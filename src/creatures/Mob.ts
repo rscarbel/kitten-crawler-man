@@ -909,6 +909,29 @@ export abstract class Mob extends Player {
   }
 
   /**
+   * How far from its position, centre to centre, this mob keeps every other
+   * body — crawlers in `MobUpdateLoop`, other mobs in `mobSeparation`. A pair
+   * keeps the larger of its two radii apart (`pairContactRadius`), so two mobs
+   * on the one-tile default keep exactly one tile apart. Only a
+   * creature whose drawn body is wider than a tile overrides it, measured from
+   * that body.
+   */
+  get collisionRadiusPx(): number {
+    return SEPARATION_RADIUS;
+  }
+
+  /**
+   * Whether this mob comes up to the ordinary one-tile contact with every
+   * other mob, however wide that mob's {@link collisionRadiusPx}. True for the
+   * party's companions: their blows are measured centre to centre and reach
+   * about a tile, so a wide body's radius would hold them out of their own
+   * reach.
+   */
+  get closesToOrdinaryContact(): boolean {
+    return this.yieldsToParty;
+  }
+
+  /**
    * Slows this mob for a single frame. Refreshed by every impact, so the slow
    * holds only while the mob is under continuous fire.
    */

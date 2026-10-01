@@ -2,54 +2,28 @@
  * Where every piece of on-screen chrome sits inside a building, computed
  * without drawing anything.
  *
+ * The buttons come from `hudButtonLayout`, the same layout the scene outside
+ * uses, so walking through a door moves none of them; what is left here is
+ * what only a building has — the room-name plate.
+ *
  * The scene draws its HUD from this layout, and the interior camera reads the
  * same rects to keep the room clear of them — so a button can never cover a
  * part of the room the camera believes is on show. Pure in its inputs, so a
  * layout check can ask about a phone from a desktop process.
  */
 
-import {
-  bottomRowButtonRects,
-  interiorMiniMapRect,
-  rightColumnButtonRect,
-  SMALL_BUTTON_SIZE,
-  stackedAboveRect,
-  type Rect,
-} from '../systems/MobileHUDSystem';
-import { SUMMON_BUTTON_HEIGHT, SUMMON_BUTTON_WIDTH } from '../systems/MongoSystem';
-import { columnPieceSizes } from '../systems/DungeonUIRenderer';
+import { interiorMiniMapRect, type Rect } from '../systems/MobileHUDSystem';
 import { drawBox, BOX_PRESETS } from '../ui/Box';
-import { hudHpBarRects, hudPanelArea, hudToggleRect } from '../ui/HUD';
-import { insetRect, packStack, type PackOptions, type PackSize } from '../ui/hudPacking';
-import { hotbarStripRectFor } from '../ui/InventoryPanel';
+import { hudKeepouts, hudPanelArea, hudReportedPanelRect, hudToggleRect } from '../ui/HUD';
+import {
+  desktopSummonButtonRect,
+  hudButtonLayout,
+  phoneSummonButtonRect,
+  phoneSwitchButtonRect,
+} from '../ui/hudButtons/hudButtonLayout';
+import { hudMiniMapRect } from '../ui/hudButtons/hudMiniMap';
 import { drawText, measureTextWidth } from '../ui/TextBox';
 import type { ScreenRect } from './interiorCamera';
-
-/** Clear space between the minimap's caption and the Pause button below it. */
-const MINIMAP_TO_PAUSE_GAP = 20;
-/** Clear space between the phone's Pause, Gear and Bag buttons, and round them. */
-const PHONE_BUTTON_GAP = 6;
-/** Keeps the right-hand buttons off the screen's edges. */
-const PHONE_SCREEN_MARGIN = 8;
-/** Clear space kept round the Build button, the achievement chip and the Journal. */
-const COLUMN_PIECE_GAP = 6;
-/**
- * What a pixel of sideways drift from the column under the minimap costs, in
- * pixels of drop down it: large enough that a portrait phone keeps Pause, Gear
- * and Bag in one column under the minimap, and a landscape one moves them
- * beside it only once that column runs into the bottom-row buttons.
- */
-const COLUMN_SHIFT_COST = 4;
-/**
- * The height the phone's bottom-row buttons are lifted by. A fixed band rather
- * than the hotbar's measured one: the row is laid out against the phone
- * hotbar's usual height.
- */
-const MOBILE_BOTTOM_ROW_HOTBAR_HEIGHT = 52;
-/** Left edge of the desktop Summon button. */
-const DESKTOP_SUMMON_LEFT = 10;
-/** Clearance between the desktop Summon button and the hotbar band it sits above. */
-const DESKTOP_SUMMON_HOTBAR_GAP = 8;
 
 /** Clear space kept between the name plate and the HUD it sits beside or under. */
 const NAMEPLATE_GAP = 6;
@@ -103,13 +77,13 @@ export function interiorRoomTitle(buildingName: string, towerFloor: number | nul
 export interface InteriorHudLayoutInput {
   readonly viewportWidth: number;
   readonly viewportHeight: number;
-  /** The phone layout: Gear, Bag, Switch and the bottom row are drawn. */
+  /** The phone layout: Switch and the packed button cluster are drawn. */
   readonly mobile: boolean;
   /** Whether the party HUD panel is collapsed, where the platform lets it be. */
   readonly hudCollapsed: boolean;
   readonly miniMapExpanded: boolean;
   readonly hotbarBandHeight: number;
-  /** Whether the phone's Follow button is offered in this room. */
+  /** Whether the Follower button is offered in this room. */
   readonly followButton: boolean;
   /** Whether Mongo's Summon button is showing. */
   readonly summonButton: boolean;
@@ -117,6 +91,8 @@ export interface InteriorHudLayoutInput {
   readonly buildButton: boolean;
   /** Whether the Journal's compass button is offered: on a floor with a Quest Journal. */
   readonly journalButton: boolean;
+  /** The unopened-loot-box banner, while a safe room shows it. */
+  readonly lootBoxBanner: Rect | null;
 }
 
 export interface InteriorHudLayout {
@@ -124,12 +100,14 @@ export interface InteriorHudLayout {
   readonly hud: Rect;
   /** The HUD panel's collapse toggle, where the platform has one. */
   readonly hudToggle: Rect | null;
+  /** The left edge of the minimap footprint the toggle steps aside for, as `drawHUD` takes it. */
+  readonly toggleClearOfX: number;
   /** The minimap and its caption. */
   readonly miniMap: Rect & { readonly size: number };
   readonly pause: Rect;
-  readonly gear: Rect | null;
-  readonly bag: Rect | null;
+  readonly bag: Rect;
   readonly switchButton: Rect | null;
+  /** The Follower button, or null where the room refuses the command. */
   readonly follow: Rect | null;
   readonly summon: Rect | null;
   /** The room-name plate, or null when the chrome leaves no room anywhere for one. */
@@ -147,70 +125,30 @@ export interface InteriorHudLayout {
   readonly journal: Rect | null;
 }
 
-/**
- * The Build button, the Journal and the achievement chip, placed as the
- * overworld places its column: down under Pause while there is room, and
- * wherever there is clear space once there is not — clear of every other
- * piece of chrome, and of the HUD panel while there is room elsewhere.
- *
- * The chip goes last because it is not an occluder: on a landscape phone the
- * last piece is the one left with the worst spot, and a chip that only shows
- * until it is read is the piece that can best afford it.
- */
-function columnPieces(
-  input: InteriorHudLayoutInput,
-  hud: Rect,
-  pause: Rect,
-  chrome: readonly Rect[],
-): { build: Rect | null; achievementChip: Rect; journal: Rect | null } {
-  const { viewportWidth: width, viewportHeight: height } = input;
-  const sizes = columnPieceSizes(input.mobile);
-  const anchorRight = pause.x + pause.w;
-  const options: PackOptions = {
-    bounds: {
-      x: PHONE_SCREEN_MARGIN,
-      y: PHONE_SCREEN_MARGIN,
-      w: width - PHONE_SCREEN_MARGIN * 2,
-      h: height - PHONE_SCREEN_MARGIN * 2,
-    },
-    blocked: [
-      ...chrome,
-      insetRect(hotbarStripRectFor(width, height), COLUMN_PIECE_GAP),
-      ...hudHpBarRects(input.hudCollapsed, input.mobile),
-    ],
-    avoid: [hud],
-    gap: COLUMN_PIECE_GAP,
-    cost: (rect) => Math.abs(anchorRight - (rect.x + rect.w)) * COLUMN_SHIFT_COST + rect.y,
-    seedXs: [anchorRight],
-    seedYs: [pause.y + pause.h + COLUMN_PIECE_GAP],
-  };
-  const placed: Rect[] = [];
-  const one = (size: PackSize): Rect => {
-    // One rect per member, always: a screen with no clear room still gets a spot.
-    const [spot] = packStack([size], placed, options);
-    placed.push(spot);
-    return spot;
-  };
-  const build = input.buildButton ? one(sizes.build) : null;
-  const journal = input.journalButton ? one(sizes.journal) : null;
-  const achievementChip = one(sizes.chip);
-  return { build, achievementChip, journal };
+function rectsOverlap(a: Rect, b: Rect): boolean {
+  return a.x < b.x + b.w && b.x < a.x + a.w && a.y < b.y + b.h && b.y < a.y + a.h;
+}
+
+function grownRect(rect: Rect, by: number): Rect {
+  return { x: rect.x - by, y: rect.y - by, w: rect.w + by * 2, h: rect.h + by * 2 };
 }
 
 /**
- * The name plate goes in the top band between the HUD panel and the minimap
- * column when there is room for it, centred on the screen where it can be;
- * otherwise directly under the HUD panel, as wide as the column allows. Under
- * a tall HUD panel on a short screen that slot would reach down into the
- * bottom-row buttons, and the plate squeezes into the top band after all,
- * cutting the name short there — unless the band is too narrow even for that,
- * when the plate is left off rather than drawn as a sliver.
+ * The name plate goes in the top band between the HUD panel and the
+ * right-hand buttons when there is room for it, centred on the screen where it
+ * can be; otherwise directly under the HUD panel, as wide as the column
+ * allows. Under a tall HUD panel on a short screen that slot would reach down
+ * into the bottom-row buttons or onto a button the layout packed beside the
+ * panel, and the plate squeezes into the top band after all, cutting the name
+ * short there — unless the band is too narrow even for that, when the plate is
+ * left off rather than drawn as a sliver.
  */
 function placeNameplate(
   input: InteriorHudLayoutInput,
   hud: Rect,
   rightColumnLeft: number,
   bottomChromeTop: number,
+  buttons: readonly Rect[],
 ): { rect: Rect | null; underHud: boolean } {
   const topBandLeft = hud.x + hud.w + NAMEPLATE_GAP;
   const topBandRight = rightColumnLeft - NAMEPLATE_GAP;
@@ -230,191 +168,95 @@ function placeNameplate(
     Math.min(NAMEPLATE_MAX_WIDTH, rightColumnLeft - NAMEPLATE_GAP - hud.x),
   );
   if (!underHudFits || underHudWidth < NAMEPLATE_MIN_SQUEEZED_WIDTH) return inTopBand();
-  return {
-    rect: { x: hud.x, y: underHudTop, w: underHudWidth, h: NAMEPLATE_HEIGHT },
-    underHud: true,
-  };
-}
-
-/**
- * The phone's bottom-row buttons: Switch at the left and `extraCount` more
- * packed in from the right. Where the right-hand ones would land on
- * `keepClearOf` — the minimap reaching down on a short landscape screen, or
- * Pause, Gear and Bag hung under it — they step left until they are clear.
- */
-function phoneBottomRow(
-  input: InteriorHudLayoutInput,
-  keepClearOf: readonly Rect[],
-  extraCount: number,
-): { switchButton: Rect; extras: Rect[] } {
-  const row = bottomRowButtonRects(
-    input.viewportWidth,
-    input.viewportHeight,
-    MOBILE_BOTTOM_ROW_HOTBAR_HEIGHT,
-    extraCount,
+  const underHud: Rect = { x: hud.x, y: underHudTop, w: underHudWidth, h: NAMEPLATE_HEIGHT };
+  const landsOnButton = buttons.some((button) =>
+    rectsOverlap(underHud, grownRect(button, NAMEPLATE_GAP)),
   );
-  const leftLimit = row.switchButton.x + row.switchButton.w + PHONE_BUTTON_GAP;
-  let extras = row.extras;
-  for (;;) {
-    const shift = Math.max(
-      0,
-      ...extras.flatMap((rect) =>
-        keepClearOf
-          .filter((other) => rectsOverlap(rect, grownRect(other, PHONE_BUTTON_GAP)))
-          .map((other) => rect.x + rect.w - (other.x - PHONE_BUTTON_GAP)),
-      ),
-    );
-    const shifted = extras.map((rect) => ({ ...rect, x: rect.x - shift }));
-    const runsIntoSwitch = shifted.some((rect) => rect.x < leftLimit);
-    if (shift === 0 || runsIntoSwitch) return { ...row, extras };
-    extras = shifted;
-  }
-}
-
-function rectsOverlap(a: Rect, b: Rect): boolean {
-  return a.x < b.x + b.w && b.x < a.x + a.w && a.y < b.y + b.h && b.y < a.y + a.h;
-}
-
-function grownRect(rect: Rect, by: number): Rect {
-  return { x: rect.x - by, y: rect.y - by, w: rect.w + by * 2, h: rect.h + by * 2 };
-}
-
-/**
- * A phone's Pause, Gear and Bag: one column under the minimap, as long as it
- * fits above the hotbar; on a short screen — a phone in landscape — beside
- * the minimap or across, wherever there is clear room, kept together where
- * they can be. They keep clear of the minimap, the hotbar, Switch and Summon
- * (Summon counted whether or not it shows, so switching crawler never moves
- * Pause) and the HUD panel's toggle and HP bars, and of the rest of the HUD
- * panel while there is room elsewhere. Follow steps aside for them instead.
- */
-function phoneRightButtons(
-  input: InteriorHudLayoutInput,
-  miniMap: Rect,
-  hud: Rect,
-  hudToggle: Rect | null,
-): { pause: Rect; gear: Rect; bag: Rect } {
-  const { viewportWidth: width, viewportHeight: height } = input;
-  const anchorRight = width - PHONE_SCREEN_MARGIN;
-  const anchorTop = miniMap.y + miniMap.h + MINIMAP_TO_PAUSE_GAP;
-  const switchButton = bottomRowButtonRects(
-    width,
-    height,
-    MOBILE_BOTTOM_ROW_HOTBAR_HEIGHT,
-    0,
-  ).switchButton;
-  const blocked: Rect[] = [
-    { ...miniMap, h: miniMap.h + MINIMAP_TO_PAUSE_GAP - PHONE_BUTTON_GAP },
-    insetRect(hotbarStripRectFor(width, height), PHONE_BUTTON_GAP),
-    switchButton,
-    stackedAboveRect(switchButton),
-    ...(hudToggle === null ? [] : [hudToggle]),
-    ...hudHpBarRects(input.hudCollapsed, true),
-  ];
-  const [pause, gear, bag] = packStack(
-    [SMALL_BUTTON_SIZE, SMALL_BUTTON_SIZE, SMALL_BUTTON_SIZE],
-    [],
-    {
-      bounds: {
-        x: PHONE_SCREEN_MARGIN,
-        y: miniMap.y,
-        w: width - PHONE_SCREEN_MARGIN * 2,
-        h: height - miniMap.y - PHONE_SCREEN_MARGIN,
-      },
-      blocked,
-      avoid: [hud],
-      gap: PHONE_BUTTON_GAP,
-      cost: (rect) => (anchorRight - (rect.x + rect.w)) * COLUMN_SHIFT_COST + rect.y,
-      seedXs: [],
-      seedYs: [anchorTop],
-    },
-  );
-  return { pause, gear, bag };
+  if (landsOnButton) return inTopBand();
+  return { rect: underHud, underHud: true };
 }
 
 export function interiorHudLayout(input: InteriorHudLayoutInput): InteriorHudLayout {
-  const hud = hudPanelArea(input.hudCollapsed, input.mobile);
-  const miniMap = interiorMiniMapRect(input.viewportWidth, input.miniMapExpanded);
-  const hudToggle = hudToggleRect(input.hudCollapsed, input.mobile, miniMap.x);
-  const hotbarTop = input.viewportHeight - input.hotbarBandHeight;
+  const { viewportWidth: width, viewportHeight: height, mobile } = input;
+  const hud = hudPanelArea(input.hudCollapsed, mobile);
+  const miniMap = interiorMiniMapRect(width, input.miniMapExpanded);
+  // The buttons and the HUD panel's toggle are laid out against the
+  // overworld minimap's footprint, which the smaller interior minimap sits
+  // inside, so that they stand exactly where they stand outside.
+  const buttonMiniMap = hudMiniMapRect(width, input.miniMapExpanded);
+  const toggleClearOfX = buttonMiniMap.x;
+  const hudToggle = hudToggleRect(input.hudCollapsed, mobile, toggleClearOfX);
+  const hotbarTop = height - input.hotbarBandHeight;
 
-  const phoneButtons = input.mobile ? phoneRightButtons(input, miniMap, hud, hudToggle) : null;
-  const bottomRow =
-    phoneButtons === null
-      ? null
-      : phoneBottomRow(
-          input,
-          [miniMap, phoneButtons.pause, phoneButtons.gear, phoneButtons.bag],
-          input.followButton ? 1 : 0,
-        );
-  const switchButton = bottomRow?.switchButton ?? null;
-  const follow = bottomRow?.extras[0] ?? null;
+  const buttons = hudButtonLayout({
+    viewportWidth: width,
+    viewportHeight: height,
+    mobile,
+    miniMap: buttonMiniMap,
+    hudPanel: hudReportedPanelRect(input.hudCollapsed, mobile),
+    hudKeepouts: hudKeepouts(input.hudCollapsed, mobile, toggleClearOfX),
+    // No floor with a collapse timer has buildings to go into.
+    timer: false,
+    build: input.buildButton,
+    lootBoxBanner: input.lootBoxBanner,
+    extras: [],
+  });
+  const follow = input.followButton ? buttons.follower : null;
+  const build = input.buildButton ? buttons.build : null;
+  const journal = input.journalButton ? buttons.journal : null;
+
+  const switchButton = mobile ? phoneSwitchButtonRect(width, height) : null;
   let summon: Rect | null = null;
   if (input.summonButton) {
-    summon =
-      switchButton !== null
-        ? stackedAboveRect(switchButton)
-        : {
-            x: DESKTOP_SUMMON_LEFT,
-            y: hotbarTop - SUMMON_BUTTON_HEIGHT - DESKTOP_SUMMON_HOTBAR_GAP,
-            w: SUMMON_BUTTON_WIDTH,
-            h: SUMMON_BUTTON_HEIGHT,
-          };
+    summon = mobile ? phoneSummonButtonRect(width, height) : desktopSummonButtonRect(height);
   }
+  const desktopFollow = mobile ? null : follow;
   const bottomChromeTop = Math.min(
     hotbarTop,
-    ...[switchButton, follow, summon].flatMap((rect) => (rect === null ? [] : [rect.y])),
+    ...[switchButton, summon, desktopFollow].flatMap((rect) => (rect === null ? [] : [rect.y])),
   );
 
-  const pause =
-    phoneButtons?.pause ??
-    rightColumnButtonRect(input.viewportWidth, miniMap.y + miniMap.h + MINIMAP_TO_PAUSE_GAP);
+  const placedButtons = [buttons.pause, buttons.bag, follow, build, buttons.chip, journal].flatMap(
+    (rect) => (rect === null ? [] : [rect]),
+  );
+  const plateBandBottom = hud.y + NAMEPLATE_HEIGHT;
   const rightColumnLeft = Math.min(
     miniMap.x,
-    ...[pause, phoneButtons?.gear, phoneButtons?.bag].flatMap((rect) =>
-      rect === undefined || rect.y > hud.y + NAMEPLATE_HEIGHT ? [] : [rect.x],
-    ),
+    ...placedButtons.flatMap((rect) => (rect.y > plateBandBottom ? [] : [rect.x])),
   );
 
   // A toggle stepped out from under the minimap can hang below the panel;
   // whatever stacks under the panel stacks under it too.
   const hudAndToggle = hudToggle === null ? hud : boundingRect(hud, hudToggle);
-  const nameplate = placeNameplate(input, hudAndToggle, rightColumnLeft, bottomChromeTop);
+  const nameplate = placeNameplate(
+    input,
+    hudAndToggle,
+    rightColumnLeft,
+    bottomChromeTop,
+    placedButtons,
+  );
   const plateUnderHud = nameplate.underHud ? nameplate.rect : null;
   const skillBadgeTop =
     plateUnderHud !== null
       ? plateUnderHud.y + plateUnderHud.h + SKILL_BADGE_GAP
       : hudAndToggle.y + hudAndToggle.h + SKILL_BADGE_GAP;
 
-  const gear = phoneButtons?.gear ?? null;
-  const bag = phoneButtons?.bag ?? null;
-  const chrome = [
-    { ...miniMap, h: miniMap.h + MINIMAP_TO_PAUSE_GAP - COLUMN_PIECE_GAP },
-    pause,
-    gear,
-    bag,
-    switchButton,
-    follow,
-    summon,
-    hudToggle,
-    nameplate.rect,
-  ].flatMap((rect) => (rect === null ? [] : [rect]));
-  const pieces = columnPieces(input, hud, pause, chrome);
-
   return {
     hud,
     hudToggle,
+    toggleClearOfX,
     miniMap,
-    pause,
-    gear,
-    bag,
+    pause: buttons.pause,
+    bag: buttons.bag,
     switchButton,
     follow,
     summon,
     nameplate: nameplate.rect,
     nameplateUnderHud: nameplate.underHud,
     skillBadgeTop,
-    ...pieces,
+    build,
+    achievementChip: buttons.chip,
+    journal,
   };
 }
 
@@ -447,7 +289,6 @@ export function interiorHudOccluders(layout: InteriorHudLayout): ScreenRect[] {
     layout.nameplate,
     layout.miniMap,
     layout.pause,
-    layout.gear,
     layout.bag,
     layout.switchButton,
     layout.follow,

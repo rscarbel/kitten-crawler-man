@@ -1356,19 +1356,9 @@ export class AudioManager {
       }
     });
 
+    // No fanfare here: `quest_complete` plays when the quest-complete screen
+    // goes up, which can be a while after the quest completes.
     bus.on('questCompleted', (e) => {
-      // `borrowed_blueprints` is absent on purpose: its fanfare plays when its
-      // quest-complete screen goes up, as one of the quest's own cues.
-      if (
-        e.questId === 'defend_goblin_mother' ||
-        e.questId === 'grotesque_spider' ||
-        e.questId === 'the_show_must_go_on' ||
-        e.questId === 'krasue_murders' ||
-        e.questId === 'anchor_shards' ||
-        e.questId === 'briar_hollow_plea'
-      ) {
-        this.play('quest_complete');
-      }
       // The spider lab never emits `bossDefeated`, so its boss track has to be
       // handed back to the level's music here or it would loop forever.
       if (e.questId === 'grotesque_spider') {

@@ -16,8 +16,9 @@ import type { HumanPlayer } from '../creatures/HumanPlayer';
 import type { CatPlayer } from '../creatures/CatPlayer';
 import type { Player } from '../Player';
 import type { GrantedReward } from './GrantedReward';
+import type { QuestRewardSpec } from '../ui/questReward/types';
 import type { DishId } from '../systems/bopcaDialog';
-import type { RecallMode } from '../systems/RecallSystem';
+import type { TravelDestinationId } from '../systems/travel/travelDestinations';
 import type { SkillId, CrawlerKind } from './SkillManager';
 import type { CraftSkillId } from './CraftSkills';
 import type { StructureKind } from './structureKinds';
@@ -170,14 +171,19 @@ export interface GameEvents {
   objectiveComplete: { objectiveId: string };
 
   /**
-   * The Wayfinder's Anchor completed a warp. `mode` says which way it pulled —
-   * `recall` to the town square, `return` back out to the trail anchor — and the
-   * tile is where the party was set down.
+   * The Wayfinder's Anchor completed a warp to `destination`; the tile is the
+   * one it aimed for, which the party was set down on or as near as it could.
    */
-  fastTravelUsed: { mode: RecallMode; tileX: number; tileY: number };
+  fastTravelUsed: { destination: TravelDestinationId; tileX: number; tileY: number };
 
   /** An award screen was dismissed and contains ability or special unlocks to announce. */
   rewardGranted: { rewards: GrantedReward[] };
+
+  /**
+   * A quest has paid its rewards and asks for its quest-complete screen. The
+   * scene queues the spec on its one `QuestRewardScreen`.
+   */
+  questRewardShown: QuestRewardSpec;
 
   /** A safe-room Bopca was spoken to. `tone` is which character it is addressing. */
   bopcaGreeted: { tone: 'toHuman' | 'toCat' };

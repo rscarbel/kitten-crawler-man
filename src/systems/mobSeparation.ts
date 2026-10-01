@@ -24,6 +24,19 @@ export interface SeparationBody {
    * it overlaps takes all of it, so the two still come apart.
    */
   readonly separationAnchored?: boolean;
+  /**
+   * How far from its position this body keeps others; absent means
+   * {@link SEPARATION_RADIUS}. Only a body whose drawn footprint is wider than
+   * a tile sets it.
+   */
+  readonly collisionRadiusPx?: number;
+  /**
+   * Comes up to the ordinary one-tile contact even against a wider body. A
+   * party companion's blows are measured centre to centre and reach barely a
+   * tile, so holding it out at a wide body's radius would leave it swinging at
+   * air; it still cannot walk through the body or move an anchored one.
+   */
+  readonly closesToOrdinaryContact?: boolean;
 }
 
 /**
@@ -38,12 +51,51 @@ function pushShare(self: SeparationBody, other: SeparationBody): number {
 }
 
 /**
- * Contact radius for push-apart: mobs closer than one tile are in each other's
- * way. `SeparationGrid` takes this as its `build` argument and sizes its cells
- * from what it is passed, so there is one definition and nothing to keep in step.
+ * Contact radius for push-apart between two ordinary bodies: mobs closer than
+ * one tile are in each other's way. A body wider than that says so through
+ * `SeparationBody.collisionRadiusPx`. `SeparationGrid` takes the widest radius
+ * in play as its `build` argument and sizes its cells from what it is passed,
+ * so there is one definition and nothing to keep in step.
  */
 export const SEPARATION_RADIUS = TILE_SIZE;
-export const SEPARATION_RADIUS_SQ = SEPARATION_RADIUS * SEPARATION_RADIUS;
+
+/**
+ * How close two bodies may come before they are pushed apart: the larger of
+ * their two collision radii.
+ *
+ * The larger rather than the sum, because every body's radius is measured
+ * centre to centre against an ordinary one-tile neighbour — `SEPARATION_RADIUS`
+ * is already a whole contact distance, not half of one. A wide body therefore
+ * keeps everything out to its own radius, and two ordinary bodies keep exactly
+ * one tile apart.
+ */
+export function pairContactRadius(radiusA: number, radiusB: number): number {
+  return radiusA > radiusB ? radiusA : radiusB;
+}
+
+function contactRadiusOf(a: SeparationBody, b: SeparationBody): number {
+  if (a.closesToOrdinaryContact === true || b.closesToOrdinaryContact === true) {
+    return SEPARATION_RADIUS;
+  }
+  return pairContactRadius(
+    a.collisionRadiusPx ?? SEPARATION_RADIUS,
+    b.collisionRadiusPx ?? SEPARATION_RADIUS,
+  );
+}
+
+/**
+ * The widest contact distance any pair among `bodies` can have. Read once per
+ * pass so that a roster of ordinary bodies — nearly every pass — skips the
+ * per-pair radius lookup entirely.
+ */
+function widestContactRadius(bodies: readonly SeparationBody[]): number {
+  let widest = SEPARATION_RADIUS;
+  for (const body of bodies) {
+    const radius = body.collisionRadiusPx ?? SEPARATION_RADIUS;
+    if (radius > widest) widest = radius;
+  }
+  return widest;
+}
 
 /** Fraction of the measured overlap a single frame corrects. */
 const SEPARATION_BASE_MULTIPLIER = 0.3;
@@ -80,18 +132,22 @@ export const SEPARATION_GRID_MIN_MOBS = 48;
 
 /**
  * Push scale for two bodies `distSq` apart (squared, to keep the square root
- * off the overwhelming majority of candidates that are out of range), or 0 when
- * they are not overlapping enough to be pushed at all.
+ * off the overwhelming majority of candidates that are out of range) whose
+ * contact distance is `contactRadius`, or 0 when they are not overlapping
+ * enough to be pushed at all.
  *
  * Multiply by the separation vector and by the pushed body's share of the
  * pair's mass to get its displacement. Shared by both strategies below so they
  * cannot drift into computing different forces.
  */
-export function separationPushScale(distSq: number): number {
-  if (distSq >= SEPARATION_RADIUS_SQ) return 0;
+export function separationPushScale(
+  distSq: number,
+  contactRadius: number = SEPARATION_RADIUS,
+): number {
+  if (distSq >= contactRadius * contactRadius) return 0;
   const dist = Math.sqrt(distSq);
   if (dist <= SEPARATION_POSITION_TOLERANCE) return 0;
-  const overlap = SEPARATION_RADIUS - dist - SEPARATION_DEADBAND_PX;
+  const overlap = contactRadius - dist - SEPARATION_DEADBAND_PX;
   if (overlap <= 0) return 0;
   return (overlap * SEPARATION_BASE_MULTIPLIER) / dist;
 }
@@ -108,14 +164,17 @@ export function accumulateFromAllPairs(
   bodies: readonly SeparationBody[],
   outDx: number[],
   outDy: number[],
+  widestRadius: number = widestContactRadius(bodies),
 ): void {
+  const everyPairIsOrdinary = widestRadius === SEPARATION_RADIUS;
   for (let i = 0; i < bodies.length; i++) {
     const a = bodies[i];
     for (let j = i + 1; j < bodies.length; j++) {
       const b = bodies[j];
       const dx = a.x - b.x;
       const dy = a.y - b.y;
-      const scale = separationPushScale(dx * dx + dy * dy);
+      const contactRadius = everyPairIsOrdinary ? SEPARATION_RADIUS : contactRadiusOf(a, b);
+      const scale = separationPushScale(dx * dx + dy * dy, contactRadius);
       if (scale === 0) continue;
       const aShare = pushShare(a, b);
       const bShare = pushShare(b, a);
@@ -142,14 +201,17 @@ export function accumulateFromAllPairs(
  * from b, `dx` flips sign and the share becomes a's, which is exactly the term
  * the all-pairs loop subtracts from b.
  *
- * `grid` must have been built from `bodies` this frame.
+ * `grid` must have been built from `bodies` this frame, out to the widest
+ * contact radius among them, or a wide body's lookup misses what it touches.
  */
 export function accumulateFromGrid<T extends SeparationBody>(
   bodies: readonly T[],
   outDx: number[],
   outDy: number[],
   grid: SeparationGrid<T>,
+  widestRadius: number = widestContactRadius(bodies),
 ): void {
+  const everyPairIsOrdinary = widestRadius === SEPARATION_RADIUS;
   let comparisons = 0;
   const candidates = grid.candidates;
   for (let i = 0; i < bodies.length; i++) {
@@ -162,7 +224,8 @@ export function accumulateFromGrid<T extends SeparationBody>(
       const b = bodies[candidates[c]];
       const dx = a.x - b.x;
       const dy = a.y - b.y;
-      const scale = separationPushScale(dx * dx + dy * dy);
+      const contactRadius = everyPairIsOrdinary ? SEPARATION_RADIUS : contactRadiusOf(a, b);
+      const scale = separationPushScale(dx * dx + dy * dy, contactRadius);
       if (scale === 0) continue;
       const aShare = pushShare(a, b);
       pushX += dx * scale * aShare;
@@ -185,10 +248,11 @@ export function accumulateSeparationForces<T extends SeparationBody>(
   grid: SeparationGrid<T>,
 ): void {
   perfMonitor.count('separationMobs', bodies.length);
+  const widestRadius = widestContactRadius(bodies);
   if (bodies.length < SEPARATION_GRID_MIN_MOBS) {
-    accumulateFromAllPairs(bodies, outDx, outDy);
+    accumulateFromAllPairs(bodies, outDx, outDy, widestRadius);
     return;
   }
-  grid.build(bodies, SEPARATION_RADIUS);
-  accumulateFromGrid(bodies, outDx, outDy, grid);
+  grid.build(bodies, widestRadius);
+  accumulateFromGrid(bodies, outDx, outDy, grid, widestRadius);
 }

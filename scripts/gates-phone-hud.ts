@@ -50,7 +50,7 @@ function describe(rect: Rect): string {
  */
 const REQUIRED_PIECES: Record<'dungeon' | 'interior', readonly string[]> = {
   dungeon: ['pause', 'bag', 'follower', 'switch', 'summon', 'journal', 'hotbar', 'minimap'],
-  interior: ['pause', 'gear', 'bag', 'switch', 'hotbar', 'minimap'],
+  interior: ['pause', 'bag', 'switch', 'achievementChip', 'journal', 'hotbar', 'minimap'],
 };
 
 const failures: string[] = [];

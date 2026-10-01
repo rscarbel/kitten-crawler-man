@@ -7,6 +7,10 @@
  * Stages are entry-idempotent: every overworld wave completes before the Big
  * Top unlocks, so no transient combat state ever needs to cross a scene swap.
  */
+
+/** The questline's display title, as the journal, notices and reward screens name it. */
+export const CIRCUS_QUEST_NAME = 'The Show Must Go On';
+
 export type CircusQuestStage =
   | 'not_started'
   | 'ritual_defense'

@@ -42,7 +42,6 @@ import type { ConversationTopic } from '../../dialog/request';
 import type { TilePoint } from '../../map/town/townPlan';
 import type { Player } from '../../Player';
 import type { MiniMapSystem, QuestMarkerType } from '../MiniMapSystem';
-import type { OverlayInputClaim } from '../kits/OverlayClaims';
 import { phoneHudButtonRects, type Rect } from '../DungeonUIRenderer';
 import { hotbarStripRect } from '../../ui/InventoryPanel';
 import { doorwayBeaconTarget } from '../objectiveBeaconTargets';
@@ -76,7 +75,7 @@ import {
 import { playBlueprintsCue, type BlueprintsCue } from './blueprints/blueprintsSoundCues';
 import { FennaBlueprintsLines } from './blueprints/FennaBlueprintsLines';
 import { BlueprintsStepMoments } from './blueprints/BlueprintsStepMoments';
-import { BlueprintsCompletionScreen } from './blueprints/BlueprintsCompletionScreen';
+import { blueprintsRewardSpec } from './blueprints/blueprintsRewardSpec';
 import { GrainHarvest } from './blueprints/GrainHarvest';
 import { MerritBlueprintsLines } from './blueprints/MerritBlueprintsLines';
 import { MidgeEscort } from './blueprints/MidgeEscort';
@@ -136,8 +135,12 @@ export class BlueprintsQuestSystem implements QuestLineProvider, TopicProvider, 
   readonly stations: StationUpgrades;
   /** The banners and Midge's `!` at the seams between the steps. */
   readonly moments: BlueprintsStepMoments;
-  /** The quest-complete screen naming the upgraded stations, raised once. */
-  readonly completion: BlueprintsCompletionScreen;
+  /**
+   * Whether this build of the system has asked for the quest-complete screen.
+   * Not durable: the screen's own dismissal sets `completionScreenSeen`, so a
+   * rebuild after a screen dropped unread (a rewind) asks again.
+   */
+  private rewardScreenRequested = false;
   /** Takes rotated per cue, so a cue with several recordings walks through them. */
   private readonly cueTakesPlayed = new Map<BlueprintsCue, number>();
   private readonly ctx: BlueprintsQuestContext;
@@ -170,7 +173,6 @@ export class BlueprintsQuestSystem implements QuestLineProvider, TopicProvider, 
     this.escort = new MidgeEscort(this.ctx);
     this.stations = new StationUpgrades(this.ctx, () => this.complete());
     this.moments = new BlueprintsStepMoments(this.ctx, this.escort);
-    this.completion = new BlueprintsCompletionScreen(this.ctx, () => this.stations.isCelebrating);
     // Registered after the Plea's provider, which the kit builds first, so the
     // Plea's openings and markers win wherever both have something to say.
     deps.villagers.addQuestLineProvider(this);
@@ -250,6 +252,25 @@ export class BlueprintsQuestSystem implements QuestLineProvider, TopicProvider, 
     this.setPhase('complete');
   }
 
+  /**
+   * Asks for the quest-complete screen once the finish has been seen: the
+   * last upgrade's "upgraded!" callout played out and the Plea's siege not
+   * on. The screen itself then waits out any conversation or other halt.
+   */
+  private requestRewardScreenWhenDue(): void {
+    if (this.rewardScreenRequested) return;
+    const quest = this.quest;
+    if (quest.phase !== 'complete' || quest.completionScreenSeen) return;
+    if (this.suppressedBySiege || this.stations.isCelebrating) return;
+    this.rewardScreenRequested = true;
+    this.ctx.bus.emit(
+      'questRewardShown',
+      blueprintsRewardSpec(() => {
+        quest.completionScreenSeen = true;
+      }),
+    );
+  }
+
   // ── Polling: steps the world itself finishes ─────────────────────────────
 
   /**
@@ -265,7 +286,7 @@ export class BlueprintsQuestSystem implements QuestLineProvider, TopicProvider, 
     this.updateEscortRoute();
     this.stations.update();
     this.moments.update();
-    this.completion.update();
+    this.requestRewardScreenWhenDue();
     switch (this.phase) {
       case 'build_fence':
         if (this.fence.allSectionsBuilt) this.setPhase('report_fence');
@@ -487,28 +508,11 @@ export class BlueprintsQuestSystem implements QuestLineProvider, TopicProvider, 
   }
 
   /**
-   * A raw keydown, ahead of every other key consumer: the quest-complete
-   * screen takes every key while it is up, and a live scythe swing takes the
-   * attack key as its timed press. Returns whether it was taken.
+   * A raw keydown, ahead of every other key consumer: a live scythe swing
+   * takes the attack key as its timed press. Returns whether it was taken.
    */
   handleKeyDown(key: string, repeat: boolean, eventTimeStampMs: number): boolean {
-    if (this.completion.handleKeyDown(key, repeat)) return true;
     return this.harvest.handleKeyDown(key, repeat, eventTimeStampMs);
-  }
-
-  /** The quest-complete screen's entry for the scene's overlay claims. */
-  overlayClaim(): OverlayInputClaim {
-    return this.completion.overlayClaim();
-  }
-
-  /** A click or tap on the quest-complete screen. Returns whether it was taken. */
-  handleClick(mx: number, my: number): boolean {
-    return this.completion.handleClick(mx, my);
-  }
-
-  /** The quest-complete screen, drawn with the scene's other dialogs. */
-  renderDialog(ctx: CanvasRenderingContext2D): void {
-    this.completion.render(ctx);
   }
 
   /** X: a station upgrade in reach. Returns whether the press was taken. */
@@ -625,7 +629,7 @@ export class BlueprintsQuestSystem implements QuestLineProvider, TopicProvider, 
     this.ctx.midgeCarry.routeFrom = null;
     this.stations.onRewind();
     this.moments.onRewind();
-    this.completion.close();
+    this.rewardScreenRequested = false;
   }
 
   // ── The journal ──────────────────────────────────────────────────────────
@@ -794,7 +798,6 @@ export class BlueprintsQuestSystem implements QuestLineProvider, TopicProvider, 
     this.escort.dispose();
     this.stations.dispose();
     this.moments.dispose();
-    this.completion.close();
     this.ctx.villagers.removeQuestLineProvider(this);
   }
 }

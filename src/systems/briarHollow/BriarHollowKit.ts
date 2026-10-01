@@ -86,6 +86,7 @@ import { BRAMBLEWICK } from '../../dialog/scripts/briarHollow';
 import { blueprintsPhaseAtLeast } from '../../core/blueprintsQuestPhase';
 import { createMidgeEscortCarry, type MidgeEscortCarry } from '../../core/midgeEscortCarry';
 import type { BlueprintsCue } from './blueprints/blueprintsSoundCues';
+import type { TravelUnlockState } from '../travel/travelDestinations';
 
 /** The live `Keybindings` singleton's own type, which the class itself does not export. */
 type KeybindingsHost = typeof keybindings;
@@ -153,10 +154,6 @@ export interface BriarHollowKitDeps {
     y: number,
     items: ReadonlyArray<{ id: ItemId; quantity: number }>,
   ) => void;
-  /** A quest coin reward was just granted — for a fly-to-HUD effect. */
-  readonly onCoinsGranted?: (coins: number, worldX: number, worldY: number) => void;
-  /** A quest item reward was just granted straight into the bag (not dropped) — for a fly-to-HUD effect. */
-  readonly onItemGranted?: (id: ItemId, quantity: number, worldX: number, worldY: number) => void;
   /**
    * Midge's escort across a door: threaded by reference from the scene
    * rebuilt on the way out of a building. Absent means a fresh scene, where
@@ -165,6 +162,8 @@ export interface BriarHollowKitDeps {
   readonly midgeEscortCarry?: MidgeEscortCarry;
   /** Told of every cue the side quest raises; a headless gate's ear, absent in the game. */
   readonly onBlueprintsCue?: (cue: BlueprintsCue) => void;
+  /** Handed to the questline for its reward screen's travel card. */
+  readonly travelUnlocks: Pick<TravelUnlockState, 'anchor'>;
 }
 
 export class BriarHollowKit {
@@ -378,12 +377,10 @@ export class BriarHollowKit {
             announce: (message) => deps.menus.announce(message),
             groundPickups: deps.groundPickups,
             dropItems: (x, y, items) => deps.dropItems?.(x, y, items),
-            onCoinsGranted: (coins, worldX, worldY) => deps.onCoinsGranted?.(coins, worldX, worldY),
-            onItemGranted: (id, quantity, worldX, worldY) =>
-              deps.onItemGranted?.(id, quantity, worldX, worldY),
             grantOrenTools: () => this.services?.grantOrenTools() ?? null,
             // Lazy: the recruiter is built after the questline it reads from.
             recruiter: () => this.recruiter?.post ?? null,
+            travelUnlocks: deps.travelUnlocks,
           });
     this.blueprints =
       site === null || villagers === null
@@ -593,7 +590,9 @@ export class BriarHollowKit {
   private drainQuestLineQueue(): void {
     if (this.deps.conversation.isOpen) return;
     if (this.isConversationOpen || this.isMenuOpen) return;
-    if (this.blueprints?.completion.isOpen === true) return;
+    // A line opened under the quest-complete screen would be swept away by the
+    // scene's halt, unread.
+    if (this.deps.menus.questReward.isOpen) return;
     if (this.quest?.isConfirmOpen === true) return;
     if (this.recruiter?.isDialogOpen === true) return;
     const next = this.pendingQuestLines.shift();
@@ -1072,7 +1071,6 @@ export class BriarHollowKit {
 
   /** A click or tap on a village panel. Returns whether it landed on one. */
   handleClick(mx: number, my: number): boolean {
-    if (this.blueprints?.handleClick(mx, my) === true) return true;
     if (this.quest?.handleClick(mx, my) === true) return true;
     if (this.defences?.handleClick(mx, my) === true) return true;
     if (this.services?.handleClick(mx, my) === true) return true;
@@ -1093,9 +1091,8 @@ export class BriarHollowKit {
     this.services?.picker.handlePointerUp();
   }
 
-  /** Whether one of the village's own modals (a confirm, a narrated line, the blueprints' quest-complete screen) is what has halted the world. */
+  /** Whether one of the village's own modals (a confirm, a narrated line) is what has halted the world. */
   get haltsWorldItself(): boolean {
-    if (this.blueprints?.completion.isOpen === true) return true;
     if (this.quest?.isConfirmOpen === true) return true;
     if (this.isQuestLineShowing()) return true;
     return this.defences?.haltsWorldItself === true;
@@ -1148,9 +1145,6 @@ export class BriarHollowKit {
     // A villager conversation or a narrated line takes the frame over every
     // other village panel.
     this.deps.conversation.render(ctx);
-    // Topmost: nothing else in the village opens while the quest-complete
-    // screen is up, and it waits for anything that was.
-    this.blueprints?.renderDialog(ctx);
   }
 
   /**
@@ -1164,7 +1158,6 @@ export class BriarHollowKit {
     // and an open claim would hold the Space chain and the attack for the
     // whole countdown.
     return [
-      ...(this.blueprints === null ? [] : [this.blueprints.overlayClaim()]),
       ...(this.quest === null ? [] : [this.quest.overlayClaim()]),
       ...(this.defences?.overlayClaims() ?? []),
       ...(this.services?.overlayClaims() ?? []),

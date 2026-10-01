@@ -61,7 +61,6 @@ export class MobileTouchState {
   /** Button rects updated each render frame by the scene. */
   switchBtnRect: Rect = { x: 0, y: 0, w: 0, h: 0 };
   followBtnRect: Rect = { x: 0, y: 0, w: 0, h: 0 };
-  gearBtnRect: Rect = { x: -9999, y: 0, w: 0, h: 0 };
   bagBtnRect: Rect = { x: -9999, y: 0, w: 0, h: 0 };
   miniMapRect: Rect = { x: -9999, y: 0, w: 0, h: 0 };
   summonBtnRect: Rect = { x: -9999, y: 0, w: 0, h: 0 };

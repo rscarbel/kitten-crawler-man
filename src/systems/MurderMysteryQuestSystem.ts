@@ -13,7 +13,7 @@
  * entry-idempotent so building round-trips reconstruct cleanly.
  */
 
-import { awardXp } from '../core/awardXp';
+import { awardPartyXp, type PartyXpApplied } from '../core/awardXp';
 import { TILE_SIZE } from '../core/constants';
 import { applySpawnDifficulty } from '../core/difficultyProfiles';
 import type { GameMap } from '../map/GameMap';
@@ -45,12 +45,9 @@ import { drawInteractionPrompt } from '../ui/InteractionPrompt';
 import type { Conversation } from '../dialog/Conversation';
 import type { DialogLine, NonEmpty } from '../dialog/line';
 import type { ConversationHandle } from '../dialog/request';
-import {
-  drawQuestBanner,
-  drawQuestCompleteOverlay,
-  QUEST_BANNER_FRAMES,
-  QUEST_COMPLETE_OVERLAY_FRAMES,
-} from '../ui/QuestBanners';
+import { drawQuestBanner, QUEST_BANNER_FRAMES } from '../ui/QuestBanners';
+import { partyXpSections } from '../ui/questReward/rewardLines';
+import type { QuestRewardSpec } from '../ui/questReward/types';
 import {
   MURDER_HOOK,
   MURDER_BODY_FOUND,
@@ -63,6 +60,7 @@ import {
 } from '../dialog/scripts/scenes/murder';
 
 export const MURDER_QUEST_ID = 'krasue_murders';
+const MURDER_QUEST_NAME = 'The Krasue Murders';
 
 /** The two papers tucked in GumGum's coat, handed over when the alley scene closes. */
 const ALLEY_EVIDENCE: ReadonlyArray<ItemId> = ['magistrates_writ', 'unreadable_letter'];
@@ -277,7 +275,6 @@ export class MurderMysteryQuestSystem implements GameSystem {
   private swarmSpawnGrace = new Map<Krasue, number>();
   private bannerTimer = 0;
   private bannerText = '';
-  private completeOverlayTimer = 0;
   /** Latest frame context — lets dialog callbacks reach the live players. */
   private lastCtx: SystemContext | null = null;
   /**
@@ -299,7 +296,7 @@ export class MurderMysteryQuestSystem implements GameSystem {
     this.questManager = new QuestManager();
     this.questManager.register({
       id: MURDER_QUEST_ID,
-      name: 'The Krasue Murders',
+      name: MURDER_QUEST_NAME,
       type: 'story',
       rewards: {
         xp: 800,
@@ -597,21 +594,6 @@ export class MurderMysteryQuestSystem implements GameSystem {
    */
   get isTownFightInProgress(): boolean {
     return this.phase === 'night_attack' && !this.swarmCleared;
-  }
-
-  /**
-   * The completion banner, which a press dismisses early. It rides over live
-   * play rather than pausing it, so it is not part of `isDialogOpen`.
-   */
-  get isOutcomeOverlayShowing(): boolean {
-    return this.completeOverlayTimer > 0;
-  }
-
-  /** Space/tap on the banner: dismiss early rather than wait out the timer. */
-  advanceOutcomeOverlay(): boolean {
-    if (this.completeOverlayTimer <= 0) return false;
-    this.completeOverlayTimer = 0;
-    return true;
   }
 
   /**
@@ -1024,7 +1006,6 @@ export class MurderMysteryQuestSystem implements GameSystem {
   }
 
   handleClick(mx: number, my: number): boolean {
-    if (this.advanceOutcomeOverlay()) return true;
     if (!this.conversationOwned) return false;
     return this.conversation.handleClick(mx, my);
   }
@@ -1183,16 +1164,39 @@ export class MurderMysteryQuestSystem implements GameSystem {
     this.bus.emit('objectiveComplete', { objectiveId: 'krasue_night_attack_survived' });
   }
 
-  private finishQuest(active: Player): void {
+  /** Both crawlers earn the full XP; the coins go into the active crawler's purse. */
+  private finishQuest(ctx: Pick<SystemContext, 'human' | 'cat' | 'active'>): void {
     this.phase = 'complete';
     this.progress.stage = 'complete';
     this.questManager.completeQuest(MURDER_QUEST_ID);
 
     const def = this.questManager.getDef(MURDER_QUEST_ID);
-    if (def) awardXp(active, def.rewards.xp, this.bus);
+    const xpApplied =
+      def === null ? null : awardPartyXp(ctx.human, ctx.cat, def.rewards.xp, this.bus);
+    const coins = def?.rewards.coins ?? 0;
+    ctx.active.earnCoins(coins);
 
     this.bus.emit('questCompleted', { questId: MURDER_QUEST_ID });
-    this.completeOverlayTimer = QUEST_COMPLETE_OVERLAY_FRAMES;
+    const questTitle = def?.name ?? MURDER_QUEST_NAME;
+    this.bus.emit('questRewardShown', this.rewardSpec(questTitle, xpApplied, coins));
+  }
+
+  /**
+   * The solved case's quest-complete screen, describing what
+   * {@link finishQuest} actually paid. It waits out any conversation still open.
+   */
+  private rewardSpec(
+    questTitle: string,
+    xpApplied: PartyXpApplied | null,
+    coins: number,
+  ): QuestRewardSpec {
+    return {
+      questTitle,
+      sections: [
+        ...(xpApplied === null ? [] : partyXpSections(xpApplied)),
+        { kind: 'coins', amount: coins },
+      ],
+    };
   }
 
   // ── Frame update ──────────────────────────────────────────────────────────
@@ -1201,7 +1205,6 @@ export class MurderMysteryQuestSystem implements GameSystem {
     this.lastCtx = ctx;
     this.grantOwedEvidence(ctx);
     this.partyLevel = partyLevelOf(ctx.human.level, ctx.cat.level);
-    if (this.completeOverlayTimer > 0) this.completeOverlayTimer--;
     if (this.bannerTimer > 0) this.bannerTimer--;
 
     switch (this.phase) {
@@ -1269,7 +1272,7 @@ export class MurderMysteryQuestSystem implements GameSystem {
         }
         break;
       case 'awaiting_rewards':
-        this.finishQuest(ctx.active);
+        this.finishQuest(ctx);
         break;
       case 'investigation':
         // Opened once every clue is found.
@@ -1445,6 +1448,5 @@ export class MurderMysteryQuestSystem implements GameSystem {
 
   renderUI(ctx: CanvasRenderingContext2D): void {
     drawQuestBanner(ctx, this.bannerText, this.bannerTimer, '#f47c7c', '#6a2a2a');
-    drawQuestCompleteOverlay(ctx, 'THE KRASUE MURDERS — SOLVED', this.completeOverlayTimer);
   }
 }

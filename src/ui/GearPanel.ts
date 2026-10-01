@@ -22,12 +22,6 @@ const SLOT_GAP = 3;
 const PANEL_PAD = EQUIP_PANEL_PAD;
 const HEADER_H = 40;
 
-// Toggle button positioning
-const TOGGLE_BTN_X_OFFSET = 252;
-const TOGGLE_BTN_Y = 8;
-const TOGGLE_BTN_W = 76;
-const TOGGLE_BTN_H = 28;
-
 // Panel sizing
 const MAX_PANEL_HEIGHT = 420;
 const PANEL_HEIGHT_MARGIN = 16;
@@ -90,15 +84,6 @@ export class GearPanel {
 
   toggle(): void {
     this.isOpen = !this.isOpen;
-  }
-
-  toggleBtnRect() {
-    return {
-      x: viewportWidth() - TOGGLE_BTN_X_OFFSET,
-      y: TOGGLE_BTN_Y,
-      w: TOGGLE_BTN_W,
-      h: TOGGLE_BTN_H,
-    };
   }
 
   private panelRect() {

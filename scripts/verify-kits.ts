@@ -73,6 +73,7 @@ import { createMurderQuestProgress } from '../src/core/MurderQuestProgress';
 import { MenusKit } from '../src/systems/kits/MenusKit';
 import { BriarHollowKit } from '../src/systems/briarHollow/BriarHollowKit';
 import { createBriarHollowState } from '../src/core/briarHollowState';
+import { createAnchorQuestProgress } from '../src/core/AnchorQuestProgress';
 import { createPartyCraftsState } from '../src/core/partyCrafts';
 import { PartyTools } from '../src/core/PartyTools';
 import { keybindings } from '../src/core/Keybindings';
@@ -892,6 +893,7 @@ console.log('\nBriarHollowKit is inert until gameMap.briarHollow exists');
   const menus = new MenusKit({ world: stage.world, abilityManager: new AbilityManager() });
   const partyCrafts = createPartyCraftsState();
   const kit = new BriarHollowKit(stage.world, {
+    travelUnlocks: { anchor: createAnchorQuestProgress() },
     human: stage.pm.human,
     cat: stage.pm.cat,
     partyTools: new PartyTools(partyCrafts.tools),

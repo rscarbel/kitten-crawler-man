@@ -27,8 +27,8 @@ export function buildAnchorReward(xp: number): DialogReward {
     itemId: 'wayfinders_anchor',
     displayName: "Wayfinder's Anchor",
     lines: [
-      'Anywhere in the Over City: sends the party back to the town square.',
-      'In the square: sends you back to where you left. One minute between trips.',
+      'Anywhere in the Over City: carries the party to a place it is bound to.',
+      'The town square first; the circus and Briar Hollow later. One minute between trips.',
     ],
     xp,
   };
@@ -74,7 +74,7 @@ export const VOSS_ASSEMBLY_OFFER = voss.fn(
 
 export const VOSS_ASSEMBLY_DONE = voss.button(
   'Take the stone',
-  'There. Incredible! Feel that? That warmth is the stone at home; this very town square lays on top of the same clearing in the woods that the sorceress once lived. If you use this when you are out in the wild, it will bring you back here, where it is anchored. It cannot be used in rapid succession, and there are spells that can block it, but it should help you travel around much faster.',
+  'There. Incredible! Feel that? That warmth is the stone at home; this very town square lays on top of the same clearing in the woods that the sorceress once lived. If you use this when you are out in the wild, it will bring you back here, where it is anchored, and to any other place you come to hold dear once you have done right by it. It cannot be used in rapid succession, and there are spells that can block it, but it should help you travel around much faster.',
 );
 
 export const VOSS_CANNOT_AFFORD = voss.fn(

@@ -23,12 +23,9 @@ import { setViewportSize } from '../../src/core/Viewport';
 import { transientSpeaker } from '../../src/dialog/line';
 import { PASTURE_FENCE_SECTION_COUNT } from '../../src/map/overworld/briarHollowLayout';
 import { focusedButtonClickPoint } from '../../src/ui/Button';
-import {
-  BLUEPRINTS_COMPLETE_FOCUS_ID,
-  BLUEPRINTS_COMPLETE_SETTLED_FRAMES,
-  BLUEPRINTS_REWARDS_HEADING,
-} from '../../src/systems/briarHollow/blueprints/BlueprintsCompletionScreen';
-import type { BlueprintsCue } from '../../src/systems/briarHollow/blueprints/blueprintsSoundCues';
+import { BLUEPRINTS_REWARDS_HEADING } from '../../src/systems/briarHollow/blueprints/blueprintsRewardSpec';
+import { BLUEPRINTS_QUEST_NAME } from '../../src/systems/briarHollow/blueprints/blueprintsProgress';
+import type { QuestRewardScreen } from '../../src/ui/questReward/QuestRewardScreen';
 import { UPGRADED_WOOD_PER_PRESS } from '../../src/systems/briarHollow/blueprints/StationUpgrades';
 import { PLAIN_WOOD_PER_PRESS } from '../../src/systems/briarHollow/processingStations';
 import {
@@ -163,26 +160,57 @@ const SCREEN_H = 720;
 /** A point on no button, well clear of the panel. */
 const STRAY_CLICK = { x: 2, y: 2 } as const;
 
+/** Render frames a reveal is given to settle before a check calls it stuck. */
+const SETTLE_CEILING_FRAMES = 600;
+
 interface CompletionRig {
   readonly rig: SiegeRig;
   readonly blueprints: BlueprintsQuestSystem;
-  readonly cues: BlueprintsCue[];
+  /** The scene's shared quest-complete screen, as the rig's menus hold it. */
+  readonly screen: QuestRewardScreen;
+  /** How many times a quest-complete screen has gone up, fanfare and all. */
+  readonly opens: { count: number };
 }
 
-/** A village kit on `state`, recording every cue the quest raises. */
+/**
+ * A village kit on `state`, with the shared quest-complete screen waiting out
+ * the village's conversation as the scene's does, counting every time it goes up.
+ */
 function completionRigOn(state: BriarHollowState): CompletionRig {
-  const cues: BlueprintsCue[] = [];
   const rig = buildSiegeRig({
     seed: BLUEPRINTS_RIG_SEED,
     state,
     assaultLevel: COMPLETE_RIG_ASSAULT_LEVEL,
-    onBlueprintsCue: (cue) => cues.push(cue),
   });
   const blueprints = rig.kit.blueprints;
   if (blueprints === null) throw new Error('the village kit built no blueprints quest');
   rig.human.godMode = true;
   rig.cat.godMode = true;
-  return { rig, blueprints, cues };
+  const screen = rig.menus.questReward;
+  screen.setOpenConditions({
+    conversationOpen: () => rig.kit.villagers?.conversation.isOpen === true,
+    worldHeld: () => false,
+  });
+  const opens = { count: 0 };
+  const open = screen.open.bind(screen);
+  screen.open = (spec) => {
+    opens.count++;
+    open(spec);
+  };
+  return { rig, blueprints, screen, opens };
+}
+
+/** One scene frame: the village's update, then the menus' screen. */
+function stepCompletion(setup: CompletionRig, frames: number): void {
+  for (let frame = 0; frame < frames; frame++) {
+    setup.rig.step();
+    setup.screen.update();
+  }
+}
+
+/** Whether the Blueprints' own screen is the one on show. */
+function blueprintsScreenOpen(setup: CompletionRig): boolean {
+  return setup.screen.showing?.questTitle === BLUEPRINTS_QUEST_NAME;
 }
 
 /** A kit whose second station has just gone up: the next update completes the quest. */
@@ -194,12 +222,8 @@ function bothStationsUpgradedRig(): CompletionRig {
   return completionRigOn(state);
 }
 
-function fanfares(setup: CompletionRig): number {
-  return setup.cues.filter((cue) => cue === 'questComplete').length;
-}
-
-/** Every word one frame of the kit's dialogs drew, at a desktop window. */
-function renderDialogs(rig: SiegeRig): string[] {
+/** Every word one frame of the village's dialogs and the screen drew, at a desktop window. */
+function renderDialogs(setup: CompletionRig): string[] {
   setViewportSize(SCREEN_W, SCREEN_H);
   const ctx = surfaceContext(allocCanvas(SCREEN_W, SCREEN_H));
   const texts: string[] = [];
@@ -208,66 +232,64 @@ function renderDialogs(rig: SiegeRig): string[] {
     texts.push(args[0]);
     fillText(...args);
   };
-  rig.kit.renderDialog(ctx, 0, 0);
+  setup.rig.kit.renderDialog(ctx, 0, 0);
+  setup.screen.render(ctx);
   return texts;
 }
 
 /** Renders the screen until its reveal has settled. */
-function settle(rig: SiegeRig): void {
-  for (let frame = 0; frame <= BLUEPRINTS_COMPLETE_SETTLED_FRAMES; frame++) renderDialogs(rig);
+function settle(setup: CompletionRig): void {
+  for (let frame = 0; frame < SETTLE_CEILING_FRAMES && !setup.screen.isSettled; frame++) {
+    renderDialogs(setup);
+  }
 }
 
 /** Presses the accept key as the focus ring would: a click at the ring's primary. */
-function pressAccept(rig: SiegeRig): boolean {
-  renderDialogs(rig);
+function pressAccept(setup: CompletionRig): boolean {
+  renderDialogs(setup);
   const point = focusedButtonClickPoint();
   if (point === null) return false;
-  rig.kit.handleClick(point.x, point.y);
+  setup.screen.handleClick(point.x, point.y);
   return true;
-}
-
-function screenClaim(rig: SiegeRig): ReturnType<SiegeRig['kit']['overlayClaims']>[number] | null {
-  return (
-    rig.kit.overlayClaims().find((claim) => claim.focusContext === BLUEPRINTS_COMPLETE_FOCUS_ID) ??
-    null
-  );
 }
 
 /** Raised once on completion, halting the world, and gone for good after Continue. */
 function verifyCompletionScreenShownOnce(check: Check): void {
   const setup = bothStationsUpgradedRig();
-  const { rig, blueprints } = setup;
-  stepFrames(rig, OPEN_WITHIN_FRAMES);
+  const { rig, screen } = setup;
+  stepCompletion(setup, OPEN_WITHIN_FRAMES);
   check(rig.state.blueprints.phase === 'complete', 'both stations upgraded completes the quest');
-  check(blueprints.completion.isOpen, 'the quest-complete screen goes up on completion');
-  check(fanfares(setup) === 1, 'the screen plays the quest-complete fanfare once as it goes up');
-  const claim = screenClaim(rig);
+  check(blueprintsScreenOpen(setup), 'the quest-complete screen goes up on completion');
+  check(setup.opens.count === 1, 'the screen goes up once, with its fanfare');
+  const claim = screen.overlayClaim();
   check(
-    claim?.isOpen === true && claim.haltsWorld && claim.locksKeyboard,
+    claim.isOpen && claim.haltsWorld && claim.locksKeyboard,
     "the screen's overlay claim is open, halts the world and locks the keyboard",
   );
-  check(rig.kit.haltsWorldItself, 'the kit owns the halt, so the scene does not sweep it away');
 
-  const drawn = renderDialogs(rig).join('\n');
+  const drawn = renderDialogs(setup).join('\n');
   check(
-    drawn.includes('QUEST COMPLETE') && drawn.includes('The Borrowed Blueprints'),
+    drawn.includes('QUEST COMPLETE') && drawn.includes(BLUEPRINTS_QUEST_NAME),
     'the screen names the quest as complete',
   );
   check(drawn.includes(BLUEPRINTS_REWARDS_HEADING), 'the screen lists its rewards as permanent');
 
-  rig.kit.handleClick(STRAY_CLICK.x, STRAY_CLICK.y);
-  check(blueprints.completion.isOpen, 'a click before the reveal settles only finishes the reveal');
-  settle(rig);
-  rig.kit.handleClick(STRAY_CLICK.x, STRAY_CLICK.y);
-  check(blueprints.completion.isOpen, 'a click off Continue does not dismiss the settled screen');
-  check(pressAccept(rig), 'the settled screen offers Continue as its primary to the accept key');
-  check(!blueprints.completion.isOpen, 'Continue dismisses the screen');
-  check(rig.state.blueprints.completionScreenSeen, 'dismissing records the screen as seen');
-  check(screenClaim(rig)?.isOpen === false, 'the claim closes with the screen');
-
-  stepFrames(rig, NO_REPLAY_FRAMES);
+  screen.handleClick(STRAY_CLICK.x, STRAY_CLICK.y);
   check(
-    !blueprints.completion.isOpen && fanfares(setup) === 1,
+    screen.isOpen && screen.isSettled,
+    'a click before the reveal settles only finishes the reveal',
+  );
+  settle(setup);
+  screen.handleClick(STRAY_CLICK.x, STRAY_CLICK.y);
+  check(screen.isOpen, 'a click off Continue does not dismiss the settled screen');
+  check(pressAccept(setup), 'the settled screen offers Continue as its primary to the accept key');
+  check(!screen.isOpen, 'Continue dismisses the screen');
+  check(rig.state.blueprints.completionScreenSeen, 'dismissing records the screen as seen');
+  check(!screen.overlayClaim().isOpen, 'the claim closes with the screen');
+
+  stepCompletion(setup, NO_REPLAY_FRAMES);
+  check(
+    !screen.isOpen && setup.opens.count === 1,
     'the screen never comes back, and the fanfare never repeats',
   );
 
@@ -283,9 +305,9 @@ function verifyCompletionScreenShownOnce(check: Check): void {
   const reloadedState = createBriarHollowState();
   restoreBriarHollowState(reloadedState, reloaded);
   const rebuilt = completionRigOn(reloadedState);
-  stepFrames(rebuilt.rig, NO_REPLAY_FRAMES);
+  stepCompletion(rebuilt, NO_REPLAY_FRAMES);
   check(
-    !rebuilt.blueprints.completion.isOpen && fanfares(rebuilt) === 0,
+    !rebuilt.screen.isOpen && rebuilt.opens.count === 0,
     'a kit rebuilt from the reloaded save (a door visit, a load) never raises it again',
   );
   rebuilt.rig.dispose();
@@ -293,18 +315,16 @@ function verifyCompletionScreenShownOnce(check: Check): void {
 
 /** Escape leaves as Continue does, once settled; an auto-repeat does not. */
 function verifyCompletionScreenEscape(check: Check): void {
-  const { rig, blueprints } = bothStationsUpgradedRig();
-  stepFrames(rig, OPEN_WITHIN_FRAMES);
-  settle(rig);
-  rig.kit.handleKeyDown('Escape', true);
+  const setup = bothStationsUpgradedRig();
+  const { rig, screen } = setup;
+  stepCompletion(setup, OPEN_WITHIN_FRAMES);
+  settle(setup);
+  screen.handleKeyDown('Escape', true);
+  check(screen.isOpen, 'a held Escape repeating into the screen does not dismiss it');
+  check(screen.handleKeyDown('h', false), 'every other key is swallowed while the screen is up');
+  screen.handleKeyDown('Escape', false);
   check(
-    blueprints.completion.isOpen,
-    'a held Escape repeating into the screen does not dismiss it',
-  );
-  check(rig.kit.handleKeyDown('h'), 'every other key is swallowed while the screen is up');
-  rig.kit.handleKeyDown('Escape', false);
-  check(
-    !blueprints.completion.isOpen && rig.state.blueprints.completionScreenSeen,
+    !screen.isOpen && rig.state.blueprints.completionScreenSeen,
     'a fresh Escape dismisses the settled screen and records it as seen',
   );
   rig.dispose();
@@ -313,7 +333,7 @@ function verifyCompletionScreenEscape(check: Check): void {
 /** It waits for a conversation and for the siege, and a completion never read survives a door. */
 function verifyCompletionScreenWaits(check: Check): void {
   const setup = bothStationsUpgradedRig();
-  const { rig, blueprints } = setup;
+  const { rig } = setup;
   const conversation = rig.kit.villagers?.conversation ?? null;
   if (conversation === null) {
     check(false, 'the village kit has a conversation panel');
@@ -329,31 +349,34 @@ function verifyCompletionScreenWaits(check: Check): void {
     anchor: null,
     locksKeyboard: true,
   });
-  stepFrames(rig, OPEN_WITHIN_FRAMES);
+  stepCompletion(setup, OPEN_WITHIN_FRAMES);
   check(
-    rig.state.blueprints.phase === 'complete' && !blueprints.completion.isOpen,
+    rig.state.blueprints.phase === 'complete' && !blueprintsScreenOpen(setup),
     'the screen waits while a conversation is open',
   );
-  check(fanfares(setup) === 0, 'and holds its fanfare for when it goes up');
+  check(setup.opens.count === 0, 'and holds its fanfare for when it goes up');
   if (conversation.isActive(handle)) conversation.close();
-  stepFrames(rig, OPEN_WITHIN_FRAMES);
-  check(blueprints.completion.isOpen, 'the screen goes up once the conversation closes');
+  stepCompletion(setup, OPEN_WITHIN_FRAMES);
+  check(blueprintsScreenOpen(setup), 'the screen goes up once the conversation closes');
   rig.dispose();
 
   const underSiege = createBriarHollowState();
   underSiege.blueprints.phase = 'complete';
   underSiege.quest.phase = 'imminent';
   const siege = completionRigOn(underSiege);
-  stepFrames(siege.rig, OPEN_WITHIN_FRAMES);
-  check(!siege.blueprints.completion.isOpen, 'the screen never goes up during the siege');
+  stepCompletion(siege, OPEN_WITHIN_FRAMES);
+  check(
+    !siege.screen.isOpen && siege.screen.queuedCount === 0,
+    'the screen is never asked for during the siege',
+  );
   siege.rig.dispose();
 
   const unread = createBriarHollowState();
   unread.blueprints.phase = 'complete';
   const door = completionRigOn(unread);
-  stepFrames(door.rig, OPEN_WITHIN_FRAMES);
+  stepCompletion(door, OPEN_WITHIN_FRAMES);
   check(
-    door.blueprints.completion.isOpen,
+    blueprintsScreenOpen(door),
     'a completion whose screen was never dismissed raises it on the far side of a door',
   );
   door.rig.dispose();
@@ -390,10 +413,11 @@ function verifyCompletionFlagParse(check: Check): void {
  * out here from the constants the sawmill itself reads.
  */
 function verifyCompletionRewardsMatchConstants(check: Check): void {
-  const { rig } = bothStationsUpgradedRig();
-  stepFrames(rig, OPEN_WITHIN_FRAMES);
-  settle(rig);
-  const drawn = renderDialogs(rig);
+  const setup = bothStationsUpgradedRig();
+  const { rig } = setup;
+  stepCompletion(setup, OPEN_WITHIN_FRAMES);
+  settle(setup);
+  const drawn = renderDialogs(setup);
   const drew = (text: string): boolean => drawn.some((line) => line.includes(text));
   const intake = `${UPGRADED_WOOD_PER_PRESS} wood per press (was ${PLAIN_WOOD_PER_PRESS})`;
   const sawOutput = `${UPGRADED_WOOD_PER_PRESS * BOARDS_PER_WOOD} boards a press (was ${PLAIN_WOOD_PER_PRESS * BOARDS_PER_WOOD})`;

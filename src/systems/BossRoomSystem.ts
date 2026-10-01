@@ -37,6 +37,7 @@ import {
   drawSlamShadow,
   drawSlamImpact,
   drawKrakarenSlamTentacle,
+  krakarenScaledArtOrigin,
   prewarmKrakarenGore,
 } from '../sprites/krakarenSprite';
 import { prewarmKrakarenTentacle } from '../sprites/krakarenTentacleSprite';
@@ -1788,16 +1789,17 @@ export class BossRoomSystem implements GameSystem, GroundHazardSource {
         const worldX = standsAtTarget ? tentacle.targetX : tentacle.riseX;
         const worldY = standsAtTarget ? tentacle.targetY : tentacle.riseY;
         const tileOriginOffset = TILE_SIZE * ENTITY_TILE_CENTER_OFFSET;
-        // Drawn at the boss's own visual scale, anchored on the same world
+        const artTileSize = TILE_SIZE * KRAKAREN_VISUAL_SCALE;
+        // Drawn at the boss's own visual scale, standing on the same world
         // point, so it reads as belonging to her rather than to a smaller,
         // separate creature.
-        drawKrakarenSlamTentacle(
-          ctx,
+        const art = krakarenScaledArtOrigin(
           worldX - camX - tileOriginOffset,
           worldY - camY - tileOriginOffset,
-          TILE_SIZE * KRAKAREN_VISUAL_SCALE,
-          tentacle,
+          TILE_SIZE,
+          artTileSize,
         );
+        drawKrakarenSlamTentacle(ctx, art.x, art.y, artTileSize, tentacle);
       }
     }
   }

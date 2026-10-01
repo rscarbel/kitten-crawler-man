@@ -66,6 +66,7 @@ import {
 } from '../src/systems/briarHollow/VillageQuestSystem';
 import { TREBUCHET_BUILD_COST } from '../src/systems/briarHollow/structureRules';
 import { buildSiegeRig, standAt } from './villageSiegeHarness';
+import type { QuestRewardSpec } from '../src/ui/questReward/types';
 
 installCanvasGlobals();
 // The villager conversation paginates its text against the live viewport;
@@ -759,6 +760,17 @@ section('9. The retry and the turn-in');
   const burgersBefore = human.inventory.countOf('hamburger');
   const stewBefore = human.inventory.countOf('hollow_stew');
   const xpBefore = partyXp();
+  const rewardScreens: QuestRewardSpec[] = [];
+  rig.bus.on('questRewardShown', (spec) => rewardScreens.push(spec));
+  const xpLanded = { total: 0 };
+  for (const crawler of [human, cat]) {
+    const gainXp = crawler.gainXp.bind(crawler);
+    crawler.gainXp = (amount) => {
+      const result = gainXp(amount);
+      xpLanded.total += result.xpApplied;
+      return result;
+    };
+  }
   const siege = state.quest.lastSiege;
   const damaged =
     siege !== null && siege.segmentsBreached + siege.structuresDestroyed + siege.soldiersDowned > 0;
@@ -786,7 +798,15 @@ section('9. The retry and the turn-in');
     'questCompleted is emitted once',
   );
   choose('Goodbye');
-  check(rig.rewardCards.length >= 2, 'the reward cards are shown once the conversation closes');
+  const xpSectionsShown = (rewardScreens[0]?.sections ?? []).flatMap((section) =>
+    section.kind === 'xp' ? [section.amount] : [],
+  );
+  const xpShownTotal = xpSectionsShown.reduce((total, amount) => total + amount, 0);
+  check(rewardScreens.length === 1, 'the quest asks for its reward screen once');
+  check(
+    xpSectionsShown.length === 2 && xpShownTotal === xpLanded.total,
+    `the reward screen shows the XP the quest actually paid, one line per crawler (${xpSectionsShown.join(' + ')} shown, ${xpLanded.total} landed)`,
+  );
 
   const coinsAfter = human.coins;
   const xpAfter = partyXp();

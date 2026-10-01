@@ -15,7 +15,10 @@ import { CENTER_COLLISION_OFFSET, SOLE_COLLISION_OFFSET } from '../map/collision
 import type { TrackerEntry } from './questTracker';
 import { clamp, pointInRect } from '../utils';
 import { drawText } from '../ui/TextBox';
-import { drawFittedTitle } from '../ui/QuestBanners';
+import { awardPartyXp, type PartyXpApplied } from '../core/awardXp';
+import { CRAWLER_NAMES } from '../core/SkillManager';
+import { bagItemRewardLine, itemIconPainter, partyXpSections } from '../ui/questReward/rewardLines';
+import type { QuestRewardSpec } from '../ui/questReward/types';
 import { drawBox, BOX_PRESETS } from '../ui/Box';
 import { drawInteractionPrompt } from '../ui/InteractionPrompt';
 import { platform } from '../core/Platform';
@@ -77,6 +80,9 @@ import type { ConversationHandle } from '../dialog/request';
 import { SCIENTIST } from '../dialog/scripts/scenes/spider';
 
 export const SPIDER_QUEST_ID = 'grotesque_spider';
+const SPIDER_QUEST_NAME = 'The Arachnid Experiment';
+/** The skill book the lab pays out. */
+const SPIDER_QUEST_BOOK = 'skill_book_night_vision';
 export const SPIDER_QUEST_COMPLETION_XP = 2000;
 
 const SCIENTIST_INTERACT_RANGE_TILES = 2.5;
@@ -323,32 +329,14 @@ const CS_GORE_COLORS = ['#7f1d1d', '#991b1b', '#b91c1c', '#dc2626', '#5b1010'] a
 /** Recentres `Math.random()` on zero so jitter throws both ways. */
 const SHAKE_JITTER_CENTER = 0.5;
 
-// Quest complete overlay constants
-const QUEST_COMPLETE_DISPLAY_FRAMES = 420; // 7 seconds at 60 fps
-/** A short pause after her death finishes playing, before the banner covers the room. */
+/** A short pause after her death finishes playing, before the reward screen covers the room. */
 const QUEST_COMPLETE_AFTER_DEATH_BEAT_FRAMES = 30;
 /**
- * Frames from her death to the quest-complete banner. Its dimmed screen would
- * otherwise hide her whole collapse, which plays out on her corpse clock.
+ * Frames from her death to asking for the quest-complete screen. Its dimmed
+ * backdrop would otherwise hide her whole collapse, which plays out on her
+ * corpse clock.
  */
-export const QUEST_COMPLETE_OVERLAY_DELAY_FRAMES =
-  DEATH_ANIM_FRAMES + QUEST_COMPLETE_AFTER_DEATH_BEAT_FRAMES;
-const OVERLAY_FADE_FRAMES = 90;
-const TEXT_HEIGHT_FACTOR = 0.8;
-const OVERLAY_PULSE_SPEED = 200;
-const OVERLAY_PULSE_AMP = 0.05;
-const OVERLAY_BASE_TEXT_SIZE = 36;
-const OVERLAY_COMPLETE_TITLE_Y_OFFSET = 30;
-const OVERLAY_TITLE_GLOW_BLUR = 15;
-const OVERLAY_REWARDS_Y_OFFSET = 10;
-const OVERLAY_REWARDS_Y_ASCENT = 13;
-const OVERLAY_REWARD_1_Y_OFFSET = 35;
-const OVERLAY_REWARD_1_ASCENT = 11;
-const OVERLAY_DISMISS_Y_OFFSET = 65;
-const OVERLAY_DISMISS_ASCENT = 10;
-const OVERLAY_REWARDS_SIZE = 16;
-const OVERLAY_REWARD_SIZE = 14;
-const OVERLAY_DISMISS_SIZE = 12;
+const QUEST_REWARD_SCREEN_DELAY_FRAMES = DEATH_ANIM_FRAMES + QUEST_COMPLETE_AFTER_DEATH_BEAT_FRAMES;
 
 const NEIGHBOR_OFFSETS_SMALL: Array<[number, number]> = [
   [0, OFFSET_NORTH],
@@ -553,23 +541,13 @@ export class SpiderQuestSystem implements GameSystem {
    */
   private _bossMusicStopGraceTimer = 0;
 
-  // Quest completion
-  completeOverlayTimer = 0;
-  /** Frames until the quest-complete banner opens; the quest itself is already complete. */
-  completeOverlayDelay = 0;
   /**
-   * What the completion banner reads off, set by `DungeonScene`'s
-   * `questCompleted` handler right after it calls `awardXp` for each crawler —
-   * the amount that actually landed on the XP bar, not the flat award.
+   * The quest-complete screen built when she died, held until her death has
+   * played; the quest itself is already complete and paid.
    */
-  private humanXpApplied = 0;
-  private catXpApplied = 0;
-
-  /** Records what each crawler actually gained, for the completion banner. */
-  setAwardedXp(humanXpApplied: number, catXpApplied: number): void {
-    this.humanXpApplied = humanXpApplied;
-    this.catXpApplied = catXpApplied;
-  }
+  private pendingRewardSpec: QuestRewardSpec | null = null;
+  /** Frames until {@link pendingRewardSpec} is asked for. */
+  rewardScreenDelay = 0;
 
   // Boss intro trigger — set when the cutscene ends and the fight begins
   bossFightStartPending = false;
@@ -788,21 +766,6 @@ export class SpiderQuestSystem implements GameSystem {
     return this.phase === 'hacking_failed' || this.phase === 'keyboard_hero_tutorial';
   }
 
-  /**
-   * The completion banner, which a press dismisses early. It rides over live
-   * play rather than pausing it, so it is not part of `isDialogOpen`.
-   */
-  get isOutcomeOverlayShowing(): boolean {
-    return this.completeOverlayTimer > 0;
-  }
-
-  /** Space/tap on the banner: dismiss early rather than wait out the timer. */
-  advanceOutcomeOverlay(): boolean {
-    if (this.completeOverlayTimer <= 0) return false;
-    this.completeOverlayTimer = 0;
-    return true;
-  }
-
   get isDungeonPaused(): boolean {
     return (
       this.phase === 'hacking' ||
@@ -881,7 +844,7 @@ export class SpiderQuestSystem implements GameSystem {
    */
   trackerEntries(): ReadonlyArray<TrackerEntry> {
     if (this.phase === 'inactive' || this.roomData === null) return [];
-    const base = { id: SPIDER_QUEST_ID, name: 'The Arachnid Experiment' };
+    const base = { id: SPIDER_QUEST_ID, name: SPIDER_QUEST_NAME };
     const labTile = {
       x: this.roomData.computerTile.x,
       y: this.roomData.computerTile.y,
@@ -963,13 +926,7 @@ export class SpiderQuestSystem implements GameSystem {
   }
 
   update(ctx: SystemContext): void {
-    // Overlay timer ticks even after quest ends
-    if (this.completeOverlayTimer > 0) this.completeOverlayTimer--;
-    if (this.completeOverlayDelay > 0) {
-      this.completeOverlayDelay--;
-      if (this.completeOverlayDelay === 0)
-        this.completeOverlayTimer = QUEST_COMPLETE_DISPLAY_FRAMES;
-    }
+    this.tickRewardScreenDelay();
 
     if (this.phase === 'inactive') return;
     if (!this.roomData) return;
@@ -984,7 +941,7 @@ export class SpiderQuestSystem implements GameSystem {
     // Boss death check
     if (this.phase === 'boss_fight' && this._grotesqueSpider !== null) {
       if (!this._grotesqueSpider.isAlive) {
-        this.onBossKilled();
+        this.onBossKilled(ctx.human, ctx.cat);
         return;
       }
       this._updateBrood(this._grotesqueSpider);
@@ -1159,15 +1116,9 @@ export class SpiderQuestSystem implements GameSystem {
     if (this._roomLocked && this.roomData !== null) {
       this._renderLockedRoomBorder(ctx, camX, camY);
     }
-
-    if (this.completeOverlayTimer > 0) {
-      this._renderCompleteOverlay(ctx);
-    }
   }
 
   handleClick(mx: number, my: number, eventTimeStampMs?: number): boolean {
-    if (this.advanceOutcomeOverlay()) return true;
-
     if (this.phase === 'keyboard_hero_tutorial') {
       for (const btn of this._tutorialButtons) {
         if (pointInRect(mx, my, btn)) {
@@ -1377,12 +1328,11 @@ export class SpiderQuestSystem implements GameSystem {
     }
   }
 
-  onBossKilled(): void {
+  onBossKilled(human: HumanPlayer, cat: CatPlayer): void {
     if (this.phase === 'complete') return;
     this.phase = 'complete';
     this._clearBrood();
     this.labDressing?.onBossDefeated();
-    this.completeOverlayDelay = QUEST_COMPLETE_OVERLAY_DELAY_FRAMES;
     this._playerLocked = false;
     this._roomLocked = false;
     this._fightAborted = false;
@@ -1400,6 +1350,48 @@ export class SpiderQuestSystem implements GameSystem {
     this._bossMusicStopGraceTimer = 0;
     this._bossMusicPlaying = false;
     this.bus.emit('questCompleted', { questId: SPIDER_QUEST_ID, difficulty: 'medium' });
+    this.payRewards(human, cat);
+  }
+
+  /**
+   * Both crawlers earn the XP, and the night-vision book goes straight to the
+   * cat: the lab's dark is what the book is about, and she is the only crawler
+   * who can read it. The screen describing it is held until her death has played.
+   */
+  private payRewards(human: HumanPlayer, cat: CatPlayer): void {
+    const xpApplied = awardPartyXp(human, cat, SPIDER_QUEST_COMPLETION_XP, this.bus);
+    cat.inventory.addItem(SPIDER_QUEST_BOOK, 1);
+    this.pendingRewardSpec = this.rewardSpec(xpApplied);
+    this.rewardScreenDelay = QUEST_REWARD_SCREEN_DELAY_FRAMES;
+  }
+
+  /** The lab's quest-complete screen, describing what {@link payRewards} actually paid. */
+  private rewardSpec(xpApplied: PartyXpApplied): QuestRewardSpec {
+    return {
+      questTitle: SPIDER_QUEST_NAME,
+      renderQuestIcon: itemIconPainter(SPIDER_QUEST_BOOK),
+      sections: [
+        ...partyXpSections(xpApplied),
+        {
+          kind: 'items',
+          items: [
+            bagItemRewardLine(SPIDER_QUEST_BOOK, 1, {
+              describe: true,
+              note: `In ${CRAWLER_NAMES.cat}'s bag.`,
+            }),
+          ],
+        },
+      ],
+    };
+  }
+
+  /** Counts down to asking for the held quest-complete screen. */
+  private tickRewardScreenDelay(): void {
+    if (this.rewardScreenDelay > 0) this.rewardScreenDelay--;
+    const spec = this.pendingRewardSpec;
+    if (spec === null || this.rewardScreenDelay > 0) return;
+    this.pendingRewardSpec = null;
+    this.bus.emit('questRewardShown', spec);
   }
 
   /** Claims the boss track for the fight; a no-op while it is already playing. */
@@ -1480,7 +1472,8 @@ export class SpiderQuestSystem implements GameSystem {
     this.lifeMachines = snapshot.lifeMachines.map((machine) => ({ ...machine }));
     this.keyboardHero.restoreCheckpoint(snapshot.keyboardHero);
     this.impactFeedback.reset();
-    this.completeOverlayDelay = 0;
+    this.rewardScreenDelay = 0;
+    this.pendingRewardSpec = null;
   }
 
   dispose(): void {
@@ -1493,7 +1486,8 @@ export class SpiderQuestSystem implements GameSystem {
     this._grotesqueSpider?.setBroodContext(null);
     this._grotesqueSpider = null;
     this.impactFeedback.reset();
-    this.completeOverlayDelay = 0;
+    this.rewardScreenDelay = 0;
+    this.pendingRewardSpec = null;
   }
 
   /**
@@ -3222,63 +3216,6 @@ export class SpiderQuestSystem implements GameSystem {
       ctx.fill();
     }
     ctx.restore();
-  }
-
-  private _renderCompleteOverlay(ctx: CanvasRenderingContext2D): void {
-    const cw = viewportWidth();
-    const ch = viewportHeight();
-    const alpha =
-      this.completeOverlayTimer < OVERLAY_FADE_FRAMES
-        ? this.completeOverlayTimer / OVERLAY_FADE_FRAMES
-        : 1;
-
-    ctx.save();
-    ctx.globalAlpha = alpha;
-    ctx.fillStyle = 'rgba(0,0,0,0.6)';
-    ctx.fillRect(0, 0, cw, ch);
-    ctx.restore();
-
-    const pulse = 1 + OVERLAY_PULSE_AMP * Math.sin(performance.now() / OVERLAY_PULSE_SPEED);
-    const pulsedSize = Math.floor(OVERLAY_BASE_TEXT_SIZE * pulse);
-    drawFittedTitle(ctx, 'QUEST COMPLETE!', {
-      centerX: cw / 2,
-      y: ch / 2 - OVERLAY_COMPLETE_TITLE_Y_OFFSET - Math.round(pulsedSize * TEXT_HEIGHT_FACTOR),
-      size: pulsedSize,
-      color: '#4ade80',
-      alpha,
-      glow: '#4ade80',
-      glowBlur: OVERLAY_TITLE_GLOW_BLUR,
-    });
-
-    drawText(ctx, 'Rewards:', {
-      x: cw / 2,
-      y: ch / 2 + OVERLAY_REWARDS_Y_OFFSET - OVERLAY_REWARDS_Y_ASCENT,
-      size: OVERLAY_REWARDS_SIZE,
-      bold: true,
-      color: '#fbbf24',
-      align: 'center',
-      alpha,
-    });
-    drawText(
-      ctx,
-      `Carl +${this.humanXpApplied.toLocaleString()} EXP · Donut +${this.catXpApplied.toLocaleString()} EXP`,
-      {
-        x: cw / 2,
-        y: ch / 2 + OVERLAY_REWARD_1_Y_OFFSET - OVERLAY_REWARD_1_ASCENT,
-        size: OVERLAY_REWARD_SIZE,
-        color: '#e2e8f0',
-        align: 'center',
-        alpha,
-      },
-    );
-    drawText(ctx, 'Space or click to dismiss', {
-      x: cw / 2,
-      y: ch / 2 + OVERLAY_DISMISS_Y_OFFSET - OVERLAY_DISMISS_ASCENT,
-      size: OVERLAY_DISMISS_SIZE,
-      color: 'rgba(200,200,200,0.7)',
-      align: 'center',
-      alpha,
-    });
   }
 
   private _renderCutsceneUI(ctx: CanvasRenderingContext2D): void {

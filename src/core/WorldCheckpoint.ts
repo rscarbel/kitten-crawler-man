@@ -59,8 +59,8 @@ export interface WorldCheckpoint {
   miniMap: MiniMapCheckpoint;
   stairwell: StairwellCheckpoint;
   /**
-   * The Wayfinder's Anchor's cooldown alone. The live channel and the trail
-   * anchor are dropped by the restore rather than captured — see `RecallSystem`.
+   * The Wayfinder's Anchor's cooldown alone. The live channel is dropped by
+   * the restore rather than captured — see `RecallSystem`.
    */
   recall: RecallCheckpoint;
   treasureChests: TreasureChestCheckpoint;

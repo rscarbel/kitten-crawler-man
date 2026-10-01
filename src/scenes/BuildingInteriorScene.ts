@@ -25,6 +25,7 @@ import { MobileHUDSystem, type Rect } from '../systems/MobileHUDSystem';
 import { constructionUnlocked } from '../core/villageUnlocks';
 import { platform } from '../core/Platform';
 import * as UIRenderer from '../systems/DungeonUIRenderer';
+import type { HudViewState } from '../ui/hudButtons/hudViewState';
 import { TowerStairSystem } from '../systems/TowerStairSystem';
 import {
   readMovement,
@@ -220,6 +221,7 @@ import { ChatKit } from '../systems/kits/ChatKit';
 import {
   activateHotbarSlot,
   drinkAnyHealthPotion,
+  refuseAnchorIndoors,
   releaseChargedDynamite,
   type HotbarHost,
 } from '../systems/kits/hotbarActions';
@@ -255,6 +257,7 @@ import {
 } from '../systems/townInteriorPropFigures';
 import { shouldShowInteractionPrompts } from '../systems/interactionPromptGate';
 import { viewportWidth, viewportHeight } from '../core/Viewport';
+import type { QuestRewardSpec } from '../ui/questReward/types';
 import {
   ClearViewMemo,
   hudClearView,
@@ -582,10 +585,14 @@ export class BuildingInteriorScene extends GameplayScene {
   private readonly achievementUI: AchievementUISystem;
   /** The overworld's Quest Journal, read through the door; null on a floor with none. */
   private readonly overworldJournal: InteriorJournalSource | null;
+  /** The HUD toggles the party walked in with, written back on the way out. */
+  private readonly hudView: HudViewState | null;
   /** Where this frame's HUD drew the Build button, or null when it is not offered. */
   private buildButtonRect: Rect | null = null;
   /** Where this frame's HUD drew the Journal button, or null when it is not offered. */
   private journalButtonRect: Rect | null = null;
+  /** Where this frame's HUD drew the Follower button, or null when it is not drawn. */
+  private followButtonRect: Rect | null = null;
 
   protected get pauseMenu(): PauseMenu {
     return this.menus.pauseMenu;
@@ -859,6 +866,7 @@ export class BuildingInteriorScene extends GameplayScene {
     partyCrafts?: PartyCraftsState,
     briarHollowState?: BriarHollowState,
     overworldJournal?: InteriorJournalSource,
+    hudView?: HudViewState,
   ) {
     super(input, sceneManager);
     this.overworldJournal = overworldJournal ?? null;
@@ -1143,11 +1151,24 @@ export class BuildingInteriorScene extends GameplayScene {
       onOverlayRaised: () => this.mobileHUD.clearInvLongPress(),
       onPotionDrunk: (id) => this.noteDrinkAchievement(id),
     });
+    this.menus.questReward.setOpenConditions({
+      conversationOpen: () => this.conversation.isOpen,
+      worldHeld: () => worldHalted(this.overlayClaims),
+    });
+    this.menus.questReward.onClosed = (spec) => this.flyQuestRewards(spec);
     this.menus.inventoryPanel.interaction.onBlockedHotbarDrop = () => {
       this.audio?.play('error');
       this.menus.announce(HOTBAR_REFUSAL_MESSAGE);
     };
+    this.menus.useSceneItem = (item) => {
+      this.trySceneHotbarSlot(item);
+    };
     this.mobileHUD = new MobileHUDSystem(this.menus.inventoryPanel, this.menus.gearPanel);
+    this.hudView = hudView ?? null;
+    if (this.hudView !== null) {
+      this.mobileHUD.setMiniMapExpanded(this.hudView.miniMapExpanded);
+      this._hudCollapsed = this.hudView.hudCollapsed;
+    }
     this.achievementUI = new AchievementUISystem(
       this.humanAchievements,
       this.catAchievements,
@@ -1427,6 +1448,7 @@ export class BuildingInteriorScene extends GameplayScene {
       // The award stack outranks the death screen because it draws over it — a
       // level-up earned by the blow that killed you is still on top and still
       // has to be dismissible.
+      this.menus.questReward.overlayClaim(),
       modal(this.menus.levelUpDialog.isShowing, 'level-up'),
       modal(this.menus.rewardGrantedDialog.isShowing, 'reward-granted'),
       modal(this.menus.mongoExplainer.isOpen, MONGO_EXPLAINER_FOCUS_ID),
@@ -1495,6 +1517,24 @@ export class BuildingInteriorScene extends GameplayScene {
   /** Whose pack the bag is showing: an override picked from the pause menu, or the active crawler. */
   private inventoryPlayer(): HumanPlayer | CatPlayer {
     return this.menus.inventoryPlayer();
+  }
+
+  /**
+   * Flies what a dismissed quest-complete screen announced to the HUD, from
+   * the middle of the screen where its panel stood: its coins to the purse
+   * and its bag items to the bag.
+   */
+  private flyQuestRewards(spec: QuestRewardSpec): void {
+    const fromX = viewportWidth() / 2;
+    const fromY = viewportHeight() / 2;
+    for (const section of spec.sections) {
+      if (section.kind === 'coins') this.rewardFly.enqueueCoins(section.amount, fromX, fromY);
+      if (section.kind !== 'items') continue;
+      for (const item of section.items) {
+        const id = item.itemId;
+        if (id !== undefined) this.rewardFly.enqueueItem(id, ITEM_DEF[id].name, fromX, fromY);
+      }
+    }
   }
 
   /** From a ground pile's world position on `floor`, to wherever the HUD's coin/bag targets sit this frame. */
@@ -1921,7 +1961,10 @@ export class BuildingInteriorScene extends GameplayScene {
     // choice that closes it — "leave" — would otherwise land on a hotbar slot
     // on its way out.
     this.conversationKeyHandler = (e: KeyboardEvent) => {
+      // Escape dismisses the quest-complete screen and it swallows every other
+      // key; Space and Enter reach its Continue through the focus ring first.
       const taken =
+        this.menus.questReward.handleKeyDown(e.key, e.repeat) ||
         this.menus.constructionMenu.handleKey(e.key, e.repeat) ||
         this.menus.itemQuantityPicker.handleKey(e.key) ||
         this.conversation.handleKeyDown(e.key);
@@ -2175,6 +2218,14 @@ export class BuildingInteriorScene extends GameplayScene {
     return false;
   }
 
+  /** The Follower button, on either platform. Returns whether the press was its. */
+  private tryPressFollowButton(mx: number, my: number): boolean {
+    const follow = this.followButtonRect;
+    if (follow === null || !pointInRect(mx, my, follow)) return false;
+    if (this.canOpenFollowerMenu()) this.followerMenu.open();
+    return true;
+  }
+
   /** The collaborators a hotbar press reaches, resolved against the live floor. */
   private hotbarHost(): HotbarHost {
     return {
@@ -2195,8 +2246,7 @@ export class BuildingInteriorScene extends GameplayScene {
    */
   private trySceneHotbarSlot(slot: InventoryItem): boolean {
     if (slot.id !== 'wayfinders_anchor') return false;
-    this.audio?.play('error_taking_action');
-    this.menus.hotbarToast.show('The stone needs open sky to find its way.');
+    refuseAnchorIndoors({ world: this.world, menus: this.menus });
     return true;
   }
 
@@ -2540,9 +2590,10 @@ export class BuildingInteriorScene extends GameplayScene {
     }
 
     if (this.menus.skillBookPrompt.isOpen) return;
-    // Both award dialogs accept through their own focus rings, which reach
+    // The award dialogs accept through their own focus rings, which reach
     // `handleClick`; polling the key here would be the second path to the same
-    // OK button.
+    // button.
+    if (this.menus.questReward.isOpen) return;
     if (this.menus.levelUpDialog.isShowing) return;
     if (this.menus.rewardGrantedDialog.isShowing) return;
     // The chat box says it halts the world in `overlayClaims`, and this is where
@@ -3131,6 +3182,7 @@ export class BuildingInteriorScene extends GameplayScene {
     // draw order: the award stack is painted on top of it, so a press aimed at
     // an OK button there must not reach the screen underneath.
     if (this.achievementUI.handleClick(mx, my)) return;
+    if (this.menus.questReward.handleClick(mx, my)) return;
     if (this.menus.levelUpDialog.handleClick(mx, my)) return;
     if (this.menus.rewardGrantedDialog.handleClick(mx, my)) return;
     if (this.menus.mongoExplainer.handleClick(mx, my)) return;
@@ -3217,6 +3269,7 @@ export class BuildingInteriorScene extends GameplayScene {
       return;
     }
     if (!this.menus.panelCovers(mx, my) && this.tryPressSummonButton(mx, my)) return;
+    if (!this.menus.panelCovers(mx, my) && this.tryPressFollowButton(mx, my)) return;
     // Below every panel branch above, which is where they are drawn: a shop's
     // Buy column can sit over the Build button on a phone.
     if (!this.menus.panelCovers(mx, my) && this.tryPressColumnPieces(mx, my)) return;
@@ -3423,6 +3476,10 @@ export class BuildingInteriorScene extends GameplayScene {
     this.mercenarySystem.dismissForTransition(this.world.roster.mobs, this.world.roster.grid);
     const humanSnap = snapPlayer(this.human);
     const catSnap = snapPlayer(this.cat);
+    if (this.hudView !== null) {
+      this.hudView.miniMapExpanded = this.mobileHUD.miniMapExpanded;
+      this.hudView.hudCollapsed = this._hudCollapsed;
+    }
     this.onExitCallback(humanSnap, catSnap, defeated, companions);
   }
 
@@ -4076,6 +4133,7 @@ export class BuildingInteriorScene extends GameplayScene {
    * when this room offers them, the same tests their draw calls make.
    */
   private hudLayoutInput(): InteriorHudLayoutInput {
+    const banner = this.achievementUI.lootBoxIconRect;
     return {
       viewportWidth: viewportWidth(),
       viewportHeight: viewportHeight(),
@@ -4087,6 +4145,7 @@ export class BuildingInteriorScene extends GameplayScene {
       summonButton: this.mongoSystem.canShow && this.cat.isActive,
       buildButton: this.buildButtonOffered,
       journalButton: this.overworldJournal !== null,
+      lootBoxBanner: banner.w > 0 ? banner : null,
     };
   }
 
@@ -4095,7 +4154,7 @@ export class BuildingInteriorScene extends GameplayScene {
   }
 
   protected override hudToggleClearOfX(): number {
-    return this.hudLayout().miniMap.x;
+    return this.hudLayout().toggleClearOfX;
   }
 
   /**
@@ -4320,6 +4379,15 @@ export class BuildingInteriorScene extends GameplayScene {
     if (!this.exitMenuOpen && !this.pauseMenu.isOpen) {
       this.mobileHUD.renderInteriorMiniMap(ctx, this.map, this.active(), this.inactive());
       this.mobileHUD.renderPauseButton(ctx, hudLayout.pause);
+      // Hidden rather than merely inert where the room refuses the command: a
+      // button that answers every press with an error sound is a control the
+      // player keeps trying. The layout only offers Follow where it is allowed.
+      // Before the panels, as outside, so an open bag paints over it.
+      const follow = hudLayout.follow;
+      this.followButtonRect =
+        follow === null
+          ? null
+          : UIRenderer.renderFollowerButton(ctx, this.companion, this.human.isActive, follow);
 
       // The bag can be showing the companion's pack, opened from the pause
       // menu; the gear screen is always the active crawler's.
@@ -4339,6 +4407,7 @@ export class BuildingInteriorScene extends GameplayScene {
       });
       this.menus.syncPotionCooldownOverlay(invPlayer);
       this.menus.inventoryPanel.bagBouncePulse = this.rewardFly.bagBouncePulse();
+      this.menus.inventoryPanel.desktopBagButtonRect = hudLayout.bag;
       this.mobileHUD.renderPanels(
         ctx,
         invPlayer.inventory,
@@ -4346,29 +4415,12 @@ export class BuildingInteriorScene extends GameplayScene {
         invPlayer.coins,
         this.menus.inventoryWieldedWeaponId(),
       );
-      const { gear, bag, switchButton, follow } = hudLayout;
-      if (platform.isMobile && gear !== null && bag !== null && switchButton !== null) {
-        // Hidden rather than merely inert where the room refuses the command:
-        // a button that answers every press with an error sound is a control the
-        // player keeps trying. The layout only places Follow where it is offered.
-        const extraButtons =
-          follow === null
-            ? []
-            : [
-                {
-                  button: {
-                    id: 'follow',
-                    icon: '↩',
-                    label: 'Follow',
-                    active: this.companion.getMovementMode(this.human.isActive) === 'anchored',
-                  },
-                  rect: follow,
-                },
-              ];
+      const { bag, switchButton } = hudLayout;
+      if (platform.isMobile && switchButton !== null) {
         this.mobileHUD.renderButtons(
           ctx,
           this.human.isActive,
-          { switchButton, gear, bag, extraButtons },
+          { switchButton, bag },
           this.inventoryPlayer().inventory.unseenUpgrades.size > 0,
           this.rewardFly.bagBouncePulse(),
         );
@@ -4379,6 +4431,7 @@ export class BuildingInteriorScene extends GameplayScene {
     } else {
       this.buildButtonRect = null;
       this.journalButtonRect = null;
+      this.followButtonRect = null;
     }
 
     const safeRoomSpeaker = safeRoomSpeakerFor(this.bopca, this.safeRoom, this.active());
@@ -4747,17 +4800,13 @@ export class BuildingInteriorScene extends GameplayScene {
       }
 
       if (!coveredByPanel && this.tryPressSummonButton(x, y)) continue;
+      if (!coveredByPanel && this.tryPressFollowButton(x, y)) continue;
       if (!coveredByPanel && this.tryPressColumnPieces(x, y)) continue;
 
-      // Mobile button hit-test (Switch, Gear, Bag, Pause, Minimap, Follow)
       if (platform.isMobile && !coveredByPanel) {
         const btn = this.mobileHUD.hitTest(x, y);
         if (btn === 'switch') {
           this.trySwitchActive();
-          continue;
-        }
-        if (btn === 'gear') {
-          this.menus.toggleGear();
           continue;
         }
         if (btn === 'bag') {
@@ -4770,10 +4819,6 @@ export class BuildingInteriorScene extends GameplayScene {
         }
         if (btn === 'minimap') {
           this.mobileHUD.toggleMiniMap();
-          continue;
-        }
-        if (btn === 'follow') {
-          if (this.canOpenFollowerMenu()) this.followerMenu.open();
           continue;
         }
       }

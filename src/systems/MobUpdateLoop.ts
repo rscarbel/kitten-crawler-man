@@ -26,9 +26,9 @@ import { SeparationGrid } from '../core/SeparationGrid';
 import type { SpatialGrid } from '../core/SpatialGrid';
 import {
   accumulateSeparationForces,
+  pairContactRadius,
   SEPARATION_POSITION_TOLERANCE,
   SEPARATION_RADIUS,
-  SEPARATION_RADIUS_SQ,
 } from './mobSeparation';
 import type { GameSystem, SystemContext } from './GameSystem';
 import { pushPlayerWithCollision } from './playerDisplacement';
@@ -299,7 +299,10 @@ export class MobUpdateLoop implements GameSystem {
 
     // Player-mob collision. Human-controlled: mass-weighted push so heavy bosses and light
     // cockroaches are displaced proportionally to their mass relative to the player.
-    // AI-controlled follower: full push back onto the player only — mobs act as walls.
+    // AI-controlled follower, or a mob nothing can move (`separationAnchored`): full push
+    // back onto the player only — the mob acts as a wall. That covers every anchored mob,
+    // a rooted one as much as the Krakaren Clone: a mass share handed to a mob that
+    // cannot move is simply lost, and the crawler would stay partly inside it.
     // A party companion (`yieldsToParty`) never moves a crawler: it takes the
     // whole push itself. A pet or hireling pathing to a fight through its
     // standing owner would otherwise re-overlap her every frame and carry her
@@ -313,34 +316,32 @@ export class MobUpdateLoop implements GameSystem {
         const dx = player.x - mob.x;
         const dy = player.y - mob.y;
         const distSq = dx * dx + dy * dy;
-        if (distSq >= SEPARATION_RADIUS_SQ) continue;
+        const contactRadius = pairContactRadius(SEPARATION_RADIUS, mob.collisionRadiusPx);
+        if (distSq >= contactRadius * contactRadius) continue;
         const dist = Math.sqrt(distSq);
-        if (dist > SEPARATION_POSITION_TOLERANCE) {
-          if (mob.yieldsToParty) {
-            const full = (SEPARATION_RADIUS - dist) / dist;
-            const mobOx = mob.x;
-            const mobOy = mob.y;
-            mob.applySeparation(-dx * full, -dy * full);
-            if (mob.x !== mobOx || mob.y !== mobOy) mobGrid.move(mob, mobOx, mobOy);
-          } else if (player.isActive) {
-            const base = (SEPARATION_RADIUS - dist) / dist;
-            const totalMass = PLAYER_MASS + mob.mass;
-            const playerShare = mob.mass / totalMass;
-            const mobShare = PLAYER_MASS / totalMass;
-            pushPlayerWithCollision(
-              player,
-              dx * base * playerShare,
-              dy * base * playerShare,
-              gameMap,
-            );
-            const mobOx = mob.x;
-            const mobOy = mob.y;
-            mob.applySeparation(-dx * base * mobShare, -dy * base * mobShare);
-            if (mob.x !== mobOx || mob.y !== mobOy) mobGrid.move(mob, mobOx, mobOy);
-          } else {
-            const full = (SEPARATION_RADIUS - dist) / dist;
-            pushPlayerWithCollision(player, dx * full, dy * full, gameMap);
-          }
+        if (dist <= SEPARATION_POSITION_TOLERANCE) continue;
+        const full = (contactRadius - dist) / dist;
+        if (mob.yieldsToParty) {
+          const mobOx = mob.x;
+          const mobOy = mob.y;
+          mob.applySeparation(-dx * full, -dy * full);
+          if (mob.x !== mobOx || mob.y !== mobOy) mobGrid.move(mob, mobOx, mobOy);
+        } else if (player.isActive && !mob.separationAnchored) {
+          const totalMass = PLAYER_MASS + mob.mass;
+          const playerShare = mob.mass / totalMass;
+          const mobShare = PLAYER_MASS / totalMass;
+          pushPlayerWithCollision(
+            player,
+            dx * full * playerShare,
+            dy * full * playerShare,
+            gameMap,
+          );
+          const mobOx = mob.x;
+          const mobOy = mob.y;
+          mob.applySeparation(-dx * full * mobShare, -dy * full * mobShare);
+          if (mob.x !== mobOx || mob.y !== mobOy) mobGrid.move(mob, mobOx, mobOy);
+        } else {
+          pushPlayerWithCollision(player, dx * full, dy * full, gameMap);
         }
       }
     }

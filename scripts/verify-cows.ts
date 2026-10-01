@@ -39,6 +39,7 @@ import { hasRoomToMove } from '../src/map/findWalkableTile';
 import { PLAYER_SPEED, TILE_SIZE } from '../src/core/constants';
 import { EventBus } from '../src/core/EventBus';
 import { createBriarHollowState } from '../src/core/briarHollowState';
+import { createAnchorQuestProgress } from '../src/core/AnchorQuestProgress';
 import type { VillageQuestPhase } from '../src/core/villageQuestPhase';
 import { AbilityManager } from '../src/core/AbilityManager';
 import { ITEM_DEF } from '../src/core/ItemDefs';
@@ -1018,6 +1019,7 @@ function routingSection(): void {
   const sceneWorld: SceneWorld = { gameMap: map, bus: new EventBus(), audio: null, pm, roster };
   const partyCrafts = createPartyCraftsState();
   const kit = new BriarHollowKit(sceneWorld, {
+    travelUnlocks: { anchor: createAnchorQuestProgress() },
     human: pm.human,
     cat: pm.cat,
     partyTools: new PartyTools(partyCrafts.tools),

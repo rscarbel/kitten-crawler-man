@@ -1,21 +1,19 @@
 /**
- * RecallSystem — the Wayfinder's Anchor's two-way fast travel.
+ * RecallSystem — the Wayfinder's Anchor's fast travel.
  *
- * One stone, two modes, chosen by where the party is standing rather than by a
- * menu: out in the Over City it channels and pulls the party home to the town
- * square, remembering the tile it left from; standing in the square it channels
- * and puts them back on that tile. That is what turns a town round trip — sell,
- * restock, touch the checkpoint, turn in — from two long walks into none.
+ * A press opens the travel menu (through the scene, which owns it); a row
+ * chosen there starts a channel to that destination, and a finished channel
+ * warps the party there. That is what turns a town round trip — sell,
+ * restock, touch the checkpoint, turn in — from long walks into none.
  *
- * The system owns the channel, the cooldown and the trail anchor, and nothing
- * else. The position writes and the Mongo/mercenary dismissal stay with the
- * scene, which owns those objects; this asks for a destination tile and is told
- * whether the party got there.
+ * The system owns the channel and the cooldown, and nothing else. The position
+ * writes and the Mongo/mercenary dismissal stay with the scene, which owns
+ * those objects; this asks for a destination tile and is told whether the
+ * party got there. The destinations themselves are data in
+ * `travel/travelDestinations.ts`.
  *
- * The trail anchor is deliberately per-scene: a floor change or a checkpoint
- * restore drops it, because an anchor pointing into a map that has since been
- * regenerated is a tile chosen at random. The cooldown does *not* drop, or dying
- * would be the cheapest way to reset it.
+ * The cooldown survives a checkpoint restore, or dying would be the cheapest
+ * way to reset it. A channel in progress does not.
  */
 
 import type { AudioManager } from '../audio/AudioManager';
@@ -29,11 +27,13 @@ import { TILE_SIZE } from '../core/constants';
 import { PROGRESS_PRESETS, drawProgressBar } from '../ui/Box';
 import { drawText } from '../ui/TextBox';
 import {
-  ARROW_PRIORITY,
-  drawArrowAbovePlayer,
-  type ArrowAvoidRect,
-  type ArrowCandidate,
-} from '../ui/WorldArrow';
+  NOT_ON_THIS_MAP_REASON,
+  travelDestination,
+  travelRefusal,
+  type TravelDestination,
+  type TravelDestinationId,
+  type TravelUnlockState,
+} from './travel/travelDestinations';
 
 /**
  * Three seconds at 60 fps — long enough that a fight interrupts it.
@@ -44,7 +44,7 @@ import {
  */
 const RECALL_CHANNEL_FRAMES = 180;
 /**
- * Sixty seconds at 60 fps, shared by both modes and both crawlers.
+ * Sixty seconds at 60 fps, shared by every destination and both crawlers.
  *
  * Overworld playtime, not wall-clock: this system's `update` only runs while
  * `DungeonScene` is the active scene, so time spent inside a building does not
@@ -57,25 +57,15 @@ export const RECALL_COOLDOWN_FRAMES = 3600;
 const RECALL_ENEMY_BLOCK_RADIUS_TILES = 7;
 const RECALL_ENEMY_BLOCK_RADIUS_PX = RECALL_ENEMY_BLOCK_RADIUS_TILES * TILE_SIZE;
 
-/** How long the "your trail is that way" arrow shows after walking into the square. */
-const TRAIL_HINT_FRAMES = 240;
-
 const TILE_CENTRE_FRACTION = 0.5;
 
 const INERT_UNDERGROUND_TOAST = 'The stone is inert underground.';
 const BOSS_FIGHT_TOAST = 'The stone will not answer mid-fight.';
 const ENEMIES_NEARBY_TOAST = 'Too dangerous — enemies nearby.';
-const NO_TRAIL_TOAST = 'The stone has no trail to follow.';
-const NO_TOWN_TOAST = 'The stone cannot find the Over City.';
 const NO_LANDING_TOAST = 'The stone can find no ground to set you on.';
 const CANCELLED_TOAST = 'You let the stone go cold.';
 const MOVED_TOAST = 'You moved — the stone lost its hold.';
 const STRUCK_TOAST = 'The blow broke the stone’s hold.';
-const ARRIVED_HOME_TOAST = 'The stone sets you down in the Over City.';
-const ARRIVED_TRAIL_TOAST = 'The stone sets you back on your trail.';
-
-const RECALL_CHANNEL_LABEL = 'Recalling to the Over City…';
-const RETURN_CHANNEL_LABEL = 'Returning to your trail…';
 
 // Channel bar, drawn over the channelling crawler's head
 const CHANNEL_BAR_WIDTH_PX = 72;
@@ -86,13 +76,8 @@ const CHANNEL_LABEL_Y_GAP_PX = 14;
 const CHANNEL_LABEL_SIZE = 10;
 const CHANNEL_LABEL_COLOR = '#e0f2fe';
 
-const TRAIL_ARROW_COLOR = '#38bdf8';
-
-/** Which direction the stone is pulling: out to the town square, or back out of it. */
-export type RecallMode = 'recall' | 'return';
-
 interface RecallChannel {
-  mode: RecallMode;
+  destination: TravelDestination;
   caster: HumanPlayer | CatPlayer;
   framesElapsed: number;
   /**
@@ -107,37 +92,24 @@ interface RecallChannel {
 }
 
 /**
- * What survives a checkpoint restore. The live channel and the trail anchor are
- * absent on purpose — see the class doc.
+ * What survives a checkpoint restore and a building-exit scene rebuild. The
+ * live channel is absent on purpose — see the class doc.
  */
 export interface RecallCheckpoint {
   cooldownFrames: number;
 }
 
-/**
- * What survives a `DungeonScene` rebuilt on the *same* map — a building exit,
- * not a death or a floor change. Unlike `RecallCheckpoint`, the trail anchor
- * rides along here: the map instance is unchanged, so a tile recorded on the
- * way in still names real ground on the way out, and dropping it would erase
- * the return leg for every errand that involves a doorway.
- */
-export interface RecallSceneRebuildState {
-  cooldownFrames: number;
-  trailAnchorTile: { x: number; y: number } | null;
-}
-
 export class RecallSystem implements GameSystem {
   private channel: RecallChannel | null = null;
   private cooldownRemaining = 0;
-  private trailAnchorTile: { x: number; y: number } | null = null;
-  private trailHintFramesLeft = 0;
-  /** Previous frame's answer, so the hint fires on the *entry* into the square. */
-  private wasInTownSafeZone = false;
 
   /**
    * @param teleportParty Moves both crawlers to (or as near as it can get to)
    *   the given tile, reporting whether it found somewhere to put them. The
    *   scene owns this because it owns the crawlers, Mongo and the mercenaries.
+   * @param travelState The questlines' live progress, read for every unlock.
+   * @param openTravelMenu Shows the destination list for `caster`; a row
+   *   chosen there comes back through `beginChannelTo`.
    */
   constructor(
     private readonly gameMap: GameMap,
@@ -148,6 +120,8 @@ export class RecallSystem implements GameSystem {
     private readonly teleportParty: (tile: { x: number; y: number }) => boolean,
     private readonly showToast: (message: string) => void,
     private readonly audio: AudioManager | null,
+    private readonly travelState: TravelUnlockState,
+    private readonly openTravelMenu: (caster: HumanPlayer | CatPlayer) => void,
   ) {}
 
   /** Frames left before the stone will answer again; zero when it is ready. */
@@ -164,80 +138,91 @@ export class RecallSystem implements GameSystem {
     return { cooldownFrames: this.cooldownRemaining };
   }
 
+  /**
+   * Also how a building-exit rebuild carries the cooldown across: any channel
+   * in progress does not survive a scene rebuild regardless — the caster
+   * reference it holds belongs to the `Player` instance being replaced.
+   */
   restoreCheckpoint(snapshot: RecallCheckpoint): void {
     this.channel = null;
-    this.trailAnchorTile = null;
-    this.trailHintFramesLeft = 0;
     this.cooldownRemaining = snapshot.cooldownFrames;
   }
 
-  /** Read on the way out of a building-exit scene rebuild. */
-  captureForSceneRebuild(): RecallSceneRebuildState {
-    return { cooldownFrames: this.cooldownRemaining, trailAnchorTile: this.trailAnchorTile };
-  }
-
   /**
-   * Applied on the way in, once the rebuilt scene's own `RecallSystem` exists.
-   * Any channel in progress does not survive a scene rebuild regardless — the
-   * caster reference it holds belongs to the `Player` instance being replaced.
+   * The hotbar press. A press during a channel gives it up, so the same key
+   * both starts and abandons a trip; otherwise the press either is refused
+   * outright or opens the travel menu.
    */
-  restoreFromSceneRebuild(state: RecallSceneRebuildState): void {
-    this.cooldownRemaining = state.cooldownFrames;
-    this.trailAnchorTile = state.trailAnchorTile;
-  }
-
-  /** The hotbar press: one key both starts the channel and gives it up. */
-  toggle(caster: HumanPlayer | CatPlayer): void {
+  requestTravel(caster: HumanPlayer | CatPlayer): void {
     if (this.channel !== null) {
       this.audio?.play('menu_click');
       this.endChannel(CANCELLED_TOAST);
       return;
     }
-    this.beginChannel(caster);
+    if (!this.passesPressRefusals(caster)) return;
+    this.openTravelMenu(caster);
   }
 
-  update(ctx: SystemContext): void {
-    if (this.cooldownRemaining > 0) this.cooldownRemaining--;
-    this.trackSafeZoneEntry(ctx.active);
-    this.tickChannel(ctx);
-  }
-
-  private beginChannel(caster: HumanPlayer | CatPlayer): void {
-    // The overlay on the hotbar slot already counts this one down, so a toast
-    // saying the same thing would be the third time the game has said it.
-    if (this.cooldownRemaining > 0) {
-      this.audio?.play('error_taking_action');
-      return;
-    }
-
-    const mode: RecallMode = this.isInTownSafeZone(caster) ? 'return' : 'recall';
-    const refusal = this.startRefusal(caster, mode);
+  /**
+   * Starts the channel to a destination chosen from the travel menu. Every
+   * refusal is asked again here, the destination's own included, so a caller
+   * that skips the menu is held to the same rules as one that used it.
+   *
+   * @returns whether the channel started.
+   */
+  beginChannelTo(caster: HumanPlayer | CatPlayer, destinationId: TravelDestinationId): boolean {
+    if (this.channel !== null) return false;
+    if (!this.passesPressRefusals(caster)) return false;
+    const destination = travelDestination(destinationId);
+    const refusal = travelRefusal(destination, this.travelState, this.gameMap, caster);
     if (refusal !== null) {
       this.audio?.play('error_taking_action');
       this.showToast(refusal);
-      return;
+      return false;
     }
 
     // -1 is below any real `framesSinceLastDamage`, so the first tick's
     // struck-check can never fire on a stale reading — it only ever seeds the
     // comparison for the tick after.
     this.channel = {
-      mode,
+      destination,
       caster,
       framesElapsed: 0,
       lastHumanDamageFrames: -1,
       lastCatDamageFrames: -1,
     };
     this.audio?.play('charging_up_1');
+    return true;
   }
 
-  /** The one reason this press cannot start a channel, or null if it can. */
-  private startRefusal(caster: HumanPlayer | CatPlayer, mode: RecallMode): string | null {
+  update(ctx: SystemContext): void {
+    if (this.cooldownRemaining > 0) this.cooldownRemaining--;
+    this.tickChannel(ctx);
+  }
+
+  /**
+   * The refusals that hold whatever the destination, answered with their
+   * sound and toast. False when one applied.
+   */
+  private passesPressRefusals(caster: HumanPlayer | CatPlayer): boolean {
+    // The overlay on the hotbar slot already counts this one down, so a toast
+    // saying the same thing would be the third time the game has said it.
+    if (this.cooldownRemaining > 0) {
+      this.audio?.play('error_taking_action');
+      return false;
+    }
+    const refusal = this.pressRefusal(caster);
+    if (refusal === null) return true;
+    this.audio?.play('error_taking_action');
+    this.showToast(refusal);
+    return false;
+  }
+
+  /** The one reason this press cannot use the stone at all, or null if it can. */
+  private pressRefusal(caster: HumanPlayer | CatPlayer): string | null {
     if (this.levelDef.isOverworld !== true) return INERT_UNDERGROUND_TOAST;
     if (this.isBossFightActive()) return BOSS_FIGHT_TOAST;
     if (this.hasNearbyEnemy(caster, RECALL_ENEMY_BLOCK_RADIUS_PX)) return ENEMIES_NEARBY_TOAST;
-    if (mode === 'return' && this.trailAnchorTile === null) return NO_TRAIL_TOAST;
-    if (mode === 'recall' && this.gameMap.townSquareCentre === undefined) return NO_TOWN_TOAST;
     return null;
   }
 
@@ -282,16 +267,14 @@ export class RecallSystem implements GameSystem {
   }
 
   private completeChannel(channel: RecallChannel): void {
-    const departureTile = this.tileOf(channel.caster);
-    const destination =
-      channel.mode === 'recall' ? (this.gameMap.townSquareCentre ?? null) : this.trailAnchorTile;
-    if (destination === null) {
+    const landingTile = channel.destination.landingTile(this.gameMap);
+    if (landingTile === null) {
       this.audio?.play('error_taking_action');
-      this.endChannel(channel.mode === 'recall' ? NO_TOWN_TOAST : NO_TRAIL_TOAST);
+      this.endChannel(NOT_ON_THIS_MAP_REASON);
       return;
     }
 
-    if (!this.teleportParty(destination)) {
+    if (!this.teleportParty(landingTile)) {
       this.audio?.play('error_taking_action');
       this.endChannel(NO_LANDING_TOAST);
       return;
@@ -299,17 +282,12 @@ export class RecallSystem implements GameSystem {
 
     this.channel = null;
     this.cooldownRemaining = RECALL_COOLDOWN_FRAMES;
-    this.trailAnchorTile = channel.mode === 'recall' ? departureTile : null;
-    // The arrival re-crosses the safe-zone boundary; letting the next update's
-    // edge test raise the hint is what points the stone back at the trail it
-    // has just laid.
-    this.trailHintFramesLeft = 0;
     this.audio?.play('teleport');
-    this.showToast(channel.mode === 'recall' ? ARRIVED_HOME_TOAST : ARRIVED_TRAIL_TOAST);
+    this.showToast(channel.destination.arrivalToast);
     this.bus.emit('fastTravelUsed', {
-      mode: channel.mode,
-      tileX: destination.x,
-      tileY: destination.y,
+      destination: channel.destination.id,
+      tileX: landingTile.x,
+      tileY: landingTile.y,
     });
   }
 
@@ -317,32 +295,6 @@ export class RecallSystem implements GameSystem {
   private endChannel(message: string): void {
     this.channel = null;
     this.showToast(message);
-  }
-
-  private trackSafeZoneEntry(active: HumanPlayer | CatPlayer): void {
-    const inZone = this.isInTownSafeZone(active);
-    if (inZone && !this.wasInTownSafeZone && this.trailAnchorTile !== null) {
-      this.trailHintFramesLeft = TRAIL_HINT_FRAMES;
-    } else if (!inZone) {
-      this.trailHintFramesLeft = 0;
-    } else if (this.trailHintFramesLeft > 0) {
-      this.trailHintFramesLeft--;
-    }
-    this.wasInTownSafeZone = inZone;
-  }
-
-  private isInTownSafeZone(player: HumanPlayer | CatPlayer): boolean {
-    return this.gameMap.isInTownSafeZone(
-      player.x + TILE_SIZE * TILE_CENTRE_FRACTION,
-      player.y + TILE_SIZE * TILE_CENTRE_FRACTION,
-    );
-  }
-
-  private tileOf(player: HumanPlayer | CatPlayer): { x: number; y: number } {
-    return {
-      x: Math.floor((player.x + TILE_SIZE * TILE_CENTRE_FRACTION) / TILE_SIZE),
-      y: Math.floor((player.y + TILE_SIZE * TILE_CENTRE_FRACTION) / TILE_SIZE),
-    };
   }
 
   render(ctx: CanvasRenderingContext2D, camX: number, camY: number): void {
@@ -363,7 +315,7 @@ export class RecallSystem implements GameSystem {
       value: channel.framesElapsed / RECALL_CHANNEL_FRAMES,
       ...PROGRESS_PRESETS.recall,
     });
-    drawText(ctx, channel.mode === 'recall' ? RECALL_CHANNEL_LABEL : RETURN_CHANNEL_LABEL, {
+    drawText(ctx, channel.destination.channelLabel, {
       x: centreX,
       y: barY - CHANNEL_LABEL_Y_GAP_PX,
       size: CHANNEL_LABEL_SIZE,
@@ -372,32 +324,5 @@ export class RecallSystem implements GameSystem {
       align: 'center',
       outline: true,
     });
-  }
-
-  /** A candidate for the shared arrow arbiter: the brief trail back after a recall. */
-  trailArrowCandidate(
-    ctx: CanvasRenderingContext2D,
-    active: HumanPlayer | CatPlayer,
-    camX: number,
-    camY: number,
-    avoidRect: ArrowAvoidRect,
-  ): ArrowCandidate | null {
-    const anchor = this.trailAnchorTile;
-    if (anchor === null || this.trailHintFramesLeft <= 0) return null;
-    return {
-      priority: ARROW_PRIORITY.RECALL_TRAIL,
-      draw: () =>
-        drawArrowAbovePlayer(
-          ctx,
-          active.x,
-          active.y,
-          (anchor.x + TILE_CENTRE_FRACTION) * TILE_SIZE,
-          (anchor.y + TILE_CENTRE_FRACTION) * TILE_SIZE,
-          camX,
-          camY,
-          TRAIL_ARROW_COLOR,
-          { avoidRect },
-        ),
-    };
   }
 }

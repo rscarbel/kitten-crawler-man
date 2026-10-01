@@ -144,7 +144,7 @@ const FAULTS = {
   'cutscene-frozen': 'the cutscene spit freezes on its release while the glob flies (gate 1)',
   'cutscene-silent-spit': 'the cutscene spit leaves her mouth without its fire sound (gate 1)',
   'cutscene-exposed': 'the cutscene spit recovery counts as exposed (gate 1)',
-  'banner-over-death': 'the quest-complete banner opens on the frame she dies (gate 10)',
+  'banner-over-death': 'the quest-complete screen is asked for on the frame she dies (gate 10)',
   'eggs-underfoot': 'eggs land 1 to 3 tiles from her centre, under her body (gate 9)',
   'cutscene-no-reset':
     'the fight opens without resetting her attack state after the cutscene (gate 1)',
@@ -3973,12 +3973,12 @@ function watchPuddlesEnd(lab: Lab, frames: number): PuddleEnds {
   return result;
 }
 
-/** Frames the banner probe waits for the quest-complete banner before calling it stuck. */
+/** Frames the probe waits for the quest-complete screen to be asked for before calling it stuck. */
 const BANNER_WAIT_CEILING_FRAMES = 600;
 
 /**
- * The quest completes on the tick she dies, but its banner and full-screen dim
- * hold off until her death has played, so the collapse is seen.
+ * The quest completes on the tick she dies, but its quest-complete screen and
+ * its full-screen dim hold off until her death has played, so the collapse is seen.
  */
 function bannerWaitsForHerDeath(): void {
   const lab = broodLab(RUN_SEED);
@@ -3986,14 +3986,17 @@ function bannerWaitsForHerDeath(): void {
   if (fault === 'banner-over-death') {
     wrapMethod(quest, 'onBossKilled', (original, args) => {
       const result = original(...args);
-      quest.completeOverlayDelay = 0;
-      quest.completeOverlayTimer = 1;
+      quest.rewardScreenDelay = 0;
       return result;
     });
   }
   const completions = { count: 0 };
   lab.combat.bus.on('questCompleted', () => {
     completions.count++;
+  });
+  const screenRequests = { count: 0 };
+  lab.combat.bus.on('questRewardShown', () => {
+    screenRequests.count++;
   });
   lab.spider.takeDamageFrom(lab.spider.hp, lab.human, 'melee');
   let framesToBanner = 0;
@@ -4002,7 +4005,7 @@ function bannerWaitsForHerDeath(): void {
   while (framesToBanner < BANNER_WAIT_CEILING_FRAMES) {
     step(lab, standOff(lab));
     framesToBanner++;
-    if (quest.completeOverlayTimer > 0) {
+    if (screenRequests.count > 0) {
       corpseClockAtBanner = numberField(lab.spider, 'corpseFrames');
       break;
     }

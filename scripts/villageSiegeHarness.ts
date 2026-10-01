@@ -14,6 +14,10 @@ import { TILE_SIZE } from '../src/core/constants';
 import { Conversation } from '../src/dialog/Conversation';
 import { EventBus } from '../src/core/EventBus';
 import { createBriarHollowState, type BriarHollowState } from '../src/core/briarHollowState';
+import {
+  createAnchorQuestProgress,
+  type AnchorQuestProgress,
+} from '../src/core/AnchorQuestProgress';
 import { createPartyCraftsState, type PartyCraftsState } from '../src/core/partyCrafts';
 import { PartyTools } from '../src/core/PartyTools';
 import { PlayerManager } from '../src/core/PlayerManager';
@@ -68,6 +72,8 @@ export interface SiegeRig {
   readonly map: GameMap;
   readonly site: BriarHollowSite;
   readonly state: BriarHollowState;
+  /** What the village's reward screen reads to say whether the stone can travel there yet. */
+  readonly anchorQuest: AnchorQuestProgress;
   readonly crafts: PartyCraftsState;
   readonly pm: PlayerManager;
   readonly human: HumanPlayer;
@@ -143,7 +149,9 @@ export function buildSiegeRig(options: SiegeRigOptions): SiegeRig {
     return opened;
   };
   const rigRef: { rig: SiegeRig | null } = { rig: null };
+  const anchorQuest = createAnchorQuestProgress();
   const kit = new BriarHollowKit(world, {
+    travelUnlocks: { anchor: anchorQuest },
     human: pm.human,
     cat: pm.cat,
     partyTools: new PartyTools(crafts.tools),
@@ -194,6 +202,7 @@ export function buildSiegeRig(options: SiegeRigOptions): SiegeRig {
     map,
     site,
     state,
+    anchorQuest,
     crafts,
     pm,
     human: pm.human,

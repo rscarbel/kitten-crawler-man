@@ -115,7 +115,7 @@ const MOBILE_CONTROL_ROWS: ReadonlyArray<{ gesture: string; effect: string }> = 
   { gesture: 'Tap', effect: 'Attack, or use whatever you are standing beside.' },
   { gesture: 'Tap Switch', effect: 'Swap which crawler you are driving.' },
   { gesture: 'Tap Follower', effect: 'Give your companion movement and stance orders.' },
-  { gesture: 'Tap Bag / Gear', effect: 'Open the pack or the equipment panel.' },
+  { gesture: 'Tap Bag', effect: 'Open the pack.' },
   { gesture: 'Tap Summon', effect: 'Call Mongo to your side — the cat only.' },
   { gesture: 'Tap a hotbar slot', effect: 'Use that item.' },
   { gesture: 'Hold a dynamite slot', effect: 'Charge the throw; let go to send it.' },

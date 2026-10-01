@@ -7,8 +7,8 @@
  *   screen the HUD leaves clear, with a little empty space beyond them; a room
  *   that fits an axis is centred in that clear part.
  * - Standing on any floor tile the party can reach, that tile is on screen and
- *   under none of the HUD's rects (HUD panel, name plate, minimap, Pause, Gear,
- *   Bag, Switch, Follow, Summon). A rat on a tile the chrome always covers is a
+ *   under none of the HUD's rects (HUD panel, name plate, minimap, Pause, Bag,
+ *   Build, Journal, Switch, Follow, Summon). A rat on a tile the chrome always covers is a
  *   rat the player cannot find.
  * - The room-name plate stays on screen, overlaps no other HUD rect or the
  *   skill-point badge, and its text fits it for every room's name. It may be
@@ -84,10 +84,14 @@ const PHONE_PORTRAIT_VIEWPORTS: readonly Viewport[] = [
   { w: 375, h: 667 },
   { w: 320, h: 568 },
 ];
-const PHONE_VIEWPORTS: readonly Viewport[] = [
-  ...PHONE_PORTRAIT_VIEWPORTS,
+/** Every landscape phone but the smallest. */
+const ROOMY_LANDSCAPE_VIEWPORTS: readonly Viewport[] = [
   { w: 844, h: 390 },
   { w: 667, h: 375 },
+];
+const PHONE_VIEWPORTS: readonly Viewport[] = [
+  ...PHONE_PORTRAIT_VIEWPORTS,
+  ...ROOMY_LANDSCAPE_VIEWPORTS,
   { w: 568, h: 320 },
 ];
 
@@ -143,12 +147,18 @@ const HUD_VARIANTS: readonly HudVariant[] = [
     viewports: PHONE_VIEWPORTS,
     cameraViewports: PHONE_PORTRAIT_VIEWPORTS,
   },
+  // The camera everywhere but the smallest landscape phone. The buttons stand
+  // where they stand outside, and there the expanded minimap reaches down to
+  // the hotbar, so the column hangs beside it down the middle of the screen
+  // and no clear rect is left: a player who opens the map there has chosen
+  // the map over the room, as with the expanded HUD panel.
   {
     label: 'phone, minimap expanded',
     mobile: true,
     hudCollapsed: true,
     miniMapExpanded: true,
     viewports: PHONE_VIEWPORTS,
+    cameraViewports: [...PHONE_PORTRAIT_VIEWPORTS, ...ROOMY_LANDSCAPE_VIEWPORTS],
   },
   // Both panels open on a landscape phone leave the plate no slot: the band
   // between them is a few pixels, and under the HUD panel runs into the
@@ -315,6 +325,7 @@ function layoutFor(variant: HudVariant, viewport: Viewport): InteriorHudLayout {
     summonButton: true,
     buildButton: true,
     journalButton: true,
+    lootBoxBanner: null,
   });
 }
 
@@ -516,7 +527,6 @@ function checkNameplate(
     { name: 'HUD panel', rect: layout.hud },
     { name: 'minimap', rect: layout.miniMap },
     { name: 'Pause', rect: layout.pause },
-    { name: 'Gear', rect: layout.gear },
     { name: 'Bag', rect: layout.bag },
     { name: 'Switch', rect: layout.switchButton },
     { name: 'Follow', rect: layout.follow },

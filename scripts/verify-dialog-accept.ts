@@ -63,6 +63,7 @@ import { AnchorQuestSystem } from '../src/systems/AnchorQuestSystem';
 import { advanceFocusedOverlay, auditOverlayFocus } from '../src/systems/kits/OverlayClaims';
 import { RewardGrantedDialog } from '../src/ui/RewardGrantedDialog';
 import { createBriarHollowState } from '../src/core/briarHollowState';
+import { createCircusQuestProgress } from '../src/core/CircusQuestProgress';
 import { buildSiegeRig } from './villageSiegeHarness';
 import {
   focusedButtonClickPoint,
@@ -167,12 +168,17 @@ function makeVoss(progress: AnchorQuestProgress, party: Party, conversation: Con
   return new AnchorQuestSystem(
     new EventBus(),
     progress,
-    () => [party.human, party.cat],
+    () => ({ human: party.human, cat: party.cat }),
     () => null,
     () => null,
     () => null,
     () => undefined,
     conversation,
+    {
+      circus: createCircusQuestProgress(),
+      briarHollow: createBriarHollowState(),
+      anchor: progress,
+    },
     null,
   );
 }

@@ -44,8 +44,7 @@ export const ARROW_PRIORITY = {
   CHEAT_REVEAL: 1,
   PINNED_OBJECTIVE: 2,
   BOUNTY: 3,
-  RECALL_TRAIL: 4,
-  SOUL_CRYSTAL: 5,
+  SOUL_CRYSTAL: 4,
 } as const;
 
 /**

@@ -70,14 +70,6 @@ const HOTBAR_BOTTOM_MARGIN = 12;
 /** Clearance either side of the hotbar before its slots shrink to fit a narrow screen. */
 const HOTBAR_SIDE_MARGIN = 20;
 
-// Toggle button dimensions
-const DESKTOP_BTN_W = 104;
-const RIGHT_COL_MARGIN = 8;
-const PAUSE_BTN_H = 28;
-const TOGGLE_BTN_H = 28;
-const BTN_ROW_GAP = 6;
-const PANEL_TOP_MARGIN = 20;
-
 // Hotbar hit margin
 const HOTBAR_HIT_MARGIN = 12;
 
@@ -146,8 +138,8 @@ const PANEL_HEADER_COINS_TITLE_GAP = 6;
  */
 const SLOT_DIMMED_ALPHA = 0.25;
 
-// Default minimap size when not yet updated by scene
-const DEFAULT_MM_SIZE = 240;
+const OFFSCREEN_X = -9999;
+const UNPLACED_BAG_BUTTON_RECT = { x: OFFSCREEN_X, y: 0, w: 0, h: 0 } as const;
 
 // Info popup text offsets
 const INFO_POPUP_PAD_HALF = 0.5;
@@ -624,21 +616,18 @@ export class InventoryPanel {
   // Layout helpers
 
   /**
-   * Current minimap rendered size — set by DungeonScene each frame before render/handleClick
-   * so the bag button can be positioned below the pause button, which itself sits below the minimap.
-   * Must match the DESKTOP_BTN_W / PAUSE_BTN_H constants in DungeonUIRenderer.ts.
+   * Where a desktop's Bag button stands — off screen until the scene first
+   * places it. The scene sets it once a frame from the HUD's shared button
+   * layout (`hudButtonLayout`), before rendering or routing clicks, so the
+   * button is drawn and hit-tested at the same rect. A phone's Bag button is
+   * the mobile HUD's, not this one.
    */
-  mmSize = DEFAULT_MM_SIZE;
+  desktopBagButtonRect: { x: number; y: number; w: number; h: number } = {
+    ...UNPLACED_BAG_BUTTON_RECT,
+  };
 
-  toggleBtnRect() {
-    // On mobile the button is handled via touch.bagBtnRect in renderMobileButtons.
-    // On desktop, sit below the pause button in the right column.
-    return {
-      x: viewportWidth() - RIGHT_COL_MARGIN - DESKTOP_BTN_W,
-      y: RIGHT_COL_MARGIN + this.mmSize + PANEL_TOP_MARGIN + PAUSE_BTN_H + BTN_ROW_GAP,
-      w: DESKTOP_BTN_W,
-      h: TOGGLE_BTN_H,
-    };
+  toggleBtnRect(): { x: number; y: number; w: number; h: number } {
+    return this.desktopBagButtonRect;
   }
 
   /**

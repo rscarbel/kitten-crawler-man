@@ -2173,6 +2173,21 @@ export class GameMap {
   }
 
   /**
+   * True when the given world-pixel position lies within the circus grounds'
+   * radius of `circusCentre`, widened by `marginTiles`. Always false off the
+   * overworld.
+   */
+  isInCircusGrounds(worldX: number, worldY: number, marginTiles = 0): boolean {
+    const centre = this.circusCentre;
+    const radiusTiles = this.circusRadiusTiles;
+    if (centre === undefined || radiusTiles === undefined) return false;
+    const reachTiles = radiusTiles + marginTiles;
+    const dxTiles = worldX / this.tileHeight - centre.x;
+    const dyTiles = worldY / this.tileHeight - centre.y;
+    return dxTiles * dxTiles + dyTiles * dyTiles <= reachTiles * reachTiles;
+  }
+
+  /**
    * Which Briar Hollow district the given world-pixel position is in — the
    * first listed district whose rectangle contains it — or null outside them
    * all, and always off the overworld.

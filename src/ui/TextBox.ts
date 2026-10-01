@@ -45,8 +45,13 @@ const STRIKETHROUGH_MIN_THICKNESS = 1;
 export interface TextOptions {
   /** Left edge of the text anchor (standard canvas textAlign rules apply when no width is set). */
   x: number;
-  /** Top edge of the first line of text. y always refers to the top — no baseline arithmetic needed. */
+  /**
+   * Top edge of the first line of text — no baseline arithmetic needed. The
+   * one exception is {@link BaselineTextOptions}, where it is the baseline.
+   */
   y: number;
+  /** `y` names the top of the first line. See {@link BaselineTextOptions} for the alternative. */
+  baseline?: 'top';
 
   /** Font size in px. Default: 12 */
   size?: number;
@@ -118,6 +123,30 @@ export interface TextOptions {
   /** Border stroke width. Default: 1.5 */
   borderWidth?: number;
 }
+
+/** The options that lay text out in a box or across lines, which a baseline-placed glyph has none of. */
+type BoxedTextOption =
+  | 'width'
+  | 'padding'
+  | 'height'
+  | 'scrollY'
+  | 'lineHeight'
+  | 'background'
+  | 'border'
+  | 'borderWidth'
+  | 'strikethrough';
+
+/**
+ * drawText for a single unboxed line placed by where its alphabetic baseline
+ * sits, rather than by its top — for a glyph such as an emoji icon whose
+ * position was set against its baseline. The box, wrapping and strikethrough
+ * options measure from a line's top, so they are refused here.
+ */
+export type BaselineTextOptions = Omit<TextOptions, BoxedTextOption | 'baseline' | 'y'> & {
+  /** The first line's alphabetic baseline. */
+  y: number;
+  baseline: 'alphabetic';
+} & Partial<Record<BoxedTextOption, never>>;
 
 /** Return value from drawText — use for flow layout or scroll clamping. */
 export interface TextResult {
@@ -329,16 +358,18 @@ function resolveLines(
  * Draw text on a 2D canvas context.
  *
  * Saves and restores all ctx state — this function has zero side effects.
- * y always refers to the TOP of the first line, regardless of font metrics.
+ * y refers to the TOP of the first line, regardless of font metrics — except
+ * with {@link BaselineTextOptions}, where it is the first line's baseline.
  */
 export function drawText(
   ctx: CanvasRenderingContext2D,
   text: string,
-  opts: TextOptions,
+  opts: TextOptions | BaselineTextOptions,
 ): TextResult {
   const {
     x,
     y,
+    baseline = 'top',
     size = DEFAULT_FONT_SIZE,
     bold = false,
     italic = false,
@@ -369,7 +400,7 @@ export function drawText(
 
   ctx.save();
   ctx.font = fontStr;
-  ctx.textBaseline = 'top';
+  ctx.textBaseline = baseline;
   ctx.globalAlpha = alpha;
 
   const innerW = width !== undefined ? width - padding * 2 : undefined;

@@ -48,6 +48,7 @@ import {
   CROP_FIELD,
 } from '../map/tileTypes';
 import { viewportWidth } from '../core/Viewport';
+import { HUD_MINIMAP_MARGIN } from '../ui/hudButtons/hudMiniMap';
 import { bossRoomMinimapColor } from '../map/tiles/bossRoomTiles';
 
 export type Rect = { x: number; y: number; w: number; h: number };
@@ -60,19 +61,20 @@ const MOBILE_BTN_LEFT_MARGIN = 10;
 const MOBILE_BTN_BOTTOM_OFFSET = 8;
 /** Clear space between the Switch button and the Summon button stacked on it. */
 const MOBILE_BTN_STACK_GAP = 6;
-const MOBILE_SMALL_BTN_WIDTH = 80;
-const MOBILE_SMALL_BTN_HEIGHT = 28;
-const MOBILE_GEAR_BAG_X_OFFSET = 88;
 const BAG_ICON_SIZE = 12;
 const BAG_ICON_PAD = 3;
 const BAG_BADGE_RADIUS = 3.5;
 const BAG_BOUNCE_SCALE_AMOUNT = 0.18;
 
 // Minimap constants
+/**
+ * The interior minimap is smaller than the overworld's, which a small room
+ * needs no more than; the HUD's buttons still hang under the overworld
+ * minimap's footprint (`hudMiniMapRect`), so they stand where they stand
+ * outside.
+ */
 const MINIMAP_EXPANDED_SIZE = 180;
 const MINIMAP_NORMAL_SIZE = 100;
-const MINIMAP_X_OFFSET = 8;
-const MINIMAP_Y_OFFSET = 8;
 const MINIMAP_EXPANDED_ALPHA = 0.82;
 const DOT_COMPANION_SIZE = 0.4;
 const DOT_PLAYER_SIZE = 0.5;
@@ -130,26 +132,13 @@ export function interiorMiniMapRect(viewportW: number, expanded: boolean): Rect 
   const size = expanded ? MINIMAP_EXPANDED_SIZE : MINIMAP_NORMAL_SIZE;
   const hintBottom = MINIMAP_HINT_Y_OFFSET - MINIMAP_HINT_Y_BASELINE + MINIMAP_HINT_SIZE;
   return {
-    x: viewportW - size - MINIMAP_X_OFFSET,
-    y: MINIMAP_Y_OFFSET,
+    x: viewportW - size - HUD_MINIMAP_MARGIN,
+    y: HUD_MINIMAP_MARGIN,
     w: size,
     h: size + hintBottom,
     size,
   };
 }
-
-/** A small button in the right-hand column (Pause, Gear, Bag) whose top is at `y`. */
-export function rightColumnButtonRect(viewportW: number, y: number): Rect {
-  return {
-    x: viewportW - MOBILE_GEAR_BAG_X_OFFSET,
-    y,
-    w: MOBILE_SMALL_BTN_WIDTH,
-    h: MOBILE_SMALL_BTN_HEIGHT,
-  };
-}
-
-/** The size of a small button in the right-hand column: Pause, Gear, Bag. */
-export const SMALL_BUTTON_SIZE = { w: MOBILE_SMALL_BTN_WIDTH, h: MOBILE_SMALL_BTN_HEIGHT } as const;
 
 /**
  * The large bottom-row buttons: Switch at the left, then `extraCount` buttons
@@ -187,19 +176,11 @@ export function stackedAboveRect(below: Rect): Rect {
   return { x: below.x, y: below.y - below.h - MOBILE_BTN_STACK_GAP, w: below.w, h: below.h };
 }
 
-export interface MobileHUDButton {
-  id: string;
-  icon: string;
-  label: string;
-  active: boolean;
-}
-
 /**
- * Shared mobile HUD system: renders Switch / Gear / Bag buttons,
- * manages touch-movement state, and provides inventory/gear panel wiring.
- *
- * Used by both DungeonScene and BuildingInteriorScene so mobile UI stays
- * consistent without duplicating rendering or hit-testing code.
+ * The building interior's HUD odds and ends: its minimap, its Pause, Switch
+ * and Bag buttons and their hit-test, touch-movement state, and the bag and
+ * gear panels it renders for the scene. The scene outside draws its own from
+ * `DungeonUIRenderer`; both take their button rects from `hudButtonLayout`.
  */
 export class MobileHUDSystem implements GameSystem {
   dispose(): void {
@@ -219,11 +200,9 @@ export class MobileHUDSystem implements GameSystem {
 
   // Button rects (updated each render frame)
   private _switchBtnRect: Rect = { x: 0, y: 0, w: 0, h: 0 };
-  private _gearBtnRect: Rect = { x: -9999, y: 0, w: 0, h: 0 };
   private _bagBtnRect: Rect = { x: -9999, y: 0, w: 0, h: 0 };
   private _pauseBtnRect: Rect = { x: -9999, y: 0, w: 0, h: 0 };
   private _miniMapRect: Rect = { x: -9999, y: 0, w: 0, h: 0 };
-  private _extraBtnRects = new Map<string, Rect>();
 
   // Interior minimap state
   private _miniMapExpanded = false;
@@ -253,24 +232,13 @@ export class MobileHUDSystem implements GameSystem {
     return this._bagBtnRect;
   }
 
-  /**
-   * Render the standard mobile buttons: Switch + Gear + Bag, plus any extra
-   * buttons (e.g. Follow indoors), each where the scene's layout put it.
-   *
-   * @param extraButtons - Additional large buttons, with the rect each is drawn
-   *   and hit-tested at. Pass [] for scenes that don't need them.
-   */
+  /** Render the standard mobile buttons, Switch and Bag, each where the scene's layout put it. */
   renderButtons(
     ctx: CanvasRenderingContext2D,
     humanActive: boolean,
     placement: {
       readonly switchButton: Rect;
-      readonly gear: Rect;
       readonly bag: Rect;
-      readonly extraButtons: ReadonlyArray<{
-        readonly button: MobileHUDButton;
-        readonly rect: Rect;
-      }>;
     },
     hasUnseenUpgrade = false,
     bagBouncePulse = 0,
@@ -286,15 +254,7 @@ export class MobileHUDSystem implements GameSystem {
       false,
     );
 
-    this._extraBtnRects.clear();
-    for (const { button, rect } of placement.extraButtons) {
-      this._extraBtnRects.set(button.id, rect);
-      this.drawBtn(ctx, rect, button.icon, button.label, button.active);
-    }
-
-    this._gearBtnRect = placement.gear;
     this._bagBtnRect = placement.bag;
-    this.drawSmallBtn(ctx, this._gearBtnRect, 'Gear', this.gearPanel.isOpen);
 
     const bagBounceScale = 1 + Math.sin(bagBouncePulse * Math.PI) * BAG_BOUNCE_SCALE_AMOUNT;
     const bagCx = this._bagBtnRect.x + this._bagBtnRect.w / 2;
@@ -453,6 +413,10 @@ export class MobileHUDSystem implements GameSystem {
     return mmSize;
   }
 
+  setMiniMapExpanded(expanded: boolean): void {
+    this._miniMapExpanded = expanded;
+  }
+
   toggleMiniMap(): void {
     this._miniMapExpanded = !this._miniMapExpanded;
   }
@@ -467,18 +431,13 @@ export class MobileHUDSystem implements GameSystem {
 
   /**
    * Hit-test a touch/click point against mobile buttons.
-   * Returns the button id ('switch', 'gear', 'bag', 'pause', 'minimap',
-   * or a custom extra id), or null.
+   * Returns the button id, or null.
    */
-  hitTest(x: number, y: number): string | null {
+  hitTest(x: number, y: number): 'minimap' | 'pause' | 'switch' | 'bag' | null {
     if (this.hitRect(x, y, this._miniMapRect)) return 'minimap';
     if (this.hitRect(x, y, this._pauseBtnRect)) return 'pause';
     if (this.hitRect(x, y, this._switchBtnRect)) return 'switch';
-    if (this.hitRect(x, y, this._gearBtnRect)) return 'gear';
     if (this.hitRect(x, y, this._bagBtnRect)) return 'bag';
-    for (const [id, rect] of this._extraBtnRects) {
-      if (this.hitRect(x, y, rect)) return id;
-    }
     return null;
   }
 

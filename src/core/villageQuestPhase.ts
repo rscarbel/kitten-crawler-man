@@ -1,3 +1,6 @@
+/** The questline's display title, as the journal and reward screens name it. */
+export const BRIAR_HOLLOW_QUEST_NAME = "Briar Hollow's Plea";
+
 /**
  * Where the Briar Hollow defense quest stands. Phases move forward in
  * {@link VILLAGE_QUEST_PHASE_ORDER}, except `declined` and the outcome

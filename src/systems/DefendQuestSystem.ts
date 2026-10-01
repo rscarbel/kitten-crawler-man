@@ -6,7 +6,7 @@
  *   complete_pending → complete | failed
  */
 
-import { awardXp } from '../core/awardXp';
+import { awardPartyXp, type CrawlerPair, type PartyXpApplied } from '../core/awardXp';
 import { TILE_SIZE } from '../core/constants';
 import { randomInt, pixelToTile, pointInRect } from '../utils';
 import { drawInteractionPrompt } from '../ui/InteractionPrompt';
@@ -44,10 +44,14 @@ import {
 } from '../sprites/art/nurseryArt';
 import { drawText, measureTextWidth, TEXT_PRESETS } from '../ui/TextBox';
 import { drawFittedTitle } from '../ui/QuestBanners';
+import { drawLootBoxRewardIcon } from '../ui/icons/rewardIcons';
+import type { QuestRewardSpec } from '../ui/questReward/types';
+import type { BoxTier } from '../core/AchievementManager';
+import { partyXpSections } from '../ui/questReward/rewardLines';
 import { beginMenuFocus, drawButton, endMenuFocus, BUTTON_PRESETS } from '../ui/Button';
 import { drawAreaHighlightFrame, drawAreaHighlightGround } from '../ui/AreaHighlight';
 import type { AreaHighlightMood, AreaHighlightRect } from '../ui/AreaHighlight';
-import { BOX_PRESETS, PROGRESS_PRESETS, drawBox, drawProgressBar } from '../ui/Box';
+import { BOX_PRESETS, PROGRESS_PRESETS, drawBox, drawOverlay, drawProgressBar } from '../ui/Box';
 import { drawResourceIcon } from '../ui/icons/resourceIcons';
 import { drawBouncingArrowAboveEntity } from '../ui/WorldArrow';
 import { NurseryEffects } from './nurseryEffects';
@@ -69,6 +73,8 @@ import { viewForFacing } from '../sprites/humanSprite';
 import type { CarlView } from '../sprites/art/carl/rig';
 
 export const DEFEND_QUEST_ID = 'defend_goblin_mother';
+/** The loot box the rescue earns; the scene grants it onto the achievement stack. */
+export const DEFEND_LOOT_BOX_TIER: BoxTier = 'Silver';
 
 const APPROACH_SECONDS = 25;
 const DEFENSE_SECONDS = 60;
@@ -114,9 +120,8 @@ const CHILD_STRIDE_TILES = 0.6;
 const CHILD_STRIDE_PX = TILE_SIZE * CHILD_STRIDE_TILES;
 /** `drawChildSprite` reads the stride phase in radians, one stride per turn. */
 const FULL_STRIDE_RADIANS = Math.PI * 2;
-const XP_FLOAT_FRAMES = 180;
-const QUEST_COMPLETE_DISPLAY_FRAMES = 420; // 7 seconds
-const QUEST_FAILED_DISPLAY_FRAMES = 420; // 7 seconds
+const QUEST_FAILED_DISPLAY_SECONDS = 7;
+const QUEST_FAILED_DISPLAY_FRAMES = QUEST_FAILED_DISPLAY_SECONDS * FRAMES_PER_SECOND;
 const OVERLAY_FADE_FRAMES = 90;
 const TEXT_HEIGHT_FACTOR = 0.8;
 const PICKUP_PROXIMITY_FRACTION = 1.2;
@@ -133,25 +138,12 @@ const NPC_DEAD_X_END_FRACTION = 0.8;
 const BARRIER_HIT_FLASH_FRAMES = 12;
 const BARRIER_HIT_ALPHA_FRACTION = 0.45;
 
-// Overlay layout constants
-const OVERLAY_PULSE_SPEED = 200;
-const OVERLAY_PULSE_AMP = 0.05;
-const OVERLAY_BASE_TEXT_SIZE = 36;
-const OVERLAY_COMPLETE_TITLE_Y_OFFSET = 30;
 const OVERLAY_TITLE_GLOW_BLUR = 15;
-const OVERLAY_REWARDS_Y_OFFSET = 10;
-const OVERLAY_REWARDS_Y_ASCENT = 13;
-const OVERLAY_REWARD_1_Y_OFFSET = 35;
-const OVERLAY_REWARD_1_ASCENT = 11;
-const OVERLAY_REWARD_2_Y_OFFSET = 55;
-const OVERLAY_REWARD_3_Y_OFFSET = 75;
-const OVERLAY_DISMISS_Y_OFFSET = 105;
+/** How far the quest-failed banner dims the floor behind it. */
+const FAILED_OVERLAY_DIM_ALPHA = 0.6;
 const OVERLAY_DISMISS_ASCENT = 10;
-const OVERLAY_REWARDS_SIZE = 16;
-const OVERLAY_REWARD_SIZE = 14;
 const OVERLAY_DISMISS_SIZE = 12;
 
-// Failed overlay constants
 const OVERLAY_X_SIZE = 60;
 const OVERLAY_X_CENTER_Y_OFFSET = 60;
 const OVERLAY_X_LINE_WIDTH = 8;
@@ -159,13 +151,6 @@ const OVERLAY_FAIL_TITLE_Y_OFFSET = 50;
 const OVERLAY_FAIL_TITLE_ASCENT = 29;
 const OVERLAY_FAIL_DISMISS_Y_OFFSET = 80;
 const OVERLAY_FAIL_TEXT_SIZE = 36;
-
-// XP float constants
-const XP_FLOAT_ALPHA_FRAMES = 60;
-const XP_FLOAT_RISE_SPEED = 0.5;
-const XP_FLOAT_Y_OFFSET = 80;
-const XP_FLOAT_ASCENT = 22;
-const XP_FLOAT_SIZE = 28;
 
 // Mobile quest timer layout constants
 const MOBILE_QUEST_BOX_X = 8;
@@ -499,12 +484,7 @@ export class DefendQuestSystem implements GameSystem {
   private childTargetY = 0;
   private childWalkFrame = 0;
 
-  private completeOverlayTimer = 0;
   private failOverlayTimer = 0;
-  private xpFloatTimer = 0;
-  /** What the completion banner reads off, filled in by {@link triggerQuestComplete}. */
-  private completionXpApplied = 0;
-  private completionCrawlerName = '';
 
   /** The handle the goblin mother's offer opened with. */
   private conversationHandle: ConversationHandle | null = null;
@@ -705,11 +685,12 @@ export class DefendQuestSystem implements GameSystem {
   }
 
   /**
-   * The end-of-quest banner, which a press dismisses early. It rides over live
-   * play rather than pausing it, so it is not part of `isDialogOpen`.
+   * The quest-failed banner, which a press dismisses early. It rides over live
+   * play rather than pausing it, so it is not part of `isDialogOpen`. Success
+   * is announced on the shared quest-complete screen instead.
    */
   get isOutcomeOverlayShowing(): boolean {
-    return this.completeOverlayTimer > 0 || this.failOverlayTimer > 0;
+    return this.failOverlayTimer > 0;
   }
 
   readonly isSuppressed = false;
@@ -726,7 +707,7 @@ export class DefendQuestSystem implements GameSystem {
     return this.phase === 'npc_waiting' || this.phase === 'complete_pending';
   }
 
-  tryInteract(active: Player): boolean {
+  tryInteract(active: Player, party: CrawlerPair): boolean {
     if (!this.wouldInteract(active)) return false;
 
     if (this.phase === 'npc_waiting') {
@@ -735,7 +716,7 @@ export class DefendQuestSystem implements GameSystem {
       return true;
     }
     if (this.phase === 'complete_pending') {
-      this.triggerQuestComplete(active);
+      this.triggerQuestComplete(active, party);
       return true;
     }
     return false;
@@ -784,11 +765,6 @@ export class DefendQuestSystem implements GameSystem {
 
   /** Handle click on dialog menu buttons. */
   handleClick(mx: number, my: number): boolean {
-    // Dismiss completion/failure overlays on any click
-    if (this.completeOverlayTimer > 0) {
-      this.completeOverlayTimer = 0;
-      return true;
-    }
     if (this.failOverlayTimer > 0) {
       this.failOverlayTimer = 0;
       return true;
@@ -836,10 +812,6 @@ export class DefendQuestSystem implements GameSystem {
       } else {
         this.tutorialPage++;
       }
-      return true;
-    }
-    if (this.completeOverlayTimer > 0) {
-      this.completeOverlayTimer = 0;
       return true;
     }
     if (this.failOverlayTimer > 0) {
@@ -1142,10 +1114,8 @@ export class DefendQuestSystem implements GameSystem {
     // with the wave.
     if (this.phase !== 'countdown' && this.phase !== 'defending') this.woodReminder = false;
 
-    // Overlay timers tick even after quest ends
-    if (this.completeOverlayTimer > 0) this.completeOverlayTimer--;
+    // The failure banner ticks even after the quest ends.
     if (this.failOverlayTimer > 0) this.failOverlayTimer--;
-    if (this.xpFloatTimer > 0) this.xpFloatTimer--;
 
     // Tick NPC timers so hurt-state visuals (red box, waving arms) fade naturally
     if (this.npc?.isAlive) this.npc.tickTimers();
@@ -1551,19 +1521,52 @@ export class DefendQuestSystem implements GameSystem {
     this.childWalkFrame += (covered / CHILD_STRIDE_PX) * FULL_STRIDE_RADIANS;
   }
 
-  private triggerQuestComplete(active: Player): void {
+  /** Both crawlers earn the full XP; the coins go into the purse of whoever handed the child back. */
+  private triggerQuestComplete(active: Player, party: CrawlerPair): void {
     this.phase = 'complete';
     this.questManager.completeQuest(DEFEND_QUEST_ID);
     if (this.npc) this.npc.markerType = 'none';
 
     const def = this.questManager.getDef(DEFEND_QUEST_ID);
     if (!def) return;
-    this.completionXpApplied = awardXp(active, def.rewards.xp, this.bus);
-    this.completionCrawlerName = active instanceof CatPlayer ? 'Donut' : 'Carl';
-    this.xpFloatTimer = XP_FLOAT_FRAMES;
+    const xpApplied = awardPartyXp(party.human, party.cat, def.rewards.xp, this.bus);
+    const coins = def.rewards.coins ?? 0;
+    active.earnCoins(coins);
 
+    // The scene's `questCompleted` handler grants the loot box: the
+    // achievement stack it goes onto is the scene's.
     this.bus.emit('questCompleted', { questId: DEFEND_QUEST_ID });
-    this.completeOverlayTimer = QUEST_COMPLETE_DISPLAY_FRAMES;
+    this.bus.emit('questRewardShown', this.rewardSpec(def.name, xpApplied, coins));
+  }
+
+  /**
+   * The rescue's quest-complete screen, describing what
+   * {@link triggerQuestComplete} actually paid.
+   */
+  private rewardSpec(
+    questTitle: string,
+    xpApplied: PartyXpApplied,
+    coins: number,
+  ): QuestRewardSpec {
+    return {
+      questTitle,
+      sections: [
+        ...partyXpSections(xpApplied),
+        { kind: 'coins', amount: coins },
+        {
+          kind: 'items',
+          items: [
+            {
+              name: `${DEFEND_LOOT_BOX_TIER} Loot Box`,
+              count: 1,
+              renderIcon: (ctx, x, y, size) =>
+                drawLootBoxRewardIcon(ctx, x, y, size, DEFEND_LOOT_BOX_TIER),
+              note: 'Open it in a Safe Room.',
+            },
+          ],
+        },
+      ],
+    };
   }
 
   private triggerQuestFailed(): void {
@@ -2107,16 +2110,8 @@ export class DefendQuestSystem implements GameSystem {
       this.renderTutorial(ctx);
     }
 
-    if (this.completeOverlayTimer > 0) {
-      this.renderCompleteOverlay(ctx);
-    }
-
     if (this.failOverlayTimer > 0) {
       this.renderFailedOverlay(ctx);
-    }
-
-    if (this.xpFloatTimer > 0) {
-      this.renderXPFloat(ctx);
     }
   }
 
@@ -2258,91 +2253,20 @@ export class DefendQuestSystem implements GameSystem {
     }
   }
 
-  private renderCompleteOverlay(ctx: CanvasRenderingContext2D): void {
-    const cw = viewportWidth();
-    const ch = viewportHeight();
-    const alpha =
-      this.completeOverlayTimer < OVERLAY_FADE_FRAMES
-        ? this.completeOverlayTimer / OVERLAY_FADE_FRAMES
-        : 1;
-
-    ctx.save();
-    ctx.globalAlpha = alpha;
-    ctx.fillStyle = 'rgba(0,0,0,0.6)';
-    ctx.fillRect(0, 0, cw, ch);
-    ctx.restore();
-
-    const pulse = 1 + OVERLAY_PULSE_AMP * Math.sin(performance.now() / OVERLAY_PULSE_SPEED);
-    const pulsedSize = Math.floor(OVERLAY_BASE_TEXT_SIZE * pulse);
-    drawFittedTitle(ctx, 'QUEST COMPLETE!', {
-      centerX: cw / 2,
-      y: ch / 2 - OVERLAY_COMPLETE_TITLE_Y_OFFSET - Math.round(pulsedSize * TEXT_HEIGHT_FACTOR),
-      size: pulsedSize,
-      color: '#4ade80',
-      alpha,
-      glow: '#4ade80',
-      glowBlur: OVERLAY_TITLE_GLOW_BLUR,
-    });
-
-    drawText(ctx, 'Rewards:', {
-      x: cw / 2,
-      y: ch / 2 + OVERLAY_REWARDS_Y_OFFSET - OVERLAY_REWARDS_Y_ASCENT,
-      size: OVERLAY_REWARDS_SIZE,
-      bold: true,
-      color: '#fbbf24',
-      align: 'center',
-      alpha,
-    });
-    const rewardXpLabel =
-      this.completionCrawlerName === ''
-        ? `+${this.completionXpApplied.toLocaleString()} EXP`
-        : `${this.completionCrawlerName} +${this.completionXpApplied.toLocaleString()} EXP`;
-    drawText(ctx, rewardXpLabel, {
-      x: cw / 2,
-      y: ch / 2 + OVERLAY_REWARD_1_Y_OFFSET - OVERLAY_REWARD_1_ASCENT,
-      size: OVERLAY_REWARD_SIZE,
-      color: '#e2e8f0',
-      align: 'center',
-      alpha,
-    });
-    const rewardCoins = this.questManager.getDef(DEFEND_QUEST_ID)?.rewards.coins ?? 0;
-    drawText(ctx, `+${rewardCoins} Gold`, {
-      x: cw / 2,
-      y: ch / 2 + OVERLAY_REWARD_2_Y_OFFSET - OVERLAY_REWARD_1_ASCENT,
-      size: OVERLAY_REWARD_SIZE,
-      color: '#e2e8f0',
-      align: 'center',
-      alpha,
-    });
-    drawText(ctx, 'Loot Box (open in Safe Room)', {
-      x: cw / 2,
-      y: ch / 2 + OVERLAY_REWARD_3_Y_OFFSET - OVERLAY_REWARD_1_ASCENT,
-      size: OVERLAY_REWARD_SIZE,
-      color: '#e2e8f0',
-      align: 'center',
-      alpha,
-    });
-    drawText(ctx, 'Space or click to dismiss', {
-      x: cw / 2,
-      y: ch / 2 + OVERLAY_DISMISS_Y_OFFSET - OVERLAY_DISMISS_ASCENT,
-      size: OVERLAY_DISMISS_SIZE,
-      color: 'rgba(200,200,200,0.7)',
-      align: 'center',
-      alpha,
-    });
-  }
-
   private renderFailedOverlay(ctx: CanvasRenderingContext2D): void {
     const cw = viewportWidth();
     const ch = viewportHeight();
     const alpha =
       this.failOverlayTimer < OVERLAY_FADE_FRAMES ? this.failOverlayTimer / OVERLAY_FADE_FRAMES : 1;
 
+    drawOverlay(ctx, {
+      canvasWidth: cw,
+      canvasHeight: ch,
+      alpha: alpha * FAILED_OVERLAY_DIM_ALPHA,
+    });
+
     ctx.save();
     ctx.globalAlpha = alpha;
-    ctx.fillStyle = 'rgba(0,0,0,0.6)';
-    ctx.fillRect(0, 0, cw, ch);
-
     const xCenterY = ch / 2 - OVERLAY_X_CENTER_Y_OFFSET;
     ctx.strokeStyle = '#ef4444';
     ctx.lineWidth = OVERLAY_X_LINE_WIDTH;
@@ -2372,25 +2296,6 @@ export class DefendQuestSystem implements GameSystem {
       color: 'rgba(200,200,200,0.7)',
       align: 'center',
       alpha,
-    });
-  }
-
-  private renderXPFloat(ctx: CanvasRenderingContext2D): void {
-    const cw = viewportWidth();
-    const alpha = Math.min(1, this.xpFloatTimer / XP_FLOAT_ALPHA_FRAMES);
-    const yOffset = (XP_FLOAT_FRAMES - this.xpFloatTimer) * XP_FLOAT_RISE_SPEED;
-
-    drawText(ctx, '+500 EXP', {
-      x: cw / 2,
-      y: viewportHeight() / 2 - XP_FLOAT_Y_OFFSET - yOffset - XP_FLOAT_ASCENT,
-      size: XP_FLOAT_SIZE,
-      bold: true,
-      color: '#4ade80',
-      align: 'center',
-      alpha,
-      shadow: 'rgba(0,0,0,0.9)',
-      shadowBlurPx: 6,
-      shadowOffset: { x: 0, y: 0 },
     });
   }
 

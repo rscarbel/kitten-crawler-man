@@ -30,6 +30,7 @@ import { EventBus } from '../../src/core/EventBus';
 import { settings } from '../../src/core/Settings';
 import { DIFFICULTY_PROFILES, type Difficulty } from '../../src/core/difficultyProfiles';
 import { createCircusQuestProgress } from '../../src/core/CircusQuestProgress';
+import { createAnchorQuestProgress } from '../../src/core/AnchorQuestProgress';
 import { createMurderQuestProgress } from '../../src/core/MurderQuestProgress';
 import { createDoomsdayProgress } from '../../src/core/DoomsdayProgress';
 import { withWorldSeed } from '../../src/core/WorldRandom';
@@ -618,6 +619,7 @@ function heatherSighting(difficulty: Difficulty, seed: number): BossSighting {
       null,
       party.human,
       new Conversation(null),
+      { anchor: createAnchorQuestProgress() },
     );
     return {
       name: 'heather_the_bear',
@@ -651,6 +653,7 @@ function assaultRun(difficulty: Difficulty, seed: number): AssaultRun {
       null,
       party.human,
       new Conversation(null),
+      { anchor: createAnchorQuestProgress() },
     );
     const ctx = contextFor(party, roster, map);
     const terror = (): Mob | null =>

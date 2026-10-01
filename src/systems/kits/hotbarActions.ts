@@ -139,6 +139,15 @@ export function refuseDynamiteInSafeRoom(host: Pick<HotbarHost, 'world' | 'menus
   host.menus.announce(DYNAMITE_SAFE_ROOM_REFUSAL);
 }
 
+/** What the Wayfinder's Anchor says when it is used under a roof. */
+export const ANCHOR_INDOORS_REFUSAL = 'The stone needs open sky to find its way.';
+
+/** Buzzes and explains a refused trip, from the hotbar or the bag menu. */
+export function refuseAnchorIndoors(host: Pick<HotbarHost, 'world' | 'menus'>): void {
+  host.world.audio?.play('error_taking_action');
+  host.menus.hotbarToast.show(ANCHOR_INDOORS_REFUSAL);
+}
+
 /**
  * Lets go of a charging stick, reporting whether this slot was the one holding
  * it. Bound to key-up so the throw's power is how long the key was held.

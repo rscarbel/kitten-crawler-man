@@ -1,12 +1,12 @@
 /**
- * Shared quest banner / completion-overlay rendering, so every questline
- * announces stages and completion the same way. Callers own the countdown
- * timers and pass frames-remaining.
+ * Shared quest stage-banner rendering, so every questline announces a stage
+ * the same way. Callers own the countdown timers and pass frames-remaining.
+ * A quest's completion is announced on the shared quest-complete screen
+ * (`src/ui/questReward/`), not here.
  */
 
 import { drawText } from './TextBox';
-import { drawOverlay } from './Box';
-import { viewportWidth, viewportHeight } from '../core/Viewport';
+import { viewportWidth } from '../core/Viewport';
 
 /** Horizontal gap kept clear on each side of a full-width title, even on the narrowest mobile canvas. */
 const TITLE_SIDE_MARGIN = 20;
@@ -91,17 +91,6 @@ const BANNER_TITLE_Y = 70;
 const BANNER_TITLE_SIZE = 30;
 const BANNER_GLOW_BLUR = 12;
 
-/** Completion-overlay display time. */
-const QUEST_COMPLETE_DISPLAY_SECONDS = 7;
-export const QUEST_COMPLETE_OVERLAY_FRAMES = QUEST_COMPLETE_DISPLAY_SECONDS * FRAMES_PER_SECOND;
-const OVERLAY_FADE_FRAMES = 90;
-const OVERLAY_DIM_ALPHA = 0.6;
-const OVERLAY_TITLE_Y_OFFSET = 30;
-const OVERLAY_TITLE_SIZE = 26;
-const OVERLAY_GLOW_BLUR = 15;
-const OVERLAY_DISMISS_Y_OFFSET = 30;
-const OVERLAY_DISMISS_SIZE = 12;
-
 /** Draws a fading top-of-screen stage banner. No-op when framesLeft <= 0. */
 export function drawQuestBanner(
   ctx: CanvasRenderingContext2D,
@@ -122,39 +111,5 @@ export function drawQuestBanner(
     alpha,
     glow,
     glowBlur: BANNER_GLOW_BLUR,
-  });
-}
-
-/** Draws the dimmed full-screen quest-complete overlay. No-op when framesLeft <= 0. */
-export function drawQuestCompleteOverlay(
-  ctx: CanvasRenderingContext2D,
-  title: string,
-  framesLeft: number,
-): void {
-  if (framesLeft <= 0) return;
-  const alpha = framesLeft < OVERLAY_FADE_FRAMES ? framesLeft / OVERLAY_FADE_FRAMES : 1;
-
-  drawOverlay(ctx, {
-    canvasWidth: viewportWidth(),
-    canvasHeight: viewportHeight(),
-    alpha: alpha * OVERLAY_DIM_ALPHA,
-  });
-
-  drawFittedTitle(ctx, title, {
-    centerX: viewportWidth() / 2,
-    y: viewportHeight() / 2 - OVERLAY_TITLE_Y_OFFSET,
-    size: OVERLAY_TITLE_SIZE,
-    color: '#4ade80',
-    alpha,
-    glow: '#4ade80',
-    glowBlur: OVERLAY_GLOW_BLUR,
-  });
-  drawText(ctx, 'Space or click to dismiss', {
-    x: viewportWidth() / 2,
-    y: viewportHeight() / 2 + OVERLAY_DISMISS_Y_OFFSET,
-    size: OVERLAY_DISMISS_SIZE,
-    color: 'rgba(200,200,200,0.7)',
-    align: 'center',
-    alpha,
   });
 }

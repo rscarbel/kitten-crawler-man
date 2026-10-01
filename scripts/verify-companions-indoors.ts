@@ -1799,6 +1799,7 @@ function checkSceneWiring(): void {
     summonButton: true,
     buildButton: true,
     journalButton: true,
+    lootBoxBanner: null,
   });
   const stackedSummon = phoneLayout.summon;
   const phoneSwitch = phoneLayout.switchButton;

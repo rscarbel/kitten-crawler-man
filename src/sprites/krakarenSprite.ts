@@ -11,7 +11,12 @@
 import { progressFrameIndex, timeFrameIndex } from '../core/SpriteRenderer';
 import { drawFigureCached, prewarmFigureState } from './figure/figureFrameCache';
 import { figureFrameCount } from './figure/figureDef';
-import { KRAKAREN_FIGURE, KRAKAREN_SLAM_FIGURE } from './art/krakarenFigure';
+import {
+  GROUND_OFFSET_PX,
+  KRAKAREN_FIGURE,
+  KRAKAREN_SLAM_FIGURE,
+  TILE_SCALE,
+} from './art/krakarenFigure';
 
 /** Which of the three drawn viewpoints a facing resolves to. */
 export type KrakarenView = 'front' | 'side' | 'away';
@@ -248,6 +253,33 @@ export function krakarenArtHeightTiles(_fallbackTiles: number): number {
 /** How far above her tile origin to hang a health bar so it clears the mantle. */
 export function krakarenOverheadLiftTiles(_fallbackTiles: number): number {
   return KRAKAREN_ART_TOP_TILES + KRAKAREN_OVERHEAD_CLEARANCE_TILES;
+}
+
+/** Where every Krakaren figure's ground line sits in its tile, as a fraction of the tile. */
+const KRAKAREN_GROUND_LINE_TILE_FRACTION = GROUND_OFFSET_PX / TILE_SCALE;
+
+/**
+ * The tile origin to draw her art from at `artTileSize` so it stands where a
+ * `tileSize` figure drawn from (`sx`, `sy`) would: centred on that tile and on
+ * its ground line.
+ *
+ * The figure cache places a tile by its top-left corner, so a scaled-up tile
+ * drawn from the one-tile origin grows right and down from it — at triple size
+ * her art would stand a tile to the right of and two tiles below the point the
+ * fight measures her from, and the slam tentacle would come down that far from
+ * where its kill lands.
+ */
+export function krakarenScaledArtOrigin(
+  sx: number,
+  sy: number,
+  tileSize: number,
+  artTileSize: number,
+): { x: number; y: number } {
+  const growth = artTileSize - tileSize;
+  return {
+    x: sx - growth / 2,
+    y: sy - growth * KRAKAREN_GROUND_LINE_TILE_FRACTION,
+  };
 }
 
 const ENRAGE_GLOW_BASE_ALPHA = 0.25;

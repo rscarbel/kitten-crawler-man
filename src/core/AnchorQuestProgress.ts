@@ -17,6 +17,9 @@
 
 import type { QuestStatus } from './QuestManager';
 
+/** The questline's display title, as the journal, overlay and reward screens name it. */
+export const ANCHOR_QUEST_NAME = 'The Anchor is Broken';
+
 /**
  * How far one shard's giver has got.
  *

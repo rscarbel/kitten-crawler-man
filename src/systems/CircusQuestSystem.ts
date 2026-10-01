@@ -15,7 +15,7 @@
  * entry-idempotent so building round-trips reconstruct cleanly.
  */
 
-import { awardXp } from '../core/awardXp';
+import { awardPartyXp, type CrawlerPair, type PartyXpApplied } from '../core/awardXp';
 import { TILE_SIZE } from '../core/constants';
 import { applySpawnDifficulty } from '../core/difficultyProfiles';
 import type { ItemId } from '../core/ItemDefs';
@@ -31,7 +31,7 @@ import { QuestManager, type QuestStatus } from '../core/QuestManager';
 import { partyLevelOf } from '../levels/spawner';
 import { questMobLevel } from './questMobLevel';
 import { characterTarget, type TrackerEntry } from './questTracker';
-import type { CircusQuestProgress } from '../core/CircusQuestProgress';
+import { CIRCUS_QUEST_NAME, type CircusQuestProgress } from '../core/CircusQuestProgress';
 import type { OverworldMusicSystem } from './OverworldMusicSystem';
 import { Signet } from '../creatures/Signet';
 import { SIGNET_OVERLAY_CLEARANCE } from '../sprites/signetSprite';
@@ -46,12 +46,9 @@ import type { QuestMarkerType } from './MiniMapSystem';
 import { drawInteractionPrompt } from '../ui/InteractionPrompt';
 import type { Conversation } from '../dialog/Conversation';
 import type { ConversationHandle, ConversationRequest } from '../dialog/request';
-import {
-  drawQuestBanner,
-  drawQuestCompleteOverlay,
-  QUEST_BANNER_FRAMES,
-  QUEST_COMPLETE_OVERLAY_FRAMES,
-} from '../ui/QuestBanners';
+import { drawQuestBanner, QUEST_BANNER_FRAMES } from '../ui/QuestBanners';
+import { partyXpSections } from '../ui/questReward/rewardLines';
+import type { QuestRewardSpec } from '../ui/questReward/types';
 import {
   CIRCUS_INTRO,
   CIRCUS_RITUAL_FAILED,
@@ -64,6 +61,7 @@ import { spawnHardModeBossHealer } from '../levels/fairySpawner';
 import type { HealingFairy } from '../creatures/fairies/HealingFairy';
 import { level3 } from '../levels/level3';
 import { placeCompanionBeside, standingCompanions } from './partyCompanions';
+import { travelUnlocksSection, type TravelUnlockState } from './travel/travelDestinations';
 
 export const CIRCUS_QUEST_ID = 'the_show_must_go_on';
 
@@ -280,7 +278,6 @@ export class CircusQuestSystem implements GameSystem {
 
   private bannerTimer = 0;
   private bannerText = '';
-  private completeOverlayTimer = 0;
   /** Latest frame context — lets dialog callbacks reach the live mob list (e.g. Mongo dismissal). */
   private lastCtx: SystemContext | null = null;
   /**
@@ -301,11 +298,13 @@ export class CircusQuestSystem implements GameSystem {
     private readonly audio: AudioManager | null = null,
     initialActivePlayer: Player,
     private readonly conversation: Conversation,
+    /** Read when the reward screen is built, to say whether the stone can use its new destination yet. */
+    private readonly travelUnlocks: Pick<TravelUnlockState, 'anchor'>,
   ) {
     this.questManager = new QuestManager();
     this.questManager.register({
       id: CIRCUS_QUEST_ID,
-      name: 'The Show Must Go On',
+      name: CIRCUS_QUEST_NAME,
       type: 'story',
       rewards: {
         // Includes the 800 XP a boss fight would have paid: the finale is a
@@ -784,21 +783,6 @@ export class CircusQuestSystem implements GameSystem {
   }
 
   /**
-   * The completion banner, which a press dismisses early. It rides over live
-   * play rather than pausing it, so it is not part of `isDialogOpen`.
-   */
-  get isOutcomeOverlayShowing(): boolean {
-    return this.completeOverlayTimer > 0;
-  }
-
-  /** Space/tap on the banner: dismiss early rather than wait out the timer. */
-  advanceOutcomeOverlay(): boolean {
-    if (this.completeOverlayTimer <= 0) return false;
-    this.completeOverlayTimer = 0;
-    return true;
-  }
-
-  /**
    * Snapshots the questline so a death inside a safe room rewinds every beat the
    * player completed after checking in.
    *
@@ -926,7 +910,7 @@ export class CircusQuestSystem implements GameSystem {
    * to.
    */
   trackerEntries(): ReadonlyArray<TrackerEntry> {
-    const name = this.questManager.getDef(CIRCUS_QUEST_ID)?.name ?? 'The Show Must Go On';
+    const name = this.questManager.getDef(CIRCUS_QUEST_ID)?.name ?? CIRCUS_QUEST_NAME;
     const atSignet = this.signet?.isAlive === true ? characterTarget(this.signetTile()) : undefined;
     const base = { id: CIRCUS_QUEST_ID, name };
 
@@ -1057,7 +1041,7 @@ export class CircusQuestSystem implements GameSystem {
     });
   }
 
-  private openDialogForCurrentPhase(active: Player): boolean {
+  private openDialogForCurrentPhase(active: Player, party: CrawlerPair): boolean {
     switch (this.phase) {
       case 'awaiting_intro':
         this.openSignetConversation(CIRCUS_INTRO, () => this.startRitualDefense());
@@ -1077,7 +1061,7 @@ export class CircusQuestSystem implements GameSystem {
         return true;
       case 'awaiting_resolution':
         this.openSignetConversation(circusResolutionLines(this.progress.mongoKidnapped), () =>
-          this.finishQuest(active),
+          this.finishQuest(active, party),
         );
         return true;
       case 'ritual_defense':
@@ -1116,9 +1100,9 @@ export class CircusQuestSystem implements GameSystem {
   }
 
   /** Space-key interaction: opens Signet's dialog for the current stage when in range. */
-  tryInteract(active: Player): boolean {
+  tryInteract(active: Player, party: CrawlerPair): boolean {
     if (!this.wouldInteract(active)) return false;
-    return this.openDialogForCurrentPhase(active);
+    return this.openDialogForCurrentPhase(active, party);
   }
 
   /** Esc closes an open dialog without advancing the quest. Returns true if handled. */
@@ -1128,7 +1112,6 @@ export class CircusQuestSystem implements GameSystem {
   }
 
   handleClick(mx: number, my: number): boolean {
-    if (this.advanceOutcomeOverlay()) return true;
     if (!this.conversationOwned) return false;
     return this.conversation.handleClick(mx, my);
   }
@@ -1177,13 +1160,17 @@ export class CircusQuestSystem implements GameSystem {
     if (this.lastCtx) this.gatherCompanionsOntoGrounds(this.lastCtx);
   }
 
-  private finishQuest(active: Player): void {
+  /** Both crawlers earn the full XP; the coins go into the purse of whoever closed the conversation. */
+  private finishQuest(active: Player, party: CrawlerPair): void {
     this.phase = 'complete';
     this.progress.stage = 'complete';
     this.questManager.completeQuest(CIRCUS_QUEST_ID);
 
-    const def = this.questManager.getDef(CIRCUS_QUEST_ID);
-    if (def) awardXp(active, def.rewards.xp, this.bus);
+    const rewards = this.questManager.getDef(CIRCUS_QUEST_ID)?.rewards ?? null;
+    const xpApplied =
+      rewards === null ? null : awardPartyXp(party.human, party.cat, rewards.xp, this.bus);
+    const coins = rewards?.coins ?? 0;
+    active.earnCoins(coins);
 
     if (this.progress.mongoKidnapped && this.mongoSystem) {
       this.mongoSystem.summonLocked = false;
@@ -1191,7 +1178,22 @@ export class CircusQuestSystem implements GameSystem {
     }
 
     this.bus.emit('questCompleted', { questId: CIRCUS_QUEST_ID });
-    this.completeOverlayTimer = QUEST_COMPLETE_OVERLAY_FRAMES;
+    this.bus.emit('questRewardShown', this.rewardSpec(xpApplied, coins));
+  }
+
+  /**
+   * The finale's quest-complete screen, describing what {@link finishQuest}
+   * actually paid. It goes up once Signet's closing conversation has closed.
+   */
+  private rewardSpec(xpApplied: PartyXpApplied | null, coins: number): QuestRewardSpec {
+    return {
+      questTitle: CIRCUS_QUEST_NAME,
+      sections: [
+        ...(xpApplied === null ? [] : partyXpSections(xpApplied)),
+        { kind: 'coins', amount: coins },
+        travelUnlocksSection(['circus'], this.travelUnlocks),
+      ],
+    };
   }
 
   // ── Frame update ──────────────────────────────────────────────────────────
@@ -1199,7 +1201,6 @@ export class CircusQuestSystem implements GameSystem {
   update(ctx: SystemContext): void {
     this.lastCtx = ctx;
     this.partyLevel = partyLevelOf(ctx.human.level, ctx.cat.level);
-    if (this.completeOverlayTimer > 0) this.completeOverlayTimer--;
     if (this.bannerTimer > 0) this.bannerTimer--;
 
     // Signet is in `ctx.roster.mobs`, so MobUpdateLoop already ticks her timers every
@@ -1224,7 +1225,7 @@ export class CircusQuestSystem implements GameSystem {
         this.updateAssault(ctx);
         break;
       case 'awaiting_resolution':
-        this.autoOpenResolution(ctx.active);
+        this.autoOpenResolution(ctx.active, ctx);
         break;
       case 'awaiting_intro':
       case 'awaiting_ritual_failed':
@@ -1251,11 +1252,11 @@ export class CircusQuestSystem implements GameSystem {
    * non-quest chat is on screen: `resolutionAutoOpened` only latches once the
    * open actually happens, so this keeps retrying every frame until then.
    */
-  private autoOpenResolution(active: Player): void {
+  private autoOpenResolution(active: Player, party: CrawlerPair): void {
     if (this.resolutionAutoOpened || this.conversationOwned) return;
     if (this.conversation.isOpen) return;
     this.resolutionAutoOpened = true;
-    this.openDialogForCurrentPhase(active);
+    this.openDialogForCurrentPhase(active, party);
   }
 
   private updateRitualDefense(ctx: SystemContext): void {
@@ -1414,6 +1415,5 @@ export class CircusQuestSystem implements GameSystem {
 
   renderUI(ctx: CanvasRenderingContext2D): void {
     drawQuestBanner(ctx, this.bannerText, this.bannerTimer);
-    drawQuestCompleteOverlay(ctx, 'THE SHOW MUST GO ON — COMPLETE', this.completeOverlayTimer);
   }
 }

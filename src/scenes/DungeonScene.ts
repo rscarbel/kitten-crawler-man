@@ -1,12 +1,13 @@
 import { displayHp } from '../core/crawlerFormulas';
 import { forwardQuestItemEvictions } from '../systems/questItemEvictions';
-import { awardXp } from '../core/awardXp';
 import { type SceneManager } from '../core/Scene';
 import { type InputManager } from '../core/InputManager';
 import { platform } from '../core/Platform';
 import { TILE_SIZE } from '../core/constants';
 import { clamp, frameTime } from '../utils';
 import * as UIRenderer from '../systems/DungeonUIRenderer';
+import type { HudViewState } from '../ui/hudButtons/hudViewState';
+import { desktopSummonButtonRect } from '../ui/hudButtons/hudButtonLayout';
 import { GameMap } from '../map/GameMap';
 import { DEFAULT_DUNGEON_FLOOR_THEME, setDungeonFloorTheme } from '../map/dungeon/floorTheme';
 import type { GameProgressInput } from '../auth/AuthClient';
@@ -163,8 +164,14 @@ import { StairwellSystem } from '../systems/StairwellSystem';
 import {
   RECALL_COOLDOWN_FRAMES,
   RecallSystem,
-  type RecallSceneRebuildState,
+  type RecallCheckpoint,
 } from '../systems/RecallSystem';
+import { TravelMenu } from '../ui/TravelMenu';
+import {
+  TRAVEL_LANDING_SEARCH_TILES,
+  TRAVEL_LANDING_STANDOFF_TILES,
+  type TravelUnlockState,
+} from '../systems/travel/travelDestinations';
 import {
   BuildingSystem,
   downedPartnerEntryRefusal,
@@ -341,19 +348,20 @@ import { findBountyDef } from '../systems/bountyDefs';
 import {
   findNearbyWalkableTile,
   findPartyArrivalTiles,
+  findWarpLandingTile,
   hasRoomToMove,
 } from '../map/findWalkableTile';
 import { resolveDeathCause } from '../systems/DeathCauseSystem';
 import { pickDeathExplanation } from '../ui/DeathExplanations';
 import { BuildingInteriorScene } from './BuildingInteriorScene';
-import {
-  MongoSystem,
-  mongoXpFraction,
-  SUMMON_BUTTON_HEIGHT,
-  SUMMON_BUTTON_WIDTH,
-} from '../systems/MongoSystem';
+import { MongoSystem, mongoXpFraction } from '../systems/MongoSystem';
 import type { InteriorCompanionArrival } from '../systems/companionCarry';
-import { DefendQuestSystem } from '../systems/DefendQuestSystem';
+import {
+  DEFEND_LOOT_BOX_TIER,
+  DEFEND_QUEST_ID,
+  DefendQuestSystem,
+} from '../systems/DefendQuestSystem';
+import type { QuestRewardSpec } from '../ui/questReward/types';
 import { DungeonLightingSystem, type OverDarknessPainter } from '../systems/DungeonLightingSystem';
 import {
   DungeonAmbienceSystem,
@@ -368,7 +376,7 @@ import { floorSurfaceOf } from '../map/dungeon/floorSurface';
 import { dungeonFloorTheme } from '../map/dungeon/floorTheme';
 import { partyLightSource, type PartyCompanion } from '../systems/lighting/partyLights';
 import { beginAboveDarkness, flushAboveDarkness } from '../systems/lighting/aboveDarkness';
-import { SpiderQuestSystem, SPIDER_QUEST_COMPLETION_XP } from '../systems/SpiderQuestSystem';
+import { SpiderQuestSystem } from '../systems/SpiderQuestSystem';
 import { CircusQuestSystem, CIRCUS_QUEST_ID } from '../systems/CircusQuestSystem';
 import { MurderMysteryQuestSystem, MURDER_QUEST_ID } from '../systems/MurderMysteryQuestSystem';
 import { AnchorQuestSystem } from '../systems/AnchorQuestSystem';
@@ -527,6 +535,8 @@ export type SaveProgressFn = (data: GameProgressInput) => void;
 export interface DungeonSceneOptions {
   /** Tile coordinates to spawn players at (instead of map start tile). */
   spawnAt?: { x: number; y: number };
+  /** The HUD toggles the party walked out of a building with, so the door moves no button. */
+  hudView?: HudViewState;
   /** Preserved human player state from a previous scene (e.g. building interior). */
   humanSnap?: PlayerSnapshot;
   /** Preserved cat player state from a previous scene. */
@@ -544,12 +554,8 @@ export interface DungeonSceneOptions {
    * alongside `existingMap` — its fog array is sized to that map's structure.
    */
   existingMiniMap?: MiniMapSystem;
-  /**
-   * The Wayfinder's Anchor's cooldown and trail anchor, carried across a
-   * building-exit rebuild — only meaningful alongside `existingMap`, since the
-   * anchor tile it names is only still real ground on the same map instance.
-   */
-  existingRecallState?: RecallSceneRebuildState;
+  /** The Wayfinder's Anchor's cooldown, carried across a building-exit rebuild. */
+  existingRecallState?: RecallCheckpoint;
   /**
    * Whatever was lying on the ground to be picked up, carried across a
    * building-exit rebuild — only meaningful alongside `existingMap`, since the
@@ -715,10 +721,6 @@ const FAIRY_CHEAT_SPREAD_TILES = 3;
 const FAIRY_CHEAT_ATTEMPTS = 40;
 /** Widest ring `!bounty go` will search for somewhere walkable to land. */
 const BOUNTY_WARP_SEARCH_TILES = 20;
-/** A recall lands *on* its destination where it can, so the ring search starts there. */
-const RECALL_WARP_STANDOFF_TILES = 0;
-/** Widest ring the Wayfinder's Anchor will search for somewhere to set the party down. */
-const RECALL_WARP_SEARCH_TILES = 24;
 /** Distance-attenuated ambience tuning for the overworld town. */
 const FOUNTAIN_AMBIENT_RADIUS_TILES = 10;
 const FOUNTAIN_AMBIENT_VOLUME = 0.5;
@@ -902,13 +904,6 @@ const TROGLODYTE_SPAWN_KEY = 'troglodyte';
 
 // UI positioning and sizing
 const MOBILE_UI_SPACING = 4;
-
-// UI button positioning (Mongo/Gear/Bag etc)
-const SUMMON_BUTTON_X = 10;
-const SUMMON_BUTTON_Y_OFFSET_1 = 52;
-const SUMMON_BUTTON_Y_OFFSET_2 = 12;
-const SUMMON_BUTTON_Y_OFFSET_3 = 52;
-const SUMMON_BUTTON_Y_OFFSET_4 = 8;
 
 // Music and animation timing
 const MUSIC_FADE_IN_MS = 2000;
@@ -1149,8 +1144,11 @@ export class DungeonScene extends GameplayScene {
   /** Null on every map but the overworld, which is the only one with rivers. */
   private water: WaterAnimationSystem | null;
   private stairwell: StairwellSystem;
-  /** The Wayfinder's Anchor: channel, cooldown and trail anchor. */
+  /** The Wayfinder's Anchor: channel and cooldown. */
   private readonly recall: RecallSystem;
+  private readonly travelMenu: TravelMenu;
+  /** The questlines that bind the anchor's destinations, read by the menu and every reward screen that names one. */
+  private readonly travelUnlocks: TravelUnlockState;
   private building: BuildingSystem | null = null;
   private townLife: TownLifeSystem | null = null;
   /**
@@ -1748,6 +1746,10 @@ export class DungeonScene extends GameplayScene {
         ? options.existingMiniMap
         : undefined;
     this.miniMap = reusableMiniMap ?? new MiniMapSystem(this.gameMap);
+    if (options?.hudView !== undefined) {
+      this.miniMap.setExpanded(options.hudView.miniMapExpanded);
+      this._hudCollapsed = options.hudView.hudCollapsed;
+    }
     this.safeRoom = new SafeRoomSystem(
       this.gameMap,
       spawnTileX,
@@ -1772,9 +1774,17 @@ export class DungeonScene extends GameplayScene {
         if (id === 'health_potion') this.tutorial?.onPotionUsed();
       },
     });
+    this.menus.questReward.setOpenConditions({
+      conversationOpen: () => this.conversation.isOpen,
+      worldHeld: () => this.gameplayHalted,
+    });
+    this.menus.questReward.onClosed = (spec) => this.flyQuestRewards(spec);
     this.menus.inventoryPanel.interaction.onBlockedHotbarDrop = () => {
       this.audio?.play('error');
       this.menus.announce(HOTBAR_REFUSAL_MESSAGE);
+    };
+    this.menus.useSceneItem = (item) => {
+      if (item.id === 'wayfinders_anchor') this.recall.requestTravel(this.active());
     };
     this.chat = new ChatKit({
       world: this.world,
@@ -2199,6 +2209,15 @@ export class DungeonScene extends GameplayScene {
       partyLevel,
     );
 
+    const travelState: TravelUnlockState = {
+      circus: this.circusQuestProgress,
+      briarHollow: this.briarHollowState,
+      anchor: this.anchorQuestProgress,
+    };
+    this.travelUnlocks = travelState;
+    this.travelMenu = new TravelMenu(this.gameMap, travelState, (caster, destination) =>
+      this.recall.beginChannelTo(caster, destination),
+    );
     this.recall = new RecallSystem(
       this.gameMap,
       levelDef,
@@ -2208,11 +2227,14 @@ export class DungeonScene extends GameplayScene {
       (tile) => this.warpPartyForRecall(tile),
       (message) => this.menus.hotbarToast.show(message),
       this.audio,
+      travelState,
+      (caster) => {
+        this.travelMenu.open(caster);
+        this.audio?.play('menu_open');
+      },
     );
-    // Only meaningful on the same map instance the anchor tile was recorded
-    // against — a building-exit rebuild, never a floor change or a death.
     if (options?.existingMap !== undefined && options.existingRecallState !== undefined) {
-      this.recall.restoreFromSceneRebuild(options.existingRecallState);
+      this.recall.restoreCheckpoint(options.existingRecallState);
     }
     if (options?.existingMap !== undefined && options.existingGroundPickups !== undefined) {
       this.destruction.groundPickups.restoreCheckpoint(options.existingGroundPickups);
@@ -2243,6 +2265,10 @@ export class DungeonScene extends GameplayScene {
           this.musicPersistsAcrossExit = true;
           const humanSnap = snapPlayer(this.human);
           const catSnap = snapPlayer(this.cat);
+          const hudView: HudViewState = {
+            miniMapExpanded: this.miniMap.isExpanded,
+            hudCollapsed: this._hudCollapsed,
+          };
           this.sceneManager.replace(
             new BuildingInteriorScene(
               entry,
@@ -2273,6 +2299,7 @@ export class DungeonScene extends GameplayScene {
                 this.sceneManager.replace(
                   new DungeonScene(levelDef, this.input, this.sceneManager, {
                     spawnAt: exitTile,
+                    hudView,
                     humanSnap: hSnap,
                     catSnap: cSnap,
                     // Entering a building is a detour, not a new floor — the floor
@@ -2293,7 +2320,7 @@ export class DungeonScene extends GameplayScene {
                     lastSave: this.lastSave?.progress,
                     existingMap: this.gameMap,
                     existingMiniMap: this.miniMap,
-                    existingRecallState: this.recall.captureForSceneRebuild(),
+                    existingRecallState: this.recall.captureCheckpoint(),
                     existingGroundPickups: this.destruction.groundPickups.captureCheckpoint(),
                     humanAchievements: this.humanAchievements,
                     catAchievements: this.catAchievements,
@@ -2358,6 +2385,7 @@ export class DungeonScene extends GameplayScene {
               this.hasQuestJournal
                 ? { entries: () => this.collectTrackerEntries(), progress: this.journalProgress }
                 : undefined,
+              hudView,
             ),
           );
         },
@@ -2492,16 +2520,6 @@ export class DungeonScene extends GameplayScene {
                   this.active(),
                   true,
                 ),
-              onCoinsGranted: (coins, worldX, worldY) => {
-                const cam = this.camera();
-                this.rewardFly.enqueueCoins(coins, worldX - cam.x, worldY - cam.y);
-              },
-              onItemGranted: (id, quantity, worldX, worldY) => {
-                const cam = this.camera();
-                for (let i = 0; i < quantity; i++) {
-                  this.rewardFly.enqueueItem(id, ITEM_DEF[id].name, worldX - cam.x, worldY - cam.y);
-                }
-              },
               assaultLevel: () =>
                 resolveVillageAssaultLevel(
                   levelDef,
@@ -2509,6 +2527,7 @@ export class DungeonScene extends GameplayScene {
                   activeDifficultyProfile(),
                 ),
               midgeEscortCarry: this.midgeEscortCarry,
+              travelUnlocks: this.travelUnlocks,
             })
           : null;
       // Regrowth must never stand a rock or a tree back up under a trebuchet or a snare.
@@ -2678,6 +2697,7 @@ export class DungeonScene extends GameplayScene {
       this.audio,
       this.active(),
       this.conversation,
+      this.travelUnlocks,
     );
     this.circusQuest.onItemGranted = (id, quantity, worldX, worldY) => {
       const cam = this.camera();
@@ -2699,7 +2719,7 @@ export class DungeonScene extends GameplayScene {
     this.anchorQuest = new AnchorQuestSystem(
       this.bus,
       this.anchorQuestProgress,
-      () => [this.human, this.cat],
+      () => ({ human: this.human, cat: this.cat }),
       () => {
         const tile = this.townProps?.fortuneTellerTile ?? null;
         return tile === null ? null : characterTarget(tile);
@@ -2711,14 +2731,9 @@ export class DungeonScene extends GameplayScene {
         ),
       (message) => this.menus.announce(message),
       this.conversation,
+      this.travelUnlocks,
       this.audio,
     );
-    this.anchorQuest.onItemGranted = (id, quantity, worldX, worldY) => {
-      const cam = this.camera();
-      for (let i = 0; i < quantity; i++) {
-        this.rewardFly.enqueueItem(id, ITEM_DEF[id].name, worldX - cam.x, worldY - cam.y);
-      }
-    };
     this.doomsdayEscape = new DoomsdayEscapeSystem(
       this.gameMap,
       this.doomsdayQuestProgress,
@@ -3302,44 +3317,19 @@ export class DungeonScene extends GameplayScene {
       this.journalProgress.pinSource = 'auto';
     });
 
+    // Each quest pays its own XP and coins and asks for its reward screen; what
+    // stays here is what only the scene owns: the achievement stack the loot
+    // box goes onto, and both crawlers' quest slots.
     bus.on('questCompleted', (e) => {
-      if (e.questId === 'defend_goblin_mother') {
-        const def = this.defendQuest.questManager.getDef(e.questId);
-        if (def?.rewards.coins) {
-          this.active().earnCoins(def.rewards.coins);
-          this.flyQuestCoins(def.rewards.coins);
-        }
-        this.humanAchievements.grantBox('Silver', 'Adventurer', 'quest_defend_npc');
+      if (e.questId === DEFEND_QUEST_ID) {
+        this.humanAchievements.grantBox(DEFEND_LOOT_BOX_TIER, 'Adventurer', 'quest_defend_npc');
         this.human.inventory.clearQuestItem('quest_wood_board');
         this.cat.inventory.clearQuestItem('quest_wood_board');
-      }
-      if (e.questId === 'grotesque_spider') {
-        const humanXpApplied = awardXp(this.human, SPIDER_QUEST_COMPLETION_XP, this.bus);
-        const catXpApplied = awardXp(this.cat, SPIDER_QUEST_COMPLETION_XP, this.bus);
-        this.spiderQuest.setAwardedXp(humanXpApplied, catXpApplied);
-        // Straight to the cat: the lab's dark is what the book is about, and she
-        // is the only crawler who can read it.
-        this.cat.inventory.addItem('skill_book_night_vision', 1);
-        this.flyQuestItem('skill_book_night_vision');
-      }
-      if (e.questId === 'the_show_must_go_on') {
-        const def = this.circusQuest.questManager.getDef(e.questId);
-        if (def?.rewards.coins) {
-          this.active().earnCoins(def.rewards.coins);
-          this.flyQuestCoins(def.rewards.coins);
-        }
-      }
-      if (e.questId === MURDER_QUEST_ID) {
-        const def = this.murderQuest.questManager.getDef(e.questId);
-        if (def?.rewards.coins) {
-          this.active().earnCoins(def.rewards.coins);
-          this.flyQuestCoins(def.rewards.coins);
-        }
       }
     });
 
     bus.on('questFailed', (e) => {
-      if (e.questId === 'defend_goblin_mother') {
+      if (e.questId === DEFEND_QUEST_ID) {
         this.human.inventory.clearQuestItem('quest_wood_board');
         this.cat.inventory.clearQuestItem('quest_wood_board');
       }
@@ -3388,6 +3378,14 @@ export class DungeonScene extends GameplayScene {
     }
 
     this._spiderKeyHandler = (e: KeyboardEvent) => {
+      // Escape dismisses the quest-complete screen, and every other key under
+      // it is swallowed; Space and Enter reach its Continue through the focus
+      // ring before this listener runs.
+      if (this.menus.questReward.handleKeyDown(e.key, e.repeat)) {
+        e.preventDefault();
+        e.stopImmediatePropagation();
+        return;
+      }
       if (this.questSwitchConfirm.handleKey(e.key)) {
         e.preventDefault();
         e.stopImmediatePropagation();
@@ -3473,6 +3471,10 @@ export class DungeonScene extends GameplayScene {
         }
         if (this.marketPanel?.isOpen === true) {
           this.marketPanel.close();
+          return true;
+        }
+        if (this.travelMenu.isOpen) {
+          this.travelMenu.close();
           return true;
         }
         if (this.fortuneTeller?.isOpen === true) {
@@ -4268,7 +4270,8 @@ export class DungeonScene extends GameplayScene {
     }
     const markTileX = Math.floor(mark.x / TILE_SIZE);
     const markTileY = Math.floor(mark.y / TILE_SIZE);
-    const landing = this.findWarpLandingTile(
+    const landing = findWarpLandingTile(
+      this.gameMap,
       markTileX,
       markTileY,
       BOUNTY_WARP_STANDOFF_TILES,
@@ -4293,11 +4296,12 @@ export class DungeonScene extends GameplayScene {
    * @returns whether the party actually moved.
    */
   private warpPartyForRecall(tile: { x: number; y: number }): boolean {
-    const landing = this.findWarpLandingTile(
+    const landing = findWarpLandingTile(
+      this.gameMap,
       tile.x,
       tile.y,
-      RECALL_WARP_STANDOFF_TILES,
-      RECALL_WARP_SEARCH_TILES,
+      TRAVEL_LANDING_STANDOFF_TILES,
+      TRAVEL_LANDING_SEARCH_TILES,
     );
     if (landing === null) return false;
 
@@ -4328,33 +4332,6 @@ export class DungeonScene extends GameplayScene {
     this.human.y = leader.y * TILE_SIZE;
     this.cat.x = follower.x * TILE_SIZE;
     this.cat.y = follower.y * TILE_SIZE;
-  }
-
-  /**
-   * Nearest tile with room to stand at least `standoffTiles` out from a target.
-   *
-   * The standoff is what keeps `!bounty go` from dropping the party inside the
-   * boss; a recall passes zero, because landing on the town square is the point.
-   * `hasRoomToMove` rather than `isWalkable`: a one-tile gap between two trunks
-   * passes every walkability test and traps whoever lands in it.
-   */
-  private findWarpLandingTile(
-    targetTileX: number,
-    targetTileY: number,
-    standoffTiles: number,
-    searchTiles: number,
-  ): { x: number; y: number } | null {
-    for (let radius = standoffTiles; radius <= searchTiles; radius++) {
-      for (let dy = -radius; dy <= radius; dy++) {
-        for (let dx = -radius; dx <= radius; dx++) {
-          if (Math.max(Math.abs(dx), Math.abs(dy)) !== radius) continue;
-          const tileX = targetTileX + dx;
-          const tileY = targetTileY + dy;
-          if (hasRoomToMove(this.gameMap, tileX, tileY)) return { x: tileX, y: tileY };
-        }
-      }
-    }
-    return null;
   }
 
   private triggerBuildAction(): boolean {
@@ -4570,6 +4547,7 @@ export class DungeonScene extends GameplayScene {
     // The same for granted-reward cards and whatever waits on them (the
     // Resourcing explainer after Oren's tools): the rewind takes the grant back.
     this.menus.rewardGrantedDialog.discard();
+    this.menus.questReward.discard();
 
     restorePlayer(this.human, cp.humanSnap);
     restorePlayer(this.cat, cp.catSnap);
@@ -5542,6 +5520,7 @@ export class DungeonScene extends GameplayScene {
     if (
       this.noticeBoard?.isOpen === true ||
       this.marketPanel?.isOpen === true ||
+      this.travelMenu.isOpen ||
       this.fortuneTeller?.isOpen === true ||
       this.bounty?.isDialogOpen === true
     ) {
@@ -5737,6 +5716,7 @@ export class DungeonScene extends GameplayScene {
       // so the ring takes the press before this chain is reached. The claim is
       // still needed to keep the rest of the keyboard — and the world behind —
       // out of it.
+      this.menus.questReward.overlayClaim(),
       modal(this.menus.levelUpDialog.isShowing, 'level-up'),
       modal(this.menus.rewardGrantedDialog.isShowing, 'reward-granted'),
       modal(this.menus.mongoExplainer.isOpen, MONGO_EXPLAINER_FOCUS_ID),
@@ -5773,6 +5753,7 @@ export class DungeonScene extends GameplayScene {
         focusContext: 'notice-board',
       },
       modal(marketPanel?.isOpen === true, 'priced-menu'),
+      modal(this.travelMenu.isOpen, 'priced-menu'),
       modal(fortuneTeller?.isOpen === true, 'fortune-teller'),
       {
         isOpen: this.defendQuest.isTutorialOpen,
@@ -5782,18 +5763,6 @@ export class DungeonScene extends GameplayScene {
         focusContext: 'defend-quest',
       },
       floatingDialog(this.defendQuest.isOutcomeOverlayShowing, () => this.advanceDefendQuestPage()),
-      floatingDialog(this.circusQuest.isOutcomeOverlayShowing, () =>
-        this.dismissOutcomeOverlay(this.circusQuest.advanceOutcomeOverlay()),
-      ),
-      floatingDialog(this.murderQuest.isOutcomeOverlayShowing, () =>
-        this.dismissOutcomeOverlay(this.murderQuest.advanceOutcomeOverlay()),
-      ),
-      floatingDialog(this.anchorQuest.isOutcomeOverlayShowing, () =>
-        this.dismissOutcomeOverlay(this.anchorQuest.advanceOutcomeOverlay()),
-      ),
-      floatingDialog(this.spiderQuest.isOutcomeOverlayShowing, () =>
-        this.dismissOutcomeOverlay(this.spiderQuest.advanceOutcomeOverlay()),
-      ),
       // The quest systems below own their own window listener for Space, so the
       // claim here only has to keep the press away from the world behind them.
       // The scientist's offer opens on the shared conversation below, so it
@@ -5830,11 +5799,6 @@ export class DungeonScene extends GameplayScene {
 
   private advanceDefendQuestPage(): void {
     if (this.defendQuest.advancePage()) this.audio?.play('menu_click');
-  }
-
-  /** Shared feedback for the space-dismisses-the-banner-early claims below. */
-  private dismissOutcomeOverlay(dismissed: boolean): void {
-    if (dismissed) this.audio?.play('menu_click');
   }
 
   /** The overlay that currently owns input, or null when play has the floor. */
@@ -6250,7 +6214,7 @@ export class DungeonScene extends GameplayScene {
     // say about one.
     const hasNursery = this.gameMap.questRooms.length > 0;
     return adviceObjective(
-      'defend_goblin_mother',
+      DEFEND_QUEST_ID,
       this.defendQuest.isSpentAsAdvice,
       hasNursery ? this.gameMap.questRooms[0].centre : null,
     );
@@ -6418,13 +6382,13 @@ export class DungeonScene extends GameplayScene {
     if (this.treasureChests.tryInteract(active)) {
       return true;
     }
-    if (this.defendQuest.tryInteract(active)) {
+    if (this.defendQuest.tryInteract(active, { human: this.human, cat: this.cat })) {
       return true;
     }
     if (this.spiderQuest.tryInteract(active)) {
       return true;
     }
-    if (this.circusQuest.tryInteract(active)) {
+    if (this.circusQuest.tryInteract(active, { human: this.human, cat: this.cat })) {
       return true;
     }
     if (this.murderQuest.tryInteract(active)) {
@@ -6537,10 +6501,8 @@ export class DungeonScene extends GameplayScene {
       this.defendQuest.tryBuildBarrier(this.active());
       return true;
     }
-    // A press while the stone is already channelling gives it up, so the same
-    // key both starts and abandons the trip.
     if (slot.id === 'wayfinders_anchor') {
-      this.recall.toggle(this.active());
+      this.recall.requestTravel(this.active());
       return true;
     }
     return false;
@@ -6594,6 +6556,7 @@ export class DungeonScene extends GameplayScene {
     // menu that outranked them here would take a press aimed at their OK button
     // and leave the overlay with no way to be dismissed.
     if (this.achievementUI.handleClick(mx, my)) return;
+    if (this.menus.questReward.handleClick(mx, my)) return;
     if (this.menus.levelUpDialog.handleClick(mx, my)) return;
     if (this.menus.rewardGrantedDialog.handleClick(mx, my)) return;
     if (this.menus.mongoExplainer.handleClick(mx, my)) return;
@@ -6631,6 +6594,10 @@ export class DungeonScene extends GameplayScene {
     }
     if (this.marketPanel?.isOpen === true) {
       this.marketPanel.handleClick(mx, my, this.active(), this.inactive());
+      return;
+    }
+    if (this.travelMenu.isOpen) {
+      this.travelMenu.handleClick(mx, my, this.active(), this.inactive());
       return;
     }
     if (this.fortuneTeller?.isOpen === true) {
@@ -6910,6 +6877,7 @@ export class DungeonScene extends GameplayScene {
     }
     this.noticeBoard?.handleWheel(deltaY);
     this.marketPanel?.handleWheel(deltaY);
+    this.travelMenu.handleWheel(deltaY);
     this.briarHollowKit?.handleWheel(deltaY);
   }
 
@@ -7026,6 +6994,7 @@ export class DungeonScene extends GameplayScene {
     if (this.gameplayHalted) {
       this.silenceMovementLoops();
       this.marketPanel?.update();
+      this.travelMenu.update();
       return;
     }
     this.gameStats.recordPlayedFrame();
@@ -7485,7 +7454,6 @@ export class DungeonScene extends GameplayScene {
         this.shouldShowBountyArrow()
           ? (this.bounty?.arrowCandidate(ctx, this.active(), camX, camY, this._hudRect) ?? null)
           : null,
-        this.recall.trailArrowCandidate(ctx, this.active(), camX, camY, this._hudRect),
       ]);
     }
 
@@ -7589,8 +7557,7 @@ export class DungeonScene extends GameplayScene {
         current: this.recall.cooldownRemainingFrames,
         max: RECALL_COOLDOWN_FRAMES,
       });
-      const mmSz = this.miniMap.isExpanded ? this.miniMap.EXPANDED_SIZE : this.miniMap.NORMAL_SIZE;
-      this.menus.inventoryPanel.mmSize = mmSz;
+      this.menus.inventoryPanel.desktopBagButtonRect = UIRenderer.bagButtonRect(this.miniMap);
       this.menus.inventoryPanel.bagBouncePulse = this.rewardFly.bagBouncePulse();
 
       // Render persistent HUD buttons before panels so open menus and context menus paint over them.
@@ -7626,14 +7593,18 @@ export class DungeonScene extends GameplayScene {
           companion: this.companion,
           mongoSystem: this.mongoSystem,
           inventoryPanel: this.menus.inventoryPanel,
-          gearPanel: this.menus.gearPanel,
           hideSwitchButton: this.tutorial !== null && !this.tutorial.showSwitchButton,
           hideFollowerButton: this.tutorial !== null && !this.tutorial.showFollowerButton,
           hasUnseenUpgrade: this.menus.inventoryPlayer().inventory.unseenUpgrades.size > 0,
           bagBouncePulse: this.rewardFly.bagBouncePulse(),
         });
       else if (this.tutorial === null || this.tutorial.showFollowerButton)
-        UIRenderer.renderFollowerButton(ctx, this.touch, this.companion, this.human.isActive);
+        this.touch.followBtnRect = UIRenderer.renderFollowerButton(
+          ctx,
+          this.companion,
+          this.human.isActive,
+          UIRenderer.followerButtonRect(),
+        );
 
       this.menus.inventoryPanel.render(
         ctx,
@@ -7650,19 +7621,15 @@ export class DungeonScene extends GameplayScene {
       this.defendQuest.renderUI(ctx, mobileQuestTopY);
       this.circusQuest.renderUI(ctx);
       this.murderQuest.renderUI(ctx);
-      this.anchorQuest.renderUI(ctx);
       this.doomsdayEscape.renderUI(ctx);
       if (!platform.isMobile && this.mongoSystem.canShow && this.cat.isActive) {
+        const summon = desktopSummonButtonRect(viewportHeight());
         this.touch.summonBtnRect = this.mongoSystem.renderSummonButton(
           ctx,
-          SUMMON_BUTTON_X,
-          viewportHeight() -
-            SUMMON_BUTTON_Y_OFFSET_1 -
-            SUMMON_BUTTON_Y_OFFSET_2 -
-            SUMMON_BUTTON_Y_OFFSET_3 -
-            SUMMON_BUTTON_Y_OFFSET_4,
-          SUMMON_BUTTON_WIDTH,
-          SUMMON_BUTTON_HEIGHT,
+          summon.x,
+          summon.y,
+          summon.w,
+          summon.h,
           this.cat.isActive,
         );
       }
@@ -7722,6 +7689,7 @@ export class DungeonScene extends GameplayScene {
     this.grateSpikes.render(ctx, camX, camY);
     this.noticeBoard?.render(ctx);
     this.marketPanel?.render(ctx, this.active(), this.inactive());
+    this.travelMenu.render(ctx, this.active(), this.inactive());
     this.fortuneTeller?.render(ctx, this.active(), this.inactive());
 
     if (this.stairwell.menuOpen) {
@@ -8839,8 +8807,10 @@ export class DungeonScene extends GameplayScene {
       if (
         this.noticeBoard?.isOpen === true ||
         this.marketPanel?.isOpen === true ||
+        this.travelMenu.isOpen ||
         this.fortuneTeller?.isOpen === true ||
         this.menus.skillBookPrompt.isOpen ||
+        this.menus.questReward.isOpen ||
         this.menus.levelUpDialog.isShowing ||
         this.menus.rewardGrantedDialog.isShowing ||
         this.menus.mongoExplainer.isOpen ||
@@ -9467,6 +9437,21 @@ export class DungeonScene extends GameplayScene {
     const active = this.active();
     const cam = this.camera();
     this.rewardFly.enqueueItem(id, ITEM_DEF[id].name, active.x - cam.x, active.y - cam.y);
+  }
+
+  /**
+   * Flies what a dismissed quest-complete screen announced to the HUD, now
+   * that the HUD is visible again: its coins to the purse and its bag items
+   * to the bag.
+   */
+  private flyQuestRewards(spec: QuestRewardSpec): void {
+    for (const section of spec.sections) {
+      if (section.kind === 'coins') this.flyQuestCoins(section.amount);
+      if (section.kind !== 'items') continue;
+      for (const item of section.items) {
+        if (item.itemId !== undefined) this.flyQuestItem(item.itemId);
+      }
+    }
   }
 
   /** From a ground pile's world position, to wherever the HUD's coin/bag targets sit this frame. */

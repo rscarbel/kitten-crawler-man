@@ -41,6 +41,35 @@ export function hasRoomToMove(
 }
 
 /**
+ * Nearest tile with room to stand at least `standoffTiles` out from a target,
+ * searched in square rings out to `searchTiles`; null when none qualifies.
+ *
+ * The standoff is what keeps a warp onto a boss from dropping the party inside
+ * it; the Wayfinder's Anchor passes zero, because landing on its destination is
+ * the point. `hasRoomToMove` rather than `isWalkable`: a one-tile gap between
+ * two trunks passes every walkability test and traps whoever lands in it.
+ */
+export function findWarpLandingTile(
+  map: GameMap,
+  targetTileX: number,
+  targetTileY: number,
+  standoffTiles: number,
+  searchTiles: number,
+): { x: number; y: number } | null {
+  for (let radius = standoffTiles; radius <= searchTiles; radius++) {
+    for (let dy = -radius; dy <= radius; dy++) {
+      for (let dx = -radius; dx <= radius; dx++) {
+        if (Math.max(Math.abs(dx), Math.abs(dy)) !== radius) continue;
+        const tileX = targetTileX + dx;
+        const tileY = targetTileY + dy;
+        if (hasRoomToMove(map, tileX, tileY)) return { x: tileX, y: tileY };
+      }
+    }
+  }
+  return null;
+}
+
+/**
  * {@link hasRoomToMove} over any walkability predicate and grid size, for callers
  * that hold a raw tile grid rather than a built map — the generator seats fixtures
  * before a `GameMap` exists, and must ask the same question the spawner will ask.

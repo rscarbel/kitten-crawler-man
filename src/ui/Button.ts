@@ -668,11 +668,11 @@ export const BUTTON_PRESETS = {
     glowBlur: 12,
   },
   /**
-   * The Continue on a Briar Hollow quest-complete screen: the villager topic's
-   * candlelit brass, lit gold, so the one way out of a celebration reads as
-   * the village's own and still stands out as the thing to press.
+   * The Continue on the quest-complete screen: candlelit brass, lit gold, so
+   * the one way out of a celebration matches the panel's brass frame and
+   * still stands out as the thing to press.
    */
-  villageCelebration: {
+  questReward: {
     fill: '#3a2708',
     // Darker than the label: hover and focus glow in the border colour through
     // the button's own face, and a bright gold there washes the label out.
@@ -1001,13 +1001,14 @@ export function drawButton(ctx: CanvasRenderingContext2D, opts: ButtonOptions): 
 
   // Outside the button rather than on its border, so a preset that is already
   // gold-bordered still shows a visible ring rather than merging with it.
+  // Unfilled, so the glow is cast by the ring's stroke: a transparent fill
+  // casts a shadow some canvases paint solid over the face and others not at all.
   if (focused && !selectionDrawnByCaller) {
     drawBox(ctx, {
       x: x + FOCUS_RING_INSET,
       y: y + FOCUS_RING_INSET,
       width: width - FOCUS_RING_INSET * 2,
       height: height - FOCUS_RING_INSET * 2,
-      fill: 'rgba(0,0,0,0)',
       border: FOCUS_RING_COLOR,
       borderWidth: FOCUS_RING_BORDER_WIDTH,
       radius: radius - FOCUS_RING_INSET,

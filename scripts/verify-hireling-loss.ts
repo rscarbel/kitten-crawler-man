@@ -29,6 +29,7 @@ import { TILE_SIZE } from '../src/core/constants';
 import { EventBus } from '../src/core/EventBus';
 import { withWorldSeed } from '../src/core/WorldRandom';
 import { createCircusQuestProgress } from '../src/core/CircusQuestProgress';
+import { createAnchorQuestProgress } from '../src/core/AnchorQuestProgress';
 import {
   captureMercenaryRoster,
   createMercenaryRoster,
@@ -150,6 +151,7 @@ function stageAssault(worldSeed: number): CircusStage | null {
     null,
     human,
     new Conversation(null),
+    { anchor: createAnchorQuestProgress() },
   );
   return { map, roster, human, quest, centre, radiusTiles };
 }

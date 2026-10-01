@@ -31,6 +31,7 @@ import {
   createCircusQuestProgress,
   type CircusQuestProgress,
 } from '../../src/core/CircusQuestProgress';
+import { createAnchorQuestProgress } from '../../src/core/AnchorQuestProgress';
 import {
   captureMercenaryRoster,
   createMercenaryRoster,
@@ -314,6 +315,7 @@ function rebuildQuest(
     null,
     party.human,
     new Conversation(null),
+    { anchor: createAnchorQuestProgress() },
   );
 }
 

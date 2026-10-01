@@ -16,7 +16,7 @@ A mob is a `Player` with AI: `Mob` (`src/creatures/Mob.ts`) extends `Player` (`s
 
 ## Optional overrides (all have base defaults)
 
-`coinDropMin/Max`, `displayName`, `description`, `audioTag`, `bodyPartKey`, `mass` (heavier = displaced less in separation), `isFlying`, `isBoss`, `isHostile`, `requiresEvasion`, `rollLootItems(killer)` for creature-specific drops, `tacticsEligibility` (see below).
+`coinDropMin/Max`, `displayName`, `description`, `audioTag`, `bodyPartKey`, `mass` (heavier = displaced less in separation), `separationAnchored` (nothing can push it; whatever bumps it, crawlers included, takes the whole push), `collisionRadiusPx` (for a body drawn wider than a tile: measure it from the rendered art, keep it inside both crawlers' melee reach, and see `KrakarenClone`), `isFlying`, `isBoss`, `isHostile`, `requiresEvasion`, `rollLootItems(killer)` for creature-specific drops, `tacticsEligibility` (see below).
 
 ## Do not reimplement — inherited helpers
 

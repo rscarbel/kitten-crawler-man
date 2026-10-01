@@ -209,6 +209,26 @@ export function expandedHudPanelRect(): HudRect {
   return { x: PANEL_START_X, y: PANEL_START_Y, w: width, h: PANEL_HEIGHT };
 }
 
+/**
+ * The rect {@link drawHUD} reports as `hudRect` — the panel or the collapsed
+ * bar, without an expanded panel's overhanging toggle — for a layout that must
+ * agree with what the scene is told after drawing, before anything is drawn.
+ */
+export function hudReportedPanelRect(
+  collapsed: boolean,
+  collapsible = platform.showHudCollapseToggle,
+): HudRect {
+  if (collapsible && collapsed) {
+    return {
+      x: COLLAPSED_X,
+      y: COLLAPSED_Y,
+      w: COLLAPSED_BAR_W + TOGGLE_BTN_W,
+      h: COLLAPSED_BAR_H,
+    };
+  }
+  return { x: PANEL_START_X, y: PANEL_START_Y, w: PANEL_WIDTH, h: PANEL_HEIGHT };
+}
+
 /** Clear space kept between the collapse toggle and the minimap it steps aside for. */
 const TOGGLE_MINIMAP_CLEARANCE = 6;
 
@@ -421,7 +441,7 @@ export function drawHUD(
     ? HIDDEN_RECT
     : renderNotification(ctx, human, cat, pulseRef, reminderActive);
   const hudPanelBottom = panelTopY + panelHeight;
-  const hudRect: HudRect = { x: PANEL_START_X, y: panelTopY, w: PANEL_WIDTH, h: panelHeight };
+  const hudRect = hudReportedPanelRect(false, false);
 
   if (platform.showHudCollapseToggle) {
     const toggleRect = hudToggleRect(false, true, toggleClearOfX) ?? HIDDEN_RECT;
@@ -614,7 +634,7 @@ function drawHUDCollapsed(
 
   // Skill badge is rendered separately by the caller so it can be positioned
   // below any boss UI that stacks below this bar.
-  const hudRect: HudRect = { x, y, w: BAR_W + TOGGLE_BTN_W, h: BAR_H };
+  const hudRect = hudReportedPanelRect(true, true);
   return { toggleRect, notifRect: HIDDEN_RECT, hudPanelBottom: y + BAR_H, hudRect };
 }
 

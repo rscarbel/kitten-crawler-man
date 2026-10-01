@@ -168,7 +168,6 @@ function drawChrome(ctx: CanvasRenderingContext2D, layout: InteriorHudLayout): v
     { name: 'HUD', rect: layout.hud },
     { name: 'Minimap', rect: layout.miniMap },
     { name: 'Pause', rect: layout.pause },
-    { name: 'Gear', rect: layout.gear },
     { name: 'Bag', rect: layout.bag },
     { name: 'Switch', rect: layout.switchButton },
     { name: 'Follow', rect: layout.follow },
@@ -258,6 +257,7 @@ for (const roomName of roomNames) {
       summonButton: true,
       buildButton: true,
       journalButton: true,
+      lootBoxBanner: null,
     });
     const occluders = interiorHudOccluders(layout);
     const bounds = interiorCameraBounds(map);

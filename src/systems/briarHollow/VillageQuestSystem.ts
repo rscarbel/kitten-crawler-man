@@ -21,14 +21,18 @@ import type {
   TrebuchetStructureRecord,
   VillageQuestState,
 } from '../../core/briarHollowState';
-import { hasAcceptedMayorRequest, type VillageQuestPhase } from '../../core/villageQuestPhase';
+import {
+  BRIAR_HOLLOW_QUEST_NAME,
+  hasAcceptedMayorRequest,
+  type VillageQuestPhase,
+} from '../../core/villageQuestPhase';
 import { grantConstructionUnlocks, TIKKA_PLANS_UNLOCKS } from '../../core/villageUnlocks';
 import { QuestManager, type QuestDef } from '../../core/QuestManager';
 import { teachBoth } from '../../core/CraftSkills';
 import type { PartyCraftsState } from '../../core/partyCrafts';
 import { canAfford, partyCount, type ResourceCost } from '../../core/partyResources';
-import { awardXp } from '../../core/awardXp';
-import { ITEM_DEF, type ItemId } from '../../core/ItemDefs';
+import { awardPartyXp, type PartyXpApplied } from '../../core/awardXp';
+import type { ItemId } from '../../core/ItemDefs';
 import type { GrantedReward } from '../../core/GrantedReward';
 import { TILE_SIZE } from '../../core/constants';
 import type { HumanPlayer } from '../../creatures/HumanPlayer';
@@ -37,7 +41,8 @@ import type { NPCMarkerType } from '../../creatures/QuestNPC';
 import type { BriarHollowSite } from '../../map/overworld/briarHollowSite';
 import type { TilePoint } from '../../map/town/townPlan';
 import { ConfirmModal } from '../../ui/ConfirmModal';
-import { drawItemIcon } from '../../ui/InventoryPanel';
+import { bagItemRewardLine, partyXpSections } from '../../ui/questReward/rewardLines';
+import type { QuestRewardSpec, RewardItemLine } from '../../ui/questReward/types';
 import { drawCraftSkillIcon } from '../../ui/icons/craftSkillIcons';
 import type { OverlayInputClaim } from '../kits/OverlayClaims';
 import type { QuestMarkerType } from '../MiniMapSystem';
@@ -75,9 +80,9 @@ import type { TopicProvider, VillagerConversationFlow } from './villagerTopics';
 import type { VillagerSystem } from './VillagerSystem';
 import { ASSAULT_WAVE_COUNT, type VillageAssaultSystem } from './VillageAssaultSystem';
 import { BOARDS_PER_WOOD } from './services/woodProcessing';
+import { travelUnlocksSection, type TravelUnlockState } from '../travel/travelDestinations';
 
 export const BRIAR_HOLLOW_QUEST_ID = 'briar_hollow_plea';
-export const BRIAR_HOLLOW_QUEST_NAME = "Briar Hollow's Plea";
 
 /**
  * The questline's XP, set against the floor's other questlines: the circus's
@@ -199,10 +204,6 @@ export interface VillageQuestSystemDeps {
     y: number,
     items: ReadonlyArray<{ id: ItemId; quantity: number }>,
   ) => void;
-  /** A quest coin reward was just granted — for a fly-to-HUD effect. */
-  readonly onCoinsGranted?: (coins: number, worldX: number, worldY: number) => void;
-  /** A quest item reward was just granted straight into the bag (not dropped) — for a fly-to-HUD effect. */
-  readonly onItemGranted?: (id: ItemId, quantity: number, worldX: number, worldY: number) => void;
   /**
    * Grants Oren's starter tools and the Resourcing lesson, as the questline's
    * own opening line for him. Returns the follow-up to run once the
@@ -215,16 +216,17 @@ export interface VillageQuestSystemDeps {
    * is posted.
    */
   readonly recruiter: () => { readonly name: string; readonly tile: TilePoint } | null;
+  /** Read when the reward screen is built, to say whether the stone can use its new destination yet. */
+  readonly travelUnlocks: Pick<TravelUnlockState, 'anchor'>;
 }
 
-function itemReward(id: ItemId, quantity: number): GrantedReward {
-  const def = ITEM_DEF[id];
-  return {
-    kind: 'item',
-    name: `${def.name} ×${quantity}`,
-    description: def.description ?? '',
-    renderIcon: (ctx, x, y, size) => drawItemIcon(ctx, { ...def, quantity }, x, y, size),
-  };
+/** The note on a reward line whose items did not fit the bag and were left on the ground. */
+const LEFT_AT_MAYORS_FEET_NOTE = "Your bag was full — left at the Mayor's feet.";
+
+/** A reward line for food the Plea paid, flown to the bag only if it went in. */
+function foodRewardLine(id: ItemId, quantity: number, bagged: boolean): RewardItemLine {
+  if (bagged) return bagItemRewardLine(id, quantity);
+  return bagItemRewardLine(id, quantity, { note: LEFT_AT_MAYORS_FEET_NOTE, flyToBag: false });
 }
 
 /** The skill-unlocked card Tikka's plans are announced with. */
@@ -590,18 +592,7 @@ export class VillageQuestSystem implements QuestLineProvider, TopicProvider {
         const pages = this.victoryPages();
         this.grantRewards();
         this.setPhase('complete');
-        return {
-          pages,
-          questRelated: true,
-          after: {
-            kind: 'root',
-            onEventualClose: () => {
-              if (!this.deps.active().isAlive) return;
-              this.deps.enqueueReward(itemReward('hamburger', BRIAR_HOLLOW_REWARD_BURGERS));
-              this.deps.enqueueReward(itemReward('hollow_stew', BRIAR_HOLLOW_REWARD_STEW));
-            },
-          },
-        };
+        return { pages, questRelated: true, after: KEEP_TALKING };
       }
       case 'complete':
         return {
@@ -857,41 +848,80 @@ export class VillageQuestSystem implements QuestLineProvider, TopicProvider {
 
   // ── The reward ────────────────────────────────────────────────────────────
 
-  /** Pays out the quest's rewards unless they have been paid already. Returns whether it paid. */
+  /**
+   * Pays out the quest's rewards unless they have been paid already. Returns
+   * whether it paid. Both crawlers earn the full XP; the coins and food go to
+   * the active crawler.
+   */
   grantRewards(): boolean {
     const quest = this.quest;
     if (quest.rewardsGranted) return false;
     quest.rewardsGranted = true;
     const active = this.deps.active();
-    awardXp(active, BRIAR_HOLLOW_QUEST_XP, this.deps.bus);
+    const xpApplied = awardPartyXp(
+      this.deps.human,
+      this.deps.cat,
+      BRIAR_HOLLOW_QUEST_XP,
+      this.deps.bus,
+    );
     active.earnCoins(BRIAR_HOLLOW_QUEST_COINS);
-    this.deps.onCoinsGranted?.(BRIAR_HOLLOW_QUEST_COINS, active.x, active.y);
-    this.giveOrDrop(active, 'hamburger', BRIAR_HOLLOW_REWARD_BURGERS);
-    this.giveOrDrop(active, 'hollow_stew', BRIAR_HOLLOW_REWARD_STEW);
+    const burgersBagged = this.giveOrDrop(active, 'hamburger', BRIAR_HOLLOW_REWARD_BURGERS);
+    const stewBagged = this.giveOrDrop(active, 'hollow_stew', BRIAR_HOLLOW_REWARD_STEW);
     this.questManager.startQuest(BRIAR_HOLLOW_QUEST_ID);
     this.questManager.completeQuest(BRIAR_HOLLOW_QUEST_ID);
     this.deps.bus.emit('questCompleted', { questId: BRIAR_HOLLOW_QUEST_ID });
-    this.deps.announce(
-      `${BRIAR_HOLLOW_QUEST_NAME} complete: +${BRIAR_HOLLOW_QUEST_XP} XP, +${BRIAR_HOLLOW_QUEST_COINS} coins`,
+    this.deps.bus.emit(
+      'questRewardShown',
+      this.rewardSpec({ xpApplied, coins: BRIAR_HOLLOW_QUEST_COINS, burgersBagged, stewBagged }),
     );
     return true;
   }
 
-  /** Into the bag if it fits; otherwise onto the ground at the Mayor's feet. */
-  private giveOrDrop(crawler: HumanPlayer | CatPlayer, id: ItemId, quantity: number): void {
+  /**
+   * The Plea's quest-complete screen, describing what {@link grantRewards}
+   * actually paid. It goes up once the Mayor's thanks have been read.
+   */
+  private rewardSpec(paid: {
+    readonly xpApplied: PartyXpApplied;
+    readonly coins: number;
+    readonly burgersBagged: boolean;
+    readonly stewBagged: boolean;
+  }): QuestRewardSpec {
+    return {
+      questTitle: BRIAR_HOLLOW_QUEST_NAME,
+      sections: [
+        ...partyXpSections(paid.xpApplied),
+        { kind: 'coins', amount: paid.coins },
+        {
+          kind: 'items',
+          items: [
+            foodRewardLine('hamburger', BRIAR_HOLLOW_REWARD_BURGERS, paid.burgersBagged),
+            foodRewardLine('hollow_stew', BRIAR_HOLLOW_REWARD_STEW, paid.stewBagged),
+          ],
+        },
+        travelUnlocksSection(['briar_hollow'], this.deps.travelUnlocks),
+      ],
+    };
+  }
+
+  /**
+   * Into the bag if it fits; otherwise onto the ground at the Mayor's feet.
+   * Returns whether it went into the bag.
+   */
+  private giveOrDrop(crawler: HumanPlayer | CatPlayer, id: ItemId, quantity: number): boolean {
     if (crawler.inventory.hasRoomFor(id)) {
       crawler.inventory.addItem(id, quantity);
-      this.deps.onItemGranted?.(id, quantity, crawler.x, crawler.y);
-      return;
+      return true;
     }
     const mayor = this.deps.villagers.villagerFor('bramblewick');
     const x = (mayor?.x ?? crawler.x) + TILE_SIZE * TILE_CENTRE;
     const y = (mayor?.y ?? crawler.y) + TILE_SIZE * TILE_CENTRE;
     if (id === 'hamburger') {
       this.deps.groundPickups.spawnBurgers(x, y, quantity);
-      return;
+      return false;
     }
     this.deps.dropItems(x, y, [{ id, quantity }]);
+    return false;
   }
 
   // ── Markers and the journal ───────────────────────────────────────────────

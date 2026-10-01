@@ -16,7 +16,7 @@
  * rather than the other way round.
  */
 
-import { awardXp } from '../core/awardXp';
+import { awardPartyXp, type CrawlerPair, type PartyXpApplied } from '../core/awardXp';
 import type { GameSystem } from './GameSystem';
 import type { TrackerEntry, TrackerSource, TrackerTarget } from './questTracker';
 import type { QuestMarkerType } from './MiniMapSystem';
@@ -26,16 +26,20 @@ import type { EventBus } from '../core/EventBus';
 import type { AudioManager } from '../audio/AudioManager';
 import type { Player } from '../Player';
 import { canAffordCoins, spendPartyCoins } from '../core/partyCoins';
-import type { GrantedReward } from '../core/GrantedReward';
-import type { AnchorQuestProgress } from '../core/AnchorQuestProgress';
+import { ANCHOR_QUEST_NAME, type AnchorQuestProgress } from '../core/AnchorQuestProgress';
 import { ANCHOR_SHARD_IDS, ITEM_DEF, QUEST_SLOT_IDX, type ItemId } from '../core/ItemDefs';
 import type { Conversation } from '../dialog/Conversation';
 import type { DialogLine, NonEmpty } from '../dialog/line';
 import type { ConversationHandle, DialogReward } from '../dialog/request';
-import { drawItemIcon } from '../ui/InventoryPanel';
-import { drawQuestCompleteOverlay, QUEST_COMPLETE_OVERLAY_FRAMES } from '../ui/QuestBanners';
+import { bagItemRewardLine, itemIconPainter, partyXpSections } from '../ui/questReward/rewardLines';
+import type { QuestRewardSpec, RewardItemLine } from '../ui/questReward/types';
 import type { VendorLineGate } from './market/vendorDefs';
 import { HILDA_COTTAGE_NAME, SKY_TEMPLE_NAME } from './AnchorInteriorSystem';
+import {
+  travelUnlocksSection,
+  unlockedDestinationIds,
+  type TravelUnlockState,
+} from './travel/travelDestinations';
 import {
   buildAnchorReward,
   VOSS_ASSEMBLY_DONE,
@@ -48,7 +52,6 @@ import {
 } from '../dialog/scripts/scenes/anchor';
 
 const ANCHOR_QUEST_ID = 'anchor_shards';
-const ANCHOR_QUEST_NAME = 'The Anchor is Broken';
 
 /** Voss's cut for four seconds of work and thirty years of knowing which four. */
 const ANCHOR_ASSEMBLY_FEE_COINS = 25;
@@ -86,17 +89,12 @@ export class AnchorQuestSystem implements GameSystem, TrackerSource {
 
   /** The handle Voss's beat opened with, so `conversationOwned` can ask the shared box whether it is still the one showing rather than tracking its own copy of that answer. */
   private conversationHandle: ConversationHandle | null = null;
-  private completeOverlayTimer = 0;
-
-  /** Fired whenever the assembly reward actually hands a crawler an item — for a fly-to-bag effect. */
-  onItemGranted: ((id: ItemId, quantity: number, worldX: number, worldY: number) => void) | null =
-    null;
 
   constructor(
     private readonly bus: EventBus,
     private readonly progress: AnchorQuestProgress,
     /** Both crawlers. Every shard question is a sum over the pair, never one bag. */
-    private readonly crawlers: () => ReadonlyArray<Player>,
+    private readonly party: () => CrawlerPair,
     /** Madame Voss's plaza tile; null where the plaza had no room for her. */
     private readonly fortuneTile: () => TrackerTarget | null,
     /** The tinker's counter, for the Journal's chevron on that step. */
@@ -114,6 +112,8 @@ export class AnchorQuestSystem implements GameSystem, TrackerSource {
     private readonly doorTileOf: (buildingName: string) => TrackerTarget | null,
     private readonly toast: (message: string) => void,
     private readonly conversation: Conversation,
+    /** Every questline that binds a destination, read when the reward screen is built. */
+    private readonly travelUnlocks: TravelUnlockState,
     private readonly audio: AudioManager | null = null,
   ) {
     this.questManager = new QuestManager();
@@ -139,6 +139,11 @@ export class AnchorQuestSystem implements GameSystem, TrackerSource {
 
   private get status(): QuestStatus {
     return this.progress.status;
+  }
+
+  private crawlers(): readonly Player[] {
+    const { human, cat } = this.party();
+    return [human, cat];
   }
 
   /** How many of the item the party holds, across both bags. */
@@ -178,7 +183,6 @@ export class AnchorQuestSystem implements GameSystem, TrackerSource {
   // ── Frame ─────────────────────────────────────────────────────────────────
 
   update(): void {
-    if (this.completeOverlayTimer > 0) this.completeOverlayTimer--;
     this.syncStepStates();
   }
 
@@ -209,21 +213,6 @@ export class AnchorQuestSystem implements GameSystem, TrackerSource {
 
   get isDialogOpen(): boolean {
     return this.conversationOwned;
-  }
-
-  /**
-   * The completion banner, which a press dismisses early. It rides over live
-   * play rather than pausing it, so it is not part of `isDialogOpen`.
-   */
-  get isOutcomeOverlayShowing(): boolean {
-    return this.completeOverlayTimer > 0;
-  }
-
-  /** Space/tap on the banner: dismiss early rather than wait out the timer. */
-  advanceOutcomeOverlay(): boolean {
-    if (this.completeOverlayTimer <= 0) return false;
-    this.completeOverlayTimer = 0;
-    return true;
   }
 
   /**
@@ -393,7 +382,6 @@ export class AnchorQuestSystem implements GameSystem, TrackerSource {
   }
 
   handleClick(mx: number, my: number): boolean {
-    if (this.advanceOutcomeOverlay()) return true;
     if (!this.conversationOwned) return false;
     return this.conversation.handleClick(mx, my);
   }
@@ -433,28 +421,45 @@ export class AnchorQuestSystem implements GameSystem, TrackerSource {
     this.progress.status = 'completed';
     this.questManager.completeQuest(ANCHOR_QUEST_ID);
 
-    // Granted once, to the payer: `gainXp` is a per-player ledger, and the
-    // errand was one trip for the party, not one trip each.
     const xp = this.questManager.getDef(ANCHOR_QUEST_ID)?.rewards.xp ?? ANCHOR_QUEST_XP;
-    awardXp(payer, xp, this.bus);
+    const { human, cat } = this.party();
+    const xpApplied = awardPartyXp(human, cat, xp, this.bus);
     // `QuestManager`'s generic `lootBoxItems` field is never read by any payout
     // path in this codebase, so the potions are granted directly here.
     // `addItem` drops silently when there is no room, same as every other
     // grant here checks for first.
+    let potionCount = 0;
     if (payer.inventory.hasRoomFor('health_potion')) {
-      const potionCount =
+      potionCount =
         ANCHOR_REWARD_POTIONS_MIN +
         Math.floor(Math.random() * (ANCHOR_REWARD_POTIONS_MAX - ANCHOR_REWARD_POTIONS_MIN + 1));
       payer.inventory.addItem('health_potion', potionCount);
-      this.onItemGranted?.('health_potion', potionCount, payer.x, payer.y);
     }
 
+    this.bus.emit('questCompleted', { questId: ANCHOR_QUEST_ID });
     // Presented, not merely deposited: a permanent item that appears silently on
     // a full hotbar is an item the player never learns they have.
-    this.bus.emit('rewardGranted', { rewards: [this.anchorReward()] });
-    this.bus.emit('questCompleted', { questId: ANCHOR_QUEST_ID });
-    this.toast("Wayfinder's Anchor assembled — both crawlers carry one.");
-    this.completeOverlayTimer = QUEST_COMPLETE_OVERLAY_FRAMES;
+    this.bus.emit('questRewardShown', this.rewardSpec(xpApplied, potionCount));
+  }
+
+  /** The assembly's quest-complete screen, describing what {@link assemble} actually paid. */
+  private rewardSpec(xpApplied: PartyXpApplied, potionCount: number): QuestRewardSpec {
+    const items: RewardItemLine[] = [
+      bagItemRewardLine('wayfinders_anchor', 1, {
+        describe: true,
+        note: 'Both crawlers carry one.',
+      }),
+    ];
+    if (potionCount > 0) items.push(bagItemRewardLine('health_potion', potionCount));
+    return {
+      questTitle: ANCHOR_QUEST_NAME,
+      renderQuestIcon: itemIconPainter('wayfinders_anchor'),
+      sections: [
+        ...partyXpSections(xpApplied),
+        { kind: 'items', items },
+        travelUnlocksSection(unlockedDestinationIds(this.travelUnlocks), this.travelUnlocks),
+      ],
+    };
   }
 
   /** Whether this crawler has a free hotbar slot or bag room for the stone. */
@@ -479,22 +484,10 @@ export class AnchorQuestSystem implements GameSystem, TrackerSource {
     for (let slot = 0; slot < QUEST_SLOT_IDX; slot++) {
       if (bar.slots[slot] === null) {
         bar.slots[slot] = { ...ITEM_DEF.wayfinders_anchor, quantity: 1 };
-        this.onItemGranted?.('wayfinders_anchor', 1, crawler.x, crawler.y);
         return;
       }
     }
     crawler.inventory.addItem('wayfinders_anchor', 1);
-    this.onItemGranted?.('wayfinders_anchor', 1, crawler.x, crawler.y);
-  }
-
-  private anchorReward(): GrantedReward {
-    const def = ITEM_DEF.wayfinders_anchor;
-    return {
-      kind: 'item',
-      name: def.name,
-      description: def.description ?? '',
-      renderIcon: (ctx, x, y, size) => drawItemIcon(ctx, { ...def, quantity: 1 }, x, y, size),
-    };
   }
 
   // ── Signposting ───────────────────────────────────────────────────────────
@@ -584,11 +577,5 @@ export class AnchorQuestSystem implements GameSystem, TrackerSource {
     if (shardId === 'anchor_shard_tinker') return this.tinkerStallTile() ?? undefined;
     if (shardId === 'anchor_shard_hilda') return this.doorTileOf(HILDA_COTTAGE_NAME) ?? undefined;
     return this.doorTileOf(SKY_TEMPLE_NAME) ?? undefined;
-  }
-
-  renderUI(ctx: CanvasRenderingContext2D): void {
-    if (this.completeOverlayTimer > 0) {
-      drawQuestCompleteOverlay(ctx, `${ANCHOR_QUEST_NAME} — COMPLETE`, this.completeOverlayTimer);
-    }
   }
 }

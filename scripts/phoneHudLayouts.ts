@@ -83,7 +83,7 @@ export function dungeonPhoneHudStates(width: number, height: number): PhoneHudSt
             { name: 'minimap', kind: 'minimap', rect: miniMap.screenRect },
             { name: 'hotbar', kind: 'button', rect: hotbarStripRect() },
             { name: 'pause', kind: 'button', rect: UI.pauseButtonRect(miniMap) },
-            { name: 'bag', kind: 'button', rect: UI.mobileBagButtonRect(miniMap) },
+            { name: 'bag', kind: 'button', rect: UI.bagButtonRect(miniMap) },
             { name: 'follower', kind: 'button', rect: UI.mobileFollowerButtonRect(miniMap) },
             { name: 'switch', kind: 'button', rect: UI.mobileSwitchButtonRect() },
             { name: 'summon', kind: 'button', rect: UI.mobileSummonButtonRect() },
@@ -168,6 +168,7 @@ export function interiorPhoneHudStates(width: number, height: number): PhoneHudS
             // Always offered here: the worst case for crowding is every piece on screen.
             buildButton: true,
             journalButton: true,
+            lootBoxBanner: null,
           });
           const pieces: HudPiece[] = [
             { name: 'minimap', kind: 'minimap', rect: layout.miniMap },
@@ -175,7 +176,6 @@ export function interiorPhoneHudStates(width: number, height: number): PhoneHudS
             { name: 'pause', kind: 'button', rect: layout.pause },
           ];
           const optional: ReadonlyArray<readonly [string, HudPieceKind, Rect | null]> = [
-            ['gear', 'button', layout.gear],
             ['bag', 'button', layout.bag],
             ['switch', 'button', layout.switchButton],
             ['follow', 'button', layout.follow],

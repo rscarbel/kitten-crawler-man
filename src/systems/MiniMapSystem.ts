@@ -70,6 +70,11 @@ import {
 } from '../map/tileTypes';
 import { viewportWidth } from '../core/Viewport';
 import { bossRoomMinimapColor } from '../map/tiles/bossRoomTiles';
+import {
+  HUD_MINIMAP_EXPANDED_SIZE,
+  HUD_MINIMAP_NORMAL_SIZE,
+  hudMiniMapRect,
+} from '../ui/hudButtons/hudMiniMap';
 import type { ProcessingStationKind } from './briarHollow/processingStations';
 import { drawRopeCoilGlyph, drawSawBladeGlyph } from '../ui/icons/stationGlyphs';
 import { SERVICE_DECAL_TILE_TYPES } from '../map/serviceLevelProps';
@@ -131,8 +136,6 @@ const ESCAPE_MARKER_PULSE_BASE = 0.75;
 const ESCAPE_MARKER_PULSE_RANGE = 0.25;
 /** Pixels above minimap to render the expand hint text. */
 const MINIMAP_HINT_OFFSET_Y = 3;
-/** Margin from the canvas edge for minimap placement (pixels). */
-const MINIMAP_MARGIN = 8;
 /** Minimap hint font size. */
 const MINIMAP_HINT_FONT_SIZE = 10;
 /** Extra tiles revealed around boss room bounds. */
@@ -219,8 +222,8 @@ export class MiniMapSystem implements GameSystem {
   private lastRevealTileY = TILE_NEVER_REVEALED;
 
   private readonly REVEAL_RADIUS = 10;
-  readonly NORMAL_SIZE = 160;
-  readonly EXPANDED_SIZE = 240;
+  readonly NORMAL_SIZE = HUD_MINIMAP_NORMAL_SIZE;
+  readonly EXPANDED_SIZE = HUD_MINIMAP_EXPANDED_SIZE;
 
   /** Offscreen canvas caching revealed tile colors (1px per tile). */
   private _tileCache: OffscreenCanvas | HTMLCanvasElement;
@@ -255,13 +258,11 @@ export class MiniMapSystem implements GameSystem {
 
   /** The square the minimap is drawn in, and the tap target that toggles it. */
   get screenRect(): { x: number; y: number; w: number; h: number } {
-    const mmSize = this._expanded ? this.EXPANDED_SIZE : this.NORMAL_SIZE;
-    return {
-      x: viewportWidth() - mmSize - MINIMAP_MARGIN,
-      y: MINIMAP_MARGIN,
-      w: mmSize,
-      h: mmSize,
-    };
+    return { ...hudMiniMapRect(viewportWidth(), this._expanded) };
+  }
+
+  setExpanded(expanded: boolean): void {
+    if (expanded !== this._expanded) this.toggle();
   }
 
   toggle(): void {

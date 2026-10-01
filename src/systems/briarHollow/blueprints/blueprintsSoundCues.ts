@@ -15,11 +15,8 @@
  * `AudioManager.play` returns silently on a buffer that was never preloaded,
  * and `verify:borrowed-blueprints` fails on any id missing from both.
  *
- * Unlike every other quest's, this quest's `quest_complete` is a cue here
- * rather than a `questCompleted` listener in `AudioManager.wireEvents`: it
- * plays when the quest-complete screen goes up, which can be a while after
- * the phase moves (the last upgrade's callout plays out first, and the screen
- * waits out any conversation), and the fanfare belongs with the screen.
+ * The quest-complete fanfare is not a cue here: like every quest's, it plays
+ * when the shared quest-complete screen goes up.
  *
  * Plumbline Farm's room ambience (`ambient_quiet_farmhouse`, not yet
  * recorded) is the room's, not the quest's, and belongs with the interior
@@ -83,10 +80,6 @@ export const BLUEPRINTS_CUES = {
   upgradedSawLoop: ['loopable_sawing'],
   /** The upgraded rope walk while it processes. Waits on `rope_walk_upgraded_loop`. */
   upgradedRopeWalkLoop: ['rope_tightening'],
-
-  // ── The finish ──
-  /** The quest-complete screen going up. Final: `quest_complete`. */
-  questComplete: ['quest_complete'],
 } as const satisfies Record<string, readonly SoundId[]>;
 
 /** Which cue a play site raises. */

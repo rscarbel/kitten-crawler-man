@@ -39,9 +39,10 @@ import { playButtonSound } from '../../ui/Button';
 import { potionEffectNotice, statBoostNotice } from '../../ui/potionNotices';
 import { PauseMenu } from '../../ui/PauseMenu';
 import { RewardGrantedDialog } from '../../ui/RewardGrantedDialog';
+import { QuestRewardScreen } from '../../ui/questReward/QuestRewardScreen';
 import { SkillBookPrompt } from '../../ui/SkillBookPrompt';
 import { promptSkillBookRead, type SkillBookFlowHost } from '../skillBookUse';
-import type { SkillBookReadRequest } from '../../ui/InventoryInteraction';
+import type { PendingSlotRef, SkillBookReadRequest } from '../../ui/InventoryInteraction';
 import type { SceneWorld } from './SceneWorld';
 
 /** Which bottle a drink came from: the container and the slot inside it. */
@@ -110,6 +111,15 @@ export class MenusKit {
   readonly pauseMenu = new PauseMenu();
   readonly levelUpDialog = new LevelUpDialog();
   readonly rewardGrantedDialog = new RewardGrantedDialog();
+  /**
+   * The quest-complete screen every quest asks for through `questRewardShown`.
+   * It waits for every other halt before going up, so anything raised after
+   * it — an ability level-up, a granted reward card — lands while it is open.
+   * Ranked above those in both scenes' claims and drawn over them, so the
+   * screen the player is reading keeps the keyboard and the clicks until it
+   * is dismissed, and the card underneath follows.
+   */
+  readonly questReward: QuestRewardScreen;
   readonly skillBookPrompt = new SkillBookPrompt();
   readonly hotbarToast = new HotbarToast();
   readonly mongoExplainer: MongoExplainer;
@@ -128,6 +138,16 @@ export class MenusKit {
    * one of these opens.
    */
   readonly itemQuantityPicker: QuantityPicker;
+
+  /**
+   * What the bag menu's `menuUseLabel` entry does, set by the scene: exactly
+   * what a hotbar press of the item does there, made by the active crawler even
+   * when the bag on screen is the companion's. The use moves the party (the
+   * anchor's trip), and a channel cast by the crawler the player is not
+   * controlling is given up on its first tick as a crawler switch. Null where
+   * no item has a use.
+   */
+  useSceneItem: ((item: InventoryItem) => void) | null = null;
 
   private readonly world: SceneWorld;
   private readonly abilityManager: AbilityManager;
@@ -175,6 +195,8 @@ export class MenusKit {
     this.levelUpDialog.audio = audio;
     this.rewardGrantedDialog.audio = audio;
     this.skillBookPrompt.audio = audio;
+    this.questReward = new QuestRewardScreen(audio);
+    deps.world.bus.on('questRewardShown', (spec) => this.questReward.enqueue(spec));
 
     this.itemQuantityPicker = new QuantityPicker(audio);
     // The picker is a host-owned overlay spawned from an item action, not one
@@ -189,13 +211,16 @@ export class MenusKit {
    * explainer, so Escape pressed under one of them is not aimed at it.
    */
   get isAwardStackShowing(): boolean {
-    return this.levelUpDialog.isShowing || this.rewardGrantedDialog.isShowing;
+    return (
+      this.questReward.isOpen || this.levelUpDialog.isShowing || this.rewardGrantedDialog.isShowing
+    );
   }
 
   /** True while a pausing overlay owns the screen and every raw pointer path must stop. */
   get isOverlayBlockingPointer(): boolean {
     return (
       this.skillBookPrompt.isOpen ||
+      this.questReward.isOpen ||
       this.levelUpDialog.isShowing ||
       this.rewardGrantedDialog.isShowing ||
       this.mongoExplainer.isOpen ||
@@ -212,9 +237,17 @@ export class MenusKit {
     this.hotbarToast.update();
     this.levelUpDialog.update();
     this.rewardGrantedDialog.update();
+    this.updateQuestReward();
     this.itemQuantityPicker.update();
     this.syncItemQuantityPrompt();
     this.tickDelayedSounds();
+  }
+
+  /** Raises the next queued quest-complete screen when it is clear to go up. */
+  private updateQuestReward(): void {
+    // The screen's pointer guard blocks the mouse-up that would otherwise
+    // resolve a drag still in flight underneath it.
+    if (this.questReward.update()) this.cancelInventoryDragForOverlay();
   }
 
   /**
@@ -663,6 +696,13 @@ export class MenusKit {
       this.studyTome(holder, tome);
     }
 
+    const used = interaction.pendingUseSlot;
+    if (used !== null) {
+      interaction.pendingUseSlot = null;
+      this.cancelInventoryDragForOverlay();
+      this.useFromMenu(holder, used);
+    }
+
     const equipSlot = interaction.pendingEquipSlot;
     if (equipSlot !== null) {
       const source = interaction.pendingEquipSource;
@@ -703,6 +743,23 @@ export class MenusKit {
       interaction.pendingTradeItem = null;
       this.tradeItem(holder, traded.id, traded.quantity);
     }
+  }
+
+  /**
+   * Runs the scene's use of the item the menu was opened on, held to the same
+   * gate a hotbar press is: when the active crawler cannot act, it buzzes
+   * instead. The slot is re-read because the menu is resolved a frame later
+   * indoors, and an item moved off it in between is no longer the one the
+   * player pointed at.
+   */
+  private useFromMenu(holder: HumanPlayer | CatPlayer, used: PendingSlotRef): void {
+    const item = slotContentsAt(holder, used.source, used.slotIdx);
+    if (item?.id !== used.id) return;
+    if (!this.world.pm.active().canAct) {
+      this.world.audio?.play('error_taking_action');
+      return;
+    }
+    this.useSceneItem?.(item);
   }
 
   /**
@@ -822,5 +879,6 @@ export class MenusKit {
     this.rewardGrantedDialog.render(ctx);
     this.levelUpDialog.render(ctx);
     this.itemQuantityPicker.render(ctx);
+    this.questReward.render(ctx);
   }
 }

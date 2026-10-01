@@ -15,6 +15,7 @@ import {
   createCircusQuestProgress,
   type CircusQuestStage,
 } from '../../src/core/CircusQuestProgress';
+import { createAnchorQuestProgress } from '../../src/core/AnchorQuestProgress';
 import { CatPlayer } from '../../src/creatures/CatPlayer';
 import { HumanPlayer } from '../../src/creatures/HumanPlayer';
 import { Conversation } from '../../src/dialog/Conversation';
@@ -222,6 +223,7 @@ export function buildQuestRig(
     null,
     human,
     new Conversation(null),
+    { anchor: createAnchorQuestProgress() },
   );
   const mobLoop = new MobUpdateLoop();
   return {

@@ -122,6 +122,13 @@ export interface InventoryItem {
    * to a hotbar slot. Drives the context menu's Drink entry.
    */
   drinkable?: boolean;
+  /**
+   * The context-menu entry that uses this item exactly as a hotbar press of it
+   * would, for an item whose use belongs to a scene system rather than to one
+   * of the kinds the menu already knows (Drink, Eat, Read, Study). The scene
+   * decides what the use does — see `MenusKit.useSceneItem`.
+   */
+  menuUseLabel?: string;
   /** When true, hotbar slot renders with a lighter quest-item colour. */
   isQuestItem?: boolean;
   /**
@@ -432,11 +439,13 @@ export const ITEM_DEF: Record<ItemId, Omit<InventoryItem, 'quantity'>> = {
     canHotlist: true,
     canDrop: false,
     type: 'consumable',
+    menuUseLabel: 'Travel',
     description:
       'Three shards of a seer’s stone, welded back into one and humming like a struck bell. ' +
-      'Out in the Over City it pulls the whole party back to the town square, and remembers where ' +
-      'it took you from. Used in the square, it puts you back on that spot. One minute between ' +
-      'trips. It stays dead underground, during a boss fight, and with anything hostile close by.',
+      'It carries the whole party to the places it has been bound to: the town square from the ' +
+      'start, and the circus and Briar Hollow once you have set things right there. One minute ' +
+      'between trips. It stays dead underground, during a boss fight, and with anything hostile ' +
+      'close by.',
   },
   // The three shards are ordinary undroppable bag items rather than `isQuestItem`
   // ones: the quest flag routes an item into the single reserved hotbar slot, and

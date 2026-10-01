@@ -20,7 +20,6 @@
 import { platform } from '../core/Platform';
 import {
   drawBox,
-  drawModal,
   drawOverlay,
   drawScrollbar,
   beginModalFit,
@@ -42,7 +41,7 @@ import {
 } from './Button';
 import { QUEST_MARKER_GOLD } from '../sprites/questNPCSprite';
 import { drawQuestIcon } from './QuestIcon';
-import { drawText, measureTextBox } from './TextBox';
+import { drawText, measureTextBox, measureTextWidth } from './TextBox';
 import type { Player } from '../Player';
 import { viewportWidth, viewportHeight } from '../core/Viewport';
 import { canAffordCoins, partyCoins, spendPartyCoins } from '../core/partyCoins';
@@ -85,7 +84,28 @@ export interface PricedMenu {
    */
   byline?: string;
   options: ReadonlyArray<PricedOption>;
+  /**
+   * Set for a menu of free actions rather than goods (the Wayfinder's Anchor's
+   * destinations): no price column and no purse, nothing is charged, and each
+   * row's button reads `actionLabel` instead of Buy. Its rows' `price` is
+   * ignored.
+   */
+  unpriced?: UnpricedRows;
+  /** Painted into a square left of the title, when the panel is wide enough to hold both. */
+  titleIcon?: TitleIconPainter;
 }
+
+export interface UnpricedRows {
+  readonly actionLabel: string;
+}
+
+/** Paints an icon into the square whose top-left corner is (`x`, `y`). */
+export type TitleIconPainter = (
+  ctx: CanvasRenderingContext2D,
+  x: number,
+  y: number,
+  size: number,
+) => void;
 
 /** What a handler did: whether the purchase went through, and the line to echo. */
 export interface PricedPurchaseResult {
@@ -165,6 +185,16 @@ const OPTION_DESC_LINE_HEIGHT = 14;
 /** Space a grown row keeps under its last description line before the next row's name. */
 const ROW_BOTTOM_GAP = 8;
 const PRICE_SIZE = 12;
+/**
+ * An unpriced row has no price column to hold its unavailable reason, which
+ * there is often a whole quest title, so the reason takes a line of its own
+ * under the description instead.
+ */
+const REASON_SIZE = 10;
+const REASON_LINE_HEIGHT = 14;
+const REASON_COLOR = '#f87171';
+const TITLE_ICON_SIZE = 24;
+const TITLE_ICON_GAP = 8;
 const BYLINE_SIZE = 11;
 const BYLINE_GAP = 5;
 const BYLINE_LINE_HEIGHT = BYLINE_SIZE + BYLINE_GAP;
@@ -216,6 +246,12 @@ const QUEST_ROW_ICON_SIZE = 14;
 const QUEST_ROW_ICON_TOP_GAP = 18;
 
 /**
+ * A button's border is stroked across its edge, so half of it lies above the
+ * rect; without this much more room the first row's top border is clipped off.
+ */
+const ROW_BORDER_CLEARANCE = 2;
+
+/**
  * How far a row's own content reaches above its `rowY` — the Buy button and
  * the quest plate both float above the row's text baseline rather than
  * starting flush with it. Between rows this overhang lands in the gap the
@@ -225,12 +261,13 @@ const QUEST_ROW_ICON_TOP_GAP = 18;
  * clip flush with the viewport's top edge while still giving the first row's
  * button and plate room to float above `rowY` without being sheared off flat.
  */
-const ROW_TOP_INSET = Math.max(BUY_BTN_Y_LIFT, QUEST_ROW_PLATE_LIFT);
+const ROW_TOP_INSET = Math.max(BUY_BTN_Y_LIFT, QUEST_ROW_PLATE_LIFT) + ROW_BORDER_CLEARANCE;
 
 /**
  * Width the label/description column gets before word-wrap kicks in — the row's
  * content width minus the price and Buy button on the right. Without the cap, a
- * long description runs underneath the button.
+ * long description runs underneath the button. An unpriced row keeps the same
+ * column: its reason line is the longest thing in it.
  */
 function optionTextMaxWidth(contentWidth: number): number {
   return contentWidth - BUY_BTN_WIDTH - PRICE_BTN_GAP * 2;
@@ -263,6 +300,7 @@ function rowHeightFor(
   ctx: CanvasRenderingContext2D,
   option: PricedOption,
   contentWidth: number,
+  unpriced: boolean,
 ): number {
   const descTop = labelLineCount(ctx, option, contentWidth) * OPTION_NAME_LINE_HEIGHT;
   const descLines = measureTextBox(ctx, option.desc, {
@@ -271,7 +309,37 @@ function rowHeightFor(
     lineHeight: OPTION_DESC_LINE_HEIGHT,
   }).lineCount;
   const descBottom = descTop + descLines * OPTION_DESC_LINE_HEIGHT;
-  return Math.max(ROW_HEIGHT, descBottom + ROW_BOTTOM_GAP);
+  const reason = unpriced ? option.unavailable : undefined;
+  const reasonHeight =
+    reason === undefined ? 0 : reasonLineCount(ctx, reason, contentWidth) * REASON_LINE_HEIGHT;
+  return Math.max(ROW_HEIGHT, descBottom + reasonHeight + ROW_BOTTOM_GAP);
+}
+
+function reasonLineCount(
+  ctx: CanvasRenderingContext2D,
+  reason: string,
+  contentWidth: number,
+): number {
+  return measureTextBox(ctx, reason, {
+    size: REASON_SIZE,
+    bold: true,
+    width: optionTextMaxWidth(contentWidth),
+    lineHeight: REASON_LINE_HEIGHT,
+  }).lineCount;
+}
+
+/** Whether `option` can be acted on: available and, on a priced menu, affordable. */
+function isRowEnabled(
+  option: PricedOption,
+  mode: 'buy' | 'sell',
+  unpriced: boolean,
+  active: Player,
+  companion: Player,
+): boolean {
+  if (option.unavailable !== undefined) return false;
+  // Selling never checks the player's purse — the shop is the one paying.
+  if (mode === 'sell' || unpriced) return true;
+  return canAffordCoins(active, companion, option.price);
 }
 
 function closeLabel(questRowIsPrimary: boolean): string {
@@ -436,7 +504,8 @@ export class PricedMenuPanel {
       extraBarkHeight +
       (menu.byline === undefined ? 0 : BYLINE_LINE_HEIGHT) +
       (this.sell !== null ? TAB_ROW_HEIGHT : 0);
-    const rowHeights = options.map((option) => rowHeightFor(ctx, option, contentWidth));
+    const unpriced = !sellTabOpen && menu.unpriced !== undefined;
+    const rowHeights = options.map((option) => rowHeightFor(ctx, option, contentWidth, unpriced));
     const rowsHeight =
       options.length === 0 ? ROW_HEIGHT : rowHeights.reduce((sum, rowHeight) => sum + rowHeight, 0);
     // The scrollable content is the rows plus the dead space `ROW_TOP_INSET`
@@ -448,9 +517,13 @@ export class PricedMenuPanel {
     const visibleRowsHeight = height - headerHeight - FOOTER_HEIGHT;
     this.maxScrollY = Math.max(0, totalRowsHeight - visibleRowsHeight);
     this.scrollY = Math.min(this.scrollY, this.maxScrollY);
-    const modal = drawModal(ctx, {
-      canvasWidth: viewportWidth(),
-      canvasHeight: viewportHeight(),
+    // `drawBox` centred by hand rather than `drawModal`: the fit above already
+    // shrinks the whole panel to the viewport, and `drawModal` would clamp the
+    // design width to the *unscaled* viewport as well, leaving a box narrower
+    // than the rows laid out inside it on any phone under the design width.
+    const modal = drawBox(ctx, {
+      x: Math.round(viewportWidth() / 2 - panelWidth / 2),
+      y: Math.round(viewportHeight() / 2 - height / 2),
       width: panelWidth,
       height,
       radius: PANEL_RADIUS,
@@ -467,15 +540,7 @@ export class PricedMenuPanel {
     const centerX = modal.x + modal.width / 2;
     const barkY = modal.y + PANEL_PADDING + TITLE_SIZE + BARK_GAP;
 
-    drawText(ctx, menu.title, {
-      x: centerX,
-      y: modal.y + PANEL_PADDING,
-      size: TITLE_SIZE,
-      bold: true,
-      color: '#f0d870',
-      align: 'center',
-      outline: true,
-    });
+    this.renderTitle(ctx, menu, centerX, modal.y + PANEL_PADDING, contentWidth);
     // `x` is the box's left edge whenever `width` is set — `drawText` centres
     // within the box, so passing `centerX` here would shift it half a panel right.
     drawText(ctx, this.feedbackLine(menu), {
@@ -537,7 +602,7 @@ export class PricedMenuPanel {
     }
     // Row zero starts `ROW_TOP_INSET` below the viewport edge rather than flush
     // with it, so its button/plate — which float that far above their own
-    // `rowY` — land exactly on the clip edge instead of past it.
+    // `rowY` — land just inside the clip edge instead of past it.
     let rowY = this.rowsTop + ROW_TOP_INSET - this.scrollY;
     for (let i = 0; i < options.length; i++) {
       this.renderRow(
@@ -552,6 +617,7 @@ export class PricedMenuPanel {
         i === questRowIndex,
         rowHeights[i],
         this.mode,
+        menu.unpriced,
       );
       rowY += rowHeights[i];
     }
@@ -581,16 +647,49 @@ export class PricedMenuPanel {
     endMenuFocus();
     // The purse shares the footer rather than the header: a centred title on a
     // narrow phone panel grows into the top-right corner and hides it.
-    drawText(ctx, `Coins: ${partyCoins(active, companion)}`, {
-      x: contentRight,
-      y: footerCenterY - PRICE_SIZE / 2,
-      size: PRICE_SIZE,
-      bold: true,
-      color: '#d4c070',
-      align: 'right',
-    });
+    if (menu.unpriced === undefined) {
+      drawText(ctx, `Coins: ${partyCoins(active, companion)}`, {
+        x: contentRight,
+        y: footerCenterY - PRICE_SIZE / 2,
+        size: PRICE_SIZE,
+        bold: true,
+        color: '#d4c070',
+        align: 'right',
+      });
+    }
     endModalFit(ctx);
     resetButtonPointerSpace();
+  }
+
+  /**
+   * The centred title, with the menu's icon beside it when the title and icon
+   * together fit the panel; on a panel too narrow for both, the title alone.
+   */
+  private renderTitle(
+    ctx: CanvasRenderingContext2D,
+    menu: PricedMenu,
+    centerX: number,
+    top: number,
+    contentWidth: number,
+  ): void {
+    const titleStyle = { size: TITLE_SIZE, bold: true } as const;
+    const titleWidth = measureTextWidth(ctx, menu.title, titleStyle);
+    const icon = menu.titleIcon;
+    const iconRun = TITLE_ICON_SIZE + TITLE_ICON_GAP;
+    const showIcon = icon !== undefined && titleWidth + iconRun <= contentWidth;
+    const runWidth = showIcon ? titleWidth + iconRun : titleWidth;
+    const runLeft = centerX - runWidth / 2;
+    if (showIcon) {
+      const iconTop = top + (TITLE_SIZE - TITLE_ICON_SIZE) / 2;
+      icon(ctx, runLeft, iconTop, TITLE_ICON_SIZE);
+    }
+    drawText(ctx, menu.title, {
+      x: showIcon ? runLeft + iconRun : runLeft,
+      y: top,
+      ...titleStyle,
+      color: '#f0d870',
+      outline: true,
+    });
   }
 
   /** Touch has no wheel and the scene forwards no drags, so the footer carries explicit step buttons. */
@@ -675,8 +774,10 @@ export class PricedMenuPanel {
     isPrimaryBuy: boolean,
     rowHeight: number,
     mode: 'buy' | 'sell',
+    unpricedRows: UnpricedRows | undefined,
   ): void {
     const isQuestRow = option.isQuestItem === true;
+    const unpriced = mode === 'buy' && unpricedRows !== undefined;
     if (isQuestRow) {
       drawBox(ctx, {
         x: left - QUEST_ROW_PLATE_SIDE_PAD,
@@ -700,9 +801,10 @@ export class PricedMenuPanel {
       width: optionTextMaxWidth(contentWidth),
       lineHeight: OPTION_NAME_LINE_HEIGHT,
     });
-    drawText(ctx, option.desc, {
+    const descTop = rowY + labelLines * OPTION_NAME_LINE_HEIGHT;
+    const desc = drawText(ctx, option.desc, {
       x: left,
-      y: rowY + labelLines * OPTION_NAME_LINE_HEIGHT,
+      y: descTop,
       size: OPTION_DESC_SIZE,
       color: '#94a3b8',
       width: optionTextMaxWidth(contentWidth),
@@ -710,21 +812,29 @@ export class PricedMenuPanel {
     });
 
     const blockedReason = option.unavailable;
-    const isAvailable = blockedReason === undefined;
-    // Selling never checks the player's purse — the shop is the one paying —
-    // so a sell row is enabled whenever it's simply on the list at all.
-    const rowEnabled =
-      mode === 'sell'
-        ? isAvailable
-        : isAvailable && canAffordCoins(active, companion, option.price);
-    drawText(ctx, blockedReason ?? `${option.price}c`, {
-      x: right - BUY_BTN_WIDTH - PRICE_BTN_GAP,
-      y: rowY + ROW_TEXT_TOP_PAD,
-      size: PRICE_SIZE,
-      bold: true,
-      color: rowEnabled ? '#facc15' : '#7f1d1d',
-      align: 'right',
-    });
+    const rowEnabled = isRowEnabled(option, mode, unpriced, active, companion);
+    if (unpriced) {
+      if (blockedReason !== undefined) {
+        drawText(ctx, blockedReason, {
+          x: left,
+          y: descTop + desc.lineCount * OPTION_DESC_LINE_HEIGHT,
+          size: REASON_SIZE,
+          bold: true,
+          color: REASON_COLOR,
+          width: optionTextMaxWidth(contentWidth),
+          lineHeight: REASON_LINE_HEIGHT,
+        });
+      }
+    } else {
+      drawText(ctx, blockedReason ?? `${option.price}c`, {
+        x: right - BUY_BTN_WIDTH - PRICE_BTN_GAP,
+        y: rowY + ROW_TEXT_TOP_PAD,
+        size: PRICE_SIZE,
+        bold: true,
+        color: rowEnabled ? '#facc15' : '#7f1d1d',
+        align: 'right',
+      });
+    }
 
     if (isQuestRow) {
       drawQuestIcon(
@@ -753,7 +863,7 @@ export class PricedMenuPanel {
         width: BUY_BTN_WIDTH,
         height: BUY_BTN_HEIGHT,
         alignX: 'right',
-        label: mode === 'sell' ? 'Sell' : 'Buy',
+        label: mode === 'sell' ? 'Sell' : (unpricedRows?.actionLabel ?? 'Buy'),
         labelSize: BUY_LABEL_SIZE,
         disabled: !rowEnabled || !isReachable,
         ...BUTTON_PRESETS.success,
@@ -859,7 +969,8 @@ export class PricedMenuPanel {
   private tryBuy(option: PricedOption, active: Player, companion: Player): void {
     const purchase = this.onPurchase;
     if (purchase === null || this.rebuyGuardLeft > 0) return;
-    if (option.unavailable !== undefined || !canAffordCoins(active, companion, option.price)) {
+    const unpriced = this.menu?.unpriced !== undefined;
+    if (!isRowEnabled(option, 'buy', unpriced, active, companion)) {
       this.onBlocked?.();
       const refusal = this.blockedLine?.(option, active) ?? null;
       if (refusal !== null) this.showFeedback(refusal);
@@ -870,7 +981,7 @@ export class PricedMenuPanel {
     // they never receive.
     const result = purchase(option, active);
     if (result.ok) {
-      spendPartyCoins(active, companion, option.price, active);
+      if (!unpriced) spendPartyCoins(active, companion, option.price, active);
       this.rebuyGuardLeft = this.rebuyGuardFrames;
     }
     // A purchase can change what's still on offer — the last tattoo, the last

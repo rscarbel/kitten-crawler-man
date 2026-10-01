@@ -91,14 +91,6 @@ const VIEWPORTS: ReadonlyArray<readonly [number, number]> = isMobile
     ];
 
 /**
- * Layout constants the column is measured against, as `DungeonUIRenderer` and
- * the desktop `InventoryPanel` lay them out. A phone's Bag has a rect function
- * of its own and is read from it.
- */
-const PAUSE_TO_BAG_STEP = 34;
-const RIGHT_COL_MARGIN = 8;
-const MINIMAP_Y = 8;
-/**
  * The one viewport with no room at all between the HUD panel and the minimap:
  * a column piece may land on a corner of the panel there, the one surface that
  * is not a button. 640 × 340 is the smallest where avoiding the panel changes
@@ -131,13 +123,10 @@ for (const [width, height] of VIEWPORTS) {
         UI.setBuildSlotReserved(reserved);
         UI.setLevelTimerShown(hasTimer);
         const pause = UI.pauseButtonRect(miniMap);
-        const mmSize = expanded ? miniMap.EXPANDED_SIZE : miniMap.NORMAL_SIZE;
         const fixed: Record<string, Rect> = {
           hotbar: hotbarStripRect(),
           pause,
-          bag: isMobile
-            ? UI.mobileBagButtonRect(miniMap)
-            : { x: pause.x, y: pause.y + PAUSE_TO_BAG_STEP, w: pause.w, h: pause.h },
+          bag: UI.bagButtonRect(miniMap),
           follower: isMobile ? UI.mobileFollowerButtonRect(miniMap) : UI.followerButtonRect(),
         };
         if (hasTimer) fixed.timer = UI.levelTimerRect(miniMap);
@@ -172,7 +161,7 @@ for (const [width, height] of VIEWPORTS) {
                 w: RESOURCE_HUD_WIDTH * strip.scale,
                 h: RESOURCE_HUD_HEIGHT * strip.scale,
               },
-          minimap: { x: width - RIGHT_COL_MARGIN - mmSize, y: MINIMAP_Y, w: mmSize, h: mmSize },
+          minimap: miniMap.screenRect,
         };
         const siegeOff =
           siegePanel.x < 0 ||

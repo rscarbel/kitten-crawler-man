@@ -7,6 +7,7 @@ import {
   drawKrakarenSprite,
   drawKrakarenEnrageGlow,
   krakarenOverheadLiftTiles,
+  krakarenScaledArtOrigin,
   KRAKAREN_BODY_PART_KEY,
   KRAKAREN_ENRAGED_FILTER,
   prewarmKrakarenPoseForFacing,
@@ -17,7 +18,7 @@ import { prewarmKrakarenTentacle } from '../sprites/krakarenTentacleSprite';
 import { SLAM_RISE_SHARE, SLAM_LOOM_SHARE, SLAM_DIVE_SHARE } from '../sprites/krakarenAttackTiming';
 import type { KrakarenTentacle } from './KrakarenTentacle';
 
-const KRAKAREN_HP = 260; // +30% over the original 200
+const KRAKAREN_HP = 260;
 const KRAKAREN_SPEED = 0; // immobile
 const AGGRO_RANGE_TILE_MULTIPLIER = 12;
 const AGGRO_RANGE_PX = TILE_SIZE * AGGRO_RANGE_TILE_MULTIPLIER;
@@ -25,11 +26,26 @@ const AGGRO_RANGE_PX = TILE_SIZE * AGGRO_RANGE_TILE_MULTIPLIER;
 /**
  * How much bigger than her own tile her art is drawn.
  *
- * She stays a one-tile mob for movement, targeting and collision — only the
- * art passed to the sprite functions is inflated, anchored on the same feet
- * point, so nothing about how she is fought changes, only how she looks.
+ * The art is inflated about her feet point (`krakarenScaledArtOrigin`), so it
+ * stands centred on her tile. Targeting and reach stay measured from that one
+ * tile's centre, exactly as for any other mob; only her collision footprint
+ * grows with the art — see {@link KRAKAREN_BODY_RADIUS_PX}.
  */
 export const KRAKAREN_VISUAL_SCALE = 3;
+
+const KRAKAREN_BODY_RADIUS_TILES = 1.5;
+
+/**
+ * How far from her centre her body keeps crawlers and other mobs.
+ *
+ * Measured off her rendered body at in-game size: the mantle and the roots of
+ * her tentacles span about a tile and a half either side of her tile's centre
+ * in every view, while the tentacle tips and the drop shadow reach well past
+ * that and are left open. It also has to stay inside both crawlers'
+ * `getMeleeRange`, since a crawler pressed against her stands exactly this far
+ * away and must still be able to hit her.
+ */
+export const KRAKAREN_BODY_RADIUS_PX = TILE_SIZE * KRAKAREN_BODY_RADIUS_TILES;
 
 // Melee tentacle attack
 const MELEE_RANGE_TILE_MULTIPLIER = 3;
@@ -323,9 +339,36 @@ export class KrakarenClone extends Mob {
     this.slamTimer = SLAM_INTERVAL_BASE;
   }
 
-  /** Override to prevent any movement — the Krakaren Clone is immobile. */
+  /** She is rooted where she spawned; nothing she does or suffers moves her. */
   protected moveWithCollision(_dx: number, _dy: number): void {
-    // No-op: immobile boss
+    // Every step, shove and separation share ends here, refused.
+  }
+
+  /**
+   * Nothing can push her, so whatever bumps into her takes the whole push —
+   * crawlers included (`MobUpdateLoop`). Without it a crawler pressing into her
+   * is handed only its mass share of the overlap and stays partly inside her.
+   */
+  override get separationAnchored(): boolean {
+    return true;
+  }
+
+  override get collisionRadiusPx(): number {
+    return KRAKAREN_BODY_RADIUS_PX;
+  }
+
+  /**
+   * A shove never moves her. `moveWithCollision` would swallow the motion
+   * anyway; refusing it here keeps a knockback from ever starting, so nothing
+   * reads her as mid-stagger.
+   */
+  override applyKnockback(
+    _dirX: number,
+    _dirY: number,
+    _distancePx: number,
+    _frames: number,
+  ): void {
+    // Refused outright rather than started and then swallowed step by step.
   }
 
   /** Told to her by BossRoomSystem the moment one of her tentacles is in the world. */
@@ -663,13 +706,12 @@ export class KrakarenClone extends Mob {
     tileSize: number,
   ): void {
     if (!this.isAlive) return;
-    const sx = this.x - camX;
-    const sy = this.y - camY;
     const artTileSize = tileSize * KRAKAREN_VISUAL_SCALE;
+    const art = krakarenScaledArtOrigin(this.x - camX, this.y - camY, tileSize, artTileSize);
 
     // Underlay, so the tint the sprite is drawn through never touches it.
     if (this.isEnraged) {
-      drawKrakarenEnrageGlow(ctx, sx, sy, artTileSize, this.animTime);
+      drawKrakarenEnrageGlow(ctx, art.x, art.y, artTileSize, this.animTime);
     }
 
     ctx.save();
@@ -682,7 +724,7 @@ export class KrakarenClone extends Mob {
       ctx.filter = KRAKAREN_ENRAGED_FILTER;
     }
 
-    drawKrakarenSprite(ctx, sx, sy, artTileSize, {
+    drawKrakarenSprite(ctx, art.x, art.y, artTileSize, {
       facingX: this.facingX,
       facingY: this.facingY,
       swipeProgress: this.swipeProgress,
@@ -696,8 +738,8 @@ export class KrakarenClone extends Mob {
     // the scaled-up art size so the bar clears the enlarged mantle too.
     this.renderMobHealthBar(
       ctx,
-      sx,
-      sy - artTileSize * krakarenOverheadLiftTiles(FALLBACK_OVERHEAD_LIFT_TILES),
+      this.x - camX,
+      art.y - artTileSize * krakarenOverheadLiftTiles(FALLBACK_OVERHEAD_LIFT_TILES),
     );
   }
 

@@ -59,10 +59,12 @@ function extraOptionLabel(option: ExtraContextOption): string {
 
 /**
  * The one action an item offers on its own, ahead of the generic entries. An
- * item has at most one: a skill book is read, a tome is studied, a potion is
- * drunk, a food is eaten, everything else leads with the generic list.
+ * item has at most one: its own `menuUseLabel` (the anchor's Travel), or a
+ * skill book is read, a tome is studied, a potion is drunk, a food is eaten;
+ * everything else leads with the generic list.
  */
 function leadOptionFor(item: InventoryItem): string[] {
+  if (item.menuUseLabel !== undefined) return [item.menuUseLabel];
   if (item.skillId !== undefined) return ['Read'];
   if (item.explosivesHandlingLevels !== undefined) return ['Study'];
   if (item.drinkable === true) return ['Drink'];
@@ -174,6 +176,11 @@ export class InventoryInteraction {
   /** A food the player asked to eat from the menu; the same contract as {@link pendingDrinkSlot}. */
   pendingEatSlot: PendingSlotRef | null = null;
   pendingStudySlot: PendingSlotRef | null = null;
+  /**
+   * An item's own `menuUseLabel` entry, picked from the menu. The scene reads
+   * and clears this and runs whatever a hotbar press of the item would.
+   */
+  pendingUseSlot: PendingSlotRef | null = null;
   /** Set when the user confirms a drop; DungeonScene reads and clears this. */
   pendingDropItem: { id: ItemId; quantity: number } | null = null;
   /** Set when the user confirms a trade; the host reads and clears this. */
@@ -319,6 +326,8 @@ export class InventoryInteraction {
           );
           if (extra !== undefined) {
             if (extra.disabledReason === undefined) extra.run();
+          } else if (action === cm.item.menuUseLabel) {
+            this.pendingUseSlot = { source: cm.source, slotIdx: cm.slotIdx, id: cm.item.id };
           } else if (action === 'Read') {
             this.requestSkillBookRead(cm.item);
           } else if (action === 'Drink') {

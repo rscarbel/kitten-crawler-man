@@ -1181,25 +1181,23 @@ stays per wood, and the lumber foreman's bulk service is unaffected. When the se
 station finishes, Fenna barks, the blueprints are taken off whoever holds them, and the
 quest completes.
 
-**The quest-complete screen** (`BlueprintsCompletionScreen`, owned by
-`BlueprintsQuestSystem`). Once the quest stands `complete`, the last upgrade's callout has
-played out, no conversation is open, nothing else halts the world and the Plea's siege is
-not on, a centred modal goes up over a dimmed village: "QUEST COMPLETE", the quest's
-name, a line from Fenna, and a "Permanent upgrades" pair of cards — the upgraded saw and
-rope walk, each with its intake and output per press against a plain station's, and a
-footnote giving the press time and the multiplier. Every figure is worded from
-`UPGRADED_WOOD_PER_PRESS`, `PLAIN_WOOD_PER_PRESS`, `BOARDS_PER_WOOD`, `ROPE_PER_WOOD` and
-`MANUAL_PROCESS_SECONDS` (`blueprintsStationRewards`), so the screen cannot drift from the
-sawmill. It plays the quest's `questComplete` cue (`quest_complete`, universal group) as it
-goes up; that is why `AudioManager`'s `questCompleted` listener leaves this quest out. It
-halts the world: its claim leads `BriarHollowKit.overlayClaims`, its click leads
-`handleClick`, it draws last in `renderDialog`, and `haltsWorldItself` counts it, so the
-scene's halt sweep leaves it up; narrated quest lines wait behind it. Continue (focus ring
-primary: Space / Enter, tap, click) or a fresh Escape dismisses it; a press before the
-reveal settles finishes the reveal instead. Dismissal sets
-`blueprints.completionScreenSeen`, so a door visit, a reload or a rewind never raises it
-again; a completion whose screen was never dismissed raises it again on the next kit. A
-save from before the flag existed reads as seen when the quest was already complete.
+**The quest-complete screen.** The quest shows the shared quest-complete screen
+(`QuestRewardScreen` in `src/ui/questReward/`, one per scene on `MenusKit`, raised through
+the `questRewardShown` bus event). `BlueprintsQuestSystem` asks for it once the quest stands
+`complete`, the last upgrade's callout has played out and the Plea's siege is not on; the
+screen itself then waits until no conversation is open and nothing else halts the world.
+Its spec (`blueprintsRewardSpec`) holds the quest's name, a line from Fenna, and one
+"Permanent upgrades" unlocks section — the upgraded saw and rope walk, each with its intake
+and output per press against a plain station's — and a footnote giving the press time and
+the multiplier. Every figure is worded from `UPGRADED_WOOD_PER_PRESS`,
+`PLAIN_WOOD_PER_PRESS`, `BOARDS_PER_WOOD`, `ROPE_PER_WOOD` and `MANUAL_PROCESS_SECONDS`
+(`blueprintsStationRewards`), so the screen cannot drift from the sawmill. Narrated quest
+lines wait behind the screen. Continue (focus ring primary: Space / Enter, tap, click) or a
+fresh Escape dismisses it; a press before the reveal settles finishes the reveal instead.
+Dismissal sets `blueprints.completionScreenSeen`, so a door visit, a reload or a rewind
+never raises it again; a completion whose screen was never dismissed raises it again on the
+next kit. A save from before the flag existed reads as seen when the quest was already
+complete.
 
 Every station still to upgrade stays marked for the whole of `build_stations` while the
 blueprints are held — including while guidance has sent the party off to chop, mine or

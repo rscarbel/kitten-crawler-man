@@ -61,7 +61,6 @@ import {
   DOOR_SIDES,
   buildEnvironment,
   findFloorWithRoom,
-  firstOf,
   gameGauntletDressings,
   roomView,
   useFloorTheme,
@@ -629,43 +628,64 @@ for (const side of DOOR_SIDES) {
       bedChunks.add(chunkOf({ x: centre.x + dx, y: centre.y + dy }));
     }
   }
-  // An ordinary chunk: one holding lab floor but none of the bed, or failing
-  // that — a lab whose every chunk holds part of the bed — the nearest chunk
-  // beyond the bed's.
+  // The ordinary chunks are every chunk beside the bed's that holds floor. A
+  // chunk's re-bake cost follows what it paints — bare rock re-bakes in a
+  // fraction of a floored chunk — and varies twofold between floored chunks, so
+  // the bed is compared against the typical floored chunk around it rather
+  // than any single one, which would measure that chunk's luck, not the bed.
   const b = env.room.bounds;
   const margin = CHUNK_TILES;
-  const candidates: TilePoint[] = [];
+  const chunkSamples = new Map<string, TilePoint>();
   for (let y = b.y - margin; y < b.y + b.h + margin; y++) {
-    for (let x = b.x - margin; x < b.x + b.w + margin; x++) candidates.push({ x, y });
+    for (let x = b.x - margin; x < b.x + b.w + margin; x++) {
+      const key = chunkOf({ x, y });
+      if (!bedChunks.has(key) && !chunkSamples.has(key)) chunkSamples.set(key, { x, y });
+    }
   }
-  const inLab = (t: TilePoint): boolean =>
-    t.x >= b.x && t.y >= b.y && t.x < b.x + b.w && t.y < b.y + b.h;
-  const outsideBed = candidates.filter((t) => !bedChunks.has(chunkOf(t)));
-  const ordinary = outsideBed.find(inLab) ?? firstOf(outsideBed);
-  if (ordinary === undefined) {
-    check(false, scope, 'no chunk near the lab is free of the bed — nothing to compare');
+  const chunkHoldsFloor = (t: TilePoint): boolean => {
+    const left = Math.floor(t.x / CHUNK_TILES) * CHUNK_TILES;
+    const top = Math.floor(t.y / CHUNK_TILES) * CHUNK_TILES;
+    for (let y = top; y < top + CHUNK_TILES; y++) {
+      for (let x = left; x < left + CHUNK_TILES; x++) {
+        if (env.gameMap.isWalkable(x, y)) return true;
+      }
+    }
+    return false;
+  };
+  const ordinaries = [...chunkSamples.values()].filter(chunkHoldsFloor);
+  if (ordinaries.length === 0) {
+    check(false, scope, 'no chunk beside the bed holds floor — nothing to compare');
     continue;
   }
   // Each timing looks at the one chunk under test, so the chunk is on screen
   // and nothing else is re-baked beside it.
   const chunkPx = CHUNK_TILES * TILE_SIZE;
-  const timeRebake = (t: TilePoint): number => {
+  setViewportSize(chunkPx, chunkPx);
+  const bakeChunkOf = (t: TilePoint): void => {
     const camX = Math.floor(t.x / CHUNK_TILES) * chunkPx;
     const camY = Math.floor(t.y / CHUNK_TILES) * chunkPx;
-    setViewportSize(chunkPx, chunkPx);
-    const bakeChunk = (): void => env.gameMap.renderCanvas(ctx, camX, camY, chunkPx, chunkPx);
-    bakeChunk();
-    const samples: number[] = [];
-    for (let i = 0; i < REBAKE_SAMPLES; i++) {
-      env.gameMap.markTileDirty(t.x, t.y);
-      const start = performance.now();
-      bakeChunk();
-      samples.push(performance.now() - start);
-    }
-    return medianOf(samples);
+    env.gameMap.renderCanvas(ctx, camX, camY, chunkPx, chunkPx);
   };
-  const bedMs = timeRebake(centre);
-  const ordinaryMs = timeRebake(ordinary);
+  const timeRebake = (t: TilePoint): number => {
+    env.gameMap.markTileDirty(t.x, t.y);
+    const start = performance.now();
+    bakeChunkOf(t);
+    return performance.now() - start;
+  };
+  bakeChunkOf(centre);
+  for (const t of ordinaries) bakeChunkOf(t);
+  // Bed and ordinary re-bakes alternate within each round, so a burst of load
+  // from elsewhere on the machine lands on both sides of the ratio alike.
+  const bedSamples: number[] = [];
+  const ordinarySamples: number[] = [];
+  for (let i = 0; i < REBAKE_SAMPLES; i++) {
+    for (const t of ordinaries) {
+      bedSamples.push(timeRebake(centre));
+      ordinarySamples.push(timeRebake(t));
+    }
+  }
+  const bedMs = medianOf(bedSamples);
+  const ordinaryMs = medianOf(ordinarySamples);
   const ratio = bedMs / ordinaryMs;
   check(
     ratio <= MAX_BED_CHUNK_REBAKE_RATIO,
