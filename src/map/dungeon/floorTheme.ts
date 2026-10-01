@@ -36,6 +36,8 @@ import { FLOOR1_GROUND, FLOOR1_WALL_MATERIAL } from './floor1Materials';
 import { FLOOR2_GROUND, FLOOR2_WALL_MATERIAL } from './floor2Materials';
 
 export interface DungeonFloorTheme {
+  /** Which floor this is; the wall painter keys its faces, slivers and dressing on it. */
+  readonly id: DungeonFloorThemeId;
   /** The palette the four generic dungeon floor types resolve through. */
   readonly ground: GroundPalette;
   /**
@@ -51,8 +53,12 @@ export interface DungeonFloorTheme {
 export type DungeonFloorThemeId = 'cellars' | 'service_level';
 
 const THEMES: Readonly<Record<DungeonFloorThemeId, DungeonFloorTheme>> = {
-  cellars: { ground: FLOOR1_GROUND, wallMaterial: FLOOR1_WALL_MATERIAL },
-  service_level: { ground: FLOOR2_GROUND, wallMaterial: FLOOR2_WALL_MATERIAL },
+  cellars: { id: 'cellars', ground: FLOOR1_GROUND, wallMaterial: FLOOR1_WALL_MATERIAL },
+  service_level: {
+    id: 'service_level',
+    ground: FLOOR2_GROUND,
+    wallMaterial: FLOOR2_WALL_MATERIAL,
+  },
 };
 
 /**

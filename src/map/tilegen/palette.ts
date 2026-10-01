@@ -232,6 +232,30 @@ export const CELLAR_CINDER_RAMP: Ramp = {
 };
 
 /**
+ * Packed earth where a cellar's floor has given way or was never laid. Browner
+ * than the ash so the two stay apart by hue, and as narrow in value as the ash
+ * so a collapsed hall reads as dirt rather than as a field of lumps.
+ */
+export const CELLAR_EARTH_RAMP: Ramp = {
+  shadow: [78, 63, 48],
+  mid: [120, 100, 78],
+  light: [146, 124, 98],
+  accent: [164, 142, 114],
+};
+
+/**
+ * Old fired brick, laid flat. Muted toward the cellar's stone rather than a
+ * fresh brick red, because a whole chapel floor of it sits behind every figure
+ * in the room.
+ */
+export const CELLAR_BRICK_RAMP: Ramp = {
+  shadow: [96, 72, 58],
+  mid: [138, 106, 86],
+  light: [162, 130, 108],
+  accent: [180, 150, 126],
+};
+
+/**
  * Rubble masonry: rough warm stone in a lot of mortar.
  *
  * Much darker than any floor on the level, and deliberately so. A dungeon map is
@@ -269,12 +293,16 @@ export const TERRAZZO_RAMP: Ramp = {
   accent: [230, 232, 227],
 };
 
-/** The aggregate in terrazzo: mostly dark chips, a few bright ones. */
+/**
+ * The aggregate in terrazzo: chips a step or two either side of the panel's own
+ * grey. Black-on-white aggregate is what real terrazzo often looks like, but at
+ * 32 px a tile it reads as speckle and turns a whole room into static.
+ */
 export const TERRAZZO_CHIP_RAMP: Ramp = {
-  shadow: [54, 57, 62],
-  mid: [94, 99, 104],
-  light: [148, 151, 150],
-  accent: [204, 206, 201],
+  shadow: [138, 141, 142],
+  mid: [156, 159, 160],
+  light: [176, 178, 176],
+  accent: [218, 220, 215],
 };
 
 export const STEEL_PLATE_RAMP: Ramp = {
@@ -290,6 +318,38 @@ export const INSTITUTIONAL_VINYL_RAMP: Ramp = {
   mid: [79, 97, 83],
   light: [110, 130, 112],
   accent: [140, 160, 140],
+};
+
+/**
+ * Galvanised bar grating, a step lighter than the checker plate so a boiler
+ * room does not sink to the wall's value.
+ */
+export const GRATING_STEEL_RAMP: Ramp = {
+  shadow: [80, 86, 94],
+  mid: [110, 117, 126],
+  light: [132, 139, 148],
+  accent: [156, 163, 171],
+};
+
+/**
+ * What shows through a grating's slots: only a little darker than the bars.
+ * Real grating over a void is near black, and a whole room of bright bars on
+ * black is exactly the high-contrast stripe field a backdrop must not be; the
+ * depth is suggested, not shown.
+ */
+export const GRATING_DEPTH_RAMP: Ramp = {
+  shadow: [78, 83, 90],
+  mid: [92, 97, 105],
+  light: [102, 107, 115],
+  accent: [112, 117, 125],
+};
+
+/** Ribbed rubber matting: a dusty charcoal, held well clear of the wall's value. */
+export const RUBBER_MAT_RAMP: Ramp = {
+  shadow: [60, 62, 66],
+  mid: [88, 90, 95],
+  light: [108, 110, 115],
+  accent: [126, 128, 133],
 };
 
 /**

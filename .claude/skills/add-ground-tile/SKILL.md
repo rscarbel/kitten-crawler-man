@@ -99,8 +99,8 @@ const myFloor: Material = {
 6. Rebuild the seed alphabet (`npm run gen:floor-art-seeds`) and sweep it
    (`npm run verify:floor-sweep`) — the new material has to hold across every
    seed the game can draw, not just the one you looked at.
-7. Review at `localhost:8080/?tiles` (click toggles materials/transitions;
-   right-click rerolls the art seed).
+7. Review at `localhost:8080/?tiles` (click cycles materials, transitions and
+   walls; right-click rerolls the art seed).
 
 ## The four rules
 
@@ -220,6 +220,27 @@ ringed by walls still gets wedges of that ground in every inside corner.
   irregular region composited from corner data alone.
 - `localhost:8080/?tiles` — in-game review, resolving frames exactly as the
   renderer will.
+
+## Dungeon walls
+
+Floors 1 and 2 do not draw `FloorTypeValue.wall` as a ground material. Each wall
+tile is classified by its neighbours (`src/map/dungeon/wallShape.ts`) and drawn by
+`src/sprites/art/dungeonWallArt.ts` as the 3/4 camera sees it: a two-tile front
+face where floor is to the south, a sliver where floor is beside it, a lit rim
+where floor is to the north, and behind them a flat wall top that fades into pure
+black with Euclidean distance from lit space (`src/map/dungeon/wallLight.ts`,
+`WALL_FADE_TILES`). The face masonry is `paintCoursedBlocks` over the floor's wall
+ramp. Face dressing comes from the room or hallway character the face looks onto
+(`wallDressingAt` in `src/map/dungeon/wallDressing.ts`, painted by
+`src/sprites/art/dungeonWallDressing.ts`).
+
+- `npm run render:wall-cases -- --scale=2` — every wall shape, both floors (the
+  `?tiles` Walls view shows the same fixture).
+- `npm run verify:dungeon-walls` — no wall painter writes outside its tile, every
+  open side shows the wall, rock beyond the light is opaque black, and the dark
+  only deepens with distance.
+- `verify:floor-sweep` holds each dungeon floor's wall _face_ at least
+  `MIN_WALL_FLOOR_SEPARATION` darker than every one of its floors.
 
 ## Palettes
 

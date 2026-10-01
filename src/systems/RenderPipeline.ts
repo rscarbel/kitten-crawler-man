@@ -56,6 +56,18 @@ import type { Townsperson } from '../creatures/Townsperson';
 import type { TownPropRenderable } from './townPropRenderable';
 import { viewportWidth, viewportHeight } from '../core/Viewport';
 import { isStandingInWater } from './GameLoopPhases';
+import {
+  DEFAULT_DUNGEON_FLOOR_THEME,
+  dungeonFloorTheme,
+  type DungeonFloorThemeId,
+} from '../map/dungeon/floorTheme';
+import {
+  collectVisibleWallFixtures,
+  isFixtureLit,
+  wallFixtureSortY,
+  type WallFixture,
+} from '../map/dungeon/wallFixtures';
+import { drawWallFixture } from '../sprites/art/wallFixtureArt';
 
 /** Draw kind for decoration tiles. */
 const DRAW_KIND_DECO = 0;
@@ -77,6 +89,9 @@ const DRAW_KIND_TOWN_PROP = 5;
 
 /** Draw kind for a safe room's Mordecai, rendered via his own render(). */
 const DRAW_KIND_SAFE_ROOM_NPC = 6;
+
+/** Draw kind for a fixture hung on a wall face; its entry's `tx` holds the fixture's id. */
+const DRAW_KIND_WALL_FIXTURE = 7;
 
 /** Halfway across a tile — where a crawler's centre line sits. */
 const TILE_CENTRE_FRACTION = 0.5;
@@ -245,6 +260,16 @@ export interface RenderContext {
 
   // Pulse counters
   speechBubblePulse: number;
+  /**
+   * Whether the scene draws the flying gore itself, under a darkness pass,
+   * rather than with the other effects over it.
+   */
+  goreUnderDarkness?: boolean;
+  /**
+   * Whether the light hung at a tile is giving light this instant — false
+   * through a faulty tube's dark beat — for fixture art that must match it.
+   */
+  lightShining?: (tileX: number, tileY: number) => boolean;
 }
 
 export class RenderPipeline {
@@ -256,6 +281,14 @@ export class RenderPipeline {
   /** Reusable draw-entry pool to avoid per-frame allocations. */
   private _drawPool: DrawEntry[] = [];
   private _drawCount = 0;
+  /** Reused every frame: the fixtures in view, and the view each one is drawn with. */
+  private readonly _visibleFixtures: WallFixture[] = [];
+  private readonly _fixtureView: {
+    nowMs: number;
+    floor: DungeonFloorThemeId;
+    lit: boolean;
+    watch: { dx: number; dy: number };
+  } = { nowMs: 0, floor: DEFAULT_DUNGEON_FLOOR_THEME, lit: true, watch: { dx: 0, dy: 0 } };
 
   private _getEntry(): DrawEntry {
     if (this._drawCount < this._drawPool.length) {
@@ -281,6 +314,32 @@ export class RenderPipeline {
     this._drawCount++;
     return e;
   }
+  /** One wall fixture, with the active crawler as what a camera dome watches. */
+  private _drawWallFixture(
+    ctx: CanvasRenderingContext2D,
+    gameMap: GameMap,
+    fixtureId: number,
+    camX: number,
+    camY: number,
+    active: HumanPlayer | CatPlayer,
+    lightShining: ((tileX: number, tileY: number) => boolean) | undefined,
+  ): void {
+    if (fixtureId < 0 || fixtureId >= gameMap.wallFixtures.length) return;
+    const fixture = gameMap.wallFixtures[fixtureId];
+    const faceX = fixture.tileX * TILE_SIZE;
+    const faceY = fixture.tileY * TILE_SIZE;
+    const view = this._fixtureView;
+    view.nowMs = performance.now();
+    view.floor = dungeonFloorTheme().id;
+    // A faulty tube's art goes dark on the same beat as its light.
+    view.lit =
+      isFixtureLit(fixture, gameMap.wallFixtures) &&
+      (lightShining?.(fixture.tileX, fixture.tileY) ?? true);
+    view.watch.dx = active.x + TILE_SIZE * TILE_CENTRE_FRACTION - faceX;
+    view.watch.dy = active.y + TILE_SIZE * TILE_CENTRE_FRACTION - faceY;
+    drawWallFixture(ctx, fixture, faceX - camX, faceY - camY, TILE_SIZE, view);
+  }
+
   /** Queues one prop for the Y-sorted pass, unless it is too far off screen to reach it. */
   private _pushPropEntry(prop: TownPropRenderable, camX: number, camY: number): void {
     // Per-prop, because the props differ by an order of magnitude in reach:
@@ -356,6 +415,50 @@ export class RenderPipeline {
     building?.renderDoorHints(ctx, camX, camY);
   }
 
+  /** Whether {@link renderGroundWarnings} has anything to draw in this frame's view. */
+  hasGroundWarnings(rc: RenderContext): boolean {
+    return (
+      rc.lavaBalls.hasGroundArt ||
+      rc.clownGas.hasGroundArt ||
+      rc.fairies?.hasGroundArtIn(
+        rc.camX,
+        rc.camY,
+        rc.camX + viewportWidth(),
+        rc.camY + viewportHeight(),
+      ) === true ||
+      rc.fairyFireballs?.hasGroundArt === true ||
+      rc.destructibles.hasGroundArt
+    );
+  }
+
+  /**
+   * The flying gore — blood spray and thrown body parts — and the pieces of
+   * a prop breaking, on their own, for a scene that draws them under its
+   * darkness so a dark room's blood and splinters are dimmed with the room.
+   * {@link renderEffects} skips them when `RenderContext.goreUnderDarkness`
+   * says so.
+   */
+  renderFlyingGore(ctx: CanvasRenderingContext2D, rc: RenderContext): void {
+    rc.gore.renderParticles(ctx, rc.camX, rc.camY);
+    rc.bodyPartGore.renderFlying(ctx, rc.camX, rc.camY);
+    rc.destructibles.renderBreak(ctx, rc.camX, rc.camY);
+  }
+
+  /**
+   * The floor paint that warns of danger — fire patches, gas, fairy rings and
+   * reticles, fireball charges — for adding back over the dungeon's darkness
+   * at the darkness's own strength, which restores a warning in a dark room
+   * to full strength and adds nothing where the floor is lit.
+   */
+  renderGroundWarnings(ctx: CanvasRenderingContext2D, rc: RenderContext): void {
+    const { camX, camY } = rc;
+    rc.lavaBalls.renderGround(ctx, camX, camY);
+    rc.clownGas.renderGround(ctx, camX, camY);
+    rc.fairies?.renderGround(ctx, camX, camY);
+    rc.fairyFireballs?.renderGround(ctx, camX, camY);
+    rc.destructibles.renderGroundWarnings(ctx, camX, camY);
+  }
+
   /**
    * Y-sorted draw pass: interleave decoration tiles, mobs, and players
    * so depth (north = behind, south = in front) is respected.
@@ -389,6 +492,25 @@ export class RenderPipeline {
 
     // Reset pool cursor (reuses existing objects)
     this._drawCount = 0;
+
+    // Queued ahead of the decorations, as `render-dungeon` queues them: the
+    // stable sort then draws a prop whose foot ties with a fixture's over it,
+    // since the prop stands on the floor in front of the wall it hangs on.
+    for (const fixture of collectVisibleWallFixtures(
+      gameMap.wallFixtures,
+      camX,
+      camY,
+      viewportWidth(),
+      viewportHeight(),
+      this._visibleFixtures,
+    )) {
+      const e = this._getEntry();
+      e.sortY = wallFixtureSortY(fixture);
+      e.kind = DRAW_KIND_WALL_FIXTURE;
+      e.tx = fixture.id;
+      e.entity = null;
+      e.chestRef = null;
+    }
 
     for (const { tx, ty, sortYAnchorPx } of gameMap.getVisibleDecorationTiles(
       camX,
@@ -507,7 +629,11 @@ export class RenderPipeline {
     for (let i = 0; i < count; i++) {
       const item = items[i];
       if (item.kind === DRAW_KIND_DECO) {
-        gameMap.drawDecorationAt(ctx, item.tx, item.ty, camX, camY);
+        // A struck prop shudders for a few frames, so it feels heavy before it breaks.
+        const wobble = rc.destructibles.wobbleAt(item.tx, item.ty);
+        gameMap.drawDecorationAt(ctx, item.tx, item.ty, camX - wobble.x, camY - wobble.y);
+      } else if (item.kind === DRAW_KIND_WALL_FIXTURE) {
+        this._drawWallFixture(ctx, gameMap, item.tx, camX, camY, active, rc.lightShining);
       } else if (item.kind === DRAW_KIND_CHEST) {
         const chest = item.chestRef;
         if (chest !== null) {
@@ -553,14 +679,16 @@ export class RenderPipeline {
       pm,
     } = rc;
 
-    gore.renderParticles(ctx, camX, camY);
+    if (rc.goreUnderDarkness !== true) {
+      gore.renderParticles(ctx, camX, camY);
+      bodyPartGore.renderFlying(ctx, camX, camY);
+    }
     // Droplets go over the entities: water thrown up by a crawler stepping into
     // the river passes in front of the body that threw it. Everything else the
     // water system draws is surface, and stays under them in `renderGround`.
     rc.water?.renderSplashes(ctx, camX, camY);
-    rc.destructibles.renderEffects(ctx, camX, camY);
+    rc.destructibles.renderEffects(ctx, camX, camY, rc.goreUnderDarkness === true);
     rc.trees?.render(ctx, camX, camY);
-    bodyPartGore.renderFlying(ctx, camX, camY);
     barriers.render(ctx, camX, camY, active);
     spells.renderShell(ctx, camX, camY);
     spells.renderCatMiniShell(ctx, camX, camY, pm.cat);

@@ -19,6 +19,7 @@ import {
 } from './art/goblinMotherFigure';
 import { type DrawnFigureRow, figureFrameCount, drawnFigureRow } from './figure/figureDef';
 import { drawFigureCached, prewarmFigureState, touchFigureState } from './figure/figureFrameCache';
+import { deferAboveDarkness } from '../systems/lighting/aboveDarkness';
 
 // ── Goblin mother ───────────────────────────────────────────────────────────
 
@@ -233,6 +234,11 @@ export function drawQuestMarker(
   glyph: QuestMarkerGlyph,
   color: string,
 ) {
+  // Drawn from inside the entity pass, it waits for the dungeon's darkness so
+  // a quest marker is never dimmed by it.
+  if (deferAboveDarkness((target) => drawQuestMarker(target, sx, artTopY, s, glyph, color))) {
+    return;
+  }
   const t = performance.now() / MS_TO_SECONDS;
   const { bounceAmplitude, glyphFontSize, restingTextY } = markerLayout(ctx, artTopY, s, glyph);
   const bounce = Math.sin(t * EXCLAMATION_BOUNCE_FREQ) * bounceAmplitude;

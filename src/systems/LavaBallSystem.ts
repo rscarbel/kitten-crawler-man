@@ -26,6 +26,7 @@ import { PLAYER_SPEED, TILE_SIZE } from '../core/constants';
 import { normalize } from '../utils';
 import { drawLavaBolt, drawLavaBurst, drawLavaFlame } from '../sprites/lavaBallSprite';
 import type { GameSystem, SystemContext } from './GameSystem';
+import type { DynamicLightSink } from './lighting/dynamicLights';
 import type { GroundHazardSource } from './GroundHazardSource';
 
 /** One shot, as the llama hands it over. */
@@ -189,6 +190,14 @@ export class LavaBallSystem implements GameSystem, GroundHazardSource {
   burstSoundPending = false;
 
   constructor(private readonly gameMap: GameMap) {}
+
+  /** Bolts light their way across the room; bursts flare and fire patches burn low. */
+  collectLights(sink: DynamicLightSink): void {
+    for (const bolt of this.bolts) sink.add(bolt.x, bolt.y, 'lava_bolt');
+    for (const burst of this.bursts)
+      sink.add(burst.x, burst.y, 'fireball', burst.tick / BURST_FRAMES);
+    for (const flame of this.flames) sink.add(flame.x, flame.y, 'coals');
+  }
 
   update(ctx: SystemContext): void {
     this.collectSpits(ctx.roster.mobs);
@@ -421,6 +430,11 @@ export class LavaBallSystem implements GameSystem, GroundHazardSource {
     }
     if (frames === FLAME_BURN_DELAY) player.applyStatus(makeBurn());
     return frames;
+  }
+
+  /** Whether {@link renderGround} has anything to draw this frame. */
+  get hasGroundArt(): boolean {
+    return this.flames.length > 0 || this.bursts.length > 0 || this.bolts.length > 0;
   }
 
   /** The fire patches, drawn under creatures so the party walks in front of them. */

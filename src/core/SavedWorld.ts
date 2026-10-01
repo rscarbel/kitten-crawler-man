@@ -10,7 +10,7 @@ import { isRecord } from './guards';
  * regenerated from a fresh seed, its per-floor state starts over, and the
  * party arrives at the floor's start tile.
  */
-export const WORLD_GENERATOR_VERSION = 4;
+export const WORLD_GENERATOR_VERSION = 5;
 
 interface TilePoint {
   x: number;

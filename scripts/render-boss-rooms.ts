@@ -14,10 +14,12 @@
  *   --scale=N   pixel scale (default 1, the size the game draws at)
  *   --door=south|north|east|west   renders the first floor from `--seed` on
  *               whose room has its doorway on that side
+ *   --lit       draws the dungeon lighting pass at the sharp preset over the
+ *               props, mood lights included, and writes `<name>-lit.png`
  *
  * Writes `preview/boss-rooms/<room>-<state>-<door>.png`. What it draws is the
- * baked floor, the room's dressing layers and its Y-sorted props — no boss, no
- * party, no lighting.
+ * baked floor, the room's dressing layers and its Y-sorted props — no boss and
+ * no party, and no lighting unless `--lit` is given.
  */
 
 import { FLOOR_ART_SEEDS } from '../src/map/ground/artSeedAlphabet.js';
@@ -76,6 +78,7 @@ if (doorArg !== '' && !isDoorSide(doorArg)) {
 const door: DoorSide | undefined = isDoorSide(doorArg) ? doorArg : undefined;
 const seed = intArg('seed', DEFAULT_SEED);
 const scale = intArg('scale', DEFAULT_SCALE);
+const lit = process.argv.includes('--lit');
 
 await loadGameSpritesInNode(FLOOR_ART_SEEDS[0]);
 
@@ -111,8 +114,9 @@ for (const harness of harnesses) {
       continue;
     }
     roomUnderTest.update();
-    const rendered = renderRoom(env, roomUnderTest, scale);
-    const outPath = roomRenderPath(harness.id, state, fresh.room.doorSide);
+    const rendered = renderRoom(env, roomUnderTest, scale, { withLighting: lit });
+    const basePath = roomRenderPath(harness.id, state, fresh.room.doorSide);
+    const outPath = lit ? basePath.replace(/\.png$/, '-lit.png') : basePath;
     writePreviewPng(outPath, rendered.canvas.toBuffer('image/png'));
     const magenta = magentaPixelCount(rendered.canvas);
     const calls = rendered.dressingDrawCalls;

@@ -144,15 +144,6 @@ const EMBER_PERIOD_MS = 1300;
 const EMBER_SIZE = 0.03;
 const EMBER_COLOR = 'rgba(255,170,70,';
 
-/** Warm light the torches throw on the room, additive; stops are fixed so the texture is baked once. */
-const TORCH_LIGHT_STOPS: readonly GlowStop[] = [
-  { offset: 0, color: 'rgba(255,170,80,0.42)' },
-  { offset: 0.35, color: 'rgba(255,140,60,0.2)' },
-  { offset: 1, color: 'rgba(255,120,40,0)' },
-];
-const TORCH_LIGHT_RADIUS_TILES = 3.6;
-const TORCH_LIGHT_FLICKER = 0.07;
-
 /** Draws a wall torch — bracket, haft, live flame — on the wall tile at screen (sx, sy). */
 export function drawNurseryTorch(
   ctx: CanvasRenderingContext2D,
@@ -199,26 +190,6 @@ export function drawNurseryTorch(
   }
 }
 
-/** The pool of warm light a torch at screen tile (sx, sy) throws; call with additive blending set by the caller. */
-export function drawNurseryTorchLight(
-  ctx: CanvasRenderingContext2D,
-  sx: number,
-  sy: number,
-  ts: number,
-  nowMs: number,
-  seed: number,
-): void {
-  const seconds = nowMs / MS_PER_SECOND + seed;
-  const flicker = 1 + TORCH_LIGHT_FLICKER * Math.sin(seconds * FLAME_FLICKER_HZ_B);
-  drawRadialGlow(
-    ctx,
-    sx + ts * TORCH_FLAME_ROOT.x,
-    sy + ts * (TORCH_FLAME_ROOT.y + 1),
-    ts * TORCH_LIGHT_RADIUS_TILES * flicker,
-    TORCH_LIGHT_STOPS,
-  );
-}
-
 // ── Lurkers under an open grate ─────────────────────────────────────────────
 
 const EYE_PERIOD_MS = 4200;
@@ -227,8 +198,10 @@ const EYES_OPEN_FRACTION = 0.55;
 const EYE_SPACING = 0.12;
 const EYE_RADIUS = 0.028;
 const EYE_WANDER = 0.12;
-const EYE_COLOR = 'rgba(230,220,90,';
-const EYE_GLOW_STOPS: readonly GlowStop[] = [
+/** An eye's glint colour, open-ended so the caller appends its own alpha and `)`. */
+export const EYE_COLOR = 'rgba(230,220,90,';
+/** The faint halo round a pair of eyes in the dark. */
+export const EYE_GLOW_STOPS: readonly GlowStop[] = [
   { offset: 0, color: 'rgba(210,220,90,0.3)' },
   { offset: 1, color: 'rgba(210,220,90,0)' },
 ];

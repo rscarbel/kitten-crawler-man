@@ -26,7 +26,13 @@ import {
   BRIDGE,
   BRIDGE_AXIS_EAST_WEST,
 } from '../tileTypes';
-import { drawGroundTile, drawGroundMaterialTile } from './groundTiles';
+import { applyWorldNoise, drawGroundTile, drawGroundMaterialTile } from './groundTiles';
+import { isDungeonWallMap, isWallClosed, wallShapeAt } from '../dungeon/wallShape';
+import type { DungeonFloorThemeId } from '../dungeon/floorTheme';
+import { wallTileLight } from '../dungeon/wallLight';
+import { wallDressingAt } from '../dungeon/wallDressing';
+import { drawDungeonWallTile } from '../../sprites/art/dungeonWallArt';
+import type { NeighbourFace } from '../../sprites/art/dungeonWallDressing';
 import { OVERWORLD_GROUND } from '../town/groundMaterials';
 import { dungeonFloorTheme } from '../dungeon/floorTheme';
 import {
@@ -234,6 +240,65 @@ function drawBridgeDeck(
   }
 }
 
+/** The face, if any, beside a dungeon wall face tile, and what it is dressed in. */
+function neighbourFace(
+  structure: TileContent[][],
+  theme: DungeonFloorThemeId,
+  tx: number,
+  ty: number,
+): NeighbourFace | null {
+  if (!isWallClosed(structure, tx, ty)) return null;
+  const shape = wallShapeAt(structure, tx, ty);
+  return { face: shape.face, dressing: wallDressingAt(structure, theme, shape, tx, ty) };
+}
+
+/**
+ * A dungeon wall (or the void around a dungeon floor) as the 3/4 camera sees it: a
+ * face, a sliver or a rim where floor is beside it, and behind them the wall top,
+ * fading into black with distance from the floor. Never a ground material, so the
+ * corner masks cannot bleed masonry into the floor beside it.
+ */
+function drawDungeonWall(
+  ctx: CanvasRenderingContext2D,
+  structure: TileContent[][],
+  sx: number,
+  sy: number,
+  ts: number,
+  tx: number,
+  ty: number,
+): void {
+  const theme = dungeonFloorTheme().id;
+  const light = wallTileLight(structure, tx, ty);
+  if (light === null) {
+    drawDungeonWallTile(ctx, theme, null, sx, sy, ts);
+    return;
+  }
+  const shape = wallShapeAt(structure, tx, ty);
+  const hasFace = shape.face !== 'none';
+  drawDungeonWallTile(
+    ctx,
+    theme,
+    {
+      shape,
+      light,
+      dressing: wallDressingAt(structure, theme, shape, tx, ty),
+      west: hasFace ? neighbourFace(structure, theme, tx - 1, ty) : null,
+      east: hasFace ? neighbourFace(structure, theme, tx + 1, ty) : null,
+      tx,
+      ty,
+    },
+    sx,
+    sy,
+    ts,
+  );
+  if (!hasFace) return;
+  // The face takes the broad tone the floor in front of it takes, so the two
+  // read as lit together; the wall top's light is the fade's alone.
+  applyWorldNoise(ctx, sx, sy, ts, tx, ty);
+  // The gym's mirror and whiteboard hang on its north wall, baked with it.
+  drawGymWallDressing(ctx, structure, sx, sy, ts, tx, ty);
+}
+
 export function drawTerrainTile(
   ctx: CanvasRenderingContext2D,
   structure: TileContent[][],
@@ -246,7 +311,14 @@ export function drawTerrainTile(
 ): boolean {
   switch (type) {
     // Void (outer border)
+    // On a dungeon floor the void border is more of the same rock, so the light
+    // dies away across it exactly as it does across the walls, instead of a lit
+    // wall top running into a black edge.
     case VOID_TYPE: {
+      if (isDungeonWallMap(structure)) {
+        drawDungeonWall(ctx, structure, sx, sy, ts, tx, ty);
+        break;
+      }
       ctx.fillStyle = '#000000';
       ctx.fillRect(sx, sy, ts, ts);
       break;
@@ -322,14 +394,14 @@ export function drawTerrainTile(
       break;
     }
 
-    // Dungeon wall. Base material only: a wall has no neighbouring ground to
-    // blend into, and running it through `drawGroundTile` would make the corner
-    // masks bleed masonry across the floor in front of it.
+    // Dungeon wall, drawn as the 3/4 camera sees it: a face, a sliver or a rim
+    // where floor is beside it, and behind them the wall top, fading into black
+    // with distance from the floor. Never a ground
+    // material, so the corner masks cannot bleed masonry into the floor beside it.
+    // `FloorTypeValue.wall` only appears on maps drawn under a dungeon floor theme
+    // (floors 1 and 2 and the tutorial, which is a cellar), so every one takes it.
     case FloorTypeValue.wall: {
-      const theme = dungeonFloorTheme();
-      drawGroundMaterialTile(ctx, theme.ground, theme.wallMaterial, sx, sy, ts, tx, ty);
-      // The gym's mirror and whiteboard hang on its walls, baked with them.
-      drawGymWallDressing(ctx, structure, sx, sy, ts, tx, ty);
+      drawDungeonWall(ctx, structure, sx, sy, ts, tx, ty);
       break;
     }
 

@@ -1,5 +1,5 @@
 import type { Player } from '../Player';
-import { Mob } from './Mob';
+import { Mob, type EyePlacement } from './Mob';
 import { maybeDropSkillBook } from './skillBookDrop';
 import type { LootDrop } from './Mob';
 import { randomInt, normalize } from '../utils';
@@ -17,6 +17,8 @@ import {
   prewarmBrindledVespaGore,
   prewarmVespaSpit,
 } from '../sprites/brindledVespaSprite';
+import { deferChrome, type ChromePart } from '../systems/lighting/aboveDarkness';
+import type { DynamicLightSink } from '../systems/lighting/dynamicLights';
 
 const STAGE1_HP = 4;
 const STAGE2_HP = 10;
@@ -101,6 +103,29 @@ export interface AcidSpit {
   hitAge: number;
 }
 
+/** Where each stage's eyes sit, for eye-shine in the dark. */
+const GRUB_STAGE_EYES: Readonly<Record<GrubStage, EyePlacement>> = {
+  // A small worm on the floor of its tile.
+  1: {
+    sideForward: 0.05,
+    sideHeight: 0.72,
+    sideSpacing: 0.04,
+    frontHeight: 0.72,
+    frontSpacing: 0.08,
+  },
+  // The cow-tailed grub is seen from above, tail up and head down at the
+  // blunt end of its body, whichever way it crawls.
+  2: { sideForward: 0, sideHeight: 0.86, sideSpacing: 0.1, frontHeight: 0.86, frontSpacing: 0.1 },
+  // The vespa flies above its tile, its head well ahead of the body in profile.
+  3: {
+    sideForward: 0.3,
+    sideHeight: 0.28,
+    sideSpacing: 0.04,
+    frontHeight: 0.27,
+    frontSpacing: 0.12,
+  },
+};
+
 /**
  * Three-stage lifecycle mob that spawns from enemy deaths on level 2.
  *
@@ -111,6 +136,10 @@ export interface AcidSpit {
  *                                  mobs will retaliate.
  */
 export class BrindleGrub extends Mob {
+  protected override get eyePlacement(): EyePlacement {
+    return GRUB_STAGE_EYES[this.stage];
+  }
+
   /** Knee-high to a man, so a crawler kicks or stomps it rather than punching. */
   override get lowProfile(): boolean {
     return true;
@@ -488,6 +517,45 @@ export class BrindleGrub extends Mob {
     }
   }
 
+  /** The acid spits in flight and splashing. */
+  private drawSpits(
+    ctx: CanvasRenderingContext2D,
+    camX: number,
+    camY: number,
+    tileSize: number,
+  ): void {
+    for (const spit of this.spits) {
+      drawAcidSpit(
+        ctx,
+        spit.x - camX,
+        spit.y - camY,
+        tileSize,
+        spit.vx,
+        spit.vy,
+        spit.hit,
+        spit.hitAge,
+      );
+    }
+  }
+
+  override drawAboveDarkness(
+    ctx: CanvasRenderingContext2D,
+    part: ChromePart,
+    camX: number,
+    camY: number,
+    tileSize: number,
+  ): void {
+    if (part === 'acidSpits') this.drawSpits(ctx, camX, camY, tileSize);
+    else super.drawAboveDarkness(ctx, part, camX, camY, tileSize);
+  }
+
+  /** Spit in flight lights the dark it crosses, as every other projectile does. */
+  collectLights(sink: DynamicLightSink): void {
+    for (const spit of this.spits) {
+      if (!spit.hit) sink.add(spit.x, spit.y, 'acid_spit');
+    }
+  }
+
   protected override drawSelf(
     ctx: CanvasRenderingContext2D,
     camX: number,
@@ -498,19 +566,11 @@ export class BrindleGrub extends Mob {
     const sx = this.x - camX;
     const sy = this.y - camY;
 
-    // Render acid spits (behind mob sprite for Vespa)
-    if (this.stage === STAGE_VESPA) {
-      for (const spit of this.spits) {
-        drawAcidSpit(
-          ctx,
-          spit.x - camX,
-          spit.y - camY,
-          tileSize,
-          spit.vx,
-          spit.vy,
-          spit.hit,
-          spit.hitAge,
-        );
+    // A spit in flight is a warning: it waits for the dungeon's darkness to be
+    // drawn so the dark never hides it, and draws behind the vespa otherwise.
+    if (this.stage === STAGE_VESPA && this.spits.length > 0) {
+      if (!deferChrome(this, 'acidSpits', camX, camY, tileSize)) {
+        this.drawSpits(ctx, camX, camY, tileSize);
       }
     }
 

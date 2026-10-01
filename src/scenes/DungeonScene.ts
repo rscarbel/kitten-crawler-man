@@ -208,6 +208,7 @@ import {
   BossRoomDressings,
   buildColosseumDressing,
   buildGauntletRoomDressings,
+  registerBossRoomMoodLights,
 } from '../systems/bossRooms/BossRoomDressings';
 import { ArenaRoomSystem } from '../systems/ArenaRoomSystem';
 import { BarrierSystem } from '../systems/BarrierSystem';
@@ -353,6 +354,20 @@ import {
 } from '../systems/MongoSystem';
 import type { InteriorCompanionArrival } from '../systems/companionCarry';
 import { DefendQuestSystem } from '../systems/DefendQuestSystem';
+import { DungeonLightingSystem, type OverDarknessPainter } from '../systems/DungeonLightingSystem';
+import {
+  DungeonAmbienceSystem,
+  type AmbienceFrame,
+} from '../systems/dungeon/DungeonAmbienceSystem';
+import {
+  DungeonLifeSystem,
+  type LifeFrame,
+  type Walker,
+} from '../systems/dungeon/DungeonLifeSystem';
+import { floorSurfaceOf } from '../map/dungeon/floorSurface';
+import { dungeonFloorTheme } from '../map/dungeon/floorTheme';
+import { partyLightSource, type PartyCompanion } from '../systems/lighting/partyLights';
+import { beginAboveDarkness, flushAboveDarkness } from '../systems/lighting/aboveDarkness';
 import { SpiderQuestSystem, SPIDER_QUEST_COMPLETION_XP } from '../systems/SpiderQuestSystem';
 import { CircusQuestSystem, CIRCUS_QUEST_ID } from '../systems/CircusQuestSystem';
 import { MurderMysteryQuestSystem, MURDER_QUEST_ID } from '../systems/MurderMysteryQuestSystem';
@@ -974,6 +989,8 @@ const HAZARD_SOUNDS_TO_STOP_ON_RESPAWN: readonly SoundId[] = [
   'gas_cloud',
   'grotesque_spider_slam_attack',
   'grotesque_spider_screech_attack',
+  // A broken gas bottle's fuse hiss.
+  'miasma_hiss',
 ];
 
 // Spider-lab arrow geometry
@@ -988,6 +1005,9 @@ const ARROW_VERTICAL_OFFSET_TILES = 1.5;
 
 /** Offset from a tile's origin to its centre, as a fraction of a tile. */
 const TILE_CENTRE_FRACTION = 0.5;
+
+/** A per-frame record the scene owns and rewrites in place rather than rebuilding. */
+type Mutable<T> = { -readonly [K in keyof T]: T[K] };
 /** Inside this many tiles the pinned-objective arrow is suppressed — it is on screen. */
 const PINNED_ARROW_SUPPRESS_TILES = 4;
 /** Gold, matching the pinned Journal row it belongs to. */
@@ -1038,6 +1058,9 @@ function splitChestLoot(loot: LootDrop): { humanLoot: LootDrop; catLoot: LootDro
     catLoot: { coins: halfCoins + (humanGetsExtraCoin ? 0 : extraCoin), items: catItems },
   };
 }
+
+/** How far off screen, in tiles, an objective beacon's beam can still reach into view. */
+const BEACON_VIEW_REACH_TILES = 6;
 
 /** Picks a potion type for a chest using the relative rarity weights. */
 function rollChestPotion(): ItemId {
@@ -1168,6 +1191,12 @@ export class DungeonScene extends GameplayScene {
   private arenaRoom: ArenaRoomSystem;
   private barriers: BarrierSystem;
   private defendQuest: DefendQuestSystem;
+  /** Light and dark on floors 1 and 2; null on every other map. */
+  private readonly dungeonLighting: DungeonLightingSystem | null;
+  /** Beds, positional loops and distant one-shots on floors 1 and 2; null elsewhere. */
+  private readonly dungeonAmbience: DungeonAmbienceSystem | null;
+  /** Drips, splashes, critters, flies, motes and paper on floors 1 and 2; null elsewhere. */
+  private readonly dungeonLife: DungeonLifeSystem | null;
   /** The Structure menu over a boarded grate, for a crawler who can spike it. */
   private readonly grateSpikes: GrateSpikesMenu;
   /** Whether the current world touch came down on a structure, making it a long-press rather than a walk. */
@@ -1967,6 +1996,15 @@ export class DungeonScene extends GameplayScene {
     this.combat.mobLoop.registerHazardSource(this.clownGas);
     this.combat.mobLoop.registerHazardSource(this.fairyFireballs);
     this.combat.mobLoop.registerHazardSource(this.lavaBalls);
+    // Burning oil is floor anyone can step out of, so both sides steer clear of it.
+    this.companion.registerHazardSource(this.destruction.destructibles);
+    this.combat.mobLoop.registerHazardSource(this.destruction.destructibles);
+    this.destruction.destructibles.setFlameSources([
+      this.destruction.dynamite,
+      this.fairyFireballs,
+      this.lavaBalls,
+      this.combat.spells,
+    ]);
     if (this.trees !== null) this.combat.mobLoop.registerHazardSource(this.trees);
 
     if (tutorialController !== null) {
@@ -2551,6 +2589,9 @@ export class DungeonScene extends GameplayScene {
     bindCraftLevelUps({ bus: this.bus, menus: this.menus, audio: this.audio });
     this.cat.setAbilityManager(this.abilityManager);
     this.human.setAbilityManager(this.abilityManager);
+    this.dungeonLighting = this.buildDungeonLighting(levelDef);
+    this.dungeonLife = this.buildDungeonLife();
+    this.dungeonAmbience = this.buildDungeonAmbience(this.dungeonLife);
 
     // Re-apply cheat overlays carried in from the previous scene. God mode is an
     // overlay on top of base stats and so is never present in a snapshot — an
@@ -3560,6 +3601,7 @@ export class DungeonScene extends GameplayScene {
     // Ambient loops are positional, so they always die with the scene — unlike
     // music, which may deliberately survive a building round-trip.
     this.ambientSound?.dispose();
+    this.dungeonAmbience?.dispose();
     this.bopca.dispose();
     this.menus.dispose();
     if (!this.musicPersistsAcrossExit) this.audio?.stopMusic();
@@ -3578,6 +3620,7 @@ export class DungeonScene extends GameplayScene {
     this.circusAmbience?.dispose();
     this.fairies.dispose();
     this.fairyFireballs.dispose();
+    this.dungeonLighting?.dispose();
     // Drops any standing order along with the hazard sources that were meant to
     // steer around it. Both name systems this scene is taking with it.
     this.companion.dispose();
@@ -3893,6 +3936,34 @@ export class DungeonScene extends GameplayScene {
     return !this._trackerEntries.some(
       (entry) => entry.status === 'active' && !pinMatchesEntry(BOUNTY_TRACKER_ID, entry),
     );
+  }
+
+  /**
+   * Whether {@link renderObjectiveBeacons} would draw anything in the view at
+   * (`camX`, `camY`): a beacon's beam rises well above its tile, so one a few
+   * tiles off screen still counts.
+   */
+  private hasObjectiveBeacons(camX: number, camY: number): boolean {
+    if (this.gameOver || this.menus.pauseMenu.isOpen) return false;
+    const reach = TILE_SIZE * BEACON_VIEW_REACH_TILES;
+    const inView = (tileX: number, tileY: number): boolean => {
+      const x = tileX * TILE_SIZE;
+      const y = tileY * TILE_SIZE;
+      return (
+        x >= camX - reach &&
+        x <= camX + viewportWidth() + reach &&
+        y >= camY - reach &&
+        y <= camY + viewportHeight() + reach
+      );
+    };
+    const pinned = this.pinnedObjectiveTile;
+    if (pinned !== null && pinned.wearsOwnMarker !== true && inView(pinned.x, pinned.y)) {
+      return true;
+    }
+    for (const target of availableTargets(this._trackerEntries)) {
+      if (target.wearsOwnMarker !== true && inView(target.x, target.y)) return true;
+    }
+    return false;
   }
 
   /**
@@ -4683,6 +4754,11 @@ export class DungeonScene extends GameplayScene {
     this.recall.restoreCheckpoint(world.recall);
     this.treasureChests.restoreCheckpoint(world.treasureChests);
     this.destruction.restoreCheckpoint(world.destruction);
+    // The room comes back as it was saved, not broken over again in front of the player.
+    this.dungeonLighting?.settleCarriedLights();
+    this.dungeonAmbience?.markDirty();
+    this.dungeonLife?.clearSurprises();
+    this.dungeonLife?.rescan();
     this.bopca.restoreCheckpoint(world.bopca);
     this.difficultyTelemetry.restoreCheckpoint(world.difficultyTelemetry);
     this.mercenarySystem.restoreCheckpoint(world.mercenary);
@@ -6895,6 +6971,11 @@ export class DungeonScene extends GameplayScene {
     if (this.menus.pauseMenu.isOpen) this.gathering?.harvest.stopAll();
     // The village is not ticked under either, so its loops would play on unattended.
     if (this.menus.pauseMenu.isOpen || this.gameOver) this.briarHollowKit?.silenceLoops();
+    // Gameplay stops ticking the soundscape under all three end screens, so its
+    // loops would hold their last volume behind the screen until it closed.
+    const endScreenShowing =
+      this.gameOver || this.levelCompleteScreen.isActive || this.runCompleteScreen.isActive;
+    if (endScreenShowing) this.dungeonAmbience?.silence();
 
     // Town keeps living through citizen chats and other overlay dialogs — only a
     // hard stop (game over, the pause menu, or a level- or run-complete screen)
@@ -6959,6 +7040,223 @@ export class DungeonScene extends GameplayScene {
     }
 
     this.updateGameplay();
+  }
+
+  /**
+   * The lighting pass for floors 1 and 2, or null for any other map: one
+   * with no room characters has no lighting profiles to light it by.
+   */
+  private buildDungeonLighting(levelDef: LevelDef): DungeonLightingSystem | null {
+    if (levelDef.groundTheme === undefined) return null;
+    if (this.gameMap.regionCharacters.roomAssignments().length === 0) return null;
+    const lighting = new DungeonLightingSystem({
+      gameMap: this.gameMap,
+      now: () => performance.now(),
+      additiveGlows: () => renderQuality.fullDetail,
+    });
+    for (const sconce of this.defendQuest.sconceLights()) {
+      lighting.registerStaticLight({
+        tileX: sconce.tileX,
+        tileY: sconce.tileY,
+        kind: 'wall_sconce',
+        centre: { x: sconce.centreX, y: sconce.centreY },
+      });
+    }
+    registerBossRoomMoodLights(
+      lighting,
+      this.gameMap,
+      levelDef.bossRooms?.map((b) => b.type) ?? [],
+    );
+    lighting.addDynamicLightSource(
+      partyLightSource({
+        crawlers: () => this.lightedCrawlers(),
+        companions: () => this.lightedCompanions(),
+        crawlerReachTiles: (base) => lighting.crawlerReachTiles(base),
+      }),
+    );
+    lighting.addDynamicLightSource(this.cat);
+    lighting.addDynamicLightSource(this.destruction.dynamite);
+    lighting.addDynamicLightSource(this.fairyFireballs);
+    lighting.addDynamicLightSource(this.lavaBalls);
+    lighting.addDynamicLightSource(this.knightMissiles);
+    lighting.addDynamicLightSource(this.skeletonShots);
+    lighting.addDynamicLightSource(this.combat.spells);
+    lighting.addDynamicLightSource(this.destruction.destructibles);
+    lighting.addDynamicLightSource({
+      collectLights: (sink) => {
+        for (const mob of this.world.roster.mobs) {
+          if (mob instanceof BrindleGrub) mob.collectLights(sink);
+        }
+      },
+    });
+    return lighting;
+  }
+
+  /**
+   * The small moving things for floors 1 and 2, or null for any other map:
+   * like the lighting, they are dressing for a floor dressed by room
+   * characters.
+   */
+  private buildDungeonLife(): DungeonLifeSystem | null {
+    if (this.levelDef.groundTheme === undefined) return null;
+    if (this.gameMap.regionCharacters.roomAssignments().length === 0) return null;
+    const life = new DungeonLifeSystem({
+      gameMap: this.gameMap,
+      floor: dungeonFloorTheme().id,
+      puddles: floorSurfaceOf(this.gameMap.structure) ?? null,
+      lights: this.dungeonLighting,
+      fullDetail: () => renderQuality.fullDetail,
+      raiseCue: (cue, x, y, volume) => this.dungeonAmbience?.playAt(cue, x, y, volume),
+      wreckage: () => this.destruction.destructibles.wreckage,
+    });
+    this.destruction.destructibles.setSurpriseSink((x, y) => {
+      // The critters are left out whenever full detail is off — at the
+      // performance preset, or once auto has downgraded — so nothing bursts then.
+      if (!renderQuality.fullDetail) return false;
+      life.scatterSurprise(x, y);
+      return true;
+    });
+    return life;
+  }
+
+  /** The soundscape for floors 1 and 2; null wherever there is no dungeon life. */
+  private buildDungeonAmbience(life: DungeonLifeSystem | null): DungeonAmbienceSystem | null {
+    if (life === null) return null;
+    const lighting = this.dungeonLighting;
+    return new DungeonAmbienceSystem({
+      gameMap: this.gameMap,
+      audio: this.audio,
+      floor: dungeonFloorTheme().id,
+      lights: lighting === null ? null : () => lighting.staticLightTiles(),
+      puddles: { tiles: life.puddles },
+      onDrip: (tileX, tileY, volume) => life.spawnDrip(tileX, tileY, volume),
+      wreckage: () => this.destruction.destructibles.wreckage,
+    });
+  }
+
+  /** Ticks the floor's small moving things and its soundscape, after this frame's breaks. */
+  private updateDungeonLife(active: HumanPlayer | CatPlayer): void {
+    const life = this.dungeonLife;
+    if (life === null) return;
+    const party = this._lifeParty;
+    party.length = 0;
+    party.push(this.human, this.cat);
+    const mongo = this.mongoSystem.mongo;
+    if (mongo?.isAlive === true) party.push(mongo);
+    const hireling = this.mercenarySystem.activeMerc;
+    if (hireling !== null) party.push(hireling);
+    const camera = this.camera();
+    const lifeFrame = this._lifeFrame;
+    lifeFrame.others = this.world.roster.mobs;
+    lifeFrame.camX = camera.x;
+    lifeFrame.camY = camera.y;
+    lifeFrame.viewW = viewportWidth();
+    lifeFrame.viewH = viewportHeight();
+    life.update(lifeFrame);
+    const ambienceFrame = this._ambienceFrame;
+    ambienceFrame.listenerX = active.x + TILE_SIZE * TILE_CENTRE_FRACTION;
+    ambienceFrame.listenerY = active.y + TILE_SIZE * TILE_CENTRE_FRACTION;
+    ambienceFrame.inSafeRoom = this.safeRoom.isEntityInSafeRoom(active);
+    ambienceFrame.bossFight = this.bossRoom.anyLocked;
+    this.dungeonAmbience?.update(ambienceFrame);
+  }
+
+  private readonly _lifeParty: Walker[] = [];
+  /** Reused every frame rather than rebuilt, like the party list it carries. */
+  private readonly _lifeFrame: Mutable<LifeFrame> = {
+    party: this._lifeParty,
+    others: [],
+    camX: 0,
+    camY: 0,
+    viewW: 0,
+    viewH: 0,
+  };
+  private readonly _ambienceFrame: Mutable<AmbienceFrame> = {
+    listenerX: 0,
+    listenerY: 0,
+    inSafeRoom: false,
+    bossFight: false,
+  };
+
+  /** Mongo and the hireling, standing or down, for the party's lights. */
+  private lightedCompanions(): ReadonlyArray<PartyCompanion> {
+    const companions = this._lightedCompanions;
+    companions.length = 0;
+    const mongo = this.mongoSystem.mongo;
+    if (mongo?.isAlive === true) companions.push({ x: mongo.x, y: mongo.y, downed: false });
+    const standing = this.mercenarySystem.activeMerc;
+    if (standing !== null) companions.push({ x: standing.x, y: standing.y, downed: false });
+    const downed = this.mercenarySystem.downedMerc;
+    if (downed !== null) companions.push({ x: downed.x, y: downed.y, downed: true });
+    return companions;
+  }
+
+  private readonly _lightedCompanions: PartyCompanion[] = [];
+
+  /** Refilled rather than rebuilt: the lighting asks for it every frame. */
+  private lightedCrawlers(): ReadonlyArray<HumanPlayer | CatPlayer> {
+    const crawlers = this._lightedCrawlers;
+    crawlers.length = 0;
+    crawlers.push(this.human, this.cat);
+    return crawlers;
+  }
+
+  private readonly _lightedCrawlers: (HumanPlayer | CatPlayer)[] = [];
+
+  /**
+   * What the darkness pass draws back over the dark this frame: the objective
+   * beacons and the floor warnings, set before each use rather than captured
+   * in a fresh closure.
+   */
+  private readonly overDarknessPainter: OverDarknessPainter & {
+    rc: RenderContext | null;
+    beacons: boolean;
+    warnings: boolean;
+  } = {
+    rc: null,
+    beacons: false,
+    warnings: false,
+    paintOverDarkness: (target) => {
+      const rc = this.overDarknessPainter.rc;
+      if (rc === null) return;
+      if (this.overDarknessPainter.beacons) this.renderObjectiveBeacons(target, rc.camX, rc.camY);
+      if (this.overDarknessPainter.warnings) this.renderPipeline.renderGroundWarnings(target, rc);
+    },
+  };
+
+  /** Whether the light hung at a tile is shining this instant; every light is, unlit by this pass. */
+  private readonly lightShining = (tileX: number, tileY: number): boolean =>
+    this.dungeonLighting?.isShiningAt(tileX, tileY) ?? true;
+
+  /**
+   * The darkness, then everything the dark must never hide drawn back over
+   * it: floor warnings and objective beacons restored to full strength where
+   * the dark dimmed them, eye-shine,
+   * and the chrome the entity pass held back. The flying gore goes under it,
+   * so a dark room's blood is as dim as the room.
+   */
+  private renderDungeonDarkness(ctx: CanvasRenderingContext2D, rc: RenderContext): void {
+    const lighting = this.dungeonLighting;
+    if (lighting === null) return;
+    const { camX, camY } = rc;
+    const viewW = viewportWidth();
+    const viewH = viewportHeight();
+    this.renderPipeline.renderFlyingGore(ctx, rc);
+    // The fog's clear disc follows the active crawler's Night Vision; the
+    // dark follows the same crawler, so the two never disagree.
+    lighting.setNightVisionLevel(rc.active.skills.getLevel('night_vision'));
+    lighting.render(ctx, camX, camY, viewW, viewH);
+    const warnings = this.renderPipeline.hasGroundWarnings(rc);
+    const beacons = this.hasObjectiveBeacons(camX, camY);
+    if (warnings || beacons) {
+      const painter = this.overDarknessPainter;
+      painter.rc = rc;
+      painter.beacons = beacons;
+      painter.warnings = warnings;
+      lighting.renderOverDarkness(ctx, this.sceneManager.renderScale, painter);
+    }
+    lighting.renderEyeShine(ctx, camX, camY, viewW, viewH, this.world.roster.mobs);
+    flushAboveDarkness(ctx);
   }
 
   render(ctx: CanvasRenderingContext2D): void {
@@ -7028,9 +7326,12 @@ export class DungeonScene extends GameplayScene {
       mercenarySystem: this.mercenarySystem,
       crawlerBarks: this.crawlerBarks,
       speechBubblePulse: this.speechBubblePulse,
+      goreUnderDarkness: this.dungeonLighting !== null,
+      lightShining: this.lightShining,
     };
 
     this.renderPipeline.renderWorld(ctx, rc);
+    this.dungeonLife?.renderGround(ctx, camX, camY, viewportWidth(), viewportHeight());
     // Straight after the floor, ahead of every quest system's own props, so a
     // clue scene or a grate stands in front of the light marking it.
     this.renderObjectiveBeacons(ctx, camX, camY);
@@ -7049,12 +7350,16 @@ export class DungeonScene extends GameplayScene {
       spider.renderGroundTelegraphs(ctx, camX, camY);
     }
 
+    if (this.dungeonLighting !== null) beginAboveDarkness(this.dungeonLighting.darknessAtWorld);
     this.renderPipeline.renderEntities(ctx, rc);
     for (const spider of this.grotesqueSpiders) {
       spider.renderAboveEntities(ctx, camX, camY, [this.human, this.cat]);
     }
     this.murderQuest.renderWellClueOverlay(ctx, camX, camY, this.active());
     this.spiderQuest.renderLifeMachinesForeground(ctx, camX, camY, this.active());
+    this.dungeonLife?.renderAir(ctx, camX, camY, viewportWidth(), viewportHeight());
+    // Over every body and under every warning, health bar and label.
+    this.renderDungeonDarkness(ctx, rc);
     // Over every body in the lab and under every warning: the dark her roars
     // bring down, with her telegraphs, puddles and eggs drawn back over it.
     this.spiderQuest.renderLabDarkness(ctx, camX, camY, this.active());
@@ -8126,7 +8431,14 @@ export class DungeonScene extends GameplayScene {
     this.knightMissiles.update(ctx);
     this.trees?.update(ctx);
     this.destruction.update(ctx);
-    this.destruction.drainAudioCues(this.audio);
+    // After every system that can smash a lamp or a sconce this frame, so a
+    // light broken now goes dark on the frame it breaks rather than the next.
+    this.dungeonLighting?.update();
+    if (this.destruction.drainAudioCues(this.audio)) {
+      this.dungeonAmbience?.markDirty();
+      this.dungeonLife?.rescan();
+    }
+    this.updateDungeonLife(ctx.active);
     playFairySystemCues(this.fairies.takeCues(), this.audio);
     playFairyFireballCues(this.fairyFireballs.takeCues(), this.audio);
     playFrostCues([this.human, this.cat], this.audio);

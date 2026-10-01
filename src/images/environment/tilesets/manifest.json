@@ -204,6 +204,18 @@
         "frameCount": 16,
         "patchTiles": 2,
         "label": "Cellar rubble wall"
+      },
+      "f1_earth": {
+        "row": 5,
+        "frameCount": 16,
+        "patchTiles": 2,
+        "label": "Cellar packed earth"
+      },
+      "f1_herringbone": {
+        "row": 6,
+        "frameCount": 32,
+        "patchTiles": 4,
+        "label": "Cellar herringbone brick"
       }
     }
   },
@@ -243,6 +255,18 @@
         "frameCount": 32,
         "patchTiles": 4,
         "label": "Painted blockwork wall"
+      },
+      "f2_grating": {
+        "row": 5,
+        "frameCount": 32,
+        "patchTiles": 4,
+        "label": "Steel bar grating panels"
+      },
+      "f2_rubber": {
+        "row": 6,
+        "frameCount": 32,
+        "patchTiles": 4,
+        "label": "Ribbed rubber matting"
       }
     }
   },

@@ -4120,6 +4120,16 @@ export function fairyChestOffset(pose: FairyPose): Pt {
 }
 
 /**
+ * Where a fairy's eyes sit for a pose, relative to the tile centre, in tiles:
+ * the middle of the pair on the face, following the head's tilt and the
+ * body's drift and bob.
+ */
+export function fairyEyeOffset(pose: FairyPose): Pt {
+  const head = headCentre(pose);
+  return { x: pose.drift + head.x, y: pelvisY(pose) + head.y + EYE_Y };
+}
+
+/**
  * The highest point a pose paints, in tiles about the tile centre (+Y down):
  * the top of the tallest of the kind's headwear and its four wings, before
  * any outline. Measured from the painter's own geometry — the headwear's

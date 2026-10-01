@@ -44,8 +44,7 @@ import type { BriarHollowStateSnapshot } from './briarHollowState';
  * is spread across thirty-odd owners that each know their own invariants.
  *
  * A field is nullable exactly when its system is optional on the floor — trees
- * and destructible props only exist on the overworld, bounties only where Shady
- * is.
+ * only grow on the overworld, bounties only exist where Shady is.
  */
 export interface WorldCheckpoint {
   gameMap: GameMapCheckpoint;

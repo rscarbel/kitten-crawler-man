@@ -215,6 +215,29 @@ class RenderQualityController {
     return this.loadingCover;
   }
 
+  /**
+   * Whether optional per-frame scenery work — additive light glows, ambient
+   * critters, flies, motes, glints — should run, read live so a preset change
+   * mid-floor takes effect on the next frame.
+   *
+   * Keyed off the player's preset rather than the render scale: `sharp` on a
+   * 1× display resolves to the same scale as `performance`, yet the player
+   * asked for the richer picture and nothing says the machine is slow. Nor does
+   * it follow `SpriteLoader`'s display-ratio rule, which picks a sheet's pixel
+   * density — a question about the screen. This is a question about the frame
+   * budget, which only the preset and `auto`'s measurement answer.
+   */
+  get fullDetail(): boolean {
+    switch (settings.quality) {
+      case 'performance':
+        return false;
+      case 'sharp':
+        return true;
+      case 'auto':
+        return !this.downgraded;
+    }
+  }
+
   /** Ends {@link beginLoadingCover}; the next frame of play is measured normally. */
   endLoadingCover(): void {
     this.loadingCover = false;
@@ -334,14 +357,11 @@ class RenderQualityController {
  * Whether a sample of frame intervals is slow enough to be worth giving up
  * density for: the p95 interval past an absolute stutter threshold.
  *
- * This was measured against the display's own refresh rate, estimated from
- * the samples, at one point. That was implemented and then removed, because
- * it cannot do any work here. The estimate has to be capped at 60 Hz —
- * otherwise a machine pinned at half rate takes its own failure as the target
- * and always passes — and once capped, `estimate × tolerance` is never greater
- * than the absolute threshold, so the display-relative test can never be the
- * binding one. Leaving it in would have been arithmetic that reads as a
- * safeguard while deciding nothing.
+ * There is deliberately no test relative to the display's own refresh rate.
+ * Any such estimate would have to be capped at 60 Hz — otherwise a machine
+ * pinned at half rate takes its own failure as the target and always passes —
+ * and once capped, `estimate × tolerance` is never greater than the absolute
+ * threshold, so a display-relative test could never be the binding one.
  *
  * Judging against an absolute threshold is also the safer rule on the evidence:
  * floor 3 measures identically at 1× and 2×, so a 120 Hz machine held to

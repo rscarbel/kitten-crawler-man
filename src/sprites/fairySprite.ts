@@ -1,5 +1,11 @@
 import { progressFrameIndex, timeFrameIndex } from '../core/SpriteRenderer';
-import { type FairyView, type Pt, fairyChestOffset, fairyPaintedTopY } from './art/fairyArt';
+import {
+  type FairyView,
+  type Pt,
+  fairyChestOffset,
+  fairyEyeOffset,
+  fairyPaintedTopY,
+} from './art/fairyArt';
 import { FAIRY_VIEWS, fairyFigureOf, fairyPoseOf, fairyStateName } from './art/fairyFigure';
 import {
   type FairyKind,
@@ -121,6 +127,30 @@ export function fairyChestPoint(
     x: sx + tileSize * (TILE_CENTRE_FRACTION + mirroredX),
     y: sy + tileSize * (TILE_CENTRE_FRACTION + chest.y),
   };
+}
+
+/**
+ * Where the eyes of a fairy drawn by `drawFairySprite` with the same arguments
+ * are, in the same space as (sx, sy), written into `out` — or false, leaving
+ * `out` alone, when the fairy is seen from behind and shows no face.
+ */
+export function fairyEyePoint(
+  kind: FairyKind,
+  sx: number,
+  sy: number,
+  tileSize: number,
+  state: FairySpriteState,
+  out: { x: number; y: number },
+): boolean {
+  const { facingX = 0, facingY = 1, row = 'hover' } = state;
+  const view = viewFor(facingX, facingY);
+  if (view === 'away') return false;
+  const frame = frameFor(kind, fairyStateName(row, view), row, state);
+  const eyes = fairyEyeOffset(fairyPoseOf(kind, row, frame));
+  const mirroredX = view === 'side' && facingX < 0 ? -eyes.x : eyes.x;
+  out.x = sx + tileSize * (TILE_CENTRE_FRACTION + mirroredX);
+  out.y = sy + tileSize * (TILE_CENTRE_FRACTION + eyes.y);
+  return true;
 }
 
 const paintedCrowns = new Map<FairyKind, number>();

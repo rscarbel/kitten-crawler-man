@@ -342,6 +342,11 @@ export class ClownGasSystem implements GameSystem, GroundHazardSource {
   }
 
   /** The clouds, drawn under creatures so the party walks in front of them. */
+  /** Whether {@link renderGround} has anything to draw this frame. */
+  get hasGroundArt(): boolean {
+    return this.clouds.length > 0;
+  }
+
   renderGround(ctx: CanvasRenderingContext2D, camX: number, camY: number): void {
     for (const cloud of this.clouds) {
       const elapsed = CLOUD_FRAMES - cloud.tick;

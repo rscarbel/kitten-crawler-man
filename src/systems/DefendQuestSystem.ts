@@ -34,11 +34,14 @@ import {
   drawGrateLurkers,
   drawNurseryBarrier,
   drawNurseryTorch,
-  drawNurseryTorchLight,
   drawNurseryWoodPile,
   WOOD_PILE_TOP_RISE_TILES,
 } from '../sprites/nurserySprites';
-import { BARRIER_DAMAGE_STAGES, BARRIER_PLANK_COUNT } from '../sprites/art/nurseryArt';
+import {
+  BARRIER_DAMAGE_STAGES,
+  BARRIER_PLANK_COUNT,
+  TORCH_FLAME_ROOT,
+} from '../sprites/art/nurseryArt';
 import { drawText, measureTextWidth, TEXT_PRESETS } from '../ui/TextBox';
 import { drawFittedTitle } from '../ui/QuestBanners';
 import { beginMenuFocus, drawButton, endMenuFocus, BUTTON_PRESETS } from '../ui/Button';
@@ -1687,7 +1690,7 @@ export class DefendQuestSystem implements GameSystem {
   }
 
   /**
-   * The room itself — torchlight, what stirs under the open grates, the wood
+   * The room itself — the sconce flames, what stirs under the open grates, the wood
    * pile, the boards — and the goblin mother. Drawn under every body.
    */
   renderObjects(
@@ -1799,7 +1802,26 @@ export class DefendQuestSystem implements GameSystem {
     }
   }
 
-  /** Torch sconces on the north wall and the warm pools of light they throw across the floor. */
+  /**
+   * The nursery's wall sconces, each with the centre of the pool of light it
+   * throws in world pixels, for the dungeon's lighting pass to light. The
+   * flames themselves are drawn here, with the room.
+   */
+  sconceLights(): ReadonlyArray<{
+    tileX: number;
+    tileY: number;
+    centreX: number;
+    centreY: number;
+  }> {
+    return this.nurseryTorchTiles().map((tile) => ({
+      tileX: tile.x,
+      tileY: tile.y,
+      centreX: (tile.x + TORCH_FLAME_ROOT.x) * TILE_SIZE,
+      centreY: (tile.y + TORCH_FLAME_ROOT.y + 1) * TILE_SIZE,
+    }));
+  }
+
+  /** Torch sconces on the north wall, and what stirs under the open grates. */
   private renderRoomAmbience(
     ctx: CanvasRenderingContext2D,
     camX: number,
@@ -1807,21 +1829,7 @@ export class DefendQuestSystem implements GameSystem {
     nowMs: number,
   ): void {
     if (!this.roomData) return;
-    const torches = this.nurseryTorchTiles();
-    ctx.save();
-    ctx.globalCompositeOperation = 'lighter';
-    torches.forEach((tile, index) => {
-      drawNurseryTorchLight(
-        ctx,
-        tile.x * TILE_SIZE - camX,
-        tile.y * TILE_SIZE - camY,
-        TILE_SIZE,
-        nowMs,
-        index * TORCH_SEED_STRIDE,
-      );
-    });
-    ctx.restore();
-    torches.forEach((tile, index) => {
+    this.nurseryTorchTiles().forEach((tile, index) => {
       drawNurseryTorch(
         ctx,
         tile.x * TILE_SIZE - camX,

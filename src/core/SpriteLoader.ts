@@ -16,6 +16,8 @@ import environmentSpiderLabManifest from '../images/environment/spider_lab/manif
 import environmentOverCityManifest from '../images/environment/towns/over_city/manifest.json';
 import interfacesManifest from '../images/interfaces/manifest.json';
 import environmentColosseumManifest from '../images/environment/colosseum/manifest.json';
+import environmentServiceLevelManifest from '../images/environment/service_level/manifest.json';
+import environmentCellarPropsManifest from '../images/environment/cellar_props/manifest.json';
 import { TILE_SIZE } from './constants';
 import { ASSET_GROUPS, type AssetGroup } from './assetGroups';
 import { settings } from './Settings';
@@ -61,6 +63,12 @@ const environmentManifest = {
   // Ball of Swine's Iron Colosseum: its portcullis, cages, crowd and banners,
   // painted at floor load, in its own directory for the same reason.
   ...environmentColosseumManifest,
+  // Floor 2's service-level furniture: lockers, cabinets, the boiler. Y-sorted
+  // tile props that reach above their tiles, painted at floor load.
+  ...environmentServiceLevelManifest,
+  // Floor 1's cellar furniture: casks, racks, the sarcophagus. Y-sorted tile
+  // props that reach above their tiles, painted at floor load.
+  ...environmentCellarPropsManifest,
 } as const;
 
 const manifestJson = {

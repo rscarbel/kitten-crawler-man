@@ -3,7 +3,7 @@
  * `GroundPalette` names — `ground_overworld` for the town, `ground_floor1` and
  * `ground_floor2` for the two dungeon floors, `ground_dungeon` for a safe room.
  *
- * Six passes, in this order:
+ * Seven passes, in this order:
  *
  *  1. **Base** — the material's frame for this tile (see `groundFrameIndex`).
  *  2. **Fringe** — where materials meet, the boundary between them is drawn
@@ -17,7 +17,10 @@
  *  5. **World noise** — a low-frequency brightness field sampled in *world*
  *     space. Per-tile seamlessness does not fix large-scale repetition: without
  *     this, a field of perfectly-matching tiles still reads as blocks.
- *  6. **Ambient occlusion** — soft shading where ground meets a wall, building
+ *  6. **Floor surface** — on a dungeon level, each room's floor feature, the
+ *     hallway decals, and a polished lift along the routes people walk with a
+ *     dusty wash where nobody does; see `drawFloorSurface`.
+ *  7. **Ambient occlusion** — soft shading where ground meets a wall, building
  *     or ruin, so nothing looks pasted onto the lawn. A town building is one
  *     anchor tile on the grid, so this reads the sprite manifest's footprints
  *     rather than tile types alone — see `underSpriteArt`.
@@ -59,7 +62,10 @@ import {
   type TileOffset,
 } from '../../core/SpriteLoader';
 import { allocCanvas, surfaceContext, type CanvasSurface } from '../../core/canvasSurface';
+import { isFaceMountedSign } from '../dungeon/wallShape';
 import { inferFloorType } from './helpers';
+import { floorSurfaceOf } from '../dungeon/floorSurface';
+import { drawFloorSurface } from './floorWearArt';
 import type { GroundPalette } from '../ground/GroundPalette';
 import {
   CORNER_NE,
@@ -73,6 +79,7 @@ import {
 } from '../ground/groundFrames';
 import { positiveMod } from '../../utils';
 import { floorArtSubSeed, GROUND_TONE_SALT, GROUND_VARIANT_SALT } from '../ground/floorArtSeed';
+import { UINT32_SPAN } from '../../core/WorldRandom';
 
 export interface ResolvedMaterial {
   readonly def: SpriteDef;
@@ -119,7 +126,15 @@ function inferenceMemo(
   return memo;
 }
 
-/** The material at a map position, or undefined off-map or on non-ground tiles. */
+/**
+ * The material at a map position, or undefined off-map or on non-ground tiles.
+ *
+ * A dressed dungeon room or hallway is laid in its character's material, which
+ * the map's `FloorSurface` holds; everywhere else the tile type decides. The
+ * surface is asked only for a material this palette actually paints, so a safe
+ * room drawn through the station's palette, or a map with no surface at all,
+ * keeps resolving through its tile types.
+ */
 function groundMaterialAt(
   palette: GroundPalette,
   structure: TileContent[][],
@@ -129,6 +144,8 @@ function groundMaterialAt(
   if (ty < 0 || ty >= structure.length) return undefined;
   const row = structure[ty];
   if (tx < 0 || tx >= row.length) return undefined;
+  const laid = floorSurfaceOf(structure)?.materialAt(tx, ty) ?? null;
+  if (laid !== null && Object.prototype.hasOwnProperty.call(palette.blendOrder, laid)) return laid;
   return palette.materialForTileType(row[tx].type);
 }
 
@@ -168,7 +185,7 @@ function hasDeclaredGround(
  * cardinal neighbour it finds and that probe starts to the south, so anything on
  * the south edge of a region renders as whatever lies outside it.
  */
-function groundMaterialUnder(
+export function groundMaterialUnder(
   palette: GroundPalette,
   structure: TileContent[][],
   tx: number,
@@ -1125,7 +1142,6 @@ const LATTICE_HASH_Y = 1597334677;
 const LATTICE_HASH_MIX = 2246822519;
 /** Breaks the hash's fixed point at the origin — see `latticeValue`. */
 const LATTICE_HASH_OFFSET = 0x9e3779b9;
-const UINT32_SCALE = 4294967296;
 
 /**
  * Hashed lattice value in 0..1.
@@ -1141,7 +1157,7 @@ function latticeValue(ix: number, iy: number, cells: number, seed: number): numb
   let h =
     (Math.imul(x, LATTICE_HASH_X) ^ Math.imul(y, LATTICE_HASH_Y)) + LATTICE_HASH_OFFSET + seed;
   h = Math.imul(h ^ (h >>> 15), LATTICE_HASH_MIX);
-  return ((h ^ (h >>> 16)) >>> 0) / UINT32_SCALE;
+  return ((h ^ (h >>> 16)) >>> 0) / UINT32_SPAN;
 }
 
 function smoothFade(t: number): number {
@@ -1239,7 +1255,13 @@ function noiseField(field: ToneField, cell: number): CanvasSurface {
   return built;
 }
 
-function applyWorldNoise(
+/**
+ * The world-space tone layer. Exported for painters that draw their own tile
+ * rather than a ground material: anything drawn beside the ground has to take the
+ * same broad light and shade, or it sits at a flat brightness while the floor in
+ * front of it is modulated and reads as pasted on.
+ */
+export function applyWorldNoise(
   ctx: CanvasRenderingContext2D,
   sx: number,
   sy: number,
@@ -1313,19 +1335,74 @@ const OCCLUSION_SOUTH_ALPHA = 0.14;
 /** How far a band fades in at an end that no neighbouring band continues. */
 const OCCLUSION_TAPER_PX = 11;
 
-interface OcclusionSide {
-  /** Direction from the shaded tile to the occluder. */
-  readonly dx: number;
-  readonly dy: number;
+/**
+ * The same bands against a dungeon wall, which is drawn as a standing face with
+ * a sliver at its ends and a lit rim along its top. The face needs a real foot,
+ * so its band is deeper and darker; the sliver and the rim already draw the edge
+ * on their own side, so the bands beside and above them are lighter, or the
+ * contact shading would be drawn twice.
+ */
+const DUNGEON_WALL_OCCLUSION_NORTH_DEPTH_PX = 13;
+const DUNGEON_WALL_OCCLUSION_NORTH_ALPHA = 0.46;
+const DUNGEON_WALL_OCCLUSION_SIDE_DEPTH_PX = 5;
+const DUNGEON_WALL_OCCLUSION_SIDE_ALPHA = 0.16;
+const DUNGEON_WALL_OCCLUSION_SOUTH_DEPTH_PX = 3;
+const DUNGEON_WALL_OCCLUSION_SOUTH_ALPHA = 0.1;
+
+interface OcclusionStrength {
   readonly depthPx: number;
   readonly alpha: number;
 }
 
+interface OcclusionSide extends OcclusionStrength {
+  /** Direction from the shaded tile to the occluder. */
+  readonly dx: number;
+  readonly dy: number;
+  /** The band against a dungeon wall instead. */
+  readonly dungeonWall: OcclusionStrength;
+}
+
 const OCCLUSION_SIDES: ReadonlyArray<OcclusionSide> = [
-  { dx: 0, dy: -1, depthPx: OCCLUSION_NORTH_DEPTH_PX, alpha: OCCLUSION_NORTH_ALPHA },
-  { dx: -1, dy: 0, depthPx: OCCLUSION_SIDE_DEPTH_PX, alpha: OCCLUSION_SIDE_ALPHA },
-  { dx: 1, dy: 0, depthPx: OCCLUSION_SIDE_DEPTH_PX, alpha: OCCLUSION_SIDE_ALPHA },
-  { dx: 0, dy: 1, depthPx: OCCLUSION_SOUTH_DEPTH_PX, alpha: OCCLUSION_SOUTH_ALPHA },
+  {
+    dx: 0,
+    dy: -1,
+    depthPx: OCCLUSION_NORTH_DEPTH_PX,
+    alpha: OCCLUSION_NORTH_ALPHA,
+    dungeonWall: {
+      depthPx: DUNGEON_WALL_OCCLUSION_NORTH_DEPTH_PX,
+      alpha: DUNGEON_WALL_OCCLUSION_NORTH_ALPHA,
+    },
+  },
+  {
+    dx: -1,
+    dy: 0,
+    depthPx: OCCLUSION_SIDE_DEPTH_PX,
+    alpha: OCCLUSION_SIDE_ALPHA,
+    dungeonWall: {
+      depthPx: DUNGEON_WALL_OCCLUSION_SIDE_DEPTH_PX,
+      alpha: DUNGEON_WALL_OCCLUSION_SIDE_ALPHA,
+    },
+  },
+  {
+    dx: 1,
+    dy: 0,
+    depthPx: OCCLUSION_SIDE_DEPTH_PX,
+    alpha: OCCLUSION_SIDE_ALPHA,
+    dungeonWall: {
+      depthPx: DUNGEON_WALL_OCCLUSION_SIDE_DEPTH_PX,
+      alpha: DUNGEON_WALL_OCCLUSION_SIDE_ALPHA,
+    },
+  },
+  {
+    dx: 0,
+    dy: 1,
+    depthPx: OCCLUSION_SOUTH_DEPTH_PX,
+    alpha: OCCLUSION_SOUTH_ALPHA,
+    dungeonWall: {
+      depthPx: DUNGEON_WALL_OCCLUSION_SOUTH_DEPTH_PX,
+      alpha: DUNGEON_WALL_OCCLUSION_SOUTH_ALPHA,
+    },
+  },
 ];
 
 /**
@@ -1411,6 +1488,9 @@ function occluderAt(structure: TileContent[][], tx: number, ty: number): boolean
   const row = structure[ty];
   if (tx < 0 || tx >= row.length) return false;
   if (GROUND_OCCLUDER_TYPES.has(row[tx].type)) return true;
+  // A sign hung on a dungeon wall face is drawn as that face, so it shades the
+  // floor at its foot like the face either side of it.
+  if (isFaceMountedSign(structure, tx, ty)) return true;
   return underSpriteArt(structure, tx, ty);
 }
 
@@ -1428,16 +1508,17 @@ const occlusionBands = new Map<string, CanvasSurface>();
  */
 function occlusionBand(
   side: OcclusionSide,
+  strength: OcclusionStrength,
   taperLow: boolean,
   taperHigh: boolean,
   ts: number,
 ): CanvasSurface {
-  const cacheKey = `${side.dx},${side.dy}|${taperLow ? 1 : 0}${taperHigh ? 1 : 0}|${ts}`;
+  const cacheKey = `${side.dx},${side.dy}|${strength.depthPx}|${strength.alpha}|${taperLow ? 1 : 0}${taperHigh ? 1 : 0}|${ts}`;
   const cached = occlusionBands.get(cacheKey);
   if (cached !== undefined) return cached;
 
   const runsHorizontally = side.dy !== 0;
-  const depth = Math.min(side.depthPx, ts);
+  const depth = Math.min(strength.depthPx, ts);
   const width = runsHorizontally ? ts : depth;
   const height = runsHorizontally ? depth : ts;
 
@@ -1452,7 +1533,7 @@ function occlusionBand(
     runsHorizontally ? 0 : towardsOccluder ? width : 0,
     runsHorizontally ? (towardsOccluder ? height : 0) : 0,
   );
-  shade.addColorStop(0, `rgba(0,0,0,${side.alpha})`);
+  shade.addColorStop(0, `rgba(0,0,0,${strength.alpha})`);
   shade.addColorStop(1, 'rgba(0,0,0,0)');
   bandCtx.fillStyle = shade;
   bandCtx.fillRect(0, 0, width, height);
@@ -1506,6 +1587,10 @@ function drawOcclusion(
 
   for (const side of OCCLUSION_SIDES) {
     if (!occluderAt(structure, tx + side.dx, ty + side.dy)) continue;
+    const againstDungeonWall =
+      structure[ty + side.dy]?.[tx + side.dx]?.type === FloorTypeValue.wall ||
+      isFaceMountedSign(structure, tx + side.dx, ty + side.dy);
+    const strength = againstDungeonWall ? side.dungeonWall : side;
     if (nearColosseum && isColosseumRingTile(structure, tx + side.dx, ty + side.dy)) continue;
 
     // The band runs along the axis the occluder is not on; it needs a taper at
@@ -1515,8 +1600,8 @@ function drawOcclusion(
     const continuesLow = occluderAt(structure, tx + side.dx - alongDX, ty + side.dy - alongDY);
     const continuesHigh = occluderAt(structure, tx + side.dx + alongDX, ty + side.dy + alongDY);
 
-    const band = occlusionBand(side, !continuesLow, !continuesHigh, ts);
-    const depth = Math.min(side.depthPx, ts);
+    const band = occlusionBand(side, strength, !continuesLow, !continuesHigh, ts);
+    const depth = Math.min(strength.depthPx, ts);
     ctx.drawImage(band, sx + (side.dx > 0 ? ts - depth : 0), sy + (side.dy > 0 ? ts - depth : 0));
   }
 }
@@ -1663,5 +1748,6 @@ export function drawGroundTile(
     drawScatter(ctx, palette, structure, material, sx, sy, ts, tx, ty);
   }
   applyWorldNoise(ctx, sx, sy, ts, tx, ty);
+  drawFloorSurface(ctx, structure, sx, sy, ts, tx, ty);
   drawOcclusion(ctx, structure, sx, sy, ts, tx, ty);
 }

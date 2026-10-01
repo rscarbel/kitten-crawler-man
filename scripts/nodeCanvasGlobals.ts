@@ -74,7 +74,15 @@ export function paintEnvironmentArtInNode(artSeed = DEFAULT_FLOOR_ART_SEED): voi
   // stall with an empty counter and never say why.
   // The boss rooms' dressing too: a room harness renders the floors those
   // rooms sit on, and without their sheets every prop in them draws nothing.
-  requestEnvironmentSheetsForGroups(['core', 'town', 'overworld', ...BOSS_ROOM_ASSET_GROUPS]);
+  requestEnvironmentSheetsForGroups([
+    'core',
+    'town',
+    'overworld',
+    'dungeon_common',
+    'floor1_tileset',
+    'floor2_tileset',
+    ...BOSS_ROOM_ASSET_GROUPS,
+  ]);
   paintEnvironmentArtNow();
 }
 

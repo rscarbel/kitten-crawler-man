@@ -1,6 +1,11 @@
+import { boneScatterVariant, propVariantIndex } from '../dungeon/propVariants';
+import { themedPropLookFrame, themedPropSpriteKey } from '../../sprites/breakablePropSprites';
+import { BRAZIER_FLAME_FRAMES, FLAME_FRAMES } from '../../sprites/art/destructiblePropArt';
 import type { FenceStyle, TileContent } from '../tileTypes';
 import { OVERLAY_FRAME_KEY_STRIDE, SPRITE_BUILDING_OVERLAY_FPS } from './overlayAnimation';
 import {
+  BONE_PILE,
+  SLUMPED_SKELETON,
   FloorTypeValue,
   TREE,
   FOUNTAIN,
@@ -73,7 +78,12 @@ import { drawTentPoleBaseTile } from './interiorTiles';
 import { drawRockDepositTile } from './rockDepositTiles';
 import { rockDamageState } from '../rockDamage';
 import { tileHash01 } from './hollowTileHash';
-import { BOARD_CENTRE_X, SIGN_ARROW_CENTRE_Y_TILES } from '../../sprites/art/crawlerSignArt';
+import {
+  BOARD_BOTTOM,
+  BOARD_CENTRE_X,
+  SIGN_ARROW_CENTRE_Y_TILES,
+} from '../../sprites/art/crawlerSignArt';
+import { isFaceMountedSign } from '../dungeon/wallShape';
 import { inferFloorType } from './helpers';
 import { drawTerrainTile } from './terrainTiles';
 import { drawGroundTile } from './groundTiles';
@@ -84,6 +94,9 @@ import { drawFountainTileSlice } from '../../sprites/fountainSprite';
 import { getSpriteDefByKey, getSpriteOverlayStatesByKey } from '../../core/SpriteLoader';
 import { frameTime } from '../../utils';
 import { drawCircusDecals } from './circusDecalTiles';
+import { drawServiceLevelTile } from './serviceLevelPropTiles';
+import { drawCellarPropTile } from './cellarPropTiles';
+import { UINT32_SPAN } from '../../core/WorldRandom';
 
 /** Number of broken-stone chunks drawn per RUBBLE tile. */
 const RUBBLE_CHUNK_COUNT = 4;
@@ -101,55 +114,18 @@ const RUBBLE_PATCH_RX_EXTRA = 3;
 const RUBBLE_CHUNK_MIN_SIZE = 3;
 const RUBBLE_CHUNK_SIZE_VARIANCE = 4;
 
-/**
- * Long-bone geometry (the femur/tibia shape), sized well under a tile so a
- * pile of them reads as scattered debris next to the player rather than
- * looming slabs. Two colors — a pale shaft and a darker joint cap — sell the
- * knobby bone-end silhouette better than a flat rectangle does.
- */
-const BONE_SHAFT_COLOR = '#d8d0b8';
-const BONE_SHAFT_SHADOW_COLOR = '#a89c7c';
-const BONE_JOINT_COLOR = '#c8c0a4';
-const BONE_OUTLINE_COLOR = '#6b6350';
-const BONE_SHADOW_COLOR = 'rgba(20,16,8,0.28)';
-const BONE_OUTLINE_WIDTH = 0.75;
-
-const BONE1_HALF_LENGTH = 6;
-const BONE1_SHAFT_HALF_WIDTH = 1.1;
-const BONE1_JOINT_RADIUS = 2.2;
-const BONE1_SHADOW_RX = 6.5;
-const BONE1_SHADOW_RY = 2.2;
-
-const BONE2_HALF_LENGTH = 4.5;
-const BONE2_SHAFT_HALF_WIDTH = 0.85;
-const BONE2_JOINT_RADIUS = 1.6;
-const BONE2_SHADOW_RX = 4.8;
-const BONE2_SHADOW_RY = 1.7;
-
-const BONE3_SHAFT_LENGTH = 5;
-const BONE3_SHAFT_HALF_WIDTH = 0.65;
-const BONE3_JOINT_RADIUS = 1;
-
-/**
- * How far a knuckle's twin lobes sit off the bone's own axis, and how big each
- * lobe is, relative to `jointRadius`. Two smaller offset lobes per end read as
- * a flared epiphysis; one centered circle per end reads as a ball-and-stick
- * joint instead.
- */
-const BONE_KNUCKLE_LOBE_OFFSET_FRAC = 0.55;
-const BONE_KNUCKLE_LOBE_RADIUS_FRAC = 0.72;
-
 /** Playback rate and frame count of the main tower's glow overlay. */
 const MAIN_TOWER_GLOW_FPS = 4;
 const MAIN_TOWER_GLOW_FRAMES = 4;
 
-/** Playback rate and frame count of a torch's flame loop, at either wear stage. */
+/**
+ * Playback rate of a torch's flame loop, at either wear stage. Its frame count
+ * is the sheet's own, shared with the service level's work lamp.
+ */
 const TORCH_FLAME_FPS = 8;
-const TORCH_FLAME_FRAMES = 6;
 
-/** Playback rate and frame count of a brazier's flame loop. */
+/** Playback rate of a brazier's flame loop; the frame count is the sheet's own. */
 const BRAZIER_FLAME_FPS = 10;
-const BRAZIER_FLAME_FRAMES = 4;
 
 /**
  * Which animation frame a decoration tile is currently drawing, as a single
@@ -1649,7 +1625,6 @@ const COVER_HASH_MIX_X = 2654435761;
 const COVER_HASH_MIX_Y = 2246822519;
 const COVER_HASH_MIX_INDEX = 3266489917;
 const COVER_HASH_FINAL_SHIFT = 15;
-const COVER_HASH_UINT32 = 0x100000000;
 
 /** Salts, so the same tile and element can draw several independent values. */
 const COVER_SALT_X = 1;
@@ -1663,7 +1638,7 @@ function coverHash01(tx: number, ty: number, index: number, salt: number): numbe
   const salted = position ^ Math.imul(index * COVER_SALT_STRIDE + salt, COVER_HASH_MIX_INDEX);
   const mixed = Math.imul(salted, COVER_HASH_MIX_X);
   const avalanched = mixed ^ (mixed >>> COVER_HASH_FINAL_SHIFT);
-  return (avalanched >>> 0) / COVER_HASH_UINT32;
+  return (avalanched >>> 0) / UINT32_SPAN;
 }
 
 /** Keeps element index and salt from aliasing onto each other. */
@@ -2060,57 +2035,10 @@ function drawCliffLedge(
   );
 }
 
-/**
- * A single scattered bone: a ground shadow, a shaft with a darker underside
- * stripe, and two rounded joint caps, all outlined so the shape reads clearly
- * against the floor tile beneath it instead of blending into a pale blob.
- */
-function drawLongBone(
-  ctx: CanvasRenderingContext2D,
-  cx: number,
-  cy: number,
-  angle: number,
-  halfLength: number,
-  shaftHalfWidth: number,
-  jointRadius: number,
-  shadowRx: number,
-  shadowRy: number,
-): void {
-  ctx.save();
-  ctx.fillStyle = BONE_SHADOW_COLOR;
-  ctx.beginPath();
-  ctx.ellipse(cx, cy + jointRadius * 0.6, shadowRx, shadowRy, angle, 0, Math.PI * 2);
-  ctx.fill();
-
-  ctx.translate(cx, cy);
-  ctx.rotate(angle);
-
-  ctx.lineWidth = BONE_OUTLINE_WIDTH;
-  ctx.strokeStyle = BONE_OUTLINE_COLOR;
-
-  ctx.fillStyle = BONE_SHAFT_COLOR;
-  ctx.fillRect(-halfLength, -shaftHalfWidth, halfLength * 2, shaftHalfWidth * 2);
-  ctx.strokeRect(-halfLength, -shaftHalfWidth, halfLength * 2, shaftHalfWidth * 2);
-
-  ctx.fillStyle = BONE_SHAFT_SHADOW_COLOR;
-  ctx.fillRect(-halfLength, shaftHalfWidth * 0.15, halfLength * 2, shaftHalfWidth * 0.5);
-
-  // Two smaller lobes per end, offset off-axis, flare wider than the shaft and
-  // read as a knuckle; a single centered circle just reads as a ball on a stick.
-  const lobeOffset = jointRadius * BONE_KNUCKLE_LOBE_OFFSET_FRAC;
-  const lobeRadius = jointRadius * BONE_KNUCKLE_LOBE_RADIUS_FRAC;
-  for (const endX of [-halfLength, halfLength]) {
-    ctx.fillStyle = BONE_JOINT_COLOR;
-    for (const lobeSide of [-1, 1]) {
-      ctx.beginPath();
-      ctx.arc(endX, lobeSide * lobeOffset, lobeRadius, 0, Math.PI * 2);
-      ctx.fill();
-      ctx.stroke();
-    }
-  }
-
-  ctx.restore();
-}
+const WALL_PLAQUE_SHADOW = 'rgba(0,0,0,0.4)';
+/** The shadow under a wall-hung sign, in tiles: inset from each side, and its depth down the face. */
+const WALL_PLAQUE_SHADOW_INSET = 0.06;
+const WALL_PLAQUE_SHADOW_DEPTH = 0.05;
 
 /** Where the arrow's pivot sits on the board, in tiles down from the sign tile's top edge. */
 const CRAWLER_SIGN_ARROW_PIVOT_Y_TILES = SIGN_ARROW_CENTRE_Y_TILES;
@@ -2127,6 +2055,8 @@ export function drawDecorationTile(
   ty: number,
   baseOnly = false,
 ): boolean {
+  if (drawServiceLevelTile(ctx, structure, type, sx, sy, ts, tx, ty, baseOnly)) return true;
+  if (drawCellarPropTile(ctx, structure, type, sx, sy, ts, tx, ty, baseOnly)) return true;
   if (baseOnly) {
     switch (type) {
       case TENT_POLE:
@@ -2180,7 +2110,8 @@ export function drawDecorationTile(
       case BARREL_SIDE:
       case CRATE:
       case BOOKSHELF:
-      case CRAWLER_SIGN:
+      case BONE_PILE:
+      case SLUMPED_SKELETON:
       // The garrison's and the inking shop's props. Without a case here the
       // chunk bake draws nothing under them and every one sits in a solid black
       // square — which is exactly what shipped for the boulders once already.
@@ -2202,6 +2133,19 @@ export function drawDecorationTile(
       case LAB_SHELF:
       case ROCK_DEPOSIT:
       case MODERN_DECORATION: {
+        const floorType = inferFloorType(structure, tx, ty);
+        if (!drawTerrainTile(ctx, structure, floorType, sx, sy, ts, tx, ty)) {
+          drawSpecialFloorTile(ctx, structure, floorType, sx, sy, ts, tx, ty);
+        }
+        return true;
+      }
+      // A sign in a pocket of north wall is hung on the face there, so the
+      // wall is drawn under it; anywhere else it stands on the floor.
+      case CRAWLER_SIGN: {
+        if (isFaceMountedSign(structure, tx, ty)) {
+          drawTerrainTile(ctx, structure, FloorTypeValue.wall, sx, sy, ts, tx, ty);
+          return true;
+        }
         const floorType = inferFloorType(structure, tx, ty);
         if (!drawTerrainTile(ctx, structure, floorType, sx, sy, ts, tx, ty)) {
           drawSpecialFloorTile(ctx, structure, floorType, sx, sy, ts, tx, ty);
@@ -2248,9 +2192,9 @@ export function drawDecorationTile(
     case TORCH: {
       drawSpriteKey(
         ctx,
-        'torch',
+        themedPropSpriteKey('torch', tx, ty),
         propSpriteState(structure[ty][tx].damageStage),
-        timeFrameIndex(frameTime, TORCH_FLAME_FPS, TORCH_FLAME_FRAMES),
+        timeFrameIndex(frameTime, TORCH_FLAME_FPS, FLAME_FRAMES),
         sx,
         sy,
         ts,
@@ -2270,7 +2214,7 @@ export function drawDecorationTile(
     case BRAZIER: {
       drawSpriteKey(
         ctx,
-        'brazier',
+        themedPropSpriteKey('brazier', tx, ty),
         propSpriteState(structure[ty][tx].damageStage),
         timeFrameIndex(frameTime, BRAZIER_FLAME_FPS, BRAZIER_FLAME_FRAMES),
         sx,
@@ -2286,9 +2230,9 @@ export function drawDecorationTile(
     case BARREL_SIDE: {
       drawSpriteKey(
         ctx,
-        'barrel_side',
+        themedPropSpriteKey('barrel_side', tx, ty),
         propSpriteState(structure[ty][tx].damageStage),
-        0,
+        themedPropLookFrame('barrel_side', tx, ty),
         sx,
         sy,
         ts,
@@ -2298,13 +2242,52 @@ export function drawDecorationTile(
 
     // Wooden crate — sprite only; see BARREL_SIDE above.
     case CRATE: {
-      drawSpriteKey(ctx, 'crate', propSpriteState(structure[ty][tx].damageStage), 0, sx, sy, ts);
+      drawSpriteKey(
+        ctx,
+        themedPropSpriteKey('crate', tx, ty),
+        propSpriteState(structure[ty][tx].damageStage),
+        themedPropLookFrame('crate', tx, ty),
+        sx,
+        sy,
+        ts,
+      );
+      return true;
+    }
+
+    // The dead: sprite only, the floor under them drawn by the baseOnly pass.
+    case BONE_PILE:
+    case SLUMPED_SKELETON: {
+      drawSpriteKey(
+        ctx,
+        type === BONE_PILE ? 'bone_pile' : 'slumped_skeleton',
+        propSpriteState(structure[ty][tx].damageStage),
+        propVariantIndex(tx, ty),
+        sx,
+        sy,
+        ts,
+      );
       return true;
     }
 
     case CRAWLER_SIGN: {
       const arrowAngle = structure[ty][tx].crawlerSignArrowAngle;
       if (arrowAngle === undefined) return false;
+      const onFace = isFaceMountedSign(structure, tx, ty);
+      ctx.save();
+      if (onFace) {
+        // Hung on the wall: the board alone, its posts cut away, and the small
+        // shadow it throws on the face below it.
+        ctx.fillStyle = WALL_PLAQUE_SHADOW;
+        ctx.fillRect(
+          sx + ts * WALL_PLAQUE_SHADOW_INSET,
+          sy + ts * BOARD_BOTTOM,
+          ts * (1 - 2 * WALL_PLAQUE_SHADOW_INSET),
+          ts * WALL_PLAQUE_SHADOW_DEPTH,
+        );
+        ctx.beginPath();
+        ctx.rect(sx, sy, ts, ts * BOARD_BOTTOM);
+        ctx.clip();
+      }
       drawSpriteKey(ctx, 'crawler_sign', 'board', 0, sx, sy, ts);
       drawSpriteKey(
         ctx,
@@ -2316,65 +2299,17 @@ export function drawDecorationTile(
         ts,
         { rotation: arrowAngle },
       );
+      ctx.restore();
       return true;
     }
 
-    // Bones pile — walkable, procedural scattered bones drawn over floor
+    // Scattered bones: walkable floor dressing, baked with the floor under it.
     case BONES: {
       const bonesFloor = inferFloorType(structure, tx, ty);
       if (!drawTerrainTile(ctx, structure, bonesFloor, sx, sy, ts, tx, ty)) {
         drawSpecialFloorTile(ctx, structure, bonesFloor, sx, sy, ts, tx, ty);
       }
-      // Deterministic layout per tile position
-      const bh1 = (tx * 37 + ty * 23) % 97;
-      const bh2 = (tx * 61 + ty * 47) % 89;
-
-      const b1x = sx + 6 + (bh1 % (ts - 12));
-      const b1y = sy + 8 + (bh2 % (ts - 14));
-      const b1a = (bh1 % 6) * 0.5;
-      drawLongBone(
-        ctx,
-        b1x,
-        b1y,
-        b1a,
-        BONE1_HALF_LENGTH,
-        BONE1_SHAFT_HALF_WIDTH,
-        BONE1_JOINT_RADIUS,
-        BONE1_SHADOW_RX,
-        BONE1_SHADOW_RY,
-      );
-
-      // Second, smaller bone, rotated opposite so the pile doesn't read as one repeated tile.
-      const b2x = sx + 10 + (bh2 % (ts - 12));
-      const b2y = sy + 16 + (bh1 % (ts - 18));
-      const b2a = b1a + 1.1;
-      drawLongBone(
-        ctx,
-        b2x,
-        b2y,
-        b2a,
-        BONE2_HALF_LENGTH,
-        BONE2_SHAFT_HALF_WIDTH,
-        BONE2_JOINT_RADIUS,
-        BONE2_SHADOW_RX,
-        BONE2_SHADOW_RY,
-      );
-
-      // Small bone fragment / rib shard
-      const b3x = sx + 14 + (bh1 % (ts - 20));
-      const b3y = sy + 22 + (bh2 % (ts - 24));
-      const b3a = bh2 * 0.15;
-      drawLongBone(
-        ctx,
-        b3x,
-        b3y,
-        b3a,
-        BONE3_SHAFT_LENGTH / 2,
-        BONE3_SHAFT_HALF_WIDTH,
-        BONE3_JOINT_RADIUS,
-        BONE3_SHAFT_LENGTH * 0.7,
-        BONE2_SHADOW_RY * 0.6,
-      );
+      drawSpriteKey(ctx, 'bone_scatter', 'idle', boneScatterVariant(tx, ty), sx, sy, ts);
       return true;
     }
 

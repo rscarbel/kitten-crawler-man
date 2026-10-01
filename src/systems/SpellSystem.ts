@@ -30,6 +30,7 @@ import {
 } from '../sprites/art/protectiveShellFigure';
 import { viewportWidth, viewportHeight } from '../core/Viewport';
 import { standByForShellCast } from '../creatures/humanGestures';
+import type { DynamicLightSink } from './lighting/dynamicLights';
 
 interface ActiveShell {
   x: number;
@@ -207,6 +208,18 @@ export class SpellSystem implements GameSystem {
   private shellOwner: HumanPlayer | null = null;
   private catMiniShell: MiniShell | null = null;
   private chainLightningBolts: ChainLightningBolt[] = [];
+
+  /** A chain-lightning arc lights the room at its middle as it crackles and fades. */
+  collectLights(sink: DynamicLightSink): void {
+    for (const bolt of this.chainLightningBolts) {
+      sink.add(
+        (bolt.fromX + bolt.toX) / 2,
+        (bolt.fromY + bolt.toY) / 2,
+        'lightning',
+        bolt.framesLeft / CHAIN_LIGHTNING_FRAMES,
+      );
+    }
+  }
   private shockwaveRipples: ShockwaveRipple[] = [];
 
   /** Touch XP pending drain by DungeonScene (1 per unique mob pushed). */

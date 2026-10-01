@@ -1,0 +1,240 @@
+{
+  "gas_cylinder": {
+    "frameWidth": 96,
+    "frameHeight": 144,
+    "tileX": 16,
+    "tileY": 64,
+    "tileScale": 64,
+    "states": {
+      "idle": {
+        "row": 0,
+        "frameCount": 3
+      },
+      "damaged": {
+        "row": 1,
+        "frameCount": 3
+      },
+      "shatter": {
+        "row": 2,
+        "frameCount": 6
+      },
+      "remains": {
+        "row": 3,
+        "frameCount": 1
+      }
+    }
+  },
+  "locker_bank": {
+    "frameWidth": 96,
+    "frameHeight": 144,
+    "tileX": 16,
+    "tileY": 64,
+    "tileScale": 64,
+    "states": {
+      "idle": {
+        "row": 0,
+        "frameCount": 3
+      },
+      "damaged": {
+        "row": 1,
+        "frameCount": 3
+      },
+      "shatter": {
+        "row": 2,
+        "frameCount": 6
+      },
+      "remains": {
+        "row": 3,
+        "frameCount": 1
+      }
+    }
+  },
+  "filing_cabinet": {
+    "frameWidth": 96,
+    "frameHeight": 144,
+    "tileX": 16,
+    "tileY": 64,
+    "tileScale": 64,
+    "states": {
+      "idle": {
+        "row": 0,
+        "frameCount": 3
+      },
+      "damaged": {
+        "row": 1,
+        "frameCount": 3
+      },
+      "shatter": {
+        "row": 2,
+        "frameCount": 6
+      },
+      "remains": {
+        "row": 3,
+        "frameCount": 1
+      }
+    }
+  },
+  "mop_bucket": {
+    "frameWidth": 96,
+    "frameHeight": 144,
+    "tileX": 16,
+    "tileY": 64,
+    "tileScale": 64,
+    "states": {
+      "idle": {
+        "row": 0,
+        "frameCount": 3
+      },
+      "damaged": {
+        "row": 1,
+        "frameCount": 3
+      },
+      "shatter": {
+        "row": 2,
+        "frameCount": 6
+      },
+      "remains": {
+        "row": 3,
+        "frameCount": 1
+      },
+      "skid": {
+        "row": 4,
+        "frameCount": 4
+      }
+    }
+  },
+  "pallet_stack": {
+    "frameWidth": 96,
+    "frameHeight": 96,
+    "tileX": 16,
+    "tileY": 16,
+    "tileScale": 64,
+    "states": {
+      "idle": {
+        "row": 0,
+        "frameCount": 3
+      },
+      "damaged": {
+        "row": 1,
+        "frameCount": 3
+      },
+      "shatter": {
+        "row": 2,
+        "frameCount": 6
+      },
+      "remains": {
+        "row": 3,
+        "frameCount": 1
+      }
+    }
+  },
+  "vending_machine": {
+    "frameWidth": 96,
+    "frameHeight": 144,
+    "tileX": 16,
+    "tileY": 64,
+    "tileScale": 64,
+    "states": {
+      "idle": {
+        "row": 0,
+        "frameCount": 3
+      },
+      "damaged": {
+        "row": 1,
+        "frameCount": 3
+      },
+      "shatter": {
+        "row": 2,
+        "frameCount": 6
+      },
+      "remains": {
+        "row": 3,
+        "frameCount": 1
+      }
+    }
+  },
+  "service_desk": {
+    "frameWidth": 160,
+    "frameHeight": 144,
+    "tileX": 16,
+    "tileY": 64,
+    "tileScale": 64,
+    "states": {
+      "idle": {
+        "row": 0,
+        "frameCount": 3
+      },
+      "damaged": {
+        "row": 1,
+        "frameCount": 3
+      },
+      "shatter": {
+        "row": 2,
+        "frameCount": 6
+      },
+      "remains": {
+        "row": 3,
+        "frameCount": 1
+      }
+    }
+  },
+  "locker_bench": {
+    "frameWidth": 160,
+    "frameHeight": 144,
+    "tileX": 16,
+    "tileY": 64,
+    "tileScale": 64,
+    "states": {
+      "idle": {
+        "row": 0,
+        "frameCount": 3
+      },
+      "damaged": {
+        "row": 1,
+        "frameCount": 3
+      },
+      "shatter": {
+        "row": 2,
+        "frameCount": 6
+      },
+      "remains": {
+        "row": 3,
+        "frameCount": 1
+      }
+    }
+  },
+  "boiler": {
+    "frameWidth": 160,
+    "frameHeight": 208,
+    "tileX": 16,
+    "tileY": 128,
+    "tileScale": 64,
+    "states": {
+      "idle": {
+        "row": 0,
+        "frameCount": 4
+      }
+    }
+  },
+  "service_decals": {
+    "frameWidth": 64,
+    "frameHeight": 64,
+    "tileX": 0,
+    "tileY": 0,
+    "tileScale": 64,
+    "states": {
+      "cable": {
+        "row": 0,
+        "frameCount": 3
+      },
+      "paper": {
+        "row": 1,
+        "frameCount": 3
+      },
+      "towel": {
+        "row": 2,
+        "frameCount": 3
+      }
+    }
+  }
+}

@@ -52,6 +52,8 @@ import {
 } from '../src/sprites/figure/figureFrameCache.js';
 import { fairyCrownBelowTileTopTiles, fairySpriteStatesOf } from '../src/sprites/fairySprite.js';
 import { HP_BAR_HEIGHT, HP_BAR_Y_OFFSET } from '../src/Player.js';
+import { FLOOR1_GROUND } from '../src/map/dungeon/floor1Materials.js';
+import { FLOOR2_GROUND } from '../src/map/dungeon/floor2Materials.js';
 
 const CHANNELS = 4;
 const ALPHA_OFFSET = 3;
@@ -354,8 +356,8 @@ const FLOORS: readonly {
   readonly color: readonly [number, number, number];
 }[] = [
   { name: 'dungeon', color: rgbOf('#191720') },
-  { name: 'flagstone', color: rgbOf('#7e7463') },
-  { name: 'terrazzo', color: rgbOf('#b1b3b0') },
+  { name: 'flagstone', color: rgbOf(FLOOR1_GROUND.fallbackColor.f1_flagstone) },
+  { name: 'terrazzo', color: rgbOf(FLOOR2_GROUND.fallbackColor.f2_terrazzo) },
 ];
 const DARKEST_FLOOR = FLOORS[0];
 const PALEST_FLOOR = FLOORS[FLOORS.length - 1];

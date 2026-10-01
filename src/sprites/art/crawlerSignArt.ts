@@ -33,7 +33,8 @@ const SHADOW_COLOR = 'rgba(0, 0, 0, 0.38)';
 const BOARD_LEFT = 0.03;
 const BOARD_RIGHT = 0.97;
 const BOARD_TOP = 0.02;
-const BOARD_BOTTOM = 0.76;
+/** Where the board ends and the posts show below it; a sign hung on a wall face is cut off here. */
+export const BOARD_BOTTOM = 0.76;
 const BOARD_CORNER = 0.03;
 const RIM_WIDTH = 0.03;
 const OUTLINE_WIDTH = 0.02;

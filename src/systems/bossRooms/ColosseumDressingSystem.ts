@@ -35,6 +35,8 @@ import type { SystemContext } from '../GameSystem';
 import type { CheckpointedDressing, DressingRenderable } from './BossRoomDressing';
 import { stampProps, type TilePoint } from './bossRoomLayout';
 import { InertBossRoomDressing } from './InertBossRoomDressing';
+import { colosseumFloodLamps, type FloodLamp } from './bossRoomMoodLights';
+import { drawFloodLamp } from '../../sprites/art/moodLightArt';
 
 const FRAMES_PER_SECOND = 60;
 const HALF = 0.5;
@@ -247,6 +249,7 @@ export class ColosseumDressingSystem
   private preSeal: ColosseumDressingCheckpoint | null = null;
   private readonly portcullisRenderable: DressingRenderable;
   private readonly renderables: DressingRenderable[] = [];
+  private readonly floodLamps: readonly FloodLamp[];
 
   constructor(
     readonly gameMap: GameMap,
@@ -269,6 +272,7 @@ export class ColosseumDressingSystem
       y: (centre.y + patch.reduce((sum, tile) => sum + tile.y, 0) / patch.length) * TILE_SIZE,
     }));
     this.layout = colosseumLayoutAt(gameMap.structure, centre.x, centre.y);
+    this.floodLamps = colosseumFloodLamps(centre, gameMap.structure);
     this.cages = (this.layout?.cages ?? []).map((cage, index) => ({
       index,
       angle: cage.angle,
@@ -612,6 +616,7 @@ export class ColosseumDressingSystem
   override renderGround(ctx: CanvasRenderingContext2D, camX: number, camY: number): void {
     this.drawDecals(ctx, camX, camY);
     this.drawBanners(ctx, camX, camY);
+    this.drawFloodLamps(ctx, camX, camY);
     this.drawCages(ctx, camX, camY);
     this.drawWave(ctx, camX, camY);
   }
@@ -699,6 +704,13 @@ export class ColosseumDressingSystem
         TILE_SIZE,
       );
     });
+  }
+
+  private drawFloodLamps(ctx: CanvasRenderingContext2D, camX: number, camY: number): void {
+    for (const lamp of this.floodLamps) {
+      if (!this.onScreen(lamp.x, lamp.y, camX, camY)) continue;
+      drawFloodLamp(ctx, lamp.x - camX, lamp.y - camY, lamp.aim);
+    }
   }
 
   private drawCages(ctx: CanvasRenderingContext2D, camX: number, camY: number): void {

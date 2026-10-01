@@ -1,5 +1,5 @@
 import type { Player } from '../Player';
-import { Mob } from './Mob';
+import { Mob, type EyePlacement } from './Mob';
 import type { LootDrop } from './Mob';
 import { maybeDropSkillBook } from './skillBookDrop';
 import type { TacticsTrait } from './tactics/tacticsTraits';
@@ -34,7 +34,20 @@ const ENGAGE_RANGE_FRACTION = 1.15;
 const FIRST_BITE_WINDUP_FRAMES = 10;
 const RAT_TACTICS: readonly TacticsTrait[] = ['flank'];
 
+/** Where its eyes sit, for eye-shine in the dark. Low to the ground, the head well forward of the body. */
+const RAT_EYES: EyePlacement = {
+  sideForward: 0.36,
+  sideHeight: 0.5,
+  sideSpacing: 0.04,
+  frontHeight: 0.33,
+  frontSpacing: 0.1,
+};
+
 export class Rat extends Mob {
+  protected override get eyePlacement(): EyePlacement {
+    return RAT_EYES;
+  }
+
   /** The row the last body paint drew, for whatever a subclass hangs over the art. */
   protected drawnRow: DrawnFigureRow | undefined;
 

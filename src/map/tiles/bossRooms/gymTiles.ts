@@ -8,6 +8,7 @@ import {
 } from '../../../sprites/gymRoomSprites';
 import { gymLayoutOf, type GymLayout, type GymWallRun } from './gymLayout';
 import { gymRackFill, gymSquatRackLoaded } from './gymPropState';
+import { UINT32_SPAN } from '../../../core/WorldRandom';
 
 /**
  * Paints the boss-room tile types of the Juicer's gym. Returns false for any other type.
@@ -62,11 +63,10 @@ const HASH_SHIFT_A = 15;
 const HASH_SHIFT_B = 13;
 const HASH_MIX_A = 0x85ebca6b;
 const HASH_MIX_B = 0xc2b2ae35;
-const HASH_RANGE = 0x100000000;
 
 /** A stable float in [0, 1) for a tile and salt. */
 function tileRandom(tx: number, ty: number, salt: number): number {
-  return tileHash(tx, ty, salt) / HASH_RANGE;
+  return tileHash(tx, ty, salt) / UINT32_SPAN;
 }
 
 const inRect = (
@@ -420,7 +420,7 @@ const MIRROR_SHEEN_FAINT = 'rgba(255,255,255,0.1)';
 const MIRROR_FRAME = '#2a2f36';
 const MIRROR_FRAME_LIGHT = '#c8d0d8';
 const MIRROR_FRAME_PX = 2;
-/** Glass inset from the wall tile's outer edge: the frame's own depth. */
+/** Glass inset from the top of the wall tile it hangs on. */
 const MIRROR_BACK_INSET_PX = 6;
 /** World pixels between sheen streaks, so the streaks run on unbroken across tile seams. */
 const MIRROR_SHEEN_PERIOD_PX = 70;
@@ -439,9 +439,9 @@ const HANDPRINT_FINGER_REACH_PX = 5;
 const HANDPRINT_FINGERS = 4;
 
 /**
- * Dresses a wall tile of the gym: the mirror along the wall opposite the
- * doorway, the whiteboard on another. Called by the wall painter after the
- * masonry; does nothing for any wall outside the gym.
+ * Dresses a wall tile of the gym: the mirror and the whiteboard along its north
+ * wall. Called by the wall painter, only on tiles
+ * that show a face; does nothing for any wall outside the gym.
  */
 export function drawGymWallDressing(
   ctx: CanvasRenderingContext2D,
@@ -477,24 +477,11 @@ function drawMirrorTile(
   ty: number,
   index: number,
 ): void {
-  // The mirror wall is opposite the doorway, so the room lies back toward the
-  // door; the glass hangs on that face and the frame's depth is behind it.
-  const roomSide = { dx: -layout.inward.dx, dy: -layout.inward.dy };
-  let gx = sx;
-  let gy = sy;
-  let gw = ts;
-  let gh = ts;
-  if (roomSide.dy > 0) {
-    gy = sy + MIRROR_BACK_INSET_PX;
-    gh = ts - MIRROR_BACK_INSET_PX;
-  } else if (roomSide.dy < 0) {
-    gh = ts - MIRROR_BACK_INSET_PX;
-  } else if (roomSide.dx > 0) {
-    gx = sx + MIRROR_BACK_INSET_PX;
-    gw = ts - MIRROR_BACK_INSET_PX;
-  } else {
-    gw = ts - MIRROR_BACK_INSET_PX;
-  }
+  // The mirror hangs on the north wall's face, below the face's top.
+  const gx = sx;
+  const gy = sy + MIRROR_BACK_INSET_PX;
+  const gw = ts;
+  const gh = ts - MIRROR_BACK_INSET_PX;
   const glass = ctx.createLinearGradient(gx, gy, gx + gw, gy + gh);
   glass.addColorStop(0, MIRROR_GLASS_TOP);
   glass.addColorStop(1, MIRROR_GLASS_BOTTOM);

@@ -32,8 +32,10 @@ export type Floor2Material = SpriteStates[typeof GROUND_SHEET_KEY];
  * through the corner masks.
  *
  * Ordered by what was installed on top of what. The slab was poured first, the
- * vinyl and terrazzo were laid on it during fit-out, and the checker plate was
- * bolted down last.
+ * vinyl and terrazzo were laid on it during fit-out, and the checker plate,
+ * the grating and the rubber matting were put down last. The last two never
+ * actually blend — see `HARD_EDGE_MATERIALS` — so their order only decides
+ * which side of a doorway draws the joint.
  *
  * `f2_wall` is listed only because the `satisfies` check requires an order for
  * every material on the sheet. Nothing reads it: a wall is never a fringe
@@ -46,7 +48,9 @@ const GROUND_BLEND_ORDER = {
   f2_vinyl: 1,
   f2_terrazzo: 2,
   f2_plate: 3,
-  f2_wall: 4,
+  f2_grating: 4,
+  f2_rubber: 5,
+  f2_wall: 6,
 } as const satisfies Record<Floor2Material, number>;
 
 /**
@@ -61,9 +65,11 @@ const GROUND_BLEND_ORDER = {
 const GROUND_FALLBACK_COLOR = {
   f2_concrete: '#848a91',
   f2_vinyl: '#526456',
-  f2_terrazzo: '#b1b3b0',
+  f2_terrazzo: '#babcb8',
   f2_plate: '#666f7b',
   f2_wall: '#313835',
+  f2_grating: '#636971',
+  f2_rubber: '#54565b',
 } as const satisfies Record<Floor2Material, string>;
 
 /**
@@ -78,7 +84,20 @@ const GROUND_SPILL = {
   f2_terrazzo: null,
   f2_plate: null,
   f2_wall: null,
+  f2_grating: null,
+  f2_rubber: null,
 } as const satisfies Record<Floor2Material, GroundSpill | null>;
+
+/**
+ * A grating panel and a rubber mat are units dropped into a room, with straight
+ * factory edges: where one meets the slab at a doorway the joint runs along the
+ * tile edge rather than wandering through the corner masks, which would read as
+ * the steel or the rubber having melted into the concrete.
+ */
+const HARD_EDGE_MATERIALS: ReadonlySet<string> = new Set<Floor2Material>([
+  'f2_grating',
+  'f2_rubber',
+]);
 
 /**
  * Kerbs are a street feature — a raised lip holding a verge off the paving —
@@ -129,6 +148,7 @@ export const FLOOR2_GROUND: GroundPalette = {
   spill: GROUND_SPILL,
   kerbedMaterials: KERBED_MATERIALS,
   kerbSoftMaterials: KERB_SOFT_MATERIALS,
+  hardEdgeMaterials: HARD_EDGE_MATERIALS,
   fringeStandIn: FRINGE_STAND_IN_MATERIAL,
   materialForTileType: floor2MaterialForTileType,
 };

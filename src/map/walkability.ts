@@ -79,7 +79,14 @@ import {
   ROCK_DEPOSIT,
   CIRCUS_STRUCTURE_TALL,
   CIRCUS_STRUCTURE_LOW,
+  BONE_PILE,
+  SLUMPED_SKELETON,
 } from './tileTypes';
+import {
+  SERVICE_SIGHT_TRANSPARENT_TILE_TYPES,
+  SERVICE_SOLID_TILE_TYPES,
+} from './serviceLevelProps';
+import { CELLAR_SIGHT_TRANSPARENT_TILE_TYPES, CELLAR_SOLID_TILE_TYPES } from './cellarProps';
 
 /** Tile types that cannot be walked on. Everything not listed here is walkable. */
 const NON_WALKABLE_TILE_TYPES: readonly number[] = [
@@ -199,6 +206,16 @@ const NON_WALKABLE_TILE_TYPES: readonly number[] = [
   // the ground every circus fight is fought on.
   CIRCUS_STRUCTURE_TALL,
   CIRCUS_STRUCTURE_LOW,
+  // The service level's furniture, anchors and the parts their anchors draw.
+  // Its cable, paper and towel decals are absent: they are floor clutter.
+  ...SERVICE_SOLID_TILE_TYPES,
+  // The cellars' furniture. Its straw, candles and fungus are absent: each is
+  // floor dressing a crawler walks through.
+  ...CELLAR_SOLID_TILE_TYPES,
+  // The dead: a heap of bones and a skeleton sitting against a wall. The walkable
+  // scatter, `BONES`, is absent — it is floor dressing.
+  BONE_PILE,
+  SLUMPED_SKELETON,
 ];
 
 /**
@@ -219,6 +236,13 @@ const SIGHT_TRANSPARENT_TILE_TYPES: readonly number[] = [
   HOLLOW_PROP_LOW,
   // An arch post is a pole a crawler is seen past, and a wagon is waist high.
   CIRCUS_STRUCTURE_LOW,
+  // The service level's low furniture: a mop bucket, a desk, a gas bottle.
+  ...SERVICE_SIGHT_TRANSPARENT_TILE_TYPES,
+  // The cellars' low furniture: a cask, a table, a heap of rubble.
+  ...CELLAR_SIGHT_TRANSPARENT_TILE_TYPES,
+  // A knee-high heap of bones and a skeleton sitting on the floor.
+  BONE_PILE,
+  SLUMPED_SKELETON,
 ];
 
 /**

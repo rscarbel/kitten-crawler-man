@@ -21,6 +21,7 @@ import {
 } from '../../map/ground/floorArtSeed';
 import { BOSS_ROOM_ASSET_GROUPS, bossRoomSheetPlans } from './bossRoomSheets';
 import { campSheetPlans } from './campSheets';
+import { cellarPropSheetPlans } from './cellarPropSheets';
 import { circusSheetPlans } from './circusSheets';
 import { requestBuildingSheets } from '../buildinggen/runtimeBuildingSheets';
 import { clubFurnitureSheetPlans } from './clubFurnitureSheets';
@@ -28,7 +29,10 @@ import { destructiblePropSheetPlans } from './destructiblePropSheets';
 import { dungeonSignSheetPlans } from './dungeonSignSheets';
 import { overCitySheetPlans } from './overCitySheets';
 import { requestPropSheets } from './runtimePropSheets';
+import { floorTwoPropVariantSheetPlans } from './propVariantSheets';
+import { remainsSheetPlans } from './remainsSheets';
 import { rockSheetPlans } from './rockSheets';
+import { serviceFurnitureSheetPlans } from './serviceFurnitureSheets';
 import { TREE_READY_ROWS, treeSheetPlans } from './treeSheets';
 import { townscapeSheetPlans } from './townscapeSheets';
 import { villageSheetPlans } from './villageSheets';
@@ -78,6 +82,35 @@ export function requestEnvironmentSheetsForGroups(
     });
     requestPropSheets(dungeonSignSheetPlans(), {
       // The lettering is the same on every floor, so a repaint per floor buys nothing.
+      variesWithFloorSeed: false,
+      onSheetPainted,
+    });
+  }
+  if (wanted.has('dungeon_common')) {
+    requestPropSheets(remainsSheetPlans(), {
+      // A skull is the same skull on every floor; its looks are picked per tile.
+      variesWithFloorSeed: false,
+      onSheetPainted,
+    });
+  }
+  if (wanted.has('floor1_tileset')) {
+    requestPropSheets(cellarPropSheetPlans(), {
+      // A cask is the same cask on every run; its variants are picked per tile
+      // at draw time, so the sheet carries no floor seed.
+      variesWithFloorSeed: false,
+      onSheetPainted,
+    });
+  }
+  if (wanted.has('floor2_tileset')) {
+    requestPropSheets(floorTwoPropVariantSheetPlans(), {
+      // The steel drum and its kin stand in for the core props on this floor;
+      // their looks are picked per tile, so the sheets carry no floor seed.
+      variesWithFloorSeed: false,
+      onSheetPainted,
+    });
+    requestPropSheets(serviceFurnitureSheetPlans(), {
+      // A locker is the same locker on every run; its variants are picked per
+      // tile at draw time, so the sheet carries no floor seed.
       variesWithFloorSeed: false,
       onSheetPainted,
     });

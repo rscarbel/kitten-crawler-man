@@ -1,5 +1,6 @@
 import { platform } from '../core/Platform';
 import { keybindings } from '../core/Keybindings';
+import { deferAboveDarkness } from '../systems/lighting/aboveDarkness';
 
 // InteractionPrompt layout constants
 const BOB_PERIOD = 400;
@@ -91,6 +92,12 @@ export function drawInteractionPrompt(
   keyOverride?: string,
 ): void {
   if (_promptsSuppressed) return;
+  // A prompt raised from inside the entity pass waits for the dungeon's
+  // darkness to be drawn, so it is never dimmed by it.
+  const deferred = deferAboveDarkness((target) =>
+    drawInteractionPrompt(target, sx, sy, objW, label, keyOverride),
+  );
+  if (deferred) return;
   _promptsDrawnThisFrame++;
   const keyText =
     keyOverride ?? (platform.isMobile ? 'TAP' : keybindings.labelFor('attack').toUpperCase());

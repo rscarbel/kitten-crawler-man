@@ -38,6 +38,7 @@ import { DUNGEON_GROUND } from '../src/map/dungeon/groundMaterials.js';
 import { FLOOR1_GROUND, FLOOR1_WALL_MATERIAL } from '../src/map/dungeon/floor1Materials.js';
 import { FLOOR2_GROUND, FLOOR2_WALL_MATERIAL } from '../src/map/dungeon/floor2Materials.js';
 import { INTERIOR_WALL_MATERIAL, TOWN_INTERIOR_GROUND } from '../src/map/town/interiorMaterials.js';
+import { faceMeanLuminance } from '../src/sprites/art/dungeonWallArt.js';
 
 /**
  * How far a material's mean luminance may move from the reviewed art at seed 0,
@@ -65,12 +66,12 @@ export const CONTRAST_DRIFT_FACTOR = 1.3;
  * Least luminance difference a floor theme's wall must keep from each of its
  * floors, on the 0..255 scale.
  *
- * Separation, not ordering: a cellar wall is far darker than its floors, while a
- * shop's plaster is lighter than its boards. What must never happen is a wall
- * and the ground in front of it landing at the same brightness, which reads as
- * one continuous surface and makes a room unreadable. Enforced only by
- * convention until now; seeded variation is exactly what makes convention
- * insufficient.
+ * For a town interior it is separation, not ordering: a shop's plaster is
+ * lighter than its boards. What must never happen is a wall and the ground in
+ * front of it landing at the same brightness, which reads as one continuous
+ * surface and makes a room unreadable. For a dungeon floor it is measured
+ * against the wall face, which must be darker than every floor by at least this
+ * much (see `ThemeSeparation.faceLuminance`).
  */
 export const MIN_WALL_FLOOR_SEPARATION = 15;
 
@@ -95,6 +96,14 @@ interface ThemeSeparation {
   readonly name: string;
   readonly wall: string;
   readonly floors: ReadonlyArray<string>;
+  /**
+   * For a dungeon floor, the mean luminance of the wall face the player sees: a
+   * dungeon wall is drawn as a face, slivers and a wall top rather than as its
+   * flat material, and the face is what stands over the floor. It must be darker
+   * than every floor, not merely different, because a face as bright as the room
+   * below it swamps the room.
+   */
+  readonly faceLuminance?: number;
 }
 
 /**
@@ -112,11 +121,13 @@ const THEMES: ReadonlyArray<ThemeSeparation> = [
     name: 'cellars',
     wall: FLOOR1_WALL_MATERIAL,
     floors: floorsOf(FLOOR1_GROUND.blendOrder, FLOOR1_WALL_MATERIAL),
+    faceLuminance: faceMeanLuminance('cellars'),
   },
   {
     name: 'service_level',
     wall: FLOOR2_WALL_MATERIAL,
     floors: floorsOf(FLOOR2_GROUND.blendOrder, FLOOR2_WALL_MATERIAL),
+    faceLuminance: faceMeanLuminance('service_level'),
   },
   {
     name: 'town_interior',
@@ -329,6 +340,17 @@ export function judgeArtSeed(artSeed: number, baseline: SeedProfile): SeedVerdic
       const ground = profile.get(floor);
       if (ground === undefined) {
         failures.push(`${theme.name}: nothing was measured for its floor "${floor}"`);
+        continue;
+      }
+      if (theme.faceLuminance !== undefined) {
+        const faceBelowFloor = ground.meanLuminance - theme.faceLuminance;
+        tightestSeparation = Math.min(tightestSeparation, faceBelowFloor);
+        if (faceBelowFloor < MIN_WALL_FLOOR_SEPARATION) {
+          failures.push(
+            `${theme.name}: its wall face sits only ${faceBelowFloor.toFixed(1)} luminance ` +
+              `points below "${floor}" (minimum ${MIN_WALL_FLOOR_SEPARATION}, face darker)`,
+          );
+        }
         continue;
       }
       const separation = Math.abs(wall.meanLuminance - ground.meanLuminance);

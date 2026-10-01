@@ -56,6 +56,11 @@ import {
   type StatusVisualFrame,
 } from './sprites/status/statusEffectVisuals';
 import { allocCanvas, surfaceContext, type CanvasSurface } from './core/canvasSurface';
+import {
+  deferChrome,
+  type AboveDarknessDrawer,
+  type ChromePart,
+} from './systems/lighting/aboveDarkness';
 
 /**
  * Every stat a crawler carries — the single vocabulary the whole stat system
@@ -162,6 +167,7 @@ export type DamageSource =
       readonly hazard?:
         | 'burningTree'
         | 'lavaFlames'
+        | 'burningOil'
         | 'clownGas'
         | 'lichFirewall'
         | 'lichOrb'
@@ -395,7 +401,7 @@ const KO_FONT_REVIVING_FRACTION = 0.28;
 const KO_FONT_KO_FRACTION = 0.38;
 const KO_LABEL_Y_PADDING = 2;
 
-export abstract class Player {
+export abstract class Player implements AboveDarknessDrawer {
   x: number;
   y: number;
   isActive = false;
@@ -1924,7 +1930,40 @@ export abstract class Player {
     // would be repainted by their own body coat, wear the rim meant for the
     // character's outline, turn red under a hit flash, and be clipped to the
     // composite's box mid-plume.
-    this.drawWorldFeedback(ctx, sx, sy);
+    // Over the dungeon's darkness too: a burning or poisoned body is something
+    // the player has to read wherever it stands.
+    if (!deferChrome(this, 'worldFeedback', sx, sy)) this.drawWorldFeedback(ctx, sx, sy);
+  }
+
+  /**
+   * Draws a part of this character the entity pass held back for after the
+   * dungeon's darkness. A subclass with parts of its own handles those and
+   * passes the rest up.
+   */
+  drawAboveDarkness(
+    ctx: CanvasRenderingContext2D,
+    part: ChromePart,
+    sx: number,
+    sy: number,
+    _extra: number,
+  ): void {
+    switch (part) {
+      case 'worldFeedback':
+        this.drawWorldFeedback(ctx, sx, sy);
+        return;
+      case 'healthBar':
+        this.renderHealthBar(ctx, sx, sy);
+        return;
+      case 'knockedOut':
+        this.renderKnockedOutOverlay(ctx, sx, sy);
+        return;
+      case 'mobHealthBar':
+      case 'aggro':
+      case 'acidSpits':
+      case 'swineGroundTells':
+      case 'swineStoppedWarning':
+        return;
+    }
   }
 
   /** Depth of {@link paintBodyAt} calls in progress; above zero, `drawSelf` leaves its chrome off. */
@@ -2107,6 +2146,7 @@ export abstract class Player {
 
   protected renderHealthBar(ctx: CanvasRenderingContext2D, sx: number, sy: number) {
     if (this.paintingBodyOnly) return;
+    if (deferChrome(this, 'healthBar', sx, sy)) return;
     const barW = this.tileSize;
     const barH = HP_BAR_HEIGHT;
     const ratio = this.hp / this.maxHp;
@@ -2223,6 +2263,7 @@ export abstract class Player {
   /** Draws an unconscious overlay when this player is in the knocked-out state. */
   protected renderKnockedOutOverlay(ctx: CanvasRenderingContext2D, sx: number, sy: number): void {
     if (!this.isKnockedOut) return;
+    if (deferChrome(this, 'knockedOut', sx, sy)) return;
     const s = this.tileSize;
     const cx = sx + s / 2;
     const t = Date.now();

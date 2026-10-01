@@ -40,6 +40,8 @@ import { frameTime } from '../utils';
 import { drawInteractionPrompt } from '../ui/InteractionPrompt';
 import type { SystemContext } from './GameSystem';
 import { InertBossRoomDressing } from './bossRooms/InertBossRoomDressing';
+import { gymStripLights, type StripLight } from './bossRooms/bossRoomMoodLights';
+import { drawStripLight } from '../sprites/art/moodLightArt';
 import type { CheckpointedDressing, DressingRenderable } from './bossRooms/BossRoomDressing';
 import { stampProps, type TilePoint } from './bossRooms/bossRoomLayout';
 import { pushPlayerWithCollision } from './playerDisplacement';
@@ -175,6 +177,7 @@ export class JuicerRoomSystem
   implements CheckpointedDressing<JuicerRoomCheckpoint>
 {
   readonly layout: GymLayout | null;
+  private readonly stripLights: readonly StripLight[];
   private readonly racks: Rack[] = [];
   private readonly benches: Bench[] = [];
   private readonly squatRacks: SquatRack[] = [];
@@ -213,6 +216,7 @@ export class JuicerRoomSystem
     super();
     resetGymPropState();
     this.layout = gameMap === null ? null : gymLayoutOf(gameMap.structure);
+    this.stripLights = this.layout === null ? [] : gymStripLights(this.layout);
     const layout = this.layout;
     if (gameMap === null || layout === null) return;
 
@@ -803,6 +807,10 @@ export class JuicerRoomSystem
     const layout = this.layout;
     if (layout === null) return;
     const ts = TILE_SIZE;
+
+    for (const strip of this.stripLights) {
+      drawStripLight(ctx, strip.x - camX, strip.y - camY, strip.widthPx);
+    }
 
     const beltFrame = timeFrameIndex(frameTime, BELT_FRAMES_PER_SECOND, Number.MAX_SAFE_INTEGER);
     for (const treadmill of this.treadmills) {

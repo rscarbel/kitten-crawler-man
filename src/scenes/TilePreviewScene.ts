@@ -2,7 +2,7 @@
  * Localhost-only harness for reviewing the generated ground tilesets, reached
  * via `?tiles` in `devBootScene` (see `game.ts`). Never on a production path.
  *
- * Two views, toggled by clicking:
+ * Three views, cycled by clicking:
  *
  *  - **Materials** — every material laid out over a large area with its variants
  *    and patch phases resolved exactly as the game renderer will resolve them.
@@ -10,6 +10,9 @@
  *    shows a big field of each material rather than a small swatch.
  *  - **Transitions** — an irregular region of one material meeting another, so
  *    the boundary can be judged at the angles it will actually occur at.
+ *  - **Walls** — a small hand-laid dungeon holding every dungeon wall shape
+ *    (corners, corridor mouths, a pillar, a stub, thin walls, a sign plaque),
+ *    drawn through the real tile renderer on both floors side by side.
  *
  * The transition view calls the renderer's own `drawFringe`, over materials the
  * game does not currently place and pairs the map never produces. Judging a
@@ -24,6 +27,13 @@ import { TILE_SIZE } from '../core/constants';
 import { groundFrameIndex, groundVariantCount } from '../map/ground/groundFrames';
 import { drawFringe, type FringeMaterial, type ResolvedMaterial } from '../map/tiles/groundTiles';
 import { requestGroundSheets } from '../map/ground/runtimeGroundSheets';
+import { renderCanvas, renderDecorationsOverlay } from '../map/TileRenderer';
+import { buildWallCaseStructure } from '../map/dungeon/wallCaseFixture';
+import {
+  DEFAULT_DUNGEON_FLOOR_THEME,
+  setDungeonFloorTheme,
+  type DungeonFloorThemeId,
+} from '../map/dungeon/floorTheme';
 import { flushEnvironmentArtCache } from '../map/environmentArtCache';
 import {
   DEFAULT_FLOOR_ART_SEED,
@@ -104,7 +114,23 @@ interface MaterialEntry {
   readonly variants: number;
 }
 
-type PreviewMode = 'materials' | 'transitions';
+type PreviewMode = 'materials' | 'transitions' | 'walls';
+
+const NEXT_MODE: Readonly<Record<PreviewMode, PreviewMode>> = {
+  materials: 'transitions',
+  transitions: 'walls',
+  walls: 'materials',
+};
+
+/** Floors drawn side by side in the Walls view. */
+const WALL_VIEW_THEMES: ReadonlyArray<{
+  readonly id: DungeonFloorThemeId;
+  readonly label: string;
+}> = [
+  { id: 'cellars', label: 'Floor 1 — cellars' },
+  { id: 'service_level', label: 'Floor 2 — service level' },
+];
+const WALL_VIEW_GAP_TILES = 1;
 
 export class TilePreviewScene extends Scene {
   private mode: PreviewMode = 'materials';
@@ -156,7 +182,7 @@ export class TilePreviewScene extends Scene {
   }
 
   handleClick(): void {
-    this.mode = this.mode === 'materials' ? 'transitions' : 'materials';
+    this.mode = NEXT_MODE[this.mode];
     this.scrollY = 0;
   }
 
@@ -229,7 +255,9 @@ export class TilePreviewScene extends Scene {
     const title =
       this.mode === 'materials'
         ? 'Generated ground — materials'
-        : 'Generated ground — transitions (live composite via corner masks)';
+        : this.mode === 'transitions'
+          ? 'Generated ground — transitions (live composite via corner masks)'
+          : 'Dungeon walls — every wall shape, both floors';
     drawText(ctx, title, {
       x: MARGIN,
       y: TITLE_Y,
@@ -255,9 +283,40 @@ export class TilePreviewScene extends Scene {
     ctx.translate(0, HEADER_HEIGHT - this.scrollY);
 
     if (this.mode === 'materials') this.renderMaterials(ctx);
-    else this.renderTransitions(ctx);
+    else if (this.mode === 'transitions') this.renderTransitions(ctx);
+    else this.renderWalls(ctx);
 
     ctx.restore();
+  }
+
+  private readonly wallCases = buildWallCaseStructure();
+
+  /**
+   * The wall-case fixture drawn by the game's own tile renderer under each
+   * floor's theme. The theme is module state the painters read, so it is set
+   * around each panel and put back to the default after.
+   */
+  private renderWalls(ctx: CanvasRenderingContext2D): void {
+    const structure = this.wallCases;
+    const panelW = (structure[0]?.length ?? 0) * PREVIEW_TILE;
+    const panelH = structure.length * PREVIEW_TILE;
+    WALL_VIEW_THEMES.forEach((theme, index) => {
+      const originX = MARGIN + index * (panelW + WALL_VIEW_GAP_TILES * PREVIEW_TILE);
+      const originY = PANEL_LABEL_HEIGHT;
+      drawText(ctx, theme.label, {
+        x: originX,
+        y: LABEL_BASELINE_NUDGE,
+        size: HINT_SIZE,
+        color: LABEL_COLOR,
+      });
+      setDungeonFloorTheme(theme.id);
+      ctx.save();
+      ctx.translate(originX, originY);
+      renderCanvas(ctx, structure, PREVIEW_TILE, 0, 0, panelW, panelH);
+      renderDecorationsOverlay(ctx, structure, PREVIEW_TILE, 0, 0, panelW, panelH);
+      ctx.restore();
+    });
+    setDungeonFloorTheme(DEFAULT_DUNGEON_FLOOR_THEME);
   }
 
   private renderMaterials(ctx: CanvasRenderingContext2D): void {

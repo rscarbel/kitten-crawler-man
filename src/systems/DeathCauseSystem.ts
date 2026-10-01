@@ -85,6 +85,7 @@ export function causeFromDamageSource(source: DamageSource): DeathCause {
   // burning tree, which was the only producer before lava flames existed.
   if (source.kind === 'environmental') {
     if (source.hazard === 'lavaFlames') return 'lavaFlames';
+    if (source.hazard === 'burningOil') return 'burningOil';
     if (source.hazard === 'clownGas') return 'clownGas';
     if (source.hazard === 'lichFirewall') return 'lichFirewall';
     if (source.hazard === 'lichOrb') return 'lichOrb';

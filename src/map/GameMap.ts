@@ -1,3 +1,5 @@
+import { SERVICE_PROP_TILE_TYPES } from './serviceLevelProps';
+import { CELLAR_OVERLAY_TILE_TYPES } from './cellarProps';
 import {
   MAZE_CAT_SPAWN_CHAR,
   MAZE_EXIT_TILES,
@@ -10,6 +12,8 @@ import {
   type BigTopMazePlan,
 } from './bigTopMazeLayout';
 import {
+  BONE_PILE,
+  SLUMPED_SKELETON,
   type TileContent,
   FloorTypeValue,
   TREE,
@@ -76,6 +80,12 @@ import {
 } from './tileTypes';
 import { isSightTransparentTileType, isWalkableTileType } from './walkability';
 import type { Rect } from './roomDoorways';
+import { RegionMap, type RegionKind } from './regionMap';
+import { RegionCharacters } from './dungeon/regionCharacters';
+import { buildFloorSurface, FloorSurface, registerFloorSurface } from './dungeon/floorSurface';
+import { registerWallCharacters, registerWallFixtureFeet } from './dungeon/wallDressing';
+import { fixtureFoot, type WallFixture } from './dungeon/wallFixtures';
+import type { RegionCharacter } from './dungeon/roomCharacters';
 import type { Mob } from '../creatures/Mob';
 import { countsTowardRoomClear } from '../creatures/roomClear';
 import { tileIndex, tileCoordKey, tileKeyX, tileKeyY } from './tileIndex';
@@ -368,6 +378,9 @@ export interface DecorationTile {
 
 /** Tile types drawn in the Y-sorted decoration overlay pass. */
 const DECORATION_OVERLAY_TYPES: ReadonlySet<number> = new Set([
+  // The dead. Y-sorted so a crawler north of a skeleton is drawn behind it.
+  BONE_PILE,
+  SLUMPED_SKELETON,
   TREE,
   TORCH,
   WELL,
@@ -417,6 +430,10 @@ const DECORATION_OVERLAY_TYPES: ReadonlySet<number> = new Set([
   CIRCUS_STRUCTURE_LOW,
   // The Big Top's tent poles: the mast rises out of view in the Y-sorted pass.
   TENT_POLE,
+  // The service level's furniture; its part tiles are drawn by their anchor.
+  ...SERVICE_PROP_TILE_TYPES,
+  // The cellars' furniture, candles and fungus.
+  ...CELLAR_OVERLAY_TILE_TYPES,
 ]);
 
 /**
@@ -752,22 +769,74 @@ export class GameMap {
    */
   progressionLayout: ProgressionLayoutData | undefined;
   /**
+   * Which room or hallway segment each tile was generated as, with each room's
+   * role, zone, treasure flag and doorways. Generation data: it rebuilds with
+   * the map and is never checkpointed. Empty (every tile `NO_REGION`) on any map
+   * that isn't a forced-progression dungeon floor. See {@link RegionMap}.
+   */
+  regionMap: RegionMap = RegionMap.empty();
+  /**
+   * The character each room and hallway segment of this floor was dressed as,
+   * and the lighting profile of each special room. Generation data, rebuilt
+   * with the map. See {@link RegionCharacters}.
+   */
+  regionCharacters: RegionCharacters = RegionCharacters.empty();
+
+  /**
+   * What hangs on this floor's wall faces — sconces, tubes, fuse boxes, chains.
+   * Each fixture's tile stays a wall; the list is drawn live over the wall art.
+   * Placement is generation data rebuilt with the map; each fixture's `state`
+   * is live and checkpointed by `DestructiblePropSystem`. Empty on any map
+   * without room characters.
+   */
+  wallFixtures: ReadonlyArray<WallFixture> = [];
+
+  /**
+   * What each dressed room and hallway is floored in and how worn it is, read by
+   * the tile painters. Derived from the region map once the map is built, so it
+   * is never checkpointed. See {@link FloorSurface}.
+   */
+  floorSurface: FloorSurface = FloorSurface.empty();
+
+  /**
    * Every room this map's dungeon generator placed, in placement order — the
    * same list the generator used to seat encounters. Empty on any map that
    * isn't a forced-progression dungeon floor (overworld, tutorial, building
    * interiors, and a free-roam dungeon floor, which doesn't record one).
    * Room membership checks (`roomIndexAt`, `roomBoundsContaining`,
-   * `hostilesInRoom`) all read this list, so they degrade to "no room found"
-   * wherever it is empty.
+   * `hostilesInRoom`) all read the region map these bounds come from, so they
+   * degrade to "no room found" wherever it is empty.
    */
-  roomBounds: ReadonlyArray<Rect> = [];
+  get roomBounds(): ReadonlyArray<Rect> {
+    return this.regionMap.roomBounds;
+  }
 
-  /** Index into {@link roomBounds} of the room containing this tile, or `-1` when none does. */
+  /**
+   * Index into {@link roomBounds} of the room containing this tile, or `-1` when none does.
+   * Where two rooms' rectangles overlap, the earlier room is the answer.
+   */
   roomIndexAt(tileX: number, tileY: number): number {
-    return this.roomBounds.findIndex(
-      (room) =>
-        tileX >= room.x && tileX < room.x + room.w && tileY >= room.y && tileY < room.y + room.h,
-    );
+    return this.regionMap.roomIndexAt(tileX, tileY);
+  }
+
+  /** The region id at a tile; see {@link RegionMap.regionAt}. */
+  regionAt(tileX: number, tileY: number): number {
+    return this.regionMap.regionAt(tileX, tileY);
+  }
+
+  /** Whether a region id is a room or a hallway segment; see {@link RegionMap.regionKind}. */
+  regionKind(id: number): RegionKind | null {
+    return this.regionMap.regionKind(id);
+  }
+
+  /** The character of the room or hallway at a tile; see {@link RegionCharacters.characterAt}. */
+  characterAt(tileX: number, tileY: number): RegionCharacter | null {
+    return this.regionCharacters.characterAt(tileX, tileY);
+  }
+
+  /** Whether standing water covers a tile; see {@link FloorSurface.isPuddleAt}. */
+  isPuddleAt(tileX: number, tileY: number): boolean {
+    return this.floorSurface.isPuddleAt(tileX, tileY);
   }
 
   /** An entity's pixel position is its top-left corner; this converts to the tile under its centre. */
@@ -917,6 +986,12 @@ export class GameMap {
       );
     }
     this.rebuildBlockedMasks();
+    this.floorSurface = buildFloorSurface({
+      grid: this.structure,
+      regionMap: this.regionMap,
+      characters: this.regionCharacters,
+    });
+    registerFloorSurface(this.structure, this.floorSurface);
   }
 
   private generateOverworldMap(size: number): TileContent[][] {
@@ -963,7 +1038,11 @@ export class GameMap {
     this.bossRooms = data.bossRooms;
     this.questRooms = data.questRooms;
     this.progressionLayout = data.progressionLayout;
-    this.roomBounds = data.progressionLayout?.roomBounds ?? [];
+    this.regionMap = data.regionMap;
+    this.regionCharacters = data.regionCharacters;
+    registerWallCharacters(data.grid, data.regionCharacters);
+    this.wallFixtures = data.wallFixtures;
+    registerWallFixtureFeet(data.grid, data.wallFixtures.map(fixtureFoot));
     // The flag goes on now and stays on; what changes is whether it is being
     // honoured. Every floor starts `clear`: the nursery is a room on the way,
     // not a toll gate, and nothing is shut until the player takes the wave.

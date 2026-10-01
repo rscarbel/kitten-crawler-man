@@ -24,6 +24,8 @@ import { paintFigureCell } from './figureSheet.js';
 import { reportFigureGates } from './figureGates.js';
 import { fairyGateFailures } from './gates-fairy.js';
 import { PREVIEW_DIR, writePreviewPng } from './previewOut.js';
+import { FLOOR1_GROUND } from '../src/map/dungeon/floor1Materials.js';
+import { FLOOR2_GROUND } from '../src/map/dungeon/floor2Materials.js';
 import {
   FAIRY_VIEWS,
   TILE_SCALE,
@@ -66,8 +68,8 @@ const BLIND_LABEL_COLUMN_WIDTH = 40;
  */
 const REVIEW_FLOORS: readonly { readonly name: string; readonly color: string }[] = [
   { name: 'dungeon', color: '#191720' },
-  { name: 'flagstone', color: '#7e7463' },
-  { name: 'terrazzo', color: '#b1b3b0' },
+  { name: 'flagstone', color: FLOOR1_GROUND.fallbackColor.f1_flagstone },
+  { name: 'terrazzo', color: FLOOR2_GROUND.fallbackColor.f2_terrazzo },
   { name: 'snow', color: '#e6ebef' },
 ];
 

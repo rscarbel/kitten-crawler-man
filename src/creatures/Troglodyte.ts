@@ -1,4 +1,4 @@
-import { Mob } from './Mob';
+import { Mob, type EyePlacement } from './Mob';
 import { scaledCooldownFramesForLevel } from './mobLevelScaling';
 import { maybeDropSkillBook } from './skillBookDrop';
 import type { Player } from '../Player';
@@ -106,7 +106,20 @@ type TrogState = 'idle' | 'stalking' | 'winding_up' | 'striking' | 'cooldown';
 
 const TROGLODYTE_TACTICS: readonly TacticsTrait[] = ['flank', 'block', 'regroup', 'riposte'];
 
+/** Where its eyes sit, for eye-shine in the dark. A tall stooped body: the head sits ahead of the hips and over the top of the tile. */
+const TROGLODYTE_EYES: EyePlacement = {
+  sideForward: 0.2,
+  sideHeight: -0.08,
+  sideSpacing: 0.06,
+  frontHeight: -0.1,
+  frontSpacing: 0.16,
+};
+
 export class Troglodyte extends Mob {
+  protected override get eyePlacement(): EyePlacement {
+    return TROGLODYTE_EYES;
+  }
+
   readonly xpValue = 20;
   protected coinDropMin = 0;
   protected coinDropMax = 0;

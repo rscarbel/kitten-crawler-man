@@ -63,6 +63,11 @@ import {
   STEEL_PLATE_RAMP,
   INSTITUTIONAL_VINYL_RAMP,
   CINDERBLOCK_RAMP,
+  CELLAR_EARTH_RAMP,
+  CELLAR_BRICK_RAMP,
+  GRATING_STEEL_RAMP,
+  GRATING_DEPTH_RAMP,
+  RUBBER_MAT_RAMP,
   INTERIOR_BOARD_RAMP,
   INTERIOR_STONE_RAMP,
   INTERIOR_PLASTER_RAMP,
@@ -837,7 +842,7 @@ const plaza: Material = {
 
 // ── coursed masonry ────────────────────────────────────────────────────────
 
-interface CoursedBlockOptions {
+export interface CoursedBlockOptions {
   /**
    * Courses across one game tile. `coursesPerTile * patchTiles` must come out a
    * whole **even** number — whole so the course lattice wraps, even so the
@@ -903,7 +908,7 @@ const BLOCK_PHASE_OFFSET = 0.25;
  * `ctx.structure`, so every variant lays its blocks in the same places and two
  * variants meeting mid-floor keep one continuous bond.
  */
-function paintCoursedBlocks(ctx: PaintContext, options: CoursedBlockOptions): void {
+export function paintCoursedBlocks(ctx: PaintContext, options: CoursedBlockOptions): void {
   const tiles = ctx.size / TILE_PX;
   const courseHeight = TILE_PX / options.coursesPerTile;
   const blockWidth = TILE_PX / options.blocksPerCoursePerTile;
@@ -1284,8 +1289,12 @@ const F1_FLAGS_JOINT_WIDTH_PX = 1.2;
 const F1_FLAGS_JOINT_STRENGTH = 0.45;
 const F1_FLAGS_BEVEL_PX = 1.8;
 const F1_FLAGS_BEVEL_STRENGTH = 0.9;
-/** Wider than a fired tile's: no two blocks out of the same quarry match. */
-const F1_FLAGS_TONE_SPREAD = 0.36;
+/**
+ * Only a little wider than a fired tile's. The tones repeat with the patch, so a
+ * wide spread lets one row of the patch come out dark as a whole and stripe the
+ * room with a band every `patchTiles` rows.
+ */
+const F1_FLAGS_TONE_SPREAD = 0.16;
 const F1_FLAGS_WEAR_COUNT = 5;
 const F1_FLAGS_WEAR_MIN_RADIUS = 5;
 const F1_FLAGS_WEAR_MAX_RADIUS = 14;
@@ -1444,6 +1453,282 @@ const cellarCinder: Material = {
   },
 };
 
+const F1_EARTH_GROUND: GroundOptions = { patchPeriod: 8, patchWeight: 0.5, contrast: 1 };
+const F1_EARTH_DAMP_COUNT = 5;
+const F1_EARTH_DAMP_MIN_RADIUS = 6;
+const F1_EARTH_DAMP_MAX_RADIUS = 16;
+const F1_EARTH_DAMP_ALPHA = 0.12;
+const F1_EARTH_DAMP_SOFTNESS = 1;
+const F1_EARTH_TRODDEN_COUNT = 3;
+const F1_EARTH_TRODDEN_MIN_RADIUS = 8;
+const F1_EARTH_TRODDEN_MAX_RADIUS = 18;
+const F1_EARTH_TRODDEN_ALPHA = 0.1;
+const F1_EARTH_TRODDEN_SOFTNESS = 1;
+/** Detail-seed salts of the earth's two washes, so each scatters on its own stream. */
+const F1_EARTH_DAMP_SALT = 47;
+const F1_EARTH_TRODDEN_SALT = 49;
+
+/**
+ * Packed earth, for the rooms whose floor has come up or was never laid.
+ *
+ * No grit or pebble pass, deliberately: at 32 px a tile every scattered stone is
+ * a speck, and a whole collapsed hall of specks is the busy floor this level
+ * must not have. The broad damp and trodden washes carry it instead.
+ */
+const cellarEarth: Material = {
+  id: 'f1_earth',
+  label: 'Cellar packed earth',
+  patchTiles: 2,
+  variants: 4,
+  paint: (ctx) => {
+    paintNoiseGround(ctx, CELLAR_EARTH_RAMP, F1_EARTH_GROUND);
+    paintSpeckles(ctx, ctx.detail + F1_EARTH_DAMP_SALT, {
+      count: F1_EARTH_DAMP_COUNT,
+      minRadius: F1_EARTH_DAMP_MIN_RADIUS,
+      maxRadius: F1_EARTH_DAMP_MAX_RADIUS,
+      ramp: { ...CELLAR_EARTH_RAMP, mid: CELLAR_EARTH_RAMP.shadow },
+      alpha: F1_EARTH_DAMP_ALPHA,
+      softness: F1_EARTH_DAMP_SOFTNESS,
+    });
+    paintSpeckles(ctx, ctx.detail + F1_EARTH_TRODDEN_SALT, {
+      count: F1_EARTH_TRODDEN_COUNT,
+      minRadius: F1_EARTH_TRODDEN_MIN_RADIUS,
+      maxRadius: F1_EARTH_TRODDEN_MAX_RADIUS,
+      ramp: { ...CELLAR_EARTH_RAMP, mid: CELLAR_EARTH_RAMP.light },
+      alpha: F1_EARTH_TRODDEN_ALPHA,
+      softness: F1_EARTH_TRODDEN_SOFTNESS,
+    });
+  },
+};
+
+// ── herringbone ────────────────────────────────────────────────────────────
+
+/**
+ * Bricks two units long and one wide, laid in a herringbone.
+ *
+ * Every unit cell belongs to a brick by `(cellX - cellY) mod 4`: 0 and 1 are the
+ * two halves of a brick lying east–west, 3 and 2 the two halves of one standing
+ * north–south. That rule tiles the plane with no gaps or overlaps and its
+ * staircases are the herringbone's zig-zag, and because it repeats every four
+ * cells on both axes a patch wraps whenever its unit count is a multiple of four.
+ */
+const HERRINGBONE_PERIOD = 4;
+/**
+ * The phases of `(cellX - cellY) mod 4`: the two halves of a brick lying
+ * east–west, then the north half of one standing north–south. The fourth phase
+ * is that brick's south half, whose brick starts one cell up.
+ */
+const LYING_WEST_HALF = 0;
+const LYING_EAST_HALF = 1;
+const STANDING_NORTH_HALF = 3;
+const HERRINGBONE_LONG_UNITS = 2;
+const HERRINGBONE_WANDER_PX = 0.6;
+const HERRINGBONE_WANDER_PERIOD_PER_TILE = 12;
+const HERRINGBONE_GRAIN_OCTAVES = 2;
+const HERRINGBONE_GRAIN_PERIOD_PER_TILE = 24;
+const HERRINGBONE_GRAIN_STRENGTH = 0.12;
+const HERRINGBONE_TONE_FLOOR = 0.34;
+/** Seed salts of the joints' wander and of the per-brick grain. */
+const HERRINGBONE_WANDER_SALT = 5;
+const HERRINGBONE_GRAIN_SALT = 3;
+
+interface HerringboneOptions {
+  /**
+   * Brick widths across one game tile. `unitsPerTile * patchTiles` must be a
+   * whole multiple of {@link HERRINGBONE_PERIOD}, or the pattern tears at the
+   * patch edge.
+   */
+  readonly unitsPerTile: number;
+  readonly ramp: Ramp;
+  readonly jointRamp: Ramp;
+  readonly jointPx: number;
+  readonly jointStrength: number;
+  readonly bevelPx: number;
+  readonly bevelStrength: number;
+  readonly toneSpread: number;
+}
+
+interface HerringboneBrick {
+  /** Unit cell the brick starts in: its west half, or its north half. */
+  readonly originX: number;
+  readonly originY: number;
+  /** Position inside the brick, in pixels from its north-west corner. */
+  readonly localX: number;
+  readonly localY: number;
+  readonly width: number;
+  readonly height: number;
+}
+
+function herringboneBrick(
+  cellX: number,
+  cellY: number,
+  inCellX: number,
+  inCellY: number,
+  unit: number,
+): HerringboneBrick {
+  const long = unit * HERRINGBONE_LONG_UNITS;
+  switch (positiveMod(cellX - cellY, HERRINGBONE_PERIOD)) {
+    case LYING_WEST_HALF:
+      return {
+        originX: cellX,
+        originY: cellY,
+        localX: inCellX,
+        localY: inCellY,
+        width: long,
+        height: unit,
+      };
+    case LYING_EAST_HALF:
+      return {
+        originX: cellX - 1,
+        originY: cellY,
+        localX: inCellX + unit,
+        localY: inCellY,
+        width: long,
+        height: unit,
+      };
+    case STANDING_NORTH_HALF:
+      return {
+        originX: cellX,
+        originY: cellY,
+        localX: inCellX,
+        localY: inCellY,
+        width: unit,
+        height: long,
+      };
+    default:
+      return {
+        originX: cellX,
+        originY: cellY - 1,
+        localX: inCellX,
+        localY: inCellY + unit,
+        width: unit,
+        height: long,
+      };
+  }
+}
+
+/**
+ * Herringbone brick with soft mortar joints and a lit bevel, the joints
+ * wandering by a fraction of a pixel as a hand-laid floor's do.
+ *
+ * Geometry comes from `ctx.structure`, so every variant lays its bricks in the
+ * same places and two variants meeting mid-floor keep one continuous pattern.
+ */
+function paintHerringbone(ctx: PaintContext, options: HerringboneOptions): void {
+  const tiles = ctx.size / TILE_PX;
+  const unit = TILE_PX / options.unitsPerTile;
+  const unitsAcross = Math.round(options.unitsPerTile * tiles);
+
+  ctx.surface.fill((x, y) => {
+    const warped = ctx.noise.warp(
+      x,
+      y,
+      ctx.structure + HERRINGBONE_WANDER_SALT,
+      HERRINGBONE_WANDER_PX,
+      HERRINGBONE_WANDER_PERIOD_PER_TILE * tiles,
+    );
+    const cellX = Math.floor(warped.x / unit);
+    const cellY = Math.floor(warped.y / unit);
+    const brick = herringboneBrick(
+      cellX,
+      cellY,
+      warped.x - cellX * unit,
+      warped.y - cellY * unit,
+      unit,
+    );
+    const brickHash = hashLattice(
+      positiveMod(brick.originX, unitsAcross),
+      positiveMod(brick.originY, unitsAcross),
+      ctx.structure,
+    );
+    const grain =
+      (ctx.noise.fbm(
+        x,
+        y,
+        ctx.detail + HERRINGBONE_GRAIN_SALT,
+        HERRINGBONE_GRAIN_OCTAVES,
+        HERRINGBONE_GRAIN_PERIOD_PER_TILE * tiles,
+      ) -
+        0.5) *
+      HERRINGBONE_GRAIN_STRENGTH;
+    const face = sampleRamp(
+      options.ramp,
+      HERRINGBONE_TONE_FLOOR + brickHash * options.toneSpread + grain,
+    );
+
+    const fromWest = brick.localX;
+    const fromNorth = brick.localY;
+    const fromEast = brick.width - brick.localX;
+    const fromSouth = brick.height - brick.localY;
+    const edgeDistance = Math.min(fromWest, fromNorth, fromEast, fromSouth);
+    if (edgeDistance < options.jointPx) {
+      return mix(face, sampleRamp(options.jointRamp, brickHash), options.jointStrength);
+    }
+    const bevelEnd = options.jointPx + options.bevelPx;
+    if (edgeDistance < bevelEnd) {
+      const across = (edgeDistance - options.jointPx) / options.bevelPx;
+      const strength = options.bevelStrength * (1 - across);
+      const offsetX = fromWest === edgeDistance ? -1 : fromEast === edgeDistance ? 1 : 0;
+      const offsetY = fromNorth === edgeDistance ? -1 : fromSouth === edgeDistance ? 1 : 0;
+      return shade(face, reliefFactor(offsetX, offsetY, strength));
+    }
+    return face;
+  });
+}
+
+/**
+ * Three brick widths to a game tile: the size a laid brick is beside Carl, and
+ * twelve units across a four-tile patch, which is the multiple of four the
+ * herringbone needs to wrap.
+ */
+const F1_HERRINGBONE_UNITS_PER_TILE = 3;
+const F1_HERRINGBONE_JOINT_PX = 1.3;
+const F1_HERRINGBONE_JOINT_STRENGTH = 0.38;
+const F1_HERRINGBONE_BEVEL_PX = 1.6;
+const F1_HERRINGBONE_BEVEL_STRENGTH = 0.7;
+const F1_HERRINGBONE_TONE_SPREAD = 0.3;
+const F1_HERRINGBONE_WEAR_COUNT = 5;
+const F1_HERRINGBONE_WEAR_MIN_RADIUS = 6;
+const F1_HERRINGBONE_WEAR_MAX_RADIUS = 16;
+const F1_HERRINGBONE_WEAR_ALPHA = 0.12;
+const F1_HERRINGBONE_WEAR_SOFTNESS = 1;
+/** Detail-seed salt of the herringbone's wear wash. */
+const F1_HERRINGBONE_WEAR_SALT = 51;
+
+/**
+ * Old brick laid in a herringbone — the crypt chapel's floor, the one room down
+ * here somebody paved with care. Joints are kept soft and the tone spread close,
+ * because a herringbone is the busiest geometry on the level and has to sit as
+ * quietly as the flags around it.
+ */
+const cellarHerringbone: Material = {
+  id: 'f1_herringbone',
+  label: 'Cellar herringbone brick',
+  patchTiles: 4,
+  variants: 2,
+  paint: (ctx) => {
+    paintHerringbone(ctx, {
+      unitsPerTile: F1_HERRINGBONE_UNITS_PER_TILE,
+      ramp: CELLAR_BRICK_RAMP,
+      jointRamp: { ...CELLAR_MORTAR_RAMP, mid: CELLAR_MORTAR_RAMP.shadow },
+      jointPx: F1_HERRINGBONE_JOINT_PX,
+      jointStrength: F1_HERRINGBONE_JOINT_STRENGTH,
+      bevelPx: F1_HERRINGBONE_BEVEL_PX,
+      bevelStrength: F1_HERRINGBONE_BEVEL_STRENGTH,
+      toneSpread: F1_HERRINGBONE_TONE_SPREAD,
+    });
+    // Crosses the joints, which keeps the pattern from reading as a printed grid.
+    paintSpeckles(ctx, ctx.detail + F1_HERRINGBONE_WEAR_SALT, {
+      count: F1_HERRINGBONE_WEAR_COUNT,
+      minRadius: F1_HERRINGBONE_WEAR_MIN_RADIUS,
+      maxRadius: F1_HERRINGBONE_WEAR_MAX_RADIUS,
+      ramp: { ...CELLAR_BRICK_RAMP, mid: CELLAR_BRICK_RAMP.shadow },
+      alpha: F1_HERRINGBONE_WEAR_ALPHA,
+      softness: F1_HERRINGBONE_WEAR_SOFTNESS,
+    });
+  },
+};
+
 const F1_WALL_COURSES_PER_TILE = 2;
 const F1_WALL_BLOCKS_PER_COURSE_PER_TILE = 1;
 const F1_WALL_JOINT_PX = 1.8;
@@ -1574,11 +1859,15 @@ const F2_TERRAZZO_GROUT_STRENGTH = 0.4;
 const F2_TERRAZZO_BEVEL_PX = 1.2;
 const F2_TERRAZZO_BEVEL_STRENGTH = 0.5;
 const F2_TERRAZZO_TONE_SPREAD = 0.12;
-const F2_TERRAZZO_CHIP_COUNT = 210;
-const F2_TERRAZZO_CHIP_MIN_RADIUS = 0.5;
-const F2_TERRAZZO_CHIP_MAX_RADIUS = 1.8;
-const F2_TERRAZZO_CHIP_ALPHA = 0.62;
-const F2_TERRAZZO_CHIP_SOFTNESS = 0.25;
+/**
+ * Few, broad and soft: at game size the aggregate has to read as a mottled value
+ * shape across the panel, not as individual specks, or a floor of it is noise.
+ */
+const F2_TERRAZZO_CHIP_COUNT = 48;
+const F2_TERRAZZO_CHIP_MIN_RADIUS = 1.4;
+const F2_TERRAZZO_CHIP_MAX_RADIUS = 3;
+const F2_TERRAZZO_CHIP_ALPHA = 0.45;
+const F2_TERRAZZO_CHIP_SOFTNESS = 0.7;
 
 /**
  * Terrazzo: pale panels divided by thin strips, with the aggregate scattered
@@ -1697,6 +1986,189 @@ const servicePlate: Material = {
       ramp: { ...STEEL_PLATE_RAMP, mid: STEEL_PLATE_RAMP.light },
       alpha: F2_PLATE_SCUFF_ALPHA,
       softness: F2_PLATE_SCUFF_SOFTNESS,
+    });
+  },
+};
+
+const F2_GRATING_GROUND: GroundOptions = { patchPeriod: 8, patchWeight: 0.4, contrast: 0.45 };
+const F2_GRATING_DEPTH_GROUND: GroundOptions = { patchPeriod: 8, patchWeight: 0.6, contrast: 0.6 };
+/** Bearing bars across one game tile; sixteen across a four-tile patch. */
+const F2_GRATING_BARS_PER_TILE = 4;
+/** One cross rod per game tile, so the openings are long slots rather than a mesh. */
+const F2_GRATING_RODS_PER_TILE = 1;
+const F2_GRATING_BAR_PX = 8;
+const F2_GRATING_ROD_PX = 4;
+const F2_GRATING_EDGE_PX = 1.5;
+const F2_GRATING_LIT_EDGE = 1.05;
+const F2_GRATING_SHADED_EDGE = 0.95;
+/** Panels are two tiles square; two across a four-tile patch, so the joints wrap. */
+const F2_GRATING_PANEL_TILES = 2;
+/** The solid frame either side of a panel joint, and the seam down its middle. */
+const F2_GRATING_FRAME_PX = 4;
+const F2_GRATING_SEAM_PX = 1;
+const F2_GRATING_SEAM_SHADE = 0.86;
+/** How far one panel's tone may sit from the next: they were not all galvanised together. */
+const F2_GRATING_PANEL_TONE_SPREAD = 0.06;
+/** How far below the bars the depth is seen falling into shadow next to a bar. */
+const F2_GRATING_DEPTH_FALLOFF_PX = 3;
+const F2_GRATING_DEPTH_SHADOW = 0.93;
+/** Width of the half-tone step between a bar and the opening beside it. */
+const F2_GRATING_EDGE_SOFTEN_PX = 1;
+const HALF_MIX = 0.5;
+const F2_GRATING_SCUFF_COUNT = 4;
+const F2_GRATING_SCUFF_MIN_RADIUS = 6;
+const F2_GRATING_SCUFF_MAX_RADIUS = 15;
+const F2_GRATING_SCUFF_ALPHA = 0.08;
+const F2_GRATING_SCUFF_SOFTNESS = 1;
+/** Detail-seed salt of the grating's scuffs. */
+const F2_GRATING_SCUFF_SALT = 87;
+
+/** Distance from `value` to the nearest multiple of `period` on a wrapped axis. */
+function distanceToLattice(value: number, period: number): number {
+  const local = positiveMod(value, period);
+  return Math.min(local, period - local);
+}
+
+/**
+ * Steel bar grating laid in two-tile panels: bearing bars running north–south,
+ * tied by a cross rod once a tile, each panel framed and very slightly its own
+ * tone.
+ *
+ * Machine-exact with no warp, like the checker plate, because it is pressed in a
+ * factory. What shows through the slots is only a little darker than the bars —
+ * see `GRATING_DEPTH_RAMP` — so the bars read as a fine grain across the floor
+ * rather than as stripes; the panel joints and tones break the pitch up at a
+ * scale the eye can rest on.
+ */
+const serviceGrating: Material = {
+  id: 'f2_grating',
+  label: 'Steel bar grating panels',
+  patchTiles: 4,
+  variants: 2,
+  paint: (ctx) => {
+    const barPeriod = TILE_PX / F2_GRATING_BARS_PER_TILE;
+    const rodPeriod = TILE_PX / F2_GRATING_RODS_PER_TILE;
+    const panelPeriod = TILE_PX * F2_GRATING_PANEL_TILES;
+    const panelsAcross = Math.round(ctx.size / panelPeriod);
+    // Joints half a panel in from the patch edge, so the wrap joint runs through
+    // the bars of one panel: a panel joint on the wrap joint puts two panels'
+    // different tones against each other there, and the seam gate reads that
+    // step as a tear on a third of all art seeds.
+    const panelShift = panelPeriod / 2;
+
+    paintNoiseGround(ctx, GRATING_DEPTH_RAMP, F2_GRATING_DEPTH_GROUND);
+    const depth = new Surface(ctx.size);
+    depth.fill((x, y) => ctx.surface.get(x, y));
+    paintNoiseGround(ctx, GRATING_STEEL_RAMP, F2_GRATING_GROUND);
+
+    ctx.surface.fill((x, y) => {
+      const panelHash = hashLattice(
+        positiveMod(Math.floor((x + panelShift) / panelPeriod), panelsAcross),
+        positiveMod(Math.floor((y + panelShift) / panelPeriod), panelsAcross),
+        ctx.structure,
+      );
+      const panelTone = 1 + (panelHash - 0.5) * 2 * F2_GRATING_PANEL_TONE_SPREAD;
+      const steel = shade(ctx.surface.get(x, y), panelTone);
+
+      const jointDistance = Math.min(
+        distanceToLattice(x + panelShift, panelPeriod),
+        distanceToLattice(y + panelShift, panelPeriod),
+      );
+      if (jointDistance < F2_GRATING_SEAM_PX) return shade(steel, F2_GRATING_SEAM_SHADE);
+      if (jointDistance < F2_GRATING_FRAME_PX) return steel;
+
+      // Bars are centred between lattice lines so no bar is split by a joint.
+      const barDistance = distanceToLattice(x + barPeriod / 2, barPeriod);
+      const rodDistance = distanceToLattice(y + rodPeriod / 2, rodPeriod);
+      const barHalf = F2_GRATING_BAR_PX / 2;
+      const rodHalf = F2_GRATING_ROD_PX / 2;
+      if (barDistance < barHalf) {
+        if (barHalf - barDistance >= F2_GRATING_EDGE_PX) return steel;
+        const westSide = positiveMod(x + barPeriod / 2, barPeriod) > barPeriod / 2;
+        return shade(steel, westSide ? F2_GRATING_LIT_EDGE : F2_GRATING_SHADED_EDGE);
+      }
+      if (rodDistance < rodHalf) {
+        if (rodHalf - rodDistance >= F2_GRATING_EDGE_PX) return steel;
+        const northSide = positiveMod(y + rodPeriod / 2, rodPeriod) > rodPeriod / 2;
+        return shade(steel, northSide ? F2_GRATING_LIT_EDGE : F2_GRATING_SHADED_EDGE);
+      }
+      const nearestSolid = Math.min(
+        barDistance - barHalf,
+        rodDistance - rodHalf,
+        jointDistance - F2_GRATING_FRAME_PX,
+      );
+      const fall = Math.min(1, nearestSolid / F2_GRATING_DEPTH_FALLOFF_PX);
+      const occluded = F2_GRATING_DEPTH_SHADOW + (1 - F2_GRATING_DEPTH_SHADOW) * fall;
+      const seen = shade(depth.get(x, y), occluded * panelTone);
+      // The first pixel past a bar takes half of it: a hard step on a regular
+      // pitch beats against the screen's pixels into moiré when the floor is
+      // drawn scaled.
+      if (nearestSolid < F2_GRATING_EDGE_SOFTEN_PX) return mix(seen, steel, HALF_MIX);
+      return seen;
+    });
+    paintSpeckles(ctx, ctx.detail + F2_GRATING_SCUFF_SALT, {
+      count: F2_GRATING_SCUFF_COUNT,
+      minRadius: F2_GRATING_SCUFF_MIN_RADIUS,
+      maxRadius: F2_GRATING_SCUFF_MAX_RADIUS,
+      ramp: { ...GRATING_STEEL_RAMP, mid: GRATING_STEEL_RAMP.shadow },
+      alpha: F2_GRATING_SCUFF_ALPHA,
+      softness: F2_GRATING_SCUFF_SOFTNESS,
+    });
+  },
+};
+
+const F2_RUBBER_GROUND: GroundOptions = { patchPeriod: 8, patchWeight: 0.45, contrast: 0.55 };
+/** Ribs across one game tile; twelve across a four-tile patch. */
+const F2_RUBBER_RIBS_PER_TILE = 3;
+/** Share of each rib period the raised rib takes; the rest is the groove. */
+const F2_RUBBER_RIB_SHARE = 0.62;
+/** Share of the rib's width, at each side, that is its rounded shoulder. */
+const F2_RUBBER_SHOULDER_SHARE = 0.3;
+const F2_RUBBER_LIT_SHOULDER = 1.05;
+const F2_RUBBER_SHADED_SHOULDER = 0.94;
+const F2_RUBBER_GROOVE = 0.9;
+const F2_RUBBER_SCUFF_COUNT = 4;
+const F2_RUBBER_SCUFF_MIN_RADIUS = 6;
+const F2_RUBBER_SCUFF_MAX_RADIUS = 16;
+const F2_RUBBER_SCUFF_ALPHA = 0.1;
+const F2_RUBBER_SCUFF_SOFTNESS = 1;
+/** Detail-seed salt of the rubber's scuffs. */
+const F2_RUBBER_SCUFF_SALT = 89;
+
+/**
+ * Ribbed rubber matting, the ribs running east–west. Shaded, not outlined: the
+ * ribs are told apart only by their lit and shaded shoulders, so a locker room
+ * floored in it reads as texture rather than as stripes.
+ */
+const serviceRubber: Material = {
+  id: 'f2_rubber',
+  label: 'Ribbed rubber matting',
+  patchTiles: 4,
+  variants: 2,
+  paint: (ctx) => {
+    const ribPeriod = TILE_PX / F2_RUBBER_RIBS_PER_TILE;
+    const ribWidth = ribPeriod * F2_RUBBER_RIB_SHARE;
+    const shoulder = ribWidth * F2_RUBBER_SHOULDER_SHARE;
+
+    paintNoiseGround(ctx, RUBBER_MAT_RAMP, F2_RUBBER_GROUND);
+    ctx.surface.fill((x, y) => {
+      const rubber = ctx.surface.get(x, y);
+      // Phased so the patch edge runs down the flat middle of a rib: a step
+      // between a groove and a shoulder landing exactly on the wrap joint reads
+      // harder than the same step anywhere inside, where it falls between pixels.
+      const across = positiveMod(y + ribWidth / 2, ribPeriod);
+      if (across >= ribWidth) return shade(rubber, F2_RUBBER_GROOVE);
+      if (across < shoulder) return shade(rubber, F2_RUBBER_LIT_SHOULDER);
+      if (across > ribWidth - shoulder) return shade(rubber, F2_RUBBER_SHADED_SHOULDER);
+      return rubber;
+    });
+    paintSpeckles(ctx, ctx.detail + F2_RUBBER_SCUFF_SALT, {
+      count: F2_RUBBER_SCUFF_COUNT,
+      minRadius: F2_RUBBER_SCUFF_MIN_RADIUS,
+      maxRadius: F2_RUBBER_SCUFF_MAX_RADIUS,
+      ramp: { ...RUBBER_MAT_RAMP, mid: RUBBER_MAT_RAMP.light },
+      alpha: F2_RUBBER_SCUFF_ALPHA,
+      softness: F2_RUBBER_SCUFF_SOFTNESS,
     });
   },
 };
@@ -3096,6 +3568,10 @@ export const MATERIALS: ReadonlyArray<Material> = [
   bigtopSawdust,
   bigtopBackstage,
   circusLot,
+  cellarEarth,
+  cellarHerringbone,
+  serviceGrating,
+  serviceRubber,
 ];
 
 export function getMaterial(id: string): Material {

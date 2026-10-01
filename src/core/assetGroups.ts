@@ -185,10 +185,53 @@ export const ASSET_GROUPS: Readonly<Record<AssetGroup, readonly SpriteKey[]>> = 
   // Floor-specific tile *palettes* are their own groups below,
   // since floor 1 and floor 2 share these five tile types but not their look
   // (`src/map/dungeon/floorTheme.ts`).
-  dungeon_common: ['ground_dungeon', 'ground_interior'],
+  dungeon_common: [
+    'ground_dungeon',
+    'ground_interior',
+    // The dead, on any dungeon floor a character or a stamp lays them out on.
+    'bone_scatter',
+    'bone_pile',
+    'slumped_skeleton',
+  ],
 
-  floor1_tileset: ['ground_floor1'],
-  floor2_tileset: ['ground_floor2'],
+  floor1_tileset: [
+    'ground_floor1',
+    'clay_urn',
+    'grain_sack',
+    'wine_cask',
+    'bottle_rack',
+    'cellar_table',
+    'spear_rack',
+    'rubble_heap',
+    'rubble_slope',
+    'fallen_beam',
+    'glow_fungus',
+    'candle_cluster',
+    'sarcophagus',
+    'straw_scatter',
+  ],
+  floor2_tileset: [
+    // The service level's faces of the barrel, crate, bookshelf, torch and
+    // brazier tiles: drawn instead of the core sheets while its theme is active.
+    'steel_drum',
+    'oil_drum',
+    'steel_drum_side',
+    'plastic_crate',
+    'steel_shelving',
+    'work_lamp',
+    'drum_brazier',
+    'ground_floor2',
+    'gas_cylinder',
+    'locker_bank',
+    'filing_cabinet',
+    'mop_bucket',
+    'pallet_stack',
+    'vending_machine',
+    'service_desk',
+    'locker_bench',
+    'boiler',
+    'service_decals',
+  ],
 
   boss_hoarder: [
     'hoard_pile',

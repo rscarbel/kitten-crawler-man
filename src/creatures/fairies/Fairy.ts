@@ -2,6 +2,7 @@ import {
   ASTAR_FAILURE_BACKOFF_FRAMES,
   ASTAR_MAX_DENIED_FRAMES,
   Mob,
+  type EyeAnchor,
   type PlayerDamageType,
 } from '../Mob';
 import type { Player } from '../../Player';
@@ -12,6 +13,7 @@ import { isWorldPointInView } from '../../core/visibleWorldView';
 import {
   drawFairySprite,
   fairyChestPoint,
+  fairyEyePoint,
   fairyCrownBelowTileTopTiles,
   type FairySpriteState,
 } from '../../sprites/fairySprite';
@@ -220,6 +222,9 @@ const REFUGE_SEARCH_FAILURE_FRAMES = ASTAR_FAILURE_BACKOFF_FRAMES + ASTAR_MAX_DE
  * goal is taken only when nothing in reach can see the crawler.
  */
 const NO_SIGHTLINE_PENALTY_TILES = 12;
+
+/** The gap between a fairy's eyes, in tiles: its head is small. */
+const FAIRY_EYE_SPACING = 0.08;
 
 /**
  * A fragile flying caster that changes the fight around it, and keeps its
@@ -1052,6 +1057,15 @@ export abstract class Fairy extends Mob {
       return { ...facing, row: 'hurt', progress: flinchTicksPlayed / FAIRY_HURT_ROW_TICKS };
     }
     return facing;
+  }
+
+  /** Its eyes on the face it is drawn with this frame; it hovers with its head above its tile. */
+  override eyeShineAnchor(out: EyeAnchor): boolean {
+    if (!fairyEyePoint(this.kind, this.x, this.y, this.tileSize, this.spriteState(), out)) {
+      return false;
+    }
+    out.spacingPx = this.tileSize * FAIRY_EYE_SPACING;
+    return true;
   }
 
   /**

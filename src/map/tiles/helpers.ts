@@ -1,6 +1,8 @@
 import type { TileContent } from '../tileTypes';
 import { isColosseumRingTile } from './bossRooms/colosseumTiles';
 import {
+  BONE_PILE,
+  SLUMPED_SKELETON,
   FloorTypeValue,
   INTERIOR_COUNTER,
   INTERIOR_WALL,
@@ -68,6 +70,8 @@ import {
   CIRCUS_STRUCTURE_TALL,
   CIRCUS_STRUCTURE_LOW,
 } from '../tileTypes';
+import { SERVICE_LEVEL_TILE_TYPES } from '../serviceLevelProps';
+import { CELLAR_TILE_TYPES } from '../cellarProps';
 
 const CARDINAL_DIRS: [number, number][] = [
   [0, 1],
@@ -155,6 +159,8 @@ const NON_FLOOR_TYPES = new Set<number>([
   CRATE,
   BRAZIER,
   BONES,
+  BONE_PILE,
+  SLUMPED_SKELETON,
   // A rug is walkable ground decoration, so it looks like a floor — but unlike
   // `GRASSY_WEED` and `DIRT_PATCH` below it has no underlying type to report,
   // and `inferFloorType` returning `RUG` leaves every caller with a type no
@@ -219,6 +225,11 @@ const NON_FLOOR_TYPES = new Set<number>([
   ROCK_DEPOSIT,
   CIRCUS_STRUCTURE_TALL,
   CIRCUS_STRUCTURE_LOW,
+  // The service level's furniture and its floor clutter: a decal has no floor
+  // of its own to report, any more than a rug does.
+  ...SERVICE_LEVEL_TILE_TYPES,
+  // The cellars' furniture and floor dressing, for the same reason.
+  ...CELLAR_TILE_TYPES,
 ]);
 
 /**

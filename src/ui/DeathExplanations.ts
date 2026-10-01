@@ -76,6 +76,7 @@ export type DeathCause =
   | 'frozenSolid'
   | 'burningTree'
   | 'lavaFlames'
+  | 'burningOil'
   | 'clownGas'
   | 'lichFirewall'
   | 'lichOrb'
@@ -138,6 +139,11 @@ export const DEATH_EXPLANATIONS: Record<DeathCause, readonly string[]> = {
     'You stood against a burning tree until it finished the job.',
     'The tree was on fire. You were standing in it. These facts are related.',
     'Burned alive by a tree you set light to. Poetic, in a way.',
+  ],
+  burningOil: [
+    'You stood in a pool of burning oil. The drum said flammable for a reason.',
+    'Someone set the oil alight. You stayed to watch it burn, from the inside.',
+    'The spill was on fire. So, then, were you.',
   ],
   lavaFlames: [
     'You stood in a pool of burning llama spit until it burned through you.',

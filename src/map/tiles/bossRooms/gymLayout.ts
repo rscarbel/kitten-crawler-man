@@ -29,7 +29,7 @@ export interface TileStep {
   readonly dy: number;
 }
 
-/** One treadmill: a belt two tiles long running away from the mirror wall. */
+/** One treadmill: a belt two tiles long running away from the wall opposite the doorway. */
 export interface GymTreadmill {
   /** Belt tiles, the wall end first. */
   readonly belt: readonly [TilePoint, TilePoint];
@@ -64,7 +64,7 @@ export interface GymLayout {
   readonly treadmills: readonly GymTreadmill[];
   readonly benches: readonly TilePoint[];
   readonly boombox: TilePoint | null;
-  /** The wall opposite the doorway, silvered. */
+  /** The silvered stretch of the north wall, the one wall that faces the room. */
   readonly mirror: GymWallRun;
   readonly whiteboard: GymWallRun | null;
   readonly doorways: readonly BossRoomDoorway[];
@@ -73,7 +73,7 @@ export interface GymLayout {
 /** The platform's side in tiles; it spans two tiles either side of the spawn's corner. */
 const PLATFORM_TILES = 4;
 const PLATFORM_HALF = PLATFORM_TILES / 2;
-/** Depth of the sprint lane along the mirror wall, in tiles. */
+/** Depth of the sprint lane along the wall opposite the doorway, in tiles. */
 const TURF_DEPTH_TILES = 2;
 /** A treadmill's belt, in tiles along its run. */
 const BELT_TILES = 2;
@@ -98,6 +98,8 @@ const BOOMBOX_DEPTH = 2;
 /** The whiteboard is this many tiles long, starting this far from the corner. */
 const WHITEBOARD_TILES = 4;
 const WHITEBOARD_CORNER_GAP = 2;
+/** Bare wall left between the whiteboard and the mirror on either side. */
+const MIRROR_BOARD_GAP_TILES = 1;
 
 function inwardOf(side: DoorSide): TileStep {
   switch (side) {
@@ -209,11 +211,11 @@ function beltEnds(
 }
 
 /**
- * Where the treadmills stand along the mirror wall, nearest the right-hand
+ * Where the treadmills stand along the wall opposite the doorway, nearest the right-hand
  * corner first. The row keeps its pitch and steps over any spot a doorway's
  * approach lane covers rather than losing the treadmill: a lane is at least
  * three tiles wide, so at a two-tile pitch it can cover two spots at once, and
- * a secondary doorway can open anywhere in the mirror wall.
+ * a secondary doorway can open anywhere in that wall.
  */
 function treadmillRowAlongs(
   side: DoorSide,
@@ -351,6 +353,7 @@ export function planGymLayout(
   }
 
   const boombox = ofKind('boombox')[0] ?? null;
+  const whiteboard = whiteboardRun(bounds, doorways);
   return {
     bounds,
     side,
@@ -370,8 +373,8 @@ export function planGymLayout(
     treadmills,
     benches: ofKind('bench'),
     boombox,
-    mirror: mirrorRun(side, bounds, doorways),
-    whiteboard: whiteboardRun(side, bounds, doorways),
+    mirror: mirrorRun(bounds, doorways, whiteboard),
+    whiteboard,
     doorways,
   };
 }
@@ -419,37 +422,24 @@ function wallRow(wall: DoorSide, bounds: TileRect): GymWallRun {
   }
 }
 
-const OPPOSITE: Readonly<Record<DoorSide, DoorSide>> = {
-  north: 'south',
-  south: 'north',
-  east: 'west',
-  west: 'east',
-};
-
-function mirrorRun(
-  side: DoorSide,
-  bounds: TileRect,
-  doorways: readonly BossRoomDoorway[],
-): GymWallRun {
-  const row = wallRow(OPPOSITE[side], bounds);
-  return {
-    tiles: row.tiles.filter((tile) => !isDoorwayWallTile(tile, doorways, bounds)),
-    alongY: row.alongY,
-  };
+/**
+ * The north wall's tiles, doorways left out. Both of the gym's wall pieces hang
+ * there: the dungeon is drawn from a 3/4 camera, and the north wall is the only
+ * one that shows its face to the room. The side walls are seen edge-on and the
+ * south wall only as its top, so a pane on either would hang on nothing.
+ */
+function northWallTiles(bounds: TileRect, doorways: readonly BossRoomDoorway[]): TilePoint[] {
+  return wallRow('north', bounds).tiles.filter(
+    (tile) => !isDoorwayWallTile(tile, doorways, bounds),
+  );
 }
 
 /**
- * The whiteboard hangs on a wall that runs along x, where its lettering reads
- * left to right: the doorway wall for a north or south doorway, the north wall
- * otherwise. The first unbroken stretch long enough for it, from the left.
+ * The whiteboard: the first unbroken stretch of north wall long enough for it,
+ * from the left, where its lettering reads left to right.
  */
-function whiteboardRun(
-  side: DoorSide,
-  bounds: TileRect,
-  doorways: readonly BossRoomDoorway[],
-): GymWallRun | null {
-  const wall: DoorSide = side === 'north' || side === 'south' ? side : 'north';
-  const row = wallRow(wall, bounds).tiles;
+function whiteboardRun(bounds: TileRect, doorways: readonly BossRoomDoorway[]): GymWallRun | null {
+  const row = wallRow('north', bounds).tiles;
   for (let start = WHITEBOARD_CORNER_GAP; start + WHITEBOARD_TILES <= row.length; start++) {
     const run = row.slice(start, start + WHITEBOARD_TILES);
     if (run.every((tile) => !isDoorwayWallTile(tile, doorways, bounds))) {
@@ -457,6 +447,20 @@ function whiteboardRun(
     }
   }
   return null;
+}
+
+/** The mirror: the rest of the north wall, clear of the whiteboard by a tile either side. */
+function mirrorRun(
+  bounds: TileRect,
+  doorways: readonly BossRoomDoorway[],
+  whiteboard: GymWallRun | null,
+): GymWallRun {
+  const boardXs = new Set(whiteboard?.tiles.map((tile) => tile.x) ?? []);
+  const clearOfBoard = (tile: TilePoint): boolean =>
+    !boardXs.has(tile.x) &&
+    !boardXs.has(tile.x - MIRROR_BOARD_GAP_TILES) &&
+    !boardXs.has(tile.x + MIRROR_BOARD_GAP_TILES);
+  return { tiles: northWallTiles(bounds, doorways).filter(clearOfBoard), alongY: false };
 }
 
 // ── Reading a gym off a finished grid ────────────────────────────────────────

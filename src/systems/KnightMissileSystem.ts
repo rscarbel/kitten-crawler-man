@@ -22,6 +22,7 @@ import {
   KNIGHT_MISSILE_BURST_FRAMES,
 } from '../sprites/knightMissileSprite';
 import type { GameSystem, SystemContext } from './GameSystem';
+import type { DynamicLightSink } from './lighting/dynamicLights';
 
 /** Offset from a tile's origin to its centre, as a fraction of a tile. */
 const CENTER_OFFSET = 0.5;
@@ -77,6 +78,11 @@ interface Burst {
 export class KnightMissileSystem implements GameSystem {
   private missiles: Missile[] = [];
   private bursts: Burst[] = [];
+
+  /** A missile lights the dark it flies through. */
+  collectLights(sink: DynamicLightSink): void {
+    for (const missile of this.missiles) sink.add(missile.x, missile.y, 'bolt');
+  }
 
   /** Set when a bolt lands; `DungeonScene` reads and clears it to play the hit. */
   impactSoundPending = false;

@@ -1,44 +1,65 @@
 /**
- * Drawing engine for the dungeon's smashable furniture.
+ * The cellars' smashable furniture: an upright barrel, a barrel on its side, a
+ * crate, a bookshelf, a standing torch and a brazier, each at four wear stages
+ * — intact, damaged, coming apart, and the flat wreckage left behind.
  *
- * Six props — an upright barrel, a barrel on its side, a crate, a bookshelf, a
- * standing torch and a brazier — each drawn at four wear stages: intact,
- * damaged, coming apart, and the flat wreckage left behind. Every one is painted
- * from one warm-oak ramp and one cool-iron ramp, so a room full of them reads as
- * furniture from a single workshop rather than as six unrelated assets.
+ * Floor 1 is warm and old, so every piece is painted from one warm-oak ramp and
+ * one dark-iron ramp and reads as furniture from a single workshop. The service
+ * level's steel and plastic versions of the same props live in
+ * `floorTwoPropVariantArt.ts`; how a break flies and settles is shared through
+ * `propPaint.ts`.
  *
- * What a prop is made of decides how it breaks: a box throws splinters in a
- * radial ring, a haft sheds slivers up its own length, and a brazier — which has
- * no wood in it at all — throws bent iron and scattered coals.
+ * The static props carry {@link PROP_VARIANT_COUNT} looks per wear stage. Their
+ * geometry never changes between looks — only stains, contents and wear do — so
+ * a room of barrels reads as one cooper's work that has aged differently.
  *
- * Everything is expressed in multiples of the caller's `ts` (the logical tile),
- * so the sheets can be painted at any resolution without hand-tuned pixel
- * constants drifting apart. The caller supplies the anchor tile's top-left
- * corner. Light comes from the upper left, matching every other prop in the repo.
+ * A flame paints only itself: the light it throws on the floor and walls is the
+ * lighting pass's job, so no frame here carries a glow round its fire.
+ *
+ * Everything is in the caller's `ts` (the logical tile) from the anchor tile's
+ * top-left corner (`ox`, `oy`).
  */
 
-/** The game's own 2D context — the offline bakers bridge node-canvas to it. */
-type Ctx = CanvasRenderingContext2D;
+import {
+  PROP_VARIANT_COUNT,
+  SHATTER_FRAMES,
+  TWO_PI,
+  contactShadow,
+  cylinderRamp,
+  drawDebrisBurst,
+  drawWreckageField,
+  lerp,
+  pick,
+  puff,
+  radialDebris,
+  signedUnit,
+  speckle,
+  verticalRamp,
+  withRotation,
+  wreckageField,
+  wreckageShadow,
+  type BurstCloud,
+  type Ctx,
+  type DebrisPiece,
+} from './propPaint';
+import { mulberry32 } from '../person/rng';
 
-export const SHATTER_FRAMES = 6;
+export { SHATTER_FRAMES };
+
 /** Frames in the torch's flame loop, shared by its intact and damaged rows. */
 export const FLAME_FRAMES = 6;
 /**
  * Frames in the brazier's flame loop. Shorter than the torch's because a bed of
- * coals in a wide bowl settles into a slower, less legible dance than a brand
- * does — and this is the count the tile renderer has always played it at.
+ * coals in a wide bowl settles into a slower dance than a brand does.
  */
 export const BRAZIER_FLAME_FRAMES = 4;
-
-const TWO_PI = Math.PI * 2;
 
 export type PropKind = 'barrel' | 'barrel_side' | 'crate' | 'torch' | 'brazier' | 'bookshelf';
 export type PropState = 'idle' | 'damaged' | 'shatter' | 'remains';
 
 // ── Palette ───────────────────────────────────────────────────────────────────
-// Five-value warm oak ramp, lit from the upper left. The darkest value is the
-// outline colour — nothing in this set is drawn in pure black, which is what
-// made the old crate read as a UI icon rather than a prop.
+// Five-value warm oak ramp. The darkest value is the outline colour — nothing
+// is drawn in pure black, which reads as a UI icon rather than a prop.
 const WOOD_EDGE = '#2a1a0d';
 const WOOD_SHADOW = '#3a2413';
 const WOOD_DARK = '#5a3a1e';
@@ -47,99 +68,95 @@ const WOOD_LIGHT = '#9a6a38';
 const WOOD_RIM = '#c09050';
 const WOOD_RAMP = [WOOD_SHADOW, WOOD_DARK, WOOD_MID, WOOD_LIGHT, WOOD_RIM] as const;
 
-// Cool grey-blue so the iron reads as a different material from the wood.
-const IRON_DARK = '#3a4048';
-const IRON_MID = '#4a5058';
-const IRON_LIGHT = '#6b7480';
-const IRON_SPEC = '#9aa4b0';
-
+// Old blackened iron, a touch warm so it sits in the cellars' tallow light.
+const IRON_EDGE = '#1c1a1a';
+const IRON_DARK = '#33312f';
+const IRON_MID = '#4a4744';
+const IRON_LIGHT = '#6e6a64';
+const IRON_SPEC = '#a49c90';
 const IRON_RAMP = [IRON_DARK, IRON_MID, IRON_LIGHT] as const;
 
 const CAVITY = '#1d1208';
 const DUST = '#b09878';
 const DUST_RGB = [176, 152, 120] as const;
-/** Grey-brown haze an iron prop throws instead of a wooden one's sawdust. */
 const ASH = '#8a7e74';
 const ASH_RGB = [138, 126, 116] as const;
 
-// Fire ramp for the torch, running from the pale core out to the cooling tips.
+// Fire ramp, from the pale core out to the cooling tips.
 const FLAME_CORE = '#fff6cf';
 const FLAME_HOT = '#ffd24a';
 const FLAME_MID = '#ff8a1e';
 const FLAME_OUTER = '#e2450f';
-const EMBER_RGB = [255, 142, 46] as const;
 const SOOT = '#241a14';
 const SMOKE_RGB = [172, 166, 160] as const;
+/** Coal that has gone out: what a spilled fire bed is once the remains are left lying. */
+const DEAD_COAL = '#2e2724';
+const DEAD_COAL_GREY = '#4d4540';
 
-const CONTACT_SHADOW_ALPHA = 0.35;
-const CONTACT_SHADOW_WIDTH_FRACTION = 0.7;
-const CONTACT_SHADOW_HEIGHT_FRACTION = 0.11;
+// Pitch-soaked rag on a torch head: near-black with a glossy, warm sheen.
+const PITCH_DARK = '#1f1610';
+const PITCH_MID = '#3a2a1c';
+const PITCH_SHEEN = '#7a5c3c';
+const CHAR_BLACK = '#141110';
+const CHAR_GREY = '#3c3632';
 
-// ── Deterministic noise ───────────────────────────────────────────────────────
-// A seeded generator rather than Math.random so re-running the script produces
-// byte-identical sheets and diffs stay meaningful.
-function makeRng(seed: number): () => number {
-  let s = seed >>> 0;
-  return () => {
-    s += 0x6d2b79f5;
-    let t = s;
-    t = Math.imul(t ^ (t >>> 15), t | 1);
-    t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
-    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
-  };
+// Stains a barrel or crate may carry. Wide tonal washes, never speckle.
+const WINE_STAIN = 'rgba(70,14,22,0.55)';
+const DAMP_STAIN = 'rgba(20,16,10,0.4)';
+const SALT_BLOOM = 'rgba(214,204,178,0.32)';
+const BRAND_MARK = 'rgba(28,16,8,0.7)';
+const STRAW = '#b39a52';
+const STRAW_DARK = '#7d6a34';
+
+/** Seed offsets for each of a static prop's looks. Literal per look, never derived. */
+const VARIANT_SEEDS = [0x0, 0x51d7, 0xa3b1] as const;
+
+function variantSeed(variant: number): number {
+  return VARIANT_SEEDS[variant % PROP_VARIANT_COUNT] ?? VARIANT_SEEDS[0];
 }
 
-const lerp = (a: number, b: number, t: number) => a + (b - a) * t;
+// ── Shared wood and iron primitives ───────────────────────────────────────────
 
-// ── Shared wood primitives ────────────────────────────────────────────────────
+const WOOD_CYLINDER_STOPS = [
+  [0, WOOD_DARK],
+  [0.18, WOOD_LIGHT],
+  [0.34, WOOD_RIM],
+  [0.62, WOOD_MID],
+  [0.86, WOOD_DARK],
+  [1, WOOD_SHADOW],
+] as const;
 
-/**
- * Soft dark ellipse under a prop. Without this the props float above the floor
- * tile instead of sitting on it.
- */
-function contactShadow(ctx: Ctx, cx: number, baseY: number, ts: number, scale = 1): void {
-  const rx = ts * CONTACT_SHADOW_WIDTH_FRACTION * 0.5 * scale;
-  const ry = ts * CONTACT_SHADOW_HEIGHT_FRACTION * scale;
-  const grad = ctx.createRadialGradient(cx, baseY, 0, cx, baseY, rx);
-  grad.addColorStop(0, `rgba(0,0,0,${CONTACT_SHADOW_ALPHA})`);
-  grad.addColorStop(0.6, `rgba(0,0,0,${CONTACT_SHADOW_ALPHA * 0.6})`);
-  grad.addColorStop(1, 'rgba(0,0,0,0)');
-  ctx.save();
-  ctx.translate(cx, baseY);
-  ctx.scale(1, ry / rx);
-  ctx.fillStyle = grad;
-  ctx.beginPath();
-  ctx.arc(0, 0, rx, 0, TWO_PI);
-  ctx.fill();
-  ctx.restore();
-}
-
-/** Left-to-right wood gradient with the highlight sitting where the light hits. */
+/** Left-to-right wood shading with the highlight just left of centre, where the key light hits. */
 function woodGradient(ctx: Ctx, x0: number, x1: number, y: number): CanvasGradient {
-  const g = ctx.createLinearGradient(x0, y, x1, y);
-  g.addColorStop(0, WOOD_DARK);
-  g.addColorStop(0.18, WOOD_LIGHT);
-  g.addColorStop(0.34, WOOD_RIM);
-  g.addColorStop(0.62, WOOD_MID);
-  g.addColorStop(0.86, WOOD_DARK);
-  g.addColorStop(1, WOOD_SHADOW);
-  return g;
+  return cylinderRamp(ctx, x0, x1, y, WOOD_CYLINDER_STOPS);
 }
 
-/** Top-to-bottom wood gradient, for faces whose shading runs vertically. */
+const WOOD_FACE_STOPS = [
+  [0, WOOD_LIGHT],
+  [0.35, WOOD_MID],
+  [1, WOOD_SHADOW],
+] as const;
+
+/** Top-to-bottom wood shading for a front face: lit at the top, falling off toward the floor. */
 function woodGradientV(ctx: Ctx, x: number, y0: number, y1: number): CanvasGradient {
-  const g = ctx.createLinearGradient(x, y0, x, y1);
-  g.addColorStop(0, WOOD_LIGHT);
-  g.addColorStop(0.35, WOOD_MID);
-  g.addColorStop(1, WOOD_SHADOW);
-  return g;
+  return verticalRamp(ctx, x, y0, y1, WOOD_FACE_STOPS);
 }
 
-/** A 1px plank seam. Spacing is varied by the caller so seams never read as stripes. */
-function seam(ctx: Ctx, x0: number, y0: number, x1: number, y1: number, alpha = 0.85): void {
+const SEAM_ALPHA = 0.85;
+
+/** A 1px plank seam. The caller varies the spacing so seams never read as stripes. */
+function seam(
+  ctx: Ctx,
+  x0: number,
+  y0: number,
+  x1: number,
+  y1: number,
+  alpha = SEAM_ALPHA,
+  colour = WOOD_SHADOW,
+): void {
   ctx.save();
   ctx.globalAlpha = alpha;
-  ctx.strokeStyle = WOOD_SHADOW;
+  ctx.strokeStyle = colour;
   ctx.lineWidth = 1;
   ctx.beginPath();
   ctx.moveTo(x0, y0);
@@ -148,44 +165,12 @@ function seam(ctx: Ctx, x0: number, y0: number, x1: number, y1: number, alpha = 
   ctx.restore();
 }
 
-/**
- * A horizontal iron hoop wrapped around a barrel: the band follows the barrel's
- * curve, so it is drawn as the strip between two ellipse arcs.
- */
-function hoopBand(
-  ctx: Ctx,
-  cx: number,
-  cy: number,
-  rx: number,
-  ry: number,
-  thickness: number,
-): void {
-  const g = ctx.createLinearGradient(cx - rx, cy, cx + rx, cy);
-  g.addColorStop(0, IRON_MID);
-  g.addColorStop(0.22, IRON_LIGHT);
-  g.addColorStop(0.55, IRON_MID);
-  g.addColorStop(1, IRON_DARK);
+const IRON_STRAP_SPEC_ALPHA = 0.7;
+const IRON_STRAP_SPEC_OFFSET = 0.5;
 
-  ctx.save();
-  ctx.beginPath();
-  ctx.ellipse(cx, cy + thickness / 2, rx, ry, 0, 0, Math.PI);
-  ctx.ellipse(cx, cy - thickness / 2, rx, ry, 0, Math.PI, 0, true);
-  ctx.closePath();
-  ctx.fillStyle = g;
-  ctx.fill();
-
-  // Single specular arc along the upper-left of the band.
-  ctx.strokeStyle = IRON_SPEC;
-  ctx.lineWidth = 1;
-  ctx.beginPath();
-  ctx.ellipse(cx, cy - thickness / 2, rx, ry, 0, Math.PI * 1.05, Math.PI * 1.5);
-  ctx.stroke();
-  ctx.restore();
-}
-
-/** An iron strap running between two points — crate edge bracket, barrel rivet strip. */
+/** A flat iron strap between two points, lit along its upper edge. */
 function ironStrap(ctx: Ctx, x0: number, y0: number, x1: number, y1: number, width: number): void {
-  const g = ctx.createLinearGradient(x0, y0, x1, y1);
+  const g = ctx.createLinearGradient(x0, y0 - width, x0, y0 + width);
   g.addColorStop(0, IRON_LIGHT);
   g.addColorStop(0.5, IRON_MID);
   g.addColorStop(1, IRON_DARK);
@@ -197,28 +182,28 @@ function ironStrap(ctx: Ctx, x0: number, y0: number, x1: number, y1: number, wid
   ctx.moveTo(x0, y0);
   ctx.lineTo(x1, y1);
   ctx.stroke();
-
-  ctx.globalAlpha = 0.7;
+  ctx.globalAlpha = IRON_STRAP_SPEC_ALPHA;
   ctx.strokeStyle = IRON_SPEC;
   ctx.lineWidth = 1;
   ctx.beginPath();
-  ctx.moveTo(x0 - 0.5, y0 - 0.5);
-  ctx.lineTo(x1 - 0.5, y1 - 0.5);
+  ctx.moveTo(x0 - IRON_STRAP_SPEC_OFFSET, y0 - IRON_STRAP_SPEC_OFFSET);
+  ctx.lineTo(x1 - IRON_STRAP_SPEC_OFFSET, y1 - IRON_STRAP_SPEC_OFFSET);
   ctx.stroke();
   ctx.restore();
 }
+
+const CRACK_STEPS = 5;
+const CRACK_WIDTH = 1.4;
 
 /** A jagged split running down a plank, with the dark cavity showing through. */
 function crack(ctx: Ctx, x: number, y0: number, y1: number, wobble: number, rng: () => number) {
   ctx.save();
   ctx.strokeStyle = CAVITY;
-  ctx.lineWidth = 1.4;
+  ctx.lineWidth = CRACK_WIDTH;
   ctx.beginPath();
   ctx.moveTo(x, y0);
-  const steps = 5;
-  for (let i = 1; i <= steps; i++) {
-    const t = i / steps;
-    ctx.lineTo(x + (rng() - 0.5) * wobble, lerp(y0, y1, t));
+  for (let i = 1; i <= CRACK_STEPS; i++) {
+    ctx.lineTo(x + signedUnit(rng) * (wobble / 2), lerp(y0, y1, i / CRACK_STEPS));
   }
   ctx.stroke();
   ctx.restore();
@@ -226,10 +211,11 @@ function crack(ctx: Ctx, x: number, y0: number, y1: number, wobble: number, rng:
 
 /**
  * A missing chip: a shallow recess with a lit splinter lip on its upper edge.
- * The recess is deep-brown rather than near-black — a true black hole at this
- * size reads as a sticker blob stuck on the prop instead of a bite out of it.
+ * Deep brown rather than black — a black hole at this size reads as a sticker.
  */
 function chip(ctx: Ctx, x: number, y: number, w: number, h: number): void {
+  const peak = [x + w * 0.6, y - h * 0.3] as const;
+  const right = [x + w, y + h * 0.2] as const;
   ctx.save();
   const recess = ctx.createLinearGradient(x, y - h * 0.3, x + w, y + h);
   recess.addColorStop(0, CAVITY);
@@ -237,8 +223,8 @@ function chip(ctx: Ctx, x: number, y: number, w: number, h: number): void {
   ctx.fillStyle = recess;
   ctx.beginPath();
   ctx.moveTo(x, y);
-  ctx.lineTo(x + w * 0.6, y - h * 0.3);
-  ctx.lineTo(x + w, y + h * 0.2);
+  ctx.lineTo(...peak);
+  ctx.lineTo(...right);
   ctx.lineTo(x + w * 0.45, y + h);
   ctx.closePath();
   ctx.fill();
@@ -246,95 +232,33 @@ function chip(ctx: Ctx, x: number, y: number, w: number, h: number): void {
   ctx.lineWidth = 1;
   ctx.beginPath();
   ctx.moveTo(x, y);
-  ctx.lineTo(x + w * 0.6, y - h * 0.3);
-  ctx.lineTo(x + w, y + h * 0.2);
+  ctx.lineTo(...peak);
+  ctx.lineTo(...right);
   ctx.stroke();
   ctx.restore();
 }
 
-/** A single flat wood shard, drawn as a rotated tapered plank. */
-function shard(
-  ctx: Ctx,
-  cx: number,
-  cy: number,
-  length: number,
-  width: number,
-  angle: number,
-  shade: string,
-): void {
+/** A soft-edged tonal wash in an ellipse — how a stain sits in wood without speckle. */
+function stainWash(ctx: Ctx, cx: number, cy: number, rx: number, ry: number, colour: string): void {
   ctx.save();
   ctx.translate(cx, cy);
-  ctx.rotate(angle);
-  ctx.fillStyle = shade;
+  ctx.scale(1, ry / rx);
+  const g = ctx.createRadialGradient(0, 0, 0, 0, 0, rx);
+  g.addColorStop(0, colour);
+  g.addColorStop(1, 'rgba(0,0,0,0)');
+  ctx.fillStyle = g;
   ctx.beginPath();
-  ctx.moveTo(-length / 2, -width / 2);
-  ctx.lineTo(length / 2, -width * 0.25);
-  ctx.lineTo(length / 2, width * 0.3);
-  ctx.lineTo(-length / 2, width / 2);
-  ctx.closePath();
-  ctx.fill();
-  ctx.strokeStyle = WOOD_EDGE;
-  ctx.lineWidth = 0.6;
-  ctx.stroke();
-  ctx.restore();
-}
-
-/** Alpha of a puff's mid stop, relative to its centre. */
-const PUFF_MID_STOP = 0.55;
-const PUFF_MID_ALPHA_FRACTION = 0.45;
-
-/**
- * Soft cloud puffed out behind the flying debris during a break. Tinted by the
- * caller so a splintering crate throws sawdust and a felled torch throws embers.
- */
-function puff(
-  ctx: Ctx,
-  cx: number,
-  cy: number,
-  radius: number,
-  alpha: number,
-  rgb: readonly [number, number, number],
-): void {
-  const [r, g, b] = rgb;
-  const grad = ctx.createRadialGradient(cx, cy, 0, cx, cy, radius);
-  grad.addColorStop(0, `rgba(${r},${g},${b},${alpha})`);
-  grad.addColorStop(PUFF_MID_STOP, `rgba(${r},${g},${b},${alpha * PUFF_MID_ALPHA_FRACTION})`);
-  grad.addColorStop(1, `rgba(${r},${g},${b},0)`);
-  ctx.save();
-  ctx.fillStyle = grad;
-  ctx.beginPath();
-  ctx.arc(cx, cy, radius, 0, TWO_PI);
+  ctx.arc(0, 0, rx, 0, TWO_PI);
   ctx.fill();
   ctx.restore();
 }
 
-const SPECKLE_COUNT = 26;
-/** How often a speckle takes the lighter of its two shades. */
-const SPECKLE_LIGHT_SHADE_CHANCE = 0.4;
-
-/**
- * Fine speckle scattered over settled wreckage — sawdust off a splintered
- * plank, ash off a spilled fire bed. The caller picks the two shades so the
- * dusting matches whatever came apart.
- */
-function speckle(
-  ctx: Ctx,
-  cx: number,
-  cy: number,
-  spread: number,
-  rng: () => number,
-  lightShade: string,
-  darkShade: string,
-): void {
-  ctx.save();
-  for (let i = 0; i < SPECKLE_COUNT; i++) {
-    const a = rng() * TWO_PI;
-    const r = Math.sqrt(rng()) * spread;
-    ctx.globalAlpha = 0.25 + rng() * 0.35;
-    ctx.fillStyle = rng() < SPECKLE_LIGHT_SHADE_CHANCE ? lightShade : darkShade;
-    ctx.fillRect(cx + Math.cos(a) * r, cy + Math.sin(a) * r * 0.55, 1, 1);
-  }
-  ctx.restore();
+/** A nail head: a dark dot with a lit pip on its upper side. */
+function nailHead(ctx: Ctx, x: number, y: number): void {
+  ctx.fillStyle = IRON_DARK;
+  ctx.fillRect(x - 1, y - 1, 2, 2);
+  ctx.fillStyle = IRON_SPEC;
+  ctx.fillRect(x - 1, y - 1, 1, 1);
 }
 
 // ── Upright barrel ────────────────────────────────────────────────────────────
@@ -346,20 +270,37 @@ const BARREL_LID_RY = 7;
 const BARREL_TOP_RX = 20;
 const BARREL_BOTTOM_RX = 17;
 const BARREL_BULGE_RX = 23;
+const BARREL_TOP_FRACTION = 0.22;
+const BARREL_BOTTOM_FRACTION = 0.88;
+const BARREL_MID_FRACTION = 0.55;
+const BARREL_UPPER_HOOP_FRACTION = 0.24;
+const BARREL_LOWER_HOOP_FRACTION = 0.74;
+const BARREL_HOOP_THICKNESS = 3.5;
+const BARREL_UPPER_HOOP_RY_FRACTION = 0.85;
+const BARREL_LOWER_HOOP_RY_FRACTION = 0.8;
+const BARREL_SPRUNG_HOOP_LIFT = 2;
+const BARREL_SPRUNG_HOOP_TILT = -0.13;
+const BARREL_STAVE_GAP_MIN = 4;
+const BARREL_STAVE_GAP_SPREAD = 3.5;
+const BARREL_STAVE_INSET = 2;
+/** A stave seam leans outward with the bulge, by this share of its offset from centre. */
+const BARREL_STAVE_FLARE = 0.06;
+const BARREL_SHADOW_DROP = 3;
+const BARREL_BUNG_RADIUS = 2;
 
 interface BarrelGeometry {
-  cx: number;
-  topY: number;
-  bottomY: number;
-  midY: number;
+  readonly cx: number;
+  readonly topY: number;
+  readonly bottomY: number;
+  readonly midY: number;
 }
 
 function barrelGeometry(ox: number, oy: number, ts: number): BarrelGeometry {
   return {
     cx: ox + ts / 2,
-    topY: oy + ts * 0.22,
-    bottomY: oy + ts * 0.88,
-    midY: oy + ts * 0.55,
+    topY: oy + ts * BARREL_TOP_FRACTION,
+    bottomY: oy + ts * BARREL_BOTTOM_FRACTION,
+    midY: oy + ts * BARREL_MID_FRACTION,
   };
 }
 
@@ -388,21 +329,159 @@ function barrelBodyPath(ctx: Ctx, g: BarrelGeometry): void {
   ctx.closePath();
 }
 
+/** Half-width of the barrel at height `y`, following the bulge. */
+function barrelRxAt(g: BarrelGeometry, y: number): number {
+  const t = (y - g.topY) / (g.bottomY - g.topY);
+  const bulge = Math.sin(t * Math.PI);
+  return lerp(BARREL_TOP_RX, BARREL_BOTTOM_RX, t) + bulge * (BARREL_BULGE_RX - BARREL_TOP_RX);
+}
+
+/**
+ * What each of a barrel's looks carries: a cellarman's chalk mark, a weeping
+ * bung with its lid knocked ajar, or a damp foot that has rusted its lower
+ * hoop away. The barrel's shape never changes between them.
+ */
+type BarrelLook = 'chalked' | 'wine' | 'damp';
+
+const BARREL_LOOKS: Readonly<Record<number, BarrelLook>> = { 0: 'chalked', 1: 'wine', 2: 'damp' };
+
+const CHALK = 'rgba(222,214,196,0.75)';
+const CHALK_WIDTH = 1.3;
+/** A chalked ring with a cross through it, and a tally beside it, on the barrel's lit side. */
+const CHALK_MARK = {
+  dx: -7,
+  yFraction: 0.42,
+  ringR: 4,
+  tallyDx: 4,
+  tallyStep: 2.4,
+  tallyCount: 3,
+  tallyHalf: 3.5,
+} as const;
+/** A wine run's second, darker pool where it has soaked the staves above the foot. */
+const WINE_SOAK = 'rgba(52,8,14,0.6)';
+const WINE_RUN_JITTER = 4;
+const WINE_POOL = { drop: 3, widthScale: 1.6, ry: 4 } as const;
+/** How far a knocked lid has lifted and turned, showing the dark inside under its edge. */
+const LID_AJAR = { lift: 3, dx: -2, tilt: -0.14 } as const;
+/** Where the lost lower hoop has left its mark: a band of rust on the staves. */
+const HOOP_GHOST = 'rgba(96,52,26,0.55)';
+const HOOP_GHOST_WIDTH = 1.4;
+const DAMP_TIDE_JITTER = 3;
+const DAMP_WASH_WIDTH = 1.2;
+const DAMP_WASH_DEPTH = 1.4;
+const SALT_LINE_RY_FRACTION = 0.7;
+const SALT_LINE_TRIM = 0.1;
+
+/** Chalk: a ring with a cross through it, and a short tally beside it. */
+function chalkMark(ctx: Ctx, x: number, y: number): void {
+  const m = CHALK_MARK;
+  ctx.save();
+  ctx.strokeStyle = CHALK;
+  ctx.lineWidth = CHALK_WIDTH;
+  ctx.beginPath();
+  ctx.arc(x, y, m.ringR, 0, TWO_PI);
+  ctx.moveTo(x - m.ringR, y - m.ringR);
+  ctx.lineTo(x + m.ringR, y + m.ringR);
+  for (let i = 0; i < m.tallyCount; i++) {
+    const tx = x + m.ringR + m.tallyDx + i * m.tallyStep;
+    ctx.moveTo(tx, y - m.tallyHalf);
+    ctx.lineTo(tx, y + m.tallyHalf);
+  }
+  ctx.stroke();
+  ctx.restore();
+}
+
+const WINE_STAIN_RX = 7;
+const WINE_STAIN_RY = 14;
+const DAMP_STAIN_RY = 8;
+const SALT_BLOOM_WIDTH = 1.4;
+
+function drawBarrelLook(ctx: Ctx, g: BarrelGeometry, look: BarrelLook, rng: () => number): void {
+  ctx.save();
+  barrelBodyPath(ctx, g);
+  ctx.clip();
+  if (look === 'chalked') {
+    chalkMark(ctx, g.cx + CHALK_MARK.dx, lerp(g.topY, g.bottomY, CHALK_MARK.yFraction));
+  } else if (look === 'wine') {
+    // A run down the front from a weeping bung, soaked darker toward the foot.
+    const runX = g.cx + signedUnit(rng) * WINE_RUN_JITTER;
+    stainWash(ctx, runX, g.midY, WINE_STAIN_RX, WINE_STAIN_RY, WINE_STAIN);
+    stainWash(ctx, runX, g.midY + WINE_STAIN_RY / 2, WINE_STAIN_RX, WINE_STAIN_RY, WINE_SOAK);
+    stainWash(
+      ctx,
+      runX,
+      g.bottomY - WINE_POOL.drop,
+      WINE_STAIN_RX * WINE_POOL.widthScale,
+      WINE_POOL.ry,
+      WINE_SOAK,
+    );
+  } else {
+    // Damp wicking up from the floor, its high-water mark a pale salt line.
+    const tideY = g.bottomY - DAMP_STAIN_RY - rng() * DAMP_TIDE_JITTER;
+    stainWash(
+      ctx,
+      g.cx,
+      g.bottomY,
+      BARREL_BULGE_RX * DAMP_WASH_WIDTH,
+      DAMP_STAIN_RY * DAMP_WASH_DEPTH,
+      DAMP_STAIN,
+    );
+    ctx.strokeStyle = SALT_BLOOM;
+    ctx.lineWidth = SALT_BLOOM_WIDTH;
+    ctx.beginPath();
+    ctx.ellipse(
+      g.cx,
+      tideY,
+      barrelRxAt(g, tideY),
+      BARREL_LID_RY * SALT_LINE_RY_FRACTION,
+      0,
+      SALT_LINE_TRIM,
+      Math.PI - SALT_LINE_TRIM,
+    );
+    ctx.stroke();
+  }
+  ctx.restore();
+}
+
+/** The rust band a lost hoop leaves on the staves it used to bind. */
+function hoopGhost(
+  ctx: Ctx,
+  cx: number,
+  cy: number,
+  rx: number,
+  ry: number,
+  thickness: number,
+): void {
+  ctx.save();
+  ctx.strokeStyle = HOOP_GHOST;
+  ctx.lineWidth = HOOP_GHOST_WIDTH;
+  for (const dy of [-thickness / 2, thickness / 2]) {
+    ctx.beginPath();
+    ctx.ellipse(cx, cy + dy, rx, ry, 0, 0, Math.PI);
+    ctx.stroke();
+  }
+  ctx.restore();
+}
+
 function drawBarrelBody(ctx: Ctx, g: BarrelGeometry, rng: () => number): void {
   const { cx, topY, bottomY } = g;
-
   barrelBodyPath(ctx, g);
   ctx.save();
   ctx.fillStyle = woodGradient(ctx, cx - BARREL_BULGE_RX, cx + BARREL_BULGE_RX, g.midY);
   ctx.fill();
   ctx.clip();
-
-  // Staves: unevenly spaced so they read as boards, not as a stripe pattern.
-  let offset = -BARREL_BULGE_RX + 2;
-  while (offset < BARREL_BULGE_RX - 2) {
+  // The key light falls off down the staves, so the foot of the barrel is darker than its shoulder.
+  ctx.fillStyle = verticalRamp(ctx, cx, topY, bottomY, [
+    [0, 'rgba(255,230,190,0.10)'],
+    [0.45, 'rgba(0,0,0,0)'],
+    [1, 'rgba(0,0,0,0.32)'],
+  ]);
+  ctx.fillRect(cx - BARREL_BULGE_RX, topY, BARREL_BULGE_RX * 2, bottomY - topY + BARREL_LID_RY);
+  let offset = -BARREL_BULGE_RX + BARREL_STAVE_INSET;
+  while (offset < BARREL_BULGE_RX - BARREL_STAVE_INSET) {
     const x = cx + offset;
-    seam(ctx, x, topY - 2, x + offset * 0.06, bottomY + 2, 0.5 + rng() * 0.3);
-    offset += 4 + rng() * 3.5;
+    seam(ctx, x, topY - 2, x + offset * BARREL_STAVE_FLARE, bottomY + 2, 0.55 + rng() * 0.3);
+    offset += BARREL_STAVE_GAP_MIN + rng() * BARREL_STAVE_GAP_SPREAD;
   }
   ctx.restore();
 
@@ -413,6 +492,60 @@ function drawBarrelBody(ctx: Ctx, g: BarrelGeometry, rng: () => number): void {
   ctx.stroke();
   ctx.restore();
 }
+
+const HOOP_SHADOW_ALPHA = 0.45;
+const HOOP_KEY_LIGHT_START = Math.PI * 0.15;
+const HOOP_KEY_LIGHT_END = Math.PI * 0.75;
+
+/**
+ * An iron hoop round the barrel, drawn as the strip between two ellipse arcs.
+ * Its upper edge catches the key light across the front of the barrel, and it
+ * throws a thin shadow on the staves below it — that pair is what makes it
+ * read as a band standing proud of the wood.
+ */
+function hoopBand(
+  ctx: Ctx,
+  cx: number,
+  cy: number,
+  rx: number,
+  ry: number,
+  thickness: number,
+): void {
+  ctx.save();
+  ctx.globalAlpha = HOOP_SHADOW_ALPHA;
+  ctx.strokeStyle = CAVITY;
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  ctx.ellipse(cx, cy + thickness / 2 + 1, rx, ry, 0, 0, Math.PI);
+  ctx.stroke();
+  ctx.restore();
+
+  const g = ctx.createLinearGradient(cx - rx, cy, cx + rx, cy);
+  g.addColorStop(0, IRON_DARK);
+  g.addColorStop(0.3, IRON_LIGHT);
+  g.addColorStop(0.6, IRON_MID);
+  g.addColorStop(1, IRON_DARK);
+  ctx.save();
+  ctx.beginPath();
+  ctx.ellipse(cx, cy + thickness / 2, rx, ry, 0, 0, Math.PI);
+  ctx.ellipse(cx, cy - thickness / 2, rx, ry, 0, Math.PI, 0, true);
+  ctx.closePath();
+  ctx.fillStyle = g;
+  ctx.fill();
+  ctx.strokeStyle = IRON_EDGE;
+  ctx.lineWidth = 0.6;
+  ctx.stroke();
+
+  ctx.strokeStyle = IRON_SPEC;
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  ctx.ellipse(cx, cy - thickness / 2 + 0.5, rx, ry, 0, HOOP_KEY_LIGHT_START, HOOP_KEY_LIGHT_END);
+  ctx.stroke();
+  ctx.restore();
+}
+
+const LID_BOARD_COUNT_HALF = 1;
+const LID_BOARD_SPACING_FRACTION = 0.75;
 
 function drawBarrelLid(ctx: Ctx, g: BarrelGeometry, rng: () => number): void {
   const { cx, topY } = g;
@@ -427,22 +560,32 @@ function drawBarrelLid(ctx: Ctx, g: BarrelGeometry, rng: () => number): void {
   );
   lidGrad.addColorStop(0, WOOD_RIM);
   lidGrad.addColorStop(0.45, WOOD_LIGHT);
-  lidGrad.addColorStop(1, WOOD_DARK);
+  lidGrad.addColorStop(1, WOOD_MID);
   ctx.fillStyle = lidGrad;
   ctx.fill();
   ctx.clip();
-  // Two or three boards across the lid, not the old alternating stripe field.
-  for (let i = -1; i <= 1; i++) {
-    const y = topY + i * (BARREL_LID_RY * 0.75) + (rng() - 0.5);
+  for (let i = -LID_BOARD_COUNT_HALF; i <= LID_BOARD_COUNT_HALF; i++) {
+    const y = topY + i * (BARREL_LID_RY * LID_BOARD_SPACING_FRACTION) + signedUnit(rng) / 2;
     seam(ctx, cx - BARREL_TOP_RX, y, cx + BARREL_TOP_RX, y, 0.6);
   }
+  // The bung, a dark plug in the middle board.
+  ctx.fillStyle = WOOD_SHADOW;
+  ctx.beginPath();
+  ctx.arc(cx + BARREL_TOP_RX * 0.3, topY + 1, BARREL_BUNG_RADIUS, 0, TWO_PI);
+  ctx.fill();
   ctx.restore();
 
+  // The chime: the stave ends standing a little proud of the lid, lit on the far side.
   ctx.save();
   ctx.strokeStyle = WOOD_EDGE;
-  ctx.lineWidth = 1;
+  ctx.lineWidth = 1.4;
   ctx.beginPath();
   ctx.ellipse(cx, topY, BARREL_TOP_RX, BARREL_LID_RY, 0, 0, TWO_PI);
+  ctx.stroke();
+  ctx.strokeStyle = WOOD_RIM;
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  ctx.ellipse(cx, topY, BARREL_TOP_RX - 1, BARREL_LID_RY - 1, 0, Math.PI * 1.1, Math.PI * 1.9);
   ctx.stroke();
   ctx.restore();
 }
@@ -453,36 +596,49 @@ function drawBarrel(
   oy: number,
   ts: number,
   damaged: boolean,
+  variant: number,
   seedTerm: number,
 ): void {
-  const rng = makeRng(BARREL_SEED + seedTerm);
+  const rng = mulberry32(BARREL_SEED + seedTerm);
+  const lookRng = mulberry32(BARREL_SEED + variantSeed(variant) + seedTerm);
   const g = barrelGeometry(ox, oy, ts);
 
-  contactShadow(ctx, g.cx, g.bottomY + 3, ts);
+  contactShadow(ctx, g.cx, g.bottomY + BARREL_SHADOW_DROP, ts);
   drawBarrelBody(ctx, g, rng);
+  const look = BARREL_LOOKS[variant] ?? 'chalked';
+  drawBarrelLook(ctx, g, look, lookRng);
 
-  const upperHoopY = lerp(g.topY, g.bottomY, 0.24);
-  const lowerHoopY = lerp(g.topY, g.bottomY, 0.74);
-  const hoopRxAt = (y: number) => {
-    const t = (y - g.topY) / (g.bottomY - g.topY);
-    const bulge = Math.sin(t * Math.PI);
-    return lerp(BARREL_TOP_RX, BARREL_BOTTOM_RX, t) + bulge * (BARREL_BULGE_RX - BARREL_TOP_RX);
-  };
-
+  const upperHoopY = lerp(g.topY, g.bottomY, BARREL_UPPER_HOOP_FRACTION);
+  const lowerHoopY = lerp(g.topY, g.bottomY, BARREL_LOWER_HOOP_FRACTION);
+  const upperRy = BARREL_LID_RY * BARREL_UPPER_HOOP_RY_FRACTION;
   if (damaged) {
-    // A sprung hoop: the upper band lifts and tilts off the staves.
-    ctx.save();
-    ctx.translate(g.cx, upperHoopY - 2);
-    ctx.rotate(-0.13);
-    ctx.translate(-g.cx, -(upperHoopY - 2));
-    hoopBand(ctx, g.cx, upperHoopY - 2, hoopRxAt(upperHoopY), BARREL_LID_RY * 0.85, 3.5);
-    ctx.restore();
+    const sprungY = upperHoopY - BARREL_SPRUNG_HOOP_LIFT;
+    withRotation(ctx, g.cx, sprungY, BARREL_SPRUNG_HOOP_TILT, () => {
+      hoopBand(ctx, g.cx, sprungY, barrelRxAt(g, upperHoopY), upperRy, BARREL_HOOP_THICKNESS);
+    });
   } else {
-    hoopBand(ctx, g.cx, upperHoopY, hoopRxAt(upperHoopY), BARREL_LID_RY * 0.85, 3.5);
+    hoopBand(ctx, g.cx, upperHoopY, barrelRxAt(g, upperHoopY), upperRy, BARREL_HOOP_THICKNESS);
   }
-  hoopBand(ctx, g.cx, lowerHoopY, hoopRxAt(lowerHoopY), BARREL_LID_RY * 0.8, 3.5);
+  const lowerRy = BARREL_LID_RY * BARREL_LOWER_HOOP_RY_FRACTION;
+  if (look === 'damp') {
+    hoopGhost(ctx, g.cx, lowerHoopY, barrelRxAt(g, lowerHoopY), lowerRy, BARREL_HOOP_THICKNESS);
+  } else {
+    hoopBand(ctx, g.cx, lowerHoopY, barrelRxAt(g, lowerHoopY), lowerRy, BARREL_HOOP_THICKNESS);
+  }
 
-  drawBarrelLid(ctx, g, rng);
+  if (look === 'wine') {
+    // Knocked ajar: the dark of the barrel's inside shows where the lid has lifted off it.
+    ctx.fillStyle = CAVITY;
+    ctx.beginPath();
+    ctx.ellipse(g.cx, g.topY, BARREL_TOP_RX, BARREL_LID_RY, 0, 0, TWO_PI);
+    ctx.fill();
+    withRotation(ctx, g.cx, g.topY, LID_AJAR.tilt, () => {
+      ctx.translate(LID_AJAR.dx, -LID_AJAR.lift);
+      drawBarrelLid(ctx, g, rng);
+    });
+  } else {
+    drawBarrelLid(ctx, g, rng);
+  }
 
   if (damaged) {
     crack(ctx, g.cx - 7, g.topY + 6, g.bottomY - 5, 3.5, rng);
@@ -500,51 +656,69 @@ const BARREL_SIDE_HALF_LEN = 22;
 const BARREL_SIDE_CAP_RX = 7;
 const BARREL_SIDE_END_RY = 15;
 const BARREL_SIDE_BULGE_RY = 18;
+const BARREL_SIDE_CENTER_FRACTION = 0.56;
+const BARREL_SIDE_CONTROL_FRACTION = 0.4;
+const BARREL_SIDE_HOOP_FRACTIONS = [0.28, 0.72] as const;
+const BARREL_SIDE_SPRUNG_HOOP_TILT = 0.16;
+const BARREL_SIDE_HOOP_HALF_THICKNESS = 2;
+const BARREL_SIDE_SHADOW_SCALE = 1.05;
+const BARREL_SIDE_CAP_SEAM_STEP = 7;
+const SIDE_CHALK = { dx: -10, dy: -6 } as const;
+const SIDE_WINE = {
+  jitter: 8,
+  rx: 14,
+  ry: 6,
+  poolDx: 4,
+  poolDy: 16,
+  poolRx: 13,
+  poolRy: 5,
+  capStainDy: 6,
+  capStainRx: 6,
+  capStainRy: 9,
+  bungDy: -4,
+  bungRx: 1.6,
+  bungRy: 2.4,
+} as const;
+const SIDE_DAMP = { widthScale: 1.3, ry: 9 } as const;
+/** The damp look's lost hoop: the one nearer the floor-soaked end. */
+const SIDE_LOST_HOOP = 1;
 
 interface BarrelSideGeometry {
-  cx: number;
-  cy: number;
-  leftX: number;
-  rightX: number;
+  readonly cx: number;
+  readonly cy: number;
+  readonly leftX: number;
+  readonly rightX: number;
 }
 
 function barrelSideGeometry(ox: number, oy: number, ts: number): BarrelSideGeometry {
   const cx = ox + ts / 2;
-  const cy = oy + ts * 0.56;
+  const cy = oy + ts * BARREL_SIDE_CENTER_FRACTION;
   return { cx, cy, leftX: cx - BARREL_SIDE_HALF_LEN, rightX: cx + BARREL_SIDE_HALF_LEN };
 }
 
 function barrelSideBodyPath(ctx: Ctx, g: BarrelSideGeometry): void {
   const { cx, cy, leftX, rightX } = g;
+  const controlDx = BARREL_SIDE_HALF_LEN * BARREL_SIDE_CONTROL_FRACTION;
   ctx.beginPath();
   ctx.moveTo(leftX, cy - BARREL_SIDE_END_RY);
   ctx.bezierCurveTo(
-    cx - BARREL_SIDE_HALF_LEN * 0.4,
+    cx - controlDx,
     cy - BARREL_SIDE_BULGE_RY,
-    cx + BARREL_SIDE_HALF_LEN * 0.4,
+    cx + controlDx,
     cy - BARREL_SIDE_BULGE_RY,
     rightX,
     cy - BARREL_SIDE_END_RY,
   );
   ctx.ellipse(rightX, cy, BARREL_SIDE_CAP_RX, BARREL_SIDE_END_RY, 0, -Math.PI / 2, Math.PI / 2);
   ctx.bezierCurveTo(
-    cx + BARREL_SIDE_HALF_LEN * 0.4,
+    cx + controlDx,
     cy + BARREL_SIDE_BULGE_RY,
-    cx - BARREL_SIDE_HALF_LEN * 0.4,
+    cx - controlDx,
     cy + BARREL_SIDE_BULGE_RY,
     leftX,
     cy + BARREL_SIDE_END_RY,
   );
-  ctx.ellipse(
-    leftX,
-    cy,
-    BARREL_SIDE_CAP_RX,
-    BARREL_SIDE_END_RY,
-    0,
-    Math.PI / 2,
-    Math.PI * 1.5,
-    false,
-  );
+  ctx.ellipse(leftX, cy, BARREL_SIDE_CAP_RX, BARREL_SIDE_END_RY, 0, Math.PI / 2, Math.PI * 1.5);
   ctx.closePath();
 }
 
@@ -554,27 +728,62 @@ function drawBarrelSide(
   oy: number,
   ts: number,
   damaged: boolean,
+  variant: number,
   seedTerm: number,
 ): void {
-  const rng = makeRng(BARREL_SIDE_SEED + seedTerm);
+  const rng = mulberry32(BARREL_SIDE_SEED + seedTerm);
+  const lookRng = mulberry32(BARREL_SIDE_SEED + variantSeed(variant) + seedTerm);
   const g = barrelSideGeometry(ox, oy, ts);
   const { cx, cy, rightX } = g;
 
-  contactShadow(ctx, cx, cy + BARREL_SIDE_END_RY + 2, ts, 1.05);
+  contactShadow(ctx, cx, cy + BARREL_SIDE_END_RY + 2, ts, BARREL_SIDE_SHADOW_SCALE);
 
   barrelSideBodyPath(ctx, g);
   ctx.save();
   ctx.fillStyle = woodGradientV(ctx, cx, cy - BARREL_SIDE_BULGE_RY, cy + BARREL_SIDE_BULGE_RY);
   ctx.fill();
   ctx.clip();
-  // Staves run along the barrel's axis when it lies down.
-  let off = -BARREL_SIDE_BULGE_RY + 2;
-  while (off < BARREL_SIDE_BULGE_RY - 2) {
+  let off = -BARREL_SIDE_BULGE_RY + BARREL_STAVE_INSET;
+  while (off < BARREL_SIDE_BULGE_RY - BARREL_STAVE_INSET) {
     const y = cy + off;
     seam(ctx, g.leftX - 4, y, rightX, y, 0.45 + rng() * 0.3);
-    off += 4 + rng() * 3;
+    off += BARREL_STAVE_GAP_MIN + rng() * (BARREL_STAVE_GAP_SPREAD - 0.5);
+  }
+  const look = BARREL_LOOKS[variant] ?? 'chalked';
+  if (look === 'chalked') {
+    chalkMark(ctx, cx + SIDE_CHALK.dx, cy + SIDE_CHALK.dy);
+  } else if (look === 'wine') {
+    stainWash(
+      ctx,
+      cx + signedUnit(lookRng) * SIDE_WINE.jitter,
+      cy + BARREL_SIDE_BULGE_RY,
+      SIDE_WINE.rx,
+      SIDE_WINE.ry,
+      WINE_SOAK,
+    );
+  } else {
+    stainWash(
+      ctx,
+      cx,
+      cy + BARREL_SIDE_BULGE_RY,
+      BARREL_SIDE_HALF_LEN * SIDE_DAMP.widthScale,
+      SIDE_DAMP.ry,
+      DAMP_STAIN,
+    );
   }
   ctx.restore();
+
+  if (look === 'wine') {
+    // Leaking from the open bung in its end: a pool spreading on the floor below it.
+    stainWash(
+      ctx,
+      rightX + SIDE_WINE.poolDx,
+      cy + SIDE_WINE.poolDy,
+      SIDE_WINE.poolRx,
+      SIDE_WINE.poolRy,
+      WINE_SOAK,
+    );
+  }
 
   ctx.save();
   ctx.strokeStyle = WOOD_EDGE;
@@ -583,37 +792,47 @@ function drawBarrelSide(
   ctx.stroke();
   ctx.restore();
 
-  // Hoops read as vertical bands when the barrel is on its side.
   const ryAt = (x: number) => {
     const t = (x - g.leftX) / (g.rightX - g.leftX);
     return lerp(BARREL_SIDE_END_RY, BARREL_SIDE_BULGE_RY, Math.sin(t * Math.PI));
   };
-  for (const frac of [0.28, 0.72]) {
+  BARREL_SIDE_HOOP_FRACTIONS.forEach((frac, index) => {
     const x = lerp(g.leftX, g.rightX, frac);
-    const isSprung = damaged && frac === 0.28;
-    ctx.save();
-    if (isSprung) {
-      ctx.translate(x, cy);
-      ctx.rotate(0.16);
-      ctx.translate(-x, -cy);
+    const ry = ryAt(x);
+    if (look === 'damp' && index === SIDE_LOST_HOOP) {
+      ctx.save();
+      ctx.strokeStyle = HOOP_GHOST;
+      ctx.lineWidth = HOOP_GHOST_WIDTH;
+      ctx.beginPath();
+      ctx.ellipse(x, cy, BARREL_SIDE_HOOP_HALF_THICKNESS, ry, 0, -Math.PI / 2, Math.PI / 2);
+      ctx.stroke();
+      ctx.restore();
+      return;
     }
-    ctx.beginPath();
-    ctx.ellipse(x, cy, 2, ryAt(x), 0, 0, TWO_PI);
-    const bandGrad = ctx.createLinearGradient(x, cy - ryAt(x), x, cy + ryAt(x));
-    bandGrad.addColorStop(0, IRON_LIGHT);
-    bandGrad.addColorStop(0.4, IRON_MID);
-    bandGrad.addColorStop(1, IRON_DARK);
-    ctx.fillStyle = bandGrad;
-    ctx.fill();
-    ctx.strokeStyle = IRON_SPEC;
-    ctx.lineWidth = 0.8;
-    ctx.beginPath();
-    ctx.ellipse(x, cy, 2, ryAt(x), 0, Math.PI * 1.15, Math.PI * 1.6);
-    ctx.stroke();
-    ctx.restore();
-  }
+    const paintHoop = () => {
+      ctx.beginPath();
+      ctx.ellipse(x, cy, BARREL_SIDE_HOOP_HALF_THICKNESS, ry, 0, 0, TWO_PI);
+      const bandGrad = ctx.createLinearGradient(x, cy - ry, x, cy + ry);
+      bandGrad.addColorStop(0, IRON_SPEC);
+      bandGrad.addColorStop(0.25, IRON_LIGHT);
+      bandGrad.addColorStop(0.6, IRON_MID);
+      bandGrad.addColorStop(1, IRON_DARK);
+      ctx.fillStyle = bandGrad;
+      ctx.fill();
+      ctx.strokeStyle = IRON_EDGE;
+      ctx.lineWidth = 0.6;
+      ctx.stroke();
+    };
+    const isSprung = damaged && index === 0;
+    if (isSprung) withRotation(ctx, x, cy, BARREL_SIDE_SPRUNG_HOOP_TILT, paintHoop);
+    else {
+      ctx.save();
+      paintHoop();
+      ctx.restore();
+    }
+  });
 
-  // Visible end cap.
+  // The visible end, lit across its upper half.
   ctx.save();
   ctx.beginPath();
   ctx.ellipse(rightX, cy, BARREL_SIDE_CAP_RX, BARREL_SIDE_END_RY, 0, 0, TWO_PI);
@@ -632,17 +851,32 @@ function drawBarrelSide(
   ctx.fill();
   ctx.clip();
   for (let i = -1; i <= 1; i++) {
-    const y = cy + i * 7;
+    const y = cy + i * BARREL_SIDE_CAP_SEAM_STEP;
     seam(ctx, rightX - BARREL_SIDE_CAP_RX, y, rightX + BARREL_SIDE_CAP_RX, y, 0.6);
   }
   ctx.restore();
   ctx.save();
   ctx.strokeStyle = WOOD_EDGE;
-  ctx.lineWidth = 1;
+  ctx.lineWidth = 1.2;
   ctx.beginPath();
   ctx.ellipse(rightX, cy, BARREL_SIDE_CAP_RX, BARREL_SIDE_END_RY, 0, 0, TWO_PI);
   ctx.stroke();
   ctx.restore();
+  if (look === 'wine') {
+    // The open bunghole, and the wine that has run down the end from it.
+    stainWash(
+      ctx,
+      rightX,
+      cy + SIDE_WINE.capStainDy,
+      SIDE_WINE.capStainRx,
+      SIDE_WINE.capStainRy,
+      WINE_SOAK,
+    );
+    ctx.fillStyle = CAVITY;
+    ctx.beginPath();
+    ctx.ellipse(rightX, cy + SIDE_WINE.bungDy, SIDE_WINE.bungRx, SIDE_WINE.bungRy, 0, 0, TWO_PI);
+    ctx.fill();
+  }
 
   if (damaged) {
     crack(ctx, cx - 4, cy - BARREL_SIDE_BULGE_RY + 3, cy + BARREL_SIDE_BULGE_RY - 4, 3, rng);
@@ -652,30 +886,109 @@ function drawBarrelSide(
 }
 
 // ── Crate ─────────────────────────────────────────────────────────────────────
-// 3/4 view: front face, right side face and a shallow top face, so the box has
-// volume instead of reading as a flat square with an X on it.
+// 3/4 view — front face, right side face and a shallow top — built the way a
+// cooper's crate is: horizontal slats with gaps between them, nailed to corner
+// battens, with a diagonal brace across the front holding it square.
 
-/** Fixed seed for the crate's plank seams and its split face. */
 const CRATE_SEED = 0x3f19;
+const CRATE_FRONT_LEFT_FRACTION = 0.12;
+const CRATE_FRONT_RIGHT_FRACTION = 0.72;
+const CRATE_FRONT_TOP_FRACTION = 0.34;
+const CRATE_FRONT_BOTTOM_FRACTION = 0.88;
+const CRATE_DEPTH_X_FRACTION = 0.16;
+const CRATE_DEPTH_Y_FRACTION = -0.12;
+const CRATE_SLAT_COUNT = 3;
+const CRATE_SLAT_GAP = 1.6;
+const CRATE_BATTEN_WIDTH = 5;
+const CRATE_BRACE_WIDTH = 5;
+const CRATE_TOP_SLAT_COUNT = 3;
+const CRATE_SIDE_SLAT_COUNT = 3;
+const CRATE_NAIL_INSET = 2.5;
+const CRATE_SHADOW_SCALE = 1.05;
 
-interface CrateGeometry {
-  frontL: number;
-  frontR: number;
-  frontT: number;
-  frontB: number;
-  depthX: number;
-  depthY: number;
+/** What each look adds to the crate: a damp foot, a burnt-in brand, or a lid slat gone. */
+type CrateLook = 'damp' | 'brand' | 'open';
+const CRATE_LOOKS: Readonly<Record<number, CrateLook>> = { 0: 'damp', 1: 'brand', 2: 'open' };
+const CRATE_CHALK = { xFraction: 0.42, yFraction: 0.3 } as const;
+const CRATE_BRAND = {
+  xFraction: 0.58,
+  yFraction: 0.5,
+  jitter: 0.05,
+  radius: 5.5,
+  barHalf: 8,
+  width: 2.2,
+  splitFrom: 0.15,
+  splitTo: 0.7,
+  splitDrop: -1,
+  splitDepth: 0.4,
+} as const;
+const CRATE_STRAW = { count: 9, inset: 3, spreadY: 2.5, half: 3.5, tilt: 2.5 } as const;
+/** The front slat the open look has had replaced, and the paler plank it was replaced with. */
+const CRATE_REPLACED_SLAT = 2;
+const CRATE_NEW_PLANK = 'rgba(214,176,118,0.45)';
+/**
+ * The damaged crate's stove-in middle slat: where across the front it split,
+ * and how far each broken end's ragged outline sits from that line, in pixels.
+ * The right end is notched part-way down rather than cut straight.
+ */
+const CRATE_STOVE_IN = {
+  breakXFraction: 0.45,
+  leftTopInset: 3,
+  leftBottomInset: 7,
+  rightTopOffset: 6,
+  rightNotchOffset: 2,
+  rightNotchDepthFraction: 0.6,
+  rightBottomOffset: 8,
+} as const;
+
+interface CrateBox {
+  readonly frontL: number;
+  readonly frontR: number;
+  readonly frontT: number;
+  readonly frontB: number;
+  readonly depthX: number;
+  readonly depthY: number;
 }
 
-function crateGeometry(ox: number, oy: number, ts: number): CrateGeometry {
+function crateBox(ox: number, oy: number, ts: number): CrateBox {
   return {
-    frontL: ox + ts * 0.14,
-    frontR: ox + ts * 0.7,
-    frontT: oy + ts * 0.36,
-    frontB: oy + ts * 0.88,
-    depthX: ts * 0.16,
-    depthY: -ts * 0.12,
+    frontL: ox + ts * CRATE_FRONT_LEFT_FRACTION,
+    frontR: ox + ts * CRATE_FRONT_RIGHT_FRACTION,
+    frontT: oy + ts * CRATE_FRONT_TOP_FRACTION,
+    frontB: oy + ts * CRATE_FRONT_BOTTOM_FRACTION,
+    depthX: ts * CRATE_DEPTH_X_FRACTION,
+    depthY: ts * CRATE_DEPTH_Y_FRACTION,
   };
+}
+
+/** A run of slats filling a quad, each lit along its upper edge, with dark gaps between. */
+function slatRun(
+  ctx: Ctx,
+  corners: readonly [readonly [number, number], readonly [number, number]],
+  across: readonly [number, number],
+  count: number,
+  baseShade: string,
+  litShade: string,
+  rng: () => number,
+): void {
+  const [[x0, y0], [x1, y1]] = corners;
+  const [ax, ay] = across;
+  for (let i = 0; i < count; i++) {
+    const t0 = i / count;
+    const t1 = (i + 1) / count;
+    const gapT = CRATE_SLAT_GAP / Math.hypot(ax, ay);
+    const s0 = t0;
+    const s1 = Math.max(s0, t1 - gapT);
+    ctx.fillStyle = baseShade;
+    ctx.beginPath();
+    ctx.moveTo(x0 + ax * s0, y0 + ay * s0);
+    ctx.lineTo(x1 + ax * s0, y1 + ay * s0);
+    ctx.lineTo(x1 + ax * s1, y1 + ay * s1);
+    ctx.lineTo(x0 + ax * s1, y0 + ay * s1);
+    ctx.closePath();
+    ctx.fill();
+    seam(ctx, x0 + ax * s0, y0 + ay * s0, x1 + ax * s0, y1 + ay * s0, 0.5 + rng() * 0.3, litShade);
+  }
 }
 
 function drawCrate(
@@ -684,106 +997,227 @@ function drawCrate(
   oy: number,
   ts: number,
   damaged: boolean,
+  variant: number,
   seedTerm: number,
 ): void {
-  const rng = makeRng(CRATE_SEED + seedTerm);
-  const { frontL, frontR, frontT, frontB, depthX, depthY } = crateGeometry(ox, oy, ts);
+  const rng = mulberry32(CRATE_SEED + seedTerm);
+  const lookRng = mulberry32(CRATE_SEED + variantSeed(variant) + seedTerm);
+  const look = CRATE_LOOKS[variant] ?? 'damp';
+  const { frontL, frontR, frontT, frontB, depthX, depthY } = crateBox(ox, oy, ts);
   const backL = frontL + depthX;
   const backR = frontR + depthX;
   const backT = frontT + depthY;
   const backB = frontB + depthY;
+  const frontW = frontR - frontL;
+  const frontH = frontB - frontT;
 
-  contactShadow(ctx, (frontL + backR) / 2, frontB + 2, ts, 1.05);
+  contactShadow(ctx, (frontL + backR) / 2, frontB + 2, ts, CRATE_SHADOW_SCALE);
 
-  // Right side face — furthest from the light, so darkest.
-  ctx.save();
+  // The interior the gaps show into: the box's dark inside, filling its whole silhouette.
+  ctx.fillStyle = CAVITY;
   ctx.beginPath();
-  ctx.moveTo(frontR, frontT);
+  ctx.moveTo(frontL, frontB);
+  ctx.lineTo(frontL, frontT);
+  ctx.lineTo(backL, backT);
   ctx.lineTo(backR, backT);
   ctx.lineTo(backR, backB);
   ctx.lineTo(frontR, frontB);
   ctx.closePath();
-  const sideGrad = ctx.createLinearGradient(frontR, frontT, backR, backB);
-  sideGrad.addColorStop(0, WOOD_DARK);
-  sideGrad.addColorStop(1, WOOD_SHADOW);
-  ctx.fillStyle = sideGrad;
   ctx.fill();
-  ctx.clip();
-  for (let i = 1; i <= 3; i++) {
-    const t = i / 4 + (rng() - 0.5) * 0.06;
-    const y0 = lerp(frontT, frontB, t);
-    seam(ctx, frontR, y0, backR, y0 + depthY, 0.7);
-  }
-  ctx.restore();
 
-  // Top face.
-  ctx.save();
-  ctx.beginPath();
-  ctx.moveTo(frontL, frontT);
-  ctx.lineTo(frontR, frontT);
-  ctx.lineTo(backR, backT);
-  ctx.lineTo(backL, backT);
-  ctx.closePath();
-  const topGrad = ctx.createLinearGradient(frontL, frontT, backR, backT);
-  topGrad.addColorStop(0, WOOD_LIGHT);
-  topGrad.addColorStop(0.4, WOOD_RIM);
-  topGrad.addColorStop(1, WOOD_LIGHT);
-  ctx.fillStyle = topGrad;
-  ctx.fill();
-  ctx.clip();
-  for (let i = 1; i <= 3; i++) {
-    const t = i / 4 + (rng() - 0.5) * 0.07;
-    const x0 = lerp(frontL, frontR, t);
-    seam(ctx, x0, frontT, x0 + depthX, backT, 0.6);
-  }
-  ctx.restore();
+  // Right side: furthest from the key light, so the darkest face.
+  slatRun(
+    ctx,
+    [
+      [frontR, frontT],
+      [backR, backT],
+    ],
+    [0, frontH],
+    CRATE_SIDE_SLAT_COUNT,
+    WOOD_DARK,
+    WOOD_MID,
+    rng,
+  );
 
-  // Front face.
-  ctx.save();
-  ctx.beginPath();
-  ctx.rect(frontL, frontT, frontR - frontL, frontB - frontT);
-  ctx.fillStyle = woodGradient(ctx, frontL, frontR, frontT);
-  ctx.fill();
-  ctx.clip();
-  let x = frontL + 4 + rng() * 3;
-  while (x < frontR - 2) {
-    seam(ctx, x, frontT, x, frontB, 0.55 + rng() * 0.3);
-    x += 6 + rng() * 4;
-  }
-  if (damaged) {
-    // A split plank with the crate's dark interior showing through it.
-    const splitX = lerp(frontL, frontR, 0.42);
-    ctx.fillStyle = CAVITY;
+  // Top: the brightest face. One look has a slat prised off and the straw packing showing.
+  const topSlats = CRATE_TOP_SLAT_COUNT;
+  for (let i = 0; i < topSlats; i++) {
+    const t0 = i / topSlats;
+    const t1 = (i + 1) / topSlats;
+    const missing = look === 'open' && i === 1;
+    const x0 = lerp(frontL, frontR, t0);
+    const x1 = lerp(frontL, frontR, t1) - CRATE_SLAT_GAP;
     ctx.beginPath();
-    ctx.moveTo(splitX - 2, frontT + 4);
-    ctx.lineTo(splitX + 3, frontT + 14);
-    ctx.lineTo(splitX - 1, frontB - 6);
-    ctx.lineTo(splitX - 5, frontT + 16);
+    ctx.moveTo(x0, frontT);
+    ctx.lineTo(x1, frontT);
+    ctx.lineTo(x1 + depthX, backT);
+    ctx.lineTo(x0 + depthX, backT);
     ctx.closePath();
-    ctx.fill();
-    ctx.strokeStyle = WOOD_RIM;
-    ctx.lineWidth = 1;
-    ctx.beginPath();
-    ctx.moveTo(splitX - 5, frontT + 16);
-    ctx.lineTo(splitX - 2, frontT + 4);
-    ctx.stroke();
+    if (missing) {
+      ctx.fillStyle = STRAW_DARK;
+      ctx.fill();
+      ctx.save();
+      ctx.clip();
+      for (let s = 0; s < 6; s++) {
+        const sx = lerp(x0, x1 + depthX, lookRng());
+        const sy = lerp(backT, frontT, lookRng());
+        seam(ctx, sx - 3, sy, sx + 3, sy + signedUnit(lookRng) * 2, 0.9, STRAW);
+      }
+      ctx.restore();
+    } else {
+      const topGrad = ctx.createLinearGradient(x0, frontT, x0 + depthX, backT);
+      topGrad.addColorStop(0, WOOD_LIGHT);
+      topGrad.addColorStop(1, WOOD_RIM);
+      ctx.fillStyle = topGrad;
+      ctx.fill();
+      seam(ctx, x0 + 1, frontT, x0 + 1 + depthX, backT, 0.35);
+    }
   }
+
+  // Front: horizontal slats over the dark interior, lit at the top of each.
+  for (let i = 0; i < CRATE_SLAT_COUNT; i++) {
+    const y0 = lerp(frontT, frontB, i / CRATE_SLAT_COUNT);
+    const y1 = lerp(frontT, frontB, (i + 1) / CRATE_SLAT_COUNT) - CRATE_SLAT_GAP;
+    const stoveIn = damaged && i === 1;
+    if (stoveIn) {
+      // The middle slat split and pushed in: two broken ends either side of a hole.
+      const breakX = lerp(frontL, frontR, CRATE_STOVE_IN.breakXFraction);
+      const leftTopX = breakX - CRATE_STOVE_IN.leftTopInset;
+      const leftBottomX = breakX - CRATE_STOVE_IN.leftBottomInset;
+      const notchY = y0 + (y1 - y0) * CRATE_STOVE_IN.rightNotchDepthFraction;
+      ctx.fillStyle = woodGradient(ctx, frontL, frontR, y0);
+      ctx.beginPath();
+      ctx.moveTo(frontL, y0);
+      ctx.lineTo(leftTopX, y0);
+      ctx.lineTo(leftBottomX, y1);
+      ctx.lineTo(frontL, y1);
+      ctx.closePath();
+      ctx.moveTo(frontR, y0);
+      ctx.lineTo(breakX + CRATE_STOVE_IN.rightTopOffset, y0);
+      ctx.lineTo(breakX + CRATE_STOVE_IN.rightNotchOffset, notchY);
+      ctx.lineTo(breakX + CRATE_STOVE_IN.rightBottomOffset, y1);
+      ctx.lineTo(frontR, y1);
+      ctx.closePath();
+      ctx.fill();
+      seam(ctx, leftTopX, y0, leftBottomX, y1, 0.9, WOOD_RIM);
+      continue;
+    }
+    ctx.fillStyle = woodGradient(ctx, frontL, frontR, y0);
+    ctx.fillRect(frontL, y0, frontW, y1 - y0);
+    if (look === 'open' && i === CRATE_REPLACED_SLAT) {
+      // A slat replaced with whatever plank was to hand: newer, paler wood.
+      ctx.fillStyle = CRATE_NEW_PLANK;
+      ctx.fillRect(frontL, y0, frontW, y1 - y0);
+    }
+    ctx.fillStyle = 'rgba(255,225,170,0.18)';
+    ctx.fillRect(frontL, y0, frontW, 1);
+    ctx.fillStyle = 'rgba(0,0,0,0.22)';
+    ctx.fillRect(frontL, y1 - 1, frontW, 1);
+    let grainX = frontL + 6 + rng() * 6;
+    while (grainX < frontR - 6) {
+      seam(ctx, grainX, y0 + 1, grainX + 4, y0 + 1 + rng(), 0.25);
+      grainX += 9 + rng() * 8;
+    }
+  }
+
+  // The lower half of the box is further from the key light.
+  ctx.fillStyle = verticalRamp(ctx, frontL, frontT, frontB, [
+    [0, 'rgba(0,0,0,0)'],
+    [1, 'rgba(0,0,0,0.25)'],
+  ]);
+  ctx.fillRect(frontL, frontT, frontW, frontH);
+
+  if (look === 'damp') {
+    ctx.save();
+    ctx.beginPath();
+    ctx.rect(frontL, frontT, frontW + depthX, frontH);
+    ctx.clip();
+    stainWash(ctx, (frontL + frontR) / 2, frontB, frontW * 0.7, 8, DAMP_STAIN);
+    ctx.restore();
+    chalkMark(
+      ctx,
+      lerp(frontL, frontR, CRATE_CHALK.xFraction),
+      lerp(frontT, frontB, CRATE_CHALK.yFraction),
+    );
+  } else if (look === 'brand') {
+    // A merchant's mark burnt deep into the slats: a ring with a bar through it.
+    const b = CRATE_BRAND;
+    const markX = lerp(frontL, frontR, b.xFraction + signedUnit(lookRng) * b.jitter);
+    const markY = lerp(frontT, frontB, b.yFraction);
+    ctx.save();
+    ctx.strokeStyle = BRAND_MARK;
+    ctx.lineWidth = b.width;
+    ctx.beginPath();
+    ctx.arc(markX, markY, b.radius, 0, TWO_PI);
+    ctx.moveTo(markX - b.barHalf, markY);
+    ctx.lineTo(markX + b.barHalf, markY);
+    ctx.stroke();
+    ctx.restore();
+    // A split along the top's front slat, the dark of the inside showing through.
+    seam(
+      ctx,
+      lerp(frontL, frontR, b.splitFrom),
+      frontT + b.splitDrop,
+      lerp(frontL, frontR, b.splitTo),
+      frontT + b.splitDrop + depthY * b.splitDepth,
+      1,
+      CAVITY,
+    );
+  } else {
+    // The straw packing, pulled up over the lip where the slat came off.
+    const straw = CRATE_STRAW;
+    for (let i = 0; i < straw.count; i++) {
+      const sx = lerp(frontL + straw.inset, frontR, lookRng());
+      const sy = frontT + signedUnit(lookRng) * straw.spreadY;
+      seam(
+        ctx,
+        sx - straw.half,
+        sy,
+        sx + straw.half,
+        sy + signedUnit(lookRng) * straw.tilt,
+        0.9,
+        STRAW,
+      );
+    }
+  }
+
+  // Corner battens, then the diagonal brace, all nailed through the slats.
+  const battenGrad = woodGradientV(ctx, frontL, frontT, frontB);
+  ctx.fillStyle = battenGrad;
+  ctx.fillRect(frontL, frontT, CRATE_BATTEN_WIDTH, frontH);
+  const rightBattenX = frontR - CRATE_BATTEN_WIDTH;
+  ctx.fillRect(rightBattenX, frontT, CRATE_BATTEN_WIDTH, frontH);
+  ctx.fillStyle = 'rgba(255,225,170,0.22)';
+  ctx.fillRect(frontL, frontT, 1, frontH);
+  ctx.fillRect(rightBattenX, frontT, 1, frontH);
+
+  const braceStart = [frontL + CRATE_BATTEN_WIDTH, frontB - CRATE_BRACE_WIDTH / 2] as const;
+  const braceEndY = damaged ? frontT + CRATE_BRACE_WIDTH * 1.6 : frontT + CRATE_BRACE_WIDTH / 2;
+  const braceEnd = [rightBattenX + (damaged ? 2 : 0), braceEndY] as const;
+  ctx.save();
+  ctx.strokeStyle = WOOD_MID;
+  ctx.lineWidth = CRATE_BRACE_WIDTH;
+  ctx.beginPath();
+  ctx.moveTo(...braceStart);
+  ctx.lineTo(...braceEnd);
+  ctx.stroke();
+  ctx.strokeStyle = WOOD_LIGHT;
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  ctx.moveTo(braceStart[0], braceStart[1] - CRATE_BRACE_WIDTH / 2);
+  ctx.lineTo(braceEnd[0], braceEnd[1] - CRATE_BRACE_WIDTH / 2);
+  ctx.stroke();
   ctx.restore();
 
-  // Corner brackets and edge straps.
-  const bracketWidth = 3;
-  ironStrap(ctx, frontL, frontT, frontR, frontT, bracketWidth);
-  ironStrap(ctx, frontL, frontB, frontR, frontB, bracketWidth);
-  ironStrap(ctx, frontL, frontT, frontL, frontB, bracketWidth);
-  if (damaged) {
-    // The right bracket has been knocked loose and bows outward.
-    ironStrap(ctx, frontR + 2, frontT + 3, frontR, frontB, bracketWidth);
-  } else {
-    ironStrap(ctx, frontR, frontT, frontR, frontB, bracketWidth);
+  for (let i = 0; i < CRATE_SLAT_COUNT; i++) {
+    const slatMidY = lerp(frontT, frontB, (i + 0.4) / CRATE_SLAT_COUNT);
+    nailHead(ctx, frontL + CRATE_NAIL_INSET, slatMidY);
+    nailHead(ctx, frontR - CRATE_NAIL_INSET, slatMidY);
   }
-  ironStrap(ctx, frontR, frontT, backR, backT, bracketWidth - 1);
-  ironStrap(ctx, backL, backT, backR, backT, bracketWidth - 1);
+  nailHead(ctx, braceStart[0] + 2, braceStart[1]);
+  if (!damaged) nailHead(ctx, braceEnd[0] - 2, braceEnd[1]);
 
+  // Top edge of the side face, so the box keeps its corner where two faces meet.
   ctx.save();
   ctx.strokeStyle = WOOD_EDGE;
   ctx.lineWidth = 1;
@@ -795,20 +1229,23 @@ function drawCrate(
   ctx.lineTo(backR, backB);
   ctx.lineTo(frontR, frontB);
   ctx.closePath();
+  ctx.moveTo(frontR, frontT);
+  ctx.lineTo(backR, backT);
+  ctx.moveTo(frontR, frontT);
+  ctx.lineTo(frontR, frontB);
+  ctx.moveTo(frontL, frontT);
+  ctx.lineTo(frontR, frontT);
   ctx.stroke();
   ctx.restore();
 
-  if (damaged) {
-    chip(ctx, frontR - 11, frontB - 11, 6, 5);
-  }
+  if (damaged) chip(ctx, frontR - 11, frontT + 2, 6, 5);
 }
 
 // ── Bookshelf ─────────────────────────────────────────────────────────────────
-// A tall oak case standing flat against a wall: cornice, two stiles, three
-// compartments of books, plinth. The spines are kept inside the same muted,
-// low-saturation range as the rest of the props — fully saturated bindings turn
-// the tile into a colour swatch pinned to the wall instead of a piece of
-// furniture, which is exactly how the old procedural bookshelf read.
+// A tall oak case against a wall: cornice, two stiles, three compartments of
+// books, plinth. Books are bought and shelved in sets, so the spines are
+// painted as runs — blocks of one binding with only a faint step between
+// volumes — rather than as a stripe of unrelated colours.
 
 /** Aged leather and cloth bindings: dulled, and all within a stop of each other. */
 const BOOK_SHADES = [
@@ -820,24 +1257,22 @@ const BOOK_SHADES = [
   '#4d4152',
   '#6b6247',
 ] as const;
-/** Tarnished gilt for the spine bands — never bright, or it sparkles like an icon. */
 const BOOK_GILT = 'rgba(190,160,96,0.55)';
-/** Page block seen at the head of a spine. */
 const BOOK_PAGES = '#b8ab8a';
 
 const BOOKSHELF_SEED = 0x2c7b;
 const BOOKSHELF_LEFT_FRACTION = 0.11;
 const BOOKSHELF_RIGHT_FRACTION = 0.89;
-const BOOKSHELF_TOP_FRACTION = 0.07;
+/** Above its own tile: a case stands taller than the crawler beside it. */
+const BOOKSHELF_TOP_FRACTION = -0.78;
 const BOOKSHELF_BASE_FRACTION = 0.94;
 const BOOKSHELF_CORNICE_OVERHANG_FRACTION = 0.035;
 const BOOKSHELF_CORNICE_HEIGHT_FRACTION = 0.08;
 const BOOKSHELF_PLINTH_HEIGHT_FRACTION = 0.06;
 const BOOKSHELF_STILE_WIDTH_FRACTION = 0.075;
-const BOOKSHELF_COMPARTMENT_COUNT = 3;
+const BOOKSHELF_COMPARTMENT_COUNT = 4;
 const BOOKSHELF_SHELF_BOARD_THICKNESS = 2.5;
 const BOOKSHELF_CONTACT_SHADOW_SCALE = 0.95;
-/** Which compartment gives way first once the case has been struck. */
 const BOOKSHELF_BROKEN_COMPARTMENT = 1;
 /**
  * How far the snapped board sags at its middle, in pixels. Generous, because at
@@ -846,41 +1281,45 @@ const BOOKSHELF_BROKEN_COMPARTMENT = 1;
  */
 const BOOKSHELF_BROKEN_BOARD_SAG = 6;
 
-/** Clearance between the tallest book and the board above it. */
 const BOOK_HEADROOM = 2;
 const BOOK_MIN_WIDTH = 2.6;
-const BOOK_WIDTH_SPREAD = 2.8;
-const BOOK_GAP_PX = 0.6;
-/** Books never fill their compartment: shorter volumes make the row read as books. */
-const BOOK_HEIGHT_MIN_FRACTION = 0.62;
-const BOOK_HEIGHT_SPREAD_FRACTION = 0.38;
-/** Chance a slot is left empty rather than filled, and how wide that gap runs. */
-const BOOK_GAP_CHANCE = 0.1;
-/** A shelf that has been shaken loose has lost most of what stood on it. */
-const BOOK_GAP_CHANCE_BROKEN = 0.6;
-const BOOK_GAP_WIDTH_MIN = 1.5;
-const BOOK_GAP_WIDTH_SPREAD = 3;
-const BOOK_LEAN_CHANCE = 0.18;
-const BOOK_LEAN_MAX = 0.22;
-/** Chance a run of uprights is interrupted by a few volumes lying flat. */
-const BOOK_STACK_CHANCE = 0.14;
+const BOOK_WIDTH_SPREAD = 1.8;
+/** A set runs this many volumes before the next binding starts. */
+const BOOK_RUN_MIN = 3;
+const BOOK_RUN_SPREAD = 5;
+/** Volumes in a set share a height band, so the run's top edge reads as one block. */
+const BOOK_RUN_HEIGHT_MIN_FRACTION = 0.66;
+const BOOK_RUN_HEIGHT_SPREAD_FRACTION = 0.3;
+const BOOK_IN_RUN_HEIGHT_JITTER = 1.4;
+/** The faint step in value between neighbouring volumes of one set. */
+const BOOK_IN_RUN_VALUE_STEP = 0.07;
+const BOOK_RUN_GAP_CHANCE = 0.12;
+const BOOK_RUN_GAP_CHANCE_BROKEN = 0.6;
+const BOOK_GAP_WIDTH_MIN = 2;
+const BOOK_GAP_WIDTH_SPREAD = 4;
+/** Chance a set ends in one volume leaning on the last. */
+const BOOK_RUN_LEAN_CHANCE = 0.35;
+const BOOK_LEAN = 0.24;
+const BOOK_STACK_CHANCE = 0.16;
 const BOOK_STACK_MIN_COUNT = 2;
 const BOOK_STACK_COUNT_SPREAD = 2;
 const BOOK_STACK_WIDTH_MIN = 8;
 const BOOK_STACK_WIDTH_SPREAD = 4;
 const BOOK_STACK_LAYER_HEIGHT = 2.6;
-/** Fraction of a spine's width lit along its left edge, and shaded along its right. */
-const BOOK_SPINE_LIT_FRACTION = 0.3;
-const BOOK_SPINE_LIT_ALPHA = 0.16;
-const BOOK_SPINE_SHADE_ALPHA = 0.28;
-/** Where the two gilt bands sit along a spine, measured from its head. */
+/** Only a few sets carry gilt bands, so the tooling reads as a feature, not a pattern. */
+const BOOK_RUN_GILT_CHANCE = 0.3;
 const BOOK_BAND_FRACTIONS = [0.16, 0.3] as const;
 const BOOK_BAND_HEIGHT = 1;
-/** Only the wider spines carry bands — a 3px book has no room for tooling. */
-const BOOK_BAND_MIN_WIDTH = 4;
+/** The dark line down a spine's right edge that parts it from its neighbour. */
+const BOOK_SEPARATOR_WIDTH = 0.6;
+/** The lit strip down a run's left end and the shaded strip down its right, at most. */
+const BOOK_RUN_EDGE_WIDTH = 2;
+const BOOK_SEPARATOR_ALPHA = 0.45;
+const BOOK_RUN_LIT_ALPHA = 0.18;
+const BOOK_RUN_SHADE_ALPHA = 0.3;
 
 function bookShade(rng: () => number): string {
-  return BOOK_SHADES[Math.floor(rng() * BOOK_SHADES.length)];
+  return pick(rng, BOOK_SHADES);
 }
 
 /** A single upright volume, standing on `baseY` and leaning about its foot. */
@@ -892,45 +1331,36 @@ function drawBookSpine(
   height: number,
   lean: number,
   shade: string,
+  valueStep: number,
+  gilt: boolean,
 ): void {
   ctx.save();
   ctx.translate(x + width / 2, baseY);
   ctx.rotate(lean);
   const halfW = width / 2;
   const top = -height;
-
   ctx.fillStyle = shade;
   ctx.fillRect(-halfW, top, width, height);
-
-  ctx.fillStyle = `rgba(255,255,255,${BOOK_SPINE_LIT_ALPHA})`;
-  ctx.fillRect(-halfW, top, width * BOOK_SPINE_LIT_FRACTION, height);
-  ctx.fillStyle = `rgba(0,0,0,${BOOK_SPINE_SHADE_ALPHA})`;
-  ctx.fillRect(
-    halfW - width * BOOK_SPINE_LIT_FRACTION,
-    top,
-    width * BOOK_SPINE_LIT_FRACTION,
-    height,
-  );
-
-  // Page block at the head, which is what makes the shape read as a book rather
-  // than a coloured bar.
+  if (valueStep !== 0) {
+    ctx.fillStyle = valueStep > 0 ? `rgba(255,240,220,${valueStep})` : `rgba(0,0,0,${-valueStep})`;
+    ctx.fillRect(-halfW, top, width, height);
+  }
   ctx.fillStyle = BOOK_PAGES;
   ctx.fillRect(-halfW, top, width, 1);
-
-  if (width >= BOOK_BAND_MIN_WIDTH) {
+  if (gilt) {
     ctx.fillStyle = BOOK_GILT;
     for (const fraction of BOOK_BAND_FRACTIONS) {
       ctx.fillRect(-halfW, top + height * fraction, width, BOOK_BAND_HEIGHT);
     }
   }
-
-  ctx.strokeStyle = CAVITY;
-  ctx.lineWidth = 0.6;
-  ctx.strokeRect(-halfW, top, width, height);
+  // Only the right edge is darkened: neighbouring spines in a set touch, and a
+  // full outline would cut the block back into stripes.
+  ctx.globalAlpha = BOOK_SEPARATOR_ALPHA;
+  ctx.fillStyle = CAVITY;
+  ctx.fillRect(halfW - BOOK_SEPARATOR_WIDTH, top, BOOK_SEPARATOR_WIDTH, height);
   ctx.restore();
 }
 
-/** A few volumes lying flat, stacked on the board. */
 function drawBookStack(
   ctx: Ctx,
   x: number,
@@ -952,7 +1382,7 @@ function drawBookStack(
   }
 }
 
-/** Fills one compartment with a run of books, walking left to right. */
+/** Fills one compartment with sets of books, walking left to right. */
 function drawBookRow(
   ctx: Ctx,
   x0: number,
@@ -963,7 +1393,7 @@ function drawBookRow(
   ransacked: boolean,
 ): void {
   const tallest = compartmentHeight - BOOK_HEADROOM;
-  const gapChance = ransacked ? BOOK_GAP_CHANCE_BROKEN : BOOK_GAP_CHANCE;
+  const gapChance = ransacked ? BOOK_RUN_GAP_CHANCE_BROKEN : BOOK_RUN_GAP_CHANCE;
   let x = x0 + 0.5;
 
   while (x < x1 - BOOK_MIN_WIDTH) {
@@ -976,19 +1406,46 @@ function drawBookRow(
       if (x + stackWidth > x1 - 0.5) break;
       const count = BOOK_STACK_MIN_COUNT + Math.floor(rng() * BOOK_STACK_COUNT_SPREAD);
       drawBookStack(ctx, x, baseY, stackWidth, count, rng);
-      x += stackWidth + BOOK_GAP_PX;
+      x += stackWidth;
       continue;
     }
-    const width = BOOK_MIN_WIDTH + rng() * BOOK_WIDTH_SPREAD;
-    if (x + width > x1 - 0.5) break;
-    const height = tallest * (BOOK_HEIGHT_MIN_FRACTION + rng() * BOOK_HEIGHT_SPREAD_FRACTION);
-    const lean = rng() < BOOK_LEAN_CHANCE ? (rng() - 0.5) * 2 * BOOK_LEAN_MAX : 0;
-    drawBookSpine(ctx, x, baseY, width, height, lean, bookShade(rng));
-    x += width + BOOK_GAP_PX;
+    const runLength = BOOK_RUN_MIN + Math.floor(rng() * BOOK_RUN_SPREAD);
+    const shade = bookShade(rng);
+    const runHeight =
+      tallest * (BOOK_RUN_HEIGHT_MIN_FRACTION + rng() * BOOK_RUN_HEIGHT_SPREAD_FRACTION);
+    const volumeWidth = BOOK_MIN_WIDTH + rng() * BOOK_WIDTH_SPREAD;
+    const gilt = rng() < BOOK_RUN_GILT_CHANCE;
+    const runStart = x;
+    for (let i = 0; i < runLength && x + volumeWidth <= x1 - 0.5; i++) {
+      const height = Math.min(tallest, runHeight + signedUnit(rng) * BOOK_IN_RUN_HEIGHT_JITTER);
+      const valueStep = (i % 2 === 0 ? 1 : -1) * BOOK_IN_RUN_VALUE_STEP * rng();
+      drawBookSpine(ctx, x, baseY, volumeWidth, height, 0, shade, valueStep, gilt);
+      x += volumeWidth;
+    }
+    // The set reads as one block with the key light on its left and shade on its right.
+    const runWidth = x - runStart;
+    ctx.fillStyle = `rgba(255,240,220,${BOOK_RUN_LIT_ALPHA})`;
+    const edgeWidth = Math.min(BOOK_RUN_EDGE_WIDTH, runWidth);
+    ctx.fillRect(runStart, baseY - runHeight, edgeWidth, runHeight);
+    ctx.fillStyle = `rgba(0,0,0,${BOOK_RUN_SHADE_ALPHA})`;
+    ctx.fillRect(x - edgeWidth, baseY - runHeight, edgeWidth, runHeight);
+    if (rng() < BOOK_RUN_LEAN_CHANCE && x + volumeWidth * 2 < x1) {
+      drawBookSpine(
+        ctx,
+        x + 1,
+        baseY,
+        volumeWidth,
+        runHeight * 0.92,
+        BOOK_LEAN,
+        bookShade(rng),
+        0,
+        false,
+      );
+      x += volumeWidth * 2;
+    }
   }
 }
 
-/** The board the books stand on, lit along its front edge. */
 function drawShelfBoard(
   ctx: Ctx,
   x0: number,
@@ -998,7 +1455,6 @@ function drawShelfBoard(
 ): void {
   ctx.save();
   if (snapped) {
-    // A sagging V rather than a straight plank, so the break reads at a glance.
     const midX = (x0 + x1) / 2;
     const sagY = surfaceY + BOOKSHELF_BROKEN_BOARD_SAG;
     ctx.strokeStyle = WOOD_MID;
@@ -1027,9 +1483,11 @@ function drawBookshelf(
   oy: number,
   ts: number,
   damaged: boolean,
+  variant: number,
   seedTerm: number,
 ): void {
-  const rng = makeRng(BOOKSHELF_SEED + seedTerm);
+  const rng = mulberry32(BOOKSHELF_SEED + seedTerm);
+  const booksRng = mulberry32(BOOKSHELF_SEED + variantSeed(variant) + seedTerm);
   const left = ox + ts * BOOKSHELF_LEFT_FRACTION;
   const right = ox + ts * BOOKSHELF_RIGHT_FRACTION;
   const top = oy + ts * BOOKSHELF_TOP_FRACTION;
@@ -1049,7 +1507,6 @@ function drawBookshelf(
   const innerTop = top + corniceHeight;
   const innerBottom = base - plinthHeight;
 
-  // Backboard sits in shadow so the books read against something dark.
   const backGrad = ctx.createLinearGradient(innerLeft, innerTop, innerRight, innerBottom);
   backGrad.addColorStop(0, WOOD_SHADOW);
   backGrad.addColorStop(1, CAVITY);
@@ -1060,11 +1517,16 @@ function drawBookshelf(
   for (let i = 0; i < BOOKSHELF_COMPARTMENT_COUNT; i++) {
     const boardY = innerTop + compartmentHeight * (i + 1);
     const snapped = damaged && i === BOOKSHELF_BROKEN_COMPARTMENT;
-    drawBookRow(ctx, innerLeft, innerRight, boardY, compartmentHeight, rng, snapped);
+    drawBookRow(ctx, innerLeft, innerRight, boardY, compartmentHeight, booksRng, snapped);
+    // The shelf above shades the top of each compartment.
+    ctx.fillStyle = verticalRamp(ctx, innerLeft, boardY - compartmentHeight, boardY, [
+      [0, 'rgba(0,0,0,0.35)'],
+      [0.4, 'rgba(0,0,0,0)'],
+    ]);
+    ctx.fillRect(innerLeft, boardY - compartmentHeight, innerRight - innerLeft, compartmentHeight);
     drawShelfBoard(ctx, innerLeft, innerRight, boardY, snapped);
   }
 
-  // Stiles, cornice and plinth go over the books, framing them in.
   ctx.fillStyle = woodGradientV(ctx, left, top, base);
   ctx.fillRect(left, innerTop, stileWidth, innerBottom - innerTop);
   ctx.fillStyle = woodGradientV(ctx, innerRight, top, base);
@@ -1084,26 +1546,18 @@ function drawBookshelf(
   ctx.fillStyle = WOOD_SHADOW;
   ctx.fillRect(corniceLeft, base - 1, corniceWidth, 1);
 
-  // Grain down the stiles, kept subtle so the frame stays a frame.
-  seam(ctx, left + stileWidth * 0.55, innerTop, left + stileWidth * 0.55, innerBottom, 0.4);
-  seam(
-    ctx,
-    innerRight + stileWidth * 0.45,
-    innerTop,
-    innerRight + stileWidth * 0.45,
-    innerBottom,
-    0.4,
-  );
+  const leftGrainX = left + stileWidth * 0.55;
+  const rightGrainX = innerRight + stileWidth * 0.45;
+  seam(ctx, leftGrainX, innerTop, leftGrainX, innerBottom, 0.4);
+  seam(ctx, rightGrainX, innerTop, rightGrainX, innerBottom, 0.4);
 
   if (damaged) {
-    // Kept short and barely wobbling: at the width of a stile a wandering split
+    // Short and barely wobbling: at the width of a stile a wandering split
     // strays off the case and reads as a wire hanging beside it.
     crack(ctx, innerRight + stileWidth * 0.5, innerTop + 4, innerBottom - 6, 1.2, rng);
     chip(ctx, corniceLeft + 4, top + 1, 7, corniceHeight - 1);
-    // What fell out of the snapped shelf, come to rest on the plinth.
-    const spillBaseY = innerBottom;
-    drawBookSpine(ctx, innerLeft + 3, spillBaseY, 3.2, 7, -0.9, BOOK_SHADES[0]);
-    drawBookStack(ctx, innerRight - 12, spillBaseY, 9, 1, rng);
+    drawBookSpine(ctx, innerLeft + 3, innerBottom, 3.2, 7, -0.9, BOOK_SHADES[0], 0, false);
+    drawBookStack(ctx, innerRight - 12, innerBottom, 9, 1, rng);
   }
 
   ctx.strokeStyle = WOOD_EDGE;
@@ -1113,35 +1567,41 @@ function drawBookshelf(
 }
 
 // ── Torch ─────────────────────────────────────────────────────────────────────
-// A floor-standing brand: splayed iron foot, wooden haft, iron fire bowl. The
-// haft is what a swing breaks, which is why the torch splinters like the boxy
-// props rather than shedding only iron.
+// A wrought-iron stand — three splayed feet, a straight shaft, a basket socket
+// at the top — holding a short brand whose head is wrapped in pitch-soaked rag.
+// The rag is what burns: when the torch is struck the wrap chars black and
+// starts to come loose, and when it falls the head lies there charred and out.
 
-/** Fixed seed for the torch's haft grain and the coals in its bowl. */
 const TORCH_SEED = 0x6b2d;
 
 const TORCH_FOOT_BASE_FRACTION = 0.93;
-const TORCH_FOOT_HALF_W = 11;
-const TORCH_FOOT_TOP_HALF_W = 6;
-const TORCH_FOOT_H = 7;
-/** How far above its own tile the fire bowl's rim sits, as a fraction of a tile. */
-const TORCH_HEAD_ABOVE_TILE_FRACTION = 0.34;
-const TORCH_HAFT_HALF_W_BOTTOM = 3.6;
-const TORCH_HAFT_HALF_W_TOP = 2.9;
-/** Where the two iron bands sit along the haft, as fractions of its length. */
-const TORCH_FERRULE_FRACTIONS = [0.32, 0.74] as const;
-const TORCH_FERRULE_WIDTH = 3;
-const TORCH_FERRULE_OVERHANG = 1.8;
-const TORCH_BOWL_RIM_RX = 11;
-const TORCH_BOWL_RIM_RY = 4.5;
-const TORCH_BOWL_DEPTH = 10;
-const TORCH_BOWL_BASE_HALF_W = 4.5;
-const TORCH_COAL_COUNT = 5;
-const TORCH_COAL_RADIUS = 1.7;
-/** Tilt a knocked-about bowl leans at, in radians. */
-const TORCH_DAMAGED_BOWL_TILT = 0.14;
-/** Angle a sprung ferrule twists off the haft, in radians. */
-const TORCH_SPRUNG_FERRULE_TILT = -0.3;
+const TORCH_FOOT_SPREAD = [-12, 0, 12] as const;
+/** The front foot points at the viewer, so it lands lower than the outer two. */
+const TORCH_FRONT_FOOT_DROP = 3;
+const TORCH_FOOT_WIDTH = 3.2;
+const TORCH_HUB_FRACTION = 0.72;
+const TORCH_SHAFT_WIDTH = 4.4;
+/** Where the socket basket sits above the tile's top edge, as a fraction of a tile. */
+const TORCH_SOCKET_ABOVE_TILE_FRACTION = 0.02;
+const TORCH_SOCKET_RX = 6.5;
+const TORCH_SOCKET_RY = 2.4;
+const TORCH_SOCKET_DEPTH = 7;
+/** How far in each basket strip pinches at the socket's foot, as a fraction of its spread at the rim. */
+const TORCH_SOCKET_FOOT_SPREAD_FRACTION = 0.35;
+const TORCH_STICK_HALF_W = 2.2;
+const TORCH_STICK_SHOWN = 5;
+const TORCH_HEAD_HALF_W = 5.6;
+const TORCH_HEAD_H = 15;
+const TORCH_WRAP_BANDS = 4;
+const TORCH_WRAP_SLANT = 3;
+const TORCH_SHAFT_BEND_DAMAGED = 0.12;
+/** The loose strip of charred wrap that hangs off a struck head. */
+const TORCH_LOOSE_WRAP_LENGTH = 7;
+const TORCH_CHAR_EMBER_COUNT = 4;
+/** Each ember seam's half-length, and how far its right end climbs over its left. */
+const TORCH_CHAR_EMBER_HALF_LENGTH = 1.5;
+const TORCH_CHAR_EMBER_RISE = 1;
+const TORCH_SHADOW_SCALE = 0.75;
 
 const FLAME_BASE_H = 18;
 const FLAME_H_FLICKER = 3.5;
@@ -1149,208 +1609,199 @@ const FLAME_HALF_W = 6.5;
 const FLAME_SWAY = 2.2;
 const FLAME_MID_SCALE = 0.66;
 const FLAME_CORE_SCALE = 0.34;
-/** Height a guttering flame burns at, relative to a healthy one. */
 const FLAME_DAMAGED_SCALE = 0.62;
-const FLAME_GLOW_RADIUS_TILE_FRACTION = 0.44;
-const FLAME_GLOW_ALPHA_BASE = 0.26;
-const FLAME_GLOW_ALPHA_FLICKER = 0.06;
-/** Fraction of the flame's height the glow centres on. */
-const FLAME_GLOW_CENTER_FRACTION = 0.45;
+const FLAME_MID_HEIGHT_FRACTION = 0.78;
+const FLAME_CORE_HEIGHT_FRACTION = 0.5;
+const FLAME_MID_SWAY_FRACTION = 0.7;
+const FLAME_CORE_SWAY_FRACTION = 0.4;
 const SMOKE_PUFF_COUNT = 3;
-/** Kept tight so the highest wisp stays inside TORCH_HEADROOM. */
 const SMOKE_PUFF_STRIDE = 5;
 const SMOKE_PUFF_LIFT = 3;
 const SMOKE_PUFF_SWAY = 4;
 const SMOKE_PUFF_BASE_RADIUS = 3;
 const SMOKE_PUFF_ALPHA_BASE = 0.2;
 const SMOKE_PUFF_ALPHA_DECAY = 0.055;
-/** Extra smoke a guttering flame throws off, as a multiple of the healthy amount. */
 const SMOKE_DAMAGED_MULTIPLIER = 1.8;
+const TORCH_FLAME_SCALE = 1;
 
 interface TorchGeometry {
-  cx: number;
-  footY: number;
-  haftBottomY: number;
-  haftTopY: number;
-  rimY: number;
+  readonly cx: number;
+  readonly footY: number;
+  readonly hubY: number;
+  readonly socketY: number;
+  readonly headBottomY: number;
+  readonly headTopY: number;
 }
 
 function torchGeometry(ox: number, oy: number, ts: number): TorchGeometry {
   const footY = oy + ts * TORCH_FOOT_BASE_FRACTION;
-  const rimY = oy - ts * TORCH_HEAD_ABOVE_TILE_FRACTION;
+  const socketY = oy - ts * TORCH_SOCKET_ABOVE_TILE_FRACTION;
+  const headBottomY = socketY - TORCH_STICK_SHOWN;
   return {
     cx: ox + ts / 2,
     footY,
-    haftBottomY: footY - TORCH_FOOT_H / 2,
-    haftTopY: rimY + TORCH_BOWL_DEPTH,
-    rimY,
+    hubY: oy + ts * TORCH_HUB_FRACTION,
+    socketY,
+    headBottomY,
+    headTopY: headBottomY - TORCH_HEAD_H,
   };
 }
 
-/** Splayed iron plinth that keeps the brand upright. */
-function drawTorchFoot(ctx: Ctx, g: TorchGeometry): void {
-  const { cx, footY } = g;
-  const topY = footY - TORCH_FOOT_H;
-  ctx.save();
+/** Three splayed iron feet meeting at a hub, and the straight shaft rising from it. */
+function drawTorchStand(ctx: Ctx, g: TorchGeometry): void {
+  TORCH_FOOT_SPREAD.forEach((dx) => {
+    const isFront = dx === 0;
+    const footY = g.footY + (isFront ? TORCH_FRONT_FOOT_DROP : 0);
+    ironStrap(ctx, g.cx, g.hubY, g.cx + dx, footY, TORCH_FOOT_WIDTH);
+    // A curled toe, the smith's finish on each foot.
+    ctx.fillStyle = IRON_DARK;
+    ctx.beginPath();
+    ctx.ellipse(g.cx + dx, footY, 2.4, 1.3, 0, 0, TWO_PI);
+    ctx.fill();
+  });
+  ctx.fillStyle = IRON_MID;
   ctx.beginPath();
-  ctx.moveTo(cx - TORCH_FOOT_HALF_W, footY);
-  ctx.lineTo(cx - TORCH_FOOT_TOP_HALF_W, topY);
-  ctx.lineTo(cx + TORCH_FOOT_TOP_HALF_W, topY);
-  ctx.lineTo(cx + TORCH_FOOT_HALF_W, footY);
-  ctx.closePath();
-  const grad = ctx.createLinearGradient(
-    cx - TORCH_FOOT_HALF_W,
-    topY,
-    cx + TORCH_FOOT_HALF_W,
-    footY,
-  );
-  grad.addColorStop(0, IRON_LIGHT);
-  grad.addColorStop(0.5, IRON_MID);
-  grad.addColorStop(1, IRON_DARK);
-  ctx.fillStyle = grad;
+  ctx.arc(g.cx, g.hubY, 2.6, 0, TWO_PI);
   ctx.fill();
-  ctx.strokeStyle = WOOD_EDGE;
-  ctx.lineWidth = 1;
+
+  const shaftTop = g.socketY + TORCH_SOCKET_DEPTH;
+  const shaftGrad = cylinderRamp(
+    ctx,
+    g.cx - TORCH_SHAFT_WIDTH / 2,
+    g.cx + TORCH_SHAFT_WIDTH / 2,
+    0,
+    [
+      [0, IRON_DARK],
+      [0.35, IRON_LIGHT],
+      [0.7, IRON_MID],
+      [1, IRON_EDGE],
+    ],
+  );
+  ctx.fillStyle = shaftGrad;
+  ctx.fillRect(g.cx - TORCH_SHAFT_WIDTH / 2, shaftTop, TORCH_SHAFT_WIDTH, g.hubY - shaftTop);
+  ctx.fillStyle = IRON_EDGE;
+  ctx.fillRect(g.cx + TORCH_SHAFT_WIDTH / 2 - 0.6, shaftTop, 0.6, g.hubY - shaftTop);
+}
+
+/** The basket socket: an open cage of iron strips the brand sits in. */
+function drawTorchSocket(ctx: Ctx, g: TorchGeometry): void {
+  const bottomY = g.socketY + TORCH_SOCKET_DEPTH;
+  ctx.save();
+  ctx.strokeStyle = IRON_MID;
+  ctx.lineWidth = 1.4;
+  for (const dx of [-TORCH_SOCKET_RX, -TORCH_SOCKET_RX / 3, TORCH_SOCKET_RX / 3, TORCH_SOCKET_RX]) {
+    ctx.beginPath();
+    ctx.moveTo(g.cx + dx, g.socketY);
+    ctx.lineTo(g.cx + dx * TORCH_SOCKET_FOOT_SPREAD_FRACTION, bottomY);
+    ctx.stroke();
+  }
+  ctx.strokeStyle = IRON_LIGHT;
+  ctx.lineWidth = 1.6;
+  ctx.beginPath();
+  ctx.ellipse(g.cx, g.socketY, TORCH_SOCKET_RX, TORCH_SOCKET_RY, 0, 0, Math.PI);
+  ctx.stroke();
+  ctx.strokeStyle = IRON_SPEC;
+  ctx.lineWidth = 0.8;
+  ctx.beginPath();
+  ctx.ellipse(g.cx, g.socketY - 0.6, TORCH_SOCKET_RX, TORCH_SOCKET_RY, 0, 0.3, Math.PI - 0.3);
   ctx.stroke();
   ctx.restore();
 }
 
-function drawTorchHaft(ctx: Ctx, g: TorchGeometry, rng: () => number, damaged: boolean): void {
-  const { cx, haftBottomY, haftTopY } = g;
-  ctx.save();
-  ctx.beginPath();
-  ctx.moveTo(cx - TORCH_HAFT_HALF_W_BOTTOM, haftBottomY);
-  ctx.lineTo(cx - TORCH_HAFT_HALF_W_TOP, haftTopY);
-  ctx.lineTo(cx + TORCH_HAFT_HALF_W_TOP, haftTopY);
-  ctx.lineTo(cx + TORCH_HAFT_HALF_W_BOTTOM, haftBottomY);
-  ctx.closePath();
-  ctx.fillStyle = woodGradient(
-    ctx,
-    cx - TORCH_HAFT_HALF_W_BOTTOM,
-    cx + TORCH_HAFT_HALF_W_BOTTOM,
-    (haftTopY + haftBottomY) / 2,
+/**
+ * The brand: a short stick rising out of the socket into a rag head. `charred`
+ * blackens the wrap, opens glowing seams in it and lets one strip hang loose.
+ */
+function drawTorchHead(ctx: Ctx, g: TorchGeometry, charred: boolean, rng: () => number): void {
+  const { cx, headBottomY, headTopY } = g;
+  ctx.fillStyle = woodGradient(ctx, cx - TORCH_STICK_HALF_W, cx + TORCH_STICK_HALF_W, 0);
+  ctx.fillRect(
+    cx - TORCH_STICK_HALF_W,
+    headBottomY - 1,
+    TORCH_STICK_HALF_W * 2,
+    g.socketY - headBottomY + 3,
   );
+
+  // The wrapped head swells a little toward its middle, like rag bound round a stick.
+  const headPath = () => {
+    ctx.beginPath();
+    ctx.moveTo(cx - TORCH_HEAD_HALF_W + 1, headBottomY);
+    ctx.quadraticCurveTo(
+      cx - TORCH_HEAD_HALF_W - 1,
+      (headBottomY + headTopY) / 2,
+      cx - TORCH_HEAD_HALF_W + 1.5,
+      headTopY,
+    );
+    ctx.lineTo(cx + TORCH_HEAD_HALF_W - 1.5, headTopY);
+    ctx.quadraticCurveTo(
+      cx + TORCH_HEAD_HALF_W + 1,
+      (headBottomY + headTopY) / 2,
+      cx + TORCH_HEAD_HALF_W - 1,
+      headBottomY,
+    );
+    ctx.closePath();
+  };
+  headPath();
+  ctx.save();
+  ctx.fillStyle = cylinderRamp(ctx, cx - TORCH_HEAD_HALF_W, cx + TORCH_HEAD_HALF_W, 0, [
+    [0, charred ? CHAR_BLACK : PITCH_DARK],
+    [0.3, charred ? CHAR_GREY : PITCH_SHEEN],
+    [0.55, charred ? CHAR_BLACK : PITCH_MID],
+    [1, CHAR_BLACK],
+  ]);
   ctx.fill();
   ctx.clip();
-  // Two grain lines rather than the boxy props' plank seams: a haft is one turned
-  // stick, so evenly spaced seams would read as staves it does not have.
-  for (let i = 0; i < 2; i++) {
-    const x = cx - TORCH_HAFT_HALF_W_TOP + 1 + i * (TORCH_HAFT_HALF_W_TOP + rng());
-    seam(ctx, x, haftTopY, x + (rng() - 0.5) * 2, haftBottomY, 0.45 + rng() * 0.25);
-  }
-  if (damaged) crack(ctx, cx + 1, haftTopY + 6, haftBottomY - 8, 2.5, rng);
-  ctx.restore();
-
-  ctx.save();
-  ctx.strokeStyle = WOOD_EDGE;
-  ctx.lineWidth = 1;
-  ctx.beginPath();
-  ctx.moveTo(cx - TORCH_HAFT_HALF_W_BOTTOM, haftBottomY);
-  ctx.lineTo(cx - TORCH_HAFT_HALF_W_TOP, haftTopY);
-  ctx.moveTo(cx + TORCH_HAFT_HALF_W_BOTTOM, haftBottomY);
-  ctx.lineTo(cx + TORCH_HAFT_HALF_W_TOP, haftTopY);
-  ctx.stroke();
-  ctx.restore();
-
-  TORCH_FERRULE_FRACTIONS.forEach((fraction, index) => {
-    const y = lerp(haftTopY, haftBottomY, fraction);
-    const halfW = lerp(TORCH_HAFT_HALF_W_TOP, TORCH_HAFT_HALF_W_BOTTOM, fraction);
-    const isSprung = damaged && index === 0;
-    ctx.save();
-    if (isSprung) {
-      ctx.translate(cx, y);
-      ctx.rotate(TORCH_SPRUNG_FERRULE_TILT);
-      ctx.translate(-cx, -y);
-    }
-    ironStrap(
+  // The wrap's bands, slanting the way rag is wound.
+  const bandStep = TORCH_HEAD_H / TORCH_WRAP_BANDS;
+  for (let i = 1; i < TORCH_WRAP_BANDS; i++) {
+    const y = headBottomY - i * bandStep;
+    seam(
       ctx,
-      cx - halfW - TORCH_FERRULE_OVERHANG,
-      y,
-      cx + halfW + TORCH_FERRULE_OVERHANG,
-      y,
-      TORCH_FERRULE_WIDTH,
+      cx - TORCH_HEAD_HALF_W - 1,
+      y + TORCH_WRAP_SLANT / 2,
+      cx + TORCH_HEAD_HALF_W + 1,
+      y - TORCH_WRAP_SLANT / 2,
+      0.9,
+      CHAR_BLACK,
     );
-    ctx.restore();
-  });
-
-  if (damaged) chip(ctx, cx - TORCH_HAFT_HALF_W_TOP - 1, haftTopY + 14, 6, 7);
-}
-
-/** Iron cup at the head, holding the coals the flame rises from. */
-function drawTorchBowl(ctx: Ctx, g: TorchGeometry, rng: () => number, damaged: boolean): void {
-  const { cx, rimY } = g;
-  ctx.save();
-  if (damaged) {
-    ctx.translate(cx, rimY);
-    ctx.rotate(TORCH_DAMAGED_BOWL_TILT);
-    ctx.translate(-cx, -rimY);
+    if (!charred) {
+      // The glossy lip of pitch on each band's upper edge.
+      seam(ctx, cx - TORCH_HEAD_HALF_W, y + TORCH_WRAP_SLANT / 2 - 1, cx, y - 1, 0.55, PITCH_SHEEN);
+    }
   }
-
-  const bowlBottomY = rimY + TORCH_BOWL_DEPTH;
-  ctx.beginPath();
-  ctx.moveTo(cx - TORCH_BOWL_RIM_RX, rimY);
-  ctx.lineTo(cx - TORCH_BOWL_BASE_HALF_W, bowlBottomY);
-  ctx.lineTo(cx + TORCH_BOWL_BASE_HALF_W, bowlBottomY);
-  ctx.lineTo(cx + TORCH_BOWL_RIM_RX, rimY);
-  ctx.closePath();
-  const bowlGrad = ctx.createLinearGradient(
-    cx - TORCH_BOWL_RIM_RX,
-    rimY,
-    cx + TORCH_BOWL_RIM_RX,
-    bowlBottomY,
-  );
-  bowlGrad.addColorStop(0, IRON_LIGHT);
-  bowlGrad.addColorStop(0.45, IRON_MID);
-  bowlGrad.addColorStop(1, IRON_DARK);
-  ctx.fillStyle = bowlGrad;
-  ctx.fill();
-  ctx.strokeStyle = WOOD_EDGE;
-  ctx.lineWidth = 1;
-  ctx.stroke();
-
-  // Rim, then the soot-black interior seen over its near edge.
-  ctx.beginPath();
-  ctx.ellipse(cx, rimY, TORCH_BOWL_RIM_RX, TORCH_BOWL_RIM_RY, 0, 0, TWO_PI);
-  ctx.fillStyle = SOOT;
-  ctx.fill();
-  ctx.strokeStyle = IRON_SPEC;
-  ctx.lineWidth = 1;
-  ctx.beginPath();
-  ctx.ellipse(cx, rimY, TORCH_BOWL_RIM_RX, TORCH_BOWL_RIM_RY, 0, Math.PI * 1.05, Math.PI * 1.85);
-  ctx.stroke();
-
-  for (let i = 0; i < TORCH_COAL_COUNT; i++) {
-    const t = (i + 0.5) / TORCH_COAL_COUNT;
-    ctx.globalAlpha = 0.6 + rng() * 0.4;
-    ctx.fillStyle = rng() < 0.4 ? FLAME_HOT : FLAME_OUTER;
-    ctx.beginPath();
-    ctx.arc(
-      lerp(cx - TORCH_BOWL_RIM_RX * 0.6, cx + TORCH_BOWL_RIM_RX * 0.6, t),
-      rimY + (rng() - 0.5) * TORCH_BOWL_RIM_RY,
-      TORCH_COAL_RADIUS * (0.6 + rng() * 0.6),
-      0,
-      TWO_PI,
-    );
-    ctx.fill();
+  if (charred) {
+    // Seams of live ember where the char has split: the head's own glow, the only bright part.
+    ctx.strokeStyle = FLAME_OUTER;
+    ctx.lineWidth = 0.9;
+    for (let i = 0; i < TORCH_CHAR_EMBER_COUNT; i++) {
+      const y = lerp(headTopY + 2, headBottomY - 2, rng());
+      const x = cx + signedUnit(rng) * (TORCH_HEAD_HALF_W - 1.5);
+      ctx.beginPath();
+      ctx.moveTo(x - TORCH_CHAR_EMBER_HALF_LENGTH, y);
+      ctx.lineTo(x + TORCH_CHAR_EMBER_HALF_LENGTH, y - TORCH_CHAR_EMBER_RISE);
+      ctx.stroke();
+    }
   }
   ctx.restore();
 
-  if (damaged) {
-    // A gouge knocked out of the rim, so the head reads as struck rather than
-    // merely tilted.
+  if (charred) {
+    // One strip of burnt rag come unwound, hanging off the head's shaded side.
     ctx.save();
-    ctx.fillStyle = SOOT;
+    ctx.strokeStyle = CHAR_GREY;
+    ctx.lineWidth = 1.6;
     ctx.beginPath();
-    ctx.moveTo(cx + TORCH_BOWL_RIM_RX - 4, rimY - 2);
-    ctx.lineTo(cx + TORCH_BOWL_RIM_RX + 1, rimY + 1);
-    ctx.lineTo(cx + TORCH_BOWL_RIM_RX - 3, rimY + 3);
-    ctx.closePath();
-    ctx.fill();
+    ctx.moveTo(cx + TORCH_HEAD_HALF_W - 1, headBottomY - 3);
+    ctx.quadraticCurveTo(
+      cx + TORCH_HEAD_HALF_W + 3,
+      headBottomY,
+      cx + TORCH_HEAD_HALF_W + 2,
+      headBottomY + TORCH_LOOSE_WRAP_LENGTH,
+    );
+    ctx.stroke();
     ctx.restore();
   }
 }
 
-/** One teardrop of flame, swaying with the loop's phase. */
 function flamePath(
   ctx: Ctx,
   x: number,
@@ -1381,17 +1832,17 @@ function flamePath(
 }
 
 /**
- * The fire itself, rising from `baseY` at `cx`: three nested teardrops, an ember
- * glow behind them, and a column of smoke off the tip.
+ * The fire itself, rising from `baseY` at `cx`: three nested teardrops and a
+ * column of smoke off the tip. No glow is painted round it — the light a flame
+ * throws is drawn by the lighting pass, which knows where the walls are.
  *
  * @param sizeScale Multiplies every dimension, so a brazier's bed of coals burns
- *   visibly bigger than a single brand without a second copy of this code.
+ *   visibly bigger than a single brand.
  */
-function drawFlame(
+export function drawFlame(
   ctx: Ctx,
   cx: number,
   baseY: number,
-  ts: number,
   phase: number,
   damaged: boolean,
   sizeScale: number,
@@ -1403,16 +1854,6 @@ function drawFlame(
   const sway = Math.sin(phase * TWO_PI * 2) * FLAME_SWAY;
   const tipY = baseY - height;
 
-  const glowY = baseY - height * FLAME_GLOW_CENTER_FRACTION;
-  puff(
-    ctx,
-    cx + sway * FLAME_GLOW_CENTER_FRACTION,
-    glowY,
-    ts * FLAME_GLOW_RADIUS_TILE_FRACTION * sizeScale,
-    FLAME_GLOW_ALPHA_BASE + wave * FLAME_GLOW_ALPHA_FLICKER,
-    EMBER_RGB,
-  );
-
   ctx.save();
   flamePath(ctx, cx, baseY, halfW, height, sway);
   const outerGrad = ctx.createLinearGradient(cx, baseY, cx, tipY);
@@ -1422,14 +1863,28 @@ function drawFlame(
   ctx.fillStyle = outerGrad;
   ctx.fill();
 
-  flamePath(ctx, cx, baseY, halfW * FLAME_MID_SCALE, height * 0.78, sway * 0.7);
+  flamePath(
+    ctx,
+    cx,
+    baseY,
+    halfW * FLAME_MID_SCALE,
+    height * FLAME_MID_HEIGHT_FRACTION,
+    sway * FLAME_MID_SWAY_FRACTION,
+  );
   const midGrad = ctx.createLinearGradient(cx, baseY, cx, tipY);
   midGrad.addColorStop(0, FLAME_HOT);
   midGrad.addColorStop(1, FLAME_MID);
   ctx.fillStyle = midGrad;
   ctx.fill();
 
-  flamePath(ctx, cx, baseY, halfW * FLAME_CORE_SCALE, height * 0.5, sway * 0.4);
+  flamePath(
+    ctx,
+    cx,
+    baseY,
+    halfW * FLAME_CORE_SCALE,
+    height * FLAME_CORE_HEIGHT_FRACTION,
+    sway * FLAME_CORE_SWAY_FRACTION,
+  );
   ctx.fillStyle = FLAME_CORE;
   ctx.fill();
   ctx.restore();
@@ -1457,63 +1912,60 @@ function drawTorch(
   frame: number,
   seedTerm: number,
 ): void {
-  const rng = makeRng(TORCH_SEED + seedTerm);
+  const rng = mulberry32(TORCH_SEED + seedTerm);
   const g = torchGeometry(ox, oy, ts);
-
-  contactShadow(ctx, g.cx, g.footY + 2, ts, 0.75);
-  drawTorchFoot(ctx, g);
-  drawTorchHaft(ctx, g, rng, damaged);
-  drawTorchBowl(ctx, g, rng, damaged);
-  drawFlame(ctx, g.cx, g.rimY - 1, ts, frame / FLAME_FRAMES, damaged, TORCH_FLAME_SCALE);
+  contactShadow(ctx, g.cx, g.footY + 2, ts, TORCH_SHADOW_SCALE);
+  drawTorchStand(ctx, g);
+  const paintTop = () => {
+    drawTorchSocket(ctx, g);
+    drawTorchHead(ctx, g, damaged, rng);
+    drawFlame(ctx, g.cx, g.headTopY + 2, frame / FLAME_FRAMES, damaged, TORCH_FLAME_SCALE);
+  };
+  // A struck stand bends at the hub, carrying the head over with it.
+  if (damaged) withRotation(ctx, g.cx, g.hubY, TORCH_SHAFT_BEND_DAMAGED, paintTop);
+  else paintTop();
 }
 
 // ── Brazier ───────────────────────────────────────────────────────────────────
-// A wide iron fire-bowl on three splayed legs. Unlike the torch there is no wood
-// in it at all, so a swing that fells one throws bent iron and scattered coals
-// rather than splinters.
+// A wide iron fire-bowl on three splayed legs. No wood in it, so a felled one
+// throws bent iron and scattered coals.
 
-/** Fixed seed for the brazier's coal bed and the split down its bowl. */
 const BRAZIER_SEED = 0x3f81;
-
-/** Where the legs meet the floor, as a fraction of the tile. */
 const BRAZIER_FOOT_BASE_FRACTION = 0.94;
-/** Where the bowl's rim sits, as a fraction of the tile below its top edge. */
 const BRAZIER_RIM_FRACTION = 0.42;
 const BRAZIER_BOWL_RIM_RX = 19;
 const BRAZIER_BOWL_RIM_RY = 6.5;
 const BRAZIER_BOWL_DEPTH = 12;
 const BRAZIER_BOWL_BASE_HALF_W = 8.5;
 const BRAZIER_LEG_COUNT = 3;
-/** Horizontal offsets of each leg's foot and its attachment under the bowl. */
 const BRAZIER_LEG_FOOT_OFFSETS = [-15, 0, 15] as const;
 const BRAZIER_LEG_TOP_OFFSETS = [-6.5, 0, 6.5] as const;
 const BRAZIER_LEG_WIDTH = 3.4;
-/** The centre leg points at the viewer, so its foot lands lower than the outer two. */
 const BRAZIER_CENTER_LEG_FOOT_DROP = 3;
 const BRAZIER_FOOT_PAD_RX = 4;
 const BRAZIER_FOOT_PAD_RY = 1.8;
-/** Iron collar hiding the joint where the three legs meet the bowl's base. */
 const BRAZIER_COLLAR_RX = 10;
 const BRAZIER_COLLAR_RY = 3;
 const BRAZIER_COAL_COUNT = 9;
 const BRAZIER_COAL_RADIUS = 2.1;
-/** How far across the rim the coal bed is spread, as a fraction of its radius. */
 const BRAZIER_COAL_SPREAD_FRACTION = 0.72;
-/** Tilt a struck bowl settles at, in radians. */
 const BRAZIER_DAMAGED_BOWL_TILT = 0.11;
-/** Angle the buckled outer leg folds through, in radians. */
 const BRAZIER_BUCKLED_LEG_TILT = 0.28;
-/** Which leg buckles when the brazier is damaged. */
 const BRAZIER_BUCKLED_LEG_INDEX = 0;
-/** A bed of coals burns bigger than a single brand. */
 const BRAZIER_FLAME_SCALE = 1.9;
-const TORCH_FLAME_SCALE = 1;
+const BRAZIER_RIVET_COUNT = 5;
+const BRAZIER_SHADOW_SCALE = 0.95;
+const COAL_ALPHA_MIN = 0.6;
+const COAL_ALPHA_SPREAD = 0.4;
+const COAL_HOT_CHANCE = 0.4;
+const COAL_RADIUS_MIN_FRACTION = 0.6;
+const COAL_RADIUS_SPREAD_FRACTION = 0.6;
 
 interface BrazierGeometry {
-  cx: number;
-  footY: number;
-  rimY: number;
-  bowlBottomY: number;
+  readonly cx: number;
+  readonly footY: number;
+  readonly rimY: number;
+  readonly bowlBottomY: number;
 }
 
 function brazierGeometry(ox: number, oy: number, ts: number): BrazierGeometry {
@@ -1529,104 +1981,119 @@ function brazierGeometry(ox: number, oy: number, ts: number): BrazierGeometry {
 function drawBrazierLegs(ctx: Ctx, g: BrazierGeometry, damaged: boolean): void {
   const { cx, footY, bowlBottomY } = g;
   for (let i = 0; i < BRAZIER_LEG_COUNT; i++) {
-    const isCenterLeg = BRAZIER_LEG_FOOT_OFFSETS[i] === 0;
+    const footOffset = BRAZIER_LEG_FOOT_OFFSETS[i] ?? 0;
+    const topOffset = BRAZIER_LEG_TOP_OFFSETS[i] ?? 0;
+    const isCenterLeg = footOffset === 0;
     const legFootY = footY + (isCenterLeg ? BRAZIER_CENTER_LEG_FOOT_DROP : 0);
-    const footX = cx + BRAZIER_LEG_FOOT_OFFSETS[i];
-    const topX = cx + BRAZIER_LEG_TOP_OFFSETS[i];
-    const isBuckled = damaged && i === BRAZIER_BUCKLED_LEG_INDEX;
-
-    ctx.save();
-    if (isBuckled) {
-      ctx.translate(topX, bowlBottomY);
-      ctx.rotate(BRAZIER_BUCKLED_LEG_TILT);
-      ctx.translate(-topX, -bowlBottomY);
+    const footX = cx + footOffset;
+    const topX = cx + topOffset;
+    const paintLeg = () => {
+      ironStrap(ctx, topX, bowlBottomY, footX, legFootY, BRAZIER_LEG_WIDTH);
+      ctx.fillStyle = IRON_DARK;
+      ctx.beginPath();
+      ctx.ellipse(footX, legFootY, BRAZIER_FOOT_PAD_RX, BRAZIER_FOOT_PAD_RY, 0, 0, TWO_PI);
+      ctx.fill();
+    };
+    if (damaged && i === BRAZIER_BUCKLED_LEG_INDEX) {
+      withRotation(ctx, topX, bowlBottomY, BRAZIER_BUCKLED_LEG_TILT, paintLeg);
+    } else {
+      paintLeg();
     }
-    ironStrap(ctx, topX, bowlBottomY, footX, legFootY, BRAZIER_LEG_WIDTH);
-    ctx.fillStyle = IRON_DARK;
-    ctx.beginPath();
-    ctx.ellipse(footX, legFootY, BRAZIER_FOOT_PAD_RX, BRAZIER_FOOT_PAD_RY, 0, 0, TWO_PI);
-    ctx.fill();
-    ctx.restore();
   }
-
   ctx.save();
-  const collarGrad = ctx.createLinearGradient(
-    cx - BRAZIER_COLLAR_RX,
-    bowlBottomY,
-    cx + BRAZIER_COLLAR_RX,
-    bowlBottomY,
-  );
-  collarGrad.addColorStop(0, IRON_LIGHT);
-  collarGrad.addColorStop(0.5, IRON_MID);
-  collarGrad.addColorStop(1, IRON_DARK);
-  ctx.fillStyle = collarGrad;
+  ctx.fillStyle = cylinderRamp(ctx, cx - BRAZIER_COLLAR_RX, cx + BRAZIER_COLLAR_RX, 0, [
+    [0, IRON_MID],
+    [0.35, IRON_LIGHT],
+    [1, IRON_DARK],
+  ]);
   ctx.beginPath();
   ctx.ellipse(cx, bowlBottomY, BRAZIER_COLLAR_RX, BRAZIER_COLLAR_RY, 0, 0, TWO_PI);
   ctx.fill();
   ctx.restore();
 }
 
-function drawBrazierBowl(ctx: Ctx, g: BrazierGeometry, rng: () => number, damaged: boolean): void {
-  const { cx, rimY, bowlBottomY } = g;
-  ctx.save();
-  if (damaged) {
-    ctx.translate(cx, rimY);
-    ctx.rotate(BRAZIER_DAMAGED_BOWL_TILT);
-    ctx.translate(-cx, -rimY);
-  }
-
-  ctx.beginPath();
-  ctx.moveTo(cx - BRAZIER_BOWL_RIM_RX, rimY);
-  ctx.lineTo(cx - BRAZIER_BOWL_BASE_HALF_W, bowlBottomY);
-  ctx.lineTo(cx + BRAZIER_BOWL_BASE_HALF_W, bowlBottomY);
-  ctx.lineTo(cx + BRAZIER_BOWL_RIM_RX, rimY);
-  ctx.closePath();
-  const bowlGrad = ctx.createLinearGradient(
-    cx - BRAZIER_BOWL_RIM_RX,
-    rimY,
-    cx + BRAZIER_BOWL_RIM_RX,
-    bowlBottomY,
-  );
-  bowlGrad.addColorStop(0, IRON_LIGHT);
-  bowlGrad.addColorStop(0.45, IRON_MID);
-  bowlGrad.addColorStop(1, IRON_DARK);
-  ctx.fillStyle = bowlGrad;
-  ctx.fill();
-  ctx.strokeStyle = WOOD_EDGE;
-  ctx.lineWidth = 1;
-  ctx.stroke();
-
-  // Rim, then the soot-black bed of coals seen over its near edge.
-  ctx.beginPath();
-  ctx.ellipse(cx, rimY, BRAZIER_BOWL_RIM_RX, BRAZIER_BOWL_RIM_RY, 0, 0, TWO_PI);
-  ctx.fillStyle = SOOT;
-  ctx.fill();
-  ctx.strokeStyle = IRON_SPEC;
-  ctx.lineWidth = 1;
-  ctx.beginPath();
-  ctx.ellipse(cx, rimY, BRAZIER_BOWL_RIM_RX, BRAZIER_BOWL_RIM_RY, 0, Math.PI * 1.05, Math.PI * 1.9);
-  ctx.stroke();
-
-  const coalSpread = BRAZIER_BOWL_RIM_RX * BRAZIER_COAL_SPREAD_FRACTION;
-  for (let i = 0; i < BRAZIER_COAL_COUNT; i++) {
-    const t = (i + 0.5) / BRAZIER_COAL_COUNT;
-    ctx.globalAlpha = 0.6 + rng() * 0.4;
-    ctx.fillStyle = rng() < 0.4 ? FLAME_HOT : FLAME_OUTER;
+function drawCoalBed(
+  ctx: Ctx,
+  cx: number,
+  rimY: number,
+  spread: number,
+  rimRy: number,
+  count: number,
+  radius: number,
+  rng: () => number,
+): void {
+  for (let i = 0; i < count; i++) {
+    const t = (i + 0.5) / count;
+    ctx.globalAlpha = COAL_ALPHA_MIN + rng() * COAL_ALPHA_SPREAD;
+    ctx.fillStyle = rng() < COAL_HOT_CHANCE ? FLAME_HOT : FLAME_OUTER;
     ctx.beginPath();
     ctx.arc(
-      lerp(cx - coalSpread, cx + coalSpread, t),
-      rimY + (rng() - 0.5) * BRAZIER_BOWL_RIM_RY,
-      BRAZIER_COAL_RADIUS * (0.6 + rng() * 0.6),
+      lerp(cx - spread, cx + spread, t),
+      rimY + (rng() - 0.5) * rimRy,
+      radius * (COAL_RADIUS_MIN_FRACTION + rng() * COAL_RADIUS_SPREAD_FRACTION),
       0,
       TWO_PI,
     );
     ctx.fill();
   }
-  ctx.restore();
+  ctx.globalAlpha = 1;
+}
+
+function drawBrazierBowl(ctx: Ctx, g: BrazierGeometry, rng: () => number, damaged: boolean): void {
+  const { cx, rimY, bowlBottomY } = g;
+  const paintBowl = () => {
+    ctx.beginPath();
+    ctx.moveTo(cx - BRAZIER_BOWL_RIM_RX, rimY);
+    ctx.lineTo(cx - BRAZIER_BOWL_BASE_HALF_W, bowlBottomY);
+    ctx.lineTo(cx + BRAZIER_BOWL_BASE_HALF_W, bowlBottomY);
+    ctx.lineTo(cx + BRAZIER_BOWL_RIM_RX, rimY);
+    ctx.closePath();
+    ctx.fillStyle = cylinderRamp(ctx, cx - BRAZIER_BOWL_RIM_RX, cx + BRAZIER_BOWL_RIM_RX, 0, [
+      [0, IRON_DARK],
+      [0.3, IRON_LIGHT],
+      [0.6, IRON_MID],
+      [1, IRON_DARK],
+    ]);
+    ctx.fill();
+    ctx.strokeStyle = IRON_EDGE;
+    ctx.lineWidth = 1;
+    ctx.stroke();
+    // A row of rivets where the bowl's plates were joined, each catching the key light.
+    for (let i = 0; i < BRAZIER_RIVET_COUNT; i++) {
+      const t = (i + 0.5) / BRAZIER_RIVET_COUNT;
+      const rivetY = rimY + BRAZIER_BOWL_DEPTH * 0.45;
+      const halfAtRivet = lerp(BRAZIER_BOWL_RIM_RX, BRAZIER_BOWL_BASE_HALF_W, 0.45);
+      nailHead(ctx, lerp(cx - halfAtRivet + 2, cx + halfAtRivet - 2, t), rivetY);
+    }
+
+    ctx.beginPath();
+    ctx.ellipse(cx, rimY, BRAZIER_BOWL_RIM_RX, BRAZIER_BOWL_RIM_RY, 0, 0, TWO_PI);
+    ctx.fillStyle = SOOT;
+    ctx.fill();
+    ctx.strokeStyle = IRON_SPEC;
+    ctx.lineWidth = 1.2;
+    ctx.beginPath();
+    ctx.ellipse(cx, rimY, BRAZIER_BOWL_RIM_RX, BRAZIER_BOWL_RIM_RY, 0, 0.15, Math.PI - 0.15);
+    ctx.stroke();
+    drawCoalBed(
+      ctx,
+      cx,
+      rimY,
+      BRAZIER_BOWL_RIM_RX * BRAZIER_COAL_SPREAD_FRACTION,
+      BRAZIER_BOWL_RIM_RY,
+      BRAZIER_COAL_COUNT,
+      BRAZIER_COAL_RADIUS,
+      rng,
+    );
+  };
+  if (damaged) withRotation(ctx, cx, rimY, BRAZIER_DAMAGED_BOWL_TILT, paintBowl);
+  else {
+    ctx.save();
+    paintBowl();
+    ctx.restore();
+  }
 
   if (damaged) {
-    // A split down the bowl's face and a bite out of the rim, so the iron reads
-    // as struck rather than merely leaning.
     crack(ctx, cx + 4, rimY + 3, bowlBottomY - 1, 2.5, rng);
     ctx.save();
     ctx.fillStyle = SOOT;
@@ -1649,153 +2116,115 @@ function drawBrazier(
   frame: number,
   seedTerm: number,
 ): void {
-  const rng = makeRng(BRAZIER_SEED + seedTerm);
+  const rng = mulberry32(BRAZIER_SEED + seedTerm);
   const g = brazierGeometry(ox, oy, ts);
-
-  contactShadow(ctx, g.cx, g.footY + 2, ts, 0.95);
+  contactShadow(ctx, g.cx, g.footY + 2, ts, BRAZIER_SHADOW_SCALE);
   drawBrazierLegs(ctx, g, damaged);
   drawBrazierBowl(ctx, g, rng, damaged);
-  drawFlame(ctx, g.cx, g.rimY - 1, ts, frame / BRAZIER_FLAME_FRAMES, damaged, BRAZIER_FLAME_SCALE);
+  drawFlame(ctx, g.cx, g.rimY - 1, frame / BRAZIER_FLAME_FRAMES, damaged, BRAZIER_FLAME_SCALE);
 }
 
 // ── Shatter ───────────────────────────────────────────────────────────────────
 
-interface DebrisSpec {
-  angle: number;
-  distance: number;
-  /** Where along the prop the piece came off, relative to the burst centre. */
-  originY: number;
-  /** Orientation the piece starts at, before its tumble is added. */
-  restAngle: number;
-  length: number;
-  width: number;
-  spin: number;
-  shade: string;
-  isIron: boolean;
-}
-
-/** Where in the tile the burst originates, as a fraction of tile height. */
 const BURST_CENTER_Y_FRACTION = 0.5;
 /**
- * Midpoint of the torch's haft, which is most of a tile above the floor. The
- * burst is centred there rather than on the tile so the pole reads as snapping
- * along its length instead of the floor beneath it erupting.
+ * The torch bursts from halfway up its shaft rather than the tile centre, so the
+ * stand reads as snapping along its length instead of the floor erupting.
  */
 const TORCH_BURST_CENTER_Y_FRACTION = 0.34;
 /** The brazier's mass is its bowl, which rides a little above the tile centre. */
 const BRAZIER_BURST_CENTER_Y_FRACTION = 0.44;
 
-/** Where a kind's break erupts from, as a fraction of tile height. */
+/** A bookshelf's mass is the middle of a case that stands most of a tile above its own. */
+const BOOKSHELF_BURST_CENTER_Y_FRACTION = 0.1;
+
 function burstCenterYFraction(kind: PropKind): number {
   if (kind === 'torch') return TORCH_BURST_CENTER_Y_FRACTION;
+  if (kind === 'bookshelf') return BOOKSHELF_BURST_CENTER_Y_FRACTION;
   if (kind === 'brazier') return BRAZIER_BURST_CENTER_Y_FRACTION;
   return BURST_CENTER_Y_FRACTION;
 }
-/** Top-down foreshortening: debris spreads less vertically than horizontally. */
-const DEBRIS_VERTICAL_SQUASH = 0.6;
-const DEBRIS_COUNT = 16;
-const DEBRIS_SPREAD_PX = 34;
-/**
- * Vertical arc of the burst. Rise and fall are near-balanced on purpose: a fall
- * much larger than the rise walks the whole cloud off the bottom of the tile by
- * the last frame, so the break reads as debris landing a tile south of the prop
- * rather than as the prop itself coming apart.
- */
-const DEBRIS_RISE_PX = 11;
-const DEBRIS_FALL_PX = 9;
-/**
- * Frame 0 is the instant the prop gives way, not the instant before it — the
- * pieces already have this much of their travel so the first frame reads as a
- * burst rather than as a single shard sitting on an empty tile.
- */
-const DEBRIS_INITIAL_TRAVEL = 0.3;
-/** Debris travels fastest at the start of the burst, then coasts. */
-const debrisEase = (t: number) => 1 - Math.pow(1 - t, 2.2);
-/** Progress past which the pieces start fading out. */
-const DEBRIS_FADE_START = 0.55;
-/** Alpha the last shatter frame lands on, handing off to the wreckage decal. */
-const DEBRIS_FINAL_ALPHA = 0.22;
-/** Bright impact flash, brief enough to live only in the first two frames. */
-const IMPACT_FLASH_PROGRESS_END = 0.3;
 
-function buildDebris(seed: number): DebrisSpec[] {
-  const rng = makeRng(seed);
-  const out: DebrisSpec[] = [];
-  for (let i = 0; i < DEBRIS_COUNT; i++) {
-    const isIron = i % 5 === 4;
-    out.push({
-      angle: (i / DEBRIS_COUNT) * TWO_PI + rng() * 0.5,
-      distance: DEBRIS_SPREAD_PX * (0.45 + rng() * 0.75),
-      originY: 0,
-      restAngle: 0,
-      length: isIron ? 9 + rng() * 5 : 7 + rng() * 9,
-      width: isIron ? 2.5 : 2.5 + rng() * 3,
-      spin: (rng() - 0.5) * 7,
-      shade: WOOD_RAMP[Math.floor(rng() * WOOD_RAMP.length)],
-      isIron,
-    });
-  }
-  return out;
+const BOX_DEBRIS_COUNT = 16;
+const BOX_DEBRIS_SPREAD_PX = 34;
+const BOX_DEBRIS_IRON_PERIOD = 5;
+const PLANK_LENGTH_MIN = 7;
+const PLANK_LENGTH_SPREAD = 9;
+const PLANK_WIDTH_MIN = 2.5;
+const PLANK_WIDTH_SPREAD = 3;
+
+function boxDebris(seed: number, curlPeriod: number): DebrisPiece[] {
+  return radialDebris(seed, {
+    count: BOX_DEBRIS_COUNT,
+    spreadPx: BOX_DEBRIS_SPREAD_PX,
+    shades: [...WOOD_RAMP],
+    edge: WOOD_EDGE,
+    curlPeriod,
+    curlShade: IRON_MID,
+    lengthMin: PLANK_LENGTH_MIN,
+    lengthSpread: PLANK_LENGTH_SPREAD,
+    widthMin: PLANK_WIDTH_MIN,
+    widthSpread: PLANK_WIDTH_SPREAD,
+  });
 }
 
-// ── Pole debris ───────────────────────────────────────────────────────────────
-// A haft breaks nothing like a box. Its pieces come off all the way up the pole
-// and are flung sideways off it, so they stay a tall narrow column of near-
-// vertical slivers rather than opening into the boxy props' radial ring.
-
+// A torch's pieces come off all the way up the stand and are flung sideways
+// off it, so they stay a tall narrow column rather than a radial ring.
 const TORCH_DEBRIS_COUNT = 18;
-/** How far the pieces' origins spread along the haft, in tile heights. */
 const TORCH_DEBRIS_ORIGIN_SPAN_TILES = 1.05;
-/** Sideways fling, well short of DEBRIS_SPREAD_PX: a pole is a narrow thing. */
 const TORCH_DEBRIS_SPREAD_PX = 15;
-/** Half-angle of the sideways cone the pieces are thrown into, off horizontal. */
 const TORCH_DEBRIS_CONE_HALF_ANGLE = Math.PI / 3;
-/** One piece in six is a ferrule or a scrap off the fire bowl. */
-const TORCH_DEBRIS_IRON_PERIOD = 6;
-const TORCH_SPLINTER_LENGTH_MIN = 9;
-const TORCH_SPLINTER_LENGTH_SPREAD = 10;
+/** Most of a torch is iron now; one piece in three is a scrap of the brand or its rag. */
+const TORCH_DEBRIS_WOOD_PERIOD = 3;
+const TORCH_IRON_LENGTH_MIN = 9;
+const TORCH_IRON_LENGTH_SPREAD = 9;
+const TORCH_IRON_WIDTH = 2;
+const TORCH_SPLINTER_LENGTH_MIN = 5;
+const TORCH_SPLINTER_LENGTH_SPREAD = 5;
 const TORCH_SPLINTER_WIDTH_MIN = 1.7;
 const TORCH_SPLINTER_WIDTH_SPREAD = 1.6;
-/** Slivers off a pole lie near-vertical, wobbling this far either side of it. */
 const TORCH_SPLINTER_TILT = 0.5;
 const TORCH_SPLINTER_SPIN_MAX = 4;
+const TORCH_DEBRIS_DISTANCE_MIN_FRACTION = 0.4;
+const TORCH_DEBRIS_DISTANCE_SPREAD_FRACTION = 0.9;
 const QUARTER_TURN = Math.PI / 2;
 
-function buildTorchDebris(seed: number): DebrisSpec[] {
-  const rng = makeRng(seed);
-  const out: DebrisSpec[] = [];
+function buildTorchDebris(seed: number): DebrisPiece[] {
+  const rng = mulberry32(seed);
+  const out: DebrisPiece[] = [];
   for (let i = 0; i < TORCH_DEBRIS_COUNT; i++) {
-    const isIron = i % TORCH_DEBRIS_IRON_PERIOD === TORCH_DEBRIS_IRON_PERIOD - 1;
+    const isBrand = i % TORCH_DEBRIS_WOOD_PERIOD === TORCH_DEBRIS_WOOD_PERIOD - 1;
     const thrownLeft = i % 2 === 0;
-    const offHorizontal = (rng() - 0.5) * 2 * TORCH_DEBRIS_CONE_HALF_ANGLE;
-    // Origins walk the pole in order, jittered inside their own slot, so the
+    const offHorizontal = signedUnit(rng) * TORCH_DEBRIS_CONE_HALF_ANGLE;
+    // Origins walk the stand in order, jittered inside their own slot, so the
     // column stays evenly populated instead of clumping.
     const alongPole = (i + rng()) / TORCH_DEBRIS_COUNT - 0.5;
     out.push({
       angle: (thrownLeft ? Math.PI : 0) + offHorizontal,
-      distance: TORCH_DEBRIS_SPREAD_PX * (0.4 + rng() * 0.9),
+      distance:
+        TORCH_DEBRIS_SPREAD_PX *
+        (TORCH_DEBRIS_DISTANCE_MIN_FRACTION + rng() * TORCH_DEBRIS_DISTANCE_SPREAD_FRACTION),
       originY: alongPole * TORCH_DEBRIS_ORIGIN_SPAN_TILES,
-      restAngle: isIron ? 0 : QUARTER_TURN + (rng() - 0.5) * 2 * TORCH_SPLINTER_TILT,
-      length: isIron
-        ? 7 + rng() * 4
-        : TORCH_SPLINTER_LENGTH_MIN + rng() * TORCH_SPLINTER_LENGTH_SPREAD,
-      width: isIron ? 2.5 : TORCH_SPLINTER_WIDTH_MIN + rng() * TORCH_SPLINTER_WIDTH_SPREAD,
-      spin: (rng() - 0.5) * TORCH_SPLINTER_SPIN_MAX,
-      shade: WOOD_RAMP[Math.floor(rng() * WOOD_RAMP.length)],
-      isIron,
+      restAngle: QUARTER_TURN + signedUnit(rng) * TORCH_SPLINTER_TILT,
+      length: isBrand
+        ? TORCH_SPLINTER_LENGTH_MIN + rng() * TORCH_SPLINTER_LENGTH_SPREAD
+        : TORCH_IRON_LENGTH_MIN + rng() * TORCH_IRON_LENGTH_SPREAD,
+      width: isBrand
+        ? TORCH_SPLINTER_WIDTH_MIN + rng() * TORCH_SPLINTER_WIDTH_SPREAD
+        : TORCH_IRON_WIDTH,
+      spin: signedUnit(rng) * (TORCH_SPLINTER_SPIN_MAX / 2),
+      shade: isBrand ? pick(rng, [PITCH_MID, WOOD_DARK, CHAR_GREY]) : pick(rng, [...IRON_RAMP]),
+      edge: isBrand ? WOOD_EDGE : IRON_EDGE,
+      form: 'shard',
     });
   }
   return out;
 }
 
-// ── Iron debris ───────────────────────────────────────────────────────────────
-// A brazier has no wood in it. Its break is bent iron thrown in a flat ring the
-// width of the bowl, with the coal bed scattering out ahead of it.
-
+// A brazier has no wood in it: bent iron thrown in a flat ring the width of the
+// bowl, with the coal bed scattering out ahead of it.
 const BRAZIER_DEBRIS_COUNT = 17;
-/** Wider than the torch's sideways fling: a bowl comes apart outwards. */
 const BRAZIER_DEBRIS_SPREAD_PX = 28;
-/** One piece in three is a coal off the fire bed rather than a scrap of iron. */
 const BRAZIER_DEBRIS_COAL_PERIOD = 3;
 const BRAZIER_IRON_LENGTH_MIN = 8;
 const BRAZIER_IRON_LENGTH_SPREAD = 7;
@@ -1805,16 +2234,16 @@ const BRAZIER_COAL_LENGTH_SPREAD = 3.5;
 const BRAZIER_COAL_WIDTH_MIN = 2.2;
 const BRAZIER_COAL_WIDTH_SPREAD = 1.6;
 const BRAZIER_DEBRIS_SPIN_MAX = 6;
-/** Fire ramp the flying coals are tinted from. */
+const BRAZIER_ANGLE_JITTER = 0.5;
 const COAL_RAMP = [FLAME_OUTER, FLAME_MID, FLAME_HOT, SOOT] as const;
 
-function buildBrazierDebris(seed: number): DebrisSpec[] {
-  const rng = makeRng(seed);
-  const out: DebrisSpec[] = [];
+function buildBrazierDebris(seed: number): DebrisPiece[] {
+  const rng = mulberry32(seed);
+  const out: DebrisPiece[] = [];
   for (let i = 0; i < BRAZIER_DEBRIS_COUNT; i++) {
     const isCoal = i % BRAZIER_DEBRIS_COAL_PERIOD === 0;
     out.push({
-      angle: (i / BRAZIER_DEBRIS_COUNT) * TWO_PI + rng() * 0.5,
+      angle: (i / BRAZIER_DEBRIS_COUNT) * TWO_PI + rng() * BRAZIER_ANGLE_JITTER,
       distance: BRAZIER_DEBRIS_SPREAD_PX * (isCoal ? 0.6 + rng() * 0.9 : 0.4 + rng() * 0.7),
       originY: 0,
       restAngle: rng() * Math.PI,
@@ -1824,109 +2253,88 @@ function buildBrazierDebris(seed: number): DebrisSpec[] {
       width: isCoal
         ? BRAZIER_COAL_WIDTH_MIN + rng() * BRAZIER_COAL_WIDTH_SPREAD
         : BRAZIER_IRON_WIDTH,
-      spin: (rng() - 0.5) * BRAZIER_DEBRIS_SPIN_MAX,
-      shade: COAL_RAMP[Math.floor(rng() * COAL_RAMP.length)],
-      isIron: !isCoal,
+      spin: signedUnit(rng) * (BRAZIER_DEBRIS_SPIN_MAX / 2),
+      shade: isCoal ? pick(rng, [...COAL_RAMP]) : IRON_MID,
+      edge: SOOT,
+      form: isCoal ? 'shard' : 'curl',
     });
   }
   return out;
 }
 
-// ── Bookshelf debris ──────────────────────────────────────────────────────────
-// A case coming apart throws its contents as well as itself, so a share of the
-// pieces are tumbling books rather than scraps of the carcass. Nothing iron: the
-// shelf is joined wood throughout.
-
-/** One piece in three off a bookshelf is a book rather than a scrap of the case. */
+// A case coming apart throws its contents as well as itself.
 const BOOKSHELF_DEBRIS_BOOK_PERIOD = 3;
 const BOOK_DEBRIS_LENGTH_MIN = 6;
 const BOOK_DEBRIS_LENGTH_SPREAD = 4;
 const BOOK_DEBRIS_WIDTH_MIN = 4;
 const BOOK_DEBRIS_WIDTH_SPREAD = 2;
 
-function buildBookshelfDebris(seed: number): DebrisSpec[] {
-  const rng = makeRng(seed);
-  const out: DebrisSpec[] = [];
-  for (let i = 0; i < DEBRIS_COUNT; i++) {
+function buildBookshelfDebris(seed: number): DebrisPiece[] {
+  const rng = mulberry32(seed);
+  return boxDebris(seed, 0).map((piece, i) => {
     const isBook = i % BOOKSHELF_DEBRIS_BOOK_PERIOD === BOOKSHELF_DEBRIS_BOOK_PERIOD - 1;
-    out.push({
-      angle: (i / DEBRIS_COUNT) * TWO_PI + rng() * 0.5,
-      distance: DEBRIS_SPREAD_PX * (0.45 + rng() * 0.75),
-      originY: 0,
-      restAngle: 0,
-      length: isBook ? BOOK_DEBRIS_LENGTH_MIN + rng() * BOOK_DEBRIS_LENGTH_SPREAD : 7 + rng() * 9,
-      width: isBook ? BOOK_DEBRIS_WIDTH_MIN + rng() * BOOK_DEBRIS_WIDTH_SPREAD : 2.5 + rng() * 3,
-      spin: (rng() - 0.5) * 7,
-      shade: isBook ? bookShade(rng) : WOOD_RAMP[Math.floor(rng() * WOOD_RAMP.length)],
-      isIron: false,
-    });
-  }
-  return out;
+    if (!isBook) return piece;
+    return {
+      ...piece,
+      length: BOOK_DEBRIS_LENGTH_MIN + rng() * BOOK_DEBRIS_LENGTH_SPREAD,
+      width: BOOK_DEBRIS_WIDTH_MIN + rng() * BOOK_DEBRIS_WIDTH_SPREAD,
+      shade: bookShade(rng),
+      edge: CAVITY,
+    };
+  });
 }
 
 /**
  * Fixed seeds for each kind's burst, one literal per kind. Never derive these
- * from an index or from the kind's name: two kinds that landed on the same seed
- * would throw the same pieces to the same places, and a name-derived seed has
- * already collided once here.
+ * from an index or the kind's name: two kinds landing on the same seed would
+ * throw the same pieces to the same places.
  */
-const BARREL_DEBRIS_SEED = 0x1177;
-const BARREL_SIDE_DEBRIS_SEED = 0x2288;
-const CRATE_DEBRIS_SEED = 0x3399;
-const TORCH_DEBRIS_SEED = 0x44aa;
-const BRAZIER_DEBRIS_SEED = 0x55bb;
-const BOOKSHELF_DEBRIS_SEED = 0x66cc;
+const DEBRIS_SEEDS: Readonly<Record<PropKind, number>> = {
+  barrel: 0x1177,
+  barrel_side: 0x2288,
+  crate: 0x3399,
+  torch: 0x44aa,
+  brazier: 0x55bb,
+  bookshelf: 0x66cc,
+};
 
-function debrisFor(kind: PropKind, seedTerm: number): DebrisSpec[] {
-  if (kind === 'barrel') return buildDebris(BARREL_DEBRIS_SEED + seedTerm);
-  if (kind === 'barrel_side') return buildDebris(BARREL_SIDE_DEBRIS_SEED + seedTerm);
-  if (kind === 'torch') return buildTorchDebris(TORCH_DEBRIS_SEED + seedTerm);
-  if (kind === 'brazier') return buildBrazierDebris(BRAZIER_DEBRIS_SEED + seedTerm);
-  if (kind === 'bookshelf') return buildBookshelfDebris(BOOKSHELF_DEBRIS_SEED + seedTerm);
-  return buildDebris(CRATE_DEBRIS_SEED + seedTerm);
+function debrisFor(kind: PropKind, seedTerm: number): DebrisPiece[] {
+  const seed = DEBRIS_SEEDS[kind] + seedTerm;
+  if (kind === 'torch') return buildTorchDebris(seed);
+  if (kind === 'brazier') return buildBrazierDebris(seed);
+  if (kind === 'bookshelf') return buildBookshelfDebris(seed);
+  return boxDebris(seed, BOX_DEBRIS_IRON_PERIOD);
 }
 
-/** Ember puffs stacked up the torch's haft, tracking the column of debris. */
 const TORCH_CLOUD_PUFF_COUNT = 3;
-/** Narrower than the boxy props' single cloud, so the column stays a column. */
 const TORCH_CLOUD_RADIUS_SCALE = 0.55;
-/** The brazier's ember core, kept tight inside its wider ash cloud. */
-const BRAZIER_EMBER_CLOUD_RADIUS_SCALE = 0.62;
+const BRAZIER_SMOKE_CORE_RADIUS_SCALE = 0.62;
 
 /**
- * The cloud the pieces come out of: one round puff of sawdust for a box, a
- * stack of ember puffs up the pole for a torch, and hot ash off a brazier's
- * spilled fire bed.
+ * The cloud the pieces come out of: sawdust for a box, a column of ash up the
+ * stand for a torch, and ash and smoke off a brazier's spilled fire bed. None
+ * of it glows — the flash of a break is not light the lighting pass knows of.
  */
-function burstCloud(
-  ctx: Ctx,
-  kind: PropKind,
-  cx: number,
-  cy: number,
-  ts: number,
-  radiusFraction: number,
-  alpha: number,
-): void {
+function cloudFor(kind: PropKind, ts: number): BurstCloud {
   if (kind === 'brazier') {
-    puff(ctx, cx, cy, ts * radiusFraction, alpha, ASH_RGB);
-    puff(ctx, cx, cy, ts * radiusFraction * BRAZIER_EMBER_CLOUD_RADIUS_SCALE, alpha, EMBER_RGB);
-    return;
+    return (ctx, cx, cy, radius, alpha) => {
+      puff(ctx, cx, cy, radius, alpha, ASH_RGB);
+      puff(ctx, cx, cy, radius * BRAZIER_SMOKE_CORE_RADIUS_SCALE, alpha, SMOKE_RGB);
+    };
   }
-  if (kind !== 'torch') {
-    puff(ctx, cx, cy, ts * radiusFraction, alpha, DUST_RGB);
-    return;
+  if (kind === 'torch') {
+    return (ctx, cx, cy, radius, alpha) => {
+      const columnRadius = radius * TORCH_CLOUD_RADIUS_SCALE;
+      const columnHeight = ts * TORCH_DEBRIS_ORIGIN_SPAN_TILES;
+      for (let i = 0; i < TORCH_CLOUD_PUFF_COUNT; i++) {
+        const alongPole = i / (TORCH_CLOUD_PUFF_COUNT - 1) - 0.5;
+        puff(ctx, cx, cy + alongPole * columnHeight, columnRadius, alpha, ASH_RGB);
+      }
+    };
   }
-  const radius = ts * radiusFraction * TORCH_CLOUD_RADIUS_SCALE;
-  for (let i = 0; i < TORCH_CLOUD_PUFF_COUNT; i++) {
-    const alongPole = i / (TORCH_CLOUD_PUFF_COUNT - 1) - 0.5;
-    puff(ctx, cx, cy + alongPole * ts * TORCH_DEBRIS_ORIGIN_SPAN_TILES, radius, alpha, EMBER_RGB);
-  }
+  return (ctx, cx, cy, radius, alpha) => puff(ctx, cx, cy, radius, alpha, DUST_RGB);
 }
 
-/**
- * One frame of the break. `progress` runs 0→1 across the six shatter frames:
- * the pieces burst outward, tumble apart, then fall and fade.
- */
 function drawShatterFrame(
   ctx: Ctx,
   kind: PropKind,
@@ -1936,141 +2344,46 @@ function drawShatterFrame(
   progress: number,
   seedTerm: number,
 ): void {
+  // The tile's centre, not the silhouette's: the burst stays anchored to the tile the prop stood on.
   const cx = ox + ts / 2;
-  // Centre of the tile, not of the prop's silhouette: the burst has to stay
-  // visually anchored to the tile the prop occupied.
   const cy = oy + ts * burstCenterYFraction(kind);
-  const travel = lerp(DEBRIS_INITIAL_TRAVEL, 1, debrisEase(progress));
-
-  // Dust sits behind the wood and only lives through the middle of the burst.
-  const dustAlpha = Math.sin(Math.min(1, progress * 1.6) * Math.PI) * 0.5;
-  if (dustAlpha > 0.01) {
-    burstCloud(ctx, kind, cx, cy, ts, 0.28 + travel * 0.42, dustAlpha);
-  }
-
-  if (progress < IMPACT_FLASH_PROGRESS_END) {
-    const flash = 1 - progress / IMPACT_FLASH_PROGRESS_END;
-    burstCloud(ctx, kind, cx, cy, ts, 0.3, flash * 0.75);
-  }
-
-  const alpha =
-    progress <= DEBRIS_FADE_START
-      ? 1
-      : lerp(1, DEBRIS_FINAL_ALPHA, (progress - DEBRIS_FADE_START) / (1 - DEBRIS_FADE_START));
-
-  ctx.save();
-  ctx.globalAlpha = Math.max(0, alpha);
-  for (const d of debrisFor(kind, seedTerm)) {
-    const dist = d.distance * travel;
-    const px = cx + Math.cos(d.angle) * dist;
-    // Pieces are thrown up first and pulled back down as the burst settles.
-    const py =
-      cy +
-      d.originY * ts +
-      Math.sin(d.angle) * dist * DEBRIS_VERTICAL_SQUASH -
-      DEBRIS_RISE_PX * Math.sin(progress * Math.PI) +
-      DEBRIS_FALL_PX * progress * progress;
-    if (d.isIron) {
-      ctx.save();
-      ctx.translate(px, py);
-      ctx.rotate(d.restAngle + d.spin * progress);
-      ctx.strokeStyle = IRON_MID;
-      ctx.lineWidth = d.width;
-      ctx.beginPath();
-      ctx.arc(0, 0, d.length * 0.6, 0.4, 2.6);
-      ctx.stroke();
-      ctx.restore();
-    } else {
-      shard(ctx, px, py, d.length, d.width, d.restAngle + d.spin * progress, d.shade);
-    }
-  }
-  ctx.restore();
+  drawDebrisBurst(ctx, debrisFor(kind, seedTerm), cloudFor(kind, ts), cx, cy, ts, progress);
 }
 
 // ── Remains ───────────────────────────────────────────────────────────────────
 // Flat wreckage with no vertical volume, so the tile still reads as walkable.
-
-interface RemainsPlank {
-  dx: number;
-  dy: number;
-  length: number;
-  width: number;
-  angle: number;
-  shade: string;
-}
-
-/** Shades a settled piece is picked from, skipping each ramp's extremes. */
-const REMAINS_SHADE_COUNT = 3;
-
-function buildRemains(
-  seed: number,
-  plankCount: number,
-  ramp: ReadonlyArray<string>,
-): RemainsPlank[] {
-  const rng = makeRng(seed);
-  const out: RemainsPlank[] = [];
-  for (let i = 0; i < plankCount; i++) {
-    const a = (i / plankCount) * TWO_PI + rng() * 0.8;
-    const r = 4 + rng() * 12;
-    out.push({
-      dx: Math.cos(a) * r,
-      dy: Math.sin(a) * r * 0.5,
-      length: 10 + rng() * 12,
-      width: 2.5 + rng() * 2.5,
-      angle: rng() * Math.PI,
-      shade: ramp[Math.floor(rng() * Math.min(REMAINS_SHADE_COUNT, ramp.length))],
-    });
-  }
-  return out;
-}
+// Remains stay for the whole floor, so nothing in them glows: a spilled fire
+// bed has gone out by the time it is wreckage.
 
 /** The wood ramp minus its darkest value, which is the props' outline colour. */
-const REMAINS_WOOD_RAMP = WOOD_RAMP.slice(1);
-
+const REMAINS_WOOD_SHADES = [WOOD_DARK, WOOD_MID, WOOD_LIGHT] as const;
+const REMAINS_PLANK_SIZE = { lengthMin: 10, lengthSpread: 12, widthMin: 2.5, widthSpread: 2.5 };
 const REMAINS_PLANK_COUNT = 9;
-/** A haft is one long stick, so it leaves fewer and shorter pieces than a box. */
-const TORCH_REMAINS_PLANK_COUNT = 7;
-/** Iron does not splinter — a felled brazier leaves a few flattened scraps. */
 const BRAZIER_REMAINS_PIECE_COUNT = 6;
-/** A case is the largest of the props, so it leaves the widest field of planks. */
 const BOOKSHELF_REMAINS_PLANK_COUNT = 11;
+const TORCH_REMAINS_SPLINTER_COUNT = 3;
+const REMAINS_CENTER_Y_FRACTION = 0.6;
+const REMAINS_SPECKLE_SPREAD_TILE_FRACTION = 0.34;
 
-/**
- * Fixed seeds for the field of planks each kind settles into, one literal per
- * kind. Distinct from `REMAINS_SEEDS` below, which seeds the scorch, the
- * dusting and the spilled books drawn around those planks.
- */
-const BARREL_PLANKS_SEED = 0x4411;
-const BARREL_SIDE_PLANKS_SEED = 0x5522;
-const CRATE_PLANKS_SEED = 0x6633;
-const TORCH_PLANKS_SEED = 0x7755;
-const BRAZIER_PLANKS_SEED = 0x8866;
-const BOOKSHELF_PLANKS_SEED = 0x9977;
+/** Fixed seeds for the field of pieces each kind settles into, one literal per kind. */
+const PLANK_SEEDS: Readonly<Record<PropKind, number>> = {
+  barrel: 0x4411,
+  barrel_side: 0x5522,
+  crate: 0x6633,
+  torch: 0x7755,
+  brazier: 0x8866,
+  bookshelf: 0x9977,
+};
+/** Fixed seeds for the scorch, dusting and spilled books drawn round those pieces. */
+const REMAINS_SEEDS: Readonly<Record<PropKind, number>> = {
+  barrel: 0x774a,
+  barrel_side: 0x774f,
+  crate: 0x7749,
+  torch: 0x7758,
+  brazier: 0x774b,
+  bookshelf: 0x7751,
+};
 
-function remainsFor(kind: PropKind, seedTerm: number): RemainsPlank[] {
-  if (kind === 'barrel') {
-    return buildRemains(BARREL_PLANKS_SEED + seedTerm, REMAINS_PLANK_COUNT, REMAINS_WOOD_RAMP);
-  }
-  if (kind === 'barrel_side') {
-    return buildRemains(BARREL_SIDE_PLANKS_SEED + seedTerm, REMAINS_PLANK_COUNT, REMAINS_WOOD_RAMP);
-  }
-  if (kind === 'torch') {
-    return buildRemains(TORCH_PLANKS_SEED + seedTerm, TORCH_REMAINS_PLANK_COUNT, REMAINS_WOOD_RAMP);
-  }
-  if (kind === 'brazier') {
-    return buildRemains(BRAZIER_PLANKS_SEED + seedTerm, BRAZIER_REMAINS_PIECE_COUNT, IRON_RAMP);
-  }
-  if (kind === 'bookshelf') {
-    return buildRemains(
-      BOOKSHELF_PLANKS_SEED + seedTerm,
-      BOOKSHELF_REMAINS_PLANK_COUNT,
-      REMAINS_WOOD_RAMP,
-    );
-  }
-  return buildRemains(CRATE_PLANKS_SEED + seedTerm, REMAINS_PLANK_COUNT, REMAINS_WOOD_RAMP);
-}
-
-/** Books thrown clear of a collapsed case, lying open and shut on the floor. */
 const SPILLED_BOOK_COUNT = 6;
 const SPILLED_BOOK_SPREAD_X = 17;
 const SPILLED_BOOK_SPREAD_Y = 8;
@@ -2081,8 +2394,8 @@ const SPILLED_BOOK_WIDTH_SPREAD = 2;
 
 function drawSpilledBooks(ctx: Ctx, cx: number, cy: number, rng: () => number): void {
   for (let i = 0; i < SPILLED_BOOK_COUNT; i++) {
-    const x = cx + (rng() - 0.5) * 2 * SPILLED_BOOK_SPREAD_X;
-    const y = cy + (rng() - 0.5) * 2 * SPILLED_BOOK_SPREAD_Y;
+    const x = cx + signedUnit(rng) * SPILLED_BOOK_SPREAD_X;
+    const y = cy + signedUnit(rng) * SPILLED_BOOK_SPREAD_Y;
     const length = SPILLED_BOOK_LENGTH_MIN + rng() * SPILLED_BOOK_LENGTH_SPREAD;
     const width = SPILLED_BOOK_WIDTH_MIN + rng() * SPILLED_BOOK_WIDTH_SPREAD;
     ctx.save();
@@ -2099,84 +2412,50 @@ function drawSpilledBooks(ctx: Ctx, cx: number, cy: number, rng: () => number): 
   }
 }
 
-/**
- * Seed for each kind's wreckage scatter, written out per kind rather than derived
- * from the name. The old `0x7744 + kind.length` handed `crate` and `torch` the
- * same seed — only the scorch a torch draws first, consuming rng the crate never
- * does, kept the two piles from landing identically — and it would have collided
- * again on the next five-letter prop.
- *
- * The five original values are the ones that expression produced, so listing them
- * here leaves their sheets byte-identical rather than reshuffling art nobody asked
- * to change. The collision stays for now: unpicking it would redraw torch.png.
- */
-const REMAINS_SEEDS: Record<PropKind, number> = {
-  barrel: 0x774a,
-  barrel_side: 0x774f,
-  crate: 0x7749,
-  torch: 0x7749,
-  brazier: 0x774b,
-  bookshelf: 0x7751,
-};
-
-/** Scorch left where a fire bowl tipped its coals onto the floor. */
 const SCORCH_RX_TILE_FRACTION = 0.3;
 const SCORCH_RY_TILE_FRACTION = 0.15;
 const SCORCH_ALPHA = 0.5;
-const DYING_EMBER_COUNT = 9;
-const DYING_EMBER_SPREAD_TILE_FRACTION = 0.26;
-const DYING_EMBER_MAX_RADIUS = 1.6;
-/** How far the settled dusting is scattered over the wreckage, in tile widths. */
-const REMAINS_SPECKLE_SPREAD_TILE_FRACTION = 0.34;
+const DEAD_COAL_COUNT = 9;
+const DEAD_COAL_SPREAD_TILE_FRACTION = 0.26;
+const DEAD_COAL_MAX_RADIUS = 1.6;
+const DEAD_COAL_MIN_RADIUS = 0.7;
 
+/** Soot where a fire bowl tipped out, and the coals it spilled — gone dead and grey. */
 function drawScorch(ctx: Ctx, cx: number, cy: number, ts: number, rng: () => number): void {
-  ctx.save();
-  ctx.globalAlpha = SCORCH_ALPHA;
-  ctx.fillStyle = SOOT;
-  ctx.beginPath();
-  ctx.ellipse(cx, cy, ts * SCORCH_RX_TILE_FRACTION, ts * SCORCH_RY_TILE_FRACTION, 0, 0, TWO_PI);
-  ctx.fill();
-  ctx.restore();
-
-  for (let i = 0; i < DYING_EMBER_COUNT; i++) {
+  stainWash(
+    ctx,
+    cx,
+    cy,
+    ts * SCORCH_RX_TILE_FRACTION,
+    ts * SCORCH_RY_TILE_FRACTION,
+    `rgba(36,26,20,${SCORCH_ALPHA})`,
+  );
+  for (let i = 0; i < DEAD_COAL_COUNT; i++) {
     const angle = rng() * TWO_PI;
-    const reach = Math.sqrt(rng()) * ts * DYING_EMBER_SPREAD_TILE_FRACTION;
-    ctx.save();
-    ctx.globalAlpha = 0.35 + rng() * 0.5;
-    ctx.fillStyle = rng() < 0.35 ? FLAME_HOT : FLAME_OUTER;
+    const reach = Math.sqrt(rng()) * ts * DEAD_COAL_SPREAD_TILE_FRACTION;
+    ctx.fillStyle = rng() < 0.5 ? DEAD_COAL : DEAD_COAL_GREY;
     ctx.beginPath();
     ctx.arc(
       cx + Math.cos(angle) * reach,
       cy + Math.sin(angle) * reach * 0.5,
-      0.7 + rng() * DYING_EMBER_MAX_RADIUS,
+      DEAD_COAL_MIN_RADIUS + rng() * DEAD_COAL_MAX_RADIUS,
       0,
       TWO_PI,
     );
     ctx.fill();
-    ctx.restore();
   }
 }
 
-/**
- * The bent hoop / broken bracket / crushed fire bowl a prop leaves behind,
- * whichever ironwork it was holding together with. A bookshelf is joined wood
- * throughout, so it draws none.
- */
+/** The bent hoop or crushed fire bowl a prop leaves behind. A bookshelf is all wood. */
 function drawRemainsIronwork(ctx: Ctx, kind: PropKind, cx: number, cy: number): void {
-  if (kind === 'bookshelf') return;
-
+  if (kind === 'bookshelf' || kind === 'crate' || kind === 'torch') return;
   ctx.save();
   ctx.strokeStyle = IRON_MID;
   ctx.lineWidth = 2.5;
   ctx.beginPath();
-  if (kind === 'crate') {
-    ctx.moveTo(cx - 14, cy + 7);
-    ctx.quadraticCurveTo(cx - 2, cy + 12, cx + 13, cy + 5);
-  } else if (kind === 'torch') {
-    ctx.ellipse(cx - 6, cy + 4, 9, 4, -0.35, 0, Math.PI * 1.3);
-  } else if (kind === 'brazier') {
-    // Flattened bowl plus one leg that came off with it, so the tile still reads
-    // as the thing that used to stand there.
+  if (kind === 'brazier') {
+    // Flattened bowl plus one leg come off with it, so the tile still reads as
+    // the thing that used to stand there.
     ctx.ellipse(cx - 2, cy + 3, 16, 5, -0.12, 0, Math.PI * 1.55);
     ctx.moveTo(cx + 9, cy + 8);
     ctx.lineTo(cx + 20, cy + 12);
@@ -2191,41 +2470,115 @@ function drawRemainsIronwork(ctx: Ctx, kind: PropKind, cx: number, cy: number): 
   ctx.restore();
 }
 
+const FALLEN_STAND_ANGLE = -0.42;
+const FALLEN_STAND_LENGTH = 34;
+const FALLEN_HEAD_OFFSET_X = 15;
+const FALLEN_HEAD_OFFSET_Y = -5;
+const FALLEN_HEAD_RX = 7.5;
+const FALLEN_HEAD_RY = 4.6;
+const FALLEN_STAND_BEND_FRACTION = 0.4;
+const FALLEN_STAND_DROP = 2;
+const FALLEN_STAND_WIDTH = 4;
+const FALLEN_FOOT_SPREAD = [-8, 0, 8] as const;
+const FALLEN_FOOT_REACH = 6;
+/** The tile size the fallen head's own small contact shadow is scaled against. */
+const FALLEN_HEAD_SHADOW_TILE = 16;
+/** Pale ash flaking off a fallen torch's burnt head: how many flakes, how far they scatter, how big. */
+const FALLEN_ASH = { count: 4, spreadX: 3, spreadY: 1.5, width: 1.2, height: 1 } as const;
+
+/** A felled torch: its stand lying bent across the tile and the head beside it, charred and out. */
+function drawFallenTorch(ctx: Ctx, cx: number, cy: number, rng: () => number): void {
+  const half = FALLEN_STAND_LENGTH / 2;
+  const dx = Math.cos(FALLEN_STAND_ANGLE) * half;
+  const dy = Math.sin(FALLEN_STAND_ANGLE) * half;
+  const bendX = cx + dx * FALLEN_STAND_BEND_FRACTION;
+  const bendY = cy + dy * FALLEN_STAND_BEND_FRACTION + FALLEN_STAND_DROP;
+  const hubX = cx - dx;
+  const hubY = cy - dy + FALLEN_STAND_DROP;
+  ironStrap(ctx, hubX, hubY, bendX, bendY, FALLEN_STAND_WIDTH);
+  ironStrap(ctx, bendX, bendY, cx + dx, cy + FALLEN_STAND_DROP * 2, FALLEN_STAND_WIDTH);
+  for (const footDx of FALLEN_FOOT_SPREAD) {
+    ironStrap(ctx, hubX, hubY, hubX + footDx, hubY + FALLEN_FOOT_REACH, TORCH_FOOT_WIDTH);
+  }
+
+  const headX = cx + FALLEN_HEAD_OFFSET_X;
+  const headY = cy + FALLEN_HEAD_OFFSET_Y;
+  contactShadow(ctx, headX, headY + FALLEN_HEAD_RY, FALLEN_HEAD_SHADOW_TILE);
+  ctx.save();
+  ctx.translate(headX, headY);
+  ctx.rotate(FALLEN_STAND_ANGLE + 0.6);
+  ctx.fillStyle = cylinderRamp(ctx, -FALLEN_HEAD_RX, FALLEN_HEAD_RX, 0, [
+    [0, CHAR_BLACK],
+    [0.4, CHAR_GREY],
+    [1, CHAR_BLACK],
+  ]);
+  ctx.beginPath();
+  ctx.ellipse(0, 0, FALLEN_HEAD_RX, FALLEN_HEAD_RY, 0, 0, TWO_PI);
+  ctx.fill();
+  // The stub of the brand still in it.
+  ctx.fillStyle = WOOD_SHADOW;
+  ctx.fillRect(-FALLEN_HEAD_RX - 5, -1.4, 5, 2.8);
+  // Pale ash flaking off the burnt wrap.
+  ctx.fillStyle = ASH;
+  for (let i = 0; i < FALLEN_ASH.count; i++) {
+    const flakeX = signedUnit(rng) * FALLEN_ASH.spreadX;
+    const flakeY = signedUnit(rng) * FALLEN_ASH.spreadY;
+    ctx.fillRect(flakeX, flakeY, FALLEN_ASH.width, FALLEN_ASH.height);
+  }
+  ctx.restore();
+}
+
 function drawRemains(
   ctx: Ctx,
   kind: PropKind,
   ox: number,
   oy: number,
   ts: number,
+  variant: number,
   seedTerm: number,
 ): void {
-  const rng = makeRng(REMAINS_SEEDS[kind] + seedTerm);
+  const lookTerm = variantSeed(variant) + seedTerm;
+  const rng = mulberry32(REMAINS_SEEDS[kind] + lookTerm);
   const cx = ox + ts / 2;
-  const cy = oy + ts * 0.6;
+  const cy = oy + ts * REMAINS_CENTER_Y_FRACTION;
 
-  ctx.save();
-  ctx.globalAlpha = 0.28;
-  ctx.fillStyle = '#000';
-  ctx.beginPath();
-  ctx.ellipse(cx, cy + 2, ts * 0.34, ts * 0.17, 0, 0, TWO_PI);
-  ctx.fill();
-  ctx.restore();
-
+  wreckageShadow(ctx, cx, cy, ts);
   if (kind === 'torch' || kind === 'brazier') drawScorch(ctx, cx, cy, ts, rng);
-
   drawRemainsIronwork(ctx, kind, cx, cy);
 
-  for (const p of remainsFor(kind, seedTerm)) {
-    shard(ctx, cx + p.dx, cy + p.dy, p.length, p.width, p.angle, p.shade);
-  }
-
-  if (kind === 'bookshelf') drawSpilledBooks(ctx, cx, cy, rng);
-
-  if (kind === 'brazier') {
+  if (kind === 'torch') {
+    const splinters = wreckageField(
+      PLANK_SEEDS.torch + lookTerm,
+      TORCH_REMAINS_SPLINTER_COUNT,
+      REMAINS_WOOD_SHADES,
+      REMAINS_PLANK_SIZE,
+    );
+    drawWreckageField(ctx, splinters, cx, cy, WOOD_EDGE);
+    drawFallenTorch(ctx, cx, cy, rng);
     speckle(ctx, cx, cy, ts * REMAINS_SPECKLE_SPREAD_TILE_FRACTION, rng, ASH, SOOT);
-  } else {
-    speckle(ctx, cx, cy, ts * REMAINS_SPECKLE_SPREAD_TILE_FRACTION, rng, DUST, WOOD_DARK);
+    return;
   }
+
+  const count =
+    kind === 'brazier'
+      ? BRAZIER_REMAINS_PIECE_COUNT
+      : kind === 'bookshelf'
+        ? BOOKSHELF_REMAINS_PLANK_COUNT
+        : REMAINS_PLANK_COUNT;
+  const shades = kind === 'brazier' ? IRON_RAMP : REMAINS_WOOD_SHADES;
+  const pieces = wreckageField(PLANK_SEEDS[kind] + lookTerm, count, shades, REMAINS_PLANK_SIZE);
+  drawWreckageField(ctx, pieces, cx, cy, kind === 'brazier' ? IRON_EDGE : WOOD_EDGE);
+  if (kind === 'crate' && CRATE_LOOKS[variant] === 'open') {
+    // The crate's straw packing, thrown out over the boards.
+    for (let i = 0; i < 8; i++) {
+      const sx = cx + signedUnit(rng) * 14;
+      const sy = cy + signedUnit(rng) * 6;
+      seam(ctx, sx - 3, sy, sx + 3, sy + signedUnit(rng) * 2, 0.9, STRAW);
+    }
+  }
+  if (kind === 'bookshelf') drawSpilledBooks(ctx, cx, cy, rng);
+  const [dustLight, dustDark] = kind === 'brazier' ? [ASH, SOOT] : [DUST, WOOD_DARK];
+  speckle(ctx, cx, cy, ts * REMAINS_SPECKLE_SPREAD_TILE_FRACTION, rng, dustLight, dustDark);
 }
 
 // ── Dispatch ──────────────────────────────────────────────────────────────────
@@ -2234,9 +2587,13 @@ function drawRemains(
  * Paints one frame of one prop, with the anchor tile's top-left corner at
  * (`ox`, `oy`) and the tile `ts` pixels across.
  *
- * `seedTerm` is added to every fixed seed the prop draws from, so a floor can
- * shift the whole family together while each kind keeps its own identity within
- * it. Zero is the art every sheet was reviewed against.
+ * `frame` is the animation frame of a burning prop's idle and damaged rows and
+ * of every shatter row; for a static prop's idle, damaged and remains rows it
+ * is the look, 0 to {@link PROP_VARIANT_COUNT} − 1.
+ *
+ * `seedTerm` is added to every fixed seed the prop draws from, so a review bake
+ * can shift the whole family together while each kind keeps its own identity.
+ * Zero is the art every sheet was reviewed against.
  */
 export function drawProp(
   ctx: Ctx,
@@ -2253,15 +2610,17 @@ export function drawProp(
     drawShatterFrame(ctx, kind, ox, oy, ts, progress, seedTerm);
     return;
   }
+  const burning = kind === 'torch' || kind === 'brazier';
+  const variant = burning ? 0 : frame;
   if (state === 'remains') {
-    drawRemains(ctx, kind, ox, oy, ts, seedTerm);
+    drawRemains(ctx, kind, ox, oy, ts, variant, seedTerm);
     return;
   }
   const damaged = state === 'damaged';
-  if (kind === 'barrel') drawBarrel(ctx, ox, oy, ts, damaged, seedTerm);
-  else if (kind === 'barrel_side') drawBarrelSide(ctx, ox, oy, ts, damaged, seedTerm);
+  if (kind === 'barrel') drawBarrel(ctx, ox, oy, ts, damaged, variant, seedTerm);
+  else if (kind === 'barrel_side') drawBarrelSide(ctx, ox, oy, ts, damaged, variant, seedTerm);
   else if (kind === 'torch') drawTorch(ctx, ox, oy, ts, damaged, frame, seedTerm);
   else if (kind === 'brazier') drawBrazier(ctx, ox, oy, ts, damaged, frame, seedTerm);
-  else if (kind === 'bookshelf') drawBookshelf(ctx, ox, oy, ts, damaged, seedTerm);
-  else drawCrate(ctx, ox, oy, ts, damaged, seedTerm);
+  else if (kind === 'bookshelf') drawBookshelf(ctx, ox, oy, ts, damaged, variant, seedTerm);
+  else drawCrate(ctx, ox, oy, ts, damaged, variant, seedTerm);
 }

@@ -71,6 +71,25 @@ const RAISED_SKELETON_SFX_IDS: readonly SoundId[] = [
 ];
 
 /**
+ * The stand-ins the dungeon's cues borrow (`DUNGEON_CUES` in
+ * `src/systems/dungeon/dungeonSoundCues.ts`) that no boot-loaded group
+ * carries. Floors 1 and 2 share their props, fixtures and ambience, so both
+ * floor groups carry the whole set.
+ */
+const DUNGEON_CUE_SFX_IDS: readonly SoundId[] = [
+  'rumble',
+  'rock_breaking_1',
+  'rock_breaking_2',
+  'massive_metal_hit',
+  'glass_break_1',
+  'glass_break_2',
+  'glass_break_3',
+  'tech_machinery_running',
+  'miasma_hiss',
+  'llama_fireball',
+];
+
+/**
  * Every group's membership. Ids may (and do) repeat across groups — e.g. a
  * bounty boss's attack cue is often a stand-in borrowed from a level1/level2
  * boss (see `GameLoopPhases.playMobAudioCues`), so both the level that
@@ -233,6 +252,7 @@ export const SFX_GROUPS: Record<SfxGroup, readonly SoundId[]> = {
     'tuskling_grunt_2',
     'tuskling_grunt_3',
     'tuskling_grunt_4',
+    ...DUNGEON_CUE_SFX_IDS,
     ...FAIRY_SFX_IDS,
     ...RAISED_SKELETON_SFX_IDS,
   ],
@@ -281,6 +301,9 @@ export const SFX_GROUPS: Record<SfxGroup, readonly SoundId[]> = {
     'tuskling_grunt_4',
     // The colosseum's portcullis landing.
     'massive_metal_hit',
+    // A broken gas bottle's fuse.
+    'miasma_hiss',
+    ...DUNGEON_CUE_SFX_IDS,
     ...FAIRY_SFX_IDS,
     ...RAISED_SKELETON_SFX_IDS,
   ],

@@ -32,6 +32,8 @@ import {
   type HoarderLayout,
 } from './hoarderLayout';
 import { InertBossRoomDressing } from './InertBossRoomDressing';
+import { hoarderBulb, type HangingBulb } from './bossRoomMoodLights';
+import { drawHangingBulb } from '../../sprites/art/moodLightArt';
 import type { HoarderRoomCheckpoint, ToppledTower } from './hoarderRoomCheckpoint';
 
 // ── Tunables ─────────────────────────────────────────────────────────────────
@@ -172,6 +174,7 @@ export class HoarderRoomSystem
   private readonly barricadeTiles: readonly TilePoint[];
   /** The layout's orbit round the islands, as mob positions, for her flight. */
   private readonly orbitPx: ReadonlyArray<{ x: number; y: number }>;
+  private readonly bulb: HangingBulb;
 
   constructor(
     readonly gameMap: GameMap,
@@ -179,6 +182,7 @@ export class HoarderRoomSystem
   ) {
     super();
     this.layout = planHoarderLayout(gameMap.structure, bounds);
+    this.bulb = hoarderBulb(bounds);
     stampHoarderLayout(gameMap, this.layout);
     const ofKind = (kind: 'pile' | 'tower' | 'bag'): TilePoint[] =>
       this.layout.placements.filter((p) => p.kind === kind).map((p) => ({ x: p.x, y: p.y }));
@@ -788,6 +792,9 @@ export class HoarderRoomSystem
       }
     }
     this.renderFlies(ctx, camX, camY);
+    // It hangs from the ceiling, so it draws over every body; it is a few
+    // pixels across, so it never hides one.
+    drawHangingBulb(ctx, this.bulb.bulbX - camX, this.bulb.bulbY - camY);
   }
 
   /**

@@ -51,6 +51,9 @@ const { campSheetPlans } = await import('../src/sprites/sheets/campSheets.js');
 const { villageSheetPlans } = await import('../src/sprites/sheets/villageSheets.js');
 const { destructiblePropSheetPlans } =
   await import('../src/sprites/sheets/destructiblePropSheets.js');
+const { floorTwoPropVariantSheetPlans } =
+  await import('../src/sprites/sheets/propVariantSheets.js');
+const { remainsSheetPlans } = await import('../src/sprites/sheets/remainsSheets.js');
 const { clubFurnitureSheetPlans } = await import('../src/sprites/sheets/clubFurnitureSheets.js');
 const { allBossRoomSheetPlans } = await import('../src/sprites/sheets/bossRoomSheets.js');
 const { getLevelDef } = await import('../src/levels/index.js');
@@ -174,6 +177,8 @@ const PROP_FAMILIES = [
   ...campSheetPlans(0),
   ...villageSheetPlans(0),
   ...destructiblePropSheetPlans(0),
+  ...floorTwoPropVariantSheetPlans(),
+  ...remainsSheetPlans(),
   ...clubFurnitureSheetPlans(0),
   ...allBossRoomSheetPlans(0),
 ];

@@ -1,5 +1,11 @@
+import { SERVICE_PROP_TILE_TYPES } from './serviceLevelProps';
+import { serviceLevelPropExtentsPx } from './tiles/serviceLevelPropTiles';
+import { CELLAR_OVERLAY_TILE_TYPES } from './cellarProps';
+import { cellarPropExtentsPx } from './tiles/cellarPropTiles';
 import type { TileContent } from './tileTypes';
 import {
+  BONE_PILE,
+  SLUMPED_SKELETON,
   TREE,
   BUILDING_WALL,
   ROOF_THATCH,
@@ -109,6 +115,9 @@ interface CachedChunk {
  * drawImage call.
  */
 const DECORATION_TYPES = new Set([
+  // The dead. Y-sorted so a crawler north of a skeleton is drawn behind it.
+  BONE_PILE,
+  SLUMPED_SKELETON,
   TREE,
   BUILDING_WALL,
   ROOF_THATCH,
@@ -169,6 +178,12 @@ const DECORATION_TYPES = new Set([
   // The Big Top's tent poles. Y-sorted so the mast rising out of view passes
   // behind a crawler south of it and in front of one north of it.
   TENT_POLE,
+  // The service level's furniture. Its part tiles are absent: they bake as
+  // floor, and their anchor draws the whole piece over them.
+  ...SERVICE_PROP_TILE_TYPES,
+  // The cellars' furniture, its candles and its fungus; a two-tile piece's
+  // part tile is drawn by its anchor, as the service level's are.
+  ...CELLAR_OVERLAY_TILE_TYPES,
 ]);
 
 /**
@@ -576,6 +591,10 @@ export function decorationTileExtentsPx(
     return circusStructureExtentsPx(structure, tx, ty);
   }
   if (type === TENT_POLE) return tentPoleExtentsPx(structure, tx, ty, ts);
+  const serviceExtents = serviceLevelPropExtentsPx(type, ts);
+  if (serviceExtents !== null) return serviceExtents;
+  const cellarExtents = cellarPropExtentsPx(type, ts);
+  if (cellarExtents !== null) return cellarExtents;
   if (type === HOLLOW_WALL) return hollowWallExtentsPx(structure, tx, ty, ts);
   if (type === HOLLOW_PALISADE) return hollowPalisadeExtentsPx(ts);
   if (type === HOLLOW_GATE) return hollowGateExtentsPx(structure, tx, ty, ts);

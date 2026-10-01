@@ -30,6 +30,7 @@ import {
   setDungeonFloorTheme,
 } from '../src/map/dungeon/floorTheme.js';
 import { DefendQuestSystem } from '../src/systems/DefendQuestSystem.js';
+import { DungeonLightingSystem } from '../src/systems/DungeonLightingSystem.js';
 import { Conversation } from '../src/dialog/Conversation.js';
 import { HumanPlayer } from '../src/creatures/HumanPlayer.js';
 import { CatPlayer } from '../src/creatures/CatPlayer.js';
@@ -105,6 +106,24 @@ const quest = new DefendQuestSystem(
   undefined,
   levelDef.defendQuestIntensity,
 );
+/** The lighting clock, fixed so a sconce's flicker lands on the same phase every run. */
+const LIGHTING_CLOCK_MS = 0;
+
+// The sconces' pools of light belong to the dungeon's lighting pass, built
+// here the way `DungeonScene` builds it.
+const lighting = new DungeonLightingSystem({
+  gameMap,
+  now: () => LIGHTING_CLOCK_MS,
+  additiveGlows: () => true,
+});
+for (const sconce of quest.sconceLights()) {
+  lighting.registerStaticLight({
+    tileX: sconce.tileX,
+    tileY: sconce.tileY,
+    kind: 'wall_sconce',
+    centre: { x: sconce.centreX, y: sconce.centreY },
+  });
+}
 const human = new HumanPlayer(room.woodPileTile.x + 2, room.woodPileTile.y + 2, TILE_SIZE);
 const cat = new CatPlayer(room.centre.x - 2, room.centre.y + 2, TILE_SIZE);
 human.isActive = true;
@@ -138,6 +157,7 @@ function frame(name: string): void {
   renderDecorationsOverlay(gameCtx, gameMap.structure, TILE_SIZE, camX, camY, viewW, viewH);
   quest.renderObjects(gameCtx, camX, camY, human, human);
   human.render(gameCtx, camX, camY, TILE_SIZE);
+  lighting.render(gameCtx, camX, camY, viewW, viewH);
   quest.renderAbove(gameCtx, camX, camY, human);
   quest.renderUI(gameCtx);
   const path = writePreviewPng(`${outBase}-${name}.png`, canvas.toBuffer('image/png'));

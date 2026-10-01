@@ -1,0 +1,303 @@
+{
+  "clay_urn": {
+    "frameWidth": 96,
+    "frameHeight": 112,
+    "tileX": 16,
+    "tileY": 32,
+    "tileScale": 64,
+    "states": {
+      "idle": {
+        "row": 0,
+        "frameCount": 4
+      },
+      "damaged": {
+        "row": 1,
+        "frameCount": 4
+      },
+      "shatter": {
+        "row": 2,
+        "frameCount": 6
+      },
+      "remains": {
+        "row": 3,
+        "frameCount": 4
+      }
+    }
+  },
+  "grain_sack": {
+    "frameWidth": 96,
+    "frameHeight": 112,
+    "tileX": 16,
+    "tileY": 32,
+    "tileScale": 64,
+    "states": {
+      "idle": {
+        "row": 0,
+        "frameCount": 4
+      },
+      "damaged": {
+        "row": 1,
+        "frameCount": 4
+      },
+      "shatter": {
+        "row": 2,
+        "frameCount": 6
+      },
+      "remains": {
+        "row": 3,
+        "frameCount": 4
+      }
+    }
+  },
+  "wine_cask": {
+    "frameWidth": 160,
+    "frameHeight": 112,
+    "tileX": 16,
+    "tileY": 32,
+    "tileScale": 64,
+    "states": {
+      "idle": {
+        "row": 0,
+        "frameCount": 4
+      },
+      "damaged": {
+        "row": 1,
+        "frameCount": 4
+      },
+      "shatter": {
+        "row": 2,
+        "frameCount": 6
+      },
+      "remains": {
+        "row": 3,
+        "frameCount": 4
+      }
+    }
+  },
+  "bottle_rack": {
+    "frameWidth": 96,
+    "frameHeight": 144,
+    "tileX": 16,
+    "tileY": 64,
+    "tileScale": 64,
+    "states": {
+      "idle": {
+        "row": 0,
+        "frameCount": 4
+      },
+      "damaged": {
+        "row": 1,
+        "frameCount": 4
+      },
+      "shatter": {
+        "row": 2,
+        "frameCount": 6
+      },
+      "remains": {
+        "row": 3,
+        "frameCount": 4
+      }
+    }
+  },
+  "cellar_table": {
+    "frameWidth": 160,
+    "frameHeight": 112,
+    "tileX": 16,
+    "tileY": 32,
+    "tileScale": 64,
+    "states": {
+      "idle": {
+        "row": 0,
+        "frameCount": 4
+      },
+      "damaged": {
+        "row": 1,
+        "frameCount": 4
+      },
+      "shatter": {
+        "row": 2,
+        "frameCount": 6
+      },
+      "remains": {
+        "row": 3,
+        "frameCount": 4
+      }
+    }
+  },
+  "spear_rack": {
+    "frameWidth": 96,
+    "frameHeight": 144,
+    "tileX": 16,
+    "tileY": 64,
+    "tileScale": 64,
+    "states": {
+      "idle": {
+        "row": 0,
+        "frameCount": 4
+      },
+      "damaged": {
+        "row": 1,
+        "frameCount": 4
+      },
+      "shatter": {
+        "row": 2,
+        "frameCount": 6
+      },
+      "remains": {
+        "row": 3,
+        "frameCount": 4
+      }
+    }
+  },
+  "rubble_heap": {
+    "frameWidth": 96,
+    "frameHeight": 112,
+    "tileX": 16,
+    "tileY": 32,
+    "tileScale": 64,
+    "states": {
+      "idle": {
+        "row": 0,
+        "frameCount": 4
+      },
+      "damaged": {
+        "row": 1,
+        "frameCount": 4
+      },
+      "shatter": {
+        "row": 2,
+        "frameCount": 6
+      },
+      "remains": {
+        "row": 3,
+        "frameCount": 4
+      }
+    }
+  },
+  "rubble_slope": {
+    "frameWidth": 160,
+    "frameHeight": 112,
+    "tileX": 16,
+    "tileY": 32,
+    "tileScale": 64,
+    "states": {
+      "idle": {
+        "row": 0,
+        "frameCount": 4
+      },
+      "damaged": {
+        "row": 1,
+        "frameCount": 4
+      },
+      "shatter": {
+        "row": 2,
+        "frameCount": 6
+      },
+      "remains": {
+        "row": 3,
+        "frameCount": 4
+      }
+    }
+  },
+  "fallen_beam": {
+    "frameWidth": 160,
+    "frameHeight": 112,
+    "tileX": 16,
+    "tileY": 32,
+    "tileScale": 64,
+    "states": {
+      "idle": {
+        "row": 0,
+        "frameCount": 4
+      },
+      "damaged": {
+        "row": 1,
+        "frameCount": 4
+      },
+      "shatter": {
+        "row": 2,
+        "frameCount": 6
+      },
+      "remains": {
+        "row": 3,
+        "frameCount": 4
+      }
+    }
+  },
+  "glow_fungus": {
+    "frameWidth": 96,
+    "frameHeight": 112,
+    "tileX": 16,
+    "tileY": 32,
+    "tileScale": 64,
+    "states": {
+      "idle": {
+        "row": 0,
+        "frameCount": 4
+      },
+      "damaged": {
+        "row": 1,
+        "frameCount": 4
+      },
+      "shatter": {
+        "row": 2,
+        "frameCount": 6
+      },
+      "remains": {
+        "row": 3,
+        "frameCount": 4
+      }
+    }
+  },
+  "candle_cluster": {
+    "frameWidth": 96,
+    "frameHeight": 112,
+    "tileX": 16,
+    "tileY": 32,
+    "tileScale": 64,
+    "states": {
+      "idle": {
+        "row": 0,
+        "frameCount": 16
+      },
+      "damaged": {
+        "row": 1,
+        "frameCount": 16
+      },
+      "shatter": {
+        "row": 2,
+        "frameCount": 6
+      },
+      "remains": {
+        "row": 3,
+        "frameCount": 4
+      }
+    }
+  },
+  "sarcophagus": {
+    "frameWidth": 160,
+    "frameHeight": 112,
+    "tileX": 16,
+    "tileY": 32,
+    "tileScale": 64,
+    "states": {
+      "idle": {
+        "row": 0,
+        "frameCount": 4
+      }
+    }
+  },
+  "straw_scatter": {
+    "frameWidth": 64,
+    "frameHeight": 64,
+    "tileX": 0,
+    "tileY": 0,
+    "tileScale": 64,
+    "states": {
+      "idle": {
+        "row": 0,
+        "frameCount": 4
+      }
+    }
+  }
+}

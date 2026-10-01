@@ -11,13 +11,6 @@ import {
   ARENA_CAGE,
   ARENA_FLOOR,
   FLOOR_GRATE,
-  TORCH,
-  BARREL,
-  BARREL_SIDE,
-  CRATE,
-  BRAZIER,
-  BONES,
-  BOOKSHELF,
   SPIDER_LAB_FLOOR,
   LAB_BENCH,
   LAB_SHELF,
@@ -94,15 +87,31 @@ import {
   type RoomDoorway,
   type RoomWall,
 } from './roomDoorways';
-import { worldRandom } from '../core/WorldRandom';
+import { UINT32_SPAN, worldRandom } from '../core/WorldRandom';
 import { BASE_NURSERY_GRATE_COUNT } from '../levels/defendQuestIntensity';
-
-/**
- * What a generated room is *for*. Carried on the room itself rather than
- * inferred from its index, so every downstream stage (corridor width, stairwell
- * eligibility, decoration, mob spawns) asks the room what it is.
- */
-type RoomRole = 'start' | 'safe' | 'boss' | 'quest' | 'spider_lab' | 'chain' | 'regular';
+import {
+  buildRegionMap,
+  NO_REGION,
+  RegionMap,
+  type HallwayKind,
+  type RoomRole,
+  type Zone,
+} from './regionMap';
+import { mulberry32 } from '../sprites/person/rng';
+import { DEFAULT_DUNGEON_FLOOR_THEME, type DungeonFloorThemeId } from './dungeon/floorTheme';
+import {
+  SPECIAL_REGION_LIGHTING,
+  SPECIAL_REGION_PROPS,
+  type SpecialRegionTag,
+} from './dungeon/roomCharacters';
+import {
+  RegionCharacters,
+  rollHallwayCharacter,
+  rollRoomCharacter,
+  type RegionAssignment,
+} from './dungeon/regionCharacters';
+import { dressHallway, dressRoom, dressSpecialRoom } from './dungeon/roomDressing';
+import { placeWallFixtures, type WallFixture } from './dungeon/wallFixtures';
 
 type Room = {
   x: number;
@@ -125,9 +134,6 @@ type Room = {
 };
 type Point = { x: number; y: number };
 type Rect = { x: number; y: number; w: number; h: number };
-type Zone = 'entrance' | 'mid' | 'deep';
-// narrow = 1-tile wide (default); standard = 3-tile wide (main arteries); nook = narrow + alcove junction
-type HallwayKind = 'narrow' | 'standard' | 'nook';
 
 export interface ArenaExterior {
   centre: Point;
@@ -395,6 +401,19 @@ export interface DungeonData {
   progressionLayout?: ProgressionLayoutData;
   /** Every wayfinding sign stamped into the grid; empty when the floor has no forced progression. */
   readonly crawlerSigns: ReadonlyArray<PlannedCrawlerSign>;
+  /**
+   * Which room or hallway segment each tile belongs to. Built only in
+   * forced-progression mode, whose rooms are the ones `progressionLayout.roomBounds`
+   * lists; empty on a free-roam floor, which records no room list.
+   */
+  readonly regionMap: RegionMap;
+  /**
+   * The character each room and hallway segment was dressed as, indexed like
+   * {@link regionMap}. Empty wherever the region map is.
+   */
+  readonly regionCharacters: RegionCharacters;
+  /** What hangs on the floor's wall faces; empty wherever the region map is. */
+  readonly wallFixtures: ReadonlyArray<WallFixture>;
 }
 
 // ── Zone helpers ──────────────────────────────────────────────────────────────
@@ -509,32 +528,30 @@ const SPINE_TREASURE_POCKETS = 5;
 /** Chests a spine floor aims for, drawn from its pockets and its beyond rooms. */
 const SPINE_TREASURE_ROOM_TARGET = 3;
 
-// Room decoration placement
-const PILLAR_MIN_ROOM_W = 13;
-const PILLAR_MIN_ROOM_H = 10;
-const DECO_INNER_OFFSET = 3; // decor placed 3 tiles inside walls
-const DECO_NEAR_FAR_OFFSET = 4; // far-side column (r.w - DECO_NEAR_FAR_OFFSET)
+/**
+ * Mixed into the dressing seed to split off the placement and hallway streams,
+ * so which character a room rolls draws nothing from the stream props are
+ * placed from. A room dressed differently still places a different number of
+ * props, so every room after it lands its props differently.
+ */
+const PLACEMENT_STREAM_SALT = 0x5bd1e995;
+const HALLWAY_STREAM_SALT = 0x27d4eb2f;
+const FIXTURE_STREAM_SALT = 0x165667b1;
+const SPECIAL_ROOM_STREAM_SALT = 0x2f6b1c53;
 
-// Decoration cycle lengths by zone
-const ENTRANCE_CYCLE_LEN = 6;
-const STANDARD_CYCLE_LEN = 8;
-
-// Per-cycle thresholds and offsets
-const CYCLE0_MIN_W = 10;
-const CYCLE0_EXTRA_BARREL_MIN_W = 12;
-const CYCLE0_EXTRA_BARREL_DX = 5;
-const CYCLE1_MIN_W = 8;
-const CYCLE3_MIN_SIZE = 7;
-const CYCLE4_MIN_W = 9;
-const CYCLE5_BONE_COUNT = 3;
-const CYCLE5_DEEP_BONE_COUNT = 4;
-const CYCLE6_MIN_W = 10;
-const CYCLE6_SHELF_DX_END = 4;
-const DECO_CYCLE_BRAZIER = 3;
-const DECO_CYCLE_CORNER_MIX = 4;
-const DECO_CYCLE_BONES = 5;
-const DECO_CYCLE_SHELVES = 6;
-const DECO_CYCLE_CLUSTER = 7;
+/**
+ * The lighting tag each room role that takes no character is given; null for
+ * the roles that are dressed from a character.
+ */
+const SPECIAL_ROLE_TAGS = {
+  start: 'start',
+  safe: 'safe',
+  boss: 'boss',
+  quest: 'quest',
+  spider_lab: 'spider_lab',
+  chain: null,
+  regular: null,
+} as const satisfies Record<RoomRole, SpecialRegionTag | null>;
 
 const TREASURE_ROOM_RATIO = 0.05;
 
@@ -622,159 +639,6 @@ function corridorFloorForZone(zone: Zone): number {
   return worldRandom() < DEEP_ZONE_TILE_PROB ? FloorTypeValue.tile_floor : FloorTypeValue.wood;
 }
 
-// ── Vignette system ───────────────────────────────────────────────────────────
-
-type Vignette = {
-  tiles: ReadonlyArray<ReadonlyArray<number>>;
-  minZone?: Zone;
-  minRoomW?: number;
-  minRoomH?: number;
-  weight: number;
-};
-
-const ZONE_ORDER: ReadonlyArray<Zone> = ['entrance', 'mid', 'deep'];
-
-// prettier-ignore
-const VIGNETTES: ReadonlyArray<Vignette> = [
-  {
-    weight: 10,
-    tiles: [
-      [TORCH, 0,     0,       0,     TORCH],
-      [0,     CRATE, BRAZIER, CRATE, 0    ],
-      [0,     0,     BONES,   0,     0    ],
-    ],
-    minRoomW: 9, minRoomH: 7,
-  },
-  {
-    weight: 8,
-    tiles: [
-      [BARREL,      BARREL,      0, CRATE,       CRATE     ],
-      [BARREL_SIDE, BARREL_SIDE, 0, BARREL_SIDE, BARREL_SIDE],
-    ],
-    minRoomW: 9,
-  },
-  {
-    weight: 8,
-    tiles: [
-      [BARREL, CRATE, TORCH,  CRATE, BARREL],
-      [0,      0,     0,      0,     0     ],
-      [BONES,  0,     0,      0,     BONES ],
-    ],
-    minRoomW: 9, minRoomH: 7,
-  },
-  {
-    weight: 9,
-    tiles: [
-      [BARREL, BARREL_SIDE, BARREL, BARREL_SIDE, BARREL],
-    ],
-    minRoomW: 9,
-  },
-  {
-    weight: 10,
-    tiles: [
-      [BONES,       0,           BARREL_SIDE, 0    ],
-      [0,           BARREL_SIDE, 0,           BONES],
-      [BARREL_SIDE, 0,           BONES,       0    ],
-    ],
-    minRoomW: 8, minRoomH: 7,
-  },
-  {
-    weight: 7,
-    tiles: [
-      [BARREL, 0, 0, 0, BARREL],
-      [0,      0, 0, 0, 0     ],
-      [0,      0, 0, 0, 0     ],
-      [0,      0, 0, 0, 0     ],
-      [BARREL, 0, 0, 0, BARREL],
-    ],
-    minRoomW: 9, minRoomH: 9,
-  },
-  {
-    weight: 7,
-    tiles: [
-      [BARREL, BARREL, CRATE],
-      [BARREL, 0,      0    ],
-      [CRATE,  CRATE,  0    ],
-    ],
-    minRoomW: 7,
-  },
-  {
-    weight: 9,
-    minZone: 'mid',
-    tiles: [
-      [TORCH, 0,     0,       0,     TORCH],
-      [0,     BONES, 0,       BONES, 0    ],
-      [0,     0,     BRAZIER, 0,     0    ],
-      [0,     BONES, 0,       BONES, 0    ],
-      [TORCH, 0,     0,       0,     TORCH],
-    ],
-    minRoomW: 9, minRoomH: 9,
-  },
-  {
-    weight: 9,
-    minZone: 'mid',
-    tiles: [
-      [BONES,  BONES, CRATE, BONES, BONES],
-      [BONES,  0,     0,     0,     CRATE],
-      [CRATE,  0,     0,     0,     BONES],
-    ],
-    minRoomW: 9,
-  },
-  {
-    weight: 8,
-    minZone: 'mid',
-    tiles: [
-      [CRATE, CRATE, CRATE,  0    ],
-      [CRATE, 0,     0,      CRATE],
-      [BONES, BONES, 0,      0    ],
-    ],
-    minRoomW: 8, minRoomH: 7,
-  },
-  {
-    weight: 8,
-    minZone: 'deep',
-    tiles: [
-      [BOOKSHELF, 0,     TORCH,   0,     BOOKSHELF],
-      [0,         CRATE, BRAZIER, CRATE, 0        ],
-      [BONES,     BONES, 0,       BONES, BONES    ],
-    ],
-    minRoomW: 9, minRoomH: 7,
-  },
-  {
-    weight: 9,
-    minZone: 'deep',
-    tiles: [
-      [BONES,  BONES,  BRAZIER, BONES,  BONES ],
-      [BONES,  0,      0,       0,      BONES ],
-      [BARREL, BONES,  BONES,   BONES,  BARREL],
-    ],
-    minRoomW: 9, minRoomH: 7,
-  },
-];
-
-function pickVignette(zone: Zone, room: Room): Vignette | null {
-  const zi = ZONE_ORDER.indexOf(zone);
-  const eligible = VIGNETTES.filter((v) => {
-    const vH = v.tiles.length;
-    const vW = v.tiles[0]?.length ?? 0;
-    if (room.w - 2 < vW || room.h - 2 < vH) return false;
-    if (v.minRoomW !== undefined && room.w < v.minRoomW) return false;
-    if (v.minRoomH !== undefined && room.h < v.minRoomH) return false;
-    if (v.minZone !== undefined && zi < ZONE_ORDER.indexOf(v.minZone)) return false;
-    return true;
-  });
-  if (eligible.length === 0) return null;
-
-  let totalWeight = 0;
-  for (const v of eligible) totalWeight += v.weight;
-  let pick = worldRandom() * totalWeight;
-  for (const v of eligible) {
-    pick -= v.weight;
-    if (pick <= 0) return v;
-  }
-  return eligible[eligible.length - 1] ?? null;
-}
-
 /**
  * How the first stairwell is chosen when nothing is seated yet.
  *
@@ -832,56 +696,6 @@ function seatStairwellsByIsolation(
   }
   return seated;
 }
-
-function stampVignette(
-  grid: TileContent[][],
-  room: Room,
-  vignette: Vignette,
-  gridSize: number,
-  stairwellBlockedSet: Set<string>,
-): void {
-  const vH = vignette.tiles.length;
-  const vW = vignette.tiles[0]?.length ?? 0;
-  if (vH === 0 || vW === 0) return;
-
-  const interiorW = room.w - 2;
-  const interiorH = room.h - 2;
-  const maxOffX = interiorW - vW;
-  const maxOffY = interiorH - vH;
-  const offX = maxOffX > 0 ? randomInt(0, maxOffX) : 0;
-  const offY = maxOffY > 0 ? randomInt(0, maxOffY) : 0;
-
-  const originX = room.x + 1 + offX;
-  const originY = room.y + 1 + offY;
-
-  for (let vy = 0; vy < vH; vy++) {
-    const vigRow = vignette.tiles[vy];
-    for (let vx = 0; vx < vW; vx++) {
-      const tileType = vigRow[vx] ?? 0;
-      if (tileType === 0) continue;
-      const gx = originX + vx;
-      const gy = originY + vy;
-      if (gy < 0 || gy >= gridSize || gx < 0 || gx >= gridSize) continue;
-      if (stairwellBlockedSet.has(`${gx},${gy}`)) continue;
-      const existingType = grid[gy][gx].type;
-      if (
-        existingType === room.floor ||
-        existingType === FloorTypeValue.concrete ||
-        existingType === FloorTypeValue.tile_floor ||
-        existingType === FloorTypeValue.carpet ||
-        existingType === FloorTypeValue.wood
-      ) {
-        placeProp(grid[gy][gx], tileType);
-      }
-    }
-  }
-}
-
-const VIGNETTE_CHANCE: Record<Zone, number> = {
-  entrance: 0.22,
-  mid: 0.38,
-  deep: 0.55,
-};
 
 // ── Boss floor selection ──────────────────────────────────────────────────────
 
@@ -1104,6 +918,14 @@ export interface DungeonLevelOptions {
   progression?: ProgressionDef;
   /** Grates cut into the defense quest's room. Defaults to the base nursery's four. */
   questGrateCount?: number;
+  /** Which floor's room characters the rooms are dressed from. Defaults to the cellars'. */
+  floorTheme?: DungeonFloorThemeId;
+  /**
+   * False builds the floor with characters assigned but no props placed. Every
+   * other draw is unchanged, so a harness can generate a seed both ways and
+   * prove the props never cost a layout its acceptance.
+   */
+  placeProps?: boolean;
 }
 
 export interface GenerateDungeonOptions extends DungeonLevelOptions {
@@ -1414,6 +1236,12 @@ function buildDungeon(
 
   // Tiles carved as hallway — tracked for rat spawn placement
   const hallwayTiles: Array<{ x: number; y: number }> = [];
+  /** The corridor kind that first carved each tile, for the region map. */
+  const corridorKindByTile = new Map<number, HallwayKind>();
+  const recordCorridorTile = (x: number, y: number, kind: HallwayKind): void => {
+    hallwayTiles.push({ x, y });
+    corridorKindByTile.set(tileCoordKey(x, y), kind);
+  };
 
   // ── Hallway carvers ───────────────────────────────────────────────────────
   //
@@ -1428,6 +1256,7 @@ function buildDungeon(
     y2: number,
     halfWidth: number,
     floorType: number,
+    kind: HallwayKind,
   ) => {
     const minX = Math.min(x1, x2);
     const maxX = Math.max(x1, x2);
@@ -1436,7 +1265,7 @@ function buildDungeon(
         const hy = y1 + off;
         if (hy >= BORDER && hy < size - BORDER && grid[hy][hx].type === FloorTypeValue.wall) {
           grid[hy][hx].type = floorType;
-          hallwayTiles.push({ x: hx, y: hy });
+          recordCorridorTile(hx, hy, kind);
         }
       }
     }
@@ -1447,7 +1276,7 @@ function buildDungeon(
         const hx = x2 + off;
         if (hx >= BORDER && hx < size - BORDER && grid[hy][hx].type === FloorTypeValue.wall) {
           grid[hy][hx].type = floorType;
-          hallwayTiles.push({ x: hx, y: hy });
+          recordCorridorTile(hx, hy, kind);
         }
       }
     }
@@ -1462,7 +1291,7 @@ function buildDungeon(
         if (nx >= BORDER && nx < size - BORDER && ny >= BORDER && ny < size - BORDER) {
           if (grid[ny][nx].type === FloorTypeValue.wall) {
             grid[ny][nx].type = floorType;
-            hallwayTiles.push({ x: nx, y: ny });
+            recordCorridorTile(nx, ny, 'nook');
           }
         }
       }
@@ -1478,7 +1307,7 @@ function buildDungeon(
     floorType: number,
   ) => {
     const halfWidth = kind === 'standard' ? 1 : 0;
-    carveHallwayCore(x1, y1, x2, y2, halfWidth, floorType);
+    carveHallwayCore(x1, y1, x2, y2, halfWidth, floorType, kind);
     if (kind === 'nook') {
       carveNookAt(x2, y1, floorType);
     }
@@ -1556,11 +1385,15 @@ function buildDungeon(
   };
 
   /** Carves planned corridor tiles, leaving any already-carved tile alone. */
-  const carveCorridorTiles = (tiles: ReadonlyArray<Point>, floorType: number): void => {
+  const carveCorridorTiles = (
+    tiles: ReadonlyArray<Point>,
+    floorType: number,
+    kind: HallwayKind,
+  ): void => {
     for (const tile of tiles) {
       if (grid[tile.y]?.[tile.x]?.type !== FloorTypeValue.wall) continue;
       grid[tile.y][tile.x].type = floorType;
-      hallwayTiles.push({ x: tile.x, y: tile.y });
+      recordCorridorTile(tile.x, tile.y, kind);
     }
   };
 
@@ -1607,7 +1440,11 @@ function buildDungeon(
     const pickCorridorKind = (isSpecial: boolean, target: Point): HallwayKind =>
       selectHallwayKind(zoneOf(target), isSpecial);
     const carvePlannedCorridor = (corridor: PlannedCorridor): void => {
-      carveCorridorTiles(corridor.tiles, corridorFloorForZone(zoneOf(corridor.target)));
+      carveCorridorTiles(
+        corridor.tiles,
+        corridorFloorForZone(zoneOf(corridor.target)),
+        corridor.kind,
+      );
     };
 
     // ── Gauntlets ───────────────────────────────────────────────────────────
@@ -2970,249 +2807,6 @@ function buildDungeon(
     }
   }
 
-  // ── Room decorations ──────────────────────────────────────────────────────
-
-  /** The four tile-adjacent steps, used only to test a room's own floor connectivity. */
-  const ROOM_FLOOD_STEPS: ReadonlyArray<Point> = [
-    { x: 1, y: 0 },
-    { x: -1, y: 0 },
-    { x: 0, y: 1 },
-    { x: 0, y: -1 },
-  ];
-
-  /**
-   * Margin a room's own floor-connectivity test is padded by, so a corridor's
-   * approach tile just outside the room's wall is part of what the test proves
-   * stays connected — a corridor is one tile wide and its doorway can funnel
-   * straight into a room's centre with no lateral spread, so testing the room's
-   * interior alone would miss a decoration that seals that sole approach.
-   */
-  const ROOM_CONNECTIVITY_MARGIN = 2;
-
-  /**
-   * Whether making `(blockedX, blockedY)` solid would cut apart the walkable
-   * tiles around a room — its own floor, plus a short reach past each wall for
-   * the corridors that approach it — judged by 4-connectivity.
-   *
-   * A room's doorways, and the corridor tiles just outside them, are all
-   * ordinary walkable tiles this test walks, so a region that stays one piece
-   * without the blocked tile keeps every doorway reachable from every other —
-   * which is what a decoration must never cost a room whose only route in and
-   * out threads through it, on the smallest chain rooms the layout ever seats.
-   */
-  const blockingTileWouldSplitRoom = (
-    room: { x: number; y: number; w: number; h: number },
-    blockedX: number,
-    blockedY: number,
-  ): boolean => {
-    const minX = Math.max(0, room.x - ROOM_CONNECTIVITY_MARGIN);
-    const maxX = Math.min(grid[0].length - 1, room.x + room.w - 1 + ROOM_CONNECTIVITY_MARGIN);
-    const minY = Math.max(0, room.y - ROOM_CONNECTIVITY_MARGIN);
-    const maxY = Math.min(grid.length - 1, room.y + room.h - 1 + ROOM_CONNECTIVITY_MARGIN);
-    const inRegion = (x: number, y: number): boolean =>
-      x >= minX && x <= maxX && y >= minY && y <= maxY;
-
-    const floorTiles: Point[] = [];
-    for (let y = minY; y <= maxY; y++) {
-      for (let x = minX; x <= maxX; x++) {
-        if (x === blockedX && y === blockedY) continue;
-        if (isWalkableTileType(grid[y][x])) floorTiles.push({ x, y });
-      }
-    }
-    if (floorTiles.length === 0) return false;
-    const seen = new Set<number>();
-    const start = floorTiles[0];
-    const stack: Point[] = [start];
-    seen.add(tileCoordKey(start.x, start.y));
-    while (stack.length > 0) {
-      const tile = stack.pop();
-      if (tile === undefined) continue;
-      for (const step of ROOM_FLOOD_STEPS) {
-        const nx = tile.x + step.x;
-        const ny = tile.y + step.y;
-        if (nx === blockedX && ny === blockedY) continue;
-        if (!inRegion(nx, ny)) continue;
-        const key = tileCoordKey(nx, ny);
-        if (seen.has(key)) continue;
-        if (!isWalkableTileType(grid[ny][nx])) continue;
-        seen.add(key);
-        stack.push({ x: nx, y: ny });
-      }
-    }
-    return seen.size < floorTiles.length;
-  };
-
-  for (let ordinal = 0; ordinal < populatedRoomIndices.length; ordinal++) {
-    const i = populatedRoomIndices[ordinal];
-    const r = rooms[i];
-    const roomCentre: Point = {
-      x: Math.floor(r.x + r.w / 2),
-      y: Math.floor(r.y + r.h / 2),
-    };
-    const zone = getZone(roomCentre, sc);
-
-    // Torches always in 2 diagonally-opposite corners
-    const corners =
-      i % 2 === 0
-        ? [
-            { x: r.x + 1, y: r.y + 1 },
-            { x: r.x + r.w - 2, y: r.y + r.h - 2 },
-          ]
-        : [
-            { x: r.x + r.w - 2, y: r.y + 1 },
-            { x: r.x + 1, y: r.y + r.h - 2 },
-          ];
-    for (const c of corners) {
-      if (grid[c.y]?.[c.x]?.type === r.floor && !stairwellBlockedSet.has(`${c.x},${c.y}`)) {
-        placeProp(grid[c.y][c.x], TORCH);
-      }
-    }
-
-    // Large rooms get barrel pillars that create lanes and break up open space.
-    // Placed near inner corners, 3 tiles from each wall.
-    if (r.w >= PILLAR_MIN_ROOM_W && r.h >= PILLAR_MIN_ROOM_H) {
-      const pillarPositions = [
-        { x: r.x + DECO_INNER_OFFSET, y: r.y + DECO_INNER_OFFSET },
-        { x: r.x + r.w - DECO_NEAR_FAR_OFFSET, y: r.y + DECO_INNER_OFFSET },
-      ];
-      for (const p of pillarPositions) {
-        if (grid[p.y]?.[p.x]?.type === r.floor && !stairwellBlockedSet.has(`${p.x},${p.y}`)) {
-          placeProp(grid[p.y][p.x], BARREL);
-        }
-      }
-    }
-
-    // Vignette chance scales with zone depth
-    const useVignette = worldRandom() < VIGNETTE_CHANCE[zone];
-    if (useVignette) {
-      const vignette = pickVignette(zone, r);
-      if (vignette !== null) {
-        stampVignette(grid, r, vignette, size, stairwellBlockedSet);
-        continue;
-      }
-    }
-
-    // ── Cycle-based decoration (zone-aware) ──────────────────────────────
-    const cycleLen = zone === 'entrance' ? ENTRANCE_CYCLE_LEN : STANDARD_CYCLE_LEN;
-    const cycle = ordinal % cycleLen;
-
-    if (cycle === 0 && r.w >= CYCLE0_MIN_W) {
-      const positions = [
-        { x: r.x + 2, y: r.y + 1 },
-        { x: r.x + r.w - DECO_INNER_OFFSET, y: r.y + 1 },
-      ];
-      if (zone !== 'entrance' && r.w >= CYCLE0_EXTRA_BARREL_MIN_W)
-        positions.push({ x: r.x + CYCLE0_EXTRA_BARREL_DX, y: r.y + 1 });
-      for (const p of positions) {
-        if (grid[p.y]?.[p.x]?.type === r.floor && !stairwellBlockedSet.has(`${p.x},${p.y}`))
-          placeProp(grid[p.y][p.x], BARREL);
-      }
-    }
-
-    if (cycle === 1 && r.w >= CYCLE1_MIN_W) {
-      const positions = [
-        { x: r.x + 2, y: r.y + r.h - 2 },
-        { x: r.x + r.w - DECO_INNER_OFFSET, y: r.y + r.h - 2 },
-      ];
-      for (const p of positions) {
-        if (grid[p.y]?.[p.x]?.type === r.floor && !stairwellBlockedSet.has(`${p.x},${p.y}`))
-          placeProp(grid[p.y][p.x], BARREL_SIDE);
-      }
-      if (zone !== 'entrance') {
-        const bp = { x: r.x + 2, y: r.y + r.h - DECO_INNER_OFFSET };
-        if (grid[bp.y]?.[bp.x]?.type === r.floor && !stairwellBlockedSet.has(`${bp.x},${bp.y}`))
-          placeProp(grid[bp.y][bp.x], BONES);
-      }
-    }
-
-    if (cycle === 2) {
-      const cx2 = i % 2 === 0 ? r.x + r.w - 2 : r.x + 1;
-      const cy2 = r.y + 1;
-      if (grid[cy2]?.[cx2]?.type === r.floor && !stairwellBlockedSet.has(`${cx2},${cy2}`))
-        placeProp(grid[cy2][cx2], CRATE);
-      const cx3 = cx2 + (i % 2 === 0 ? -1 : 1);
-      if (grid[cy2]?.[cx3]?.type === r.floor && !stairwellBlockedSet.has(`${cx3},${cy2}`))
-        placeProp(grid[cy2][cx3], CRATE);
-    }
-
-    if (cycle === DECO_CYCLE_BRAZIER && r.w >= CYCLE3_MIN_SIZE && r.h >= CYCLE3_MIN_SIZE) {
-      const bx = Math.floor(r.x + r.w / 2);
-      const by = Math.floor(r.y + r.h / 2);
-      if (
-        grid[by]?.[bx]?.type === r.floor &&
-        !stairwellBlockedSet.has(`${bx},${by}`) &&
-        !blockingTileWouldSplitRoom(r, bx, by)
-      ) {
-        placeProp(grid[by][bx], BRAZIER);
-      }
-      if (zone === 'deep') {
-        const ring = [
-          { x: bx - 1, y: by },
-          { x: bx + 1, y: by },
-          { x: bx, y: by - 1 },
-          { x: bx, y: by + 1 },
-        ];
-        for (const p of ring) {
-          if (grid[p.y]?.[p.x]?.type === r.floor && !stairwellBlockedSet.has(`${p.x},${p.y}`))
-            placeProp(grid[p.y][p.x], BONES);
-        }
-      }
-    }
-
-    if (cycle === DECO_CYCLE_CORNER_MIX && r.w >= CYCLE4_MIN_W) {
-      const positions: Array<{ x: number; y: number; type: number }> = [
-        { x: r.x + 1, y: r.y + 1, type: BARREL },
-        { x: r.x + 2, y: r.y + 1, type: CRATE },
-        { x: r.x + r.w - 2, y: r.y + 1, type: CRATE },
-      ];
-      for (const p of positions) {
-        if (grid[p.y]?.[p.x]?.type === r.floor && !stairwellBlockedSet.has(`${p.x},${p.y}`))
-          placeProp(grid[p.y][p.x], p.type);
-      }
-    }
-
-    if (cycle === DECO_CYCLE_BONES) {
-      const boneCount = zone === 'deep' ? CYCLE5_DEEP_BONE_COUNT : CYCLE5_BONE_COUNT;
-      const spots = [
-        { x: r.x + 2, y: r.y + 2 },
-        { x: r.x + r.w - DECO_INNER_OFFSET, y: r.y + 2 },
-        { x: r.x + 2, y: r.y + r.h - DECO_INNER_OFFSET },
-        { x: r.x + r.w - DECO_INNER_OFFSET, y: r.y + r.h - DECO_INNER_OFFSET },
-      ].slice(0, boneCount);
-      for (const p of spots) {
-        if (grid[p.y]?.[p.x]?.type === r.floor && !stairwellBlockedSet.has(`${p.x},${p.y}`))
-          placeProp(grid[p.y][p.x], BONES);
-      }
-    }
-
-    if (cycle === DECO_CYCLE_SHELVES && r.w >= CYCLE6_MIN_W) {
-      const shelfY = r.y + 1;
-      for (let sx = r.x + 2; sx <= r.x + CYCLE6_SHELF_DX_END && sx < r.x + r.w - 2; sx++) {
-        if (grid[shelfY]?.[sx]?.type === r.floor && !stairwellBlockedSet.has(`${sx},${shelfY}`))
-          placeProp(grid[shelfY][sx], BOOKSHELF);
-      }
-    }
-
-    if (cycle === DECO_CYCLE_CLUSTER) {
-      const clusters: Array<Array<{ x: number; y: number; type: number }>> = [
-        [
-          { x: r.x + 1, y: r.y + r.h - 2, type: BARREL_SIDE },
-          { x: r.x + 2, y: r.y + r.h - 2, type: CRATE },
-        ],
-        [
-          { x: r.x + r.w - 2, y: r.y + 1, type: BARREL },
-          { x: r.x + r.w - DECO_INNER_OFFSET, y: r.y + 1, type: BARREL_SIDE },
-        ],
-      ];
-      for (const cluster of clusters) {
-        for (const p of cluster) {
-          if (grid[p.y]?.[p.x]?.type === r.floor && !stairwellBlockedSet.has(`${p.x},${p.y}`))
-            placeProp(grid[p.y][p.x], p.type);
-        }
-      }
-    }
-  }
-
   // 9. Mob spawn points
   const mobSpawnPoints = populatedRoomIndices
     .map((i) => rooms[i])
@@ -3257,8 +2851,6 @@ function buildDungeon(
   const treasureRooms: TreasureRoomData[] = selectedTreasureRooms.map((r) => {
     const cx = Math.floor(r.x + r.w / 2);
     const cy = Math.floor(r.y + r.h / 2);
-    // Clear the chest tile so decorations stamped earlier don't overlap the chest.
-    grid[cy][cx].type = r.floor;
     return {
       bounds: { x: r.x, y: r.y, w: r.w, h: r.h },
       centre: { x: cx, y: cy },
@@ -3602,6 +3194,220 @@ function buildDungeon(
     crawlerSigns.push(...signPlacements);
   }
 
+  // ── Room dressing ─────────────────────────────────────────────────────────
+
+  /** The four tile-adjacent steps, used only to test a room's own floor connectivity. */
+  const ROOM_FLOOD_STEPS: ReadonlyArray<Point> = [
+    { x: 1, y: 0 },
+    { x: -1, y: 0 },
+    { x: 0, y: 1 },
+    { x: 0, y: -1 },
+  ];
+
+  /**
+   * Margin a room's own floor-connectivity test is padded by, so a corridor's
+   * approach tile just outside the room's wall is part of what the test proves
+   * stays connected — a corridor is one tile wide and its doorway can funnel
+   * straight into a room's centre with no lateral spread, so testing the room's
+   * interior alone would miss a decoration that seals that sole approach.
+   */
+  const ROOM_CONNECTIVITY_MARGIN = 2;
+
+  /**
+   * Whether making `(blockedX, blockedY)` solid would disconnect walkable
+   * tiles around a room that are connected now — its own floor, plus a short
+   * reach past each wall for the corridors that approach it — judged by
+   * 4-connectivity inside that window.
+   *
+   * Every walkable tile next to the blocked one is in the same piece as it, so
+   * blocking it splits something exactly when those neighbours can no longer
+   * all reach one another without it. Asking that, rather than whether the
+   * whole window is one piece, keeps a corridor that merely passes the room
+   * inside the margin, joined to nothing in the window, from making every
+   * tile of the room read as a split. A path that leaves the window is never
+   * counted, so the test only ever errs towards refusing a tile.
+   *
+   * A room's doorways, and the corridor tiles just outside them, are ordinary
+   * walkable tiles this test walks, so no decoration can cost a room whose
+   * only route in and out threads through it the doorway that route uses.
+   */
+  const blockingTileWouldSplitRoom = (
+    room: { x: number; y: number; w: number; h: number },
+    blockedX: number,
+    blockedY: number,
+  ): boolean => {
+    const minX = Math.max(0, room.x - ROOM_CONNECTIVITY_MARGIN);
+    const maxX = Math.min(grid[0].length - 1, room.x + room.w - 1 + ROOM_CONNECTIVITY_MARGIN);
+    const minY = Math.max(0, room.y - ROOM_CONNECTIVITY_MARGIN);
+    const maxY = Math.min(grid.length - 1, room.y + room.h - 1 + ROOM_CONNECTIVITY_MARGIN);
+    const walkableInWindow = (x: number, y: number): boolean =>
+      x >= minX &&
+      x <= maxX &&
+      y >= minY &&
+      y <= maxY &&
+      !(x === blockedX && y === blockedY) &&
+      isWalkableTileType(grid[y][x]);
+
+    const neighbours = ROOM_FLOOD_STEPS.map((step) => ({
+      x: blockedX + step.x,
+      y: blockedY + step.y,
+    })).filter((tile) => walkableInWindow(tile.x, tile.y));
+    if (neighbours.length <= 1) return false;
+
+    const seen = new Set<number>();
+    const start = neighbours[0];
+    const stack: Point[] = [start];
+    seen.add(tileCoordKey(start.x, start.y));
+    let unreached = neighbours.length - 1;
+    const neighbourKeys = new Set(neighbours.map((tile) => tileCoordKey(tile.x, tile.y)));
+    while (stack.length > 0 && unreached > 0) {
+      const tile = stack.pop();
+      if (tile === undefined) continue;
+      for (const step of ROOM_FLOOD_STEPS) {
+        const nx = tile.x + step.x;
+        const ny = tile.y + step.y;
+        const key = tileCoordKey(nx, ny);
+        if (seen.has(key) || !walkableInWindow(nx, ny)) continue;
+        seen.add(key);
+        if (neighbourKeys.has(key)) unreached--;
+        stack.push({ x: nx, y: ny });
+      }
+    }
+    return unreached > 0;
+  };
+
+  // Dressing comes after every other placement, signs included, so nothing
+  // the floor is built from ever reads where a prop stands. It draws exactly
+  // one number from the world stream and runs on streams of its own from
+  // there, so a change to a character table leaves this attempt's layout and
+  // spawns as they were. It can still change the floor if it ever makes an
+  // attempt fail validation, because the retry then draws a different layout;
+  // `verify:dungeon-placement` checks that dressing never does.
+  const dressingSeed = Math.floor(worldRandom() * UINT32_SPAN);
+  const characterRng = mulberry32(dressingSeed);
+  const placementRng = mulberry32(dressingSeed ^ PLACEMENT_STREAM_SALT);
+  const hallwayRng = mulberry32(dressingSeed ^ HALLWAY_STREAM_SALT);
+  const floorTheme = options.floorTheme ?? DEFAULT_DUNGEON_FLOOR_THEME;
+  const placeProps = options.placeProps ?? true;
+
+  const dressingReserved = new Set<number>();
+  for (const list of [
+    [startTile],
+    mobSpawnPoints,
+    hallwaySpawnPoints,
+    treasureRooms.map((room) => room.centre),
+    buildingEntries.map((entry) => entry.doorTile),
+    arenaExteriors.map((arena) => arena.stairwellTile),
+  ]) {
+    for (const tile of list) dressingReserved.add(tileCoordKey(tile.x, tile.y));
+  }
+  const isDressingReserved = (x: number, y: number): boolean =>
+    dressingReserved.has(tileCoordKey(x, y)) ||
+    stairwellBlockedSet.has(`${x},${y}`) ||
+    grid[y]?.[x]?.type === CRAWLER_SIGN;
+
+  const roomAssignments: Array<RegionAssignment | null> = rooms.map((room) => {
+    const tag = SPECIAL_ROLE_TAGS[room.role];
+    return tag === null ? null : { type: 'special', tag };
+  });
+  for (const index of populatedRoomIndices) {
+    const room = rooms[index];
+    const bounds = rectOfRoom(room);
+    const zone = getZone(rectCentre(bounds), sc);
+    const assignment = rollRoomCharacter(floorTheme, zone, characterRng);
+    roomAssignments[index] = assignment;
+    if (assignment === null || !placeProps) continue;
+    dressRoom(
+      grid,
+      {
+        bounds,
+        floor: room.floor,
+        zone,
+        doorways: roomDoorways(grid, bounds),
+        isReserved: isDressingReserved,
+        wouldSplitRoom: (x, y) => blockingTileWouldSplitRoom(room, x, y),
+      },
+      assignment,
+      placementRng,
+    );
+  }
+  // On a stream of its own, so furnishing a special room never moves a prop
+  // in a populated room.
+  const specialRoomRng = mulberry32(dressingSeed ^ SPECIAL_ROOM_STREAM_SALT);
+  for (const room of rooms) {
+    const tag = SPECIAL_ROLE_TAGS[room.role];
+    if (tag === null || !placeProps) continue;
+    const bounds = rectOfRoom(room);
+    dressSpecialRoom(
+      grid,
+      {
+        bounds,
+        floor: room.floor,
+        zone: getZone(rectCentre(bounds), sc),
+        doorways: roomDoorways(grid, bounds),
+        isReserved: isDressingReserved,
+        wouldSplitRoom: (x, y) => blockingTileWouldSplitRoom(room, x, y),
+      },
+      SPECIAL_REGION_LIGHTING[tag],
+      SPECIAL_REGION_PROPS[floorTheme][tag] ?? [],
+      specialRoomRng,
+    );
+  }
+
+  // Built from the finished grid so every carve, pocket and door above is in
+  // it. Free-roam floors skip it: they publish no room list for its ids to
+  // index into.
+  const treasureRoomSet = new Set<Room>(selectedTreasureRooms);
+  const regionMap =
+    progressionLayout === undefined
+      ? RegionMap.empty()
+      : buildRegionMap({
+          grid,
+          rooms: rooms.map((room) => ({
+            bounds: rectOfRoom(room),
+            role: room.role,
+            treasure: treasureRoomSet.has(room),
+            floor: room.floor,
+          })),
+          corridorKindAt: (x, y) => corridorKindByTile.get(tileCoordKey(x, y)),
+          zoneOf: (point) => getZone(point, sc),
+          arenas: arenaExteriors,
+        });
+
+  // Dressed after the region map is built, because a hallway segment only
+  // exists as one once corridors are split into segments. A prop placed here
+  // keeps its segment's id, as a prop in a room keeps the room's.
+  const hallwayAssignments = regionMap.hallways.map((hallway) => {
+    const assignment = rollHallwayCharacter(floorTheme, hallway, characterRng);
+    if (assignment?.type === 'hallway' && placeProps) {
+      dressHallway(
+        grid,
+        {
+          hallway,
+          corridorKindAt: (x, y) => corridorKindByTile.get(tileCoordKey(x, y)),
+          isReserved: (x, y) => isDressingReserved(x, y) || claimedTiles.has(tileCoordKey(x, y)),
+          isRoomTile: (x, y) => regionMap.roomIndexAt(x, y) !== NO_REGION,
+        },
+        assignment.character,
+        hallwayRng,
+      );
+    }
+    return assignment;
+  });
+  const regionCharacters =
+    progressionLayout === undefined
+      ? RegionCharacters.empty()
+      : new RegionCharacters(regionMap, roomAssignments, hallwayAssignments);
+  const wallFixtures =
+    progressionLayout === undefined || !placeProps
+      ? []
+      : placeWallFixtures({
+          grid,
+          regionMap,
+          characters: regionCharacters,
+          rng: mulberry32(dressingSeed ^ FIXTURE_STREAM_SALT),
+        });
+
   return {
     grid,
     startTile,
@@ -3618,6 +3424,9 @@ function buildDungeon(
     arenaDoorTile: arenaExteriors[0]?.doorTile,
     progressionLayout,
     crawlerSigns,
+    regionMap,
+    regionCharacters,
+    wallFixtures,
   };
 }
 

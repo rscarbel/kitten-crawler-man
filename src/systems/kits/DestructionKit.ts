@@ -25,13 +25,22 @@ import { GroundPickupSystem, type GroundPickupCheckpoint } from '../GroundPickup
 import type { LootCheckpoint } from '../LootSystem';
 import type { TreeSystem } from '../TreeSystem';
 import type { SceneWorld } from './SceneWorld';
+import {
+  playDungeonCue,
+  propEventCues,
+  wallFixtureEventCues,
+  type DungeonCue,
+} from '../dungeon/dungeonSoundCues';
 
 /** Coin-purse cue on loot pickup. Matches the vendor-purchase level. */
 const COIN_PICKUP_VOLUME = 0.55;
 
-/** Splitting planks, alternated so back-to-back breaks never sound identical. */
-const GARBAGE_BAG_BURST_SOUNDS = ['garbage_bag_burst_1', 'garbage_bag_burst_2'] as const;
-const WOOD_SMASH_SOUNDS = ['wood_smashing_1', 'wood_smashing_2'] as const;
+/**
+ * A blow a prop survives sounds quieter than its break. The only blows with a
+ * sound of their own are sheet metal denting, so in practice this is a dent
+ * ringing quieter than the same metal giving way.
+ */
+const STRUCK_CUE_VOLUME = 0.6;
 
 export interface DestructionKitOptions {
   /** Which props a swing breaks here. Defaults to everything breakable. */
@@ -61,8 +70,10 @@ export class DestructionKit {
    */
   readonly groundPickups: GroundPickupSystem;
 
-  /** Which of the two smash samples plays next. */
-  private woodSmashSoundIdx = 0;
+  /** Each cue's next take, so back-to-back breaks never sound identical. */
+  private readonly cueTakes = new Map<DungeonCue, number>();
+  /** Cues already raised this frame; scratch for {@link drainAudioCues}. */
+  private readonly cuesThisFrame = new Set<DungeonCue>();
 
   constructor(world: SceneWorld, floorNumber: number, options: DestructionKitOptions = {}) {
     this.loot = new LootSystem(world.gameMap);
@@ -80,6 +91,10 @@ export class DestructionKit {
   update(ctx: SystemContext): void {
     this.loot.update(ctx);
     this.destructibles.update();
+    if (this.destructibles.firesBiteThisFrame) {
+      this.destructibles.burnOccupants([ctx.human, ctx.cat, ...ctx.roster.mobs]);
+    }
+    this.destructibles.knockMobsIntoProps(ctx.roster.mobs, ctx.human);
     this.dynamite.update(ctx);
     this.groundPickups.update();
   }
@@ -94,21 +109,18 @@ export class DestructionKit {
    */
   drainAudioCues(audio: AudioManager | null): boolean {
     const smashes = this.destructibles.drainSmashes();
-    if (smashes.wood > 0) {
-      // One cue per frame however many props gave way together: overlapping
-      // copies of the same sample stack into a blast rather than a smash. The
-      // index still advances once so back-to-back breaks alternate.
-      audio?.play(WOOD_SMASH_SOUNDS[this.woodSmashSoundIdx % WOOD_SMASH_SOUNDS.length]);
-      this.woodSmashSoundIdx++;
+    // One take of a cue per frame however many props gave way together:
+    // overlapping copies of the same sample stack into a blast rather than a
+    // smash.
+    this.cuesThisFrame.clear();
+    for (const event of this.destructibles.drainPropAudioEvents()) {
+      const volume = event.name === 'struck' ? STRUCK_CUE_VOLUME : undefined;
+      for (const cue of propEventCues(event)) this.raiseCue(audio, cue, volume);
     }
-    if (smashes.iron > 0) {
-      // An iron brazier folding up is a clang, not splitting planks.
-      audio?.play('hammer_strike');
+    for (const event of this.destructibles.drainWallFixtureEvents()) {
+      for (const cue of wallFixtureEventCues(event)) this.raiseCue(audio, cue);
     }
-
-    if (smashes.trash > 0) {
-      audio?.playRandom(GARBAGE_BAG_BURST_SOUNDS);
-    }
+    if (this.destructibles.drainFusesLit() > 0) this.raiseCue(audio, 'gasCylinderHiss');
 
     const pickups = this.loot.drainPickups();
     if (pickups.withCoins > 0) {
@@ -128,6 +140,12 @@ export class DestructionKit {
     }
 
     return smashes.wood > 0 || smashes.iron > 0 || smashes.trash > 0;
+  }
+
+  private raiseCue(audio: AudioManager | null, cue: DungeonCue, volume?: number): void {
+    if (this.cuesThisFrame.has(cue)) return;
+    this.cuesThisFrame.add(cue);
+    playDungeonCue(audio, cue, this.cueTakes, volume === undefined ? {} : { volume });
   }
 
   /** Wreckage lies on the floor, so it draws under everything that walks on it. */

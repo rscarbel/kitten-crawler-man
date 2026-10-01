@@ -70,6 +70,8 @@ export interface PlayOptions {
   playbackRate?: number;
   /** Start playback this many seconds into the buffer. Default: 0. */
   startOffset?: number;
+  /** Stereo position, -1 (hard left) to 1 (hard right). Default: 0, centred. */
+  pan?: number;
 }
 
 export interface MusicOptions {
@@ -547,19 +549,26 @@ export class AudioManager {
     source.buffer = buffer;
     source.playbackRate.value = opts.playbackRate ?? 1;
 
-    const { volume } = opts;
+    const { volume, pan } = opts;
+    const panner = pan !== undefined && pan !== 0 ? this.ctx.createStereoPanner() : null;
+    if (panner !== null) {
+      panner.pan.value = Math.max(-1, Math.min(1, pan ?? 0));
+      panner.connect(this.sfxGain);
+    }
+    const destination: AudioNode = panner ?? this.sfxGain;
     let perSoundGain: GainNode | null = null;
     if (volume !== undefined && volume !== 1) {
       perSoundGain = this.ctx.createGain();
       perSoundGain.gain.value = volume;
       source.connect(perSoundGain);
-      perSoundGain.connect(this.sfxGain);
+      perSoundGain.connect(destination);
     } else {
-      source.connect(this.sfxGain);
+      source.connect(destination);
     }
 
     this.activeSources.set(id, { source, gain: perSoundGain });
     source.onended = () => {
+      panner?.disconnect();
       const current = this.activeSources.get(id);
       if (current?.source === source) {
         current.gain?.disconnect();

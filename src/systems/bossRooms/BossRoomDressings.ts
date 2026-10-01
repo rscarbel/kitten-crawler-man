@@ -13,6 +13,16 @@ import type { BossRoomDressingCheckpoint } from './bossRoomDressingCheckpoint';
 import { ColosseumDressingSystem } from './ColosseumDressingSystem';
 import { HoarderRoomSystem } from './HoarderRoomSystem';
 import { KrakarenRoomSystem } from './KrakarenRoomSystem';
+import { buildKrakarenLabLayout } from './krakarenLabLayout';
+import { gymLayoutOf } from '../../map/tiles/bossRooms/gymLayout';
+import {
+  colosseumFloodLamps,
+  gymStripLights,
+  hoarderBulb,
+  krakarenMoodLights,
+  type BossRoomMoodLight,
+  type MoodLightSink,
+} from './bossRoomMoodLights';
 import type { SpiderLabDressing } from './SpiderLabDressing';
 
 /** The boss-type ids from `levelDef.bossRooms[].type` that own a rectangular boss room. */
@@ -77,6 +87,38 @@ export function buildGauntletRoomDressings(
 export function buildColosseumDressing(gameMap: GameMap): ColosseumDressingSystem | null {
   if (gameMap.arenaExteriors.length === 0) return null;
   return new ColosseumDressingSystem(gameMap, gameMap.arenaExteriors[0]);
+}
+
+/**
+ * Every boss room's mood lights on the floor — and the colosseum's — handed
+ * to the lighting pass. Reads the floor alone, the same placements each
+ * room's dressing paints its fixtures at, so a gate can light a floor without
+ * building its rooms. Returns how many lights were taken.
+ */
+export function registerBossRoomMoodLights(
+  sink: MoodLightSink,
+  gameMap: GameMap,
+  bossTypes: readonly string[],
+): number {
+  const lights: BossRoomMoodLight[] = [];
+  bossTypes.forEach((bossType, index) => {
+    if (index >= gameMap.bossRooms.length) return;
+    const room = gameMap.bossRooms[index];
+    if (bossType === HOARDER_BOSS_TYPE) lights.push(hoarderBulb(room.bounds).light);
+    if (bossType === KRAKAREN_BOSS_TYPE) {
+      const lab = buildKrakarenLabLayout(gameMap.structure, room.bounds, room.centre);
+      lights.push(...krakarenMoodLights(lab));
+    }
+  });
+  const gym = bossTypes.includes(JUICER_BOSS_TYPE) ? gymLayoutOf(gameMap.structure) : null;
+  if (gym !== null) lights.push(...gymStripLights(gym).map((strip) => strip.light));
+  if (gameMap.arenaExteriors.length > 0) {
+    const arena = gameMap.arenaExteriors[0];
+    lights.push(...colosseumFloodLamps(arena.centre, gameMap.structure).map((lamp) => lamp.light));
+  }
+  let taken = 0;
+  for (const light of lights) if (sink.registerMoodLight(light)) taken++;
+  return taken;
 }
 
 /**

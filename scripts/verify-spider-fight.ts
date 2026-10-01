@@ -4805,10 +4805,16 @@ const REAL_LAB_FIRST_SEED = 1;
 const REAL_LAB_SEED_SEARCH = 200;
 const REAL_LAB_FIGHT_SEEDS = 2;
 /**
- * A tank's blows are few and lumpy — ten or so in two minutes — so it is run
- * over more seeds than the punisher before its rate means anything.
+ * A tank's blows are few and lumpy — ten or so in two minutes, fewer where an
+ * off-centre doorway puts the party beside a bench run — so it is run over
+ * enough seeds that the furnished and bare rates differ by the room rather than
+ * by which fights happened to land. Where the tank is hit about seven times a
+ * minute, eight seeds put the two rooms a tenth apart that thirty-two seeds put
+ * within a twentieth of each other.
  */
-const TANK_FIGHT_SEEDS = 8;
+const TANK_FIGHT_SEEDS = 32;
+/** Area blows on a web camper come two dozen a minute, so their rate settles fast. */
+const CAMPER_FIGHT_SEEDS = 8;
 /** How far inside the doorway the party stands when the fight opens. */
 const PARTY_ENTRY_DEPTH_TILES = 3;
 const REAL_LAB_DOOR_SIDES: readonly DoorSide[] = ['south', 'north', 'east', 'west'];
@@ -4922,6 +4928,8 @@ function measureRealLab(site: LabSite): RealLabMetrics {
     }
     for (let seed = 0; seed < TANK_FIGHT_SEEDS; seed++) {
       tankRuns.push(fightAtLevel(REFERENCE_PARTY_LEVEL, RUN_SEED + seed, 'tank'));
+    }
+    for (let seed = 0; seed < CAMPER_FIGHT_SEEDS; seed++) {
       camperRuns.push(fightAtLevel(REFERENCE_PARTY_LEVEL, RUN_SEED + seed, 'web-camper'));
     }
     const mean = (values: readonly number[]): number =>

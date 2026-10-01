@@ -1,5 +1,5 @@
 import type { Player } from '../Player';
-import { Mob } from './Mob';
+import { Mob, type EyePlacement } from './Mob';
 import {
   LLAMA_BODY_PART_KEY,
   drawLlamaSprite,
@@ -69,7 +69,20 @@ const SPIT_RELEASE_TIMER = LLAMA_SPIT_FRAMES - llamaSpitReleaseFrame();
 
 const LLAMA_TACTICS: readonly TacticsTrait[] = ['kite', 'regroup'];
 
+/** Where its eyes sit, for eye-shine in the dark. The head rides high and forward on the long neck, above the tile. */
+const LLAMA_EYES: EyePlacement = {
+  sideForward: 0.36,
+  sideHeight: -0.2,
+  sideSpacing: 0.05,
+  frontHeight: -0.26,
+  frontSpacing: 0.12,
+};
+
 export class Llama extends Mob {
+  protected override get eyePlacement(): EyePlacement {
+    return LLAMA_EYES;
+  }
+
   readonly xpValue = 8;
   protected coinDropMin = COIN_DROP_MIN;
   protected coinDropMax = COIN_DROP_MAX;

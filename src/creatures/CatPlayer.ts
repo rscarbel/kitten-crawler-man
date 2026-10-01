@@ -46,6 +46,7 @@ import {
   missileDamage,
 } from '../core/crawlerFormulas';
 import { CAT_REFLEXES_DODGE_BONUS_PER_LEVEL } from '../core/SkillManager';
+import type { DynamicLightSink } from '../systems/lighting/dynamicLights';
 
 /** Degrees in π radians, for the one place this class works in degrees. */
 const DEGREES_PER_HALF_TURN = 180;
@@ -57,6 +58,9 @@ const CONSTITUTION_AUDIT_NOTICE = 'Constitution refunded — spend the points';
  * Primary attack (Space): claw swipe — short-range melee.
  * Magic Missile: hotbar ability, fires an arcane projectile.
  */
+
+/** A bursting missile's light, as a share of one in flight. */
+const MISSILE_BURST_LIGHT = 0.7;
 
 export class CatPlayer extends Player {
   /** Which half of the skill roster this crawler is eligible for. */
@@ -152,6 +156,14 @@ export class CatPlayer extends Player {
 
   setAbilityManager(manager: AbilityManager): void {
     this.abilityManager = manager;
+  }
+
+  /** Her missiles light the dark round them as they fly, and flare as they burst. */
+  collectLights(sink: DynamicLightSink): void {
+    for (const missile of this.missiles) {
+      const strength = missile.state === 'flying' ? 1 : MISSILE_BURST_LIGHT;
+      sink.add(missile.x, missile.y, 'magic_missile', strength);
+    }
   }
 
   getMagicMissileLevel(): number {

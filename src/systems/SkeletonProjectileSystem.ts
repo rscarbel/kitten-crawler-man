@@ -27,6 +27,7 @@ import { normalize } from '../utils';
 import { drawSoulBolt, drawSoulBurst, drawBoneArrow } from '../sprites/skeletonEffectsSprite';
 import { drawHollowSoulBolt, drawHollowSoulBurst } from '../sprites/hollowSoulBoltSprite';
 import type { GameSystem, SystemContext } from './GameSystem';
+import type { DynamicLightSink } from './lighting/dynamicLights';
 
 /**
  * What a skeleton caster can put in the air: the lich's and the lord's green
@@ -135,6 +136,11 @@ const BURST_DAMAGE = 1;
 export class SkeletonProjectileSystem implements GameSystem {
   private projectiles: Projectile[] = [];
   private bursts: Burst[] = [];
+
+  /** A bolt lights the dark it flies through. */
+  collectLights(sink: DynamicLightSink): void {
+    for (const bolt of this.projectiles) sink.add(bolt.x, bolt.y, 'bolt');
+  }
 
   /** Set when a bolt lands; `DungeonScene` reads and clears it to play the cue. */
   burstSoundPending = false;

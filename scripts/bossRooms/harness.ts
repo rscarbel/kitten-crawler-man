@@ -33,7 +33,11 @@ import type {
   BossRoomDressing,
   DressingRenderable,
 } from '../../src/systems/bossRooms/BossRoomDressing.js';
-import { buildGauntletRoomDressings } from '../../src/systems/bossRooms/BossRoomDressings.js';
+import {
+  buildGauntletRoomDressings,
+  registerBossRoomMoodLights,
+} from '../../src/systems/bossRooms/BossRoomDressings.js';
+import { DungeonLightingSystem } from '../../src/systems/DungeonLightingSystem.js';
 import {
   approachLaneTiles,
   findBossRoomDoorways,
@@ -412,7 +416,7 @@ export function renderRoom(
   env: RoomEnvironment,
   roomUnderTest: RoomUnderTest,
   scale: number,
-  options: { withOverlay?: boolean } = {},
+  options: { withOverlay?: boolean; withLighting?: boolean } = {},
 ): RenderedRoom {
   const view = roomView(env.room);
   setViewportSize(view.widthPx, view.heightPx);
@@ -456,6 +460,19 @@ export function renderRoom(
   }
   sorted.sort((a, b) => a.sortY - b.sortY);
   for (const entry of sorted) entry.draw();
+
+  if (options.withLighting === true) {
+    counter.counting = false;
+    const lighting = new DungeonLightingSystem({
+      gameMap: env.gameMap,
+      now: () => 0,
+      additiveGlows: () => true,
+    });
+    const bossTypes = env.levelDef.bossRooms?.map((bossRoom) => bossRoom.type) ?? [];
+    registerBossRoomMoodLights(lighting, env.gameMap, bossTypes);
+    lighting.render(ctx, camX, camY, view.widthPx, view.heightPx);
+    counter.counting = true;
+  }
 
   roomUnderTest.renderAbove(ctx, camX, camY);
   counter.counting = false;

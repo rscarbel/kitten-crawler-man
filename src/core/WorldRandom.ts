@@ -1,6 +1,10 @@
 import { mulberry32, type Rng } from '../sprites/person/rng';
 
-const SEED_SPACE = 0x100000000;
+/**
+ * How many distinct unsigned 32-bit values there are: the seed range
+ * `mulberry32` takes, and the divisor that maps a uint32 hash onto [0, 1).
+ */
+export const UINT32_SPAN = 0x100000000;
 
 let activeRng: Rng | null = null;
 
@@ -18,7 +22,7 @@ export function worldRandom(): number {
 
 /** A fresh seed for a floor that has none yet. */
 export function drawWorldSeed(): number {
-  return Math.floor(Math.random() * SEED_SPACE);
+  return Math.floor(Math.random() * UINT32_SPAN);
 }
 
 /**

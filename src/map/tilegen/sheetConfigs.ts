@@ -77,13 +77,31 @@ export const GROUND_SHEETS: ReadonlyArray<GroundSheetConfig> = [
   {
     key: 'ground_floor1',
     file: 'ground_floor1.png',
-    materials: ['f1_cinder', 'f1_flagstone', 'f1_flags', 'f1_timber', 'f1_wall'],
+    // Append only: a material's seed slot is its index from `seedSlotBase`.
+    materials: [
+      'f1_cinder',
+      'f1_flagstone',
+      'f1_flags',
+      'f1_timber',
+      'f1_wall',
+      'f1_earth',
+      'f1_herringbone',
+    ],
     seedSlotBase: 200,
   },
   {
     key: 'ground_floor2',
     file: 'ground_floor2.png',
-    materials: ['f2_concrete', 'f2_vinyl', 'f2_terrazzo', 'f2_plate', 'f2_wall'],
+    // Append only: a material's seed slot is its index from `seedSlotBase`.
+    materials: [
+      'f2_concrete',
+      'f2_vinyl',
+      'f2_terrazzo',
+      'f2_plate',
+      'f2_wall',
+      'f2_grating',
+      'f2_rubber',
+    ],
     seedSlotBase: 300,
   },
   // The town's building interiors — a shop, a house and the tower seen from

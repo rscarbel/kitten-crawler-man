@@ -72,6 +72,19 @@ import { viewportWidth } from '../core/Viewport';
 import { bossRoomMinimapColor } from '../map/tiles/bossRoomTiles';
 import type { ProcessingStationKind } from './briarHollow/processingStations';
 import { drawRopeCoilGlyph, drawSawBladeGlyph } from '../ui/icons/stationGlyphs';
+import { SERVICE_DECAL_TILE_TYPES } from '../map/serviceLevelProps';
+import { CELLAR_FLAT_DECAL_TILE_TYPES, CELLAR_STANDING_DECAL_TILE_TYPES } from '../map/cellarProps';
+
+/**
+ * The dungeon's walkable dressing. A minimap is read for a way through, so
+ * each of these draws as the floor it lies on. Solid dressing takes the
+ * default colour, the same as a barrel or a crate.
+ */
+const DUNGEON_WALKABLE_DECAL_TILE_TYPES: ReadonlySet<number> = new Set([
+  ...SERVICE_DECAL_TILE_TYPES,
+  ...CELLAR_FLAT_DECAL_TILE_TYPES,
+  ...CELLAR_STANDING_DECAL_TILE_TYPES,
+]);
 
 /** Half of TILE_SIZE — used to find the center of a tile from its top-left corner. */
 const HALF_TILE = TILE_SIZE / 2;
@@ -747,6 +760,10 @@ export class MiniMapSystem implements GameSystem {
     // green makes that impossible.
     if (type === TREE && this.gameMap.structure[ty][tx].treeStage === TREE_STAGE_CHARRED) {
       return CHARRED_TREE_MINIMAP_COLOR;
+    }
+    if (DUNGEON_WALKABLE_DECAL_TILE_TYPES.has(type)) {
+      const floorUnder = this.gameMap.structure[ty][tx].groundType ?? FloorTypeValue.tile_floor;
+      return this.tileColor(floorUnder);
     }
     return this.tileColor(type);
   }

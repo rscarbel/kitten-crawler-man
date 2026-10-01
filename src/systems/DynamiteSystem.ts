@@ -21,6 +21,11 @@ import {
   SCORCH_TOTAL_FRAMES,
 } from '../sprites/dynamiteExplosion';
 import type { GameSystem, SystemContext } from './GameSystem';
+import {
+  GAS_CYLINDER_CRAWLER_DAMAGE,
+  GAS_CYLINDER_MOB_DAMAGE_FRACTION,
+} from './destruction/serviceLevelPropKinds';
+import type { DynamicLightSink } from './lighting/dynamicLights';
 import type { EventBus } from '../core/EventBus';
 import {
   eventFrame,
@@ -305,6 +310,11 @@ interface PendingThrow {
   readonly launch: (fromHand: boolean) => void;
 }
 
+/** A blast's light reaches past its damage radius by this much. */
+const BLAST_LIGHT_REACH_SCALE = 1.5;
+/** The least a blast lights, in tiles, however small its radius. */
+const BLAST_LIGHT_MIN_REACH_TILES = 3;
+
 export class DynamiteSystem implements GameSystem {
   private _charging: {
     hotbarIdx: number;
@@ -400,6 +410,21 @@ export class DynamiteSystem implements GameSystem {
       });
     }
     return points;
+  }
+
+  /** A blast lights the room it goes off in, dying away with its fireball. */
+  collectLights(sink: DynamicLightSink): void {
+    for (const explosion of this.explosions) {
+      const remaining = 1 - explosion.ageFrames / EXPLOSION_TOTAL_FRAMES;
+      const reachTiles = Math.max(BLAST_LIGHT_MIN_REACH_TILES, explosion.radius / TILE_SIZE);
+      sink.add(
+        explosion.x,
+        explosion.y,
+        'explosion',
+        remaining,
+        reachTiles * BLAST_LIGHT_REACH_SCALE,
+      );
+    }
   }
 
   get isCharging(): boolean {
@@ -587,6 +612,18 @@ export class DynamiteSystem implements GameSystem {
     this.frame++;
     const { human, cat } = ctx;
     const { grid: mobGrid } = ctx.roster;
+    // A gas bottle whose fuse burnt out goes off through the same blast as a
+    // stick — it hurts, knocks back and flattens the same way — but smaller and
+    // weaker, at exactly the radius its fuse drew.
+    for (const gas of this.destructibles?.drainDetonations() ?? []) {
+      const charge: BlastCharge = {
+        x: gas.x,
+        y: gas.y,
+        mobDamage: Math.round(dynamiteMobDamage(human.level, 0) * GAS_CYLINDER_MOB_DAMAGE_FRACTION),
+        crawlerDamage: GAS_CYLINDER_CRAWLER_DAMAGE,
+      };
+      this.detonate(charge, human, cat, mobGrid, gas.radiusPx);
+    }
     // Walking into the safe room with a stick alight snuffs it: the stick is
     // only spent on release, so it goes back in the bag unburned.
     if (this._charging !== null && human.isProtected) {
@@ -629,9 +666,14 @@ export class DynamiteSystem implements GameSystem {
     human: HumanPlayer,
     cat: CatPlayer,
     mobGrid: SpatialGrid<Mob>,
+    fixedRadiusPx: number | null = null,
   ): void {
-    const chain = this.sweepChain(trigger);
-    const blast = chainedBlast(chain);
+    // A blast with a fixed radius — a gas bottle's — stands alone: sweeping the
+    // sticks lying round it into a chain would grow it past the ring its fuse
+    // drew on the floor.
+    const chain = fixedRadiusPx === null ? this.sweepChain(trigger) : [trigger];
+    const chained = chainedBlast(chain);
+    const blast = fixedRadiusPx === null ? chained : { ...chained, radius: fixedRadiusPx };
     this.blastCount++;
     const seed = this.blastCount * BLAST_SEED_STRIDE;
     const fireballScale = Math.min(
@@ -642,7 +684,7 @@ export class DynamiteSystem implements GameSystem {
       x: blast.x,
       y: blast.y,
       radius: blast.radius,
-      coreRadius: DYN_RADIUS * fireballScale,
+      coreRadius: (fixedRadiusPx ?? DYN_RADIUS) * fireballScale,
       cores: chain.map((stick, index) => ({
         x: stick.x,
         y: stick.y,

@@ -1,3 +1,4 @@
+import { themedPropLookFrame, themedPropSpriteKey } from '../../sprites/breakablePropSprites';
 import type { TileContent } from '../tileTypes';
 import {
   STAIRS_UP,
@@ -284,9 +285,9 @@ export function drawInteriorTile(
     case BOOKSHELF: {
       drawSpriteKey(
         ctx,
-        'bookshelf',
+        themedPropSpriteKey('bookshelf', tx, ty),
         propSpriteState(structure[ty][tx].damageStage),
-        0,
+        themedPropLookFrame('bookshelf', tx, ty),
         sx,
         sy,
         ts,
@@ -421,7 +422,15 @@ export function drawInteriorTile(
     // chunk pass, and repainting it here would clip a neighbouring prop's
     // overhang into this tile.
     case BARREL: {
-      drawSpriteKey(ctx, 'barrel', propSpriteState(structure[ty][tx].damageStage), 0, sx, sy, ts);
+      drawSpriteKey(
+        ctx,
+        themedPropSpriteKey('barrel', tx, ty),
+        propSpriteState(structure[ty][tx].damageStage),
+        themedPropLookFrame('barrel', tx, ty),
+        sx,
+        sy,
+        ts,
+      );
       return true;
     }
 

@@ -70,11 +70,11 @@
     "states": {
       "idle": {
         "row": 0,
-        "frameCount": 1
+        "frameCount": 3
       },
       "damaged": {
         "row": 1,
-        "frameCount": 1
+        "frameCount": 3
       },
       "shatter": {
         "row": 2,
@@ -82,7 +82,7 @@
       },
       "remains": {
         "row": 3,
-        "frameCount": 1
+        "frameCount": 3
       }
     }
   },
@@ -95,11 +95,11 @@
     "states": {
       "idle": {
         "row": 0,
-        "frameCount": 1
+        "frameCount": 3
       },
       "damaged": {
         "row": 1,
-        "frameCount": 1
+        "frameCount": 3
       },
       "shatter": {
         "row": 2,
@@ -107,7 +107,7 @@
       },
       "remains": {
         "row": 3,
-        "frameCount": 1
+        "frameCount": 3
       }
     }
   },
@@ -120,11 +120,11 @@
     "states": {
       "idle": {
         "row": 0,
-        "frameCount": 1
+        "frameCount": 3
       },
       "damaged": {
         "row": 1,
-        "frameCount": 1
+        "frameCount": 3
       },
       "shatter": {
         "row": 2,
@@ -132,24 +132,24 @@
       },
       "remains": {
         "row": 3,
-        "frameCount": 1
+        "frameCount": 3
       }
     }
   },
   "bookshelf": {
     "frameWidth": 96,
-    "frameHeight": 96,
+    "frameHeight": 144,
     "tileX": 16,
-    "tileY": 16,
+    "tileY": 64,
     "tileScale": 64,
     "states": {
       "idle": {
         "row": 0,
-        "frameCount": 1
+        "frameCount": 3
       },
       "damaged": {
         "row": 1,
-        "frameCount": 1
+        "frameCount": 3
       },
       "shatter": {
         "row": 2,
@@ -157,7 +157,7 @@
       },
       "remains": {
         "row": 3,
-        "frameCount": 1
+        "frameCount": 3
       }
     }
   },
@@ -257,6 +257,244 @@
       "arrow": {
         "row": 0,
         "frameCount": 1
+      }
+    }
+  },
+  "steel_drum": {
+    "frameWidth": 96,
+    "frameHeight": 96,
+    "tileX": 16,
+    "tileY": 16,
+    "tileScale": 64,
+    "states": {
+      "idle": {
+        "row": 0,
+        "frameCount": 3
+      },
+      "damaged": {
+        "row": 1,
+        "frameCount": 3
+      },
+      "shatter": {
+        "row": 2,
+        "frameCount": 6
+      },
+      "remains": {
+        "row": 3,
+        "frameCount": 3
+      }
+    }
+  },
+  "oil_drum": {
+    "frameWidth": 96,
+    "frameHeight": 96,
+    "tileX": 16,
+    "tileY": 16,
+    "tileScale": 64,
+    "states": {
+      "idle": {
+        "row": 0,
+        "frameCount": 3
+      },
+      "damaged": {
+        "row": 1,
+        "frameCount": 3
+      },
+      "shatter": {
+        "row": 2,
+        "frameCount": 6
+      },
+      "remains": {
+        "row": 3,
+        "frameCount": 3
+      }
+    }
+  },
+  "steel_drum_side": {
+    "frameWidth": 96,
+    "frameHeight": 96,
+    "tileX": 16,
+    "tileY": 16,
+    "tileScale": 64,
+    "states": {
+      "idle": {
+        "row": 0,
+        "frameCount": 3
+      },
+      "damaged": {
+        "row": 1,
+        "frameCount": 3
+      },
+      "shatter": {
+        "row": 2,
+        "frameCount": 6
+      },
+      "remains": {
+        "row": 3,
+        "frameCount": 3
+      }
+    }
+  },
+  "plastic_crate": {
+    "frameWidth": 96,
+    "frameHeight": 96,
+    "tileX": 16,
+    "tileY": 16,
+    "tileScale": 64,
+    "states": {
+      "idle": {
+        "row": 0,
+        "frameCount": 3
+      },
+      "damaged": {
+        "row": 1,
+        "frameCount": 3
+      },
+      "shatter": {
+        "row": 2,
+        "frameCount": 6
+      },
+      "remains": {
+        "row": 3,
+        "frameCount": 3
+      }
+    }
+  },
+  "steel_shelving": {
+    "frameWidth": 96,
+    "frameHeight": 144,
+    "tileX": 16,
+    "tileY": 64,
+    "tileScale": 64,
+    "states": {
+      "idle": {
+        "row": 0,
+        "frameCount": 3
+      },
+      "damaged": {
+        "row": 1,
+        "frameCount": 3
+      },
+      "shatter": {
+        "row": 2,
+        "frameCount": 6
+      },
+      "remains": {
+        "row": 3,
+        "frameCount": 3
+      }
+    }
+  },
+  "work_lamp": {
+    "frameWidth": 96,
+    "frameHeight": 144,
+    "tileX": 16,
+    "tileY": 64,
+    "tileScale": 64,
+    "states": {
+      "idle": {
+        "row": 0,
+        "frameCount": 6
+      },
+      "damaged": {
+        "row": 1,
+        "frameCount": 6
+      },
+      "shatter": {
+        "row": 2,
+        "frameCount": 6
+      },
+      "remains": {
+        "row": 3,
+        "frameCount": 1
+      }
+    }
+  },
+  "drum_brazier": {
+    "frameWidth": 96,
+    "frameHeight": 144,
+    "tileX": 16,
+    "tileY": 64,
+    "tileScale": 64,
+    "states": {
+      "idle": {
+        "row": 0,
+        "frameCount": 4
+      },
+      "damaged": {
+        "row": 1,
+        "frameCount": 4
+      },
+      "shatter": {
+        "row": 2,
+        "frameCount": 6
+      },
+      "remains": {
+        "row": 3,
+        "frameCount": 1
+      }
+    }
+  },
+  "bone_pile": {
+    "frameWidth": 96,
+    "frameHeight": 96,
+    "tileX": 16,
+    "tileY": 16,
+    "tileScale": 64,
+    "states": {
+      "idle": {
+        "row": 0,
+        "frameCount": 3
+      },
+      "damaged": {
+        "row": 1,
+        "frameCount": 3
+      },
+      "shatter": {
+        "row": 2,
+        "frameCount": 6
+      },
+      "remains": {
+        "row": 3,
+        "frameCount": 3
+      }
+    }
+  },
+  "slumped_skeleton": {
+    "frameWidth": 96,
+    "frameHeight": 96,
+    "tileX": 16,
+    "tileY": 16,
+    "tileScale": 64,
+    "states": {
+      "idle": {
+        "row": 0,
+        "frameCount": 3
+      },
+      "damaged": {
+        "row": 1,
+        "frameCount": 3
+      },
+      "shatter": {
+        "row": 2,
+        "frameCount": 6
+      },
+      "remains": {
+        "row": 3,
+        "frameCount": 3
+      }
+    }
+  },
+  "bone_scatter": {
+    "frameWidth": 64,
+    "frameHeight": 64,
+    "tileX": 0,
+    "tileY": 0,
+    "tileScale": 64,
+    "states": {
+      "idle": {
+        "row": 0,
+        "frameCount": 4
       }
     }
   }

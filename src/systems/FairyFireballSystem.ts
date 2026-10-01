@@ -51,6 +51,7 @@ import {
 } from '../sprites/art/fairyEffectsArt';
 import { collectFairyPartyTargets } from './fairyPartyTargets';
 import type { GameSystem, SystemContext } from './GameSystem';
+import type { DynamicLightSink } from './lighting/dynamicLights';
 import type { GroundHazardSource, HazardEscape } from './GroundHazardSource';
 
 /** Attack types the death screen names; one per way this fire can hurt. */
@@ -210,6 +211,26 @@ export class FairyFireballSystem implements GameSystem, GroundHazardSource {
     const taken = [...this.cues];
     this.cues.clear();
     return taken;
+  }
+
+  /**
+   * A ball lights the floor under it as it flies, so one crossing a dark room
+   * shows the room; its blast flares and dies, and a death flame burns low.
+   */
+  collectLights(sink: DynamicLightSink): void {
+    for (const ball of this.fireballs) {
+      // The ground point under the ball; its height in the air is left out.
+      const t = Math.min(1, ball.age / ball.flightFrames);
+      sink.add(
+        ball.fromX + (ball.toX - ball.fromX) * t,
+        ball.fromY + (ball.toY - ball.fromY) * t,
+        'fireball',
+      );
+    }
+    for (const explosion of this.explosions) {
+      sink.add(explosion.x, explosion.y, 'explosion', 1 - explosion.age / EXPLOSION_FRAMES);
+    }
+    for (const flame of this.flames) sink.add(flame.x, flame.y, 'coals');
   }
 
   /** Live charges, for gates and for anything that has to reason about the floor. */
@@ -581,6 +602,11 @@ export class FairyFireballSystem implements GameSystem, GroundHazardSource {
       if (!this.gameMap.isWalkable(tileX, tileY)) return false;
       if (travelled >= distance) return true;
     }
+  }
+
+  /** Whether {@link renderGround} has anything to draw this frame. */
+  get hasGroundArt(): boolean {
+    return this.fireballs.length > 0 || this.flames.length > 0 || this.charges.length > 0;
   }
 
   /** Floor-level fire: landing warnings, charges and their warnings, the death flames. Under creatures. */

@@ -114,6 +114,9 @@ const NECRO_WISP_FADE_START = 0.6;
  */
 const CORPSE_ROSTER_SWEEP_FRAMES = 30;
 
+/** How far past a fairy effect's own point its ground art can reach, in tiles: a heal wave's ring. */
+const GROUND_ART_REACH_TILES = HEAL_WAVE_RADIUS_TILES + 1;
+
 /** Distinct seeds per effect, so two effects laid on one frame never animate in lockstep. */
 const SEED_STEP = 1;
 
@@ -453,6 +456,25 @@ export class FairySystem implements GameSystem {
   // ── Drawing ───────────────────────────────────────────────────────────────
 
   /** Floor-level effects, drawn under every creature. */
+  /**
+   * Whether {@link renderGround} draws anything inside the view (`left`,
+   * `top`) to (`right`, `bottom`), in world pixels: any ring, blast, wisp,
+   * rising or living fairy near enough to reach into it.
+   */
+  hasGroundArtIn(left: number, top: number, right: number, bottom: number): boolean {
+    const reach = TILE_SIZE * GROUND_ART_REACH_TILES;
+    const near = (x: number, y: number): boolean =>
+      x >= left - reach && x <= right + reach && y >= top - reach && y <= bottom + reach;
+    for (const wave of this.healWaves) if (near(wave.x, wave.y)) return true;
+    for (const blast of this.chillBlasts) if (near(blast.x, blast.y)) return true;
+    for (const wisps of this.necroWisps) if (near(wisps.x, wisps.y)) return true;
+    for (const rising of this.resurrections) if (near(rising.mob.x, rising.mob.y)) return true;
+    for (const mob of this.deps.getMobs()) {
+      if (mob instanceof Fairy && mob.isAlive && near(mob.x, mob.y)) return true;
+    }
+    return false;
+  }
+
   renderGround(ctx: CanvasRenderingContext2D, camX: number, camY: number): void {
     const maxWavePx = TILE_SIZE * HEAL_WAVE_RADIUS_TILES;
     for (const wave of this.healWaves) {

@@ -54,6 +54,8 @@ export class AmbientSoundSystem implements GameSystem {
   private readonly silentFrames = new Map<SoundId, number>();
   /** Reused per-frame scratch: the loudest gain wanted for each owned sound. */
   private readonly targetGains = new Map<SoundId, number>();
+  /** Multiplies every emitter's gain; see {@link setGainScale}. */
+  private gainScale = 1;
 
   constructor(
     private readonly audio: AudioManager,
@@ -67,6 +69,15 @@ export class AmbientSoundSystem implements GameSystem {
     this.emitters.length = 0;
     this.emitters.push(...emitters);
     for (const emitter of emitters) this.ownedSounds.add(emitter.soundId);
+  }
+
+  /**
+   * Scales every loop at once, 0–1, for a scene that ducks its whole
+   * soundscape (a safe room, a boss fight, a death screen). Takes effect on
+   * the next {@link updateListener}.
+   */
+  setGainScale(scale: number): void {
+    this.gainScale = Math.max(0, Math.min(1, scale));
   }
 
   update(ctx: SystemContext): void {
@@ -84,7 +95,7 @@ export class AmbientSoundSystem implements GameSystem {
     const targetGains = this.targetGains;
     targetGains.clear();
     for (const emitter of this.emitters) {
-      const gain = this.gainFor(emitter, listenerTileX, listenerTileY);
+      const gain = this.gainFor(emitter, listenerTileX, listenerTileY) * this.gainScale;
       const loudestSoFar = targetGains.get(emitter.soundId) ?? 0;
       if (gain > loudestSoFar) targetGains.set(emitter.soundId, gain);
     }

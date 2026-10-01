@@ -15,6 +15,7 @@ import {
 import { activeSearchField, endSearchCapture } from '../ui/SearchField';
 import { beginFigureFrame } from '../sprites/figure/figureFrameCache';
 import { beginEnvironmentArtFrame } from '../map/environmentArtCache';
+import { closeAboveDarkness } from '../systems/lighting/aboveDarkness';
 import { perfMonitor } from './PerfMonitor';
 import { renderQuality } from './RenderQuality';
 import {
@@ -561,6 +562,7 @@ export class SceneManager {
     // scene passes through.
     beginFigureFrame();
     beginEnvironmentArtFrame();
+    closeAboveDarkness();
     const renderStartedAt = perfMonitor.begin();
     try {
       this.current?.render(this.ctx);

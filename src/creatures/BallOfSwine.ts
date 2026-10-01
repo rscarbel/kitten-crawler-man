@@ -22,6 +22,7 @@ import { ARENA_INTERIOR_RADIUS_TILES, ARENA_REACH } from '../map/arenaGeometry';
 import { makePoison, type StatusEffect } from '../core/StatusEffect';
 import { prewarmTuskling } from '../sprites/tusklingSprite';
 import type { LootDrop, PlayerDamageType } from './Mob';
+import { deferChromeWhereDark, type ChromePart } from '../systems/lighting/aboveDarkness';
 
 /**
  * Base HP. A borough boss spawns in the level-14–16 band, where `applyMobLevel`
@@ -1354,6 +1355,38 @@ export class BallOfSwine extends Mob {
     }
   }
 
+  /** The track she rolls, the stench round her and the lunge tell, all floor paint. */
+  private drawGroundTells(
+    ctx: CanvasRenderingContext2D,
+    camX: number,
+    camY: number,
+    tileSize: number,
+  ): void {
+    const sx = this.x - camX;
+    const sy = this.y - camY;
+    this.drawTrack(ctx, camX, camY, tileSize);
+    this.drawStenchRing(ctx, sx, sy, tileSize);
+    this.drawLungeTell(ctx, sx, sy, tileSize);
+  }
+
+  override drawAboveDarkness(
+    ctx: CanvasRenderingContext2D,
+    part: ChromePart,
+    a: number,
+    b: number,
+    tileSize: number,
+  ): void {
+    if (part === 'swineGroundTells') {
+      this.drawGroundTells(ctx, a, b, tileSize);
+    } else if (part === 'swineStoppedWarning') {
+      if (this.phase === 'wallowing') {
+        drawBallOfSwineStoppedWarning(ctx, a, b, tileSize, this.wallowElapsedFraction);
+      }
+    } else {
+      super.drawAboveDarkness(ctx, part, a, b, tileSize);
+    }
+  }
+
   protected override drawSelf(
     ctx: CanvasRenderingContext2D,
     camX: number,
@@ -1365,9 +1398,14 @@ export class BallOfSwine extends Mob {
     const sx = this.x - camX;
     const sy = this.y - camY;
 
-    this.drawTrack(ctx, camX, camY, tileSize);
-    this.drawStenchRing(ctx, sx, sy, tileSize);
-    this.drawLungeTell(ctx, sx, sy, tileSize);
+    // Her tells are warnings: where the dungeon's dark falls on her they wait
+    // for the darkness to be drawn, so it never hides one; in the light they
+    // stay floor paint under her body.
+    const centreX = this.x + tileSize * TILE_CENTER_OFFSET;
+    const centreY = this.y + tileSize * TILE_CENTER_OFFSET;
+    if (!deferChromeWhereDark(this, 'swineGroundTells', centreX, centreY, camX, camY, tileSize)) {
+      this.drawGroundTells(ctx, camX, camY, tileSize);
+    }
 
     ctx.save();
     if (this.damageFlash > 0) ctx.filter = 'brightness(3)';
@@ -1378,7 +1416,10 @@ export class BallOfSwine extends Mob {
     // Lifted by the body's own radius: both of these are anchored to the tile, and
     // the tile is buried in the middle of a sprite nearly three tiles wide.
     const aboveBody = sy - BOS_BODY_RADIUS_TILES * tileSize;
-    if (this.phase === 'wallowing') {
+    if (
+      this.phase === 'wallowing' &&
+      !deferChromeWhereDark(this, 'swineStoppedWarning', centreX, centreY, sx, aboveBody, tileSize)
+    ) {
       drawBallOfSwineStoppedWarning(ctx, sx, aboveBody, tileSize, this.wallowElapsedFraction);
     }
 

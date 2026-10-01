@@ -830,7 +830,22 @@ function planHallwaySigns(
     return beside;
   };
 
-  /** Wall tiles touching the fork: those beside its sides first, then its corners, each in scan order. */
+  /** A wall tile with the fork's floor below it and wall on its other three sides. */
+  const isFaceSeat = (key: number, forkKeys: ReadonlySet<number>): boolean => {
+    const x = tileKeyX(key);
+    const y = tileKeyY(key);
+    return (
+      forkKeys.has(tileCoordKey(x, y + 1)) &&
+      isPlainWall(x, y - 1) &&
+      isPlainWall(x - 1, y) &&
+      isPlainWall(x + 1, y)
+    );
+  };
+
+  /**
+   * Wall tiles touching the fork: those beside its sides first — a face seat
+   * before any other — then its corners, each in scan order.
+   */
   const pocketCandidates = (forkKeys: ReadonlySet<number>): Point[] => {
     const touching = (offsets: ReadonlyArray<Point>): number[] => {
       const found = new Set<number>();
@@ -845,7 +860,15 @@ function planHallwaySigns(
     };
     const besideSides = touching(ROOM_WALL_OUTWARD.map((side) => ({ x: side.dx, y: side.dy })));
     const atCorners = touching(DIAGONAL_OFFSETS).filter((key) => !besideSides.includes(key));
-    return [...besideSides, ...atCorners].map((key) => ({ x: tileKeyX(key), y: tileKeyY(key) }));
+    // A pocket in a run of north wall, with the fork's floor below it, is where
+    // the wall shows its face, so the sign hangs there as a plaque; everywhere
+    // else it has to stand in an alcove.
+    const onFace = besideSides.filter((key) => isFaceSeat(key, forkKeys));
+    const offFace = besideSides.filter((key) => !onFace.includes(key));
+    return [...onFace, ...offFace, ...atCorners].map((key) => ({
+      x: tileKeyX(key),
+      y: tileKeyY(key),
+    }));
   };
 
   const placements: PlannedCrawlerSign[] = [];

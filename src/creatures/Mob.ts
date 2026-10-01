@@ -31,6 +31,7 @@ import { SEPARATION_RADIUS } from '../systems/mobSeparation';
 import type { KiteAim, TacticalMove } from './tactics/tacticalFrame';
 import type { SilhouetteLayer } from '../core/silhouetteComposite';
 import type { SiegeCapable, SiegeDirective } from './siege/siegeTypes';
+import { deferChrome, type ChromePart } from '../systems/lighting/aboveDarkness';
 import {
   GUARD_KNOCKBACK_FRAMES,
   GUARD_KNOCKBACK_TILES,
@@ -318,6 +319,13 @@ const AGGRO_INDICATOR_FONT_SIZE = 18;
 const AGGRO_INDICATOR_LINE_WIDTH = 3;
 /** Aggro indicator Y offset above mob. */
 const AGGRO_INDICATOR_Y_OFFSET = 3;
+/** The septic label: sickly green on a darker green edge. */
+const SEPTIC_LABEL_COLOR = '#bef264';
+const SEPTIC_LABEL_OUTLINE = '#65a30d';
+const SEPTIC_LABEL_OUTLINE_WIDTH = 2;
+/** The aggro "!" in alarm red, over a soft dark edge that keeps it legible on any floor. */
+const AGGRO_INDICATOR_COLOR = 'rgba(239, 68, 68, 1)';
+const AGGRO_INDICATOR_OUTLINE = 'rgba(0, 0, 0, 0.55)';
 
 /** Star drawn beside the health bar of a mob that rolled at least one tactics trait. */
 const TACTICS_RANK_MARK = '★';
@@ -367,6 +375,41 @@ const LEASH_SETTLE_FRACTION = 0.5;
 
 /** How far ahead a resident paths on each leg of its walk home, in tiles. */
 const LEASH_RETURN_HOP_TILES = 10;
+
+/**
+ * Where a creature's eyes sit within its tile, in tiles from the tile's
+ * top-left, for each way it can face. A creature facing away shows none.
+ */
+export interface EyePlacement {
+  /** Side view: how far ahead of the tile's centre the eyes are, toward the way it faces. */
+  readonly sideForward: number;
+  /** Side view: how far down from the top of the tile. */
+  readonly sideHeight: number;
+  /** Side view: the gap between the two eyes; small, the far eye is half hidden. */
+  readonly sideSpacing: number;
+  /** Facing the camera: how far down from the top of the tile. */
+  readonly frontHeight: number;
+  /** Facing the camera: the gap between the two eyes. */
+  readonly frontSpacing: number;
+}
+
+/** Where a creature's eyes are this frame, in world pixels, and how far apart. */
+export interface EyeAnchor {
+  x: number;
+  y: number;
+  spacingPx: number;
+}
+
+/** A biped's eyes: over the middle of the tile, a third of the way down. */
+export const DEFAULT_EYE_PLACEMENT: EyePlacement = {
+  sideForward: 0.08,
+  sideHeight: 0.3,
+  sideSpacing: 0.06,
+  frontHeight: 0.3,
+  frontSpacing: 0.16,
+};
+
+const EYE_TILE_CENTRE = 0.5;
 
 /** A mob with a fixated target turns on anything else that comes within this many tiles of it. */
 const FIXATED_TARGET_YIELD_TILES = 1;
@@ -439,12 +482,11 @@ export abstract class Mob extends Player {
    * Whether this mob has actually landed a blow on a crawler.
    *
    * Half of the companion's answer to "is this fight ours" — the other half is
-   * {@link wasDamagedByParty}. `currentTarget` used to stand in for both, and it
-   * cannot: it is set by proximity, sometimes without line of sight, so a mob
-   * that had merely turned its head read as a mob the party was fighting. That
-   * is what sent the companion across the level after something behind a wall,
-   * and what let it open a boss fight through a doorway nobody had crossed.
-   * Blood is a fact; noticing is not.
+   * {@link wasDamagedByParty}. `currentTarget` cannot stand in for either: it is
+   * set by proximity, sometimes without line of sight, so a mob that has merely
+   * turned its head would read as a mob the party is fighting — sending the
+   * companion across the level after something behind a wall, or opening a boss
+   * fight through a doorway nobody has crossed. Blood is a fact; noticing is not.
    */
   get hasStruckPlayer(): boolean {
     return this._hasStruckPlayer;
@@ -1443,6 +1485,41 @@ export abstract class Mob extends Player {
   allyRally: { readonly anchor: Player; readonly radiusPx: number } | null = null;
 
   /**
+   * Where this creature's eyes sit, for the eye-shine the dungeon's dark
+   * shows of it; see {@link EyePlacement}. Bipeds keep the default; a
+   * creature whose head is not over the middle of its tile returns its own,
+   * and one that changes shape returns the placement of its current shape.
+   */
+  protected get eyePlacement(): EyePlacement {
+    return DEFAULT_EYE_PLACEMENT;
+  }
+
+  /**
+   * Writes the world point between this creature's eyes for the way it faces,
+   * and how far apart they are in pixels, into `out`. Returns false, leaving
+   * `out` alone, when it faces away from the camera and shows the back of its
+   * head.
+   */
+  eyeShineAnchor(out: EyeAnchor): boolean {
+    const placement = this.eyePlacement;
+    const tile = this.tileSize;
+    const facingAway = this.facingY < 0 && Math.abs(this.facingY) > Math.abs(this.facingX);
+    if (facingAway) return false;
+    const side = Math.abs(this.facingX) >= Math.abs(this.facingY);
+    if (side) {
+      const forward = this.facingX < 0 ? -1 : 1;
+      out.x = this.x + tile * (EYE_TILE_CENTRE + forward * placement.sideForward);
+      out.y = this.y + tile * placement.sideHeight;
+      out.spacingPx = tile * placement.sideSpacing;
+      return true;
+    }
+    out.x = this.x + tile * EYE_TILE_CENTRE;
+    out.y = this.y + tile * placement.frontHeight;
+    out.spacingPx = tile * placement.frontSpacing;
+    return true;
+  }
+
+  /**
    * Whether this mob is currently hostile toward players. True unless it has
    * been converted; override for neutral NPCs.
    *
@@ -2264,10 +2341,10 @@ export abstract class Mob extends Player {
   /**
    * The target this mob should be fighting this frame, or null to disengage.
    *
-   * Replaces the nearest-living-target-in-range scan that every subclass used to
-   * inline, and adds the gate that scan was missing: a mob that is not already
-   * fighting someone has to be able to *notice* them first, so walls, trees and
-   * furniture genuinely hide the player until a fight starts.
+   * The one nearest-living-target-in-range scan every subclass shares, with a
+   * notice gate: a mob that is not already fighting someone has to be able to
+   * *notice* them first, so walls, trees and furniture genuinely hide the
+   * player until a fight starts.
    *
    * Once engaged the gate is gone — the mob saw where its quarry went and chases
    * it around the corner — and the engaged target alone gets the widened
@@ -2282,10 +2359,9 @@ export abstract class Mob extends Player {
    *
    * A defend target is refused outright, ahead of `accept` and of `forceAggro`.
    * Quest-critical bystanders — the defend quest's NPC, Tsarina Signet at her
-   * own circus — used to be kept out of reach by never appearing in any target
-   * list, which held only for as long as nobody added one; the single mob that
-   * *does* fight one goes through its own `defendTarget` field rather than
-   * through this scan.
+   * own circus — must stay out of reach even if one is ever added to a target
+   * list; the single mob that *does* fight one goes through its own
+   * `defendTarget` field rather than through this scan.
    */
   protected acquireTarget(
     targets: readonly Player[],
@@ -3135,9 +3211,9 @@ export abstract class Mob extends Player {
   /**
    * Damage that arrives outside a swing — a burn, a poison tick, an acid pool,
    * the doomsday clock. `Player.takeDamage` writes hp and nothing else, so a mob
-   * finished by one of these used to hit zero with `justDied` still false: no
+   * finished by one of these would hit zero with `justDied` still false — no
    * death event, and therefore no gore, no loot, no XP, and a nought-HP body
-   * left standing in `mobs` and in the mob grid until something else culled it.
+   * left standing in `mobs` and in the mob grid — unless it goes through here.
    *
    * A damage-over-time tick that somebody *applied* is a blow they landed, just
    * a late one: it goes into the damage ledger and credits the kill, so the
@@ -3355,10 +3431,9 @@ export abstract class Mob extends Player {
         this.wanderDy = ny * this.speed * WANDER_PULLBACK_SPEED_FRACTION;
       }
       // Face the way we are actually walking. `followTargetCollide` does this
-      // for a mob that is chasing something, but a wandering one used to keep
-      // whatever facing its last chase left it with — so any sprite that mirrors
-      // on `facingX` moonwalks for as long as the wander happens to run the
-      // other way, which is most of the time an unaggroed mob is on screen.
+      // for a mob that is chasing something; a wandering one would otherwise
+      // keep whatever facing its last chase left it with, and any sprite that
+      // mirrors on `facingX` would moonwalk whenever the wander runs the other way.
       const wanderSpeed = Math.hypot(this.wanderDx, this.wanderDy);
       if (wanderSpeed > 0) {
         this.facingX = this.wanderDx / wanderSpeed;
@@ -3401,16 +3476,39 @@ export abstract class Mob extends Player {
     sy: number,
     tileSize: number,
   ) {
-    ctx.save();
-    ctx.font = `bold ${AGGRO_INDICATOR_FONT_SIZE}px sans-serif`;
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'bottom';
-    ctx.lineWidth = AGGRO_INDICATOR_LINE_WIDTH;
-    ctx.strokeStyle = 'rgba(0, 0, 0, 0.55)';
-    ctx.strokeText('!', sx + tileSize / 2, sy - AGGRO_INDICATOR_Y_OFFSET);
-    ctx.fillStyle = 'rgba(239, 68, 68, 1)';
-    ctx.fillText('!', sx + tileSize / 2, sy - AGGRO_INDICATOR_Y_OFFSET);
-    ctx.restore();
+    if (deferChrome(this, 'aggro', sx, sy, tileSize)) return;
+    this.drawAggroIndicator(ctx, sx, sy, tileSize);
+  }
+
+  override drawAboveDarkness(
+    ctx: CanvasRenderingContext2D,
+    part: ChromePart,
+    sx: number,
+    sy: number,
+    extra: number,
+  ): void {
+    if (part === 'aggro') this.drawAggroIndicator(ctx, sx, sy, extra);
+    else if (part === 'mobHealthBar') this.drawMobHealthBar(ctx, sx, sy);
+    else super.drawAboveDarkness(ctx, part, sx, sy, extra);
+  }
+
+  private drawAggroIndicator(
+    ctx: CanvasRenderingContext2D,
+    sx: number,
+    sy: number,
+    tileSize: number,
+  ): void {
+    drawText(ctx, '!', {
+      x: sx + tileSize / 2,
+      y: sy - AGGRO_INDICATOR_Y_OFFSET - AGGRO_INDICATOR_FONT_SIZE,
+      align: 'center',
+      size: AGGRO_INDICATOR_FONT_SIZE,
+      bold: true,
+      font: 'sans-serif',
+      color: AGGRO_INDICATOR_COLOR,
+      outline: AGGRO_INDICATOR_OUTLINE,
+      outlineWidth: AGGRO_INDICATOR_LINE_WIDTH,
+    });
   }
 
   /**
@@ -3428,20 +3526,24 @@ export abstract class Mob extends Player {
    * Fades out over the last 40 frames.
    */
   protected renderMobHealthBar(ctx: CanvasRenderingContext2D, sx: number, sy: number) {
-    if (this.healthBarTimer > 0) {
-      const alpha =
-        this.healthBarTimer < HEALTH_BAR_FADE_FRAMES
-          ? this.healthBarTimer / HEALTH_BAR_FADE_FRAMES
-          : 1;
-      ctx.save();
-      ctx.globalAlpha = alpha;
-      this.renderHealthBar(ctx, sx, sy);
-      // drawText sets its own globalAlpha from its `alpha` option rather than
-      // reading the ambient one, so the fade above has to be threaded through
-      // explicitly or the mark would snap straight to opaque.
-      this.renderTacticsRankMark(ctx, sx, sy, alpha);
-      ctx.restore();
-    }
+    if (this.healthBarTimer <= 0 || this.paintingBodyOnly) return;
+    if (deferChrome(this, 'mobHealthBar', sx, sy)) return;
+    this.drawMobHealthBar(ctx, sx, sy);
+  }
+
+  private drawMobHealthBar(ctx: CanvasRenderingContext2D, sx: number, sy: number): void {
+    const alpha =
+      this.healthBarTimer < HEALTH_BAR_FADE_FRAMES
+        ? this.healthBarTimer / HEALTH_BAR_FADE_FRAMES
+        : 1;
+    ctx.save();
+    ctx.globalAlpha = alpha;
+    this.renderHealthBar(ctx, sx, sy);
+    // drawText sets its own globalAlpha from its `alpha` option rather than
+    // reading the ambient one, so the fade above has to be threaded through
+    // explicitly or the mark would snap straight to opaque.
+    this.renderTacticsRankMark(ctx, sx, sy, alpha);
+    ctx.restore();
   }
 
   /**
@@ -3470,18 +3572,11 @@ export abstract class Mob extends Player {
   }
 
   /**
-   * Status art and the septic label, drawn by {@link Player.render} *after* the
-   * silhouette composite rather than from `drawSelf` — see the note there. The
-   * anchor is the mob's own tile, so a mob that draws its art offset from its
-   * tile (Signet stacks her overlay above hers) still gets its flames at its
-   * feet instead of over its head.
-   */
-  /**
-   * A corpse is not on fire. `drawSelf` returns early for dead mobs, so while
-   * status art lived in there this came for free; drawing it outside means
-   * saying so. It matters for the mobs that keep rendering after death — their
-   * timers stop ticking too, so the fade never starts and a killed spider would
-   * burn at full strength under its own corpse until it was culled.
+   * A corpse is not on fire. Status art is drawn outside `drawSelf`, which
+   * returns early for dead mobs, so it has to be told. It matters for the mobs
+   * that keep rendering after death — their timers stop ticking too, so the
+   * fade never starts and a killed spider would burn at full strength under its
+   * own corpse until it was culled.
    *
    * `BallOfSwine` reports itself alive through its burst, which is why this asks
    * the getter rather than testing hp.
@@ -3490,6 +3585,13 @@ export abstract class Mob extends Player {
     return this.isAlive;
   }
 
+  /**
+   * Status art and the septic label, drawn by {@link Player.render} *after* the
+   * silhouette composite rather than from `drawSelf` — see the note there. The
+   * anchor is the mob's own tile, so a mob that draws its art offset from its
+   * tile (Signet stacks her overlay above hers) still gets its flames at its
+   * feet instead of over its head.
+   */
   protected override drawWorldFeedback(ctx: CanvasRenderingContext2D, sx: number, sy: number) {
     if (!this.wearsStatusPaint) return;
     super.drawWorldFeedback(ctx, sx, sy);
@@ -3524,11 +3626,11 @@ export abstract class Mob extends Player {
       y: labelY - SEPTIC_LABEL_Y_OFFSET - SEPTIC_LABEL_Y2_OFFSET,
       size: SEPTIC_LABEL_SIZE,
       bold: true,
-      color: '#bef264',
+      color: SEPTIC_LABEL_COLOR,
       align: 'center',
       alpha: pulse,
-      outline: '#65a30d',
-      outlineWidth: 2,
+      outline: SEPTIC_LABEL_OUTLINE,
+      outlineWidth: SEPTIC_LABEL_OUTLINE_WIDTH,
     });
   }
 

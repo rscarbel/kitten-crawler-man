@@ -32,8 +32,9 @@ export type Floor1Material = SpriteStates[typeof GROUND_SHEET_KEY];
  * through the corner masks.
  *
  * Ordered by what physically sits on top of what. The cellar is a stone floor
- * that has been added to: ash settles into it and so sits lowest, the dressed
- * flags were laid over the rough ones, and boarding was laid over that.
+ * that has been added to: bare earth is what is left where it was never laid
+ * or has come up, ash settles into it, the dressed flags and the chapel's brick
+ * were laid over the rough slabs, and boarding was laid over that.
  *
  * `f1_wall` is listed only because the `satisfies` check requires an order for
  * every material on the sheet. Nothing reads it: a wall is never a fringe
@@ -42,11 +43,13 @@ export type Floor1Material = SpriteStates[typeof GROUND_SHEET_KEY];
  * `src/map/tiles/groundTiles.ts`.
  */
 const GROUND_BLEND_ORDER = {
-  f1_cinder: 0,
-  f1_flagstone: 1,
-  f1_flags: 2,
-  f1_timber: 3,
-  f1_wall: 4,
+  f1_earth: 0,
+  f1_cinder: 1,
+  f1_flagstone: 2,
+  f1_flags: 3,
+  f1_herringbone: 4,
+  f1_timber: 5,
+  f1_wall: 6,
 } as const satisfies Record<Floor1Material, number>;
 
 /**
@@ -61,16 +64,18 @@ const GROUND_BLEND_ORDER = {
 const GROUND_FALLBACK_COLOR = {
   f1_cinder: '#6c6258',
   f1_flagstone: '#7e7463',
-  f1_flags: '#b9a175',
+  f1_flags: '#b39a6e',
   f1_timber: '#87643e',
   f1_wall: '#322a21',
+  f1_earth: '#77634d',
+  f1_herringbone: '#866855',
 } as const satisfies Record<Floor1Material, string>;
 
 /**
- * Ash is the one loose material down here, so it is the only one that spills.
- * Everything else is laid or nailed: a brick does not shed onto the boards
- * beside it, and giving the harder materials scatter as well would double an
- * effect the corner masks already provide from the other direction.
+ * Ash and earth are the loose materials down here, so they are the only ones
+ * that spill. Everything else is laid or nailed: a brick does not shed onto the
+ * boards beside it, and giving the harder materials scatter as well would
+ * double an effect the corner masks already provide from the other direction.
  */
 const GROUND_SPILL = {
   f1_cinder: { kind: 'grit', color: '#8d8478' },
@@ -78,6 +83,8 @@ const GROUND_SPILL = {
   f1_flags: null,
   f1_timber: null,
   f1_wall: null,
+  f1_earth: { kind: 'grit', color: '#8a7560' },
+  f1_herringbone: null,
 } as const satisfies Record<Floor1Material, GroundSpill | null>;
 
 /**

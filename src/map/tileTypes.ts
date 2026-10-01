@@ -639,11 +639,119 @@ export const CIRCUS_STRUCTURE_TALL = 141;
  */
 export const CIRCUS_STRUCTURE_LOW = 142;
 
+// ── Dungeon remains ───────────────────────────────────────────────────────────
+
+/**
+ * A heap of skulls and long bones, knee-high. Blocks movement but is seen and
+ * shot past; breakable, and leaves a walkable scatter of bone behind.
+ */
+export const BONE_PILE = 143;
+
+/**
+ * A skeleton sitting slumped against a north face, legs out across the floor.
+ * Blocks movement but is seen past; breakable.
+ */
+export const SLUMPED_SKELETON = 144;
+
+// ── Service level furniture (floor 2) ─────────────────────────────────────────
+//
+// Every solid one is Y-sorted and stamped with `placeProp`. A piece wider or
+// deeper than one tile is drawn whole from its anchor — the south-west tile of
+// its footprint, so it sorts on its foot — and every other tile of the
+// footprint is a `PROP_PART_*` tile that only blocks; see `multiTileAnchorOf`
+// in `serviceLevelProps.ts`.
+
+/** A welded gas bottle on a stand. Solid, slim enough to see past; breakable, and explodes. */
+export const GAS_CYLINDER = 145;
+
+/** One tall steel locker of a bank along a wall. Solid, blocks sight; breakable. */
+export const LOCKER_BANK = 146;
+
+/** A four-drawer steel filing cabinet. Solid, blocks sight; breakable. */
+export const FILING_CABINET = 147;
+
+/** A yellow mop bucket with a folding "wet floor" sign. Solid, knee-high; breakable. */
+export const MOP_BUCKET = 148;
+
+/** A stack of wooden shipping pallets. Solid, knee-high; breakable. */
+export const PALLET_STACK = 149;
+
+/** A glowing snack vending machine. Solid, blocks sight; breakable, and a light. */
+export const VENDING_MACHINE = 150;
+
+/** The anchor of a two-across office desk with a dead monitor. Solid, waist-high; breakable. */
+export const SERVICE_DESK = 151;
+
+/** The anchor of a two-across slatted locker-room bench. Solid, knee-high; breakable. */
+export const LOCKER_BENCH = 152;
+
+/** The anchor of a two-by-two boiler with a fire window. Solid, blocks sight; not breakable; a light. */
+export const BOILER = 153;
+
+/** A tile of a low multi-tile prop that its anchor draws. Solid, seen past. */
+export const PROP_PART_LOW = 154;
+
+/** A tile of a tall multi-tile prop that its anchor draws. Solid, blocks sight. */
+export const PROP_PART_TALL = 155;
+
+/** A walkable tangle of cable on the floor. Baked flat. */
+export const CABLE_BUNDLE = 156;
+
+/** A walkable drift of loose paper. Baked flat. */
+export const PAPER_DRIFT = 157;
+
+/** A walkable dropped towel. Baked flat. */
+export const DROPPED_TOWEL = 158;
+
+// ── Cellar furniture (floor 1) ────────────────────────────────────────────────
+//
+// Stamped with `placeProp` and drawn by `cellarPropTiles.ts`. A two-tile piece
+// is drawn whole from its anchor, the same way the service level's are.
+
+/** A clay urn or amphora. Solid, seen past; breakable, and may hold coins or a potion. */
+export const CLAY_URN = 159;
+
+/** A grain sack, standing or slumped. Solid, seen past; breakable, and spills grain. */
+export const GRAIN_SACK = 160;
+
+/** The anchor of a two-tile wine cask on its cradle. Solid, seen past; breakable. */
+export const WINE_CASK = 161;
+
+/** A bottle rack standing against a north face. Solid, blocks sight; breakable. */
+export const BOTTLE_RACK = 162;
+
+/** The anchor of a two-tile table with stools and a candle stub. Solid, seen past; breakable, and a light. */
+export const CELLAR_TABLE = 163;
+
+/** A rack of rusted spears standing against a north face. Solid, seen past; breakable. */
+export const SPEAR_RACK = 164;
+
+/** A heap of fallen masonry. Solid, seen past; breakable, and crumbles to walkable rubble. */
+export const RUBBLE_HEAP = 165;
+
+/** The anchor of a two-tile fallen roof beam. Solid, seen past; breakable. */
+export const FALLEN_BEAM = 166;
+
+/** The anchor of a two-tile stone sarcophagus with its lid askew. Solid, seen past; not breakable. */
+export const SARCOPHAGUS = 167;
+
+/** A cluster of tallow candles. Walkable; a light, and knocked out by any hit. */
+export const CANDLE_CLUSTER = 168;
+
+/** A walkable scatter of straw and debris. Baked flat. */
+export const STRAW_SCATTER = 169;
+
+/** A walkable clump of faintly glowing fungus. A light; squashed by any hit. */
+export const GLOW_FUNGUS = 170;
+
+/** The anchor of a two-tile slope of fallen masonry. Solid, seen past; breakable, and crumbles to walkable rubble. */
+export const RUBBLE_SLOPE = 171;
+
 /**
  * One past the highest tile type value above — the length of any array indexed
  * by tile type. Bump this when a new tile type exceeds it.
  */
-export const TILE_TYPE_COUNT = 143;
+export const TILE_TYPE_COUNT = 172;
 
 /**
  * Variant indices (row * 10 + col) from the modern_decorations sprite sheet
@@ -891,6 +999,12 @@ export function flowDirFromAngle(angleRadians: number): number {
 export const PROP_DAMAGE_STAGE_INTACT = 0;
 /** A destructible prop tile that is visibly hurt but still standing. */
 export const PROP_DAMAGE_STAGE_CRACKED = 1;
+/**
+ * A sheet-metal prop buckled by a blow it held against: drawn as damaged like
+ * a cracked one, but a piece that has dented has spent its one reprieve, and
+ * the next blow that would have broken it outright does.
+ */
+export const PROP_DAMAGE_STAGE_DENTED = 2;
 
 /**
  * The sprite state a destructible prop tile should render in.
