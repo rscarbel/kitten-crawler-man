@@ -410,19 +410,21 @@ export class Troglodyte extends Mob {
       ctx.filter = 'brightness(3)';
     }
 
-    drawTroglodyteSprite(ctx, sx, sy, tileSize, {
-      walkFrame: this.walkFrame,
-      isMoving: this.isMoving,
-      facingX: this.facingX,
-      facingY: this.facingY,
-      gapeProgress: this.mouthOpenAmt,
-      strikeProgress: this.strikeProgress,
-      tongueExtend: this.tongueExtend,
+    const artTopY = this.paintSpriteMeasuringTop(ctx, sy, () => {
+      drawTroglodyteSprite(ctx, sx, sy, tileSize, {
+        walkFrame: this.walkFrame,
+        isMoving: this.isMoving,
+        facingX: this.facingX,
+        facingY: this.facingY,
+        gapeProgress: this.mouthOpenAmt,
+        strikeProgress: this.strikeProgress,
+        tongueExtend: this.tongueExtend,
+      });
     });
 
     if (this.damageFlash > 0) ctx.filter = 'none';
     ctx.restore();
 
-    this.renderMobHealthBar(ctx, sx, sy);
+    this.renderMobHealthBar(ctx, sx, sy, artTopY);
   }
 }

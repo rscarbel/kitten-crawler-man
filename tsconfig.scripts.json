@@ -78,6 +78,7 @@
     "scripts/nodeGameContext.ts",
     "scripts/gates-figure-cache.ts",
     "scripts/gates-quest-marker.ts",
+    "scripts/gates-aggro-mark.ts",
     "scripts/figureSheet.ts",
     "scripts/bench-figure-paint.ts",
     "scripts/build-review-index.ts",

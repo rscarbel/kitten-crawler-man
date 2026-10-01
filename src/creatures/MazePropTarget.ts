@@ -69,8 +69,7 @@ export const MAZE_TARGET_DAMAGE_TYPES: Readonly<
  * impact point*, every one of which arrives inside the same prop's hit radius
  * within a frame or two. Without a lockout that is one trigger pull turning a
  * two-facing swivel mirror four times — back to where it started, half the
- * time — and flattening a three-hit sandbag before it has shown a single
- * damage stage.
+ * time.
  *
  * Shorter than the 18-frame swing animation that gates both crawlers' melee and
  * than the sling's 45, so it never eats a swing. It *is* the limit on Magic

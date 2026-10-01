@@ -382,35 +382,36 @@ export class Bugaboo extends Mob {
     if (this.isBreakingIn && this.assignedGrate) {
       const holeX = this.assignedGrate.x * TILE_SIZE - camX;
       const holeY = this.assignedGrate.y * TILE_SIZE - camY;
-      this.renderAggroIndicator(ctx, holeX, holeY, tileSize);
-      drawBugabooSprite(ctx, holeX, holeY, tileSize, {
-        breaching: true,
-        loopOffsetSeconds: this.loopOffsetSeconds,
+      const holeArtTopY = this.paintSpriteMeasuringTop(ctx, holeY, () => {
+        drawBugabooSprite(ctx, holeX, holeY, tileSize, {
+          breaching: true,
+          loopOffsetSeconds: this.loopOffsetSeconds,
+        });
       });
+      this.renderAggroIndicator(ctx, holeX, holeArtTopY, holeY, tileSize);
       // Anchored to the hole rather than to the body, so the bar a player is
       // whittling down sits over the thing they are hitting.
-      this.renderMobHealthBar(ctx, holeX, holeY);
+      this.renderMobHealthBar(ctx, holeX, holeY, holeArtTopY);
       return;
     }
 
     const sx = this.x - camX;
     const sy = this.y - camY;
 
-    if (this.isAggro) {
-      this.renderAggroIndicator(ctx, sx, sy, tileSize);
-    }
-
-    drawBugabooSprite(ctx, sx, sy, tileSize, {
-      walkFrame: this.walkFrame,
-      isMoving: this.isMoving,
-      facingX: this.facingX,
-      facingY: this.facingY,
-      swipeProgress:
-        this.attackAnimTimer > 0 ? 1 - this.attackAnimTimer / BUGABOO_ATTACK_FRAMES : null,
-      emergeProgress: this.emergeTimer > 0 ? 1 - this.emergeTimer / BUGABOO_EMERGE_FRAMES : null,
-      loopOffsetSeconds: this.loopOffsetSeconds,
+    const artTopY = this.paintSpriteMeasuringTop(ctx, sy, () => {
+      drawBugabooSprite(ctx, sx, sy, tileSize, {
+        walkFrame: this.walkFrame,
+        isMoving: this.isMoving,
+        facingX: this.facingX,
+        facingY: this.facingY,
+        swipeProgress:
+          this.attackAnimTimer > 0 ? 1 - this.attackAnimTimer / BUGABOO_ATTACK_FRAMES : null,
+        emergeProgress: this.emergeTimer > 0 ? 1 - this.emergeTimer / BUGABOO_EMERGE_FRAMES : null,
+        loopOffsetSeconds: this.loopOffsetSeconds,
+      });
     });
 
-    this.renderMobHealthBar(ctx, sx, sy);
+    if (this.isAggro) this.renderAggroIndicator(ctx, sx, artTopY, sy, tileSize);
+    this.renderMobHealthBar(ctx, sx, sy, artTopY);
   }
 }

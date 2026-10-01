@@ -1,6 +1,6 @@
 import { Mob, type StructureStrikeTiming } from './Mob';
 import type { Player } from '../Player';
-import { drawRuinsGhoulSprite } from '../sprites/ruinsGhoulSprite';
+import { drawRuinsGhoulSprite, ruinsGhoulArtTopY } from '../sprites/ruinsGhoulSprite';
 import { riposteCooldown } from './tactics/riposte';
 import type { TacticsTrait } from './tactics/tacticsTraits';
 import { siegeAdvance, siegeCanEngage } from './siege/siegeCapability';
@@ -186,10 +186,6 @@ export class RuinsGhoul extends Mob {
     const sx = this.x - camX;
     const sy = this.y - camY;
 
-    if (this.isAggro) {
-      this.renderAggroIndicator(ctx, sx, sy, tileSize);
-    }
-
     ctx.save();
     if (this.damageFlash > 0) {
       ctx.filter = 'brightness(3)';
@@ -215,6 +211,8 @@ export class RuinsGhoul extends Mob {
     if (this.damageFlash > 0) ctx.filter = 'none';
     ctx.restore();
 
-    this.renderMobHealthBar(ctx, sx, sy);
+    const artTopY = ruinsGhoulArtTopY(sy, tileSize);
+    if (this.isAggro) this.renderAggroIndicator(ctx, sx, artTopY, sy, tileSize);
+    this.renderMobHealthBar(ctx, sx, sy, artTopY);
   }
 }

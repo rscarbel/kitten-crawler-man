@@ -331,20 +331,24 @@ export class RaisedRatkin extends RisingSkeleton {
     const sy = this.y - camY;
     const row = this.currentRow;
     const rising = this.isAlive && this.isRising;
-    if (this.isAggro && this.isAlive && !rising) this.renderAggroIndicator(ctx, sx, sy, tileSize);
-    drawRaisedRatkinSprite(
-      ctx,
-      this.look,
-      row.action,
-      viewForFacing(this.facingX, this.facingY),
-      row.frame,
-      sx,
-      sy,
-      tileSize,
-      this.facingX < 0,
-      this.isAlive ? 1 : this.corpseAlpha,
-    );
+    const artTopY = this.paintSpriteMeasuringTop(ctx, sy, () => {
+      drawRaisedRatkinSprite(
+        ctx,
+        this.look,
+        row.action,
+        viewForFacing(this.facingX, this.facingY),
+        row.frame,
+        sx,
+        sy,
+        tileSize,
+        this.facingX < 0,
+        this.isAlive ? 1 : this.corpseAlpha,
+      );
+    });
+    if (this.isAggro && this.isAlive && !rising) {
+      this.renderAggroIndicator(ctx, sx, artTopY, sy, tileSize);
+    }
     // Nothing to damage while it is still in the ground, and nothing left once it has fallen.
-    if (this.isAlive && !rising) this.renderMobHealthBar(ctx, sx, sy);
+    if (this.isAlive && !rising) this.renderMobHealthBar(ctx, sx, sy, artTopY);
   }
 }

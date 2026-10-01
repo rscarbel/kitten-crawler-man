@@ -139,11 +139,6 @@ export interface MercenaryArt {
    * walk advance is used.
    */
   readonly gait?: MercenaryGait;
-  /**
-   * Tiles the health bar is raised above its usual place over the tile's top
-   * edge, for a figure whose head would otherwise sit under it.
-   */
-  readonly healthBarLiftTiles?: number;
 }
 
 /** A walk cycle measured in ground covered rather than in ticks. */
@@ -230,7 +225,6 @@ const GLUTEUS_MAXX_ART: MercenaryArt = {
   },
   cullMarginTiles: MAXX_CULL_MARGIN_TILES,
   headLiftTiles: GLUTEUS_MAXX_HEAD_ABOVE_TILE_TILES,
-  healthBarLiftTiles: GLUTEUS_MAXX_HEAD_ABOVE_TILE_TILES,
   deathFrames: MAXX_DEATH_TICKS,
   prewarm: prewarmGluteusMaxx,
   prewarmForFight: () => {
@@ -331,7 +325,6 @@ const BUCKET_BOY_ART: MercenaryArt = {
   },
   cullMarginTiles: BUCKET_BOY_CULL_MARGIN_TILES,
   headLiftTiles: BUCKET_BOY_HEAD_ABOVE_TILE_TILES,
-  healthBarLiftTiles: BUCKET_BOY_HEAD_ABOVE_TILE_TILES,
   deathFrames: BUCKET_BOY_DEATH_TICKS,
   prewarm: prewarmBucketBoy,
   gait: {
@@ -404,7 +397,6 @@ const DONG_QUIXOTE_ART: MercenaryArt = {
   },
   cullMarginTiles: DONG_CULL_MARGIN_TILES,
   headLiftTiles: DONG_HEAD_TOP_ABOVE_TILE,
-  healthBarLiftTiles: DONG_HEAD_TOP_ABOVE_TILE,
   deathFrames: DONG_DEATH_TICKS,
   prewarm: () => {
     prewarmDongQuixote();
@@ -502,7 +494,6 @@ function cretinHireArt(variant: CretinVariant, fightRows: readonly CretinAction[
     },
     cullMarginTiles: CRETIN_CULL_MARGIN_TILES,
     headLiftTiles: CRETIN_HEAD_ABOVE_TILE_TILES,
-    healthBarLiftTiles: CRETIN_HEAD_ABOVE_TILE_TILES,
     deathFrames: CRETIN_ROW_TICKS.death,
     prewarm: () => prewarmCretin(variant),
     prewarmForFight: () => {

@@ -10,7 +10,6 @@ import {
 import {
   KRAKAREN_TENTACLE_BODY_PART_KEY,
   drawKrakarenTentacleSprite,
-  krakarenTentacleOverheadLiftTiles,
 } from '../sprites/krakarenTentacleSprite';
 import type { KrakarenClone } from './KrakarenClone';
 
@@ -73,9 +72,6 @@ const RETREAT_ANIMATION_FRAMES = GUARD_TENTACLE_RETREAT_FRAMES * FRAMES_PER_ANIM
 
 /** Covers the strike reach and the baked cell's overhang either side of the tile. */
 const KRAKAREN_TENTACLE_CULL_MARGIN_TILES = 2;
-
-/** Where to hang its health bar before the sheet has loaded, in tiles. */
-const FALLBACK_OVERHEAD_LIFT_TILES = 1;
 
 const CENTER_OFFSET = 0.5;
 const SECONDS_PER_LOOP_OFFSET = 1;
@@ -432,22 +428,20 @@ export class KrakarenTentacle extends Mob {
       ctx.filter = `brightness(${brightness})`;
     }
 
-    drawKrakarenTentacleSprite(ctx, sx, sy, tileSize, {
-      facingX: this.facingX,
-      facingY: this.facingY,
-      emergeProgress: this.emergeProgress,
-      strikeProgress: this.strikeProgress,
-      retreatProgress: this.retreatProgress,
-      loopOffsetSeconds: this.loopOffsetSeconds,
+    const artTopY = this.paintSpriteMeasuringTop(ctx, sy, () => {
+      drawKrakarenTentacleSprite(ctx, sx, sy, tileSize, {
+        facingX: this.facingX,
+        facingY: this.facingY,
+        emergeProgress: this.emergeProgress,
+        strikeProgress: this.strikeProgress,
+        retreatProgress: this.retreatProgress,
+        loopOffsetSeconds: this.loopOffsetSeconds,
+      });
     });
 
     ctx.restore();
 
-    this.renderMobHealthBar(
-      ctx,
-      sx,
-      sy - tileSize * krakarenTentacleOverheadLiftTiles(FALLBACK_OVERHEAD_LIFT_TILES),
-    );
+    this.renderMobHealthBar(ctx, sx, sy, artTopY);
   }
 
   /**

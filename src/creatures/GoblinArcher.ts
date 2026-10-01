@@ -332,6 +332,14 @@ export class GoblinArcher extends Mob {
       this.lastKnownTargetY = nearest.y;
     }
 
+    // Sight passes over a prop low enough to see past, but `GoblinArrowSystem`
+    // stops an arrow on any unwalkable tile. On sight alone an archer would hold
+    // its band behind a palisade and loose into it every cooldown.
+    const arrowWouldArrive = this.map
+      ? this.map.hasWalkableLine(bow.x, bow.y, targetCx, targetCy)
+      : true;
+    const hasClearShot = hasLineOfSight && arrowWouldArrive;
+
     const distance = this.distanceTo(nearest);
     const isCrowded = distance < this.bandMinPx;
 
@@ -368,7 +376,7 @@ export class GoblinArcher extends Mob {
       } else {
         this.backAwayFrom(nearest);
       }
-    } else if (!hasLineOfSight) {
+    } else if (!hasClearShot) {
       // Blocked: move onto the last place it could see them, looking for an
       // angle. Standing still and drawing at a wall is what a turret does.
       this.followTargetAStar(
@@ -389,7 +397,7 @@ export class GoblinArcher extends Mob {
 
     if (!this.isMoving) this.faceToward(nearest);
 
-    if (!hasLineOfSight || distance > this.bandMaxPx || this.shotCooldown > 0) return;
+    if (!hasClearShot || distance > this.bandMaxPx || this.shotCooldown > 0) return;
     // The hurried shot is for a target that has closed inside the band and is
     // being backed away from; the aimed one is the archer's standard. Both keep
     // the same locked telegraph, so what the hurried one buys is committing
@@ -478,8 +486,6 @@ export class GoblinArcher extends Mob {
     const sx = this.x - camX;
     const sy = this.y - camY;
 
-    if (this.isAggro) this.renderAggroIndicator(ctx, sx, sy, tileSize);
-
     const progress = this.drawProgress;
     const resolved = this.animator.resolve(
       performance.now() / MILLISECONDS_PER_SECOND,
@@ -488,16 +494,19 @@ export class GoblinArcher extends Mob {
       progress === null ? null : { kind: this.shotKind, progress },
     );
 
-    drawGoblinSprite(ctx, {
-      archetype: 'bow',
-      x: sx,
-      y: sy,
-      tileSize,
-      facingX: this.facingX,
-      state: resolved.state,
-      frame: resolved.frame,
+    const artTopY = this.paintSpriteMeasuringTop(ctx, sy, () => {
+      drawGoblinSprite(ctx, {
+        archetype: 'bow',
+        x: sx,
+        y: sy,
+        tileSize,
+        facingX: this.facingX,
+        state: resolved.state,
+        frame: resolved.frame,
+      });
     });
 
-    this.renderMobHealthBar(ctx, sx, sy);
+    if (this.isAggro) this.renderAggroIndicator(ctx, sx, artTopY, sy, tileSize);
+    this.renderMobHealthBar(ctx, sx, sy, artTopY);
   }
 }

@@ -59,6 +59,7 @@ import {
   figureFrameCount,
   type FigureId,
   type DrawnFigureRow,
+  drawnFigureRow,
 } from './figureDef';
 import {
   BYTES_PER_MEGABYTE,
@@ -1613,6 +1614,7 @@ export function drawFigureCached(
   const scale = tileSize / def.tileScale;
   const cell = cellFor(def, state, clamped, scale);
   withFigurePlacement(ctx, def, x, y, tileSize, scale, opts, (destX, destY) => {
+    recordInkTop(ctx, def, state, destX, destY, scale);
     if (cell === null) {
       directPaint(ctx, def, state, clamped, destX, destY, scale);
       return;
@@ -1652,6 +1654,7 @@ export function drawFigureCachedApprox(
   const scale = tileSize / def.tileScale;
   const cell = approxCellFor(def, state, clamped, scale);
   withFigurePlacement(ctx, def, x, y, tileSize, scale, opts, (destX, destY) => {
+    recordInkTop(ctx, def, state, destX, destY, scale);
     if (cell === null) {
       directPaint(ctx, def, state, clamped, destX, destY, scale);
       return;
@@ -1761,13 +1764,72 @@ const queuedRowInk = new Set<DrawnFigureRow>();
  */
 export function figureRowInkTop(row: DrawnFigureRow, sy: number, tileSize: number): number {
   const scale = tileSize / row.def.tileScale;
+  return sy - (row.def.tileY - rowInkTopCellPx(row)) * scale;
+}
+
+/** In declared cell pixels; 0, the cell's top, until the row has been measured. */
+function rowInkTopCellPx(row: DrawnFigureRow): number {
   const measured = rowInkTopByRow.get(row);
-  if (measured !== undefined) return sy - (row.def.tileY - measured) * scale;
+  if (measured !== undefined) return measured;
   if (!queuedRowInk.has(row)) {
     queuedRowInk.add(row);
     rowInkQueue.push({ row, nextFrame: 0, topCellPx: row.def.frameHeight });
   }
-  return sy - row.def.tileY * scale;
+  return 0;
+}
+
+interface InkTopCapture {
+  readonly ctx: CanvasRenderingContext2D;
+  readonly toCallerSpace: DOMMatrix;
+  topY: number | null;
+}
+
+/** A stack, so a nested measurement also counts toward the outer one. */
+const inkTopCaptures: InkTopCapture[] = [];
+
+/**
+ * Runs `paint` and returns the highest whole-row ink y of every figure it drew
+ * on `ctx`, in `ctx`'s current space, or `null` when it drew none.
+ */
+export function measureFiguresInkTop(
+  ctx: CanvasRenderingContext2D,
+  paint: () => void,
+): number | null {
+  const capture: InkTopCapture = {
+    ctx,
+    toCallerSpace: ctx.getTransform().invertSelf(),
+    topY: null,
+  };
+  inkTopCaptures.push(capture);
+  try {
+    paint();
+  } finally {
+    inkTopCaptures.pop();
+  }
+  return capture.topY;
+}
+
+/** Both top corners go through the transform: a mirror or rotation can lift either one. */
+function recordInkTop(
+  ctx: CanvasRenderingContext2D,
+  def: FigureDef,
+  state: string,
+  destX: number,
+  destY: number,
+  scale: number,
+): void {
+  if (inkTopCaptures.length === 0) return;
+  const inkTopY = destY + rowInkTopCellPx(drawnFigureRow(def, state)) * scale;
+  const rightX = destX + def.frameWidth * scale;
+  const placement = ctx.getTransform();
+  for (const capture of inkTopCaptures) {
+    if (capture.ctx !== ctx) continue;
+    const toCaller = capture.toCallerSpace.multiply(placement);
+    const leftTopY = toCaller.b * destX + toCaller.d * inkTopY + toCaller.f;
+    const rightTopY = toCaller.b * rightX + toCaller.d * inkTopY + toCaller.f;
+    const placedTopY = Math.min(leftTopY, rightTopY);
+    capture.topY = Math.min(capture.topY ?? placedTopY, placedTopY);
+  }
 }
 
 /** Rows {@link figureRowInkTop} has queued and not yet finished measuring. */

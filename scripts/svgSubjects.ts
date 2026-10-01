@@ -500,20 +500,14 @@ export const SUBJECTS: readonly SvgSubject[] = [
   },
   {
     name: 'heather-bear',
-    views: async () => {
-      const { drawHeatherBearSprite } = await import('../src/sprites/heatherBearSprite.js');
-      return [
-        { name: 'idle', paint: ({ dom, unit }) => drawHeatherBearSprite(dom, 0, 0, unit) },
-        {
-          name: 'walk',
-          paint: ({ dom, unit }) => drawHeatherBearSprite(dom, 0, 0, unit, WALK_FRAME, true),
-        },
-        {
-          name: 'attack',
-          paint: ({ dom, unit }) =>
-            drawHeatherBearSprite(dom, 0, 0, unit, STILL_FRAME, false, ATTACK_MIDPOINT),
-        },
-      ];
+    views: async (frame) => {
+      const { drawHeatherBear } = await import('../src/sprites/art/heatherBearArt.js');
+      const { HEATHER_ROWS } = await import('../src/sprites/art/heatherBearFigure.js');
+      return HEATHER_ROWS.map((row): SvgView => ({
+        name: row.name,
+        paint: ({ dom, unit }) =>
+          inUnitSpace(dom, unit, (ctx) => drawHeatherBear(ctx, row.pose(frame))),
+      }));
     },
   },
   {

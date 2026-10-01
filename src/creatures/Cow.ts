@@ -1627,10 +1627,10 @@ export class Cow extends Mob {
       progress,
       clockSeconds: this.clockSeconds,
     });
-    if (!this.healthBarDrawnElsewhere) this.renderMobHealthBar(ctx, sx, sy);
+    const artTop = figureRowInkTop(drawnRow, sy, tileSize);
+    if (!this.healthBarDrawnElsewhere) this.renderMobHealthBar(ctx, sx, sy, artTop);
     if (markerColor !== undefined) {
       const glyph = this.questMarker === 'question' ? '?' : '!';
-      const artTop = figureRowInkTop(drawnRow, sy, tileSize);
       const clearOf = this.overheadClearTop(artTop, sy);
       drawQuestMarker(ctx, sx, clearOf, tileSize, glyph, markerColor);
     }

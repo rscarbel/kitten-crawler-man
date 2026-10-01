@@ -25,7 +25,6 @@ import {
   BLOOD,
   BONE,
   BRASS,
-  DAMAGE_STAGE_COUNT,
   GILT,
   INK,
   IRON,
@@ -37,7 +36,6 @@ import {
   TAU,
   blend,
   contactShadow,
-  hitsLanded,
   jitterTone,
   litColumn,
   litFill,
@@ -57,10 +55,8 @@ import {
 
 /** How a destructible currently looks, as its target hands it over. */
 export interface MazeDestructibleArt {
-  /** 1 at full, 0 at broken. */
-  readonly integrity: number;
   readonly broken: boolean;
-  /** True for a few frames after a landed blow. */
+  /** True for a few frames after the blow that broke it. */
   readonly struck: boolean;
   /** Which side the acting crawler stands on. */
   readonly facing: 'west' | 'east';
@@ -864,9 +860,10 @@ export function drawGrimaldiSandbag(
     y,
     size,
   );
+  // Its only blow is also its breaking blow, so the flash must paint before the broken return.
+  paintImpact(ctx, x + size / 2, y + size * (SANDBAG_TOP + SANDBAG_HEIGHT / 2), size, state.struck);
   if (state.broken) return;
   paintDonutHoop(ctx, x + size / 2, y + size / 2, size, strength);
-  paintImpact(ctx, x + size / 2, y + size * (SANDBAG_TOP + SANDBAG_HEIGHT / 2), size, state.struck);
 }
 
 // ── Carl's brace: a timber stage brace on a screw jack ───────────────────────
@@ -885,10 +882,7 @@ const BRACE_RAKE_TOP_Y = 0.3;
 const BRACE_BAND_Y = 0.36;
 const BRACE_BAND_HEIGHT = 0.1;
 const BRACE_COLLAR_HEIGHT = 0.04;
-const BRACE_MAX_LEAN_RADIANS = 0.2;
 const BRACE_WALL_HUG = 0.18;
-const BRACE_CHUNK_DEPTH = 0.08;
-const BRACE_CHUNK_HEIGHT = 0.08;
 const BRACE_NAIL_RADIUS = 0.022;
 const BRACE_NAIL_YS: ReadonlyArray<number> = [0.2, 0.62];
 const BRACE_SHADOW_DEPTH = 0.6;
@@ -915,8 +909,6 @@ const BRACE_RAKE_LIGHT_PAD = 0.1;
 const BRACE_RAKE_LIGHT_WIDTH = 0.5;
 const BRACE_LOW_COLLAR_Y = 0.7;
 const BRACE_COLLAR_OVERHANG = 0.01;
-const BRACE_FIRST_CHUNK_Y = 0.22;
-const BRACE_CHUNK_SPACING = 0.18;
 const BRACE_JACK_THREAD_ALPHA = 0.8;
 const BRACE_JACK_THREAD_WIDTH = 0.015;
 /** The jack's screw is drawn as this many segments, the threads between them. */
@@ -928,14 +920,14 @@ const BRACE_JACK_BAR_HEIGHT = 0.035;
 /** The blow lands on the post, which is narrower than the tile the impact is sized for. */
 const BRACE_IMPACT_SCALE = 1.6;
 
-function bracePainter(facing: 'west' | 'east', stage: number, broken: boolean) {
+function bracePainter(facing: 'west' | 'east', broken: boolean) {
   return (ctx: Ctx, ox: number, oy: number, s: number): void => {
     const wallDirection = wallDirectionFor(facing);
     const postCentreX = ox + s * (0.5 + wallDirection * BRACE_WALL_HUG);
     const postWidth = s * BRACE_POST_WIDTH;
     const soleY = oy + s * BRACE_SOLE_Y;
     const jackTop = soleY - s * BRACE_JACK_HEIGHT;
-    const rng = propRng(`brace${facing}${stage}`);
+    const rng = propRng(`brace${facing}`);
 
     contactShadow(
       ctx,
@@ -1001,12 +993,6 @@ function bracePainter(facing: 'west' | 'east', stage: number, broken: boolean) {
       return;
     }
 
-    const lean = (BRACE_MAX_LEAN_RADIANS * stage) / DAMAGE_STAGE_COUNT;
-    ctx.save();
-    ctx.translate(postCentreX, jackTop);
-    ctx.rotate(lean * wallDirection);
-    ctx.translate(-postCentreX, -jackTop);
-
     // The raking brace, from the post's shoulder down to the sole on the lane side.
     const rakeFootX = postCentreX - wallDirection * s * BRACE_RAKE_FOOT_X;
     const rakeTopY = oy + s * BRACE_RAKE_TOP_Y;
@@ -1060,22 +1046,6 @@ function bracePainter(facing: 'west' | 'east', stage: number, broken: boolean) {
       ctx.arc(postCentreX, oy + s * nailY, s * BRACE_NAIL_RADIUS, 0, TAU);
       ctx.fill();
     }
-    // One bite out of the strike face per landed blow.
-    const strikeEdge = postCentreX - wallDirection * (postWidth / 2);
-    for (let chunk = 0; chunk < stage; chunk++) {
-      const chunkY = oy + s * (BRACE_FIRST_CHUNK_Y + BRACE_CHUNK_SPACING * chunk);
-      ctx.fillStyle = paint(INK);
-      ctx.beginPath();
-      ctx.moveTo(strikeEdge, chunkY);
-      ctx.lineTo(
-        strikeEdge + wallDirection * s * BRACE_CHUNK_DEPTH,
-        chunkY + (s * BRACE_CHUNK_HEIGHT) / 2,
-      );
-      ctx.lineTo(strikeEdge, chunkY + s * BRACE_CHUNK_HEIGHT);
-      ctx.closePath();
-      ctx.fill();
-    }
-    ctx.restore();
 
     // The screw jack the post stands on, wound tight.
     ctx.beginPath();
@@ -1128,20 +1098,18 @@ export function drawStageBrace(
   size: number,
   state: MazeDestructibleArt,
 ): void {
-  const stage = hitsLanded(state.integrity);
   const strength = pulseStrength(state.phase, state.pulsing);
   if (!state.broken) paintPulseHalo(ctx, x + size / 2, y + size / 2, size, strength, BRASS.accent);
   drawBigTopProp(
     ctx,
-    { prop: 'stageBrace', state: `${state.facing}|${state.broken ? 'down' : stage}`, frame: 0 },
+    { prop: 'stageBrace', state: `${state.facing}|${state.broken ? 'down' : 'up'}`, frame: 0 },
     ONE_TILE_BOX,
-    bracePainter(state.facing, stage, state.broken),
+    bracePainter(state.facing, state.broken),
     x,
     y,
     size,
   );
-  if (state.broken) return;
-  paintCarlChevrons(ctx, x + size / 2, y + size / 2, size, state.facing, strength);
+  // Its only blow is also its breaking blow, so the flash must paint before the broken return.
   paintImpact(
     ctx,
     x + size / 2,
@@ -1150,6 +1118,8 @@ export function drawStageBrace(
     state.struck,
     BRACE_POST_WIDTH * BRACE_IMPACT_SCALE,
   );
+  if (state.broken) return;
+  paintCarlChevrons(ctx, x + size / 2, y + size / 2, size, state.facing, strength);
 }
 
 // ── The shut ways: an iron fire screen and a boarded flat ────────────────────
@@ -1494,12 +1464,11 @@ function traceRope(ctx: Ctx, points: ReadonlyArray<RopePoint>, sag: number, drop
 export function drawShadedRope(
   ctx: Ctx,
   points: ReadonlyArray<RopePoint>,
-  state: { readonly pulled: number; readonly owner: 'human' | 'cat' },
+  state: { readonly pulled: boolean; readonly owner: 'human' | 'cat' },
   size: number,
 ): void {
   if (points.length < 2) return;
-  const slack = 1 - Math.max(0, Math.min(1, state.pulled));
-  const sag = slack * size * ROPE_SAG_TILES;
+  const sag = state.pulled ? 0 : size * ROPE_SAG_TILES;
   const ramp = state.owner === 'cat' ? GILT : BRASS;
   ctx.save();
   ctx.lineCap = 'round';
@@ -2005,18 +1974,13 @@ export function fireWalkPropCatalogue(): ReadonlyArray<BigTopPropCatalogueEntry>
       painter: sandbagPainter(facing, true, 0),
       openEdges: ropeEdge,
     });
-    for (let stage = 0; stage < DAMAGE_STAGE_COUNT; stage++) {
+    for (const broken of [false, true]) {
       entries.push({
-        key: { prop: 'stageBrace', state: `${facing}|${stage}`, frame: 0 },
+        key: { prop: 'stageBrace', state: `${facing}|${broken ? 'down' : 'up'}`, frame: 0 },
         box: ONE_TILE_BOX,
-        painter: bracePainter(facing, stage, false),
+        painter: bracePainter(facing, broken),
       });
     }
-    entries.push({
-      key: { prop: 'stageBrace', state: `${facing}|down`, frame: 0 },
-      box: ONE_TILE_BOX,
-      painter: bracePainter(facing, 0, true),
-    });
   }
   for (let variant = 0; variant < WALL_KIT_VARIANTS; variant++) {
     entries.push({

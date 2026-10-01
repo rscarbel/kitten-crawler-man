@@ -923,8 +923,8 @@ export const MAZE_MENAGERIE_POCKETS: ReadonlyArray<MazeTile> = MAZE_SPOTLIGHT_CR
  * The fire walk hangs a sandbag counterweight behind a grate for the cat to
  * shoot out, or drives a load-bearing brace through the wall for the human to
  * break. The menagerie swaps them for machinery that shows its work: a capstan
- * the human turns a notch at a time, and a release ring the cat shoots to drop
- * a striped sack that hauls a cage gate up on its rope.
+ * the human knocks loose to wind a cage gate up, and a release ring the cat
+ * shoots to drop a striped sack that hauls one up on its rope.
  */
 export type MazeBlockKind = 'sandbag' | 'brace' | 'release_ring' | 'capstan';
 

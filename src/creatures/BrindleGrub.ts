@@ -577,6 +577,22 @@ export class BrindleGrub extends Mob {
     ctx.save();
     if (this.damageFlash > 0) ctx.filter = 'brightness(3)';
 
+    const artTopY = this.paintSpriteMeasuringTop(ctx, sy, () => {
+      this.drawStageSprite(ctx, sx, sy, tileSize);
+    });
+
+    if (this.damageFlash > 0) ctx.filter = 'none';
+    ctx.restore();
+
+    this.renderMobHealthBar(ctx, sx, sy, artTopY);
+  }
+
+  private drawStageSprite(
+    ctx: CanvasRenderingContext2D,
+    sx: number,
+    sy: number,
+    tileSize: number,
+  ): void {
     switch (this.stage) {
       case STAGE_LARVA:
         drawBrindleGrubSprite(ctx, sx, sy, tileSize, {
@@ -605,10 +621,5 @@ export class BrindleGrub extends Mob {
         });
         break;
     }
-
-    if (this.damageFlash > 0) ctx.filter = 'none';
-    ctx.restore();
-
-    this.renderMobHealthBar(ctx, sx, sy);
   }
 }

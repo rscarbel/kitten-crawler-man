@@ -2460,28 +2460,30 @@ export class GrotesqueSpider extends Mob {
     const cx = sx + tileSize * TILE_CENTER;
     const cy = sy + tileSize * TILE_CENTER;
 
-    ctx.save();
-    if (this.isAlive) {
-      if (this.exposedHitFlash > 0) ctx.filter = EXPOSED_HIT_FILTER;
-    }
-    ctx.translate(cx, cy);
-    ctx.rotate(grotesqueSpiderFacingRotation(this.facingX, this.facingY));
-    ctx.translate(-cx, -cy);
-    if (this.isAlive) {
-      drawGrotesqueSpiderPoseSprite(ctx, sx, sy, tileSize, this.spritePose);
-    } else {
-      // The corpse plays the death row once, then holds its last frame.
-      drawGrotesqueSpiderPoseSprite(
-        ctx,
-        sx,
-        sy,
-        tileSize,
-        { kind: 'death', progress: Math.min(1, this.corpseFrames / DEATH_ANIM_FRAMES) },
-        this.corpseAlpha,
-      );
-    }
-    ctx.restore();
+    const artTopY = this.paintSpriteMeasuringTop(ctx, sy, () => {
+      ctx.save();
+      if (this.isAlive) {
+        if (this.exposedHitFlash > 0) ctx.filter = EXPOSED_HIT_FILTER;
+      }
+      ctx.translate(cx, cy);
+      ctx.rotate(grotesqueSpiderFacingRotation(this.facingX, this.facingY));
+      ctx.translate(-cx, -cy);
+      if (this.isAlive) {
+        drawGrotesqueSpiderPoseSprite(ctx, sx, sy, tileSize, this.spritePose);
+      } else {
+        // The corpse plays the death row once, then holds its last frame.
+        drawGrotesqueSpiderPoseSprite(
+          ctx,
+          sx,
+          sy,
+          tileSize,
+          { kind: 'death', progress: Math.min(1, this.corpseFrames / DEATH_ANIM_FRAMES) },
+          this.corpseAlpha,
+        );
+      }
+      ctx.restore();
+    });
 
-    if (this.isAlive) this.renderMobHealthBar(ctx, sx, sy);
+    if (this.isAlive) this.renderMobHealthBar(ctx, sx, sy, artTopY);
   }
 }

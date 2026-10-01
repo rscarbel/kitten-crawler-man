@@ -1,32 +1,22 @@
 import { allocCanvas, surfaceContext, type CanvasSurface } from '../core/canvasSurface';
+import { progressFrameIndex, timeFrameIndex, walkFrameIndex } from '../core/SpriteRenderer';
+import { MOLD_LION_FIGURE } from './art/moldLionFigure';
+import { figureFrameCount } from './figure/figureDef';
+import { drawFigureCached, prewarmFigureState } from './figure/figureFrameCache';
 
-/** Body proportions (fractions of tile size). */
-const LION_BODY_RX = 0.26;
-const LION_BODY_RY = 0.18;
-const LION_BODY_Y_OFFSET = 0.12;
-const LION_HEAD_R = 0.15;
-const LION_HEAD_Y_OFFSET = -0.1;
-const LION_HEAD_X_OFFSET = 0.2;
+const IDLE_FPS = 6;
+const MILLISECONDS_PER_SECOND = 1000;
 
-/** Fungal mane — a ring of irregular mold-green blobs. */
-const LION_MANE_BLOB_COUNT = 10;
-const LION_MANE_R = 0.22;
-const LION_MANE_BLOB_R_MIN = 0.05;
-const LION_MANE_BLOB_R_MAX = 0.08;
+export const MOLD_LION_STATES: ReadonlyArray<string> = ['idle', 'walk', 'attack'];
 
-/** Legs. */
-const LION_LEG_WIDTH = 0.07;
-const LION_LEG_HEIGHT = 0.16;
-const LION_LEG_X_OFFSET = 0.16;
-const LION_LEG_Y_OFFSET = 0.22;
-const LION_LEG_SWING_AMP = 0.09;
+function frameCountOf(state: string): number {
+  return Math.max(1, figureFrameCount(MOLD_LION_FIGURE, state));
+}
 
-/** Eyes and jaw. */
-const LION_EYE_R = 0.035;
-const LION_EYE_X_OFFSET = 0.06;
-const LION_EYE_Y_OFFSET = -0.02;
-const LION_EYE_GLOW_RADIUS = 5;
-const LION_ATTACK_LUNGE = 0.1;
+/** Call when a spawn is scheduled, so a pride arriving together is not baked mid-frame. */
+export function prewarmMoldLion(): void {
+  for (const state of MOLD_LION_STATES) prewarmFigureState(MOLD_LION_FIGURE, state);
+}
 
 /** Poison aura — faint spore clouds that ooze outward from the mane. */
 const AURA_PUFF_COUNT = 14;
@@ -143,7 +133,8 @@ function drawSporeCloud(
 
 /**
  * Draw a Mold Lion — a mutated lion bruiser whose mane has become a mass of
- * pulsating fungal growths that emit a poison aura.
+ * pulsating fungal growths that emit a poison aura. The aura is painted live,
+ * not cached, because its puffs drift continuously.
  *
  * @param attackAnim 0–1 progress through the bite lunge (0 = idle/walk).
  * @param auraRadiusPx radius of the poison aura in screen pixels, 0 to hide it.
@@ -169,75 +160,42 @@ export function drawMoldLionSprite(
     drawSporeCloud(ctx, cx, cy, auraRadiusPx, auraPhase, auraActive);
   }
 
-  ctx.save();
-  ctx.translate(cx, cy);
-  if (facingX < 0) ctx.scale(-1, 1);
-
-  const swayPhase = isMoving ? Math.sin(walkFrame) : 0;
-  const lunge = attackAnim > 0 ? Math.sin(attackAnim * Math.PI) * LION_ATTACK_LUNGE * s : 0;
-
-  // Legs
-  ctx.fillStyle = '#5a6b3a';
-  const legSwing = isMoving ? swayPhase * LION_LEG_SWING_AMP * s : 0;
-  ctx.fillRect(
-    -LION_LEG_X_OFFSET * s - LION_LEG_WIDTH * s * 0.5,
-    LION_LEG_Y_OFFSET * s + legSwing,
-    LION_LEG_WIDTH * s,
-    LION_LEG_HEIGHT * s,
-  );
-  ctx.fillRect(
-    LION_LEG_X_OFFSET * s - LION_LEG_WIDTH * s * 0.5,
-    LION_LEG_Y_OFFSET * s - legSwing,
-    LION_LEG_WIDTH * s,
-    LION_LEG_HEIGHT * s,
-  );
-
-  // Body
-  ctx.fillStyle = '#7a8a4a';
-  ctx.beginPath();
-  ctx.ellipse(lunge, LION_BODY_Y_OFFSET * s, LION_BODY_RX * s, LION_BODY_RY * s, 0, 0, Math.PI * 2);
-  ctx.fill();
-
-  // Fungal mane — irregular mold-green blobs, gently pulsing
-  const headX = lunge + LION_HEAD_X_OFFSET * s;
-  const headY = LION_HEAD_Y_OFFSET * s;
-  for (let i = 0; i < LION_MANE_BLOB_COUNT; i++) {
-    const a = (i / LION_MANE_BLOB_COUNT) * Math.PI * 2;
-    const wobble = Math.sin(auraPhase * 0.1 + i) * 0.15 + 1;
-    const bx = headX + Math.cos(a) * LION_MANE_R * s * wobble;
-    const by = headY + Math.sin(a) * LION_MANE_R * s * wobble;
-    const r = (LION_MANE_BLOB_R_MIN + (i % 3) * 0.01) * s;
-    ctx.fillStyle = i % 2 === 0 ? '#4a6b2a' : '#6a8a3a';
-    ctx.beginPath();
-    ctx.arc(bx, by, Math.max(r, LION_MANE_BLOB_R_MIN * s * 0.6), 0, Math.PI * 2);
-    ctx.fill();
+  const flipX = facingX < 0;
+  if (attackAnim > 0) {
+    drawFigureCached(
+      ctx,
+      MOLD_LION_FIGURE,
+      'attack',
+      progressFrameIndex(attackAnim, frameCountOf('attack')),
+      sx,
+      sy,
+      s,
+      { flipX },
+    );
+    return;
   }
-  ctx.fillStyle = '#5a7a3a';
-  ctx.beginPath();
-  ctx.arc(headX, headY, LION_MANE_BLOB_R_MAX * s * 1.4, 0, Math.PI * 2);
-  ctx.fill();
-
-  // Head
-  ctx.fillStyle = '#8a9a5a';
-  ctx.beginPath();
-  ctx.arc(headX, headY, LION_HEAD_R * s, 0, Math.PI * 2);
-  ctx.fill();
-
-  // Glowing toxic eyes
-  ctx.save();
-  ctx.shadowColor = '#c8f850';
-  ctx.shadowBlur = LION_EYE_GLOW_RADIUS;
-  ctx.fillStyle = '#d8ff70';
-  ctx.beginPath();
-  ctx.arc(
-    headX + LION_EYE_X_OFFSET * s,
-    headY + LION_EYE_Y_OFFSET * s,
-    LION_EYE_R * s,
-    0,
-    Math.PI * 2,
+  if (isMoving) {
+    drawFigureCached(
+      ctx,
+      MOLD_LION_FIGURE,
+      'walk',
+      walkFrameIndex(walkFrame, frameCountOf('walk')),
+      sx,
+      sy,
+      s,
+      { flipX },
+    );
+    return;
+  }
+  const nowSeconds = performance.now() / MILLISECONDS_PER_SECOND;
+  drawFigureCached(
+    ctx,
+    MOLD_LION_FIGURE,
+    'idle',
+    timeFrameIndex(nowSeconds, IDLE_FPS, frameCountOf('idle')),
+    sx,
+    sy,
+    s,
+    { flipX },
   );
-  ctx.fill();
-  ctx.restore();
-
-  ctx.restore();
 }

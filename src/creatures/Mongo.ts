@@ -1358,24 +1358,23 @@ export class Mongo extends Mob {
     if (this.damageFlash > 0) ctx.filter = 'brightness(3)';
 
     const action = this.animator.currentAction;
-    drawMongoSprite(ctx, sx, sy, tileSize, {
-      stage: this.stats.stage,
-      walkFrame: this.walkFrame,
-      isMoving: this.isMoving,
-      facingX: this.facingX,
-      facingY: this.facingY,
-      action,
-      actionProgress: this.animator.progress,
-      alpha: this.fadeAlpha,
+    const artTopY = this.paintSpriteMeasuringTop(ctx, sy, () => {
+      drawMongoSprite(ctx, sx, sy, tileSize, {
+        stage: this.stats.stage,
+        walkFrame: this.walkFrame,
+        isMoving: this.isMoving,
+        facingX: this.facingX,
+        facingY: this.facingY,
+        action,
+        actionProgress: this.animator.progress,
+        alpha: this.fadeAlpha,
+      });
     });
 
     if (this.damageFlash > 0) ctx.filter = 'none';
     ctx.restore();
 
-    // Anchored on the sheet's own headroom rather than the tile: his art stands
-    // well above the tile he occupies, and a bar at the default offset is drawn
-    // across his back.
-    this.renderMobHealthBar(ctx, sx, sy - tileSize * MONGO_HEAD_CLEARANCE_TILES[this.stats.stage]);
+    this.renderMobHealthBar(ctx, sx, sy, artTopY);
   }
 
   /** Fades out over the despawn once the recall run has landed. */

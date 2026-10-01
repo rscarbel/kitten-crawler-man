@@ -992,19 +992,21 @@ export class RatkinSoldier extends Mob {
       this.facingX === 0 && this.facingY === 0
         ? { x: 0, y: 1 }
         : normalize(this.facingX, this.facingY);
-    drawRatkinCastSprite(ctx, this.soldierId, sx, sy, tileSize, {
-      action,
-      walkPhase: this.walkPhase,
-      facingX: heading.x,
-      facingY: heading.y,
-      progress,
-      loopOffsetSeconds: this.animClockOffsetSeconds,
+    const artTopY = this.paintSpriteMeasuringTop(ctx, sy, () => {
+      drawRatkinCastSprite(ctx, this.soldierId, sx, sy, tileSize, {
+        action,
+        walkPhase: this.walkPhase,
+        facingX: heading.x,
+        facingY: heading.y,
+        progress,
+        loopOffsetSeconds: this.animClockOffsetSeconds,
+      });
     });
     if (this.downed) {
       this.renderKnockedOutOverlay(ctx, sx, sy);
       return;
     }
-    this.renderMobHealthBar(ctx, sx, sy);
+    this.renderMobHealthBar(ctx, sx, sy, artTopY);
   }
 
   /** Each soldier breathes on its own beat rather than all four in lockstep. */

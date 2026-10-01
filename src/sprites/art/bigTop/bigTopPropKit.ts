@@ -120,20 +120,6 @@ export function contactShadow(
 }
 const CONTACT_SHADOW_ALPHA = 0.6;
 
-// ── Damage ───────────────────────────────────────────────────────────────────
-
-/**
- * Every destructible's damage art is staged rather than continuous, so a
- * player can count the remaining work from across the lane.
- */
-export const DAMAGE_STAGE_COUNT = 3;
-
-/** How many blows have landed, from the integrity that is left. */
-export function hitsLanded(integrity: number): number {
-  const remaining = Math.max(0, Math.min(1, integrity));
-  return Math.min(DAMAGE_STAGE_COUNT, Math.round((1 - remaining) * DAMAGE_STAGE_COUNT));
-}
-
 // ── Live ownership overlays ──────────────────────────────────────────────────
 
 /**

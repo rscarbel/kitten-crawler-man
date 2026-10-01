@@ -551,18 +551,20 @@ export class GraveBull extends Mob {
     const sx = this.x - camX;
     const sy = this.y - camY;
     const row = this.currentRow;
-    if (this.isAggro && this.isAlive) this.renderAggroIndicator(ctx, sx, sy, tileSize);
-    drawGraveBullSprite(
-      ctx,
-      row.action,
-      viewForFacing(this.facingX, this.facingY),
-      row.frame,
-      sx,
-      sy,
-      tileSize,
-      this.facingX < 0,
-      this.isAlive ? 1 : this.corpseAlpha,
-    );
-    if (this.isAlive) this.renderMobHealthBar(ctx, sx, sy);
+    const artTopY = this.paintSpriteMeasuringTop(ctx, sy, () => {
+      drawGraveBullSprite(
+        ctx,
+        row.action,
+        viewForFacing(this.facingX, this.facingY),
+        row.frame,
+        sx,
+        sy,
+        tileSize,
+        this.facingX < 0,
+        this.isAlive ? 1 : this.corpseAlpha,
+      );
+    });
+    if (this.isAggro && this.isAlive) this.renderAggroIndicator(ctx, sx, artTopY, sy, tileSize);
+    if (this.isAlive) this.renderMobHealthBar(ctx, sx, sy, artTopY);
   }
 }

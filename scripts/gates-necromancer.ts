@@ -42,7 +42,6 @@ import {
 } from '../src/sprites/art/necromancerArt.js';
 import {
   NECROMANCER_DRAWN_STATES,
-  NECROMANCER_HEAD_ABOVE_TILE_TILES,
   NECROMANCER_ARRIVAL_ROWS,
   NECROMANCER_BLINK_ROWS,
   NECROMANCER_CASTS,
@@ -140,7 +139,7 @@ function structuralGates(): void {
   }
 }
 
-// ── G3 size against a ratkin, G4 heads tall, G5 frozen head clearance ────────
+// ── G3 size against a ratkin, G4 heads tall ──────────────────────────────────
 
 /** Half-width of the column band the crown is looked for in, in tiles. */
 const CROWN_BAND_TILES = 0.18;
@@ -149,8 +148,6 @@ const MIN_RATKIN_RATIO = 1.85;
 const MAX_RATKIN_RATIO = 2.3;
 /** Heads tall a figure needs to read as tall rather than as big. A ratkin is about 2.5. */
 const MIN_HEADS_TALL = 5.5;
-/** How far the frozen health-bar clearance may drift from the crown it clears. */
-const HEAD_CLEARANCE_SLACK_TILES = 0.08;
 
 function crownHeightTiles(): number | null {
   const data = cellRgba('idle', 0);
@@ -193,15 +190,6 @@ function sizeGates(): void {
     fail(
       'G4 heads',
       `${heads.toFixed(1)} heads tall, under ${MIN_HEADS_TALL}: a big head on a big body reads as big, not tall`,
-    );
-  }
-  const tileTop = NECROMANCER_FIGURE.tileY;
-  const crownAboveTile = (tileTop - (POSE_ORIGIN_Y - crown * TILE_SCALE)) / TILE_SCALE;
-  if (Math.abs(crownAboveTile - NECROMANCER_HEAD_ABOVE_TILE_TILES) > HEAD_CLEARANCE_SLACK_TILES) {
-    fail(
-      'G5 head clearance',
-      `the crown stands ${crownAboveTile.toFixed(2)} tiles above the tile but ` +
-        `NECROMANCER_HEAD_ABOVE_TILE_TILES is ${NECROMANCER_HEAD_ABOVE_TILE_TILES}; re-measure it`,
     );
   }
 }

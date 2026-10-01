@@ -275,10 +275,6 @@ export class CircusLemur extends Mob {
       drawThrownKnife(ctx, knife.x - camX, knife.y - camY, tileSize, knife.rotation);
     }
 
-    if (this.isAggro) {
-      this.renderAggroIndicator(ctx, sx, sy, tileSize);
-    }
-
     ctx.save();
     if (this.damageFlash > 0) {
       ctx.filter = 'brightness(3)';
@@ -287,21 +283,24 @@ export class CircusLemur extends Mob {
     const attackAnim = this.meleeAnimTimer > 0 ? 1 - this.meleeAnimTimer / MELEE_ANIM_FRAMES : 0;
     const throwAnim = this.throwAnimTimer > 0 ? 1 - this.throwAnimTimer / THROW_ANIM_FRAMES : 0;
 
-    drawCircusLemurSprite(
-      ctx,
-      sx,
-      sy,
-      tileSize,
-      this.walkFrame,
-      this.isMoving,
-      attackAnim,
-      this.facingX,
-      throwAnim,
-    );
+    const artTopY = this.paintSpriteMeasuringTop(ctx, sy, () => {
+      drawCircusLemurSprite(
+        ctx,
+        sx,
+        sy,
+        tileSize,
+        this.walkFrame,
+        this.isMoving,
+        attackAnim,
+        this.facingX,
+        throwAnim,
+      );
+    });
 
     if (this.damageFlash > 0) ctx.filter = 'none';
     ctx.restore();
 
-    this.renderMobHealthBar(ctx, sx, sy);
+    if (this.isAggro) this.renderAggroIndicator(ctx, sx, artTopY, sy, tileSize);
+    this.renderMobHealthBar(ctx, sx, sy, artTopY);
   }
 }

@@ -351,17 +351,19 @@ export class SkyFowl extends Mob {
     const action =
       peckAmt > 0 ? 'strike' : travelling ? gait : this.isAggressive ? 'aggro' : 'idle';
 
-    drawSkyfowlCastSprite(ctx, this.toughLookId, sx, sy, tileSize, {
-      action,
-      walkPhase: this.gaitPhase * TWO_PI,
-      facingX: this.facingX,
-      facingY: this.facingY,
-      progress: peckAmt,
+    const artTopY = this.paintSpriteMeasuringTop(ctx, sy, () => {
+      drawSkyfowlCastSprite(ctx, this.toughLookId, sx, sy, tileSize, {
+        action,
+        walkPhase: this.gaitPhase * TWO_PI,
+        facingX: this.facingX,
+        facingY: this.facingY,
+        progress: peckAmt,
+      });
     });
 
     if (this.damageFlash > 0) ctx.filter = 'none';
     ctx.restore();
 
-    this.renderMobHealthBar(ctx, sx, sy);
+    this.renderMobHealthBar(ctx, sx, sy, artTopY);
   }
 }

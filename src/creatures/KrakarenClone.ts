@@ -6,7 +6,6 @@ import { randomInt, normalize } from '../utils';
 import {
   drawKrakarenSprite,
   drawKrakarenEnrageGlow,
-  krakarenOverheadLiftTiles,
   krakarenScaledArtOrigin,
   KRAKAREN_BODY_PART_KEY,
   KRAKAREN_ENRAGED_FILTER,
@@ -132,12 +131,6 @@ const GUARD_SPAWN_MAX_DIST_TILES = 2.5;
  * player backed into a corner is the case this covers.
  */
 const GUARD_SPAWN_ANGLE_ATTEMPTS = 6;
-
-/**
- * Where to hang her health bar before the sheet has loaded — roughly the height
- * the baked mantle reaches above her tile.
- */
-const FALLBACK_OVERHEAD_LIFT_TILES = 1.6;
 
 /** A slam telegraph or its impact, in world pixels, with its animation progress. */
 export interface SlamMarker {
@@ -724,23 +717,18 @@ export class KrakarenClone extends Mob {
       ctx.filter = KRAKAREN_ENRAGED_FILTER;
     }
 
-    drawKrakarenSprite(ctx, art.x, art.y, artTileSize, {
-      facingX: this.facingX,
-      facingY: this.facingY,
-      swipeProgress: this.swipeProgress,
-      isChanneling: this.state === 'slam_charging',
+    const artTopY = this.paintSpriteMeasuringTop(ctx, art.y, () => {
+      drawKrakarenSprite(ctx, art.x, art.y, artTileSize, {
+        facingX: this.facingX,
+        facingY: this.facingY,
+        swipeProgress: this.swipeProgress,
+        isChanneling: this.state === 'slam_charging',
+      });
     });
 
     ctx.restore();
 
-    // Anchored on the sheet's own overhang: the default offset is a few pixels
-    // above her *tile*, which on art this tall lands inside the mantle. Uses
-    // the scaled-up art size so the bar clears the enlarged mantle too.
-    this.renderMobHealthBar(
-      ctx,
-      this.x - camX,
-      art.y - artTileSize * krakarenOverheadLiftTiles(FALLBACK_OVERHEAD_LIFT_TILES),
-    );
+    this.renderMobHealthBar(ctx, this.x - camX, this.y - camY, artTopY);
   }
 
   /**

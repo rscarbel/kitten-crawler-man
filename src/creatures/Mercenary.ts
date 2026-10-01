@@ -844,11 +844,13 @@ export class Mercenary extends Mob {
 
     ctx.save();
     if (this.damageFlash > 0) ctx.filter = DAMAGE_FLASH_BRIGHTNESS;
-    this.art.draw(ctx, sx, sy, tileSize, frame);
+    const artTopY = this.paintSpriteMeasuringTop(ctx, sy, () => {
+      this.art.draw(ctx, sx, sy, tileSize, frame);
+    });
     if (this.damageFlash > 0) ctx.filter = 'none';
     ctx.restore();
 
-    this.renderMobHealthBar(ctx, sx, sy - (this.art.healthBarLiftTiles ?? 0) * tileSize);
+    this.renderMobHealthBar(ctx, sx, sy, artTopY);
     this.renderHealFlash(ctx, sx, sy, tileSize);
   }
 

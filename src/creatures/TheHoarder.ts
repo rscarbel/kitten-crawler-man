@@ -678,17 +678,19 @@ export class TheHoarder extends Mob {
       ctx.filter = 'brightness(3)';
     }
 
-    drawHoarderSprite(ctx, sx, sy, tileSize, {
-      walkFrame: this.walkFrame,
-      isMoving: this.isMoving,
-      facingX: this.facingX,
-      facingY: this.facingY,
-      vomitProgress: this.vomitProgress,
+    const artTopY = this.paintSpriteMeasuringTop(ctx, sy, () => {
+      drawHoarderSprite(ctx, sx, sy, tileSize, {
+        walkFrame: this.walkFrame,
+        isMoving: this.isMoving,
+        facingX: this.facingX,
+        facingY: this.facingY,
+        vomitProgress: this.vomitProgress,
+      });
     });
 
     if (this.damageFlash > 0) ctx.filter = 'none';
     ctx.restore();
 
-    this.renderMobHealthBar(ctx, sx, sy);
+    this.renderMobHealthBar(ctx, sx, sy, artTopY);
   }
 }

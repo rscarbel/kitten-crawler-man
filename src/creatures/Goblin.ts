@@ -420,10 +420,6 @@ export class Goblin extends Mob {
     const sx = this.x - camX;
     const sy = this.y - camY;
 
-    if (this.isAggro) {
-      this.renderAggroIndicator(ctx, sx, sy, tileSize);
-    }
-
     const animFrames = GOBLIN_ATTACKS[this.weapon][this.attackKind].animFrames;
     const attack =
       this.attackAnimTimer > 0
@@ -436,16 +432,19 @@ export class Goblin extends Mob {
       attack,
     );
 
-    drawGoblinSprite(ctx, {
-      archetype: this.weapon,
-      x: sx,
-      y: sy,
-      tileSize,
-      facingX: this.facingX,
-      state: resolved.state,
-      frame: resolved.frame,
+    const artTopY = this.paintSpriteMeasuringTop(ctx, sy, () => {
+      drawGoblinSprite(ctx, {
+        archetype: this.weapon,
+        x: sx,
+        y: sy,
+        tileSize,
+        facingX: this.facingX,
+        state: resolved.state,
+        frame: resolved.frame,
+      });
     });
 
-    this.renderMobHealthBar(ctx, sx, sy);
+    if (this.isAggro) this.renderAggroIndicator(ctx, sx, artTopY, sy, tileSize);
+    this.renderMobHealthBar(ctx, sx, sy, artTopY);
   }
 }

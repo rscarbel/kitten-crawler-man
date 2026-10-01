@@ -246,21 +246,20 @@ export class Rat extends Mob {
     const sx = this.x - camX;
     const sy = this.y - camY;
 
-    if (this.isAggro) {
-      this.renderAggroIndicator(ctx, sx, sy, tileSize);
-    }
-
     const biteProgress =
       this.attackAnimTimer > 0 ? 1 - this.attackAnimTimer / RAT_BITE_FRAMES : null;
 
-    this.drawnRow = drawRatSprite(ctx, sx, sy, tileSize, {
-      walkFrame: this.walkFrame,
-      isMoving: this.isMoving,
-      facingX: this.facingX,
-      facingY: this.facingY,
-      biteProgress,
+    const artTopY = this.paintSpriteMeasuringTop(ctx, sy, () => {
+      this.drawnRow = drawRatSprite(ctx, sx, sy, tileSize, {
+        walkFrame: this.walkFrame,
+        isMoving: this.isMoving,
+        facingX: this.facingX,
+        facingY: this.facingY,
+        biteProgress,
+      });
     });
 
-    this.renderMobHealthBar(ctx, sx, sy);
+    if (this.isAggro) this.renderAggroIndicator(ctx, sx, artTopY, sy, tileSize);
+    this.renderMobHealthBar(ctx, sx, sy, artTopY);
   }
 }

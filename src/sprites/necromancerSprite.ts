@@ -221,13 +221,6 @@ export function prewarmNecromancerDeath(): void {
   prewarmFigureState(NECROMANCER_FIGURE, necromancerStateName('death', 'front'));
 }
 
-/**
- * How far the crown of his hood stands above the top of his own tile, in
- * tiles, so a health bar or a marker hung off the tile clears his head. Frozen
- * from the idle's painted ink; `scripts/gates-necromancer.ts` re-measures it.
- */
-export const NECROMANCER_HEAD_ABOVE_TILE_TILES = 1.59;
-
 /** The view an action is drawn in, falling back to head-on for the front-only rows. */
 export function necromancerViewFor(
   action: NecromancerAction,

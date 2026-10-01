@@ -332,17 +332,19 @@ export class Cockroach extends Mob {
     ctx.save();
     if (this.damageFlash > 0) ctx.filter = 'brightness(3)';
 
-    drawCockroachSprite(ctx, sx, sy, tileSize, {
-      walkFrame: this.walkFrame,
-      isMoving: this.isMoving,
-      facingX: this.facingX,
-      facingY: this.facingY,
-      biteProgress: this.biteProgress,
+    const artTopY = this.paintSpriteMeasuringTop(ctx, sy, () => {
+      drawCockroachSprite(ctx, sx, sy, tileSize, {
+        walkFrame: this.walkFrame,
+        isMoving: this.isMoving,
+        facingX: this.facingX,
+        facingY: this.facingY,
+        biteProgress: this.biteProgress,
+      });
     });
 
     if (this.damageFlash > 0) ctx.filter = 'none';
     ctx.restore();
 
-    this.renderMobHealthBar(ctx, sx, sy);
+    this.renderMobHealthBar(ctx, sx, sy, artTopY);
   }
 }

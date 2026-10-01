@@ -5,7 +5,6 @@ import {
   MANTIS_BODY_PART_KEY,
   drawMantidSprite,
   mantidCullMarginTiles,
-  mantidOverheadLiftTiles,
   prewarmMantidCombat,
 } from '../sprites/mantidSprite';
 import { riposteCooldown } from './tactics/riposte';
@@ -222,19 +221,17 @@ export class MantisCrony extends Mob {
     const sx = this.x - camX;
     const sy = this.y - camY;
 
-    drawMantidSprite(ctx, 'mantis', sx, sy, tileSize, {
-      walkFrame: this.walkFrame,
-      isMoving: this.isMoving,
-      facingX: this.facingX,
-      facingY: this.facingY,
-      slashProgress: this.slashTimer > 0 ? 1 - this.slashTimer / MANTIS_SLASH_TOTAL_FRAMES : null,
+    const artTopY = this.paintSpriteMeasuringTop(ctx, sy, () => {
+      drawMantidSprite(ctx, 'mantis', sx, sy, tileSize, {
+        walkFrame: this.walkFrame,
+        isMoving: this.isMoving,
+        facingX: this.facingX,
+        facingY: this.facingY,
+        slashProgress: this.slashTimer > 0 ? 1 - this.slashTimer / MANTIS_SLASH_TOTAL_FRAMES : null,
+      });
     });
 
-    // Both the aggro tell and the health bar clear the art for the same reason:
-    // `renderHealthBar` paints a few pixels above the *tile*, which on art that
-    // overhangs it lands across the animal's own thorax.
-    const overheadY = sy - tileSize * mantidOverheadLiftTiles('mantis');
-    if (this.isAggro) this.renderAggroIndicator(ctx, sx, overheadY, tileSize);
-    this.renderMobHealthBar(ctx, sx, overheadY);
+    if (this.isAggro) this.renderAggroIndicator(ctx, sx, artTopY, sy, tileSize);
+    this.renderMobHealthBar(ctx, sx, sy, artTopY);
   }
 }

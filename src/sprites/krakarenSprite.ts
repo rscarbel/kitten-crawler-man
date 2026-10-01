@@ -227,9 +227,6 @@ export function prewarmKrakarenSlam(): void {
   for (const phase of KRAKAREN_SLAM_PHASES) prewarmFigureState(KRAKAREN_SLAM_FIGURE, phase);
 }
 
-/** Clear air left between the top of her art and anything hung over her head. */
-const KRAKAREN_OVERHEAD_CLEARANCE_TILES = 0.2;
-
 /**
  * How far her painted cell reaches around her tile.
  *
@@ -248,11 +245,6 @@ export function krakarenArtTopTiles(_fallbackTiles: number): number {
 /** Height of one baked cell in tiles — the divisor for sizing a portrait. */
 export function krakarenArtHeightTiles(_fallbackTiles: number): number {
   return KRAKAREN_ART_HEIGHT_TILES;
-}
-
-/** How far above her tile origin to hang a health bar so it clears the mantle. */
-export function krakarenOverheadLiftTiles(_fallbackTiles: number): number {
-  return KRAKAREN_ART_TOP_TILES + KRAKAREN_OVERHEAD_CLEARANCE_TILES;
 }
 
 /** Where every Krakaren figure's ground line sits in its tile, as a fraction of the tile. */

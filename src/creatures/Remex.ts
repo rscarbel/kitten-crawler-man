@@ -1,7 +1,7 @@
 import { BOSS_BLAST_DAMAGE_SCALE, Mob } from './Mob';
 import type { Player } from '../Player';
 import type { LootDrop } from './Mob';
-import { drawRemexSprite } from '../sprites/remexSprite';
+import { drawRemexSprite, remexArtTopY } from '../sprites/remexSprite';
 
 const REMEX_HP = 140;
 /** Rooted in place — a capacitor does not walk. */
@@ -62,6 +62,6 @@ export class Remex extends Mob {
     if (this.damageFlash > 0) ctx.filter = 'none';
     ctx.restore();
 
-    this.renderMobHealthBar(ctx, sx, sy);
+    this.renderMobHealthBar(ctx, sx, sy, remexArtTopY(sy, tileSize));
   }
 }

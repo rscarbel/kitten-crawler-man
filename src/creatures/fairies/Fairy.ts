@@ -1108,8 +1108,8 @@ export abstract class Fairy extends Mob {
     // and wingtips all stand above the head, and a bar hung off the head
     // would cut through them.
     const crownY = sy + tileSize * fairyCrownBelowTileTopTiles(this.kind);
-    if (this.currentTarget !== null) this.renderAggroIndicator(ctx, sx, crownY, tileSize);
-    this.renderMobHealthBar(ctx, sx, crownY);
+    if (this.currentTarget !== null) this.renderAggroIndicator(ctx, sx, crownY, crownY, tileSize);
+    this.renderMobHealthBar(ctx, sx, crownY, crownY);
   }
 }
 

@@ -233,30 +233,29 @@ export class CityElfCultist extends Mob {
     const sx = this.x - camX;
     const sy = this.y - camY;
 
-    if (this.isAggro) {
-      this.renderAggroIndicator(ctx, sx, sy, tileSize);
-    }
-
     ctx.save();
     if (this.damageFlash > 0) {
       ctx.filter = 'brightness(3)';
     }
 
     const castAnim = this.castAnimTimer > 0 ? 1 - this.castAnimTimer / CAST_ANIM_FRAMES : 0;
-    drawCityElfCultistSprite(
-      ctx,
-      sx,
-      sy,
-      tileSize,
-      this.walkFrame,
-      this.isMoving,
-      castAnim,
-      this.facingX,
-    );
+    const artTopY = this.paintSpriteMeasuringTop(ctx, sy, () => {
+      drawCityElfCultistSprite(
+        ctx,
+        sx,
+        sy,
+        tileSize,
+        this.walkFrame,
+        this.isMoving,
+        castAnim,
+        this.facingX,
+      );
+    });
 
     if (this.damageFlash > 0) ctx.filter = 'none';
     ctx.restore();
 
-    this.renderMobHealthBar(ctx, sx, sy);
+    if (this.isAggro) this.renderAggroIndicator(ctx, sx, artTopY, sy, tileSize);
+    this.renderMobHealthBar(ctx, sx, sy, artTopY);
   }
 }

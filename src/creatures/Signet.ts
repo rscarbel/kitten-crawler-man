@@ -452,13 +452,8 @@ export class Signet extends Mob {
     const sx = this.x - camX;
     const sy = this.y - camY;
 
-    // The shared overlays anchor to the tile top, which lands on her chest at
-    // double scale — lift them clear of both her head and her elite marker.
+    // Not a cached figure, so unmeasurable: the elite mark's bob top is her highest pixel.
     const overlayY = sy - SIGNET_OVERLAY_CLEARANCE * tileSize;
-
-    if (this.isAggro) {
-      this.renderAggroIndicator(ctx, sx, overlayY, tileSize);
-    }
 
     // No `ctx.filter` for the hit flash, unlike the sheet-drawn mobs. A filter
     // applies to every drawing operation individually, and where their sprite is
@@ -501,15 +496,14 @@ export class Signet extends Mob {
 
     drawEliteMarker(ctx, sx, sy, tileSize);
 
-    // `overlayY` is the top of her elite mark at the height of its bob, which
-    // stands over her horns: the highest thing she paints.
+    if (this.isAggro) this.renderAggroIndicator(ctx, sx, overlayY, sy, tileSize);
     if (markerColor !== undefined) {
       const glyph = this.markerType === 'question' ? '?' : '!';
-      const clearOf = this.overheadClearTop(overlayY, overlayY);
+      const clearOf = this.overheadClearTop(overlayY, sy);
       drawQuestMarker(ctx, sx, clearOf, tileSize, glyph, markerColor);
     }
 
-    this.renderMobHealthBar(ctx, sx, overlayY);
+    this.renderMobHealthBar(ctx, sx, sy, overlayY);
   }
 
   /**

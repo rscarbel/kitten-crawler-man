@@ -22,7 +22,6 @@ import {
   BLOOD,
   BONE,
   BRASS,
-  DAMAGE_STAGE_COUNT,
   GILT,
   INK,
   IRON,
@@ -36,7 +35,6 @@ import {
   TAU,
   blend,
   contactShadow,
-  hitsLanded,
   jitterTone,
   litColumn,
   litFill,
@@ -1927,8 +1925,7 @@ export function drawCageReleaseRing(
     y,
     size,
   );
-  if (state.broken) return;
-  paintDonutHoop(ctx, cx, y + size / 2, size, strength);
+  // Its only blow is also its breaking blow, so the flash must paint before the broken return.
   paintImpact(
     ctx,
     cx,
@@ -1937,6 +1934,8 @@ export function drawCageReleaseRing(
     state.struck,
     RING_RADIUS * RING_IMPACT_SCALE,
   );
+  if (state.broken) return;
+  paintDonutHoop(ctx, cx, y + size / 2, size, strength);
 }
 
 // ── Carl's capstan winch ─────────────────────────────────────────────────────
@@ -1950,9 +1949,9 @@ const WINCH_GEAR_RADIUS = 0.14;
 const WINCH_GEAR_TEETH = 10;
 const WINCH_TOOTH_DEPTH = 0.04;
 const WINCH_PAWL_LENGTH = 0.2;
-/** How far the pawl lifts off the teeth while a blow is turning the drum. */
+/** Pawl angle off the teeth once knocked free. */
 const WINCH_PAWL_LIFT_RADIANS = 0.7;
-/** Rope coils on a fresh drum; each landed turn pays one out. */
+/** Rope coils on a wound drum. */
 const WINCH_FULL_COILS = 5;
 /** A broken winch has spun freely and stopped between teeth. */
 const WINCH_SPUN_TEETH = 4.5;
@@ -1992,11 +1991,6 @@ const WINCH = {
   toothRake: 0.7,
   gearLightReach: 0.2,
   hubRadius: 0.05,
-  firstMark: 0.34,
-  markSpacing: 0.12,
-  markRise: 0.07,
-  markWidth: 0.07,
-  markHeight: 0.04,
   pawlOffsetX: 0.02,
   pawlRise: 0.14,
   pawlRestTilt: 0.35,
@@ -2009,14 +2003,9 @@ const WINCH = {
   pawlPivotRadius: 0.03,
 } as const;
 
-function winchPainter(
-  facing: 'west' | 'east',
-  stage: number,
-  pawlUp: boolean,
-  broken: boolean,
-): Painter {
+function winchPainter(facing: 'west' | 'east', broken: boolean): Painter {
   return (ctx, ox, oy, s) => {
-    const rng = propRng(`winch${facing}${stage}`);
+    const rng = propRng(`winch${facing}`);
     const baseY = oy + s * WINCH_BASE_Y;
     contactShadow(
       ctx,
@@ -2062,7 +2051,7 @@ function winchPainter(
     ctx.fillStyle = drum;
     ctx.fill();
     outline(ctx, s);
-    const coils = broken ? 1 : WINCH_FULL_COILS - stage;
+    const coils = broken ? 1 : WINCH_FULL_COILS;
     ctx.strokeStyle = paint(BONE.mid);
     ctx.lineWidth = Math.max(1, s * WINCH.coilWidth);
     ctx.beginPath();
@@ -2097,7 +2086,7 @@ function winchPainter(
     const gearX = facing === 'east' ? ox + s * WINCH.gearEastX : ox + s * WINCH.gearWestX;
     const gearY = drumTop + drumHeight / 2;
     const toothAngle = TAU / WINCH_GEAR_TEETH;
-    const turn = broken ? toothAngle * WINCH_SPUN_TEETH : stage * toothAngle;
+    const turn = broken ? toothAngle * WINCH_SPUN_TEETH : 0;
     ctx.beginPath();
     for (let tooth = 0; tooth < WINCH_GEAR_TEETH; tooth++) {
       const angle = turn + tooth * toothAngle;
@@ -2130,20 +2119,10 @@ function winchPainter(
     ctx.fillStyle = paint(IRON.light);
     ctx.fill();
     outline(ctx, s);
-    // One notch of wear per turn, the count a player reads from across the lane.
-    ctx.fillStyle = paint(BONE.accent);
-    for (let mark = 0; mark < stage; mark++) {
-      ctx.fillRect(
-        ox + s * (WINCH.firstMark + mark * WINCH.markSpacing),
-        drumTop - s * WINCH.markRise,
-        s * WINCH.markWidth,
-        s * WINCH.markHeight,
-      );
-    }
     const pawlPivotX = gearX + (facing === 'east' ? -1 : 1) * s * WINCH.pawlOffsetX;
     const pawlPivotY = gearY - s * (WINCH_GEAR_RADIUS + WINCH.pawlRise);
     const restAngle = Math.PI / 2 + (facing === 'east' ? WINCH.pawlRestTilt : -WINCH.pawlRestTilt);
-    const lift = pawlUp || broken ? (facing === 'east' ? -1 : 1) * WINCH_PAWL_LIFT_RADIANS : 0;
+    const lift = broken ? (facing === 'east' ? -1 : 1) * WINCH_PAWL_LIFT_RADIANS : 0;
     ctx.save();
     ctx.translate(pawlPivotX, pawlPivotY);
     ctx.rotate(restAngle + lift);
@@ -2172,7 +2151,7 @@ function winchPainter(
   };
 }
 
-/** Carl's capstan winch: every blow turns the drum a tooth, and the pawl clicks home. */
+/** Carl's capstan winch: one blow knocks the pawl free and the drum spins the rope out. */
 export function drawCapstanWinch(
   ctx: Ctx,
   x: number,
@@ -2180,27 +2159,23 @@ export function drawCapstanWinch(
   size: number,
   state: MazeDestructibleArt,
 ): void {
-  const stage = hitsLanded(state.integrity);
   const cx = x + size / 2;
   const strength = pulseStrength(state.phase, state.pulsing);
   if (!state.broken) paintPulseHalo(ctx, cx, y + size / 2, size, strength, BRASS.accent);
-  // The pawl rides up over a tooth while the blow's flash lasts and drops home after: the click.
-  const pawlUp = state.struck;
   drawBigTopProp(
     ctx,
     {
       prop: 'capstanWinch',
-      state: `${state.facing}|${state.broken ? 'spent' : stage}|${pawlUp ? 'up' : 'home'}`,
+      state: `${state.facing}|${state.broken ? 'spent' : 'wound'}`,
       frame: 0,
     },
     ONE_TILE_BOX,
-    winchPainter(state.facing, stage, pawlUp, state.broken),
+    winchPainter(state.facing, state.broken),
     x,
     y,
     size,
   );
-  if (state.broken) return;
-  paintCarlChevrons(ctx, cx, y + size / 2, size, state.facing, strength);
+  // Its only blow is also its breaking blow, so the flash must paint before the broken return.
   paintImpact(
     ctx,
     cx,
@@ -2209,6 +2184,8 @@ export function drawCapstanWinch(
     state.struck,
     WINCH_GEAR_RADIUS * 2,
   );
+  if (state.broken) return;
+  paintCarlChevrons(ctx, cx, y + size / 2, size, state.facing, strength);
 }
 
 /**
@@ -2307,24 +2284,13 @@ export function menageriePropCatalogue(): ReadonlyArray<BigTopPropCatalogueEntry
     openEdges: chainEdge,
   });
   for (const facing of ['west', 'east'] as const) {
-    for (let stage = 0; stage < DAMAGE_STAGE_COUNT; stage++) {
-      for (const pawlUp of [false, true]) {
-        entries.push({
-          key: {
-            prop: 'capstanWinch',
-            state: `${facing}|${stage}|${pawlUp ? 'up' : 'home'}`,
-            frame: 0,
-          },
-          box: ONE_TILE_BOX,
-          painter: winchPainter(facing, stage, pawlUp, false),
-        });
-      }
+    for (const broken of [false, true]) {
+      entries.push({
+        key: { prop: 'capstanWinch', state: `${facing}|${broken ? 'spent' : 'wound'}`, frame: 0 },
+        box: ONE_TILE_BOX,
+        painter: winchPainter(facing, broken),
+      });
     }
-    entries.push({
-      key: { prop: 'capstanWinch', state: `${facing}|spent|home`, frame: 0 },
-      box: ONE_TILE_BOX,
-      painter: winchPainter(facing, DAMAGE_STAGE_COUNT, false, true),
-    });
   }
   return entries;
 }

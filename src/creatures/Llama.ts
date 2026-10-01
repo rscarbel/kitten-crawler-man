@@ -419,21 +419,20 @@ export class Llama extends Mob {
     const sx = this.x - camX;
     const sy = this.y - camY;
 
-    if (this.isAggro) {
-      this.renderAggroIndicator(ctx, sx, sy, tileSize);
-    }
-
     const spitProgress = this.spitAnimTimer > 0 ? 1 - this.spitAnimTimer / LLAMA_SPIT_FRAMES : null;
 
-    drawLlamaSprite(ctx, sx, sy, tileSize, {
-      walkFrame: this.walkFrame,
-      isMoving: this.isMoving,
-      facingX: this.facingX,
-      facingY: this.facingY,
-      spitProgress,
+    const artTopY = this.paintSpriteMeasuringTop(ctx, sy, () => {
+      drawLlamaSprite(ctx, sx, sy, tileSize, {
+        walkFrame: this.walkFrame,
+        isMoving: this.isMoving,
+        facingX: this.facingX,
+        facingY: this.facingY,
+        spitProgress,
+      });
     });
 
-    this.renderMobHealthBar(ctx, sx, sy);
+    if (this.isAggro) this.renderAggroIndicator(ctx, sx, artTopY, sy, tileSize);
+    this.renderMobHealthBar(ctx, sx, sy, artTopY);
   }
 }
 

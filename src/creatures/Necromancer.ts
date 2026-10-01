@@ -44,7 +44,6 @@ import type { NecromancerView } from '../sprites/art/necromancerArt';
 import {
   NECROMANCER_BLINK_WARN_TILES,
   NECROMANCER_CAST_PREWARM_LEAD_FRAMES,
-  NECROMANCER_HEAD_ABOVE_TILE_TILES,
   drawNecromancerSprite,
   prewarmNecromancerBlink,
   prewarmNecromancerCast,
@@ -1755,19 +1754,21 @@ export class Necromancer extends Mob {
     const sx = this.x - camX;
     const sy = this.y - camY;
     const row = this.currentRow;
-    drawNecromancerSprite(
-      ctx,
-      row.action,
-      viewForFacing(this.facingX, this.facingY),
-      row.frame,
-      sx,
-      sy,
-      tileSize,
-      this.facingX < 0,
-      this.isAlive ? this.retreatAlpha : this.corpseAlpha,
-    );
+    const artTopY = this.paintSpriteMeasuringTop(ctx, sy, () => {
+      drawNecromancerSprite(
+        ctx,
+        row.action,
+        viewForFacing(this.facingX, this.facingY),
+        row.frame,
+        sx,
+        sy,
+        tileSize,
+        this.facingX < 0,
+        this.isAlive ? this.retreatAlpha : this.corpseAlpha,
+      );
+    });
     if (this.isAlive && !this.isFadingAway) {
-      this.renderMobHealthBar(ctx, sx, sy - tileSize * NECROMANCER_HEAD_ABOVE_TILE_TILES);
+      this.renderMobHealthBar(ctx, sx, sy, artTopY);
     }
   }
 }

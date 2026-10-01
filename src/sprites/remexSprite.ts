@@ -23,6 +23,7 @@ const ORB_R = 0.09;
 const ORB_PULSE_AMP = 0.02;
 const ORB_PULSE_SPEED = 3.2;
 const ORB_GLOW_RADIUS = 10;
+const ORB_LIFT_RADII = 0.6;
 
 const MS_PER_SECOND = 1000;
 
@@ -40,6 +41,13 @@ const EYE_COLOR = '#f5f3ff';
  * @param phase monotonically increasing animation counter (frames).
  * @param hpFraction 0–1 — conduits dim as the capacitor is destroyed.
  */
+/** The top of its crown orb at full pulse, which stands a little above the tile. */
+export function remexArtTopY(sy: number, s: number): number {
+  const largestOrbR = ORB_R + ORB_PULSE_AMP;
+  const orbTopFromCentre = REMEX_TOP_Y - largestOrbR * (ORB_LIFT_RADII + 1);
+  return sy + s / 2 + orbTopFromCentre * s;
+}
+
 export function drawRemexSprite(
   ctx: CanvasRenderingContext2D,
   sx: number,
@@ -147,7 +155,7 @@ export function drawRemexSprite(
   ctx.fillStyle = ORB_COLOR;
   ctx.globalAlpha = conduitAlpha;
   ctx.beginPath();
-  ctx.arc(0, REMEX_TOP_Y * s - orbR * 0.6, orbR, 0, Math.PI * 2);
+  ctx.arc(0, REMEX_TOP_Y * s - orbR * ORB_LIFT_RADII, orbR, 0, Math.PI * 2);
   ctx.fill();
   ctx.restore();
 

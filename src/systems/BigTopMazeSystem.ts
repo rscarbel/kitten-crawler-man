@@ -2289,7 +2289,7 @@ export class BigTopMazeSystem implements GameSystem, GroundHazardSource {
         ctx,
         [from, pulley, to],
         {
-          pulled: this.clearedBlocks.has(block.id) ? 1 : 1 - (target?.integrityFraction ?? 1),
+          pulled: this.clearedBlocks.has(block.id) || target?.broken === true,
           owner: MAZE_TARGET_OWNER[block.kind],
         },
         TILE_SIZE,

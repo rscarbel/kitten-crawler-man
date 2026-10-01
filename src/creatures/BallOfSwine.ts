@@ -1409,7 +1409,9 @@ export class BallOfSwine extends Mob {
 
     ctx.save();
     if (this.damageFlash > 0) ctx.filter = 'brightness(3)';
-    drawBallOfSwineSprite(ctx, sx, sy, tileSize, this.drawStateFor());
+    const artTopY = this.paintSpriteMeasuringTop(ctx, sy, () => {
+      drawBallOfSwineSprite(ctx, sx, sy, tileSize, this.drawStateFor());
+    });
     if (this.damageFlash > 0) ctx.filter = 'none';
     ctx.restore();
 
@@ -1423,6 +1425,6 @@ export class BallOfSwine extends Mob {
       drawBallOfSwineStoppedWarning(ctx, sx, aboveBody, tileSize, this.wallowElapsedFraction);
     }
 
-    this.renderMobHealthBar(ctx, sx, aboveBody);
+    this.renderMobHealthBar(ctx, sx, aboveBody, artTopY);
   }
 }

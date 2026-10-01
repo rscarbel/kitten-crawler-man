@@ -1265,22 +1265,28 @@ export class Juicer extends Mob {
     // The hit flash and the enrage tint are both `ctx.filter` values and only
     // one of them can be set, so the sprite module owns the choice between them
     // rather than each caller half-applying one.
-    drawJuicerSprite(ctx, sx, sy, tileSize, {
-      walkFrame: this.walkFrame,
-      sprintFrame: this.sprintPhase,
-      isMoving: this.isMoving,
-      isSprinting: this.isSprinting,
-      punchProgress: this.punchProgress,
-      throwProgress: this.throwAnim > 0 ? this.throwAnim : null,
-      facingX: this.facingX,
-      facingY: this.facingY,
-      isEnraged: this.isEnraged,
-      isDamageFlashing: this.damageFlash > 0,
-      heldDumbbell: this.heldDumbbell,
+    const bodyTopY = this.paintSpriteMeasuringTop(ctx, sy, () => {
+      drawJuicerSprite(ctx, sx, sy, tileSize, {
+        walkFrame: this.walkFrame,
+        sprintFrame: this.sprintPhase,
+        isMoving: this.isMoving,
+        isSprinting: this.isSprinting,
+        punchProgress: this.punchProgress,
+        throwProgress: this.throwAnim > 0 ? this.throwAnim : null,
+        facingX: this.facingX,
+        facingY: this.facingY,
+        isEnraged: this.isEnraged,
+        isDamageFlashing: this.damageFlash > 0,
+        heldDumbbell: this.heldDumbbell,
+      });
     });
 
+    let artTopY = bodyTopY;
     if (this.state === 'plate_windup' && !this.plateReleased) {
-      drawGymPlateSprite(ctx, sx, sy - tileSize * PLATE_HELD_LIFT_TILES, tileSize, 0);
+      const heldPlateTopY = this.paintSpriteMeasuringTop(ctx, sy, () => {
+        drawGymPlateSprite(ctx, sx, sy - tileSize * PLATE_HELD_LIFT_TILES, tileSize, 0);
+      });
+      artTopY = Math.min(bodyTopY, heldPlateTopY);
     }
 
     // Speech bubble (drawn outside the sprite's own filter)
@@ -1302,9 +1308,7 @@ export class Juicer extends Mob {
       );
     }
 
-    // Anchored on his own headroom rather than his tile: he stands most of two
-    // tiles tall, and a bar at the default offset is drawn across his chest.
-    this.renderMobHealthBar(ctx, sx, sy - tileSize * JUICER_HEAD_CLEARANCE_TILES);
+    this.renderMobHealthBar(ctx, sx, sy, artTopY);
   }
 
   /**

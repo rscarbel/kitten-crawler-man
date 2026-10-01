@@ -227,6 +227,6 @@ export class MissQuill extends Mob {
     if (this.damageFlash > 0 || this.shieldHitFlashTimer > 0) ctx.filter = 'none';
     ctx.restore();
 
-    this.renderMobHealthBar(ctx, sx, sy);
+    this.renderMobHealthBar(ctx, sx, sy, sy);
   }
 }

@@ -181,30 +181,29 @@ export class Krasue extends Mob {
     const sx = this.x - camX;
     const sy = this.y - camY;
 
-    if (this.isAggro) {
-      this.renderAggroIndicator(ctx, sx, sy, tileSize);
-    }
-
     ctx.save();
     if (this.damageFlash > 0) {
       ctx.filter = 'brightness(3)';
     }
 
     const attackAnim = this.attackAnimTimer > 0 ? 1 - this.attackAnimTimer / ATTACK_ANIM_FRAMES : 0;
-    drawKrasueSprite(
-      ctx,
-      sx,
-      sy,
-      tileSize,
-      this.floatPhase,
-      this.isAggro,
-      this.facingX,
-      attackAnim,
-    );
+    const artTopY = this.paintSpriteMeasuringTop(ctx, sy, () => {
+      drawKrasueSprite(
+        ctx,
+        sx,
+        sy,
+        tileSize,
+        this.floatPhase,
+        this.isAggro,
+        this.facingX,
+        attackAnim,
+      );
+    });
 
     if (this.damageFlash > 0) ctx.filter = 'none';
     ctx.restore();
 
-    this.renderMobHealthBar(ctx, sx, sy);
+    if (this.isAggro) this.renderAggroIndicator(ctx, sx, artTopY, sy, tileSize);
+    this.renderMobHealthBar(ctx, sx, sy, artTopY);
   }
 }

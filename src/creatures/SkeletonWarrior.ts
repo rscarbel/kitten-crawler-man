@@ -218,22 +218,23 @@ export class SkeletonWarrior extends RisingSkeleton {
     const sy = this.y - camY;
     const rise = this.riseProgress;
 
-    if (this.isAggro && rise === null) this.renderAggroIndicator(ctx, sx, sy, tileSize);
-
-    drawSkeletonWarriorSprite(ctx, sx, sy, tileSize, {
-      walkFrame: this.walkFrame,
-      isMoving: this.isMoving,
-      facingX: this.facingX,
-      facingY: this.facingY,
-      attackProgress:
-        this.slashTimer > 0
-          ? 1 - this.slashTimer / SWORD_SLASH_FRAMES
-          : this.structureStrikeProgress,
-      riseProgress: rise,
+    const artTopY = this.paintSpriteMeasuringTop(ctx, sy, () => {
+      drawSkeletonWarriorSprite(ctx, sx, sy, tileSize, {
+        walkFrame: this.walkFrame,
+        isMoving: this.isMoving,
+        facingX: this.facingX,
+        facingY: this.facingY,
+        attackProgress:
+          this.slashTimer > 0
+            ? 1 - this.slashTimer / SWORD_SLASH_FRAMES
+            : this.structureStrikeProgress,
+        riseProgress: rise,
+      });
     });
 
+    if (this.isAggro && rise === null) this.renderAggroIndicator(ctx, sx, artTopY, sy, tileSize);
     // No health bar while it is still in the ground: there is nothing to damage
     // yet, and a bar floating over a mound of soil gives the wrong read.
-    if (rise === null) this.renderMobHealthBar(ctx, sx, sy);
+    if (rise === null) this.renderMobHealthBar(ctx, sx, sy, artTopY);
   }
 }

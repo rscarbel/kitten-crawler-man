@@ -850,7 +850,6 @@ export class DarkKnight extends Mob {
     // slam's disc is somewhere else entirely and is drawn in
     // `drawWorldFeedback` — see the note there.
     this.renderSweepTelegraph(ctx, sx, sy, tileSize);
-    if (this.isAggro) this.renderAggroIndicator(ctx, sx, sy, tileSize);
 
     ctx.save();
     if (this.damageFlash > 0) ctx.filter = 'brightness(3)';
@@ -858,22 +857,25 @@ export class DarkKnight extends Mob {
     // slam that never comes down. Sharing the row rather than baking a new one
     // keeps the largest sheet in the game from growing for one held frame.
     const isCasting = this.state === 'cast';
-    drawDarkKnightSprite(ctx, sx, sy, tileSize, {
-      walkFrame: this.walkFrame,
-      isMoving: this.isMoving,
-      facingX: this.facingX,
-      facingY: this.facingY,
-      attack: isCasting ? 'slam' : this.activeAttack,
-      attackProgress: isCasting
-        ? this.castPoseProgress
-        : this.activeAttack === null
-          ? null
-          : this.attackProgress,
+    const artTopY = this.paintSpriteMeasuringTop(ctx, sy, () => {
+      drawDarkKnightSprite(ctx, sx, sy, tileSize, {
+        walkFrame: this.walkFrame,
+        isMoving: this.isMoving,
+        facingX: this.facingX,
+        facingY: this.facingY,
+        attack: isCasting ? 'slam' : this.activeAttack,
+        attackProgress: isCasting
+          ? this.castPoseProgress
+          : this.activeAttack === null
+            ? null
+            : this.attackProgress,
+      });
     });
     if (this.damageFlash > 0) ctx.filter = 'none';
     ctx.restore();
 
-    this.renderMobHealthBar(ctx, sx, sy);
+    if (this.isAggro) this.renderAggroIndicator(ctx, sx, artTopY, sy, tileSize);
+    this.renderMobHealthBar(ctx, sx, sy, artTopY);
   }
 
   /**

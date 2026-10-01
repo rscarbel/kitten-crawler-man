@@ -474,16 +474,18 @@ export class SmallSpider extends Mob {
       return;
     }
 
-    drawSpiderSprite(
-      ctx,
-      bodyX,
-      bodyY,
-      bodyTileSize,
-      this.facingX,
-      this.facingY,
-      this._animation(),
-    );
+    const artTopY = this.paintSpriteMeasuringTop(ctx, sy, () => {
+      drawSpiderSprite(
+        ctx,
+        bodyX,
+        bodyY,
+        bodyTileSize,
+        this.facingX,
+        this.facingY,
+        this._animation(),
+      );
+    });
 
-    this.renderMobHealthBar(ctx, sx, sy);
+    this.renderMobHealthBar(ctx, sx, sy, artTopY);
   }
 }

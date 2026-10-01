@@ -574,22 +574,17 @@ export class Mantid extends Mob {
       isRaging: this.state === 'rage_pause',
     });
 
-    // Both the aggro tell and the rage marker go *after* the sprite and a full
-    // art-height above the tile. `renderAggroIndicator` draws a few pixels above
-    // the tile top, which on this creature is buried under two tiles of mantis.
-    const overheadY = sy - tileSize * mantidOverheadLiftTiles('mantid');
+    const artTopY = figureRowInkTop(drawnRow, sy, tileSize);
     if (this.isAggro && this.state !== 'rage_pause') {
-      this.renderAggroIndicator(ctx, sx, overheadY, tileSize);
+      this.renderAggroIndicator(ctx, sx, artTopY, sy, tileSize);
     }
     if (this.state === 'rage_pause') {
-      const clearOf = this.overheadClearTop(figureRowInkTop(drawnRow, sy, tileSize), overheadY);
+      const clearOf = this.overheadClearTop(artTopY, sy);
       drawQuestMarker(ctx, sx, clearOf, tileSize, '!', QUEST_MARKER_GOLD);
     }
-    this.renderImmuneLabels(ctx, sx, overheadY, tileSize);
-
-    // Lifted for the same reason, so the bar reads as *his* rather than as a
-    // strip lying across his legs.
-    this.renderMobHealthBar(ctx, sx, overheadY);
+    const immuneLabelY = sy - tileSize * mantidOverheadLiftTiles('mantid');
+    this.renderImmuneLabels(ctx, sx, immuneLabelY, tileSize);
+    this.renderMobHealthBar(ctx, sx, sy, artTopY);
   }
 
   /**

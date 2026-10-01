@@ -1,7 +1,11 @@
 import { Mob } from './Mob';
 import type { PlayerDamageType } from './Mob';
 import type { Player } from '../Player';
-import { drawHeatherBearSprite } from '../sprites/heatherBearSprite';
+import { drawHeatherBearSprite, prewarmHeatherBear } from '../sprites/heatherBearSprite';
+import {
+  HEATHER_TILES_PER_WALK_CYCLE,
+  HEATHER_WALK_FRAMES,
+} from '../sprites/art/heatherBearFigure';
 
 // Base stats are tuned to land at boss weight after applyMobLevel(HEATHER_LEVEL)
 // (×6.4 HP, ×4.6 damage, ×2.4 speed at level 19).
@@ -25,6 +29,12 @@ const FOLLOW_STOP_FRACTION = 0.75;
 const PAIN_GROWL_COOLDOWN = 90;
 const COIN_DROP_MIN = 10;
 const COIN_DROP_MAX = 18;
+/**
+ * The walk is advanced by the ground she actually covers, so her planted feet
+ * stay put on the floor. Capped at one sprite frame per tick: past that the
+ * row is undersampled and a separation shove would strobe her legs.
+ */
+const MAX_GAIT_RADIANS_PER_FRAME = (Math.PI * 2) / HEATHER_WALK_FRAMES;
 
 /**
  * Heather the Bear — the circus's beloved performing bear, now a
@@ -46,10 +56,17 @@ export class HeatherTheBear extends Mob {
   private swipeTimer = 0;
   private painGrowlCooldown = 0;
   private isAggro = false;
+  /** Drives her breathing at rest; never reset, so the idle loops seamlessly. */
+  private idleTicks = 0;
+  private gaitSampleX: number;
+  private gaitSampleY: number;
 
   constructor(tileX: number, tileY: number, tileSize: number) {
     super(tileX, tileY, tileSize, HEATHER_HP, HEATHER_SPEED);
     this.isBoss = true;
+    this.gaitSampleX = this.x;
+    this.gaitSampleY = this.y;
+    prewarmHeatherBear();
   }
 
   override resetToSpawn(): void {
@@ -59,6 +76,8 @@ export class HeatherTheBear extends Mob {
     this.swipeTimer = 0;
     this.painGrowlCooldown = 0;
     this.isAggro = false;
+    this.gaitSampleX = this.x;
+    this.gaitSampleY = this.y;
   }
 
   override takeDamageFrom(
@@ -73,8 +92,23 @@ export class HeatherTheBear extends Mob {
     }
   }
 
+  /**
+   * Measured over the previous frame so it also picks up the ground she lost
+   * to collision slides and separation pushes, not just her intended step.
+   */
+  private syncGaitToDistanceCovered(): void {
+    const coveredPx = Math.hypot(this.x - this.gaitSampleX, this.y - this.gaitSampleY);
+    this.gaitSampleX = this.x;
+    this.gaitSampleY = this.y;
+    const radiansPerPixel = (Math.PI * 2) / (HEATHER_TILES_PER_WALK_CYCLE * this.tileSize);
+    this.walkFrameSpeed = Math.min(coveredPx * radiansPerPixel, MAX_GAIT_RADIANS_PER_FRAME);
+  }
+
   updateAI(targets: Player[]): void {
     if (!this.isAlive) return;
+
+    this.idleTicks++;
+    this.syncGaitToDistanceCovered();
 
     if (this.attackCooldown > 0) this.attackCooldown--;
     if (this.swipeTimer > 0) this.swipeTimer--;
@@ -142,10 +176,6 @@ export class HeatherTheBear extends Mob {
     const sx = this.x - camX;
     const sy = this.y - camY;
 
-    if (this.isAggro) {
-      this.renderAggroIndicator(ctx, sx, sy, tileSize);
-    }
-
     ctx.save();
     if (this.damageFlash > 0) {
       ctx.filter = 'brightness(3)';
@@ -160,20 +190,26 @@ export class HeatherTheBear extends Mob {
         (1 - this.swipeTimer / ATTACK_SWIPE_FRAMES) * (1 - ATTACK_ANIM_WINDUP_PEAK);
     }
 
-    drawHeatherBearSprite(
-      ctx,
-      sx,
-      sy,
-      tileSize,
-      this.walkFrame,
-      this.isMoving,
-      attackAnim,
-      this.facingX,
-    );
+    const artTopY = this.paintSpriteMeasuringTop(ctx, sy, () => {
+      drawHeatherBearSprite(
+        ctx,
+        sx,
+        sy,
+        tileSize,
+        this.walkFrame,
+        this.isMoving,
+        attackAnim,
+        this.facingX,
+        this.idleTicks,
+      );
+    });
 
     if (this.damageFlash > 0) ctx.filter = 'none';
     ctx.restore();
 
-    this.renderMobHealthBar(ctx, sx, sy);
+    if (this.isAggro) {
+      this.renderAggroIndicator(ctx, sx, artTopY, sy, tileSize);
+    }
+    this.renderMobHealthBar(ctx, sx, sy, artTopY);
   }
 }

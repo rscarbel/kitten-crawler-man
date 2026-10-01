@@ -23,6 +23,7 @@ import { prewarmTuskling } from '../sprites/tusklingSprite';
 import { prewarmSkyfowlCastMember } from '../sprites/skyfowlCastSprite';
 import { COW_COATS, type CowCoatId, prewarmCow } from '../sprites/cowSprite';
 import { prewarmLlama } from '../sprites/llamaSprite';
+import { prewarmMoldLion } from '../sprites/moldLionSprite';
 import { prewarmBrindleGrub } from '../sprites/brindleGrubSprite';
 import { prewarmSmallSpider } from '../sprites/spiderSprite';
 import { prewarmBugaboo } from '../sprites/bugabooSprite';
@@ -587,6 +588,7 @@ const MOB_PREWARM: ReadonlyMap<string, (mob: Mob) => void> = new Map([
   ['small_spider', prewarmSmallSpider],
   ['bugaboo', prewarmBugaboo],
   ['llama', prewarmLlama],
+  ['mold_lion', prewarmMoldLion],
   ['brindle_grub', prewarmBrindleGrub],
   ['sky_fowl', prewarmSpawnedSkyFowl],
   ['cow', prewarmSpawnedCow],

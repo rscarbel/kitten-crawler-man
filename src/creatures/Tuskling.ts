@@ -372,19 +372,21 @@ export class Tuskling extends Mob {
       ctx.filter = 'brightness(3)';
     }
 
-    drawTusklingSprite(ctx, sx, sy, tileSize, {
-      walkFrame: this.walkFrame,
-      isMoving: this.isMoving,
-      facingX: this.facingX,
-      facingY: this.facingY,
-      hookProgress: this.hookProgress,
-      snortProgress: this.chargeWindup > 0 ? this.chargeWindup : null,
-      chargeFrame: this.chargeFrame,
+    const artTopY = this.paintSpriteMeasuringTop(ctx, sy, () => {
+      drawTusklingSprite(ctx, sx, sy, tileSize, {
+        walkFrame: this.walkFrame,
+        isMoving: this.isMoving,
+        facingX: this.facingX,
+        facingY: this.facingY,
+        hookProgress: this.hookProgress,
+        snortProgress: this.chargeWindup > 0 ? this.chargeWindup : null,
+        chargeFrame: this.chargeFrame,
+      });
     });
 
     if (this.damageFlash > 0) ctx.filter = 'none';
     ctx.restore();
 
-    this.renderMobHealthBar(ctx, sx, sy);
+    this.renderMobHealthBar(ctx, sx, sy, artTopY);
   }
 }

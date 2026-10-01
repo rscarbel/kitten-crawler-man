@@ -5,8 +5,8 @@
  *
  * The maze's art is procedural and drawn straight into the scene, so a throw
  * inside any one of these functions takes the whole finale down with nothing
- * but a blank canvas to debug from. This walks all of them, at every damage
- * stage and every facing, before the game ever does.
+ * but a blank canvas to debug from. This walks all of them, in every state
+ * and every facing, before the game ever does.
  *
  * Run: npx tsx scripts/render-bigtop-maze.ts
  */
@@ -142,7 +142,6 @@ const SAMPLE_PHASE = 97;
 /** A second sample, chosen to land in a different part of every cycle above. */
 const SAMPLE_PHASE_ALT = 233;
 
-const DAMAGE_STAGES = [1, 0.67, 0.34, 0] as const;
 const FACINGS: ReadonlyArray<MirrorFacing> = ['NE', 'SE', 'SW', 'NW'];
 const KINDS: ReadonlyArray<MirrorKind> = ['pivot_mirror', 'swivel_mirror'];
 const HEADINGS: ReadonlyArray<BeamDirection> = ['north', 'south', 'east', 'west'];
@@ -154,14 +153,16 @@ const push = (label: string, paint: Painter): void => {
   cells.push({ label, paint });
 };
 
-function destructibleArt(integrity: number, pulsing: boolean): MazeDestructibleArt {
+const DESTRUCTIBLE_LOOKS = ['waiting', 'struck', 'spent'] as const;
+type DestructibleLook = (typeof DESTRUCTIBLE_LOOKS)[number];
+
+function destructibleArt(look: DestructibleLook): MazeDestructibleArt {
   return {
-    integrity,
-    broken: integrity === 0,
-    struck: integrity === DAMAGE_STAGES[1],
+    broken: look !== 'waiting',
+    struck: look === 'struck',
     facing: 'east',
     phase: SAMPLE_PHASE,
-    pulsing,
+    pulsing: look === 'waiting',
   };
 }
 
@@ -173,9 +174,9 @@ const DESTRUCTIBLES = [
 ] as const;
 
 for (const [name, paint] of DESTRUCTIBLES) {
-  for (const integrity of DAMAGE_STAGES) {
-    push(`${name} ${integrity}`, (ctx, x, y) => {
-      paint(ctx, x, y, CELL, destructibleArt(integrity, integrity === 1));
+  for (const look of DESTRUCTIBLE_LOOKS) {
+    push(`${name} ${look}`, (ctx, x, y) => {
+      paint(ctx, x, y, CELL, destructibleArt(look));
     });
   }
 }
@@ -303,9 +304,9 @@ push('lantern dock', (ctx, x, y) => drawSpotlightDock(ctx, x, y, CELL, 0.7, SAMP
 push('chip DONUT', (ctx, x, y) => drawTargetNameChip(ctx, x, y, CELL, 'cat'));
 push('chip CARL', (ctx, x, y) => drawTargetNameChip(ctx, x, y, CELL, 'human'));
 
-for (const pulled of [0, 0.5, 1]) {
+for (const pulled of [false, true]) {
   for (const owner of ['human', 'cat'] as const) {
-    push(`rope ${owner} ${pulled}`, (ctx, x, y) => {
+    push(`rope ${owner} ${pulled ? 'taut' : 'slack'}`, (ctx, x, y) => {
       drawShadedRope(
         ctx,
         [

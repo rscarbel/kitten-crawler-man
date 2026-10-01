@@ -200,8 +200,6 @@ const CURTAINS_TO_THE_MIRRORS = 2;
 
 /** Longer than any prop's lockout, so a scripted swing always lands. */
 const BLOW_LOCKOUT_SETTLE_FRAMES = 16;
-/** The most sub-missiles one Magic Missile splits into at its highest level. */
-const SUB_MISSILE_BURST = 6;
 /** Longer than the slowest hazard's whole cycle, so a burnout probe always sees one light. */
 const BURNOUT_SEARCH_FRAMES = 400;
 /** Longer than any hazard cycle in the tent, so a quiet stretch is really quiet. */
@@ -1316,16 +1314,13 @@ console.log('\nChecking every prop answers to everything its crawler can swing�
   const spent = new MazeBlockTarget(0, 0, TILE_SIZE, 'brace', 'east');
   swingAt(spent, 'melee', BLOCK_TARGET_MAX_SWINGS);
   check(spent.broken, 'a brace gives way to swings that land');
-  // And a single burst never flattens a prop that is meant to take several: a
-  // three-hit target that dies to one trigger pull never shows the player a
-  // damage stage at all. The capstan is the real case, and Donut's missiles are
-  // what bursts — so the probe is the blow the maze must refuse to multiply.
-  const bursted = new MazeBlockTarget(0, 0, TILE_SIZE, 'capstan', 'east');
-  for (let subMissile = 0; subMissile < SUB_MISSILE_BURST; subMissile++) {
-    bursted.takeDamageFrom(BLOCK_TARGET_PROBE_DAMAGE, null, 'melee');
-  }
-  check(!bursted.broken, 'and one burst of sub-missiles counts as one blow, not three');
   check(!spent.takesPlayerDamage('melee'), 'a broken target takes no further punishment');
+  for (const block of MAZE_BLOCKS) {
+    const single = new MazeBlockTarget(0, 0, TILE_SIZE, block.kind, 'east');
+    const ownersBlow: PlayerDamageType = block.clearedBy === 'cat' ? 'missile' : 'melee';
+    swingAt(single, ownersBlow, 1);
+    check(single.broken, `${block.id}: its ${block.kind} gives way to the first blow`);
+  }
 }
 
 // The mirror of the section above, and the one that is easy to leave out: the
@@ -1363,7 +1358,6 @@ console.log('\nChecking a prop cannot be killed out from under the puzzle…');
   const untouched = new MazeBlockTarget(0, 0, TILE_SIZE, 'sandbag', 'east');
   untouched.takeDamage(BLOCK_TARGET_PROBE_DAMAGE);
   check(!untouched.broken, 'a status tick never counts as having broken a target');
-  check(untouched.integrityFraction === 1, 'and costs it no integrity');
 }
 
 // ── The hall of mirrors ───────────────────────────────────────────────────────

@@ -205,20 +205,27 @@ export class TerrorTheClown extends Mob {
     const sx = this.x - camX;
     const sy = this.y - camY;
 
-    if (this.isAggro) {
-      this.renderAggroIndicator(ctx, sx, sy, tileSize);
-    }
-
     ctx.save();
     if (this.damageFlash > 0) {
       ctx.filter = 'brightness(3)';
     }
 
-    drawTerrorTheClownSprite(ctx, sx, sy, tileSize, this.facingX, this.animation(), this.isEnraged);
+    const artTopY = this.paintSpriteMeasuringTop(ctx, sy, () => {
+      drawTerrorTheClownSprite(
+        ctx,
+        sx,
+        sy,
+        tileSize,
+        this.facingX,
+        this.animation(),
+        this.isEnraged,
+      );
+    });
 
     if (this.damageFlash > 0) ctx.filter = 'none';
     ctx.restore();
 
-    this.renderMobHealthBar(ctx, sx, sy);
+    if (this.isAggro) this.renderAggroIndicator(ctx, sx, artTopY, sy, tileSize);
+    this.renderMobHealthBar(ctx, sx, sy, artTopY);
   }
 }

@@ -198,6 +198,16 @@ export class SkeletonArcher extends RisingSkeleton {
       this.lastKnownTargetY = nearest.y;
     }
 
+    // Sight passes over a prop low enough to see past — Briar Hollow's
+    // palisade, a wagon — but `SkeletonProjectileSystem` stops an arrow on any
+    // unwalkable tile. On sight alone an archer would hold its band outside the
+    // palisade and loose into the stakes every cooldown, for as long as the
+    // party stood on the far side.
+    const arrowWouldArrive = this.map
+      ? this.map.hasWalkableLine(bow.x, bow.y, targetCx, targetCy)
+      : true;
+    const hasClearShot = hasLineOfSight && arrowWouldArrive;
+
     const distance = this.distanceTo(nearest);
 
     // A kite or regroup outranks the band-hold outright, and no draw starts
@@ -216,7 +226,7 @@ export class SkeletonArcher extends RisingSkeleton {
       return;
     }
 
-    if (!hasLineOfSight) {
+    if (!hasClearShot) {
       // Blocked: move onto the last place it could see them, looking for an
       // angle. Standing still and drawing at a wall is what a turret does.
       this.followTargetAStar(
@@ -235,7 +245,7 @@ export class SkeletonArcher extends RisingSkeleton {
 
     if (!this.isMoving) this.faceToward(nearest);
 
-    if (hasLineOfSight && distance <= this.kiteMaxPx && this.shotCooldown === 0) {
+    if (hasClearShot && distance <= this.kiteMaxPx && this.shotCooldown === 0) {
       this.shotCooldown = SHOT_COOLDOWN_FRAMES;
       this.drawTimer = BONE_ARROW_DRAW_FRAMES;
       this.isMoving = false;
@@ -309,17 +319,18 @@ export class SkeletonArcher extends RisingSkeleton {
     const sy = this.y - camY;
     const rise = this.riseProgress;
 
-    if (this.isAggro && rise === null) this.renderAggroIndicator(ctx, sx, sy, tileSize);
-
-    drawSkeletonArcherSprite(ctx, sx, sy, tileSize, {
-      walkFrame: this.walkFrame,
-      isMoving: this.isMoving,
-      facingX: this.facingX,
-      facingY: this.facingY,
-      attackProgress: this.drawTimer > 0 ? 1 - this.drawTimer / BONE_ARROW_DRAW_FRAMES : null,
-      riseProgress: rise,
+    const artTopY = this.paintSpriteMeasuringTop(ctx, sy, () => {
+      drawSkeletonArcherSprite(ctx, sx, sy, tileSize, {
+        walkFrame: this.walkFrame,
+        isMoving: this.isMoving,
+        facingX: this.facingX,
+        facingY: this.facingY,
+        attackProgress: this.drawTimer > 0 ? 1 - this.drawTimer / BONE_ARROW_DRAW_FRAMES : null,
+        riseProgress: rise,
+      });
     });
 
-    if (rise === null) this.renderMobHealthBar(ctx, sx, sy);
+    if (this.isAggro && rise === null) this.renderAggroIndicator(ctx, sx, artTopY, sy, tileSize);
+    if (rise === null) this.renderMobHealthBar(ctx, sx, sy, artTopY);
   }
 }

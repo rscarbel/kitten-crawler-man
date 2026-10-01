@@ -35,6 +35,8 @@ const SHOULDER_HALF_WIDTH = 0.15;
 const NECK_Y = -0.35;
 const HEAD_CENTRE_Y = -0.47;
 const HEAD_R = 0.125;
+/** The skull is drawn a touch taller than it is wide. */
+const SKULL_HEIGHT_STRETCH = 1.05;
 /** The skull rides forward of the shoulders — the hunch is most of the read. */
 const HEAD_FORWARD = 0.07;
 
@@ -255,7 +257,15 @@ function drawSkull(
   jawOpen: number,
 ): void {
   ctx.beginPath();
-  ctx.ellipse(headX * s, headY * s, HEAD_R * s, HEAD_R * 1.05 * s, 0, 0, Math.PI * 2);
+  ctx.ellipse(
+    headX * s,
+    headY * s,
+    HEAD_R * s,
+    HEAD_R * SKULL_HEIGHT_STRETCH * s,
+    0,
+    0,
+    Math.PI * 2,
+  );
   inkPath(ctx, FLESH_LIGHT);
 
   const jawTopY = headY + HEAD_R * 0.55;
@@ -404,6 +414,12 @@ function drawRibs(ctx: CanvasRenderingContext2D, s: number): void {
   );
   ctx.fill();
   ctx.lineWidth = Math.max(1, RIM_WIDTH * s);
+}
+
+/** The skull's crown at rest: the bob and the attack lean only ever move it down. */
+export function ruinsGhoulArtTopY(sy: number, s: number): number {
+  const crownY = HEAD_CENTRE_Y - HEAD_R * SKULL_HEIGHT_STRETCH - RIM_WIDTH;
+  return sy + s / 2 + crownY * s;
 }
 
 /**

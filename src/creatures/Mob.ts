@@ -19,6 +19,7 @@ import {
   type LevelledCurve,
 } from './mobLevelScaling';
 import { drawText, TEXT_PRESETS } from '../ui/TextBox';
+import { measureFiguresInkTop } from '../sprites/figure/figureFrameCache';
 import type { SpatialGrid } from '../core/SpatialGrid';
 import type { Rng } from '../sprites/person/rng';
 import { knockbackStepPx } from '../core/knockbackEase';
@@ -317,7 +318,7 @@ const SLINGSHOT_DROP_CHANCE = 0.005;
 const AGGRO_INDICATOR_FONT_SIZE = 18;
 /** Aggro indicator stroke line width. */
 const AGGRO_INDICATOR_LINE_WIDTH = 3;
-/** Aggro indicator Y offset above mob. */
+/** Gap between the aggro indicator and the art or health bar it stands over. */
 const AGGRO_INDICATOR_Y_OFFSET = 3;
 /** The septic label: sickly green on a darker green edge. */
 const SEPTIC_LABEL_COLOR = '#bef264';
@@ -326,6 +327,8 @@ const SEPTIC_LABEL_OUTLINE_WIDTH = 2;
 /** The aggro "!" in alarm red, over a soft dark edge that keeps it legible on any floor. */
 const AGGRO_INDICATOR_COLOR = 'rgba(239, 68, 68, 1)';
 const AGGRO_INDICATOR_OUTLINE = 'rgba(0, 0, 0, 0.55)';
+
+const HEALTH_BAR_ART_GAP_PX = 1;
 
 /** Star drawn beside the health bar of a mob that rolled at least one tactics trait. */
 const TACTICS_RANK_MARK = '★';
@@ -3493,14 +3496,27 @@ export abstract class Mob extends Player {
   /** Whether a converted mob is on its way back to its rally point; see {@link walkToAllyRally}. */
   private rallyReturning = false;
 
+  /** Runs `paint` and returns its art's top y; `sy` for a sprite that is not a cached figure. */
+  protected paintSpriteMeasuringTop(
+    ctx: CanvasRenderingContext2D,
+    sy: number,
+    paint: () => void,
+  ): number {
+    return measureFiguresInkTop(ctx, paint) ?? sy;
+  }
+
+  /** The aggro "!", stacked above both the art and the health bar. */
   protected renderAggroIndicator(
     ctx: CanvasRenderingContext2D,
     sx: number,
-    sy: number,
+    artTopY: number,
+    barSy: number,
     tileSize: number,
   ) {
-    if (deferChrome(this, 'aggro', sx, sy, tileSize)) return;
-    this.drawAggroIndicator(ctx, sx, sy, tileSize);
+    if (this.paintingBodyOnly) return;
+    const clearOfY = this.overheadClearTop(artTopY, barSy);
+    if (deferChrome(this, 'aggro', sx, clearOfY, tileSize)) return;
+    this.drawAggroIndicator(ctx, sx, clearOfY, tileSize);
   }
 
   override drawAboveDarkness(
@@ -3518,12 +3534,12 @@ export abstract class Mob extends Player {
   private drawAggroIndicator(
     ctx: CanvasRenderingContext2D,
     sx: number,
-    sy: number,
+    clearOfY: number,
     tileSize: number,
   ): void {
     drawText(ctx, '!', {
       x: sx + tileSize / 2,
-      y: sy - AGGRO_INDICATOR_Y_OFFSET - AGGRO_INDICATOR_FONT_SIZE,
+      y: clearOfY - AGGRO_INDICATOR_Y_OFFSET - AGGRO_INDICATOR_FONT_SIZE,
       align: 'center',
       size: AGGRO_INDICATOR_FONT_SIZE,
       bold: true,
@@ -3534,24 +3550,30 @@ export abstract class Mob extends Player {
     });
   }
 
-  /**
-   * The line anything hung over this mob must clear: `artTopY`, or the top of
-   * the health bar {@link renderMobHealthBar} draws at `barSy` while that bar is
-   * showing and stands higher.
-   */
+  /** The line anything hung over this mob must clear: the art, or the health bar while it shows. */
   protected overheadClearTop(artTopY: number, barSy: number): number {
     if (this.healthBarTimer <= 0) return artTopY;
-    return Math.min(artTopY, barSy - HP_BAR_Y_OFFSET);
+    return Math.min(artTopY, this.healthBarAnchorOver(artTopY, barSy) - HP_BAR_Y_OFFSET);
   }
 
-  /**
-   * Renders the health bar only while it is visible (after taking damage).
-   * Fades out over the last 40 frames.
-   */
-  protected renderMobHealthBar(ctx: CanvasRenderingContext2D, sx: number, sy: number) {
+  /** `barSy`, raised just clear of art reaching up to `artTopY`; floored so the bar stays crisp. */
+  private healthBarAnchorOver(artTopY: number, barSy: number): number {
+    const barBottomToAnchor = HP_BAR_Y_OFFSET - HP_BAR_HEIGHT;
+    const clearOfArtAnchor = artTopY - HEALTH_BAR_ART_GAP_PX + barBottomToAnchor;
+    return Math.floor(Math.min(barSy, clearOfArtAnchor));
+  }
+
+  /** Call after the sprite; `artTopY` is usually from {@link paintSpriteMeasuringTop}. */
+  protected renderMobHealthBar(
+    ctx: CanvasRenderingContext2D,
+    sx: number,
+    barSy: number,
+    artTopY: number,
+  ) {
     if (this.healthBarTimer <= 0 || this.paintingBodyOnly) return;
-    if (deferChrome(this, 'mobHealthBar', sx, sy)) return;
-    this.drawMobHealthBar(ctx, sx, sy);
+    const anchorY = this.healthBarAnchorOver(artTopY, barSy);
+    if (deferChrome(this, 'mobHealthBar', sx, anchorY)) return;
+    this.drawMobHealthBar(ctx, sx, anchorY);
   }
 
   private drawMobHealthBar(ctx: CanvasRenderingContext2D, sx: number, sy: number): void {

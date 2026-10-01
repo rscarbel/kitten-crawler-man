@@ -792,25 +792,26 @@ export class TheLich extends Mob {
     if (this.handsTimer > 0) this.renderConeTelegraph(ctx, sx, sy, tileSize);
     if (this.eruptionTimer > 0) this.renderEruption(ctx, sx, sy, tileSize);
 
-    if (this.isAggro) this.renderAggroIndicator(ctx, sx, sy, tileSize);
-
     ctx.save();
     // The same tell Miss Quill's capacitor shield uses, so a refused hit reads
     // as a mechanic in both halves of this room rather than as a missed swing.
     if (this.blockedHitFlashTimer > 0) ctx.filter = 'brightness(3)';
-    drawTheLichSprite(ctx, sx, sy, tileSize, {
-      walkFrame: this.walkFrame,
-      isMoving: this.isMoving,
-      facingX: this.facingX,
-      facingY: this.facingY,
-      castProgress: this.castTimer > 0 ? 1 - this.castTimer / SOUL_BOLT_CAST_FRAMES : null,
-      handsProgress: this.handsTimer > 0 ? 1 - this.handsTimer / HANDS_WINDUP_FRAMES : null,
-      summonProgress: this.summonTimer > 0 ? 1 - this.summonTimer / SUMMON_ANIM_FRAMES : null,
-      isDazed: this.battleDriver?.isDazed() === true,
+    const artTopY = this.paintSpriteMeasuringTop(ctx, sy, () => {
+      drawTheLichSprite(ctx, sx, sy, tileSize, {
+        walkFrame: this.walkFrame,
+        isMoving: this.isMoving,
+        facingX: this.facingX,
+        facingY: this.facingY,
+        castProgress: this.castTimer > 0 ? 1 - this.castTimer / SOUL_BOLT_CAST_FRAMES : null,
+        handsProgress: this.handsTimer > 0 ? 1 - this.handsTimer / HANDS_WINDUP_FRAMES : null,
+        summonProgress: this.summonTimer > 0 ? 1 - this.summonTimer / SUMMON_ANIM_FRAMES : null,
+        isDazed: this.battleDriver?.isDazed() === true,
+      });
     });
     ctx.restore();
 
-    this.renderMobHealthBar(ctx, sx, sy);
+    if (this.isAggro) this.renderAggroIndicator(ctx, sx, artTopY, sy, tileSize);
+    this.renderMobHealthBar(ctx, sx, sy, artTopY);
   }
 
   private renderConeTelegraph(

@@ -65,22 +65,6 @@ function strikeStateFor(view: KrakarenTentacleView): KrakarenTentacleState {
   return 'strike';
 }
 
-/** Clearance between the top of the painted art and an overhead health bar, in tiles. */
-const OVERHEAD_CLEARANCE_TILES = 0.2;
-
-/**
- * How far above its tile origin to hang a health bar so it clears the art.
- *
- * Read off the figure's own declared geometry rather than copied, because
- * resizing the cell moves it — and a stale copy fails silently, as a bar drawn
- * across the tentacle's own mouths.
- */
-export function krakarenTentacleOverheadLiftTiles(_fallbackTiles: number): number {
-  return (
-    KRAKAREN_TENTACLE_FIGURE.tileY / KRAKAREN_TENTACLE_FIGURE.tileScale + OVERHEAD_CLEARANCE_TILES
-  );
-}
-
 /**
  * Warms every state a guard tentacle can be drawn in, plus its severed pieces.
  *
