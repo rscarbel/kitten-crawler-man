@@ -17,14 +17,14 @@
  * strobing cycle shows up.
  */
 
-import { Scene } from '../core/Scene';
 import { PLAYER_SPEED, TILE_SIZE } from '../core/constants';
 import { progressFrameIndex, walkFrameIndex } from '../core/SpriteRenderer';
-import { viewportWidth, viewportHeight } from '../core/Viewport';
 import { HUMAN_SWING_FRAMES } from '../core/crawlerFormulas';
 import { HumanPlayer } from '../creatures/HumanPlayer';
-import { drawText } from '../ui/TextBox';
-import { drawBox, drawOverlay } from '../ui/Box';
+import { worldText } from '../ui/world/worldText';
+import { worldPlate, worldTint } from '../ui/world/worldShapes';
+import type { WorldGesture } from '../ui/core/UiRoot';
+import { PreviewScene, type PreviewControl } from './PreviewScene';
 import { HUMAN_ROWS, type RowSpec } from '../sprites/art/humanFigure';
 import {
   drawHumanSelection,
@@ -38,21 +38,17 @@ import {
 import { gaitRadiansPerPx } from '../sprites/humanAnimator';
 import { groundPxPerFrame } from '../sprites/art/human/probe';
 import { TICKS_PER_SECOND } from '../sprites/art/human/timing';
+import { previewInk } from '../ui/theme/previewInk';
 
-const BG_COLOR = '#12111a';
+const BG_COLOR = previewInk.human.backdrop;
 /** The dungeon floor's tone, the colour every in-game judgement is made against. */
-const FLOOR_COLOR = '#191720';
+const FLOOR_COLOR = previewInk.floor.unlitConcrete;
 /** The backdrop covers whatever the last scene left on the canvas. */
 const OPAQUE = 1;
-const LABEL_COLOR = '#e2e8f0';
-const SUBLABEL_COLOR = '#93a2c0';
+const SUBLABEL_COLOR = previewInk.human.sublabel;
 
 const MARGIN = 40;
-const TITLE_SIZE = 18;
 const LABEL_SIZE = 12;
-const TITLE_Y = 14;
-const SUBTITLE_Y = 40;
-const PANE_TOP = 90;
 const PANE_GAP = 60;
 const CAPTION_GAP = 8;
 /** Each square pane, in tiles: Carl stands over a tile and a half above his own, so the pane is that much taller than a tile. */
@@ -115,7 +111,7 @@ function initialRowIndex(): number {
   return Math.max(0, index);
 }
 
-export class HumanPreviewScene extends Scene {
+export class HumanPreviewScene extends PreviewScene {
   private rowIndex = initialRowIndex();
   private rowTicks = 0;
   private readonly live = new HumanPlayer(0, 0, TILE_SIZE);
@@ -127,9 +123,37 @@ export class HumanPreviewScene extends Scene {
     prewarmHumanSprite();
   }
 
-  handleClick(): void {
+  private advanceRow(): void {
     this.rowIndex = (this.rowIndex + 1) % HUMAN_ROWS.length;
     this.rowTicks = 0;
+  }
+
+  protected handlePreviewWorldPointer(gesture: WorldGesture): void {
+    if (gesture.tap) this.advanceRow();
+  }
+
+  protected previewTitle(): string {
+    return 'human preview — ?human';
+  }
+
+  protected previewCaptions(): readonly string[] {
+    const row = HUMAN_ROWS[this.rowIndex];
+    const frame = frameAt(row, this.rowTicks);
+    return [
+      `Carl — ${row.name} (${row.view}, ${row.kind}) — click for the next row`,
+      `frame ${frame + 1} of ${row.frameCount}, at game timing`,
+    ];
+  }
+
+  protected previewControls(): readonly PreviewControl[] {
+    return [
+      {
+        label: 'next row',
+        onTap: () => {
+          this.advanceRow();
+        },
+      },
+    ];
   }
 
   update(): void {
@@ -168,64 +192,42 @@ export class HumanPreviewScene extends Scene {
   }
 
   render(ctx: CanvasRenderingContext2D): void {
-    const width = viewportWidth();
-    drawOverlay(ctx, {
-      canvasWidth: width,
-      canvasHeight: viewportHeight(),
-      color: BG_COLOR,
-      alpha: OPAQUE,
-    });
+    worldTint(ctx, BG_COLOR, OPAQUE);
 
     const row = HUMAN_ROWS[this.rowIndex];
     const frame = frameAt(row, this.rowTicks);
-    drawText(ctx, `Carl — ${row.name} (${row.view}, ${row.kind}) — click for the next row`, {
-      x: MARGIN,
-      y: TITLE_Y,
-      size: TITLE_SIZE,
-      bold: true,
-      color: LABEL_COLOR,
-      outline: true,
-    });
-    drawText(ctx, `frame ${frame + 1} of ${row.frameCount}, at game timing`, {
-      x: MARGIN,
-      y: SUBTITLE_Y,
-      size: LABEL_SIZE,
-      color: SUBLABEL_COLOR,
-    });
+    const paneTop = this.headerBottom + MARGIN;
 
     let x = MARGIN;
     for (const size of ROW_TILE_SIZES) {
-      this.drawPane(ctx, x, size, `${size}px`, { row: row.name, frame, flipX: false });
+      this.drawPane(ctx, x, paneTop, size, `${size}px`, { row: row.name, frame, flipX: false });
       x += size * PANE_SIZE_TILES + PANE_GAP;
     }
 
     const step = LIVE_SCRIPT[this.scriptStep];
     const live = this.live.spriteSelection();
-    this.drawPane(ctx, x, LIVE_TILE_SIZE, `live: ${step.label} — ${live.row}[${live.frame}]`, live);
+    const liveCaption = `live: ${step.label} — ${live.row}[${live.frame}]`;
+    this.drawPane(ctx, x, paneTop, LIVE_TILE_SIZE, liveCaption, live);
+    this.renderChrome(ctx);
   }
 
   private drawPane(
     ctx: CanvasRenderingContext2D,
     left: number,
+    top: number,
     size: number,
     caption: string,
     selection: HumanRowSelection,
   ): void {
     const paneWidth = size * PANE_SIZE_TILES;
     const paneHeight = size * PANE_SIZE_TILES;
-    drawBox(ctx, {
-      x: left,
-      y: PANE_TOP,
-      width: paneWidth,
-      height: paneHeight,
-      fill: FLOOR_COLOR,
-    });
+    worldPlate(ctx, { x: left, y: top, w: paneWidth, h: paneHeight }, { fill: FLOOR_COLOR });
     const tileLeft = left + (paneWidth - size) / 2;
-    const tileTop = PANE_TOP + paneHeight - size;
+    const tileTop = top + paneHeight - size;
     drawHumanSelection(ctx, tileLeft, tileTop, size, selection);
-    drawText(ctx, caption, {
+    worldText(ctx, caption, {
       x: left,
-      y: PANE_TOP + paneHeight + CAPTION_GAP,
+      y: top + paneHeight + CAPTION_GAP,
       size: LABEL_SIZE,
       color: SUBLABEL_COLOR,
     });

@@ -18,7 +18,8 @@ import { activeRunStats } from '../core/GameStats';
 import type { SoundId } from '../audio/sounds';
 import { prewarmTriageSparkle } from '../sprites/crocodilianSprite';
 import { hirelingDownedArrowCandidate, renderHirelingDownedMarker } from '../ui/HirelingDownedUI';
-import type { ArrowAvoidRect, ArrowCandidate } from '../ui/WorldArrow';
+import type { ArrowCandidate } from '../ui/WorldArrow';
+import type { Rect } from '../ui/core/geom';
 import type { GameSystem, SystemContext } from './GameSystem';
 import type { MobRoster } from './kits/SceneWorld';
 import { hasAiAttention } from './MobUpdateLoop';
@@ -476,7 +477,7 @@ export class MercenarySystem implements GameSystem {
     camY: number,
     active: Player,
     visibleRadiusPx: number,
-    avoidRect?: ArrowAvoidRect,
+    avoidRect?: Rect,
   ): ArrowCandidate | null {
     const merc = this.downedMerc;
     if (merc === null) return null;

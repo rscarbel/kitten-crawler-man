@@ -3,15 +3,20 @@
  *
  * Chips are the player's gold rendered as chips — one balance, not a buy-in
  * wallet — so the tray and the felt stack between them always account for every
- * coin the player owns. The palette is the one already painted onto the club's
- * table sprite, so the chips in the tray match the chips on the furniture.
+ * coin the player owns. The faces are the casino's chip tokens, the red, blue
+ * and brass already painted onto the club's table sprite, so the chips in the
+ * tray match the chips on the furniture.
  *
- * Chip geometry is vector illustration with no shared-utility equivalent, so raw
- * `ctx` path drawing is confined to this module alongside `PlayingCard.ts`.
+ * Chip geometry is vector illustration with no widget equivalent, so raw `ctx`
+ * path drawing is confined to this module alongside `PlayingCard.ts`.
  */
 
 import { CHIP_DENOMINATIONS, type ChipDenomination } from '../../systems/casino/BlackjackTable';
-import { drawText } from '../TextBox';
+import { darken, withAlpha } from '../theme/color';
+import { skinsFor } from '../theme/skins';
+import type { Theme } from '../theme/tokens';
+import type { PaintTarget } from '../widgets/paint';
+import { text } from '../widgets/text';
 
 interface ChipPalette {
   readonly face: string;
@@ -20,11 +25,31 @@ interface ChipPalette {
   readonly label: string;
 }
 
-const CHIP_PALETTES: Record<ChipDenomination, ChipPalette> = {
-  10: { face: '#c8323c', edge: '#7d1a22', stripe: '#f2dede', label: '#fff0f0' },
-  25: { face: '#2f5ec8', edge: '#1a3474', stripe: '#dde6f8', label: '#eef3ff' },
-  50: { face: '#d8b432', edge: '#87681a', stripe: '#fff4d0', label: '#3a2c08' },
-};
+/** How far a chip's rim falls into shadow from its face. */
+const CHIP_EDGE_DARKEN = 0.42;
+const CHIP_SHADOW_ALPHA = 0.5;
+const EMPTY_TRAY_ALPHA = 0.35;
+const CHIP_LABEL_WEIGHT = 800;
+
+const [SMALL_CHIP, MEDIUM_CHIP, LARGE_CHIP] = CHIP_DENOMINATIONS;
+
+function chipPalettes(theme: Theme): Record<ChipDenomination, ChipPalette> {
+  const { material, text: ink } = theme.palette;
+  const stripe = skinsFor(theme).casinoChip.stripe;
+  const chip = (face: string, label: string): ChipPalette => ({
+    face,
+    edge: darken(face, CHIP_EDGE_DARKEN),
+    stripe,
+    label,
+  });
+  return {
+    [SMALL_CHIP]: chip(material.chipRed, material.chipWhite),
+    [MEDIUM_CHIP]: chip(material.chipBlue, material.chipWhite),
+    [LARGE_CHIP]: chip(material.brass, ink.inverse),
+  };
+}
+
+const paletteCache = new WeakMap<Theme, Record<ChipDenomination, ChipPalette>>();
 
 /** A chip is this many times wider than tall — the shallow ellipse of a chip seen from the table. */
 const CHIP_SQUASH = 0.42;
@@ -35,7 +60,6 @@ const CHIP_STRIPE_COUNT = 6;
 const CHIP_STRIPE_ARC = 0.22;
 const CHIP_INNER_FACE_FRACTION = 0.62;
 const CHIP_LABEL_SIZE_FRACTION = 0.72;
-const CHIP_LABEL_Y_FRACTION = 0.36;
 
 /** Beyond this a rich player's tray becomes a skyscraper; the numeric total carries the rest. */
 export const TRAY_MAX_VISIBLE_CHIPS = 12;
@@ -43,8 +67,13 @@ export const TRAY_MAX_VISIBLE_CHIPS = 12;
 const TWO_PI = Math.PI * 2;
 const HALF = 0.5;
 
-export function chipPalette(denomination: number): ChipPalette {
-  return CHIP_PALETTES[nearestDenomination(denomination)];
+export function chipPalette(theme: Theme, denomination: number): ChipPalette {
+  let palettes = paletteCache.get(theme);
+  if (palettes === undefined) {
+    palettes = chipPalettes(theme);
+    paletteCache.set(theme, palettes);
+  }
+  return palettes[nearestDenomination(denomination)];
 }
 
 /** The chip colour a loose coin amount reads as — used for the tray's odd remainder. */
@@ -66,20 +95,21 @@ export interface ChipDrawOpts {
 
 /** One chip lying face-up, centred on (cx, cy), `radius` being its half-width. */
 export function drawChip(
-  ctx: CanvasRenderingContext2D,
+  target: PaintTarget,
   cx: number,
   cy: number,
   radius: number,
   denomination: number,
   opts: ChipDrawOpts = {},
 ): void {
-  const palette = chipPalette(denomination);
+  const { ctx, theme } = target;
+  const palette = chipPalette(theme, denomination);
   const ry = radius * CHIP_SQUASH;
 
   ctx.save();
   ctx.globalAlpha = opts.alpha ?? 1;
   if (opts.shadow === true) {
-    ctx.shadowColor = 'rgba(0,0,0,0.5)';
+    ctx.shadowColor = withAlpha(theme.palette.surface.sunken, CHIP_SHADOW_ALPHA);
     ctx.shadowBlur = radius * HALF;
     ctx.shadowOffsetY = radius * CHIP_STACK_STEP;
   }
@@ -141,15 +171,21 @@ export function drawChip(
   ctx.restore();
 
   if (opts.showLabel === true) {
-    drawText(ctx, `${denomination}`, {
-      x: cx,
-      y: cy - radius * CHIP_LABEL_Y_FRACTION,
-      size: Math.max(1, radius * CHIP_LABEL_SIZE_FRACTION),
-      bold: true,
-      color: palette.label,
-      align: 'center',
-      alpha: opts.alpha ?? 1,
-    });
+    const size = Math.max(1, radius * CHIP_LABEL_SIZE_FRACTION);
+    ctx.save();
+    ctx.globalAlpha = opts.alpha ?? 1;
+    text(
+      target,
+      { x: cx - radius, y: cy - size * HALF, w: radius * 2, h: size },
+      {
+        text: `${denomination}`,
+        style: { size, weight: CHIP_LABEL_WEIGHT, lineHeight: size },
+        color: palette.label,
+        align: 'center',
+        valign: 'middle',
+      },
+    );
+    ctx.restore();
   }
 }
 
@@ -158,7 +194,7 @@ export function drawChip(
  * label — a stack of labelled discs reads as noise.
  */
 export function drawChipStack(
-  ctx: CanvasRenderingContext2D,
+  target: PaintTarget,
   cx: number,
   baseY: number,
   radius: number,
@@ -167,7 +203,7 @@ export function drawChipStack(
 ): void {
   const step = radius * CHIP_STACK_STEP;
   chips.forEach((denomination, index) => {
-    drawChip(ctx, cx, baseY - index * step, radius, denomination, {
+    drawChip(target, cx, baseY - index * step, radius, denomination, {
       alpha,
       showLabel: index === chips.length - 1,
     });
@@ -204,13 +240,14 @@ export function trayChips(coins: number): ReadonlyArray<number> {
  * to read the line.
  */
 export function drawEmptyTrayOutline(
-  ctx: CanvasRenderingContext2D,
+  target: PaintTarget,
   cx: number,
   baseY: number,
   radius: number,
 ): void {
+  const { ctx, theme } = target;
   ctx.save();
-  ctx.strokeStyle = 'rgba(200,168,64,0.35)';
+  ctx.strokeStyle = withAlpha(skinsFor(theme).casinoChip.rim, EMPTY_TRAY_ALPHA);
   ctx.lineWidth = Math.max(1, radius * CHIP_EDGE_WIDTH_FRACTION);
   ctx.setLineDash([radius * CHIP_STACK_STEP, radius * CHIP_STACK_STEP]);
   ctx.beginPath();

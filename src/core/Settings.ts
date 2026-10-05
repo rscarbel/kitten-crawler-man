@@ -37,6 +37,11 @@ export type QualityPreset = 'auto' | 'sharp' | 'performance';
 
 const QUALITY_PRESETS: ReadonlyArray<QualityPreset> = ['auto', 'sharp', 'performance'];
 
+/** How large the player wants the UI drawn, on top of what the device's density already picks. */
+export const UI_SIZES = ['small', 'medium', 'large'] as const;
+
+export type UiSize = (typeof UI_SIZES)[number];
+
 /**
  * Mirrors {@link Difficulty} as a value so it can be validated without a
  * runtime dependency on `difficultyProfiles.ts` — that module reads
@@ -83,6 +88,7 @@ interface SettingsData {
    * without it the pet sits out every fight the player does not switch over for.
    */
   catAutoSummonsMongo: boolean;
+  uiSize: UiSize;
 }
 
 const DEFAULTS: SettingsData = {
@@ -93,10 +99,15 @@ const DEFAULTS: SettingsData = {
   musicVolume: DEFAULT_MUSIC_VOLUME,
   bindings: {},
   catAutoSummonsMongo: true,
+  uiSize: 'medium',
 };
 
 function isQualityPreset(value: unknown): value is QualityPreset {
   return QUALITY_PRESETS.some((preset) => preset === value);
+}
+
+function isUiSize(value: unknown): value is UiSize {
+  return UI_SIZES.some((size) => size === value);
 }
 
 function isDifficulty(value: unknown): value is Difficulty {
@@ -158,6 +169,7 @@ function load(): SettingsData {
   if (stored === null) return { ...DEFAULTS };
   const quality = stored.quality;
   const difficulty = stored.difficulty;
+  const uiSize = stored.uiSize;
   return {
     quality: isQualityPreset(quality) ? quality : DEFAULTS.quality,
     difficulty: isDifficulty(difficulty) ? difficulty : DEFAULTS.difficulty,
@@ -166,6 +178,7 @@ function load(): SettingsData {
     musicVolume: readVolume(stored, 'musicVolume', DEFAULTS.musicVolume),
     bindings: readBindings(stored, 'bindings'),
     catAutoSummonsMongo: readBoolean(stored, 'catAutoSummonsMongo', DEFAULTS.catAutoSummonsMongo),
+    uiSize: isUiSize(uiSize) ? uiSize : DEFAULTS.uiSize,
   };
 }
 
@@ -240,6 +253,15 @@ class Settings {
 
   setCatAutoSummonsMongo(enabled: boolean): void {
     this.data.catAutoSummonsMongo = enabled;
+    this.persist();
+  }
+
+  get uiSize(): UiSize {
+    return this.data.uiSize;
+  }
+
+  setUiSize(size: UiSize): void {
+    this.data.uiSize = size;
     this.persist();
   }
 

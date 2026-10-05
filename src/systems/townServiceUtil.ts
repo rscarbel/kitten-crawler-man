@@ -25,19 +25,12 @@ export function rotateLine(pool: ReadonlyArray<string>, turn: number): string {
 /**
  * Adds `quantity` of `id` to `buyer`'s bag, reporting whether it landed.
  *
- * `addItem` is silent about a full bag — it stacks the whole quantity, drops the
- * whole quantity into an empty slot, or does nothing — so the count is taken
- * either side of it. That is the same guard the market stalls and the General
- * Store use, and it is the reason a purchase can return `ok: false` and leave
- * the buyer's coins alone.
- *
- * Because `addItem` is all-or-nothing, a partial delivery cannot happen and
- * there is nothing to roll back; the count is still compared against the full
- * quantity rather than against zero, so the day that stops being true this
- * refuses the sale instead of silently short-changing the buyer.
+ * Room is asked for first, so a full bag refuses the purchase (`ok: false`,
+ * coins untouched) rather than losing the item and reporting a full bag.
+ * `addItem` is all-or-nothing, so a partial delivery cannot happen and there
+ * is nothing to roll back.
  */
 export function giveInventoryItem(buyer: Player, id: ItemId, quantity = 1): boolean {
-  const before = buyer.inventory.countOf(id);
-  buyer.inventory.addItem(id, quantity);
-  return buyer.inventory.countOf(id) - before === quantity;
+  if (!buyer.inventory.hasRoomFor(id)) return false;
+  return buyer.inventory.addItem(id, quantity);
 }

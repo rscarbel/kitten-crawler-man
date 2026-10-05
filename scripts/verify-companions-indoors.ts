@@ -113,7 +113,8 @@ import { interiorHostilesFor } from '../src/systems/interiorHostiles';
 import { createTownMemory } from '../src/core/TownMemory';
 import { applyMovement } from '../src/systems/GameLoopPhases';
 import { CompanionSystem } from '../src/systems/CompanionSystem';
-import { interiorHudLayout } from '../src/scenes/interiorHudLayout';
+import { hudLayout } from '../src/ui/hud/hudLayout';
+import { NO_INSETS, resolveViewport } from '../src/ui/core/viewport';
 import { BuildingSystem, downedPartnerEntryRefusal } from '../src/systems/BuildingSystem';
 import { CRAWLER_NAMES } from '../src/core/SkillManager';
 
@@ -136,7 +137,6 @@ const TILE_CENTER = 0.5;
 /** A portrait phone, for checking where the phone HUD stacks Summon. */
 const PHONE_LAYOUT_WIDTH = 390;
 const PHONE_LAYOUT_HEIGHT = 844;
-const PHONE_LAYOUT_HOTBAR_BAND = 64;
 const OUTDOOR_W_TILES = 48;
 const OUTDOOR_H_TILES = 20;
 const OUTDOOR_PARTY_TILE = { x: 6, y: 10 } as const;
@@ -278,7 +278,7 @@ function makeMongoSystem(petState: MongoPetState, unlocked: boolean): MongoSyste
     () => MONGO_LEVEL,
     ignore,
     () => 0,
-    ignore,
+    { post: ignore, isShowing: () => false },
   );
   system.unlocked = unlocked;
   return system;
@@ -1523,7 +1523,8 @@ function checkEveryRoom(): void {
 // ── Outdoors: walking out of every door ──────────────────────────────────────
 
 /** Floors the doorstep check is run on: the town moves with the world seed. */
-const OUTDOOR_WORLD_SEEDS: readonly number[] = [1, 7919];
+const ALTERNATE_WORLD_SEED = 7919;
+const OUTDOOR_WORLD_SEEDS: readonly number[] = [1, ALTERNATE_WORLD_SEED];
 /** The tile the scene sets a party down on when it walks out: one south of the door. */
 const DOORSTEP_OFFSET_Y = 1;
 
@@ -1628,6 +1629,7 @@ const MERC_SYSTEM_PATH = resolve(SCENES_DIR, '..', 'systems', 'MercenarySystem.t
 const QUILL_PATH = resolve(SCENES_DIR, '..', 'systems', 'QuillConfrontationSystem.ts');
 const OCCUPANT_SYSTEM_PATH = resolve(SCENES_DIR, '..', 'systems', 'InteriorOccupantSystem.ts');
 const PLAYER_MANAGER_PATH = resolve(SCENES_DIR, '..', 'core', 'PlayerManager.ts');
+const HUD_SURFACE_PATH = resolve(SCENES_DIR, '..', 'ui', 'hud', 'HudSurface.ts');
 
 /** The source of one method, from its signature to the closing brace at method depth. */
 function methodBody(source: string, signature: string): string | null {
@@ -1783,32 +1785,42 @@ function checkSceneWiring(): void {
       `the hire’s Talk prompt is drawn after ${surface.slice('this.'.length, -1)}, and so yields to it`,
     );
   }
-  const summonButton = methodBody(interior, 'private renderSummonButton(');
+  const hudModelBody = methodBody(interior, 'private hudModel(): HudModel {');
   check(
-    summonButton?.includes('layout.summon') === true,
-    'the Summon button is drawn where the interior HUD layout puts it',
+    hudModelBody !== null && /summon: [^,]*this\.hudSummon\(\)/.test(hudModelBody),
+    'the interior hands the HUD its Summon card',
   );
-  const phoneLayout = interiorHudLayout({
-    viewportWidth: PHONE_LAYOUT_WIDTH,
-    viewportHeight: PHONE_LAYOUT_HEIGHT,
-    mobile: true,
-    hudCollapsed: true,
-    miniMapExpanded: false,
-    hotbarBandHeight: PHONE_LAYOUT_HOTBAR_BAND,
-    followButton: true,
-    summonButton: true,
-    buildButton: true,
-    journalButton: true,
-    lootBoxBanner: null,
-  });
-  const stackedSummon = phoneLayout.summon;
-  const phoneSwitch = phoneLayout.switchButton;
+  const hudSummonBody = methodBody(interior, "private hudSummon(): HudModel['summon'] {");
   check(
-    stackedSummon !== null &&
-      phoneSwitch !== null &&
-      stackedSummon.x === phoneSwitch.x &&
-      stackedSummon.y + stackedSummon.h < phoneSwitch.y,
-    'on a phone the Summon button takes the stacked slot, clear of Switch',
+    inOrder(hudSummonBody, 'this.mongoSystem.summonCard(', 'this.toggleMongoSummon()'),
+    'built from Mongo’s own card, and a tap toggles him',
+  );
+  const hudSurface = readFileSync(HUD_SURFACE_PATH, 'utf8');
+  check(
+    hudSurface.includes('summonCard(ui, geometry.buttons.summon, model.summon'),
+    'the Summon card is drawn where the HUD layout puts it',
+  );
+  const phoneViewport = resolveViewport({
+    cssWidth: PHONE_LAYOUT_WIDTH,
+    cssHeight: PHONE_LAYOUT_HEIGHT,
+    density: 'touch',
+    uiSize: 'medium',
+    safeArea: NO_INSETS,
+  });
+  const phoneLayout = hudLayout({
+    viewport: phoneViewport.safe,
+    size: phoneViewport.size,
+    density: phoneViewport.density,
+    miniMapExpanded: false,
+    build: true,
+  });
+  const phoneSummon = phoneLayout.buttons.summon;
+  const phoneSwitch = phoneLayout.buttons.switchButton;
+  check(
+    phoneSwitch !== null &&
+      phoneSummon.y + phoneSummon.h === phoneSwitch.y + phoneSwitch.h &&
+      phoneSummon.x >= phoneSwitch.x + phoneSwitch.w,
+    'on a phone the Summon button takes the slot beside Switch, clear of it',
   );
   const input = readFileSync(INPUT_HANDLER_PATH, 'utf8');
   const buildSummon = between(input, 'buildSummon: (actions) => {', '},');
@@ -1942,8 +1954,8 @@ function checkDownedPartnerKeepsEveryDoorShut(): void {
     `every door refuses, by name (${refusals.length} of ${map.buildingEntries.length})`,
   );
 
-  const [door] = map.buildingEntries;
-  if (door === undefined) return;
+  if (map.buildingEntries.length === 0) return;
+  const door = map.buildingEntries[0];
   standOn({ x: door.doorTile.x, y: door.doorTile.y + OFF_THE_MAT_TILES });
   standOn(door.doorTile);
   const refusalsBeforeDwell = refusals.length;

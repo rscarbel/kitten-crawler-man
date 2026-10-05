@@ -6,11 +6,8 @@ import { getLevelDef } from '../levels';
 import { recommendedPartyLevelFor } from '../levels/spawner';
 import { activeDifficultyProfile } from '../core/difficultyProfiles';
 import type { DifficultyProfile } from '../core/difficultyProfiles';
-import { drawText, measureTextBox, TEXT_PRESETS } from '../ui/TextBox';
-import type { TextOptions } from '../ui/TextBox';
-import { drawModal, drawOverlay, BOX_PRESETS } from '../ui/Box';
-import { addButton, beginMenuFocus, endMenuFocus, BUTTON_PRESETS } from '../ui/Button';
-import type { ButtonRect } from '../ui/pause/types';
+import { worldText } from '../ui/world/worldText';
+import { worldPalette } from '../ui/theme/worldInk';
 import { drawSpriteKey } from '../core/SpriteRenderer';
 import { dungeonFloorTheme } from '../map/dungeon/floorTheme';
 import { viewportWidth, viewportHeight } from '../core/Viewport';
@@ -55,7 +52,6 @@ const STAIRWELL_DRAFT_RESPAWN_DIST_PX = TILE_SIZE * STAIRWELL_DRAFT_RESPAWN_DIST
 const STAIRWELL_DRAFT_FADE_ZONE_TILES = 3;
 /** Distance over which a mote fades in from the outer edge, and fades out just before it recycles. */
 const STAIRWELL_DRAFT_FADE_ZONE_PX = TILE_SIZE * STAIRWELL_DRAFT_FADE_ZONE_TILES;
-const STAIRWELL_DRAFT_MOTE_COLOR_RGB = '216, 200, 235'; // pale violet dust, echoing the stairwell glow
 /** Render's own wider cull margin, since motes live well outside the sprite's own footprint. */
 const STAIRWELL_DRAFT_CULL_MARGIN_PX = STAIRWELL_DRAFT_RADIUS_PX;
 const ALPHA_CHANNEL_STEPS = 256;
@@ -213,54 +209,6 @@ function quantizeBearingToCompass(angleRadians: number): number {
   );
 }
 
-// Menu rendering
-const STAIRWELL_MENU_OVERLAY_ALPHA = 0.55;
-const STAIRWELL_MENU_PANEL_WIDTH = 360;
-const STAIRWELL_MENU_PANEL_MARGIN = 32;
-/** Panel height with no warning shown; each wrapped warning line adds a line height. */
-const STAIRWELL_MENU_PANEL_BASE_HEIGHT = 184;
-const STAIRWELL_MENU_BODY_MARGIN = 36;
-const STAIRWELL_MENU_TITLE_Y_OFFSET = 20;
-const STAIRWELL_MENU_TITLE_SIZE = 18;
-const STAIRWELL_MENU_PROMPT_Y_OFFSET = 54;
-const STAIRWELL_MENU_PROMPT_SIZE = 13;
-const STAIRWELL_MENU_RECOMMENDED_Y_OFFSET = 80;
-const STAIRWELL_MENU_WARNING_Y_GAP = 20;
-const STAIRWELL_MENU_WARNING_SIZE = 10;
-const STAIRWELL_MENU_WARNING_LINE_HEIGHT = 15;
-const STAIRWELL_MENU_HINT_SIZE = 10;
-/** Minimum gap kept between the warning text (or recommended-level line) and the hint below it. */
-const STAIRWELL_MENU_CONTENT_TO_HINT_GAP = 18;
-const STAIRWELL_MENU_BUTTON_WIDTH = 130;
-const STAIRWELL_MENU_BUTTON_HEIGHT = 40;
-const STAIRWELL_MENU_BUTTON_GAP = 16;
-const STAIRWELL_MENU_BUTTON_BOTTOM_OFFSET = 56;
-/** Gap between the hint line and the button row below it. */
-const STAIRWELL_MENU_HINT_TO_BUTTON_GAP = 16;
-/**
- * Hard floor for the button row on a viewport too short to fit the panel's
- * requested height even after clamping: half the panel's own edge margin, so
- * the row still keeps some daylight from the canvas edge instead of touching it.
- */
-const STAIRWELL_MENU_BUTTON_HARD_FLOOR_MARGIN = STAIRWELL_MENU_PANEL_MARGIN / 2;
-const STAIRWELL_MENU_BUTTON_TEXT_SIZE = 14;
-const STAIRWELL_MENU_BORDER_COLOR = '#a855f7';
-const STAIRWELL_MENU_TITLE_TEXT_COLOR = '#e9d5ff';
-const STAIRWELL_MENU_PROMPT_TEXT_COLOR = '#94a3b8';
-const STAIRWELL_MENU_HINT_TEXT_COLOR = '#64748b';
-/** The consequence-line amber every modal in the game warns in. */
-const STAIRWELL_MENU_WARNING_COLOR = '#fbbf24';
-/** Marks the recommended-level line as advice the party has not met yet. */
-const STAIRWELL_MENU_RECOMMENDED_WARNING_PREFIX = '⚠ ';
-/**
- * A hint of a halo behind the red, so the line catches the eye without the
- * bloom a full-strength glow puts on a 12px string.
- */
-const STAIRWELL_MENU_RECOMMENDED_GLOW_BLUR = 4;
-const STAIRWELL_MENU_RECOMMENDED_GLOW_COLOR = '#ffffff';
-/** The advice is not merely met but comfortably cleared. */
-const STAIRWELL_MENU_RECOMMENDED_ABOVE_COLOR = '#4ade80';
-
 /** A point-in-time copy of the descend prompt's state, and of the Wayfinder's. */
 export interface StairwellCheckpoint {
   dismissed: boolean;
@@ -313,51 +261,37 @@ interface DraftPool {
 }
 
 /** How the party's level sits against the next floor's recommendation. */
-type PartyStanding = 'below' | 'met' | 'above';
+export type PartyStanding = 'below' | 'met' | 'above';
 
-type RecommendedLineStyle = Pick<
-  TextOptions,
-  'size' | 'bold' | 'color' | 'glow' | 'glowBlur' | 'strikethrough'
->;
-
-/**
- * How the recommended-level line is dressed for a given standing.
- *
- * The struck-through variants say the same thing the colour does twice over:
- * this is advice you have already satisfied, and the number is here for
- * reference rather than as something to act on.
- */
-function recommendedLineStyle(standing: PartyStanding): RecommendedLineStyle {
-  switch (standing) {
-    case 'below':
-      return {
-        ...TEXT_PRESETS.danger,
-        glow: STAIRWELL_MENU_RECOMMENDED_GLOW_COLOR,
-        glowBlur: STAIRWELL_MENU_RECOMMENDED_GLOW_BLUR,
-      };
-    case 'met':
-      return { ...TEXT_PRESETS.value, strikethrough: true };
-    case 'above':
-      return {
-        ...TEXT_PRESETS.value,
-        color: STAIRWELL_MENU_RECOMMENDED_ABOVE_COLOR,
-        strikethrough: true,
-      };
-  }
-}
-
-interface DescentAdvice {
+export interface DescentAdvice {
   party: number;
   recommended: number;
   standing: PartyStanding;
 }
 
+/** What the descend prompt asks, for a view that draws it. */
+export interface DescentPrompt {
+  readonly nextFloorName: string;
+  /** Null on a floor that gives no advice. */
+  readonly advice: DescentAdvice | null;
+  /** Why the party may want to stay, or null when it is strong enough. */
+  readonly warning: string | null;
+}
+
+function descentWarning(advice: DescentAdvice | null): string | null {
+  if (advice?.standing !== 'below') return null;
+  return (
+    `The foes below fight like a level-${advice.recommended} party. You are level ` +
+    `${advice.party} — this floor still has strength to give.`
+  );
+}
+
+const NEXT_FLOOR_FALLBACK_NAME = 'Next Floor';
+
 export class StairwellSystem implements GameSystem {
   private onStairwell = false;
   private _menuOpen = false;
   private dismissed = false;
-  /** Rebuilt by `renderMenu`, so a click and the thing it hits can never drift apart. */
-  private menuButtons: ButtonRect[] = [];
   /**
    * One entry per stairwell currently near the player, keyed by footprint tile
    * (`x,y`). Ambient VFX, not game state: it needs no checkpoint capture,
@@ -643,6 +577,22 @@ export class StairwellSystem implements GameSystem {
     this.dismissed = true;
   }
 
+  /** The descend prompt's question and advice. */
+  descentPrompt(): DescentPrompt {
+    const nextId = this.levelDef.nextLevelId;
+    const advice = this.descentAdvice();
+    return {
+      nextFloorName: nextId ? getLevelDef(nextId).name : NEXT_FLOOR_FALLBACK_NAME,
+      advice,
+      warning: descentWarning(advice),
+    };
+  }
+
+  /** The prompt's Descend. */
+  descend(): void {
+    this.onDescend();
+  }
+
   /**
    * `detect` is deliberately not called from here: the scene drives it itself,
    * because it watches the menu-open edge across the call to decide whether the
@@ -824,22 +774,6 @@ export class StairwellSystem implements GameSystem {
     return this.gameMap.isStairwellTile(tx, ty);
   }
 
-  handleClick(mx: number, my: number): boolean {
-    if (!this._menuOpen) return false;
-    for (const button of this.menuButtons) {
-      if (
-        mx >= button.x &&
-        mx <= button.x + button.w &&
-        my >= button.y &&
-        my <= button.y + button.h
-      ) {
-        button.action?.();
-        return true;
-      }
-    }
-    return false;
-  }
-
   renderStairwells(ctx: CanvasRenderingContext2D, camX: number, camY: number): void {
     if (!this.levelDef.nextLevelId) return;
     const ts = TILE_SIZE;
@@ -861,23 +795,30 @@ export class StairwellSystem implements GameSystem {
 
       drawSpriteKey(ctx, 'stairwell', dungeonFloorTheme().id, 0, sx, sy, bw);
 
-      ctx.strokeStyle = `rgba(168, 85, 247, ${pulse})`;
+      ctx.save();
+      ctx.globalAlpha = pulse;
+      ctx.strokeStyle = worldPalette.waymark.stairwellEdge;
       ctx.lineWidth = STAIRWELL_BORDER_WIDTH;
       ctx.strokeRect(sx + 1, sy + 1, bw - 2, bh - 2);
+      ctx.restore();
 
       const arrowSize = Math.floor(bh * STAIRWELL_ICON_SIZE_RATIO);
-      drawText(ctx, '▼', {
+      worldText(ctx, '▼', {
         x: sx + bw / 2,
         y: sy + bh * STAIRWELL_ICON_Y_RATIO - Math.round(arrowSize * STAIRWELL_ICON_Y_ADJUST),
         size: arrowSize,
         bold: true,
-        color: `rgba(233, 213, 255, ${pulse})`,
+        color: worldPalette.waymark.stairwellArrow,
+        alpha: pulse,
         align: 'center',
       });
     }
 
+    ctx.save();
+    ctx.fillStyle = worldPalette.waymark.stairwellDraft;
     this.renderDraftMotes(ctx, camX, camY);
     this.renderWayfinderMotes(ctx, camX, camY);
+    ctx.restore();
   }
 
   /**
@@ -929,8 +870,8 @@ export class StairwellSystem implements GameSystem {
         const alpha = STAIRWELL_DRAFT_MOTE_ALPHA_MAX * Math.min(fadeIn, fadeOut) * pool.strength;
         if (alpha < STAIRWELL_DRAFT_MIN_VISIBLE_ALPHA) continue;
 
+        ctx.globalAlpha = alpha;
         ctx.beginPath();
-        ctx.fillStyle = `rgba(${STAIRWELL_DRAFT_MOTE_COLOR_RGB}, ${alpha})`;
         ctx.arc(screenX, screenY, mote.radiusPx, 0, Math.PI * 2);
         ctx.fill();
       }
@@ -964,8 +905,8 @@ export class StairwellSystem implements GameSystem {
       const alpha = WAYFINDER_MOTE_ALPHA_MAX * Math.min(fadeIn, fadeOut);
       if (alpha < STAIRWELL_DRAFT_MIN_VISIBLE_ALPHA) continue;
 
+      ctx.globalAlpha = alpha;
       ctx.beginPath();
-      ctx.fillStyle = `rgba(${STAIRWELL_DRAFT_MOTE_COLOR_RGB}, ${alpha})`;
       ctx.arc(screenX, screenY, mote.radiusPx, 0, Math.PI * 2);
       ctx.fill();
     }
@@ -974,7 +915,7 @@ export class StairwellSystem implements GameSystem {
   /**
    * The next floor's level, and how the party measures against it.
    *
-   * Null on a floor with nowhere to descend to — which the menu never renders
+   * Null on a floor with nowhere to descend to — which the prompt never shows
    * on, but the type says so rather than the reader having to know that — and
    * on a floor that opts out of the advice altogether.
    */
@@ -1001,192 +942,5 @@ export class StairwellSystem implements GameSystem {
     const result = { party, recommended, standing };
     this.descentAdviceCache = { nextId, party, profile, result };
     return result;
-  }
-
-  renderMenu(ctx: CanvasRenderingContext2D): void {
-    const cw = viewportWidth();
-    const ch = viewportHeight();
-
-    this.menuButtons = [];
-    drawOverlay(ctx, {
-      canvasWidth: cw,
-      canvasHeight: ch,
-      alpha: STAIRWELL_MENU_OVERLAY_ALPHA,
-    });
-
-    const panelW = Math.min(STAIRWELL_MENU_PANEL_WIDTH, cw - STAIRWELL_MENU_PANEL_MARGIN);
-    const bodyW = panelW - STAIRWELL_MENU_BODY_MARGIN;
-    const advice = this.descentAdvice();
-
-    const warningText =
-      advice?.standing === 'below'
-        ? `The foes below fight like a level-${advice.recommended} party. You are level ` +
-          `${advice.party} — this floor still has strength to give.`
-        : '';
-    const warningLineCount =
-      warningText === ''
-        ? 0
-        : measureTextBox(ctx, warningText, {
-            size: STAIRWELL_MENU_WARNING_SIZE,
-            width: bodyW,
-            lineHeight: STAIRWELL_MENU_WARNING_LINE_HEIGHT,
-          }).lineCount;
-    // How far the content actually reaches below the panel top, in the same
-    // fixed offsets used to draw it below — computed before the panel height
-    // so panelH can be sized to fit it, rather than the button row later
-    // discovering the content ran past a height that was clamped without it.
-    const contentBottomOffset =
-      advice === null
-        ? STAIRWELL_MENU_PROMPT_Y_OFFSET
-        : warningText === ''
-          ? STAIRWELL_MENU_RECOMMENDED_Y_OFFSET
-          : STAIRWELL_MENU_RECOMMENDED_Y_OFFSET +
-            STAIRWELL_MENU_WARNING_Y_GAP +
-            warningLineCount * STAIRWELL_MENU_WARNING_LINE_HEIGHT;
-    const requiredButtonsYOffset =
-      contentBottomOffset + STAIRWELL_MENU_CONTENT_TO_HINT_GAP + STAIRWELL_MENU_HINT_TO_BUTTON_GAP;
-    const neededPanelH = Math.max(
-      STAIRWELL_MENU_PANEL_BASE_HEIGHT,
-      requiredButtonsYOffset + STAIRWELL_MENU_BUTTON_BOTTOM_OFFSET,
-    );
-    const panelH = Math.min(neededPanelH, ch - STAIRWELL_MENU_PANEL_MARGIN);
-
-    const { x: panelX, y: panelY } = drawModal(ctx, {
-      canvasWidth: cw,
-      canvasHeight: ch,
-      width: panelW,
-      height: panelH,
-      ...BOX_PRESETS.modal,
-      border: STAIRWELL_MENU_BORDER_COLOR,
-    });
-    const centreX = panelX + panelW / 2;
-
-    // The row is anchored bottom-up from the panel — except on a viewport
-    // so short even the clamped panel can't fit it, where this hard floor is
-    // the last line of defence against buttons rendering past the canvas edge.
-    const buttonsY = Math.min(
-      panelY + panelH - STAIRWELL_MENU_BUTTON_BOTTOM_OFFSET,
-      ch - STAIRWELL_MENU_BUTTON_HEIGHT - STAIRWELL_MENU_BUTTON_HARD_FLOOR_MARGIN,
-    );
-    const hintY = buttonsY - STAIRWELL_MENU_HINT_TO_BUTTON_GAP;
-    // Everything above the hint is placed at fixed offsets down from the panel
-    // top while the hint and buttons are anchored to the panel bottom, so when
-    // a short viewport clamps panelH below the height the content asked for,
-    // the two halves close on each other. This ceiling is what keeps them
-    // apart: content that would not end above it is dropped or cut short
-    // rather than drawn beneath the buttons, where it would be both occluded
-    // and clickable through.
-    const contentCeilingY = hintY;
-
-    const titleText = '▼  Stairwell  ▼';
-    const titleY = panelY + STAIRWELL_MENU_TITLE_Y_OFFSET;
-    const titleHeight = measureTextBox(ctx, titleText, {
-      size: STAIRWELL_MENU_TITLE_SIZE,
-    }).totalHeight;
-    if (titleY + titleHeight <= contentCeilingY) {
-      drawText(ctx, titleText, {
-        x: centreX,
-        y: titleY,
-        size: STAIRWELL_MENU_TITLE_SIZE,
-        bold: true,
-        color: STAIRWELL_MENU_TITLE_TEXT_COLOR,
-        align: 'center',
-      });
-    }
-
-    const nextId = this.levelDef.nextLevelId;
-    const nextName = nextId ? getLevelDef(nextId).name : 'Next Floor';
-    const promptText = `Descend to: ${nextName}?`;
-    const promptY = panelY + STAIRWELL_MENU_PROMPT_Y_OFFSET;
-    const promptHeight = measureTextBox(ctx, promptText, {
-      size: STAIRWELL_MENU_PROMPT_SIZE,
-    }).totalHeight;
-    if (promptY + promptHeight <= contentCeilingY) {
-      drawText(ctx, promptText, {
-        x: centreX,
-        y: promptY,
-        size: STAIRWELL_MENU_PROMPT_SIZE,
-        color: STAIRWELL_MENU_PROMPT_TEXT_COLOR,
-        align: 'center',
-      });
-    }
-
-    if (advice !== null) {
-      const recommendedStyle = recommendedLineStyle(advice.standing);
-      const recommendedPrefix =
-        advice.standing === 'below' ? STAIRWELL_MENU_RECOMMENDED_WARNING_PREFIX : '';
-      const recommendedText = `${recommendedPrefix}Recommended level: ${advice.recommended}`;
-      const recommendedY = panelY + STAIRWELL_MENU_RECOMMENDED_Y_OFFSET;
-      const recommendedHeight = measureTextBox(ctx, recommendedText, {
-        size: recommendedStyle.size,
-      }).totalHeight;
-      if (recommendedY + recommendedHeight <= contentCeilingY) {
-        drawText(ctx, recommendedText, {
-          x: centreX,
-          y: recommendedY,
-          ...recommendedStyle,
-          align: 'center',
-        });
-      }
-      if (warningText !== '') {
-        const warningY = recommendedY + STAIRWELL_MENU_WARNING_Y_GAP;
-        const warningLinesThatFit = Math.floor(
-          (contentCeilingY - warningY) / STAIRWELL_MENU_WARNING_LINE_HEIGHT,
-        );
-        const drawnWarningLines = Math.max(0, Math.min(warningLineCount, warningLinesThatFit));
-        if (drawnWarningLines > 0) {
-          drawText(ctx, warningText, {
-            x: panelX + STAIRWELL_MENU_BODY_MARGIN / 2,
-            y: warningY,
-            size: STAIRWELL_MENU_WARNING_SIZE,
-            color: STAIRWELL_MENU_WARNING_COLOR,
-            align: 'center',
-            width: bodyW,
-            lineHeight: STAIRWELL_MENU_WARNING_LINE_HEIGHT,
-            // A whole number of line heights, so the clip falls between lines
-            // and never slices one in half.
-            height: drawnWarningLines * STAIRWELL_MENU_WARNING_LINE_HEIGHT,
-          });
-        }
-      }
-    }
-
-    drawText(ctx, '(Esc or Stay to remain on this floor)', {
-      x: centreX,
-      y: hintY,
-      size: STAIRWELL_MENU_HINT_SIZE,
-      color: STAIRWELL_MENU_HINT_TEXT_COLOR,
-      align: 'center',
-    });
-    const buttonsW = STAIRWELL_MENU_BUTTON_WIDTH * 2 + STAIRWELL_MENU_BUTTON_GAP;
-    const descendX = centreX - buttonsW / 2;
-    const stayX = descendX + STAIRWELL_MENU_BUTTON_WIDTH + STAIRWELL_MENU_BUTTON_GAP;
-
-    // Descend leads the ring so the first Tab lands on it, and it's the
-    // primary too: a bare accept-key press on a stairwell tile should send
-    // the crawler down rather than dismiss the menu.
-    beginMenuFocus('stairwell');
-    addButton(ctx, this.menuButtons, {
-      x: descendX,
-      y: buttonsY,
-      width: STAIRWELL_MENU_BUTTON_WIDTH,
-      height: STAIRWELL_MENU_BUTTON_HEIGHT,
-      label: 'Descend',
-      ...BUTTON_PRESETS.award,
-      labelSize: STAIRWELL_MENU_BUTTON_TEXT_SIZE,
-      primaryAction: true,
-      action: () => this.onDescend(),
-    });
-    addButton(ctx, this.menuButtons, {
-      x: stayX,
-      y: buttonsY,
-      width: STAIRWELL_MENU_BUTTON_WIDTH,
-      height: STAIRWELL_MENU_BUTTON_HEIGHT,
-      label: 'Stay',
-      ...BUTTON_PRESETS.primary,
-      labelSize: STAIRWELL_MENU_BUTTON_TEXT_SIZE,
-      action: () => this.closeMenu(),
-    });
-    endMenuFocus();
   }
 }

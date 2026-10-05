@@ -1,14 +1,16 @@
 import { TILE_SIZE } from '../core/constants';
-import { platform } from '../core/Platform';
-import { viewportWidth } from '../core/Viewport';
 import type { AudioManager } from '../audio/AudioManager';
 import type { EventBus } from '../core/EventBus';
 import type { Player } from '../Player';
 import { REVIVE_FRAMES, REVIVE_HP_FRACTION, REVIVE_RANGE_PX } from '../core/reviveRules';
 import { KNOCKOUT_TIMEOUT_FRAMES } from './GameLoopPhases';
-import { drawText, TEXT_PRESETS } from '../ui/TextBox';
-import { drawProgressBar, PROGRESS_PRESETS } from '../ui/Box';
+import { worldText } from '../ui/world/worldText';
+import { worldBar } from '../ui/world/worldShapes';
+import { worldPalette } from '../ui/theme/worldInk';
 import { ARROW_PRIORITY, drawArrowAbovePlayer, type ArrowCandidate } from '../ui/WorldArrow';
+import type { TopBandEntry } from '../ui/hud/topBand';
+import { stackedBandEntry, TOP_BAND_WIDTH, type BandRow } from '../ui/hud/topBandStack';
+import { palette } from '../ui/theme/tokens';
 
 /**
  * The downed-teammate state machine and its HUD, shared by every scene a
@@ -20,31 +22,17 @@ import { ARROW_PRIORITY, drawArrowAbovePlayer, type ArrowCandidate } from '../ui
 const FRAMES_PER_SECOND = 60;
 /** Seconds left on a bleed-out clock at which the countdown turns red. */
 const CRITICAL_SECONDS_LEFT = 10;
-const COUNTDOWN_COLOR = '#fbbf24';
-const COUNTDOWN_CRITICAL_COLOR = '#ef4444';
 
 const BANNER_PULSE_BASE = 0.75;
 const BANNER_PULSE_AMPLITUDE = 0.25;
 const BANNER_PULSE_FREQUENCY = 0.006;
-const BANNER_TEXT_SIZE_MOBILE = 15;
-const BANNER_TEXT_SIZE_DESKTOP = 22;
-const BANNER_MARGIN = 16;
-const BANNER_Y = 44;
-const COUNTDOWN_TEXT_SIZE = 15;
-const COUNTDOWN_Y_MOBILE = 62;
-const COUNTDOWN_Y_DESKTOP = 70;
-/** Width kept clear beside the minimap so the banner never slides behind it. */
-const MINIMAP_SIDEBAR_WIDTH = 16;
 
 /** The colour of every arrow pointing at someone waiting for a revive. */
-export const REVIVE_ARROW_COLOR = '#facc15';
+export const REVIVE_ARROW_COLOR = palette.accent.base;
 const REVIVE_BAR_WIDTH = 160;
 const REVIVE_BAR_HEIGHT = 18;
-const REVIVE_BAR_Y = 96;
 const REVIVE_BAR_TEXT_SIZE = 11;
 const REVIVE_BAR_TEXT_Y_OFFSET = 3;
-const REVIVE_BAR_BORDER_COLOR = '#ffffff';
-const REVIVE_BAR_TEXT_COLOR = '#fff';
 const REVIVE_BAR_BORDER_WIDTH = 1;
 const REVIVE_BAR_RADIUS = 2;
 
@@ -64,7 +52,9 @@ export function knockoutSecondsLeft(totalFrames: number, elapsedFrames: number):
 
 /** Amber with time to spare, red once the clock is nearly out. */
 export function knockoutCountdownColor(secondsLeft: number): string {
-  return secondsLeft <= CRITICAL_SECONDS_LEFT ? COUNTDOWN_CRITICAL_COLOR : COUNTDOWN_COLOR;
+  return secondsLeft <= CRITICAL_SECONDS_LEFT
+    ? worldPalette.knockout.countdownCritical
+    : worldPalette.knockout.countdown;
 }
 
 /**
@@ -78,24 +68,24 @@ export function drawRevivingBar(
   progress: number,
   width = REVIVE_BAR_WIDTH,
 ): void {
-  drawProgressBar(ctx, {
-    x: centerX - width / 2,
-    y,
-    width,
-    height: REVIVE_BAR_HEIGHT,
-    value: progress,
-    ...PROGRESS_PRESETS.stamina,
-    border: REVIVE_BAR_BORDER_COLOR,
-    borderWidth: REVIVE_BAR_BORDER_WIDTH,
-    radius: REVIVE_BAR_RADIUS,
-  });
-  drawText(ctx, 'REVIVING', {
+  worldBar(
+    ctx,
+    { x: centerX - width / 2, y, w: width, h: REVIVE_BAR_HEIGHT },
+    {
+      style: 'stamina',
+      value: progress,
+      border: worldPalette.knockout.reviveEdge,
+      borderWidth: REVIVE_BAR_BORDER_WIDTH,
+      radius: REVIVE_BAR_RADIUS,
+    },
+  );
+  worldText(ctx, 'REVIVING', {
     x: centerX,
     y: y + REVIVE_BAR_TEXT_Y_OFFSET,
     align: 'center',
     size: REVIVE_BAR_TEXT_SIZE,
     bold: true,
-    color: REVIVE_BAR_TEXT_COLOR,
+    color: worldPalette.knockout.reviveInk,
     outline: true,
   });
 }
@@ -203,54 +193,53 @@ export function downedCompanionArrowCandidate(
 }
 
 /**
- * Renders the knocked-out warning banner and the revival progress bar.
- * `miniMapSize` is the top-right minimap's edge length, which on mobile is
- * what the banner must stay clear of. The arrow pointing at the downed
+ * The knocked-out warning, the bleed-out clock and, once someone is in range,
+ * the revive's progress, as a top-band entry. The arrow pointing at the downed
  * teammate is drawn separately, through {@link downedCompanionArrowCandidate}
  * and the shared arrow arbiter.
  */
-export function renderKnockedOutUI(
-  ctx: CanvasRenderingContext2D,
-  inactive: Player,
-  miniMapSize: number,
-): void {
-  if (!inactive.isKnockedOut) return;
+export function knockedOutBandEntry(inactive: Player): TopBandEntry | null {
+  if (!inactive.isKnockedOut) return null;
 
   const pulse = knockoutPulse();
-
-  const availW = platform.isMobile
-    ? viewportWidth() - miniMapSize - MINIMAP_SIDEBAR_WIDTH
-    : viewportWidth();
-  const cx = availW / 2;
-  const bannerSize = platform.isMobile ? BANNER_TEXT_SIZE_MOBILE : BANNER_TEXT_SIZE_DESKTOP;
-
-  drawText(ctx, 'Revive your teammate!', {
-    x: cx,
-    y: BANNER_Y,
-    align: 'center',
-    ...TEXT_PRESETS.danger,
-    size: bannerSize,
-    outline: true,
-    alpha: pulse,
-    width: availW - BANNER_MARGIN,
-  });
-
   const secondsLeft = knockoutSecondsLeft(KNOCKOUT_TIMEOUT_FRAMES, inactive.knockedOutFrames);
-  drawText(ctx, `${secondsLeft}s`, {
-    x: cx,
-    y: platform.isMobile ? COUNTDOWN_Y_MOBILE : COUNTDOWN_Y_DESKTOP,
-    align: 'center',
-    ...TEXT_PRESETS.danger,
-    size: COUNTDOWN_TEXT_SIZE,
-    color: knockoutCountdownColor(secondsLeft),
-    outline: true,
-    alpha: pulse,
-  });
-
+  const rows: BandRow[] = [
+    {
+      kind: 'text',
+      text: 'Revive your teammate!',
+      role: 'title',
+      tone: 'danger',
+      wrap: true,
+      maxLines: 2,
+      alpha: pulse,
+    },
+    {
+      kind: 'text',
+      text: `${secondsLeft}s`,
+      role: 'heading',
+      tone: secondsLeft <= CRITICAL_SECONDS_LEFT ? 'danger' : 'warning',
+      tabular: true,
+      alpha: pulse,
+    },
+  ];
   // Only ticks up while the reviver is in range (see `updateKnockoutState`),
   // so a positive value on its own means the pair are already close enough
-  // that the arrow above would have nothing left to point out.
+  // that the arrow would have nothing left to point out.
   if (inactive.reviveProgress > 0) {
-    drawRevivingBar(ctx, cx, REVIVE_BAR_Y, inactive.reviveProgress / REVIVE_FRAMES);
+    rows.push({
+      kind: 'meter',
+      id: 'knockout/revive',
+      value: inactive.reviveProgress,
+      max: REVIVE_FRAMES,
+      meterKind: 'stamina',
+      label: 'Reviving',
+    });
   }
+  return stackedBandEntry({
+    id: 'knockout',
+    priority: 'countdown',
+    maxWidth: TOP_BAND_WIDTH.regular,
+    accentTone: 'danger',
+    rows,
+  });
 }

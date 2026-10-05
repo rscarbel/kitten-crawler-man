@@ -30,6 +30,7 @@ import {
   drawTreadmillFloor,
   drawTreadmillInventoryIcon,
 } from '../src/sprites/gymEquipmentSprite.js';
+import type { ItemIconPainter } from '../src/ui/icons/itemIcons.js';
 
 /** Each piece overdraws its tile, so every cell is padded out to this many tiles. */
 const CELL_TILES = 3;
@@ -54,12 +55,11 @@ const LABEL_LEFT_PAD = 2;
 const TILE_GUIDE_COLOR = 'rgba(80,200,255,0.35)';
 
 type FloorPainter = (ctx: CanvasRenderingContext2D, sx: number, sy: number, s: number) => void;
-type IconPainter = (ctx: CanvasRenderingContext2D, x: number, y: number, size: number) => void;
 
 interface Subject {
   label: string;
   floor: FloorPainter;
-  icon: IconPainter;
+  icon: ItemIconPainter;
 }
 
 const SUBJECTS: readonly Subject[] = [
@@ -130,7 +130,12 @@ SUBJECTS.forEach((subject, column) => {
     INVENTORY_SLOT_PX - HAIRLINE_STROKE_PX,
     INVENTORY_SLOT_PX - HAIRLINE_STROKE_PX,
   );
-  subject.icon(asGameContext(ctx), slotLeft, slotTop, INVENTORY_SLOT_PX);
+  subject.icon(asGameContext(ctx), {
+    x: slotLeft,
+    y: slotTop,
+    w: INVENTORY_SLOT_PX,
+    h: INVENTORY_SLOT_PX,
+  });
 
   ctx.fillStyle = LABEL_COLOR;
   ctx.fillText(

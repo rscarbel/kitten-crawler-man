@@ -10,11 +10,10 @@
  * whole life) that never appear on a mob's own figure.
  */
 
-import { Scene } from '../core/Scene';
 import { viewportWidth, viewportHeight } from '../core/Viewport';
-import { drawText } from '../ui/TextBox';
-import { drawBox, drawOverlay } from '../ui/Box';
-import { addButton, playButtonSound, setButtonMouseState, BUTTON_PRESETS } from '../ui/Button';
+import { worldText } from '../ui/world/worldText';
+import { worldPlate, worldTint } from '../ui/world/worldShapes';
+import { PreviewScene, type PreviewControl } from './PreviewScene';
 import { figureFrameCount } from '../sprites/figure/figureDef';
 import { drawFigureCached } from '../sprites/figure/figureFrameCache';
 import { fairyFigureOf, fairyStateName, FAIRY_VIEWS } from '../sprites/art/fairyFigure';
@@ -48,6 +47,7 @@ import {
   drawTelekineticRing,
   type FireballTrailPoint,
 } from '../sprites/art/fairyEffectsArt';
+import { previewInk } from '../ui/theme/previewInk';
 
 type Tab = FairyKind | 'effects';
 
@@ -72,17 +72,10 @@ const PROGRESS_ROW_FRAME_HOLD = 6;
 
 const BASE_TILE_SIZE = 32;
 const MARGIN = 16;
-const HEADER_HEIGHT = 92;
 const ROW_LABEL_WIDTH = 96;
 const CELL_PADDING = 10;
 const LABEL_SIZE = 11;
 const LABEL_GAP = 2;
-const TITLE_SIZE = 16;
-const BUTTON_HEIGHT = 24;
-const TAB_BUTTON_WIDTH = 76;
-const CONTROL_BUTTON_WIDTH = 92;
-const BUTTON_GAP = 8;
-const CONTROL_ROW_GAP = 8;
 const CELL_WIDTH_TILES = 3;
 const CELL_HEIGHT_TILES = 3.4;
 /** Where a fairy's ground point sits, as a fraction of the cell's height. */
@@ -97,10 +90,10 @@ const SPEED_HALF = 0.5;
 const SPEED_FULL = 1;
 const SPEED_LEVELS: ReadonlyArray<number> = [SPEED_QUARTER, SPEED_HALF, SPEED_FULL];
 
-const BACKDROP_COLOR = '#2a2f3d';
+const BACKDROP_COLOR = previewInk.fairy.backdrop;
 /** The backdrop covers the whole canvas, so nothing from the last frame shows through. */
 const BACKDROP_ALPHA = 1;
-const CELL_BORDER_COLOR = 'rgba(255,255,255,0.14)';
+const CELL_BORDER_COLOR = previewInk.grid.cellBorder;
 const CELL_BORDER_WIDTH = 1;
 
 /**
@@ -121,7 +114,11 @@ function drawCellBorder(
   width: number,
   height: number,
 ): void {
-  drawBox(ctx, { x, y, width, height, border: CELL_BORDER_COLOR, borderWidth: CELL_BORDER_WIDTH });
+  worldPlate(
+    ctx,
+    { x, y, w: width, h: height },
+    { border: CELL_BORDER_COLOR, borderWidth: CELL_BORDER_WIDTH },
+  );
 }
 
 /** One cell in the effects panel: a name and how to paint it at a given clock share. */
@@ -363,23 +360,13 @@ const EFFECTS_CELL_HEIGHT = 128;
 /** Sprite-frame span of one effect loop in the preview, matching a fairy row's own cycle length in feel. */
 const EFFECTS_CYCLE_FRAME_COUNT = 90;
 
-export class FairyPreviewScene extends Scene {
-  private readonly buttons: Array<{
-    x: number;
-    y: number;
-    w: number;
-    h: number;
-    action?: () => void;
-  }> = [];
-
+export class FairyPreviewScene extends PreviewScene {
   private tab: Tab = 'shield';
   private zoomIndex = ZOOM_LEVELS.indexOf(ZOOM_DOUBLE);
   private speedIndex = SPEED_LEVELS.length - 1;
   private paused = false;
   private clock = 0;
   private missingStates = new Set<string>();
-  private mouseX = 0;
-  private mouseY = 0;
 
   update(): void {
     if (!this.paused) this.clock += SPEED_LEVELS[this.speedIndex];
@@ -406,18 +393,18 @@ export class FairyPreviewScene extends Scene {
     const cell = this.cellSize();
     const tile = this.tile();
     const gridLeft = MARGIN + ROW_LABEL_WIDTH;
-    const gridTop = HEADER_HEIGHT + MARGIN;
+    const gridTop = this.headerBottom + MARGIN + LABEL_SIZE + LABEL_GAP;
     const rows = fairyRowsOf(kind);
     const figure = fairyFigureOf(kind);
 
     VIEWS.forEach((view, column) => {
       const x = gridLeft + column * (cell.w + CELL_PADDING);
-      drawText(ctx, view.label, {
+      worldText(ctx, view.label, {
         x: x + cell.w / 2,
         y: gridTop - LABEL_SIZE - LABEL_GAP,
         size: LABEL_SIZE,
         align: 'center',
-        color: '#f4efe4',
+        color: previewInk.grid.caption,
         outline: true,
       });
     });
@@ -431,19 +418,19 @@ export class FairyPreviewScene extends Scene {
           ? Math.floor((this.clock / PROGRESS_ROW_FRAME_HOLD) % spec.frames)
           : Math.min(spec.frames - 1, Math.floor(progress * spec.frames));
 
-      drawText(ctx, row, {
+      worldText(ctx, row, {
         x: MARGIN,
         y: y + cell.h / 2 - LABEL_SIZE,
         size: LABEL_SIZE,
-        color: '#f4efe4',
+        color: previewInk.grid.caption,
         outline: true,
         width: ROW_LABEL_WIDTH - LABEL_GAP,
       });
-      drawText(ctx, `f${frame}/${spec.frames}`, {
+      worldText(ctx, `f${frame}/${spec.frames}`, {
         x: MARGIN,
         y: y + cell.h / 2 + LABEL_GAP,
         size: LABEL_SIZE,
-        color: '#e8dcd4',
+        color: previewInk.grid.timingReadout,
         outline: true,
       });
 
@@ -475,7 +462,7 @@ export class FairyPreviewScene extends Scene {
 
   private drawEffectsGrid(ctx: CanvasRenderingContext2D, width: number): void {
     const gridLeft = MARGIN;
-    const gridTop = HEADER_HEIGHT + MARGIN;
+    const gridTop = this.headerBottom + MARGIN;
     const cycleFrames = EFFECTS_CYCLE_FRAME_COUNT * PROGRESS_ROW_FRAME_HOLD;
     const progress = (Math.floor(this.clock) % cycleFrames) / cycleFrames;
     const frame = Math.floor(this.clock);
@@ -503,12 +490,12 @@ export class FairyPreviewScene extends Scene {
       );
       ctx.restore();
       drawCellBorder(ctx, x, y, EFFECTS_CELL_WIDTH, EFFECTS_CELL_HEIGHT);
-      drawText(ctx, effect.name, {
+      worldText(ctx, effect.name, {
         x: x + EFFECTS_CELL_WIDTH / 2,
         y: y + EFFECTS_CELL_HEIGHT - LABEL_SIZE - LABEL_GAP,
         size: LABEL_SIZE,
         align: 'center',
-        color: '#f4efe4',
+        color: previewInk.grid.caption,
         outline: true,
         width: EFFECTS_CELL_WIDTH - LABEL_GAP * 2,
       });
@@ -518,18 +505,9 @@ export class FairyPreviewScene extends Scene {
   render(ctx: CanvasRenderingContext2D): void {
     const width = viewportWidth();
     const height = viewportHeight();
-    this.buttons.length = 0;
     this.missingStates.clear();
 
-    setButtonMouseState(this.mouseX, this.mouseY);
-    drawOverlay(ctx, {
-      canvasWidth: width,
-      canvasHeight: height,
-      color: BACKDROP_COLOR,
-      alpha: BACKDROP_ALPHA,
-    });
-
-    this.renderHeader(ctx, width);
+    worldTint(ctx, BACKDROP_COLOR, BACKDROP_ALPHA);
 
     if (this.tab === 'effects') {
       this.drawEffectsGrid(ctx, width);
@@ -538,115 +516,57 @@ export class FairyPreviewScene extends Scene {
     }
 
     if (this.missingStates.size > 0) {
-      drawText(ctx, `manifest is missing: ${[...this.missingStates].join(', ')}`, {
+      worldText(ctx, `manifest is missing: ${[...this.missingStates].join(', ')}`, {
         x: MARGIN,
         y: height - MARGIN - LABEL_SIZE,
         size: LABEL_SIZE,
-        color: '#ff9a76',
+        color: previewInk.grid.missingState,
         outline: true,
         width: width - MARGIN * 2,
       });
     }
+    this.renderChrome(ctx);
   }
 
-  private control(
-    ctx: CanvasRenderingContext2D,
-    x: number,
-    y: number,
-    width: number,
-    label: string,
-    active: boolean,
-    action: () => void,
-  ): number {
-    addButton(ctx, this.buttons, {
-      ...(active ? BUTTON_PRESETS.toggleActive : BUTTON_PRESETS.toggle),
-      x,
-      y,
-      width,
-      height: BUTTON_HEIGHT,
-      label,
-      action,
-    });
-    return x + width + BUTTON_GAP;
+  protected previewTitle(): string {
+    return 'fairy preview — ?fairies';
   }
 
-  private renderHeader(ctx: CanvasRenderingContext2D, width: number): void {
-    drawText(ctx, 'fairy preview — ?fairies', {
-      x: MARGIN,
-      y: MARGIN + TITLE_SIZE,
-      size: TITLE_SIZE,
-      color: '#fdfaf2',
-      outline: true,
-    });
+  protected previewCaptions(): readonly string[] {
+    return ['front / side / away, one kind per tab; effects tab loops the standalone VFX'];
+  }
 
-    const tabsY = MARGIN + TITLE_SIZE + CONTROL_ROW_GAP;
-    let x = MARGIN;
+  protected previewControls(): readonly PreviewControl[] {
     const tabs: readonly Tab[] = [...FAIRY_KINDS, 'effects'];
-    for (const tab of tabs) {
-      x = this.control(ctx, x, tabsY, TAB_BUTTON_WIDTH, TAB_LABEL[tab], this.tab === tab, () => {
-        this.tab = tab;
-      });
-    }
-
-    const controlsY = tabsY + BUTTON_HEIGHT + CONTROL_ROW_GAP;
-    x = MARGIN;
-    x = this.control(
-      ctx,
-      x,
-      controlsY,
-      CONTROL_BUTTON_WIDTH,
-      `zoom ${ZOOM_LEVELS[this.zoomIndex]}x`,
-      false,
-      () => {
-        this.zoomIndex = (this.zoomIndex + 1) % ZOOM_LEVELS.length;
+    return [
+      ...tabs.map((tab) => ({
+        label: TAB_LABEL[tab],
+        selected: this.tab === tab,
+        onTap: () => {
+          this.tab = tab;
+        },
+      })),
+      {
+        id: 'zoom',
+        label: `zoom ${ZOOM_LEVELS[this.zoomIndex]}x`,
+        onTap: () => {
+          this.zoomIndex = (this.zoomIndex + 1) % ZOOM_LEVELS.length;
+        },
       },
-    );
-    x = this.control(
-      ctx,
-      x,
-      controlsY,
-      CONTROL_BUTTON_WIDTH,
-      this.paused ? 'play' : 'pause',
-      false,
-      () => {
-        this.paused = !this.paused;
+      {
+        id: 'play',
+        label: this.paused ? 'play' : 'pause',
+        onTap: () => {
+          this.paused = !this.paused;
+        },
       },
-    );
-    this.control(
-      ctx,
-      x,
-      controlsY,
-      CONTROL_BUTTON_WIDTH,
-      `speed ${SPEED_LEVELS[this.speedIndex]}x`,
-      false,
-      () => {
-        this.speedIndex = (this.speedIndex + 1) % SPEED_LEVELS.length;
+      {
+        id: 'speed',
+        label: `speed ${SPEED_LEVELS[this.speedIndex]}x`,
+        onTap: () => {
+          this.speedIndex = (this.speedIndex + 1) % SPEED_LEVELS.length;
+        },
       },
-    );
-
-    drawText(ctx, 'front / side / away, one kind per tab; effects tab loops the standalone VFX', {
-      x: width - MARGIN,
-      y: MARGIN + TITLE_SIZE,
-      size: LABEL_SIZE,
-      align: 'right',
-      color: '#e6e0d2',
-      outline: true,
-    });
-  }
-
-  handleMouseMove(mx: number, my: number): void {
-    this.mouseX = mx;
-    this.mouseY = my;
-  }
-
-  handleClick(mx: number, my: number): void {
-    for (const button of this.buttons) {
-      const inside =
-        mx >= button.x && mx <= button.x + button.w && my >= button.y && my <= button.y + button.h;
-      if (!inside) continue;
-      playButtonSound(null);
-      button.action?.();
-      return;
-    }
+    ];
   }
 }

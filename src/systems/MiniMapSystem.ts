@@ -2,79 +2,13 @@ import type { GameMap } from '../map/GameMap';
 import { TILE_SIZE } from '../core/constants';
 import type { Mob } from '../creatures/Mob';
 import type { SpatialGrid } from '../core/SpatialGrid';
-import { platform } from '../core/Platform';
 import type { GameSystem } from './GameSystem';
 import { frameTime } from '../utils';
-import { drawText } from '../ui/TextBox';
-import {
-  COBBLE_STREET,
-  TREE,
-  TREE_STAGE_CHARRED,
-  FloorTypeValue,
-  HOARDER_FLOOR,
-  LANE_STREET,
-  PLAZA_STONE,
-  FENCE,
-  INTERIOR_BOARD_FLOOR,
-  INTERIOR_RUSH_FLOOR,
-  INTERIOR_EARTH_FLOOR,
-  INTERIOR_FLAG_FLOOR,
-  INTERIOR_INK_FLOOR,
-  DRILL_SAND_FLOOR,
-  INTERIOR_COUNTER,
-  INTERIOR_STONE_FLOOR,
-  INTERIOR_WALL,
-  GARDEN_PLANTING,
-  SAFE_ROOM_FLOOR,
-  SAFE_ROOM_THRESHOLD,
-  SAFE_ROOM_BANNER,
-  SAFE_ROOM_HERB_RACK,
-  SAFE_ROOM_LANTERN,
-  SAFE_ROOM_LARDER,
-  SAFE_ROOM_MENU_BOARD,
-  SAFE_ROOM_RUG,
-  SAFE_ROOM_STOOL,
-  SAFE_ROOM_STOVE,
-  SAFE_ROOM_TABLE,
-  TOWN_WALL,
-  VERGE_GRASS,
-  VOID_TYPE,
-  YARD_GRAVEL,
-  HIGHLAND_GRASS,
-  SCREE,
-  WILDFLOWER_TUFT,
-  PEBBLE_SCATTER,
-  BRIDGE,
-  RIVER_ROCK,
-  BOULDER_SMALL,
-  BOULDER_LARGE,
-  CLIFF,
-  CAMPFIRE,
-  GOBLIN_TENT,
-  DEN_HOLLOW,
-  HOLLOW_WALL,
-  HOLLOW_PLANK_FLOOR,
-  HOLLOW_THRESHOLD,
-  HOLLOW_PROP_LOW,
-  HOLLOW_PROP_TALL,
-  HOLLOW_DECAL,
-  HOLLOW_PALISADE,
-  HOLLOW_PALISADE_GAP,
-  HOLLOW_GATE,
-  ROCK_DEPOSIT,
-  PASTURE_GRASS,
-  CIRCUS_LOT,
-  CIRCUS_STRUCTURE_TALL,
-  CIRCUS_STRUCTURE_LOW,
-  CROP_FIELD,
-} from '../map/tileTypes';
-import { viewportWidth } from '../core/Viewport';
-import { bossRoomMinimapColor } from '../map/tiles/bossRoomTiles';
-import {
-  HUD_MINIMAP_EXPANDED_SIZE,
-  HUD_MINIMAP_NORMAL_SIZE,
-  hudMiniMapRect,
-} from '../ui/hudButtons/hudMiniMap';
+import { worldText } from '../ui/world/worldText';
+import { worldPalette } from '../ui/theme/worldInk';
+import type { Rect } from '../ui/core/geom';
+import { TREE, TREE_STAGE_CHARRED, FloorTypeValue } from '../map/tileTypes';
+import { MINIMAP_MARKER_COLORS, minimapTileColor } from '../ui/theme/minimapColors';
 import type { ProcessingStationKind } from './briarHollow/processingStations';
 import { drawRopeCoilGlyph, drawSawBladeGlyph } from '../ui/icons/stationGlyphs';
 import { SERVICE_DECAL_TILE_TYPES } from '../map/serviceLevelProps';
@@ -109,13 +43,11 @@ const MOB_DOT_RADIUS = 1.5;
 const MORDECAI_DOT_RADIUS = 1.5;
 /** Pet dot radius on minimap. Under the companion's — he is party, but not a crawler. */
 const PET_DOT_RADIUS = 1.75;
-/**
- * Mongo's dot. Pink, for his feathers, and distinct from every other marker on
- * the map: red is a hostile, blue the companion, white Mordecai and stairs.
- */
-const MINIMAP_PET_COLOR = '#f0abfc';
 /** Quest marker pulse speed (radians per frame-time unit). */
 const QUEST_MARKER_PULSE_SPEED = 5;
+const QUEST_MARKER_FONT_SIZE = 8;
+const QUEST_MARKER_PULSE_BASE = 0.7;
+const QUEST_MARKER_PULSE_RANGE = 0.3;
 /** Quest marker X line arm length (pixels). */
 const QUEST_MARKER_X_ARM = 3;
 /** X marker line width. */
@@ -134,10 +66,6 @@ const ESCAPE_MARKER_TILES = 2;
 const ESCAPE_MARKER_HALF_EXTRA = 1;
 const ESCAPE_MARKER_PULSE_BASE = 0.75;
 const ESCAPE_MARKER_PULSE_RANGE = 0.25;
-/** Pixels above minimap to render the expand hint text. */
-const MINIMAP_HINT_OFFSET_Y = 3;
-/** Minimap hint font size. */
-const MINIMAP_HINT_FONT_SIZE = 10;
 /** Extra tiles revealed around boss room bounds. */
 const BOSS_REVEAL_EXTRA_TILES = 15;
 /** Fog radius revealed around the nearest stairwell once the floor's last gauntlet boss dies. */
@@ -148,8 +76,6 @@ const CORPSE_MARKER_ARM = 2;
 const CORPSE_MARKER_TTL = 1800;
 /** District names on the expanded minimap: small, warm, and outlined so they read over any tile. */
 const DISTRICT_LABEL_FONT_SIZE = 9;
-const DISTRICT_LABEL_COLOR = '#e8d9a0';
-const DISTRICT_LABEL_OUTLINE_COLOR = '#000000';
 
 /** A processing station's glyph on the minimap: a saw blade for the mill, a coil for the rope walk. */
 const STATION_MARKER_GLYPH: Readonly<
@@ -165,21 +91,11 @@ const STATION_MARKER_GLYPH: Readonly<
 const STATION_MARKER_GLYPH_RADIUS = 4;
 /** Radius of the dark backing disc behind a station glyph, so it reads over any tile colour. */
 const STATION_MARKER_BACKING_RADIUS = 5;
-const STATION_MARKER_BACKING_COLOR = 'rgba(20, 16, 12, 0.85)';
 
 /** `$` marker over anyone who sells something. */
 const VENDOR_MARKER_FONT_SIZE = 8;
-const VENDOR_MARKER_COLOR = '#4ade80';
-const VENDOR_MARKER_OUTLINE_COLOR = '#0a2010';
 /** Lifts the `$` a little above the dot a plain NPC or mob marker would sit on. */
 const VENDOR_MARKER_Y_OFFSET = -4;
-
-/** Sprite-building footprints read as solid masonry on the minimap, like wall tiles. */
-const SPRITE_BUILDING_MINIMAP_COLOR = '#3a3028';
-/** Standing forest, a shade deeper than the grass it grows out of. */
-const LIVING_TREE_MINIMAP_COLOR = '#2c5434';
-/** A tree burnt down to charcoal, so a stand the player torched stays findable. */
-const CHARRED_TREE_MINIMAP_COLOR = '#2a221e';
 
 /** Sentinel for "no fog reveal has happened yet" — no real tile coord is negative. */
 const TILE_NEVER_REVEALED = -1;
@@ -222,8 +138,6 @@ export class MiniMapSystem implements GameSystem {
   private lastRevealTileY = TILE_NEVER_REVEALED;
 
   private readonly REVEAL_RADIUS = 10;
-  readonly NORMAL_SIZE = HUD_MINIMAP_NORMAL_SIZE;
-  readonly EXPANDED_SIZE = HUD_MINIMAP_EXPANDED_SIZE;
 
   /** Offscreen canvas caching revealed tile colors (1px per tile). */
   private _tileCache: OffscreenCanvas | HTMLCanvasElement;
@@ -248,17 +162,12 @@ export class MiniMapSystem implements GameSystem {
       this._tileCache = c;
       this._tileCacheCtx = tctx;
     }
-    this._tileCacheCtx.fillStyle = '#111';
+    this._tileCacheCtx.fillStyle = worldPalette.minimap.unexplored;
     this._tileCacheCtx.fillRect(0, 0, sz, sz);
   }
 
   get isExpanded(): boolean {
     return this._expanded;
-  }
-
-  /** The square the minimap is drawn in, and the tap target that toggles it. */
-  get screenRect(): { x: number; y: number; w: number; h: number } {
-    return { ...hudMiniMapRect(viewportWidth(), this._expanded) };
   }
 
   setExpanded(expanded: boolean): void {
@@ -316,9 +225,8 @@ export class MiniMapSystem implements GameSystem {
    * Repaints one already-revealed tile whose type or state has changed.
    *
    * The tile cache is otherwise written exactly once per tile, at the moment fog
-   * lifts off it, and never again — which was fine while the map was immutable
-   * after generation. It no longer is: a felled tree turns to grass and a burnt
-   * one turns to charcoal, both of them well inside the reveal radius, so
+   * lifts off it, and never again — but the map changes after generation: a
+   * felled tree turns to grass and a burnt one turns to charcoal, both of them well inside the reveal radius, so
    * without this the minimap keeps showing forest green over open ground and a
    * stand the player set alight is indistinguishable from a living one.
    *
@@ -338,7 +246,7 @@ export class MiniMapSystem implements GameSystem {
   }
 
   /** Shared clamp/loop/fog-set/fill body behind every neighborhood reveal. */
-  private revealNeighborhood(bounds: { x: number; y: number; w: number; h: number }): void {
+  private revealNeighborhood(bounds: Rect): void {
     const mapSize = this.gameMap.structure.length;
     const x1 = Math.max(0, bounds.x);
     const y1 = Math.max(0, bounds.y);
@@ -358,7 +266,7 @@ export class MiniMapSystem implements GameSystem {
     }
   }
 
-  revealBossNeighborhood(bounds: { x: number; y: number; w: number; h: number }): void {
+  revealBossNeighborhood(bounds: Rect): void {
     const extra = BOSS_REVEAL_EXTRA_TILES;
     this.revealNeighborhood({
       x: bounds.x - extra,
@@ -444,19 +352,21 @@ export class MiniMapSystem implements GameSystem {
     const mapSize = this.gameMap.structure.length;
     for (const label of labels) {
       if (!this.fogOfWar[label.tile.y * mapSize + label.tile.x]) continue;
-      drawText(ctx, label.name, {
+      worldText(ctx, label.name, {
         x: mmX + (label.tile.x - viewCenterTX + halfTiles) * pxPerTile,
         y: mmY + (label.tile.y - viewCenterTY + halfTiles) * pxPerTile,
         size: DISTRICT_LABEL_FONT_SIZE,
-        color: DISTRICT_LABEL_COLOR,
-        outline: DISTRICT_LABEL_OUTLINE_COLOR,
+        color: worldPalette.minimap.districtLabel,
+        outline: MINIMAP_MARKER_COLORS.outline,
         align: 'center',
       });
     }
   }
 
+  /** Paints the map's data into `rect`, centred on the active crawler (or the pan). */
   render(
     ctx: CanvasRenderingContext2D,
+    rect: Rect,
     active: { x: number; y: number },
     companion: { x: number; y: number },
     mobGrid: SpatialGrid<Mob>,
@@ -468,14 +378,13 @@ export class MiniMapSystem implements GameSystem {
   ): void {
     const mapSize = this.gameMap.structure.length;
     const expanded = this._expanded;
-    const mmSize = expanded ? this.EXPANDED_SIZE : this.NORMAL_SIZE;
+    const mmSize = Math.min(rect.w, rect.h);
     const pxPerTile = expanded ? EXPANDED_PX_PER_TILE : NORMAL_PX_PER_TILE;
     const tilesInView = Math.floor(mmSize / pxPerTile);
     const halfTiles = Math.floor(tilesInView / 2);
 
-    const placed = this.screenRect;
-    const mmX = placed.x;
-    const mmY = placed.y;
+    const mmX = rect.x;
+    const mmY = rect.y;
 
     const playerTX = Math.floor((active.x + HALF_TILE) / TILE_SIZE);
     const playerTY = Math.floor((active.y + HALF_TILE) / TILE_SIZE);
@@ -483,9 +392,6 @@ export class MiniMapSystem implements GameSystem {
     // When expanded, honour scroll offset so the user can pan to explored areas.
     const viewCenterTX = expanded ? playerTX + this._scrollTX : playerTX;
     const viewCenterTY = expanded ? playerTY + this._scrollTY : playerTY;
-
-    ctx.fillStyle = 'rgba(0,0,0,0.82)';
-    ctx.fillRect(mmX, mmY, mmSize, mmSize);
 
     ctx.save();
     ctx.beginPath();
@@ -518,8 +424,13 @@ export class MiniMapSystem implements GameSystem {
       if (!this.fogOfWar[st.y * mapSize + st.x]) continue;
       const sx = mmX + (st.x - viewCenterTX + halfTiles) * pxPerTile - STAIRWELL_ICON_HALF_EXTRA;
       const sy = mmY + (st.y - viewCenterTY + halfTiles) * pxPerTile - STAIRWELL_ICON_HALF_EXTRA;
-      ctx.fillStyle = '#ffffff';
-      ctx.fillRect(sx, sy, pxPerTile + 2, pxPerTile + 2);
+      ctx.fillStyle = worldPalette.minimap.stairwell;
+      ctx.fillRect(
+        sx,
+        sy,
+        pxPerTile + STAIRWELL_ICON_HALF_EXTRA * 2,
+        pxPerTile + STAIRWELL_ICON_HALF_EXTRA * 2,
+      );
     }
 
     const escapeTile = this.escapeMarkerTile;
@@ -531,7 +442,7 @@ export class MiniMapSystem implements GameSystem {
         ESCAPE_MARKER_PULSE_RANGE * Math.sin(frameTime * QUEST_MARKER_PULSE_SPEED);
       ctx.save();
       ctx.globalAlpha = escapePulse;
-      ctx.fillStyle = '#4ade80';
+      ctx.fillStyle = worldPalette.minimap.escape;
       ctx.fillRect(
         ex - ESCAPE_MARKER_HALF_EXTRA,
         ey - ESCAPE_MARKER_HALF_EXTRA,
@@ -541,7 +452,7 @@ export class MiniMapSystem implements GameSystem {
       ctx.restore();
     }
 
-    ctx.strokeStyle = '#000000';
+    ctx.strokeStyle = worldPalette.minimap.corpse;
     ctx.lineWidth = 1;
     for (const corpse of this.corpseMarkers) {
       const ctx2TX = Math.floor(corpse.x / TILE_SIZE);
@@ -559,7 +470,7 @@ export class MiniMapSystem implements GameSystem {
 
     // Mobs — red dots (only within radar range)
     const MOB_RADAR_PX = TILE_SIZE * MOB_RADAR_TILES;
-    ctx.fillStyle = '#ef4444';
+    ctx.fillStyle = worldPalette.minimap.hostile;
     this._radarQuery.clear();
     const mobsOnRadar = mobGrid.queryCircle(active.x, active.y, MOB_RADAR_PX, this._radarQuery);
     for (const mob of mobsOnRadar) {
@@ -582,7 +493,7 @@ export class MiniMapSystem implements GameSystem {
       mmX + (compTX - viewCenterTX + halfTiles) * pxPerTile + Math.floor(pxPerTile / 2);
     const compSY =
       mmY + (compTY - viewCenterTY + halfTiles) * pxPerTile + Math.floor(pxPerTile / 2);
-    ctx.fillStyle = '#60a5fa';
+    ctx.fillStyle = MINIMAP_MARKER_COLORS.companion;
     ctx.beginPath();
     ctx.arc(compSX, compSY, COMPANION_DOT_RADIUS, 0, Math.PI * 2);
     ctx.fill();
@@ -596,14 +507,16 @@ export class MiniMapSystem implements GameSystem {
         mmX + (petTX - viewCenterTX + halfTiles) * pxPerTile + Math.floor(pxPerTile / 2);
       const petSY =
         mmY + (petTY - viewCenterTY + halfTiles) * pxPerTile + Math.floor(pxPerTile / 2);
-      ctx.fillStyle = MINIMAP_PET_COLOR;
+      // Pink for his feathers, apart from every other dot: red is a hostile,
+      // blue the companion, white Mordecai and the stairs.
+      ctx.fillStyle = MINIMAP_MARKER_COLORS.pet;
       ctx.beginPath();
       ctx.arc(petSX, petSY, PET_DOT_RADIUS, 0, Math.PI * 2);
       ctx.fill();
     }
 
     // Mordecai — white dot per safe room if revealed
-    ctx.fillStyle = '#ffffff';
+    ctx.fillStyle = worldPalette.minimap.mordecai;
     for (const pos of mordecaiPositions) {
       if (!this.fogOfWar[pos.y * mapSize + pos.x]) continue;
       const msx = mmX + (pos.x - viewCenterTX + halfTiles) * pxPerTile + Math.floor(pxPerTile / 2);
@@ -628,38 +541,37 @@ export class MiniMapSystem implements GameSystem {
       if (!this.fogOfWar[qm.y * mapSize + qm.x]) continue;
       const qsx = mmX + (qm.x - viewCenterTX + halfTiles) * pxPerTile + Math.floor(pxPerTile / 2);
       const qsy = mmY + (qm.y - viewCenterTY + halfTiles) * pxPerTile + Math.floor(pxPerTile / 2);
-      const questPulseBase = 0.7;
-      const questPulseRange = 0.3;
       const pulse =
-        questPulseBase + questPulseRange * Math.sin(frameTime * QUEST_MARKER_PULSE_SPEED);
+        QUEST_MARKER_PULSE_BASE +
+        QUEST_MARKER_PULSE_RANGE * Math.sin(frameTime * QUEST_MARKER_PULSE_SPEED);
       if (qm.type === 'exclamation') {
-        drawText(ctx, '!', {
+        worldText(ctx, '!', {
           x: qsx,
           y: qsy - QUEST_MARKER_X_ARM,
-          size: 8,
+          size: QUEST_MARKER_FONT_SIZE,
           bold: true,
-          color: '#fbbf24',
+          color: worldPalette.minimap.questOffer,
           alpha: pulse,
           align: 'center',
         });
       } else if (qm.type === 'question') {
-        drawText(ctx, '?', {
+        worldText(ctx, '?', {
           x: qsx,
           y: qsy - QUEST_MARKER_X_ARM,
-          size: 8,
+          size: QUEST_MARKER_FONT_SIZE,
           bold: true,
-          color: '#4ade80',
+          color: worldPalette.minimap.questTurnIn,
           alpha: pulse,
           align: 'center',
         });
       } else if (qm.type === 'elite') {
         // The book's elite marker: a black cross inside a white circle.
         ctx.save();
-        ctx.fillStyle = '#ffffff';
+        ctx.fillStyle = worldPalette.minimap.eliteDisc;
         ctx.beginPath();
         ctx.arc(qsx, qsy, ELITE_MARKER_RADIUS, 0, Math.PI * 2);
         ctx.fill();
-        ctx.strokeStyle = '#000000';
+        ctx.strokeStyle = worldPalette.minimap.eliteCross;
         ctx.lineWidth = QUEST_MARKER_LINE_WIDTH;
         ctx.beginPath();
         ctx.moveTo(qsx - ELITE_MARKER_CROSS_ARM, qsy);
@@ -671,7 +583,7 @@ export class MiniMapSystem implements GameSystem {
       } else {
         ctx.save();
         ctx.globalAlpha = pulse;
-        ctx.strokeStyle = '#ef4444';
+        ctx.strokeStyle = worldPalette.minimap.questTarget;
         ctx.lineWidth = QUEST_MARKER_LINE_WIDTH;
         ctx.beginPath();
         ctx.moveTo(qsx - QUEST_MARKER_X_ARM, qsy - QUEST_MARKER_X_ARM);
@@ -692,7 +604,7 @@ export class MiniMapSystem implements GameSystem {
         mmY + (station.y - viewCenterTY + halfTiles) * pxPerTile + Math.floor(pxPerTile / 2);
       ctx.beginPath();
       ctx.arc(ssx, ssy, STATION_MARKER_BACKING_RADIUS, 0, Math.PI * 2);
-      ctx.fillStyle = STATION_MARKER_BACKING_COLOR;
+      ctx.fillStyle = worldPalette.minimap.stationBacking;
       ctx.fill();
       STATION_MARKER_GLYPH[station.kind](ctx, ssx, ssy, STATION_MARKER_GLYPH_RADIUS);
     }
@@ -709,13 +621,13 @@ export class MiniMapSystem implements GameSystem {
         (vendorTY - viewCenterTY + halfTiles) * pxPerTile +
         Math.floor(pxPerTile / 2) +
         VENDOR_MARKER_Y_OFFSET;
-      drawText(ctx, '$', {
+      worldText(ctx, '$', {
         x: vsx,
         y: vsy,
         size: VENDOR_MARKER_FONT_SIZE,
         bold: true,
-        color: VENDOR_MARKER_COLOR,
-        outline: VENDOR_MARKER_OUTLINE_COLOR,
+        color: worldPalette.minimap.vendor,
+        outline: worldPalette.minimap.vendorOutline,
         align: 'center',
       });
     }
@@ -725,26 +637,12 @@ export class MiniMapSystem implements GameSystem {
       mmX + (playerTX - viewCenterTX + halfTiles) * pxPerTile + Math.floor(pxPerTile / 2);
     const playerSY =
       mmY + (playerTY - viewCenterTY + halfTiles) * pxPerTile + Math.floor(pxPerTile / 2);
-    ctx.fillStyle = '#4ade80';
+    ctx.fillStyle = MINIMAP_MARKER_COLORS.player;
     ctx.beginPath();
     ctx.arc(playerSX, playerSY, PLAYER_DOT_RADIUS, 0, Math.PI * 2);
     ctx.fill();
 
     ctx.restore();
-
-    ctx.strokeStyle = '#475569';
-    ctx.lineWidth = 1;
-    ctx.strokeRect(mmX, mmY, mmSize, mmSize);
-
-    const expandHint = platform.miniMapHint(expanded);
-    drawText(ctx, expandHint, {
-      x: mmX + mmSize / 2,
-      y: mmY + mmSize + MINIMAP_HINT_OFFSET_Y,
-      size: MINIMAP_HINT_FONT_SIZE,
-      color: '#ffffff',
-      outline: true,
-      align: 'center',
-    });
   }
 
   /**
@@ -754,166 +652,19 @@ export class MiniMapSystem implements GameSystem {
    * up as a single dot.
    */
   private minimapColorAt(tx: number, ty: number, type: number): string {
-    if (this.gameMap.isSpriteBuildingTile(tx, ty)) return SPRITE_BUILDING_MINIMAP_COLOR;
+    if (this.gameMap.isSpriteBuildingTile(tx, ty)) return worldPalette.minimap.spriteBuilding;
     // A burnt-out tree is still a `TREE` tile, so its colour cannot come from
     // the type alone. Worth the special case: the map is how a player finds
     // their way back to a stand they set alight, and charcoal drawn in forest
     // green makes that impossible.
     if (type === TREE && this.gameMap.structure[ty][tx].treeStage === TREE_STAGE_CHARRED) {
-      return CHARRED_TREE_MINIMAP_COLOR;
+      return worldPalette.minimap.charredTree;
     }
     if (DUNGEON_WALKABLE_DECAL_TILE_TYPES.has(type)) {
       const floorUnder = this.gameMap.structure[ty][tx].groundType ?? FloorTypeValue.tile_floor;
-      return this.tileColor(floorUnder);
+      return minimapTileColor(floorUnder);
     }
-    return this.tileColor(type);
-  }
-
-  private tileColor(type: number): string {
-    switch (type) {
-      case VOID_TYPE:
-        return '#000000';
-      case FloorTypeValue.wall:
-        return '#3a3028';
-      case FloorTypeValue.grass:
-        return '#3a7040';
-      case FloorTypeValue.road:
-        return '#6a5040';
-      case FloorTypeValue.water:
-        return '#1a6880';
-      case FloorTypeValue.concrete:
-        return '#606060';
-      case FloorTypeValue.tile_floor:
-        return '#707070';
-      case FloorTypeValue.carpet:
-        return '#503030';
-      case FloorTypeValue.wood:
-        return '#704030';
-      case SAFE_ROOM_FLOOR:
-      // A minimap is a floor plan, so the runner the player walks straight over
-      // is the floor.
-      case SAFE_ROOM_RUG:
-        return '#8a7040';
-      case SAFE_ROOM_THRESHOLD:
-        return '#7a6a4c'; // the worn band inside a safe room's doorways
-      // The eight solid furnishings share one furniture tone rather than each
-      // becoming a stray grey pixel from the default case.
-      case SAFE_ROOM_MENU_BOARD:
-      case SAFE_ROOM_HERB_RACK:
-      case SAFE_ROOM_BANNER:
-      case SAFE_ROOM_LANTERN:
-      case SAFE_ROOM_STOVE:
-      case SAFE_ROOM_TABLE:
-      case SAFE_ROOM_STOOL:
-      case SAFE_ROOM_LARDER:
-        return '#5c4a2c';
-      case HOARDER_FLOOR:
-        return '#2a1808';
-      case TOWN_WALL:
-        return '#8a8175';
-      case VERGE_GRASS:
-        return '#4c6338'; // street verge — greener than a street, duller than field grass
-      case YARD_GRAVEL:
-        return '#6e685e';
-      case LANE_STREET:
-        return '#7a6448';
-      case COBBLE_STREET:
-        return '#8e7a5c'; // the two main streets, lighter so the spine reads at a glance
-      case PLAZA_STONE:
-        return '#a89c86';
-      case GARDEN_PLANTING:
-        return '#5f7a34'; // planted bed — a shade greener than the verge it sits on
-      case FENCE:
-        return '#6a5334'; // yard fence, in its own timber colour
-      case TREE:
-        return LIVING_TREE_MINIMAP_COLOR;
-      // Town building interiors. This minimap does not draw one today — that is
-      // the mobile HUD's — but the two tables answer the same question, and a
-      // tile type known to one and not the other is how the mobile interior
-      // minimap turned into a flat grey square when these types were added.
-      case INTERIOR_WALL:
-        return '#3a3028';
-      case INTERIOR_BOARD_FLOOR:
-        return '#6a4a30';
-      case INTERIOR_STONE_FLOOR:
-        return '#585860';
-      case INTERIOR_RUSH_FLOOR:
-        return '#7a5f3c';
-      case INTERIOR_EARTH_FLOOR:
-        return '#4a3e30';
-      case INTERIOR_FLAG_FLOOR:
-        return '#5e5850';
-      case INTERIOR_INK_FLOOR:
-        return '#6a5138';
-      case DRILL_SAND_FLOOR:
-        return '#8a7448';
-      case INTERIOR_COUNTER:
-        return '#4a3020';
-      // The floor-3 wilderness. Every one of these needs an entry in this table,
-      // in the mobile HUD's, and in `TownMapScene`'s — a type known to one and
-      // not the others draws as the default grey, which is how a whole river or
-      // a whole camp can vanish from one map and not the next.
-      case HIGHLAND_GRASS:
-        return '#6f7048'; // upland turf — drier and paler than field grass
-      case SCREE:
-        return '#6a6660';
-      case WILDFLOWER_TUFT:
-        return '#4a7a48';
-      case PEBBLE_SCATTER:
-        return '#787268';
-      case BRIDGE:
-        return '#8a6a44'; // timber, and lighter than the water it spans
-      case RIVER_ROCK:
-        return '#4a5a60';
-      case BOULDER_SMALL:
-      case BOULDER_LARGE:
-        return '#6e6a64';
-      case CLIFF:
-        return '#57534c';
-      case CAMPFIRE:
-        return '#d07a2c';
-      case GOBLIN_TENT:
-        return '#7a5f3a';
-      case DEN_HOLLOW:
-        return '#2e2a26';
-      // Briar Hollow. Every one of these needs an entry here, in the mobile
-      // HUD's table and in `TownMapScene`'s — a type known to one and not the
-      // others draws as the default grey, or magenta in the schematic view.
-      case HOLLOW_WALL:
-        return '#8a7458';
-      case HOLLOW_PLANK_FLOOR:
-        return '#8a6a42';
-      case HOLLOW_THRESHOLD:
-        return '#7a6248';
-      case HOLLOW_PROP_LOW:
-        return '#9a7850';
-      case HOLLOW_PROP_TALL:
-        return '#6a5238';
-      case HOLLOW_DECAL:
-        return '#6e7a3c';
-      case HOLLOW_PALISADE:
-        return '#8a6a3c';
-      case HOLLOW_PALISADE_GAP:
-        return '#5c5548';
-      case HOLLOW_GATE:
-        return '#6b5636';
-      case ROCK_DEPOSIT:
-        return '#726a5e';
-      case PASTURE_GRASS:
-        return '#5c8048';
-      case CROP_FIELD:
-        return '#6e5636';
-      // The circus grounds. Like Briar Hollow's types, each needs an entry in
-      // the mobile HUD's table and in `TownMapScene`'s as well.
-      case CIRCUS_LOT:
-        return '#6a6240';
-      case CIRCUS_STRUCTURE_TALL:
-        return '#a0433c';
-      case CIRCUS_STRUCTURE_LOW:
-        return '#b89a6a';
-      default:
-        return bossRoomMinimapColor(type) ?? '#555555';
-    }
+    return minimapTileColor(type);
   }
 
   dispose(): void {

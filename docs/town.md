@@ -375,9 +375,9 @@ The town is the floor a player is most likely to stall on: sixteen doors, three
 questlines and a market, and nothing that says what any of it is for. Four things answer
 that, and each answers a different half of "I don't know what to do":
 
-- **The Quest Journal** (`src/ui/pause/JournalTab.ts`) — a pause-menu tab, reached from
+- **The Quest Journal** (`src/ui/screens/pause/journalSection.ts`) — a pause-screen page, reached from
   the compass button under the achievement chip, from the `toggleQuestTracker` binding, or
-  from the Game tab. It lists whatever the floor's quest systems say is outstanding: an
+  from the pause screen's menu. It lists whatever the floor's quest systems say is outstanding: an
   objective line, a hint, a compass chevron and a tile distance per row, and clicking one
   pins it — which puts a world arrow over the player and an extra marker on the minimap.
   It lives behind a pause rather than on the HUD because it has to be able to show
@@ -564,13 +564,14 @@ it, as do the tower storeys, the club and the Big Top.
 
 - **Bounds are visual, not the grid.** Prop art rising above row 0 is measured from the
   baked frame (`townInteriorPropArtRiseTiles`) and grown by `INTERIOR_CAMERA_MARGIN_PX`.
-- **The HUD is an occluder.** `interiorHudLayout` (`src/scenes/interiorHudLayout.ts`)
-  places every piece of indoor chrome: the HUD panel, the room-name plate, the minimap
-  column, and the phone's buttons. `interiorHudOccluders` feeds `hudClearView`, which
-  pushes the view off each occluder that could cover reachable floor, keeping at least
-  four tiles clear. Otherwise a rat or the cat stands under the Bag button on a phone.
-- **The name plate** (`drawInteriorNameplate`) sits between the HUD panel and the minimap
-  when there is room, and under the panel when there is not.
+- **The HUD is an occluder.** Indoors the HUD is the same `HudSurface` as outside, laid
+  out by the shared `hudLayout`; `liveHudLayout` answers for the live screen without
+  drawing. `interiorHudOccluders` (`src/scenes/interiorHud.ts`) turns that layout's unit
+  frames, minimap, room-name slot and shown buttons into occluders for `hudClearView`,
+  which pushes the view off each occluder that could cover reachable floor, keeping at
+  least four tiles clear. Otherwise a rat or the cat stands under the Bag button on a phone.
+- **The room name** is a top-band entry (`roomNameEntry`), placed with the rest of the band
+  between the unit frames and the minimap, and under the frames on a compact screen.
 
 `npm run verify:interior-camera` checks every reachable floor tile, with the party on it,
 at desktop and phone sizes with each HUD variant. `npm run render:interior-hud` renders
@@ -1025,7 +1026,7 @@ starts a `SCYTHE_SWING_SECONDS` (1.5 s) swing, drawn on Carl's chop row paced to
 with the scythe as his working tool; Donut swipes as the grain falls. The swing shows a
 screen-wide timing bar in the HUD pass (`ScytheSwingBar`): a needle crossing a track with
 the good and perfect bands marked, laid out below the crawler and pushed in sideways or
-up off the HUD panel, minimap, hotbar and a phone's buttons (compact under 520 px tall).
+up off the unit frames, minimap, hotbar and a phone's buttons (compact under 520 px tall).
 The one timed second press is the attack key (Space) or, on a phone, any tap while the
 swing claims world taps:
 
@@ -1275,9 +1276,9 @@ driven is knocked out: `downedPartnerEntryRefusal` (`BuildingSystem.ts`) refuses
 `DungeonScene.sealedBuildingMessage`. A crawler can still go down indoors
 (`companionDownIndoors`), which is why Wendell's beats check for it themselves.
 
-**The HUD.** `QuestCounterHud` draws "N/10 fence sections" in `build_fence` and "N/100
-grain" in `harvest_grain`, under the resource strip's slot, stepping aside to the nearest
-clear spot where that lands on phone buttons, the minimap, the HUD panel or the hotbar.
+**The HUD.** `QuestCounterHud` shows "N/10 fence sections" in `build_fence` and "N/100
+grain" in `harvest_grain` as a card in the HUD's top band (`questCounterEntry`), stacked
+with the resource strip and any fight bars by the band's own priorities.
 
 **Sound.** Every play site raises a cue from `BLUEPRINTS_CUES`
 (`blueprintsSoundCues.ts`), never a raw id; each cue's JSDoc names the recording it
@@ -1452,7 +1453,8 @@ bare floor and still typechecks, so both structure types are in all of these:
   branch there; `DECORATION_OVERLAY_TYPES` and the draws-at filter (`GameMap.ts`);
 - the `baseOnly` and draw switches of `drawDecorationTile` (`decorationTiles.ts`);
 - `NON_FLOOR_TYPES` (`tiles/helpers.ts`) and `SOLID_TILE_TYPES` (`town/tileGrid.ts`);
-- the minimap colours in `MiniMapSystem.ts`, `MobileHUDSystem.ts` and `TownMapScene.ts`.
+- the minimap colours in `minimapTileColor` (`src/ui/theme/minimapColors.ts`) and the
+  town map's `TOWN_MAP_INK.tiles` (`src/ui/theme/townMapInk.ts`, read by `TownMapScene.ts`).
 
 They are deliberately **absent** from `GROUND_OCCLUDER_TYPES`: a tent is round and
 paints its own contact shadow, and a band along its rectangle draws a dark box on the

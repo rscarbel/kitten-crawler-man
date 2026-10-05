@@ -1,12 +1,13 @@
+import type { Rect } from '../ui/core/geom';
+import { iconSquare } from '../ui/icons/iconSquare';
+
 /**
  * All procedural drawing functions for Goblin Dynamite:
  *  - In-world floor sprite (with fuse countdown)
  *  - Inventory icon
- *  - Throw charge bar
  *
  * The blast itself is painted by `dynamiteExplosion.ts`.
  */
-import { drawText } from '../ui/TextBox';
 
 const FLOOR_CX_OFFSET = 0.5;
 const FLOOR_CY_OFFSET = 0.55;
@@ -50,21 +51,6 @@ const ICON_FUSE_END_Y = 0.18;
 const ICON_FUSE_LINEWIDTH = 0.03;
 const ICON_SPARK_R = 0.04;
 const ICON_SPARK_CENTER_R = 0.02;
-
-const CHARGE_BAR_WIDTH = 20;
-const CHARGE_BAR_HEIGHT = 150;
-const CHARGE_BAR_RIGHT_MARGIN = 16;
-const CHARGE_BAR_BORDER = 2;
-const CHARGE_BAR_BORDER_TOTAL = 4;
-const CHARGE_BAR_FLASH_DIVISOR = 8;
-const CHARGE_BAR_LABEL_Y_DANGER_TOP = 26;
-const CHARGE_BAR_LABEL_Y_DANGER_BOT = 14;
-const CHARGE_BAR_LABEL_Y_THROW_TOP = 22;
-const CHARGE_BAR_LABEL_Y_THROW_BOT = 10;
-const CHARGE_BAR_HIGH_POWER_THRESHOLD = 0.85;
-const CHARGE_BAR_TICK_QUARTER = 0.25;
-const CHARGE_BAR_TICK_HALF = 0.5;
-const CHARGE_BAR_TICK_THREE_QUARTER = 0.75;
 
 // Throw path preview overlay constants
 const THROW_PATH_DOT_RADIUS = 2.5;
@@ -180,12 +166,8 @@ export function drawDynamiteFloorSprite(
 /**
  * Draws a compact dynamite stick icon for the inventory/hotbar slot.
  */
-export function drawDynamiteInventoryIcon(
-  ctx: CanvasRenderingContext2D,
-  x: number,
-  y: number,
-  size: number,
-): void {
+export function drawDynamiteInventoryIcon(ctx: CanvasRenderingContext2D, rect: Rect): void {
+  const { x, y, size } = iconSquare(rect);
   ctx.save();
 
   const cx = x + size * ICON_CX_OFFSET;
@@ -313,120 +295,6 @@ export function drawDynamiteThrowPath(
   ctx.arc(impact.x, impact.y, THROW_PATH_IMPACT_CENTER_RADIUS, 0, Math.PI * 2);
   ctx.fillStyle = `rgba(220, 40, 40, ${THROW_PATH_IMPACT_ALPHA * 0.8})`;
   ctx.fill();
-
-  ctx.restore();
-}
-
-// Throw charge bar
-
-/**
- * Draws the throw-charge bar at the bottom center of the screen.
- * @param canvasW       Canvas width
- * @param canvasH       Canvas height
- * @param ratio         Charge ratio 0–1 (1 = max throw)
- * @param chargeFrames  Raw frames held (for danger flash detection)
- * @param dangerFrames  Frame count at which the bar turns red/flashing
- */
-export function drawDynamiteChargeBar(
-  ctx: CanvasRenderingContext2D,
-  canvasW: number,
-  canvasH: number,
-  ratio: number,
-  chargeFrames: number,
-  dangerFrames: number,
-): void {
-  ctx.save();
-
-  const barW = CHARGE_BAR_WIDTH;
-  const barH = CHARGE_BAR_HEIGHT;
-  const barX = canvasW - barW - CHARGE_BAR_RIGHT_MARGIN;
-  const barY = (canvasH - barH) / 2;
-
-  const isDanger = chargeFrames >= dangerFrames;
-  // Flash every 8 frames when in danger
-  const flashOn = !isDanger || Math.floor(chargeFrames / CHARGE_BAR_FLASH_DIVISOR) % 2 === 0;
-
-  const labelX = barX + barW / 2;
-  if (isDanger) {
-    drawText(ctx, '⚠', {
-      x: labelX,
-      y: barY - CHARGE_BAR_LABEL_Y_DANGER_TOP,
-      size: 10,
-      bold: true,
-      font: 'monospace',
-      color: '#ef4444',
-      align: 'center',
-    });
-    drawText(ctx, 'DANGER', {
-      x: labelX,
-      y: barY - CHARGE_BAR_LABEL_Y_DANGER_BOT,
-      size: 10,
-      bold: true,
-      font: 'monospace',
-      color: '#ef4444',
-      align: 'center',
-    });
-  } else {
-    drawText(ctx, 'THROW', {
-      x: labelX,
-      y: barY - CHARGE_BAR_LABEL_Y_THROW_TOP,
-      size: 10,
-      bold: true,
-      font: 'monospace',
-      color: '#e2e8f0',
-      align: 'center',
-    });
-    drawText(ctx, 'POWER', {
-      x: labelX,
-      y: barY - CHARGE_BAR_LABEL_Y_THROW_BOT,
-      size: 10,
-      bold: true,
-      font: 'monospace',
-      color: '#e2e8f0',
-      align: 'center',
-    });
-  }
-
-  ctx.fillStyle = 'rgba(0,0,0,0.72)';
-  ctx.fillRect(
-    barX - CHARGE_BAR_BORDER,
-    barY - CHARGE_BAR_BORDER,
-    barW + CHARGE_BAR_BORDER_TOTAL,
-    barH + CHARGE_BAR_BORDER_TOTAL,
-  );
-  ctx.strokeStyle = isDanger ? '#ef4444' : '#475569';
-  ctx.lineWidth = 1;
-  ctx.strokeRect(
-    barX - CHARGE_BAR_BORDER,
-    barY - CHARGE_BAR_BORDER,
-    barW + CHARGE_BAR_BORDER_TOTAL,
-    barH + CHARGE_BAR_BORDER_TOTAL,
-  );
-
-  // Fill — grows from bottom upward
-  if (flashOn) {
-    const fillH = Math.ceil(barH * ratio);
-    ctx.fillStyle = isDanger
-      ? '#ef4444'
-      : ratio > CHARGE_BAR_HIGH_POWER_THRESHOLD
-        ? '#facc15'
-        : '#4ade80';
-    ctx.fillRect(barX, barY + barH - fillH, barW, fillH);
-  }
-
-  ctx.strokeStyle = 'rgba(255,255,255,0.25)';
-  ctx.lineWidth = 1;
-  for (const pct of [
-    CHARGE_BAR_TICK_QUARTER,
-    CHARGE_BAR_TICK_HALF,
-    CHARGE_BAR_TICK_THREE_QUARTER,
-  ]) {
-    const ty = barY + barH * (1 - pct);
-    ctx.beginPath();
-    ctx.moveTo(barX, ty);
-    ctx.lineTo(barX + barW, ty);
-    ctx.stroke();
-  }
 
   ctx.restore();
 }

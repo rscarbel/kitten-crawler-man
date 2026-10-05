@@ -159,7 +159,6 @@ function frame(name: string): void {
   human.render(gameCtx, camX, camY, TILE_SIZE);
   lighting.render(gameCtx, camX, camY, viewW, viewH);
   quest.renderAbove(gameCtx, camX, camY, human);
-  quest.renderUI(gameCtx);
   const path = writePreviewPng(`${outBase}-${name}.png`, canvas.toBuffer('image/png'));
   console.log(path);
 }

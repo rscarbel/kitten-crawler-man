@@ -11,7 +11,7 @@
 
 import { EventBus } from '../src/core/EventBus';
 import { SystemNoticeSystem } from '../src/systems/SystemNoticeSystem';
-import { HotbarToast } from '../src/ui/HotbarToast';
+import { HudToasts } from '../src/ui/hud/toasts';
 import { HumanPlayer } from '../src/creatures/HumanPlayer';
 import { CatPlayer } from '../src/creatures/CatPlayer';
 import { TILE_SIZE } from '../src/core/constants';
@@ -48,7 +48,7 @@ function freshRig(): {
   levelUpEvents: { crawler: string; id: string; level: number }[];
 } {
   const bus = new EventBus();
-  const notices = new SystemNoticeSystem(bus, new HotbarToast());
+  const notices = new SystemNoticeSystem(bus, new HudToasts());
   const human = new HumanPlayer(0, 0, TILE_SIZE);
   const cat = new CatPlayer(0, 0, TILE_SIZE);
   const learnedEvents: { crawler: string; id: string }[] = [];

@@ -6,7 +6,7 @@
  *  - The Anchor quest's wood pile pickup (the nursery's own props are in `nurserySprites.ts`)
  */
 import { timeFrameIndex, walkFrameIndex } from '../core/SpriteRenderer';
-import { drawText, measureTextInkExtent, type TextInkExtent } from '../ui/TextBox';
+import { worldText, worldTextInkExtent, type WorldTextInkExtent } from '../ui/world/worldText';
 import {
   GOBLIN_MOTHER_FIGURE,
   GOBLIN_TODDLER_FIGURE,
@@ -100,12 +100,12 @@ export function drawQuestNPCSprite(
     ctx.stroke();
 
     const helpFontSize = Math.floor(s * NPC_BUBBLE_TEXT_SIZE_RATIO);
-    drawText(ctx, 'Help!!!', {
+    worldText(ctx, 'Help!!!', {
       x: bx + bw * NPC_BUBBLE_TEXT_CENTER_X,
       y: by + bh * NPC_BUBBLE_TEXT_CENTER_Y - helpFontSize / 2,
       size: helpFontSize,
       bold: true,
-      font: 'sans-serif',
+      family: 'sans-serif',
       color: '#ef4444',
       alpha: bubbleAlpha,
       align: 'center',
@@ -161,18 +161,18 @@ export function questMarkerColorFor(state: QuestMarkerState): string | undefined
   return undefined;
 }
 
-const glyphInkBySize = new Map<QuestMarkerGlyph, Map<number, TextInkExtent>>();
+const glyphInkBySize = new Map<QuestMarkerGlyph, Map<number, WorldTextInkExtent>>();
 
 /** Where the glyph's ink sits below its text `y`, measured once per glyph and size. */
 function glyphInk(ctx: CanvasRenderingContext2D, glyph: QuestMarkerGlyph, size: number) {
   let bySize = glyphInkBySize.get(glyph);
   if (bySize === undefined) {
-    bySize = new Map<number, TextInkExtent>();
+    bySize = new Map<number, WorldTextInkExtent>();
     glyphInkBySize.set(glyph, bySize);
   }
   let ink = bySize.get(size);
   if (ink === undefined) {
-    ink = measureTextInkExtent(ctx, glyph, { size, bold: true, font: EXCLAMATION_FONT });
+    ink = worldTextInkExtent(ctx, glyph, { size, bold: true, family: EXCLAMATION_FONT });
     bySize.set(size, ink);
   }
   return ink;
@@ -245,12 +245,12 @@ export function drawQuestMarker(
   const cx = sx + s * EXCLAMATION_CENTER_X;
 
   ctx.save();
-  drawText(ctx, glyph, {
+  worldText(ctx, glyph, {
     x: cx,
     y: restingTextY + bounce,
     size: glyphFontSize,
     bold: true,
-    font: EXCLAMATION_FONT,
+    family: EXCLAMATION_FONT,
     color,
     align: 'center',
     outline: '#000',
@@ -420,12 +420,11 @@ export function drawWoodPileSprite(
   ctx.fill();
 
   const woodFontSize = Math.floor(s * WOODPILE_TEXT_SIZE);
-  drawText(ctx, 'WOOD', {
+  worldText(ctx, 'WOOD', {
     x: sx + s * WOODPILE_ARROW_X,
     y: sy + s * WOODPILE_TEXT_Y - Math.round(woodFontSize * WOODPILE_TEXT_BASELINE_RATIO),
     size: woodFontSize,
     bold: true,
-    font: 'monospace',
     color: '#fbbf24',
     align: 'center',
     outline: '#3a2500',

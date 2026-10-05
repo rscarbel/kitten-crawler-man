@@ -3,14 +3,14 @@
  * permanent, and strictly one per character (`Player.tattooStat`), so the choice
  * of which stat it raises is the whole decision.
  *
- * Pure data + line selection; `PricedMenuPanel` owns the UI and
+ * Pure data + line selection; the shop screen owns the UI and
  * `BuildingInteriorScene` owns the sounds and the interaction gating.
  */
 
 import type { StatName, Player } from '../Player';
 import type { SkillId } from '../core/SkillManager';
 import { getSkillDef } from '../core/SkillManager';
-import type { PricedMenu, PricedOption, PricedPurchaseHandler } from '../ui/PricedMenuPanel';
+import type { ShopMenu, ShopRow, ShopPurchaseHandler } from '../ui/screens/shop/shopSession';
 import type { ResidentHost } from './townResidents';
 import { rotateLine } from './townServiceUtil';
 
@@ -61,9 +61,9 @@ const TATTOO_DESIGNS: ReadonlyArray<{
 ];
 
 /** The skill-tattoo row, with its availability resolved for `player`. */
-function buildSkillTattooOption(player: Player): PricedOption {
+function buildSkillTattooOption(player: Player): ShopRow {
   const def = getSkillDef(SKILL_TATTOO_SKILL);
-  const option: PricedOption = {
+  const option: ShopRow = {
     key: SKILL_TATTOO_KEY,
     label: 'The Brass Gullet',
     price: SKILL_TATTOO_PRICE,
@@ -98,18 +98,14 @@ function tattooistBark(turn: number): string {
  * `host` names the resident behind the needle when the room has one, so the
  * greeting is theirs rather than the generic tattooist's.
  */
-export function buildTattooMenu(
-  player: Player,
-  turn: number,
-  host: ResidentHost | null,
-): PricedMenu {
+export function buildTattooMenu(player: Player, turn: number, host: ResidentHost | null): ShopMenu {
   const existing = player.tattooStat;
   return {
     title: 'The Quiet Needle',
     bark: host?.line ?? tattooistBark(turn),
     byline: host?.name,
     options: TATTOO_DESIGNS.map((design) => {
-      const option: PricedOption = {
+      const option: ShopRow = {
         key: design.key,
         label: design.label,
         price: TATTOO_PRICE,
@@ -124,7 +120,7 @@ export function buildTattooMenu(
 }
 
 /** Ink the chosen design onto the buyer and return the tattooist's line. */
-export const inkTattoo: PricedPurchaseHandler = (option, buyer) => {
+export const inkTattoo: ShopPurchaseHandler = (option, buyer) => {
   if (option.key === SKILL_TATTOO_KEY) {
     if (buyer.skillTattoo !== null) {
       return { ok: false, line: 'One mark of that kind per skin. You have yours.' };

@@ -20,7 +20,7 @@ import type { BriarHollowSite } from '../../map/overworld/briarHollowSite';
 import type { MobRoster, SceneWorld } from '../kits/SceneWorld';
 import type { Mob } from '../../creatures/Mob';
 import type { MenusKit } from '../kits/MenusKit';
-import type { OverlayInputClaim } from '../kits/OverlayClaims';
+import type { KeyModifiers, Surface } from '../../ui/core/UiRoot';
 import type { TownPropRenderable } from '../townPropRenderable';
 import type { Player } from '../../Player';
 import type { CrawlerKind } from '../../core/SkillManager';
@@ -32,17 +32,23 @@ import { RESOURCE_IDS } from '../../core/resourceIds';
 import { ITEM_DEF } from '../../core/ItemDefs';
 import { TILE_SIZE } from '../../core/constants';
 import { keybindings } from '../../core/Keybindings';
-import { platform } from '../../core/Platform';
-import { drawText, TEXT_PRESETS } from '../../ui/TextBox';
-import { interactionPromptsSuppressed } from '../../ui/InteractionPrompt';
-import { ConfirmModal } from '../../ui/ConfirmModal';
-import { QuantityPicker } from '../../ui/QuantityPicker';
 import {
-  StructureMenu,
-  type StructureMenuModel,
-  type StructureMenuOption,
-} from '../../ui/StructureMenu';
-import type { ConstructionMenuSource } from '../../ui/ConstructionMenu';
+  actionPrompt,
+  activeInputMode,
+  byInputMode,
+  keycapLabel,
+  keyLabel,
+} from '../../ui/core/inputMode';
+import { worldText } from '../../ui/world/worldText';
+import { interactionPromptsSuppressed } from '../../ui/InteractionPrompt';
+import { ConfirmDialog } from '../../ui/screens/dialogs/ConfirmDialog';
+import { QuantityDialog } from '../../ui/screens/dialogs/QuantityDialog';
+import {
+  StructurePopover,
+  type StructurePopoverModel,
+  type StructurePopoverOption,
+} from '../../ui/screens/construction/StructurePopover';
+import type { ConstructionScreenSource } from '../../ui/screens/construction/ConstructionScreen';
 import { infernalTrebuchets } from '../../core/craftPerks';
 import {
   drawTrebuchet,
@@ -83,6 +89,7 @@ import {
 } from './structureRules';
 import type { Villager } from './Villager';
 import { HOLLOW_BELL_LABEL } from './hollowBell';
+import { worldPalette } from '../../ui/theme/worldInk';
 
 type Crawler = HumanPlayer | CatPlayer;
 
@@ -105,16 +112,16 @@ const TILE_CENTRE = 0.5;
 /** Reach is measured to a tile's centre, so a tile whose near edge is in reach counts. */
 const REACH_TO_TILE_CENTRE_SLACK = 0.5;
 
-const GHOST_VALID_FILL = 'rgba(74,222,128,0.28)';
-const GHOST_VALID_EDGE = 'rgba(74,222,128,0.9)';
-const GHOST_INVALID_FILL = 'rgba(248,113,113,0.28)';
-const GHOST_INVALID_EDGE = 'rgba(248,113,113,0.9)';
+const GHOST_VALID_FILL = worldPalette.village.ghostValidFill;
+const GHOST_VALID_EDGE = worldPalette.village.ghostValidEdge;
+const GHOST_INVALID_FILL = worldPalette.village.ghostInvalidFill;
+const GHOST_INVALID_EDGE = worldPalette.village.ghostInvalidEdge;
 const GHOST_EDGE_WIDTH = 2;
-const HIGHLIGHT_EDGE = 'rgba(253,230,138,0.95)';
+const HIGHLIGHT_EDGE = worldPalette.village.segmentHighlight;
 /** How far outside its tile a segment's highlight is drawn, so it reads over the wall art. */
 const HIGHLIGHT_INSET = 1;
 /** The "no room" silhouette's own tint, over the failed build's exact sprite shape. */
-const NO_ROOM_GHOST_TINT = '#ef4444';
+const NO_ROOM_GHOST_TINT = worldPalette.village.noRoomTint;
 /** The silhouette never reads as solid, even at full strength, so it never looks like a real structure. */
 const NO_ROOM_GHOST_MAX_ALPHA = 0.6;
 
@@ -187,9 +194,9 @@ export class ConstructionKit {
   /** The enemies a level-15 snare has turned, for as long as that lasts. */
   readonly allies: ConvertedAllyController;
   private readonly deps: ConstructionKitDeps;
-  private readonly structureMenu: StructureMenu;
-  private readonly confirm: ConfirmModal;
-  private readonly picker: QuantityPicker;
+  private readonly structureMenu: StructurePopover;
+  private readonly confirm: ConfirmDialog;
+  private readonly picker: QuantityDialog;
   private structureTarget: StructureRef | null = null;
   private preview: BuildOption | null = null;
   /** Reused across frames so a fading "no room" silhouette doesn't allocate a canvas every draw. */
@@ -198,7 +205,7 @@ export class ConstructionKit {
   private buildPulseSecondsLeft = 0;
   private timeSeconds = 0;
   private readonly entityBuffer: TownPropRenderable[] = [];
-  private readonly menuSource: ConstructionMenuSource;
+  private readonly menuSource: ConstructionScreenSource;
 
   constructor(deps: ConstructionKitDeps) {
     this.deps = deps;
@@ -224,7 +231,7 @@ export class ConstructionKit {
       cat: deps.cat,
       roster: world.roster,
       audio,
-      announce: (message, prominence) => deps.menus.announce(message, prominence),
+      announce: (message, opts) => deps.menus.announce(message, opts),
       noteResourceActivity: deps.noteResourceActivity,
       bodies: () => this.pushableBodies(),
       indoors: false,
@@ -259,9 +266,9 @@ export class ConstructionKit {
       allies: this.allies,
       callouts: this.trebuchets.callouts,
     });
-    this.structureMenu = new StructureMenu(audio);
-    this.confirm = new ConfirmModal(audio);
-    this.picker = new QuantityPicker(audio);
+    this.structureMenu = new StructurePopover(audio);
+    this.confirm = new ConfirmDialog(audio);
+    this.picker = new QuantityDialog(audio);
     this.menuSource = {
       // The wall rows only mean anything while facing a section of the ring:
       // away from the wall, the menu shows only what can be built anywhere.
@@ -388,7 +395,6 @@ export class ConstructionKit {
       this.trebuchets.update();
       this.allies.update();
     }
-    this.picker.update();
     const menu = this.deps.menus.constructionMenu;
     if (!menu.isOpen) this.preview = null;
     this.updateStructureMenu();
@@ -475,20 +481,21 @@ export class ConstructionKit {
   }
 
   /**
-   * The build key (desktop) pressed over a wall the active crawler faces:
-   * raises it the same way choosing that tier's row in the Construction menu
-   * would, without opening any menu first. Returns whether it started a job.
+   * The build key pressed over a wall the active crawler faces: raises it the
+   * same way choosing that tier's row in the Construction menu would, without
+   * opening any menu first. Returns whether it started a job.
    *
-   * Desktop only: this is reached from `tryInteract`, which is also every
-   * mobile tap's fallback once nothing more specific claims it. If it ran
-   * there too, the first tap of a "double tap to build" gesture would raise
-   * the wall on its own, silently spending it before the second tap — the
-   * one the on-screen prompt names — ever lands, leaving `handleDoubleTap`
+   * Refused when `fromTap`: this is reached from `tryInteract`, which is also
+   * every world tap's fallback once nothing more specific claims it. If a
+   * tap built here, the first tap of a "double tap to build" gesture would
+   * raise the wall on its own, silently spending it before the second tap —
+   * the one the touch prompt names — ever lands, leaving `handleDoubleTap`
    * refused with a job already running that a subsequent tap then cancels.
-   * Mobile's own double tap is the only door in for a wall build there.
+   * A key press always builds, so a touch laptop's keyboard honours the
+   * "Press Space" prompt it is shown.
    */
-  tryBuildWall(): boolean {
-    if (platform.isMobile || !this.learned || this.isMenuOpen) return false;
+  tryBuildWall(fromTap: boolean): boolean {
+    if (fromTap || !this.learned || this.isMenuOpen) return false;
     return this.construction.tryBuildFacedWall();
   }
 
@@ -524,26 +531,26 @@ export class ConstructionKit {
     const topY = tile.y * TILE_SIZE - camY - WALL_PROMPT_LIFT_TILES * TILE_SIZE;
     const tierLabel = WALL_TIERS[prompt.tier].label;
     const deed = prompt.repair ? `repair ${tierLabel}` : `build ${tierLabel}`;
-    const buildLine = platform.isMobile
-      ? `Double tap to ${deed}`
-      : `Press ${keybindings.labelFor('attack')} to ${deed}`;
-    drawText(ctx, buildLine, { x: sx, y: topY, align: 'center', ...TEXT_PRESETS.label });
-    drawText(ctx, `Cost: ${formatCost(prompt.cost)}.`, {
+    const mode = activeInputMode();
+    const buildLine = actionPrompt(mode, { deed, action: 'attack', gesture: 'doubleTap' });
+    worldText(ctx, buildLine, { x: sx, y: topY, align: 'center', style: 'label' });
+    worldText(ctx, `Cost: ${formatCost(prompt.cost)}.`, {
       x: sx,
       y: topY + WALL_PROMPT_LINE_GAP_PX,
       align: 'center',
+      style: 'hint',
       outline: true,
-      ...TEXT_PRESETS.hint,
     });
-    const menuLine = platform.isMobile
-      ? 'Long-tap for menu'
-      : `Press ${keybindings.labelFor('structureMenu')} for menu`;
-    drawText(ctx, menuLine, {
+    const menuLine = byInputMode(mode, {
+      touch: 'Long-tap for menu',
+      pointer: `Press ${keyLabel('structureMenu')} for menu`,
+    });
+    worldText(ctx, menuLine, {
       x: sx,
       y: topY + 2 * WALL_PROMPT_LINE_GAP_PX,
       align: 'center',
+      style: 'hint',
       outline: true,
-      ...TEXT_PRESETS.hint,
     });
     return true;
   }
@@ -631,7 +638,7 @@ export class ConstructionKit {
     target: StructureRef,
     camX: number,
     camY: number,
-  ): StructureMenuModel | null {
+  ): StructurePopoverModel | null {
     const defense = this.defense;
     const construction = this.construction;
     const tiles = defense.footprintOf(target);
@@ -653,7 +660,7 @@ export class ConstructionKit {
       h: (maxY - minY) * TILE_SIZE,
     };
     const record = defense.record(target);
-    const options: StructureMenuOption[] = [];
+    const options: StructurePopoverOption[] = [];
     const busy = construction.job !== null ? 'Already building' : undefined;
     const affordReason = (cost: ResourceCost): string | undefined =>
       busy ??
@@ -690,7 +697,7 @@ export class ConstructionKit {
       // The key mends before it loads, so it is shown on whichever row it would choose.
       const keyLoads = construction.repairCostFor(target) === null;
       options.push({
-        label: keyLoads ? `Quick Load [${keybindings.labelFor('quickLoad')}]` : 'Quick Load',
+        label: keyLoads ? `Quick Load ${keycapLabel('quickLoad')}` : 'Quick Load',
         disabledReason:
           room <= 0 ? 'The trebuchet is full' : stone <= 0 ? 'You have no stone' : undefined,
         action: () => {
@@ -702,7 +709,7 @@ export class ConstructionKit {
     const repairCost = construction.repairCostFor(target);
     if (repairCost !== null) {
       options.push({
-        label: `Repair [${keybindings.labelFor('quickLoad')}]`,
+        label: `Repair ${keycapLabel('quickLoad')}`,
         cost: repairCost,
         disabledReason: affordReason(repairCost),
         action: act(() => construction.startRepair(target)),
@@ -1021,19 +1028,23 @@ export class ConstructionKit {
     const footprint = trebuchetFootprint(record.x, record.y);
     const x = (footprint.x + footprint.w / 2) * TILE_SIZE - camX;
     const y = footprint.y * TILE_SIZE - camY - TREBUCHET_HINT_LIFT_TILES * TILE_SIZE;
-    const menuLine = platform.isMobile
-      ? 'Long-press to open menu'
-      : `Press ${keybindings.labelFor('structureMenu')} to open menu`;
+    const mode = activeInputMode();
+    const menuLine = actionPrompt(mode, {
+      deed: 'open menu',
+      action: 'structureMenu',
+      gesture: 'longPress',
+    });
     const needsRepair = this.construction.repairCostFor(target) !== null;
-    const reloadLine = platform.isMobile
-      ? 'Double tap to reload'
-      : `Press ${keybindings.labelFor('quickLoad')} to ${needsRepair ? 'repair' : 'reload'}`;
-    drawText(ctx, menuLine, { x, y, align: 'center', ...TEXT_PRESETS.label });
-    drawText(ctx, reloadLine, {
+    const reloadLine = byInputMode(mode, {
+      touch: 'Double tap to reload',
+      pointer: `Press ${keyLabel('quickLoad')} to ${needsRepair ? 'repair' : 'reload'}`,
+    });
+    worldText(ctx, menuLine, { x, y, align: 'center', style: 'label' });
+    worldText(ctx, reloadLine, {
       x,
       y: y + TREBUCHET_HINT_LINE_GAP_PX,
       align: 'center',
-      ...TEXT_PRESETS.label,
+      style: 'label',
     });
   }
 
@@ -1070,10 +1081,11 @@ export class ConstructionKit {
     const sx = ((minX + maxX) / 2) * TILE_SIZE - camX;
     const topY = minY * TILE_SIZE - camY - BELL_TOWER_PROMPT_LIFT_TILES * TILE_SIZE;
 
-    const repairLine = platform.isMobile
-      ? 'Double tap to repair'
-      : `Repair (${keybindings.labelFor('quickLoad')})`;
-    drawText(ctx, repairLine, { x: sx, y: topY, align: 'center', ...TEXT_PRESETS.label });
+    const repairLine = byInputMode(activeInputMode(), {
+      touch: 'Double tap to repair',
+      pointer: `Repair (${keyLabel('quickLoad')})`,
+    });
+    worldText(ctx, repairLine, { x: sx, y: topY, align: 'center', style: 'label' });
 
     const human = this.deps.human;
     const cat = this.deps.cat;
@@ -1082,25 +1094,22 @@ export class ConstructionKit {
       const need = cost[id] ?? 0;
       if (need <= 0) continue;
       const have = partyCount(human, cat, id);
-      const style = have >= need ? TEXT_PRESETS.label : TEXT_PRESETS.danger;
-      drawText(ctx, `${ITEM_DEF[id].name} ${have}/${need}`, {
+      worldText(ctx, `${ITEM_DEF[id].name} ${have}/${need}`, {
         x: sx,
         y: lineY,
         align: 'center',
+        style: have >= need ? 'label' : 'danger',
         outline: true,
-        ...style,
       });
       lineY += BELL_TOWER_PROMPT_LINE_GAP_PX;
     }
     const coinsHave = partyCoins(human, cat);
-    const coinsStyle =
-      coinsHave >= BELL_TOWER_REPAIR_COINS ? TEXT_PRESETS.label : TEXT_PRESETS.danger;
-    drawText(ctx, `Coins ${coinsHave}/${BELL_TOWER_REPAIR_COINS}`, {
+    worldText(ctx, `Coins ${coinsHave}/${BELL_TOWER_REPAIR_COINS}`, {
       x: sx,
       y: lineY,
       align: 'center',
+      style: coinsHave >= BELL_TOWER_REPAIR_COINS ? 'label' : 'danger',
       outline: true,
-      ...coinsStyle,
     });
   }
 
@@ -1133,66 +1142,52 @@ export class ConstructionKit {
     return false;
   }
 
-  /** The village's construction menus, drawn with the scene's dialogs; the topmost last. */
-  renderDialog(ctx: CanvasRenderingContext2D, camX: number, camY: number): void {
-    const active = this.active();
-    const target = this.structureTarget;
-    if (target !== null && this.structureMenu.isOpen) {
-      const model = this.structureModel(target, camX, camY);
-      if (model !== null) {
-        this.structureMenu.render(ctx, model, (id) =>
-          partyCount(this.deps.human, this.deps.cat, id),
-        );
-      }
-    }
-    this.deps.menus.constructionMenu.render(
-      ctx,
-      { name: active === this.deps.human ? 'Carl' : 'Donut', skills: active.craftSkills },
-      (id) => partyCount(this.deps.human, this.deps.cat, id),
-    );
-    this.picker.render(ctx);
-    this.confirm.render(ctx);
-  }
-
-  // ── Input ───────────────────────────────────────────────────────────────
-
-  /** Highest first: the confirm and the picker sit over both menus. */
-  handleClick(mx: number, my: number): boolean {
-    if (this.confirm.handleClick(mx, my)) return true;
-    if (this.picker.handleClick(mx, my)) return true;
-    if (this.deps.menus.constructionMenu.handleClick(mx, my)) return true;
-    return this.structureMenu.handleClick(mx, my);
-  }
-
-  handlePointerDown(mx: number, my: number): void {
-    this.picker.handlePointerDown(mx, my);
-  }
-
-  handlePointerUp(): void {
-    this.picker.handlePointerUp();
+  /**
+   * The construction panels as surfaces: the structure menu beside its
+   * structure, the Construction menu, the ammunition picker and the dismantle
+   * confirm. The Construction menu belongs to the shared menus but is listed
+   * here, so a scene with a village mounts it through this and not again.
+   *
+   * @param camera Where the camera is, for anchoring the structure menu.
+   */
+  surfaces(camera: () => { readonly x: number; readonly y: number }): Surface[] {
+    return [
+      this.structureMenu.surface('structure-menu', {
+        model: () => {
+          const target = this.structureTarget;
+          if (target === null) return null;
+          const { x, y } = camera();
+          return this.structureModel(target, x, y);
+        },
+        stockOf: (id) => partyCount(this.deps.human, this.deps.cat, id),
+        onKey: (key, mods) => this.handleStructureMenuKey(key, mods),
+        close: () => this.closeStructureMenu(),
+      }),
+      this.deps.menus.constructionMenu.surface('construction-menu', () => {
+        const active = this.active();
+        return {
+          crawlerName: active === this.deps.human ? 'Carl' : 'Donut',
+          skills: active.craftSkills,
+          partyCount: (id) => partyCount(this.deps.human, this.deps.cat, id),
+        };
+      }),
+      this.picker.surface('construction-picker'),
+      this.confirm.surface('construction-confirm'),
+    ];
   }
 
   /**
-   * Keys for whichever construction panel is up. A held key's auto-repeat is
-   * swallowed rather than acted on: otherwise holding the key that opened a
-   * menu would close it again a moment later.
+   * The Structure menu key closes the menu it opened. A held key's auto-repeat
+   * is swallowed rather than acted on: otherwise holding the key that opened
+   * the menu would close it again a moment later.
    */
-  handleKeyDown(key: string, repeat = false): boolean {
-    if (this.confirm.handleKey(key)) return true;
-    if (this.picker.handleKey(key)) return true;
-    if (this.deps.menus.constructionMenu.handleKey(key, repeat)) return true;
-    if (this.structureMenu.isOpen && keybindings.actionFor(key) === 'structureMenu') {
-      if (!repeat) this.closeStructureMenu();
-      return true;
-    }
-    if (this.structureMenu.handleKey(key)) {
-      this.structureTarget = null;
-      return true;
-    }
-    return false;
+  private handleStructureMenuKey(key: string, mods: KeyModifiers): boolean {
+    if (!this.structureMenu.isOpen || keybindings.actionFor(key) !== 'structureMenu') return false;
+    if (mods.repeat !== true) this.closeStructureMenu();
+    return true;
   }
 
-  /** Escape, reached through the scene's dismiss chain. Returns whether it closed something. */
+  /** Closes whichever construction panel is up. Returns whether it closed something. */
   dismissDialog(): boolean {
     const menu = this.deps.menus.constructionMenu;
     if (menu.isOpen) {
@@ -1213,16 +1208,6 @@ export class ConstructionKit {
       this.picker.isOpen ||
       this.confirm.isOpen
     );
-  }
-
-  /** Topmost first, as the scene's list ranks them. */
-  overlayClaims(): OverlayInputClaim[] {
-    return [
-      this.confirm.overlayClaim(),
-      this.picker.overlayClaim(),
-      this.deps.menus.constructionMenu.overlayClaim(),
-      this.structureMenu.overlayClaim(),
-    ];
   }
 
   /**

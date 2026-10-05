@@ -1,25 +1,29 @@
 /**
  * Gate for the camera and the chrome inside buildings, at desktop and phone
- * viewport sizes and with every HUD layout a phone can show:
+ * viewport sizes, at both input densities and with the minimap normal and
+ * expanded:
  *
  * - From every corner of every walk-in room, the room's far edges — the top of
  *   the north wall's tallest art included — come fully into the part of the
  *   screen the HUD leaves clear, with a little empty space beyond them; a room
  *   that fits an axis is centred in that clear part.
  * - Standing on any floor tile the party can reach, that tile is on screen and
- *   under none of the HUD's rects (HUD panel, name plate, minimap, Pause, Bag,
- *   Build, Journal, Switch, Follow, Summon). A rat on a tile the chrome always covers is a
- *   rat the player cannot find.
- * - The room-name plate stays on screen, overlaps no other HUD rect or the
- *   skill-point badge, and its text fits it for every room's name. It may be
- *   left off only in the layout that leaves it no slot at all (both panels
- *   expanded on a landscape phone).
+ *   under none of the HUD's rects (unit frames and coins, room name, minimap,
+ *   Pause, Bag, Build, Journal, Switch, Follow, Summon). A rat on a tile the
+ *   chrome always covers is a rat the player cannot find.
+ * - The room-name slot in the top band stays on screen and overlaps no dock
+ *   button, the hotbar, the unit frames or the minimap's normal square; with
+ *   the map expanded the bars may lie over the part it grew into, which the
+ *   player opened only to look for a moment. A name too long for its slot
+ *   ends in an ellipsis, which is reported. The skill-point badge sits on the
+ *   unit frame's portrait, inside the frames block, so it needs no check of
+ *   its own.
  *
  * "The room" is measured, not taken from the camera's own bounds: each room is
  * drawn through the same layers `BuildingInteriorScene` draws (tiles, ground
  * props, decorations, standing props) onto a padded transparent canvas, and the
  * opaque bounding box of the result is what has to fit. The camera, the HUD
- * layout and the clear view are the scene's own functions.
+ * layout, the occluders and the clear view are the scene's own functions.
  *
  * Three cameras are also run and must fail: one clamped to the tile grid over
  * the whole screen, one blind to the HUD (framing against the whole view), and
@@ -35,7 +39,6 @@ import { loadGameSpritesInNode } from './nodeCanvasGlobals';
 import { asGameContext } from './nodeGameContext';
 import { TILE_SIZE } from '../src/core/constants';
 import { level3 } from '../src/levels/level3';
-import { setViewportSize } from '../src/core/Viewport';
 import { GameMap, TOWER_FLOOR_COUNT } from '../src/map/GameMap';
 import { createTownPlan, type BuildingKind } from '../src/map/town/townPlan';
 import { BIG_TOP_ENTRY_KIND, BIG_TOP_ENTRY_NAME } from '../src/map/OverworldGenerator';
@@ -45,9 +48,7 @@ import {
   drawTownInteriorGroundProps,
   townInteriorPropFigures,
 } from '../src/systems/townInteriorPropFigures';
-import { hotbarStripRect } from '../src/ui/InventoryPanel';
-import { mobileSkillBadgeRect } from '../src/ui/HUD';
-import { measureTextWidth } from '../src/ui/TextBox';
+import { measureWorldText } from '../src/ui/world/worldText';
 import {
   ClearViewMemo,
   INTERIOR_CAMERA_MARGIN_PX,
@@ -56,17 +57,21 @@ import {
   interiorCameraBounds,
   interiorFocusRange,
   interiorMustSeeBounds,
-  type ScreenRect,
   type WorldRect,
 } from '../src/scenes/interiorCamera';
 import {
-  interiorHudLayout,
+  hotbarBandHeightCss,
   interiorHudOccluders,
   interiorRoomTitle,
-  chooseNameplateText,
-  type InteriorHudLayout,
-} from '../src/scenes/interiorHudLayout';
-import type { Rect } from '../src/systems/MobileHUDSystem';
+  roomNameSlot,
+  type InteriorChrome,
+} from '../src/scenes/interiorHud';
+import { hudLayout, type HudGeometry } from '../src/ui/hud/hudLayout';
+import { toCssRect } from '../src/ui/hud/HudSurface';
+import { NO_INSETS, resolveViewport, type SizeClass } from '../src/ui/core/viewport';
+import type { Rect } from '../src/ui/core/geom';
+import type { Density } from '../src/ui/theme/tokens';
+import { measureText } from '../src/ui/widgets/text';
 
 interface Viewport {
   readonly w: number;
@@ -89,90 +94,61 @@ const ROOMY_LANDSCAPE_VIEWPORTS: readonly Viewport[] = [
   { w: 844, h: 390 },
   { w: 667, h: 375 },
 ];
-const PHONE_VIEWPORTS: readonly Viewport[] = [
+const SMALLEST_LANDSCAPE_VIEWPORT: Viewport = { w: 568, h: 320 };
+const ALL_VIEWPORTS: readonly Viewport[] = [
+  ...DESKTOP_VIEWPORTS,
   ...PHONE_PORTRAIT_VIEWPORTS,
   ...ROOMY_LANDSCAPE_VIEWPORTS,
-  { w: 568, h: 320 },
+  SMALLEST_LANDSCAPE_VIEWPORT,
 ];
+/** Everywhere but the smallest landscape phone. */
+const ALL_BUT_SMALLEST_LANDSCAPE: readonly Viewport[] = ALL_VIEWPORTS.filter(
+  (viewport) => viewport !== SMALLEST_LANDSCAPE_VIEWPORT,
+);
 
 interface HudVariant {
   readonly label: string;
-  readonly mobile: boolean;
-  readonly hudCollapsed: boolean;
+  readonly density: Density;
   readonly miniMapExpanded: boolean;
-  /** Where the name plate is checked. */
+  /** Where the room-name slot is checked. */
   readonly viewports: readonly Viewport[];
   /** Where the camera is checked — every one of `viewports` unless said otherwise. */
   readonly cameraViewports?: readonly Viewport[];
-  /**
-   * Whether the chrome may leave no room for the name plate at all, so the
-   * layout leaves it off. Everywhere else a missing plate is a failure.
-   */
-  readonly nameplateMayHide?: boolean;
 }
 
-/**
- * Narrower than any listed phone in landscape: the band between an expanded
- * HUD panel and an expanded minimap closes altogether here.
- */
-const NARROW_LANDSCAPE_VIEWPORT: Viewport = { w: 540, h: 320 };
+/** The player's UI size the gate lays the HUD out at: one CSS pixel per UI unit. */
+const GATE_UI_SIZE = 'medium';
 
 /**
- * Every layout the chrome can take. Follow and Summon are always on: the most
- * covered the screen gets.
+ * Every layout the chrome can take. Follow, Summon, Build and Journal are
+ * always on: the most covered the screen gets.
+ *
+ * With the minimap expanded on the smallest landscape phone, the map reaches
+ * most of the way down to the hotbar and the dock hangs beside it, so the
+ * camera is not checked there: a player who opens the map on that screen has
+ * chosen the map over the room. The room's name is checked everywhere, on
+ * screen and clear of every button.
  */
 const HUD_VARIANTS: readonly HudVariant[] = [
+  { label: 'pointer', density: 'pointer', miniMapExpanded: false, viewports: ALL_VIEWPORTS },
   {
-    label: 'desktop',
-    mobile: false,
-    hudCollapsed: false,
-    miniMapExpanded: false,
-    viewports: DESKTOP_VIEWPORTS,
-  },
-  {
-    label: 'phone',
-    mobile: true,
-    hudCollapsed: true,
-    miniMapExpanded: false,
-    viewports: PHONE_VIEWPORTS,
-  },
-  // The camera only in portrait: on a landscape phone the expanded panel is
-  // most of the screen's height, and a player who opens it has chosen stats
-  // over the room.
-  {
-    label: 'phone, HUD expanded',
-    mobile: true,
-    hudCollapsed: false,
-    miniMapExpanded: false,
-    viewports: PHONE_VIEWPORTS,
-    cameraViewports: PHONE_PORTRAIT_VIEWPORTS,
-  },
-  // The camera everywhere but the smallest landscape phone. The buttons stand
-  // where they stand outside, and there the expanded minimap reaches down to
-  // the hotbar, so the column hangs beside it down the middle of the screen
-  // and no clear rect is left: a player who opens the map there has chosen
-  // the map over the room, as with the expanded HUD panel.
-  {
-    label: 'phone, minimap expanded',
-    mobile: true,
-    hudCollapsed: true,
+    label: 'pointer, minimap expanded',
+    density: 'pointer',
     miniMapExpanded: true,
-    viewports: PHONE_VIEWPORTS,
-    cameraViewports: [...PHONE_PORTRAIT_VIEWPORTS, ...ROOMY_LANDSCAPE_VIEWPORTS],
+    viewports: ALL_VIEWPORTS,
+    cameraViewports: ALL_BUT_SMALLEST_LANDSCAPE,
   },
-  // Both panels open on a landscape phone leave the plate no slot: the band
-  // between them is a few pixels, and under the HUD panel runs into the
-  // bottom row. The camera only in portrait, as for the expanded HUD alone.
+  { label: 'touch', density: 'touch', miniMapExpanded: false, viewports: ALL_VIEWPORTS },
   {
-    label: 'phone, HUD and minimap expanded',
-    mobile: true,
-    hudCollapsed: false,
+    label: 'touch, minimap expanded',
+    density: 'touch',
     miniMapExpanded: true,
-    viewports: [...PHONE_VIEWPORTS, NARROW_LANDSCAPE_VIEWPORT],
-    cameraViewports: PHONE_PORTRAIT_VIEWPORTS,
-    nameplateMayHide: true,
+    viewports: ALL_VIEWPORTS,
+    cameraViewports: ALL_BUT_SMALLEST_LANDSCAPE,
   },
 ];
+
+const FULL_CHROME: InteriorChrome = { follow: true, summon: true, build: true, journal: true };
 
 /** Transparent space drawn around a room so art past its grid is caught, not clipped. */
 const CAPTURE_PAD_TILES = 6;
@@ -202,6 +178,8 @@ const FULL_WIDTH_LABEL_TEXT_TOP = 8;
 const FULL_WIDTH_LABEL_VIEWPORT: Viewport = { w: 390, h: 844 };
 /** Frames the clear-view memo is asked for at one fixed layout; all but the first must hit. */
 const MEMO_FRAMES = 60;
+/** How many times the memo has computed after each step: once for the fixed layout, then once per change. */
+const MEMO_COMPUTES = { fixedLayout: 1, afterResize: 2, afterRebuild: 3 } as const;
 
 interface Tile {
   readonly x: number;
@@ -210,7 +188,7 @@ interface Tile {
 
 interface Room {
   readonly label: string;
-  /** The name its plate shows. */
+  /** The name its banner shows. */
   readonly title: string;
   readonly map: GameMap;
   /** What the room actually draws, in world pixels. */
@@ -219,10 +197,16 @@ interface Room {
   readonly reachable: readonly Tile[];
 }
 
+interface HudOnScreen {
+  readonly geometry: HudGeometry;
+  readonly uiScale: number;
+  readonly size: SizeClass;
+}
+
 interface Frame {
-  readonly view: ScreenRect;
-  readonly clear: ScreenRect;
-  readonly occluders: readonly ScreenRect[];
+  readonly view: Rect;
+  readonly clear: Rect;
+  readonly occluders: readonly Rect[];
 }
 
 type CameraFor = (map: GameMap, focus: Tile, frame: Frame) => { x: number; y: number };
@@ -313,26 +297,38 @@ function reachableTiles(map: GameMap): Tile[] {
   return queue;
 }
 
-function layoutFor(variant: HudVariant, viewport: Viewport): InteriorHudLayout {
-  return interiorHudLayout({
-    viewportWidth: viewport.w,
-    viewportHeight: viewport.h,
-    mobile: variant.mobile,
-    hudCollapsed: variant.hudCollapsed,
-    miniMapExpanded: variant.miniMapExpanded,
-    hotbarBandHeight: viewport.h - hotbarStripRect().y,
-    followButton: true,
-    summonButton: true,
-    buildButton: true,
-    journalButton: true,
-    lootBoxBanner: null,
+/** The HUD's layout on a screen of `viewport` CSS pixels, resolved as the scene's `UiRoot` resolves it. */
+function hudFor(variant: HudVariant, viewport: Viewport): HudOnScreen {
+  const resolved = resolveViewport({
+    cssWidth: viewport.w,
+    cssHeight: viewport.h,
+    density: variant.density,
+    uiSize: GATE_UI_SIZE,
+    safeArea: NO_INSETS,
   });
+  return {
+    geometry: hudLayout({
+      viewport: resolved.safe,
+      size: resolved.size,
+      density: resolved.density,
+      miniMapExpanded: variant.miniMapExpanded,
+      build: FULL_CHROME.build,
+    }),
+    uiScale: resolved.uiScale,
+    size: resolved.size,
+  };
 }
 
-/** The band the camera frames in (the hotbar is off its bottom), and the part of it the chrome leaves clear. */
-function frameFor(room: Room, layout: InteriorHudLayout, viewport: Viewport): Frame {
-  const view = { left: 0, top: 0, right: viewport.w, bottom: hotbarStripRect().y };
-  const occluders = interiorHudOccluders(layout);
+/** The band the camera frames in (the hotbar's band is off its bottom), as the scene computes it. */
+function cameraView(hud: HudOnScreen, viewport: Viewport): Rect {
+  const hotbarBand = hotbarBandHeightCss(hud.geometry, hud.uiScale, viewport.h);
+  return { x: 0, y: 0, w: viewport.w, h: viewport.h - hotbarBand };
+}
+
+/** The camera's view, and the part of it the chrome leaves clear. */
+function frameFor(room: Room, hud: HudOnScreen, viewport: Viewport): Frame {
+  const view = cameraView(hud, viewport);
+  const occluders = interiorHudOccluders(hud.geometry, hud.uiScale, FULL_CHROME);
   const clear = hudClearView(
     view,
     occluders,
@@ -400,8 +396,8 @@ function checkFraming(room: Room, frame: Frame, where: string, cameraFor: Camera
       name: 'horizontal',
       drawnStart: room.drawn.left,
       drawnEnd: room.drawn.right,
-      clearStart: frame.clear.left,
-      clearEnd: frame.clear.right,
+      clearStart: frame.clear.x,
+      clearEnd: frame.clear.x + frame.clear.w,
       cameraOf: (camera) => camera.x,
       startEdge: 'west',
       endEdge: 'east',
@@ -410,8 +406,8 @@ function checkFraming(room: Room, frame: Frame, where: string, cameraFor: Camera
       name: 'vertical',
       drawnStart: room.drawn.top,
       drawnEnd: room.drawn.bottom,
-      clearStart: frame.clear.top,
-      clearEnd: frame.clear.bottom,
+      clearStart: frame.clear.y,
+      clearEnd: frame.clear.y + frame.clear.h,
       cameraOf: (camera) => camera.y,
       startEdge: 'north (art top)',
       endEdge: 'south',
@@ -455,12 +451,22 @@ function checkFraming(room: Room, frame: Frame, where: string, cameraFor: Camera
   return problems;
 }
 
-function rectsOverlap(a: ScreenRect, b: ScreenRect): boolean {
+function rectsOverlap(a: Rect, b: Rect): boolean {
   return (
-    a.left < b.right - EPSILON_PX &&
-    b.left < a.right - EPSILON_PX &&
-    a.top < b.bottom - EPSILON_PX &&
-    b.top < a.bottom - EPSILON_PX
+    a.x < b.x + b.w - EPSILON_PX &&
+    b.x < a.x + a.w - EPSILON_PX &&
+    a.y < b.y + b.h - EPSILON_PX &&
+    b.y < a.y + a.h - EPSILON_PX
+  );
+}
+
+/** Whether `inner` lies within `outer`, give or take {@link EPSILON_PX}. */
+function rectWithin(inner: Rect, outer: Rect): boolean {
+  return (
+    inner.x >= outer.x - EPSILON_PX &&
+    inner.x + inner.w <= outer.x + outer.w + EPSILON_PX &&
+    inner.y >= outer.y - EPSILON_PX &&
+    inner.y + inner.h <= outer.y + outer.h + EPSILON_PX
   );
 }
 
@@ -477,17 +483,13 @@ function checkTilesClearOfHud(
   const problems: string[] = [];
   for (const tile of room.reachable) {
     const camera = cameraFor(room.map, tile, frame);
-    const onScreen = {
-      left: tile.x * TILE_SIZE - camera.x,
-      top: tile.y * TILE_SIZE - camera.y,
-      right: (tile.x + 1) * TILE_SIZE - camera.x,
-      bottom: (tile.y + 1) * TILE_SIZE - camera.y,
+    const onScreen: Rect = {
+      x: tile.x * TILE_SIZE - camera.x,
+      y: tile.y * TILE_SIZE - camera.y,
+      w: TILE_SIZE,
+      h: TILE_SIZE,
     };
-    const inView =
-      onScreen.left >= frame.view.left - EPSILON_PX &&
-      onScreen.right <= frame.view.right + EPSILON_PX &&
-      onScreen.top >= frame.view.top - EPSILON_PX &&
-      onScreen.bottom <= frame.view.bottom + EPSILON_PX;
+    const inView = rectWithin(onScreen, frame.view);
     const covered = frame.occluders.some((occluder) => rectsOverlap(onScreen, occluder));
     if (!inView || covered) {
       const why = inView ? 'under the HUD' : 'off screen';
@@ -497,13 +499,13 @@ function checkTilesClearOfHud(
   return problems;
 }
 
-function toScreen(rect: Rect): ScreenRect {
-  return { left: rect.x, top: rect.y, right: rect.x + rect.w, bottom: rect.y + rect.h };
-}
-
-/** The name plate: on screen, clear of every other HUD rect and the skill badge, and its text fits. */
-function checkNameplate(
-  layout: InteriorHudLayout,
+/**
+ * The room-name slot: on screen, and clear of every dock button, the
+ * minimap's normal square, the unit frames and the hotbar. A name too long for its slot ends in an
+ * ellipsis, which is reported, not failed.
+ */
+function checkRoomNameSlot(
+  hud: HudOnScreen,
   variant: HudVariant,
   viewport: Viewport,
   titles: readonly string[],
@@ -511,40 +513,43 @@ function checkNameplate(
 ): string[] {
   const where = `${variant.label} @ ${viewport.w}x${viewport.h}`;
   const problems: string[] = [];
-  if (layout.nameplate === null) {
-    if (variant.nameplateMayHide !== true) problems.push(`${where}: the name plate is left off`);
-    else console.log(`  ${where}: no room for the name plate; it is left off`);
-    return problems;
+  const { geometry, uiScale } = hud;
+  const slotRect = roomNameSlot(geometry);
+  const slot = slotRect === null ? null : toCssRect(slotRect, uiScale);
+  const screen: Rect = { x: 0, y: 0, w: viewport.w, h: viewport.h };
+  const onScreen = slot !== null && rectWithin(slot, screen);
+  if (slotRect === null || slot === null || !onScreen) {
+    const why = slot === null ? 'has no slot' : `lands at y ${slot.y.toFixed(0)}, off the screen`;
+    return [`${where}: the room's name ${why}`];
   }
-  if (!(layout.nameplate.w > 0)) {
-    problems.push(`${where}: name plate is ${layout.nameplate.w} px wide`);
-  }
-  const plate = toScreen(layout.nameplate);
-  const onScreen =
-    plate.left >= 0 && plate.top >= 0 && plate.right <= viewport.w && plate.bottom <= viewport.h;
-  if (!onScreen) problems.push(`${where}: name plate runs off screen`);
+  if (!(slotRect.w > 0)) problems.push(`${where}: the room-name slot is ${slotRect.w} wide`);
+  const { buttons } = geometry;
   const others: Array<{ name: string; rect: Rect | null }> = [
-    { name: 'HUD panel', rect: layout.hud },
-    { name: 'minimap', rect: layout.miniMap },
-    { name: 'Pause', rect: layout.pause },
-    { name: 'Bag', rect: layout.bag },
-    { name: 'Switch', rect: layout.switchButton },
-    { name: 'Follow', rect: layout.follow },
-    { name: 'Summon', rect: layout.summon },
-    {
-      name: 'skill badge',
-      rect: variant.mobile ? mobileSkillBadgeRect(layout.skillBadgeTop, viewport.w) : null,
-    },
+    { name: 'unit frames', rect: geometry.framesBlock },
+    { name: 'minimap', rect: geometry.normalMiniMap },
+    { name: 'hotbar', rect: geometry.hotbar.strip },
+    { name: 'Pause', rect: buttons.pause },
+    { name: 'Bag', rect: buttons.bag },
+    { name: 'Build', rect: buttons.build },
+    { name: 'achievement chip', rect: buttons.chip },
+    { name: 'Journal', rect: buttons.journal },
+    { name: 'Switch', rect: buttons.switchButton },
+    { name: 'Follow', rect: buttons.follower },
+    { name: 'Summon', rect: buttons.summon },
   ];
   for (const other of others) {
     if (other.rect === null) continue;
-    if (rectsOverlap(plate, toScreen(other.rect))) {
-      problems.push(`${where}: name plate overlaps the ${other.name}`);
+    if (rectsOverlap(slot, toCssRect(other.rect, uiScale))) {
+      problems.push(`${where}: the room-name slot overlaps the ${other.name}`);
     }
   }
-  for (const title of titles) {
-    const fit = chooseNameplateText(measureCtx, layout.nameplate, title);
-    if (!fit.fits) problems.push(`${where}: "${title}" does not fit its plate even cut short`);
+  const textRoom = slotRect.w - geometry.theme.space.md * 2;
+  const paint = { ctx: measureCtx, theme: geometry.theme };
+  const cutShort = titles.filter(
+    (title) => measureText(paint, `Inside: ${title}`, { role: 'label' }) > textRoom + EPSILON_PX,
+  );
+  if (cutShort.length > 0) {
+    console.log(`  ${where}: cut short with an ellipsis: ${cutShort.join(', ')}`);
   }
   return problems;
 }
@@ -596,9 +601,8 @@ const gridClampedProblems: string[] = [];
 const hudBlindProblems: string[] = [];
 for (const variant of HUD_VARIANTS) {
   for (const viewport of variant.viewports) {
-    setViewportSize(viewport.w, viewport.h);
-    const layout = layoutFor(variant, viewport);
-    for (const problem of checkNameplate(layout, variant, viewport, titles, measureCtx)) {
+    const hud = hudFor(variant, viewport);
+    for (const problem of checkRoomNameSlot(hud, variant, viewport, titles, measureCtx)) {
       fail(problem);
     }
     const cameraViewports = variant.cameraViewports ?? variant.viewports;
@@ -606,7 +610,7 @@ for (const variant of HUD_VARIANTS) {
     for (const room of rooms) {
       pairs++;
       const where = `${room.label} @ ${variant.label} ${viewport.w}x${viewport.h}`;
-      const frame = frameFor(room, layout, viewport);
+      const frame = frameFor(room, hud, viewport);
       for (const problem of checkFraming(room, frame, where, sceneCamera)) fail(problem);
       const hidden = checkTilesClearOfHud(room, frame, where, sceneCamera);
       tilesChecked += room.reachable.length;
@@ -636,34 +640,36 @@ function reportNegative(name: string, problems: readonly string[]): void {
 reportNegative('a grid-clamped camera', gridClampedProblems);
 reportNegative('a camera blind to the HUD', hudBlindProblems);
 
+const touchVariant = HUD_VARIANTS.find(
+  (variant) => variant.density === 'touch' && !variant.miniMapExpanded,
+);
+
 // The name as a full-width bar with its text centred on the screen: on a phone
 // the text runs under the minimap.
 {
   const viewport = FULL_WIDTH_LABEL_VIEWPORT;
-  setViewportSize(viewport.w, viewport.h);
-  const phone = HUD_VARIANTS.find((variant) => variant.mobile);
   const temple = rooms.find((room) => room.label === NEGATIVE_TEST_ROOM);
-  if (phone === undefined || temple === undefined) {
-    fail('the full-width-label check could not find the phone layout or the temple');
+  if (touchVariant === undefined || temple === undefined) {
+    fail('the full-width-label check could not find the touch layout or the temple');
   } else {
-    const layout = layoutFor(phone, viewport);
+    const hud = hudFor(touchVariant, viewport);
     const text = `Inside: ${temple.title}`;
-    const textWidth = measureTextWidth(measureCtx, text, {
+    const textWidth = measureWorldText(measureCtx, text, {
       size: FULL_WIDTH_LABEL_TEXT_SIZE,
       bold: true,
-    });
-    const centredText = {
-      left: viewport.w / 2 - textWidth / 2,
-      top: FULL_WIDTH_LABEL_TEXT_TOP,
-      right: viewport.w / 2 + textWidth / 2,
-      bottom: FULL_WIDTH_LABEL_TEXT_TOP + FULL_WIDTH_LABEL_TEXT_SIZE,
+    }).width;
+    const centredText: Rect = {
+      x: viewport.w / 2 - textWidth / 2,
+      y: FULL_WIDTH_LABEL_TEXT_TOP,
+      w: textWidth,
+      h: FULL_WIDTH_LABEL_TEXT_SIZE,
     };
-    if (rectsOverlap(centredText, toScreen(layout.miniMap))) {
+    if (rectsOverlap(centredText, toCssRect(hud.geometry.miniMap, hud.uiScale))) {
       console.log(
         `  ok   a full-width centred label runs under the minimap at ${viewport.w}x${viewport.h}, as it must`,
       );
     } else {
-      fail('a full-width centred label clears the minimap — the name-plate check has no teeth');
+      fail('a full-width centred label clears the minimap — the room-name check has no teeth');
     }
   }
 }
@@ -671,24 +677,23 @@ reportNegative('a camera blind to the HUD', hudBlindProblems);
 // The scene's clear-view memo: at a fixed layout the chrome search runs once,
 // not every frame, and it runs again when the layout or the room changes.
 {
-  const phone = HUD_VARIANTS.find((variant) => variant.mobile);
-  const phoneViewport = phone?.viewports[0];
+  const phoneViewport = PHONE_PORTRAIT_VIEWPORTS[0];
   const temple = walkIns.find((walkIn) => walkIn.name === NEGATIVE_TEST_ROOM);
-  if (phone === undefined || phoneViewport === undefined || temple === undefined) {
-    fail('the memo check could not find the phone layout or the temple');
+  if (touchVariant === undefined || temple === undefined) {
+    fail('the memo check could not find the touch layout or the temple');
   } else {
     const memo = new ClearViewMemo();
     let recomputes = 0;
     const map = buildInterior(temple.name, temple.kind, 1, temple.hasSafeRoom);
     const askFor = (viewport: Viewport): void => {
-      setViewportSize(viewport.w, viewport.h);
-      const layout = layoutFor(phone, viewport);
-      const view = { left: 0, top: 0, right: viewport.w, bottom: hotbarStripRect().y };
+      const hud = hudFor(touchVariant, viewport);
+      const view = cameraView(hud, viewport);
+      const occluders = interiorHudOccluders(hud.geometry, hud.uiScale, FULL_CHROME);
       const bounds = interiorCameraBounds(map);
-      const key = JSON.stringify({ layout, view, bounds });
+      const key = JSON.stringify({ occluders, view, bounds });
       memo.clearView(map, key, (mustSee) => {
         recomputes++;
-        return hudClearView(view, interiorHudOccluders(layout), bounds, mustSee);
+        return hudClearView(view, occluders, bounds, mustSee);
       });
     };
     for (let frame = 0; frame < MEMO_FRAMES; frame++) askFor(phoneViewport);
@@ -698,13 +703,13 @@ reportNegative('a camera blind to the HUD', hudBlindProblems);
     map.generateInterior(temple.kind, 1, temple.name, temple.hasSafeRoom);
     askFor({ w: phoneViewport.h, h: phoneViewport.w });
     const afterRebuild = recomputes;
-    if (atFixedLayout !== 1) {
+    if (atFixedLayout !== MEMO_COMPUTES.fixedLayout) {
       fail(
         `the clear-view memo recomputed ${atFixedLayout} time(s) over ${MEMO_FRAMES} identical frames — it must hit after the first`,
       );
-    } else if (afterResize !== 2) {
+    } else if (afterResize !== MEMO_COMPUTES.afterResize) {
       fail('the clear-view memo did not recompute when the viewport changed');
-    } else if (afterRebuild !== 3) {
+    } else if (afterRebuild !== MEMO_COMPUTES.afterRebuild) {
       fail('the clear-view memo did not recompute when the room was rebuilt in place');
     } else {
       console.log(

@@ -74,7 +74,7 @@ import {
   type StarMarqueeArt,
   type StarMarqueeBulb,
 } from '../src/sprites/art/bigTop/mirrorPuzzleProps';
-import { drawText } from '../src/ui/TextBox';
+import { worldText } from '../src/ui/world/worldText';
 import {
   drawActEasel,
   drawMazeCurtain,
@@ -981,7 +981,7 @@ function paintPuzzleSheet(): { colour: Buffer; grey: Buffer } {
       sheetCtx.fillStyle = cell.ground === 'wall' ? HALL_WALL : HALL_FLOOR;
       sheetCtx.fillRect(x, y, cell.span * CELL, CELL);
       if (SCALE >= MIN_LABELLED_SCALE)
-        drawText(sheetCtx, cell.label, {
+        worldText(sheetCtx, cell.label, {
           x: x + PUZZLE_LABEL_INSET_PX,
           y: y + CELL + PUZZLE_LABEL_INSET_PX,
           size: PUZZLE_LABEL_SIZE,

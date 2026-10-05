@@ -65,8 +65,9 @@ import {
   drawWrench,
   emberDrift,
 } from '../../sprites/art/siegeEffectsArt';
-import { BOX_PRESETS, PROGRESS_PRESETS, drawBox, drawProgressBar } from '../../ui/Box';
-import { TEXT_PRESETS, drawText } from '../../ui/TextBox';
+import { WORLD_TEXT, worldPalette } from '../../ui/theme/worldInk';
+import { worldBar, worldPlate } from '../../ui/world/worldShapes';
+import { worldText } from '../../ui/world/worldText';
 import {
   type DefenseStructures,
   type TileFootprint,
@@ -1060,7 +1061,7 @@ const PILL_W = 84;
 const PILL_H = 22;
 const PILL_ICON = 16;
 /** The icon sits on a pale disc, so a grey stone and a white spanner both read on navy and on red. */
-const PILL_ICON_DISC = 'rgba(226,232,240,0.9)';
+const PILL_ICON_DISC = worldPalette.village.pillIconDisc;
 const PILL_ICON_DISC_PAD = 1;
 /** The infinity sign is a small glyph at label size; this size reads as clearly as the digits. */
 const PILL_INFINITY_SIZE = 16;
@@ -1114,15 +1115,10 @@ export function drawAmmoPill(ctx: CanvasRenderingContext2D, state: AmmoPillState
   const empty = !state.unlimited && state.ammo <= 0;
   const pulse = (Math.sin(state.timeSeconds * FULL_TURN * PILL_PULSE_HZ) + 1) / 2;
   const alarmed = state.broken || empty;
-  const box = drawBox(ctx, {
-    x: state.x,
-    y: state.y,
-    width: PILL_W,
-    height: PILL_H,
-    alignX: 'center',
-    alignY: 'bottom',
+  const box = { x: state.x - PILL_W / 2, y: state.y - PILL_H, w: PILL_W, h: PILL_H };
+  worldPlate(ctx, box, {
+    style: alarmed ? 'danger' : 'panel',
     radius: PILL_H / 2,
-    ...(alarmed ? BOX_PRESETS.danger : BOX_PRESETS.panel),
     alpha: empty && !state.broken ? PILL_PULSE_MIN_ALPHA + (1 - PILL_PULSE_MIN_ALPHA) * pulse : 1,
   });
   const iconX = box.x + PILL_PAD;
@@ -1142,7 +1138,7 @@ export function drawAmmoPill(ctx: CanvasRenderingContext2D, state: AmmoPillState
   if (state.broken) {
     drawWrench(ctx, iconX, iconY, PILL_ICON);
   } else {
-    drawResourceIcon(ctx, 'stone', iconX, iconY, PILL_ICON);
+    drawResourceIcon(ctx, { x: iconX, y: iconY, w: PILL_ICON, h: PILL_ICON }, 'stone');
   }
   const label = state.broken
     ? 'Broken'
@@ -1150,23 +1146,25 @@ export function drawAmmoPill(ctx: CanvasRenderingContext2D, state: AmmoPillState
       ? '∞'
       : `${state.ammo}/${TREBUCHET_MAX_AMMO}`;
   // Pale text on either box: the red box itself is the alarm, and red on red would not read.
-  const size = state.unlimited && !state.broken ? PILL_INFINITY_SIZE : TEXT_PRESETS.label.size;
-  drawText(ctx, label, {
+  const size = state.unlimited && !state.broken ? PILL_INFINITY_SIZE : WORLD_TEXT.label.size;
+  worldText(ctx, label, {
     x: box.x + PILL_PAD + PILL_ICON + (PILL_W - PILL_ICON - PILL_PAD) / 2,
     y: box.y + (PILL_H - size) / 2,
     align: 'center',
-    ...TEXT_PRESETS.label,
+    style: 'label',
     bold: alarmed,
     size,
   });
   if (state.hpFraction < 1) {
-    drawProgressBar(ctx, {
-      x: box.x + PILL_PAD,
-      y: box.y + PILL_H + PILL_HP_GAP,
-      width: PILL_W - PILL_PAD * 2,
-      height: PILL_HP_H,
-      value: state.hpFraction,
-      ...PROGRESS_PRESETS.hp,
-    });
+    worldBar(
+      ctx,
+      {
+        x: box.x + PILL_PAD,
+        y: box.y + PILL_H + PILL_HP_GAP,
+        w: PILL_W - PILL_PAD * 2,
+        h: PILL_HP_H,
+      },
+      { style: 'hp', value: state.hpFraction },
+    );
   }
 }

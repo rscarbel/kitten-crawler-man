@@ -17,11 +17,11 @@ Abilities are defined by `AbilityDef` (`src/core/AbilityManager.ts`) and live in
 2. **Def file**: create `src/abilities/<name>.ts` exporting `<NAME>_DEF: AbilityDef`, a `get<Name>Stats(level)` function (per-level tuning table), and `render<Name>Icon` delegating to `drawSpriteKey(ctx, '<name>_icon', state, 0, ...)` — state `full_power` at max level, else `standard`.
 3. **Icon sprite**: add `<name>_icon` to `src/images/effects/manifest.json` with `standard`/`full_power` states (see `add-sprite`).
 4. **Register**: `this.abilityManager.register(<NAME>_DEF)` in `DungeonScene` next to the existing three.
-5. **Tome item**: abilities reach the hotbar via a granting item with `abilityId: '<name>'` and `canDrop: false` in `ItemDefs.ts`, plus an icon branch in `InventoryPanel.renderItemIcon` (see `add-item`).
-6. **Trigger**: add a branch in `DungeonScene.triggerHotbarActivation` matching `slot.abilityId` — gate on the owning character being active (`human.isActive` / `!human.isActive`), fire the effect, call `abilityManager.addUsageXp(id)`, play a sound.
+5. **Tome item**: abilities reach the hotbar via a granting item with `abilityId: '<name>'` and `canDrop: false` in `ItemDefs.ts`, plus its `ITEM_ICONS` entry (see `add-item`).
+6. **Trigger**: add a branch in `activateHotbarSlot` (`src/systems/kits/hotbarActions.ts`) matching `slot.abilityId` — gate on the owning character being active (`human.isActive` / `!human.isActive`), fire the effect, call `abilityManager.addUsageXp(id)`, play a sound.
 7. **Effect**: area/persistent effects live in `src/systems/SpellSystem.ts` (shell, fog — trigger/update/render methods); projectile-style effects live on the player class (`cat.triggerMissile`, `human.triggerSmush`). Scale the effect with `getLevel(id)` via `get<Name>Stats(level)`.
 8. **Kill XP**: grant `addKillXp` in the `mobKilled` handler in `DungeonScene` when the kill came from this ability.
-9. **UI**: level-up dialog is automatic via `AbilityManager.onLevelUp` (a direct callback, not the EventBus). **Add the id to the `isAbilityId` allowlist in `src/ui/pause/AbilitiesTab.ts`** or it won't appear in the equipped-abilities view. Wire cooldown display via `inventoryPanel.abilityCooldowns.set(...)` in `DungeonScene` if the ability has one.
+9. **UI**: level-up dialog is automatic via `AbilityManager.onLevelUp` (a direct callback, not the EventBus). **Add the id to `ABILITY_IDS` in `src/core/AbilityManager.ts`** (what `isAbilityId` reads) or it won't appear on the pause screen's Abilities page (`src/ui/screens/pause/abilitiesSection.ts`). If the ability has a cooldown, set it each frame in `MenusKit.itemCooldowns` (keyed by ability id, as `DungeonScene` does for the existing three) so its hotbar slot shows the sweep.
 
 ## Leveling mechanics (no changes needed)
 

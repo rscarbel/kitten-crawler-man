@@ -6,7 +6,9 @@
  */
 
 import type { BlueprintsStationId } from '../../../core/blueprintsQuestPhase';
+import type { Rect } from '../../../ui/core/geom';
 import { drawBlueprintsQuestIcon } from '../../../ui/icons/blueprintsQuestIcons';
+import { iconSquare } from '../../../ui/icons/iconSquare';
 import { drawRopeCoilGlyph, drawSawBladeGlyph } from '../../../ui/icons/stationGlyphs';
 import type { QuestRewardSpec, RewardUnlockCard } from '../../../ui/questReward/types';
 import { PLAIN_WOOD_PER_PRESS } from '../processingStations';
@@ -63,12 +65,8 @@ const MS_PER_SECOND = 1000;
 const SAW_SPIN_TURNS_PER_SECOND = 0.25;
 
 /** The saw blade turning, as the upgraded bench's blade does. */
-function drawSpinningSawIcon(
-  ctx: CanvasRenderingContext2D,
-  x: number,
-  y: number,
-  size: number,
-): void {
+function drawSpinningSawIcon(ctx: CanvasRenderingContext2D, rect: Rect): void {
+  const { x, y, size } = iconSquare(rect);
   const turns = (performance.now() / MS_PER_SECOND) * SAW_SPIN_TURNS_PER_SECOND;
   ctx.save();
   ctx.translate(x + size / 2, y + size / 2);
@@ -77,7 +75,8 @@ function drawSpinningSawIcon(
   ctx.restore();
 }
 
-function drawRopeIcon(ctx: CanvasRenderingContext2D, x: number, y: number, size: number): void {
+function drawRopeIcon(ctx: CanvasRenderingContext2D, rect: Rect): void {
+  const { x, y, size } = iconSquare(rect);
   drawRopeCoilGlyph(ctx, x + size / 2, y + size / 2, size / 2);
 }
 
@@ -96,8 +95,7 @@ function stationCard(reward: StationReward): RewardUnlockCard {
 export function blueprintsRewardSpec(onDismissed: () => void): QuestRewardSpec {
   return {
     questTitle: BLUEPRINTS_QUEST_NAME,
-    renderQuestIcon: (ctx, x, y, size) =>
-      drawBlueprintsQuestIcon(ctx, 'quest_blueprints', x, y, size),
+    renderQuestIcon: (ctx, rect) => drawBlueprintsQuestIcon(ctx, rect, 'quest_blueprints'),
     quote: { text: FENNA_QUOTE, speaker: FENNA },
     sections: [
       {

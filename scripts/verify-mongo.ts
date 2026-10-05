@@ -395,7 +395,7 @@ function buildHarness(existingPetState?: MongoPetState, petLevel = 1): Harness {
       /* XP pacing is checked arithmetically below, not by driving fights */
     },
     () => 0,
-    (message) => announced.push(message),
+    { post: (message) => announced.push(message), isShowing: () => false },
   );
   system.unlocked = true;
   return {
@@ -1243,7 +1243,7 @@ console.log('\na safe room lets its allies in');
       () => 1,
       ignoreXp,
       () => 0,
-      ignoreAnnouncement,
+      { post: ignoreAnnouncement, isShowing: () => false },
     );
     system.unlocked = true;
     const safeRoom = new SafeRoomSystem(map, room.centre.x, room.centre.y, new Conversation(null));

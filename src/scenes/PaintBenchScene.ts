@@ -12,19 +12,18 @@
  * the console as well as drawn, so a run can be read out of browser automation.
  */
 
-import { Scene } from '../core/Scene';
 import { viewportHeight, viewportWidth } from '../core/Viewport';
 import { PAINT_BENCH_SUBJECTS, type PaintBenchSubject } from '../dev/paintBenchSubjects';
 import { allocCanvas, surfaceContext } from '../core/canvasSurface';
-import { drawText, TEXT_PRESETS } from '../ui/TextBox';
+import { worldText } from '../ui/world/worldText';
+import { PreviewScene, type PreviewControl } from './PreviewScene';
 import { figureBakeDensity } from '../sprites/figure/figureDef';
+import { previewInk } from '../ui/theme/previewInk';
 
-const BACKGROUND_COLOR = '#12161f';
+const BACKGROUND_COLOR = previewInk.bench.backdrop;
 const MARGIN = 32;
-const TITLE_SIZE = 18;
 const ROW_SIZE = 12;
 const ROW_HEIGHT = 18;
-const HEADING_GAP = 26;
 
 /** Untimed passes that let the JIT settle before anything is recorded. */
 const WARMUP_PAINTS = 5;
@@ -129,7 +128,7 @@ function timeBakePaints(subject: PaintBenchSubject): number {
 /** Gap between subjects, long enough that the tab stays answerable. */
 const SUBJECT_INTERVAL_MS = 0;
 
-export class PaintBenchScene extends Scene {
+export class PaintBenchScene extends PreviewScene {
   private measurements: Measurement[] = [];
   private nextSubject = 0;
 
@@ -182,41 +181,45 @@ export class PaintBenchScene extends Scene {
     ctx.fillStyle = BACKGROUND_COLOR;
     ctx.fillRect(0, 0, viewportWidth(), viewportHeight());
 
-    drawText(ctx, 'paint bench — ms per painted frame, Chrome', {
-      x: MARGIN,
-      y: MARGIN,
-      size: TITLE_SIZE,
-      bold: true,
-      color: TEXT_PRESETS.heading.color,
-    });
+    const top = this.headerBottom + MARGIN;
 
     if (PAINT_BENCH_SUBJECTS.length === 0) {
-      drawText(ctx, 'No painted figures are registered yet.', {
+      worldText(ctx, 'No painted figures are registered yet.', {
+        style: 'hint',
         x: MARGIN,
-        y: MARGIN + HEADING_GAP,
+        y: top,
         size: ROW_SIZE,
-        color: TEXT_PRESETS.hint.color,
       });
+      this.renderChrome(ctx);
       return;
     }
 
     this.measurements.forEach((measurement, index) => {
-      const y = MARGIN + HEADING_GAP + index * ROW_HEIGHT;
+      const y = top + index * ROW_HEIGHT;
       const affordable = measurement.directMs <= FALLBACK_AFFORDABLE_MS;
-      drawText(
+      worldText(
         ctx,
         `${measurement.name}  ${measurement.cellPixels}  ` +
           `direct ${measurement.directMs.toFixed(MS_DECIMALS)} ms  ` +
           `bake ${measurement.bakeMs.toFixed(MS_DECIMALS)} ms  ` +
           fallbackVerdict(measurement.directMs),
         {
+          style: affordable ? 'value' : 'danger',
           x: MARGIN,
           y,
           size: ROW_SIZE,
-          font: 'monospace',
-          color: affordable ? TEXT_PRESETS.value.color : TEXT_PRESETS.danger.color,
+          bold: false,
         },
       );
     });
+    this.renderChrome(ctx);
+  }
+
+  protected previewTitle(): string {
+    return 'paint bench — ms per painted frame, Chrome — ?paintbench';
+  }
+
+  protected previewControls(): readonly PreviewControl[] {
+    return [];
   }
 }

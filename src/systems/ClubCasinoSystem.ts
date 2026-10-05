@@ -15,31 +15,9 @@ import type { Player } from '../Player';
 import { canAffordCoins, partyCoins } from '../core/partyCoins';
 import type { AudioManager } from '../audio/AudioManager';
 import type { ClubMembership } from '../core/ClubMembership';
-import { drawText } from '../ui/TextBox';
-import {
-  drawModal,
-  drawOverlay,
-  drawBox,
-  BOX_PRESETS,
-  fitModal,
-  beginModalFit,
-  endModalFit,
-  modalFitPoint,
-  MODAL_FIT_NONE,
-  type ModalFit,
-} from '../ui/Box';
-import {
-  beginMenuFocus,
-  drawButton,
-  endMenuFocus,
-  BUTTON_PRESETS,
-  setButtonPointerSpace,
-  resetButtonPointerSpace,
-  type ButtonOptions,
-  type ButtonResult,
-} from '../ui/Button';
 import { viewportWidth, viewportHeight } from '../core/Viewport';
-import { platform } from '../core/Platform';
+import { keybindings } from '../core/Keybindings';
+import { ACTIVATE_KEYS, type Surface } from '../ui/core/UiRoot';
 import {
   BlackjackTable,
   CHIP_DENOMINATIONS,
@@ -53,14 +31,23 @@ import { handValue, isBust, netForOutcome } from './casino/blackjackRules';
 import { basicStrategyAdvice } from './casino/basicStrategy';
 import type { Card } from './casino/Deck';
 import {
-  casinoDesignHeight,
-  casinoLayoutMode,
+  casinoFit,
   computeCasinoLayout,
+  fitRectToScreen,
+  fitToScreen,
+  handCardBand,
   handSpread,
+  type CasinoFit,
   type CasinoLayout,
-  type Rect,
 } from '../ui/casino/casinoLayout';
-import { CARD_ASPECT, drawCardBack, drawCardFace, drawCardFlip } from '../ui/casino/PlayingCard';
+import {
+  CARD_ASPECT,
+  drawCardBack,
+  drawCardFace,
+  drawCardFlip,
+  drawSuitGlyph,
+  type CardPose,
+} from '../ui/casino/PlayingCard';
 import {
   drawChip,
   drawChipStack,
@@ -69,44 +56,33 @@ import {
   trayChips,
   CHIP_STACK_STEP as CHIP_STACK_STEP_FRACTION,
 } from '../ui/casino/ChipStack';
-import { BlackjackRulesOverlay } from '../ui/casino/BlackjackRulesOverlay';
+import { BlackjackRules } from '../ui/screens/dialogs/BlackjackRules';
 import { pickDeuceLine, type BanterTrigger } from '../dialog/scripts/deuce';
 import { drawDeucePortrait, dealerStateFor, type DealerState } from '../sprites/casinoDealerSprite';
+import type { Rect } from '../ui/core/geom';
+import {
+  casinoTableColors,
+  glowText,
+  paintSkinnedControl,
+  type CasinoTableColors,
+  type ControlLook,
+} from '../ui/screens/dialogs/minigameChrome';
+import { withAlpha } from '../ui/theme/color';
+import { skinsFor, type ButtonVariant } from '../ui/theme/skins';
+import {
+  drawFocusRing,
+  drawGlass,
+  fillRounded,
+  roundRectPath,
+  strokeRounded,
+  type PaintTarget,
+} from '../ui/widgets/paint';
+import { measureText, text, type TextOptions } from '../ui/widgets/text';
 
-const OVERLAY_ALPHA = 0.7;
-const PANEL_RADIUS = 10;
-const PORTRAIT_RADIUS = 8;
-const PANEL_BORDER = '#c8a840';
-const PANEL_FILL = '#0d1a14';
-
-const TITLE_SIZE = 16;
-const READOUT_SIZE = 11;
-const STATUS_SIZE = 14;
-/** How much a win or a blackjack grows the outcome line over a neutral one. */
-const STATUS_EMPHASIS_BUMP = 2;
-const HINT_SIZE = 10;
-const BANTER_SIZE = 11;
-const BUTTON_LABEL_SIZE = 12;
-const FOOTER_LABEL_SIZE = 11;
-const HAND_LABEL_SIZE = 10;
-
-const ACCENT = '#f0d870';
-const SECONDARY_TEXT = '#cbbf98';
-const MUTED_TEXT = '#8a7648';
-const WIN_COLOR = '#6ee87a';
-const LOSE_COLOR = '#e87a7a';
-const PUSH_COLOR = '#c8c8a0';
-const FEEDBACK_COLOR = '#f0b040';
-const TURNED_AWAY_SCRIM = 'rgba(34,8,10,0.96)';
-const TURNED_AWAY_TITLE_COLOR = '#ffe4e0';
-const TURNED_AWAY_TITLE_SIZE = 22;
-const FELT_GREEN = 'rgba(18,58,44,0.55)';
-const BET_SPOT_FILL = 'rgba(10,36,27,0.6)';
-const PORTRAIT_FILL = 'rgba(8,24,18,0.7)';
-const PORTRAIT_BORDER = 'rgba(200,168,64,0.25)';
-const FELT_LINE = 'rgba(200,168,64,0.35)';
-/** The felt at full opacity, for the scrim the shuffle flourish plays on. */
-const FELT_GREEN_OPAQUE = '#123a2c';
+const FELT_BORDER_WIDTH = 1;
+const TURNED_AWAY_BORDER_WIDTH = 2;
+/** Deuce's longest line wraps to three lines in the narrow portrait column. */
+const BANTER_MAX_LINES = 3;
 
 const BUTTON_GAP = 8;
 /** Clear, Same Bet and Deal accompany the chip wells in the betting row. */
@@ -146,9 +122,6 @@ const BUST_SHAKE_FREQUENCY = 26;
 const BUST_SHAKE_AMPLITUDE = 3;
 const BUST_DIM = 0.45;
 const VIGNETTE_ALPHA = 0.55;
-const BUST_VIGNETTE = 'rgba(160,30,30,1)';
-/** The same tint at zero alpha — the gradient's inner stop. */
-const BUST_VIGNETTE_CLEAR = 'rgba(160,30,30,0)';
 /** Losing is frequent, so the bust tint is a flash rather than a hold. */
 const BUST_VIGNETTE_MS = 700;
 /** Inside this fraction of the panel's radius the vignette is fully transparent. */
@@ -180,8 +153,6 @@ const DEALER_RACK_PORTRAIT_FRACTION = 0.86;
 /** How far a disabled chip fades, so it still reads as a chip rather than vanishing. */
 const DISABLED_CHIP_ALPHA = 0.4;
 
-const WIN_HIGHLIGHT = 'rgba(240,216,112,0.8)';
-
 /** Net winnings above which an ordinary win earns a word from Deuce. */
 const BIG_WIN_COINS = 50;
 
@@ -198,7 +169,8 @@ const CHIP_SFX_VOLUME = 1;
 const HALF = 0.5;
 const TWO_PI = Math.PI * 2;
 
-type PanelAction =
+/** Everything a player can do at the table. */
+export type CasinoAction =
   | { kind: 'chip'; denomination: ChipDenomination }
   | { kind: 'remove_chip' }
   | { kind: 'clear_bet' }
@@ -212,12 +184,50 @@ type PanelAction =
   | { kind: 'help' }
   | { kind: 'leave' };
 
-/** The styling half of a `drawButton` call — everything but geometry and label. */
-type CasinoButtonPreset = Partial<Omit<ButtonOptions, 'x' | 'y' | 'width' | 'height' | 'label'>>;
+/** Who sits at the table, read afresh whenever a control fires. */
+export interface CasinoSeat {
+  readonly active: () => Player;
+  readonly companion: () => Player;
+}
 
-interface PanelButton {
-  readonly result: ButtonResult;
-  readonly action: PanelAction;
+/** The fit and screen the table was last drawn at, in UI units. */
+interface TableFrame {
+  readonly fit: CasinoFit;
+  readonly screenW: number;
+  readonly screenH: number;
+  /** CSS pixels per UI unit. */
+  readonly uiScale: number;
+}
+
+/** One control the table paints. Its rect is in the panel's design space, before the fit. */
+export interface CasinoControl {
+  readonly id: string;
+  readonly rect: Rect;
+  readonly disabled: boolean;
+  /** The table's safe default, which an accept key activates when nothing is focused. */
+  readonly primary: boolean;
+  /**
+   * Joins the keyboard ring. The betting row joins it too but marks no primary,
+   * so an accept press stakes chips only once the player has walked focus onto
+   * a chip on purpose.
+   */
+  readonly focusable: boolean;
+  readonly action: CasinoAction;
+}
+
+/** Where and how {@link ClubCasinoSystem.paintTable} draws, and how its controls are hit. */
+export interface CasinoPaintFrame {
+  readonly target: PaintTarget;
+  readonly viewportW: number;
+  readonly viewportH: number;
+  /** The panel's shrink about the viewport centre; see `casinoFit`. */
+  readonly fit: CasinoFit;
+  /** Whether labels name their keyboard shortcuts. */
+  readonly keyHints: boolean;
+  /** Registers a control for this frame and reports how it should look. */
+  control(control: CasinoControl): ControlLook;
+  /** Opens a keyboard focus group for the controls registered next, or closes it with `null`. */
+  focusGroup(id: string | null): void;
 }
 
 type HandSide = 'player' | 'dealer';
@@ -257,26 +267,25 @@ function clamp01(value: number): number {
  * How many chips fit in a stack of `height` px without running through the
  * caption above it.
  */
-function visibleChipCapacity(height: number, radius: number): number {
-  const usable = height - HAND_LABEL_SIZE - radius;
+function visibleChipCapacity(height: number, radius: number, captionHeight: number): number {
+  const usable = height - captionHeight - radius;
   return Math.max(1, Math.floor(usable / (radius * CHIP_STACK_STEP_FRACTION)));
 }
 
 function rectCentre(rect: Rect): { x: number; y: number } {
-  return { x: rect.x + rect.width * HALF, y: rect.y + rect.height * HALF };
+  return { x: rect.x + rect.w * HALF, y: rect.y + rect.h * HALF };
 }
 
 export class ClubCasinoSystem {
   open = false;
 
   private readonly table: BlackjackTable;
-  private readonly rules: BlackjackRulesOverlay;
+  private readonly rules = new BlackjackRules();
 
   private animTime = 0;
   private lastFrameStamp: number | null = null;
 
-  private fit: ModalFit = MODAL_FIT_NONE;
-  private buttons: PanelButton[] = [];
+  private lastFrame: TableFrame | null = null;
 
   private readonly cardFlights: CardFlight[] = [];
   private readonly chipFlights: ChipFlight[] = [];
@@ -313,27 +322,33 @@ export class ClubCasinoSystem {
   constructor(
     private readonly audio: AudioManager | null,
     private readonly membership: ClubMembership,
+    private readonly clock: () => number = () => performance.now(),
   ) {
     this.table = new BlackjackTable(membership.casinoShoe);
-    this.rules = new BlackjackRulesOverlay(audio);
     this.table.onWinnings = (winnings) => {
       if (winnings > 0) this.pendingSessionWinnings += winnings;
     };
   }
 
   /**
-   * The chip tray's current on-screen centre, in real canvas pixels rather
-   * than the panel's design-sized space — `this.fit` is whatever the last
-   * `renderPanel` call measured, which is always at least one frame old by
-   * the time a hand can settle.
+   * The chip tray's current on-screen centre, in canvas CSS pixels rather than
+   * the panel's design space or UI units. The fit is whatever the table was
+   * last drawn at, which is always at least one frame old by the time a hand
+   * can settle.
    */
   private trayScreenPosition(): { x: number; y: number } {
-    const layout = computeCasinoLayout(viewportWidth(), viewportHeight(), this.fit.scale);
+    const frame = this.lastFrame ?? this.unscaledFrame();
+    const layout = computeCasinoLayout(frame.screenW, frame.screenH, frame.fit.scale);
     const trayCentre = rectCentre(layout.chipTray);
-    return {
-      x: this.fit.pivotX + (trayCentre.x - this.fit.pivotX) * this.fit.scale,
-      y: this.fit.pivotY + (trayCentre.y - this.fit.pivotY) * this.fit.scale,
-    };
+    const onScreen = fitToScreen(frame.fit, trayCentre.x, trayCentre.y);
+    return { x: onScreen.x * frame.uiScale, y: onScreen.y * frame.uiScale };
+  }
+
+  /** The canvas taken at one UI unit per CSS pixel, for a table closed before it ever drew. */
+  private unscaledFrame(): TableFrame {
+    const screenW = viewportWidth();
+    const screenH = viewportHeight();
+    return { fit: casinoFit(screenW, screenH), screenW, screenH, uiScale: 1 };
   }
 
   /** Flies the whole session's accumulated winnings as one, then clears the tally. Safe to call on a session with nothing to fly. */
@@ -356,10 +371,6 @@ export class ClubCasinoSystem {
 
   set jackpotPending(value: boolean) {
     this.table.jackpotPending = value;
-  }
-
-  get rulesOpen(): boolean {
-    return this.rules.isOpen;
   }
 
   dismissRules(): void {
@@ -450,7 +461,7 @@ export class ClubCasinoSystem {
 
   /** Milliseconds since the last frame, refusing to jump after a tab-away. */
   private tickClock(): number {
-    const now = performance.now();
+    const now = this.clock();
     const previous = this.lastFrameStamp;
     this.lastFrameStamp = now;
     if (previous === null) return 0;
@@ -658,21 +669,8 @@ export class ClubCasinoSystem {
 
   // ── Input ────────────────────────────────────────────────────────────────
 
-  handleClick(mx: number, my: number, player: Player, companion: Player): void {
-    if (this.rules.isOpen) {
-      this.rules.handleClick(mx, my, () => this.toggleHints());
-      return;
-    }
-    const point = modalFitPoint(this.fit, mx, my);
-    for (let i = this.buttons.length - 1; i >= 0; i--) {
-      const button = this.buttons[i];
-      if (!button.result.contains(point.x, point.y)) continue;
-      this.runAction(button.action, player, companion);
-      return;
-    }
-  }
-
-  private runAction(action: PanelAction, player: Player, companion: Player): void {
+  /** Performs a table action, exactly as tapping its control does. */
+  act(action: CasinoAction, player: Player, companion: Player): void {
     switch (action.kind) {
       case 'chip':
         this.placeChip(action.denomination, player, companion);
@@ -720,67 +718,149 @@ export class ClubCasinoSystem {
 
   // ── Render ───────────────────────────────────────────────────────────────
 
-  renderPanel(ctx: CanvasRenderingContext2D, player: Player, companion: Player): void {
-    if (!this.open) return;
-    this.buttons = [];
-
-    const vw = viewportWidth();
-    const vh = viewportHeight();
-    drawOverlay(ctx, { canvasWidth: vw, canvasHeight: vh, alpha: OVERLAY_ALPHA });
-
-    // The fit is measured before the layout because the layout derives its touch
-    // targets *from* it — a 44px screen target is 44 / scale design pixels.
-    const mode = casinoLayoutMode(vw);
-    this.fit = fitModal(casinoDesignHeight(mode));
-    const layout = computeCasinoLayout(vw, vh, this.fit.scale);
-
-    beginModalFit(ctx, this.fit);
-    setButtonPointerSpace(this.fit.scale, this.fit.pivotX, this.fit.pivotY);
-
-    drawModal(ctx, {
-      canvasWidth: vw,
-      canvasHeight: vh,
-      width: layout.panel.width,
-      height: layout.panel.height,
-      radius: PANEL_RADIUS,
-      shadow: true,
-      ...BOX_PRESETS.modal,
-      fill: PANEL_FILL,
-      border: PANEL_BORDER,
-    });
-
-    this.renderHeader(ctx, layout);
-    this.renderDealer(ctx, layout);
-    this.renderFelt(ctx, layout);
-    this.renderHands(ctx, layout);
-    if (this.table.phase === 'turned_away') this.renderTurnedAwayNotice(ctx, layout);
-    this.renderStatus(ctx, layout);
-    this.renderChips(ctx, layout, player, companion);
-    this.renderActions(ctx, layout, player, companion);
-    this.renderHint(ctx, layout);
-    this.renderFooter(ctx, layout);
-    this.renderFlights(ctx, layout);
-    this.renderOutcomeEffects(ctx, layout);
-    if (this.shuffleStartedAt !== null) this.renderShuffleFlourish(ctx, layout);
-
-    endModalFit(ctx);
-    resetButtonPointerSpace();
-
-    this.rules.render(ctx, this.hintsEnabled);
+  /**
+   * The table as a surface: modal and halting. Escape backs out of the rules
+   * sheet first, then leaves the table. While no decision row is up to take
+   * the accept keys, and the keyboard has not walked focus onto a control, the
+   * attack key leaves the table too, as the club's dismiss key does at every
+   * other station.
+   */
+  tableSurface(id: string, seat: CasinoSeat): Surface {
+    let decisionRowLive = false;
+    return {
+      id,
+      band: 'modal',
+      haltsWorld: true,
+      locksKeyboard: true,
+      isOpen: () => this.open,
+      render: (ui) => {
+        const fit = casinoFit(ui.screen.w, ui.screen.h);
+        this.lastFrame = { fit, screenW: ui.screen.w, screenH: ui.screen.h, uiScale: ui.uiScale };
+        let keyboardOnAControl = false;
+        this.paintTable(
+          {
+            target: ui,
+            viewportW: ui.screen.w,
+            viewportH: ui.screen.h,
+            fit,
+            keyHints: ui.density === 'pointer',
+            control: (control) => {
+              const look = ui.hit(control.id, fitRectToScreen(fit, control.rect), {
+                onTap: () => this.act(control.action, seat.active(), seat.companion()),
+                disabled: control.disabled,
+                primary: control.primary,
+                focusable: control.focusable,
+              });
+              if (look.focused) keyboardOnAControl = true;
+              return look;
+            },
+            focusGroup: () => undefined,
+          },
+          seat.active(),
+          seat.companion(),
+        );
+        const phase = this.table.phase;
+        const decisionRowUp = phase === 'player_turn' || phase === 'settled';
+        decisionRowLive = decisionRowUp || keyboardOnAControl;
+      },
+      close: () => {
+        if (this.rules.isOpen) this.rules.dismiss();
+        else this.close(seat.active());
+      },
+      onKey: (key, mods) => {
+        if (keybindings.actionFor(key) !== 'attack') return false;
+        if (decisionRowLive && ACTIVATE_KEYS.has(key)) return false;
+        if (mods.repeat !== true && mods.predatesSurface !== true) this.close(seat.active());
+        return true;
+      },
+    };
   }
 
-  private renderHeader(ctx: CanvasRenderingContext2D, layout: CasinoLayout): void {
+  /** The rules sheet as its own surface; mount it after {@link tableSurface} so it stacks above. */
+  rulesSurface(id: string): Surface {
+    return this.rules.surface(id, {
+      enabled: () => this.hintsEnabled,
+      toggle: () => this.toggleHints(),
+    });
+  }
+
+  /**
+   * Paints the whole table — scrim, panel, hands, chips, controls and effects —
+   * into `frame`, registering every control through `frame.control`. The rules
+   * overlay is not part of it.
+   */
+  paintTable(frame: CasinoPaintFrame, player: Player, companion: Player): void {
+    const { ctx } = frame.target;
+    ctx.save();
+    ctx.fillStyle = skinsFor(frame.target.theme).scrim;
+    ctx.fillRect(0, 0, frame.viewportW, frame.viewportH);
+    ctx.restore();
+
+    const layout = computeCasinoLayout(frame.viewportW, frame.viewportH, frame.fit.scale);
+    const { fit } = frame;
+    ctx.save();
+    ctx.translate(fit.pivotX, fit.pivotY);
+    ctx.scale(fit.scale, fit.scale);
+    ctx.translate(-fit.pivotX, -fit.pivotY);
+
+    drawGlass(frame.target, layout.panel, skinsFor(frame.target.theme).panel.card);
+
+    this.renderHeader(frame, layout);
+    this.renderDealer(frame, layout);
+    this.renderFelt(frame, layout);
+    this.renderHands(frame, layout);
+    if (this.table.phase === 'turned_away') this.renderTurnedAwayNotice(frame, layout);
+    this.renderStatus(frame, layout);
+    this.renderChips(frame, layout, player, companion);
+    this.renderActions(frame, layout, player, companion);
+    this.renderHint(frame, layout);
+    this.renderFooter(frame, layout);
+    this.renderFlights(frame, layout);
+    this.renderOutcomeEffects(frame, layout);
+    if (this.shuffleStartedAt !== null) this.renderShuffleFlourish(frame, layout);
+
+    ctx.restore();
+  }
+
+  private colors(frame: CasinoPaintFrame): CasinoTableColors {
+    return casinoTableColors(frame.target.theme);
+  }
+
+  private renderHeader(frame: CasinoPaintFrame, layout: CasinoLayout): void {
+    const { target } = frame;
+    const { type, space } = target.theme;
+    const colors = this.colors(frame);
     const header = layout.header;
-    const title = layout.mode === 'wide' ? "♠  Deuce's Table — Blackjack  ♠" : '♠  Blackjack  ♠';
-    drawText(ctx, title, {
+    const title = layout.mode === 'wide' ? "Deuce's Table — Blackjack" : 'Blackjack';
+    const titleRect: Rect = {
       x: header.x,
       y: header.y,
-      width: header.width,
-      size: TITLE_SIZE,
-      bold: true,
-      color: ACCENT,
+      w: header.w,
+      h: type.title.lineHeight,
+    };
+    text(target, titleRect, {
+      text: title,
+      style: type.title,
+      color: colors.title,
       align: 'center',
     });
+
+    // The suits flank the title as painted pips rather than font glyphs, so
+    // they never fall back to a system face's spade.
+    const titleWidth = measureText(target, title, { style: type.title });
+    const pipY = titleRect.y + titleRect.h * HALF;
+    const pipOffset = titleWidth * HALF + space.md;
+    const centreX = header.x + header.w * HALF;
+    for (const side of [-1, 1]) {
+      drawSuitGlyph(
+        target.ctx,
+        'spades',
+        centreX + side * pipOffset,
+        pipY,
+        type.caption.size,
+        colors.title,
+      );
+    }
 
     // One readout line rather than a right-aligned corner counter: at the
     // compact width the corner is where the header bust lives. The wager total
@@ -788,14 +868,22 @@ export class ClubCasinoSystem {
     // it is the least load-bearing of them.
     const coins = Math.round(this.displayedCoins);
     const wagered = layout.mode === 'wide' ? `  ·  Wagered ${this.table.coinsWagered}` : '';
-    drawText(ctx, `Coins ${coins}${wagered}  ·  Cards ${this.table.cardsRemaining}`, {
-      x: header.x,
-      y: header.y + TITLE_SIZE + BUTTON_GAP * HALF,
-      width: header.width,
-      size: READOUT_SIZE,
-      color: this.shuffleStartedAt === null ? SECONDARY_TEXT : ACCENT,
-      align: 'center',
-    });
+    text(
+      target,
+      {
+        x: header.x,
+        y: titleRect.y + titleRect.h,
+        w: header.w,
+        h: type.caption.lineHeight,
+      },
+      {
+        text: `Coins ${coins}${wagered}  ·  Cards ${this.table.cardsRemaining}`,
+        style: type.caption,
+        color: this.shuffleStartedAt === null ? colors.readout : colors.readoutLive,
+        align: 'center',
+        tabular: true,
+      },
+    );
   }
 
   private dealerState(): DealerState {
@@ -808,53 +896,39 @@ export class ClubCasinoSystem {
     );
   }
 
-  private renderDealer(ctx: CanvasRenderingContext2D, layout: CasinoLayout): void {
+  private paintInset(frame: CasinoPaintFrame, rect: Rect, fill: string, border: string): void {
+    const { ctx, theme } = frame.target;
+    const shape = rect;
+    fillRounded(ctx, shape, theme.radius.md, fill);
+    strokeRounded(ctx, shape, theme.radius.md, border, FELT_BORDER_WIDTH);
+  }
+
+  private renderDealer(frame: CasinoPaintFrame, layout: CasinoLayout): void {
+    const { ctx } = frame.target;
+    const colors = this.colors(frame);
     const state = this.dealerState();
     // Deuce's eyes drift toward whichever hand is live, which is what sells the
     // portrait as watching the table rather than the player.
     const lookY = this.table.phase === 'player_turn' ? 1 : -1;
     const portrait = layout.dealerPortrait;
     if (portrait !== null) {
-      drawBox(ctx, {
-        x: portrait.x,
-        y: portrait.y,
-        width: portrait.width,
-        height: portrait.height,
-        fill: PORTRAIT_FILL,
-        border: PORTRAIT_BORDER,
-        radius: PORTRAIT_RADIUS,
+      this.paintInset(frame, portrait, colors.portrait, colors.portraitBorder);
+      drawDeucePortrait(ctx, portrait.x, portrait.y, portrait.w, portrait.h, state, this.animTime, {
+        lookY,
       });
-      drawDeucePortrait(
-        ctx,
-        portrait.x,
-        portrait.y,
-        portrait.width,
-        portrait.height,
-        state,
-        this.animTime,
-        { lookY },
-      );
     }
     const bust = layout.headerBust;
     if (bust !== null) {
-      drawBox(ctx, {
-        x: bust.x,
-        y: bust.y,
-        width: bust.width,
-        height: bust.height,
-        fill: PORTRAIT_FILL,
-        border: PORTRAIT_BORDER,
-        radius: PORTRAIT_RADIUS,
-      });
-      drawDeucePortrait(ctx, bust.x, bust.y, bust.width, bust.height, state, this.animTime, {
+      this.paintInset(frame, bust, colors.portrait, colors.portraitBorder);
+      drawDeucePortrait(ctx, bust.x, bust.y, bust.w, bust.h, state, this.animTime, {
         lookY,
         showDeck: false,
       });
     }
-    this.renderBanter(ctx, layout);
+    this.renderBanter(frame, layout);
   }
 
-  private renderBanter(ctx: CanvasRenderingContext2D, layout: CasinoLayout): void {
+  private renderBanter(frame: CasinoPaintFrame, layout: CasinoLayout): void {
     const line = this.banterLine;
     if (line === null) return;
     const age = this.animTime - this.banterStartedAt;
@@ -863,40 +937,28 @@ export class ClubCasinoSystem {
       return;
     }
     const alpha = age <= BANTER_HOLD_MS ? 1 : 1 - (age - BANTER_HOLD_MS) / BANTER_FADE_MS;
-    drawText(ctx, line, {
-      x: layout.banner.x,
-      y: layout.banner.y,
-      width: layout.banner.width,
-      size: BANTER_SIZE,
-      color: SECONDARY_TEXT,
+    glowText(frame.target, layout.banner, {
+      text: line,
+      style: frame.target.theme.type.caption,
+      color: this.colors(frame).label,
       align: 'center',
+      wrap: true,
+      maxLines: BANTER_MAX_LINES,
       alpha,
     });
   }
 
   /** The felt each hand sits on, plus the painted betting circle. */
-  private renderFelt(ctx: CanvasRenderingContext2D, layout: CasinoLayout): void {
+  private renderFelt(frame: CasinoPaintFrame, layout: CasinoLayout): void {
+    const { ctx } = frame.target;
+    const colors = this.colors(frame);
     for (const band of [layout.dealerHand, layout.playerHand]) {
-      drawBox(ctx, {
-        x: band.x,
-        y: band.y,
-        width: band.width,
-        height: band.height,
-        fill: FELT_GREEN,
-        border: FELT_LINE,
-        radius: PANEL_RADIUS,
-      });
+      this.paintInset(frame, band, colors.felt, colors.feltLine);
     }
     const spot = layout.betSpot;
-    drawBox(ctx, {
-      x: spot.x,
-      y: spot.y,
-      width: spot.width,
-      height: spot.height,
-      fill: BET_SPOT_FILL,
-      border: FELT_LINE,
-      radius: spot.height * HALF,
-    });
+    const spotRadius = spot.h * HALF;
+    fillRounded(ctx, spot, spotRadius, colors.betSpot);
+    strokeRounded(ctx, spot, spotRadius, colors.feltLine, FELT_BORDER_WIDTH);
   }
 
   /**
@@ -926,30 +988,37 @@ export class ClubCasinoSystem {
     return `You ${value.total}${value.soft ? ' (soft)' : ''}`;
   }
 
-  private renderHands(ctx: CanvasRenderingContext2D, layout: CasinoLayout): void {
-    this.renderHand(ctx, layout, 'dealer', layout.dealerHand);
-    this.renderHand(ctx, layout, 'player', layout.playerHand);
+  private renderHands(frame: CasinoPaintFrame, layout: CasinoLayout): void {
+    this.renderHand(frame, layout, 'dealer', layout.dealerHand);
+    this.renderHand(frame, layout, 'player', layout.playerHand);
   }
 
   private renderHand(
-    ctx: CanvasRenderingContext2D,
+    frame: CasinoPaintFrame,
     layout: CasinoLayout,
     side: HandSide,
     band: Rect,
   ): void {
+    const { target } = frame;
+    const { ctx } = target;
+    const { type, space } = target.theme;
     // The turn-away notice covers both bands; seat labels showing through it
     // read as artefacts rather than as empty seats.
     if (this.table.phase !== 'turned_away') {
-      drawText(ctx, this.handLabel(side), {
-        x: band.x + BUTTON_GAP,
-        y: band.y + BUTTON_GAP * HALF,
-        size: HAND_LABEL_SIZE,
-        color: SECONDARY_TEXT,
-      });
+      text(
+        target,
+        {
+          x: band.x + space.sm,
+          y: band.y + space.xs,
+          w: band.w - space.sm * 2,
+          h: type.overline.lineHeight,
+        },
+        { text: this.handLabel(side), style: type.overline, color: this.colors(frame).label },
+      );
     }
 
     const cards = side === 'player' ? this.table.playerHand : this.table.dealerHand;
-    const placements = handSpread(band, layout.cardWidth, cards.length);
+    const placements = handSpread(handCardBand(layout, band), layout.cardWidth, cards.length);
     const busted = isBust(cards);
     const winning = this.isWinningHand(side);
     const shake = this.bustShakeOffset(side);
@@ -964,7 +1033,7 @@ export class ClubCasinoSystem {
         rotation: placement.rotation,
       };
       const opts = {
-        highlight: winning ? WIN_HIGHLIGHT : undefined,
+        highlight: winning ? this.colors(frame).winHighlight : undefined,
         dim: busted ? BUST_DIM : undefined,
       };
       if (this.isHoleCard(side, index)) {
@@ -978,7 +1047,7 @@ export class ClubCasinoSystem {
   private renderHoleCard(
     ctx: CanvasRenderingContext2D,
     card: Card,
-    rect: { x: number; y: number; width: number; rotation: number },
+    rect: CardPose,
     opts: { highlight?: string; dim?: number },
   ): void {
     if (!this.table.holeCardRevealed) {
@@ -1025,176 +1094,193 @@ export class ClubCasinoSystem {
    * warm line both say it, but a player who cannot bet needs to know *why* the
    * controls are gone at a glance, before reading anything.
    */
-  private renderTurnedAwayNotice(ctx: CanvasRenderingContext2D, layout: CasinoLayout): void {
+  private renderTurnedAwayNotice(frame: CasinoPaintFrame, layout: CasinoLayout): void {
+    const { target } = frame;
+    const { ctx, theme } = target;
+    const colors = this.colors(frame);
     const top = layout.dealerHand.y;
-    const bottom = layout.playerHand.y + layout.playerHand.height;
-    const band = {
-      x: layout.dealerHand.x,
-      y: top,
-      width: layout.dealerHand.width,
-      height: bottom - top,
-    };
+    const bottom = layout.playerHand.y + layout.playerHand.h;
+    const band = { x: layout.dealerHand.x, y: top, w: layout.dealerHand.w, h: bottom - top };
 
-    drawBox(ctx, {
-      x: band.x,
-      y: band.y,
-      width: band.width,
-      height: band.height,
-      fill: TURNED_AWAY_SCRIM,
-      border: LOSE_COLOR,
-      borderWidth: 2,
-      radius: PANEL_RADIUS,
-    });
+    fillRounded(ctx, band, theme.radius.md, colors.turnedAwayScrim);
+    strokeRounded(ctx, band, theme.radius.md, colors.lose, TURNED_AWAY_BORDER_WIDTH);
 
-    const centreY = band.y + band.height * HALF;
+    const centreY = band.y + band.h * HALF;
     // Flat, bright and unglowing. A glow behind a long string blurs into a bar
     // that reads as text underneath the text, and red on a dark red scrim has
     // too little contrast to carry the line in the first place — the red is
     // doing its job on the border.
-    drawText(ctx, 'NOT ENOUGH MONEY', {
-      x: band.x,
-      y: centreY - TURNED_AWAY_TITLE_SIZE,
-      width: band.width,
-      size: TURNED_AWAY_TITLE_SIZE,
-      bold: true,
-      color: TURNED_AWAY_TITLE_COLOR,
-      align: 'center',
-    });
-    drawText(ctx, `You need at least ${TABLE_MINIMUM} coins to sit down.`, {
-      x: band.x,
-      y: centreY + BUTTON_GAP,
-      width: band.width,
-      size: READOUT_SIZE,
-      color: SECONDARY_TEXT,
-      align: 'center',
-    });
+    const titleStyle = theme.type.heading;
+    text(
+      target,
+      { x: band.x, y: centreY - titleStyle.lineHeight, w: band.w, h: titleStyle.lineHeight },
+      {
+        text: 'NOT ENOUGH MONEY',
+        style: titleStyle,
+        color: colors.turnedAwayTitle,
+        align: 'center',
+      },
+    );
+    text(
+      target,
+      { x: band.x, y: centreY + theme.space.sm, w: band.w, h: theme.type.caption.lineHeight },
+      {
+        text: `You need at least ${TABLE_MINIMUM} coins to sit down.`,
+        style: theme.type.caption,
+        color: colors.label,
+        align: 'center',
+      },
+    );
   }
 
-  private renderStatus(ctx: CanvasRenderingContext2D, layout: CasinoLayout): void {
-    const row = layout.statusRow;
-    const centreX = row.x + row.width * HALF;
-    const message = this.statusMessage();
+  private renderStatus(frame: CasinoPaintFrame, layout: CasinoLayout): void {
+    const { target } = frame;
+    const { type } = target.theme;
+    const colors = this.colors(frame);
+    const message = this.statusMessage(colors);
     // The turn-away notice already spells this out across the felt in the
     // player's face; repeating it here just lands a second line on top of it.
     if (message.text === '') return;
-    drawText(ctx, message.text, {
-      x: centreX,
-      y: row.y,
-      size: message.emphasised ? STATUS_SIZE + STATUS_EMPHASIS_BUMP : STATUS_SIZE,
-      bold: true,
+    glowText(target, layout.statusRow, {
+      text: message.text,
+      style: message.emphasised ? type.heading : type.title,
       color: message.color,
       align: 'center',
-      glow: message.emphasised ? message.color : false,
+      glow: message.emphasised ? message.color : undefined,
     });
 
     const feedback = this.table.feedbackMessage;
     if (feedback !== null) {
-      drawText(ctx, feedback, {
-        x: layout.hintRow.x,
-        y: layout.hintRow.y,
-        width: layout.hintRow.width,
-        size: HINT_SIZE,
-        color: FEEDBACK_COLOR,
+      text(target, layout.hintRow, {
+        text: feedback,
+        style: type.caption,
+        color: colors.feedback,
         align: 'center',
+        ...hintWrap(layout),
       });
     }
   }
 
-  private statusMessage(): { text: string; color: string; emphasised: boolean } {
+  private statusMessage(colors: CasinoTableColors): {
+    text: string;
+    color: string;
+    emphasised: boolean;
+  } {
     switch (this.table.phase) {
       case 'turned_away':
-        return { text: '', color: MUTED_TEXT, emphasised: false };
+        return { text: '', color: colors.muted, emphasised: false };
       case 'betting':
         return {
           text:
             this.table.betTotal > 0 ? `Bet ${this.table.betTotal}` : 'Stack your chips on the felt',
-          color: SECONDARY_TEXT,
+          color: colors.label,
           emphasised: false,
         };
       case 'dealing':
-        return { text: 'Dealing…', color: SECONDARY_TEXT, emphasised: false };
+        return { text: 'Dealing…', color: colors.label, emphasised: false };
       case 'player_turn':
         return {
           text: `Your call — ${this.table.stake} on the felt`,
-          color: ACCENT,
+          color: colors.title,
           emphasised: false,
         };
       case 'dealer_turn':
-        return { text: "Deuce's turn", color: SECONDARY_TEXT, emphasised: false };
+        return { text: "Deuce's turn", color: colors.label, emphasised: false };
       case 'settled':
-        return this.outcomeMessage();
+        return this.outcomeMessage(colors);
     }
   }
 
-  private outcomeMessage(): { text: string; color: string; emphasised: boolean } {
+  private outcomeMessage(colors: CasinoTableColors): {
+    text: string;
+    color: string;
+    emphasised: boolean;
+  } {
     const outcome = this.table.outcome;
     if (outcome === null) {
-      return { text: 'Hand void — bet refunded', color: FEEDBACK_COLOR, emphasised: false };
+      return { text: 'Hand void — bet refunded', color: colors.feedback, emphasised: false };
     }
     const stake = this.table.stake;
     switch (outcome.kind) {
       case 'player_blackjack':
         return {
           text: `BLACKJACK!  +${netForOutcome(outcome, stake)}`,
-          color: ACCENT,
+          color: colors.title,
           emphasised: true,
         };
       case 'player_win':
-        return { text: `You win  +${stake}`, color: WIN_COLOR, emphasised: true };
+        return { text: `You win  +${stake}`, color: colors.win, emphasised: true };
       case 'dealer_win':
         return {
           text: isBust(this.table.playerHand) ? `Bust  −${stake}` : `House wins  −${stake}`,
-          color: LOSE_COLOR,
+          color: colors.lose,
           emphasised: false,
         };
       case 'push':
-        return { text: 'Push — stake returned', color: PUSH_COLOR, emphasised: false };
+        return { text: 'Push — stake returned', color: colors.push, emphasised: false };
     }
   }
 
   private renderChips(
-    ctx: CanvasRenderingContext2D,
+    frame: CasinoPaintFrame,
     layout: CasinoLayout,
     player: Player,
     companion: Player,
   ): void {
+    const { target } = frame;
+    const { type } = target.theme;
+    const colors = this.colors(frame);
     const tray = layout.chipTray;
     const trayCentre = rectCentre(tray);
-    const radius = tray.height * TRAY_CHIP_RADIUS_FRACTION;
-    const baseY = tray.y + tray.height - radius;
+    const radius = tray.h * TRAY_CHIP_RADIUS_FRACTION;
+    const baseY = tray.y + tray.h - radius;
     // The label owns the top of the rect, so the stack is capped to whatever is
     // left under it — an uncapped stack grows straight through its own caption.
     const chips = trayChips(partyCoins(player, companion)).slice(
       0,
-      visibleChipCapacity(tray.height, radius),
+      visibleChipCapacity(tray.h, radius, type.caption.lineHeight),
     );
 
-    if (chips.length === 0) drawEmptyTrayOutline(ctx, trayCentre.x, baseY, radius);
-    else drawChipStack(ctx, trayCentre.x, baseY, radius, chips);
+    if (chips.length === 0) drawEmptyTrayOutline(target, trayCentre.x, baseY, radius);
+    else drawChipStack(target, trayCentre.x, baseY, radius, chips);
 
-    drawText(ctx, `Your tray — ${Math.round(this.displayedCoins)}`, {
-      x: trayCentre.x,
-      y: tray.y,
-      size: HAND_LABEL_SIZE,
-      color: MUTED_TEXT,
-      align: 'center',
-    });
+    text(
+      target,
+      { x: tray.x, y: tray.y, w: tray.w, h: type.caption.lineHeight },
+      {
+        text: `Your tray — ${Math.round(this.displayedCoins)}`,
+        style: type.caption,
+        color: colors.muted,
+        align: 'center',
+        tabular: true,
+      },
+    );
 
     const spot = layout.betSpot;
     const spotCentre = rectCentre(spot);
     // Tapping the stack takes the top chip back off, which is the reverse of
     // tapping a chip well — Clear is the all-at-once shortcut, not the only way.
     if (this.table.phase === 'betting' && this.table.pendingBet.length > 0) {
-      this.addButton(ctx, spot, '', BUTTON_PRESETS.casinoBetSpot, { kind: 'remove_chip' });
+      const look = frame.control({
+        id: 'bet-spot',
+        rect: spot,
+        disabled: false,
+        primary: false,
+        focusable: false,
+        action: { kind: 'remove_chip' },
+      });
+      if (look.hovered || look.pressed) {
+        fillRounded(target.ctx, spot, spot.h * HALF, colors.betSpotHover);
+      }
     }
-    const betRadius = spot.height * BET_CHIP_RADIUS_FRACTION;
-    const betBaseY = spot.y + spot.height - betRadius;
+    const betRadius = spot.h * BET_CHIP_RADIUS_FRACTION;
+    const betBaseY = spot.y + spot.h - betRadius;
     const betting = this.table.phase === 'betting';
     const felt = (betting ? this.table.pendingBet : this.stakeChipsOnFelt()).slice(
       0,
-      visibleChipCapacity(spot.height, betRadius),
+      visibleChipCapacity(spot.h, betRadius, type.caption.lineHeight),
     );
-    if (felt.length > 0) drawChipStack(ctx, spotCentre.x, betBaseY, betRadius, felt);
+    if (felt.length > 0) drawChipStack(target, spotCentre.x, betBaseY, betRadius, felt);
 
     const spotLabel = betting
       ? `Your bet — ${this.table.betTotal}`
@@ -1202,13 +1288,17 @@ export class ClubCasinoSystem {
         ? `Stake — ${this.table.stake}`
         : '';
     if (spotLabel !== '') {
-      drawText(ctx, spotLabel, {
-        x: spotCentre.x,
-        y: spot.y,
-        size: HAND_LABEL_SIZE,
-        color: MUTED_TEXT,
-        align: 'center',
-      });
+      text(
+        target,
+        { x: spot.x, y: spot.y, w: spot.w, h: type.caption.lineHeight },
+        {
+          text: spotLabel,
+          style: type.caption,
+          color: colors.muted,
+          align: 'center',
+          tabular: true,
+        },
+      );
     }
   }
 
@@ -1223,7 +1313,7 @@ export class ClubCasinoSystem {
   }
 
   private renderActions(
-    ctx: CanvasRenderingContext2D,
+    frame: CasinoPaintFrame,
     layout: CasinoLayout,
     player: Player,
     companion: Player,
@@ -1235,30 +1325,27 @@ export class ClubCasinoSystem {
       case 'dealer_turn':
         return;
       case 'betting':
-        this.renderBettingActions(ctx, layout, row, player, companion);
+        this.renderBettingActions(frame, layout, row, player, companion);
         return;
       case 'player_turn':
-        // Only the two decision phases join a ring. The betting row deliberately
-        // does not: a stray accept press must never place a wager the player did
-        // not aim at.
-        beginMenuFocus('casino-turn');
-        this.renderTurnActions(ctx, layout, row, player, companion);
-        endMenuFocus();
+        frame.focusGroup('casino-turn');
+        this.renderTurnActions(frame, layout, row, player, companion);
+        frame.focusGroup(null);
         return;
       case 'settled':
-        beginMenuFocus('casino-settled');
-        this.renderSettledActions(ctx, layout, row);
-        endMenuFocus();
+        frame.focusGroup('casino-settled');
+        this.renderSettledActions(frame, layout, row);
+        frame.focusGroup(null);
         return;
     }
   }
 
   /** Split `row` into `count` equal columns with the standard gap between them. */
   private columns(row: Rect, count: number): Array<Rect> {
-    const width = (row.width - BUTTON_GAP * (count - 1)) / count;
+    const width = (row.w - BUTTON_GAP * (count - 1)) / count;
     const cells: Rect[] = [];
     for (let i = 0; i < count; i++) {
-      cells.push({ x: row.x + (width + BUTTON_GAP) * i, y: row.y, width, height: row.height });
+      cells.push({ x: row.x + (width + BUTTON_GAP) * i, y: row.y, w: width, h: row.h });
     }
     return cells;
   }
@@ -1268,44 +1355,56 @@ export class ClubCasinoSystem {
     if (layout.mode === 'wide') return this.columns(row, count);
     const perRow = Math.ceil(count / COMPACT_ACTION_ROW_COUNT);
     const rowHeight = layout.buttonHeight;
-    const top = this.columns({ ...row, height: rowHeight }, perRow);
+    const top = this.columns({ ...row, h: rowHeight }, perRow);
     const bottom = this.columns(
-      { x: row.x, y: row.y + rowHeight + BUTTON_GAP, width: row.width, height: rowHeight },
+      { x: row.x, y: row.y + rowHeight + BUTTON_GAP, w: row.w, h: rowHeight },
       count - perRow,
     );
     return [...top, ...bottom];
   }
 
   private addButton(
-    ctx: CanvasRenderingContext2D,
-    cell: Rect,
-    label: string,
-    preset: CasinoButtonPreset,
-    action: PanelAction,
-    disabled = false,
-    primaryAction = false,
+    frame: CasinoPaintFrame,
+    button: {
+      readonly id: string;
+      readonly cell: Rect;
+      readonly label: string;
+      readonly variant: ButtonVariant;
+      readonly action: CasinoAction;
+      readonly disabled?: boolean;
+      readonly primary?: boolean;
+      readonly focusable?: boolean;
+    },
   ): void {
-    const result = drawButton(ctx, {
-      x: cell.x,
-      y: cell.y,
-      width: cell.width,
-      height: cell.height,
-      label,
-      labelSize: BUTTON_LABEL_SIZE,
+    const disabled = button.disabled ?? false;
+    const look = frame.control({
+      id: button.id,
+      rect: button.cell,
       disabled,
-      primaryAction,
-      ...preset,
+      primary: button.primary ?? false,
+      focusable: button.focusable ?? true,
+      action: button.action,
     });
-    if (!disabled) this.buttons.push({ result, action });
+    const { theme } = frame.target;
+    paintSkinnedControl(frame.target, button.cell, {
+      label: button.label,
+      skin: skinsFor(theme).button[button.variant],
+      look,
+      disabled,
+      radius: theme.radius.md,
+      textStyle: theme.type.label,
+    });
   }
 
   private renderBettingActions(
-    ctx: CanvasRenderingContext2D,
+    frame: CasinoPaintFrame,
     layout: CasinoLayout,
     row: Rect,
     player: Player,
     companion: Player,
   ): void {
+    const { target } = frame;
+    const colors = this.colors(frame);
     const cells = this.actionCells(layout, row, CHIP_DENOMINATIONS.length + BETTING_CONTROL_COUNT);
     const ceiling = this.table.effectiveMaximum(player, companion);
 
@@ -1314,20 +1413,29 @@ export class ClubCasinoSystem {
       const affordable =
         canAffordCoins(player, companion, denomination) &&
         this.table.betTotal + denomination <= ceiling;
-      this.addButton(
-        ctx,
-        cell,
-        '',
-        BUTTON_PRESETS.casinoChip,
-        { kind: 'chip', denomination },
-        !affordable,
-      );
+      const look = frame.control({
+        id: `chip-${denomination}`,
+        rect: cell,
+        disabled: !affordable,
+        primary: false,
+        focusable: true,
+        action: { kind: 'chip', denomination },
+      });
+      const well = cell;
+      const wellRadius = well.h * HALF;
+      fillRounded(target.ctx, well, wellRadius, colors.well);
+      if (affordable && (look.hovered || look.pressed)) {
+        fillRounded(target.ctx, well, wellRadius, colors.wellHover);
+      }
+      strokeRounded(target.ctx, well, wellRadius, colors.wellRim, FELT_BORDER_WIDTH);
+      if (look.focused) drawFocusRing(target, well, wellRadius);
       const centre = rectCentre(cell);
       const chipRadius = Math.min(
-        cell.width * CHIP_WELL_FILL_FRACTION,
-        cell.height * HALF - CHIP_BUTTON_INSET,
+        cell.w * CHIP_WELL_FILL_FRACTION,
+        cell.h * HALF - CHIP_BUTTON_INSET,
       );
-      drawChip(ctx, centre.x, centre.y, chipRadius, denomination, {
+      const pressDrop = look.pressed && affordable ? skinsFor(target.theme).pressDrop : 0;
+      drawChip(target, centre.x, centre.y + pressDrop, chipRadius, denomination, {
         alpha: affordable ? 1 : DISABLED_CHIP_ALPHA,
         showLabel: true,
       });
@@ -1337,79 +1445,86 @@ export class ClubCasinoSystem {
     const sameCell = cells[CHIP_DENOMINATIONS.length + 1];
     const dealCell = cells[CHIP_DENOMINATIONS.length + 2];
 
-    this.addButton(
-      ctx,
-      clearCell,
-      'Clear',
-      BUTTON_PRESETS.primary,
-      { kind: 'clear_bet' },
-      this.table.betTotal === 0,
-    );
-    this.addButton(
-      ctx,
-      sameCell,
-      'Same Bet',
-      BUTTON_PRESETS.blue,
-      { kind: 'same_bet' },
-      !this.table.canRepeatLastBet,
-    );
-    this.addButton(
-      ctx,
-      dealCell,
-      'Deal',
-      BUTTON_PRESETS.gold,
-      { kind: 'deal' },
-      this.table.betTotal < TABLE_MINIMUM,
-    );
+    this.addButton(frame, {
+      id: 'clear',
+      cell: clearCell,
+      label: 'Clear',
+      variant: 'ghost',
+      action: { kind: 'clear_bet' },
+      disabled: this.table.betTotal === 0,
+    });
+    this.addButton(frame, {
+      id: 'same-bet',
+      cell: sameCell,
+      label: 'Same Bet',
+      variant: 'secondary',
+      action: { kind: 'same_bet' },
+      disabled: !this.table.canRepeatLastBet,
+    });
+    this.addButton(frame, {
+      id: 'deal',
+      cell: dealCell,
+      label: 'Deal',
+      variant: 'primary',
+      action: { kind: 'deal' },
+      disabled: this.table.betTotal < TABLE_MINIMUM,
+    });
   }
 
   private renderTurnActions(
-    ctx: CanvasRenderingContext2D,
+    frame: CasinoPaintFrame,
     layout: CasinoLayout,
     row: Rect,
     player: Player,
     companion: Player,
   ): void {
     const cells = this.actionCells(layout, row, TURN_CONTROL_COUNT);
-    this.addButton(ctx, cells[0], 'Hit', BUTTON_PRESETS.success, { kind: 'hit' });
-    this.addButton(ctx, cells[1], 'Stand', BUTTON_PRESETS.danger, { kind: 'stand' });
-    this.addButton(
-      ctx,
-      cells[2],
-      `Double (${this.table.stake})`,
-      BUTTON_PRESETS.gold,
-      { kind: 'double' },
-      !this.table.canDoubleDown(player, companion),
-    );
+    this.addButton(frame, {
+      id: 'hit',
+      cell: cells[0],
+      label: 'Hit',
+      variant: 'success',
+      action: { kind: 'hit' },
+    });
+    this.addButton(frame, {
+      id: 'stand',
+      cell: cells[1],
+      label: 'Stand',
+      variant: 'danger',
+      action: { kind: 'stand' },
+    });
+    this.addButton(frame, {
+      id: 'double',
+      cell: cells[2],
+      label: `Double (${this.table.stake})`,
+      variant: 'secondary',
+      action: { kind: 'double' },
+      disabled: !this.table.canDoubleDown(player, companion),
+    });
   }
 
-  private renderSettledActions(
-    ctx: CanvasRenderingContext2D,
-    layout: CasinoLayout,
-    row: Rect,
-  ): void {
+  private renderSettledActions(frame: CasinoPaintFrame, layout: CasinoLayout, row: Rect): void {
     const cells = this.actionCells(layout, row, SETTLED_CONTROL_COUNT);
     // The one safe default at this table: it clears the felt rather than staking anything.
-    this.addButton(
-      ctx,
-      cells[0],
-      'Next Hand',
-      BUTTON_PRESETS.gold,
-      { kind: 'next_hand' },
-      false,
-      true,
-    );
-    this.addButton(
-      ctx,
-      cells[1],
-      'Same Bet',
-      BUTTON_PRESETS.blue,
-      { kind: 'repeat_hand' },
-      !this.table.canRepeatLastBet,
-    );
+    this.addButton(frame, {
+      id: 'next-hand',
+      cell: cells[0],
+      label: 'Next Hand',
+      variant: 'primary',
+      action: { kind: 'next_hand' },
+      primary: true,
+    });
+    this.addButton(frame, {
+      id: 'repeat-hand',
+      cell: cells[1],
+      label: 'Same Bet',
+      variant: 'secondary',
+      action: { kind: 'repeat_hand' },
+      disabled: !this.table.canRepeatLastBet,
+    });
   }
 
-  private renderHint(ctx: CanvasRenderingContext2D, layout: CasinoLayout): void {
+  private renderHint(frame: CasinoPaintFrame, layout: CasinoLayout): void {
     if (this.table.feedbackMessage !== null) return;
     if (!this.hintsEnabled) return;
     if (this.table.phase !== 'player_turn') return;
@@ -1419,33 +1534,30 @@ export class ClubCasinoSystem {
       this.table.playerHand.length === 2 && !this.table.doubled,
     );
     if (advice === null) return;
-    drawText(ctx, advice.line, {
-      x: layout.hintRow.x,
-      y: layout.hintRow.y,
-      width: layout.hintRow.width,
-      size: HINT_SIZE,
-      color: MUTED_TEXT,
+    text(frame.target, layout.hintRow, {
+      text: advice.line,
+      style: frame.target.theme.type.caption,
+      color: this.colors(frame).muted,
       align: 'center',
+      ...hintWrap(layout),
     });
   }
 
-  private renderFooter(ctx: CanvasRenderingContext2D, layout: CasinoLayout): void {
-    const help = layout.helpButton;
-    this.addButton(
-      ctx,
-      help,
-      '?  How to Play',
-      { ...BUTTON_PRESETS.primary, labelSize: FOOTER_LABEL_SIZE },
-      { kind: 'help' },
-    );
-    const leave = layout.leaveButton;
-    this.addButton(
-      ctx,
-      leave,
-      platform.isMobile ? 'Leave Table' : 'Leave Table  [Esc]',
-      { ...BUTTON_PRESETS.danger, labelSize: FOOTER_LABEL_SIZE },
-      { kind: 'leave' },
-    );
+  private renderFooter(frame: CasinoPaintFrame, layout: CasinoLayout): void {
+    this.addButton(frame, {
+      id: 'help',
+      cell: layout.helpButton,
+      label: 'How to Play',
+      variant: 'secondary',
+      action: { kind: 'help' },
+    });
+    this.addButton(frame, {
+      id: 'leave',
+      cell: layout.leaveButton,
+      label: leaveLabel(frame.keyHints, layout.mode),
+      variant: 'danger',
+      action: { kind: 'leave' },
+    });
   }
 
   // ── Animation layers ─────────────────────────────────────────────────────
@@ -1454,15 +1566,15 @@ export class ClubCasinoSystem {
     switch (anchor) {
       case 'tray': {
         const tray = layout.chipTray;
-        const radius = tray.height * TRAY_CHIP_RADIUS_FRACTION;
-        return { x: tray.x + tray.width * HALF, y: tray.y + tray.height - radius };
+        const radius = tray.h * TRAY_CHIP_RADIUS_FRACTION;
+        return { x: tray.x + tray.w * HALF, y: tray.y + tray.h - radius };
       }
       case 'felt': {
         const spot = layout.betSpot;
-        const radius = spot.height * BET_CHIP_RADIUS_FRACTION;
+        const radius = spot.h * BET_CHIP_RADIUS_FRACTION;
         return {
-          x: spot.x + spot.width * HALF,
-          y: chipStackTopY(spot.y + spot.height - radius, radius, this.table.pendingBet.length),
+          x: spot.x + spot.w * HALF,
+          y: chipStackTopY(spot.y + spot.h - radius, radius, this.table.pendingBet.length),
         };
       }
       case 'rack': {
@@ -1471,11 +1583,11 @@ export class ClubCasinoSystem {
         // Aiming at the portrait's centre threw losing chips into Deuce's face.
         const portrait = layout.dealerPortrait;
         if (portrait === null) {
-          return { x: layout.dealerHand.x + layout.dealerHand.width * HALF, y: layout.panel.y };
+          return { x: layout.dealerHand.x + layout.dealerHand.w * HALF, y: layout.panel.y };
         }
         return {
-          x: portrait.x + portrait.width * HALF,
-          y: portrait.y + portrait.height * DEALER_RACK_PORTRAIT_FRACTION,
+          x: portrait.x + portrait.w * HALF,
+          y: portrait.y + portrait.h * DEALER_RACK_PORTRAIT_FRACTION,
         };
       }
     }
@@ -1488,14 +1600,14 @@ export class ClubCasinoSystem {
    */
   private shoePoint(layout: CasinoLayout): { x: number; y: number } {
     return {
-      x: layout.dealerHand.x + layout.dealerHand.width - layout.cardWidth,
+      x: layout.dealerHand.x + layout.dealerHand.w - layout.cardWidth,
       y: layout.dealerHand.y,
     };
   }
 
-  private renderFlights(ctx: CanvasRenderingContext2D, layout: CasinoLayout): void {
-    this.renderCardFlights(ctx, layout);
-    this.renderChipFlights(ctx, layout);
+  private renderFlights(frame: CasinoPaintFrame, layout: CasinoLayout): void {
+    this.renderCardFlights(frame.target.ctx, layout);
+    this.renderChipFlights(frame, layout);
   }
 
   private renderCardFlights(ctx: CanvasRenderingContext2D, layout: CasinoLayout): void {
@@ -1507,7 +1619,9 @@ export class ClubCasinoSystem {
       if (flight.index >= cards.length) continue;
       const card = cards[flight.index];
       const band = flight.side === 'player' ? layout.playerHand : layout.dealerHand;
-      const target = handSpread(band, layout.cardWidth, cards.length)[flight.index];
+      const target = handSpread(handCardBand(layout, band), layout.cardWidth, cards.length)[
+        flight.index
+      ];
 
       const progress = clamp01((this.animTime - flight.startedAt) / CARD_FLIGHT_MS);
       const eased = easeOutCubic(progress);
@@ -1530,19 +1644,19 @@ export class ClubCasinoSystem {
     }
   }
 
-  private renderChipFlights(ctx: CanvasRenderingContext2D, layout: CasinoLayout): void {
+  private renderChipFlights(frame: CasinoPaintFrame, layout: CasinoLayout): void {
     for (const flight of this.chipFlights) {
       const progress = clamp01((this.animTime - flight.startedAt) / flight.duration);
       const eased = easeOutCubic(progress);
       const from = this.anchorPoint(layout, flight.from);
       const to = this.anchorPoint(layout, flight.to);
-      const radius = layout.chipTray.height * TRAY_CHIP_RADIUS_FRACTION;
+      const radius = layout.chipTray.h * TRAY_CHIP_RADIUS_FRACTION;
       const arc = -Math.sin(progress * Math.PI) * radius * CHIP_ARC_HEIGHT_FRACTION;
       // A landing chip settles with a small bounce rather than sticking flat.
       const landingPhase = Math.max(0, progress - (1 - CHIP_LAND_BOUNCE)) / CHIP_LAND_BOUNCE;
       const bounce = -Math.sin(landingPhase * Math.PI) * radius * CHIP_LAND_BOUNCE;
       drawChip(
-        ctx,
+        frame.target,
         from.x + (to.x - from.x) * eased,
         from.y + (to.y - from.y) * eased + arc + bounce,
         radius,
@@ -1552,13 +1666,14 @@ export class ClubCasinoSystem {
     }
   }
 
-  private renderOutcomeEffects(ctx: CanvasRenderingContext2D, layout: CasinoLayout): void {
+  private renderOutcomeEffects(frame: CasinoPaintFrame, layout: CasinoLayout): void {
     const shownAt = this.outcomeShownAt;
     if (shownAt === null) return;
+    const { ctx } = frame.target;
     const age = this.animTime - shownAt;
 
     if (isBust(this.table.playerHand) && age < BUST_VIGNETTE_MS) {
-      this.renderBustVignette(ctx, layout, age / BUST_VIGNETTE_MS);
+      this.renderBustVignette(frame, layout, age / BUST_VIGNETTE_MS);
     }
 
     const centre = rectCentre(layout.playerHand);
@@ -1574,7 +1689,7 @@ export class ClubCasinoSystem {
         Math.sin(particle.angle) * particle.speed * elapsed * HALF;
       ctx.save();
       ctx.globalAlpha = 1 - elapsed;
-      ctx.fillStyle = ACCENT;
+      ctx.fillStyle = this.colors(frame).coin;
       ctx.beginPath();
       ctx.arc(x, y, COIN_PARTICLE_RADIUS, 0, TWO_PI);
       ctx.fill();
@@ -1589,14 +1704,16 @@ export class ClubCasinoSystem {
    * anything — and it is over quickly, because losing is frequent.
    */
   private renderBustVignette(
-    ctx: CanvasRenderingContext2D,
+    frame: CasinoPaintFrame,
     layout: CasinoLayout,
     progress: number,
   ): void {
+    const { ctx, theme } = frame.target;
+    const tint = theme.palette.state.danger;
     const panel = layout.panel;
-    const centreX = panel.x + panel.width * HALF;
-    const centreY = panel.y + panel.height * HALF;
-    const radius = Math.hypot(panel.width, panel.height) * HALF;
+    const centreX = panel.x + panel.w * HALF;
+    const centreY = panel.y + panel.h * HALF;
+    const radius = Math.hypot(panel.w, panel.h) * HALF;
     const gradient = ctx.createRadialGradient(
       centreX,
       centreY,
@@ -1605,13 +1722,14 @@ export class ClubCasinoSystem {
       centreY,
       radius,
     );
-    gradient.addColorStop(0, BUST_VIGNETTE_CLEAR);
-    gradient.addColorStop(1, BUST_VIGNETTE);
+    gradient.addColorStop(0, withAlpha(tint, 0));
+    gradient.addColorStop(1, withAlpha(tint, 1));
 
     ctx.save();
     ctx.globalAlpha = Math.max(0, Math.sin(progress * Math.PI) * VIGNETTE_ALPHA);
     ctx.fillStyle = gradient;
-    ctx.fillRect(panel.x, panel.y, panel.width, panel.height);
+    roundRectPath(ctx, panel, theme.radius.lg);
+    ctx.fill();
     ctx.restore();
   }
 
@@ -1620,28 +1738,24 @@ export class ClubCasinoSystem {
    * moment the player learns the deck is real, so it is visible and unmissable
    * rather than a silent counter reset.
    */
-  private renderShuffleFlourish(ctx: CanvasRenderingContext2D, layout: CasinoLayout): void {
+  private renderShuffleFlourish(frame: CasinoPaintFrame, layout: CasinoLayout): void {
     const started = this.shuffleStartedAt;
     if (started === null) return;
+    const { ctx } = frame.target;
+    const colors = this.colors(frame);
     const progress = clamp01((this.animTime - started) / SHUFFLE_FLOURISH_MS);
     const band = layout.dealerHand;
     const centre = rectCentre(band);
 
     // The riffle plays over the hand that just settled, so the band is covered
     // first — interleaving card backs through a live hand reads as a glitch.
-    drawBox(ctx, {
-      x: band.x,
-      y: band.y,
-      width: band.width,
-      height: band.height,
-      fill: FELT_GREEN_OPAQUE,
-      border: FELT_LINE,
-      radius: PANEL_RADIUS,
-      alpha: Math.min(1, (1 - progress) * SHUFFLE_SCRIM_FADE),
-    });
+    ctx.save();
+    ctx.globalAlpha *= Math.min(1, (1 - progress) * SHUFFLE_SCRIM_FADE);
+    this.paintInset(frame, band, colors.feltOpaque, colors.feltLine);
+    ctx.restore();
 
     const cardW = layout.cardWidth * SHUFFLE_CARD_WIDTH_FRACTION;
-    const spread = Math.sin(progress * Math.PI) * band.width * SHUFFLE_SPLIT_SPREAD;
+    const spread = Math.sin(progress * Math.PI) * band.w * SHUFFLE_SPLIT_SPREAD;
 
     for (let i = 0; i < SHUFFLE_CARD_COUNT; i++) {
       const side = i % 2 === 0 ? -1 : 1;
@@ -1658,4 +1772,14 @@ export class ClubCasinoSystem {
       );
     }
   }
+}
+
+function hintWrap(layout: CasinoLayout): Pick<TextOptions, 'wrap' | 'maxLines' | 'valign'> {
+  return { wrap: layout.hintLines > 1, maxLines: layout.hintLines, valign: 'middle' };
+}
+
+/** The landscape footer button is too narrow for both the full name and the key. */
+function leaveLabel(keyHints: boolean, mode: CasinoLayout['mode']): string {
+  if (!keyHints) return 'Leave Table';
+  return mode === 'landscape' ? 'Leave [Esc]' : 'Leave Table [Esc]';
 }

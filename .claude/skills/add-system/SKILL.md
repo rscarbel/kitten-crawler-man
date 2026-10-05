@@ -17,19 +17,19 @@ A boss room's props, slow ground, hazards and interactables are not a new top-le
 
 - `DynamiteSystem` — `constructor(private readonly gameMap: GameMap)`, `update(ctx)`, `render(...)`, exposes an `explosionSoundPending` flag the scene drains.
 - `TreasureChestSystem` — no ctor deps; imperative API (`addWoodenChest`) plus callback setters (`onChestOpened`).
-- `StairwellSystem` — `constructor(gameMap, levelDef, onDescend)`; `update(ctx)`, `handleClick(mx, my, canvas): boolean`, separate render methods for world vs. menu.
+- `StairwellSystem` — `constructor(gameMap, levelDef, onDescend)`; `update(ctx)`, world render methods, and the state its prompt reads (`menuOpen`, `descentPrompt()`, `descend()`, `closeMenu()`); the prompt itself is a `choiceModalSurface` in `src/ui/screens/dialogs/stairwellPrompt.ts`.
 
 ## Checklist
 
 1. **Class**: `class FooSystem implements GameSystem` in `src/systems/FooSystem.ts`. Constructor takes explicit deps — typically `gameMap`, sometimes `bus`, and an `addMob` callback if it spawns mobs (pass `(mob) => world.roster.add(mob)`).
 2. **Construct**: add a field on `DungeonScene` and instantiate in its constructor near the other systems.
 3. **Update**: call `this.foo.update(ctx)` in `DungeonScene.updateGameplay()`. Order matters — `src/systems/GameLoopPhases.ts` documents the 9 phases; place the call next to systems in the same phase.
-4. **Render**: add render calls where appropriate. World-space entities that should Y-sort go through `RenderPipeline`'s entity pass (sorted by `.y`); overlays/menus render after the pipeline.
-5. **Input**: mouse — add a `handleClick(...): boolean` and insert it into the scene's `handleClick` priority chain (return `true` to consume; order in that chain is the UI stacking order). Keyboard — add to `GameplayInputHandler`'s action bindings and Esc chain; respect `isSuppressed()`.
+4. **Render**: add render calls where appropriate. World-space entities that should Y-sort go through `RenderPipeline`'s entity pass (sorted by `.y`); world text and bars use `src/ui/world/`. Menus, dialogs and HUD pieces are never drawn from a system's render call: they are surfaces, top-band entries or toasts drawn in `ui.frame` (see `add-ui`).
+5. **Input**: anything on screen that takes a press is a surface mounted on the scene's `UiRoot` (see below); world taps arrive only through the scene's `handleWorldPointer`. Keyboard — a surface's `onKey` gets keys first; gameplay keys go in `GameplayInputHandler`'s action bindings and respect `isSuppressed()`.
 6. **Audio**: don't hold an audio reference — set pending flags the scene drains, or emit an EventBus event `AudioManager.wireEvents` maps to a sound (see `add-sound`).
 7. **Events**: communicate with other systems via `bus.emit` / `bus.on` (`src/core/EventBus.ts`); add new event names to the `GameEvents` interface with a typed payload. `bus.on` returns an unsubscribe fn; the bus is cleared on scene exit.
 8. **Cleanup**: implement `dispose()` if the system holds DOM listeners or timers.
-9. **Overlay**: if it can raise a panel that owns the screen, add a claim to the scene's `overlayClaims` getter (see below) rather than a new boolean on the scene.
+9. **Overlay**: if it can raise a panel that owns the screen, give it a `surface()` and mount it on the scene's `UiRoot` (see below) rather than a new boolean on the scene.
 
 Finish with the `dev-workflow` gates (typecheck, lint, format).
 
@@ -122,44 +122,35 @@ than binding a handler that does nothing. Hotbar presses go through
 `activateHotbarSlot` (`src/systems/kits/hotbarActions.ts`); a scene's own slots
 get first refusal through `trySceneSlot`.
 
-## 5. Compose overlay claims
+## 5. Mount surfaces
 
-`overlayClaims` is one ordered list of everything that can own the screen, and it
-is the single source of truth for "a menu is up". `keyboardSuppressed`,
-`focusedOverlay`, `advanceFocusedOverlay` and `worldHalted`
-(`src/systems/kits/OverlayClaims.ts`) all read it, so the keyboard gate, the
-Space chain, the mobile tap route and the "is the world paused" test cannot drift
-apart. Each claim declares:
+Each scene owns one `UiRoot` (`src/ui/core/UiRoot.ts`, built with
+`createSceneUi`) and mounts every surface once. The stack — band, then open
+order — is the single source of truth for "a menu is up": draw order, which
+surface a press reaches, where Escape goes, `ui.worldHalted()`,
+`ui.keyboardLocked()` and `surfacesOverHud(ui)` (interaction-prompt
+suppression) all read it, so they cannot drift apart. Each surface declares:
 
-- `locksKeyboard` — is the rest of the keyboard locked out?
+- `band` — `hud`, `panel` (floats; blocks only its own area), `modal` or
+  `system` (cover the screen).
 - `haltsWorld` — does the world stop? False only for overlays the player must be
   able to walk during (a street conversation ends _because_ they walked off).
-- `space` — `advance` (with the call), `swallow`, or `passThrough` (the chat box
-  alone, whose DOM input needs the space character itself).
+- `locksKeyboard` — is the rest of the keyboard locked out without halting?
+- `close` — present means Escape closes it; `blocksEscape` stops Escape entirely.
 
-Whatever owns the screen has already had the press by the time a scene's own
-_polled_ interaction chain runs, so that chain has to be told. Two rules, both
-learned the hard way:
-
-- Withhold, don't clear. A scene that polls gates its chain on
-  `focusedOverlay(claims) === null`; calling `this.input.clear()` there drops the
-  movement keys too, and the one overlay that reaches that line is the
-  conversation the player has to be able to _walk away from_.
-- Mark the press spent the moment it is taken. `advanceFocusedOverlay` reports
-  `'advanced' | 'swallowed' | 'ignored'`; anything but `'ignored'` means the
-  press is gone, and the scene has to remember that, because a page turn that
-  closes the last page leaves no claim behind and the polled chain would read the
-  same press as "start that conversation again". Remember it in a flag re-armed
-  from the key _events_ (`interactPressStarted` / `interactReleased`), never from
-  `input.clear()` or the held-key set — a scene cannot tell its own clear apart
-  from a finger coming off the key.
+A key a surface consumes is spent until it is released (`SceneManager`), so the
+Space that turns a dialog's last page can never, held, reopen it in the polled
+interaction chain. Gate a polled chain on `surfacesOverHud(ui).length === 0` — withhold,
+don't `input.clear()`, which drops the movement keys too, and the one overlay
+that reaches that line is the conversation the player has to be able to _walk
+away from_.
 
 ## 6. Tear down
 
 `onExit` must: `bus.clear()`, dispose **every** kit it built (a multi-map scene
 disposes all of them — each `CombatKit` holds a `MobUpdateLoop`, whose pack-alert
-grid is a module-level handle that pins the whole roster), `clearButtonMouseState()`,
-and unbind the input handler.
+grid is a module-level handle that pins the whole roster) and unbind the input
+handler. `SceneManager` disposes the scene's `UiRoot`.
 
 ## 7. Give the place something to fight
 

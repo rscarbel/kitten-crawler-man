@@ -1,3 +1,6 @@
+import type { Rect } from '../core/geom';
+import { iconSquare } from './iconSquare';
+
 /**
  * Icons for the folded-for-carrying trebuchet and snare kits.
  *
@@ -9,20 +12,11 @@
  * disappears at hotbar size; a bold shape on a pale plate does not.
  */
 
-import type { ItemId } from '../../core/ItemDefs';
-
 /** The two kit ids this module can draw. Closed, so a new kit cannot ship iconless. */
 export type KitIconId = 'trebuchet_kit' | 'snare_kit';
 
-/** Every id this module can draw, the single source of truth for the id set below and for the icon bake gate. */
+/** Every id this module can draw, in the order the icon bake gate lays them out. */
 export const KIT_ICON_ID_LIST: readonly KitIconId[] = ['trebuchet_kit', 'snare_kit'];
-
-const KIT_ICON_IDS: ReadonlySet<string> = new Set<KitIconId>(KIT_ICON_ID_LIST);
-
-/** Whether `id` is a kit, and so drawable by {@link drawKitIcon}. */
-export function isKitIconId(id: ItemId): id is KitIconId {
-  return KIT_ICON_IDS.has(id);
-}
 
 const FULL_CIRCLE = Math.PI * 2;
 const OUTLINE = '#3a2414';
@@ -164,14 +158,9 @@ function drawSnareGlyph(ctx: CanvasRenderingContext2D, cx: number, cy: number, s
   );
 }
 
-/** Draws one kit's icon into a square icon region at `x`,`y`. */
-export function drawKitIcon(
-  ctx: CanvasRenderingContext2D,
-  id: KitIconId,
-  x: number,
-  y: number,
-  size: number,
-): void {
+/** Draws one kit's icon into the largest square centred in `rect`. */
+export function drawKitIcon(ctx: CanvasRenderingContext2D, rect: Rect, id: KitIconId): void {
+  const { x, y, size } = iconSquare(rect);
   ctx.save();
   ctx.beginPath();
   ctx.rect(x, y, size, size);

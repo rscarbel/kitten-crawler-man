@@ -2,7 +2,7 @@
  * Localhost-only harness for reviewing the generated ground tilesets, reached
  * via `?tiles` in `devBootScene` (see `game.ts`). Never on a production path.
  *
- * Three views, cycled by clicking:
+ * Three views, cycled by tapping the art or the header's view button:
  *
  *  - **Materials** — every material laid out over a large area with its variants
  *    and patch phases resolved exactly as the game renderer will resolve them.
@@ -19,9 +19,11 @@
  * boundary against a reimplementation of it would be worth nothing.
  */
 
-import { Scene } from '../core/Scene';
 import { viewportWidth, viewportHeight } from '../core/Viewport';
-import { drawText } from '../ui/TextBox';
+import { worldText } from '../ui/world/worldText';
+import { PRIMARY_BUTTON } from '../ui/core/pointer';
+import type { WorldGesture } from '../ui/core/UiRoot';
+import { PreviewScene, type PreviewControl } from './PreviewScene';
 import { getSpriteDef, type SpriteDef, type SpriteStateDef } from '../core/SpriteLoader';
 import { TILE_SIZE } from '../core/constants';
 import { groundFrameIndex, groundVariantCount } from '../map/ground/groundFrames';
@@ -42,10 +44,12 @@ import {
   GROUND_VARIANT_SALT,
   setFloorArtSeed,
 } from '../map/ground/floorArtSeed';
+import { previewInk } from '../ui/theme/previewInk';
+import { worldPalette } from '../ui/theme/worldInk';
 
-const BG_COLOR = '#12161f';
-const LABEL_COLOR = '#cbd5e1';
-const HINT_COLOR = '#94a3b8';
+const BG_COLOR = previewInk.bench.backdrop;
+const LABEL_COLOR = worldPalette.ink.secondary;
+const HINT_COLOR = worldPalette.ink.hint;
 
 /** Sheets reviewed by this scene, in display order. */
 const SHEET_KEYS = [
@@ -63,10 +67,7 @@ const PANEL_TILES_DOWN = 7;
 const PANEL_LABEL_HEIGHT = 20;
 const PANEL_GAP = 10;
 const MARGIN = 24;
-const HEADER_HEIGHT = 54;
-const TITLE_Y = 14;
-const SUBTITLE_Y = 36;
-const TITLE_SIZE = 20;
+const EMPTY_STATE_TITLE_SIZE = 18;
 const HINT_SIZE = 13;
 const META_SIZE = 11;
 const LABEL_BASELINE_NUDGE = 3;
@@ -116,6 +117,12 @@ interface MaterialEntry {
 
 type PreviewMode = 'materials' | 'transitions' | 'walls';
 
+const MODE_LABELS: Readonly<Record<PreviewMode, string>> = {
+  materials: 'materials',
+  transitions: 'transitions',
+  walls: 'walls',
+};
+
 const NEXT_MODE: Readonly<Record<PreviewMode, PreviewMode>> = {
   materials: 'transitions',
   transitions: 'walls',
@@ -132,7 +139,7 @@ const WALL_VIEW_THEMES: ReadonlyArray<{
 ];
 const WALL_VIEW_GAP_TILES = 1;
 
-export class TilePreviewScene extends Scene {
+export class TilePreviewScene extends PreviewScene {
   private mode: PreviewMode = 'materials';
   private scrollY = 0;
   private readonly materials: MaterialEntry[] = [];
@@ -181,18 +188,57 @@ export class TilePreviewScene extends Scene {
     }
   }
 
-  handleClick(): void {
+  private nextMode(): void {
     this.mode = NEXT_MODE[this.mode];
     this.scrollY = 0;
   }
 
-  handleContextMenu(): void {
+  private reseed(): void {
     this.artSeed = drawFloorArtSeed();
     this.repaint();
   }
 
-  handleWheel(deltaY: number): void {
-    this.scrollY = Math.max(0, this.scrollY + deltaY);
+  protected previewTitle(): string {
+    return this.mode === 'materials'
+      ? 'generated ground — materials — ?tiles'
+      : this.mode === 'transitions'
+        ? 'generated ground — transitions (live composite via corner masks) — ?tiles'
+        : 'dungeon walls — every wall shape, both floors — ?tiles';
+  }
+
+  protected previewCaptions(): readonly string[] {
+    return [
+      `art seed ${this.artSeed}`,
+      'tap to switch view · scroll to pan · right-click to reseed',
+    ];
+  }
+
+  protected previewControls(): readonly PreviewControl[] {
+    return [
+      {
+        id: 'view',
+        label: `view: ${MODE_LABELS[this.mode]}`,
+        onTap: () => {
+          this.nextMode();
+        },
+      },
+      {
+        label: 'new art seed',
+        onTap: () => {
+          this.reseed();
+        },
+      },
+    ];
+  }
+
+  protected handlePreviewWorldPointer(gesture: WorldGesture): void {
+    if (gesture.kind === 'wheel') {
+      this.scrollY = Math.max(0, this.scrollY + gesture.deltaY);
+      return;
+    }
+    if (gesture.kind !== 'up' || !gesture.tap) return;
+    if (gesture.button === PRIMARY_BUTTON) this.nextMode();
+    else this.reseed();
   }
 
   update(): void {
@@ -241,52 +287,36 @@ export class TilePreviewScene extends Scene {
     ctx.fillStyle = BG_COLOR;
     ctx.fillRect(0, 0, width, height);
 
+    const headerBottom = this.headerBottom;
+
     if (this.materials.length === 0) {
-      drawText(ctx, 'No generated ground sheets found.', { x: MARGIN, y: MARGIN, size: 18 });
-      drawText(ctx, 'Painting — the sheets arrive a few materials a frame.', {
+      worldText(ctx, 'No generated ground sheets found.', {
         x: MARGIN,
-        y: MARGIN + EMPTY_STATE_LINE_GAP,
+        y: headerBottom + MARGIN,
+        size: EMPTY_STATE_TITLE_SIZE,
+      });
+      worldText(ctx, 'Painting — the sheets arrive a few materials a frame.', {
+        x: MARGIN,
+        y: headerBottom + MARGIN + EMPTY_STATE_LINE_GAP,
         size: HINT_SIZE,
         color: HINT_COLOR,
       });
+      this.renderChrome(ctx);
       return;
     }
 
-    const title =
-      this.mode === 'materials'
-        ? 'Generated ground — materials'
-        : this.mode === 'transitions'
-          ? 'Generated ground — transitions (live composite via corner masks)'
-          : 'Dungeon walls — every wall shape, both floors';
-    drawText(ctx, title, {
-      x: MARGIN,
-      y: TITLE_Y,
-      size: TITLE_SIZE,
-      bold: true,
-      color: LABEL_COLOR,
-    });
-    drawText(
-      ctx,
-      `click to switch view · scroll to pan · right-click for a new art seed (${this.artSeed})`,
-      {
-        x: MARGIN,
-        y: SUBTITLE_Y,
-        size: HINT_SIZE,
-        color: HINT_COLOR,
-      },
-    );
-
     ctx.save();
     ctx.beginPath();
-    ctx.rect(0, HEADER_HEIGHT, width, height - HEADER_HEIGHT);
+    ctx.rect(0, headerBottom, width, height - headerBottom);
     ctx.clip();
-    ctx.translate(0, HEADER_HEIGHT - this.scrollY);
+    ctx.translate(0, headerBottom - this.scrollY);
 
     if (this.mode === 'materials') this.renderMaterials(ctx);
     else if (this.mode === 'transitions') this.renderTransitions(ctx);
     else this.renderWalls(ctx);
 
     ctx.restore();
+    this.renderChrome(ctx);
   }
 
   private readonly wallCases = buildWallCaseStructure();
@@ -303,7 +333,7 @@ export class TilePreviewScene extends Scene {
     WALL_VIEW_THEMES.forEach((theme, index) => {
       const originX = MARGIN + index * (panelW + WALL_VIEW_GAP_TILES * PREVIEW_TILE);
       const originY = PANEL_LABEL_HEIGHT;
-      drawText(ctx, theme.label, {
+      worldText(ctx, theme.label, {
         x: originX,
         y: LABEL_BASELINE_NUDGE,
         size: HINT_SIZE,
@@ -345,13 +375,13 @@ export class TilePreviewScene extends Scene {
         }
       }
 
-      drawText(ctx, entry.label, {
+      worldText(ctx, entry.label, {
         x: originX,
         y: originY - PANEL_LABEL_HEIGHT + LABEL_BASELINE_NUDGE,
         size: HINT_SIZE,
         color: LABEL_COLOR,
       });
-      drawText(ctx, `${entry.patchTiles}x${entry.patchTiles} patch · ${entry.variants} variants`, {
+      worldText(ctx, `${entry.patchTiles}x${entry.patchTiles} patch · ${entry.variants} variants`, {
         x: originX + panelWidth,
         y: originY - PANEL_LABEL_HEIGHT + LABEL_BASELINE_NUDGE,
         size: META_SIZE,
@@ -475,7 +505,7 @@ export class TilePreviewScene extends Scene {
         }
       }
 
-      drawText(ctx, `${base.label} -> ${over.label}`, {
+      worldText(ctx, `${base.label} -> ${over.label}`, {
         x: originX,
         y: originY - PANEL_LABEL_HEIGHT + LABEL_BASELINE_NUDGE,
         size: HINT_SIZE,

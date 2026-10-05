@@ -15,15 +15,20 @@
  *      move on; else advancePage(). Otherwise call skipToEnd().
  */
 
-import { drawBox } from './Box';
-import { drawText, measureTextBox } from './TextBox';
+import type { Rect } from './core/geom';
 import { drawQuestIcon } from './QuestIcon';
+import { chromeTarget } from './screens/dialogs/canvasChrome';
+import { TERMINAL_FONT_STACK, UI_FONT_STACK } from './theme/fonts';
+import { skinsFor } from './theme/skins';
+import { fontFor, type, type Theme } from './theme/tokens';
+import { drawGlass, fillRounded, strokeRounded, type PaintTarget } from './widgets/paint';
+import { measureText, text as drawLabel } from './widgets/text';
 import type { AudioManager } from '../audio/AudioManager';
 import { viewportWidth, viewportHeight } from '../core/Viewport';
 import { allocCanvas, surfaceContext } from '../core/canvasSurface';
 import type { Paragraphs } from '../dialog/line';
-import { paginate, splitSentences, type Page } from '../dialog/paginate';
-import type { SpeakerVoice, TextCase } from '../dialog/speakers';
+import { computeLineSpans, paginate, splitSentences, type Page } from '../dialog/paginate';
+import type { SpeakerTypeface, SpeakerVoice, TextCase } from '../dialog/speakers';
 
 let measuringCtx: CanvasRenderingContext2D | null = null;
 
@@ -65,23 +70,51 @@ const SPEAKER_ROW_Y = 10;
 const ICON_SIZE = 20;
 const ICON_GAP = 8;
 const TEXT_AREA_Y = 34;
-const TEXT_SIZE = 12;
-const TEXT_LINE_HEIGHT = 18;
-const SPEAKER_SIZE = 13;
-const FOOTER_HINT_SIZE = 10;
+const BODY_STYLE = type.body;
+const TEXT_LINE_HEIGHT = BODY_STYLE.lineHeight;
 const FOOTER_Y_FROM_BOTTOM = 18;
-const BORDER_RADIUS = 4;
 const TEXT_AREA_BOTTOM_GAP = 4;
 const QUEST_ICON_SIZE = 16;
 const QUEST_ICON_MARGIN = 10;
+const PORTRAIT_BORDER_WIDTH = 1;
+const SPEAKER_PLATE_BORDER_WIDTH = 1;
 
-// Colors — warm parchment/candlelight theme matching Mordecai's tutorial dialog
-const DIALOG_BG = 'rgba(10,8,6,0.92)';
-const BORDER_COLOR = '#c8a860';
-const BORDER_WIDTH = 2;
-const TEXT_COLOR = '#e8dfc8';
-const SPEAKER_COLOR = '#c8a860';
-const HINT_COLOR = '#7a6e5a';
+/** The CSS font family a speaker's body text is set in. */
+function bodyFontFamily(typeface: SpeakerTypeface): string {
+  return typeface === 'terminal' ? TERMINAL_FONT_STACK : UI_FONT_STACK;
+}
+
+/** The full CSS font the body text is measured and drawn in for `typeface`. */
+function bodyFont(typeface: SpeakerTypeface): string {
+  return fontFor(BODY_STYLE, bodyFontFamily(typeface));
+}
+
+/**
+ * `text` broken into the lines the box draws it on, by the same rule
+ * `paginate` counts them with, so a page's drawn lines never outnumber the
+ * lines it was cut to.
+ */
+function wrapBodyLines(text: string, maxWidth: number, typeface: SpeakerTypeface): string[] {
+  const ctx = measuringContext();
+  ctx.font = bodyFont(typeface);
+  const spans = computeLineSpans(text, maxWidth, (line) => ctx.measureText(line).width);
+  return spans.map((span) => text.slice(span.offset, span.offset + span.length));
+}
+
+const bodyThemes = new WeakMap<Theme, Map<string, Theme>>();
+
+/** `theme` with the body face of `typeface` in place of the UI face, built once per pair. */
+function bodyTheme(theme: Theme, typeface: SpeakerTypeface): Theme {
+  const family = bodyFontFamily(typeface);
+  if (family === theme.fontFamily) return theme;
+  const byFamily = bodyThemes.get(theme) ?? new Map<string, Theme>();
+  bodyThemes.set(theme, byFamily);
+  const cached = byFamily.get(family);
+  if (cached !== undefined) return cached;
+  const built: Theme = { ...theme, fontFamily: family };
+  byFamily.set(family, built);
+  return built;
+}
 
 /** Controls how the dialog body text is progressively revealed. */
 export type RevealMode = 'all' | 'sentence' | 'word' | 'letter';
@@ -96,6 +129,8 @@ export interface ResolvedSpeaker {
   readonly textCase: TextCase;
   /** Milliseconds between revealed elements — this speaker's own pace, not a box-wide setting. */
   readonly revealIntervalMs: number;
+  /** Omitted means the UI face. */
+  readonly typeface?: SpeakerTypeface;
 }
 
 export interface DialogBoxConfig {
@@ -111,8 +146,7 @@ export interface ShowOptions {
   /**
    * Shows the shared quest badge in the box's top-right corner. Set when the
    * conversation on screen matters for an active quest but offers the player
-   * no choice — a choice that matters wears the badge itself instead (see
-   * {@link ButtonOptions.questRelated}).
+   * no choice — a choice that matters wears the badge itself instead.
    */
   readonly questRelated: boolean;
   /**
@@ -125,11 +159,6 @@ export interface ShowOptions {
   readonly pageIndicator: () => string | null;
 }
 
-/** The indicator a caller with no larger request to count across wants: this line's own "n / N" over its display pages, or nothing when it only has one. */
-export function perLinePageIndicator(box: DialogBox): () => string | null {
-  return () => (box.pageCount() > 1 ? `${box.currentPageNumber()} / ${box.pageCount()}` : null);
-}
-
 /**
  * How many display pages `paragraphs` would split into at the live viewport,
  * without showing them — for a caller (`Conversation`) that has to count
@@ -138,11 +167,15 @@ export function perLinePageIndicator(box: DialogBox): () => string | null {
  * content against, so the count this returns for the line currently showing
  * always agrees with that box's own `pageCount()`.
  */
-export function countDisplayPages(paragraphs: Paragraphs, showFooterHint: boolean): number {
+export function countDisplayPages(
+  paragraphs: Paragraphs,
+  showFooterHint: boolean,
+  typeface: SpeakerTypeface = 'ui',
+): number {
   const { maxWidth, maxLines } = layoutBudget(showFooterHint);
   const ctx = measuringContext();
-  ctx.font = `${TEXT_SIZE}px monospace`;
-  const measure = (text: string): number => ctx.measureText(text).width;
+  ctx.font = bodyFont(typeface);
+  const measure = (line: string): number => ctx.measureText(line).width;
   return paginate(paragraphs, measure, maxWidth, maxLines).length;
 }
 
@@ -179,8 +212,17 @@ interface PageCache {
   readonly paragraphs: Paragraphs;
   readonly maxWidth: number;
   readonly maxLines: number;
+  /** The font string and the probe's width in it when the pages were cut. */
+  readonly font: string;
+  readonly fontProbeWidth: number;
   readonly pages: ReadonlyArray<Page>;
 }
+
+/**
+ * Measured to notice the face changing under an unchanged font string: the UI
+ * face can finish loading after a page was cut against its fallback.
+ */
+const FONT_PROBE_TEXT = 'The quick brown fox jumps over the lazy dog';
 
 /**
  * The current display page's computed geometry and text, exposed so a test
@@ -373,36 +415,18 @@ export class DialogBox {
   render(ctx: CanvasRenderingContext2D, alpha = 1): void {
     if (!this._visible || this._paragraphs === null || this._speaker === null) return;
 
-    this._sync();
-
-    const { maxWidth, maxHeight, chrome } = layoutBudget(this._showFooterHint);
-    const pageText = this._currentPage()?.text ?? '';
-    const { totalHeight } = measureTextBox(ctx, pageText, {
-      size: TEXT_SIZE,
-      width: maxWidth,
-      lineHeight: TEXT_LINE_HEIGHT,
-    });
-    this._height = Math.min(maxHeight, Math.max(DIALOG_HEIGHT, totalHeight + chrome));
-
+    this._fitHeight();
     const { x: dx, y: dy, width: dw } = this._computeRect();
+    const target = chromeTarget(ctx);
 
     ctx.save();
     if (alpha < 1) ctx.globalAlpha = alpha;
 
-    drawBox(ctx, {
-      x: dx,
-      y: dy,
-      width: dw,
-      height: this._height,
-      fill: DIALOG_BG,
-      border: BORDER_COLOR,
-      borderWidth: BORDER_WIDTH,
-      radius: BORDER_RADIUS,
-    });
+    drawGlass(target, { x: dx, y: dy, w: dw, h: this._height }, skinsFor(target.theme).panel.card);
 
-    this._renderSpeakerRow(ctx, dx, dy);
-    this._renderBodyText(ctx, dx, dy, dw);
-    this._renderFooterHint(ctx, dx, dy, dw);
+    this._renderSpeakerRow(target, dx, dy);
+    this._renderBodyText(target, dx, dy, dw);
+    this._renderFooterHint(target, dx, dy, dw);
     if (this._questRelated) {
       drawQuestIcon(ctx, dx + dw - QUEST_ICON_MARGIN, dy + QUEST_ICON_MARGIN, QUEST_ICON_SIZE);
     }
@@ -411,24 +435,37 @@ export class DialogBox {
   }
 
   /**
-   * The box's screen rectangle.
+   * Grows the box to the page now showing, between its resting height and
+   * the most the viewport allows.
+   */
+  private _fitHeight(): void {
+    if (this._paragraphs === null || this._speaker === null) return;
+    this._sync();
+    const { maxWidth, maxHeight, chrome } = layoutBudget(this._showFooterHint);
+    const pageText = this._currentPage()?.text ?? '';
+    const pageHeight = wrapBodyLines(pageText, maxWidth, this._typeface).length * TEXT_LINE_HEIGHT;
+    this._height = Math.min(maxHeight, Math.max(DIALOG_HEIGHT, pageHeight + chrome));
+  }
+
+  /**
+   * The box's screen rectangle, in canvas CSS pixels, sized to the page now
+   * showing.
    *
    * Exposed so callers that draw their own controls against the dialog — a row of
    * choice buttons above it, say — can position them from the real geometry
    * instead of re-deriving it from copies of these constants, which would drift
    * the moment the box is resized.
    */
-  rect(): { x: number; y: number; width: number; height: number } {
-    return { ...this._computeRect(), height: this._height };
+  rect(): Rect {
+    this._fitHeight();
+    const { x, y, width } = this._computeRect();
+    return { x, y, w: width, h: this._height };
   }
 
-  /**
-   * Returns true if the given canvas point falls inside the dialog box.
-   * Useful for routing click events.
-   */
+  /** Whether the canvas point falls inside the dialog box, its edge pixels included. */
   contains(px: number, py: number): boolean {
-    const { x, y, width } = this._computeRect();
-    return px >= x && px <= x + width && py >= y && py <= y + this._height;
+    const { x, y, w, h } = this.rect();
+    return px >= x && px <= x + w && py >= y && py <= y + h;
   }
 
   /**
@@ -443,7 +480,7 @@ export class DialogBox {
       textWidth: maxWidth,
       maxLines,
       pageText: this._currentPage()?.text ?? '',
-      font: `${TEXT_SIZE}px monospace`,
+      font: bodyFont(this._typeface),
     };
   }
 
@@ -464,18 +501,25 @@ export class DialogBox {
     if (paragraphs === null) return;
 
     const { maxWidth, maxLines } = layoutBudget(this._showFooterHint);
+    const font = bodyFont(this._typeface);
+    const ctx = measuringContext();
+    ctx.font = font;
+    const measure = (line: string): number => ctx.measureText(line).width;
+    const fontProbeWidth = measure(FONT_PROBE_TEXT);
     const cache = this._pageCache;
     const sameContent = cache !== null && cache.paragraphs === paragraphs;
-    const sameLayout = cache !== null && cache.maxWidth === maxWidth && cache.maxLines === maxLines;
+    const sameLayout =
+      cache !== null &&
+      cache.maxWidth === maxWidth &&
+      cache.maxLines === maxLines &&
+      cache.font === font &&
+      cache.fontProbeWidth === fontProbeWidth;
     if (cache !== null && sameContent && sameLayout) return;
 
     const previousStartOffset =
       cache !== null && sameContent ? (this._currentPage()?.startOffset ?? null) : null;
-    const ctx = measuringContext();
-    ctx.font = `${TEXT_SIZE}px monospace`;
-    const measure = (text: string): number => ctx.measureText(text).width;
     const pages = paginate(paragraphs, measure, maxWidth, maxLines);
-    this._pageCache = { paragraphs, maxWidth, maxLines, pages };
+    this._pageCache = { paragraphs, maxWidth, maxLines, font, fontProbeWidth, pages };
 
     if (previousStartOffset !== null) {
       this._currentPageIndex = this._pageIndexContaining(pages, previousStartOffset);
@@ -519,62 +563,79 @@ export class DialogBox {
     if (this._tokens.length > 0) this._playRevealSound();
   }
 
-  private _renderSpeakerRow(ctx: CanvasRenderingContext2D, dx: number, dy: number): void {
+  private get _typeface(): SpeakerTypeface {
+    return this._speaker?.typeface ?? 'ui';
+  }
+
+  private _renderSpeakerRow(target: PaintTarget, dx: number, dy: number): void {
     const speaker = this._speaker;
     if (speaker === null) return;
-    let speakerTextX = dx + DIALOG_PADDING;
+    const { ctx, theme } = target;
+    const { palette, radius, space } = theme;
+    let plateX = dx + DIALOG_PADDING;
     const rowY = dy + SPEAKER_ROW_Y;
 
     if (speaker.portrait !== null) {
-      ctx.drawImage(speaker.portrait, speakerTextX, rowY, ICON_SIZE, ICON_SIZE);
-      speakerTextX += ICON_SIZE + ICON_GAP;
+      const portrait = { x: plateX, y: rowY, w: ICON_SIZE, h: ICON_SIZE };
+      fillRounded(ctx, portrait, radius.sm, palette.surface.sunken);
+      ctx.drawImage(speaker.portrait, plateX, rowY, ICON_SIZE, ICON_SIZE);
+      strokeRounded(ctx, portrait, radius.sm, palette.border.strong, PORTRAIT_BORDER_WIDTH);
+      plateX += ICON_SIZE + ICON_GAP;
     }
 
     if (speaker.name !== null) {
-      drawText(ctx, speaker.name, {
-        x: speakerTextX,
-        y: rowY,
-        size: SPEAKER_SIZE,
-        bold: true,
-        color: SPEAKER_COLOR,
-      });
+      const nameWidth = measureText(target, speaker.name, { role: 'accent' });
+      const plate = { x: plateX, y: rowY, w: nameWidth + space.sm * 2, h: ICON_SIZE };
+      fillRounded(ctx, plate, radius.pill, palette.accent.soft);
+      strokeRounded(ctx, plate, radius.pill, palette.border.subtle, SPEAKER_PLATE_BORDER_WIDTH);
+      drawLabel(
+        target,
+        { ...plate, x: plate.x + space.sm, w: nameWidth },
+        {
+          text: speaker.name,
+          role: 'accent',
+        },
+      );
     }
   }
 
-  private _renderBodyText(ctx: CanvasRenderingContext2D, dx: number, dy: number, dw: number): void {
+  private _renderBodyText(target: PaintTarget, dx: number, dy: number, dw: number): void {
     const textAreaWidth = dw - DIALOG_PADDING * 2;
     const footerReserve = this._showFooterHint
       ? FOOTER_Y_FROM_BOTTOM + TEXT_AREA_BOTTOM_GAP
       : TEXT_AREA_BOTTOM_GAP;
     const textAreaHeight = this._height - TEXT_AREA_Y - footerReserve;
-    drawText(ctx, this._displayText, {
-      x: dx + DIALOG_PADDING,
-      y: dy + TEXT_AREA_Y,
-      size: TEXT_SIZE,
-      color: TEXT_COLOR,
-      width: textAreaWidth,
-      height: textAreaHeight,
-      lineHeight: TEXT_LINE_HEIGHT,
+    const linesThatFit = Math.max(0, Math.floor(textAreaHeight / TEXT_LINE_HEIGHT));
+    const lines = wrapBodyLines(this._displayText, textAreaWidth, this._typeface);
+    const body: PaintTarget = { ctx: target.ctx, theme: bodyTheme(target.theme, this._typeface) };
+    const color = target.theme.palette.text.primary;
+    lines.slice(0, linesThatFit).forEach((line, index) => {
+      drawLabel(
+        body,
+        {
+          x: dx + DIALOG_PADDING,
+          y: dy + TEXT_AREA_Y + index * TEXT_LINE_HEIGHT,
+          w: textAreaWidth,
+          h: TEXT_LINE_HEIGHT,
+        },
+        { text: line, style: BODY_STYLE, color },
+      );
     });
   }
 
-  private _renderFooterHint(
-    ctx: CanvasRenderingContext2D,
-    dx: number,
-    dy: number,
-    dw: number,
-  ): void {
+  private _renderFooterHint(target: PaintTarget, dx: number, dy: number, dw: number): void {
     if (!this._showFooterHint) return;
     const footerY = dy + this._height - FOOTER_Y_FROM_BOTTOM;
+    const row = {
+      x: dx + DIALOG_PADDING,
+      y: footerY,
+      w: dw - DIALOG_PADDING * 2,
+      h: target.theme.type.caption.lineHeight,
+    };
 
     const indicator = this._pageIndicator?.() ?? null;
     if (indicator !== null) {
-      drawText(ctx, indicator, {
-        x: dx + DIALOG_PADDING,
-        y: footerY,
-        size: FOOTER_HINT_SIZE,
-        color: HINT_COLOR,
-      });
+      drawLabel(target, row, { text: indicator, role: 'muted', tabular: true, valign: 'top' });
     }
 
     const hintLabel = !this.isFullyRevealed()
@@ -582,13 +643,7 @@ export class DialogBox {
       : this.isLastPageOfLine()
         ? '[Space / Click] Close'
         : '[Space / Click] Continue';
-    drawText(ctx, hintLabel, {
-      x: dx + dw - DIALOG_PADDING,
-      y: footerY,
-      size: FOOTER_HINT_SIZE,
-      color: HINT_COLOR,
-      align: 'right',
-    });
+    drawLabel(target, row, { text: hintLabel, role: 'muted', align: 'right', valign: 'top' });
   }
 
   private _computeRect(): { x: number; y: number; width: number } {

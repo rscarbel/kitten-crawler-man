@@ -42,7 +42,7 @@ import type { ConversationHandle } from '../../../dialog/request';
 import { MIDGE_ESCORT_NARRATION } from '../../../dialog/scripts/scenes/midgeEscort';
 import { findNearbyWalkableTile } from '../../../map/findWalkableTile';
 import type { TilePoint } from '../../../map/town/townPlan';
-import { PROGRESS_PRESETS, drawProgressBar } from '../../../ui/Box';
+import { worldBar } from '../../../ui/world/worldShapes';
 import type { CowPen } from '../cowPen';
 import { EscortAmbushSystem } from '../EscortAmbushSystem';
 import { IN_VIEW_TILES, MIDGE_COAT, MIDGE_COW_NAME, ROUTINE_WARM_TILES } from '../LivestockSystem';
@@ -627,14 +627,16 @@ export class MidgeEscort {
   renderAbove(ctx: CanvasRenderingContext2D, camX: number, camY: number): void {
     const cow = this.midge;
     if (cow === null || !cow.isAlive || this.phase !== 'escort_midge') return;
-    drawProgressBar(ctx, {
-      x: cow.x - camX,
-      y: cow.y - camY - MIDGE_BAR_RISE_PX,
-      width: TILE_SIZE,
-      height: MIDGE_BAR_HEIGHT_PX,
-      value: cow.hp / cow.maxHp,
-      ...PROGRESS_PRESETS.hp,
-    });
+    worldBar(
+      ctx,
+      {
+        x: cow.x - camX,
+        y: cow.y - camY - MIDGE_BAR_RISE_PX,
+        w: TILE_SIZE,
+        h: MIDGE_BAR_HEIGHT_PX,
+      },
+      { style: 'hp', value: cow.hp / cow.maxHp },
+    );
   }
 
   /** Screen space, over the fog: where the road's ambushers still out of sight are coming from. */

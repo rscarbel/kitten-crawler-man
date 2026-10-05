@@ -13,6 +13,7 @@ import {
   DEFAULT_XP_GROWTH_RATE,
   DEFAULT_FINAL_LEVEL_MULTIPLIER,
 } from './xpCurve';
+import type { Rect } from '../ui/core/geom';
 
 export type AbilityId = 'magic_missile' | 'protective_shell' | 'smush' | 'mongo';
 
@@ -76,14 +77,8 @@ export interface AbilityDef {
   killXp: number;
   maxLevel: number;
   perks: AbilityPerkDef[];
-  /** Draw the ability icon into a square region. Called by UI. */
-  renderIcon: (
-    ctx: CanvasRenderingContext2D,
-    x: number,
-    y: number,
-    size: number,
-    level: number,
-  ) => void;
+  /** Draw the ability icon into the largest square centred in `rect`. Called by UI. */
+  renderIcon: (ctx: CanvasRenderingContext2D, rect: Rect, level: number) => void;
 }
 
 export interface AbilityState {

@@ -15,29 +15,44 @@
  * — on a choice or confirm row — takes the row's default, which is the
  * accepting option and never a way out (see `defaultChoiceIndex`). Escape is
  * the only key that leaves.
+ *
+ * The box and everything drawn against it are laid out in canvas CSS pixels,
+ * the space the box paginates in, and painted under the inverse of the UI
+ * scale; their hit regions are registered in UI units.
  */
 
 import type { AudioManager } from '../audio/AudioManager';
+import type { SoundId } from '../audio/sounds';
 import { TILE_SIZE } from '../core/constants';
-import { ITEM_DEF, type ItemId } from '../core/ItemDefs';
-import { drawItemIcon } from '../ui/InventoryPanel';
-import { drawBox, BOX_PRESETS } from '../ui/Box';
-import { drawText, measureTextBox } from '../ui/TextBox';
-import {
-  BUTTON_PRESETS,
-  beginMenuFocus,
-  drawButton,
-  endMenuFocus,
-  focusMenuButton,
-  menuFocusIndex,
-  playButtonSound,
-  pointerOverRect,
-  suppressMenuFocus,
-} from '../ui/Button';
+import { keybindings } from '../core/Keybindings';
+import { viewportHeight } from '../core/Viewport';
 import { countDisplayPages, DialogBox } from '../ui/DialogBox';
-import type { OverlayInputClaim } from '../systems/kits/OverlayClaims';
+import {
+  ACTIVATE_KEYS,
+  FOCUS_MOVE_KEYS,
+  UI_TAP_SOUND,
+  type Band,
+  type HitHandlers,
+  type HitState,
+  type KeyModifiers,
+  type Surface,
+  type TapEvent,
+  type Ui,
+} from '../ui/core/UiRoot';
+import type { Rect } from '../ui/core/geom';
 import type { DialogLine, NonEmpty } from './line';
-import { resolveSpeaker } from './speakers';
+import {
+  drawChoiceButton,
+  drawFooterButton,
+  drawFooterHint,
+  drawRewardStrip,
+  footerButtonNaturalWidth,
+  footerHintHeight,
+  rewardStripHeight,
+  type RewardStripSize,
+} from '../ui/screens/dialogs/conversationChrome';
+import type { PaintTarget } from '../ui/widgets/paint';
+import { resolveSpeaker, speakerTypeface } from './speakers';
 import type {
   Choice,
   ConfirmKeyboardDefault,
@@ -75,12 +90,6 @@ const PENDING_LINE_FAILURE_TEXT = "…that didn't come through. Try asking again
 
 const CHOICE_BUTTON_WIDTH = 200;
 const MIN_CHOICE_BUTTON_WIDTH = 160;
-/**
- * The size a choice's label starts at. `drawButton` shrinks one that does
- * not fit its button, so a long question may be set smaller than its
- * neighbours.
- */
-export const CONVERSATION_CHOICE_LABEL_SIZE = 12;
 const CHOICE_BUTTON_HEIGHT = 36;
 const CHOICE_BUTTON_GAP = 8;
 const CHOICE_ROW_GAP = 8;
@@ -92,41 +101,41 @@ const SELECTED_CHOICE_MARKER = '▶ ';
 
 const FOOTER_PAD_X = 14;
 const FOOTER_Y_FROM_BOTTOM = 18;
-const FOOTER_HINT_SIZE = 10;
-const FOOTER_HINT_COLOR = '#7a6e5a';
+/** How far below the footer row's top the custom-advance button's bottom edge sits. */
+const FOOTER_BUTTON_DROP = 10;
 const FOOTER_BUTTON_HEIGHT = 22;
 const FOOTER_BUTTON_MIN_WIDTH = 90;
 const FOOTER_BUTTON_MAX_WIDTH = 220;
-const FOOTER_BUTTON_LABEL_PADDING = 24;
 
 const REWARD_STRIP_TOP_GAP = 12;
-const REWARD_STRIP_PAD = 9;
-const REWARD_ICON_SIZE = 36;
-const REWARD_ICON_TEXT_GAP = 10;
-const REWARD_HEADING_SIZE = 9;
-const REWARD_HEADING_HEIGHT = 13;
-const REWARD_NAME_SIZE = 12;
-const REWARD_NAME_HEIGHT = 16;
-const REWARD_LINE_SIZE = 10;
-const REWARD_LINE_SPACING = 13;
-const REWARD_XP_SIZE = 10;
-const REWARD_XP_HEIGHT = 14;
-const REWARD_HEADING_COLOR = 'rgba(148,163,184,0.9)';
-const REWARD_NAME_COLOR = '#facc15';
-const REWARD_LINE_COLOR = '#cbd5e1';
-const REWARD_XP_COLOR = '#4ade80';
-const REWARD_HEADING_TEXT = 'REWARD';
+/** Strip sizes tried in order until one fits beside the box. */
+const REWARD_STRIP_SIZES: readonly RewardStripSize[] = ['full', 'compact'];
 
-/** The keyboard/controller focus ring `Conversation` shares with every load-bearing quest scene it replaces. */
-const FOCUS_CONTEXT = 'quest-dialog';
+/** Whether a canvas point lies on `rect`, its far edges included, the way every press on the box is tested. */
+function touches(rect: Rect, x: number, y: number): boolean {
+  return x >= rect.x && x <= rect.x + rect.w && y >= rect.y && y <= rect.y + rect.h;
+}
 
 /**
- * Declared while a world-halting conversation is on a page being read, so the
- * ring changes identity between the page and the row it opens onto — which is
- * what lets the scene's key handler tell a Space struck at the row from one
- * still held down from the page before it.
+ * `rect`, in canvas CSS pixels, as a hit rect in UI units. Rounded outward
+ * with the far edges included: `handleClick` takes a rect's edge pixels, and a
+ * press there must not fall through to the world.
  */
-const PAGE_FOCUS_CONTEXT = `${FOCUS_CONTEXT}-page`;
+function toUiRect(rect: Rect, uiScale: number): Rect {
+  const left = Math.floor(rect.x / uiScale);
+  const top = Math.floor(rect.y / uiScale);
+  return {
+    x: left,
+    y: top,
+    w: Math.floor((rect.x + rect.w) / uiScale) + 1 - left,
+    h: Math.floor((rect.y + rect.h) / uiScale) + 1 - top,
+  };
+}
+
+/** The region id of choice `index` on row `rowSerial`: a fresh id per row, so focus walked onto one row never carries to the next. */
+function choiceRegionId(rowSerial: number, index: number): string {
+  return `row${rowSerial}/choice${index}`;
+}
 
 /**
  * The index a bare Space picks on a `choices` row, or null when it picks nothing.
@@ -152,21 +161,31 @@ export function defaultChoiceIndex(choices: readonly Choice[]): number | null {
   );
 }
 
-export interface ChoiceRect {
+/** A choice button where the last frame drew it, in canvas CSS pixels. */
+export interface PlacedChoice extends Rect {
   readonly index: number;
-  readonly x: number;
-  readonly y: number;
-  readonly w: number;
-  readonly h: number;
   /** The label as drawn, number included. */
   readonly label: string;
 }
 
-interface FooterButtonRect {
-  readonly x: number;
-  readonly y: number;
-  readonly w: number;
-  readonly h: number;
+/** What the conversation's surface is told by the scene mounting it. */
+export interface ConversationSurfaceOptions {
+  readonly id?: string;
+  /**
+   * Tried first on Space: lets the press go to the world instead (the player
+   * has walked off, or is pressing at someone else). Returns whether the
+   * world took it.
+   */
+  readonly handOffPress?: () => boolean;
+  /** What Escape does; `dismiss()` when omitted. */
+  readonly dismiss?: () => void;
+  /** When it returns false, Escape passes beneath. */
+  readonly wantsEscape?: () => boolean;
+  /**
+   * A press off the box while a halting request covers the screen, in canvas
+   * CSS pixels, for the few HUD controls that stay live under it.
+   */
+  readonly offBoxClick?: (x: number, y: number) => void;
 }
 
 /** What the last line's last page currently has the player choosing between. */
@@ -193,13 +212,12 @@ export class Conversation {
   private pendingResolvedText: string | null = null;
   private choiceRowRendered = false;
   /**
-   * Bumped every time a choice or confirm row comes up, so each row declares
-   * a focus ring of its own: a player who tabbed off the default on one row
-   * starts the next on its default again, and a key held across the change
-   * is recognised as predating the row.
+   * Bumped every time a choice or confirm row comes up, so each row's buttons
+   * register under ids of their own: a player who tabbed off the default on
+   * one row starts the next on its default again.
    */
   private choiceRowSerial = 0;
-  private choiceRects: ChoiceRect[] = [];
+  private choiceRects: PlacedChoice[] = [];
   private drawnSelectedIndex: number | null = null;
   /**
    * Which row was last drawn, and the choice the pointer was over then (null
@@ -212,7 +230,15 @@ export class Conversation {
    */
   private lastPointerOverRow: { readonly rowSerial: number; readonly index: number | null } | null =
     null;
-  private footerButtonRect: FooterButtonRect | null = null;
+  /** The last row whose default was handed keyboard focus as it came up. */
+  private focusSeededRow: number | null = null;
+  /**
+   * The choice the row last drew as selected. A press anywhere hides the
+   * focus ring, but a click past the box (a HUD button live under the
+   * conversation) has not chosen anything, so the selection holds.
+   */
+  private heldSelection: { readonly rowSerial: number; readonly index: number } | null = null;
+  private footerButtonRect: Rect | null = null;
   /**
    * The handle returned by the `open()` that is currently on screen — unique
    * per open, so a caller can ask `isActive` whether the beat it opened (or
@@ -235,7 +261,7 @@ export class Conversation {
   }
 
   /** Where the choice or confirm row was last drawn — for checking every button landed on screen and its label fits it. */
-  get choiceBounds(): ReadonlyArray<ChoiceRect> {
+  get choiceBounds(): ReadonlyArray<PlacedChoice> {
     return this.choiceRects;
   }
 
@@ -541,7 +567,7 @@ export class Conversation {
   private runChoice(choice: Choice): void {
     const handle = this.currentHandle;
     if (handle === null) return;
-    playButtonSound(this.audio);
+    this.audio?.play(UI_TAP_SOUND);
     choice.run(handle);
   }
 
@@ -576,23 +602,79 @@ export class Conversation {
     return false;
   }
 
-  /** A click or tap. Returns whether it landed on this conversation. */
+  /** What a click or tap can land on, in canvas CSS pixels: the box, its choice row and its footer button. Empty while closed. */
+  hitRects(): Rect[] {
+    if (this.request === null) return [];
+    const rects: Rect[] = [this.box.rect()];
+    for (const { x, y, w, h } of this.choiceRects) rects.push({ x, y, w, h });
+    if (this.footerButtonRect !== null) rects.push(this.footerButtonRect);
+    return rects;
+  }
+
+  /**
+   * The conversation as a surface, its claim read off the active request each
+   * time it is asked. A request that halts the world sits with the modals and
+   * covers the screen, and its choice row is the keyboard focus ring; one the
+   * player can walk away from floats over the HUD, takes only presses on its
+   * own box, and leaves the arrow keys to walking.
+   */
+  surface(opts: ConversationSurfaceOptions = {}): Surface {
+    const halts = (): boolean => this.request?.haltsWorld === true;
+    const locks = (): boolean => this.request?.locksKeyboard === true;
+    const surface: Surface = {
+      id: opts.id ?? 'conversation',
+      get band(): Band {
+        return halts() ? 'modal' : 'panel';
+      },
+      get haltsWorld(): boolean {
+        return halts();
+      },
+      get locksKeyboard(): boolean {
+        return locks();
+      },
+      isOpen: () => this.isOpen,
+      render: (ui) => this.renderSurface(ui, opts.offBoxClick),
+      onKey: (key, mods) => this.surfaceKey(key, mods, opts.handOffPress),
+      close: opts.dismiss ?? (() => void this.dismiss()),
+    };
+    const wantsEscape = opts.wantsEscape;
+    if (wantsEscape !== undefined) surface.wantsEscape = () => wantsEscape();
+    return surface;
+  }
+
+  /**
+   * A key offered to the surface. Digits pick; on a world-halting row the
+   * focus keys are left to the row's focus ring; the attack key (Space unless
+   * rebound) is otherwise the advance, once per fresh press.
+   */
+  private surfaceKey(
+    key: string,
+    mods: KeyModifiers,
+    handOffPress: (() => boolean) | undefined,
+  ): boolean {
+    if (this.handleKeyDown(key)) return true;
+    const rowOwnsFocusKeys = this.request?.haltsWorld === true && this.ending.kind !== 'none';
+    if (rowOwnsFocusKeys && (ACTIVATE_KEYS.has(key) || FOCUS_MOVE_KEYS.has(key))) return false;
+    if (keybindings.actionFor(key) !== 'attack') return false;
+    const freshPress = mods.repeat !== true && mods.predatesSurface !== true;
+    if (freshPress && handOffPress?.() !== true) this.advance();
+    return true;
+  }
+
+  /** A click or tap, in canvas CSS pixels. Returns whether it landed on this conversation. */
   handleClick(mx: number, my: number): boolean {
     if (this.request === null) return false;
     if (this.ending.kind === 'choices' || this.ending.kind === 'confirm') {
       for (const rect of this.choiceRects) {
-        if (mx >= rect.x && mx <= rect.x + rect.w && my >= rect.y && my <= rect.y + rect.h) {
+        if (touches(rect, mx, my)) {
           this.runChoice(this.currentChoiceRow()[rect.index]);
           return true;
         }
       }
     }
-    if (this.footerButtonRect !== null) {
-      const rect = this.footerButtonRect;
-      if (mx >= rect.x && mx <= rect.x + rect.w && my >= rect.y && my <= rect.y + rect.h) {
-        this.advance();
-        return true;
-      }
+    if (this.footerButtonRect !== null && touches(this.footerButtonRect, mx, my)) {
+      this.advance();
+      return true;
     }
     if (this.box.contains(mx, my)) {
       this.advance();
@@ -626,7 +708,9 @@ export class Conversation {
     let total = 0;
     let current = 0;
     request.lines.forEach((line, index) => {
-      const pages = isPendingLine(line) ? 1 : countDisplayPages(line.paragraphs, false);
+      const pages = isPendingLine(line)
+        ? 1
+        : countDisplayPages(line.paragraphs, false, speakerTypeface(line.speaker));
       if (index < this.lineIndex) current += pages;
       else if (index === this.lineIndex) current += this.box.currentPageNumber();
       total += pages;
@@ -634,63 +718,120 @@ export class Conversation {
     return { current, total };
   }
 
-  render(ctx: CanvasRenderingContext2D): void {
+  private renderSurface(ui: Ui, offBoxClick: ((x: number, y: number) => void) | undefined): void {
     const request = this.request;
     if (request === null) return;
-    this.box.render(ctx);
-    this.choiceRects = [];
-    this.drawnSelectedIndex = null;
-    this.footerButtonRect = null;
-
+    const scale = ui.uiScale;
     const boxRect = this.box.rect();
-    this.renderFooter(ctx, request, boxRect);
+    const rowUp = this.ending.kind !== 'none';
+    this.choiceRects = rowUp ? this.placeChoices(boxRect) : [];
+    this.drawnSelectedIndex = null;
+    this.footerButtonRect = this.placeFooterButton(ui, request, boxRect);
+    if (rowUp) this.choiceRowRendered = true;
 
-    if (this.ending.kind === 'choices' || this.ending.kind === 'confirm') {
-      this.choiceRowRendered = true;
-      this.renderChoiceRow(ctx, boxRect, request.haltsWorld);
-      return;
-    }
-    if (request.haltsWorld) suppressMenuFocus(PAGE_FOCUS_CONTEXT);
+    const tap = (e: TapEvent): void => {
+      const x = e.x * scale;
+      const y = e.y * scale;
+      if (!this.handleClick(x, y)) offBoxClick?.(x, y);
+    };
+    const pressable = (sound: SoundId | null): HitHandlers => ({
+      onTap: tap,
+      focusable: false,
+      sound,
+    });
+    if (request.haltsWorld) ui.hit('off-box', ui.screen, pressable(null));
+    ui.hit('box', toUiRect(boxRect, scale), pressable(null));
+    const footerButton = this.footerButtonRect;
+    const footerState =
+      footerButton === null
+        ? null
+        : ui.hit('advance', toUiRect(footerButton, scale), pressable(UI_TAP_SOUND));
+    const row = rowUp ? this.registerChoiceRow(ui, request.haltsWorld, tap) : null;
 
-    const isLastLine = this.lineIndex === request.lines.length - 1;
-    const onLastPage =
-      !this.isLineStillPending(request, this.lineIndex) &&
-      this.box.isLastPageOfLine() &&
-      this.box.isFullyRevealed();
-    if (isLastLine && onLastPage && request.reward !== null) {
-      this.renderRewardStrip(ctx, request.reward, boxRect);
+    const { ctx } = ui;
+    ctx.save();
+    ctx.scale(1 / scale, 1 / scale);
+    this.box.render(ctx);
+    this.renderFooter(ui, request, boxRect, footerState);
+    if (row !== null) {
+      this.paintChoiceRow(ui, request.haltsWorld, row);
+    } else {
+      const isLastLine = this.lineIndex === request.lines.length - 1;
+      const onLastPage =
+        !this.isLineStillPending(request, this.lineIndex) &&
+        this.box.isLastPageOfLine() &&
+        this.box.isFullyRevealed();
+      if (isLastLine && onLastPage && request.reward !== null) {
+        this.renderRewardStrip(ui, request.reward, boxRect);
+      }
     }
+    ctx.restore();
+  }
+
+  private footerRow(target: PaintTarget, boxRect: Rect, footerY: number): Rect {
+    return {
+      x: boxRect.x + FOOTER_PAD_X,
+      y: footerY,
+      w: boxRect.w - FOOTER_PAD_X * 2,
+      h: footerHintHeight(target.theme),
+    };
+  }
+
+  /** The label a line with a custom advance shows on its button, once its last page is read; null for none. */
+  private customAdvanceLabel(request: ConversationRequest): string | null {
+    if (this.ending.kind !== 'none') return null;
+    if (this.isLineStillPending(request, this.lineIndex)) return null;
+    const line = request.lines[this.lineIndex];
+    const onLastPageOfLine = this.box.isLastPageOfLine() && this.box.isFullyRevealed();
+    if (isPendingLine(line) || !onLastPageOfLine || line.advance.kind !== 'custom') return null;
+    return `1. ${line.advance.label}`;
+  }
+
+  private placeFooterButton(
+    target: PaintTarget,
+    request: ConversationRequest,
+    boxRect: Rect,
+  ): Rect | null {
+    const label = this.customAdvanceLabel(request);
+    if (label === null) return null;
+    const width = Math.max(
+      FOOTER_BUTTON_MIN_WIDTH,
+      Math.min(FOOTER_BUTTON_MAX_WIDTH, footerButtonNaturalWidth(target, label)),
+    );
+    const footerY = boxRect.y + boxRect.h - FOOTER_Y_FROM_BOTTOM;
+    return {
+      x: boxRect.x + boxRect.w - FOOTER_PAD_X - width,
+      y: footerY - FOOTER_BUTTON_HEIGHT + FOOTER_BUTTON_DROP,
+      w: width,
+      h: FOOTER_BUTTON_HEIGHT,
+    };
   }
 
   private renderFooter(
-    ctx: CanvasRenderingContext2D,
+    ui: Ui,
     request: ConversationRequest,
-    boxRect: { x: number; y: number; width: number; height: number },
+    boxRect: Rect,
+    footerState: HitState | null,
   ): void {
-    const footerY = boxRect.y + boxRect.height - FOOTER_Y_FROM_BOTTOM;
+    const footerY = boxRect.y + boxRect.h - FOOTER_Y_FROM_BOTTOM;
+    const row = this.footerRow(ui, boxRect, footerY);
     const { current, total } = this.displayPageTotals(request);
-    if (total > 1) {
-      drawText(ctx, `${current} / ${total}`, {
-        x: boxRect.x + FOOTER_PAD_X,
-        y: footerY,
-        size: FOOTER_HINT_SIZE,
-        color: FOOTER_HINT_COLOR,
-      });
-    }
+    if (total > 1) drawFooterHint(ui, row, `${current} / ${total}`, 'left');
 
     if (this.ending.kind !== 'none') {
-      this.renderRowFooterHint(ctx, request, boxRect, footerY);
+      this.renderRowFooterHint(ui, request, row);
       return;
     }
     if (this.isLineStillPending(request, this.lineIndex)) return;
 
-    const line = request.lines[this.lineIndex];
-    const onLastPageOfLine = this.box.isLastPageOfLine() && this.box.isFullyRevealed();
-    if (!isPendingLine(line) && onLastPageOfLine && line.advance.kind === 'custom') {
-      this.renderFooterButton(ctx, line.advance.label, boxRect, footerY);
+    const buttonLabel = this.customAdvanceLabel(request);
+    const button = this.footerButtonRect;
+    if (buttonLabel !== null && button !== null && footerState !== null) {
+      drawFooterButton(ui, button, buttonLabel, footerState);
       return;
     }
 
+    const onLastPageOfLine = this.box.isLastPageOfLine() && this.box.isFullyRevealed();
     const label = !this.box.isFullyRevealed()
       ? 'Skip'
       : onLastPageOfLine
@@ -698,13 +839,7 @@ export class Conversation {
           ? 'Close'
           : 'Continue'
         : 'Continue';
-    drawText(ctx, `[Space / Click] ${label}`, {
-      x: boxRect.x + boxRect.width - FOOTER_PAD_X,
-      y: footerY,
-      size: FOOTER_HINT_SIZE,
-      color: FOOTER_HINT_COLOR,
-      align: 'right',
-    });
+    drawFooterHint(ui, row, `[Space / Click] ${label}`, 'right');
   }
 
   /**
@@ -712,69 +847,21 @@ export class Conversation {
    * street conversation, whose arrow keys still walk. A world-halting row
    * draws its default as the focused button instead.
    */
-  private renderRowFooterHint(
-    ctx: CanvasRenderingContext2D,
-    request: ConversationRequest,
-    boxRect: { x: number; y: number; width: number; height: number },
-    footerY: number,
-  ): void {
+  private renderRowFooterHint(target: PaintTarget, request: ConversationRequest, row: Rect): void {
     if (request.haltsWorld) return;
     const label = this.keyboardDefaultLabel;
     if (label === null) return;
-    drawText(ctx, `[Space] ${label}`, {
-      x: boxRect.x + boxRect.width - FOOTER_PAD_X,
-      y: footerY,
-      size: FOOTER_HINT_SIZE,
-      color: FOOTER_HINT_COLOR,
-      align: 'right',
-    });
+    drawFooterHint(target, row, `[Space] ${label}`, 'right');
   }
 
-  private renderFooterButton(
-    ctx: CanvasRenderingContext2D,
-    label: string,
-    boxRect: { x: number; y: number; width: number; height: number },
-    footerY: number,
-  ): void {
-    ctx.save();
-    ctx.font = `${CONVERSATION_CHOICE_LABEL_SIZE}px sans-serif`;
-    const labelWidth = ctx.measureText(`1. ${label}`).width;
-    ctx.restore();
-    const width = Math.max(
-      FOOTER_BUTTON_MIN_WIDTH,
-      Math.min(FOOTER_BUTTON_MAX_WIDTH, labelWidth + FOOTER_BUTTON_LABEL_PADDING),
-    );
-    const x = boxRect.x + boxRect.width - FOOTER_PAD_X - width;
-    const y = footerY - FOOTER_BUTTON_HEIGHT + FOOTER_HINT_SIZE;
-    drawButton(ctx, {
-      x,
-      y,
-      width,
-      height: FOOTER_BUTTON_HEIGHT,
-      label: `1. ${label}`,
-      ...BUTTON_PRESETS.primary,
-      labelSize: CONVERSATION_CHOICE_LABEL_SIZE,
-      primaryAction: true,
-    });
-    this.footerButtonRect = { x, y, w: width, h: FOOTER_BUTTON_HEIGHT };
-  }
-
-  private renderChoiceRow(
-    ctx: CanvasRenderingContext2D,
-    boxRect: { x: number; y: number; width: number; height: number },
-    haltsWorld: boolean,
-  ): void {
+  /** Lays the choice or confirm row out above the box, wrapping onto as many rows as the screen above it allows. */
+  private placeChoices(boxRect: Rect): PlacedChoice[] {
     const choices = this.currentChoiceRow();
-    const defaultIndex = this.keyboardDefaultIndex();
-    const focusPrimaryByDefault = true;
-    const rowFocusContext = `${FOCUS_CONTEXT}-row-${this.choiceRowSerial}`;
-    if (haltsWorld) beginMenuFocus(rowFocusContext, focusPrimaryByDefault);
-
     const fitsInRow = Math.floor(
-      (boxRect.width + CHOICE_BUTTON_GAP) / (MIN_CHOICE_BUTTON_WIDTH + CHOICE_BUTTON_GAP),
+      (boxRect.w + CHOICE_BUTTON_GAP) / (MIN_CHOICE_BUTTON_WIDTH + CHOICE_BUTTON_GAP),
     );
     const rowPitch = CHOICE_BUTTON_HEIGHT + CHOICE_BUTTON_GAP;
-    const boxBottom = boxRect.y + boxRect.height;
+    const boxBottom = boxRect.y + boxRect.h;
     const rowsOnScreen = Math.max(
       1,
       Math.floor((boxBottom - CHOICES_MIN_TOP + CHOICE_BUTTON_GAP) / rowPitch),
@@ -786,169 +873,128 @@ export class Conversation {
     const rowCount = Math.ceil(choices.length / perRow);
     const buttonWidth = Math.min(
       CHOICE_BUTTON_WIDTH,
-      (boxRect.width - (perRow - 1) * CHOICE_BUTTON_GAP) / perRow,
+      (boxRect.w - (perRow - 1) * CHOICE_BUTTON_GAP) / perRow,
     );
     const stackedFromBox =
       boxRect.y - CHOICE_ROW_GAP - CHOICE_BUTTON_HEIGHT - (rowCount - 1) * rowPitch;
     const firstRowY = Math.max(CHOICES_MIN_TOP, stackedFromBox);
 
-    const placements = choices.map((choice, index) => {
+    return choices.map((choice, index) => {
       const row = Math.floor(index / perRow);
       const column = index % perRow;
       const inThisRow = Math.min(perRow, choices.length - row * perRow);
       const rowWidth = inThisRow * buttonWidth + (inThisRow - 1) * CHOICE_BUTTON_GAP;
-      const x =
-        boxRect.x + (boxRect.width - rowWidth) / 2 + column * (buttonWidth + CHOICE_BUTTON_GAP);
-      const y = firstRowY + row * rowPitch;
-      return { choice, index, x, y };
-    });
-
-    const hovered = placements.find((placement) =>
-      pointerOverRect(placement.x, placement.y, buttonWidth, CHOICE_BUTTON_HEIGHT),
-    );
-    const hoveredIndex = hovered?.index ?? null;
-    const lastPointer = this.lastPointerOverRow;
-    const rowWasAlreadyOnScreen = lastPointer?.rowSerial === this.choiceRowSerial;
-    const pointerMovedOntoChoice =
-      rowWasAlreadyOnScreen && hoveredIndex !== null && lastPointer.index !== hoveredIndex;
-    this.lastPointerOverRow = { rowSerial: this.choiceRowSerial, index: hoveredIndex };
-
-    // The selected look always marks what Space will take. On a world-halting
-    // row that is the focus ring's entry, so the pointer moves focus rather
-    // than drawing a hover look of its own. A row without a ring always takes
-    // its fixed default on Space, so that stays marked; the option under the
-    // pointer only gets the ordinary hover brighten, since a click still
-    // takes it.
-    let selectedIndex: number | null;
-    if (haltsWorld) {
-      if (pointerMovedOntoChoice) focusMenuButton(rowFocusContext, hoveredIndex);
-      const focusedIndex = menuFocusIndex(rowFocusContext);
-      const focusIsOnThisRow = focusedIndex !== null && focusedIndex < choices.length;
-      selectedIndex = focusIsOnThisRow ? focusedIndex : defaultIndex;
-    } else {
-      selectedIndex = defaultIndex;
-    }
-
-    this.drawnSelectedIndex = selectedIndex;
-    for (const { choice, index, x, y } of placements) {
       const numbered = index < MAX_NUMBERED_CHOICES;
-      const numberedLabel = numbered ? `${index + 1}. ${choice.label}` : choice.label;
-      const isSelected = index === selectedIndex;
-      const label = isSelected ? `${SELECTED_CHOICE_MARKER}${numberedLabel}` : numberedLabel;
-      drawButton(ctx, {
-        x,
-        y,
-        width: buttonWidth,
-        height: CHOICE_BUTTON_HEIGHT,
-        label,
-        ...(isSelected ? BUTTON_PRESETS.dialogChoiceSelected : BUTTON_PRESETS.dialogChoice),
-        labelSize: CONVERSATION_CHOICE_LABEL_SIZE,
-        primaryAction: index === defaultIndex,
-        questRelated: choice.tone === 'quest',
-        selectionDrawnByCaller: haltsWorld || isSelected,
-      });
-      this.choiceRects.push({ index, x, y, w: buttonWidth, h: CHOICE_BUTTON_HEIGHT, label });
-    }
-
-    if (haltsWorld) endMenuFocus();
-  }
-
-  private rewardTextWidth(stripWidth: number): number {
-    return stripWidth - REWARD_STRIP_PAD * 2 - REWARD_ICON_SIZE - REWARD_ICON_TEXT_GAP;
-  }
-
-  private rewardStripHeight(
-    ctx: CanvasRenderingContext2D,
-    reward: DialogReward,
-    stripWidth: number,
-  ): number {
-    const { lineCount } = measureTextBox(ctx, reward.lines.join('\n'), {
-      width: this.rewardTextWidth(stripWidth),
-      size: REWARD_LINE_SIZE,
-      lineHeight: REWARD_LINE_SPACING,
+      return {
+        index,
+        x: boxRect.x + (boxRect.w - rowWidth) / 2 + column * (buttonWidth + CHOICE_BUTTON_GAP),
+        y: firstRowY + row * rowPitch,
+        w: buttonWidth,
+        h: CHOICE_BUTTON_HEIGHT,
+        label: numbered ? `${index + 1}. ${choice.label}` : choice.label,
+      };
     });
-    const textHeight =
-      REWARD_HEADING_HEIGHT +
-      REWARD_NAME_HEIGHT +
-      lineCount * REWARD_LINE_SPACING +
-      (reward.xp > 0 ? REWARD_XP_HEIGHT : 0);
-    return REWARD_STRIP_PAD * 2 + Math.max(REWARD_ICON_SIZE, textHeight);
-  }
-
-  private renderRewardStrip(
-    ctx: CanvasRenderingContext2D,
-    reward: DialogReward,
-    boxRect: { x: number; y: number; width: number; height: number },
-  ): void {
-    const width = boxRect.width;
-    const height = this.rewardStripHeight(ctx, reward, width);
-    const x = boxRect.x;
-    const y = boxRect.y + boxRect.height + REWARD_STRIP_TOP_GAP;
-    drawBox(ctx, { x, y, width, height, ...BOX_PRESETS.panel });
-
-    const innerX = x + REWARD_STRIP_PAD;
-    const innerY = y + REWARD_STRIP_PAD;
-    const itemId: ItemId = reward.itemId;
-    drawItemIcon(ctx, { ...ITEM_DEF[itemId], quantity: 1 }, innerX, innerY, REWARD_ICON_SIZE);
-
-    const textX = innerX + REWARD_ICON_SIZE + REWARD_ICON_TEXT_GAP;
-    const textWidth = this.rewardTextWidth(width);
-    drawText(ctx, REWARD_HEADING_TEXT, {
-      x: textX,
-      y: innerY,
-      size: REWARD_HEADING_SIZE,
-      bold: true,
-      color: REWARD_HEADING_COLOR,
-    });
-    drawText(ctx, reward.displayName, {
-      x: textX,
-      y: innerY + REWARD_HEADING_HEIGHT,
-      size: REWARD_NAME_SIZE,
-      bold: true,
-      color: REWARD_NAME_COLOR,
-    });
-    const linesY = innerY + REWARD_HEADING_HEIGHT + REWARD_NAME_HEIGHT;
-    drawText(ctx, reward.lines.join('\n'), {
-      x: textX,
-      y: linesY,
-      width: textWidth,
-      lineHeight: REWARD_LINE_SPACING,
-      size: REWARD_LINE_SIZE,
-      color: REWARD_LINE_COLOR,
-    });
-    if (reward.xp > 0) {
-      const { lineCount } = measureTextBox(ctx, reward.lines.join('\n'), {
-        width: textWidth,
-        size: REWARD_LINE_SIZE,
-        lineHeight: REWARD_LINE_SPACING,
-      });
-      drawText(ctx, `+${reward.xp} XP`, {
-        x: textX,
-        y: linesY + lineCount * REWARD_LINE_SPACING,
-        size: REWARD_XP_SIZE,
-        bold: true,
-        color: REWARD_XP_COLOR,
-      });
-    }
   }
 
   /**
-   * This conversation's claim on the screen: `haltsWorld` and `focusContext`
-   * both read straight off the active request, so a scene's `update()` and
-   * the focus ring this panel draws can never drift from what it actually
-   * does. `null` while nothing is open, so a caller with several possible
-   * conversation owners can just spread every one of them into its claim
-   * list and let `isOpen: false` make the unused ones inert.
+   * Registers the row's buttons and decides which one wears the selected
+   * look, which always marks what Space will take. On a world-halting row
+   * that is the focus ring's entry, which starts on the row's default and
+   * follows the pointer; a row without a ring always takes its fixed default.
    */
-  overlayClaim(): OverlayInputClaim {
-    const request = this.request;
-    const haltsWorld = request?.haltsWorld ?? false;
-    return {
-      isOpen: request !== null,
-      space: { kind: 'advance', advance: () => this.advance() },
-      locksKeyboard: request?.locksKeyboard ?? false,
-      haltsWorld,
-      focusContext: haltsWorld ? FOCUS_CONTEXT : null,
+  private registerChoiceRow(
+    ui: Ui,
+    haltsWorld: boolean,
+    tap: (e: TapEvent) => void,
+  ): { readonly states: readonly HitState[]; readonly selectedIndex: number | null } {
+    const serial = this.choiceRowSerial;
+    const defaultIndex = this.keyboardDefaultIndex();
+    if (haltsWorld && this.focusSeededRow !== serial) {
+      this.focusSeededRow = serial;
+      if (defaultIndex !== null) ui.focus(choiceRegionId(serial, defaultIndex));
+    }
+    const scale = ui.uiScale;
+    const states = this.choiceRects.map((placed) =>
+      ui.hit(choiceRegionId(serial, placed.index), toUiRect(placed, scale), {
+        onTap: tap,
+        focusable: haltsWorld,
+        primary: haltsWorld && placed.index === defaultIndex,
+        sound: null,
+      }),
+    );
+
+    const pointer = ui.pointer;
+    const hovered =
+      pointer === null
+        ? undefined
+        : this.choiceRects.find((placed) => touches(placed, pointer.x * scale, pointer.y * scale));
+    const hoveredIndex = hovered?.index ?? null;
+    const lastPointer = this.lastPointerOverRow;
+    const rowWasAlreadyOnScreen = lastPointer?.rowSerial === serial;
+    const pointerMovedOntoChoice =
+      rowWasAlreadyOnScreen && hoveredIndex !== null && lastPointer.index !== hoveredIndex;
+    this.lastPointerOverRow = { rowSerial: serial, index: hoveredIndex };
+
+    if (!haltsWorld) return { states, selectedIndex: defaultIndex };
+    const select = (index: number | null) => {
+      this.heldSelection = index === null ? null : { rowSerial: serial, index };
+      return { states, selectedIndex: index };
     };
+    if (pointerMovedOntoChoice) {
+      ui.focus(choiceRegionId(serial, hoveredIndex));
+      return select(hoveredIndex);
+    }
+    const focusedIndex = states.findIndex((state) => state.focused);
+    if (focusedIndex !== -1) return select(focusedIndex);
+    const held = this.heldSelection;
+    if (held !== null && held.rowSerial === serial) {
+      ui.focus(choiceRegionId(serial, held.index));
+      return select(held.index);
+    }
+    return select(defaultIndex);
+  }
+
+  private paintChoiceRow(
+    ui: Ui,
+    haltsWorld: boolean,
+    row: { readonly states: readonly HitState[]; readonly selectedIndex: number | null },
+  ): void {
+    const choices = this.currentChoiceRow();
+    const serial = this.choiceRowSerial;
+    this.drawnSelectedIndex = row.selectedIndex;
+    this.choiceRects = this.choiceRects.map((placed) => {
+      const isSelected = placed.index === row.selectedIndex;
+      const label = isSelected ? `${SELECTED_CHOICE_MARKER}${placed.label}` : placed.label;
+      drawChoiceButton(ui, placed, {
+        id: choiceRegionId(serial, placed.index),
+        label,
+        tone: choices[placed.index].tone,
+        selected: isSelected,
+        hoverable: !haltsWorld,
+        state: row.states[placed.index],
+      });
+      return { ...placed, label };
+    });
+  }
+
+  private renderRewardStrip(target: PaintTarget, reward: DialogReward, boxRect: Rect): void {
+    const width = boxRect.w;
+    const placed = REWARD_STRIP_SIZES.map((size) => {
+      const height = rewardStripHeight(target, reward, width, size);
+      const belowY = boxRect.y + boxRect.h + REWARD_STRIP_TOP_GAP;
+      const aboveY = boxRect.y - REWARD_STRIP_TOP_GAP - height;
+      const lowestY = viewportHeight() - REWARD_STRIP_TOP_GAP - height;
+      const y = belowY <= lowestY ? belowY : aboveY >= 0 ? aboveY : null;
+      return { size, height, y, aboveY };
+    });
+    // The strip never covers the box: its footer holds the close hint and any
+    // custom-advance button. Failing every size beside it, the compact strip
+    // is pinned to the top of the screen, over the speaker row at worst.
+    const fitting = placed.find((placement) => placement.y !== null);
+    const compact = placed[placed.length - 1];
+    const size = fitting?.size ?? compact.size;
+    const height = fitting?.height ?? compact.height;
+    const y = fitting?.y ?? Math.max(0, compact.aboveY);
+    drawRewardStrip(target, reward, { x: boxRect.x, y, w: width, h: height }, size);
   }
 }

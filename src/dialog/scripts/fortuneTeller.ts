@@ -3,7 +3,7 @@
  * one fortune. Most draws are whimsical general fortunes; some are
  * quest-reactive omens that nod at what the player is (or should be) doing,
  * so the mystic feels like she actually sees the town's troubles.
- * `FortuneTellerPanel` owns the coin cost and the card flip — this module only
+ * `FortuneTable` owns the coin cost and the card flip — this module only
  * picks the words.
  *
  * Two people read in this town and they are not the same act. Madame Voss works

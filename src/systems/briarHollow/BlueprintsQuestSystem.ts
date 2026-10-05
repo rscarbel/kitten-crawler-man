@@ -41,9 +41,9 @@ import type { VillagerId } from '../../dialog/scripts/briarHollow';
 import type { ConversationTopic } from '../../dialog/request';
 import type { TilePoint } from '../../map/town/townPlan';
 import type { Player } from '../../Player';
-import type { MiniMapSystem, QuestMarkerType } from '../MiniMapSystem';
-import { phoneHudButtonRects, type Rect } from '../DungeonUIRenderer';
-import { hotbarStripRect } from '../../ui/InventoryPanel';
+import type { QuestMarkerType } from '../MiniMapSystem';
+import type { Rect } from '../../ui/core/geom';
+import type { TopBandEntry } from '../../ui/hud/topBand';
 import { doorwayBeaconTarget } from '../objectiveBeaconTargets';
 import {
   characterTarget,
@@ -60,7 +60,7 @@ import {
 } from './questGuidance';
 import type { QuestLineProvider, QuestOpening, VillagerContext } from './villagerCircumstances';
 import type { TopicProvider, VillagerConversationFlow } from './villagerTopics';
-import { drawQuestCounter, questCounterRect } from './QuestCounterHud';
+import { questCounterEntry } from './QuestCounterHud';
 import type { BlueprintsCrawler, BlueprintsQuestContext } from './blueprints/blueprintsContext';
 import { FENNA_COMPLETION_BARK } from './blueprints/blueprintsDialog';
 import {
@@ -123,8 +123,7 @@ export type BlueprintsQuestSystemDeps = Omit<
   };
 
 const TILE_CENTRE = 0.5;
-/** Clear space between the counter's slot and a step banner under it. */
-const BANNER_GAP_UNDER_COUNTER_PX = 10;
+const BLUEPRINTS_COUNTER_ENTRY_ID = 'blueprints-counter';
 
 export class BlueprintsQuestSystem implements QuestLineProvider, TopicProvider, TrackerSource {
   readonly fenna: FennaBlueprintsLines;
@@ -571,26 +570,28 @@ export class BlueprintsQuestSystem implements QuestLineProvider, TopicProvider, 
   }
 
   /**
-   * Screen space. The scythe's timing bar across the screen, clear of the HUD
-   * and a phone's buttons, whenever a swing is up. Under the resource strip,
-   * the step's own count while the party works through it — fence sections,
-   * then grain — and a step's banner under that. The count and the banner are
-   * hidden through the Plea's siege, when this quest stands down and the siege
-   * panel wants the room.
+   * Screen space: the scythe's timing bar across the screen whenever a swing
+   * is up, clear of every rect in `keepouts` (the HUD's panels, the minimap,
+   * the hotbar, a phone's buttons).
    */
-  renderHud(ctx: CanvasRenderingContext2D, miniMap: MiniMapSystem, hudRect: Rect): void {
-    const keepouts = [
-      ...phoneHudButtonRects(miniMap),
-      miniMap.screenRect,
-      hudRect,
-      hotbarStripRect(),
-    ];
+  renderHud(ctx: CanvasRenderingContext2D, keepouts: readonly Rect[]): void {
     this.harvest.renderHud(ctx, keepouts);
-    if (this.suppressedBySiege) return;
-    const text = this.counterText();
-    if (text !== null) drawQuestCounter(ctx, miniMap, hudRect, text);
-    const counter = questCounterRect(miniMap, hudRect);
-    this.moments.renderHud(ctx, counter.y + counter.h + BANNER_GAP_UNDER_COUNTER_PX);
+  }
+
+  /**
+   * The HUD's top-band cards: the step's own count while the party works
+   * through it — fence sections, then grain — and a step's banner. Both stand
+   * down through the Plea's siege, when this quest does and the siege's card
+   * wants the room.
+   */
+  topBandEntries(): TopBandEntry[] {
+    if (this.suppressedBySiege) return [];
+    const entries: TopBandEntry[] = [];
+    const counter = this.counterText();
+    if (counter !== null) entries.push(questCounterEntry(BLUEPRINTS_COUNTER_ENTRY_ID, counter));
+    const banner = this.moments.topBandEntry();
+    if (banner !== null) entries.push(banner);
+    return entries;
   }
 
   /** The step's count as the HUD shows it, or null in a step without one. */

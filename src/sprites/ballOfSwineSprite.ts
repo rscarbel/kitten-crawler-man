@@ -1,4 +1,4 @@
-import { drawText } from '../ui/TextBox';
+import { worldText } from '../ui/world/worldText';
 import { progressFrameIndex, walkFrameIndex } from '../core/SpriteRenderer';
 import { drawFigureCached, prewarmFigureState } from './figure/figureFrameCache';
 import { BALL_OF_SWINE_FIGURE } from './art/ballOfSwineFigure';
@@ -174,12 +174,11 @@ export function drawBallOfSwineStoppedWarning(
   const fontSize = Math.floor(ts * WARNING_TEXT_SIZE_RATIO);
 
   ctx.save();
-  drawText(ctx, 'VULNERABLE', {
+  worldText(ctx, 'VULNERABLE', {
     x: cx,
     y: topY - Math.round(fontSize * WARNING_TEXT_LIFT_RATIO),
     size: fontSize,
     bold: true,
-    font: 'monospace',
     color: '#fde68a',
     alpha: pulse,
     align: 'center',

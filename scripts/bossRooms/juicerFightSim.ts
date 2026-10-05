@@ -110,9 +110,6 @@ export interface JuicerFightSimOptions {
 
 const HEADLESS_MINIMAP: BossRoomMiniMap = {
   revealBossNeighborhood: () => undefined,
-  isExpanded: false,
-  EXPANDED_SIZE: 0,
-  NORMAL_SIZE: 0,
 };
 
 function centreOf(body: { x: number; y: number }): TilePoint {

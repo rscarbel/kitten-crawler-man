@@ -22,10 +22,14 @@
  * dev-only field.
  */
 
-import { Scene } from '../core/Scene';
 import { viewportWidth, viewportHeight } from '../core/Viewport';
-import { drawText } from '../ui/TextBox';
-import { drawBox } from '../ui/Box';
+import { worldText } from '../ui/world/worldText';
+import { inset, splitH, splitV, type Rect } from '../ui/core/geom';
+import type { Surface, Ui, WorldGesture } from '../ui/core/UiRoot';
+import { card } from '../ui/widgets/card';
+import { lineHeightOf, measureText, text } from '../ui/widgets/text';
+import { skinsFor } from '../ui/theme/skins';
+import { PreviewScene, type PreviewControl } from './PreviewScene';
 import { generateOverworld, type OverworldData } from '../map/OverworldGenerator';
 import {
   collectBuildingPlots,
@@ -37,6 +41,7 @@ import {
 import type { TilePoint, TileRect } from '../map/town/townPlan';
 import { level3 } from '../levels/index';
 import type { TileContent } from '../map/tileTypes';
+import { TOWN_MAP_INK } from '../ui/theme/townMapInk';
 import {
   FloorTypeValue,
   VOID_TYPE,
@@ -92,104 +97,88 @@ import {
   CROP_FIELD,
 } from '../map/tileTypes';
 
-const BG_COLOR = '#0b0e14';
-const LABEL_COLOR = '#e2e8f0';
-const HINT_COLOR = '#94a3b8';
-const METRIC_LABEL_COLOR = '#9aa7bd';
-const FOOTPRINT_STROKE = 'rgba(255, 214, 102, 0.85)';
+const BG_COLOR = TOWN_MAP_INK.bgColor;
+const LABEL_COLOR = TOWN_MAP_INK.labelColor;
+const FOOTPRINT_STROKE = TOWN_MAP_INK.footprintStroke;
 /** A sprite's art beyond the ground it occupies — today only the tower's spire. */
-const OVERHANG_STROKE = 'rgba(255, 214, 102, 0.28)';
-const DOOR_MARKER_COLOR = '#ff5d8f';
-const SAFE_RADIUS_STROKE = 'rgba(94, 234, 212, 0.7)';
-const CIRCUS_STROKE = 'rgba(196, 132, 252, 0.8)';
+const OVERHANG_STROKE = TOWN_MAP_INK.overhangStroke;
+const DOOR_MARKER_COLOR = TOWN_MAP_INK.doorMarkerColor;
+const SAFE_RADIUS_STROKE = TOWN_MAP_INK.safeRadiusStroke;
+const CIRCUS_STROKE = TOWN_MAP_INK.circusStroke;
 /** Briar Hollow's footprints and ruins: warm, to read against the town's cool strokes. */
-const VILLAGE_STROKE = 'rgba(251, 191, 36, 0.85)';
-const VILLAGE_DISTRICT_LABEL_COLOR = '#fcd34d';
-const START_TILE_COLOR = '#38bdf8';
-const ESCAPE_TILE_COLOR = '#f97316';
-const UNKNOWN_TILE_COLOR = '#ff00ff';
+const VILLAGE_STROKE = TOWN_MAP_INK.villageStroke;
+const VILLAGE_DISTRICT_LABEL_COLOR = TOWN_MAP_INK.villageDistrictLabelColor;
+const START_TILE_COLOR = TOWN_MAP_INK.startTileColor;
+const ESCAPE_TILE_COLOR = TOWN_MAP_INK.escapeTileColor;
+const UNKNOWN_TILE_COLOR = TOWN_MAP_INK.unknownTileColor;
 
 /** Schematic fill per tile type. Anything unmapped renders magenta so it is obvious. */
 const TILE_COLORS = new Map<number, string>([
-  [VOID_TYPE, '#05070b'],
-  [FloorTypeValue.grass, '#3f6b46'],
-  [GRASSY_WEED, '#4a7a50'],
-  [FloorTypeValue.road, '#9a8163'],
-  [DIRT_PATCH, '#8a7154'],
-  [TREE, '#1f3d2b'],
-  [RUBBLE, '#5a5348'],
-  [RUINED_WALL, '#6b6459'],
-  [BUILDING_WALL, '#cbb89a'],
-  [ROOF_THATCH, '#c9a25e'],
-  [ROOF_SLATE, '#7b8794'],
-  [ROOF_RED, '#a4553e'],
-  [ROOF_GREEN, '#4f7a56'],
-  [FOUNTAIN, '#3fa9c0'],
-  [TORCH, '#e8a33d'],
-  [WELL, '#6f6250'],
-  [MAIN_TOWER, '#d8c9a8'],
-  [SPRITE_BUILDING, '#d8c9a8'],
+  [VOID_TYPE, TOWN_MAP_INK.tiles.voidType],
+  [FloorTypeValue.grass, TOWN_MAP_INK.tiles.grass],
+  [GRASSY_WEED, TOWN_MAP_INK.tiles.grassyWeed],
+  [FloorTypeValue.road, TOWN_MAP_INK.tiles.road],
+  [DIRT_PATCH, TOWN_MAP_INK.tiles.dirtPatch],
+  [TREE, TOWN_MAP_INK.tiles.tree],
+  [RUBBLE, TOWN_MAP_INK.tiles.rubble],
+  [RUINED_WALL, TOWN_MAP_INK.tiles.ruinedWall],
+  [BUILDING_WALL, TOWN_MAP_INK.tiles.buildingWall],
+  [ROOF_THATCH, TOWN_MAP_INK.tiles.roofThatch],
+  [ROOF_SLATE, TOWN_MAP_INK.tiles.roofSlate],
+  [ROOF_RED, TOWN_MAP_INK.tiles.roofRed],
+  [ROOF_GREEN, TOWN_MAP_INK.tiles.roofGreen],
+  [FOUNTAIN, TOWN_MAP_INK.tiles.fountain],
+  [TORCH, TOWN_MAP_INK.tiles.torch],
+  [WELL, TOWN_MAP_INK.tiles.well],
+  [MAIN_TOWER, TOWN_MAP_INK.tiles.mainTower],
+  [SPRITE_BUILDING, TOWN_MAP_INK.tiles.spriteBuilding],
   // Darker than any street so the ring reads at a glance, which is the one thing
   // this view exists to show. The wall's in-game stone is much lighter.
-  [TOWN_WALL, '#4b4640'],
-  [VERGE_GRASS, '#5e7345'],
-  [YARD_GRAVEL, '#7d7568'],
-  [LANE_STREET, '#9c8768'],
-  [COBBLE_STREET, '#a89880'],
-  [PLAZA_STONE, '#c0b49c'],
-  [GARDEN_PLANTING, '#4f6a2c'],
-  [FENCE, '#8a6a3c'],
+  [TOWN_WALL, TOWN_MAP_INK.tiles.townWall],
+  [VERGE_GRASS, TOWN_MAP_INK.tiles.vergeGrass],
+  [YARD_GRAVEL, TOWN_MAP_INK.tiles.yardGravel],
+  [LANE_STREET, TOWN_MAP_INK.tiles.laneStreet],
+  [COBBLE_STREET, TOWN_MAP_INK.tiles.cobbleStreet],
+  [PLAZA_STONE, TOWN_MAP_INK.tiles.plazaStone],
+  [GARDEN_PLANTING, TOWN_MAP_INK.tiles.gardenPlanting],
+  [FENCE, TOWN_MAP_INK.tiles.fence],
   // The floor-3 wilderness, in this view's own brighter schematic palette. A
   // type missing here draws in `UNKNOWN_TILE_COLOR` magenta rather than grey,
   // which at least fails loudly — but the whole point of the view is reading the
   // generator's output at a glance, so every generated type belongs here.
-  [FloorTypeValue.water, '#2f6f8a'],
-  [HIGHLAND_GRASS, '#7d7c4c'],
-  [SCREE, '#7a766e'],
-  [WILDFLOWER_TUFT, '#5a8a52'],
-  [PEBBLE_SCATTER, '#8a8478'],
-  [BRIDGE, '#a07a4a'],
-  [RIVER_ROCK, '#5a6c74'],
-  [BOULDER_SMALL, '#8a857c'],
-  [BOULDER_LARGE, '#9a958c'],
-  [CLIFF, '#645f56'],
-  [CAMPFIRE, '#e8862f'],
-  [GOBLIN_TENT, '#8f6f42'],
-  [DEN_HOLLOW, '#3a352f'],
+  [FloorTypeValue.water, TOWN_MAP_INK.tiles.water],
+  [HIGHLAND_GRASS, TOWN_MAP_INK.tiles.highlandGrass],
+  [SCREE, TOWN_MAP_INK.tiles.scree],
+  [WILDFLOWER_TUFT, TOWN_MAP_INK.tiles.wildflowerTuft],
+  [PEBBLE_SCATTER, TOWN_MAP_INK.tiles.pebbleScatter],
+  [BRIDGE, TOWN_MAP_INK.tiles.bridge],
+  [RIVER_ROCK, TOWN_MAP_INK.tiles.riverRock],
+  [BOULDER_SMALL, TOWN_MAP_INK.tiles.boulderSmall],
+  [BOULDER_LARGE, TOWN_MAP_INK.tiles.boulderLarge],
+  [CLIFF, TOWN_MAP_INK.tiles.cliff],
+  [CAMPFIRE, TOWN_MAP_INK.tiles.campfire],
+  [GOBLIN_TENT, TOWN_MAP_INK.tiles.goblinTent],
+  [DEN_HOLLOW, TOWN_MAP_INK.tiles.denHollow],
   // Briar Hollow, in the same schematic palette.
-  [HOLLOW_WALL, '#8a7458'],
-  [HOLLOW_PLANK_FLOOR, '#8a6a42'],
-  [HOLLOW_THRESHOLD, '#7a6248'],
-  [HOLLOW_PROP_LOW, '#9a7850'],
-  [HOLLOW_PROP_TALL, '#6a5238'],
-  [HOLLOW_DECAL, '#6e7a3c'],
-  [HOLLOW_PALISADE, '#8a6a3c'],
-  [HOLLOW_PALISADE_GAP, '#5c5548'],
-  [HOLLOW_GATE, '#6b5636'],
-  [ROCK_DEPOSIT, '#726a5e'],
-  [PASTURE_GRASS, '#5c8048'],
-  [CROP_FIELD, '#6e5636'],
+  [HOLLOW_WALL, TOWN_MAP_INK.tiles.hollowWall],
+  [HOLLOW_PLANK_FLOOR, TOWN_MAP_INK.tiles.hollowPlankFloor],
+  [HOLLOW_THRESHOLD, TOWN_MAP_INK.tiles.hollowThreshold],
+  [HOLLOW_PROP_LOW, TOWN_MAP_INK.tiles.hollowPropLow],
+  [HOLLOW_PROP_TALL, TOWN_MAP_INK.tiles.hollowPropTall],
+  [HOLLOW_DECAL, TOWN_MAP_INK.tiles.hollowDecal],
+  [HOLLOW_PALISADE, TOWN_MAP_INK.tiles.hollowPalisade],
+  [HOLLOW_PALISADE_GAP, TOWN_MAP_INK.tiles.hollowPalisadeGap],
+  [HOLLOW_GATE, TOWN_MAP_INK.tiles.hollowGate],
+  [ROCK_DEPOSIT, TOWN_MAP_INK.tiles.rockDeposit],
+  [PASTURE_GRASS, TOWN_MAP_INK.tiles.pastureGrass],
+  [CROP_FIELD, TOWN_MAP_INK.tiles.cropField],
   // The circus grounds, in the same schematic palette.
-  [CIRCUS_LOT, '#7a7050'],
-  [CIRCUS_STRUCTURE_TALL, '#c0453f'],
-  [CIRCUS_STRUCTURE_LOW, '#d8b27a'],
+  [CIRCUS_LOT, TOWN_MAP_INK.tiles.circusLot],
+  [CIRCUS_STRUCTURE_TALL, TOWN_MAP_INK.tiles.circusStructureTall],
+  [CIRCUS_STRUCTURE_LOW, TOWN_MAP_INK.tiles.circusStructureLow],
 ]);
 
-/** Header band above the map viewport. */
-const HEADER_HEIGHT = 58;
-const TITLE_Y = 12;
-const SUBTITLE_Y = 34;
-const TITLE_SIZE = 19;
-const HINT_SIZE = 12;
-const MARGIN = 20;
-
-/** Metrics panel, drawn over the map in the bottom-left corner. */
-const METRICS_PANEL_WIDTH = 320;
-const METRICS_PANEL_PADDING = 12;
-const METRICS_ROW_HEIGHT = 17;
-const METRICS_SIZE = 12;
-const METRICS_VALUE_COLUMN = 196;
-const METRICS_BOTTOM_GAP = 18;
+const METRICS_SURFACE_ID = 'town-metrics';
 
 /** Tiles of empty ground kept around the town when framing the town view. */
 const TOWN_VIEW_MARGIN_TILES = 8;
@@ -214,8 +203,8 @@ const TILE_CENTRE = 0.5;
 
 /**
  * Pointer travel past which a press counts as a pan rather than a view toggle.
- * The browser fires `click` after every press/release pair regardless of
- * movement, so without this every pan would end by switching views.
+ * Summed along the path, so a pan that wanders back to where it began still
+ * pans rather than switching views.
  */
 const DRAG_THRESHOLD_PX = 4;
 
@@ -241,7 +230,7 @@ const VIEW_TITLES: Readonly<Record<MapView, string>> = {
   village: 'Briar Hollow',
 };
 
-export class TownMapScene extends Scene {
+export class TownMapScene extends PreviewScene {
   private readonly data: OverworldData;
   private readonly size: number;
   private readonly plots: BuildingPlot[];
@@ -253,6 +242,8 @@ export class TownMapScene extends Scene {
   private originTileY = 0;
   private dragAnchor: { readonly mx: number; readonly my: number } | null = null;
   private dragDistancePx = 0;
+  /** The view was framed before the header's height was known, and is framed again once it is. */
+  private framedUnderHeader = false;
 
   constructor() {
     super();
@@ -262,20 +253,57 @@ export class TownMapScene extends Scene {
     this.metrics = measureTown(this.plots, this.data);
     this.frameView();
     logMetrics(this.metrics, this.data);
+    this.ui.mount(this.metricsSurface());
   }
 
-  handleClick(): void {
-    if (this.dragDistancePx > DRAG_THRESHOLD_PX) return;
+  protected previewTitle(): string {
+    return `town map — ${VIEW_TITLES[this.view]} — ?townmap`;
+  }
+
+  protected previewCaptions(): readonly string[] {
+    return ['tap the map to switch view', 'scroll to zoom · drag to pan'];
+  }
+
+  protected previewControls(): readonly PreviewControl[] {
+    return [
+      {
+        id: 'view',
+        label: `view: ${VIEW_TITLES[this.view]}`,
+        onTap: () => {
+          this.nextView();
+        },
+      },
+    ];
+  }
+
+  protected handlePreviewWorldPointer(gesture: WorldGesture): void {
+    switch (gesture.kind) {
+      case 'down':
+        this.dragAnchor = { mx: gesture.cssX, my: gesture.cssY };
+        this.dragDistancePx = 0;
+        return;
+      case 'move':
+        this.pan(gesture.cssX, gesture.cssY);
+        return;
+      case 'up':
+        this.dragAnchor = null;
+        if (gesture.tap && this.dragDistancePx <= DRAG_THRESHOLD_PX) this.nextView();
+        return;
+      case 'cancel':
+        this.dragAnchor = null;
+        return;
+      case 'wheel':
+        this.zoom(gesture.deltaY);
+        return;
+    }
+  }
+
+  private nextView(): void {
     this.view = NEXT_VIEW[this.view];
     this.frameView();
   }
 
-  handleMouseDown(mx: number, my: number): void {
-    this.dragAnchor = { mx, my };
-    this.dragDistancePx = 0;
-  }
-
-  handleMouseMove(mx: number, my: number): void {
+  private pan(mx: number, my: number): void {
     const anchor = this.dragAnchor;
     if (anchor === null) return;
     this.dragDistancePx += Math.hypot(mx - anchor.mx, my - anchor.my);
@@ -285,20 +313,8 @@ export class TownMapScene extends Scene {
     this.clampOrigin();
   }
 
-  handleMouseUp(): void {
-    this.dragAnchor = null;
-  }
-
-  handleMouseLeave(): void {
-    this.dragAnchor = null;
-  }
-
-  /**
-   * Zooms about the viewport centre, keeping the tile there fixed. Not
-   * cursor-anchored: `Scene.handleWheel` receives only a delta, so zooming to
-   * the pointer would need a signature change across every scene.
-   */
-  handleWheel(deltaY: number): void {
+  /** Zooms about the viewport centre, keeping the tile there fixed. */
+  private zoom(deltaY: number): void {
     const factor = deltaY < 0 ? ZOOM_STEP : 1 / ZOOM_STEP;
     const next = clamp(this.pxPerTile * factor, MIN_PX_PER_TILE, MAX_PX_PER_TILE);
     const viewport = this.viewportSize();
@@ -336,7 +352,7 @@ export class TownMapScene extends Scene {
   private viewportSize(): { readonly width: number; readonly height: number } {
     const width = viewportWidth();
     const height = viewportHeight();
-    return { width, height: height - HEADER_HEIGHT };
+    return { width, height: height - this.headerBottom };
   }
 
   /** Fits the current view's tile region into the viewport and centres it. */
@@ -357,30 +373,21 @@ export class TownMapScene extends Scene {
   render(ctx: CanvasRenderingContext2D): void {
     const width = viewportWidth();
     const height = viewportHeight();
+    if (!this.framedUnderHeader && this.headerBottom > 0) {
+      this.framedUnderHeader = true;
+      this.frameView();
+    }
+    const headerBottom = this.headerBottom;
     ctx.fillStyle = BG_COLOR;
     ctx.fillRect(0, 0, width, height);
 
-    drawText(ctx, `Town map — ${VIEW_TITLES[this.view]}`, {
-      x: MARGIN,
-      y: TITLE_Y,
-      size: TITLE_SIZE,
-      bold: true,
-      color: LABEL_COLOR,
-    });
-    drawText(ctx, 'click to switch view · scroll to zoom · drag to pan', {
-      x: MARGIN,
-      y: SUBTITLE_Y,
-      size: HINT_SIZE,
-      color: HINT_COLOR,
-    });
-
     ctx.save();
     ctx.beginPath();
-    ctx.rect(0, HEADER_HEIGHT, width, height - HEADER_HEIGHT);
+    ctx.rect(0, headerBottom, width, height - headerBottom);
     ctx.clip();
     ctx.translate(
       -this.originTileX * this.pxPerTile,
-      HEADER_HEIGHT - this.originTileY * this.pxPerTile,
+      headerBottom - this.originTileY * this.pxPerTile,
     );
 
     this.renderTiles(ctx);
@@ -388,7 +395,7 @@ export class TownMapScene extends Scene {
 
     ctx.restore();
 
-    this.renderMetricsPanel(ctx, height);
+    this.renderChrome(ctx);
   }
 
   /** Draws only the tiles inside the viewport — the full grid is 78k cells. */
@@ -483,7 +490,7 @@ export class TownMapScene extends Scene {
 
     if (px < NAME_LABEL_MIN_PX_PER_TILE) return;
     for (const plot of this.plots) {
-      drawText(ctx, plot.name, {
+      worldText(ctx, plot.name, {
         x: (plot.rect.x + plot.rect.w / 2) * px,
         y: (plot.rect.y + plot.rect.h / 2) * px,
         size: NAME_LABEL_SIZE,
@@ -518,7 +525,7 @@ export class TownMapScene extends Scene {
     if (px < NAME_LABEL_MIN_PX_PER_TILE) return;
     for (const district of village.districts) {
       if (district.label === null) continue;
-      drawText(ctx, district.label, {
+      worldText(ctx, district.label, {
         x: (district.labelTile.x + TILE_CENTRE) * px,
         y: (district.labelTile.y + TILE_CENTRE) * px,
         size: NAME_LABEL_SIZE,
@@ -529,7 +536,7 @@ export class TownMapScene extends Scene {
       });
     }
     for (const building of village.buildings) {
-      drawText(ctx, building.name, {
+      worldText(ctx, building.name, {
         x: (building.rect.x + building.rect.w / 2) * px,
         y: (building.rect.y + building.rect.h / 2) * px,
         size: NAME_LABEL_SIZE,
@@ -556,35 +563,49 @@ export class TownMapScene extends Scene {
     ctx.stroke();
   }
 
-  private renderMetricsPanel(ctx: CanvasRenderingContext2D, canvasHeight: number): void {
+  /** The layout metrics, in a card over the map's bottom-left corner. */
+  private metricsSurface(): Surface {
+    return {
+      id: METRICS_SURFACE_ID,
+      band: 'hud',
+      haltsWorld: false,
+      isOpen: () => true,
+      render: (ui) => {
+        this.renderMetrics(ui);
+      },
+    };
+  }
+
+  private renderMetrics(ui: Ui): void {
     const rows = metricRows(this.metrics, this.data);
-    const panelHeight = rows.length * METRICS_ROW_HEIGHT + METRICS_PANEL_PADDING * 2;
-    const panelY = canvasHeight - panelHeight - METRICS_BOTTOM_GAP;
-
-    drawBox(ctx, {
-      x: MARGIN,
-      y: panelY,
-      width: METRICS_PANEL_WIDTH,
-      height: panelHeight,
-      fill: 'rgba(8, 11, 18, 0.9)',
-      border: '#334155',
-    });
-
+    const { space } = ui.theme;
+    const padding = skinsFor(ui.theme).panel.hud.padding;
+    const rowHeight = lineHeightOf(ui, 'caption');
+    const labelWidth = Math.max(
+      ...rows.map(([label]) => measureText(ui, label, { role: 'caption' })),
+    );
+    const valueWidth = Math.max(
+      ...rows.map(([, value]) => measureText(ui, value, { role: 'label' })),
+    );
+    const outer = inset(ui.viewport, space.sm);
+    const cardWidth = Math.min(outer.w, labelWidth + space.lg + valueWidth + padding * 2);
+    const cardHeight = rows.length * rowHeight + padding * 2;
+    const frame: Rect = {
+      x: outer.x,
+      y: outer.y + outer.h - cardHeight,
+      w: cardWidth,
+      h: cardHeight,
+    };
+    card(ui, frame, { id: 'metrics', kind: 'hud' });
+    const lines = splitV(
+      inset(frame, padding),
+      rows.map(() => rowHeight),
+      0,
+    );
     rows.forEach(([label, value], index) => {
-      const rowY = panelY + METRICS_PANEL_PADDING + index * METRICS_ROW_HEIGHT;
-      drawText(ctx, label, {
-        x: MARGIN + METRICS_PANEL_PADDING,
-        y: rowY,
-        size: METRICS_SIZE,
-        color: METRIC_LABEL_COLOR,
-      });
-      drawText(ctx, value, {
-        x: MARGIN + METRICS_PANEL_PADDING + METRICS_VALUE_COLUMN,
-        y: rowY,
-        size: METRICS_SIZE,
-        color: LABEL_COLOR,
-        bold: true,
-      });
+      const [labelCell, valueCell] = splitH(lines[index], [labelWidth, 'fill'], space.lg);
+      text(ui, labelCell, { text: label, role: 'caption' });
+      text(ui, valueCell, { text: value, role: 'label' });
     });
   }
 }

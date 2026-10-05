@@ -54,7 +54,7 @@ const { loadSprites } = await import('../src/core/SpriteLoader');
 const { GameMap } = await import('../src/map/GameMap');
 const { renderCanvas } = await import('../src/map/TileRenderer');
 const { FLOOR_ART_SEEDS } = await import('../src/map/ground/artSeedAlphabet.js');
-const { drawText } = await import('../src/ui/TextBox');
+const { worldText } = await import('../src/ui/world/worldText');
 const { drawFigureCached } = await import('../src/sprites/figure/figureFrameCache');
 const { activeHumanFigure } = await import('../src/sprites/humanSprite');
 const { isWalkableTileType } = await import('../src/map/walkability');
@@ -255,7 +255,7 @@ for (const seed of seeds) {
     // The same context `renderView` drew through, still under its scale.
     const labelCtx = asGameContext(canvas.getContext('2d'));
     for (const building of worldFrame ? [] : site.buildings) {
-      drawText(labelCtx, building.name, {
+      worldText(labelCtx, building.name, {
         x: (building.rect.x + building.rect.w / 2 - view.x) * TILE_SIZE,
         y: (building.rect.y + building.rect.h / 2 - view.y) * TILE_SIZE,
         size: LABEL_SIZE_PX,

@@ -1,7 +1,7 @@
 /**
  * Draws that must land over the dungeon's darkness although they are made
  * from inside the Y-sorted entity pass: a mob's health bar, its tactics rank
- * mark, its aggro "!", status art, quest markers, prompts, spit in flight.
+ * mark, its aggro "!", status art, quest markers, spit in flight.
  *
  * A creature paints its body and its chrome in one `drawSelf`, and the
  * darkness has to fall between the two — over the body, under the
@@ -81,7 +81,7 @@ export function beginAboveDarkness(darkness: (worldX: number, worldY: number) =>
  * {@link beginAboveDarkness} and {@link flushAboveDarkness} skips the flush,
  * and the render loop survives the throw, so without it deferral would stay
  * open into the next scene — and a town, which never flushes, would queue
- * every health bar and prompt it drew and never show one.
+ * every health bar it drew and never show one.
  */
 export function closeAboveDarkness(): void {
   deferring = false;
@@ -136,7 +136,7 @@ export function deferChrome(
 
 /**
  * Queues `draw` for after the darkness pass, or reports false when nothing is
- * deferring. For the rare free-standing draw — a prompt, a quest marker —
+ * deferring. For the rare free-standing draw — a quest marker —
  * that has no drawer of its own; a creature's parts go through
  * {@link deferChrome}.
  */

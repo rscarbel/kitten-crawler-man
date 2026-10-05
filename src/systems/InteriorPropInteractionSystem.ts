@@ -5,7 +5,7 @@
  * speaker in the room talks) rather than a second dialog surface.
  *
  * `InteriorReadableSystem` stays the mechanism for documents — a ledger, a
- * letter, a price board — paged in `ReadablePanel`. This system is for the
+ * letter, a price board — paged in `ReadableOverlay`. This system is for the
  * shorter interactions beside it: a one-line look at an object, a
  * container's first-search payout, and a flavour use.
  */

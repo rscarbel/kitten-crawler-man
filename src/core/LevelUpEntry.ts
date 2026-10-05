@@ -1,3 +1,5 @@
+import type { Rect } from '../ui/core/geom';
+
 /**
  * One "X reached level N" announcement, queued for the LevelUpDialog.
  *
@@ -11,11 +13,5 @@ export interface LevelUpEntry {
   newLevel: number;
   /** What the new level unlocked, or null when the tier grants no new perk. */
   perkDescription: string | null;
-  renderIcon: (
-    ctx: CanvasRenderingContext2D,
-    x: number,
-    y: number,
-    size: number,
-    level: number,
-  ) => void;
+  renderIcon: (ctx: CanvasRenderingContext2D, rect: Rect, level: number) => void;
 }

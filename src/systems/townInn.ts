@@ -14,12 +14,12 @@
  * lose money, so a room clears `AILMENT_STATUSES` and — because only one room
  * boon may run at a time — the other two room boons. Nothing else.
  *
- * Pure data + effect application; `PricedMenuPanel` owns the UI and
+ * Pure data + effect application; the shop screen owns the UI and
  * `BuildingInteriorScene` owns the fade, the sounds and the interaction gating.
  */
 
 import type { Player } from '../Player';
-import type { PricedMenu, PricedPurchaseHandler } from '../ui/PricedMenuPanel';
+import type { ShopMenu, ShopPurchaseHandler } from '../ui/screens/shop/shopSession';
 import { buildInnRoomOptions, isInnRoomKey, rentInnRoom } from './townInnRooms';
 import { buildTavernMenu, serveDrinkAt } from './townPub';
 import type { ResidentHost } from './townResidents';
@@ -31,7 +31,7 @@ export function buildInnMenu(
   turn: number,
   host: ResidentHost | null,
   townInDanger: boolean,
-): PricedMenu {
+): ShopMenu {
   const menu = buildTavernMenu(house, buyer, turn, host);
   return { ...menu, options: [...menu.options, ...buildInnRoomOptions(townInDanger)] };
 }
@@ -44,7 +44,7 @@ export function serveInn(
   house: string,
   party: ReadonlyArray<Player>,
   turn: number,
-): PricedPurchaseHandler {
+): ShopPurchaseHandler {
   const serveFood = serveDrinkAt(house);
   const rentRoom = rentInnRoom(party, turn);
   return (option, buyer) => {

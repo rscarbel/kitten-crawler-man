@@ -5,7 +5,7 @@ import type { SkillEvent, SkillId } from '../core/SkillManager';
 import { getSkillDef } from '../core/SkillManager';
 import type { CraftSkillEvent } from '../core/CraftSkills';
 import type { CrawlerKind } from '../core/SkillManager';
-import type { HotbarToast } from '../ui/HotbarToast';
+import type { HudToasts, ToastOptions } from '../ui/hud/toasts';
 
 /**
  * First-unlock copy. One line per skill, trimmed to the name and the fact that
@@ -22,6 +22,12 @@ const UNLOCK_LINES: Record<SkillId, string> = {
 };
 
 const COCKROACH_RECHARGED_LINE = 'Cockroach ready';
+
+const SYSTEM_NOTICE_TOAST: ToastOptions = { tone: 'info' };
+const SKILL_UNLOCK_TOAST: ToastOptions = { tone: 'accent', icon: 'star' };
+const SKILL_LEVEL_TOAST: ToastOptions = { tone: 'accent', icon: 'sparkle' };
+const SKILL_TRIGGER_TOAST: ToastOptions = { tone: 'success', icon: 'zap' };
+const SKILL_READY_TOAST: ToastOptions = { tone: 'success', icon: 'check' };
 
 /**
  * Effect blurbs are written as prose sentences for the skills panel, so they end
@@ -44,7 +50,7 @@ export class SystemNoticeSystem implements GameSystem {
 
   constructor(
     private readonly bus: EventBus,
-    private readonly toast: HotbarToast,
+    private readonly toasts: HudToasts,
   ) {}
 
   update(ctx: SystemContext): void {
@@ -71,14 +77,14 @@ export class SystemNoticeSystem implements GameSystem {
     if (!cat.skills.isUnlocked('cockroach')) return;
     const ready = cat.isCockroachReady;
     if (ready && this.cockroachWasRecharging) {
-      this.toast.show(COCKROACH_RECHARGED_LINE);
+      this.toasts.post(COCKROACH_RECHARGED_LINE, SKILL_READY_TOAST);
     }
     this.cockroachWasRecharging = !ready;
   }
 
   private drain(player: Player, who: 'Human' | 'Cat'): void {
     const notices = player.pendingSystemNotices;
-    for (const line of notices) this.toast.show(line);
+    for (const line of notices) this.toasts.post(line, SYSTEM_NOTICE_TOAST);
     notices.length = 0;
 
     for (let i = 0; i < player.pendingDodges; i++) {
@@ -120,20 +126,21 @@ export class SystemNoticeSystem implements GameSystem {
     switch (event.kind) {
       case 'unlocked':
         this.bus.emit('skillUnlocked', { player: who, skillId: event.id });
-        this.toast.show(UNLOCK_LINES[event.id]);
+        this.toasts.post(UNLOCK_LINES[event.id], SKILL_UNLOCK_TOAST);
         return;
       case 'leveled':
         this.bus.emit('skillLevelUp', { player: who, skillId: event.id, newLevel: event.level });
-        this.toast.show(
+        this.toasts.post(
           `${def.name} Lv ${event.level} — ${def.describeEffect(event.level)}`.replace(
             TRAILING_PERIOD,
             '',
           ),
+          SKILL_LEVEL_TOAST,
         );
         return;
       case 'triggered':
         this.bus.emit('skillTriggered', { player: who, skillId: event.id });
-        this.toast.show(TRIGGER_LINES[event.id]);
+        this.toasts.post(TRIGGER_LINES[event.id], SKILL_TRIGGER_TOAST);
         return;
       default: {
         const unhandled: never = event.kind;

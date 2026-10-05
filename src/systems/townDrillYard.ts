@@ -8,12 +8,12 @@
  * at a time, each dearer than the last — so a crawler who wants all four feels
  * the yard closing before it shuts.
  *
- * Pure data + effect application; `PricedMenuPanel` owns the UI and
+ * Pure data + effect application; the shop screen owns the UI and
  * `BuildingInteriorScene` owns the sounds and the interaction gating.
  */
 
 import type { Player, StatName } from '../Player';
-import type { PricedMenu, PricedOption, PricedPurchaseHandler } from '../ui/PricedMenuPanel';
+import type { ShopMenu, ShopRow, ShopPurchaseHandler } from '../ui/screens/shop/shopSession';
 import type { ResidentHost } from './townResidents';
 import { rotateLine } from './townServiceUtil';
 
@@ -101,14 +101,14 @@ export function buildDrillYardMenu(
   player: Player,
   turn: number,
   host: ResidentHost | null,
-): PricedMenu {
+): ShopMenu {
   const price = nextPrice(player);
   return {
     title: 'The Drill Yard',
     bark: host?.line ?? rotateLine(SERGEANT_BARKS, turn),
     byline: host?.name,
-    options: DRILL_ROWS.map((row): PricedOption => {
-      const option: PricedOption = {
+    options: DRILL_ROWS.map((row): ShopRow => {
+      const option: ShopRow = {
         key: row.key,
         label: row.label,
         // A capped row carries the last rung's price only because the field is
@@ -124,7 +124,7 @@ export function buildDrillYardMenu(
 }
 
 /** Runs the chosen drill, banking one permanent point against the crawler's cap. */
-export const runDrill: PricedPurchaseHandler = (option, buyer) => {
+export const runDrill: ShopPurchaseHandler = (option, buyer) => {
   if (nextPrice(buyer) === null) {
     return { ok: false, line: `${DRILL_EXHAUSTED}. Go and use it.` };
   }

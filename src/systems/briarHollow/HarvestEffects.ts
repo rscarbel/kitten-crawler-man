@@ -9,7 +9,7 @@
 
 import { TILE_SIZE } from '../../core/constants';
 import type { HarvestKind } from '../../core/craftPerks';
-import { drawText } from '../../ui/TextBox';
+import { worldText } from '../../ui/world/worldText';
 
 /** Chips a single strike throws, fewest and most. */
 const CHIPS_PER_STRIKE_MIN = 3;
@@ -163,7 +163,7 @@ export class HarvestEffects {
     }
     ctx.restore();
     for (const pop of this.pops) {
-      drawText(ctx, pop.text, {
+      worldText(ctx, pop.text, {
         x: pop.x - camX,
         y: pop.y - camY,
         size: POP_TEXT_SIZE,

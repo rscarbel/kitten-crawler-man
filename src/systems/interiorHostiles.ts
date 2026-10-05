@@ -56,7 +56,7 @@ const STAIR_GUARD_LEVEL = CULT_HIDEOUT_CULTIST_LEVEL;
  */
 export const STAIR_GUARD_OFFSETS: ReadonlyArray<{ dx: number; dy: number }> = [
   { dx: -1, dy: 4 },
-  { dx: -4, dy: 3 },
+  { dx: -4, dy: 2 },
   { dx: -8, dy: 4 },
 ];
 

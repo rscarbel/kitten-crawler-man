@@ -24,8 +24,8 @@ import {
 import { Inventory } from './core/Inventory';
 import type { ResistanceType } from './core/ItemDefs';
 import { normalize } from './utils';
-import { drawText, TEXT_PRESETS } from './ui/TextBox';
-import { drawBox } from './ui/Box';
+import { worldPlate } from './ui/world/worldShapes';
+import { worldText } from './ui/world/worldText';
 import { DRUNK_MELEE_DAMAGE_BONUS } from './core/DrunkEffect';
 import { computeDodgeChance } from './core/dodge';
 import { xpMultiplierForPlayerLevel, type XpDiminishingTier } from './levels/xpDiminishing';
@@ -2269,14 +2269,11 @@ export abstract class Player implements AboveDarknessDrawer {
     const t = Date.now();
     const pulse = HALF + HALF * Math.sin(t * KO_PULSE_SPEED);
 
-    drawBox(ctx, {
-      x: sx,
-      y: sy,
-      width: s,
-      height: s,
-      fill: KO_OVERLAY_FILL,
-      alpha: KO_OVERLAY_ALPHA,
-    });
+    worldPlate(
+      ctx,
+      { x: sx, y: sy, w: s, h: s },
+      { fill: KO_OVERLAY_FILL, alpha: KO_OVERLAY_ALPHA },
+    );
 
     ctx.save();
 
@@ -2297,8 +2294,8 @@ export abstract class Player implements AboveDarknessDrawer {
     const isReviving = this.reviveProgress > 0;
     const label = isReviving ? 'Reviving' : 'KO';
     const fontSize = Math.round(s * (isReviving ? KO_FONT_REVIVING_FRACTION : KO_FONT_KO_FRACTION));
-    drawText(ctx, label, {
-      ...(isReviving ? TEXT_PRESETS.heading : TEXT_PRESETS.danger),
+    worldText(ctx, label, {
+      style: isReviving ? 'heading' : 'danger',
       x: cx,
       y: sy - fontSize - KO_LABEL_Y_PADDING,
       align: 'center',

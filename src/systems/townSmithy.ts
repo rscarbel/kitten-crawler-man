@@ -9,13 +9,13 @@
  * slot. Buying it while it is still live is refused by the menu rather than the
  * handler, so nobody is charged for a re-sharpen they cannot use.
  *
- * Pure data + effect application; `PricedMenuPanel` owns the UI and
+ * Pure data + effect application; the shop screen owns the UI and
  * `BuildingInteriorScene` owns the sounds and the interaction gating.
  */
 
 import { makeWhetstone, WHETSTONE_MELEE_DAMAGE_BONUS } from '../core/StatusEffect';
 import type { Player } from '../Player';
-import type { PricedMenu, PricedOption, PricedPurchaseHandler } from '../ui/PricedMenuPanel';
+import type { ShopMenu, ShopRow, ShopPurchaseHandler } from '../ui/screens/shop/shopSession';
 import type { ResidentHost } from './townResidents';
 import { rotateLine } from './townServiceUtil';
 
@@ -49,8 +49,8 @@ export function buildSmithyMenu(
   buyer: Player,
   turn: number,
   host: ResidentHost | null,
-): PricedMenu {
-  const single: PricedOption = {
+): ShopMenu {
+  const single: ShopRow = {
     key: SINGLE_EDGE_KEY,
     label: 'Put an edge on it',
     price: SINGLE_EDGE_PRICE,
@@ -58,7 +58,7 @@ export function buildSmithyMenu(
   };
   if (buyer.hasStatus(WHETSTONE_STATUS)) single.unavailable = 'Still sharp';
 
-  const pair: PricedOption = {
+  const pair: ShopRow = {
     key: PAIR_EDGE_KEY,
     label: 'Edge the pair of you',
     price: PAIR_EDGE_PRICE,
@@ -75,7 +75,7 @@ export function buildSmithyMenu(
 }
 
 /** Grinds the chosen edge and returns the smith's parting line. */
-export function sharpenEdges(party: ReadonlyArray<Player>, turn: number): PricedPurchaseHandler {
+export function sharpenEdges(party: ReadonlyArray<Player>, turn: number): ShopPurchaseHandler {
   return (option, buyer) => {
     // Both branches re-check the status the menu already disables on. An edge
     // ground onto an edge is coin for nothing, and the menu should not be the

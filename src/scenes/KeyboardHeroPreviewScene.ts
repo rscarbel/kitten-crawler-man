@@ -21,18 +21,16 @@
  *    two-strike fail sequence can be reviewed without having to play badly.
  */
 
-import { Scene } from '../core/Scene';
 import { keybindings, type GameAction } from '../core/Keybindings';
 import { setViewportSize, viewportWidth, viewportHeight } from '../core/Viewport';
-import { drawText } from '../ui/TextBox';
-import { drawButton, BUTTON_PRESETS, setButtonMouseState, type ButtonResult } from '../ui/Button';
+import { worldText } from '../ui/world/worldText';
+import { PreviewScene, type PreviewControl } from './PreviewScene';
 import { KeyboardHeroSystem } from '../systems/KeyboardHeroSystem';
 import { KEYBOARD_HERO_CHART } from '../systems/keyboardHeroChart';
 import { HIT_ZONE_IMG_CENTER } from '../systems/keyboardHeroGeometry';
 import {
   LANE_BED_IMG_H,
   LANE_INDICES,
-  LANE_PALETTES,
   NOTE_IMG_SIZE,
   RECEPTOR_IMG_SIZE,
   TOUCH_IMG_SIZE,
@@ -41,6 +39,9 @@ import {
   type KeyboardHeroLayout,
   type LaneIndex,
 } from '../systems/keyboardHeroLayout';
+import type { Rect } from '../ui/core/geom';
+import { LANE_PALETTES } from '../sprites/art/keyboardHeroLanePalettes';
+import { chromeTarget } from '../ui/screens/dialogs/canvasChrome';
 import {
   drawBoardBase,
   drawLaneBedSlice,
@@ -52,29 +53,20 @@ import {
   type ReceptorArtState,
   type TouchArtState,
 } from '../systems/keyboardHeroBoardArt';
+import { previewInk } from '../ui/theme/previewInk';
 
-const BG_COLOR = '#0b0f14';
-const PANEL_COLOR = '#05070a';
-const LABEL_COLOR = '#e8eef6';
-const SUBLABEL_COLOR = '#8fa3bd';
-const WARNING_COLOR = '#f0b34a';
+const BG_COLOR = previewInk.keyboardHero.backdrop;
+const PANEL_COLOR = previewInk.keyboardHero.panel;
+const LABEL_COLOR = previewInk.keyboardHero.label;
+const SUBLABEL_COLOR = previewInk.keyboardHero.sublabel;
+const WARNING_COLOR = previewInk.keyboardHero.warning;
 
 const MARGIN = 24;
-const TITLE_SIZE = 18;
 const LABEL_SIZE = 12;
 const SMALL_LABEL_SIZE = 10;
 const LINE_HEIGHT = 18;
-const TAB_HEIGHT = 30;
-const TAB_WIDTH = 96;
-const TAB_GAP = 6;
-const TAB_ROW_Y = 40;
-const TAB_ROW_GAP = 16;
-const CONTENT_TOP = TAB_ROW_Y + TAB_HEIGHT + TAB_ROW_GAP;
-
-const BTN_HEIGHT = 26;
-const BTN_GAP = 6;
-const VIEWPORT_BTN_WIDTH = 116;
-const CONTROL_BTN_WIDTH = 150;
+/** Gap between the header and the tab's content. */
+const CONTENT_GAP = 16;
 
 const TABS = ['Board', 'States', 'Autoplay', 'Failure'] as const;
 type PreviewTab = (typeof TABS)[number];
@@ -104,6 +96,8 @@ const TOUCH_STATES: ReadonlyArray<TouchArtState> = ['idle', 'pressed'];
 
 const SWATCH_GAP = 10;
 const SWATCH_CAPTION_GAP = 14;
+/** Space between a swatch and the caption under it. */
+const SWATCH_CAPTION_OFFSET = 2;
 const SWATCH_SECTION_GAP = 18;
 /** The lane bed slice drawn behind a swatch, in board-space pixels. */
 const SWATCH_BED_DEPTH_IMG = 120;
@@ -171,18 +165,10 @@ function autoplayOffsetMs(chartIndex: number): number {
   return (phase * 2 - 1) * AUTOPLAY_JITTER_MS;
 }
 
-export class KeyboardHeroPreviewScene extends Scene {
+export class KeyboardHeroPreviewScene extends PreviewScene {
   private tab: PreviewTab = 'Board';
   private viewportIndex = 0;
   private playPerfectly = false;
-
-  private mouseX = 0;
-  private mouseY = 0;
-
-  private tabButtons: Array<{ result: ButtonResult; tab: PreviewTab }> = [];
-  private viewportButtons: Array<{ result: ButtonResult; index: number }> = [];
-  private restartButton: ButtonResult | null = null;
-  private perfectButton: ButtonResult | null = null;
 
   private readonly board = new KeyboardHeroSystem();
   private songTimeMs = 0;
@@ -192,32 +178,50 @@ export class KeyboardHeroPreviewScene extends Scene {
   private restartAtMs = 0;
   private missingBinding = false;
 
-  handleMouseMove(mx: number, my: number): void {
-    this.mouseX = mx;
-    this.mouseY = my;
+  protected previewTitle(): string {
+    return 'Keyboard hero — mini-game review harness';
   }
 
-  handleClick(mx: number, my: number): void {
-    for (const tab of this.tabButtons) {
-      if (!tab.result.contains(mx, my)) continue;
-      this.tab = tab.tab;
-      if (this.isAutoplayTab()) this.startRun();
-      return;
-    }
-    for (const button of this.viewportButtons) {
-      if (button.result.contains(mx, my)) {
-        this.viewportIndex = button.index;
-        return;
-      }
-    }
-    if (this.restartButton?.contains(mx, my) === true) {
-      this.startRun();
-      return;
-    }
-    if (this.perfectButton?.contains(mx, my) === true) {
-      this.playPerfectly = !this.playPerfectly;
-      this.startRun();
-    }
+  protected previewControls(): readonly PreviewControl[] {
+    const tabs: PreviewControl[] = TABS.map((tab) => ({
+      label: tab,
+      selected: tab === this.tab,
+      onTap: () => {
+        this.tab = tab;
+        if (this.isAutoplayTab()) this.startRun();
+      },
+    }));
+    if (this.tab === 'States') return tabs;
+
+    const viewports: PreviewControl[] = VIEWPORT_MATRIX.map((viewport, index) => ({
+      label: viewport.label,
+      selected: index === this.viewportIndex,
+      onTap: () => {
+        this.viewportIndex = index;
+      },
+    }));
+    if (this.tab === 'Board') return [...tabs, ...viewports];
+
+    const restart: PreviewControl = {
+      label: 'Restart run',
+      onTap: () => {
+        this.startRun();
+      },
+    };
+    if (this.tab === 'Failure') return [...tabs, ...viewports, restart];
+    return [
+      ...tabs,
+      ...viewports,
+      restart,
+      {
+        id: 'timing',
+        label: this.playPerfectly ? 'Timing: perfect' : 'Timing: jittered',
+        onTap: () => {
+          this.playPerfectly = !this.playPerfectly;
+          this.startRun();
+        },
+      },
+    ];
   }
 
   private isAutoplayTab(): boolean {
@@ -287,67 +291,23 @@ export class KeyboardHeroPreviewScene extends Scene {
     ctx.fillStyle = BG_COLOR;
     ctx.fillRect(0, 0, width, height);
 
-    setButtonMouseState(this.mouseX, this.mouseY);
-    this.viewportButtons = [];
-    this.restartButton = null;
-    this.perfectButton = null;
-
-    drawText(ctx, 'Keyboard hero — mini-game review harness', {
-      x: MARGIN,
-      y: 14,
-      size: TITLE_SIZE,
-      bold: true,
-      color: LABEL_COLOR,
-    });
-
-    this.renderTabs(ctx);
-
     switch (this.tab) {
       case 'Board':
         this.renderBoardTab(ctx, width, height);
-        return;
+        break;
       case 'States':
         this.renderStatesTab(ctx, width);
-        return;
+        break;
       case 'Autoplay':
       case 'Failure':
         this.renderRunTab(ctx, width, height);
-        return;
+        break;
     }
+    this.renderChrome(ctx);
   }
 
-  private renderTabs(ctx: CanvasRenderingContext2D): void {
-    this.tabButtons = [];
-    TABS.forEach((tab, i) => {
-      const result = drawButton(ctx, {
-        x: MARGIN + i * (TAB_WIDTH + TAB_GAP),
-        y: TAB_ROW_Y,
-        width: TAB_WIDTH,
-        height: TAB_HEIGHT,
-        label: tab,
-        ...(tab === this.tab ? BUTTON_PRESETS.gold : BUTTON_PRESETS.primary),
-      });
-      this.tabButtons.push({ result, tab });
-    });
-  }
-
-  private renderViewportButtons(ctx: CanvasRenderingContext2D): void {
-    VIEWPORT_MATRIX.forEach((viewport, i) => {
-      const result = drawButton(ctx, {
-        x: MARGIN + i * (VIEWPORT_BTN_WIDTH + BTN_GAP),
-        y: CONTENT_TOP,
-        width: VIEWPORT_BTN_WIDTH,
-        height: BTN_HEIGHT,
-        label: viewport.label,
-        labelSize: SMALL_LABEL_SIZE,
-        ...(i === this.viewportIndex ? BUTTON_PRESETS.gold : BUTTON_PRESETS.primary),
-      });
-      this.viewportButtons.push({ result, index: i });
-    });
-  }
-
-  private panelTop(): number {
-    return CONTENT_TOP + BTN_HEIGHT + BTN_GAP + BTN_HEIGHT + TAB_ROW_GAP;
+  private get contentTop(): number {
+    return this.headerBottom + CONTENT_GAP;
   }
 
   /**
@@ -362,7 +322,7 @@ export class KeyboardHeroPreviewScene extends Scene {
     windowH: number,
     draw: (layoutViewport: PreviewViewport) => void,
   ): number {
-    const top = this.panelTop();
+    const top = this.contentTop;
     const availableW = windowW - MARGIN * 2;
     const availableH = windowH - top - MARGIN - LINE_HEIGHT;
     const scale = Math.min(1, availableW / viewport.width, availableH / viewport.height);
@@ -379,13 +339,10 @@ export class KeyboardHeroPreviewScene extends Scene {
     draw(viewport);
     setViewportSize(windowW, windowH);
     ctx.restore();
-    setButtonMouseState(this.mouseX, this.mouseY);
     return scale;
   }
 
   private renderBoardTab(ctx: CanvasRenderingContext2D, width: number, height: number): void {
-    this.renderViewportButtons(ctx);
-
     const viewport = VIEWPORT_MATRIX[this.viewportIndex];
     const scale = this.letterbox(ctx, viewport, width, height, (simulated) => {
       const layout = computeKeyboardHeroLayout(
@@ -396,7 +353,7 @@ export class KeyboardHeroPreviewScene extends Scene {
       this.drawStaticBoard(ctx, layout);
     });
 
-    drawText(ctx, `${viewport.label} at ${(scale * PERCENT).toFixed(0)}%`, {
+    worldText(ctx, `${viewport.label} at ${(scale * PERCENT).toFixed(0)}%`, {
       x: MARGIN,
       y: height - MARGIN,
       size: LABEL_SIZE,
@@ -421,7 +378,7 @@ export class KeyboardHeroPreviewScene extends Scene {
       drawNoteKeycap(
         ctx,
         lane,
-        laneRect.x + laneRect.width / 2,
+        laneRect.x + laneRect.w / 2,
         noteImgYToScreenY(layout, depth * LANE_BED_IMG_H),
         layout.noteSize,
         'normal',
@@ -443,17 +400,21 @@ export class KeyboardHeroPreviewScene extends Scene {
   }
 
   private renderStatesTab(ctx: CanvasRenderingContext2D, width: number): void {
-    drawText(ctx, `Board-space sizes, each swatch on its own lane's bed. Window ${width}px wide.`, {
-      x: MARGIN,
-      y: CONTENT_TOP,
-      size: SMALL_LABEL_SIZE,
-      color: SUBLABEL_COLOR,
-    });
+    worldText(
+      ctx,
+      `Board-space sizes, each swatch on its own lane's bed. Window ${width}px wide.`,
+      {
+        x: MARGIN,
+        y: this.contentTop,
+        size: SMALL_LABEL_SIZE,
+        color: SUBLABEL_COLOR,
+      },
+    );
 
     // The three families sit side by side rather than stacked: stacked, the
     // touch row falls off the bottom of every ordinary window, and comparing a
     // note against the receptor it lands in means seeing both at once.
-    const top = CONTENT_TOP + LINE_HEIGHT;
+    const top = this.contentTop + LINE_HEIGHT;
     let x = MARGIN;
     x += this.drawStateBlock(
       ctx,
@@ -508,7 +469,7 @@ export class KeyboardHeroPreviewScene extends Scene {
     top: number,
     paint: (lane: LaneIndex, state: TState, rect: SwatchRect) => void,
   ): number {
-    drawText(ctx, title, {
+    worldText(ctx, title, {
       x: left,
       y: top,
       size: LABEL_SIZE,
@@ -526,9 +487,9 @@ export class KeyboardHeroPreviewScene extends Scene {
         };
         this.drawSwatchBed(ctx, lane, rect);
         paint(lane, state, rect);
-        drawText(ctx, `${LANE_PALETTES[lane].name} · ${state}`, {
+        worldText(ctx, `${LANE_PALETTES[lane].name} · ${state}`, {
           x: rect.x,
-          y: rect.y + size + 2,
+          y: rect.y + size + SWATCH_CAPTION_OFFSET,
           size: SMALL_LABEL_SIZE,
           color: SUBLABEL_COLOR,
         });
@@ -543,42 +504,18 @@ export class KeyboardHeroPreviewScene extends Scene {
    * a surface it never meets.
    */
   private drawSwatchBed(ctx: CanvasRenderingContext2D, lane: LaneIndex, rect: SwatchRect): void {
-    drawLaneBedSlice(
-      ctx,
-      { x: rect.x, y: rect.y, width: rect.size, height: rect.size },
-      lane,
-      HIT_ZONE_IMG_CENTER,
-      SWATCH_BED_DEPTH_IMG,
-    );
+    drawLaneBedSlice(ctx, boxOf(rect), lane, HIT_ZONE_IMG_CENTER, SWATCH_BED_DEPTH_IMG);
   }
 
   private renderRunTab(ctx: CanvasRenderingContext2D, width: number, height: number): void {
-    this.renderViewportButtons(ctx);
-    const controlsY = CONTENT_TOP + BTN_HEIGHT + BTN_GAP;
-    this.restartButton = drawButton(ctx, {
-      x: MARGIN,
-      y: controlsY,
-      width: CONTROL_BTN_WIDTH,
-      height: BTN_HEIGHT,
-      label: 'Restart run',
-      labelSize: SMALL_LABEL_SIZE,
-      ...BUTTON_PRESETS.gold,
-    });
-    if (this.tab === 'Autoplay') {
-      this.perfectButton = drawButton(ctx, {
-        x: MARGIN + CONTROL_BTN_WIDTH + BTN_GAP,
-        y: controlsY,
-        width: CONTROL_BTN_WIDTH,
-        height: BTN_HEIGHT,
-        label: this.playPerfectly ? 'Timing: perfect' : 'Timing: jittered',
-        ...BUTTON_PRESETS.toggle,
-        labelSize: SMALL_LABEL_SIZE,
-      });
-    }
-
     const viewport = VIEWPORT_MATRIX[this.viewportIndex];
-    const scale = this.letterbox(ctx, viewport, width, height, () => {
-      this.board.render(ctx);
+    const scale = this.letterbox(ctx, viewport, width, height, (simulated) => {
+      const layout = computeKeyboardHeroLayout(
+        simulated.width,
+        simulated.height,
+        simulated.isMobile,
+      );
+      this.board.paint(chromeTarget(ctx), layout, simulated.width, simulated.height);
     });
 
     const detail =
@@ -589,9 +526,8 @@ export class KeyboardHeroPreviewScene extends Scene {
           : `presses swept ±${AUTOPLAY_JITTER_MS}ms`;
     const status = this.missingBinding
       ? 'a movement action has no key bound, so its lane cannot be auto-played'
-      : `${this.outcome} · ${detail} · the board reads the real device flag, so the touch row ` +
-        'only appears on a real phone';
-    drawText(ctx, `${viewport.label} at ${(scale * PERCENT).toFixed(0)}% — ${status}`, {
+      : `${this.outcome} · ${detail}`;
+    worldText(ctx, `${viewport.label} at ${(scale * PERCENT).toFixed(0)}% — ${status}`, {
       x: MARGIN,
       y: height - MARGIN,
       size: LABEL_SIZE,
@@ -606,6 +542,6 @@ interface SwatchRect {
   readonly size: number;
 }
 
-function boxOf(rect: SwatchRect): { x: number; y: number; width: number; height: number } {
-  return { x: rect.x, y: rect.y, width: rect.size, height: rect.size };
+function boxOf(rect: SwatchRect): Rect {
+  return { x: rect.x, y: rect.y, w: rect.size, h: rect.size };
 }

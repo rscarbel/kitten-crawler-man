@@ -6,7 +6,7 @@
 import type { PartyXpApplied } from '../../core/awardXp';
 import { ITEM_DEF, type ItemId } from '../../core/ItemDefs';
 import { CRAWLER_NAMES } from '../../core/SkillManager';
-import { drawItemIcon } from '../InventoryPanel';
+import { drawItemIcon } from '../icons/drawItemIcon';
 import type { IconPainter, QuestRewardSection, RewardItemLine } from './types';
 
 /** How a bag item's line reads beyond its name and count. */
@@ -21,7 +21,7 @@ export interface BagItemLineOptions {
 /** The icon a bag item wears in the inventory. */
 export function itemIconPainter(id: ItemId): IconPainter {
   const item = { ...ITEM_DEF[id], quantity: 1 };
-  return (ctx, x, y, size) => drawItemIcon(ctx, item, x, y, size);
+  return (ctx, rect) => drawItemIcon(ctx, rect, item);
 }
 
 /** A line for `count` of a bag item, drawn with its inventory icon and name. */

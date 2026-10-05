@@ -20,17 +20,10 @@ import type { GameMap } from '../map/GameMap';
 import type { TileContent } from '../map/tileTypes';
 import { clamp } from '../utils';
 import { townInteriorPropArtRiseTiles } from '../sprites/art/townInterior/townInteriorProps';
+import { intersect, type Rect } from '../ui/core/geom';
 
 /** An axis-aligned rectangle in world pixels. */
 export interface WorldRect {
-  readonly left: number;
-  readonly top: number;
-  readonly right: number;
-  readonly bottom: number;
-}
-
-/** The part of the screen the world is shown in, in screen pixels. */
-export interface ScreenRect {
   readonly left: number;
   readonly top: number;
   readonly right: number;
@@ -122,8 +115,8 @@ export function followCameraAxis(
 export function followCamera(
   focus: { readonly x: number; readonly y: number },
   bounds: WorldRect,
-  view: ScreenRect,
-  clear: ScreenRect = view,
+  view: Rect,
+  clear: Rect = view,
   focusRange: WorldRect | null = null,
 ): { x: number; y: number } {
   return {
@@ -131,20 +124,20 @@ export function followCamera(
       focus.x,
       bounds.left,
       bounds.right,
-      view.left,
-      view.right,
-      clear.left,
-      clear.right,
+      view.x,
+      view.x + view.w,
+      clear.x,
+      clear.x + clear.w,
       focusRange === null ? null : { start: focusRange.left, end: focusRange.right },
     ),
     y: followCameraAxis(
       focus.y,
       bounds.top,
       bounds.bottom,
-      view.top,
-      view.bottom,
-      clear.top,
-      clear.bottom,
+      view.y,
+      view.y + view.h,
+      clear.y,
+      clear.y + clear.h,
       focusRange === null ? null : { start: focusRange.top, end: focusRange.bottom },
     ),
   };
@@ -157,10 +150,10 @@ interface AxisSpan {
   readonly end: number;
 }
 
-function screenSpan(rect: ScreenRect, axis: Axis): AxisSpan {
+function screenSpan(rect: Rect, axis: Axis): AxisSpan {
   return axis === 'x'
-    ? { start: rect.left, end: rect.right }
-    : { start: rect.top, end: rect.bottom };
+    ? { start: rect.x, end: rect.x + rect.w }
+    : { start: rect.y, end: rect.y + rect.h };
 }
 
 function worldSpan(rect: WorldRect, axis: Axis): AxisSpan {
@@ -180,8 +173,8 @@ function spansOverlap(a: AxisSpan, b: AxisSpan): boolean {
  * does.
  */
 function mayOverlapOnAxis(
-  occluder: ScreenRect,
-  clear: ScreenRect,
+  occluder: Rect,
+  clear: Rect,
   bounds: WorldRect,
   mustSee: WorldRect,
   axis: Axis,
@@ -202,35 +195,18 @@ function mayOverlapOnAxis(
  * The clear rect's new edge when an occluder is pushed off it along `axis`:
  * off whichever end of the view the occluder is nearer to.
  */
-function pushOffAxis(
-  clear: ScreenRect,
-  view: ScreenRect,
-  occluder: ScreenRect,
-  axis: Axis,
-): ScreenRect {
+function pushOffAxis(clear: Rect, view: Rect, occluder: Rect, axis: Axis): Rect {
   const viewSpan = screenSpan(view, axis);
   const occluderSpan = screenSpan(occluder, axis);
+  const clearSpan = screenSpan(clear, axis);
   const viewCentre = (viewSpan.start + viewSpan.end) / 2;
   const occluderCentre = (occluderSpan.start + occluderSpan.end) / 2;
   const fromStart = occluderCentre < viewCentre;
-  if (axis === 'x') {
-    return fromStart
-      ? { ...clear, left: Math.max(clear.left, occluderSpan.end) }
-      : { ...clear, right: Math.min(clear.right, occluderSpan.start) };
-  }
-  return fromStart
-    ? { ...clear, top: Math.max(clear.top, occluderSpan.end) }
-    : { ...clear, bottom: Math.min(clear.bottom, occluderSpan.start) };
-}
-
-function intersectScreen(a: ScreenRect, b: ScreenRect): ScreenRect | null {
-  const rect = {
-    left: Math.max(a.left, b.left),
-    top: Math.max(a.top, b.top),
-    right: Math.min(a.right, b.right),
-    bottom: Math.min(a.bottom, b.bottom),
-  };
-  return rect.left < rect.right && rect.top < rect.bottom ? rect : null;
+  const start = fromStart ? Math.max(clearSpan.start, occluderSpan.end) : clearSpan.start;
+  const end = fromStart ? clearSpan.end : Math.min(clearSpan.end, occluderSpan.start);
+  return axis === 'x'
+    ? { ...clear, x: start, w: end - start }
+    : { ...clear, y: start, h: end - start };
 }
 
 /**
@@ -241,11 +217,9 @@ function intersectScreen(a: ScreenRect, b: ScreenRect): ScreenRect | null {
  * for both. A handful of occluders makes that a few hundred rects. Null when
  * no assignment leaves {@link MIN_CLEAR_SPAN_PX} on both axes.
  */
-function bestClearFor(view: ScreenRect, occluders: readonly ScreenRect[]): ScreenRect | null {
-  const viewWidth = view.right - view.left;
-  const viewHeight = view.bottom - view.top;
+function bestClearFor(view: Rect, occluders: readonly Rect[]): Rect | null {
   const assignments = 1 << occluders.length;
-  let best: ScreenRect | null = null;
+  let best: Rect | null = null;
   let bestScore = -1;
   for (let assignment = 0; assignment < assignments; assignment++) {
     let clear = view;
@@ -253,10 +227,8 @@ function bestClearFor(view: ScreenRect, occluders: readonly ScreenRect[]): Scree
       const axis: Axis = (assignment >> index) % 2 === 0 ? 'x' : 'y';
       clear = pushOffAxis(clear, view, occluder, axis);
     });
-    const width = clear.right - clear.left;
-    const height = clear.bottom - clear.top;
-    if (width < MIN_CLEAR_SPAN_PX || height < MIN_CLEAR_SPAN_PX) continue;
-    const score = (width / viewWidth) * (height / viewHeight);
+    if (clear.w < MIN_CLEAR_SPAN_PX || clear.h < MIN_CLEAR_SPAN_PX) continue;
+    const score = (clear.w / view.w) * (clear.h / view.h);
     if (score > bestScore) {
       best = clear;
       bestScore = score;
@@ -283,17 +255,17 @@ function bestClearFor(view: ScreenRect, occluders: readonly ScreenRect[]): Scree
  * one at a time, until one is found.
  */
 export function hudClearView(
-  view: ScreenRect,
-  occluders: readonly ScreenRect[],
+  view: Rect,
+  occluders: readonly Rect[],
   bounds: WorldRect,
   mustSee: WorldRect,
-): ScreenRect {
+): Rect {
   const onScreen = occluders.flatMap((occluder) => {
-    const clipped = intersectScreen(occluder, view);
+    const clipped = intersect(occluder, view);
     return clipped === null ? [] : [clipped];
   });
   let clear = view;
-  const everActive = new Set<ScreenRect>();
+  const everActive = new Set<Rect>();
   for (let pass = 0; pass <= onScreen.length; pass++) {
     const current = clear;
     for (const occluder of onScreen) {
@@ -305,18 +277,17 @@ export function hudClearView(
     let active = onScreen.filter((occluder) => everActive.has(occluder));
     let next = bestClearFor(view, active);
     while (next === null && active.length > 0) {
-      const areaOf = (rect: ScreenRect): number =>
-        (rect.right - rect.left) * (rect.bottom - rect.top);
+      const areaOf = (rect: Rect): number => rect.w * rect.h;
       const largest = active.reduce((a, b) => (areaOf(b) > areaOf(a) ? b : a));
       active = active.filter((occluder) => occluder !== largest);
       next = bestClearFor(view, active);
     }
     const settled = next ?? view;
     const unchanged =
-      settled.left === clear.left &&
-      settled.top === clear.top &&
-      settled.right === clear.right &&
-      settled.bottom === clear.bottom;
+      settled.x === clear.x &&
+      settled.y === clear.y &&
+      settled.w === clear.w &&
+      settled.h === clear.h;
     clear = settled;
     if (unchanged) break;
   }
@@ -471,7 +442,7 @@ export class ClearViewMemo {
     readonly map: GameMap;
     readonly mustSee: WorldRect;
     readonly key: string;
-    readonly clear: ScreenRect;
+    readonly clear: Rect;
   } | null = null;
 
   /**
@@ -479,7 +450,7 @@ export class ClearViewMemo {
    * its {@link interiorMustSeeBounds} or `key` — everything else the view
    * depends on, serialised — differs from the last call.
    */
-  clearView(map: GameMap, key: string, compute: (mustSee: WorldRect) => ScreenRect): ScreenRect {
+  clearView(map: GameMap, key: string, compute: (mustSee: WorldRect) => Rect): Rect {
     const mustSee = interiorMustSeeBounds(map);
     const last = this.last;
     if (last?.map === map && last.mustSee === mustSee && last.key === key) return last.clear;

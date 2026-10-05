@@ -13,13 +13,16 @@
 import type { AudioManager } from '../audio/AudioManager';
 import type { HumanPlayer } from '../creatures/HumanPlayer';
 import type { CatPlayer } from '../creatures/CatPlayer';
-import type { OverlayInputClaim } from './kits/OverlayClaims';
 import type { DefendQuestSystem } from './DefendQuestSystem';
 import { canAfford, partyCount, spend } from '../core/partyResources';
 import { constructionHpMultiplier, spikesUnlocked } from '../core/craftPerks';
 import { keybindings } from '../core/Keybindings';
 import { TILE_SIZE } from '../core/constants';
-import { StructureMenu, type StructureMenuModel } from '../ui/StructureMenu';
+import {
+  StructurePopover,
+  type StructurePopoverModel,
+} from '../ui/screens/construction/StructurePopover';
+import type { Surface } from '../ui/core/UiRoot';
 import {
   CONSTRUCTION_XP,
   SPIKES_BASE_HP,
@@ -47,11 +50,11 @@ function constructionLevel(crawler: Crawler): number {
 }
 
 export class GrateSpikesMenu {
-  private readonly menu: StructureMenu;
+  private readonly menu: StructurePopover;
   private grateIdx: number | null = null;
 
   constructor(private readonly deps: GrateSpikesMenuDeps) {
-    this.menu = new StructureMenu(deps.audio);
+    this.menu = new StructurePopover(deps.audio);
   }
 
   private active(): Crawler {
@@ -132,7 +135,7 @@ export class GrateSpikesMenu {
     return true;
   }
 
-  private model(camX: number, camY: number): StructureMenuModel | null {
+  private model(camX: number, camY: number): StructurePopoverModel | null {
     const grateIdx = this.grateIdx;
     if (grateIdx === null) return null;
     const barrier = this.deps.defendQuest.spikeableBarrierNear(this.active());
@@ -160,29 +163,28 @@ export class GrateSpikesMenu {
     };
   }
 
-  render(ctx: CanvasRenderingContext2D, camX: number, camY: number): void {
-    if (!this.menu.isOpen) return;
-    const model = this.model(camX, camY);
-    if (model === null) return;
-    this.menu.render(ctx, model, (id) => partyCount(this.deps.human, this.deps.cat, id));
+  /** The Structure menu key again closes it; Escape reaches `close` through the surface. */
+  private handleKeyDown(key: string, repeat: boolean): boolean {
+    if (!this.menu.isOpen || keybindings.actionFor(key) !== 'structureMenu') return false;
+    // A held key repeating is still the press that opened the menu.
+    if (!repeat) this.close();
+    return true;
   }
 
-  handleClick(mx: number, my: number): boolean {
-    return this.menu.handleClick(mx, my);
-  }
-
-  /** Escape closes it; so does the Structure menu key again. */
-  handleKeyDown(key: string, repeat = false): boolean {
-    if (!this.menu.isOpen) return false;
-    if (key === 'Escape' || keybindings.actionFor(key) === 'structureMenu') {
-      // A held key repeating is still the press that opened the menu.
-      if (!repeat) this.close();
-      return true;
-    }
-    return false;
-  }
-
-  overlayClaim(): OverlayInputClaim {
-    return this.menu.overlayClaim();
+  /**
+   * This menu as a surface beside its grate.
+   *
+   * @param camera Where the camera is, for anchoring the menu to the grate.
+   */
+  surface(camera: () => { readonly x: number; readonly y: number }): Surface {
+    return this.menu.surface('grate-spikes', {
+      model: () => {
+        const { x, y } = camera();
+        return this.model(x, y);
+      },
+      stockOf: (id) => partyCount(this.deps.human, this.deps.cat, id),
+      onKey: (key, mods) => this.handleKeyDown(key, mods.repeat === true),
+      close: () => void this.close(),
+    });
   }
 }

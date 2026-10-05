@@ -34,8 +34,8 @@ import {
   LANE_BED_IMG_W,
   LANE_COUNT,
   LANE_GAP_IMG,
-  type LanePalette,
 } from '../../systems/keyboardHeroLayout';
+import type { LanePalette } from './keyboardHeroLanePalettes';
 import { mulberry32, type Rng } from '../person/rng';
 
 export type NoteState = 'normal' | 'hit' | 'missed';

@@ -5,9 +5,21 @@ import { type InputManager } from '../core/InputManager';
 import { platform } from '../core/Platform';
 import { TILE_SIZE } from '../core/constants';
 import { clamp, frameTime } from '../utils';
-import * as UIRenderer from '../systems/DungeonUIRenderer';
-import type { HudViewState } from '../ui/hudButtons/hudViewState';
-import { desktopSummonButtonRect } from '../ui/hudButtons/hudButtonLayout';
+import {
+  renderEntityTooltip,
+  renderHealthVignette,
+  renderLevelUpFlash,
+  renderStatBoostFlash,
+} from '../systems/worldEffects';
+import type { DockButtonModel, HudModel, HudViewState, MinimapModel } from '../ui/hud/hudModel';
+import { HudSurface, surfacesOverHud, toCssRect } from '../ui/hud/HudSurface';
+import { inventoryTabRect, itemMenuEntryRects } from '../ui/screens/inventory/renderInventory';
+import type { Rect } from '../ui/core/geom';
+import { levelTimerCue, levelTimerEntry, type LevelTimerCue } from '../ui/hud/levelTimer';
+import { promptSurface } from '../ui/hud/prompt';
+import type { TopBandEntry } from '../ui/hud/topBand';
+import { hotbarPressInput, hotbarSlotModels } from '../systems/kits/hudHotbar';
+import { toastBagFullLosses } from '../systems/bagFullToasts';
 import { GameMap } from '../map/GameMap';
 import { DEFAULT_DUNGEON_FLOOR_THEME, setDungeonFloorTheme } from '../map/dungeon/floorTheme';
 import type { GameProgressInput } from '../auth/AuthClient';
@@ -21,7 +33,7 @@ import { type CatPlayer } from '../creatures/CatPlayer';
 import { despawnMob, type Mob, type LootDrop } from '../creatures/Mob';
 import type { Player } from '../Player';
 import { PlayerManager } from '../core/PlayerManager';
-import { MobileTouchState } from '../core/MobileTouchState';
+import { TouchMoveState } from '../core/TouchMoveState';
 import type { LevelDef, MobLevelRange, MobSpawnRule } from '../levels/types';
 import {
   spawnForLevel,
@@ -44,16 +56,16 @@ import { requiredSpriteKeysForLevel } from '../core/systemAssetRequirements';
 import { getLevelDef } from '../levels';
 import { dungeonOptionsForLevel } from '../levels/dungeonOptions';
 import { TUTORIAL_LEVEL_ID } from '../levels/tutorial';
-import { LevelCompleteScreen } from '../ui/LevelCompleteScreen';
+import { LevelCompleteScreen } from '../ui/screens/dialogs/LevelCompleteScreen';
 import {
-  RUN_COMPLETE_FOCUS_ID,
-  RunCompleteScreen,
   buildRunSummary,
   countPartyAchievements,
   finishRun,
-} from '../ui/RunCompleteScreen';
+  RunCompleteScreen,
+} from '../ui/screens/dialogs/RunCompleteScreen';
 import { PostSignupScene } from './PostSignupScene';
-import { MENU_TAP_DURATION_MS, MENU_TAP_MAX_DISTANCE, type PauseMenu } from '../ui/PauseMenu';
+import { MENU_TAP_MAX_DISTANCE } from '../ui/core/pointer';
+import type { PauseFrame, PauseScreen } from '../ui/screens/pause/PauseScreen';
 import { SpellSystem } from '../systems/SpellSystem';
 import type { InventoryItem } from '../core/ItemDefs';
 import { AchievementManager } from '../core/AchievementManager';
@@ -91,12 +103,10 @@ import { SystemNoticeSystem } from '../systems/SystemNoticeSystem';
 import { TacticsNoticeSystem } from '../systems/TacticsNoticeSystem';
 import type { TacticsTrait } from '../creatures/tactics/tacticsTraits';
 import { isEngagedInFight } from '../creatures/tactics/tacticalFrame';
-import { resolveSkillBookPrompt } from '../systems/skillBookUse';
 import { getSkillDef, CRAWLER_NAMES, type CrawlerKind } from '../core/SkillManager';
 import { stampSafeRoomCounters } from '../map/safeRoomCounterLayout';
 import { stampSafeRoomDecor } from '../map/safeRoomDecorLayout';
 import { BossRoomSystem, BOSS_META } from '../systems/BossRoomSystem';
-import { drawHUD, renderMobileSkillBadge, hudCoinCounterScreenPos, hudKeepouts } from '../ui/HUD';
 import { LavaBallSystem } from '../systems/LavaBallSystem';
 import { RockThrowSystem } from '../systems/RockThrowSystem';
 import { HirelingBoltSystem } from '../systems/HirelingBoltSystem';
@@ -140,21 +150,11 @@ import {
   activateHotbarSlot,
   drinkAnyHealthPotion,
   releaseChargedDynamite,
-  refuseDynamiteInSafeRoom,
   type HotbarHost,
 } from '../systems/kits/hotbarActions';
 import { MobRoster, type SceneWorld } from '../systems/kits/SceneWorld';
 import { markMobsAtCheckpoint, rewindMobsToCheckpoint } from '../systems/mobCheckpoint';
 import { deadFairyUpgradeBosses, replayFairyRateUpgrades } from '../systems/fairyUpgradeBosses';
-import {
-  advanceFocusedOverlay,
-  auditOverlayFocus,
-  focusedOverlay,
-  keyboardSuppressed,
-  worldHalted,
-  type OverlayInputClaim,
-  type OverlaySpaceHandling,
-} from '../systems/kits/OverlayClaims';
 import {
   CompanionSystem,
   createCompanionStanceState,
@@ -201,10 +201,10 @@ import {
   type TownDialogContext,
 } from '../systems/townDialog';
 import { buildTownNotices, type TownNoticeContext } from '../systems/townNotices';
-import { NoticeBoardPanel } from '../ui/NoticeBoardPanel';
-import { PricedMenuPanel } from '../ui/PricedMenuPanel';
-import { partyCoins } from '../core/partyCoins';
-import { FortuneTellerPanel } from '../ui/FortuneTellerPanel';
+import { NoticeBoard } from '../ui/screens/dialogs/NoticeBoard';
+import { ShopSession } from '../ui/screens/shop/shopSession';
+import { shopScreenSurface } from '../ui/screens/shop/ShopScreen';
+import { FortuneTable, fortuneScreenSurface } from '../ui/screens/shop/FortuneScreen';
 import {
   drawInteractionPrompt,
   interactionPromptsDrawnThisFrame,
@@ -228,7 +228,16 @@ import {
 import { HumanTalkDriver, openChestWithGesture } from '../creatures/humanGestures';
 import { type Pt } from '../sprites/art/carlArt';
 import { ChestRewardDialog, type ChestLootSplit } from '../ui/ChestRewardDialog';
-import { ConfirmModal } from '../ui/ConfirmModal';
+import { ConfirmDialog } from '../ui/screens/dialogs/ConfirmDialog';
+import { chestRewardSurface } from '../ui/screens/dialogs/chestRewardScreen';
+import { deathScreenSurface } from '../ui/screens/dialogs/deathScreen';
+import { nearGoblinHintSurface } from '../ui/screens/dialogs/nearGoblinHint';
+import { defendTutorialSurface } from '../ui/screens/dialogs/defendTutorial';
+import { stairwellPromptSurface } from '../ui/screens/dialogs/stairwellPrompt';
+import { buildingEntryPromptSurface } from '../ui/screens/dialogs/buildingEntryPrompt';
+import { keyboardHeroSurface } from '../ui/screens/dialogs/keyboardHeroSurface';
+import { spiderTutorialSurface } from '../ui/screens/dialogs/spiderTutorial';
+import { hackFailedPromptSurface } from '../ui/screens/dialogs/hackFailedPrompt';
 import { RewardFlySystem, type RewardFlyHold } from '../systems/RewardFlySystem';
 import { playRewardLandingCues } from '../systems/rewardFlyAudio';
 import type { PendingLoot } from '../systems/LootSystem';
@@ -280,9 +289,8 @@ import { DungeonIntroSystem } from '../systems/DungeonIntroSystem';
 import { TreeSystem } from '../systems/TreeSystem';
 import { WaterAnimationSystem } from '../systems/WaterAnimationSystem';
 import { AbilityManager, type AbilityId } from '../core/AbilityManager';
-import { FollowerMenu } from '../systems/FollowerMenu';
+import { FollowerScreen } from '../ui/screens/follower/FollowerScreen';
 import { MAGIC_MISSILE_DEF, MAGIC_MISSILE_TALISMAN_LEVEL } from '../abilities/magicMissile';
-import { MONGO_EXPLAINER_FOCUS_ID } from '../ui/MongoExplainer';
 import { MONGO_DEF, getMongoStats } from '../abilities/mongo';
 import {
   captureMongoPetState,
@@ -456,9 +464,7 @@ import { GameplayInputHandler } from '../systems/GameplayInputHandler';
 import { GameplayScene } from './GameplayScene';
 import { TutorialController, type TutorialRenderContext } from '../systems/TutorialController';
 import { TutorialMap, TUTORIAL_CHEST_POS, TUTORIAL_TREASURE_ROOM_BOUNDS } from '../map/TutorialMap';
-import { TutorialInventoryInteraction } from '../ui/TutorialInventoryInteraction';
-import { HOTBAR_REFUSAL_MESSAGE } from '../ui/InventoryInteraction';
-import { ITEM_DEF, isWearable, type ItemId } from '../core/ItemDefs';
+import { HOTBAR_COUNT, ITEM_DEF, type ItemId } from '../core/ItemDefs';
 import { BrindleGrub } from '../creatures/BrindleGrub';
 import { SmallSpider } from '../creatures/SmallSpider';
 import {
@@ -506,23 +512,24 @@ import type { SoundId } from '../audio/sounds';
 import type { VillageBuildingId } from '../map/overworld/briarHollowLayout';
 import { rectCentre } from '../map/overworld/briarHollowSite';
 import { sfxGroupsForLevelId } from '../audio/sfxGroups';
-import { drawText } from '../ui/TextBox';
 import {
   downedCompanionArrowCandidate,
-  renderKnockedOutUI,
+  knockedOutBandEntry,
   updateKnockoutState,
 } from '../systems/KnockoutRevive';
 import { viewportWidth, viewportHeight } from '../core/Viewport';
 import { renderQuality } from '../core/RenderQuality';
 import { LoadingOverlay } from '../ui/LoadingScreen';
 import { floorArrivalLoadTasks, floorArrivalOwesWork } from './floorArrivalLoad';
-import {
-  setButtonMouseState,
-  setButtonAudio,
-  notifyButtonClick,
-  clearButtonMouseState,
-  menuFocusContextId,
-} from '../ui/Button';
+import { createSceneUi, sceneMouse } from '../ui/core/sceneUi';
+import { byInputMode } from '../ui/core/inputMode';
+import { worldText } from '../ui/world/worldText';
+import { worldPalette } from '../ui/theme/worldInk';
+import { drawUnknownAbilityIcon } from '../ui/icons/rewardIcons';
+import { iconSquare } from '../ui/icons/iconSquare';
+import { dynamiteChargeSurface } from '../systems/DynamiteSystem';
+import type { Surface, UiRoot, WorldGesture } from '../ui/core/UiRoot';
+import { PRIMARY_BUTTON } from '../ui/core/pointer';
 
 /**
  * Persists a run. Everything a resumed game needs that the scene cannot
@@ -902,9 +909,6 @@ const BIG_BRAWLER_GUARD_RADIUS = BIG_BRAWLER_GUARD_RADIUS_TILES * TILE_SIZE;
 /** Spawn-table key of the mobs that guard the Juicer's gateway. */
 const TROGLODYTE_SPAWN_KEY = 'troglodyte';
 
-// UI positioning and sizing
-const MOBILE_UI_SPACING = 4;
-
 // Music and animation timing
 const MUSIC_FADE_IN_MS = 2000;
 
@@ -917,17 +921,18 @@ const KEYBOARD_HERO_MUSIC_HANDOVER_FADE_MS = 400;
 
 /** The keyboard-hero per-hit tick sits under the track rather than over it. */
 const KEYBOARD_HERO_HIT_TICK_VOLUME = 0.45;
-const LONGPRESS_TIMEOUT_MS = 500;
-const TOUCH_DRAG_THRESHOLD = 10;
-const MINIMAP_DRAG_THRESHOLD = 5;
+/** Escape opens the pause menu; it is not a rebindable action, so its keycap is fixed. */
+const PAUSE_KEY_LABEL = 'Esc';
+/** The id `Conversation.surface` mounts under. */
+const CONVERSATION_SURFACE_ID = 'conversation';
 /** How close two world taps must land, in time, to read as the village kit's double-tap gesture. */
 const BRIAR_HOLLOW_DOUBLE_TAP_WINDOW_MS = 300;
 /** A hold that moved the crawler further than this was a walk, not a long-press. */
 const HOLD_WALK_TOLERANCE_PX = 4;
 
-// Health visual feedback
-const HEALTH_BAR_COLOR_THRESHOLD = 0.78;
-const HEALTH_BAR_WARNING_THRESHOLD = 0.75;
+/** Where the intro's "begin" hint sits, as a fraction of the screen's height from the top. */
+const INTRO_BEGIN_HINT_Y_FRACTION = 0.78;
+const INTRO_BEGIN_HINT_SIZE = 18;
 
 // Combat and interaction
 const ACHIEVEMENT_RECENT_EVENTS_LIMIT = 5;
@@ -1006,9 +1011,8 @@ type Mutable<T> = { -readonly [K in keyof T]: T[K] };
 /** Inside this many tiles the pinned-objective arrow is suppressed — it is on screen. */
 const PINNED_ARROW_SUPPRESS_TILES = 4;
 /** Gold, matching the pinned Journal row it belongs to. */
-const PINNED_ARROW_COLOR = '#facc15';
-/** Gold, as the `!reveal` cheat arrow has always been. */
-const STAIRWELL_ARROW_COLOR = '#facc15';
+const PINNED_ARROW_COLOR = worldPalette.ink.gold;
+const STAIRWELL_ARROW_COLOR = worldPalette.ink.gold;
 
 function splitChestLoot(loot: LootDrop): { humanLoot: LootDrop; catLoot: LootDrop } {
   const humanItems: LootDrop['items'] = [];
@@ -1081,8 +1085,8 @@ export class DungeonScene extends GameplayScene {
   private readonly world: SceneWorld;
   private grotesqueSpiders: GrotesqueSpider[] = [];
 
-  protected override get pauseMenu(): PauseMenu {
-    return this.menus.pauseMenu;
+  protected override get pauseScreen(): PauseScreen {
+    return this.menus.pauseScreen;
   }
 
   /**
@@ -1161,10 +1165,6 @@ export class DungeonScene extends GameplayScene {
   private townProps: TownPropSystem | null = null;
   /** Shady's bounty loop. Overworld only — null on every other floor. */
   private bounty: BountySystem | null = null;
-  /** Screen rect of the Journal's compass button, or null on floors without one. */
-  private journalButtonRect: UIRenderer.Rect | null = null;
-  /** The HUD's Build button, while it shows. */
-  private buildButtonRect: UIRenderer.Rect | null = null;
   private townDecor: TownDecorSystem | null = null;
   private market: MarketSystem | null = null;
   /**
@@ -1183,9 +1183,9 @@ export class DungeonScene extends GameplayScene {
   private citizenDialogHandle: ConversationHandle | null = null;
   /** Keeps Carl talking, turned to whoever he is in conversation with. */
   private readonly humanTalk = new HumanTalkDriver();
-  private noticeBoard: NoticeBoardPanel | null = null;
-  private marketPanel: PricedMenuPanel | null = null;
-  private fortuneTeller: FortuneTellerPanel | null = null;
+  private noticeBoard: NoticeBoard | null = null;
+  private marketPanel: ShopSession | null = null;
+  private fortuneTeller: FortuneTable | null = null;
   private juicerRoom: JuicerRoomSystem;
   private bossRoomDressings: BossRoomDressings;
   private arenaRoom: ArenaRoomSystem;
@@ -1264,7 +1264,6 @@ export class DungeonScene extends GameplayScene {
   /** Companion combat stance, threaded by reference so it survives building trips and floor changes. */
   private readonly companionStance: CompanionStanceState;
   private readonly godModeState: GodModeState;
-  private _spiderKeyHandler: ((e: KeyboardEvent) => void) | null = null;
   private difficultyTelemetry = new DifficultyTelemetrySystem();
   /**
    * Whether the floor has already been told where its stairwell is.
@@ -1289,6 +1288,7 @@ export class DungeonScene extends GameplayScene {
   private bus = new EventBus();
   /** Stops forwarding the crawlers' quest-slot evictions onto this scene's bus; set while the scene is running. */
   private stopForwardingQuestItemEvictions: (() => void) | null = null;
+  private stopBagFullToasts: (() => void) | null = null;
   private readonly crawlerBarks = new CrawlerBarkSystem();
 
   private levelCompleteScreen = new LevelCompleteScreen();
@@ -1324,7 +1324,7 @@ export class DungeonScene extends GameplayScene {
   private readonly floorEntryGameStats: GameStatsSnapshot;
   private readonly floorEntryMercenaryRoster: MercenaryRosterCheckpoint;
 
-  private readonly followerMenu = new FollowerMenu();
+  private readonly followerMenu = new FollowerScreen();
 
   private _revealStairwell = false;
   private _revealSpiderLab = false;
@@ -1419,7 +1419,7 @@ export class DungeonScene extends GameplayScene {
 
   private readonly inputHandler = new GameplayInputHandler();
 
-  private readonly touch = new MobileTouchState();
+  private readonly touch = new TouchMoveState();
   private krakarenKilled = false;
   private krakarenBossRoomIdx = -1;
   private juicerKilled = false;
@@ -1431,13 +1431,19 @@ export class DungeonScene extends GameplayScene {
   private playerIdleFrames = 0;
   private readonly gameStats: GameStats;
 
-  private _mouseX = -9999; // eslint-disable-line @typescript-eslint/no-magic-numbers
-  private _mouseY = -9999; // eslint-disable-line @typescript-eslint/no-magic-numbers
-  private _mouseDown = false;
-  private _companionErrorMsg: { text: string; framesLeft: number } | null = null;
-  private _miniMapDragging = false;
-  private _miniMapDragLastX = 0;
-  private _miniMapDragLastY = 0;
+  /** The HUD, drawn from {@link hudModel} each frame. */
+  protected readonly hud = new HudSurface({
+    visible: () => this.hudTakesInput,
+    model: () => this.hudModel(),
+    toasts: () => this.menus.toasts,
+  });
+  /** Takes the scythe's timed key off the stack; set while a village floor is entered. */
+  private removeHarvestKeyHook: (() => void) | null = null;
+  /**
+   * The scene's surface stack: every menu, dialog and the HUD take pointer
+   * and key input through it, and the world sees only what none of them took.
+   */
+  readonly ui: UiRoot;
 
   private onSaveProgress: SaveProgressFn | undefined;
 
@@ -1447,14 +1453,12 @@ export class DungeonScene extends GameplayScene {
   /**
    * The one conversation panel every speaking system on this floor shares,
    * so two conversation boxes can never be open at once. This scene is the
-   * only thing that ticks it, once per frame; it is drawn once per frame too,
-   * by `BriarHollowKit.renderDialog` on a village floor (above the village's
-   * own panels) and by this scene everywhere else. Systems only open
-   * requests on it.
+   * only thing that ticks it, once per frame, and it is drawn through its
+   * own surface on the scene's `UiRoot`. Systems only open requests on it.
    */
   private readonly conversation: Conversation;
   private readonly tutorial: TutorialController | null = null;
-  private readonly questSwitchConfirm: ConfirmModal;
+  private readonly questSwitchConfirm: ConfirmDialog;
   /**
    * A quest started while the player was already tracking a different active
    * one. Held until every other modal on screen has closed, so the prompt
@@ -1485,8 +1489,12 @@ export class DungeonScene extends GameplayScene {
     // Both are needed before the roster below, which hands every mob it accepts
     // the spell context, and by the level spawners' audio-carrying siblings.
     this.audio = options?.audio ?? null;
+    this.ui = createSceneUi({
+      audio: this.audio,
+      handleWorldPointer: (gesture) => this.handleWorldPointer(gesture),
+    });
     this.conversation = new Conversation(this.audio);
-    this.questSwitchConfirm = new ConfirmModal(this.audio);
+    this.questSwitchConfirm = new ConfirmDialog(this.audio);
     this.companionStance = options?.companionStance ?? createCompanionStanceState();
     this.godModeState = options?.godModeState ?? createGodModeState();
     this.gameStats = options?.gameStats ?? new GameStats();
@@ -1502,21 +1510,6 @@ export class DungeonScene extends GameplayScene {
     this.abilityManager.register(MONGO_DEF);
 
     const tutorialController = options?.tutorialController ?? null;
-    // Built here rather than beside the bag it restricts: `MenusKit` owns the
-    // bag now, and the kit is constructed long before the tutorial's other
-    // wiring.
-    const tutorialInventoryInteraction =
-      tutorialController === null ? null : new TutorialInventoryInteraction();
-    if (tutorialController !== null && tutorialInventoryInteraction !== null) {
-      const drag = tutorialInventoryInteraction;
-      drag.getAllowedSourceItemId = () => tutorialController.tutorialDragItemId;
-      drag.getAllowedTargetHotbarSlot = () => tutorialController.tutorialDragTargetSlot;
-      drag.getBlockedDragItemId = () => tutorialController.tutorialBlockedDragItemId;
-      drag.onBlockedDragAttempt = () => {
-        this.audio?.play('error');
-        tutorialController.triggerBoxersDragHint();
-      };
-    }
     /**
      * The floor's starting population, held aside until the roster exists —
      * `MobRoster.add` is what gives a mob its map and spell context, so nothing
@@ -1750,7 +1743,6 @@ export class DungeonScene extends GameplayScene {
     this.miniMap = reusableMiniMap ?? new MiniMapSystem(this.gameMap);
     if (options?.hudView !== undefined) {
       this.miniMap.setExpanded(options.hudView.miniMapExpanded);
-      this._hudCollapsed = options.hudView.hudCollapsed;
     }
     this.safeRoom = new SafeRoomSystem(
       this.gameMap,
@@ -1768,8 +1760,13 @@ export class DungeonScene extends GameplayScene {
     this.menus = new MenusKit({
       world: this.world,
       abilityManager: this.abilityManager,
-      inventoryInteraction: tutorialInventoryInteraction ?? undefined,
-      onOverlayRaised: () => this.clearInvLongPress(),
+      ...(tutorialController === null
+        ? {}
+        : {
+            inventoryRestrictions: () => tutorialController.inventoryRestrictions(),
+            onBlockedInventoryDrag: () => tutorialController.triggerBoxersDragHint(),
+            inventoryCrawlerLock: () => tutorialController.pauseRestriction()?.crawler ?? null,
+          }),
       // The tutorial waits on this one: `SWITCHED_TO_CAT` locks the cat in place
       // and drinking is the only thing that unlocks her.
       onPotionDrunk: (id) => {
@@ -1781,10 +1778,6 @@ export class DungeonScene extends GameplayScene {
       worldHeld: () => this.gameplayHalted,
     });
     this.menus.questReward.onClosed = (spec) => this.flyQuestRewards(spec);
-    this.menus.inventoryPanel.interaction.onBlockedHotbarDrop = () => {
-      this.audio?.play('error');
-      this.menus.announce(HOTBAR_REFUSAL_MESSAGE);
-    };
     this.menus.useSceneItem = (item) => {
       if (item.id === 'wayfinders_anchor') this.recall.requestTravel(this.active());
     };
@@ -1812,7 +1805,7 @@ export class DungeonScene extends GameplayScene {
         this.rewardFly.enqueueItem(itemId, name, worldX - cam.x, worldY - cam.y);
       }
     };
-    this.systemNotices = new SystemNoticeSystem(this.bus, this.menus.hotbarToast);
+    this.systemNotices = new SystemNoticeSystem(this.bus, this.menus.toasts);
     // The safe-room counter is stamped here rather than in the generators: it
     // belongs to every safe room on every map, and this and BuildingInteriorScene
     // are the only two places a safe room is ever brought to life. Idempotent,
@@ -1878,9 +1871,6 @@ export class DungeonScene extends GameplayScene {
       levelDef.levelledCurve,
       levelDef.defendQuestIntensity,
     );
-    // The column's layout state is module-level and outlives a scene; a new
-    // one starts from nothing until its first frame says otherwise.
-    UIRenderer.resetColumnLayoutState();
     this.grateSpikes = new GrateSpikesMenu({
       defendQuest: this.defendQuest,
       human: this.human,
@@ -1931,7 +1921,7 @@ export class DungeonScene extends GameplayScene {
       levelDef.id,
       (entity) => this.safeRoom.isEntityInSafeRoom(entity),
       {
-        toast: (message) => this.menus.hotbarToast.show(message),
+        toast: (message) => this.menus.toasts.post(message),
         sound: (id) => this.audio?.play(id),
       },
     );
@@ -2070,10 +2060,10 @@ export class DungeonScene extends GameplayScene {
           if (teleportTile === undefined) {
             this.audio?.play('error');
             const companionName = companionIsCat ? 'cat' : 'human';
-            this._companionErrorMsg = {
-              text: `The ${companionName} is too far away.`,
-              framesLeft: COMPANION_ERROR_DISPLAY_FRAMES,
-            };
+            this.menus.toasts.post(`The ${companionName} is too far away.`, {
+              tone: 'danger',
+              durationTicks: COMPANION_ERROR_DISPLAY_FRAMES,
+            });
             return;
           }
           companion.x = teleportTile.x * ts;
@@ -2227,7 +2217,7 @@ export class DungeonScene extends GameplayScene {
       () => this.bossRoom.anyLocked,
       (player, rangePx) => hostileWithinRadius(player, this.world.roster.grid, rangePx),
       (tile) => this.warpPartyForRecall(tile),
-      (message) => this.menus.hotbarToast.show(message),
+      (message) => this.menus.toasts.post(message),
       this.audio,
       travelState,
       (caster) => {
@@ -2267,10 +2257,7 @@ export class DungeonScene extends GameplayScene {
           this.musicPersistsAcrossExit = true;
           const humanSnap = snapPlayer(this.human);
           const catSnap = snapPlayer(this.cat);
-          const hudView: HudViewState = {
-            miniMapExpanded: this.miniMap.isExpanded,
-            hudCollapsed: this._hudCollapsed,
-          };
+          const hudView: HudViewState = { miniMapExpanded: this.miniMap.isExpanded };
           this.sceneManager.replace(
             new BuildingInteriorScene(
               entry,
@@ -2395,13 +2382,13 @@ export class DungeonScene extends GameplayScene {
           blockedMessage: (entry) => this.sealedBuildingMessage(entry),
           onRefused: (message) => {
             this.audio?.play('error');
-            this.menus.hotbarToast.show(message);
+            this.menus.toasts.post(message);
           },
         },
       );
-      this.noticeBoard = new NoticeBoardPanel();
-      this.marketPanel = new PricedMenuPanel();
-      this.fortuneTeller = new FortuneTellerPanel();
+      this.noticeBoard = new NoticeBoard();
+      this.marketPanel = new ShopSession();
+      this.fortuneTeller = new FortuneTable();
       // Both built before TownLifeSystem so their blocked tiles are excluded from
       // the citizen spawn candidates — and the market first, so the other props
       // can steer clear of the stall footprints it claims.
@@ -2490,8 +2477,7 @@ export class DungeonScene extends GameplayScene {
       });
       const gathering = this.gathering;
       this.companion.registerHarvestSource(gathering);
-      this.menus.inventoryPanel.interaction.extraContextOptions = (item) =>
-        gathering.contextOptionsFor(item);
+      this.menus.inventoryActions.extraContextOptions = (item) => gathering.contextOptionsFor(item);
       this.briarHollowKit =
         this.gameMap.briarHollow !== null
           ? new BriarHollowKit(this.world, {
@@ -2592,7 +2578,7 @@ export class DungeonScene extends GameplayScene {
         this.abilityManager.addXp('mongo', amount);
       },
       () => mongoXpFraction(this.abilityManager),
-      (message) => this.menus.hotbarToast.show(message),
+      this.menus.toasts,
     );
     if (options?.mongoUnlocked) {
       this.mongoSystem.unlocked = true;
@@ -2739,7 +2725,7 @@ export class DungeonScene extends GameplayScene {
     this.doomsdayEscape = new DoomsdayEscapeSystem(
       this.gameMap,
       this.doomsdayQuestProgress,
-      (message) => this.menus.hotbarToast.show(message),
+      (message) => this.menus.toasts.post(message),
       () => (this.human.isKnockedOut || this.cat.isKnockedOut ? STAIRWELL_KNOCKED_OUT_TOAST : null),
     );
     // Y-sorted with the town's fixtures, so the tower above it can never paint over it.
@@ -2752,21 +2738,15 @@ export class DungeonScene extends GameplayScene {
     if (this.audio !== null) {
       aiAdapter.messages.setAudio(this.audio);
     }
-    this.menus.pauseMenu.onResetGame = this.onResetGameCallback;
-    this.menus.pauseMenu.skipAudioPause = () =>
+    this.menus.pauseScreen.onResetGame = this.onResetGameCallback;
+    this.menus.pauseScreen.skipAudioPause = () =>
       this.tutorial !== null &&
       (this.tutorial.state === 'HUMAN_OPENED_ACHIEVEMENT' ||
         this.tutorial.state === 'CAT_OPENED_TREASURE_BOX');
-    this.menus.pauseMenu.onOpenChat = () => {
-      this.menus.pauseMenu.close();
+    this.menus.pauseScreen.onOpenChat = () => {
+      this.menus.pauseScreen.close();
       this.triggerOpenChat();
     };
-
-    const openInventoryFor = (player: HumanPlayer | CatPlayer): void => {
-      this.menus.openInventoryFor(player, () => this.menus.pauseMenu.openToInventory());
-    };
-    this.menus.pauseMenu.onManageHumanInventory = () => openInventoryFor(this.human);
-    this.menus.pauseMenu.onManageCatInventory = () => openInventoryFor(this.cat);
 
     this.gameMap.bossRooms.forEach((br, i) => {
       const cx = br.centre.x;
@@ -2845,6 +2825,7 @@ export class DungeonScene extends GameplayScene {
       renderQuality.beginLoadingCover();
       holdFigureIdleSweep();
     }
+    for (const surface of this.surfaces()) this.ui.mount(surface);
   }
 
   /**
@@ -3030,7 +3011,7 @@ export class DungeonScene extends GameplayScene {
       // kill at all (a cow caught in a blast): it earns nothing below but its
       // gore and its corpse marker.
       const creditedKiller = mob.countsAsKill ? killer : null;
-      if (creditedKiller !== null) this.mongoSystem.onKill();
+      if (creditedKiller !== null) this.mongoSystem.onKill(this.cat.isActive);
 
       this.combat.spawnKillGore(mob, killer);
       this.miniMap.addCorpseMarker(cx, cy);
@@ -3250,10 +3231,7 @@ export class DungeonScene extends GameplayScene {
     });
 
     bus.on('rewardGranted', (e) => {
-      for (const reward of e.rewards) {
-        this.menus.cancelInventoryDragForOverlay();
-        this.menus.rewardGrantedDialog.enqueue(reward);
-      }
+      for (const reward of e.rewards) this.menus.rewardGrantedDialog.enqueue(reward);
     });
 
     bus.on('playerLevelUp', (e) => {
@@ -3338,7 +3316,7 @@ export class DungeonScene extends GameplayScene {
     });
 
     this.audio?.wireEvents(bus, this.levelDef.music);
-    this.wireSaveIndicator(bus);
+    this.wireSaveIndicator(bus, this.menus.toasts);
   }
 
   onEnter(): void {
@@ -3348,6 +3326,8 @@ export class DungeonScene extends GameplayScene {
       human: this.human,
       cat: this.cat,
     });
+    this.stopBagFullToasts?.();
+    this.stopBagFullToasts = toastBagFullLosses([this.human, this.cat], this.menus.toasts);
     // Level entry is the one stretch of real rendering the player cannot act
     // during, which is what makes it usable cover for the quality probe.
     renderQuality.requestProbe();
@@ -3379,57 +3359,15 @@ export class DungeonScene extends GameplayScene {
       this.audio.onRunning(startIntro);
     }
 
-    this._spiderKeyHandler = (e: KeyboardEvent) => {
-      // Escape dismisses the quest-complete screen, and every other key under
-      // it is swallowed; Space and Enter reach its Continue through the focus
-      // ring before this listener runs.
-      if (this.menus.questReward.handleKeyDown(e.key, e.repeat)) {
-        e.preventDefault();
-        e.stopImmediatePropagation();
-        return;
-      }
-      if (this.questSwitchConfirm.handleKey(e.key)) {
-        e.preventDefault();
-        e.stopImmediatePropagation();
-        return;
-      }
-      // A conversation's numbered choices are picked with 1/2/3, which the
-      // hotbar also owns. Stopped rather than merely defaulted: the shared
-      // handler's suppression gate reads whether it is open *after* this ran,
-      // and the choice that closes it — "leave" — would otherwise land on a
-      // hotbar slot on its way out.
-      if (this.conversation.handleKeyDown(e.key)) {
-        e.preventDefault();
-        e.stopImmediatePropagation();
-        return;
-      }
-      if (this.grateSpikes.handleKeyDown(e.key, e.repeat)) {
-        e.preventDefault();
-        e.stopImmediatePropagation();
-        return;
-      }
-      // A villager's numbered choices, stopped for the same reason as the Bopca's.
-      if (this.briarHollowKit?.handleKeyDown(e.key, e.repeat, e.timeStamp) === true) {
-        e.preventDefault();
-        e.stopImmediatePropagation();
-        return;
-      }
-      // The bag's Drop/Trade quantity prompt: digits edit the amount directly,
-      // so they must never also reach the hotbar or the movement keys.
-      if (this.menus.itemQuantityPicker.handleKey(e.key)) {
-        e.preventDefault();
-        e.stopImmediatePropagation();
-        return;
-      }
-      this.spiderQuest.handleKeyDown(e.key, e.timeStamp);
-    };
-    window.addEventListener('keydown', this._spiderKeyHandler);
+    const village = this.briarHollowKit;
+    this.removeHarvestKeyHook?.();
+    this.removeHarvestKeyHook =
+      village === null ? null : this.ui.addKeyHook(village.harvestKeyHook);
 
     this.inputHandler.bind({
-      // Reads the overlay registry rather than its own list, so that a hotbar key
-      // pressed under an award overlay cannot queue a second read behind it,
-      // stacking a prompt whose Read button the overlay's own OK then swallows.
-      isSuppressed: () => keyboardSuppressed(this.overlayClaims),
+      // A key reaches this handler only when no surface consumed it; a pausing
+      // or keyboard-taking surface still keeps the rest from gameplay.
+      isSuppressed: () => this.ui.keyboardLocked(),
       // The two end-of-floor screens count as over for Escape: each owns the
       // screen until its own button is pressed, and a pause menu opened behind
       // one would take the keyboard from it.
@@ -3440,110 +3378,7 @@ export class DungeonScene extends GameplayScene {
         this.levelCompleteScreen.isActive ||
         this.runCompleteScreen.isActive ||
         this.arrivalLoading?.isOpen === true,
-      dismissChestDialog: () => this.chestRewardDialog.handleKeyDown(),
-      dismissDialog: () => {
-        if (this.menus.mongoExplainer.isOpen && !this.menus.isAwardStackShowing) {
-          this.menus.mongoExplainer.close();
-          return true;
-        }
-        if (this.menus.craftExplainers.isOpen && !this.menus.isAwardStackShowing) {
-          this.menus.craftExplainers.close();
-          return true;
-        }
-        if (this.menus.skillBookPrompt.isOpen) {
-          // Escape declines the read; the book stays in the pack.
-          this.menus.skillBookPrompt.close();
-          this.menus.releaseSkillBookReader();
-          return true;
-        }
-        if (this.chat.isOpen) {
-          this.chat.cancel();
-          return true;
-        }
-        if (this.defendQuest.dismissDialog()) return true;
-        if (this.grateSpikes.close()) return true;
-        if (this.spiderQuest.dismissDialog()) return true;
-        if (this.bounty?.dismissDialog() === true) return true;
-        if (this.circusQuest.dismissDialog()) return true;
-        if (this.murderQuest.dismissDialog()) return true;
-        if (this.anchorQuest.dismissDialog()) return true;
-        if (this.noticeBoard?.isOpen === true) {
-          this.noticeBoard.close();
-          return true;
-        }
-        if (this.marketPanel?.isOpen === true) {
-          this.marketPanel.close();
-          return true;
-        }
-        if (this.travelMenu.isOpen) {
-          this.travelMenu.close();
-          return true;
-        }
-        if (this.fortuneTeller?.isOpen === true) {
-          this.fortuneTeller.close();
-          return true;
-        }
-        if (this.safeRoom.mordecaiDialogOpen) {
-          this.conversation.dismiss();
-          return true;
-        }
-        if (this.bopca.dismissDialog()) return true;
-        // Last, and declining while anything halts the world: a street
-        // conversation is the bottom-most surface Escape can be aimed at,
-        // everything else is drawn over it, and the handler reaches the
-        // stairwell, building and follower menus *after* this callback. Without
-        // the guard, stepping onto a shop's doorstep mid-sentence and pressing
-        // Escape shuts the conversation underneath the Enter/Stay menu the
-        // player is actually looking at.
-        if (this.citizenDialogTarget !== null && !this.gameplayHalted) {
-          this.conversation.dismiss();
-          return true;
-        }
-        if (!this.gameplayHalted && this.briarHollowKit?.dismissDialog() === true) return true;
-        if (this.signDialogTarget !== null && !this.gameplayHalted) {
-          this.conversation.dismiss();
-          return true;
-        }
-        return false;
-      },
-      dismissStairwell: () => {
-        if (this.stairwell.menuOpen) {
-          this.stairwell.closeMenu();
-          return true;
-        }
-        return false;
-      },
-      dismissBuilding: () => {
-        if (this.building?.menuOpen) {
-          this.building.closeMenu();
-          return true;
-        }
-        return false;
-      },
-      dismissFollowerMenu: () => {
-        if (this.followerMenu.isOpen) {
-          this.followerMenu.close();
-          return true;
-        }
-        return false;
-      },
-      togglePause: () => {
-        this.closeConversationForMenu();
-        this.menus.pauseMenu.toggle();
-        if (this.menus.pauseMenu.isOpen) {
-          this.menus.closePanels();
-          this.audio?.play('menu_open');
-        } else {
-          this.input.clear();
-        }
-      },
-      // Runs before the input-suppression gate, because most of these overlays
-      // are themselves what suppresses input — Space would otherwise never
-      // reach them. Consuming here is also what keeps the press off the world:
-      // whatever owns the screen eats Space even when it has nothing to do with
-      // it, so a click-only menu can never leak the press to an NPC behind it.
-      advanceDialog: () =>
-        this.handOffConversationPress() || advanceFocusedOverlay(this.overlayClaims) !== 'ignored',
+      togglePause: () => this.togglePause(),
       switchCharacter: () => this.triggerSwitchCharacter(),
       spaceAction: () => this.triggerSpaceAction(),
       // No slot: the dedicated potion key means "any bottle you have", unlike a
@@ -3585,6 +3420,8 @@ export class DungeonScene extends GameplayScene {
   onExit(): void {
     this.stopForwardingQuestItemEvictions?.();
     this.stopForwardingQuestItemEvictions = null;
+    this.stopBagFullToasts?.();
+    this.stopBagFullToasts = null;
     // A scene left while still loading must not leave the probe blindfolded,
     // nor the figure cache unable to let anything go.
     if (this.arrivalLoading?.isOpen === true) {
@@ -3610,13 +3447,11 @@ export class DungeonScene extends GameplayScene {
     this.menus.dispose();
     if (!this.musicPersistsAcrossExit) this.audio?.stopMusic();
     this.inputHandler.unbind();
+    this.removeHarvestKeyHook?.();
+    this.removeHarvestKeyHook = null;
     // A real <input> on document.body, which swallows every key it is focused
     // for. Left behind, it makes the scene that replaces this one unplayable.
     this.chat.dispose();
-    if (this._spiderKeyHandler !== null) {
-      window.removeEventListener('keydown', this._spiderKeyHandler);
-      this._spiderKeyHandler = null;
-    }
     this.spiderQuest.dispose();
     this.bounty?.dispose();
     this.briarHollowKit?.dispose();
@@ -3786,7 +3621,7 @@ export class DungeonScene extends GameplayScene {
           camY,
           STAIRWELL_ARROW_COLOR,
           {
-            avoidRect: this._hudRect,
+            avoidRect: this.hudFramesRect(),
           },
         ),
     };
@@ -3823,8 +3658,8 @@ export class DungeonScene extends GameplayScene {
         ctx.save();
         ctx.translate(arrowX, arrowY);
         ctx.rotate(angle);
-        ctx.fillStyle = '#a855f7';
-        ctx.strokeStyle = '#000';
+        ctx.fillStyle = worldPalette.waymark.cheatReveal;
+        ctx.strokeStyle = worldPalette.shade;
         ctx.lineWidth = ARROW_LINE_WIDTH;
         ctx.beginPath();
         ctx.moveTo(len, 0);
@@ -3871,31 +3706,31 @@ export class DungeonScene extends GameplayScene {
     if (this.gameOver) return false;
     this.closeConversationForMenu();
     this.syncJournalContext();
-    this.menus.pauseMenu.openToJournal();
+    this.menus.pauseScreen.open('journal');
     // The same housekeeping `togglePause` does, because this opens the same
     // menu: two panels left open behind it would be waiting on the far side of
     // a Resume the player pressed to get back to the game.
     this.menus.closePanels();
-    // No sound here: the compass button declares its own, which the pointer
-    // paths have already played through `notifyButtonClick`. The key path plays
-    // it at the binding instead, exactly as `togglePause` does.
+    // No sound here: the compass button declares its own, which `UiRoot` plays
+    // when the tap fires. The key path plays it at the binding instead, exactly
+    // as `togglePause` does.
     return true;
   }
 
   /**
-   * Hands the pause menu this frame's journal, or takes it away.
+   * Hands the pause screen this frame's journal, or takes it away.
    *
-   * Null is what hides the Quest Journal row from the Game tab, so the menu has
+   * Null is what hides the Journal entry from the pause screen, so the menu has
    * one condition to read rather than a floor number it would have to be told
    * about separately.
    */
   private syncJournalContext(): void {
     if (!this.hasQuestJournal) {
-      this.menus.pauseMenu.journalContext = null;
+      this.menus.pauseScreen.journalContext = null;
       return;
     }
     const active = this.active();
-    this.menus.pauseMenu.journalContext = {
+    this.menus.pauseScreen.journalContext = {
       playerTileX: Math.floor(active.x / TILE_SIZE),
       playerTileY: Math.floor(active.y / TILE_SIZE),
       entries: this._trackerEntries,
@@ -3948,7 +3783,7 @@ export class DungeonScene extends GameplayScene {
    * tiles off screen still counts.
    */
   private hasObjectiveBeacons(camX: number, camY: number): boolean {
-    if (this.gameOver || this.menus.pauseMenu.isOpen) return false;
+    if (this.gameOver || this.menus.pauseScreen.isOpen) return false;
     const reach = TILE_SIZE * BEACON_VIEW_REACH_TILES;
     const inView = (tileX: number, tileY: number): boolean => {
       const x = tileX * TILE_SIZE;
@@ -4015,7 +3850,7 @@ export class DungeonScene extends GameplayScene {
    * drawing it twice would stack two additive beams at double brightness.
    */
   private objectiveBeamTargets(): ReadonlyArray<TrackerTarget> {
-    if (this.gameOver || this.menus.pauseMenu.isOpen) return [];
+    if (this.gameOver || this.menus.pauseScreen.isOpen) return [];
     const pinned = this.pinnedObjectiveTile;
     const beams: TrackerTarget[] = [];
     let pinnedAlreadyLit = false;
@@ -4109,7 +3944,7 @@ export class DungeonScene extends GameplayScene {
           camY,
           PINNED_ARROW_COLOR,
           {
-            avoidRect: this._hudRect,
+            avoidRect: this.hudFramesRect(),
           },
         ),
     };
@@ -4129,7 +3964,7 @@ export class DungeonScene extends GameplayScene {
   }
 
   private triggerOpenChat(): void {
-    if (this.gameOver || this.menus.pauseMenu.isOpen) return;
+    if (this.gameOver || this.menus.pauseScreen.isOpen) return;
     this.chat.open(this.sceneManager.canvas);
   }
 
@@ -5486,7 +5321,7 @@ export class DungeonScene extends GameplayScene {
     camY: number,
   ): boolean {
     // `triggerSpaceAction` hands the press to whatever overlay owns the screen.
-    if (this.focusedOverlay !== null) return false;
+    if (this.overlayOpen) return false;
     const active = this.active();
     // The safe room's Space chain ends at its own fixtures and never reaches a pickup.
     if (this.safeRoom.isEntityInSafeRoom(active)) return false;
@@ -5530,14 +5365,10 @@ export class DungeonScene extends GameplayScene {
   /** Opens a market stall's buy panel on the rows the market system built. */
   private openMarketStall(browse: MarketBrowse): void {
     if (this.marketPanel === null) return;
-    this.marketPanel.open(
-      browse.buildMenu,
-      browse.purchase,
-      browse.onBlocked,
-      undefined,
-      0,
-      browse.sell,
-    );
+    this.marketPanel.open(browse.buildMenu, browse.purchase, {
+      onBlocked: browse.onBlocked,
+      sell: browse.sell,
+    });
     this.audio?.play('menu_open');
   }
 
@@ -5704,145 +5535,215 @@ export class DungeonScene extends GameplayScene {
     this.signDialogHandle = null;
   }
 
-  /** This floor's overlays, ordered by which one a press should reach first. */
-  private get overlayClaims(): readonly OverlayInputClaim[] {
+  /**
+   * Every surface on this floor that can take input or hide the world. The
+   * band places each in the stack and, within a band, the one opened last is
+   * on top; that order decides what draws over what, which surface a press
+   * reaches, and where Escape goes.
+   */
+  private surfaces(): Surface[] {
+    const party = (): { readonly active: Player; readonly companion: Player } => ({
+      active: this.active(),
+      companion: this.inactive(),
+    });
+    const camera = (): { readonly x: number; readonly y: number } => this.camera();
     const tutorial = this.tutorial;
-    const noticeBoard = this.noticeBoard;
-    const marketPanel = this.marketPanel;
-    const fortuneTeller = this.fortuneTeller;
-    const closeWithClick = (close: () => void): OverlaySpaceHandling => ({
-      kind: 'advance',
-      advance: () => {
-        close();
-        this.audio?.play('menu_click');
-      },
-    });
-    /**
-     * The shape most of this list takes: a panel that stops the floor, takes the
-     * keyboard, and answers Space through its own focus ring rather than here.
-     */
-    const modal = (isOpen: boolean, focusContext: string | null): OverlayInputClaim => ({
-      isOpen,
-      space: { kind: 'swallow' },
-      locksKeyboard: true,
-      haltsWorld: true,
-      focusContext,
-    });
-    /** A dialog the player pages through, over a floor that keeps running. */
-    const floatingDialog = (isOpen: boolean, advance: () => void): OverlayInputClaim => ({
-      isOpen,
-      space: { kind: 'advance', advance },
-      locksKeyboard: false,
-      haltsWorld: false,
-      focusContext: null,
-    });
     return [
-      // First: while the floor is still loading nothing else can be on screen,
-      // and nothing the keyboard does may reach a world that is not drawn yet.
-      ...(this.arrivalLoading === null ? [] : [this.arrivalLoading.overlayClaim()]),
-      modal(this.chestRewardDialog.isOpen, 'chest-reward'),
-      this.questSwitchConfirm.overlayClaim(),
-      floatingDialog(tutorial?.showNearGoblinDialog === true, () =>
-        tutorial?.dismissNearGoblinDialog(),
-      ),
-      // Tutorial Mordecai and his reminders open on the shared conversation,
-      // whose own claim at the end of this list answers Space for them.
-      // No single ring to promise: the award stack is several surfaces deep, and
-      // each of the notification, the loot box and the chest award declares its
-      // own. Floating, so the audit does not hold it to one.
-      floatingDialog(this.achievementUI.isBlocking, () => void this.achievementUI.handleSpaceBar()),
-      // The four below each render an accept button inside their own focus ring,
-      // so the ring takes the press before this chain is reached. The claim is
-      // still needed to keep the rest of the keyboard — and the world behind —
-      // out of it.
-      this.menus.questReward.overlayClaim(),
-      modal(this.menus.levelUpDialog.isShowing, 'level-up'),
-      modal(this.menus.rewardGrantedDialog.isShowing, 'reward-granted'),
-      modal(this.menus.mongoExplainer.isOpen, MONGO_EXPLAINER_FOCUS_ID),
-      modal(this.menus.craftExplainers.isOpen, this.menus.craftExplainers.focusId),
-      modal(this.menus.skillBookPrompt.isOpen, 'skill-book-prompt'),
-      this.menus.itemQuantityPicker.overlayClaim(),
-      // Below the award stack because that stack draws over the death screen — a
-      // level-up earned by the blow that killed you is still on top and still
-      // has to be dismissible. `locksKeyboard` even so: the screen's own focus
-      // ring listens in the capture phase and is reached first, so locking here
-      // only stops a hotbar key spending a potion the respawn will throw away.
-      modal(this.gameOver, 'death-screen'),
+      ...(this.arrivalLoading === null ? [] : [this.arrivalLoading.surface('arrival-loading')]),
+      promptSurface(),
+      this.hud,
+      this.hud.overlay(),
+      ...this.menus.surfaces({
+        pauseFrame: () => this.pauseFrame(),
+        togglePause: () => this.togglePause(),
+        resolveInventoryActions: () => this.resolveInventoryActions(),
+        pauseRestriction: () => this.tutorial?.pauseRestriction() ?? null,
+      }),
+      this.conversation.surface({
+        handOffPress: () => this.handOffConversationPress(),
+        dismiss: () => this.conversationEscapeOwner()?.(),
+        wantsEscape: () => this.conversationEscapeOwner() !== null,
+        offBoxClick: (x, y) => this.pressPastHaltingConversation(x, y),
+      }),
+      chestRewardSurface(this.chestRewardDialog),
+      this.questSwitchConfirm.surface('quest-switch-confirm', 'system'),
+      nearGoblinHintSurface({
+        get showNearGoblinDialog(): boolean {
+          return tutorial?.showNearGoblinDialog === true;
+        },
+        dismissNearGoblinDialog: () => tutorial?.dismissNearGoblinDialog(),
+      }),
       {
-        isOpen: this.levelCompleteScreen.isActive,
-        space: { kind: 'swallow' },
-        locksKeyboard: false,
-        haltsWorld: true,
-        focusContext: 'level-complete',
-      },
-      modal(this.runCompleteScreen.isActive, RUN_COMPLETE_FOCUS_ID),
-      {
-        isOpen: this.chat.isOpen,
-        space: { kind: 'passThrough' },
-        locksKeyboard: true,
-        haltsWorld: true,
-        // The DOM input owns every key while it is up, the ring included.
-        focusContext: null,
-      },
-      {
-        isOpen: noticeBoard?.isOpen === true,
-        space: closeWithClick(() => noticeBoard?.close()),
-        locksKeyboard: true,
-        haltsWorld: true,
-        focusContext: 'notice-board',
-      },
-      modal(marketPanel?.isOpen === true, 'priced-menu'),
-      modal(this.travelMenu.isOpen, 'priced-menu'),
-      modal(fortuneTeller?.isOpen === true, 'fortune-teller'),
-      {
-        isOpen: this.defendQuest.isTutorialOpen,
-        space: { kind: 'advance', advance: () => this.advanceDefendQuestPage() },
-        locksKeyboard: true,
-        haltsWorld: true,
-        focusContext: 'defend-quest',
-      },
-      floatingDialog(this.defendQuest.isOutcomeOverlayShowing, () => this.advanceDefendQuestPage()),
-      // The quest systems below own their own window listener for Space, so the
-      // claim here only has to keep the press away from the world behind them.
-      // The scientist's offer opens on the shared conversation below, so it
-      // needs no claim of its own here.
-      modal(this.spiderQuest.isModalPhaseOpen, 'spider-quest'),
-      // Mordecai's own conversation opens on the shared one below, so it needs no claim of its own here.
-      modal(this.stairwell.menuOpen, 'stairwell'),
-      modal(this.building?.menuOpen === true, 'building-entry'),
-      this.grateSpikes.overlayClaim(),
-      ...(this.briarHollowKit?.overlayClaims() ?? []),
-      {
-        isOpen: this.followerMenu.isOpen,
-        space: { kind: 'swallow' },
-        locksKeyboard: true,
+        id: 'tutorial-mordecai',
+        band: 'system',
+        isOpen: () => this.tutorialForcesMordecaiRead,
         haltsWorld: false,
-        focusContext: 'follower-menu',
+        // His box is the shared conversation's; this only makes any press, on
+        // the box or off it, turn his page, since the tutorial forces a full read.
+        render: (ui) =>
+          void ui.hit('advance', ui.screen, {
+            onTap: () => this.conversation.advance(),
+            focusable: false,
+            sound: null,
+          }),
+        onKey: (key, mods) => {
+          if (keybindings.actionFor(key) !== 'attack') return this.conversation.handleKeyDown(key);
+          if (mods.repeat !== true && mods.predatesSurface !== true) this.conversation.advance();
+          return true;
+        },
       },
-      {
-        isOpen: this.menus.pauseMenu.isOpen,
-        space: { kind: 'swallow' },
-        locksKeyboard: true,
-        haltsWorld: true,
-        // The base of the namespace: the menu re-keys its ring per tab, and an
-        // inner confirm narrows it further, so the declared id is `pause-…`.
-        focusContext: 'pause',
-      },
-      // Last: the one overlay the world keeps running under — a street
-      // conversation ends because the player walked away from it — and the one
-      // every other surface here is drawn over. Ranking it above them would hand
-      // Space and Escape to the box underneath whatever the player is looking at.
-      this.conversation.overlayClaim(),
+      this.achievementUI.surface(),
+      deathScreenSurface(this.combat.deathScreen, {
+        isOpen: () => this.gameOver,
+        onRespawn: () => this.respawnAfterDeath(),
+      }),
+      this.levelCompleteScreen.surface(),
+      this.runCompleteScreen.surface(),
+      this.chat.surface(),
+      ...(this.noticeBoard === null ? [] : [this.noticeBoard.surface('notice-board')]),
+      ...(this.marketPanel === null
+        ? []
+        : [shopScreenSurface({ id: 'market-stall', session: this.marketPanel, party })]),
+      shopScreenSurface({ id: 'travel-menu', session: this.travelMenu.session, party }),
+      ...(this.fortuneTeller === null
+        ? []
+        : [fortuneScreenSurface({ id: 'fortune-teller', table: this.fortuneTeller, party })]),
+      defendTutorialSurface(this.defendQuest),
+      this.defendQuest.failedBannerSurface('defend-quest', this.audio),
+      dynamiteChargeSurface({
+        id: 'dynamite-charge',
+        dynamite: () => this.destruction.dynamite,
+        shows: () => !this.gameOver && !this.menus.pauseScreen.isOpen,
+      }),
+      keyboardHeroSurface('keyboard-hero', this.spiderQuest),
+      spiderTutorialSurface(this.spiderQuest, 'spider-tutorial'),
+      hackFailedPromptSurface('spider-hack-failed', this.spiderQuest),
+      stairwellPromptSurface('stairwell', this.stairwell),
+      buildingEntryPromptSurface('building-entry', () => this.building ?? null),
+      this.grateSpikes.surface(camera),
+      ...(this.briarHollowKit?.surfaces(camera) ?? []),
+      this.followerMenu.surface({
+        haltsWorld: false,
+        state: () => ({
+          movementMode: this.companion.getMovementMode(this.human.isActive),
+          combatStance: this.companion.getCombatStance(this.human.isActive),
+          companionIsCat: this.human.isActive,
+          mongoAutoSummon: this.mongoSystem.unlocked ? settings.catAutoSummonsMongo : null,
+        }),
+        restriction: () => this.tutorial?.followerMenuRestriction ?? null,
+      }),
     ];
   }
 
-  private advanceDefendQuestPage(): void {
-    if (this.defendQuest.advancePage()) this.audio?.play('menu_click');
+  /** Whether the HUD's buttons, hotbar and panels answer presses: not under the death screen, the pause menu or the loading screen. */
+  private get hudTakesInput(): boolean {
+    return !this.gameOver && !this.menus.pauseScreen.isOpen && this.arrivalLoading?.isOpen !== true;
   }
 
-  /** The overlay that currently owns input, or null when play has the floor. */
-  private get focusedOverlay(): OverlayInputClaim | null {
-    return focusedOverlay(this.overlayClaims);
+  private get tutorialForcesMordecaiRead(): boolean {
+    return (
+      this.tutorial?.showTutorialMordecaiDialog === true ||
+      this.tutorial?.showMordecaiReminderDialog === true
+    );
+  }
+
+  /**
+   * Who answers Escape on the conversation now up, or null when Escape is the
+   * pause key's instead (the pause key then closes the conversation for the
+   * menu). Only the speakers listed here take it, in this order: the defend
+   * offer, the lab's scientist, the bounty man, the circus, the murder and the
+   * Anchor questlines, Mordecai, the Bopca, and, while nothing else has halted
+   * the floor, a citizen, a villager or the recruiter, and a sign. A request
+   * that must be read to its end still spends the press on its speaker.
+   */
+  private conversationEscapeOwner(): (() => void) | null {
+    const dismiss = (): void => void this.conversation.dismiss();
+    if (this.defendQuest.isDialogOpen && !this.defendQuest.isTutorialOpen) {
+      return () => void this.defendQuest.dismissDialog();
+    }
+    if (this.spiderQuest.isDialogOpen && !this.spiderQuest.isModalPhaseOpen) {
+      return () => void this.spiderQuest.dismissDialog();
+    }
+    if (
+      this.bounty?.isDialogOpen === true ||
+      this.circusQuest.isDialogOpen ||
+      this.murderQuest.isDialogOpen ||
+      this.anchorQuest.isDialogOpen ||
+      this.safeRoom.mordecaiDialogOpen
+    ) {
+      return dismiss;
+    }
+    if (this.bopca.isDialogOpen) return () => void this.bopca.dismissDialog();
+    // A street chat floats over a running world: while something else has
+    // halted the floor, Escape is meant for that and passes the chat by.
+    if (this.gameplayHalted) return null;
+    if (this.citizenDialogTarget !== null || this.signDialogTarget !== null) return dismiss;
+    const village = this.briarHollowKit;
+    if (village?.isConversationOpen === true || village?.recruiter?.isDialogOpen === true) {
+      return () => void village.dismissDialog();
+    }
+    return null;
+  }
+
+  /**
+   * The two HUD controls that stay live under a conversation that halts the
+   * floor and covers the screen: the pause button and the skill-point badge.
+   */
+  private pressPastHaltingConversation(x: number, y: number): void {
+    const control = this.hud.controlUnderHalt(x, y);
+    if (control === 'pause') this.openPauseFromButton();
+    else if (control === 'skill-points') this.menus.openSpendScreen();
+  }
+
+  /** The HUD's pause button: the button sounds its own click, so this plays none. */
+  private openPauseFromButton(): void {
+    this.closeConversationForMenu();
+    this.menus.pauseScreen.toggle();
+    this.menus.closePanels();
+    this.input.clear();
+  }
+
+  private pauseFrame(): PauseFrame {
+    const inSafe = this.human.isProtected || this.cat.isProtected;
+    const closePause = (): void => this.menus.pauseScreen.close();
+    return {
+      humanAchievements: this.humanAchievements,
+      catAchievements: this.catAchievements,
+      gameStats: this.gameStats,
+      onOpenHumanBoxes:
+        inSafe && this.humanAchievements.pendingBoxes.length > 0
+          ? () => this.achievementUI.openBoxQueue('human', closePause)
+          : undefined,
+      onOpenCatBoxes:
+        inSafe && this.catAchievements.pendingBoxes.length > 0
+          ? () => this.achievementUI.openBoxQueue('cat', closePause)
+          : undefined,
+    };
+  }
+
+  /** The pause key and the pause menu's own close. Opening it takes every panel down with it. */
+  private togglePause(): void {
+    this.closeConversationForMenu();
+    this.menus.pauseScreen.toggle();
+    if (this.menus.pauseScreen.isOpen) {
+      this.menus.closePanels();
+      this.audio?.play('menu_open');
+    } else {
+      this.input.clear();
+    }
+  }
+
+  /** Drains what a click on the bag, its context menu or the picker queued, dropping onto this floor. */
+  private resolveInventoryActions(): void {
+    const invPlayer = this.menus.inventoryPlayer();
+    this.menus.resolvePendingInventoryActions(invPlayer, (id, quantity) =>
+      this.destruction.loot.addPlayerDrop(invPlayer.x, invPlayer.y, id, quantity, invPlayer),
+    );
+  }
+
+  /** Whether any menu or dialog is open over the HUD, a conversation the world runs under included. */
+  private get overlayOpen(): boolean {
+    return surfacesOverHud(this.ui).length > 0;
   }
 
   /**
@@ -5854,7 +5755,7 @@ export class DungeonScene extends GameplayScene {
   private resolvePendingQuestSwitch(): void {
     const pending = this.pendingQuestSwitch;
     if (pending === null || this.questSwitchConfirm.isOpen) return;
-    if (this.gameOver || this.focusedOverlay !== null) return;
+    if (this.gameOver || this.overlayOpen) return;
     // The exact id first — the quest's own header row, which is what carries the
     // quest's name — falling back to a sub-step for a source that never emits one.
     const toEntry =
@@ -5893,23 +5794,14 @@ export class DungeonScene extends GameplayScene {
   /**
    * Anything that takes the floor away from ordinary play.
    *
-   * Derived from the claim registry rather than restated as a second boolean
+   * Read off the surface stack rather than restated as a second boolean
    * chain: two hand-maintained lists of the same overlays drift, and a dialog
    * added to one of them and not the other is a menu the world keeps running
-   * underneath. The spider lab's cutscene is the one term with no
-   * overlay behind it — the quest freezes the floor from inside its own state
-   * machine.
+   * underneath. The spider lab's cutscene is the one term with no surface
+   * behind it — the quest freezes the floor from inside its own state machine.
    */
   private get gameplayHalted(): boolean {
-    return worldHalted(this.overlayClaims) || this.spiderQuest.isDungeonPaused;
-  }
-
-  /** What the right-hand HUD column has to lay itself out around this frame. */
-  private syncColumnLayoutState(): void {
-    UIRenderer.setBuildSlotReserved(this.briarHollowKit?.defences?.buildButtonVisible === true);
-    UIRenderer.setLevelTimerShown(this.levelDef.hasCollapseTimer === true);
-    const banner = this.achievementUI.lootBoxIconRect;
-    UIRenderer.setLootBoxBannerRect(banner.w > 0 ? banner : null);
+    return this.ui.worldHalted() || this.spiderQuest.isDungeonPaused;
   }
 
   /** Whether the finger held on the world walked the crawler toward it. */
@@ -6328,20 +6220,19 @@ export class DungeonScene extends GameplayScene {
   }
 
   private triggerSpaceAction(tapScreenX?: number, tapScreenY?: number): void {
-    // Whatever owns the screen has already had this press: the keyboard path
-    // hands it to `advanceDialog` before the suppression gate, and the mobile
-    // tap path runs `handleClick` first. Either way the world behind the overlay
-    // must not see it — that is what opened an NPC conversation underneath the
-    // building menu and left both boxes fighting over the same clicks.
-    if (this.focusedOverlay !== null) return;
+    // Whatever surface owns the screen has already been offered this press.
+    // The world behind it must not also see it, or an NPC conversation opens
+    // underneath the building menu and both boxes fight over the same clicks.
+    if (this.overlayOpen) return;
 
+    const fromTap = tapScreenX !== undefined;
     const active = this.active();
     if (this.safeRoom.isEntityInSafeRoom(active)) {
       // Nothing in a safe room is a swing, whether or not a speaker answered.
       this.trySafeRoomPress(active);
       return;
     }
-    if (this.tryInteractWithWorld(active)) return;
+    if (this.tryInteractWithWorld(active, fromTap)) return;
     if (this.tutorial !== null && !this.tutorial.canAttack) return;
 
     // On mobile tap: aim toward tap position before snapping to nearest mob
@@ -6368,8 +6259,8 @@ export class DungeonScene extends GameplayScene {
    */
   private handOffConversationPress(): boolean {
     if (!this.conversation.isOpen) return false;
-    const openOverlays = this.overlayClaims.filter((claim) => claim.isOpen);
-    if (openOverlays.length !== 1) return false;
+    const openSurfaces = surfacesOverHud(this.ui);
+    if (openSurfaces.length !== 1 || openSurfaces[0] !== CONVERSATION_SURFACE_ID) return false;
     const active = this.active();
     const inSafeRoom = this.safeRoom.isEntityInSafeRoom(active);
     const pressIsForSomeoneElse =
@@ -6388,7 +6279,7 @@ export class DungeonScene extends GameplayScene {
    */
   private tryHandOffToWorld(active: HumanPlayer | CatPlayer): boolean {
     if (hostileWithinAttackRange(active, this.world.roster.grid)) return false;
-    return this.tryWalkedUpToInteraction(active);
+    return this.tryWalkedUpToInteraction(active, false);
   }
 
   /** The safe room's half of the interact chain: whichever of the Bopca and Mordecai is nearer. Returns whether either took the press. */
@@ -6407,9 +6298,11 @@ export class DungeonScene extends GameplayScene {
    * order, short of a swing. Returns whether anything took it. Nothing does
    * while a hostile is inside the attack range: the press is a swing then.
    */
-  private tryInteractWithWorld(active: HumanPlayer | CatPlayer): boolean {
+  private tryInteractWithWorld(active: HumanPlayer | CatPlayer, fromTap: boolean): boolean {
     if (hostileWithinAttackRange(active, this.world.roster.grid)) return false;
-    return this.tryWalkedUpToInteraction(active) || this.tryInteractWithSurroundings(active);
+    return (
+      this.tryWalkedUpToInteraction(active, fromTap) || this.tryInteractWithSurroundings(active)
+    );
   }
 
   /**
@@ -6417,7 +6310,7 @@ export class DungeonScene extends GameplayScene {
    * chests, quest givers, pickups, stalls, signs, villagers and citizens.
    * Returns whether anything took the press.
    */
-  private tryWalkedUpToInteraction(active: HumanPlayer | CatPlayer): boolean {
+  private tryWalkedUpToInteraction(active: HumanPlayer | CatPlayer, fromTap: boolean): boolean {
     if (this.treasureChests.tryInteract(active)) {
       return true;
     }
@@ -6457,7 +6350,7 @@ export class DungeonScene extends GameplayScene {
     if (this.crawlerSigns?.tryInteract(active) === true) {
       return true;
     }
-    if (this.briarHollowKit?.tryInteract(active) === true) {
+    if (this.briarHollowKit?.tryInteract(active, fromTap) === true) {
       return true;
     }
     return this.tryTalkToCitizen(active);
@@ -6521,10 +6414,10 @@ export class DungeonScene extends GameplayScene {
   private trySceneHotbarSlot(slot: InventoryItem, hotbarIdx: number): boolean {
     if (this.tutorial?.blockBoxersActivation === true && slot.id === 'enchanted_bigboi_boxers') {
       this.audio?.play('error');
-      this._companionErrorMsg = {
-        text: 'The boxers are already doing their job — just equip them!',
-        framesLeft: COMPANION_ERROR_DISPLAY_FRAMES,
-      };
+      this.menus.toasts.post('The boxers are already doing their job — just equip them!', {
+        tone: 'warning',
+        durationTicks: COMPANION_ERROR_DISPLAY_FRAMES,
+      });
       return true;
     }
     if (
@@ -6547,377 +6440,338 @@ export class DungeonScene extends GameplayScene {
     return false;
   }
 
-  handleClick(mx: number, my: number, eventTimeStampMs: number): void {
-    // Nothing under the loading screen has been drawn yet, so nothing can be aimed at.
-    if (this.arrivalLoading?.isOpen === true) return;
-    notifyButtonClick(mx, my);
-    // Before the routing chain below, because most of its branches return long
-    // before the bag is offered the click: a field left focused by a press that
-    // opened the journal or the market would go on eating that overlay's keys.
-    this.menus.blurInventorySearchUnlessClicked(mx, my);
-    // First, ahead of every HUD rect and world hit-test below: a long-press
-    // context menu floats over whatever was drawn underneath it, and those
-    // rects are tested by raw coordinates rather than draw order, so a menu
-    // option sitting over the bag button or over Mordecai in the world would
-    // otherwise also fire whatever is beneath it. The menu always closes on
-    // this click, so it must always be the thing that answers it.
-    if (this.menus.inventoryPanel.interaction.contextMenu !== null) {
-      const invPlayer = this.menus.inventoryPlayer();
-      if (this.menus.inventoryPanel.handleClick(mx, my, invPlayer.inventory)) {
-        this.menus.resolvePendingInventoryActions(invPlayer, (id, quantity) =>
-          this.destruction.loot.addPlayerDrop(invPlayer.x, invPlayer.y, id, quantity, invPlayer),
-        );
+  // ── HUD ──────────────────────────────────────────────────────────────────
+
+  /** What the HUD shows this frame. */
+  private hudModel(): HudModel {
+    const invPlayer = this.menus.inventoryPlayer();
+    return {
+      crawlers: this.hudCrawlerFrames(),
+      activeCrawler: this.human.isActive ? 'human' : 'cat',
+      coins: this.hudCoins(),
+      skillPoints: this.hudSkillPoints(() => void this.menus.openSpendScreen()),
+      minimap: this.hudMinimap(),
+      dock: this.hudDock(),
+      summon: this.hudSummon(),
+      lootBanner: this.showsAchievementUi
+        ? this.achievementUI.hudBanner(() => this.menus.pauseScreen.close())
+        : null,
+      hotbar: {
+        slots: hotbarSlotModels(
+          this.menus.itemCooldowns,
+          invPlayer.inventory,
+          this.menus.inventoryWieldedWeaponId(),
+        ),
+        input: hotbarPressInput(
+          () => this.hotbarHost(),
+          () => this.ui.worldHalted(),
+        ),
+      },
+      topBand: this.topBandEntries(),
+    };
+  }
+
+  private hudMinimap(): MinimapModel {
+    this.miniMap.escapeMarkerTile = this.doomsdayEscape.escapeMarkerTile;
+    return {
+      expanded: this.miniMap.isExpanded,
+      hint: platform.miniMapHint(this.miniMap.isExpanded),
+      paint: (ctx, rect) =>
+        this.miniMap.render(
+          ctx,
+          rect,
+          this.active(),
+          this.inactive(),
+          this.world.roster.grid,
+          this.safeRoom.mordecaiPositions,
+          this.collectQuestMarkers(),
+          this.mongoSystem.mongo,
+          this.briarHollowKit?.minimapProcessingStations ?? [],
+          this.collectVendorMinimapPositions(),
+        ),
+      toggle: () => this.miniMap.toggle(),
+      pan: (dx, dy) => this.miniMap.pan(dx, dy),
+    };
+  }
+
+  /** The dock's buttons in column order; one this floor does not offer is left out. */
+  private hudDock(): DockButtonModel[] {
+    const dock: DockButtonModel[] = [
+      {
+        id: 'pause',
+        icon: 'pause',
+        label: 'Pause',
+        key: PAUSE_KEY_LABEL,
+        sound: 'menu_open',
+        onTap: () => this.openPauseFromButton(),
+      },
+    ];
+    const unseenUpgrades = this.menus.inventoryPlayer().inventory.unseenUpgrades.size;
+    dock.push({
+      id: 'bag',
+      icon: 'bag',
+      label: 'Bag',
+      key: keybindings.labelFor('toggleInventory'),
+      badge: unseenUpgrades > 0 ? String(unseenUpgrades) : undefined,
+      selected: this.menus.inventoryScreen.isOpen,
+      bounce: this.rewardFly.bagBouncePulse(),
+      onTap: () => this.toggleBagFromHud(),
+    });
+    const defences = this.briarHollowKit?.defences ?? null;
+    if (defences?.buildButtonVisible === true) {
+      dock.push({
+        id: 'build',
+        icon: 'hammer',
+        label: 'Build',
+        key: keybindings.labelFor('construction'),
+        selected: defences.constructionMenuOpen,
+        pulse: defences.buildButtonPulseSeconds > 0,
+        sound: 'menu_open',
+        onTap: () => this.briarHollowKit?.openConstruction(),
+      });
+    }
+    const unread = this.showsAchievementUi ? this.achievementUI.hudChipCount() : null;
+    if (unread !== null) {
+      dock.push({
+        id: 'chip',
+        icon: 'trophy',
+        label: 'New achievements',
+        badge: String(unread),
+        pulse: true,
+        onTap: () => void this.achievementUI.showUnread(),
+      });
+    }
+    if (this.hasQuestJournal) {
+      const outstanding = this._trackerEntries.filter((entry) =>
+        isOutstanding(entry.status),
+      ).length;
+      dock.push({
+        id: 'journal',
+        icon: 'compass',
+        label: 'Quest Journal',
+        key: keybindings.labelFor('toggleQuestTracker'),
+        badge: outstanding > 0 ? String(outstanding) : undefined,
+        sound: 'menu_open',
+        onTap: () => void this.openQuestJournal(),
+      });
+    }
+    if (this.showsFollowerButton) {
+      const humanLeads = this.human.isActive;
+      const ordersChanged =
+        this.companion.getMovementMode(humanLeads) === 'anchored' ||
+        this.companion.getCombatStance(humanLeads) === 'passive';
+      dock.push({
+        id: 'follower',
+        icon: 'users',
+        label: 'Follower orders',
+        key: keybindings.labelFor('companionFollow'),
+        selected: ordersChanged,
+        onTap: () => this.triggerCompanionFollow(),
+      });
+    }
+    if (this.showsSwitchButton) {
+      const other = this.human.isActive ? 'cat' : 'human';
+      dock.push({
+        id: 'switch',
+        icon: other === 'cat' ? 'cat' : 'user',
+        label: `Switch to ${CRAWLER_NAMES[other]}`,
+        onTap: () => this.triggerSwitchCharacter(),
+      });
+    }
+    return dock;
+  }
+
+  private hudSummon(): HudModel['summon'] {
+    const card = this.mongoSystem.summonCard(this.cat.isActive);
+    return card === null ? null : { ...card, onTap: () => this.toggleMongoSummon() };
+  }
+
+  /** Every bar the top band stacks this frame. */
+  private topBandEntries(): TopBandEntry[] {
+    const entries: (TopBandEntry | null)[] = [
+      this.bossRoom.topBandEntry(this.world.roster.mobs, this.human, this.cat),
+      ...this.arena.topBandEntries(this.active()),
+      this.defendQuest.topBandEntry(),
+      this.circusQuest.topBandEntry(),
+      this.murderQuest.topBandEntry(),
+      this.doomsdayEscape.topBandEntry(),
+      this.spiderQuest.topBandEntry(),
+      ...(this.briarHollowKit?.topBandEntries() ?? []),
+      ...(this.gathering?.topBandEntries(this.active()) ?? []),
+      knockedOutBandEntry(this.inactive()),
+    ];
+    if (this.levelDef.hasCollapseTimer === true && this.tutorial === null) {
+      entries.push(levelTimerEntry(this.levelTimerFrames, this.isLevelTimerPaused()));
+    }
+    return entries.filter((entry): entry is TopBandEntry => entry !== null);
+  }
+
+  /**
+   * The dock's Bag button. A finger on it also ends a conversation the world
+   * runs under, the way a phone's buttons always have.
+   */
+  private toggleBagFromHud(): void {
+    if (this.ui.viewport.density === 'touch') this.closeConversationForMenu();
+    this.menus.toggleInventory();
+  }
+
+  private get showsAchievementUi(): boolean {
+    return this.tutorial === null || this.tutorial.showAchievementUI;
+  }
+
+  private get showsFollowerButton(): boolean {
+    return this.tutorial === null || this.tutorial.showFollowerButton;
+  }
+
+  private get showsSwitchButton(): boolean {
+    return this.tutorial === null || this.tutorial.showSwitchButton;
+  }
+
+  // ── World input ──────────────────────────────────────────────────────────
+
+  /**
+   * Every pointer gesture that landed on no surface: walking and tapping on a
+   * phone, and clicking loot and chests with a mouse. Coordinates are canvas
+   * CSS pixels, the space the camera works in.
+   */
+  private handleWorldPointer(gesture: WorldGesture): void {
+    if (gesture.button !== PRIMARY_BUTTON) return;
+    const x = gesture.cssX;
+    const y = gesture.cssY;
+    switch (gesture.kind) {
+      case 'down':
+        if (gesture.source === 'touch')
+          this.beginWorldTouch(gesture.pointerId, x, y, gesture.timeStamp);
+        return;
+      case 'move':
+        if (gesture.pointerId === this.touch.moveTouchId) this.touch.updateMove(x, y);
+        return;
+      case 'up':
+        if (gesture.source === 'mouse') {
+          if (gesture.tap) this.collectWorldPickupAt(x, y);
+          return;
+        }
+        if (gesture.pointerId === this.touch.moveTouchId)
+          this.endWorldTouch(x, y, gesture.timeStamp);
+        return;
+      case 'cancel':
+        if (gesture.pointerId === this.touch.moveTouchId) this.clearWorldTouch();
+        return;
+      case 'wheel':
+        return;
+    }
+  }
+
+  /** The finger that walks the crawler: the first one down on the world. */
+  private beginWorldTouch(
+    pointerId: number,
+    x: number,
+    y: number,
+    timeStamp: number | undefined,
+  ): void {
+    if (this.touch.moveTouchId !== null) return;
+    this.touch.startMove(pointerId, x, y, timeStamp ?? performance.now());
+    this.structureHold.begin(this.fingerOnWorkableStructure(x, y), x, y);
+    const starter = this.active();
+    this.holdStartActivePos = { x: starter.x, y: starter.y };
+  }
+
+  private endWorldTouch(x: number, y: number, timeStamp: number | undefined): void {
+    if (this.touch.tapStart !== null) {
+      if (this.touch.isTap(x, y)) {
+        this.tapWorld(x, y, timeStamp);
+      } else if (this.touch.heldInPlace(x, y) && !this.crawlerWalkedDuringHold()) {
+        // Held roughly in place past tap duration, rather than dragged — and
+        // without the hold having walked the crawler, which is just the end of
+        // a walk with the finger resting somewhere: the Structure menu's
+        // gesture. A village structure under the finger wins; otherwise a
+        // boarded grate in reach, for a crawler who can spike it.
+        const cam = this.camera();
+        const villageTook =
+          this.briarHollowKit?.handleLongPress(x, y, cam.x, cam.y, this.active()) === true;
+        if (!villageTook) this.grateSpikes.tryOpen();
       }
+    }
+    this.clearWorldTouch();
+  }
+
+  private clearWorldTouch(): void {
+    this.touch.endMove();
+    this.structureHold.end();
+  }
+
+  /**
+   * A short tap on the world: the touch form of the interact press. It throws
+   * charged dynamite at the tap, picks up loot or opens a chest under it, is
+   * offered to whoever the crawler walked up to mid-conversation, works the
+   * village, boards a grate, and otherwise interacts or swings toward it.
+   */
+  private tapWorld(x: number, y: number, timeStamp: number | undefined): void {
+    if (this.destruction.dynamite.isCharging && this.human.isActive) {
+      const cam = this.camera();
+      const ddx = x + cam.x - (this.human.x + TILE_SIZE / 2);
+      const ddy = y + cam.y - (this.human.y + TILE_SIZE / 2);
+      const dist = Math.hypot(ddx, ddy);
+      if (dist > 0) {
+        this.human.facingX = ddx / dist;
+        this.human.facingY = ddy / dist;
+      }
+      this.destruction.dynamite.release(this.human);
+      this.bus.emit('dynamiteUsed', { player: 'Human' });
       return;
     }
+    // A phone tap anywhere on the world dismisses these, and does nothing else.
     if (this.tutorial?.showNearGoblinDialog === true) {
       this.tutorial.dismissNearGoblinDialog();
       return;
     }
+    if (this.defendQuest.isOutcomeOverlayShowing) {
+      this.defendQuest.dismissFailedBanner();
+      return;
+    }
+    if (this.collectWorldPickupAt(x, y)) return;
+    if (this.conversation.isOpen && this.handOffConversationPress()) return;
+    // A conversation or menu up over the world had this tap's chance; the
+    // world behind it must not open another conversation or swing underneath.
+    if (this.overlayOpen) return;
+    const cam = this.camera();
+    const kit = this.briarHollowKit;
+    if (kit !== null) {
+      const now = Date.now();
+      const lastTap = this.briarHollowLastWorldTapAt;
+      const isDoubleTap = lastTap !== null && now - lastTap < BRIAR_HOLLOW_DOUBLE_TAP_WINDOW_MS;
+      this.briarHollowLastWorldTapAt = now;
+      // A live scythe swing takes every tap as its timed press, graded by when
+      // the finger came down, however soon after the tap that started it.
+      const pressedAt = this.touch.tapStartEventMs ?? timeStamp ?? performance.now();
+      const villageTook =
+        isDoubleTap && !kit.claimsWorldTaps
+          ? kit.handleDoubleTap(x, y, cam.x, cam.y, this.active())
+          : kit.handleTap(x, y, cam.x, cam.y, this.active(), pressedAt);
+      if (villageTook) return;
+    }
+    if (this.defendQuest.tryMobileTapOnGrate(x, y, cam.x, cam.y, this.active())) return;
+    this.triggerSpaceAction(x, y);
+  }
 
-    if (
-      this.tutorial?.showTutorialMordecaiDialog === true ||
-      this.tutorial?.showMordecaiReminderDialog === true
-    ) {
-      // Any press advances Mordecai's tutorial dialog, not only one landing on
-      // his box — the tutorial forces a full read, with no way to walk off.
-      this.conversation.advance();
-      return;
-    }
-
-    if (this.chestRewardDialog.isOpen) {
-      this.chestRewardDialog.handleClick(mx, my);
-      return;
-    }
-    if (this.questSwitchConfirm.handleClick(mx, my)) return;
-    // Ranked here rather than below the panels, matching where `overlayClaims`
-    // puts it: the award overlays swallow every click while they are up, so a
-    // menu that outranked them here would take a press aimed at their OK button
-    // and leave the overlay with no way to be dismissed.
-    if (this.achievementUI.handleClick(mx, my)) return;
-    if (this.menus.questReward.handleClick(mx, my)) return;
-    if (this.menus.levelUpDialog.handleClick(mx, my)) return;
-    if (this.menus.rewardGrantedDialog.handleClick(mx, my)) return;
-    if (this.menus.mongoExplainer.handleClick(mx, my)) return;
-    if (this.menus.craftExplainers.handleClick(mx, my)) return;
-    if (this.menus.skillBookPrompt.isOpen) {
-      const reader = this.menus.pendingSkillBookReader(this.menus.inventoryPlayer());
-      const choice = resolveSkillBookPrompt(this.menus.skillBookFlowHost(), reader, mx, my);
-      if (choice !== null) this.menus.releaseSkillBookReader();
-      return;
-    }
-    if (this.menus.itemQuantityPicker.handleClick(mx, my)) {
-      const invPlayer = this.menus.inventoryPlayer();
-      this.menus.resolvePendingInventoryActions(invPlayer, (id, quantity) =>
-        this.destruction.loot.addPlayerDrop(invPlayer.x, invPlayer.y, id, quantity, invPlayer),
-      );
-      return;
-    }
-    // Ranked where its overlay claim is: under the award stack, which can land
-    // on the same frame the run ends, and over every panel and HUD button.
-    if (this.runCompleteScreen.handleClick(mx, my)) return;
-    if (this.defendQuest.handleClick(mx, my)) return;
-    if (this.grateSpikes.handleClick(mx, my)) return;
-    if (this.spiderQuest.handleClick(mx, my, eventTimeStampMs)) return;
-    if (this.bounty?.handleClick(mx, my) === true) return;
-    if (this.circusQuest.handleClick(mx, my)) return;
-    if (this.murderQuest.handleClick(mx, my)) return;
-    if (this.anchorQuest.handleClick(mx, my)) return;
-    // Only the dialog's own box is consumed: a conversation does not halt the
-    // world, so the bag can be open underneath it and its slots must stay live.
-    if (this.conversation.handleClick(mx, my)) return;
-    if (this.briarHollowKit?.handleClick(mx, my) === true) return;
-    if (this.noticeBoard?.isOpen === true) {
-      this.noticeBoard.handleClick();
-      return;
-    }
-    if (this.marketPanel?.isOpen === true) {
-      this.marketPanel.handleClick(mx, my, this.active(), this.inactive());
-      return;
-    }
-    if (this.travelMenu.isOpen) {
-      this.travelMenu.handleClick(mx, my, this.active(), this.inactive());
-      return;
-    }
-    if (this.fortuneTeller?.isOpen === true) {
-      this.fortuneTeller.handleClick(mx, my, this.active(), this.inactive());
-      return;
-    }
-    if (this.followerMenu.isOpen) {
-      this.followerMenu.restrictedToButtonIndex = this.tutorial?.followerMenuRestriction ?? null;
-      this.followerMenu.handleClick(mx, my);
-      return;
-    }
-
-    if (!platform.isMobile && !this.gameOver && !this.menus.pauseMenu.isOpen) {
-      if (pointInRect(mx, my, this.touch.followBtnRect)) {
-        this.triggerCompanionFollow();
-        return;
-      }
-    }
-
-    if (
-      !platform.isMobile &&
-      !this.gameOver &&
-      !this.menus.pauseMenu.isOpen &&
-      this.mongoSystem.canShow &&
-      this.cat.isActive
-    ) {
-      const sb = this.touch.summonBtnRect;
-      if (pointInRect(mx, my, sb)) {
-        this.toggleMongoSummon();
-        return;
-      }
-    }
-
-    if (!this.gameOver && !this.menus.pauseMenu.isOpen) {
-      if (this.achievementUI.handleAchievIconClick(mx, my)) return;
-      if (this.achievementUI.handleLootBoxIconClick(mx, my, () => this.menus.pauseMenu.close()))
-        return;
-      if (this.menus.tryOpenSpendScreen(mx, my, this._hudSkillBannerRect)) return;
-    }
-
-    if (this.levelCompleteScreen.isActive) {
-      this.levelCompleteScreen.handleClick(mx, my);
-      return;
-    }
-
-    if (this.stairwell.menuOpen) {
-      this.stairwell.handleClick(mx, my);
-      return;
-    }
-
-    if (this.building?.menuOpen) {
-      this.building.handleClick(mx, my);
-      return;
-    }
-
-    if (this.gameOver) {
-      if (this.combat.deathScreen.handleClick(mx, my)) {
-        this.respawnAfterDeath();
-      }
-      return;
-    }
-
-    if (this.menus.pauseMenu.isOpen) {
-      const allowedLabel = this.tutorial?.getAllowedMenuButtonLabel(
-        this.menus.pauseMenu.currentTab,
-      );
-      if (allowedLabel !== undefined && allowedLabel !== null) {
-        // Tutorial is guiding: only permit the highlighted button to be clicked
-        const btn = this.menus.pauseMenu.renderedButtons.find((b) => b.label === allowedLabel);
-        if (btn !== undefined) {
-          const { x, y, w, h } = btn;
-          if (mx >= x && mx <= x + w && my >= y && my <= y + h) {
-            if (btn.positionedAction !== undefined) {
-              btn.positionedAction(mx, my);
-            } else {
-              btn.action?.();
-            }
-          }
-        }
-        return;
-      }
-      this.menus.pauseMenu.handleClick(mx, my);
-      return;
-    }
-
+  /** Loot or an openable chest under a click or tap. Returns whether either took it. */
+  private collectWorldPickupAt(x: number, y: number): boolean {
     const active = this.active();
-    const invPlayer = this.menus.inventoryPlayer();
-
-    const gearResult = this.menus.gearPanel.handleClick(mx, my, active.inventory);
-    if (gearResult) {
-      active.onEquipmentChanged();
-      return;
-    }
-
-    if (this.menus.gearPanel.isOpen && this.menus.inventoryPanel.isOpen) {
-      const slotIdx = this.menus.inventoryPanel.getClickedInventorySlot(
-        mx,
-        my,
-        invPlayer.inventory,
-      );
-      if (slotIdx !== null) {
-        const item = invPlayer.inventory.bag.slots[slotIdx];
-        if (isWearable(item) && this.menus.inventoryPanel.interaction.bagSlotIsInteractive(item)) {
-          // The click is spent either way — it was aimed at armour — but a
-          // refusal (wrong wearer, same id already worn) changes nothing, and
-          // announcing a change that never happened is a lie to every listener.
-          if (invPlayer.inventory.canEquipSlot(slotIdx)) {
-            invPlayer.inventory.equip(slotIdx);
-            invPlayer.onEquipmentChanged();
-          }
-          return;
-        }
-      }
-    }
-
-    // With the rest of the HUD chrome, and crucially *above* the world hit-tests
-    // below: those compare screen coordinates against loot drops and chests, so
-    // anything drawn behind the button would otherwise take a click aimed at it.
-    // Not where the bag or gear panel is drawn over them: both paint on top.
-    const hudButtonsUncovered = !this.menus.panelCovers(mx, my);
-    if (
-      hudButtonsUncovered &&
-      this.journalButtonRect !== null &&
-      pointInRect(mx, my, this.journalButtonRect)
-    ) {
-      this.openQuestJournal();
-      return;
-    }
-    if (
-      hudButtonsUncovered &&
-      this.buildButtonRect !== null &&
-      pointInRect(mx, my, this.buildButtonRect)
-    ) {
-      this.briarHollowKit?.openConstruction();
-      return;
-    }
-
-    const wasInventoryOpen = this.menus.inventoryPanel.isOpen;
-    if (this.menus.inventoryPanel.handleClick(mx, my, invPlayer.inventory)) {
-      this.menus.resolvePendingInventoryActions(invPlayer, (id, quantity) =>
-        this.destruction.loot.addPlayerDrop(invPlayer.x, invPlayer.y, id, quantity, invPlayer),
-      );
-      if (this.menus.inventoryPanel.isOpen && !wasInventoryOpen) {
-        this.menus.gearPanel.isOpen = false;
-      }
-      return;
-    }
-
     const { x: camX, y: camY } = this.camera();
-    if (this.destruction.loot.tryCollectLootAt(mx, my, camX, camY, active, this.inactive())) return;
-
+    if (this.destruction.loot.tryCollectLootAt(x, y, camX, camY, active, this.inactive())) {
+      return true;
+    }
     for (const chest of this.treasureChests.allChests) {
       if (!isChestOpenable(chest)) continue;
-      const chestScreenX = chest.tileX * TILE_SIZE - camX;
-      const chestScreenY = chest.tileY * TILE_SIZE - camY;
-      if (
-        mx >= chestScreenX &&
-        mx <= chestScreenX + TILE_SIZE &&
-        my >= chestScreenY &&
-        my <= chestScreenY + TILE_SIZE
-      ) {
-        if (this.treasureChests.tryInteract(active)) return;
-      }
+      const chestRect = {
+        x: chest.tileX * TILE_SIZE - camX,
+        y: chest.tileY * TILE_SIZE - camY,
+        w: TILE_SIZE,
+        h: TILE_SIZE,
+      };
+      if (pointInRect(x, y, chestRect) && this.treasureChests.tryInteract(active)) return true;
     }
-
-    const pb = UIRenderer.pauseButtonRect(this.miniMap);
-    if (pointInRect(mx, my, pb)) {
-      this.closeConversationForMenu();
-      this.menus.pauseMenu.toggle();
-      this.menus.closePanels();
-      this.input.clear();
-      return;
-    }
-  }
-
-  private clearInvLongPress(): void {
-    if (this.touch.longPressTimer !== null) {
-      clearTimeout(this.touch.longPressTimer);
-      this.touch.longPressTimer = null;
-    }
-    this.touch.longPressPos = null;
-  }
-
-  /**
-   * True while a pausing overlay owns the screen. The bag is still drawn
-   * underneath one, and the overlays' buttons sit right on top of its slots, so
-   * every raw-pointer path has to stop here — otherwise a click on Read or
-   * Cancel also lands on the slot beneath it and re-queues the prompt.
-   */
-  private get isOverlayBlockingPointer(): boolean {
-    return this.menus.isOverlayBlockingPointer;
-  }
-
-  handleMouseDown(mx: number, my: number): void {
-    this._mouseDown = true;
-    // Ahead of the pause menu: the explainer opens over it, and a press there
-    // must not start a drag in the tab hidden underneath.
-    if (this.menus.mongoExplainer.isOpen || this.menus.craftExplainers.isOpen) return;
-    // Delegated rather than swallowed: the pause menu's Equipment tab drags gear
-    // between the bag and the doll, and a drag is a press and a release, not a
-    // click. Every other tab ignores these.
-    if (this.menus.pauseMenu.isOpen) {
-      this.menus.pauseMenu.handleMouseDown(mx, my, this.human, this.cat);
-      return;
-    }
-    // Ahead of the blocking-overlay return below, which the picker's own
-    // `isOpen` feeds into: without this branch a press on its step buttons
-    // would never reach them.
-    if (this.menus.itemQuantityPicker.isOpen) {
-      this.menus.itemQuantityPicker.handlePointerDown(mx, my);
-      return;
-    }
-    if (this.gameOver || this.isOverlayBlockingPointer) return;
-    this.briarHollowKit?.handlePointerDown(mx, my);
-    if (this.miniMap.isExpanded && pointInRect(mx, my, this.touch.miniMapRect)) {
-      this._miniMapDragging = true;
-      this._miniMapDragLastX = mx;
-      this._miniMapDragLastY = my;
-      return;
-    }
-    this.menus.inventoryPanel.handleMouseDown(mx, my, this.menus.inventoryPlayer().inventory);
-  }
-
-  handleMouseMove(mx: number, my: number): void {
-    this._mouseX = mx;
-    this._mouseY = my;
-    if (this.menus.mongoExplainer.isOpen || this.menus.craftExplainers.isOpen) return;
-    if (this.menus.pauseMenu.isOpen) {
-      this.menus.pauseMenu.handleMouseMove(mx, my, this.human, this.cat);
-      return;
-    }
-    if (this._miniMapDragging) {
-      this.miniMap.pan(mx - this._miniMapDragLastX, my - this._miniMapDragLastY);
-      this._miniMapDragLastX = mx;
-      this._miniMapDragLastY = my;
-    }
-    this.menus.inventoryPanel.handleMouseMove(mx, my, this.menus.inventoryPlayer().inventory);
-    this.menus.gearPanel.handleMouseMove(mx, my);
-  }
-
-  handleMouseUp(mx: number, my: number): void {
-    this._mouseDown = false;
-    this._miniMapDragging = false;
-    this.briarHollowKit?.handlePointerUp();
-    this.menus.itemQuantityPicker.handlePointerUp();
-    if (this.menus.mongoExplainer.isOpen || this.menus.craftExplainers.isOpen) return;
-    if (this.menus.pauseMenu.isOpen) {
-      this.menus.pauseMenu.handleMouseUp(mx, my, this.human, this.cat);
-      return;
-    }
-    if (this.gameOver || this.isOverlayBlockingPointer) return;
-    this.menus.inventoryPanel.handleMouseUp(mx, my, this.menus.inventoryPlayer().inventory);
-  }
-
-  handleMouseLeave(): void {
-    this._mouseDown = false;
-    this.briarHollowKit?.handlePointerUp();
-    this.menus.itemQuantityPicker.handlePointerUp();
-    this._miniMapDragging = false;
-    clearButtonMouseState();
-  }
-
-  handleContextMenu(mx: number, my: number): void {
-    if (this.gameOver || this.menus.pauseMenu.isOpen || this.isOverlayBlockingPointer) return;
-    this.menus.inventoryPanel.openContextMenu(mx, my, this.menus.inventoryPlayer().inventory);
-  }
-
-  handleWheel(deltaY: number): void {
-    if (this.menus.mongoExplainer.isOpen || this.menus.craftExplainers.isOpen) return;
-    if (this.menus.pauseMenu.isOpen) {
-      this.menus.pauseMenu.handleWheel(deltaY);
-      return;
-    }
-    if (this.followerMenu.isOpen) {
-      this.followerMenu.handleWheel(deltaY);
-      return;
-    }
-    this.noticeBoard?.handleWheel(deltaY);
-    this.marketPanel?.handleWheel(deltaY);
-    this.travelMenu.handleWheel(deltaY);
-    this.briarHollowKit?.handleWheel(deltaY);
+    return false;
   }
 
   update(): void {
@@ -6931,17 +6785,11 @@ export class DungeonScene extends GameplayScene {
     // Ahead of every halting return, because a conversation that halts the world
     // still has to keep revealing — but not under the pause menu, which freezes
     // the voice along with everything else.
-    if (!this.gameOver && !this.menus.pauseMenu.isOpen) {
+    if (!this.gameOver && !this.menus.pauseScreen.isOpen) {
       this.conversation.update({ x: active.x, y: active.y });
     }
     aiAdapter.update();
     this.chat.update();
-    if (this._companionErrorMsg !== null) {
-      this._companionErrorMsg.framesLeft--;
-      if (this._companionErrorMsg.framesLeft <= 0) {
-        this._companionErrorMsg = null;
-      }
-    }
     this.achievementUI.tick();
     this.resolvePendingQuestSwitch();
     playRewardLandingCues(this.audio, this.rewardFly.update());
@@ -6949,6 +6797,7 @@ export class DungeonScene extends GameplayScene {
     // boss room locks would otherwise sit frozen at its first frame for the
     // length of the intro, and a potion's effect cue would be held with it.
     this.menus.update();
+    this.tickSaveIndicator();
     this.chestRewardDialog.tick();
     if (this.chestRewardDialog.rewardSoundPending) {
       this.chestRewardDialog.rewardSoundPending = false;
@@ -6967,7 +6816,7 @@ export class DungeonScene extends GameplayScene {
     }
 
     // Spider quest ticks even while other systems are paused (keyboard hero must advance)
-    if (!this.gameOver && !this.menus.pauseMenu.isOpen) {
+    if (!this.gameOver && !this.menus.pauseScreen.isOpen) {
       const sqCtx = this.buildSystemContext();
       this.spiderQuest.update(sqCtx);
       this._processSpiderQuestSounds();
@@ -6975,9 +6824,9 @@ export class DungeonScene extends GameplayScene {
 
     // A harvest does not outlast the pause menu: the block below stops ticking
     // under it, so without this the swing would pick straight back up on close.
-    if (this.menus.pauseMenu.isOpen) this.gathering?.harvest.stopAll();
+    if (this.menus.pauseScreen.isOpen) this.gathering?.harvest.stopAll();
     // The village is not ticked under either, so its loops would play on unattended.
-    if (this.menus.pauseMenu.isOpen || this.gameOver) this.briarHollowKit?.silenceLoops();
+    if (this.menus.pauseScreen.isOpen || this.gameOver) this.briarHollowKit?.silenceLoops();
     // Gameplay stops ticking the soundscape under all three end screens, so its
     // loops would hold their last volume behind the screen until it closed.
     const endScreenShowing =
@@ -6989,13 +6838,13 @@ export class DungeonScene extends GameplayScene {
     // should freeze the streets.
     if (
       !this.gameOver &&
-      !this.menus.pauseMenu.isOpen &&
+      !this.menus.pauseScreen.isOpen &&
       !this.levelCompleteScreen.isActive &&
       !this.runCompleteScreen.isActive
     ) {
       this.townLife?.update(this.buildSystemContext());
       this.briarHollowKit?.update(this.buildSystemContext());
-      this.gathering?.update(this.buildSystemContext(), this.focusedOverlay !== null);
+      this.gathering?.update(this.buildSystemContext(), this.overlayOpen);
       this.circusAmbience?.update(
         this.gameMap,
         1 / FRAMES_PER_SECOND,
@@ -7269,12 +7118,10 @@ export class DungeonScene extends GameplayScene {
 
   render(ctx: CanvasRenderingContext2D): void {
     if (this.renderArrivalLoading(ctx)) return;
-    setButtonAudio(this.audio);
-    setButtonMouseState(this._mouseX, this._mouseY, this._mouseDown);
     // Any overlay at all, not only the world-halting ones: a street conversation
     // lets the player keep walking, and a "SPACE — Talk" cap still hovering over
     // the citizen they are already talking to is the loudest of these.
-    setInteractionPromptsSuppressed(this.focusedOverlay !== null || this.gameOver);
+    setInteractionPromptsSuppressed(this.overlayOpen || this.gameOver);
     const { x: camX, y: camY } = this.camera();
     const frontBeams = this.frontObjectiveBeams();
 
@@ -7302,7 +7149,7 @@ export class DungeonScene extends GameplayScene {
             ]
           : (this.townPropRenderables ?? undefined),
       gameOver: this.gameOver,
-      pauseMenuOpen: this.menus.pauseMenu.isOpen,
+      pauseMenuOpen: this.menus.pauseScreen.isOpen,
       gore: this.combat.gore,
       bodyPartGore: this.combat.bodyPartGore,
       safeRoom: this.safeRoom,
@@ -7396,30 +7243,22 @@ export class DungeonScene extends GameplayScene {
     this.renderPipeline.renderTowerBalconyOverlay(ctx, rc);
 
     this.renderPipeline.renderEffects(ctx, rc, (c, cx, cy) => {
-      UIRenderer.renderLevelUpFlash(c, cx, cy, this.pm);
-      UIRenderer.renderStatBoostFlash(c, cx, cy, this.pm);
+      renderLevelUpFlash(c, cx, cy, this.pm);
+      renderStatBoostFlash(c, cx, cy, this.pm);
     });
 
     this.renderPipeline.renderVisibilityFog(ctx, rc);
 
-    UIRenderer.renderHealthVignette(ctx, this.active(), this.gameOver);
+    renderHealthVignette(ctx, this.active(), this.gameOver);
 
-    // Between the fog and the HUD, and pinned there by both neighbours.
-    //
-    // It has to be after the fog, which fills everything past its outer radius
-    // with solid black: a marker clamped to the screen edge is by definition out
-    // at that radius or further — further still once the camera clamps at a map
-    // border and puts the party on the opposite side of the screen — so drawn
-    // with the world effects it was painted out in precisely the
-    // far-from-the-cat case it exists to answer.
-    //
-    // And it has to be before the HUD, which is the one piece of chrome drawn
-    // ahead of it. The other directional affordances below are drawn *at the
-    // player* and can never reach the corners; this one is clamped to the edge,
-    // so a pet off the top of the screen puts it inside the HUD panel's health
-    // bars. Everything else on screen — the minimap, the buttons, the pause menu
-    // and the award overlays — is drawn after this point and covers it already.
-    if (!this.gameOver && !this.menus.pauseMenu.isOpen) {
+    // After the fog, which fills everything past its outer radius with solid
+    // black: a marker clamped to the screen edge is by definition out at that
+    // radius or further — further still once the camera clamps at a map border
+    // and puts the party on the opposite side of the screen — so drawn with the
+    // world effects it was painted out in precisely the far-from-the-cat case it
+    // exists to answer. The HUD and every menu draw after it and cover it where
+    // they meet.
+    if (!this.gameOver && !this.menus.pauseScreen.isOpen) {
       this.mongoSystem.renderOffscreenMarker(
         ctx,
         camX,
@@ -7427,37 +7266,6 @@ export class DungeonScene extends GameplayScene {
         this.active(),
         visibilityRadiusPx(this.active()),
       );
-    }
-
-    // Render the HUD panel. On mobile the skill-points badge is NOT drawn here;
-    // it is stacked below the boss UI box further down in this method.
-    const hudResult = drawHUD(
-      ctx,
-      this.human,
-      this.cat,
-      this.notifPulse,
-      this._hudCollapsed,
-      this.skillPointReminderActive,
-      this.skillPointsSuppressed,
-      {
-        pendingAmount: this.rewardFly.pendingCoinAmount(),
-        pulse: this.rewardFly.coinCounterPulse(),
-      },
-      this.miniMap.screenRect.x,
-    );
-    this._hudToggleRect = hudResult.toggleRect;
-    this._hudRect = hudResult.hudRect;
-    UIRenderer.setHudPanelRect(this._hudRect);
-    UIRenderer.setHudPanelKeepouts(
-      hudKeepouts(this._hudCollapsed, platform.showHudCollapseToggle, this.miniMap.screenRect.x),
-    );
-    this.saveIndicator.render(ctx);
-    if (!platform.isMobile) {
-      this._hudSkillBannerRect = hudResult.notifRect;
-    }
-    this.briarHollowKit?.renderHud(ctx, this.miniMap, this._hudRect);
-    if (this.briarHollowKit?.hidesResourceStrip(this.miniMap, this._hudRect) !== true) {
-      this.gathering?.renderHud(ctx, this.miniMap, this._hudRect, this.active());
     }
 
     // Rebuilt once here, above every consumer: the pinned world arrow, the
@@ -7469,15 +7277,17 @@ export class DungeonScene extends GameplayScene {
     if (this.hasQuestJournal) this.collectTrackerEntries();
     else this._trackerEntries.length = 0;
     // Every frame, not only when the Journal is opened from its own button: the
-    // pause menu can also be reached with Escape, and the Game tab decides
-    // whether to offer a Quest Journal row from whether this is null.
+    // pause screen can also be reached with Escape, and it decides whether to
+    // offer the Journal from whether this is null.
     this.syncJournalContext();
 
-    if (!this.gameOver && !this.menus.pauseMenu.isOpen) {
-      const mmSize = this.miniMap.isExpanded
-        ? this.miniMap.EXPANDED_SIZE
-        : this.miniMap.NORMAL_SIZE;
-      renderKnockedOutUI(ctx, this.inactive(), mmSize);
+    const framesRect = this.hudFramesRect();
+    this.briarHollowKit?.renderHud(ctx, {
+      keepouts: this.hudKeepoutsCss(),
+      buildButton: this.hud.cssDockRect('build'),
+    });
+
+    if (!this.gameOver && !this.menus.pauseScreen.isOpen) {
       this.recall.render(ctx, camX, camY);
 
       // Only one of these may be on screen at once — a downed companion always
@@ -7490,224 +7300,48 @@ export class DungeonScene extends GameplayScene {
           camY,
           this.active(),
           visibilityRadiusPx(this.active()),
-          this._hudRect,
+          framesRect,
         ),
         this.stairwellRevealArrowCandidate(ctx, camX, camY),
         this.spiderLabArrowCandidate(ctx, camX, camY),
         this.pinnedObjectiveArrowCandidate(ctx, camX, camY),
         this.shouldShowBountyArrow()
-          ? (this.bounty?.arrowCandidate(ctx, this.active(), camX, camY, this._hudRect) ?? null)
+          ? (this.bounty?.arrowCandidate(ctx, this.active(), camX, camY, framesRect) ?? null)
           : null,
       ]);
     }
 
-    if (!this.gameOver && !this.menus.pauseMenu.isOpen) {
-      this.miniMap.escapeMarkerTile = this.doomsdayEscape.escapeMarkerTile;
-      this.miniMap.render(
-        ctx,
-        this.active(),
-        this.inactive(),
-        this.world.roster.grid,
-        this.safeRoom.mordecaiPositions,
-        this.collectQuestMarkers(),
-        this.mongoSystem.mongo,
-        this.briarHollowKit?.minimapProcessingStations ?? [],
-        this.collectVendorMinimapPositions(),
-      );
-      this.touch.miniMapRect = this.miniMap.screenRect;
-    } else {
-      this.touch.miniMapRect = { x: -9999, y: 0, w: 0, h: 0 };
-    }
-
-    if (this.levelDef.hasCollapseTimer === true && !this.gameOver && this.tutorial === null) {
-      UIRenderer.renderLevelTimer(
-        ctx,
-        this.miniMap,
-        this.levelTimerFrames,
-        this.isLevelTimerPaused(),
-      );
-    }
-
-    let mobileQuestTopY: number | undefined;
-    if (platform.isMobile) {
-      // On mobile, stack the boss UI directly below the HUD bar and render the
-      // skill-points badge below that so nothing overlaps.
-      const mobileTopY = hudResult.hudPanelBottom + MOBILE_UI_SPACING;
-      const bossBottom = this.bossRoom.renderUI(
-        ctx,
-        camX,
-        camY,
-        this.world.roster.mobs,
-        this.human,
-        this.cat,
-        mobileTopY,
-      );
-      const skillTopY = bossBottom !== null ? bossBottom + MOBILE_UI_SPACING : mobileTopY;
-      this._hudSkillBannerRect = renderMobileSkillBadge(
-        ctx,
-        this.human,
-        this.cat,
-        this.notifPulse,
-        skillTopY,
-        this.skillPointReminderActive,
-        this.skillPointsSuppressed,
-      );
-      const skillBadgeBottom =
-        this._hudSkillBannerRect.w > 0
-          ? this._hudSkillBannerRect.y + this._hudSkillBannerRect.h
-          : skillTopY;
-      mobileQuestTopY = skillBadgeBottom + MOBILE_UI_SPACING;
-    } else {
-      this.bossRoom.renderUI(ctx, camX, camY, this.world.roster.mobs, this.human, this.cat);
-    }
-    this.arena.render(ctx, this.active());
-
+    this.bossRoom.renderSealedBorders(ctx, camX, camY);
     this.destruction.loot.render(ctx, camX, camY, this.active());
 
-    // Told before anything in the right-hand column is placed — the chip just
-    // below is the first — so the whole column lays out from this frame's HUD.
-    this.syncColumnLayoutState();
-    const showAchievUI = this.tutorial === null || this.tutorial.showAchievementUI;
-    if (showAchievUI) {
-      this.achievementUI.drawAchievementIcon(
-        ctx,
-        UIRenderer.achievementChipRect(this.miniMap),
-        this.gameOver,
-        this.menus.pauseMenu.isOpen,
-      );
-      this.achievementUI.drawLootBoxIcon(ctx, this.gameOver, this.menus.pauseMenu.isOpen);
-    }
-
-    if (!this.gameOver && !this.menus.pauseMenu.isOpen) {
-      const active = this.active();
+    if (!this.gameOver && !this.menus.pauseScreen.isOpen) {
       const invPlayer = this.menus.inventoryPlayer();
-      const invName = invPlayer === this.human ? 'Human' : 'Cat';
-      this.menus.inventoryPanel.abilityCooldowns.set('protective_shell', {
+      const cooldowns = this.menus.itemCooldowns;
+      cooldowns.set('protective_shell', {
         current: this.combat.spells.shellCooldown,
         max: this.combat.spells.shellCooldownMax,
       });
-      this.menus.inventoryPanel.abilityCooldowns.set('magic_missile', {
+      cooldowns.set('magic_missile', {
         current: this.cat.missileCooldownCurrent,
         max: Math.max(1, this.cat.missileCooldownMax),
       });
-      this.menus.inventoryPanel.abilityCooldowns.set('smush', {
+      cooldowns.set('smush', {
         current: this.human.smushCooldown,
         max: Math.max(1, this.human.getSmushCooldownMax()),
       });
       this.menus.syncPotionCooldownOverlay(invPlayer);
       // Keyed by item id rather than ability id — the stone is a plain item that
-      // happens to have a cooldown; `renderSlot` falls back to the id for it.
-      this.menus.inventoryPanel.abilityCooldowns.set('wayfinders_anchor', {
+      // happens to have a cooldown; the hotbar falls back to the id for it.
+      cooldowns.set('wayfinders_anchor', {
         current: this.recall.cooldownRemainingFrames,
         max: RECALL_COOLDOWN_FRAMES,
       });
-      this.menus.inventoryPanel.desktopBagButtonRect = UIRenderer.bagButtonRect(this.miniMap);
-      this.menus.inventoryPanel.bagBouncePulse = this.rewardFly.bagBouncePulse();
-
-      // Render persistent HUD buttons before panels so open menus and context menus paint over them.
-      UIRenderer.drawPauseButton(ctx, this.miniMap, this.gameOver, this.menus.pauseMenu.isOpen);
-
-      if (this.hasQuestJournal) {
-        const outstanding = this._trackerEntries.filter((entry) =>
-          isOutstanding(entry.status),
-        ).length;
-        this.journalButtonRect = UIRenderer.drawJournalButton(
-          ctx,
-          UIRenderer.journalButtonRect(this.miniMap),
-          outstanding,
-        );
-      } else {
-        this.journalButtonRect = null;
-      }
-      const defences = this.briarHollowKit?.defences ?? null;
-      this.buildButtonRect =
-        defences?.buildButtonVisible === true
-          ? UIRenderer.drawBuildButton(
-              ctx,
-              UIRenderer.buildButtonRect(this.miniMap),
-              defences.constructionMenuOpen,
-              defences.buildButtonPulseSeconds,
-            )
-          : null;
-      if (platform.isMobile)
-        UIRenderer.renderMobileButtons(ctx, this.touch, {
-          human: this.human,
-          cat: this.cat,
-          miniMap: this.miniMap,
-          companion: this.companion,
-          mongoSystem: this.mongoSystem,
-          inventoryPanel: this.menus.inventoryPanel,
-          hideSwitchButton: this.tutorial !== null && !this.tutorial.showSwitchButton,
-          hideFollowerButton: this.tutorial !== null && !this.tutorial.showFollowerButton,
-          hasUnseenUpgrade: this.menus.inventoryPlayer().inventory.unseenUpgrades.size > 0,
-          bagBouncePulse: this.rewardFly.bagBouncePulse(),
-        });
-      else if (this.tutorial === null || this.tutorial.showFollowerButton)
-        this.touch.followBtnRect = UIRenderer.renderFollowerButton(
-          ctx,
-          this.companion,
-          this.human.isActive,
-          UIRenderer.followerButtonRect(),
-        );
-
-      this.menus.inventoryPanel.render(
-        ctx,
-        invPlayer.inventory,
-        invName,
-        partyCoins(this.human, this.cat),
-        this.menus.inventoryWieldedWeaponId(),
-        `${CRAWLER_NAMES.human} ${this.human.coins} · ${CRAWLER_NAMES.cat} ${this.cat.coins}`,
-      );
-      const activeName = this.human.isActive ? 'Human' : 'Cat';
-      this.menus.gearPanel.render(ctx, active.inventory, activeName);
-      this.destruction.dynamite.renderChargeBar(ctx, viewportWidth(), viewportHeight());
       this.barriers.renderConstructUI(ctx);
-      this.defendQuest.renderUI(ctx, mobileQuestTopY);
-      this.circusQuest.renderUI(ctx);
-      this.murderQuest.renderUI(ctx);
-      this.doomsdayEscape.renderUI(ctx);
-      if (!platform.isMobile && this.mongoSystem.canShow && this.cat.isActive) {
-        const summon = desktopSummonButtonRect(viewportHeight());
-        this.touch.summonBtnRect = this.mongoSystem.renderSummonButton(
-          ctx,
-          summon.x,
-          summon.y,
-          summon.w,
-          summon.h,
-          this.cat.isActive,
-        );
-      }
-    }
-
-    if (this.gameOver) {
-      this.combat.deathScreen.render(ctx);
-    }
-
-    if (this.menus.pauseMenu.isOpen) {
-      const inSafe = this.human.isProtected || this.cat.isProtected;
-      const onOpenHuman =
-        inSafe && this.humanAchievements.pendingBoxes.length > 0
-          ? () => this.achievementUI.openBoxQueue('human', () => this.menus.pauseMenu.close())
-          : undefined;
-      const onOpenCat =
-        inSafe && this.catAchievements.pendingBoxes.length > 0
-          ? () => this.achievementUI.openBoxQueue('cat', () => this.menus.pauseMenu.close())
-          : undefined;
-      this.menus.renderPauseMenu(ctx, {
-        humanAchievements: this.humanAchievements,
-        catAchievements: this.catAchievements,
-        gameStats: this.gameStats,
-        onOpenHumanBoxes: onOpenHuman,
-        onOpenCatBoxes: onOpenCat,
-        mouseX: this._mouseX,
-        mouseY: this._mouseY,
-      });
     }
 
     const anyMenuOpen =
-      this.menus.pauseMenu.isOpen ||
-      this.menus.inventoryPanel.isOpen ||
-      this.menus.gearPanel.isOpen ||
+      this.menus.pauseScreen.isOpen ||
+      this.menus.inventoryScreen.isOpen ||
       this.followerMenu.isOpen;
     if (!this.gameOver && !anyMenuOpen) {
       const safeRoomSpeaker = safeRoomSpeakerFor(this.bopca, this.safeRoom, this.active());
@@ -7726,124 +7360,62 @@ export class DungeonScene extends GameplayScene {
       }
     }
 
-    // On a village floor, `BriarHollowKit.renderDialog` draws the shared
-    // conversation itself; drawing it again here would double-render it.
-    if (this.briarHollowKit === null) this.conversation.render(ctx);
-    this.briarHollowKit?.renderDialog(ctx, camX, camY);
-    this.grateSpikes.render(ctx, camX, camY);
-    this.noticeBoard?.render(ctx);
-    this.marketPanel?.render(ctx, this.active(), this.inactive());
-    this.travelMenu.render(ctx, this.active(), this.inactive());
-    this.fortuneTeller?.render(ctx, this.active(), this.inactive());
-
-    if (this.stairwell.menuOpen) {
-      this.stairwell.renderMenu(ctx);
-    }
-
-    if (this.levelCompleteScreen.isActive) {
-      this.levelCompleteScreen.render(ctx);
-    }
-    this.runCompleteScreen.render(ctx);
-
-    if (this.building?.menuOpen) {
-      this.building.renderMenu(ctx);
-    }
-
-    if (this.followerMenu.isOpen) {
-      this.followerMenu.restrictedToButtonIndex = this.tutorial?.followerMenuRestriction ?? null;
-      this.followerMenu.render(
-        ctx,
-        this.companion.getMovementMode(this.human.isActive),
-        this.companion.getCombatStance(this.human.isActive),
-        this.human.isActive,
-        this.mongoSystem.unlocked ? settings.catAutoSummonsMongo : null,
-      );
-    }
-
-    // The award stack, drawn lowest-priority first so that draw order matches
-    // the order `overlayClaims` and `handleClick` rank these same surfaces in.
-    // Whichever one is on top is then also the one that owns the keyboard's
-    // focus ring and the one a click reaches. Were the three orders to
-    // disagree, the topmost dialog would be visible but un-activatable.
-    this.menus.renderOverlays(ctx);
-    this.achievementUI.renderOverlays(ctx);
-    if (this.chestRewardDialog.isOpen) {
-      this.chestRewardDialog.render(ctx);
-    }
-    if (this.questSwitchConfirm.isOpen) {
-      this.questSwitchConfirm.render(ctx);
-    }
+    // Every menu and dialog, bottom to top in stack order; the hit regions
+    // they register here are what the next press is tested against.
+    this.ui.frame(ctx);
 
     // Flies over every dialog above: it is reporting a grant that already
     // happened, not asking for input, so nothing on screen should be able to
     // hide it mid-flight.
-    const coinTarget = hudCoinCounterScreenPos(this._hudCollapsed);
-    this.rewardFly.render(ctx, {
-      coinX: coinTarget.x,
-      coinY: coinTarget.y,
-      bagRect: platform.isMobile
-        ? this.touch.bagBtnRect
-        : this.menus.inventoryPanel.toggleBtnRect(),
-    });
+    this.rewardFly.render(ctx, this.hudFlyTargets());
 
     // Hidden behind the pause menu, like every other overlay above: the intro
     // card is drawn last and would otherwise cover the menu it was opened over,
     // leaving a screen of buttons nobody can see to aim at.
-    if (this.tutorial === null && !this.menus.pauseMenu.isOpen) {
+    if (this.tutorial === null && !this.menus.pauseScreen.isOpen) {
       this.dungeonIntro.render(ctx);
 
       if (this.dungeonIntro.isActive && !this.introStarted) {
-        const hint = platform.isMobile ? 'Tap to begin' : 'Press any key to begin';
-        drawText(ctx, hint, {
+        const hint = byInputMode(this.ui.viewport.density, {
+          touch: 'Tap to begin',
+          pointer: 'Press any key to begin',
+        });
+        worldText(ctx, hint, {
           x: Math.round(viewportWidth() / 2),
-          y: Math.round(viewportHeight() * HEALTH_BAR_COLOR_THRESHOLD),
+          y: Math.round(viewportHeight() * INTRO_BEGIN_HINT_Y_FRACTION),
           align: 'center',
-          size: 18,
+          size: INTRO_BEGIN_HINT_SIZE,
           bold: true,
-          color: '#ffffff',
+          color: worldPalette.introPrompt,
           outline: true,
           glow: true,
         });
       }
     }
 
-    if (this._companionErrorMsg !== null) {
-      const msg = this._companionErrorMsg;
-      const FADE_FRAMES = 30;
-      const alpha = Math.min(1, msg.framesLeft / FADE_FRAMES);
-      drawText(ctx, msg.text, {
-        x: Math.round(viewportWidth() / 2),
-        y: Math.round(viewportHeight() * HEALTH_BAR_WARNING_THRESHOLD),
-        align: 'center',
-        size: 18,
-        bold: true,
-        color: '#ff5555',
-        outline: true,
-        alpha,
-      });
-    }
-
-    this.menus.hotbarToast.render(ctx, this.menus.inventoryPanel.hotbarBandHeight());
     aiAdapter.render(ctx);
-    this.chat.renderHint(ctx);
+    // While its modals or the song are up, they draw with their own surface.
     this.spiderQuest.renderUI(ctx, camX, camY);
 
     if (this.bossIntro.isActive) {
       this.bossIntro.render(ctx);
     }
 
+    const mouse = sceneMouse(this.ui);
     if (
       platform.showEntityTooltip &&
+      mouse !== null &&
+      !this.ui.pointerOverUi() &&
       !this.gameOver &&
-      !this.menus.pauseMenu.isOpen &&
+      !this.menus.pauseScreen.isOpen &&
       !this.achievementUI.isBlocking
     ) {
-      UIRenderer.renderEntityTooltip(
+      renderEntityTooltip(
         ctx,
         camX,
         camY,
-        this._mouseX,
-        this._mouseY,
+        mouse.x,
+        mouse.y,
         this.world.roster.grid,
         this.briarHollowKit?.villagers?.villagers ?? [],
       );
@@ -7852,42 +7424,52 @@ export class DungeonScene extends GameplayScene {
     if (this.tutorial !== null) {
       const { x: tutCamX, y: tutCamY } = this.camera();
       const activePlayer = this.active();
-      const pb = UIRenderer.pauseButtonRect(this.miniMap);
-      const invPlayer = this.menus.inventoryPlayer();
-      const bagSlots = invPlayer.inventory.bag.slots;
-      const smushIdx = bagSlots.findIndex((s) => s?.id === 'smush_tome');
-      const potionIdx = bagSlots.findIndex((s) => s?.id === 'health_potion');
-      const boxersIdx = bagSlots.findIndex((s) => s?.id === 'enchanted_bigboi_boxers');
-      const missileIdx = bagSlots.findIndex((s) => s?.id === 'magic_missile_tome');
-      const HOTBAR_SLOT_COUNT = 8;
+      const pauseButton = this.hud.cssDockRect('pause');
+      const hotbarFrame = this.hud.frame;
+      const screen = this.menus.inventoryScreen;
+      const uiScale = this.ui.uiScale;
+      const bagSlots = this.menus.inventoryPlayer().inventory.bag.slots;
+      const bagItemRect = (id: ItemId): Rect | null => {
+        const rect = screen.geometry.bagCells.get(bagSlots.findIndex((slot) => slot?.id === id));
+        return rect === undefined ? null : toCssRect(rect, uiScale);
+      };
+      const inventoryFrame = screen.isOpen ? screen.geometry.frame : null;
+      const bagTab = screen.isOpen
+        ? inventoryTabRect(screen.surface.id, this.ui.regions(), 'bag')
+        : null;
+      const pauseInventoryEntry = this.menus.pauseScreen.guidedEntryRect;
       const tutRenderCtx: TutorialRenderContext = {
         isPlayerInSafeRoom: this.safeRoom.isEntityInSafeRoom(activePlayer),
-        pauseMenuOpen: this.menus.pauseMenu.isOpen,
-        pauseMenuTab: this.menus.pauseMenu.isOpen ? this.menus.pauseMenu.currentTab : null,
-        pauseMenuButtons: this.menus.pauseMenu.renderedButtons,
-        inventoryPanelOpen: this.menus.inventoryPanel.isOpen,
-        gearPanelOpen: this.menus.gearPanel.isOpen,
-        pauseButtonRect: { x: pb.x, y: pb.y, w: pb.w, h: pb.h },
+        pauseMenuOpen: this.menus.pauseScreen.isOpen,
+        inventoryPanelOpen: screen.isOpen && screen.tab === 'bag',
+        inventoryFrame: inventoryFrame === null ? null : toCssRect(inventoryFrame, uiScale),
+        inventoryBagTabRect: bagTab === null ? null : toCssRect(bagTab, uiScale),
+        pauseInventoryEntryRect:
+          pauseInventoryEntry === null ? null : toCssRect(pauseInventoryEntry, uiScale),
+        pauseButtonRect: pauseButton,
         bagItemRects: {
-          smush_tome:
-            smushIdx >= 0 ? (this.menus.inventoryPanel.getBagSlotRect(smushIdx) ?? null) : null,
-          health_potion:
-            potionIdx >= 0 ? (this.menus.inventoryPanel.getBagSlotRect(potionIdx) ?? null) : null,
-          enchanted_bigboi_boxers:
-            boxersIdx >= 0 ? (this.menus.inventoryPanel.getBagSlotRect(boxersIdx) ?? null) : null,
-          magic_missile_tome:
-            missileIdx >= 0 ? (this.menus.inventoryPanel.getBagSlotRect(missileIdx) ?? null) : null,
+          smush_tome: bagItemRect('smush_tome'),
+          health_potion: bagItemRect('health_potion'),
+          enchanted_bigboi_boxers: bagItemRect('enchanted_bigboi_boxers'),
+          magic_missile_tome: bagItemRect('magic_missile_tome'),
         },
-        hotbarSlotRects: Array.from({ length: HOTBAR_SLOT_COUNT }, (_, i) =>
-          this.menus.inventoryPanel.getHotbarSlotRect(i),
-        ),
-        isDragActive: this.menus.inventoryPanel.interaction.isDragging,
+        hotbarSlotRects:
+          hotbarFrame === null
+            ? []
+            : hotbarFrame.geometry.hotbar.slots.map((slot) => toCssRect(slot, hotbarFrame.uiScale)),
+        bagHotbarSlotRects: Array.from({ length: HOTBAR_COUNT }, (_, index) => {
+          const rect = screen.geometry.hotbarCells.get(index);
+          return rect === undefined ? null : toCssRect(rect, uiScale);
+        }),
+        isDragActive: screen.drag !== null,
         isAchievementNotifActive: this.achievementUI.notifActive,
-        isContextMenuOpen: this.menus.inventoryPanel.interaction.contextMenu !== null,
-        contextMenuOptionRects: this.menus.inventoryPanel.contextMenuOptionRects,
+        isContextMenuOpen: screen.menu?.kind === 'item',
+        contextMenuOptionRects: itemMenuEntryRects(screen.surface.id, this.ui.regions()).map(
+          (entry) => ({ id: entry.id, ...toCssRect(entry.rect, uiScale) }),
+        ),
         isAbilityDialogShowing: this.menus.levelUpDialog.isShowing,
         isRewardGrantedDialogShowing: this.menus.rewardGrantedDialog.isShowing,
-        followerButtonRect: this.touch.followBtnRect.w > 0 ? this.touch.followBtnRect : null,
+        followerButtonRect: this.hud.cssDockRect('follower'),
         followerMenuOpen: this.followerMenu.isOpen,
         followerMenuFollowMeRect: this.followerMenu.isOpen
           ? this.followerMenu.followMeButtonRect
@@ -7903,35 +7485,27 @@ export class DungeonScene extends GameplayScene {
       );
     }
 
-    // Last, once every surface has drawn: the ring belongs to whoever declared
-    // it last, so this is the only point at which the frame's answer to "who
-    // owns the keyboard" is final.
-    //
-    // The bag declares no claim of its own, so every claim in that list outranks
-    // it. Checked per frame rather than at each overlay's open, because the
-    // floor raises them from event handlers, the mobile tap path and a death the
-    // player never touched a button for.
-    if (keyboardSuppressed(this.overlayClaims)) this.menus.blurInventorySearch();
-    auditOverlayFocus(this.overlayClaims, menuFocusContextId());
     // Over everything, HUD included: the loading screen fades out over the
     // finished frame rather than cutting to it.
     this.renderArrivalFade(ctx);
   }
 
   /**
-   * Draws the arrival's loading screen instead of the world while it is open,
-   * which is also what ticks its work. Returns whether it took the frame.
+   * While the arrival's loading screen is open, frames only the UI: its
+   * surface draws the screen in place of the world, and drawing it is what
+   * ticks the work. Returns whether it took the frame.
    */
   private renderArrivalLoading(ctx: CanvasRenderingContext2D): boolean {
     const loading = this.arrivalLoading;
     if (loading?.isOpen !== true) return false;
-    const stillLoading = loading.renderFrame(ctx, viewportWidth(), viewportHeight());
-    if (stillLoading) return true;
-    // Finished on this frame: the world is drawn from here on, and its frame
-    // times are the ones the render-quality probe should judge.
-    renderQuality.endLoadingCover();
-    releaseFigureIdleSweep();
-    return false;
+    this.ui.frame(ctx);
+    if (loading.hasFinished()) {
+      // Finished on this frame: the world is drawn from the next one on, and
+      // its frame times are the ones the render-quality probe should judge.
+      renderQuality.endLoadingCover();
+      releaseFigureIdleSweep();
+    }
+    return true;
   }
 
   private renderArrivalFade(ctx: CanvasRenderingContext2D): void {
@@ -7941,7 +7515,7 @@ export class DungeonScene extends GameplayScene {
       this.arrivalLoading = null;
       return;
     }
-    loading.renderFrame(ctx, viewportWidth(), viewportHeight());
+    loading.renderFadeOut(ctx, viewportWidth(), viewportHeight());
   }
 
   /**
@@ -8149,7 +7723,6 @@ export class DungeonScene extends GameplayScene {
 
     this.safeRoom.update(ctx);
     this.tickSkillPointReminder(ctx);
-    this.tickSaveIndicator();
     // Straight after the context is built, so the move-cancel it watches for is
     // this frame's movement rather than the previous frame's.
     this.recall.update(ctx);
@@ -8173,7 +7746,7 @@ export class DungeonScene extends GameplayScene {
       this.bossRoom.newlyLockedBossType = null;
       const meta = BOSS_META[bt] ?? {
         displayName: 'THE BOSS',
-        color: '#ef4444',
+        color: worldPalette.ink.danger,
       };
       this.bossIntro.trigger(bt, meta.displayName, meta.color);
       this.bus.emit('bossFightInitiated', { bossType: bt });
@@ -8281,7 +7854,7 @@ export class DungeonScene extends GameplayScene {
 
       if (this.tutorial.needsAutoCloseMenus) {
         this.tutorial.needsAutoCloseMenus = false;
-        this.menus.pauseMenu.close();
+        this.menus.pauseScreen.close();
         this.menus.closePanels();
       }
     }
@@ -8515,7 +8088,7 @@ export class DungeonScene extends GameplayScene {
     ) {
       const framesBefore = this.levelTimerFrames;
       this.levelTimerFrames--;
-      this.playLevelTimerCue(UIRenderer.levelTimerCue(framesBefore, this.levelTimerFrames));
+      this.playLevelTimerCue(levelTimerCue(framesBefore, this.levelTimerFrames));
     }
 
     revealMinimap(player, this.miniMap);
@@ -8548,9 +8121,6 @@ export class DungeonScene extends GameplayScene {
       )
     ) {
       this.gameOver = true;
-      // A death arrives from the fight, not from a key or a click, so nothing
-      // else here has taken the keyboard off a bag left open behind it.
-      this.menus.cancelInventoryDragForOverlay();
       difficultyStats.recordDeath();
       this.gameStats.recordDeath();
       this.barriers.cancelConstruct();
@@ -8582,7 +8152,7 @@ export class DungeonScene extends GameplayScene {
     return this.levelTimerFrames;
   }
 
-  private playLevelTimerCue(cue: UIRenderer.LevelTimerCue | null): void {
+  private playLevelTimerCue(cue: LevelTimerCue | null): void {
     if (cue === 'final_minute_heartbeat') {
       this.audio?.play('level_timer_final_minute_heartbeat');
     } else if (cue === 'five_minute_warning') {
@@ -8699,7 +8269,11 @@ export class DungeonScene extends GameplayScene {
     }
     if (this.spiderQuest.bossFightStartPending) {
       this.spiderQuest.bossFightStartPending = false;
-      this.bossIntro.trigger('grotesque_spider', 'GROTESQUE SPIDER', '#22c55e');
+      this.bossIntro.trigger(
+        'grotesque_spider',
+        'GROTESQUE SPIDER',
+        worldPalette.bossIntro.spiderAccent,
+      );
     }
     if (this.spiderQuest.bossMusicStartPending) {
       this.spiderQuest.bossMusicStartPending = false;
@@ -8771,7 +8345,7 @@ export class DungeonScene extends GameplayScene {
       isBossFightActive: () => this.bossRoom.anyLocked,
       isPaused: () =>
         this.gameOver ||
-        this.menus.pauseMenu.isOpen ||
+        this.menus.pauseScreen.isOpen ||
         this.stairwell.menuOpen ||
         (this.building?.menuOpen ?? false) ||
         this.defendQuest.isDialogOpen ||
@@ -8836,523 +8410,13 @@ export class DungeonScene extends GameplayScene {
     };
   }
 
-  handleTouchStart(e: TouchEvent, rect: DOMRect): void {
-    if (this.arrivalLoading?.isOpen === true) return;
-    for (const touch of Array.from(e.changedTouches)) {
-      const x = touch.clientX - rect.left;
-      const y = touch.clientY - rect.top;
-
-      // A full-screen town modal (notice board, market stall, fortune teller) or
-      // a pausing award overlay owns every tap while it's open — route to it
-      // before any HUD button, so a tap landing on a now-hidden control (e.g.
-      // Switch, which would change whose wallet a shop charges) can't leak
-      // through underneath the overlay, and so an overlay button sitting over the
-      // hotbar band is pressed rather than starting a drag on the slot beneath.
-      if (
-        this.noticeBoard?.isOpen === true ||
-        this.marketPanel?.isOpen === true ||
-        this.travelMenu.isOpen ||
-        this.fortuneTeller?.isOpen === true ||
-        this.menus.skillBookPrompt.isOpen ||
-        this.menus.questReward.isOpen ||
-        this.menus.levelUpDialog.isShowing ||
-        this.menus.rewardGrantedDialog.isShowing ||
-        this.menus.mongoExplainer.isOpen ||
-        this.menus.craftExplainers.isOpen ||
-        this.levelCompleteScreen.isActive ||
-        this.runCompleteScreen.isActive ||
-        // A long-press context menu answers whatever click lands anywhere on
-        // screen (even a miss, which dismisses it) rather than whatever
-        // button or world tile its option happens to be drawn over.
-        this.menus.inventoryPanel.interaction.contextMenu !== null
-      ) {
-        this.handleClick(x, y, e.timeStamp);
-        continue;
-      }
-
-      // The bag's Drop/Trade "how many?" prompt, ahead of every mobile HUD hit
-      // test below: its step buttons sit over the same screen band as the bag,
-      // build and minimap buttons, and a tap on one must neither press what's
-      // drawn beneath it nor start hold-to-repeat on the wrong control.
-      if (this.menus.itemQuantityPicker.isOpen) {
-        this.menus.itemQuantityPicker.handlePointerDown(x, y);
-        this.handleClick(x, y, e.timeStamp);
-        continue;
-      }
-
-      // A village or grate panel owns every finger while it is up, for the same
-      // reason: its rows sit over the Bag, Build and Journal buttons on a phone,
-      // and a tap on one must neither press what is drawn beneath it nor start
-      // a walk that re-aims the placement the row is about to build.
-      if (this.briarHollowKit?.isMenuOpen === true || this.grateSpikes.isOpen) {
-        this.briarHollowKit?.handlePointerDown(x, y);
-        this.handleClick(x, y, e.timeStamp);
-        continue;
-      }
-
-      // The follower menu covers the whole screen, so it owns every finger — a
-      // tap must not reach the HUD buttons drawn beneath it. Its rows scroll
-      // under a drag, so the release decides whether the press was a click.
-      if (this.followerMenu.isOpen) {
-        this.followerMenu.touchStart(touch.identifier, x, y);
-        continue;
-      }
-
-      if (this.menus.gearPanel.hitsPanel(x, y)) {
-        this.handleClick(x, y, e.timeStamp);
-        continue;
-      }
-
-      const coveredByPanel = this.menus.panelCovers(x, y);
-
-      if (platform.isMobile && !this.menus.pauseMenu.isOpen && !coveredByPanel) {
-        const ht = this._hudToggleRect;
-        if (pointInRect(x, y, ht)) {
-          this._hudCollapsed = !this._hudCollapsed;
-          continue;
-        }
-      }
-
-      if (
-        platform.isMobile &&
-        !this.gameOver &&
-        !this.menus.pauseMenu.isOpen &&
-        !coveredByPanel &&
-        this.menus.tryOpenSpendScreen(x, y, this._hudSkillBannerRect)
-      ) {
-        continue;
-      }
-
-      if (platform.isMobile && !this.gameOver && !this.menus.pauseMenu.isOpen && !coveredByPanel) {
-        const mm = this.touch.miniMapRect;
-        if (pointInRect(x, y, mm)) {
-          if (!this.miniMap.isExpanded) {
-            this.miniMap.toggle();
-          } else {
-            // Track touch for drag-to-pan or tap-to-collapse
-            this.touch.miniMapTouchId = touch.identifier;
-            this.touch.miniMapTouchStartX = x;
-            this.touch.miniMapTouchStartY = y;
-            this.touch.miniMapTouchLastX = x;
-            this.touch.miniMapTouchLastY = y;
-            this.touch.miniMapDragged = false;
-          }
-          continue;
-        }
-      }
-
-      if (platform.isMobile && !this.gameOver && !this.menus.pauseMenu.isOpen && !coveredByPanel) {
-        const bb = this.touch.bagBtnRect;
-        if (pointInRect(x, y, bb)) {
-          this.closeConversationForMenu();
-          this.menus.inventoryPanel.toggle();
-          if (this.menus.inventoryPanel.isOpen) {
-            this.menus.gearPanel.isOpen = false;
-          }
-          continue;
-        }
-      }
-
-      // The Journal's compass, before the fall-through that turns an unclaimed
-      // tap into a move order: without this a tap on it also walks the party
-      // toward the button and swings on release.
-      if (
-        platform.isMobile &&
-        !this.gameOver &&
-        !this.menus.pauseMenu.isOpen &&
-        !coveredByPanel &&
-        this.journalButtonRect !== null &&
-        pointInRect(x, y, this.journalButtonRect)
-      ) {
-        notifyButtonClick(x, y);
-        this.openQuestJournal();
-        continue;
-      }
-      // The Build button, for the same reason as the compass above.
-      if (
-        platform.isMobile &&
-        !this.gameOver &&
-        !this.menus.pauseMenu.isOpen &&
-        !coveredByPanel &&
-        this.buildButtonRect !== null &&
-        pointInRect(x, y, this.buildButtonRect)
-      ) {
-        notifyButtonClick(x, y);
-        this.briarHollowKit?.openConstruction();
-        continue;
-      }
-
-      if (
-        platform.isMobile &&
-        !this.menus.pauseMenu.isOpen &&
-        !coveredByPanel &&
-        this.mongoSystem.canShow &&
-        this.cat.isActive
-      ) {
-        const mb = this.touch.summonBtnRect;
-        if (pointInRect(x, y, mb)) {
-          if (!this.gameOver) this.toggleMongoSummon();
-          continue;
-        }
-      }
-
-      if (platform.isMobile && !this.menus.pauseMenu.isOpen && !coveredByPanel) {
-        const sb = this.touch.switchBtnRect;
-        if (pointInRect(x, y, sb)) {
-          if (!this.gameOver) this.triggerSwitchCharacter();
-          continue;
-        }
-        const fb = this.touch.followBtnRect;
-        if (pointInRect(x, y, fb)) {
-          if (!this.gameOver) this.triggerCompanionFollow();
-          continue;
-        }
-      }
-
-      if (!this.menus.pauseMenu.isOpen && !this.gameOver && !coveredByPanel) {
-        const hi = this.menus.inventoryPanel.getHotbarTappedIndex(x, y);
-        if (hi >= 0) {
-          this.touch.inventoryDragTouchId = touch.identifier;
-          this.handleMouseDown(x, y);
-          this.clearInvLongPress();
-          this.touch.longPressPos = { x, y };
-          this.touch.longPressFired = false;
-          this.touch.longPressTimer = setTimeout(() => {
-            this.touch.longPressFired = true;
-            this.menus.inventoryPanel.cancelDrag();
-            this.handleContextMenu(x, y);
-          }, LONGPRESS_TIMEOUT_MS);
-          continue;
-        }
-      }
-
-      if (
-        this.achievementUI.isBlocking ||
-        this.stairwell.menuOpen ||
-        this.gameOver ||
-        this.menus.pauseMenu.isOpen ||
-        // Mordecai's, the Bopca's, a citizen's and a sign's boxes are
-        // deliberately absent: each is a floating claim the player is meant to
-        // walk out of, and walking is tap-to-move, so routing their touches
-        // straight to `handleClick` leaves a phone player unable to end the
-        // conversation at all. A tap on the box still advances it — the release
-        // reaches `handleClick` — and a tap off it hands the press on.
-        this.spiderQuest.isDialogOpen ||
-        this.circusQuest.isDialogOpen ||
-        this.murderQuest.isDialogOpen ||
-        this.anchorQuest.isDialogOpen ||
-        // Town modals (notice board / market stall / fortune teller) are handled
-        // by the early full-screen-modal gate at the top of this loop.
-        this.tutorial?.showTutorialMordecaiDialog === true ||
-        this.tutorial?.showMordecaiReminderDialog === true
-      ) {
-        if (this.menus.pauseMenu.isOpen) {
-          if (this.touch.pauseScrollTouchId === null) {
-            this.touch.pauseScrollTouchId = touch.identifier;
-            this.touch.pauseScrollTapStart = { x, y, time: Date.now() };
-            this.menus.pauseMenu.touchScrollStart(x, y, this.human, this.cat);
-          }
-        } else {
-          this.handleClick(x, y, e.timeStamp);
-        }
-        continue;
-      }
-
-      if (this.human.isActive) {
-        const dynIdx = this.menus.inventoryPanel.getHotbarTappedIndex(x, y);
-        const isDynamiteSlot =
-          dynIdx >= 0 && this.human.inventory.actionBar.slots[dynIdx]?.id === 'goblin_dynamite';
-        if (isDynamiteSlot && this.human.canAct) {
-          if (this.destruction.dynamite.beginCharge(dynIdx, this.human)) {
-            this.touch.dynamiteTouchId = touch.identifier;
-          } else {
-            refuseDynamiteInSafeRoom(this.hotbarHost());
-          }
-          continue;
-        }
-      }
-
-      if (this.menus.inventoryPanel.isOpen) {
-        if (this.menus.inventoryPanel.hitsPanel(x, y)) {
-          this.handleMouseDown(x, y);
-          this.touch.inventoryDragTouchId ??= touch.identifier;
-          this.clearInvLongPress();
-          this.touch.longPressPos = { x, y };
-          this.touch.longPressFired = false;
-          this.touch.longPressTimer = setTimeout(() => {
-            this.touch.longPressFired = true;
-            this.menus.inventoryPanel.cancelDrag();
-            this.handleContextMenu(x, y);
-          }, LONGPRESS_TIMEOUT_MS);
-          continue;
-        }
-      }
-
-      if (this.touch.moveTouchId === null) {
-        this.touch.moveTouchId = touch.identifier;
-        this.touch.moveTarget = { x, y };
-        this.touch.tapStart = { x, y, time: Date.now() };
-        this.touch.tapStartEventMs = e.timeStamp;
-        this.structureHold.begin(this.fingerOnWorkableStructure(x, y), x, y);
-        const starter = this.active();
-        this.holdStartActivePos = { x: starter.x, y: starter.y };
-        this.menus.pauseMenu.touchScrollStart(x, y, this.human, this.cat);
-      }
-    }
-  }
-
-  handleTouchMove(e: TouchEvent, rect: DOMRect): void {
-    if (this.arrivalLoading?.isOpen === true) return;
-    for (const touch of Array.from(e.changedTouches)) {
-      const x = touch.clientX - rect.left;
-      const y = touch.clientY - rect.top;
-
-      if (this.followerMenu.touchMove(touch.identifier, x, y)) continue;
-
-      if (this.touch.longPressPos) {
-        const dist = Math.hypot(x - this.touch.longPressPos.x, y - this.touch.longPressPos.y);
-        if (dist > TOUCH_DRAG_THRESHOLD) this.clearInvLongPress();
-      }
-
-      this.handleMouseMove(x, y);
-
-      if (touch.identifier === this.touch.miniMapTouchId) {
-        const dx = x - this.touch.miniMapTouchLastX;
-        const dy = y - this.touch.miniMapTouchLastY;
-        const totalDist = Math.hypot(
-          x - this.touch.miniMapTouchStartX,
-          y - this.touch.miniMapTouchStartY,
-        );
-        if (totalDist > MINIMAP_DRAG_THRESHOLD) this.touch.miniMapDragged = true;
-        if (this.touch.miniMapDragged) this.miniMap.pan(dx, dy);
-        this.touch.miniMapTouchLastX = x;
-        this.touch.miniMapTouchLastY = y;
-      }
-
-      if (touch.identifier === this.touch.moveTouchId) {
-        this.touch.moveTarget = { x, y };
-        this.menus.pauseMenu.touchScrollMove(x, y);
-      }
-
-      if (touch.identifier === this.touch.pauseScrollTouchId) {
-        this.menus.pauseMenu.touchScrollMove(x, y);
-      }
-    }
-  }
-
-  handleTouchEnd(e: TouchEvent, rect: DOMRect): void {
-    if (this.arrivalLoading?.isOpen === true) return;
-    // Any lifted finger ends a held picker step; a picker's own buttons never
-    // start a move or a drag, so there is nothing else to match it to.
-    this.briarHollowKit?.handlePointerUp();
-    this.menus.itemQuantityPicker.handlePointerUp();
-    for (const touch of Array.from(e.changedTouches)) {
-      const x = touch.clientX - rect.left;
-      const y = touch.clientY - rect.top;
-
-      const followerMenuTouch = this.followerMenu.touchEnd(touch.identifier);
-      if (followerMenuTouch !== null) {
-        if (followerMenuTouch === 'tap') this.handleClick(x, y, e.timeStamp);
-        continue;
-      }
-
-      if (touch.identifier === this.touch.miniMapTouchId) {
-        if (!this.touch.miniMapDragged) this.miniMap.toggle();
-        this.touch.miniMapTouchId = null;
-        this.touch.miniMapDragged = false;
-        continue;
-      }
-
-      if (touch.identifier === this.touch.pauseScrollTouchId) {
-        this.menus.pauseMenu.touchScrollEnd(x, y, this.human, this.cat);
-        this.touch.pauseScrollTouchId = null;
-        const tapStart = this.touch.pauseScrollTapStart;
-        this.touch.pauseScrollTapStart = null;
-        if (tapStart !== null) {
-          const elapsed = Date.now() - tapStart.time;
-          const moved = Math.hypot(x - tapStart.x, y - tapStart.y);
-          const wasTap = elapsed < MENU_TAP_DURATION_MS && moved < MENU_TAP_MAX_DISTANCE;
-          if (wasTap) {
-            this.handleClick(x, y, e.timeStamp);
-          } else {
-            // A drag ends here and nowhere else: no click follows it, so the
-            // menu's held-back click would sit waiting and eat the next tap.
-            this.menus.pauseMenu.clearSuppressedClick();
-          }
-        }
-        continue;
-      }
-
-      if (touch.identifier === this.touch.dynamiteTouchId) {
-        const wasCharging = this.destruction.dynamite.isCharging;
-        this.destruction.dynamite.release(this.human);
-        if (wasCharging) this.bus.emit('dynamiteUsed', { player: 'Human' });
-        this.touch.dynamiteTouchId = null;
-        continue;
-      }
-
-      if (touch.identifier === this.touch.inventoryDragTouchId) {
-        const longPressFired = this.touch.longPressFired;
-        // longPressPos is cleared by move handler when finger travels > 10px — use it to
-        // distinguish a tap (pos still set) from a drag (pos already null).
-        const wasTap = this.touch.longPressPos !== null;
-        this.clearInvLongPress();
-        if (!longPressFired) {
-          this.handleMouseUp(x, y);
-          const hi = this.menus.inventoryPanel.getHotbarTappedIndex(x, y);
-          if (
-            hi >= 0 &&
-            wasTap &&
-            // A menu open over the bar owns the tap: it is drawn on top of the
-            // slots, so activating the slot beneath would swallow the selection.
-            this.menus.inventoryPanel.interaction.contextMenu === null &&
-            // Likewise a pausing overlay, which a second finger can raise while
-            // this one is still down.
-            !this.isOverlayBlockingPointer &&
-            !this.menus.pauseMenu.isOpen &&
-            !this.gameOver
-          ) {
-            activateHotbarSlot(this.hotbarHost(), hi);
-          } else if (wasTap) {
-            this.handleClick(x, y, e.timeStamp);
-          }
-        }
-        this.touch.inventoryDragTouchId = null;
-        continue;
-      }
-
-      if (touch.identifier === this.touch.moveTouchId) {
-        if (this.touch.tapStart) {
-          const elapsed = Date.now() - this.touch.tapStart.time;
-          const moved = Math.hypot(x - this.touch.tapStart.x, y - this.touch.tapStart.y);
-          if (elapsed < MENU_TAP_DURATION_MS && moved < MENU_TAP_MAX_DISTANCE) {
-            if (
-              this.destruction.dynamite.isCharging &&
-              this.human.isActive &&
-              !this.menus.pauseMenu.isOpen &&
-              !this.gameOver
-            ) {
-              const cam = this.camera();
-              const ddx = x + cam.x - (this.human.x + TILE_SIZE / 2);
-              const ddy = y + cam.y - (this.human.y + TILE_SIZE / 2);
-              const dist = Math.hypot(ddx, ddy);
-              if (dist > 0) {
-                this.human.facingX = ddx / dist;
-                this.human.facingY = ddy / dist;
-              }
-              this.destruction.dynamite.release(this.human);
-              this.bus.emit('dynamiteUsed', { player: 'Human' });
-            } else {
-              // Captured before `handleClick`, which may turn the last page of
-              // a dialog and close it: without this the same tap falls through
-              // to `triggerSpaceAction` and starts the conversation again
-              // (the player is still in range), which is the close-then-reopen trap.
-              const dialogWasOpen =
-                this.safeRoom.mordecaiDialogOpen ||
-                this.bopca.isDialogOpen ||
-                this.citizenDialogTarget !== null ||
-                this.signDialogTarget !== null ||
-                this.briarHollowKit?.isConversationOpen === true;
-              // Also captured first: a menu or dialog that owned the screen had
-              // this tap, and the village behind it must not open a
-              // conversation or pet a cow underneath it.
-              const overlayWasFocused = this.focusedOverlay !== null;
-              // A long-press context menu always closes itself on the very
-              // click that answers it, so `handleClick` leaves no trace of it
-              // having been open — captured here or the tap that picked
-              // "Equip" would fall through into a talk or a pet on whatever
-              // stands where the menu was drawn.
-              const contextMenuWasOpen = this.menus.inventoryPanel.interaction.contextMenu !== null;
-              // Off the box, a tap is the touch form of the interact press, and
-              // may be for whoever the crawler has walked up to since.
-              const tapMissedConversation =
-                this.conversation.isOpen && !this.conversation.hitsSurface(x, y);
-              this.handleClick(x, y, e.timeStamp);
-              const handedOff =
-                tapMissedConversation && !contextMenuWasOpen && this.handOffConversationPress();
-              if (
-                !handedOff &&
-                !dialogWasOpen &&
-                !contextMenuWasOpen &&
-                !this.menus.pauseMenu.isOpen &&
-                !this.gameOver
-              ) {
-                const cam = this.camera();
-                let villageConsumed = false;
-                if (this.briarHollowKit !== null && !overlayWasFocused) {
-                  const now = Date.now();
-                  const isDoubleTap =
-                    this.briarHollowLastWorldTapAt !== null &&
-                    now - this.briarHollowLastWorldTapAt < BRIAR_HOLLOW_DOUBLE_TAP_WINDOW_MS;
-                  this.briarHollowLastWorldTapAt = now;
-                  // A live scythe swing takes every tap as its timed press,
-                  // however soon after the tap that started it.
-                  villageConsumed =
-                    isDoubleTap && !this.briarHollowKit.claimsWorldTaps
-                      ? this.briarHollowKit.handleDoubleTap(x, y, cam.x, cam.y, this.active())
-                      : this.briarHollowKit.handleTap(
-                          x,
-                          y,
-                          cam.x,
-                          cam.y,
-                          this.active(),
-                          this.touch.tapStartEventMs ?? e.timeStamp,
-                        );
-                }
-                // A tap a menu took is spent: the world behind it must not also swing at it.
-                if (!villageConsumed && !overlayWasFocused) {
-                  const grateHandled = this.defendQuest.tryMobileTapOnGrate(
-                    x,
-                    y,
-                    cam.x,
-                    cam.y,
-                    this.active(),
-                  );
-                  if (!grateHandled) {
-                    this.triggerSpaceAction(x, y);
-                  }
-                }
-              }
-            }
-          } else if (
-            elapsed >= MENU_TAP_DURATION_MS &&
-            moved < MENU_TAP_MAX_DISTANCE &&
-            !this.crawlerWalkedDuringHold()
-          ) {
-            // Held roughly in place past tap duration, rather than dragged — and
-            // without the hold having walked the crawler, which is just the end
-            // of a walk with the finger resting somewhere: the Structure menu's
-            // gesture. A village structure under the finger
-            // wins; otherwise a boarded grate in reach, for a crawler who can
-            // spike it. With neither, the press means nothing, as it always has.
-            const cam = this.camera();
-            const villageTook =
-              this.briarHollowKit?.handleLongPress(x, y, cam.x, cam.y, this.active()) === true;
-            if (!villageTook) this.grateSpikes.tryOpen();
-          }
-        }
-        this.menus.pauseMenu.touchScrollEnd(x, y, this.human, this.cat);
-        this.touch.moveTouchId = null;
-        this.touch.moveTarget = null;
-        this.touch.tapStart = null;
-        this.structureHold.end();
-      }
-    }
-  }
-
   private _makeAbilityReward(abilityId: AbilityId): GrantedReward {
     const def = this.abilityManager.getDef(abilityId);
     const name = def?.name ?? abilityId;
     const description =
       def?.perks.find((p) => p.level === 1)?.description ?? 'A new ability has been granted!';
-    const renderIcon =
-      def !== null
-        ? (ctx: CanvasRenderingContext2D, x: number, y: number, size: number) =>
-            def.renderIcon(ctx, x, y, size, 1)
-        : (ctx: CanvasRenderingContext2D, x: number, y: number, size: number) => {
-            ctx.fillStyle = '#a855f7';
-            ctx.fillRect(x, y, size, size);
-          };
+    const renderIcon: GrantedReward['renderIcon'] =
+      def !== null ? (ctx, rect) => def.renderIcon(ctx, rect, 1) : drawUnknownAbilityIcon;
     return { kind: 'ability', name, description, renderIcon };
   }
 
@@ -9419,7 +8483,9 @@ export class DungeonScene extends GameplayScene {
           this.bus.emit('rewardGranted', { rewards: [this._makeMongoReward()] });
           // Only this first grant explains him: the circus quest hands back a pet
           // the player already knows, and the Abilities tab reopens it on request.
-          this.menus.rewardGrantedDialog.afterQueueDrains(() => this.menus.mongoExplainer.open());
+          this.menus.rewardGrantedDialog.afterQueueDrains(() =>
+            this.menus.craftExplainers.open('mongo'),
+          );
         },
       };
     }
@@ -9527,7 +8593,8 @@ export class DungeonScene extends GameplayScene {
       name: 'Mongo',
       description:
         'A loyal velociraptor companion. Summon Mongo to fight alongside the Cat in battle!',
-      renderIcon: (ctx: CanvasRenderingContext2D, x: number, y: number, size: number) => {
+      renderIcon: (ctx: CanvasRenderingContext2D, rect: Rect) => {
+        const { x, y, size } = iconSquare(rect);
         const stage = getMongoStats(this.abilityManager.getLevel('mongo')).stage;
         drawMongoIcon(ctx, stage, x + size / 2, y + size / 2, size);
       },

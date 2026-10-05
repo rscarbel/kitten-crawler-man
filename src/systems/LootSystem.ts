@@ -6,8 +6,11 @@ import { playPickupGesture } from '../creatures/humanGestures';
 import type { CatPlayer } from '../creatures/CatPlayer';
 import type { ItemId } from '../core/ItemDefs';
 import type { GameSystem, SystemContext } from './GameSystem';
-import { drawText } from '../ui/TextBox';
-import { drawItemIcon } from '../ui/InventoryPanel';
+import type { Rect } from '../ui/core/geom';
+import { worldPalette } from '../ui/theme/worldInk';
+import { worldPlate } from '../ui/world/worldShapes';
+import { worldText } from '../ui/world/worldText';
+import { drawItemIcon } from '../ui/icons/drawItemIcon';
 import { ITEM_DEF } from '../core/ItemDefs';
 import { drawRadialGlow } from '../sprites/radialGlow';
 import { cloneLootDrop } from '../core/lootDrop';
@@ -26,6 +29,9 @@ const LOOT_CLICK_RANGE_TILES = 3;
 const LOOT_FADE_START_FRAMES = 600;
 /** Minimum opacity for fading loot. */
 const LOOT_MIN_ALPHA = 0.15;
+const LOOT_LABEL_BORDER_WIDTH = 1;
+/** A boss pile's caption wears a heavier edge, so it reads as the prize in a room of drops. */
+const LOOT_BOSS_LABEL_BORDER_WIDTH = 2;
 /** Width of the loot label dot indicator. */
 const LOOT_DOT_RADIUS = 5;
 /** Horizontal offset from loot dot to label text start. */
@@ -495,21 +501,13 @@ export class LootSystem implements GameSystem {
   }
 
   /** Screen-space rectangle of a pile's label box. */
-  private labelBox(
-    loot: PendingLoot,
-    label: string,
-    camX: number,
-    camY: number,
-  ): { bx: number; by: number; bw: number; bh: number } {
-    const bw = Math.max(
-      LOOT_LABEL_MIN_WIDTH,
-      label.length * LOOT_CHARS_PER_PX + LOOT_LABEL_PADDING,
-    );
+  private labelBox(loot: PendingLoot, label: string, camX: number, camY: number): Rect {
+    const w = Math.max(LOOT_LABEL_MIN_WIDTH, label.length * LOOT_CHARS_PER_PX + LOOT_LABEL_PADDING);
     return {
-      bx: loot.x - camX - bw / 2,
-      by: loot.y - camY - LOOT_LABEL_ABOVE_PX,
-      bw,
-      bh: LOOT_LABEL_HEIGHT,
+      x: loot.x - camX - w / 2,
+      y: loot.y - camY - LOOT_LABEL_ABOVE_PX,
+      w,
+      h: LOOT_LABEL_HEIGHT,
     };
   }
 
@@ -590,8 +588,9 @@ export class LootSystem implements GameSystem {
       const dist = Math.hypot(active.x + HALF_TILE - loot.x, active.y + HALF_TILE - loot.y);
       if (dist > LOOT_CLICK_RANGE_TILES * TILE_SIZE) continue;
 
-      const { bx, by, bw, bh } = this.labelBox(loot, this.lootLabel(loot, active), camX, camY);
-      if (mx >= bx && mx <= bx + bw && my >= by && my <= by + bh) {
+      const box = this.labelBox(loot, this.lootLabel(loot, active), camX, camY);
+      const insideLabel = mx >= box.x && mx <= box.x + box.w && my >= box.y && my <= box.y + box.h;
+      if (insideLabel) {
         const recipient = (loot.droppedByPlayer ?? false) ? active : loot.owner;
         this.creditLoot(loot, recipient, [active, inactive]);
         playPickupGesture(active, loot);
@@ -691,7 +690,11 @@ export class LootSystem implements GameSystem {
       }
 
       const fullLabel = this.lootLabel(loot, active);
-      const ownColor = loot.isBossLoot ? '#ffd700' : loot.owner === active ? '#fbbf24' : '#60a5fa';
+      const ownColor = loot.isBossLoot
+        ? worldPalette.loot.bossGlow
+        : loot.owner === active
+          ? worldPalette.loot.ownGlow
+          : worldPalette.loot.partnerGlow;
       const dist = Math.hypot(active.x + HALF_TILE - loot.x, active.y + HALF_TILE - loot.y);
       const isNear = dist <= LOOT_CLICK_RANGE_TILES * TILE_SIZE;
 
@@ -735,30 +738,36 @@ export class LootSystem implements GameSystem {
       }
 
       if (isNear) {
-        const { bx, by, bw, bh } = this.labelBox(loot, fullLabel, camX, camY);
-        ctx.fillStyle = 'rgba(15,23,42,0.85)';
-        ctx.fillRect(bx, by, bw, bh);
-        ctx.strokeStyle = ownColor;
-        ctx.lineWidth = loot.isBossLoot ? 2 : 1;
-        ctx.strokeRect(bx, by, bw, bh);
+        const box = this.labelBox(loot, fullLabel, camX, camY);
+        worldPlate(ctx, box, {
+          fill: worldPalette.loot.plateFill,
+          border: ownColor,
+          borderWidth: loot.isBossLoot ? LOOT_BOSS_LABEL_BORDER_WIDTH : LOOT_LABEL_BORDER_WIDTH,
+          alpha: ctx.globalAlpha,
+        });
 
         ctx.fillStyle = ownColor;
         ctx.beginPath();
-        ctx.arc(bx + LOOT_DOT_RADIUS * 2, by + bh / 2, LOOT_DOT_RADIUS, 0, Math.PI * 2);
+        ctx.arc(box.x + LOOT_DOT_RADIUS * 2, box.y + box.h / 2, LOOT_DOT_RADIUS, 0, Math.PI * 2);
         ctx.fill();
 
-        drawText(ctx, fullLabel, {
-          x: bx + LOOT_LABEL_TEXT_OFFSET_X,
-          y: by + bh / 2 - LOOT_LABEL_TEXT_OFFSET_Y,
+        const labelColor = loot.isBossLoot
+          ? worldPalette.loot.bossLabel
+          : loot.owner === active
+            ? worldPalette.loot.ownLabel
+            : worldPalette.loot.partnerLabel;
+        worldText(ctx, fullLabel, {
+          x: box.x + LOOT_LABEL_TEXT_OFFSET_X,
+          y: box.y + box.h / 2 - LOOT_LABEL_TEXT_OFFSET_Y,
           size: LOOT_LABEL_FONT_SIZE,
-          color: loot.isBossLoot ? '#fff8dc' : loot.owner === active ? '#fde68a' : '#93c5fd',
+          color: labelColor,
         });
 
-        drawText(ctx, '[click]', {
+        worldText(ctx, '[click]', {
           x: sx,
-          y: by - LOOT_CLICK_HINT_ABOVE_PX,
+          y: box.y - LOOT_CLICK_HINT_ABOVE_PX,
           size: LOOT_CLICK_HINT_FONT_SIZE,
-          color: '#94a3b8',
+          color: worldPalette.ink.hint,
           align: 'center',
         });
       }
@@ -788,20 +797,19 @@ export class LootSystem implements GameSystem {
     if (hasItems) {
       const first = loot.loot.items[0];
       const size = LOOT_ITEM_ICON_SIZE;
+      const half = size / 2;
       drawItemIcon(
         ctx,
+        { x: itemCx - half, y: cy - half, w: size, h: size },
         { ...ITEM_DEF[first.id], quantity: first.quantity },
-        itemCx - size / 2,
-        cy - size / 2,
-        size,
       );
       if (loot.loot.items.length > 1) {
-        drawText(ctx, `+${loot.loot.items.length - 1}`, {
+        worldText(ctx, `+${loot.loot.items.length - 1}`, {
           x: itemCx + size / 2,
           y: cy + size / 2 - LOOT_EXTRA_ITEMS_BADGE_OFFSET,
           size: LOOT_EXTRA_ITEMS_BADGE_SIZE,
           bold: true,
-          color: '#e2e8f0',
+          color: worldPalette.ink.primary,
           outline: true,
         });
       }
@@ -901,12 +909,11 @@ export class LootSystem implements GameSystem {
         this.drawSingleCoin(ctx, px, drawY);
       } else if (piece.itemId !== undefined) {
         const size = DROP_ITEM_ICON_SIZE;
+        const half = size / 2;
         drawItemIcon(
           ctx,
+          { x: px - half, y: drawY - half, w: size, h: size },
           { ...ITEM_DEF[piece.itemId], quantity: 1 },
-          px - size / 2,
-          drawY - size / 2,
-          size,
         );
       }
     }

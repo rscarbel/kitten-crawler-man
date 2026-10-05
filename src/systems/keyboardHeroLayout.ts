@@ -24,13 +24,7 @@ import {
   HIT_WINDOW_MS,
   FALL_SPEED_IMG_PX_PER_MS,
 } from './keyboardHeroGeometry';
-
-export interface Rect {
-  readonly x: number;
-  readonly y: number;
-  readonly width: number;
-  readonly height: number;
-}
+import type { Rect } from '../ui/core/geom';
 
 export interface Point {
   readonly x: number;
@@ -48,35 +42,6 @@ export const LANE_DOWN = 2;
 export const LANE_RIGHT = 3;
 
 export const LANE_INDICES: readonly LaneIndex[] = [LANE_LEFT, LANE_UP, LANE_DOWN, LANE_RIGHT];
-
-/**
- * One fixed hue per lane — guitar hero's oldest readability trick, and the thing
- * that lets a player tell at a glance which falling note belongs to which key.
- *
- * The four are the Okabe-Ito colourblind-safe qualitative set, brightened for a
- * neon console: no two of them collapse together under deuteranopia,
- * protanopia or tritanopia, and they differ in luminance as well as hue so the
- * separation survives even in greyscale.
- */
-export interface LanePalette {
-  /** The lane's identity colour: note face, receptor ring, particles, glow. */
-  readonly hue: string;
-  /** A darker shade for bevel shadow and the lane bed's tint. */
-  readonly shade: string;
-  /** A lighter shade for the keycap's lit top bevel and flash states. */
-  readonly light: string;
-  /** Human-readable name, used by the review harness's captions. */
-  readonly name: string;
-  /** The arrow the lane's keycap carries. */
-  readonly glyph: 'left' | 'up' | 'down' | 'right';
-}
-
-export const LANE_PALETTES: readonly [LanePalette, LanePalette, LanePalette, LanePalette] = [
-  { hue: '#4fc3f7', shade: '#12475f', light: '#b6e7ff', name: 'sky', glyph: 'left' },
-  { hue: '#ffa726', shade: '#6b3d05', light: '#ffe0ab', name: 'amber', glyph: 'up' },
-  { hue: '#34d399', shade: '#0c4a3a', light: '#b4f5db', name: 'jade', glyph: 'down' },
-  { hue: '#e879c0', shade: '#5c1c47', light: '#ffcdeb', name: 'orchid', glyph: 'right' },
-];
 
 // ── Board design space ──────────────────────────────────────────────────────
 // Every dimension below is in board-space pixels. The bakery paints at
@@ -142,6 +107,9 @@ export const MIN_TOUCH_TARGET_PX = 48;
 
 /** Screen-space gap kept between the board's bottom edge and the touch row. */
 const TOUCH_ROW_GAP_PX = 10;
+
+/** Screen-space gap kept between neighbouring touch buttons. */
+const TOUCH_BUTTON_MIN_GAP_PX = 8;
 
 /** Screen-space breathing room kept below the touch row. */
 const TOUCH_ROW_BOTTOM_MARGIN_PX = 12;
@@ -215,8 +183,8 @@ function laneRects(
   return perLane((lane) => ({
     x: laneAreaX + lane * strideX,
     y: laneAreaY,
-    width: laneW,
-    height: laneAreaH,
+    w: laneW,
+    h: laneAreaH,
   }));
 }
 
@@ -248,33 +216,33 @@ export function computeKeyboardHeroLayout(
   const hitLineY = laneAreaY + HIT_ZONE_IMG_CENTER * scale;
   const receptorSize = RECEPTOR_IMG_SIZE * scale;
   const receptors = perLane((lane) => ({
-    x: lanes[lane].x + (lanes[lane].width - receptorSize) / 2,
+    x: lanes[lane].x + (lanes[lane].w - receptorSize) / 2,
     y: hitLineY - receptorSize / 2,
-    width: receptorSize,
-    height: receptorSize,
+    w: receptorSize,
+    h: receptorSize,
   }));
 
   const stripInset = STRIP_INSET_IMG * scale;
   const header: Rect = {
     x: laneAreaX,
     y: boardY,
-    width: laneAreaW,
-    height: FRAME_HEADER_IMG_H * scale,
+    w: laneAreaW,
+    h: FRAME_HEADER_IMG_H * scale,
   };
   const footer: Rect = {
     x: laneAreaX,
     y: laneAreaY + laneAreaH,
-    width: laneAreaW,
-    height: FRAME_FOOTER_IMG_H * scale,
+    w: laneAreaW,
+    h: FRAME_FOOTER_IMG_H * scale,
   };
 
-  const progressW = header.width * PROGRESS_BAR_WIDTH_FRACTION;
+  const progressW = header.w * PROGRESS_BAR_WIDTH_FRACTION;
   const progressH = PROGRESS_BAR_IMG_H * scale;
   const progressBar: Rect = {
-    x: header.x + (header.width - progressW) / 2,
-    y: header.y + (header.height - progressH) / 2,
-    width: progressW,
-    height: progressH,
+    x: header.x + (header.w - progressW) / 2,
+    y: header.y + (header.h - progressH) / 2,
+    w: progressW,
+    h: progressH,
   };
 
   let touchButtons: LaneRects | null = null;
@@ -283,19 +251,26 @@ export function computeKeyboardHeroLayout(
       boardY + boardH + TOUCH_ROW_GAP_PX,
       viewportH - touchSize - TOUCH_ROW_BOTTOM_MARGIN_PX,
     );
+    // Under its own lane while the lanes are wide enough to hold a button; on a
+    // board too small for that, the row spreads past the board's edges so no two
+    // buttons overlap, still in lane order and centred under the board.
+    const laneStride = (LANE_BED_IMG_W + LANE_GAP_IMG) * scale;
+    const stride = Math.max(laneStride, touchSize + TOUCH_BUTTON_MIN_GAP_PX);
+    const boardCentreX = laneAreaX + laneAreaW / 2;
+    const firstCentreX = boardCentreX - (stride * (LANE_COUNT - 1)) / 2;
     touchButtons = perLane((lane) => ({
-      x: lanes[lane].x + (lanes[lane].width - touchSize) / 2,
+      x: firstCentreX + stride * lane - touchSize / 2,
       y: rowY,
-      width: touchSize,
-      height: touchSize,
+      w: touchSize,
+      h: touchSize,
     }));
   }
 
   return {
     scale,
     isMobile,
-    board: { x: boardX, y: boardY, width: boardW, height: boardH },
-    laneArea: { x: laneAreaX, y: laneAreaY, width: laneAreaW, height: laneAreaH },
+    board: { x: boardX, y: boardY, w: boardW, h: boardH },
+    laneArea: { x: laneAreaX, y: laneAreaY, w: laneAreaW, h: laneAreaH },
     lanes,
     hitLineY,
     hitWindowHalfHeight: HIT_WINDOW_IMG_HALF_HEIGHT * scale,
@@ -304,12 +279,12 @@ export function computeKeyboardHeroLayout(
     header,
     footer,
     progressBar,
-    timerAnchor: { x: header.x + header.width - stripInset, y: header.y + header.height / 2 },
-    integrityAnchor: { x: header.x + stripInset, y: header.y + header.height / 2 },
+    timerAnchor: { x: header.x + header.w - stripInset, y: header.y + header.h / 2 },
+    integrityAnchor: { x: header.x + stripInset, y: header.y + header.h / 2 },
     integrityPipSize: INTEGRITY_PIP_IMG_SIZE * scale,
-    hitCountAnchor: { x: footer.x + stripInset, y: footer.y + footer.height / 2 },
-    streakAnchor: { x: footer.x + footer.width - stripInset, y: footer.y + footer.height / 2 },
-    hintAnchor: { x: footer.x + footer.width / 2, y: footer.y + footer.height / 2 },
+    hitCountAnchor: { x: footer.x + stripInset, y: footer.y + footer.h / 2 },
+    streakAnchor: { x: footer.x + footer.w - stripInset, y: footer.y + footer.h / 2 },
+    hintAnchor: { x: footer.x + footer.w / 2, y: footer.y + footer.h / 2 },
     boardCenter: { x: boardX + boardW / 2, y: laneAreaY + laneAreaH / 2 },
     touchButtons,
   };
@@ -318,27 +293,4 @@ export function computeKeyboardHeroLayout(
 /** Screen Y of a note-space Y under this layout. */
 export function noteImgYToScreenY(layout: KeyboardHeroLayout, imgY: number): number {
   return layout.laneArea.y + imgY * layout.scale;
-}
-
-function containsPoint(rect: Rect, x: number, y: number): boolean {
-  return x >= rect.x && x <= rect.x + rect.width && y >= rect.y && y <= rect.y + rect.height;
-}
-
-/**
- * The lane a tap belongs to, or null if it landed on the frame, the rails or
- * outside the board entirely. Taps are attributed to the lane beds and the touch
- * buttons only — never to the whole board rect, which would make a tap on the
- * decorative left rail read as a press of the leftmost lane.
- */
-export function laneAtPoint(layout: KeyboardHeroLayout, x: number, y: number): LaneIndex | null {
-  for (const lane of LANE_INDICES) {
-    if (containsPoint(layout.lanes[lane], x, y)) return lane;
-  }
-  const buttons = layout.touchButtons;
-  if (buttons !== null) {
-    for (const lane of LANE_INDICES) {
-      if (containsPoint(buttons[lane], x, y)) return lane;
-    }
-  }
-  return null;
 }

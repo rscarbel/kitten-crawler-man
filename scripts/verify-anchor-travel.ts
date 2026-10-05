@@ -34,8 +34,8 @@ import {
   hasRoomToMove,
 } from '../src/map/findWalkableTile';
 import { TILE_SIZE } from '../src/core/constants';
-import { HumanPlayer } from '../src/creatures/HumanPlayer';
-import { CatPlayer } from '../src/creatures/CatPlayer';
+import type { HumanPlayer } from '../src/creatures/HumanPlayer';
+import type { CatPlayer } from '../src/creatures/CatPlayer';
 import { EventBus } from '../src/core/EventBus';
 import { SpellSystem } from '../src/systems/SpellSystem';
 import { MobRoster } from '../src/systems/kits/SceneWorld';
@@ -71,7 +71,6 @@ import { setViewportSize } from '../src/core/Viewport';
 import { MenusKit } from '../src/systems/kits/MenusKit';
 import { ANCHOR_INDOORS_REFUSAL, refuseAnchorIndoors } from '../src/systems/kits/hotbarActions';
 import type { SceneWorld } from '../src/systems/kits/SceneWorld';
-import { CONTEXT_MENU_ITEM_HEIGHT } from '../src/ui/InventoryInteraction';
 
 /**
  * Seeds the gate runs on: each one a different town, circus and village
@@ -96,8 +95,6 @@ const VIEWPORT_W = 1280;
 const VIEWPORT_H = 800;
 const TRAVEL_LABEL = 'Travel';
 const ANCHOR_ID: ItemId = 'wayfinders_anchor';
-/** Where a click lands inside a slot or a menu row: its middle, clear of every edge. */
-const HALF = 0.5;
 
 let failures = 0;
 function check(ok: boolean, message: string): void {
@@ -111,7 +108,7 @@ interface Rig {
   readonly cat: CatPlayer;
   readonly recall: RecallSystem;
   readonly menu: TravelMenu;
-  /** The bag, its context menu, and the hotbar toast, with the dungeon's item use wired in. */
+  /** The bag, its context menu, and the toast stack, with the dungeon's item use wired in. */
   readonly menus: MenusKit;
   readonly sceneWorld: SceneWorld;
   readonly toasts: string[];
@@ -148,8 +145,8 @@ function buildRig(map: GameMap, levelDef: LevelDef = level3): Rig {
   const sceneWorld: SceneWorld = { gameMap: map, bus, audio: null, pm, roster };
   const menus = new MenusKit({ world: sceneWorld, abilityManager: new AbilityManager() });
   const toasts: string[] = [];
-  // Every toast the stone raises goes through the hotbar toast, as in the scene.
-  menus.hotbarToast.show = (message) => toasts.push(message);
+  // Every toast the stone raises goes through the toast stack, as in the scene.
+  menus.toasts.post = (message) => toasts.push(message);
   const circus = createCircusQuestProgress();
   const briarHollow = createBriarHollowState();
   const travelState = { circus, briarHollow, anchor: createAnchorQuestProgress() };
@@ -180,7 +177,7 @@ function buildRig(map: GameMap, levelDef: LevelDef = level3): Rig {
     () => world.bossFight,
     () => world.enemyNear,
     teleportParty,
-    (message) => menus.hotbarToast.show(message),
+    (message) => menus.toasts.post(message),
     null,
     travelState,
     (caster) => rig.menu?.open(caster),
@@ -513,43 +510,45 @@ function giveAnchor(holder: HumanPlayer | CatPlayer, slot: AnchorSlot): void {
   container.slots[slot.slotIdx] = anchor;
 }
 
+/** Where the screen's item menu is opened from, in UI units: anywhere on screen will do. */
+const MENU_POINT = { x: 0, y: 0 } as const;
+
 /**
- * Right-clicks the slot the way a player would — at its middle on screen —
- * and returns the menu that opened, or null when none did.
+ * Opens the inventory screen on `holder`'s pack and the item menu on `slot`,
+ * as a right-click there does, and returns the menu's actions, or null when
+ * none opened.
  */
 function openSlotMenu(
   rig: Rig,
   holder: HumanPlayer | CatPlayer,
   slot: AnchorSlot,
 ): string[] | null {
-  const panel = rig.menus.inventoryPanel;
-  if (slot.source === 'inv' && !panel.isOpen) panel.toggle();
-  if (slot.source === 'hotbar' && panel.isOpen) panel.toggle();
-  const rect =
-    slot.source === 'hotbar'
-      ? panel.getHotbarSlotRect(slot.slotIdx)
-      : panel.getBagSlotRect(slot.slotIdx);
-  if (rect === null) return null;
-  panel.openContextMenu(rect.x + rect.w * HALF, rect.y + rect.h * HALF, holder.inventory);
-  const opened = panel.interaction.contextMenu;
-  if (opened === null) return null;
-  return panel.interaction.contextMenuOptions(opened.item, opened.source, opened.isEquipped);
+  const screen = rig.menus.inventoryScreen;
+  const kind = holder === rig.human ? 'human' : 'cat';
+  if (!screen.isOpen) screen.open({ tab: 'bag', member: kind });
+  else screen.switchMember(kind);
+  const container = slot.source === 'hotbar' ? holder.inventory.actionBar : holder.inventory.bag;
+  const item = container.slots[slot.slotIdx] ?? null;
+  if (item === null) return null;
+  screen.openItemMenu({ source: slot.source, slotIdx: slot.slotIdx, item }, MENU_POINT);
+  const menu = screen.menu;
+  if (menu?.kind !== 'item') return null;
+  return screen.entriesFor(menu.target, holder.inventory).map((entry) => entry.action);
 }
 
 /**
- * Clicks the open menu's `label` row and resolves what it queued, the way the
- * scene's click routing does. False when the menu had no such row.
+ * Picks the open menu's `label` entry and resolves what it queued, the way
+ * the scene does. False when the menu had no such entry.
  */
 function chooseMenuOption(rig: Rig, holder: HumanPlayer | CatPlayer, label: string): boolean {
-  const interaction = rig.menus.inventoryPanel.interaction;
-  const opened = interaction.contextMenu;
-  if (opened === null) return false;
-  const options = interaction.contextMenuOptions(opened.item, opened.source, opened.isEquipped);
-  const row = options.indexOf(label);
-  if (row < 0) return false;
-  const clickX = opened.x + CONTEXT_MENU_ITEM_HEIGHT * HALF;
-  const clickY = opened.y + (row + HALF) * CONTEXT_MENU_ITEM_HEIGHT;
-  rig.menus.inventoryPanel.handleClick(clickX, clickY, holder.inventory);
+  const screen = rig.menus.inventoryScreen;
+  const menu = screen.menu;
+  if (menu?.kind !== 'item') return false;
+  const offered = screen
+    .entriesFor(menu.target, holder.inventory)
+    .some((entry) => entry.action === label);
+  if (!offered) return false;
+  screen.choose(label, menu.target);
   rig.menus.resolvePendingInventoryActions(holder);
   return true;
 }
@@ -583,13 +582,13 @@ function checkContextMenuTravel(map: GameMap, wild: { x: number; y: number }): v
   );
   chooseMenuOption(rig, rig.human, TRAVEL_LABEL);
   check(
-    rig.menus.inventoryPanel.interaction.contextMenu === null && rig.menu.isOpen,
+    rig.menus.inventoryScreen.menu === null && rig.menu.isOpen,
     'choosing Travel closes the context menu and opens the travel menu',
   );
   makeReady(rig);
 
   check(rig.human.isActive, 'the human is the active crawler for the bag check');
-  rig.menus.openInventoryFor(rig.cat, () => undefined);
+  rig.menus.inventoryScreen.switchMember('cat');
   const bagOptions = openSlotMenu(rig, rig.cat, BAG_ANCHOR) ?? [];
   check(
     bagOptions[0] === TRAVEL_LABEL,
@@ -614,7 +613,7 @@ function checkContextMenuTravel(map: GameMap, wild: { x: number; y: number }): v
   check(arrived, `and the party lands in ${town.label}`);
   standInWild(rig, wild);
   makeReady(rig);
-  if (rig.menus.inventoryPanel.isOpen) rig.menus.inventoryPanel.toggle();
+  rig.menus.inventoryScreen.close();
 
   const refusals: ReadonlyArray<{ name: string; stage: () => void; unstage: () => void }> = [
     {
@@ -682,7 +681,7 @@ function checkContextMenuTravel(map: GameMap, wild: { x: number; y: number }): v
     if (def.id === ANCHOR_ID) return false;
     const item: InventoryItem = { ...def, quantity: 1 };
     return (['inv', 'hotbar'] as const).some((source) =>
-      rig.menus.inventoryPanel.interaction.contextMenuOptions(item, source).includes(TRAVEL_LABEL),
+      rig.menus.inventoryActions.contextMenuOptions(item, source).includes(TRAVEL_LABEL),
     );
   });
   check(

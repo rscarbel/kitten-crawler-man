@@ -79,7 +79,6 @@ const {
 const { setFigureCacheStatsRecording, getFigureCacheStats } =
   await import('../src/sprites/figure/figureCacheStats.js');
 const { BIG_TOP_BUILDING_NAME } = await import('../src/core/CircusQuestProgress.js');
-const { menuFocusContextId } = await import('../src/ui/Button.js');
 
 const cyclesArg = process.argv.find((arg) => arg.startsWith('--cycles='));
 const DEFAULT_TRIPS = 20;
@@ -127,10 +126,10 @@ const MAX_CACHE_GROWTH_MEGABYTES = 16;
  */
 const MAX_LIVE_SCENES = 3;
 /** The focus rings the door menu and the exit-mat menu declare. */
-const DOOR_MENU_FOCUS = 'building-entry';
-const EXIT_MENU_FOCUS = 'exit-building';
-/** Every conversation page and row declares a ring under this prefix. */
-const CONVERSATION_FOCUS_PREFIX = 'quest-dialog';
+const DOOR_MENU_SURFACE = 'building-entry';
+const EXIT_MENU_SURFACE = 'exit-building';
+/** The surface both scenes mount their conversation under. */
+const CONVERSATION_SURFACE = 'conversation';
 /** Escapes tried on one conversation before the trip gives up on it. */
 const MAX_CONVERSATION_DISMISSALS = 8;
 const BYTES_PER_KILOBYTE = 1024;
@@ -279,7 +278,9 @@ async function wander(): Promise<void> {
  */
 async function dismissConversations(): Promise<void> {
   for (let attempt = 0; attempt < MAX_CONVERSATION_DISMISSALS; attempt++) {
-    if (menuFocusContextId()?.startsWith(CONVERSATION_FOCUS_PREFIX) !== true) return;
+    const ui = currentScene().ui;
+    const haltingConversationUp = ui?.isOpen(CONVERSATION_SURFACE) === true && ui.worldHalted();
+    if (!haltingConversationUp) return;
     await press('Escape');
   }
 }
@@ -382,7 +383,7 @@ async function walkOntoSomeDoor(firstIndex: number): Promise<BuildingEntry | nul
     const opened = await holdUntil(
       'w',
       MAX_WALK_FRAMES,
-      () => menuFocusContextId() === DOOR_MENU_FOCUS,
+      () => currentScene().ui?.focusSurfaceId() === DOOR_MENU_SURFACE,
     );
     if (opened) return door;
     unreachableDoors.add(door.name);
@@ -418,7 +419,7 @@ for (let cycle = 0; cycle < CYCLES; cycle++) {
   const onMat = await holdUntil(
     's',
     MAX_WALK_FRAMES,
-    () => menuFocusContextId() === EXIT_MENU_FOCUS,
+    () => currentScene().ui?.focusSurfaceId() === EXIT_MENU_SURFACE,
   );
   if (onMat) await press(' ');
   const leftBuilding = currentScene() !== interior;

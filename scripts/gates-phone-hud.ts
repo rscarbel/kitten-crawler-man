@@ -1,29 +1,25 @@
 /**
- * Gates a phone's HUD buttons, in the dungeon and inside a building, at every
- * common phone size in portrait and landscape and every HUD state that moves
- * them: minimap normal or expanded, HUD panel expanded or collapsed, the level
- * timer, the Build slot and the siege panel, Follow and Summon.
+ * Gates a phone's HUD — the same layout in the dungeon and inside a building —
+ * at every common phone size in portrait and landscape, at every UI size, and
+ * in every HUD state that moves a piece: minimap normal or expanded, and the
+ * Build slot. Rects are in UI units, as the HUD lays itself out. The top
+ * band is filled with a boss bar, an encounter bar, a countdown and a banner.
  *
- * Every rect comes from the functions the renderers draw from
+ * Every rect comes from `hudLayout`, the function the HUD draws from
  * (`phoneHudLayouts.ts`). For each layout:
  * - every button is wholly on screen;
- * - no two buttons overlap, and no button covers a surface (the timer, the
- *   name plate, the siege panel, the resource strip);
- * - no button covers either crawler's HP bar.
+ * - no two buttons overlap, none covers the minimap's normal square, and none
+ *   covers the band's leading bars, a boss and an encounter (buttons and bars
+ *   may lie over the part an expanded minimap grew into);
+ * - no button covers either crawler's HP meter;
+ * - the leading bars always find room, and every bar placed is on screen.
  *
  *   npm run gates:phone-hud
  */
 
-import type { Rect } from '../src/systems/MobileHUDSystem';
-
-Object.defineProperty(globalThis, 'navigator', {
-  value: { maxTouchPoints: 1, userAgent: 'iPhone' },
-  configurable: true,
-});
-
-const { installCanvasGlobals } = await import('./nodeCanvasGlobals.js');
-installCanvasGlobals();
-const { dungeonPhoneHudStates, interiorPhoneHudStates } = await import('./phoneHudLayouts');
+import { overlaps, type Rect } from '../src/ui/core/geom';
+import type { UiSize } from '../src/core/Settings';
+import { LEADING_BARS, hudStates, representativeTopBand } from './phoneHudLayouts';
 
 /** Common phone viewports in CSS pixels, portrait; each is also checked in landscape. */
 const PORTRAIT_PHONES: ReadonlyArray<readonly [number, number]> = [
@@ -36,68 +32,76 @@ const PORTRAIT_PHONES: ReadonlyArray<readonly [number, number]> = [
 ];
 const VIEWPORTS = PORTRAIT_PHONES.flatMap(([w, h]) => [[w, h] as const, [h, w] as const]);
 
-function overlaps(a: Rect, b: Rect): boolean {
-  return a.x < b.x + b.w && b.x < a.x + a.w && a.y < b.y + b.h && b.y < a.y + a.h;
-}
+/** Pieces every layout must report: a layout missing one would pass every check by never being measured. */
+const REQUIRED_PIECES: readonly string[] = [
+  'pause',
+  'bag',
+  'follower',
+  'switch',
+  'summon',
+  'chip',
+  'journal',
+  'hotbar',
+  'minimap',
+];
+
+const UI_SIZES: readonly UiSize[] = ['small', 'medium', 'large'];
 
 function describe(rect: Rect): string {
   return `(${Math.round(rect.x)},${Math.round(rect.y)} ${Math.round(rect.w)}×${Math.round(rect.h)})`;
 }
 
-/**
- * Pieces each scene must report in every layout: a layout missing one would
- * pass every check below by never being measured.
- */
-const REQUIRED_PIECES: Record<'dungeon' | 'interior', readonly string[]> = {
-  dungeon: ['pause', 'bag', 'follower', 'switch', 'summon', 'journal', 'hotbar', 'minimap'],
-  interior: ['pause', 'bag', 'switch', 'achievementChip', 'journal', 'hotbar', 'minimap'],
-};
+function offScreen(rect: Rect, width: number, height: number): boolean {
+  return rect.x < 0 || rect.y < 0 || rect.x + rect.w > width || rect.y + rect.h > height;
+}
 
 const failures: string[] = [];
 let layouts = 0;
 let buttonsChecked = 0;
 
-for (const [width, height] of VIEWPORTS) {
-  const states = [
-    ...dungeonPhoneHudStates(width, height),
-    ...interiorPhoneHudStates(width, height),
-  ];
-  for (const state of states) {
-    layouts++;
-    const where = `${state.scene} ${width}x${height} [${state.label}]`;
-    for (const required of REQUIRED_PIECES[state.scene]) {
-      if (!state.pieces.some((piece) => piece.name === required)) {
-        failures.push(`${where}: no ${required} rect to check`);
+for (const uiSize of UI_SIZES) {
+  for (const [cssWidth, cssHeight] of VIEWPORTS) {
+    for (const state of hudStates(cssWidth, cssHeight, 'touch', uiSize)) {
+      layouts++;
+      const { width, height } = state;
+      const where = `${cssWidth}x${cssHeight} [${state.label}]`;
+      for (const required of REQUIRED_PIECES) {
+        if (!state.pieces.some((piece) => piece.name === required)) {
+          failures.push(`${where}: no ${required} rect to check`);
+        }
       }
-    }
-    const tappable = state.pieces.filter((piece) => piece.kind !== 'surface');
-    for (const piece of tappable) {
-      buttonsChecked++;
-      const r = piece.rect;
-      const offscreen = r.x < 0 || r.y < 0 || r.x + r.w > width || r.y + r.h > height;
-      if (offscreen) failures.push(`${where}: ${piece.name} ${describe(r)} is off screen`);
-      if (piece.kind === 'button') {
-        for (const bar of state.hpBars) {
-          if (overlaps(r, bar)) {
+      for (const piece of state.pieces.filter((p) => p.kind !== 'surface')) {
+        buttonsChecked++;
+        if (offScreen(piece.rect, width, height)) {
+          failures.push(`${where}: ${piece.name} ${describe(piece.rect)} is off screen`);
+        }
+        if (piece.kind === 'button') {
+          for (const bar of state.hpBars) {
+            if (overlaps(piece.rect, bar)) {
+              failures.push(
+                `${where}: ${piece.name} ${describe(piece.rect)} covers an HP meter ${describe(bar)}`,
+              );
+            }
+          }
+        }
+      }
+      for (const [index, piece] of state.pieces.entries()) {
+        for (const other of state.pieces.slice(index + 1)) {
+          if (piece.kind === 'surface' && other.kind === 'surface') continue;
+          if (overlaps(piece.rect, other.rect)) {
             failures.push(
-              `${where}: ${piece.name} ${describe(r)} covers an HP bar ${describe(bar)}`,
+              `${where}: ${piece.name} ${describe(piece.rect)} overlaps ${other.name} ${describe(other.rect)}`,
             );
           }
         }
       }
-    }
-    for (const [index, piece] of state.pieces.entries()) {
-      for (const other of state.pieces.slice(index + 1)) {
-        const bothSurfaces = piece.kind === 'surface' && other.kind === 'surface';
-        if (bothSurfaces) continue;
-        const allowed =
-          (piece.mayOverlap ?? []).includes(other.name) ||
-          (other.mayOverlap ?? []).includes(piece.name);
-        if (allowed) continue;
-        if (overlaps(piece.rect, other.rect)) {
-          failures.push(
-            `${where}: ${piece.name} ${describe(piece.rect)} overlaps ${other.name} ${describe(other.rect)}`,
-          );
+      const leading = representativeTopBand(state.geometry, LEADING_BARS);
+      if (leading.length < LEADING_BARS.length) {
+        failures.push(`${where}: only ${leading.length} of the leading bars found room`);
+      }
+      for (const bar of representativeTopBand(state.geometry)) {
+        if (offScreen(bar.rect, width, height)) {
+          failures.push(`${where}: the ${bar.name} bar ${describe(bar.rect)} is off screen`);
         }
       }
     }

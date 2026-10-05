@@ -31,7 +31,8 @@ import type { InteriorFigure } from '../core/InteriorFigure';
 import type { GameSystem, SystemContext } from './GameSystem';
 import { drawInteractionPrompt, interactionPromptTop } from '../ui/InteractionPrompt';
 import { randomFromArray, frameTime } from '../utils';
-import { drawText, TEXT_PRESETS } from '../ui/TextBox';
+import { worldText } from '../ui/world/worldText';
+import { worldPalette } from '../ui/theme/worldInk';
 import { viewportWidth, viewportHeight } from '../core/Viewport';
 import { drawRadialGlow, type GlowStop } from '../sprites/radialGlow';
 import type { Conversation } from '../dialog/Conversation';
@@ -143,8 +144,6 @@ export class SafeRoomSystem implements GameSystem {
   private static readonly BED_NEAR_DISTANCE = 1.8;
   /** Reach and strength of one standing lantern's pool of light. */
   private static readonly LANTERN_LIGHT_RADIUS_TILES = 3.2;
-  private static readonly LANTERN_LIGHT_ALPHA = 0.16;
-  private static readonly LANTERN_LIGHT_COLOR = '255,204,128';
   private static readonly BANNER_TEXT_SIZE = 10;
   private static readonly BANNER_TILE_Y_OFFSET = -1;
   private static readonly BANNER_Y_BASELINE_OFFSET = 0.65;
@@ -540,14 +539,12 @@ export class SafeRoomSystem implements GameSystem {
     for (const e of this.entries) {
       const b = e.bounds;
 
-      // "SAFE ROOM" banner (world-space label above the room)
-      // size=10, old baseline = bsy + ts*0.65; top = baseline - round(10*0.8) = baseline - 8
       const bannerTileY = b.y + SafeRoomSystem.BANNER_TILE_Y_OFFSET;
       const bannerTileX = b.x + Math.floor(b.w / 2);
       const bsx = bannerTileX * ts - camX;
       const bsy = bannerTileY * ts - camY;
-      drawText(ctx, 'SAFE ROOM', {
-        ...TEXT_PRESETS.label,
+      worldText(ctx, 'SAFE ROOM', {
+        style: 'label',
         x: bsx,
         y:
           bsy +
@@ -555,7 +552,7 @@ export class SafeRoomSystem implements GameSystem {
           SafeRoomSystem.BANNER_TEXT_TOP_OFFSET,
         size: SafeRoomSystem.BANNER_TEXT_SIZE,
         bold: true,
-        color: '#f0e4c8',
+        color: worldPalette.safeRoom.ink,
         align: 'center',
       });
 
@@ -678,10 +675,8 @@ export class SafeRoomSystem implements GameSystem {
       }
     }
 
-    // "~ Safe Room ~" HUD banner when player is inside
-    // size=12, old baseline = canvas.height - 18; top = baseline - round(12*0.8) = baseline - 10
     if (this.isEntityInSafeRoom(active)) {
-      drawText(ctx, '~ Safe Room ~', {
+      worldText(ctx, '~ Safe Room ~', {
         x: viewportWidth() / 2,
         y:
           viewportHeight() -
@@ -689,7 +684,7 @@ export class SafeRoomSystem implements GameSystem {
           SafeRoomSystem.HUD_BANNER_TEXT_TOP_OFFSET,
         size: SafeRoomSystem.HUD_BANNER_SIZE,
         bold: true,
-        color: '#f0e4c8',
+        color: worldPalette.safeRoom.ink,
         alpha: SafeRoomSystem.HUD_BANNER_ALPHA,
         align: 'center',
       });
@@ -715,11 +710,8 @@ export class SafeRoomSystem implements GameSystem {
   ): void {
     const radius = TILE_SIZE * SafeRoomSystem.LANTERN_LIGHT_RADIUS_TILES;
     const stops: GlowStop[] = [
-      {
-        offset: 0,
-        color: `rgba(${SafeRoomSystem.LANTERN_LIGHT_COLOR},${SafeRoomSystem.LANTERN_LIGHT_ALPHA})`,
-      },
-      { offset: 1, color: `rgba(${SafeRoomSystem.LANTERN_LIGHT_COLOR},0)` },
+      { offset: 0, color: worldPalette.safeRoom.lanternPool },
+      { offset: 1, color: worldPalette.safeRoom.lanternPoolRim },
     ];
     for (const lantern of entry.lanternTiles) {
       const cx = lantern.x * TILE_SIZE + TILE_SIZE / 2 - camX;

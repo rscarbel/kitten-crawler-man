@@ -7,47 +7,43 @@ import { TutorialController } from '../systems/TutorialController';
 import { getLevelDef } from '../levels';
 import { difficultyStats } from '../core/DifficultyStats';
 import { bindRunStats } from '../core/GameStats';
-import { drawText } from '../ui/TextBox';
-import { drawOverlay } from '../ui/Box';
-import type { ButtonResult } from '../ui/Button';
-import {
-  beginMenuFocus,
-  endMenuFocus,
-  drawButton,
-  BUTTON_PRESETS,
-  setButtonMouseState,
-  notifyButtonClick,
-} from '../ui/Button';
-import { viewportWidth, viewportHeight } from '../core/Viewport';
+import { splitV, type Rect } from '../ui/core/geom';
+import { createSceneUi } from '../ui/core/sceneUi';
+import type { Surface, Ui, UiRoot } from '../ui/core/UiRoot';
+import { button, buttonHeight } from '../ui/widgets/button';
+import { panel, type PanelOptions } from '../ui/widgets/panel';
+import { measureTextHeight, text } from '../ui/widgets/text';
+import type { ButtonVariant, ControlSize, TextRole } from '../ui/theme/skins';
+import { drawBackdrop, fitPanelBody } from '../ui/screens/dialogs/endScreenParts';
 
-const TITLE_Y_FRACTION = 0.22;
-const SUBTITLE_Y_FRACTION = 0.35;
-const BTN_Y_FRACTION = 0.5;
-const BTN_GAP = 20;
-const BTN_COMPACT_GAP = 10;
-const BTN_WIDTH = 300;
-const BTN_HEIGHT = 56;
-/** Smallest fingertip-friendly button; the stack shrinks to this before it may run off-screen. */
-const BTN_MIN_HEIGHT = 44;
-const SCREEN_BOTTOM_MARGIN = 12;
-const BUTTONS_WITH_CHECKPOINT = 3;
-const BUTTONS_WITHOUT_CHECKPOINT = 2;
-/** Clear space kept between the subtitle's baseline and the first button. */
-const SUBTITLE_TO_BUTTONS_GAP = 40;
-const OVERLAY_ALPHA = 0.92;
-const BG_COLOR = '#0f172a';
-const TEXT_SIDE_MARGIN = 24;
+const MENU_SURFACE_ID = 'main-menu';
+const MENU_PANEL_ID = 'main-menu';
 
+/** How the menu is set, roomiest first; the first that fits the screen without scrolling wins. */
+const MENU_DENSITIES: readonly {
+  readonly titleRole: TextRole;
+  readonly buttonSize: ControlSize;
+}[] = [
+  { titleRole: 'display', buttonSize: 'lg' },
+  { titleRole: 'display', buttonSize: 'md' },
+  { titleRole: 'heading', buttonSize: 'md' },
+];
+const FULLY_OPAQUE = 1;
+
+interface MenuChoice {
+  readonly id: string;
+  readonly label: string;
+  readonly variant: ButtonVariant;
+  readonly primary: boolean;
+  readonly onTap: () => void;
+}
+
+/**
+ * The title menu every player lands on: continue a saved run when there is
+ * one, or start a new game with or without the tutorial.
+ */
 export class PostSignupScene extends Scene {
-  private _mouseX = 0;
-  private _mouseY = 0;
-  /**
-   * The rects `render` last produced. Kept rather than re-derived in
-   * `handleClick`, so the two can never disagree about where a button is.
-   */
-  private tutorialButton: ButtonResult | null = null;
-  private skipButton: ButtonResult | null = null;
-  private continueButton: ButtonResult | null = null;
+  readonly ui: UiRoot;
 
   constructor(
     private readonly input: InputManager,
@@ -57,6 +53,13 @@ export class PostSignupScene extends Scene {
     private readonly onContinue?: () => void,
   ) {
     super();
+    this.ui = createSceneUi({
+      audio: baseOptions.audio ?? null,
+      handleWorldPointer: () => {
+        // Every pixel of the menu belongs to its surface; nothing lies beneath it.
+      },
+    });
+    this.ui.mount(this.menuSurface());
   }
 
   update(): void {
@@ -64,123 +67,119 @@ export class PostSignupScene extends Scene {
   }
 
   render(ctx: CanvasRenderingContext2D): void {
-    const cx = viewportWidth() / 2;
+    this.ui.frame(ctx);
+  }
 
-    ctx.fillStyle = BG_COLOR;
-    ctx.fillRect(0, 0, viewportWidth(), viewportHeight());
-    drawOverlay(ctx, {
-      canvasWidth: viewportWidth(),
-      canvasHeight: viewportHeight(),
-      alpha: OVERLAY_ALPHA,
-    });
+  private menuSurface(): Surface {
+    return {
+      id: MENU_SURFACE_ID,
+      band: 'modal',
+      // Halting is what hands the arrows, Tab, Space and Enter to the menu's focus ring.
+      haltsWorld: true,
+      isOpen: () => true,
+      render: (ui) => {
+        this.renderMenu(ui);
+      },
+    };
+  }
 
-    setButtonMouseState(this._mouseX, this._mouseY);
-    beginMenuFocus('post-signup');
+  private choices(): readonly MenuChoice[] {
+    const onContinue = this.onContinue;
+    if (onContinue === undefined) {
+      return [
+        {
+          id: 'tutorial',
+          label: 'Continue to Tutorial',
+          variant: 'primary',
+          primary: true,
+          onTap: () => this.launchTutorial(),
+        },
+        {
+          id: 'level1',
+          label: 'Skip to Level 1',
+          variant: 'secondary',
+          primary: false,
+          onTap: () => this.launchLevel1(),
+        },
+      ];
+    }
+    return [
+      {
+        id: 'continue',
+        label: 'Continue from last checkpoint',
+        variant: 'primary',
+        primary: true,
+        onTap: onContinue,
+      },
+      {
+        id: 'tutorial',
+        label: 'New Game: Tutorial',
+        variant: 'secondary',
+        primary: false,
+        onTap: () => this.launchTutorial(),
+      },
+      {
+        id: 'level1',
+        label: 'New Game: Level 1',
+        variant: 'secondary',
+        primary: false,
+        onTap: () => this.launchLevel1(),
+      },
+    ];
+  }
+
+  private renderMenu(ui: Ui): void {
+    drawBackdrop(ui, FULLY_OPAQUE);
 
     const hasCheckpoint = this.onContinue !== undefined;
     const title = hasCheckpoint ? 'Welcome back, adventurer!' : 'Welcome, adventurer!';
     const subtitle = hasCheckpoint
       ? 'Pick up where you left off, or start over?'
       : 'Would you like to start with the tutorial?';
+    const choices = this.choices();
+    const { space } = ui.theme;
 
-    drawText(ctx, title, {
-      x: TEXT_SIDE_MARGIN,
-      y: viewportHeight() * TITLE_Y_FRACTION,
-      align: 'center',
-      size: 32,
-      bold: true,
-      color: '#f8fafc',
-      outline: true,
-      glow: true,
-      width: viewportWidth() - TEXT_SIDE_MARGIN * 2,
+    // A phone keeps the narrow card, since anything wider turns into a bottom sheet there.
+    const panelOpts: Pick<PanelOptions, 'width'> = { width: ui.size === 'compact' ? 'sm' : 'md' };
+    const totalHeight = (tracks: readonly number[]): number =>
+      tracks.reduce((sum, h) => sum + h, 0) + space.md * (tracks.length - 1);
+    const layoutFor = (density: (typeof MENU_DENSITIES)[number]) => {
+      const tracksAt = (width: number): number[] => [
+        measureTextHeight(ui, width, { text: title, role: density.titleRole }),
+        measureTextHeight(ui, width, { text: subtitle, role: 'secondary' }),
+        ...choices.map(() => buttonHeight(ui, density.buttonSize)),
+      ];
+      const fit = fitPanelBody(ui, panelOpts, (width) => totalHeight(tracksAt(width)));
+      return { ...density, tracksAt, fit };
+    };
+    const layouts = MENU_DENSITIES.map(layoutFor);
+    const chosen = layouts.find((layout) => !layout.fit.scroll) ?? layouts[layouts.length - 1];
+    const { fit, tracksAt, titleRole, buttonSize } = chosen;
+
+    panel(ui, {
+      ...panelOpts,
+      id: MENU_PANEL_ID,
+      height: 'content',
+      contentHeight: fit.contentHeight,
+      scrollBody: fit.scroll,
+      scrim: false,
+      content: (body: Rect) => {
+        const rows = splitV(body, tracksAt(body.w), space.md);
+        const [titleRow, subtitleRow, ...buttonRows] = rows;
+        text(ui, titleRow, { text: title, role: titleRole, align: 'center', wrap: true });
+        text(ui, subtitleRow, { text: subtitle, role: 'secondary', align: 'center', wrap: true });
+        choices.forEach((choice, index) => {
+          button(ui, buttonRows[index], {
+            id: choice.id,
+            label: choice.label,
+            variant: choice.variant,
+            size: buttonSize,
+            primary: choice.primary,
+            onTap: choice.onTap,
+          });
+        });
+      },
     });
-
-    drawText(ctx, subtitle, {
-      x: TEXT_SIDE_MARGIN,
-      y: viewportHeight() * SUBTITLE_Y_FRACTION,
-      align: 'center',
-      size: 16,
-      color: '#cbd5e1',
-      width: viewportWidth() - TEXT_SIDE_MARGIN * 2,
-    });
-
-    const buttonCount = hasCheckpoint ? BUTTONS_WITH_CHECKPOINT : BUTTONS_WITHOUT_CHECKPOINT;
-    const btnWidth = Math.min(BTN_WIDTH, viewportWidth() - TEXT_SIDE_MARGIN * 2);
-    const idealTop = viewportHeight() * BTN_Y_FRACTION;
-    const idealStackHeight = buttonCount * BTN_HEIGHT + (buttonCount - 1) * BTN_GAP;
-    const fitsAtIdealTop = idealTop + idealStackHeight + SCREEN_BOTTOM_MARGIN <= viewportHeight();
-    const compactTop = viewportHeight() * SUBTITLE_Y_FRACTION + SUBTITLE_TO_BUTTONS_GAP;
-    const compactAvailable = viewportHeight() - SCREEN_BOTTOM_MARGIN - compactTop;
-    const compactHeight = Math.floor(
-      (compactAvailable - (buttonCount - 1) * BTN_COMPACT_GAP) / buttonCount,
-    );
-    const btnHeight = fitsAtIdealTop
-      ? BTN_HEIGHT
-      : Math.min(BTN_HEIGHT, Math.max(BTN_MIN_HEIGHT, compactHeight));
-    const btnGap = fitsAtIdealTop ? BTN_GAP : BTN_COMPACT_GAP;
-    let btnY = fitsAtIdealTop ? idealTop : compactTop;
-
-    if (hasCheckpoint) {
-      this.continueButton = drawButton(ctx, {
-        x: cx,
-        y: btnY,
-        width: btnWidth,
-        height: btnHeight,
-        alignX: 'center',
-        label: 'Continue from last checkpoint',
-        ...BUTTON_PRESETS.gold,
-        primaryAction: true,
-      });
-      btnY += btnHeight + btnGap;
-    }
-
-    this.tutorialButton = drawButton(ctx, {
-      x: cx,
-      y: btnY,
-      width: btnWidth,
-      height: btnHeight,
-      alignX: 'center',
-      label: hasCheckpoint ? 'New Game: Tutorial' : 'Continue to Tutorial',
-      ...BUTTON_PRESETS.success,
-      primaryAction: !hasCheckpoint,
-    });
-
-    this.skipButton = drawButton(ctx, {
-      x: cx,
-      y: btnY + btnHeight + btnGap,
-      width: btnWidth,
-      height: btnHeight,
-      alignX: 'center',
-      label: hasCheckpoint ? 'New Game: Level 1' : 'Skip to Level 1',
-      ...BUTTON_PRESETS.primary,
-    });
-
-    endMenuFocus();
-  }
-
-  handleClick(mx: number, my: number): void {
-    notifyButtonClick(mx, my);
-
-    if (this.continueButton?.contains(mx, my) === true) {
-      this.onContinue?.();
-    } else if (this.tutorialButton?.contains(mx, my) === true) {
-      this.launchTutorial();
-    } else if (this.skipButton?.contains(mx, my) === true) {
-      this.launchLevel1();
-    }
-  }
-
-  handleMouseMove(mx: number, my: number): void {
-    this._mouseX = mx;
-    this._mouseY = my;
-  }
-
-  handleTouchEnd(e: TouchEvent, rect: DOMRect): void {
-    for (const touch of Array.from(e.changedTouches)) {
-      const x = touch.clientX - rect.left;
-      const y = touch.clientY - rect.top;
-      this.handleClick(x, y);
-    }
   }
 
   /**

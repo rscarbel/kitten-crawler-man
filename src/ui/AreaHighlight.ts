@@ -1,5 +1,7 @@
-import { roundRectPath } from './Box';
-import { withAlpha } from './ObjectiveBeacon';
+import type { Rect } from './core/geom';
+import { roundRectPath } from './widgets/paint';
+import { withAlpha } from './theme/color';
+import { worldPalette } from './theme/worldInk';
 import { TILE_SIZE } from '../core/constants';
 import { viewportHeight, viewportWidth } from '../core/Viewport';
 
@@ -27,14 +29,6 @@ import { viewportHeight, viewportWidth } from '../core/Viewport';
  * stacked on a wide area lights the ground under it into a glare. Beams are
  * for targets with no outline — a quest NPC, a doorway.
  */
-
-/** A rectangle in screen pixels. */
-export interface AreaHighlightRect {
-  readonly x: number;
-  readonly y: number;
-  readonly width: number;
-  readonly height: number;
-}
 
 /** `ready`: the player can act on it now. `pending`: still waiting on something. */
 export type AreaHighlightMood = 'ready' | 'pending';
@@ -86,7 +80,7 @@ const MAX_CORNER_RADIUS_FRACTION = 0.25;
  * A dark hairline under the glow: 'lighter' alone vanishes into anything
  * already bright — sunlit wheat, pale paving — so the outline carries its own contrast.
  */
-const OUTLINE_SHADOW_COLOR = 'rgba(0, 0, 0, 0.35)';
+const OUTLINE_SHADOW_COLOR = worldPalette.areaHighlight.outlineShadow;
 const OUTLINE_SHADOW_WIDTH_PX = 3.5;
 const OUTLINE_GLOW_WIDTH_PX = 6;
 const OUTLINE_GLOW_ALPHA = 0.22;
@@ -117,7 +111,7 @@ const SPARK_LAYERS: ReadonlyArray<{
   { lengthFraction: 0.3, width: 2.5, alpha: 1 },
 ];
 /** The spark is lightened toward white so it reads as a glint of the outline, not a second colour. */
-const SPARK_COLOR = '#fffbe6';
+const SPARK_COLOR = worldPalette.areaHighlight.spark;
 
 // ── Motes ────────────────────────────────────────────────────────────────
 const TILE_AREA_PX = TILE_SIZE * TILE_SIZE;
@@ -148,17 +142,17 @@ const BRACKET_MAX_ARM_PX = 20;
 /** How far the brackets breathe outward at the pulse's peak. */
 const BRACKET_BREATHE_PX = 2;
 /** A dark stroke under the bright one, so the bracket reads on sunlit wheat as well as on dark mud. */
-const BRACKET_SHADOW_COLOR = 'rgba(0, 0, 0, 0.5)';
+const BRACKET_SHADOW_COLOR = worldPalette.areaHighlight.bracketShadow;
 const BRACKET_WIDTH_PX: Readonly<Record<AreaHighlightMood, number>> = { ready: 2.5, pending: 1.5 };
 const BRACKET_SHADOW_EXTRA_PX = 2;
 const BRACKET_GLOW_WIDTH_PX = 6;
 const BRACKET_GLOW_ALPHA = 0.3;
 
-function isOffScreen(rect: AreaHighlightRect): boolean {
+function isOffScreen(rect: Rect): boolean {
   return (
-    rect.x + rect.width < -OFFSCREEN_MARGIN_PX ||
+    rect.x + rect.w < -OFFSCREEN_MARGIN_PX ||
     rect.x > viewportWidth() + OFFSCREEN_MARGIN_PX ||
-    rect.y + rect.height < -OFFSCREEN_MARGIN_PX ||
+    rect.y + rect.h < -OFFSCREEN_MARGIN_PX ||
     rect.y > viewportHeight() + OFFSCREEN_MARGIN_PX
   );
 }
@@ -174,8 +168,8 @@ function pulseStrength(nowMs: number, mood: AreaHighlightMood): number {
   return (PULSE_FLOOR + swing * pulsePhase(nowMs, mood)) * MOOD_STRENGTH[mood];
 }
 
-function cornerRadius(rect: AreaHighlightRect): number {
-  const shortSide = Math.min(rect.width, rect.height);
+function cornerRadius(rect: Rect): number {
+  const shortSide = Math.min(rect.w, rect.h);
   return Math.min(CORNER_RADIUS_PX, shortSide * MAX_CORNER_RADIUS_FRACTION);
 }
 
@@ -185,7 +179,7 @@ function cornerRadius(rect: AreaHighlightRect): number {
  */
 export function drawAreaHighlightGround(
   ctx: CanvasRenderingContext2D,
-  rect: AreaHighlightRect,
+  rect: Rect,
   options: AreaHighlightOptions,
 ): void {
   if (isOffScreen(rect)) return;
@@ -212,22 +206,22 @@ export function drawAreaHighlightGround(
  */
 export function drawAreaHighlightFrame(
   ctx: CanvasRenderingContext2D,
-  rect: AreaHighlightRect,
+  rect: Rect,
   options: AreaHighlightOptions,
 ): void {
   if (isOffScreen(rect)) return;
   const mood = options.mood ?? 'ready';
   const strength = pulseStrength(options.nowMs, mood);
   const breathe = BRACKET_BREATHE_PX * pulsePhase(options.nowMs, mood);
-  const shortSide = Math.min(rect.width, rect.height);
+  const shortSide = Math.min(rect.w, rect.h);
   const arm = Math.max(
     BRACKET_MIN_ARM_PX,
     Math.min(BRACKET_MAX_ARM_PX, shortSide * BRACKET_ARM_FRACTION),
   );
   const left = rect.x - breathe;
-  const right = rect.x + rect.width + breathe;
+  const right = rect.x + rect.w + breathe;
   const top = rect.y - breathe;
-  const bottom = rect.y + rect.height + breathe;
+  const bottom = rect.y + rect.h + breathe;
   const width = BRACKET_WIDTH_PX[mood];
 
   ctx.save();
@@ -251,7 +245,7 @@ export function drawAreaHighlightFrame(
 /** Both halves at once, for a caller with no sprite between them. */
 export function drawAreaHighlight(
   ctx: CanvasRenderingContext2D,
-  rect: AreaHighlightRect,
+  rect: Rect,
   options: AreaHighlightOptions,
 ): void {
   drawAreaHighlightGround(ctx, rect, options);
@@ -260,17 +254,17 @@ export function drawAreaHighlight(
 
 function drawEdgeWash(
   ctx: CanvasRenderingContext2D,
-  rect: AreaHighlightRect,
+  rect: Rect,
   color: string,
   strength: number,
 ): void {
-  const centreX = rect.x + rect.width * HALF;
-  const centreY = rect.y + rect.height * HALF;
+  const centreX = rect.x + rect.w * HALF;
+  const centreY = rect.y + rect.h * HALF;
   ctx.save();
-  roundRectPath(ctx, rect.x, rect.y, rect.width, rect.height, cornerRadius(rect));
+  roundRectPath(ctx, rect, cornerRadius(rect));
   ctx.clip();
   ctx.translate(centreX, centreY);
-  ctx.scale(rect.width * HALF, rect.height * HALF);
+  ctx.scale(rect.w * HALF, rect.h * HALF);
   const edgeAlpha = WASH_EDGE_ALPHA * strength;
   const wash = ctx.createRadialGradient(0, 0, 0, 0, 0, WASH_CORNER_RADIUS);
   wash.addColorStop(0, withAlpha(color, 0));
@@ -285,11 +279,11 @@ function drawEdgeWash(
 /** The outline's path, dashed and marching when `pending`. */
 function traceOutline(
   ctx: CanvasRenderingContext2D,
-  rect: AreaHighlightRect,
+  rect: Rect,
   mood: AreaHighlightMood,
   nowMs: number,
 ): void {
-  roundRectPath(ctx, rect.x, rect.y, rect.width, rect.height, cornerRadius(rect));
+  roundRectPath(ctx, rect, cornerRadius(rect));
   if (mood === 'pending') {
     ctx.setLineDash([PENDING_DASH_PX, PENDING_GAP_PX]);
     ctx.lineDashOffset = -(nowMs / MS_PER_SECOND) * PENDING_MARCH_PX_PER_SECOND;
@@ -298,7 +292,7 @@ function traceOutline(
 
 function drawOutlineShadow(
   ctx: CanvasRenderingContext2D,
-  rect: AreaHighlightRect,
+  rect: Rect,
   mood: AreaHighlightMood,
   nowMs: number,
 ): void {
@@ -312,7 +306,7 @@ function drawOutlineShadow(
 
 function drawOutline(
   ctx: CanvasRenderingContext2D,
-  rect: AreaHighlightRect,
+  rect: Rect,
   color: string,
   strength: number,
   mood: AreaHighlightMood,
@@ -333,9 +327,9 @@ function drawOutline(
 const CORNER_RADII_CUT_FROM_STRAIGHTS = 8;
 
 /** The rounded outline's length: the straight runs, plus a quarter circle per corner. */
-function outlinePerimeter(rect: AreaHighlightRect): number {
+function outlinePerimeter(rect: Rect): number {
   const radius = cornerRadius(rect);
-  const straight = 2 * (rect.width + rect.height) - CORNER_RADII_CUT_FROM_STRAIGHTS * radius;
+  const straight = 2 * (rect.w + rect.h) - CORNER_RADII_CUT_FROM_STRAIGHTS * radius;
   return straight + FULL_TURN_RADIANS * radius;
 }
 
@@ -343,7 +337,7 @@ function outlinePerimeter(rect: AreaHighlightRect): number {
  * Sparks run round the outline by dashing it: one dash per spark, the rest of
  * the lap a gap, the dash offset advanced with the clock.
  */
-function drawSparks(ctx: CanvasRenderingContext2D, rect: AreaHighlightRect, nowMs: number): void {
+function drawSparks(ctx: CanvasRenderingContext2D, rect: Rect, nowMs: number): void {
   const perimeter = outlinePerimeter(rect);
   const lap = perimeter / SPARK_COUNT;
   const sparkLength = Math.max(
@@ -353,7 +347,7 @@ function drawSparks(ctx: CanvasRenderingContext2D, rect: AreaHighlightRect, nowM
   const travelled = ((nowMs % SPARK_LAP_MS) / SPARK_LAP_MS) * perimeter;
   ctx.save();
   ctx.lineCap = 'round';
-  roundRectPath(ctx, rect.x, rect.y, rect.width, rect.height, cornerRadius(rect));
+  roundRectPath(ctx, rect, cornerRadius(rect));
   for (const layer of SPARK_LAYERS) {
     const length = Math.min(lap, sparkLength * layer.lengthFraction);
     // The head stays put across layers; only the tail shortens, so the offset
@@ -372,13 +366,8 @@ function fractionalPart(value: number): number {
   return value - Math.floor(value);
 }
 
-function drawMotes(
-  ctx: CanvasRenderingContext2D,
-  rect: AreaHighlightRect,
-  color: string,
-  nowMs: number,
-): void {
-  const areaTiles = (rect.width * rect.height) / TILE_AREA_PX;
+function drawMotes(ctx: CanvasRenderingContext2D, rect: Rect, color: string, nowMs: number): void {
+  const areaTiles = (rect.w * rect.h) / TILE_AREA_PX;
   const count = Math.max(MIN_MOTES, Math.min(MAX_MOTES, Math.round(areaTiles * MOTES_PER_TILE)));
   const cycle = nowMs / MOTE_PERIOD_MS;
   for (let index = 1; index <= count; index++) {
@@ -386,8 +375,8 @@ function drawMotes(
     const row = fractionalPart(index * PLASTIC_RATIO_FRACTION);
     const age = fractionalPart(cycle + index * SILVER_RATIO_FRACTION);
     const sway = Math.sin((age * MOTE_SWAY_CYCLES + column) * FULL_TURN_RADIANS) * MOTE_SWAY_PX;
-    const x = rect.x + column * rect.width + sway;
-    const y = rect.y + row * rect.height - age * MOTE_RISE_PX;
+    const x = rect.x + column * rect.w + sway;
+    const y = rect.y + row * rect.h - age * MOTE_RISE_PX;
     // Fades in off the ground and out at the top of its rise, never popping.
     const alpha = Math.sin(age * Math.PI) * MOTE_ALPHA;
     ctx.fillStyle = withAlpha(color, alpha * MOTE_HALO_ALPHA_FRACTION);

@@ -38,9 +38,9 @@ import { referenceStats } from '../src/core/referenceCrawler';
 import { HumanPlayer } from '../src/creatures/HumanPlayer';
 import { CatPlayer } from '../src/creatures/CatPlayer';
 import { GameMap } from '../src/map/GameMap';
-import { PricedMenuPanel } from '../src/ui/PricedMenuPanel';
+import { ShopSession } from '../src/ui/screens/shop/shopSession';
 import { RewardGrantedDialog } from '../src/ui/RewardGrantedDialog';
-import { QuantityPicker } from '../src/ui/QuantityPicker';
+import { QuantityDialog } from '../src/ui/screens/dialogs/QuantityDialog';
 import {
   FENNA,
   OREN,
@@ -77,7 +77,7 @@ import {
   tradingPostShop,
 } from '../src/systems/briarHollow/services/tradingPost';
 import {
-  UPGRADE_REBUY_GUARD_FRAMES,
+  UPGRADE_REBUY_GUARD_TICKS,
   forgeShop,
   forgeTopics,
   type ForgeHost,
@@ -333,9 +333,9 @@ function runTopic(rig: Rig, villager: VillagerId, key: string): Recording | null
   return topic === undefined ? null : runRecordedTopic(topic);
 }
 
-/** Opens a shop on a fresh panel, applying the gate's fault when one is asked for. */
-function openShop(shop: ShopDefinition): PricedMenuPanel {
-  const panel = new PricedMenuPanel();
+/** Opens a shop on a fresh session, applying the gate's fault when one is asked for. */
+function openShop(shop: ShopDefinition): ShopSession {
+  const panel = new ShopSession();
   const purchase: ShopDefinition['purchase'] =
     fault === 'charge-first'
       ? (option, buyer) => {
@@ -343,7 +343,10 @@ function openShop(shop: ShopDefinition): PricedMenuPanel {
           return shop.purchase(option, buyer);
         }
       : shop.purchase;
-  panel.open(shop.build, purchase, undefined, shop.blockedLine, shop.rebuyGuardFrames);
+  panel.open(shop.build, purchase, {
+    blockedLine: shop.blockedLine,
+    rebuyGuardTicks: shop.rebuyGuardTicks,
+  });
   return panel;
 }
 
@@ -387,22 +390,22 @@ function checkCook(rig: Rig): void {
 
   human.coins = 0;
   const broke = openShop(cookShop(() => undefined, rig.state));
-  broke.pressBuy('hamburger', human, cat);
+  broke.pressBuy('hamburger', { active: human, companion: cat });
   check(human.inventory.countOf('hamburger') === 0 && human.coins === 0, 'no coins buys nothing');
   check(broke.currentLine === sellerLine(PIPKIN.cannotAfford), 'no coins hears cannot_afford');
 
   human.coins = PLENTY_OF_COINS;
   const panel = openShop(cookShop(() => undefined, rig.state));
-  panel.pressBuy('hamburger', human, cat);
+  panel.pressBuy('hamburger', { active: human, companion: cat });
   check(human.inventory.countOf('hamburger') === 1, 'a burger lands in the pack');
   check(human.coins === PLENTY_OF_COINS - EXPECTED_BURGER_PRICE, 'and costs its price');
   check(panel.currentLine === sellerLine(PIPKIN.buyBurger), 'with buy_burger');
 
   human.potionCooldownFrames = 0;
-  panel.pressBuy('hollow_stew', human, cat);
+  panel.pressBuy('hollow_stew', { active: human, companion: cat });
   check(panel.currentLine === sellerLine(PIPKIN.buyStew), 'stew off cooldown hears buy_stew');
   human.potionCooldownFrames = 100;
-  panel.pressBuy('hollow_stew', human, cat);
+  panel.pressBuy('hollow_stew', { active: human, companion: cat });
   check(human.inventory.countOf('hollow_stew') === 2, 'stew on cooldown still sells');
   check(
     panel.currentLine === sellerLine(PIPKIN.stewCooldownActive),
@@ -420,7 +423,7 @@ function checkFullBagRefused(): void {
   human.coins = PLENTY_OF_COINS;
   const announced: string[] = [];
   const panel = openShop(cookShop((message) => announced.push(message), rig.state));
-  panel.pressBuy('hamburger', human, cat);
+  panel.pressBuy('hamburger', { active: human, companion: cat });
   check(human.inventory.countOf('hamburger') === 0, 'a full bag takes no burger');
   check(human.coins === PLENTY_OF_COINS, 'and the buyer is not charged for it');
   check(announced.includes('Your bag is full.'), 'and is told the bag is full');
@@ -439,7 +442,7 @@ function checkDoctor(rig: Rig): void {
   const host = { openShop: () => undefined, beginTreatment: () => treatments++ };
   human.coins = PLENTY_OF_COINS;
   const panel = openShop(infirmaryShop(party, host));
-  panel.pressBuy('treat_party', human, cat);
+  panel.pressBuy('treat_party', { active: human, companion: cat });
   check(human.hp === human.maxHp && cat.hp === cat.maxHp, 'both crawlers end at full HP');
   check(human.coins === PLENTY_OF_COINS - expected, 'the fee is charged once');
   check(treatments === 1, 'the treatment plays');
@@ -487,7 +490,7 @@ function checkMerchant(): void {
     buildTradingPostMenu(state).options.find((option) => option.key === 'rope');
   check(ropeRow()?.price === EXPECTED_ROPE_PRICE, 'rope costs 6');
   const panel = openShop(tradingPostShop(state, () => undefined));
-  panel.pressBuy('rope', human, rig.cat);
+  panel.pressBuy('rope', { active: human, companion: rig.cat });
   check(state.merchantStock.rope === EXPECTED_ROPE_BASE - 1, 'a sale takes one off the shelf');
   check(human.inventory.countOf('rope') === 1, 'and hands it over');
 
@@ -522,7 +525,10 @@ function checkMerchant(): void {
   state.merchantStock.rope = 0;
   check(ropeRow()?.unavailable === 'Sold out', 'an empty shelf is sold out');
   const before = human.coins;
-  openShop(tradingPostShop(state, () => undefined)).pressBuy('rope', human, rig.cat);
+  openShop(tradingPostShop(state, () => undefined)).pressBuy('rope', {
+    active: human,
+    companion: rig.cat,
+  });
   check(human.coins === before, 'and sells nothing');
 
   restockTradingPost(state);
@@ -629,7 +635,7 @@ function checkForge(): void {
     panel.currentLine === sellerLine(OREN.axeUpgradeAvailable),
     'an affordable axe is announced first',
   );
-  panel.pressBuy('axe', human, cat);
+  panel.pressBuy('axe', { active: human, companion: cat });
   check(
     slotIndexOf(human, 'hardened_axe') === humanSlot,
     `the buyer's axe is swapped in place (${humanSlot})`,
@@ -657,8 +663,8 @@ function checkForge(): void {
     'toolUpgraded fires',
   );
   human.coins = PLENTY_OF_COINS;
-  for (let frame = 0; frame < UPGRADE_REBUY_GUARD_FRAMES; frame++) panel.update();
-  panel.pressBuy('pickaxe', human, cat);
+  for (let frame = 0; frame < UPGRADE_REBUY_GUARD_TICKS; frame++) panel.update();
+  panel.pressBuy('pickaxe', { active: human, companion: cat });
   check(panel.currentLine === sellerLine(OREN.upgradePurchased), 'the explanation is a one-shot');
 
   rig.crafts.tools.axeTier = 5;
@@ -672,7 +678,7 @@ function checkForge(): void {
   );
   const coins = human.coins;
   const topPanel = openShop(forgeShop(host));
-  topPanel.pressBuy('axe', human, cat);
+  topPanel.pressBuy('axe', { active: human, companion: cat });
   check(
     human.coins === coins && rig.crafts.tools.axeTier === 5,
     'buying past the top tier is refused',
@@ -792,7 +798,7 @@ function checkSawmill(): void {
  */
 function fennaHost(
   rig: Rig,
-  picker: QuantityPicker,
+  picker: QuantityDialog,
   responses: BarkLine[][],
   conversationOpen: () => boolean = () => true,
 ): LumberForemanHost {
@@ -831,7 +837,7 @@ function checkFenna(): void {
   const rig = buildRig();
   if (rig === null) return;
   const { human, cat } = rig;
-  const picker = new QuantityPicker(null);
+  const picker = new QuantityDialog(null);
   const responses: BarkLine[][] = [];
   const host = fennaHost(rig, picker, responses);
 
@@ -1033,19 +1039,19 @@ function checkDoublePress(): void {
   const startingCoins = 3000;
   human.coins = startingCoins;
   const panel = openShop(forgeShop(forgeHostFor(rig, rig.partyTools)));
-  panel.pressBuy('axe', human, cat);
-  panel.pressBuy('axe', human, cat);
+  panel.pressBuy('axe', { active: human, companion: cat });
+  panel.pressBuy('axe', { active: human, companion: cat });
   check(
     rig.crafts.tools.axeTier === 1 && human.coins === startingCoins - HARDENED_AXE_PRICE,
     'two presses inside the window upgrade once',
   );
-  for (let frame = 0; frame < UPGRADE_REBUY_GUARD_FRAMES - 1; frame++) panel.update();
-  panel.pressBuy('axe', human, cat);
+  for (let frame = 0; frame < UPGRADE_REBUY_GUARD_TICKS - 1; frame++) panel.update();
+  panel.pressBuy('axe', { active: human, companion: cat });
   check(rig.crafts.tools.axeTier === 1, "a press on the window's last frame is still refused");
   panel.update();
-  panel.pressBuy('axe', human, cat);
+  panel.pressBuy('axe', { active: human, companion: cat });
   check(rig.crafts.tools.axeTier === 2, 'a press after the window buys the next tier');
-  const town = new PricedMenuPanel();
+  const town = new ShopSession();
   let sales = 0;
   town.open(
     () => ({ title: '', bark: '', options: [{ key: 'x', label: 'x', price: 1, desc: '' }] }),
@@ -1054,8 +1060,8 @@ function checkDoublePress(): void {
       return { ok: true, line: '' };
     },
   );
-  town.pressBuy('x', human, cat);
-  town.pressBuy('x', human, cat);
+  town.pressBuy('x', { active: human, companion: cat });
+  town.pressBuy('x', { active: human, companion: cat });
   check(sales === 2, 'a menu that asks for no guard still sells on every press');
 }
 
@@ -1095,7 +1101,7 @@ function checkDeathDuringLesson(): void {
   dialog.enqueue({ kind: 'item', name: 'Later', description: '', renderIcon: () => undefined });
   const cardFrames = 61;
   for (let frame = 0; frame < cardFrames; frame++) dialog.update();
-  dialog.handleClick(0, 0);
+  dialog.acknowledge();
   check(
     !dialog.isShowing && staleFollowUps === 0 && freshFollowUps === 1,
     'discarding the reward cards drops them and what waited on them',

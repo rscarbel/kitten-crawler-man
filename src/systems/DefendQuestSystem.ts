@@ -8,9 +8,9 @@
 
 import { awardPartyXp, type CrawlerPair, type PartyXpApplied } from '../core/awardXp';
 import { TILE_SIZE } from '../core/constants';
-import { randomInt, pixelToTile, pointInRect } from '../utils';
+import { randomInt, pixelToTile } from '../utils';
 import { drawInteractionPrompt } from '../ui/InteractionPrompt';
-import { platform } from '../core/Platform';
+import { activeInputMode, byInputMode, keyLabel } from '../ui/core/inputMode';
 import type { GameMap, QuestExitDoorState } from '../map/GameMap';
 import type { QuestRoomData } from '../map/DungeonGenerator';
 import type { EventBus } from '../core/EventBus';
@@ -28,7 +28,7 @@ import type { NPCMarkerType } from '../creatures/QuestNPC';
 import { QuestManager } from '../core/QuestManager';
 import type { QuestStatus } from '../core/QuestManager';
 import { secondsLabel, type TrackerEntry } from './questTracker';
-import { drawQuestNPCSprite, drawChildSprite } from '../sprites/questNPCSprite';
+import { drawChildSprite } from '../sprites/questNPCSprite';
 import {
   barrierDamageStage,
   drawGrateLurkers,
@@ -37,21 +37,31 @@ import {
   drawNurseryWoodPile,
   WOOD_PILE_TOP_RISE_TILES,
 } from '../sprites/nurserySprites';
+import { BARRIER_PLANK_COUNT, TORCH_FLAME_ROOT } from '../sprites/art/nurseryArt';
+import { measureWorldText, worldText, type WorldTextOptions } from '../ui/world/worldText';
+import { questFailedOverlay } from '../ui/hud/questFailedOverlay';
 import {
-  BARRIER_DAMAGE_STAGES,
-  BARRIER_PLANK_COUNT,
-  TORCH_FLAME_ROOT,
-} from '../sprites/art/nurseryArt';
-import { drawText, measureTextWidth, TEXT_PRESETS } from '../ui/TextBox';
-import { drawFittedTitle } from '../ui/QuestBanners';
+  NURSERY_GUIDE_COLOR,
+  paintBarrierHitFlash,
+  paintBarrierSpikes,
+  paintDeadNpcCross,
+} from './nurseryWorldArt';
+import type { TopBandEntry } from '../ui/hud/topBand';
+import { stackedBandEntry, type BandRow } from '../ui/hud/topBandStack';
+import { lineHeightOf, text } from '../ui/widgets/text';
+import { fillRounded, strokeRounded } from '../ui/widgets/paint';
+import type { Theme } from '../ui/theme/tokens';
 import { drawLootBoxRewardIcon } from '../ui/icons/rewardIcons';
 import type { QuestRewardSpec } from '../ui/questReward/types';
 import type { BoxTier } from '../core/AchievementManager';
 import { partyXpSections } from '../ui/questReward/rewardLines';
-import { beginMenuFocus, drawButton, endMenuFocus, BUTTON_PRESETS } from '../ui/Button';
 import { drawAreaHighlightFrame, drawAreaHighlightGround } from '../ui/AreaHighlight';
-import type { AreaHighlightMood, AreaHighlightRect } from '../ui/AreaHighlight';
-import { BOX_PRESETS, PROGRESS_PRESETS, drawBox, drawOverlay, drawProgressBar } from '../ui/Box';
+import type { AreaHighlightMood } from '../ui/AreaHighlight';
+import { worldBar, worldPlate } from '../ui/world/worldShapes';
+import { worldPalette } from '../ui/theme/worldInk';
+import type { Surface, UiAudio } from '../ui/core/UiRoot';
+import type { Rect } from '../ui/core/geom';
+import { keybindings } from '../core/Keybindings';
 import { drawResourceIcon } from '../ui/icons/resourceIcons';
 import { drawBouncingArrowAboveEntity } from '../ui/WorldArrow';
 import { NurseryEffects } from './nurseryEffects';
@@ -62,7 +72,6 @@ import {
 import type { Conversation } from '../dialog/Conversation';
 import type { ConversationHandle } from '../dialog/request';
 import { GOBLIN_MOTHER } from '../dialog/scripts/scenes/defend';
-import { viewportWidth, viewportHeight } from '../core/Viewport';
 import {
   BUILD_KNEEL_ROWS,
   BUILD_RISE_ROWS,
@@ -95,8 +104,6 @@ const BUILD_FRAMES = BUILD_SECONDS * FRAMES_PER_SECOND;
  */
 const CAT_BUILD_TIME_MULTIPLIER = 3;
 const BARRIER_MAX_HP = 36;
-/** The quest guide's gold — the same colour the Borrowed Blueprints marks its fence and harvest spots in. */
-const GUIDE_COLOR = '#facc15';
 const SPAWN_INTERVAL_MIN_SECONDS = 3;
 const SPAWN_INTERVAL_MAX_SECONDS = 5;
 const SPAWN_INTERVAL_MIN = SPAWN_INTERVAL_MIN_SECONDS * FRAMES_PER_SECOND;
@@ -123,7 +130,6 @@ const FULL_STRIDE_RADIANS = Math.PI * 2;
 const QUEST_FAILED_DISPLAY_SECONDS = 7;
 const QUEST_FAILED_DISPLAY_FRAMES = QUEST_FAILED_DISPLAY_SECONDS * FRAMES_PER_SECOND;
 const OVERLAY_FADE_FRAMES = 90;
-const TEXT_HEIGHT_FACTOR = 0.8;
 const PICKUP_PROXIMITY_FRACTION = 1.2;
 /**
  * The hammer's cadence for a build nobody is drawn hammering — the cat's, or
@@ -132,88 +138,8 @@ const PICKUP_PROXIMITY_FRACTION = 1.2;
  */
 const HAMMER_SOUND_INTERVAL = 30;
 const TILE_CENTER_OFFSET = 0.5;
-const NPC_DEAD_X_LINE_WIDTH = 4;
-const NPC_DEAD_X_MARGIN_FRACTION = 0.2;
-const NPC_DEAD_X_END_FRACTION = 0.8;
 const BARRIER_HIT_FLASH_FRAMES = 12;
 const BARRIER_HIT_ALPHA_FRACTION = 0.45;
-
-const OVERLAY_TITLE_GLOW_BLUR = 15;
-/** How far the quest-failed banner dims the floor behind it. */
-const FAILED_OVERLAY_DIM_ALPHA = 0.6;
-const OVERLAY_DISMISS_ASCENT = 10;
-const OVERLAY_DISMISS_SIZE = 12;
-
-const OVERLAY_X_SIZE = 60;
-const OVERLAY_X_CENTER_Y_OFFSET = 60;
-const OVERLAY_X_LINE_WIDTH = 8;
-const OVERLAY_FAIL_TITLE_Y_OFFSET = 50;
-const OVERLAY_FAIL_TITLE_ASCENT = 29;
-const OVERLAY_FAIL_DISMISS_Y_OFFSET = 80;
-const OVERLAY_FAIL_TEXT_SIZE = 36;
-
-// Mobile quest timer layout constants
-const MOBILE_QUEST_BOX_X = 8;
-const MOBILE_QUEST_BOX_GAP = 8;
-const MOBILE_QUEST_MINIMAP_W = 176; // normal minimap (160) + margin (8) + gap (8)
-
-// Tutorial layout constants
-const TUTORIAL_MAX_WIDTH = 500;
-const TUTORIAL_MAX_HEIGHT = 410;
-const TUTORIAL_CANVAS_PADDING_Y = 60;
-const DIALOG_CANVAS_PADDING = 40;
-const TUTORIAL_PAD = 16;
-const TUTORIAL_HEADER_H = 36;
-const TUTORIAL_HEADER_FILL_INSET = 2;
-const TUTORIAL_TITLE_Y = 24;
-const TUTORIAL_TITLE_ASCENT = 12;
-const TUTORIAL_DOT_GAP = 14;
-const TUTORIAL_DOT_BOTTOM = 16;
-const TUTORIAL_DOT_RADIUS = 4;
-const TUTORIAL_ILL_HEIGHT_FRACTION = 0.43;
-const TUTORIAL_SPRITE_MIN_FRACTION = 0.8;
-const TUTORIAL_SPRITE_MAX_HEIGHT = 72;
-const TUTORIAL_TEXT_LINE_SPACING = 18;
-const TUTORIAL_TEXT_LINE_ASCENT = 10;
-const TUTORIAL_TEXT_LINE_SIZE = 12;
-const TUTORIAL_BTN_W = 130;
-const TUTORIAL_BTN_H = 30;
-const TUTORIAL_BTN_Y_FROM_BOTTOM = 50;
-const TUTORIAL_BTN_LABEL_SIZE = 12;
-const TUTORIAL_HEADER_Y = 46;
-const TUTORIAL_TEXT_Y_GAP = 20;
-
-// Tutorial page 0 sprite offsets
-const T0_NPC_X_FACTOR = 1.3;
-const T0_NPC_Y_FACTOR = 0.5;
-const T0_CHILD_X_FACTOR = 0.45;
-const T0_CHILD_Y_FACTOR = 0.35;
-const T0_CHILD_SIZE_FACTOR = 0.72;
-const T0_HEART_X_FACTOR = 0.08;
-const T0_HEART_Y_FACTOR = 0.08;
-const T0_HEART_SIZE_FACTOR = 0.38;
-
-// Tutorial page 1 sprite offsets
-const T1_PANEL_CENTER_FRACTION = 0.5;
-const T1_ARROW_Y_FACTOR = 0.06;
-const T1_ARROW_SIZE_FACTOR = 0.5;
-const T1_BUILD_LABEL_Y_FACTOR = 0.68;
-const T1_BUILD_LABEL_ASCENT = 9;
-const T1_BUILD_LABEL_SIZE = 11;
-
-// Tutorial page 2 sprite offsets
-/** The tutorial's clawed-at barrier: well chewed, not yet broken through. */
-const T2_BARRIER_DAMAGE_STAGE = BARRIER_DAMAGE_STAGES - 2;
-const T2_ARROW_BOTTOM_FACTOR = 1.05;
-const T2_ARROW_MID_FACTOR = 0.65;
-const T2_ARROWHEAD_OUTER_Y = 0.72;
-const T2_ARROWHEAD_TIP_Y = 0.58;
-const T2_ENEMY_LABEL_Y_FACTOR = 1.2;
-const T2_ENEMY_LABEL_ASCENT = 9;
-const T2_ENEMY_LABEL_SIZE = 11;
-const T2_ARROW_NOTCH_OFFSET = 6;
-const T2_DASH_LENGTH = 3;
-const T2_DASH_GAP = 3;
 
 const APPROACH_TITLE = 'BUGABOOS INCOMING';
 /** Shown while the segment is called off — the timer is frozen and there is nothing to count. */
@@ -239,10 +165,7 @@ const NO_WOOD_FLASH_BLINK_FRAMES = 10;
 /** How often grit is shaken up between the boards of a grate being clawed from below. */
 const SCRABBLE_DUST_INTERVAL_FRAMES = 14;
 
-/** The warm flash a blow throws off the boards; additive, so it reads as sparks off the wood rather than a red box. */
-const BARRIER_HIT_FLASH_COLOR = '#ff9a4a';
 const BARRIER_CRITICAL_FRACTION = 0.35;
-const BARRIER_CRITICAL_COLOR = '#ef4444';
 
 /** Where along the north wall the nursery's torches hang, as fractions of its length. */
 const TORCH_WEST_FRACTION = 0.18;
@@ -253,7 +176,6 @@ const TORCH_WALL_FRACTIONS = [TORCH_WEST_FRACTION, TORCH_MIDDLE_FRACTION, TORCH_
 const TORCH_SEED_STRIDE = 1.7;
 
 const WOOD_LABEL_SIZE = 11;
-const WOOD_LABEL_STYLE = { size: WOOD_LABEL_SIZE, bold: true, color: '#fbbf24' } as const;
 const WOOD_LABEL_GAP_PX = 2;
 /** Lifts the pile's arrow clear of its label. */
 const WOOD_ARROW_LIFT_PX = 24;
@@ -279,30 +201,24 @@ const BUILD_BAR_HEIGHT_PX = 4;
 const BUILD_BAR_LIFT_PX = 6;
 const BUILD_LABEL_HEIGHT_PX = 13;
 
-const STATUS_PANEL_WIDTH_PX = 280;
-const STATUS_PANEL_MARGIN_PX = 12;
-const STATUS_PANEL_TOP_PX = 10;
-const STATUS_PAD_PX = 8;
-const STATUS_RADIUS_PX = 8;
-const STATUS_ROW_PX = 18;
-const STATUS_ROW_COMPACT_PX = 14;
-const STATUS_ROWS_COUNTDOWN = 4;
-const STATUS_ROWS_DEFENDING = 5;
-const STATUS_TITLE_SIZE = 14;
-const STATUS_TITLE_COMPACT_SIZE = 11;
-const STATUS_DETAIL_SIZE = 11;
-const STATUS_DETAIL_COMPACT_SIZE = 9;
-const STATUS_BAR_HEIGHT_PX = 6;
-const STATUS_INLINE_GAP_PX = 6;
-const STATUS_PIP_PX = 11;
-const STATUS_PIP_COMPACT_PX = 9;
-const STATUS_PIP_GAP_PX = 4;
-const STATUS_PIP_RADIUS_PX = 2;
-const STATUS_DEFENDING_BORDER = '#ef4444';
-const PIP_OPEN = { fill: 'rgba(0,0,0,0.5)', border: '#facc15', borderWidth: 1 } as const;
-const PIP_BOARDED = { fill: '#a8753d', border: '#e0b67a', borderWidth: 1 } as const;
-const PIP_DAMAGED = { fill: '#8a5c2e', border: '#fb923c', borderWidth: 1 } as const;
-const PIP_FAILING = { fill: '#7f1d1d', border: '#ef4444', borderWidth: 1 } as const;
+const GRATE_PIP_BORDER_WIDTH = 1;
+
+/** A grate as its status pip shows it. */
+type GratePip = 'open' | 'boarded' | 'damaged' | 'failing';
+
+function gratePipColors(theme: Theme, pip: GratePip): { fill: string; border: string } {
+  const { palette } = theme;
+  switch (pip) {
+    case 'open':
+      return { fill: palette.surface.sunken, border: palette.state.warning };
+    case 'boarded':
+      return { fill: palette.category.tool, border: palette.border.strong };
+    case 'damaged':
+      return { fill: palette.category.tool, border: palette.state.warning };
+    case 'failing':
+      return { fill: palette.surface.sunken, border: palette.state.danger };
+  }
+}
 
 /** The pixel centre of a grate tile. */
 function tileCentre(tile: { x: number; y: number }): { x: number; y: number } {
@@ -495,8 +411,6 @@ export class DefendQuestSystem implements GameSystem {
   }
 
   private tutorialPage = 0;
-  private tutorialButtons: Array<{ x: number; y: number; w: number; h: number; action: string }> =
-    [];
 
   private addMob: (mob: Mob) => void;
   /** The crawlers, as of the last update: who a spiked grate's thorns are credited to. */
@@ -679,9 +593,14 @@ export class DefendQuestSystem implements GameSystem {
     return this.phase === 'dialog' || this.phase === 'tutorial';
   }
 
-  /** Just the tutorial pages — the offer itself is claimed by the shared conversation's own overlay claim. */
+  /** Just the tutorial pages — the offer itself is the shared conversation's, on its own surface. */
   get isTutorialOpen(): boolean {
     return this.phase === 'tutorial';
+  }
+
+  /** Zero-based index of the tutorial page on screen. */
+  get tutorialPageIndex(): number {
+    return this.tutorialPage;
   }
 
   /**
@@ -763,27 +682,11 @@ export class DefendQuestSystem implements GameSystem {
     });
   }
 
-  /** Handle click on dialog menu buttons. */
-  handleClick(mx: number, my: number): boolean {
+  /** Takes down the quest-failed banner; false when it was not up. */
+  dismissFailedBanner(): boolean {
     if (this.failOverlayTimer > 0) {
       this.failOverlayTimer = 0;
       return true;
-    }
-    if (this.phase === 'tutorial') {
-      for (const btn of this.tutorialButtons) {
-        if (pointInRect(mx, my, btn)) {
-          if (btn.action === 'next') {
-            this.tutorialPage++;
-          } else if (btn.action === 'go') {
-            tutorialSeen = true;
-            this.tutorialButtons = [];
-            this.startCountdown();
-          }
-          this.tutorialButtons = [];
-          return true;
-        }
-      }
-      return true; // consume all clicks while tutorial is open
     }
     return false;
   }
@@ -795,7 +698,6 @@ export class DefendQuestSystem implements GameSystem {
     }
     if (this.phase === 'tutorial') {
       this.phase = 'npc_waiting';
-      this.tutorialButtons = [];
       return true;
     }
     return false;
@@ -805,7 +707,6 @@ export class DefendQuestSystem implements GameSystem {
   advancePage(): boolean {
     if (this.phase === 'tutorial') {
       const isLast = this.tutorialPage === TUTORIAL_PAGES - 1;
-      this.tutorialButtons = [];
       if (isLast) {
         tutorialSeen = true;
         this.startCountdown();
@@ -1559,8 +1460,7 @@ export class DefendQuestSystem implements GameSystem {
             {
               name: `${DEFEND_LOOT_BOX_TIER} Loot Box`,
               count: 1,
-              renderIcon: (ctx, x, y, size) =>
-                drawLootBoxRewardIcon(ctx, x, y, size, DEFEND_LOOT_BOX_TIER),
+              renderIcon: (ctx, rect) => drawLootBoxRewardIcon(ctx, rect, DEFEND_LOOT_BOX_TIER),
               note: 'Open it in a Safe Room.',
             },
           ],
@@ -1660,16 +1560,12 @@ export class DefendQuestSystem implements GameSystem {
     return this.hasBoardsForBuild(activeCrawler) ? 'ready' : 'pending';
   }
 
-  private grateScreenRect(
-    grate: { x: number; y: number },
-    camX: number,
-    camY: number,
-  ): AreaHighlightRect {
+  private grateScreenRect(grate: { x: number; y: number }, camX: number, camY: number): Rect {
     return {
       x: grate.x * TILE_SIZE - camX,
       y: grate.y * TILE_SIZE - camY,
-      width: TILE_SIZE,
-      height: TILE_SIZE,
+      w: TILE_SIZE,
+      h: TILE_SIZE,
     };
   }
 
@@ -1719,7 +1615,7 @@ export class DefendQuestSystem implements GameSystem {
         this.roomData.grateTiles.forEach((grate, grateIdx) => {
           if (!this.isGrateOpen(grateIdx)) return;
           drawAreaHighlightGround(ctx, this.grateScreenRect(grate, camX, camY), {
-            color: GUIDE_COLOR,
+            color: NURSERY_GUIDE_COLOR,
             nowMs,
             mood,
           });
@@ -1744,28 +1640,7 @@ export class DefendQuestSystem implements GameSystem {
     if (this.npc && !this.npc.isAlive && this.phase === 'failed') {
       const sx = this.npc.x - camX;
       const sy = this.npc.y - camY;
-      ctx.save();
-      ctx.strokeStyle = '#ef4444';
-      ctx.lineWidth = NPC_DEAD_X_LINE_WIDTH;
-      ctx.beginPath();
-      ctx.moveTo(
-        sx + TILE_SIZE * NPC_DEAD_X_MARGIN_FRACTION,
-        sy + TILE_SIZE * NPC_DEAD_X_MARGIN_FRACTION,
-      );
-      ctx.lineTo(
-        sx + TILE_SIZE * NPC_DEAD_X_END_FRACTION,
-        sy + TILE_SIZE * NPC_DEAD_X_END_FRACTION,
-      );
-      ctx.moveTo(
-        sx + TILE_SIZE * NPC_DEAD_X_END_FRACTION,
-        sy + TILE_SIZE * NPC_DEAD_X_MARGIN_FRACTION,
-      );
-      ctx.lineTo(
-        sx + TILE_SIZE * NPC_DEAD_X_MARGIN_FRACTION,
-        sy + TILE_SIZE * NPC_DEAD_X_END_FRACTION,
-      );
-      ctx.stroke();
-      ctx.restore();
+      paintDeadNpcCross(ctx, sx, sy, TILE_SIZE);
     }
 
     if (this.childVisible && (this.phase === 'complete_pending' || this.phase === 'complete')) {
@@ -1783,16 +1658,17 @@ export class DefendQuestSystem implements GameSystem {
         const grate = this.roomData.grateTiles[grateIdx];
         const isRepair = this.barrierOn(grateIdx) !== undefined;
         const hasBoards = this.hasBoardsForBuild(activeCrawler);
+        const mode = activeInputMode();
         const label = !hasBoards
           ? 'Need wood'
-          : platform.isMobile
-            ? isRepair
-              ? 'Tap to repair'
-              : 'Tap to construct'
-            : isRepair
-              ? 'Repair'
-              : 'Build Barrier';
-        const keyOverride = platform.isMobile ? undefined : 'R';
+          : byInputMode(mode, {
+              touch: isRepair ? 'Tap to repair' : 'Tap to construct',
+              pointer: isRepair ? 'Repair' : 'Build Barrier',
+            });
+        const keyOverride = byInputMode(mode, {
+          touch: undefined,
+          pointer: keyLabel('buildSummon'),
+        });
         drawInteractionPrompt(
           ctx,
           grate.x * TILE_SIZE - camX,
@@ -1880,14 +1756,10 @@ export class DefendQuestSystem implements GameSystem {
         damageStage: barrierDamageStage(shownFraction),
         planksLaid: BARRIER_PLANK_COUNT,
       });
-      if ((b.spikesHp ?? 0) > 0) drawBarrierSpikes(ctx, bx, by, TILE_SIZE);
+      if ((b.spikesHp ?? 0) > 0) paintBarrierSpikes(ctx, bx, by, TILE_SIZE);
       if (b.hitFlash > 0) {
-        ctx.save();
-        ctx.globalCompositeOperation = 'lighter';
-        ctx.globalAlpha = (b.hitFlash / BARRIER_HIT_FLASH_FRAMES) * BARRIER_HIT_ALPHA_FRACTION;
-        ctx.fillStyle = BARRIER_HIT_FLASH_COLOR;
-        ctx.fillRect(bx, by, TILE_SIZE, TILE_SIZE);
-        ctx.restore();
+        const flashAlpha = (b.hitFlash / BARRIER_HIT_FLASH_FRAMES) * BARRIER_HIT_ALPHA_FRACTION;
+        paintBarrierHitFlash(ctx, bx, by, TILE_SIZE, flashAlpha);
       }
     }
 
@@ -1927,7 +1799,7 @@ export class DefendQuestSystem implements GameSystem {
       this.roomData.grateTiles.forEach((grate, grateIdx) => {
         if (!this.isGrateOpen(grateIdx)) return;
         drawAreaHighlightFrame(ctx, this.grateScreenRect(grate, camX, camY), {
-          color: GUIDE_COLOR,
+          color: NURSERY_GUIDE_COLOR,
           nowMs,
           mood,
         });
@@ -1961,8 +1833,10 @@ export class DefendQuestSystem implements GameSystem {
     const centreX = worldX + TILE_SIZE * HALF - camX;
     const restockSeconds = Math.ceil(this.woodRespawnTimer / FRAMES_PER_SECOND);
     const label = this.woodPileAvailable ? 'WOOD' : `WOOD · ${restockSeconds}s`;
-    drawText(ctx, label, {
-      ...(this.woodPileAvailable ? WOOD_LABEL_STYLE : TEXT_PRESETS.muted),
+    worldText(ctx, label, {
+      ...(this.woodPileAvailable
+        ? { style: 'ready', size: WOOD_LABEL_SIZE, color: worldPalette.woodPileLabel }
+        : { style: 'muted' }),
       x: centreX,
       y: labelWorldY - camY - WOOD_LABEL_SIZE,
       align: 'center',
@@ -1979,7 +1853,7 @@ export class DefendQuestSystem implements GameSystem {
         labelTopWorldY + TILE_SIZE * WORLD_ARROW_RISE_TILES - WOOD_ARROW_LIFT_PX,
         camX,
         camY,
-        GUIDE_COLOR,
+        NURSERY_GUIDE_COLOR,
       );
     }
   }
@@ -2004,15 +1878,15 @@ export class DefendQuestSystem implements GameSystem {
       this.noWoodFlash.grateIdx === barrier.grateIdx &&
       Math.floor(this.noWoodFlash.frames / NO_WOOD_FLASH_BLINK_FRAMES) % 2 === 0;
     const title = refused ? 'Need wood!' : 'Repair';
-    const titleStyle = refused
-      ? TEXT_PRESETS.requirementShort
-      : affordable
-        ? TEXT_PRESETS.ready
-        : TEXT_PRESETS.label;
+    const titleStyle: Pick<WorldTextOptions, 'style'> = {
+      style: refused ? 'requirementShort' : affordable ? 'ready' : 'label',
+    };
     const costText = `${BOARDS_PER_BUILD}`;
-    const costStyle = affordable ? TEXT_PRESETS.requirementMet : TEXT_PRESETS.requirementShort;
-    const titleWidth = measureTextWidth(ctx, title, titleStyle);
-    const costWidth = measureTextWidth(ctx, costText, costStyle);
+    const costStyle: Pick<WorldTextOptions, 'style'> = {
+      style: affordable ? 'requirementMet' : 'requirementShort',
+    };
+    const titleWidth = measureWorldText(ctx, title, titleStyle).width;
+    const costWidth = measureWorldText(ctx, costText, costStyle).width;
     const rowWidth = titleWidth + BADGE_GAP_PX + BADGE_ICON_PX + BADGE_ICON_GAP_PX + costWidth;
     const width = rowWidth + BADGE_PAD_X_PX * 2;
     const height = BADGE_HEIGHT_PX;
@@ -2020,48 +1894,44 @@ export class DefendQuestSystem implements GameSystem {
     const centreX = barrier.worldX + TILE_SIZE * HALF - camX;
     const top = barrier.worldY - camY - BADGE_LIFT_PX - height + bob;
 
-    drawBox(ctx, {
-      x: centreX,
-      y: top,
-      width,
-      height,
-      alignX: 'center',
-      ...(refused
-        ? BOX_PRESETS.danger
-        : affordable
-          ? BOX_PRESETS.worldCaptionReady
-          : BOX_PRESETS.worldCaptionPending),
-      radius: BADGE_RADIUS_PX,
-    });
+    worldPlate(
+      ctx,
+      { x: centreX - width * HALF, y: top, w: width, h: height },
+      {
+        style: refused ? 'danger' : affordable ? 'captionReady' : 'captionPending',
+        radius: BADGE_RADIUS_PX,
+      },
+    );
     let x = centreX - rowWidth * HALF;
     const textY = top + BADGE_TEXT_TOP_PX;
-    drawText(ctx, title, { ...titleStyle, x, y: textY });
+    worldText(ctx, title, { ...titleStyle, x, y: textY });
     x += titleWidth + BADGE_GAP_PX;
     ctx.save();
     ctx.globalAlpha = affordable ? 1 : BADGE_ICON_SHORT_ALPHA;
-    drawResourceIcon(
-      ctx,
-      'wood_board',
-      x,
-      top + (height - BADGE_ICON_PX) * HALF - BADGE_BAR_PX * HALF,
-      BADGE_ICON_PX,
-    );
+    const badgeIconTop = top + (height - BADGE_ICON_PX) * HALF - BADGE_BAR_PX * HALF;
+    drawResourceIcon(ctx, { x, y: badgeIconTop, w: BADGE_ICON_PX, h: BADGE_ICON_PX }, 'wood_board');
     ctx.restore();
     x += BADGE_ICON_PX + BADGE_ICON_GAP_PX;
-    drawText(ctx, costText, { ...costStyle, x, y: textY });
+    worldText(ctx, costText, { ...costStyle, x, y: textY });
 
-    drawProgressBar(ctx, {
-      x: centreX - width * HALF + BADGE_BAR_INSET_PX,
-      y: top + height - BADGE_BAR_PX - BADGE_BAR_INSET_PX,
-      width: width - BADGE_BAR_INSET_PX * 2,
-      height: BADGE_BAR_PX,
-      value: barrier.hp / barrier.maxHp,
-      ...PROGRESS_PRESETS.structureHp,
-      fill:
-        barrier.hp / barrier.maxHp < BARRIER_CRITICAL_FRACTION
-          ? BARRIER_CRITICAL_COLOR
-          : PROGRESS_PRESETS.structureHp.fill,
-    });
+    const hpFraction = barrier.hp / barrier.maxHp;
+    worldBar(
+      ctx,
+      {
+        x: centreX - width * HALF + BADGE_BAR_INSET_PX,
+        y: top + height - BADGE_BAR_PX - BADGE_BAR_INSET_PX,
+        w: width - BADGE_BAR_INSET_PX * 2,
+        h: BADGE_BAR_PX,
+      },
+      {
+        style: 'structureHp',
+        value: hpFraction,
+        fill:
+          hpFraction < BARRIER_CRITICAL_FRACTION
+            ? worldPalette.bar.hp
+            : worldPalette.bar.structureHp,
+      },
+    );
   }
 
   private renderBuildProgress(ctx: CanvasRenderingContext2D, camX: number, camY: number): void {
@@ -2070,63 +1940,64 @@ export class DefendQuestSystem implements GameSystem {
     const centreX = grate.x * TILE_SIZE - camX + TILE_SIZE * HALF;
     const top = grate.y * TILE_SIZE - camY - BUILD_BAR_LIFT_PX;
     const ratio = 1 - this.pendingBuild.framesLeft / this.pendingBuild.totalFrames;
-    drawText(ctx, this.pendingBuild.isRepair ? 'Repairing…' : 'Building…', {
-      ...TEXT_PRESETS.ready,
+    worldText(ctx, this.pendingBuild.isRepair ? 'Repairing…' : 'Building…', {
+      style: 'ready',
       x: centreX,
       y: top - BUILD_LABEL_HEIGHT_PX,
       align: 'center',
     });
-    drawProgressBar(ctx, {
-      x: centreX - BUILD_BAR_WIDTH_PX * HALF,
-      y: top,
-      width: BUILD_BAR_WIDTH_PX,
-      height: BUILD_BAR_HEIGHT_PX,
-      value: ratio,
-      ...PROGRESS_PRESETS.build,
-    });
+    worldBar(
+      ctx,
+      {
+        x: centreX - BUILD_BAR_WIDTH_PX * HALF,
+        y: top,
+        w: BUILD_BAR_WIDTH_PX,
+        h: BUILD_BAR_HEIGHT_PX,
+      },
+      { style: 'build', value: ratio },
+    );
   }
 
-  renderUI(ctx: CanvasRenderingContext2D, mobileTopY?: number): void {
-    if (this.phase === 'inactive') return;
-
-    if (this.phase === 'countdown' || this.phase === 'defending') {
-      if (platform.isMobile && mobileTopY !== undefined) {
-        const boxWidth =
-          viewportWidth() - MOBILE_QUEST_MINIMAP_W - MOBILE_QUEST_BOX_X - MOBILE_QUEST_BOX_GAP;
-        this.renderStatusPanel(ctx, MOBILE_QUEST_BOX_X, mobileTopY, boxWidth, true);
-      } else {
-        const width = Math.min(STATUS_PANEL_WIDTH_PX, viewportWidth() - STATUS_PANEL_MARGIN_PX * 2);
-        this.renderStatusPanel(
-          ctx,
-          (viewportWidth() - width) * HALF,
-          STATUS_PANEL_TOP_PX,
-          width,
-          false,
-        );
-      }
-    }
-
-    if (this.phase === 'tutorial') {
-      this.renderTutorial(ctx);
-    }
-
-    if (this.failOverlayTimer > 0) {
-      this.renderFailedOverlay(ctx);
-    }
+  /**
+   * The quest-failed banner as a surface. It rides over live play: on touch
+   * the HUD stays live under it and a tap on the world dismisses it (the
+   * scene's world tap calls {@link dismissFailedBanner}), and Escape and the
+   * other keys pass it by. With a mouse it takes the screen, and a click
+   * anywhere dismisses it. A fresh press of the attack key dismisses it on
+   * either.
+   */
+  failedBannerSurface(id: string, audio: UiAudio | null): Surface {
+    return {
+      id,
+      get band() {
+        return activeInputMode() === 'touch' ? 'panel' : 'modal';
+      },
+      haltsWorld: false,
+      isOpen: () => this.isOutcomeOverlayShowing,
+      render: (ui) => {
+        questFailedOverlay(ui, ui.screen, ui.density, this.failedOverlayAlpha());
+        if (ui.density === 'touch') return;
+        ui.hit('dismiss', ui.screen, {
+          onTap: () => void this.dismissFailedBanner(),
+          focusable: false,
+        });
+      },
+      onKey: (key, mods) => {
+        if (keybindings.actionFor(key) !== 'attack') return false;
+        const freshPress = mods.repeat !== true && mods.predatesSurface !== true;
+        if (freshPress && this.dismissFailedBanner()) audio?.play('menu_click');
+        return true;
+      },
+    };
   }
 
   /**
    * The wave's status: what to do, how long is left as a draining bar, and a
    * pip per grate showing which are boarded — with the mother's health once
-   * the bugaboos are in. `compact` is the phone layout beside the minimap.
+   * the bugaboos are in. `null` outside the countdown and the defence.
    */
-  private renderStatusPanel(
-    ctx: CanvasRenderingContext2D,
-    x: number,
-    y: number,
-    width: number,
-    compact: boolean,
-  ): void {
+  topBandEntry(): TopBandEntry | null {
+    if (this.phase !== 'countdown' && this.phase !== 'defending') return null;
     const defending = this.phase === 'defending';
     const held = this.phase === 'countdown' && this.encounterAborted;
     const title = held ? HELD_TITLE : defending ? DEFENSE_TITLE : APPROACH_TITLE;
@@ -2143,373 +2014,81 @@ export class DefendQuestSystem implements GameSystem {
       : defending
         ? this.defenseTimer / DEFENSE_TIMER_FRAMES
         : this.approachTimer / APPROACH_TIMER_FRAMES;
-    const rows = defending ? STATUS_ROWS_DEFENDING : STATUS_ROWS_COUNTDOWN;
-    const rowHeight = compact ? STATUS_ROW_COMPACT_PX : STATUS_ROW_PX;
-    const height = STATUS_PAD_PX * 2 + rows * rowHeight;
-
-    const panel = drawBox(ctx, {
-      x,
-      y,
-      width,
-      height,
-      ...BOX_PRESETS.panel,
-      border: defending ? STATUS_DEFENDING_BORDER : GUIDE_COLOR,
-      radius: STATUS_RADIUS_PX,
-      padding: STATUS_PAD_PX,
-    });
-    const inner = panel.inner;
-    const centreX = inner.x + inner.width * HALF;
-    let rowTop = inner.y;
-
-    drawText(ctx, title, {
-      ...(defending ? TEXT_PRESETS.danger : TEXT_PRESETS.ready),
-      size: compact ? STATUS_TITLE_COMPACT_SIZE : STATUS_TITLE_SIZE,
-      x: centreX,
-      y: rowTop,
-      align: 'center',
-    });
-    rowTop += rowHeight;
-    drawText(ctx, detail, {
-      ...TEXT_PRESETS.label,
-      size: compact ? STATUS_DETAIL_COMPACT_SIZE : STATUS_DETAIL_SIZE,
-      x: centreX,
-      y: rowTop,
-      align: 'center',
-    });
-    rowTop += rowHeight;
-    drawProgressBar(ctx, {
-      x: inner.x,
-      y: rowTop + (rowHeight - STATUS_BAR_HEIGHT_PX) * HALF,
-      width: inner.width,
-      height: STATUS_BAR_HEIGHT_PX,
-      value: timeFraction,
-      ...(defending ? PROGRESS_PRESETS.stamina : PROGRESS_PRESETS.build),
-    });
-    rowTop += rowHeight;
-    this.renderGratePips(ctx, inner.x, rowTop, inner.width, rowHeight, compact);
-
+    const tone = defending ? 'danger' : 'warning';
+    const rows: BandRow[] = [
+      { kind: 'text', text: title, role: 'title', tone },
+      { kind: 'text', text: detail, role: 'label', tabular: true, wrap: true, maxLines: 2 },
+      {
+        kind: 'meter',
+        id: 'defend-status/time',
+        value: timeFraction,
+        max: 1,
+        meterKind: defending ? 'stamina' : 'progress',
+      },
+    ];
+    const grates = this.gratePipsRow();
+    if (grates !== null) rows.push(grates);
     if (defending && this.npc) {
-      rowTop += rowHeight;
-      const labelWidth = measureTextWidth(ctx, MOTHER_LABEL, TEXT_PRESETS.hint);
-      drawText(ctx, MOTHER_LABEL, {
-        ...TEXT_PRESETS.hint,
-        x: inner.x,
-        y: rowTop + (rowHeight - TEXT_PRESETS.hint.size) * HALF,
-      });
-      drawProgressBar(ctx, {
-        x: inner.x + labelWidth + STATUS_INLINE_GAP_PX,
-        y: rowTop + (rowHeight - STATUS_BAR_HEIGHT_PX) * HALF,
-        width: inner.width - labelWidth - STATUS_INLINE_GAP_PX,
-        height: STATUS_BAR_HEIGHT_PX,
-        value: this.npc.hp / this.npc.maxHp,
-        ...PROGRESS_PRESETS.hp,
+      rows.push({
+        kind: 'meter',
+        id: 'defend-status/mother',
+        value: this.npc.hp,
+        max: this.npc.maxHp,
+        meterKind: 'hp',
+        label: MOTHER_LABEL,
       });
     }
+    return stackedBandEntry({ id: 'defend-status', priority: 'encounter', accentTone: tone, rows });
   }
 
   /** "Grates" and one pip per grate: open, boarded, or boarded and failing. */
-  private renderGratePips(
-    ctx: CanvasRenderingContext2D,
-    x: number,
-    top: number,
-    width: number,
-    rowHeight: number,
-    compact: boolean,
-  ): void {
-    if (!this.roomData) return;
+  private gratePipsRow(): BandRow | null {
+    if (!this.roomData) return null;
     const count = this.roomData.grateTiles.length;
     const boarded = this.barriers.length;
     const label = `Grates ${boarded}/${count}`;
-    const labelStyle = boarded === count ? TEXT_PRESETS.requirementMet : TEXT_PRESETS.label;
-    drawText(ctx, label, {
-      ...labelStyle,
-      x,
-      y: top + (rowHeight - labelStyle.size) * HALF,
-    });
-    const pip = compact ? STATUS_PIP_COMPACT_PX : STATUS_PIP_PX;
-    const pipsWidth = count * pip + (count - 1) * STATUS_PIP_GAP_PX;
-    let pipX = x + width - pipsWidth;
-    const pipY = top + (rowHeight - pip) * HALF;
+    const pips: GratePip[] = [];
     for (let grateIdx = 0; grateIdx < count; grateIdx++) {
       const barrier = this.barrierOn(grateIdx);
       const hpFraction = barrier === undefined ? 0 : barrier.hp / barrier.maxHp;
-      const style =
+      pips.push(
         barrier === undefined
-          ? PIP_OPEN
+          ? 'open'
           : hpFraction < BARRIER_CRITICAL_FRACTION
-            ? PIP_FAILING
+            ? 'failing'
             : hpFraction < 1
-              ? PIP_DAMAGED
-              : PIP_BOARDED;
-      drawBox(ctx, {
-        x: pipX,
-        y: pipY,
-        width: pip,
-        height: pip,
-        radius: STATUS_PIP_RADIUS_PX,
-        ...style,
-      });
-      pipX += pip + STATUS_PIP_GAP_PX;
+              ? 'damaged'
+              : 'boarded',
+      );
     }
+    return {
+      kind: 'custom',
+      height: (ui) => Math.max(lineHeightOf(ui, 'label'), ui.theme.space.md),
+      render: (ui, rect) => {
+        const { space, palette, radius } = ui.theme;
+        text(ui, rect, {
+          text: label,
+          role: 'label',
+          color: boarded === count ? palette.state.success : undefined,
+        });
+        const pipSize = space.md;
+        const pipsWidth = count * pipSize + Math.max(0, count - 1) * space.xs;
+        let pipX = rect.x + rect.w - pipsWidth;
+        const pipY = rect.y + (rect.h - pipSize) * HALF;
+        for (const pip of pips) {
+          const colors = gratePipColors(ui.theme, pip);
+          const pipRect = { x: pipX, y: pipY, w: pipSize, h: pipSize };
+          fillRounded(ui.ctx, pipRect, radius.sm, colors.fill);
+          strokeRounded(ui.ctx, pipRect, radius.sm, colors.border, GRATE_PIP_BORDER_WIDTH);
+          pipX += pipSize + space.xs;
+        }
+      },
+    };
   }
 
-  private renderFailedOverlay(ctx: CanvasRenderingContext2D): void {
-    const cw = viewportWidth();
-    const ch = viewportHeight();
-    const alpha =
-      this.failOverlayTimer < OVERLAY_FADE_FRAMES ? this.failOverlayTimer / OVERLAY_FADE_FRAMES : 1;
-
-    drawOverlay(ctx, {
-      canvasWidth: cw,
-      canvasHeight: ch,
-      alpha: alpha * FAILED_OVERLAY_DIM_ALPHA,
-    });
-
-    ctx.save();
-    ctx.globalAlpha = alpha;
-    const xCenterY = ch / 2 - OVERLAY_X_CENTER_Y_OFFSET;
-    ctx.strokeStyle = '#ef4444';
-    ctx.lineWidth = OVERLAY_X_LINE_WIDTH;
-    ctx.lineCap = 'round';
-    ctx.beginPath();
-    ctx.moveTo(cw / 2 - OVERLAY_X_SIZE, xCenterY - OVERLAY_X_SIZE);
-    ctx.lineTo(cw / 2 + OVERLAY_X_SIZE, xCenterY + OVERLAY_X_SIZE);
-    ctx.moveTo(cw / 2 + OVERLAY_X_SIZE, xCenterY - OVERLAY_X_SIZE);
-    ctx.lineTo(cw / 2 - OVERLAY_X_SIZE, xCenterY + OVERLAY_X_SIZE);
-    ctx.stroke();
-    ctx.lineCap = 'butt';
-    ctx.restore();
-
-    drawFittedTitle(ctx, 'QUEST FAILED', {
-      centerX: cw / 2,
-      y: ch / 2 + OVERLAY_FAIL_TITLE_Y_OFFSET - OVERLAY_FAIL_TITLE_ASCENT,
-      size: OVERLAY_FAIL_TEXT_SIZE,
-      color: '#ef4444',
-      alpha,
-      glow: '#ef4444',
-      glowBlur: OVERLAY_TITLE_GLOW_BLUR,
-    });
-    drawText(ctx, 'Space or click to dismiss', {
-      x: cw / 2,
-      y: ch / 2 + OVERLAY_FAIL_DISMISS_Y_OFFSET - OVERLAY_DISMISS_ASCENT,
-      size: OVERLAY_DISMISS_SIZE,
-      color: 'rgba(200,200,200,0.7)',
-      align: 'center',
-      alpha,
-    });
-  }
-
-  private renderTutorial(ctx: CanvasRenderingContext2D): void {
-    const cw = viewportWidth();
-    const ch = viewportHeight();
-    const dw = Math.min(TUTORIAL_MAX_WIDTH, cw - DIALOG_CANVAS_PADDING);
-    const dh = Math.min(TUTORIAL_MAX_HEIGHT, ch - TUTORIAL_CANVAS_PADDING_Y);
-    const dx = Math.floor((cw - dw) / 2);
-    const dy = Math.floor((ch - dh) / 2);
-    const PAGES = TUTORIAL_PAGES;
-
-    ctx.save();
-
-    ctx.fillStyle = 'rgba(0,0,0,0.88)';
-    ctx.fillRect(0, 0, cw, ch);
-
-    ctx.fillStyle = '#0b1220';
-    ctx.fillRect(dx, dy, dw, dh);
-    ctx.strokeStyle = '#fbbf24';
-    ctx.lineWidth = 2;
-    ctx.strokeRect(dx, dy, dw, dh);
-
-    ctx.fillStyle = '#1e3a5f';
-    ctx.fillRect(
-      dx + TUTORIAL_HEADER_FILL_INSET,
-      dy + TUTORIAL_HEADER_FILL_INSET,
-      dw - TUTORIAL_HEADER_FILL_INSET * 2,
-      TUTORIAL_HEADER_H,
-    );
-
-    const titles = ['THE QUEST', 'BUILD BARRIERS', 'THE THREAT'];
-    drawText(ctx, titles[this.tutorialPage], {
-      x: dx + dw / 2,
-      y: dy + TUTORIAL_TITLE_Y - TUTORIAL_TITLE_ASCENT,
-      size: 15,
-      bold: true,
-      color: '#fbbf24',
-      align: 'center',
-    });
-
-    const dotsX = dx + dw / 2 - ((PAGES - 1) * TUTORIAL_DOT_GAP) / 2;
-    const dotsY = dy + dh - TUTORIAL_DOT_BOTTOM;
-    for (let i = 0; i < PAGES; i++) {
-      ctx.beginPath();
-      ctx.arc(dotsX + i * TUTORIAL_DOT_GAP, dotsY, TUTORIAL_DOT_RADIUS, 0, Math.PI * 2);
-      ctx.fillStyle = i === this.tutorialPage ? '#fbbf24' : '#334155';
-      ctx.fill();
-    }
-
-    const illX = dx + TUTORIAL_PAD;
-    const illY = dy + TUTORIAL_HEADER_Y;
-    const illW = dw - TUTORIAL_PAD * 2;
-    const illH = Math.floor(dh * TUTORIAL_ILL_HEIGHT_FRACTION);
-
-    ctx.fillStyle = '#111827';
-    ctx.fillRect(illX, illY, illW, illH);
-    ctx.strokeStyle = '#1e293b';
-    ctx.lineWidth = 1;
-    ctx.strokeRect(illX, illY, illW, illH);
-
-    const s = Math.min(illH * TUTORIAL_SPRITE_MIN_FRACTION, TUTORIAL_SPRITE_MAX_HEIGHT);
-    const icx = illX + illW / 2;
-    const icy = illY + illH / 2;
-
-    if (this.tutorialPage === 0) {
-      drawQuestNPCSprite(ctx, icx - s * T0_NPC_X_FACTOR, icy - s * T0_NPC_Y_FACTOR, s);
-      drawChildSprite(
-        ctx,
-        icx + s * T0_CHILD_X_FACTOR,
-        icy - s * T0_CHILD_Y_FACTOR,
-        s * T0_CHILD_SIZE_FACTOR,
-        0,
-        false,
-        -1,
-      );
-      const heartSize = Math.floor(s * T0_HEART_SIZE_FACTOR);
-      drawText(ctx, '♥', {
-        x: icx - s * T0_HEART_X_FACTOR,
-        y: icy + s * T0_HEART_Y_FACTOR - Math.round(heartSize * TEXT_HEIGHT_FACTOR),
-        size: heartSize,
-        bold: true,
-        color: '#f87171',
-        align: 'center',
-      });
-    } else if (this.tutorialPage === 1) {
-      const hw = illW / 2;
-      drawNurseryWoodPile(
-        ctx,
-        illX + hw * T1_PANEL_CENTER_FRACTION - s * TILE_CENTER_OFFSET,
-        icy - s * TILE_CENTER_OFFSET,
-        s,
-        true,
-      );
-      const arrowSize = Math.floor(s * T1_ARROW_SIZE_FACTOR);
-      drawText(ctx, '→', {
-        x: illX + hw,
-        y: icy + s * T1_ARROW_Y_FACTOR - Math.round(arrowSize * TEXT_HEIGHT_FACTOR),
-        size: arrowSize,
-        bold: true,
-        color: '#fbbf24',
-        align: 'center',
-      });
-      drawNurseryBarrier(
-        ctx,
-        illX + hw + hw * T1_PANEL_CENTER_FRACTION - s * TILE_CENTER_OFFSET,
-        icy - s * TILE_CENTER_OFFSET,
-        s,
-        { variant: 0, damageStage: 0, planksLaid: BARRIER_PLANK_COUNT },
-      );
-      drawText(ctx, '[R] to build', {
-        x: illX + hw + hw * T1_PANEL_CENTER_FRACTION,
-        y: icy + s * T1_BUILD_LABEL_Y_FACTOR - T1_BUILD_LABEL_ASCENT,
-        size: T1_BUILD_LABEL_SIZE,
-        bold: true,
-        color: '#fbbf24',
-        align: 'center',
-        outline: true,
-      });
-    } else {
-      drawNurseryBarrier(ctx, icx - s * TILE_CENTER_OFFSET, icy - s * TILE_CENTER_OFFSET, s, {
-        variant: 0,
-        damageStage: T2_BARRIER_DAMAGE_STAGE,
-        planksLaid: BARRIER_PLANK_COUNT,
-      });
-      ctx.save();
-      ctx.strokeStyle = '#ef4444';
-      ctx.lineWidth = 2;
-      ctx.setLineDash([T2_DASH_LENGTH, T2_DASH_GAP]);
-      ctx.beginPath();
-      ctx.moveTo(icx, icy + s * T2_ARROW_BOTTOM_FACTOR);
-      ctx.lineTo(icx, icy + s * T2_ARROW_MID_FACTOR);
-      ctx.stroke();
-      ctx.setLineDash([]);
-      ctx.lineWidth = 2;
-      ctx.beginPath();
-      ctx.moveTo(icx - T2_ARROW_NOTCH_OFFSET, icy + s * T2_ARROWHEAD_OUTER_Y);
-      ctx.lineTo(icx, icy + s * T2_ARROWHEAD_TIP_Y);
-      ctx.lineTo(icx + T2_ARROW_NOTCH_OFFSET, icy + s * T2_ARROWHEAD_OUTER_Y);
-      ctx.stroke();
-      ctx.restore();
-      drawText(ctx, 'enemies spawn below!', {
-        x: icx,
-        y: icy + s * T2_ENEMY_LABEL_Y_FACTOR - T2_ENEMY_LABEL_ASCENT,
-        size: T2_ENEMY_LABEL_SIZE,
-        bold: true,
-        color: '#ef4444',
-        align: 'center',
-      });
-    }
-
-    const descriptions = [
-      [
-        'The goblin mother bars the way on while this',
-        'runs. Keep her alive for 60 seconds — or walk',
-        'out on it, and the boards come straight down.',
-      ],
-      [
-        'Walk over the WOOD PILE to collect boards.',
-        'Stand by a glowing grate, then press [R]',
-        'to board it up. Each barrier costs 4 boards.',
-      ],
-      [
-        'Bugaboos crawl up from grates to attack!',
-        'Barriers hold them — repair any that are clawed.',
-        'Survive the full timer to complete the quest.',
-      ],
-    ];
-
-    const textStartY = illY + illH + TUTORIAL_TEXT_Y_GAP;
-    const textWidth = dw - TUTORIAL_PAD * 2;
-    // Joined rather than drawn one authored line at a time: those lines were
-    // wrapped by hand for the desktop-width box, so on a narrower mobile box
-    // drawText's own word-wrap re-flows them to fit instead of running past
-    // the padded edge.
-    drawText(ctx, descriptions[this.tutorialPage].join(' '), {
-      x: dx + TUTORIAL_PAD,
-      y: textStartY - TUTORIAL_TEXT_LINE_ASCENT,
-      size: TUTORIAL_TEXT_LINE_SIZE,
-      color: '#cbd5e1',
-      align: 'center',
-      width: textWidth,
-      lineHeight: TUTORIAL_TEXT_LINE_SPACING,
-    });
-
-    this.tutorialButtons = [];
-    const btnX = dx + dw - TUTORIAL_PAD - TUTORIAL_BTN_W;
-    const btnY = dy + dh - TUTORIAL_BTN_Y_FROM_BOTTOM;
-    const isLast = this.tutorialPage === PAGES - 1;
-
-    beginMenuFocus('defend-quest');
-    drawButton(ctx, {
-      x: btnX,
-      y: btnY,
-      width: TUTORIAL_BTN_W,
-      height: TUTORIAL_BTN_H,
-      label: isLast ? "Let's Go!" : 'Next  ›',
-      ...(isLast ? BUTTON_PRESETS.success : BUTTON_PRESETS.blue),
-      labelSize: TUTORIAL_BTN_LABEL_SIZE,
-      // The only button on the page, and Space turned it before the ring
-      // existed — without this the ring would swallow the press and strand the
-      // player on page one.
-      primaryAction: true,
-    });
-    this.tutorialButtons.push({
-      x: btnX,
-      y: btnY,
-      w: TUTORIAL_BTN_W,
-      h: TUTORIAL_BTN_H,
-      action: isLast ? 'go' : 'next',
-    });
-    endMenuFocus();
-
-    ctx.restore();
+  private failedOverlayAlpha(): number {
+    const fadingOut = this.failOverlayTimer < OVERLAY_FADE_FRAMES;
+    return fadingOut ? this.failOverlayTimer / OVERLAY_FADE_FRAMES : 1;
   }
 
   /** Snapshots the quest for the safe-room checkpoint. See {@link DefendQuestCheckpoint}. */
@@ -2578,42 +2157,5 @@ export class DefendQuestSystem implements GameSystem {
     this.questMobs = [];
     this.barriers = [];
     this.effects.clear();
-    this.tutorialButtons = [];
   }
-}
-
-/** Sharpened stakes nailed round a boarded grate, points out. */
-const BARRIER_SPIKE_COUNT = 8;
-const BARRIER_SPIKE_RING = 0.46;
-const BARRIER_SPIKE_LENGTH = 0.2;
-const BARRIER_SPIKE_WIDTH = 0.06;
-const BARRIER_SPIKE_FILL = '#d8b27a';
-const BARRIER_SPIKE_INK = '#2a1a10';
-
-function drawBarrierSpikes(ctx: CanvasRenderingContext2D, x: number, y: number, ts: number): void {
-  const cx = x + ts * TILE_CENTER_OFFSET;
-  const cy = y + ts * TILE_CENTER_OFFSET;
-  ctx.save();
-  ctx.fillStyle = BARRIER_SPIKE_FILL;
-  ctx.strokeStyle = BARRIER_SPIKE_INK;
-  ctx.lineWidth = 1;
-  for (let spike = 0; spike < BARRIER_SPIKE_COUNT; spike++) {
-    const angle = (spike / BARRIER_SPIKE_COUNT) * Math.PI * 2;
-    const dirX = Math.cos(angle);
-    const dirY = Math.sin(angle);
-    const rootX = cx + dirX * ts * (BARRIER_SPIKE_RING - BARRIER_SPIKE_LENGTH);
-    const rootY = cy + dirY * ts * (BARRIER_SPIKE_RING - BARRIER_SPIKE_LENGTH);
-    const tipX = cx + dirX * ts * BARRIER_SPIKE_RING;
-    const tipY = cy + dirY * ts * BARRIER_SPIKE_RING;
-    const sideX = -dirY * ts * BARRIER_SPIKE_WIDTH;
-    const sideY = dirX * ts * BARRIER_SPIKE_WIDTH;
-    ctx.beginPath();
-    ctx.moveTo(rootX + sideX, rootY + sideY);
-    ctx.lineTo(tipX, tipY);
-    ctx.lineTo(rootX - sideX, rootY - sideY);
-    ctx.closePath();
-    ctx.fill();
-    ctx.stroke();
-  }
-  ctx.restore();
 }

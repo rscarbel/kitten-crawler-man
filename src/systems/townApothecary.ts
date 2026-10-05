@@ -11,14 +11,14 @@
  * — the same rule the market stalls' stock plays by, and the only thing keeping
  * a 4-coin health potion from making the General Store's 5-coin one pointless.
  *
- * Pure data + effect application; `PricedMenuPanel` owns the UI and
+ * Pure data + effect application; the shop screen owns the UI and
  * `BuildingInteriorScene` owns the sounds and the interaction gating.
  */
 
 import { AILMENT_STATUSES } from '../core/StatusEffect';
 import type { ItemId } from '../core/ItemDefs';
 import type { Player } from '../Player';
-import type { PricedMenu, PricedOption, PricedPurchaseHandler } from '../ui/PricedMenuPanel';
+import type { ShopMenu, ShopRow, ShopPurchaseHandler } from '../ui/screens/shop/shopSession';
 import type { TownMemory } from '../core/TownMemory';
 import type { ResidentHost } from './townResidents';
 import { giveInventoryItem, rotateLine } from './townServiceUtil';
@@ -59,8 +59,8 @@ export function buildApothecaryMenu(
   memory: TownMemory,
   turn: number,
   host: ResidentHost | null,
-): PricedMenu {
-  const poultice: PricedOption = {
+): ShopMenu {
+  const poultice: ShopRow = {
     key: POULTICE_KEY,
     label: 'Marsh Poultice',
     price: POULTICE_PRICE,
@@ -68,7 +68,7 @@ export function buildApothecaryMenu(
   };
   if (memory.poulticesLeft <= 0) poultice.unavailable = 'Sold out';
 
-  const cure: PricedOption = {
+  const cure: ShopRow = {
     key: CURE_KEY,
     label: "Fen's Antidote",
     price: CURE_PRICE,
@@ -76,7 +76,7 @@ export function buildApothecaryMenu(
   };
   if (!afflicted(party)) cure.unavailable = 'Unafflicted';
 
-  const tonic: PricedOption = {
+  const tonic: ShopRow = {
     key: TONIC_KEY,
     label: 'Ruin-Root Tonic',
     price: TONIC_PRICE,
@@ -92,10 +92,7 @@ export function buildApothecaryMenu(
 }
 
 /** Serves whichever remedy was bought, against the visit's own batch. */
-export function serveRemedy(
-  party: ReadonlyArray<Player>,
-  memory: TownMemory,
-): PricedPurchaseHandler {
+export function serveRemedy(party: ReadonlyArray<Player>, memory: TownMemory): ShopPurchaseHandler {
   return (option, buyer) => {
     if (option.key === CURE_KEY) {
       let cleared = 0;

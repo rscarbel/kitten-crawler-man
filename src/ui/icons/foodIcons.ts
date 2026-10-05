@@ -7,22 +7,16 @@
  * never drift apart.
  */
 
-import type { ItemId } from '../../core/ItemDefs';
 import { DISH_DEF } from '../../systems/bopcaDialog';
 import { drawDishIcon } from '../../sprites/safeRoomCounter';
+import type { Rect } from '../core/geom';
+import { iconSquare } from './iconSquare';
 
 /** The two food ids this module can draw. Closed, so a new dish cannot ship iconless. */
 export type FoodIconId = 'hamburger' | 'hollow_stew';
 
-/** Every id this module can draw, the single source of truth for the id set below and for the icon bake gate. */
+/** Every id this module can draw, in the order the icon bake gate lays them out. */
 export const FOOD_ICON_ID_LIST: readonly FoodIconId[] = ['hamburger', 'hollow_stew'];
-
-const FOOD_ICON_IDS: ReadonlySet<string> = new Set<FoodIconId>(FOOD_ICON_ID_LIST);
-
-/** Whether `id` is a food item, and so drawable by {@link drawFoodIcon}. */
-export function isFoodIconId(id: ItemId): id is FoodIconId {
-  return FOOD_ICON_IDS.has(id);
-}
 
 const FULL_CIRCLE = Math.PI * 2;
 const OUTLINE = '#3a2410';
@@ -240,14 +234,9 @@ function drawHamburgerIcon(
   }
 }
 
-/** Draws one food item's icon into a square icon region at `x`,`y`. */
-export function drawFoodIcon(
-  ctx: CanvasRenderingContext2D,
-  id: FoodIconId,
-  x: number,
-  y: number,
-  size: number,
-): void {
+/** Draws one food item's icon into the largest square centred in `rect`. */
+export function drawFoodIcon(ctx: CanvasRenderingContext2D, rect: Rect, id: FoodIconId): void {
+  const { x, y, size } = iconSquare(rect);
   ctx.save();
   ctx.beginPath();
   ctx.rect(x, y, size, size);

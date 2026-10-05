@@ -40,7 +40,7 @@ import { drawThrall, type ThrallLook } from '../../sprites/thrallSprite';
 import { THRALL_WORK_FRAMES, thrallFigure } from '../../sprites/art/thrallFigure';
 import { figureFrameCount } from '../../sprites/figure/figureDef';
 import { HAMMER_STRIKE_PHASE } from '../../sprites/art/ratkin/castRows';
-import { drawText, TEXT_PRESETS } from '../../ui/TextBox';
+import { worldText } from '../../ui/world/worldText';
 import { HARVEST_BUFF_COLOR, type HarvestEffects } from './HarvestEffects';
 import type { HarvestAudio } from './HarvestSystem';
 import { grantResource } from './HarvestSystem';
@@ -528,10 +528,10 @@ export class ThrallSystem {
     drawThrall(ctx, thrallLook(thrall, presence), sx, sy, tileSize);
 
     if (thrall.bagFull && thrall.fadeTicks === null) {
-      drawText(ctx, BAG_FULL_BUBBLE, {
+      worldText(ctx, BAG_FULL_BUBBLE, {
         x: sx + tileSize / 2,
         y: sy - (BUBBLE_RAISE_TILES - 1) * tileSize,
-        ...TEXT_PRESETS.label,
+        style: 'label',
         color: BUBBLE_COLOR,
         bold: true,
         align: 'center',

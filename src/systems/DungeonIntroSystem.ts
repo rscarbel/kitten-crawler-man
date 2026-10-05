@@ -1,10 +1,12 @@
-import { drawOverlay } from '../ui/Box';
+import { worldTint } from '../ui/world/worldShapes';
+import { worldPalette } from '../ui/theme/worldInk';
 import { viewportWidth, viewportHeight } from '../core/Viewport';
 import { getSpriteDefByKey } from '../core/SpriteLoader';
 
 const HOLD_FRAMES = 125;
 const FADE_OUT_FRAMES = 80;
 const TOTAL_FRAMES = HOLD_FRAMES + FADE_OUT_FRAMES;
+const OVERLAY_ALPHA_MULT = 0.52;
 
 export class DungeonIntroSystem {
   private frame = 0;
@@ -24,10 +26,9 @@ export class DungeonIntroSystem {
 
   render(ctx: CanvasRenderingContext2D): void {
     if (!this.isActive) return;
-    // Routed through SpriteLoader's lazy sprite-group loading instead of a
-    // standalone `new Image()` — undefined until the `core` group has loaded
-    // it, in which case this frame (and maybe the next couple) just shows no
-    // banner, same as any other sprite miss.
+    // Undefined until SpriteLoader's `core` group has loaded it, in which case
+    // this frame (and maybe the next couple) just shows no banner, the same as
+    // any other sprite miss.
     const img = getSpriteDefByKey('find-the-stairwell')?.img;
     // `img` only ever reaches `_defs` (and so is only ever returned here) after
     // `ensureLoading`'s onload finished populating it — the low-end-device
@@ -44,13 +45,7 @@ export class DungeonIntroSystem {
 
     const alpha = this.frame < HOLD_FRAMES ? 1 : 1 - (this.frame - HOLD_FRAMES) / FADE_OUT_FRAMES;
 
-    const OVERLAY_ALPHA_MULT = 0.52;
-    drawOverlay(ctx, {
-      canvasWidth: cw,
-      canvasHeight: ch,
-      color: '#000',
-      alpha: alpha * OVERLAY_ALPHA_MULT,
-    });
+    worldTint(ctx, worldPalette.shade, alpha * OVERLAY_ALPHA_MULT);
 
     const aspectRatio = img.height / img.width;
     const widthCappedH = Math.round(cw * aspectRatio);

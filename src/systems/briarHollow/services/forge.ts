@@ -31,9 +31,9 @@ import {
   type ToolTier,
   type ToolTierDef,
 } from '../../../core/toolTiers';
-import { drawItemIcon } from '../../../ui/InventoryPanel';
+import { drawItemIcon } from '../../../ui/icons/drawItemIcon';
 import { asPercent } from '../../../ui/itemEffectLines';
-import type { PricedMenu, PricedOption, PricedPurchaseResult } from '../../../ui/PricedMenuPanel';
+import type { ShopMenu, ShopRow, ShopPurchaseResult } from '../../../ui/screens/shop/shopSession';
 import { partyCoins } from '../../../core/partyCoins';
 import { SPEAKERS } from '../../../dialog/speakers';
 import { OREN } from '../../../dialog/scripts/briarHollow';
@@ -64,7 +64,7 @@ const TOOL_KINDS: readonly ToolKind[] = ['axe', 'pickaxe'];
  * A bought row turns into the next, dearer tier under the cursor, so a second
  * click that lands within this long of a sale is taken as the same press.
  */
-export const UPGRADE_REBUY_GUARD_FRAMES = 18;
+export const UPGRADE_REBUY_GUARD_TICKS = 18;
 
 export interface ForgeHost extends ShopCounter {
   readonly party: ServiceParty;
@@ -107,7 +107,7 @@ function toolReward(kind: ToolKind): GrantedReward {
     kind: 'item',
     name: def.name,
     description: def.description ?? '',
-    renderIcon: (ctx, x, y, size) => drawItemIcon(ctx, { ...def, quantity: 1 }, x, y, size),
+    renderIcon: (ctx, rect) => drawItemIcon(ctx, rect, { ...def, quantity: 1 }),
   };
 }
 
@@ -192,7 +192,7 @@ function describeToolTierGain(def: ToolTierDef): string {
   return parts.length > 0 ? parts.join(', ') : 'no bonus';
 }
 
-function upgradeOption(tools: PartyToolsState, kind: ToolKind): PricedOption {
+function upgradeOption(tools: PartyToolsState, kind: ToolKind): ShopRow {
   const current = toolTierDef(kind, tierOf(tools, kind) ?? TOOL_TIER_BASIC);
   const nextTier = nextToolTier(tools, kind);
   if (nextTier === null) {
@@ -225,7 +225,7 @@ function forgeBark(tools: PartyToolsState, buyerCoins: number): string {
   return sellerLine(OREN.shopOpen);
 }
 
-export function buildForgeMenu(tools: PartyToolsState, buyerCoins: number): PricedMenu {
+export function buildForgeMenu(tools: PartyToolsState, buyerCoins: number): ShopMenu {
   return {
     title: FORGE_TITLE,
     bark: forgeBark(tools, buyerCoins),
@@ -234,7 +234,7 @@ export function buildForgeMenu(tools: PartyToolsState, buyerCoins: number): Pric
   };
 }
 
-function kindOfOption(option: PricedOption): ToolKind | null {
+function kindOfOption(option: ShopRow): ToolKind | null {
   return TOOL_KINDS.find((kind) => kind === option.key) ?? null;
 }
 
@@ -242,7 +242,7 @@ function alreadyMaxLine(kind: ToolKind): string {
   return sellerLine(kind === 'axe' ? OREN.alreadyMaxAxe : OREN.alreadyMaxPickaxe);
 }
 
-export function forgePurchase(host: ForgeHost, option: PricedOption): PricedPurchaseResult {
+export function forgePurchase(host: ForgeHost, option: ShopRow): ShopPurchaseResult {
   const kind = kindOfOption(option);
   if (kind === null) return { ok: false, line: '' };
   const next = nextToolTier(host.tools, kind);
@@ -261,7 +261,7 @@ export function forgeShop(host: ForgeHost): ShopDefinition {
   return {
     build: () => buildForgeMenu(host.tools, partyCoins(host.party.human, host.party.cat)),
     purchase: (option) => forgePurchase(host, option),
-    rebuyGuardFrames: UPGRADE_REBUY_GUARD_FRAMES,
+    rebuyGuardTicks: UPGRADE_REBUY_GUARD_TICKS,
     blockedLine: (option) => {
       const kind = kindOfOption(option);
       if (kind !== null && option.unavailable !== undefined) return alreadyMaxLine(kind);

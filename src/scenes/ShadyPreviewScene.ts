@@ -4,26 +4,27 @@
  * A contact sheet cannot show whether the fidget reads as nerves or as a
  * twitch, how often the neck scratch should fire, or whether the hood's lag
  * lands — so this runs the real `Shady` mob's own timers at several zooms, with
- * all three bounty markers side by side. Click to pause; paused, the wheel
- * steps frame by frame. Press S to fire the scratch on demand rather than
- * waiting out its several-second gap.
+ * all three bounty markers side by side. Paused, the wheel steps frame by
+ * frame. Press S (or the scratch button) to fire the scratch on demand rather
+ * than waiting out its several-second gap.
  *
  * Reached via `?shady` in `devBootScene`; never on a production path.
  */
 
-import { Scene } from '../core/Scene';
 import { TILE_SIZE } from '../core/constants';
 import { viewportWidth, viewportHeight } from '../core/Viewport';
-import { drawText } from '../ui/TextBox';
+import type { WorldGesture } from '../ui/core/UiRoot';
+import { worldText } from '../ui/world/worldText';
+import { PreviewScene, type PreviewControl } from './PreviewScene';
 import { Shady, type ShadyMarker } from '../creatures/Shady';
+import { previewInk } from '../ui/theme/previewInk';
 
-const BG_COLOR = '#20242e';
-const GROUND_COLOR = '#2c3342';
-const LABEL_COLOR = '#c9d2e0';
+const BG_COLOR = previewInk.slate.backdrop;
+const GROUND_COLOR = previewInk.slate.ground;
+const LABEL_COLOR = previewInk.slate.label;
 const GROUND_THICKNESS = 3;
 const MARGIN = 32;
 const LABEL_SIZE = 14;
-const TITLE_SIZE = 20;
 
 /** The tile sizes he is shown at, in-game size first — that is the one that counts. */
 const IN_GAME_ZOOM = 1;
@@ -31,7 +32,8 @@ const REVIEW_ZOOM = 2;
 const DETAIL_ZOOM = 3;
 const ZOOMS: readonly number[] = [IN_GAME_ZOOM, REVIEW_ZOOM, DETAIL_ZOOM];
 
-const LANE_TOP = 66;
+/** Gap between the header and the first lane's column captions. */
+const LANE_TOP_GAP = 12;
 /**
  * Lane heights follow their own zoom rather than sharing one constant: his art
  * stands 1.42 tiles tall, so a fixed lane tall enough for the 32px row lets the
@@ -62,7 +64,7 @@ const COLUMNS: readonly Column[] = [
 /** Wheel notches only ever step forward — there is no history to rewind. */
 const STEP_FRAMES = 1;
 
-export class ShadyPreviewScene extends Scene {
+export class ShadyPreviewScene extends PreviewScene {
   private frame = 0;
   private paused = false;
   /**
@@ -73,19 +75,56 @@ export class ShadyPreviewScene extends Scene {
    */
   private readonly figures = COLUMNS.map(() => new Shady(0, 0, TILE_SIZE));
 
-  handleClick(): void {
-    this.paused = !this.paused;
+  constructor() {
+    super();
+    this.ui.addKeyHook((key) => {
+      if (key.toLowerCase() !== 's') return false;
+      this.scratch();
+      return true;
+    });
   }
 
-  handleKeyDown(key: string): boolean {
-    if (key.toLowerCase() !== 's') return false;
+  private scratch(): void {
     for (const figure of this.figures) figure.forceScratch();
-    return true;
   }
 
-  handleWheel(deltaY: number): void {
-    if (!this.paused || deltaY <= 0) return;
+  protected handlePreviewWorldPointer(gesture: WorldGesture): void {
+    if (gesture.kind !== 'wheel') return;
+    if (!this.paused || gesture.deltaY <= 0) return;
     this.step();
+  }
+
+  protected previewTitle(): string {
+    return 'Shady preview — ?shady';
+  }
+
+  protected previewCaptions(): readonly string[] {
+    return [`frame ${this.frame}${this.paused ? ' (paused)' : ''}`];
+  }
+
+  protected previewControls(): readonly PreviewControl[] {
+    return [
+      {
+        id: 'play',
+        label: this.paused ? 'play' : 'pause',
+        onTap: () => {
+          this.paused = !this.paused;
+        },
+      },
+      {
+        label: 'step',
+        onTap: () => {
+          this.paused = true;
+          this.step();
+        },
+      },
+      {
+        label: 'scratch (S)',
+        onTap: () => {
+          this.scratch();
+        },
+      },
+    ];
   }
 
   private step(): void {
@@ -108,16 +147,7 @@ export class ShadyPreviewScene extends Scene {
     ctx.fillStyle = BG_COLOR;
     ctx.fillRect(0, 0, width, height);
 
-    drawText(ctx, 'Shady — click to pause, wheel to step, S to scratch', {
-      x: MARGIN,
-      y: 16,
-      size: TITLE_SIZE,
-      bold: true,
-      color: LABEL_COLOR,
-      outline: true,
-    });
-
-    let laneY = LANE_TOP;
+    let laneY = this.headerBottom + LANE_TOP_GAP;
     ZOOMS.forEach((zoom) => {
       const tile = TILE_SIZE * zoom;
       const laneHeight = tile * LANE_TILES_TALL + LANE_PADDING;
@@ -139,7 +169,7 @@ export class ShadyPreviewScene extends Scene {
         figure.render(ctx, 0, 0, tile);
         figure.renderMarker(ctx, 0, 0, tile);
         if (zoom === ZOOMS[0]) {
-          drawText(ctx, column.label, {
+          worldText(ctx, column.label, {
             x: MARGIN + index * slot,
             y: laneY,
             size: LABEL_SIZE,
@@ -148,7 +178,7 @@ export class ShadyPreviewScene extends Scene {
         }
       });
 
-      drawText(ctx, `${tile}px tile${zoom === ZOOMS[0] ? ' — in-game size' : ''}`, {
+      worldText(ctx, `${tile}px tile${zoom === ZOOMS[0] ? ' — in-game size' : ''}`, {
         x: width - MARGIN - LABEL_GUTTER,
         y: laneY,
         size: LABEL_SIZE,
@@ -157,11 +187,6 @@ export class ShadyPreviewScene extends Scene {
       laneY += laneHeight;
     });
 
-    drawText(ctx, `frame ${this.frame}${this.paused ? ' (paused)' : ''}`, {
-      x: MARGIN,
-      y: height - MARGIN,
-      size: LABEL_SIZE,
-      color: LABEL_COLOR,
-    });
+    this.renderChrome(ctx);
   }
 }

@@ -8,11 +8,12 @@ import type { Mob } from '../creatures/Mob';
 import { MAX_MOB_HP_MULTIPLIER } from '../creatures/mobLevelScaling';
 import type { HumanPlayer } from '../creatures/HumanPlayer';
 import type { CatPlayer } from '../creatures/CatPlayer';
-import {
-  drawDynamiteFloorSprite,
-  drawDynamiteChargeBar,
-  drawDynamiteThrowPath,
-} from '../sprites/dynamiteSprite';
+import { drawDynamiteFloorSprite, drawDynamiteThrowPath } from '../sprites/dynamiteSprite';
+import type { Rect } from '../ui/core/geom';
+import type { Surface, Ui } from '../ui/core/UiRoot';
+import { skinsFor } from '../ui/theme/skins';
+import { drawGlass, fillRounded } from '../ui/widgets/paint';
+import { text } from '../ui/widgets/text';
 import {
   type BlastCore,
   drawDynamiteExplosion,
@@ -42,6 +43,23 @@ import { easeOut, type Pt } from '../sprites/art/carlArt';
 export const DYN_MAX_CHARGE = 120;
 /** Frames of charge after which the charge bar turns red, a second before the stick goes off in hand. */
 export const DYN_DANGER = 240;
+/** The charge meter's danger state blinks on and off every this many frames. */
+const CHARGE_FLASH_FRAMES = 8;
+/** Above this share of full strength the charge meter turns from green to yellow. */
+const CHARGE_HIGH_POWER_FRACTION = 0.85;
+const CHARGE_BAR_WIDTH = 20;
+const CHARGE_BAR_HEIGHT = 150;
+const CHARGE_BAR_RADIUS = 4;
+/** Wide enough for the meter's "POWER" and "DANGER" captions. */
+const CHARGE_FRAME_WIDTH = 64;
+const CHARGE_TICK_QUARTER = 0.25;
+const CHARGE_TICK_HALF = 0.5;
+const CHARGE_TICK_THREE_QUARTERS = 0.75;
+const CHARGE_TICK_FRACTIONS = [CHARGE_TICK_QUARTER, CHARGE_TICK_HALF, CHARGE_TICK_THREE_QUARTERS];
+const CHARGE_TICK_THICKNESS = 1;
+const CHARGE_POWER_LABEL = ['Throw', 'Power'] as const;
+const CHARGE_DANGER_LABEL = ['⚠', 'Danger'] as const;
+
 /** Frames of charge after which the stick goes off in the thrower's hand. */
 const DYN_EXPLODE_HAND = 300;
 /** Frames a thrown or dropped stick burns before it goes off. */
@@ -903,10 +921,70 @@ export class DynamiteSystem implements GameSystem {
     ctx.restore();
   }
 
-  renderChargeBar(ctx: CanvasRenderingContext2D, canvasW: number, canvasH: number): void {
+  /**
+   * The throw-power meter at the right edge, half way down: an upright bar
+   * that fills from the bottom while the stick is held, yellow near full
+   * strength, and flashing red once holding on means it goes off in hand.
+   */
+  renderChargeMeter(ui: Ui): void {
     if (!this._charging) return;
-    const ratio = Math.min(1, this._charging.chargeFrames / DYN_MAX_CHARGE);
-    drawDynamiteChargeBar(ctx, canvasW, canvasH, ratio, this._charging.chargeFrames, DYN_DANGER);
+    const { chargeFrames } = this._charging;
+    const ratio = Math.min(1, chargeFrames / DYN_MAX_CHARGE);
+    const isDanger = chargeFrames >= DYN_DANGER;
+    const flashOn = !isDanger || Math.floor(chargeFrames / CHARGE_FLASH_FRAMES) % 2 === 0;
+    const { palette, space, type, radius } = ui.theme;
+    const labelHeight = type.overline.lineHeight;
+    const frame: Rect = {
+      x: ui.viewport.x + ui.viewport.w - space.lg - CHARGE_FRAME_WIDTH,
+      y: ui.viewport.y + (ui.viewport.h - CHARGE_BAR_HEIGHT) / 2 - labelHeight * 2 - space.sm,
+      w: CHARGE_FRAME_WIDTH,
+      h: CHARGE_BAR_HEIGHT + labelHeight * 2 + space.sm * 2,
+    };
+    drawGlass(ui, frame, skinsFor(ui.theme).panel.hud, radius.sm);
+    const labelColor = isDanger ? palette.state.danger : palette.text.primary;
+    const [topLine, bottomLine] = isDanger ? CHARGE_DANGER_LABEL : CHARGE_POWER_LABEL;
+    const labelRect = (row: number): Rect => ({
+      x: frame.x,
+      y: frame.y + space.xs + labelHeight * row,
+      w: frame.w,
+      h: labelHeight,
+    });
+    text(ui, labelRect(0), { text: topLine, role: 'overline', color: labelColor, align: 'center' });
+    text(ui, labelRect(1), {
+      text: bottomLine,
+      role: 'overline',
+      color: labelColor,
+      align: 'center',
+    });
+
+    const bar: Rect = {
+      x: frame.x + (frame.w - CHARGE_BAR_WIDTH) / 2,
+      y: frame.y + frame.h - space.sm - CHARGE_BAR_HEIGHT,
+      w: CHARGE_BAR_WIDTH,
+      h: CHARGE_BAR_HEIGHT,
+    };
+    fillRounded(ui.ctx, bar, CHARGE_BAR_RADIUS, palette.meter.track);
+    if (flashOn) {
+      const fillHeight = Math.ceil(bar.h * ratio);
+      const fill = isDanger
+        ? palette.state.danger
+        : ratio > CHARGE_HIGH_POWER_FRACTION
+          ? palette.state.warning
+          : palette.state.success;
+      ui.clip(bar, () => {
+        fillRounded(
+          ui.ctx,
+          { ...bar, y: bar.y + bar.h - fillHeight, h: fillHeight },
+          CHARGE_BAR_RADIUS,
+          fill,
+        );
+      });
+    }
+    ui.ctx.fillStyle = palette.border.strong;
+    for (const fraction of CHARGE_TICK_FRACTIONS) {
+      const tickY = Math.round(bar.y + bar.h * (1 - fraction));
+      ui.ctx.fillRect(bar.x, tickY, bar.w, CHARGE_TICK_THICKNESS);
+    }
   }
 
   private simulateTrajectory(human: HumanPlayer): Array<{ x: number; y: number }> {
@@ -1012,5 +1090,27 @@ function chainedBlast(chain: ReadonlyArray<BlastCharge>): Blast {
     crawlerDamage: chain.reduce((sum, stick) => sum + stick.crawlerDamage, 0),
     stickMobDamage: chain.reduce((most, stick) => Math.max(most, stick.mobDamage), 0),
     stickCrawlerDamage: chain.reduce((most, stick) => Math.max(most, stick.crawlerDamage), 0),
+  };
+}
+
+export interface DynamiteChargeSurfaceOptions {
+  readonly id: string;
+  /** The dynamite of the floor on screen; a scene with several floors swaps it as the party moves. */
+  readonly dynamite: () => DynamiteSystem;
+  /** Whether the meter may show at all this frame (not under a death or the pause menu, say). */
+  readonly shows: () => boolean;
+}
+
+/**
+ * The throw-power meter as a HUD-band surface, open while a stick is held. It
+ * takes no input and never halts the world: charging is play.
+ */
+export function dynamiteChargeSurface(opts: DynamiteChargeSurfaceOptions): Surface {
+  return {
+    id: opts.id,
+    band: 'hud',
+    haltsWorld: false,
+    isOpen: () => opts.dynamite().isCharging && opts.shows(),
+    render: (ui) => opts.dynamite().renderChargeMeter(ui),
   };
 }

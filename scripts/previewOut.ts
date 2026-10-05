@@ -8,6 +8,8 @@
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 
+import './nodeUiFont.js';
+
 export const PREVIEW_DIR = 'preview';
 
 /**

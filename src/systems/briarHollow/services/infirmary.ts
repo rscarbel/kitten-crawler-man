@@ -12,7 +12,7 @@
  */
 
 import { HEALTH_POTION_PRICE } from '../../market/vendorDefs';
-import type { PricedMenu, PricedOption, PricedPurchaseResult } from '../../../ui/PricedMenuPanel';
+import type { ShopMenu, ShopRow, ShopPurchaseResult } from '../../../ui/screens/shop/shopSession';
 import type { TopicProvider } from '../villagerTopics';
 import { SPEAKERS } from '../../../dialog/speakers';
 import { SELLA } from '../../../dialog/scripts/briarHollow';
@@ -55,8 +55,8 @@ export function treatmentFee(party: ServiceParty): number {
   return Math.max(SELLA_MIN_FEE, byWounds);
 }
 
-export function buildInfirmaryMenu(party: ServiceParty): PricedMenu {
-  const option: PricedOption = {
+export function buildInfirmaryMenu(party: ServiceParty): ShopMenu {
+  const option: ShopRow = {
     key: TREATMENT_KEY,
     label: 'Treat the party',
     price: treatmentFee(party),
@@ -85,7 +85,7 @@ export interface InfirmaryHost extends ShopCounter {
 export function infirmaryShop(party: ServiceParty, host: InfirmaryHost): ShopDefinition {
   return {
     build: () => buildInfirmaryMenu(party),
-    purchase: (option): PricedPurchaseResult => {
+    purchase: (option): ShopPurchaseResult => {
       if (option.key !== TREATMENT_KEY || partyIsUnhurt(party)) {
         return { ok: false, line: sellerLine(SELLA.fullyHealthy) };
       }

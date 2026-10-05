@@ -1,5 +1,7 @@
 import type { AbilityDef } from '../core/AbilityManager';
 import { drawSpriteKey } from '../core/SpriteRenderer';
+import type { Rect } from '../ui/core/geom';
+import { iconSquare } from '../ui/icons/iconSquare';
 
 const LEVEL_SLIGHT_COOLDOWN_REDUCTION = 2;
 const LEVEL_MODERATE_COOLDOWN_REDUCTION = 6;
@@ -109,13 +111,8 @@ export function getMagicMissileVisualTier(level: number): MagicMissileVisualTier
   return 'tier1';
 }
 
-function renderMagicMissileIcon(
-  ctx: CanvasRenderingContext2D,
-  x: number,
-  y: number,
-  size: number,
-  level: number,
-): void {
+function renderMagicMissileIcon(ctx: CanvasRenderingContext2D, rect: Rect, level: number): void {
+  const { x, y, size } = iconSquare(rect);
   const state = level >= LEVEL_FULL_POWER ? 'full_power' : 'standard';
   drawSpriteKey(ctx, 'magic_missile_icon', state, 0, x, y, size);
 }

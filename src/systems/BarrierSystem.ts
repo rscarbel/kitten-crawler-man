@@ -9,7 +9,8 @@ import {
   drawBenchPressFloor,
   drawTreadmillFloor,
 } from '../sprites/gymEquipmentSprite';
-import { drawText } from '../ui/TextBox';
+import { worldPalette } from '../ui/theme/worldInk';
+import { worldText } from '../ui/world/worldText';
 import { viewportWidth, viewportHeight } from '../core/Viewport';
 import { HumanPlayer } from '../creatures/HumanPlayer';
 import { PLACE_ROWS } from '../sprites/art/humanFigure';
@@ -33,8 +34,12 @@ const TILE_CENTER_FRACTION = 0.5;
 const CONSTRUCT_ARC_RADIUS_MULT = 1.2;
 /** Label y offset above the arc radius. */
 const CONSTRUCT_LABEL_Y_OFFSET = 14;
-/** Label size adjustment for drawText. */
+/** Lifts the label from where its baseline would sit to where its top sits. */
 const CONSTRUCT_LABEL_ADJUST = 7;
+const CONSTRUCT_LABEL_SIZE = 9;
+const CONSTRUCT_RING_WIDTH = 4;
+const CONSTRUCT_TRACK_ALPHA = 0.5;
+const CONSTRUCT_PROGRESS_ALPHA = 0.9;
 /** Slow zone pulse ring alpha base and range. */
 const SLOW_PULSE_ALPHA_BASE = 0.18;
 const SLOW_PULSE_ALPHA_RANGE = 0.08;
@@ -322,18 +327,16 @@ export class BarrierSystem implements GameSystem {
     const endAngle = startAngle + Math.PI * 2 * ratio;
 
     ctx.save();
-    // Outer ring (track)
-    ctx.globalAlpha = 0.5;
-    ctx.strokeStyle = '#4b5563';
-    ctx.lineWidth = 4;
+    ctx.globalAlpha = CONSTRUCT_TRACK_ALPHA;
+    ctx.strokeStyle = worldPalette.spell.barrierTrack;
+    ctx.lineWidth = CONSTRUCT_RING_WIDTH;
     ctx.beginPath();
     ctx.arc(cx, cy, radius, 0, Math.PI * 2);
     ctx.stroke();
 
-    // Progress fill
-    ctx.globalAlpha = 0.9;
-    ctx.strokeStyle = '#60a5fa';
-    ctx.lineWidth = 4;
+    ctx.globalAlpha = CONSTRUCT_PROGRESS_ALPHA;
+    ctx.strokeStyle = worldPalette.spell.barrierPlacing;
+    ctx.lineWidth = CONSTRUCT_RING_WIDTH;
     ctx.lineCap = 'round';
     ctx.beginPath();
     ctx.arc(cx, cy, radius, startAngle, endAngle);
@@ -342,12 +345,12 @@ export class BarrierSystem implements GameSystem {
 
     ctx.restore();
 
-    drawText(ctx, 'PLACING...', {
+    worldText(ctx, 'PLACING...', {
       x: cx,
       y: cy + radius + CONSTRUCT_LABEL_Y_OFFSET - CONSTRUCT_LABEL_ADJUST,
-      size: 9,
+      size: CONSTRUCT_LABEL_SIZE,
       bold: true,
-      color: '#60a5fa',
+      color: worldPalette.spell.barrierPlacing,
       align: 'center',
     });
   }

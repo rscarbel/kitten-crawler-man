@@ -9,7 +9,7 @@
  *
  * Pure data + selection, the same shape as `townNotices.ts`: no rendering, no
  * audio, no scene coupling. `InteriorReadableSystem` finds a piece of furniture
- * to sit each one on and `ReadablePanel` draws it.
+ * to sit each one on and `ReadableOverlay` draws it.
  */
 
 /** The furniture a readable sits on, resolved to real tiles by the owning system. */

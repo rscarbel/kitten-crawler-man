@@ -24,11 +24,9 @@ import { drawMongoIcon, prewarmMongoPet } from '../sprites/mongoSprite';
 import type { GameSystem, SystemContext } from './GameSystem';
 import type { CarriedCompanion } from './companionCarry';
 import type { AbilityManager } from '../core/AbilityManager';
-import { drawText } from '../ui/TextBox';
-import { drawButton } from '../ui/Button';
-import { drawProgressBar, PROGRESS_PRESETS } from '../ui/Box';
-import { drawCooldownOverlay } from '../ui/CooldownOverlay';
-import { ToastStack } from '../ui/ToastStack';
+import type { HudToasts, ToastOptions } from '../ui/hud/toasts';
+import type { SummonModel } from '../ui/hud/hudModel';
+import { paintOffscreenPetMarker } from '../ui/hud/offscreenPetMarker';
 import { CAT_SPEECH_STYLE, TimedSpeech, drawTimedSpeechBubble } from '../sprites/speechBubble';
 import { findNearbyWalkableTile } from '../map/findWalkableTile';
 import { viewportHeight, viewportWidth } from '../core/Viewport';
@@ -78,34 +76,11 @@ export const MONGO_PET_RANGE_TILES = 1.4;
  */
 const MONGO_PET_OVERWORLD_CLEAR_RADIUS_TILES = 10;
 
-// Rendering constants
-/**
- * Icon size and lift, which have to be read together with the rows below it.
- *
- * Both shrank when the XP strip and the numeric health were added: the button is
- * a fixed 80×48 and the stack under the icon grew by a bar and a text row, so
- * the portrait had to give the space up rather than be drawn through the label.
- */
-const MONGO_BUTTON_ICON_SIZE_RATIO = 0.52;
-const MONGO_ICON_Y_OFFSET = 9;
-/** Clear space between the text row's top and the XP strip drawn under it. */
-const MONGO_BUTTON_LABEL_GAP = 12;
+/** His portrait fills this fraction of the Summon card's icon square. */
+const MONGO_CARD_ICON_SIZE_RATIO = 0.9;
+// The Summon button as the Mongo explainer pictures it: its label, its health
+// number and its size, which `verify-mongo.ts` holds to fitting one row.
 const MONGO_BUTTON_LABEL_SIZE = 8;
-const MONGO_HP_BAR_HEIGHT = 4;
-const MONGO_HP_BAR_INSET = 4;
-const MONGO_HP_BAR_BOTTOM_GAP = 2;
-const MONGO_HP_READY_COLOR = '#4ade80';
-const MONGO_HP_SPENT_COLOR = '#ef4444';
-/**
- * The XP strip: thinner than the HP bar, and directly above it.
- *
- * Two pixels because it is not a thing the player acts on — it is the tell that
- * a number the game never showed is moving at all, between the growth-spurt
- * flashes that are the only other evidence he levels.
- */
-const MONGO_XP_BAR_HEIGHT = 2;
-const MONGO_XP_BAR_GAP = 2;
-const MONGO_XP_BAR_COLOR = '#38bdf8';
 /**
  * His health as a number, beside the label.
  *
@@ -128,11 +103,9 @@ const MONGO_BUTTON_TEXT_INSET = 2;
 export const MONGO_BUTTON_TEXT_MIN_GAP = 6;
 
 /**
- * The Summon button's own size.
- *
- * Owned here rather than by the scene that positions it: the rows inside it are
- * laid out against these two numbers, so a caller free to pass any width could
- * push the label through the health number without anything failing.
+ * The pictured Summon button's own size: the rows inside it are laid out
+ * against these two numbers, so a caller free to pass any width could push
+ * the label through the health number without anything failing.
  */
 export const SUMMON_BUTTON_WIDTH = 80;
 export const SUMMON_BUTTON_HEIGHT = 48;
@@ -156,41 +129,23 @@ export const MONGO_BUTTON_TEXT_SIZES = {
   inset: MONGO_BUTTON_TEXT_INSET,
 } as const;
 
-// The off-screen marker: a small portrait of him pinned to the screen edge,
-// with a chevron pointing on past it along the cat→Mongo bearing.
-/** Kept off the very edge, where a marker is half-clipped and reads as an artefact. */
-const OFFSCREEN_MARKER_EDGE_INSET_PX = 22;
-const OFFSCREEN_MARKER_SIZE_PX = 26;
-/** Chevron length as a fraction of the portrait, so the two scale together. */
-const OFFSCREEN_MARKER_CHEVRON_RATIO = 0.75;
-/** How far back from the tip the chevron's trailing corners sit, as a fraction of its length. */
-const OFFSCREEN_MARKER_CHEVRON_BACK = 0.35;
-const OFFSCREEN_MARKER_CHEVRON_HALF_WIDTH = 0.45;
-const OFFSCREEN_MARKER_CHEVRON_COLOR = '#f0abfc';
-const OFFSCREEN_MARKER_CHEVRON_OUTLINE = '#000000';
-const OFFSCREEN_MARKER_CHEVRON_LINE_WIDTH = 1.5;
-
 /** The cat's calls are centred over her tile. */
 const SPEECH_ANCHOR_X_RATIO = 0.5;
 
-// Recovery toasts — the "-1.2s" flags a kill puts over the Summon button.
+/** How long the recovery toast stays up after the latest kill that fed it. */
 const RECOVERY_TOAST_FRAMES = 90;
-/** Frames of the tail spent fading, so a toast never simply blinks out. */
-const RECOVERY_TOAST_FADE_FRAMES = 30;
+const RECOVERY_TOAST_KEY = 'mongo-recovery';
 /**
- * Most toasts on screen at once.
- *
- * A stack taller than this stops being a readable list and starts covering the
- * hotbar above it, and the oldest is the one the player has already read.
+ * Keyed, so a run of kills reads as one toast whose total climbs and whose
+ * clock restarts on each kill, rather than a stack of identical flags.
  */
-const RECOVERY_TOAST_MAX = 4;
-const RECOVERY_TOAST_FONT_SIZE = 11;
-/** Line pitch of the stack. Above the font size, or the rows touch. */
-const RECOVERY_TOAST_LINE_HEIGHT = 13;
-/** Clear space between the newest toast and the top of the button. */
-const RECOVERY_TOAST_BOTTOM_GAP = 6;
-/** Green, because it is time coming *off* a wait — the minus belongs to the clock. */
-const RECOVERY_TOAST_COLOR = '#4ade80';
+const RECOVERY_TOAST: ToastOptions = {
+  tone: 'info',
+  icon: 'hourglass',
+  key: RECOVERY_TOAST_KEY,
+  durationTicks: RECOVERY_TOAST_FRAMES,
+};
+const HEALING_RULE_TOAST: ToastOptions = { tone: 'info', icon: 'heart' };
 const FRAMES_PER_SECOND = 60;
 /** Decimals on the toast's seconds. One kill is worth well under a second. */
 const RECOVERY_TOAST_DECIMALS = 1;
@@ -237,22 +192,6 @@ export class MongoSystem implements GameSystem {
   private retreatMobs: Mob[] = [];
 
   /**
-   * The "-1.2s" flags over the Summon button.
-   *
-   * Not merged by text: identical numbers back to back are the normal case here
-   * — every kill is worth the same tick — and three of them mean three kills.
-   */
-  private readonly recoveryToasts = new ToastStack({
-    displayTicks: RECOVERY_TOAST_FRAMES,
-    fadeTicks: RECOVERY_TOAST_FADE_FRAMES,
-    maxVisible: RECOVERY_TOAST_MAX,
-    fontSize: RECOVERY_TOAST_FONT_SIZE,
-    lineHeight: RECOVERY_TOAST_LINE_HEIGHT,
-    color: RECOVERY_TOAST_COLOR,
-    outline: true,
-  });
-
-  /**
    * Whether the "he only heals while recalled" line has been said in this scene.
    *
    * Scoped to the system, and so re-armed with every scene — a visit to a floor
@@ -273,6 +212,8 @@ export class MongoSystem implements GameSystem {
    * nothing heals him — for the whole run home that follows it.
    */
   private retreatFrames = 0;
+  /** Recovery frames the showing recovery toast totals across the kills that fed it. */
+  private recoveryToastFrames = 0;
 
   /** Frames left before the companion cat may try another summon on her own. */
   private autoSummonRetryFrames = 0;
@@ -291,15 +232,16 @@ export class MongoSystem implements GameSystem {
    *                  its own, and the scene owns the one that must be levelled.
    * @param petXpFraction  Progress toward the next pet level, 0–1, for the strip
    *                  above the HP bar. Same injection, same reason.
-   * @param announce  Raises one line as a hotbar toast. Used for the two
-   *                  first-time healing rules, which are stated nowhere else.
+   * @param toasts  The stack above the hotbar. Carries the running total kills
+   *                  have taken off his recovery and the two first-time healing
+   *                  rules, which are stated nowhere else.
    */
   constructor(
     private readonly petState: MongoPetState,
     private readonly petLevel: () => number,
     private readonly grantAbilityXp: (amount: number) => void,
     private readonly petXpFraction: () => number,
-    private readonly announce: (text: string) => void,
+    private readonly toasts: Pick<HudToasts, 'post' | 'isShowing'>,
   ) {}
 
   /**
@@ -502,12 +444,11 @@ export class MongoSystem implements GameSystem {
    * pointed the right way, and the ring search below only leaves it when that
    * tile is wall, a stairwell, or too tight to move in.
    *
-   * Two things made the old version put him inside walls in a corridor. It took
-   * the cat's tile as `floor(cat.x / TILE_SIZE)`, which is the tile under her
-   * sprite's top-left *corner* rather than under her — one tile off in a narrow
-   * hallway, where the neighbouring tile is masonry. And its fallback was that
-   * same unvalidated tile, so the one branch that existed to handle a blocked
-   * spawn placed him on ground nothing had checked.
+   * The cat's tile is taken from her centre, never as `floor(cat.x / TILE_SIZE)`:
+   * that is the tile under her sprite's top-left *corner*, one tile off in a
+   * narrow hallway, where the neighbouring tile is masonry and he would spawn
+   * inside the wall. For the same reason every candidate, the facing tile
+   * included, is validated before he is placed on it.
    *
    * The sight test keeps the ring search from solving a blocked corridor by
    * putting him in the room on the other side of the wall, and stairwell tiles
@@ -555,10 +496,6 @@ export class MongoSystem implements GameSystem {
 
     this.speech.tick();
     this.emotes.update(1 / FRAMES_PER_SECOND);
-
-    // Above the summoned/not-summoned branch below: a toast raised by the last
-    // kill before he came up would otherwise hang on screen forever.
-    this.recoveryToasts.update();
 
     if (!this.mongo) {
       // Also here, not only from `onLevelUp`: `setGodModeMinLevel` moves the
@@ -660,7 +597,7 @@ export class MongoSystem implements GameSystem {
    * copy from his last despawn), and never one held by the circus quest, whose
    * wait is a story beat rather than a cooldown.
    */
-  onKill(): void {
+  onKill(isCatActive: boolean): void {
     if (!this.unlocked || this.summonLocked || this.mongo !== null) return;
     const framesSaved = advanceMongoRecovery(
       this.petState,
@@ -671,13 +608,21 @@ export class MongoSystem implements GameSystem {
     // Zero whenever he was already fit, which is most of the run — no toast for
     // a boost that did nothing.
     if (framesSaved <= 0) return;
-    this.pushRecoveryToast(framesSaved);
+    // The toast annotates the countdown on his Summon card, so it shows only
+    // while that card does.
+    const summonCardShown = this.summonCard(isCatActive) !== null;
+    if (summonCardShown) this.pushRecoveryToast(framesSaved);
   }
 
-  /** Raises a fresh "-1.2s" over the button, pushing the older ones up a row. */
+  /** Adds `framesSaved` to the running total on the recovery toast, starting a fresh total once the last toast has gone. */
   private pushRecoveryToast(framesSaved: number): void {
-    const secondsSaved = framesSaved / FRAMES_PER_SECOND;
-    this.recoveryToasts.show(`-${secondsSaved.toFixed(RECOVERY_TOAST_DECIMALS)}s`);
+    const continuesShownTotal = this.toasts.isShowing(RECOVERY_TOAST_KEY);
+    this.recoveryToastFrames = (continuesShownTotal ? this.recoveryToastFrames : 0) + framesSaved;
+    const secondsSaved = this.recoveryToastFrames / FRAMES_PER_SECOND;
+    this.toasts.post(
+      `Mongo recovering −${secondsSaved.toFixed(RECOVERY_TOAST_DECIMALS)}s`,
+      RECOVERY_TOAST,
+    );
   }
 
   /**
@@ -955,7 +900,7 @@ export class MongoSystem implements GameSystem {
     if (!this.unlocked || this.summonLocked) return;
     if (this.mongo !== null || !this.petState.restingUntilFull) return;
     this.petState.knockoutRuleExplained = true;
-    this.announce('Mongo must heal fully before resummoning');
+    this.toasts.post('Mongo must heal fully before resummoning', HEALING_RULE_TOAST);
   }
 
   /**
@@ -971,7 +916,7 @@ export class MongoSystem implements GameSystem {
     if (mongo.hp >= mongo.maxHp) return;
     this.hasExplainedOffDutyRegen = true;
     this.speak(MONGO_LINES.restUp.paragraphs[0]);
-    this.announce('Mongo heals only while recalled');
+    this.toasts.post('Mongo heals only while recalled', HEALING_RULE_TOAST);
   }
 
   /**
@@ -1033,52 +978,15 @@ export class MongoSystem implements GameSystem {
   }
 
   /**
-   * Render the Summon/Recall button. Works for both desktop and mobile.
-   * Returns the button rect for hit-testing.
+   * What the HUD's Summon card shows, or null while it is hidden: before he is
+   * unlocked, or while the human leads.
    */
-  renderSummonButton(
-    ctx: CanvasRenderingContext2D,
-    x: number,
-    y: number,
-    w: number,
-    h: number,
-    isCatActive: boolean,
-  ): { x: number; y: number; w: number; h: number } {
-    const rect = { x, y, w, h };
-    if (!this.unlocked || !isCatActive) return rect;
-
+  summonCard(isCatActive: boolean): Omit<SummonModel, 'onTap'> | null {
+    if (!this.unlocked || !isCatActive) return null;
     const isActive = this.mongo !== null;
-    const usable = this.canPress;
-
-    drawButton(ctx, {
-      x,
-      y,
-      width: w,
-      height: h,
-      label: '',
-      fill: isActive ? 'rgba(37,99,235,0.30)' : usable ? 'rgba(0,0,0,0.65)' : 'rgba(0,0,0,0.45)',
-      border: isActive ? '#2563eb' : usable ? '#475569' : '#334155',
-      borderWidth: 1.5,
-      radius: 0,
-    });
-
-    drawMongoIcon(
-      ctx,
-      getMongoStats(this.petLevel()).stage,
-      x + w / 2,
-      y + h / 2 - MONGO_ICON_Y_OFFSET,
-      Math.min(w, h) * MONGO_BUTTON_ICON_SIZE_RATIO,
-    );
-
-    // Stacked upward from the bottom edge, so every row's position is stated
-    // relative to the one below it rather than as its own arithmetic on `h`.
-    const hpBarY = y + h - MONGO_HP_BAR_HEIGHT - MONGO_HP_BAR_BOTTOM_GAP;
-    const xpBarY = hpBarY - MONGO_XP_BAR_HEIGHT - MONGO_XP_BAR_GAP;
-    const textRowY = xpBarY - MONGO_BUTTON_LABEL_GAP;
-
     // 'Resting' covers every health reason he is unavailable, not just a
-    // knockout. A pet recalled voluntarily at a third of his health is exactly as
-    // unsummonable as a knocked-out one until he heals past the floor, and
+    // knockout. A pet recalled voluntarily at a third of his health is exactly
+    // as unsummonable as a knocked-out one until he heals past the floor, and
     // labelling that state 'Summon' over a countdown says the button is ready
     // when it is refusing. The circus quest's hold is deliberately not covered:
     // that is a story beat rather than a wait, and it is not resting.
@@ -1088,94 +996,41 @@ export class MongoSystem implements GameSystem {
       : restingUp
         ? MONGO_BUTTON_LABELS.resting
         : MONGO_BUTTON_LABELS.summon;
-    const labelColor = usable ? '#94a3b8' : '#64748b';
-    drawText(ctx, label, {
-      x: x + MONGO_BUTTON_TEXT_INSET,
-      y: textRowY,
-      size: MONGO_BUTTON_LABEL_SIZE,
-      color: labelColor,
-      align: 'left',
-    });
-    drawText(ctx, `${displayHp(this.hp)}/${this.maxHp}`, {
-      x: x + w - MONGO_BUTTON_TEXT_INSET,
-      y: textRowY,
-      size: MONGO_HP_TEXT_SIZE,
-      color: labelColor,
-      align: 'right',
-    });
-
-    // Progress toward his next level. Deliberately above the health bar rather
-    // than beside it: the two answer different questions and the one the player
-    // acts on is the lower, larger one.
-    drawProgressBar(ctx, {
-      x: x + MONGO_HP_BAR_INSET,
-      y: xpBarY,
-      width: w - MONGO_HP_BAR_INSET * 2,
-      height: MONGO_XP_BAR_HEIGHT,
-      value: this.petXpFraction(),
-      ...PROGRESS_PRESETS.xp,
-      fill: MONGO_XP_BAR_COLOR,
-    });
-
-    // His health, which is what the countdown over it is counting *toward* —
-    // there is no separate cooldown clock, only the climb back up this bar.
-    drawProgressBar(ctx, {
-      x: x + MONGO_HP_BAR_INSET,
-      y: hpBarY,
-      width: w - MONGO_HP_BAR_INSET * 2,
-      height: MONGO_HP_BAR_HEIGHT,
-      value: this.hpRatio,
-      ...PROGRESS_PRESETS.hp,
+    // The wait is only legible as a number. The HP bar answers "how hurt is
+    // he", but a raptor resting off a knockout is unavailable at 99% as surely
+    // as at 1%, and the bar cannot show the difference between "nearly" and "yes".
+    const waitFrames = isActive ? 0 : this.framesUntilReady;
+    const totalFrames = mongoTotalRecoveryFrames(this.petState, this.maxHp, this.minSummonHp);
+    const stage = getMongoStats(this.petLevel()).stage;
+    return {
+      label,
+      active: isActive,
+      usable: this.canPress,
       // Green once he is fit to send in, red while he is still recovering: the
       // bar answers "can I summon him" as well as "how hurt is he".
-      fill: this.canSummon || isActive ? MONGO_HP_READY_COLOR : MONGO_HP_SPENT_COLOR,
-    });
-
-    // The wait is only legible as a number. The HP bar answers "how hurt is he",
-    // but a raptor resting off a knockout is unavailable at 99% as surely as at
-    // 1%, and the bar cannot show the difference between "nearly" and "yes".
-    if (!isActive) {
-      drawCooldownOverlay(ctx, {
-        x,
-        y,
-        width: w,
-        height: h,
-        remainingFrames: this.framesUntilReady,
-        totalFrames: mongoTotalRecoveryFrames(this.petState, this.maxHp, this.minSummonHp),
-      });
-    }
-
-    this.renderRecoveryToasts(ctx, x, y, w);
-
-    return rect;
-  }
-
-  /**
-   * The stack of "-1.2s" flags, drawn upward from just above the button.
-   *
-   * Anchored to the button rather than to the screen so it cannot drift away
-   * from the countdown it is explaining — the number the toast is subtracting
-   * from is the one drawn on this button, and the two have to read as one
-   * widget. That is also why it is drawn from here: the button's rect is a
-   * layout decision the caller makes per frame, and nothing else knows it.
-   */
-  private renderRecoveryToasts(
-    ctx: CanvasRenderingContext2D,
-    buttonX: number,
-    buttonY: number,
-    buttonWidth: number,
-  ): void {
-    const newestRowTopY = buttonY - RECOVERY_TOAST_BOTTOM_GAP - RECOVERY_TOAST_FONT_SIZE;
-    this.recoveryToasts.render(ctx, buttonX + buttonWidth / 2, newestRowTopY);
+      ready: this.canSummon || isActive,
+      hp: displayHp(this.hp),
+      maxHp: this.maxHp,
+      xpFraction: this.petXpFraction(),
+      cooldown: totalFrames > 0 ? Math.min(1, Math.max(0, waitFrames / totalFrames)) : 0,
+      cooldownSeconds: Math.ceil(waitFrames / FRAMES_PER_SECOND),
+      paintIcon: (ctx, rect) =>
+        drawMongoIcon(
+          ctx,
+          stage,
+          rect.x + rect.w / 2,
+          rect.y + rect.h / 2,
+          Math.min(rect.w, rect.h) * MONGO_CARD_ICON_SIZE_RATIO,
+        ),
+    };
   }
 
   /**
    * A marker pinned to the screen edge while he is out but off-camera.
    *
-   * The passive half of the vanish fix: the rescue guarantees he can always get
-   * home, and this guarantees the player can always tell where he is on the way.
-   * Between them there is no arrangement of pet and geometry that reads as "he
-   * is simply gone" — which is what the complaint actually was.
+   * The rescue guarantees he can always get home, and this guarantees the
+   * player can always tell where he is on the way, so no arrangement of pet and
+   * geometry reads as "he is simply gone".
    *
    * Both the visibility test and the bearing are taken from the *active* crawler
    * rather than from the cat, because that is who the camera follows and who the
@@ -1211,36 +1066,16 @@ export class MongoSystem implements GameSystem {
     const distanceFromActive = Math.hypot(mongo.x - active.x, mongo.y - active.y);
     if (insideViewport && distanceFromActive <= visibleRadiusPx) return;
 
-    const inset = OFFSCREEN_MARKER_EDGE_INSET_PX;
-    const markerX = Math.max(inset, Math.min(width - inset, screenX));
-    const markerY = Math.max(inset, Math.min(height - inset, screenY));
-
-    drawMongoIcon(
-      ctx,
-      getMongoStats(this.petLevel()).stage,
-      markerX,
-      markerY,
-      OFFSCREEN_MARKER_SIZE_PX,
-    );
-
-    // The icon says who; the chevron says which way, which the clamped position
-    // alone cannot at a corner, where both axes are pinned.
-    const bearing = Math.atan2(mongo.y - active.y, mongo.x - active.x);
-    const tip = OFFSCREEN_MARKER_SIZE_PX * OFFSCREEN_MARKER_CHEVRON_RATIO;
-    ctx.save();
-    ctx.translate(markerX, markerY);
-    ctx.rotate(bearing);
-    ctx.fillStyle = OFFSCREEN_MARKER_CHEVRON_COLOR;
-    ctx.strokeStyle = OFFSCREEN_MARKER_CHEVRON_OUTLINE;
-    ctx.lineWidth = OFFSCREEN_MARKER_CHEVRON_LINE_WIDTH;
-    ctx.beginPath();
-    ctx.moveTo(tip, 0);
-    ctx.lineTo(tip * OFFSCREEN_MARKER_CHEVRON_BACK, -tip * OFFSCREEN_MARKER_CHEVRON_HALF_WIDTH);
-    ctx.lineTo(tip * OFFSCREEN_MARKER_CHEVRON_BACK, tip * OFFSCREEN_MARKER_CHEVRON_HALF_WIDTH);
-    ctx.closePath();
-    ctx.fill();
-    ctx.stroke();
-    ctx.restore();
+    const stage = getMongoStats(this.petLevel()).stage;
+    paintOffscreenPetMarker(ctx, {
+      screenX,
+      screenY,
+      screenW: width,
+      screenH: height,
+      bearing: Math.atan2(mongo.y - active.y, mongo.x - active.x),
+      paintPortrait: (target, centreX, centreY, size) =>
+        drawMongoIcon(target, stage, centreX, centreY, size),
+    });
   }
 
   /** Render the cat's speech bubble for Mongo-related lines. */

@@ -11,7 +11,7 @@ import type { AbilityManager } from '../../core/AbilityManager';
 import { castShellWithGesture, isCastingShell } from '../../creatures/humanGestures';
 import type { InventoryItem } from '../../core/ItemDefs';
 import type { DynamiteSystem } from '../DynamiteSystem';
-import type { SkillBookReadRequest } from '../../ui/InventoryInteraction';
+import type { SkillBookReadRequest } from '../../ui/screens/inventory/InventoryActions';
 import type { SpellSystem } from '../SpellSystem';
 import type { MenusKit, PotionSlot } from './MenusKit';
 import type { SceneWorld } from './SceneWorld';
@@ -145,7 +145,7 @@ export const ANCHOR_INDOORS_REFUSAL = 'The stone needs open sky to find its way.
 /** Buzzes and explains a refused trip, from the hotbar or the bag menu. */
 export function refuseAnchorIndoors(host: Pick<HotbarHost, 'world' | 'menus'>): void {
   host.world.audio?.play('error_taking_action');
-  host.menus.hotbarToast.show(ANCHOR_INDOORS_REFUSAL);
+  host.menus.toasts.post(ANCHOR_INDOORS_REFUSAL, { tone: 'warning', icon: 'anchor' });
 }
 
 /**

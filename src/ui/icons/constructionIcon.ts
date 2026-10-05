@@ -1,3 +1,5 @@
+import type { Rect } from '../core/geom';
+import { iconSquare } from './iconSquare';
 /**
  * The Build button's icon: a hammer and a saw crossed over a small plank.
  *
@@ -47,12 +49,8 @@ const HAMMER_HANDLE_SHARE = 0.95;
 const CLAW_NOTCH = 0.15;
 const CLAW_REACH = 1.4;
 
-export function drawConstructionIcon(
-  ctx: CanvasRenderingContext2D,
-  x: number,
-  y: number,
-  size: number,
-): void {
+export function drawConstructionIcon(ctx: CanvasRenderingContext2D, rect: Rect): void {
+  const { x, y, size } = iconSquare(rect);
   ctx.save();
   try {
     ctx.beginPath();

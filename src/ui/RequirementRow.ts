@@ -1,4 +1,5 @@
-import { drawText, measureTextWidth, TEXT_PRESETS } from './TextBox';
+import type { WorldTextStyleId } from './theme/worldInk';
+import { measureWorldText, worldText } from './world/worldText';
 
 /**
  * A one-line checklist of what a job needs against what the party holds —
@@ -39,8 +40,8 @@ function entryText(requirement: Requirement): string {
   return isMet(requirement) ? `${count} ${MET_MARK}` : count;
 }
 
-function entryStyle(requirement: Requirement) {
-  return isMet(requirement) ? TEXT_PRESETS.requirementMet : TEXT_PRESETS.requirementShort;
+function entryStyle(requirement: Requirement): WorldTextStyleId {
+  return isMet(requirement) ? 'requirementMet' : 'requirementShort';
 }
 
 /** The row's width in pixels, for sizing a panel round it. */
@@ -51,7 +52,9 @@ export function measureRequirementRow(
   let width = 0;
   requirements.forEach((requirement, index) => {
     if (index > 0) width += ENTRY_GAP_PX;
-    width += measureTextWidth(ctx, entryText(requirement), entryStyle(requirement));
+    width += measureWorldText(ctx, entryText(requirement), {
+      style: entryStyle(requirement),
+    }).width;
   });
   return width;
 }
@@ -67,8 +70,7 @@ export function drawRequirementRow(
   for (const requirement of requirements) {
     const text = entryText(requirement);
     const style = entryStyle(requirement);
-    drawText(ctx, text, { x, y: topY, ...style });
-    x += measureTextWidth(ctx, text, style) + ENTRY_GAP_PX;
+    x += worldText(ctx, text, { x, y: topY, style }).width + ENTRY_GAP_PX;
   }
 }
 
@@ -79,7 +81,9 @@ export function measureRequirementColumn(
 ): number {
   let widest = 0;
   for (const requirement of requirements) {
-    const width = measureTextWidth(ctx, entryText(requirement), entryStyle(requirement));
+    const { width } = measureWorldText(ctx, entryText(requirement), {
+      style: entryStyle(requirement),
+    });
     widest = Math.max(widest, width);
   }
   return widest;
@@ -94,11 +98,11 @@ export function drawRequirementColumn(
   lineHeightPx: number,
 ): void {
   requirements.forEach((requirement, index) => {
-    drawText(ctx, entryText(requirement), {
+    worldText(ctx, entryText(requirement), {
       x: centreX,
       y: topY + index * lineHeightPx,
       align: 'center',
-      ...entryStyle(requirement),
+      style: entryStyle(requirement),
     });
   });
 }

@@ -39,7 +39,7 @@ import type { BriarHollowKit } from '../../src/systems/briarHollow/BriarHollowKi
 import { processingStationsOf } from '../../src/systems/briarHollow/processingStations';
 import { pointedGuidanceTarget } from '../../src/systems/briarHollow/questGuidance';
 import { CALLOUT_FRAMES } from '../../src/systems/briarHollow/structureCallouts';
-import { setInteractionPromptsSuppressed } from '../../src/ui/InteractionPrompt';
+import { queuedPrompts, setInteractionPromptsSuppressed } from '../../src/ui/InteractionPrompt';
 import { testConversationFlow } from '../dialogFlowTestHelpers';
 import { standAt, UPDATES_PER_SECOND } from '../villageSiegeHarness';
 import { blueprintsRig } from './fence';
@@ -59,7 +59,8 @@ const SWING_BAR_VIEWPORT = { width: 1280, height: 720 } as const;
  * A compass word joins the bearing once the arrow leans that way by more
  * than half a sector of an eight-way rose: sin(22.5°).
  */
-const COMPASS_LEAN = Math.sin(Math.PI / 8);
+const COMPASS_ROSE_POINTS = 8;
+const COMPASS_LEAN = Math.sin(Math.PI / COMPASS_ROSE_POINTS);
 const PROMPT_CANVAS_PX = 256;
 /** Enough boards for a fence section with plenty over. */
 const PLENTY_OF_BOARDS = 40;
@@ -68,6 +69,7 @@ const STATION_SCAN_MARGIN_TILES = 3;
 const UPGRADE_FRAMES = Math.round(STATION_UPGRADE_SECONDS * UPDATES_PER_SECOND);
 const WOOD_TO_WORK = 5;
 const TALK_LABEL = 'Talk';
+const MISMATCHES_SHOWN = 4;
 /** How far below the saw the callout probe walks to talk to someone else, and how far round it may look. */
 const AWAY_FROM_SAW_TILES = 10;
 const AWAY_SEARCH_TILES = 4;
@@ -95,7 +97,7 @@ function recordingContext(): { readonly ctx: CanvasRenderingContext2D; readonly 
   return { ctx, texts };
 }
 
-/** The kit's prompt chain for one frame, as the scene runs it: what it claimed and every word it drew. */
+/** The kit's prompt chain for one frame, as the scene runs it: what it claimed, every word it drew and every prompt label it raised. */
 function promptFrame(
   kit: BriarHollowKit,
   active: HumanPlayer,
@@ -103,6 +105,9 @@ function promptFrame(
   setInteractionPromptsSuppressed(false);
   const { ctx, texts } = recordingContext();
   const claimed = kit.renderPrompt(ctx, 0, 0, active);
+  for (const prompt of queuedPrompts()) {
+    if (prompt.label !== null) texts.push(prompt.label);
+  }
   return { claimed, texts };
 }
 
@@ -159,10 +164,7 @@ export function verifyTownBearingAgreesWithArrow(check: Check): void {
       .trackerEntries()
       .find((entry) => entry.id === BLUEPRINTS_QUEST_ID)?.target;
     check(
-      pointed !== null &&
-        tracked !== undefined &&
-        pointed.x === tracked.x &&
-        pointed.y === tracked.y,
+      pointed !== null && pointed.x === tracked?.x && pointed.y === tracked.y,
       `seed ${seed}: the guidance and the Journal pin both point at Plumbline Farm's door`,
     );
     if (tracked === undefined || spoken === null) {
@@ -222,7 +224,7 @@ export function verifySwingOwnsThePrompt(check: Check): void {
   );
 
   check(
-    rig.kit.tryInteract(rig.human) && blueprints.harvest.isSwinging,
+    rig.kit.tryInteract(rig.human, false) && blueprints.harvest.isSwinging,
     'Space starts a swing rather than a conversation',
   );
   const during = promptFrame(rig.kit, rig.human);
@@ -263,7 +265,7 @@ export function verifyFenceWorkOwnsThePrompt(check: Check): void {
     'Merrit is near enough to talk to',
   );
   check(
-    rig.kit.tryInteract(rig.human) && blueprints.fence.isWorking,
+    rig.kit.tryInteract(rig.human, false) && blueprints.fence.isWorking,
     'Space starts hammering the section',
   );
   const during = promptFrame(rig.kit, rig.human);
@@ -326,7 +328,7 @@ export function verifyStationGuidanceFollowsThePrompt(check: Check): void {
   );
   check(
     mismatches.length === 0,
-    `the guidance names the machine whose prompt shows (wrong at: ${mismatches.slice(0, 4).join(', ') || 'none'})`,
+    `the guidance names the machine whose prompt shows (wrong at: ${mismatches.slice(0, MISMATCHES_SHOWN).join(', ') || 'none'})`,
   );
 }
 

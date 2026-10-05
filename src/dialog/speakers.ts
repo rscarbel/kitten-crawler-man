@@ -18,6 +18,12 @@ import type { RatkinCastId } from '../sprites/art/ratkin/cast';
 export type TextCase = 'as-written' | 'upper';
 
 /**
+ * The face a speaker's words are set in: the UI face, or a terminal face for a
+ * voice that is meant to read as a machine. Omitted means `'ui'`.
+ */
+export type SpeakerTypeface = 'ui' | 'terminal';
+
+/**
  * How a speaker sounds while their text reveals.
  *   'typing' → the shared typing-click sound, once per revealed token
  *   'clips'  → one of the speaker's own voice clips, once per DialogLine
@@ -83,6 +89,7 @@ export interface SpeakerDef {
   readonly textCase: TextCase;
   /** Milliseconds between revealed elements — {@link SPEECH_REVEAL_INTERVAL_MS} for ordinary speech. */
   readonly revealIntervalMs: number;
+  readonly typeface?: SpeakerTypeface;
 }
 
 function ratkinVillagerSpeaker(name: string, id: RatkinCastId): SpeakerDef {
@@ -394,6 +401,7 @@ export interface TransientStyleDef {
   readonly textCase: TextCase;
   /** Milliseconds between revealed elements — {@link SPEECH_REVEAL_INTERVAL_MS} for ordinary speech. */
   readonly revealIntervalMs: number;
+  readonly typeface?: SpeakerTypeface;
 }
 
 /**
@@ -443,6 +451,7 @@ export const TRANSIENT_STYLES = {
     reveal: 'sentence',
     textCase: 'as-written',
     revealIntervalMs: SPEECH_REVEAL_INTERVAL_MS,
+    typeface: 'terminal',
   },
   /** A room's cook — the name changes with the room, the voice does not. */
   bopca: {
@@ -502,7 +511,7 @@ export function resolveSpeaker(ref: SpeakerRef): ResolvedSpeaker {
   if (ref.kind === 'transient') {
     return { name: ref.name, portrait: null, ...TRANSIENT_STYLES[ref.style] };
   }
-  const def = SPEAKERS[ref.id];
+  const def: SpeakerDef = SPEAKERS[ref.id];
   return {
     name: def.name,
     portrait: def.portrait === null ? null : resolvePortrait(def.portrait),
@@ -510,5 +519,13 @@ export function resolveSpeaker(ref: SpeakerRef): ResolvedSpeaker {
     reveal: def.reveal,
     textCase: def.textCase,
     revealIntervalMs: def.revealIntervalMs,
+    typeface: def.typeface,
   };
+}
+
+/** The face a `SpeakerRef`'s words are set in, without painting its portrait. */
+export function speakerTypeface(ref: SpeakerRef): SpeakerTypeface {
+  const def: SpeakerDef | TransientStyleDef =
+    ref.kind === 'transient' ? TRANSIENT_STYLES[ref.style] : SPEAKERS[ref.id];
+  return def.typeface ?? 'ui';
 }

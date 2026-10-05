@@ -33,6 +33,6 @@ All audio is **pre-recorded mp3 files** — no synthesis. WebAudio is only the p
 - **Preferred**: wire to a game event in `AudioManager.wireEvents(bus)` — the central subscriber mapping EventBus events (`mobKilled`, `bossFightInitiated`, `questCompleted`, ...) to sounds/music. Cleaner than sprinkling `audio.play` at emit sites. Note the bus is cleared on scene teardown, so `wireEvents` runs once per scene.
 - **Mob sounds**: set the creature's `audioTag` and add a `case` in the `mob.audioTag` switch in `playMobAudioCues` (`src/systems/GameLoopPhases.ts`). `dealDamage` sets `attackSoundPending` automatically; set `projectileSoundPending` for ranged attacks. Boss-specific sounds use `instanceof` checks there. A creature with more voices than the boolean pending flags can carry queues a typed field instead (`Cow.voicePending`, drained by `playCowVoice` in the same file), or a cue queue drained by its own player (`src/systems/undeadAudioCues.ts` for the village assault's undead).
 - **Systems** don't hold an audio reference — they set pending flags (e.g. `explosionSoundPending`) the scene drains.
-- **UI buttons**: handled by `setButtonAudio` + `notifyButtonClick` (see `add-ui`) — don't add per-button play calls.
+- **UI buttons**: the scene's `UiRoot` plays the tap sound when a control fires (a region's `sound` option picks another cue or `null` for none; a disabled control plays `error`) — see `add-ui`. Never add per-button play calls.
 
 Finish with the `dev-workflow` gates (typecheck, lint, format).

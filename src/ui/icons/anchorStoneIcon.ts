@@ -1,4 +1,6 @@
 import { frameTime } from '../../utils';
+import type { Rect } from '../core/geom';
+import { iconSquare } from './iconSquare';
 
 /**
  * The Wayfinder's Anchor and the shards it is welded from.
@@ -167,17 +169,11 @@ const GLEAM_TRAVEL_END = 1.2;
 const GLEAM_RGB = '226,240,255';
 
 /**
- * Draws the assembled Wayfinder's Anchor into a square icon region, animated
+ * Draws the assembled Wayfinder's Anchor into the square centred in `rect`, animated
  * by the shared frame clock.
  */
-export function drawAnchorStoneIcon(
-  ctx: CanvasRenderingContext2D,
-  x: number,
-  y: number,
-  size: number,
-  alpha = 1,
-): void {
-  paintAnchorStoneAt(ctx, x, y, size, frameTime, alpha);
+export function drawAnchorStoneIcon(ctx: CanvasRenderingContext2D, rect: Rect, alpha = 1): void {
+  paintAnchorStoneAt(ctx, rect, frameTime, alpha);
 }
 
 /**
@@ -186,12 +182,11 @@ export function drawAnchorStoneIcon(
  */
 export function paintAnchorStoneAt(
   ctx: CanvasRenderingContext2D,
-  x: number,
-  y: number,
-  size: number,
+  rect: Rect,
   timeS: number,
   alpha = 1,
 ): void {
+  const { x, y, size } = iconSquare(rect);
   const drawable =
     size > 0 && Number.isFinite(size) && Number.isFinite(timeS) && isVisibleAlpha(alpha);
   if (!drawable) return;
@@ -573,13 +568,8 @@ const SHARD_FRACTURE_ALPHA = 0.5;
 const SHARD_LINE_WIDTH_FRACTION = 0.055;
 
 /** Draws one broken shard. Shared by all three — they are the same stone. */
-export function drawAnchorShardIcon(
-  ctx: CanvasRenderingContext2D,
-  x: number,
-  y: number,
-  size: number,
-  alpha = 1,
-): void {
+export function drawAnchorShardIcon(ctx: CanvasRenderingContext2D, rect: Rect, alpha = 1): void {
+  const { x, y, size } = iconSquare(rect);
   const drawable = size > 0 && Number.isFinite(size) && isVisibleAlpha(alpha);
   if (!drawable) return;
   const lineWidth = Math.max(MIN_LINE_WIDTH, size * SHARD_LINE_WIDTH_FRACTION);

@@ -107,7 +107,13 @@ const assets = collectShippedAssets();
 reportAssetSelection(assets);
 
 const LAUNCHER_FILES = ['start.command', 'start.bat', 'README.txt'];
-const zipEntries = [...CORE_FILES, ...assets.images, ...assets.audio, ...LAUNCHER_FILES];
+const zipEntries = [
+  ...CORE_FILES,
+  ...assets.images,
+  ...assets.audio,
+  ...assets.fonts,
+  ...LAUNCHER_FILES,
+];
 
 try {
   // `zip -@` takes the file list on stdin, so the archive contains exactly the

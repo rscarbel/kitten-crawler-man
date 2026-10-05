@@ -1,48 +1,66 @@
 /**
  * MenusKit — the panels, overlays and hotbar every place with a player in it
- * needs: the bag, the gear screen, the pause menu, the award stack, the toast
+ * needs: the inventory screen, the pause menu, the award stack, the toast
  * strip, and the one routine that decides what pressing a hotbar slot does.
  *
  * A scene constructs one of these and its player can spend a skill point, drag
- * an item, drink a potion and read a skill book. Building interiors had a
- * stripped copy of about a third of this, reachable only from mobile taps, which
- * is why a desktop player indoors had no working hotbar and no way at all to
- * spend the points they had just earned.
+ * an item, drink a potion and read a skill book. Every scene with a player
+ * shares this one kit, so indoors and out offer the same menus and the same
+ * hotbar on every platform.
  */
 
 import type { SoundId } from '../../audio/sounds';
 import type { AbilityManager } from '../../core/AbilityManager';
 import { playDrinkGesture } from '../../creatures/humanGestures';
-import type { AchievementManager } from '../../core/AchievementManager';
-import type { GameStats } from '../../core/GameStats';
 import { displayHp } from '../../core/crawlerFormulas';
 import { ITEM_DEF, type InventoryItem, type ItemId } from '../../core/ItemDefs';
 import { itemIsTradable } from '../../core/itemTrade';
-import { CRAWLER_NAMES } from '../../core/SkillManager';
+import { CRAWLER_NAMES, type CrawlerKind } from '../../core/SkillManager';
 import { POTION_EFFECT_SOUND_DELAY, TIMED_POTIONS } from '../../core/timedPotions';
 import { eatFood, isFoodId } from '../../core/foods';
 import type { CatPlayer } from '../../creatures/CatPlayer';
 import { HumanPlayer } from '../../creatures/HumanPlayer';
-import { GearPanel } from '../../ui/GearPanel';
-import { HotbarToast, type NoticeProminence } from '../../ui/HotbarToast';
-import { InventoryPanel } from '../../ui/InventoryPanel';
-import type { InventoryInteraction } from '../../ui/InventoryInteraction';
+import { partyCoins } from '../../core/partyCoins';
+import { HudToasts, type ToastOptions } from '../../ui/hud/toasts';
+import {
+  InventoryActions,
+  type PendingSlotRef,
+  type SkillBookReadRequest,
+} from '../../ui/screens/inventory/InventoryActions';
+import { InventoryScreen } from '../../ui/screens/inventory/InventoryScreen';
+import type {
+  InventoryMember,
+  InventoryRestrictions,
+  InventoryTab,
+  ItemCooldown,
+} from '../../ui/screens/inventory/inventoryTypes';
 import { LevelUpDialog } from '../../ui/LevelUpDialog';
-import { MongoExplainer } from '../../ui/MongoExplainer';
-import { CraftExplainers } from '../../ui/CraftExplainers';
-import { ResourcingExplainer } from '../../ui/ResourcingExplainer';
-import { ConstructionExplainer } from '../../ui/ConstructionExplainer';
-import { ProcessingExplainer } from '../../ui/ProcessingExplainer';
-import { ConstructionMenu } from '../../ui/ConstructionMenu';
-import { QuantityPicker } from '../../ui/QuantityPicker';
-import { playButtonSound } from '../../ui/Button';
+import { CraftExplainers } from '../../ui/screens/dialogs/CraftExplainers';
+import { RESOURCING_EXPLAINER } from '../../ui/screens/dialogs/resourcingExplainer';
+import { CONSTRUCTION_EXPLAINER } from '../../ui/screens/dialogs/constructionExplainer';
+import { PROCESSING_EXPLAINER } from '../../ui/screens/dialogs/processingExplainer';
+import { mongoExplainerEntry } from '../../ui/screens/dialogs/mongoExplainer';
+import { levelUpSurface } from '../../ui/screens/dialogs/levelUpDialog';
+import { rewardGrantedSurface } from '../../ui/screens/dialogs/rewardGrantedDialog';
+import { skillBookDialogSurface } from '../../ui/screens/dialogs/skillBookDialog';
+import { questRewardSurface } from '../../ui/screens/dialogs/questRewardScreen';
+import { ConstructionScreen } from '../../ui/screens/construction/ConstructionScreen';
+import { QuantityDialog } from '../../ui/screens/dialogs/QuantityDialog';
 import { potionEffectNotice, statBoostNotice } from '../../ui/potionNotices';
-import { PauseMenu } from '../../ui/PauseMenu';
 import { RewardGrantedDialog } from '../../ui/RewardGrantedDialog';
 import { QuestRewardScreen } from '../../ui/questReward/QuestRewardScreen';
 import { SkillBookPrompt } from '../../ui/SkillBookPrompt';
-import { promptSkillBookRead, type SkillBookFlowHost } from '../skillBookUse';
-import type { PendingSlotRef, SkillBookReadRequest } from '../../ui/InventoryInteraction';
+import {
+  promptSkillBookRead,
+  resolveSkillBookChoice,
+  type SkillBookFlowHost,
+} from '../skillBookUse';
+import { UI_TAP_SOUND, type Surface } from '../../ui/core/UiRoot';
+import {
+  PauseScreen,
+  type PauseFrame,
+  type PauseRestriction,
+} from '../../ui/screens/pause/PauseScreen';
 import type { SceneWorld } from './SceneWorld';
 
 /** Which bottle a drink came from: the container and the slot inside it. */
@@ -63,6 +81,10 @@ function slotContentsAt(
 
 /** What a hamburger refusal says: the one refusal with a reason worth reading. */
 const ALREADY_FULL_NOTICE = "You're already full.";
+const POTION_TOAST: ToastOptions = { tone: 'success', icon: 'flask' };
+const TOME_TOAST: ToastOptions = { tone: 'accent', icon: 'book' };
+const PACK_FULL_TOAST: ToastOptions = { tone: 'warning', icon: 'bag' };
+const HOTBAR_REFUSED_TOAST: ToastOptions = { tone: 'warning', icon: 'bag' };
 
 /** Every item gated by the potion cooldown, so each wears the same hotbar sweep. */
 const POTION_COOLDOWN_ITEMS: readonly ItemId[] = ['health_potion', 'hollow_stew'];
@@ -77,16 +99,14 @@ export interface MenusKitDeps {
   readonly world: SceneWorld;
   readonly abilityManager: AbilityManager;
   /**
-   * The tutorial's restricted drag rules, when one is running. Absent everywhere
-   * else, which is what leaves the bag fully draggable.
+   * The tutorial's narrowing of the bag while a step steers a drag. Absent
+   * everywhere else, which is what leaves the bag fully usable.
    */
-  readonly inventoryInteraction?: InventoryInteraction;
-  /**
-   * Extra teardown a scene needs whenever a pausing overlay takes the screen —
-   * the dungeon's mobile long-press timer, which would otherwise fire a context
-   * menu underneath the overlay that just covered it.
-   */
-  readonly onOverlayRaised?: () => void;
+  readonly inventoryRestrictions?: () => InventoryRestrictions;
+  /** A blocked item was dragged somewhere other than home: the tutorial's cue. */
+  readonly onBlockedInventoryDrag?: () => void;
+  /** The one crawler whose pack the inventory may show while a tutorial step asks for it, or null. */
+  readonly inventoryCrawlerLock?: () => CrawlerKind | null;
   /**
    * Called after a bottle actually goes down, for the achievements a scene ties
    * to drinking one *where it was poured*.
@@ -94,21 +114,34 @@ export interface MenusKitDeps {
   readonly onPotionDrunk?: (id: ItemId, drinker: HumanPlayer | CatPlayer) => void;
 }
 
-/** Everything the pause menu needs in order to draw its full set of tabs. */
-export interface PauseMenuRenderDeps {
-  readonly humanAchievements: AchievementManager;
-  readonly catAchievements: AchievementManager;
-  readonly gameStats: GameStats;
-  readonly onOpenHumanBoxes?: () => void;
-  readonly onOpenCatBoxes?: () => void;
-  readonly mouseX: number;
-  readonly mouseY: number;
+/** What the kit's surfaces need from the scene that mounts them. */
+export interface MenusSurfaceHooks {
+  /** The scene's achievements, stats and loot-box openers the pause screen draws from. */
+  readonly pauseFrame: () => PauseFrame;
+  /** Closes the pause menu the way the scene's pause key does, with its side effects. */
+  readonly togglePause: () => void;
+  /**
+   * Drains what a click on the picker or the bag's context menu queued (a
+   * drink, a drop, a trade) with the scene's drop target. Omitted by a scene
+   * that drains them every frame instead.
+   */
+  readonly resolveInventoryActions?: () => void;
+  /** The tutorial step that allows only one crawler's inventory in the pause screen, or null. */
+  readonly pauseRestriction?: () => PauseRestriction | null;
 }
 
 export class MenusKit {
-  readonly inventoryPanel: InventoryPanel;
-  readonly gearPanel = new GearPanel();
-  readonly pauseMenu = new PauseMenu();
+  /** The item menu's entries and the `pending*` hand-off the scene resolves. */
+  readonly inventoryActions = new InventoryActions();
+  /** The bag and character screen: I opens its Bag tab, G its Character tab. */
+  readonly inventoryScreen: InventoryScreen;
+  /**
+   * Cooldowns still running, keyed by ability id or, for a plain item with a
+   * cooldown of its own (the Wayfinder's Anchor), by item id. The scene fills
+   * it each frame; the HUD hotbar and the inventory's hotbar row both read it.
+   */
+  readonly itemCooldowns = new Map<string, ItemCooldown>();
+  readonly pauseScreen: PauseScreen;
   readonly levelUpDialog = new LevelUpDialog();
   readonly rewardGrantedDialog = new RewardGrantedDialog();
   /**
@@ -121,23 +154,26 @@ export class MenusKit {
    */
   readonly questReward: QuestRewardScreen;
   readonly skillBookPrompt = new SkillBookPrompt();
-  readonly hotbarToast = new HotbarToast();
-  readonly mongoExplainer: MongoExplainer;
-  /** The craft skills' and processing's "how it works" explainers, opened from the Crafts tab and by the teachers. */
+  readonly toasts = new HudToasts();
+  /**
+   * The "how it works" explainers: the craft skills' and processing's, opened
+   * from the Crafts tab and by the teachers, and Mongo's, opened when he joins
+   * and from the pause menu.
+   */
   readonly craftExplainers = new CraftExplainers();
   /**
    * The Construction menu. Held here rather than by the village because both
    * scenes open it — indoors the outdoor-only kinds are refused — and
    * whichever scene is live supplies what it lists.
    */
-  readonly constructionMenu: ConstructionMenu;
+  readonly constructionMenu: ConstructionScreen;
   /**
    * "How many?" for the bag's Drop and Trade entries, shared with every other
    * quantity picker in the game rather than the bag rolling its own — a
    * digit typed into it edits the amount directly, the same as anywhere else
    * one of these opens.
    */
-  readonly itemQuantityPicker: QuantityPicker;
+  readonly itemQuantityDialog: QuantityDialog;
 
   /**
    * What the bag menu's `menuUseLabel` entry does, set by the scene: exactly
@@ -151,14 +187,9 @@ export class MenusKit {
 
   private readonly world: SceneWorld;
   private readonly abilityManager: AbilityManager;
-  private readonly onOverlayRaised: (() => void) | null;
   private readonly onPotionDrunk: ((id: ItemId, drinker: HumanPlayer | CatPlayer) => void) | null;
-  /**
-   * When set, the bag shows this crawler's pack rather than the active one's —
-   * how the pause menu offers the companion's inventory without switching to
-   * them.
-   */
-  private inventoryOverridePlayer: HumanPlayer | CatPlayer | null = null;
+  /** Drains what an item action queued, set by the scene that mounts the surfaces. */
+  private resolveInventoryActions: (() => void) | null = null;
   private delayedSounds: DelayedSound[] = [];
   /**
    * A skill book asked for, and who asked, held together in one field because
@@ -175,40 +206,77 @@ export class MenusKit {
   constructor(deps: MenusKitDeps) {
     this.world = deps.world;
     this.abilityManager = deps.abilityManager;
-    this.onOverlayRaised = deps.onOverlayRaised ?? null;
     this.onPotionDrunk = deps.onPotionDrunk ?? null;
-    this.inventoryPanel =
-      deps.inventoryInteraction === undefined
-        ? new InventoryPanel()
-        : new InventoryPanel(deps.inventoryInteraction);
+    this.inventoryScreen = this.buildInventoryScreen(deps);
 
     const audio = deps.world.audio;
-    this.mongoExplainer = new MongoExplainer(audio, () => this.abilityManager.getLevel('mongo'));
-    this.pauseMenu.onHowMongoWorks = () => this.mongoExplainer.open();
-    this.craftExplainers.register('resourcing', new ResourcingExplainer(audio));
-    this.craftExplainers.register('construction', new ConstructionExplainer(audio));
-    this.craftExplainers.register('processing', new ProcessingExplainer(audio));
-    this.constructionMenu = new ConstructionMenu(audio, (message) => this.announce(message));
-    this.pauseMenu.onHowCraftWorks = (id) => void this.craftExplainers.open(id);
-    this.pauseMenu.onHowProcessingWorks = () => void this.craftExplainers.open('processing');
-    this.pauseMenu.audio = audio;
+    this.craftExplainers.register('resourcing', RESOURCING_EXPLAINER);
+    this.craftExplainers.register('construction', CONSTRUCTION_EXPLAINER);
+    this.craftExplainers.register('processing', PROCESSING_EXPLAINER);
+    this.craftExplainers.register(
+      'mongo',
+      mongoExplainerEntry(() => this.abilityManager.getLevel('mongo')),
+    );
+    this.constructionMenu = new ConstructionScreen(audio, {
+      notify: (message) => this.announce(message),
+    });
+    this.pauseScreen = new PauseScreen({
+      party: () => this.world.pm,
+      abilities: this.abilityManager,
+      audio,
+      guides: {
+        mongo: () => void this.craftExplainers.open('mongo'),
+        craft: (id) => void this.craftExplainers.open(id),
+        processing: () => void this.craftExplainers.open('processing'),
+      },
+    });
     this.levelUpDialog.audio = audio;
     this.rewardGrantedDialog.audio = audio;
     this.skillBookPrompt.audio = audio;
     this.questReward = new QuestRewardScreen(audio);
     deps.world.bus.on('questRewardShown', (spec) => this.questReward.enqueue(spec));
 
-    this.itemQuantityPicker = new QuantityPicker(audio);
-    // The picker is a host-owned overlay spawned from an item action, not one
-    // of the panel's own fields, so it has to be told explicitly to close
-    // alongside the bag rather than surviving underneath it.
-    this.inventoryPanel.onClosingSubPanels = () => this.itemQuantityPicker.close();
-    this.inventoryPanel.interaction.canTradeItem = (item) => this.itemIsTradableNow(item);
+    this.itemQuantityDialog = new QuantityDialog(audio);
+    this.inventoryActions.canTradeItem = (item) => this.itemIsTradableNow(item);
+  }
+
+  private buildInventoryScreen(deps: MenusKitDeps): InventoryScreen {
+    const { pm } = this.world;
+    const member = (kind: CrawlerKind): InventoryMember =>
+      kind === 'human'
+        ? {
+            id: 'human',
+            name: CRAWLER_NAMES.human,
+            owner: pm.human,
+            wieldedWeaponId: pm.human.wieldedWeaponId,
+          }
+        : { id: 'cat', name: CRAWLER_NAMES.cat, owner: pm.cat };
+    const restrictions = deps.inventoryRestrictions;
+    return new InventoryScreen({
+      actions: this.inventoryActions,
+      party: () => {
+        const locked = deps.inventoryCrawlerLock?.() ?? null;
+        if (locked !== null) return [member(locked)];
+        const active: CrawlerKind = pm.active() === pm.human ? 'human' : 'cat';
+        return [member(active), member(active === 'human' ? 'cat' : 'human')];
+      },
+      coins: () => partyCoins(pm.human, pm.cat),
+      coinSplit: () =>
+        `${CRAWLER_NAMES.human} ${pm.human.coins} · ${CRAWLER_NAMES.cat} ${pm.cat.coins}`,
+      cooldownFor: (item) => this.itemCooldowns.get(item.abilityId ?? item.id) ?? null,
+      restrictions: restrictions === undefined ? undefined : () => restrictions(),
+      onBlockedDrag: () => deps.onBlockedInventoryDrag?.(),
+      onHotbarRefused: (_item, reason) => this.announce(reason, HOTBAR_REFUSED_TOAST),
+      onActionQueued: () => this.resolveInventoryActions?.(),
+      // "How many?" is opened from an item action, not drawn by the screen, so
+      // it has to close alongside it rather than survive underneath.
+      onClosed: () => this.itemQuantityDialog.close(),
+    });
   }
 
   /**
-   * True while a reward or level-up announcement is up. Both draw over the Mongo
-   * explainer, so Escape pressed under one of them is not aimed at it.
+   * True while a reward or level-up announcement is up. Both draw over the
+   * explainers, so Escape pressed under one of them is not aimed at one.
    */
   get isAwardStackShowing(): boolean {
     return (
@@ -216,38 +284,18 @@ export class MenusKit {
     );
   }
 
-  /** True while a pausing overlay owns the screen and every raw pointer path must stop. */
-  get isOverlayBlockingPointer(): boolean {
-    return (
-      this.skillBookPrompt.isOpen ||
-      this.questReward.isOpen ||
-      this.levelUpDialog.isShowing ||
-      this.rewardGrantedDialog.isShowing ||
-      this.mongoExplainer.isOpen ||
-      this.craftExplainers.isOpen ||
-      this.itemQuantityPicker.isOpen ||
-      // A long-press context menu answers whatever click lands anywhere on
-      // screen, even one that misses it and only dismisses it — so the tap
-      // that closes it must not also reach a world interaction underneath.
-      this.inventoryPanel.interaction.contextMenu !== null
-    );
-  }
-
   update(): void {
-    this.hotbarToast.update();
+    this.toasts.update();
     this.levelUpDialog.update();
     this.rewardGrantedDialog.update();
     this.updateQuestReward();
-    this.itemQuantityPicker.update();
     this.syncItemQuantityPrompt();
     this.tickDelayedSounds();
   }
 
   /** Raises the next queued quest-complete screen when it is clear to go up. */
   private updateQuestReward(): void {
-    // The screen's pointer guard blocks the mouse-up that would otherwise
-    // resolve a drag still in flight underneath it.
-    if (this.questReward.update()) this.cancelInventoryDragForOverlay();
+    this.questReward.update();
   }
 
   /**
@@ -256,12 +304,12 @@ export class MenusKit {
    * the same widget instead of each owning a bespoke one.
    */
   private syncItemQuantityPrompt(): void {
-    if (this.itemQuantityPicker.isOpen) return;
-    const interaction = this.inventoryPanel.interaction;
-    const prompt = interaction.pendingQuantityPrompt;
+    if (this.itemQuantityDialog.isOpen) return;
+    const actions = this.inventoryActions;
+    const prompt = actions.pendingQuantityPrompt;
     if (prompt === null) return;
-    interaction.pendingQuantityPrompt = null;
-    this.itemQuantityPicker.open({
+    actions.pendingQuantityPrompt = null;
+    this.itemQuantityDialog.open({
       title: prompt.kind === 'drop' ? `Drop ${prompt.itemName}` : `Trade ${prompt.itemName}`,
       max: prompt.maxQty,
       initial: 1,
@@ -269,9 +317,9 @@ export class MenusKit {
       confirmLabel: prompt.kind === 'drop' ? 'Drop' : 'Trade',
       onConfirm: (qty) => {
         if (prompt.kind === 'drop') {
-          interaction.pendingDropItem = { id: prompt.id, quantity: qty };
+          actions.pendingDropItem = { id: prompt.id, quantity: qty };
         } else {
-          interaction.pendingTradeItem = { id: prompt.id, quantity: qty };
+          actions.pendingTradeItem = { id: prompt.id, quantity: qty };
         }
       },
       onCancel: () => undefined,
@@ -279,90 +327,42 @@ export class MenusKit {
   }
 
   dispose(): void {
-    this.hotbarToast.clear();
+    this.toasts.clear();
+    // An armed key chip would otherwise eat the first key of the next scene.
+    this.pauseScreen.rebind.reset();
   }
 
   /** Announces something in the toast strip above the hotbar. */
-  announce(message: string, prominence: NoticeProminence = 'normal'): void {
-    this.hotbarToast.show(message, prominence);
+  announce(message: string, opts?: ToastOptions): void {
+    this.toasts.post(message, opts);
   }
 
-  /**
-   * Closes both panels, so an overlay that takes the screen replaces them rather
-   * than stacking on top of their slots.
-   */
+  /** Closes the inventory, so an overlay that takes the screen replaces it rather than stacking on it. */
   closePanels(): void {
-    this.closeInventory();
-    this.gearPanel.isOpen = false;
+    this.inventoryScreen.close();
   }
 
-  /**
-   * Shuts the bag through the panel's own teardown, which is what drops the
-   * `returnToMenuCallback` and the companion override with it. Setting `isOpen`
-   * directly leaves both behind, and the next press of `i` then opens on the
-   * companion's pack.
-   */
-  private closeInventory(): void {
-    if (this.inventoryPanel.isOpen) this.inventoryPanel.toggle();
-  }
-
+  /** I: shows the Bag tab, or closes the screen when it is already showing. */
   toggleInventory(): void {
-    this.inventoryPanel.toggle();
-    if (!this.inventoryPanel.isOpen) return;
-    this.pauseMenu.close();
-    this.gearPanel.isOpen = false;
+    this.toggleInventoryTab('bag');
   }
 
-  /**
-   * True when an open bag or gear panel is drawn over (mx, my), or a
-   * long-press context menu is up anywhere on screen. HUD buttons sit beneath
-   * the panels, so a touch landing on one must never reach them — and a
-   * context menu answers whatever click lands on it (even one that misses it,
-   * which dismisses the menu) rather than whatever button its option happens
-   * to be drawn over, so it blocks every touch regardless of position.
-   */
-  panelCovers(mx: number, my: number): boolean {
-    return (
-      this.inventoryPanel.hitsPanel(mx, my) ||
-      this.gearPanel.hitsPanel(mx, my) ||
-      this.inventoryPanel.interaction.contextMenu !== null
-    );
-  }
-
+  /** G: shows the Character tab, or closes the screen when it is already showing. */
   toggleGear(): void {
-    this.gearPanel.toggle();
-    if (!this.gearPanel.isOpen) return;
-    this.pauseMenu.close();
-    this.closeInventory();
+    this.toggleInventoryTab('character');
   }
 
-  /**
-   * Drops whatever the bag has in flight, for when a pausing overlay takes the
-   * screen. The overlays' pointer guard blocks the mouse-up that would otherwise
-   * resolve a drag, so without this the ghost item survives the overlay and the
-   * *next* mouse-up drops it into whatever slot the cursor is over.
-   */
-  cancelInventoryDragForOverlay(): void {
-    this.inventoryPanel.interaction.cancelDrag();
-    // Same reasoning for the search field: it would otherwise keep eating keys
-    // the overlay in front of it is the one asking for.
-    this.inventoryPanel.blurSearch();
-    this.onOverlayRaised?.();
+  private toggleInventoryTab(tab: InventoryTab): void {
+    this.inventoryScreen.toggle(tab);
+    if (this.inventoryScreen.isOpen) this.pauseScreen.close();
   }
 
-  /** Gives the keyboard back to the game, for a surface that now outranks the bag. */
-  blurInventorySearch(): void {
-    this.inventoryPanel.blurSearch();
-  }
-
-  /** The scene-entry guard: any click not aimed at the search field releases it. */
-  blurInventorySearchUnlessClicked(mx: number, my: number): void {
-    this.inventoryPanel.blurSearchUnlessClicked(mx, my);
-  }
-
-  /** Whose pack the bag is showing: an override picked from the pause menu, or the active crawler. */
+  /** Whose pack the inventory is showing: the crawler picked in its header, or the active one. */
   inventoryPlayer(): HumanPlayer | CatPlayer {
-    return this.inventoryOverridePlayer ?? this.world.pm.active();
+    const { pm } = this.world;
+    const shown = this.inventoryScreen.isOpen ? this.inventoryScreen.member() : null;
+    if (shown === null) return pm.active();
+    return shown.id === 'human' ? pm.human : pm.cat;
   }
 
   /** The weapon the bag's owner is holding, for the hotbar's in-hand badge. */
@@ -371,42 +371,14 @@ export class MenusKit {
     return holder instanceof HumanPlayer ? holder.wieldedWeaponId : null;
   }
 
-  /**
-   * Opens the bag on `player`'s pack, with a way back to the pause menu it was
-   * opened from.
-   */
-  openInventoryFor(player: HumanPlayer | CatPlayer, returnToMenu: () => void): void {
-    this.pauseMenu.close();
-    this.inventoryOverridePlayer = player;
-    this.inventoryPanel.isOpen = true;
-    this.inventoryPanel.returnToMenuCallback = () => {
-      this.clearInventoryOverride();
-      this.inventoryPanel.isOpen = false;
-      returnToMenu();
-    };
-    this.inventoryPanel.onClose = () => this.clearInventoryOverride();
-  }
-
-  private clearInventoryOverride(): void {
-    this.inventoryOverridePlayer = null;
-  }
-
   skillBookFlowHost(): SkillBookFlowHost {
     return {
       audio: this.world.audio,
       announce: (message) => this.announce(message),
       prompt: this.skillBookPrompt,
-      // The drag is dropped alongside: the overlays' pointer guard blocks the
-      // mouse-up that would otherwise resolve one still in flight.
-      showReward: (reward) => {
-        this.cancelInventoryDragForOverlay();
-        this.rewardGrantedDialog.enqueue(reward);
-      },
-      showLevelUp: (entry) => {
-        this.cancelInventoryDragForOverlay();
-        this.levelUpDialog.enqueue(entry);
-      },
-      closeInventory: () => this.closeInventory(),
+      showReward: (reward) => this.rewardGrantedDialog.enqueue(reward),
+      showLevelUp: (entry) => this.levelUpDialog.enqueue(entry),
+      closeInventory: () => this.inventoryScreen.close(),
     };
   }
 
@@ -427,19 +399,16 @@ export class MenusKit {
     // The bag's own queue carries no reader — a click there is by definition
     // aimed at whichever pack is on screen — so it is paired here rather than
     // inheriting whoever a previous hotbar press happened to pin.
-    const interaction = this.inventoryPanel.interaction;
-    const fromPanel = interaction.pendingSkillBookRead;
+    const actions = this.inventoryActions;
+    const fromPanel = actions.pendingSkillBookRead;
     if (fromPanel !== null) {
-      interaction.pendingSkillBookRead = null;
+      actions.pendingSkillBookRead = null;
       this.queuedRead = { request: fromPanel, reader: fallbackReader };
     }
 
     const queued = this.queuedRead;
     if (queued === null) return;
     this.queuedRead = null;
-    // The click that queued this also left a drag half-started on the slot
-    // underneath the prompt about to cover it.
-    this.cancelInventoryDragForOverlay();
     promptSkillBookRead(this.skillBookFlowHost(), queued.reader, queued.request);
     // A refused read never opens the prompt, so there is nothing to pin.
     this.skillBookReader = this.skillBookPrompt.isOpen ? queued.reader : null;
@@ -530,7 +499,7 @@ export class MenusKit {
       if (!consume()) return false;
       const { stat, amount } = drinker.applyStatBoost();
       this.playDrinkSounds('stat_boost');
-      this.announce(statBoostNotice(stat, amount));
+      this.announce(statBoostNotice(stat, amount), POTION_TOAST);
       return true;
     }
 
@@ -609,7 +578,7 @@ export class MenusKit {
       max: Math.max(1, holder.computePotionCooldown()),
     };
     for (const id of POTION_COOLDOWN_ITEMS) {
-      this.inventoryPanel.abilityCooldowns.set(id, overlay);
+      this.itemCooldowns.set(id, overlay);
     }
   }
 
@@ -628,7 +597,7 @@ export class MenusKit {
     if (!reader.inventory.removeOneFromSlot(tome.source, tome.slotIdx, tome.id)) return;
     reader.explosivesHandling += levels;
     audio?.play('menu_skillpoint_spent');
-    this.announce(`Explosives Handling is now level ${reader.explosivesHandling}.`);
+    this.announce(`Explosives Handling is now level ${reader.explosivesHandling}.`, TOME_TOAST);
   }
 
   /** The gulp, then the effect landing a beat later. */
@@ -639,7 +608,7 @@ export class MenusKit {
 
   private showPotionEffectNotice(id: ItemId): void {
     const notice = potionEffectNotice(id);
-    if (notice !== null) this.announce(notice);
+    if (notice !== null) this.announce(notice, POTION_TOAST);
   }
 
   private tickDelayedSounds(): void {
@@ -652,10 +621,12 @@ export class MenusKit {
   }
 
   /**
-   * Everything the bag's context menu queued: a drink, a meal, an equip, an unequip, a
-   * drop. Drained from the scene's frame rather than from the menu's own click
-   * handler, because acting on a slot can raise an overlay over the very panel
-   * that click landed in.
+   * Everything an item action in the inventory screen queued: a drink, a meal,
+   * an equip, an unequip, a drop, a trade. Two routes drain it: the dungeon
+   * resolves it as soon as the screen queues an action (`onActionQueued`, and
+   * the quantity dialog's `afterChoice`), and the interior resolves it once a
+   * frame from its update. Neither acts inside the screen's own tap, because
+   * acting on a slot can raise an overlay over the very panel that tap landed in.
    *
    * @param dropLoot Where a dropped item goes. Omitted by a scene with nowhere
    *   to drop to, which simply does not offer Drop.
@@ -664,50 +635,40 @@ export class MenusKit {
     holder: HumanPlayer | CatPlayer,
     dropLoot?: (id: ItemId, quantity: number) => void,
   ): void {
-    const interaction = this.inventoryPanel.interaction;
+    const actions = this.inventoryActions;
 
-    const bottle = interaction.pendingDrinkSlot;
+    const bottle = actions.pendingDrinkSlot;
     if (bottle !== null) {
-      interaction.pendingDrinkSlot = null;
-      this.cancelInventoryDragForOverlay();
+      actions.pendingDrinkSlot = null;
       // Only a drink that landed sends the player back to the fight. A refusal
-      // has sounded and changed nothing, so the bag stays up to be acted on
-      // again. Closed through toggle() rather than the flag so the panel's own
-      // teardown runs.
-      if (this.drinkPotion(holder, bottle.id, bottle) && this.inventoryPanel.isOpen) {
-        this.inventoryPanel.toggle();
-      }
+      // has sounded and changed nothing, so the bag stays up to be acted on again.
+      if (this.drinkPotion(holder, bottle.id, bottle)) this.inventoryScreen.close();
     }
 
-    const dish = interaction.pendingEatSlot;
+    const dish = actions.pendingEatSlot;
     if (dish !== null) {
-      interaction.pendingEatSlot = null;
-      this.cancelInventoryDragForOverlay();
+      actions.pendingEatSlot = null;
       // Same rule as a drink: only a meal that went down closes the bag.
-      if (this.eatFood(holder, dish.id, dish) && this.inventoryPanel.isOpen) {
-        this.inventoryPanel.toggle();
-      }
+      if (this.eatFood(holder, dish.id, dish)) this.inventoryScreen.close();
     }
 
-    const tome = interaction.pendingStudySlot;
+    const tome = actions.pendingStudySlot;
     if (tome !== null) {
-      interaction.pendingStudySlot = null;
-      this.cancelInventoryDragForOverlay();
+      actions.pendingStudySlot = null;
       this.studyTome(holder, tome);
     }
 
-    const used = interaction.pendingUseSlot;
+    const used = actions.pendingUseSlot;
     if (used !== null) {
-      interaction.pendingUseSlot = null;
-      this.cancelInventoryDragForOverlay();
+      actions.pendingUseSlot = null;
       this.useFromMenu(holder, used);
     }
 
-    const equipSlot = interaction.pendingEquipSlot;
+    const equipSlot = actions.pendingEquipSlot;
     if (equipSlot !== null) {
-      const source = interaction.pendingEquipSource;
-      interaction.pendingEquipSlot = null;
-      interaction.pendingEquipSource = null;
+      const source = actions.pendingEquipSource;
+      actions.pendingEquipSlot = null;
+      actions.pendingEquipSource = null;
       // A refusal — wrong wearer, or the same id already worn elsewhere — must
       // not announce a change that never happened.
       if (source === 'hotbar') {
@@ -721,26 +682,26 @@ export class MenusKit {
       }
     }
 
-    const unequipSlot = interaction.pendingUnequipSlot;
+    const unequipSlot = actions.pendingUnequipSlot;
     if (unequipSlot !== null) {
-      const source = interaction.pendingUnequipSource;
-      interaction.pendingUnequipSlot = null;
-      interaction.pendingUnequipSource = null;
+      const source = actions.pendingUnequipSource;
+      actions.pendingUnequipSlot = null;
+      actions.pendingUnequipSource = null;
       const item = slotContentsAt(holder, source, unequipSlot);
       if (item !== null && holder.inventory.unequipById(item.id) !== null) {
         holder.onEquipmentChanged();
       }
     }
 
-    const dropped = interaction.pendingDropItem;
+    const dropped = actions.pendingDropItem;
     if (dropped !== null) {
-      interaction.pendingDropItem = null;
+      actions.pendingDropItem = null;
       this.dropItem(holder, dropped.id, dropped.quantity, dropLoot);
     }
 
-    const traded = interaction.pendingTradeItem;
+    const traded = actions.pendingTradeItem;
     if (traded !== null) {
-      interaction.pendingTradeItem = null;
+      actions.pendingTradeItem = null;
       this.tradeItem(holder, traded.id, traded.quantity);
     }
   }
@@ -774,12 +735,16 @@ export class MenusKit {
     dropLoot?: (id: ItemId, quantity: number) => void,
   ): void {
     if (dropLoot === undefined) return;
+    // Clamped to what is still held: the quantity dialog confirms on a later
+    // frame than the tap that opened it, and the stack may have shrunk since.
+    const drop = Math.min(quantity, holder.inventory.countOf(id));
+    if (drop <= 0) return;
     if (holder.inventory.unequipById(id) !== null) holder.onEquipmentChanged();
-    holder.inventory.removeItems(id, quantity);
+    holder.inventory.removeItems(id, drop);
     // A weapon thrown on the floor is out of hand, for the same reason worn gear
     // is taken off: it would otherwise keep firing from where it landed.
     holder.onInventoryChanged();
-    dropLoot(id, quantity);
+    dropLoot(id, drop);
     this.world.audio?.play('menu_drop_item');
   }
 
@@ -818,7 +783,7 @@ export class MenusKit {
     const partner = this.partnerOf(holder);
     if (!partner.inventory.hasRoomFor(id)) {
       const partnerName = partner === this.world.pm.human ? CRAWLER_NAMES.human : CRAWLER_NAMES.cat;
-      this.announce(`${partnerName}'s pack is full.`);
+      this.announce(`${partnerName}'s pack is full.`, PACK_FULL_TOAST);
       this.world.audio?.play('error_taking_action');
       return;
     }
@@ -827,58 +792,78 @@ export class MenusKit {
     holder.onInventoryChanged();
     partner.inventory.addItem(id, trade);
     partner.onInventoryChanged();
-    playButtonSound(this.world.audio);
+    this.world.audio?.play(UI_TAP_SOUND);
   }
 
   /**
-   * The unspent-points banner: a click on it opens the pause menu straight to
-   * the Spend screen. Reported rather than silently swallowed so the caller can
-   * stop routing the click.
+   * Opens the Spend section, where unspent skill points go. Does nothing while
+   * neither crawler has any. Returns whether it opened.
    */
-  tryOpenSpendScreen(
-    mx: number,
-    my: number,
-    bannerRect: { x: number; y: number; w: number; h: number },
-  ): boolean {
+  openSpendScreen(): boolean {
     const { human, cat } = this.world.pm;
     if (human.unspentPoints <= 0 && cat.unspentPoints <= 0) return false;
-    if (mx < bannerRect.x || mx > bannerRect.x + bannerRect.w) return false;
-    if (my < bannerRect.y || my > bannerRect.y + bannerRect.h) return false;
-    this.pauseMenu.openToSpend();
+    this.pauseScreen.open('character');
     this.world.audio?.play('menu_open');
     return true;
   }
 
   /**
-   * The pause menu with every tab it can offer — achievements, stats and the
-   * ability screen included. A scene that renders it with fewer arguments gets a
-   * stripped shell, which is what interiors used to show.
+   * The kit's overlays as surfaces: the inventory screen, the award stack,
+   * the explainers, the skill-book prompt, the item picker and the pause
+   * menu. The hotbar is drawn with the scene's HUD, and the construction menu
+   * with whoever lists its options, so the scene mounts those itself.
+   *
+   * The quest-complete screen stays above any level-up or reward card raised
+   * while it is open, and a level-up above any reward card: a card counts as
+   * open only once nothing it queues behind is showing. The skill-book prompt
+   * is mounted ahead of the explainers, so an explainer raised on the same
+   * frame stacks over it.
    */
-  renderPauseMenu(ctx: CanvasRenderingContext2D, deps: PauseMenuRenderDeps): void {
-    const { human, cat } = this.world.pm;
-    this.pauseMenu.render(
-      ctx,
-      human,
-      cat,
-      deps.humanAchievements,
-      deps.catAchievements,
-      deps.onOpenHumanBoxes,
-      deps.onOpenCatBoxes,
-      deps.gameStats,
-      this.abilityManager,
-      deps.mouseX,
-      deps.mouseY,
-    );
+  surfaces(hooks: MenusSurfaceHooks): Surface[] {
+    const explainerWantsEscape = (): boolean => !this.isAwardStackShowing;
+    this.resolveInventoryActions = hooks.resolveInventoryActions ?? null;
+    return [
+      this.inventoryScreen.surface,
+      questRewardSurface(this.questReward, { id: 'quest-reward' }),
+      levelUpSurface('level-up', this.levelUpDialog, {
+        shownWhen: () => !this.questReward.isOpen,
+      }),
+      rewardGrantedSurface('reward-granted', this.rewardGrantedDialog, {
+        shownWhen: () => !this.levelUpDialog.isShowing && !this.questReward.isOpen,
+      }),
+      skillBookDialogSurface('skill-book-prompt', this.skillBookPrompt, {
+        resolve: (choice) => {
+          const reader = this.pendingSkillBookReader(this.inventoryPlayer());
+          resolveSkillBookChoice(this.skillBookFlowHost(), reader, choice);
+          this.releaseSkillBookReader();
+        },
+        dismiss: () => {
+          this.skillBookPrompt.close();
+          this.releaseSkillBookReader();
+        },
+      }),
+      this.craftExplainers.surface({ id: 'craft-explainers', wantsEscape: explainerWantsEscape }),
+      this.itemQuantityDialog.surface('item-picker', hooks.resolveInventoryActions),
+      this.pauseScreen.surface({
+        frame: hooks.pauseFrame,
+        onEscape: hooks.togglePause,
+        openInventory: (crawler) => this.openInventoryFromPause(crawler),
+        restriction: hooks.pauseRestriction,
+      }),
+      ...this.pauseScreen.confirmSurfaces(),
+    ];
   }
 
-  /** The award stack, drawn lowest-priority first so draw order matches claim order. */
-  renderOverlays(ctx: CanvasRenderingContext2D): void {
-    this.skillBookPrompt.render(ctx);
-    this.mongoExplainer.render(ctx);
-    this.craftExplainers.render(ctx);
-    this.rewardGrantedDialog.render(ctx);
-    this.levelUpDialog.render(ctx);
-    this.itemQuantityPicker.render(ctx);
-    this.questReward.render(ctx);
+  /**
+   * Opens the inventory on `crawler`'s pack (the active crawler's when null),
+   * with a way back to the pause screen it was opened from.
+   */
+  private openInventoryFromPause(crawler: CrawlerKind | null): void {
+    this.pauseScreen.close();
+    this.inventoryScreen.open({
+      tab: 'bag',
+      member: crawler ?? undefined,
+      onBack: () => this.pauseScreen.open(),
+    });
   }
 }

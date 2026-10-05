@@ -11,7 +11,9 @@
  *
  * A file ships only if something reachable at runtime names it: a sprite
  * manifest `path`, SOUND_MANIFEST, a path literal in `src/**\/*.ts`, or a
- * reference from the HTML/CSS/PWA-manifest entry points.
+ * reference from the HTML/CSS/PWA-manifest entry points. A shipped font always
+ * travels with `src/fonts/OFL.txt`, because its licence requires the notice to
+ * accompany every copy.
  */
 
 import fs from 'fs';
@@ -29,9 +31,13 @@ const ENTRY_POINT_FILES = ['index.html', 'main.css', 'manifest.json', 'download/
 
 const IMAGE_EXTENSIONS = /\.(png|jpe?g|ico)$/i;
 const AUDIO_EXTENSIONS = /\.mp3$/i;
+const FONT_EXTENSIONS = /\.woff2$/i;
+
+const FONT_LICENSE = 'src/fonts/OFL.txt';
 
 const IMAGE_PATH_LITERAL = /src\/images\/[\w\-./]+?\.(?:png|jpe?g|ico)/gi;
 const AUDIO_PATH_LITERAL = /src\/audio\/[\w\-./]+?\.mp3/gi;
+const FONT_PATH_LITERAL = /src\/fonts\/[\w\-./]+?\.woff2/gi;
 
 /** Recursively walk a directory, returning ROOT-relative POSIX paths. */
 function walkDir(dir) {
@@ -84,6 +90,7 @@ function collectPathLiterals() {
     const text = readTextFile(sourceFile);
     for (const match of text.matchAll(IMAGE_PATH_LITERAL)) referenced.add(match[0]);
     for (const match of text.matchAll(AUDIO_PATH_LITERAL)) referenced.add(match[0]);
+    for (const match of text.matchAll(FONT_PATH_LITERAL)) referenced.add(match[0]);
   }
   return referenced;
 }
@@ -91,7 +98,7 @@ function collectPathLiterals() {
 /**
  * Resolve which asset files the game actually loads.
  *
- * @returns {{ images: string[], audio: string[], excluded: string[], missing: string[] }}
+ * @returns {{ images: string[], audio: string[], fonts: string[], excluded: string[], missing: string[] }}
  *   ROOT-relative POSIX paths. `excluded` is on disk but unreferenced;
  *   `missing` is referenced but absent, which means a broken build.
  */
@@ -101,15 +108,21 @@ export function collectShippedAssets() {
   const onDisk = [
     ...walkDir(path.join(ROOT, 'src/images')),
     ...walkDir(path.join(ROOT, 'src/audio')),
+    ...walkDir(path.join(ROOT, 'src/fonts')),
   ];
-  const assetsOnDisk = onDisk.filter((f) => IMAGE_EXTENSIONS.test(f) || AUDIO_EXTENSIONS.test(f));
+  const assetsOnDisk = onDisk.filter(
+    (f) => IMAGE_EXTENSIONS.test(f) || AUDIO_EXTENSIONS.test(f) || FONT_EXTENSIONS.test(f),
+  );
   const onDiskSet = new Set(assetsOnDisk);
 
   const shipped = assetsOnDisk.filter((f) => referenced.has(f)).sort();
 
+  const fontFiles = shipped.filter((f) => FONT_EXTENSIONS.test(f));
+
   return {
     images: shipped.filter((f) => IMAGE_EXTENSIONS.test(f)),
     audio: shipped.filter((f) => AUDIO_EXTENSIONS.test(f)),
+    fonts: fontFiles.length > 0 ? [...fontFiles, FONT_LICENSE] : [],
     excluded: assetsOnDisk.filter((f) => !referenced.has(f)).sort(),
     missing: [...referenced].filter((f) => !onDiskSet.has(f)).sort(),
   };
@@ -122,11 +135,13 @@ export function fileSize(relativePath) {
 }
 
 /** Logs which assets were left out of the build, and fails loudly on missing ones. */
-export function reportAssetSelection({ images, audio, excluded, missing }) {
+export function reportAssetSelection({ images, audio, fonts, excluded, missing }) {
   const BYTES_PER_MB = 1024 * 1024;
   const excludedBytes = excluded.reduce((total, f) => total + fileSize(f), 0);
 
-  console.log(`Assets: ${images.length} images, ${audio.length} audio referenced by the game.`);
+  console.log(
+    `Assets: ${images.length} images, ${audio.length} audio, ${fonts.length} font files referenced by the game.`,
+  );
 
   if (excluded.length > 0) {
     console.log(

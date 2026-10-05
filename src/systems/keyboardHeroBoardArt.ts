@@ -13,7 +13,7 @@
  * without their floor-long residency.
  */
 
-import { drawBox } from '../ui/Box';
+import { worldPlate } from '../ui/world/worldShapes';
 import type { CanvasSurface } from '../core/canvasSurface';
 import type { NoteState, ReceptorState, TouchState } from '../sprites/art/keyboardHeroArt';
 import {
@@ -29,11 +29,11 @@ import {
   LANE_BED_IMG_H,
   LANE_BED_IMG_W,
   LANE_INDICES,
-  LANE_PALETTES,
   type KeyboardHeroLayout,
   type LaneIndex,
-  type Rect,
 } from './keyboardHeroLayout';
+import type { Rect } from '../ui/core/geom';
+import { LANE_PALETTES } from '../sprites/art/keyboardHeroLanePalettes';
 
 export type NoteArtState = NoteState;
 export type ReceptorArtState = ReceptorState;
@@ -64,13 +64,13 @@ function drawPiece(
   if (piece === null) return;
   ctx.save();
   ctx.globalAlpha = clamp01(alpha);
-  ctx.drawImage(piece, rect.x, rect.y, rect.width, rect.height);
+  ctx.drawImage(piece, rect.x, rect.y, rect.w, rect.h);
   ctx.restore();
 }
 
 export function drawBoardFrame(ctx: CanvasRenderingContext2D, layout: KeyboardHeroLayout): void {
   const { board } = layout;
-  drawPiece(ctx, boardFrameArt(board.width, board.height), board, 1);
+  drawPiece(ctx, boardFrameArt(board.w, board.h), board, 1);
 }
 
 /** One lane's bed in an arbitrary rect, for reviewing a bed away from the board. */
@@ -80,7 +80,7 @@ export function drawLaneBedInRect(
   lane: LaneIndex,
   alpha: number,
 ): void {
-  drawPiece(ctx, laneBedArt(lane, rect.width, rect.height), rect, alpha);
+  drawPiece(ctx, laneBedArt(lane, rect.w, rect.h), rect, alpha);
 }
 
 export function drawLaneBed(
@@ -120,8 +120,8 @@ export function drawLaneBedSlice(
     sourceDepth,
     rect.x,
     rect.y,
-    rect.width,
-    rect.height,
+    rect.w,
+    rect.h,
   );
 }
 
@@ -152,13 +152,13 @@ export function drawHitWindow(
   ctx.fillRect(
     layout.laneArea.x,
     layout.hitLineY - layout.hitWindowHalfHeight,
-    layout.laneArea.width,
+    layout.laneArea.w,
     layout.hitWindowHalfHeight * 2,
   );
 
   ctx.globalAlpha = clamp01(HIT_LINE_ALPHA * lineAlphaScale);
   const lineH = Math.max(1, HIT_LINE_IMG_H * layout.scale);
-  ctx.fillRect(layout.laneArea.x, layout.hitLineY - lineH / 2, layout.laneArea.width, lineH);
+  ctx.fillRect(layout.laneArea.x, layout.hitLineY - lineH / 2, layout.laneArea.w, lineH);
   ctx.restore();
 }
 
@@ -180,10 +180,10 @@ export function drawLaneHighlight(
   const rect = layout.lanes[lane];
   ctx.save();
   ctx.globalCompositeOperation = 'lighter';
-  drawPiece(ctx, laneHighlightArt(rect.width, rect.height), rect, LANE_HIGHLIGHT_ALPHA * strength);
+  drawPiece(ctx, laneHighlightArt(rect.w, rect.h), rect, LANE_HIGHLIGHT_ALPHA * strength);
   ctx.globalAlpha = clamp01(LANE_TINT_ALPHA * strength);
   ctx.fillStyle = color;
-  ctx.fillRect(rect.x, rect.y, rect.width, rect.height);
+  ctx.fillRect(rect.x, rect.y, rect.w, rect.h);
   ctx.restore();
 }
 
@@ -220,7 +220,7 @@ export function drawReceptorInRect(
   lane: LaneIndex,
   state: ReceptorArtState,
 ): void {
-  drawPiece(ctx, receptorArt(lane, state, rect.width), rect, 1);
+  drawPiece(ctx, receptorArt(lane, state, rect.w), rect, 1);
 }
 
 export function drawReceptor(
@@ -245,7 +245,7 @@ export function drawNoteKeycap(
   drawPiece(
     ctx,
     noteKeycapArt(lane, state),
-    { x: centerX - size / 2, y: centerY - size / 2, width: size, height: size },
+    { x: centerX - size / 2, y: centerY - size / 2, w: size, h: size },
     alpha,
   );
 }
@@ -256,13 +256,13 @@ export function drawTouchButton(
   lane: LaneIndex,
   state: TouchArtState,
 ): void {
-  drawPiece(ctx, touchButtonArt(lane, state, rect.width), rect, 1);
+  drawPiece(ctx, touchButtonArt(lane, state, rect.w), rect, 1);
 }
 
 /** Clip subsequent drawing to the play area, so notes never spill onto the frame. */
 export function clipToLanes(ctx: CanvasRenderingContext2D, layout: KeyboardHeroLayout): void {
   ctx.beginPath();
-  ctx.rect(layout.laneArea.x, layout.laneArea.y, layout.laneArea.width, layout.laneArea.height);
+  ctx.rect(layout.laneArea.x, layout.laneArea.y, layout.laneArea.w, layout.laneArea.h);
   ctx.clip();
 }
 
@@ -284,11 +284,7 @@ const PIP_RADIUS = 2;
 
 /** Draw one firewall pip, either whole or already breached. */
 export function drawFirewallPip(ctx: CanvasRenderingContext2D, rect: Rect, intact: boolean): void {
-  drawBox(ctx, {
-    x: rect.x,
-    y: rect.y,
-    width: rect.width,
-    height: rect.height,
+  worldPlate(ctx, rect, {
     fill: intact ? PIP_INTACT_FILL : PIP_LOST_FILL,
     border: intact ? PIP_INTACT_BORDER : PIP_LOST_BORDER,
     borderWidth: PIP_BORDER_WIDTH,

@@ -1,4 +1,6 @@
 import type { AbilityDef } from '../core/AbilityManager';
+import type { Rect } from '../ui/core/geom';
+import { iconSquare } from '../ui/icons/iconSquare';
 
 const LEVEL_3 = 3;
 const LEVEL_4 = 4;
@@ -102,13 +104,8 @@ export function getProtectiveShellStats(level: number): ProtectiveShellStats {
   };
 }
 
-function renderProtectiveShellIcon(
-  ctx: CanvasRenderingContext2D,
-  x: number,
-  y: number,
-  size: number,
-  level: number,
-): void {
+function renderProtectiveShellIcon(ctx: CanvasRenderingContext2D, rect: Rect, level: number): void {
+  const { x, y, size } = iconSquare(rect);
   const cx = x + size * ICON_CENTER;
   const cy = y + size * ICON_CENTER;
   const isFullPower = level >= LEVEL_15;

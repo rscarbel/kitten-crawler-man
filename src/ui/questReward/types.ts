@@ -8,7 +8,7 @@
 import type { GrantedReward } from '../../core/GrantedReward';
 import type { ItemId } from '../../core/ItemDefs';
 
-/** Paints an icon into the `size`-pixel square whose top-left corner is (`x`, `y`). */
+/** Paints an icon into the largest square centred in `rect`. */
 export type IconPainter = GrantedReward['renderIcon'];
 
 /** One line in an `items` section: an icon, a name and how many were given. */

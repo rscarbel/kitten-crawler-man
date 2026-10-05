@@ -26,10 +26,10 @@ import type { AudioManager } from '../../audio/AudioManager';
 import type { GameMap } from '../../map/GameMap';
 import type { Player } from '../../Player';
 import type {
-  PricedMenuBuilder,
-  PricedPurchaseHandler,
-  SellConfig,
-} from '../../ui/PricedMenuPanel';
+  ShopMenuBuilder,
+  ShopPurchaseHandler,
+  ShopSellConfig,
+} from '../../ui/screens/shop/shopSession';
 import type { GameSystem } from '../GameSystem';
 import type { TownPropRenderable } from '../townPropRenderable';
 
@@ -77,12 +77,12 @@ interface MarketStall {
 
 /** Everything the scene needs to open a stall's panel: the rows, and the sale. */
 export interface MarketBrowse {
-  buildMenu: PricedMenuBuilder;
-  purchase: PricedPurchaseHandler;
+  buildMenu: ShopMenuBuilder;
+  purchase: ShopPurchaseHandler;
   /** Sounds the refusal when the player pokes a row they can't buy. */
   onBlocked: () => void;
   /** This stall's Sell tab. */
-  sell: SellConfig;
+  sell: ShopSellConfig;
 }
 
 export class MarketSystem implements GameSystem {

@@ -1,18 +1,7 @@
 import { updateFrameTime } from '../utils';
-import {
-  clearMenuFocus,
-  focusNextButton,
-  focusPreviousButton,
-  focusedButtonClickPoint,
-  menuFocusContextId,
-  menuFocusRingSize,
-} from '../ui/Button';
-import {
-  cancelRebindCapture,
-  handleRebindCaptureKey,
-  isRebindCaptureActive,
-} from '../ui/pause/rebindCapture';
-import { activeSearchField, endSearchCapture } from '../ui/SearchField';
+import { bindPointerEvents, PointerInput } from '../ui/core/pointer';
+import type { UiRoot } from '../ui/core/UiRoot';
+import { rebindCaptureArmed } from '../ui/screens/pause/rebindCapture';
 import { beginFigureFrame } from '../sprites/figure/figureFrameCache';
 import { beginEnvironmentArtFrame } from '../map/environmentArtCache';
 import { closeAboveDarkness } from '../systems/lighting/aboveDarkness';
@@ -54,23 +43,17 @@ const MIN_VIEWPORT_PX = 1;
  */
 const MAX_LEAKED_SAVES = 64;
 
-/** Keys that step the menu focus ring forward. */
-const FOCUS_NEXT_KEYS: ReadonlySet<string> = new Set(['Tab', 'ArrowDown', 'ArrowRight']);
-/** Keys that step it backward. Shift+Tab is handled separately. */
-const FOCUS_PREVIOUS_KEYS: ReadonlySet<string> = new Set(['ArrowUp', 'ArrowLeft']);
-/** Keys that activate the focused button — or, with nothing focused, the primary one. */
-const FOCUS_ACTIVATE_KEYS: ReadonlySet<string> = new Set([' ', 'Enter']);
-
 /**
- * Shortest gap between two focus steps driven by the OS key-repeat stream.
- *
- * Auto-repeat runs at around thirty presses a second, which walks a four-button
- * menu end to end inside the frame the player is still reading. A fresh press is
- * never throttled — only the repeats behind it.
+ * The physical key a keyboard event is about. Held keys are tracked by `code`:
+ * Shift or Caps Lock changing between the down and the up changes `key`
+ * ("a" down, "A" up), which would leave the key held for good. A virtual
+ * keyboard may report no `code`, so `key` stands in.
  */
-const FOCUS_REPEAT_INTERVAL_MS = 140;
+function heldKeyId(e: KeyboardEvent): string {
+  return e.code === '' ? e.key : e.code;
+}
 
-/** Elements that own their own keystrokes; the ring must not steal from them. */
+/** Elements that own their own keystrokes; the surface stack must not steal from them. */
 const TEXT_ENTRY_TAG_NAMES: ReadonlySet<string> = new Set(['INPUT', 'TEXTAREA']);
 
 function isTypingIntoTextField(): boolean {
@@ -80,26 +63,16 @@ function isTypingIntoTextField(): boolean {
 }
 
 export abstract class Scene {
+  /**
+   * The scene's surface stack. Every pointer gesture and every keydown goes
+   * through it: the stack decides which surface a press belongs to, and hands
+   * the rest to the scene's own world handler.
+   */
+  abstract readonly ui: UiRoot;
   abstract update(): void;
   abstract render(ctx: CanvasRenderingContext2D): void;
   onEnter?(): void;
   onExit?(): void;
-  /**
-   * @param eventTimeStampMs - when the click was *created*, on `performance.now()`'s
-   *   timebase. A stalled main thread queues events and delivers them all at resume,
-   *   so anything timing-sensitive has to score the click by this rather than by when
-   *   the handler happened to run.
-   */
-  handleClick?(mx: number, my: number, eventTimeStampMs: number): void;
-  handleMouseDown?(mx: number, my: number): void;
-  handleMouseMove?(mx: number, my: number): void;
-  handleMouseUp?(mx: number, my: number): void;
-  handleMouseLeave?(): void;
-  handleContextMenu?(mx: number, my: number): void;
-  handleWheel?(deltaY: number): void;
-  handleTouchStart?(e: TouchEvent, rect: DOMRect): void;
-  handleTouchMove?(e: TouchEvent, rect: DOMRect): void;
-  handleTouchEnd?(e: TouchEvent, rect: DOMRect): void;
 }
 
 /**
@@ -136,21 +109,20 @@ export class SceneManager {
    */
   private readonly keysHeldWhenMenuOpened = new Set<string>();
 
-  /** The menu {@link keysHeldWhenMenuOpened} was snapshotted for. */
-  private lastMenuFocusContext: string | null = null;
+  /** The surface owning keyboard focus that {@link keysHeldWhenMenuOpened} was snapshotted for. */
+  private lastFocusSurfaceId: string | null = null;
 
   /**
-   * The keys that were already down when the currently-focused search field
-   * gained focus. Their auto-repeats are leftovers from walking, not typing —
-   * without this, holding W into a click on the search field types "wwww…".
+   * Keys whose press a surface consumed, until they come up. Their repeats
+   * never reach gameplay even after that surface closes: the press that
+   * turned a dialog's last page must not, still held, open it again. Keyed
+   * by `code`, the physical key: Shift or Caps Lock changing between the down
+   * and the up changes `key`, which would leave the key spent for good.
    */
-  private readonly keysHeldWhenSearchFocused = new Set<string>();
+  private readonly keysSpentByUi = new Set<string>();
 
-  /** The `SearchField.focusToken()` {@link keysHeldWhenSearchFocused} was snapshotted for. */
-  private lastSearchFocusToken: number | null = null;
-
-  /** `performance.now()` of the last focus step, for the auto-repeat throttle. */
-  private lastFocusStepAtMs = Number.NEGATIVE_INFINITY;
+  /** Gestures for the current scene's `UiRoot`. */
+  private readonly pointerInput: PointerInput;
 
   constructor() {
     this.canvas = document.createElement('canvas');
@@ -171,18 +143,19 @@ export class SceneManager {
     });
 
     // Capture phase, on `window`: it has to run before the gameplay handlers
-    // registered on the same target, so that a key the menu ring consumes never
+    // registered on the same target, so that a key a surface consumes never
     // also fires an attack or a character switch underneath the open menu.
-    window.addEventListener('keydown', (e) => this.handleMenuNavigation(e), { capture: true });
+    window.addEventListener('keydown', (e) => this.handleKeyDown(e), { capture: true });
 
     // A release re-arms a key the menu opened underneath: lifting the finger and
     // pressing again is unambiguously aimed at the menu.
     window.addEventListener(
       'keyup',
       (e) => {
-        this.heldKeys.delete(e.key);
-        this.keysHeldWhenMenuOpened.delete(e.key);
-        this.keysHeldWhenSearchFocused.delete(e.key);
+        const physicalKey = heldKeyId(e);
+        this.heldKeys.delete(physicalKey);
+        this.keysHeldWhenMenuOpened.delete(physicalKey);
+        this.keysSpentByUi.delete(physicalKey);
       },
       { capture: true },
     );
@@ -192,183 +165,52 @@ export class SceneManager {
     window.addEventListener('blur', () => {
       this.heldKeys.clear();
       this.keysHeldWhenMenuOpened.clear();
-      this.keysHeldWhenSearchFocused.clear();
+      this.keysSpentByUi.clear();
       // Nor the mouseup: a button held as focus left would stay held.
-      this.current?.handleMouseLeave?.();
+      this.pointerInput.cancelAll();
     });
 
-    const getPos = (e: MouseEvent) => {
-      const rect = this.canvas.getBoundingClientRect();
-      return { x: e.clientX - rect.left, y: e.clientY - rect.top };
-    };
-
-    this.canvas.addEventListener('click', (e) => {
-      if (!this.current?.handleClick) return;
-      const { x, y } = getPos(e);
-      this.current.handleClick(x, y, e.timeStamp);
-    });
-
-    this.canvas.addEventListener('mousedown', (e) => {
-      if (!this.current?.handleMouseDown) return;
-      if (e.button !== 0) return;
-      const { x, y } = getPos(e);
-      this.current.handleMouseDown(x, y);
-    });
-
-    this.canvas.addEventListener('mousemove', (e) => {
-      if (!this.current?.handleMouseMove) return;
-      const { x, y } = getPos(e);
-      this.current.handleMouseMove(x, y);
-    });
-
-    this.canvas.addEventListener('mouseup', (e) => {
-      if (!this.current?.handleMouseUp) return;
-      const { x, y } = getPos(e);
-      this.current.handleMouseUp(x, y);
-    });
-
-    this.canvas.addEventListener('mouseleave', () => {
-      this.current?.handleMouseLeave?.();
-    });
-
-    this.canvas.addEventListener(
-      'wheel',
-      (e) => {
-        if (!this.current?.handleWheel) return;
-        e.preventDefault();
-        this.current.handleWheel(e.deltaY);
-      },
-      { passive: false },
+    this.pointerInput = new PointerInput(
+      (gesture) => this.current?.ui.pointer(gesture),
+      () => this.current?.ui.uiScale ?? 1,
+      () => this.current?.ui.pointerLeft(),
     );
+    bindPointerEvents(this.canvas, this.pointerInput);
 
-    this.canvas.addEventListener('contextmenu', (e) => {
-      e.preventDefault();
-      if (!this.current?.handleContextMenu) return;
-      const { x, y } = getPos(e);
-      this.current.handleContextMenu(x, y);
-    });
-
-    this.canvas.addEventListener(
-      'touchstart',
-      (e) => {
-        e.preventDefault();
-        if (!this.current?.handleTouchStart) return;
-        const rect = this.canvas.getBoundingClientRect();
-        this.current.handleTouchStart(e, rect);
-      },
-      { passive: false },
-    );
-
-    this.canvas.addEventListener(
-      'touchmove',
-      (e) => {
-        e.preventDefault();
-        if (!this.current?.handleTouchMove) return;
-        const rect = this.canvas.getBoundingClientRect();
-        this.current.handleTouchMove(e, rect);
-      },
-      { passive: false },
-    );
-
-    const onTouchEnd = (e: TouchEvent) => {
-      e.preventDefault();
-      if (!this.current?.handleTouchEnd) return;
-      const rect = this.canvas.getBoundingClientRect();
-      this.current.handleTouchEnd(e, rect);
-    };
-    this.canvas.addEventListener('touchend', onTouchEnd, { passive: false });
-    this.canvas.addEventListener('touchcancel', onTouchEnd, { passive: false });
+    // The browser's own menu would cover the canvas on a right-click or a long press.
+    this.canvas.addEventListener('contextmenu', (e) => e.preventDefault());
 
     requestAnimationFrame((t) => this.loop(t));
   }
 
-  /**
-   * Keyboard driving for whatever menu declared a focus ring last frame.
-   *
-   * Deliberately inert outside menus: with no ring declared this returns
-   * immediately, so Space still attacks, Tab still switches crawlers and the
-   * arrows still walk. Escape is never consumed here — it belongs to the scenes'
-   * dismiss chains, which are the only way out of some of these menus.
-   */
-  private handleMenuNavigation(e: KeyboardEvent): void {
-    const { predatesMenu: pressPredatesMenu, predatesSearchFocus: pressPredatesSearchFocus } =
-      this.trackHeldKey(e);
-
+  private handleKeyDown(e: KeyboardEvent): void {
+    const pressPredatesMenu = this.trackHeldKey(e);
     if (isTypingIntoTextField()) return;
+    const ui = this.current?.ui;
+    if (ui === undefined) return;
+    this.routeKeyToUi(ui, e, pressPredatesMenu);
+  }
 
-    if (isRebindCaptureActive()) {
-      e.preventDefault();
-      e.stopPropagation();
-      if (e.key === 'Escape') cancelRebindCapture();
-      else if (!e.repeat) handleRebindCaptureKey(e.key);
-      return;
-    }
-
-    // A focused search field owns every key while it has capture, auto-repeats
-    // included — holding Backspace has to erase more than one character. This is
-    // also what keeps hotbar slots 1-8 and WASD out of a typed query: both live
-    // on window listeners behind this capture-phase one.
-    const searchField = activeSearchField();
-    if (searchField !== null) {
-      // A chord is aimed at the browser or the OS, never at the field: Cmd+R
-      // means reload, not the letter R. preventDefault is skipped so the
-      // browser's own action still fires, but stopPropagation still runs —
-      // otherwise the same keydown falls through to the window-level gameplay
-      // handlers (hotbar, WASD) and Cmd+1 both switches a tab and activates
-      // hotbar slot 1.
-      const isModifierChord = e.ctrlKey || e.metaKey || e.altKey;
-      if (isModifierChord) {
-        e.stopPropagation();
-        return;
-      }
-      e.preventDefault();
-      e.stopPropagation();
-      // An auto-repeat from a key held since before the click that focused this
-      // field — e.g. walking with W held, then clicking search — is movement
-      // input the field never asked for, not a keystroke; typing it would spell
-      // "wwww…" into the query.
-      if (pressPredatesSearchFocus) return;
-      searchField.handleCapturedKey(e.key);
-      return;
-    }
-
-    if (e.key === 'Escape') return;
-    if (menuFocusRingSize() === 0) return;
-
-    const consume = () => {
-      e.preventDefault();
-      e.stopPropagation();
-    };
-
-    // Consumed before the guards below reject it, never after. A press the menu
-    // declines to act on still must not reach the world and swing a weapon
-    // behind the panel — the menu owns the screen either way.
-    if (FOCUS_NEXT_KEYS.has(e.key)) {
-      consume();
-      if (pressPredatesMenu || !this.allowFocusStep(e)) return;
-      if (e.key === 'Tab' && e.shiftKey) focusPreviousButton();
-      else focusNextButton();
-      return;
-    }
-
-    if (FOCUS_PREVIOUS_KEYS.has(e.key)) {
-      consume();
-      if (pressPredatesMenu || !this.allowFocusStep(e)) return;
-      focusPreviousButton();
-      return;
-    }
-
-    if (FOCUS_ACTIVATE_KEYS.has(e.key)) {
-      // Consumed whether or not anything answers it. A menu that declares a ring
-      // but marks no primary — the casino's betting row is the deliberate case —
-      // must still not let the press reach the world. A held accept key never
-      // re-activates: one press, one button.
-      consume();
-      if (e.repeat || pressPredatesMenu) return;
-      const point = focusedButtonClickPoint();
-      if (point === null) return;
-      this.current?.handleClick?.(point.x, point.y, e.timeStamp);
-    }
+  /**
+   * Offers a keydown to the scene's surface stack ahead of every gameplay
+   * listener. A key a surface consumed, or one whose press a surface consumed
+   * earlier in the same hold, goes no further; anything else carries on to
+   * gameplay, whose own gate reads the stack to decide whether it may act.
+   */
+  private routeKeyToUi(ui: UiRoot, e: KeyboardEvent, predatesSurface: boolean): void {
+    // A chord is aimed at the browser or the OS (Cmd+R, Ctrl+Tab), never at a
+    // menu, unless a key chip is listening: then the modifier is the answer.
+    if ((e.ctrlKey || e.metaKey || e.altKey) && !rebindCaptureArmed()) return;
+    const outcome = ui.key(e.key, {
+      shift: e.shiftKey,
+      repeat: e.repeat,
+      timeStamp: e.timeStamp,
+      predatesSurface,
+    });
+    if (outcome === 'consumed') this.keysSpentByUi.add(heldKeyId(e));
+    if (!this.keysSpentByUi.has(heldKeyId(e))) return;
+    e.preventDefault();
+    e.stopPropagation();
   }
 
   /**
@@ -383,41 +225,24 @@ export class SceneManager {
    *
    * The snapshot is taken *before* the press joins the held set, so a key struck
    * after the menu appeared is never caught by it.
+   *
+   * A Ctrl or Cmd chord is never recorded: macOS delivers no keyup for a key
+   * released while Cmd is down, so it would stay "held" for good and make the
+   * next real press of it look like a leftover.
    */
-  private trackHeldKey(e: KeyboardEvent): {
-    predatesMenu: boolean;
-    predatesSearchFocus: boolean;
-  } {
-    const contextId = menuFocusContextId();
-    if (contextId !== this.lastMenuFocusContext) {
-      this.lastMenuFocusContext = contextId;
+  private trackHeldKey(e: KeyboardEvent): boolean {
+    const focusSurfaceId = this.current?.ui.focusSurfaceId() ?? null;
+    if (focusSurfaceId !== this.lastFocusSurfaceId) {
+      this.lastFocusSurfaceId = focusSurfaceId;
       this.keysHeldWhenMenuOpened.clear();
       for (const key of this.heldKeys) this.keysHeldWhenMenuOpened.add(key);
     }
-    const predatesMenu = this.keysHeldWhenMenuOpened.has(e.key);
+    const physicalKey = heldKeyId(e);
+    const predatesMenu = this.keysHeldWhenMenuOpened.has(physicalKey);
 
-    const searchFocusToken = activeSearchField()?.focusToken() ?? null;
-    if (searchFocusToken !== this.lastSearchFocusToken) {
-      this.lastSearchFocusToken = searchFocusToken;
-      this.keysHeldWhenSearchFocused.clear();
-      for (const key of this.heldKeys) this.keysHeldWhenSearchFocused.add(key);
-    }
-    const predatesSearchFocus = this.keysHeldWhenSearchFocused.has(e.key);
-
-    this.heldKeys.add(e.key);
-    return { predatesMenu, predatesSearchFocus };
-  }
-
-  /**
-   * Throttle to the auto-repeat stream only. Timed off `e.timeStamp` rather than
-   * `performance.now()`: a stalled main thread delivers every queued repeat at
-   * resume, and handler time would read them all as one instant and let the
-   * whole backlog through.
-   */
-  private allowFocusStep(e: KeyboardEvent): boolean {
-    if (e.repeat && e.timeStamp - this.lastFocusStepAtMs < FOCUS_REPEAT_INTERVAL_MS) return false;
-    this.lastFocusStepAtMs = e.timeStamp;
-    return true;
+    const isChord = e.ctrlKey || e.metaKey;
+    if (!isChord) this.heldKeys.add(physicalKey);
+    return predatesMenu;
   }
 
   /** Visible width in CSS pixels. */
@@ -475,15 +300,11 @@ export class SceneManager {
    * onEnter on the incoming one.
    */
   replace(scene: Scene): void {
+    // Released into the outgoing scene, so no surface or world gesture there is
+    // left waiting for an `up` that will now arrive somewhere else.
+    this.pointerInput.cancelAll();
     this.current?.onExit?.();
-    // The outgoing scene's ring outlives its last render otherwise, and a key
-    // pressed before the incoming scene draws would synthesize a click at
-    // coordinates belonging to a menu that is no longer on screen. An armed
-    // rebind chip would likewise eat the first key of the new scene, as would a
-    // search field left focused by the panel the outgoing scene tore down.
-    clearMenuFocus();
-    cancelRebindCapture();
-    endSearchCapture();
+    this.current?.ui.dispose();
     this.current = scene;
     scene.onEnter?.();
   }

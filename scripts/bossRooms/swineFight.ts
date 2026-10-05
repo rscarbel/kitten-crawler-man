@@ -95,13 +95,8 @@ const START_DEPTH_TILES = 3;
 /** The crawler is topped back up below this share of its health, so one run measures a whole fight. */
 const TOP_UP_HP_SHARE = 0.35;
 
-/** The minimap is never drawn here, so it has no size. */
-const UNDRAWN_MINIMAP_SIZE = 0;
 const undrawnMiniMap: BossRoomMiniMap = {
   revealBossNeighborhood: () => undefined,
-  isExpanded: false,
-  EXPANDED_SIZE: UNDRAWN_MINIMAP_SIZE,
-  NORMAL_SIZE: UNDRAWN_MINIMAP_SIZE,
 };
 
 export interface SwineFightMetrics {

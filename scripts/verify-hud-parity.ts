@@ -1,218 +1,115 @@
 /**
- * Gates that walking through a door moves no HUD button: for the same screen
- * and the same buttons on show, the scene outside (`DungeonUIRenderer`'s rect
- * functions, as `DungeonScene` feeds them) and a building's interior
- * (`interiorHudLayout`) put Pause, Bag, Build, the achievement chip, the
- * Journal, the Follower button and the HUD panel's collapse toggle on the same
- * pixels.
+ * Gates that walking through a door, or a button coming and going, moves no
+ * HUD button.
  *
- * Every desktop and phone size it checks is tried in portrait and landscape,
- * with the minimap normal and expanded, the HUD panel expanded and collapsed
- * (where the platform can collapse it), the Build slot held or not, the
- * loot-box banner up or not, and the Follower button offered or refused — the
- * Big Top maze refuses it, and hiding it must move nothing else. Switch and
- * Summon are compared too.
+ * The layout half: the dungeon and every building draw their HUD from the one
+ * `hudLayout`, so for each window, density, UI size and minimap size it checks that the
+ * pieces a scene may or may not offer never move the rest — holding the Build
+ * slot moves none of the pieces ahead of it in the dock (Pause, Bag, the
+ * Follower button, Summon, the switch), nor the hotbar, the minimap or the unit
+ * frames.
  *
- * Then the door itself (`hudParityDoor.ts`): the real scenes, on a phone,
- * carry the minimap and HUD panel toggles through it both ways.
+ * The door half (`hudParityDoor.ts`): the real `DungeonScene` and
+ * `BuildingInteriorScene`, on a phone and on a desktop, carry the minimap
+ * toggle through a door both ways, and every shared HUD piece stands on the
+ * same pixels on both sides of it.
  *
  *   npm run verify:hud-parity
  *
- * The platform is fixed when the game's modules load, so the script runs
- * itself once per platform in a child process.
+ * Each door run is its own child process: the platform is decided once, when
+ * the game's modules load.
  */
 
 import { spawnSync } from 'node:child_process';
 
-/** `door` is the scene round trip, run on a phone. */
-const PLATFORMS = ['desktop', 'mobile', 'door'] as const;
-type PlatformName = (typeof PLATFORMS)[number];
-
-const platformArg = process.argv.find((arg) => arg.startsWith('--platform='))?.split('=')[1];
-
-if (platformArg === undefined) {
-  let failed = false;
-  for (const name of PLATFORMS) {
-    const child = spawnSync(
-      process.execPath,
-      [...process.execArgv, process.argv[1] ?? '', `--platform=${name}`],
-      { stdio: 'inherit' },
-    );
-    if (child.status !== 0) failed = true;
-  }
-  if (failed) {
-    console.error('verify:hud-parity FAILED');
-    process.exit(1);
-  }
-  console.log('verify:hud-parity passed');
-  process.exit(0);
-}
-
-if (platformArg === 'door') {
+const doorArg = process.argv.find((arg) => arg.startsWith('--door='))?.split('=')[1];
+if (doorArg !== undefined) {
+  process.env.HUD_DOOR_DEVICE = doorArg;
   await import('./hudParityDoor');
   process.exit(0);
 }
 
-const platformName: PlatformName = platformArg === 'mobile' ? 'mobile' : 'desktop';
-const isMobile = platformName === 'mobile';
-Object.defineProperty(globalThis, 'navigator', {
-  value: { maxTouchPoints: isMobile ? 1 : 0, userAgent: isMobile ? 'iPhone' : 'Desktop' },
-  configurable: true,
-});
-
-const { installCanvasGlobals } = await import('./nodeCanvasGlobals.js');
-installCanvasGlobals();
-const { setViewportSize } = await import('../src/core/Viewport');
-const { GameMap } = await import('../src/map/GameMap');
-const { FloorTypeValue } = await import('../src/map/tileTypes');
-const { TILE_SIZE } = await import('../src/core/constants');
-const UI = await import('../src/systems/DungeonUIRenderer');
-const { MiniMapSystem } = await import('../src/systems/MiniMapSystem');
-const { hotbarStripRect } = await import('../src/ui/InventoryPanel');
-const { hudKeepouts, hudReportedPanelRect, hudToggleRect } = await import('../src/ui/HUD');
-const { interiorHudLayout } = await import('../src/scenes/interiorHudLayout');
-const { desktopSummonButtonRect } = await import('../src/ui/hudButtons/hudButtonLayout');
+const { hudLayout } = await import('../src/ui/hud/hudLayout');
+const { NO_INSETS, resolveViewport } = await import('../src/ui/core/viewport');
 
 type Rect = { readonly x: number; readonly y: number; readonly w: number; readonly h: number };
 
-const DESKTOP_SIZES: ReadonlyArray<readonly [number, number]> = [
+const VIEWPORTS: ReadonlyArray<readonly [number, number]> = [
   [1920, 1080],
   [1280, 720],
   [1024, 768],
   [800, 600],
   [640, 340],
-];
-const PHONE_SIZES: ReadonlyArray<readonly [number, number]> = [
   [320, 568],
-  [375, 667],
   [390, 844],
   [430, 932],
-];
-const VIEWPORTS = (isMobile ? PHONE_SIZES : DESKTOP_SIZES).flatMap(([w, h]) => [
-  [w, h] as const,
-  [h, w] as const,
-]);
+].flatMap(([w, h]) => [[w, h] as const, [h, w] as const]);
+const DENSITIES = ['pointer', 'touch'] as const;
+const UI_SIZES = ['small', 'medium', 'large'] as const;
 const BOOLEANS = [false, true] as const;
-/** Where the loot-box banner stands when a safe room shows it: the left edge, mid-screen. */
-const BANNER_LEFT = 12;
-const BANNER_W = 96;
-const BANNER_H = 88;
-/** Mismatches printed before the rest are only counted. */
 const FAILURES_LISTED = 20;
 
-/** The minimap needs a map to exist; the layout only reads its size and expanded state. */
-const tinyMap = new GameMap({
-  tileHeight: TILE_SIZE,
-  prebuiltStructure: [[{ tileId: '0#0', type: FloorTypeValue.tile_floor }]],
-});
-
-function sameRect(a: Rect | null, b: Rect | null): boolean {
+function same(a: Rect | null, b: Rect | null): boolean {
   if (a === null || b === null) return a === b;
   return a.x === b.x && a.y === b.y && a.w === b.w && a.h === b.h;
 }
 
-function describe(rect: Rect | null): string {
-  return rect === null ? 'none' : `(${rect.x},${rect.y} ${rect.w}×${rect.h})`;
-}
-
 const failures: string[] = [];
-let layouts = 0;
 let comparisons = 0;
-
-for (const [width, height] of VIEWPORTS) {
-  for (const miniMapExpanded of BOOLEANS) {
-    for (const hudCollapsed of isMobile ? BOOLEANS : [false]) {
-      for (const build of BOOLEANS) {
-        for (const banner of BOOLEANS) {
-          for (const followOffered of BOOLEANS) {
-            layouts++;
-            setViewportSize(width, height);
-            const lootBoxBanner: Rect | null = banner
-              ? { x: BANNER_LEFT, y: height / 2 - BANNER_H / 2, w: BANNER_W, h: BANNER_H }
-              : null;
-
-            // Outside, as `DungeonScene` tells the renderer each frame.
-            UI.resetColumnLayoutState();
-            const miniMap = new MiniMapSystem(tinyMap);
-            if (miniMapExpanded) miniMap.toggle();
-            const toggleClearOfX = miniMap.screenRect.x;
-            UI.setHudPanelRect(hudReportedPanelRect(hudCollapsed));
-            UI.setHudPanelKeepouts(hudKeepouts(hudCollapsed, isMobile, toggleClearOfX));
-            // No floor with a collapse timer has buildings to go into.
-            UI.setLevelTimerShown(false);
-            UI.setBuildSlotReserved(build);
-            UI.setLootBoxBannerRect(lootBoxBanner);
-            const outdoorFollower = isMobile
-              ? UI.mobileFollowerButtonRect(miniMap)
-              : UI.followerButtonRect();
-            const outdoor: Record<string, Rect | null> = {
-              pause: UI.pauseButtonRect(miniMap),
-              bag: UI.bagButtonRect(miniMap),
-              build: build ? UI.buildButtonRect(miniMap) : null,
-              chip: UI.achievementChipRect(miniMap),
-              journal: UI.journalButtonRect(miniMap),
-              follower: followOffered ? outdoorFollower : null,
-              hudToggle: hudToggleRect(hudCollapsed, isMobile, toggleClearOfX),
-              switchButton: isMobile ? UI.mobileSwitchButtonRect() : null,
-              summon: isMobile ? UI.mobileSummonButtonRect() : desktopSummonButtonRect(height),
-            };
-
-            const interior = interiorHudLayout({
-              viewportWidth: width,
-              viewportHeight: height,
-              mobile: isMobile,
-              hudCollapsed,
-              miniMapExpanded,
-              hotbarBandHeight: height - hotbarStripRect().y,
-              followButton: followOffered,
-              summonButton: true,
-              buildButton: build,
-              journalButton: true,
-              lootBoxBanner,
-            });
-            const indoor: Record<string, Rect | null> = {
-              pause: interior.pause,
-              bag: interior.bag,
-              build: interior.build,
-              chip: interior.achievementChip,
-              journal: interior.journal,
-              follower: interior.follow,
-              hudToggle: interior.hudToggle,
-              switchButton: interior.switchButton,
-              summon: interior.summon,
-            };
-
-            const label = [
-              `${platformName} ${width}x${height}`,
-              miniMapExpanded ? 'minimap expanded' : 'minimap',
-              ...(isMobile ? [hudCollapsed ? 'hud collapsed' : 'hud expanded'] : []),
-              ...(build ? ['build'] : []),
-              ...(banner ? ['loot banner'] : []),
-              followOffered ? 'follower' : 'follower refused',
-            ].join(', ');
-            for (const [name, rect] of Object.entries(outdoor)) {
-              comparisons++;
-              const inside = indoor[name] ?? null;
-              if (!sameRect(rect, inside)) {
-                failures.push(
-                  `${label}: ${name} is ${describe(rect)} outside but ${describe(inside)} inside`,
-                );
-              }
-            }
-          }
+for (const density of DENSITIES) {
+  for (const uiSize of UI_SIZES) {
+    for (const [width, height] of VIEWPORTS) {
+      const resolved = resolveViewport({
+        cssWidth: width,
+        cssHeight: height,
+        density,
+        uiSize,
+        safeArea: NO_INSETS,
+      });
+      for (const miniMapExpanded of BOOLEANS) {
+        const layout = (build: boolean): ReturnType<typeof hudLayout> =>
+          hudLayout({
+            viewport: resolved.safe,
+            size: resolved.size,
+            density,
+            miniMapExpanded,
+            build,
+          });
+        const without = layout(false);
+        const withBuild = layout(true);
+        const steady: Record<string, readonly [Rect | null, Rect | null]> = {
+          pause: [without.buttons.pause, withBuild.buttons.pause],
+          bag: [without.buttons.bag, withBuild.buttons.bag],
+          follower: [without.buttons.follower, withBuild.buttons.follower],
+          summon: [without.buttons.summon, withBuild.buttons.summon],
+          switch: [without.buttons.switchButton, withBuild.buttons.switchButton],
+          hotbar: [without.hotbar.strip, withBuild.hotbar.strip],
+          minimap: [without.miniMap, withBuild.miniMap],
+          frames: [without.framesBlock, withBuild.framesBlock],
+        };
+        const label = `${density} ${uiSize} ${width}x${height}${miniMapExpanded ? ' expanded' : ''}`;
+        for (const [name, [before, after]] of Object.entries(steady)) {
+          comparisons++;
+          if (!same(before, after)) failures.push(`${label}: holding the Build slot moves ${name}`);
         }
       }
     }
   }
 }
+console.log(`hud parity (layout): ${comparisons} rects compared`);
+for (const failure of failures.slice(0, FAILURES_LISTED)) console.error(`  FAIL ${failure}`);
 
-console.log(
-  `hud parity (${platformName}): ${layouts} layouts, ${comparisons} button rects compared`,
-);
-if (failures.length > 0) {
-  for (const failure of failures.slice(0, FAILURES_LISTED)) console.error(`  FAIL ${failure}`);
-  if (failures.length > FAILURES_LISTED) {
-    console.error(`  … and ${failures.length - FAILURES_LISTED} more`);
-  }
+let failed = failures.length > 0;
+for (const device of ['phone', 'desktop'] as const) {
+  const child = spawnSync(
+    process.execPath,
+    [...process.execArgv, process.argv[1] ?? '', `--door=${device}`],
+    { stdio: 'inherit' },
+  );
+  if (child.status !== 0) failed = true;
+}
+if (failed) {
+  console.error('verify:hud-parity FAILED');
   process.exit(1);
 }
+console.log('verify:hud-parity passed');

@@ -102,13 +102,10 @@ function same(actual: readonly string[], wanted: readonly string[]): boolean {
 function readThrough(talk: TalkRig): void {
   const conversation = talk.rig.kit.villagers?.conversation;
   if (conversation === undefined) return;
-  for (
-    let turn = 0;
-    turn < READ_LIMIT && conversation.isOpen && !conversation.isShowingChoices;
-    turn++
-  ) {
+  const awaitingAPage = () => conversation.isOpen && !conversation.isShowingChoices;
+  for (let turn = 0; turn < READ_LIMIT && awaitingAPage(); turn++) {
     conversation.update(null);
-    if (!conversation.isOpen || conversation.isShowingChoices) break;
+    if (!awaitingAPage()) break;
     conversation.advance();
   }
 }
@@ -122,7 +119,7 @@ function talkToMerrit(talk: TalkRig): string[] {
   talk.rig.human.x = merrit.x;
   talk.rig.human.y = merrit.y;
   const before = talk.shown.length;
-  talk.rig.kit.tryInteract(talk.rig.human);
+  talk.rig.kit.tryInteract(talk.rig.human, false);
   readThrough(talk);
   return talk.shown.slice(before);
 }
@@ -234,10 +231,7 @@ export function verifyMerritGrainAndCall(check: Check): void {
     'Midge wears a "!" while she answers the call',
   );
   check(
-    midgeTile !== null &&
-      pointedAt !== undefined &&
-      pointedAt.x === midgeTile.x &&
-      pointedAt.y === midgeTile.y,
+    midgeTile !== null && pointedAt?.x === midgeTile.x && pointedAt.y === midgeTile.y,
     'while Merrit calls, the journal points at Midge rather than Merrit',
   );
 

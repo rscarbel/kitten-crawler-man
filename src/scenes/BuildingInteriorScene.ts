@@ -1,4 +1,3 @@
-import { MONGO_EXPLAINER_FOCUS_ID } from '../ui/MongoExplainer';
 import { firstResidentMarker, type ResidentQuestHook } from '../systems/residentQuestHooks';
 import { WendellBlueprintsHook } from '../systems/briarHollow/blueprints/WendellBlueprintsHook';
 import { forwardQuestItemEvictions } from '../systems/questItemEvictions';
@@ -21,11 +20,23 @@ import { BopcaSystem } from '../systems/BopcaSystem';
 import { stampSafeRoomCounters } from '../map/safeRoomCounterLayout';
 import { stampSafeRoomDecor } from '../map/safeRoomDecorLayout';
 import { ShopSystem, GENERAL_STORE_CONFIG } from '../systems/ShopSystem';
-import { MobileHUDSystem, type Rect } from '../systems/MobileHUDSystem';
+import { TouchMoveState } from '../core/TouchMoveState';
+import { CRAWLER_NAMES } from '../core/SkillManager';
 import { constructionUnlocked } from '../core/villageUnlocks';
 import { platform } from '../core/Platform';
-import * as UIRenderer from '../systems/DungeonUIRenderer';
-import type { HudViewState } from '../ui/hudButtons/hudViewState';
+import {
+  renderEntityTooltip,
+  renderLevelUpFlash,
+  renderStatBoostFlash,
+} from '../systems/worldEffects';
+import type { DockButtonModel, HudModel, HudViewState, MinimapModel } from '../ui/hud/hudModel';
+import { HudSurface, surfacesOverHud } from '../ui/hud/HudSurface';
+import { liveHudLayout } from '../ui/hud/liveHudLayout';
+import { promptSurface } from '../ui/hud/prompt';
+import type { TopBandEntry } from '../ui/hud/topBand';
+import { hotbarPressInput, hotbarSlotModels } from '../systems/kits/hudHotbar';
+import { toastBagFullLosses } from '../systems/bagFullToasts';
+import { paintInteriorMiniMap } from '../systems/interiorMiniMap';
 import { TowerStairSystem } from '../systems/TowerStairSystem';
 import {
   readMovement,
@@ -35,19 +46,17 @@ import {
 } from '../systems/GameLoopPhases';
 import {
   downedCompanionArrowCandidate,
-  renderKnockedOutUI,
+  knockedOutBandEntry,
   updateKnockoutState,
 } from '../systems/KnockoutRevive';
 import { drawTopArrowCandidate, type ArrowCandidate } from '../ui/WorldArrow';
 import { GameplayScene } from './GameplayScene';
-import { hudCoinCounterScreenPos } from '../ui/HUD';
-import { pointInRect } from '../utils';
 import { AchievementManager } from '../core/AchievementManager';
 import { AchievementUISystem } from '../systems/AchievementUISystem';
 import type { JournalProgress } from '../core/JournalProgress';
 import { isOutstanding, type TrackerEntry } from '../systems/questTracker';
 import { GameStats, bindRunStats } from '../core/GameStats';
-import { MENU_TAP_DURATION_MS, MENU_TAP_MAX_DISTANCE, type PauseMenu } from '../ui/PauseMenu';
+import type { PauseScreen } from '../ui/screens/pause/PauseScreen';
 import type { Player } from '../Player';
 import type { HumanPlayer } from '../creatures/HumanPlayer';
 import { HumanTalkDriver } from '../creatures/humanGestures';
@@ -66,10 +75,6 @@ import {
 import { sfxGroupsForBuildingEntry } from '../audio/sfxGroups';
 import { prewarmGroups } from '../core/SpriteLoader';
 import { aiAdapter } from '../ai/AIAdapter';
-import { drawText } from '../ui/TextBox';
-import { drawBox, drawOverlay } from '../ui/Box';
-import { addButton, beginMenuFocus, endMenuFocus, menuFocusContextId } from '../ui/Button';
-import type { ButtonRect } from '../ui/pause/types';
 import { EventBus } from '../core/EventBus';
 import { CrawlerBarkSystem } from '../systems/CrawlerBarkSystem';
 import { barkWhenBlueprintsItemEvicted } from '../systems/briarHollow/blueprints/blueprintsEvictionBark';
@@ -80,7 +85,6 @@ import type { TacticsTrait } from '../creatures/tactics/tacticsTraits';
 import type { RespawnMode } from '../ui/DeathScreen';
 import { causeFromDamageSource } from '../systems/DeathCauseSystem';
 import { pickDeathExplanation } from '../ui/DeathExplanations';
-import { resolveSkillBookPrompt } from '../systems/skillBookUse';
 import type { Mob } from '../creatures/Mob';
 import type { Townsperson } from '../creatures/Townsperson';
 import { CITIZEN_TALK_RADIUS_TILES } from '../creatures/townInteraction';
@@ -96,7 +100,7 @@ import type { MurderQuestProgress, MurderQuestStage } from '../core/MurderQuestP
 import { createDoomsdayProgress, type DoomsdayProgress } from '../core/DoomsdayProgress';
 import { createClubMembership, type ClubMembership } from '../core/ClubMembership';
 import type { MarketStock } from '../systems/market/MarketStock';
-import { FollowerMenu } from '../systems/FollowerMenu';
+import { FollowerScreen } from '../ui/screens/follower/FollowerScreen';
 import {
   CompanionSystem,
   createCompanionStanceState,
@@ -108,8 +112,8 @@ import {
   type MercenaryRoster,
 } from '../core/MercenaryRoster';
 import { createGodModeState, type GodModeState } from '../core/GodMode';
-import { ITEM_DEF, isWearable, type InventoryItem, type ItemId } from '../core/ItemDefs';
-import { DesperadoClubSystem } from '../systems/DesperadoClubSystem';
+import { ITEM_DEF, type InventoryItem, type ItemId } from '../core/ItemDefs';
+import { CLUB_STATION_SURFACE_IDS, DesperadoClubSystem } from '../systems/DesperadoClubSystem';
 import { InteriorOccupantSystem } from '../systems/InteriorOccupantSystem';
 import { InteriorReadableSystem } from '../systems/InteriorReadableSystem';
 import {
@@ -152,11 +156,12 @@ import { buildTattooMenu, inkTattoo } from '../systems/townTattooParlor';
 import { buildArmouryMenu, issueArmour } from '../systems/townArmoury';
 import { buildDrillYardMenu, runDrill } from '../systems/townDrillYard';
 import {
-  PricedMenuPanel,
-  type PricedOption,
-  type PricedPurchaseHandler,
-  type SellConfig,
-} from '../ui/PricedMenuPanel';
+  ShopSession,
+  type ShopRow,
+  type ShopPurchaseHandler,
+  type ShopSellConfig,
+} from '../ui/screens/shop/shopSession';
+import { shopScreenSurface } from '../ui/screens/shop/ShopScreen';
 import {
   ARMOURY_PRICING,
   APOTHECARY_PRICING,
@@ -164,12 +169,13 @@ import {
   FARMER_PRICING,
 } from '../systems/market/shopProfiles';
 import type { ShopPricingProfile } from '../systems/market/shopPricing';
-import {
-  setButtonMouseState,
-  setButtonAudio,
-  notifyButtonClick,
-  clearButtonMouseState,
-} from '../ui/Button';
+import { createSceneUi, sceneMouse } from '../ui/core/sceneUi';
+import type { Rect } from '../ui/core/geom';
+import { worldText } from '../ui/world/worldText';
+import { worldPalette } from '../ui/theme/worldInk';
+import { dynamiteChargeSurface } from '../systems/DynamiteSystem';
+import type { Surface, UiRoot, WorldGesture } from '../ui/core/UiRoot';
+import { PRIMARY_BUTTON } from '../ui/core/pointer';
 import { interiorServiceForRole, interiorServicesFor } from '../systems/townServices';
 import type { TownRole } from '../sprites/person/PersonAppearance';
 import {
@@ -187,8 +193,11 @@ import {
 import { PLUMBLINE_FARM_NAME } from '../systems/briarHollow/blueprints/blueprintsProgress';
 import { partyCount } from '../core/partyResources';
 import { indoorsConstructionSource } from '../systems/briarHollow/ConstructionSystem';
-import { FortuneTellerPanel, HEDGE_WITCH } from '../ui/FortuneTellerPanel';
-import { ReadablePanel } from '../ui/ReadablePanel';
+import { FortuneTable, HEDGE_WITCH, fortuneScreenSurface } from '../ui/screens/shop/FortuneScreen';
+import { ReadableOverlay } from '../ui/screens/dialogs/ReadableOverlay';
+import { deathScreenSurface } from '../ui/screens/dialogs/deathScreen';
+import { exitBuildingPromptSurface } from '../ui/screens/dialogs/exitBuildingPrompt';
+import { towerStairsPromptSurface } from '../ui/screens/dialogs/towerStairsPrompt';
 import {
   drawInteractionPrompt,
   interactionPromptsDrawnThisFrame,
@@ -216,7 +225,6 @@ import { partyLevelOf } from '../levels/spawner';
 import { AnchorInteriorSystem, SKY_TEMPLE_NAME } from '../systems/AnchorInteriorSystem';
 import { createAnchorQuestProgress, type AnchorQuestProgress } from '../core/AnchorQuestProgress';
 import { MenusKit } from '../systems/kits/MenusKit';
-import { HOTBAR_REFUSAL_MESSAGE } from '../ui/InventoryInteraction';
 import { ChatKit } from '../systems/kits/ChatKit';
 import {
   activateHotbarSlot,
@@ -226,14 +234,6 @@ import {
   type HotbarHost,
 } from '../systems/kits/hotbarActions';
 import { GameplayInputHandler } from '../systems/GameplayInputHandler';
-import {
-  advanceFocusedOverlay,
-  auditOverlayFocus,
-  focusedOverlay,
-  keyboardSuppressed,
-  worldHalted,
-  type OverlayInputClaim,
-} from '../systems/kits/OverlayClaims';
 import { DestructionKit } from '../systems/kits/DestructionKit';
 import { RewardFlySystem } from '../systems/RewardFlySystem';
 import { playRewardLandingCues } from '../systems/rewardFlyAudio';
@@ -263,17 +263,15 @@ import {
   hudClearView,
   interiorCameraBounds,
   interiorFocusRange,
-  type ScreenRect,
   type WorldRect,
 } from './interiorCamera';
 import {
-  drawInteriorNameplate,
-  interiorHudLayout,
-  interiorRoomTitle,
+  hotbarBandHeightCss,
   interiorHudOccluders,
-  type InteriorHudLayout,
-  type InteriorHudLayoutInput,
-} from './interiorHudLayout';
+  interiorRoomTitle,
+  roomNameEntry,
+  type InteriorChrome,
+} from './interiorHud';
 import { cameraWorldView, setVisibleWorldView } from '../core/visibleWorldView';
 import { createMongoPetState, type MongoPetState } from '../core/MongoPetState';
 import { settings } from '../core/Settings';
@@ -289,8 +287,42 @@ import {
 } from '../systems/companionCarry';
 import { getMongoStats } from '../abilities/mongo';
 
-/** Parks the cursor outside any button until a real mouse move reports a position. */
-const OFFSCREEN_CURSOR_POS = -9999;
+/** The shared conversation's surface id: the one overlay a world tap may hand its press past. */
+const CONVERSATION_SURFACE_ID = 'conversation';
+const SHOP_SURFACE_ID = 'shop';
+const CLUB_SURFACE_ID = 'club';
+const SERVICE_SURFACE_ID = 'priced-menu';
+const READING_SURFACE_ID = 'fortune-teller';
+const READABLE_SURFACE_ID = 'readable';
+const EXIT_MENU_SURFACE_ID = 'exit-building';
+const TOWER_STAIRS_SURFACE_ID = 'tower-stairs';
+const ROOM_STATUS_SURFACE_ID = 'room-status';
+const DYNAMITE_CHARGE_SURFACE_ID = 'dynamite-charge';
+/** Escape opens the pause menu; it is not a rebindable action, so its keycap is fixed. */
+const PAUSE_KEY_LABEL = 'Esc';
+/** The room's own status layer: it reports, so it never counts as a menu over the HUD. */
+const ROOM_STATUS_ONLY: ReadonlySet<string> = new Set([ROOM_STATUS_SURFACE_ID]);
+
+/** The two door menus: standing in a doorway or on a stair. */
+const DOOR_MENU_SURFACE_IDS: ReadonlySet<string> = new Set([
+  EXIT_MENU_SURFACE_ID,
+  TOWER_STAIRS_SURFACE_ID,
+]);
+
+/** The panels the room raises itself, which its status draws over. */
+const ROOM_PANEL_SURFACE_IDS: ReadonlySet<string> = new Set([
+  CONVERSATION_SURFACE_ID,
+  SHOP_SURFACE_ID,
+  CLUB_SURFACE_ID,
+  SERVICE_SURFACE_ID,
+  READING_SURFACE_ID,
+  READABLE_SURFACE_ID,
+  ...CLUB_STATION_SURFACE_IDS,
+  ...DOOR_MENU_SURFACE_IDS,
+]);
+
+/** Where the room's status draws relative to the stack; see `roomStatusLayerPlacement`. */
+type RoomStatusLayer = 'underEverything' | 'overPanel' | 'overDoorMenu';
 
 /** Every hearth and brazier in a room emits its own fire crackle at this reach. */
 const HEARTH_AMBIENT_RADIUS_TILES = 7;
@@ -302,21 +334,6 @@ const MAGIC_SHOP_AMBIENT_VOLUME = 0.3;
 const TALK_PROMPT_LABEL = 'Talk';
 /** Prompt shown over a ledger, letter or board sitting on the furniture. */
 const READ_PROMPT_LABEL = 'Read';
-
-/**
- * Frames a freshly-opened interior modal ignores the interact key entirely.
- *
- * The same key opens these panels and closes them, and `InputManager` only
- * tracks whether a key is currently *down*. Opening a panel releases the key
- * that opened it, so a still-held key reads as released — until the browser's
- * auto-repeat puts it back and the panel shuts itself the moment it appeared.
- *
- * The window has to outlast that repeat delay, which is an OS setting and can be
- * as long as a second, so this is deliberately generous: a player who just
- * opened a shop or a ledger is not reaching for the key again inside a second,
- * and `modalCloseArmed` takes over as soon as it expires.
- */
-const MODAL_REOPEN_GRACE_FRAMES = 60;
 
 /** Rooms that hum with their own constant ambience regardless of where you stand. */
 const INTERIOR_AMBIENT_BEDS = new Map<string, { soundId: SoundId; volume: number }>([
@@ -353,37 +370,8 @@ const PULSE_SWING = 0.3;
  * Interiors are lit end to end, so only the viewport edge can hide him.
  */
 const INTERIOR_SIGHT_RADIUS_PX = Number.POSITIVE_INFINITY;
-/**
- * The Build button's first-sighting pulse belongs to the village, which
- * starts it the first time the button appears outdoors; indoors it never pulses.
- */
-const NO_BUILD_BUTTON_PULSE = 0;
 const EXIT_HINT_PULSE_PERIOD_MS = 500;
 const EXIT_ARROW_Y_OFFSET = 15;
-const EXIT_MENU_TITLE_Y = 22;
-const EXIT_MENU_QUESTION_Y = 58;
-const EXIT_MENU_HINT_Y = 79;
-const EXIT_BTN_Y_OFFSET = 110;
-const EXIT_BTN_GAP = 8;
-const EXIT_MENU_OVERLAY_ALPHA = 0.55;
-const EXIT_MENU_PANEL_WIDTH = 340;
-const EXIT_MENU_PANEL_HEIGHT = 190;
-const EXIT_MENU_TITLE_SIZE = 18;
-const EXIT_MENU_QUESTION_SIZE = 13;
-const EXIT_MENU_HINT_SIZE = 11;
-const EXIT_MENU_BUTTON_WIDTH = 120;
-const EXIT_MENU_BUTTON_HEIGHT = 42;
-const EXIT_MENU_BUTTON_TEXT_SIZE = 14;
-const EXIT_MENU_BG_COLOR = '#0d1a09';
-const EXIT_MENU_BORDER_COLOR = '#6aaa44';
-const EXIT_MENU_BORDER_WIDTH = 2;
-const EXIT_MENU_BUTTON_BORDER_WIDTH = 1.5;
-const EXIT_MENU_LEAVE_BG_COLOR = '#1a4d0d';
-const EXIT_MENU_LEAVE_TEXT_COLOR = '#d4edaa';
-const EXIT_MENU_STAY_BG_COLOR = '#1e293b';
-const EXIT_MENU_STAY_BORDER_COLOR = '#475569';
-const EXIT_MENU_STAY_TEXT_COLOR = '#94a3b8';
-const EXIT_MENU_HINT_TEXT_COLOR = '#64748b';
 /** Shown when the party falls indoors to something no quest encounter owns. */
 const INTERIOR_DEFEAT_MESSAGE = 'The building kept what was left of you.';
 /** Fraction of max HP both players are revived to after falling in an interior fight. */
@@ -418,7 +406,10 @@ const CURED_GRIMALDI_SEARCH_RADIUS_TILES = 4;
 /** A quest encounter that runs inside a building (the Big Top maze, cult hideout, tower fight). */
 interface InteriorEncounter {
   update(ctx: SystemContext): void;
-  renderUI(ctx: CanvasRenderingContext2D): void;
+  /** What the encounter draws over the room that is not a bar in the top band. */
+  renderUI?(ctx: CanvasRenderingContext2D): void;
+  /** The encounter's bars, stacked in the HUD's top band. */
+  topBandEntries(): TopBandEntry[];
   /**
    * World-space furniture the encounter owns — props that belong to the room
    * rather than to any creature in it, drawn under the figures so a crawler
@@ -546,19 +537,9 @@ export class BuildingInteriorScene extends GameplayScene {
   readonly pm: PlayerManager;
   private mapW: number;
 
-  // Exit menu state
   private onExitTile = false;
-  // Cursor state fed to the shared Button module each frame so hover/press works
-  // on the interior's panels. Parked far off-screen until the mouse actually moves.
-  private _mouseX = OFFSCREEN_CURSOR_POS;
-  private _mouseY = OFFSCREEN_CURSOR_POS;
-  private _mouseDown = false;
-  /** The finger scrolling a pause-menu tab; its release is a click only if it never became a drag. */
-  private pauseScrollTouch: { id: number; x: number; y: number; time: number } | null = null;
   private exitMenuOpen = false;
   private exitDismissed = false;
-  /** Exit/Stay hit-rects, rebuilt by `renderExitMenu` and read by `handleExitMenuClick`. */
-  private exitMenuButtons: ButtonRect[] = [];
 
   // Safe room — the one building the town plan flags with `hasSafeRoom`
   private readonly safeRoom: SafeRoomSystem | null;
@@ -587,15 +568,11 @@ export class BuildingInteriorScene extends GameplayScene {
   private readonly overworldJournal: InteriorJournalSource | null;
   /** The HUD toggles the party walked in with, written back on the way out. */
   private readonly hudView: HudViewState | null;
-  /** Where this frame's HUD drew the Build button, or null when it is not offered. */
-  private buildButtonRect: Rect | null = null;
-  /** Where this frame's HUD drew the Journal button, or null when it is not offered. */
-  private journalButtonRect: Rect | null = null;
-  /** Where this frame's HUD drew the Follower button, or null when it is not drawn. */
-  private followButtonRect: Rect | null = null;
+  /** Whether the room's minimap is expanded; carried through the door both ways. */
+  private miniMapExpanded = false;
 
-  protected get pauseMenu(): PauseMenu {
-    return this.menus.pauseMenu;
+  protected get pauseScreen(): PauseScreen {
+    return this.menus.pauseScreen;
   }
 
   // Shop (store only)
@@ -608,16 +585,23 @@ export class BuildingInteriorScene extends GameplayScene {
   private readonly club: DesperadoClubSystem | null;
 
   private readonly inputHandler = new GameplayInputHandler();
+  /** Every overlay in the room, and the one path pointer and key input takes to reach them or the world. */
+  readonly ui: UiRoot;
+  /** Decided once per frame before the stack draws, so the status surface never queries the stack it sits in. */
+  private roomStatusLayer: RoomStatusLayer = 'underEverything';
   /** Enter opens chat indoors too, with the same universal cheat table. */
   private readonly chat: ChatKit;
-  /**
-   * The Bopca's own number keys. Bound separately because her dialog is the one
-   * surface that reads 1/2/3 as a menu choice rather than as hotbar slots.
-   */
-  private conversationKeyHandler: ((e: KeyboardEvent) => void) | null = null;
 
-  // Shared mobile HUD (buttons, touch state) — the panels it draws are the kit's.
-  private readonly mobileHUD: MobileHUDSystem;
+  /** The finger walking the crawler around the room. */
+  private readonly touch = new TouchMoveState();
+  /** The HUD, drawn from {@link hudModel} each frame. */
+  protected readonly hud = new HudSurface({
+    visible: () => this.hudShows,
+    model: () => this.hudModel(),
+    toasts: () => this.menus.toasts,
+    liftTopBand: () => this.roomStatusLayer === 'overPanel',
+  });
+  private stopBagFullToasts: (() => void) | null = null;
 
   /** Coins/items flying to this scene's own HUD. One instance for the whole building — floors change, this doesn't. */
   protected readonly rewardFly = new RewardFlySystem();
@@ -627,7 +611,7 @@ export class BuildingInteriorScene extends GameplayScene {
   // so passive/aggressive chosen here persists back out to the overworld.
   private readonly companionStance: CompanionStanceState;
   private readonly companion: CompanionSystem;
-  private readonly followerMenu = new FollowerMenu();
+  private readonly followerMenu = new FollowerScreen();
   /**
    * Mongo. Owned by the scene rather than by a storey: he climbs a tower's
    * stairs with the party, and `changeFloor` moves him between storey rosters.
@@ -644,12 +628,7 @@ export class BuildingInteriorScene extends GameplayScene {
    * or end one under this roof, and the figure in the room has to follow it.
    */
   private hireContract: HiredMercenary | null = null;
-  /** Where the Summon button was drawn this frame, for the click and the tap. */
-  private summonButtonRect: { x: number; y: number; w: number; h: number } | null = null;
   private readonly clearViewMemo = new ClearViewMemo();
-
-  // Notif pulse (unused but needed for HUD signature)
-  protected readonly notifPulse = { value: 0 };
 
   /**
    * One instance shared across every floor: it only reads the roster each
@@ -680,8 +659,8 @@ export class BuildingInteriorScene extends GameplayScene {
    * The tower fight, held by its own type as well as by `encounter`.
    *
    * It is the one encounter with a conversation in it — the body at the desk
-   * and the reveal that follows — so the overlay list, the Escape chain and the
-   * Space chain all have to be able to ask it questions no other encounter
+   * and the reveal that follows — so the conversation's Escape hook and the
+   * Space chain both have to be able to ask it questions no other encounter
    * answers.
    */
   private towerConfrontation: QuillConfrontationSystem | null = null;
@@ -690,8 +669,8 @@ export class BuildingInteriorScene extends GameplayScene {
    *
    * Like the tower's confrontation it has a conversation in it, and more besides
    * — a camera the script takes over, a follow command it refuses, and a door it
-   * sends the party out through — so the overlay list, the Space chain and the
-   * render pass all ask it questions no other encounter answers.
+   * sends the party out through — so the conversation's hooks, the Space chain
+   * and the render pass all ask it questions no other encounter answers.
    */
   private bigTopMaze: BigTopMazeSystem | null = null;
   /**
@@ -708,12 +687,12 @@ export class BuildingInteriorScene extends GameplayScene {
   private readonly occupants: InteriorOccupantSystem | null;
   private readonly ambientSound: AmbientSoundSystem | null;
   /** Priced-service menu for this room's NPC (drinks, blessing, ink); null where none is offered. */
-  private readonly servicePanel: PricedMenuPanel | null;
+  private readonly servicePanel: ShopSession | null;
   /** Old Hilda's reading surface; null in every room that sells rather than reads. */
-  private readonly readingPanel: FortuneTellerPanel | null;
+  private readonly readingPanel: FortuneTable | null;
   /** Ledgers, letters and tally boards sitting on this room's furniture. */
   private readonly readables: InteriorReadableSystem | null;
-  private readonly readablePanel = new ReadablePanel();
+  private readonly readablePanel = new ReadableOverlay();
   /** Examine/search/use on this room's placed props; null where nothing here offers any of the three. */
   private readonly propInteractions: InteriorPropInteractionSystem | null;
   /** This room's breakable placed props (barrels, crates, jars…); null where nothing here is breakable. */
@@ -753,19 +732,9 @@ export class BuildingInteriorScene extends GameplayScene {
   private citizenDialogTarget: Townsperson | null = null;
   /** Keeps Carl talking, turned to whoever he is in conversation with. */
   private readonly humanTalk = new HumanTalkDriver();
-  /** Frames left in which a freshly-opened interior modal ignores the interact key. */
-  private modalGraceFrames = 0;
   /**
-   * Whether the interact key has been observed genuinely released since the open
-   * modal appeared. Nothing releases it while one of these panels is
-   * up, so inside that window "not held" really does mean the key came up —
-   * which makes this the edge trigger `isHeld` cannot be on its own.
-   */
-  private modalCloseArmed = false;
-  /**
-   * Whether the interact key has been released since an overlay last spent it.
-   * The same edge trigger `modalCloseArmed` is, one layer out: it guards the
-   * whole interaction chain rather than a single panel's close.
+   * Whether the interact key has been released since an overlay last spent it:
+   * the edge trigger that guards the whole interaction chain.
    *
    * Re-armed from the key *events*, never from the held-key set: a panel that
    * closes releases the key, which the polled set cannot tell apart from a
@@ -871,6 +840,10 @@ export class BuildingInteriorScene extends GameplayScene {
     super(input, sceneManager);
     this.overworldJournal = overworldJournal ?? null;
     this.audio = audio ?? null;
+    this.ui = createSceneUi({
+      audio: this.audio,
+      handleWorldPointer: (gesture) => this.handleWorldPointer(gesture),
+    });
     this.conversation = new Conversation(this.audio);
     // Additive and cheap on repeat entry: preloading the same interior's SFX
     // group twice is a no-op, so re-entering a shop never re-pays the decode
@@ -899,7 +872,11 @@ export class BuildingInteriorScene extends GameplayScene {
         this.abilityManager.addXp('mongo', amount);
       },
       () => mongoXpFraction(this.abilityManager),
-      (message) => this.menus.hotbarToast.show(message),
+      // Built ahead of the menus, so the stack is reached once he has something to say.
+      {
+        post: (text, opts) => this.menus.toasts.post(text, opts),
+        isShowing: (key) => this.menus.toasts.isShowing(key),
+      },
     );
     this.mongoSystem.unlocked = companionArrival.mongoUnlocked;
     this.hireContract = this.mercenaryRoster.active;
@@ -908,7 +885,7 @@ export class BuildingInteriorScene extends GameplayScene {
       null,
       (entity) => this.safeRoom?.isEntityInSafeRoom(entity) ?? false,
       {
-        toast: (message) => this.menus.hotbarToast.show(message),
+        toast: (message) => this.menus.toasts.post(message),
         sound: (id) => this.audio?.play(id),
       },
     );
@@ -1001,7 +978,6 @@ export class BuildingInteriorScene extends GameplayScene {
     }
 
     this.audio?.wireEvents(this.bus);
-    this.wireSaveIndicator(this.bus);
 
     // The same companion drive the overworld runs, sharing the overworld stance
     // so movement mode and combat stance are consistent everywhere. It owns the
@@ -1148,27 +1124,19 @@ export class BuildingInteriorScene extends GameplayScene {
     this.menus = new MenusKit({
       world: this.floors[GROUND_FLOOR_INDEX].world,
       abilityManager: this.abilityManager,
-      onOverlayRaised: () => this.mobileHUD.clearInvLongPress(),
       onPotionDrunk: (id) => this.noteDrinkAchievement(id),
     });
     this.menus.questReward.setOpenConditions({
       conversationOpen: () => this.conversation.isOpen,
-      worldHeld: () => worldHalted(this.overlayClaims),
+      worldHeld: () => this.ui.worldHalted(),
     });
     this.menus.questReward.onClosed = (spec) => this.flyQuestRewards(spec);
-    this.menus.inventoryPanel.interaction.onBlockedHotbarDrop = () => {
-      this.audio?.play('error');
-      this.menus.announce(HOTBAR_REFUSAL_MESSAGE);
-    };
     this.menus.useSceneItem = (item) => {
       this.trySceneHotbarSlot(item);
     };
-    this.mobileHUD = new MobileHUDSystem(this.menus.inventoryPanel, this.menus.gearPanel);
+    this.wireSaveIndicator(this.bus, this.menus.toasts);
     this.hudView = hudView ?? null;
-    if (this.hudView !== null) {
-      this.mobileHUD.setMiniMapExpanded(this.hudView.miniMapExpanded);
-      this._hudCollapsed = this.hudView.hudCollapsed;
-    }
+    if (this.hudView !== null) this.miniMapExpanded = this.hudView.miniMapExpanded;
     this.achievementUI = new AchievementUISystem(
       this.humanAchievements,
       this.catAchievements,
@@ -1188,7 +1156,7 @@ export class BuildingInteriorScene extends GameplayScene {
         true,
       );
     };
-    this.systemNotices = new SystemNoticeSystem(this.bus, this.menus.hotbarToast);
+    this.systemNotices = new SystemNoticeSystem(this.bus, this.menus.toasts);
     this.tacticsNotices = new TacticsNoticeSystem(tacticsNoticesSeen ?? new Set<TacticsTrait>());
     this.chat = new ChatKit({
       world: this.floors[GROUND_FLOOR_INDEX].world,
@@ -1200,7 +1168,7 @@ export class BuildingInteriorScene extends GameplayScene {
         `Human HP: ${displayHp(this.human.hp)}/${this.human.maxHp}, Cat HP: ${displayHp(this.cat.hp)}/${this.cat.maxHp}.`,
     });
     this.chat.applyCarriedCheat();
-    this.wirePauseMenu();
+    this.wirePauseScreen();
     // No tutorial runs indoors, so the talisman needs none of the overworld's guard.
     bindAbilityLevelUps({
       abilityManager: this.abilityManager,
@@ -1225,7 +1193,7 @@ export class BuildingInteriorScene extends GameplayScene {
       ground.gameMap,
       () => [this.human, this.cat],
       (mob) => ground.roster.add(mob),
-      (message) => this.menus.hotbarToast.show(message),
+      (message) => this.menus.toasts.post(message),
       this.conversation,
       this.audio,
     );
@@ -1243,7 +1211,7 @@ export class BuildingInteriorScene extends GameplayScene {
       conversation: this.conversation,
       human: this.human,
       cat: this.cat,
-      toast: (message) => this.menus.hotbarToast.show(message),
+      toast: (message) => this.menus.toasts.post(message),
       onItemGranted: flyGrantedItem,
     });
     this.residentQuestHooks = [this.anchorInterior, wendellHook].flatMap((hook) =>
@@ -1315,15 +1283,16 @@ export class BuildingInteriorScene extends GameplayScene {
     // one of them.
     const services = interiorServicesFor(entry.name);
     this.servicePanel = services.some((service) => service.surface === 'menu')
-      ? new PricedMenuPanel()
+      ? new ShopSession()
       : null;
     this.readingPanel = services.some((service) => service.surface === 'reading')
-      ? new FortuneTellerPanel()
+      ? new FortuneTable()
       : null;
 
     // Last, once the party stands where it came in and the entry storey's roster
     // exists to receive him.
     if (companionArrival.mongoWasOut) this.carryMongoIn();
+    this.mountSurfaces();
   }
 
   /**
@@ -1418,100 +1387,11 @@ export class BuildingInteriorScene extends GameplayScene {
     return this.currentFloor === this.encounterFloor ? this.encounter : null;
   }
 
-  /**
-   * Every overlay this room can raise, ordered by which one a press should reach
-   * first. The keyboard gate, the Space chain and the mobile tap path all read
-   * this one list, so none of them can drift apart.
-   */
-  private get overlayClaims(): readonly OverlayInputClaim[] {
-    const servicePanel = this.servicePanel;
-    const readingPanel = this.readingPanel;
-    /** Every modal in this room stops the world; only the shop-floor chat does not. */
-    const modal = (isOpen: boolean, focusContext: string | null): OverlayInputClaim => ({
-      isOpen,
-      space: { kind: 'swallow' },
-      locksKeyboard: true,
-      haltsWorld: true,
-      focusContext,
-    });
-    return [
-      // Floating, as outdoors: the notification and the loot-box reveal each
-      // declare their own ring, and the room keeps running under them. Drawn
-      // over every other award, so ranked above them all.
-      {
-        isOpen: this.achievementUI.isBlocking,
-        space: { kind: 'advance', advance: () => void this.achievementUI.handleSpaceBar() },
-        locksKeyboard: false,
-        haltsWorld: false,
-        focusContext: null,
-      },
-      // The award stack outranks the death screen because it draws over it — a
-      // level-up earned by the blow that killed you is still on top and still
-      // has to be dismissible.
-      this.menus.questReward.overlayClaim(),
-      modal(this.menus.levelUpDialog.isShowing, 'level-up'),
-      modal(this.menus.rewardGrantedDialog.isShowing, 'reward-granted'),
-      modal(this.menus.mongoExplainer.isOpen, MONGO_EXPLAINER_FOCUS_ID),
-      modal(this.menus.craftExplainers.isOpen, this.menus.craftExplainers.focusId),
-      modal(this.menus.skillBookPrompt.isOpen, 'skill-book-prompt'),
-      this.menus.itemQuantityPicker.overlayClaim(),
-      // `locksKeyboard` even though the death screen accepts from the keyboard:
-      // its focus ring listens in the capture phase and consumes the press
-      // before this handler is reached, so locking here only stops a hotbar key
-      // spending a potion the revive is about to throw away.
-      modal(this.gameOver, 'death-screen'),
-      this.menus.constructionMenu.overlayClaim(),
-      {
-        isOpen: this.chat.isOpen,
-        space: { kind: 'passThrough' },
-        locksKeyboard: true,
-        haltsWorld: true,
-        // The DOM input owns every key while it is up, the ring included.
-        focusContext: null,
-      },
-      // Mordecai's own conversation opens on the shared one below, so it needs no claim of its own here.
-      modal(this.shop?.shopOpen === true, 'shop'),
-      {
-        isOpen: this.club?.modalOpen === true,
-        space: { kind: 'advance', advance: () => this.club?.dismissModal(this.active()) },
-        locksKeyboard: true,
-        haltsWorld: true,
-        // One claim over five stations — shop, casino, guild, VIP lounge, quest
-        // dialog — so the club answers for whichever of them is drawn.
-        focusContext: this.club?.focusContext ?? null,
-      },
-      modal(servicePanel?.isOpen === true, 'priced-menu'),
-      modal(readingPanel?.isOpen === true, 'fortune-teller'),
-      // Pages of text with no buttons; Space turns them, and the panel declares
-      // an empty ring so nothing behind it keeps one.
-      modal(this.readablePanel.isOpen, 'readable'),
-      modal(this.exitMenuOpen, 'exit-building'),
-      modal(this.towerStairs?.menuOpen === true, 'tower-stairs'),
-      modal(this.followerMenu.isOpen, 'follower-menu'),
-      modal(this.pauseMenu.isOpen, 'pause'),
-      // Last: the one overlay the world keeps running under — walking away from
-      // an occupant is what ends the conversation — and the one every other
-      // surface here is drawn over. Ranking it above them would hand Space and
-      // Escape to the box underneath whatever the player is looking at.
-      this.conversation.overlayClaim(),
-    ];
-  }
-
-  /**
-   * The pause menu's own buttons. The two inventory rows open the bag on the
-   * named crawler's pack rather than the active one's, which is the only way to
-   * reach a companion's bag without switching to them.
-   */
-  private wirePauseMenu(): void {
-    this.pauseMenu.onOpenChat = () => {
-      this.pauseMenu.close();
+  private wirePauseScreen(): void {
+    this.pauseScreen.onOpenChat = () => {
+      this.pauseScreen.close();
       this.openChat();
     };
-    const openInventoryFor = (player: HumanPlayer | CatPlayer): void => {
-      this.menus.openInventoryFor(player, () => this.pauseMenu.openToInventory());
-    };
-    this.pauseMenu.onManageHumanInventory = () => openInventoryFor(this.human);
-    this.pauseMenu.onManageCatInventory = () => openInventoryFor(this.cat);
   }
 
   /** Whose pack the bag is showing: an override picked from the pause menu, or the active crawler. */
@@ -1563,7 +1443,7 @@ export class BuildingInteriorScene extends GameplayScene {
     // Nothing may raise the chat box over a menu that already owns the screen:
     // its DOM input takes focus and the surface underneath keeps its own click
     // routing, so the two would be answering the same keys.
-    if (worldHalted(this.overlayClaims)) return;
+    if (this.ui.worldHalted()) return;
     this.chat.open(this.sceneManager.canvas);
   }
 
@@ -1598,7 +1478,7 @@ export class BuildingInteriorScene extends GameplayScene {
     this.bus.on('mobKilled', (e) => {
       this.gameStats.recordMobKilled(e);
       // A kill the party earned speeds his recovery, indoors as outdoors.
-      if (e.killer !== null) this.mongoSystem.onKill();
+      if (e.killer !== null) this.mongoSystem.onKill(this.cat.isActive);
       this.combat.spawnKillGore(e.mob, e.killer);
       // Onto the floor, the same as the dungeon, rather than straight into the
       // purse: seeing the loot fall and land is how a kill reads as having paid.
@@ -1757,7 +1637,7 @@ export class BuildingInteriorScene extends GameplayScene {
     const old = this.bigTopMaze;
     const worldSeed = this.circus?.worldSeed;
     if (old === null || worldSeed === undefined) return;
-    this.pauseMenu.close();
+    this.pauseScreen.close();
     // The same as closing it with Escape: a key still held from the menu must
     // not walk a crawler off the flap the moment the show starts again.
     this.input.clear();
@@ -1948,6 +1828,8 @@ export class BuildingInteriorScene extends GameplayScene {
       human: this.human,
       cat: this.cat,
     });
+    this.stopBagFullToasts?.();
+    this.stopBagFullToasts = toastBagFullLosses([this.human, this.cat], this.menus.toasts);
     // Override the overworld's persisted music with the room's own; the
     // overworld's zone music (OverworldMusicSystem) restores itself on exit.
     const musicTracks = this.interiorMusicTracks();
@@ -1955,149 +1837,17 @@ export class BuildingInteriorScene extends GameplayScene {
       this.audio?.playMusicPlaylist(musicTracks, { fadeInMs: INTERIOR_MUSIC_FADE_IN_MS });
     }
 
-    // A conversation's numbered choices are picked with 1/2/3, which the hotbar
-    // also owns. Stopped rather than merely defaulted: the shared handler's
-    // suppression gate reads whether it is open *after* this ran, and the
-    // choice that closes it — "leave" — would otherwise land on a hotbar slot
-    // on its way out.
-    this.conversationKeyHandler = (e: KeyboardEvent) => {
-      // Escape dismisses the quest-complete screen and it swallows every other
-      // key; Space and Enter reach its Continue through the focus ring first.
-      const taken =
-        this.menus.questReward.handleKeyDown(e.key, e.repeat) ||
-        this.menus.constructionMenu.handleKey(e.key, e.repeat) ||
-        this.menus.itemQuantityPicker.handleKey(e.key) ||
-        this.conversation.handleKeyDown(e.key);
-      if (!taken) return;
-      e.preventDefault();
-      e.stopImmediatePropagation();
-    };
-    window.addEventListener('keydown', this.conversationKeyHandler);
-
     this.inputHandler.bind({
-      isSuppressed: () => keyboardSuppressed(this.overlayClaims),
+      isSuppressed: () => this.ui.keyboardLocked(),
       isGameOver: () => this.gameOver,
-      // No chest reward dialog indoors: chests are a dungeon fixture.
-      dismissChestDialog: () => false,
-      dismissDialog: () => {
-        // First, because it is a DOM field that has taken focus: a click on the
-        // canvas blurs it without closing it, and every gate below reads it as
-        // still owning the screen.
-        if (this.chat.isOpen) {
-          this.chat.cancel();
-          return true;
-        }
-        if (this.menus.mongoExplainer.isOpen && !this.menus.isAwardStackShowing) {
-          this.menus.mongoExplainer.close();
-          return true;
-        }
-        if (this.menus.craftExplainers.isOpen && !this.menus.isAwardStackShowing) {
-          this.menus.craftExplainers.close();
-          return true;
-        }
-        if (this.menus.constructionMenu.isOpen) {
-          this.menus.constructionMenu.close();
-          return true;
-        }
-        if (this.menus.skillBookPrompt.isOpen) {
-          // Escape declines the read; the book stays in the pack.
-          this.menus.skillBookPrompt.close();
-          this.menus.releaseSkillBookReader();
-          return true;
-        }
-        if (this.bopca?.dismissDialog() === true) return true;
-        if (this.bigTopMaze?.dismissDialog() === true) return true;
-        if (this.towerConfrontation?.dismissDialog() === true) return true;
-        if (this.dismissResidentQuestDialog()) return true;
-        if (this.safeRoom?.mordecaiDialogOpen === true) {
-          this.conversation.dismiss();
-          return true;
-        }
-        if (this.shop?.shopOpen === true) {
-          this.shop.shopOpen = false;
-          return true;
-        }
-        if (this.club?.modalOpen === true) {
-          this.club.closeModals(this.active());
-          return true;
-        }
-        if (this.servicePanel?.isOpen === true) {
-          this.servicePanel.close();
-          return true;
-        }
-        if (this.readingPanel?.isOpen === true) {
-          this.readingPanel.close();
-          return true;
-        }
-        if (this.readablePanel.isOpen) {
-          this.readablePanel.close();
-          return true;
-        }
-        // The bottom-most surface Escape can be aimed at: anything that can be
-        // raised over a live conversation also renders over it. The handler
-        // reaches the tower-stair, exit and follower menus *after* this
-        // callback, so this branch has to decline while any of them is up —
-        // otherwise Escape silently shuts the conversation underneath the modal
-        // the player is actually looking at.
-        if (this.citizenDialogTarget !== null && !worldHalted(this.overlayClaims)) {
-          // `dismiss` rather than `close`: a service queued behind the story
-          // must not open on the way out of it, and `onDismissed` is what
-          // skips straight to unfreezing the target instead.
-          this.conversation.dismiss();
-          return true;
-        }
-        return false;
-      },
-      // The interior's two structural menus take the dungeon's stairwell and
-      // building slots: both are "a door you are standing in", and both have to
-      // close before Escape reaches the pause menu.
-      dismissStairwell: () => {
-        if (this.towerStairs?.menuOpen !== true) return false;
-        this.towerStairs.closeMenu();
-        return true;
-      },
-      dismissBuilding: () => {
-        if (!this.exitMenuOpen) return false;
-        this.closeExitMenu();
-        return true;
-      },
-      dismissFollowerMenu: () => {
-        if (!this.followerMenu.isOpen) return false;
-        this.followerMenu.close();
-        return true;
-      },
-      togglePause: () => {
-        this.pauseMenu.toggle();
-        if (this.pauseMenu.isOpen) {
-          this.menus.closePanels();
-          this.audio?.play('menu_open');
-        } else {
-          this.input.clear();
-        }
-      },
-      advanceDialog: () => {
-        if (this.handOffConversationPress()) {
-          this.interactArmed = false;
-          return true;
-        }
-        const outcome = advanceFocusedOverlay(this.overlayClaims);
-        // Disarmed rather than cleared. The press is spent, and the page turn
-        // that closes the last page leaves no claim behind for the polled chain
-        // in `update` to check — so without this, the press that dismissed a
-        // conversation immediately starts it again. Clearing the input instead
-        // would look like a release to `consumeModalClose`, whose whole job is
-        // to tell a real release from a held key, and would re-arm on the next
-        // auto-repeat anyway.
-        if (outcome !== 'ignored') this.interactArmed = false;
-        return outcome !== 'ignored';
-      },
+      togglePause: () => this.togglePause(),
       // No `switchCharacter` or `spaceAction`: both are polled from the held-key
       // set in `update`, where the interaction chain can order them against
       // movement and against each other. The keys are still swallowed here.
       usePotion: () => drinkAnyHealthPotion(this.hotbarHost()),
       toggleInventory: () => this.menus.toggleInventory(),
       toggleGear: () => this.menus.toggleGear(),
-      // Closing is `dismissFollowerMenu`'s job, which the handler tries first.
+      // Closing is the follower menu's own job: its surface takes the key while it is open.
       companionFollow: () => {
         if (this.followDisabled) {
           this.audio?.play('error');
@@ -2105,7 +1855,7 @@ export class BuildingInteriorScene extends GameplayScene {
         }
         if (this.canOpenFollowerMenu()) this.followerMenu.open();
       },
-      toggleMiniMap: () => this.mobileHUD.toggleMiniMap(),
+      toggleMiniMap: () => this.toggleMiniMap(),
       // Indoors this is Old Hilda's hammer rather than the dungeon's barricades,
       // but it is the same key doing the same thing: spending boards on a
       // broken thing you are standing at.
@@ -2174,10 +1924,10 @@ export class BuildingInteriorScene extends GameplayScene {
   private syncJournalContext(): void {
     const journal = this.overworldJournal;
     if (journal === null) {
-      this.pauseMenu.journalContext = null;
+      this.pauseScreen.journalContext = null;
       return;
     }
-    this.pauseMenu.journalContext = {
+    this.pauseScreen.journalContext = {
       playerTileX: this.entry.doorTile.x,
       playerTileY: this.entry.doorTile.y,
       entries: journal.entries(),
@@ -2190,39 +1940,8 @@ export class BuildingInteriorScene extends GameplayScene {
     if (this.overworldJournal === null || this.gameOver) return false;
     if (this.conversation.isOpen) this.conversation.dismiss();
     this.syncJournalContext();
-    this.pauseMenu.openToJournal();
+    this.pauseScreen.open('journal');
     this.menus.closePanels();
-    return true;
-  }
-
-  /**
-   * The Build button, the achievement chip, the loot-box banner and the
-   * Journal. Returns whether the press was theirs.
-   */
-  private tryPressColumnPieces(mx: number, my: number): boolean {
-    if (this.gameOver || this.pauseMenu.isOpen) return false;
-    if (this.achievementUI.handleAchievIconClick(mx, my)) return true;
-    if (this.achievementUI.handleLootBoxIconClick(mx, my, () => this.pauseMenu.close())) {
-      return true;
-    }
-    const build = this.buildButtonRect;
-    if (build !== null && pointInRect(mx, my, build)) {
-      this.toggleConstructionMenu();
-      return true;
-    }
-    const journal = this.journalButtonRect;
-    if (journal !== null && pointInRect(mx, my, journal)) {
-      this.openQuestJournal();
-      return true;
-    }
-    return false;
-  }
-
-  /** The Follower button, on either platform. Returns whether the press was its. */
-  private tryPressFollowButton(mx: number, my: number): boolean {
-    const follow = this.followButtonRect;
-    if (follow === null || !pointInRect(mx, my, follow)) return false;
-    if (this.canOpenFollowerMenu()) this.followerMenu.open();
     return true;
   }
 
@@ -2253,6 +1972,8 @@ export class BuildingInteriorScene extends GameplayScene {
   onExit(): void {
     this.stopForwardingQuestItemEvictions?.();
     this.stopForwardingQuestItemEvictions = null;
+    this.stopBagFullToasts?.();
+    this.stopBagFullToasts = null;
     // See the matching note in DungeonScene.onExit: defensive, since a fresh
     // scene already starts with a fresh RewardFlySystem.
     this.rewardFly.reset();
@@ -2282,29 +2003,164 @@ export class BuildingInteriorScene extends GameplayScene {
     // maps — reachable for the rest of the page's life.
     for (const floor of this.floors) floor.combat.dispose();
     for (const floor of this.floors) floor.fairies.dispose();
-    // Drop this scene's hit-rects so the next scene doesn't inherit stale hover.
-    clearButtonMouseState();
     this.inputHandler.unbind();
     // A real <input> on document.body, which swallows every key it is focused
     // for. Left behind, it makes the scene that replaces this one unplayable.
     this.chat.dispose();
-    if (this.conversationKeyHandler !== null) {
-      window.removeEventListener('keydown', this.conversationKeyHandler);
-      this.conversationKeyHandler = null;
+  }
+
+  /** Escape with nothing else open, and the pause menu's own close. */
+  private togglePause(): void {
+    this.pauseScreen.toggle();
+    if (this.pauseScreen.isOpen) {
+      this.menus.closePanels();
+      this.audio?.play('menu_open');
+    } else {
+      this.input.clear();
     }
+  }
+
+  /**
+   * Mounts every overlay this room can raise. Which one is on top, which one a
+   * press reaches, where Escape goes and whether the room keeps running are
+   * all read off the stack these build, by band and then by the order they
+   * opened in.
+   */
+  private mountSurfaces(): void {
+    const party = (): { active: Player; companion: Player } => ({
+      active: this.active(),
+      companion: this.inactive(),
+    });
+    const surfaces: Surface[] = [
+      promptSurface(),
+      this.hud,
+      this.hud.overlay(),
+      ...this.menus.surfaces({
+        pauseFrame: () => ({
+          humanAchievements: this.humanAchievements,
+          catAchievements: this.catAchievements,
+          gameStats: this.gameStats,
+        }),
+        togglePause: () => this.togglePause(),
+      }),
+      this.menus.constructionMenu.surface('construction-menu', () => {
+        const menuCrawler = this.active();
+        return {
+          crawlerName: menuCrawler === this.human ? 'Carl' : 'Donut',
+          skills: menuCrawler.craftSkills,
+          partyCount: (id) => partyCount(this.human, this.cat, id),
+        };
+      }),
+      this.achievementUI.surface(),
+      this.chat.surface(),
+      deathScreenSurface(this.combat.deathScreen, {
+        isOpen: () => this.gameOver,
+        onRespawn: () => this.reviveAndExit(),
+      }),
+      this.followerMenu.surface({
+        // Indoors the follower menu stops the room, unlike the dungeon's.
+        haltsWorld: true,
+        state: () => ({
+          movementMode: this.companion.getMovementMode(this.human.isActive),
+          combatStance: this.companion.getCombatStance(this.human.isActive),
+          companionIsCat: this.human.isActive,
+          mongoAutoSummon: null,
+        }),
+      }),
+      this.conversation.surface({
+        id: CONVERSATION_SURFACE_ID,
+        handOffPress: () => this.handOffConversationPress(),
+        dismiss: () => this.conversationEscape()?.(),
+        wantsEscape: () => this.conversationEscape() !== null,
+        offBoxClick: (x, y) => this.pressPastHaltingConversation(x, y),
+      }),
+      this.readablePanel.surface(READABLE_SURFACE_ID),
+      exitBuildingPromptSurface(EXIT_MENU_SURFACE_ID, {
+        isOpen: () => this.exitMenuOpen,
+        buildingName: () => this.entry.name,
+        exit: () => this.doExit(),
+        stay: () => this.closeExitMenu(),
+      }),
+      towerStairsPromptSurface(TOWER_STAIRS_SURFACE_ID, () => this.towerStairs ?? null),
+      this.roomStatusSurface(),
+      dynamiteChargeSurface({
+        id: DYNAMITE_CHARGE_SURFACE_ID,
+        dynamite: () => this.destruction.dynamite,
+        shows: () => this.roomStatusLayer === 'underEverything',
+      }),
+    ];
+    if (this.servicePanel !== null) {
+      surfaces.push(
+        shopScreenSurface({ id: SERVICE_SURFACE_ID, session: this.servicePanel, party }),
+      );
+    }
+    if (this.readingPanel !== null) {
+      surfaces.push(
+        fortuneScreenSurface({ id: READING_SURFACE_ID, table: this.readingPanel, party }),
+      );
+    }
+    const shop = this.shop;
+    if (shop !== null) {
+      surfaces.push(shopScreenSurface({ id: SHOP_SURFACE_ID, session: shop.session, party }));
+    }
+    const club = this.club;
+    if (club !== null) {
+      surfaces.push(
+        club.clarabelleSurface(CLUB_SURFACE_ID),
+        ...club.stationSurfaces(party),
+        ...club.casinoSurfaces({ active: () => this.active(), companion: () => this.inactive() }),
+      );
+    }
+    for (const surface of surfaces) this.ui.mount(surface);
+  }
+
+  /**
+   * What Escape does to the conversation on screen, or null to let it pass
+   * beneath: only the speakers below may be backed out of. A scripted beat that
+   * holds the party (the Big Top's cure, the tower's load-bearing pages) and a
+   * line from anyone not listed leave Escape to the pause menu.
+   */
+  private conversationEscape(): (() => void) | null {
+    const bopca = this.bopca;
+    if (bopca?.isDialogOpen === true) return () => void bopca.dismissDialog();
+    const maze = this.bigTopMaze;
+    if (maze?.dialogDismissible === true) return () => void maze.dismissDialog();
+    const tower = this.towerConfrontation;
+    if (tower?.dialogDismissible === true) return () => void tower.dismissDialog();
+    const questHook = this.openResidentQuestHook();
+    if (questHook !== null) return () => void questHook.dismissDialog();
+    if (this.safeRoom?.mordecaiDialogOpen === true) return () => void this.conversation.dismiss();
+    // `dismiss` rather than `close`: a service queued behind the story must not
+    // open on the way out of it. Declined while anything halts the room, as
+    // the box underneath a halting menu is not what the player is looking at.
+    if (this.citizenDialogTarget !== null && !this.ui.worldHalted()) {
+      return () => void this.conversation.dismiss();
+    }
+    return null;
+  }
+
+  /**
+   * The two HUD controls that stay live under a conversation that halts the
+   * room: the pause button, and the skill-point badge that opens the Spend
+   * section. Everything else under it waits for the conversation to end.
+   */
+  private pressPastHaltingConversation(x: number, y: number): void {
+    const control = this.hud.controlUnderHalt(x, y);
+    if (control === 'pause') this.pauseScreen.toggle();
+    else if (control === 'skill-points') this.menus.openSpendScreen();
   }
 
   /**
    * True when no other modal owns the screen, so the follower menu may open.
    *
-   * Read off the claim registry rather than restated as a second list of the
+   * Read off the surface stack rather than restated as a second list of the
    * same panels: a panel added to one and forgotten in the other is a menu that
    * opens on top of another menu. The street-chat exception is deliberate here
    * too — a conversation the player can walk out of should not block a command.
    */
   private canOpenFollowerMenu(): boolean {
     if (this.followDisabled) return false;
-    return !worldHalted(this.overlayClaims) && this.citizenDialogTarget === null;
+    return !this.ui.worldHalted() && this.citizenDialogTarget === null;
   }
 
   /**
@@ -2431,29 +2287,6 @@ export class BuildingInteriorScene extends GameplayScene {
   }
 
   /**
-   * Mongo's Summon/Recall button: on a phone stacked on the Switch button as
-   * outdoors, elsewhere bottom-left above the hotbar band the room is already
-   * lifted clear of. Null where it is not drawn, so nothing hit-tests a button
-   * the player cannot see.
-   */
-  private renderSummonButton(
-    ctx: CanvasRenderingContext2D,
-    layout: InteriorHudLayout,
-  ): { x: number; y: number; w: number; h: number } | null {
-    const rect = layout.summon;
-    if (rect === null) return null;
-    return this.mongoSystem.renderSummonButton(ctx, rect.x, rect.y, rect.w, rect.h, true);
-  }
-
-  /** Whether a press at this point landed on the Summon button, which it then toggles. */
-  private tryPressSummonButton(x: number, y: number): boolean {
-    const rect = this.summonButtonRect;
-    if (rect === null || !pointInRect(x, y, rect)) return false;
-    this.toggleMongoSummon();
-    return true;
-  }
-
-  /**
    * True while a scripted beat is driving both crawlers' bodies.
    *
    * One accessor rather than a condition repeated at each site: the keyboard
@@ -2535,12 +2368,12 @@ export class BuildingInteriorScene extends GameplayScene {
     // party is still drawn on top of the screen announcing it, and a dialog that
     // is not ticked sits frozen at its first frame with its accept button inert.
     this.menus.update();
+    this.tickSaveIndicator();
     this.achievementUI.tick();
     playRewardLandingCues(this.audio, this.rewardFly.update());
 
-    // The death screen accepts through its own focus ring, which reaches
-    // `handleClick` — nothing to poll for here. The fall he died in still
-    // plays out beneath it as it fades in.
+    // The death screen accepts through its own surface — nothing to poll for
+    // here. The fall he died in still plays out beneath it as it fades in.
     if (this.gameOver) {
       this.human.tickReactionWhileDefeated();
       return;
@@ -2576,10 +2409,6 @@ export class BuildingInteriorScene extends GameplayScene {
       this.destruction.loot.addPlayerDrop(invPlayer.x, invPlayer.y, id, quantity, invPlayer),
     );
     this.chat.update();
-    // Drained here rather than inside the panel branches that read it: a panel
-    // dismissed with the mouse before the grace expired would otherwise leave a
-    // stale count behind to swallow an unrelated key press later.
-    if (this.modalGraceFrames > 0) this.modalGraceFrames--;
 
     // Caught here as well as at the end of `updateCombat`, because a death can
     // arrive from something the frame stops before reaching it — the doomsday
@@ -2590,17 +2419,16 @@ export class BuildingInteriorScene extends GameplayScene {
     }
 
     if (this.menus.skillBookPrompt.isOpen) return;
-    // The award dialogs accept through their own focus rings, which reach
-    // `handleClick`; polling the key here would be the second path to the same
-    // button.
+    // The award dialogs accept through their own surfaces; polling the key
+    // here would be the second path to the same button.
     if (this.menus.questReward.isOpen) return;
     if (this.menus.levelUpDialog.isShowing) return;
     if (this.menus.rewardGrantedDialog.isShowing) return;
-    // The chat box says it halts the world in `overlayClaims`, and this is where
-    // that has to be true: a fight left running under a DOM text field is one
+    // The chat box's surface says it halts the world, and this is where that
+    // has to be true: a fight left running under a DOM text field is one
     // the player cannot answer.
     if (this.chat.isOpen) return;
-    if (this.pauseMenu.isOpen) return;
+    if (this.pauseScreen.isOpen) return;
     if (this.followerMenu.isOpen) return;
     // Asked while the party can still turn back: a door or a stair would leave
     // a downed hire behind for good.
@@ -2613,17 +2441,19 @@ export class BuildingInteriorScene extends GameplayScene {
     // still the one thing that has to keep revealing and counting walk-away,
     // and the branches below return before the world's own tick.
     this.conversation.update({ x: this.active().x, y: this.active().y });
-    // The dialogs below advance from the claim registry, on the key event
-    // rather than from the held-key set: a polled advance on top of the handler's
-    // would turn one press into two pages.
+    // The dialogs below advance from their surfaces, on the key event rather
+    // than from the held-key set: a polled advance on top of that would turn
+    // one press into two pages.
     if (this.bopca?.isDialogOpen === true) {
       // The cook timer has to keep running through the conversation — the dish
       // is meant to land while the player is still reading the order line.
       this.bopca.tick(this.human, this.cat, this.active(), this.inactive());
       return;
     }
-    if (this.shop?.shopOpen === true) {
-      if (this.consumeModalClose()) this.shop.shopOpen = false;
+    const shop = this.shop;
+    if (shop?.isOpen === true) {
+      shop.update();
+      this.playShopTradeSound(shop);
       return;
     }
     if (this.club?.modalOpen) {
@@ -2634,8 +2464,8 @@ export class BuildingInteriorScene extends GameplayScene {
       return;
     }
     // The tower's own conversation: the office scene, the reveal, the Lich's
-    // phase barks and the victory page. Its claim has always promised
-    // `haltsWorld: true`, and this return is what makes that true — without it
+    // phase barks and the victory page. Its conversation halts the world, and
+    // this return is what makes that true — without it
     // the room kept fighting behind the box, which meant a boss phase advancing
     // and orbs landing on a party that was reading. A bare return is safe here
     // where it is not for the maze: nothing inside the confrontation is waiting
@@ -2659,26 +2489,16 @@ export class BuildingInteriorScene extends GameplayScene {
       this.drainMazeQueues();
       return;
     }
-    // Space reaches this conversation through the claim registry's advance
-    // chain on the key event, and Escape through `dismissDialog`. Polling the
-    // held key here as well would turn the press that turns a page into one
-    // that also closes the box.
+    // Space and Escape reach this conversation through its surface on the key
+    // event. Polling the held key here as well would turn the press that turns
+    // a page into one that also closes the box.
     if (this.residentQuestDialogOpen()) return;
     if (this.servicePanel?.isOpen === true) {
       this.servicePanel.update();
-      if (this.consumeModalClose()) this.servicePanel.close();
       return;
     }
-    if (this.readingPanel?.isOpen === true) {
-      if (this.consumeModalClose()) this.readingPanel.close();
-      return;
-    }
-    if (this.readablePanel.isOpen) {
-      // Advances rather than closing: a long readable is paged, and the last
-      // page is where `advance` closes it.
-      if (this.consumeModalClose()) this.readablePanel.advance();
-      return;
-    }
+    if (this.readingPanel?.isOpen === true) return;
+    if (this.readablePanel.isOpen) return;
     this.gameStats.recordPlayedFrame();
     // Deliberately does not return: the player has to be able to walk while the
     // box is up, because walking off is what dismisses it. Mordecai's own
@@ -2697,8 +2517,8 @@ export class BuildingInteriorScene extends GameplayScene {
     if (!scriptOwnsParty) {
       const move = readMovement(
         this.input,
-        this.mobileHUD.moveTarget,
-        this.mobileHUD.tapStart,
+        this.touch.moveTarget,
+        this.touch.tapStart,
         player,
         this.computeCamera(this.map),
       );
@@ -2719,8 +2539,8 @@ export class BuildingInteriorScene extends GameplayScene {
       this.trySwitchActive();
     }
 
-    // Whatever owns the screen has already had this press: the keydown handler
-    // runs the claim registry's advance chain before anything here. Withholding
+    // Whatever owns the screen has already had this press: every key reaches
+    // the surface stack before anything here. Withholding
     // it is what keeps the world behind an overlay from seeing it too — without
     // this, the press that turned a conversation's page also re-opens that same
     // conversation, and then swings at the person having it.
@@ -2730,7 +2550,7 @@ export class BuildingInteriorScene extends GameplayScene {
     // from: clearing would drop the movement keys too, and the conversation
     // ends only when they have walked off.
     //
-    const overlayOwnsInteract = focusedOverlay(this.overlayClaims) !== null;
+    const overlayOwnsInteract = surfacesOverHud(this.ui).length > 0;
     const interactPressed = (): boolean =>
       this.interactArmed && !overlayOwnsInteract && keybindings.isHeld(this.input, 'attack');
 
@@ -2760,13 +2580,9 @@ export class BuildingInteriorScene extends GameplayScene {
       this.talkToMordecai(player);
     }
 
-    // Store: open the shop when standing at the counter. Closing is the ladder's
-    // job, through the same edge-triggered helper every other interior panel
-    // uses — the key that opens one is the key that shuts it.
     if (this.shop !== null && interactPressed() && this.shop.isNearShopkeeper(player)) {
       keybindings.release(this.input, 'attack');
-      this.shop.shopOpen = true;
-      this.beginModalGrace();
+      this.shop.open();
     }
 
     // Club: talk to a station NPC (Clarabelle, bar, casino, …) with Space.
@@ -2799,11 +2615,8 @@ export class BuildingInteriorScene extends GameplayScene {
     // Readables sit on furniture the occupants stand beside, so this runs after
     // the talk above: a person in reach always wins the same press.
     //
-    // The press is deliberately *not* cleared. The panel's own early-return owns
-    // every frame after, and leaving the key alone is what lets
-    // `consumeModalClose` see the player's real hold — a clear here would fake a
-    // release and the page would shut on the first auto-repeat. Which is why the
-    // swing below has to be told about it separately.
+    // The press is not released here, so the swing below has to be told about
+    // it separately; the panel's own early return owns every frame after.
     const openedReadable = interactPressed() && this.tryReadNearby(player);
 
     // Examine/search/use, same non-clearing press as the readable above, and
@@ -2835,10 +2648,7 @@ export class BuildingInteriorScene extends GameplayScene {
     this.applyResidentQuestMarkers();
     for (const hook of this.residentQuestHooks) hook.update();
     this.ambientSound?.updateListener(player.x, player.y);
-    if (this.shop?.purchasePending) {
-      this.shop.purchasePending = false;
-      this.audio?.play('purchase_success');
-    }
+    if (this.shop !== null) this.playShopTradeSound(this.shop);
 
     // Exit tile detection
     const ptx = Math.floor((player.x + TILE_SIZE * TILE_CENTER_RATIO) / TILE_SIZE);
@@ -2942,7 +2752,6 @@ export class BuildingInteriorScene extends GameplayScene {
     const destruction = this.destruction;
 
     this.tickSkillPointReminder(ctx);
-    this.tickSaveIndicator();
 
     // Ahead of the swings it decides on.
     this.companion.update(ctx);
@@ -3087,7 +2896,7 @@ export class BuildingInteriorScene extends GameplayScene {
     camX: number,
     camY: number,
   ): ArrowCandidate | null {
-    if (this.gameOver || this.pauseMenu.isOpen || this.entry.type !== 'tower') return null;
+    if (this.gameOver || this.pauseScreen.isOpen || this.entry.type !== 'tower') return null;
     const upTiles = this.map._interiorStairUpTiles;
     const middleUpTile = upTiles[Math.floor(upTiles.length / 2)];
     const upStairs =
@@ -3117,9 +2926,6 @@ export class BuildingInteriorScene extends GameplayScene {
     if (this.gameOver) return;
     this.gameOver = true;
     this.gameStats.recordDeath();
-    // A death arrives from the fight, not from a key or a click, so nothing else
-    // here has taken the keyboard off a bag left open behind it.
-    this.menus.cancelInventoryDragForOverlay();
     this.combat.deathScreen.activate(this.deathScreenMessage(), this.defeatRespawnMode);
   }
 
@@ -3161,294 +2967,10 @@ export class BuildingInteriorScene extends GameplayScene {
     this.doExit(true);
   }
 
-  handleClick(mx: number, my: number): void {
-    notifyButtonClick(mx, my);
-    // Before the routing chain below, because most of its branches return long
-    // before the bag is offered the click: a field left focused by a press that
-    // opened a counter or the pause menu would go on eating that overlay's keys.
-    this.menus.blurInventorySearchUnlessClicked(mx, my);
-    // First, ahead of every HUD rect and world hit-test below: a long-press
-    // context menu floats over whatever was drawn underneath it, and those
-    // rects are tested by raw coordinates rather than draw order, so a menu
-    // option sitting over the pause button or a shop counter would otherwise
-    // also fire whatever is beneath it. The menu always closes on this click,
-    // so it must always be the thing that answers it.
-    if (this.menus.inventoryPanel.interaction.contextMenu !== null) {
-      const invPlayer = this.inventoryPlayer();
-      this.menus.inventoryPanel.handleClick(mx, my, invPlayer.inventory);
-      return;
-    }
-    // Ranked above the death screen, matching both the claim registry and the
-    // draw order: the award stack is painted on top of it, so a press aimed at
-    // an OK button there must not reach the screen underneath.
-    if (this.achievementUI.handleClick(mx, my)) return;
-    if (this.menus.questReward.handleClick(mx, my)) return;
-    if (this.menus.levelUpDialog.handleClick(mx, my)) return;
-    if (this.menus.rewardGrantedDialog.handleClick(mx, my)) return;
-    if (this.menus.mongoExplainer.handleClick(mx, my)) return;
-    if (this.menus.craftExplainers.handleClick(mx, my)) return;
-    if (this.menus.constructionMenu.handleClick(mx, my)) return;
-    if (this.menus.itemQuantityPicker.handleClick(mx, my)) return;
-    if (this.menus.skillBookPrompt.isOpen) {
-      const reader = this.menus.pendingSkillBookReader(this.inventoryPlayer());
-      if (resolveSkillBookPrompt(this.menus.skillBookFlowHost(), reader, mx, my) !== null) {
-        this.menus.releaseSkillBookReader();
-      }
-      return;
-    }
-    if (this.gameOver) {
-      if (this.combat.deathScreen.handleClick(mx, my)) this.reviveAndExit();
-      return;
-    }
-    if (this.pauseMenu.isOpen) {
-      this.pauseMenu.handleClick(mx, my);
-      return;
-    }
-    if (this.followerMenu.isOpen) {
-      this.followerMenu.handleClick(mx, my);
-      return;
-    }
-    // With the other modals rather than at the end of the method, and above the
-    // HUD chrome below it: its panel is viewport-centred and the bag's is too,
-    // so a bag left open behind it swallows every press aimed at Exit or Stay —
-    // and the exit menu locks the keyboard, so there is no key that could shut
-    // the bag either.
-    if (this.exitMenuOpen) {
-      this.handleExitMenuClick(mx, my);
-      return;
-    }
-    // Pause button (works on desktop + mobile)
-    const btn = this.mobileHUD.hitTest(mx, my);
-    if (btn === 'pause') {
-      this.pauseMenu.toggle();
-      return;
-    }
-    // With the rest of the HUD chrome, above every world hit-test below: those
-    // compare screen coordinates against loot on the floor, so anything drawn
-    // behind the banner would otherwise take a click aimed at it.
-    if (this.menus.tryOpenSpendScreen(mx, my, this._hudSkillBannerRect)) return;
-    if (this.towerStairs?.menuOpen) {
-      this.towerStairs.handleClick(mx, my);
-      return;
-    }
-    if (this.shop?.shopOpen) {
-      this.shop.handleClick(mx, my);
-      return;
-    }
-    if (this.club?.modalOpen) {
-      this.club.handleClick(mx, my, this.active(), this.inactive());
-      return;
-    }
-    if (this.bigTopMaze?.isDialogOpen === true) {
-      this.bigTopMaze.handleClick(mx, my);
-      return;
-    }
-    if (this.towerConfrontation?.isDialogOpen === true) {
-      this.towerConfrontation.handleClick(mx, my);
-      return;
-    }
-    const questHook = this.openResidentQuestHook();
-    if (questHook !== null) {
-      questHook.handleClick(mx, my);
-      return;
-    }
-    if (this.servicePanel?.isOpen === true) {
-      this.servicePanel.handleClick(mx, my, this.active(), this.inactive());
-      return;
-    }
-    if (this.readingPanel?.isOpen === true) {
-      this.readingPanel.handleClick(mx, my, this.active(), this.inactive());
-      return;
-    }
-    if (this.readablePanel.handleClick()) {
-      return;
-    }
-    // Only the dialog's own box is consumed: a conversation does not halt the
-    // world, so the bag can be open underneath it and its slots must stay live.
-    if (this.conversation.handleClick(mx, my)) {
-      return;
-    }
-    if (!this.menus.panelCovers(mx, my) && this.tryPressSummonButton(mx, my)) return;
-    if (!this.menus.panelCovers(mx, my) && this.tryPressFollowButton(mx, my)) return;
-    // Below every panel branch above, which is where they are drawn: a shop's
-    // Buy column can sit over the Build button on a phone.
-    if (!this.menus.panelCovers(mx, my) && this.tryPressColumnPieces(mx, my)) return;
-
-    const invPlayer = this.inventoryPlayer();
-    const active = this.active();
-    if (this.menus.gearPanel.handleClick(mx, my, active.inventory)) {
-      active.onEquipmentChanged();
-      return;
-    }
-    // Both panels open is the equip flow: a click on an armour slot in the bag
-    // puts it on rather than picking it up.
-    if (this.menus.gearPanel.isOpen && this.menus.inventoryPanel.isOpen) {
-      const slotIdx = this.menus.inventoryPanel.getClickedInventorySlot(
-        mx,
-        my,
-        invPlayer.inventory,
-      );
-      const item = slotIdx === null ? null : invPlayer.inventory.bag.slots[slotIdx];
-      if (
-        slotIdx !== null &&
-        isWearable(item) &&
-        this.menus.inventoryPanel.interaction.bagSlotIsInteractive(item)
-      ) {
-        // The click is spent either way — it was aimed at armour — but a refusal
-        // (wrong wearer, same id already worn) changes nothing, and announcing
-        // a change that never happened is a lie to every listener.
-        if (invPlayer.inventory.canEquipSlot(slotIdx)) {
-          invPlayer.inventory.equip(slotIdx);
-          invPlayer.onEquipmentChanged();
-        }
-        return;
-      }
-    }
-    const wasInventoryOpen = this.menus.inventoryPanel.isOpen;
-    if (this.menus.inventoryPanel.handleClick(mx, my, invPlayer.inventory)) {
-      if (this.menus.inventoryPanel.isOpen && !wasInventoryOpen) {
-        this.menus.gearPanel.isOpen = false;
-      }
-      return;
-    }
-
-    const { x: camX, y: camY } = this.computeCamera(this.map);
-    if (
-      this.destruction.loot.tryCollectLootAt(mx, my, camX, camY, this.active(), this.inactive())
-    ) {
-      return;
-    }
-  }
-
-  /**
-   * Exit or Stay, dispatched through the hit-rects `renderExitMenu` registered.
-   *
-   * The registered rects rather than a second call to `menuRects()`: the focus
-   * ring activates a button by synthesizing a click at the rect the *render*
-   * produced, so a click path measuring its own geometry is a second list that
-   * can disagree with the one the keyboard aims at.
-   */
-  private handleExitMenuClick(mx: number, my: number): void {
-    for (const button of this.exitMenuButtons) {
-      if (pointInRect(mx, my, { x: button.x, y: button.y, w: button.w, h: button.h })) {
-        button.action?.();
-        return;
-      }
-    }
-  }
-
   /** Stay: shut the menu and remember the refusal until the player steps off the mat. */
   private closeExitMenu(): void {
     this.exitMenuOpen = false;
     this.exitDismissed = true;
-  }
-
-  /**
-   * True while a pausing overlay owns the screen. The bag is still drawn
-   * underneath one, and the overlays' buttons sit right on top of its slots, so
-   * every raw-pointer path has to stop here — otherwise a click on Read or
-   * Cancel also lands on the slot beneath it and re-queues the prompt.
-   */
-  private get isOverlayBlockingPointer(): boolean {
-    return this.menus.isOverlayBlockingPointer;
-  }
-
-  /** The buy panel currently open, whether the shop floor's own or one of the club's. */
-  private get scrollableShop(): ShopSystem | null {
-    if (this.shop?.shopOpen === true) return this.shop;
-    return this.club?.openShop ?? null;
-  }
-
-  handleWheel(deltaY: number): void {
-    if (this.menus.mongoExplainer.isOpen || this.menus.craftExplainers.isOpen) return;
-    if (this.pauseMenu.isOpen) {
-      this.pauseMenu.handleWheel(deltaY);
-      return;
-    }
-    if (this.followerMenu.isOpen) {
-      this.followerMenu.handleWheel(deltaY);
-      return;
-    }
-    this.scrollableShop?.handleWheel(deltaY);
-    this.servicePanel?.handleWheel(deltaY);
-  }
-
-  handleMouseDown(mx: number, my: number): void {
-    this._mouseX = mx;
-    this._mouseY = my;
-    this._mouseDown = true;
-    // Ahead of everything below: the explainer opens over the pause menu, and a
-    // press there must not start a drag or a scroll in the surface underneath.
-    if (this.menus.mongoExplainer.isOpen || this.menus.craftExplainers.isOpen) return;
-    const openShop = this.scrollableShop;
-    if (openShop !== null) {
-      openShop.handlePointerDown(mx, my);
-      return;
-    }
-    // Delegated rather than swallowed: the pause menu's Equipment tab drags gear
-    // between the bag and the doll, and a drag is a press and a release, not a
-    // click. Every other tab ignores these.
-    if (this.pauseMenu.isOpen) {
-      this.pauseMenu.handleMouseDown(mx, my, this.human, this.cat);
-      return;
-    }
-    // Ahead of the blocking-overlay return below, which the picker's own
-    // `isOpen` feeds into: without this branch a press on its step buttons
-    // would never reach them.
-    if (this.menus.itemQuantityPicker.isOpen) {
-      this.menus.itemQuantityPicker.handlePointerDown(mx, my);
-      return;
-    }
-    if (this.isOverlayBlockingPointer) return;
-    this.mobileHUD.handleMouseDown(mx, my, this.inventoryPlayer().inventory);
-  }
-
-  handleMouseMove(mx: number, my: number): void {
-    this._mouseX = mx;
-    this._mouseY = my;
-    if (this.menus.mongoExplainer.isOpen || this.menus.craftExplainers.isOpen) return;
-    this.scrollableShop?.handlePointerMove(mx, my);
-    if (this.pauseMenu.isOpen) {
-      this.pauseMenu.handleMouseMove(mx, my, this.human, this.cat);
-      return;
-    }
-    this.mobileHUD.handleMouseMove(mx, my, this.inventoryPlayer().inventory);
-    this.menus.gearPanel.handleMouseMove(mx, my);
-  }
-
-  handleMouseUp(mx: number, my: number): void {
-    this._mouseX = mx;
-    this._mouseY = my;
-    this._mouseDown = false;
-    this.scrollableShop?.handlePointerUp();
-    this.menus.itemQuantityPicker.handlePointerUp();
-    if (this.menus.mongoExplainer.isOpen || this.menus.craftExplainers.isOpen) return;
-    if (this.pauseMenu.isOpen) {
-      this.pauseMenu.handleMouseUp(mx, my, this.human, this.cat);
-      return;
-    }
-    if (this.isOverlayBlockingPointer) return;
-    this.mobileHUD.handleMouseUp(mx, my, this.inventoryPlayer().inventory);
-  }
-
-  handleContextMenu(mx: number, my: number): void {
-    // Read off the claim registry like every other pointer path in this scene:
-    // a context menu opened under a shop or a ledger is drawn beneath it, so the
-    // player never sees it and the next click is eaten resolving something
-    // invisible.
-    if (this.isOverlayBlockingPointer || worldHalted(this.overlayClaims)) return;
-    this.menus.inventoryPanel.openContextMenu(mx, my, this.inventoryPlayer().inventory);
-  }
-
-  /**
-   * `mouseup` only fires on the canvas, so a press that is released off it would
-   * otherwise leave a button stuck in its held state forever.
-   */
-  handleMouseLeave(): void {
-    this._mouseDown = false;
-    this.scrollableShop?.handlePointerUp();
-    this.menus.itemQuantityPicker.handlePointerUp();
-    clearButtonMouseState();
   }
 
   private doExit(defeated = false): void {
@@ -3476,10 +2998,7 @@ export class BuildingInteriorScene extends GameplayScene {
     this.mercenarySystem.dismissForTransition(this.world.roster.mobs, this.world.roster.grid);
     const humanSnap = snapPlayer(this.human);
     const catSnap = snapPlayer(this.cat);
-    if (this.hudView !== null) {
-      this.hudView.miniMapExpanded = this.mobileHUD.miniMapExpanded;
-      this.hudView.hudCollapsed = this._hudCollapsed;
-    }
+    if (this.hudView !== null) this.hudView.miniMapExpanded = this.miniMapExpanded;
     this.onExitCallback(humanSnap, catSnap, defeated, companions);
   }
 
@@ -3515,11 +3034,6 @@ export class BuildingInteriorScene extends GameplayScene {
     return this.openResidentQuestHook() !== null;
   }
 
-  /** Escape on a resident questline's conversation. Returns whether there was one. */
-  private dismissResidentQuestDialog(): boolean {
-    return this.openResidentQuestHook()?.dismissDialog() === true;
-  }
-
   /**
    * Each resident questline's first refusal on talking to `residentId`, in
    * priority order. Returns whether one opened a beat and took the press.
@@ -3543,8 +3057,8 @@ export class BuildingInteriorScene extends GameplayScene {
    */
   private handOffConversationPress(): boolean {
     if (!this.conversation.isOpen) return false;
-    const openOverlays = this.overlayClaims.filter((claim) => claim.isOpen);
-    if (openOverlays.length !== 1) return false;
+    const openOverlays = surfacesOverHud(this.ui, ROOM_STATUS_ONLY);
+    if (openOverlays.length !== 1 || openOverlays[0] !== CONVERSATION_SURFACE_ID) return false;
     const player = this.active();
     const pressIsForSomeoneElse = safeRoomPressLeavesSpeaker(this.bopca, this.safeRoom, player);
     return this.conversation.handOff(
@@ -3678,30 +3192,6 @@ export class BuildingInteriorScene extends GameplayScene {
     noteResidentTalk(this.townMemory, target.residentId);
   }
 
-  /**
-   * Whether the interact key is asking to close the open interior modal.
-   *
-   * Edge-triggered rather than level-triggered: the key must be seen released
-   * before a press counts, so the press that opened the panel — and every
-   * auto-repeat of it — is ignored while the player keeps holding it.
-   */
-  private consumeModalClose(): boolean {
-    if (this.modalGraceFrames > 0) return false;
-    if (!keybindings.isHeld(this.input, 'attack')) {
-      this.modalCloseArmed = true;
-      return false;
-    }
-    if (!this.modalCloseArmed) return false;
-    this.modalCloseArmed = false;
-    keybindings.release(this.input, 'attack');
-    // Disarmed for the same reason a consumed overlay press is: this press is
-    // spent, and without saying so the browser's next auto-repeat would hand the
-    // same hold to the interaction chain, which would re-open the panel that
-    // just closed. Only a real release or a new press re-arms.
-    this.interactArmed = false;
-    return true;
-  }
-
   private releaseCitizenDialogTarget(): void {
     if (this.citizenDialogTarget === null) return;
     this.citizenDialogTarget.frozen = false;
@@ -3721,32 +3211,16 @@ export class BuildingInteriorScene extends GameplayScene {
     // A resident questline gets the counter first, exactly as the Anchor gets
     // Madame Voss's Consult prompt first out on the plaza: while it has
     // something to say, Hilda reads no cards and Aviel sells no blessings.
-    if (resident !== null && this.tryResidentQuestDialog(resident.id, this.active())) {
-      this.beginModalGrace();
-      return;
-    }
+    if (resident !== null && this.tryResidentQuestDialog(resident.id, this.active())) return;
     if (service.surface === 'reading') {
       if (this.readingPanel === null) return;
       this.readingPanel.openWith(this.townDialogContext(), HEDGE_WITCH);
-      this.beginModalGrace();
       this.audio?.play('menu_open');
       return;
     }
     if (this.servicePanel === null) return;
     this.openServiceMenu(this.servicePanel, turn, residentHost(resident, turn), role);
-    this.beginModalGrace();
     this.audio?.play('menu_open');
-  }
-
-  /**
-   * Starts the window in which a newly-opened modal ignores the interact key.
-   * Every path that opens one goes through here, including the ones whose caller
-   * already released the interact key — that release is exactly the protection
-   * this mechanism exists because it does not provide.
-   */
-  private beginModalGrace(): void {
-    this.modalGraceFrames = MODAL_REOPEN_GRACE_FRAMES;
-    this.modalCloseArmed = false;
   }
 
   /**
@@ -3765,7 +3239,7 @@ export class BuildingInteriorScene extends GameplayScene {
    * Store and the Desperado Club's counters already use — so a sale here and
    * a sale at the General Store never share a shelf.
    */
-  private sellConfigFor(vendorId: string, pricing: ShopPricingProfile): SellConfig {
+  private sellConfigFor(vendorId: string, pricing: ShopPricingProfile): ShopSellConfig {
     return {
       pricing,
       heldStock: this.marketStock.held,
@@ -3774,8 +3248,15 @@ export class BuildingInteriorScene extends GameplayScene {
     };
   }
 
+  /** The General Store's chime for whatever went over its counter since the last tick. */
+  private playShopTradeSound(shop: ShopSystem): void {
+    if (!shop.purchasePending) return;
+    shop.purchasePending = false;
+    this.audio?.play('purchase_success');
+  }
+
   private openServiceMenu(
-    panel: PricedMenuPanel,
+    panel: ShopSession,
     turn: number,
     host: ResidentHost | null,
     role: TownRole,
@@ -3788,9 +3269,9 @@ export class BuildingInteriorScene extends GameplayScene {
     const never = (): SoundId | null => null;
     const always = (): SoundId | null => POUR_CUE;
     const confirmed = (
-      handler: PricedPurchaseHandler,
-      cue: (option: PricedOption) => SoundId | null,
-    ): PricedPurchaseHandler => {
+      handler: ShopPurchaseHandler,
+      cue: (option: ShopRow) => SoundId | null,
+    ): ShopPurchaseHandler => {
       return (option, buyer) => {
         const result = handler(option, buyer);
         if (!result.ok) return result;
@@ -3824,23 +3305,15 @@ export class BuildingInteriorScene extends GameplayScene {
           );
           return;
         }
-        panel.open(
-          () => buildArmouryMenu(turn, host),
-          confirmed(issueArmour, never),
-          undefined,
-          undefined,
-          0,
-          this.sellConfigFor('armoury', ARMOURY_PRICING),
-        );
+        panel.open(() => buildArmouryMenu(turn, host), confirmed(issueArmour, never), {
+          sell: this.sellConfigFor('armoury', ARMOURY_PRICING),
+        });
         return;
       case 'Herb & Remedy':
         panel.open(
           () => buildApothecaryMenu(party, this.townMemory, turn, host),
           confirmed(serveRemedy(party, this.townMemory), never),
-          undefined,
-          undefined,
-          0,
-          this.sellConfigFor('apothecary', APOTHECARY_PRICING),
+          { sell: this.sellConfigFor('apothecary', APOTHECARY_PRICING) },
         );
         return;
       case 'The Rusty Anvil':
@@ -3853,20 +3326,14 @@ export class BuildingInteriorScene extends GameplayScene {
         panel.open(
           () => buildCartwrightMenu(turn, host),
           confirmed(sellCartwrightGoods(turn), never),
-          undefined,
-          undefined,
-          0,
-          this.sellConfigFor('cartwright_workshop', MERCHANT_STALL_PRICING),
+          { sell: this.sellConfigFor('cartwright_workshop', MERCHANT_STALL_PRICING) },
         );
         return;
       case "Miller's Farm":
         panel.open(
           () => buildMillerMenu(this.active(), turn, host),
           confirmed(serveMillerGoods(turn), never),
-          undefined,
-          undefined,
-          0,
-          this.sellConfigFor('millers_farm', FARMER_PRICING),
+          { sell: this.sellConfigFor('millers_farm', FARMER_PRICING) },
         );
         return;
       case 'Plumbline Farm':
@@ -3993,7 +3460,7 @@ export class BuildingInteriorScene extends GameplayScene {
    */
   private renderCitizenPrompt(ctx: CanvasRenderingContext2D, camX: number, camY: number): void {
     if (this.citizenDialogTarget !== null) return;
-    if (worldHalted(this.overlayClaims)) return;
+    if (this.ui.worldHalted()) return;
     const active = this.active();
     const target = this.occupants?.findTalkTarget(active.x, active.y) ?? null;
     if (target !== null) {
@@ -4032,7 +3499,6 @@ export class BuildingInteriorScene extends GameplayScene {
     const page = this.readables.findReadTarget(player.x, player.y);
     if (page === null) return false;
     this.readablePanel.openWith(page.readable);
-    this.beginModalGrace();
     this.audio?.play('menu_open');
     return true;
   }
@@ -4126,62 +3592,41 @@ export class BuildingInteriorScene extends GameplayScene {
    * the difference between a visible door and none at all.
    */
   protected override viewportBottomInset(): number {
-    return this.mobileHUD.inventoryPanel.hotbarBandHeight();
+    const live = liveHudLayout(this.hudLayoutState());
+    return hotbarBandHeightCss(live.geometry, live.uiScale, viewportHeight());
   }
 
-  /**
-   * Where this frame's chrome sits. The Follow and Summon buttons count only
-   * when this room offers them, the same tests their draw calls make.
-   */
-  private hudLayoutInput(): InteriorHudLayoutInput {
-    const banner = this.achievementUI.lootBoxIconRect;
+  /** The HUD state that moves its pieces: what the layout needs before anything is drawn. */
+  private hudLayoutState(): { miniMapExpanded: boolean; build: boolean } {
+    return { miniMapExpanded: this.miniMapExpanded, build: this.buildButtonOffered };
+  }
+
+  /** Which of the room's own buttons show, each of which hides what is under it. */
+  private interiorChrome(): InteriorChrome {
     return {
-      viewportWidth: viewportWidth(),
-      viewportHeight: viewportHeight(),
-      mobile: platform.isMobile,
-      hudCollapsed: this._hudCollapsed,
-      miniMapExpanded: this.mobileHUD.miniMapExpanded,
-      hotbarBandHeight: this.mobileHUD.inventoryPanel.hotbarBandHeight(),
-      followButton: !this.followDisabled,
-      summonButton: this.mongoSystem.canShow && this.cat.isActive,
-      buildButton: this.buildButtonOffered,
-      journalButton: this.overworldJournal !== null,
-      lootBoxBanner: banner.w > 0 ? banner : null,
+      follow: !this.followDisabled,
+      summon: this.mongoSystem.canShow && this.cat.isActive,
+      build: this.buildButtonOffered,
+      journal: this.overworldJournal !== null,
     };
   }
 
-  private hudLayout(): InteriorHudLayout {
-    return interiorHudLayout(this.hudLayoutInput());
-  }
-
-  protected override hudToggleClearOfX(): number {
-    return this.hudLayout().toggleClearOfX;
-  }
-
   /**
-   * The room is framed clear of the HUD panel, the name plate, the minimap
-   * column and a phone's buttons, so no floor tile — and nothing standing on
-   * one — and none of the far wall is only ever on screen underneath them.
+   * The room is framed clear of the unit frames, the room's name, the minimap
+   * and the HUD's buttons, so no floor tile — and nothing standing on one —
+   * and none of the far wall is only ever on screen underneath them.
    */
-  protected override cameraClearView(
-    map: GameMap,
-    view: ScreenRect,
-    bounds: WorldRect,
-  ): ScreenRect {
-    const layoutInput = this.hudLayoutInput();
-    const key = JSON.stringify({ layoutInput, view, bounds });
+  protected override cameraClearView(map: GameMap, view: Rect, bounds: WorldRect): Rect {
+    const live = liveHudLayout(this.hudLayoutState());
+    const occluders = interiorHudOccluders(live.geometry, live.uiScale, this.interiorChrome());
+    const key = JSON.stringify({ occluders, view, bounds });
     return this.clearViewMemo.clearView(map, key, (mustSee) =>
-      hudClearView(view, interiorHudOccluders(interiorHudLayout(layoutInput)), bounds, mustSee),
+      hudClearView(view, occluders, bounds, mustSee),
     );
   }
 
   protected override cameraFocusRange(map: GameMap): WorldRect {
     return interiorFocusRange(map);
-  }
-
-  /** On a narrow phone the name plate takes the slot under the HUD panel, so the badge goes under it. */
-  protected override mobileSkillBadgeTop(): number {
-    return this.hudLayout().skillBadgeTop;
   }
 
   /**
@@ -4204,16 +3649,12 @@ export class BuildingInteriorScene extends GameplayScene {
   render(ctx: CanvasRenderingContext2D): void {
     const { x: camX, y: camY } = this.computeCamera(this.map);
 
-    // Drive the shared Button module before anything draws a button: it clears
-    // last frame's hit-rects and resolves hover/press for this one.
-    setButtonAudio(this.audio);
-    setButtonMouseState(this._mouseX, this._mouseY, this._mouseDown);
     // Any overlay at all, not only the world-halting ones: a shop-floor
     // conversation leaves the player free to walk, and the prompt that opened it
     // must not go on hovering over the person now talking.
-    setInteractionPromptsSuppressed(focusedOverlay(this.overlayClaims) !== null);
+    setInteractionPromptsSuppressed(surfacesOverHud(this.ui).length > 0);
 
-    ctx.fillStyle = '#000';
+    ctx.fillStyle = worldPalette.shade;
     ctx.fillRect(0, 0, viewportWidth(), viewportHeight());
 
     this.map.renderCanvas(ctx, camX, camY, viewportWidth(), viewportHeight());
@@ -4303,8 +3744,8 @@ export class BuildingInteriorScene extends GameplayScene {
     if (this.activeEncounter === null) this.renderCitizenPrompt(ctx, camX, camY);
 
     combat.floatingText.render(ctx, camX, camY);
-    UIRenderer.renderLevelUpFlash(ctx, camX, camY, this.pm);
-    UIRenderer.renderStatBoostFlash(ctx, camX, camY, this.pm);
+    renderLevelUpFlash(ctx, camX, camY, this.pm);
+    renderStatBoostFlash(ctx, camX, camY, this.pm);
     this.chat.renderBubble(ctx, camX, camY);
     this.mongoSystem.renderSpeechBubble(ctx, this.cat.x - camX, this.cat.y - camY);
     this.mercenarySystem.renderSpeech(ctx, camX, camY);
@@ -4329,7 +3770,7 @@ export class BuildingInteriorScene extends GameplayScene {
 
     // Before the HUD: the marker is clamped to the screen edge, and a pet off
     // the top of the room would otherwise sit on top of the health bars.
-    if (!this.gameOver && !this.pauseMenu.isOpen) {
+    if (!this.gameOver && !this.pauseScreen.isOpen) {
       this.mongoSystem.renderOffscreenMarker(
         ctx,
         camX,
@@ -4339,9 +3780,7 @@ export class BuildingInteriorScene extends GameplayScene {
       );
     }
 
-    this.renderHUD(ctx);
-
-    if (!this.gameOver && !this.pauseMenu.isOpen) {
+    if (!this.gameOver && !this.pauseScreen.isOpen) {
       // Only one of these may be on screen at once — a downed companion always
       // wins the slot, and every other kind has a fixed place behind it.
       drawTopArrowCandidate([
@@ -4359,81 +3798,26 @@ export class BuildingInteriorScene extends GameplayScene {
       ]);
     }
 
-    if (!this.gameOver && !this.pauseMenu.isOpen && this.companionDownIndoors) {
-      renderKnockedOutUI(ctx, this.inactive(), this.mobileHUD.miniMapSize);
-    }
-
-    const hudLayout = this.hudLayout();
-    const towerFloor = this.towerFloors.length > 0 ? this.currentFloor : null;
-    if (hudLayout.nameplate !== null) {
-      drawInteriorNameplate(
-        ctx,
-        hudLayout.nameplate,
-        interiorRoomTitle(this.entry.name, towerFloor),
-      );
-    }
-
     // Every frame, not only when the Journal is opened from its button: Escape
-    // reaches the same pause menu, whose Game tab offers the Journal row from
-    // this, and an open Journal has to keep following the quests it lists.
+    // reaches the same pause screen, which offers the Journal from this, and an
+    // open Journal has to keep following the quests it lists.
     this.syncJournalContext();
-    this.summonButtonRect = null;
-    if (!this.exitMenuOpen && !this.pauseMenu.isOpen) {
-      this.mobileHUD.renderInteriorMiniMap(ctx, this.map, this.active(), this.inactive());
-      this.mobileHUD.renderPauseButton(ctx, hudLayout.pause);
-      // Hidden rather than merely inert where the room refuses the command: a
-      // button that answers every press with an error sound is a control the
-      // player keeps trying. The layout only offers Follow where it is allowed.
-      // Before the panels, as outside, so an open bag paints over it.
-      const follow = hudLayout.follow;
-      this.followButtonRect =
-        follow === null
-          ? null
-          : UIRenderer.renderFollowerButton(ctx, this.companion, this.human.isActive, follow);
-
-      // The bag can be showing the companion's pack, opened from the pause
-      // menu; the gear screen is always the active crawler's.
+    if (this.hudShows) {
       const invPlayer = this.inventoryPlayer();
-      const invName = invPlayer === this.human ? 'Human' : 'Cat';
-      this.menus.inventoryPanel.abilityCooldowns.set('protective_shell', {
+      const cooldowns = this.menus.itemCooldowns;
+      cooldowns.set('protective_shell', {
         current: this.combat.spells.shellCooldown,
         max: this.combat.spells.shellCooldownMax,
       });
-      this.menus.inventoryPanel.abilityCooldowns.set('magic_missile', {
+      cooldowns.set('magic_missile', {
         current: this.cat.missileCooldownCurrent,
         max: Math.max(1, this.cat.missileCooldownMax),
       });
-      this.menus.inventoryPanel.abilityCooldowns.set('smush', {
+      cooldowns.set('smush', {
         current: this.human.smushCooldown,
         max: Math.max(1, this.human.getSmushCooldownMax()),
       });
       this.menus.syncPotionCooldownOverlay(invPlayer);
-      this.menus.inventoryPanel.bagBouncePulse = this.rewardFly.bagBouncePulse();
-      this.menus.inventoryPanel.desktopBagButtonRect = hudLayout.bag;
-      this.mobileHUD.renderPanels(
-        ctx,
-        invPlayer.inventory,
-        invName,
-        invPlayer.coins,
-        this.menus.inventoryWieldedWeaponId(),
-      );
-      const { bag, switchButton } = hudLayout;
-      if (platform.isMobile && switchButton !== null) {
-        this.mobileHUD.renderButtons(
-          ctx,
-          this.human.isActive,
-          { switchButton, bag },
-          this.inventoryPlayer().inventory.unseenUpgrades.size > 0,
-          this.rewardFly.bagBouncePulse(),
-        );
-      }
-      // After the mobile buttons, whose Switch it is stacked on.
-      this.summonButtonRect = this.renderSummonButton(ctx, hudLayout);
-      this.renderColumnPieces(ctx, hudLayout);
-    } else {
-      this.buildButtonRect = null;
-      this.journalButtonRect = null;
-      this.followButtonRect = null;
     }
 
     const safeRoomSpeaker = safeRoomSpeakerFor(this.bopca, this.safeRoom, this.active());
@@ -4447,145 +3831,228 @@ export class BuildingInteriorScene extends GameplayScene {
     // Last of the world prompts; see the method for why.
     this.renderMercenaryPrompt(ctx, camX, camY);
 
-    if (this.shop) {
-      this.shop.renderUI(ctx, this.active());
-      this.shop.renderShopPanel(ctx, this.active(), this.inactive());
-    }
-
-    if (this.club) {
-      this.club.renderUI(ctx, this.active(), this.inactive());
-    }
-
-    this.conversation.render(ctx);
-    this.servicePanel?.render(ctx, this.active(), this.inactive());
-    this.readingPanel?.render(ctx, this.active(), this.inactive());
-    this.readablePanel.render(ctx);
-
-    this.activeEncounter?.renderUI(ctx);
-    this.soulCrystal.renderUI(ctx);
-
-    // The doormat draws over the stairs, not under them: `handleClick` answers
-    // the exit menu first, and the focus ring goes to whichever declares last,
-    // so drawing them the other way round would hand the keyboard to the stair
-    // menu while the mouse still drove the exit menu.
-    if (this.towerStairs?.menuOpen) this.towerStairs.renderMenu(ctx);
-    if (this.exitMenuOpen) this.renderExitMenu(ctx);
-
-    this.destruction.dynamite.renderChargeBar(ctx, viewportWidth(), viewportHeight());
-    // With the Construction menu up, its refusals are drawn over the panel
-    // below instead: a refusal hidden behind the row that raised it says nothing.
-    const toastOverConstructionMenu = this.menus.constructionMenu.isOpen;
-    if (!toastOverConstructionMenu) {
-      this.menus.hotbarToast.render(ctx, this.mobileHUD.inventoryPanel.hotbarBandHeight());
-    }
-
-    if (platform.showEntityTooltip && !this.gameOver && !this.pauseMenu.isOpen) {
-      UIRenderer.renderEntityTooltip(
-        ctx,
-        camX,
-        camY,
-        this._mouseX,
-        this._mouseY,
-        this.world.roster.grid,
-      );
-    }
-
-    if (this.pauseMenu.isOpen) {
-      // The full argument list, not the stripped three: without the achievement
-      // managers, the stats and the ability manager this is a shell with no
-      // Spend screen, which is what left skill points unspendable indoors.
-      this.menus.renderPauseMenu(ctx, {
-        humanAchievements: this.humanAchievements,
-        catAchievements: this.catAchievements,
-        gameStats: this.gameStats,
-        mouseX: this._mouseX,
-        mouseY: this._mouseY,
-      });
-    }
-
-    this.followerMenu.render(
-      ctx,
-      this.companion.getMovementMode(this.human.isActive),
-      this.companion.getCombatStance(this.human.isActive),
-      this.human.isActive,
-    );
-
-    // These last two in this order, so draw order matches the order
-    // `overlayClaims` and `handleClick` rank the same surfaces in: the death
-    // screen over the menus it outranks, and the award stack over the death
-    // screen, because an award earned by the killing blow is still the thing on
-    // top. Whichever draws last also takes the focus ring, so three orders that
-    // disagree leave the topmost dialog visible and un-activatable.
-    // A death takes the read-only Construction menu down: drawn under the death
-    // screen, it would otherwise still take that screen's first click.
+    // A death takes the read-only Construction menu down: left under the death
+    // screen it would still be a menu the player cannot see.
     if (this.gameOver) this.menus.constructionMenu.close();
-    const menuCrawler = this.human.isActive ? this.human : this.cat;
-    this.menus.constructionMenu.render(
-      ctx,
-      { name: menuCrawler === this.human ? 'Carl' : 'Donut', skills: menuCrawler.craftSkills },
-      (id) => partyCount(this.human, this.cat, id),
-    );
-    if (toastOverConstructionMenu) {
-      this.menus.hotbarToast.render(ctx, this.mobileHUD.inventoryPanel.hotbarBandHeight());
+    this.roomStatusLayer = this.roomStatusLayerPlacement();
+    if (this.roomStatusLayer !== 'overPanel') this.renderEncounterStatus(ctx);
+
+    this.ui.frame(ctx);
+
+    const mouse = sceneMouse(this.ui);
+    const showTooltip =
+      platform.showEntityTooltip &&
+      mouse !== null &&
+      !this.gameOver &&
+      !this.pauseScreen.isOpen &&
+      !this.ui.pointerOverUi();
+    if (showTooltip) {
+      renderEntityTooltip(ctx, camX, camY, mouse.x, mouse.y, this.world.roster.grid);
     }
-    if (this.gameOver) this.combat.deathScreen.render(ctx);
-    this.menus.renderOverlays(ctx);
-    this.achievementUI.renderOverlays(ctx);
 
-    // Flies over every dialog above, same as DungeonScene: it's reporting a
-    // grant that already happened, not asking for input.
-    const coinTarget = hudCoinCounterScreenPos(this._hudCollapsed);
-    this.rewardFly.render(ctx, {
-      coinX: coinTarget.x,
-      coinY: coinTarget.y,
-      bagRect: platform.isMobile
-        ? this.mobileHUD.bagBtnRect
-        : this.menus.inventoryPanel.toggleBtnRect(),
-    });
-
-    this.chat.renderHint(ctx);
-
-    // Last, once every surface has drawn: the ring belongs to whoever declared
-    // it last, so this is the only point at which the frame's answer to "who
-    // owns the keyboard" is final.
-    //
-    // The bag declares no claim of its own, so every claim in that list outranks
-    // it. Checked per frame rather than at each overlay's open, because a room
-    // raises them from the interact chain, the mobile tap path and a death the
-    // player never touched a button for.
-    if (keyboardSuppressed(this.overlayClaims)) this.menus.blurInventorySearch();
-    auditOverlayFocus(this.overlayClaims, menuFocusContextId());
+    // Flies over every dialog, same as DungeonScene: it's reporting a grant
+    // that already happened, not asking for input.
+    this.rewardFly.render(ctx, this.hudFlyTargets());
   }
 
   /**
-   * The Build button, the achievement chip (or the safe room's banners) and
-   * the Journal, where the layout placed them.
+   * Where the room's own status draws this frame: the fight's overlays and
+   * bars and the dynamite charge. They sit over a counter, a conversation or
+   * a reading the room raised, so they stay readable while one is up, and
+   * under every menu (pause, awards, death) that takes the screen from the
+   * room.
    */
-  private renderColumnPieces(ctx: CanvasRenderingContext2D, layout: InteriorHudLayout): void {
-    this.achievementUI.drawAchievementIcon(
-      ctx,
-      layout.achievementChip,
-      this.gameOver,
-      this.pauseMenu.isOpen,
-    );
-    this.achievementUI.drawLootBoxIcon(ctx, this.gameOver, this.pauseMenu.isOpen);
-    this.buildButtonRect =
-      layout.build === null
-        ? null
-        : UIRenderer.drawBuildButton(
-            ctx,
-            layout.build,
-            this.menus.constructionMenu.isOpen,
-            NO_BUILD_BUTTON_PULSE,
-          );
-    const journal = layout.journal;
-    if (journal === null) {
-      this.journalButtonRect = null;
-      return;
+  private roomStatusLayerPlacement(): RoomStatusLayer {
+    const open = surfacesOverHud(this.ui, ROOM_STATUS_ONLY);
+    if (open.length === 0) return 'underEverything';
+    const top = open[open.length - 1];
+    if (!ROOM_PANEL_SURFACE_IDS.has(top)) return 'underEverything';
+    return DOOR_MENU_SURFACE_IDS.has(top) ? 'overDoorMenu' : 'overPanel';
+  }
+
+  /** The encounter's own overlays beyond its bars; a door menu draws over them. */
+  private renderEncounterStatus(ctx: CanvasRenderingContext2D): void {
+    this.activeEncounter?.renderUI?.(ctx);
+  }
+
+  /**
+   * The room's status over a panel it raised; see {@link roomStatusLayerPlacement}.
+   * An encounter's own overlay is a full-canvas tint, so the UI-scaled context
+   * paints it the same as the world's.
+   */
+  private roomStatusSurface(): Surface {
+    return {
+      id: ROOM_STATUS_SURFACE_ID,
+      band: 'toast',
+      haltsWorld: false,
+      isOpen: () => this.roomStatusLayer !== 'underEverything',
+      render: (ui) => {
+        if (this.roomStatusLayer === 'overPanel') this.renderEncounterStatus(ui.ctx);
+        this.destruction.dynamite.renderChargeMeter(ui);
+      },
+    };
+  }
+
+  // ── HUD ──────────────────────────────────────────────────────────────────
+
+  /** Whether the HUD shows and takes input: not over a death, the pause menu or the door's menu. */
+  private get hudShows(): boolean {
+    return !this.gameOver && !this.pauseScreen.isOpen;
+  }
+
+  /**
+   * The door's menu stands where the minimap, the buttons and the hotbar go;
+   * the crawlers' frames stay up under it.
+   */
+  private get hudControlsShow(): boolean {
+    return this.hudShows && !this.exitMenuOpen;
+  }
+
+  private toggleMiniMap(): void {
+    this.miniMapExpanded = !this.miniMapExpanded;
+  }
+
+  /** What the HUD shows this frame. */
+  private hudModel(): HudModel {
+    const controls = this.hudControlsShow;
+    return {
+      crawlers: this.hudCrawlerFrames(),
+      activeCrawler: this.human.isActive ? 'human' : 'cat',
+      coins: this.hudCoins(),
+      skillPoints: this.hudSkillPoints(() => void this.menus.openSpendScreen()),
+      minimap: controls ? this.hudMinimap() : null,
+      dock: controls ? this.hudDock() : [],
+      summon: controls ? this.hudSummon() : null,
+      lootBanner: controls ? this.achievementUI.hudBanner(() => this.pauseScreen.close()) : null,
+      hotbar: controls
+        ? {
+            slots: hotbarSlotModels(
+              this.menus.itemCooldowns,
+              this.inventoryPlayer().inventory,
+              this.menus.inventoryWieldedWeaponId(),
+            ),
+            input: hotbarPressInput(
+              () => this.hotbarHost(),
+              () => this.ui.worldHalted(),
+            ),
+          }
+        : null,
+      topBand: this.topBandEntries(),
+    };
+  }
+
+  private hudMinimap(): MinimapModel {
+    return {
+      expanded: this.miniMapExpanded,
+      hint: platform.miniMapHint(this.miniMapExpanded),
+      paint: (ctx, rect) =>
+        paintInteriorMiniMap(ctx, rect, this.map, this.active(), this.inactive()),
+      toggle: () => this.toggleMiniMap(),
+    };
+  }
+
+  /** The dock's buttons in column order; one this room does not offer is left out. */
+  private hudDock(): DockButtonModel[] {
+    const dock: DockButtonModel[] = [
+      {
+        id: 'pause',
+        icon: 'pause',
+        label: 'Pause',
+        key: PAUSE_KEY_LABEL,
+        sound: 'menu_open',
+        onTap: () => this.pauseScreen.toggle(),
+      },
+    ];
+    const unseenUpgrades = this.inventoryPlayer().inventory.unseenUpgrades.size;
+    dock.push({
+      id: 'bag',
+      icon: 'bag',
+      label: 'Bag',
+      key: keybindings.labelFor('toggleInventory'),
+      badge: unseenUpgrades > 0 ? String(unseenUpgrades) : undefined,
+      selected: this.menus.inventoryScreen.isOpen,
+      bounce: this.rewardFly.bagBouncePulse(),
+      onTap: () => this.menus.toggleInventory(),
+    });
+    if (this.buildButtonOffered) {
+      dock.push({
+        id: 'build',
+        icon: 'hammer',
+        label: 'Build',
+        key: keybindings.labelFor('construction'),
+        selected: this.menus.constructionMenu.isOpen,
+        sound: 'menu_open',
+        onTap: () => this.toggleConstructionMenu(),
+      });
     }
-    const entries = this.pauseMenu.journalContext?.entries ?? [];
-    const outstanding = entries.filter((entry) => isOutstanding(entry.status)).length;
-    this.journalButtonRect = UIRenderer.drawJournalButton(ctx, journal, outstanding);
+    const unread = this.achievementUI.hudChipCount();
+    if (unread !== null) {
+      dock.push({
+        id: 'chip',
+        icon: 'trophy',
+        label: 'New achievements',
+        badge: String(unread),
+        pulse: true,
+        onTap: () => void this.achievementUI.showUnread(),
+      });
+    }
+    if (this.overworldJournal !== null) {
+      const entries = this.pauseScreen.journalContext?.entries ?? [];
+      const outstanding = entries.filter((entry) => isOutstanding(entry.status)).length;
+      dock.push({
+        id: 'journal',
+        icon: 'compass',
+        label: 'Quest Journal',
+        key: keybindings.labelFor('toggleQuestTracker'),
+        badge: outstanding > 0 ? String(outstanding) : undefined,
+        sound: 'menu_open',
+        onTap: () => void this.openQuestJournal(),
+      });
+    }
+    // Hidden rather than merely inert where the room refuses the command: a
+    // button that answers every press with an error sound is a control the
+    // player keeps trying.
+    if (!this.followDisabled) {
+      const humanLeads = this.human.isActive;
+      const ordersChanged =
+        this.companion.getMovementMode(humanLeads) === 'anchored' ||
+        this.companion.getCombatStance(humanLeads) === 'passive';
+      dock.push({
+        id: 'follower',
+        icon: 'users',
+        label: 'Follower orders',
+        key: keybindings.labelFor('companionFollow'),
+        selected: ordersChanged,
+        onTap: () => {
+          if (this.canOpenFollowerMenu()) this.followerMenu.open();
+        },
+      });
+    }
+    const other = this.human.isActive ? 'cat' : 'human';
+    dock.push({
+      id: 'switch',
+      icon: other === 'cat' ? 'cat' : 'user',
+      label: `Switch to ${CRAWLER_NAMES[other]}`,
+      onTap: () => this.trySwitchActive(),
+    });
+    return dock;
+  }
+
+  private hudSummon(): HudModel['summon'] {
+    const card = this.mongoSystem.summonCard(this.cat.isActive);
+    return card === null ? null : { ...card, onTap: () => this.toggleMongoSummon() };
+  }
+
+  /** Every bar the top band stacks this frame, the room's name last. */
+  private topBandEntries(): TopBandEntry[] {
+    const towerFloor = this.towerFloors.length > 0 ? this.currentFloor : null;
+    const entries: (TopBandEntry | null)[] = [
+      ...(this.activeEncounter?.topBandEntries() ?? []),
+      this.soulCrystal.topBandEntry(),
+      this.companionDownIndoors ? knockedOutBandEntry(this.inactive()) : null,
+      roomNameEntry(interiorRoomTitle(this.entry.name, towerFloor)),
+    ];
+    return entries.filter((entry): entry is TopBandEntry => entry !== null);
   }
 
   private renderExitHint(ctx: CanvasRenderingContext2D, camX: number, camY: number): void {
@@ -4595,421 +4062,105 @@ export class BuildingInteriorScene extends GameplayScene {
     for (const t of this.map._interiorExitTiles) {
       const sx = t.x * TILE_SIZE - camX + TILE_SIZE / 2;
       const sy = t.y * TILE_SIZE - camY;
-      // baseline was sy - 2; top = baseline - round(size * 0.8) = (sy - 2) - 13 = sy - 15
-      drawText(ctx, '▼', {
+      worldText(ctx, '▼', {
         x: sx,
         y: sy - EXIT_ARROW_Y_OFFSET,
         size: arrowSize,
         bold: true,
-        color: `rgba(250,220,80,1)`,
+        color: worldPalette.waymark.doorArrow,
         alpha: pulse,
         align: 'center',
       });
     }
   }
 
-  private renderExitMenu(ctx: CanvasRenderingContext2D): void {
-    const cw = viewportWidth();
-    const ch = viewportHeight();
-
-    this.exitMenuButtons = [];
-    drawOverlay(ctx, {
-      canvasWidth: cw,
-      canvasHeight: ch,
-      alpha: EXIT_MENU_OVERLAY_ALPHA,
-    });
-
-    const panelW = EXIT_MENU_PANEL_WIDTH;
-    const panelH = EXIT_MENU_PANEL_HEIGHT;
-    const panelX = cw / 2 - panelW / 2;
-    const panelY = ch / 2 - panelH / 2;
-
-    drawBox(ctx, {
-      x: panelX,
-      y: panelY,
-      width: panelW,
-      height: panelH,
-      fill: EXIT_MENU_BG_COLOR,
-      border: EXIT_MENU_BORDER_COLOR,
-      borderWidth: EXIT_MENU_BORDER_WIDTH,
-      radius: 0,
-    });
-
-    drawText(ctx, '▼  Exit Building  ▼', {
-      x: cw / 2,
-      y: panelY + EXIT_MENU_TITLE_Y,
-      size: EXIT_MENU_TITLE_SIZE,
-      bold: true,
-      color: EXIT_MENU_LEAVE_TEXT_COLOR,
-      align: 'center',
-    });
-
-    drawText(ctx, `Leave ${this.entry.name}?`, {
-      x: cw / 2,
-      y: panelY + EXIT_MENU_QUESTION_Y,
-      size: EXIT_MENU_QUESTION_SIZE,
-      color: EXIT_MENU_STAY_TEXT_COLOR,
-      align: 'center',
-    });
-
-    drawText(ctx, '(Esc or Stay to remain inside)', {
-      x: cw / 2,
-      y: panelY + EXIT_MENU_HINT_Y,
-      size: EXIT_MENU_HINT_SIZE,
-      color: EXIT_MENU_HINT_TEXT_COLOR,
-      align: 'center',
-    });
-
-    const rects = this.menuRects();
-
-    // Exit is the default selection, shown highlighted from the moment the menu
-    // appears: standing on the doormat is how the player asks to leave, and the
-    // door menu on the way in reads the same way round. Unlike the stairwell,
-    // which keeps Stay as its default, nothing here is one-way — an accidental
-    // Exit puts the party back on the doorstep it came from.
-    beginMenuFocus('exit-building', true);
-    addButton(ctx, this.exitMenuButtons, {
-      x: rects.exit.x,
-      y: rects.exit.y,
-      width: rects.exit.w,
-      height: rects.exit.h,
-      label: 'Exit',
-      fill: EXIT_MENU_LEAVE_BG_COLOR,
-      border: EXIT_MENU_BORDER_COLOR,
-      borderWidth: EXIT_MENU_BUTTON_BORDER_WIDTH,
-      radius: 0,
-      labelSize: EXIT_MENU_BUTTON_TEXT_SIZE,
-      labelColor: EXIT_MENU_LEAVE_TEXT_COLOR,
-      primaryAction: true,
-      action: () => this.doExit(),
-    });
-    addButton(ctx, this.exitMenuButtons, {
-      x: rects.stay.x,
-      y: rects.stay.y,
-      width: rects.stay.w,
-      height: rects.stay.h,
-      label: 'Stay',
-      fill: EXIT_MENU_STAY_BG_COLOR,
-      border: EXIT_MENU_STAY_BORDER_COLOR,
-      borderWidth: EXIT_MENU_BUTTON_BORDER_WIDTH,
-      radius: 0,
-      labelSize: EXIT_MENU_BUTTON_TEXT_SIZE,
-      labelColor: EXIT_MENU_STAY_TEXT_COLOR,
-      action: () => this.closeExitMenu(),
-    });
-    endMenuFocus();
-  }
-
-  private menuRects(): {
-    exit: { x: number; y: number; w: number; h: number };
-    stay: { x: number; y: number; w: number; h: number };
-  } {
-    const cw = viewportWidth();
-    const ch = viewportHeight();
-    const panelY = ch / 2 - EXIT_MENU_PANEL_HEIGHT / 2;
-    const btnW = EXIT_MENU_BUTTON_WIDTH;
-    const btnH = EXIT_MENU_BUTTON_HEIGHT;
-    const btnY = panelY + EXIT_BTN_Y_OFFSET;
-    return {
-      exit: { x: cw / 2 - btnW - EXIT_BTN_GAP, y: btnY, w: btnW, h: btnH },
-      stay: { x: cw / 2 + EXIT_BTN_GAP, y: btnY, w: btnW, h: btnH },
-    };
-  }
-
-  // Mobile touch handlers
-
-  handleTouchStart(e: TouchEvent, rect: DOMRect): void {
-    for (const touch of Array.from(e.changedTouches)) {
-      const x = touch.clientX - rect.left;
-      const y = touch.clientY - rect.top;
-
-      // Route to click for modals. Read from the claim registry rather than a
-      // second hand-maintained list, so a panel added to one is never missing
-      // from the other.
-      if (worldHalted(this.overlayClaims)) {
-        // The follower menu's rows scroll under a drag, so the release decides
-        // whether the press was a click.
-        // Opened over the pause menu from the Abilities tab, where the pause
-        // menu's scroll gesture below would otherwise take the tap.
-        if (this.menus.mongoExplainer.isOpen || this.menus.craftExplainers.isOpen) {
-          this.handleClick(x, y);
-          continue;
+  /**
+   * Every gesture that began on bare room rather than on a surface: a finger
+   * walking the crawler, a tap that talks, buys, reads or swings, and a click
+   * that picks up loot.
+   */
+  private handleWorldPointer(gesture: WorldGesture): void {
+    if (gesture.button !== PRIMARY_BUTTON) return;
+    const x = gesture.cssX;
+    const y = gesture.cssY;
+    const isMoveTouch = gesture.pointerId === this.touch.moveTouchId;
+    switch (gesture.kind) {
+      case 'down':
+        if (gesture.source === 'touch' && this.touch.moveTouchId === null) {
+          this.touch.startMove(gesture.pointerId, x, y, gesture.timeStamp);
         }
-        if (this.followerMenu.isOpen && !this.pauseMenu.isOpen) {
-          this.followerMenu.touchStart(touch.identifier, x, y);
-          continue;
+        return;
+      case 'move':
+        if (isMoveTouch) this.touch.updateMove(x, y);
+        return;
+      case 'up':
+        if (gesture.source === 'mouse') {
+          if (gesture.tap) this.collectLootAt(x, y);
+          return;
         }
-        // The Equipment tab is the one halting surface a finger can drag across
-        // rather than only tap, so it takes the press now and the release from
-        // the drag branch in `handleTouchEnd`, which already ends with a click.
-        const shopIsScrollable = this.scrollableShop !== null;
-        if (
-          shopIsScrollable ||
-          (this.pauseMenu.isOpen && this.pauseMenu.currentTab === 'equipment')
-        ) {
-          this.handleMouseDown(x, y);
-          this.mobileHUD.inventoryDragTouchId ??= touch.identifier;
-          continue;
-        }
-        // A tab taller than the box scrolls under the finger, so the press
-        // can't be a click yet: the release decides between the two.
-        if (this.pauseMenu.isOpen && this.pauseScrollTouch === null) {
-          this.pauseScrollTouch = { id: touch.identifier, x, y, time: Date.now() };
-          this.pauseMenu.touchScrollStart(x, y, this.human, this.cat);
-          continue;
-        }
-        this.handleClick(x, y);
-        continue;
-      }
-
-      // Neither halts the world, but both own every tap on screen while they
-      // are up: the menu closes on a tap outside it, and the award overlays
-      // take any tap as their continue. Left to the world, a tap on a row
-      // would walk the crawler instead of choosing it.
-      if (this.menus.constructionMenu.isOpen || this.achievementUI.isBlocking) {
-        this.handleClick(x, y);
-        continue;
-      }
-
-      // The bag's Drop/Trade "how many?" prompt: not world-halting (it can open
-      // mid-shop, same as everywhere else it's used), so it falls outside the
-      // block above. Routed through `handleMouseDown` rather than straight to
-      // `handleClick` so a held step button starts repeating under a finger the
-      // same way it does under a held mouse button.
-      if (this.menus.itemQuantityPicker.isOpen) {
-        this.handleMouseDown(x, y);
-        this.mobileHUD.inventoryDragTouchId ??= touch.identifier;
-        continue;
-      }
-
-      if (this.menus.gearPanel.hitsPanel(x, y)) {
-        this.handleClick(x, y);
-        continue;
-      }
-
-      const coveredByPanel = this.menus.panelCovers(x, y);
-
-      // HUD collapse/expand toggle (mobile only)
-      if (platform.isMobile && !coveredByPanel) {
-        const ht = this._hudToggleRect;
-        if (pointInRect(x, y, ht)) {
-          this._hudCollapsed = !this._hudCollapsed;
-          continue;
-        }
-        // The skill badge sits under the HUD bar on mobile, where there is no
-        // banner to click — tapping it is the only route to the Spend screen.
-        if (this.menus.tryOpenSpendScreen(x, y, this._hudSkillBannerRect)) continue;
-      }
-
-      if (!coveredByPanel && this.tryPressSummonButton(x, y)) continue;
-      if (!coveredByPanel && this.tryPressFollowButton(x, y)) continue;
-      if (!coveredByPanel && this.tryPressColumnPieces(x, y)) continue;
-
-      if (platform.isMobile && !coveredByPanel) {
-        const btn = this.mobileHUD.hitTest(x, y);
-        if (btn === 'switch') {
-          this.trySwitchActive();
-          continue;
-        }
-        if (btn === 'bag') {
-          this.menus.toggleInventory();
-          continue;
-        }
-        if (btn === 'pause') {
-          this.pauseMenu.toggle();
-          continue;
-        }
-        if (btn === 'minimap') {
-          this.mobileHUD.toggleMiniMap();
-          continue;
-        }
-      }
-
-      // Hotbar slot tap — activation is deferred to touch end so a drag off the
-      // slot doesn't also fire the item.
-      const hi = this.menus.inventoryPanel.getHotbarTappedIndex(x, y);
-      if (hi >= 0 && !coveredByPanel) {
-        this.mobileHUD.inventoryDragTouchId = touch.identifier;
-        this.handleMouseDown(x, y);
-        continue;
-      }
-
-      // Inventory panel drag start, and the long-press that opens a slot's
-      // context menu — both of which need clicks to reach the panel, which is
-      // exactly what this scene gained.
-      if (this.menus.inventoryPanel.isOpen) {
-        if (this.menus.inventoryPanel.hitsPanel(x, y)) {
-          this.handleMouseDown(x, y);
-          this.mobileHUD.inventoryDragTouchId ??= touch.identifier;
-          this.mobileHUD.startInvLongPress(x, y, () => this.handleContextMenu(x, y));
-          continue;
-        }
-      }
-
-      // Game world touch: movement / tap tracking
-      if (this.mobileHUD.moveTouchId === null) {
-        this.mobileHUD.startMovement(touch.identifier, x, y);
-      }
+        if (!isMoveTouch) return;
+        if (this.touch.isTap(x, y)) this.handleWorldTap(x, y);
+        this.touch.endMove();
+        return;
+      case 'cancel':
+        if (isMoveTouch) this.touch.endMove();
+        return;
+      case 'wheel':
+        return;
     }
   }
 
-  handleTouchMove(e: TouchEvent, rect: DOMRect): void {
-    for (const touch of Array.from(e.changedTouches)) {
-      const x = touch.clientX - rect.left;
-      const y = touch.clientY - rect.top;
-
-      if (touch.identifier === this.pauseScrollTouch?.id) {
-        this.pauseMenu.touchScrollMove(x, y);
-        continue;
-      }
-
-      if (this.followerMenu.touchMove(touch.identifier, x, y)) continue;
-
-      // Update inventory drag
-      this.handleMouseMove(x, y);
-      this.mobileHUD.checkInvLongPressMove(x, y);
-
-      // Update movement target
-      if (touch.identifier === this.mobileHUD.moveTouchId) {
-        this.mobileHUD.moveTarget = { x, y };
-      }
-    }
-  }
-
-  handleTouchEnd(e: TouchEvent, rect: DOMRect): void {
-    for (const touch of Array.from(e.changedTouches)) {
-      const x = touch.clientX - rect.left;
-      const y = touch.clientY - rect.top;
-
-      const followerMenuTouch = this.followerMenu.touchEnd(touch.identifier);
-      if (followerMenuTouch !== null) {
-        if (followerMenuTouch === 'tap') this.handleClick(x, y);
-        continue;
-      }
-
-      const pauseScroll = this.pauseScrollTouch;
-      if (pauseScroll !== null && touch.identifier === pauseScroll.id) {
-        this.pauseScrollTouch = null;
-        this.pauseMenu.touchScrollEnd(x, y, this.human, this.cat);
-        const elapsed = Date.now() - pauseScroll.time;
-        const moved = Math.hypot(x - pauseScroll.x, y - pauseScroll.y);
-        if (elapsed < MENU_TAP_DURATION_MS && moved < MENU_TAP_MAX_DISTANCE) {
-          this.handleClick(x, y);
-        } else {
-          // No click follows a drag, so the menu's held-back click would
-          // otherwise sit waiting and eat the next tap.
-          this.pauseMenu.clearSuppressedClick();
-        }
-        continue;
-      }
-
-      // Inventory / hotbar drag end
-      if (touch.identifier === this.mobileHUD.inventoryDragTouchId) {
-        const openedContextMenu = this.mobileHUD.invLongPressFired;
-        this.mobileHUD.clearInvLongPress();
-        this.handleMouseUp(x, y);
-        // A release that only ended a long press must not also fire the slot it
-        // was held on, or the menu it just opened is dismissed by its own tap.
-        if (openedContextMenu) {
-          this.mobileHUD.inventoryDragTouchId = null;
-          continue;
-        }
-        const hi = this.mobileHUD.inventoryPanel.getHotbarTappedIndex(x, y);
-        // A second finger can land on the bar in the same frame an overlay goes
-        // up; its release must resolve the overlay, not fire the slot beneath.
-        // The pause menu is named separately because it covers the bar without
-        // being a pointer-blocking overlay: the hotbar is not drawn under it, so
-        // a release over where it used to be must go to the menu instead.
-        // An open shop is drawn over the bar and is not a pointer-blocking overlay,
-        // so its Close and lower Buy rows would otherwise fire the slot beneath.
-        if (
-          hi >= 0 &&
-          !this.isOverlayBlockingPointer &&
-          !this.pauseMenu.isOpen &&
-          this.scrollableShop === null
-        ) {
-          activateHotbarSlot(this.hotbarHost(), hi);
-        } else {
-          this.handleClick(x, y);
-        }
-        this.mobileHUD.inventoryDragTouchId = null;
-        continue;
-      }
-
-      // Game world touch end
-      if (touch.identifier === this.mobileHUD.moveTouchId) {
-        if (this.mobileHUD.isTap(x, y)) {
-          // Capture before handleClick, which may advance/close an open dialog —
-          // guarding the talk trigger below against reopening a fresh one in the
-          // same tap (the close-then-reopen trap).
-          const mordecaiWasOpen = this.safeRoom?.mordecaiDialogOpen === true;
-          const dialogWasOpen =
-            mordecaiWasOpen ||
-            this.citizenDialogTarget !== null ||
-            this.servicePanel?.isOpen === true ||
-            this.readingPanel?.isOpen === true ||
-            this.readablePanel.isOpen;
-          const bopcaWasOpen = this.bopca?.isDialogOpen === true;
-          // A tap whose finger went down before an award overlay appeared still
-          // arrives here. `handleClick` routes it to the overlay; the
-          // space-equivalents must not also fire while the game is paused.
-          const overlayClaimedTap = this.isOverlayBlockingPointer;
-          // Off the box, a tap is the touch form of the interact press, and
-          // may be for whoever the crawler has walked up to since.
-          const tapMissedConversation =
-            this.conversation.isOpen && !this.conversation.hitsSurface(x, y);
-          this.handleClick(x, y);
-          const handedOff = tapMissedConversation && this.handOffConversationPress();
-          if (!overlayClaimedTap && !handedOff) {
-            this.triggerTapInteractions(dialogWasOpen, bopcaWasOpen, mordecaiWasOpen, x, y);
-          }
-        }
-        this.mobileHUD.clearMovement();
-      }
-    }
+  private collectLootAt(screenX: number, screenY: number): void {
+    const { x: camX, y: camY } = this.computeCamera(this.map);
+    this.destruction.loot.tryCollectLootAt(
+      screenX,
+      screenY,
+      camX,
+      camY,
+      this.active(),
+      this.inactive(),
+    );
   }
 
   /**
-   * The space-equivalent actions a world tap performs, once `handleClick` has
-   * had its chance at it.
+   * A finger tapped bare room: the touch form of the interact press. Loot under
+   * the finger is picked up, and the tap is then offered to whoever the crawler
+   * has walked up to, so a conversation the player can walk out of hands the
+   * press on to the next speaker rather than swallowing it.
+   */
+  private handleWorldTap(screenX: number, screenY: number): void {
+    this.collectLootAt(screenX, screenY);
+    if (this.handOffConversationPress()) return;
+    this.triggerTapInteractions(screenX, screenY);
+  }
+
+  /**
+   * The space-equivalent actions a world tap performs.
    *
-   * @param dialogWasOpen Whether a citizen dialog, service panel or Mordecai's
-   *   own box was already up before `handleClick` ran — that call would have
-   *   advanced or closed it, and reopening one in the same tap is the
-   *   close-then-reopen trap.
-   * @param bopcaWasOpen The same guard for the Bopca's own conversation.
-   * @param mordecaiWasOpen The same guard for Mordecai's, which needs its own
-   *   flag because the safe room's talk trigger below runs whether or not any
-   *   other dialog was up.
+   * A conversation, panel or Mordecai's own box already up when the tap landed
+   * keeps the tap from opening a fresh one in the same press: the
+   * close-then-reopen trap.
+   *
    * @param tapScreenX Where the finger landed, so a swing that reaches nothing
    *   to interact with is still aimed the way the player pointed it.
    * @param tapScreenY See `tapScreenX`.
    */
-  private triggerTapInteractions(
-    dialogWasOpen: boolean,
-    bopcaWasOpen: boolean,
-    mordecaiWasOpen: boolean,
-    tapScreenX: number,
-    tapScreenY: number,
-  ): void {
-    // A finger that went down on open ground can come up after something has
-    // taken the screen — the release belongs to whatever that is, and `update`
-    // is not running the world underneath it anyway.
-    if (worldHalted(this.overlayClaims)) return;
+  private triggerTapInteractions(tapScreenX: number, tapScreenY: number): void {
+    if (this.ui.worldHalted()) return;
     // The keyboard's swing is withheld for the whole of a scripted beat; the tap
     // has to be too, or a stray finger spins Carl round mid-walk-up and swings
     // at the vine he is there to save.
     if (this.scriptOwnsParty) return;
+    const dialogUpBeforeTap = this.citizenDialogTarget !== null || this.tapTargetOpen();
     const safeRoomSpeaker = safeRoomSpeakerFor(this.bopca, this.safeRoom, this.active());
-    if (this.bopca !== null && !bopcaWasOpen && safeRoomSpeaker === 'bopca') {
+    if (this.bopca !== null && !this.bopca.isDialogOpen && safeRoomSpeaker === 'bopca') {
       this.bopca.tryInteract(this.active());
     }
-    if (!mordecaiWasOpen && safeRoomSpeaker === 'mordecai') {
+    if (this.safeRoom?.mordecaiDialogOpen !== true && safeRoomSpeaker === 'mordecai') {
       this.talkToMordecai(this.active());
     }
     if (this.shop?.isNearShopkeeper(this.active()) === true) {
-      this.shop.shopOpen = true;
-      this.beginModalGrace();
+      this.shop.open();
     }
     if (this.currentFloor === TOWER_CONFRONTATION_FLOOR) {
       this.towerConfrontation?.tryExamine(this.active());
@@ -5019,25 +4170,15 @@ export class BuildingInteriorScene extends GameplayScene {
     // shop/club panel is up (the store has both a shop and shelf-browsers), and
     // the safe room didn't just open Mordecai (that building has both Mordecai
     // and ambient occupants within one tap's reach).
-    if (
-      !dialogWasOpen &&
-      this.shop?.shopOpen !== true &&
-      this.club?.modalOpen !== true &&
-      this.safeRoom?.mordecaiDialogOpen !== true &&
-      this.bopca?.isDialogOpen !== true &&
-      this.servicePanel?.isOpen !== true &&
-      this.readingPanel?.isOpen !== true &&
-      !this.readablePanel.isOpen
-    ) {
+    if (!dialogUpBeforeTap && !this.tapTargetOpen()) {
       const active = this.active();
       // The prompt already reads "Tap to repair" on mobile (`AnchorInteriorSystem
-      // .renderObjects`), but nothing routed the tap there — a phone player could
-      // never earn Hilda's shard, since `buildAction` is bound to the `R` key.
+      // .renderObjects`), and `buildAction` is bound to the `R` key, so without
+      // this a phone player could never earn Hilda's shard.
       const repaired = this.anchorInterior?.tryRepair(active) ?? false;
-      // The same trap, and a worse one: the Big Top's prompt reads "Tap to pour"
-      // on a phone, and the pour is the *only* way out of the finale. Without
-      // this the tap falls through to the swing below and Carl beats on a vine
-      // that cannot be hurt, forever.
+      // The Big Top's prompt reads "Tap to pour" on a phone, and the pour is the
+      // *only* way out of the finale: a tap that fell through to the swing below
+      // would have Carl beat on a vine that cannot be hurt, forever.
       const poured = this.bigTopMaze?.tryInteract(this.buildSystemContext()) ?? false;
       if (
         !repaired &&
@@ -5049,6 +4190,19 @@ export class BuildingInteriorScene extends GameplayScene {
         this.attackTowardTap(active, tapScreenX, tapScreenY);
       }
     }
+  }
+
+  /** Whether a counter, a panel or a safe-room conversation already has the party's attention. */
+  private tapTargetOpen(): boolean {
+    return (
+      this.shop?.isOpen === true ||
+      this.club?.modalOpen === true ||
+      this.safeRoom?.mordecaiDialogOpen === true ||
+      this.bopca?.isDialogOpen === true ||
+      this.servicePanel?.isOpen === true ||
+      this.readingPanel?.isOpen === true ||
+      this.readablePanel.isOpen
+    );
   }
 
   /**

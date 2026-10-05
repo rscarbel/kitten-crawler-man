@@ -21,7 +21,7 @@ import { ITEM_DEF } from '../../../core/ItemDefs';
 import type { BriarHollowSite } from '../../../map/overworld/briarHollowSite';
 import { BUILD_ROWS } from '../../../sprites/art/humanFigure';
 import { viewForFacing } from '../../../sprites/humanSprite';
-import { drawProgressBar, PROGRESS_PRESETS } from '../../../ui/Box';
+import { worldBar } from '../../../ui/world/worldShapes';
 import { drawInteractionPrompt, interactionPromptsSuppressed } from '../../../ui/InteractionPrompt';
 import { drawRopeCoilGlyph, drawSawBladeGlyph } from '../../../ui/icons/stationGlyphs';
 import { cueSoundOr } from '../blueprints/blueprintsSoundCues';
@@ -562,14 +562,16 @@ export class SawmillService {
     if (job === null) return;
     const { x, y, w } = job.station.footprint;
     const centreX = (x + w / 2) * TILE_SIZE - camX;
-    drawProgressBar(ctx, {
-      x: centreX - PROGRESS_BAR_WIDTH / 2,
-      y: y * TILE_SIZE - camY - PROGRESS_BAR_LIFT,
-      width: PROGRESS_BAR_WIDTH,
-      height: PROGRESS_BAR_HEIGHT,
-      value: 1 - job.framesLeft / MANUAL_PROCESS_FRAMES,
-      ...PROGRESS_PRESETS.build,
-    });
+    worldBar(
+      ctx,
+      {
+        x: centreX - PROGRESS_BAR_WIDTH / 2,
+        y: y * TILE_SIZE - camY - PROGRESS_BAR_LIFT,
+        w: PROGRESS_BAR_WIDTH,
+        h: PROGRESS_BAR_HEIGHT,
+      },
+      { style: 'build', value: 1 - job.framesLeft / MANUAL_PROCESS_FRAMES },
+    );
   }
 
   dispose(): void {

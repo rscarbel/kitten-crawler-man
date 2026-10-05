@@ -40,8 +40,6 @@ import type { Player } from '../Player';
 import type { HumanPlayer } from '../creatures/HumanPlayer';
 import type { CircusQuestProgress } from '../core/CircusQuestProgress';
 import type { Difficulty } from '../core/difficultyProfiles';
-import { keybindings } from '../core/Keybindings';
-import { platform } from '../core/Platform';
 import { GrimaldiVine } from '../creatures/GrimaldiVine';
 import { MazeBlockTarget } from '../creatures/MazeBlockTarget';
 import type { MazePropTarget } from '../creatures/MazePropTarget';
@@ -51,7 +49,11 @@ import type { Conversation } from '../dialog/Conversation';
 import type { ConversationHandle } from '../dialog/request';
 import type { DialogLine, NonEmpty } from '../dialog/line';
 import { drawInteractionPrompt } from '../ui/InteractionPrompt';
-import { drawText } from '../ui/TextBox';
+import { worldText } from '../ui/world/worldText';
+import { worldTint } from '../ui/world/worldShapes';
+import { worldPalette } from '../ui/theme/worldInk';
+import { activeInputMode, byInputMode, keycapLabel } from '../ui/core/inputMode';
+import { objectiveBandEntry } from '../ui/hud/objectiveLine';
 import { viewportWidth, viewportHeight } from '../core/Viewport';
 import {
   drawActArchPost,
@@ -199,7 +201,8 @@ import {
   type LiveLights,
   type StageCue,
 } from './bigTop/bigTopLighting';
-import { drawOverlay } from '../ui/Box';
+import { questBannerEntry } from '../ui/QuestBanners';
+import type { TopBandEntry } from '../ui/hud/topBand';
 
 const FRAMES_PER_SECOND = 60;
 
@@ -226,7 +229,6 @@ const BLOCK_HINT_RANGE_TILES = 3.5;
 const TARGET_PROMPT_RANGE_TILES = 3;
 
 /** The white-out a failed act paints over everything, at its brightest. */
-const BURNOUT_FLASH_COLOR = '#ffe8c0';
 const BURNOUT_FLASH_PEAK_ALPHA = 0.92;
 
 /** The one consumable the cure spends, when the party happens to have one. */
@@ -234,15 +236,6 @@ const POUR_ITEM_ID = 'health_potion';
 
 const BANNER_SECONDS = 5;
 const BANNER_FRAMES = BANNER_SECONDS * FRAMES_PER_SECOND;
-const BANNER_FADE_FRAMES = 60;
-const BANNER_TITLE_Y = 70;
-const BANNER_TITLE_SIZE = 26;
-const BANNER_SUBTITLE_Y = 102;
-const BANNER_SUBTITLE_SIZE = 13;
-const BANNER_GLOW_BLUR = 12;
-const BANNER_TITLE_COLOR = '#a8f070';
-const BANNER_TITLE_GLOW = '#3a6a2a';
-const BANNER_SUBTITLE_COLOR = '#d4edaa';
 
 // ── Cutscene script, in frames at 60 fps ──────────────────────────────────────
 
@@ -274,16 +267,9 @@ const CS_SAG_BLOOM_FRAMES = 90;
 /** Where in the cutscene the script currently is. */
 type CutsceneBeat = 'dialog' | 'approach' | 'cure' | 'freed' | 'done';
 
-const OBJECTIVE_Y_FROM_BOTTOM = 96;
-const OBJECTIVE_SIZE = 13;
-const OBJECTIVE_PENDING_COLOR = '#e8d060';
-const OBJECTIVE_DONE_COLOR = '#a8f070';
-
 /** World-space hint text sits this far above the crawler's head. */
 const HINT_LIFT_TILES = 1.6;
 const HINT_SIZE = 11;
-const HINT_COLOR = '#ffe9a8';
-const HINT_OUTLINE = 'rgba(0,0,0,0.85)';
 
 const TILE_CENTRE = 0.5;
 
@@ -586,8 +572,8 @@ export class BigTopMazeSystem implements GameSystem, GroundHazardSource {
   private flashFrames = 0;
 
   /**
-   * The most recent frame context, so `renderUI` — which is handed only a
-   * drawing surface — can still ask where the crawlers are standing.
+   * The most recent frame context, so the band and paint passes — which are
+   * handed no context — can still ask where the crawlers are standing.
    */
   private lastContext: SystemContext | null = null;
 
@@ -788,13 +774,13 @@ export class BigTopMazeSystem implements GameSystem, GroundHazardSource {
    * party has already been moved, and it is pure explanation.
    */
   dismissDialog(): boolean {
-    if (this.openBeat !== 'interlude') return false;
+    if (!this.dialogDismissible) return false;
     return this.conversation.dismiss();
   }
 
-  handleClick(mx: number, my: number): boolean {
-    if (this.openBeat === 'none') return false;
-    return this.conversation.handleClick(mx, my);
+  /** Whether Escape may close the box on screen: an interlude, never the cure. */
+  get dialogDismissible(): boolean {
+    return this.openBeat === 'interlude';
   }
 
   /** Opens a beat on the shared conversation. `onClosed` fires once its last page is read. */
@@ -2623,7 +2609,10 @@ export class BigTopMazeSystem implements GameSystem, GroundHazardSource {
 
   /** On a touch screen there is no key to name, so the on-screen control is. */
   private switchControlLabel(): string {
-    return platform.isMobile ? 'the switch button' : `[${keybindings.labelFor('switchCharacter')}]`;
+    return byInputMode(activeInputMode(), {
+      touch: 'the switch button',
+      pointer: keycapLabel('switchCharacter'),
+    });
   }
 
   private drawSwitchHint(
@@ -2653,14 +2642,14 @@ export class BigTopMazeSystem implements GameSystem, GroundHazardSource {
     camY: number,
     line: string,
   ): void {
-    drawText(ctx, line, {
+    worldText(ctx, line, {
       x: active.x - camX + TILE_SIZE * TILE_CENTRE,
       y: active.y - camY - TILE_SIZE * HINT_LIFT_TILES,
       size: HINT_SIZE,
       bold: true,
-      color: HINT_COLOR,
+      color: worldPalette.bigTop.hint,
       align: 'center',
-      outline: HINT_OUTLINE,
+      outline: worldPalette.bigTop.hintOutline,
     });
   }
 
@@ -2710,56 +2699,36 @@ export class BigTopMazeSystem implements GameSystem, GroundHazardSource {
     return MAZE_SECTIONS[index + 1]?.banner ?? ACT_ONE_BANNER;
   }
 
+  topBandEntries(): TopBandEntry[] {
+    const banner = questBannerEntry({
+      id: 'bigtop-banner',
+      title: this.bannerTitle,
+      subtitle: this.bannerSubtitle,
+      framesLeft: this.bannerTimer,
+    });
+    const entries: TopBandEntry[] = banner === null ? [] : [banner];
+    if (this.beat === null && !this.isDialogOpen) {
+      const objective = this.currentObjective();
+      entries.push(
+        objectiveBandEntry('bigtop-objective', {
+          text: objective.line,
+          tone: objective.done ? 'success' : 'warning',
+        }),
+      );
+    }
+    return entries;
+  }
+
   renderUI(ctx: CanvasRenderingContext2D): void {
     // Under the boxes rather than over them: the white-out is the room going
     // white, and a message printed behind its own flash cannot be read.
     if (this.flashFrames > 0) {
-      drawOverlay(ctx, {
-        canvasWidth: viewportWidth(),
-        canvasHeight: viewportHeight(),
-        color: BURNOUT_FLASH_COLOR,
-        alpha: (this.flashFrames / BURNOUT_FLASH_FRAMES) * BURNOUT_FLASH_PEAK_ALPHA,
-      });
+      worldTint(
+        ctx,
+        worldPalette.bigTop.burnoutFlash,
+        (this.flashFrames / BURNOUT_FLASH_FRAMES) * BURNOUT_FLASH_PEAK_ALPHA,
+      );
     }
-    // Drawn through the scene's shared conversation panel.
-
-    if (this.bannerTimer > 0) {
-      const alpha =
-        this.bannerTimer < BANNER_FADE_FRAMES ? this.bannerTimer / BANNER_FADE_FRAMES : 1;
-      drawText(ctx, this.bannerTitle, {
-        x: viewportWidth() / 2,
-        y: BANNER_TITLE_Y,
-        size: BANNER_TITLE_SIZE,
-        bold: true,
-        color: BANNER_TITLE_COLOR,
-        align: 'center',
-        alpha,
-        glow: BANNER_TITLE_GLOW,
-        glowBlur: BANNER_GLOW_BLUR,
-      });
-      const subtitle = this.bannerSubtitle;
-      if (subtitle !== null) {
-        drawText(ctx, subtitle, {
-          x: viewportWidth() / 2,
-          y: BANNER_SUBTITLE_Y,
-          size: BANNER_SUBTITLE_SIZE,
-          color: BANNER_SUBTITLE_COLOR,
-          align: 'center',
-          alpha,
-        });
-      }
-    }
-
-    if (this.beat !== null || this.isDialogOpen) return;
-    const objective = this.currentObjective();
-    drawText(ctx, objective.line, {
-      x: viewportWidth() / 2,
-      y: viewportHeight() - OBJECTIVE_Y_FROM_BOTTOM,
-      size: OBJECTIVE_SIZE,
-      bold: true,
-      color: objective.done ? OBJECTIVE_DONE_COLOR : OBJECTIVE_PENDING_COLOR,
-      align: 'center',
-    });
   }
 }
 

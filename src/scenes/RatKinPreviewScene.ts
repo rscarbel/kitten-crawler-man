@@ -5,16 +5,18 @@
  * A contact sheet cannot show gait speed, whether he floats or plants, or
  * whether the loop seam pops — so this walks him back and forth across the
  * screen at several zooms, driving the cycle from the ground he covers exactly
- * the way `SafeRoomSystem` does. Click to pause and step frame by frame.
+ * the way `SafeRoomSystem` does. Click the art to pause; paused, the wheel
+ * steps frame by frame.
  *
  * Reached via `?ratkin` in `devBootScene` (see `game.ts`); never on a production
  * path.
  */
 
-import { Scene } from '../core/Scene';
 import { TILE_SIZE } from '../core/constants';
 import { viewportWidth, viewportHeight } from '../core/Viewport';
-import { drawText } from '../ui/TextBox';
+import type { WorldGesture } from '../ui/core/UiRoot';
+import { worldText } from '../ui/world/worldText';
+import { PreviewScene, type PreviewControl } from './PreviewScene';
 import { RAT_KIN_TILES_PER_WALK_CYCLE, drawRatKinSprite } from '../sprites/ratKinSprite';
 import { MORDECAI_MAX_PAUSE_FRAMES, MordecaiWanderer } from '../systems/mordecaiWander';
 import { RATKIN_CAST_IDS, type RatkinCastId } from '../sprites/art/ratkin/cast';
@@ -24,7 +26,7 @@ import {
   ratkinCastActions,
   ratkinCastTilesPerWalkCycle,
 } from '../sprites/ratkinCastSprite';
-import { BUTTON_PRESETS, addButton, playButtonSound, setButtonMouseState } from '../ui/Button';
+import { previewInk } from '../ui/theme/previewInk';
 
 /** Who the picker can show: Mordecai first, then the cast in table order. */
 type PreviewSubject = 'mordecai' | RatkinCastId;
@@ -32,22 +34,15 @@ const SUBJECTS: readonly PreviewSubject[] = ['mordecai', ...RATKIN_CAST_IDS];
 /** Actions the picker cycles through; locomotion follows the wanderer. */
 const WANDER_ACTION = 'wander';
 type PreviewAction = typeof WANDER_ACTION | Exclude<RatkinCastAction, 'walk' | 'idle'>;
-const PICKER_TOP = 36;
-const PICKER_HEIGHT = 24;
-const ARROW_WIDTH = 32;
-const NAME_WIDTH = 150;
-const ACTION_WIDTH = 150;
-const PICKER_GAP = 6;
 /** Frames a one-shot action (strike, down…) takes to play through in the preview. */
 const ONE_SHOT_PREVIEW_FRAMES = 48;
 
-const BG_COLOR = '#20242e';
-const GROUND_COLOR = '#2c3342';
-const LABEL_COLOR = '#c9d2e0';
+const BG_COLOR = previewInk.slate.backdrop;
+const GROUND_COLOR = previewInk.slate.ground;
+const LABEL_COLOR = previewInk.slate.label;
 const GROUND_THICKNESS = 3;
 const MARGIN = 32;
 const LABEL_SIZE = 14;
-const TITLE_SIZE = 20;
 
 /** The tile sizes he is shown at, in-game size first — that is the one that counts. */
 const IN_GAME_ZOOM = 1;
@@ -62,7 +57,8 @@ const FACINGS: ReadonlyArray<{ label: string; facingX: number; facingY: number }
   { label: 'toward', facingX: 0, facingY: 1 },
   { label: 'away', facingX: 0, facingY: -1 },
 ];
-const LANE_TOP = 76;
+/** Gap between the header and the first lane's facing captions. */
+const LANE_TOP_GAP = 12;
 const LANE_HEIGHT = 132;
 /** Room kept at the right of a lane for its zoom label. */
 const LABEL_GUTTER = 120;
@@ -86,19 +82,11 @@ const PREVIEW_HOME = { x: 4, y: 4 };
  */
 const MAX_STEP_SKIP = MORDECAI_MAX_PAUSE_FRAMES + 1;
 
-export class RatKinPreviewScene extends Scene {
+export class RatKinPreviewScene extends PreviewScene {
   private frame = 0;
   private paused = false;
   private subjectIndex = 0;
   private actionIndex = 0;
-  private readonly buttons: Array<{
-    x: number;
-    y: number;
-    w: number;
-    h: number;
-    action?: () => void;
-    label?: string;
-  }> = [];
   private readonly wanderer = new MordecaiWanderer(
     PREVIEW_ROOM,
     PREVIEW_HOME,
@@ -129,44 +117,52 @@ export class RatKinPreviewScene extends Scene {
     this.actionIndex = 0;
   }
 
-  handleMouseMove(mx: number, my: number): void {
-    setButtonMouseState(mx, my);
+  protected previewTitle(): string {
+    return 'ratkin preview — ?ratkin';
   }
 
-  /** A click on the picker picks; anywhere else pauses and resumes. */
-  handleClick(mx: number, my: number): void {
-    for (const button of this.buttons) {
-      const inside =
-        mx >= button.x && mx <= button.x + button.w && my >= button.y && my <= button.y + button.h;
-      if (!inside) continue;
-      playButtonSound(null);
-      button.action?.();
+  protected previewCaptions(): readonly string[] {
+    return [`frame ${this.frame}${this.paused ? ' (paused)' : ''}`];
+  }
+
+  protected previewControls(): readonly PreviewControl[] {
+    return [
+      { label: '<', onTap: () => this.stepSubject(-1) },
+      { id: 'subject', label: this.subject, onTap: () => this.stepSubject(1) },
+      { label: '>', onTap: () => this.stepSubject(1) },
+      {
+        id: 'action',
+        label: this.action,
+        onTap: () => {
+          this.actionIndex = (this.actionIndex + 1) % this.actionsFor(this.subject).length;
+        },
+      },
+      {
+        id: 'play',
+        label: this.paused ? 'play' : 'pause',
+        onTap: () => {
+          this.paused = !this.paused;
+        },
+      },
+      {
+        label: 'step',
+        onTap: () => {
+          this.paused = true;
+          this.stepPastStanding();
+        },
+      },
+    ];
+  }
+
+  /** A tap on the art pauses and resumes; paused, the wheel steps. */
+  protected handlePreviewWorldPointer(gesture: WorldGesture): void {
+    if (gesture.kind === 'up' && gesture.tap) {
+      this.paused = !this.paused;
       return;
     }
-    this.paused = !this.paused;
-  }
-
-  private renderPicker(ctx: CanvasRenderingContext2D): void {
-    this.buttons.length = 0;
-    let x = MARGIN;
-    const control = (width: number, label: string, action: () => void): void => {
-      addButton(ctx, this.buttons, {
-        ...BUTTON_PRESETS.toggle,
-        x,
-        y: PICKER_TOP,
-        width,
-        height: PICKER_HEIGHT,
-        label,
-        action,
-      });
-      x += width + PICKER_GAP;
-    };
-    control(ARROW_WIDTH, '<', () => this.stepSubject(-1));
-    control(NAME_WIDTH, this.subject, () => this.stepSubject(1));
-    control(ARROW_WIDTH, '>', () => this.stepSubject(1));
-    control(ACTION_WIDTH, this.action, () => {
-      this.actionIndex = (this.actionIndex + 1) % this.actionsFor(this.subject).length;
-    });
+    if (gesture.kind !== 'wheel') return;
+    if (!this.paused || gesture.deltaY <= 0) return;
+    this.stepPastStanding();
   }
 
   /** Draws the picked subject at one lane position, facing one way. */
@@ -205,15 +201,13 @@ export class RatKinPreviewScene extends Scene {
   }
 
   /**
-   * Paused, scrolling *down* steps the wanderer forward — which is how a loop
-   * seam is found. There is no step-backward: the wanderer has no history to
-   * rewind, so scrolling up does nothing.
+   * Steps the wanderer forward — which, paused, is how a loop seam is found.
+   * There is no step-backward: the wanderer has no history to rewind.
    *
-   * One notch skips straight over the standing-about, because he pauses for
+   * One step skips straight over the standing-about, because he pauses for
    * seconds at a time and the thing worth stepping through is the walk.
    */
-  handleWheel(deltaY: number): void {
-    if (!this.paused || deltaY <= 0) return;
+  private stepPastStanding(): void {
     for (let step = 0; step < MAX_STEP_SKIP; step++) {
       this.frame += 1;
       this.wanderer.update();
@@ -235,19 +229,10 @@ export class RatKinPreviewScene extends Scene {
 
     const wander = this.wanderer.state;
 
-    this.renderPicker(ctx);
-    drawText(ctx, 'Ratkin — click to pause; paused, the wheel steps frame by frame', {
-      x: MARGIN,
-      y: 16,
-      size: TITLE_SIZE,
-      bold: true,
-      color: LABEL_COLOR,
-      outline: true,
-    });
-
+    const laneTop = this.headerBottom + LANE_TOP_GAP;
     ZOOMS.forEach((zoom, lane) => {
       const tile = TILE_SIZE * zoom;
-      const laneY = LANE_TOP + lane * LANE_HEIGHT;
+      const laneY = laneTop + lane * LANE_HEIGHT;
       // The tile guide's own bottom edge. His soles sit a little above it, the
       // same fraction down the tile the bake anchors him at — so a figure whose
       // feet land *on* this line is anchored wrong.
@@ -277,7 +262,7 @@ export class RatKinPreviewScene extends Scene {
           facing.facingY,
         );
         if (zoom === ZOOMS[0]) {
-          drawText(ctx, facing.label, {
+          worldText(ctx, facing.label, {
             x: MARGIN + index * slot,
             y: laneY,
             size: LABEL_SIZE,
@@ -286,7 +271,7 @@ export class RatKinPreviewScene extends Scene {
         }
       });
 
-      drawText(ctx, `${tile}px tile${zoom === ZOOMS[0] ? ' — in-game size' : ''}`, {
+      worldText(ctx, `${tile}px tile${zoom === ZOOMS[0] ? ' — in-game size' : ''}`, {
         x: width - MARGIN - LABEL_GUTTER,
         y: laneY,
         size: LABEL_SIZE,
@@ -294,12 +279,13 @@ export class RatKinPreviewScene extends Scene {
       });
     });
 
-    drawText(
+    worldText(
       ctx,
       `frame ${this.frame}  phase ${wander.walkPhase.toFixed(2)}rad  ` +
         (wander.isWalking ? 'walking' : 'idle') +
         `  live facing ${wander.facingX},${wander.facingY}`,
       { x: MARGIN, y: height - MARGIN, size: LABEL_SIZE, color: LABEL_COLOR },
     );
+    this.renderChrome(ctx);
   }
 }

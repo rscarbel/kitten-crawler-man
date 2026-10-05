@@ -18,6 +18,7 @@ import type { AbilityManager } from '../../core/AbilityManager';
 import { aiAdapter } from '../../ai/AIAdapter';
 import { PlayerChatSystem } from '../PlayerChatSystem';
 import type { SceneWorld } from './SceneWorld';
+import type { Surface } from '../../ui/core/UiRoot';
 
 /** What `!payday` is worth. Enough to matter, not enough to be the whole economy. */
 const CHEAT_PAYDAY_COINS = 2500;
@@ -86,12 +87,17 @@ export class ChatKit {
   }
 
   /**
-   * Takes the chat box off the page. It is a real DOM `<input>` appended to the
-   * body, so a scene that tore down with it open leaves an invisible field that
+   * Closes the chat box. It keeps a hidden DOM `<input>` on the page to type
+   * through, so a scene that tore down with it open would leave a field that
    * swallows every key the next scene needs.
    */
   dispose(): void {
     this.cancel();
+  }
+
+  /** The chat box as a surface; see `PlayerChatSystem.surface`. */
+  surface(id = 'chat'): Surface {
+    return this.chat.surface(id);
   }
 
   showBubble(text: string): void {
@@ -100,10 +106,6 @@ export class ChatKit {
 
   renderBubble(ctx: CanvasRenderingContext2D, camX: number, camY: number): void {
     this.chat.renderBubble(ctx, camX, camY, this.world.pm.active());
-  }
-
-  renderHint(ctx: CanvasRenderingContext2D): void {
-    this.chat.renderChatHint(ctx);
   }
 
   open(canvas: HTMLCanvasElement): void {

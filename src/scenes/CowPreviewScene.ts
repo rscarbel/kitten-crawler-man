@@ -15,10 +15,9 @@
  * watched tumbling.
  */
 
-import { Scene } from '../core/Scene';
 import { viewportWidth, viewportHeight } from '../core/Viewport';
-import { drawText } from '../ui/TextBox';
-import { addButton, playButtonSound, setButtonMouseState, BUTTON_PRESETS } from '../ui/Button';
+import { worldText } from '../ui/world/worldText';
+import { PreviewScene, type PreviewControl } from './PreviewScene';
 import {
   COW_AGES,
   COW_COATS,
@@ -36,6 +35,7 @@ import { cowPollPoint, restCowPose } from '../sprites/art/cowArt';
 import { cowLookOf } from '../sprites/art/cowLooks';
 import { GameMap } from '../map/GameMap';
 import { BodyPartGoreSystem } from '../systems/BodyPartGoreSystem';
+import { previewInk } from '../ui/theme/previewInk';
 
 const BASE_TILE_SIZE = 32;
 const FRAMES_PER_SECOND = 60;
@@ -51,15 +51,9 @@ const SPEED_FULL = 1;
 const SPEED_LEVELS: ReadonlyArray<number> = [SPEED_QUARTER, SPEED_HALF, SPEED_FULL];
 
 /** The floor-3 grass a pasture cow stands on, from `src/map/tilegen/palette.ts`. */
-const GRASS = '#637032';
+const GRASS = previewInk.floor.grass;
 const MARGIN = 16;
-const TITLE_SIZE = 16;
 const LABEL_SIZE = 11;
-const BUTTON_HEIGHT = 26;
-const BUTTON_WIDTH = 92;
-const BUTTON_GAP = 8;
-const CONTROL_ROW_GAP = 8;
-const HEADER_HEIGHT = 68;
 
 /**
  * An adult's and a calf's walking pace, in tiles per second. Close to what a
@@ -85,7 +79,7 @@ const HAPPY_SECONDS = COW_HAPPY_FRAMES / COW_HAPPY_FPS;
 const HEART_SECONDS = 3;
 const HEART_COUNT = 4;
 const HEART_RISE_TILES = 1;
-const HEART_COLOR = '#ff5c7a';
+const HEART_COLOR = previewInk.cow.heart;
 const HEART_STAGGER_SECONDS = 0.25;
 const HEART_SWAY_TILES = 0.15;
 const HEART_SPACING_TILES = 0.12;
@@ -112,16 +106,9 @@ interface Walker {
   gaitPhase: number;
 }
 
-export class CowPreviewScene extends Scene {
+export class CowPreviewScene extends PreviewScene {
   private readonly map = new GameMap({ mapSize: PREVIEW_MAP_SIZE });
   private readonly gore = new BodyPartGoreSystem(this.map);
-  private readonly buttons: Array<{
-    x: number;
-    y: number;
-    w: number;
-    h: number;
-    action?: () => void;
-  }> = [];
   private readonly walkers: Walker[] = COW_AGES.flatMap((age) =>
     COW_COATS.map((coat, i) => ({
       coat,
@@ -167,13 +154,11 @@ export class CowPreviewScene extends Scene {
   render(ctx: CanvasRenderingContext2D): void {
     const width = viewportWidth();
     const height = viewportHeight();
-    this.buttons.length = 0;
     ctx.fillStyle = GRASS;
     ctx.fillRect(0, 0, width, height);
-    this.renderHeader(ctx);
 
     const tile = BASE_TILE_SIZE;
-    const pastureTop = HEADER_HEIGHT + MARGIN;
+    const pastureTop = this.headerBottom + MARGIN;
     const centreX = width / 2;
     const centreY = pastureTop + (PASTURE_HEIGHT_TILES * tile) / 2;
     const placed = this.walkers.map((walker) => {
@@ -202,6 +187,7 @@ export class CowPreviewScene extends Scene {
     this.renderStrip(ctx, pastureTop + PASTURE_HEIGHT_TILES * tile + MARGIN, width);
     this.gore.renderSettled(ctx, 0, 0);
     this.gore.renderFlying(ctx, 0, 0);
+    this.renderChrome(ctx);
   }
 
   /** The six standing still at the chosen zoom, where "pet" plays. */
@@ -224,12 +210,12 @@ export class CowPreviewScene extends Scene {
         progress: petting ? sincePet / HAPPY_SECONDS : 0,
         clockSeconds: this.clock + i * STRIP_CLOCK_STAGGER,
       });
-      drawText(ctx, `${walker.age} ${walker.coat}`, {
+      worldText(ctx, `${walker.age} ${walker.coat}`, {
         x: x + tile / 2,
         y: y + tile + LABEL_SIZE,
         size: LABEL_SIZE,
         align: 'center',
-        color: '#f4efe4',
+        color: previewInk.grid.caption,
         outline: true,
       });
       if (sincePet < HEART_SECONDS) {
@@ -265,7 +251,7 @@ export class CowPreviewScene extends Scene {
       const fadeStart = 1 - HEART_FADE_SHARE;
       ctx.save();
       ctx.globalAlpha = t > fadeStart ? (1 - t) / HEART_FADE_SHARE : 1;
-      drawText(ctx, '♥', {
+      worldText(ctx, '♥', {
         x: x + sway + (i - HEART_COUNT / 2) * tile * HEART_SPACING_TILES,
         y: y - rise,
         size: Math.round(tile * HEART_SIZE_TILES),
@@ -291,66 +277,45 @@ export class CowPreviewScene extends Scene {
     });
   }
 
-  private control(
-    ctx: CanvasRenderingContext2D,
-    x: number,
-    y: number,
-    label: string,
-    action: () => void,
-  ): number {
-    addButton(ctx, this.buttons, {
-      ...BUTTON_PRESETS.toggle,
-      x,
-      y,
-      width: BUTTON_WIDTH,
-      height: BUTTON_HEIGHT,
-      label,
-      action,
-    });
-    return x + BUTTON_WIDTH + BUTTON_GAP;
+  protected previewTitle(): string {
+    return 'cows preview — ?cows';
   }
 
-  private renderHeader(ctx: CanvasRenderingContext2D): void {
-    drawText(ctx, 'cows preview — ?cows', {
-      x: MARGIN,
-      y: MARGIN + TITLE_SIZE,
-      size: TITLE_SIZE,
-      color: '#fdfaf2',
-      outline: true,
-    });
-    let x = MARGIN;
-    const y = MARGIN + TITLE_SIZE + CONTROL_ROW_GAP;
-    x = this.control(ctx, x, y, `zoom ${ZOOM_LEVELS[this.zoomIndex]}x`, () => {
-      this.zoomIndex = (this.zoomIndex + 1) % ZOOM_LEVELS.length;
-    });
-    x = this.control(ctx, x, y, this.paused ? 'play' : 'pause', () => {
-      this.paused = !this.paused;
-    });
-    x = this.control(ctx, x, y, `speed ${SPEED_LEVELS[this.speedIndex]}x`, () => {
-      this.speedIndex = (this.speedIndex + 1) % SPEED_LEVELS.length;
-    });
-    x = this.control(ctx, x, y, 'pet', () => {
-      this.pettedAt = this.clock;
-    });
-    this.control(ctx, x, y, 'kill', () => {
-      this.kill();
-    });
-  }
-
-  handleMouseMove(mx: number, my: number): void {
-    setButtonMouseState(mx, my);
-  }
-
-  handleClick(mx: number, my: number): void {
-    for (const button of this.buttons) {
-      const inside =
-        mx >= button.x && mx <= button.x + button.w && my >= button.y && my <= button.y + button.h;
-      if (!inside) continue;
-      // This scene has no `AudioManager`; the call keeps the control path the
-      // same as every other button in the game.
-      playButtonSound(null);
-      button.action?.();
-      return;
-    }
+  protected previewControls(): readonly PreviewControl[] {
+    return [
+      {
+        id: 'zoom',
+        label: `zoom ${ZOOM_LEVELS[this.zoomIndex]}x`,
+        onTap: () => {
+          this.zoomIndex = (this.zoomIndex + 1) % ZOOM_LEVELS.length;
+        },
+      },
+      {
+        id: 'play',
+        label: this.paused ? 'play' : 'pause',
+        onTap: () => {
+          this.paused = !this.paused;
+        },
+      },
+      {
+        id: 'speed',
+        label: `speed ${SPEED_LEVELS[this.speedIndex]}x`,
+        onTap: () => {
+          this.speedIndex = (this.speedIndex + 1) % SPEED_LEVELS.length;
+        },
+      },
+      {
+        label: 'pet',
+        onTap: () => {
+          this.pettedAt = this.clock;
+        },
+      },
+      {
+        label: 'kill',
+        onTap: () => {
+          this.kill();
+        },
+      },
+    ];
   }
 }

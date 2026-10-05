@@ -18,13 +18,14 @@ Type safety is the highest priority in this codebase. The tsconfig has strict mo
 
 ## Canvas UI Utilities
 
-Prefer the shared utilities in `src/ui/` over raw `ctx` calls:
+Read the `add-ui` skill before touching any menu, dialog, HUD element or on-screen text. In short:
 
-- **`src/ui/TextBox.ts`** — `drawText()` for all canvas text. Handles font, color, outline, glow, word-wrap, and alignment in one call. Use `TEXT_PRESETS` for common styles (`danger`, `heading`, `label`, `value`, etc.).
-- **`src/ui/Box.ts`** — `drawBox()` / `drawModal()` for panels, dialogs, and containers; `drawProgressBar()` for fill bars; `drawOverlay()` for full-screen tints. Use `BOX_PRESETS` (e.g. `panel`, `modal`, `danger`) and `PROGRESS_PRESETS` (e.g. `hp`, `stamina`) for consistent styling.
-- **`src/ui/Button.ts`** — `drawButton()` for all canvas buttons. Handles fill, border, radius, hover brightening, press darkening, label rendering, word-wrap, glow, and shadow in one call. Use `BUTTON_PRESETS` for common styles (`primary`, `danger`, `success`, `gold`, `toggle`, `mobile`, etc.). Call `setButtonMouseState(mx, my)` once per render frame so hover/press state flows automatically to every button. Call `playButtonSound(audio)` from every `handleClick` that activates a button. Use `addButton()` (draw + register hit-rect in one call) for menu-style buttons with action callbacks. If a button needs a visual not covered by existing presets, add a new preset to `BUTTON_PRESETS` rather than hand-rolling the style inline.
+- **Surfaces** — anything on screen that takes input or hides the world is a `Surface` (`src/ui/core/UiRoot.ts`) mounted once on the scene's `UiRoot`. Its band and open order decide draw order, which press reaches it, where Escape goes, keyboard focus and whether the world halts. Never add a click chain, overlay flag or Escape branch; world taps arrive only through the scene's `handleWorldPointer`.
+- **Widgets** — `src/ui/widgets/` (`text`, `button`, `iconButton`, `panel`, `scrollView`, `tabs`, `listRow`, `card`, `meter`, `itemSlot`, `choiceModal`, `pagedOverlay`, …) draw and register their hit region in one call. A menu is a `panel` with a width token (`sm`/`md`/`lg`/`xl`) filled with widgets; phones get a bottom sheet automatically.
+- **Theme** — every colour, font, size, radius, spacing and duration comes from `src/ui/theme/tokens.ts` and the skins in `skins.ts`. A new look is a new skin or token, never an inline literal. Branch on `ui.size` / `ui.density`, never on platform.
+- **World painters** — text, bars and plates painted into the game world use `src/ui/world/` (`worldText`, `worldBar`, `worldPlate`, `worldTint`) styled from `theme/worldInk.ts`. Raw `ctx` calls are fine only for game-world art (sprites, particles, geometry), never for UI chrome.
 
-Never reach for `ctx.fillText`, `ctx.strokeText`, `ctx.fillRect` for UI chrome when these utilities already handle the pattern — raw `ctx` calls are fine only for game-world rendering (sprites, particles, geometry) where the utilities don't apply.
+`npm run check:ui-style` (part of `npm run lint`) fails on colour literals, font strings, direct `fillText`/`strokeText` and platform branches in UI code; `npm run verify:ui-input` is the click-through gate; `npm run render:ui-gallery` renders every widget and screen for review — open the PNGs.
 
 ## Code Clarity
 

@@ -52,7 +52,7 @@ import {
   type ClothColour,
   type OverlayAnchor,
 } from '../../sprites/art/villageArt';
-import { drawText } from '../../ui/TextBox';
+import { worldText } from '../../ui/world/worldText';
 import type { TownPropRenderable } from '../townPropRenderable';
 
 /** A point in world pixels. */
@@ -707,7 +707,7 @@ export class VillageAmbience {
       ctx.restore();
     }
     const stroke = (this.seconds % BONG_RING_SECONDS) / BONG_RING_SECONDS;
-    drawText(ctx, 'BONG', {
+    worldText(ctx, 'BONG', {
       x,
       y: y - BONG_TEXT_RISE_TILES * TILE_SIZE * (1 + stroke),
       size: BONG_TEXT_SIZE_PX,

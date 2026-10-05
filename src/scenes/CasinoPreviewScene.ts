@@ -13,15 +13,18 @@
  *    no-repeat and money-conservation invariants and prints a line per check.
  */
 
-import { Scene } from '../core/Scene';
 import { setViewportSize, viewportWidth, viewportHeight } from '../core/Viewport';
-import { drawText } from '../ui/TextBox';
-import { drawButton, BUTTON_PRESETS, setButtonMouseState, type ButtonResult } from '../ui/Button';
+import { worldText } from '../ui/world/worldText';
+import type { WorldGesture } from '../ui/core/UiRoot';
+import { PreviewScene, type PreviewControl } from './PreviewScene';
 import { HumanPlayer } from '../creatures/HumanPlayer';
 import { CatPlayer } from '../creatures/CatPlayer';
 import { TILE_SIZE } from '../core/constants';
 import { createClubMembership, type ClubMembership } from '../core/ClubMembership';
-import { ClubCasinoSystem } from '../systems/ClubCasinoSystem';
+import { ClubCasinoSystem, type CasinoAction } from '../systems/ClubCasinoSystem';
+import { casinoFit, fitRectToScreen } from '../ui/casino/casinoLayout';
+import { chromeTarget } from '../ui/screens/dialogs/canvasChrome';
+import { contains, type Rect } from '../ui/core/geom';
 import {
   Deck,
   RANKS,
@@ -43,24 +46,21 @@ import {
   drawDeucePortrait,
   type DealerState,
 } from '../sprites/casinoDealerSprite';
+import { previewInk } from '../ui/theme/previewInk';
+import { worldPalette } from '../ui/theme/worldInk';
 
-const BG_COLOR = '#151d18';
-const PANEL_COLOR = '#1e2a22';
-const LABEL_COLOR = '#e2e8f0';
-const SUBLABEL_COLOR = '#93a2c0';
-const PASS_COLOR = '#6ee87a';
-const FAIL_COLOR = '#e87a7a';
+const BG_COLOR = previewInk.casino.backdrop;
+const PANEL_COLOR = previewInk.casino.panel;
+const LABEL_COLOR = worldPalette.ink.primary;
+const SUBLABEL_COLOR = previewInk.casino.sublabel;
+const PASS_COLOR = previewInk.casino.pass;
+const FAIL_COLOR = previewInk.casino.fail;
 
 const MARGIN = 24;
-const TITLE_SIZE = 18;
 const LABEL_SIZE = 12;
 const SMALL_LABEL_SIZE = 10;
-const TAB_HEIGHT = 30;
-const TAB_WIDTH = 96;
-const TAB_GAP = 6;
-const TAB_ROW_Y = 40;
-const TAB_ROW_GAP = 16;
-const CONTENT_TOP = TAB_ROW_Y + TAB_HEIGHT + TAB_ROW_GAP;
+/** Gap between the header and the tab's content. */
+const CONTENT_GAP = 16;
 
 const TABS = ['Cards', 'Panel', 'Dealer', 'Deck'] as const;
 type PreviewTab = (typeof TABS)[number];
@@ -90,9 +90,6 @@ const VIEWPORT_MATRIX: ReadonlyArray<PreviewViewport> = [
   { label: '1920×1080', width: 1920, height: 1080 },
 ];
 
-const VIEWPORT_BTN_WIDTH = 82;
-const VIEWPORT_BTN_HEIGHT = 26;
-const VIEWPORT_BTN_GAP = 6;
 const PREVIEW_STARTING_COINS = 400;
 
 // Dealer tab.
@@ -134,8 +131,6 @@ const CLOSE_REPEATS = 3;
 const SIM_CARDS_PER_ROUND_MIN = 4;
 const SIM_CARDS_PER_ROUND_MAX = 11;
 const LINE_HEIGHT = 18;
-const READOUT_BTN_WIDTH = 200;
-const READOUT_BTN_HEIGHT = 30;
 
 /** The expected totals for the ace-promotion check, spelled out rather than inline. */
 const SOFT_TWENTY_ONE = 21;
@@ -467,18 +462,14 @@ function runInvariants(): ReadonlyArray<InvariantResult> {
   ];
 }
 
-export class CasinoPreviewScene extends Scene {
+export class CasinoPreviewScene extends PreviewScene {
   private frames = 0;
   private tab: PreviewTab = 'Cards';
   private viewportIndex = 0;
   private results: ReadonlyArray<InvariantResult> | null = null;
 
-  private mouseX = 0;
-  private mouseY = 0;
-
-  private tabButtons: Array<{ result: ButtonResult; tab: PreviewTab }> = [];
-  private viewportButtons: Array<{ result: ButtonResult; index: number }> = [];
-  private runButton: ButtonResult | null = null;
+  /** The table's live controls from the last Panel frame, in the letterboxed viewport's space; later entries sit on top. */
+  private tableControls: Array<{ rect: Rect; action: CasinoAction }> = [];
 
   private readonly membership: ClubMembership = createClubMembership();
   private readonly player = new HumanPlayer(0, 0, TILE_SIZE);
@@ -492,32 +483,64 @@ export class CasinoPreviewScene extends Scene {
     this.casino.dismissRules();
   }
 
-  handleMouseMove(mx: number, my: number): void {
-    this.mouseX = mx;
-    this.mouseY = my;
+  protected previewTitle(): string {
+    return 'Blackjack — Desperado Club review harness';
   }
 
-  handleClick(mx: number, my: number): void {
-    for (const tab of this.tabButtons) {
-      if (tab.result.contains(mx, my)) {
-        this.tab = tab.tab;
-        return;
-      }
-    }
+  protected previewControls(): readonly PreviewControl[] {
+    const tabs: PreviewControl[] = TABS.map((tab) => ({
+      label: tab,
+      selected: tab === this.tab,
+      onTap: () => {
+        this.tab = tab;
+      },
+    }));
     if (this.tab === 'Panel') {
-      for (const button of this.viewportButtons) {
-        if (button.result.contains(mx, my)) {
-          this.viewportIndex = button.index;
-          return;
-        }
-      }
-      const inset = this.panelInset();
-      this.casino.handleClick(mx - inset.x, my - inset.y, this.player, this.companion);
-      return;
+      const viewports: PreviewControl[] = VIEWPORT_MATRIX.map((viewport, index) => ({
+        label: viewport.label,
+        selected: index === this.viewportIndex,
+        onTap: () => {
+          this.viewportIndex = index;
+        },
+      }));
+      return [...tabs, ...viewports];
     }
-    if (this.tab === 'Deck' && this.runButton?.contains(mx, my) === true) {
-      this.results = runInvariants();
+    if (this.tab === 'Deck') {
+      return [
+        ...tabs,
+        {
+          label: 'Run invariant checks',
+          onTap: () => {
+            this.results = runInvariants();
+          },
+        },
+      ];
     }
+    return tabs;
+  }
+
+  /** A tap inside the letterboxed table presses the topmost live control under it. */
+  protected handlePreviewWorldPointer(gesture: WorldGesture): void {
+    if (this.tab !== 'Panel' || gesture.kind !== 'up' || !gesture.tap) return;
+    const inset = this.panelInset();
+    const tableX = gesture.cssX - inset.x;
+    const tableY = gesture.cssY - inset.y;
+    const hit = [...this.tableControls]
+      .reverse()
+      .find((control) => contains(control.rect, tableX, tableY));
+    if (hit !== undefined) this.casino.act(hit.action, this.player, this.companion);
+  }
+
+  /** The mouse in canvas pixels, or null while it is off the canvas. */
+  private canvasMouse(): { x: number; y: number } | null {
+    const mouse = this.ui.mouse;
+    if (mouse === null) return null;
+    const scale = this.ui.uiScale;
+    return { x: mouse.x * scale, y: mouse.y * scale };
+  }
+
+  private get contentTop(): number {
+    return this.headerBottom + CONTENT_GAP;
   }
 
   update(): void {
@@ -534,53 +557,27 @@ export class CasinoPreviewScene extends Scene {
     ctx.fillStyle = BG_COLOR;
     ctx.fillRect(0, 0, width, height);
 
-    setButtonMouseState(this.mouseX, this.mouseY);
-
-    drawText(ctx, 'Blackjack — Desperado Club review harness', {
-      x: MARGIN,
-      y: 14,
-      size: TITLE_SIZE,
-      bold: true,
-      color: LABEL_COLOR,
-    });
-
-    this.renderTabs(ctx);
-
     switch (this.tab) {
       case 'Cards':
         this.renderCardsTab(ctx, width);
-        return;
+        break;
       case 'Panel':
         this.renderPanelTab(ctx, width, height);
-        return;
+        break;
       case 'Dealer':
         this.renderDealerTab(ctx);
-        return;
+        break;
       case 'Deck':
         this.renderDeckTab(ctx);
-        return;
+        break;
     }
-  }
-
-  private renderTabs(ctx: CanvasRenderingContext2D): void {
-    this.tabButtons = [];
-    TABS.forEach((tab, i) => {
-      const result = drawButton(ctx, {
-        x: MARGIN + i * (TAB_WIDTH + TAB_GAP),
-        y: TAB_ROW_Y,
-        width: TAB_WIDTH,
-        height: TAB_HEIGHT,
-        label: tab,
-        ...(tab === this.tab ? BUTTON_PRESETS.gold : BUTTON_PRESETS.primary),
-      });
-      this.tabButtons.push({ result, tab });
-    });
+    this.renderChrome(ctx);
   }
 
   private renderCardsTab(ctx: CanvasRenderingContext2D, width: number): void {
-    let y = CONTENT_TOP;
+    let y = this.contentTop;
     for (const size of CARD_SIZES) {
-      drawText(ctx, `${size}px wide`, {
+      worldText(ctx, `${size}px wide`, {
         x: MARGIN,
         y,
         size: LABEL_SIZE,
@@ -614,26 +611,12 @@ export class CasinoPreviewScene extends Scene {
     }
   }
 
-  /** Top-left of the letterboxed viewport, so clicks can be mapped into it. */
+  /** Top-left of the letterboxed viewport, so taps can be mapped into it. */
   private panelInset(): { x: number; y: number } {
-    return { x: MARGIN, y: CONTENT_TOP + VIEWPORT_BTN_HEIGHT + CARD_ROW_GAP };
+    return { x: MARGIN, y: this.contentTop };
   }
 
   private renderPanelTab(ctx: CanvasRenderingContext2D, width: number, height: number): void {
-    this.viewportButtons = [];
-    VIEWPORT_MATRIX.forEach((viewport, i) => {
-      const result = drawButton(ctx, {
-        x: MARGIN + i * (VIEWPORT_BTN_WIDTH + VIEWPORT_BTN_GAP),
-        y: CONTENT_TOP,
-        width: VIEWPORT_BTN_WIDTH,
-        height: VIEWPORT_BTN_HEIGHT,
-        label: viewport.label,
-        labelSize: SMALL_LABEL_SIZE,
-        ...(i === this.viewportIndex ? BUTTON_PRESETS.gold : BUTTON_PRESETS.primary),
-      });
-      this.viewportButtons.push({ result, index: i });
-    });
-
     const viewport = VIEWPORT_MATRIX[this.viewportIndex];
     const inset = this.panelInset();
 
@@ -648,13 +631,13 @@ export class CasinoPreviewScene extends Scene {
     ctx.rect(0, 0, viewport.width, viewport.height);
     ctx.clip();
     setViewportSize(viewport.width, viewport.height);
-    setButtonMouseState(this.mouseX - inset.x, this.mouseY - inset.y);
-    this.casino.renderPanel(ctx, this.player, this.companion);
+    const mouse = this.canvasMouse();
+    const tableMouse = mouse === null ? null : { x: mouse.x - inset.x, y: mouse.y - inset.y };
+    this.paintTable(ctx, viewport, tableMouse);
     setViewportSize(width, height);
     ctx.restore();
-    setButtonMouseState(this.mouseX, this.mouseY);
 
-    drawText(ctx, `${viewport.label} — click inside to play the table`, {
+    worldText(ctx, `${viewport.label} — tap inside to play the table`, {
       x: inset.x,
       y: inset.y + viewport.height + CARD_GRID_GAP,
       size: SMALL_LABEL_SIZE,
@@ -662,12 +645,40 @@ export class CasinoPreviewScene extends Scene {
     });
   }
 
+  /** The table at one UI unit per pixel, its controls kept for `handlePreviewWorldPointer` to map taps onto. */
+  private paintTable(
+    ctx: CanvasRenderingContext2D,
+    viewport: PreviewViewport,
+    mouse: { x: number; y: number } | null,
+  ): void {
+    const fit = casinoFit(viewport.width, viewport.height);
+    this.tableControls = [];
+    this.casino.paintTable(
+      {
+        target: chromeTarget(ctx),
+        viewportW: viewport.width,
+        viewportH: viewport.height,
+        fit,
+        keyHints: true,
+        control: (control) => {
+          const rect = fitRectToScreen(fit, control.rect);
+          if (!control.disabled) this.tableControls.push({ rect, action: control.action });
+          const hovered = mouse !== null && contains(rect, mouse.x, mouse.y);
+          return { hovered, pressed: false, focused: false };
+        },
+        focusGroup: () => undefined,
+      },
+      this.player,
+      this.companion,
+    );
+  }
+
   private renderDealerTab(ctx: CanvasRenderingContext2D): void {
     DEALER_STATES.forEach((state, i) => {
       const column = i % PORTRAIT_COLUMNS;
       const row = Math.floor(i / PORTRAIT_COLUMNS);
       const x = MARGIN + column * PORTRAIT_CELL_W;
-      const y = CONTENT_TOP + row * PORTRAIT_CELL_H;
+      const y = this.contentTop + row * PORTRAIT_CELL_H;
       ctx.fillStyle = PANEL_COLOR;
       ctx.fillRect(
         x,
@@ -685,7 +696,7 @@ export class CasinoPreviewScene extends Scene {
         this.frames,
         { lookY: 1 },
       );
-      drawText(ctx, state, {
+      worldText(ctx, state, {
         x: x + (PORTRAIT_CELL_W - PORTRAIT_INSET) / 2,
         y: y + PORTRAIT_CELL_H - PORTRAIT_INSET * 2,
         size: SMALL_LABEL_SIZE,
@@ -695,8 +706,8 @@ export class CasinoPreviewScene extends Scene {
     });
 
     const worldRow =
-      CONTENT_TOP + Math.ceil(DEALER_STATES.length / PORTRAIT_COLUMNS) * PORTRAIT_CELL_H;
-    drawText(ctx, 'World figure — resting / dealing', {
+      this.contentTop + Math.ceil(DEALER_STATES.length / PORTRAIT_COLUMNS) * PORTRAIT_CELL_H;
+    worldText(ctx, 'World figure — resting / dealing', {
       x: MARGIN,
       y: worldRow,
       size: LABEL_SIZE,
@@ -716,19 +727,10 @@ export class CasinoPreviewScene extends Scene {
   }
 
   private renderDeckTab(ctx: CanvasRenderingContext2D): void {
-    this.runButton = drawButton(ctx, {
-      x: MARGIN,
-      y: CONTENT_TOP,
-      width: READOUT_BTN_WIDTH,
-      height: READOUT_BTN_HEIGHT,
-      label: 'Run invariant checks',
-      ...BUTTON_PRESETS.gold,
-    });
-
-    let y = CONTENT_TOP + READOUT_BTN_HEIGHT + CARD_ROW_GAP;
+    let y = this.contentTop;
     const results = this.results;
     if (results === null) {
-      drawText(ctx, 'Not run yet — the long checks simulate 10,000 rounds and take a moment.', {
+      worldText(ctx, 'Not run yet — the long checks simulate 10,000 rounds and take a moment.', {
         x: MARGIN,
         y,
         size: LABEL_SIZE,
@@ -738,7 +740,7 @@ export class CasinoPreviewScene extends Scene {
     }
 
     for (const result of results) {
-      drawText(ctx, `${result.passed ? 'PASS' : 'FAIL'}  ${result.label}  —  ${result.detail}`, {
+      worldText(ctx, `${result.passed ? 'PASS' : 'FAIL'}  ${result.label}  —  ${result.detail}`, {
         x: MARGIN,
         y,
         size: LABEL_SIZE,

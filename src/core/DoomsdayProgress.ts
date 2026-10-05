@@ -68,9 +68,9 @@ export function formatCountdownClock(deadlineAt: number): string {
   return `${mm}:${ss}`;
 }
 
-/** Red once under a minute remains, amber otherwise — shared urgency threshold for countdown HUDs. */
-export function countdownUrgencyColor(deadlineAt: number): string {
-  return countdownSecondsLeft(deadlineAt) <= SECONDS_PER_MINUTE ? '#ef4444' : '#fbbf24';
+/** Whether a minute or less remains: the shared threshold at which a countdown HUD turns from warning to danger. */
+export function isCountdownUrgent(deadlineAt: number): boolean {
+  return countdownSecondsLeft(deadlineAt) <= SECONDS_PER_MINUTE;
 }
 
 /**

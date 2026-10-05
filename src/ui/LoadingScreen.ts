@@ -8,35 +8,22 @@
  *   No state, no clock of its own — what the boot screen and the preview
  *   renderer use.
  * - {@link LoadingOverlay} is the host a scene holds while it loads: it owns a
- *   {@link LoadRunner}, ticks it once per rendered frame, draws the screen,
- *   fades it out once the work is done, and hands the scene an overlay claim so
- *   the keyboard and the world stay still underneath it.
+ *   {@link LoadRunner} and a surface the scene mounts, which ticks the work
+ *   once per rendered frame and draws the screen in place of the world while
+ *   the keyboard and the world stay still underneath it. Once the work is done
+ *   the scene draws its fade-out over the world.
  * - {@link showLoadingScreen} is the boot-time variant, which runs its own
  *   animation loop because there is no scene yet to host it.
  */
-import {
-  drawBox,
-  drawDivider,
-  drawOverlay,
-  drawProgressBar,
-  BOX_PRESETS,
-  PROGRESS_PRESETS,
-} from './Box';
-import { drawText, measureTextBox } from './TextBox';
 import { viewportWidth, viewportHeight } from '../core/Viewport';
+import { keybindings } from '../core/Keybindings';
 import { LoadRunner, type LoadRunnerOptions, type LoadTask } from '../core/LoadRunner';
-import type { OverlayInputClaim } from '../systems/kits/OverlayClaims';
-
-const BACKGROUND_COLOR = '#05070f';
-const GOLD = '#facc15';
-const TITLE_COLOR = '#f8fafc';
-const STATUS_COLOR = '#cbd5e1';
-const TIP_COLOR = '#94a3b8';
-const TIP_LABEL_COLOR = '#fde68a';
-const DIVIDER_COLOR = 'rgba(250,204,21,0.35)';
-const TITLE_GLOW = 'rgba(250,204,21,0.45)';
-const TITLE_OUTLINE = '#020617';
-const MOTE_COLOR = 'rgba(250,204,21,0.5)';
+import { chromeTarget, drawBar, drawRule } from './screens/dialogs/canvasChrome';
+import { withAlpha } from './theme/color';
+import { skinsFor } from './theme/skins';
+import { drawGlass, fillRounded, type PaintTarget } from './widgets/paint';
+import type { Surface } from './core/UiRoot';
+import { measureTextHeight, text } from './widgets/text';
 
 /** Widest the card grows, on a desktop. */
 const CARD_MAX_WIDTH = 480;
@@ -53,26 +40,11 @@ const COMPACT_CARD_PADDING = 18;
  */
 const MIN_CARD_WIDTH = COMPACT_CARD_PADDING * 2 + 1;
 
-const KICKER_SIZE = 12;
-const TITLE_SIZE = 30;
-const COMPACT_TITLE_SIZE = 22;
-const STATUS_SIZE = 12;
-const STATUS_LINE_HEIGHT = 17;
 /** Room kept at the right of the status line for "100%". */
 const PERCENT_LABEL_RESERVE_PX = 44;
-const TIP_SIZE = 12;
-const TIP_LINE_HEIGHT = 17;
-const TITLE_GLOW_BLUR = 18;
-const TITLE_OUTLINE_WIDTH = 4;
 
-const KICKER_TO_TITLE_GAP = 8;
-const TITLE_TO_DIVIDER_GAP = 16;
-const DIVIDER_TO_BAR_GAP = 20;
-const BAR_HEIGHT = 16;
-const BAR_TO_STATUS_GAP = 10;
-const STATUS_TO_TIP_GAP = 22;
-const TIP_LABEL_TO_TEXT_GAP = 6;
-/** Share of the card's inner width the divider under the title spans. */
+const BAR_HEIGHT = 10;
+/** Share of the card's inner width the rule under the title spans. */
 const DIVIDER_WIDTH_FRACTION = 0.5;
 /** Nudges the card above centre, where a reader's eye rests on a blank screen. */
 const CARD_LIFT_FRACTION = 0.04;
@@ -90,7 +62,7 @@ const MOTE_COUNT = 18;
 const MOTE_RISE_MS = 14000;
 const MOTE_MIN_SIZE = 1.5;
 const MOTE_SIZE_RANGE = 2;
-const MOTE_MAX_ALPHA = 0.55;
+const MOTE_MAX_ALPHA = 0.5;
 /** Horizontal sway of a mote as it rises, in px. */
 const MOTE_SWAY_PX = 10;
 /** Constants of a cheap, fixed hash, so the motes sit in the same places every run. */
@@ -98,6 +70,11 @@ const MOTE_HASH_X = 0.6180339887;
 const MOTE_HASH_PHASE = 0.3819660113;
 const MOTE_HASH_SIZE = 0.7548776662;
 const FULL_TURN = Math.PI * 2;
+/** Strength of the warm glow pooled behind the card. */
+const BACKDROP_GLOW_ALPHA = 0.08;
+/** Radius of that glow, as a fraction of the screen's longer side. */
+const BACKDROP_GLOW_RADIUS = 0.6;
+const TIP_LABEL = 'Tip';
 
 /** One frame's worth of what the loading screen shows. */
 export interface LoadingScreenView {
@@ -125,13 +102,18 @@ function fractionalPart(value: number): number {
   return value - Math.floor(value);
 }
 
-function drawMotes(
-  ctx: CanvasRenderingContext2D,
-  cw: number,
-  ch: number,
-  timeMs: number,
-  alpha: number,
-): void {
+function drawBackdrop(target: PaintTarget, cw: number, ch: number, timeMs: number): void {
+  const { ctx, theme } = target;
+  const { palette } = theme;
+  ctx.fillStyle = palette.surface.sunken;
+  ctx.fillRect(0, 0, cw, ch);
+  const glowRadius = Math.max(1, Math.max(cw, ch) * BACKDROP_GLOW_RADIUS);
+  const glow = ctx.createRadialGradient(cw / 2, ch / 2, 0, cw / 2, ch / 2, glowRadius);
+  glow.addColorStop(0, withAlpha(palette.accent.base, BACKDROP_GLOW_ALPHA));
+  glow.addColorStop(1, withAlpha(palette.accent.base, 0));
+  ctx.fillStyle = glow;
+  ctx.fillRect(0, 0, cw, ch);
+
   for (let index = 0; index < MOTE_COUNT; index++) {
     const seedX = fractionalPart((index + 1) * MOTE_HASH_X);
     const seedPhase = fractionalPart((index + 1) * MOTE_HASH_PHASE);
@@ -141,15 +123,12 @@ function drawMotes(
     const sway = Math.sin((rise + seedX) * FULL_TURN) * MOTE_SWAY_PX;
     // Brightest mid-screen, fading at both ends, so no mote pops in or out.
     const fadeInOut = Math.sin(rise * Math.PI);
-    drawBox(ctx, {
-      x: seedX * cw + sway,
-      y: ch - rise * ch,
-      width: size,
-      height: size,
-      radius: size / 2,
-      fill: MOTE_COLOR,
-      alpha: alpha * fadeInOut * MOTE_MAX_ALPHA,
-    });
+    fillRounded(
+      ctx,
+      { x: seedX * cw + sway, y: ch - rise * ch, w: size, h: size },
+      size / 2,
+      withAlpha(palette.accent.base, fadeInOut * MOTE_MAX_ALPHA),
+    );
   }
 }
 
@@ -167,6 +146,16 @@ export function drawLoadingScreen(
   canvasWidth: number,
   canvasHeight: number,
 ): void {
+  paintLoadingScreen(chromeTarget(ctx), view, canvasWidth, canvasHeight);
+}
+
+function paintLoadingScreen(
+  target: PaintTarget,
+  view: LoadingScreenView,
+  canvasWidth: number,
+  canvasHeight: number,
+): void {
+  const { ctx } = target;
   const alpha = finiteOr(view.alpha ?? 1, 0);
   if (alpha <= 0) return;
   const cw = Math.max(0, finiteOr(canvasWidth, 0));
@@ -176,47 +165,40 @@ export function drawLoadingScreen(
   // of a load can arrive with a slightly negative clock.
   const timeMs = Math.max(0, finiteOr(view.timeMs, 0));
 
-  drawOverlay(ctx, { canvasWidth: cw, canvasHeight: ch, color: BACKGROUND_COLOR, alpha });
-  drawMotes(ctx, cw, ch, timeMs, alpha);
+  const { theme } = target;
+  const { type, space, palette } = theme;
+
+  ctx.save();
+  ctx.globalAlpha *= Math.min(1, alpha);
+  drawBackdrop(target, cw, ch, timeMs);
 
   const cardWidth = Math.max(MIN_CARD_WIDTH, Math.min(CARD_MAX_WIDTH, cw - SCREEN_GUTTER * 2));
   const compact = cardWidth < COMPACT_CARD_WIDTH;
   const padding = compact ? COMPACT_CARD_PADDING : CARD_PADDING;
   const innerWidth = cardWidth - padding * 2;
-  const titleSize = compact ? COMPACT_TITLE_SIZE : TITLE_SIZE;
+  const titleStyle = compact ? type.heading : type.display;
 
-  const kickerHeight =
-    view.kicker === undefined
-      ? 0
-      : measureTextBox(ctx, view.kicker, { size: KICKER_SIZE, bold: true, width: innerWidth })
-          .totalHeight + KICKER_TO_TITLE_GAP;
-  const titleHeight = measureTextBox(ctx, view.title, {
-    size: titleSize,
-    bold: true,
-    width: innerWidth,
-  }).totalHeight;
-  const statusHeight = STATUS_LINE_HEIGHT;
-  const tipLabelHeight = measureTextBox(ctx, 'TIP', { size: KICKER_SIZE, bold: true }).totalHeight;
+  const kickerHeight = view.kicker === undefined ? 0 : type.overline.lineHeight + space.sm;
+  const titleHeight = measureTextHeight(target, innerWidth, {
+    text: view.title,
+    style: titleStyle,
+  });
+  const statusHeight = type.caption.lineHeight;
   const tipHeight =
     view.tip === undefined
       ? 0
-      : STATUS_TO_TIP_GAP +
-        tipLabelHeight +
-        TIP_LABEL_TO_TEXT_GAP +
-        measureTextBox(ctx, view.tip, {
-          size: TIP_SIZE,
-          italic: true,
-          width: innerWidth,
-          lineHeight: TIP_LINE_HEIGHT,
-        }).totalHeight;
+      : space.xl +
+        type.overline.lineHeight +
+        space.xs +
+        measureTextHeight(target, innerWidth, { text: view.tip, role: 'secondary' });
 
   const contentHeight =
     kickerHeight +
     titleHeight +
-    TITLE_TO_DIVIDER_GAP +
-    DIVIDER_TO_BAR_GAP +
+    space.lg +
+    space.lg +
     BAR_HEIGHT +
-    BAR_TO_STATUS_GAP +
+    space.sm +
     statusHeight +
     tipHeight;
   const cardHeight = contentHeight + padding * 2;
@@ -224,128 +206,86 @@ export function drawLoadingScreen(
     SCREEN_GUTTER,
     Math.round((ch - cardHeight) / 2 - ch * CARD_LIFT_FRACTION),
   );
+  const card = { x: Math.round(cw / 2 - cardWidth / 2), y: cardTop, w: cardWidth, h: cardHeight };
+  drawGlass(target, card, skinsFor(theme).panel.card);
 
-  const card = drawBox(ctx, {
-    x: Math.round(cw / 2),
-    y: cardTop,
-    width: cardWidth,
-    height: cardHeight,
-    alignX: 'center',
-    padding,
-    alpha,
-    ...BOX_PRESETS.loading,
-  });
-  const inner = card.inner;
-  const centreX = inner.x + inner.width / 2;
-  let cursorY = inner.y;
+  const innerX = card.x + padding;
+  const centreX = innerX + innerWidth / 2;
+  let cursorY = card.y + padding;
 
   if (view.kicker !== undefined) {
-    drawText(ctx, view.kicker.toUpperCase(), {
-      x: inner.x,
-      y: cursorY,
-      width: inner.width,
-      align: 'center',
-      size: KICKER_SIZE,
-      bold: true,
-      color: GOLD,
-      alpha,
-    });
+    text(
+      target,
+      { x: innerX, y: cursorY, w: innerWidth, h: type.overline.lineHeight },
+      { text: view.kicker, role: 'overline', color: palette.accent.base, align: 'center' },
+    );
     cursorY += kickerHeight;
   }
 
-  drawText(ctx, view.title, {
-    x: inner.x,
-    y: cursorY,
-    width: inner.width,
-    align: 'center',
-    size: titleSize,
-    bold: true,
-    color: TITLE_COLOR,
-    outline: TITLE_OUTLINE,
-    outlineWidth: TITLE_OUTLINE_WIDTH,
-    glow: TITLE_GLOW,
-    glowBlur: TITLE_GLOW_BLUR,
-    alpha,
-  });
-  cursorY += titleHeight + TITLE_TO_DIVIDER_GAP;
+  text(
+    target,
+    { x: innerX, y: cursorY, w: innerWidth, h: titleHeight },
+    { text: view.title, style: titleStyle, wrap: true, align: 'center' },
+  );
+  cursorY += titleHeight + space.lg;
 
-  const dividerLength = inner.width * DIVIDER_WIDTH_FRACTION;
-  drawDivider(ctx, {
-    x: centreX - dividerLength / 2,
-    y: cursorY,
-    length: dividerLength,
-    color: DIVIDER_COLOR,
-    alpha,
-  });
-  cursorY += DIVIDER_TO_BAR_GAP;
+  const dividerLength = innerWidth * DIVIDER_WIDTH_FRACTION;
+  drawRule(target, centreX - dividerLength / 2, cursorY, dividerLength, palette.accent.base);
+  cursorY += space.lg;
 
   const progress = Math.max(0, Math.min(1, finiteOr(view.progress, 0)));
-  drawProgressBar(ctx, {
-    x: inner.x,
-    y: cursorY,
-    width: inner.width,
-    height: BAR_HEIGHT,
-    value: progress,
-    alpha,
-    shimmerPhase: timeMs / SHIMMER_PERIOD_MS,
-    ...PROGRESS_PRESETS.loading,
-  });
-  cursorY += BAR_HEIGHT + BAR_TO_STATUS_GAP;
+  drawBar(
+    target,
+    { x: innerX, y: cursorY, w: innerWidth, h: BAR_HEIGHT },
+    { value: progress, fill: palette.accent.base, shimmerPhase: timeMs / SHIMMER_PERIOD_MS },
+  );
+  cursorY += BAR_HEIGHT + space.sm;
 
   // A finished load has nothing still going on to animate.
   const stillWorking = progress < 1;
   const ellipsis = stillWorking
     ? '.'.repeat(Math.floor(timeMs / ELLIPSIS_STEP_MS) % ELLIPSIS_STEPS)
     : '';
-  const percentLabel = `${Math.floor(progress * PERCENT)}%`;
-  // Held to one line, clipped rather than wrapped: a status that wrapped would
-  // push the tip down and make the card jump between tasks.
-  drawText(ctx, `${view.status}${ellipsis}`, {
-    x: inner.x,
-    y: cursorY,
-    width: Math.max(0, inner.width - PERCENT_LABEL_RESERVE_PX),
-    size: STATUS_SIZE,
-    color: STATUS_COLOR,
-    lineHeight: statusHeight,
-    height: statusHeight,
-    alpha,
-  });
-  drawText(ctx, percentLabel, {
-    x: inner.x + inner.width,
-    y: cursorY,
-    align: 'right',
-    size: STATUS_SIZE,
-    bold: true,
-    color: GOLD,
-    alpha,
-  });
+  // Held to one line, ending in an ellipsis rather than wrapping: a status that
+  // wrapped would push the tip down and make the card jump between tasks.
+  text(
+    target,
+    {
+      x: innerX,
+      y: cursorY,
+      w: Math.max(0, innerWidth - PERCENT_LABEL_RESERVE_PX),
+      h: statusHeight,
+    },
+    { text: `${view.status}${ellipsis}`, role: 'caption' },
+  );
+  text(
+    target,
+    { x: innerX, y: cursorY, w: innerWidth, h: statusHeight },
+    {
+      text: `${Math.floor(progress * PERCENT)}%`,
+      style: type.label,
+      color: palette.accent.base,
+      align: 'right',
+      tabular: true,
+    },
+  );
   cursorY += statusHeight;
 
   if (view.tip !== undefined) {
-    cursorY += STATUS_TO_TIP_GAP;
-    drawText(ctx, 'TIP', {
-      x: inner.x,
-      y: cursorY,
-      width: inner.width,
-      align: 'center',
-      size: KICKER_SIZE,
-      bold: true,
-      color: TIP_LABEL_COLOR,
-      alpha,
-    });
-    cursorY += tipLabelHeight + TIP_LABEL_TO_TEXT_GAP;
-    drawText(ctx, view.tip, {
-      x: inner.x,
-      y: cursorY,
-      width: inner.width,
-      align: 'center',
-      size: TIP_SIZE,
-      italic: true,
-      color: TIP_COLOR,
-      lineHeight: TIP_LINE_HEIGHT,
-      alpha,
-    });
+    cursorY += space.xl;
+    text(
+      target,
+      { x: innerX, y: cursorY, w: innerWidth, h: type.overline.lineHeight },
+      { text: TIP_LABEL, role: 'overline', color: palette.accent.base, align: 'center' },
+    );
+    cursorY += type.overline.lineHeight + space.xs;
+    text(
+      target,
+      { x: innerX, y: cursorY, w: innerWidth, h: 0 },
+      { text: view.tip, role: 'secondary', wrap: true, align: 'center' },
+    );
   }
+  ctx.restore();
 }
 
 /** Milliseconds the screen takes to fade out over the world once the work is done. */
@@ -367,11 +307,12 @@ export interface LoadingOverlayOptions {
 /**
  * The loading screen as a scene holds it.
  *
- * A scene constructs one when it has up-front work worth covering, and while
- * {@link isOpen} it renders only this — calling {@link renderFrame} once per
- * rendered frame, which is what ticks the work — and skips its own `update`.
- * Once the work is done the overlay stays {@link isVisible} a moment longer,
- * fading out over the world the scene is now drawing beneath it.
+ * A scene constructs one when it has up-front work worth covering and mounts
+ * its {@link surface}. While {@link isOpen} the scene skips its own `update`
+ * and, in `render`, frames only its `UiRoot`: the surface draws the screen
+ * over everything, and drawing it is what ticks the work. Once the work is
+ * done the overlay stays {@link isVisible} a moment longer, and the scene
+ * calls {@link renderFadeOut} after its UI so it fades out over the world.
  */
 export class LoadingOverlay {
   readonly runner: LoadRunner;
@@ -399,54 +340,72 @@ export class LoadingOverlay {
     return this.closedAtMs === null;
   }
 
+  /**
+   * Whether the work is done. A method rather than a getter so a caller that
+   * checked {@link isOpen} before framing the surface (which ticks the work)
+   * reads it afresh afterwards.
+   */
+  hasFinished(): boolean {
+    return this.closedAtMs !== null;
+  }
+
   /** True while the screen still draws anything — open, or fading out. */
   get isVisible(): boolean {
     return this.closedAtMs === null || this.now() - this.closedAtMs < FADE_OUT_MS;
   }
 
   /**
-   * Ticks the work (while open) and draws the screen. Call once per rendered
-   * frame, after the world when fading and instead of it while open. Returns
-   * {@link isOpen} as it stands after this frame's work.
+   * The screen as a surface: open exactly while {@link isOpen}, in the system
+   * band so it covers everything and takes every press, halting the world,
+   * locking the keyboard and holding Escape. A fresh press of the attack key
+   * is spent on it rather than left to swing a weapon nobody can see.
    */
-  renderFrame(ctx: CanvasRenderingContext2D, canvasWidth: number, canvasHeight: number): boolean {
-    if (this.closedAtMs === null) {
-      this.runner.tick();
-      if (this.runner.isFinished) this.closedAtMs = this.now();
-    }
+  surface(id: string): Surface {
+    return {
+      id,
+      band: 'system',
+      haltsWorld: true,
+      locksKeyboard: true,
+      blocksEscape: true,
+      isOpen: () => this.isOpen,
+      render: (ui) => {
+        this.tick();
+        paintLoadingScreen(ui, this.view(), ui.screen.w, ui.screen.h);
+      },
+      onKey: (key) => keybindings.actionFor(key) === 'attack',
+    };
+  }
+
+  /**
+   * Draws the screen fading out over the world, once the work is done; does
+   * nothing while it is still open or once the fade has finished. Call after
+   * the scene's UI, on a context in canvas CSS pixels.
+   */
+  renderFadeOut(ctx: CanvasRenderingContext2D, canvasWidth: number, canvasHeight: number): void {
+    if (this.isOpen || !this.isVisible) return;
+    drawLoadingScreen(ctx, this.view(), canvasWidth, canvasHeight);
+  }
+
+  private tick(): void {
+    if (this.closedAtMs !== null) return;
+    this.runner.tick();
+    if (this.runner.isFinished) this.closedAtMs = this.now();
+  }
+
+  private view(): LoadingScreenView {
     const timeMs = Math.max(0, this.now() - this.openedAtMs);
     const fadeAlpha =
       this.closedAtMs === null ? 1 : 1 - (this.now() - this.closedAtMs) / FADE_OUT_MS;
     const tipIndex =
       (this.firstTip + Math.floor(timeMs / TIP_ROTATION_MS)) % Math.max(1, this.tips.length);
-    drawLoadingScreen(
-      ctx,
-      {
-        title: this.title,
-        kicker: this.kicker,
-        progress: this.runner.progress,
-        status: this.runner.tasksDone ? 'Ready' : this.runner.statusLabel,
-        tip: this.tips[tipIndex],
-        timeMs,
-        alpha: Math.max(0, fadeAlpha),
-      },
-      canvasWidth,
-      canvasHeight,
-    );
-    return this.isOpen;
-  }
-
-  /**
-   * The overlay's claim on input while open: the keyboard locked, the world
-   * halted, Space swallowed. Nothing on it can be focused.
-   */
-  overlayClaim(): OverlayInputClaim {
     return {
-      isOpen: this.isOpen,
-      space: { kind: 'swallow' },
-      focusContext: null,
-      locksKeyboard: true,
-      haltsWorld: true,
+      title: this.title,
+      kicker: this.kicker,
+      progress: this.runner.progress,
+      status: this.runner.tasksDone ? 'Ready' : this.runner.statusLabel,
+      tip: this.tips[tipIndex],
+      timeMs,
+      alpha: Math.max(0, fadeAlpha),
     };
   }
 }

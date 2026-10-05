@@ -5,18 +5,23 @@
  *
  * Everything here is painted flat on the ground *before* the Y-sorted entity
  * pass, so anything standing on it (crawlers, staff, the furniture sprites in
- * `clubProps`) draws over it. The furniture itself used to live in this file as
- * primitive shapes; it is now PNG art placed by the sorted pass, which is what
- * lets a player stand in front of a counter instead of under it.
+ * `clubProps`) draws over it. The furniture is PNG art placed by the sorted
+ * pass rather than painted here, so a player can stand in front of a counter
+ * instead of under it.
  */
 
 import { TILE_SIZE } from '../core/constants';
-import { drawText } from '../ui/TextBox';
-import { drawBox } from '../ui/Box';
+import type { Rect } from '../ui/core/geom';
+import { worldPlate } from '../ui/world/worldShapes';
+import { worldText } from '../ui/world/worldText';
 import { CLUB_ZONES, type ClubZone, type ClubStationId } from '../core/clubLayout';
 
 const TS = TILE_SIZE;
 const RUG_INSET = 4;
+const RUG_FILL_ALPHA = 0.1;
+const RUG_BORDER_ALPHA = 0.5;
+const RUG_BORDER_WIDTH = 2;
+const RUG_RADIUS = 8;
 const LABEL_SIZE = 12;
 const LABEL_TOP_OFFSET = 6;
 
@@ -37,14 +42,7 @@ const SCUFF_SPOTS: ReadonlyArray<{ fx: number; fy: number; r: number }> = [
   { fx: 0.14, fy: 0.82, r: 0.28 },
 ];
 
-interface Screen {
-  x: number;
-  y: number;
-  w: number;
-  h: number;
-}
-
-function zoneScreen(z: ClubZone, camX: number, camY: number): Screen {
+function zoneScreen(z: ClubZone, camX: number, camY: number): Rect {
   return {
     x: z.x0 * TS - camX,
     y: z.y0 * TS - camY,
@@ -60,7 +58,7 @@ export function drawClubDecor(ctx: CanvasRenderingContext2D, camX: number, camY:
     const s = zoneScreen(zone, camX, camY);
     drawZoneRug(ctx, s, zone.color);
     drawFloorWear(ctx, zone.id, s, zone.color);
-    drawText(ctx, zone.label, {
+    worldText(ctx, zone.label, {
       x: s.x + s.w / 2,
       y: s.y + LABEL_TOP_OFFSET,
       size: LABEL_SIZE,
@@ -73,17 +71,22 @@ export function drawClubDecor(ctx: CanvasRenderingContext2D, camX: number, camY:
   ctx.restore();
 }
 
-function drawZoneRug(ctx: CanvasRenderingContext2D, s: Screen, color: string): void {
-  drawBox(ctx, {
-    x: s.x + RUG_INSET,
-    y: s.y + RUG_INSET,
-    width: s.w - RUG_INSET * 2,
-    height: s.h - RUG_INSET * 2,
-    fill: hexToRgba(color, 0.1),
-    border: hexToRgba(color, 0.5),
-    borderWidth: 2,
-    radius: 8,
-  });
+function drawZoneRug(ctx: CanvasRenderingContext2D, s: Rect, color: string): void {
+  worldPlate(
+    ctx,
+    {
+      x: s.x + RUG_INSET,
+      y: s.y + RUG_INSET,
+      w: s.w - RUG_INSET * 2,
+      h: s.h - RUG_INSET * 2,
+    },
+    {
+      fill: hexToRgba(color, RUG_FILL_ALPHA),
+      border: hexToRgba(color, RUG_BORDER_ALPHA),
+      borderWidth: RUG_BORDER_WIDTH,
+      radius: RUG_RADIUS,
+    },
+  );
 }
 
 /**
@@ -94,7 +97,7 @@ function drawZoneRug(ctx: CanvasRenderingContext2D, s: Screen, color: string): v
 function drawFloorWear(
   ctx: CanvasRenderingContext2D,
   id: ClubStationId,
-  s: Screen,
+  s: Rect,
   accent: string,
 ): void {
   const stain = FLOOR_STAIN_COLOR[id];

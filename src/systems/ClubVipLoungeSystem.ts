@@ -1,79 +1,11 @@
 import { playDrinkGesture } from '../creatures/humanGestures';
 import { displayHp } from '../core/crawlerFormulas';
 import type { Player } from '../Player';
-import { canAffordCoins, partyCoins, spendPartyCoins } from '../core/partyCoins';
+import { canAffordCoins, spendPartyCoins } from '../core/partyCoins';
 import type { AudioManager } from '../audio/AudioManager';
 import type { MercenaryRoster } from '../core/MercenaryRoster';
 import type { MercenaryTemplateId } from '../core/mercenaryTemplates';
 import type { CretinVariant } from '../sprites/cretinSprite';
-import { drawText } from '../ui/TextBox';
-import {
-  drawModal,
-  drawOverlay,
-  drawBox,
-  BOX_PRESETS,
-  beginModalFit,
-  endModalFit,
-  modalFitPoint,
-  MODAL_FIT_NONE,
-  type ModalFit,
-} from '../ui/Box';
-import { fitPanel } from '../ui/panelFit';
-import {
-  beginMenuFocus,
-  drawButton,
-  endMenuFocus,
-  BUTTON_PRESETS,
-  setButtonPointerSpace,
-  resetButtonPointerSpace,
-} from '../ui/Button';
-import { pointInRect } from '../utils';
-import { viewportWidth, viewportHeight } from '../core/Viewport';
-
-// Panel geometry
-const PANEL_W = 540;
-/** Tall enough for the three service cards plus the Leave button beneath them. */
-const PANEL_H = 536;
-const PANEL_PADDING = 24;
-const OVERLAY_ALPHA = 0.6;
-
-const TITLE_SIZE = 18;
-const SUBTITLE_SIZE = 11;
-const SUBTITLE_GAP = 22;
-const COINS_SIZE = 12;
-const COINS_GAP = 22;
-
-// Service cards
-const CARDS_TOP = 96;
-const CARD_H = 94;
-const CARD_GAP = 12;
-const CARD_PAD = 14;
-const CARD_NAME_SIZE = 15;
-const CARD_NAME_Y = 22;
-const CARD_DESC_SIZE = 11;
-const CARD_DESC_Y = 44;
-const CARD_STATUS_SIZE = 11;
-const CARD_STATUS_Y = 68;
-const ACTION_BTN_W = 128;
-const ACTION_BTN_H = 44;
-const ACTION_BTN_MARGIN = 14;
-
-const FEEDBACK_SIZE = 12;
-const FEEDBACK_Y_FROM_BOTTOM = 46;
-const CLOSE_HINT_SIZE = 10;
-const CLOSE_HINT_Y_FROM_BOTTOM = 18;
-const LEAVE_BTN_W = 200;
-const LEAVE_BTN_H = 40;
-const LEAVE_BTN_Y_FROM_BOTTOM = 92;
-
-const ACCENT = '#e6c65a';
-const GOLD_TEXT = '#f6e08a';
-const MUTED_TEXT = '#cbb98a';
-// Velvet VIP dressing — a wine-dark panel and card fills instead of the default blue-grey modal.
-const VELVET_PANEL = '#1c0f16';
-const VELVET_CARD = 'rgba(74,26,44,0.55)';
-const VELVET_CARD_BORDER = '#7a3a52';
-const BODY_TEXT = '#e8dcbe';
 
 /** Prices for the VIP back-room services (canon-flavoured coin sinks). */
 const VIP_HEAL_PRICE = 40;
@@ -111,38 +43,42 @@ export function escortPairFor(roster: MercenaryRoster): EscortPair {
   return houseEscortOnContract ? RELIEF_ESCORT : HOUSE_ESCORT;
 }
 
-type VipAction = { kind: 'heal' } | { kind: 'buff' } | { kind: 'escort' } | { kind: 'close' };
+/** One of the lounge's three paid services. */
+export type VipServiceKind = 'heal' | 'buff' | 'escort';
 
-interface VipButton {
-  x: number;
-  y: number;
-  w: number;
-  h: number;
-  action: VipAction;
+/** A service as the lounge screen draws it: what it is, what pressing it costs, and whether it can be pressed. */
+export interface VipServiceCard {
+  readonly kind: VipServiceKind;
+  readonly name: string;
+  readonly desc: string;
+  readonly actionLabel: string;
+  readonly disabled: boolean;
+  /** A line about the service's state (HP, already active, comped); empty when there is nothing to say. */
+  readonly statusLine: string;
 }
 
 interface VipService {
   name: string;
   /** Takes the escort pair because the escort card names whichever two are working tonight. */
   desc: (escort: EscortPair) => string;
-  action: VipAction;
+  kind: VipServiceKind;
 }
 
 const VIP_SERVICES: ReadonlyArray<VipService> = [
   {
     name: 'Full Recovery',
     desc: () => 'A back-room medic patches you up completely.',
-    action: { kind: 'heal' },
+    kind: 'heal',
   },
   {
     name: 'VIP Cocktail',
     desc: () => 'Speed Fizz + Cooldown Crisp on the house pour.',
-    action: { kind: 'buff' },
+    kind: 'buff',
   },
   {
     name: 'Private Escort',
     desc: (escort) => `${escort.names} shadow you through the club.`,
-    action: { kind: 'escort' },
+    kind: 'escort',
   },
 ];
 
@@ -169,9 +105,6 @@ export class ClubVipLoungeSystem {
 
   /** Transient status line (e.g. "Not enough coins"); cleared on the next valid action. */
   private feedbackMsg = '';
-  private buttons: VipButton[] = [];
-  /** Set every render; clicks are mapped back through it before hit-testing. */
-  private fit: ModalFit = MODAL_FIT_NONE;
 
   constructor(
     private readonly audio: AudioManager | null,
@@ -260,227 +193,47 @@ export class ClubVipLoungeSystem {
     this.audio?.play('purchase_success');
   }
 
-  handleClick(mx: number, my: number, player: Player, companion: Player): void {
-    const point = modalFitPoint(this.fit, mx, my);
-    for (const btn of this.buttons) {
-      if (!pointInRect(point.x, point.y, btn)) continue;
-      const action = btn.action;
-      switch (action.kind) {
-        case 'heal':
-          this.heal(player, companion);
-          return;
-        case 'buff':
-          this.buff(player, companion);
-          return;
-        case 'escort':
-          this.hireEscort(player, companion);
-          return;
-        case 'close':
-          this.close();
-          return;
-      }
-    }
+  /** The line the lounge last answered with; empty until something is pressed. */
+  get feedback(): string {
+    return this.feedbackMsg;
   }
 
-  renderPanel(ctx: CanvasRenderingContext2D, player: Player, companion: Player): void {
-    if (!this.open) return;
-    this.buttons = [];
-
-    drawOverlay(ctx, {
-      canvasWidth: viewportWidth(),
-      canvasHeight: viewportHeight(),
-      alpha: OVERLAY_ALPHA,
-    });
-    this.fit = fitPanel(PANEL_W, PANEL_H);
-    beginModalFit(ctx, this.fit);
-    setButtonPointerSpace(this.fit.scale, this.fit.pivotX, this.fit.pivotY);
-
-    const panelW = PANEL_W;
-    const panel = drawModal(ctx, {
-      canvasWidth: viewportWidth(),
-      canvasHeight: viewportHeight(),
-      width: panelW,
-      height: PANEL_H,
-      padding: PANEL_PADDING,
-      ...BOX_PRESETS.modal,
-      fill: VELVET_PANEL,
-      border: ACCENT,
-      borderWidth: 3,
-      glow: ACCENT,
-      glowBlur: 22,
-    });
-
-    const centerX = panel.x + panelW / 2;
-
-    drawText(ctx, '✦  VIP  LOUNGE  ✦', {
-      x: centerX,
-      y: panel.inner.y,
-      size: TITLE_SIZE,
-      bold: true,
-      color: GOLD_TEXT,
-      align: 'center',
-      glow: ACCENT,
-    });
-
-    drawText(ctx, 'A hush-quiet back room — velvet, privacy, and comped luxury.', {
-      x: centerX,
-      y: panel.inner.y + SUBTITLE_GAP,
-      size: SUBTITLE_SIZE,
-      color: MUTED_TEXT,
-      align: 'center',
-    });
-
-    drawText(ctx, `Coins: ${partyCoins(player, companion)}`, {
-      x: centerX,
-      y: panel.inner.y + SUBTITLE_GAP + COINS_GAP,
-      size: COINS_SIZE,
-      color: '#d4c070',
-      align: 'center',
-    });
-
-    // The whole lounge is a coin sink: every service button spends money, so
-    // the ring has to end on a way out, and that way out has to be the primary.
-    // Without it a bare Space in here buys something.
-    beginMenuFocus('club-vip');
-    this.renderServiceCards(ctx, panel.x, panel.y, panelW, player, companion);
-    this.renderLeaveButton(ctx, panel.y, centerX);
-    endMenuFocus();
-
-    if (this.feedbackMsg !== '') {
-      drawText(ctx, this.feedbackMsg, {
-        x: centerX,
-        y: panel.y + PANEL_H - FEEDBACK_Y_FROM_BOTTOM,
-        size: FEEDBACK_SIZE,
-        color: '#f0b040',
-        align: 'center',
-      });
-    }
-
-    drawText(ctx, '[Space / Esc]  Leave the lounge', {
-      x: centerX,
-      y: panel.y + PANEL_H - CLOSE_HINT_Y_FROM_BOTTOM,
-      size: CLOSE_HINT_SIZE,
-      color: '#9a8452',
-      align: 'center',
-    });
-
-    endModalFit(ctx);
-    resetButtonPointerSpace();
-  }
-
-  /**
-   * The visible way out. A `[Space / Esc]` hint alone leaves a player driving
-   * with a mouse — or reading the buttons rather than the fine print — with
-   * nothing to aim at but the three purchases.
-   */
-  private renderLeaveButton(ctx: CanvasRenderingContext2D, panelY: number, centerX: number): void {
-    const btnX = centerX - LEAVE_BTN_W / 2;
-    const btnY = panelY + PANEL_H - LEAVE_BTN_Y_FROM_BOTTOM;
-    drawButton(ctx, {
-      x: btnX,
-      y: btnY,
-      width: LEAVE_BTN_W,
-      height: LEAVE_BTN_H,
-      label: 'Leave the Lounge',
-      ...BUTTON_PRESETS.primary,
-      primaryAction: true,
-    });
-    this.buttons.push({
-      x: btnX,
-      y: btnY,
-      w: LEAVE_BTN_W,
-      h: LEAVE_BTN_H,
-      action: { kind: 'close' },
+  /** The three services, in the order the lounge lists them. */
+  serviceCards(player: Player, companion: Player): VipServiceCard[] {
+    return VIP_SERVICES.map((service) => {
+      const state = this.buttonStateFor(service.kind, player, companion);
+      return {
+        kind: service.kind,
+        name: service.name,
+        desc: service.desc(this.escortPair),
+        actionLabel: state.label,
+        disabled: state.disabled,
+        statusLine: state.statusLine,
+      };
     });
   }
 
-  private renderServiceCards(
-    ctx: CanvasRenderingContext2D,
-    panelX: number,
-    panelY: number,
-    panelW: number,
-    player: Player,
-    companion: Player,
-  ): void {
-    const x = panelX + PANEL_PADDING;
-    const w = panelW - PANEL_PADDING * 2;
-    let y = panelY + CARDS_TOP;
-
-    for (const service of VIP_SERVICES) {
-      drawBox(ctx, {
-        x,
-        y,
-        width: w,
-        height: CARD_H,
-        fill: VELVET_CARD,
-        border: VELVET_CARD_BORDER,
-        borderWidth: 1.5,
-        radius: 8,
-      });
-      drawBox(ctx, { x, y, width: 4, height: CARD_H, fill: ACCENT, radius: 2 });
-
-      drawText(ctx, service.name, {
-        x: x + CARD_PAD,
-        y: y + CARD_NAME_Y,
-        size: CARD_NAME_SIZE,
-        bold: true,
-        color: GOLD_TEXT,
-        align: 'left',
-      });
-      drawText(ctx, service.desc(this.escortPair), {
-        x: x + CARD_PAD,
-        y: y + CARD_DESC_Y,
-        size: CARD_DESC_SIZE,
-        color: BODY_TEXT,
-        align: 'left',
-      });
-
-      const { label, disabled, statusLine } = this.buttonStateFor(
-        service.action,
-        player,
-        companion,
-      );
-      if (statusLine !== '') {
-        drawText(ctx, statusLine, {
-          x: x + CARD_PAD,
-          y: y + CARD_STATUS_Y,
-          size: CARD_STATUS_SIZE,
-          color: MUTED_TEXT,
-          align: 'left',
-        });
-      }
-
-      const btnX = x + w - ACTION_BTN_W - ACTION_BTN_MARGIN;
-      const btnY = y + (CARD_H - ACTION_BTN_H) / 2;
-      drawButton(ctx, {
-        x: btnX,
-        y: btnY,
-        width: ACTION_BTN_W,
-        height: ACTION_BTN_H,
-        label,
-        ...BUTTON_PRESETS.gold,
-        disabled,
-      });
-      if (!disabled) {
-        this.buttons.push({
-          x: btnX,
-          y: btnY,
-          w: ACTION_BTN_W,
-          h: ACTION_BTN_H,
-          action: service.action,
-        });
-      }
-
-      y += CARD_H + CARD_GAP;
+  /** Presses a service's button, refused and charged by the same rules as a click. */
+  activate(kind: VipServiceKind, player: Player, companion: Player): void {
+    switch (kind) {
+      case 'heal':
+        this.heal(player, companion);
+        return;
+      case 'buff':
+        this.buff(player, companion);
+        return;
+      case 'escort':
+        this.hireEscort(player, companion);
+        return;
     }
   }
 
   private buttonStateFor(
-    action: VipAction,
+    kind: VipServiceKind,
     player: Player,
     companion: Player,
   ): { label: string; disabled: boolean; statusLine: string } {
-    switch (action.kind) {
+    switch (kind) {
       case 'heal': {
         const atFull = player.hp >= player.maxHp;
         return {
@@ -515,8 +268,6 @@ export class ClubVipLoungeSystem {
           statusLine: free ? 'Comped: your table play covers it.' : '',
         };
       }
-      case 'close':
-        return { label: '', disabled: true, statusLine: '' };
     }
   }
 }

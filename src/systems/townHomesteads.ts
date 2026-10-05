@@ -8,12 +8,12 @@
  * Wendell has a hayloft. They are priced against the plaza's versions so no
  * homestead becomes the strictly better place to buy anything.
  *
- * Pure data + effect application; `PricedMenuPanel` owns the UI and
+ * Pure data + effect application; the shop screen owns the UI and
  * `BuildingInteriorScene` owns the sounds and the interaction gating.
  */
 
 import type { Player } from '../Player';
-import type { PricedMenu, PricedOption, PricedPurchaseHandler } from '../ui/PricedMenuPanel';
+import type { ShopMenu, ShopRow, ShopPurchaseHandler } from '../ui/screens/shop/shopSession';
 import type { ResidentHost } from './townResidents';
 import { giveInventoryItem, rotateLine } from './townServiceUtil';
 
@@ -44,7 +44,7 @@ const CARTWRIGHT_LINES: ReadonlyArray<string> = [
   'Do not run with it. I have seen where that ends and I had to rebuild the fence.',
 ];
 
-export function buildCartwrightMenu(turn: number, host: ResidentHost | null): PricedMenu {
+export function buildCartwrightMenu(turn: number, host: ResidentHost | null): ShopMenu {
   return {
     title: "Cartwright's Workshop",
     bark: host?.line ?? rotateLine(CARTWRIGHT_BARKS, turn),
@@ -66,7 +66,7 @@ export function buildCartwrightMenu(turn: number, host: ResidentHost | null): Pr
   };
 }
 
-export function sellCartwrightGoods(turn: number): PricedPurchaseHandler {
+export function sellCartwrightGoods(turn: number): ShopPurchaseHandler {
   return (option, buyer) => {
     const sticks =
       option.key === DYNAMITE_BUNDLE_KEY
@@ -105,12 +105,8 @@ const MILLER_LINES: ReadonlyArray<string> = [
   'Come back when you are hungry rather than when you are dying.',
 ];
 
-export function buildMillerMenu(
-  buyer: Player,
-  turn: number,
-  host: ResidentHost | null,
-): PricedMenu {
-  const plate: PricedOption = {
+export function buildMillerMenu(buyer: Player, turn: number, host: ResidentHost | null): ShopMenu {
+  const plate: ShopRow = {
     key: HOT_PLATE_KEY,
     label: 'A Hot Plate',
     price: HOT_PLATE_PRICE,
@@ -134,7 +130,7 @@ export function buildMillerMenu(
   };
 }
 
-export function serveMillerGoods(turn: number): PricedPurchaseHandler {
+export function serveMillerGoods(turn: number): ShopPurchaseHandler {
   return (option, buyer) => {
     if (option.key === HOT_PLATE_KEY) {
       // Re-checked rather than trusting the menu's `Unhurt`: the guard the
@@ -178,8 +174,8 @@ export function buildPlumblineFarmMenu(
   party: ReadonlyArray<Player>,
   turn: number,
   host: ResidentHost | null,
-): PricedMenu {
-  const loft: PricedOption = {
+): ShopMenu {
+  const loft: ShopRow = {
     key: HAYLOFT_KEY,
     label: 'An hour in the loft',
     price: HAYLOFT_PRICE,
@@ -198,7 +194,7 @@ export function buildPlumblineFarmMenu(
 export function servePlumblineFarmRest(
   party: ReadonlyArray<Player>,
   turn: number,
-): PricedPurchaseHandler {
+): ShopPurchaseHandler {
   return (option) => {
     if (option.key !== HAYLOFT_KEY) return { ok: false, line: 'Wendell scratches his head.' };
     // Same reason as the mill's plate: the refusal is the handler's job too.

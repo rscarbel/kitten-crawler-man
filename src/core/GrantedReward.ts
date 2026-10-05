@@ -1,3 +1,5 @@
+import type { Rect } from '../ui/core/geom';
+
 /**
  * What kind of thing was granted. Only the overlay's heading varies — the
  * animation, layout and dismissal are identical, which is why an ability tome
@@ -13,5 +15,5 @@ export interface GrantedReward {
   kind: GrantedRewardKind;
   name: string;
   description: string;
-  renderIcon: (ctx: CanvasRenderingContext2D, x: number, y: number, size: number) => void;
+  renderIcon: (ctx: CanvasRenderingContext2D, rect: Rect) => void;
 }

@@ -5,8 +5,12 @@ import { getSkillDef } from '../core/SkillManager';
 import type { GrantedReward } from '../core/GrantedReward';
 import type { LevelUpEntry } from '../core/LevelUpEntry';
 import type { AudioManager } from '../audio/AudioManager';
-import type { SkillBookChoice, SkillBookPrompt } from '../ui/SkillBookPrompt';
-import type { SkillBookReadRequest } from '../ui/InventoryInteraction';
+import type {
+  SkillBookChoice,
+  SkillBookPrompt,
+  SkillBookPromptResult,
+} from '../ui/SkillBookPrompt';
+import type { SkillBookReadRequest } from '../ui/screens/inventory/InventoryActions';
 import { drawSkillIcon } from '../ui/icons/skillIcons';
 
 /** What a scene should do after a crawler tried to read a skill book. */
@@ -113,9 +117,7 @@ export function readSkillBook(
 
   const def = getSkillDef(skillId);
   const level = reader.skills.getLevel(skillId);
-  const renderIcon = (ctx: CanvasRenderingContext2D, x: number, y: number, size: number): void => {
-    drawSkillIcon(ctx, x, y, size, skillId);
-  };
+  const renderIcon: GrantedReward['renderIcon'] = (ctx, rect) => drawSkillIcon(ctx, rect, skillId);
 
   if (wasUnknown) {
     return {
@@ -177,20 +179,24 @@ export function promptSkillBookRead(
 }
 
 /**
- * Routes a click at the open read prompt, and performs the read if confirmed.
- *
- * @returns the choice made, or null when the click missed both buttons and the
- *   prompt is still up — which is how a caller knows whether to release any
- *   state it pinned for the prompt's lifetime.
+ * Answers the open read prompt with `choice`, and performs the read if it is
+ * 'read'. Returns the choice, or null when no prompt was open.
  */
-export function resolveSkillBookPrompt(
+export function resolveSkillBookChoice(
   host: SkillBookFlowHost,
   reader: HumanPlayer | CatPlayer,
-  mx: number,
-  my: number,
+  choice: SkillBookChoice,
 ): SkillBookChoice | null {
-  const result = host.prompt.handleClick(mx, my);
+  const result = host.prompt.choose(choice);
   if (result === null) return null;
+  return actOnSkillBookAnswer(host, reader, result);
+}
+
+function actOnSkillBookAnswer(
+  host: SkillBookFlowHost,
+  reader: HumanPlayer | CatPlayer,
+  result: SkillBookPromptResult,
+): SkillBookChoice {
   if (result.choice === 'cancel') return 'cancel';
 
   host.closeInventory();

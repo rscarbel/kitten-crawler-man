@@ -87,16 +87,30 @@ import {
 /** The level the kit's militia are raised at; nothing here fights them. */
 const MILITIA_LEVEL = 1;
 
+const PERCENT = 100;
+/** Mixed into the map seed so Carl's wandering draws a stream of its own. */
+const CARL_WANDER_RNG_SALT = 0x5eed;
+
 const MAP_SIZE = 280;
 const DEFAULT_SEEDS = 30;
 const FRAMES_PER_SECOND = 60;
-const SIMULATED_SECONDS = 5 * 60;
+const SECONDS_PER_MINUTE = 60;
+const SIMULATED_MINUTES = 5;
+const SIMULATED_SECONDS = SIMULATED_MINUTES * SECONDS_PER_MINUTE;
 const TOTAL_FRAMES = SIMULATED_SECONDS * FRAMES_PER_SECOND;
 /** Two blasts beside the herd, and the siege after them. */
-const BLAST_FRAMES: readonly number[] = [60 * FRAMES_PER_SECOND, 150 * FRAMES_PER_SECOND];
-const SIEGE_START_FRAME = 220 * FRAMES_PER_SECOND;
-const SIEGE_END_FRAME = 280 * FRAMES_PER_SECOND;
-const SHELTER_DEADLINE_FRAMES = 30 * FRAMES_PER_SECOND;
+const FIRST_BLAST_SECOND = 60;
+const SECOND_BLAST_SECOND = 150;
+const BLAST_FRAMES: readonly number[] = [
+  FIRST_BLAST_SECOND * FRAMES_PER_SECOND,
+  SECOND_BLAST_SECOND * FRAMES_PER_SECOND,
+];
+const SIEGE_START_SECOND = 220;
+const SIEGE_END_SECOND = 280;
+const SIEGE_START_FRAME = SIEGE_START_SECOND * FRAMES_PER_SECOND;
+const SIEGE_END_FRAME = SIEGE_END_SECOND * FRAMES_PER_SECOND;
+const SHELTER_DEADLINE_SECONDS = 30;
+const SHELTER_DEADLINE_FRAMES = SHELTER_DEADLINE_SECONDS * FRAMES_PER_SECOND;
 
 /** The rules the herd is held to, stated here rather than read from the code under test. */
 const CALF_NEAR_MOTHER_TILES = 4;
@@ -107,29 +121,35 @@ const CALF_NEAR_MOTHER_SHARE = 0.95;
  * one unbroken stall, because an animal that gives up a blocked walk and
  * tries it again is just as stuck as one grinding at it.
  */
-const STUCK_WINDOW_FRAMES = 5 * FRAMES_PER_SECOND;
+const STUCK_WINDOW_SECONDS = 5;
+const STUCK_WINDOW_FRAMES = STUCK_WINDOW_SECONDS * FRAMES_PER_SECOND;
 const STUCK_TRYING_FRAMES = 2 * FRAMES_PER_SECOND;
 const STUCK_MIN_PROGRESS_PX = TILE_SIZE;
 /** The protective shell is cast among the herd this far in, at its widest level. */
-const SHELL_FRAME = 100 * FRAMES_PER_SECOND;
+const SHELL_SECOND = 100;
+const SHELL_FRAME = SHELL_SECOND * FRAMES_PER_SECOND;
 const SHELL_LEVEL = 15;
 /** Animals gathered round Carl for the shell. */
 const SHELL_VICTIMS = 3;
 /** How far a stick's blast reaches, stated here. */
 const STICK_KILL_REACH_TILES = 3;
 /** A stick is lit this long before each blast, which is the herd's warning to warm its rows. */
-const STICK_BURN_FRAMES = 3 * FRAMES_PER_SECOND;
+const STICK_BURN_SECONDS = 3;
+const STICK_BURN_FRAMES = STICK_BURN_SECONDS * FRAMES_PER_SECOND;
 /**
  * The herd's share of the figure cache, stated here: a pasture of six figures
  * next to a whole village's villagers, soldiers and undead gets a third.
  */
 const HERD_CACHE_SHARE_DIVISOR = 3;
 const BYTES_PER_PIXEL = 4;
-const BYTES_PER_MEGABYTE = 1024 * 1024;
+const BYTES_PER_KILOBYTE = 1024;
+const BYTES_PER_MEGABYTE = BYTES_PER_KILOBYTE * BYTES_PER_KILOBYTE;
 /** How long an animal put off the pen has to walk back on. */
-const RETURN_DEADLINE_FRAMES = 20 * FRAMES_PER_SECOND;
+const RETURN_DEADLINE_SECONDS = 20;
+const RETURN_DEADLINE_FRAMES = RETURN_DEADLINE_SECONDS * FRAMES_PER_SECOND;
 /** A panic is a flinch and a three-second run; this is the longest it may take to end. */
-const PANIC_LIMIT_FRAMES = 5 * FRAMES_PER_SECOND;
+const PANIC_LIMIT_SECONDS = 5;
+const PANIC_LIMIT_FRAMES = PANIC_LIMIT_SECONDS * FRAMES_PER_SECOND;
 /** A blast is set off this far from the animal it is aimed beside, in tiles. */
 const BLAST_OFFSET_TILES = 1.5;
 /** Ground the whole herd covers in one seed's five minutes, at the least, for the run to mean anything. */
@@ -138,9 +158,11 @@ const MIN_TILES_WALKED_PER_SEED = 100;
 const LANE_MAX_TILES = 4;
 
 /** Carl lingers this long at each stop as he wanders the pen. */
-const CARL_LINGER_MAX_FRAMES = 4 * FRAMES_PER_SECOND;
+const CARL_LINGER_MAX_SECONDS = 4;
+const CARL_LINGER_MAX_FRAMES = CARL_LINGER_MAX_SECONDS * FRAMES_PER_SECOND;
 /** Every so often Carl drives the cow nearest the gate at a tile this far out along the lane. */
-const DRIVE_EVERY_FRAMES = 12 * FRAMES_PER_SECOND;
+const DRIVE_EVERY_SECONDS = 12;
+const DRIVE_EVERY_FRAMES = DRIVE_EVERY_SECONDS * FRAMES_PER_SECOND;
 const LANE_EXIT_TILES = 2;
 /** The cat sits this far off, out of the herd's way. */
 const CAT_OFFSET_TILES = 6;
@@ -151,13 +173,15 @@ const EXPECTED_BURGERS_MAX = 3;
 /** Far more than any cow has, so a blow that lands is unmistakable. */
 const OVERKILL_DAMAGE = 10_000;
 /** A dead cow stands back up this long after it fell; stated here rather than read from the code under test. */
-const RESPAWN_FRAMES = 30 * FRAMES_PER_SECOND;
+const RESPAWN_SECONDS = 30;
+const RESPAWN_FRAMES = RESPAWN_SECONDS * FRAMES_PER_SECOND;
 const RESPAWN_SEEDS = 5;
 const JUST_BEFORE_RESPAWN_FRAMES = RESPAWN_FRAMES - 2 * FRAMES_PER_SECOND;
 /** Frames given to a respawn to be noticed once its time is up. */
 const RESPAWN_SLACK_FRAMES = 2 * FRAMES_PER_SECOND;
 /** Frames a dropped stick takes to go off, with room to spare. */
-const DYNAMITE_WAIT_FRAMES = 6 * FRAMES_PER_SECOND;
+const DYNAMITE_WAIT_SECONDS = 6;
+const DYNAMITE_WAIT_FRAMES = DYNAMITE_WAIT_SECONDS * FRAMES_PER_SECOND;
 const DYNAMITE_HOTBAR_SLOT = 0;
 const MISSILE_HOTBAR_SLOT = 1;
 /** Cows gathered round the stick for the blast test. */
@@ -165,7 +189,8 @@ const BLAST_VICTIMS = 3;
 /** A level a spawn site might ask a cow spawned by name for — well above livestock's. */
 const SPAWN_SITE_LEVEL = 8;
 /** How long a pen-less cow is watched for, which must see it wander. */
-const STRAY_WANDER_FRAMES = 30 * FRAMES_PER_SECOND;
+const STRAY_WANDER_SECONDS = 30;
+const STRAY_WANDER_FRAMES = STRAY_WANDER_SECONDS * FRAMES_PER_SECOND;
 /** Where a hostile stands for the tap cases: behind the cat, and between the cat and the cow. */
 const HOSTILE_BEHIND_TILES = 4;
 const HOSTILE_AHEAD_TILES = 1;
@@ -342,9 +367,7 @@ class Wanderer {
       this.lingerFrames--;
       return;
     }
-    if (this.goal === null) {
-      this.goal = this.stops[Math.floor(this.random() * this.stops.length)];
-    }
+    this.goal ??= this.stops[Math.floor(this.random() * this.stops.length)];
     const dx = this.goal.x * TILE_SIZE - this.body.x;
     const dy = this.goal.y * TILE_SIZE - this.body.y;
     const distance = Math.hypot(dx, dy);
@@ -484,7 +507,7 @@ function simulate(seed: number, tally: HerdTally): void {
   const { livestock, site } = world;
   const herd = livestock.herd;
   const allowed = allowedGround(site);
-  const random = mulberry32(seed ^ 0x5eed);
+  const random = mulberry32(seed ^ CARL_WANDER_RNG_SALT);
   const laneStops: TilePoint[] = [];
   const allowedStops = [...livestock.pen.pastureTiles, ...livestock.pen.barnTiles];
   for (const gate of site.pasture.fenceGates) {
@@ -538,15 +561,15 @@ function simulate(seed: number, tally: HerdTally): void {
     }
     if (frame % DRIVE_EVERY_FRAMES === 0 && frame < SIEGE_START_FRAME) {
       const gate = site.pasture.fenceGates[0];
-      const nearestToGate = herd
+      const livingByDistanceToGate = herd
         .filter((cow) => cow.isAlive)
         .sort(
           (a, b) =>
             tilesApart(a, { x: gate.x * TILE_SIZE, y: gate.y * TILE_SIZE }) -
             tilesApart(b, { x: gate.x * TILE_SIZE, y: gate.y * TILE_SIZE }),
-        )[0];
+        );
       const exit = exits[Math.floor(random() * exits.length)];
-      if (nearestToGate !== undefined) carl.driveAt(nearestToGate, exit);
+      if (livingByDistanceToGate.length > 0) carl.driveAt(livingByDistanceToGate[0], exit);
     }
     if (frame >= SHELL_FRAME && world.spells.isInsideShell(world.human.x, world.human.y)) {
       // Carl holds still inside his shell while it lasts, so it keeps pushing where it was cast.
@@ -595,7 +618,7 @@ function simulate(seed: number, tally: HerdTally): void {
         tally.panicsUnended++;
       }
       const mother = cow.mother;
-      if (cow.isCalf && mother !== null && mother.isAlive) {
+      if (cow.isCalf && mother?.isAlive) {
         tally.calfFrames++;
         if (tilesApart(cow, mother) <= CALF_NEAR_MOTHER_TILES) tally.calfNearFrames++;
       }
@@ -691,7 +714,7 @@ function escapesFence(world: World): boolean {
 }
 
 function herdSection(seeds: number): void {
-  console.log(`\nThe herd, ${seeds} seeds × ${SIMULATED_SECONDS / 60} simulated minutes`);
+  console.log(`\nThe herd, ${seeds} seeds × ${SIMULATED_MINUTES} simulated minutes`);
   const tally: HerdTally = {
     leaves: 0,
     stuck: 0,
@@ -723,7 +746,7 @@ function herdSection(seeds: number): void {
   const share = tally.calfFrames === 0 ? 0 : tally.calfNearFrames / tally.calfFrames;
   check(
     tally.calfFrames > 0 && share >= CALF_NEAR_MOTHER_SHARE,
-    `calves are within ${CALF_NEAR_MOTHER_TILES} tiles of their mothers ${(share * 100).toFixed(1)}% of the time`,
+    `calves are within ${CALF_NEAR_MOTHER_TILES} tiles of their mothers ${(share * PERCENT).toFixed(1)}% of the time`,
   );
   check(
     tally.stuck === 0,
@@ -1046,7 +1069,7 @@ function routingSection(): void {
    * then the attack. `verify-cows-scene.ts` holds the real scene to that order.
    */
   const pressSpace = (): void => {
-    if (kit.tryInteract(pm.active())) return;
+    if (kit.tryInteract(pm.active(), false)) return;
     triggerPlayerAttack(human, cat, roster.grid, map, null);
   };
   let swings = 0;

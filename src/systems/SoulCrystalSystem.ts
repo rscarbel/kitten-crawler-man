@@ -19,21 +19,17 @@ import type { CatPlayer } from '../creatures/CatPlayer';
 import {
   DOOMSDAY_CONTAIN_OBJECTIVE,
   type DoomsdayProgress,
-  countdownUrgencyColor,
-  formatCountdownClock,
   triggerDoomsdayExplosionIfExpired,
 } from '../core/DoomsdayProgress';
-import { drawText } from '../ui/TextBox';
+import { worldText } from '../ui/world/worldText';
+import { worldPalette } from '../ui/theme/worldInk';
 import { drawObjectiveBeacon } from '../ui/ObjectiveBeacon';
 import { drawSoulCrystalProp, SOUL_CRYSTAL_TOP_TILES } from '../sprites/soulCrystalArt';
 import { frameTime } from '../utils';
-import { viewportWidth } from '../core/Viewport';
-import {
-  ARROW_PRIORITY,
-  drawArrowAbovePlayer,
-  type ArrowAvoidRect,
-  type ArrowCandidate,
-} from '../ui/WorldArrow';
+import type { TopBandEntry } from '../ui/hud/topBand';
+import { CONTAINMENT_LABEL, doomsdayCountdownEntry } from './DoomsdayEscapeSystem';
+import { ARROW_PRIORITY, drawArrowAbovePlayer, type ArrowCandidate } from '../ui/WorldArrow';
+import type { Rect } from '../ui/core/geom';
 
 /** How close the player must walk to auto-contain the crystal. */
 const CONTAIN_RANGE_TILES = 2.5;
@@ -46,14 +42,8 @@ const CRYSTAL_GROUND_IN_TILE = 0.8;
 const CRYSTAL_PROMPT_GAP_PX = 6;
 const CRYSTAL_PROMPT_SIZE = 12;
 
-const COUNTDOWN_Y = 60;
-const COUNTDOWN_SIZE = 16;
-const COUNTDOWN_LABEL_Y = 78;
-const COUNTDOWN_LABEL_SIZE = 12;
-const OBJECTIVE_Y = 94;
-const OBJECTIVE_SIZE = 11;
 /** The same gold as the Journal's pinned arrow outdoors, so both read as "go here". */
-const GUIDE_ARROW_COLOR = '#facc15';
+const GUIDE_ARROW_COLOR = worldPalette.objective.ready;
 /** Past this the thing is on screen, and an arrow still insisting on a direction is noise. */
 const GUIDE_ARROW_SUPPRESS_TILES = 4;
 
@@ -147,12 +137,12 @@ export class SoulCrystalSystem {
       crystalTile.y - camY + TILE_SIZE * (CRYSTAL_GROUND_IN_TILE - SOUL_CRYSTAL_TOP_TILES);
     const dist = Math.hypot(active.x - crystalTile.x, active.y - crystalTile.y);
     if (dist <= TILE_SIZE * CRYSTAL_PROMPT_RANGE_TILES) {
-      drawText(ctx, 'Contain the crystal!', {
+      worldText(ctx, 'Contain the crystal!', {
         x: sx,
         y: crystalTopY - CRYSTAL_PROMPT_GAP_PX,
         size: CRYSTAL_PROMPT_SIZE,
         bold: true,
-        color: '#e9d5ff',
+        color: worldPalette.soulCrystalInk,
         align: 'center',
         outline: true,
       });
@@ -175,7 +165,7 @@ export class SoulCrystalSystem {
     active: { x: number; y: number },
     isOnCrystalFloor: boolean,
     upStairs: { x: number; y: number } | null,
-    avoidRect?: ArrowAvoidRect,
+    avoidRect?: Rect,
   ): ArrowCandidate | null {
     if (this.progress.stage !== 'containment') return null;
     const crystal = this.progress.crystalTile;
@@ -206,40 +196,15 @@ export class SoulCrystalSystem {
   }
 
   /** Countdown HUD — shown from anywhere while a doomsday countdown is running, not just the crystal's floor. */
-  renderUI(ctx: CanvasRenderingContext2D): void {
+  topBandEntry(): TopBandEntry | null {
     const { stage, deadlineAt } = this.progress;
-    if ((stage !== 'containment' && stage !== 'escape') || deadlineAt === null) return;
-
-    drawText(
-      ctx,
-      stage === 'containment' ? 'THE SOUL CRYSTAL IS DESTABILIZING' : 'ESCAPE THE CITY',
-      {
-        x: viewportWidth() / 2,
-        y: COUNTDOWN_LABEL_Y,
-        size: COUNTDOWN_LABEL_SIZE,
-        bold: true,
-        color: '#f47c7c',
-        align: 'center',
-      },
-    );
-    if (stage === 'containment') {
-      drawText(ctx, DOOMSDAY_CONTAIN_OBJECTIVE, {
-        x: viewportWidth() / 2,
-        y: OBJECTIVE_Y,
-        size: OBJECTIVE_SIZE,
-        color: '#e9d5ff',
-        align: 'center',
-        outline: true,
-      });
-    }
-    drawText(ctx, formatCountdownClock(deadlineAt), {
-      x: viewportWidth() / 2,
-      y: COUNTDOWN_Y,
-      size: COUNTDOWN_SIZE,
-      bold: true,
-      color: countdownUrgencyColor(deadlineAt),
-      align: 'center',
-      outline: true,
+    if ((stage !== 'containment' && stage !== 'escape') || deadlineAt === null) return null;
+    const containing = stage === 'containment';
+    return doomsdayCountdownEntry({
+      id: 'soul-crystal-countdown',
+      label: containing ? CONTAINMENT_LABEL : 'ESCAPE THE CITY',
+      deadlineAt,
+      objective: containing ? DOOMSDAY_CONTAIN_OBJECTIVE : undefined,
     });
   }
 }

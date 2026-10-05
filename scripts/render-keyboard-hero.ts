@@ -46,7 +46,6 @@ import {
   LANE_BED_IMG_H,
   LANE_BED_IMG_W,
   LANE_INDICES,
-  LANE_PALETTES,
   NOTE_IMG_SIZE,
   RECEPTOR_IMG_SIZE,
   TOUCH_IMG_SIZE,
@@ -54,9 +53,9 @@ import {
   noteImgYToScreenY,
   type KeyboardHeroLayout,
   type LaneIndex,
-  type LanePalette,
-  type Rect,
 } from '../src/systems/keyboardHeroLayout.js';
+import type { Rect } from '../src/ui/core/geom.js';
+import { LANE_PALETTES, type LanePalette } from '../src/sprites/art/keyboardHeroLanePalettes.js';
 import {
   paintBoardFrame,
   paintLaneBed,
@@ -81,6 +80,8 @@ const MARGIN = 28;
 const SECTION_GAP = 40;
 const LABEL_HEIGHT = 30;
 const CAPTION_HEIGHT = 24;
+/** Distance a label or caption's baseline sits above the bottom of its band. */
+const TEXT_BASELINE_INSET = 8;
 const SWATCH_GAP = 14;
 
 /** The hit line the runtime paints over the beds, redrawn here as a review annotation. */
@@ -202,7 +203,7 @@ function touchPiece(state: TouchState, lane: LaneIndex): Canvas {
 }
 
 function blit(ctx: Ctx, art: Canvas, rect: Rect): void {
-  ctx.drawImage(art, rect.x, rect.y, rect.width, rect.height);
+  ctx.drawImage(art, rect.x, rect.y, rect.w, rect.h);
 }
 
 // ── The assembled board ─────────────────────────────────────────────────────
@@ -218,29 +219,29 @@ function drawHitWindow(ctx: Ctx, layout: KeyboardHeroLayout): void {
   ctx.fillRect(
     layout.laneArea.x,
     layout.hitLineY - layout.hitWindowHalfHeight,
-    layout.laneArea.width,
+    layout.laneArea.w,
     layout.hitWindowHalfHeight * 2,
   );
   ctx.fillStyle = HIT_LINE_COLOR;
   const lineH = Math.max(1, HIT_LINE_IMG_H * layout.scale);
-  ctx.fillRect(layout.laneArea.x, layout.hitLineY - lineH / 2, layout.laneArea.width, lineH);
+  ctx.fillRect(layout.laneArea.x, layout.hitLineY - lineH / 2, layout.laneArea.w, lineH);
   ctx.restore();
 }
 
 function drawReviewNotes(ctx: Ctx, layout: KeyboardHeroLayout): void {
   ctx.save();
   ctx.beginPath();
-  ctx.rect(layout.laneArea.x, layout.laneArea.y, layout.laneArea.width, layout.laneArea.height);
+  ctx.rect(layout.laneArea.x, layout.laneArea.y, layout.laneArea.w, layout.laneArea.h);
   ctx.clip();
   for (const lane of LANE_INDICES) {
     const depth = FIRST_NOTE_DEPTH + lane * NOTE_DEPTH_STRIDE;
     const centerY = noteImgYToScreenY(layout, depth * LANE_BED_IMG_H);
     const laneRect = layout.lanes[lane];
     blit(ctx, notePiece('normal', lane), {
-      x: laneRect.x + (laneRect.width - layout.noteSize) / 2,
+      x: laneRect.x + (laneRect.w - layout.noteSize) / 2,
       y: centerY - layout.noteSize / 2,
-      width: layout.noteSize,
-      height: layout.noteSize,
+      w: layout.noteSize,
+      h: layout.noteSize,
     });
   }
   ctx.restore();
@@ -303,13 +304,20 @@ function swatchBlockHeight(family: SwatchFamily): number {
 }
 
 function drawSwatchFamily(ctx: Ctx, family: SwatchFamily, top: number): void {
-  text(ctx, family.title, MARGIN, top + LABEL_HEIGHT - 8, LABEL_FONT, LABEL_COLOR);
+  text(
+    ctx,
+    family.title,
+    MARGIN,
+    top + LABEL_HEIGHT - TEXT_BASELINE_INSET,
+    LABEL_FONT,
+    LABEL_COLOR,
+  );
   const rowHeight = family.size + CAPTION_HEIGHT + SWATCH_GAP;
   for (const lane of LANE_INDICES) {
     const rowTop = top + LABEL_HEIGHT + lane * rowHeight;
     family.stateNames.forEach((state, index) => {
       const x = MARGIN + index * (family.size + SWATCH_GAP);
-      const rect: Rect = { x, y: rowTop, width: family.size, height: family.size };
+      const rect: Rect = { x, y: rowTop, w: family.size, h: family.size };
       // Painted on the lane's own bed rather than on the page, because that is
       // the only surface any of these art states is ever seen against.
       drawSwatchBed(ctx, lane, rect);
@@ -318,7 +326,7 @@ function drawSwatchFamily(ctx: Ctx, family: SwatchFamily, top: number): void {
         ctx,
         `${LANE_PALETTES[lane].name} · ${state}`,
         x,
-        rowTop + family.size + CAPTION_HEIGHT - 8,
+        rowTop + family.size + CAPTION_HEIGHT - TEXT_BASELINE_INSET,
         CAPTION_FONT,
         SUBLABEL_COLOR,
       );
@@ -329,7 +337,7 @@ function drawSwatchFamily(ctx: Ctx, family: SwatchFamily, top: number): void {
 /** The slice of the lane bed that sits behind a note at the hit line. */
 function drawSwatchBed(ctx: Ctx, lane: LaneIndex, rect: Rect): void {
   const bed = bedPiece(lane);
-  const sourceH = rect.height * BOARD_BAKE_SCALE;
+  const sourceH = rect.h * BOARD_BAKE_SCALE;
   ctx.drawImage(
     bed,
     0,
@@ -338,8 +346,8 @@ function drawSwatchBed(ctx: Ctx, lane: LaneIndex, rect: Rect): void {
     sourceH,
     rect.x,
     rect.y,
-    rect.width,
-    rect.height,
+    rect.w,
+    rect.h,
   );
 }
 
@@ -352,7 +360,7 @@ function drawBedStrips(ctx: Ctx, top: number): void {
     ctx,
     'Lane beds at full depth, and the neutral highlight strip the runtime tints',
     MARGIN,
-    top + LABEL_HEIGHT - 8,
+    top + LABEL_HEIGHT - TEXT_BASELINE_INSET,
     LABEL_FONT,
     LABEL_COLOR,
   );
@@ -367,8 +375,15 @@ function drawBedStrips(ctx: Ctx, top: number): void {
     const y = top + LABEL_HEIGHT;
     ctx.fillStyle = PANEL_BACKDROP;
     ctx.fillRect(x, y, BED_STRIP_W, BED_STRIP_H);
-    blit(ctx, strip.art, { x, y, width: BED_STRIP_W, height: BED_STRIP_H });
-    text(ctx, strip.caption, x, y + BED_STRIP_H + CAPTION_HEIGHT - 8, CAPTION_FONT, SUBLABEL_COLOR);
+    blit(ctx, strip.art, { x, y, w: BED_STRIP_W, h: BED_STRIP_H });
+    text(
+      ctx,
+      strip.caption,
+      x,
+      y + BED_STRIP_H + CAPTION_HEIGHT - TEXT_BASELINE_INSET,
+      CAPTION_FONT,
+      SUBLABEL_COLOR,
+    );
   });
 }
 
@@ -402,7 +417,7 @@ function main(): void {
     ctx,
     'Keyboard hero — board review harness',
     MARGIN,
-    MARGIN + LABEL_HEIGHT - 8,
+    MARGIN + LABEL_HEIGHT - TEXT_BASELINE_INSET,
     TITLE_FONT,
     LABEL_COLOR,
   );
@@ -417,7 +432,7 @@ function main(): void {
       ctx,
       panel.caption,
       panelX,
-      boardTop + panel.viewportH + CAPTION_HEIGHT - 8,
+      boardTop + panel.viewportH + CAPTION_HEIGHT - TEXT_BASELINE_INSET,
       CAPTION_FONT,
       SUBLABEL_COLOR,
     );

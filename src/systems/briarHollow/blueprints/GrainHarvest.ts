@@ -40,7 +40,7 @@ import type { Mob } from '../../../creatures/Mob';
 import { BLUEPRINTS_GRAIN_TARGET } from '../../../core/blueprintsQuestPhase';
 import { allocCanvas, type CanvasSurface, surfaceContext } from '../../../core/canvasSurface';
 import { keybindings } from '../../../core/Keybindings';
-import { platform } from '../../../core/Platform';
+import { activeInputMode, byInputMode, keyLabel } from '../../../ui/core/inputMode';
 import { HumanPlayer } from '../../../creatures/HumanPlayer';
 import { rectContains } from '../../../map/overworld/briarHollowSite';
 import { drawGrainStand, type GrainStage } from '../../../map/tiles/cropRowTiles';
@@ -49,7 +49,7 @@ import type { TilePoint } from '../../../map/town/townPlan';
 import { CHOP_ROWS } from '../../../sprites/art/humanFigure';
 import { viewForFacing } from '../../../sprites/humanSprite';
 import { drawInteractionPrompt } from '../../../ui/InteractionPrompt';
-import type { Rect } from '../../DungeonUIRenderer';
+import type { Rect } from '../../../ui/core/geom';
 import { hostileWithinAttackRange } from '../../interactionPromptGate';
 import type { TileRect } from '../questGuidance';
 import { UPDATES_PER_SECOND } from '../structureRules';
@@ -601,7 +601,7 @@ export class GrainHarvest {
       verdictGrain: grainForGrade(swing.verdict ?? 'miss'),
       goodWindow: SCYTHE_GOOD_WINDOW,
       perfectWindow: SCYTHE_PERFECT_WINDOW,
-      pressLabel: platform.isMobile ? 'Tap' : keybindings.labelFor('attack'),
+      pressLabel: byInputMode(activeInputMode(), { touch: 'Tap', pointer: keyLabel('attack') }),
     };
   }
 
@@ -671,10 +671,11 @@ export class GrainHarvest {
     active: BlueprintsCrawler,
   ): boolean {
     if (this.swing !== null) return true;
-    // On a phone the key cap itself reads "TAP", so the label finishes its sentence.
+    // In touch mode the key cap itself reads "TAP", so the label finishes its sentence.
+    const mode = activeInputMode();
     const pegs = this.pegs;
     if (pegs !== null && this.canTakeScythe(active)) {
-      const label = platform.isMobile ? 'to take the scythe' : 'Take scythe';
+      const label = byInputMode(mode, { touch: 'to take the scythe', pointer: 'Take scythe' });
       drawInteractionPrompt(
         ctx,
         pegs.x * TILE_SIZE - camX,
@@ -685,7 +686,7 @@ export class GrainHarvest {
       return true;
     }
     if (this.standInReach(active) === null) return false;
-    const label = platform.isMobile ? 'to harvest' : 'Harvest';
+    const label = byInputMode(mode, { touch: 'to harvest', pointer: 'Harvest' });
     drawInteractionPrompt(ctx, active.x - camX, active.y - camY, TILE_SIZE, label);
     return true;
   }

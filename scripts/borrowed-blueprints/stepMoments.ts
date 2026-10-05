@@ -22,7 +22,7 @@ import { allocCanvas, surfaceContext } from '../../src/core/canvasSurface';
 import { setViewportSize } from '../../src/core/Viewport';
 import { transientSpeaker } from '../../src/dialog/line';
 import { PASTURE_FENCE_SECTION_COUNT } from '../../src/map/overworld/briarHollowLayout';
-import { focusedButtonClickPoint } from '../../src/ui/Button';
+import { MOUSE_POINTER_ID, PRIMARY_BUTTON } from '../../src/ui/core/pointer';
 import { BLUEPRINTS_REWARDS_HEADING } from '../../src/systems/briarHollow/blueprints/blueprintsRewardSpec';
 import { BLUEPRINTS_QUEST_NAME } from '../../src/systems/briarHollow/blueprints/blueprintsProgress';
 import type { QuestRewardScreen } from '../../src/ui/questReward/QuestRewardScreen';
@@ -42,11 +42,19 @@ import {
 } from '../../src/systems/briarHollow/blueprints/BlueprintsStepMoments';
 import type { BlueprintsQuestSystem } from '../../src/systems/briarHollow/BlueprintsQuestSystem';
 import type { SiegeRig } from '../villageSiegeHarness';
-import { buildSiegeRig, UPDATES_PER_SECOND } from '../villageSiegeHarness';
+import {
+  buildSiegeRig,
+  questRewardSurface,
+  questRewardUi,
+  UPDATES_PER_SECOND,
+  type QuestRewardUi,
+} from '../villageSiegeHarness';
 import { BLUEPRINTS_RIG_SEED, blueprintsRig, type Check } from './fence';
 
 const GRAIN_TARGET = 100;
 const BANNER_FRAMES = STEP_BANNER_SECONDS * UPDATES_PER_SECOND;
+/** The rig never scrolls, so the village's world-anchored panels read the map's origin. */
+const HARNESS_CAMERA = { x: 0, y: 0 } as const;
 
 /** Every `objectiveComplete` id the rig's bus carries from now on. */
 function recordObjectives(rig: SiegeRig): string[] {
@@ -168,6 +176,8 @@ interface CompletionRig {
   readonly blueprints: BlueprintsQuestSystem;
   /** The scene's shared quest-complete screen, as the rig's menus hold it. */
   readonly screen: QuestRewardScreen;
+  /** The screen's surface on a `UiRoot`, as the scene draws it and routes input to it. */
+  readonly ui: QuestRewardUi;
   /** How many times a quest-complete screen has gone up, fanfare and all. */
   readonly opens: { count: number };
 }
@@ -197,7 +207,9 @@ function completionRigOn(state: BriarHollowState): CompletionRig {
     opens.count++;
     open(spec);
   };
-  return { rig, blueprints, screen, opens };
+  const ui = questRewardUi(rig);
+  for (const surface of rig.kit.surfaces(() => HARNESS_CAMERA)) ui.root.mount(surface);
+  return { rig, blueprints, screen, ui, opens };
 }
 
 /** One scene frame: the village's update, then the menus' screen. */
@@ -222,7 +234,7 @@ function bothStationsUpgradedRig(): CompletionRig {
   return completionRigOn(state);
 }
 
-/** Every word one frame of the village's dialogs and the screen drew, at a desktop window. */
+/** Every word one frame of the village's panels and the screen drew, at a desktop window. */
 function renderDialogs(setup: CompletionRig): string[] {
   setViewportSize(SCREEN_W, SCREEN_H);
   const ctx = surfaceContext(allocCanvas(SCREEN_W, SCREEN_H));
@@ -232,25 +244,44 @@ function renderDialogs(setup: CompletionRig): string[] {
     texts.push(args[0]);
     fillText(...args);
   };
-  setup.rig.kit.renderDialog(ctx, 0, 0);
-  setup.screen.render(ctx);
+  setup.ui.frame(ctx);
   return texts;
 }
 
-/** Renders the screen until its reveal has settled. */
+/**
+ * Renders the screen until its reveal has settled, and always at least once,
+ * so what input reaches is the settled screen's controls.
+ */
 function settle(setup: CompletionRig): void {
+  renderDialogs(setup);
   for (let frame = 0; frame < SETTLE_CEILING_FRAMES && !setup.screen.isSettled; frame++) {
     renderDialogs(setup);
   }
 }
 
-/** Presses the accept key as the focus ring would: a click at the ring's primary. */
+/** Presses the accept key, which the screen's focus scope hands to its primary. */
 function pressAccept(setup: CompletionRig): boolean {
   renderDialogs(setup);
-  const point = focusedButtonClickPoint();
-  if (point === null) return false;
-  setup.screen.handleClick(point.x, point.y);
-  return true;
+  return setup.ui.root.key('Enter', {}) === 'consumed';
+}
+
+/** A mouse click at `point`, in the screen's UI units. */
+function clickAt(setup: CompletionRig, point: { readonly x: number; readonly y: number }): void {
+  const { root } = setup.ui;
+  const scale = root.uiScale;
+  for (const kind of ['down', 'up'] as const) {
+    root.pointer({
+      kind,
+      pointerId: MOUSE_POINTER_ID,
+      source: 'mouse',
+      x: point.x,
+      y: point.y,
+      cssX: point.x * scale,
+      cssY: point.y * scale,
+      button: PRIMARY_BUTTON,
+      deltaY: 0,
+    });
+  }
 }
 
 /** Raised once on completion, halting the world, and gone for good after Continue. */
@@ -261,31 +292,32 @@ function verifyCompletionScreenShownOnce(check: Check): void {
   check(rig.state.blueprints.phase === 'complete', 'both stations upgraded completes the quest');
   check(blueprintsScreenOpen(setup), 'the quest-complete screen goes up on completion');
   check(setup.opens.count === 1, 'the screen goes up once, with its fanfare');
-  const claim = screen.overlayClaim();
+  const surface = questRewardSurface(rig);
   check(
-    claim.isOpen && claim.haltsWorld && claim.locksKeyboard,
-    "the screen's overlay claim is open, halts the world and locks the keyboard",
+    surface.isOpen() && surface.haltsWorld && surface.locksKeyboard === true,
+    "the screen's surface is open, halts the world and locks the keyboard",
   );
 
-  const drawn = renderDialogs(setup).join('\n');
+  // Letter-spaced labels are drawn a character at a time, so the draws are read run together.
+  const drawn = renderDialogs(setup).join('');
   check(
     drawn.includes('QUEST COMPLETE') && drawn.includes(BLUEPRINTS_QUEST_NAME),
     'the screen names the quest as complete',
   );
   check(drawn.includes(BLUEPRINTS_REWARDS_HEADING), 'the screen lists its rewards as permanent');
 
-  screen.handleClick(STRAY_CLICK.x, STRAY_CLICK.y);
+  clickAt(setup, STRAY_CLICK);
   check(
     screen.isOpen && screen.isSettled,
     'a click before the reveal settles only finishes the reveal',
   );
   settle(setup);
-  screen.handleClick(STRAY_CLICK.x, STRAY_CLICK.y);
+  clickAt(setup, STRAY_CLICK);
   check(screen.isOpen, 'a click off Continue does not dismiss the settled screen');
   check(pressAccept(setup), 'the settled screen offers Continue as its primary to the accept key');
   check(!screen.isOpen, 'Continue dismisses the screen');
   check(rig.state.blueprints.completionScreenSeen, 'dismissing records the screen as seen');
-  check(!screen.overlayClaim().isOpen, 'the claim closes with the screen');
+  check(!surface.isOpen(), 'the surface closes with the screen');
 
   stepCompletion(setup, NO_REPLAY_FRAMES);
   check(

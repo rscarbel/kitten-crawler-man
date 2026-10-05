@@ -166,7 +166,7 @@ export class AnchorQuestSystem implements GameSystem, TrackerSource {
   /**
    * Whether the tinker's gated row is on his counter: only while the errand is
    * live and the party does not already have that shard. Buying it therefore
-   * removes the row, since `PricedMenuPanel` rebuilds its rows after every sale.
+   * removes the row, since `ShopSession` rebuilds its rows after every sale.
    */
   isVendorLineOffered(gate: VendorLineGate): boolean {
     return this.gateChecks[gate]();
@@ -379,11 +379,6 @@ export class AnchorQuestSystem implements GameSystem, TrackerSource {
   dismissDialog(): boolean {
     if (!this.conversationOwned) return false;
     return this.conversation.dismiss();
-  }
-
-  handleClick(mx: number, my: number): boolean {
-    if (!this.conversationOwned) return false;
-    return this.conversation.handleClick(mx, my);
   }
 
   // ── The assembly ──────────────────────────────────────────────────────────

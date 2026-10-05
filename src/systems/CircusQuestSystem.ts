@@ -46,7 +46,8 @@ import type { QuestMarkerType } from './MiniMapSystem';
 import { drawInteractionPrompt } from '../ui/InteractionPrompt';
 import type { Conversation } from '../dialog/Conversation';
 import type { ConversationHandle, ConversationRequest } from '../dialog/request';
-import { drawQuestBanner, QUEST_BANNER_FRAMES } from '../ui/QuestBanners';
+import { questBannerEntry, QUEST_BANNER_FRAMES } from '../ui/QuestBanners';
+import type { TopBandEntry } from '../ui/hud/topBand';
 import { partyXpSections } from '../ui/questReward/rewardLines';
 import type { QuestRewardSpec } from '../ui/questReward/types';
 import {
@@ -1111,11 +1112,6 @@ export class CircusQuestSystem implements GameSystem {
     return this.conversation.dismiss();
   }
 
-  handleClick(mx: number, my: number): boolean {
-    if (!this.conversationOwned) return false;
-    return this.conversation.handleClick(mx, my);
-  }
-
   // ── Phase transitions ─────────────────────────────────────────────────────
 
   private startRitualDefense(): void {
@@ -1413,7 +1409,11 @@ export class CircusQuestSystem implements GameSystem {
     drawInteractionPrompt(ctx, this.signet.x - camX, promptY, TILE_SIZE, 'Talk');
   }
 
-  renderUI(ctx: CanvasRenderingContext2D): void {
-    drawQuestBanner(ctx, this.bannerText, this.bannerTimer);
+  topBandEntry(): TopBandEntry | null {
+    return questBannerEntry({
+      id: 'circus-banner',
+      title: this.bannerText,
+      framesLeft: this.bannerTimer,
+    });
   }
 }

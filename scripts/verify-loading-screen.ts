@@ -13,9 +13,11 @@
  *  3. A unit bigger than a whole frame still makes progress, alone in its frame.
  *  4. The runner resolves: `finished` settles, including past a rejected promise.
  *  5. The screen stays up at least its minimum display time, then fades and goes.
- *  6. While it is up, the world does not update: the overlay's claim halts the
- *     world and locks the keyboard through the same `OverlayClaims` functions the
- *     scenes read, and `DungeonScene.update` returns on it before anything else.
+ *  6. While it is up, the world does not update: the overlay's own surface, which
+ *     the dungeon mounts as `arrival-loading`, halts the world, locks the
+ *     keyboard and spends the attack key through the same `UiRoot` the scene
+ *     reads, framing that root is what ticks the work, and `DungeonScene.update`
+ *     returns on it before anything else.
  *  7. The screen draws at any canvas size, clock and progress it can be
  *     handed — a 0 px window, a rAF timestamp from before the load started, a
  *     progress of NaN — without throwing, without geometry a browser rejects or
@@ -38,7 +40,8 @@ installCanvasGlobals();
 const { LoadRunner, steppedWork, iteratorWork, promiseWork, DEFAULT_MIN_LOAD_DISPLAY_MS } =
   await import('../src/core/LoadRunner.js');
 const { LoadingOverlay, drawLoadingScreen } = await import('../src/ui/LoadingScreen.js');
-const { worldHalted, keyboardSuppressed } = await import('../src/systems/kits/OverlayClaims.js');
+const { UiRoot } = await import('../src/ui/core/UiRoot.js');
+const { NO_INSETS } = await import('../src/ui/core/viewport.js');
 
 type Fault = 'none' | 'no-budget' | 'no-halt';
 const faultArg = process.argv.find((arg) => arg.startsWith('--fault='))?.slice('--fault='.length);
@@ -53,6 +56,11 @@ const FRAME_BUDGET_MS = 10;
 const SMALL_UNIT_MS = 2;
 /** Real frames also pass time between ticks, which the fake clock must too. */
 const FRAME_INTERVAL_MS = 16;
+
+/** How many over-budget frames a failure lists; the rest are the same story. */
+const OVER_BUDGET_FRAMES_REPORTED = 5;
+/** Units in the loading overlay's one task: enough to span several frames. */
+const OVERLAY_TASK_UNITS = 30;
 
 const failures: string[] = [];
 function check(ok: boolean, message: string): void {
@@ -178,7 +186,7 @@ check(
 );
 check(
   overBudget.length === 0,
-  `frames over budget + one small unit: ${overBudget.slice(0, 5).join('; ')}`,
+  `frames over budget + one small unit: ${overBudget.slice(0, OVER_BUDGET_FRAMES_REPORTED).join('; ')}`,
 );
 check(
   hugeFrameSpent >= HUGE_UNIT_MS && hugeFrameSpent <= HUGE_UNIT_MS + SMALL_UNIT_MS,
@@ -206,27 +214,55 @@ const overlay = new LoadingOverlay({
   kicker: 'Floor 0',
   tips: ['A tip.'],
   now,
-  tasks: [{ label: 'work', work: steppedWork(fakeSteppedTask(30, STEPPED_UNIT_MS).step) }],
+  tasks: [
+    { label: 'work', work: steppedWork(fakeSteppedTask(OVERLAY_TASK_UNITS, STEPPED_UNIT_MS).step) },
+  ],
   runner: { frameBudgetMs: FRAME_BUDGET_MS },
 });
 const VIEW_W = 390;
 const VIEW_H = 844;
 const ctx = gameContext(VIEW_W, VIEW_H);
 
-/** A stand-in scene following the rule `DungeonScene` follows: no update while a world-halting claim is open. */
+const dungeonSource = readFileSync(resolve('src/scenes/DungeonScene.ts'), 'utf8');
+check(
+  dungeonSource.includes("this.arrivalLoading.surface('arrival-loading')"),
+  "DungeonScene does not mount the loading overlay's own 'arrival-loading' surface",
+);
+
+const hostUi = new UiRoot({
+  audio: null,
+  viewport: () => ({
+    cssWidth: VIEW_W,
+    cssHeight: VIEW_H,
+    density: 'touch',
+    uiSize: 'medium',
+    safeArea: NO_INSETS,
+  }),
+  now,
+});
+const arrivalSurface = overlay.surface('arrival-loading');
+hostUi.mount(
+  fault === 'no-halt'
+    ? { ...arrivalSurface, haltsWorld: false, locksKeyboard: false }
+    : arrivalSurface,
+);
+
+/** A stand-in scene following the rule `DungeonScene` follows: no update while its UiRoot halts the world. */
 let worldUpdates = 0;
 let worldUpdatesWhileOpen = 0;
 let keyboardOpenWhileUp = 0;
+let attackKeyLeakedWhileUp = 0;
 let hostFrames = 0;
 for (; hostFrames < MAX_FRAMES && overlay.isVisible; hostFrames++) {
-  const claims = fault === 'no-halt' ? [] : [overlay.overlayClaim()];
   const openBefore = overlay.isOpen;
-  if (!worldHalted(claims)) {
+  if (!hostUi.worldHalted()) {
     worldUpdates++;
     if (openBefore) worldUpdatesWhileOpen++;
   }
-  if (openBefore && !keyboardSuppressed(claims)) keyboardOpenWhileUp++;
-  overlay.renderFrame(ctx, VIEW_W, VIEW_H);
+  if (openBefore && !hostUi.keyboardLocked()) keyboardOpenWhileUp++;
+  if (openBefore && hostUi.key(' ') !== 'consumed') attackKeyLeakedWhileUp++;
+  hostUi.frame(ctx);
+  overlay.renderFadeOut(ctx, VIEW_W, VIEW_H);
   clockMs += FRAME_INTERVAL_MS;
 }
 check(!overlay.isVisible, 'the overlay never finished fading out');
@@ -239,10 +275,13 @@ check(
   `the world updated ${worldUpdatesWhileOpen} time(s) while the loading screen was up`,
 );
 check(worldUpdates > 0, 'the world never resumed after the loading screen closed');
+check(
+  attackKeyLeakedWhileUp === 0,
+  `the attack key reached play on ${attackKeyLeakedWhileUp} frame(s) while the loading screen was up`,
+);
 
 // The scene half of the same rule, read from the source: `DungeonScene.update`
 // must return on the loading screen before it does anything else.
-const dungeonSource = readFileSync(resolve('src/scenes/DungeonScene.ts'), 'utf8');
 const updateBody = /\n {2}update\(\): void \{\n([\s\S]*?)\n {2}\}\n/.exec(dungeonSource)?.[1] ?? '';
 const firstStatement = updateBody
   .split('\n')
@@ -255,31 +294,47 @@ check(
 
 // ── Scenario 4: any size, any clock, any progress ───────────────────────────
 
-/** Width, height in CSS px: degenerate, a sliver, phones, desktop, 4K. */
-const EXTREME_VIEWPORTS: ReadonlyArray<readonly [number, number]> = [
-  [0, 0],
-  [1, 1],
-  [16, 16],
-  [40, 900],
-  [900, 40],
-  [320, 568],
-  [390, 844],
-  [1280, 720],
-  [3840, 2160],
+/** Canvas sizes in CSS px: degenerate, a sliver, phones, desktop, 4K. */
+const EXTREME_VIEWPORTS: ReadonlyArray<{ readonly w: number; readonly h: number }> = [
+  { w: 0, h: 0 },
+  { w: 1, h: 1 },
+  { w: 16, h: 16 },
+  { w: 40, h: 900 },
+  { w: 900, h: 40 },
+  { w: 320, h: 568 },
+  { w: 390, h: 844 },
+  { w: 1280, h: 720 },
+  { w: 3840, h: 2160 },
 ];
 /**
  * Clocks in ms. A rAF timestamp marks the start of the frame, which can come
  * before the `performance.now()` a caller took as the load's start, so the
  * first frame's clock can be a little negative.
  */
-const EXTREME_TIMES = [-100000, -1, -0.5, 0, 399, 400, 1e12, Number.NaN];
-const EXTREME_PROGRESS = [-1, 0, 0.5, 1, 2, Number.NaN];
+const EXTREME_TIMES = Object.values({
+  longBeforeStart: -100000,
+  oneMsBeforeStart: -1,
+  halfMsBeforeStart: -0.5,
+  atStart: 0,
+  justBeforeEllipsisStep: 399,
+  onEllipsisStep: 400,
+  farFuture: 1e12,
+  notANumber: Number.NaN,
+});
+const EXTREME_PROGRESS = Object.values({
+  belowEmpty: -1,
+  empty: 0,
+  half: 0.5,
+  full: 1,
+  overFull: 2,
+  notANumber: Number.NaN,
+});
 const EXTREME_CANVAS = 64;
 const extremeCtx = gameContext(EXTREME_CANVAS, EXTREME_CANVAS);
 const extremeWatch = watchCanvas(extremeCtx);
 const extremeReported = new Set<string>();
 let extremeDraws = 0;
-for (const [width, height] of EXTREME_VIEWPORTS) {
+for (const { w: width, h: height } of EXTREME_VIEWPORTS) {
   for (const timeMs of EXTREME_TIMES) {
     for (const progress of EXTREME_PROGRESS) {
       for (const withText of [true, false]) {

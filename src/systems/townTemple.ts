@@ -7,12 +7,12 @@
  * hurt: an unhurt party has nothing to buy, which is a gate that survives walking
  * out of the building and back in, unlike a scene-local timer would.
  *
- * Pure data + line selection; `PricedMenuPanel` owns the UI and
+ * Pure data + line selection; the shop screen owns the UI and
  * `BuildingInteriorScene` owns the sounds.
  */
 
 import type { Player } from '../Player';
-import type { PricedMenu, PricedOption } from '../ui/PricedMenuPanel';
+import type { ShopMenu, ShopRow } from '../ui/screens/shop/shopSession';
 import type { ResidentHost } from './townResidents';
 import { rotateLine } from './townServiceUtil';
 
@@ -44,8 +44,8 @@ export function buildBlessingMenu(
   party: ReadonlyArray<Player>,
   turn: number,
   host: ResidentHost | null,
-): PricedMenu {
-  const option: PricedOption = {
+): ShopMenu {
+  const option: ShopRow = {
     key: 'blessing',
     label: 'Blessing of the Sky',
     price: BLESSING_PRICE,

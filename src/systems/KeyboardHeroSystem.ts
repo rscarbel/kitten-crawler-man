@@ -22,15 +22,12 @@
  * - **Feedback state** (streaks, judgement floats, sparks, shakes, flashes) is
  *   cosmetic and runs on a monotonic wall clock, so a stalled song cannot leave
  *   an effect stuck on screen and a fast/slow frame cannot stretch it.
- * - **Layout** comes from `computeKeyboardHeroLayout`, which both `render` and
- *   `handleTouchAt` call, so what is drawn and what is tappable can never drift.
+ * - **Layout** comes from `computeKeyboardHeroLayout`. The caller hands the same
+ *   layout to `paint` and resolves its own taps against its lane rects, then
+ *   calls `handleLaneTap`, so what is drawn and what is tappable can never drift.
  */
 
-import { platform } from '../core/Platform';
 import { keybindings } from '../core/Keybindings';
-import { drawText } from '../ui/TextBox';
-import { drawProgressBar, PROGRESS_PRESETS } from '../ui/Box';
-import { viewportWidth, viewportHeight } from '../core/Viewport';
 import { KEYBOARD_HERO_CHART, KEYBOARD_HERO_CHART_END_MS } from './keyboardHeroChart';
 import type { KeyboardHeroColumn } from './keyboardHeroChart';
 import {
@@ -43,16 +40,24 @@ import {
   NOTE_TRAVEL_MS,
 } from './keyboardHeroGeometry';
 import {
-  computeKeyboardHeroLayout,
-  laneAtPoint,
   noteImgYToScreenY,
   LANE_INDICES,
-  LANE_PALETTES,
   type KeyboardHeroLayout,
   type LaneIndex,
-  type LanePalette,
 } from './keyboardHeroLayout';
+import { LANE_PALETTES, type LanePalette } from '../sprites/art/keyboardHeroLanePalettes';
 import { releaseKeyboardHeroArt } from './keyboardHeroArtCache';
+import {
+  glowText,
+  paintTrackBar,
+  scaledStyle,
+  type GlowTextOptions,
+} from '../ui/screens/dialogs/minigameChrome';
+import type { Rect } from '../ui/core/geom';
+import { withAlpha } from '../ui/theme/color';
+import { skinsFor } from '../ui/theme/skins';
+import type { Theme, TypeStyle } from '../ui/theme/tokens';
+import type { PaintTarget } from '../ui/widgets/paint';
 import {
   clipToLanes,
   drawBoardBase,
@@ -102,6 +107,9 @@ const MISS_STAMP_MS = 520;
 
 /** Scrim alpha over the world behind the board. */
 const SCRIM_ALPHA = 0.86;
+
+/** Width of the box an anchored readout is laid into; wider than any string the board prints. */
+const ANCHORED_TEXT_WIDTH_FACTOR = 24;
 
 /** Two mistakes end the run, so the firewall has two pips to lose. */
 const FIREWALL_PIPS = 2;
@@ -178,12 +186,15 @@ const GLITCH_BAR_ALPHA = 0.34;
 const STREAK_PUNCH_MS = 220;
 /** Extra scale a freshly-incremented streak readout gets. */
 const STREAK_PUNCH_SCALE = 0.55;
-/** Streak thresholds and the colour each one promotes the readout to. */
-const STREAK_COLOR_RAMP: ReadonlyArray<{ readonly atLeast: number; readonly color: string }> = [
-  { atLeast: 30, color: '#ffffff' },
-  { atLeast: 20, color: '#ffa726' },
-  { atLeast: 10, color: '#4fc3f7' },
-  { atLeast: 0, color: '#94a3b8' },
+/** Streak thresholds and the text tone each one promotes the readout to. */
+const STREAK_TONE_RAMP: ReadonlyArray<{
+  readonly atLeast: number;
+  readonly tone: (theme: Theme) => string;
+}> = [
+  { atLeast: 30, tone: (theme) => theme.palette.text.primary },
+  { atLeast: 20, tone: (theme) => theme.palette.accent.base },
+  { atLeast: 10, tone: (theme) => theme.palette.state.info },
+  { atLeast: 0, tone: (theme) => theme.palette.text.secondary },
 ];
 
 /**
@@ -225,17 +236,12 @@ const HUD_PIP_GAP_IMG = 6;
 /** Board-space gap between a HUD label and the thing it labels. */
 const HUD_LABEL_GAP_IMG = 4;
 const HUD_PIP_LABEL_SIZE_IMG = 11;
-const HUD_MUTED_COLOR = '#7c8ba1';
-const HUD_VALUE_COLOR = '#dbeafe';
 /** How long a shattering pip throws its shards. */
 const PIP_SHATTER_MS = 520;
 const PIP_SHARD_COUNT = 9;
 /** Board-space pixels a pip shard travels over its life. */
 const PIP_SHARD_TRAVEL_IMG = 38;
 const PIP_SHARD_SIZE_IMG = 3;
-
-const DANGER_COLOR = '#ef4444';
-const SUCCESS_COLOR = '#4ade80';
 
 /** Extra scale a struck note pops to before it fades out. */
 const NOTE_HIT_POP_SCALE = 0.55;
@@ -273,7 +279,8 @@ interface LaneFeedback {
 interface Judgement {
   lane: LaneIndex;
   text: string;
-  color: string;
+  /** The judgement's colour, resolved against the theme it is painted with. */
+  color: (theme: Theme) => string;
   startedAtMs: number;
 }
 
@@ -347,6 +354,9 @@ export class KeyboardHeroSystem {
   private _glitchStartedAtMs = 0;
   /** Wall-clock time each firewall pip shattered, indexed by pip; 0 = still intact. */
   private _pipShatteredAtMs: number[] = [];
+
+  /** @param clock - the wall clock feedback runs on; a review harness passes a fake one. */
+  constructor(private readonly clock: () => number = () => performance.now()) {}
 
   start(onComplete: () => void, onFail: () => void, onFailImmediate?: () => void): void {
     this._onComplete = onComplete;
@@ -428,7 +438,7 @@ export class KeyboardHeroSystem {
    * callback.
    */
   private _nowMs(): number {
-    return performance.now();
+    return this.clock();
   }
 
   /**
@@ -565,21 +575,13 @@ export class KeyboardHeroSystem {
     this._processColumnInput(column, songTimeMs);
   }
 
-  /** @param songTimeMs - the song clock *at the moment of the tap*; see `_processColumnInput`. */
-  handleTouchAt(
-    x: number,
-    y: number,
-    canvasW: number,
-    canvasH: number,
-    songTimeMs: number | null,
-  ): void {
+  /**
+   * A tap on `lane`, already resolved by the caller against the layout it drew.
+   * @param songTimeMs - the song clock *at the moment of the tap*; see `_processColumnInput`.
+   */
+  handleLaneTap(lane: LaneIndex, songTimeMs: number | null): void {
     if (!this.isActive) return;
-
-    const layout = computeKeyboardHeroLayout(canvasW, canvasH, platform.isMobile);
-    const lane = laneAtPoint(layout, x, y);
-    if (lane === null) return;
     if (!isColumnIndex(lane)) return;
-
     this._processColumnInput(lane, songTimeMs);
   }
 
@@ -663,18 +665,18 @@ export class KeyboardHeroSystem {
   // ── Feedback bookkeeping ──────────────────────────────────────────────────
 
   private _registerHitFeedback(lane: ColumnIndex, offsetMs: number, nowMs: number): void {
-    const palette = LANE_PALETTES[lane];
+    const lanePalette = LANE_PALETTES[lane];
     this._lanes[lane].flashEndsAtMs = nowMs + RECEPTOR_FLASH_MS;
 
     const isPerfect = Math.abs(offsetMs) <= PERFECT_WINDOW_MS;
     this._judgements.push({
       lane,
       text: isPerfect ? 'PERFECT!' : 'HIT!',
-      color: isPerfect ? palette.light : palette.hue,
+      color: () => (isPerfect ? lanePalette.light : lanePalette.hue),
       startedAtMs: nowMs,
     });
 
-    this._spawnSparks(lane, SPARKS_PER_HIT, palette, nowMs);
+    this._spawnSparks(lane, SPARKS_PER_HIT, lanePalette, nowMs);
 
     this._streak++;
     this._streakPunchedAtMs = nowMs;
@@ -685,7 +687,12 @@ export class KeyboardHeroSystem {
     this._streak = 0;
     this._shakeStartedAtMs = nowMs;
     this._glitchStartedAtMs = nowMs;
-    this._judgements.push({ lane, text: 'MISS', color: DANGER_COLOR, startedAtMs: nowMs });
+    this._judgements.push({
+      lane,
+      text: 'MISS',
+      color: (theme) => theme.palette.state.danger,
+      startedAtMs: nowMs,
+    });
 
     // Pips shatter from the right, so the leftmost one is the last life left.
     const pipIndex = FIREWALL_PIPS - this._missCount;
@@ -695,7 +702,12 @@ export class KeyboardHeroSystem {
     }
   }
 
-  private _spawnSparks(lane: LaneIndex, count: number, palette: LanePalette, nowMs: number): void {
+  private _spawnSparks(
+    lane: LaneIndex,
+    count: number,
+    lanePalette: LanePalette,
+    nowMs: number,
+  ): void {
     if (this._sparks.length >= MAX_SPARKS) return;
     for (let i = 0; i < count; i++) {
       const angle = (i / count) * Math.PI * 2 + Math.random() * Math.PI;
@@ -708,7 +720,7 @@ export class KeyboardHeroSystem {
         vy: Math.sin(angle) * speed,
         bornAtMs: nowMs,
         lifeMs: SPARK_LIFE_MIN_MS + Math.random() * SPARK_LIFE_SPAN_MS,
-        color: Math.random() < SPARK_LIGHT_SHADE_CHANCE ? palette.hue : palette.light,
+        color: Math.random() < SPARK_LIGHT_SHADE_CHANCE ? lanePalette.hue : lanePalette.light,
       });
     }
   }
@@ -727,15 +739,25 @@ export class KeyboardHeroSystem {
 
   // ── Render ────────────────────────────────────────────────────────────────
 
-  render(ctx: CanvasRenderingContext2D): void {
+  /**
+   * Paints the scrim, the board and its readouts into `layout`. Nothing here is
+   * hit-tested: a caller that takes taps registers `layout.lanes` and
+   * `layout.touchButtons` itself and reports them through `handleLaneTap`.
+   */
+  paint(
+    target: PaintTarget,
+    layout: KeyboardHeroLayout,
+    viewportW: number,
+    viewportH: number,
+  ): void {
     if (!this.isActive && !this._failed && !this._completed) return;
 
-    const layout = computeKeyboardHeroLayout(viewportWidth(), viewportHeight(), platform.isMobile);
+    const { ctx } = target;
     const nowMs = this._nowMs();
 
     ctx.save();
-    ctx.fillStyle = `rgba(0, 0, 0, ${SCRIM_ALPHA})`;
-    ctx.fillRect(0, 0, viewportWidth(), viewportHeight());
+    ctx.fillStyle = withAlpha(target.theme.palette.surface.sunken, SCRIM_ALPHA);
+    ctx.fillRect(0, 0, viewportW, viewportH);
 
     // Everything painted *on* the console rides the shake with it — the pips and
     // counters are printed on the header and footer strips, and a judgement is
@@ -746,20 +768,20 @@ export class KeyboardHeroSystem {
     ctx.translate(shake.x, shake.y);
 
     drawBoardBase(ctx, layout, () => this._laneBedAlpha(nowMs), this._hitLineAlphaScale(nowMs));
-    this._drawLaneHighlights(ctx, layout, nowMs);
+    this._drawLaneHighlights(target, layout, nowMs);
     this._drawNotes(ctx, layout, nowMs);
     this._drawReceptors(ctx, layout, nowMs);
     this._drawSparks(ctx, layout, nowMs);
-    this._drawGlitchBars(ctx, layout, nowMs);
-    this._drawHud(ctx, layout, nowMs);
-    this._drawJudgements(ctx, layout, nowMs);
+    this._drawGlitchBars(target, layout, nowMs);
+    this._drawHud(target, layout, nowMs);
+    this._drawJudgements(target, layout, nowMs);
     ctx.restore();
 
     // The touch row sits below the housing, and the countdown and success stamp
     // float over it, so none of the three is part of the thing being shaken.
     this._drawTouchButtons(ctx, layout, nowMs);
-    this._drawCountdown(ctx, layout);
-    this._drawSuccessFlourish(ctx, layout, nowMs);
+    this._drawCountdown(target, layout);
+    this._drawSuccessFlourish(target, layout, nowMs);
 
     ctx.restore();
   }
@@ -817,7 +839,7 @@ export class KeyboardHeroSystem {
   }
 
   private _drawLaneHighlights(
-    ctx: CanvasRenderingContext2D,
+    target: PaintTarget,
     layout: KeyboardHeroLayout,
     nowMs: number,
   ): void {
@@ -836,8 +858,8 @@ export class KeyboardHeroSystem {
       // that is merely flaring as an error, because a dormant error and a dormant
       // press are both zero and zero is not less than zero.
       const isError = errorStrength > 0 && errorStrength >= Math.max(pressStrength, flareStrength);
-      const color = isError ? DANGER_COLOR : LANE_PALETTES[lane].hue;
-      drawLaneHighlight(ctx, layout, lane, color, strength);
+      const color = isError ? target.theme.palette.state.danger : LANE_PALETTES[lane].hue;
+      drawLaneHighlight(target.ctx, layout, lane, color, strength);
     }
   }
 
@@ -863,7 +885,7 @@ export class KeyboardHeroSystem {
     const imgY = this._noteImgY(note);
     const centerY = noteImgYToScreenY(layout, imgY);
     const laneRect = layout.lanes[note.column];
-    const centerX = laneRect.x + laneRect.width / 2;
+    const centerX = laneRect.x + laneRect.w / 2;
 
     let alpha = 1;
     let scale = 1;
@@ -914,7 +936,7 @@ export class KeyboardHeroSystem {
     // outer-lane hit would otherwise spray particles onto the bare scrim beyond
     // the console. The housing eats them instead.
     ctx.beginPath();
-    ctx.rect(layout.board.x, layout.board.y, layout.board.width, layout.board.height);
+    ctx.rect(layout.board.x, layout.board.y, layout.board.w, layout.board.h);
     ctx.clip();
     ctx.globalCompositeOperation = 'lighter';
     for (const spark of this._sparks) {
@@ -923,7 +945,7 @@ export class KeyboardHeroSystem {
       const laneRect = layout.lanes[spark.lane];
       const dxImg = spark.vx * age;
       const dyImg = spark.vy * age + SPARK_GRAVITY_IMG_PER_MS2 * age * age;
-      const x = laneRect.x + laneRect.width / 2 + dxImg * layout.scale;
+      const x = laneRect.x + laneRect.w / 2 + dxImg * layout.scale;
       const y = layout.hitLineY + dyImg * layout.scale;
       ctx.globalAlpha = 1 - life;
       ctx.fillStyle = spark.color;
@@ -939,73 +961,90 @@ export class KeyboardHeroSystem {
    * intrusion. Kept short and thin: misses happen mid-play, and anything that
    * obscures the next note turns one mistake into two.
    */
-  private _drawGlitchBars(
-    ctx: CanvasRenderingContext2D,
-    layout: KeyboardHeroLayout,
-    nowMs: number,
-  ): void {
+  private _drawGlitchBars(target: PaintTarget, layout: KeyboardHeroLayout, nowMs: number): void {
     const elapsed = nowMs - this._glitchStartedAtMs;
     if (this._glitchStartedAtMs === 0 || elapsed >= GLITCH_MS) return;
     const strength = 1 - elapsed / GLITCH_MS;
 
+    const { ctx } = target;
     ctx.save();
     clipToLanes(ctx, layout);
     ctx.globalCompositeOperation = 'lighter';
-    ctx.fillStyle = DANGER_COLOR;
+    ctx.fillStyle = target.theme.palette.state.danger;
     const barH = GLITCH_BAR_IMG_H * layout.scale;
     for (let i = 0; i < GLITCH_BAR_COUNT; i++) {
       const t = (i + 1) / (GLITCH_BAR_COUNT + 1);
-      const y = layout.laneArea.y + layout.laneArea.height * t;
+      const y = layout.laneArea.y + layout.laneArea.h * t;
       const offset = (i % 2 === 0 ? 1 : -1) * GLITCH_BAR_IMG_OFFSET * layout.scale * strength;
       ctx.globalAlpha = GLITCH_BAR_ALPHA * strength;
-      ctx.fillRect(layout.laneArea.x + offset, y, layout.laneArea.width, barH);
+      ctx.fillRect(layout.laneArea.x + offset, y, layout.laneArea.w, barH);
     }
     ctx.restore();
   }
 
-  private _drawJudgements(
-    ctx: CanvasRenderingContext2D,
-    layout: KeyboardHeroLayout,
-    nowMs: number,
+  /**
+   * A readout laid out the way the board's anchors are written: `y` is the top
+   * of the line and `x` the edge (or centre) named by `align`.
+   */
+  private _anchoredText(
+    target: PaintTarget,
+    x: number,
+    y: number,
+    opts: GlowTextOptions & { readonly style: TypeStyle },
   ): void {
+    const size = opts.style.size;
+    const width = size * ANCHORED_TEXT_WIDTH_FACTOR;
+    const align = opts.align ?? 'left';
+    const left = align === 'left' ? x : align === 'right' ? x - width : x - width / 2;
+    const rect: Rect = { x: left, y, w: width, h: size };
+    glowText(target, rect, { ...opts, valign: 'middle' });
+  }
+
+  /** A type role re-set at a board-space size the layout has scaled. */
+  private _style(target: PaintTarget, role: 'overline' | 'label' | 'display', size: number) {
+    return scaledStyle(target.theme.type[role], size);
+  }
+
+  private _drawJudgements(target: PaintTarget, layout: KeyboardHeroLayout, nowMs: number): void {
     for (const judgement of this._judgements) {
       const progress = clamp01((nowMs - judgement.startedAtMs) / JUDGEMENT_LIFE_MS);
       const receptor = layout.receptors[judgement.lane];
+      const judgementColor = judgement.color(target.theme);
       const size = JUDGEMENT_SIZE_IMG * layout.scale;
       const baseY = receptor.y - JUDGEMENT_GAP_IMG * layout.scale - size;
-      drawText(ctx, judgement.text, {
-        x: receptor.x + receptor.width / 2,
-        y: baseY - JUDGEMENT_RISE_IMG * layout.scale * progress,
-        size,
-        bold: true,
-        color: judgement.color,
-        align: 'center',
-        alpha: 1 - progress,
-        glow: judgement.color,
-        glowBlur: JUDGEMENT_GLOW_BLUR,
-        outline: true,
-      });
+      this._anchoredText(
+        target,
+        receptor.x + receptor.w / 2,
+        baseY - JUDGEMENT_RISE_IMG * layout.scale * progress,
+        {
+          text: judgement.text,
+          style: this._style(target, 'display', size),
+          color: judgementColor,
+          align: 'center',
+          alpha: 1 - progress,
+          glow: judgementColor,
+          glowBlur: JUDGEMENT_GLOW_BLUR,
+          halo: target.theme.palette.surface.sunken,
+        },
+      );
     }
   }
 
   // ── HUD ───────────────────────────────────────────────────────────────────
 
-  private _drawHud(ctx: CanvasRenderingContext2D, layout: KeyboardHeroLayout, nowMs: number): void {
-    this._drawFirewallPips(ctx, layout, nowMs);
-    this._drawProgress(ctx, layout);
-    this._drawCounters(ctx, layout, nowMs);
-    this._drawHint(ctx, layout);
+  private _drawHud(target: PaintTarget, layout: KeyboardHeroLayout, nowMs: number): void {
+    this._drawFirewallPips(target, layout, nowMs);
+    this._drawProgress(target, layout);
+    this._drawCounters(target, layout, nowMs);
+    this._drawHint(target, layout);
   }
 
   /**
-   * The two-strike rule used to be invisible until it killed you. Two pips, one
-   * shattering per mistake, teach it without a word of tutorial.
+   * The two-strike rule made visible: two pips, one shattering per mistake, so
+   * the player learns it without a word of tutorial.
    */
-  private _drawFirewallPips(
-    ctx: CanvasRenderingContext2D,
-    layout: KeyboardHeroLayout,
-    nowMs: number,
-  ): void {
+  private _drawFirewallPips(target: PaintTarget, layout: KeyboardHeroLayout, nowMs: number): void {
+    const { ctx } = target;
     const labelSize = HUD_PIP_LABEL_SIZE_IMG * layout.scale;
     const anchor = layout.integrityAnchor;
     const pipSize = layout.integrityPipSize;
@@ -1014,23 +1053,20 @@ export class KeyboardHeroSystem {
 
     // The label and its pips are one stacked block, centred in the header strip:
     // hanging the label off the pips instead pushes it out through the top bezel.
-    const blockTop =
-      layout.header.y + (layout.header.height - (labelSize + labelGap + pipSize)) / 2;
+    const blockTop = layout.header.y + (layout.header.h - (labelSize + labelGap + pipSize)) / 2;
     const pipsY = blockTop + labelSize + labelGap;
 
-    drawText(ctx, 'FIREWALL', {
-      x: anchor.x,
-      y: blockTop,
-      size: labelSize,
-      bold: true,
-      color: HUD_MUTED_COLOR,
+    this._anchoredText(target, anchor.x, blockTop, {
+      text: 'FIREWALL',
+      style: this._style(target, 'overline', labelSize),
+      color: target.theme.palette.text.muted,
     });
 
     for (let pip = 0; pip < FIREWALL_PIPS; pip++) {
       const x = anchor.x + pip * (pipSize + gap);
       const shatteredAtMs = this._pipShatteredAtMs[pip] ?? 0;
       const intact = shatteredAtMs === 0;
-      drawFirewallPip(ctx, { x, y: pipsY, width: pipSize, height: pipSize }, intact);
+      drawFirewallPip(ctx, { x, y: pipsY, w: pipSize, h: pipSize }, intact);
       if (!intact)
         this._drawPipShards(
           ctx,
@@ -1057,7 +1093,7 @@ export class KeyboardHeroSystem {
     // A shard outruns the header strip it was thrown from, so without this the
     // top of the burst lands on the bare scrim above the console.
     ctx.beginPath();
-    ctx.rect(layout.board.x, layout.board.y, layout.board.width, layout.board.height);
+    ctx.rect(layout.board.x, layout.board.y, layout.board.w, layout.board.h);
     ctx.clip();
     ctx.globalAlpha = 1 - progress;
     ctx.fillStyle = PIP_INTACT_BORDER;
@@ -1075,54 +1111,50 @@ export class KeyboardHeroSystem {
     ctx.restore();
   }
 
-  private _drawProgress(ctx: CanvasRenderingContext2D, layout: KeyboardHeroLayout): void {
+  private _drawProgress(target: PaintTarget, layout: KeyboardHeroLayout): void {
+    const { palette } = target.theme;
     const bar = layout.progressBar;
-    drawProgressBar(ctx, {
-      x: bar.x,
-      y: bar.y,
-      width: bar.width,
-      height: bar.height,
-      value: this._songTimeMs / KEYBOARD_HERO_CHART_END_MS,
-      ...PROGRESS_PRESETS.hack,
-    });
+    paintTrackBar(
+      target,
+      bar,
+      this._songTimeMs / KEYBOARD_HERO_CHART_END_MS,
+      skinsFor(target.theme).meter.progress,
+    );
 
     const labelSize = HUD_PIP_LABEL_SIZE_IMG * layout.scale;
-    drawText(ctx, 'INTRUSION PROGRESS', {
-      x: bar.x + bar.width / 2,
-      y: bar.y - labelSize - HUD_LABEL_GAP_IMG * layout.scale,
-      size: labelSize,
-      bold: true,
-      color: HUD_MUTED_COLOR,
-      align: 'center',
-    });
+    this._anchoredText(
+      target,
+      bar.x + bar.w / 2,
+      bar.y - labelSize - HUD_LABEL_GAP_IMG * layout.scale,
+      {
+        text: 'INTRUSION PROGRESS',
+        style: this._style(target, 'overline', labelSize),
+        color: palette.text.muted,
+        align: 'center',
+      },
+    );
 
     const remainingMs = Math.max(0, KEYBOARD_HERO_CHART_END_MS - this._songTimeMs);
     const remainingSec = Math.ceil(remainingMs / MS_PER_SECOND);
     const mm = Math.floor(remainingSec / SECONDS_PER_MINUTE);
     const ss = remainingSec % SECONDS_PER_MINUTE;
     const size = HUD_LABEL_SIZE_IMG * layout.scale;
-    drawText(ctx, `${mm.toString().padStart(2, '0')}:${ss.toString().padStart(2, '0')}`, {
-      x: layout.timerAnchor.x,
-      y: layout.timerAnchor.y - size / 2,
-      size,
-      bold: true,
-      color: HUD_VALUE_COLOR,
+    this._anchoredText(target, layout.timerAnchor.x, layout.timerAnchor.y - size / 2, {
+      text: `${mm.toString().padStart(2, '0')}:${ss.toString().padStart(2, '0')}`,
+      style: this._style(target, 'label', size),
+      color: palette.text.primary,
       align: 'right',
+      tabular: true,
     });
   }
 
-  private _drawCounters(
-    ctx: CanvasRenderingContext2D,
-    layout: KeyboardHeroLayout,
-    nowMs: number,
-  ): void {
+  private _drawCounters(target: PaintTarget, layout: KeyboardHeroLayout, nowMs: number): void {
     const size = HUD_LABEL_SIZE_IMG * layout.scale;
-    drawText(ctx, `HITS ${this._hitCount}`, {
-      x: layout.hitCountAnchor.x,
-      y: layout.hitCountAnchor.y - size / 2,
-      size,
-      bold: true,
-      color: HUD_MUTED_COLOR,
+    this._anchoredText(target, layout.hitCountAnchor.x, layout.hitCountAnchor.y - size / 2, {
+      text: `HITS ${this._hitCount}`,
+      style: this._style(target, 'label', size),
+      color: target.theme.palette.text.secondary,
+      tabular: true,
     });
 
     if (this._streak <= 0) return;
@@ -1133,30 +1165,27 @@ export class KeyboardHeroSystem {
       nowMs,
     );
     const streakSize = HUD_VALUE_SIZE_IMG * layout.scale * (1 + STREAK_PUNCH_SCALE * punch);
-    const color = streakColor(this._streak);
-    drawText(ctx, `x${this._streak}`, {
-      x: layout.streakAnchor.x,
-      y: layout.streakAnchor.y - streakSize / 2,
-      size: streakSize,
-      bold: true,
+    const color = streakColor(target.theme, this._streak);
+    this._anchoredText(target, layout.streakAnchor.x, layout.streakAnchor.y - streakSize / 2, {
+      text: `x${this._streak}`,
+      style: this._style(target, 'display', streakSize),
       color,
       align: 'right',
       glow: color,
       glowBlur: JUDGEMENT_GLOW_BLUR * punch,
+      tabular: true,
     });
   }
 
-  private _drawHint(ctx: CanvasRenderingContext2D, layout: KeyboardHeroLayout): void {
+  private _drawHint(target: PaintTarget, layout: KeyboardHeroLayout): void {
     // On mobile the buttons under the board are the hint; saying it again just
     // spends footer space the streak readout wants.
     if (layout.isMobile) return;
     const size = HUD_HINT_SIZE_IMG * layout.scale;
-    drawText(ctx, 'WASD / ARROW KEYS', {
-      x: layout.hintAnchor.x,
-      y: layout.hintAnchor.y - size / 2,
-      size,
-      bold: true,
-      color: HUD_MUTED_COLOR,
+    this._anchoredText(target, layout.hintAnchor.x, layout.hintAnchor.y - size / 2, {
+      text: 'WASD / ARROW KEYS',
+      style: this._style(target, 'label', size),
+      color: target.theme.palette.text.secondary,
       align: 'center',
     });
   }
@@ -1179,8 +1208,9 @@ export class KeyboardHeroSystem {
    * in over that gap is the difference between a run that starts on the beat and
    * one that starts with a miss.
    */
-  private _drawCountdown(ctx: CanvasRenderingContext2D, layout: KeyboardHeroLayout): void {
+  private _drawCountdown(target: PaintTarget, layout: KeyboardHeroLayout): void {
     if (this._failed || this._completed) return;
+    const { palette } = target.theme;
     const firstNote = KEYBOARD_HERO_CHART[0];
     const stepMs = firstNote.timeMs / COUNTDOWN_LABELS.length;
     const finalSlot = COUNTDOWN_LABELS.length - 1;
@@ -1190,10 +1220,10 @@ export class KeyboardHeroSystem {
     // clock is latency-corrected, so it reads negative for the first tens of
     // milliseconds of every attempt — the track has begun, but its opening sample
     // has not reached the player's ears yet. Floored, that is slot -1, and the
-    // label it indexes does not exist. `drawText` then throws mid-render, the
-    // scrim and the board's clip are never popped off the save stack, and every
-    // later frame paints inside them: a dark, garbled screen over a floor the
-    // player can still walk around, because only rendering died.
+    // label it indexes does not exist. The text painter then throws mid-render,
+    // the scrim and the board's clip are never popped off the save stack, and
+    // every later frame paints inside them: a dark, garbled screen over a floor
+    // the player can still walk around, because only rendering died.
     const rawSlot = Math.floor(this._songTimeMs / stepMs);
     const slot = Math.max(0, Math.min(finalSlot, rawSlot));
     const label = COUNTDOWN_LABELS[slot];
@@ -1206,19 +1236,17 @@ export class KeyboardHeroSystem {
     const slotProgress = clamp01(intoSlot / slotSpanMs);
     const popProgress = clamp01(slotProgress / COUNTDOWN_POP_FRACTION);
     const size = COUNTDOWN_SIZE_IMG * layout.scale * (1 + COUNTDOWN_POP_SCALE * (1 - popProgress));
-    const color = slot === finalSlot ? SUCCESS_COLOR : '#e2e8f0';
+    const color = slot === finalSlot ? palette.state.success : palette.text.primary;
 
-    drawText(ctx, label, {
-      x: layout.boardCenter.x,
-      y: layout.boardCenter.y - size / 2,
-      size,
-      bold: true,
+    this._anchoredText(target, layout.boardCenter.x, layout.boardCenter.y - size / 2, {
+      text: label,
+      style: this._style(target, 'display', size),
       color,
       align: 'center',
       alpha: 1 - slotProgress * slotProgress,
       glow: color,
       glowBlur: JUDGEMENT_GLOW_BLUR * 2,
-      outline: true,
+      halo: palette.surface.sunken,
     });
   }
 
@@ -1237,26 +1265,25 @@ export class KeyboardHeroSystem {
   }
 
   private _drawSuccessFlourish(
-    ctx: CanvasRenderingContext2D,
+    target: PaintTarget,
     layout: KeyboardHeroLayout,
     nowMs: number,
   ): void {
     const progress = this._successFlourishProgress(nowMs);
     if (progress <= 0) return;
 
+    const { palette } = target.theme;
     const popProgress = clamp01(progress / SUCCESS_STAMP_POP_FRACTION);
     const size =
       SUCCESS_STAMP_SIZE_IMG * layout.scale * (1 + SUCCESS_STAMP_POP_SCALE * (1 - popProgress));
-    drawText(ctx, 'ACCESS GRANTED', {
-      x: layout.boardCenter.x,
-      y: layout.boardCenter.y - size / 2,
-      size,
-      bold: true,
-      color: SUCCESS_COLOR,
+    this._anchoredText(target, layout.boardCenter.x, layout.boardCenter.y - size / 2, {
+      text: 'ACCESS GRANTED',
+      style: this._style(target, 'display', size),
+      color: palette.state.success,
       align: 'center',
-      glow: SUCCESS_COLOR,
+      glow: palette.state.success,
       glowBlur: JUDGEMENT_GLOW_BLUR * 2,
-      outline: true,
+      halo: palette.surface.sunken,
     });
   }
 }
@@ -1276,9 +1303,9 @@ function remainingFraction(endsAtMs: number, spanMs: number, nowMs: number): num
   return clamp01((endsAtMs - nowMs) / spanMs);
 }
 
-function streakColor(streak: number): string {
-  for (const step of STREAK_COLOR_RAMP) {
-    if (streak >= step.atLeast) return step.color;
+function streakColor(theme: Theme, streak: number): string {
+  for (const step of STREAK_TONE_RAMP) {
+    if (streak >= step.atLeast) return step.tone(theme);
   }
-  return HUD_MUTED_COLOR;
+  return theme.palette.text.muted;
 }

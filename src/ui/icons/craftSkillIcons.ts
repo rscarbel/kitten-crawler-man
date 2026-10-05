@@ -9,6 +9,8 @@
 
 import { drawToolIcon } from './toolIcons';
 import type { CraftSkillId } from '../../core/CraftSkills';
+import type { Rect } from '../core/geom';
+import { iconSquare } from './iconSquare';
 
 const OUTLINE = '#1c1712';
 const OUTLINE_WIDTH = 1;
@@ -105,17 +107,16 @@ function drawConstructionIcon(
   ctx.restore();
 }
 
-/** Draws the icon for one craft skill into a square icon region at `x`,`y`. */
+/** Draws the icon for one craft skill into the largest square centred in `rect`. */
 export function drawCraftSkillIcon(
   ctx: CanvasRenderingContext2D,
+  rect: Rect,
   id: CraftSkillId,
-  x: number,
-  y: number,
-  size: number,
 ): void {
   if (id === 'resourcing') {
-    drawToolIcon(ctx, 'basic_axe', x, y, size);
+    drawToolIcon(ctx, rect, 'basic_axe');
     return;
   }
+  const { x, y, size } = iconSquare(rect);
   drawConstructionIcon(ctx, x, y, size);
 }

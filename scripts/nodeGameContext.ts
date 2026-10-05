@@ -11,6 +11,8 @@
 
 import { createCanvas, type Canvas } from 'canvas';
 
+import './nodeUiFont.js';
+
 import type { CanvasSurface } from '../src/core/canvasSurface.js';
 
 export type NodeContext = ReturnType<ReturnType<typeof createCanvas>['getContext']>;

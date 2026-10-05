@@ -21,11 +21,11 @@ import { GOBLIN_DYNAMITE_PRICE } from '../../ShopSystem';
 import { SOLD_OUT_LABEL } from '../../market/vendorMenu';
 import { TRADING_POST_PRICING } from '../../market/shopProfiles';
 import type {
-  PricedMenu,
-  PricedOption,
-  PricedPurchaseResult,
-  SellConfig,
-} from '../../../ui/PricedMenuPanel';
+  ShopMenu,
+  ShopRow,
+  ShopPurchaseResult,
+  ShopSellConfig,
+} from '../../../ui/screens/shop/shopSession';
 import type { TopicProvider } from '../villagerTopics';
 import { SPEAKERS } from '../../../dialog/speakers';
 import { VETCH } from '../../../dialog/scripts/briarHollow';
@@ -110,10 +110,10 @@ function tradingPostLinesFor(state: BriarHollowState): readonly TradingPostLine[
   return TRADING_POST_LINES.filter((entry) => !PROCESSED_GOODS.has(entry.id));
 }
 
-export function buildTradingPostMenu(state: BriarHollowState): PricedMenu {
-  const options = tradingPostLinesFor(state).map((entry): PricedOption => {
+export function buildTradingPostMenu(state: BriarHollowState): ShopMenu {
+  const options = tradingPostLinesFor(state).map((entry): ShopRow => {
     const remaining = remainingStock(state, entry);
-    const option: PricedOption = {
+    const option: ShopRow = {
       key: entry.id,
       label: ITEM_DEF[entry.id].name,
       price: linePrice(state, entry),
@@ -132,10 +132,10 @@ export function buildTradingPostMenu(state: BriarHollowState): PricedMenu {
 
 export function tradingPostPurchase(
   state: BriarHollowState,
-  option: PricedOption,
+  option: ShopRow,
   buyer: Player,
   announce: (message: string) => void,
-): PricedPurchaseResult {
+): ShopPurchaseResult {
   const entry = tradingPostLinesFor(state).find((candidate) => candidate.id === option.key);
   if (entry === undefined) return { ok: false, line: '' };
   const remaining = remainingStock(state, entry);
@@ -149,7 +149,7 @@ export function tradingPostPurchase(
   return { ok: true, line: `${ITEM_DEF[entry.id].name} — ${left} left.` };
 }
 
-function tradingPostSellConfig(state: BriarHollowState): SellConfig {
+function tradingPostSellConfig(state: BriarHollowState): ShopSellConfig {
   return { pricing: TRADING_POST_PRICING, heldStock: state.merchantHeld, vendorId: MERCHANT };
 }
 

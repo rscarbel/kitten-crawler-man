@@ -1,10 +1,12 @@
 /**
  * Small icons for rewards that are not bag items: experience, coins and an
- * achievement loot box. Each paints into the `size`-pixel square whose top-left
- * corner is (`x`, `y`), the same contract as `drawItemIcon`.
+ * achievement loot box. Each paints into the largest square centred in its
+ * `rect`, the same contract as `drawItemIcon`.
  */
 
 import type { BoxTier } from '../../core/AchievementManager';
+import type { Rect } from '../core/geom';
+import { iconSquare } from './iconSquare';
 
 const FULL_TURN = Math.PI * 2;
 
@@ -18,12 +20,8 @@ const XP_STAR_EDGE = '#365314';
 const XP_STAR_EDGE_WIDTH = 0.07;
 
 /** A five-pointed green star: experience, the colour the XP bar fills in. */
-export function drawXpRewardIcon(
-  ctx: CanvasRenderingContext2D,
-  x: number,
-  y: number,
-  size: number,
-): void {
+export function drawXpRewardIcon(ctx: CanvasRenderingContext2D, rect: Rect): void {
+  const { x, y, size } = iconSquare(rect);
   const cx = x + size / 2;
   const cy = y + size / 2;
   const tips = XP_STAR_POINTS * 2;
@@ -59,12 +57,8 @@ const COIN_GLINT_RADIUS = 0.09;
 const COIN_GLINT_COLOR = '#fef3c7';
 
 /** A gold coin seen face-on, with an inner rim and a glint. */
-export function drawCoinRewardIcon(
-  ctx: CanvasRenderingContext2D,
-  x: number,
-  y: number,
-  size: number,
-): void {
+export function drawCoinRewardIcon(ctx: CanvasRenderingContext2D, rect: Rect): void {
+  const { x, y, size } = iconSquare(rect);
   const cx = x + size / 2;
   const cy = y + size / 2;
   ctx.save();
@@ -114,11 +108,10 @@ const BOX_RIBBON_WIDTH = 0.1;
 /** A ribboned box in its tier's colour. */
 export function drawLootBoxRewardIcon(
   ctx: CanvasRenderingContext2D,
-  x: number,
-  y: number,
-  size: number,
+  rect: Rect,
   tier: BoxTier,
 ): void {
+  const { x, y, size } = iconSquare(rect);
   const color = LOOT_BOX_TIER_COLORS[tier];
   const left = x + BOX_INSET * size;
   const width = size * (1 - BOX_INSET * 2);
@@ -146,4 +139,13 @@ export function drawLootBoxRewardIcon(
     bodyTop + bodyHeight - lidTop,
   );
   ctx.restore();
+}
+
+const UNKNOWN_ABILITY_FILL = '#a855f7';
+
+/** A plain violet square for an ability whose definition has no icon to offer. */
+export function drawUnknownAbilityIcon(ctx: CanvasRenderingContext2D, rect: Rect): void {
+  const { x, y, size } = iconSquare(rect);
+  ctx.fillStyle = UNKNOWN_ABILITY_FILL;
+  ctx.fillRect(x, y, size, size);
 }

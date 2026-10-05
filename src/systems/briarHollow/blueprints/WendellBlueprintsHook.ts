@@ -171,11 +171,6 @@ export class WendellBlueprintsHook implements ResidentQuestHook {
     return this.deps.conversation.dismiss();
   }
 
-  handleClick(mx: number, my: number): boolean {
-    if (!this.isDialogOpen) return false;
-    return this.deps.conversation.handleClick(mx, my);
-  }
-
   update(): void {
     return;
   }

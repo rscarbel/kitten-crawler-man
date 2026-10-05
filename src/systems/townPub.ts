@@ -1,7 +1,7 @@
 /**
  * The tavern round. Talking to a barkeep opens a short drink menu: a few coins
  * for something served on the spot rather than sold as an item the way the market
- * stalls do. Pure data + effect application here; `PricedMenuPanel` owns the UI
+ * stalls do. Pure data + effect application here; the shop screen owns the UI
  * and `BuildingInteriorScene` owns the sounds and the interaction gating.
  *
  * The town's three drinking houses each keep their own board, so the Low Quarter
@@ -14,14 +14,14 @@
 import { makeDrunk } from '../core/StatusEffect';
 import { playDrinkGesture } from '../creatures/humanGestures';
 import type { Player } from '../Player';
-import type { PricedMenu, PricedOption, PricedPurchaseHandler } from '../ui/PricedMenuPanel';
+import type { ShopMenu, ShopRow, ShopPurchaseHandler } from '../ui/screens/shop/shopSession';
 import type { ResidentHost } from './townResidents';
 import { rotateLine } from './townServiceUtil';
 
 /** What a serving does to whoever downs it. */
 type DrinkEffect = 'drunk' | 'drunk_and_heal' | 'heal' | 'speed';
 
-type Drink = PricedOption & {
+type Drink = ShopRow & {
   effect: DrinkEffect;
   /** Fraction of max HP restored; only read by the healing effects. */
   healFraction?: number;
@@ -196,13 +196,13 @@ export function buildTavernMenu(
   buyer: Player,
   turn: number,
   host: ResidentHost | null,
-): PricedMenu {
+): ShopMenu {
   return {
     title: house,
     bark: host?.line ?? pubServeLine(house, turn),
     byline: host?.name,
     options: drinksFor(house).map((drink) => {
-      const option: PricedOption = {
+      const option: ShopRow = {
         key: drink.key,
         label: drink.label,
         price: drink.price,
@@ -221,7 +221,7 @@ export function buildTavernMenu(
  * The purchase handler for one house — bound to the same board `buildTavernMenu`
  * showed, so a key can never be served from a different tavern's list.
  */
-export function serveDrinkAt(house: string): PricedPurchaseHandler {
+export function serveDrinkAt(house: string): ShopPurchaseHandler {
   return (option, player) => {
     const drink = drinksFor(house).find((d) => d.key === option.key);
     if (drink === undefined) return { ok: false, line: 'The barkeep shrugs.' };

@@ -24,14 +24,14 @@ import type { GameSystem, SystemContext } from './GameSystem';
 import {
   DOOMSDAY_CONTAIN_OBJECTIVE,
   type DoomsdayProgress,
-  countdownUrgencyColor,
   formatCountdownClock,
+  isCountdownUrgent,
   isDoomsdayCountdownLive,
   triggerDoomsdayExplosionIfExpired,
 } from '../core/DoomsdayProgress';
-import { drawText } from '../ui/TextBox';
-import { drawSpriteKey } from '../core/SpriteRenderer';
-import { viewportWidth } from '../core/Viewport';
+import { renderEscapeStairwell, STAIRWELL_SCALE } from '../sprites/doomsdayStairwell';
+import type { TopBandEntry } from '../ui/hud/topBand';
+import { stackedBandEntry, type BandRow } from '../ui/hud/topBandStack';
 import type { TownPropRenderable } from './townPropRenderable';
 import type { TrackerEntry, TrackerSource, TrackerTarget } from './questTracker';
 import { towerApproachBeaconTarget } from './objectiveBeaconTargets';
@@ -39,14 +39,6 @@ import { towerApproachBeaconTarget } from './objectiveBeaconTargets';
 /** How close the player must be to the escape tile to take the stairs. */
 const REACH_RANGE_TILES = 1.2;
 
-const STAIRWELL_SCALE = 2;
-const STAIRWELL_PULSE_CENTER = 0.7;
-const STAIRWELL_PULSE_AMPLITUDE = 0.2;
-const STAIRWELL_PULSE_SPEED = 500; // ms
-const STAIRWELL_BORDER_WIDTH = 2;
-const STAIRWELL_OPEN_GLOW_BLUR = 12;
-/** Pixels the border sits inside the sprite's own edge, so the stroke is not clipped by it. */
-const STAIRWELL_BORDER_INSET = 1;
 /**
  * How far north of its own tile the stairwell sorts in the Y-sorted pass.
  *
@@ -57,10 +49,8 @@ const STAIRWELL_BORDER_INSET = 1;
  */
 const STAIRWELL_SORT_LIFT_TILES = 1;
 
-const COUNTDOWN_Y = 60;
-const COUNTDOWN_SIZE = 16;
-const COUNTDOWN_LABEL_Y = 78;
-const COUNTDOWN_LABEL_SIZE = 12;
+/** What the countdown card says while the crystal is still loose, in the city and in the tower alike. */
+export const CONTAINMENT_LABEL = 'THE SOUL CRYSTAL IS DESTABILIZING';
 
 /** Shown once per visit when the party steps on the stairs before the crystal is contained. */
 export const STAIRWELL_SEALED_TOAST = 'The crystal must be contained first';
@@ -236,38 +226,59 @@ export class DoomsdayEscapeSystem implements GameSystem, TrackerSource {
       cullMarginTiles: STAIRWELL_SCALE + STAIRWELL_SORT_LIFT_TILES,
       render(ctx, camX, camY) {
         if (escapeTile === undefined || !isEscapeStairwellStanding(progress)) return;
-        renderStairwell(ctx, escapeTile, camX, camY, progress.stage !== 'containment');
+        renderEscapeStairwell(ctx, escapeTile, camX, camY, progress.stage !== 'containment');
       },
     };
   }
 
   /** Countdown HUD — shown while the doomsday countdown is running, whether the crystal is contained yet or not. */
-  renderUI(ctx: CanvasRenderingContext2D): void {
+  topBandEntry(): TopBandEntry | null {
     const { stage, deadlineAt } = this.progress;
-    if (!isDoomsdayCountdownLive(this.progress) || deadlineAt === null) return;
-
-    drawText(
-      ctx,
-      stage === 'containment' ? 'THE SOUL CRYSTAL IS DESTABILIZING' : 'GET TO THE ESCAPE ROUTE',
-      {
-        x: viewportWidth() / 2,
-        y: COUNTDOWN_LABEL_Y,
-        size: COUNTDOWN_LABEL_SIZE,
-        bold: true,
-        color: '#f47c7c',
-        align: 'center',
-      },
-    );
-    drawText(ctx, formatCountdownClock(deadlineAt), {
-      x: viewportWidth() / 2,
-      y: COUNTDOWN_Y,
-      size: COUNTDOWN_SIZE,
-      bold: true,
-      color: countdownUrgencyColor(deadlineAt),
-      align: 'center',
-      outline: true,
+    if (!isDoomsdayCountdownLive(this.progress) || deadlineAt === null) return null;
+    return doomsdayCountdownEntry({
+      id: 'doomsday-countdown',
+      label: stage === 'containment' ? CONTAINMENT_LABEL : 'GET TO THE ESCAPE ROUTE',
+      deadlineAt,
     });
   }
+}
+
+/** What a doomsday countdown card says, and when it runs out. */
+export interface DoomsdayCountdownOptions {
+  /** Unique within the band this frame. */
+  readonly id: string;
+  readonly label: string;
+  readonly deadlineAt: number;
+  /** A line under the label saying what to do about it. */
+  readonly objective?: string;
+}
+
+/**
+ * The doomsday countdown as a top-band entry: the clock, what it is counting
+ * down to, and optionally what to do about it. Shared by the overworld and the
+ * tower, so the deadline reads the same wherever the party stands.
+ */
+export function doomsdayCountdownEntry(opts: DoomsdayCountdownOptions): TopBandEntry {
+  const tone = isCountdownUrgent(opts.deadlineAt) ? 'danger' : 'warning';
+  const rows: BandRow[] = [
+    {
+      kind: 'text',
+      text: formatCountdownClock(opts.deadlineAt),
+      role: 'heading',
+      tone,
+      tabular: true,
+    },
+    { kind: 'text', text: opts.label, role: 'label', tone: 'danger', wrap: true, maxLines: 2 },
+  ];
+  if (opts.objective !== undefined) {
+    rows.push({ kind: 'text', text: opts.objective, role: 'caption', wrap: true, maxLines: 2 });
+  }
+  return stackedBandEntry({
+    id: opts.id,
+    priority: 'countdown',
+    accentTone: tone,
+    rows,
+  });
 }
 
 /**
@@ -276,41 +287,4 @@ export class DoomsdayEscapeSystem implements GameSystem, TrackerSource {
  */
 function isEscapeStairwellStanding(progress: DoomsdayProgress): boolean {
   return isDoomsdayCountdownLive(progress) || progress.stage === 'complete';
-}
-
-/**
- * The stairwell and its rim: a red pulse while it is sealed, a green glow once
- * the crystal is contained and it leads out.
- */
-function renderStairwell(
-  ctx: CanvasRenderingContext2D,
-  tile: { x: number; y: number },
-  camX: number,
-  camY: number,
-  open: boolean,
-): void {
-  const sx = tile.x * TILE_SIZE - camX;
-  const sy = tile.y * TILE_SIZE - camY;
-  const size = TILE_SIZE * STAIRWELL_SCALE;
-  const pulse =
-    STAIRWELL_PULSE_CENTER +
-    Math.sin(Date.now() / STAIRWELL_PULSE_SPEED) * STAIRWELL_PULSE_AMPLITUDE;
-
-  drawSpriteKey(ctx, 'stairwell', 'street', 0, sx, sy, size);
-  ctx.save();
-  if (open) {
-    ctx.strokeStyle = `rgba(74, 222, 128, ${pulse})`;
-    ctx.shadowColor = '#4ade80';
-    ctx.shadowBlur = STAIRWELL_OPEN_GLOW_BLUR;
-  } else {
-    ctx.strokeStyle = `rgba(239, 68, 68, ${pulse})`;
-  }
-  ctx.lineWidth = STAIRWELL_BORDER_WIDTH;
-  ctx.strokeRect(
-    sx + STAIRWELL_BORDER_INSET,
-    sy + STAIRWELL_BORDER_INSET,
-    size - STAIRWELL_BORDER_INSET * 2,
-    size - STAIRWELL_BORDER_INSET * 2,
-  );
-  ctx.restore();
 }

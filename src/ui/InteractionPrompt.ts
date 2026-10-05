@@ -1,26 +1,36 @@
-import { platform } from '../core/Platform';
-import { keybindings } from '../core/Keybindings';
-import { deferAboveDarkness } from '../systems/lighting/aboveDarkness';
+import { skinsFor } from './theme/skins';
+import { resolveTheme, type Theme } from './theme/tokens';
 
-// InteractionPrompt layout constants
-const BOB_PERIOD = 400;
-const BOB_AMPLITUDE = 2;
-const KEY_PADDING = 10;
-const KEY_HEIGHT = 16;
-const LABEL_GAP = 4;
-const KEY_RADIUS = 3;
-const LABEL_Y_OFFSET = 12;
-const LABEL_X_OFFSET = 4;
-const KEY_CENTER_X = 0.5;
-const KEY_CENTER_Y = 0.5;
-const KEY_CENTER_Y_OFFSET = 0.5;
-const HALF_DIVISOR = 0.5;
-const HIGHLIGHT_OFFSET_X = 1;
-const HIGHLIGHT_OFFSET_Y = 2;
-const HIGHLIGHT_LINE_OFFSET = 1;
+/** Period of the prompt's bob, in ms per radian. */
+export const PROMPT_BOB_PERIOD_MS = 400;
+/** How far the prompt bobs above and below its rest height, in UI units. */
+export const PROMPT_BOB_AMPLITUDE = 2;
+/** Gap between the prompted object's top edge and the bottom of the pill, in UI units. */
+export const PROMPT_LIFT = 12;
 
-let _promptsSuppressed = false;
-let _promptsDrawnThisFrame = 0;
+/** Before the first prompt frame there is no live theme; the pill's geometry is the same at either density. */
+const DEFAULT_THEME = resolveTheme('pointer');
+const DEFAULT_UI_SCALE = 1;
+
+/** The pill's height: a keycap with its pressed-edge depth, padded on both sides. */
+export function promptPillHeight(theme: Theme): number {
+  const keycap = skinsFor(theme).keycap;
+  return keycap.height + keycap.depth + theme.space.xs * 2;
+}
+
+/** A prompt waiting to be drawn, anchored at the top-centre of its object in canvas pixels. */
+export interface QueuedPrompt {
+  readonly canvasX: number;
+  readonly canvasY: number;
+  readonly label: string | null;
+  readonly keyOverride: string | null;
+}
+
+const queue: QueuedPrompt[] = [];
+let promptsSuppressed = false;
+let promptsDrawnThisFrame = 0;
+let lastUiScale = DEFAULT_UI_SCALE;
+let lastTheme = DEFAULT_THEME;
 
 /**
  * Silences every floating prompt for the frame.
@@ -29,28 +39,30 @@ let _promptsDrawnThisFrame = 0;
  * object, so none of them can tell whether a dialog is already covering the
  * screen — and a per-system list of dialog flags goes stale the moment a new
  * dialog system is added. A scene instead answers the question once per frame
- * from its `overlayClaims`, the same way `setButtonMouseState` feeds hover state
- * to every button from one call.
+ * from its `UiRoot`'s surface stack, in one call for every prompt.
  *
  * Call it at the top of every scene render that draws prompts: the flag is
  * module state, so a scene that never sets it inherits the last scene's answer.
+ * It also drops anything still queued, so a scene without the prompt surface
+ * mounted never accumulates prompts.
  */
 export function setInteractionPromptsSuppressed(suppressed: boolean): void {
-  _promptsSuppressed = suppressed;
-  _promptsDrawnThisFrame = 0;
+  promptsSuppressed = suppressed;
+  promptsDrawnThisFrame = 0;
+  queue.length = 0;
 }
 
 /**
- * Prompts actually drawn since the frame began — the frame being the last
+ * Prompts raised since the frame began — the frame being the last
  * {@link setInteractionPromptsSuppressed} call, which every prompting scene
  * makes at the top of its render.
  *
- * For a prompt that stands for the last link of a scene's Space chain: drawn
+ * For a prompt that stands for the last link of a scene's Space chain: raised
  * after every other prompt, it can show only when none of them did, and so
  * never promises a press that an earlier link would take.
  */
 export function interactionPromptsDrawnThisFrame(): number {
-  return _promptsDrawnThisFrame;
+  return promptsDrawnThisFrame;
 }
 
 /**
@@ -60,28 +72,37 @@ export function interactionPromptsDrawnThisFrame(): number {
  * that still needs to honor the same one answer everything else does.
  */
 export function interactionPromptsSuppressed(): boolean {
-  return _promptsSuppressed;
-}
-
-/** The highest pixel a prompt anchored at `sy` reaches, bob included, for UI stacked above it. */
-export function interactionPromptTop(sy: number): number {
-  return sy - LABEL_Y_OFFSET - KEY_HEIGHT - BOB_AMPLITUDE;
+  return promptsSuppressed;
 }
 
 /**
- * Draws a floating interaction prompt above an object in world-space.
+ * The highest pixel a prompt anchored at `sy` reaches, bob included, for
+ * world art stacked above it. The pill is sized in UI units, so the reach is
+ * converted with the UI scale of the last frame that drew prompts.
+ */
+export function interactionPromptTop(sy: number): number {
+  const reachUnits = PROMPT_LIFT + promptPillHeight(lastTheme) + PROMPT_BOB_AMPLITUDE;
+  return sy - reachUnits * lastUiScale;
+}
+
+/**
+ * Raises a floating interaction prompt above an object in world space: a
+ * keycap ("SPACE", or "TAP" on touch) with an optional action label, bobbing
+ * gently to draw the player's eye.
  *
- * Renders a small rounded "SPACE" key icon (or "TAP" on mobile) with an
- * optional action label, bobbing gently to draw the player's eye.
+ * Nothing is painted here. The prompt is queued with its position mapped
+ * through the context's current transform, and the scene's prompt surface
+ * draws the whole queue above the world, its darkness and fog, in the same
+ * frame — so it must be raised before the scene's `ui.frame`.
  *
  * Does nothing while {@link setInteractionPromptsSuppressed} is set for the frame.
  *
- * @param ctx      Canvas context (world-space, already camera-offset)
- * @param sx       Screen-x of the object's top-left corner
- * @param sy       Screen-y of the object's top-left corner
- * @param objW     Width of the object in pixels (prompt is centered above it)
- * @param label    Optional action label shown to the right of the key, e.g. "Talk"
- * @param keyOverride  Optional key text override (default: "SPACE" / "TAP")
+ * @param ctx      Canvas context the object is being drawn with
+ * @param sx       X of the object's top-left corner in `ctx`'s current space
+ * @param sy       Y of the object's top-left corner in `ctx`'s current space
+ * @param objW     Width of the object in that space (the prompt is centred above it)
+ * @param label    Optional action label shown beside the key, e.g. "Talk"
+ * @param keyOverride  Optional key text override (default: the attack key, or "TAP" on touch)
  */
 export function drawInteractionPrompt(
   ctx: CanvasRenderingContext2D,
@@ -91,88 +112,40 @@ export function drawInteractionPrompt(
   label?: string,
   keyOverride?: string,
 ): void {
-  if (_promptsSuppressed) return;
-  // A prompt raised from inside the entity pass waits for the dungeon's
-  // darkness to be drawn, so it is never dimmed by it.
-  const deferred = deferAboveDarkness((target) =>
-    drawInteractionPrompt(target, sx, sy, objW, label, keyOverride),
-  );
-  if (deferred) return;
-  _promptsDrawnThisFrame++;
-  const keyText =
-    keyOverride ?? (platform.isMobile ? 'TAP' : keybindings.labelFor('attack').toUpperCase());
-  const bob = Math.sin(performance.now() / BOB_PERIOD) * BOB_AMPLITUDE;
+  if (promptsSuppressed) return;
+  promptsDrawnThisFrame++;
+  const anchorX = sx + objW / 2;
+  const m = ctx.getTransform();
+  queue.push({
+    canvasX: m.a * anchorX + m.c * sy + m.e,
+    canvasY: m.b * anchorX + m.d * sy + m.f,
+    label: label === undefined || label === '' ? null : label,
+    keyOverride: keyOverride ?? null,
+  });
+}
 
-  ctx.save();
-  ctx.font = 'bold 9px monospace';
+/** The prompts raised so far this frame and not yet drawn. */
+export function queuedPrompts(): readonly QueuedPrompt[] {
+  return queue;
+}
 
-  const keyMetrics = ctx.measureText(keyText);
-  const keyW = keyMetrics.width + KEY_PADDING;
-  const keyH = KEY_HEIGHT;
+/** Whether any prompt is waiting to be drawn this frame. */
+export function hasQueuedPrompts(): boolean {
+  return queue.length > 0;
+}
 
-  let totalW = keyW;
-  let labelW = 0;
-  if (label) {
-    labelW = ctx.measureText(label).width;
-    totalW += LABEL_GAP + labelW;
-  }
-
-  const cx = sx + objW * HALF_DIVISOR;
-  const baseY = sy - LABEL_Y_OFFSET + bob;
-  const x0 = cx - totalW * HALF_DIVISOR;
-
-  // Key cap background
-  const r = KEY_RADIUS;
-  const kx = x0;
-  const ky = baseY - keyH;
-  ctx.beginPath();
-  ctx.moveTo(kx + r, ky);
-  ctx.lineTo(kx + keyW - r, ky);
-  ctx.arcTo(kx + keyW, ky, kx + keyW, ky + r, r);
-  ctx.lineTo(kx + keyW, ky + keyH - r);
-  ctx.arcTo(kx + keyW, ky + keyH, kx + keyW - r, ky + keyH, r);
-  ctx.lineTo(kx + r, ky + keyH);
-  ctx.arcTo(kx, ky + keyH, kx, ky + keyH - r, r);
-  ctx.lineTo(kx, ky + r);
-  ctx.arcTo(kx, ky, kx + r, ky, r);
-  ctx.closePath();
-
-  // Fill + border to look like a keyboard key
-  ctx.fillStyle = 'rgba(30, 30, 30, 0.85)';
-  ctx.fill();
-  ctx.strokeStyle = 'rgba(200, 200, 200, 0.7)';
-  ctx.lineWidth = 1;
-  ctx.stroke();
-
-  // Inner highlight (top edge of key cap)
-  ctx.beginPath();
-  ctx.moveTo(kx + r + HIGHLIGHT_OFFSET_X, ky + HIGHLIGHT_OFFSET_Y);
-  ctx.lineTo(kx + keyW - r - HIGHLIGHT_LINE_OFFSET, ky + HIGHLIGHT_OFFSET_Y);
-  ctx.strokeStyle = 'rgba(255, 255, 255, 0.15)';
-  ctx.lineWidth = 1;
-  ctx.stroke();
-
-  // Key text
-  ctx.fillStyle = '#fff';
-  ctx.textAlign = 'center';
-  ctx.textBaseline = 'middle';
-  ctx.fillText(keyText, kx + keyW * KEY_CENTER_X, ky + keyH * KEY_CENTER_Y + KEY_CENTER_Y_OFFSET);
-
-  // Label
-  if (label) {
-    ctx.textAlign = 'left';
-    ctx.textBaseline = 'middle';
-    ctx.strokeStyle = 'rgba(0,0,0,0.85)';
-    ctx.lineWidth = 3;
-    ctx.lineJoin = 'round';
-    ctx.strokeText(
-      label,
-      kx + keyW + LABEL_X_OFFSET,
-      ky + keyH * KEY_CENTER_Y + KEY_CENTER_Y_OFFSET,
-    );
-    ctx.fillStyle = '#f0e8d0';
-    ctx.fillText(label, kx + keyW + LABEL_X_OFFSET, ky + keyH * KEY_CENTER_Y + KEY_CENTER_Y_OFFSET);
-  }
-
-  ctx.restore();
+/**
+ * Hands every queued prompt to `draw` and empties the queue. `uiScale` and
+ * `theme` are what the prompts are being drawn at, remembered for
+ * {@link interactionPromptTop}.
+ */
+export function drainQueuedPrompts(
+  uiScale: number,
+  theme: Theme,
+  draw: (prompt: QueuedPrompt) => void,
+): void {
+  lastUiScale = uiScale;
+  lastTheme = theme;
+  for (const prompt of queue) draw(prompt);
+  queue.length = 0;
 }

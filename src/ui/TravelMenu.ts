@@ -3,11 +3,12 @@
  * in `TRAVEL_DESTINATIONS` order, each either a Travel button or disabled with
  * the reason it cannot be chosen (still locked, already here, under siege).
  *
- * A thin owner of a `PricedMenuPanel` in its unpriced mode, so it gets the
- * panel's scrolling, keyboard focus ring ('priced-menu'), tap-outside-to-close
- * and phone fitting rather than a second list widget. Choosing a row hands the
- * destination to `onChoose` — `RecallSystem.beginChannelTo` in the game — and
- * closes the menu; closing it any other way starts nothing.
+ * A thin owner of a `ShopSession` in its unpriced mode, drawn by the shop
+ * screen, so it gets that screen's scrolling list, keyboard focus,
+ * tap-outside-to-close and phone layout rather than a second list widget.
+ * Choosing a row hands the destination to `onChoose` —
+ * `RecallSystem.beginChannelTo` in the game — and closes the menu; closing it
+ * any other way starts nothing.
  */
 
 import type { CatPlayer } from '../creatures/CatPlayer';
@@ -21,12 +22,12 @@ import {
   type TravelUnlockState,
 } from '../systems/travel/travelDestinations';
 import { drawAnchorStoneIcon } from './icons/anchorStoneIcon';
-import { PricedMenuPanel, type PricedMenu, type PricedOption } from './PricedMenuPanel';
+import { ShopSession, type ShopMenu, type ShopRow } from './screens/shop/shopSession';
 
 export const TRAVEL_MENU_TITLE = 'Travel Locations';
 const TRAVEL_MENU_BARK = 'The stone hums, waiting for a place it knows.';
 const TRAVEL_ACTION_LABEL = 'Travel';
-/** Free travel still goes through the panel's price field, which unpriced rows ignore. */
+/** Free travel still goes through the row's price field, which unpriced rows ignore. */
 const NO_PRICE = 0;
 
 type Caster = HumanPlayer | CatPlayer;
@@ -39,8 +40,8 @@ export function buildTravelMenu(
   map: GameMap,
   state: TravelUnlockState,
   caster: { readonly x: number; readonly y: number },
-): PricedMenu {
-  const options: PricedOption[] = TRAVEL_DESTINATIONS.map((destination) => {
+): ShopMenu {
+  const options: ShopRow[] = TRAVEL_DESTINATIONS.map((destination) => {
     const refusal = travelRefusal(destination, state, map, caster);
     return {
       key: destination.id,
@@ -55,7 +56,8 @@ export function buildTravelMenu(
     bark: TRAVEL_MENU_BARK,
     options,
     unpriced: { actionLabel: TRAVEL_ACTION_LABEL },
-    titleIcon: (ctx, x, y, size) => drawAnchorStoneIcon(ctx, x, y, size),
+    rowGlyph: 'map',
+    titleIcon: (ctx, rect) => drawAnchorStoneIcon(ctx, rect),
   };
 }
 
@@ -64,7 +66,7 @@ function destinationIdFor(key: string): TravelDestinationId | null {
 }
 
 export class TravelMenu {
-  private readonly panel = new PricedMenuPanel();
+  readonly session = new ShopSession();
   /** What the last chosen row's `onChoose` answered, read back by `pressTravel`. */
   private lastChoiceStarted = false;
 
@@ -75,39 +77,27 @@ export class TravelMenu {
   ) {}
 
   get isOpen(): boolean {
-    return this.panel.isOpen;
+    return this.session.isOpen;
   }
 
   /** The rows on screen right now, or none while closed. */
-  get options(): ReadonlyArray<PricedOption> {
-    return this.panel.options;
+  get options(): ReadonlyArray<ShopRow> {
+    return this.session.rows;
   }
 
   open(caster: Caster): void {
-    this.panel.open(
+    this.session.open(
       () => buildTravelMenu(this.map, this.state, caster),
       (option) => this.choose(option, caster),
     );
   }
 
   close(): void {
-    this.panel.close();
+    this.session.close();
   }
 
   update(): void {
-    this.panel.update();
-  }
-
-  render(ctx: CanvasRenderingContext2D, active: Player, companion: Player): void {
-    this.panel.render(ctx, active, companion);
-  }
-
-  handleClick(mx: number, my: number, active: Player, companion: Player): boolean {
-    return this.panel.handleClick(mx, my, active, companion);
-  }
-
-  handleWheel(deltaY: number): void {
-    this.panel.handleWheel(deltaY);
+    this.session.update();
   }
 
   /**
@@ -119,18 +109,18 @@ export class TravelMenu {
    */
   pressTravel(destination: TravelDestinationId, active: Player, companion: Player): boolean {
     this.lastChoiceStarted = false;
-    this.panel.pressBuy(destination, active, companion);
+    this.session.pressBuy(destination, { active, companion });
     return this.lastChoiceStarted;
   }
 
-  private choose(option: PricedOption, caster: Caster): { ok: boolean; line: string } {
+  private choose(option: ShopRow, caster: Caster): { ok: boolean; line: string } {
     const destination = destinationIdFor(option.key);
     if (destination === null) return { ok: false, line: '' };
     const started = this.onChoose(caster, destination);
     this.lastChoiceStarted = started;
     // Closed either way: a refused trip has already said why in its toast,
     // and the menu it was chosen from no longer describes a trip on offer.
-    this.panel.close();
+    this.session.close();
     return { ok: started, line: '' };
   }
 }

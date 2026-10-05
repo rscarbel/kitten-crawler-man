@@ -18,8 +18,6 @@
 
 import type { SoundId } from '../../../audio/sounds';
 import { TILE_SIZE } from '../../../core/constants';
-import { keybindings } from '../../../core/Keybindings';
-import { platform } from '../../../core/Platform';
 import {
   canAfford,
   costRequirements,
@@ -39,9 +37,7 @@ import {
   drawAreaHighlightFrame,
   drawAreaHighlightGround,
   type AreaHighlightMood,
-  type AreaHighlightRect,
 } from '../../../ui/AreaHighlight';
-import { BOX_PRESETS, drawBox, drawProgressBar, PROGRESS_PRESETS } from '../../../ui/Box';
 import { interactionPromptsSuppressed } from '../../../ui/InteractionPrompt';
 import {
   drawRequirementColumn,
@@ -49,7 +45,11 @@ import {
   requirementsMet,
   type Requirement,
 } from '../../../ui/RequirementRow';
-import { drawText, measureTextWidth, TEXT_PRESETS } from '../../../ui/TextBox';
+import { activeInputMode, actionPrompt } from '../../../ui/core/inputMode';
+import type { Rect } from '../../../ui/core/geom';
+import { worldPalette } from '../../../ui/theme/worldInk';
+import { worldBar, worldPlate } from '../../../ui/world/worldShapes';
+import { measureWorldText, worldText } from '../../../ui/world/worldText';
 import {
   processingStationInReach,
   processingStationsOf,
@@ -134,10 +134,6 @@ const PROGRESS_BAR_WIDTH = 40;
 const PROGRESS_BAR_HEIGHT = 5;
 const PROGRESS_BAR_LIFT = 10;
 
-/** Matches the quest guide's gold, so a station ready to upgrade is marked like every other objective. */
-const READY_HIGHLIGHT_COLOR = '#facc15';
-/** Orange rather than gold, so a station still short of materials never reads as ready. */
-const PENDING_HIGHLIGHT_COLOR = '#fb923c';
 /**
  * Clear air between the machine's art and the caption: room for the
  * sawmill's own bobbing output badge, which stands just above the art.
@@ -317,12 +313,11 @@ export class StationUpgrades {
    * crawler holds the blueprints (or says "Not enough materials."). Returns
    * whether the press was taken; false sends it on to repair or load.
    *
-   * Desktop only, like `ConstructionKit.tryBuildWall`: on a touch screen the
-   * double tap is the one way in, so no single gesture can start an upgrade
-   * the prompt never offered.
+   * Only a key reaches this, so it never refuses for the device: no tap can
+   * start an upgrade, since a touch screen's one way in is
+   * {@link handleDoubleTap} on the machine itself.
    */
   tryUpgrade(active: BlueprintsCrawler): boolean {
-    if (platform.isMobile) return false;
     return this.begin(active, this.upgradableInReach(active));
   }
 
@@ -564,7 +559,7 @@ export class StationUpgrades {
     for (const machine of this.machinesToMark()) {
       const mood = this.highlightMood(machine);
       drawAreaHighlightGround(ctx, footprintRect(machine, camX, camY), {
-        color: mood === 'ready' ? READY_HIGHLIGHT_COLOR : PENDING_HIGHLIGHT_COLOR,
+        color: mood === 'ready' ? worldPalette.objective.ready : worldPalette.objective.pending,
         nowMs,
         mood,
       });
@@ -585,7 +580,7 @@ export class StationUpgrades {
     for (const machine of machinesFramed) {
       const mood = this.highlightMood(machine);
       drawAreaHighlightFrame(ctx, artRect(machine, camX, camY), {
-        color: mood === 'ready' ? READY_HIGHLIGHT_COLOR : PENDING_HIGHLIGHT_COLOR,
+        color: mood === 'ready' ? worldPalette.objective.ready : worldPalette.objective.pending,
         nowMs,
         mood,
       });
@@ -594,14 +589,16 @@ export class StationUpgrades {
     if (channel === null) return;
     const { x, y, w } = channel.machine.footprint;
     const centreX = (x + w / 2) * TILE_SIZE - camX;
-    drawProgressBar(ctx, {
-      x: centreX - PROGRESS_BAR_WIDTH / 2,
-      y: y * TILE_SIZE - camY - PROGRESS_BAR_LIFT,
-      width: PROGRESS_BAR_WIDTH,
-      height: PROGRESS_BAR_HEIGHT,
-      value: 1 - channel.framesLeft / STATION_UPGRADE_FRAMES,
-      ...PROGRESS_PRESETS.build,
-    });
+    worldBar(
+      ctx,
+      {
+        x: centreX - PROGRESS_BAR_WIDTH / 2,
+        y: y * TILE_SIZE - camY - PROGRESS_BAR_LIFT,
+        w: PROGRESS_BAR_WIDTH,
+        h: PROGRESS_BAR_HEIGHT,
+      },
+      { style: 'build', value: 1 - channel.framesLeft / STATION_UPGRADE_FRAMES },
+    );
   }
 
   /**
@@ -618,11 +615,11 @@ export class StationUpgrades {
   ): void {
     const { requirements, ready, title, actionLine, panelHeight, panelTopWorldY } =
       this.captionPlan(machine);
-    const titleStyle = ready ? TEXT_PRESETS.ready : TEXT_PRESETS.label;
+    const titleStyle = ready ? 'ready' : 'label';
     const contentWidth = Math.max(
-      measureTextWidth(ctx, title, titleStyle),
+      measureWorldText(ctx, title, { style: titleStyle }).width,
       measureRequirementColumn(ctx, requirements),
-      actionLine === null ? 0 : measureTextWidth(ctx, actionLine, TEXT_PRESETS.ready),
+      actionLine === null ? 0 : measureWorldText(ctx, actionLine, { style: 'ready' }).width,
     );
     const panelWidth = contentWidth + CAPTION_PADDING_X_PX * 2;
     const { x, w } = machine.footprint;
@@ -636,24 +633,21 @@ export class StationUpgrades {
       panelTop > viewportHeight();
     if (offScreen) return;
 
-    drawBox(ctx, {
-      x: centreX,
-      y: panelTop,
-      width: panelWidth,
-      height: panelHeight,
-      alignX: 'center',
-      ...(ready ? BOX_PRESETS.worldCaptionReady : BOX_PRESETS.worldCaptionPending),
-    });
+    worldPlate(
+      ctx,
+      { x: centreX - panelWidth / 2, y: panelTop, w: panelWidth, h: panelHeight },
+      { style: ready ? 'captionReady' : 'captionPending' },
+    );
     const textTop = panelTop + CAPTION_PADDING_Y_PX;
-    drawText(ctx, title, { x: centreX, y: textTop, align: 'center', ...titleStyle });
+    worldText(ctx, title, { x: centreX, y: textTop, align: 'center', style: titleStyle });
     const listTop = textTop + CAPTION_LINE_HEIGHT_PX;
     drawRequirementColumn(ctx, requirements, centreX, listTop, CAPTION_LINE_HEIGHT_PX);
     if (actionLine !== null) {
-      drawText(ctx, actionLine, {
+      worldText(ctx, actionLine, {
         x: centreX,
         y: listTop + requirements.length * CAPTION_LINE_HEIGHT_PX,
         align: 'center',
-        ...TEXT_PRESETS.ready,
+        style: 'ready',
       });
     }
   }
@@ -685,9 +679,11 @@ export class StationUpgrades {
   private actionLineFor(machine: ProcessingStation): string | null {
     if (interactionPromptsSuppressed()) return null;
     if (this.upgradableInReach(this.ctx.active()) !== machine) return null;
-    return platform.isMobile
-      ? 'Double tap to upgrade'
-      : `Press ${keybindings.labelFor('quickLoad')} to upgrade`;
+    return actionPrompt(activeInputMode(), {
+      deed: 'upgrade',
+      action: 'quickLoad',
+      gesture: 'doubleTap',
+    });
   }
 
   /**
@@ -731,22 +727,22 @@ export class StationUpgrades {
 }
 
 /** A machine's footprint, in screen pixels. */
-function footprintRect(machine: ProcessingStation, camX: number, camY: number): AreaHighlightRect {
+function footprintRect(machine: ProcessingStation, camX: number, camY: number): Rect {
   const { x, y, w, h } = machine.footprint;
   return {
     x: x * TILE_SIZE - camX,
     y: y * TILE_SIZE - camY,
-    width: w * TILE_SIZE,
-    height: h * TILE_SIZE,
+    w: w * TILE_SIZE,
+    h: h * TILE_SIZE,
   };
 }
 
 /** A machine's whole art, from the top of its ink down to its footprint's south edge, in screen pixels. */
-function artRect(machine: ProcessingStation, camX: number, camY: number): AreaHighlightRect {
+function artRect(machine: ProcessingStation, camX: number, camY: number): Rect {
   const { x, y, w, h } = machine.footprint;
   const top = stationArtTopTileY(machine) * TILE_SIZE - camY;
   const bottom = (y + h) * TILE_SIZE - camY;
-  return { x: x * TILE_SIZE - camX, y: top, width: w * TILE_SIZE, height: bottom - top };
+  return { x: x * TILE_SIZE - camX, y: top, w: w * TILE_SIZE, h: bottom - top };
 }
 
 function stationToUpgrade(machine: ProcessingStation): StationToUpgrade {

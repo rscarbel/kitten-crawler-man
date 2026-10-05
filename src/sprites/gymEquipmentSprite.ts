@@ -1,3 +1,6 @@
+import type { Rect } from '../ui/core/geom';
+import { iconSquare } from '../ui/icons/iconSquare';
+
 /**
  * Sprite functions for gym equipment items:
  *   - Dumbbell  (floor world, inventory icon, held-by-Juicer)
@@ -583,12 +586,8 @@ export function drawDumbbellFloor(
   );
 }
 
-export function drawDumbbellInventoryIcon(
-  ctx: CanvasRenderingContext2D,
-  x: number,
-  y: number,
-  size: number,
-): void {
+export function drawDumbbellInventoryIcon(ctx: CanvasRenderingContext2D, rect: Rect): void {
+  const { x, y, size } = iconSquare(rect);
   const cx = x + size * DUMBBELL_ICON_CX_OFFSET;
   const cy = y + size * DUMBBELL_ICON_CY_OFFSET;
 
@@ -954,12 +953,8 @@ export function drawBenchPressFloor(
   }
 }
 
-export function drawBenchPressInventoryIcon(
-  ctx: CanvasRenderingContext2D,
-  x: number,
-  y: number,
-  size: number,
-): void {
+export function drawBenchPressInventoryIcon(ctx: CanvasRenderingContext2D, rect: Rect): void {
+  const { x, y, size } = iconSquare(rect);
   const cx = x + size * BENCH_ICON.centreXFrac;
   const cy = y + size * BENCH_ICON.groundYFrac;
   const px = (frac: number): number => cx + frac * size;
@@ -1261,12 +1256,8 @@ export function drawTreadmillFloor(
   }
 }
 
-export function drawTreadmillInventoryIcon(
-  ctx: CanvasRenderingContext2D,
-  x: number,
-  y: number,
-  size: number,
-): void {
+export function drawTreadmillInventoryIcon(ctx: CanvasRenderingContext2D, rect: Rect): void {
+  const { x, y, size } = iconSquare(rect);
   const cx = x + size * TREADMILL_ICON.centreXFrac;
   const cy = y + size * TREADMILL_ICON.groundYFrac;
   const px = (frac: number): number => cx + frac * size;

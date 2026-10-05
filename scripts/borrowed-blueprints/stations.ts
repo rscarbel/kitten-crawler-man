@@ -26,6 +26,7 @@ import { FENNA } from '../../src/dialog/scripts/briarHollow';
 import { GameMap } from '../../src/map/GameMap';
 import type { BriarHollowSite } from '../../src/map/overworld/briarHollowSite';
 import { SpellSystem } from '../../src/systems/SpellSystem';
+import { noteFrameInputMode, resetInputMode } from '../../src/ui/core/inputMode';
 import { MobRoster } from '../../src/systems/kits/SceneWorld';
 import { BlueprintsQuestSystem } from '../../src/systems/briarHollow/BlueprintsQuestSystem';
 import {
@@ -64,8 +65,7 @@ import { cueSoundOr } from '../../src/systems/briarHollow/blueprints/blueprintsS
 import { PLAIN_SAWING_LOOP, SawmillService } from '../../src/systems/briarHollow/services/sawmill';
 import type { Check } from './fenna';
 import { setViewportSize } from '../../src/core/Viewport';
-import { PROGRESS_PRESETS } from '../../src/ui/Box';
-import { TEXT_PRESETS } from '../../src/ui/TextBox';
+import { WORLD_BAR, WORLD_TEXT } from '../../src/ui/theme/worldInk';
 import type { VillageQuestPhase } from '../../src/core/villageQuestPhase';
 import type { CrawlerKind } from '../../src/core/SkillManager';
 import { DefenseStructures } from '../../src/systems/briarHollow/DefenseStructures';
@@ -343,6 +343,18 @@ export function verifyStationXPrecedence(check: Check): void {
     'a double tap on the machine starts its upgrade',
   );
   check(tapRig.quest.stations.isUpgrading, 'and the channel runs');
+
+  const keyRig = buildStationsRig();
+  const keySaw = keyRig === null ? null : machineOf(keyRig, 'boards');
+  if (keyRig === null || keySaw === null) return;
+  give(keyRig, SAW_UPGRADE_COST);
+  standBeside(keyRig, keySaw);
+  noteFrameInputMode('touch', keyRig);
+  check(
+    keyRig.quest.tryUpgradeStation(keyRig.human),
+    'a touch laptop: X still starts the upgrade, since only a key reaches it',
+  );
+  resetInputMode();
 }
 
 // ── Costs and the refusal ────────────────────────────────────────────────
@@ -642,6 +654,13 @@ interface RecordedFrame {
   readonly fills: readonly string[];
 }
 
+/** The fill colour as text; a gradient or pattern is not a colour these checks look for. */
+function fillColorOf(ctx: CanvasRenderingContext2D): string {
+  return typeof ctx.fillStyle === 'string' ? ctx.fillStyle : NON_COLOUR_FILL;
+}
+
+const NON_COLOUR_FILL = 'gradient-or-pattern';
+
 function recordFrame(draw: (ctx: CanvasRenderingContext2D) => void): RecordedFrame {
   setViewportSize(CAPTION_SCREEN_PX, CAPTION_SCREEN_PX);
   setInteractionPromptsSuppressed(false);
@@ -650,12 +669,12 @@ function recordFrame(draw: (ctx: CanvasRenderingContext2D) => void): RecordedFra
   const fills: string[] = [];
   const fillText = ctx.fillText.bind(ctx);
   ctx.fillText = (...args: Parameters<CanvasRenderingContext2D['fillText']>) => {
-    texts.push({ text: args[0], color: String(ctx.fillStyle), y: args[2] });
+    texts.push({ text: args[0], color: fillColorOf(ctx), y: args[2] });
     fillText(...args);
   };
   const fill = ctx.fill.bind(ctx);
   ctx.fill = (pathOrRule?: Path2D | CanvasFillRule, fillRule?: CanvasFillRule) => {
-    fills.push(String(ctx.fillStyle));
+    fills.push(fillColorOf(ctx));
     if (typeof pathOrRule === 'object') fill(pathOrRule, fillRule);
     else fill(pathOrRule);
   };
@@ -709,7 +728,7 @@ export function verifyStationsStayMarked(check: Check): void {
     `out of reach, the saw's caption still shows (${short.map((entry) => entry.text).join(' | ')})`,
   );
   check(
-    drewIn(short, shortBoards, TEXT_PRESETS.requirementShort.color),
+    drewIn(short, shortBoards, WORLD_TEXT.requirementShort.color),
     `a short material is drawn in the "short" colour (${shortBoards})`,
   );
 
@@ -717,11 +736,11 @@ export function verifyStationsStayMarked(check: Check): void {
   const met = captionFrame(rig, camX, camY);
   const metBoards = `Boards ${SAW_UPGRADE_COST.wood_board ?? 0}/${SAW_UPGRADE_COST.wood_board ?? 0} ✓`;
   check(
-    drewIn(met, metBoards, TEXT_PRESETS.requirementMet.color),
+    drewIn(met, metBoards, WORLD_TEXT.requirementMet.color),
     `once held, the same line flips to the "met" colour with a tick (${metBoards})`,
   );
   check(
-    drewIn(met, 'Upgrade saw', TEXT_PRESETS.ready.color),
+    drewIn(met, 'Upgrade saw', WORLD_TEXT.ready.color),
     'with every line met, the title turns to the "ready" gold',
   );
 
@@ -779,7 +798,7 @@ export function verifyStationMarksStandDown(check: Check): void {
   rig.quest.stations.update();
   const channelling = recordFrame((ctx) => rig.quest.stations.renderAbove(ctx, camX, camY));
   const withoutSpaces = (color: string): string => color.replace(/\s/g, '');
-  const barColor = withoutSpaces(PROGRESS_PRESETS.build.background);
+  const barColor = withoutSpaces(WORLD_BAR.build.track);
   check(
     rig.quest.stations.isUpgrading &&
       channelling.fills.some((color) => withoutSpaces(color) === barColor),

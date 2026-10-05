@@ -15,13 +15,12 @@ import type { GameMap } from '../map/GameMap';
 import type { Mob } from '../creatures/Mob';
 import { BallOfSwine } from '../creatures/BallOfSwine';
 import { Tuskling } from '../creatures/Tuskling';
-import { BOSS_HEALER_ALIVE_NOTICE, type BossRoomSystem } from './BossRoomSystem';
+import { BOSS_HEALER_ALIVE_NOTICE, BOSS_META, type BossRoomSystem } from './BossRoomSystem';
 import { createMob } from '../levels/spawner';
 import { hasRoomToMove } from '../map/findWalkableTile';
 import type { GameSystem, SystemContext } from './GameSystem';
-import { drawText } from '../ui/TextBox';
-import { drawBox, drawProgressBar } from '../ui/Box';
-import { viewportWidth } from '../core/Viewport';
+import type { TopBandEntry } from '../ui/hud/topBand';
+import { stackedBandEntry, type BandRow, type BandTone } from '../ui/hud/topBandStack';
 import { ARENA_INTERIOR_RADIUS_TILES, ARENA_REACH } from '../map/arenaGeometry';
 import { prewarmTuskling } from '../sprites/tusklingSprite';
 import { spawnHardModeBossHealer } from '../levels/fairySpawner';
@@ -57,48 +56,17 @@ const TILE_CENTER_OFFSET = 0.5;
 const TUSKLING_SPAWN_RADIUS_TILES = 3;
 /** Frames Tusklings remain dazed after spawning (10 seconds at 60 fps). */
 const TUSKLING_DAZE_FRAMES = 600;
-/** Display-bar width cap in pixels. */
-const HEALTH_BAR_MAX_W = 360;
-/** Display-bar height in pixels. */
-const HEALTH_BAR_H = 18;
-/** Vertical position of health bar from top of canvas. */
-const HEALTH_BAR_Y = 48;
-/** Padding around the health bar container box. */
-const HEALTH_BAR_PADDING = 6;
 /** Tile distance beyond arena radius at which the health bar is hidden. */
 const HEALTH_BAR_HIDE_DISTANCE_EXTRA_TILES = 5;
 /** Frames per second used for countdown display. */
 const DISPLAY_FPS = 60;
-/** Pixel inset for boss name label from bar top. */
-const LABEL_Y_INSET = 6;
-/** Pixel inset for HP text from bar bottom. */
-const HP_TEXT_INSET = 4;
-/** Y offset for Tuskling counter text below bar area. */
-const TUSKLINGS_LABEL_Y_OFFSET = 6;
-/** Phase-2 Tusklings label y relative to the bar y anchor. */
-const PHASE2_LABEL_Y = 78;
-const PHASE2_LABEL_SIZE = 11;
-const PHASE2_PENDING_COLOR = '#f87171';
-const PHASE2_DONE_COLOR = '#4ade80';
 /**
  * How far inside the ring's wall the ball's healer is held, so it hovers over
  * the arena floor rather than over the wall.
  */
 const HEALER_WALL_CLEARANCE_TILES = 1;
-/** Height of the momentum bar under the health bar. */
-const MOMENTUM_BAR_H = 7;
-/** Gap between the health bar and the momentum bar — enough to clear its caption. */
-const MOMENTUM_BAR_GAP = 9;
-const MOMENTUM_BAR_COLOR = '#38bdf8';
-const HUD_PANEL_FILL = 'rgba(0,0,0,0.75)';
-const HUD_BAR_TRACK = '#0a0a12';
-const HUD_STUNNED_COLOR = '#fde68a';
-const MOMENTUM_LABEL_INSET = 2;
-const MOMENTUM_LABEL_LIFT = 8;
-/** Text y anchor adjustment for label rendering. */
-const LABEL_TEXT_ADJUST = 9;
-/** HP text adjust. */
-const HP_TEXT_ADJUST = 7;
+const MOMENTUM_LABEL = 'Momentum';
+const BALL_OF_SWINE_COLOR = BOSS_META.ball_of_swine.color;
 
 /** Point-in-time arena progress, restorable any number of times. */
 export interface ArenaCheckpoint {
@@ -122,7 +90,7 @@ function bossLabel(bos: BallOfSwine): string {
   // mid-animation, which means the bar is still up while the body comes apart. It
   // should not still be shouting FRENZIED over a corpse at 0 HP.
   if (bos.hp === 0) return 'BALL OF SWINE — DEFEATED';
-  if (bos.isStopped) return '★ BALL OF SWINE — VULNERABLE ★';
+  if (bos.isStopped) return 'BALL OF SWINE — VULNERABLE';
   if (bos.isFrenzied) return 'BALL OF SWINE — FRENZIED';
   if (bos.isShedding) return 'BALL OF SWINE — COMING APART';
   return 'BALL OF SWINE';
@@ -626,130 +594,87 @@ export class ArenaSystem implements GameSystem {
     player.y = (doorTile.y - 2) * TILE_SIZE;
   }
 
-  render(ctx: CanvasRenderingContext2D, activePlayer: { x: number; y: number }): void {
-    if (!this.hasArena) return;
-
+  /** The ball's health and momentum while the party is near the arena, then the Tusklings left to clear. */
+  topBandEntries(activePlayer: { x: number; y: number }): TopBandEntry[] {
+    if (!this.hasArena) return [];
     const mobs = this.getMobs();
+    const entries: TopBandEntry[] = [];
     const bos = mobs.find((m) => m instanceof BallOfSwine);
-
-    if (bos?.isAlive) {
-      const arena = this.gameMap.arenaExteriors[0];
-      const distToArena = Math.hypot(
-        activePlayer.x - arena.centre.x * TILE_SIZE,
-        activePlayer.y - arena.centre.y * TILE_SIZE,
-      );
-      if (distToArena > (arena.radius + HEALTH_BAR_HIDE_DISTANCE_EXTRA_TILES) * TILE_SIZE) return;
-
-      const meta = { displayName: 'BALL OF SWINE', color: '#f87171' };
-      const BAR_WIDTH_FRACTION = 0.5;
-      const barW = Math.min(HEALTH_BAR_MAX_W, viewportWidth() * BAR_WIDTH_FRACTION);
-      const barH = HEALTH_BAR_H;
-      const barX = Math.floor((viewportWidth() - barW) / 2);
-      const barY = HEALTH_BAR_Y;
-      const hpFrac = Math.max(0, bos.hp / bos.maxHp);
-
-      const momentumY = barY + barH + MOMENTUM_BAR_GAP;
-      const barColor = bos.isStopped ? HUD_STUNNED_COLOR : meta.color;
-      const labelY = barY - LABEL_Y_INSET - LABEL_TEXT_ADJUST;
-      // The panel is sized from the *label* down, not from the health bar down: the
-      // name sits above the bar, and a panel that started at the bar left it printed
-      // on the world outside the box that is meant to hold it.
-      const panelTop = labelY - HEALTH_BAR_PADDING;
-
-      ctx.save();
-      drawBox(ctx, {
-        x: barX - HEALTH_BAR_PADDING,
-        y: panelTop,
-        width: barW + HEALTH_BAR_PADDING * 2,
-        height: momentumY + MOMENTUM_BAR_H + HEALTH_BAR_PADDING - panelTop,
-        fill: HUD_PANEL_FILL,
-        border: meta.color,
-        borderWidth: 1,
-        radius: 0,
-      });
-
-      drawText(ctx, bossLabel(bos), {
-        x: viewportWidth() / 2,
-        y: labelY,
-        size: 11,
-        bold: true,
-        color: barColor,
-        align: 'center',
-      });
-
-      drawProgressBar(ctx, {
-        x: barX,
-        y: barY,
-        width: barW,
-        height: barH,
-        value: hpFrac,
-        fill: barColor,
-        background: HUD_BAR_TRACK,
-        border: meta.color,
-        radius: 0,
-      });
-
-      drawText(ctx, `${displayHp(bos.hp)} / ${bos.maxHp}`, {
-        x: viewportWidth() / 2,
-        y: barY + barH - HP_TEXT_INSET - HP_TEXT_ADJUST,
-        size: 9,
-        color: '#e2e8f0',
-        align: 'center',
-      });
-
-      // The momentum read-out. The fight is *about* momentum, so the crawler has to
-      // be able to see it going down — without this, baiting a square slam and
-      // grinding it on barriers look identical until the moment it collapses.
-      drawProgressBar(ctx, {
-        x: barX,
-        y: momentumY,
-        width: barW,
-        height: MOMENTUM_BAR_H,
-        value: bos.momentumFraction,
-        fill: MOMENTUM_BAR_COLOR,
-        background: HUD_BAR_TRACK,
-        border: meta.color,
-        radius: 0,
-      });
-      drawText(ctx, 'MOMENTUM', {
-        x: barX + MOMENTUM_LABEL_INSET,
-        y: momentumY - MOMENTUM_LABEL_LIFT,
-        size: 8,
-        color: '#94a3b8',
-      });
-
-      if (this.entryWindowTimer > 0) {
-        const seconds = Math.ceil(this.entryWindowTimer / DISPLAY_FPS);
-        drawText(ctx, `Entry closes in ${seconds}s`, {
-          x: viewportWidth() / 2,
-          y: momentumY + MOMENTUM_BAR_H + TUSKLINGS_LABEL_Y_OFFSET,
-          size: 11,
-          bold: true,
-          color: '#fbbf24',
-          align: 'center',
-        });
-      }
-
-      ctx.restore();
+    if (bos?.isAlive === true && this.isNearArena(activePlayer)) {
+      entries.push(this.bossBarEntry(bos));
     }
-
     if (this.arenaPhase2Active && !this.arenaStairwellUnlocked) {
-      const alive = this.arenaLiveTusklings.filter((t) => t.isAlive).length;
-      const healerAlive = this.hasLivingSwineHealer(mobs);
-      const notice =
-        alive > 0
-          ? { text: `Tusklings remaining: ${alive}`, color: PHASE2_PENDING_COLOR }
-          : healerAlive
-            ? BOSS_HEALER_ALIVE_NOTICE
-            : { text: 'All Tusklings defeated! Stairwell unlocked.', color: PHASE2_DONE_COLOR };
-      drawText(ctx, notice.text, {
-        x: viewportWidth() / 2,
-        y: PHASE2_LABEL_Y - LABEL_TEXT_ADJUST,
-        size: PHASE2_LABEL_SIZE,
-        bold: true,
-        color: notice.color,
-        align: 'center',
+      entries.push(this.phase2Entry(mobs));
+    }
+    return entries;
+  }
+
+  private isNearArena(activePlayer: { x: number; y: number }): boolean {
+    const arena = this.gameMap.arenaExteriors[0];
+    const distToArena = Math.hypot(
+      activePlayer.x - arena.centre.x * TILE_SIZE,
+      activePlayer.y - arena.centre.y * TILE_SIZE,
+    );
+    return distToArena <= (arena.radius + HEALTH_BAR_HIDE_DISTANCE_EXTRA_TILES) * TILE_SIZE;
+  }
+
+  private bossBarEntry(bos: BallOfSwine): TopBandEntry {
+    const rows: BandRow[] = [
+      bos.isStopped
+        ? { kind: 'text', text: bossLabel(bos), role: 'label', tone: 'warning' }
+        : { kind: 'text', text: bossLabel(bos), role: 'label', color: BALL_OF_SWINE_COLOR },
+      {
+        kind: 'meter',
+        id: 'arena-boss/hp',
+        value: bos.hp,
+        max: bos.maxHp,
+        meterKind: bos.isStopped ? 'warning' : 'boss',
+        valueText: `${displayHp(bos.hp)} / ${bos.maxHp}`,
+      },
+      // The fight is about momentum, so the crawler has to be able to see it
+      // going down: without this, baiting a square slam and grinding it on
+      // barriers look identical until the moment it collapses.
+      {
+        kind: 'meter',
+        id: 'arena-boss/momentum',
+        value: bos.momentumFraction,
+        max: 1,
+        meterKind: 'mana',
+        label: MOMENTUM_LABEL,
+      },
+    ];
+    if (this.entryWindowTimer > 0) {
+      const seconds = Math.ceil(this.entryWindowTimer / DISPLAY_FPS);
+      rows.push({
+        kind: 'text',
+        text: `Entry closes in ${seconds}s`,
+        role: 'label',
+        tone: 'warning',
+        tabular: true,
       });
     }
+    return stackedBandEntry({
+      id: 'arena-boss',
+      priority: 'boss',
+      accent: BALL_OF_SWINE_COLOR,
+      rows,
+    });
+  }
+
+  private phase2Entry(mobs: readonly Mob[]): TopBandEntry {
+    const alive = this.arenaLiveTusklings.filter((t) => t.isAlive).length;
+    const healerAlive = this.hasLivingSwineHealer(mobs);
+    const notice: { text: string; tone: BandTone } =
+      alive > 0
+        ? { text: `Tusklings remaining: ${alive}`, tone: 'danger' }
+        : healerAlive
+          ? { text: BOSS_HEALER_ALIVE_NOTICE, tone: 'danger' }
+          : { text: 'All Tusklings defeated! Stairwell unlocked.', tone: 'success' };
+    return stackedBandEntry({
+      id: 'arena-tusklings',
+      priority: 'encounter',
+      accentTone: notice.tone,
+      rows: [{ kind: 'text', text: notice.text, role: 'label', tone: notice.tone, wrap: true }],
+    });
   }
 }

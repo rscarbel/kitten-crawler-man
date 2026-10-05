@@ -9,6 +9,8 @@
  */
 
 import { allocCanvas, surfaceContext, type CanvasSurface } from '../../core/canvasSurface';
+import type { Rect } from '../core/geom';
+import { iconSquare } from './iconSquare';
 
 /**
  * Texture resolution. Comfortably above the ~28px the button draws it at, so
@@ -125,16 +127,11 @@ function bake(): CanvasSurface {
 }
 
 /**
- * Draws the compass rose into a square region of the screen, `(x, y)` being
- * its top-left corner. The texture is baked well above button size, so this
+ * Draws the compass rose into the largest square centred in `rect`. The texture is baked well above button size, so this
  * stays a downscale even at the small badge sizes `QuestIcon` uses.
  */
-export function drawCompassIcon(
-  ctx: CanvasRenderingContext2D,
-  x: number,
-  y: number,
-  size: number,
-): void {
+export function drawCompassIcon(ctx: CanvasRenderingContext2D, rect: Rect): void {
+  const { x, y, size } = iconSquare(rect);
   texture ??= bake();
   ctx.drawImage(texture, x, y, size, size);
 }

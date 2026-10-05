@@ -18,8 +18,6 @@
 
 import { TILE_SIZE } from '../../core/constants';
 import { ITEM_DEF, type ItemId } from '../../core/ItemDefs';
-import { keybindings } from '../../core/Keybindings';
-import { platform } from '../../core/Platform';
 import type { BriarHollowState } from '../../core/briarHollowState';
 import type { CatPlayer } from '../../creatures/CatPlayer';
 import type { HumanPlayer } from '../../creatures/HumanPlayer';
@@ -27,18 +25,18 @@ import type { GameMap } from '../../map/GameMap';
 import type { BriarHollowSite, PalisadeSegmentDef } from '../../map/overworld/briarHollowSite';
 import type { TilePoint } from '../../map/town/townPlan';
 import { ROCK_DEPOSIT } from '../../map/tileTypes';
-import { drawItemIcon } from '../../ui/InventoryPanel';
+import { drawItemIcon } from '../../ui/icons/drawItemIcon';
 import {
   drawAreaHighlightFrame,
   drawAreaHighlightGround,
   type AreaHighlightOptions,
-  type AreaHighlightRect,
 } from '../../ui/AreaHighlight';
 import { drawRequirementRow, type Requirement } from '../../ui/RequirementRow';
 import { drawBouncingArrowAboveEntity } from '../../ui/WorldArrow';
-import { drawText, TEXT_PRESETS, type TextOptions } from '../../ui/TextBox';
-import { buildButtonRect } from '../DungeonUIRenderer';
-import type { MiniMapSystem } from '../MiniMapSystem';
+import { actionPrompt, activeInputMode } from '../../ui/core/inputMode';
+import { worldPalette, type WorldTextStyleId } from '../../ui/theme/worldInk';
+import { worldText } from '../../ui/world/worldText';
+import type { Rect } from '../../ui/core/geom';
 import { tileKey } from '../tileKey';
 import type { TrackerTarget } from '../questTracker';
 import type { DefenseStructures } from './DefenseStructures';
@@ -64,9 +62,6 @@ import { TREBUCHET_HEIGHT_TILES, TREBUCHET_WIDTH_TILES } from './structureRules'
 import { drawEscortTrail } from './blueprints/escortRouteMarkers';
 
 type Crawler = HumanPlayer | CatPlayer;
-
-/** A `TEXT_PRESETS` entry: every `drawText` option except the position, which the caller supplies. */
-type CaptionStyle = Omit<TextOptions, 'x' | 'y'>;
 
 /** A tile rectangle in the shapes this system reads off the site and off `DefenseStructures`. */
 interface Footprint {
@@ -140,7 +135,7 @@ const KEEP_COLLECTING_THRESHOLD = 2;
 const TREE_HIGHLIGHT_SCALE = 1.5;
 
 /** Matches the gold `WorldArrow`/`ObjectiveBeacon` colour everywhere else in the game points at something. */
-const GUIDE_COLOR = '#facc15';
+const GUIDE_COLOR = worldPalette.objective.ready;
 
 /** A `drawAreaHighlight*` call's look, without its clock. */
 type HighlightStyle = Pick<AreaHighlightOptions, 'color' | 'mood'>;
@@ -169,12 +164,13 @@ const ZONE_LABEL_VERTICAL_OFFSET_PX = 6;
  * Green, and drawn `pending` — a dashed outline — because the zones are
  * suggestions for where to build, not a thing already there to act on.
  */
-const BUILD_ZONE_COLOR = '#4ade80';
+const BUILD_ZONE_COLOR = worldPalette.village.buildZone;
 
 const HUD_ARROW_BOUNCE_FREQUENCY = 0.005;
 const HUD_ARROW_BOUNCE_AMPLITUDE_PX = 4;
 const HUD_ARROW_LENGTH_PX = 14;
 const HUD_ARROW_HALF_WIDTH_PX = 8;
+const HUD_ARROW_OUTLINE_WIDTH_PX = 1.5;
 const HUD_ARROW_GAP_ABOVE_BUTTON_PX = 8;
 const HUD_CAPTION_GAP_PX = 4;
 
@@ -653,11 +649,11 @@ export class VillageQuestGuide {
     for (const zone of zones) {
       const centreX = (zone.x + zone.width / 2) * TILE_SIZE - camX;
       const centreY = (zone.y + zone.height / 2) * TILE_SIZE - camY;
-      drawText(ctx, 'Build trebuchet here', {
+      worldText(ctx, 'Build trebuchet here', {
         x: centreX,
         y: centreY - ZONE_LABEL_VERTICAL_OFFSET_PX,
         align: 'center',
-        ...TEXT_PRESETS.label,
+        style: 'label',
       });
     }
   }
@@ -691,13 +687,11 @@ export class VillageQuestGuide {
       const countLine = `${cache.progress.have}/${cache.progress.target} ${countedNoun}`;
       const keepCollecting = cache.progress.have >= KEEP_COLLECTING_THRESHOLD;
       const lines = keepCollecting ? ['Keep collecting', countLine] : [countLine];
-      const firstLinePreset = keepCollecting ? TEXT_PRESETS.label : TEXT_PRESETS.value;
-      this.renderPointArrowAndCaption(ctx, camX, camY, cache.tile, null, lines, firstLinePreset);
+      const firstLineStyle = keepCollecting ? 'label' : 'value';
+      this.renderPointArrowAndCaption(ctx, camX, camY, cache.tile, null, lines, firstLineStyle);
       return;
     }
-    const line = platform.isMobile
-      ? `Tap to ${collectVerb}`
-      : `Press ${keybindings.labelFor('attack')} to ${collectVerb}`;
+    const line = actionPrompt(activeInputMode(), { deed: collectVerb, action: 'attack' });
     this.renderPointArrowAndCaption(ctx, camX, camY, cache.tile, icon, [line]);
   }
 
@@ -734,11 +728,11 @@ export class VillageQuestGuide {
     const pointedAt = this.stationGuideAnchor(entry.id, footprint);
     this.renderFootprintArrow(ctx, camX, camY, pointedAt);
     const { centreScreenX, topY } = footprintCaptionAnchor(pointedAt, camX, camY);
-    drawText(ctx, STATION_CAPTION_TITLE[entry.id], {
+    worldText(ctx, STATION_CAPTION_TITLE[entry.id], {
       x: centreScreenX,
       y: topY,
       align: 'center',
-      ...TEXT_PRESETS.label,
+      style: 'label',
     });
     const requirement: Requirement = {
       label: STATION_OUTPUT_LABEL[entry.id],
@@ -763,9 +757,11 @@ export class VillageQuestGuide {
     const footprint = trebuchetFootprint(at);
     this.renderFrameHighlight(ctx, camX, camY, footprint);
     if (this.deps.isDefaultTrebuchetPromptShowing(at)) return;
-    const line = platform.isMobile
-      ? 'Double tap to load with stone'
-      : `Press ${keybindings.labelFor('quickLoad')} to load with stone`;
+    const line = actionPrompt(activeInputMode(), {
+      deed: 'load with stone',
+      action: 'quickLoad',
+      gesture: 'doubleTap',
+    });
     this.renderFootprintArrowAndCaption(ctx, camX, camY, footprint, [line]);
   }
 
@@ -782,9 +778,11 @@ export class VillageQuestGuide {
   ): void {
     this.renderFrameHighlight(ctx, camX, camY, tileArea(tile));
     if (this.deps.isDefaultWallPromptShowing()) return;
-    const line = platform.isMobile
-      ? 'Double tap to upgrade'
-      : `Press ${keybindings.labelFor('attack')} to upgrade`;
+    const line = actionPrompt(activeInputMode(), {
+      deed: 'upgrade',
+      action: 'attack',
+      gesture: 'doubleTap',
+    });
     this.renderPointArrowAndCaption(ctx, camX, camY, tile, null, [
       'Upgrade this fence to a wooden wall',
       line,
@@ -880,7 +878,7 @@ export class VillageQuestGuide {
     tile: TilePoint,
     icon: ItemId | null,
     lines: readonly string[],
-    firstLinePreset: CaptionStyle = TEXT_PRESETS.label,
+    firstLineStyle: WorldTextStyleId = 'label',
   ): void {
     const sx = tile.x * TILE_SIZE - camX;
     const sy = tile.y * TILE_SIZE - camY;
@@ -896,16 +894,15 @@ export class VillageQuestGuide {
     if (icon !== null) {
       const size = ICON_SIZE_TILES * TILE_SIZE;
       const iconY = sy - ICON_LIFT_TILES * TILE_SIZE;
+      const half = size / 2;
       drawItemIcon(
         ctx,
+        { x: centreX - half, y: iconY - half, w: size, h: size },
         { ...ITEM_DEF[icon], quantity: 1 },
-        centreX - size / 2,
-        iconY - size / 2,
-        size,
       );
     }
     const captionLift = icon !== null ? CAPTION_LIFT_TILES : CAPTION_LIFT_NO_ICON_TILES;
-    this.renderCaption(ctx, centreX, sy - captionLift * TILE_SIZE, lines, firstLinePreset);
+    this.renderCaption(ctx, centreX, sy - captionLift * TILE_SIZE, lines, firstLineStyle);
   }
 
   private renderFootprintArrow(
@@ -930,11 +927,11 @@ export class VillageQuestGuide {
     camY: number,
     footprint: Footprint,
     lines: readonly string[],
-    restLinePreset: CaptionStyle = TEXT_PRESETS.hint,
+    restLineStyle: WorldTextStyleId = 'hint',
   ): void {
     this.renderFootprintArrow(ctx, camX, camY, footprint);
     const { centreScreenX, topY } = footprintCaptionAnchor(footprint, camX, camY);
-    this.renderCaption(ctx, centreScreenX, topY, lines, TEXT_PRESETS.label, restLinePreset);
+    this.renderCaption(ctx, centreScreenX, topY, lines, 'label', restLineStyle);
   }
 
   private renderCaption(
@@ -942,16 +939,16 @@ export class VillageQuestGuide {
     x: number,
     topY: number,
     lines: readonly string[],
-    firstLinePreset: CaptionStyle,
-    restLinePreset: CaptionStyle = TEXT_PRESETS.hint,
+    firstLineStyle: WorldTextStyleId,
+    restLineStyle: WorldTextStyleId = 'hint',
   ): void {
     lines.forEach((line, index) => {
-      drawText(ctx, line, {
+      worldText(ctx, line, {
         x,
         y: topY + index * CAPTION_LINE_GAP_PX,
         align: 'center',
+        style: index === 0 ? firstLineStyle : restLineStyle,
         outline: true,
-        ...(index === 0 ? firstLinePreset : restLinePreset),
       });
     });
   }
@@ -959,22 +956,22 @@ export class VillageQuestGuide {
   /**
    * The bouncing arrow and caption over the HUD's Construction button, shown
    * while a `build_trebuchet` zone has the active crawler standing in it.
-   * Drawn from `renderHud`, which is the one call already handed the
-   * `MiniMapSystem` the button's own layout is read off.
+   * `buildButton` is the button's rect in CSS pixels, or null while the HUD
+   * shows none.
    */
-  renderConstructionHint(ctx: CanvasRenderingContext2D, miniMap: MiniMapSystem): void {
+  renderConstructionHint(ctx: CanvasRenderingContext2D, buildButton: Rect | null): void {
+    if (buildButton === null) return;
     const guidance = this.deps.guidance();
     if (guidance?.kind !== 'build_trebuchet') return;
     if (!this.insideAnyZone(guidance.zones)) return;
-    const rect = buildButtonRect(miniMap);
-    const centreX = rect.x + rect.w / 2;
+    const centreX = buildButton.x + buildButton.w / 2;
     const bounce =
       Math.sin(Date.now() * HUD_ARROW_BOUNCE_FREQUENCY) * HUD_ARROW_BOUNCE_AMPLITUDE_PX;
-    const tipY = rect.y - HUD_ARROW_GAP_ABOVE_BUTTON_PX + bounce;
+    const tipY = buildButton.y - HUD_ARROW_GAP_ABOVE_BUTTON_PX + bounce;
     ctx.save();
     ctx.fillStyle = GUIDE_COLOR;
-    ctx.strokeStyle = '#000';
-    ctx.lineWidth = 1.5;
+    ctx.strokeStyle = worldPalette.shade;
+    ctx.lineWidth = HUD_ARROW_OUTLINE_WIDTH_PX;
     ctx.beginPath();
     ctx.moveTo(centreX, tipY);
     ctx.lineTo(centreX - HUD_ARROW_HALF_WIDTH_PX, tipY - HUD_ARROW_LENGTH_PX);
@@ -983,11 +980,11 @@ export class VillageQuestGuide {
     ctx.fill();
     ctx.stroke();
     ctx.restore();
-    drawText(ctx, 'Build a trebuchet', {
+    worldText(ctx, 'Build a trebuchet', {
       x: centreX,
       y: tipY - HUD_ARROW_LENGTH_PX - HUD_CAPTION_GAP_PX,
       align: 'center',
-      ...TEXT_PRESETS.label,
+      style: 'label',
     });
   }
 
@@ -1159,12 +1156,12 @@ function trebuchetFootprint(at: TilePoint): Footprint {
   return { x: at.x, y: at.y, w: TREBUCHET_WIDTH_TILES, h: TREBUCHET_HEIGHT_TILES };
 }
 
-function areaToScreen(area: Footprint, camX: number, camY: number): AreaHighlightRect {
+function areaToScreen(area: Footprint, camX: number, camY: number): Rect {
   return {
     x: area.x * TILE_SIZE - camX,
     y: area.y * TILE_SIZE - camY,
-    width: area.w * TILE_SIZE,
-    height: area.h * TILE_SIZE,
+    w: area.w * TILE_SIZE,
+    h: area.h * TILE_SIZE,
   };
 }
 

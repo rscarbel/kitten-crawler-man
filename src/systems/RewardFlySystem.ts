@@ -14,13 +14,14 @@
 
 import { ITEM_DEF } from '../core/ItemDefs';
 import type { ItemId } from '../core/ItemDefs';
-import { drawItemIcon } from '../ui/InventoryPanel';
-import { drawText, TEXT_PRESETS } from '../ui/TextBox';
+import { drawItemIcon } from '../ui/icons/drawItemIcon';
+import type { Rect } from '../ui/core/geom';
+import { worldText } from '../ui/world/worldText';
 
 export interface FlyTargets {
   coinX: number;
   coinY: number;
-  bagRect: { x: number; y: number; w: number; h: number };
+  bagRect: Rect;
 }
 
 /** How many coin sprites a single grant spawns, before capping. */
@@ -371,7 +372,11 @@ export class RewardFlySystem {
       ctx.translate(x + ITEM_ICON_SIZE / 2, arcedY + ITEM_ICON_SIZE / 2);
       ctx.scale(scale, scale);
       ctx.translate(-ITEM_ICON_SIZE / 2, -ITEM_ICON_SIZE / 2);
-      drawItemIcon(ctx, { ...ITEM_DEF[item.itemId], quantity: 1 }, 0, 0, ITEM_ICON_SIZE, 1);
+      drawItemIcon(
+        ctx,
+        { x: 0, y: 0, w: ITEM_ICON_SIZE, h: ITEM_ICON_SIZE },
+        { ...ITEM_DEF[item.itemId], quantity: 1 },
+      );
       ctx.restore();
     }
 
@@ -385,12 +390,12 @@ export class RewardFlySystem {
         t > LABEL_FADE_START_FRACTION
           ? Math.max(0, 1 - (t - LABEL_FADE_START_FRACTION) / (1 - LABEL_FADE_START_FRACTION))
           : 1;
-      drawText(ctx, label.text, {
+      worldText(ctx, label.text, {
+        style: 'success',
         x: label.x,
         y: label.y - t * LABEL_RISE_PX,
         align: 'center',
-        ...TEXT_PRESETS.success,
-        color: `rgba(74,222,128,${alpha})`,
+        alpha,
       });
     }
   }

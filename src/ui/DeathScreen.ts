@@ -1,38 +1,10 @@
-import { drawText } from './TextBox';
-import { drawOverlay } from './Box';
-import { beginMenuFocus, drawButton, endMenuFocus, BUTTON_PRESETS } from './Button';
 import type { AudioManager } from '../audio/AudioManager';
-import { viewportWidth, viewportHeight } from '../core/Viewport';
 
 const ALPHA_VISIBILITY_THRESHOLD = 0.5;
 const ALPHA_MAX = 0.82;
 const ALPHA_INCREMENT_PER_FRAME = 0.018;
 const TEXT_ALPHA_START_THRESHOLD = 0.45;
 const TEXT_ALPHA_FADE_RANGE = 0.37;
-const YOU_DIED_OFFSET_Y = 110;
-const EXPLANATION_Y_OFFSET = -40;
-const EXPLANATION_FONT_SIZE = 16;
-const EXPLANATION_LINE_HEIGHT = 22;
-const EXPLANATION_MAX_WIDTH = 420;
-const EXPLANATION_PADDING = 32;
-const SUBTITLE_MAX_WIDTH = 400;
-const SUBTITLE_PADDING = 32;
-const SUBTITLE_Y_OFFSET = 20;
-const SUBTITLE_FONT_SIZE = 14;
-const SUBTITLE_LINE_HEIGHT = 20;
-const BUTTON_WIDTH = 210;
-const MIN_TOUCH_BUTTON_HEIGHT = 40;
-const BUTTON_HEIGHT = 48;
-const BUTTON_Y_OFFSET = 75;
-const BUTTON_LABEL_SIZE = 17;
-const YOU_DIED_FONT_SIZE = 72;
-/** Monospace bold glyph advance as a fraction of font size, used to keep the headline inside the screen. */
-const HEADLINE_GLYPH_ADVANCE = 0.62;
-const HEADLINE_GLYPH_COUNT = 'YOU DIED'.length;
-const HEADLINE_SIDE_MARGIN = 16;
-/** Height of the stacked content block (headline top to button bottom) at full scale. */
-const DESIGN_CONTENT_HEIGHT = YOU_DIED_OFFSET_Y + BUTTON_Y_OFFSET + BUTTON_HEIGHT;
-const SCREEN_VERTICAL_MARGIN = 12;
 
 /**
  * Where a death screen exit sends the player: the floor restart, or the last
@@ -40,25 +12,13 @@ const SCREEN_VERTICAL_MARGIN = 12;
  */
 export type RespawnMode = 'floorRestart' | 'checkpoint';
 
-const RESPAWN_BUTTON_LABEL: Record<RespawnMode, string> = {
-  floorRestart: 'Restart Level',
-  checkpoint: 'Return to Checkpoint',
-};
-
-const RESPAWN_SUBTITLE: Record<RespawnMode, string> = {
-  floorRestart: 'Respawning at floor start — progress from previous floors kept.',
-  checkpoint: 'Respawning where you last saved — the floor rewinds to how you left it.',
-};
-
 /**
- * Manages the "YOU DIED" overlay: fade-in alpha, rendering, and restart
- * button hit-testing. The caller is responsible for calling tick() each frame
- * (can be done inside render()) and checking handleClick() on canvas clicks.
+ * The "YOU DIED" overlay's state: whether it is up, its fade-in, and what it
+ * says. The view advances the fade by calling tick() once per drawn frame.
  */
 export class DeathScreen {
   private alpha = 0;
   private _active = false;
-  private _btnResult: { x: number; y: number; width: number; height: number } | null = null;
   private _explanation = '';
   private _mode: RespawnMode = 'floorRestart';
   audio: AudioManager | null = null;
@@ -85,6 +45,29 @@ export class DeathScreen {
     return this._active;
   }
 
+  /** The flavour line naming what killed the party; empty when there is none. */
+  get explanation(): string {
+    return this._explanation;
+  }
+
+  get respawnMode(): RespawnMode {
+    return this._mode;
+  }
+
+  /** How dark the backdrop has faded in so far, from 0 up to its full opacity. */
+  get fadeAlpha(): number {
+    return this.alpha;
+  }
+
+  /** How far the headline, text and button have faded in: 0 until the backdrop is dark enough to hold them. */
+  get contentAlpha(): number {
+    if (!this._active) return 0;
+    return Math.max(
+      0,
+      Math.min(1, (this.alpha - TEXT_ALPHA_START_THRESHOLD) / TEXT_ALPHA_FADE_RANGE),
+    );
+  }
+
   /** True once the overlay is opaque enough to show interactive elements. */
   get isVisible(): boolean {
     return this._active && this.alpha >= ALPHA_VISIBILITY_THRESHOLD;
@@ -95,105 +78,5 @@ export class DeathScreen {
     if (!this._active) return;
     if (this.alpha < ALPHA_MAX)
       this.alpha = Math.min(ALPHA_MAX, this.alpha + ALPHA_INCREMENT_PER_FRAME);
-  }
-
-  render(ctx: CanvasRenderingContext2D): void {
-    if (!this._active) return;
-
-    this.tick();
-
-    const w = viewportWidth();
-    const h = viewportHeight();
-    const fit = Math.min(1, (h - SCREEN_VERTICAL_MARGIN * 2) / DESIGN_CONTENT_HEIGHT);
-    const u = (designPx: number): number => Math.round(designPx * fit);
-    const headlineSize = Math.min(
-      u(YOU_DIED_FONT_SIZE),
-      Math.floor((w - HEADLINE_SIDE_MARGIN * 2) / (HEADLINE_GLYPH_COUNT * HEADLINE_GLYPH_ADVANCE)),
-    );
-
-    drawOverlay(ctx, { canvasWidth: w, canvasHeight: h, alpha: this.alpha });
-
-    // Below the fade gate: while the screen is still darkening there is no
-    // button to accept yet, and a ring declared over an empty frame would eat
-    // the press that follows.
-    if (this.alpha < TEXT_ALPHA_START_THRESHOLD) return;
-    // Deliberately the same gate `handleClick` uses rather than the fade above:
-    // a ring declared a few frames early consumes an accept press that the click
-    // router would then throw away.
-    if (this.isVisible) beginMenuFocus('death-screen');
-    const textAlpha = Math.min(
-      1,
-      (this.alpha - TEXT_ALPHA_START_THRESHOLD) / TEXT_ALPHA_FADE_RANGE,
-    );
-
-    // "YOU DIED"
-    drawText(ctx, 'YOU DIED', {
-      x: w / 2,
-      y: h / 2 - u(YOU_DIED_OFFSET_Y),
-      bold: true,
-      size: headlineSize,
-      color: '#dc2626',
-      align: 'center',
-      alpha: textAlpha,
-    });
-
-    // Death explanation flavor text
-    if (this._explanation.length > 0) {
-      const explanationW = Math.min(EXPLANATION_MAX_WIDTH, w - EXPLANATION_PADDING);
-      drawText(ctx, this._explanation, {
-        x: w / 2 - explanationW / 2,
-        y: h / 2 + u(EXPLANATION_Y_OFFSET),
-        size: EXPLANATION_FONT_SIZE,
-        color: '#e2bfa0',
-        align: 'center',
-        width: explanationW,
-        lineHeight: EXPLANATION_LINE_HEIGHT,
-        alpha: textAlpha,
-      });
-    }
-
-    // Subtitle
-    const subtitleW = Math.min(SUBTITLE_MAX_WIDTH, w - SUBTITLE_PADDING);
-    drawText(ctx, RESPAWN_SUBTITLE[this._mode], {
-      x: w / 2 - subtitleW / 2,
-      y: h / 2 + u(SUBTITLE_Y_OFFSET),
-      size: SUBTITLE_FONT_SIZE,
-      color: '#94a3b8',
-      align: 'center',
-      width: subtitleW,
-      lineHeight: SUBTITLE_LINE_HEIGHT,
-      alpha: textAlpha,
-    });
-
-    // Restart button
-    const btnW = BUTTON_WIDTH;
-    const btnH = Math.max(u(BUTTON_HEIGHT), MIN_TOUCH_BUTTON_HEIGHT);
-    const btnX = w / 2 - btnW / 2;
-    const btnY = h / 2 + u(BUTTON_Y_OFFSET);
-    this._btnResult = drawButton(ctx, {
-      x: btnX,
-      y: btnY,
-      width: btnW,
-      height: btnH,
-      label: RESPAWN_BUTTON_LABEL[this._mode],
-      ...BUTTON_PRESETS.danger,
-      labelSize: BUTTON_LABEL_SIZE,
-      alpha: textAlpha,
-      primaryAction: true,
-    });
-    if (this.isVisible) endMenuFocus();
-  }
-
-  /**
-   * Returns true if the click landed on the restart button.
-   * Only meaningful when isVisible === true.
-   */
-  handleClick(mx: number, my: number): boolean {
-    if (!this.isVisible) return false;
-    const btn = this._btnResult;
-    if (btn && mx >= btn.x && mx <= btn.x + btn.width && my >= btn.y && my <= btn.y + btn.height) {
-      return true;
-    }
-    return false;
   }
 }

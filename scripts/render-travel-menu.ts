@@ -4,34 +4,19 @@
  * three destinations unlocked, at desktop and phone sizes, into
  * `preview/travel-menu/`.
  *
- * Drawn through the real `TravelMenu` over a real floor-3 map, from a party
- * standing out in the wild, so the rows are the ones the game builds. Whether
- * the panel draws its touch footer is fixed when `Platform` loads, so the
- * phone renders run in a second process with a touch `navigator` installed
- * first.
+ * Drawn through the real `TravelMenu` and the shop screen it is mounted on,
+ * in a real `UiRoot`, over a real floor-3 map, from a party standing out in
+ * the wild, so the rows are the ones the game builds.
  *
  *   npm run render:travel-menu
  */
 
-import { execFileSync } from 'node:child_process';
-import { fileURLToPath } from 'node:url';
 import { createCanvas } from 'canvas';
-
-const PHONE_FLAG = '--phone';
-const isPhoneRun = process.argv.includes(PHONE_FLAG);
-
-if (isPhoneRun) {
-  Object.defineProperty(globalThis, 'navigator', {
-    value: { maxTouchPoints: 1, userAgent: 'iPhone' },
-    configurable: true,
-  });
-}
 
 const { installCanvasGlobals } = await import('./nodeCanvasGlobals.js');
 installCanvasGlobals();
 const { asGameContext } = await import('./nodeGameContext.js');
 const { PREVIEW_DIR, writePreviewPng } = await import('./previewOut.js');
-const { setViewportSize } = await import('../src/core/Viewport.js');
 const { TILE_SIZE } = await import('../src/core/constants.js');
 const { level3 } = await import('../src/levels/level3.js');
 const { GameMap } = await import('../src/map/GameMap.js');
@@ -43,29 +28,35 @@ const { createBriarHollowState } = await import('../src/core/briarHollowState.js
 const { createAnchorQuestProgress } = await import('../src/core/AnchorQuestProgress.js');
 const { TRAVEL_DESTINATIONS } = await import('../src/systems/travel/travelDestinations.js');
 const { TravelMenu } = await import('../src/ui/TravelMenu.js');
-const { setButtonMouseState } = await import('../src/ui/Button.js');
+const { UiRoot } = await import('../src/ui/core/UiRoot.js');
+const { NO_INSETS } = await import('../src/ui/core/viewport.js');
+const { shopScreenSurface } = await import('../src/ui/screens/shop/ShopScreen.js');
 
-const DEVICE_PIXEL_RATIO = 2;
+type Density = import('../src/ui/theme/tokens.js').Density;
+type ViewportInput = import('../src/ui/core/viewport.js').ViewportInput;
+
 const OUT_DIR = `${PREVIEW_DIR}/travel-menu`;
 const WORLD_SEED = 4242;
 /** Far enough from every destination that no row reads "You are here". */
 const WILDERNESS_MIN_DISTANCE_TILES = 40;
-/** A pointer parked off every button, so no row renders hovered. */
-const POINTER_OFF_SCREEN = -1000;
 /** The scene's own clear colour, so the overlay reads as it does in game. */
 const BACKDROP = '#1f2a1a';
+const FRAME_MS = 16;
+/** Long enough for the panel's open tween to settle. */
+const SETTLE_MS = 1000;
 
 interface Viewport {
   readonly name: string;
   readonly width: number;
   readonly height: number;
+  readonly density: Density;
 }
 
-const DESKTOP_VIEWPORTS: readonly Viewport[] = [{ name: 'desktop', width: 1280, height: 720 }];
-const PHONE_VIEWPORTS: readonly Viewport[] = [
-  { name: 'phone-portrait', width: 390, height: 844 },
-  { name: 'phone-landscape', width: 844, height: 390 },
-  { name: 'small-phone', width: 320, height: 568 },
+const VIEWPORTS: readonly Viewport[] = [
+  { name: 'desktop', width: 1280, height: 720, density: 'pointer' },
+  { name: 'phone-portrait', width: 390, height: 844, density: 'touch' },
+  { name: 'phone-landscape', width: 844, height: 390, density: 'touch' },
+  { name: 'small-phone', width: 568, height: 320, density: 'touch' },
 ];
 
 const map = new GameMap({
@@ -108,8 +99,7 @@ const UNLOCK_SETS: readonly Unlocks[] = [
   { name: 'three-rows', circusDone: true, villageDone: true },
 ];
 
-const viewports = isPhoneRun ? PHONE_VIEWPORTS : DESKTOP_VIEWPORTS;
-for (const viewport of viewports) {
+for (const viewport of VIEWPORTS) {
   for (const unlocks of UNLOCK_SETS) {
     const circus = createCircusQuestProgress();
     const briarHollow = createBriarHollowState();
@@ -122,25 +112,43 @@ for (const viewport of viewports) {
     );
     menu.open(human);
 
-    setViewportSize(viewport.width, viewport.height);
-    const canvas = createCanvas(
-      viewport.width * DEVICE_PIXEL_RATIO,
-      viewport.height * DEVICE_PIXEL_RATIO,
+    let clock = 0;
+    const viewportInput = (): ViewportInput => ({
+      cssWidth: viewport.width,
+      cssHeight: viewport.height,
+      density: viewport.density,
+      uiSize: 'medium',
+      safeArea: NO_INSETS,
+    });
+    const root = new UiRoot({
+      audio: null,
+      viewport: viewportInput,
+      now: () => clock,
+      warn: () => undefined,
+    });
+    root.mount(
+      shopScreenSurface({
+        id: 'travel-menu',
+        session: menu.session,
+        party: () => ({ active: human, companion: cat }),
+      }),
     );
-    const nodeCtx = canvas.getContext('2d');
-    nodeCtx.scale(DEVICE_PIXEL_RATIO, DEVICE_PIXEL_RATIO);
-    nodeCtx.fillStyle = BACKDROP;
-    nodeCtx.fillRect(0, 0, viewport.width, viewport.height);
-    setButtonMouseState(POINTER_OFF_SCREEN, POINTER_OFF_SCREEN);
-    menu.render(asGameContext(nodeCtx), human, cat);
+    const canvas = createCanvas(viewport.width, viewport.height);
+    const ctx = asGameContext(canvas.getContext('2d'));
+    const frame = (): void => {
+      ctx.setTransform(1, 0, 0, 1, 0, 0);
+      ctx.fillStyle = BACKDROP;
+      ctx.fillRect(0, 0, viewport.width, viewport.height);
+      root.frame(ctx);
+    };
+    clock += FRAME_MS;
+    frame();
+    clock += SETTLE_MS;
+    frame();
     const out = writePreviewPng(
       `${OUT_DIR}/${viewport.name}-${unlocks.name}.png`,
       canvas.toBuffer('image/png'),
     );
     console.log(`wrote ${out}`);
   }
-}
-
-if (!isPhoneRun) {
-  execFileSync('npx', ['tsx', fileURLToPath(import.meta.url), PHONE_FLAG], { stdio: 'inherit' });
 }

@@ -3,7 +3,8 @@ import type { Player } from '../Player';
 import type { Mob } from '../creatures/Mob';
 import type { FloatingTextRequest, FloatingTextStyle } from '../core/FloatingText';
 import { TILE_SIZE } from '../core/constants';
-import { drawText, TEXT_PRESETS } from '../ui/TextBox';
+import { worldPalette } from '../ui/theme/worldInk';
+import { measureWorldText, worldText } from '../ui/world/worldText';
 
 /** Frames a floating label stays on screen, rising and fading. */
 export const FLOATING_LABEL_FRAMES = 55;
@@ -30,20 +31,20 @@ interface StyleDef {
 }
 
 const STYLE_DEFS: Record<FloatingTextStyle, StyleDef> = {
-  miss: { size: 11, color: '#cbd5e1', bold: true },
-  buff: { size: 12, color: '#22d3ee', bold: true },
-  trigger: { size: 16, color: '#f97316', bold: true },
+  miss: { size: 11, color: worldPalette.combat.miss, bold: true },
+  buff: { size: 12, color: worldPalette.combat.buff, bold: true },
+  trigger: { size: 16, color: worldPalette.combat.trigger, bold: true },
   // Steel blue: a guard is a clang, and it must not be mistaken for the grey
   // of a crawler's own dodge happening in the same melee.
-  block: { size: 12, color: '#60a5fa', bold: true },
+  block: { size: 12, color: worldPalette.combat.block, bold: true },
   // Gold and larger than any hit label: a blow landed in a boss's punish
   // window, and it matches the halo she wears while that window is open.
-  exposed: { size: 18, color: '#facc15', bold: true },
+  exposed: { size: 18, color: worldPalette.combat.exposed, bold: true },
   // Ward blue/white and the biggest hit label of the lot: a mob wearing a
   // shield fairy's ward is not merely dodging, it cannot be touched at all,
   // and the flanking shields say why without the player having to notice the
   // ward's tether.
-  immune: { size: 15, color: '#bfe3ff', bold: true, icon: 'shield' },
+  immune: { size: 15, color: worldPalette.combat.immune, bold: true, icon: 'shield' },
 };
 
 /** Gap between the word and each flanking icon, in pixels. */
@@ -96,7 +97,7 @@ function drawShieldIcon(
   ctx.fillStyle = color;
   ctx.fill();
   ctx.lineWidth = size * SHIELD_OUTLINE_WIDTH_SHARE;
-  ctx.strokeStyle = 'rgba(8, 18, 38, 0.95)';
+  ctx.strokeStyle = worldPalette.combat.shieldRim;
   ctx.stroke();
 
   const spineHalfWidth = halfW * SHIELD_SPINE_HALF_WIDTH_SHARE;
@@ -106,7 +107,7 @@ function drawShieldIcon(
   ctx.lineTo(cx + spineHalfWidth, cy + halfH);
   ctx.lineTo(cx - spineHalfWidth, cy + halfH);
   ctx.closePath();
-  ctx.fillStyle = 'rgba(255, 255, 255, 0.85)';
+  ctx.fillStyle = worldPalette.combat.shieldSpine;
   ctx.fill();
   ctx.restore();
 }
@@ -215,8 +216,8 @@ export class FloatingCombatTextSystem implements GameSystem {
       const alpha = 1 - fadeProgress;
       const screenX = label.worldX - camX;
       const screenY = label.worldY - camY - TILE_SIZE * LABEL_RISE_TILES * progress;
-      drawText(ctx, label.text, {
-        ...TEXT_PRESETS.value,
+      worldText(ctx, label.text, {
+        style: 'value',
         x: screenX,
         y: screenY,
         size: style.size,
@@ -229,10 +230,12 @@ export class FloatingCombatTextSystem implements GameSystem {
       });
 
       if (style.icon === 'shield') {
-        ctx.save();
-        ctx.font = `${style.bold ? 'bold ' : ''}${style.size}px monospace`;
-        const halfTextWidth = ctx.measureText(label.text).width / 2;
-        ctx.restore();
+        const textWidth = measureWorldText(ctx, label.text, {
+          style: 'value',
+          size: style.size,
+          bold: style.bold,
+        }).width;
+        const halfTextWidth = textWidth / 2;
         const iconOffset = halfTextWidth + ICON_GAP_PX + ICON_SIZE_PX / 2;
         drawShieldIcon(ctx, screenX - iconOffset, screenY, ICON_SIZE_PX, style.color, alpha);
         drawShieldIcon(ctx, screenX + iconOffset, screenY, ICON_SIZE_PX, style.color, alpha);

@@ -16,8 +16,10 @@ import {
   environmentArtSheetCount,
   environmentPaintDepth,
 } from '../map/environmentArtCache';
-import { drawBox, BOX_PRESETS } from '../ui/Box';
-import { drawText, TEXT_PRESETS } from '../ui/TextBox';
+import { inset, type Rect } from '../ui/core/geom';
+import { WORLD_TEXT } from '../ui/theme/worldInk';
+import { worldPlate } from '../ui/world/worldShapes';
+import { worldText } from '../ui/world/worldText';
 
 const PANEL_WIDTH = 190;
 const PANEL_MARGIN = 8;
@@ -64,8 +66,7 @@ function figureCacheRows(neutral: string): PerfRow[] {
     {
       label: 'fig hit%',
       value: hitRate.toFixed(0),
-      color:
-        hitRate < FIGURE_HIT_RATE_WARNING ? TEXT_PRESETS.danger.color : TEXT_PRESETS.value.color,
+      color: hitRate < FIGURE_HIT_RATE_WARNING ? WORLD_TEXT.danger.color : WORLD_TEXT.value.color,
     },
     {
       label: 'fig MB/rows',
@@ -75,7 +76,7 @@ function figureCacheRows(neutral: string): PerfRow[] {
     {
       label: 'fig bake/dir',
       value: `${stats.bakes + stats.prewarmBakes}/${stats.directDraws}`,
-      color: stats.directDraws > 0 ? TEXT_PRESETS.danger.color : neutral,
+      color: stats.directDraws > 0 ? WORLD_TEXT.danger.color : neutral,
     },
   ];
 }
@@ -97,14 +98,14 @@ function environmentArtRows(neutral: string): PerfRow[] {
     {
       label: 'env owed',
       value: pending.toString(),
-      color: pending > 0 ? TEXT_PRESETS.value.color : neutral,
+      color: pending > 0 ? WORLD_TEXT.value.color : neutral,
     },
   ];
 }
 
 function buildRows(): PerfRow[] {
   const fps = perfMonitor.fps;
-  const neutral = TEXT_PRESETS.label.color;
+  const neutral = WORLD_TEXT.label.color;
   const timerRows: PerfRow[] = PERF_TIMERS.map((timer) => ({
     label: timer,
     value: formatMs(perfMonitor.msPerFrame(timer)),
@@ -116,7 +117,7 @@ function buildRows(): PerfRow[] {
     {
       label: 'fps',
       value: fps.toFixed(FPS_DECIMALS),
-      color: fps < FPS_WARNING_THRESHOLD ? TEXT_PRESETS.danger.color : TEXT_PRESETS.value.color,
+      color: fps < FPS_WARNING_THRESHOLD ? WORLD_TEXT.danger.color : WORLD_TEXT.value.color,
     },
     ...timerRows,
     { label: 'mobs act/sep', value: `${activeMobs}/${separatedMobs}`, color: neutral },
@@ -141,23 +142,22 @@ export function drawPerfOverlay(ctx: CanvasRenderingContext2D): void {
   // Also published, not only drawn: this readout is the instrument for the
   // frame cache, and browser automation cannot read a canvas.
   globalThis.__perfRows = Object.fromEntries(rows.map((row) => [row.label, row.value]));
-  const { inner } = drawBox(ctx, {
+  const frame: Rect = {
     x: viewportWidth() - PANEL_WIDTH - PANEL_MARGIN,
     y: PANEL_MARGIN,
-    width: PANEL_WIDTH,
-    height: rows.length * ROW_HEIGHT + PANEL_PADDING * 2,
-    radius: PANEL_RADIUS,
-    padding: PANEL_PADDING,
-    ...BOX_PRESETS.panel,
-  });
+    w: PANEL_WIDTH,
+    h: rows.length * ROW_HEIGHT + PANEL_PADDING * 2,
+  };
+  worldPlate(ctx, frame, { style: 'panel', radius: PANEL_RADIUS });
+  const inner = inset(frame, PANEL_PADDING);
 
   rows.forEach((row, index) => {
     const y = inner.y + index * ROW_HEIGHT;
-    drawText(ctx, row.label, { x: inner.x, y, ...TEXT_PRESETS.hint });
-    drawText(ctx, row.value, {
+    worldText(ctx, row.label, { x: inner.x, y, style: 'hint' });
+    worldText(ctx, row.value, {
       x: inner.x + VALUE_COLUMN_OFFSET,
       y,
-      ...TEXT_PRESETS.hint,
+      style: 'hint',
       color: row.color,
     });
   });

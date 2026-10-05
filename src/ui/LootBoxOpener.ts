@@ -1,10 +1,21 @@
 import type { LootBox, BoxContents } from '../core/AchievementManager';
-import { ITEM_DEF, isItemId } from '../core/ItemDefs';
+import { ITEM_DEF, isItemId, type ItemId } from '../core/ItemDefs';
 import { randomFromArray, randomInt } from '../utils';
-import { drawText } from './TextBox';
-import { drawOverlay, drawBox, drawDivider, drawProgressBar } from './Box';
-import { suppressMenuFocus } from './Button';
-import { viewportWidth, viewportHeight } from '../core/Viewport';
+import { inset, type Rect } from './core/geom';
+import type { Ui } from './core/UiRoot';
+import {
+  chromeTheme,
+  drawBar,
+  drawItemFrame,
+  drawRule,
+  lootTierColor,
+} from './screens/dialogs/canvasChrome';
+import { withAlpha } from './theme/color';
+import { drawGlyph } from './theme/glyphs';
+import { skinsFor } from './theme/skins';
+import type { Theme } from './theme/tokens';
+import { drawGlass, fillRounded, strokeRounded, type PaintTarget } from './widgets/paint';
+import { measureText, text } from './widgets/text';
 import type { AudioManager } from '../audio/AudioManager';
 
 type ParticleShape = 'circle' | 'confetti';
@@ -25,21 +36,31 @@ interface Particle {
   spinRate: number;
 }
 
-const PARTICLE_COLORS = [
-  '#ffd700',
-  '#ff6b6b',
-  '#4ade80',
-  '#38bdf8',
-  '#a855f7',
-  '#fb923c',
-  '#fff',
-  '#fbbf24',
-];
+/** The confetti and sparks: every rarity colour plus the accent and the bright states. */
+function particleColors(theme: Theme): string[] {
+  const { palette } = theme;
+  return [
+    ...Object.values(palette.tier),
+    palette.accent.base,
+    palette.accent.hover,
+    palette.state.success,
+    palette.state.danger,
+    palette.state.info,
+    palette.text.primary,
+  ];
+}
+
+/** One line of what a box paid out, with the item it pictures (`'coins'` for coins, `null` for none). */
+interface RewardEntry {
+  readonly text: string;
+  readonly icon: ItemId | 'coins' | null;
+  readonly color: string;
+}
 
 type Phase = 'shaking' | 'opening' | 'revealing' | 'done';
 
 const BOX_W = 400;
-const BOX_H = 300;
+const BOX_H = 390;
 const SHAKE_FRAMES = 40;
 const OPEN_FRAMES = 30;
 const REVEAL_FRAMES = 50;
@@ -51,20 +72,23 @@ const PANEL_MARGIN = 32;
 const SPARKLE_INTERVAL = 6;
 const REVEAL_SPARKLE_INTERVAL = 4;
 
-const CONTENT_Y_OFFSET_FRACTION = 0.633;
+/**
+ * How far the box art reaches above and below its centre, as multiples of its
+ * size: the blown-off lid flies well above the box, the body sits just below.
+ */
+const ART_REACH_ABOVE = 1.2;
+const ART_REACH_BELOW = 0.5;
+/** Smallest the box art is drawn on a short screen, as a fraction of its full size. */
+const MIN_ART_SCALE = 0.5;
+/** Shortest a reward line gets; past this, lines that do not fit fold into a "+N more" line. */
+const MIN_REWARD_ROW_STEP = 22;
 
 const REVEAL_FADE_FRACTION = 0.6;
 
-const SKIP_HINT_BOTTOM_OFFSET = 52;
-
 const COUNTDOWN_BAR_MARGIN = 24;
-const COUNTDOWN_BAR_SIDE_PAD = 48;
 const COUNTDOWN_BAR_Y_FROM_BOTTOM = 18;
 const COUNTDOWN_BAR_H = 6;
 const COUNTDOWN_BAR_ALPHA = 0.7;
-
-const COUNTDOWN_LABEL_Y_ABOVE_BAR = 4;
-const COUNTDOWN_LABEL_CORRECTION = 8;
 
 const BOX_ANIM_SIZE = 56;
 const BOX_SHAKE_AMPLITUDE_FRAMES = 1.8;
@@ -101,30 +125,22 @@ const PARTICLE_LIFE_MIN = 40;
 const PARTICLE_LIFE_MAX = 79;
 const PARTICLE_MAX_LIFE = 80;
 
-const HEADER_PROGRESS_RIGHT_MARGIN = 12;
-const HEADER_PROGRESS_Y_FROM_TOP = 20;
 const HEADER_TITLE_X_MARGIN = 16;
-const HEADER_TITLE_Y_FROM_TOP = 36;
-const HEADER_TITLE_SIZE = 17;
-const HEADER_TITLE_FONT_CORRECTION = 14;
-const HEADER_PLAYER_Y_FROM_TOP = 52;
-const HEADER_PLAYER_Y_CORRECTION = 9;
-const HEADER_PLAYER_SIZE = 11;
-const HEADER_DIVIDER_Y_FROM_TOP = 62;
 const HEADER_DIVIDER_SIDE_PAD = 24;
-
-const CONTENT_LINE_STEP_SMALL = 14;
-const CONTENT_LINE_STEP_NORMAL = 16;
-const CONTENT_FONT_SMALL = 10;
-const CONTENT_FONT_NORMAL = 12;
-const CONTENT_FONT_SMALL_THRESHOLD = 3;
-const CONTENT_RECEIVED_Y_OFFSET = 10;
-const CONTENT_RECEIVED_SIZE = 13;
-const CONTENT_ITEM_Y_OFFSET = 10;
-const CONTENT_ADVANCE_Y = 18;
+/** Top of the box's title, below the "Box n of N" counter. */
+const HEADER_TITLE_TOP = 22;
+const PANEL_GLOW_ALPHA = 0.55;
+const PANEL_GLOW_BLUR = 28;
+const PANEL_EDGE_ALPHA = 0.7;
+const PANEL_EDGE_WIDTH = 1.5;
+const RIBBON_ALPHA = 0.8;
+/** Height a reward line takes when there is room; tighter lists shrink to fit. */
+const REWARD_ROW_STEP = 28;
+/** Vertical space between one reward line's icon and the next. */
+const REWARD_ROW_GAP = 4;
+const COIN_GLYPH_INSET_RATIO = 0.18;
 
 const CONTENT_LEFT_PAD = 20;
-const CONTENT_WIDTH_REDUCTION = 40;
 
 // Particle spread — centering the random range around zero
 const PARTICLE_CENTER_OFFSET = 0.5;
@@ -138,8 +154,6 @@ const CONFETTI_SIZE_RANGE = 4;
 const CONFETTI_SPIN_RANGE = 0.3;
 /** Confetti rectangles are taller than they are wide, so a spin reads as a tumbling ribbon. */
 const CONFETTI_ASPECT = 2.2;
-
-const HEADER_PROGRESS_Y_CORRECTION = 9;
 
 /** Ascending rarity order for sorting boxes (lowest first). */
 const TIER_ORDER: Record<string, number> = {
@@ -185,7 +199,11 @@ const SHOCKWAVE_ALPHA = 0.55;
 // Reveal: each reward line pops in with an overshoot scale bounce.
 const REVEAL_LINE_STAGGER_FRAMES = 6;
 const REVEAL_POP_FRAMES = 14;
-const REVEAL_POP_START_SCALE = 0.2;
+/**
+ * A line enters at full size and fades in under its overshoot, so text in
+ * mid-pop is never drawn smaller than its own style.
+ */
+const REVEAL_POP_START_SCALE = 1;
 const REVEAL_POP_OVERSHOOT_SCALE = 1.25;
 /** Sparkle particles fired at a card's own position the instant it starts popping in. */
 const CARD_SPARKLE_COUNT = 10;
@@ -223,6 +241,8 @@ export class LootBoxOpener {
   private shakeY = 0;
   /** Reward lines that have already fired their pop-in sparkle burst, so a re-render of the same frame can't double it up. */
   private sparkledLineIndices = new Set<number>();
+  /** Where the box art was last drawn, which bursts fly out of; the screen's centre until then. */
+  private artCenter: { x: number; y: number } | null = null;
 
   /** Lets the owner wire a rising hum into the anticipation phase. */
   setAudio(audio: AudioManager | null): void {
@@ -361,163 +381,196 @@ export class LootBoxOpener {
     this.particles = this.particles.filter((p) => p.life > 0);
   }
 
-  render(ctx: CanvasRenderingContext2D): void {
-    if (!this.active || !this.box) return;
-    // Owns the screen with nothing to focus, and is opened from the pause menu —
-    // without this the menu underneath would keep the live ring.
-    suppressMenuFocus('loot-box');
-
-    const cw = viewportWidth();
-    const ch = viewportHeight();
+  /** Draws the reveal over a `cw` × `ch` screen. */
+  paint(target: PaintTarget & Pick<Ui, 'density'>, cw: number, ch: number): void {
+    const box = this.box;
+    if (!this.active || box === null) return;
+    const { ctx, theme } = target;
+    const { palette, type, space } = theme;
+    const skins = skinsFor(theme);
     const boxW = Math.min(BOX_W, cw - PANEL_MARGIN);
     const boxH = Math.min(BOX_H, ch - PANEL_MARGIN);
     const bx = (cw - boxW) / 2;
     const by = (ch - boxH) / 2;
     const cx = cw / 2;
 
-    drawOverlay(ctx, { canvasWidth: cw, canvasHeight: ch, alpha: 0.7 });
+    ctx.fillStyle = skins.scrim;
+    ctx.fillRect(0, 0, cw, ch);
 
     if (this.burstFlashFrames > 0) {
       ctx.save();
       ctx.globalCompositeOperation = 'lighter';
-      drawOverlay(ctx, {
-        canvasWidth: cw,
-        canvasHeight: ch,
-        color: '#ffffff',
-        alpha: (this.burstFlashFrames / BURST_FLASH_FRAMES) * BURST_FLASH_ALPHA,
-      });
+      ctx.globalAlpha *= (this.burstFlashFrames / BURST_FLASH_FRAMES) * BURST_FLASH_ALPHA;
+      ctx.fillStyle = palette.text.primary;
+      ctx.fillRect(0, 0, cw, ch);
       ctx.restore();
     }
 
     ctx.save();
     ctx.translate(this.shakeX, this.shakeY);
 
-    const tierColor = this.tierColor(this.box.tier);
-    drawBox(ctx, {
-      x: bx,
-      y: by,
-      width: boxW,
-      height: boxH,
-      fill: '#0f172a',
-      border: tierColor,
-      borderWidth: 2.5,
-      glow: tierColor,
-      glowBlur: 28,
-    });
+    const tierColor = lootTierColor(theme, box.tier);
+    const panel: Rect = { x: bx, y: by, w: boxW, h: boxH };
+    ctx.save();
+    ctx.shadowColor = withAlpha(tierColor, PANEL_GLOW_ALPHA);
+    ctx.shadowBlur = PANEL_GLOW_BLUR;
+    fillRounded(ctx, panel, theme.radius.lg, palette.surface.sunken);
+    ctx.restore();
+    drawGlass(target, panel, skins.panel.card);
+    strokeRounded(
+      ctx,
+      panel,
+      theme.radius.lg,
+      withAlpha(tierColor, PANEL_EDGE_ALPHA),
+      PANEL_EDGE_WIDTH,
+    );
 
+    const headerRow = (y: number, h: number): Rect => ({
+      x: bx + HEADER_TITLE_X_MARGIN,
+      y,
+      w: boxW - HEADER_TITLE_X_MARGIN * 2,
+      h,
+    });
     const total = this.queue.length;
     const current = this.queueIndex + 1;
-    drawText(ctx, `Box ${current} of ${total}`, {
-      x: bx + boxW - HEADER_PROGRESS_RIGHT_MARGIN,
-      y: by + HEADER_PROGRESS_Y_FROM_TOP - HEADER_PROGRESS_Y_CORRECTION,
-      size: HEADER_PLAYER_SIZE,
-      color: '#64748b',
+    text(target, headerRow(by + space.sm, type.caption.lineHeight), {
+      text: `Box ${current} of ${total}`,
+      role: 'muted',
       align: 'right',
+      tabular: true,
     });
-
-    drawText(ctx, `${this.box.tier} ${this.box.category} Box`, {
-      x: bx + HEADER_TITLE_X_MARGIN,
-      y: by + HEADER_TITLE_Y_FROM_TOP - HEADER_TITLE_FONT_CORRECTION,
-      bold: true,
-      size: HEADER_TITLE_SIZE,
+    text(target, headerRow(by + HEADER_TITLE_TOP, type.heading.lineHeight), {
+      text: `${box.tier} ${box.category} Box`,
+      style: type.heading,
       color: tierColor,
       align: 'center',
-      width: boxW - PANEL_MARGIN,
     });
+    text(
+      target,
+      headerRow(by + HEADER_TITLE_TOP + type.heading.lineHeight, type.caption.lineHeight),
+      { text: `for ${this.playerName}`, role: 'caption', align: 'center' },
+    );
+    const dividerFromTop =
+      HEADER_TITLE_TOP + type.heading.lineHeight + type.caption.lineHeight + space.xs;
+    drawRule(
+      target,
+      bx + HEADER_DIVIDER_SIDE_PAD,
+      by + dividerFromTop,
+      boxW - HEADER_DIVIDER_SIDE_PAD * 2,
+      tierColor,
+    );
 
-    drawText(ctx, `for ${this.playerName}`, {
-      x: cx,
-      y: by + HEADER_PLAYER_Y_FROM_TOP - HEADER_PLAYER_Y_CORRECTION,
-      size: HEADER_PLAYER_SIZE,
-      color: '#94a3b8',
-      align: 'center',
-    });
-
-    drawDivider(ctx, {
-      x: bx + HEADER_DIVIDER_SIDE_PAD,
-      y: by + HEADER_DIVIDER_Y_FROM_TOP,
-      length: boxW - COUNTDOWN_BAR_SIDE_PAD,
-      color: `${tierColor}55`,
-    });
-
-    const boxCenterY = by + boxH / 2 - HEADER_TITLE_FONT_CORRECTION;
+    // Top to bottom: header, box art, reward list, skip hint. The list is
+    // sized for its lines first and the art takes what is left, so a short
+    // screen shrinks the art rather than piling the lines on top of each other.
+    const plannedRows = this.rewardEntries(theme).length;
+    const contentNeeds =
+      type.label.lineHeight + space.xs + plannedRows * MIN_REWARD_ROW_STEP + space.xs;
+    const artTop = by + dividerFromTop + space.sm;
+    const barY = by + boxH - COUNTDOWN_BAR_Y_FROM_BOTTOM;
+    const footerRowY = barY - space.xs - type.caption.lineHeight;
+    const footerReserve = by + boxH - footerRowY + space.xs;
+    const artRoom = boxH - dividerFromTop - space.sm * 2 - contentNeeds - footerReserve;
+    const artSpan = BOX_ANIM_SIZE * (ART_REACH_ABOVE + ART_REACH_BELOW);
+    const artScale = Math.max(MIN_ART_SCALE, Math.min(1, artRoom / artSpan));
+    const artSize = BOX_ANIM_SIZE * artScale;
+    const boxCenterY = artTop + artSize * ART_REACH_ABOVE;
+    this.artCenter = { x: cx, y: boxCenterY };
+    const contentTop = Math.round(boxCenterY + artSize * ART_REACH_BELOW + space.sm);
+    // The burst lights up the art band and the screen around the panel, but
+    // never the reward list or the header text.
+    const artBand: Rect = {
+      x: bx,
+      y: artTop,
+      w: boxW,
+      h: contentTop - space.xs - artTop,
+    };
+    const clipToBurstArea = (): void => {
+      ctx.beginPath();
+      ctx.rect(-this.shakeX, -this.shakeY, cw, ch);
+      ctx.rect(panel.x, panel.y, panel.w, panel.h);
+      ctx.rect(artBand.x, artBand.y, artBand.w, artBand.h);
+      ctx.clip('evenodd');
+    };
+    ctx.save();
+    clipToBurstArea();
     if (this.phase === 'opening' || this.phase === 'revealing') {
       this.renderGodRays(ctx, cx, boxCenterY, tierColor);
     }
     if (this.phase === 'opening' && this.frame < SHOCKWAVE_FRAMES) {
       this.renderShockwave(ctx, cx, boxCenterY, tierColor);
     }
-    this.drawAnimatedBox(ctx, cx, boxCenterY, tierColor);
+    ctx.restore();
+    this.drawAnimatedBox(ctx, cx, boxCenterY, artSize, tierColor, palette.text.primary);
 
     if (this.phase === 'revealing' || this.phase === 'done') {
       const revealAlpha =
         this.phase === 'done'
           ? 1
           : Math.min(1, this.frame / (REVEAL_FRAMES * REVEAL_FADE_FRACTION));
-      ctx.globalAlpha = revealAlpha;
-      // Pass left edge of content area so drawText centers within the dialog box
-      this.renderContents(
-        ctx,
-        bx + CONTENT_LEFT_PAD,
-        by + Math.round(boxH * CONTENT_Y_OFFSET_FRACTION),
-        boxW - CONTENT_WIDTH_REDUCTION,
-      );
-      ctx.globalAlpha = 1;
+      ctx.save();
+      ctx.globalAlpha *= revealAlpha;
+      this.renderContents(target, {
+        x: bx + CONTENT_LEFT_PAD,
+        y: contentTop,
+        w: boxW - CONTENT_LEFT_PAD * 2,
+        h: footerRowY - space.xs - contentTop,
+      });
+      ctx.restore();
     }
 
-    // Skip hint — raised to avoid overlapping the countdown label
-    drawText(ctx, this.phase === 'done' ? 'Click to continue' : 'Click to skip', {
-      x: cx,
-      y: by + boxH - SKIP_HINT_BOTTOM_OFFSET,
-      size: HEADER_PLAYER_SIZE,
-      color: '#475569',
-      align: 'center',
+    const counting = this.phase === 'done' && this.nextTimer > 0;
+    const footerRow = headerRow(footerRowY, type.caption.lineHeight);
+    text(target, footerRow, {
+      text: footerHint(target.density, this.phase === 'done'),
+      role: 'muted',
+      align: counting ? 'left' : 'center',
     });
 
-    if (this.phase === 'done' && this.nextTimer > 0) {
+    if (counting) {
       const ratio = this.nextTimer / NEXT_DELAY;
-      const barW = boxW - COUNTDOWN_BAR_SIDE_PAD;
-      const barX = bx + COUNTDOWN_BAR_MARGIN;
-      const barY = by + boxH - COUNTDOWN_BAR_Y_FROM_BOTTOM;
-      drawProgressBar(ctx, {
-        x: barX,
-        y: barY,
-        width: barW,
-        height: COUNTDOWN_BAR_H,
-        value: ratio,
-        fill: tierColor,
-        background: '#1e293b',
-        alpha: COUNTDOWN_BAR_ALPHA,
-      });
+      ctx.save();
+      ctx.globalAlpha *= COUNTDOWN_BAR_ALPHA;
+      drawBar(
+        target,
+        {
+          x: bx + COUNTDOWN_BAR_MARGIN,
+          y: barY,
+          w: boxW - COUNTDOWN_BAR_MARGIN * 2,
+          h: COUNTDOWN_BAR_H,
+        },
+        { value: ratio, fill: tierColor },
+      );
+      ctx.restore();
 
       const isLast = this.queueIndex >= this.queue.length - 1;
-      drawText(ctx, isLast ? 'Done!' : 'Next box…', {
-        x: cx,
-        y: barY - COUNTDOWN_LABEL_Y_ABOVE_BAR - COUNTDOWN_LABEL_CORRECTION,
-        size: HEADER_PLAYER_SIZE,
-        color: '#64748b',
-        align: 'center',
+      text(target, footerRow, {
+        text: isLast ? 'Done!' : 'Next box…',
+        role: 'muted',
+        align: 'right',
       });
     }
 
+    ctx.save();
+    clipToBurstArea();
     for (const p of this.particles) {
       const ratio = p.life / p.maxLife;
-      ctx.globalAlpha = ratio;
+      ctx.save();
+      ctx.globalAlpha *= ratio;
       ctx.fillStyle = p.color;
       if (p.shape === 'confetti') {
-        ctx.save();
         ctx.translate(p.x, p.y);
         ctx.rotate(p.spin);
         const size = p.radius * ratio;
         ctx.fillRect(-size / 2, -size / 2, size, size * CONFETTI_ASPECT);
-        ctx.restore();
       } else {
         ctx.beginPath();
         ctx.arc(p.x, p.y, p.radius * ratio, 0, Math.PI * 2);
         ctx.fill();
       }
+      ctx.restore();
     }
-    ctx.globalAlpha = 1;
+    ctx.restore();
 
     ctx.restore();
   }
@@ -585,6 +638,7 @@ export class LootBoxOpener {
     this.shakeX = 0;
     this.shakeY = 0;
     this.sparkledLineIndices = new Set();
+    this.artCenter = null;
     this.audio?.play('rumble', { volume: SHAKE_HUM_VOLUME });
   }
 
@@ -605,11 +659,14 @@ export class LootBoxOpener {
   }
 
   private spawnParticle(burst = false, origin?: { x: number; y: number }): void {
-    // Particles are drawn onto the canvas, so they spawn in the CSS-pixel
-    // viewport the box is laid out in, not in window coordinates — unless a
-    // caller hands over a specific spot (a reward card popping in).
-    const cx = origin?.x ?? viewportWidth() / 2;
-    const cy = origin?.y ?? viewportHeight() / 2;
+    // Particles are drawn onto the canvas, so they spawn in the space the box
+    // is laid out in: at the box art, or a spot the caller hands over (a
+    // reward card popping in). Before the box has been drawn there is nowhere
+    // for them to come from.
+    const from = origin ?? this.artCenter;
+    if (from === null) return;
+    const cx = from.x;
+    const cy = from.y;
     const angle = Math.random() * Math.PI * 2;
     const speed = burst
       ? PARTICLE_BURST_SPEED_BASE + Math.random() * PARTICLE_BURST_SPEED_RANGE
@@ -623,7 +680,7 @@ export class LootBoxOpener {
       radius: isConfetti
         ? CONFETTI_SIZE_BASE + Math.random() * CONFETTI_SIZE_RANGE
         : PARTICLE_RADIUS_BASE + Math.random() * PARTICLE_RADIUS_RANGE,
-      color: randomFromArray(PARTICLE_COLORS),
+      color: randomFromArray(particleColors(chromeTheme())),
       life: randomInt(PARTICLE_LIFE_MIN, PARTICLE_LIFE_MAX),
       maxLife: PARTICLE_MAX_LIFE,
       shape: isConfetti ? 'confetti' : 'circle',
@@ -636,10 +693,12 @@ export class LootBoxOpener {
     ctx: CanvasRenderingContext2D,
     cx: number,
     cy: number,
+    size: number,
     color: string,
+    light: string,
   ): void {
-    const size = BOX_ANIM_SIZE;
-
+    const artScale = size / BOX_ANIM_SIZE;
+    const lidPad = BOX_LID_PAD * artScale;
     let shakeX = 0;
     let shakeY = 0;
     // Grows from a fraction of full strength up to full strength, so the shake
@@ -662,7 +721,7 @@ export class LootBoxOpener {
       // The lid overshoots its resting angle and lifts as it blows off, rather
       // than simply rotating open, so the burst reads as an impact.
       const lidAngle = t * (BOX_LID_ANGLE + BOX_LID_SPIN_EXTRA);
-      const lidLift = t * BOX_LID_FLING_DISTANCE;
+      const lidLift = t * BOX_LID_FLING_DISTANCE * artScale;
       ctx.save();
       ctx.translate(bx + size / 2, by + size * BOX_BODY_Y_FRAC - lidLift);
       ctx.rotate(lidAngle);
@@ -670,9 +729,9 @@ export class LootBoxOpener {
       const LID_FILL_ALPHA = 0.25;
       ctx.globalAlpha = LID_FILL_ALPHA;
       ctx.fillRect(
-        -size / 2 - BOX_LID_PAD,
+        -size / 2 - lidPad,
         -size * BOX_LID_HEIGHT_FRAC,
-        size + BOX_LID_PAD * 2,
+        size + lidPad * 2,
         size * BOX_LID_HEIGHT_FRAC,
       );
       ctx.globalAlpha = 1;
@@ -680,9 +739,9 @@ export class LootBoxOpener {
       const BOX_LID_LINE_W = 2;
       ctx.lineWidth = BOX_LID_LINE_W;
       ctx.strokeRect(
-        -size / 2 - BOX_LID_PAD,
+        -size / 2 - lidPad,
         -size * BOX_LID_HEIGHT_FRAC,
-        size + BOX_LID_PAD * 2,
+        size + lidPad * 2,
         size * BOX_LID_HEIGHT_FRAC,
       );
       ctx.restore();
@@ -720,9 +779,9 @@ export class LootBoxOpener {
     if (this.phase === 'shaking') {
       ctx.fillStyle = color;
       ctx.globalAlpha = BOX_SHAKE_FILL_ALPHA;
-      ctx.fillRect(bx - BOX_LID_PAD, by, size + BOX_LID_PAD * 2, size * BOX_SHAKE_FILL_Y_FRAC);
+      ctx.fillRect(bx - lidPad, by, size + lidPad * 2, size * BOX_SHAKE_FILL_Y_FRAC);
       ctx.globalAlpha = 1;
-      ctx.strokeRect(bx - BOX_LID_PAD, by, size + BOX_LID_PAD * 2, size * BOX_SHAKE_FILL_Y_FRAC);
+      ctx.strokeRect(bx - lidPad, by, size + lidPad * 2, size * BOX_SHAKE_FILL_Y_FRAC);
 
       // Light leaking from the lid seam, brightening with the shake — the
       // anticipation that something is about to force its way out.
@@ -730,17 +789,17 @@ export class LootBoxOpener {
       ctx.save();
       ctx.globalCompositeOperation = 'lighter';
       ctx.globalAlpha = SEAM_LEAK_ALPHA * shakeCrescendo;
-      ctx.fillStyle = '#ffffff';
+      ctx.fillStyle = light;
       ctx.fillRect(
-        bx - BOX_LID_PAD,
+        bx - lidPad,
         seamY - (size * SEAM_LEAK_HEIGHT_FRAC) / 2,
-        size + BOX_LID_PAD * 2,
+        size + lidPad * 2,
         size * SEAM_LEAK_HEIGHT_FRAC,
       );
       ctx.restore();
     }
 
-    ctx.strokeStyle = `${color}cc`;
+    ctx.strokeStyle = withAlpha(color, RIBBON_ALPHA);
     const RIBBON_LINE_W = 2;
     ctx.lineWidth = RIBBON_LINE_W;
     ctx.beginPath();
@@ -753,118 +812,84 @@ export class LootBoxOpener {
     ctx.stroke();
   }
 
-  private renderContents(
-    ctx: CanvasRenderingContext2D,
-    leftX: number,
-    y: number,
-    maxW: number,
-  ): void {
-    if (!this.contents) return;
-
-    drawText(ctx, `${this.playerName} received:`, {
-      x: leftX,
-      y: y - CONTENT_RECEIVED_Y_OFFSET,
-      bold: true,
-      size: CONTENT_RECEIVED_SIZE,
-      color: '#f1f5f9',
-      align: 'center',
-      width: maxW,
-    });
-    y += CONTENT_ADVANCE_Y;
-
-    let lineIndex = 0;
-
-    if (this.contents.displayLines !== undefined) {
-      const lines = this.contents.displayLines;
-      const itemFontSize =
-        lines.length >= CONTENT_FONT_SMALL_THRESHOLD ? CONTENT_FONT_SMALL : CONTENT_FONT_NORMAL;
-      const lineStep =
-        itemFontSize <= CONTENT_FONT_SMALL ? CONTENT_LINE_STEP_SMALL : CONTENT_LINE_STEP_NORMAL;
-      for (const line of lines) {
-        this.drawPoppingLine(
-          ctx,
-          line,
-          leftX,
-          y - CONTENT_ITEM_Y_OFFSET,
-          itemFontSize,
-          '#4ade80',
-          maxW,
-          lineIndex++,
-        );
-        y += lineStep;
-      }
-      return;
+  /** What the current box paid out, one entry per reward line. */
+  private rewardEntries(theme: Theme): RewardEntry[] {
+    const contents = this.contents;
+    if (contents === null) return [];
+    const { palette } = theme;
+    if (contents.displayLines !== undefined) {
+      return contents.displayLines.map((line) => ({
+        text: line,
+        icon: null,
+        color: palette.state.success,
+      }));
     }
-
-    // Count distinct reward lines so we can shrink text when there are 3+
-    const potionCount = this.contents.potions ?? 0;
-    const itemCount =
-      (potionCount > 0 ? 1 : 0) +
-      (this.contents.coins > 0 ? 1 : 0) +
-      (this.contents.bonus ? 1 : 0) +
-      (this.contents.itemRewards?.length ?? 0);
-    const itemFontSize =
-      itemCount >= CONTENT_FONT_SMALL_THRESHOLD ? CONTENT_FONT_SMALL : CONTENT_FONT_NORMAL;
-    const lineStep =
-      itemFontSize <= CONTENT_FONT_SMALL ? CONTENT_LINE_STEP_SMALL : CONTENT_LINE_STEP_NORMAL;
-
+    const entries: RewardEntry[] = [];
+    const potionCount = contents.potions ?? 0;
     if (potionCount > 0) {
-      this.drawPoppingLine(
-        ctx,
-        `+${potionCount} Health Potion${potionCount !== 1 ? 's' : ''}`,
-        leftX,
-        y - CONTENT_ITEM_Y_OFFSET,
-        itemFontSize,
-        '#4ade80',
-        maxW,
-        lineIndex++,
-      );
-      y += lineStep;
+      entries.push({
+        text: `+${potionCount} Health Potion${potionCount !== 1 ? 's' : ''}`,
+        icon: 'health_potion',
+        color: palette.state.success,
+      });
     }
-    if (this.contents.coins > 0) {
-      this.drawPoppingLine(
-        ctx,
-        `+${this.contents.coins} Coins`,
-        leftX,
-        y - CONTENT_ITEM_Y_OFFSET,
-        itemFontSize,
-        '#fbbf24',
-        maxW,
-        lineIndex++,
-      );
-      y += lineStep;
+    if (contents.coins > 0) {
+      entries.push({ text: `+${contents.coins} Coins`, icon: 'coins', color: palette.accent.base });
     }
-    if (this.contents.bonus) {
-      const bonusId = this.contents.bonus.id;
-      const name = isItemId(bonusId) ? ITEM_DEF[bonusId].name : bonusId.replace(/_/g, ' ');
+    if (contents.bonus) {
+      const bonusId = contents.bonus.id;
+      const known = isItemId(bonusId);
+      const name = known ? ITEM_DEF[bonusId].name : bonusId.replace(/_/g, ' ');
       // The shared tier/category bonus always goes to the human, regardless of
       // which player's box granted it.
       const bonusRecipient = this.playerName !== 'Human' ? ' → Human' : '';
-      this.drawPoppingLine(
-        ctx,
-        `+${this.contents.bonus.quantity} ${name}${bonusRecipient}`,
-        leftX,
-        y - CONTENT_ITEM_Y_OFFSET,
-        itemFontSize,
-        '#fb923c',
-        maxW,
-        lineIndex++,
-      );
-      y += lineStep;
+      entries.push({
+        text: `+${contents.bonus.quantity} ${name}${bonusRecipient}`,
+        icon: known ? bonusId : null,
+        color: palette.text.primary,
+      });
     }
-    for (const { id, quantity } of this.contents.itemRewards ?? []) {
-      this.drawPoppingLine(
-        ctx,
-        `+${quantity} ${ITEM_DEF[id].name}`,
-        leftX,
-        y - CONTENT_ITEM_Y_OFFSET,
-        itemFontSize,
-        '#fb923c',
-        maxW,
-        lineIndex++,
-      );
-      y += lineStep;
+    for (const { id, quantity } of contents.itemRewards ?? []) {
+      entries.push({
+        text: `+${quantity} ${ITEM_DEF[id].name}`,
+        icon: id,
+        color: palette.text.primary,
+      });
     }
+    return entries;
+  }
+
+  /**
+   * The "received" heading and the reward lines, laid into `area`. Lines keep
+   * a readable height; any that do not fit fold into one "+N more" line.
+   */
+  private renderContents(target: PaintTarget, area: Rect): void {
+    if (!this.contents) return;
+    const { type } = target.theme;
+    text(
+      target,
+      { x: area.x, y: area.y, w: area.w, h: type.label.lineHeight },
+      { text: `${this.playerName} received:`, role: 'label', align: 'center' },
+    );
+    const entries = this.rewardEntries(target.theme);
+    if (entries.length === 0) return;
+    const rowsTop = area.y + type.label.lineHeight + target.theme.space.xs;
+    const rowsHeight = Math.max(0, area.y + area.h - rowsTop);
+    const rowStep = Math.min(
+      REWARD_ROW_STEP,
+      Math.max(MIN_REWARD_ROW_STEP, rowsHeight / entries.length),
+    );
+    const rowsThatFit = Math.max(1, Math.floor(rowsHeight / rowStep));
+    const shown =
+      entries.length <= rowsThatFit ? entries : foldOverflow(entries, rowsThatFit, target.theme);
+    shown.forEach((entry, lineIndex) => {
+      this.drawPoppingLine(
+        target,
+        entry,
+        { x: area.x, y: rowsTop + lineIndex * rowStep, w: area.w, h: rowStep },
+        lineIndex,
+      );
+    });
   }
 
   /**
@@ -874,35 +899,60 @@ export class LootBoxOpener {
    * one without this function needing to know about tiers at all.
    */
   private drawPoppingLine(
-    ctx: CanvasRenderingContext2D,
-    text: string,
-    x: number,
-    y: number,
-    size: number,
-    color: string,
-    width: number,
+    target: PaintTarget,
+    entry: RewardEntry,
+    row: Rect,
     lineIndex: number,
   ): void {
     const scale = this.phase === 'revealing' ? this.revealPopScale(lineIndex) : 1;
     if (scale <= 0) return;
-    // drawText's `align: 'center'` centres the glyphs at x + width/2, not at
-    // x — pivoting the scale around x alone made every line slide sideways as
-    // it popped in instead of growing in place.
-    const pivotX = x + width / 2;
+    const { ctx, theme } = target;
+    const iconSize = row.h - REWARD_ROW_GAP;
+    const textStyle = row.h < REWARD_ROW_STEP ? theme.type.caption : theme.type.body;
+    const hasIcon = entry.icon !== null;
+    const iconSpan = hasIcon ? iconSize + theme.space.sm : 0;
+    const textWidth = Math.min(
+      row.w - iconSpan,
+      measureText(target, entry.text, { style: textStyle }),
+    );
+    const left = row.x + (row.w - iconSpan - textWidth) / 2;
+    const pivotX = row.x + row.w / 2;
+    const pivotY = row.y + row.h / 2;
     if (this.phase === 'revealing' && !this.sparkledLineIndices.has(lineIndex)) {
       const local = this.frame - lineIndex * REVEAL_LINE_STAGGER_FRAMES;
       if (local > 0) {
         this.sparkledLineIndices.add(lineIndex);
-        this.burstParticles(CARD_SPARKLE_COUNT, { x: pivotX, y });
+        this.burstParticles(CARD_SPARKLE_COUNT, { x: pivotX, y: pivotY });
         this.playCardStinger();
       }
     }
     ctx.save();
-    ctx.translate(pivotX, y);
+    if (this.phase === 'revealing') ctx.globalAlpha *= this.revealPopAlpha(lineIndex);
+    ctx.translate(pivotX, pivotY);
     ctx.scale(scale, scale);
-    ctx.translate(-pivotX, -y);
-    drawText(ctx, text, { x, y, size, color, align: 'center', width });
+    ctx.translate(-pivotX, -pivotY);
+    if (entry.icon !== null) {
+      const iconRect: Rect = { x: left, y: pivotY - iconSize / 2, w: iconSize, h: iconSize };
+      if (entry.icon === 'coins') this.drawCoinFrame(target, iconRect);
+      else drawItemFrame(target, iconRect, entry.icon);
+    }
+    text(
+      target,
+      { x: left + iconSpan, y: row.y, w: textWidth, h: row.h },
+      { text: entry.text, style: textStyle, color: entry.color },
+    );
     ctx.restore();
+  }
+
+  /** Coins have no item of their own, so their line wears the coin glyph in the same frame. */
+  private drawCoinFrame(target: PaintTarget, rect: Rect): void {
+    const { ctx, theme } = target;
+    const { palette, radius } = theme;
+    fillRounded(ctx, rect, radius.sm, palette.surface.sunken);
+    drawGlyph(ctx, 'coin', inset(rect, rect.w * COIN_GLYPH_INSET_RATIO), {
+      color: palette.accent.base,
+    });
+    strokeRounded(ctx, rect, radius.sm, palette.border.subtle, PANEL_EDGE_WIDTH);
   }
 
   private playCardStinger(): void {
@@ -914,6 +964,13 @@ export class LootBoxOpener {
     );
     const playbackRate = 1 - (intensity - 1) * CARD_STINGER_RATE_DROP_PER_INTENSITY;
     this.audio?.play('loot_box_tier_stinger', { volume, playbackRate });
+  }
+
+  /** Fade-in for the `lineIndex`-th reveal line, complete at the top of its overshoot. */
+  private revealPopAlpha(lineIndex: number): number {
+    const local = this.frame - lineIndex * REVEAL_LINE_STAGGER_FRAMES;
+    const half = REVEAL_POP_FRAMES / 2;
+    return Math.min(1, Math.max(0, local / half));
   }
 
   /** Scale envelope for the `lineIndex`-th reveal line: 0 until its turn, an overshoot bounce, then settles at 1. */
@@ -929,21 +986,16 @@ export class LootBoxOpener {
     const t = (local - half) / half;
     return REVEAL_POP_OVERSHOOT_SCALE + (1 - REVEAL_POP_OVERSHOOT_SCALE) * t;
   }
+}
 
-  private tierColor(tier: string): string {
-    switch (tier) {
-      case 'Bronze':
-        return '#cd7f32';
-      case 'Silver':
-        return '#c0c0c0';
-      case 'Gold':
-        return '#ffd700';
-      case 'Legendary':
-        return '#a855f7';
-      case 'Celestial':
-        return '#38bdf8';
-      default:
-        return '#e2e8f0';
-    }
-  }
+function footerHint(density: Ui['density'], waitingToContinue: boolean): string {
+  const verb = density === 'touch' ? 'Tap' : 'Click';
+  return `${verb} to ${waitingToContinue ? 'continue' : 'skip'}`;
+}
+
+/** The first lines that fit, the last slot given to a count of the rest. */
+function foldOverflow(entries: RewardEntry[], rows: number, theme: Theme): RewardEntry[] {
+  const kept = entries.slice(0, rows - 1);
+  const hidden = entries.length - kept.length;
+  return [...kept, { text: `+${hidden} more`, icon: null, color: theme.palette.text.secondary }];
 }

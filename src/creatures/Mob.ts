@@ -18,7 +18,8 @@ import {
   speedScaleForLevel,
   type LevelledCurve,
 } from './mobLevelScaling';
-import { drawText, TEXT_PRESETS } from '../ui/TextBox';
+import { WORLD_TEXT } from '../ui/theme/worldInk';
+import { worldText } from '../ui/world/worldText';
 import { measureFiguresInkTop } from '../sprites/figure/figureFrameCache';
 import type { SpatialGrid } from '../core/SpatialGrid';
 import type { Rng } from '../sprites/person/rng';
@@ -451,10 +452,10 @@ export abstract class Mob extends Player {
    * Where this mob belongs, and how far it will stray from it — set only for the
    * residents of a floor-3 camp.
    *
-   * **Both are optional and default to unset, and unset means the old behaviour
-   * exactly.** `isBeyondLeash` returns false and `returnHomeOrWander` falls
-   * straight through to `doWander`, so a goblin on floor 1 takes a code path
-   * that is unchanged: no extra branch it can fail, no field it can read stale.
+   * **Both are optional and default to unset, and an unset mob has no leash.**
+   * `isBeyondLeash` returns false and `returnHomeOrWander` falls straight
+   * through to `doWander`, so a goblin on floor 1 takes the plain wander path:
+   * no extra branch it can fail, no field it can read stale.
    * The camp spawner is the only writer.
    *
    * A leash exists because a camp is a landmark. Residents that chase a player
@@ -2381,7 +2382,7 @@ export abstract class Mob extends Player {
    *
    * `accept` filters candidates a subclass refuses to fight; it runs before the
    * sight test, which is the expensive one. `forceAggro` bypasses range and
-   * sight both, so scripted encounters behave exactly as before.
+   * sight both, so a scripted encounter engages whether or not the target is seen.
    *
    * A defend target is refused outright, ahead of `accept` and of `forceAggro`.
    * Quest-critical bystanders — the defend quest's NPC, Tsarina Signet at her
@@ -3537,13 +3538,13 @@ export abstract class Mob extends Player {
     clearOfY: number,
     tileSize: number,
   ): void {
-    drawText(ctx, '!', {
+    worldText(ctx, '!', {
       x: sx + tileSize / 2,
       y: clearOfY - AGGRO_INDICATOR_Y_OFFSET - AGGRO_INDICATOR_FONT_SIZE,
       align: 'center',
       size: AGGRO_INDICATOR_FONT_SIZE,
       bold: true,
-      font: 'sans-serif',
+      family: 'sans-serif',
       color: AGGRO_INDICATOR_COLOR,
       outline: AGGRO_INDICATOR_OUTLINE,
       outlineWidth: AGGRO_INDICATOR_LINE_WIDTH,
@@ -3584,7 +3585,7 @@ export abstract class Mob extends Player {
     ctx.save();
     ctx.globalAlpha = alpha;
     this.renderHealthBar(ctx, sx, sy);
-    // drawText sets its own globalAlpha from its `alpha` option rather than
+    // worldText sets its own globalAlpha from its `alpha` option rather than
     // reading the ambient one, so the fade above has to be threaded through
     // explicitly or the mark would snap straight to opaque.
     this.renderTacticsRankMark(ctx, sx, sy, alpha);
@@ -3607,12 +3608,12 @@ export abstract class Mob extends Player {
     if (this.isBoss || !this.hasActiveTactics) return;
     const barTop = sy - HP_BAR_Y_OFFSET;
     const barCenterY = barTop + HP_BAR_HEIGHT / 2;
-    drawText(ctx, TACTICS_RANK_MARK, {
+    worldText(ctx, TACTICS_RANK_MARK, {
       x: sx + this.tileSize + TACTICS_RANK_MARK_GAP,
-      y: barCenterY - TEXT_PRESETS.tacticsMark.size / 2,
+      y: barCenterY - WORLD_TEXT.tacticsMark.size / 2,
       align: 'left',
       alpha,
-      ...TEXT_PRESETS.tacticsMark,
+      style: 'tacticsMark',
     });
   }
 
@@ -3666,7 +3667,7 @@ export abstract class Mob extends Player {
     const labelY = sy - this.statusLabelClearanceTiles * this.tileSize;
     const t = Date.now();
     const pulse = SEPTIC_PULSE_BASE + SEPTIC_PULSE_AMP * Math.sin(t * SEPTIC_PULSE_SPEED);
-    drawText(ctx, 'Septic', {
+    worldText(ctx, 'Septic', {
       x: sx + this.tileSize * MOB_TILE_CENTER,
       y: labelY - SEPTIC_LABEL_Y_OFFSET - SEPTIC_LABEL_Y2_OFFSET,
       size: SEPTIC_LABEL_SIZE,

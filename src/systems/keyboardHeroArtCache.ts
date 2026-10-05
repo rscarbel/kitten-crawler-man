@@ -49,7 +49,6 @@ import {
 } from '../sprites/art/keyboardHeroArt';
 import {
   BOARD_BAKE_SCALE,
-  LANE_PALETTES,
   BOARD_IMG_W,
   LANE_BED_IMG_W,
   NOTE_IMG_SIZE,
@@ -57,21 +56,22 @@ import {
   TOUCH_IMG_SIZE,
   type LaneIndex,
 } from './keyboardHeroLayout';
+import { LANE_PALETTES } from '../sprites/art/keyboardHeroLanePalettes';
 
 /** Paints one piece into a surface already sized to `w`×`h` supersampled pixels. */
 type PiecePainter = (ctx: CanvasRenderingContext2D, w: number, h: number) => void;
 
 /**
  * A piece is painted at `BOARD_BAKE_SCALE` times its display size, but never at
- * more pixels than the sheet it replaced held.
+ * more than `BOARD_BAKE_SCALE` times its design size.
  *
  * Display size is a function of the viewport, so an uncapped supersample would
  * make the board's memory a function of the monitor: fullscreen on a 4K panel
  * asks for a board roughly 1259 CSS px wide, which at a flat 2× is a 2518×3888
- * surface — around 39 MB for the console frame alone, against the 6.3 MB the
- * baked sheet cost at any resolution. The cap holds the old ceiling exactly, and
- * at ordinary desktop fits it never binds: a 1280×720 viewport paints the frame
- * 840 px wide, well inside the 1036 the sheet had.
+ * surface — around 39 MB for the console frame alone. Capping at the design
+ * size bounds the board at about 6.3 MB on any monitor, and at ordinary desktop
+ * fits the cap never binds: a 1280×720 viewport paints the frame 840 px wide,
+ * well inside its 1036 px design width.
  */
 function supersampleFor(requestedWidth: number, designWidth: number): number {
   return Math.min(BOARD_BAKE_SCALE, (BOARD_BAKE_SCALE * designWidth) / requestedWidth);

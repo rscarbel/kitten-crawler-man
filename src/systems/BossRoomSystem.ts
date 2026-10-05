@@ -1,4 +1,5 @@
 import { displayHp } from '../core/crawlerFormulas';
+import { BOSS_IDENTITY_COLOR, SEALED_ROOM_BORDER_COLOR } from '../sprites/bossRoomColors';
 import type { GameMap } from '../map/GameMap';
 import type { DamageSource, Player } from '../Player';
 import { TILE_SIZE } from '../core/constants';
@@ -21,7 +22,7 @@ import type { GroundHazardSource } from './GroundHazardSource';
 import type { GameSystem, SystemContext } from './GameSystem';
 import type { MobRoster } from './kits/SceneWorld';
 import type { EventBus } from '../core/EventBus';
-import { drawText, TEXT_PRESETS } from '../ui/TextBox';
+import { worldText } from '../ui/world/worldText';
 import { drawHoarderAcidPool, drawHoarderBile } from '../sprites/hoarderBileSprite';
 import { bileLobHeight, drawBileShadow, isHoardJunk, stopsBile } from './bossRooms/hoarderBile';
 import {
@@ -41,15 +42,16 @@ import {
   prewarmKrakarenGore,
 } from '../sprites/krakarenSprite';
 import { prewarmKrakarenTentacle } from '../sprites/krakarenTentacleSprite';
-import { viewportWidth } from '../core/Viewport';
+import type { TopBandEntry } from '../ui/hud/topBand';
+import type { MeterKind } from '../ui/theme/skins';
+import { stackedBandEntry, type BandRow, type BandTextRow } from '../ui/hud/topBandStack';
 
 /**
  * The slice of the minimap a boss room reaches for: revealing a room's
- * surroundings when it locks, and the minimap's size for laying out beside it.
- * Narrowed so a headless harness can run the seal without a canvas to draw on.
+ * surroundings when it locks. Narrowed so a headless harness can run the seal
+ * without a canvas to draw on.
  */
-export type BossRoomMiniMap = Pick<MiniMapSystem, 'revealBossNeighborhood' | 'isExpanded'> &
-  Record<'EXPANDED_SIZE' | 'NORMAL_SIZE', number>;
+export type BossRoomMiniMap = Pick<MiniMapSystem, 'revealBossNeighborhood'>;
 
 interface VomitProjectile {
   x: number;
@@ -118,10 +120,10 @@ export interface BossRoomCheckpoint {
 }
 
 export const BOSS_META: Record<string, { displayName: string; color: string }> = {
-  the_hoarder: { displayName: 'THE HOARDER', color: '#c084fc' },
-  juicer: { displayName: 'THE JUICER', color: '#fb923c' },
-  ball_of_swine: { displayName: 'BALL OF SWINE', color: '#f87171' },
-  krakaren_clone: { displayName: 'KRAKAREN CLONE', color: '#e05090' },
+  the_hoarder: { displayName: 'THE HOARDER', color: BOSS_IDENTITY_COLOR.the_hoarder },
+  juicer: { displayName: 'THE JUICER', color: BOSS_IDENTITY_COLOR.juicer },
+  ball_of_swine: { displayName: 'BALL OF SWINE', color: BOSS_IDENTITY_COLOR.ball_of_swine },
+  krakaren_clone: { displayName: 'KRAKAREN CLONE', color: BOSS_IDENTITY_COLOR.krakaren_clone },
 };
 
 /** 30 seconds at 60 fps. */
@@ -152,9 +154,6 @@ const REGEN_NOTICE_RANGE_TILES = 20;
  * the lock failing to release.
  */
 const LOOT_SEAL_NOTICE = 'The room stays sealed until the boss chest is opened';
-
-/** Silver, like the chest the seal is waiting on — distinct from the fight's yellow and red. */
-const LOOT_SEAL_BORDER_COLOR = '#e5e7eb';
 
 /**
  * Drops every hazard a given boss laid, in place. In place because the arrays
@@ -268,59 +267,29 @@ const ADJACENT_TILE_OFFSETS = [
 /** A quarter of the pool's life, so it visibly recedes rather than vanishing. */
 const PUDDLE_FADE_FRAMES = 300;
 
-// Boss HUD layout constants (desktop)
-const BOSS_BAR_MAX_WIDTH = 360;
-const BOSS_BAR_WIDTH_FRACTION = 0.5;
-const BOSS_BAR_HEIGHT = 18;
-const BOSS_BAR_TOP_Y = 48;
-const BOSS_CONTAINER_PAD_X = 6;
-const BOSS_CONTAINER_PAD_TOP = 22;
-const BOSS_CONTAINER_SUBTEXT_H = 46;
-const BOSS_CONTAINER_BASE_H = 30;
-const BOSS_NAME_Y_OFFSET = 15;
-const BOSS_HP_TEXT_OFFSET = 11;
-const BOSS_DEFEATED_TEXT_Y = 6;
-const BOSS_ENTRY_TEXT_Y = 6;
 const BOSS_MIDLINE_FRACTION = 0.5;
 const FRAMES_PER_SECOND = 60;
 const BOSS_LABEL_BASELINE_FRACTION = 0.65;
 const BOSS_LABEL_SIZE = 10;
-const BOSS_NAME_SIZE = 11;
-const BOSS_HP_TEXT_SIZE = 9;
-/** The line under the bar that says why the room is (or is no longer) sealed. */
-const BOSS_ROOM_STATUS_TEXT_SIZE = 12;
-const BOSS_ENTRY_COUNTDOWN_SIZE = 11;
 const BOSS_LABEL_ASCENT_OFFSET = 8;
 
-/** Alarm red the bar wears while the boss is enraged. */
-const BOSS_ENRAGED_COLOR = '#ef4444';
-/** Slate grey: the corpse is no longer a threat, so it stops shouting in red. */
-const BOSS_DECEASED_COLOR = '#94a3b8';
-const BOSS_MIDLINE_LIVE_STROKE = 'rgba(239,68,68,0.6)';
-const BOSS_MIDLINE_DECEASED_STROKE = 'rgba(148,163,184,0.6)';
 const BOSS_DEFEATED_TEXT = 'DEFEATED';
-const BOSS_DEFEATED_TEXT_COLOR = '#4ade80';
 /**
  * What a boss fight shows while its hard-mode healer keeps the way out shut.
  * Shared with the Ball of Swine arena, so every sealed fight words it alike.
  */
-export const BOSS_HEALER_ALIVE_NOTICE = {
-  text: 'The healer still flies!',
-  color: '#f87171',
-} as const;
+export const BOSS_HEALER_ALIVE_NOTICE = 'The healer still flies!';
 
 interface BossBarStyle {
-  readonly nameText: string;
-  /** Name text and health-fill colour. */
-  readonly color: string;
-  /** Container and bar outlines, which stay the boss's own colour while it lives. */
-  readonly chromeColor: string;
-  readonly midlineStroke: string;
+  readonly nameRow: BandTextRow;
+  readonly meterKind: MeterKind;
+  /** The card's edge: the boss's own colour while it lives. */
+  readonly accent: string | undefined;
 }
 
 /**
  * The single place the boss bar decides what a boss is called and what colour
- * it reads as, so the desktop and mobile bars cannot drift apart.
+ * it reads as.
  *
  * Deceased outranks enraged because `Mob.isEnraged` is a latch that is never
  * cleared on death — a boss killed mid-rage would otherwise keep screaming from
@@ -330,47 +299,61 @@ function bossBarStyle(
   meta: { displayName: string; color: string },
   isEnraged: boolean,
   isDeceased: boolean,
-  flankEnragedName: boolean,
 ): BossBarStyle {
   if (isDeceased) {
     return {
-      nameText: `${meta.displayName} [DECEASED]`,
-      color: BOSS_DECEASED_COLOR,
-      chromeColor: BOSS_DECEASED_COLOR,
-      midlineStroke: BOSS_MIDLINE_DECEASED_STROKE,
+      nameRow: {
+        kind: 'text',
+        text: `${meta.displayName} [DECEASED]`,
+        role: 'label',
+        tone: 'muted',
+      },
+      meterKind: 'boss',
+      accent: undefined,
     };
   }
   if (isEnraged) {
-    const enragedName = flankEnragedName
-      ? `⚠ ${meta.displayName} [ENRAGED] ⚠`
-      : `${meta.displayName} [ENRAGED]`;
     return {
-      nameText: enragedName,
-      color: BOSS_ENRAGED_COLOR,
-      chromeColor: meta.color,
-      midlineStroke: BOSS_MIDLINE_LIVE_STROKE,
+      nameRow: {
+        kind: 'text',
+        text: `${meta.displayName} [ENRAGED]`,
+        role: 'label',
+        tone: 'danger',
+      },
+      meterKind: 'danger',
+      accent: meta.color,
     };
   }
   return {
-    nameText: meta.displayName,
-    color: meta.color,
-    chromeColor: meta.color,
-    midlineStroke: BOSS_MIDLINE_LIVE_STROKE,
+    nameRow: { kind: 'text', text: meta.displayName, role: 'label', color: meta.color },
+    meterKind: 'boss',
+    accent: meta.color,
   };
 }
 
-// Boss HUD layout constants (mobile)
-const MOBILE_BOX_MARGIN = 8;
-const MOBILE_BOX_GAP = 8;
-const MOBILE_INNER_W_INSET = 12;
-const MOBILE_INNER_X_OFFSET = 6;
-const MOBILE_PAD_V = 6;
-const MOBILE_NAME_H = 12;
-const MOBILE_GAP = 4;
-const MOBILE_BAR_H = 14;
-const MOBILE_NAME_SIZE = 10;
-const MOBILE_HP_SIZE = 9;
-const MOBILE_SUBTEXT_SIZE = 10;
+/** The line under the bar that says why the room is (or is no longer) sealed, if anything does. */
+function bossRoomStatusRow(
+  state: BossRoomState,
+  healerKeepingRoomSealed: boolean,
+): BandTextRow | null {
+  if (state.defeated) {
+    return { kind: 'text', text: BOSS_DEFEATED_TEXT, role: 'label', tone: 'success' };
+  }
+  if (healerKeepingRoomSealed) {
+    return { kind: 'text', text: BOSS_HEALER_ALIVE_NOTICE, role: 'label', tone: 'danger' };
+  }
+  if (state.locked && state.entryWindowTimer > 0) {
+    const seconds = Math.ceil(state.entryWindowTimer / FRAMES_PER_SECOND);
+    return {
+      kind: 'text',
+      text: `Entry closes in ${seconds}s`,
+      role: 'label',
+      tone: 'warning',
+      tabular: true,
+    };
+  }
+  return null;
+}
 
 // Locked room border
 const BORDER_PULSE_SPEED = 0.12;
@@ -378,6 +361,7 @@ const BORDER_PULSE_MIN = 0.55;
 const BORDER_PULSE_AMP = 0.25;
 const BORDER_LINE_WIDTH = 3;
 const BORDER_CROSS_OFFSET = 4;
+const BORDER_CROSS_LINE_WIDTH = 2;
 
 // Corner X markers
 
@@ -1815,8 +1799,8 @@ export class BossRoomSystem implements GameSystem, GroundHazardSource {
     const meta = BOSS_META[bossType] ?? BOSS_META.the_hoarder;
     const bannerX = (b.x + Math.floor(b.w / 2)) * ts - camX;
     const bannerY = (b.y - 1) * ts - camY;
-    drawText(ctx, 'BOSS ROOM', {
-      ...TEXT_PRESETS.label,
+    worldText(ctx, 'BOSS ROOM', {
+      style: 'label',
       x: bannerX,
       y: bannerY + ts * BOSS_LABEL_BASELINE_FRACTION - BOSS_LABEL_ASCENT_OFFSET,
       size: BOSS_LABEL_SIZE,
@@ -1826,27 +1810,8 @@ export class BossRoomSystem implements GameSystem, GroundHazardSource {
     });
   }
 
-  /**
-   * Renders the boss-room UI overlay.
-   *
-   * On mobile pass `mobileTopY` (pixels from canvas top where the box should
-   * start). The method then returns the bottom Y of the rendered box so the
-   * caller can stack the skill-points badge below it.
-   *
-   * On desktop omit `mobileTopY` — the centred desktop layout is used and
-   * `null` is returned.
-   */
-  renderUI(
-    ctx: CanvasRenderingContext2D,
-    camX: number,
-    camY: number,
-    mobs: Mob[],
-    human: HumanPlayer,
-    cat: CatPlayer,
-    mobileTopY?: number,
-  ): number | null {
-    if (this.states.length === 0) return null;
-
+  /** The pulsing outline and corner crosses on every sealed room, in world space. */
+  renderSealedBorders(ctx: CanvasRenderingContext2D, camX: number, camY: number): void {
     this.states.forEach((state, roomIndex) => {
       const sealedForLoot = this.isSealedForLoot(roomIndex);
       if (!state.locked && !sealedForLoot) return;
@@ -1856,11 +1821,14 @@ export class BossRoomSystem implements GameSystem, GroundHazardSource {
       const pulse =
         BORDER_PULSE_MIN + BORDER_PULSE_AMP * Math.sin(state.pulse * BORDER_PULSE_SPEED);
       ctx.globalAlpha = pulse;
-      const fightBorderColor = state.entryWindowTimer > 0 ? '#fbbf24' : '#ef4444';
-      ctx.strokeStyle = sealedForLoot ? LOOT_SEAL_BORDER_COLOR : fightBorderColor;
+      const fightBorderColor =
+        state.entryWindowTimer > 0
+          ? SEALED_ROOM_BORDER_COLOR.entryWindow
+          : SEALED_ROOM_BORDER_COLOR.fight;
+      ctx.strokeStyle = sealedForLoot ? SEALED_ROOM_BORDER_COLOR.lootSeal : fightBorderColor;
       ctx.lineWidth = BORDER_LINE_WIDTH;
       ctx.strokeRect(b.x * ts - camX, b.y * ts - camY, b.w * ts, b.h * ts);
-      ctx.lineWidth = 2;
+      ctx.lineWidth = BORDER_CROSS_LINE_WIDTH;
       const corners: [number, number][] = [
         [b.x, b.y],
         [b.x + b.w - 1, b.y],
@@ -1879,8 +1847,16 @@ export class BossRoomSystem implements GameSystem, GroundHazardSource {
       }
       ctx.restore();
     });
+  }
 
-    // Boss health bar
+  /**
+   * The boss bar for the room the party is fighting in (or standing in): the
+   * boss's name, its health, and a line saying why the room is, or is no
+   * longer, sealed. `null` when no boss room concerns the party.
+   */
+  topBandEntry(mobs: readonly Mob[], human: HumanPlayer, cat: CatPlayer): TopBandEntry | null {
+    if (this.states.length === 0) return null;
+
     const active = human.isActive ? human : cat;
     const relevantState = this.states.find(
       (s) =>
@@ -1909,230 +1885,27 @@ export class BossRoomSystem implements GameSystem, GroundHazardSource {
     // deceased while the room stays locked) without this to explain why.
     const healerKeepingRoomSealed =
       !boss.isAlive && this.hasLivingHealer(mobs, relevantState.bounds);
-    const barStyle = bossBarStyle(meta, isEnraged, isDeceased, true);
-    const hpFrac = Math.max(0, boss.hp / boss.maxHp);
+    const barStyle = bossBarStyle(meta, isEnraged, isDeceased);
 
-    if (mobileTopY !== undefined) {
-      return this.renderMobileBossBar(
-        ctx,
-        boss,
-        relevantState,
-        meta,
-        isEnraged,
-        isDeceased,
-        healerKeepingRoomSealed,
-        hpFrac,
-        mobileTopY,
-      );
-    }
-
-    const barW = Math.min(BOSS_BAR_MAX_WIDTH, viewportWidth() * BOSS_BAR_WIDTH_FRACTION);
-    const barH = BOSS_BAR_HEIGHT;
-    const barX = Math.floor((viewportWidth() - barW) / 2);
-    const barY = BOSS_BAR_TOP_Y;
-
-    const showSubText =
-      relevantState.defeated ||
-      healerKeepingRoomSealed ||
-      (relevantState.locked && relevantState.entryWindowTimer > 0);
-    // Expand container height when sub-text (DEFEATED / countdown) is present so
-    // the text is not bisected by the box border.
-    const containerH = showSubText ? barH + BOSS_CONTAINER_SUBTEXT_H : barH + BOSS_CONTAINER_BASE_H;
-
-    ctx.save();
-
-    ctx.fillStyle = 'rgba(0,0,0,0.75)';
-    ctx.fillRect(
-      barX - BOSS_CONTAINER_PAD_X,
-      barY - BOSS_CONTAINER_PAD_TOP,
-      barW + BOSS_CONTAINER_PAD_X * 2,
-      containerH,
-    );
-    ctx.strokeStyle = barStyle.chromeColor;
-    ctx.lineWidth = 1;
-    ctx.strokeRect(
-      barX - BOSS_CONTAINER_PAD_X,
-      barY - BOSS_CONTAINER_PAD_TOP,
-      barW + BOSS_CONTAINER_PAD_X * 2,
-      containerH,
-    );
-
-    drawText(ctx, barStyle.nameText, {
-      x: viewportWidth() / 2,
-      y: barY - BOSS_NAME_Y_OFFSET,
-      size: BOSS_NAME_SIZE,
-      bold: true,
-      color: barStyle.color,
-      align: 'center',
+    const rows: BandRow[] = [
+      barStyle.nameRow,
+      {
+        kind: 'meter',
+        id: 'boss-room/hp',
+        value: Math.max(0, boss.hp),
+        max: boss.maxHp,
+        meterKind: barStyle.meterKind,
+        valueText: `${displayHp(boss.hp)} / ${boss.maxHp}`,
+        marks: [BOSS_MIDLINE_FRACTION],
+      },
+    ];
+    const statusRow = bossRoomStatusRow(relevantState, healerKeepingRoomSealed);
+    if (statusRow !== null) rows.push(statusRow);
+    return stackedBandEntry({
+      id: 'boss-room',
+      priority: 'boss',
+      accent: barStyle.accent,
+      rows,
     });
-
-    ctx.fillStyle = '#0a0a12';
-    ctx.fillRect(barX, barY, barW, barH);
-
-    ctx.fillStyle = barStyle.color;
-    ctx.fillRect(barX, barY, barW * hpFrac, barH);
-
-    ctx.strokeStyle = barStyle.midlineStroke;
-    ctx.lineWidth = 1;
-    ctx.beginPath();
-    ctx.moveTo(barX + barW * BOSS_MIDLINE_FRACTION, barY);
-    ctx.lineTo(barX + barW * BOSS_MIDLINE_FRACTION, barY + barH);
-    ctx.stroke();
-
-    ctx.strokeStyle = barStyle.chromeColor;
-    ctx.lineWidth = 1;
-    ctx.strokeRect(barX, barY, barW, barH);
-
-    ctx.restore();
-
-    drawText(ctx, `${displayHp(boss.hp)} / ${boss.maxHp}`, {
-      x: viewportWidth() / 2,
-      y: barY + barH - BOSS_HP_TEXT_OFFSET,
-      size: BOSS_HP_TEXT_SIZE,
-      color: '#e2e8f0',
-      align: 'center',
-    });
-
-    if (relevantState.defeated) {
-      drawText(ctx, BOSS_DEFEATED_TEXT, {
-        x: viewportWidth() / 2,
-        y: barY + barH + BOSS_DEFEATED_TEXT_Y,
-        size: BOSS_ROOM_STATUS_TEXT_SIZE,
-        bold: true,
-        color: BOSS_DEFEATED_TEXT_COLOR,
-        align: 'center',
-      });
-    } else if (healerKeepingRoomSealed) {
-      drawText(ctx, BOSS_HEALER_ALIVE_NOTICE.text, {
-        x: viewportWidth() / 2,
-        y: barY + barH + BOSS_DEFEATED_TEXT_Y,
-        size: BOSS_ROOM_STATUS_TEXT_SIZE,
-        bold: true,
-        color: BOSS_HEALER_ALIVE_NOTICE.color,
-        align: 'center',
-      });
-    } else if (relevantState.locked && relevantState.entryWindowTimer > 0) {
-      const seconds = Math.ceil(relevantState.entryWindowTimer / FRAMES_PER_SECOND);
-      drawText(ctx, `Entry closes in ${seconds}s`, {
-        x: viewportWidth() / 2,
-        y: barY + barH + BOSS_ENTRY_TEXT_Y,
-        size: BOSS_ENTRY_COUNTDOWN_SIZE,
-        bold: true,
-        color: '#fbbf24',
-        align: 'center',
-      });
-    }
-
-    return null;
-  }
-
-  private renderMobileBossBar(
-    ctx: CanvasRenderingContext2D,
-    boss: Mob,
-    state: BossRoomState,
-    meta: { displayName: string; color: string },
-    isEnraged: boolean,
-    isDeceased: boolean,
-    healerKeepingRoomSealed: boolean,
-    hpFrac: number,
-    topY: number,
-  ): number {
-    const barStyle = bossBarStyle(meta, isEnraged, isDeceased, false);
-    const mmSize = this.miniMap.isExpanded ? this.miniMap.EXPANDED_SIZE : this.miniMap.NORMAL_SIZE;
-    const BOX_X = MOBILE_BOX_MARGIN;
-    // Leave MOBILE_BOX_GAP px between the box's right edge and the minimap's left edge.
-    const boxW = viewportWidth() - (mmSize + MOBILE_BOX_GAP) - BOX_X - MOBILE_BOX_GAP;
-    const innerW = boxW - MOBILE_INNER_W_INSET;
-    const innerX = BOX_X + MOBILE_INNER_X_OFFSET;
-
-    const PAD_V = MOBILE_PAD_V;
-    const NAME_H = MOBILE_NAME_H;
-    const GAP = MOBILE_GAP;
-    const BAR_H = MOBILE_BAR_H;
-
-    const hasSubText =
-      state.defeated || healerKeepingRoomSealed || (state.locked && state.entryWindowTimer > 0);
-    const boxH = PAD_V + NAME_H + GAP + BAR_H + (hasSubText ? GAP + NAME_H : 0) + PAD_V;
-
-    // Container
-    ctx.save();
-    ctx.fillStyle = 'rgba(0,0,0,0.75)';
-    ctx.fillRect(BOX_X, topY, boxW, boxH);
-    ctx.strokeStyle = barStyle.chromeColor;
-    ctx.lineWidth = 1;
-    ctx.strokeRect(BOX_X, topY, boxW, boxH);
-    ctx.restore();
-
-    const nameY = topY + PAD_V;
-    drawText(ctx, barStyle.nameText, {
-      x: innerX + innerW / 2,
-      y: nameY,
-      size: MOBILE_NAME_SIZE,
-      bold: true,
-      color: barStyle.color,
-      align: 'center',
-    });
-
-    const barY = nameY + NAME_H + GAP;
-    ctx.save();
-    ctx.fillStyle = '#0a0a12';
-    ctx.fillRect(innerX, barY, innerW, BAR_H);
-    ctx.fillStyle = barStyle.color;
-    ctx.fillRect(innerX, barY, innerW * hpFrac, BAR_H);
-
-    ctx.strokeStyle = barStyle.midlineStroke;
-    ctx.lineWidth = 1;
-    ctx.beginPath();
-    ctx.moveTo(innerX + innerW * BOSS_MIDLINE_FRACTION, barY);
-    ctx.lineTo(innerX + innerW * BOSS_MIDLINE_FRACTION, barY + BAR_H);
-    ctx.stroke();
-
-    ctx.strokeStyle = barStyle.chromeColor;
-    ctx.lineWidth = 1;
-    ctx.strokeRect(innerX, barY, innerW, BAR_H);
-    ctx.restore();
-
-    drawText(ctx, `${displayHp(boss.hp)} / ${boss.maxHp}`, {
-      x: innerX + innerW / 2,
-      y: barY + Math.floor((BAR_H - MOBILE_HP_SIZE) / 2),
-      size: MOBILE_HP_SIZE,
-      color: '#e2e8f0',
-      align: 'center',
-    });
-
-    if (hasSubText) {
-      const subY = barY + BAR_H + GAP;
-      if (state.defeated) {
-        drawText(ctx, BOSS_DEFEATED_TEXT, {
-          x: BOX_X + boxW / 2,
-          y: subY,
-          size: MOBILE_SUBTEXT_SIZE,
-          bold: true,
-          color: BOSS_DEFEATED_TEXT_COLOR,
-          align: 'center',
-        });
-      } else if (healerKeepingRoomSealed) {
-        drawText(ctx, BOSS_HEALER_ALIVE_NOTICE.text, {
-          x: BOX_X + boxW / 2,
-          y: subY,
-          size: MOBILE_SUBTEXT_SIZE,
-          bold: true,
-          color: BOSS_HEALER_ALIVE_NOTICE.color,
-          align: 'center',
-        });
-      } else if (state.locked && state.entryWindowTimer > 0) {
-        const seconds = Math.ceil(state.entryWindowTimer / FRAMES_PER_SECOND);
-        drawText(ctx, `Entry closes in ${seconds}s`, {
-          x: BOX_X + boxW / 2,
-          y: subY,
-          size: MOBILE_SUBTEXT_SIZE,
-          bold: true,
-          color: '#fbbf24',
-          align: 'center',
-        });
-      }
-    }
-
-    return topY + boxH;
   }
 }

@@ -27,11 +27,13 @@ import { installCanvasGlobals } from './nodeCanvasGlobals';
 import { asGameContext } from './nodeGameContext';
 import { createCanvas } from 'canvas';
 import { setViewportSize } from '../src/core/Viewport';
-import { Conversation, CONVERSATION_CHOICE_LABEL_SIZE } from '../src/dialog/Conversation';
+import { Conversation } from '../src/dialog/Conversation';
 import { speakerLines } from '../src/dialog/line';
 import { OREN } from '../src/dialog/scripts/briarHollow';
 import type { Choice, ConversationRequest } from '../src/dialog/request';
-import { buttonLabelFits } from '../src/ui/Button';
+import { choiceLabelFits } from '../src/ui/screens/dialogs/conversationChrome';
+import { resolveTheme } from '../src/ui/theme/tokens';
+import { mountConversation } from './conversationHarness';
 import {
   ASK_QUESTION_LABEL,
   BACK_LABEL,
@@ -543,7 +545,7 @@ function verifyConversation(): void {
   // A choice row only answers Space once it has actually been drawn — the
   // same tick that reveals it must not also be the tick that picks from it.
   const goodbyeScratch = createCanvas(SHORT_PHONE_WIDTH, SHORT_PHONE_HEIGHT);
-  system.conversation.render(asGameContext(goodbyeScratch.getContext('2d')));
+  mountConversation(system.conversation, asGameContext(goodbyeScratch.getContext('2d'))).frame();
   const rootDefault = system.conversation.keyboardDefaultLabel;
   check(
     rootDefault !== null && rootDefault !== GOODBYE_LABEL,
@@ -582,7 +584,7 @@ function verifyConversation(): void {
     })),
   );
   const screen = createCanvas(SHORT_PHONE_WIDTH, SHORT_PHONE_HEIGHT);
-  panel.render(asGameContext(screen.getContext('2d')));
+  mountConversation(panel, asGameContext(screen.getContext('2d'))).frame();
   const rects = panel.choiceBounds;
   check(rects.length === MANY_CHOICES, `all ${MANY_CHOICES} choices are drawn on a short phone`);
   check(
@@ -603,9 +605,10 @@ function verifyConversation(): void {
     const panel = openWithChoices('oren', choices);
     const screen = createCanvas(SHORT_PHONE_WIDTH, SHORT_PHONE_HEIGHT);
     const ctx = asGameContext(screen.getContext('2d'));
-    panel.render(ctx);
+    mountConversation(panel, ctx).frame();
+    const target = { ctx, theme: resolveTheme('pointer') };
     const overflowing = panel.choiceBounds.filter(
-      (rect) => !buttonLabelFits(ctx, rect.label, rect.w, CONVERSATION_CHOICE_LABEL_SIZE),
+      (rect) => !choiceLabelFits(target, rect.label, rect.w),
     );
     check(
       panel.choiceBounds.length === choices.length,

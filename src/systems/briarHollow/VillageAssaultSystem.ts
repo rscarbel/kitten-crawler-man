@@ -93,8 +93,8 @@ import {
   type AssaultWave,
 } from '../../sprites/assaultPrewarm';
 import { drawCrumble } from '../../sprites/art/siegeEffectsArt';
-import { BOX_PRESETS, PROGRESS_PRESETS, drawBox, drawProgressBar } from '../../ui/Box';
-import { TEXT_PRESETS, drawText } from '../../ui/TextBox';
+import { worldPalette } from '../../ui/theme/worldInk';
+import { worldText } from '../../ui/world/worldText';
 import { viewportHeight, viewportWidth } from '../../core/Viewport';
 import type { MobRoster } from '../kits/SceneWorld';
 import type { OverworldMusicSystem } from '../OverworldMusicSystem';
@@ -104,13 +104,8 @@ export type SiegeMusicClaim = Pick<OverworldMusicSystem, 'battleMusicActive' | '
 import type { DefenseStructures } from './DefenseStructures';
 import type { VillageAmbience } from './VillageAmbience';
 import { SiegeFlowField } from './SiegeFlowField';
-import {
-  SIEGE_HUD_PANEL_PAD,
-  SIEGE_HUD_PANEL_WIDTH,
-  SIEGE_HUD_ROW_HEIGHT,
-  type SiegeHudSlot,
-  siegeHudPanelHeight,
-} from './siegeHudLayout';
+import { siegeHudEntry, type SiegeHudBar, type SiegeHudView } from './siegeHudEntry';
+import type { TopBandEntry } from '../../ui/hud/topBand';
 import { HOLLOW_BELL_MAX_HP } from './hollowBell';
 import { UPDATES_PER_SECOND } from './structureRules';
 import { ASSAULT_BOUNTY_KINDS, createBountyMark, type AssaultBountyKind } from './siegeBountyMarks';
@@ -834,7 +829,7 @@ export interface VillageAssaultSystemDeps {
 }
 
 /** The necromancer's boss-intro colour: his lantern's soul-blue. */
-const NECROMANCER_INTRO_COLOR = '#7dd3fc';
+const NECROMANCER_INTRO_COLOR = worldPalette.village.necromancerIntro;
 
 export class VillageAssaultSystem {
   private readonly random: () => number;
@@ -1959,28 +1954,9 @@ export class VillageAssaultSystem {
     }
   }
 
-  /**
-   * The siege's HUD: the countdown or the wave, the bell's health and the
-   * necromancer's, stacked at the top centre under the resource strip; the
-   * abandon warning and the outcome banner across the middle of the screen.
-   */
-  renderHud(ctx: CanvasRenderingContext2D, slot: SiegeHudSlot): void {
-    this.renderOutcomeBanner(ctx);
-    if (!this.inSiege) return;
-    const scale = slot.scale;
-    const width = SIEGE_HUD_PANEL_WIDTH * scale;
-    const { x, y } = slot;
-    const necro = this.activeNecromancer;
-    const mark = this.activeBountyMark;
-    const inAssault = this.phase === 'assault';
-    const barRows = (inAssault ? 1 : 0) + (necro !== null ? 1 : 0) + (mark !== null ? 1 : 0);
-    // Compact: every bar shares the one row under the headline.
-    const rows = 1 + (slot.compact ? Math.min(1, barRows) : barRows);
-    const height = siegeHudPanelHeight(rows) * scale;
-    drawBox(ctx, { x, y, width, height, ...BOX_PRESETS.hudTranslucent });
-    const innerX = x + SIEGE_HUD_PANEL_PAD * scale;
-    const innerW = width - SIEGE_HUD_PANEL_PAD * 2 * scale;
-    let rowY = y + SIEGE_HUD_PANEL_PAD * scale;
+  /** What the siege's card in the top band shows, or null outside the siege. */
+  hudView(): SiegeHudView | null {
+    if (!this.inSiege) return null;
     const side = this.attackSide;
     const sideName = side === null ? '' : SIDE_NAMES[side];
     const headline =
@@ -1989,61 +1965,52 @@ export class VillageAssaultSystem {
         : this.inLull
           ? `Wave ${this.waveNumber + 1} from the ${sideName} — ${countdownLabel(this.lullFrames)}`
           : `Defend Briar Hollow — Wave ${this.waveNumber}/${ASSAULT_WAVE_COUNT} (${sideName})`;
-    drawText(ctx, headline, {
-      ...TEXT_PRESETS.danger,
-      x: x + width / 2,
-      y: rowY,
-      size: TEXT_PRESETS.danger.size * scale,
-      align: 'center',
-      outline: true,
-    });
-    rowY += SIEGE_HUD_ROW_HEIGHT * scale;
-    const bars: Array<{ label: string; value: number; preset: 'hp' | 'boss'; flash: boolean }> = [];
-    if (inAssault) {
+    const bars: SiegeHudBar[] = [];
+    if (this.phase === 'assault') {
       bars.push({
+        id: 'bell',
         label: 'Hollow Bell',
-        value: this.bellFraction,
-        preset: 'hp',
-        flash: this.bellFlashFrames > 0,
+        fraction: this.bellFraction,
+        kind: 'hp',
+        flash: this.bellFlashFrames / BELL_FLASH_FRAMES,
       });
     }
+    const necro = this.activeNecromancer;
     if (necro !== null) {
       bars.push({
+        id: 'necromancer',
         label: necro.displayName,
-        value: necro.hp / necro.maxHp,
-        preset: 'boss',
-        flash: false,
+        fraction: necro.hp / necro.maxHp,
+        kind: 'boss',
+        flash: 0,
       });
     }
+    const mark = this.activeBountyMark;
     if (mark !== null) {
       bars.push({
+        id: 'bounty',
         label: mark.displayName,
-        value: mark.hp / mark.maxHp,
-        preset: 'boss',
-        flash: false,
+        fraction: mark.hp / mark.maxHp,
+        kind: 'boss',
+        flash: 0,
       });
     }
-    const perRow = slot.compact ? Math.max(1, bars.length) : 1;
-    const barGap = SIEGE_HUD_PANEL_PAD * scale;
-    const barWidth = (innerW - barGap * (perRow - 1)) / perRow;
-    bars.forEach((bar, index) => {
-      const column = index % perRow;
-      const barX = innerX + column * (barWidth + barGap);
-      this.renderBar(ctx, bar.label, barX, rowY, barWidth, bar.value, scale, bar.preset);
-      if (bar.flash) {
-        drawProgressBar(ctx, {
-          x: barX,
-          y: rowY + HUD_LABEL_HEIGHT * scale,
-          width: barWidth,
-          height: HUD_BAR_HEIGHT * scale,
-          value: 1,
-          ...PROGRESS_PRESETS.hp,
-          fill: BELL_FLASH_FILL,
-          alpha: this.bellFlashFrames / BELL_FLASH_FRAMES,
-        });
-      }
-      if (column === perRow - 1) rowY += SIEGE_HUD_ROW_HEIGHT * scale;
-    });
+    return { headline, bars };
+  }
+
+  /** The siege's card for the HUD's top band, while the countdown or the waves run. */
+  topBandEntry(): TopBandEntry | null {
+    const view = this.hudView();
+    return view === null ? null : siegeHudEntry(view);
+  }
+
+  /**
+   * The banners across the middle of the screen: the outcome, and through the
+   * siege the abandon warning or the side the next attack comes from.
+   */
+  renderCentreBanners(ctx: CanvasRenderingContext2D): void {
+    this.renderOutcomeBanner(ctx);
+    if (!this.inSiege) return;
     this.renderAbandonWarning(ctx);
     this.renderSideBanner(ctx);
   }
@@ -2052,50 +2019,23 @@ export class VillageAssaultSystem {
     const banner = this.sideBanner;
     // The abandon warning holds the same place on screen, and matters more.
     if (banner === null || this.abandonSecondsLeft !== null) return;
-    drawText(ctx, banner.text, {
-      ...TEXT_PRESETS.title,
-      color: TEXT_PRESETS.danger.color,
-      x: viewportWidth() / 2,
+    worldText(ctx, banner.text, {
+      style: 'title',
+      color: worldPalette.ink.danger,
+      ...centreBannerColumn(),
       y: viewportHeight() * CENTRE_BANNER_HEIGHT_SHARE,
-      width: Math.min(OUTCOME_BANNER_MAX_WIDTH, viewportWidth() - BANNER_SIDE_MARGIN * 2),
       align: 'center',
       outline: true,
       alpha: Math.min(1, banner.framesLeft / BANNER_FADE_FRAMES),
     });
   }
 
-  private renderBar(
-    ctx: CanvasRenderingContext2D,
-    label: string,
-    x: number,
-    y: number,
-    width: number,
-    value: number,
-    scale: number,
-    preset: 'hp' | 'boss',
-  ): void {
-    drawText(ctx, label, {
-      ...TEXT_PRESETS.label,
-      x,
-      y,
-      size: HUD_LABEL_SIZE * scale,
-    });
-    drawProgressBar(ctx, {
-      x,
-      y: y + HUD_LABEL_HEIGHT * scale,
-      width,
-      height: HUD_BAR_HEIGHT * scale,
-      value,
-      ...PROGRESS_PRESETS[preset],
-    });
-  }
-
   private renderAbandonWarning(ctx: CanvasRenderingContext2D): void {
     const seconds = this.abandonSecondsLeft;
     if (seconds === null) return;
-    drawText(ctx, `Return to Briar Hollow! ${seconds}`, {
-      ...TEXT_PRESETS.title,
-      color: TEXT_PRESETS.danger.color,
+    worldText(ctx, `Return to Briar Hollow! ${seconds}`, {
+      style: 'title',
+      color: worldPalette.ink.danger,
       x: viewportWidth() / 2,
       y: viewportHeight() * CENTRE_BANNER_HEIGHT_SHARE,
       align: 'center',
@@ -2105,12 +2045,11 @@ export class VillageAssaultSystem {
   private renderOutcomeBanner(ctx: CanvasRenderingContext2D): void {
     const banner = this.outcomeBanner;
     if (banner === null) return;
-    drawText(ctx, banner.text, {
-      ...TEXT_PRESETS.title,
-      color: TEXT_PRESETS.danger.color,
-      x: viewportWidth() / 2,
+    worldText(ctx, banner.text, {
+      style: 'title',
+      color: worldPalette.ink.danger,
+      ...centreBannerColumn(),
       y: viewportHeight() * CENTRE_BANNER_HEIGHT_SHARE,
-      width: Math.min(OUTCOME_BANNER_MAX_WIDTH, viewportWidth() - BANNER_SIDE_MARGIN * 2),
       align: 'center',
       alpha: Math.min(1, banner.framesLeft / BANNER_FADE_FRAMES),
     });
@@ -2184,13 +2123,16 @@ const VICTORY_MUSIC_FRAMES = VICTORY_MUSIC_SECONDS * UPDATES_PER_SECOND;
 const VORDRICK_FLEES_BANNER = 'Vordrick steals the life stone and retreats.';
 const ABANDONED_BANNER = 'You left Briar Hollow to the dead. They withdraw…';
 
-const HUD_LABEL_SIZE = 10;
-const HUD_LABEL_HEIGHT = 12;
-const HUD_BAR_HEIGHT = 8;
-const BELL_FLASH_FILL = '#ffffff';
 /** The abandon warning and the outcome banner sit this far down the screen. */
 const CENTRE_BANNER_HEIGHT_SHARE = 0.45;
 const OUTCOME_BANNER_MAX_WIDTH = 520;
 const BANNER_SIDE_MARGIN = 16;
+
+/** The wrapping column a centre banner is set in, centred on the screen. */
+function centreBannerColumn(): { x: number; width: number } {
+  const width = Math.min(OUTCOME_BANNER_MAX_WIDTH, viewportWidth() - BANNER_SIDE_MARGIN * 2);
+  return { x: (viewportWidth() - width) / 2, width };
+}
+
 /** The outcome banner fades out over its last this-many frames. */
 const BANNER_FADE_FRAMES = 60;

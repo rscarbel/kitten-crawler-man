@@ -42,3 +42,21 @@ canvas {
   height: 100%;
   touch-action: none;
 }
+
+/*
+ * Never seen: the UI reads this element's computed padding to learn the
+ * device's safe-area insets, which canvas code cannot query directly.
+ */
+#safe-area-probe {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 0;
+  height: 0;
+  visibility: hidden;
+  pointer-events: none;
+  padding-top: env(safe-area-inset-top, 0px);
+  padding-right: env(safe-area-inset-right, 0px);
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+  padding-left: env(safe-area-inset-left, 0px);
+}

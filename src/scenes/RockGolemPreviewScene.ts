@@ -14,10 +14,9 @@
  * rubble tumbles about its own centre rather than orbiting it.
  */
 
-import { Scene } from '../core/Scene';
 import { viewportWidth, viewportHeight } from '../core/Viewport';
-import { drawText } from '../ui/TextBox';
-import { addButton, playButtonSound, setButtonMouseState, BUTTON_PRESETS } from '../ui/Button';
+import { worldText } from '../ui/world/worldText';
+import { PreviewScene, type PreviewControl } from './PreviewScene';
 import { GameMap } from '../map/GameMap';
 import { BodyPartGoreSystem } from '../systems/BodyPartGoreSystem';
 import { drawGolemRock, drawGolemRockBurst } from '../sprites/golemRockSprite';
@@ -29,6 +28,7 @@ import {
   type GolemBallState,
   type RockGolemSheet,
 } from '../sprites/rockGolemSprite';
+import { previewInk } from '../ui/theme/previewInk';
 
 /** A facing vector per column, chosen so the wrapper picks each viewpoint. */
 interface ViewSpec {
@@ -97,20 +97,17 @@ const SPEED_LEVELS: ReadonlyArray<number> = [SPEED_QUARTER, SPEED_HALF, SPEED_FU
 const FRAMES_PER_SECOND = 60;
 
 /** The floors a golem is actually seen against, darkest first. */
-const BACKDROPS: ReadonlyArray<string> = ['#2b2b30', '#4a4034', '#6f7a5c', '#8d8477'];
+const BACKDROPS: ReadonlyArray<string> = previewInk.rockGolem.backdrops;
 
 const MARGIN = 16;
 const ROW_LABEL_WIDTH = 78;
 const CELL_PADDING = 6;
 const LABEL_SIZE = 12;
-const HEADER_HEIGHT = 46;
+/** Space between a column label and the cells under it. */
+const LABEL_GAP = 2;
 /** Cells are three tiles tall so the boss's overhead slam raise fits. */
 const CELL_TILES_TALL = 3;
 const CELL_TILES_WIDE = 2.6;
-
-const BUTTON_HEIGHT = 26;
-const BUTTON_WIDTH = 92;
-const BUTTON_GAP = 8;
 
 /** Gore needs a map to settle onto; a small empty one is enough for a preview. */
 const PREVIEW_MAP_SIZE = 24;
@@ -123,16 +120,9 @@ const ROCK_DEMO_FLIGHT_FRAMES = 90;
 const ROCK_DEMO_BURST_FRAMES = 22;
 const ROCK_DEMO_LANE_TILES = 6;
 
-export class RockGolemPreviewScene extends Scene {
+export class RockGolemPreviewScene extends PreviewScene {
   private readonly map = new GameMap({ mapSize: PREVIEW_MAP_SIZE });
   private readonly gore = new BodyPartGoreSystem(this.map);
-  private readonly buttons: Array<{
-    x: number;
-    y: number;
-    w: number;
-    h: number;
-    action?: () => void;
-  }> = [];
 
   private zoomIndex = DEFAULT_ZOOM_INDEX;
   private speedIndex = SPEED_LEVELS.length - 1;
@@ -167,37 +157,34 @@ export class RockGolemPreviewScene extends Scene {
     ctx.fillStyle = BACKDROPS[this.backdropIndex];
     ctx.fillRect(0, 0, width, height);
 
-    this.buttons.length = 0;
-    this.renderControls(ctx);
-
     const tile = this.tileSize();
     const cellW = tile * CELL_TILES_WIDE;
     const cellH = tile * CELL_TILES_TALL;
     const rows = ROWS.filter((row) => !row.bossOnly || this.variant.sheet === 'rock_golem_boss');
 
-    const gridTop = HEADER_HEIGHT + LABEL_SIZE + CELL_PADDING;
+    const gridTop = this.headerBottom + LABEL_SIZE + CELL_PADDING;
     VIEWS.forEach((view, column) => {
-      drawText(ctx, view.label, {
+      worldText(ctx, view.label, {
         x: MARGIN + ROW_LABEL_WIDTH + column * (cellW + CELL_PADDING),
-        y: gridTop - LABEL_SIZE - 2,
+        y: gridTop - LABEL_SIZE - LABEL_GAP,
         size: LABEL_SIZE,
-        color: '#f0e9da',
+        color: previewInk.rockGolem.caption,
         outline: true,
       });
     });
 
     rows.forEach((row, rowIndex) => {
       const y = gridTop + rowIndex * (cellH + CELL_PADDING);
-      drawText(ctx, row.label, {
+      worldText(ctx, row.label, {
         x: MARGIN,
         y: y + cellH / 2,
         size: LABEL_SIZE,
-        color: '#f0e9da',
+        color: previewInk.rockGolem.caption,
         outline: true,
       });
       VIEWS.forEach((view, column) => {
         const x = MARGIN + ROW_LABEL_WIDTH + column * (cellW + CELL_PADDING);
-        ctx.strokeStyle = 'rgba(255,255,255,0.1)';
+        ctx.strokeStyle = previewInk.rockGolem.cellBorder;
         ctx.strokeRect(x, y, cellW, cellH);
         // The sprite anchors on a tile, so it is placed on the cell's own floor
         // rather than its centre — which is where the anchor is checked from.
@@ -225,6 +212,7 @@ export class RockGolemPreviewScene extends Scene {
 
     this.gore.renderSettled(ctx, 0, 0);
     this.gore.renderFlying(ctx, 0, 0);
+    this.renderChrome(ctx);
   }
 
   /** The thrown boulder crossing a lane and shattering at the end of it. */
@@ -234,11 +222,11 @@ export class RockGolemPreviewScene extends Scene {
     const cycle = ROCK_DEMO_FLIGHT_FRAMES + ROCK_DEMO_BURST_FRAMES;
     const at = this.clock % cycle;
 
-    drawText(ctx, 'thrown rock', {
+    worldText(ctx, 'thrown rock', {
       x: MARGIN,
       y: y - LABEL_SIZE,
       size: LABEL_SIZE,
-      color: '#f0e9da',
+      color: previewInk.rockGolem.caption,
       outline: true,
     });
 
@@ -275,75 +263,53 @@ export class RockGolemPreviewScene extends Scene {
     );
   }
 
-  private renderControls(ctx: CanvasRenderingContext2D): void {
-    const controls: ReadonlyArray<{ readonly label: string; readonly action: () => void }> = [
+  protected previewTitle(): string {
+    return 'rock golem preview — ?golem';
+  }
+
+  protected previewControls(): readonly PreviewControl[] {
+    return [
       {
+        id: 'variant',
         label: this.variant.label,
-        action: () => {
+        onTap: () => {
           this.variantIndex = (this.variantIndex + 1) % VARIANTS.length;
         },
       },
       {
+        id: 'zoom',
         label: `${ZOOM_LEVELS[this.zoomIndex]}×`,
-        action: () => {
+        onTap: () => {
           this.zoomIndex = (this.zoomIndex + 1) % ZOOM_LEVELS.length;
         },
       },
       {
+        id: 'speed',
         label: `speed ${SPEED_LEVELS[this.speedIndex]}`,
-        action: () => {
+        onTap: () => {
           this.speedIndex = (this.speedIndex + 1) % SPEED_LEVELS.length;
         },
       },
       {
+        id: 'play',
         label: this.paused ? 'play' : 'pause',
-        action: () => {
+        onTap: () => {
           this.paused = !this.paused;
         },
       },
       {
         label: 'floor',
-        action: () => {
+        onTap: () => {
           this.backdropIndex = (this.backdropIndex + 1) % BACKDROPS.length;
         },
       },
       {
         label: 'kill',
-        action: () => {
+        onTap: () => {
           this.kill();
         },
       },
     ];
-
-    controls.forEach((control, index) => {
-      addButton(ctx, this.buttons, {
-        ...BUTTON_PRESETS.toggle,
-        x: MARGIN + index * (BUTTON_WIDTH + BUTTON_GAP),
-        y: MARGIN,
-        width: BUTTON_WIDTH,
-        height: BUTTON_HEIGHT,
-        label: control.label,
-        action: control.action,
-      });
-    });
-  }
-
-  handleMouseMove(mx: number, my: number): void {
-    setButtonMouseState(mx, my);
-  }
-
-  handleClick(mx: number, my: number): void {
-    for (const button of this.buttons) {
-      const inside =
-        mx >= button.x && mx <= button.x + button.w && my >= button.y && my <= button.y + button.h;
-      if (!inside) continue;
-      // This scene has no `AudioManager` of its own; the call is here so the
-      // control path matches every other button in the game rather than quietly
-      // diverging from it.
-      playButtonSound(null);
-      button.action?.();
-      return;
-    }
   }
 }
 

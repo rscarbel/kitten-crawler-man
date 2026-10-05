@@ -1,5 +1,5 @@
 /**
- * Turns a `VendorDef` into the rows the shared `PricedMenuPanel` draws, and the
+ * Turns a `VendorDef` into the rows the shop screen draws, and the
  * handler that actually hands the goods over. The market's counterpart to
  * `buildTavernMenu` / `serveDrink`, with two differences: what's bought lands in
  * the inventory rather than being consumed on the spot, and a stall can run out.
@@ -9,7 +9,7 @@ import { consumeStock, remainingFor, type MarketStock } from './MarketStock';
 import type { VendorDef, VendorLineGate, VendorStockLine } from './vendorDefs';
 import type { Player } from '../../Player';
 import type { AudioManager } from '../../audio/AudioManager';
-import type { PricedMenu, PricedOption, PricedPurchaseHandler } from '../../ui/PricedMenuPanel';
+import type { ShopMenu, ShopRow, ShopPurchaseHandler } from '../../ui/screens/shop/shopSession';
 
 export const SOLD_OUT_LABEL = 'Sold out';
 
@@ -44,7 +44,7 @@ export function buildVendorMenu(
   stock: MarketStock,
   visits: number,
   isGateOpen: VendorGateCheck,
-): PricedMenu {
+): ShopMenu {
   // While a gated line is on the counter, it is the one thing the player was
   // sent here for — the rest of the stock is genuinely closed rather than
   // merely present-and-tempting, so a mid-errand player can't wander off and
@@ -62,7 +62,7 @@ export function buildVendorMenu(
     options: def.items
       .filter((line) => line.gate === undefined || isGateOpen(line.gate))
       .map((line) => {
-        const option: PricedOption = {
+        const option: ShopRow = {
           key: line.id,
           label: line.label,
           price: line.price,
@@ -91,7 +91,7 @@ export function createVendorPurchase(
   def: VendorDef,
   stock: MarketStock,
   getAudio: () => AudioManager | null,
-): PricedPurchaseHandler {
+): ShopPurchaseHandler {
   return (option, buyer) => {
     const line = def.items.find((item) => item.id === option.key);
     if (line === undefined) return { ok: false, line: 'The vendor shrugs.' };
@@ -115,11 +115,11 @@ export function createVendorPurchase(
 }
 
 /**
- * `addItem` is silent about a full inventory, so the count is checked either
- * side of it. Without this the player pays for goods they never receive.
+ * Hands over one unit, or refuses when the bag has no room. Asked before
+ * adding, so a full bag refuses the sale instead of reporting a lost item the
+ * player never paid for.
  */
 function giveItem(buyer: Player, line: VendorStockLine): boolean {
-  const before = buyer.inventory.countOf(line.id);
-  buyer.inventory.addItem(line.id, 1);
-  return buyer.inventory.countOf(line.id) > before;
+  if (!buyer.inventory.hasRoomFor(line.id)) return false;
+  return buyer.inventory.addItem(line.id, 1);
 }

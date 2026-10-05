@@ -1,39 +1,21 @@
 import type { LevelUpEntry } from '../core/LevelUpEntry';
 import type { AudioManager } from '../audio/AudioManager';
-import { drawPowerUpIcon } from './canvasUtils';
-import { drawText, wrapLines } from './TextBox';
-import { drawOverlay, drawBox } from './Box';
-import { beginMenuFocus, drawButton, endMenuFocus, BUTTON_PRESETS } from './Button';
-import { viewportWidth, viewportHeight } from '../core/Viewport';
-
-const DIALOG_MAX_WIDTH = 320;
-const DIALOG_PADDING_HORIZONTAL = 32;
-const DIALOG_MIN_HEIGHT = 280;
-const DIALOG_BASE_HEIGHT = 222;
-const DIALOG_PERK_LINE_HEIGHT = 15;
-
-const DIALOG_TITLE_Y_OFFSET = 30;
-const DIALOG_TITLE_OVERLAP = 13;
-const DIALOG_ICON_Y = 48;
-const DIALOG_LEVEL_Y_OFFSET = 28;
-
-const LEVEL_TEXT_X_OFFSET = 18;
-const LEVEL_TEXT_SIZE = 13;
-const LEVEL_NUMBER_X_OFFSET = 14;
-const LEVEL_NUMBER_SIZE = 18;
-const LEVEL_NUMBER_ANIM_AMPLITUDE = 0.5;
-
-const PERK_DESCRIPTION_Y_OFFSET = 22;
-const PERK_DESCRIPTION_X = 20;
-const PERK_DESCRIPTION_SIZE = 11;
-const PERK_DESCRIPTION_WIDTH_MARGIN = 40;
-const PERK_DESCRIPTION_LINE_HEIGHT = 15;
-
-const OK_BUTTON_WIDTH = 100;
-const OK_BUTTON_HEIGHT = 40;
-const OK_BUTTON_Y_OFFSET = 56;
-
 type Phase = 'idle' | 'power_up' | 'count_up' | 'done';
+
+/** What the card on screen shows this frame. */
+export interface LevelUpView {
+  readonly entry: LevelUpEntry;
+  /** The icon is still pulsing in. */
+  readonly poweringUp: boolean;
+  /** 0 to 1 through the pulse. */
+  readonly iconPulse: number;
+  /** The level number drawn: the old level until the count-up lands. */
+  readonly displayedLevel: number;
+  /** 0 to 1 through the count-up; 1 once it has landed. */
+  readonly countUpProgress: number;
+  /** The count-up has landed: the perk line and OK are shown and OK may be pressed. */
+  readonly settled: boolean;
+}
 
 /**
  * Pausing overlay that plays when an ability or a skill gains a level.
@@ -46,8 +28,8 @@ type Phase = 'idle' | 'power_up' | 'count_up' | 'done';
  * A scene should:
  *   1. Call enqueue(entry) each time something levels.
  *   2. Skip updateGameplay() while isShowing is true.
- *   3. Call update() and render() every frame regardless of pause state.
- *   4. Call handleClick(mx, my) in its click handler (returns true when consumed).
+ *   3. Call update() every frame regardless of pause state, and mount
+ *      `levelUpSurface` to draw the card and take its OK.
  */
 export class LevelUpDialog {
   private queue: LevelUpEntry[] = [];
@@ -57,7 +39,6 @@ export class LevelUpDialog {
 
   private displayedLevel = 0;
   private iconPulse = 0;
-  private okBtnRect = { x: 0, y: 0, w: 0, h: 0 };
 
   private readonly POWER_UP_FRAMES = 60;
   private readonly COUNT_UP_FRAMES = 20;
@@ -108,128 +89,22 @@ export class LevelUpDialog {
     }
   }
 
-  handleClick(mx: number, my: number): boolean {
-    if (this.phase !== 'done') return this.isShowing;
-    const { x, y, w, h } = this.okBtnRect;
-    if (mx >= x && mx <= x + w && my >= y && my <= y + h) {
-      this.advance();
-      return true;
-    }
-    return true;
+  /** The card on screen, or null when none is. */
+  get view(): LevelUpView | null {
+    const entry = this.current;
+    if (this.phase === 'idle' || entry === null) return null;
+    return {
+      entry,
+      poweringUp: this.phase === 'power_up',
+      iconPulse: this.iconPulse,
+      displayedLevel: this.displayedLevel,
+      countUpProgress: this.phase === 'count_up' ? this.frame / this.COUNT_UP_FRAMES : 1,
+      settled: this.phase === 'done',
+    };
   }
 
-  render(ctx: CanvasRenderingContext2D): void {
-    if (!this.isShowing || !this.current) return;
-    const current = this.current;
-
-    const cw = viewportWidth();
-    const ch = viewportHeight();
-
-    drawOverlay(ctx, { canvasWidth: cw, canvasHeight: ch, alpha: 0.72 });
-
-    const boxW = Math.min(DIALOG_MAX_WIDTH, cw - DIALOG_PADDING_HORIZONTAL);
-    const perk = current.perkDescription;
-    const perkLines =
-      perk === null
-        ? []
-        : wrapLines(
-            ctx,
-            perk,
-            boxW - PERK_DESCRIPTION_WIDTH_MARGIN,
-            `${PERK_DESCRIPTION_SIZE}px monospace`,
-          );
-    const boxH = Math.min(
-      Math.max(DIALOG_MIN_HEIGHT, DIALOG_BASE_HEIGHT + perkLines.length * DIALOG_PERK_LINE_HEIGHT),
-      ch - DIALOG_PADDING_HORIZONTAL,
-    );
-    const bx = cw / 2 - boxW / 2;
-    const by = ch / 2 - boxH / 2;
-
-    drawBox(ctx, {
-      x: bx,
-      y: by,
-      width: boxW,
-      height: boxH,
-      fill: '#0f172a',
-      border: '#a855f7',
-      borderWidth: 2.5,
-    });
-
-    drawText(ctx, `${current.name} Level Up!`, {
-      x: bx + boxW / 2,
-      y: by + DIALOG_TITLE_Y_OFFSET - DIALOG_TITLE_OVERLAP,
-      size: 16,
-      bold: true,
-      color: '#e9d5ff',
-      align: 'center',
-    });
-
-    const iconSize = 56;
-    const iconX = bx + boxW / 2 - iconSize / 2;
-    const iconY = by + DIALOG_ICON_Y;
-    drawPowerUpIcon(ctx, iconX, iconY, iconSize, this.iconPulse, this.phase === 'power_up', () => {
-      current.renderIcon(ctx, iconX, iconY, iconSize, current.newLevel);
-    });
-
-    const levelY = iconY + iconSize + DIALOG_LEVEL_Y_OFFSET;
-    const isCountingUp = this.phase === 'count_up';
-    const progress = isCountingUp ? this.frame / this.COUNT_UP_FRAMES : 1;
-
-    drawText(ctx, 'Level', {
-      x: bx + boxW / 2 - LEVEL_TEXT_X_OFFSET,
-      y: levelY - LEVEL_TEXT_SIZE,
-      size: LEVEL_TEXT_SIZE,
-      color: '#94a3b8',
-      align: 'center',
-    });
-
-    // Animated level number: grows as it counts up
-    const numScale = isCountingUp
-      ? 1.0 + Math.sin(progress * Math.PI) * LEVEL_NUMBER_ANIM_AMPLITUDE
-      : 1.0;
-    const displayNum = this.displayedLevel;
-    ctx.save();
-    ctx.translate(bx + boxW / 2 + LEVEL_NUMBER_X_OFFSET, levelY);
-    ctx.scale(numScale, numScale);
-    ctx.fillStyle = '#e9d5ff';
-    ctx.font = `bold ${Math.round(LEVEL_NUMBER_SIZE * numScale)}px monospace`;
-    ctx.textAlign = 'center';
-    ctx.fillText(String(displayNum), 0, 0);
-    ctx.restore();
-
-    if (this.phase === 'done' && perk !== null) {
-      const descY = levelY + PERK_DESCRIPTION_Y_OFFSET;
-      drawText(ctx, perk, {
-        x: bx + PERK_DESCRIPTION_X,
-        y: descY - PERK_DESCRIPTION_SIZE,
-        size: PERK_DESCRIPTION_SIZE,
-        color: '#c4b5fd',
-        align: 'center',
-        width: boxW - PERK_DESCRIPTION_WIDTH_MARGIN,
-        lineHeight: PERK_DESCRIPTION_LINE_HEIGHT,
-      });
-    }
-
-    if (this.phase === 'done') {
-      const btnW = OK_BUTTON_WIDTH;
-      const btnH = OK_BUTTON_HEIGHT;
-      const btnX = bx + boxW / 2 - btnW / 2;
-      const btnY = by + boxH - OK_BUTTON_Y_OFFSET;
-      this.okBtnRect = { x: btnX, y: btnY, w: btnW, h: btnH };
-
-      // Only once the count-up has finished: before that there is nothing to
-      // accept, and the press should keep falling through to whatever wanted it.
-      beginMenuFocus('level-up');
-      drawButton(ctx, {
-        x: btnX,
-        y: btnY,
-        width: btnW,
-        height: btnH,
-        label: 'OK',
-        ...BUTTON_PRESETS.award,
-        primaryAction: true,
-      });
-      endMenuFocus();
-    }
+  /** OK: moves on to the next queued level-up, or closes. Ignored until the count-up has landed. */
+  acknowledge(): void {
+    if (this.phase === 'done') this.advance();
   }
 }

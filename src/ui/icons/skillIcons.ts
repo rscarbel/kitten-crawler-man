@@ -1,4 +1,6 @@
 import type { SkillId } from '../../core/SkillManager';
+import type { Rect } from '../core/geom';
+import { iconSquare } from './iconSquare';
 
 /**
  * One emblem per trainable skill, drawn into a square region.
@@ -579,13 +581,8 @@ const SKILL_EMBLEMS: Record<SkillId, EmblemRenderer> = {
 };
 
 /** Draws a skill's emblem into a square icon region. */
-export function drawSkillIcon(
-  ctx: CanvasRenderingContext2D,
-  x: number,
-  y: number,
-  size: number,
-  skillId: SkillId,
-): void {
+export function drawSkillIcon(ctx: CanvasRenderingContext2D, rect: Rect, skillId: SkillId): void {
+  const { x, y, size } = iconSquare(rect);
   const palette = SKILL_PALETTES[skillId];
   const cx = x + size * CENTER;
   const cy = y + size * CENTER;

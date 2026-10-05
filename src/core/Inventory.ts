@@ -11,9 +11,13 @@ import {
 } from './ItemDefs';
 import type { InventoryItem, ItemId } from './ItemDefs';
 import type { CrawlerKind } from './SkillManager';
+import { sortStacks, type BagSortMode, type PlacedStack } from './bagSort';
 
 /** Told of the stack {@link Inventory.replaceQuestSlot} evicted from the quest slot. */
 export type QuestItemEvictionListener = (evicted: InventoryItem) => void;
+
+/** Told of an item {@link Inventory.addItem} could not store because the bag was full. */
+export type BagFullListener = (id: ItemId, quantity: number) => void;
 
 export class Inventory {
   readonly bag: ItemBag;
@@ -29,6 +33,7 @@ export class Inventory {
   readonly unseenUpgrades = new Set<ItemId>();
 
   private questItemEvictionListener: QuestItemEvictionListener | null = null;
+  private bagFullListener: BagFullListener | null = null;
 
   constructor(ownerKind: CrawlerKind | null = null) {
     this.bag = new ItemBag(SLOT_COUNT);
@@ -46,24 +51,44 @@ export class Inventory {
 
   // ── Item storage (delegates to bag + actionBar) ──
 
-  /** Add `quantity` of the given item, stacking into an existing slot when possible. */
-  addItem(id: ItemId, quantity: number): void {
+  /**
+   * Add `quantity` of the given item, stacking into an existing slot when possible.
+   *
+   * @returns false when the bag was full and the item was lost. The bag-full
+   *   listener hears of it too, so the player is told even by callers that
+   *   ignore the result.
+   */
+  addItem(id: ItemId, quantity: number): boolean {
     if (ITEM_DEF[id].isQuestItem) {
       this.addToQuestSlot(id, quantity);
-      return;
+      return true;
     }
-    if (this.equipment.isUpgradeOverEquipped({ ...ITEM_DEF[id], quantity })) {
-      this.unseenUpgrades.add(id);
+    const isUpgrade = this.equipment.isUpgradeOverEquipped({ ...ITEM_DEF[id], quantity });
+    const stored =
+      this.actionBar.stackInto(id, quantity) ||
+      this.bag.stackInto(id, quantity) ||
+      this.bag.addToEmpty(id, quantity);
+    if (!stored) {
+      this.bagFullListener?.(id, quantity);
+      return false;
     }
-    if (this.actionBar.stackInto(id, quantity)) return;
-    if (this.bag.stackInto(id, quantity)) return;
-    this.bag.addToEmpty(id, quantity);
+    if (isUpgrade) this.unseenUpgrades.add(id);
+    return true;
   }
 
   /**
-   * Whether {@link addItem} would actually store this item. `addItem` drops
-   * silently when there is nowhere to put the thing, so any caller that cannot
-   * afford to lose the item has to ask first.
+   * Who hears that {@link addItem} lost an item to a full bag. Set by the
+   * running scene on entry and cleared on exit, like the quest-eviction
+   * listener, because inventories outlive scenes.
+   */
+  setBagFullListener(listener: BagFullListener | null): void {
+    this.bagFullListener = listener;
+  }
+
+  /**
+   * Whether {@link addItem} would actually store this item. `addItem` loses
+   * the item when there is nowhere to put it, so any caller that cannot
+   * afford to lose it has to ask first.
    */
   hasRoomFor(id: ItemId): boolean {
     if (ITEM_DEF[id].isQuestItem) return true;
@@ -245,6 +270,33 @@ export class Inventory {
     return source === 'hotbar'
       ? this.actionBar.removeOneAt(slotIdx, id)
       : this.bag.removeOneAt(slotIdx, id);
+  }
+
+  /**
+   * Rewrites the bag in `mode`'s order from the first slot on, folding split
+   * stacks of a stackable item together and leaving every empty slot at the
+   * end. The hotbar is left alone.
+   */
+  sortBag(mode: BagSortMode): void {
+    const merged = new Map<ItemId, InventoryItem>();
+    const stacks: PlacedStack[] = [];
+    this.bag.slots.forEach((item, slotIdx) => {
+      if (item === null) return;
+      const def = ITEM_DEF[item.id];
+      const home = def.stackable && def.isQuestItem !== true ? merged.get(item.id) : undefined;
+      if (home !== undefined) {
+        home.quantity += item.quantity;
+        return;
+      }
+      const copy = { ...item };
+      if (def.stackable) merged.set(item.id, copy);
+      stacks.push({ item: copy, slotIdx });
+    });
+    const ordered = sortStacks(stacks, mode);
+    this.bag.slots.fill(null);
+    ordered.forEach((stack, index) => {
+      this.bag.slots[index] = stack.item;
+    });
   }
 
   /** Total count across all inventory slots and hotbar. */

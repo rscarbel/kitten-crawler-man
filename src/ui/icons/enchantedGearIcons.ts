@@ -1,3 +1,6 @@
+import type { Rect } from '../core/geom';
+import { iconSquare } from './iconSquare';
+
 /**
  * Icons for the eight source-material enchanted pieces.
  *
@@ -9,8 +12,6 @@
  * two or three flat bands rather than a gradient.
  */
 
-import type { ItemId } from '../../core/ItemDefs';
-
 /** The eight ids this module can draw. Closed, so a new piece cannot ship iconless. */
 export type EnchantedGearItemId =
   | 'nightgaunt_cloak'
@@ -21,22 +22,6 @@ export type EnchantedGearItemId =
   | 'shade_gnoll_kneepads'
   | 'grull_war_gauntlet'
   | 'slingshot';
-
-export const ENCHANTED_GEAR_IDS: ReadonlySet<string> = new Set<EnchantedGearItemId>([
-  'nightgaunt_cloak',
-  'slate_butterfly_talisman',
-  'fae_scale_crupper',
-  'bracelet_of_dex',
-  'splatter_skunk_toe_ring',
-  'shade_gnoll_kneepads',
-  'grull_war_gauntlet',
-  'slingshot',
-]);
-
-/** Whether `id` is one of the enchanted pieces, and so drawable by {@link drawEnchantedGearIcon}. */
-export function isEnchantedGearItem(id: ItemId): id is EnchantedGearItemId {
-  return ENCHANTED_GEAR_IDS.has(id);
-}
 
 const INDIGO = '#2c2a52';
 const INDIGO_SHADE = '#191833';
@@ -227,14 +212,13 @@ const SLING_LOOSE_PEBBLE_NEAR_X = 0.14;
 const SLING_LOOSE_PEBBLE_FAR_X = 0.28;
 const SLING_LOOSE_PEBBLE_XS = [SLING_LOOSE_PEBBLE_NEAR_X, SLING_LOOSE_PEBBLE_FAR_X] as const;
 
-/** Draws one enchanted piece into a square icon region at `x`,`y`. */
+/** Draws one enchanted piece into the largest square centred in `rect`. */
 export function drawEnchantedGearIcon(
   ctx: CanvasRenderingContext2D,
-  x: number,
-  y: number,
-  size: number,
+  rect: Rect,
   id: EnchantedGearItemId,
 ): void {
+  const { x, y, size } = iconSquare(rect);
   switch (id) {
     case 'nightgaunt_cloak':
       drawNightgauntCloak(ctx, x, y, size);

@@ -68,11 +68,14 @@ import { TREBUCHET_BUILD_COST } from '../src/systems/briarHollow/structureRules'
 import { buildSiegeRig, standAt } from './villageSiegeHarness';
 import type { QuestRewardSpec } from '../src/ui/questReward/types';
 
+const VIEWPORT_WIDTH = 1280;
+const VIEWPORT_HEIGHT = 720;
+
 installCanvasGlobals();
 // The villager conversation paginates its text against the live viewport;
 // without a size set, DialogBox measures against a zero-width box and splits
 // every line into one page per word.
-setViewportSize(1280, 720);
+setViewportSize(VIEWPORT_WIDTH, VIEWPORT_HEIGHT);
 
 let failures = 0;
 let checks = 0;
@@ -98,6 +101,12 @@ const UPDATES_PER_SECOND = 60;
 const REQUEST_IMMINENT_SECONDS = 45;
 const REQUEST_BELL_HP = 120;
 const REQUEST_COINS = 500;
+/** The Mayor's choice row must fit this many entries. */
+const MAYOR_CHOICE_LIMIT = 9;
+/** Pages turned at most while reading a conversation through to its choices. */
+const READ_THROUGH_PAGE_LIMIT = 40;
+/** Carl waits out the countdown this many tiles south of the bell. */
+const BELL_STAND_OFFSET_TILES = 3;
 const WOODEN_WALL_BOARDS = 5;
 /** Enough stone to load a trebuchet from empty. */
 const TREBUCHET_AMMO_LOADED = 1;
@@ -196,9 +205,10 @@ function readThrough(): void {
   // `advance()` ever sees a fully-revealed last page — which, with nothing
   // else pending, reads as "leave" and picks Goodbye out from under the
   // choices this same tick would otherwise have put up.
-  for (let i = 0; i < 40 && conversation.isOpen && !conversation.isShowingChoices; i++) {
+  const awaitingAPage = () => conversation.isOpen && !conversation.isShowingChoices;
+  for (let i = 0; i < READ_THROUGH_PAGE_LIMIT && awaitingAPage(); i++) {
     conversation.update(null);
-    if (!conversation.isOpen || conversation.isShowingChoices) break;
+    if (!awaitingAPage()) break;
     conversation.advance();
   }
 }
@@ -212,7 +222,7 @@ function talk(villager: VillagerId): string[] {
   human.x = body.x;
   human.y = body.y;
   const before = shown.length;
-  kit.tryInteract(human);
+  kit.tryInteract(human, false);
   readThrough();
   return shown.slice(before);
 }
@@ -328,7 +338,10 @@ section('1. The Mayor');
     'questStarted is emitted',
   );
   check(quest.status === 'active', 'the quest is active');
-  check(conversation.choiceLabels.length <= 9, 'the Mayor offers nine choices or fewer');
+  check(
+    conversation.choiceLabels.length <= MAYOR_CHOICE_LIMIT,
+    'the Mayor offers nine choices or fewer',
+  );
   checkpointStep('need_tools');
   choose('Goodbye');
 }
@@ -349,7 +362,7 @@ section('2. Tools');
     human.x = orenBody.x;
     human.y = orenBody.y;
     const before = shown.length;
-    kit.tryInteract(human);
+    kit.tryInteract(human, false);
     check(
       human.inventory.countOf('basic_axe') === 0 && cat.inventory.countOf('basic_axe') === 0,
       "the tools aren't granted merely from opening onto the grant page",
@@ -593,7 +606,7 @@ section('7. Summoned by the Mayor, and the countdown');
   );
   check(kit.ambience.noticeBoard.callToArms, 'the call to arms goes up on the notice board');
   checkpointStep('imminent');
-  standAt(human, rig.site.square.bellTile.x, rig.site.square.bellTile.y + 3);
+  standAt(human, rig.site.square.bellTile.x, rig.site.square.bellTile.y + BELL_STAND_OFFSET_TILES);
   stepFrames(IMMINENT_FRAMES - 1);
   check(state.quest.phase === 'imminent', 'still counting down a frame before the end');
   check(kit.ambience.bell.ringing, 'the bell rings through the countdown');
@@ -618,7 +631,9 @@ section('8. A lost siege');
   for (let blow = 0; blow < REQUEST_BELL_HP && !defences.defense.bellCracked; blow++) {
     defences.defense.damage({ kind: 'bell' }, REQUEST_BELL_HP, null, 'melee');
   }
-  check(HOLLOW_BELL_MAX_HP === REQUEST_BELL_HP, `the bell has ${REQUEST_BELL_HP} health`);
+  // Widened from its literal type so a drifted constant fails this check at run time.
+  const gameBellMaxHp: number = HOLLOW_BELL_MAX_HP;
+  check(gameBellMaxHp === REQUEST_BELL_HP, `the bell has ${REQUEST_BELL_HP} health`);
   rig.step();
   check(state.quest.phase === 'repelled_failed', 'the bell at zero loses the siege');
   check(state.quest.bellHp === REQUEST_BELL_HP, 'the villagers restore the bell');
@@ -782,7 +797,9 @@ section('9. The retry and the turn-in');
   check(state.quest.phase === 'complete', 'the quest is complete');
   check(quest.status === 'completed', 'the quest manager agrees');
   check(human.coins - coinsBefore === REQUEST_COINS, `the purse pays ${REQUEST_COINS} coins`);
-  check(BRIAR_HOLLOW_QUEST_COINS === REQUEST_COINS, 'the purse is the request’s 500');
+  // Widened from its literal type so a drifted constant fails this check at run time.
+  const gameQuestCoins: number = BRIAR_HOLLOW_QUEST_COINS;
+  check(gameQuestCoins === REQUEST_COINS, 'the purse is the request’s 500');
   check(
     human.inventory.countOf('hamburger') - burgersBefore === BRIAR_HOLLOW_REWARD_BURGERS,
     `${BRIAR_HOLLOW_REWARD_BURGERS} hamburgers`,

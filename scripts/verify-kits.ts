@@ -25,8 +25,8 @@
  * What this does **not** cover, so a green run is not read as more than it is:
  *
  *  - **The scenes.** `BuildingInteriorScene` and `DungeonScene` need a DOM, a
- *    canvas and a running frame loop, so their input bindings, overlay claim
- *    ladders and render order are checked by reading them, not by running them.
+ *    canvas and a running frame loop, so their input bindings, surface stacks
+ *    and render order are checked by reading them, not by running them.
  *    `GameplayInputHandler`, `MenusKit`, `ChatKit` and `hotbarActions` are not
  *    imported here at all for the same reason.
  *  - **Anything audio-shaped.** `CombatKit.drainMobAudioCues` and
@@ -79,7 +79,6 @@ import { PartyTools } from '../src/core/PartyTools';
 import { keybindings } from '../src/core/Keybindings';
 import { GroundPickupSystem } from '../src/systems/GroundPickupSystem';
 import { DynamiteSystem } from '../src/systems/DynamiteSystem';
-import { focusedOverlay, worldHalted } from '../src/systems/kits/OverlayClaims';
 import { Conversation } from '../src/dialog/Conversation';
 
 /** The level the kit's militia are raised at; nothing here fights them. */
@@ -128,7 +127,8 @@ const RESWEPT_COINS = 11;
  */
 const PACK_STANDOFF_TILES = 40;
 /** How far a shout carries in this check. The two probes are neighbours. */
-const PACK_ALERT_RADIUS_PX = TILE_SIZE * 3;
+const PACK_ALERT_RADIUS_TILES = 3;
+const PACK_ALERT_RADIUS_PX = TILE_SIZE * PACK_ALERT_RADIUS_TILES;
 
 const TOWER_NAME = 'verify-kits tower';
 /**
@@ -370,8 +370,9 @@ console.log('\nrebuildGrid keeps exactly the mobs that still claim a cell');
 {
   const map = makeInterior();
   const stage = makeStage(map, PARKED_TILE, PARKED_TILE);
+  const CASUALTY_TILE_X = 3;
   const survivor = new ProbeMob(1, 1);
-  const casualty = new ProbeMob(3, 1);
+  const casualty = new ProbeMob(CASUALTY_TILE_X, 1);
   stage.roster.add(survivor);
   stage.roster.add(casualty);
 
@@ -539,8 +540,8 @@ console.log('\nDestructibles exist indoors and break');
     smashable.length > 0,
     `the generated store stands barrels or crates a swing can reach (${smashable.length})`,
   );
-  const target = smashable[0];
-  if (target !== undefined) {
+  const target = smashable.length > 0 ? smashable[0] : null;
+  if (target !== null) {
     const stage = makeStage(map, PARKED_TILE, PARKED_TILE);
     const combat = makeCombatKit(stage);
     const destruction = new DestructionKit(stage.world, OVERWORLD_FLOOR_NUMBER);
@@ -606,10 +607,8 @@ console.log('\nCombatKit.dispose releases the module-level pack-alert grid');
   listener.currentTarget = null;
   combat.dispose();
   alertPackAround(shouter, PACK_ALERT_RADIUS_PX, stage.pm.human);
-  check(
-    listener.currentTarget === null,
-    'after dispose the shout reaches nobody, so the grid was dropped',
-  );
+  const heardAfterDispose = (): boolean => listener.currentTarget !== null;
+  check(!heardAfterDispose(), 'after dispose the shout reaches nobody, so the grid was dropped');
 }
 
 console.log('\nCombatKit re-reads the world it was handed');
@@ -846,12 +845,13 @@ console.log('\nA room with hostiles in it is content, not wiring');
   // architecture is that this is all a new fight costs.
   for (const guard of guards) stage.roster.add(guard);
   const anyGuard = guards[0];
+  const hasGuard = guards.length > 0;
   check(
-    anyGuard !== undefined && stage.roster.mobs.includes(anyGuard),
+    hasGuard && stage.roster.mobs.includes(anyGuard),
     'they join through the roster the storey already had',
   );
   check(
-    anyGuard !== undefined &&
+    hasGuard &&
       stage.roster.grid.queryCircle(anyGuard.x, anyGuard.y, PINPOINT_QUERY_RADIUS).has(anyGuard),
     'so they are in its spatial index and can be hit',
   );
@@ -910,14 +910,17 @@ console.log('\nBriarHollowKit is inert until gameMap.briarHollow exists');
     assaultLevel: () => MILITIA_LEVEL,
   });
 
-  check(!kit.tryInteract(stage.pm.active()), 'tryInteract claims nothing');
+  check(!kit.tryInteract(stage.pm.active(), false), 'tryInteract claims nothing');
   check(!kit.tryStructureMenu(), 'the Structure menu never opens');
   check(!kit.handleTap(0, 0, 0, 0, stage.pm.active()), 'a world tap is not consumed');
   check(!kit.handleLongPress(0, 0, 0, 0, stage.pm.active()), 'a long-press is not consumed');
   check(!kit.handleDoubleTap(0, 0, 0, 0, stage.pm.active()), 'a double-tap is not consumed');
-  check(kit.overlayClaims().length === 0, 'it raises no overlay');
-  check(focusedOverlay(kit.overlayClaims()) === null, 'so nothing can own the screen through it');
-  check(!worldHalted(kit.overlayClaims()), 'and nothing can halt the world through it');
+  const kitSurfaces = kit.surfaces(() => ({ x: 0, y: 0 }));
+  check(!kitSurfaces.some((surface) => surface.isOpen()), 'it raises no overlay');
+  check(
+    !kitSurfaces.some((surface) => surface.isOpen() && surface.haltsWorld),
+    'and nothing can halt the world through it',
+  );
   check(kit.questMarkers.length === 0, 'no minimap markers');
   check(kit.trackerEntries().length === 0, 'no Journal rows');
   check(kit.renderEntities().length === 0, 'no Y-sorted renderables');

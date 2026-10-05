@@ -10,8 +10,13 @@
  *
  * Which key means which action is `Keybindings`' business, so a player who
  * rebinds a key in the Controls screen changes this dispatch without any code
- * here knowing what a letter is. Escape is the exception: it is reserved, is
- * never routed through the table, and drives the dismiss chain directly.
+ * here knowing what a letter is. Escape is the exception: it is reserved and
+ * never routed through the table.
+ *
+ * The scene's `UiRoot` has already offered every key to its surfaces before
+ * these listeners run: a key a surface consumed never arrives here, and an
+ * Escape that does arrive is one no surface claimed, so it toggles the pause
+ * menu.
  */
 
 import { keybindings, HOTBAR_ACTIONS, type GameAction } from '../core/Keybindings';
@@ -22,18 +27,8 @@ export interface GameplayInputActions {
   isSuppressed(): boolean;
   /** Whether the game is over. */
   isGameOver(): boolean;
-
-  // Escape-level actions
-  dismissChestDialog(): boolean;
-  dismissDialog(): boolean;
-  dismissStairwell(): boolean;
-  dismissBuilding(): boolean;
-  dismissFollowerMenu(): boolean;
   togglePause(): void;
 
-  // Action key handlers
-  /** Called when Space is pressed while a suppressible dialog is open. Returns true if consumed. */
-  advanceDialog(): boolean;
   /**
    * The five below are optional because a scene that cannot honour one leaves it
    * out rather than binding a handler that does nothing: there is no pet, no
@@ -108,6 +103,7 @@ const SIMPLE_ACTION_HANDLERS: Partial<Record<GameAction, (actions: GameplayInput
     toggleInventory: (actions) => actions.toggleInventory(),
     toggleGear: (actions) => actions.toggleGear(),
     toggleMiniMap: (actions) => actions.toggleMiniMap(),
+    companionFollow: (actions) => actions.companionFollow(),
     toggleQuestTracker: (actions) => actions.toggleQuestTracker?.(),
     buildSummon: (actions) => {
       if (actions.buildAction?.() === true) return;
@@ -134,30 +130,12 @@ export class GameplayInputHandler {
     this.escHandler = (e: KeyboardEvent) => {
       if (e.key !== 'Escape' || e.repeat) return;
       e.preventDefault();
-      if (actions.dismissChestDialog()) return;
-      if (actions.dismissDialog()) return;
-      if (actions.dismissStairwell()) return;
-      if (actions.dismissBuilding()) return;
-      if (actions.dismissFollowerMenu()) return;
-      if (!actions.isGameOver()) {
-        actions.togglePause();
-      }
+      if (!actions.isGameOver()) actions.togglePause();
     };
 
     this.actionHandler = (e: KeyboardEvent) => {
-      if (!e.repeat && actions.dismissChestDialog()) return;
       const action = keybindings.actionFor(e.key);
-      // Before the advance below, which is what spends the press: a scene that
-      // edge-triggers off this has to see the press start before it can be told
-      // the press is gone.
       if (action === 'attack' && !e.repeat) actions.interactPressStarted?.();
-      // Ahead of the suppression gate on purpose: a dialog raised over the world
-      // suppresses gameplay, and advancing it is the one thing the attack key
-      // must still do while that is true.
-      if (action === 'attack' && !e.repeat && actions.advanceDialog()) {
-        e.preventDefault();
-        return;
-      }
       if (action === null || MOVEMENT_ACTIONS.has(action)) return;
 
       // Ahead of the suppression gate, and swallowed either way: letting Tab
@@ -167,16 +145,6 @@ export class GameplayInputHandler {
       if (action === 'switchCharacter') {
         e.preventDefault();
         if (!actions.isSuppressed()) actions.switchCharacter?.();
-        return;
-      }
-
-      // Also ahead of the gate, for the same reason Escape is: the follower menu
-      // suppresses the keyboard while it is open, so the key that opened it
-      // would otherwise be the one key that cannot close it again.
-      if (action === 'companionFollow' && !e.repeat) {
-        e.preventDefault();
-        if (actions.dismissFollowerMenu()) return;
-        if (!actions.isSuppressed()) actions.companionFollow();
         return;
       }
 

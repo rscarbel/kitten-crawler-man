@@ -8,12 +8,12 @@
  *  2. The only automatic opener is the Krakaren chest's first grant. The circus
  *     quest hands back a pet the player already knows; the pause menu's
  *     Abilities tab is the one other way in.
- *  3. The paged frame: Next walks forward and closes off the last page, Skip on
- *     the first page closes, Back walks back, `onClose` fires exactly once, and
- *     a click anywhere is consumed while it is open.
- *  4. It ranks in the same place in each scene's claim list, click chain and
- *     draw order, and a button hidden under it cannot answer a press with its
- *     click sound.
+ *  3. The explainers' host, driven through a `UiRoot`: Next walks forward and
+ *     closes off the last page, Skip on the first page closes, Back and the
+ *     arrow keys walk the pages, a click anywhere is consumed while it is
+ *     open, and Escape closes it only while it wants Escape.
+ *  4. It ranks below the award cards in the surface stack both scenes mount,
+ *     which alone decides draw order and what a press reaches.
  *  5. The copy reads the live key bindings, uses touch wording on a phone, and
  *     says what is actually true of him: he fights at any health, and a
  *     knockout demands a full heal before he can be sent back in.
@@ -30,20 +30,27 @@ import { join } from 'node:path';
 
 import { installCanvasGlobals } from './nodeCanvasGlobals.js';
 import { gameContext } from './nodeGameContext.js';
-import { setViewportSize } from '../src/core/Viewport.js';
 import { keybindings } from '../src/core/Keybindings.js';
 import { RewardGrantedDialog } from '../src/ui/RewardGrantedDialog.js';
-import { drawButton, renderedButtonSoundAt, setButtonMouseState } from '../src/ui/Button.js';
-import { HowToPlayOverlay, type HowToPlayPage } from '../src/ui/HowToPlayOverlay.js';
-import { buildMongoExplainerPages, MONGO_EXPLAINER_CONFIG } from '../src/ui/MongoExplainer.js';
 import type { GrantedReward } from '../src/core/GrantedReward.js';
+import { BANDS, UiRoot, type HitRegion } from '../src/ui/core/UiRoot.js';
+import { MOUSE_POINTER_ID, PRIMARY_BUTTON } from '../src/ui/core/pointer.js';
+import { NO_INSETS } from '../src/ui/core/viewport.js';
+import { CraftExplainers } from '../src/ui/screens/dialogs/CraftExplainers.js';
+import { explainerPage } from '../src/ui/screens/dialogs/explainerPages.js';
+import { mongoExplainerPages } from '../src/ui/screens/dialogs/mongoExplainer.js';
+import { buildSiegeRig } from './villageSiegeHarness.js';
 
 const VIEWPORT_W = 1280;
 const VIEWPORT_H = 720;
+const FRAME_MS = 16;
 /** Comfortably past the reward dialog's reveal animation. */
 const REVEAL_FRAMES = 120;
 const PAGE_COUNT = 3;
 const REBOUND_SUMMON_KEY = 'g';
+const HOST_SURFACE_ID = 'craft-explainers';
+const RIG_SEED = 7919;
+const RIG_ASSAULT_LEVEL = 6;
 
 const failures: string[] = [];
 let checks = 0;
@@ -53,7 +60,6 @@ function check(condition: boolean, message: string): void {
 }
 
 installCanvasGlobals();
-setViewportSize(VIEWPORT_W, VIEWPORT_H);
 const ctx = gameContext(VIEWPORT_W, VIEWPORT_H);
 
 // ---------------------------------------------------------------- 1. drain hook
@@ -65,14 +71,10 @@ const reward = (name: string): GrantedReward => ({
   renderIcon: () => undefined,
 });
 
-/** Plays the reveal out, then presses the dialog's OK button where it was drawn. */
+/** Plays the reveal out, then presses the card's OK. */
 function dismissShowingReward(dialog: RewardGrantedDialog): void {
   for (let i = 0; i < REVEAL_FRAMES; i++) dialog.update();
-  dialog.render(ctx);
-  // The OK button is centred horizontally near the box's foot; sweep the centre
-  // column. Only one press can land: the next reward starts in its reveal, which
-  // accepts no press until it is played out.
-  for (let y = 0; y < VIEWPORT_H; y++) dialog.handleClick(VIEWPORT_W / 2, y);
+  dialog.acknowledge();
 }
 
 {
@@ -99,6 +101,8 @@ function dismissShowingReward(dialog: RewardGrantedDialog): void {
 
 // ---------------------------------------------------------------- 2. the trigger
 
+const MONGO_OPEN = "craftExplainers.open('mongo')";
+
 function collectSources(dir: string, out: Map<string, string>): Map<string, string> {
   for (const entry of readdirSync(dir)) {
     const path = join(dir, entry);
@@ -113,9 +117,7 @@ function collectSources(dir: string, out: Map<string, string>): Map<string, stri
 
 {
   const sources = collectSources('src', new Map());
-  const openers = [...sources.entries()].filter(([, text]) =>
-    text.includes('mongoExplainer.open('),
-  );
+  const openers = [...sources.entries()].filter(([, text]) => text.includes(MONGO_OPEN));
   const openerFiles = openers.map(([path]) => path).sort();
   const expectedFiles = ['src/scenes/DungeonScene.ts', 'src/systems/kits/MenusKit.ts'];
   check(
@@ -124,16 +126,17 @@ function collectSources(dir: string, out: Map<string, string>): Map<string, stri
   );
 
   const scene = sources.get('src/scenes/DungeonScene.ts') ?? '';
-  const sceneOpens = scene.split('mongoExplainer.open(').length - 1;
+  const sceneOpens = scene.split(MONGO_OPEN).length - 1;
   check(sceneOpens === 1, `DungeonScene opens the explainer ${sceneOpens} times, expected 1`);
   const krakarenBranchStart = scene.indexOf('chest.bossRoomIndex === this.krakarenBossRoomIdx');
   const nextBranch = scene.indexOf('chest.bossRoomIndex', krakarenBranchStart + 1);
-  const opener = scene.indexOf('mongoExplainer.open(');
+  const opener = scene.indexOf(MONGO_OPEN);
   check(
     krakarenBranchStart >= 0 && opener > krakarenBranchStart && opener < nextBranch,
     'the scene opens the explainer outside the Krakaren chest branch of grantChestContents',
   );
-  const drainedOpen = /afterQueueDrains\(\s*\(\)\s*=>\s*this\.menus\.mongoExplainer\.open\(\)/;
+  const drainedOpen =
+    /afterQueueDrains\(\s*\(\)\s*=>\s*this\.menus\.craftExplainers\.open\('mongo'\)/;
   check(
     drainedOpen.test(scene),
     'the Krakaren grant opens the explainer directly instead of after the reward queue drains',
@@ -141,8 +144,8 @@ function collectSources(dir: string, out: Map<string, string>): Map<string, stri
 
   const menus = sources.get('src/systems/kits/MenusKit.ts') ?? '';
   check(
-    /pauseMenu\.onHowMongoWorks\s*=\s*\(\)\s*=>\s*this\.mongoExplainer\.open\(\)/.test(menus),
-    "MenusKit's opener is not the pause menu's How Mongo works hook",
+    /mongo:\s*\(\)\s*=>\s*void this\.craftExplainers\.open\('mongo'\)/.test(menus),
+    "MenusKit's opener is not the pause screen's How Mongo works guide",
   );
 
   const circus = sources.get('src/systems/CircusQuestSystem.ts') ?? '';
@@ -150,130 +153,181 @@ function collectSources(dir: string, out: Map<string, string>): Map<string, stri
     circus.length > 0,
     'CircusQuestSystem.ts was not found, so the circus check proves nothing',
   );
-  check(!circus.includes('mongoExplainer'), 'the circus quest touches the Mongo explainer');
+  check(!circus.includes(MONGO_OPEN), 'the circus quest opens the Mongo explainer');
 }
 
 // ---------------------------------------------------------------- 3. the frame
 
-function blankPage(subtitle: string): HowToPlayPage {
-  return { subtitle, lines: [subtitle], drawIllustration: () => undefined };
+interface HostRig {
+  readonly root: UiRoot;
+  readonly host: CraftExplainers;
+  /** Gestures no surface claimed: a click that reaches here fell through the explainer. */
+  readonly worldTaps: { count: number };
+  frame(): void;
+  region(suffix: string): HitRegion | null;
+  tap(point: { readonly x: number; readonly y: number }): void;
+}
+
+function hostRig(wantsEscape: () => boolean): HostRig {
+  let clock = 0;
+  const worldTaps = { count: 0 };
+  const root = new UiRoot({
+    audio: null,
+    viewport: () => ({
+      cssWidth: VIEWPORT_W,
+      cssHeight: VIEWPORT_H,
+      density: 'pointer',
+      uiSize: 'medium',
+      safeArea: NO_INSETS,
+    }),
+    handleWorldPointer: (gesture) => {
+      if (gesture.tap) worldTaps.count++;
+    },
+    now: () => clock,
+    warn: () => undefined,
+  });
+  const host = new CraftExplainers();
+  host.register('mongo', {
+    title: 'How Mongo works',
+    pages: () =>
+      ['one', 'two', 'three'].map((subtitle) =>
+        explainerPage({ subtitle, lines: [subtitle], drawIllustration: () => undefined }),
+      ),
+  });
+  root.mount(host.surface({ id: HOST_SURFACE_ID, wantsEscape }));
+  const tap = (point: { readonly x: number; readonly y: number }): void => {
+    const scale = root.uiScale;
+    for (const kind of ['down', 'up'] as const) {
+      root.pointer({
+        kind,
+        pointerId: MOUSE_POINTER_ID,
+        source: 'mouse',
+        x: point.x,
+        y: point.y,
+        cssX: point.x * scale,
+        cssY: point.y * scale,
+        button: PRIMARY_BUTTON,
+        deltaY: 0,
+      });
+    }
+  };
+  return {
+    root,
+    host,
+    worldTaps,
+    frame: () => {
+      clock += FRAME_MS;
+      root.frame(ctx);
+    },
+    region: (suffix) =>
+      root.regions().find((region) => region.id.endsWith(`${HOST_SURFACE_ID}/${suffix}`)) ?? null,
+    tap,
+  };
+}
+
+/** Draws a frame, then taps the control named `suffix`. Returns false when it was not drawn. */
+function press(rig: HostRig, suffix: string): boolean {
+  rig.frame();
+  const region = rig.region(suffix);
+  if (region === null) return false;
+  rig.tap({ x: region.rect.x + region.rect.w / 2, y: region.rect.y + region.rect.h / 2 });
+  return true;
 }
 
 {
-  const overlay = new HowToPlayOverlay(null, MONGO_EXPLAINER_CONFIG);
-  let closed = 0;
-  const pages = [blankPage('one'), blankPage('two'), blankPage('three')];
-  overlay.open(pages, () => closed++);
-  check(overlay.isOpen && overlay.currentPage === 0, 'the overlay did not open on its first page');
-  overlay.renderFrame(ctx, 0);
-  check(overlay.handleClick(1, 1), 'a click on the backdrop fell through an open overlay');
-  overlay.advance();
-  overlay.advance();
-  check(overlay.currentPage === 2, `two Nexts landed on page ${overlay.currentPage + 1}, not 3`);
-  overlay.back();
-  check(overlay.currentPage === 1, 'Back did not step back a page');
-  overlay.advance();
-  overlay.advance();
-  check(!overlay.isOpen, 'Next on the last page did not close the overlay');
-  check(closed === 1, `onClose ran ${closed} times after the last page, expected 1`);
-  overlay.close();
-  check(closed === 1, 'closing an already-closed overlay ran onClose again');
-  check(!overlay.handleClick(1, 1), 'a closed overlay still consumed a click');
+  const rig = hostRig(() => true);
+  const { host } = rig;
+  check(!host.isOpen && host.open('mongo'), 'the host did not open the registered explainer');
+  check(host.isOpen && host.currentPage === 0, 'the explainer did not open on its first page');
+  rig.frame();
+  check(rig.root.isOpen(HOST_SURFACE_ID), 'the host surface is not open while the explainer is');
+  rig.tap({ x: 1, y: 1 });
+  check(rig.worldTaps.count === 0 && host.isOpen, 'a click on the backdrop fell through');
+  check(press(rig, 'next') && press(rig, 'next'), 'Next was not drawn');
+  check(host.currentPage === 2, `two Nexts landed on page ${host.currentPage + 1}, not 3`);
+  check(press(rig, 'back'), 'Back was not drawn past the first page');
+  check(host.currentPage === 1, 'Back did not step back a page');
+  rig.frame();
+  rig.root.key('ArrowRight', {});
+  check(host.currentPage === 2, 'the right arrow did not turn the page');
+  rig.root.key('ArrowLeft', {});
+  check(host.currentPage === 1, 'the left arrow did not turn the page back');
+  check(press(rig, 'next') && press(rig, 'next'), 'Next was not drawn on the later pages');
+  check(!host.isOpen, 'Next on the last page did not close the explainer');
+  rig.frame();
+  rig.tap({ x: 1, y: 1 });
+  check(rig.worldTaps.count === 1, 'a closed explainer still swallowed a click');
 
-  overlay.open(pages, () => closed++);
-  overlay.back();
-  check(!overlay.isOpen && closed === 2, 'Skip on the first page did not close the overlay');
+  host.open('mongo');
+  check(press(rig, 'skip') && !host.isOpen, 'Skip on the first page did not close the explainer');
 
-  overlay.open([]);
-  check(!overlay.isOpen, 'an overlay opened with no pages claims the screen with nothing on it');
+  host.open('mongo');
+  rig.frame();
+  check(
+    rig.root.key('Escape', {}) === 'consumed' && !host.isOpen,
+    'Escape did not close the explainer',
+  );
+  check(!host.open('processing'), 'the host opened an explainer nobody registered');
+}
+
+{
+  // While an award card is drawn over the explainer, Escape is not aimed at it.
+  const rig = hostRig(() => false);
+  rig.host.open('mongo');
+  rig.frame();
+  rig.root.key('Escape', {});
+  check(rig.host.isOpen, 'Escape closed the explainer while it did not want Escape');
 }
 
 // ---------------------------------------------------------------- 3b. stacking
 
-/**
- * Asserts `anchors` appear in `text` in the order given, each searched after the
- * one before it. Every anchor must be found: a renamed line is a failure rather
- * than a vacuous pass.
- */
-function checkOrder(text: string, anchors: readonly string[], where: string): void {
-  let cursor = 0;
-  for (const anchor of anchors) {
-    const found = text.indexOf(anchor, cursor);
-    check(found >= 0, `${where}: "${anchor}" not found after the previous anchor`);
-    if (found < 0) return;
-    cursor = found + anchor.length;
-  }
-}
-
 {
-  const REWARD_CLAIM = "modal(this.menus.rewardGrantedDialog.isShowing, 'reward-granted')";
-  const EXPLAINER_CLAIM = 'modal(this.menus.mongoExplainer.isOpen, MONGO_EXPLAINER_FOCUS_ID)';
-  const SKILL_BOOK_CLAIM = "modal(this.menus.skillBookPrompt.isOpen, 'skill-book-prompt')";
-  const REWARD_CLICK = 'this.menus.rewardGrantedDialog.handleClick(mx, my)';
-  const EXPLAINER_CLICK = 'this.menus.mongoExplainer.handleClick(mx, my)';
-  const SKILL_BOOK_CLICK = 'this.menus.skillBookPrompt.isOpen';
+  // Each scene mounts the kit's surfaces and keeps no click chain of its own,
+  // so the stack those surfaces form is the one order that decides what draws
+  // on top, what a press reaches and where Escape goes. In it a reward card and
+  // a level-up sit in a band above the explainer's.
   for (const scene of ['src/scenes/DungeonScene.ts', 'src/scenes/BuildingInteriorScene.ts']) {
     const text = readFileSync(scene, 'utf8');
-    checkOrder(text, [REWARD_CLAIM, EXPLAINER_CLAIM, SKILL_BOOK_CLAIM], `${scene} overlayClaims`);
-    const clickStart = text.indexOf('handleClick(mx: number, my: number');
-    check(clickStart >= 0, `${scene}: handleClick not found`);
-    checkOrder(
-      text.slice(Math.max(0, clickStart)),
-      [REWARD_CLICK, EXPLAINER_CLICK, SKILL_BOOK_CLICK],
-      `${scene} handleClick`,
+    check(text.includes('this.menus.surfaces('), `${scene} does not mount the kit's surfaces`);
+    check(
+      !text.includes('handleClick(mx: number, my: number'),
+      `${scene} still routes clicks through a handleClick chain of its own`,
     );
   }
-  // Drawn lowest-priority first, so the draw order is the claim order reversed.
-  const menus = readFileSync('src/systems/kits/MenusKit.ts', 'utf8');
-  const renderStart = menus.indexOf('renderOverlays(ctx: CanvasRenderingContext2D)');
-  check(renderStart >= 0, 'MenusKit.renderOverlays not found');
-  checkOrder(
-    menus.slice(Math.max(0, renderStart)),
-    [
-      'this.skillBookPrompt.render(ctx)',
-      'this.mongoExplainer.render(ctx)',
-      'this.rewardGrantedDialog.render(ctx)',
-      'this.levelUpDialog.render(ctx)',
-    ],
-    'MenusKit.renderOverlays',
-  );
-}
-
-// ---------------------------------------------------------------- 3c. occlusion
-
-{
-  // A button hidden under the panel must not answer a press with its click
-  // sound, while one drawn over the explainer — a reward or level-up OK — must.
-  const HIDDEN_X = VIEWPORT_W / 2;
-  const HIDDEN_Y = VIEWPORT_H / 2;
-  const PROBE_SIZE = 40;
-  const probe = { width: PROBE_SIZE, height: PROBE_SIZE, label: '' };
-  setButtonMouseState(0, 0);
-  drawButton(ctx, { ...probe, x: HIDDEN_X, y: HIDDEN_Y });
+  const siegeRig = buildSiegeRig({ seed: RIG_SEED, assaultLevel: RIG_ASSAULT_LEVEL });
+  const surfaces = siegeRig.menus.surfaces({
+    pauseFrame: () => {
+      throw new Error('the stacking check never draws the pause screen');
+    },
+    togglePause: () => undefined,
+  });
+  siegeRig.dispose();
+  const mountIndex = (id: string): number => surfaces.findIndex((surface) => surface.id === id);
+  const bandRank = (id: string): number =>
+    BANDS.findIndex((band) => band === surfaces[mountIndex(id)]?.band);
+  check(mountIndex('mongo-explainer') < 0, 'MenusKit still mounts a separate Mongo explainer');
+  for (const award of ['reward-granted', 'level-up']) {
+    for (const explainer of [HOST_SURFACE_ID, 'skill-book-prompt']) {
+      check(
+        bandRank(award) >= 0 && bandRank(explainer) >= 0 && bandRank(award) > bandRank(explainer),
+        `MenusKit.surfaces: "${award}" is not in a band above "${explainer}"`,
+      );
+    }
+  }
+  // Within the modal band, a surface mounted later stacks over one that opened
+  // on the same frame, so the explainer is mounted after the skill-book prompt.
   check(
-    renderedButtonSoundAt(HIDDEN_X + 1, HIDDEN_Y + 1) !== null,
-    'the probe button never registered, so the occlusion check proves nothing',
+    mountIndex('skill-book-prompt') >= 0 &&
+      mountIndex(HOST_SURFACE_ID) > mountIndex('skill-book-prompt'),
+    'MenusKit.surfaces: the explainer is not mounted after the skill-book prompt',
   );
-  const overlay = new HowToPlayOverlay(null, MONGO_EXPLAINER_CONFIG);
-  overlay.open(buildMongoExplainerPages('juvenile', false));
-  overlay.renderFrame(ctx, 0);
-  check(
-    renderedButtonSoundAt(HIDDEN_X + 1, HIDDEN_Y + 1) === null,
-    'a button hidden under the explainer still answers a press on the panel with its click sound',
-  );
-  drawButton(ctx, { ...probe, x: HIDDEN_X, y: HIDDEN_Y });
-  check(
-    renderedButtonSoundAt(HIDDEN_X + 1, HIDDEN_Y + 1) !== null,
-    'a button drawn over the explainer lost its click sound',
-  );
-  setButtonMouseState(0, 0);
 }
 
 // ---------------------------------------------------------------- 4. the copy
 
 {
-  const desktop = buildMongoExplainerPages('juvenile', false);
-  const phone = buildMongoExplainerPages('juvenile', true);
+  const desktop = mongoExplainerPages('juvenile', false);
+  const phone = mongoExplainerPages('juvenile', true);
   check(
     desktop.length === PAGE_COUNT,
     `desktop has ${desktop.length} pages, expected ${PAGE_COUNT}`,
@@ -301,7 +355,7 @@ function checkOrder(text: string, anchors: readonly string[], where: string): vo
 
   const defaults = keybindings.keysFor('buildSummon');
   keybindings.rebind('buildSummon', 0, REBOUND_SUMMON_KEY);
-  const rebound = buildMongoExplainerPages('juvenile', false)
+  const rebound = mongoExplainerPages('juvenile', false)
     .flatMap((page) => page.lines)
     .join(' ');
   const reboundLabel = `[${keybindings.labelForKey(REBOUND_SUMMON_KEY)}]`;

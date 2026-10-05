@@ -14,7 +14,6 @@
  * anything to anybody — `update()` polls for those every gameplay frame.
  */
 
-import type { AudioManager } from '../../audio/AudioManager';
 import type { EventBus } from '../../core/EventBus';
 import type {
   BriarHollowState,
@@ -40,11 +39,9 @@ import type { CatPlayer } from '../../creatures/CatPlayer';
 import type { NPCMarkerType } from '../../creatures/QuestNPC';
 import type { BriarHollowSite } from '../../map/overworld/briarHollowSite';
 import type { TilePoint } from '../../map/town/townPlan';
-import { ConfirmModal } from '../../ui/ConfirmModal';
 import { bagItemRewardLine, partyXpSections } from '../../ui/questReward/rewardLines';
 import type { QuestRewardSpec, RewardItemLine } from '../../ui/questReward/types';
 import { drawCraftSkillIcon } from '../../ui/icons/craftSkillIcons';
-import type { OverlayInputClaim } from '../kits/OverlayClaims';
 import type { QuestMarkerType } from '../MiniMapSystem';
 import {
   characterTarget,
@@ -161,7 +158,6 @@ export function hasWoodenWall(tally: FortificationTally): boolean {
 
 export interface VillageQuestSystemDeps {
   readonly bus: EventBus;
-  readonly audio: AudioManager | null;
   readonly state: BriarHollowState;
   readonly site: BriarHollowSite;
   readonly human: HumanPlayer;
@@ -236,14 +232,12 @@ function constructionUnlockedReward(): GrantedReward {
     name: 'Construction',
     description:
       'You have unlocked the Construction skill. You may now earn construction experience.',
-    renderIcon: (ctx, x, y, size) => drawCraftSkillIcon(ctx, 'construction', x, y, size),
+    renderIcon: (ctx, rect) => drawCraftSkillIcon(ctx, rect, 'construction'),
   };
 }
 
 export class VillageQuestSystem implements QuestLineProvider, TopicProvider {
   private readonly questManager = new QuestManager();
-  /** Never opened: "I'm ready" starts the siege directly. Kept for API parity. */
-  private readonly confirm: ConfirmModal;
   private readonly unsubscribers: Array<() => void> = [];
   /** Set while waiting for the Construction explainer, opened after Tikka hands over her plans, to close. */
   private awaitingPlansExplainerClose = false;
@@ -257,7 +251,6 @@ export class VillageQuestSystem implements QuestLineProvider, TopicProvider {
   private mayorSummonsRequested = false;
 
   constructor(private readonly deps: VillageQuestSystemDeps) {
-    this.confirm = new ConfirmModal(deps.audio);
     const def: QuestDef = {
       id: BRIAR_HOLLOW_QUEST_ID,
       name: BRIAR_HOLLOW_QUEST_NAME,
@@ -1191,37 +1184,7 @@ export class VillageQuestSystem implements QuestLineProvider, TopicProvider {
     return [{ x: target.x, y: target.y, type }];
   }
 
-  // ── The confirm modal ─────────────────────────────────────────────────────
-  // Kept for API parity with `BriarHollowKit`; "I'm ready"
-  // starts the siege directly, so the modal is never opened.
-
-  get isConfirmOpen(): boolean {
-    return this.confirm.isOpen;
-  }
-
-  overlayClaim(): OverlayInputClaim {
-    return this.confirm.overlayClaim();
-  }
-
-  renderDialog(ctx: CanvasRenderingContext2D): void {
-    this.confirm.render(ctx);
-  }
-
-  handleClick(mx: number, my: number): boolean {
-    return this.confirm.handleClick(mx, my);
-  }
-
-  handleKeyDown(key: string): boolean {
-    return this.confirm.handleKey(key);
-  }
-
-  /** Answers "Not yet" for the player: death, or a rewind, takes the question down. */
-  closeConfirm(): void {
-    this.confirm.close();
-  }
-
   dispose(): void {
-    this.confirm.close();
     for (const unsubscribe of this.unsubscribers) unsubscribe();
     this.unsubscribers.length = 0;
     this.deps.villagers.removeQuestLineProvider(this);

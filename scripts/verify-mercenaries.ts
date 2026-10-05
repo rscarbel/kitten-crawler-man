@@ -89,7 +89,12 @@ import {
   fromPersistedMarketStockCheckpoint,
   parsePersistedMarketStockCheckpoint,
 } from '../src/core/PersistedWorldState';
-import { setViewportSize } from '../src/core/Viewport';
+import { UiRoot } from '../src/ui/core/UiRoot';
+import { MOUSE_POINTER_ID, PRIMARY_BUTTON } from '../src/ui/core/pointer';
+import { NO_INSETS } from '../src/ui/core/viewport';
+import { shopScreenSurface } from '../src/ui/screens/shop/ShopScreen';
+import { mercenaryDeskSurface } from '../src/ui/screens/shop/MercenaryDeskScreen';
+import { MercenaryGuildSystem } from '../src/systems/MercenaryGuildSystem';
 import { verifyBrawlerKit } from './verifyMercenaries/brawler';
 import { verifyWaterMageKit } from './verifyMercenaries/waterMageKit';
 import { verifyLancerKit } from './verifyMercenaries/lancer';
@@ -619,11 +624,17 @@ function checkShell(): void {
 const DECIDED_STAT_BOOST_PRICE = 1000;
 const DECIDED_STAT_BOOST_STOCK = 1;
 
-/** Big enough that `fitPanel` never shrinks the club panel, so screen and design coordinates match. */
+/** A desktop window: every row of the club market is on screen without scrolling. */
 const STOCK_TEST_VIEWPORT_W = 1200;
 const STOCK_TEST_VIEWPORT_H = 900;
-/** Fine enough to land inside a 76×40 Buy button without needing its private layout constants. */
-const BUTTON_SCAN_STEP_PX = 3;
+const SHOP_SURFACE_ID = 'club-market-shop';
+const FRAME_MS = 16;
+/** Long enough for the panel's open tween and the quantity card to settle. */
+const SETTLE_MS = 1000;
+/** Added on top of whatever the crawler starts with, so the sold item is surely a stack. */
+const STACK_ADDED = 3;
+const STACK_SOLD = 2;
+const SOLD_STACK_ITEM = 'health_potion';
 
 /** The real Stat Boost row, exactly as `DesperadoClubSystem` sells it — never a hand-built copy. */
 function realStatBoostRow(): ShopItem {
@@ -647,25 +658,76 @@ function marketConfigWithStatBoostStock(stockLimit: number): ShopConfig {
   };
 }
 
-/** Renders the shop panel once and hunts the whole canvas for the point that fires a purchase. */
-function findBuyButton(
-  shop: ShopSystem,
-  buyer: HumanPlayer,
-  companion: CatPlayer,
-): { x: number; y: number } | null {
-  const ctx = gameContext(STOCK_TEST_VIEWPORT_W, STOCK_TEST_VIEWPORT_H);
-  setViewportSize(STOCK_TEST_VIEWPORT_W, STOCK_TEST_VIEWPORT_H);
-  shop.shopOpen = true;
-  shop.renderShopPanel(ctx, buyer, companion);
-  const coinsBefore = buyer.coins;
-  for (let y = 0; y < STOCK_TEST_VIEWPORT_H; y += BUTTON_SCAN_STEP_PX) {
-    for (let x = 0; x < STOCK_TEST_VIEWPORT_W; x += BUTTON_SCAN_STEP_PX) {
-      shop.handleClick(x, y);
-      if (buyer.coins < coinsBefore) return { x, y };
-    }
-  }
-  return null;
+/** The shop screen over a real `UiRoot`, driven by taps on the regions it registers. */
+interface ShopRig {
+  /** Taps the region `widgetId` of the shop's panel; false when no such region was drawn. */
+  tap(widgetId: string): boolean;
 }
+
+/** A desktop `UiRoot` on a fixed clock, and a frame that lets every tween settle. */
+function desktopRoot(): { root: UiRoot; settle: () => void } {
+  let clock = 0;
+  const root = new UiRoot({
+    audio: null,
+    viewport: () => ({
+      cssWidth: STOCK_TEST_VIEWPORT_W,
+      cssHeight: STOCK_TEST_VIEWPORT_H,
+      density: 'pointer',
+      uiSize: 'medium',
+      safeArea: NO_INSETS,
+    }),
+    now: () => clock,
+    warn: () => undefined,
+  });
+  const ctx = gameContext(STOCK_TEST_VIEWPORT_W, STOCK_TEST_VIEWPORT_H);
+  const settle = (): void => {
+    clock += SETTLE_MS;
+    root.frame(ctx);
+    clock += FRAME_MS;
+    root.frame(ctx);
+  };
+  return { root, settle };
+}
+
+function shopRig(shop: ShopSystem, buyer: HumanPlayer, companion: CatPlayer): ShopRig {
+  const { root, settle } = desktopRoot();
+  root.mount(
+    shopScreenSurface({
+      id: SHOP_SURFACE_ID,
+      session: shop.session,
+      party: () => ({ active: buyer, companion }),
+    }),
+  );
+  settle();
+  return {
+    tap: (widgetId) => {
+      const id = `${SHOP_SURFACE_ID}/${SHOP_SURFACE_ID}/${widgetId}`;
+      const region = root.regions().find((candidate) => candidate.id === id);
+      if (region === undefined) return false;
+      const scale = root.uiScale;
+      const x = region.rect.x + region.rect.w / 2;
+      const y = region.rect.y + region.rect.h / 2;
+      for (const kind of ['down', 'up'] as const) {
+        root.pointer({
+          kind,
+          pointerId: MOUSE_POINTER_ID,
+          source: 'mouse',
+          x,
+          y,
+          cssX: x * scale,
+          cssY: y * scale,
+          button: PRIMARY_BUTTON,
+          deltaY: 0,
+        });
+      }
+      shop.update();
+      settle();
+      return true;
+    },
+  };
+}
+
+const STAT_BOOST_BUY = 'buy-stat_boost_potion';
 
 /**
  * Builds a club market shop with `buildShop`, buys the Stat Boost row (the
@@ -680,16 +742,84 @@ function secondStatBoostPurchaseIsRefused(buildShop: (stock: MarketStock) => Sho
   buyer.coins = STAT_BOOST_PRICE * 2;
   const companion = new CatPlayer(1, 0, TILE_SIZE);
 
-  const point = findBuyButton(shop, buyer, companion);
-  if (point === null) return false;
+  shop.open();
+  const rig = shopRig(shop, buyer, companion);
+  if (!rig.tap(STAT_BOOST_BUY)) return false;
   const afterFirst = buyer.inventory.countOf('stat_boost_potion');
   const coinsAfterFirst = buyer.coins;
 
-  shop.handleClick(point.x, point.y);
+  rig.tap(STAT_BOOST_BUY);
   const afterSecond = buyer.inventory.countOf('stat_boost_potion');
   const coinsAfterSecond = buyer.coins;
 
   return afterFirst === 1 && afterSecond === 1 && coinsAfterSecond === coinsAfterFirst;
+}
+
+function checkClubShopSellsAStack(): void {
+  section('Club market: selling part of a stack through the quantity card');
+  const shop = createClubMarketShop(createMarketStock());
+  const seller = new HumanPlayer(0, 0, TILE_SIZE);
+  const companion = new CatPlayer(1, 0, TILE_SIZE);
+  seller.inventory.addItem(SOLD_STACK_ITEM, STACK_ADDED);
+  const held = seller.inventory.countOf(SOLD_STACK_ITEM);
+  shop.open();
+  const rig = shopRig(shop, seller, companion);
+  check(rig.tap('tabs/sell'), 'the Sell tab is on the club market');
+  const quote = shop.session.sellQuote(SOLD_STACK_ITEM, STACK_SOLD);
+  const coinsBefore = seller.coins;
+  check(rig.tap(`sell-${SOLD_STACK_ITEM}`), 'the stack has a Sell button');
+  check(
+    held > 1 && seller.inventory.countOf(SOLD_STACK_ITEM) === held,
+    'Sell on a stack asks how many before anything is sold',
+  );
+  check(rig.tap('qty/stepper/plus1'), 'the quantity card opens at one, with a stepper to raise it');
+  check(rig.tap('qty/confirm'), 'and a Sell button to confirm');
+  check(
+    seller.inventory.countOf(SOLD_STACK_ITEM) === held - STACK_SOLD,
+    `confirming the card at ${STACK_SOLD} sells ${STACK_SOLD} and keeps the rest`,
+  );
+  check(
+    seller.coins - coinsBefore === quote && quote > 0,
+    `and pays the quoted ${quote} coins, unit by unit at the falling price`,
+  );
+  check(shop.purchasePending, 'and flags the sale for its chime');
+}
+
+function checkDismissAsksFirst(): void {
+  section("Rosemarie's desk: dismissing a contract asks first, and No is the default");
+  const roster = createMercenaryRoster();
+  roster.floorLevelId = FLOOR;
+  const hire = MERCENARY_TEMPLATES[0];
+  roster.active = { id: hire.id, name: hire.name, contractLevelId: FLOOR, introduced: true };
+  const desk = new MercenaryGuildSystem(roster, null);
+  const human = new HumanPlayer(0, 0, TILE_SIZE);
+  const cat = new CatPlayer(1, 0, TILE_SIZE);
+  const { root, settle } = desktopRoot();
+  root.mount(
+    mercenaryDeskSurface({
+      id: 'club-guild',
+      desk,
+      party: () => ({ active: human, companion: cat }),
+    }),
+  );
+  root.mount(desk.dismissConfirm.surface('club-guild-dismiss'));
+  desk.openPanel();
+  settle();
+  desk.askDismiss();
+  settle();
+  check(desk.dismissConfirm.isOpen, 'Dismiss Contract opens the confirm dialog');
+  root.key('Enter', {});
+  settle();
+  check(
+    !desk.dismissConfirm.isOpen && roster.active?.id === hire.id,
+    'a bare Enter answers No and the contract stands',
+  );
+  desk.askDismiss();
+  settle();
+  root.key('y', {});
+  settle();
+  check(roster.active === null, 'Y tears the contract up');
+  check(desk.open, 'and the desk stays open behind the answer');
 }
 
 function checkClubStock(): void {
@@ -742,9 +872,13 @@ function checkClubStock(): void {
   const companion = new CatPlayer(1, 0, TILE_SIZE);
 
   const beforeSaleSnapshot = captureMarketStock(stock);
-  const point = findBuyButton(shop, buyer, companion);
-  check(point !== null, 'the Buy button for Stat Boost is found on the panel');
-  if (point !== null) shop.handleClick(point.x, point.y);
+  shop.open();
+  const rig = shopRig(shop, buyer, companion);
+  check(rig.tap(STAT_BOOST_BUY), 'the Buy button for Stat Boost is found on the shop screen');
+  check(
+    buyer.inventory.countOf('stat_boost_potion') === 1 && shop.purchasePending,
+    'a tap on Buy hands over the potion and flags the sale for its chime',
+  );
   const afterSaleSnapshot = captureMarketStock(stock);
 
   restoreMarketStock(stock, beforeSaleSnapshot);
@@ -786,6 +920,8 @@ checkTemplateTable();
 checkSave();
 checkShell();
 checkClubStock();
+checkClubShopSellsAStack();
+checkDismissAsksFirst();
 verifyBrawlerKit({ section, check, checkCatches });
 failures += verifyWaterMageKit();
 verifyLancerKit({ section, check, checkCatches });

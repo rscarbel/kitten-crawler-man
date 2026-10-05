@@ -175,6 +175,15 @@ export class EquipmentManager {
     return `${slot}:${empty ?? candidates[0]}`;
   }
 
+  /**
+   * The `"Slot:SubSlot"` key {@link equip} would put `item` in: `targetKey`
+   * when it fits there, else the first empty sub-slot it fits, else the first
+   * it fits, whose wearer it would displace.
+   */
+  keyFor(item: WearableItem, targetKey?: string): string {
+    return this.resolveSubSlotKey(item, item.equipSlot, item.equipSubSlot, targetKey);
+  }
+
   /** Equip by looking up an item ID via the item finder. */
   equipById(itemId: ItemId): InventoryItem | null {
     const item = this.findItem(itemId);

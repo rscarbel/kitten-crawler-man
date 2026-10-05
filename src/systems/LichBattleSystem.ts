@@ -33,8 +33,8 @@ import { drawDangerCircle, drawDangerTile } from '../sprites/dangerTelegraph';
 import { drawSoulBurst, prewarmSoulBurst } from '../sprites/skeletonEffectsSprite';
 import { drawFireWave, WAVE_MIN_LOOP_FRAMES } from '../sprites/fireWaveSprite';
 import { drawLichOrb } from '../sprites/lichOrbSprite';
-import { drawProgressBar, PROGRESS_PRESETS } from '../ui/Box';
-import { viewportWidth } from '../core/Viewport';
+import type { TopBandEntry } from '../ui/hud/topBand';
+import { stackedBandEntry, TOP_BAND_WIDTH } from '../ui/hud/topBandStack';
 import {
   LICH_FIREWALL_BARK,
   LICH_RECKONING_BARK,
@@ -223,9 +223,7 @@ const FLOAT_STATION_REACHED_PX = LICH_FLOAT_SPEED * 2;
 
 // ── HUD ──────────────────────────────────────────────────────────────────────
 
-const DODGE_BAR_WIDTH = 240;
-const DODGE_BAR_HEIGHT = 10;
-const DODGE_BAR_Y = 62;
+const DODGE_BAR_LABEL = 'Survive the rain';
 const CENTER_OFFSET = 0.5;
 const FRAMES_PER_SECOND = 60;
 
@@ -1373,17 +1371,26 @@ export class LichBattleSystem implements GroundHazardSource {
     }
   }
 
-  /** The dodge clock, drawn under the boss bar for the phase that has one. */
-  renderUI(ctx: CanvasRenderingContext2D): void {
-    if (this.machine.phase !== 'tantrum') return;
-    if (this.machine.tantrumMode !== 'float') return;
-    drawProgressBar(ctx, {
-      x: viewportWidth() / 2 - DODGE_BAR_WIDTH / 2,
-      y: DODGE_BAR_Y,
-      width: DODGE_BAR_WIDTH,
-      height: DODGE_BAR_HEIGHT,
-      value: this.machine.dodgeProgress,
-      ...PROGRESS_PRESETS.stamina,
+  /** The dodge clock, stacked under the boss bar for the phase that has one. */
+  topBandEntry(): TopBandEntry | null {
+    if (this.machine.phase !== 'tantrum') return null;
+    if (this.machine.tantrumMode !== 'float') return null;
+    const seconds = secondsLeftOnDodgeClock(this.machine.dodgeProgress);
+    return stackedBandEntry({
+      id: 'lich-dodge',
+      priority: 'encounter',
+      maxWidth: TOP_BAND_WIDTH.regular,
+      rows: [
+        {
+          kind: 'meter',
+          id: 'lich-dodge/clock',
+          value: this.machine.dodgeProgress,
+          max: 1,
+          meterKind: 'stamina',
+          label: DODGE_BAR_LABEL,
+          valueText: `${seconds}s`,
+        },
+      ],
     });
   }
 

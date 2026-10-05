@@ -1,5 +1,7 @@
 import type { AbilityDef } from '../core/AbilityManager';
 import { drawMongoIcon, type MongoStage } from '../sprites/mongoSprite';
+import type { Rect } from '../ui/core/geom';
+import { iconSquare } from '../ui/icons/iconSquare';
 
 /**
  * Mongo the Mongoliensis — the cat's pet raptor, modelled as an ability so he
@@ -277,13 +279,8 @@ export function getMongoStats(level: number): MongoStats {
  * Drawn from the sheet his *current* level uses, so the button shows the animal
  * that will actually turn up rather than a stock portrait of the adult.
  */
-function renderMongoIcon(
-  ctx: CanvasRenderingContext2D,
-  x: number,
-  y: number,
-  size: number,
-  level: number,
-): void {
+function renderMongoIcon(ctx: CanvasRenderingContext2D, rect: Rect, level: number): void {
+  const { x, y, size } = iconSquare(rect);
   drawMongoIcon(ctx, getMongoStats(level).stage, x + size / 2, y + size / 2, size);
 }
 

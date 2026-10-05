@@ -2,8 +2,8 @@
 /**
  * Review render for the siege's dressing: the square with the bell at rest,
  * ringing, and cracked under the call-to-arms poster, at the scale the game
- * is played at; and the siege's HUD panel in each of its states, at a desktop
- * and a phone width. Written to `preview/village-siege-*.png`.
+ * is played at; and the siege's top-band card, under the resource strip's, in
+ * each of its states at a desktop and a phone width. Written to `preview/village-siege-*.png`.
  *
  *   npm run render:village-siege
  */
@@ -33,20 +33,16 @@ const { TILE_SIZE } = await import('../src/core/constants');
 const { loadSprites } = await import('../src/core/SpriteLoader');
 const { renderCanvas } = await import('../src/map/TileRenderer');
 const { FLOOR_ART_SEEDS } = await import('../src/map/ground/artSeedAlphabet.js');
-const { drawText } = await import('../src/ui/TextBox');
+const { worldText } = await import('../src/ui/world/worldText');
 const { VillageAmbience } = await import('../src/systems/briarHollow/VillageAmbience');
 const { setViewportSize } = await import('../src/core/Viewport');
 const { buildSiegeRig } = await import('./villageSiegeHarness');
 const { IMMINENT_FRAMES } = await import('../src/systems/briarHollow/VillageAssaultSystem');
 const { Necromancer } = await import('../src/creatures/Necromancer');
-const { siegeHudSlot } = await import('../src/systems/briarHollow/siegeHudLayout');
-const { expandedHudPanelRect } = await import('../src/ui/HUD');
-const { hotbarStripRect } = await import('../src/ui/InventoryPanel');
-const { setHudPanelRect, topCentreStripSlot } = await import('../src/systems/DungeonUIRenderer');
-const { RESOURCE_HUD_HEIGHT, RESOURCE_HUD_WIDTH } =
-  await import('../src/systems/briarHollow/ResourceHud');
-const { MiniMapSystem } = await import('../src/systems/MiniMapSystem');
-const { BOX_PRESETS, drawBox } = await import('../src/ui/Box');
+const { UiRoot } = await import('../src/ui/core/UiRoot');
+const { NO_INSETS } = await import('../src/ui/core/viewport');
+const { renderTopBand } = await import('../src/ui/hud/topBand');
+const { ResourceHud } = await import('../src/systems/briarHollow/ResourceHud');
 
 const SEED = 7919;
 const OUT_DIR = 'preview';
@@ -69,6 +65,8 @@ const NECRO_HP_SHARE_SHOWN = 0.6;
 const NECRO_LEVEL_SHOWN = 6;
 /** Long enough away for the warning to be counting down. */
 const ABANDON_SAMPLE_FRAMES = 180;
+/** Far enough outside the palisade to count as leaving the village. */
+const ABANDON_TILES_PAST_PALISADE = 60;
 
 await loadSprites('src/images/');
 const { paintEnvironmentArtInNode } = await import('./nodeCanvasGlobals.js');
@@ -127,7 +125,7 @@ states.forEach((state, index) => {
   draws.sort((a, b) => a.sortY - b.sortY);
   for (const item of draws) item.draw();
   ambience.renderAbove(squareCtx, camX, camY, viewW, viewH);
-  drawText(squareCtx, state, {
+  worldText(squareCtx, state, {
     x: 4,
     y: 4,
     size: LABEL_SIZE_PX,
@@ -170,16 +168,30 @@ const shots: HudShot[] = [
   {
     label: 'abandoning',
     prepare: () => {
-      rig.human.x = (site.palisadeBounds.x + site.palisadeBounds.w + 60) * TILE_SIZE;
+      rig.human.x =
+        (site.palisadeBounds.x + site.palisadeBounds.w + ABANDON_TILES_PAST_PALISADE) * TILE_SIZE;
       for (let i = 0; i < ABANDON_SAMPLE_FRAMES; i++) rig.step();
     },
   },
 ];
 
-const miniMap = new MiniMapSystem(map);
-/** The minimap's inset from the top-right corner, as the game draws it. */
-const MINIMAP_MARGIN = 8;
-const sizes = [DESKTOP, PHONE];
+/** Frames the resource strip takes to fade fully in. */
+const RESOURCE_FADE_IN_FRAMES = 30;
+/** The band's widest, as the HUD gives it between the unit frames and the minimap. */
+const BAND_MAX_WIDTH = 520;
+const BAND_TOP = 8;
+const resourceHud = new ResourceHud();
+const resourceFrame = {
+  human: rig.human,
+  cat: rig.cat,
+  inResourceZone: true,
+  thrallSecondsLeft: null,
+};
+for (let i = 0; i < RESOURCE_FADE_IN_FRAMES; i++) resourceHud.update(resourceFrame);
+const sizes = [
+  { ...DESKTOP, density: 'pointer' },
+  { ...PHONE, density: 'touch' },
+] as const;
 const sheets = sizes.map((size) => createCanvas(size.w, size.h * HUD_STATES));
 shots.forEach((shot, index) => {
   shot.prepare();
@@ -190,40 +202,40 @@ shots.forEach((shot, index) => {
     sheetCtx.translate(0, index * size.h);
     sheetCtx.fillStyle = HUD_BACKDROP;
     sheetCtx.fillRect(0, 0, size.w, size.h);
-    // The chrome the panel must keep clear of, outlined, and the panel at the
-    // slot the game itself would give it on this window.
-    const hudRect = expandedHudPanelRect();
-    setHudPanelRect(hudRect);
-    const strip = topCentreStripSlot(miniMap, hudRect, RESOURCE_HUD_WIDTH, RESOURCE_HUD_HEIGHT);
-    const mapSize = miniMap.NORMAL_SIZE;
-    const slot = siegeHudSlot(miniMap, hudRect);
-    const outlines = [
-      hudRect,
-      hotbarStripRect(),
-      { x: size.w - MINIMAP_MARGIN - mapSize, y: MINIMAP_MARGIN, w: mapSize, h: mapSize },
-      // The strip is not drawn where the panel takes its place.
-      ...(slot.hidesResourceStrip
-        ? []
-        : [
-            {
-              x: strip.x,
-              y: strip.y,
-              w: RESOURCE_HUD_WIDTH * strip.scale,
-              h: RESOURCE_HUD_HEIGHT * strip.scale,
-            },
-          ]),
-    ];
-    for (const rect of outlines) {
-      drawBox(sheetCtx, {
-        x: rect.x,
-        y: rect.y,
-        width: rect.w,
-        height: rect.h,
-        ...BOX_PRESETS.panel,
-      });
-    }
-    assault.renderHud(sheetCtx, slot);
-    drawText(sheetCtx, shot.label, {
+    const root = new UiRoot({
+      audio: null,
+      viewport: () => ({
+        cssWidth: size.w,
+        cssHeight: size.h,
+        density: size.density,
+        uiSize: 'medium',
+        safeArea: NO_INSETS,
+      }),
+      now: () => 0,
+      warn: () => undefined,
+    });
+    const siege = assault.topBandEntry();
+    const resources = resourceHud.topBandEntry(resourceFrame);
+    const entries = [siege, resources].filter((entry) => entry !== null);
+    root.mount({
+      id: 'siege-band',
+      band: 'hud',
+      haltsWorld: false,
+      isOpen: () => true,
+      render: (ui) => {
+        const w = Math.min(BAND_MAX_WIDTH, ui.viewport.w);
+        const area = {
+          x: ui.viewport.x + (ui.viewport.w - w) / 2,
+          y: ui.viewport.y + BAND_TOP,
+          w,
+          h: ui.viewport.h,
+        };
+        renderTopBand(ui, area, entries, []);
+      },
+    });
+    root.frame(sheetCtx);
+    assault.renderCentreBanners(sheetCtx);
+    worldText(sheetCtx, shot.label, {
       x: 4,
       y: HUD_LABEL_Y,
       size: LABEL_SIZE_PX,

@@ -13,8 +13,8 @@
  * prop and its owner from the colours alone at a 32-pixel tile.
  */
 
-import { drawBox } from '../ui/Box';
-import { drawText } from '../ui/TextBox';
+import { worldPlate } from '../ui/world/worldShapes';
+import { worldText } from '../ui/world/worldText';
 import {
   MIN_VISIBLE_ALPHA,
   flameStamps,
@@ -1053,6 +1053,7 @@ const CHIP_HEIGHT = 0.42;
 const CHIP_LIFT = 0.42;
 const CHIP_RADIUS = 3;
 const CHIP_BORDER_WIDTH = 1.5;
+const CHIP_FILL_ALPHA = 0.9;
 /**
  * Cap height as a fraction of the tile rather than a pixel count, so the chip
  * holds its proportions at any tile size — a fixed 9px label is right at 32px
@@ -1075,24 +1076,28 @@ export function drawTargetNameChip(
   const textSize = Math.max(CHIP_TEXT_MIN_SIZE, size * CHIP_TEXT_FRACTION);
   const width = size * CHIP_WIDTH;
   const height = size * CHIP_HEIGHT;
-  const box = drawBox(ctx, {
-    x: x + size / 2,
+  const box = {
+    x: x + size / 2 - width / 2,
     y: y - size * CHIP_LIFT,
-    width,
-    height,
-    alignX: 'center',
-    fill: donutOwned ? inkRgba(STRIPE_RED_INK, 0.9) : inkRgba(CIRCUS_BLUE_INK, 0.9),
-    border: donutOwned ? GOLD : BRASS_LIGHT,
+    w: width,
+    h: height,
+  };
+  const ink = donutOwned ? GOLD : BRASS_LIGHT;
+  worldPlate(ctx, box, {
+    fill: donutOwned
+      ? inkRgba(STRIPE_RED_INK, CHIP_FILL_ALPHA)
+      : inkRgba(CIRCUS_BLUE_INK, CHIP_FILL_ALPHA),
+    border: ink,
     borderWidth: CHIP_BORDER_WIDTH,
     radius: CHIP_RADIUS,
   });
-  drawText(ctx, donutOwned ? 'DONUT' : 'CARL', {
-    x: box.x + box.width / 2,
-    y: box.y + (box.height - textSize) / 2 - CHIP_TEXT_NUDGE,
+  worldText(ctx, donutOwned ? 'DONUT' : 'CARL', {
+    x: box.x + box.w / 2,
+    y: box.y + (box.h - textSize) / 2 - CHIP_TEXT_NUDGE,
     size: textSize,
     bold: true,
     align: 'center',
-    color: donutOwned ? GOLD : BRASS_LIGHT,
+    color: ink,
     outline: true,
   });
 }

@@ -56,7 +56,7 @@ const { TILE_SIZE } = await import('../src/core/constants');
 const { loadSprites } = await import('../src/core/SpriteLoader');
 const { renderCanvas } = await import('../src/map/TileRenderer');
 const { FLOOR_ART_SEEDS } = await import('../src/map/ground/artSeedAlphabet.js');
-const { drawText, TEXT_PRESETS } = await import('../src/ui/TextBox');
+const { worldText } = await import('../src/ui/world/worldText');
 const { findNearbyWalkableTile } = await import('../src/map/findWalkableTile');
 const { HumanPlayer } = await import('../src/creatures/HumanPlayer');
 const { CatPlayer } = await import('../src/creatures/CatPlayer');
@@ -249,8 +249,8 @@ function renderSite(site: CircusSite, stage: CircusQuestStage): Canvas {
   for (const item of draws) item.draw();
   ambience.renderAbove(ctx, camX, camY);
 
-  drawText(ctx, `seed ${site.seed} — road from the ${approachHeading(site)} — ${stageName}`, {
-    ...TEXT_PRESETS.label,
+  worldText(ctx, `seed ${site.seed} — road from the ${approachHeading(site)} — ${stageName}`, {
+    style: 'label',
     x: TITLE_X,
     y: TITLE_Y,
     outline: true,

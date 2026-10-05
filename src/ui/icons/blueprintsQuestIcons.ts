@@ -1,3 +1,6 @@
+import type { Rect } from '../core/geom';
+import { iconSquare } from './iconSquare';
+
 /**
  * Icons for the two items "The Borrowed Blueprints" puts in the quest slot:
  * Merrit's scythe and Tikka's blueprints.
@@ -8,25 +11,14 @@
  * smears at 24px.
  */
 
-import type { ItemId } from '../../core/ItemDefs';
-
 /** The two ids this module can draw. Closed, so neither item can ship iconless. */
 export type BlueprintsQuestIconId = 'quest_scythe' | 'quest_blueprints';
 
-/** Every id this module can draw, the single source of truth for the id set below and for the icon bake gate. */
+/** Every id this module can draw, in the order the icon bake gate lays them out. */
 export const BLUEPRINTS_QUEST_ICON_ID_LIST: readonly BlueprintsQuestIconId[] = [
   'quest_scythe',
   'quest_blueprints',
 ];
-
-const BLUEPRINTS_QUEST_ICON_IDS: ReadonlySet<string> = new Set<BlueprintsQuestIconId>(
-  BLUEPRINTS_QUEST_ICON_ID_LIST,
-);
-
-/** Whether `id` is one of this quest's items, and so drawable by {@link drawBlueprintsQuestIcon}. */
-export function isBlueprintsQuestIconId(id: ItemId): id is BlueprintsQuestIconId {
-  return BLUEPRINTS_QUEST_ICON_IDS.has(id);
-}
 
 const OUTLINE = '#2a1a10';
 const OUTLINE_WIDTH = 1;
@@ -192,14 +184,13 @@ function drawBlueprints(ctx: CanvasRenderingContext2D, x: number, y: number, siz
   ctx.stroke();
 }
 
-/** Draws `id` into the `size`-pixel square at (`x`, `y`). */
+/** Draws `id` into the largest square centred in `rect`. */
 export function drawBlueprintsQuestIcon(
   ctx: CanvasRenderingContext2D,
+  rect: Rect,
   id: BlueprintsQuestIconId,
-  x: number,
-  y: number,
-  size: number,
 ): void {
+  const { x, y, size } = iconSquare(rect);
   ctx.save();
   if (id === 'quest_scythe') drawScythe(ctx, x, y, size);
   else drawBlueprints(ctx, x, y, size);

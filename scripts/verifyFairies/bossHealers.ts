@@ -104,8 +104,6 @@ const ASSAULT_FRAMES_PER_WAVE = 3;
 const OVERKILL_DAMAGE = 1e6;
 /** Offset a healer is dropped at when a spawn path is broken to skip the bond. */
 const UNBOUND_HEALER_OFFSET_TILES = 3;
-/** The minimap here is never drawn, so it has no size to lay anything out against. */
-const UNDRAWN_MINIMAP_SIZE = 0;
 /** The level a mob stands at before anything levels it. */
 const UNLEVELLED = 1;
 /** Frames a won-or-not verdict is given to settle once a boss or its healer falls. */
@@ -156,9 +154,6 @@ function underDifficulty<T>(difficulty: Difficulty, seed: number, build: () => T
  */
 const undrawnMiniMap: BossRoomMiniMap = {
   revealBossNeighborhood: () => undefined,
-  isExpanded: false,
-  EXPANDED_SIZE: UNDRAWN_MINIMAP_SIZE,
-  NORMAL_SIZE: UNDRAWN_MINIMAP_SIZE,
 };
 
 function buildDungeon(def: LevelDef, seed: number): GameMap {

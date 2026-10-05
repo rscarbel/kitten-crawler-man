@@ -53,7 +53,11 @@ import {
   type DoomsdayProgress,
 } from '../src/core/DoomsdayProgress';
 import { GameStats, parseGameStatsSnapshot } from '../src/core/GameStats';
-import { RunCompleteScreen, buildRunSummary, finishRun } from '../src/ui/RunCompleteScreen';
+import {
+  RunCompleteScreen,
+  buildRunSummary,
+  finishRun,
+} from '../src/ui/screens/dialogs/RunCompleteScreen';
 import { asGameContext } from './nodeGameContext';
 import { MercenarySystem } from '../src/systems/MercenarySystem';
 import {

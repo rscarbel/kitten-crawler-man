@@ -1,11 +1,15 @@
 // Renders transient System AI messages using the shared DialogBox component.
-import { drawText } from '../ui/TextBox';
 import { DialogBox, type ResolvedSpeaker } from '../ui/DialogBox';
 import type { AudioManager } from '../audio/AudioManager';
 import { viewportWidth, viewportHeight } from '../core/Viewport';
 import { resolveSpeaker } from '../dialog/speakers';
+import { chromeTarget } from '../ui/screens/dialogs/canvasChrome';
+import { withAlpha } from '../ui/theme/color';
+import { drawGlyph } from '../ui/theme/glyphs';
+import { fillRounded, strokeRounded } from '../ui/widgets/paint';
+import { measureText, text } from '../ui/widgets/text';
 
-const SYSTEM_AI_NAME = '⚙ System AI';
+const SYSTEM_AI_NAME = 'System AI';
 
 const SYSTEM_AI_SPEAKER: ResolvedSpeaker = resolveSpeaker({
   kind: 'transient',
@@ -28,13 +32,9 @@ const ACTION_FADE_TICKS = 45;
 const MAX_ACTIONNOTIFS = 3;
 const PADDING_BOTTOM = 20;
 const ACTION_PADDING = 8;
-const ACTION_FONT_SIZE = 11;
-const ACTION_ALPHA_BACKGROUND = 0.88;
 const ACTION_BORDER_WIDTH = 1;
 const ACTION_BORDER_ALPHA = 0.7;
-const ACTION_TEXT_Y_BASELINE_OFFSET = 1;
-const ACTION_TEXT_TOP_OFFSET = 9;
-const ACTION_TEXT_LABEL_GAP = 8;
+const ACTION_GLYPH_SIZE = 14;
 
 function calcTtl(text: string): number {
   const words = text.trim().split(/\s+/).length;
@@ -88,75 +88,67 @@ export class AIMessageDisplay {
     const alpha = lastMsg !== null && lastMsg.ttl < FADE_TICKS ? lastMsg.ttl / FADE_TICKS : 1;
     this._dialogBox?.render(ctx, alpha);
 
-    // Action notifications — bottom of screen
     if (this.actionNotifs.length > 0) {
       const notif = this.actionNotifs[this.actionNotifs.length - 1];
       const actionAlpha = notif.ttl < ACTION_FADE_TICKS ? notif.ttl / ACTION_FADE_TICKS : 1;
-      const pad = ACTION_PADDING;
-      const fsize = ACTION_FONT_SIZE;
-      ctx.save();
-      ctx.font = `${fsize}px monospace`;
-      const label = '⚙ System AI';
-      const labelW = ctx.measureText(label).width;
-      const textW = ctx.measureText(notif.text).width;
-      const pillW = pad * 2 + labelW + ACTION_TEXT_LABEL_GAP + textW;
-      const pillH = fsize + pad * 2;
-      const px = Math.round((viewportWidth() - pillW) / 2);
-      const py = viewportHeight() - pillH - PADDING_BOTTOM;
-
-      ctx.globalAlpha = actionAlpha * ACTION_ALPHA_BACKGROUND;
-      ctx.fillStyle = '#0a0a0c';
-      roundRect(ctx, px, py, pillW, pillH, pillH / 2);
-      ctx.fill();
-
-      ctx.strokeStyle = '#d97706';
-      ctx.lineWidth = ACTION_BORDER_WIDTH;
-      ctx.globalAlpha = actionAlpha * ACTION_BORDER_ALPHA;
-      roundRect(ctx, px, py, pillW, pillH, pillH / 2);
-      ctx.stroke();
-
-      // drawText positions from the top, so the baseline computed here is converted
-      // back to a top-anchored y below via ACTION_TEXT_TOP_OFFSET.
-      const ty = py + pad + fsize - ACTION_TEXT_Y_BASELINE_OFFSET;
-      drawText(ctx, label, {
-        x: px + pad,
-        y: ty - ACTION_TEXT_TOP_OFFSET,
-        size: fsize,
-        bold: true,
-        color: '#fbbf24',
-        alpha: actionAlpha,
-      });
-
-      drawText(ctx, notif.text, {
-        x: px + pad + labelW + ACTION_TEXT_LABEL_GAP,
-        y: ty - ACTION_TEXT_TOP_OFFSET,
-        size: fsize,
-        color: '#e5e5e5',
-        alpha: actionAlpha,
-      });
-
-      ctx.restore();
+      this.renderActionPill(ctx, notif.text, actionAlpha);
     }
   }
-}
 
-function roundRect(
-  ctx: CanvasRenderingContext2D,
-  x: number,
-  y: number,
-  w: number,
-  h: number,
-  r: number,
-): void {
-  ctx.beginPath();
-  ctx.moveTo(x + r, y);
-  ctx.lineTo(x + w - r, y);
-  ctx.quadraticCurveTo(x + w, y, x + w, y + r);
-  ctx.lineTo(x + w, y + h - r);
-  ctx.quadraticCurveTo(x + w, y + h, x + w - r, y + h);
-  ctx.lineTo(x + r, y + h);
-  ctx.quadraticCurveTo(x, y + h, x, y + h - r);
-  ctx.lineTo(x, y + r);
-  ctx.quadraticCurveTo(x, y, x + r, y);
-  ctx.closePath();
+  /** The one-line pill along the bottom naming what the System AI just did. */
+  private renderActionPill(ctx: CanvasRenderingContext2D, message: string, alpha: number): void {
+    const target = chromeTarget(ctx);
+    const { palette, radius, space, type } = target.theme;
+    const labelWidth = measureText(target, SYSTEM_AI_NAME, { role: 'accent' });
+    const pillChromeWidth = ACTION_PADDING * 2 + ACTION_GLYPH_SIZE + space.xs + space.sm;
+    const maxTextWidth = viewportWidth() - PADDING_BOTTOM * 2 - labelWidth - pillChromeWidth;
+    const textWidth = Math.max(
+      0,
+      Math.min(maxTextWidth, measureText(target, message, { role: 'caption' })),
+    );
+    const pillH = type.label.lineHeight + ACTION_PADDING * 2;
+    const pillW = pillChromeWidth + labelWidth + textWidth;
+    const pill = {
+      x: Math.round((viewportWidth() - pillW) / 2),
+      y: viewportHeight() - pillH - PADDING_BOTTOM,
+      w: pillW,
+      h: pillH,
+    };
+
+    ctx.save();
+    ctx.globalAlpha *= alpha;
+    fillRounded(ctx, pill, radius.pill, palette.surface.base);
+    strokeRounded(
+      ctx,
+      pill,
+      radius.pill,
+      withAlpha(palette.accent.base, ACTION_BORDER_ALPHA),
+      ACTION_BORDER_WIDTH,
+    );
+    let cursorX = pill.x + ACTION_PADDING;
+    drawGlyph(
+      ctx,
+      'settings',
+      {
+        x: cursorX,
+        y: pill.y + (pill.h - ACTION_GLYPH_SIZE) / 2,
+        w: ACTION_GLYPH_SIZE,
+        h: ACTION_GLYPH_SIZE,
+      },
+      { color: palette.accent.base },
+    );
+    cursorX += ACTION_GLYPH_SIZE + space.xs;
+    text(
+      target,
+      { x: cursorX, y: pill.y, w: labelWidth, h: pill.h },
+      { text: SYSTEM_AI_NAME, role: 'accent' },
+    );
+    cursorX += labelWidth + space.sm;
+    text(
+      target,
+      { x: cursorX, y: pill.y, w: textWidth, h: pill.h },
+      { text: message, role: 'caption', color: palette.text.primary },
+    );
+    ctx.restore();
+  }
 }

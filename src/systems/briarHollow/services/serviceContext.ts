@@ -1,7 +1,7 @@
 /**
  * What every Briar Hollow shop and service shares: who the party is, which
  * phases keep the shops shut, and the one way a seller's `BarkLine` becomes
- * the plain string the priced-menu panel draws.
+ * the plain string the shop screen draws.
  *
  * A service never types a word of a villager's dialogue itself. It reads the
  * villager's own script property and hands the resolved line to `sellerLine`,
@@ -17,11 +17,11 @@ import type { ConversationTopic } from '../../../dialog/request';
 import { isShopClosed } from '../villagerCircumstances';
 import type { VillagerConversationFlow } from '../villagerTopics';
 import type {
-  PricedBlockedLine,
-  PricedMenuBuilder,
-  PricedPurchaseHandler,
-  SellConfig,
-} from '../../../ui/PricedMenuPanel';
+  ShopBlockedLine,
+  ShopMenuBuilder,
+  ShopPurchaseHandler,
+  ShopSellConfig,
+} from '../../../ui/screens/shop/shopSession';
 
 export type Crawler = HumanPlayer | CatPlayer;
 
@@ -52,7 +52,7 @@ export function shopTrades(phase: VillageQuestPhase): boolean {
   return !isShopClosed(phase);
 }
 
-/** A villager's bark, as the priced-menu panel's plain-string header or result line wants it. */
+/** A villager's bark, as the shop screen's plain-string header or result line wants it. */
 export function sellerLine(line: BarkLine): string {
   return line.paragraphs[0];
 }
@@ -75,13 +75,13 @@ export function recipientFor(party: ServiceParty, preferred: Crawler, id: ItemId
 
 /** One shop's rows, what a purchase does, and what the seller says to a refused one. */
 export interface ShopDefinition {
-  readonly build: PricedMenuBuilder;
-  readonly purchase: PricedPurchaseHandler;
-  readonly blockedLine?: PricedBlockedLine;
-  /** See `PricedMenuPanel.open`: how long a Buy is ignored after a sale. Absent, every press buys. */
-  readonly rebuyGuardFrames?: number;
+  readonly build: ShopMenuBuilder;
+  readonly purchase: ShopPurchaseHandler;
+  readonly blockedLine?: ShopBlockedLine;
+  /** How many ticks a Buy is ignored after a sale. Absent, every press buys. */
+  readonly rebuyGuardTicks?: number;
   /** Opts this counter into a Sell tab. Absent for a service with no goods to buy back. */
-  readonly sell?: SellConfig;
+  readonly sell?: ShopSellConfig;
 }
 
 /** Where a shop topic sends the party: the priced menu, opened over the village. */

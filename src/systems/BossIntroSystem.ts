@@ -19,7 +19,10 @@ import { drawGrotesqueSpiderPoseSprite } from '../sprites/grotesqueSpiderSprite'
 import { GROTESQUE_SPIDER_IDLE_REACH_TILES } from '../sprites/art/grotesqueSpiderFigure';
 import { SPIDER_FRAMES_PER_SECOND } from '../creatures/grotesqueSpiderTimeline';
 import type { GameSystem } from './GameSystem';
-import { drawText } from '../ui/TextBox';
+import { measureWorldText, worldText } from '../ui/world/worldText';
+import { worldPlate, worldTint } from '../ui/world/worldShapes';
+import { worldPalette } from '../ui/theme/worldInk';
+import { withAlpha } from '../ui/theme/color';
 import { viewportWidth, viewportHeight } from '../core/Viewport';
 
 type IntroState = {
@@ -70,7 +73,7 @@ const VERSUS_PANEL_W_FRACTION = 0.38;
 const VERSUS_PANEL_W_MAX = 280;
 /** Offset for the "TEAM CAT POSSE" label from panel bottom. */
 const TEAM_LABEL_Y_OFFSET_FROM_BOTTOM = 28;
-/** Text size adjustment for drawText. */
+/** Lifts a label from its baseline-relative offset to the top of its glyphs. */
 const LABEL_TEXT_ADJUST = 9;
 /** Smaller label y offset from panel bottom. */
 const SMALL_LABEL_Y_OFFSET_FROM_BOTTOM = 14;
@@ -171,15 +174,20 @@ const LAST_CHAR_SCALE_FACTOR = 0.15;
 const FONT_BASELINE_FRACTION = 0.8;
 /** Fractional font scale for subtext y offset. */
 const SUBTEXT_Y_FRACTION = 0.9;
-/** Backdrop of the boss panel — a near-black maroon that most bosses read against. */
-const BOSS_PANEL_DEFAULT_BG = 'rgba(30,10,10,0.9)';
+const BOSS_PANEL_DEFAULT_BG = worldPalette.bossIntro.bossPanelFill;
 /**
  * Per-boss overrides for {@link BOSS_PANEL_DEFAULT_BG}. A boss whose sprite is
  * near-black disappears into the default backdrop, so it gets a lighter one.
  */
 const BOSS_PANEL_BACKGROUNDS: Partial<Record<string, string>> = {
-  grotesque_spider: 'rgba(96,74,66,0.95)',
+  grotesque_spider: worldPalette.bossIntro.bossPanelFillLight,
 };
+/** How far the title card darkens the scene behind it. */
+const BACKDROP_ALPHA = 0.88;
+const VERSUS_PANEL_BORDER_WIDTH = 2;
+const PANEL_LABEL_SIZE = 11;
+const PANEL_CAPTION_SIZE = 9;
+const FIGHT_LABEL_SIZE = 10;
 
 /** The `bossRooms[].type` the Krakaren Clone is spawned under. */
 const KRAKAREN_BOSS_TYPE = 'krakaren_clone';
@@ -251,45 +259,41 @@ export class BossIntroSystem implements GameSystem {
     const CX = viewportWidth() / 2;
     const CY = viewportHeight() / 2;
 
-    ctx.fillStyle = 'rgba(0,0,0,0.88)';
-    ctx.fillRect(0, 0, viewportWidth(), viewportHeight());
+    worldTint(ctx, worldPalette.shade, BACKDROP_ALPHA);
 
     if (intro.phase === 'letters') {
       const TITLE = BossIntroSystem.INTRO_TITLE;
       const FPC = BossIntroSystem.INTRO_FRAMES_PER_CHAR;
       const charsShown = Math.min(TITLE.length, Math.floor(intro.frame / FPC) + 1);
 
-      ctx.save();
-      ctx.textAlign = 'center';
-
       const fullText = TITLE.slice(0, charsShown);
       const fontSize = Math.min(
         INTRO_FONT_MIN_SIZE,
         Math.floor(viewportWidth() / INTRO_FONT_DIVISOR),
       );
-      ctx.font = `bold ${fontSize}px monospace`;
-
-      const charW = ctx.measureText('B').width;
+      const charW = measureWorldText(ctx, 'B', { size: fontSize, bold: true }).width;
       for (let i = 0; i < fullText.length; i++) {
         const isLast = i === charsShown - 1;
         const FLASH_PULSE_SPEED = 0.6;
         const flashPulse = isLast ? Math.sin(intro.frame * FLASH_PULSE_SPEED) : 1;
         const ch = fullText[i];
 
-        // B's in yellow-gold, dashes in grey, rest of "OSS BATTLE!" in white
-        let charColor: string;
         const CHAR_ALPHA_BASE = 0.7;
         const CHAR_ALPHA_PULSE_RANGE = 0.3;
+        const flashAlpha = CHAR_ALPHA_BASE + CHAR_ALPHA_PULSE_RANGE * flashPulse;
+        const { bossIntro } = worldPalette;
+        // The flash rides on the colour rather than on the text's alpha: under a
+        // canvas shadow the two are not equivalent, and the marquee's glow was
+        // tuned with the flash in the colour.
+        let charColor: string;
         if (ch === 'B') {
-          charColor = isLast
-            ? `rgba(255,200,0,${CHAR_ALPHA_BASE + CHAR_ALPHA_PULSE_RANGE * flashPulse})`
-            : '#fbbf24';
+          charColor = isLast ? withAlpha(bossIntro.marqueeFlash, flashAlpha) : bossIntro.marquee;
         } else if (ch === '-') {
-          charColor = '#94a3b8';
+          charColor = bossIntro.marqueeDash;
         } else {
           charColor = isLast
-            ? `rgba(255,255,255,${CHAR_ALPHA_BASE + CHAR_ALPHA_PULSE_RANGE * flashPulse})`
-            : '#f1f5f9';
+            ? withAlpha(bossIntro.marqueeLetterFlash, flashAlpha)
+            : bossIntro.marqueeLetter;
         }
 
         const CHAR_X_CENTER = 0.5;
@@ -301,11 +305,10 @@ export class BossIntroSystem implements GameSystem {
         ctx.save();
         ctx.translate(cx, CY);
         ctx.scale(scale, scale);
-        ctx.shadowColor = '#fbbf24';
+        ctx.shadowColor = worldPalette.bossIntro.marquee;
         ctx.shadowBlur = isLast ? CHAR_LAST_SHADOW_BLUR : CHAR_SHADOW_BLUR;
-        // y=0 in this translated+scaled space is the baseline;
-        // drawText uses top so we shift up by size*0.8
-        drawText(ctx, ch, {
+        // The translated origin is the baseline, and the text is set from its top.
+        worldText(ctx, ch, {
           x: 0,
           y: -Math.round(fontSize * FONT_BASELINE_FRACTION),
           size: fontSize,
@@ -321,20 +324,18 @@ export class BossIntroSystem implements GameSystem {
         const holdProgress = (intro.frame - titleLen * FPC) / BossIntroSystem.INTRO_HOLD_FRAMES;
         const alpha = Math.min(1, holdProgress * SUBTEXT_ALPHA_RAMP);
         const subSize = Math.floor(fontSize * SUBTEXT_FONT_SCALE);
-        drawText(ctx, 'GET READY!', {
+        worldText(ctx, 'GET READY!', {
           x: CX,
           y: CY + fontSize * SUBTEXT_Y_FRACTION - Math.round(subSize * FONT_BASELINE_FRACTION),
           size: subSize,
           bold: true,
-          color: '#ef4444',
+          color: worldPalette.ink.danger,
           align: 'center',
           alpha,
-          glow: '#ef4444',
+          glow: true,
           glowBlur: GET_READY_GLOW_BLUR,
         });
       }
-
-      ctx.restore();
     } else {
       const t = intro.frame;
       const slideIn = Math.min(1, t / VERSUS_SLIDE_IN_FRAMES);
@@ -346,12 +347,15 @@ export class BossIntroSystem implements GameSystem {
       const panelY = CY - panelH / 2;
 
       const leftX = CX - VERSUS_PANEL_GAP - panelW - (1 - eased) * CX;
-      ctx.save();
-      ctx.fillStyle = 'rgba(10,20,40,0.9)';
-      ctx.fillRect(leftX, panelY, panelW, panelH);
-      ctx.strokeStyle = '#60a5fa';
-      ctx.lineWidth = 2;
-      ctx.strokeRect(leftX, panelY, panelW, panelH);
+      worldPlate(
+        ctx,
+        { x: leftX, y: panelY, w: panelW, h: panelH },
+        {
+          fill: worldPalette.bossIntro.partyPanelFill,
+          border: worldPalette.bossIntro.partyPanelEdge,
+          borderWidth: VERSUS_PANEL_BORDER_WIDTH,
+        },
+      );
 
       ctx.save();
       drawHumanSprite(
@@ -370,30 +374,32 @@ export class BossIntroSystem implements GameSystem {
       );
       ctx.restore();
 
-      ctx.restore();
-      drawText(ctx, 'TEAM CAT POSSE', {
+      worldText(ctx, 'TEAM CAT POSSE', {
         x: leftX + panelW / 2,
         y: panelY + panelH - TEAM_LABEL_Y_OFFSET_FROM_BOTTOM - LABEL_TEXT_ADJUST,
-        size: 11,
+        size: PANEL_LABEL_SIZE,
         bold: true,
-        color: '#93c5fd',
+        color: worldPalette.ink.human,
         align: 'center',
       });
-      drawText(ctx, 'Human + Cat', {
+      worldText(ctx, 'Human + Cat', {
         x: leftX + panelW / 2,
         y: panelY + panelH - SMALL_LABEL_Y_OFFSET_FROM_BOTTOM - SMALL_LABEL_TEXT_ADJUST,
-        size: 9,
-        color: '#64748b',
+        size: PANEL_CAPTION_SIZE,
+        color: worldPalette.ink.muted,
         align: 'center',
       });
 
       const rightX = CX + VERSUS_PANEL_GAP + (1 - eased) * CX;
-      ctx.save();
-      ctx.fillStyle = BOSS_PANEL_BACKGROUNDS[intro.bossType] ?? BOSS_PANEL_DEFAULT_BG;
-      ctx.fillRect(rightX, panelY, panelW, panelH);
-      ctx.strokeStyle = intro.bossColor;
-      ctx.lineWidth = 2;
-      ctx.strokeRect(rightX, panelY, panelW, panelH);
+      worldPlate(
+        ctx,
+        { x: rightX, y: panelY, w: panelW, h: panelH },
+        {
+          fill: BOSS_PANEL_BACKGROUNDS[intro.bossType] ?? BOSS_PANEL_DEFAULT_BG,
+          border: intro.bossColor,
+          borderWidth: VERSUS_PANEL_BORDER_WIDTH,
+        },
+      );
 
       ctx.save();
       if (intro.bossType === 'juicer') {
@@ -460,20 +466,19 @@ export class BossIntroSystem implements GameSystem {
       }
       ctx.restore();
 
-      ctx.restore();
-      drawText(ctx, intro.bossName, {
+      worldText(ctx, intro.bossName, {
         x: rightX + panelW / 2,
         y: panelY + panelH - TEAM_LABEL_Y_OFFSET_FROM_BOTTOM - LABEL_TEXT_ADJUST,
-        size: 11,
+        size: PANEL_LABEL_SIZE,
         bold: true,
         color: intro.bossColor,
         align: 'center',
       });
-      drawText(ctx, 'BOSS', {
+      worldText(ctx, 'BOSS', {
         x: rightX + panelW / 2,
         y: panelY + panelH - SMALL_LABEL_Y_OFFSET_FROM_BOTTOM - SMALL_LABEL_TEXT_ADJUST,
-        size: 9,
-        color: '#64748b',
+        size: PANEL_CAPTION_SIZE,
+        color: worldPalette.ink.muted,
         align: 'center',
       });
 
@@ -483,26 +488,26 @@ export class BossIntroSystem implements GameSystem {
         const vsPulse = 1 + VS_PULSE_SCALE * Math.sin(t * VS_PULSE_SPEED);
         const vsSize = Math.floor(VS_BASE_SIZE * vsPulse);
         const VS_GLOW_BLUR = 20;
-        drawText(ctx, 'VS', {
+        worldText(ctx, 'VS', {
           x: CX,
           y: CY + VERSUS_VS_Y_OFFSET - Math.round(vsSize * FONT_BASELINE_FRACTION),
           size: vsSize,
           bold: true,
-          color: '#ef4444',
+          color: worldPalette.ink.danger,
           align: 'center',
           alpha: vsAlpha,
-          glow: '#ef4444',
+          glow: true,
           glowBlur: VS_GLOW_BLUR,
         });
       }
 
       const framesLeft = BossIntroSystem.INTRO_VERSUS_FRAMES - t;
       if (framesLeft < FIGHT_LABEL_BEFORE_END) {
-        drawText(ctx, 'FIGHT!', {
+        worldText(ctx, 'FIGHT!', {
           x: CX,
           y: CY + panelH / 2 + FIGHT_Y_OFFSET - FIGHT_Y_ADJUST,
-          size: 10,
-          color: '#94a3b8',
+          size: FIGHT_LABEL_SIZE,
+          color: worldPalette.ink.hint,
           align: 'center',
           alpha: Math.min(1, (FIGHT_LABEL_BEFORE_END - framesLeft) / FIGHT_ALPHA_RAMP),
         });

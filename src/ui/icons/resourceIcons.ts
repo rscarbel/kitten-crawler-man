@@ -1,3 +1,6 @@
+import type { Rect } from '../core/geom';
+import { iconSquare } from './iconSquare';
+
 /**
  * Icons for Briar Hollow's raw and refined resources.
  *
@@ -7,25 +10,16 @@
  * fractions-of-`size` geometry, matching the rest of `src/ui/icons/`.
  */
 
-import type { ItemId } from '../../core/ItemDefs';
-
 /** The four resource ids this module can draw. Closed, so a new resource cannot ship iconless. */
 export type ResourceIconId = 'wood' | 'stone' | 'wood_board' | 'rope';
 
-/** Every id this module can draw, the single source of truth for the id set below and for the icon bake gate. */
+/** Every id this module can draw, in the order the icon bake gate lays them out. */
 export const RESOURCE_ICON_ID_LIST: readonly ResourceIconId[] = [
   'wood',
   'stone',
   'wood_board',
   'rope',
 ];
-
-const RESOURCE_ICON_IDS: ReadonlySet<string> = new Set<ResourceIconId>(RESOURCE_ICON_ID_LIST);
-
-/** Whether `id` is a resource, and so drawable by {@link drawResourceIcon}. */
-export function isResourceIconId(id: ItemId): id is ResourceIconId {
-  return RESOURCE_ICON_IDS.has(id);
-}
 
 const FULL_CIRCLE = Math.PI * 2;
 const QUARTER_TURN = Math.PI / 2;
@@ -389,14 +383,13 @@ function drawRopeIcon(ctx: CanvasRenderingContext2D, x: number, y: number, size:
   ctx.lineJoin = 'miter';
 }
 
-/** Draws one resource's icon into a square icon region at `x`,`y`. */
+/** Draws one resource's icon into the largest square centred in `rect`. */
 export function drawResourceIcon(
   ctx: CanvasRenderingContext2D,
+  rect: Rect,
   id: ResourceIconId,
-  x: number,
-  y: number,
-  size: number,
 ): void {
+  const { x, y, size } = iconSquare(rect);
   ctx.save();
   ctx.beginPath();
   ctx.rect(x, y, size, size);

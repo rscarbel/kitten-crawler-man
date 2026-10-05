@@ -26,9 +26,10 @@ import type { BriarHollowState } from '../../../core/briarHollowState';
 import type { HumanPlayer } from '../../../creatures/HumanPlayer';
 import type { CatPlayer } from '../../../creatures/CatPlayer';
 import type { BriarHollowSite } from '../../../map/overworld/briarHollowSite';
-import { PricedMenuPanel } from '../../../ui/PricedMenuPanel';
-import { QuantityPicker } from '../../../ui/QuantityPicker';
-import type { OverlayInputClaim } from '../../kits/OverlayClaims';
+import { QuantityDialog } from '../../../ui/screens/dialogs/QuantityDialog';
+import type { Surface } from '../../../ui/core/UiRoot';
+import { shopScreenSurface } from '../../../ui/screens/shop/ShopScreen';
+import { ShopSession } from '../../../ui/screens/shop/shopSession';
 import type { ProcessingStationKind } from '../processingStations';
 import type { BarkLine, NonEmpty } from '../../../dialog/line';
 import { FENNA, SELLA, type VillagerId } from '../../../dialog/scripts/briarHollow';
@@ -103,14 +104,11 @@ const IDLE_SAWING_VOLUME = 0.18;
 const IDLE_SAWING_RANGE_TILES = 10;
 const UPGRADE_SOUND = 'tool_upgrade';
 
-/** The claim the priced menu has always had wherever it is shown; its buttons are ringed under this id. */
-const PRICED_MENU_FOCUS_ID = 'priced-menu';
-
 const TILE_CENTRE = 0.5;
 
 export class VillageServices {
-  readonly panel = new PricedMenuPanel();
-  readonly picker: QuantityPicker;
+  readonly panel = new ShopSession();
+  readonly picker: QuantityDialog;
   readonly sawmill: SawmillService;
   private treatmentFramesLeft = 0;
   private disposed = false;
@@ -118,7 +116,7 @@ export class VillageServices {
   private readonly removeKeyListeners: () => void;
 
   constructor(private readonly deps: VillageServicesDeps) {
-    this.picker = new QuantityPicker(deps.audio);
+    this.picker = new QuantityDialog(deps.audio);
     this.party = {
       human: deps.human,
       cat: deps.cat,
@@ -259,10 +257,7 @@ export class VillageServices {
         audio?.play(result.ok ? 'purchase_success' : 'error');
         return result;
       },
-      () => audio?.play('error'),
-      shop.blockedLine,
-      shop.rebuyGuardFrames,
-      sell,
+      { blockedLine: shop.blockedLine, rebuyGuardTicks: shop.rebuyGuardTicks, sell },
     );
     audio?.play('menu_open');
   }
@@ -300,7 +295,6 @@ export class VillageServices {
   update(): void {
     const halted = this.deps.worldHalted();
     this.panel.update();
-    this.picker.update();
     // The picker is Fenna's question; once she is no longer being talked to it has no one to answer.
     if (this.picker.isOpen && !this.deps.villagers.isConversationOpen) this.picker.close();
     if (!halted) this.tickTreatment();
@@ -475,12 +469,6 @@ export class VillageServices {
     }
   }
 
-  renderDialog(ctx: CanvasRenderingContext2D): void {
-    const active = this.party.active();
-    this.panel.render(ctx, active, otherCrawler(this.party, active));
-    this.picker.render(ctx);
-  }
-
   /** The sawmill's two machines, in tile coordinates with their output, for the minimap. */
   minimapProcessingStations(): Array<{ x: number; y: number; kind: ProcessingStationKind }> {
     return this.sawmill.minimapStations();
@@ -497,43 +485,22 @@ export class VillageServices {
     return positions;
   }
 
-  // ── Input ──────────────────────────────────────────────────────────────
-
-  handleKeyDown(key: string): boolean {
-    if (this.picker.handleKey(key)) return true;
-    if (this.panel.isOpen && key === 'Escape') {
-      this.panel.close();
-      return true;
-    }
-    return false;
-  }
-
-  handleClick(mx: number, my: number): boolean {
-    if (this.picker.handleClick(mx, my)) return true;
-    const active = this.party.active();
-    return this.panel.handleClick(mx, my, active, otherCrawler(this.party, active));
-  }
-
-  handleWheel(deltaY: number): void {
-    this.panel.handleWheel(deltaY);
-  }
-
   get isMenuOpen(): boolean {
     return this.panel.isOpen || this.picker.isOpen;
   }
 
-  /** Topmost first: the picker opens over Fenna's conversation, the priced menu over the village. */
-  overlayClaims(): OverlayInputClaim[] {
+  /** The shops' priced menu and Fenna's picker as surfaces. */
+  surfaces(): Surface[] {
     return [
-      this.picker.overlayClaim(),
-      {
-        isOpen: this.panel.isOpen,
-        // The panel's own focus ring answers Space; the claim keeps it from the world.
-        space: { kind: 'swallow' },
-        locksKeyboard: true,
-        haltsWorld: true,
-        focusContext: PRICED_MENU_FOCUS_ID,
-      },
+      shopScreenSurface({
+        id: 'village-priced-menu',
+        session: this.panel,
+        party: () => {
+          const active = this.party.active();
+          return { active, companion: otherCrawler(this.party, active) };
+        },
+      }),
+      this.picker.surface('village-services-picker'),
     ];
   }
 

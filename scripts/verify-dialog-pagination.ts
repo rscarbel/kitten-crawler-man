@@ -28,14 +28,13 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
-import { paginate, type Page } from '../src/dialog/paginate';
+import { computeLineSpans, paginate, type Page } from '../src/dialog/paginate';
 import type { DialogLine, NonEmpty, Paragraphs } from '../src/dialog/line';
 import { installCanvasGlobals } from './nodeCanvasGlobals';
 import { gameContext } from './nodeGameContext';
 import { setViewportSize } from '../src/core/Viewport';
 import { DialogBox, type DialogLayout, type ResolvedSpeaker } from '../src/ui/DialogBox';
 import { SPEECH_REVEAL_INTERVAL_MS } from '../src/dialog/speakers';
-import { wrapLines } from '../src/ui/TextBox';
 
 let failures = 0;
 function check(ok: boolean, label: string): void {
@@ -422,6 +421,20 @@ function harnessResolvedSpeaker(line: DialogLine): ResolvedSpeaker {
     textCase: 'as-written',
     revealIntervalMs: SPEECH_REVEAL_INTERVAL_MS,
   };
+}
+
+/** `text` wrapped at `maxWidth` in `font`, by the line rule the box draws its body with. */
+function wrapLines(
+  ctx: CanvasRenderingContext2D,
+  text: string,
+  maxWidth: number,
+  font: string,
+): string[] {
+  ctx.save();
+  ctx.font = font;
+  const spans = computeLineSpans(text, maxWidth, (line) => ctx.measureText(line).width);
+  ctx.restore();
+  return spans.map((span) => text.slice(span.offset, span.offset + span.length));
 }
 
 interface PageFitResult {

@@ -71,10 +71,10 @@ export interface SignpostArm {
 /**
  * A fingerpost: a post with one pointed arm per destination.
  *
- * The label is drawn with the canvas's own text rather than through
- * `src/ui/TextBox`, which is for screen-space UI — this is world-space art that
- * scales with the tile and pans with the camera, and routing it through the UI
- * helper would tie a prop's lettering to the HUD's font stack.
+ * The label is drawn with the canvas's own text rather than through the UI text
+ * widget, which is for screen-space UI — this is world-space art that scales
+ * with the tile and pans with the camera, and routing it through the UI helper
+ * would tie a prop's lettering to the HUD's font stack.
  */
 export function drawSignpost(
   ctx: CanvasRenderingContext2D,

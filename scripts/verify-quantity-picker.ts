@@ -1,13 +1,13 @@
 #!/usr/bin/env tsx
 /**
  * Headless checks for `QuantityPickerState` (clamping, ±1/±10 at the bounds,
- * Max, typed digits, backspace) and for `QuantityPicker`'s open/confirm/cancel
+ * Max, typed digits, backspace) and for `QuantityDialog`'s open/confirm/cancel
  * dispatch through `handleKey`, none of which touch a canvas.
  *
  * Run: npx tsx scripts/verify-quantity-picker.ts
  */
 import { QuantityPickerState } from '../src/ui/QuantityPickerState';
-import { QuantityPicker } from '../src/ui/QuantityPicker';
+import { QuantityDialog } from '../src/ui/screens/dialogs/QuantityDialog';
 
 let failures = 0;
 function check(ok: boolean, message: string): void {
@@ -138,12 +138,12 @@ function check(ok: boolean, message: string): void {
   );
 }
 
-// ── QuantityPicker: open/confirm/cancel via handleKey, without a canvas ──
+// ── QuantityDialog: open/confirm/cancel via handleKey, without a canvas ──
 {
   const MAX = 25;
   const INITIAL = 5;
   const TYPED_QTY = 9;
-  const picker = new QuantityPicker(null);
+  const picker = new QuantityDialog(null);
   const confirmedQtys: number[] = [];
   picker.open({
     title: 'Deposit stone',
@@ -169,7 +169,7 @@ function check(ok: boolean, message: string): void {
 {
   const MAX = 25;
   const INITIAL = 5;
-  const picker = new QuantityPicker(null);
+  const picker = new QuantityDialog(null);
   let cancelled = false;
   picker.open({
     title: 'Deposit stone',
@@ -195,7 +195,7 @@ function check(ok: boolean, message: string): void {
   const INITIAL = 10;
   const COST_PER_UNIT = 5;
   const AVAILABLE = 10;
-  const picker = new QuantityPicker(null);
+  const picker = new QuantityDialog(null);
   let confirmed = false;
   picker.open({
     title: 'Buy boards',

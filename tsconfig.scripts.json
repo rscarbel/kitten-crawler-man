@@ -8,8 +8,14 @@
   },
   "include": [
     "scripts/verify-loading-screen.ts",
+    "scripts/verify-pause-keyboard.ts",
+    "scripts/verify-chat-input.ts",
     "scripts/verify-town-soak.ts",
     "scripts/verify-item-icons.ts",
+    "scripts/verify-inventory-screen.ts",
+    "scripts/verify-tutorial-guide.ts",
+    "scripts/verify-world-alpha.ts",
+    "scripts/inventoryScreenScene.ts",
     "scripts/gates-anchor-icon.ts",
     "scripts/browserShim.ts",
     "scripts/strictCanvas.ts",
@@ -76,6 +82,10 @@
     "scripts/gates-clowns.ts",
     "scripts/nodeCanvasGlobals.ts",
     "scripts/nodeGameContext.ts",
+    "scripts/nodeUiFont.ts",
+    "scripts/verify-ui-input.ts",
+    "scripts/uiInputDungeon.ts",
+    "scripts/render-ui-gallery.ts",
     "scripts/gates-figure-cache.ts",
     "scripts/gates-quest-marker.ts",
     "scripts/gates-aggro-mark.ts",
@@ -385,7 +395,8 @@
     "scripts/verify-food.ts",
     "scripts/gates-burger-art.ts",
     "scripts/verify-briar-hollow-state.ts",
-    "scripts/render-crafts-tab.ts",
-    "scripts/verify-craft-level-ups.ts"
+    "scripts/verify-craft-level-ups.ts",
+    "scripts/check-ui-style.ts",
+    "scripts/render-world-text.ts"
   ]
 }

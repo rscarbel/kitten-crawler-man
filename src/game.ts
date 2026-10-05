@@ -16,7 +16,7 @@ import { showLoadingScreen } from './ui/LoadingScreen';
 import { difficultyStats } from './core/DifficultyStats';
 import { clearLocalProgress, readLocalProgress, writeLocalProgress } from './core/LocalProgress';
 import { stampGameProgress } from './core/saveFormat';
-import { setSearchCaptureHeldKeyRelease } from './ui/SearchField';
+import { loadUiFont } from './ui/theme/fonts';
 
 declare const __AI_ENABLED__: boolean;
 
@@ -30,7 +30,6 @@ function resumeFromProgress(baseOptions: DungeonSceneOptions, progress: GameProg
 }
 
 const input = new InputManager();
-setSearchCaptureHeldKeyRelease(() => input.clear());
 const audio = new AudioManager();
 // Only the universal group (menu/UI + generic player-combat cues) decodes at
 // boot now; per-floor and per-interior SFX preload additively as the player
@@ -52,7 +51,10 @@ const loadingScreen = showLoadingScreen(sceneManager.ctx);
   // `prewarmGroups` (not `loadGroups`) also forces the GPU texture upload for
   // each sprite behind this same loading screen, so `core`'s sheets don't
   // hitch on the first frame that actually draws them.
-  await prewarmGroups(['core'], (loaded, total) => loadingScreen.setProgress(loaded, total));
+  await Promise.all([
+    prewarmGroups(['core'], (loaded, total) => loadingScreen.setProgress(loaded, total)),
+    loadUiFont(),
+  ]);
   loadingScreen.stop();
 
   if (!__AI_ENABLED__) {

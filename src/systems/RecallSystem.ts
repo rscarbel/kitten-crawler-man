@@ -24,8 +24,9 @@ import type { GameSystem, SystemContext } from './GameSystem';
 import type { HumanPlayer } from '../creatures/HumanPlayer';
 import type { LevelDef } from '../levels/types';
 import { TILE_SIZE } from '../core/constants';
-import { PROGRESS_PRESETS, drawProgressBar } from '../ui/Box';
-import { drawText } from '../ui/TextBox';
+import { worldBar } from '../ui/world/worldShapes';
+import { worldText } from '../ui/world/worldText';
+import { worldPalette } from '../ui/theme/worldInk';
 import {
   NOT_ON_THIS_MAP_REASON,
   travelDestination,
@@ -74,7 +75,6 @@ const CHANNEL_BAR_HEIGHT_PX = 6;
 const CHANNEL_BAR_Y_OFFSET_PX = 16;
 const CHANNEL_LABEL_Y_GAP_PX = 14;
 const CHANNEL_LABEL_SIZE = 10;
-const CHANNEL_LABEL_COLOR = '#e0f2fe';
 
 interface RecallChannel {
   destination: TravelDestination;
@@ -307,20 +307,22 @@ export class RecallSystem implements GameSystem {
 
     const centreX = channel.caster.x - camX + TILE_SIZE * TILE_CENTRE_FRACTION;
     const barY = channel.caster.y - camY - CHANNEL_BAR_Y_OFFSET_PX;
-    drawProgressBar(ctx, {
-      x: centreX - CHANNEL_BAR_WIDTH_PX / 2,
-      y: barY,
-      width: CHANNEL_BAR_WIDTH_PX,
-      height: CHANNEL_BAR_HEIGHT_PX,
-      value: channel.framesElapsed / RECALL_CHANNEL_FRAMES,
-      ...PROGRESS_PRESETS.recall,
-    });
-    drawText(ctx, channel.destination.channelLabel, {
+    worldBar(
+      ctx,
+      {
+        x: centreX - CHANNEL_BAR_WIDTH_PX / 2,
+        y: barY,
+        w: CHANNEL_BAR_WIDTH_PX,
+        h: CHANNEL_BAR_HEIGHT_PX,
+      },
+      { style: 'recall', value: channel.framesElapsed / RECALL_CHANNEL_FRAMES },
+    );
+    worldText(ctx, channel.destination.channelLabel, {
       x: centreX,
       y: barY - CHANNEL_LABEL_Y_GAP_PX,
       size: CHANNEL_LABEL_SIZE,
       bold: true,
-      color: CHANNEL_LABEL_COLOR,
+      color: worldPalette.recallInk,
       align: 'center',
       outline: true,
     });

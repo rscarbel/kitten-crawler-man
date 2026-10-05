@@ -20,6 +20,8 @@ import {
   type ToolTier,
   type ToolTierLook,
 } from '../../core/toolTiers';
+import type { Rect } from '../core/geom';
+import { iconSquare } from './iconSquare';
 
 /** The twelve tool ids this module can draw. Closed, so a new tier cannot ship iconless. */
 export type ToolIconId =
@@ -334,14 +336,9 @@ function drawTool(
   ctx.restore();
 }
 
-/** Draws one tool's icon into a square icon region at `x`,`y`. */
-export function drawToolIcon(
-  ctx: CanvasRenderingContext2D,
-  id: ToolIconId,
-  x: number,
-  y: number,
-  size: number,
-): void {
+/** Draws one tool's icon into the largest square centred in `rect`. */
+export function drawToolIcon(ctx: CanvasRenderingContext2D, rect: Rect, id: ToolIconId): void {
+  const { x, y, size } = iconSquare(rect);
   const { kind, tier } = TOOL_ICON_INFO[id];
   const look = TOOL_TIER_LOOKS[tier];
 

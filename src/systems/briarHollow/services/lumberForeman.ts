@@ -50,7 +50,7 @@ const PICKER_TITLE: Readonly<Record<ProcessingStationKind, string>> = {
   rope: 'Process into rope',
 };
 
-/** What the picker needs to be told; `QuantityPicker.open` takes exactly this. */
+/** What the picker needs to be told; `QuantityDialog.open` takes exactly this. */
 export interface BatchPickerOptions {
   title: string;
   max: number;

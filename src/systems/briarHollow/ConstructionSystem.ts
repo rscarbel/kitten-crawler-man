@@ -16,7 +16,7 @@
  * does not end it: building under fire is the point of a siege.
  */
 
-import type { NoticeProminence } from '../../ui/HotbarToast';
+import type { ToastOptions } from '../../ui/hud/toasts';
 import type { GameMap } from '../../map/GameMap';
 import type { BriarHollowSite } from '../../map/overworld/briarHollowSite';
 import type { PalisadeTier } from '../../map/tileTypes';
@@ -33,7 +33,7 @@ import { canAfford, spend } from '../../core/partyResources';
 import { canAffordCoins, spendPartyCoins } from '../../core/partyCoins';
 import { constructionTimeFactor, spikesUnlocked } from '../../core/craftPerks';
 import { TILE_SIZE } from '../../core/constants';
-import { drawProgressBar, PROGRESS_PRESETS } from '../../ui/Box';
+import { worldBar } from '../../ui/world/worldShapes';
 import {
   BUILD_KNEEL_ROWS,
   BUILD_RISE_ROWS,
@@ -86,7 +86,7 @@ import {
   FACING_STEP,
 } from './constructionPlacement';
 import { unlimitedAmmo } from '../../core/craftPerks';
-import type { ConstructionMenuSource } from '../../ui/ConstructionMenu';
+import type { ConstructionScreenSource } from '../../ui/screens/construction/ConstructionScreen';
 import {
   hasConstructionUnlock,
   type ConstructionUnlockId,
@@ -242,7 +242,7 @@ export interface ConstructionSystemDeps {
   readonly cat: CatPlayer;
   readonly roster: MobRoster;
   readonly audio: AudioManager | null;
-  readonly announce: (message: string, prominence?: NoticeProminence) => void;
+  readonly announce: (message: string, opts?: ToastOptions) => void;
   /** Keeps the resource strip up while a job runs. */
   readonly noteResourceActivity: () => void;
   /** Every body a trebuchet may have to push clear, crawlers included. */
@@ -284,6 +284,11 @@ export const BUILD_OPTION_DEFS: Readonly<Record<BuildOption, BuildOptionDef>> = 
   trebuchet: { label: 'Trebuchet', buildableIndoors: false },
   snare: { label: 'Snare Trap', buildableIndoors: false },
 };
+
+/** The status line of a row whose plan the party does not hold yet. */
+export const OPTION_LOCKED_STATUS = 'Not yet unlocked';
+/** The status line of a row stopped only by the party's stock. */
+export const NOT_ENOUGH_MATERIALS_STATUS = 'Not enough materials';
 
 /** The notice a refused row gives when it is chosen indoors. */
 export const INDOORS_BUILD_REFUSAL = 'Cannot build this while inside';
@@ -573,7 +578,7 @@ export class ConstructionSystem {
         option,
         label,
         enabled: false,
-        status: 'Not yet unlocked',
+        status: OPTION_LOCKED_STATUS,
         cost: {},
         baseCost: {},
         affordable: false,
@@ -609,7 +614,7 @@ export class ConstructionSystem {
         enabled = false;
         roomBlocked = true;
       } else if (!affordable) {
-        status = 'Not enough materials';
+        status = NOT_ENOUGH_MATERIALS_STATUS;
         enabled = false;
       }
       return {
@@ -665,7 +670,7 @@ export class ConstructionSystem {
         seconds: this.repairSeconds(breach, crawler),
       };
       if (busy) return { ...repair, enabled: false, status: 'Already building' };
-      if (!canRepair) return { ...repair, enabled: false, status: 'Not enough materials' };
+      if (!canRepair) return { ...repair, enabled: false, status: NOT_ENOUGH_MATERIALS_STATUS };
       return { ...repair, enabled: true, status: 'Ready — repairs the breach' };
     }
     const target = this.deps.defense.upgradeTarget({ kind: 'segment', id: segment });
@@ -680,7 +685,7 @@ export class ConstructionSystem {
       };
     }
     if (busy) return { ...base, enabled: false, status: 'Already building' };
-    if (!affordable) return { ...base, enabled: false, status: 'Not enough materials' };
+    if (!affordable) return { ...base, enabled: false, status: NOT_ENOUGH_MATERIALS_STATUS };
     return { ...base, enabled: true, status: 'Ready' };
   }
 
@@ -973,8 +978,8 @@ export class ConstructionSystem {
     return false;
   }
 
-  private refuse(message: string, prominence: NoticeProminence = 'normal'): void {
-    this.deps.announce(message, prominence);
+  private refuse(message: string, urgent = false): void {
+    this.deps.announce(message, { tone: 'warning', urgent });
     this.deps.audio?.play(ERROR_SOUND);
   }
 
@@ -983,7 +988,7 @@ export class ConstructionSystem {
     this.showNoRoomGhost(crawler, footprint);
     // The builder is reading the build menu and its prompts when this lands,
     // so the refusal has to shout over them to be noticed at all.
-    this.refuse(NO_SPACE_MESSAGE, 'urgent');
+    this.refuse(NO_SPACE_MESSAGE, true);
   }
 
   // ── The job ─────────────────────────────────────────────────────────────
@@ -1395,14 +1400,16 @@ export class ConstructionSystem {
     }
     const centreX = ((minX + maxX) / 2) * TILE_SIZE - camX;
     const top = minY * TILE_SIZE - camY - PROGRESS_BAR_LIFT;
-    drawProgressBar(ctx, {
-      x: centreX - PROGRESS_BAR_WIDTH / 2,
-      y: top,
-      width: PROGRESS_BAR_WIDTH,
-      height: PROGRESS_BAR_HEIGHT,
-      value: 1 - job.framesLeft / job.totalFrames,
-      ...PROGRESS_PRESETS.build,
-    });
+    worldBar(
+      ctx,
+      {
+        x: centreX - PROGRESS_BAR_WIDTH / 2,
+        y: top,
+        w: PROGRESS_BAR_WIDTH,
+        h: PROGRESS_BAR_HEIGHT,
+      },
+      { style: 'build', value: 1 - job.framesLeft / job.totalFrames },
+    );
   }
 
   /** How far a trebuchet under construction has risen, for its scaffold art; null when it is not being built. */
@@ -1561,7 +1568,7 @@ export function indoorsConstructionSource(
   human: HumanPlayer,
   cat: CatPlayer,
   unlocks: () => VillageUnlocks,
-): ConstructionMenuSource {
+): ConstructionScreenSource {
   const rows = (): OptionStatus[] => {
     const active = human.isActive ? human : cat;
     const skills = active.craftSkills;

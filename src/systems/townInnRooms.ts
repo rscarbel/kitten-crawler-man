@@ -13,7 +13,7 @@
  * or the ladder collapses into "rent all three, take +2 to everything" and the
  * choice between the rooms stops being a choice.
  *
- * Pure data + effect application; `PricedMenuPanel` owns the UI and
+ * Pure data + effect application; the shop screen owns the UI and
  * `BuildingInteriorScene` owns the sounds and the interaction gating.
  */
 
@@ -27,7 +27,7 @@ import {
   type StatusEffect,
 } from '../core/StatusEffect';
 import type { Player } from '../Player';
-import type { PricedOption, PricedPurchaseHandler } from '../ui/PricedMenuPanel';
+import type { ShopRow, ShopPurchaseHandler } from '../ui/screens/shop/shopSession';
 import { rotateLine } from './townServiceUtil';
 
 interface InnRoom {
@@ -103,9 +103,9 @@ export function isInnRoomKey(key: string): boolean {
  * boon is the product, and a healthy player refused a purchase they came in for
  * reads as a bug rather than as a rule.
  */
-export function buildInnRoomOptions(townInDanger: boolean): ReadonlyArray<PricedOption> {
+export function buildInnRoomOptions(townInDanger: boolean): ReadonlyArray<ShopRow> {
   return ROOMS.map((room) => {
-    const option: PricedOption = {
+    const option: ShopRow = {
       key: room.key,
       label: room.label,
       price: room.price,
@@ -123,7 +123,7 @@ export function buildInnRoomOptions(townInDanger: boolean): ReadonlyArray<Priced
  * a player topping up before the stairs is doing the intended thing, and
  * refusing the sale would only send them down a floor on four remaining minutes.
  */
-export function rentInnRoom(party: ReadonlyArray<Player>, turn: number): PricedPurchaseHandler {
+export function rentInnRoom(party: ReadonlyArray<Player>, turn: number): ShopPurchaseHandler {
   return (option) => {
     const room = ROOMS.find((candidate) => candidate.key === option.key);
     if (room === undefined) {

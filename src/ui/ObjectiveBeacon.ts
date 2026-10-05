@@ -124,30 +124,3 @@ export function drawObjectiveBeacon(
   if (isOffScreen(placement, tileSize)) return;
   drawLightBeam(ctx, placement);
 }
-
-const HEX_RADIX = 16;
-const HEX_RED_START = 1;
-const HEX_GREEN_START = 3;
-const HEX_BLUE_START = 5;
-const HEX_CHANNEL_LENGTH = 2;
-
-/** node-canvas and Chrome both drop an `rgba()` whose alpha is in exponent form. */
-const MIN_RENDERABLE_ALPHA = 0.001;
-
-/** `#rrggbb` as an `rgba()` string, with an alpha too small to render clamped to zero. */
-export function withAlpha(hexColor: string, alpha: number): string {
-  const clamped = alpha < MIN_RENDERABLE_ALPHA ? 0 : alpha;
-  const red = Number.parseInt(
-    hexColor.slice(HEX_RED_START, HEX_RED_START + HEX_CHANNEL_LENGTH),
-    HEX_RADIX,
-  );
-  const green = Number.parseInt(
-    hexColor.slice(HEX_GREEN_START, HEX_GREEN_START + HEX_CHANNEL_LENGTH),
-    HEX_RADIX,
-  );
-  const blue = Number.parseInt(
-    hexColor.slice(HEX_BLUE_START, HEX_BLUE_START + HEX_CHANNEL_LENGTH),
-    HEX_RADIX,
-  );
-  return `rgba(${red}, ${green}, ${blue}, ${clamped})`;
-}

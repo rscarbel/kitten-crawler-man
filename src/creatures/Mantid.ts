@@ -10,7 +10,7 @@ import {
 import { drawQuestMarker, QUEST_MARKER_GOLD } from '../sprites/questNPCSprite';
 import { figureRowInkTop } from '../sprites/figure/figureFrameCache';
 import { maybeDropSkillBook } from './skillBookDrop';
-import { drawText } from '../ui/TextBox';
+import { worldText } from '../ui/world/worldText';
 import { randomInt } from '../utils';
 import { PLAYER_SPEED } from '../core/constants';
 
@@ -607,7 +607,7 @@ export class Mantid extends Mob {
         elapsed < IMMUNE_LABEL_HOLD
           ? 1
           : 1 - (elapsed - IMMUNE_LABEL_HOLD) / (1 - IMMUNE_LABEL_HOLD);
-      drawText(ctx, IMMUNE_LABEL_TEXT, {
+      worldText(ctx, IMMUNE_LABEL_TEXT, {
         x: sx + tileSize * (CENTER_OFFSET + label.offsetTiles),
         y: overheadY - tileSize * elapsed * IMMUNE_LABEL_RISE_TILES,
         size: IMMUNE_LABEL_SIZE,

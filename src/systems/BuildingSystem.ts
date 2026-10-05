@@ -6,8 +6,8 @@ import { tileCoordKey } from '../map/tileIndex';
 /** Sentinel index meaning the player is not standing on any building's door. */
 const NO_DOOR_HERE = -1;
 import type { GameSystem, SystemContext } from './GameSystem';
-import { drawText } from '../ui/TextBox';
-import { beginMenuFocus, drawButton, endMenuFocus, BUTTON_PRESETS } from '../ui/Button';
+import { worldText } from '../ui/world/worldText';
+import { worldPalette } from '../ui/theme/worldInk';
 import { viewportWidth, viewportHeight } from '../core/Viewport';
 
 export type BuildingEntry = {
@@ -68,29 +68,8 @@ export function doorwaySpan(entry: BuildingEntry): { readonly x0: number; readon
   return { x0: entry.doorwayX0, width: entry.doorwayWidth };
 }
 
-/** Entry-menu icon per building type. Exhaustive over `BuildingKind` by construction. */
-const BUILDING_TYPE_ICONS: Record<BuildingKind, string> = {
-  tower: '🏰',
-  store: '🏪',
-  club: '🔪',
-  house: '🏠',
-};
-
-/** Per-building overrides for buildings whose type icon reads wrong. */
-const BUILDING_NAME_ICONS: Record<string, string> = {
-  'The Barracks': '⚔️',
-  'Temple of the Sky': '🕊',
-  'The Quiet Needle': '💀',
-  'The Sunken Stump Pub': '🍺',
-  'The Horned Flagon': '🍺',
-  'The Sleeping Cat Inn': '🛏',
-  'The Rusty Anvil': '🔨',
-};
-
 /** Tile center fraction for player position calculation. */
 const TILE_CENTER_FRAC = 0.5;
-/** Opacity of the dim backdrop behind the entry menu. */
-const MENU_BACKDROP_ALPHA = 0.55;
 /** Arrow size as fraction of tile size. */
 const ARROW_SIZE_FRACTION = 0.55;
 /** Alpha base for door hint pulse animation. */
@@ -103,34 +82,9 @@ const DOOR_HINT_PULSE_PERIOD = 600;
 const BUILDING_NAME_Y_FRACTION = 0.6;
 /** Multiplier for name label alpha. */
 const BUILDING_NAME_ALPHA_MULT = 0.85;
+const BUILDING_NAME_SIZE = 11;
 /** Arrow y offset from door in pixels. */
 const ARROW_Y_OFFSET = 4;
-/** Menu panel width. */
-const MENU_PANEL_W = 340;
-/** Menu panel height. */
-const MENU_PANEL_H = 190;
-/** Icon/title y offset in panel. */
-const MENU_TITLE_Y = 36;
-/** Title text size. */
-const MENU_TITLE_SIZE = 18;
-/** Title text adjust. */
-const MENU_TITLE_ADJUST = 14;
-/** "Enter building?" y offset. */
-const MENU_ENTER_Y = 68;
-/** "Enter building?" text adjust. */
-const MENU_ENTER_ADJUST = 10;
-/** "(Esc or Leave...)" y offset. */
-const MENU_ESC_Y = 88;
-/** "(Esc or Leave...)" text adjust. */
-const MENU_ESC_ADJUST = 9;
-/** Button y offset within panel (from panel top). */
-const MENU_BTN_Y_OFFSET = 110;
-/** Button width. */
-const MENU_BTN_W = 120;
-/** Button height. */
-const MENU_BTN_H = 42;
-/** Gap between enter and leave buttons. */
-const MENU_BTN_GAP = 8;
 
 export class BuildingSystem implements GameSystem {
   private onDoor = false;
@@ -177,6 +131,18 @@ export class BuildingSystem implements GameSystem {
    */
   closeMenu(): void {
     this._menuOpen = false;
+  }
+
+  /** The building whose entry prompt is up, or null while it is down. */
+  get menuEntry(): BuildingEntry | null {
+    if (!this._menuOpen) return null;
+    return this.gameMap.buildingEntries[this.activeDoorIdx] ?? null;
+  }
+
+  /** The prompt's Enter. */
+  enterActiveBuilding(): void {
+    const entry = this.menuEntry;
+    if (entry !== null) this.onEnterBuilding(entry);
   }
 
   update(ctx: SystemContext): void {
@@ -238,31 +204,6 @@ export class BuildingSystem implements GameSystem {
     return this.entryGate?.blockedMessage(entry) ?? null;
   }
 
-  handleClick(mx: number, my: number): boolean {
-    if (!this._menuOpen) return false;
-    const rects = this.menuRects();
-    if (
-      mx >= rects.enter.x &&
-      mx <= rects.enter.x + rects.enter.w &&
-      my >= rects.enter.y &&
-      my <= rects.enter.y + rects.enter.h
-    ) {
-      const entry = this.gameMap.buildingEntries[this.activeDoorIdx];
-      this.onEnterBuilding(entry);
-      return true;
-    }
-    if (
-      mx >= rects.stay.x &&
-      mx <= rects.stay.x + rects.stay.w &&
-      my >= rects.stay.y &&
-      my <= rects.stay.y + rects.stay.h
-    ) {
-      this.closeMenu();
-      return true;
-    }
-    return false;
-  }
-
   /** Renders a pulsing ▶ door indicator above each building entrance. */
   renderDoorHints(ctx: CanvasRenderingContext2D, camX: number, camY: number): void {
     const ts = TILE_SIZE;
@@ -290,123 +231,26 @@ export class BuildingSystem implements GameSystem {
 
       const arrowSize = Math.floor(ts * ARROW_SIZE_FRACTION);
       const ARROW_TEXT_ADJUST_FRACTION = 0.8;
-      drawText(ctx, '▶', {
+      worldText(ctx, '▶', {
         x: sx,
         y: sy - ARROW_Y_OFFSET - Math.round(arrowSize * ARROW_TEXT_ADJUST_FRACTION),
         size: arrowSize,
         bold: true,
-        color: `rgba(250, 220, 80, ${pulse})`,
+        color: worldPalette.waymark.doorArrow,
+        alpha: pulse,
         align: 'center',
       });
 
       const BUILDING_NAME_TEXT_ADJUST = 9;
       const BUILDING_NAME_Y_EXTRA = 2;
-      drawText(ctx, entry.name, {
+      worldText(ctx, entry.name, {
         x: sx,
         y: sy - ts * BUILDING_NAME_Y_FRACTION - BUILDING_NAME_Y_EXTRA - BUILDING_NAME_TEXT_ADJUST,
-        size: 11,
-        color: `rgba(255,255,220,${pulse * BUILDING_NAME_ALPHA_MULT})`,
+        size: BUILDING_NAME_SIZE,
+        color: worldPalette.waymark.doorName,
+        alpha: pulse * BUILDING_NAME_ALPHA_MULT,
         align: 'center',
       });
     }
-  }
-
-  renderMenu(ctx: CanvasRenderingContext2D): void {
-    if (!this._menuOpen) return;
-    const entry = this.gameMap.buildingEntries[this.activeDoorIdx];
-
-    const cw = viewportWidth();
-    const ch = viewportHeight();
-
-    ctx.fillStyle = `rgba(0,0,0,${MENU_BACKDROP_ALPHA})`;
-    ctx.fillRect(0, 0, cw, ch);
-
-    const panelW = MENU_PANEL_W;
-    const panelH = MENU_PANEL_H;
-    const panelX = cw / 2 - panelW / 2;
-    const panelY = ch / 2 - panelH / 2;
-
-    ctx.fillStyle = '#0d1a09';
-    ctx.fillRect(panelX, panelY, panelW, panelH);
-    ctx.strokeStyle = '#6aaa44';
-    ctx.lineWidth = 2;
-    ctx.strokeRect(panelX, panelY, panelW, panelH);
-
-    const icon = BUILDING_NAME_ICONS[entry.name] ?? BUILDING_TYPE_ICONS[entry.type];
-    drawText(ctx, `${icon}  ${entry.name}  ${icon}`, {
-      x: cw / 2,
-      y: panelY + MENU_TITLE_Y - MENU_TITLE_ADJUST,
-      size: MENU_TITLE_SIZE,
-      bold: true,
-      color: '#d4edaa',
-      align: 'center',
-    });
-
-    drawText(ctx, 'Enter this building?', {
-      x: cw / 2,
-      y: panelY + MENU_ENTER_Y - MENU_ENTER_ADJUST,
-      size: 13,
-      color: '#94a3b8',
-      align: 'center',
-    });
-
-    drawText(ctx, '(Esc or Leave to stay outside)', {
-      x: cw / 2,
-      y: panelY + MENU_ESC_Y - MENU_ESC_ADJUST,
-      size: 11,
-      color: '#64748b',
-      align: 'center',
-    });
-
-    const rects = this.menuRects();
-
-    // Enter is the default selection, shown highlighted from the moment the menu
-    // appears: the player walked up to a door, and the door is the answer they
-    // came for. Escape and Leave are both still one press away.
-    beginMenuFocus('building-entry', true);
-    drawButton(ctx, {
-      x: rects.enter.x,
-      y: rects.enter.y,
-      width: rects.enter.w,
-      height: rects.enter.h,
-      label: 'Enter',
-      fill: '#1a4d0d',
-      border: '#6aaa44',
-      borderWidth: 1.5,
-      radius: 4,
-      labelSize: 14,
-      labelColor: '#d4edaa',
-      primaryAction: true,
-    });
-
-    drawButton(ctx, {
-      x: rects.stay.x,
-      y: rects.stay.y,
-      width: rects.stay.w,
-      height: rects.stay.h,
-      label: 'Leave',
-      ...BUTTON_PRESETS.primary,
-      border: '#475569',
-      labelSize: 14,
-      labelColor: '#94a3b8',
-    });
-    endMenuFocus();
-  }
-
-  private menuRects(): {
-    enter: { x: number; y: number; w: number; h: number };
-    stay: { x: number; y: number; w: number; h: number };
-  } {
-    const cw = viewportWidth();
-    const ch = viewportHeight();
-    const panelH = MENU_PANEL_H;
-    const panelY = ch / 2 - panelH / 2;
-    const btnW = MENU_BTN_W;
-    const btnH = MENU_BTN_H;
-    const btnY = panelY + MENU_BTN_Y_OFFSET;
-    return {
-      enter: { x: cw / 2 - btnW - MENU_BTN_GAP, y: btnY, w: btnW, h: btnH },
-      stay: { x: cw / 2 + MENU_BTN_GAP, y: btnY, w: btnW, h: btnH },
-    };
   }
 }

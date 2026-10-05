@@ -1,7 +1,7 @@
 /**
- * What a player can sell back at any counter, goods-shop or priced-menu alike.
- * One list, shared by `ShopSystem` and `PricedMenuPanel`'s Sell tab, so the two
- * UIs can never disagree about which items are on offer.
+ * What a player can sell back at any counter, catalog store or service counter alike.
+ * One list, shared by every counter's Sell tab through `ShopSession`, so no two
+ * counters can disagree about which items are on offer.
  */
 
 import { ITEM_DEF, canSellItemId, type ItemId } from '../../core/ItemDefs';

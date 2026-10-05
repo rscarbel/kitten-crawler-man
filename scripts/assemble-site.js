@@ -39,7 +39,13 @@ reportAssetSelection(assets);
 
 fs.rmSync(SITE_DIR, { recursive: true, force: true });
 
-const siteFiles = [...CORE_FILES, ...EXTRA_PAGES, ...assets.images, ...assets.audio];
+const siteFiles = [
+  ...CORE_FILES,
+  ...EXTRA_PAGES,
+  ...assets.images,
+  ...assets.audio,
+  ...assets.fonts,
+];
 for (const file of siteFiles) copyInto(file);
 
 const totalBytes = siteFiles.reduce((total, file) => total + fileSize(file), 0);

@@ -4,7 +4,7 @@
  * player standing reasons to linger:
  *
  *  - A **notice board** planted in the square: pressing Space beside it opens the
- *    `NoticeBoardPanel` (the scene supplies the callback), surfacing the current
+ *    `NoticeBoard` (the scene supplies the callback), surfacing the current
  *    quest/bounty state. The board is a physical prop — it renders in the scene's
  *    Y-sorted entity pass and blocks its tile so citizens and players walk around
  *    it.

@@ -13,7 +13,7 @@ import type { Player } from '../../../Player';
 import { giveInventoryItem } from '../../townServiceUtil';
 import { HEALTH_POTION_PRICE } from '../../market/vendorDefs';
 import { FARMER_PRICING } from '../../market/shopProfiles';
-import type { PricedMenu, PricedOption, PricedPurchaseResult } from '../../../ui/PricedMenuPanel';
+import type { ShopMenu, ShopRow, ShopPurchaseResult } from '../../../ui/screens/shop/shopSession';
 import type { TopicProvider } from '../villagerTopics';
 import { SPEAKERS } from '../../../dialog/speakers';
 import { PIPKIN } from '../../../dialog/scripts/briarHollow';
@@ -41,8 +41,8 @@ const MENU_ITEMS: ReadonlyArray<{ readonly id: ItemId; readonly price: number }>
   { id: 'hollow_stew', price: HOLLOW_STEW_PRICE },
 ];
 
-export function buildCookMenu(): PricedMenu {
-  const options: PricedOption[] = MENU_ITEMS.map(({ id, price }) => ({
+export function buildCookMenu(): ShopMenu {
+  const options: ShopRow[] = MENU_ITEMS.map(({ id, price }) => ({
     key: id,
     label: ITEM_DEF[id].name,
     price,
@@ -62,10 +62,10 @@ export function buildCookMenu(): PricedMenu {
  * — it keeps — but Pipkin says why it can't be eaten yet.
  */
 export function cookPurchase(
-  option: PricedOption,
+  option: ShopRow,
   buyer: Player,
   announce: (message: string) => void,
-): PricedPurchaseResult {
+): ShopPurchaseResult {
   const dish = MENU_ITEMS.find((item) => item.id === option.key);
   if (dish === undefined) return { ok: false, line: '' };
   if (!giveInventoryItem(buyer, dish.id)) {

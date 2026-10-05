@@ -616,10 +616,6 @@ console.log('\nBreak reactions (General Store)');
   check(!reactions.react([firstBreak], []), 'an empty room does not react');
   check(reactions.react([firstBreak], people), 'an occupied room reacts to a break');
   check(!conversation.isOpen, 'the reaction leaves the conversation box closed');
-  check(
-    !conversation.overlayClaim().isOpen,
-    'the reaction claims no overlay (no input lock, no world halt)',
-  );
 
   const { x: breakX, y: breakY } = footprintCentrePx(firstBreak.placed);
   const distSq = (x: number, y: number): number => (x - breakX) ** 2 + (y - breakY) ** 2;

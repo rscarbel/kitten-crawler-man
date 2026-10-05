@@ -34,7 +34,8 @@ import {
   type BopcaTopic,
 } from '../dialog/scripts/bopca';
 import { drawInteractionPrompt } from '../ui/InteractionPrompt';
-import { drawText, TEXT_PRESETS } from '../ui/TextBox';
+import { worldPalette } from '../ui/theme/worldInk';
+import { worldText } from '../ui/world/worldText';
 import { drawSpeechBubbleWithText } from '../sprites/speechBubble';
 import {
   BOPCA_FEET_COUNTER_FRACTION,
@@ -121,7 +122,6 @@ const COOK_STEAM_WALL_SIDE_OFFSET_TILES = 0.2;
 
 const HEAL_POPUP_RISE_TILES = 1.2;
 const HEAL_POPUP_SIZE = 13;
-const HEAL_POPUP_COLOR = '#7ae08a';
 
 /** Which flavour idle a Bopca is playing between conversations. */
 const IDLE_ANIMS: ReadonlyArray<BopcaState> = ['idle', 'leaning', 'wipingHands', 'readingNews'];
@@ -597,14 +597,10 @@ export class BopcaSystem implements GameSystem {
    * reach, otherwise opens the conversation. Returns whether it consumed the
    * press, so the scene can fall through to its other interactions.
    *
-   * This is the mobile path too. Routing it through a contextual action button
-   * on `MobileHUDSystem`, alongside the existing Talk action, is not an
-   * option: there is no such button and that action was never surfaced
-   * there either — `MobileHUDSystem.hitTest` knows only
-   * minimap, pause, switch, gear and bag. On mobile, Talk is reached by
-   * tapping the world, which routes here through both scenes' touch handlers, and
-   * `drawInteractionPrompt` already renders its key cap as "TAP". Adding a sixth
-   * HUD button for one fixture would be the odd one out, not the consistent move.
+   * This is the mobile path too. The HUD has no contextual action button: on
+   * mobile, Talk is reached by tapping the world, which routes here through
+   * both scenes' touch handlers, and the interaction prompt already shows its
+   * key cap as "TAP". A HUD button for one fixture would be the odd one out.
    */
   tryInteract(active: HumanPlayer | CatPlayer): boolean {
     const withDish = this.entryWithTakeableDish(active);
@@ -925,13 +921,13 @@ export class BopcaSystem implements GameSystem {
   ): void {
     for (const popup of this.healPopups) {
       const progress = 1 - popup.framesLeft / HEAL_POPUP_FRAMES;
-      drawText(ctx, `+${popup.amount}`, {
-        ...TEXT_PRESETS.value,
+      worldText(ctx, `+${popup.amount}`, {
+        style: 'value',
         x: popup.worldX + TILE_SIZE / 2 - camX,
         y: popup.worldY - camY - TILE_SIZE * HEAL_POPUP_RISE_TILES * progress,
         size: HEAL_POPUP_SIZE,
         bold: true,
-        color: HEAL_POPUP_COLOR,
+        color: worldPalette.combat.heal,
         alpha: 1 - progress,
         align: 'center',
       });

@@ -39,11 +39,18 @@ import { drawClubProp } from '../sprites/clubFurnitureSprite';
 import { drawClubDecor } from '../sprites/clubDecor';
 import { ShopSystem, type ShopConfig } from './ShopSystem';
 import { CLUB_BAR_PRICING, CLUB_MARKET_PRICING } from './market/shopProfiles';
-import { ClubCasinoSystem } from './ClubCasinoSystem';
+import { ClubCasinoSystem, type CasinoSeat } from './ClubCasinoSystem';
+import type { Surface } from '../ui/core/UiRoot';
+import { keybindings } from '../core/Keybindings';
+import { shopScreenSurface } from '../ui/screens/shop/ShopScreen';
+import type { ShopParty } from '../ui/screens/shop/shopSession';
+import { vipLoungeSurface } from '../ui/screens/shop/VipLoungeScreen';
+import { mercenaryDeskSurface } from '../ui/screens/shop/MercenaryDeskScreen';
 import { MercenaryGuildSystem } from './MercenaryGuildSystem';
 import { ClubVipLoungeSystem, type EscortPair } from './ClubVipLoungeSystem';
 import { ClubCrowdSystem, tileBody, playerBody, type CrowdBody } from './ClubCrowdSystem';
 import type { MarketStock } from './market/MarketStock';
+import { worldPalette } from '../ui/theme/worldInk';
 
 /** Keys the club market's stock lines the same way the overworld stalls key theirs. */
 export const DESPERADO_MARKET_VENDOR_ID = 'desperado_market';
@@ -92,7 +99,7 @@ const ESCORT_WALK_RADIANS_PER_PIXEL = FULL_TURN_RADIANS / (CRETIN_WALK_TILES_PER
 const ESCORT_MAX_WALK_RADIANS_PER_TICK = FULL_TURN_RADIANS / CRETIN_WALK_FRAMES;
 
 // Dance-floor light overlay
-const DANCE_LIGHT_COLORS = ['#ff2d78', '#2d9bff', '#a94dff', '#4dffb0', '#ffd23d'];
+const DANCE_LIGHT_COLORS = worldPalette.danceFloorLights;
 const DANCE_LIGHT_PERIOD_MS = 900;
 const DANCE_LIGHT_TILE_PHASE_X = 0.7;
 const DANCE_LIGHT_TILE_PHASE_Y = 1.3;
@@ -224,6 +231,23 @@ const STATION_FIGURE: Readonly<
   vip: CLUB_VIP_HOST,
 };
 
+const CLUB_BAR_SURFACE_ID = 'club-bar-shop';
+const CLUB_MARKET_SURFACE_ID = 'club-market-shop';
+const CLUB_VIP_SURFACE_ID = 'club-vip';
+const CLUB_GUILD_SURFACE_ID = 'club-guild';
+const CLUB_GUILD_DISMISS_SURFACE_ID = 'club-guild-dismiss';
+/** The full-screen press layer of {@link DesperadoClubSystem.clarabelleSurface}. */
+const CLARABELLE_PRESS_REGION_ID = 'clarabelle-press';
+
+/** Every surface {@link DesperadoClubSystem.stationSurfaces} mounts. */
+export const CLUB_STATION_SURFACE_IDS: readonly string[] = [
+  CLUB_BAR_SURFACE_ID,
+  CLUB_MARKET_SURFACE_ID,
+  CLUB_VIP_SURFACE_ID,
+  CLUB_GUILD_SURFACE_ID,
+  CLUB_GUILD_DISMISS_SURFACE_ID,
+];
+
 /** Proximity-prompt verb for a station: "Talk" to Clarabelle, "Shop" at the vendors, "Play" at the casino, else the room name. */
 function promptLabel(station: ClubStation): string {
   if (station.id === 'clarabelle') return 'Talk';
@@ -329,33 +353,61 @@ export class DesperadoClubSystem {
     return this.conversationHandle !== null && this.conversation.isActive(this.conversationHandle);
   }
 
-  /** The bar/market shop whose buy panel is currently open, if any. */
+  /** The bar/market shop whose counter is currently open, if any. */
   private activeShop(): ShopSystem | null {
-    if (this.barShop.shopOpen) return this.barShop;
-    if (this.marketShop.shopOpen) return this.marketShop;
+    if (this.barShop.isOpen) return this.barShop;
+    if (this.marketShop.isOpen) return this.marketShop;
     return null;
   }
 
   /**
-   * The keyboard focus context of whichever station is on screen — the promise
-   * the interior's overlay claim makes on the club's behalf.
-   *
-   * Mirrors `renderUI`'s order exactly, because that early-return chain decides
-   * which of the five stations actually draws, and only the one that draws
-   * declares a ring.
+   * Clarabelle's conversation, held over the club floor while she talks. The
+   * shared conversation draws her box; this layer sits above it so Space turns
+   * her page (never handed off to the room), Escape walks away from her, and a
+   * press anywhere on screen is offered to her box rather than the HUD.
    */
-  get focusContext(): string | null {
-    if (this.activeShop() !== null) return 'shop';
-    if (this.casino.open) return 'casino';
-    if (this.guild.open) return 'club-guild';
-    if (this.vip.open) return 'club-vip';
-    if (this.conversationOwned) return 'quest-dialog';
-    return null;
+  clarabelleSurface(id: string): Surface {
+    return {
+      id,
+      band: 'modal',
+      haltsWorld: true,
+      locksKeyboard: true,
+      isOpen: () => this.conversationOwned,
+      render: (ui) => {
+        const cssPerUnit = ui.uiScale;
+        ui.hit(CLARABELLE_PRESS_REGION_ID, ui.screen, {
+          onTap: (press) =>
+            void this.conversation.handleClick(press.x * cssPerUnit, press.y * cssPerUnit),
+          focusable: false,
+          sound: null,
+        });
+      },
+      onKey: (key, mods) => {
+        if (keybindings.actionFor(key) !== 'attack') return false;
+        if (mods.repeat !== true && mods.predatesSurface !== true) this.dismissModal();
+        return true;
+      },
+      close: () => this.closeModals(),
+    };
   }
 
-  /** The bar/market buy panel on screen, exposed so the scene can feed it scroll gestures. */
-  get openShop(): ShopSystem | null {
-    return this.activeShop();
+  /** The bar and market counters, the VIP lounge, the mercenary desk and its dismiss question. */
+  stationSurfaces(party: () => ShopParty): Surface[] {
+    return [
+      shopScreenSurface({ id: CLUB_BAR_SURFACE_ID, session: this.barShop.session, party }),
+      shopScreenSurface({ id: CLUB_MARKET_SURFACE_ID, session: this.marketShop.session, party }),
+      vipLoungeSurface({ id: CLUB_VIP_SURFACE_ID, lounge: this.vip, party }),
+      mercenaryDeskSurface({ id: CLUB_GUILD_SURFACE_ID, desk: this.guild, party }),
+      this.guild.dismissConfirm.surface(CLUB_GUILD_DISMISS_SURFACE_ID),
+    ];
+  }
+
+  /** The blackjack table and its rules sheet, in stacking order: the sheet sits above the table. */
+  casinoSurfaces(seat: CasinoSeat): Surface[] {
+    return [
+      this.casino.tableSurface('club-casino', seat),
+      this.casino.rulesSurface('blackjack-rules'),
+    ];
   }
 
   get modalOpen(): boolean {
@@ -379,13 +431,7 @@ export class DesperadoClubSystem {
     // while this update runs — an open table routes through `tickOpenModals`
     // instead — so a missing companion here falls back to the active crawler alone.
     this.casino.update(active, companion ?? active);
-    if (this.barShop.purchasePending || this.marketShop.purchasePending) {
-      // A round at the bar pours; gear off the market rack does not.
-      if (this.barShop.purchasePending) this.audio?.play('ambient_pouring_a_drink');
-      this.barShop.purchasePending = false;
-      this.marketShop.purchasePending = false;
-      this.audio?.play('purchase_success');
-    }
+    this.drainShopTrades();
     // Sub-panels freeze this update() while open, so pending achievement flags set
     // during a hire/win/hire-escort are consumed here once the panel closes.
     this.consumePendingUnlocks();
@@ -400,11 +446,24 @@ export class DesperadoClubSystem {
   tickOpenModals(active: Player, companion: Player): void {
     this.animTime++;
     this.guild.updateDesk();
+    this.barShop.update();
+    this.marketShop.update();
+    this.drainShopTrades();
     this.casino.update(active, companion);
     // A natural can settle while the panel is still open, and that panel can be
     // the last thing the player touches before leaving — so the flags are
     // drained here too, or the achievement is lost with the system.
     this.consumePendingUnlocks();
+  }
+
+  /** Sounds whatever went over either counter since the last tick. */
+  private drainShopTrades(): void {
+    if (!this.barShop.purchasePending && !this.marketShop.purchasePending) return;
+    // A round at the bar pours; gear off the market rack does not.
+    if (this.barShop.purchasePending) this.audio?.play('ambient_pouring_a_drink');
+    this.barShop.purchasePending = false;
+    this.marketShop.purchasePending = false;
+    this.audio?.play('purchase_success');
   }
 
   /** Drain every sub-panel's "something unlockable happened" flag. */
@@ -490,17 +549,10 @@ export class DesperadoClubSystem {
   }
 
   /** Close the open shop panel, or advance the open sub-panel/dialog. */
-  dismissModal(player: Player): void {
+  private dismissModal(): void {
     const shop = this.activeShop();
     if (shop) {
-      shop.shopOpen = false;
-      return;
-    }
-    if (this.casino.open) {
-      // The rules overlay sits above the table, so Esc backs out of it first
-      // rather than closing the table underneath it.
-      if (this.casino.rulesOpen) this.casino.dismissRules();
-      else this.casino.close(player);
+      shop.close();
       return;
     }
     if (this.guild.open) {
@@ -550,11 +602,11 @@ export class DesperadoClubSystem {
       return true;
     }
     if (station.id === 'bar') {
-      this.barShop.shopOpen = true;
+      this.barShop.open();
       return true;
     }
     if (station.id === 'market') {
-      this.marketShop.shopOpen = true;
+      this.marketShop.open();
       return true;
     }
     if (station.id === 'casino') {
@@ -570,44 +622,15 @@ export class DesperadoClubSystem {
     return true;
   }
 
-  /** Route clicks to an open shop panel's buy buttons, else advance the modal; returns true when a modal/shop was open. */
-  handleClick(mx: number, my: number, active: Player, companion: Player): boolean {
-    const shop = this.activeShop();
-    if (shop) {
-      shop.handleClick(mx, my);
-      return true;
-    }
-    if (this.casino.open) {
-      this.casino.handleClick(mx, my, active, companion);
-      return true;
-    }
-    if (this.guild.open) {
-      this.guild.handleClick(mx, my, active, companion);
-      return true;
-    }
-    if (this.vip.open) {
-      this.vip.handleClick(mx, my, active, companion);
-      return true;
-    }
-    if (!this.conversationOwned) return false;
-    this.conversation.handleClick(mx, my);
-    return true;
-  }
-
   /**
    * Escape. Deliberately not `dismissModal`, whose tail advances an open
    * conversation the way Space does: Escape backs out of it instead, through
    * `Conversation.dismiss()`, which grants nothing for a beat still mid-read.
    */
-  closeModals(player: Player): void {
+  private closeModals(): void {
     const shop = this.activeShop();
     if (shop) {
-      shop.shopOpen = false;
-      return;
-    }
-    if (this.casino.open) {
-      if (this.casino.rulesOpen) this.casino.dismissRules();
-      else this.casino.close(player);
+      shop.close();
       return;
     }
     if (this.guild.open) {
@@ -629,8 +652,8 @@ export class DesperadoClubSystem {
    * and the rules overlay is one level under the blackjack table it sits on.
    */
   closeAll(player: Player): void {
-    const shop = this.activeShop();
-    if (shop) shop.shopOpen = false;
+    this.barShop.close();
+    this.marketShop.close();
     if (this.casino.open) this.casino.close(player);
     this.guild.close();
     this.vip.close();
@@ -914,29 +937,5 @@ export class DesperadoClubSystem {
 
   private escortFigures(): ReadonlyArray<InteriorFigure> {
     return this.vip.escortActive ? this.escortFigureList : [];
-  }
-
-  renderUI(ctx: CanvasRenderingContext2D, active: Player, companion: Player): void {
-    const shop = this.activeShop();
-    if (shop) {
-      shop.renderUI(ctx, active);
-      shop.renderShopPanel(ctx, active, companion);
-      return;
-    }
-
-    if (this.casino.open) {
-      this.casino.renderPanel(ctx, active, companion);
-      return;
-    }
-
-    if (this.guild.open) {
-      this.guild.renderPanel(ctx, active, companion);
-      return;
-    }
-
-    if (this.vip.open) {
-      this.vip.renderPanel(ctx, active, companion);
-    }
-    // Clarabelle's own lines draw through the scene's shared conversation panel.
   }
 }

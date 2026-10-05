@@ -6,40 +6,25 @@
  * viewports — so the cards are drawn at runtime, every dimension derived from a
  * single `width`.
  *
- * **The `ctx` boundary lives here.** Card chrome (body, border, rank index) goes
- * through `drawBox` / `drawText` like all other UI. Suit pips and court figures
- * are vector illustration with no shared-utility equivalent, so raw `ctx` path
+ * **The `ctx` boundary lives here.** A card is a picture, inked from
+ * `PLAYING_CARD_PALETTE`; its body goes through the shared rounded-shape
+ * primitives and its rank index through the text widget. Suit pips and court
+ * figures are vector illustration with no widget equivalent, so raw `ctx` path
  * drawing is confined to this module. It must not leak into the panel layout or
  * the table host.
  */
 
-import { drawBox } from '../Box';
-import { drawText } from '../TextBox';
 import { type Card, type Rank, type Suit } from '../../systems/casino/Deck';
+import { PLAYING_CARD_PALETTE as INK } from '../icons/playingCardPalette';
+import { chromeTarget } from '../screens/dialogs/canvasChrome';
+import { fillRounded, strokeRounded } from '../widgets/paint';
+import { text } from '../widgets/text';
 
 /** Poker-card proportions: height is width × this. */
 export const CARD_ASPECT = 1.4;
 
-export const SUIT_RED = '#b02a2a';
-export const SUIT_BLACK = '#1a1410';
-const FACE_FILL = '#f4ecd8';
-const FACE_BORDER = '#c8a840';
-const COURT_ROBE = '#7a2438';
-const COURT_ROBE_LIGHT = '#a8394f';
-const COURT_TRIM = '#c8a840';
-const COURT_SKIN = '#e8cba8';
-const COURT_INK = '#2a1f10';
-/** Cool grey veil laid over a busted hand, so it desaturates rather than blacks out. */
-const DIM_VEIL = '#2a2a2e';
-
-// Card back — the club's green felt under a gold lattice.
-const BACK_FELT = '#123a2c';
-const BACK_FELT_EDGE = '#0a241b';
-const BACK_LATTICE = 'rgba(200,168,64,0.55)';
-const BACK_BORDER = '#c8a840';
-const BACK_EMBLEM = '#e0c060';
-
 // Everything below is a fraction of card width, so one `width` drives the art.
+const RANK_INDEX_WEIGHT = 800;
 const BORDER_WIDTH_FRACTION = 0.028;
 const RADIUS_FRACTION = 0.09;
 const CORNER_INDEX_WIDTH_FRACTION = 0.26;
@@ -81,7 +66,7 @@ const FLIP_MIDPOINT = 0.5;
 const TWO_PI = Math.PI * 2;
 const HALF = 0.5;
 
-export interface CardRect {
+export interface CardPose {
   x: number;
   y: number;
   /** Height is derived — `width * CARD_ASPECT`. */
@@ -109,7 +94,7 @@ export function cardHeight(width: number): number {
 const RED_SUITS: ReadonlyArray<Suit> = ['hearts', 'diamonds'];
 
 export function suitColor(suit: Suit): string {
-  return RED_SUITS.includes(suit) ? SUIT_RED : SUIT_BLACK;
+  return RED_SUITS.includes(suit) ? INK.suitRed : INK.suitBlack;
 }
 
 // ── Suit glyphs ─────────────────────────────────────────────────────────────
@@ -443,7 +428,7 @@ function drawCourtBody(
   ctx.closePath();
   ctx.fill();
 
-  ctx.fillStyle = COURT_TRIM;
+  ctx.fillStyle = INK.courtTrim;
   ctx.fillRect(
     cx - w * COURT_TRIM_WIDTH_FRACTION * HALF,
     shoulderY,
@@ -451,12 +436,12 @@ function drawCourtBody(
     top + h - shoulderY,
   );
 
-  ctx.fillStyle = COURT_SKIN;
+  ctx.fillStyle = INK.courtSkin;
   ctx.beginPath();
   ctx.arc(cx, headY, headR, 0, TWO_PI);
   ctx.fill();
 
-  ctx.fillStyle = COURT_INK;
+  ctx.fillStyle = INK.courtInk;
   ctx.beginPath();
   ctx.arc(cx - headR * HALF, headY, headR * COURT_EYE_RADIUS_FRACTION, 0, TWO_PI);
   ctx.arc(cx + headR * HALF, headY, headR * COURT_EYE_RADIUS_FRACTION, 0, TWO_PI);
@@ -464,7 +449,7 @@ function drawCourtBody(
 }
 
 function drawCrown(ctx: CanvasRenderingContext2D, cx: number, baseY: number, w: number): void {
-  ctx.fillStyle = COURT_TRIM;
+  ctx.fillStyle = INK.courtTrim;
   ctx.beginPath();
   ctx.moveTo(cx - w * CROWN_HALF_WIDTH, baseY);
   for (let point = 0; point < CROWN_POINTS; point++) {
@@ -478,7 +463,7 @@ function drawCrown(ctx: CanvasRenderingContext2D, cx: number, baseY: number, w: 
 }
 
 function drawTiara(ctx: CanvasRenderingContext2D, cx: number, baseY: number, w: number): void {
-  ctx.fillStyle = COURT_TRIM;
+  ctx.fillStyle = INK.courtTrim;
   ctx.beginPath();
   ctx.moveTo(cx - w * TIARA_HALF_WIDTH, baseY);
   ctx.quadraticCurveTo(cx, baseY - w * TIARA_HEIGHT * 2, cx + w * TIARA_HALF_WIDTH, baseY);
@@ -487,7 +472,7 @@ function drawTiara(ctx: CanvasRenderingContext2D, cx: number, baseY: number, w: 
 }
 
 function drawJackCap(ctx: CanvasRenderingContext2D, cx: number, baseY: number, w: number): void {
-  ctx.fillStyle = COURT_ROBE;
+  ctx.fillStyle = INK.courtRobe;
   ctx.beginPath();
   ctx.moveTo(cx - w * JACK_CAP_HALF_WIDTH, baseY);
   ctx.lineTo(cx + w * JACK_CAP_HALF_WIDTH, baseY);
@@ -495,7 +480,7 @@ function drawJackCap(ctx: CanvasRenderingContext2D, cx: number, baseY: number, w
   ctx.lineTo(cx - w * JACK_CAP_HALF_WIDTH, baseY - w * JACK_CAP_HEIGHT);
   ctx.closePath();
   ctx.fill();
-  ctx.strokeStyle = COURT_TRIM;
+  ctx.strokeStyle = INK.courtTrim;
   ctx.lineWidth = Math.max(1, w * BACK_LATTICE_WIDTH_FRACTION);
   ctx.beginPath();
   ctx.moveTo(cx + w * JACK_CAP_HALF_WIDTH * HALF, baseY - w * JACK_CAP_HEIGHT);
@@ -517,9 +502,9 @@ const COURT_HATS: Record<'J' | 'Q' | 'K', CourtHatDrawer> = {
 };
 
 const COURT_ROBES: Record<'J' | 'Q' | 'K', string> = {
-  J: COURT_ROBE_LIGHT,
-  Q: COURT_ROBE,
-  K: COURT_ROBE,
+  J: INK.courtRobeLight,
+  Q: INK.courtRobe,
+  K: INK.courtRobe,
 };
 
 function drawCourtFigure(
@@ -549,7 +534,7 @@ function courtRankOf(rank: Rank): 'J' | 'Q' | 'K' | null {
  */
 function withCardTransform(
   ctx: CanvasRenderingContext2D,
-  rect: CardRect,
+  rect: CardPose,
   opts: CardDrawOpts,
   body: (w: number, h: number) => void,
 ): void {
@@ -580,7 +565,7 @@ function applyCardShadow(ctx: CanvasRenderingContext2D, w: number, opts: CardDra
     return;
   }
   if (opts.liftShadow === true) {
-    ctx.shadowColor = 'rgba(0,0,0,0.55)';
+    ctx.shadowColor = INK.liftShadow;
     ctx.shadowBlur = w * LIFT_SHADOW_BLUR_FRACTION;
     ctx.shadowOffsetX = w * LIFT_SHADOW_OFFSET_FRACTION;
     ctx.shadowOffsetY = w * LIFT_SHADOW_OFFSET_FRACTION;
@@ -595,17 +580,11 @@ function drawCardBody(
 ): void {
   ctx.save();
   applyCardShadow(ctx, w, opts);
-  drawBox(ctx, {
-    x: 0,
-    y: 0,
-    width: w,
-    height: h,
-    fill: FACE_FILL,
-    border: FACE_BORDER,
-    borderWidth: Math.max(1, w * BORDER_WIDTH_FRACTION),
-    radius: w * RADIUS_FRACTION,
-  });
+  const body = { x: 0, y: 0, w, h };
+  const radius = w * RADIUS_FRACTION;
+  fillRounded(ctx, body, radius, INK.faceFill);
   ctx.restore();
+  strokeRounded(ctx, body, radius, INK.faceBorder, Math.max(1, w * BORDER_WIDTH_FRACTION));
 }
 
 function drawCornerIndex(
@@ -623,14 +602,17 @@ function drawCornerIndex(
 
   /** One corner, drawn at the origin; the bottom-right copy is the same block rotated 180°. */
   const drawCorner = (): void => {
-    drawText(ctx, card.rank, {
-      x: insetX,
-      y: insetY,
-      size: indexSize,
-      bold: true,
-      color,
-      align: 'center',
-    });
+    text(
+      chromeTarget(ctx),
+      { x: insetX - indexSize, y: insetY, w: indexSize * 2, h: indexSize },
+      {
+        text: card.rank,
+        style: { size: indexSize, weight: RANK_INDEX_WEIGHT, lineHeight: indexSize },
+        color,
+        align: 'center',
+        valign: 'middle',
+      },
+    );
     drawSuitGlyph(
       ctx,
       card.suit,
@@ -693,24 +675,16 @@ function applyDim(
   dim: number | undefined,
 ): void {
   if (dim === undefined || dim <= 0) return;
-  // The opacity goes to drawBox, not to globalAlpha: drawBox sets its own alpha
-  // from `opts.alpha` (default 1), which would overwrite an ambient one and turn
-  // the veil into an opaque slab.
-  drawBox(ctx, {
-    x: 0,
-    y: 0,
-    width: w,
-    height: h,
-    fill: DIM_VEIL,
-    radius: w * RADIUS_FRACTION,
-    alpha: dim,
-  });
+  ctx.save();
+  ctx.globalAlpha *= dim;
+  fillRounded(ctx, { x: 0, y: 0, w, h }, w * RADIUS_FRACTION, INK.dimVeil);
+  ctx.restore();
 }
 
 export function drawCardFace(
   ctx: CanvasRenderingContext2D,
   card: Card,
-  rect: CardRect,
+  rect: CardPose,
   opts: CardDrawOpts = {},
 ): void {
   withCardTransform(ctx, rect, opts, (w, h) => {
@@ -746,42 +720,39 @@ export function drawCardFace(
 
 export function drawCardBack(
   ctx: CanvasRenderingContext2D,
-  rect: CardRect,
+  rect: CardPose,
   opts: CardDrawOpts = {},
 ): void {
   withCardTransform(ctx, rect, opts, (w, h) => {
     ctx.save();
     applyCardShadow(ctx, w, opts);
-    drawBox(ctx, {
-      x: 0,
-      y: 0,
-      width: w,
-      height: h,
-      fill: BACK_FELT_EDGE,
-      border: BACK_BORDER,
-      borderWidth: Math.max(1, w * BORDER_WIDTH_FRACTION),
-      radius: w * RADIUS_FRACTION,
-    });
+    const back = { x: 0, y: 0, w, h };
+    fillRounded(ctx, back, w * RADIUS_FRACTION, INK.backFeltEdge);
     ctx.restore();
+    strokeRounded(
+      ctx,
+      back,
+      w * RADIUS_FRACTION,
+      INK.backBorder,
+      Math.max(1, w * BORDER_WIDTH_FRACTION),
+    );
 
     const inset = w * BACK_INSET_FRACTION;
     const innerW = w - inset * 2;
     const innerH = h - inset * 2;
-    drawBox(ctx, {
-      x: inset,
-      y: inset,
-      width: innerW,
-      height: innerH,
-      fill: BACK_FELT,
-      radius: w * RADIUS_FRACTION * HALF,
-    });
+    fillRounded(
+      ctx,
+      { x: inset, y: inset, w: innerW, h: innerH },
+      w * RADIUS_FRACTION * HALF,
+      INK.backFelt,
+    );
 
     // Diagonal lattice, clipped to the felt panel so it never crosses the border.
     ctx.save();
     ctx.beginPath();
     ctx.rect(inset, inset, innerW, innerH);
     ctx.clip();
-    ctx.strokeStyle = BACK_LATTICE;
+    ctx.strokeStyle = INK.backLattice;
     ctx.lineWidth = Math.max(1, w * BACK_LATTICE_WIDTH_FRACTION);
     const spacing = w * BACK_LATTICE_SPACING_FRACTION;
     const span = innerW + innerH;
@@ -799,14 +770,14 @@ export function drawCardBack(
 
     // Centred club emblem — the tell that stops the back reading as a face.
     const emblemR = w * BACK_EMBLEM_RADIUS_FRACTION;
-    ctx.fillStyle = BACK_FELT_EDGE;
+    ctx.fillStyle = INK.backFeltEdge;
     ctx.beginPath();
     ctx.arc(w * HALF, h * HALF, emblemR, 0, TWO_PI);
     ctx.fill();
-    ctx.strokeStyle = BACK_EMBLEM;
+    ctx.strokeStyle = INK.backEmblem;
     ctx.lineWidth = Math.max(1, w * BACK_LATTICE_WIDTH_FRACTION);
     ctx.stroke();
-    drawSuitGlyph(ctx, 'spades', w * HALF, h * HALF, emblemR, BACK_EMBLEM);
+    drawSuitGlyph(ctx, 'spades', w * HALF, h * HALF, emblemR, INK.backEmblem);
   });
 }
 
@@ -817,7 +788,7 @@ export function drawCardBack(
 export function drawCardFlip(
   ctx: CanvasRenderingContext2D,
   card: Card,
-  rect: CardRect,
+  rect: CardPose,
   flipProgress: number,
   opts: CardDrawOpts = {},
 ): void {

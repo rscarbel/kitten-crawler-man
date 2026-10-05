@@ -11,7 +11,7 @@ Browser dungeon crawler: TypeScript + one HTML5 Canvas, no framework, bundled by
 
 - Entry: `src/game.ts` → creates `InputManager` + `SceneManager`.
 - `SceneManager` (`src/core/Scene.ts`) owns the canvas, attaches all DOM listeners once, and runs a fixed-timestep loop: 60 Hz `update()` via accumulator, `render()` once per rAF. `replace(scene)` calls `onExit`/`onEnter`.
-- Scenes: `DungeonScene` (main orchestrator, ~3k lines), `BuildingInteriorScene`, `GameplayScene` (shared camera/HUD/companion logic), `PostSignupScene`. A `Scene` implements `update()` + `render(ctx)` and optional input hooks (`handleClick`, `handleKeyDown`, touch, etc.).
+- Scenes: `DungeonScene` (main orchestrator, ~3k lines), `BuildingInteriorScene`, `GameplayScene` (shared camera/HUD/companion logic), `PostSignupScene`. A `Scene` implements `update()` + `render(ctx)` and takes input through its `ui: UiRoot` (see Input). Localhost review scenes extend `PreviewScene`.
 
 ## Systems
 
@@ -31,9 +31,8 @@ See the `add-system` skill for the recipe.
 - `SceneWorld.ts` — `MobRoster` (list + spatial grid + the one `add` path) and the `SceneWorld` record (`gameMap`, `bus`, `audio`, `pm`, `roster`). One world per **map**; one bus per **scene**.
 - `CombatKit` — spells, mob AI, attack/death resolution, gore, floating numbers, smush, regen, death screen.
 - `DestructionKit` — smashable props, floor loot, dynamite.
-- `MenusKit` — bag, gear, pause menu, award stack, toasts, potions, skill books.
+- `MenusKit` — inventory screen, pause screen, award stack, toasts, potions, skill books; `menus.surfaces(...)` lists the surfaces it mounts.
 - `ChatKit` — chat box plus the universal cheat table.
-- `OverlayClaims.ts` — the one ordered list of "what owns the screen", read by the keyboard gate, the Space chain, the mobile tap route and the world-halt test.
 - `hotbarActions.ts` — what pressing slots 1–8 does, for every scene that has them.
 
 Kit fields stay concrete types: `update` signatures are not uniform, so a `GameSystem[]` loop could only be reached through casts. `npm run verify:kits` gates the spine.
@@ -43,7 +42,7 @@ Kit fields stay concrete types: `update` signatures are not uniform, so a `GameS
 **Floor-3 kits.** Two more kits hang off `DungeonScene` as one field each, with one-line call sites:
 
 - `GatheringKit` (`src/systems/briarHollow/GatheringKit.ts`) — harvesting any tree or boulder, thralls, the resource HUD and the village's node regrowth. Built on every overworld floor, village or not. It owns exactly one link in the Space chain, after citizen and village talk.
-- `BriarHollowKit` (`src/systems/briarHollow/BriarHollowKit.ts`) — Briar Hollow: villagers, the herd, services (`VillageServices`), construction and the siege engines (`ConstructionKit`, held as `defences`), soldiers, the Plea (`VillageQuestSystem`) and its assault, and Fenna's side quest The Borrowed Blueprints (`BlueprintsQuestSystem`, whose parts live in `src/systems/briarHollow/blueprints/`; see `docs/town.md`). Built only when `gameMap.briarHollow` is non-null (every floor-3 world). It is rebuilt on every door visit, so its systems keep nothing durable themselves: they read and write the `BriarHollowState` threaded by reference through both scenes (`src/core/briarHollowState.ts`), the same way `TownMemory` is. Its render hooks (`renderGround`, `renderEntities` merged into the Y-sort, `renderAbove`, `renderHud`), `tryInteract`, overlay claims, quest markers and tracker entries follow the boss-room dressing slots below.
+- `BriarHollowKit` (`src/systems/briarHollow/BriarHollowKit.ts`) — Briar Hollow: villagers, the herd, services (`VillageServices`), construction and the siege engines (`ConstructionKit`, held as `defences`), soldiers, the Plea (`VillageQuestSystem`) and its assault, and Fenna's side quest The Borrowed Blueprints (`BlueprintsQuestSystem`, whose parts live in `src/systems/briarHollow/blueprints/`; see `docs/town.md`). Built only when `gameMap.briarHollow` is non-null (every floor-3 world). It is rebuilt on every door visit, so its systems keep nothing durable themselves: they read and write the `BriarHollowState` threaded by reference through both scenes (`src/core/briarHollowState.ts`), the same way `TownMemory` is. Its render hooks (`renderGround`, `renderEntities` merged into the Y-sort, `renderAbove`, `renderHud`), `topBandEntries()`, `surfaces(camera)`, `tryInteract`, quest markers and tracker entries follow the boss-room dressing slots below.
 
 `EmoteEffectSystem` (`src/systems/EmoteEffectSystem.ts`) draws floating emotes (a petted cow's hearts) and is built to take other emote kinds.
 
@@ -57,7 +56,7 @@ The floor-3 town's systems, and where each rule lives. The durable description i
   - `InteriorPropInteractionSystem` runs examine, search and use; `InteriorReadableSystem` runs paged documents.
   - `TownInteriorPropDestructionSystem` breaks placed props, and `InteriorBreakReactionBarks` voices the reactions.
   - `townInteriorPropFigures.ts` splits walkable ground props from Y-sorted ones.
-  - `src/scenes/interiorCamera.ts` and `interiorHudLayout.ts` frame the room clear of the HUD.
+  - `src/scenes/interiorCamera.ts` frames the room clear of the HUD: `interiorHudOccluders` (`src/scenes/interiorHud.ts`) turns the shared HUD layout (`liveHudLayout`) into occluders for `hudClearView`.
 - **Memory:** `TownMemory` (`src/core/TownMemory.ts`) is threaded by reference through both scenes, like `BriarHollowState`: resident talks, cleared rooms and camps, and props that have paid out. `RENAMED_BUILDINGS` migrates old building names in saves.
 - **Talk:** `src/dialog/walkAway.ts` is the one walk-away rule. `src/systems/safeRoomSpeaker.ts` decides whether a press in the safe room is for the Bopca or Mordecai.
 - **Arrival:** `findPartyArrivalTiles` (`src/map/findWalkableTile.ts`) sets the party down on every arrival. `src/scenes/floorArrivalLoad.ts` builds the loading screen's tasks, run by `LoadRunner` (`src/core/LoadRunner.ts`).
@@ -139,7 +138,7 @@ Traits (`src/creatures/tactics/`) are opt-in per creature via `Mob.tacticsEligib
 - `villagerRegistry.ts` — `VILLAGER_SCRIPTS`/`SOLDIER_SCRIPTS`/`SHOPKEEPER_SCRIPTS`, the role-typed lookup tables generic Briar Hollow code reads a villager through.
 - `scripts/` — one file per speaker or scene (`scripts/tikka.ts`, `scripts/scenes/defend.ts`, …), each exporting the lines and pools that speaker or scene needs. `verify:dialog-lines` walks every export here and fails on a line nothing ever reads.
 
-`DungeonScene` and `BuildingInteriorScene` each own exactly one `Conversation`: constructed once, ticked once per frame with the player's position, rendered once, and its `overlayClaim()` folded into the scene's shared claim list. A system that needs to talk takes that `Conversation` through its constructor deps rather than building a second one. See `add-ui` for the API and `add-quest` for how a quest's dialog is structured.
+`DungeonScene` and `BuildingInteriorScene` each own exactly one `Conversation`: constructed once, ticked once per frame with the player's position, and mounted once on the scene's `UiRoot` through `conversation.surface()`. A system that needs to talk takes that `Conversation` through its constructor deps rather than building a second one. See `add-ui` for the API and `add-quest` for how a quest's dialog is structured.
 
 ## EventBus
 
@@ -147,7 +146,24 @@ Traits (`src/creatures/tactics/`) are opt-in per creature via `Mob.tacticsEligib
 
 ## Input
 
-`InputManager` only tracks held keys. Per-scene bindings live in `src/systems/GameplayInputHandler.ts`, bound in each scene's `onEnter` via a `GameplayInputActions` callback object (Esc handler chain + action handlers, suppressed while menus are open — the suppression reads `overlayClaims`). Mouse/touch flows `SceneManager` → scene `handleClick`, which routes to consumers in priority order; each consumer returns `boolean` and the scene early-returns on `true`.
+`InputManager` only tracks held keys. Every scene with on-canvas UI owns one `UiRoot` (`src/ui/core/UiRoot.ts`; gameplay scenes build it with `createSceneUi` from `src/ui/core/sceneUi.ts`) and exposes it as `scene.ui`. `SceneManager` (`src/core/Scene.ts`) feeds it every pointer gesture through `PointerInput` (`src/ui/core/pointer.ts`, which turns mouse and touch into `down`/`move`/`up`/`cancel`/`wheel` in UI units), offers it every keydown before any gameplay listener, and disposes it when the scene exits. The browser's `click` event is never used.
+
+- **Surfaces.** Each menu, dialog, prompt layer and the HUD is a `Surface` mounted once (`DungeonScene.surfaces()`, and the interior's equivalent). Its band (`world`, `hud`, `panel`, `modal`, `toast`, `system`) and open order make one stack, from which draw order, pointer order, Escape, keyboard focus, `ui.worldHalted()` and `ui.keyboardLocked()` all derive. A scene never keeps its own list of overlays.
+- **Pointer.** The topmost region under a press owns the whole gesture and taps on release; a press on no region goes to the scene's `handleWorldPointer(gesture)` — tap-to-move, attack, loot and chest taps, NPC taps, Briar Hollow taps. Nothing else in a scene hit-tests.
+- **Keys.** `ui.key` runs key hooks, then the topmost surface's `onKey`, then focus navigation, then Escape. A key no surface consumed reaches `src/systems/GameplayInputHandler.ts`, bound in each scene's `onEnter` via a `GameplayInputActions` callback object; an unclaimed Escape toggles pause, and `isSuppressed` reads `ui.keyboardLocked()`. `SceneManager` marks a key a surface consumed as spent until it is released, and tells `UiRoot` which keys were already held when a new menu appeared (`predatesSurface`).
+- **Interaction prompts** are withheld while `surfacesOverHud(ui)` is non-empty.
+
+The full contract is in the `add-ui` skill.
+
+## Render pipeline and UI
+
+A gameplay scene's `render` draws, in order:
+
+1. The world through `src/systems/RenderPipeline.ts` (ground, Y-sorted entities, effects, fog), then the screen-space world effects in `src/systems/worldEffects.ts` (health vignette, level-up and stat-boost flashes) and world-anchored markers. World text, bars and plates use the painters in `src/ui/world/`; interaction prompts raised here with `drawInteractionPrompt` are only queued.
+2. `ui.frame(ctx)`: every open surface bottom to top inside one `ctx.scale(uiScale)` — the `world`-band prompt surface (draws the queued prompts above darkness and fog), the `HudSurface` built from the scene's `HudModel` (unit frames, coin pill, minimap, dock, top band, hotbar), panels, modals, the HUD's `toast`-band overlay (toasts, and the top band when lifted over a scene panel), then system surfaces. The hit regions they register are what the next press is tested against.
+3. A few reporters drawn over everything (the reward fly-in to the HUD), and the entity hover tooltip while `!ui.pointerOverUi()`.
+
+Notices go to the toast stack (`MenusKit.toasts.post`), top-of-screen bars to `HudModel.topBand` entries, HUD buttons to `HudModel.dock`. `hudLayout` (`src/ui/hud/hudLayout.ts`) places every HUD piece the same way in the dungeon and indoors, so walking through a door moves nothing.
 
 ## AI bridge (optional)
 

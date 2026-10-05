@@ -37,7 +37,6 @@ import { CityElfCultist } from '../creatures/CityElfCultist';
 import { TheLich } from '../creatures/TheLich';
 import { drawSkyFowlCorpse } from '../sprites/featherfallCorpseSprite';
 import { drawSoulBurst, prewarmLichFightEffects } from '../sprites/skeletonEffectsSprite';
-import { drawRadialGlow } from '../sprites/radialGlow';
 import { drawInteractionPrompt } from '../ui/InteractionPrompt';
 import type { Conversation } from '../dialog/Conversation';
 import type { BarkLine, DialogLine, NonEmpty } from '../dialog/line';
@@ -49,10 +48,12 @@ import {
 } from '../dialog/scripts/scenes/quill';
 import { LICH_REVEAL } from '../dialog/scripts/scenes/lich';
 import { LichBattleSystem, type CompanionDirector } from './LichBattleSystem';
-import { drawText } from '../ui/TextBox';
-import { drawOverlay, drawProgressBar, PROGRESS_PRESETS } from '../ui/Box';
-import { drawQuestBanner, QUEST_BANNER_FRAMES } from '../ui/QuestBanners';
-import { viewportWidth, viewportHeight } from '../core/Viewport';
+import { questBannerEntry, QUEST_BANNER_FRAMES } from '../ui/QuestBanners';
+import type { TopBandEntry } from '../ui/hud/topBand';
+import { stackedBandEntry, type BandRow, type BandTone } from '../ui/hud/topBandStack';
+import { displayHp } from '../core/crawlerFormulas';
+import { paintRevealLighting } from './quillOfficeArt';
+import { objectiveRow, type ObjectiveLine } from '../ui/hud/objectiveLine';
 import { questMobLevel } from './questMobLevel';
 import { spawnHardModeBossHealer } from '../levels/fairySpawner';
 import { level3 } from '../levels/level3';
@@ -125,25 +126,9 @@ const LICH_OFFSET = { dx: 2, dy: -3 };
 /** How close the party must stand to read the body. */
 const EXAMINE_RANGE_TILES = 2.5;
 
-const BOSS_BAR_WIDTH = 320;
-const BOSS_BAR_HEIGHT = 14;
-const BOSS_BAR_Y = 40;
-const BOSS_BAR_LABEL_Y = 22;
-const BOSS_BAR_LABEL_SIZE = 12;
-const OBJECTIVE_Y_FROM_BOTTOM = 96;
-const OBJECTIVE_SIZE = 13;
-
 const FRAMES_PER_SECOND = 60;
 const VICTORY_BANNER_SECONDS = 8;
 const VICTORY_BANNER_FRAMES = VICTORY_BANNER_SECONDS * FRAMES_PER_SECOND;
-const VICTORY_GLOW_BLUR = 12;
-const BANNER_SUBTITLE_Y = 104;
-const BANNER_SUBTITLE_SIZE = 13;
-const VICTORY_TITLE_SIZE = 26;
-const VICTORY_SUBTITLE_SIZE = 13;
-const VICTORY_TITLE_Y_OFFSET = 30;
-const VICTORY_SUBTITLE_Y_OFFSET = 8;
-const BANNER_FADE_FRAMES = 60;
 const BOSS_MUSIC_FADE_IN_MS = 1500;
 const VICTORY_MUSIC_FADE_IN_MS = 2000;
 
@@ -157,16 +142,8 @@ const VICTORY_MUSIC_FADE_IN_MS = 2000;
  * to ever expire.
  */
 const REVEAL_HOLD_FRAMES = 50;
-/** How far the room dims while the light is on the corpse. */
-const REVEAL_DIM_ALPHA = 0.62;
-const REVEAL_DIM_COLOR = '#04060a';
 /** Frames the dim takes to arrive, so the room falls dark rather than blinking. */
 const REVEAL_DIM_FADE_FRAMES = 24;
-const REVEAL_SPOTLIGHT_RADIUS_TILES = 3.4;
-/** A flat bright centre, so the light reads as a pool rather than a point. */
-const REVEAL_SPOTLIGHT_CORE_FRACTION = 0.3;
-const REVEAL_SPOTLIGHT_RGB = '236, 226, 190';
-const REVEAL_SPOTLIGHT_ALPHA = 0.3;
 
 /** Frames of gathering witch-light before the Lich is solid enough to fight. */
 const MATERIALISE_FRAMES = 46;
@@ -197,25 +174,19 @@ type ConfrontationPhase =
 interface BannerCard {
   readonly title: string;
   readonly subtitle: string;
-  readonly color: string;
-  readonly shadow: string;
-  readonly subtitleColor: string;
+  readonly tone: BandTone;
 }
 
 const QUILL_BANNER: BannerCard = {
   title: 'MISS QUILL — THE HEADMISTRESS',
   subtitle: 'Every krasue in the city was her handiwork',
-  color: '#f47c7c',
-  shadow: '#6a2a2a',
-  subtitleColor: '#f4c7c7',
+  tone: 'danger',
 };
 
 const LICH_BANNER: BannerCard = {
   title: 'THE LICH — MAGISTRATE IN ALL BUT BODY',
   subtitle: 'Featherfall has been dead for weeks. This signed his letters.',
-  color: '#9ade63',
-  shadow: '#1d3a14',
-  subtitleColor: '#d4edaa',
+  tone: 'success',
 };
 
 /** A phase card raised by the Lich battle, in the Lich's own colours. */
@@ -460,9 +431,13 @@ export class QuillConfrontationSystem implements GameSystem {
    * telling the caller whether the room actually opened up.
    */
   dismissDialog(): boolean {
-    if (this.phase !== 'quill_fight') return false;
-    if (!this.conversationOwned) return false;
+    if (!this.dialogDismissible) return false;
     return this.conversation.dismiss();
+  }
+
+  /** Whether Escape may close the box on screen: only the examination's. */
+  get dialogDismissible(): boolean {
+    return this.phase === 'quill_fight' && this.conversationOwned;
   }
 
   /** Opens a beat whose Escape and walk-away do nothing until it is read. */
@@ -510,11 +485,6 @@ export class QuillConfrontationSystem implements GameSystem {
    */
   get lichBattle(): LichBattleSystem | null {
     return this.battle;
-  }
-
-  handleClick(mx: number, my: number): boolean {
-    if (!this.conversationOwned) return false;
-    return this.conversation.handleClick(mx, my);
   }
 
   /** Space on the body: one page of what the party can now see. Optional. */
@@ -762,23 +732,11 @@ export class QuillConfrontationSystem implements GameSystem {
     const corpseY = this.corpseTile.y * TILE_SIZE - camY;
 
     if (this.roomIsDimmed) {
-      const fade = this.dimTimer / REVEAL_DIM_FADE_FRAMES;
-      drawOverlay(ctx, {
-        canvasWidth: viewportWidth(),
-        canvasHeight: viewportHeight(),
-        color: REVEAL_DIM_COLOR,
-        alpha: REVEAL_DIM_ALPHA * fade,
-      });
-      drawRadialGlow(
+      paintRevealLighting(
         ctx,
         corpseX + TILE_SIZE * CENTER_OFFSET,
         corpseY + TILE_SIZE * CENTER_OFFSET,
-        TILE_SIZE * REVEAL_SPOTLIGHT_RADIUS_TILES,
-        [
-          { offset: 0, color: `rgba(${REVEAL_SPOTLIGHT_RGB}, ${REVEAL_SPOTLIGHT_ALPHA})` },
-          { offset: 1, color: `rgba(${REVEAL_SPOTLIGHT_RGB}, 0)` },
-        ],
-        REVEAL_SPOTLIGHT_CORE_FRACTION,
+        this.dimTimer / REVEAL_DIM_FADE_FRAMES,
       );
     }
 
@@ -816,111 +774,70 @@ export class QuillConfrontationSystem implements GameSystem {
     this.battle?.renderEffects(ctx, camX, camY, this.frameCount);
   }
 
-  renderUI(ctx: CanvasRenderingContext2D): void {
-    this.renderBossBar(ctx);
-    this.battle?.renderUI(ctx);
-    this.renderBanner(ctx);
-    this.renderVictory(ctx);
-    // Drawn through the scene's shared conversation panel.
-  }
-
-  private renderBossBar(ctx: CanvasRenderingContext2D): void {
-    const boss: MissQuill | TheLich | null =
-      this.phase === 'quill_fight' ? this.quill : this.phase === 'lich_fight' ? this.lich : null;
-    if (boss?.isAlive !== true) return;
-
-    const barX = viewportWidth() / 2 - BOSS_BAR_WIDTH / 2;
-    drawText(ctx, boss.displayName, {
-      x: viewportWidth() / 2,
-      y: BOSS_BAR_LABEL_Y,
-      size: BOSS_BAR_LABEL_SIZE,
-      bold: true,
-      color: '#f47c7c',
-      align: 'center',
+  topBandEntries(): TopBandEntry[] {
+    const entries: TopBandEntry[] = [];
+    const bossBar = this.bossBarEntry();
+    if (bossBar !== null) entries.push(bossBar);
+    const dodge = this.battle?.topBandEntry() ?? null;
+    if (dodge !== null) entries.push(dodge);
+    const banner = questBannerEntry({
+      id: 'quill-banner',
+      title: this.banner.title,
+      subtitle: this.banner.subtitle,
+      framesLeft: this.bannerTimer,
+      tone: this.banner.tone,
     });
-    drawProgressBar(ctx, {
-      x: barX,
-      y: BOSS_BAR_Y,
-      width: BOSS_BAR_WIDTH,
-      height: BOSS_BAR_HEIGHT,
-      value: boss.hp / boss.maxHp,
-      ...PROGRESS_PRESETS.hp,
-    });
-
-    if (this.phase === 'lich_fight') {
-      const objective = this.battle?.objectiveLine;
-      if (objective !== undefined) {
-        drawText(ctx, objective, {
-          x: viewportWidth() / 2,
-          y: viewportHeight() - OBJECTIVE_Y_FROM_BOTTOM,
-          size: OBJECTIVE_SIZE,
-          bold: true,
-          color: '#a8f070',
-          align: 'center',
-        });
-      }
-      return;
-    }
-
-    const remexAlive = this.remex?.isAlive ?? false;
-    drawText(
-      ctx,
-      remexAlive
-        ? 'Destroy Remex — his stored souls shield her'
-        : 'The shield is broken — Miss Quill is exposed!',
-      {
-        x: viewportWidth() / 2,
-        y: viewportHeight() - OBJECTIVE_Y_FROM_BOTTOM,
-        size: OBJECTIVE_SIZE,
-        bold: true,
-        color: remexAlive ? '#e8d060' : '#a8f070',
-        align: 'center',
-      },
-    );
-  }
-
-  private renderBanner(ctx: CanvasRenderingContext2D): void {
-    if (this.bannerTimer <= 0) return;
-    const card = this.banner;
-    drawQuestBanner(ctx, card.title, this.bannerTimer, card.color, card.shadow);
-    const alpha = this.bannerTimer < BANNER_FADE_FRAMES ? this.bannerTimer / BANNER_FADE_FRAMES : 1;
-    drawText(ctx, card.subtitle, {
-      x: viewportWidth() / 2,
-      y: BANNER_SUBTITLE_Y,
-      size: BANNER_SUBTITLE_SIZE,
-      color: card.subtitleColor,
-      align: 'center',
-      alpha,
-    });
-  }
-
-  private renderVictory(ctx: CanvasRenderingContext2D): void {
+    if (banner !== null) entries.push(banner);
     // Only the end of the whole confrontation arms this timer: Quill's death is
     // a turn in the room, not the end of it, and a card telling the player the
     // murders are over while the thing behind them is still forming would be
     // the game lying to them.
-    if (this.victoryTimer <= 0) return;
-    const alpha =
-      this.victoryTimer < BANNER_FADE_FRAMES ? this.victoryTimer / BANNER_FADE_FRAMES : 1;
-    drawText(ctx, 'THE MAGISTRACY IS EMPTY', {
-      x: viewportWidth() / 2,
-      y: viewportHeight() / 2 - VICTORY_TITLE_Y_OFFSET,
-      size: VICTORY_TITLE_SIZE,
-      bold: true,
-      color: '#4ade80',
-      align: 'center',
-      alpha,
-      glow: '#4ade80',
-      glowBlur: VICTORY_GLOW_BLUR,
+    const victory = questBannerEntry({
+      id: 'quill-victory',
+      title: 'THE MAGISTRACY IS EMPTY',
+      subtitle: 'The murders are over. Return to the streets below.',
+      framesLeft: this.victoryTimer,
+      tone: 'success',
     });
-    drawText(ctx, 'The murders are over. Return to the streets below.', {
-      x: viewportWidth() / 2,
-      y: viewportHeight() / 2 + VICTORY_SUBTITLE_Y_OFFSET,
-      size: VICTORY_SUBTITLE_SIZE,
-      color: '#d4edaa',
-      align: 'center',
-      alpha,
-    });
+    if (victory !== null) entries.push(victory);
+    return entries;
+  }
+
+  private get fightingBoss(): MissQuill | TheLich | null {
+    const boss: MissQuill | TheLich | null =
+      this.phase === 'quill_fight' ? this.quill : this.phase === 'lich_fight' ? this.lich : null;
+    return boss?.isAlive === true ? boss : null;
+  }
+
+  private bossBarEntry(): TopBandEntry | null {
+    const boss = this.fightingBoss;
+    if (boss === null) return null;
+    const rows: BandRow[] = [
+      { kind: 'text', text: boss.displayName, role: 'label', tone: 'danger' },
+      {
+        kind: 'meter',
+        id: 'quill-boss/hp',
+        value: boss.hp,
+        max: boss.maxHp,
+        meterKind: 'boss',
+        valueText: `${displayHp(boss.hp)} / ${boss.maxHp}`,
+      },
+    ];
+    const objective = this.objective();
+    if (objective !== null) rows.push(objectiveRow(objective));
+    return stackedBandEntry({ id: 'quill-boss', priority: 'boss', accentTone: 'danger', rows });
+  }
+
+  /** What the fight in progress asks of the party. */
+  private objective(): ObjectiveLine | null {
+    if (this.phase === 'lich_fight') {
+      const battleLine = this.battle?.objectiveLine;
+      return battleLine === undefined ? null : { text: battleLine, tone: 'success' };
+    }
+    const remexAlive = this.remex?.isAlive ?? false;
+    return remexAlive
+      ? { text: 'Destroy Remex — his stored souls shield her', tone: 'warning' }
+      : { text: 'The shield is broken — Miss Quill is exposed!', tone: 'success' };
   }
 }
 

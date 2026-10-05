@@ -1,6 +1,8 @@
 import { frameTime } from '../../utils';
 import { drawRadialGlow, type GlowStop } from '../../sprites/radialGlow';
 import { paintSoulCrystalBody, soulCrystalHeartbeat } from '../../sprites/soulCrystalArt';
+import type { Rect } from '../core/geom';
+import { iconSquare } from './iconSquare';
 
 /**
  * Carl's Doomsday Scenario: the city's soul crystal, sealed under an enchanted
@@ -117,12 +119,11 @@ function drawPlinth(ctx: CanvasRenderingContext2D, x: number, y: number, size: n
  */
 export function paintSoulCrystalIconAt(
   ctx: CanvasRenderingContext2D,
-  x: number,
-  y: number,
-  size: number,
+  rect: Rect,
   timeS: number,
   alpha = 1,
 ): void {
+  const { x, y, size } = iconSquare(rect);
   ctx.save();
   ctx.globalAlpha *= alpha;
 
@@ -165,12 +166,6 @@ export function paintSoulCrystalIconAt(
 }
 
 /** Draws Carl's Doomsday Scenario in an inventory or hotbar cell. */
-export function drawSoulCrystalIcon(
-  ctx: CanvasRenderingContext2D,
-  x: number,
-  y: number,
-  size: number,
-  alpha = 1,
-): void {
-  paintSoulCrystalIconAt(ctx, x, y, size, frameTime, alpha);
+export function drawSoulCrystalIcon(ctx: CanvasRenderingContext2D, rect: Rect, alpha = 1): void {
+  paintSoulCrystalIconAt(ctx, rect, frameTime, alpha);
 }

@@ -3,24 +3,18 @@
  * canvas, no globals — hand it a viewport and a fit scale and it resolves every
  * rect the panel needs.
  *
- * `fitModal` alone is not enough here. It scales the whole panel about the
+ * `casinoFit` alone is not enough here. It scales the whole panel about the
  * viewport centre by one factor derived from height, so a 640px-tall blackjack
  * panel on a 360×640 phone would still overflow horizontally, and on a landscape
  * phone would put the action buttons below any usable touch target. So the mode
- * is chosen first and `fitModal` handles only the residual, which keeps the
+ * is chosen first and `casinoFit` handles only the residual, which keeps the
  * shrink factor near 1 in both modes.
  */
 
 import { CARD_ASPECT } from './PlayingCard';
+import type { Rect } from '../core/geom';
 
-export type CasinoLayoutMode = 'wide' | 'compact';
-
-export interface Rect {
-  readonly x: number;
-  readonly y: number;
-  readonly width: number;
-  readonly height: number;
-}
+export type CasinoLayoutMode = 'wide' | 'compact' | 'landscape';
 
 export interface CasinoLayout {
   readonly mode: CasinoLayoutMode;
@@ -44,6 +38,13 @@ export interface CasinoLayout {
   readonly leaveButton: Rect;
   /** Post-fit button height, already divided back into design space. */
   readonly buttonHeight: number;
+  /** Lines the hint row wraps to; the landscape control column is too narrow for one. */
+  readonly hintLines: number;
+  /**
+   * Height kept clear at the top of each hand band for its seat label. Only a
+   * band too short to centre the cards below the label reserves it.
+   */
+  readonly handLabelInset: number;
 }
 
 /** Below this width the panel switches to the stacked, two-column-button layout. */
@@ -100,16 +101,90 @@ const MIN_CARD_WIDTH = 26;
 
 const HALF = 0.5;
 
-export function casinoLayoutMode(viewportW: number): CasinoLayoutMode {
+/**
+ * A screen at least this much wider than tall takes the two-column landscape
+ * layout whenever the stacked panel would have to shrink to fit: shrunk, its
+ * 44px buttons grow so tall in design space that they bury the hands, and its
+ * text drops below a readable size.
+ */
+const LANDSCAPE_MIN_ASPECT = 1.25;
+
+/** Breathing room kept above and below a shrunk panel so it doesn't touch the viewport edges. */
+const FIT_VERTICAL_MARGIN = 24;
+/** The landscape panel is laid out at the viewport's own height, so it keeps a slimmer margin. */
+const LANDSCAPE_VERTICAL_MARGIN = 8;
+/**
+ * The smallest shrink a stacked panel is drawn at. Only a viewport too small
+ * for any layout reaches it; it keeps the text legible and lets the panel
+ * overflow instead.
+ */
+const FIT_MIN_SCALE = 0.6;
+
+function stackedDesignHeight(viewportW: number): number {
+  return viewportW >= WIDE_LAYOUT_MIN_WIDTH ? WIDE_PANEL_HEIGHT : COMPACT_PANEL_HEIGHT;
+}
+
+function unclampedFit(designHeight: number, viewportH: number): number {
+  return (viewportH - FIT_VERTICAL_MARGIN * 2) / designHeight;
+}
+
+export function casinoLayoutMode(viewportW: number, viewportH: number): CasinoLayoutMode {
+  const isLandscapeScreen = viewportW >= viewportH * LANDSCAPE_MIN_ASPECT;
+  const stackedWouldShrink = unclampedFit(stackedDesignHeight(viewportW), viewportH) < 1;
+  if (isLandscapeScreen && stackedWouldShrink) return 'landscape';
   return viewportW >= WIDE_LAYOUT_MIN_WIDTH ? 'wide' : 'compact';
 }
 
-export function casinoDesignHeight(mode: CasinoLayoutMode): number {
-  return mode === 'wide' ? WIDE_PANEL_HEIGHT : COMPACT_PANEL_HEIGHT;
+/** The landscape panel is exactly as tall as the viewport allows, so it is never shrunk. */
+export function casinoDesignHeight(mode: CasinoLayoutMode, viewportH: number): number {
+  switch (mode) {
+    case 'wide':
+      return WIDE_PANEL_HEIGHT;
+    case 'compact':
+      return COMPACT_PANEL_HEIGHT;
+    case 'landscape':
+      return Math.max(MIN_TOUCH_TARGET_PX, viewportH - LANDSCAPE_VERTICAL_MARGIN * 2);
+  }
 }
 
-function rect(x: number, y: number, width: number, height: number): Rect {
-  return { x, y, width, height };
+/** How the panel is shrunk about the viewport centre to fit a short viewport. */
+export interface CasinoFit {
+  readonly scale: number;
+  readonly pivotX: number;
+  readonly pivotY: number;
+}
+
+/**
+ * The shrink that fits the panel's design height into the viewport, about the
+ * viewport's centre. A pure function of the viewport, so the bare-context
+ * render and a surface rendering in UI units fit the panel the same way.
+ */
+export function casinoFit(viewportW: number, viewportH: number): CasinoFit {
+  const mode = casinoLayoutMode(viewportW, viewportH);
+  const scale =
+    mode === 'landscape'
+      ? 1
+      : Math.min(
+          1,
+          Math.max(FIT_MIN_SCALE, unclampedFit(casinoDesignHeight(mode, viewportH), viewportH)),
+        );
+  return {
+    scale,
+    pivotX: viewportW * HALF,
+    pivotY: viewportH * HALF,
+  };
+}
+
+/** A design-space point mapped onto the fitted screen. */
+export function fitToScreen(fit: CasinoFit, x: number, y: number): { x: number; y: number } {
+  return {
+    x: fit.pivotX + (x - fit.pivotX) * fit.scale,
+    y: fit.pivotY + (y - fit.pivotY) * fit.scale,
+  };
+}
+
+function rect(x: number, y: number, w: number, h: number): Rect {
+  return { x, y, w, h };
 }
 
 /**
@@ -144,9 +219,9 @@ export function handSpread(
   const overlap = overlapFractionFor(handSize);
   const step = cardWidth * overlap;
   const spanWidth = cardWidth + step * (handSize - 1);
-  const left = band.x + (band.width - spanWidth) * HALF;
+  const left = band.x + (band.w - spanWidth) * HALF;
   const height = cardWidth * CARD_ASPECT;
-  const top = band.y + (band.height - height) * HALF;
+  const top = band.y + (band.h - height) * HALF;
   const centreIndex = (handSize - 1) * HALF;
 
   const placements: CardPlacement[] = [];
@@ -164,15 +239,15 @@ export function handSpread(
 /** The card width that fits `MAX_PLANNED_HAND_SIZE` cards inside a hand band. */
 function cardWidthFor(band: Rect): number {
   const spanFactor = 1 + overlapFractionFor(MAX_PLANNED_HAND_SIZE) * (MAX_PLANNED_HAND_SIZE - 1);
-  const byWidth = band.width / spanFactor;
-  const byHeight = (band.height - CARD_BAND_VERTICAL_PAD * 2) / CARD_ASPECT;
+  const byWidth = band.w / spanFactor;
+  const byHeight = (band.h - CARD_BAND_VERTICAL_PAD * 2) / CARD_ASPECT;
   return Math.max(MIN_CARD_WIDTH, Math.min(byWidth, byHeight));
 }
 
 /**
  * Resolve the panel layout.
  *
- * `fitScale` is the factor `fitModal` will apply to everything drawn here. The
+ * `fitScale` is the factor `casinoFit` will apply to everything drawn here. The
  * button height is derived *from* it — a 44px screen target is
  * `44 / fitScale` design pixels — so computing the fit first and the buttons
  * second is load-bearing, not incidental ordering.
@@ -182,9 +257,9 @@ export function computeCasinoLayout(
   viewportH: number,
   fitScale: number,
 ): CasinoLayout {
-  const mode = casinoLayoutMode(viewportW);
-  const designHeight = casinoDesignHeight(mode);
-  const idealWidth = mode === 'wide' ? WIDE_PANEL_WIDTH : COMPACT_PANEL_WIDTH;
+  const mode = casinoLayoutMode(viewportW, viewportH);
+  const designHeight = casinoDesignHeight(mode, viewportH);
+  const idealWidth = mode === 'compact' ? COMPACT_PANEL_WIDTH : WIDE_PANEL_WIDTH;
   const panelW = Math.min(idealWidth, Math.max(MIN_TOUCH_TARGET_PX, viewportW - PANEL_SIDE_MARGIN));
   const panelX = Math.round(viewportW * HALF - panelW * HALF);
   const panelY = Math.round(viewportH * HALF - designHeight * HALF);
@@ -196,9 +271,14 @@ export function computeCasinoLayout(
   const innerW = panelW - PANEL_PADDING * 2;
   const innerBottom = panelY + designHeight - PANEL_PADDING;
 
-  return mode === 'wide'
-    ? wideLayout(panel, innerX, innerY, innerW, innerBottom, buttonHeight)
-    : compactLayout(panel, innerX, innerY, innerW, innerBottom, buttonHeight);
+  switch (mode) {
+    case 'wide':
+      return wideLayout(panel, innerX, innerY, innerW, innerBottom, buttonHeight);
+    case 'compact':
+      return compactLayout(panel, innerX, innerY, innerW, innerBottom, buttonHeight);
+    case 'landscape':
+      return landscapeLayout(panel, buttonHeight);
+  }
 }
 
 function wideLayout(
@@ -254,7 +334,7 @@ function wideLayout(
   );
   const banner = rect(
     innerX,
-    dealerPortrait.y + dealerPortrait.height + ROW_GAP,
+    dealerPortrait.y + dealerPortrait.h + ROW_GAP,
     portraitW,
     BANNER_HEIGHT,
   );
@@ -281,6 +361,8 @@ function wideLayout(
     helpButton: rect(innerX, footerTop, footerBtnW, footerHeight),
     leaveButton: rect(innerX + footerBtnW + COLUMN_GAP, footerTop, footerBtnW, footerHeight),
     buttonHeight,
+    hintLines: 1,
+    handLabelInset: 0,
   };
 }
 
@@ -349,5 +431,134 @@ function compactLayout(
     helpButton: rect(innerX, footerTop, footerBtnW, footerHeight),
     leaveButton: rect(innerX + footerBtnW + COLUMN_GAP, footerTop, footerBtnW, footerHeight),
     buttonHeight,
+    hintLines: 1,
+    handLabelInset: 0,
+  };
+}
+
+/** Share of the landscape panel's inner width the felt column takes; the controls get the rest. */
+const LANDSCAPE_FELT_FRACTION = 0.5;
+/** The header's title and readout lines, with nothing to spare. */
+const LANDSCAPE_HEADER_HEIGHT = 36;
+/** Two caption lines of Deuce's banter. */
+const LANDSCAPE_BANNER_HEIGHT = 28;
+const LANDSCAPE_BUST_SIZE = 36;
+const LANDSCAPE_PANEL_PADDING = 12;
+const LANDSCAPE_ROW_GAP = 6;
+const LANDSCAPE_HINT_LINES = 2;
+/** The seat label's overline plus the gap under it. */
+const LANDSCAPE_HAND_LABEL_INSET = 16;
+/** Chips are sized from the tray's height, so it is held between a legible and a sensible stack. */
+const LANDSCAPE_MIN_TRAY_HEIGHT = 52;
+const LANDSCAPE_MAX_TRAY_HEIGHT = 84;
+
+/**
+ * Two columns for a short landscape viewport: the felt (header, banter and both
+ * hands) on the left, and the chips, actions and footer stacked on the right, so
+ * full-size touch targets never sit on top of the cards.
+ */
+function landscapeLayout(panel: Rect, buttonHeight: number): CasinoLayout {
+  const innerX = panel.x + LANDSCAPE_PANEL_PADDING;
+  const innerY = panel.y + LANDSCAPE_PANEL_PADDING;
+  const innerW = panel.w - LANDSCAPE_PANEL_PADDING * 2;
+  const innerBottom = panel.y + panel.h - LANDSCAPE_PANEL_PADDING;
+  const innerH = innerBottom - innerY;
+
+  const feltW = (innerW - COLUMN_GAP) * LANDSCAPE_FELT_FRACTION;
+  const controlsX = innerX + feltW + COLUMN_GAP;
+  const controlsW = innerW - feltW - COLUMN_GAP;
+
+  const banner = rect(
+    innerX,
+    innerY + LANDSCAPE_HEADER_HEIGHT + LANDSCAPE_ROW_GAP,
+    feltW,
+    LANDSCAPE_BANNER_HEIGHT,
+  );
+  const bandsTop = banner.y + LANDSCAPE_BANNER_HEIGHT + LANDSCAPE_ROW_GAP;
+  const handBandHeight = Math.max(
+    0,
+    (innerBottom - bandsTop - STATUS_HEIGHT - LANDSCAPE_ROW_GAP * 2) * HAND_BAND_SHARE,
+  );
+  const dealerHand = rect(innerX, bandsTop, feltW, handBandHeight);
+  const statusRow = rect(
+    innerX,
+    dealerHand.y + handBandHeight + LANDSCAPE_ROW_GAP,
+    feltW,
+    STATUS_HEIGHT,
+  );
+  const playerHand = rect(
+    innerX,
+    statusRow.y + STATUS_HEIGHT + LANDSCAPE_ROW_GAP,
+    feltW,
+    handBandHeight,
+  );
+
+  const hintHeight = HINT_HEIGHT * LANDSCAPE_HINT_LINES;
+  const actionHeight = buttonHeight * COMPACT_ACTION_ROWS + LANDSCAPE_ROW_GAP;
+  const fixedControlsHeight =
+    hintHeight + LANDSCAPE_ROW_GAP + actionHeight + LANDSCAPE_ROW_GAP + buttonHeight;
+  const spareHeight = innerH - fixedControlsHeight - LANDSCAPE_ROW_GAP;
+  const trayHeight = Math.min(
+    LANDSCAPE_MAX_TRAY_HEIGHT,
+    Math.max(LANDSCAPE_MIN_TRAY_HEIGHT, spareHeight),
+  );
+  const stackHeight = trayHeight + LANDSCAPE_ROW_GAP + fixedControlsHeight;
+  const trayTop = innerY + Math.max(0, (innerH - stackHeight) * HALF);
+  const hintTop = trayTop + trayHeight + LANDSCAPE_ROW_GAP;
+  const actionTop = hintTop + hintHeight + LANDSCAPE_ROW_GAP;
+  const footerTop = actionTop + actionHeight + LANDSCAPE_ROW_GAP;
+  const trayW = (controlsW - COLUMN_GAP) * HAND_BAND_SHARE;
+  const footerBtnW = (controlsW - COLUMN_GAP) * HAND_BAND_SHARE;
+
+  return {
+    mode: 'landscape',
+    panel,
+    header: rect(innerX, innerY, feltW - LANDSCAPE_BUST_SIZE - COLUMN_GAP, LANDSCAPE_HEADER_HEIGHT),
+    dealerPortrait: null,
+    headerBust: rect(
+      innerX + feltW - LANDSCAPE_BUST_SIZE,
+      innerY,
+      LANDSCAPE_BUST_SIZE,
+      LANDSCAPE_BUST_SIZE,
+    ),
+    banner,
+    dealerHand,
+    playerHand,
+    cardWidth: cardWidthFor(insetTop(dealerHand, LANDSCAPE_HAND_LABEL_INSET)),
+    chipTray: rect(controlsX, trayTop, trayW, trayHeight),
+    betSpot: rect(
+      controlsX + trayW + COLUMN_GAP,
+      trayTop,
+      controlsW - trayW - COLUMN_GAP,
+      trayHeight,
+    ),
+    actionRow: rect(controlsX, actionTop, controlsW, actionHeight),
+    statusRow,
+    hintRow: rect(controlsX, hintTop, controlsW, hintHeight),
+    helpButton: rect(controlsX, footerTop, footerBtnW, buttonHeight),
+    leaveButton: rect(controlsX + footerBtnW + COLUMN_GAP, footerTop, footerBtnW, buttonHeight),
+    buttonHeight,
+    hintLines: LANDSCAPE_HINT_LINES,
+    handLabelInset: LANDSCAPE_HAND_LABEL_INSET,
+  };
+}
+
+function insetTop(band: Rect, inset: number): Rect {
+  return rect(band.x, band.y + inset, band.w, Math.max(0, band.h - inset));
+}
+
+/** The part of a hand band the cards are spread across, clear of the seat label. */
+export function handCardBand(layout: CasinoLayout, band: Rect): Rect {
+  return insetTop(band, layout.handLabelInset);
+}
+
+/** A design-space rect mapped onto the fitted screen, as a UI rect a hit region can take. */
+export function fitRectToScreen(fit: CasinoFit, designRect: Rect): Rect {
+  const topLeft = fitToScreen(fit, designRect.x, designRect.y);
+  return {
+    x: topLeft.x,
+    y: topLeft.y,
+    w: designRect.w * fit.scale,
+    h: designRect.h * fit.scale,
   };
 }

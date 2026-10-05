@@ -12,12 +12,15 @@ import {
   knockoutSecondsLeft,
   REVIVE_ARROW_COLOR,
 } from '../systems/KnockoutRevive';
-import { drawText, TEXT_PRESETS } from './TextBox';
+import { inset, type Rect } from './core/geom';
+import { chromeTarget } from './screens/dialogs/canvasChrome';
+import { skinsFor } from './theme/skins';
+import { drawGlass } from './widgets/paint';
+import { measureText, text } from './widgets/text';
 import {
   ARROW_PRIORITY,
   drawArrowAbovePlayer,
   isWorldPointOnScreen,
-  type ArrowAvoidRect,
   type ArrowCandidate,
 } from './WorldArrow';
 
@@ -30,10 +33,6 @@ import {
 
 /** Height of the countdown pill's centre above the body's tile, in tiles. */
 const COUNTDOWN_LIFT_TILES = 1.15;
-const COUNTDOWN_TEXT_SIZE = 12;
-const COUNTDOWN_PADDING = 3;
-const COUNTDOWN_BACKGROUND = 'rgba(15, 10, 10, 0.78)';
-const COUNTDOWN_BORDER_WIDTH = 1;
 /** Below the body, clear of the knockout ring drawn over it. */
 const REVIVE_BAR_DROP_TILES = 1.1;
 /** Wide enough for its label at world scale, narrow enough to sit under one body. */
@@ -66,20 +65,14 @@ export function renderHirelingDownedMarker(
   // there would read as time running out.
   const reviving = survival.reviveProgress > 0;
 
-  drawText(ctx, `${body.displayName}  ${secondsLeft}s`, {
-    ...TEXT_PRESETS.danger,
-    x: centerX,
-    y: tileTop - TILE_SIZE * COUNTDOWN_LIFT_TILES,
-    align: 'center',
-    size: COUNTDOWN_TEXT_SIZE,
+  drawCountdownPill(
+    ctx,
+    centerX,
+    tileTop - TILE_SIZE * COUNTDOWN_LIFT_TILES,
+    `${body.displayName}  ${secondsLeft}s`,
     color,
-    outline: true,
-    alpha: reviving ? 1 : knockoutPulse(),
-    padding: COUNTDOWN_PADDING,
-    background: COUNTDOWN_BACKGROUND,
-    border: color,
-    borderWidth: COUNTDOWN_BORDER_WIDTH,
-  });
+    reviving ? 1 : knockoutPulse(),
+  );
 
   if (reviving) {
     drawRevivingBar(
@@ -90,6 +83,41 @@ export function renderHirelingDownedMarker(
       REVIVE_BAR_WIDTH_PX,
     );
   }
+}
+
+/** A glass pill centred on (`centerX`, `centerY`), edged and lettered in the countdown's colour. */
+function drawCountdownPill(
+  ctx: CanvasRenderingContext2D,
+  centerX: number,
+  centerY: number,
+  content: string,
+  color: string,
+  alpha: number,
+): void {
+  const target = chromeTarget(ctx);
+  const { space, type } = target.theme;
+  const style = type.label;
+  const textWidth = Math.ceil(measureText(target, content, { style, tabular: true }));
+  const width = textWidth + space.sm * 2;
+  const height = style.lineHeight + space.xs * 2;
+  const pill: Rect = {
+    x: Math.round(centerX - width / 2),
+    y: Math.round(centerY - height / 2),
+    w: width,
+    h: height,
+  };
+  const skin = skinsFor(target.theme).panel.hud;
+  ctx.save();
+  ctx.globalAlpha *= alpha;
+  drawGlass(target, pill, { ...skin, border: color }, target.theme.radius.pill);
+  text(target, inset(pill, { l: space.sm, r: space.sm }), {
+    text: content,
+    style,
+    color,
+    align: 'center',
+    tabular: true,
+  });
+  ctx.restore();
 }
 
 /**
@@ -106,7 +134,7 @@ export function hirelingDownedArrowCandidate(
   camX: number,
   camY: number,
   visibleRadiusPx: number,
-  avoidRect?: ArrowAvoidRect,
+  avoidRect?: Rect,
 ): ArrowCandidate | null {
   if (!body.survival.downed) return null;
   const bodyCenterX = body.x + TILE_SIZE * CENTER_OFFSET;

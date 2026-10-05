@@ -82,6 +82,14 @@ function stepFrames(rig: SiegeRig, frames: number): void {
   for (let frame = 0; frame < frames; frame++) rig.step();
 }
 
+/**
+ * The item at `index`, or undefined past either end. The project does not
+ * type index reads as possibly undefined, so an empty-array check needs this.
+ */
+function itemAt<T>(items: readonly T[], index: number): T | undefined {
+  return index >= 0 && index < items.length ? items[index] : undefined;
+}
+
 function isFourAdjacent(a: TilePoint, b: TilePoint): boolean {
   return Math.abs(a.x - b.x) + Math.abs(a.y - b.y) === 1;
 }
@@ -154,14 +162,16 @@ export function verifyFenceSections(check: Check): void {
     flat.every((tile) => rig.map.structure[tile.y]?.[tile.x]?.type === FENCE),
     'every section tile is a fence tile on the painted map',
   );
-  const [gate] = fenceGates;
-  const firstTile = sections[0]?.[0];
+  const gate = itemAt(fenceGates, 0);
+  const firstSection = itemAt(sections, 0);
+  const firstTile = firstSection === undefined ? undefined : itemAt(firstSection, 0);
   check(
     gate !== undefined && firstTile !== undefined && isFourAdjacent(gate, firstTile),
     'the first section starts at the gate',
   );
-  const lastSection = sections[sections.length - 1];
-  const lastTile = lastSection?.[lastSection.length - 1];
+  const lastSection = itemAt(sections, sections.length - 1);
+  const lastTile =
+    lastSection === undefined ? undefined : itemAt(lastSection, lastSection.length - 1);
   check(
     gate !== undefined && lastTile !== undefined && isFourAdjacent(gate, lastTile),
     'the last section ends at the gate from the other side',
@@ -231,7 +241,7 @@ export function verifyFenceBuild(check: Check): void {
     blueprints.counterText() === `0/${PASTURE_FENCE_SECTION_COUNT} fence sections`,
     'the counter reads 0/10 fence sections',
   );
-  check(rig.kit.tryInteract(rig.human), 'Space through the kit takes the press');
+  check(rig.kit.tryInteract(rig.human, false), 'Space through the kit takes the press');
   check(fence.isWorking, 'the press starts the hammering channel');
   check(boardsHeld(rig) === PLENTY_OF_BOARDS, 'no boards are spent as the channel starts');
   stepFrames(rig, HALF_THE_CHANNEL_FRAMES);

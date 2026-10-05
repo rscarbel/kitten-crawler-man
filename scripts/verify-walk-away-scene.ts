@@ -45,7 +45,7 @@ const { MercenarySystem } = await import('../src/systems/MercenarySystem.js');
 const { TownLifeSystem } = await import('../src/systems/TownLifeSystem.js');
 const { BopcaSystem, BOPCA_TALK_DISTANCE_TILES } = await import('../src/systems/BopcaSystem.js');
 const { SafeRoomSystem } = await import('../src/systems/SafeRoomSystem.js');
-const { MobileTouchState } = await import('../src/core/MobileTouchState.js');
+const { TouchMoveState } = await import('../src/core/TouchMoveState.js');
 const { safeRoomSpeakerFor } = await import('../src/systems/safeRoomSpeaker.js');
 const { stampSafeRoomCounters } = await import('../src/map/safeRoomCounterLayout.js');
 const { CITIZEN_TALK_RADIUS_TILES } = await import('../src/creatures/townInteraction.js');
@@ -140,14 +140,15 @@ function tilesApart(a: Point, b: Point): number {
   return Math.hypot(a.x - b.x, a.y - b.y) / TILE_SIZE;
 }
 
-/** Lays the box out as a frame would, so `hitsSurface` knows where it is drawn. */
-function layOutConversation(
-  sceneManager: InstanceType<typeof SceneManager>,
-  conversation: InstanceType<typeof Conversation>,
-): void {
+/**
+ * Draws one frame of the scene, which lays the box out (so `hitsSurface`
+ * knows where it is drawn) and leaves the scene's surface stack holding the
+ * regions the next touch is tested against.
+ */
+function drawFrame(sceneManager: InstanceType<typeof SceneManager>, scene: Scene): void {
   const ctx = sceneManager.canvas.getContext('2d');
   if (ctx === null) throw new Error('the shim canvas has no 2d context');
-  conversation.render(ctx);
+  scene.render(ctx);
 }
 
 /**
@@ -170,15 +171,15 @@ async function settleArrival(
   return false;
 }
 
-/** A point on the conversation's box, found by scanning the screen. */
+/**
+ * The middle of the conversation's box, where a tap plainly lands on it: an
+ * edge pixel can sit on the box for its own hit test yet outside the region
+ * the scene's surface stack registered for it.
+ */
 function pointOnBox(conversation: InstanceType<typeof Conversation>): Point | null {
-  const SCAN_STEP_PX = 8;
-  for (let y = VIEWPORT.height - SCAN_STEP_PX; y > 0; y -= SCAN_STEP_PX) {
-    for (let x = SCAN_STEP_PX; x < VIEWPORT.width; x += SCAN_STEP_PX) {
-      if (conversation.hitsSurface(x, y)) return { x, y };
-    }
-  }
-  return null;
+  const box = conversation.hitRects()[0];
+  if (box === undefined) return null;
+  return { x: box.x + box.w / 2, y: box.y + box.h / 2 };
 }
 
 // ── A citizen's box, with the hireling at the party's shoulder ───────────
@@ -301,7 +302,7 @@ async function verifyCitizenWithHireling(): Promise<void> {
   let taps = 0;
   let missedTheBox = false;
   while (conversation.isOpen && taps < MAX_BOX_TAPS) {
-    layOutConversation(sceneManager, conversation);
+    drawFrame(sceneManager, scene);
     const onBox = pointOnBox(conversation);
     if (onBox === null) {
       missedTheBox = true;
@@ -421,7 +422,7 @@ function verifyBopcaOnAPhone(): void {
 
   const bopca = sceneField(scene, 'bopca', BopcaSystem);
   const safeRoom = sceneField(scene, 'safeRoom', SafeRoomSystem);
-  const touch = sceneField(scene, 'touch', MobileTouchState);
+  const touch = sceneField(scene, 'touch', TouchMoveState);
   const events = canvasEvents(sceneManager);
   const active = scene.pm.active();
   const inactive = scene.pm.inactive();
@@ -452,7 +453,7 @@ function verifyBopcaOnAPhone(): void {
     y: setup.mordecaiHome.y * TILE_SIZE + TILE_SIZE / 2 - camera.y,
   };
   const conversation = sceneField(scene, 'conversation', Conversation);
-  layOutConversation(sceneManager, conversation);
+  drawFrame(sceneManager, scene);
   check(
     !conversation.hitsSurface(onMordecai.x, onMordecai.y),
     'Mordecai is not drawn under the box',

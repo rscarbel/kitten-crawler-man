@@ -49,7 +49,8 @@ import type { DialogLine, NonEmpty } from '../dialog/line';
 import type { ConversationHandle } from '../dialog/request';
 import { drawInteractionPrompt } from '../ui/InteractionPrompt';
 import { drawWoodPileSprite } from '../sprites/questNPCSprite';
-import { platform } from '../core/Platform';
+import { activeInputMode, byInputMode, keyLabel, tapVerb } from '../ui/core/inputMode';
+import { worldPalette } from '../ui/theme/worldInk';
 import {
   AVIEL_PROGRESS,
   AVIEL_REQUEST_INTRO,
@@ -124,7 +125,6 @@ const BROKEN_TYPE_FOR_INTACT: ReadonlyMap<number, number> = new Map([
 /** Pulse geometry for the ring that marks a wreck the party can afford to mend. */
 const HIGHLIGHT_RADIUS_FRACTION = 0.62;
 const HIGHLIGHT_LINE_WIDTH = 2;
-const HIGHLIGHT_COLOR = '#fbbf24';
 const HIGHLIGHT_ALPHA_BASE = 0.45;
 const HIGHLIGHT_ALPHA_AMPLITUDE = 0.3;
 const HIGHLIGHT_PULSE_HZ = 2.2;
@@ -591,11 +591,6 @@ export class AnchorInteriorSystem {
     return this.conversation.dismiss();
   }
 
-  handleClick(mx: number, my: number): boolean {
-    if (!this.conversationOwned) return false;
-    return this.conversation.handleClick(mx, my);
-  }
-
   /** Opens a beat on the shared conversation. Esc closes it without agreeing to anything. */
   private openConversation(lines: NonEmpty<DialogLine>, onClosed: () => void): void {
     this.conversationHandle = this.conversation.open({
@@ -825,7 +820,7 @@ export class AnchorInteriorSystem {
         const sy = tile.y * TILE_SIZE - camY;
         ctx.save();
         ctx.globalAlpha = pulse;
-        ctx.strokeStyle = HIGHLIGHT_COLOR;
+        ctx.strokeStyle = worldPalette.waymark.mendable;
         ctx.lineWidth = HIGHLIGHT_LINE_WIDTH;
         ctx.beginPath();
         ctx.arc(
@@ -845,13 +840,14 @@ export class AnchorInteriorSystem {
     const activeTileX = Math.floor((activeCrawler.x + TILE_SIZE / 2) / TILE_SIZE);
     const activeTileY = Math.floor((activeCrawler.y + TILE_SIZE / 2) / TILE_SIZE);
     const promptTile = this.nearestTileOf(reachable, activeTileX, activeTileY);
+    const mode = activeInputMode();
     drawInteractionPrompt(
       ctx,
       promptTile.x * TILE_SIZE - camX,
       promptTile.y * TILE_SIZE - camY,
       TILE_SIZE,
-      platform.isMobile ? 'Tap to repair' : 'Repair',
-      platform.isMobile ? undefined : 'R',
+      byInputMode(mode, { touch: `${tapVerb(mode)} to repair`, pointer: 'Repair' }),
+      byInputMode(mode, { touch: undefined, pointer: keyLabel('buildSummon') }),
     );
   }
 }

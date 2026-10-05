@@ -38,9 +38,9 @@ const BEACON_FULL_STRENGTH_TILES = 4;
  * The active player's position in world pixels, set once per rendered frame.
  *
  * A module-level viewer rather than a parameter threaded through four unrelated
- * creature classes, in the same shape as `setButtonMouseState`: every beacon in
- * a frame fades against the same player, and none of the creatures that draw one
- * otherwise has any business holding a reference to them.
+ * creature classes: every beacon in a frame fades against the same player, and
+ * none of the creatures that draw one otherwise has any business holding a
+ * reference to them.
  */
 let viewerX = 0;
 let viewerY = 0;

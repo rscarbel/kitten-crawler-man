@@ -1,7 +1,7 @@
 /**
  * Localhost-only harness for eyeballing the Bopca: one hero figure behind a real
  * counter run at four sizes, plus a grid of every animation state and a row of
- * seeded palette variants. Click anywhere to advance the palette seed.
+ * seeded palette variants. Tap the art to advance the palette seed.
  *
  * Reached via `?bopca` in `devBootScene` (see `game.ts`); never on a production
  * path. Exists because the Bopca is only ever seen from the waist up behind a
@@ -9,9 +9,10 @@
  * at it at 32 px next to the same face at 128 px.
  */
 
-import { Scene } from '../core/Scene';
 import { viewportWidth, viewportHeight } from '../core/Viewport';
-import { drawText } from '../ui/TextBox';
+import { worldText } from '../ui/world/worldText';
+import type { WorldGesture } from '../ui/core/UiRoot';
+import { PreviewScene, type PreviewControl } from './PreviewScene';
 import {
   bopcaPaletteForSeed,
   drawBopcaSprite,
@@ -35,14 +36,15 @@ import {
   DISH_COLUMN_OFFSET_FROM_BOPCA,
 } from '../map/safeRoomCounterLayout';
 import { SAFE_ROOM_COUNTER, SAFE_ROOM_COUNTER_BACK } from '../map/tileTypes';
+import { previewInk } from '../ui/theme/previewInk';
+import { worldPalette } from '../ui/theme/worldInk';
 
-const BG_COLOR = '#1b2436';
-const PANEL_COLOR = '#232f47';
-const LABEL_COLOR = '#e2e8f0';
-const SUBLABEL_COLOR = '#93a2c0';
+const BG_COLOR = previewInk.bopca.backdrop;
+const PANEL_COLOR = previewInk.bopca.panel;
+const LABEL_COLOR = worldPalette.ink.primary;
+const SUBLABEL_COLOR = previewInk.bopca.sublabel;
 
 const MARGIN = 40;
-const TITLE_SIZE = 20;
 const LABEL_SIZE = 12;
 /** Gap between a section heading and the figures under it. */
 const HEADING_GAP = 20;
@@ -68,7 +70,8 @@ const HERO_TILE_SIZES: ReadonlyArray<number> = [
   HERO_TILE_SIZE_SMALL,
   IN_GAME_TILE_SIZE,
 ];
-const HERO_ROW_TOP = 70;
+/** Space between the header and the hero band, leaving room for the band's backing panel. */
+const HERO_ROW_TOP_GAP = 24;
 const HERO_GAP = 36;
 const HERO_CAPTION_GAP = 6;
 
@@ -118,9 +121,9 @@ const HEARTH_FALLBACK_COLOR = DUNGEON_GROUND.fallbackColor.bopca_hearth;
 /** A stand-in dish for the serving state, so the counter is not always bare. */
 const PREVIEW_DISH: DishVisual = {
   shape: 'bowl',
-  vesselColor: '#e8e0cc',
-  contentColor: '#b4762e',
-  garnishColor: '#6f9f4a',
+  vesselColor: previewInk.bopca.dishVessel,
+  contentColor: previewInk.bopca.dishContent,
+  garnishColor: previewInk.bopca.dishGarnish,
 };
 
 const BLINK_INTERVAL_FRAMES = 190;
@@ -222,11 +225,30 @@ function drawBopcaAtCounter(
   }
 }
 
-export class BopcaPreviewScene extends Scene {
+export class BopcaPreviewScene extends PreviewScene {
   private frames = 0;
   private seedBase = 0;
 
-  handleClick(): void {
+  protected previewTitle(): string {
+    return 'Bopca Protector — tap the art to advance the palette seed';
+  }
+
+  protected previewControls(): readonly PreviewControl[] {
+    return [
+      {
+        label: 'next seed',
+        onTap: () => {
+          this.advanceSeed();
+        },
+      },
+    ];
+  }
+
+  protected handlePreviewWorldPointer(gesture: WorldGesture): void {
+    if (gesture.tap) this.advanceSeed();
+  }
+
+  private advanceSeed(): void {
     this.seedBase += 1;
   }
 
@@ -240,37 +262,25 @@ export class BopcaPreviewScene extends Scene {
     ctx.fillStyle = BG_COLOR;
     ctx.fillRect(0, 0, width, height);
 
-    drawText(ctx, 'Bopca Protector — click to advance the palette seed', {
-      x: MARGIN,
-      y: 16,
-      size: TITLE_SIZE,
-      bold: true,
-      color: LABEL_COLOR,
-      outline: true,
-    });
-
     const stateGridTop = this.renderHeroRow(ctx, width);
     const paletteRowTop = this.renderStateGrid(ctx, stateGridTop);
     this.renderPaletteRow(ctx, paletteRowTop, height);
+    this.renderChrome(ctx);
   }
 
   /** Returns the y the next section may start at. */
   private renderHeroRow(ctx: CanvasRenderingContext2D, width: number): number {
+    const heroRowTop = this.headerBottom + HERO_ROW_TOP_GAP;
     const tallest = HERO_TILE_SIZES[0] * BOPCA_HEIGHT_TILE_FRACTION;
-    const baseline = HERO_ROW_TOP + tallest;
+    const baseline = heroRowTop + tallest;
     ctx.fillStyle = PANEL_COLOR;
-    ctx.fillRect(
-      0,
-      HERO_ROW_TOP - PANEL_PAD,
-      width,
-      tallest + HERO_TILE_SIZE_LARGE + PANEL_PAD * 2,
-    );
+    ctx.fillRect(0, heroRowTop - PANEL_PAD, width, tallest + HERO_TILE_SIZE_LARGE + PANEL_PAD * 2);
 
     let cursorX = MARGIN;
     for (const ts of HERO_TILE_SIZES) {
       const centreX = cursorX + (COUNTER_RUN_TILES * ts) / 2;
       drawBopcaAtCounter(ctx, centreX, baseline, ts, 'idle', this.seedBase, this.frames);
-      drawText(ctx, `${ts}px tile`, {
+      worldText(ctx, `${ts}px tile`, {
         x: centreX,
         y: baseline + ts + HERO_CAPTION_GAP,
         size: LABEL_SIZE,
@@ -283,7 +293,7 @@ export class BopcaPreviewScene extends Scene {
   }
 
   private renderStateGrid(ctx: CanvasRenderingContext2D, top: number): number {
-    drawText(ctx, 'States', {
+    worldText(ctx, 'States', {
       x: MARGIN,
       y: top,
       size: LABEL_SIZE,
@@ -307,7 +317,7 @@ export class BopcaPreviewScene extends Scene {
         this.seedBase,
         this.frames,
       );
-      drawText(ctx, state, {
+      worldText(ctx, state, {
         x: centreX,
         y: frontRowTop + STATE_TILE_SIZE + CAPTION_GAP,
         size: LABEL_SIZE,
@@ -321,7 +331,7 @@ export class BopcaPreviewScene extends Scene {
 
   private renderPaletteRow(ctx: CanvasRenderingContext2D, top: number, height: number): void {
     if (top > height) return;
-    drawText(ctx, 'Seeded palettes', {
+    worldText(ctx, 'Seeded palettes', {
       x: MARGIN,
       y: top,
       size: LABEL_SIZE,
@@ -341,7 +351,7 @@ export class BopcaPreviewScene extends Scene {
         this.seedBase + variant,
         this.frames,
       );
-      drawText(ctx, `seed ${this.seedBase + variant}`, {
+      worldText(ctx, `seed ${this.seedBase + variant}`, {
         x: centreX,
         y: frontRowTop + PALETTE_TILE_SIZE + CAPTION_GAP,
         size: LABEL_SIZE,

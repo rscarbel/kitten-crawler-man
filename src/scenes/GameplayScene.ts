@@ -3,7 +3,7 @@
  * Extracts shared logic from DungeonScene and BuildingInteriorScene:
  *   - Camera calculation
  *   - Pause menu
- *   - HUD rendering
+ *   - The HUD's crawler frames, purse and skill-point badge
  *   - Player movement with wall collision
  *   - Inventory / gear panel interaction
  */
@@ -12,54 +12,63 @@ import type { SceneManager } from '../core/Scene';
 import { Scene } from '../core/Scene';
 import type { InputManager } from '../core/InputManager';
 import { TILE_SIZE } from '../core/constants';
-import { frameTime, pointInRect } from '../utils';
-import { followCamera, type ScreenRect, type WorldRect } from './interiorCamera';
+import { frameTime } from '../utils';
+import { followCamera, type WorldRect } from './interiorCamera';
 import { drunkCameraOffset } from '../core/DrunkEffect';
 import type { GameMap } from '../map/GameMap';
 import type { HumanPlayer } from '../creatures/HumanPlayer';
 import type { CatPlayer } from '../creatures/CatPlayer';
 import type { PlayerManager } from '../core/PlayerManager';
-import type { PauseMenu } from '../ui/PauseMenu';
-import type { HudRect } from '../ui/HUD';
-import { drawHUD, renderMobileSkillBadge } from '../ui/HUD';
-import { platform } from '../core/Platform';
+import type { PauseScreen } from '../ui/screens/pause/PauseScreen';
 import { viewportWidth, viewportHeight } from '../core/Viewport';
 import type { AudioManager } from '../audio/AudioManager';
 import type { SkillPointReminderSystem } from '../systems/SkillPointReminderSystem';
 import type { SystemContext } from '../systems/GameSystem';
-import type { RewardFlySystem } from '../systems/RewardFlySystem';
+import type { FlyTargets, RewardFlySystem } from '../systems/RewardFlySystem';
 import { SaveIndicator } from '../ui/SaveIndicator';
 import type { EventBus } from '../core/EventBus';
+import { displayHp } from '../core/crawlerFormulas';
+import { partyCoins } from '../core/partyCoins';
+import { CRAWLER_NAMES } from '../core/SkillManager';
+import { statusRemainingFraction } from '../core/StatusEffect';
+import { statusBadge } from '../sprites/status/statusEffectVisuals';
+import type { Rect } from '../ui/core/geom';
+import { toCssRect, type HudSurface } from '../ui/hud/HudSurface';
+import type { HudToasts } from '../ui/hud/toasts';
+import { liveHudLayout } from '../ui/hud/liveHudLayout';
+import type {
+  CoinModel,
+  SkillPointsModel,
+  StatusPillModel,
+  UnitFrameModel,
+} from '../ui/hud/hudModel';
+import { palette } from '../ui/theme/tokens';
 
 const CAMERA_CENTER_OFFSET_MULTIPLIER = 0.5;
-const HUD_SKILL_BADGE_GAP = 4;
+/** The Cockroach pill's label: a standing capability rather than a timed effect. */
+const COCKROACH_PILL_LABEL = 'ROACH';
 
 export abstract class GameplayScene extends Scene {
   abstract readonly pm: PlayerManager;
-  protected abstract readonly pauseMenu: PauseMenu;
-  protected abstract readonly notifPulse: { value: number };
-
-  protected _hudCollapsed = platform.initialHudCollapsed;
-  protected _hudToggleRect = { x: 0, y: 0, w: 0, h: 0 };
-  protected _hudSkillBannerRect = { x: -9999, y: 0, w: 0, h: 0 };
+  protected abstract readonly pauseScreen: PauseScreen;
   /**
-   * Whether the "spend it" box should render in its flagged, more-prominent
-   * state. Owned by each concrete scene's own `SkillPointReminderSystem` (they
-   * each have their own mob roster to check for nearby enemies), and copied
-   * here each frame before `renderHUD` runs.
+   * Whether the skill-point badge should render in its flagged, more
+   * prominent state. Owned by each concrete scene's own
+   * `SkillPointReminderSystem` (they each have their own mob roster to check
+   * for nearby enemies), and copied here each frame.
    */
   protected skillPointReminderActive = false;
   /** Mirrors `SkillPointReminderSystem.suppressed`: hides the skill-point badge. */
   protected skillPointsSuppressed = false;
-  /** Screen rect of the HUD health-bar panel, for keeping world arrows clear of it. */
-  protected _hudRect: HudRect = { x: 0, y: 0, w: 0, h: 0 };
+  /** The scene's HUD, drawn from the model the scene builds each frame. */
+  protected abstract readonly hud: HudSurface;
 
   /** Each concrete scene owns its own instance — it has its own mob roster to check. */
   protected abstract readonly skillPointReminder: SkillPointReminderSystem;
   protected abstract readonly audio: AudioManager | null;
   /** Coins/items flying to this scene's own HUD — each concrete scene owns its own instance. */
   protected abstract readonly rewardFly: RewardFlySystem;
-  /** The "Saving... / Game Saved" banner — shared so it renders identically in every scene a save can happen in. */
+  /** The "Saving... / Game Saved" toast — shared so it reads the same in every scene a save can happen in. */
   protected readonly saveIndicator = new SaveIndicator();
 
   constructor(
@@ -134,7 +143,7 @@ export abstract class GameplayScene extends Scene {
    * against — the whole view unless a scene's chrome permanently covers some
    * of it.
    */
-  protected cameraClearView(_map: GameMap, view: ScreenRect, _bounds: WorldRect): ScreenRect {
+  protected cameraClearView(_map: GameMap, view: Rect, _bounds: WorldRect): Rect {
     return view;
   }
 
@@ -152,11 +161,12 @@ export abstract class GameplayScene extends Scene {
     const focus = this.cameraFocus();
     const focusCentreOffset = TILE_SIZE * CAMERA_CENTER_OFFSET_MULTIPLIER;
     const bounds = this.cameraWorldBounds(map);
-    const view = {
-      left: 0,
-      top: this.viewportTopInset(),
-      right: viewportWidth(),
-      bottom: viewportHeight() - this.viewportBottomInset(),
+    const viewTop = this.viewportTopInset();
+    const view: Rect = {
+      x: 0,
+      y: viewTop,
+      w: viewportWidth(),
+      h: viewportHeight() - this.viewportBottomInset() - viewTop,
     };
     const camera = followCamera(
       { x: focus.x + focusCentreOffset, y: focus.y + focusCentreOffset },
@@ -171,12 +181,13 @@ export abstract class GameplayScene extends Scene {
     return { x: camera.x + sway.x, y: camera.y + sway.y };
   }
 
-  /** Subscribes the save banner to the scene's own bus — call once per scene setup. */
-  protected wireSaveIndicator(bus: EventBus): void {
+  /** Subscribes the save toast to the scene's own bus and toast stack — call once per scene setup. */
+  protected wireSaveIndicator(bus: EventBus, toasts: HudToasts): void {
+    this.saveIndicator.attach(toasts);
     bus.on('gameSaved', () => this.saveIndicator.trigger());
   }
 
-  /** Advances the save banner's fade/phase timing — call once per update tick. */
+  /** Advances the save toast from "Saving..." to "Game Saved" — call once per update tick. */
   protected tickSaveIndicator(): void {
     this.saveIndicator.update();
   }
@@ -192,63 +203,109 @@ export abstract class GameplayScene extends Scene {
     }
   }
 
-  protected renderHUD(ctx: CanvasRenderingContext2D): void {
-    const hud = drawHUD(
-      ctx,
-      this.human,
-      this.cat,
-      this.notifPulse,
-      this._hudCollapsed,
-      this.skillPointReminderActive,
-      this.skillPointsSuppressed,
-      {
-        pendingAmount: this.rewardFly.pendingCoinAmount(),
-        pulse: this.rewardFly.coinCounterPulse(),
-      },
-      this.hudToggleClearOfX(),
-    );
-    this._hudToggleRect = hud.toggleRect;
-    this._hudRect = hud.hudRect;
-    if (platform.isMobile) {
-      this._hudSkillBannerRect = renderMobileSkillBadge(
-        ctx,
-        this.human,
-        this.cat,
-        this.notifPulse,
-        this.mobileSkillBadgeTop(hud.hudPanelBottom),
-        this.skillPointReminderActive,
-        this.skillPointsSuppressed,
-      );
-    } else {
-      this._hudSkillBannerRect = hud.notifRect;
+  /** Both crawlers' unit frames, the active one first. */
+  protected hudCrawlerFrames(): readonly [UnitFrameModel, UnitFrameModel] {
+    return [this.unitFrameModel(this.active()), this.unitFrameModel(this.inactive())];
+  }
+
+  private unitFrameModel(player: HumanPlayer | CatPlayer): UnitFrameModel {
+    const kind = player === this.human ? 'human' : 'cat';
+    const status: StatusPillModel[] = player.statusEffects.map((effect, index) => {
+      const badge = statusBadge(effect.type);
+      return {
+        id: `${effect.type}-${index}`,
+        label: badge.label,
+        color: badge.color,
+        remaining: statusRemainingFraction(effect),
+        harmful: badge.harmful,
+      };
+    });
+    if (player.skills.isUnlocked('cockroach')) {
+      const ready = player.isCockroachReady;
+      status.push({
+        id: 'cockroach',
+        label: COCKROACH_PILL_LABEL,
+        color: ready ? palette.state.warning : palette.text.muted,
+        remaining: player.cockroachRechargeFraction(),
+        harmful: false,
+        spent: !ready,
+      });
     }
-    this.saveIndicator.render(ctx);
+    return {
+      id: kind,
+      name: CRAWLER_NAMES[kind],
+      glyph: kind === 'human' ? 'user' : 'cat',
+      level: player.level,
+      hp: displayHp(player.hp),
+      maxHp: player.maxHp,
+      xp: player.xp,
+      xpMax: player.xpNeededForNextLevel,
+      status,
+      skillPoints: player.unspentPoints,
+    };
   }
 
   /**
-   * The minimap's left edge, which the HUD panel's collapse toggle steps
-   * aside for (see `hudToggleRect`). A scene with no minimap over the panel
-   * leaves the toggle in its corner.
+   * The party's purse. The figure lags the real one by whatever is still in
+   * flight, so it visibly ticks up as each coin sprite lands rather than
+   * jumping the instant the coins are earned.
    */
-  protected hudToggleClearOfX(): number {
-    return Infinity;
+  protected hudCoins(): CoinModel {
+    const pending = Math.round(this.rewardFly.pendingCoinAmount());
+    return {
+      shown: Math.max(0, partyCoins(this.human, this.cat) - pending),
+      split: `${CRAWLER_NAMES.human} ${this.human.coins} · ${CRAWLER_NAMES.cat} ${this.cat.coins}`,
+      pulse: this.rewardFly.coinCounterPulse(),
+    };
+  }
+
+  protected hudSkillPoints(open: () => void): SkillPointsModel {
+    return { hidden: this.skillPointsSuppressed, nag: this.skillPointReminderActive, open };
   }
 
   /**
-   * Where a phone's skill-point badge starts: just under the HUD panel, unless
-   * a scene stacks something of its own there first.
+   * The unit frames in CSS pixels, for world chrome that keeps clear of them
+   * (arrows clamped to the screen's edge): as last drawn, or as they will be
+   * before the HUD's first frame.
    */
-  protected mobileSkillBadgeTop(hudPanelBottom: number): number {
-    return hudPanelBottom + HUD_SKILL_BADGE_GAP;
+  protected hudFramesRect(): Rect {
+    const frame = this.hud.frame;
+    if (frame !== null) return toCssRect(frame.geometry.framesBlock, frame.uiScale);
+    const live = liveHudLayout({ miniMapExpanded: false, build: false });
+    return toCssRect(live.geometry.framesBlock, live.uiScale);
   }
 
-  protected handleHudToggleTap(x: number, y: number): boolean {
-    if (!platform.showHudCollapseToggle) return false;
-    const ht = this._hudToggleRect;
-    if (pointInRect(x, y, ht)) {
-      this._hudCollapsed = !this._hudCollapsed;
-      return true;
-    }
-    return false;
+  /**
+   * Everything the HUD drew last frame that other chrome must keep off, in
+   * CSS pixels: the unit frames, the minimap, the hotbar and every button.
+   */
+  protected hudKeepoutsCss(): Rect[] {
+    const frame = this.hud.frame;
+    if (frame === null) return [];
+    const { geometry } = frame;
+    return [
+      geometry.framesBlock,
+      geometry.miniMap,
+      geometry.hotbar.strip,
+      ...frame.dock.values(),
+    ].map((rect) => toCssRect(rect, frame.uiScale));
+  }
+
+  /** Where flying coins and items land: the coin pill and the Bag button as last drawn. */
+  protected hudFlyTargets(): FlyTargets {
+    const coin = this.hudCoinTarget();
+    return {
+      coinX: coin.x,
+      coinY: coin.y,
+      bagRect: this.hud.cssDockRect('bag') ?? { x: coin.x, y: coin.y, w: 0, h: 0 },
+    };
+  }
+
+  /** Where a flying coin lands: the middle of the coin pill as last drawn. */
+  protected hudCoinTarget(): { x: number; y: number } {
+    const frame = this.hud.frame;
+    if (frame === null) return { x: 0, y: 0 };
+    const pill = toCssRect(frame.coins, frame.uiScale);
+    return { x: pill.x + pill.h / 2, y: pill.y + pill.h / 2 };
   }
 }

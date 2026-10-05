@@ -35,6 +35,8 @@ import type { BriarHollowSite } from '../src/map/overworld/briarHollowSite';
 import { SpellSystem } from '../src/systems/SpellSystem';
 import { MobRoster, type SceneWorld } from '../src/systems/kits/SceneWorld';
 import { MenusKit } from '../src/systems/kits/MenusKit';
+import { UiRoot, type Surface } from '../src/ui/core/UiRoot';
+import { NO_INSETS } from '../src/ui/core/viewport';
 import { CombatKit } from '../src/systems/kits/CombatKit';
 import type { SystemContext } from '../src/systems/GameSystem';
 import { SkeletonSummonSystem } from '../src/systems/SkeletonSummonSystem';
@@ -48,6 +50,11 @@ import type { BlueprintsCue } from '../src/systems/briarHollow/blueprints/bluepr
 /** Briar Hollow stands on floor 3's overworld, so its map is that floor's size. */
 export const SIEGE_MAP_SIZE = level3.mapSize;
 export const UPDATES_PER_SECOND = 60;
+const QUEST_REWARD_SURFACE_ID = 'quest-reward';
+/** The desktop window the quest-complete screen is driven at. */
+const QUEST_REWARD_UI_W = 1280;
+const QUEST_REWARD_UI_H = 720;
+const QUEST_REWARD_FRAME_MS = 16;
 
 const maps = new Map<number, GameMap>();
 
@@ -248,4 +255,55 @@ export function buildSiegeRig(options: SiegeRigOptions): SiegeRig {
 export function standAt(player: Player, tileX: number, tileY: number): void {
   player.x = tileX * TILE_SIZE;
   player.y = tileY * TILE_SIZE;
+}
+
+/**
+ * The quest-complete screen's surface, as the scene mounts it from the rig's
+ * menus. The pause screen is never drawn by the quest-reward checks, so the
+ * pause hooks are inert.
+ */
+export function questRewardSurface(rig: SiegeRig): Surface {
+  const surface = rig.menus
+    .surfaces({
+      pauseFrame: () => {
+        throw new Error('the quest-reward checks never draw the pause screen');
+      },
+      togglePause: () => undefined,
+    })
+    .find((candidate) => candidate.id === QUEST_REWARD_SURFACE_ID);
+  if (surface === undefined)
+    throw new Error(`MenusKit mounts no '${QUEST_REWARD_SURFACE_ID}' surface`);
+  return surface;
+}
+
+/** A `UiRoot` at a desktop window holding only the quest-complete screen, and the clock it reads. */
+export interface QuestRewardUi {
+  readonly root: UiRoot;
+  /** Draws one frame into `ctx`, a frame's time after the last. */
+  frame(ctx: CanvasRenderingContext2D): void;
+}
+
+/** The rig's quest-complete screen mounted on its own `UiRoot`, as the scene mounts it. */
+export function questRewardUi(rig: SiegeRig): QuestRewardUi {
+  let clock = 0;
+  const root = new UiRoot({
+    audio: null,
+    viewport: () => ({
+      cssWidth: QUEST_REWARD_UI_W,
+      cssHeight: QUEST_REWARD_UI_H,
+      density: 'pointer',
+      uiSize: 'medium',
+      safeArea: NO_INSETS,
+    }),
+    now: () => clock,
+    warn: () => undefined,
+  });
+  root.mount(questRewardSurface(rig));
+  return {
+    root,
+    frame: (ctx) => {
+      clock += QUEST_REWARD_FRAME_MS;
+      root.frame(ctx);
+    },
+  };
 }

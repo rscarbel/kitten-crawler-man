@@ -1,4 +1,6 @@
 import type { SkillId } from '../../core/SkillManager';
+import type { Rect } from '../core/geom';
+import { iconSquare } from './iconSquare';
 
 /**
  * One shared book silhouette for every skill book, tinted per skill.
@@ -43,15 +45,13 @@ const SKILL_COVERS: Record<SkillId, CoverPalette> = {
   powerful_strike: { cover: '#92400e', spine: '#4a1f04' },
 };
 
-/** Draws a closed skill book, cover facing the viewer, into a square icon region. */
+/** Draws a closed skill book, cover facing the viewer, centred in `rect`. */
 export function drawSkillBookIcon(
   ctx: CanvasRenderingContext2D,
-  x: number,
-  y: number,
-  size: number,
+  rect: Rect,
   skillId: SkillId,
 ): void {
-  drawBookIcon(ctx, x, y, size, SKILL_COVERS[skillId]);
+  drawBookIcon(ctx, rect, SKILL_COVERS[skillId]);
 }
 
 /**
@@ -60,11 +60,10 @@ export function drawSkillBookIcon(
  */
 export function drawBookIcon(
   ctx: CanvasRenderingContext2D,
-  x: number,
-  y: number,
-  size: number,
+  rect: Rect,
   palette: CoverPalette,
 ): void {
+  const { x, y, size } = iconSquare(rect);
   const w = size * BOOK_W;
   const h = size * BOOK_H;
   const left = x + size * BOOK_CX - w / 2;

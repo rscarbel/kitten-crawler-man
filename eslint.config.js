@@ -52,6 +52,22 @@ export default tseslint.config(
           ignoreTypeIndexes: true,
         },
       ],
+      // The canvas UI kit these named is gone: screen UI is a surface on the
+      // scene's `UiRoot` drawn with `src/ui/widgets/`, and world labels and bars
+      // use the painters in `src/ui/world/`.
+      'no-restricted-imports': [
+        'error',
+        {
+          patterns: [
+            {
+              regex: '(^|/)(TextBox|Box|Button|panelFit|legacySurface)(\\.js|\\.ts)?$',
+              caseSensitive: true,
+              message:
+                'Removed UI kit. Use a Surface with src/ui/widgets/ for screen UI, or src/ui/world/ for world text and bars.',
+            },
+          ],
+        },
+      ],
     },
   },
   {
@@ -66,6 +82,14 @@ export default tseslint.config(
         project: './tsconfig.scripts.json',
         tsconfigRootDir: import.meta.dirname,
       },
+    },
+    rules: {
+      // A harness reaches a scene's private collaborators by name on purpose,
+      // and the bracket is the only way TypeScript lets it.
+      '@typescript-eslint/dot-notation': [
+        'error',
+        { allowPrivateClassPropertyAccess: true, allowProtectedClassPropertyAccess: true },
+      ],
     },
   },
   {

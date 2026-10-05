@@ -24,10 +24,8 @@ import type { HumanPlayer } from '../../creatures/HumanPlayer';
 import type { CatPlayer } from '../../creatures/CatPlayer';
 import type { GameMap } from '../../map/GameMap';
 import { mulberry32 } from '../../sprites/person/rng';
-import type { ExtraContextOption } from '../../ui/InventoryInteraction';
-import { type Rect, topCentreStripSlot } from '../DungeonUIRenderer';
+import type { ExtraContextOption } from '../../ui/screens/inventory/InventoryActions';
 import type { SystemContext } from '../GameSystem';
-import type { MiniMapSystem } from '../MiniMapSystem';
 import type { TownPropRenderable } from '../townPropRenderable';
 import type { TreeSystem } from '../TreeSystem';
 import { harvestKindAt } from './harvestNodes';
@@ -37,9 +35,11 @@ import { HarvestEffects } from './HarvestEffects';
 import { HarvestSystem } from './HarvestSystem';
 import { NodeLedger, type NodeLedgerCheckpoint } from './NodeLedger';
 import { NodeRegrowth, type StandingBody } from './NodeRegrowth';
-import { RESOURCE_HUD_HEIGHT, ResourceHud, resourceHudFootprintWidth } from './ResourceHud';
+import { ResourceHud } from './ResourceHud';
+import type { TopBandEntry } from '../../ui/hud/topBand';
 import { ThrallSystem } from './ThrallSystem';
 import { thrallCooldownSecondsLeft } from '../../core/thrallCooldowns';
+import { worldPalette } from '../../ui/theme/worldInk';
 
 type Crawler = HumanPlayer | CatPlayer;
 
@@ -50,8 +50,6 @@ const LUCK_SEED_SPACE = 0x100000000;
 const ARC_RADIUS_TILES = 0.32;
 const ARC_LIFT_TILES = 1.25;
 const ARC_WIDTH_PX = 3;
-const ARC_TRACK_COLOR = 'rgba(0,0,0,0.45)';
-const ARC_FILL_COLOR = '#facc15';
 const ARC_START = -Math.PI / 2;
 const FULL_TURN = Math.PI * 2;
 const TILE_CENTER_OFFSET = 0.5;
@@ -256,16 +254,10 @@ export class GatheringKit {
     return [...this.thralls.renderables(), ...this.regrowth.renderables()];
   }
 
-  /** The resource strip, between the top-left HUD panel and the minimap. */
-  renderHud(
-    ctx: CanvasRenderingContext2D,
-    miniMap: MiniMapSystem,
-    hudRect: Rect,
-    active: Crawler,
-  ): void {
-    const frame = this.hudFrame(active);
-    const width = resourceHudFootprintWidth(frame.thrallSecondsLeft !== null);
-    this.hud.render(ctx, topCentreStripSlot(miniMap, hudRect, width, RESOURCE_HUD_HEIGHT), frame);
+  /** The resource strip's card for the HUD's top band, while it is showing. */
+  topBandEntries(active: Crawler): TopBandEntry[] {
+    const entry = this.hud.topBandEntry(this.hudFrame(active));
+    return entry === null ? [] : [entry];
   }
 
   private hudFrame(active: Crawler): {
@@ -305,11 +297,11 @@ export class GatheringKit {
     ctx.save();
     ctx.lineWidth = ARC_WIDTH_PX;
     ctx.lineCap = 'round';
-    ctx.strokeStyle = ARC_TRACK_COLOR;
+    ctx.strokeStyle = worldPalette.gatherArc.track;
     ctx.beginPath();
     ctx.arc(x, y, radius, 0, FULL_TURN);
     ctx.stroke();
-    ctx.strokeStyle = ARC_FILL_COLOR;
+    ctx.strokeStyle = worldPalette.gatherArc.fill;
     ctx.beginPath();
     ctx.arc(x, y, radius, ARC_START, ARC_START + FULL_TURN * left);
     ctx.stroke();

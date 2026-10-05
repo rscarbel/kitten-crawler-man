@@ -5,28 +5,23 @@
  * its accepting option — never with the way out. Escape is the only key that
  * leaves.
  *
- * Driven through the real `Conversation`, the real quest systems that open it,
- * and the real focus ring in `ui/Button`. A Space press is routed the way the
- * browser routes it:
+ * Driven through the real `Conversation` mounted on a `UiRoot`, and the real
+ * quest systems that open it. A Space press goes to the root the way the
+ * scene's key handler sends it:
  *
- *   - While the last rendered frame declared a focus ring with buttons in it,
- *     `SceneManager.handleMenuNavigation` takes the press in the capture phase
- *     and synthesizes a click on `focusedButtonClickPoint()`, which the scene
- *     hands to the owning system's `handleClick`.
- *   - Otherwise the press reaches `GameplayInputHandler`, whose `advanceDialog`
- *     is `advanceFocusedOverlay` over the scene's claims — here, the
- *     conversation's own claim.
+ *   - On a world-halting choice or confirm row the conversation leaves Space
+ *     to the root's focus ring, whose focused (or primary) choice it taps.
+ *   - Otherwise the conversation's surface takes it, and turns the page.
  *
  * Both of those ignore an OS auto-repeat, so every press here is a fresh one.
  *
  * Also checked:
  *   - The press that finishes a page never also answers the row that page
- *     opens onto, and each row declares a focus ring distinct from the page
- *     before it and from the row before it — the identity change the scene's
- *     key handler snapshots held keys on, so a Space still held down from
- *     earlier cannot confirm the new row.
- *   - The interior scene does not poll the held Space key to close the Anchor
- *     conversation, and Escape reaches that conversation.
+ *     opens onto, a Space held down from the page (an auto-repeat, or a key
+ *     already down when the row appeared) never confirms it, and focus moved
+ *     on one row never carries to the next.
+ *   - Escape on a resident questline's beat inside the real interior scene is
+ *     checked by `verify:interior-hud-clicks`, which builds that scene.
  *   - Every confirm row in `src/` defaults Space to its accept side, except
  *     the ones that spend coin (Madame Voss's fee), where Space does nothing.
  *   - Bramblewick's "I'm ready", which starts the siege on the spot, is never
@@ -60,23 +55,21 @@ import {
   SKY_TEMPLE_NAME,
 } from '../src/systems/AnchorInteriorSystem';
 import { AnchorQuestSystem } from '../src/systems/AnchorQuestSystem';
-import { advanceFocusedOverlay, auditOverlayFocus } from '../src/systems/kits/OverlayClaims';
 import { RewardGrantedDialog } from '../src/ui/RewardGrantedDialog';
+import { UiRoot } from '../src/ui/core/UiRoot';
+import { NO_INSETS } from '../src/ui/core/viewport';
+import { rewardGrantedSurface } from '../src/ui/screens/dialogs/rewardGrantedDialog';
 import { createBriarHollowState } from '../src/core/briarHollowState';
 import { createCircusQuestProgress } from '../src/core/CircusQuestProgress';
+import { mountConversation, type ConversationRig } from './conversationHarness';
 import { buildSiegeRig } from './villageSiegeHarness';
-import {
-  focusedButtonClickPoint,
-  menuFocusContextId,
-  menuFocusRingSize,
-  setButtonMouseState,
-} from '../src/ui/Button';
 
 // ── Reporting ────────────────────────────────────────────────────────────────
 
 let failures = 0;
 /** Frames the reward card may take to reach its OK before the check gives up. */
 const MAX_REWARD_CARD_FRAMES = 600;
+const UI_FRAME_MS = 16;
 
 function check(ok: boolean, label: string): void {
   console.log(`${ok ? '  ok  ' : ' FAIL '} ${label}`);
@@ -91,8 +84,6 @@ function section(title: string): void {
 
 const VIEWPORT_WIDTH = 960;
 const VIEWPORT_HEIGHT = 640;
-/** Where the pointer rests: nowhere near a button, so hover never decides anything. */
-const POINTER_OFF_CANVAS = -1;
 /** Frames between presses — short enough that some presses land mid-typing and skip it, as an impatient reader's do. */
 const FRAMES_BETWEEN_PRESSES = 3;
 /** More presses than any conversation here has pages; a walk that hits it is stuck. */
@@ -104,8 +95,6 @@ installCanvasGlobals();
 setViewportSize(VIEWPORT_WIDTH, VIEWPORT_HEIGHT);
 const ctx = gameContext(VIEWPORT_WIDTH, VIEWPORT_HEIGHT);
 
-type ClickRouter = (mx: number, my: number) => boolean;
-
 interface PressTally {
   ring: number;
   overlay: number;
@@ -116,38 +105,43 @@ interface Pointer {
   readonly y: number;
 }
 
-const POINTER_AWAY: Pointer = { x: POINTER_OFF_CANVAS, y: POINTER_OFF_CANVAS };
-
-function frame(conversation: Conversation, pointer: Pointer = POINTER_AWAY): void {
-  setButtonMouseState(pointer.x, pointer.y);
-  conversation.update(null);
-  conversation.render(ctx);
+/** A conversation and the root it is mounted on. */
+interface Rig {
+  readonly conversation: Conversation;
+  readonly ui: ConversationRig;
 }
 
-/** One fresh Space press, routed the way the scene's two key handlers route it. */
-function pressSpace(conversation: Conversation, click: ClickRouter, tally: PressTally): void {
-  if (menuFocusRingSize() > 0) {
-    tally.ring++;
-    const point = focusedButtonClickPoint();
-    if (point !== null) click(point.x, point.y);
-    return;
-  }
-  tally.overlay++;
-  advanceFocusedOverlay([conversation.overlayClaim()]);
+function rigFor(conversation: Conversation): Rig {
+  return { conversation, ui: mountConversation(conversation, ctx) };
+}
+
+/** One tick and one drawn frame, the mouse resting at `pointer` or (null) off the canvas. */
+function frame(rig: Rig, pointer: Pointer | null = null): void {
+  rig.ui.pointAt(pointer);
+  rig.conversation.update(null);
+  rig.ui.frame();
+}
+
+/** One fresh Space press, counted by whether the root's focus ring held any of the conversation's choices when it landed. */
+function pressSpace(rig: Rig, tally: PressTally): void {
+  if (rig.ui.focusRingSize() > 0) tally.ring++;
+  else tally.overlay++;
+  rig.ui.key(' ');
 }
 
 /** Presses Space, and nothing else, until the conversation closes — the pointer never moving from `pointer`. */
-function spaceUntilClosed(
-  conversation: Conversation,
-  click: ClickRouter,
-  pointer: Pointer = POINTER_AWAY,
-): PressTally {
+function spaceUntilClosed(rig: Rig, pointer: Pointer | null = null): PressTally {
   const tally: PressTally = { ring: 0, overlay: 0 };
-  for (let press = 0; press < PRESS_GUARD && conversation.isOpen; press++) {
-    for (let f = 0; f < FRAMES_BETWEEN_PRESSES; f++) frame(conversation, pointer);
-    pressSpace(conversation, click, tally);
+  for (let press = 0; press < PRESS_GUARD && rig.conversation.isOpen; press++) {
+    for (let f = 0; f < FRAMES_BETWEEN_PRESSES; f++) frame(rig, pointer);
+    pressSpace(rig, tally);
   }
   return tally;
+}
+
+/** A click on the middle of a choice button as last drawn. */
+function clickChoice(rig: Rig, rect: { x: number; y: number; w: number; h: number }): void {
+  rig.ui.tap(rect.x + rect.w / 2, rect.y + rect.h / 2);
 }
 
 // ── Fixtures ─────────────────────────────────────────────────────────────────
@@ -226,8 +220,9 @@ function verifyVossOffer(): void {
   const progress = createAnchorQuestProgress();
   const party = makeParty();
   const voss = makeVoss(progress, party, conversation);
+  const rig = rigFor(conversation);
   check(voss.tryOpenDialog(party.human), 'the offer opens');
-  const tally = spaceUntilClosed(conversation, (mx, my) => voss.handleClick(mx, my));
+  const tally = spaceUntilClosed(rig);
   check(progress.status === 'active', `the quest is accepted (status: ${progress.status})`);
   check(
     tally.ring > 0,
@@ -250,9 +245,9 @@ function verifyVossAssembly(): void {
   party.human.inventory.addItem('anchor_shard_temple', 1);
   party.human.coins = PLENTY_OF_COINS;
   const voss = makeVoss(progress, party, conversation);
-  const click: ClickRouter = (mx, my) => voss.handleClick(mx, my);
+  const rig = rigFor(conversation);
   check(voss.tryOpenDialog(party.human), 'the assembly opens');
-  spaceUntilClosed(conversation, click);
+  spaceUntilClosed(rig);
   check(
     conversation.isOpen && conversation.isShowingChoices,
     'Space alone leaves the fee row standing',
@@ -261,12 +256,12 @@ function verifyVossAssembly(): void {
     progress.status === 'active' && party.human.coins === PLENTY_OF_COINS,
     `and nothing is paid (status: ${progress.status}, coins: ${party.human.coins})`,
   );
-  frame(conversation);
+  frame(rig);
   const pay = conversation.choiceBounds.find((rect) => rect.label.includes(VOSS_PAY_LABEL_PREFIX));
   check(pay !== undefined, 'the "Pay" button is on screen');
   if (pay === undefined) return;
-  click(pay.x + pay.w / 2, pay.y + pay.h / 2);
-  spaceUntilClosed(conversation, click);
+  clickChoice(rig, pay);
+  spaceUntilClosed(rig);
   check(
     progress.status === 'completed',
     `a click on it makes the stone (status: ${progress.status})`,
@@ -292,14 +287,13 @@ function verifyRestingPointerDoesNotPay(): void {
     party.human.inventory.addItem('anchor_shard_temple', 1);
     party.human.coins = PLENTY_OF_COINS;
     const voss = makeVoss(progress, party, conversation);
-    const click: ClickRouter = (mx, my) => voss.handleClick(mx, my);
-    return { conversation, progress, party, voss, click };
+    return { conversation, progress, party, voss, rig: rigFor(conversation) };
   };
 
   const scout = setUp();
   scout.voss.tryOpenDialog(scout.party.human);
-  spaceUntilClosed(scout.conversation, scout.click);
-  frame(scout.conversation);
+  spaceUntilClosed(scout.rig);
+  frame(scout.rig);
   const pay = scout.conversation.choiceBounds.find((rect) =>
     rect.label.includes(VOSS_PAY_LABEL_PREFIX),
   );
@@ -309,7 +303,7 @@ function verifyRestingPointerDoesNotPay(): void {
 
   const run = setUp();
   check(run.voss.tryOpenDialog(run.party.human), 'the assembly opens under the resting cursor');
-  const tally = spaceUntilClosed(run.conversation, run.click, restingOnPay);
+  const tally = spaceUntilClosed(run.rig, restingOnPay);
   check(
     run.conversation.isOpen && run.conversation.isShowingChoices,
     'Space alone leaves the fee row standing',
@@ -339,8 +333,9 @@ function verifyHilda(): void {
     check(false, "Old Hilda's cottage has a questline system");
     return;
   }
+  const rig = rigFor(conversation);
   check(room.tryOpenDialog('old_hilda', party.human), 'her request opens');
-  const tally = spaceUntilClosed(conversation, (mx, my) => room.handleClick(mx, my));
+  const tally = spaceUntilClosed(rig);
   check(progress.hilda === 'in_progress', `the repair job is accepted (hilda: ${progress.hilda})`);
   check(
     tally.ring > 0,
@@ -349,7 +344,7 @@ function verifyHilda(): void {
 
   progress.hilda = 'shard_owed';
   check(room.tryOpenDialog('old_hilda', party.human), 'her thanks open');
-  spaceUntilClosed(conversation, (mx, my) => room.handleClick(mx, my));
+  spaceUntilClosed(rig);
   const hildaAfterThanks = stepOf(progress, 'hilda');
   check(hildaAfterThanks === 'done', `the shard is handed over (hilda: ${hildaAfterThanks})`);
   check(party.human.inventory.countOf('anchor_shard_hilda') === 1, 'and it is in the bag');
@@ -359,7 +354,7 @@ function verifyHilda(): void {
   const escRoom = makeRoom(HILDA_COTTAGE_NAME, fresh, party, conversation);
   if (escRoom === null) return;
   escRoom.tryOpenDialog('old_hilda', party.human);
-  frame(conversation);
+  frame(rig);
   check(escRoom.dismissDialog(), 'Escape reaches her conversation');
   check(!conversation.isOpen, 'and closes it');
   check(fresh.hilda === 'offered', `without taking the job (hilda: ${fresh.hilda})`);
@@ -377,13 +372,14 @@ function verifyAviel(): void {
     check(false, 'the Temple of the Sky has a questline system');
     return;
   }
+  const rig = rigFor(conversation);
   check(room.tryOpenDialog('deacon_aviel', party.human), 'his request opens');
-  spaceUntilClosed(conversation, (mx, my) => room.handleClick(mx, my));
+  spaceUntilClosed(rig);
   check(progress.temple !== 'offered', `the vermin job is accepted (temple: ${progress.temple})`);
 
   progress.temple = 'shard_owed';
   check(room.tryOpenDialog('deacon_aviel', party.human), 'his thanks open');
-  spaceUntilClosed(conversation, (mx, my) => room.handleClick(mx, my));
+  spaceUntilClosed(rig);
   const templeAfterThanks = stepOf(progress, 'temple');
   check(templeAfterThanks === 'done', `the shard is handed over (temple: ${templeAfterThanks})`);
 }
@@ -405,32 +401,38 @@ function rowRequest(choices: NonEmpty<Choice>, haltsWorld: boolean): Conversatio
   };
 }
 
+/** What a choice row's `run` recorded; read through the object so a pick made inside a call is not narrowed away. */
+interface PickRecord {
+  picked: string | null;
+}
+
 /** Which label a lone Space press picks on `choices`, or null when it picks none. */
 function spacePicks(choices: NonEmpty<Choice>, haltsWorld: boolean): string | null {
   const conversation = new Conversation(null);
-  let picked: string | null = null;
+  const record: PickRecord = { picked: null };
   const recorded = choices.map((choice): Choice => ({
     ...choice,
     run: (convo) => {
-      picked = choice.label;
+      record.picked = choice.label;
       convo.close();
     },
   }));
   const [first, ...rest] = recorded;
-  if (first === undefined) return null;
+  const rig = rigFor(conversation);
   conversation.open(rowRequest([first, ...rest], haltsWorld));
-  for (let press = 0; press < PRESS_GUARD && conversation.isOpen && picked === null; press++) {
-    for (let f = 0; f < FRAMES_BETWEEN_PRESSES; f++) frame(conversation);
+  for (
+    let press = 0;
+    press < PRESS_GUARD && conversation.isOpen && record.picked === null;
+    press++
+  ) {
+    for (let f = 0; f < FRAMES_BETWEEN_PRESSES; f++) frame(rig);
     // Stops at the first press that lands on the row: a row whose default is
     // "nothing" must read as nothing, not as whatever a later press did.
     const rowWasUp = conversation.isShowingChoices;
-    pressSpace(conversation, (mx, my) => conversation.handleClick(mx, my), {
-      ring: 0,
-      overlay: 0,
-    });
+    pressSpace(rig, { ring: 0, overlay: 0 });
     if (rowWasUp) break;
   }
-  return picked;
+  return record.picked;
 }
 
 const noop = (): void => undefined;
@@ -512,8 +514,9 @@ function verifyTopicMenu(): void {
     (row) => rowRequest(row, false),
   );
   const conversation = new Conversation(null);
+  const rig = rigFor(conversation);
   conversation.open(rowRequest(choices, false));
-  spaceUntilClosed(conversation, (mx, my) => conversation.handleClick(mx, my));
+  spaceUntilClosed(rig);
   check(
     asked.join() === 'The missing cow',
     `Space picked the quest topic (asked: ${asked.join() || 'nothing'})`,
@@ -528,33 +531,34 @@ function verifyTopicMenu(): void {
 function verifyStreetRowMarksSpaceDefault(): void {
   section('A street row marks what Space picks, wherever the pointer hovers');
   const conversation = new Conversation(null);
-  let picked: string | null = null;
+  const record: PickRecord = { picked: null };
   const recording = (label: string, tone: Choice['tone']): Choice => ({
     label,
     tone,
     run: (convo) => {
-      picked = label;
+      record.picked = label;
       convo.close();
     },
   });
   const askLabel = 'Ask about the well';
   const goodbyeLabel = 'Goodbye';
+  const rig = rigFor(conversation);
   conversation.open(
     rowRequest([recording(askLabel, 'normal'), recording(goodbyeLabel, 'exit')], false),
   );
   for (let press = 0; press < PRESS_GUARD; press++) {
-    for (let f = 0; f < FRAMES_BETWEEN_PRESSES; f++) frame(conversation);
+    for (let f = 0; f < FRAMES_BETWEEN_PRESSES; f++) frame(rig);
     // Checked after the frames, not before the press: the row can come up
     // during a frame, and a press then would already answer it.
     if (conversation.isShowingChoices) break;
-    advanceFocusedOverlay([conversation.overlayClaim()]);
+    rig.ui.key(' ');
   }
-  frame(conversation);
+  frame(rig);
   const goodbye = conversation.choiceBounds.find((rect) => rect.label.includes(goodbyeLabel));
   check(goodbye !== undefined, 'the Goodbye button is on screen');
   if (goodbye === undefined) return;
   const onGoodbye: Pointer = { x: goodbye.x + goodbye.w / 2, y: goodbye.y + goodbye.h / 2 };
-  for (let f = 0; f < FRAMES_BETWEEN_PRESSES; f++) frame(conversation, onGoodbye);
+  for (let f = 0; f < FRAMES_BETWEEN_PRESSES; f++) frame(rig, onGoodbye);
 
   const askIndex = 0;
   const marked = conversation.choiceBounds.filter((rect) => rect.label.startsWith('▶'));
@@ -566,34 +570,126 @@ function verifyStreetRowMarksSpaceDefault(): void {
     marked.length === 1 && marked[0]?.index === askIndex,
     `and it alone wears the marker (marked: ${marked.map((rect) => rect.label).join(', ') || 'none'})`,
   );
-  advanceFocusedOverlay([conversation.overlayClaim()]);
-  check(picked === askLabel, `and Space picks it (picked: ${picked ?? 'nothing'})`);
+  rig.ui.key(' ');
+  check(record.picked === askLabel, `and Space picks it (picked: ${record.picked ?? 'nothing'})`);
+}
+
+/**
+ * On a world-halting row the selected look is the focus ring's entry, and a
+ * pointer that moves onto a choice takes the focus with it: Space then
+ * answers with what the player is pointing at.
+ */
+function verifyPointerMovesHaltingFocus(): void {
+  section('A world-halting row: a pointer moved onto a choice is what Space takes');
+  const conversation = new Conversation(null);
+  const record: PickRecord = { picked: null };
+  const recording = (label: string, tone: Choice['tone']): Choice => ({
+    label,
+    tone,
+    run: (convo) => {
+      record.picked = label;
+      convo.close();
+    },
+  });
+  const askLabel = 'Ask about the well';
+  const goodbyeLabel = 'Goodbye';
+  const rig = rigFor(conversation);
+  conversation.open(
+    rowRequest([recording(askLabel, 'normal'), recording(goodbyeLabel, 'exit')], true),
+  );
+  for (let press = 0; press < PRESS_GUARD; press++) {
+    frame(rig);
+    if (conversation.isShowingChoices) break;
+    rig.ui.key(' ');
+  }
+  frame(rig);
+  const goodbye = conversation.choiceBounds.find((rect) => rect.label.includes(goodbyeLabel));
+  check(goodbye !== undefined, 'the Goodbye button is on screen');
+  if (goodbye === undefined) return;
+  const goodbyeIndex = 1;
+  check(
+    selectedOf(conversation) !== goodbyeIndex,
+    `before the pointer moves, the default is selected (selected: ${selectedOf(conversation)})`,
+  );
+  frame(rig, { x: goodbye.x + goodbye.w / 2, y: goodbye.y + goodbye.h / 2 });
+  frame(rig, { x: goodbye.x + goodbye.w / 2, y: goodbye.y + goodbye.h / 2 });
+  check(
+    selectedOf(conversation) === goodbyeIndex,
+    `the pointer on Goodbye selects it (selected: ${selectedOf(conversation)})`,
+  );
+  rig.ui.key(' ');
+  check(
+    record.picked === goodbyeLabel,
+    `and Space takes it (picked: ${record.picked ?? 'nothing'})`,
+  );
+}
+
+/** The box lays out in canvas pixels under any UI size; its regions must land where it draws. */
+function verifyClickLandsAtLargeUiSize(): void {
+  section('At a large UI size a click on a choice still lands on that choice');
+  const conversation = new Conversation(null);
+  const record: PickRecord = { picked: null };
+  const recording = (label: string): Choice => ({
+    label,
+    tone: 'normal',
+    run: (convo) => {
+      record.picked = label;
+      convo.close();
+    },
+  });
+  const rig: Rig = { conversation, ui: mountConversation(conversation, ctx, { uiSize: 'large' }) };
+  const lastLabel = 'Third';
+  conversation.open(
+    rowRequest([recording('First'), recording('Second'), recording(lastLabel)], true),
+  );
+  for (let press = 0; press < PRESS_GUARD; press++) {
+    frame(rig);
+    if (conversation.isShowingChoices) break;
+    rig.ui.key(' ');
+  }
+  frame(rig);
+  const last = conversation.choiceBounds.find((rect) => rect.label.includes(lastLabel));
+  check(last !== undefined, 'the last choice is on screen');
+  if (last === undefined) return;
+  clickChoice(rig, last);
+  check(record.picked === lastLabel, `the click picks it (picked: ${record.picked ?? 'nothing'})`);
 }
 
 // ── A held key does not answer a row it predates ─────────────────────────────
 
-function verifyHeldKeyDoesNotConfirm(): void {
-  section('A press that finishes a page never also answers the row it opens');
-  const conversation = new Conversation(null);
-  let accepted = 0;
-  conversation.open({
+function confirmRequest(onAccept: () => void): ConversationRequest {
+  return {
     lines: [narrator.line('Short.')],
     reward: null,
     questRelated: true,
     ending: {
       kind: 'confirm',
       keyboardDefault: 'accept',
-      accept: { label: 'Yes', tone: 'quest', run: () => accepted++ },
+      accept: { label: 'Yes', tone: 'quest', run: onAccept },
       decline: { label: 'No', tone: 'exit', run: (convo) => convo.close() },
     },
     dismiss: { kind: 'allowed', onDismissed: () => undefined },
     haltsWorld: true,
     anchor: null,
     locksKeyboard: true,
-  });
-  setButtonMouseState(POINTER_OFF_CANVAS, POINTER_OFF_CANVAS);
-  conversation.render(ctx);
-  const pageContext = menuFocusContextId();
+  };
+}
+
+const CONFIRM_DECLINE_INDEX = 0;
+const CONFIRM_ACCEPT_INDEX = 1;
+
+/** Read back through a call, so a selection changed by the frame just run is not narrowed away. */
+function selectedOf(conversation: Conversation): number | null {
+  return conversation.selectedChoiceIndex;
+}
+
+function verifyHeldKeyDoesNotConfirm(): void {
+  section('A press that finishes a page never also answers the row it opens');
+  const conversation = new Conversation(null);
+  const rig = rigFor(conversation);
+  let accepted = 0;
+  conversation.open(confirmRequest(() => accepted++));
+  rig.ui.frame();
   // Skip the typing, then the very next press arrives before the row has
   // ever been drawn — both must leave the accept side untouched.
   conversation.advance();
@@ -601,38 +697,148 @@ function verifyHeldKeyDoesNotConfirm(): void {
   conversation.advance();
   check(conversation.isShowingChoices, 'the confirm row is up');
   check(accepted === 0, 'but nothing was accepted before the row was drawn');
+  rig.ui.key(' ');
+  check(accepted === 0, 'nor by a Space that lands before the row is drawn');
 
-  frame(conversation);
-  const firstRowContext = menuFocusContextId();
+  frame(rig);
+  check(rig.ui.focusRingSize() === 2, `the row is the focus ring (${rig.ui.focusRingSize()})`);
+  rig.ui.key(' ', { repeat: true });
+  check(accepted === 0, 'an auto-repeat of a Space held from the page confirms nothing');
+  rig.ui.key(' ', { predatesSurface: true });
+  check(accepted === 0, 'nor does a Space already held when the row appeared');
+  rig.ui.key(' ');
+  check(accepted === 1, `a fresh Space takes the accept side (accepted ${accepted})`);
+
+  rig.ui.key('ArrowLeft');
+  frame(rig);
+  const movedTo = selectedOf(conversation);
   check(
-    pageContext !== null && firstRowContext !== null && pageContext !== firstRowContext,
-    `the page and its row declare different rings ("${pageContext}" then "${firstRowContext}")`,
+    movedTo === CONFIRM_DECLINE_INDEX,
+    `the arrow key steps off the default onto the decline side (selected: ${movedTo})`,
   );
 
-  conversation.open({
-    lines: [narrator.line('Again.')],
-    reward: null,
-    questRelated: true,
-    ending: {
-      kind: 'confirm',
-      keyboardDefault: 'accept',
-      accept: { label: 'Yes', tone: 'quest', run: () => accepted++ },
-      decline: { label: 'No', tone: 'exit', run: (convo) => convo.close() },
-    },
-    dismiss: { kind: 'allowed', onDismissed: () => undefined },
-    haltsWorld: true,
-    anchor: null,
-    locksKeyboard: true,
-  });
+  conversation.open(confirmRequest(() => accepted++));
   for (let press = 0; press < PRESS_GUARD && !conversation.isShowingChoices; press++) {
-    frame(conversation);
+    frame(rig);
     conversation.advance();
   }
-  frame(conversation);
-  const secondRowContext = menuFocusContextId();
+  frame(rig);
+  const nextRowSelected = selectedOf(conversation);
   check(
-    secondRowContext !== firstRowContext,
-    `a later row declares a ring of its own ("${firstRowContext}" then "${secondRowContext}")`,
+    nextRowSelected === CONFIRM_ACCEPT_INDEX,
+    `a later row starts on its own default, not where focus was left (selected: ${nextRowSelected})`,
+  );
+}
+
+/** Opens a world-halting row of `labels` on `rig` and frames until it is drawn. */
+function openRow(rig: Rig, labels: NonEmpty<string>): void {
+  const [first, ...rest] = labels.map((label) => choice(label, 'normal'));
+  rig.conversation.open(rowRequest([first, ...rest], true));
+  for (let press = 0; press < PRESS_GUARD && !rig.conversation.isShowingChoices; press++) {
+    frame(rig);
+    rig.conversation.advance();
+  }
+  frame(rig);
+}
+
+const WRAPPING_ROW: NonEmpty<string> = ['First', 'Second', 'Third', 'Fourth'];
+/** Faster than the throttle: the OS auto-repeat stream's pace. */
+const KEY_REPEAT_GAP_MS = 33;
+/** Comfortably past the throttle, so the next repeat may step again. */
+const PAST_THROTTLE_MS = 200;
+const START_STAMP_MS = 1000;
+/** Auto-repeats sent per check: enough that an unthrottled stream would visibly walk the row. */
+const REPEATS_PER_CHECK = 3;
+/** A canvas point clear of the box and its row, where a click goes past the conversation. */
+const PAST_THE_BOX: Pointer = { x: 4, y: 4 };
+
+function verifyChoiceRowKeyboard(): void {
+  section('Choice rows: arrows walk a wrapped row, at a readable pace, and only on fresh presses');
+  const conversation = new Conversation(null);
+  const rig = rigFor(conversation);
+  openRow(rig, WRAPPING_ROW);
+  const rowLines = new Set(conversation.choiceBounds.map((placed) => placed.y)).size;
+  check(rowLines > 1, `the four-choice row wraps onto ${rowLines} lines`);
+  const visited: Array<number | null> = [selectedOf(conversation)];
+  for (let step = 1; step < WRAPPING_ROW.length; step++) {
+    rig.ui.key('ArrowRight');
+    frame(rig);
+    visited.push(selectedOf(conversation));
+  }
+  check(
+    visited.join() === '0,1,2,3',
+    `ArrowRight reaches every choice, the wrapped ones too (visited ${visited.join()})`,
+  );
+
+  openRow(rig, WRAPPING_ROW);
+  let stamp = START_STAMP_MS;
+  rig.ui.key('ArrowRight', { timeStamp: stamp });
+  frame(rig);
+  const afterFresh = selectedOf(conversation);
+  for (let repeat = 0; repeat < REPEATS_PER_CHECK; repeat++) {
+    stamp += KEY_REPEAT_GAP_MS;
+    rig.ui.key('ArrowRight', { repeat: true, timeStamp: stamp });
+    frame(rig);
+  }
+  const afterFastRepeats = selectedOf(conversation);
+  check(
+    afterFresh === 1 && afterFastRepeats === 1,
+    `repeats inside the throttle do not step (fresh: ${afterFresh}, after repeats: ${afterFastRepeats})`,
+  );
+  stamp += PAST_THROTTLE_MS;
+  rig.ui.key('ArrowRight', { repeat: true, timeStamp: stamp });
+  frame(rig);
+  check(
+    selectedOf(conversation) === 2,
+    `a repeat past the throttle steps once (selected: ${selectedOf(conversation)})`,
+  );
+
+  const [first, ...rest] = WRAPPING_ROW.map((label) => choice(label, 'normal'));
+  conversation.open({
+    ...rowRequest([first, ...rest], true),
+    lines: [narrator.line('A line read before the question.'), narrator.line('The question.')],
+  });
+  frame(rig);
+  check(rig.ui.focusRingSize() === 0, 'the first line shows no row yet');
+  rig.ui.key('ArrowRight', { timeStamp: START_STAMP_MS });
+  for (let press = 0; press < PRESS_GUARD && !conversation.isShowingChoices; press++) {
+    frame(rig);
+    conversation.advance();
+  }
+  frame(rig);
+  stamp = START_STAMP_MS;
+  for (let repeat = 0; repeat < REPEATS_PER_CHECK; repeat++) {
+    stamp += PAST_THROTTLE_MS;
+    rig.ui.key('ArrowRight', { repeat: true, timeStamp: stamp });
+    frame(rig);
+  }
+  check(
+    selectedOf(conversation) === 0,
+    `an arrow held from the last line does not walk the row it opens (selected: ${selectedOf(conversation)})`,
+  );
+}
+
+function verifyClickPastTheBoxKeepsSelection(): void {
+  section('A click past the box (a HUD button) leaves the row selection where it was');
+  const conversation = new Conversation(null);
+  let pastClicks = 0;
+  const rig: Rig = {
+    conversation,
+    ui: mountConversation(conversation, ctx, { offBoxClick: () => pastClicks++ }),
+  };
+  openRow(rig, WRAPPING_ROW);
+  rig.ui.key('ArrowRight');
+  frame(rig);
+  check(
+    selectedOf(conversation) === 1,
+    `the arrow moved the selection (${selectedOf(conversation)})`,
+  );
+  rig.ui.tap(PAST_THE_BOX.x, PAST_THE_BOX.y);
+  frame(rig);
+  check(pastClicks === 1, `the click went past the box (${pastClicks})`);
+  check(
+    selectedOf(conversation) === 1,
+    `the marker stays on the chosen option (selected: ${selectedOf(conversation)})`,
   );
 }
 
@@ -640,38 +846,37 @@ function verifyHeldKeyDoesNotConfirm(): void {
 
 const REPO_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 
-/**
- * Every branch the interior scene takes on a resident questline's
- * conversation (the Anchor's, the blueprints') being open: a one-line
- * `return`, or a braced body up to its first closing brace.
- */
-const ANCHOR_UPDATE_BRANCH =
-  /if \(this\.residentQuestDialogOpen\(\)\) (?:return;|\{[\s\S]*?\n\s*\})/g;
-
-function verifyInteriorSource(): void {
-  section('Interior: Space is not polled into a close; Escape reaches the conversation');
-  const source = readFileSync(join(REPO_ROOT, 'src/scenes/BuildingInteriorScene.ts'), 'utf8');
-  const branches = [...source.matchAll(ANCHOR_UPDATE_BRANCH)].map((match) => match[0]);
-  check(
-    branches.length > 0,
-    `the resident questlines' conversation branches are found (${branches.length})`,
-  );
-  const polledClose = branches.filter(
-    (branch) => branch.includes('consumeModalClose') || branch.includes('dismissDialog'),
-  );
-  check(polledClose.length === 0, 'none of them closes the conversation off the held Space key');
-  check(
-    source.includes('if (this.dismissResidentQuestDialog()) return true;'),
-    "Escape's dismiss chain includes the resident questlines' conversations",
-  );
-}
-
 function listSourceFiles(dir: string): string[] {
   return readdirSync(dir).flatMap((name) => {
     const path = join(dir, name);
     if (statSync(path).isDirectory()) return listSourceFiles(path);
     return path.endsWith('.ts') ? [path] : [];
   });
+}
+
+/** A private method's body in `source`: from its signature to the first brace back at its own indent. */
+function methodBody(source: string, name: string): string | null {
+  const match = new RegExp(`\\n  private ${name}\\([^)]*\\)[^{]*\\{([\\s\\S]*?)\\n  \\}`).exec(
+    source,
+  );
+  return match?.[1] ?? null;
+}
+
+function verifyInteriorEscapeSource(): void {
+  section('Interior: Escape reaches the conversation');
+  const source = readFileSync(join(REPO_ROOT, 'src/scenes/BuildingInteriorScene.ts'), 'utf8');
+  const escapeBody = methodBody(source, 'conversationEscape');
+  check(escapeBody !== null, 'the interior names what Escape does to its conversation');
+  check(
+    escapeBody?.includes('openResidentQuestHook()') === true &&
+      escapeBody.includes('.dismissDialog()'),
+    "Escape's dismiss chain includes the resident questlines' conversations",
+  );
+  check(
+    source.includes('dismiss: () => this.conversationEscape()?.()') &&
+      source.includes('wantsEscape: () => this.conversationEscape() !== null'),
+    "the conversation's surface hands Escape to that chain",
+  );
 }
 
 const CONFIRM_DEFAULT = /keyboardDefault:\s*'([a-z]+)'/g;
@@ -713,6 +918,16 @@ const MORE_TIME_LABEL = 'I need more time';
 /** Enough presses to skip the typing and turn every page up to the Mayor's choice row. */
 const READ_THROUGH_GUARD = 40;
 
+/** Read back through a call, so a row raised by the frame just run is not narrowed away. */
+function showingChoices(conversation: Conversation): boolean {
+  return conversation.isShowingChoices;
+}
+
+/** Read back through a call, so the phase set before the press is not narrowed across it. */
+function phaseOf(state: ReturnType<typeof createBriarHollowState>): string {
+  return state.quest.phase;
+}
+
 function verifyMayorReadyIsGuarded(): void {
   section('Briar Hollow: Space asks the Mayor for more time, never starts the siege');
   const state = createBriarHollowState();
@@ -732,14 +947,14 @@ function verifyMayorReadyIsGuarded(): void {
   const conversation = villagers.conversation;
   rig.human.x = mayor.x;
   rig.human.y = mayor.y;
-  rig.kit.tryInteract(rig.human);
+  rig.kit.tryInteract(rig.human, false);
   for (
     let press = 0;
     press < READ_THROUGH_GUARD && conversation.isOpen && !conversation.isShowingChoices;
     press++
   ) {
     conversation.update(null);
-    if (conversation.isShowingChoices) break;
+    if (showingChoices(conversation)) break;
     conversation.advance();
   }
   check(
@@ -751,22 +966,24 @@ function verifyMayorReadyIsGuarded(): void {
   check(spacePick === MORE_TIME_LABEL, `Space picks "${MORE_TIME_LABEL}" (picks ${spacePick})`);
 
   const tally: PressTally = { ring: 0, overlay: 0 };
-  frame(conversation);
-  pressSpace(conversation, (mx, my) => conversation.handleClick(mx, my), tally);
+  const mayorRig = rigFor(conversation);
+  frame(mayorRig);
+  pressSpace(mayorRig, tally);
+  const phaseAfter = phaseOf(state);
   check(
-    state.quest.phase === 'fortifying',
-    `a Space press leaves the village fortifying (phase: ${state.quest.phase})`,
+    phaseAfter === 'fortifying',
+    `a Space press leaves the village fortifying (phase: ${phaseAfter})`,
   );
 }
 
 /**
  * The reward card is a world-halting modal for its whole life — the reveal as
- * well as the OK — and both scenes claim it with the card's focus ring. Every
- * frame it is up must declare that ring (empty during the reveal), or the
- * frame audit reports the claim as a lie; and Space, once OK is up, takes it.
+ * well as the OK — and owns the keyboard as the top surface while it is up.
+ * Space during the reveal is swallowed rather than reaching whatever is
+ * beneath; once OK is up, Space takes it.
  */
-function verifyRewardCardDeclaresItsRing(): void {
-  section('The reward card declares its focus ring on every frame it is up');
+function verifyRewardCardOwnsSpace(): void {
+  section('The reward card owns Space on every frame it is up');
   const dialog = new RewardGrantedDialog();
   dialog.enqueue({
     kind: 'ability',
@@ -774,42 +991,44 @@ function verifyRewardCardDeclaresItsRing(): void {
     description: 'A reward granted to check the card keeps its promise to the keyboard.',
     renderIcon: () => undefined,
   });
-  const claims = [
-    {
-      isOpen: true,
-      space: { kind: 'swallow' },
-      locksKeyboard: true,
-      haltsWorld: true,
-      focusContext: 'reward-granted',
-    } as const,
-  ];
-  const quietConsole = console.error;
-  console.error = () => undefined;
+  let clock = 0;
+  const root = new UiRoot({
+    audio: null,
+    viewport: () => ({
+      cssWidth: VIEWPORT_WIDTH,
+      cssHeight: VIEWPORT_HEIGHT,
+      density: 'pointer',
+      uiSize: 'medium',
+      safeArea: NO_INSETS,
+    }),
+    now: () => clock,
+    warn: () => undefined,
+  });
+  root.mount(rewardGrantedSurface('reward-granted', dialog));
   let frames = 0;
-  let mismatches = 0;
   let revealFrames = 0;
-  try {
-    while (dialog.isShowing && frames < MAX_REWARD_CARD_FRAMES) {
-      setButtonMouseState(0, 0);
-      dialog.update();
-      dialog.render(ctx);
-      if (auditOverlayFocus(claims, menuFocusContextId()) !== null) mismatches++;
-      if (menuFocusRingSize() === 0) revealFrames++;
-      frames++;
-      if (menuFocusRingSize() > 0) break;
+  let leaked = 0;
+  const revealing = (): boolean => dialog.view?.settled === false;
+  while (revealing() && frames < MAX_REWARD_CARD_FRAMES) {
+    dialog.update();
+    clock += UI_FRAME_MS;
+    root.frame(ctx);
+    if (revealing()) {
+      revealFrames++;
+      if (root.key(' ', {}) !== 'consumed') leaked++;
     }
-  } finally {
-    console.error = quietConsole;
+    frames++;
   }
   check(revealFrames > 0, `the card has a reveal before its OK (${revealFrames} frame(s))`);
-  check(mismatches === 0, `no frame declares a ring other than the claim's (${mismatches} did)`);
-  const okPoint = focusedButtonClickPoint();
-  check(okPoint !== null, 'OK is focused by Space once the reveal ends');
-  if (okPoint !== null) dialog.handleClick(okPoint.x, okPoint.y);
+  check(leaked === 0, `Space during the reveal is the card's (${leaked} press(es) leaked)`);
+  check(dialog.isShowing, 'Space during the reveal does not close the card');
+  clock += UI_FRAME_MS;
+  root.frame(ctx);
+  check(root.key(' ', {}) === 'consumed', 'Space is taken once OK is up');
   check(!dialog.isShowing, 'Space on OK closes the card');
 }
 
-verifyRewardCardDeclaresItsRing();
+verifyRewardCardOwnsSpace();
 verifyVossOffer();
 verifyVossAssembly();
 verifyRestingPointerDoesNotPay();
@@ -818,9 +1037,13 @@ verifyAviel();
 verifyDefaultResolution();
 verifyTopicMenu();
 verifyStreetRowMarksSpaceDefault();
+verifyPointerMovesHaltingFocus();
+verifyClickLandsAtLargeUiSize();
 verifyHeldKeyDoesNotConfirm();
-verifyInteriorSource();
+verifyChoiceRowKeyboard();
+verifyClickPastTheBoxKeepsSelection();
 verifyConfirmDefaults();
+verifyInteriorEscapeSource();
 verifyMayorReadyIsGuarded();
 
 console.log(

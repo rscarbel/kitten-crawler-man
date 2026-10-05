@@ -1,70 +1,15 @@
-import { ITEM_DEF } from '../core/ItemDefs';
 import type { LootDrop } from '../creatures/Mob';
 import type { TreasureChest } from '../systems/TreasureChestSystem';
-import { getChestImage, getChestSourceScale } from '../systems/TreasureChestSystem';
-import { drawText, measureTextBox, TEXT_PRESETS } from './TextBox';
-import { drawBox, drawOverlay, BOX_PRESETS } from './Box';
-import { suppressMenuFocus } from './Button';
-import { viewportWidth, viewportHeight } from '../core/Viewport';
 
-// Dialog dimensions
-const CHEST_DIALOG_MAX_WIDTH = 380;
-const CHEST_DIALOG_MAX_HEIGHT = 340;
-const CHEST_DIALOG_PADDING = 32;
-
-// Particle effects
 const PARTICLE_SPEED_MIN = 1.5;
 const PARTICLE_SPEED_VARIANCE = 3;
 const PARTICLE_LIFE_MIN = 40;
 const PARTICLE_LIFE_VARIANCE = 30;
 const PARTICLE_MAX_LIFE = 70;
 const PARTICLE_GRAVITY = 0.15;
-const PARTICLE_RADIUS = 3;
-
-// Chest sprite
-const CHEST_OPEN_FRAME = 30;
 const PARTICLE_COUNT = 30;
-const PARTICLE_COLORS = ['#ffd700', '#facc15', '#fbbf24', '#f59e0b', '#fff', '#a3e635'] as const;
 
-// Pulse animation
-const PULSE_AMPLITUDE = 0.5;
-const PULSE_OSCILLATION = 0.08;
-const GLOW_BLUR_MIN = 20;
-const GLOW_BLUR_VARIANCE = 20;
-
-// Title
-const TITLE_Y = 16;
-const TITLE_SIZE = 22;
-const TITLE_GLOW_BLUR = 18;
-
-// Chest sprite rendering
-const CHEST_SPRITE_SIZE = 64;
-const CHEST_SPRITE_Y_OFFSET = 52;
-const CHEST_SPRITE_SOURCE_WIDTH = 80;
-const CHEST_SPRITE_SOURCE_HEIGHT = 80;
-const CHEST_WOODEN_OPEN_X = 80;
-const CHEST_WOODEN_CLOSED_X = 0;
-const CHEST_SILVER_OPEN_X = 240;
-const CHEST_SILVER_CLOSED_X = 160;
-
-// Particle rendering
-const LOOT_START_Y_OFFSET = 10;
-
-// Continue text
-const CONTINUE_TEXT_Y_OFFSET = 28;
-
-// Loot split rendering
-const LOOT_COLUMN_PADDING = 6;
-const LOOT_COLUMN_HEADER_SIZE = 11;
-const LOOT_COLUMN_DIVIDER_Y_OFFSET = 40;
-const LOOT_ITEMS_Y_OFFSET = 16;
-const LOOT_ITEM_SIZE = 11;
-const LOOT_ITEM_MIN_SIZE = 8;
-const LOOT_ITEM_SHRINK_STEP = 1;
-
-// Opening animation
-const OPENING_ANIMATION_FRAME_STEP = 10;
-const OPENING_DOT_CYCLE = 3;
+const CHEST_OPEN_FRAME = 30;
 
 interface Particle {
   x: number;
@@ -73,7 +18,6 @@ interface Particle {
   vy: number;
   life: number;
   maxLife: number;
-  color: string;
 }
 
 export interface ChestLootSplit {
@@ -87,7 +31,24 @@ export interface ChestLootSplit {
   customCatEntries?: string[];
 }
 
-const LOOT_ENTRY_COLOR = '#e2e8f0';
+/** A spark from the chest's burst, relative to the chest's centre. */
+export interface ChestSpark {
+  readonly x: number;
+  readonly y: number;
+  readonly life: number;
+  readonly maxLife: number;
+}
+
+/** What the open dialog shows this frame. */
+export interface ChestRewardView {
+  readonly chestType: TreasureChest['type'];
+  /** Update frames since the dialog opened. */
+  readonly frame: number;
+  /** The lid is up, the loot is listed and a press dismisses. */
+  readonly opened: boolean;
+  readonly lootSplit: ChestLootSplit | null;
+  readonly sparks: readonly ChestSpark[];
+}
 
 export class ChestRewardDialog {
   private _isOpen = false;
@@ -101,6 +62,18 @@ export class ChestRewardDialog {
 
   get isOpen(): boolean {
     return this._isOpen;
+  }
+
+  /** The open dialog's state, or null while it is closed. */
+  get view(): ChestRewardView | null {
+    if (!this._isOpen || this.chest === null) return null;
+    return {
+      chestType: this.chest.type,
+      frame: this.frame,
+      opened: this.frame >= CHEST_OPEN_FRAME,
+      lootSplit: this.lootSplit,
+      sparks: this.particles,
+    };
   }
 
   open(chest: TreasureChest, lootSplit: ChestLootSplit | null, onClose?: () => void): void {
@@ -135,16 +108,12 @@ export class ChestRewardDialog {
 
     this.frame++;
 
-    // Spawn particle burst when chest opens
     if (this.frame === CHEST_OPEN_FRAME && !this.burstSpawned) {
       this.burstSpawned = true;
       this.rewardSoundPending = true;
-      // Particles are spawned with placeholder origin (0,0); resolved in render on this frame
       for (let i = 0; i < PARTICLE_COUNT; i++) {
         const angle = (i / PARTICLE_COUNT) * Math.PI * 2;
         const speed = PARTICLE_SPEED_MIN + Math.random() * PARTICLE_SPEED_VARIANCE;
-        const colorIdx = Math.floor(Math.random() * PARTICLE_COLORS.length);
-        const color = PARTICLE_COLORS[colorIdx] ?? '#ffd700';
         this.particles.push({
           x: 0,
           y: 0,
@@ -152,12 +121,10 @@ export class ChestRewardDialog {
           vy: Math.sin(angle) * speed,
           life: PARTICLE_LIFE_MIN + Math.floor(Math.random() * PARTICLE_LIFE_VARIANCE),
           maxLife: PARTICLE_MAX_LIFE,
-          color,
         });
       }
     }
 
-    // Update particles
     this.particles = this.particles.filter((p) => p.life > 0);
     for (const p of this.particles) {
       p.x += p.vx;
@@ -167,281 +134,17 @@ export class ChestRewardDialog {
     }
   }
 
-  handleClick(_mx: number, _my: number): boolean {
-    return this.dismiss();
-  }
-
   handleKeyDown(): boolean {
     return this.dismiss();
   }
 
-  private dismiss(): boolean {
+  /** Closes the card once the chest has opened; returns whether it closed. */
+  dismiss(): boolean {
     if (!this._isOpen || this.frame < CHEST_OPEN_FRAME) return false;
     this._isOpen = false;
     if (this.onClose !== null) {
       this.onClose();
     }
     return true;
-  }
-
-  render(ctx: CanvasRenderingContext2D): void {
-    if (!this._isOpen || this.chest === null) return;
-    suppressMenuFocus('chest-reward');
-
-    const cw = viewportWidth();
-    const ch = viewportHeight();
-
-    drawOverlay(ctx, { canvasWidth: cw, canvasHeight: ch, alpha: 0.7 });
-
-    const boxW = Math.min(CHEST_DIALOG_MAX_WIDTH, cw - CHEST_DIALOG_PADDING);
-    const boxH = Math.min(CHEST_DIALOG_MAX_HEIGHT, ch - CHEST_DIALOG_PADDING);
-    const boxX = Math.round(cw / 2 - boxW / 2);
-    const boxY = Math.round(ch / 2 - boxH / 2);
-
-    const pulse = PULSE_AMPLITUDE + PULSE_AMPLITUDE * Math.sin(this.frame * PULSE_OSCILLATION);
-    const glowBlur = GLOW_BLUR_MIN + pulse * GLOW_BLUR_VARIANCE;
-    const borderColor = this.chest.type === 'silver' ? '#c0c0c0' : '#8b5e3c';
-    const glowColor = this.chest.type === 'silver' ? '#c0c0c0' : '#d4a17a';
-
-    drawBox(ctx, {
-      x: boxX,
-      y: boxY,
-      width: boxW,
-      height: boxH,
-      ...BOX_PRESETS.modal,
-      border: borderColor,
-      borderWidth: 3,
-      glow: glowColor,
-      glowBlur,
-      radius: 8,
-      padding: 20,
-    });
-
-    drawText(ctx, 'TREASURE!', {
-      x: boxX + boxW / 2,
-      y: boxY + TITLE_Y,
-      align: 'center',
-      size: TITLE_SIZE,
-      bold: true,
-      color: '#ffd700',
-      glow: '#ffd700',
-      glowBlur: TITLE_GLOW_BLUR,
-      outline: true,
-    });
-
-    // Chest sprite — 64×64, centered horizontally
-    const chestSpriteSize = CHEST_SPRITE_SIZE;
-    const chestSpriteX = Math.round(boxX + (boxW - chestSpriteSize) / 2);
-    const chestSpriteY = boxY + CHEST_SPRITE_Y_OFFSET;
-
-    const chestOpened = this.frame >= CHEST_OPEN_FRAME;
-    let srcX: number;
-    if (this.chest.type === 'wooden') {
-      srcX = chestOpened ? CHEST_WOODEN_OPEN_X : CHEST_WOODEN_CLOSED_X;
-    } else {
-      srcX = chestOpened ? CHEST_SILVER_OPEN_X : CHEST_SILVER_CLOSED_X;
-    }
-
-    const chestImage = getChestImage();
-    if (chestImage !== undefined) {
-      // Every constant above is authored against the chest sheet's 80px
-      // full-resolution frame — scale by how much smaller the actually-loaded
-      // sheet is (low-end devices bake sprite sheets at a fraction of full
-      // resolution) or these source coordinates read from the wrong region
-      // of a halved canvas.
-      const s = getChestSourceScale();
-      ctx.drawImage(
-        chestImage,
-        srcX * s,
-        0,
-        CHEST_SPRITE_SOURCE_WIDTH * s,
-        CHEST_SPRITE_SOURCE_HEIGHT * s,
-        chestSpriteX,
-        chestSpriteY,
-        chestSpriteSize,
-        chestSpriteSize,
-      );
-    }
-
-    // Resolve particle origin to chest sprite center on the burst frame
-    const particleCenterX = chestSpriteX + chestSpriteSize / 2;
-    const particleCenterY = chestSpriteY + chestSpriteSize / 2;
-    if (this.burstSpawned && this.frame === CHEST_OPEN_FRAME) {
-      for (const p of this.particles) {
-        p.x = particleCenterX;
-        p.y = particleCenterY;
-      }
-    }
-
-    ctx.save();
-    for (const p of this.particles) {
-      const alpha = p.life / p.maxLife;
-      ctx.globalAlpha = alpha;
-      ctx.fillStyle = p.color;
-      ctx.beginPath();
-      ctx.arc(p.x, p.y, PARTICLE_RADIUS, 0, Math.PI * 2);
-      ctx.fill();
-    }
-    ctx.restore();
-
-    const lootStartY = chestSpriteY + chestSpriteSize + LOOT_START_Y_OFFSET;
-
-    if (!chestOpened) {
-      const dots = '.'.repeat(
-        1 + (Math.floor(this.frame / OPENING_ANIMATION_FRAME_STEP) % OPENING_DOT_CYCLE),
-      );
-      drawText(ctx, `Opening${dots}`, {
-        x: boxX + boxW / 2,
-        y: lootStartY,
-        align: 'center',
-        ...TEXT_PRESETS.hint,
-      });
-    } else if (this.lootSplit === null) {
-      drawText(ctx, 'The chest is empty.', {
-        x: boxX + boxW / 2,
-        y: lootStartY,
-        align: 'center',
-        ...TEXT_PRESETS.hint,
-      });
-    } else {
-      this.renderLootSplit(ctx, boxX, boxW, boxH, boxY, lootStartY, this.lootSplit);
-    }
-
-    // Only show "click to continue" after the chest has opened
-    if (chestOpened) {
-      drawText(ctx, 'Press any key or click to continue', {
-        x: boxX + boxW / 2,
-        y: boxY + boxH - CONTINUE_TEXT_Y_OFFSET,
-        align: 'center',
-        ...TEXT_PRESETS.controls,
-      });
-    }
-  }
-
-  private renderLootSplit(
-    ctx: CanvasRenderingContext2D,
-    boxX: number,
-    boxW: number,
-    boxH: number,
-    boxY: number,
-    lootStartY: number,
-    split: ChestLootSplit,
-  ): void {
-    const dividerX = boxX + boxW / 2;
-    const colPad = LOOT_COLUMN_PADDING;
-    const colW = Math.floor(boxW / 2) - colPad * 2;
-    const leftColX = boxX + colPad;
-    const rightColX = dividerX + colPad;
-
-    drawText(ctx, 'Human', {
-      x: leftColX,
-      y: lootStartY,
-      width: colW,
-      align: 'center',
-      size: LOOT_COLUMN_HEADER_SIZE,
-      bold: true,
-      color: '#93c5fd',
-    });
-    drawText(ctx, 'Cat', {
-      x: rightColX,
-      y: lootStartY,
-      width: colW,
-      align: 'center',
-      size: LOOT_COLUMN_HEADER_SIZE,
-      bold: true,
-      color: '#fb923c',
-    });
-
-    ctx.save();
-    ctx.strokeStyle = 'rgba(255,255,255,0.15)';
-    ctx.lineWidth = 1;
-    ctx.beginPath();
-    ctx.moveTo(dividerX, lootStartY);
-    ctx.lineTo(dividerX, boxY + boxH - LOOT_COLUMN_DIVIDER_Y_OFFSET);
-    ctx.stroke();
-    ctx.restore();
-
-    const itemsTop = lootStartY + LOOT_ITEMS_Y_OFFSET;
-    const itemsBottom = boxY + boxH - LOOT_COLUMN_DIVIDER_Y_OFFSET;
-    const leftEntries = lootEntries(split.humanLoot, split.displayLabels, split.customHumanEntries);
-    const rightEntries = lootEntries(split.catLoot, split.displayLabels, split.customCatEntries);
-
-    // A long haul on a short phone screen shrinks the text instead of running
-    // into the continue prompt underneath.
-    let itemSize = LOOT_ITEM_SIZE;
-    for (;;) {
-      const tallest = Math.max(
-        columnHeight(ctx, leftEntries, colW, itemSize),
-        columnHeight(ctx, rightEntries, colW, itemSize),
-      );
-      if (itemsTop + tallest <= itemsBottom || itemSize <= LOOT_ITEM_MIN_SIZE) break;
-      itemSize -= LOOT_ITEM_SHRINK_STEP;
-    }
-
-    drawLootColumn(ctx, leftEntries, leftColX, itemsTop, colW, itemSize);
-    drawLootColumn(ctx, rightEntries, rightColX, itemsTop, colW, itemSize);
-  }
-}
-
-interface LootEntry {
-  label: string;
-  kind: 'coins' | 'item' | 'empty';
-}
-
-function lootEntries(
-  loot: ChestLootSplit['humanLoot'],
-  displayLabels: ChestLootSplit['displayLabels'],
-  customEntries: ReadonlyArray<string> | undefined,
-): LootEntry[] {
-  const entries: LootEntry[] = [];
-  if (loot.coins > 0) entries.push({ label: `${loot.coins} coins`, kind: 'coins' });
-  for (const entry of loot.items) {
-    const baseName = displayLabels?.[entry.id] ?? ITEM_DEF[entry.id].name;
-    const label = entry.quantity > 1 ? `${entry.quantity}x ${baseName}` : baseName;
-    entries.push({ label, kind: 'item' });
-  }
-  for (const label of customEntries ?? []) entries.push({ label, kind: 'item' });
-  if (entries.length === 0) entries.push({ label: '(empty)', kind: 'empty' });
-  return entries;
-}
-
-function columnHeight(
-  ctx: CanvasRenderingContext2D,
-  entries: ReadonlyArray<LootEntry>,
-  width: number,
-  itemSize: number,
-): number {
-  let total = 0;
-  for (const entry of entries) {
-    const size = entry.kind === 'item' ? itemSize : undefined;
-    total += measureTextBox(ctx, entry.label, { width, size }).totalHeight;
-  }
-  return total;
-}
-
-function drawLootColumn(
-  ctx: CanvasRenderingContext2D,
-  entries: ReadonlyArray<LootEntry>,
-  x: number,
-  top: number,
-  width: number,
-  itemSize: number,
-): void {
-  let y = top;
-  for (const entry of entries) {
-    const style =
-      entry.kind === 'coins'
-        ? TEXT_PRESETS.value
-        : entry.kind === 'empty'
-          ? TEXT_PRESETS.hint
-          : { size: itemSize, color: LOOT_ENTRY_COLOR };
-    const { totalHeight } = drawText(ctx, entry.label, {
-      x,
-      y,
-      width,
-      align: 'center',
-      ...style,
-    });
-    y += totalHeight;
   }
 }

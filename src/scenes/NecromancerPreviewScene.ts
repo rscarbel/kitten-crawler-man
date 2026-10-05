@@ -5,17 +5,17 @@
  * A contact sheet cannot show whether the hem's ripple reads as floating, how
  * long a raise's sigils burn before the dead come up, or whether a pulse's
  * channel holds without a hitch — so this plays every row at the tick rates
- * the creature plays them, one column per action, one lane per view. Click
- * the left half to pause (the wheel then steps a tick at a time); click the
- * right half to switch between in-game size and double size.
+ * the creature plays them, one column per action, one lane per view. While
+ * paused, the wheel or the step button advances a tick at a time.
  *
  * Reached via `?necromancer` in `devBootScene`; never on a production path.
  */
 
-import { Scene } from '../core/Scene';
 import { TILE_SIZE } from '../core/constants';
 import { viewportHeight, viewportWidth } from '../core/Viewport';
-import { drawText } from '../ui/TextBox';
+import type { WorldGesture } from '../ui/core/UiRoot';
+import { worldText } from '../ui/world/worldText';
+import { PreviewScene, type PreviewControl } from './PreviewScene';
 import { drawFigureCached } from '../sprites/figure/figureFrameCache';
 import {
   GROUND_OFFSET_PX,
@@ -39,15 +39,15 @@ import {
   prewarmNecromancerArrival,
   prewarmNecromancerStanding,
 } from '../sprites/necromancerSprite';
+import { previewInk } from '../ui/theme/previewInk';
 
-const BG_COLOR = '#262b22';
-const GROUND_COLOR = '#3f4d31';
-const LABEL_COLOR = '#c9d2e0';
+const BG_COLOR = previewInk.necromancer.backdrop;
+const GROUND_COLOR = previewInk.necromancer.ground;
+const LABEL_COLOR = previewInk.necromancer.label;
 const MARGIN = 24;
 const LABEL_SIZE = 13;
-const TITLE_SIZE = 18;
-const TITLE_Y = 14;
-const LANE_TOP = 60;
+/** Room above the first lane for the action captions. */
+const COLUMN_LABEL_ROOM = 36;
 
 const ACTIONS: readonly NecromancerAction[] = [
   'drift',
@@ -129,7 +129,7 @@ function playheadOf(row: NecromancerRowSpec, tick: number): Playhead {
   return { frame, telegraph: t <= eventTick ? t / eventTick : null };
 }
 
-export class NecromancerPreviewScene extends Scene {
+export class NecromancerPreviewScene extends PreviewScene {
   private tick = 0;
   private paused = false;
   private zoomIndex = 0;
@@ -139,14 +139,49 @@ export class NecromancerPreviewScene extends Scene {
     prewarmNecromancerStanding();
   }
 
-  handleClick(mx: number): void {
-    if (mx < viewportWidth() / 2) this.paused = !this.paused;
-    else this.zoomIndex = (this.zoomIndex + 1) % ZOOMS.length;
+  protected handlePreviewWorldPointer(gesture: WorldGesture): void {
+    if (gesture.kind !== 'wheel') return;
+    if (!this.paused || gesture.deltaY <= 0) return;
+    this.tick++;
   }
 
-  handleWheel(deltaY: number): void {
-    if (!this.paused || deltaY <= 0) return;
-    this.tick++;
+  protected previewTitle(): string {
+    return 'Vordrick Boneharrow preview — ?necromancer';
+  }
+
+  protected previewCaptions(): readonly string[] {
+    const zoom = ZOOMS[this.zoomIndex] ?? 1;
+    const tile = TILE_SIZE * zoom;
+    return [
+      `${tile}px tile${zoom === 1 ? ' (in-game)' : ''}`,
+      `tick ${this.tick}${this.paused ? ' (paused)' : ''}`,
+    ];
+  }
+
+  protected previewControls(): readonly PreviewControl[] {
+    return [
+      {
+        id: 'play',
+        label: this.paused ? 'play' : 'pause',
+        onTap: () => {
+          this.paused = !this.paused;
+        },
+      },
+      {
+        label: 'step',
+        onTap: () => {
+          this.paused = true;
+          this.tick++;
+        },
+      },
+      {
+        id: 'zoom',
+        label: `zoom ${ZOOMS[this.zoomIndex] ?? 1}x`,
+        onTap: () => {
+          this.zoomIndex = (this.zoomIndex + 1) % ZOOMS.length;
+        },
+      },
+    ];
   }
 
   update(): void {
@@ -160,15 +195,11 @@ export class NecromancerPreviewScene extends Scene {
     ctx.fillRect(0, 0, width, height);
     const zoom = ZOOMS[this.zoomIndex] ?? 1;
     const tile = TILE_SIZE * zoom;
-    drawText(
-      ctx,
-      `Vordrick Boneharrow — ${tile}px tile${zoom === 1 ? ' (in-game)' : ''}. Left click: pause/step with wheel. Right click: zoom.`,
-      { x: MARGIN, y: TITLE_Y, size: TITLE_SIZE, bold: true, color: LABEL_COLOR, outline: true },
-    );
+    const laneTop = this.headerBottom + COLUMN_LABEL_ROOM;
     const column = (width - MARGIN * 2) / ACTIONS.length;
     const laneHeight = tile * LANE_TILES;
     VIEWS.forEach((view, lane) => {
-      const groundY = LANE_TOP + (lane + 1) * laneHeight - tile * GROUND_LINE_LIFT_TILES;
+      const groundY = laneTop + (lane + 1) * laneHeight - tile * GROUND_LINE_LIFT_TILES;
       ctx.fillStyle = GROUND_COLOR;
       ctx.fillRect(
         MARGIN,
@@ -176,7 +207,7 @@ export class NecromancerPreviewScene extends Scene {
         width - MARGIN * 2,
         tile * GROUND_BAND_TILES,
       );
-      drawText(ctx, view, {
+      worldText(ctx, view, {
         x: MARGIN,
         y: groundY - laneHeight + tile,
         size: LABEL_SIZE,
@@ -184,9 +215,9 @@ export class NecromancerPreviewScene extends Scene {
       });
       ACTIONS.forEach((action, index) => {
         if (lane === 0) {
-          drawText(ctx, action, {
+          worldText(ctx, action, {
             x: MARGIN + index * column + LABEL_SIZE,
-            y: LANE_TOP - LABEL_SIZE,
+            y: laneTop - LABEL_SIZE,
             size: LABEL_SIZE,
             color: LABEL_COLOR,
           });
@@ -198,12 +229,7 @@ export class NecromancerPreviewScene extends Scene {
         this.drawCell(ctx, row, footX, groundY, tile);
       });
     });
-    drawText(ctx, `tick ${this.tick}${this.paused ? ' (paused)' : ''}`, {
-      x: MARGIN,
-      y: height - MARGIN,
-      size: LABEL_SIZE,
-      color: LABEL_COLOR,
-    });
+    this.renderChrome(ctx);
   }
 
   /** One row at its playhead, its telegraph under it, stood on (footX, groundY). */

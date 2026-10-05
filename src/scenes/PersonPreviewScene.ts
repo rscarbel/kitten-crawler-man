@@ -18,11 +18,10 @@
  * production path.
  */
 
-import { Scene } from '../core/Scene';
 import { TILE_SIZE } from '../core/constants';
 import { viewportWidth, viewportHeight } from '../core/Viewport';
-import { addButton, BUTTON_PRESETS, notifyButtonClick, setButtonMouseState } from '../ui/Button';
-import { drawText } from '../ui/TextBox';
+import { worldText } from '../ui/world/worldText';
+import { PreviewScene, type PreviewControl } from './PreviewScene';
 import { Townsperson } from '../creatures/Townsperson';
 import { TOWN_SPECIES } from '../systems/townSpecies';
 import {
@@ -39,24 +38,26 @@ import {
 } from '../sprites/figure/figureCacheStats';
 import { HUMANOID_NPC_SCALE } from '../sprites/humanoidScale';
 import type { Facing } from '../sprites/person/skeleton';
+import { previewInk } from '../ui/theme/previewInk';
+import { worldPalette } from '../ui/theme/worldInk';
 
-const BG_COLOR = '#1b2436';
-const GROUND_COLOR = '#26324a';
-const HEADING_COLOR = '#e2e8f0';
-const LABEL_COLOR = '#94a3b8';
-const READOUT_COLOR = '#a7f3d0';
+const BG_COLOR = previewInk.person.backdrop;
+const GROUND_COLOR = previewInk.person.ground;
+const LABEL_COLOR = worldPalette.ink.hint;
+const READOUT_COLOR = previewInk.person.readout;
 
 const HERO_SIZE = 150;
 const GRID_SIZE = 88;
 const GRID_CELL = 104;
 const ROLE_STRIP_SIZE = 96;
 const MARGIN = 40;
-const HEADING_SIZE = 20;
 const LABEL_SIZE = 14;
 
-const HERO_BAND_Y = 60;
-const ROLE_STRIP_TOP = 250;
-const GRID_TOP = 400;
+/** Gap between the header and the hero band. */
+const HERO_BAND_GAP = 18;
+/** How far below the hero band's top the archetype strip and the grid start. */
+const ROLE_STRIP_OFFSET = 190;
+const GRID_OFFSET = 340;
 
 const FACINGS: ReadonlyArray<Facing> = ['down', 'left', 'up', 'right'];
 const HERO_LABELS: Record<Facing, string> = {
@@ -104,31 +105,18 @@ const CROWD_ARRIVE_DIST = TILE_SIZE / 2;
 const CROWD_PAUSE_MIN = 20;
 const CROWD_PAUSE_MAX = 180;
 const CROWD_PEN_INSET = 60;
-const CROWD_PEN_TOP = 150;
+/** Gap between the header and the top of the crowd's pen, leaving room for its caption. */
+const CROWD_PEN_GAP = 108;
 /** Frames of draw time averaged into the readout, so it does not flicker. */
 const TIMING_WINDOW_FRAMES = 30;
 const MS_DECIMALS = 2;
 const PERCENT = 100;
 
-const BUTTON_W = 130;
-const BUTTON_H = 34;
-const BUTTON_GAP = 10;
-const BUTTON_ROW_Y = 8;
 const READOUT_LINE_HEIGHT = 18;
 
 type PreviewMode = 'gallery' | 'crowd';
 
-/** What `addButton` records so a click can be routed back to its action. */
-interface ButtonHitRect {
-  x: number;
-  y: number;
-  w: number;
-  h: number;
-  action?: () => void;
-  label?: string;
-}
-
-export class PersonPreviewScene extends Scene {
+export class PersonPreviewScene extends PreviewScene {
   private frame = 0;
   private seedBase = 1;
   private mode: PreviewMode = 'gallery';
@@ -138,9 +126,6 @@ export class PersonPreviewScene extends Scene {
   private drawMsTotal = 0;
   private drawMsSamples = 0;
   private drawMsAverage = 0;
-  private mouseX = 0;
-  private mouseY = 0;
-  private readonly buttons: ButtonHitRect[] = [];
 
   onEnter(): void {
     setFigureCacheStatsRecording(true);
@@ -148,23 +133,6 @@ export class PersonPreviewScene extends Scene {
 
   onExit(): void {
     setFigureCacheStatsRecording(false);
-  }
-
-  handleClick(mx: number, my: number): void {
-    notifyButtonClick(mx, my);
-    for (const button of this.buttons) {
-      const inside =
-        mx >= button.x && mx <= button.x + button.w && my >= button.y && my <= button.y + button.h;
-      if (inside) {
-        button.action?.();
-        return;
-      }
-    }
-  }
-
-  handleMouseMove(mx: number, my: number): void {
-    this.mouseX = mx;
-    this.mouseY = my;
   }
 
   update(): void {
@@ -175,7 +143,6 @@ export class PersonPreviewScene extends Scene {
   }
 
   render(ctx: CanvasRenderingContext2D): void {
-    setButtonMouseState(this.mouseX, this.mouseY);
     const width = viewportWidth();
     const height = viewportHeight();
     ctx.fillStyle = BG_COLOR;
@@ -188,7 +155,15 @@ export class PersonPreviewScene extends Scene {
     } else {
       this.renderCrowd(ctx, width, height);
     }
-    this.renderControls(ctx, width);
+    this.renderChrome(ctx);
+  }
+
+  private get heroBandTop(): number {
+    return this.headerBottom + HERO_BAND_GAP;
+  }
+
+  private get crowdPenTop(): number {
+    return this.headerBottom + CROWD_PEN_GAP;
   }
 
   /** Cycle position for a figure walking at `speed`, offset by `stagger` strides. */
@@ -198,18 +173,19 @@ export class PersonPreviewScene extends Scene {
   }
 
   private renderHeroes(ctx: CanvasRenderingContext2D, width: number): void {
+    const heroBandTop = this.heroBandTop;
     ctx.fillStyle = GROUND_COLOR;
-    ctx.fillRect(0, HERO_BAND_Y + HERO_SIZE * HERO_GROUND_FRAC, width, GROUND_THICKNESS);
+    ctx.fillRect(0, heroBandTop + HERO_SIZE * HERO_GROUND_FRAC, width, GROUND_THICKNESS);
 
     const slot = width / (FACINGS.length + 1);
     FACINGS.forEach((facing, i) => {
       const appearance = generatePersonAppearance(this.seedBase + i);
       const sx = slot * (i + 1) - HERO_SIZE / 2;
       const phase = this.galleryPhase(appearance, HERO_SIZE, 0);
-      drawPerson(ctx, sx, HERO_BAND_Y, HERO_SIZE, appearance, phase, facing, true);
-      drawText(ctx, HERO_LABELS[facing], {
+      drawPerson(ctx, sx, heroBandTop, HERO_SIZE, appearance, phase, facing, true);
+      worldText(ctx, HERO_LABELS[facing], {
         x: slot * (i + 1),
-        y: HERO_BAND_Y + HERO_SIZE,
+        y: heroBandTop + HERO_SIZE,
         size: LABEL_SIZE,
         align: 'center',
         color: LABEL_COLOR,
@@ -218,15 +194,16 @@ export class PersonPreviewScene extends Scene {
   }
 
   private renderArchetypeStrip(ctx: CanvasRenderingContext2D, width: number): void {
+    const roleStripTop = this.heroBandTop + ROLE_STRIP_OFFSET;
     const slot = width / (ARCHETYPE_ROLES.length + 1);
     ARCHETYPE_ROLES.forEach((role, i) => {
       const appearance = generatePersonAppearance(this.seedBase + i, role);
       const sx = slot * (i + 1) - ROLE_STRIP_SIZE / 2;
       const phase = this.galleryPhase(appearance, ROLE_STRIP_SIZE, i * PHASE_STAGGER);
-      drawPerson(ctx, sx, ROLE_STRIP_TOP, ROLE_STRIP_SIZE, appearance, phase, 'right', true);
-      drawText(ctx, `${role} — ${appearance.gait.archetype}`, {
+      drawPerson(ctx, sx, roleStripTop, ROLE_STRIP_SIZE, appearance, phase, 'right', true);
+      worldText(ctx, `${role} — ${appearance.gait.archetype}`, {
         x: slot * (i + 1),
-        y: ROLE_STRIP_TOP + ROLE_STRIP_SIZE,
+        y: roleStripTop + ROLE_STRIP_SIZE,
         size: LABEL_SIZE,
         align: 'center',
         color: LABEL_COLOR,
@@ -237,7 +214,7 @@ export class PersonPreviewScene extends Scene {
   private renderGrid(ctx: CanvasRenderingContext2D, width: number, height: number): void {
     const cols = Math.max(1, Math.floor((width - MARGIN * 2) / GRID_CELL));
     let index = 0;
-    for (let y = GRID_TOP; y + GRID_CELL < height; y += GRID_CELL) {
+    for (let y = this.heroBandTop + GRID_OFFSET; y + GRID_CELL < height; y += GRID_CELL) {
       for (let col = 0; col < cols; col += 1) {
         const appearance = generatePersonAppearance(this.seedBase * GRID_SEED_STRIDE + index + 1);
         // Each figure turns on its own schedule so the crowd looks unchoreographed.
@@ -260,10 +237,11 @@ export class PersonPreviewScene extends Scene {
     // into a rectangle that no longer exists after a resize.
     const pickTarget = (): { x: number; y: number } => {
       const penWidth = Math.max(TILE_SIZE, viewportWidth() - CROWD_PEN_INSET * 2);
-      const penHeight = Math.max(TILE_SIZE, viewportHeight() - CROWD_PEN_TOP - CROWD_PEN_INSET);
+      const penTop = this.crowdPenTop;
+      const penHeight = Math.max(TILE_SIZE, viewportHeight() - penTop - CROWD_PEN_INSET);
       return {
         x: CROWD_PEN_INSET + Math.random() * penWidth,
-        y: CROWD_PEN_TOP + Math.random() * penHeight,
+        y: penTop + Math.random() * penHeight,
       };
     };
 
@@ -323,7 +301,7 @@ export class PersonPreviewScene extends Scene {
       `${stats.figures} figures cached, ${stats.rows} rows, ${megabytes.toFixed(1)} MB`,
     ];
     lines.forEach((line, i) => {
-      drawText(ctx, line, {
+      worldText(ctx, line, {
         x: MARGIN,
         y: height - MARGIN - (lines.length - i) * READOUT_LINE_HEIGHT,
         size: LABEL_SIZE,
@@ -331,54 +309,52 @@ export class PersonPreviewScene extends Scene {
         outline: true,
       });
     });
-    drawText(ctx, 'Crowd stress — real Townsperson instances through the frame cache', {
+    worldText(ctx, 'Crowd stress — real Townsperson instances through the frame cache', {
       x: width / 2,
-      y: CROWD_PEN_TOP - READOUT_LINE_HEIGHT * 2,
+      y: this.crowdPenTop - READOUT_LINE_HEIGHT * 2,
       size: LABEL_SIZE,
       align: 'center',
       color: LABEL_COLOR,
     });
   }
 
-  private renderControls(ctx: CanvasRenderingContext2D, width: number): void {
-    drawText(ctx, 'Procedural People', {
-      x: MARGIN,
-      y: BUTTON_ROW_Y,
-      size: HEADING_SIZE,
-      bold: true,
-      color: HEADING_COLOR,
-      outline: true,
-    });
+  protected previewTitle(): string {
+    return 'Procedural People — ?people';
+  }
 
-    this.buttons.length = 0;
-    let x = width - MARGIN - BUTTON_W;
-    const button = (label: string, action: () => void): void => {
-      addButton(ctx, this.buttons, {
-        x,
-        y: BUTTON_ROW_Y,
-        width: BUTTON_W,
-        height: BUTTON_H,
-        label,
-        ...BUTTON_PRESETS.toggle,
-        action,
-      });
-      x -= BUTTON_W + BUTTON_GAP;
+  protected previewControls(): readonly PreviewControl[] {
+    const modeToggle: PreviewControl = {
+      id: 'mode',
+      label: this.mode === 'gallery' ? 'crowd stress' : 'gallery',
+      onTap: () => {
+        this.mode = this.mode === 'gallery' ? 'crowd' : 'gallery';
+      },
     };
-
-    if (this.mode === 'crowd') {
-      button(`+${CROWD_STEP} people`, () => {
-        this.crowdCount = Math.min(CROWD_MAX, this.crowdCount + CROWD_STEP);
-      });
-      button(`−${CROWD_STEP} people`, () => {
-        this.crowdCount = Math.max(CROWD_MIN, this.crowdCount - CROWD_STEP);
-      });
-    } else {
-      button('reroll seeds', () => {
-        this.seedBase += SEED_REROLL_STRIDE;
-      });
+    if (this.mode === 'gallery') {
+      return [
+        modeToggle,
+        {
+          label: 'reroll seeds',
+          onTap: () => {
+            this.seedBase += SEED_REROLL_STRIDE;
+          },
+        },
+      ];
     }
-    button(this.mode === 'gallery' ? 'crowd stress' : 'gallery', () => {
-      this.mode = this.mode === 'gallery' ? 'crowd' : 'gallery';
-    });
+    return [
+      modeToggle,
+      {
+        label: `−${CROWD_STEP} people`,
+        onTap: () => {
+          this.crowdCount = Math.max(CROWD_MIN, this.crowdCount - CROWD_STEP);
+        },
+      },
+      {
+        label: `+${CROWD_STEP} people`,
+        onTap: () => {
+          this.crowdCount = Math.min(CROWD_MAX, this.crowdCount + CROWD_STEP);
+        },
+      },
+    ];
   }
 }

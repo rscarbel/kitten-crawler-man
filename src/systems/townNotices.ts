@@ -8,7 +8,7 @@
  * finished one as DONE, and a live doomsday countdown as a DANGER alert.
  *
  * Pure data + selection: no rendering, no audio, no scene coupling. The owning
- * `TownPropSystem` / `NoticeBoardPanel` supply the context and draw the result.
+ * `TownPropSystem` / `NoticeBoard` supply the context and draw the result.
  */
 
 import type { CircusQuestStage } from '../core/CircusQuestProgress';

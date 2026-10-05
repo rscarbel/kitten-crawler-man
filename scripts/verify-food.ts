@@ -300,7 +300,7 @@ console.log('\nEvery route to a meal');
   human.inventory.addItem('hamburger', STARTING_BURGERS);
   const burger = human.inventory.bag.slots.findIndex((slot) => slot?.id === 'hamburger');
   const onHotbar = human.inventory.actionBar.slots.findIndex((slot) => slot?.id === 'hamburger');
-  const interaction = menus.inventoryPanel.interaction;
+  const interaction = menus.inventoryActions;
   const hotbarBurger = onHotbar >= 0 ? human.inventory.actionBar.slots[onHotbar] : null;
   const bagBurger = burger >= 0 ? human.inventory.bag.slots[burger] : null;
   const anyBurger = hotbarBurger ?? bagBurger;

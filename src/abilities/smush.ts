@@ -1,5 +1,7 @@
 import type { AbilityDef } from '../core/AbilityManager';
 import { drawSpriteKey } from '../core/SpriteRenderer';
+import type { Rect } from '../ui/core/geom';
+import { iconSquare } from '../ui/icons/iconSquare';
 
 const SMUSH_BASE_COOLDOWN = 600;
 const SMUSH_COOLDOWN_DECREMENT = 60;
@@ -83,13 +85,8 @@ export function getSmushStats(level: number): SmushStats {
   };
 }
 
-function renderSmushIcon(
-  ctx: CanvasRenderingContext2D,
-  x: number,
-  y: number,
-  size: number,
-  level: number,
-): void {
+function renderSmushIcon(ctx: CanvasRenderingContext2D, rect: Rect, level: number): void {
+  const { x, y, size } = iconSquare(rect);
   const state = level >= SMUSH_LEVEL_FULL_POWER ? 'full_power' : 'standard';
   drawSpriteKey(ctx, 'smush_icon', state, 0, x, y, size);
 }

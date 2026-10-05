@@ -1,3 +1,6 @@
+import type { Rect } from '../core/geom';
+import { iconSquare } from './iconSquare';
+
 /**
  * The two papers the Krasue murder mystery hands the party at the alley: the
  * magistrate's writ and the letter Mordecai calls necro-script. Drawn as a
@@ -50,12 +53,8 @@ const WRIT_SEAL_SHINE_R = 0.28;
 const FULL_CIRCLE = Math.PI * 2;
 
 /** Draws Magistrate's Writ: a crisp cream page with a red wax seal. */
-export function drawMagistratesWritIcon(
-  ctx: CanvasRenderingContext2D,
-  x: number,
-  y: number,
-  size: number,
-): void {
+export function drawMagistratesWritIcon(ctx: CanvasRenderingContext2D, rect: Rect): void {
+  const { x, y, size } = iconSquare(rect);
   const pageX = x + size * PAGE_X;
   const pageY = y + size * PAGE_Y;
   const pageW = size * PAGE_W;
@@ -147,12 +146,8 @@ const LETTER_GLOW_COLOR = 'rgba(217,119,6,0.35)';
 const LETTER_GLOW_BLUR = 5;
 
 /** Draws The Unreadable Letter: warm, sickly parchment covered in necro-script. */
-export function drawUnreadableLetterIcon(
-  ctx: CanvasRenderingContext2D,
-  x: number,
-  y: number,
-  size: number,
-): void {
+export function drawUnreadableLetterIcon(ctx: CanvasRenderingContext2D, rect: Rect): void {
+  const { x, y, size } = iconSquare(rect);
   const pageX = x + size * PAGE_X;
   const pageY = y + size * PAGE_Y;
   const pageW = size * PAGE_W;

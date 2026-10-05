@@ -36,10 +36,11 @@ import {
   drawBlueprintsQuestIcon,
   type BlueprintsQuestIconId,
 } from '../src/ui/icons/blueprintsQuestIcons.js';
-import { drawItemIcon } from '../src/ui/InventoryPanel.js';
+import { drawItemIcon } from '../src/ui/icons/drawItemIcon.js';
 import type { InventoryItem } from '../src/core/ItemDefs.js';
+import type { Rect } from '../src/ui/core/geom.js';
 
-type Draw = (ctx: CanvasRenderingContext2D, x: number, y: number, size: number) => void;
+type Draw = (ctx: CanvasRenderingContext2D, rect: Rect) => void;
 
 interface IconSpec {
   readonly label: string;
@@ -50,24 +51,24 @@ interface IconSpec {
 
 const RESOURCE_ICONS: readonly IconSpec[] = RESOURCE_ICON_ID_LIST.map((id: ResourceIconId) => ({
   label: `resource:${id}`,
-  draw: (ctx, x, y, size) => drawResourceIcon(ctx, id, x, y, size),
+  draw: (ctx, rect) => drawResourceIcon(ctx, rect, id),
 }));
 const TOOL_ICONS: readonly IconSpec[] = TOOL_ICON_ID_LIST.map((id: ToolIconId) => ({
   label: `tool:${id}`,
-  draw: (ctx, x, y, size) => drawToolIcon(ctx, id, x, y, size),
+  draw: (ctx, rect) => drawToolIcon(ctx, rect, id),
 }));
 const FOOD_ICONS: readonly IconSpec[] = FOOD_ICON_ID_LIST.map((id: FoodIconId) => ({
   label: `food:${id}`,
-  draw: (ctx, x, y, size) => drawFoodIcon(ctx, id, x, y, size),
+  draw: (ctx, rect) => drawFoodIcon(ctx, rect, id),
 }));
 const KIT_ICONS: readonly IconSpec[] = KIT_ICON_ID_LIST.map((id: KitIconId) => ({
   label: `kit:${id}`,
-  draw: (ctx, x, y, size) => drawKitIcon(ctx, id, x, y, size),
+  draw: (ctx, rect) => drawKitIcon(ctx, rect, id),
 }));
 const BLUEPRINTS_QUEST_ICONS: readonly IconSpec[] = BLUEPRINTS_QUEST_ICON_ID_LIST.map(
   (id: BlueprintsQuestIconId) => ({
     label: `quest:${id}`,
-    draw: (ctx, x, y, size) => drawBlueprintsQuestIcon(ctx, id, x, y, size),
+    draw: (ctx, rect) => drawBlueprintsQuestIcon(ctx, rect, id),
   }),
 );
 
@@ -90,12 +91,12 @@ const REFERENCE_GOBLIN_DYNAMITE: InventoryItem = {
 const REFERENCE_ICONS: readonly IconSpec[] = [
   {
     label: 'reference:health_potion',
-    draw: (ctx, x, y, size) => drawItemIcon(ctx, REFERENCE_HEALTH_POTION, x, y, size),
+    draw: (ctx, rect) => drawItemIcon(ctx, rect, REFERENCE_HEALTH_POTION),
     reference: true,
   },
   {
     label: 'reference:goblin_dynamite',
-    draw: (ctx, x, y, size) => drawItemIcon(ctx, REFERENCE_GOBLIN_DYNAMITE, x, y, size),
+    draw: (ctx, rect) => drawItemIcon(ctx, rect, REFERENCE_GOBLIN_DYNAMITE),
     reference: true,
   },
 ];
@@ -155,7 +156,7 @@ function paint(
   canvasSize: number,
 ): Pixels {
   const ctx = gameContext(canvasSize, canvasSize);
-  spec.draw(ctx, offsetX, offsetY, size);
+  spec.draw(ctx, { x: offsetX, y: offsetY, w: size, h: size });
   const image = ctx.getImageData(0, 0, canvasSize, canvasSize);
   return { width: canvasSize, height: canvasSize, data: image.data };
 }
@@ -278,7 +279,7 @@ function bakePreview(): string {
       const iconY = rowTop + (rowHeight - size) / 2;
       ctx.strokeStyle = PREVIEW_CELL_OUTLINE;
       ctx.strokeRect(iconX, iconY, size, size);
-      spec.draw(ctx, iconX, iconY, size);
+      spec.draw(ctx, { x: iconX, y: iconY, w: size, h: size });
     });
   });
 

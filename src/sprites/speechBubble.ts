@@ -1,13 +1,11 @@
 /**
- * World-space speech bubbles above an NPC's head.
- *
- * Lifted out of `mordecaiSprite` once the Bopca needed the same shape with words
- * in it: two callers, one drawing routine, and the tail geometry is fiddly enough
- * that a second copy would have drifted.
+ * World-space speech bubbles above an NPC's head. Every speaker shares this one
+ * drawing routine: the tail geometry is fiddly enough that a second copy would
+ * drift.
  */
 
-import { drawText, measureTextBox } from '../ui/TextBox';
-import { drawBox } from '../ui/Box';
+import { worldPlate } from '../ui/world/worldShapes';
+import { measureWorldText, worldText } from '../ui/world/worldText';
 
 const BUBBLE_PULSE_RATE = 0.12;
 const BUBBLE_ALPHA_BASE = 0.7;
@@ -175,7 +173,7 @@ export function drawSpeechBubbleWithText(
   ctx.fill();
   ctx.restore();
 
-  drawText(ctx, text, {
+  worldText(ctx, text, {
     x: boxX + TEXT_PADDING,
     y: boxY + TEXT_PADDING,
     size: TEXT_SIZE,
@@ -285,12 +283,13 @@ export function drawTimedSpeechBubble(
   const alpha = speech.alpha;
   const italic = speech.isItalic;
 
-  ctx.save();
-  ctx.font = `${italic ? 'italic ' : ''}bold ${TIMED_FONT_SIZE}px monospace`;
-  const singleLineWidth = ctx.measureText(text).width;
-  ctx.restore();
+  const singleLineWidth = measureWorldText(ctx, text, {
+    size: TIMED_FONT_SIZE,
+    bold: true,
+    italic,
+  }).width;
   const textWidth = Math.min(singleLineWidth, TIMED_MAX_TEXT_WIDTH);
-  const { lineCount } = measureTextBox(ctx, text, {
+  const { lineCount } = measureWorldText(ctx, text, {
     size: TIMED_FONT_SIZE,
     bold: true,
     italic,
@@ -307,18 +306,18 @@ export function drawTimedSpeechBubble(
 
   ctx.save();
   ctx.globalAlpha = alpha;
-  drawBox(ctx, {
-    x: boxX,
-    y: boxY,
-    width: boxWidth,
-    height: boxHeight,
-    fill,
-    border: style.border,
-    borderWidth: TIMED_BORDER_WIDTH,
-    radius: TIMED_CORNER_RADIUS,
-    // drawBox sets its own globalAlpha, so the fade has to be handed to it.
-    alpha,
-  });
+  worldPlate(
+    ctx,
+    { x: boxX, y: boxY, w: boxWidth, h: boxHeight },
+    {
+      fill,
+      border: style.border,
+      borderWidth: TIMED_BORDER_WIDTH,
+      radius: TIMED_CORNER_RADIUS,
+      // worldPlate sets its own globalAlpha, so the fade has to be handed to it.
+      alpha,
+    },
+  );
   // The pointer is the one part with no utility for it: a triangle hanging off
   // one edge of a box is not a box.
   ctx.fillStyle = fill;
@@ -330,7 +329,7 @@ export function drawTimedSpeechBubble(
   ctx.fill();
   ctx.restore();
 
-  drawText(ctx, text, {
+  worldText(ctx, text, {
     x: boxX + TIMED_PADDING_X,
     y: boxY + TIMED_PADDING_Y + TIMED_GLYPH_INSET,
     width: textWidth,

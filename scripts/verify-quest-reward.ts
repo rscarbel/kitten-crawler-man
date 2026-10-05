@@ -24,7 +24,6 @@ import { createBriarHollowState } from '../src/core/briarHollowState';
 import { createCircusQuestProgress } from '../src/core/CircusQuestProgress';
 import { ANCHOR_SHARD_IDS } from '../src/core/ItemDefs';
 import { createMurderQuestProgress } from '../src/core/MurderQuestProgress';
-import { setViewportSize } from '../src/core/Viewport';
 import { transientSpeaker } from '../src/dialog/line';
 import { Conversation } from '../src/dialog/Conversation';
 import { CRAWLER_NAMES } from '../src/core/SkillManager';
@@ -36,7 +35,13 @@ import { SpiderQuestSystem } from '../src/systems/SpiderQuestSystem';
 import type { QuestRewardScreen } from '../src/ui/questReward/QuestRewardScreen';
 import type { QuestRewardSpec, RewardUnlockCard } from '../src/ui/questReward/types';
 import type { QuestStatus } from '../src/core/QuestManager';
-import { buildSiegeRig, type SiegeRig } from './villageSiegeHarness';
+import {
+  buildSiegeRig,
+  questRewardSurface,
+  questRewardUi,
+  type QuestRewardUi,
+  type SiegeRig,
+} from './villageSiegeHarness';
 
 installCanvasGlobals();
 
@@ -82,6 +87,8 @@ function callCompletion(target: object, name: string, args: readonly unknown[]):
 interface RewardRig {
   readonly rig: SiegeRig;
   readonly screen: QuestRewardScreen;
+  /** The screen's surface on a `UiRoot`, as the scene draws it and routes keys to it. */
+  readonly ui: QuestRewardUi;
   readonly conversation: Conversation;
   /** Every spec asked for on this rig's bus. */
   readonly requested: QuestRewardSpec[];
@@ -129,7 +136,16 @@ function rewardRig(): RewardRig {
       return result;
     };
   }
-  return { rig, screen, conversation, requested, opens, xpLanded, coinGrants };
+  return {
+    rig,
+    screen,
+    ui: questRewardUi(rig),
+    conversation,
+    requested,
+    opens,
+    xpLanded,
+    coinGrants,
+  };
 }
 
 function stepScreen(setup: RewardRig, frames: number): void {
@@ -137,8 +153,7 @@ function stepScreen(setup: RewardRig, frames: number): void {
 }
 
 function renderScreen(setup: RewardRig): void {
-  setViewportSize(SCREEN_W, SCREEN_H);
-  setup.screen.render(surfaceContext(allocCanvas(SCREEN_W, SCREEN_H)));
+  setup.ui.frame(surfaceContext(allocCanvas(SCREEN_W, SCREEN_H)));
 }
 
 /** Every XP line on a screen, as `recipient=amount`, in the order listed. */
@@ -330,22 +345,23 @@ function verifyScreenBehaviour(): void {
   completeQuest('the_show_must_go_on', setup);
   stepScreen(setup, OPEN_WITHIN_FRAMES);
   const { screen } = setup;
-  const claim = screen.overlayClaim();
-  check(claim.isOpen && claim.haltsWorld, 'the open screen halts the world');
-  check(claim.locksKeyboard && claim.space.kind === 'swallow', 'and takes the keyboard and Space');
+  const surface = questRewardSurface(setup.rig);
+  check(surface.isOpen() && surface.haltsWorld, 'the open screen halts the world');
+  check(surface.locksKeyboard === true, 'and takes the keyboard');
   check(screen.handleKeyDown('h', false) && screen.isOpen, 'an ordinary key is swallowed');
   renderScreen(setup);
   check(!screen.isSettled, 'the reveal is still playing after one frame');
-  screen.advance();
+  check(setup.ui.root.key(' ', {}) === 'consumed', 'Space is taken by the screen');
   check(screen.isOpen && screen.isSettled, 'the first press finishes the reveal');
-  let closedWith: QuestRewardSpec | null = null;
+  const closedWith: QuestRewardSpec[] = [];
   screen.onClosed = (spec) => {
-    closedWith = spec;
+    closedWith.push(spec);
   };
-  screen.advance();
+  renderScreen(setup);
+  setup.ui.root.key('Enter', {});
   check(!screen.isOpen, 'the second press closes it');
-  check(closedWith !== null, 'and tells the scene, for the fly-ins');
-  check(!screen.overlayClaim().isOpen, 'its claim closes with it');
+  check(closedWith.length === 1, 'and tells the scene, for the fly-ins');
+  check(!surface.isOpen(), 'its surface closes with it');
   setup.rig.dispose();
 }
 

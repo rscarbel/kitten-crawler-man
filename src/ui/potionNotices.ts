@@ -1,4 +1,4 @@
-import type { ItemId } from '../core/ItemDefs';
+import { ITEM_DEF, type ItemId } from '../core/ItemDefs';
 import type { StatName } from '../Player';
 import { HAMBURGER_FED_DURATION_SECONDS, HAMBURGER_STR_BONUS } from '../core/foodEffects';
 
@@ -34,4 +34,11 @@ const STAT_LABELS: Record<StatName, string> = {
 
 export function statBoostNotice(stat: StatName, amount: number): string {
   return `${STAT_LABELS[stat]} increased by ${amount}`;
+}
+
+/** The line to toast when a full bag leaves `quantity` of `id` behind. */
+export function bagFullNotice(id: ItemId, quantity = 1): string {
+  const name = ITEM_DEF[id].name;
+  if (quantity > 1) return `Bag full — ${quantity} × ${name} were left behind`;
+  return `Bag full — ${name} was left behind`;
 }

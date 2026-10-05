@@ -7,7 +7,8 @@ import type { CatPlayer } from '../creatures/CatPlayer';
 import type { GameSystem, SystemContext } from './GameSystem';
 import { getProtectiveShellStats, type ProtectiveShellStats } from '../abilities/protectiveShell';
 import { normalize } from '../utils';
-import { drawText } from '../ui/TextBox';
+import { worldPalette } from '../ui/theme/worldInk';
+import { worldText } from '../ui/world/worldText';
 import { progressFrameIndex, timeFrameIndex } from '../core/SpriteRenderer';
 import {
   drawFigureCached,
@@ -764,8 +765,10 @@ export class SpellSystem implements GameSystem {
     drawFigureCached(ctx, PROTECTIVE_SHELL_FIGURE, state, frame, sx, sy, tileSize, { alpha });
 
     const secs = Math.ceil(framesRemaining / FOG_DURATION_FRAME_MULTIPLIER);
-    const timerColor = isFullPower ? '#fbbf24' : '#93c5fd';
-    drawText(ctx, `${secs}s`, {
+    const timerColor = isFullPower
+      ? worldPalette.spell.shellTimerFull
+      : worldPalette.spell.shellTimer;
+    worldText(ctx, `${secs}s`, {
       x: sx,
       y: sy - radiusPx - TIMER_Y_OFFSET,
       size: TIMER_TEXT_SIZE,
@@ -890,14 +893,12 @@ export class SpellSystem implements GameSystem {
       );
       ctx.restore();
 
-      // Timer countdown above fog: size=10, old baseline = cy - fog.radiusPx - 6
-      // top = (cy - fog.radiusPx - 6) - round(10*0.8) = (cy - fog.radiusPx - 6) - 8 = cy - fog.radiusPx - 14
-      drawText(ctx, `${Math.ceil(fog.framesLeft / FOG_DURATION_FRAME_MULTIPLIER)}s`, {
+      worldText(ctx, `${Math.ceil(fog.framesLeft / FOG_DURATION_FRAME_MULTIPLIER)}s`, {
         x: cx,
         y: cy - fog.radiusPx - TIMER_Y_OFFSET,
         size: TIMER_TEXT_SIZE,
         bold: true,
-        color: '#d0d0e0',
+        color: worldPalette.spell.fogTimer,
         alpha: alpha * FOG_TIMER_ALPHA_MULT,
         align: 'center',
       });

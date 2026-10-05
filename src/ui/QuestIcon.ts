@@ -19,5 +19,6 @@ export function drawQuestIcon(
   y: number,
   size: number,
 ): void {
-  drawCompassIcon(ctx, x - size / 2, y - size / 2, size);
+  const half = size / 2;
+  drawCompassIcon(ctx, { x: x - half, y: y - half, w: size, h: size });
 }

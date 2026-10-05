@@ -1,11 +1,16 @@
-import type { AchievementDef } from '../core/AchievementManager';
-import { randomFromArray, randomInt, pointInRect } from '../utils';
-import { drawText } from './TextBox';
-import { drawOverlay, drawBox, drawDivider, BOX_PRESETS } from './Box';
-import { beginMenuFocus, drawButton, endMenuFocus, BUTTON_PRESETS } from './Button';
-import type { AudioManager } from '../audio/AudioManager';
-import { viewportWidth, viewportHeight } from '../core/Viewport';
+import type { AchievementDef, BoxTier } from '../core/AchievementManager';
+import { randomFromArray, randomInt } from '../utils';
+import type { Rect } from './core/geom';
+import type { Ui } from './core/UiRoot';
+import { chromeTheme, drawRule, lootTierColor } from './screens/dialogs/canvasChrome';
+import { button } from './widgets/button';
+import { withAlpha } from './theme/color';
+import { skinsFor } from './theme/skins';
+import type { Theme } from './theme/tokens';
+import { drawGlass, fillRounded, strokeRounded, type PaintTarget } from './widgets/paint';
+import { measureText, measureTextHeight, text } from './widgets/text';
 
+/** A sparkle's position is relative to the card's centre, so it rides wherever the card is drawn. */
 interface Sparkle {
   x: number;
   y: number;
@@ -17,16 +22,18 @@ interface Sparkle {
   maxLife: number;
 }
 
-const SPARKLE_COLORS = [
-  '#ffd700',
-  '#ffec6e',
-  '#fffbe6',
-  '#fbbf24',
-  '#f59e0b',
-  '#fff',
-  '#e0f2fe',
-  '#bae6fd',
-];
+/** Gold-leaning sparkles: the accent, the top rarities and a little white. */
+function sparkleColors(theme: Theme): string[] {
+  const { palette } = theme;
+  return [
+    palette.accent.base,
+    palette.accent.hover,
+    palette.tier.gold,
+    palette.material.brassLight,
+    palette.tier.celestial,
+    palette.text.primary,
+  ];
+}
 
 const BOX_W = 420;
 const BOX_H = 280;
@@ -34,41 +41,24 @@ const FADE_IN_FRAMES = 18;
 const OK_BTN_W = 100;
 const OK_BTN_H = 40;
 
-// Magic number constants
-const OVERLAY_ALPHA = 0.55;
 const BOX_MARGIN = 32;
-const BORDER_WIDTH = 8;
-const BORDER_OFFSET = 4;
 const PULSE_MIN = 0.85;
 const PULSE_RANGE = 0.15;
 const PULSE_FREQ = 0.12;
-const HEADER_SIZE = 22;
-const HEADER_Y_OFFSET = 40;
-const HEADER_TEXT_TOP_OFFSET = 18;
 const HEADER_GLOW = 16;
 const DIVIDER_Y = 52;
 const DIVIDER_PADDING = 24;
-const DIVIDER_ALPHA = 0.4;
-const ACHIEVEMENT_NAME_Y = 88;
-const ACHIEVEMENT_NAME_SIZE = 18;
-const ACHIEVEMENT_NAME_TOP_OFFSET = 14;
 const ACHIEVEMENT_NAME_PADDING = 48;
-const PLAYER_Y = 107;
-const PLAYER_SIZE = 11;
-const PLAYER_TOP_OFFSET = 9;
-const DESCRIPTION_Y = 126;
-const DESCRIPTION_SIZE = 13;
-const DESCRIPTION_TOP_OFFSET = 10;
-const DESCRIPTION_LINE_HEIGHT = 18;
 const DESCRIPTION_PADDING = 64;
-const LOOT_Y = 185;
-const LOOT_TEXT_TOP_OFFSET = 10;
-const LOOT_SIZE = 13;
-const LOOT_PADDING = 48;
-const BOX_ICON_Y = 194;
 const BOX_ICON_SIZE = 24;
 const OK_BTN_Y_OFFSET = 18;
-const OK_BTN_LABEL_SIZE = 14;
+const HEADER_TOP = 18;
+const CARD_GLOW_ALPHA = 0.35;
+const CARD_GLOW_BLUR = 32;
+const CARD_EDGE_ALPHA = 0.55;
+const CARD_EDGE_WIDTH = 1.5;
+const REWARD_ROW_HEIGHT = 28;
+const BOX_ICON_FILL_ALPHA = 0.3;
 const SPARKLE_SPAWN_RATE = 3;
 const SPARKLE_BURST_MIN_SPEED = 2;
 const SPARKLE_BURST_SPEED_RANGE = 5;
@@ -83,7 +73,6 @@ const SPARKLE_TOTAL_LIFE = 70;
 const SPARKLE_GRAVITY = 0.08;
 const SPARKLE_SPAWN_COUNT = 30;
 const SPAWN_OFFSET_RANGE = 0.5;
-const BOX_ICON_X_OFFSET = 12;
 const BOX_BODY_TOP = 0.3;
 const BOX_BODY_HEIGHT = 0.7;
 const BOX_ICON_LINE_WIDTH = 1.5;
@@ -95,8 +84,6 @@ const BOX_LID_TOP = 0.25;
 export class AchievementNotification {
   private frame = 0;
   private sparkles: Sparkle[] = [];
-  private okRect = { x: 0, y: 0, w: OK_BTN_W, h: OK_BTN_H };
-  audio: AudioManager | null = null;
 
   /** Call once per frame when a notification is visible to advance animation. */
   tick(): void {
@@ -117,6 +104,11 @@ export class AchievementNotification {
     this.sparkles = this.sparkles.filter((s) => s.life > 0);
   }
 
+  /** Whether the card has finished fading in, so OK answers. */
+  get isFadedIn(): boolean {
+    return this.frame >= FADE_IN_FRAMES;
+  }
+
   /** Reset animation state — call this when a new notification starts. */
   reset(): void {
     this.frame = 0;
@@ -130,228 +122,202 @@ export class AchievementNotification {
     const speed = burst
       ? SPARKLE_BURST_MIN_SPEED + Math.random() * SPARKLE_BURST_SPEED_RANGE
       : SPARKLE_NORMAL_MIN_SPEED + Math.random() * SPARKLE_NORMAL_SPEED_RANGE;
-    // Sparkles are drawn onto the canvas, so they have to spawn in the same
-    // space the box is laid out in — the CSS-pixel viewport, not the window.
-    const cx = viewportWidth() / 2;
-    const cy = viewportHeight() / 2;
-    const edgeX = cx + (Math.random() - SPAWN_OFFSET_RANGE) * BOX_W;
-    const edgeY = cy + (Math.random() - SPAWN_OFFSET_RANGE) * BOX_H;
+    const edgeX = (Math.random() - SPAWN_OFFSET_RANGE) * BOX_W;
+    const edgeY = (Math.random() - SPAWN_OFFSET_RANGE) * BOX_H;
     this.sparkles.push({
       x: edgeX,
       y: edgeY,
       vx: Math.cos(angle) * speed,
       vy: Math.sin(angle) * speed - (burst ? SPARKLE_BURST_GRAVITY : 0),
       radius: SPARKLE_MIN_RADIUS + Math.random() * SPARKLE_RADIUS_RANGE,
-      color: randomFromArray(SPARKLE_COLORS),
+      color: randomFromArray(sparkleColors(chromeTheme())),
       life: randomInt(SPARKLE_LIFE_MIN, SPARKLE_LIFE_MAX),
       maxLife: SPARKLE_TOTAL_LIFE,
     });
   }
 
-  render(
-    ctx: CanvasRenderingContext2D,
-    achievement: AchievementDef,
-    player: 'Human' | 'Cat' = 'Human',
-  ): void {
-    const cw = viewportWidth();
-    const ch = viewportHeight();
-
-    // Fade-in alpha
+  /**
+   * Draws the card over the whole screen with its OK button, which is the
+   * default for Space and Enter and stays disabled until the card has faded in.
+   */
+  paint(ui: Ui, achievement: AchievementDef, player: 'Human' | 'Cat', onOk: () => void): void {
+    const { ctx, theme } = ui;
+    const cw = ui.screen.w;
+    const ch = ui.screen.h;
+    const { palette, type, space, radius } = theme;
+    const skins = skinsFor(theme);
     const alpha = Math.min(1, this.frame / FADE_IN_FRAMES);
 
-    drawOverlay(ctx, { canvasWidth: cw, canvasHeight: ch, alpha: alpha * OVERLAY_ALPHA });
     ctx.save();
-    ctx.globalAlpha = alpha;
+    ctx.globalAlpha *= alpha;
+    ctx.fillStyle = skins.scrim;
+    ctx.fillRect(0, 0, cw, ch);
 
     const boxW = Math.min(BOX_W, cw - BOX_MARGIN);
     const boxH = Math.min(BOX_H, ch - BOX_MARGIN);
-    const bx = (cw - boxW) / 2;
-    const by = (ch - boxH) / 2;
-
-    // Main box — dark blue-gold gradient feel
-    drawBox(ctx, { x: bx, y: by, width: boxW, height: boxH, ...BOX_PRESETS.achievement, alpha });
-
-    // Gold border — double ring (inner decorative ring)
-    ctx.strokeStyle = 'rgba(255,215,0,0.3)';
-    ctx.lineWidth = BORDER_WIDTH;
-    ctx.strokeRect(
-      bx + BORDER_OFFSET,
-      by + BORDER_OFFSET,
-      boxW - BORDER_WIDTH,
-      boxH - BORDER_WIDTH,
+    const card: Rect = { x: (cw - boxW) / 2, y: (ch - boxH) / 2, w: boxW, h: boxH };
+    ctx.save();
+    ctx.shadowColor = withAlpha(palette.accent.base, CARD_GLOW_ALPHA);
+    ctx.shadowBlur = CARD_GLOW_BLUR;
+    fillRounded(ctx, card, radius.lg, palette.surface.sunken);
+    ctx.restore();
+    drawGlass(ui, card, skins.panel.card);
+    strokeRounded(
+      ctx,
+      card,
+      radius.lg,
+      withAlpha(palette.accent.base, CARD_EDGE_ALPHA),
+      CARD_EDGE_WIDTH,
     );
 
-    // Header: NEW ACHIEVEMENT!
+    const column = (y: number, h: number, pad: number): Rect => ({
+      x: card.x + pad,
+      y,
+      w: card.w - pad * 2,
+      h,
+    });
+
     const pulse = PULSE_MIN + PULSE_RANGE * Math.sin(this.frame * PULSE_FREQ);
-    drawText(ctx, 'NEW ACHIEVEMENT!', {
-      x: cw / 2,
-      y: by + HEADER_Y_OFFSET - HEADER_TEXT_TOP_OFFSET,
-      bold: true,
-      size: HEADER_SIZE,
-      color: '#ffd700',
+    ctx.save();
+    ctx.globalAlpha *= pulse;
+    ctx.shadowColor = palette.accent.base;
+    ctx.shadowBlur = HEADER_GLOW;
+    text(ui, column(card.y + HEADER_TOP, type.heading.lineHeight, DIVIDER_PADDING), {
+      text: 'New achievement!',
+      style: type.heading,
+      color: palette.accent.base,
       align: 'center',
-      glow: '#ffd700',
-      glowBlur: HEADER_GLOW,
-      alpha: alpha * pulse,
     });
+    ctx.restore();
 
-    // Divider line
-    drawDivider(ctx, {
-      x: bx + DIVIDER_PADDING,
-      y: by + DIVIDER_Y,
-      length: boxW - DIVIDER_PADDING * 2,
-      color: `rgba(255,215,0,${DIVIDER_ALPHA})`,
-      alpha,
+    drawRule(
+      ui,
+      card.x + DIVIDER_PADDING,
+      card.y + DIVIDER_Y,
+      card.w - DIVIDER_PADDING * 2,
+      palette.accent.base,
+    );
+
+    let cursorY = card.y + DIVIDER_Y + space.lg;
+    const nameHeight = measureTextHeight(ui, card.w - ACHIEVEMENT_NAME_PADDING * 2, {
+      text: achievement.name,
+      role: 'title',
     });
-
-    // Achievement name
-    drawText(ctx, achievement.name, {
-      x: bx + DIVIDER_PADDING,
-      y: by + ACHIEVEMENT_NAME_Y - ACHIEVEMENT_NAME_TOP_OFFSET,
-      bold: true,
-      size: ACHIEVEMENT_NAME_SIZE,
-      color: '#f1f5f9',
+    text(ui, column(cursorY, nameHeight, ACHIEVEMENT_NAME_PADDING), {
+      text: achievement.name,
+      role: 'title',
+      wrap: true,
       align: 'center',
-      width: boxW - ACHIEVEMENT_NAME_PADDING,
-      alpha,
     });
+    cursorY += nameHeight;
 
-    // Awarded-to label
-    const playerColor = player === 'Human' ? '#86efac' : '#93c5fd';
-    const playerIcon = player === 'Human' ? '\u{1F9CD}' : '\u{1F431}';
-    drawText(ctx, `${playerIcon} Awarded to: ${player}`, {
-      x: cw / 2,
-      y: by + PLAYER_Y - PLAYER_TOP_OFFSET,
-      size: PLAYER_SIZE,
-      color: playerColor,
+    const crawlerColor = player === 'Human' ? palette.crawler.human : palette.crawler.cat;
+    text(ui, column(cursorY, type.caption.lineHeight, DIVIDER_PADDING), {
+      text: `Awarded to ${player}`,
+      role: 'caption',
+      color: crawlerColor,
       align: 'center',
-      alpha,
     });
+    cursorY += type.caption.lineHeight + space.sm;
 
-    // Description (word-wrapped)
-    drawText(ctx, achievement.description, {
-      x: cw / 2 - (boxW - DESCRIPTION_PADDING) / 2,
-      y: by + DESCRIPTION_Y - DESCRIPTION_TOP_OFFSET,
-      size: DESCRIPTION_SIZE,
-      color: '#94a3b8',
+    const okY = card.y + card.h - OK_BTN_H - OK_BTN_Y_OFFSET;
+    const lootBox = achievement.lootBox;
+    const rewardTop = okY - space.md - REWARD_ROW_HEIGHT;
+    const descriptionBottom = lootBox === undefined ? okY - space.md : rewardTop - space.sm;
+    text(ui, column(cursorY, Math.max(0, descriptionBottom - cursorY), DESCRIPTION_PADDING), {
+      text: achievement.description,
+      role: 'secondary',
+      wrap: true,
       align: 'center',
-      width: boxW - DESCRIPTION_PADDING,
-      lineHeight: DESCRIPTION_LINE_HEIGHT,
-      alpha,
+      maxLines: Math.max(1, Math.floor((descriptionBottom - cursorY) / type.body.lineHeight)),
     });
 
-    // Loot box reward
-    if (achievement.lootBox) {
-      const { tier, category } = achievement.lootBox;
-      const tierColor = this.tierColor(tier);
-      drawText(ctx, `REWARD: ${tier} ${category} Box`, {
-        x: bx + DIVIDER_PADDING,
-        y: by + LOOT_Y - LOOT_TEXT_TOP_OFFSET,
-        bold: true,
-        size: LOOT_SIZE,
-        color: tierColor,
-        align: 'center',
-        width: boxW - LOOT_PADDING,
-        alpha,
+    if (lootBox !== undefined) {
+      this.paintReward(ui, lootBox.tier, `${lootBox.tier} ${lootBox.category} Box`, {
+        x: card.x + DIVIDER_PADDING,
+        y: rewardTop,
+        w: card.w - DIVIDER_PADDING * 2,
+        h: REWARD_ROW_HEIGHT,
       });
-
-      // Small box icon
-      this.drawBoxIcon(ctx, cw / 2 - BOX_ICON_X_OFFSET, by + BOX_ICON_Y, BOX_ICON_SIZE, tier);
     }
 
-    // OK button
     const okX = cw / 2 - OK_BTN_W / 2;
-    const okY = by + boxH - OK_BTN_H - OK_BTN_Y_OFFSET;
-    this.okRect = { x: okX, y: okY, w: OK_BTN_W, h: OK_BTN_H };
+    const fadedIn = this.isFadedIn;
+    button(
+      ui,
+      { x: okX, y: okY, w: OK_BTN_W, h: OK_BTN_H },
+      {
+        id: 'ok',
+        label: 'OK!',
+        variant: 'primary',
+        primary: true,
+        disabled: !fadedIn,
+        onTap: onOk,
+      },
+    );
 
-    // Matches the fade gate `handleClick` uses: the button is not acceptable
-    // until the box has fully appeared.
-    const acceptable = this.frame >= FADE_IN_FRAMES;
-    if (acceptable) beginMenuFocus('achievement-notification');
-    drawButton(ctx, {
-      x: okX,
-      y: okY,
-      width: OK_BTN_W,
-      height: OK_BTN_H,
-      label: 'OK!',
-      ...BUTTON_PRESETS.success,
-      labelColor: '#4ade80',
-      labelSize: OK_BTN_LABEL_SIZE,
-      alpha,
-      primaryAction: true,
-    });
-    if (acceptable) endMenuFocus();
-
-    // Sparkles
+    const centreX = cw / 2;
+    const centreY = ch / 2;
     for (const s of this.sparkles) {
       const lifeRatio = s.life / s.maxLife;
-      ctx.globalAlpha = alpha * lifeRatio;
+      ctx.save();
+      ctx.globalAlpha *= lifeRatio;
       ctx.fillStyle = s.color;
       ctx.beginPath();
-      ctx.arc(s.x, s.y, s.radius * lifeRatio, 0, Math.PI * 2);
+      ctx.arc(centreX + s.x, centreY + s.y, s.radius * lifeRatio, 0, Math.PI * 2);
       ctx.fill();
+      ctx.restore();
     }
 
-    ctx.globalAlpha = 1;
     ctx.restore();
   }
 
-  /**
-   * Returns true if the click hit the OK button (notification should be dismissed).
-   * Only responds if the notification has fully appeared (past fade-in).
-   */
-  handleClick(mx: number, my: number): boolean {
-    if (this.frame < FADE_IN_FRAMES) return false;
-    const r = this.okRect;
-    return pointInRect(mx, my, r);
+  /** The loot box the achievement pays: a little box in its rarity colour beside its name. */
+  private paintReward(target: PaintTarget, tier: BoxTier, name: string, row: Rect): void {
+    const { theme } = target;
+    const color = lootTierColor(theme, tier);
+    const label = `Reward: ${name}`;
+    const labelWidth = Math.min(
+      row.w - BOX_ICON_SIZE - theme.space.sm,
+      measureText(target, label, { role: 'label' }),
+    );
+    const left = row.x + (row.w - BOX_ICON_SIZE - theme.space.sm - labelWidth) / 2;
+    this.drawBoxIcon(target.ctx, left, row.y + (row.h - BOX_ICON_SIZE) / 2, BOX_ICON_SIZE, color);
+    text(
+      target,
+      { x: left + BOX_ICON_SIZE + theme.space.sm, y: row.y, w: labelWidth, h: row.h },
+      { text: label, role: 'label', color },
+    );
   }
 
   // Helpers
-
-  private tierColor(tier: string): string {
-    switch (tier) {
-      case 'Bronze':
-        return '#cd7f32';
-      case 'Silver':
-        return '#c0c0c0';
-      case 'Gold':
-        return '#ffd700';
-      case 'Legendary':
-        return '#a855f7';
-      case 'Celestial':
-        return '#38bdf8';
-      default:
-        return '#e2e8f0';
-    }
-  }
 
   private drawBoxIcon(
     ctx: CanvasRenderingContext2D,
     x: number,
     y: number,
     size: number,
-    tier: string,
+    color: string,
   ): void {
-    const color = this.tierColor(tier);
-    // Box body
+    ctx.save();
     ctx.fillStyle = color;
-    ctx.globalAlpha = 0.3;
+    ctx.globalAlpha *= BOX_ICON_FILL_ALPHA;
     ctx.fillRect(x, y + size * BOX_BODY_TOP, size, size * BOX_BODY_HEIGHT);
-    ctx.globalAlpha = 1;
+    ctx.restore();
+    ctx.save();
     ctx.strokeStyle = color;
     ctx.lineWidth = BOX_ICON_LINE_WIDTH;
     ctx.strokeRect(x, y + size * BOX_BODY_TOP, size, size * BOX_BODY_HEIGHT);
-    // Lid
     ctx.strokeRect(
       x - BOX_LID_OFFSET,
       y + size * BOX_LID_TOP,
       size + BOX_LID_WIDTH_ADD,
       size * BOX_LID_HEIGHT,
     );
-    // Ribbon
     ctx.beginPath();
     ctx.moveTo(x + size / 2, y + size * BOX_LID_TOP);
     ctx.lineTo(x + size / 2, y + size);
     ctx.stroke();
+    ctx.restore();
   }
 }

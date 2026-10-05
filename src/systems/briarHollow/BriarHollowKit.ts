@@ -40,7 +40,7 @@ import type { BriarHollowState } from '../../core/briarHollowState';
 import type { keybindings } from '../../core/Keybindings';
 import type { SceneWorld } from '../kits/SceneWorld';
 import type { MenusKit } from '../kits/MenusKit';
-import type { OverlayInputClaim } from '../kits/OverlayClaims';
+import type { KeyModifiers, Surface } from '../../ui/core/UiRoot';
 import type { SystemContext } from '../GameSystem';
 import type { TownPropRenderable } from '../townPropRenderable';
 import type { QuestMarkerType } from '../MiniMapSystem';
@@ -71,9 +71,8 @@ import type { Player } from '../../Player';
 import { renderNecromancerTelegraphs } from '../../creatures/Necromancer';
 import type { ItemId } from '../../core/ItemDefs';
 import { activeDifficultyProfile } from '../../core/difficultyProfiles';
-import type { MiniMapSystem } from '../MiniMapSystem';
-import type { Rect } from '../DungeonUIRenderer';
-import { siegeHudSlot } from './siegeHudLayout';
+import type { Rect } from '../../ui/core/geom';
+import type { TopBandEntry } from '../../ui/hud/topBand';
 import { VillageAssaultSystem, type SiegeMusicClaim } from './VillageAssaultSystem';
 import { VillageQuestSystem } from './VillageQuestSystem';
 import { VillageQuestGuide } from './VillageQuestGuide';
@@ -164,6 +163,14 @@ export interface BriarHollowKitDeps {
   readonly onBlueprintsCue?: (cue: BlueprintsCue) => void;
   /** Handed to the questline for its reward screen's travel card. */
   readonly travelUnlocks: Pick<TravelUnlockState, 'anchor'>;
+}
+
+/** The HUD chrome `BriarHollowKit.renderHud` draws around, in CSS pixels. */
+export interface BriarHollowHudChrome {
+  /** The HUD's panels, minimap, hotbar and buttons: the scythe's bar stays off them. */
+  readonly keepouts: readonly Rect[];
+  /** The HUD's Build button, or null while it shows none. */
+  readonly buildButton: Rect | null;
 }
 
 export class BriarHollowKit {
@@ -353,7 +360,6 @@ export class BriarHollowKit {
         ? null
         : new VillageQuestSystem({
             bus: sceneWorld.bus,
-            audio: deps.audio,
             state: deps.state,
             site,
             human: deps.human,
@@ -593,7 +599,6 @@ export class BriarHollowKit {
     // A line opened under the quest-complete screen would be swept away by the
     // scene's halt, unread.
     if (this.deps.menus.questReward.isOpen) return;
-    if (this.quest?.isConfirmOpen === true) return;
     if (this.recruiter?.isDialogOpen === true) return;
     const next = this.pendingQuestLines.shift();
     if (next === undefined) return;
@@ -703,24 +708,29 @@ export class BriarHollowKit {
   }
 
   /**
-   * Screen-space chrome, drawn after the HUD panel: the siege's banner, bell
-   * and boss bars, in the top band under the resource strip's row so the two
-   * never overlap; and the escort's markers for ambushers still out of sight.
+   * The HUD's top-band cards: the siege's countdown or wave with the bell's
+   * and the bosses' health, and the Blueprints quest's counter and step
+   * banner.
    */
-  renderHud(ctx: CanvasRenderingContext2D, miniMap: MiniMapSystem, hudRect: Rect): void {
-    this.assault?.renderHud(ctx, siegeHudSlot(miniMap, hudRect));
-    this.blueprints?.renderHud(ctx, miniMap, hudRect);
-    this.blueprints?.escort.renderHud(ctx);
-    this.questGuide?.renderConstructionHint(ctx, miniMap);
+  topBandEntries(): TopBandEntry[] {
+    const entries: TopBandEntry[] = [];
+    const siege = this.assault?.topBandEntry() ?? null;
+    if (siege !== null) entries.push(siege);
+    entries.push(...(this.blueprints?.topBandEntries() ?? []));
+    return entries;
   }
 
   /**
-   * Whether the resource strip gives up its place to the siege's panel this
-   * frame: only during the siege, and only on a window too small for both.
+   * Screen-space chrome outside the top band, in CSS pixels: the siege's
+   * banners across the middle of the screen, the scythe's timing bar, the
+   * escort's markers for ambushers still out of sight, and the arrow over the
+   * Build button while the party stands where a trebuchet should go.
    */
-  hidesResourceStrip(miniMap: MiniMapSystem, hudRect: Rect): boolean {
-    if (this.assault?.inSiege !== true) return false;
-    return siegeHudSlot(miniMap, hudRect).hidesResourceStrip;
+  renderHud(ctx: CanvasRenderingContext2D, chrome: BriarHollowHudChrome): void {
+    this.assault?.renderCentreBanners(ctx);
+    this.blueprints?.renderHud(ctx, chrome.keepouts);
+    this.blueprints?.escort.renderHud(ctx);
+    this.questGuide?.renderConstructionHint(ctx, chrome.buildButton);
   }
 
   /**
@@ -760,9 +770,10 @@ export class BriarHollowKit {
    * bounty consumers have had first refusal, and before the citizen-talk
    * fallback, so a press near a villager or a village fixture never falls
    * through to "talk to the nearest townsperson" instead. Returns whether the
-   * press was claimed.
+   * press was claimed. `fromTap` says whether a world tap made the press
+   * rather than a key.
    */
-  tryInteract(active: HumanPlayer | CatPlayer): boolean {
+  tryInteract(active: HumanPlayer | CatPlayer, fromTap: boolean): boolean {
     if (hostileWithinAttackRange(active, this.world.roster.grid)) return false;
     // A fence section of Merrit's in reach, or the scythe and the grain: each
     // only takes the press in its own step and only when something is in
@@ -770,7 +781,7 @@ export class BriarHollowKit {
     if (this.blueprints?.tryInteract(active) === true) return true;
     // A wall the crawler is squarely facing is the most specific thing a press
     // can mean, and never overlaps a villager or a fixture.
-    if (this.defences?.tryBuildWall() === true) return true;
+    if (this.defences?.tryBuildWall(fromTap) === true) return true;
     // A cow in reach is petted before a villager is spoken to: the herd is
     // fenced in, so the only villager ever that close is one leaning on the
     // rail, and the press is plainly meant for the animal.
@@ -1055,45 +1066,8 @@ export class BriarHollowKit {
     return this.defences?.isMenuOpen === true || this.services?.isMenuOpen === true;
   }
 
-  /**
-   * Number keys pick a conversation choice; the construction menus take their
-   * own keys; a live scythe swing takes the attack key as its timed press,
-   * graded at `eventTimeStampMs` (the keydown's own `timeStamp`). Returns
-   * whether the key was taken.
-   */
-  handleKeyDown(key: string, repeat = false, eventTimeStampMs = performance.now()): boolean {
-    if (this.blueprints?.handleKeyDown(key, repeat, eventTimeStampMs) === true) return true;
-    if (this.quest?.handleKeyDown(key) === true) return true;
-    if (this.defences?.handleKeyDown(key, repeat) === true) return true;
-    if (this.services?.handleKeyDown(key) === true) return true;
-    return this.deps.conversation.handleKeyDown(key);
-  }
-
-  /** A click or tap on a village panel. Returns whether it landed on one. */
-  handleClick(mx: number, my: number): boolean {
-    if (this.quest?.handleClick(mx, my) === true) return true;
-    if (this.defences?.handleClick(mx, my) === true) return true;
-    if (this.services?.handleClick(mx, my) === true) return true;
-    return this.deps.conversation.handleClick(mx, my);
-  }
-
-  /**
-   * A press going down: starts a held step on whichever quantity picker is
-   * up, which repeats until {@link handlePointerUp}.
-   */
-  handlePointerDown(mx: number, my: number): void {
-    this.defences?.handlePointerDown(mx, my);
-    this.services?.picker.handlePointerDown(mx, my);
-  }
-
-  handlePointerUp(): void {
-    this.defences?.handlePointerUp();
-    this.services?.picker.handlePointerUp();
-  }
-
   /** Whether one of the village's own modals (a confirm, a narrated line) is what has halted the world. */
   get haltsWorldItself(): boolean {
-    if (this.quest?.isConfirmOpen === true) return true;
     if (this.isQuestLineShowing()) return true;
     return this.defences?.haltsWorldItself === true;
   }
@@ -1101,7 +1075,6 @@ export class BriarHollowKit {
   /** Closes every construction panel, the picker and the confirm included. */
   closeConstructionPanels(): void {
     this.defences?.closeAllPanels();
-    this.quest?.closeConfirm();
   }
 
   /**
@@ -1118,11 +1091,6 @@ export class BriarHollowKit {
     this.services?.silenceLoops();
   }
 
-  /** The mouse wheel, for a village shop whose rows run past the bottom of the screen. */
-  handleWheel(deltaY: number): void {
-    this.services?.handleWheel(deltaY);
-  }
-
   /**
    * Escape: backs a question submenu out to the root topics, or closes the
    * conversation from the root. Returns whether there was one to act on.
@@ -1136,33 +1104,29 @@ export class BriarHollowKit {
     return this.villagers?.escapeConversation() ?? false;
   }
 
-  /** The conversation panel and the construction menus, drawn with the scene's other dialogs. */
-  renderDialog(ctx: CanvasRenderingContext2D, camX: number, camY: number): void {
-    this.defences?.renderDialog(ctx, camX, camY);
-    this.services?.renderDialog(ctx);
-    // The "We're ready" confirm sits over everything else the village draws.
-    this.quest?.renderDialog(ctx);
-    // A villager conversation or a narrated line takes the frame over every
-    // other village panel.
-    this.deps.conversation.render(ctx);
+  /**
+   * The village's panels as surfaces: the construction panels (the shared
+   * Construction menu among them) and the services' menus.
+   * Villager conversations and narrated lines open on the scene's shared
+   * `Conversation`, whose own surface the scene mounts.
+   *
+   * @param camera Where the camera is, for anchoring the structure menu.
+   */
+  surfaces(camera: () => { readonly x: number; readonly y: number }): Surface[] {
+    return [...(this.defences?.surfaces(camera) ?? []), ...(this.services?.surfaces() ?? [])];
   }
 
   /**
-   * The village's menus, in the shape `DungeonScene.overlayClaims` spreads
-   * straight into its own list, ranked with the other floor menus. Empty until
-   * a village menu exists; villager conversations and narrated quest lines
-   * claim through the scene's shared `Conversation`.
+   * A live scythe swing takes the attack key as its timed press, graded at
+   * the keydown's own time, ahead of every menu and of gameplay's attack.
+   * For `UiRoot.addKeyHook`, which keeps it from keys typed into the chat box.
    */
-  overlayClaims(): OverlayInputClaim[] {
-    // The siege's countdown banner claims nothing: it floats over live play,
-    // and an open claim would hold the Space chain and the attack for the
-    // whole countdown.
-    return [
-      ...(this.quest === null ? [] : [this.quest.overlayClaim()]),
-      ...(this.defences?.overlayClaims() ?? []),
-      ...(this.services?.overlayClaims() ?? []),
-    ];
-  }
+  readonly harvestKeyHook = (key: string, mods: KeyModifiers): boolean =>
+    this.blueprints?.handleKeyDown(
+      key,
+      mods.repeat === true,
+      mods.timeStamp ?? performance.now(),
+    ) === true;
 
   /** Minimap pips for anything the village's questlines want pointed at. */
   get questMarkers(): Array<{ x: number; y: number; type: QuestMarkerType }> {
@@ -1205,7 +1169,6 @@ export class BriarHollowKit {
     // the herd, and the escort then finds her gone.
     this.livestock?.onRewind();
     this.blueprints?.onRewind();
-    this.quest?.closeConfirm();
     if (this.isQuestLineShowing()) {
       this.deps.conversation.close();
     }

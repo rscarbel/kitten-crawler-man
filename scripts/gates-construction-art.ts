@@ -35,7 +35,7 @@ const { PALISADE_DIRS, PALISADE_REACH_UP_TILES, paintGapPiece, paintGate, paintP
 const { drawTrebuchet, TREBUCHET_COCKED_ANGLE, TREBUCHET_LOOSED_ANGLE, TREBUCHET_REACH_UP_TILES } =
   await import('../src/sprites/art/trebuchetArt.js');
 const { drawSnare, SNARE_REACH_UP_TILES } = await import('../src/sprites/art/snareArt.js');
-const { drawText } = await import('../src/ui/TextBox.js');
+const { worldText } = await import('../src/ui/world/worldText.js');
 
 type PalisadeTier = 'fence' | 'wood' | 'stone' | 'fortified';
 type Side = 'north' | 'south' | 'east' | 'west';
@@ -52,6 +52,23 @@ const PALISADE_REACH_DOWN_TILES = 0.4;
 const GATE_REACH_UP_TILES = 1.6;
 const GATE_HALF_SPAN_TILES = 1.5;
 const GATE_POST_WIDTH_TILES = 0.44;
+const GATE_AREA_TILES = 3;
+/** Each look is painted with this much empty margin, so a stray overhang lands on the canvas. */
+const SCRATCH_PAD_TILES = 3;
+/** Pixel centres sit half a pixel inside an edge, so bounds are compared with this much slack. */
+const PIXEL_EDGE_SLACK = 0.5;
+const PALISADE_VARIANT_COUNT = 4;
+const GAP_SEED_COUNT = 5;
+const GATE_OPEN_STEPS = 4;
+const TREBUCHET_FOOTPRINT_COLS = 2;
+const TREBUCHET_FOOTPRINT_ROWS = 3;
+const SLING_MID_PHASE = 0.5;
+const PARTIAL_AMMO_FRACTION = 0.4;
+const SCAFFOLD_PROGRESS_EARLY = 0.1;
+const SCAFFOLD_PROGRESS_MID = 0.5;
+const SCAFFOLD_PROGRESS_LATE = 0.9;
+const SNARE_AREA_TILES = 0.5;
+const MAX_FAILURES_SHOWN = 20;
 
 const fault = process.argv.find((arg) => arg.startsWith('--fault='))?.split('=')[1] ?? null;
 const faultShiftPx = fault === 'overhang' ? TILE : 0;
@@ -80,7 +97,7 @@ function gateLook(
   draw: (ctx: CanvasRenderingContext2D, ox: number, oy: number) => void,
 ): void {
   looksChecked++;
-  const pad = TILE * 3;
+  const pad = TILE * SCRATCH_PAD_TILES;
   const width = Math.ceil(bounds.right - bounds.left + pad * 2);
   const height = Math.ceil(bounds.bottom - bounds.top + pad * 2);
   const canvas = createCanvas(width, height);
@@ -97,8 +114,10 @@ function gateLook(
       if (data[(y * width + x) * CHANNELS + ALPHA_OFFSET] < SOLID_ALPHA) continue;
       const rx = x - ox;
       const ry = y - oy;
-      const insideColumns = rx >= bounds.left - 0.5 && rx < bounds.right + 0.5;
-      const insideRows = ry >= bounds.top - 0.5 && ry < bounds.bottom + 0.5;
+      const insideColumns =
+        rx >= bounds.left - PIXEL_EDGE_SLACK && rx < bounds.right + PIXEL_EDGE_SLACK;
+      const insideRows =
+        ry >= bounds.top - PIXEL_EDGE_SLACK && ry < bounds.bottom + PIXEL_EDGE_SLACK;
       if (!insideColumns) sideways++;
       else if (!insideRows) vertical++;
       else solid++;
@@ -125,7 +144,7 @@ const MASKS: ReadonlyArray<{ name: string; mask: number }> = [
   { name: 'end-west', mask: PALISADE_DIRS.west },
 ];
 const STAGES = [0, 1, 2] as const;
-const VARIANTS = [0, 1, 2, 3] as const;
+const VARIANTS = Array.from({ length: PALISADE_VARIANT_COUNT }, (_, variant) => variant);
 
 const palisadeBounds: Measured = {
   left: 0,
@@ -167,7 +186,7 @@ for (const tier of TIERS) {
 
 const gapBounds: Measured = { left: 0, right: TILE, top: 0, bottom: TILE, area: TILE * TILE };
 for (const tier of [null, ...TIERS] as const) {
-  for (const seed of [1, 2, 3, 4, 5]) {
+  for (const seed of Array.from({ length: GAP_SEED_COUNT }, (_, index) => index + 1)) {
     gateLook(`gap ${tier ?? 'plain'} seed${seed}`, gapBounds, (ctx, ox, oy) =>
       paintGapPiece(ctx, ox, oy, TILE, tier, seed),
     );
@@ -182,9 +201,12 @@ const gateBounds: Measured = {
   right: gateSide,
   top: -Math.ceil(TILE * GATE_REACH_UP_TILES),
   bottom: TILE,
-  area: TILE * TILE * 3,
+  area: TILE * TILE * GATE_AREA_TILES,
 };
-for (const open of [0, 0.25, 0.5, 0.75, 1]) {
+for (const open of Array.from(
+  { length: GATE_OPEN_STEPS + 1 },
+  (_, step) => step / GATE_OPEN_STEPS,
+)) {
   for (const shakePx of [0, 2]) {
     gateLook(`gate open${open} shake${shakePx}`, gateBounds, (ctx, ox, oy) =>
       paintGate(ctx, ox, oy, TILE, { open, shakePx }),
@@ -196,10 +218,10 @@ for (const open of [0, 0.25, 0.5, 0.75, 1]) {
 
 const trebuchetBounds: Measured = {
   left: 0,
-  right: TILE * 2,
+  right: TILE * TREBUCHET_FOOTPRINT_COLS,
   top: -Math.ceil(TILE * TREBUCHET_REACH_UP_TILES),
-  bottom: TILE * 3,
-  area: TILE * TILE * 6,
+  bottom: TILE * TREBUCHET_FOOTPRINT_ROWS,
+  area: TILE * TILE * TREBUCHET_FOOTPRINT_COLS * TREBUCHET_FOOTPRINT_ROWS,
 };
 interface TrebuchetCase {
   readonly label: string;
@@ -220,7 +242,7 @@ for (const armAngle of [
   (TREBUCHET_COCKED_ANGLE + TREBUCHET_LOOSED_ANGLE) / 2,
   TREBUCHET_LOOSED_ANGLE,
 ]) {
-  for (const slingPhase of [0, 0.5]) {
+  for (const slingPhase of [0, SLING_MID_PHASE]) {
     TREBUCHET_CASES.push({
       label: `arm${armAngle.toFixed(2)} sling${slingPhase}`,
       state: { ...baseTrebuchet, armAngle, slingPhase },
@@ -235,7 +257,7 @@ for (const damageStage of [0, 1, 2]) {
     });
   }
 }
-for (const ammoFraction of [0, 0.4, 1]) {
+for (const ammoFraction of [0, PARTIAL_AMMO_FRACTION, 1]) {
   TREBUCHET_CASES.push({ label: `ammo${ammoFraction}`, state: { ...baseTrebuchet, ammoFraction } });
 }
 TREBUCHET_CASES.push({
@@ -246,7 +268,7 @@ TREBUCHET_CASES.push({
   label: 'infernal',
   state: { ...baseTrebuchet, infernal: true, timeSeconds: 0.2 },
 });
-for (const progress of [0.1, 0.5, 0.9]) {
+for (const progress of [SCAFFOLD_PROGRESS_EARLY, SCAFFOLD_PROGRESS_MID, SCAFFOLD_PROGRESS_LATE]) {
   TREBUCHET_CASES.push({ label: `scaffold${progress}`, state: { ...baseTrebuchet, progress } });
 }
 for (const { label, state } of TREBUCHET_CASES) {
@@ -262,7 +284,7 @@ const snareBounds: Measured = {
   right: TILE,
   top: -Math.ceil(TILE * SNARE_REACH_UP_TILES),
   bottom: TILE,
-  area: TILE * TILE * 0.5,
+  area: TILE * TILE * SNARE_AREA_TILES,
 };
 const SNARE_LOOKS = ['set', 'sprung', 'broken'] as const;
 for (const look of SNARE_LOOKS) {
@@ -280,6 +302,33 @@ const GRASS_DARK = '#40592c';
 const LABEL_COLOR = '#f1e6c8';
 /** Review scale: twice game size, as Retina shows it. */
 const REVIEW_SCALE = 2;
+const TILE_CENTRE = 0.5;
+const BUTTRESS_EVERY_NTH_TILE = 3;
+const VARIANT_HASH_X = 7;
+const VARIANT_HASH_Y = 3;
+/** Rings sit this far down their cell, leaving room for the label above. */
+const RING_TOP_TILES = 1.4;
+const RING_LABEL_LIFT_TILES = 1.3;
+const STRUCTURES_SHEET_COLS = 22;
+const STRUCTURES_SHEET_ROWS = 17;
+const GAP_REVIEW_SEED_OFFSET = 3;
+const GAP_LABEL_ROW = 0.3;
+const GATE_HALF_OPEN = 0.5;
+const GATE_REVIEW_FIRST_COL = 3;
+const GATE_REVIEW_COL_STRIDE = 5;
+const GATE_REVIEW_ROW = 4;
+const GATE_LABEL_ROW = 2.4;
+const TREBUCHETS_PER_REVIEW_ROW = 10;
+const TREBUCHET_REVIEW_COL_STRIDE = 2.1;
+const TREBUCHET_REVIEW_ROWS = [
+  { row: 8, labelRow: 11.2 },
+  { row: 13, labelRow: 16.2 },
+] as const;
+const TREBUCHET_LABEL_SIZE = 11;
+const SNARE_REVIEW_FIRST_COL = 13;
+const SNARE_PLAIN_ROW = 3.5;
+const SNARE_SPIKED_ROW = 5.5;
+const SNARE_LABEL_ROW = 1.4;
 
 function background(canvas: Canvas): CanvasRenderingContext2D {
   const ctx = asGameContext(canvas.getContext('2d'));
@@ -332,8 +381,8 @@ function drawRing(
       if (isRing(x + 1, y)) mask |= PALISADE_DIRS.east;
       if (isRing(x, y + 1)) mask |= PALISADE_DIRS.south;
       if (isRing(x - 1, y)) mask |= PALISADE_DIRS.west;
-      const dx = (x + 0.5 - RING_W / 2) / (RING_W / 2);
-      const dy = (y + 0.5 - RING_H / 2) / (RING_H / 2);
+      const dx = (x + TILE_CENTRE - RING_W / 2) / (RING_W / 2);
+      const dy = (y + TILE_CENTRE - RING_H / 2) / (RING_H / 2);
       const outside: Side =
         Math.abs(dy) >= Math.abs(dx) ? (dy < 0 ? 'north' : 'south') : dx < 0 ? 'west' : 'east';
       paintPalisadeForReview(ctx, left + x * ts, top + y * ts, ts, {
@@ -342,8 +391,8 @@ function drawRing(
         mask,
         outside,
         spiked,
-        buttress: tier === 'fortified' && (x + y) % 3 === 1,
-        variant: (x * 7 + y * 3) % 4,
+        buttress: tier === 'fortified' && (x + y) % BUTTRESS_EVERY_NTH_TILE === 1,
+        variant: (x * VARIANT_HASH_X + y * VARIANT_HASH_Y) % PALISADE_VARIANT_COUNT,
       });
     }
   }
@@ -369,11 +418,11 @@ const palisadeSheet = createCanvas(
 const palisadeCtx = background(palisadeSheet);
 palisadeRows.forEach((row, index) => {
   const left = (index % PER_ROW) * ringCellW + TILE;
-  const top = Math.floor(index / PER_ROW) * ringCellH + TILE * REVIEW_SCALE * 1.4;
+  const top = Math.floor(index / PER_ROW) * ringCellH + TILE * REVIEW_SCALE * RING_TOP_TILES;
   drawRing(palisadeCtx, left, top, row.tier, row.stage, row.spiked);
-  drawText(palisadeCtx, row.label, {
+  worldText(palisadeCtx, row.label, {
     x: left,
-    y: top - TILE * REVIEW_SCALE * 1.3,
+    y: top - TILE * REVIEW_SCALE * RING_LABEL_LIFT_TILES,
     size: 20,
     color: LABEL_COLOR,
     outline: true,
@@ -385,47 +434,59 @@ const palisadePath = writePreviewPng(
 );
 
 const ts = TILE * REVIEW_SCALE;
-const structuresSheet = createCanvas(ts * 22, ts * 17);
+const structuresSheet = createCanvas(ts * STRUCTURES_SHEET_COLS, ts * STRUCTURES_SHEET_ROWS);
 const structuresCtx = background(structuresSheet);
 [null, ...TIERS].forEach((tier, index) => {
-  paintGapPiece(structuresCtx, ts * (1 + index * 2), ts * 1, ts, tier, index + 3);
-  drawText(structuresCtx, tier ?? 'gap', {
+  paintGapPiece(structuresCtx, ts * (1 + index * 2), ts, ts, tier, index + GAP_REVIEW_SEED_OFFSET);
+  worldText(structuresCtx, tier ?? 'gap', {
     x: ts * (1 + index * 2),
-    y: ts * 0.3,
+    y: ts * GAP_LABEL_ROW,
     size: 16,
     color: LABEL_COLOR,
     outline: true,
   });
 });
-[0, 0.5, 1].forEach((open, index) => {
-  paintGate(structuresCtx, ts * (3 + index * 5), ts * 4, ts, { open, shakePx: 0 });
-  drawText(structuresCtx, `gate ${open}`, {
-    x: ts * (1 + index * 5),
-    y: ts * 2.4,
+[0, GATE_HALF_OPEN, 1].forEach((open, index) => {
+  paintGate(
+    structuresCtx,
+    ts * (GATE_REVIEW_FIRST_COL + index * GATE_REVIEW_COL_STRIDE),
+    ts * GATE_REVIEW_ROW,
+    ts,
+    { open, shakePx: 0 },
+  );
+  worldText(structuresCtx, `gate ${open}`, {
+    x: ts * (1 + index * GATE_REVIEW_COL_STRIDE),
+    y: ts * GATE_LABEL_ROW,
     size: 16,
     color: LABEL_COLOR,
     outline: true,
   });
 });
-TREBUCHET_CASES.slice(0, 10).forEach(({ label, state }, index) => {
-  const x = ts * (1 + (index % 10) * 2.1);
-  drawTrebuchet(structuresCtx, x, ts * 8, ts, state);
-  drawText(structuresCtx, label, { x, y: ts * 11.2, size: 11, color: LABEL_COLOR, outline: true });
-});
-TREBUCHET_CASES.slice(10, 20).forEach(({ label, state }, index) => {
-  const x = ts * (1 + (index % 10) * 2.1);
-  drawTrebuchet(structuresCtx, x, ts * 13, ts, state);
-  drawText(structuresCtx, label, { x, y: ts * 16.2, size: 11, color: LABEL_COLOR, outline: true });
+TREBUCHET_REVIEW_ROWS.forEach(({ row, labelRow }, rowIndex) => {
+  const firstCase = rowIndex * TREBUCHETS_PER_REVIEW_ROW;
+  TREBUCHET_CASES.slice(firstCase, firstCase + TREBUCHETS_PER_REVIEW_ROW).forEach(
+    ({ label, state }, index) => {
+      const x = ts * (1 + index * TREBUCHET_REVIEW_COL_STRIDE);
+      drawTrebuchet(structuresCtx, x, ts * row, ts, state);
+      worldText(structuresCtx, label, {
+        x,
+        y: ts * labelRow,
+        size: TREBUCHET_LABEL_SIZE,
+        color: LABEL_COLOR,
+        outline: true,
+      });
+    },
+  );
 });
 SNARE_LOOKS.forEach((look, index) => {
   for (const spikes of [false, true]) {
-    const x = ts * (13 + index * 2 + (spikes ? 1 : 0) * 0);
-    const y = ts * (spikes ? 5.5 : 3.5);
+    const x = ts * (SNARE_REVIEW_FIRST_COL + index * 2);
+    const y = ts * (spikes ? SNARE_SPIKED_ROW : SNARE_PLAIN_ROW);
     drawSnare(structuresCtx, x, y, ts, { look, spikes, timeSeconds: 0.6 });
   }
-  drawText(structuresCtx, look, {
-    x: ts * (13 + index * 2),
-    y: ts * 1.4,
+  worldText(structuresCtx, look, {
+    x: ts * (SNARE_REVIEW_FIRST_COL + index * 2),
+    y: ts * SNARE_LABEL_ROW,
     size: 14,
     color: LABEL_COLOR,
     outline: true,
@@ -440,7 +501,7 @@ console.log(`construction art: ${looksChecked} looks checked`);
 console.log(`review: ${palisadePath}`);
 console.log(`review: ${structuresPath}`);
 if (failures.length > 0) {
-  const shown = failures.slice(0, 20);
+  const shown = failures.slice(0, MAX_FAILURES_SHOWN);
   for (const failure of shown) console.error(`  FAIL ${failure}`);
   if (failures.length > shown.length)
     console.error(`  … and ${failures.length - shown.length} more`);

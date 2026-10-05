@@ -168,7 +168,7 @@ export function travelUnlockCard(
 ): RewardUnlockCard {
   const destination = travelDestination(destinationId);
   const card: RewardUnlockCard = {
-    renderIcon: (ctx, x, y, size) => drawAnchorStoneIcon(ctx, x, y, size),
+    renderIcon: (ctx, rect) => drawAnchorStoneIcon(ctx, rect),
     title: `${UNLOCK_CARD_TITLE_PREFIX}${destination.label}`,
     body: [{ text: UNLOCK_CARD_BODY, emphasis: true }, { text: destination.description }],
   };

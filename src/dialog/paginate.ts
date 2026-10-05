@@ -148,10 +148,9 @@ function computeChunkLineSpans(
 
 /**
  * Wraps `text` into display-line spans, honoring explicit `\n` as a forced
- * line break — each `\n`-delimited chunk is wrapped independently, the same
- * way `wrapWithMeasure` (the draw-time wrapper in `TextBox.ts`) processes
- * `text.split('\n')`. Sharing this one function is what keeps a page's line
- * count and its drawn line count in agreement.
+ * line break — each `\n`-delimited chunk is wrapped independently. The dialog
+ * box and the world-text painter both draw from these spans, which is what keeps
+ * a page's line count and its drawn line count in agreement.
  */
 export function computeLineSpans(
   text: string,

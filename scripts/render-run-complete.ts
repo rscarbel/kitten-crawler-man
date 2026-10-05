@@ -1,36 +1,37 @@
 /**
- * Review harness for the run-complete screen: bakes it at a desktop window, a
- * portrait phone and a landscape phone, each mid count-up and settled, into
- * `preview/run-complete/` (or `--out-dir=<dir>`). The screen draws itself from
- * a `RunSummary`, so a sample one stands in for a finished run; a second,
- * leaner summary checks the no-Mongo, no-kills layout.
+ * Review harness for the run-complete screen: bakes its surface through a real
+ * `UiRoot` at a desktop window, a portrait phone and a landscape phone, each
+ * mid count-up and settled, into `preview/run-complete/` (or
+ * `--out-dir=<dir>`). The screen draws itself from a `RunSummary`, so a sample
+ * one stands in for a finished run; a second, leaner summary checks the
+ * no-Mongo, no-kills layout.
  *
  *   npx tsx scripts/render-run-complete.ts
  */
 
 import { createCanvas } from 'canvas';
 import { join } from 'node:path';
-import { setViewportSize } from '../src/core/Viewport.js';
-import { RunCompleteScreen, type RunSummary } from '../src/ui/RunCompleteScreen.js';
-import { setButtonMouseState } from '../src/ui/Button.js';
+import { UiRoot } from '../src/ui/core/UiRoot.js';
+import { NO_INSETS, type ViewportInput } from '../src/ui/core/viewport.js';
+import type { Density } from '../src/ui/theme/tokens.js';
+import { RunCompleteScreen, type RunSummary } from '../src/ui/screens/dialogs/RunCompleteScreen.js';
+import { installCanvasGlobals } from './nodeCanvasGlobals.js';
 import { PREVIEW_DIR, writePreviewPng } from './previewOut.js';
 import { asGameContext } from './nodeGameContext.js';
 
-/** Backing-store pixels per CSS pixel, as a Retina display draws the game. */
-const RENDER_SCALE = 2;
 /** Render frames into the count-up at which the "mid" shot is taken. */
 const MID_COUNT_UP_FRAME = 95;
 /** Render frames after which every row has settled and the buttons are up. */
 const SETTLED_FRAME = 420;
-/** Off-canvas, so no button draws hovered. */
-const MOUSE_AWAY = -1000;
+const FRAME_MS = 16;
 const FRAMES_PER_MINUTE = 3600;
 const FULL_RUN_MINUTES = 327;
+const BACKDROP_COLOUR = '#1f2937';
 
-const viewports: ReadonlyArray<{ name: string; w: number; h: number }> = [
-  { name: 'desktop', w: 1280, h: 800 },
-  { name: 'phone-portrait', w: 375, h: 667 },
-  { name: 'phone-landscape', w: 667, h: 375 },
+const viewports: ReadonlyArray<{ name: string; w: number; h: number; density: Density }> = [
+  { name: 'desktop', w: 1280, h: 800, density: 'pointer' },
+  { name: 'phone-portrait', w: 375, h: 667, density: 'touch' },
+  { name: 'phone-landscape', w: 667, h: 375, density: 'touch' },
 ];
 
 const FULL_RUN: RunSummary = {
@@ -73,18 +74,31 @@ const outDir =
 
 function bake(summary: RunSummary, label: string): void {
   for (const viewport of viewports) {
-    const canvas = createCanvas(viewport.w * RENDER_SCALE, viewport.h * RENDER_SCALE);
-    const nodeCtx = canvas.getContext('2d');
-    const ctx = asGameContext(nodeCtx);
-    setViewportSize(viewport.w, viewport.h);
+    let clock = 0;
+    const viewportInput = (): ViewportInput => ({
+      cssWidth: viewport.w,
+      cssHeight: viewport.h,
+      density: viewport.density,
+      uiSize: 'medium',
+      safeArea: NO_INSETS,
+    });
+    const root = new UiRoot({
+      audio: null,
+      viewport: viewportInput,
+      now: () => clock,
+      warn: () => undefined,
+    });
     const screen = new RunCompleteScreen();
+    root.mount(screen.surface());
     screen.activate(summary, { onKeepExploring: () => undefined, onMainMenu: () => undefined });
+    const canvas = createCanvas(viewport.w, viewport.h);
+    const ctx = asGameContext(canvas.getContext('2d'));
     for (let frame = 1; frame <= SETTLED_FRAME; frame++) {
-      ctx.setTransform(RENDER_SCALE, 0, 0, RENDER_SCALE, 0, 0);
-      ctx.fillStyle = '#1f2937';
+      clock += FRAME_MS;
+      ctx.setTransform(1, 0, 0, 1, 0, 0);
+      ctx.fillStyle = BACKDROP_COLOUR;
       ctx.fillRect(0, 0, viewport.w, viewport.h);
-      setButtonMouseState(MOUSE_AWAY, MOUSE_AWAY);
-      screen.render(ctx);
+      root.frame(ctx);
       if (frame === MID_COUNT_UP_FRAME || frame === SETTLED_FRAME) {
         const stage = frame === SETTLED_FRAME ? 'settled' : 'mid';
         const path = writePreviewPng(
@@ -97,5 +111,6 @@ function bake(summary: RunSummary, label: string): void {
   }
 }
 
+installCanvasGlobals();
 bake(FULL_RUN, 'full');
 bake(LEAN_RUN, 'lean');

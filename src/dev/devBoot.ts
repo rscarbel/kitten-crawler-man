@@ -29,6 +29,7 @@ import { FairyPreviewScene } from '../scenes/FairyPreviewScene';
 import { CasinoPreviewScene } from '../scenes/CasinoPreviewScene';
 import { KeyboardHeroPreviewScene } from '../scenes/KeyboardHeroPreviewScene';
 import { TownMapScene } from '../scenes/TownMapScene';
+import { UiGalleryScene } from '../scenes/UiGalleryScene';
 import { getLevelDef } from '../levels/index';
 import { createCircusQuestProgress, type CircusQuestStage } from '../core/CircusQuestProgress';
 import { createPartyCraftsState } from '../core/partyCrafts';
@@ -352,6 +353,11 @@ export function devBootScene(
 
   if (params.get('keyboardhero') !== null) {
     sceneManager.replace(new KeyboardHeroPreviewScene());
+    return true;
+  }
+
+  if (params.get('ui') !== null) {
+    sceneManager.replace(new UiGalleryScene());
     return true;
   }
 

@@ -1,6 +1,6 @@
 /**
  * Colour table for the stat-boost potion's fanfare (see
- * `DungeonUIRenderer.renderStatBoostFlash`). Lives under `src/sprites/` with
+ * `renderStatBoostFlash` in `src/systems/worldEffects.ts`). Lives under `src/sprites/` with
  * the rest of the game's art palettes, since a colour ramp is art data rather
  * than a game rule.
  */

@@ -88,13 +88,9 @@ export const HOARDER_FLEE_RANGE_TILES = 8;
 const HOARDER_FLEE_RANGE_PX = HOARDER_FLEE_RANGE_TILES * TILE_SIZE;
 
 const HALF = 0.5;
-const UNDRAWN_MINIMAP_SIZE = 0;
 
 const undrawnMiniMap: BossRoomMiniMap = {
   revealBossNeighborhood: () => undefined,
-  isExpanded: false,
-  EXPANDED_SIZE: UNDRAWN_MINIMAP_SIZE,
-  NORMAL_SIZE: UNDRAWN_MINIMAP_SIZE,
 };
 
 /** A crawler who counts every blow that lands, then shrugs it off. */

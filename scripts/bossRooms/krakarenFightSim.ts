@@ -66,9 +66,6 @@ const DETOUR_ANGLES_RAD: readonly number[] = [
 /** A step shorter than this counts as blocked and the next detour is tried. */
 const MIN_PROGRESS_PX = 0.2;
 
-const MINIMAP_EXPANDED_SIZE = 0;
-const MINIMAP_NORMAL_SIZE = 0;
-
 /** What one fight measured. */
 export interface FightMetrics {
   readonly seed: number;
@@ -147,9 +144,6 @@ function runSeededFight(options: RunOptions): FightMetrics {
     gameMap,
     {
       revealBossNeighborhood: () => undefined,
-      isExpanded: false,
-      EXPANDED_SIZE: MINIMAP_EXPANDED_SIZE,
-      NORMAL_SIZE: MINIMAP_NORMAL_SIZE,
     },
     new EventBus(),
     bossTypes,

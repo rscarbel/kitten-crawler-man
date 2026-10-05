@@ -3140,7 +3140,7 @@ console.log('\nChanging the difficulty while the show is on…');
     sceneSource.indexOf('private placeCuredGrimaldi('),
   );
   const order = [
-    'this.pauseMenu.close()',
+    'this.pauseScreen.close()',
     'this.input.clear()',
     'restartBigTopTent(',
     'this.parkBothInTheMaze()',

@@ -1,6 +1,7 @@
 /**
- * Owns all achievement/loot-box UI state: notification queue, achievement
- * icon, loot box icon, and the loot-box-opener lifecycle.
+ * Owns all achievement/loot-box UI state: the notification queue, what the
+ * HUD's achievement chip and safe-room banner show, and the loot-box-opener
+ * lifecycle.
  */
 
 import type { AchievementManager, BoxContents, LootBox } from '../core/AchievementManager';
@@ -13,11 +14,12 @@ import type { HumanPlayer } from '../creatures/HumanPlayer';
 import type { CatPlayer } from '../creatures/CatPlayer';
 import type { AudioManager } from '../audio/AudioManager';
 import { isItemId } from '../core/ItemDefs';
-import { drawText } from '../ui/TextBox';
-import type { Rect } from './MobileHUDSystem';
 import { viewportWidth, viewportHeight } from '../core/Viewport';
 import { ITEM_DEF } from '../core/ItemDefs';
 import type { RewardFlySystem } from './RewardFlySystem';
+import { keybindings } from '../core/Keybindings';
+import { ACTIVATE_KEYS, UI_TAP_SOUND, type Surface } from '../ui/core/UiRoot';
+import type { LootBannerModel } from '../ui/hud/hudModel';
 
 interface QueueEntry {
   def: AchievementDef;
@@ -31,8 +33,6 @@ export class AchievementUISystem {
 
   private _notifActive = false;
   private _notifQueue: QueueEntry[] = [];
-  private _achievIconRect = { x: 0, y: 0, w: 80, h: 28 };
-  private _lootBoxIconRect = { x: -9999, y: 0, w: 0, h: 0 };
 
   /**
    * When set, called once after every pending loot box queue has been fully opened.
@@ -58,7 +58,6 @@ export class AchievementUISystem {
     private readonly rewardFly: RewardFlySystem,
     private readonly audio: AudioManager | null = null,
   ) {
-    this.achievementNotif.audio = audio;
     this.lootBoxOpener.setAudio(audio);
   }
 
@@ -71,35 +70,10 @@ export class AchievementUISystem {
     return this._notifActive;
   }
 
-  get achievIconRect(): { x: number; y: number; w: number; h: number } {
-    return this._achievIconRect;
-  }
-
-  get lootBoxIconRect(): { x: number; y: number; w: number; h: number } {
-    return this._lootBoxIconRect;
-  }
-
   /** Call once per frame (before pause/game-over checks). */
   tick(): void {
     if (this.lootBoxOpener.isOpen) this.lootBoxOpener.tick();
     if (this._notifActive) this.achievementNotif.tick();
-  }
-
-  /**
-   * Handle a space-bar press as an OK/continue action.
-   *
-   * The achievement notification accepts through its own focus ring, so all
-   * that is left here is the loot-box reveal — which has no button to focus and
-   * is skipped by a bare press.
-   *
-   * @returns true if the event was consumed.
-   */
-  handleSpaceBar(): boolean {
-    if (this.lootBoxOpener.isOpen) {
-      this.lootBoxOpener.skip();
-      return true;
-    }
-    return this._notifActive;
   }
 
   private _advanceNotifQueue(): void {
@@ -124,37 +98,67 @@ export class AchievementUISystem {
     }
   }
 
-  /**
-   * Handle a click. Returns true if the click was consumed by this system.
-   */
-  handleClick(mx: number, my: number): boolean {
-    // Loot box opener takes priority (skip animation on click)
-    if (this.lootBoxOpener.isOpen) {
-      this.lootBoxOpener.skip();
-      return true;
-    }
+  /** Unread achievements across both crawlers. */
+  private get unreadCount(): number {
+    return this.humanAchievements.unreadCount + this.catAchievements.unreadCount;
+  }
 
-    if (this._notifActive) {
-      if (this.achievementNotif.handleClick(mx, my)) {
-        this._advanceNotifQueue();
-      }
-      return true;
-    }
+  private get pendingBoxCount(): number {
+    return this.humanAchievements.pendingBoxes.length + this.catAchievements.pendingBoxes.length;
+  }
 
-    return false;
+  private get partyInSafeRoom(): boolean {
+    return this.human.isProtected || this.cat.isProtected;
+  }
+
+  /** The award overlays own the screen while either is up; the HUD's entries to them hide. */
+  private get awardsShowing(): boolean {
+    return this.lootBoxOpener.isOpen || this._notifActive;
   }
 
   /**
-   * Handle click on the achievement icon (top-right button / safe-room banner).
-   * Returns true if the click was consumed.
+   * How many achievements the HUD's chip counts, or null when it does not
+   * show: nothing unread, inside a safe room (its banner says it instead), or
+   * an award already on screen.
    */
-  handleAchievIconClick(mx: number, my: number): boolean {
-    const ai = this._achievIconRect;
-    if (mx < ai.x || mx > ai.x + ai.w || my < ai.y || my > ai.y + ai.h) return false;
+  hudChipCount(): number | null {
+    if (this.awardsShowing || this.partyInSafeRoom) return null;
+    const unread = this.unreadCount;
+    return unread > 0 ? unread : null;
+  }
 
-    const totalUnread = this.humanAchievements.unreadCount + this.catAchievements.unreadCount;
-    if (totalUnread === 0) return false;
+  /**
+   * The safe room's left-edge banner: unread achievements first, then loot
+   * boxes waiting to be opened. Null outside a safe room, with nothing
+   * waiting, or while an award is on screen.
+   *
+   * @param onClose Called as the boxes start opening, to put away whatever
+   *   menu the banner was reached through.
+   */
+  hudBanner(onClose: () => void): LootBannerModel | null {
+    if (this.awardsShowing || !this.partyInSafeRoom) return null;
+    const unread = this.unreadCount;
+    if (unread > 0) {
+      return {
+        glyph: 'trophy',
+        title: 'Achievement!',
+        detail: unread === 1 ? '1 new' : `${unread} new`,
+        onTap: () => void this.showUnread(),
+      };
+    }
+    const boxes = this.pendingBoxCount;
+    if (boxes === 0) return null;
+    return {
+      glyph: 'sparkle',
+      title: 'Open loot!',
+      detail: boxes === 1 ? '1 box' : `${boxes} boxes`,
+      onTap: () => void this.openPendingBoxes(onClose),
+    };
+  }
 
+  /** Shows every unread achievement in turn. Returns whether there were any. */
+  showUnread(): boolean {
+    if (this.unreadCount === 0) return false;
     this._notifQueue = [
       ...this.humanAchievements.pendingNotifications.map((def) => ({
         def,
@@ -176,16 +180,12 @@ export class AchievementUISystem {
   }
 
   /**
-   * Handle click on the loot box icon (safe-room banner).
-   * Returns true if the click was consumed.
+   * Opens the human's loot boxes, then the cat's. Declined while an
+   * achievement is still unread, which is read first. Returns whether any
+   * box opened.
    */
-  handleLootBoxIconClick(mx: number, my: number, onClose: () => void): boolean {
-    const lb = this._lootBoxIconRect;
-    if (mx < lb.x || mx > lb.x + lb.w || my < lb.y || my > lb.y + lb.h) return false;
-
-    const unread = this.humanAchievements.unreadCount + this.catAchievements.unreadCount;
-    if (unread > 0) return false;
-
+  openPendingBoxes(onClose: () => void): boolean {
+    if (this.unreadCount > 0) return false;
     if (this.humanAchievements.pendingBoxes.length > 0) {
       this.openBoxQueue('human', onClose);
       return true;
@@ -296,221 +296,52 @@ export class AchievementUISystem {
 
   // ── Rendering ──
 
-  /** Render the notification overlay and loot box opener (top-layer). */
-  renderOverlays(ctx: CanvasRenderingContext2D): void {
-    if (this.lootBoxOpener.isOpen) {
-      this.lootBoxOpener.render(ctx);
-    }
-
-    if (this._notifActive && this._notifQueue.length > 0) {
-      this.achievementNotif.render(ctx, this._notifQueue[0].def, this._notifQueue[0].player);
-    }
-  }
-
   /**
-   * Draw the achievement icon button: the "NEW" chip at `chipRect`, which the
-   * scene places in its own HUD column, or the safe room's banner.
+   * The notification and the loot-box reveal as one surface. It takes every
+   * press while up, over the death screen included, but floats: the world
+   * runs on and the keyboard is not locked. A tap anywhere or the attack key
+   * skips the reveal; once the card has faded in, its OK button, Space, Enter
+   * or the attack key dismisses it.
    */
-  drawAchievementIcon(
-    ctx: CanvasRenderingContext2D,
-    chipRect: Rect,
-    gameOver: boolean,
-    pauseOpen: boolean,
-  ): void {
-    if (gameOver || pauseOpen || this.lootBoxOpener.isOpen || this._notifActive) {
-      this._achievIconRect = { x: -9999, y: 0, w: 0, h: 0 };
-      return;
-    }
-
-    const unread = this.humanAchievements.unreadCount + this.catAchievements.unreadCount;
-    if (unread === 0) {
-      this._achievIconRect = { x: -9999, y: 0, w: 0, h: 0 };
-      return;
-    }
-
-    const inSafeRoom = this.human.isProtected || this.cat.isProtected;
-
-    if (inSafeRoom) {
-      const BANNER_W = 96;
-      const BANNER_H = 88;
-      const BANNER_LEFT = 12;
-      const TROPHY_ICON_Y_OFFSET = 34;
-      const LABEL_Y_OFFSET = 54;
-      const LABEL_Y_ADJUST = 8;
-      const COUNT_Y_OFFSET = 68;
-      const COUNT_Y_ADJUST = 7;
-      const PULSE_BASE = 0.5;
-      const PULSE_AMPLITUDE = 0.5;
-      const PULSE_PERIOD = 220;
-      const BOUNCE_PERIOD = 400;
-      const BOUNCE_AMPLITUDE = 3;
-      const SHADOW_BASE = 18;
-      const SHADOW_RANGE = 14;
-      const BORDER_BASE_WIDTH = 2;
-      const STROKE_MIN = 0.55;
-      const STROKE_RANGE = 0.45;
-      const LABEL_ALPHA_BASE = 0.75;
-      const LABEL_ALPHA_RANGE = 0.25;
-      const FONT_SIZE = 28;
-
-      const w = BANNER_W;
-      const h = BANNER_H;
-      const x = BANNER_LEFT;
-      const y = viewportHeight() / 2 - h / 2;
-      this._achievIconRect = { x, y, w, h };
-
-      const t = Date.now();
-      const pulse = PULSE_BASE + PULSE_AMPLITUDE * Math.sin(t / PULSE_PERIOD);
-      const bounce = Math.sin(t / BOUNCE_PERIOD) * BOUNCE_AMPLITUDE;
-
-      ctx.save();
-      ctx.shadowColor = '#ffd700';
-      ctx.shadowBlur = SHADOW_BASE + SHADOW_RANGE * pulse;
-
-      ctx.fillStyle = 'rgba(10, 20, 0, 0.92)';
-      ctx.fillRect(x, y + bounce, w, h);
-
-      ctx.strokeStyle = `rgba(134, 239, 172, ${STROKE_MIN + STROKE_RANGE * pulse})`;
-      ctx.lineWidth = BORDER_BASE_WIDTH + pulse;
-      ctx.strokeRect(x, y + bounce, w, h);
-      ctx.shadowBlur = 0;
-
-      ctx.font = `bold ${FONT_SIZE}px monospace`;
-      ctx.textAlign = 'center';
-      ctx.fillStyle = '#ffd700';
-      ctx.fillText('🏆', x + w / 2, y + bounce + TROPHY_ICON_Y_OFFSET);
-      ctx.textAlign = 'left';
-      ctx.restore();
-
-      drawText(ctx, 'ACHIEVEMENT!', {
-        x: x + w / 2,
-        y: y + bounce + LABEL_Y_OFFSET - LABEL_Y_ADJUST,
-        size: 10,
-        bold: true,
-        color: `rgba(134, 239, 172, ${LABEL_ALPHA_BASE + LABEL_ALPHA_RANGE * pulse})`,
-        align: 'center',
-      });
-      drawText(ctx, unread === 1 ? '1 new' : `${unread} new`, {
-        x: x + w / 2,
-        y: y + bounce + COUNT_Y_OFFSET - COUNT_Y_ADJUST,
-        size: 9,
-        color: '#94a3b8',
-        align: 'center',
-      });
-    } else {
-      const PULSE_PERIOD = 300;
-      const PULSE_BASE = 0.5;
-      const PULSE_AMPLITUDE = 0.5;
-      const STROKE_BASE = 0.6;
-      const STROKE_RANGE = 0.4;
-      const ICON_Y_OFFSET = 4;
-      const ICON_Y_ADJUST = 9;
-
-      const r = chipRect;
-      this._achievIconRect = r;
-
-      const pulse = PULSE_BASE + PULSE_AMPLITUDE * Math.sin(Date.now() / PULSE_PERIOD);
-      ctx.fillStyle = 'rgba(26,42,10,0.9)';
-      ctx.fillRect(r.x, r.y, r.w, r.h);
-      ctx.strokeStyle = `rgba(134,239,172,${STROKE_BASE + STROKE_RANGE * pulse})`;
-      ctx.lineWidth = 1.5;
-      ctx.strokeRect(r.x, r.y, r.w, r.h);
-      drawText(ctx, `🏆 NEW (${unread})`, {
-        x: r.x + r.w / 2,
-        y: r.y + r.h / 2 + ICON_Y_OFFSET - ICON_Y_ADJUST,
-        size: 11,
-        bold: true,
-        color: '#86efac',
-        align: 'center',
-      });
-    }
-  }
-
-  /** Draw the loot box icon banner (safe room only). */
-  drawLootBoxIcon(ctx: CanvasRenderingContext2D, gameOver: boolean, pauseOpen: boolean): void {
-    const inSafe = this.human.isProtected || this.cat.isProtected;
-    const totalBoxes =
-      this.humanAchievements.pendingBoxes.length + this.catAchievements.pendingBoxes.length;
-    const totalUnread = this.humanAchievements.unreadCount + this.catAchievements.unreadCount;
-
-    if (
-      !inSafe ||
-      totalBoxes === 0 ||
-      gameOver ||
-      pauseOpen ||
-      this.lootBoxOpener.isOpen ||
-      this._notifActive ||
-      totalUnread > 0
-    ) {
-      this._lootBoxIconRect = { x: -9999, y: 0, w: 0, h: 0 };
-      return;
-    }
-
-    const BANNER_W = 96;
-    const BANNER_H = 88;
-    const BANNER_LEFT = 12;
-    const BOX_ICON_Y_OFFSET = 36;
-    const LABEL_Y_OFFSET = 54;
-    const LABEL_Y_ADJUST = 8;
-    const COUNT_Y_OFFSET = 68;
-    const COUNT_Y_ADJUST = 7;
-    const PULSE_BASE = 0.5;
-    const PULSE_AMPLITUDE = 0.5;
-    const PULSE_PERIOD = 220;
-    const BOUNCE_PERIOD = 400;
-    const BOUNCE_AMPLITUDE = 3;
-    const SHADOW_BASE = 18;
-    const SHADOW_RANGE = 14;
-    const BORDER_BASE_WIDTH = 2;
-    const STROKE_MIN = 0.55;
-    const STROKE_RANGE = 0.45;
-    const LABEL_ALPHA_BASE = 0.75;
-    const LABEL_ALPHA_RANGE = 0.25;
-    const FONT_SIZE = 30;
-
-    const w = BANNER_W;
-    const h = BANNER_H;
-    const x = BANNER_LEFT;
-    const y = viewportHeight() / 2 - h / 2;
-    this._lootBoxIconRect = { x, y, w, h };
-
-    const t = Date.now();
-    const pulse = PULSE_BASE + PULSE_AMPLITUDE * Math.sin(t / PULSE_PERIOD);
-    const bounce = Math.sin(t / BOUNCE_PERIOD) * BOUNCE_AMPLITUDE;
-
-    ctx.save();
-    ctx.shadowColor = '#ffd700';
-    ctx.shadowBlur = SHADOW_BASE + SHADOW_RANGE * pulse;
-
-    ctx.fillStyle = 'rgba(20, 14, 0, 0.92)';
-    ctx.fillRect(x, y + bounce, w, h);
-
-    ctx.strokeStyle = `rgba(255, 215, 0, ${STROKE_MIN + STROKE_RANGE * pulse})`;
-    ctx.lineWidth = BORDER_BASE_WIDTH + pulse;
-    ctx.strokeRect(x, y + bounce, w, h);
-    ctx.shadowBlur = 0;
-
-    ctx.font = `bold ${FONT_SIZE}px monospace`;
-    ctx.textAlign = 'center';
-    ctx.fillStyle = '#ffd700';
-    ctx.fillText('📦', x + w / 2, y + bounce + BOX_ICON_Y_OFFSET);
-    ctx.textAlign = 'left';
-    ctx.restore();
-
-    drawText(ctx, 'OPEN LOOT!', {
-      x: x + w / 2,
-      y: y + bounce + LABEL_Y_OFFSET - LABEL_Y_ADJUST,
-      size: 10,
-      bold: true,
-      color: `rgba(255, 215, 0, ${LABEL_ALPHA_BASE + LABEL_ALPHA_RANGE * pulse})`,
-      align: 'center',
-    });
-    drawText(ctx, totalBoxes === 1 ? '1 box' : `${totalBoxes} boxes`, {
-      x: x + w / 2,
-      y: y + bounce + COUNT_Y_OFFSET - COUNT_Y_ADJUST,
-      size: 9,
-      color: '#94a3b8',
-      align: 'center',
-    });
+  surface(id = 'achievement-overlay'): Surface {
+    return {
+      id,
+      band: 'system',
+      haltsWorld: false,
+      locksKeyboard: false,
+      isOpen: () => this.isBlocking,
+      render: (ui) => {
+        const revealing = this.lootBoxOpener.isOpen;
+        if (revealing) this.lootBoxOpener.paint(ui, ui.screen.w, ui.screen.h);
+        if (this._notifActive && this._notifQueue.length > 0) {
+          const shown = this._notifQueue[0];
+          this.achievementNotif.paint(ui, shown.def, shown.player, () => this._advanceNotifQueue());
+        }
+        // Registered last so it sits over everything: while a box is opening, any tap skips it.
+        if (revealing) {
+          ui.hit('skip', ui.screen, {
+            onTap: () => this.lootBoxOpener.skip(),
+            focusable: false,
+            sound: null,
+          });
+        }
+      },
+      onKey: (key, mods) => {
+        const isAttack = keybindings.actionFor(key) === 'attack';
+        const fresh = mods.repeat !== true && mods.predatesSurface !== true;
+        if (this.lootBoxOpener.isOpen) {
+          if (!isAttack) return false;
+          if (fresh) this.lootBoxOpener.skip();
+          return true;
+        }
+        if (!isAttack && !ACTIVATE_KEYS.has(key)) return false;
+        // The surface neither halts nor locks, so the focus ring never sees these keys: OK is pressed here.
+        if (fresh && this.achievementNotif.isFadedIn) {
+          this.audio?.play(UI_TAP_SOUND);
+          this._advanceNotifQueue();
+        }
+        return true;
+      },
+    };
   }
 }

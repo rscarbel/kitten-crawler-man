@@ -25,16 +25,11 @@ import {
   drawAnchorShardIcon,
   paintAnchorStoneAt,
 } from '../src/ui/icons/anchorStoneIcon.js';
-import { drawItemIcon } from '../src/ui/InventoryPanel.js';
+import { drawItemIcon } from '../src/ui/icons/drawItemIcon.js';
 import type { InventoryItem } from '../src/core/ItemDefs.js';
+import type { Rect } from '../src/ui/core/geom.js';
 
-type TimedDraw = (
-  ctx: CanvasRenderingContext2D,
-  x: number,
-  y: number,
-  size: number,
-  timeS: number,
-) => void;
+type TimedDraw = (ctx: CanvasRenderingContext2D, rect: Rect, timeS: number) => void;
 
 interface IconSpec {
   readonly label: string;
@@ -55,11 +50,11 @@ const REFERENCE_HEALTH_POTION: InventoryItem = {
 const STONE: IconSpec = { label: 'wayfinders_anchor', draw: paintAnchorStoneAt };
 const SHARD: IconSpec = {
   label: 'anchor_shard',
-  draw: (ctx, x, y, size) => drawAnchorShardIcon(ctx, x, y, size),
+  draw: (ctx, rect) => drawAnchorShardIcon(ctx, rect),
 };
 const REFERENCE: IconSpec = {
   label: 'reference:health_potion',
-  draw: (ctx, x, y, size) => drawItemIcon(ctx, REFERENCE_HEALTH_POTION, x, y, size),
+  draw: (ctx, rect) => drawItemIcon(ctx, rect, REFERENCE_HEALTH_POTION),
   reference: true,
 };
 const ALL_ICONS: readonly IconSpec[] = [REFERENCE, STONE, SHARD];
@@ -133,7 +128,7 @@ function paint(
     ctx.fillStyle = background;
     ctx.fillRect(0, 0, canvasSize, canvasSize);
   }
-  spec.draw(ctx, offset, offset, size, timeS);
+  spec.draw(ctx, { x: offset, y: offset, w: size, h: size }, timeS);
   return { width: canvasSize, data: ctx.getImageData(0, 0, canvasSize, canvasSize).data };
 }
 
@@ -249,7 +244,7 @@ function gateCost(): void {
   const ctx = gameContext(size, size);
   const started = performance.now();
   for (let iteration = 0; iteration < PERF_ITERATIONS; iteration++) {
-    paintAnchorStoneAt(ctx, 0, 0, size, iteration * REAL_FRAME_S);
+    paintAnchorStoneAt(ctx, { x: 0, y: 0, w: size, h: size }, iteration * REAL_FRAME_S);
   }
   const msPerPaint = (performance.now() - started) / PERF_ITERATIONS;
   console.log(`  cost: ${msPerPaint.toFixed(MS_DECIMALS)} ms per ${size}px paint (node-canvas)`);
@@ -296,7 +291,7 @@ function bakeLoopSheet(): string {
       const iconY = top + (cell - size) / 2;
       ctx.fillStyle = HOTBAR_SLOT_FILL;
       ctx.fillRect(iconX, iconY, size, size);
-      spec.draw(ctx, iconX, iconY, size, timeS);
+      spec.draw(ctx, { x: iconX, y: iconY, w: size, h: size }, timeS);
     });
   });
   return writePreviewPng('preview/anchor-icon.png', canvas.toBuffer('image/png'));
@@ -315,7 +310,8 @@ function bakeStrip(): string {
     const iconX = PREVIEW_PAD + frame * cell;
     ctx.fillStyle = HOTBAR_SLOT_FILL;
     ctx.fillRect(iconX, PREVIEW_PAD, STRIP_SIZE, STRIP_SIZE);
-    paintAnchorStoneAt(ctx, iconX, PREVIEW_PAD, STRIP_SIZE, STRIP_START_S + frame * REAL_FRAME_S);
+    const stripCell = { x: iconX, y: PREVIEW_PAD, w: STRIP_SIZE, h: STRIP_SIZE };
+    paintAnchorStoneAt(ctx, stripCell, STRIP_START_S + frame * REAL_FRAME_S);
   }
   return writePreviewPng('preview/anchor-icon-strip.png', canvas.toBuffer('image/png'));
 }

@@ -1,5 +1,5 @@
 import { drawDumbbellHeld } from './gymEquipmentSprite';
-import { drawText } from '../ui/TextBox';
+import { measureWorldText, worldText } from '../ui/world/worldText';
 import { progressFrameIndex, timeFrameIndex, walkFrameIndex } from '../core/SpriteRenderer';
 import { drawFigureCached } from './figure/figureFrameCache';
 import { JUICER_FIGURE } from './art/juicerFigure';
@@ -409,6 +409,22 @@ export function drawThrownDumbbell(
  */
 const BUBBLE_HEAD_GAP_TILES = 0.15;
 
+const BUBBLE_TEXT_SIZE = 9;
+const BUBBLE_PAD_X = 8;
+const BUBBLE_HEIGHT = 18;
+/** Pixels between the bubble's tail tip and the bottom of the bubble body. */
+const BUBBLE_TAIL_DROP = 2;
+const BUBBLE_TAIL_HALF_WIDTH = 4;
+const BUBBLE_RADIUS = 5;
+const BUBBLE_BORDER_WIDTH = 1.5;
+const BUBBLE_ALPHA_BASE = 0.85;
+const BUBBLE_ALPHA_SWING = 0.1;
+const BUBBLE_PULSE_RATE = 0.1;
+const BUBBLE_FILL = '#fff';
+const BUBBLE_BORDER = '#f97316';
+const BUBBLE_TEXT = '#1a1a1a';
+const HALF = 0.5;
+
 /** Render a speech bubble with the Juicer's taunt above his head. */
 export function drawJuicerSpeechBubble(
   ctx: CanvasRenderingContext2D,
@@ -421,55 +437,48 @@ export function drawJuicerSpeechBubble(
   const cx = sx + s * TILE_CENTRE_FRACTION;
   const bubbleY = sy - s * (JUICER_HEAD_CLEARANCE_TILES + BUBBLE_HEAD_GAP_TILES);
 
-  ctx.save();
-  ctx.font = 'bold 9px monospace';
-  const textWidth = ctx.measureText(text).width;
-  const padX = 8;
-  const bw = textWidth + padX * 2;
-  const bh = 18;
-  const bx = cx - bw * 0.5;
-  const by = bubbleY - bh - 2;
+  const textWidth = measureWorldText(ctx, text, { size: BUBBLE_TEXT_SIZE, bold: true }).width;
+  const bw = textWidth + BUBBLE_PAD_X * 2;
+  const bh = BUBBLE_HEIGHT;
+  const bx = cx - bw * HALF;
+  const by = bubbleY - bh - BUBBLE_TAIL_DROP;
 
-  const alpha = 0.85 + 0.1 * Math.sin(pulse * 0.1);
+  ctx.save();
+  const alpha = BUBBLE_ALPHA_BASE + BUBBLE_ALPHA_SWING * Math.sin(pulse * BUBBLE_PULSE_RATE);
   ctx.globalAlpha = alpha;
 
-  // Bubble background
-  ctx.fillStyle = '#fff';
+  ctx.fillStyle = BUBBLE_FILL;
   ctx.beginPath();
-  ctx.roundRect(bx, by, bw, bh, 5);
+  ctx.roundRect(bx, by, bw, bh, BUBBLE_RADIUS);
   ctx.fill();
 
-  // Border
-  ctx.strokeStyle = '#f97316';
-  ctx.lineWidth = 1.5;
+  ctx.strokeStyle = BUBBLE_BORDER;
+  ctx.lineWidth = BUBBLE_BORDER_WIDTH;
   ctx.beginPath();
-  ctx.roundRect(bx, by, bw, bh, 5);
+  ctx.roundRect(bx, by, bw, bh, BUBBLE_RADIUS);
   ctx.stroke();
 
-  // Tail pointing down toward head
-  ctx.fillStyle = '#fff';
+  ctx.fillStyle = BUBBLE_FILL;
   ctx.beginPath();
-  ctx.moveTo(cx - 4, by + bh);
-  ctx.lineTo(cx + 4, by + bh);
+  ctx.moveTo(cx - BUBBLE_TAIL_HALF_WIDTH, by + bh);
+  ctx.lineTo(cx + BUBBLE_TAIL_HALF_WIDTH, by + bh);
   ctx.lineTo(cx, bubbleY);
   ctx.closePath();
   ctx.fill();
-  ctx.strokeStyle = '#f97316';
-  ctx.lineWidth = 1.5;
+  // The tail's two slanted sides only, so no seam is drawn across its join with the body.
   ctx.beginPath();
-  ctx.moveTo(cx - 4, by + bh - 1);
+  ctx.moveTo(cx - BUBBLE_TAIL_HALF_WIDTH, by + bh - 1);
   ctx.lineTo(cx, bubbleY);
-  ctx.moveTo(cx + 4, by + bh - 1);
+  ctx.moveTo(cx + BUBBLE_TAIL_HALF_WIDTH, by + bh - 1);
   ctx.lineTo(cx, bubbleY);
   ctx.stroke();
 
-  drawText(ctx, text, {
+  worldText(ctx, text, {
     x: cx,
-    y: by + bh * 0.5 - 9 / 2,
-    size: 9,
+    y: by + bh * HALF - BUBBLE_TEXT_SIZE * HALF,
+    size: BUBBLE_TEXT_SIZE,
     bold: true,
-    font: 'monospace',
-    color: '#1a1a1a',
+    color: BUBBLE_TEXT,
     alpha,
     align: 'center',
   });

@@ -10,12 +10,12 @@
  * crawler should be able to walk out of here kitted after two or three floors'
  * worth of coin, and should still have to choose which piece they want first.
  *
- * Pure data + effect application; `PricedMenuPanel` owns the UI and
+ * Pure data + effect application; the shop screen owns the UI and
  * `BuildingInteriorScene` owns the sounds and the interaction gating.
  */
 
 import type { ItemId } from '../core/ItemDefs';
-import type { PricedMenu, PricedOption, PricedPurchaseHandler } from '../ui/PricedMenuPanel';
+import type { ShopMenu, ShopRow, ShopPurchaseHandler } from '../ui/screens/shop/shopSession';
 import type { ResidentHost } from './townResidents';
 import { giveInventoryItem, rotateLine } from './townServiceUtil';
 
@@ -90,19 +90,19 @@ const QUARTERMASTER_BARKS: ReadonlyArray<string> = [
 ];
 
 /** The armoury's board for this visit. */
-export function buildArmouryMenu(turn: number, host: ResidentHost | null): PricedMenu {
+export function buildArmouryMenu(turn: number, host: ResidentHost | null): ShopMenu {
   return {
     title: 'The Quartermaster',
     bark: host?.line ?? rotateLine(QUARTERMASTER_BARKS, turn),
     byline: host?.name,
-    options: ISSUE_KIT.map((piece): PricedOption => {
+    options: ISSUE_KIT.map((piece): ShopRow => {
       return { key: piece.key, label: piece.label, price: piece.price, desc: piece.desc };
     }),
   };
 }
 
 /** Hands over the chosen piece, or refuses when it will not fit in the buyer's bag. */
-export const issueArmour: PricedPurchaseHandler = (option, buyer) => {
+export const issueArmour: ShopPurchaseHandler = (option, buyer) => {
   const piece = ISSUE_KIT.find((candidate) => candidate.key === option.key);
   if (piece === undefined) return { ok: false, line: 'Dann checks the rack and finds nothing.' };
   if (!giveInventoryItem(buyer, piece.item)) {

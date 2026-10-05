@@ -28,6 +28,8 @@ import type { Player } from '../Player';
 import { QuestManager, type QuestStatus } from '../core/QuestManager';
 import type { ItemId } from '../core/ItemDefs';
 import { partyLevelOf } from '../levels/spawner';
+import { worldPalette } from '../ui/theme/worldInk';
+import { withAlpha } from '../ui/theme/color';
 import { questMobLevel } from './questMobLevel';
 import { characterTarget, type TrackerEntry, type TrackerTarget } from './questTracker';
 import type { MurderQuestProgress } from '../core/MurderQuestProgress';
@@ -45,7 +47,8 @@ import { drawInteractionPrompt } from '../ui/InteractionPrompt';
 import type { Conversation } from '../dialog/Conversation';
 import type { DialogLine, NonEmpty } from '../dialog/line';
 import type { ConversationHandle } from '../dialog/request';
-import { drawQuestBanner, QUEST_BANNER_FRAMES } from '../ui/QuestBanners';
+import { questBannerEntry, QUEST_BANNER_FRAMES } from '../ui/QuestBanners';
+import type { TopBandEntry } from '../ui/hud/topBand';
 import { partyXpSections } from '../ui/questReward/rewardLines';
 import type { QuestRewardSpec } from '../ui/questReward/types';
 import {
@@ -148,14 +151,6 @@ const NIGHT_SWARM_SPAWN_GRACE_FRAMES = 90;
 
 const BATTLE_MUSIC_FADE_IN_MS = 1000;
 
-/**
- * Clue-point attention rendering.
- *
- * Witch-green rather than the festival yellow every other marker in town uses:
- * a clue is a krasue's leavings, and the glow over it should read as the same
- * sickly light the creature itself trails.
- */
-const CLUE_GLOW_RGB = '132, 206, 92';
 const CLUE_GLOW_RADIUS_TILES = 1.5;
 const CLUE_GLOW_ALPHA_BASE = 0.35;
 const CLUE_GLOW_ALPHA_PULSE = 0.2;
@@ -172,8 +167,6 @@ const CLUE_GLOW_CORE_FRACTION = 0.25;
 
 /** Beyond this the arrow is clutter; inside it, it is the one unmissable "look here". */
 const CLUE_ARROW_RANGE_TILES = 12;
-const CLUE_ARROW_COLOR = '#9ade63';
-const CLUE_ARROW_OUTLINE_COLOR = '#16300c';
 
 /**
  * How wide each gore prop lies, in tiles, and how far west of the clue tile it
@@ -310,9 +303,9 @@ export class MurderMysteryQuestSystem implements GameSystem {
     const pubDoor = this.doorTileOf('The Sunken Stump Pub');
     // Book-accurate hook: GumGum approaches at the Desperado Club when it exists
     // on this floor, else the pub (Carl's Doomsday Scenario). Gated on the pub
-    // too, so the alley/body anchor and the "is this quest viable?" check below
-    // still resolve exactly as before on a pub-less map. To force the pub hook,
-    // drop this club lookup — the rest of the quest is untouched.
+    // too, so on a pub-less map the alley/body anchor and the "is this quest
+    // viable?" check below resolve without a club. Dropping this club lookup
+    // forces the pub hook; nothing else in the quest depends on it.
     const clubDoor = pubDoor ? this.doorTileOf(GUMGUM_HOOK_CLUB_NAME) : null;
     // The hook and the corpse anchor separately: she is last seen at the club's
     // door and found in the alley beside it.
@@ -1005,11 +998,6 @@ export class MurderMysteryQuestSystem implements GameSystem {
     return this.conversation.dismiss();
   }
 
-  handleClick(mx: number, my: number): boolean {
-    if (!this.conversationOwned) return false;
-    return this.conversation.handleClick(mx, my);
-  }
-
   // ── Phase transitions ─────────────────────────────────────────────────────
 
   private finishHook(): void {
@@ -1413,8 +1401,8 @@ export class MurderMysteryQuestSystem implements GameSystem {
     const glowAlpha =
       Math.round(Math.max(0, pulse) * CLUE_GLOW_ALPHA_STEPS) / CLUE_GLOW_ALPHA_STEPS;
     const glowStops = [
-      { offset: 0, color: `rgba(${CLUE_GLOW_RGB}, ${glowAlpha})` },
-      { offset: 1, color: `rgba(${CLUE_GLOW_RGB}, 0)` },
+      { offset: 0, color: withAlpha(worldPalette.clue.glow, glowAlpha) },
+      { offset: 1, color: withAlpha(worldPalette.clue.glow, 0) },
     ];
 
     const worldX = clue.tile.x * TILE_SIZE;
@@ -1437,8 +1425,8 @@ export class MurderMysteryQuestSystem implements GameSystem {
         worldY,
         camX,
         camY,
-        CLUE_ARROW_COLOR,
-        CLUE_ARROW_OUTLINE_COLOR,
+        worldPalette.clue.arrow,
+        worldPalette.clue.arrowOutline,
       );
     }
     if (distance <= TILE_SIZE * CLUE_INTERACT_RANGE_TILES) {
@@ -1446,7 +1434,12 @@ export class MurderMysteryQuestSystem implements GameSystem {
     }
   }
 
-  renderUI(ctx: CanvasRenderingContext2D): void {
-    drawQuestBanner(ctx, this.bannerText, this.bannerTimer, '#f47c7c', '#6a2a2a');
+  topBandEntry(): TopBandEntry | null {
+    return questBannerEntry({
+      id: 'murder-banner',
+      title: this.bannerText,
+      framesLeft: this.bannerTimer,
+      tone: 'danger',
+    });
   }
 }

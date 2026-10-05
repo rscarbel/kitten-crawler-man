@@ -140,8 +140,8 @@ export const ACTION_LABELS: Record<GameAction, string> = {
 };
 
 /**
- * Escape is the universal dismiss chain in both scenes and the cancel gesture
- * during rebind capture. Letting a player bind it away would leave them with no
+ * Escape closes the topmost surface (or toggles pause) in every scene and is the
+ * cancel gesture during rebind capture. Letting a player bind it away would leave them with no
  * way out of the very screen they bound it from.
  */
 export const RESERVED_KEYS: ReadonlySet<string> = new Set(['Escape']);

@@ -11,9 +11,10 @@
  * upward to whatever HUD pieces and phone buttons it would cover.
  */
 
-import type { Rect } from '../../DungeonUIRenderer';
-import { drawBox } from '../../../ui/Box';
-import { drawText } from '../../../ui/TextBox';
+import type { Rect } from '../../../ui/core/geom';
+import { scytheEdgeGlowColor, scytheSwingInk } from '../../../ui/theme/scytheSwingInk';
+import { worldPlate } from '../../../ui/world/worldShapes';
+import { worldText } from '../../../ui/world/worldText';
 import type { ScytheGrade } from './GrainHarvest';
 
 /** A band of the swing, as shares of it. */
@@ -203,31 +204,16 @@ export function scytheSwingBarLayout(
 
 // ── Look ───────────────────────────────────────────────────────────────────
 
-const PANEL_FILL = 'rgba(8,15,30,0.9)';
-const PANEL_BORDER = '#475569';
 const PANEL_BORDER_WIDTH = 2;
-const TRACK_FILL = '#0b1220';
-const TRACK_BORDER = '#64748b';
 const TRACK_RADIUS_PX = 4;
-/** The part of the track the needle has already crossed. */
-const ELAPSED_FILL = 'rgba(148,163,184,0.16)';
-const GOOD_BAND_FILL = 'rgba(234,179,8,0.55)';
-const GOOD_BAND_EDGE = '#facc15';
-const PERFECT_BAND_FILL = 'rgba(34,197,94,0.9)';
-const PERFECT_BAND_EDGE = '#bbf7d0';
 const BAND_EDGE_WIDTH_PX = 2;
 const BAND_LABEL_SIZE = 10;
-const BAND_LABEL_COLOR = '#ffffff';
-/** A dark rim keeps the name legible over the gold, the green and a white flash alike. */
-const BAND_LABEL_OUTLINE = '#0b1220';
 const BAND_LABEL_OUTLINE_WIDTH_PX = 3;
 /** A band's name is only written into it where it has this much room either side. */
 const BAND_LABEL_ROOM_PX = 4;
 const BAND_LABEL_CHAR_WIDTH_SHARE = 0.62;
 
 const NEEDLE_WIDTH_PX = 4;
-const NEEDLE_COLOR = '#ffffff';
-const NEEDLE_OUTLINE = '#0f172a';
 const NEEDLE_OUTLINE_WIDTH_PX = 2;
 
 const PRESS_MARK_WIDTH_PX = 4;
@@ -235,7 +221,6 @@ const PRESS_MARK_OVERHANG_PX = 7;
 const MISS_CROSS_HALF_PX = 7;
 const MISS_CROSS_WIDTH_PX = 3;
 
-const INSTRUCTION_COLOR = '#e2e8f0';
 /** Gap between the verdict word and the grain beside it. */
 const VERDICT_DETAIL_GAP_PX = 12;
 /**
@@ -253,7 +238,6 @@ const POP_SECONDS = 0.18;
 const FLASH_SECONDS = 0.35;
 const HIT_FLASH_PEAK_ALPHA = 0.85;
 const MISS_FLASH_PEAK_ALPHA = 0.55;
-const MISS_FLASH_COLOR = '#ef4444';
 /** The panel's glow, in the verdict's colour, dies away over this long. */
 const PANEL_GLOW_SECONDS = 0.6;
 const PANEL_GLOW_BLUR_PEAK = 28;
@@ -274,22 +258,18 @@ const EDGE_GLOW_DEPTH_SHARE = 0.09;
 const EDGE_GLOW_PEAK_ALPHA = 0.55;
 const MISS_EDGE_GLOW_PEAK_ALPHA = 0.4;
 
-const ALPHA_DECIMALS = 3;
-
 const FULL_TURN = Math.PI * 2;
 const HALF = 0.5;
 
 interface VerdictStyle {
   readonly word: string;
   readonly color: string;
-  /** `r,g,b` of {@link color}, for the fading edge glow. */
-  readonly rgb: string;
 }
 
 const VERDICT_STYLES: Record<ScytheGrade, VerdictStyle> = {
-  perfect: { word: 'PERFECT!', color: '#4ade80', rgb: '74,222,128' },
-  good: { word: 'Clean cut!', color: '#facc15', rgb: '250,204,21' },
-  miss: { word: 'Miss!', color: '#f87171', rgb: '239,68,68' },
+  perfect: { word: 'PERFECT!', color: scytheSwingInk.verdict.perfect.color },
+  good: { word: 'Clean cut!', color: scytheSwingInk.verdict.good.color },
+  miss: { word: 'Miss!', color: scytheSwingInk.verdict.miss.color },
 };
 
 /** 1 at the verdict, falling linearly to 0 after `seconds`. */
@@ -333,13 +313,9 @@ export function drawScytheSwingBar(
   const glow = style === null ? 0 : fadeOver(view.verdictAgeSeconds, PANEL_GLOW_SECONDS);
 
   ctx.save();
-  drawBox(ctx, {
-    x: panel.x,
-    y: panel.y,
-    width: panel.w,
-    height: panel.h,
-    fill: PANEL_FILL,
-    border: style?.color ?? PANEL_BORDER,
+  worldPlate(ctx, panel, {
+    fill: scytheSwingInk.panelFill,
+    border: style?.color ?? scytheSwingInk.panelBorder,
     borderWidth: PANEL_BORDER_WIDTH,
     radius: PANEL_RADIUS_PX,
     ...(style !== null && glow > 0
@@ -365,12 +341,12 @@ function drawHeader(
   const centreX = panel.x + panel.w * HALF;
   const headerTop = panel.y + PANEL_PADDING_PX;
   if (style === null) {
-    drawText(ctx, scytheSwingInstruction(view.pressLabel), {
+    worldText(ctx, scytheSwingInstruction(view.pressLabel), {
       x: centreX,
       y: headerTop + (metrics.headerHeight - metrics.instructionSize) * HALF,
       size: metrics.instructionSize,
       bold: true,
-      color: INSTRUCTION_COLOR,
+      color: scytheSwingInk.instruction,
       align: 'center',
       outline: true,
     });
@@ -390,7 +366,7 @@ function drawHeader(
   const wordCentreX = lineLeft + restingWordWidth * HALF;
   const poppedWordWidth = style.word.length * verdictSize * VERDICT_CHAR_WIDTH_SHARE;
   const headerMidY = headerTop + metrics.headerHeight * HALF;
-  drawText(ctx, style.word, {
+  worldText(ctx, style.word, {
     x: wordCentreX,
     y: headerMidY - verdictSize * HALF,
     size: verdictSize,
@@ -402,41 +378,49 @@ function drawHeader(
     glowBlur: VERDICT_GLOW_BLUR,
   });
   if (detail === '') return;
-  drawText(ctx, detail, {
+  worldText(ctx, detail, {
     x: wordCentreX + poppedWordWidth * HALF + VERDICT_DETAIL_GAP_PX,
     y: headerMidY - metrics.detailSize * HALF,
     size: metrics.detailSize,
     bold: true,
-    color: INSTRUCTION_COLOR,
+    color: scytheSwingInk.instruction,
     outline: true,
     alpha: detailAlpha,
   });
 }
 
 function drawTrack(ctx: CanvasRenderingContext2D, track: Rect, view: ScytheSwingBarView): void {
-  drawBox(ctx, {
-    x: track.x,
-    y: track.y,
-    width: track.w,
-    height: track.h,
-    fill: TRACK_FILL,
-    border: TRACK_BORDER,
+  worldPlate(ctx, track, {
+    fill: scytheSwingInk.trackFill,
+    border: scytheSwingInk.trackBorder,
     borderWidth: 1,
     radius: TRACK_RADIUS_PX,
   });
   const needleX = trackX(track, view.progress);
   if (needleX > track.x) {
-    drawBox(ctx, {
-      x: track.x,
-      y: track.y,
-      width: needleX - track.x,
-      height: track.h,
-      fill: ELAPSED_FILL,
-      radius: TRACK_RADIUS_PX,
-    });
+    worldPlate(
+      ctx,
+      { x: track.x, y: track.y, w: needleX - track.x, h: track.h },
+      {
+        fill: scytheSwingInk.elapsedFill,
+        radius: TRACK_RADIUS_PX,
+      },
+    );
   }
-  drawBandFill(ctx, track, view.goodWindow, GOOD_BAND_FILL, GOOD_BAND_EDGE);
-  drawBandFill(ctx, track, view.perfectWindow, PERFECT_BAND_FILL, PERFECT_BAND_EDGE);
+  drawBandFill(
+    ctx,
+    track,
+    view.goodWindow,
+    scytheSwingInk.goodBandFill,
+    scytheSwingInk.goodBandEdge,
+  );
+  drawBandFill(
+    ctx,
+    track,
+    view.perfectWindow,
+    scytheSwingInk.perfectBandFill,
+    scytheSwingInk.perfectBandEdge,
+  );
   drawVerdictFlash(ctx, track, view);
 }
 
@@ -460,28 +444,29 @@ function drawVerdictFlash(
   const flash = fadeOver(view.verdictAgeSeconds, FLASH_SECONDS);
   if (flash <= 0 || view.verdict === null) return;
   if (view.verdict === 'miss') {
-    drawBox(ctx, {
-      x: track.x,
-      y: track.y,
-      width: track.w,
-      height: track.h,
-      fill: MISS_FLASH_COLOR,
+    worldPlate(ctx, track, {
+      fill: scytheSwingInk.missFlash,
       radius: TRACK_RADIUS_PX,
       alpha: MISS_FLASH_PEAK_ALPHA * flash,
     });
     return;
   }
   const hitBand = view.verdict === 'perfect' ? view.perfectWindow : view.goodWindow;
-  drawBox(ctx, {
-    x: trackX(track, hitBand.start),
-    y: track.y,
-    width: (hitBand.end - hitBand.start) * track.w,
-    height: track.h,
-    fill: '#ffffff',
-    alpha: HIT_FLASH_PEAK_ALPHA * flash,
-    glow: VERDICT_STYLES[view.verdict].color,
-    glowBlur: PANEL_GLOW_BLUR_PEAK * flash,
-  });
+  worldPlate(
+    ctx,
+    {
+      x: trackX(track, hitBand.start),
+      y: track.y,
+      w: (hitBand.end - hitBand.start) * track.w,
+      h: track.h,
+    },
+    {
+      fill: scytheSwingInk.hitFlash,
+      alpha: HIT_FLASH_PEAK_ALPHA * flash,
+      glow: VERDICT_STYLES[view.verdict].color,
+      glowBlur: PANEL_GLOW_BLUR_PEAK * flash,
+    },
+  );
 }
 
 function drawBandFill(
@@ -491,15 +476,15 @@ function drawBandFill(
   fill: string,
   edge: string,
 ): void {
-  drawBox(ctx, {
-    x: trackX(track, band.start),
-    y: track.y,
-    width: (band.end - band.start) * track.w,
-    height: track.h,
-    fill,
-    border: edge,
-    borderWidth: BAND_EDGE_WIDTH_PX,
-  });
+  worldPlate(
+    ctx,
+    { x: trackX(track, band.start), y: track.y, w: (band.end - band.start) * track.w, h: track.h },
+    {
+      fill,
+      border: edge,
+      borderWidth: BAND_EDGE_WIDTH_PX,
+    },
+  );
 }
 
 /** A band's name, centred in `span`: left out where the span is too narrow to hold it. */
@@ -513,14 +498,14 @@ function drawBandLabel(
   const spanWidth = (span.end - span.start) * track.w;
   const labelWidth = label.length * BAND_LABEL_SIZE * BAND_LABEL_CHAR_WIDTH_SHARE;
   if (labelWidth + BAND_LABEL_ROOM_PX * 2 > spanWidth) return;
-  drawText(ctx, label, {
+  worldText(ctx, label, {
     x: spanLeft + spanWidth * HALF,
     y: track.y + (track.h - BAND_LABEL_SIZE) * HALF,
     size: BAND_LABEL_SIZE,
     bold: true,
-    color: BAND_LABEL_COLOR,
+    color: scytheSwingInk.bandLabel,
     align: 'center',
-    outline: BAND_LABEL_OUTLINE,
+    outline: scytheSwingInk.bandLabelOutline,
     outlineWidth: BAND_LABEL_OUTLINE_WIDTH_PX,
   });
 }
@@ -541,9 +526,9 @@ function drawNeedle(ctx: CanvasRenderingContext2D, track: Rect, progress: number
   ctx.lineTo(x - NEEDLE_WIDTH_PX * HALF, top);
   ctx.closePath();
   ctx.lineWidth = NEEDLE_OUTLINE_WIDTH_PX;
-  ctx.strokeStyle = NEEDLE_OUTLINE;
+  ctx.strokeStyle = scytheSwingInk.needleOutline;
   ctx.stroke();
-  ctx.fillStyle = NEEDLE_COLOR;
+  ctx.fillStyle = scytheSwingInk.needle;
   ctx.fill();
 }
 
@@ -552,15 +537,20 @@ function drawPressMark(ctx: CanvasRenderingContext2D, track: Rect, view: ScytheS
   if (view.pressShare === null || view.verdict === null) return;
   const style = VERDICT_STYLES[view.verdict];
   const x = trackX(track, view.pressShare);
-  drawBox(ctx, {
-    x: x - PRESS_MARK_WIDTH_PX * HALF,
-    y: track.y - PRESS_MARK_OVERHANG_PX,
-    width: PRESS_MARK_WIDTH_PX,
-    height: track.h + PRESS_MARK_OVERHANG_PX * 2,
-    fill: style.color,
-    border: NEEDLE_OUTLINE,
-    borderWidth: 1,
-  });
+  worldPlate(
+    ctx,
+    {
+      x: x - PRESS_MARK_WIDTH_PX * HALF,
+      y: track.y - PRESS_MARK_OVERHANG_PX,
+      w: PRESS_MARK_WIDTH_PX,
+      h: track.h + PRESS_MARK_OVERHANG_PX * 2,
+    },
+    {
+      fill: style.color,
+      border: scytheSwingInk.needleOutline,
+      borderWidth: 1,
+    },
+  );
   if (view.verdict !== 'miss') return;
   const cy = track.y + track.h * HALF;
   ctx.beginPath();
@@ -570,7 +560,7 @@ function drawPressMark(ctx: CanvasRenderingContext2D, track: Rect, view: ScytheS
   ctx.lineTo(x - MISS_CROSS_HALF_PX, cy + MISS_CROSS_HALF_PX);
   ctx.lineCap = 'round';
   ctx.lineWidth = MISS_CROSS_WIDTH_PX + NEEDLE_OUTLINE_WIDTH_PX;
-  ctx.strokeStyle = NEEDLE_OUTLINE;
+  ctx.strokeStyle = scytheSwingInk.needleOutline;
   ctx.stroke();
   ctx.lineWidth = MISS_CROSS_WIDTH_PX;
   ctx.strokeStyle = style.color;
@@ -619,10 +609,8 @@ export function drawScytheVerdictEdgeGlow(
   if (life <= 0) return;
   const peak = view.verdict === 'miss' ? MISS_EDGE_GLOW_PEAK_ALPHA : EDGE_GLOW_PEAK_ALPHA;
   const alpha = peak * life;
-  const { rgb } = VERDICT_STYLES[view.verdict];
-  // Fixed-point, because node-canvas drops an rgba() whose alpha is written with an exponent.
-  const solid = `rgba(${rgb},${alpha.toFixed(ALPHA_DECIMALS)})`;
-  const clear = `rgba(${rgb},0)`;
+  const solid = scytheEdgeGlowColor(view.verdict, alpha);
+  const clear = scytheEdgeGlowColor(view.verdict, 0);
   const depth = Math.min(viewportW, viewportH) * EDGE_GLOW_DEPTH_SHARE;
   const edges: ReadonlyArray<{ x0: number; y0: number; x1: number; y1: number; rect: Rect }> = [
     { x0: 0, y0: 0, x1: 0, y1: depth, rect: { x: 0, y: 0, w: viewportW, h: depth } },

@@ -14,7 +14,7 @@
  */
 
 import type { BeamDirection } from '../../../map/bigTopMazeLayout';
-import { drawText } from '../../../ui/TextBox';
+import { worldText } from '../../../ui/world/worldText';
 import { drawRadialGlow, type GlowStop } from '../../radialGlow';
 import { hashUnit } from '../../flameStamps';
 import { fillSoftEllipse } from '../softShade';
@@ -1041,7 +1041,7 @@ function paintBravoLetter(
   letter: string,
   bright: boolean,
 ): void {
-  drawText(ctx, letter, {
+  worldText(ctx, letter, {
     x: originX,
     y: originY,
     width: BRAVO_LETTER_BOX_WIDTH * size,

@@ -39,15 +39,15 @@ import {
   LANE_LEFT,
   LANE_RIGHT,
   LANE_UP,
-  LANE_PALETTES,
   NOTE_IMG_SIZE,
   RECEPTOR_IMG_SIZE,
   TOUCH_IMG_SIZE,
   computeKeyboardHeroLayout,
   type KeyboardHeroLayout,
   type LaneIndex,
-  type Rect,
 } from '../src/systems/keyboardHeroLayout.js';
+import type { Rect } from '../src/ui/core/geom.js';
+import { LANE_PALETTES } from '../src/sprites/art/keyboardHeroLanePalettes.js';
 import {
   paintBoardFrame,
   paintLaneBed,
@@ -89,6 +89,11 @@ const GREEN_OFFSET = 1;
 const BLUE_OFFSET = 2;
 const ALPHA_OFFSET = 3;
 const MAX_CHANNEL = 255;
+
+/** Decimal places printed for a lane well's luminance, which sits a few thousandths above black. */
+const WELL_LUMINANCE_DIGITS = 5;
+const DIFFERENCE_DIGITS = 4;
+const LUMINANCE_DIGITS = 3;
 
 /** Alpha at or above which a pixel counts as part of the keycap's solid body. */
 const OPAQUE_ALPHA = 200;
@@ -300,8 +305,8 @@ function boardToSheetY(layout: KeyboardHeroLayout, screenY: number): number {
 function meanLuminance(cell: Cell, rect: Rect): number {
   let total = 0;
   let counted = 0;
-  const right = Math.min(cell.width, Math.round(rect.x + rect.width));
-  const bottom = Math.min(cell.height, Math.round(rect.y + rect.height));
+  const right = Math.min(cell.width, Math.round(rect.x + rect.w));
+  const bottom = Math.min(cell.height, Math.round(rect.y + rect.h));
   for (let y = Math.max(0, Math.round(rect.y)); y < bottom; y++) {
     for (let x = Math.max(0, Math.round(rect.x)); x < right; x++) {
       total += luminanceAt(cell, x, y);
@@ -314,8 +319,8 @@ function meanLuminance(cell: Cell, rect: Rect): number {
 /** The brightest pixel in a rect of a cell, as relative luminance. */
 function peakLuminance(cell: Cell, rect: Rect): number {
   let peak = 0;
-  const right = Math.min(cell.width, Math.round(rect.x + rect.width));
-  const bottom = Math.min(cell.height, Math.round(rect.y + rect.height));
+  const right = Math.min(cell.width, Math.round(rect.x + rect.w));
+  const bottom = Math.min(cell.height, Math.round(rect.y + rect.h));
   for (let y = Math.max(0, Math.round(rect.y)); y < bottom; y++) {
     for (let x = Math.max(0, Math.round(rect.x)); x < right; x++) {
       peak = Math.max(peak, luminanceAt(cell, x, y));
@@ -331,8 +336,8 @@ function laneRectInSheet(layout: KeyboardHeroLayout, lane: LaneIndex): Rect {
   return {
     x: boardToSheetX(layout, rect.x) + inset,
     y: boardToSheetY(layout, rect.y) + inset,
-    width: (rect.width / layout.scale) * BOARD_BAKE_SCALE - inset * 2,
-    height: (rect.height / layout.scale) * BOARD_BAKE_SCALE - inset * 2,
+    w: (rect.w / layout.scale) * BOARD_BAKE_SCALE - inset * 2,
+    h: (rect.h / layout.scale) * BOARD_BAKE_SCALE - inset * 2,
   };
 }
 
@@ -363,13 +368,13 @@ function gateLaneAlignment(art: KeyboardHeroArt, layout: KeyboardHeroLayout): vo
     const peak = peakLuminance(frame, sheetRect);
     console.log(
       `  K1 ${LANE_PALETTES[lane].name}: the frame under the lane rect peaks at ` +
-        `${peak.toFixed(5)} luminance (well ceiling ${WELL_MAX_LUMINANCE})`,
+        `${peak.toFixed(WELL_LUMINANCE_DIGITS)} luminance (well ceiling ${WELL_MAX_LUMINANCE})`,
     );
     if (peak > WELL_MAX_LUMINANCE) {
       fail(
         'K1',
         `lane ${lane} (${LANE_PALETTES[lane].name}) covers frame pixels as bright as ` +
-          `${peak.toFixed(5)}, above the ${WELL_MAX_LUMINANCE} the near-black lane well sits ` +
+          `${peak.toFixed(WELL_LUMINANCE_DIGITS)}, above the ${WELL_MAX_LUMINANCE} the near-black lane well sits ` +
           'at — the lane rect has slid off the well onto a rail, a divider or a bezel strip',
       );
     }
@@ -393,7 +398,7 @@ function bedVisibilityFailures(
 ): string[] {
   const laneRect = layout.lanes[lane];
   const sheetX = Math.round(boardToSheetX(layout, laneRect.x));
-  const sheetW = Math.round((laneRect.width / layout.scale) * BOARD_BAKE_SCALE);
+  const sheetW = Math.round((laneRect.w / layout.scale) * BOARD_BAKE_SCALE);
   const hitSheetY = Math.round(boardToSheetY(layout, layout.hitLineY));
   const bandTop = Math.round(hitSheetY - (NOTE_IMG_SIZE * BOARD_BAKE_SCALE) / 2);
   const bandH = NOTE_IMG_SIZE * BOARD_BAKE_SCALE;
@@ -442,12 +447,12 @@ function bedVisibilityFailures(
   const visibility = delta / counted;
   console.log(
     `  K1 ${LANE_PALETTES[lane].name}: composited in the runtime's order the bed moves the ` +
-      `board by ${visibility.toFixed(4)} luminance at the hit line (floor ${MIN_BED_VISIBILITY})`,
+      `board by ${visibility.toFixed(DIFFERENCE_DIGITS)} luminance at the hit line (floor ${MIN_BED_VISIBILITY})`,
   );
   if (visibility >= MIN_BED_VISIBILITY) return [];
   return [
     `lane ${lane} (${LANE_PALETTES[lane].name}) bed changes the board by only ` +
-      `${visibility.toFixed(4)} luminance once it is composited into the frame's well, under ` +
+      `${visibility.toFixed(DIFFERENCE_DIGITS)} luminance once it is composited into the frame's well, under ` +
       `the ${MIN_BED_VISIBILITY} floor — the bed layer has been lost, and with it the per-lane ` +
       'hue, the hit window band and the press and error highlights that ride on it',
   ];
@@ -482,7 +487,7 @@ const KEYCAP_RIM_MIN_CONTRAST = 2.5;
 /** Percentile of a keycap's solid pixels taken to stand for its outline. */
 const RIM_PERCENTILE = 0.1;
 
-function gateKeycapContrast(art: KeyboardHeroArt, layout: KeyboardHeroLayout): void {
+function gateKeycapContrast(art: KeyboardHeroArt): void {
   let measured = 0;
   for (const lane of LANE_INDICES) {
     const bed = lookup('K2', art, laneBedPiece(lane));
@@ -495,8 +500,8 @@ function gateKeycapContrast(art: KeyboardHeroArt, layout: KeyboardHeroLayout): v
     const bedBehind: Rect = {
       x: (bed.width - noteSheetSize) / 2,
       y: HIT_ZONE_IMG_CENTER * BOARD_BAKE_SCALE - noteSheetSize / 2,
-      width: noteSheetSize,
-      height: noteSheetSize,
+      w: noteSheetSize,
+      h: noteSheetSize,
     };
     const bedLuminance = meanLuminance(bed, bedBehind);
 
@@ -527,8 +532,8 @@ function gateKeycapContrast(art: KeyboardHeroArt, layout: KeyboardHeroLayout): v
       const faceContrast = contrastRatio(face, bedLuminance);
       const rimContrast = contrastRatio(rim, bedLuminance);
       console.log(
-        `  K2 ${LANE_PALETTES[lane].name}/${state}: bed ${bedLuminance.toFixed(3)}, face ` +
-          `${face.toFixed(3)} (${faceContrast.toFixed(2)}:1), rim ${rim.toFixed(3)} ` +
+        `  K2 ${LANE_PALETTES[lane].name}/${state}: bed ${bedLuminance.toFixed(LUMINANCE_DIGITS)}, face ` +
+          `${face.toFixed(LUMINANCE_DIGITS)} (${faceContrast.toFixed(2)}:1), rim ${rim.toFixed(LUMINANCE_DIGITS)} ` +
           `(${rimContrast.toFixed(2)}:1)`,
       );
       if (faceContrast < KEYCAP_FACE_MIN_CONTRAST) {
@@ -584,8 +589,8 @@ function gateReceptorContrast(art: KeyboardHeroArt): void {
     const bedBehind: Rect = {
       x: (bed.width - receptorSheetSize) / 2,
       y: HIT_ZONE_IMG_CENTER * BOARD_BAKE_SCALE - receptorSheetSize / 2,
-      width: receptorSheetSize,
-      height: receptorSheetSize,
+      w: receptorSheetSize,
+      h: receptorSheetSize,
     };
     const bedLuminance = meanLuminance(bed, bedBehind);
 
@@ -614,8 +619,8 @@ function gateReceptorContrast(art: KeyboardHeroArt): void {
       const ringLuminance = solid[Math.floor((solid.length - 1) * RING_PERCENTILE)];
       const ringContrast = contrastRatio(ringLuminance, bedLuminance);
       console.log(
-        `  K6 ${LANE_PALETTES[lane].name}/${state}: bed ${bedLuminance.toFixed(3)}, ring ` +
-          `${ringLuminance.toFixed(3)} (${ringContrast.toFixed(2)}:1)`,
+        `  K6 ${LANE_PALETTES[lane].name}/${state}: bed ${bedLuminance.toFixed(LUMINANCE_DIGITS)}, ring ` +
+          `${ringLuminance.toFixed(LUMINANCE_DIGITS)} (${ringContrast.toFixed(2)}:1)`,
       );
       if (ringContrast < RECEPTOR_RING_MIN_CONTRAST) {
         fail(
@@ -745,7 +750,7 @@ function gateStateDistinctness(art: KeyboardHeroArt): void {
           fail(
             'K3',
             `${family.prefix} ${family.states[i].name} and ${family.states[j].name} on lane ` +
-              `${lane} (${LANE_PALETTES[lane].name}) differ by only ${difference.toFixed(4)}, ` +
+              `${lane} (${LANE_PALETTES[lane].name}) differ by only ${difference.toFixed(DIFFERENCE_DIGITS)}, ` +
               `under the ${family.minDifference} this family is held to — the two states are ` +
               'painting the same picture, so the player never sees the change',
           );
@@ -755,7 +760,7 @@ function gateStateDistinctness(art: KeyboardHeroArt): void {
     if (mildestPair !== '') {
       console.log(
         `  K3 ${family.prefix}: mildest pair is ${mildestPair} at ` +
-          `${mildestDifference.toFixed(4)} (floor ${family.minDifference})`,
+          `${mildestDifference.toFixed(DIFFERENCE_DIGITS)} (floor ${family.minDifference})`,
       );
     }
   }
@@ -896,7 +901,7 @@ export function keyboardHeroGateFailures(art: KeyboardHeroArt): string[] {
   const layout = computeKeyboardHeroLayout(GATE_VIEWPORT_W, GATE_VIEWPORT_H, false);
   gateEveryPieceExists(art);
   gateLaneAlignment(art, layout);
-  gateKeycapContrast(art, layout);
+  gateKeycapContrast(art);
   gateReceptorContrast(art);
   gateStateDistinctness(art);
   gateInkStaysInsideCell(art);

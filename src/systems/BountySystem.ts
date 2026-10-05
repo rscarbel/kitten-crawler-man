@@ -35,7 +35,8 @@ import type { GameSystem, SystemContext } from './GameSystem';
 import type { QuestMarkerType } from './MiniMapSystem';
 import type { BountyNoticeState } from './townNotices';
 import { characterTarget, type TrackerEntry, type TrackerTarget } from './questTracker';
-import type { ArrowAvoidRect, ArrowCandidate } from '../ui/WorldArrow';
+import type { ArrowCandidate } from '../ui/WorldArrow';
+import type { Rect } from '../ui/core/geom';
 import { ARROW_PRIORITY, drawArrowAbovePlayer } from '../ui/WorldArrow';
 import { drawInteractionPrompt } from '../ui/InteractionPrompt';
 import { drawSpeechBubbleWithText } from '../sprites/speechBubble';
@@ -377,11 +378,6 @@ export class BountySystem implements GameSystem {
     return this.conversation.dismiss();
   }
 
-  handleClick(mx: number, my: number): boolean {
-    if (!this.conversationOwned) return false;
-    return this.conversation.handleClick(mx, my);
-  }
-
   private openBountyConversation(
     lines: ConversationRequest['lines'],
     questRelated: boolean,
@@ -718,7 +714,7 @@ export class BountySystem implements GameSystem {
     activePlayer: HumanPlayer | CatPlayer,
     camX: number,
     camY: number,
-    hudRect: ArrowAvoidRect,
+    hudRect: Rect,
   ): ArrowCandidate | null {
     const target = this.arrowTargetWorld();
     if (target === null) return null;

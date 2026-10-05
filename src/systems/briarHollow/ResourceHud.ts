@@ -14,11 +14,12 @@ import { RESOURCE_IDS, type ResourceId } from '../../core/resourceIds';
 import { resetSessionTally, sessionTallyOf } from '../../core/resourceSessionTally';
 import type { HumanPlayer } from '../../creatures/HumanPlayer';
 import type { CatPlayer } from '../../creatures/CatPlayer';
-import { BOX_PRESETS, drawBox } from '../../ui/Box';
-import { drawText, TEXT_PRESETS } from '../../ui/TextBox';
+import type { Rect } from '../../ui/core/geom';
+import type { Ui } from '../../ui/core/UiRoot';
+import { topBandCard, topBandCardPadding, type TopBandEntry } from '../../ui/hud/topBand';
 import { drawResourceIcon } from '../../ui/icons/resourceIcons';
-import type { StripSlot } from '../DungeonUIRenderer';
-import { HARVEST_BUFF_COLOR } from './HarvestEffects';
+import { badge, badgeSize } from '../../ui/widgets/badge';
+import { lineHeightOf, measureText, tabularNumber } from '../../ui/widgets/text';
 
 const TICKS_PER_SECOND = 60;
 /** How long the strip stays up after the last harvest, build or repair. */
@@ -31,30 +32,12 @@ const FADE_TICKS = 15;
 const PULSE_TICKS = 18;
 const PULSE_PEAK_SCALE = 0.1;
 
-/** Strip geometry, in unscaled pixels. */
-const CELL_W = 56;
-const CELL_GAP = 4;
-const STRIP_PAD = 6;
+export const RESOURCE_HUD_ENTRY_ID = 'briar-resources';
+/** Every cell side by side with the thrall pill beside them. */
+const RESOURCE_HUD_MAX_WIDTH = 340;
+/** Narrowest a cell is drawn before the cells wrap onto another row. */
+const MIN_CELL_WIDTH = 56;
 const ICON_SIZE = 22;
-const ICON_TOP = 4;
-const COUNT_TOP = 7;
-const ICON_COUNT_GAP = 4;
-const COUNT_LEFT = ICON_SIZE + ICON_COUNT_GAP;
-const TALLY_TOP = 30;
-const STRIP_H = 46;
-/** The strip's height, for HUD chrome that stacks under it. */
-export const RESOURCE_HUD_HEIGHT = STRIP_H;
-export const RESOURCE_HUD_WIDTH =
-  RESOURCE_IDS.length * CELL_W + (RESOURCE_IDS.length - 1) * CELL_GAP + STRIP_PAD * 2;
-const TALLY_SIZE = 9;
-const TALLY_IDLE_COLOR = '#94a3b8';
-
-/** The thrall timer pill beside the strip. */
-const PILL_W = 70;
-const PILL_H = 22;
-const PILL_GAP = 6;
-const PILL_TEXT_TOP = 5;
-const THRALL_PILL_COLOR = '#86efac';
 
 export interface ResourceHudFrame {
   readonly human: HumanPlayer;
@@ -114,83 +97,128 @@ export class ResourceHud {
     return this.fade;
   }
 
-  render(ctx: CanvasRenderingContext2D, slot: StripSlot, frame: ResourceHudFrame): void {
-    if (this.fade <= 0) return;
+  /** The strip's card for the HUD's top band, while it is showing at all. */
+  topBandEntry(frame: ResourceHudFrame): TopBandEntry | null {
+    if (this.fade <= 0) return null;
+    return {
+      id: RESOURCE_HUD_ENTRY_ID,
+      priority: 'banner',
+      maxWidth: RESOURCE_HUD_MAX_WIDTH,
+      height: (ui, width) =>
+        topBandCardPadding(ui) + stripLayout(ui, contentRect(ui, width), thrallLabel(frame)).height,
+      render: (ui, rect) => this.render(ui, rect, frame),
+    };
+  }
+
+  private render(ui: Ui, rect: Rect, frame: ResourceHudFrame): void {
+    const { ctx } = ui;
     ctx.save();
-    ctx.translate(slot.x, slot.y);
-    ctx.scale(slot.scale, slot.scale);
-    drawBox(ctx, {
-      x: 0,
-      y: 0,
-      width: RESOURCE_HUD_WIDTH,
-      height: STRIP_H,
-      ...BOX_PRESETS.hudTranslucent,
-      alpha: this.fade,
-    });
-    RESOURCE_IDS.forEach((id, index) => {
-      this.renderCell(ctx, id, STRIP_PAD + index * (CELL_W + CELL_GAP), frame);
-    });
-    if (frame.thrallSecondsLeft !== null) this.renderThrallPill(ctx, frame.thrallSecondsLeft);
+    ctx.globalAlpha *= this.fade;
+    const inner = topBandCard(ui, rect);
+    const pillLabel = thrallLabel(frame);
+    const layout = stripLayout(ui, inner, pillLabel);
+    for (const cell of layout.cells) this.renderCell(ui, cell.rect, cell.id, frame);
+    if (layout.pill !== null && pillLabel !== null) {
+      badge(ui, layout.pill, { label: pillLabel, tone: 'success', variant: 'soft' });
+    }
     ctx.restore();
   }
 
-  private renderCell(
-    ctx: CanvasRenderingContext2D,
-    id: ResourceId,
-    left: number,
-    frame: ResourceHudFrame,
-  ): void {
+  private renderCell(ui: Ui, cell: Rect, id: ResourceId, frame: ResourceHudFrame): void {
     const pulse = (this.pulseTicks.get(id) ?? 0) / PULSE_TICKS;
     const scale = 1 + Math.sin(pulse * Math.PI) * PULSE_PEAK_SCALE;
-    const centreX = left + CELL_W / 2;
-    const centreY = STRIP_H / 2;
+    const { ctx, theme } = ui;
+    const centreX = cell.x + cell.w / 2;
+    const centreY = cell.y + cell.h / 2;
     ctx.save();
     ctx.translate(centreX, centreY);
     ctx.scale(scale, scale);
     ctx.translate(-centreX, -centreY);
-    ctx.globalAlpha = this.fade;
-    drawResourceIcon(ctx, id, left, ICON_TOP, ICON_SIZE);
-    drawText(ctx, String(partyCount(frame.human, frame.cat, id)), {
-      x: left + COUNT_LEFT,
-      y: COUNT_TOP,
-      ...TEXT_PRESETS.value,
-      outline: true,
-      alpha: this.fade,
-    });
-    drawText(ctx, `+${sessionTallyOf(id)}`, {
-      x: centreX,
-      y: TALLY_TOP,
-      ...TEXT_PRESETS.label,
-      size: TALLY_SIZE,
-      color: pulse > 0 ? HARVEST_BUFF_COLOR : TALLY_IDLE_COLOR,
-      align: 'center',
-      alpha: this.fade,
-    });
+    const count = String(partyCount(frame.human, frame.cat, id));
+    const countLine = lineHeightOf(ui, 'value');
+    const countWidth = measureText(ui, count, { role: 'value', tabular: true });
+    const groupWidth = Math.min(cell.w, ICON_SIZE + theme.space.xs + countWidth);
+    const groupLeft = cell.x + (cell.w - groupWidth) / 2;
+    const iconTop = cell.y + (countLine - ICON_SIZE) / 2;
+    drawResourceIcon(ctx, { x: groupLeft, y: iconTop, w: ICON_SIZE, h: ICON_SIZE }, id);
+    const countLeft = groupLeft + ICON_SIZE + theme.space.xs;
+    tabularNumber(
+      ui,
+      { x: countLeft, y: cell.y, w: Math.max(0, cell.x + cell.w - countLeft), h: countLine },
+      { value: count, role: 'value' },
+    );
+    tabularNumber(
+      ui,
+      { x: cell.x, y: cell.y + countLine, w: cell.w, h: lineHeightOf(ui, 'caption') },
+      {
+        value: `+${sessionTallyOf(id)}`,
+        role: 'caption',
+        color: pulse > 0 ? theme.palette.state.success : theme.palette.text.secondary,
+        align: 'center',
+      },
+    );
     ctx.restore();
-  }
-
-  private renderThrallPill(ctx: CanvasRenderingContext2D, secondsLeft: number): void {
-    const left = RESOURCE_HUD_WIDTH + PILL_GAP;
-    drawBox(ctx, {
-      x: left,
-      y: 0,
-      width: PILL_W,
-      height: PILL_H,
-      ...BOX_PRESETS.hudTranslucent,
-      alpha: this.fade,
-    });
-    drawText(ctx, `Thrall ${secondsLeft}s`, {
-      x: left + PILL_W / 2,
-      y: PILL_TEXT_TOP,
-      ...TEXT_PRESETS.label,
-      color: THRALL_PILL_COLOR,
-      align: 'center',
-      alpha: this.fade,
-    });
   }
 }
 
-/** The strip's full width including the thrall pill, for laying it out before it is drawn. */
-export function resourceHudFootprintWidth(withThrallPill: boolean): number {
-  return withThrallPill ? RESOURCE_HUD_WIDTH + PILL_GAP + PILL_W : RESOURCE_HUD_WIDTH;
+function thrallLabel(frame: ResourceHudFrame): string | null {
+  return frame.thrallSecondsLeft === null ? null : `Thrall ${frame.thrallSecondsLeft}s`;
+}
+
+/** The card's inside for a card `width` wide, placed at the origin, for measuring. */
+function contentRect(ui: Ui, width: number): Rect {
+  return { x: 0, y: 0, w: Math.max(0, width - ui.theme.space.md * 2), h: 0 };
+}
+
+interface StripLayout {
+  readonly cells: readonly { readonly id: ResourceId; readonly rect: Rect }[];
+  readonly pill: Rect | null;
+  readonly height: number;
+}
+
+/**
+ * The cells in as few rows as fit `inner`'s width, and the thrall pill beside
+ * them when there is room, else on a row of its own under them.
+ */
+function stripLayout(ui: Ui, inner: Rect, pillLabel: string | null): StripLayout {
+  const gap = ui.theme.space.xs;
+  const cellHeight = lineHeightOf(ui, 'value') + lineHeightOf(ui, 'caption');
+  const count = RESOURCE_IDS.length;
+  const pillSize = pillLabel === null ? null : badgeSize(ui, { label: pillLabel });
+  const cellsInOneRow = count * MIN_CELL_WIDTH + (count - 1) * gap;
+  const pillBeside = pillSize !== null && inner.w >= cellsInOneRow + gap + pillSize.w;
+  const cellsWidth = pillBeside ? inner.w - gap - pillSize.w : inner.w;
+  const columns = Math.max(
+    1,
+    Math.min(count, Math.floor((cellsWidth + gap) / (MIN_CELL_WIDTH + gap))),
+  );
+  const rows = Math.ceil(count / columns);
+  const cellWidth = (cellsWidth - gap * (columns - 1)) / columns;
+  const cells = RESOURCE_IDS.map((id, index) => ({
+    id,
+    rect: {
+      x: inner.x + (index % columns) * (cellWidth + gap),
+      y: inner.y + Math.floor(index / columns) * (cellHeight + gap),
+      w: cellWidth,
+      h: cellHeight,
+    },
+  }));
+  const cellsHeight = rows * cellHeight + (rows - 1) * gap;
+  if (pillSize === null) return { cells, pill: null, height: cellsHeight };
+  if (pillBeside) {
+    const pill: Rect = {
+      x: inner.x + inner.w - pillSize.w,
+      y: inner.y + (cellsHeight - pillSize.h) / 2,
+      w: pillSize.w,
+      h: pillSize.h,
+    };
+    return { cells, pill, height: cellsHeight };
+  }
+  const pill: Rect = {
+    x: inner.x + (inner.w - pillSize.w) / 2,
+    y: inner.y + cellsHeight + gap,
+    w: pillSize.w,
+    h: pillSize.h,
+  };
+  return { cells, pill, height: cellsHeight + gap + pillSize.h };
 }

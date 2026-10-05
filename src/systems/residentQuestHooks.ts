@@ -26,8 +26,6 @@ export interface ResidentQuestHook {
   markerFor(residentId: ResidentId): NPCMarkerType | null;
   /** Escape on this hook's beat. Returns whether it had one to act on. */
   dismissDialog(): boolean;
-  /** A click on this hook's beat. Returns whether it landed. */
-  handleClick(mx: number, my: number): boolean;
   /** Once per gameplay frame. */
   update(): void;
 }

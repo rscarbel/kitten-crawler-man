@@ -15,9 +15,9 @@ import type { Mob } from '../creatures/Mob';
 import type { MurderQuestProgress } from '../core/MurderQuestProgress';
 import { findNearbyWalkableTile } from '../map/findWalkableTile';
 import { CityElfCultist } from '../creatures/CityElfCultist';
-import { drawText } from '../ui/TextBox';
-import { drawQuestBanner, QUEST_BANNER_FRAMES } from '../ui/QuestBanners';
-import { viewportWidth, viewportHeight } from '../core/Viewport';
+import { questBannerEntry, QUEST_BANNER_FRAMES } from '../ui/QuestBanners';
+import type { TopBandEntry } from '../ui/hud/topBand';
+import { objectiveBandEntry, type ObjectiveLine } from '../ui/hud/objectiveLine';
 import { questMobLevel } from './questMobLevel';
 
 const SPAWN_SEARCH_RADIUS_TILES = 5;
@@ -35,9 +35,6 @@ const CULTIST_SPAWN_OFFSETS: ReadonlyArray<{ dx: number; dy: number }> = [
  * eventually stop agreeing.
  */
 export const CULT_HIDEOUT_CULTIST_LEVEL = 6;
-
-const OBJECTIVE_Y_FROM_BOTTOM = 96;
-const OBJECTIVE_SIZE = 13;
 
 export class CultHideoutSystem implements GameSystem {
   /** Shown by BuildingInteriorScene if the players fall here. */
@@ -88,26 +85,27 @@ export class CultHideoutSystem implements GameSystem {
     this.bannerTimer = QUEST_BANNER_FRAMES;
   }
 
-  renderUI(ctx: CanvasRenderingContext2D): void {
-    drawQuestBanner(
-      ctx,
-      this.cleared ? 'THE NEST IS CLEANSED' : "THE CULT'S NEST",
-      this.bannerTimer,
-      '#f47c7c',
-      '#6a2a2a',
-    );
-
-    const remaining = this.cultists.filter((c) => c.isAlive).length;
-    const objective = this.cleared
-      ? 'The letter names Miss Quill, and it bears the magistrate’s seal. The tower, top floor.'
-      : `Cleanse the cult — ${remaining} remaining`;
-    drawText(ctx, objective, {
-      x: viewportWidth() / 2,
-      y: viewportHeight() - OBJECTIVE_Y_FROM_BOTTOM,
-      size: OBJECTIVE_SIZE,
-      bold: true,
-      color: this.cleared ? '#a8f070' : '#e8d060',
-      align: 'center',
+  topBandEntries(): TopBandEntry[] {
+    const entries: TopBandEntry[] = [];
+    const banner = questBannerEntry({
+      id: 'cult-banner',
+      title: this.cleared ? 'THE NEST IS CLEANSED' : "THE CULT'S NEST",
+      framesLeft: this.bannerTimer,
+      tone: 'danger',
     });
+    if (banner !== null) entries.push(banner);
+    entries.push(objectiveBandEntry('cult-objective', this.objective()));
+    return entries;
+  }
+
+  private objective(): ObjectiveLine {
+    if (this.cleared) {
+      return {
+        text: 'The letter names Miss Quill, and it bears the magistrate’s seal. The tower, top floor.',
+        tone: 'success',
+      };
+    }
+    const remaining = this.cultists.filter((c) => c.isAlive).length;
+    return { text: `Cleanse the cult — ${remaining} remaining`, tone: 'warning' };
   }
 }

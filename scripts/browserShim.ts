@@ -12,6 +12,8 @@
 
 import { Image, createCanvas } from 'canvas';
 
+import './nodeUiFont.js';
+
 /** One registered listener, kept in registration order as the DOM does. */
 interface ListenerEntry {
   readonly type: string;
@@ -88,14 +90,26 @@ export interface ShimTouch {
 }
 
 /** The fields the game's handlers read off a keyboard, mouse or touch event. */
+/** Keyboard state a {@link ShimEvent} can carry beyond its `key`. */
+export interface ShimKeyInit {
+  /** The physical key; defaults to `key`. */
+  readonly code?: string;
+  readonly repeat?: boolean;
+  readonly ctrlKey?: boolean;
+  readonly metaKey?: boolean;
+  readonly altKey?: boolean;
+  readonly shiftKey?: boolean;
+}
+
 export class ShimEvent {
   propagationStopped = false;
   defaultPrevented = false;
-  readonly repeat = false;
-  readonly ctrlKey = false;
-  readonly metaKey = false;
-  readonly altKey = false;
-  readonly shiftKey = false;
+  readonly repeat: boolean;
+  readonly ctrlKey: boolean;
+  readonly metaKey: boolean;
+  readonly altKey: boolean;
+  readonly shiftKey: boolean;
+  readonly code: string;
   readonly button = 0;
   readonly clientX: number;
   readonly clientY: number;
@@ -112,13 +126,16 @@ export class ShimEvent {
     readonly timeStamp: number,
     position: { readonly x: number; readonly y: number } = { x: 0, y: 0 },
     readonly changedTouches: readonly ShimTouch[] = [],
+    keyInit: ShimKeyInit = {},
   ) {
     this.clientX = position.x;
     this.clientY = position.y;
-  }
-
-  get code(): string {
-    return this.key;
+    this.code = keyInit.code ?? key;
+    this.repeat = keyInit.repeat ?? false;
+    this.ctrlKey = keyInit.ctrlKey ?? false;
+    this.metaKey = keyInit.metaKey ?? false;
+    this.altKey = keyInit.altKey ?? false;
+    this.shiftKey = keyInit.shiftKey ?? false;
   }
 
   preventDefault(): void {
@@ -202,6 +219,15 @@ export interface BrowserShim {
  * Installs the shim on `globalThis` and returns the handles a harness drives
  * it through.
  */
+const COARSE_POINTER_FEATURE = 'pointer: coarse';
+
+function hasTouchNavigator(): boolean {
+  const nav: unknown = Reflect.get(globalThis, 'navigator');
+  if (typeof nav !== 'object' || nav === null) return false;
+  const touchPoints: unknown = Reflect.get(nav, 'maxTouchPoints');
+  return typeof touchPoints === 'number' && touchPoints > 0;
+}
+
 export function installBrowserShim(viewport: {
   readonly width: number;
   readonly height: number;
@@ -238,8 +264,10 @@ export function installBrowserShim(viewport: {
     innerHeight: viewport.height,
     devicePixelRatio: viewport.devicePixelRatio,
     location: { search: '', hostname: 'localhost', href: 'http://localhost/', pathname: '/' },
-    matchMedia: () => ({
-      matches: false,
+    // A harness that makes `navigator` look like a phone gets a phone's coarse
+    // pointer too, so the UI picks touch density there as it would on the device.
+    matchMedia: (query: string) => ({
+      matches: query.includes(COARSE_POINTER_FEATURE) && hasTouchNavigator(),
       addEventListener: () => undefined,
       removeEventListener: () => undefined,
     }),

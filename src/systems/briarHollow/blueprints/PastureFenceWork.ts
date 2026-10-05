@@ -21,7 +21,7 @@ import {
   type ResourceCost,
 } from '../../../core/partyResources';
 import { TILE_SIZE } from '../../../core/constants';
-import { platform } from '../../../core/Platform';
+import { activeInputMode, byInputMode } from '../../../ui/core/inputMode';
 import { blueprintsPhaseAtLeast } from '../../../core/blueprintsQuestPhase';
 import {
   PASTURE_FENCE_SECTION_COUNT,
@@ -29,7 +29,7 @@ import {
 } from '../../../map/overworld/briarHollowLayout';
 import { REPAIR_ROWS } from '../../../sprites/art/humanFigure';
 import { viewForFacing } from '../../../sprites/humanSprite';
-import { drawProgressBar, PROGRESS_PRESETS } from '../../../ui/Box';
+import { worldBar } from '../../../ui/world/worldShapes';
 import {
   drawInteractionPrompt,
   interactionPromptsSuppressed,
@@ -39,6 +39,7 @@ import { drawRequirementRow } from '../../../ui/RequirementRow';
 import { UPDATES_PER_SECOND } from '../structureRules';
 import type { BlueprintsCrawler, BlueprintsQuestContext } from './blueprintsContext';
 import { BLUEPRINTS_CUES } from './blueprintsSoundCues';
+import { worldPalette } from '../../../ui/theme/worldInk';
 
 /** Boards of wood each fence section costs, spent when its channel completes. */
 export const FENCE_SECTION_BOARD_COST = 2;
@@ -87,7 +88,7 @@ const PROGRESS_BAR_LIFT_PX = 10;
 const COST_LINE_GAP_PX = 12;
 
 /** The reach glow, matching the sawmill's: a pulsing ellipse on the ground under each tile of the section. */
-const REACH_GLOW_COLOR = '#f0c85a';
+const REACH_GLOW_COLOR = worldPalette.village.reachGlow;
 const REACH_GLOW_PULSE_PERIOD_MS = 700;
 const REACH_GLOW_PULSE_MIN = 0.35;
 const REACH_GLOW_PULSE_RANGE = 0.4;
@@ -470,14 +471,16 @@ export class PastureFenceWork {
     const tiles = this.sections[job.section];
     const centreX = sectionCentreX(tiles) * TILE_SIZE - camX;
     const top = Math.min(...tiles.map((tile) => tile.y)) * TILE_SIZE - camY - PROGRESS_BAR_LIFT_PX;
-    drawProgressBar(ctx, {
-      x: centreX - PROGRESS_BAR_WIDTH / 2,
-      y: top,
-      width: PROGRESS_BAR_WIDTH,
-      height: PROGRESS_BAR_HEIGHT,
-      value: 1 - job.framesLeft / FENCE_SECTION_WORK_FRAMES,
-      ...PROGRESS_PRESETS.build,
-    });
+    worldBar(
+      ctx,
+      {
+        x: centreX - PROGRESS_BAR_WIDTH / 2,
+        y: top,
+        w: PROGRESS_BAR_WIDTH,
+        h: PROGRESS_BAR_HEIGHT,
+      },
+      { style: 'build', value: 1 - job.framesLeft / FENCE_SECTION_WORK_FRAMES },
+    );
   }
 
   /**
@@ -500,8 +503,11 @@ export class PastureFenceWork {
     if (anchor === null) return false;
     const sx = anchor.x * TILE_SIZE - camX;
     const sy = anchor.y * TILE_SIZE - camY;
-    // On a phone the key cap itself reads "TAP", so the label finishes its sentence.
-    const label = platform.isMobile ? 'to rebuild fence' : 'Rebuild fence';
+    // In touch mode the key cap itself reads "TAP", so the label finishes its sentence.
+    const label = byInputMode(activeInputMode(), {
+      touch: 'to rebuild fence',
+      pointer: 'Rebuild fence',
+    });
     drawInteractionPrompt(ctx, sx, sy, TILE_SIZE, label);
     if (!interactionPromptsSuppressed()) {
       drawRequirementRow(

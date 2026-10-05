@@ -1,29 +1,17 @@
+import type { Rect } from '../core/geom';
+import { iconSquare } from './iconSquare';
+
 /**
  * Icons for the garrison's four issue-kit armour pieces.
  *
- * One module rather than four inline branches in `InventoryPanel`, and one
- * shared palette rather than four: the pieces are a matched set the player buys
+ * One shared palette rather than four: the pieces are a matched set the player buys
  * over the same counter, so what tells them apart at inventory-slot size has to
  * be the silhouette, not the colour.
  */
 
-import type { ItemId } from '../../core/ItemDefs';
-
 /** The four ids this module can draw. Closed, so a new piece cannot ship iconless. */
 export type IssueKitItemId =
   'issue_kettle_helm' | 'padded_gambeson' | 'riveted_bracers' | 'marching_boots';
-
-const ISSUE_KIT_IDS: ReadonlySet<string> = new Set<IssueKitItemId>([
-  'issue_kettle_helm',
-  'padded_gambeson',
-  'riveted_bracers',
-  'marching_boots',
-]);
-
-/** Whether `id` is a piece of issue kit, and so drawable by {@link drawIssueKitIcon}. */
-export function isIssueKitItem(id: ItemId): id is IssueKitItemId {
-  return ISSUE_KIT_IDS.has(id);
-}
 
 const IRON = '#8a8f98';
 const IRON_SHADE = '#5b6068';
@@ -81,14 +69,13 @@ const BOOT_RIGHT_X = 0.5;
 const BOOT_NAIL_COUNT = 3;
 const BOOT_NAIL_R = 0.018;
 
-/** Draws one piece of issue kit into a square icon region at `x`,`y`. */
+/** Draws one piece of issue kit into the largest square centred in `rect`. */
 export function drawIssueKitIcon(
   ctx: CanvasRenderingContext2D,
-  x: number,
-  y: number,
-  size: number,
+  rect: Rect,
   id: IssueKitItemId,
 ): void {
+  const { x, y, size } = iconSquare(rect);
   switch (id) {
     case 'issue_kettle_helm':
       drawKettleHelm(ctx, x, y, size);

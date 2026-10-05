@@ -16,9 +16,18 @@ import {
   TUTORIAL_CHEST_POS,
   TUTORIAL_STAIR_POS,
 } from '../map/TutorialMap';
-import { drawText } from '../ui/TextBox';
-import { drawBox, BOX_PRESETS } from '../ui/Box';
-import { drawButton, BUTTON_PRESETS } from '../ui/Button';
+import { measureWorldText, worldText } from '../ui/world/worldText';
+import { worldPlate } from '../ui/world/worldShapes';
+import { worldPalette } from '../ui/theme/worldInk';
+import type { Rect } from '../ui/core/geom';
+import {
+  activeInputMode,
+  byInputMode,
+  keyLabel,
+  tapVerb,
+  TOUCH_GESTURES,
+  type InputMode,
+} from '../ui/core/inputMode';
 import type { Conversation } from '../dialog/Conversation';
 import type { ConversationHandle, ConversationRequest } from '../dialog/request';
 import type { DialogLine } from '../dialog/line';
@@ -38,12 +47,10 @@ import {
 } from '../dialog/scripts/mordecai';
 import { drawArrowAbovePlayer, drawBouncingArrowAboveEntity } from '../ui/WorldArrow';
 import type { ItemId } from '../core/ItemDefs';
-import { platform } from '../core/Platform';
+import type { InventoryRestrictions } from '../ui/screens/inventory/inventoryTypes';
+import { menuItemId } from '../ui/screens/inventory/renderInventory';
 import { clamp } from '../utils';
-import { drawHumanSprite } from '../sprites/humanSprite';
-import { GOBLIN_ATTACKS, drawGoblinSprite } from '../sprites/goblinSprite';
-import type { PauseTab } from '../ui/pause/types';
-import type { ButtonRect } from '../ui/pause/types';
+import type { PauseRestriction } from '../ui/screens/pause/PauseScreen';
 import { viewportWidth, viewportHeight } from '../core/Viewport';
 
 // ── State machine
@@ -113,13 +120,8 @@ const SWITCH_DISPLAY_FRAMES = 90;
 
 // ── Gate visual constants
 
-const GATE_FILL = 'rgba(220, 60, 30, 0.42)';
-const GATE_STROKE = 'rgba(255, 140, 80, 0.85)';
 const GATE_LINE_WIDTH = 2;
-const GATE_GLOW_COLOR = 'rgba(255, 100, 40, 0.25)';
 const GATE_GLOW_BLUR = 10;
-const LEDGE_FILL = 'rgba(220, 60, 30, 0.42)';
-const LEDGE_STROKE = 'rgba(255, 140, 80, 0.85)';
 
 // ── Constraint buffer (pixels) — expands the gate check region ───────────────
 
@@ -128,12 +130,10 @@ const GATE_Y_BUFFER_TILES = 1;
 
 // ── Overlay constants
 
-// Mirrors InventoryPanel.ts hotbar geometry — must stay in sync with those constants
-const HOTBAR_SLOT_SIZE_MIRROR = 52;
-const HOTBAR_BOTTOM_MARGIN_MIRROR = 12;
+const EQUIP_ENTRY_ID = menuItemId('Equip');
 
+/** The gap between the hint box and whatever it sits above, and its distance from the top edge. */
 const HINT_BOX_GAP_ABOVE_HOTBAR = 8;
-const DRAG_DROP_HINT_RAISE_PX = 52;
 const HINT_BOX_PADDING = 14;
 const HINT_BOX_HEIGHT = 64;
 const HINT_BOX_MAX_WIDTH = 520;
@@ -147,45 +147,19 @@ const HINT_TEXT_SIZE = 13;
 const BOXERS_DRAG_HINT_TEXT = 'You can add this to your hotlist later!';
 const BOXERS_DRAG_HINT_DURATION_FRAMES = 240;
 const BOXERS_DRAG_HINT_FADE_FRAMES = 20;
-const BOXERS_DRAG_HINT_BORDER_COLOR = '#38bdf8';
-const BOXERS_DRAG_HINT_TEXT_COLOR = '#e0f2fe';
-
-// ── Near-goblin dialog constants ──────────────────────────────────────────────
-
-const DIALOG_WIDTH = 420;
-const DIALOG_TITLE_SIZE = 18;
-const DIALOG_BODY_SIZE = 14;
-const DIALOG_BTN_WIDTH = 120;
-const DIALOG_BTN_HEIGHT = 40;
-
-// ── Combat animation in near-goblin dialog ────────────────────────────────────
-
-const DIALOG_HEIGHT_WITH_ANIMATION = 290;
-const DIALOG_ANIMATION_AREA_Y_OFFSET = 28;
-const DIALOG_ANIMATION_AREA_H = 90;
-const COMBAT_SPRITE_SIZE = 48;
-const COMBAT_SPRITE_GAP = 20;
-const COMBAT_PERIOD = 120;
-const COMBAT_HALF_PERIOD = 60;
-const COMBAT_ATTACK_FRAMES = 60;
-const DIALOG_TEXT_GAP_BELOW_ANIMATION = 8;
-/** Gap from animation bottom to button top — sized to accommodate 2-line wrapped body text. */
-const DIALOG_BTN_GAP_BELOW_ANIMATION = 60;
-
-const DIALOG_SIDE_MARGIN = 12;
-const DIALOG_SPACE_HINT_GAP = 6;
-const DIALOG_SPACE_HINT_SIZE = 10;
 
 // ── Menu-guide overlay constants ──────────────────────────────────────────────
 
 const GUIDE_ALPHA_BASE = 0.6;
 const GUIDE_ALPHA_PULSE = 0.4;
-const GUIDE_HIGHLIGHT_COLOR = '#f59e0b';
 const GUIDE_DIM_ALPHA = 0.55;
-const GUIDE_HIGHLIGHT_BORDER_WIDTH = 3;
 const GUIDE_ARROW_SIZE = 14;
 const GUIDE_ARROW_BOUNCE = 8;
 const GUIDE_ARROW_SPEED = 0.05;
+const GUIDE_ARROW_EDGE_WIDTH = 1.5;
+const GUIDE_ARROW_GLOW_BLUR = 8;
+/** How far the bouncing guide arrow reaches above the rect it points at. */
+const GUIDE_ARROW_REACH = GUIDE_ARROW_SIZE * 2 + GUIDE_ARROW_BOUNCE;
 
 /**
  * The short reminder Mordecai delivers when the player talks to him at a
@@ -216,13 +190,9 @@ const MORDECAI_REMINDERS: Record<TutorialState, DialogLine | null> = {
   COMPLETE: null,
 };
 
-// How far to raise the hint box above the hotbar on mobile for SWITCHED_TO_HUMAN,
-// so the text does not overlap the Follower button (height 52 + bottom offset 8 + gap 8).
-const SWITCHED_TO_HUMAN_MOBILE_HINT_RAISE_PX = 68;
-
-// How far to raise the hint box on mobile when pointing at the health potion hotbar slot,
+// How far to raise the hint box on touch when pointing at the health potion hotbar slot,
 // so the arrow drawn above the slot does not overlap the text.
-const SWITCHED_TO_CAT_MOBILE_HINT_RAISE_PX = 52;
+const SWITCHED_TO_CAT_TOUCH_HINT_RAISE_PX = 52;
 
 //  Smoothstep animation
 
@@ -241,47 +211,28 @@ const DRAG_HINT_TEXT_SPEED = 0.06;
 const DRAG_HINT_TEXT_MIN_ALPHA = 0.35;
 const DRAG_HINT_TEXT_MAX_ALPHA = 0.9;
 
-// Hint text per state
+/** The bindings the pointer copy names; a rebind changes the copy. */
+const HINT_TEXT_ACTIONS = ['attack', 'hotbar1', 'usePotion', 'companionFollow'] as const;
 
-const HINT_TEXTS_DESKTOP: Record<TutorialState, string> = {
-  SEPARATE_ROOMS: platform.isMobile
-    ? 'Move by pressing and holding in the direction you want to go.'
-    : 'Move with WASD or the Arrow Keys. Head south to meet your first enemy.',
-  HUMAN_MOVED: 'A goblin is patrolling ahead. Get close to engage it!',
-  HUMAN_NEAR_GOBLIN: '',
-  HUMAN_KILLED_GOBLIN: 'Enemy defeated! Head south through the corridor to the Safe Room.',
-  HUMAN_GETS_TO_SAFE_ROOM: platform.isMobile
-    ? 'You are safe here. Talk to Mordecai — tap him when you are nearby.'
-    : 'You are safe here. Talk to Mordecai — press spacebar near him.',
-  HUMAN_TALKED_TO_MORDECAI:
-    'You have an achievement! Click the 🏆 banner on the left to claim your reward.',
-  HUMAN_OPENED_ACHIEVEMENT: '',
-  HUMAN_EQUIPPED_SMUSH: 'Two guards block the path. Stand near them and press 1 to Smush!',
-  HUMAN_SMUSHED_GUARDS: 'Excellent smushery! The path is clear.',
-  CAMERA_PAN_TO_CAT: 'Your partner has been waiting patiently...',
-  SWITCHED_TO_CAT: platform.isMobile
-    ? "Oh no! The cat's health is low. Tap the health potion to restore her health."
-    : "Oh no! The cat's health is low. Press Q or 1 to use the health potion.",
-  CAT_MOVED: '',
-  USED_HEALTH_POTION: 'Good! Now head south to the treasure room.',
-  CAT_INSIDE_TREASURE_ROOM: 'A treasure chest! Press spacebar to open it.',
-  CAT_OPENED_TREASURE_BOX: '',
-  CAT_EQUIPPED_MAGIC_MISSILE: platform.isMobile
-    ? 'A goblin guard lurks behind the gate. Tap to send a magic missle his way!'
-    : 'A goblin guard lurks behind the gate. Press 1 — magic passes through!',
-  CAT_SHOT_GUARD: 'The missile passed right through the gate!',
-  SWITCHED_TO_HUMAN: platform.isMobile
-    ? 'Click the Follower button and call the cat to you.'
-    : 'Press "F" to bring up the follower menu and call the cat to you.',
-  CAT_ARRIVED: 'Speak with Mordecai once more.',
-  TALKED_TO_MORDECAI_AGAIN: 'Tutorial complete! Find the stairwell and descend to begin.',
-  COMPLETE: '',
-};
+let cachedHintTexts: {
+  readonly key: string;
+  readonly texts: Record<TutorialState, string>;
+} | null = null;
 
-const HINT_TEXTS_MOBILE: Record<TutorialState, string> = {
+/** The copy for each step's hint box; an empty string shows no box. */
+function hintTexts(mode: InputMode): Record<TutorialState, string> {
+  const key = [mode, ...HINT_TEXT_ACTIONS.map((action) => keyLabel(action))].join('|');
+  if (cachedHintTexts?.key !== key) {
+    const texts = byInputMode(mode, { touch: TOUCH_HINT_TEXTS, pointer: pointerHintTexts() });
+    cachedHintTexts = { key, texts };
+  }
+  return cachedHintTexts.texts;
+}
+
+const TOUCH_HINT_TEXTS: Record<TutorialState, string> = {
   SEPARATE_ROOMS: 'Move by pressing and holding in the direction you want to go.',
   HUMAN_MOVED: 'A goblin is ahead — get close!',
-  HUMAN_NEAR_GOBLIN: 'You are safe here. Talk to Mordecai — tap him when you are nearby.',
+  HUMAN_NEAR_GOBLIN: '',
   HUMAN_KILLED_GOBLIN: 'Enemy defeated! Head south to the Safe Room.',
   HUMAN_GETS_TO_SAFE_ROOM: 'Tap Mordecai to talk to him. He is on the left side of the saferoom.',
   HUMAN_TALKED_TO_MORDECAI:
@@ -297,13 +248,67 @@ const HINT_TEXTS_MOBILE: Record<TutorialState, string> = {
   CAT_OPENED_TREASURE_BOX: '',
   CAT_EQUIPPED_MAGIC_MISSILE: 'Tap Magic Missile (slot 1) to fire at the goblin!',
   CAT_SHOT_GUARD: 'The missile passed through the gate!',
-  SWITCHED_TO_HUMAN: platform.isMobile
-    ? 'Click the Follower button and call the cat to you.'
-    : 'Press "F" to bring up the follower menu and call the cat to you.',
+  SWITCHED_TO_HUMAN: 'Tap the Follower button and call the cat to you.',
   CAT_ARRIVED: 'Speak with Mordecai once more.',
   TALKED_TO_MORDECAI_AGAIN: 'Tutorial complete! Find the stairs to continue.',
   COMPLETE: '',
 };
+
+/** Names the player's bound keys, so {@link hintTexts} rebuilds it when they change. */
+function pointerHintTexts(): Record<TutorialState, string> {
+  const talkKey = keyLabel('attack');
+  const firstSlotKey = keyLabel('hotbar1');
+  return {
+    SEPARATE_ROOMS: 'Move with WASD or the Arrow Keys. Head south to meet your first enemy.',
+    HUMAN_MOVED: 'A goblin is patrolling ahead. Get close to engage it!',
+    HUMAN_NEAR_GOBLIN: '',
+    HUMAN_KILLED_GOBLIN: 'Enemy defeated! Head south through the corridor to the Safe Room.',
+    HUMAN_GETS_TO_SAFE_ROOM: `You are safe here. Talk to Mordecai — press ${talkKey} near him.`,
+    HUMAN_TALKED_TO_MORDECAI:
+      'You have an achievement! Click the 🏆 banner on the left to claim your reward.',
+    HUMAN_OPENED_ACHIEVEMENT: '',
+    HUMAN_EQUIPPED_SMUSH: `Two guards block the path. Stand near them and press ${firstSlotKey} to Smush!`,
+    HUMAN_SMUSHED_GUARDS: 'Excellent smushery! The path is clear.',
+    CAMERA_PAN_TO_CAT: 'Your partner has been waiting patiently...',
+    SWITCHED_TO_CAT: `Oh no! The cat's health is low. Press ${keyLabel('usePotion')} or ${firstSlotKey} to use the health potion.`,
+    CAT_MOVED: '',
+    USED_HEALTH_POTION: 'Good! Now head south to the treasure room.',
+    CAT_INSIDE_TREASURE_ROOM: `A treasure chest! Press ${talkKey} to open it.`,
+    CAT_OPENED_TREASURE_BOX: '',
+    CAT_EQUIPPED_MAGIC_MISSILE: `A goblin guard lurks behind the gate. Press ${firstSlotKey} — magic passes through!`,
+    CAT_SHOT_GUARD: 'The missile passed right through the gate!',
+    SWITCHED_TO_HUMAN: `Press "${keyLabel('companionFollow')}" to bring up the follower menu and call the cat to you.`,
+    CAT_ARRIVED: 'Speak with Mordecai once more.',
+    TALKED_TO_MORDECAI_AGAIN: 'Tutorial complete! Find the stairwell and descend to begin.',
+    COMPLETE: '',
+  };
+}
+
+/** "Hold and drag" on touch, "Click and drag" with a mouse: the label under an item to move. */
+function dragLabel(mode: InputMode): string {
+  return byInputMode(mode, {
+    touch: TOUCH_GESTURES.holdAndDrag,
+    pointer: `${tapVerb(mode)} and drag`,
+  });
+}
+
+function potionDragHint(mode: InputMode): string {
+  return byInputMode(mode, {
+    touch: 'Press and hold the Health Potions, then drag them to hotbar slot 2.',
+    pointer: 'Click and drag the Health Potions into hotbar slot 2.',
+  });
+}
+
+function bagTabHint(mode: InputMode): string {
+  return `${tapVerb(mode)} the Bag tab.`;
+}
+
+function openPauseHint(mode: InputMode): string {
+  return byInputMode(mode, {
+    touch: 'Tap the Pause button to open the menu.',
+    pointer: 'Press Esc to open the Pause Menu.',
+  });
+}
 
 // ── World-space arrow targets per state
 
@@ -368,25 +373,34 @@ const NEAR_OBJECTIVE_THRESHOLD_PX = NEAR_OBJECTIVE_THRESHOLD_TILES * TILE_SIZE;
 export interface TutorialRenderContext {
   isPlayerInSafeRoom: boolean;
   pauseMenuOpen: boolean;
-  pauseMenuTab: PauseTab | null;
-  pauseMenuButtons: ReadonlyArray<ButtonRect>;
   inventoryPanelOpen: boolean;
-  gearPanelOpen: boolean;
+  /** Screen-space frame of the open inventory, which the hint box keeps clear of; null while closed. */
+  inventoryFrame: Rect | null;
+  /**
+   * Screen-space rect of the open inventory's Bag tab: the guide points at it
+   * while another tab shows, and the hint box keeps clear of the header row it
+   * sits in. Null or absent while the inventory is closed.
+   */
+  inventoryBagTabRect?: Rect | null;
+  /** Screen-space rect of the pause menu's Inventory entry while the menu is open; null or absent otherwise. */
+  pauseInventoryEntryRect?: Rect | null;
   /** Screen-space rect of the pause button. */
-  pauseButtonRect: { x: number; y: number; w: number; h: number } | null;
+  pauseButtonRect: Rect | null;
   /** Screen-space rect of the follower button, or null if not yet positioned. */
-  followerButtonRect: { x: number; y: number; w: number; h: number } | null;
+  followerButtonRect: Rect | null;
   /** True while the follower menu is open — hides the guide arrow pointing at the button. */
   followerMenuOpen: boolean;
   /** Screen rects of specific items in the inventory bag (null if not visible). */
   bagItemRects: {
-    smush_tome: { x: number; y: number; w: number; h: number } | null;
-    health_potion: { x: number; y: number; w: number; h: number } | null;
-    enchanted_bigboi_boxers: { x: number; y: number; w: number; h: number } | null;
-    magic_missile_tome: { x: number; y: number; w: number; h: number } | null;
+    smush_tome: Rect | null;
+    health_potion: Rect | null;
+    enchanted_bigboi_boxers: Rect | null;
+    magic_missile_tome: Rect | null;
   };
-  /** Screen rects of hotbar slots 0–N. */
-  hotbarSlotRects: ReadonlyArray<{ x: number; y: number; w: number; h: number }>;
+  /** Screen rects of the HUD's hotbar slots 0–N. */
+  hotbarSlotRects: ReadonlyArray<Rect>;
+  /** Screen rects of the open inventory's own hotbar row, the drag steps' drop targets. */
+  bagHotbarSlotRects: ReadonlyArray<Rect | null>;
   /** True when the player is currently dragging the tutorial-required item. */
   isDragActive: boolean;
   /** True when an achievement notification overlay is currently displayed. */
@@ -394,19 +408,18 @@ export interface TutorialRenderContext {
   /** True when the inventory context menu (right-click options) is currently open. */
   isContextMenuOpen: boolean;
   /** Screen-space rects for each option in the currently open context menu, or null. */
-  contextMenuOptionRects: ReadonlyArray<{
-    label: string;
-    x: number;
-    y: number;
-    w: number;
-    h: number;
-  }> | null;
+  contextMenuOptionRects: ReadonlyArray<
+    Rect & {
+      /** The entry's action id, as `menuItemId` makes it. */
+      id: string;
+    }
+  > | null;
   /** True while the ability level-up dialog is showing. */
   isAbilityDialogShowing: boolean;
   /** True while the "New Ability!" reward dialog is showing. */
   isRewardGrantedDialogShowing: boolean;
   /** Screen-space rect of the "Follow me" button inside the open follower menu, or null. */
-  followerMenuFollowMeRect: { x: number; y: number; w: number; h: number } | null;
+  followerMenuFollowMeRect: Rect | null;
 }
 
 export interface TutorialMobs {
@@ -417,6 +430,45 @@ export interface TutorialMobs {
 }
 
 // ── TutorialController ────────────────────────────────────────────────────────
+
+/**
+ * What the hint box keeps clear of this frame: the open inventory, or else the
+ * HUD's hotbar. `guidedHeader` is the inventory's header row while the guide
+ * points into it (at the Bag tab), and null while the Bag tab is showing.
+ */
+type HintPlacement =
+  | { readonly kind: 'inventory'; readonly frame: Rect; readonly guidedHeader: Rect | null }
+  | { readonly kind: 'hotbar'; readonly floor: number };
+
+function hintPlacementFor(renderCtx: TutorialRenderContext): HintPlacement {
+  const frame = renderCtx.inventoryFrame;
+  if (frame !== null) {
+    const guidedHeader = renderCtx.inventoryPanelOpen
+      ? null
+      : (renderCtx.inventoryBagTabRect ?? null);
+    return { kind: 'inventory', frame, guidedHeader };
+  }
+  const hotbarTop = Math.min(...renderCtx.hotbarSlotRects.map((rect) => rect.y));
+  return { kind: 'hotbar', floor: Number.isFinite(hotbarTop) ? hotbarTop : viewportHeight() };
+}
+
+/**
+ * The hint box's top edge. Over the hotbar it rests above the slots. With the
+ * inventory open it sits above the panel when there is room. On a short phone
+ * screen the panel fills the height: the box then takes the top of the
+ * screen, over the header row, since the bag's filters, items and hotbar below
+ * it are what the drag steps point at. Only while the guide points into the
+ * header itself (at the Bag tab) does the box drop just under that row.
+ */
+function hintBoxTop(placement: HintPlacement, boxHeight: number, raise: number): number {
+  const gap = HINT_BOX_GAP_ABOVE_HOTBAR;
+  if (placement.kind === 'hotbar') return Math.max(gap, placement.floor - boxHeight - gap - raise);
+  const aboveFrame = placement.frame.y - boxHeight - gap;
+  if (aboveFrame >= gap) return aboveFrame;
+  const header = placement.guidedHeader;
+  const fitsAboveHeader = header === null || gap + boxHeight + gap <= header.y;
+  return fitsAboveHeader ? gap : header.y + header.h + gap;
+}
 
 export class TutorialController {
   private _state: TutorialState = 'SEPARATE_ROOMS';
@@ -468,6 +520,7 @@ export class TutorialController {
 
   // Countdown timer for the transient boxers-drag flash hint (0 = not showing)
   private _boxersDragHintTimer = 0;
+  private hintPlacement: HintPlacement = { kind: 'hotbar', floor: 0 };
 
   // Menu-guide step for CAT_OPENED_TREASURE_BOX phase
   private _catMenuGuideStep: CatMenuGuideStep = 'drag_missile';
@@ -617,7 +670,6 @@ export class TutorialController {
 
   /**
    * The item ID the player must drag during the current inventory guide step, or null.
-   * DungeonScene passes this to TutorialInventoryInteraction.getAllowedSourceItemId.
    */
   get tutorialDragItemId(): ItemId | null {
     if (this._state === 'HUMAN_OPENED_ACHIEVEMENT') {
@@ -649,13 +701,24 @@ export class TutorialController {
 
   /**
    * The item ID the player must NOT drag during the current step (causes an error
-   * sound when attempted). DungeonScene passes this to TutorialInventoryInteraction.
+   * sound when attempted).
    */
   get tutorialBlockedDragItemId(): ItemId | null {
     if (this._state === 'HUMAN_OPENED_ACHIEVEMENT' && this._menuGuideStep === 'equip_boxers') {
       return 'enchanted_bigboi_boxers';
     }
     return null;
+  }
+
+  /** How the inventory screen is narrowed while a step steers the bag. */
+  inventoryRestrictions(): InventoryRestrictions {
+    const blocked = this.tutorialBlockedDragItemId;
+    return {
+      allowedSource: this.tutorialDragItemId,
+      allowedHotbarTarget: this.tutorialDragTargetSlot,
+      blockedItems: blocked === null ? [] : [blocked],
+      contextMenu: true,
+    };
   }
 
   /** Shows the "You can add this to your hotlist later!" flash hint for a few seconds. */
@@ -951,18 +1014,12 @@ export class TutorialController {
   }
 
   /**
-   * Returns the button label that should be the ONLY clickable button in the pause
-   * menu during the current tutorial menu-guide step, or null if no restriction applies.
+   * The pause screen's one allowed action during a menu-guide step: opening
+   * that crawler's inventory. Null when the tutorial leaves the menu alone.
    */
-  getAllowedMenuButtonLabel(pauseTab: PauseTab | null): string | null {
-    const isHumanGuide = this._state === 'HUMAN_OPENED_ACHIEVEMENT';
-    const isCatGuide = this._state === 'CAT_OPENED_TREASURE_BOX';
-    if (!isHumanGuide && !isCatGuide) return null;
-
-    if (pauseTab === 'main') return 'Inventory';
-    if (pauseTab === 'inventory') {
-      return isHumanGuide ? 'Manage Human Inventory' : 'Manage Cat Inventory';
-    }
+  pauseRestriction(): PauseRestriction | null {
+    if (this._state === 'HUMAN_OPENED_ACHIEVEMENT') return { crawler: 'human' };
+    if (this._state === 'CAT_OPENED_TREASURE_BOX') return { crawler: 'cat' };
     return null;
   }
 
@@ -1223,10 +1280,6 @@ export class TutorialController {
    * Call this after renderWorld but before renderEntities so players stand in front.
    */
   renderGatesAndLedge(ctx: CanvasRenderingContext2D, camX: number, camY: number): void {
-    ctx.save();
-    ctx.shadowColor = GATE_GLOW_COLOR;
-    ctx.shadowBlur = GATE_GLOW_BLUR;
-
     if (!this.isSafeEntranceGateOpen) {
       this.drawGateBar(
         ctx,
@@ -1273,7 +1326,7 @@ export class TutorialController {
       );
     }
     if (this.isLedgeActive) {
-      this.drawLedgeBar(
+      this.drawGateBar(
         ctx,
         TUTORIAL_LEDGE.x,
         TUTORIAL_LEDGE.y1,
@@ -1283,8 +1336,6 @@ export class TutorialController {
         camY,
       );
     }
-
-    ctx.restore();
   }
 
   private drawGateBar(
@@ -1296,37 +1347,20 @@ export class TutorialController {
     camX: number,
     camY: number,
   ): void {
-    const sx = tileX * TILE_SIZE - camX;
-    const sy = tileY * TILE_SIZE - camY;
-    const sw = widthTiles * TILE_SIZE;
-    const sh = heightTiles * TILE_SIZE;
-
-    ctx.fillStyle = GATE_FILL;
-    ctx.fillRect(sx, sy, sw, sh);
-    ctx.strokeStyle = GATE_STROKE;
-    ctx.lineWidth = GATE_LINE_WIDTH;
-    ctx.strokeRect(sx, sy, sw, sh);
-  }
-
-  private drawLedgeBar(
-    ctx: CanvasRenderingContext2D,
-    tileX: number,
-    tileY: number,
-    widthTiles: number,
-    heightTiles: number,
-    camX: number,
-    camY: number,
-  ): void {
-    const sx = tileX * TILE_SIZE - camX;
-    const sy = tileY * TILE_SIZE - camY;
-    const sw = widthTiles * TILE_SIZE;
-    const sh = heightTiles * TILE_SIZE;
-
-    ctx.fillStyle = LEDGE_FILL;
-    ctx.fillRect(sx, sy, sw, sh);
-    ctx.strokeStyle = LEDGE_STROKE;
-    ctx.lineWidth = GATE_LINE_WIDTH;
-    ctx.strokeRect(sx, sy, sw, sh);
+    const barrier: Rect = {
+      x: tileX * TILE_SIZE - camX,
+      y: tileY * TILE_SIZE - camY,
+      w: widthTiles * TILE_SIZE,
+      h: heightTiles * TILE_SIZE,
+    };
+    worldPlate(ctx, barrier, {
+      fill: worldPalette.guide.barrierFill,
+      border: worldPalette.guide.barrierEdge,
+      borderWidth: GATE_LINE_WIDTH,
+      glow: worldPalette.guide.barrierGlow,
+      glowBlur: GATE_GLOW_BLUR,
+      glowEdge: true,
+    });
   }
 
   // ── Overlay rendering ─────────────────────────────────────────────────────
@@ -1340,9 +1374,10 @@ export class TutorialController {
     renderCtx: TutorialRenderContext,
   ): void {
     if (this._state === 'COMPLETE') return;
+    this.hintPlacement = hintPlacementFor(renderCtx);
 
     if (this.showNearGoblinDialog) {
-      this.renderNearGoblinDialog(ctx);
+      // Drawn by its own UI surface; the guidance below would sit on top of it.
       return;
     }
 
@@ -1363,14 +1398,15 @@ export class TutorialController {
 
     if (renderCtx.pauseMenuOpen) return;
 
-    const hints = platform.isMobile ? HINT_TEXTS_MOBILE : HINT_TEXTS_DESKTOP;
-    const hint = hints[this._state];
+    const mode = activeInputMode();
+    const isTouch = mode === 'touch';
+    const hint = hintTexts(mode)[this._state];
     if (hint) {
       const extraYOffset =
-        this._state === 'SWITCHED_TO_HUMAN' && platform.isMobile
-          ? SWITCHED_TO_HUMAN_MOBILE_HINT_RAISE_PX
-          : this._state === 'SWITCHED_TO_CAT' && platform.isMobile
-            ? SWITCHED_TO_CAT_MOBILE_HINT_RAISE_PX
+        this._state === 'SWITCHED_TO_HUMAN' && isTouch
+          ? this.followerButtonClearance(renderCtx.followerButtonRect)
+          : this._state === 'SWITCHED_TO_CAT' && isTouch
+            ? SWITCHED_TO_CAT_TOUCH_HINT_RAISE_PX
             : 0;
       this.renderHintBox(ctx, hint, extraYOffset);
     }
@@ -1395,19 +1431,21 @@ export class TutorialController {
       }
     }
 
-    // On mobile, show an arrow over the Smush hotbar slot during the Smush step,
+    // On touch, show an arrow over the Smush hotbar slot during the Smush step,
     // but only once the player is close enough that casting would actually hit both guards.
+    const slots = renderCtx.hotbarSlotRects;
+    const firstHotbarSlot = slots.length > 0 ? slots[0] : null;
     if (
+      firstHotbarSlot !== null &&
       this._state === 'HUMAN_EQUIPPED_SMUSH' &&
-      platform.isMobile &&
+      isTouch &&
       this.isWithinSmushRangeOfBothGuards(activePlayerX, activePlayerY)
     ) {
-      this.renderGuideArrowAt(ctx, renderCtx.hotbarSlotRects[0], alpha);
+      this.renderGuideArrowAt(ctx, firstHotbarSlot, alpha);
     }
 
-    // On mobile, show an arrow over the health potion hotbar slot during the cat heal step.
-    if (this._state === 'SWITCHED_TO_CAT' && platform.isMobile) {
-      this.renderGuideArrowAt(ctx, renderCtx.hotbarSlotRects[0], alpha);
+    if (firstHotbarSlot !== null && this._state === 'SWITCHED_TO_CAT' && isTouch) {
+      this.renderGuideArrowAt(ctx, firstHotbarSlot, alpha);
     }
 
     // Fixed arrow above goblin B during the magic missile step.
@@ -1420,7 +1458,7 @@ export class TutorialController {
         GOBLIN_B_POS.y * TILE_SIZE,
         camX,
         camY,
-        '#f59e0b',
+        worldPalette.guide.accent,
       );
 
       const catNearGate = activePlayerY >= TUTORIAL_GATE_G2.clampPxY - NEAR_LEDGE_THRESHOLD_PX;
@@ -1433,7 +1471,7 @@ export class TutorialController {
           (GOBLIN_B_POS.y + TILE_FRACTION_CENTER) * TILE_SIZE,
           camX,
           camY,
-          '#f59e0b',
+          worldPalette.guide.accent,
         );
       }
     }
@@ -1459,6 +1497,16 @@ export class TutorialController {
     }
   }
 
+  /**
+   * How far to lift the hint box over the hotbar so it clears the Follower
+   * button and the arrow bouncing above it.
+   */
+  private followerButtonClearance(followerButton: Rect | null): number {
+    if (followerButton === null || this.hintPlacement.kind !== 'hotbar') return 0;
+    const clearTop = followerButton.y - GUIDE_ARROW_REACH;
+    return Math.max(0, this.hintPlacement.floor - clearTop);
+  }
+
   private renderHintBox(
     ctx: CanvasRenderingContext2D,
     text: string,
@@ -1467,171 +1515,71 @@ export class TutorialController {
   ): void {
     const boxW = Math.min(viewportWidth() - HINT_BOX_HORIZONTAL_MARGIN * 2, HINT_BOX_MAX_WIDTH);
     const boxX = (viewportWidth() - boxW) / 2;
-    const hotbarTop = viewportHeight() - HOTBAR_SLOT_SIZE_MIRROR - HOTBAR_BOTTOM_MARGIN_MIRROR;
-    const boxY = hotbarTop - HINT_BOX_HEIGHT - HINT_BOX_GAP_ABOVE_HOTBAR - extraYOffset;
-    const r = HINT_BOX_CORNER_RADIUS;
-    const boxAlpha = overrides.alpha ?? HINT_BOX_ALPHA;
-    const borderColor = overrides.borderColor ?? '#f59e0b';
-    const textColor = overrides.textColor ?? '#fde68a';
-
-    ctx.save();
-    ctx.globalAlpha = boxAlpha;
-    ctx.fillStyle = '#0d1117';
-    ctx.strokeStyle = borderColor;
-    ctx.lineWidth = HINT_BOX_LINE_WIDTH;
-    ctx.beginPath();
-    ctx.moveTo(boxX + r, boxY);
-    ctx.lineTo(boxX + boxW - r, boxY);
-    ctx.arcTo(boxX + boxW, boxY, boxX + boxW, boxY + r, r);
-    ctx.lineTo(boxX + boxW, boxY + HINT_BOX_HEIGHT - r);
-    ctx.arcTo(boxX + boxW, boxY + HINT_BOX_HEIGHT, boxX + boxW - r, boxY + HINT_BOX_HEIGHT, r);
-    ctx.lineTo(boxX + r, boxY + HINT_BOX_HEIGHT);
-    ctx.arcTo(boxX, boxY + HINT_BOX_HEIGHT, boxX, boxY + HINT_BOX_HEIGHT - r, r);
-    ctx.lineTo(boxX, boxY + r);
-    ctx.arcTo(boxX, boxY, boxX + r, boxY, r);
-    ctx.closePath();
-    ctx.fill();
-    ctx.stroke();
-    ctx.globalAlpha = 1;
-
-    drawText(ctx, text, {
-      x: boxX + HINT_BOX_PADDING,
-      y: boxY + HINT_BOX_PADDING,
+    const textWidth = boxW - HINT_BOX_PADDING * 2;
+    const textHeight = measureWorldText(ctx, text, {
       size: HINT_TEXT_SIZE,
-      color: textColor,
+      bold: true,
+      width: textWidth,
+    }).totalHeight;
+    const boxH = Math.max(HINT_BOX_HEIGHT, textHeight + HINT_BOX_PADDING * 2);
+    const boxY = hintBoxTop(this.hintPlacement, boxH, extraYOffset);
+    const boxAlpha = overrides.alpha ?? HINT_BOX_ALPHA;
+    const box: Rect = { x: boxX, y: boxY, w: boxW, h: boxH };
+
+    worldPlate(ctx, box, {
+      fill: worldPalette.guide.plateFill,
+      border: overrides.borderColor ?? worldPalette.guide.accent,
+      borderWidth: HINT_BOX_LINE_WIDTH,
+      radius: HINT_BOX_CORNER_RADIUS,
+      alpha: boxAlpha,
+    });
+    const textTop = boxY + (boxH - textHeight) / 2;
+    worldText(ctx, text, {
+      x: boxX + HINT_BOX_PADDING,
+      y: textTop,
+      size: HINT_TEXT_SIZE,
+      color: overrides.textColor ?? worldPalette.guide.ink,
       alpha: boxAlpha,
       bold: true,
       outline: true,
       align: 'center',
-      width: boxW - HINT_BOX_PADDING * 2,
-    });
-    ctx.restore();
-  }
-
-  private renderNearGoblinDialog(ctx: CanvasRenderingContext2D): void {
-    const attackInstruction = platform.isMobile
-      ? 'Walk right up to an enemy and tap to attack.'
-      : 'Walk right up to an enemy and press spacebar to attack.';
-
-    const dialogW = Math.min(DIALOG_WIDTH, viewportWidth() - DIALOG_SIDE_MARGIN * 2);
-    const dialogX = Math.round((viewportWidth() - dialogW) / 2);
-    const dialogY = Math.round((viewportHeight() - DIALOG_HEIGHT_WITH_ANIMATION) / 2);
-
-    const box = drawBox(ctx, {
-      x: dialogX,
-      y: dialogY,
-      width: dialogW,
-      height: DIALOG_HEIGHT_WITH_ANIMATION,
-      ...BOX_PRESETS.modal,
-      padding: 20,
-    });
-
-    drawText(ctx, 'Enemy Nearby!', {
-      x: box.inner.x + box.inner.width / 2,
-      y: box.inner.y,
-      align: 'center',
-      size: DIALOG_TITLE_SIZE,
-      bold: true,
-      color: '#fbbf24',
-      outline: true,
-    });
-
-    // Animated combat preview — human and goblin trade attacks, no damage dealt
-    this.renderCombatAnimation(
-      ctx,
-      box.inner.x,
-      box.inner.y + DIALOG_ANIMATION_AREA_Y_OFFSET,
-      box.inner.width,
-    );
-
-    drawText(ctx, attackInstruction, {
-      x: box.inner.x,
-      y:
-        box.inner.y +
-        DIALOG_ANIMATION_AREA_Y_OFFSET +
-        DIALOG_ANIMATION_AREA_H +
-        DIALOG_TEXT_GAP_BELOW_ANIMATION,
-      align: 'center',
-      size: DIALOG_BODY_SIZE,
-      color: '#e2e8f0',
-      width: box.inner.width,
-    });
-
-    const btnX = box.inner.x + (box.inner.width - DIALOG_BTN_WIDTH) / 2;
-    const btnY =
-      box.inner.y +
-      DIALOG_ANIMATION_AREA_Y_OFFSET +
-      DIALOG_ANIMATION_AREA_H +
-      DIALOG_BTN_GAP_BELOW_ANIMATION;
-
-    drawButton(ctx, {
-      x: btnX,
-      y: btnY,
-      width: DIALOG_BTN_WIDTH,
-      height: DIALOG_BTN_HEIGHT,
-      label: 'Got it',
-      ...BUTTON_PRESETS.primary,
-    });
-
-    drawText(ctx, '[Space] or Click', {
-      x: box.inner.x + box.inner.width / 2,
-      y: btnY + DIALOG_BTN_HEIGHT + DIALOG_SPACE_HINT_GAP,
-      align: 'center',
-      size: DIALOG_SPACE_HINT_SIZE,
-      color: '#64748b',
+      width: textWidth,
     });
   }
 
-  private renderCombatAnimation(
+  /**
+   * Guidance while the inventory is open on a tab other than the Bag, which
+   * the drag steps need. Returns whether it drew.
+   */
+  private renderBagTabGuide(
     ctx: CanvasRenderingContext2D,
-    areaX: number,
-    areaY: number,
-    areaWidth: number,
+    renderCtx: TutorialRenderContext,
+    mode: InputMode,
+    alpha: number,
+  ): boolean {
+    if (renderCtx.inventoryFrame === null || renderCtx.inventoryPanelOpen) return false;
+    this.renderHintBox(ctx, bagTabHint(mode));
+    const bagTab = renderCtx.inventoryBagTabRect ?? null;
+    if (bagTab !== null) this.renderGuideArrowAt(ctx, bagTab, alpha);
+    return true;
+  }
+
+  /** Guidance before the inventory is open: to the pause menu, then to its Inventory entry. */
+  private renderOpenInventoryGuide(
+    ctx: CanvasRenderingContext2D,
+    renderCtx: TutorialRenderContext,
+    mode: InputMode,
+    alpha: number,
   ): void {
-    const t = this.animFrame % COMBAT_PERIOD;
-    const humanIsAttacking = t < COMBAT_HALF_PERIOD;
-    const phaseT = humanIsAttacking ? t : t - COMBAT_HALF_PERIOD;
-
-    const centerX = areaX + areaWidth / 2;
-    const s = COMBAT_SPRITE_SIZE;
-
-    // Human on the left, goblin on the right, facing each other
-    const humanX = centerX - s - COMBAT_SPRITE_GAP / 2;
-    const goblinX = centerX + COMBAT_SPRITE_GAP / 2;
-    const spriteY = areaY + (DIALOG_ANIMATION_AREA_H - s) / 2;
-
-    // Clip to the animation area to keep sprites contained
-    ctx.save();
-    ctx.beginPath();
-    ctx.rect(areaX, areaY, areaWidth, DIALOG_ANIMATION_AREA_H);
-    ctx.clip();
-
-    const humanAttackPhase = humanIsAttacking ? ('jab_side' as const) : null;
-    const humanAttackTimer = humanIsAttacking ? COMBAT_ATTACK_FRAMES - phaseT : 0;
-
-    drawHumanSprite(ctx, humanX, spriteY, s, {
-      attackPhase: humanAttackPhase,
-      attackTimer: humanAttackTimer,
-      attackFrames: COMBAT_ATTACK_FRAMES,
-      facingX: 1,
-      facingY: 0,
-    });
-
-    // A still of the strike, not of the goblin standing there: the mace's whirl
-    // on the frame it actually connects, whichever that is.
-    const MACE_IMPACT_FRAME = GOBLIN_ATTACKS.mace.light.impactFrame;
-    const GUARD_FRAME = 0;
-    drawGoblinSprite(ctx, {
-      archetype: 'mace',
-      x: goblinX,
-      y: spriteY,
-      tileSize: s,
-      facingX: -1,
-      state: humanIsAttacking ? 'idle' : 'attack_light',
-      frame: humanIsAttacking ? GUARD_FRAME : MACE_IMPACT_FRAME,
-    });
-
-    ctx.restore();
+    if (renderCtx.pauseMenuOpen) {
+      const entry = renderCtx.pauseInventoryEntryRect ?? null;
+      if (entry !== null) this.renderGuideArrowAt(ctx, entry, alpha);
+      return;
+    }
+    this.renderHintBox(ctx, openPauseHint(mode));
+    if (renderCtx.pauseButtonRect !== null) {
+      this.renderGuideArrowAt(ctx, renderCtx.pauseButtonRect, alpha);
+    }
   }
 
   /** Renders step-by-step inventory guidance when human needs to set up their items. */
@@ -1639,100 +1587,57 @@ export class TutorialController {
     if (renderCtx.isRewardGrantedDialogShowing) return;
 
     const step = this._menuGuideStep;
+    const mode = activeInputMode();
     const pulse = (Math.sin(this.animFrame * PULSE_SPEED) + 1) * PULSE_NORMALIZE;
     const alpha = GUIDE_ALPHA_BASE + GUIDE_ALPHA_PULSE * pulse;
 
     if (step === 'drag_smush' || step === 'drag_potions') {
-      // Inventory panel is open: point at the relevant item in the bag
+      if (this.renderBagTabGuide(ctx, renderCtx, mode, alpha)) return;
       if (renderCtx.inventoryPanelOpen) {
         const targetSlot = step === 'drag_smush' ? 0 : 1;
-        const targetSlotRect = renderCtx.hotbarSlotRects[targetSlot];
+        const targetSlotRect = renderCtx.bagHotbarSlotRects[targetSlot] ?? null;
 
         if (step === 'drag_smush') {
-          const dragHint = platform.isMobile
-            ? 'Press and hold the Smush Ability, then drag it to hotbar slot 1.'
-            : 'Click and drag the Smush Ability into hotbar slot 1.';
-          this.renderHintBox(ctx, dragHint, renderCtx.isDragActive ? DRAG_DROP_HINT_RAISE_PX : 0);
+          const dragHint = byInputMode(mode, {
+            touch: 'Press and hold the Smush Ability, then drag it to hotbar slot 1.',
+            pointer: 'Click and drag the Smush Ability into hotbar slot 1.',
+          });
+          this.renderHintBox(ctx, dragHint);
           const itemRect = renderCtx.bagItemRects.smush_tome;
           if (!renderCtx.isDragActive && itemRect !== null) {
             this.renderGuideArrowAt(ctx, itemRect, alpha);
-            this.renderHintLabel(
-              ctx,
-              itemRect,
-              platform.isMobile ? 'Hold and drag' : 'Click and drag',
-            );
+            this.renderHintLabel(ctx, itemRect, dragLabel(mode));
           }
         } else {
-          const dragHint = platform.isMobile
-            ? 'Press and hold the Health Potions, then drag them to hotbar slot 2.'
-            : 'Click and drag the Health Potions into hotbar slot 2.';
-          this.renderHintBox(ctx, dragHint, renderCtx.isDragActive ? DRAG_DROP_HINT_RAISE_PX : 0);
+          const dragHint = potionDragHint(mode);
+          this.renderHintBox(ctx, dragHint);
           const itemRect = renderCtx.bagItemRects.health_potion;
           if (!renderCtx.isDragActive && itemRect !== null) {
             this.renderGuideArrowAt(ctx, itemRect, alpha);
-            this.renderHintLabel(
-              ctx,
-              itemRect,
-              platform.isMobile ? 'Hold and drag' : 'Click and drag',
-            );
+            this.renderHintLabel(ctx, itemRect, dragLabel(mode));
           }
         }
 
-        if (renderCtx.isDragActive) {
+        if (renderCtx.isDragActive && targetSlotRect !== null) {
           this.renderGuideArrowAt(ctx, targetSlotRect, alpha);
         }
         return;
       }
 
-      if (!renderCtx.pauseMenuOpen) {
-        const hint = platform.isMobile
-          ? 'Tap the Pause button to open the menu.'
-          : 'Press Esc to open the Pause Menu.';
-        this.renderHintBox(ctx, hint);
-        if (renderCtx.pauseButtonRect !== null) {
-          this.renderGuideArrowAt(ctx, renderCtx.pauseButtonRect, alpha);
-        }
-        return;
-      }
-
-      if (renderCtx.pauseMenuTab === 'main') {
-        this.renderPauseMenuOverlay(ctx, renderCtx, 'Inventory', alpha);
-        return;
-      }
-
-      if (renderCtx.pauseMenuTab === 'inventory') {
-        const manageBtn = renderCtx.pauseMenuButtons.find(
-          (b) => b.label === 'Manage Human Inventory',
-        );
-        if (manageBtn !== undefined) {
-          this.renderButtonOverlay(ctx, manageBtn, alpha);
-        }
-        this.renderHintBox(ctx, 'Click "Manage Human Inventory" to open your item panel.');
-        return;
-      }
-
-      const fallback =
-        step === 'drag_smush'
-          ? 'Open the Pause Menu → Inventory → Manage Human Inventory.'
-          : 'Now drag the Health Potions to hotbar slot 2.';
-      this.renderHintBox(ctx, fallback);
+      this.renderOpenInventoryGuide(ctx, renderCtx, mode, alpha);
       return;
     }
 
     if (step === 'equip_boxers') {
-      // Inventory panel is open: point at the boxers item in the bag
+      if (this.renderBagTabGuide(ctx, renderCtx, mode, alpha)) return;
       if (renderCtx.inventoryPanelOpen) {
-        // Context menu is open — guide the player to click Equip
         if (renderCtx.isContextMenuOpen && renderCtx.contextMenuOptionRects !== null) {
-          ctx.save();
-          ctx.fillStyle = `rgba(0, 0, 0, ${GUIDE_DIM_ALPHA})`;
           for (const r of renderCtx.contextMenuOptionRects) {
-            if (r.label !== 'Equip') {
-              ctx.fillRect(r.x, r.y, r.w, r.h);
+            if (r.id !== EQUIP_ENTRY_ID) {
+              worldPlate(ctx, r, { fill: worldPalette.shade, alpha: GUIDE_DIM_ALPHA });
             }
           }
-          ctx.restore();
-          const equipRect = renderCtx.contextMenuOptionRects.find((r) => r.label === 'Equip');
+          const equipRect = renderCtx.contextMenuOptionRects.find((r) => r.id === EQUIP_ENTRY_ID);
           if (equipRect !== undefined) {
             this.renderGuideArrowAt(ctx, equipRect, alpha);
           }
@@ -1749,13 +1654,14 @@ export class TutorialController {
           const flashAlpha = HINT_BOX_ALPHA * Math.min(fadeIn, fadeOut);
           this.renderHintBox(ctx, BOXERS_DRAG_HINT_TEXT, 0, {
             alpha: flashAlpha,
-            borderColor: BOXERS_DRAG_HINT_BORDER_COLOR,
-            textColor: BOXERS_DRAG_HINT_TEXT_COLOR,
+            borderColor: worldPalette.guide.noticeEdge,
+            textColor: worldPalette.guide.noticeInk,
           });
         } else {
-          const hint = platform.isMobile
-            ? 'Press and hold the Enchanted BigBoi Boxers to equip them.'
-            : 'Right-click the Enchanted BigBoi Boxers to equip them.';
+          const hint = byInputMode(mode, {
+            touch: 'Press and hold the Enchanted BigBoi Boxers to equip them.',
+            pointer: 'Right-click the Enchanted BigBoi Boxers to equip them.',
+          });
           this.renderHintBox(ctx, hint);
         }
         const itemRect = renderCtx.bagItemRects.enchanted_bigboi_boxers;
@@ -1764,43 +1670,16 @@ export class TutorialController {
           this.renderHintLabel(
             ctx,
             itemRect,
-            platform.isMobile ? 'Press and hold to open options' : 'Right click to open options',
+            byInputMode(mode, {
+              touch: 'Press and hold to open options',
+              pointer: 'Right click to open options',
+            }),
           );
         }
         return;
       }
 
-      if (!renderCtx.pauseMenuOpen) {
-        const hint = platform.isMobile
-          ? 'Tap the Pause button to open the menu.'
-          : 'Press Esc to open the Pause Menu.';
-        this.renderHintBox(ctx, hint);
-        if (renderCtx.pauseButtonRect !== null) {
-          this.renderGuideArrowAt(ctx, renderCtx.pauseButtonRect, alpha);
-        }
-        return;
-      }
-
-      if (renderCtx.pauseMenuTab === 'main') {
-        this.renderPauseMenuOverlay(ctx, renderCtx, 'Inventory', alpha);
-        return;
-      }
-
-      if (renderCtx.pauseMenuTab === 'inventory') {
-        const manageBtn = renderCtx.pauseMenuButtons.find(
-          (b) => b.label === 'Manage Human Inventory',
-        );
-        if (manageBtn !== undefined) {
-          this.renderButtonOverlay(ctx, manageBtn, alpha);
-        }
-        this.renderHintBox(ctx, 'Click "Manage Human Inventory" to access your gear.');
-        return;
-      }
-
-      const hint = platform.isMobile
-        ? 'Open the Pause Menu → Inventory → Manage Human Inventory to equip the Boxers.'
-        : 'Open the Pause Menu → Inventory → Manage Human Inventory to equip the Boxers.';
-      this.renderHintBox(ctx, hint);
+      this.renderOpenInventoryGuide(ctx, renderCtx, mode, alpha);
     }
   }
 
@@ -1812,126 +1691,43 @@ export class TutorialController {
     if (renderCtx.isRewardGrantedDialogShowing) return;
 
     const step = this._catMenuGuideStep;
+    const mode = activeInputMode();
     const pulse = (Math.sin(this.animFrame * PULSE_SPEED) + 1) * PULSE_NORMALIZE;
     const alpha = GUIDE_ALPHA_BASE + GUIDE_ALPHA_PULSE * pulse;
 
-    // Inventory panel is open: point at the relevant item in the bag
+    if (this.renderBagTabGuide(ctx, renderCtx, mode, alpha)) return;
     if (renderCtx.inventoryPanelOpen) {
       const targetSlot = step === 'drag_missile' ? 0 : 1;
-      const targetSlotRect = renderCtx.hotbarSlotRects[targetSlot];
+      const targetSlotRect = renderCtx.bagHotbarSlotRects[targetSlot] ?? null;
 
       if (step === 'drag_missile') {
-        const dragHint = platform.isMobile
-          ? 'Press and hold the Magic Missile Ability, then drag it to hotbar slot 1.'
-          : 'Click and drag the Magic Missile Ability into hotbar slot 1.';
-        this.renderHintBox(ctx, dragHint, renderCtx.isDragActive ? DRAG_DROP_HINT_RAISE_PX : 0);
+        const dragHint = byInputMode(mode, {
+          touch: 'Press and hold the Magic Missile Ability, then drag it to hotbar slot 1.',
+          pointer: 'Click and drag the Magic Missile Ability into hotbar slot 1.',
+        });
+        this.renderHintBox(ctx, dragHint);
         const itemRect = renderCtx.bagItemRects.magic_missile_tome;
         if (!renderCtx.isDragActive && itemRect !== null) {
           this.renderGuideArrowAt(ctx, itemRect, alpha);
-          this.renderHintLabel(
-            ctx,
-            itemRect,
-            platform.isMobile ? 'Hold and drag' : 'Click and drag',
-          );
+          this.renderHintLabel(ctx, itemRect, dragLabel(mode));
         }
       } else {
-        const dragHint = platform.isMobile
-          ? 'Press and hold the Health Potions, then drag them to hotbar slot 2.'
-          : 'Click and drag the Health Potions into hotbar slot 2.';
-        this.renderHintBox(ctx, dragHint, renderCtx.isDragActive ? DRAG_DROP_HINT_RAISE_PX : 0);
+        const dragHint = potionDragHint(mode);
+        this.renderHintBox(ctx, dragHint);
         const itemRect = renderCtx.bagItemRects.health_potion;
         if (!renderCtx.isDragActive && itemRect !== null) {
           this.renderGuideArrowAt(ctx, itemRect, alpha);
-          this.renderHintLabel(
-            ctx,
-            itemRect,
-            platform.isMobile ? 'Hold and drag' : 'Click and drag',
-          );
+          this.renderHintLabel(ctx, itemRect, dragLabel(mode));
         }
       }
 
-      if (renderCtx.isDragActive) {
+      if (renderCtx.isDragActive && targetSlotRect !== null) {
         this.renderGuideArrowAt(ctx, targetSlotRect, alpha);
       }
       return;
     }
 
-    if (!renderCtx.pauseMenuOpen) {
-      const hint = platform.isMobile
-        ? 'Tap the Pause button to open the menu.'
-        : 'Press Esc to open the Pause Menu.';
-      this.renderHintBox(ctx, hint);
-      if (renderCtx.pauseButtonRect !== null) {
-        this.renderGuideArrowAt(ctx, renderCtx.pauseButtonRect, alpha);
-      }
-      return;
-    }
-
-    if (renderCtx.pauseMenuTab === 'main') {
-      this.renderPauseMenuOverlay(ctx, renderCtx, 'Inventory', alpha);
-      return;
-    }
-
-    if (renderCtx.pauseMenuTab === 'inventory') {
-      const manageBtn = renderCtx.pauseMenuButtons.find((b) => b.label === 'Manage Cat Inventory');
-      if (manageBtn !== undefined) {
-        this.renderButtonOverlay(ctx, manageBtn, alpha);
-      }
-      this.renderHintBox(ctx, 'Click "Manage Cat Inventory" to open your item panel.');
-      return;
-    }
-
-    this.renderHintBox(ctx, 'Open the Pause Menu → Inventory → Manage Cat Inventory.');
-  }
-
-  /** Draw a dark overlay on all pause-menu main-tab buttons EXCEPT the one with the target label, and draw a pulsing border around the target. */
-  private renderPauseMenuOverlay(
-    ctx: CanvasRenderingContext2D,
-    renderCtx: TutorialRenderContext,
-    targetLabel: string,
-    alpha: number,
-  ): void {
-    const targetBtn = renderCtx.pauseMenuButtons.find((b) => b.label === targetLabel);
-    if (targetBtn === undefined) return;
-
-    ctx.save();
-    ctx.fillStyle = `rgba(0, 0, 0, ${GUIDE_DIM_ALPHA})`;
-    for (const btn of renderCtx.pauseMenuButtons) {
-      if (btn.label !== targetLabel) {
-        ctx.fillRect(btn.x, btn.y, btn.w, btn.h);
-      }
-    }
-    ctx.restore();
-
-    this.renderButtonOverlay(ctx, targetBtn, alpha);
-  }
-
-  /** Draws a pulsing golden highlight border around a button and a small arrow pointing at it from above. */
-  private renderButtonOverlay(ctx: CanvasRenderingContext2D, btn: ButtonRect, alpha: number): void {
-    ctx.save();
-    ctx.strokeStyle = `rgba(245, 158, 11, ${alpha})`;
-    ctx.lineWidth = GUIDE_HIGHLIGHT_BORDER_WIDTH;
-    ctx.shadowColor = GUIDE_HIGHLIGHT_COLOR;
-    ctx.shadowBlur = 12;
-    ctx.strokeRect(btn.x, btn.y, btn.w, btn.h);
-    ctx.restore();
-
-    const bounce = Math.sin(this.animFrame * GUIDE_ARROW_SPEED) * GUIDE_ARROW_BOUNCE;
-    const arrowX = btn.x + btn.w / 2;
-    const arrowY = btn.y - GUIDE_ARROW_SIZE * 2 - bounce;
-
-    ctx.save();
-    ctx.fillStyle = GUIDE_HIGHLIGHT_COLOR;
-    ctx.strokeStyle = '#78350f';
-    ctx.lineWidth = 1.5;
-    ctx.beginPath();
-    ctx.moveTo(arrowX, arrowY + GUIDE_ARROW_SIZE * 2);
-    ctx.lineTo(arrowX - GUIDE_ARROW_SIZE, arrowY);
-    ctx.lineTo(arrowX + GUIDE_ARROW_SIZE, arrowY);
-    ctx.closePath();
-    ctx.fill();
-    ctx.stroke();
-    ctx.restore();
+    this.renderOpenInventoryGuide(ctx, renderCtx, mode, alpha);
   }
 
   private isWithinSmushRangeOfBothGuards(playerX: number, playerY: number): boolean {
@@ -1950,48 +1746,42 @@ export class TutorialController {
   }
 
   /** Draws a downward pointing arrow above the given rect (for pointing at UI buttons). */
-  private renderGuideArrowAt(
-    ctx: CanvasRenderingContext2D,
-    rect: { x: number; y: number; w: number; h: number },
-    alpha: number,
-  ): void {
+  private renderGuideArrowAt(ctx: CanvasRenderingContext2D, rect: Rect, alpha: number): void {
     const bounce = Math.sin(this.animFrame * GUIDE_ARROW_SPEED) * GUIDE_ARROW_BOUNCE;
     const cx = rect.x + rect.w / 2;
     const ty = rect.y - GUIDE_ARROW_SIZE * 2 - bounce;
     const size = GUIDE_ARROW_SIZE;
 
     ctx.save();
-    ctx.fillStyle = `rgba(245, 158, 11, ${alpha})`;
-    ctx.strokeStyle = '#78350f';
-    ctx.lineWidth = 1.5;
-    ctx.shadowColor = GUIDE_HIGHLIGHT_COLOR;
-    ctx.shadowBlur = 8;
     ctx.beginPath();
     ctx.moveTo(cx, ty + size * 2);
     ctx.lineTo(cx - size, ty);
     ctx.lineTo(cx + size, ty);
     ctx.closePath();
+    ctx.globalAlpha = alpha;
+    ctx.fillStyle = worldPalette.guide.accent;
+    ctx.shadowColor = worldPalette.guide.accent;
+    ctx.shadowBlur = GUIDE_ARROW_GLOW_BLUR;
     ctx.fill();
+    ctx.globalAlpha = 1;
+    ctx.strokeStyle = worldPalette.guide.accentEdge;
+    ctx.lineWidth = GUIDE_ARROW_EDGE_WIDTH;
     ctx.stroke();
     ctx.restore();
   }
 
   /** Renders an oscillating hint label centred below the given item rect. */
-  private renderHintLabel(
-    ctx: CanvasRenderingContext2D,
-    itemRect: { x: number; y: number; w: number; h: number },
-    label: string,
-  ): void {
+  private renderHintLabel(ctx: CanvasRenderingContext2D, itemRect: Rect, label: string): void {
     const textAlpha =
       DRAG_HINT_TEXT_MIN_ALPHA +
       (Math.sin(this.animFrame * DRAG_HINT_TEXT_SPEED) + 1) *
         PULSE_NORMALIZE *
         (DRAG_HINT_TEXT_MAX_ALPHA - DRAG_HINT_TEXT_MIN_ALPHA);
-    drawText(ctx, label, {
+    worldText(ctx, label, {
       x: itemRect.x + itemRect.w / 2,
       y: itemRect.y + itemRect.h + DRAG_HINT_TEXT_GAP,
       size: DRAG_HINT_TEXT_SIZE,
-      color: '#ffffff',
+      color: worldPalette.guide.labelInk,
       alpha: textAlpha,
       align: 'center',
       bold: true,
@@ -2040,7 +1830,7 @@ export class TutorialController {
       targetWorldY,
       camX,
       camY,
-      '#f59e0b',
+      worldPalette.guide.accent,
     );
   }
 

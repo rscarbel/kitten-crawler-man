@@ -14,11 +14,10 @@
  * that timing is written down.
  */
 
-import { Scene } from '../core/Scene';
 import { viewportWidth, viewportHeight } from '../core/Viewport';
-import { drawText } from '../ui/TextBox';
-import { addButton, playButtonSound, setButtonMouseState, BUTTON_PRESETS } from '../ui/Button';
-import { drawProgressBar, PROGRESS_PRESETS } from '../ui/Box';
+import { worldText } from '../ui/world/worldText';
+import { worldBar } from '../ui/world/worldShapes';
+import { PreviewScene, type PreviewControl } from './PreviewScene';
 import {
   drawKrakarenSprite,
   drawKrakarenEnrageGlow,
@@ -50,6 +49,7 @@ import {
 import type { SlamTentacleMarker } from '../creatures/KrakarenClone';
 import { GameMap } from '../map/GameMap';
 import { BodyPartGoreSystem } from '../systems/BodyPartGoreSystem';
+import { previewInk } from '../ui/theme/previewInk';
 
 /** A facing vector per column, chosen so the wrapper picks each viewpoint. */
 interface ViewSpec {
@@ -100,23 +100,17 @@ const SPEED_LEVELS: ReadonlyArray<number> = [SPEED_QUARTER, SPEED_HALF, SPEED_FU
 
 /** The floor mids a Krakaren Clone actually stands on, from `src/map/tilegen/palette.ts`. */
 const BACKDROPS: ReadonlyArray<{ readonly name: string; readonly color: string }> = [
-  { name: 'floor 2 — poured concrete', color: '#888e96' },
-  { name: 'unlit cave', color: '#2a2f2b' },
-  { name: 'lair — wet stone', color: '#3c4644' },
+  { name: 'floor 2 — poured concrete', color: previewInk.floor.pouredConcrete },
+  { name: 'unlit cave', color: previewInk.floor.unlitCave },
+  { name: 'lair — wet stone', color: previewInk.floor.wetStone },
 ];
 
 const BASE_TILE_SIZE = 32;
 const MARGIN = 16;
-const HEADER_HEIGHT = 68;
 const ROW_LABEL_WIDTH = 96;
 const CELL_PADDING = 10;
 const LABEL_SIZE = 11;
 const LABEL_GAP = 2;
-const TITLE_SIZE = 16;
-const BUTTON_HEIGHT = 26;
-const BUTTON_WIDTH = 116;
-const BUTTON_GAP = 8;
-const CONTROL_ROW_GAP = 8;
 /** The Krakaren's tentacles reach nearly 3 tiles past its 1-tile footprint. */
 const CELL_WIDTH_TILES = 5.2;
 const CELL_HEIGHT_TILES = 4.4;
@@ -194,17 +188,9 @@ const SLAM_DIVE_START = SLAM_RISE_SHARE + SLAM_LOOM_SHARE;
 /** Where the rise tentacle sits relative to the target ring, as a fraction of the panel. */
 const SLAM_RISE_OFFSET_FRACTION = 0.22;
 
-export class KrakarenPreviewScene extends Scene {
+export class KrakarenPreviewScene extends PreviewScene {
   private readonly map = new GameMap({ mapSize: PREVIEW_MAP_SIZE });
   private readonly gore = new BodyPartGoreSystem(this.map);
-
-  private readonly buttons: Array<{
-    x: number;
-    y: number;
-    w: number;
-    h: number;
-    action?: () => void;
-  }> = [];
 
   private zoomIndex = ZOOM_LEVELS.indexOf(ZOOM_DOUBLE);
   private speedIndex = SPEED_LEVELS.length - 1;
@@ -385,18 +371,22 @@ export class KrakarenPreviewScene extends Scene {
   render(ctx: CanvasRenderingContext2D): void {
     const width = viewportWidth();
     const height = viewportHeight();
-    this.buttons.length = 0;
 
     ctx.fillStyle = BACKDROPS[this.backdropIndex].color;
     ctx.fillRect(0, 0, width, height);
 
-    this.renderHeader(ctx, width);
     this.renderBodyGrid(ctx);
     this.renderTentaclePanel(ctx, width);
     this.renderSlamPanel(ctx, width, height);
 
     this.gore.renderSettled(ctx, 0, 0);
     this.gore.renderFlying(ctx, 0, 0);
+    this.renderChrome(ctx);
+  }
+
+  /** The top of the panels pinned under the header. */
+  private get panelTop(): number {
+    return this.headerBottom + MARGIN;
   }
 
   /** Everything the body sprite needs for one row × facing cell. */
@@ -423,18 +413,18 @@ export class KrakarenPreviewScene extends Scene {
   private renderBodyGrid(ctx: CanvasRenderingContext2D): void {
     const cell = this.cellSize();
     const gridLeft = MARGIN + ROW_LABEL_WIDTH;
-    const gridTop = HEADER_HEIGHT + MARGIN;
+    const gridTop = this.panelTop + LABEL_SIZE + LABEL_GAP;
     const tile = BASE_TILE_SIZE * ZOOM_LEVELS[this.zoomIndex];
     const animTime = this.clock / FRAMES_PER_SECOND;
 
     VIEWS.forEach((view, column) => {
       const x = gridLeft + column * (cell.w + CELL_PADDING);
-      drawText(ctx, view.label, {
+      worldText(ctx, view.label, {
         x: x + cell.w / 2,
         y: gridTop - LABEL_SIZE - LABEL_GAP,
         size: LABEL_SIZE,
         align: 'center',
-        color: '#f4efe4',
+        color: previewInk.grid.caption,
         outline: true,
       });
     });
@@ -442,18 +432,18 @@ export class KrakarenPreviewScene extends Scene {
     BODY_ROWS.forEach((row, rowIndex) => {
       const y = gridTop + rowIndex * (cell.h + CELL_PADDING);
       const progress = this.progressOf(row.gameFrames);
-      drawText(ctx, row.kind, {
+      worldText(ctx, row.kind, {
         x: MARGIN,
         y: y + cell.h / 2 - LABEL_SIZE,
         size: LABEL_SIZE,
-        color: '#f4efe4',
+        color: previewInk.grid.caption,
         outline: true,
       });
-      drawText(ctx, `t${progress.toFixed(2)}  ${row.gameFrames}gf`, {
+      worldText(ctx, `t${progress.toFixed(2)}  ${row.gameFrames}gf`, {
         x: MARGIN,
         y: y + cell.h / 2 + LABEL_GAP,
         size: LABEL_SIZE,
-        color: '#e8dcd4',
+        color: previewInk.grid.timingReadout,
         outline: true,
       });
 
@@ -475,7 +465,7 @@ export class KrakarenPreviewScene extends Scene {
         ctx.filter = 'none';
         ctx.restore();
 
-        ctx.strokeStyle = 'rgba(255,255,255,0.14)';
+        ctx.strokeStyle = previewInk.grid.cellBorder;
         ctx.strokeRect(x, y, cell.w, cell.h);
       });
     });
@@ -483,19 +473,19 @@ export class KrakarenPreviewScene extends Scene {
 
   private renderTentaclePanel(ctx: CanvasRenderingContext2D, width: number): void {
     const x = width - TENTACLE_PANEL_WIDTH - MARGIN;
-    const y = HEADER_HEIGHT + MARGIN;
+    const y = this.panelTop;
     const cx = x + TENTACLE_PANEL_WIDTH / 2;
     const groundY = y + TENTACLE_PANEL_HEIGHT * GROUND_FRACTION;
 
-    ctx.strokeStyle = 'rgba(255,255,255,0.14)';
+    ctx.strokeStyle = previewInk.grid.cellBorder;
     ctx.strokeRect(x, y, TENTACLE_PANEL_WIDTH, TENTACLE_PANEL_HEIGHT);
 
-    drawText(ctx, `guard tentacle — ${this.tentaclePhase}`, {
+    worldText(ctx, `guard tentacle — ${this.tentaclePhase}`, {
       x: cx,
       y: y + LABEL_SIZE,
       size: LABEL_SIZE,
       align: 'center',
-      color: '#f4efe4',
+      color: previewInk.grid.caption,
       outline: true,
     });
 
@@ -515,14 +505,16 @@ export class KrakarenPreviewScene extends Scene {
       ctx.restore();
     }
 
-    drawProgressBar(ctx, {
-      x: cx - TENTACLE_HEALTH_BAR_WIDTH / 2,
-      y: y + TENTACLE_PANEL_HEIGHT - TENTACLE_HEALTH_BAR_HEIGHT - LABEL_GAP,
-      width: TENTACLE_HEALTH_BAR_WIDTH,
-      height: TENTACLE_HEALTH_BAR_HEIGHT,
-      value: this.tentacleHp / PREVIEW_TENTACLE_MAX_HP,
-      ...PROGRESS_PRESETS.hp,
-    });
+    worldBar(
+      ctx,
+      {
+        x: cx - TENTACLE_HEALTH_BAR_WIDTH / 2,
+        y: y + TENTACLE_PANEL_HEIGHT - TENTACLE_HEALTH_BAR_HEIGHT - LABEL_GAP,
+        w: TENTACLE_HEALTH_BAR_WIDTH,
+        h: TENTACLE_HEALTH_BAR_HEIGHT,
+      },
+      { style: 'hp', value: this.tentacleHp / PREVIEW_TENTACLE_MAX_HP },
+    );
   }
 
   /**
@@ -591,14 +583,14 @@ export class KrakarenPreviewScene extends Scene {
     const riseX = targetX - SLAM_PANEL_SIZE * SLAM_RISE_OFFSET_FRACTION;
     const riseY = targetY - SLAM_PANEL_SIZE * SLAM_RISE_OFFSET_FRACTION;
 
-    ctx.strokeStyle = 'rgba(255,255,255,0.14)';
+    ctx.strokeStyle = previewInk.grid.cellBorder;
     ctx.strokeRect(x, y, SLAM_PANEL_SIZE, SLAM_PANEL_SIZE);
-    drawText(ctx, 'slam sequence — loop', {
+    worldText(ctx, 'slam sequence — loop', {
       x: targetX,
       y: y + LABEL_SIZE,
       size: LABEL_SIZE,
       align: 'center',
-      color: '#f4efe4',
+      color: previewInk.grid.caption,
       outline: true,
     });
 
@@ -630,84 +622,66 @@ export class KrakarenPreviewScene extends Scene {
     ctx.restore();
   }
 
-  private control(
-    ctx: CanvasRenderingContext2D,
-    x: number,
-    y: number,
-    label: string,
-    action: () => void,
-  ): number {
-    addButton(ctx, this.buttons, {
-      ...BUTTON_PRESETS.toggle,
-      x,
-      y,
-      width: BUTTON_WIDTH,
-      height: BUTTON_HEIGHT,
-      label,
-      action,
-    });
-    return x + BUTTON_WIDTH + BUTTON_GAP;
+  protected previewTitle(): string {
+    return 'krakaren preview — ?krakaren';
   }
 
-  private renderHeader(ctx: CanvasRenderingContext2D, width: number): void {
-    drawText(ctx, 'krakaren preview — ?krakaren', {
-      x: MARGIN,
-      y: MARGIN + TITLE_SIZE,
-      size: TITLE_SIZE,
-      color: '#fdfaf2',
-      outline: true,
-    });
-
-    let x = MARGIN;
-    const y = MARGIN + TITLE_SIZE + CONTROL_ROW_GAP;
-    x = this.control(ctx, x, y, `zoom ${ZOOM_LEVELS[this.zoomIndex]}x`, () => {
-      this.zoomIndex = (this.zoomIndex + 1) % ZOOM_LEVELS.length;
-    });
-    x = this.control(ctx, x, y, this.paused ? 'play' : 'pause', () => {
-      this.paused = !this.paused;
-    });
-    x = this.control(ctx, x, y, 'step', () => {
-      this.paused = true;
-      this.stepRequested = true;
-    });
-    x = this.control(ctx, x, y, `speed ${SPEED_LEVELS[this.speedIndex]}x`, () => {
-      this.speedIndex = (this.speedIndex + 1) % SPEED_LEVELS.length;
-    });
-    x = this.control(ctx, x, y, 'backdrop', () => {
-      this.backdropIndex = (this.backdropIndex + 1) % BACKDROPS.length;
-    });
-    x = this.control(ctx, x, y, this.isEnraged ? 'enraged: on' : 'enraged: off', () => {
-      this.isEnraged = !this.isEnraged;
-    });
-    this.control(ctx, x, y, 'damage tentacle', () => {
-      const vw = viewportWidth();
-      const cx = vw - TENTACLE_PANEL_WIDTH / 2 - MARGIN;
-      const groundY = HEADER_HEIGHT + MARGIN + TENTACLE_PANEL_HEIGHT * GROUND_FRACTION;
-      this.damageTentacle(cx, groundY);
-    });
-
-    drawText(ctx, BACKDROPS[this.backdropIndex].name, {
-      x: width - MARGIN,
-      y: MARGIN + TITLE_SIZE,
-      size: LABEL_SIZE,
-      align: 'right',
-      color: '#e6e0d2',
-      outline: true,
-    });
+  protected previewCaptions(): readonly string[] {
+    return [BACKDROPS[this.backdropIndex].name];
   }
 
-  handleMouseMove(mx: number, my: number): void {
-    setButtonMouseState(mx, my);
-  }
-
-  handleClick(mx: number, my: number): void {
-    for (const button of this.buttons) {
-      const inside =
-        mx >= button.x && mx <= button.x + button.w && my >= button.y && my <= button.y + button.h;
-      if (!inside) continue;
-      playButtonSound(null);
-      button.action?.();
-      return;
-    }
+  protected previewControls(): readonly PreviewControl[] {
+    return [
+      {
+        id: 'zoom',
+        label: `zoom ${ZOOM_LEVELS[this.zoomIndex]}x`,
+        onTap: () => {
+          this.zoomIndex = (this.zoomIndex + 1) % ZOOM_LEVELS.length;
+        },
+      },
+      {
+        id: 'play',
+        label: this.paused ? 'play' : 'pause',
+        onTap: () => {
+          this.paused = !this.paused;
+        },
+      },
+      {
+        label: 'step',
+        onTap: () => {
+          this.paused = true;
+          this.stepRequested = true;
+        },
+      },
+      {
+        id: 'speed',
+        label: `speed ${SPEED_LEVELS[this.speedIndex]}x`,
+        onTap: () => {
+          this.speedIndex = (this.speedIndex + 1) % SPEED_LEVELS.length;
+        },
+      },
+      {
+        label: 'backdrop',
+        onTap: () => {
+          this.backdropIndex = (this.backdropIndex + 1) % BACKDROPS.length;
+        },
+      },
+      {
+        id: 'enraged',
+        label: this.isEnraged ? 'enraged: on' : 'enraged: off',
+        selected: this.isEnraged,
+        onTap: () => {
+          this.isEnraged = !this.isEnraged;
+        },
+      },
+      {
+        label: 'damage tentacle',
+        onTap: () => {
+          const cx = viewportWidth() - TENTACLE_PANEL_WIDTH / 2 - MARGIN;
+          const groundY = this.panelTop + TENTACLE_PANEL_HEIGHT * GROUND_FRACTION;
+          this.damageTentacle(cx, groundY);
+        },
+      },
+    ];
   }
 }

@@ -15,8 +15,10 @@ import {
   type DifficultySegment,
 } from '../core/DifficultyStats';
 import { DIFFICULTY_LABELS } from '../core/difficultyProfiles';
-import { drawBox, BOX_PRESETS } from '../ui/Box';
-import { drawText, TEXT_PRESETS } from '../ui/TextBox';
+import { inset, type Rect } from '../ui/core/geom';
+import { WORLD_TEXT } from '../ui/theme/worldInk';
+import { worldPlate } from '../ui/world/worldShapes';
+import { worldText } from '../ui/world/worldText';
 
 const PANEL_WIDTH = 660;
 const PANEL_MARGIN = 8;
@@ -103,9 +105,9 @@ interface DifficultyRow {
 
 /** The target-feel HP color for a fraction, or the muted label color when there is no data yet. */
 function hpTargetColor(fraction: number | null): string {
-  if (fraction === null) return TEXT_PRESETS.label.color;
+  if (fraction === null) return WORLD_TEXT.label.color;
   const onTarget = fraction >= HP_TARGET_MIN_FRACTION && fraction <= HP_TARGET_MAX_FRACTION;
-  return onTarget ? TEXT_PRESETS.value.color : TEXT_PRESETS.danger.color;
+  return onTarget ? WORLD_TEXT.value.color : WORLD_TEXT.danger.color;
 }
 
 function buildRow(segment: DifficultySegment): DifficultyRow | null {
@@ -170,15 +172,14 @@ export function drawDifficultyOverlay(ctx: CanvasRenderingContext2D): void {
 
   const totalRows =
     rows.length + HEADER_ROWS + FOOTER_GAP_ROWS + FOOTER_HEADER_ROWS + huntRows.length;
-  const { inner } = drawBox(ctx, {
+  const frame: Rect = {
     x: PANEL_MARGIN,
     y: PANEL_MARGIN,
-    width: PANEL_WIDTH,
-    height: totalRows * ROW_HEIGHT + PANEL_PADDING * 2,
-    radius: PANEL_RADIUS,
-    padding: PANEL_PADDING,
-    ...BOX_PRESETS.panel,
-  });
+    w: PANEL_WIDTH,
+    h: totalRows * ROW_HEIGHT + PANEL_PADDING * 2,
+  };
+  worldPlate(ctx, frame, { style: 'panel', radius: PANEL_RADIUS });
+  const inner = inset(frame, PANEL_PADDING);
 
   const columns: ReadonlyArray<readonly [number, string]> = [
     [COLUMN_SEGMENT, 'segment'],
@@ -197,29 +198,29 @@ export function drawDifficultyOverlay(ctx: CanvasRenderingContext2D): void {
     [COLUMN_HP_NO_TRAIT, 'hp% none'],
   ];
   for (const [offset, label] of columns) {
-    drawText(ctx, label, { x: inner.x + offset, y: inner.y, ...TEXT_PRESETS.hint });
+    worldText(ctx, label, { x: inner.x + offset, y: inner.y, style: 'hint' });
   }
 
   rows.forEach((row, index) => {
     const y = inner.y + (index + HEADER_ROWS) * ROW_HEIGHT;
     const cells: ReadonlyArray<readonly [number, string, string]> = [
-      [COLUMN_SEGMENT, row.label, TEXT_PRESETS.label.color],
+      [COLUMN_SEGMENT, row.label, WORLD_TEXT.label.color],
       [COLUMN_HP, row.hp, row.hpColor],
-      [COLUMN_POTIONS, row.potions, TEXT_PRESETS.value.color],
-      [COLUMN_DAMAGE, row.damage, TEXT_PRESETS.value.color],
-      [COLUMN_DODGES, row.dodges, TEXT_PRESETS.value.color],
-      [COLUMN_DEATHS, row.deaths, TEXT_PRESETS.value.color],
-      [COLUMN_SECONDS, row.seconds, TEXT_PRESETS.value.color],
-      [COLUMN_DESCENTS, row.descents, TEXT_PRESETS.value.color],
-      [COLUMN_UNDERLEVELED, row.underleveled, TEXT_PRESETS.value.color],
-      [COLUMN_BLOCKS, row.blocksPerFight, TEXT_PRESETS.value.color],
-      [COLUMN_KITES, row.kiteStarts, TEXT_PRESETS.value.color],
-      [COLUMN_KITE_LEN, row.kiteAvgFrames, TEXT_PRESETS.value.color],
+      [COLUMN_POTIONS, row.potions, WORLD_TEXT.value.color],
+      [COLUMN_DAMAGE, row.damage, WORLD_TEXT.value.color],
+      [COLUMN_DODGES, row.dodges, WORLD_TEXT.value.color],
+      [COLUMN_DEATHS, row.deaths, WORLD_TEXT.value.color],
+      [COLUMN_SECONDS, row.seconds, WORLD_TEXT.value.color],
+      [COLUMN_DESCENTS, row.descents, WORLD_TEXT.value.color],
+      [COLUMN_UNDERLEVELED, row.underleveled, WORLD_TEXT.value.color],
+      [COLUMN_BLOCKS, row.blocksPerFight, WORLD_TEXT.value.color],
+      [COLUMN_KITES, row.kiteStarts, WORLD_TEXT.value.color],
+      [COLUMN_KITE_LEN, row.kiteAvgFrames, WORLD_TEXT.value.color],
       [COLUMN_HP_TRAIT, row.hpTrait, row.hpTraitColor],
       [COLUMN_HP_NO_TRAIT, row.hpNoTrait, row.hpNoTraitColor],
     ];
     for (const [offset, text, color] of cells) {
-      drawText(ctx, text, { x: inner.x + offset, y, ...TEXT_PRESETS.hint, color });
+      worldText(ctx, text, { x: inner.x + offset, y, style: 'hint', color });
     }
   });
 
@@ -227,19 +228,19 @@ export function drawDifficultyOverlay(ctx: CanvasRenderingContext2D): void {
   // to stairwell found" stretch spans what may be several segments on floor 1
   // — so it gets its own footer table below the per-segment one.
   const footerHeaderY = inner.y + (rows.length + HEADER_ROWS + FOOTER_GAP_ROWS) * ROW_HEIGHT;
-  drawText(ctx, 'stairwell hunt (last gauntlet boss → found)', {
+  worldText(ctx, 'stairwell hunt (last gauntlet boss → found)', {
     x: inner.x + COLUMN_SEGMENT,
     y: footerHeaderY,
-    ...TEXT_PRESETS.hint,
+    style: 'hint',
   });
   huntRows.forEach((row, index) => {
     const y = footerHeaderY + (index + FOOTER_HEADER_ROWS) * ROW_HEIGHT;
-    drawText(ctx, row.label, { x: inner.x + COLUMN_SEGMENT, y, ...TEXT_PRESETS.hint });
-    drawText(ctx, row.seconds === NO_DATA ? NO_DATA : `${row.seconds}s`, {
+    worldText(ctx, row.label, { x: inner.x + COLUMN_SEGMENT, y, style: 'hint' });
+    worldText(ctx, row.seconds === NO_DATA ? NO_DATA : `${row.seconds}s`, {
       x: inner.x + COLUMN_HP,
       y,
-      ...TEXT_PRESETS.hint,
-      color: TEXT_PRESETS.value.color,
+      style: 'hint',
+      color: WORLD_TEXT.value.color,
     });
   });
 }

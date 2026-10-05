@@ -121,6 +121,8 @@ const LONG_PRESS_VIEW_TILES = 6;
 const FAR_SNARE_TILES = 4;
 /** How far a held finger may drift and still be the same hold. */
 const HOLD_STILL_PX = 20;
+/** What a wooden wall costs, in boards. */
+const WOOD_WALL_BOARDS = 5;
 /** The request's spikes: 150 health on walls, trebuchets and defense-quest grates alike. */
 const EXPECTED_SPIKES_HP = 150;
 
@@ -1014,14 +1016,14 @@ function wallJobRig(): { rig: Rig; id: string } {
   const rig = makeRig();
   const { id, tile } = southWallSegment();
   standAt(rig.human, tile.x, tile.y - 1, 0, 1);
-  give(rig.human, 'wood_board', 5);
+  give(rig.human, 'wood_board', WOOD_WALL_BOARDS);
   return { rig, id };
 }
 {
   const { rig, id } = wallJobRig();
   const started = rig.construction.startOption('wood');
   rig.construction.update();
-  check(started && boardsHeld(rig) === 5, 'starting a wall takes nothing');
+  check(started && boardsHeld(rig) === WOOD_WALL_BOARDS, 'starting a wall takes nothing');
   runJob(rig);
   check(
     rig.defense.segmentTier(id) === 'wood' && boardsHeld(rig) === 0,
@@ -1043,7 +1045,7 @@ function wallJobRig(): { rig: Rig; id: string } {
   rig.construction.update();
   check(
     rig.construction.job === null &&
-      boardsHeld(rig) === 5 &&
+      boardsHeld(rig) === WOOD_WALL_BOARDS &&
       rig.defense.segmentTier(id) === 'fence',
     'walking off cancels with nothing lost',
   );
@@ -1063,7 +1065,7 @@ function wallJobRig(): { rig: Rig; id: string } {
   const { rig, id } = wallJobRig();
   rig.construction.startOption('wood');
   rig.construction.update();
-  rig.human.inventory.removeItems('wood_board', 5);
+  rig.human.inventory.removeItems('wood_board', WOOD_WALL_BOARDS);
   runJob(rig);
   check(
     rig.defense.segmentTier(id) === 'fence' &&
@@ -1427,6 +1429,55 @@ section('Long-press');
   check(!hold.suppressesWalk(fingerX, fingerY, HOLD_STILL_PX), 'and the lift clears it');
   kit.defense.destroy(snare);
   kit.defense.destroy(farSnare);
+  kit.dispose();
+}
+
+// ── The build key over a faced wall ───────────────────────────────────────
+
+section('The build key over a faced wall');
+{
+  const { id, tile } = southWallSegment();
+  const pm = new PlayerManager(tile.x, tile.y - 1, undefined);
+  const world: SceneWorld = {
+    gameMap,
+    bus: new EventBus(),
+    audio: null,
+    pm,
+    roster: new MobRoster(gameMap, new SpellSystem()),
+  };
+  const menus = new MenusKit({ world, abilityManager: new AbilityManager() });
+  const state = createBriarHollowState();
+  grantConstructionUnlocks(state.unlocks, CONSTRUCTION_UNLOCK_IDS);
+  teach(pm.human, 1);
+  pm.human.isActive = true;
+  pm.cat.isActive = false;
+  const kit = new ConstructionKit({
+    world,
+    site,
+    human: pm.human,
+    cat: pm.cat,
+    state,
+    menus,
+    audio: null,
+    noteResourceActivity: () => undefined,
+    onTileChanged: () => undefined,
+    villagers: () => [],
+    clockSeconds: () => 0,
+    isInSafeRoom: () => false,
+    worldHalted: () => false,
+  });
+  standAt(pm.human, tile.x, tile.y - 1, 0, 1);
+  give(pm.human, 'wood_board', WOOD_WALL_BOARDS);
+  check(kit.isWallPromptShowing(), 'facing a bare wall, the build prompt shows');
+  check(
+    !kit.tryBuildWall(true) && kit.construction.job === null,
+    'a world tap never builds: only the double tap the touch prompt names does',
+  );
+  check(
+    kit.tryBuildWall(false) && kit.construction.job !== null,
+    'a key press builds on any device, so a touch laptop honours "Press Space"',
+  );
+  check(kit.defense.segmentTier(id) !== 'wood', 'and the wall is still only being raised');
   kit.dispose();
 }
 

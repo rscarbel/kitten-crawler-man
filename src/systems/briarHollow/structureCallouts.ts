@@ -5,7 +5,7 @@
  * break structures raise their callouts here instead.
  */
 
-import { drawText, TEXT_PRESETS } from '../../ui/TextBox';
+import { worldText } from '../../ui/world/worldText';
 
 /** How long a callout stays up, in updates. */
 export const CALLOUT_FRAMES = 90;
@@ -56,11 +56,11 @@ export class StructureCallouts {
       const life = callout.age / CALLOUT_FRAMES;
       const fadeStart = 1 - CALLOUT_FADE_FRACTION;
       const alpha = life < fadeStart ? 1 : Math.max(0, (1 - life) / CALLOUT_FADE_FRACTION);
-      drawText(ctx, callout.text, {
+      worldText(ctx, callout.text, {
         x: callout.x - camX,
         y: callout.y - camY - life * CALLOUT_RISE_PX,
         align: 'center',
-        ...(callout.tone === 'danger' ? TEXT_PRESETS.danger : TEXT_PRESETS.label),
+        style: callout.tone === 'danger' ? 'danger' : 'label',
         outline: true,
         alpha,
       });

@@ -35,7 +35,6 @@ export function bindAbilityLevelUps(target: AbilityLevelUpTarget): void {
     }
     const def = abilityManager.getDef(id);
     if (def === null) return;
-    menus.cancelInventoryDragForOverlay();
     menus.levelUpDialog.enqueue({
       name: def.name,
       newLevel,
