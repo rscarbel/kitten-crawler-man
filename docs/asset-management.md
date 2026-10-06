@@ -312,14 +312,27 @@ loader has always understood — took the town's facades from 116 MB resident to
 The paced queues above are right for a floor already being played, and wrong
 for its first seconds: on the town they mean buildings arriving one at a time,
 a crowd drawn as stand-in poses while its rows bake, and a screenful of ground
-chunks baked on the first frame. A floor whose `LevelDef` sets
-`arrivalLoadingScreen` (floor 3 does) covers that instead.
-`src/scenes/floorArrivalLoad.ts` builds the work as `LoadTask`s — the queued
+chunks baked on the first frame; in a dungeon, Mordecai's wander and the boss
+rooms' sheets painting in. Every environment covers that instead — the
+tutorial, every floor and every building interior. `LevelDef.arrivalLoadingScreen`
+is required, and `GameplayScene` holds an abstract `ArrivalLoader`
+(`src/scenes/ArrivalLoader.ts`) that each scene begins last in its
+constructor. `src/scenes/floorArrivalLoad.ts` builds the work as `LoadTask`s — the queued
 environment sheets, the figure prewarm queue, the fetched sprite groups, then
 the ground chunks and decoration overlay entries for the view the first frame
-draws — and `DungeonScene` runs them behind a `LoadingOverlay`
+draws (after applying any tile marked dirty while the floor was built) — and
+the loader runs them behind a `LoadingOverlay`
 (`src/ui/LoadingScreen.ts`) driven by a `LoadRunner` (`src/core/LoadRunner.ts`)
-a few milliseconds a frame. The world neither updates nor draws while it is
+a few milliseconds a frame.
+
+The screen only drains what was queued, so what makes an arrival hitch-free is
+that everything drawn from the first frame queued its rows when it was placed:
+Mordecai in every view he wanders in, the goblin mother, the tutorial's
+goblins, the spider lab's self-cycling life machines, the town's recruiter
+(urgently, since the crowd has filled the cache by then).
+`npm run verify:arrival-load` runs the real scene for each environment and
+fails on any render-path bake, stand-in, direct paint, chunk bake or
+environment step in its first frames of play. The world neither updates nor draws while it is
 up; the render-quality probe and the figure cache's idle sweep are both held
 for its duration, since its frames are neither play nor a sign that anything
 went unused.

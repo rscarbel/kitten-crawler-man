@@ -252,3 +252,16 @@ export const BUGABOO_STATES: ReadonlyArray<BugabooState> = [
 export function prewarmBugaboo(): void {
   for (const state of BUGABOO_STATES) prewarmFigureState(BUGABOO_FIGURE, state);
 }
+
+/** The rows a Bugaboo that never fights can play: a shopkeeper wearing the shape stands and walks. */
+const BUGABOO_PEACEFUL_BASES: ReadonlyArray<BugabooBase> = ['idle', 'walk'];
+
+/**
+ * Warms the stance and walk rows in every view, for a Bugaboo that only ever
+ * stands and wanders — floor 2's Mordecai. Called when his room is built.
+ */
+export function prewarmPeacefulBugaboo(): void {
+  for (const base of BUGABOO_PEACEFUL_BASES) {
+    for (const view of BUGABOO_VIEWS) prewarmFigureState(BUGABOO_FIGURE, stateFor(base, view));
+  }
+}

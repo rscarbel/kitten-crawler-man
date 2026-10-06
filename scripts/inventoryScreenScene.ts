@@ -48,7 +48,6 @@ const { InputManager } = await import('../src/core/InputManager.js');
 const { getLevelDef } = await import('../src/levels/index.js');
 const { DungeonScene } = await import('../src/scenes/DungeonScene.js');
 const { TutorialController } = await import('../src/systems/TutorialController.js');
-const { LoadingOverlay } = await import('../src/ui/LoadingScreen.js');
 const { MOUSE_POINTER_ID, PRIMARY_BUTTON } = await import('../src/ui/core/pointer.js');
 const { toCssRect } = await import('../src/ui/hud/HudSurface.js');
 const { LONG_PRESS_MS, TOUCH_PICKUP_HOLD_MS } =
@@ -211,8 +210,7 @@ async function openContextMenu(scene: Scene, at: Point): Promise<void> {
 
 async function settleArrival(scene: Scene): Promise<boolean> {
   for (let attempt = 0; attempt < MAX_ARRIVAL_FRAMES; attempt++) {
-    const loading: unknown = Reflect.get(scene, 'arrivalLoading');
-    if (!(loading instanceof LoadingOverlay) || !loading.isOpen) return true;
+    if (!scene.arrivalLoadingOpen) return true;
     scene.render(ctx);
     await new Promise((resolve) => setImmediate(resolve));
   }

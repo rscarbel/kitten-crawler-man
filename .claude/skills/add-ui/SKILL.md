@@ -215,8 +215,13 @@ What each `render(ui)` receives:
 - `tween(id, target, { ms?, from? })` — eases a number toward its target
   (default `motion.base`).
 - `defer(draw)` — runs after the surface finishes, above and unclipped; its
-  regions sit above the surface's others. Tooltips, context menus and popovers
-  draw through it.
+  regions sit above the surface's others. Context menus and popovers (things
+  that take input) draw through it.
+- `overlay(draw)` — runs after **every** surface has rendered, above all bands,
+  unclipped, under the transform and alpha of the call. It takes no input (a
+  region registered inside is refused with a dev warning). Hover descriptions
+  (`tooltip`, so every widget's tooltip) and drag ghosts draw through it, so a
+  HUD slot's tooltip reads over a menu opened above the HUD.
 - `layer({ onEscape? })` — starts a dismissable layer (context menu, popover):
   focus, Enter's primary, wheel and drag hand-off stop at it, and Escape calls
   `onEscape` before any surface closes.
@@ -322,9 +327,12 @@ hover/press treatment). Feature code never calls it; it calls widgets.
 - **Ink modules** for non-chrome palettes: `worldInk.ts` (world text, bars and
   plates), `minimapColors.ts` (one tile-colour table for every minimap),
   `previewInk.ts` (review scenes), `townMapInk.ts`, `scytheSwingInk.ts`.
-- Item and skill art lives in `src/ui/icons/` (`ITEM_ICONS: Record<ItemId,
-ItemIconPainter>`, painters take `(ctx, rect)`); `drawItemIcon` serves code
-  outside widgets.
+- Item icons are registered in `src/ui/icons/itemIcons.ts` (`ITEM_ICONS:
+Record<ItemId, ItemIconPainter>`, painters take `(ctx, rect)`); `drawItemIcon`
+  serves code outside widgets. The coordinate-heavy item painters live in
+  `src/sprites/art/itemIcons/` and paint in a unit square through
+  `paintIconArt` (`iconPaint.ts`); older painters and skill art remain in
+  `src/ui/icons/`.
 
 ## World painters vs screen widgets
 
@@ -490,7 +498,8 @@ shop, the casino).
   (`CraftExplainers`: `register(id, entry)` once, `open(id)`, one surface per
   scene), `NoticeBoard`, `ReadableOverlay`.
 - **`src/ui/LoadingScreen.ts`** — `LoadingOverlay` ticks a `LoadRunner` and is
-  mounted through its `surface(id)` (band `system`); `npm run
+  mounted through its `surface(id)` (band `system`); gameplay scenes hold it
+  through `ArrivalLoader` (`src/scenes/ArrivalLoader.ts`); `npm run
 render:loading-screen`.
 - **`src/ui/questReward/`** — the quest-complete screen model, drawn by
   `questRewardSurface`; see `add-quest`.

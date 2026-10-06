@@ -1,5 +1,5 @@
 import { Goblin } from './Goblin';
-import type { GoblinWeapon } from '../sprites/goblinSprite';
+import { prewarmGoblin, prewarmGoblinCombat, type GoblinWeapon } from '../sprites/goblinSprite';
 import type { Player } from '../Player';
 import type { TacticsTrait } from './tactics/tacticsTraits';
 
@@ -28,6 +28,11 @@ export class TutorialGoblin extends Goblin {
     this.setFixedMaxHp(TUTORIAL_HP);
     this.isStationary = stationary;
     this.defenseOnly = defenseOnly;
+    // Placed with the tutorial map, behind its loading screen, and the first
+    // of them stands in the opening view waiting to be hit: its blows and its
+    // flinch are as much its opening rows as its stance.
+    prewarmGoblin(weapon);
+    prewarmGoblinCombat(weapon);
   }
 
   /**

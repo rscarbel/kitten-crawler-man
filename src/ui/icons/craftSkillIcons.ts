@@ -7,7 +7,7 @@
  * item icon, so it gets a small hammer-and-nail painter of its own.
  */
 
-import { drawToolIcon } from './toolIcons';
+import { drawToolIcon } from '../../sprites/art/itemIcons/toolIcons';
 import type { CraftSkillId } from '../../core/CraftSkills';
 import type { Rect } from '../core/geom';
 import { iconSquare } from './iconSquare';

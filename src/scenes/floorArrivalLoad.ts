@@ -9,8 +9,9 @@
  * screen none of that pacing is needed, so these tasks drain the same queues as
  * fast as a frame's budget allows and hand play a floor with nothing left owed.
  *
- * The tasks are ordinary {@link LoadTask}s, so any floor can use them; one opts
- * in through `LevelDef.arrivalLoadingScreen`.
+ * The tasks are ordinary {@link LoadTask}s and name no particular floor: every
+ * gameplay scene runs them through its `ArrivalLoader`, so a new environment
+ * that queues its art and figures the usual way is covered without a line here.
  */
 import { steppedWork, promiseWork, type LoadTask } from '../core/LoadRunner';
 import type { GameMap } from '../map/GameMap';
@@ -116,7 +117,7 @@ export function floorArrivalLoadTasks(deps: FloorArrivalLoadDeps): LoadTask[] {
 
   let mostCellsOwed = 0;
   const figureTask: LoadTask = {
-    label: 'Gathering the locals',
+    label: 'Waking the inhabitants',
     weight: FIGURE_WEIGHT,
     work: steppedWork((budgetMs, mustProgress) => {
       bakeFigurePrewarmFor(budgetMs, mustProgress);
@@ -145,7 +146,7 @@ export function floorArrivalLoadTasks(deps: FloorArrivalLoadDeps): LoadTask[] {
     }),
   };
   const decorationTask: LoadTask = {
-    label: 'Raising the buildings',
+    label: 'Placing the props',
     weight: DECORATION_WEIGHT,
     work: steppedWork((budgetMs, mustProgress) => {
       const { x, y } = deps.camera();

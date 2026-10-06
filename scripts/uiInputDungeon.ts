@@ -59,7 +59,6 @@ const { InputManager } = await import('../src/core/InputManager.js');
 const { GameMap } = await import('../src/map/GameMap.js');
 const { level3 } = await import('../src/levels/level3.js');
 const { DungeonScene } = await import('../src/scenes/DungeonScene.js');
-const { LoadingOverlay } = await import('../src/ui/LoadingScreen.js');
 const { MOUSE_POINTER_ID, PRIMARY_BUTTON } = await import('../src/ui/core/pointer.js');
 const { signLine } = await import('../src/dialog/scripts/crawlerSigns.js');
 const { toCssRect } = await import('../src/ui/hud/HudSurface.js');
@@ -146,8 +145,7 @@ function frame(scene: Scene): void {
 
 async function settleArrival(scene: Scene): Promise<boolean> {
   for (let attempt = 0; attempt < MAX_ARRIVAL_FRAMES; attempt++) {
-    const loading: unknown = Reflect.get(scene, 'arrivalLoading');
-    if (!(loading instanceof LoadingOverlay) || !loading.isOpen) return true;
+    if (!scene.arrivalLoadingOpen) return true;
     scene.render(ctx);
     await new Promise((resolve) => setImmediate(resolve));
   }

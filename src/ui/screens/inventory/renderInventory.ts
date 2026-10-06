@@ -1068,7 +1068,7 @@ function drawDragGhost(ui: Ui, screen: InventoryScreen): void {
   const drag = screen.drag;
   if (drag === null) return;
   const item = drag.item;
-  ui.defer(() => {
+  ui.overlay(() => {
     const side = ui.theme.size.slot;
     const at: Point = { x: drag.x, y: drag.y };
     const { ctx } = ui;

@@ -16,6 +16,7 @@
  */
 
 import { installBrowserShim } from './browserShim.js';
+import { settleArrival } from './settleArrival.js';
 
 const VIEWPORT = { width: 1280, height: 720, devicePixelRatio: 1 } as const;
 installBrowserShim(VIEWPORT);
@@ -102,7 +103,7 @@ function framesLost(scene: Scene, activeTile: Tile, inactiveTile: Tile): number 
   return before - scene.levelTimerRemainingFrames;
 }
 
-function checkFloor(name: string, levelDef: LevelDef): void {
+async function checkFloor(name: string, levelDef: LevelDef): Promise<void> {
   const map = new GameMap({
     mapSize: levelDef.mapSize,
     tileHeight: TILE_SIZE,
@@ -124,6 +125,9 @@ function checkFloor(name: string, levelDef: LevelDef): void {
     skipIntro: true,
   });
   sceneManager.replace(scene);
+  const ctx = sceneManager.canvas.getContext('2d');
+  if (ctx === null) throw new Error('the shim canvas has no 2d context');
+  check(await settleArrival(scene, ctx), `${name}: the arrival screen finishes`);
   check(scene.levelTimerRemainingFrames > 0, `${name}: the collapse timer starts with time on it`);
 
   const lostOutside = framesLost(scene, outside, outside);
@@ -166,7 +170,7 @@ const TIMED_FLOORS: ReadonlyArray<readonly [string, LevelDef]> = [
 ];
 for (const [name, levelDef] of TIMED_FLOORS) {
   check(levelDef.hasCollapseTimer === true, `${name}: has a collapse timer`);
-  checkFloor(name, levelDef);
+  await checkFloor(name, levelDef);
 }
 
 console.log(failures === 0 ? '\nAll level-timer checks passed.' : `\n${failures} check(s) failed.`);

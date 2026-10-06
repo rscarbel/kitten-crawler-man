@@ -14,6 +14,7 @@ import type { InputManager } from '../core/InputManager';
 import { TILE_SIZE } from '../core/constants';
 import { frameTime } from '../utils';
 import { followCamera, type WorldRect } from './interiorCamera';
+import type { ArrivalLoader } from './ArrivalLoader';
 import { drunkCameraOffset } from '../core/DrunkEffect';
 import type { GameMap } from '../map/GameMap';
 import type { HumanPlayer } from '../creatures/HumanPlayer';
@@ -66,6 +67,23 @@ export abstract class GameplayScene extends Scene {
   /** Each concrete scene owns its own instance — it has its own mob roster to check. */
   protected abstract readonly skillPointReminder: SkillPointReminderSystem;
   protected abstract readonly audio: AudioManager | null;
+  /**
+   * The loading screen this scene arrives behind. Every gameplay scene holds
+   * one, begins it last in its constructor and mounts its surfaces; while it is
+   * open the scene neither updates nor draws the world.
+   */
+  protected abstract readonly arrivalLoading: ArrivalLoader;
+
+  /** Whether the arrival's loading screen is still up, for harnesses waiting on it. */
+  get arrivalLoadingOpen(): boolean {
+    return this.arrivalLoading.isOpen;
+  }
+
+  assertReadyToEnter(): void {
+    if (!this.arrivalLoading.hasBegun) {
+      throw new Error(`${this.constructor.name} was entered without beginning its arrival`);
+    }
+  }
   /** Coins/items flying to this scene's own HUD — each concrete scene owns its own instance. */
   protected abstract readonly rewardFly: RewardFlySystem;
   /** The "Saving... / Game Saved" toast — shared so it reads the same in every scene a save can happen in. */

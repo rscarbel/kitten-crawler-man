@@ -2357,8 +2357,11 @@ export class GameMap {
     budgetMs: number,
     mustProgress: boolean,
   ): number {
-    this._chunkCache ??= new TileChunkCache(this.structure, this.tileHeight);
-    return this._chunkCache.bakeView(cameraX, cameraY, viewW, viewH, budgetMs, mustProgress);
+    // A tile changed since the last frame (a chest blocked, a door stamped as
+    // the floor was built) would otherwise be baked stale here and rebaked by
+    // the first frame of play.
+    const chunkCache = this.applyDirtyTiles();
+    return chunkCache.bakeView(cameraX, cameraY, viewW, viewH, budgetMs, mustProgress);
   }
 
   /**
@@ -2374,6 +2377,7 @@ export class GameMap {
     budgetMs: number,
     mustProgress: boolean,
   ): number {
+    this.applyDirtyTiles();
     this._overlayCache ??= new OverlayTileCache(this.structure, this.tileHeight);
     return bakeDecorationsForView(
       this.structure,
@@ -2395,23 +2399,20 @@ export class GameMap {
     viewW: number,
     viewH: number,
   ): void {
-    this._chunkCache ??= new TileChunkCache(this.structure, this.tileHeight);
+    const chunkCache = this.applyDirtyTiles();
+    renderCanvas(ctx, this.structure, this.tileHeight, cameraX, cameraY, viewW, viewH, chunkCache);
+  }
+
+  /** Invalidates the cached art of every tile announced by {@link markTileDirty} since the last call. */
+  private applyDirtyTiles(): TileChunkCache {
+    const chunkCache = (this._chunkCache ??= new TileChunkCache(this.structure, this.tileHeight));
     for (const t of this._dirtyTiles) {
-      this._chunkCache.invalidateTile(t.x, t.y);
+      chunkCache.invalidateTile(t.x, t.y);
       this._overlayCache?.invalidateTile(t.x, t.y);
       this.refreshDecorationTile(t.x, t.y);
     }
     this._dirtyTiles.length = 0;
-    renderCanvas(
-      ctx,
-      this.structure,
-      this.tileHeight,
-      cameraX,
-      cameraY,
-      viewW,
-      viewH,
-      this._chunkCache,
-    );
+    return chunkCache;
   }
 
   renderDecorationsOverlay(

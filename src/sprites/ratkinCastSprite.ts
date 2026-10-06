@@ -216,10 +216,18 @@ export function ratkinCastArrivalStates(id: RatkinCastId): string[] {
   return states;
 }
 
-/** Queues one cast member's arrival rows with the cache's paced prewarm. */
-export function prewarmRatkinCastMember(id: RatkinCastId): void {
+/**
+ * Queues one cast member's arrival rows with the cache's paced prewarm.
+ *
+ * @param urgent The member stands where the party arrives and is drawn on the
+ *   first frame of play, so the rows may take room from rows nothing is
+ *   drawing rather than yield to a full cache.
+ */
+export function prewarmRatkinCastMember(id: RatkinCastId, urgent = false): void {
   const figure = ratkinCastFigure(id);
-  for (const state of ratkinCastArrivalStates(id)) prewarmFigureState(figure, state);
+  for (const state of ratkinCastArrivalStates(id)) {
+    prewarmFigureState(figure, state, undefined, urgent);
+  }
 }
 
 /** A soldier's fight rows: the thrust, the flinch, the fall and the rise. */

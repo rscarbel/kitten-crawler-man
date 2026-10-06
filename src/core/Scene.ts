@@ -73,6 +73,12 @@ export abstract class Scene {
   abstract render(ctx: CanvasRenderingContext2D): void;
   onEnter?(): void;
   onExit?(): void;
+  /**
+   * Throws when the scene was built incompletely — checked as it is handed the
+   * canvas, so a scene missing a required construction step fails on its first
+   * entry rather than misbehaving quietly.
+   */
+  assertReadyToEnter?(): void;
 }
 
 /**
@@ -305,6 +311,7 @@ export class SceneManager {
     this.pointerInput.cancelAll();
     this.current?.onExit?.();
     this.current?.ui.dispose();
+    scene.assertReadyToEnter?.();
     this.current = scene;
     scene.onEnter?.();
   }

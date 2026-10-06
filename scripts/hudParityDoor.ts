@@ -36,7 +36,6 @@ const { GameMap } = await import('../src/map/GameMap.js');
 const { level3 } = await import('../src/levels/level3.js');
 const { DungeonScene } = await import('../src/scenes/DungeonScene.js');
 const { BuildingInteriorScene } = await import('../src/scenes/BuildingInteriorScene.js');
-const { LoadingOverlay } = await import('../src/ui/LoadingScreen.js');
 
 type Rect = { readonly x: number; readonly y: number; readonly w: number; readonly h: number };
 type Outside = InstanceType<typeof DungeonScene>;
@@ -58,8 +57,7 @@ const ctx = gameContext(SCREEN.width, SCREEN.height);
 
 async function settleArrival(scene: Outside): Promise<boolean> {
   for (let frame = 0; frame < MAX_ARRIVAL_FRAMES; frame++) {
-    const loading: unknown = Reflect.get(scene, 'arrivalLoading');
-    if (!(loading instanceof LoadingOverlay) || !loading.isOpen) return true;
+    if (!scene.arrivalLoadingOpen) return true;
     scene.render(ctx);
     await new Promise((resolve) => setImmediate(resolve));
   }

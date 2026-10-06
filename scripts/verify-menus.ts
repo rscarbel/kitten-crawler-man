@@ -34,6 +34,7 @@ Object.defineProperty(globalThis, 'navigator', {
 
 const DESKTOP = { width: 1280, height: 800, devicePixelRatio: 1 } as const;
 const { installBrowserShim } = await import('./browserShim.js');
+const { settleArrival } = await import('./settleArrival.js');
 installBrowserShim(DESKTOP);
 const WORLD_SEED = 7;
 const { mulberry32 } = await import('../src/sprites/person/rng.js');
@@ -360,6 +361,8 @@ type ConversationRequest = Parameters<Town['conversation']['open']>[0];
 
 /** Arrival screens poll their loaders across ticks of the event loop, not frames. */
 const MAX_ARRIVAL_FRAMES = 3000;
+const { ARRIVAL_LOADING_SURFACE_ID: ARRIVAL_SURFACE } =
+  await import('../src/scenes/ArrivalLoader.js');
 const SAMPLE_LEVEL = 2;
 const SAMPLE_SKILL_LEVEL = 1;
 const SAMPLE_QUANTITY_MAX = 5;
@@ -726,7 +729,7 @@ section('the town (DungeonScene)');
   });
   sceneManager.replace(street);
   street.render(ctx);
-  const arrival = 'arrival-loading';
+  const arrival = ARRIVAL_SURFACE;
   check(street.ui.isOpen(arrival), 'the town raises no arrival screen to audit');
   const arrivalOutcome = auditFocus(street.ui, `town ${arrival}`);
   failures.push(...arrivalOutcome.failures);
@@ -766,21 +769,37 @@ const SAMPLE_READABLE = {
   body: ['Every menu must answer the keyboard.'],
 } as const;
 
-function enter(entry: Entry): Interior {
+/** A building entered and past its arrival loading screen, ready to be audited. */
+async function enter(entry: Entry): Promise<Interior> {
   const human = new HumanPlayer(0, 0, TILE_SIZE);
   const cat = new CatPlayer(1, 0, TILE_SIZE);
   human.isActive = true;
   teachBoth(human, cat, 'construction');
-  return new BuildingInteriorScene(
+  const room = new BuildingInteriorScene(
     entry,
     snapPlayer(human),
     snapPlayer(cat),
     level3.xpDiminishingTiers,
+    level3.arrivalLoadingScreen,
     new InputManager(),
     new SceneManager(),
     noop,
     createMarketStock(),
   );
+  // The room's own loading screen, audited while it is up the way the town's
+  // is: it is the one surface a player meets before any other in the room.
+  room.render(ctx);
+  if (room.ui.isOpen(ARRIVAL_SURFACE)) {
+    const arrivalOutcome = auditFocus(room.ui, `${entry.name} ${ARRIVAL_SURFACE}`);
+    failures.push(...arrivalOutcome.failures);
+    console.log(
+      `  ${entry.name} ${ARRIVAL_SURFACE}: ${describeClaimants(arrivalOutcome.claimants)}`,
+    );
+  }
+  if (!(await settleArrival(room, ctx))) {
+    throw new Error(`${entry.name}'s arrival screen never finished`);
+  }
+  return room;
 }
 
 function building(label: string, predicate: (entry: Entry) => boolean): Entry {
@@ -950,10 +969,12 @@ function interiorCases(): InteriorCase[] {
 const cases = interiorCases();
 for (const { label, entry, openers } of cases) {
   section(`${label} (BuildingInteriorScene)`);
-  const room = enter(entry);
+  const room = await enter(entry);
   step(room);
   const auditedHere = new Set(openers.map((candidate) => candidate.surfaceId));
-  const elsewhere: Record<string, string> = {};
+  const elsewhere: Record<string, string> = {
+    [ARRIVAL_SURFACE]: 'audited above, while the room loads',
+  };
   for (const other of cases) {
     if (other.label === label) continue;
     for (const candidate of other.openers) {

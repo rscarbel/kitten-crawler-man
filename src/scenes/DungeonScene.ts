@@ -47,13 +47,9 @@ import {
 } from '../levels/spawner';
 import { activeDifficultyProfile, applySpawnDifficulty } from '../core/difficultyProfiles';
 import { getSpriteMissCounts, prewarmGroups, releaseSpritesExcept } from '../core/SpriteLoader';
-import {
-  flushFigureFrameCache,
-  holdFigureIdleSweep,
-  releaseFigureIdleSweep,
-} from '../sprites/figure/figureFrameCache';
+import { flushFigureFrameCache } from '../sprites/figure/figureFrameCache';
 import { requiredSpriteKeysForLevel } from '../core/systemAssetRequirements';
-import { getLevelDef } from '../levels';
+import { getLevelDef, levelLoadingKicker } from '../levels';
 import { dungeonOptionsForLevel } from '../levels/dungeonOptions';
 import { TUTORIAL_LEVEL_ID } from '../levels/tutorial';
 import { LevelCompleteScreen } from '../ui/screens/dialogs/LevelCompleteScreen';
@@ -519,8 +515,8 @@ import {
 } from '../systems/KnockoutRevive';
 import { viewportWidth, viewportHeight } from '../core/Viewport';
 import { renderQuality } from '../core/RenderQuality';
-import { LoadingOverlay } from '../ui/LoadingScreen';
-import { floorArrivalLoadTasks, floorArrivalOwesWork } from './floorArrivalLoad';
+import { floorArrivalLoadTasks } from './floorArrivalLoad';
+import { ArrivalLoader } from './ArrivalLoader';
 import { createSceneUi, sceneMouse } from '../ui/core/sceneUi';
 import { byInputMode } from '../ui/core/inputMode';
 import { worldText } from '../ui/world/worldText';
@@ -1157,11 +1153,7 @@ export class DungeonScene extends GameplayScene {
   private readonly travelUnlocks: TravelUnlockState;
   private building: BuildingSystem | null = null;
   private townLife: TownLifeSystem | null = null;
-  /**
-   * The loading screen covering this floor's arrival, while it is up or fading
-   * out; null once gone, or when the arrival owed too little to cover.
-   */
-  private arrivalLoading: LoadingOverlay | null = null;
+  protected readonly arrivalLoading = new ArrivalLoader();
   private townProps: TownPropSystem | null = null;
   /** Shady's bounty loop. Overworld only — null on every other floor. */
   private bounty: BountySystem | null = null;
@@ -2264,6 +2256,7 @@ export class DungeonScene extends GameplayScene {
               humanSnap,
               catSnap,
               levelDef.xpDiminishingTiers,
+              levelDef.arrivalLoadingScreen,
               this.input,
               this.sceneManager,
               (hSnap, cSnap, defeated, companionDeparture) => {
@@ -2808,23 +2801,19 @@ export class DungeonScene extends GameplayScene {
     // measures what is owed. Checked on every construction rather than at the
     // call sites that build this scene, because there are several and a floor
     // is arrived on through all of them: stairs, a save, a restart, a door.
-    const loadingScreen = levelDef.arrivalLoadingScreen;
-    const returningFromBuilding = options?.existingMap !== undefined;
-    if (loadingScreen !== undefined && floorArrivalOwesWork(returningFromBuilding)) {
-      this.arrivalLoading = new LoadingOverlay({
-        kicker: `Floor ${levelDef.floorNumber}`,
-        title: levelDef.name,
-        tips: loadingScreen.tips,
-        tasks: floorArrivalLoadTasks({
+    this.arrivalLoading.begin({
+      kicker: levelLoadingKicker(levelDef),
+      title: levelDef.name,
+      screen: levelDef.arrivalLoadingScreen,
+      returning: options?.existingMap !== undefined,
+      tasks: () =>
+        floorArrivalLoadTasks({
           gameMap: this.gameMap,
           camera: () => this.camera(),
           viewport: () => ({ width: viewportWidth(), height: viewportHeight() }),
           spriteGroupsReady,
         }),
-      });
-      renderQuality.beginLoadingCover();
-      holdFigureIdleSweep();
-    }
+    });
     for (const surface of this.surfaces()) this.ui.mount(surface);
   }
 
@@ -3353,11 +3342,15 @@ export class DungeonScene extends GameplayScene {
         }
       }
     };
-    if (this.audio === null || this.audio.isRunning) {
-      startIntro();
-    } else {
-      this.audio.onRunning(startIntro);
-    }
+    // Behind the loading screen too: the sting announces the floor, so it is
+    // heard with the banner it belongs to, not over the loading bar.
+    this.arrivalLoading.whenClosed(() => {
+      if (this.audio === null || this.audio.isRunning) {
+        startIntro();
+      } else {
+        this.audio.onRunning(startIntro);
+      }
+    });
 
     const village = this.briarHollowKit;
     this.removeHarvestKeyHook?.();
@@ -3377,7 +3370,7 @@ export class DungeonScene extends GameplayScene {
         this.gameOver ||
         this.levelCompleteScreen.isActive ||
         this.runCompleteScreen.isActive ||
-        this.arrivalLoading?.isOpen === true,
+        this.arrivalLoading.isOpen,
       togglePause: () => this.togglePause(),
       switchCharacter: () => this.triggerSwitchCharacter(),
       spaceAction: () => this.triggerSpaceAction(),
@@ -3424,10 +3417,7 @@ export class DungeonScene extends GameplayScene {
     this.stopBagFullToasts = null;
     // A scene left while still loading must not leave the probe blindfolded,
     // nor the figure cache unable to let anything go.
-    if (this.arrivalLoading?.isOpen === true) {
-      renderQuality.endLoadingCover();
-      releaseFigureIdleSweep();
-    }
+    this.arrivalLoading.dispose();
     // Every floor is a fresh `DungeonScene`, which would already start this
     // fresh too — reset defensively anyway, so a hold left outstanding by a
     // dialog that never got its close callback can never surface as a
@@ -5549,7 +5539,7 @@ export class DungeonScene extends GameplayScene {
     const camera = (): { readonly x: number; readonly y: number } => this.camera();
     const tutorial = this.tutorial;
     return [
-      ...(this.arrivalLoading === null ? [] : [this.arrivalLoading.surface('arrival-loading')]),
+      ...this.arrivalLoading.surfaces(),
       promptSurface(),
       this.hud,
       this.hud.overlay(),
@@ -5637,7 +5627,7 @@ export class DungeonScene extends GameplayScene {
 
   /** Whether the HUD's buttons, hotbar and panels answer presses: not under the death screen, the pause menu or the loading screen. */
   private get hudTakesInput(): boolean {
-    return !this.gameOver && !this.menus.pauseScreen.isOpen && this.arrivalLoading?.isOpen !== true;
+    return !this.gameOver && !this.menus.pauseScreen.isOpen && !this.arrivalLoading.isOpen;
   }
 
   private get tutorialForcesMordecaiRead(): boolean {
@@ -6779,7 +6769,7 @@ export class DungeonScene extends GameplayScene {
     // is being done under this screen, and a world ticked behind it would be
     // played by nobody — a crowd walking off from where it was warmed, a save
     // taken of a floor the player has not seen.
-    if (this.arrivalLoading?.isOpen === true) return;
+    if (this.arrivalLoading.isOpen) return;
     this.yieldCitizenDialogToInterruption();
     const active = this.active();
     // Ahead of every halting return, because a conversation that halts the world
@@ -7117,7 +7107,7 @@ export class DungeonScene extends GameplayScene {
   }
 
   render(ctx: CanvasRenderingContext2D): void {
-    if (this.renderArrivalLoading(ctx)) return;
+    if (this.arrivalLoading.renderLoading(this.ui, ctx)) return;
     // Any overlay at all, not only the world-halting ones: a street conversation
     // lets the player keep walking, and a "SPACE — Talk" cap still hovering over
     // the citizen they are already talking to is the loudest of these.
@@ -7487,35 +7477,7 @@ export class DungeonScene extends GameplayScene {
 
     // Over everything, HUD included: the loading screen fades out over the
     // finished frame rather than cutting to it.
-    this.renderArrivalFade(ctx);
-  }
-
-  /**
-   * While the arrival's loading screen is open, frames only the UI: its
-   * surface draws the screen in place of the world, and drawing it is what
-   * ticks the work. Returns whether it took the frame.
-   */
-  private renderArrivalLoading(ctx: CanvasRenderingContext2D): boolean {
-    const loading = this.arrivalLoading;
-    if (loading?.isOpen !== true) return false;
-    this.ui.frame(ctx);
-    if (loading.hasFinished()) {
-      // Finished on this frame: the world is drawn from the next one on, and
-      // its frame times are the ones the render-quality probe should judge.
-      renderQuality.endLoadingCover();
-      releaseFigureIdleSweep();
-    }
-    return true;
-  }
-
-  private renderArrivalFade(ctx: CanvasRenderingContext2D): void {
-    const loading = this.arrivalLoading;
-    if (loading === null || loading.isOpen) return;
-    if (!loading.isVisible) {
-      this.arrivalLoading = null;
-      return;
-    }
-    loading.renderFadeOut(ctx, viewportWidth(), viewportHeight());
+    this.arrivalLoading.renderFadeOut(ctx);
   }
 
   /**

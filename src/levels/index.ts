@@ -18,5 +18,15 @@ export function getLevelDef(id: string): LevelDef {
   return def;
 }
 
+/** Every registered level, in the order a run reaches them. */
+export function allLevelDefs(): LevelDef[] {
+  return [...registry.values()];
+}
+
+/** The small line over a level's name on its loading screen. */
+export function levelLoadingKicker(def: LevelDef): string {
+  return def.arrivalLoadingScreen.kicker ?? `Floor ${def.floorNumber}`;
+}
+
 export { tutorialLevel, level1, level2, level3 };
 export type { LevelDef, MobSpawnRule } from './types';

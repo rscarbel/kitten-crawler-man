@@ -36,6 +36,7 @@ Object.defineProperty(globalThis, 'navigator', {
 
 const PHONE = { width: 390, height: 844, devicePixelRatio: 1 } as const;
 const { installBrowserShim } = await import('./browserShim.js');
+const { settleArrival } = await import('./settleArrival.js');
 installBrowserShim(PHONE);
 const { gameContext } = await import('./nodeGameContext.js');
 const { setViewportSize } = await import('../src/core/Viewport.js');
@@ -141,16 +142,18 @@ village.unlocks.construction.push('trebuchet', 'snare');
 type Interior = InstanceType<typeof BuildingInteriorScene>;
 type DockId = Parameters<Interior['hud']['cssDockRect']>[0];
 
-function enter(
+/** A building entered and past its arrival loading screen, ready to be driven. */
+async function enter(
   entry: (typeof town.buildingEntries)[number],
   anchorProgress = createAnchorQuestProgress(),
   journal?: InteriorJournalSource,
-): Interior {
-  return new BuildingInteriorScene(
+): Promise<Interior> {
+  const scene = new BuildingInteriorScene(
     entry,
     snapPlayer(human),
     snapPlayer(cat),
     level3.xpDiminishingTiers,
+    level3.arrivalLoadingScreen,
     new InputManager(),
     new SceneManager(),
     () => undefined,
@@ -179,6 +182,10 @@ function enter(
     village,
     journal,
   );
+  if (!(await settleArrival(scene, ctx))) {
+    throw new Error(`${entry.name}'s arrival screen never finished`);
+  }
+  return scene;
 }
 
 function hudFrame(scene: Interior) {
@@ -246,7 +253,7 @@ function rig(scene: InstanceType<typeof BuildingInteriorScene>) {
 
 // ── The General Store ────────────────────────────────────────────────────────
 
-const scene = enter(building((entry) => entry.type === 'store'));
+const scene = await enter(building((entry) => entry.type === 'store'));
 // Private collaborators, reached by name: the scene has no public way to open
 // its counter, and the check is about what a press reaches, not how the panel
 // was opened.
@@ -378,7 +385,7 @@ console.log("\nUnder one of Old Hilda's beats, which halts the room");
 
 const anchorProgress = createAnchorQuestProgress();
 anchorProgress.status = 'active';
-const cottage = enter(
+const cottage = await enter(
   building((entry) => entry.name === HILDA_COTTAGE_NAME),
   anchorProgress,
 );
@@ -456,7 +463,7 @@ check(inside(hildaSlot, hudHotbarSlot(POTION_SLOT)), 'the slot point is on the b
 console.log('\nEach HUD control reaches its own action and nothing else');
 
 const journal: InteriorJournalSource = { entries: () => [], progress: createJournalProgress() };
-const room = enter(
+const room = await enter(
   building((entry) => entry.type === 'store'),
   createAnchorQuestProgress(),
   journal,

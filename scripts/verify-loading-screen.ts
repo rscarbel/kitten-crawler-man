@@ -16,8 +16,8 @@
  *  6. While it is up, the world does not update: the overlay's own surface, which
  *     the dungeon mounts as `arrival-loading`, halts the world, locks the
  *     keyboard and spends the attack key through the same `UiRoot` the scene
- *     reads, framing that root is what ticks the work, and `DungeonScene.update`
- *     returns on it before anything else.
+ *     reads, framing that root is what ticks the work, and every gameplay
+ *     scene's `update` and `render` return on it before anything else.
  *  7. The screen draws at any canvas size, clock and progress it can be
  *     handed — a 0 px window, a rAF timestamp from before the load started, a
  *     progress of NaN — without throwing, without geometry a browser rejects or
@@ -28,8 +28,8 @@
  *   npx tsx scripts/verify-loading-screen.ts --fault=no-halt     # must fail
  */
 
-import { readFileSync } from 'node:fs';
-import { resolve } from 'node:path';
+import { readdirSync, readFileSync } from 'node:fs';
+import { join, resolve } from 'node:path';
 
 import { installCanvasGlobals } from './nodeCanvasGlobals.js';
 import { gameContext } from './nodeGameContext.js';
@@ -223,11 +223,57 @@ const VIEW_W = 390;
 const VIEW_H = 844;
 const ctx = gameContext(VIEW_W, VIEW_H);
 
-const dungeonSource = readFileSync(resolve('src/scenes/DungeonScene.ts'), 'utf8');
-check(
-  dungeonSource.includes("this.arrivalLoading.surface('arrival-loading')"),
-  "DungeonScene does not mount the loading overlay's own 'arrival-loading' surface",
-);
+/**
+ * Every gameplay scene arrives behind the loading screen, read from the source:
+ * each file anywhere under `src/` that extends `GameplayScene` begins its
+ * `ArrivalLoader`, mounts its surfaces, returns from `update` and `render` on
+ * it before anything else, and lets it go on exit. A new scene that forgets
+ * one of these goes red here rather than popping its art in on first frame.
+ */
+const SOURCE_DIR = resolve('src');
+const gameplayScenes = readdirSync(SOURCE_DIR, { recursive: true, encoding: 'utf8' })
+  .filter((name) => name.endsWith('.ts'))
+  .map((name) => ({ name, source: readFileSync(join(SOURCE_DIR, name), 'utf8') }))
+  .filter(({ source }) => /\bextends GameplayScene\b/.test(source));
+check(gameplayScenes.length > 0, 'found no scene extending GameplayScene to check');
+
+function firstStatementOf(source: string, signature: string): string {
+  const escaped = signature.replace(/[()]/g, (paren) => `\\${paren}`);
+  const body =
+    new RegExp(`\\n {2}${escaped} \\{\\n([\\s\\S]*?)\\n {2}\\}\\n`).exec(source)?.[1] ?? '';
+  return (
+    body
+      .split('\n')
+      .map((line) => line.trim())
+      .find((line) => line !== '' && !line.startsWith('//')) ?? 'nothing'
+  );
+}
+
+for (const { name, source } of gameplayScenes) {
+  check(source.includes('this.arrivalLoading.begin({'), `${name} never begins its arrival`);
+  check(
+    source.includes('...this.arrivalLoading.surfaces()'),
+    `${name} does not mount its loading screen's surface`,
+  );
+  check(
+    source.includes('this.arrivalLoading.dispose();'),
+    `${name} does not release its loading screen on exit`,
+  );
+  check(
+    source.includes('this.arrivalLoading.renderFadeOut(ctx);'),
+    `${name} does not fade its loading screen out over the world`,
+  );
+  const updateFirst = firstStatementOf(source, 'update(): void');
+  check(
+    updateFirst === 'if (this.arrivalLoading.isOpen) return;',
+    `${name}: update's first statement is not the loading-screen guard (found: ${updateFirst})`,
+  );
+  const renderFirst = firstStatementOf(source, 'render(ctx: CanvasRenderingContext2D): void');
+  check(
+    renderFirst === 'if (this.arrivalLoading.renderLoading(this.ui, ctx)) return;',
+    `${name}: render's first statement is not the loading screen (found: ${renderFirst})`,
+  );
+}
 
 const hostUi = new UiRoot({
   audio: null,
@@ -278,18 +324,6 @@ check(worldUpdates > 0, 'the world never resumed after the loading screen closed
 check(
   attackKeyLeakedWhileUp === 0,
   `the attack key reached play on ${attackKeyLeakedWhileUp} frame(s) while the loading screen was up`,
-);
-
-// The scene half of the same rule, read from the source: `DungeonScene.update`
-// must return on the loading screen before it does anything else.
-const updateBody = /\n {2}update\(\): void \{\n([\s\S]*?)\n {2}\}\n/.exec(dungeonSource)?.[1] ?? '';
-const firstStatement = updateBody
-  .split('\n')
-  .map((line) => line.trim())
-  .find((line) => line !== '' && !line.startsWith('//'));
-check(
-  firstStatement === 'if (this.arrivalLoading?.isOpen === true) return;',
-  `DungeonScene.update's first statement is not the loading-screen guard (found: ${firstStatement ?? 'nothing'})`,
 );
 
 // ── Scenario 4: any size, any clock, any progress ───────────────────────────

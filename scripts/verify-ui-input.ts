@@ -1953,6 +1953,130 @@ section('a hover-only region shows hover and lets every press through');
   );
 }
 
+section('an overlay draws above every band and takes no input');
+{
+  const OVERLAY_BUTTON: Rect = { x: 360, y: 390, w: 80, h: 20 };
+  const rec = recorder();
+  const paintOrder: string[] = [];
+  const hud = new FakeSurface({
+    id: 'hud',
+    band: 'hud',
+    draw: (ui) => {
+      ui.overlay(() => {
+        paintOrder.push('hud overlay');
+        ui.hit('stolen', OVERLAY_BUTTON, { onTap: () => rec.fired.push('hud/stolen') });
+      });
+      paintOrder.push('hud');
+    },
+  });
+  const panel = new FakeSurface({
+    id: 'panel',
+    band: 'panel',
+    draw: (ui, self) => {
+      paintOrder.push('panel');
+      ui.defer(() => paintOrder.push('panel deferred'));
+      fakeButton(ui, self, rec, 'ok', PANEL_BUTTON);
+    },
+  });
+  const toast = new FakeSurface({
+    id: 'toast',
+    band: 'toast',
+    draw: () => paintOrder.push('toast'),
+  });
+  const h = harness([hud, panel, toast]);
+  h.frame();
+  check(
+    paintOrder.join() === 'hud,panel,panel deferred,toast,hud overlay',
+    `a HUD overlay paints after every band, a panel's deferred draw only after the panel (got ${paintOrder.join()})`,
+  );
+  check(
+    !h.root.regions().some((region) => region.id === 'hud/stolen'),
+    'a region registered from an overlay is refused',
+  );
+  check(
+    h.rec.warnings.some((message) => message.includes('overlays take no input')),
+    'and the refusal warns in dev',
+  );
+  toast.open = false;
+  h.frame();
+  clear(h.rec);
+  h.tap(mid(OVERLAY_BUTTON));
+  check(
+    rec.fired.join() === 'panel/ok',
+    `a tap under the overlay reaches the panel beneath it (got ${rec.fired.join()})`,
+  );
+}
+
+section('an overlay under a scrim is dropped, and paints from its surface’s starting state');
+{
+  const WIDGET_SHIFT = 37;
+  const WIDGET_ALPHA = 0.3;
+  const painted: string[] = [];
+  const seen: {
+    start: DOMMatrix | null;
+    startAlpha: number | null;
+    overlay: DOMMatrix | null;
+    overlayAlpha: number | null;
+  } = { start: null, startAlpha: null, overlay: null, overlayAlpha: null };
+  const bag = new FakeSurface({
+    id: 'bag',
+    band: 'panel',
+    draw: (ui) => {
+      seen.start = ui.ctx.getTransform();
+      seen.startAlpha = ui.ctx.globalAlpha;
+      ui.ctx.save();
+      ui.ctx.translate(WIDGET_SHIFT, WIDGET_SHIFT);
+      ui.ctx.globalAlpha = WIDGET_ALPHA;
+      ui.overlay(() => {
+        painted.push('bag tip');
+        seen.overlay = ui.ctx.getTransform();
+        seen.overlayAlpha = ui.ctx.globalAlpha;
+      });
+      ui.ctx.restore();
+    },
+  });
+  const levelUp = new FakeSurface({
+    id: 'level-up',
+    band: 'system',
+    open: false,
+    draw: () => undefined,
+  });
+  const h = harness([bag, levelUp]);
+  const before = h.ctx.getTransform();
+  const alphaBefore = h.ctx.globalAlpha;
+  h.frame();
+  check(painted.join() === 'bag tip', 'with nothing above, the panel’s overlay paints');
+  const { start, overlay } = seen;
+  check(
+    start !== null && start.e === overlay?.e && start.f === overlay.f,
+    'it paints at the surface’s starting transform, not the widget’s translate',
+  );
+  check(
+    seen.overlayAlpha !== null && seen.overlayAlpha === seen.startAlpha,
+    `and at the surface’s starting alpha (got ${String(seen.overlayAlpha)})`,
+  );
+  const after = h.ctx.getTransform();
+  check(
+    after.a === before.a && after.e === before.e && after.f === before.f,
+    'the canvas transform is restored after the overlays',
+  );
+  check(h.ctx.globalAlpha === alphaBefore, 'and so is its alpha');
+
+  painted.length = 0;
+  levelUp.open = true;
+  h.frame();
+  check(
+    painted.length === 0,
+    `a system surface above the panel drops its overlay (painted: ${painted.join() || 'none'})`,
+  );
+
+  painted.length = 0;
+  levelUp.open = false;
+  bag.open = false;
+  h.frame();
+  check(painted.length === 0, 'a closed surface’s overlay is not painted on the next frame');
+}
+
 section('the real dungeon scene, on a desktop and on a phone');
 {
   // Each in its own process: the platform is decided once, when the game's modules load.

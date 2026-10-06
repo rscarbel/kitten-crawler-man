@@ -74,6 +74,9 @@ import {
 } from '../audio/sounds';
 import { sfxGroupsForBuildingEntry } from '../audio/sfxGroups';
 import { prewarmGroups } from '../core/SpriteLoader';
+import { ArrivalLoader } from './ArrivalLoader';
+import { floorArrivalLoadTasks } from './floorArrivalLoad';
+import type { ArrivalLoadingScreen } from '../levels/types';
 import { aiAdapter } from '../ai/AIAdapter';
 import { EventBus } from '../core/EventBus';
 import { CrawlerBarkSystem } from '../systems/CrawlerBarkSystem';
@@ -289,6 +292,8 @@ import { getMongoStats } from '../abilities/mongo';
 
 /** The shared conversation's surface id: the one overlay a world tap may hand its press past. */
 const CONVERSATION_SURFACE_ID = 'conversation';
+/** The line over a building's name on its loading screen. */
+const INTERIOR_LOADING_KICKER = 'Stepping inside';
 const SHOP_SURFACE_ID = 'shop';
 const CLUB_SURFACE_ID = 'club';
 const SERVICE_SURFACE_ID = 'priced-menu';
@@ -533,6 +538,7 @@ function interiorVariantFor(
 }
 
 export class BuildingInteriorScene extends GameplayScene {
+  protected readonly arrivalLoading = new ArrivalLoader();
   private map: GameMap;
   readonly pm: PlayerManager;
   private mapW: number;
@@ -771,6 +777,8 @@ export class BuildingInteriorScene extends GameplayScene {
     catSnap: PlayerSnapshot,
     /** The curve of the floor this building stands on: XP earned indoors is earned there. */
     private readonly xpCurve: readonly XpDiminishingTier[] | undefined,
+    /** The loading screen of the floor this building stands on. */
+    loadingScreen: ArrivalLoadingScreen,
     input: InputManager,
     sceneManager: SceneManager,
     private readonly onExitCallback: (
@@ -952,7 +960,7 @@ export class BuildingInteriorScene extends GameplayScene {
     // built above from the same 'town' group, so one resolution covers all
     // of them; `changeFloor` never re-triggers this load.
     const interiorMaps = isTower ? this.towerFloors : [this.map];
-    void prewarmGroups(['town']).then(() => {
+    const spriteGroupsReady = prewarmGroups(['town']).then(() => {
       for (const m of interiorMaps) m.invalidateAllTileArt();
     });
 
@@ -1292,6 +1300,21 @@ export class BuildingInteriorScene extends GameplayScene {
     // Last, once the party stands where it came in and the entry storey's roster
     // exists to receive him.
     if (companionArrival.mongoWasOut) this.carryMongoIn();
+    // After everything that warms figures or queues art — the occupants, the
+    // party, the companions — so the loader measures what this room really owes.
+    this.arrivalLoading.begin({
+      kicker: INTERIOR_LOADING_KICKER,
+      title: entry.name,
+      screen: loadingScreen,
+      returning: false,
+      tasks: () =>
+        floorArrivalLoadTasks({
+          gameMap: this.map,
+          camera: () => this.computeCamera(this.map),
+          viewport: () => ({ width: viewportWidth(), height: viewportHeight() }),
+          spriteGroupsReady,
+        }),
+    });
     this.mountSurfaces();
   }
 
@@ -1832,9 +1855,12 @@ export class BuildingInteriorScene extends GameplayScene {
     this.stopBagFullToasts = toastBagFullLosses([this.human, this.cat], this.menus.toasts);
     // Override the overworld's persisted music with the room's own; the
     // overworld's zone music (OverworldMusicSystem) restores itself on exit.
+    // Started as the room is shown, not under its loading screen.
     const musicTracks = this.interiorMusicTracks();
     if (musicTracks !== null) {
-      this.audio?.playMusicPlaylist(musicTracks, { fadeInMs: INTERIOR_MUSIC_FADE_IN_MS });
+      this.arrivalLoading.whenClosed(() =>
+        this.audio?.playMusicPlaylist(musicTracks, { fadeInMs: INTERIOR_MUSIC_FADE_IN_MS }),
+      );
     }
 
     this.inputHandler.bind({
@@ -1970,6 +1996,7 @@ export class BuildingInteriorScene extends GameplayScene {
   }
 
   onExit(): void {
+    this.arrivalLoading.dispose();
     this.stopForwardingQuestItemEvictions?.();
     this.stopForwardingQuestItemEvictions = null;
     this.stopBagFullToasts?.();
@@ -2032,6 +2059,7 @@ export class BuildingInteriorScene extends GameplayScene {
       companion: this.inactive(),
     });
     const surfaces: Surface[] = [
+      ...this.arrivalLoading.surfaces(),
       promptSurface(),
       this.hud,
       this.hud.overlay(),
@@ -2364,6 +2392,9 @@ export class BuildingInteriorScene extends GameplayScene {
   }
 
   update(): void {
+    // Ahead of everything: the room's own work is being done under this
+    // screen, and a world ticked behind it would be played by nobody.
+    if (this.arrivalLoading.isOpen) return;
     // Above the death-screen return: an award earned by the blow that killed the
     // party is still drawn on top of the screen announcing it, and a dialog that
     // is not ticked sits frozen at its first frame with its accept button inert.
@@ -3647,6 +3678,7 @@ export class BuildingInteriorScene extends GameplayScene {
   }
 
   render(ctx: CanvasRenderingContext2D): void {
+    if (this.arrivalLoading.renderLoading(this.ui, ctx)) return;
     const { x: camX, y: camY } = this.computeCamera(this.map);
 
     // Any overlay at all, not only the world-halting ones: a shop-floor
@@ -3853,6 +3885,7 @@ export class BuildingInteriorScene extends GameplayScene {
     // Flies over every dialog, same as DungeonScene: it's reporting a grant
     // that already happened, not asking for input.
     this.rewardFly.render(ctx, this.hudFlyTargets());
+    this.arrivalLoading.renderFadeOut(ctx);
   }
 
   /**

@@ -42,7 +42,6 @@ const { walkAwayRangeTiles } = await import('../src/dialog/walkAway.js');
 const { BriarHollowKit } = await import('../src/systems/briarHollow/BriarHollowKit.js');
 const { MobRoster } = await import('../src/systems/kits/SceneWorld.js');
 const { createMob } = await import('../src/levels/spawner.js');
-const { LoadingOverlay } = await import('../src/ui/LoadingScreen.js');
 
 type Scene = InstanceType<typeof DungeonScene>;
 type Point = { readonly x: number; readonly y: number };
@@ -150,8 +149,7 @@ async function settleArrival(
   const ctx = sceneManager.canvas.getContext('2d');
   if (ctx === null) throw new Error('the shim canvas has no 2d context');
   for (let frame = 0; frame < MAX_ARRIVAL_FRAMES; frame++) {
-    const loading: unknown = Reflect.get(scene, 'arrivalLoading');
-    if (!(loading instanceof LoadingOverlay) || !loading.isOpen) return true;
+    if (!scene.arrivalLoadingOpen) return true;
     scene.render(ctx);
     await new Promise((resolve) => setImmediate(resolve));
   }

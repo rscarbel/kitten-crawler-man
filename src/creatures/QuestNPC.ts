@@ -3,6 +3,7 @@ import { TILE_SIZE } from '../core/constants';
 import {
   drawQuestNPCSprite,
   drawQuestMarker,
+  prewarmQuestNPCSprite,
   questMarkerColorFor,
   questNPCHelpBubbleTop,
   type QuestMarkerState,
@@ -43,6 +44,7 @@ export class QuestNPC extends Player {
     super(tileX, tileY, TILE_SIZE, { maxHp: NPC_MAX_HP });
     this.questId = questId;
     this.inventory.removeItems('health_potion', INITIAL_POTION_COUNT);
+    prewarmQuestNPCSprite();
   }
 
   protected override drawSelf(

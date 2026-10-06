@@ -10,7 +10,7 @@ import { HUMAN_FIGURE, CHOP_ROWS, humanRowOf } from '../../../sprites/art/humanF
 import { drawFigureCached } from '../../../sprites/figure/figureFrameCache';
 import { drawToolOverlay, toolOverlayOf } from '../../../sprites/toolOverlaySprite';
 import { worldText } from '../../world/worldText';
-import { drawToolIcon, isToolIconId } from '../toolIcons';
+import { drawToolIcon, isToolIconId } from '../../../sprites/art/itemIcons/toolIcons';
 
 // ── Illustration stage ─────────────────────────────────────────────────────
 

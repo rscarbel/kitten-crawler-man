@@ -290,6 +290,16 @@ export interface Ui {
    */
   defer(draw: () => void): void;
   /**
+   * Runs `draw` once every surface has rendered, above all of them (any band)
+   * and unclipped, under the surface's starting transform and opacity (not a
+   * widget's own bounce or scale). For hover descriptions and drag ghosts: a
+   * tooltip on a HUD slot must still read over a menu opened above the HUD.
+   * An overlay from a surface under a modal or system scrim is dropped, since
+   * nothing under a scrim can be hovered. An overlay takes no input; regions
+   * it tries to register are refused.
+   */
+  overlay(draw: () => void): void;
+  /**
    * Starts a dismissable layer (a context menu, a popover): every region this
    * surface registers after the call, this frame, sits on it. While a layer
    * is up, keyboard focus, Enter's primary control, wheel and drag hand-off
@@ -652,12 +662,13 @@ export class UiRoot {
     const building: HitRegion[] = [];
     const renderedSurfaces = new Set<string>();
     const layers = new Map<string, { depth: number; onEscape: (() => void) | null }>();
+    const overlays: QueuedOverlay[] = [];
 
     ctx.save();
     try {
       ctx.scale(viewport.uiScale, viewport.uiScale);
-      for (const entry of this.stack) {
-        const context = new SurfaceContext(this, entry, {
+      for (const [stackIndex, entry] of this.stack.entries()) {
+        const context = new SurfaceContext(this, entry, stackIndex, {
           ctx,
           theme,
           viewport,
@@ -666,6 +677,7 @@ export class UiRoot {
           mousePos: this.mousePos,
           building,
           layers,
+          overlays,
           store: this.store,
         });
         if (SCRIM_BANDS.has(entry.surface.band)) {
@@ -679,6 +691,16 @@ export class UiRoot {
           context.flushDeferred();
         });
         renderedSurfaces.add(entry.surface.id);
+      }
+      const scrimIndices = this.stack
+        .map((entry, index) => (SCRIM_BANDS.has(entry.surface.band) ? index : -1))
+        .filter((index) => index >= 0);
+      const topScrimIndex = Math.max(-1, ...scrimIndices);
+      for (const queued of overlays) {
+        if (queued.context.stackIndex < topScrimIndex) continue;
+        paintIsolated(ctx, `surface ${queued.context.surfaceId} overlay`, () => {
+          queued.context.paintOverlay(queued);
+        });
       }
     } finally {
       ctx.restore();
@@ -1339,7 +1361,14 @@ interface FrameShared {
   readonly mousePos: { readonly x: number; readonly y: number } | null;
   readonly building: HitRegion[];
   readonly layers: Map<string, { depth: number; onEscape: (() => void) | null }>;
+  readonly overlays: QueuedOverlay[];
   readonly store: UiStateStore;
+}
+
+/** An overlay draw waiting for every surface to finish. */
+interface QueuedOverlay {
+  readonly context: SurfaceContext;
+  readonly draw: () => void;
 }
 
 /** The `Ui` one surface renders with for one frame. */
@@ -1363,12 +1392,17 @@ class SurfaceContext implements Ui {
   private clipStack: (Rect | null)[];
   private deferred: (() => void)[] = [];
   private layerDepth = 0;
+  private paintingOverlay = false;
   /** The transform the surface starts from; regions are mapped from the live transform back into it. */
   private readonly baseInverse: DOMMatrix;
+  private readonly baseTransform: DOMMatrix;
+  private readonly baseAlpha: number;
 
   constructor(
     private readonly root: UiRoot,
     entry: MountedSurface,
+    /** @internal Position in the frame's bottom-to-top stack. */
+    readonly stackIndex: number,
     private readonly shared: FrameShared,
   ) {
     this.ctx = shared.ctx;
@@ -1384,7 +1418,9 @@ class SurfaceContext implements Ui {
     this.band = entry.surface.band;
     this.pointer = shared.mousePos;
     this.clipStack = [shared.viewport.screen];
-    this.baseInverse = shared.ctx.getTransform().inverse();
+    this.baseTransform = shared.ctx.getTransform();
+    this.baseInverse = this.baseTransform.inverse();
+    this.baseAlpha = shared.ctx.globalAlpha;
   }
 
   /**
@@ -1412,6 +1448,13 @@ class SurfaceContext implements Ui {
 
   private register(widgetId: string, rect: Rect, handlers: HitHandlers): RegionRef | null {
     const id = `${this.surfaceId}/${widgetId}`;
+    if (this.paintingOverlay) {
+      this.root.warnOnce(
+        `${id}#overlay`,
+        `UiRoot: overlay in surface "${this.surfaceId}" tried to register "${widgetId}"; overlays take no input`,
+      );
+      return null;
+    }
     if (this.idsThisFrame.has(id)) {
       this.root.warnOnce(
         id,
@@ -1528,6 +1571,10 @@ class SurfaceContext implements Ui {
     this.deferred.push(draw);
   }
 
+  overlay(draw: () => void): void {
+    this.shared.overlays.push({ context: this, draw });
+  }
+
   layer(opts: { readonly onEscape?: () => void } = {}): void {
     this.layerDepth++;
     this.shared.layers.set(this.surfaceId, {
@@ -1548,5 +1595,18 @@ class SurfaceContext implements Ui {
     for (const draw of this.deferred) draw();
     this.deferred = [];
     this.clipStack = outerClips;
+  }
+
+  /** @internal Paints one queued overlay from the surface's starting canvas state, refusing any region it registers. */
+  paintOverlay(queued: QueuedOverlay): void {
+    this.ctx.setTransform(this.baseTransform);
+    this.ctx.globalAlpha = this.baseAlpha;
+    this.paintingOverlay = true;
+    try {
+      queued.draw();
+      this.flushDeferred();
+    } finally {
+      this.paintingOverlay = false;
+    }
   }
 }

@@ -1,6 +1,7 @@
 /**
  * A hover label: appears after a short delay beside its anchor, kept inside
- * the viewport, drawn above everything else the surface drew. Takes no input.
+ * the viewport, drawn above every surface on screen (a HUD slot's tooltip
+ * reads over a menu opened above the HUD). Takes no input.
  */
 
 import { inset, intersect, type Rect } from '../core/geom';
@@ -140,7 +141,7 @@ export function tooltip(ui: Ui, anchor: Rect, opts: TooltipOptions): boolean {
   );
   const visibleSince = opts.immediate === true ? timer.since : timer.since + TOOLTIP_DELAY_MS;
   const fade = Math.min(1, Math.max(0, (ui.now - visibleSince) / theme.motion.fast));
-  ui.defer(() => {
+  ui.overlay(() => {
     const { ctx } = ui;
     ctx.save();
     ctx.globalAlpha *= fade;

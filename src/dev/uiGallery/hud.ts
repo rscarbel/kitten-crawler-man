@@ -2,7 +2,8 @@
  * The gallery's HUD sheet: the real `HudSurface` drawn from fixture models —
  * a quiet moment with skill points to spend and toasts up, a boss fight with
  * the top band full and statuses ticking, the safe room's call to collect,
- * and a building with its room-name banner.
+ * a building with its room-name banner, and a hotbar slot's tooltip read
+ * over the open bag.
  */
 
 import { HOTBAR_COUNT, ITEM_DEF, type InventoryItem, type ItemId } from '../../core/ItemDefs';
@@ -25,6 +26,7 @@ import { stackedBandEntry } from '../../ui/hud/topBandStack';
 import { QUEST_BANNER_FRAMES, questBannerEntry } from '../../ui/QuestBanners';
 import { palette } from '../../ui/theme/tokens';
 import type { DialogFixture } from './dialogs/fixture';
+import { buildFixture as inventoryFixture } from './inventory';
 
 const FIXTURE_TOAST_TICKS = 20;
 const BOSS_HP = 420;
@@ -47,6 +49,8 @@ const STATUS_MOST = 0.85;
 const COOLDOWN_SECONDS = 4;
 const COOLDOWN_FRACTION = 0.4;
 const MINIMAP_TILE = 8;
+/** The dynamite stack: its tooltip carries a description long enough to wrap. */
+const HOVERED_HOTBAR_SLOT = 2;
 
 function item(id: ItemId, quantity: number): InventoryItem {
   return { ...ITEM_DEF[id], quantity };
@@ -297,6 +301,30 @@ function hudFixture(spec: HudFixtureSpec): DialogFixture {
   };
 }
 
+/**
+ * The HUD with the bag open over it and a hotbar slot hovered: the slot's
+ * tooltip must draw above the bag, not beneath it.
+ */
+function hotbarTooltipOverMenu(): DialogFixture {
+  const name = 'hotbar-tip-over-bag';
+  const hud = hudFixture({
+    name,
+    status: [],
+    skillPoints: 0,
+    dockExtras: [],
+    topBand: () => [],
+    lootBanner: false,
+    toasts: false,
+    expanded: false,
+  });
+  const bag = inventoryFixture({ name, tab: 'bag' });
+  return {
+    name,
+    surfaces: (shown) => [...hud.surfaces(shown), ...bag.surfaces(shown)],
+    interact: (rig) => rig.hover(rig.need(`hud-${name}/hotbar/${HOVERED_HOTBAR_SLOT}`)),
+  };
+}
+
 export const HUD_FIXTURES: readonly DialogFixture[] = [
   hudFixture({
     name: 'quiet',
@@ -347,4 +375,5 @@ export const HUD_FIXTURES: readonly DialogFixture[] = [
     toasts: false,
     expanded: true,
   }),
+  hotbarTooltipOverMenu(),
 ];

@@ -28,7 +28,11 @@ import {
   RESOURCE_ICON_ID_LIST,
   type ResourceIconId,
 } from '../src/ui/icons/resourceIcons.js';
-import { drawToolIcon, TOOL_ICON_ID_LIST, type ToolIconId } from '../src/ui/icons/toolIcons.js';
+import {
+  drawToolIcon,
+  TOOL_ICON_ID_LIST,
+  type ToolIconId,
+} from '../src/sprites/art/itemIcons/toolIcons.js';
 import { drawFoodIcon, FOOD_ICON_ID_LIST, type FoodIconId } from '../src/ui/icons/foodIcons.js';
 import { drawKitIcon, KIT_ICON_ID_LIST, type KitIconId } from '../src/ui/icons/kitIcons.js';
 import {

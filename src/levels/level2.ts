@@ -139,6 +139,16 @@ export const level2: LevelDef = {
   id: 'level2',
   name: 'The Dungeon, Level 2',
   floorNumber: 2,
+  arrivalLoadingScreen: {
+    tips: [
+      'The collapse countdown is running again. Keep an eye on the clock.',
+      'The Krakaren Clone guards the only way deeper into this floor.',
+      'Past the Krakaren, the Ball of Swine waits in its arena.',
+      'A spider lab hangs off the chain of rooms. Something large has made it home.',
+      'Fairies heal the monsters around them. Bring the healer down first.',
+      'A safe room saves your run, and a death returns you to your last save.',
+    ],
+  },
   music: 'bg_level_2',
   groundTheme: 'service_level',
   mapSize: 260,

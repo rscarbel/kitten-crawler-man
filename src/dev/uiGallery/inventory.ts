@@ -98,7 +98,7 @@ function fillBag(owner: InventoryOwner): void {
   }
 }
 
-function buildFixture(spec: FixtureSpec): DialogFixture {
+export function buildFixture(spec: FixtureSpec): DialogFixture {
   return {
     name: spec.name,
     surfaces: (shown) => {

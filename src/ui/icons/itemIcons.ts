@@ -9,14 +9,17 @@ import {
 } from '../../sprites/gymEquipmentSprite';
 import { drawAnchorShardIcon, drawAnchorStoneIcon } from './anchorStoneIcon';
 import { drawBlueprintsQuestIcon, type BlueprintsQuestIconId } from './blueprintsQuestIcons';
-import { drawEnchantedGearIcon, type EnchantedGearItemId } from './enchantedGearIcons';
+import {
+  drawEnchantedGearIcon,
+  type EnchantedGearItemId,
+} from '../../sprites/art/itemIcons/enchantedGearIcons';
 import {
   drawBigBoiBoxersIcon,
   drawSepsisCrownIcon,
   drawTrollskinShirtIcon,
-} from './enchantedApparelIcons';
+} from '../../sprites/art/itemIcons/enchantedApparelIcons';
 import { drawFoodIcon, type FoodIconId } from './foodIcons';
-import { drawIssueKitIcon, type IssueKitItemId } from './issueKitIcon';
+import { drawIssueKitIcon, type IssueKitItemId } from '../../sprites/art/itemIcons/issueKitIcon';
 import { drawKitIcon, type KitIconId } from './kitIcons';
 import { drawMagistratesWritIcon, drawUnreadableLetterIcon } from './murderMysteryLetterIcons';
 import {
@@ -28,10 +31,10 @@ import {
   drawStatBoostIcon,
 } from './potionIcons';
 import { drawResourceIcon, type ResourceIconId } from './resourceIcons';
-import { drawConfusingFogScrollIcon } from './scrollIcons';
+import { drawConfusingFogScrollIcon } from '../../sprites/art/itemIcons/scrollIcons';
 import { drawSkillBookIcon } from './skillBookIcon';
 import { drawSoulCrystalIcon } from './soulCrystalIcon';
-import { drawToolIcon, type ToolIconId } from './toolIcons';
+import { drawToolIcon, type ToolIconId } from '../../sprites/art/itemIcons/toolIcons';
 import { drawExplosivesTomeIcon, drawMagicMissileTomeIcon, drawSmushTomeIcon } from './tomeIcons';
 
 /** Paints one item's picture into `rect`. Square art is centred in a non-square rect. */

@@ -42,15 +42,18 @@ const FRAME_COUNT: Record<RatKinState, number> = {
 /**
  * The rows worth warming the moment a safe room stands him up.
  *
- * All three idle views: he is standing the frame the room exists and the player
- * can walk in from any side, so which view he is first drawn in is not knowable
- * here. The walk rows follow within a wander beat and are cheap enough to paint
- * directly while they bake.
+ * Every view of both rows: he is standing the frame the room exists, the player
+ * can walk in from any side, and he sets off on a wander within a beat. The
+ * room is built behind the arrival's loading screen, so warming the walks there
+ * costs play nothing, where painting them directly on his first steps would.
  */
 export const RAT_KIN_PREWARMED_STATES: ReadonlyArray<RatKinState> = [
   'idle',
   'idle_side',
   'idle_away',
+  'walk',
+  'walk_side',
+  'walk_away',
 ];
 
 /** Warms the rows he starts playing immediately. Called when a safe room is built. */

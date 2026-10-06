@@ -233,7 +233,7 @@ export const TOOL_TIER_LOOKS: Record<ToolTier, ToolTierLook> = {
     hafColor: '#6b4a30',
   },
   2: {
-    headColor: '#6a5a4c',
+    headColor: '#8a7966',
     edgeColor: '#e6d2b0',
     hafColor: '#79542f',
     longHaft: true,

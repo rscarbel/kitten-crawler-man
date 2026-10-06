@@ -9,7 +9,11 @@ import {
   incubusHeadClearanceTiles,
   prewarmIncubusSprite,
 } from './incubusSprite';
-import { bugabooHeadClearanceTiles, drawBugabooSprite } from './bugabooSprite';
+import {
+  bugabooHeadClearanceTiles,
+  drawBugabooSprite,
+  prewarmPeacefulBugaboo,
+} from './bugabooSprite';
 import type { DrawnFigureRow } from './figure/figureDef';
 
 /**
@@ -72,11 +76,13 @@ export function mordecaiHeadTop(levelId: string, sy: number, tileSize: number): 
  * moment his room is built rather than on his first frame.
  *
  * Branches on the same level IDs {@link drawMordecaiForLevel} does, so a level
- * cannot be warmed for a shape it never draws. The Bugaboo is not painted
- * through the figure cache here, so it has nothing to warm.
+ * cannot be warmed for a shape it never draws.
  */
 export function prewarmMordecaiForLevel(levelId: string): void {
-  if (levelId === 'level2') return;
+  if (levelId === 'level2') {
+    prewarmPeacefulBugaboo();
+    return;
+  }
   if (levelId === 'level3') {
     prewarmIncubusSprite();
     return;

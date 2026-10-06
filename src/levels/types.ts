@@ -343,6 +343,16 @@ export interface FairySpawnTable {
   readonly guaranteedShieldNightmareOnly?: boolean;
 }
 
+/**
+ * What an environment's loading screen says while the player waits. Every
+ * environment declares its own, so the screen is never bare of advice.
+ */
+export interface ArrivalLoadingScreen {
+  readonly tips: readonly [string, ...string[]];
+  /** The small line over the title, for an environment that is not a numbered floor. */
+  readonly kicker?: string;
+}
+
 /** Data-only description of a dungeon level. No game-logic dependencies. */
 export interface LevelDef {
   id: string;
@@ -447,14 +457,13 @@ export interface LevelDef {
   /** Overworld levels use outdoor map generation instead of dungeon rooms. */
   isOverworld?: boolean;
   /**
-   * Covers this floor's arrival with a loading screen while its painted art,
-   * its figures and the first screenful of ground are prepared, rather than
-   * letting them fill in over the first seconds of play. For a floor heavy
-   * enough that the fill-in is what the player would see. Shown only when the
-   * arrival actually owes that work — walking out of a building usually does
-   * not — with one of `tips` on it.
+   * What the loading screen says while this floor's painted art, its figures
+   * and the first screenful of ground are prepared. Every floor arrives behind
+   * one, so required: a floor without tips does not typecheck. Shown only when
+   * the arrival actually owes that work — walking out of a building usually
+   * does not. Building interiors on this floor show the same tips.
    */
-  arrivalLoadingScreen?: { readonly tips: readonly string[] };
+  arrivalLoadingScreen: ArrivalLoadingScreen;
   /**
    * Which materials this floor's generic walls and floors are drawn in.
    *

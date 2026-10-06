@@ -22,6 +22,7 @@
     "scripts/verify-town-arrival-load.ts",
     "scripts/render-loading-screen.ts",
     "scripts/render-quest-reward.ts",
+    "scripts/render-equipment-icons.ts",
     "scripts/verify-quest-reward.ts",
     "scripts/render-travel-menu.ts",
     "scripts/verify-anchor-travel.ts",

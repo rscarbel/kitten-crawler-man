@@ -50,7 +50,7 @@ import { drawSpitProjectile } from '../sprites/grotesqueSpiderSpitSprite';
 import { prewarmGrotesqueSpiderLocomotion } from '../sprites/grotesqueSpiderSprite';
 import { LIFE_MACHINE_FIGURE, lifeMachineStateName } from '../sprites/art/lifeMachineFigure';
 import { figureFrameCount } from '../sprites/figure/figureDef';
-import { drawFigureCached } from '../sprites/figure/figureFrameCache';
+import { drawFigureCached, prewarmFigureState } from '../sprites/figure/figureFrameCache';
 import { spawnHardModeBossHealer } from '../levels/fairySpawner';
 import type { HealingFairy } from '../creatures/fairies/HealingFairy';
 import { level2 } from '../levels/level2';
@@ -573,6 +573,15 @@ export class SpiderQuestSystem implements GameSystem {
           poweringOnSoundPending: false,
         });
         gameMap.blockTilePermanently(pt.x, pt.y);
+      }
+      // Drawn every frame wherever the party is, and cycling through their
+      // rows on their own from the start, so the cycle and its lamps are warmed
+      // with the floor rather than baked on its first frames of play.
+      if (this.lifeMachines.length > 0) {
+        for (const machineState of Object.values(LIFE_MACHINE_STATES)) {
+          prewarmFigureState(LIFE_MACHINE_FIGURE, machineState.spriteState);
+        }
+        prewarmFigureState(LIFE_MACHINE_FIGURE, lifeMachineStateName('green_lights'));
       }
 
       // A generated lab stamps the terminal's bench as bench tiles, which are

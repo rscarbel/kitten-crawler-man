@@ -42,6 +42,17 @@ const NPC_BUBBLE_TEXT_CENTER_X = 0.5;
 const NPC_BUBBLE_TEXT_CENTER_Y = 0.5;
 
 /**
+ * Warms both of the goblin mother's rows. Called when she is placed, so the
+ * arrival's loading screen bakes her rather than her first frames on screen:
+ * she stands idle from the moment she exists, and her call for help plays on a
+ * first blow that lands with no telegraph.
+ */
+export function prewarmQuestNPCSprite(): void {
+  prewarmFigureState(GOBLIN_MOTHER_FIGURE, 'idle');
+  prewarmFigureState(GOBLIN_MOTHER_FIGURE, 'hurt');
+}
+
+/**
  * The goblin mother, cradling her baby. `hurtTimer` above zero plays her call
  * for help — the baby clutched tight, her free arm waving — with a "Help!!!"
  * bubble fading out over its last frames. Faces toward +X unless `facingX` is

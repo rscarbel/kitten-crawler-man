@@ -180,6 +180,16 @@ export const level1: LevelDef = {
   music: 'bg_level_1',
   name: 'The Dungeon',
   floorNumber: 1,
+  arrivalLoadingScreen: {
+    tips: [
+      'The floor is on a countdown. Find a stairwell before it collapses with you on it.',
+      'The Hoarder and then the Juicer stand between you and the stairwells.',
+      'A safe room saves your run, and a death returns you to your last save.',
+      'The Bopca in each safe room runs a shop. Spend your coins before you descend.',
+      'Other crawlers have painted signs on the walls. They point toward the stairwell.',
+      'Treasure rooms are guarded. Clear the guards before you reach for the chest.',
+    ],
+  },
   groundTheme: 'cellars',
   mapSize: 450,
   spriteGroups: ['core', 'dungeon_common', 'floor1_tileset', 'boss_hoarder', 'boss_juicer'],

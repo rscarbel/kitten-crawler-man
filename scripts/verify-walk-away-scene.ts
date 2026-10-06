@@ -49,7 +49,6 @@ const { TouchMoveState } = await import('../src/core/TouchMoveState.js');
 const { safeRoomSpeakerFor } = await import('../src/systems/safeRoomSpeaker.js');
 const { stampSafeRoomCounters } = await import('../src/map/safeRoomCounterLayout.js');
 const { CITIZEN_TALK_RADIUS_TILES } = await import('../src/creatures/townInteraction.js');
-const { LoadingOverlay } = await import('../src/ui/LoadingScreen.js');
 
 type Scene = InstanceType<typeof DungeonScene>;
 type Point = { readonly x: number; readonly y: number };
@@ -163,8 +162,7 @@ async function settleArrival(
   const ctx = sceneManager.canvas.getContext('2d');
   if (ctx === null) throw new Error('the shim canvas has no 2d context');
   for (let frame = 0; frame < MAX_ARRIVAL_FRAMES; frame++) {
-    const loading: unknown = Reflect.get(scene, 'arrivalLoading');
-    if (!(loading instanceof LoadingOverlay) || !loading.isOpen) return true;
+    if (!scene.arrivalLoadingOpen) return true;
     scene.render(ctx);
     await new Promise((resolve) => setImmediate(resolve));
   }
@@ -405,7 +403,7 @@ function findSafeRoomSetup(): SafeRoomSetup | null {
   return null;
 }
 
-function verifyBopcaOnAPhone(): void {
+async function verifyBopcaOnAPhone(): Promise<void> {
   console.log("\nthe Bopca's box on a phone");
   const setup = findSafeRoomSetup();
   check(setup !== null, 'a safe room puts Mordecai inside the Bopca walk-away range');
@@ -418,6 +416,7 @@ function verifyBopcaOnAPhone(): void {
     skipIntro: true,
   });
   sceneManager.replace(scene);
+  check(await settleArrival(sceneManager, scene), "floor 1's arrival screen finishes");
   scene.update();
 
   const bopca = sceneField(scene, 'bopca', BopcaSystem);
@@ -468,7 +467,7 @@ function verifyBopcaOnAPhone(): void {
 }
 
 await verifyCitizenWithHireling();
-verifyBopcaOnAPhone();
+await verifyBopcaOnAPhone();
 
 console.log(
   failures === 0 ? '\nall scene walk-away checks passed' : `\n${failures} check(s) failed`,

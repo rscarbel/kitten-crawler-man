@@ -59,7 +59,7 @@ The floor-3 town's systems, and where each rule lives. The durable description i
   - `src/scenes/interiorCamera.ts` frames the room clear of the HUD: `interiorHudOccluders` (`src/scenes/interiorHud.ts`) turns the shared HUD layout (`liveHudLayout`) into occluders for `hudClearView`.
 - **Memory:** `TownMemory` (`src/core/TownMemory.ts`) is threaded by reference through both scenes, like `BriarHollowState`: resident talks, cleared rooms and camps, and props that have paid out. `RENAMED_BUILDINGS` migrates old building names in saves.
 - **Talk:** `src/dialog/walkAway.ts` is the one walk-away rule. `src/systems/safeRoomSpeaker.ts` decides whether a press in the safe room is for the Bopca or Mordecai.
-- **Arrival:** `findPartyArrivalTiles` (`src/map/findWalkableTile.ts`) sets the party down on every arrival. `src/scenes/floorArrivalLoad.ts` builds the loading screen's tasks, run by `LoadRunner` (`src/core/LoadRunner.ts`).
+- **Arrival:** `findPartyArrivalTiles` (`src/map/findWalkableTile.ts`) sets the party down on every arrival. Every gameplay scene, on every floor, arrives behind an `ArrivalLoader` (`src/scenes/ArrivalLoader.ts`, abstract on `GameplayScene`); `src/scenes/floorArrivalLoad.ts` builds its tasks, run by `LoadRunner` (`src/core/LoadRunner.ts`). See `add-level`.
 
 ### Boss-room dressing
 

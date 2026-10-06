@@ -18,7 +18,7 @@ import type { GameMap } from '../../map/GameMap';
 import { findNearbyWalkableTile } from '../../map/findWalkableTile';
 import type { TilePoint } from '../../map/town/townPlan';
 import { drawQuestBeacon } from '../../sprites/questBeacon';
-import { drawRatkinCastSprite } from '../../sprites/ratkinCastSprite';
+import { drawRatkinCastSprite, prewarmRatkinCastMember } from '../../sprites/ratkinCastSprite';
 import { figureRowInkTop } from '../../sprites/figure/figureFrameCache';
 import {
   drawQuestMarker,
@@ -55,6 +55,10 @@ export class RecruiterNPC implements TownPropRenderable {
   constructor(tile: TilePoint) {
     this.x = tile.x * TILE_SIZE;
     this.y = tile.y * TILE_SIZE;
+    // He stands in the square the party arrives in, so his stance is warmed
+    // with the town rather than baked on his first frames on screen, and is
+    // not left to yield to a cache the crowd has already filled.
+    prewarmRatkinCastMember(RECRUITER_SPRITE_ID, true);
   }
 
   render(ctx: CanvasRenderingContext2D, camX: number, camY: number, tileSize: number): void {
