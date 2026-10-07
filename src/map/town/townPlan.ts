@@ -54,6 +54,36 @@ export interface TownOffset {
 export type BuildingKind = 'house' | 'tower' | 'store' | 'club';
 
 /**
+ * Every sprite building's name, exactly as `buildingEntries` and the interior
+ * registries key it. A union rather than free strings so a system that names
+ * buildings (a resident's home, a contract site) fails to compile on a rename.
+ */
+export const PLANNED_BUILDING_NAMES = [
+  'Blackwood Lodge',
+  'Plumbline Farm',
+  'The Barracks',
+  "Cartwright's Workshop",
+  'Temple of the Sky',
+  'Herb & Remedy',
+  'General Store',
+  'The Sleeping Cat Inn',
+  'The Horned Flagon',
+  "Old Hilda's Cottage",
+  'The Rusty Anvil',
+  'The Sunken Stump Pub',
+  'The Quiet Needle',
+  'The Desperado Club',
+  "Miller's Farm",
+] as const;
+
+export type PlannedBuildingName = (typeof PLANNED_BUILDING_NAMES)[number];
+
+export const TOWN_TOWER_NAME = 'Town Center Tower';
+
+/** Every enterable building inside the town wall: the sprite buildings and the tower. */
+export type TownBuildingName = PlannedBuildingName | typeof TOWN_TOWER_NAME;
+
+/**
  * One paved or planted region of the town.
  *
  * Surfaces are painted in the order the `TownPlan` lists them and later ones win, so
@@ -166,7 +196,7 @@ export interface PlannedBuilding {
    */
   readonly plotTop: number;
   readonly spriteKey: string;
-  readonly name: string;
+  readonly name: PlannedBuildingName;
   readonly kind: BuildingKind;
   /**
    * Whether this building's interior hosts the town's safe room — Mordecai, the
@@ -195,7 +225,7 @@ export interface PlannedTower {
   /** Tile carrying the `MAIN_TOWER` type that triggers the sprite render. */
   readonly anchor: TownOffset;
   readonly door: TownOffset;
-  readonly name: string;
+  readonly name: typeof TOWN_TOWER_NAME;
   readonly kind: BuildingKind;
 }
 
@@ -1241,7 +1271,7 @@ export function createTownPlan(size: number): TownPlan {
     tower: {
       anchor: { dx: 0, dy: -TOWER_ANCHOR_NORTH_OFFSET },
       door: { dx: -TOWER_DOOR_WEST_OFFSET, dy: -TOWER_DOOR_NORTH_OFFSET },
-      name: 'Town Center Tower',
+      name: TOWN_TOWER_NAME,
       kind: 'tower',
     },
     buildings: PLANNED_BUILDINGS,

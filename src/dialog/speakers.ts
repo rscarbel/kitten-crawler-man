@@ -92,7 +92,11 @@ export interface SpeakerDef {
   readonly typeface?: SpeakerTypeface;
 }
 
-function ratkinVillagerSpeaker(name: string, id: RatkinCastId): SpeakerDef {
+/** Typed with the exact name, never null, so code that names a villager outside the dialog box needs no fallback. */
+function ratkinVillagerSpeaker<const Name extends string>(
+  name: Name,
+  id: RatkinCastId,
+): SpeakerDef & { readonly name: Name } {
   return {
     name,
     portrait: { source: 'ratkin', id },

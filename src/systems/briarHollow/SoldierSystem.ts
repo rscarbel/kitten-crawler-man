@@ -18,7 +18,11 @@
 import type { AudioManager } from '../../audio/AudioManager';
 import { VILLAGE_CUES } from '../../audio/villageSoundCues';
 import { TILE_SIZE } from '../../core/constants';
-import type { BriarHollowState, SoldierOrderRecord } from '../../core/briarHollowState';
+import type {
+  ActiveContract,
+  BriarHollowState,
+  SoldierOrderRecord,
+} from '../../core/briarHollowState';
 import type { CrawlerKind } from '../../core/SkillManager';
 import type { VillageQuestPhase } from '../../core/villageQuestPhase';
 import { applySpawnDifficulty } from '../../core/difficultyProfiles';
@@ -36,6 +40,7 @@ import type { GameMap } from '../../map/GameMap';
 import type { AssaultLaneId, BriarHollowSite } from '../../map/overworld/briarHollowSite';
 import type { TilePoint } from '../../map/town/townPlan';
 import { findNearbyWalkableTile } from '../../map/findWalkableTile';
+import { HOLLOW_THRESHOLD } from '../../map/tileTypes';
 import { RATKIN_SOLDIER_IDS, type RatkinSoldierId } from '../../sprites/art/ratkin/cast';
 import { drawTimedSpeechBubble, type TimedBubbleStyle } from '../../sprites/speechBubble';
 import { drawInteractionPrompt } from '../../ui/InteractionPrompt';
@@ -44,6 +49,11 @@ import { hostileWithinAttackRange } from '../interactionPromptGate';
 import type { BarkLine } from '../../dialog/line';
 import { HOBB, type VillagerId } from '../../dialog/scripts/briarHollow';
 import { SOLDIER_SCRIPTS } from '../../dialog/villagerRegistry';
+import {
+  contractContactPin,
+  samePin,
+  type ContractContactPin,
+} from '../constructionContracts/contractContactPin';
 import type { DefenseStructures } from './DefenseStructures';
 import {
   type SoldierPosts,
@@ -135,6 +145,9 @@ const BELL_GUARD_OFFSETS: ReadonlyArray<{ readonly x: number; readonly y: number
 /** How far from its side a guard spot may be nudged to open ground. */
 const BELL_GUARD_SEARCH_TILES = 3;
 
+/** A soldier a contract holds indoors faces into the room, the way the village's civilians stand. */
+const PINNED_FACING = { x: 0, y: 1 } as const;
+
 /** Topic keys, stable for the gates. */
 export const SOLDIER_TOPIC_KEYS = {
   follow: 'soldier_follow',
@@ -182,6 +195,13 @@ export interface SoldierSystemDeps {
   readonly random?: () => number;
 }
 
+/** The contract pin as last worked out, kept while neither the contract nor the siege has changed. */
+interface ContractPinMemo {
+  readonly active: ActiveContract | null;
+  readonly phase: VillageQuestPhase;
+  readonly pin: ContractContactPin | null;
+}
+
 interface SoldierTalk {
   readonly soldier: RatkinSoldier;
   readonly talker: HumanPlayer | CatPlayer;
@@ -219,6 +239,7 @@ export class SoldierSystem {
   private fallenBack = false;
   private readonly bellStations: Record<RatkinSoldierId, SoldierPosts['post'][RatkinSoldierId]>;
   private lastGateStruck: number | null;
+  private contractPinMemo: ContractPinMemo | null = null;
 
   constructor(private readonly deps: SoldierSystemDeps) {
     this.random = deps.random ?? Math.random;
@@ -402,6 +423,16 @@ export class SoldierSystem {
         outward: this.outwardAt(anchor),
       };
     }
+    const pinned = this.contractPinTile(id);
+    if (pinned !== null) {
+      return {
+        kind: 'stand',
+        anchor: pinned,
+        engageTiles: profile.postEngageTiles,
+        leashTiles: profile.postEngageTiles + POST_CHASE_SLACK_TILES,
+        outward: PINNED_FACING,
+      };
+    }
     const station = this.postStation(id);
     const inSiege = SIEGE_PHASES.has(this.deps.state.quest.phase);
     if (id === 'sedge' && !inSiege && this.posts.sedgeBeat.length > 1) {
@@ -414,6 +445,56 @@ export class SoldierSystem {
       leashTiles: profile.postEngageTiles + POST_CHASE_SLACK_TILES,
       outward: station.outward,
     };
+  }
+
+  /**
+   * The soldier the active contract holds inside its building, and where;
+   * null with no Briar Hollow contract, under siege, or when its contact is
+   * a civilian. Worked out again only when the contract or the phase changes.
+   */
+  private contractPin(): ContractContactPin | null {
+    const { state, gameMap, site } = this.deps;
+    const active = state.contracts.active;
+    const phase = state.quest.phase;
+    const memo = this.contractPinMemo;
+    if (memo?.active === active && memo.phase === phase) return memo.pin;
+    const resolved = contractContactPin(
+      state,
+      site,
+      (tile) =>
+        gameMap.isWalkable(tile.x, tile.y) &&
+        gameMap.structure[tile.y][tile.x].type !== HOLLOW_THRESHOLD,
+      {
+        canStand: (tile) => gameMap.isWalkable(tile.x, tile.y),
+        talkRangeTiles: VILLAGER_TALK_RANGE_TILES,
+      },
+    );
+    const pin = resolved !== null && isSoldierId(resolved.contact) ? resolved : null;
+    this.contractPinMemo = { active, phase, pin };
+    return pin;
+  }
+
+  private contractPinTile(id: RatkinSoldierId): TilePoint | null {
+    const pin = this.contractPin();
+    return pin?.contact === id ? pin.tile : null;
+  }
+
+  /**
+   * Sends a soldier the contract has just taken hold of, or just let go of,
+   * to their new duty. A soldier on the player's orders keeps them: the
+   * contract holds only a soldier at their post.
+   */
+  private syncContractPin(): void {
+    const before = this.contractPinMemo?.pin ?? null;
+    const after = this.contractPin();
+    if (samePin(before, after)) return;
+    for (const pin of [before, after]) {
+      if (pin === null || !isSoldierId(pin.contact)) continue;
+      const soldier = this.soldierById(pin.contact);
+      if (soldier !== null && this.orderFor(pin.contact) === undefined) {
+        soldier.setDuty(this.dutyFor(pin.contact));
+      }
+    }
   }
 
   private outwardAt(tile: TilePoint): { x: number; y: number } {
@@ -508,11 +589,13 @@ export class SoldierSystem {
       this.lastPhase = phase;
       this.onPhaseChanged(from, phase);
     }
+    this.syncContractPin();
     const party: readonly Player[] = [frame.human, frame.cat];
     for (const soldier of this.soldiers) {
       soldier.allMobs = this.deps.roster.mobs;
       soldier.party = party;
     }
+    this.refreshQuestMarkers();
     if (halted) return;
     this.clockSeconds += SECONDS_PER_UPDATE;
     this.frame++;
@@ -753,6 +836,19 @@ export class SoldierSystem {
   }
 
   // ── Talk ───────────────────────────────────────────────────────────────
+
+  /** The questlines' glyphs over the soldiers, from the same providers the civilians wear theirs from. */
+  private refreshQuestMarkers(): void {
+    for (const soldier of this.soldiers) {
+      soldier.questMarker = this.isFreeToTalk(soldier)
+        ? this.deps.villagers.questMarkerFor(
+            soldier.soldierId,
+            soldier,
+            this.stanceOf(soldier.soldierId),
+          )
+        : 'none';
+    }
+  }
 
   /**
    * Whether a soldier can be talked to: standing, and not in a fight. A

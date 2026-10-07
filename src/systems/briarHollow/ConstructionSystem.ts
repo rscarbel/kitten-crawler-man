@@ -92,6 +92,7 @@ import {
   type ConstructionUnlockId,
   type VillageUnlocks,
 } from '../../core/villageUnlocks';
+import { JOB_MOTION_TOLERANCE_PX } from '../WorkChannel';
 
 type Crawler = HumanPlayer | CatPlayer;
 
@@ -129,8 +130,6 @@ export interface ConstructionJob {
   refY: number;
 }
 
-/** A job's move tolerance: a pixel of drift from a shove or a separation push is not walking off. */
-const JOB_MOTION_TOLERANCE_PX = 0.5;
 /** How long a "no room" silhouette holds before fading out on its own. */
 const NO_ROOM_GHOST_SECONDS = 3;
 const NO_ROOM_GHOST_FRAMES = UPDATES_PER_SECOND * NO_ROOM_GHOST_SECONDS;

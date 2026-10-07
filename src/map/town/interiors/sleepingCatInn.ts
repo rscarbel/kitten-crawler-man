@@ -22,7 +22,8 @@
  */
 
 import { INTERIOR_WALL } from '../../tileTypes';
-import { prop, tile, type TownInteriorLayoutEntry } from './types';
+import { contractTarget, prop, tile, type TownInteriorLayoutEntry } from './types';
+import type { ContractAreaRecord } from '../../contractAreas';
 
 export const INN_INTERIOR_W = 24;
 export const INN_INTERIOR_H = 19;
@@ -49,6 +50,69 @@ const TILL_SECTION = 1;
 const LANDING_RUNNER_COLOURWAY = 1;
 /** Back bench, galley strip and front bar: the rows `planSafeRoomCounters` lays the Bopca's run across. */
 const SAFE_ROOM_COUNTER_DEPTH_ROWS = 3;
+
+const CONTRACT_SITE = 'sleeping_cat_inn';
+const CONTRACT_COT_INDEX = 0;
+/** The east supper table's bench, in the open middle of the taproom. */
+const CONTRACT_BENCH_TABLE_INDEX = 3;
+const HEARTH_APRON_SPOT_W = 1;
+const HEARTH_APRON_SPOT_H = 2;
+
+/**
+ * The run along the partition from the archway to the inglenook: shared by
+ * the layout and by the contract rect laid at the hearth's mouth.
+ */
+function innHearthSide() {
+  /*
+   * The archway down to the taproom is deliberately off-centre.
+   *
+   * The Bopca's counter run is laid against the north wall of the safe
+   * room's bounds — this partition row — and centred on the widest span of
+   * it that no doorway opens onto, three rows deep including the galley
+   * behind. An archway in the middle would sit directly under that run,
+   * whose back bench is solid: the guest wing would be sealed off with no
+   * error and no log anywhere. Kept hard against the taproom's west end
+   * instead, which leaves the span east of it for the run.
+   */
+  const archwayWestCol = 3;
+  const archwayEastCol = 4;
+  const taproomNorthRow = INN_TAPROOM_FIRST_ROW;
+  const catSignCol = archwayEastCol + 1;
+  const logBasketCol = catSignCol + 1;
+  /**
+   * Flush against the Bopca's back bench: the run lands on columns 10–15,
+   * and a hearth stopping one column short of it would leave a one-tile
+   * slot behind the counter that only the hearth rug's corner reaches.
+   */
+  const hearthCol = logBasketCol + 1;
+  const catStoolRow = taproomNorthRow + 1;
+  return {
+    archwayWestCol,
+    archwayEastCol,
+    taproomNorthRow,
+    catSignCol,
+    logBasketCol,
+    hearthCol,
+    catStoolRow,
+  };
+}
+
+/** The Sleeping Cat Inn's floor rects a construction contract can mark, keyed by spot id. */
+export function buildSleepingCatInnContractAreas(_w: number, _h: number): ContractAreaRecord {
+  const { logBasketCol, catStoolRow } = innHearthSide();
+  return {
+    // The hearth's west flank, under the log basket: the rag rug owns the
+    // floor straight in front of the fire, and Mordecai's rug the floor
+    // south of that.
+    hearth_apron: {
+      kind: 'floor',
+      x: logBasketCol,
+      y: catStoolRow,
+      w: HEARTH_APRON_SPOT_W,
+      h: HEARTH_APRON_SPOT_H,
+    },
+  };
+}
 
 export function buildSleepingCatInnLayout(
   w: number,
@@ -98,32 +162,17 @@ export function buildSleepingCatInnLayout(
   const landingLinenChestCol = 14;
 
   // ── Taproom ─────────────────────────────────────────────────────────────
-  /*
-   * The archway down to the taproom is deliberately off-centre.
-   *
-   * The Bopca's counter run is laid against the north wall of the safe
-   * room's bounds — this partition row — and centred on the widest span of
-   * it that no doorway opens onto, three rows deep including the galley
-   * behind. An archway in the middle would sit directly under that run,
-   * whose back bench is solid: the guest wing would be sealed off with no
-   * error and no log anywhere. Kept hard against the taproom's west end
-   * instead, which leaves the span east of it for the run.
-   */
-  const archwayWestCol = 3;
-  const archwayEastCol = 4;
+  const {
+    archwayWestCol,
+    archwayEastCol,
+    taproomNorthRow,
+    catSignCol,
+    logBasketCol,
+    hearthCol,
+    catStoolRow,
+  } = innHearthSide();
   const archwayCols = [archwayWestCol, archwayEastCol];
-
-  const taproomNorthRow = INN_TAPROOM_FIRST_ROW;
-  const catSignCol = archwayEastCol + 1;
-  const logBasketCol = catSignCol + 1;
-  /**
-   * Flush against the Bopca's back bench: the run lands on columns 10–15,
-   * and a hearth stopping one column short of it would leave a one-tile
-   * slot behind the counter that only the hearth rug's corner reaches.
-   */
-  const hearthCol = logBasketCol + 1;
   const hearthRugRow = taproomNorthRow + 2;
-  const catStoolRow = taproomNorthRow + 1;
   /** Coats by the foot of the stairs, where a guest coming down takes theirs off. */
   const coatHookRow = taproomNorthRow + 2;
   /**
@@ -195,7 +244,10 @@ export function buildSleepingCatInnLayout(
   );
 
   // The cheap room: three cots shoulder to shoulder.
-  for (let i = 0; i < cotCount; i++) entries.push(prop(westCol + i, northRow, 'inn_cot', i));
+  for (let i = 0; i < cotCount; i++) {
+    const cotTarget = i === CONTRACT_COT_INDEX ? contractTarget(CONTRACT_SITE, 'cot') : {};
+    entries.push(prop(westCol + i, northRow, 'inn_cot', i, cotTarget));
+  }
   entries.push(
     prop(cotRoomWashstandCol, northRow, 'washstand'),
     prop(cotRoomWindowCol, northRow, 'window_dressing'),
@@ -206,10 +258,16 @@ export function buildSleepingCatInnLayout(
   // The best room: a double bed by its own fire.
   entries.push(
     prop(bestRoomWestCol, northRow, 'drawer_unit'),
-    prop(bestRoomHearthCol, northRow, 'hearth_wide'),
+    prop(bestRoomHearthCol, northRow, 'hearth_wide', 0, contractTarget(CONTRACT_SITE, 'best_fire')),
     prop(bestRoomWestCol + 1, northRow + 1, 'rag_rug_small'),
     prop(bestRoomWindowCol, northRow, 'window_dressing'),
-    prop(bestRoomBedCol, northRow, 'inn_guest_bed', BLUE_CHECK_QUILT),
+    prop(
+      bestRoomBedCol,
+      northRow,
+      'inn_guest_bed',
+      BLUE_CHECK_QUILT,
+      contractTarget(CONTRACT_SITE, 'guest_bed'),
+    ),
     prop(bestRoomWindowCol, bestRoomSeatRow, 'fireside_chair'),
     prop(bestRoomWestCol, bestRoomSeatRow + 1, 'washstand'),
     prop(bestRoomBedCol + 1, bestRoomSeatRow, 'chest'),
@@ -240,12 +298,18 @@ export function buildSleepingCatInnLayout(
 
   // The hearth side of the taproom.
   entries.push(
-    prop(westCol, taproomNorthRow, 'inn_dresser'),
+    prop(westCol, taproomNorthRow, 'inn_dresser', 0, contractTarget(CONTRACT_SITE, 'dresser')),
     prop(westCol, coatHookRow, 'coat_hook'),
     prop(catSignCol, taproomNorthRow, 'cat_portrait'),
     prop(logBasketCol, taproomNorthRow, 'log_basket'),
     prop(catSignCol, catStoolRow, 'cat_stool'),
-    prop(hearthCol, taproomNorthRow, 'inn_hearth'),
+    prop(
+      hearthCol,
+      taproomNorthRow,
+      'inn_hearth',
+      0,
+      contractTarget(CONTRACT_SITE, 'taproom_hearth'),
+    ),
     prop(hearthCol, hearthRugRow, 'rag_rug_small'),
     prop(logBasketCol, firesideChairRow, 'fireside_chair'),
     prop(mordecaiRugCol, mordecaiRugRow, 'rag_rug_small', 1),
@@ -254,7 +318,7 @@ export function buildSleepingCatInnLayout(
   // Ossie's bar.
   entries.push(
     prop(backBarCol, taproomNorthRow, 'inn_back_bar'),
-    prop(backBarCol, barRow, 'inn_bar', BEER_ENGINE_SECTION),
+    prop(backBarCol, barRow, 'inn_bar', BEER_ENGINE_SECTION, contractTarget(CONTRACT_SITE, 'bar')),
     prop(barTillCol, barRow, 'inn_bar', TILL_SECTION),
     prop(galleyRugCol, galleyRugRow, 'rag_rug', 1),
   );
@@ -269,16 +333,18 @@ export function buildSleepingCatInnLayout(
     { col: eastTableCol, row: middleTableRow, variant: STEW_NIGHT },
     { col: cornerTableCol, row: middleTableRow, variant: ROAST_NIGHT },
   ];
+  const contractBenchTable = tables[CONTRACT_BENCH_TABLE_INDEX];
   for (const table of tables) {
+    const benchTarget = table === contractBenchTable ? contractTarget(CONTRACT_SITE, 'bench') : {};
     entries.push(
       prop(table.col, table.row, 'inn_table', table.variant),
-      prop(table.col, table.row + 1, 'inn_bench'),
+      prop(table.col, table.row + 1, 'inn_bench', 0, benchTarget),
     );
   }
 
   entries.push(
     prop(southStoreCol, southRow, 'dairy_churn'),
-    prop(southStoreCol + 1, southRow, 'cask_rack'),
+    prop(southStoreCol + 1, southRow, 'cask_rack', 0, contractTarget(CONTRACT_SITE, 'cask_rack')),
     prop(eastCol - 1, southRow, 'barrel'),
     prop(eastCol, southRow, 'barrel', 1),
   );

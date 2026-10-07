@@ -26,7 +26,8 @@
  */
 
 import { RUG } from '../../tileTypes';
-import { prop, tile, type TownInteriorLayoutEntry } from './types';
+import { contractTarget, prop, tile, type TownInteriorLayoutEntry } from './types';
+import type { ContractAreaRecord } from '../../contractAreas';
 
 /** One pew segment in this many carries a book left on its seat. */
 const PEW_BOOK_EVERY = 5;
@@ -38,41 +39,116 @@ function pewVariant(col: number, rank: number): number {
   return (col + rank * PEW_BOOK_RANK_STRIDE) % PEW_BOOK_EVERY === 0 ? PEW_BOOK_VARIANT : 0;
 }
 
-export function buildTempleOfTheSkyLayout(w: number, h: number): TownInteriorLayoutEntry[] {
+const CONTRACT_SITE = 'temple_of_the_sky';
+/** The east end of the third rank: an ordinary pew, clear of the aisle's candle stands. */
+const CONTRACT_PEW_RANK = 2;
+const NAVE_FLAGS_SPOT_W = 3;
+const NAVE_FLAGS_SPOT_H = 2;
+const DAIS_STEPS_SPOT_H = 1;
+
+/** The dais, its west fittings, the aisle and the pew ranks, shared by the layout and its contract rects. */
+function templeGeometry() {
   const westWallCol = 1;
+  const daisCol = westWallCol + 1;
+  const westPerchCol = daisCol;
+  const westBannerCol = westPerchCol + 1;
+  const westBrazierCol = westBannerCol + 1;
+  const westVotiveCol = westBrazierCol;
+  const daisRow = 1;
+  const altarRow = daisRow + 1;
+  const daisFrontRow = altarRow + 1;
+  const aisleStartCol = 8;
+  const aisleEndCol = aisleStartCol + 1;
+  const aisleStartRow = daisFrontRow + 1;
+  const firstPewRow = aisleStartRow + 1;
+  const pewRowPitch = 2;
+  const pewRanks = 4;
+  const lastPewRow = firstPewRow + (pewRanks - 1) * pewRowPitch;
+  const westPewEndCol = aisleStartCol - 1;
+  return {
+    westWallCol,
+    daisCol,
+    westPerchCol,
+    westBannerCol,
+    westBrazierCol,
+    westVotiveCol,
+    daisRow,
+    altarRow,
+    daisFrontRow,
+    aisleStartCol,
+    aisleEndCol,
+    aisleStartRow,
+    firstPewRow,
+    pewRowPitch,
+    pewRanks,
+    lastPewRow,
+    westPewEndCol,
+  };
+}
+
+/** The Temple of the Sky's floor rects a construction contract can mark, keyed by spot id. */
+export function buildTempleOfTheSkyContractAreas(_w: number, _h: number): ContractAreaRecord {
+  const { daisCol, daisFrontRow, westVotiveCol, lastPewRow, westPewEndCol } = templeGeometry();
+  return {
+    // The dais' front step west of its votive rack: clear of the altar and
+    // lectern spots, and of the aisle runner that climbs the step.
+    dais: {
+      kind: 'floor',
+      x: daisCol,
+      y: daisFrontRow,
+      w: westVotiveCol - daisCol,
+      h: DAIS_STEPS_SPOT_H,
+    },
+    // Behind the back rank, west of the aisle and ending a column short of
+    // it: `AnchorInteriorSystem.naveSpawnAnchors` reads the aisle's `RUG`
+    // tiles, so the flags never touch them.
+    nave_flags: {
+      kind: 'floor',
+      x: westPewEndCol - NAVE_FLAGS_SPOT_W + 1,
+      y: lastPewRow + 1,
+      w: NAVE_FLAGS_SPOT_W,
+      h: NAVE_FLAGS_SPOT_H,
+    },
+  };
+}
+
+export function buildTempleOfTheSkyLayout(w: number, h: number): TownInteriorLayoutEntry[] {
+  const {
+    westWallCol,
+    daisCol,
+    westPerchCol,
+    westBannerCol,
+    westBrazierCol,
+    westVotiveCol,
+    daisRow,
+    altarRow,
+    daisFrontRow,
+    aisleStartCol,
+    aisleEndCol,
+    aisleStartRow,
+    firstPewRow,
+    pewRowPitch,
+    pewRanks,
+    lastPewRow,
+    westPewEndCol,
+  } = templeGeometry();
   const eastWallCol = w - 2;
 
   // ── Sanctuary ──
-  const daisRow = 1;
-  const daisCol = westWallCol + 1;
-  const altarRow = daisRow + 1;
   const altarCol = 7;
   const altarWidth = 4;
   const altarEastCol = altarCol + altarWidth - 1;
   const lecternCol = altarCol - 1;
   const westCandelabrumCol = lecternCol - 1;
   const eastCandelabrumCol = altarEastCol + 2;
-  const westPerchCol = daisCol;
   const eastPerchCol = eastWallCol - 1;
-  const westBannerCol = westPerchCol + 1;
   const eastBannerCol = eastPerchCol - 1;
-  const westBrazierCol = westBannerCol + 1;
   const eastBrazierCol = eastBannerCol - 1;
-  const daisFrontRow = altarRow + 1;
-  const westVotiveCol = westBrazierCol;
   const eastVotiveCol = eastBrazierCol - 1;
 
   // ── Nave ──
-  const aisleStartCol = 8;
-  const aisleEndCol = aisleStartCol + 1;
-  const aisleStartRow = daisFrontRow + 1;
   const aisleEndRow = h - 2 - 2;
-  const firstPewRow = aisleStartRow + 1;
-  const pewRowPitch = 2;
-  const pewRanks = 4;
-  const lastPewRow = firstPewRow + (pewRanks - 1) * pewRowPitch;
   const westPewStartCol = 3;
-  const westPewEndCol = aisleStartCol - 1;
   const eastPewStartCol = aisleEndCol + 1;
   const eastPewEndCol = eastWallCol - 2;
   const scriptureStartRow = aisleStartRow;
@@ -101,8 +177,8 @@ export function buildTempleOfTheSkyLayout(w: number, h: number): TownInteriorLay
   const entries: TownInteriorLayoutEntry[] = [
     prop(daisCol, daisRow, 'temple_dais'),
     prop(altarCol, daisRow, 'sky_window'),
-    prop(altarCol, altarRow, 'altar'),
-    prop(lecternCol, daisRow, 'lectern'),
+    prop(altarCol, altarRow, 'altar', 0, contractTarget(CONTRACT_SITE, 'altar')),
+    prop(lecternCol, daisRow, 'lectern', 0, contractTarget(CONTRACT_SITE, 'lectern')),
     prop(westCandelabrumCol, daisRow, 'temple_candelabrum'),
     prop(eastCandelabrumCol, daisRow, 'temple_candelabrum'),
     prop(westPerchCol, daisRow, 'perch_stand'),
@@ -125,8 +201,18 @@ export function buildTempleOfTheSkyLayout(w: number, h: number): TownInteriorLay
     const eastStart = isEndRank ? eastPewStartCol + 1 : eastPewStartCol;
     for (let rx = westPewStartCol; rx <= westEnd; rx++)
       entries.push(prop(rx, pewRow, 'pew', pewVariant(rx, rank)));
-    for (let rx = eastStart; rx <= eastPewEndCol; rx++)
-      entries.push(prop(rx, pewRow, 'pew', pewVariant(rx, rank)));
+    for (let rx = eastStart; rx <= eastPewEndCol; rx++) {
+      const isContractPew = rank === CONTRACT_PEW_RANK && rx === eastPewEndCol;
+      entries.push(
+        prop(
+          rx,
+          pewRow,
+          'pew',
+          pewVariant(rx, rank),
+          isContractPew ? contractTarget(CONTRACT_SITE, 'pew') : {},
+        ),
+      );
+    }
     if (isEndRank) {
       entries.push(prop(westPewEndCol, pewRow, 'temple_candelabrum', 1));
       entries.push(prop(eastPewStartCol, pewRow, 'temple_candelabrum', 1));
@@ -134,13 +220,22 @@ export function buildTempleOfTheSkyLayout(w: number, h: number): TownInteriorLay
   }
 
   for (let ry = scriptureStartRow; ry <= scriptureEndRow; ry++) {
-    entries.push(prop(westWallCol, ry, 'scripture_shelf', ry % 2));
+    const isContractShelf = ry === scriptureStartRow;
+    entries.push(
+      prop(
+        westWallCol,
+        ry,
+        'scripture_shelf',
+        ry % 2,
+        isContractShelf ? contractTarget(CONTRACT_SITE, 'scripture_shelf') : {},
+      ),
+    );
     entries.push(prop(eastWallCol, ry, 'scripture_shelf', (ry + 1) % 2));
   }
   entries.push(
-    prop(westWallCol, sideBannerRow, 'sky_banner'),
+    prop(westWallCol, sideBannerRow, 'sky_banner', 0, contractTarget(CONTRACT_SITE, 'banner')),
     prop(eastWallCol, sideBannerRow, 'sky_banner'),
-    prop(westWallCol, sidePerchRow, 'perch_stand', 1),
+    prop(westWallCol, sidePerchRow, 'perch_stand', 1, contractTarget(CONTRACT_SITE, 'perches')),
     prop(westWallCol, lowerScriptureRow, 'scripture_shelf', 1),
     prop(eastWallCol, lowerScriptureRow, 'scripture_shelf'),
     prop(eastWallCol, sidePerchRow, 'perch_stand'),
@@ -148,11 +243,17 @@ export function buildTempleOfTheSkyLayout(w: number, h: number): TownInteriorLay
     prop(westBenchCol + 1, benchRow, 'pew'),
     prop(eastBenchCol, benchRow, 'pew'),
     prop(eastBenchCol + 1, benchRow, 'pew'),
-    prop(westBenchCol, narthexVotiveRow, 'votive_rack'),
+    prop(
+      westBenchCol,
+      narthexVotiveRow,
+      'votive_rack',
+      0,
+      contractTarget(CONTRACT_SITE, 'votive_rack'),
+    ),
     prop(eastBenchCol, narthexVotiveRow, 'votive_rack'),
     prop(westDoorLightCol, doorRow, 'temple_candelabrum', 1),
     prop(eastDoorLightCol, doorRow, 'temple_candelabrum', 1),
-    prop(fontCol, fontRow, 'sky_font'),
+    prop(fontCol, fontRow, 'sky_font', 0, contractTarget(CONTRACT_SITE, 'font')),
     prop(offeringTableCol, fontRow, 'offering_table'),
     prop(westWallCol, narthexPerchRow + 1, 'perch_stand'),
     prop(eastWallCol, narthexPerchRow + 1, 'perch_stand', 1),

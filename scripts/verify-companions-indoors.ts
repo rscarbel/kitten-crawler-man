@@ -106,7 +106,8 @@ import {
 const BIG_TOP_WORLD_SEED = 0x5eed_b16;
 const BIG_TOP_DIFFICULTY = 'normal';
 import { TOWN_INTERIOR_PROPS } from '../src/sprites/art/townInterior/townInteriorProps';
-import { AnchorInteriorSystem, SKY_TEMPLE_NAME } from '../src/systems/AnchorInteriorSystem';
+import { AnchorInteriorSystem } from '../src/systems/AnchorInteriorSystem';
+import { SKY_TEMPLE_NAME } from '../src/systems/interiorStoryOwnership';
 import { createAnchorQuestProgress } from '../src/core/AnchorQuestProgress';
 import { CultHideoutSystem } from '../src/systems/CultHideoutSystem';
 import { interiorHostilesFor } from '../src/systems/interiorHostiles';

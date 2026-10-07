@@ -379,12 +379,14 @@ export function verifyWendellMarker(check: Check): void {
   if (hook === null) return;
   const wrong = BLUEPRINTS_QUEST_PHASE_ORDER.filter((phase) => {
     state.blueprints.phase = phase;
-    const expected: NPCMarkerType = WENDELL_QUESTION_PHASES.includes(phase) ? 'question' : 'none';
+    // Once the quest is complete his glyph belongs to the construction contracts.
+    const expected: NPCMarkerType | null =
+      phase === 'complete' ? null : WENDELL_QUESTION_PHASES.includes(phase) ? 'question' : 'none';
     return hook.markerFor('wendell') !== expected;
   });
   check(
     wrong.length === 0,
-    `Wendell shows "?" in ask_wendell, midge_delivered and build_stations only (${wrong.join(', ')})`,
+    `Wendell shows "?" in ask_wendell, midge_delivered and build_stations only, and leaves his glyph alone once complete (${wrong.join(', ')})`,
   );
   state.blueprints.phase = 'build_stations';
   human.inventory.addItem('quest_blueprints', 1);

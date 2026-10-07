@@ -29,28 +29,90 @@
 
 import { BOOKSHELF, CHAIR, TABLE } from '../../tileTypes';
 import { TOWN_INTERIOR_PROPS } from '../../../sprites/art/townInterior/townInteriorProps';
-import { prop, tile, type TownInteriorLayoutEntry } from './types';
+import { contractTarget, prop, tile, type TownInteriorLayoutEntry } from './types';
+import type { ContractAreaRecord } from '../../contractAreas';
 
 /** Deep sky field, ember border — the reading-table rug, told apart from the hearth rug's ember field. */
 const READING_RUG_COLOURWAY = 3;
 
-export function buildOldHildasCottageLayout(w: number, h: number): TownInteriorLayoutEntry[] {
+const CONTRACT_SITE = 'old_hildas_cottage';
+const FLOORBOARDS_SPOT_SIZE = 2;
+const DOOR_STEP_SPOT_H = 1;
+
+/**
+ * The room's walls, the hearth's place on the north one and the door's on
+ * the south: shared by the layout and by the contract rects measured
+ * against them.
+ */
+function cottageFrame(w: number, h: number) {
   const westCol = 1;
   const eastCol = w - 2;
   const northRow = 1;
   const southRow = h - 2;
-
   // North wall, west to east: dresser (3 wide), hearth (3 wide, 2 deep),
-  // the birdcage stand, then the drying beam into the east corner.
+  // one bare tile, then the drying beam into the east corner. The bare tile
+  // is the only floor touching the chimney, so it is worked from there.
   const dresserCol = westCol;
   const hearthCol = dresserCol + TOWN_INTERIOR_PROPS.jar_dresser.footprint.w;
-  const birdcageCol = hearthCol + TOWN_INTERIOR_PROPS.witch_hearth.footprint.w;
-  const dryingBeamCol = birdcageCol + 1;
+  const storeRow = southRow - 1;
+  // The door is two columns wide with its east column on the room's centre
+  // line (see `generateInterior`).
+  const doorEastCol = Math.floor(w / 2);
+  const doorWestCol = doorEastCol - 1;
+  return {
+    westCol,
+    eastCol,
+    northRow,
+    southRow,
+    dresserCol,
+    hearthCol,
+    storeRow,
+    doorEastCol,
+    doorWestCol,
+  };
+}
+
+/** Old Hilda's Cottage's floor and wall rects a construction contract can mark, keyed by spot id. */
+export function buildOldHildasCottageContractAreas(w: number, h: number): ContractAreaRecord {
+  const { eastCol, northRow, southRow, hearthCol, storeRow, doorEastCol, doorWestCol } =
+    cottageFrame(w, h);
+  return {
+    // East of the reading table, on the clear path Hilda walks, and well
+    // away from the TABLE/CHAIR/BOOKSHELF wreck on the west wall.
+    floorboards: {
+      kind: 'floor',
+      x: eastCol - FLOORBOARDS_SPOT_SIZE,
+      y: storeRow - 1,
+      w: FLOORBOARDS_SPOT_SIZE,
+      h: FLOORBOARDS_SPOT_SIZE,
+    },
+    chimney: {
+      kind: 'wall',
+      x: hearthCol,
+      y: northRow - 1,
+      w: TOWN_INTERIOR_PROPS.witch_hearth.footprint.w,
+      h: 1,
+    },
+    door_step: {
+      kind: 'floor',
+      x: doorWestCol,
+      y: southRow,
+      w: doorEastCol - doorWestCol + 1,
+      h: DOOR_STEP_SPOT_H,
+    },
+  };
+}
+
+export function buildOldHildasCottageLayout(w: number, h: number): TownInteriorLayoutEntry[] {
+  const { westCol, eastCol, northRow, southRow, dresserCol, hearthCol, storeRow, doorWestCol } =
+    cottageFrame(w, h);
+  const chimneyStepCol = hearthCol + TOWN_INTERIOR_PROPS.witch_hearth.footprint.w;
+  const dryingBeamCol = chimneyStepCol + 1;
 
   // The hearth rug and its seating, just south of the fire.
   const hearthRugRow = northRow + 2;
   const hearthRugCol = hearthCol;
-  const armchairCol = birdcageCol;
+  const armchairCol = chimneyStepCol;
   const armchairRow = hearthRugRow;
   const footstoolRow = armchairRow + 1;
   const bookHeapCol = eastCol - 1;
@@ -79,19 +141,14 @@ export function buildOldHildasCottageLayout(w: number, h: number): TownInteriorL
   const readingRugCol = wreckChairCol + 2;
   const readingTableCol = readingRugCol + 1;
 
-  const storeRow = southRow - 1;
-  // The door is two columns wide with its east column on the room's centre
-  // line (see `generateInterior`); the broom leans against the wall just west
-  // of it, off both columns, so it never snags the player stepping in.
-  const doorEastCol = Math.floor(w / 2);
-  const doorWestCol = doorEastCol - 1;
+  // The broom leans against the wall just west of the door, off both its
+  // columns, so it never snags the player stepping in.
   const broomCol = doorWestCol - 1;
 
   return [
-    prop(dresserCol, northRow, 'jar_dresser'),
-    prop(hearthCol, northRow, 'witch_hearth'),
-    prop(birdcageCol, northRow, 'birdcage_stand'),
-    prop(dryingBeamCol, northRow, 'drying_beam'),
+    prop(dresserCol, northRow, 'jar_dresser', 0, contractTarget(CONTRACT_SITE, 'jar_dresser')),
+    prop(hearthCol, northRow, 'witch_hearth', 0, contractTarget(CONTRACT_SITE, 'hearth')),
+    prop(dryingBeamCol, northRow, 'drying_beam', 0, contractTarget(CONTRACT_SITE, 'drying_beam')),
     prop(eastCol, northRow + 1, 'mushroom_basket'),
     prop(eastCol - 1, northRow + 1, 'basket', 1),
 
@@ -104,9 +161,16 @@ export function buildOldHildasCottageLayout(w: number, h: number): TownInteriorL
 
     prop(westCol, hearthRugRow, 'crock_cluster'),
     prop(westCol + 1, hearthRugRow, 'sack'),
+    prop(westCol, hearthRugRow + 1, 'birdcage_stand'),
     prop(westCol, worktableRow, 'crock_cluster', 1),
     prop(worktableCol - 1, worktableRow, 'mushroom_basket'),
-    prop(worktableCol, worktableRow, 'witch_worktable'),
+    prop(
+      worktableCol,
+      worktableRow,
+      'witch_worktable',
+      0,
+      contractTarget(CONTRACT_SITE, 'worktable'),
+    ),
     prop(workStoolCol, workStoolRow, 'stool'),
     prop(worktableCol + TOWN_INTERIOR_PROPS.witch_worktable.footprint.w, worktableRow, 'basket', 1),
 
@@ -115,7 +179,13 @@ export function buildOldHildasCottageLayout(w: number, h: number): TownInteriorL
     tile(wreckTableCol2, wreckTableRow, TABLE),
     tile(wreckChairCol, wreckTableRow, CHAIR),
 
-    prop(eastCol, eastShelfRow, 'crockery_shelf'),
+    prop(
+      eastCol,
+      eastShelfRow,
+      'crockery_shelf',
+      0,
+      contractTarget(CONTRACT_SITE, 'crockery_shelf'),
+    ),
     prop(eastCol, eastShelfRow + 1, 'crock_cluster', 1),
     prop(eastCol - 1, eastShelfRow, 'oil_lamp'),
 
@@ -125,7 +195,7 @@ export function buildOldHildasCottageLayout(w: number, h: number): TownInteriorL
     prop(readingTableCol + 1, readingRugRow, 'stool'),
 
     // Her bed along the south wall's west end, a chest at its foot.
-    prop(westCol, southRow, 'cottage_bed'),
+    prop(westCol, southRow, 'cottage_bed', 0, contractTarget(CONTRACT_SITE, 'bed')),
     prop(westCol + 2, southRow, 'chest'),
     prop(westCol, storeRow, 'basket'),
 

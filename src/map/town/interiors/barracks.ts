@@ -21,7 +21,8 @@ import {
   TOWN_INTERIOR_PROPS,
   type TownInteriorPropId,
 } from '../../../sprites/art/townInterior/townInteriorProps';
-import { prop, tile, tileRect, type TownInteriorLayoutEntry } from './types';
+import { contractTarget, prop, tile, tileRect, type TownInteriorLayoutEntry } from './types';
+import type { ContractAreaRecord } from '../../contractAreas';
 
 export const BARRACKS_INTERIOR_W = 22;
 export const BARRACKS_INTERIOR_H = 18;
@@ -50,13 +51,36 @@ function widthOf(propId: TownInteriorPropId): number {
 /** A bunk nobody has claimed: upper mattress rolled, lower one bare. */
 const UNCLAIMED_BUNK_VARIANT = 1;
 
+const CONTRACT_SITE = 'barracks';
+const MUSTER_FLOOR_SPOT_W = 3;
+const MUSTER_FLOOR_SPOT_H = 2;
+/** Columns left between the cracked flags and the barrel and crate stacked against the east wall. */
+const MUSTER_FLOOR_EAST_WALL_GAP = 1;
+
+function barracksFrame(w: number, h: number) {
+  return { eastWallCol: w - 2, southWallRow: h - 2 };
+}
+
+/** The Barracks' floor and wall rects a construction contract can mark, keyed by spot id. */
+export function buildBarracksContractAreas(w: number, h: number): ContractAreaRecord {
+  const { eastWallCol } = barracksFrame(w, h);
+  return {
+    muster_floor: {
+      kind: 'floor',
+      x: eastWallCol - MUSTER_FLOOR_EAST_WALL_GAP - MUSTER_FLOOR_SPOT_W,
+      y: BARRACKS_MUSTER_FIRST_ROW + 1,
+      w: MUSTER_FLOOR_SPOT_W,
+      h: MUSTER_FLOOR_SPOT_H,
+    },
+  };
+}
+
 export function buildBarracksLayout(
   w: number,
   h: number,
   floorType: number,
 ): TownInteriorLayoutEntry[] {
-  const eastWallCol = w - 2;
-  const southWallRow = h - 2;
+  const { eastWallCol, southWallRow } = barracksFrame(w, h);
   const armouryFirstCol = 1;
   const armouryLastCol = BARRACKS_ZONE_DIVIDER_COL - 1;
   const drillFirstCol = BARRACKS_ZONE_DIVIDER_COL + 1;
@@ -151,10 +175,22 @@ export function buildBarracksLayout(
   // stock alley behind the counter, and the kit waiting to be signed for
   // stacked down both walls of the customer side.
   entries.push(
-    prop(armouryFirstCol, northRow, 'garrison_weapon_rack'),
+    prop(
+      armouryFirstCol,
+      northRow,
+      'garrison_weapon_rack',
+      0,
+      contractTarget(CONTRACT_SITE, 'weapon_rack'),
+    ),
     prop(armourRowCol, northRow, 'armour_stand_row'),
     prop(armouryFirstCol, stockAlleyRow, 'barrel'),
-    prop(armouryFirstCol, counterRow, 'issue_counter'),
+    prop(
+      armouryFirstCol,
+      counterRow,
+      'issue_counter',
+      0,
+      contractTarget(CONTRACT_SITE, 'issue_counter'),
+    ),
     prop(armouryFirstCol, footlockerRow, 'chest', 0, { id: 'barracks_footlocker' }),
     prop(armouryFirstCol, issueCrateFirstRow, 'crate'),
     prop(armouryFirstCol, issueCrateFirstRow + 1, 'open_crate'),
@@ -185,16 +221,30 @@ export function buildBarracksLayout(
   // legitimate open floor in the building — so the dressing lines the walls
   // instead, and the dummies and pells stand in two lines either side of
   // the ring where a recruit can swing at them without crossing the bout.
-  entries.push(prop(ringFirstCol, ringFirstRow, 'sparring_ring'));
+  entries.push(
+    prop(
+      ringFirstCol,
+      ringFirstRow,
+      'sparring_ring',
+      0,
+      contractTarget(CONTRACT_SITE, 'sparring_ring'),
+    ),
+  );
   entries.push(
     prop(drillFirstCol, northRow, 'garrison_weapon_rack', PRACTICE_RACK_VARIANT),
     prop(drillSlateCol, northRow, 'drill_slate'),
-    prop(drillTroughCol, northRow, 'water_trough'),
-    prop(drillButtCol, northRow, 'archery_butt'),
+    prop(drillTroughCol, northRow, 'water_trough', 0, contractTarget(CONTRACT_SITE, 'trough')),
+    prop(drillButtCol, northRow, 'archery_butt', 0, contractTarget(CONTRACT_SITE, 'archery_butt')),
     prop(eastWallCol - 1, northRow, 'sandbags'),
   );
   entries.push(
-    prop(pellWestCol, drillNorthLineRow, 'pell_post'),
+    prop(
+      pellWestCol,
+      drillNorthLineRow,
+      'pell_post',
+      0,
+      contractTarget(CONTRACT_SITE, 'pell_posts'),
+    ),
     prop(dummyWestCol, drillNorthLineRow, 'straw_dummy'),
     prop(pellEastCol, drillNorthLineRow, 'pell_post', BATTERED_VARIANT),
     prop(dummyEastCol, drillNorthLineRow, 'straw_dummy', BATTERED_VARIANT),
@@ -235,7 +285,13 @@ export function buildBarracksLayout(
     prop(boardCol - 1, musterNorthRow, 'barrel'),
     prop(boardCol, musterNorthRow, 'muster_board'),
     prop(boardEndCol, musterNorthRow, 'bunk_bed', UNCLAIMED_BUNK_VARIANT),
-    prop(boardEndCol + widthOf('bunk_bed'), musterNorthRow, 'bunk_bed'),
+    prop(
+      boardEndCol + widthOf('bunk_bed'),
+      musterNorthRow,
+      'bunk_bed',
+      0,
+      contractTarget(CONTRACT_SITE, 'bunk'),
+    ),
     prop(drillArchwayCol + 1, musterNorthRow, 'bunk_bed', UNCLAIMED_BUNK_VARIANT),
     prop(drillArchwayCol + 1 + widthOf('bunk_bed'), musterNorthRow, 'bunk_bed'),
     prop(eastWallCol - 1, musterNorthRow, 'bunk_bed', UNCLAIMED_BUNK_VARIANT),
@@ -251,7 +307,13 @@ export function buildBarracksLayout(
   );
   entries.push(
     prop(armouryFirstCol, southWallRow, 'bunk_bed'),
-    prop(southBrazierWestCol, southWallRow, 'forge_brazier'),
+    prop(
+      southBrazierWestCol,
+      southWallRow,
+      'forge_brazier',
+      0,
+      contractTarget(CONTRACT_SITE, 'brazier'),
+    ),
     prop(southBrazierWestCol + 1, southWallRow, 'bench_seat'),
     prop(drillArchwayCol, southWallRow, 'forge_brazier'),
     prop(drillArchwayCol + 1, southWallRow, 'bench_seat'),

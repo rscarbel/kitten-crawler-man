@@ -867,7 +867,7 @@ function buildBuildings(origin: TilePoint): VillageBuildingDef[] {
       floor: template.floor,
       occupantAnchors: template.occupantAnchors.map((anchor) => shiftPoint(buildingOrigin, anchor)),
       furniture: template.furniture.map((prop) =>
-        resolveProp({ prop: prop.prop, ...shiftPoint(buildingOrigin, prop) }),
+        resolveProp({ ...prop, ...shiftPoint(buildingOrigin, prop) }),
       ),
     };
   });

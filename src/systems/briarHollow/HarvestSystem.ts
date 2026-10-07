@@ -61,6 +61,7 @@ import type { SystemContext } from '../GameSystem';
 import type { HarvestEffects } from './HarvestEffects';
 import type { NodeLedger } from './NodeLedger';
 import { harvestKindAt } from './harvestNodes';
+import { CAT_WORK_SWING_TICKS } from '../WorkChannel';
 
 type Crawler = HumanPlayer | CatPlayer;
 
@@ -78,8 +79,6 @@ const FACING_PREFERENCE_DOT = 0.5;
  * that moves the body without a key press has to end it too.
  */
 const CHANNEL_MOTION_TOLERANCE_PX = 0.5;
-/** Donut has no tool row: her swipe plays on this cadence, and each one is a strike's feedback. */
-const CAT_WORK_SWING_TICKS = 30;
 
 /** A strike's pitch and loudness drift this far either side of the sample, so a long channel doesn't sound mechanical. */
 const STRIKE_PITCH_JITTER = 0.05;

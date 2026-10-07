@@ -56,7 +56,19 @@ import {
   roomKey,
 } from '../src/core/TownMemory.js';
 
-const SEEDS: ReadonlyArray<number> = [1, 123456789, 987654321, 424242, 7];
+const MINIMAL_SEED = 1;
+const ASCENDING_DIGITS_SEED = 123456789;
+const DESCENDING_DIGITS_SEED = 987654321;
+const REPEATING_DIGITS_SEED = 424242;
+/** The world seed the walk-away and inventory scene harnesses play on. */
+const HARNESS_WORLD_SEED = 7;
+const SEEDS: ReadonlyArray<number> = [
+  MINIMAL_SEED,
+  ASCENDING_DIGITS_SEED,
+  DESCENDING_DIGITS_SEED,
+  REPEATING_DIGITS_SEED,
+  HARNESS_WORLD_SEED,
+];
 
 /** Any seed: the respawn checks read the save, not the map it describes. */
 const RESPAWN_CHECK_SEED = 424242;
@@ -470,6 +482,55 @@ function checkRenamedBuildingMemory(): void {
   );
 }
 
+const RENAMED_PROP_BUILDING_NAME = 'Temple of the Sky';
+const RENAMED_PROP_BUILDING_KIND = 'house';
+/** A breakable pew a save keyed by position before its layout entry took an explicit id. */
+const RENAMED_PROP_POSITIONAL_ID = 'pew@14,9';
+
+/**
+ * A prop paid out under its positional id must stay paid out once its layout
+ * entry carries an explicit id, or breaking it again would pay twice.
+ */
+function checkRenamedInteriorPropMemory(): void {
+  const room = new GameMap({ tileHeight: TILE_SIZE, prebuiltStructure: [] });
+  room.generateInterior(RENAMED_PROP_BUILDING_KIND, RENAMED_ROOM_FLOOR, RENAMED_PROP_BUILDING_NAME);
+  const pew = room.placedInteriorProps.find(
+    (placed) => `${placed.propId}@${placed.tile.x},${placed.tile.y}` === RENAMED_PROP_POSITIONAL_ID,
+  );
+  if (pew === undefined || pew.id === RENAMED_PROP_POSITIONAL_ID) {
+    check(
+      false,
+      `${RENAMED_PROP_BUILDING_NAME} has no explicitly-ided ${RENAMED_PROP_POSITIONAL_ID}`,
+    );
+    return;
+  }
+  const parsed = parseTownMemoryCheckpoint({
+    residentTalks: [],
+    poulticesLeft: 0,
+    clearedRooms: [],
+    clearedCamps: [],
+    paidOutInteriorProps: [
+      interiorPropPayoutKey(
+        RENAMED_PROP_BUILDING_NAME,
+        RENAMED_ROOM_FLOOR,
+        RENAMED_PROP_POSITIONAL_ID,
+      ),
+    ],
+  });
+  if (parsed === undefined) {
+    check(false, 'a town memory naming a positional prop id does not parse');
+    return;
+  }
+  const memory = createTownMemory();
+  restoreTownMemory(memory, parsed);
+  check(
+    memory.paidOutInteriorProps.has(
+      interiorPropPayoutKey(RENAMED_PROP_BUILDING_NAME, RENAMED_ROOM_FLOOR, pew.id),
+    ),
+    `${RENAMED_PROP_POSITIONAL_ID} paid out by position is not remembered as ${pew.id}`,
+  );
+}
+
 for (const seed of SEEDS) {
   checkOverworld(seed);
   checkDungeon(seed);
@@ -477,6 +538,7 @@ for (const seed of SEEDS) {
 checkRespawnRoutes();
 checkArrivalSaves();
 checkRenamedBuildingMemory();
+checkRenamedInteriorPropMemory();
 
 console.log(`${checks - failures}/${checks} checks passed`);
 if (failures > 0) process.exit(1);

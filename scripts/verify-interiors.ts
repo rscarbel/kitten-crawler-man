@@ -227,11 +227,11 @@ function check(condition: boolean, label: string): void {
 }
 
 const plan = createTownPlan(PLAN_SIZE);
-const buildings = new Map(plan.buildings.map((b) => [b.name, b.kind]));
+const buildings = new Map<string, BuildingKind>(plan.buildings.map((b) => [b.name, b.kind]));
 const towerName = plan.tower.name;
 buildings.set(towerName, plan.tower.kind);
 /** Named rather than derived from a kind, exactly as the town plan states it. */
-const safeRoomBuildings = new Set(
+const safeRoomBuildings = new Set<string>(
   plan.buildings.filter((b) => b.hasSafeRoom === true).map((b) => b.name),
 );
 

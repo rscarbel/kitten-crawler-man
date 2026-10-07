@@ -156,11 +156,13 @@ export class WendellBlueprintsHook implements ResidentQuestHook {
   /**
    * `'question'` over Wendell in the steps that need him; `'none'` over him
    * in every other step, so a glyph cleared by the quest moving on is
-   * actually taken down; null for anyone else.
+   * actually taken down; null for anyone else, and once the quest is
+   * complete, when his glyph belongs to the construction contracts.
    */
   markerFor(residentId: ResidentId): NPCMarkerType | null {
     if (residentId !== WENDELL_RESIDENT_ID) return null;
     const phase = this.quest.phase;
+    if (phase === 'complete') return null;
     const needsHim =
       phase === 'ask_wendell' || phase === 'midge_delivered' || this.blueprintsOwedBack;
     return needsHim ? 'question' : 'none';

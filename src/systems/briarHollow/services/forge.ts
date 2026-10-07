@@ -229,7 +229,7 @@ export function buildForgeMenu(tools: PartyToolsState, buyerCoins: number): Shop
   return {
     title: FORGE_TITLE,
     bark: forgeBark(tools, buyerCoins),
-    byline: SPEAKERS.oren.name ?? undefined,
+    byline: SPEAKERS.oren.name,
     options: TOOL_KINDS.map((kind) => upgradeOption(tools, kind)),
   };
 }

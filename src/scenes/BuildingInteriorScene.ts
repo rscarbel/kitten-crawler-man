@@ -1,5 +1,14 @@
 import { firstResidentMarker, type ResidentQuestHook } from '../systems/residentQuestHooks';
 import { WendellBlueprintsHook } from '../systems/briarHollow/blueprints/WendellBlueprintsHook';
+import { WendellContractsHook } from '../systems/constructionContracts/WendellContractsHook';
+import { ContractContactHook } from '../systems/constructionContracts/ContractContactHook';
+import { contractCounterEntry } from '../systems/constructionContracts/ContractSiteWork';
+import {
+  buildContractWorld,
+  releaseContractAutoPinOnEnd,
+} from '../systems/constructionContracts/contractQuest';
+import type { CitizenSpeechStyle } from '../dialog/speakers';
+import type { DialogLine } from '../dialog/line';
 import { forwardQuestItemEvictions } from '../systems/questItemEvictions';
 import { displayHp } from '../core/crawlerFormulas';
 import type { XpDiminishingTier } from '../levels/xpDiminishing';
@@ -54,7 +63,7 @@ import { GameplayScene } from './GameplayScene';
 import { AchievementManager } from '../core/AchievementManager';
 import { AchievementUISystem } from '../systems/AchievementUISystem';
 import type { JournalProgress } from '../core/JournalProgress';
-import { isOutstanding, type TrackerEntry } from '../systems/questTracker';
+import { isOutstanding, resolvePinnedEntry, type TrackerEntry } from '../systems/questTracker';
 import { GameStats, bindRunStats } from '../core/GameStats';
 import type { PauseScreen } from '../ui/screens/pause/PauseScreen';
 import type { Player } from '../Player';
@@ -124,6 +133,7 @@ import {
   TownMemoryInteriorPayoutRecord,
 } from '../systems/InteriorPropInteractionSystem';
 import { TownInteriorPropDestructionSystem } from '../systems/TownInteriorPropDestructionSystem';
+import { ContractInteriorSite } from '../systems/constructionContracts/ContractInteriorSite';
 import { InteriorBreakReactionBarks } from '../systems/InteriorBreakReactionBarks';
 import { AmbientSoundSystem, type AmbientEmitter } from '../systems/AmbientSoundSystem';
 import {
@@ -225,7 +235,12 @@ import { CombatKit } from '../systems/kits/CombatKit';
 import { SkillPointReminderSystem } from '../systems/SkillPointReminderSystem';
 import { interiorHostilesFor, noteRoomCleared } from '../systems/interiorHostiles';
 import { partyLevelOf } from '../levels/spawner';
-import { AnchorInteriorSystem, SKY_TEMPLE_NAME } from '../systems/AnchorInteriorSystem';
+import { AnchorInteriorSystem } from '../systems/AnchorInteriorSystem';
+import {
+  SKY_TEMPLE_NAME,
+  cultHideoutHoldsRoom,
+  type InteriorStoryState,
+} from '../systems/interiorStoryOwnership';
 import { createAnchorQuestProgress, type AnchorQuestProgress } from '../core/AnchorQuestProgress';
 import { MenusKit } from '../systems/kits/MenusKit';
 import { ChatKit } from '../systems/kits/ChatKit';
@@ -258,7 +273,10 @@ import {
   drawTownInteriorGroundProps,
   townInteriorPropFigures,
 } from '../systems/townInteriorPropFigures';
-import { shouldShowInteractionPrompts } from '../systems/interactionPromptGate';
+import {
+  hostileWithinAttackRange,
+  shouldShowInteractionPrompts,
+} from '../systems/interactionPromptGate';
 import { viewportWidth, viewportHeight } from '../core/Viewport';
 import type { QuestRewardSpec } from '../ui/questReward/types';
 import {
@@ -518,6 +536,15 @@ export interface BuildingInteriorCircusContext {
 const OVERWORLD_FLOOR_NUMBER = 3;
 
 /**
+ * The contract stream's seed in a harness that builds a room with no overworld
+ * behind it; the game always hands the overworld's own seed across.
+ */
+const DETACHED_ROOM_WORLD_SEED = 0;
+
+/** Wendell's voice for his small talk on the rare frame he is not found standing in his room. */
+const WENDELL_FALLBACK_SPEECH_STYLE: CitizenSpeechStyle = 'townsfolkMasculine';
+
+/**
  * Which shape this room is built in.
  *
  * The Big Top is the only building with more than one, and only for the length
@@ -703,6 +730,10 @@ export class BuildingInteriorScene extends GameplayScene {
   private readonly propInteractions: InteriorPropInteractionSystem | null;
   /** This room's breakable placed props (barrels, crates, jars…); null where nothing here is breakable. */
   private readonly interiorPropDestruction: TownInteriorPropDestructionSystem | null;
+  /** The active construction contract's spots, when this room hosts them; null everywhere else. */
+  private readonly contractSite: ContractInteriorSite | null;
+  /** This room's contract contact, when the building can host a contract; also in `residentQuestHooks`. */
+  private readonly contractContact: ContractContactHook | null;
   /**
    * Resident lore progress and the apothecary's batch. Threaded in by reference
    * because this scene is rebuilt on every door entry — anything held here
@@ -725,9 +756,13 @@ export class BuildingInteriorScene extends GameplayScene {
   private readonly anchorInterior: AnchorInteriorSystem | null;
   /**
    * Every questline with business with this room's residents, in priority
-   * order: the Anchor's first, then "The Borrowed Blueprints". Talking to a
-   * resident, their glyph, and the quest's open conversation all walk this
-   * list, so a questline indoors is one more entry rather than a special case.
+   * order: a construction contract's client first, then the Anchor's, then
+   * "The Borrowed Blueprints", then Wendell's construction contracts. The
+   * client answers only while a payment is owed, so it never talks over the
+   * others, and behind the Anchor its terms for Aviel or Hilda would take
+   * every talk. Talking to a resident, their glyph, and the quest's open
+   * conversation all walk this list, so a questline indoors is one more entry
+   * rather than a special case.
    */
   private readonly residentQuestHooks: readonly ResidentQuestHook[];
   /** Plumbline Farm's quest-driven props; null in every other building. */
@@ -1222,9 +1257,48 @@ export class BuildingInteriorScene extends GameplayScene {
       toast: (message) => this.menus.toasts.post(message),
       onItemGranted: flyGrantedItem,
     });
-    this.residentQuestHooks = [this.anchorInterior, wendellHook].flatMap((hook) =>
-      hook === null ? [] : [hook],
-    );
+    const wendellContractsHook = WendellContractsHook.forBuilding(entry.name, GROUND_FLOOR_INDEX, {
+      state: this.briarHollowState,
+      bus: this.bus,
+      audio: this.audio,
+      conversation: this.conversation,
+      worldSeed: this.circus?.worldSeed ?? DETACHED_ROOM_WORLD_SEED,
+      world: () =>
+        buildContractWorld({
+          murderQuest: this.murderQuestProgress,
+          anchorQuest: this.anchorQuestProgress,
+          briarHollow: this.briarHollowState,
+        }),
+      openHayloft: () => this.openWendellHayloft(),
+      chatLine: () => this.wendellChatLine(),
+    });
+    this.contractContact = ContractContactHook.forBuilding(entry.name, GROUND_FLOOR_INDEX, {
+      state: this.briarHollowState,
+      story: () => ({
+        murderStage: this.murderQuestProgress?.stage,
+        anchor: this.anchorQuestProgress,
+      }),
+      bus: this.bus,
+      audio: this.audio,
+      conversation: this.conversation,
+      flyCoins: (coins, worldX, worldY) => {
+        const cam = this.computeCamera(ground.gameMap);
+        this.rewardFly.enqueueCoins(coins, worldX - cam.x, worldY - cam.y);
+      },
+      speechStyleOf: (residentId) =>
+        this.occupants?.people.find((person) => person.residentId === residentId)?.speechStyle ??
+        null,
+    });
+    // The contract's contact first: it speaks only while a payment is owed,
+    // and the Anchor's terms for Aviel or Hilda would otherwise take every
+    // talk and keep the payment from ever being made.
+    this.residentQuestHooks = [
+      this.contractContact,
+      this.anchorInterior,
+      wendellHook,
+      wendellContractsHook,
+    ].flatMap((hook) => (hook === null ? [] : [hook]));
+    this.pinQuestsStartedIndoors();
 
     // Ambient occupants only where no live encounter owns the room; the tower's
     // confrontation can start after entry, so towers are excluded outright.
@@ -1282,6 +1356,32 @@ export class BuildingInteriorScene extends GameplayScene {
     // placed barrel exactly as it flattens a dungeon crate.
     this.floors[GROUND_FLOOR_INDEX].destruction.dynamite.interiorProps =
       this.interiorPropDestruction;
+    // A room a live encounter holds is a fight, not a job site, the same as
+    // for the occupants and the prop interactions above.
+    const murderStage = (): MurderQuestStage | undefined => this.murderQuestProgress?.stage;
+    const contractStory: InteriorStoryState = {
+      get murderStage() {
+        return murderStage();
+      },
+      anchor: this.anchorQuestProgress,
+    };
+    const contractSite =
+      this.encounter === null
+        ? ContractInteriorSite.forBuilding(entry.name, GROUND_FLOOR_INDEX, {
+            state: this.briarHollowState,
+            story: () => contractStory,
+            gameMap: ground.gameMap,
+            human: this.human,
+            cat: this.cat,
+            audio: this.audio,
+            toast: (message) => this.menus.toasts.post(message),
+            worldHalted: () => this.ui.worldHalted(),
+          })
+        : null;
+    this.contractSite = contractSite;
+    if (contractSite !== null && this.interiorPropDestruction !== null) {
+      this.interiorPropDestruction.protectedIds = () => contractSite.protectedProps();
+    }
 
     this.ambientSound =
       this.audio !== null ? new AmbientSoundSystem(this.audio, this.buildAmbientEmitters()) : null;
@@ -1610,7 +1710,10 @@ export class BuildingInteriorScene extends GameplayScene {
     }
 
     const murderProgress = this.murderQuestProgress;
-    if (this.entry.name === 'Blackwood Lodge' && murderProgress?.stage === 'cult_hideout') {
+    if (
+      murderProgress !== undefined &&
+      cultHideoutHoldsRoom(this.entry.name, murderProgress.stage)
+    ) {
       this.startEncounter(
         GROUND_FLOOR_INDEX,
         (bus, addMob) =>
@@ -2016,6 +2119,7 @@ export class BuildingInteriorScene extends GameplayScene {
     this.bus.clear();
     this.menus.dispose();
     this.ambientSound?.dispose();
+    this.contractSite?.dispose();
     this.bopca?.dispose();
     // Ahead of the companion's own teardown, because a quest fight's cleanup
     // withdraws the orders and hazards it gave the companion, and it should be
@@ -2157,6 +2261,10 @@ export class BuildingInteriorScene extends GameplayScene {
     if (tower?.dialogDismissible === true) return () => void tower.dismissDialog();
     const questHook = this.openResidentQuestHook();
     if (questHook !== null) return () => void questHook.dismissDialog();
+    const contractContact = this.contractContact;
+    if (contractContact?.isFollowUpOpen === true) {
+      return () => void contractContact.dismissFollowUp();
+    }
     if (this.safeRoom?.mordecaiDialogOpen === true) return () => void this.conversation.dismiss();
     // `dismiss` rather than `close`: a service queued behind the story must not
     // open on the way out of it. Declined while anything halts the room, as
@@ -2588,6 +2696,10 @@ export class BuildingInteriorScene extends GameplayScene {
     // Safe room: whichever of the Bopca and Mordecai is nearer. Only consume
     // Space when actually acting, so an unrelated press can still fall through
     // to talking to an ambient occupant sharing the room.
+    if (interactPressed() && this.questResidentInReach(player) && this.tryTalkToOccupant(player)) {
+      keybindings.release(this.input, 'attack');
+    }
+
     const safeRoomSpeaker = safeRoomSpeakerFor(this.bopca, this.safeRoom, player);
     if (
       this.bopca !== null &&
@@ -2638,6 +2750,18 @@ export class BuildingInteriorScene extends GameplayScene {
       keybindings.release(this.input, 'attack');
     }
 
+    // A contract spot in reach, ahead of examining the prop it marks, unless
+    // the person the same press would talk to stands nearer than the spot.
+    // With a hostile in reach the press is a swing, as it is outdoors.
+    if (
+      interactPressed() &&
+      this.citizenDialogTarget === null &&
+      !hostileWithinAttackRange(player, this.world.roster.grid) &&
+      this.contractSite?.tryInteract(player, this.occupantTalkTiles(player)) === true
+    ) {
+      keybindings.release(this.input, 'attack');
+    }
+
     // Ambient occupants: talk to the nearest one with Space
     if (interactPressed() && this.tryTalkToOccupant(player)) {
       keybindings.release(this.input, 'attack');
@@ -2678,6 +2802,7 @@ export class BuildingInteriorScene extends GameplayScene {
     this.syncPlumblineFarmRoom();
     this.applyResidentQuestMarkers();
     for (const hook of this.residentQuestHooks) hook.update();
+    this.contractSite?.update();
     this.ambientSound?.updateListener(player.x, player.y);
     if (this.shop !== null) this.playShopTradeSound(this.shop);
 
@@ -2957,6 +3082,8 @@ export class BuildingInteriorScene extends GameplayScene {
     if (this.gameOver) return;
     this.gameOver = true;
     this.gameStats.recordDeath();
+    // The death screen stops the site's ticks, so its work loop would play on under it.
+    this.contractSite?.cancelWork();
     this.combat.deathScreen.activate(this.deathScreenMessage(), this.defeatRespawnMode);
   }
 
@@ -3038,17 +3165,31 @@ export class BuildingInteriorScene extends GameplayScene {
    * Hilda or Deacon Aviel for the Anchor, Wendell for the blueprints — the
    * first hook in priority order with an opinion winning.
    *
-   * A hook answers `null` for everybody it has no business with, so this can
-   * never wipe a marker some other system put on a citizen — a marker is only
-   * ever written by whoever claims that citizen.
+   * A hook answers `null` for everybody it has no business with. Indoors only
+   * these hooks put glyphs over residents, so a resident none of them has
+   * business with wears none; that is what takes a client's `?` down once
+   * they have paid.
    */
   private applyResidentQuestMarkers(): void {
     if (this.residentQuestHooks.length === 0 || this.occupants === null) return;
     for (const person of this.occupants.people) {
       if (person.residentId === null) continue;
-      const marker = firstResidentMarker(this.residentQuestHooks, person.residentId);
-      if (marker !== null) person.markerType = marker;
+      person.markerType = firstResidentMarker(this.residentQuestHooks, person.residentId) ?? 'none';
     }
+  }
+
+  /**
+   * Whether the occupant a press from `player` would talk to is a resident a
+   * questline has put a glyph over. Their business outranks the counter, bar
+   * or safe room they stand at: a shopkeeper who is also a contract's client
+   * would otherwise only ever open the shop.
+   */
+  private questResidentInReach(player: HumanPlayer | CatPlayer): boolean {
+    const target = this.occupants?.findTalkTarget(player.x, player.y) ?? null;
+    const residentId = target?.residentId ?? null;
+    if (residentId === null || target === this.citizenDialogTarget) return false;
+    const marker = firstResidentMarker(this.residentQuestHooks, residentId);
+    return marker === 'question' || marker === 'exclamation';
   }
 
   private syncPlumblineFarmRoom(): void {
@@ -3073,6 +3214,52 @@ export class BuildingInteriorScene extends GameplayScene {
     return this.residentQuestHooks.some((hook) => hook.tryOpenDialog(residentId, talker));
   }
 
+  /** Wendell's own occupant figure, when he is standing in this room. */
+  private wendellFigure(): Townsperson | null {
+    return this.occupants?.people.find((person) => person.residentId === 'wendell') ?? null;
+  }
+
+  /** His hayloft rest menu, straight to the counter: his contracts menu is how the player got here. */
+  private openWendellHayloft(): void {
+    if (this.servicePanel === null) return;
+    const resident = residentById('wendell');
+    const turn = residentTalkCount(this.townMemory, resident.id);
+    this.openServiceMenu(this.servicePanel, turn, residentHost(resident, turn), resident.role);
+    this.audio?.play('menu_open');
+  }
+
+  /** His ordinary small talk, picked from his lore and ambient lines as any resident's would be. */
+  private wendellChatLine(): DialogLine {
+    const resident = residentById('wendell');
+    // The press that opened his menu has already been counted as this visit's
+    // talk, so the line for this visit is the one before the count.
+    const thisTalkTurn = Math.max(0, residentTalkCount(this.townMemory, resident.id) - 1);
+    const speechStyle = this.wendellFigure()?.speechStyle ?? WENDELL_FALLBACK_SPEECH_STYLE;
+    return buildResidentConversation(resident, thisTalkTurn, this.townDialogContext(), speechStyle);
+  }
+
+  /**
+   * A quest taken indoors is pinned in the Journal the way the overworld pins
+   * one, unless that would knock a still-followable pin off: the overworld's
+   * switch prompt has no room here, so that pin stays and the new quest waits
+   * in the Journal for the player to pin.
+   */
+  private pinQuestsStartedIndoors(): void {
+    const journal = this.overworldJournal;
+    if (journal === null) return;
+    this.bus.on('questStarted', (e) => {
+      const pinnedId = journal.progress.pinnedTrackerId;
+      const keepsLivePin =
+        pinnedId !== null &&
+        pinnedId !== e.questId &&
+        resolvePinnedEntry(pinnedId, journal.entries()) !== null;
+      if (keepsLivePin) return;
+      journal.progress.pinnedTrackerId = e.questId;
+      journal.progress.pinSource = 'auto';
+    });
+    releaseContractAutoPinOnEnd(this.bus, journal.progress);
+  }
+
   /** The `R` press indoors: Old Hilda's repairs, and nothing else so far. */
   private triggerAnchorRepair(): boolean {
     return this.anchorInterior?.tryRepair(this.active()) ?? false;
@@ -3095,7 +3282,10 @@ export class BuildingInteriorScene extends GameplayScene {
     return this.conversation.handOff(
       player,
       pressIsForSomeoneElse,
-      () => this.trySafeRoomPress(player) || this.tryTalkToOccupant(player),
+      () =>
+        (this.questResidentInReach(player) && this.tryTalkToOccupant(player)) ||
+        this.trySafeRoomPress(player) ||
+        this.tryTalkToOccupant(player),
     );
   }
 
@@ -3493,6 +3683,15 @@ export class BuildingInteriorScene extends GameplayScene {
     if (this.citizenDialogTarget !== null) return;
     if (this.ui.worldHalted()) return;
     const active = this.active();
+    // Same order as the Space chain: a pickup already prompted takes the
+    // press first, and a contract spot beats everyone but a nearer occupant.
+    if (
+      interactionPromptsDrawnThisFrame() === 0 &&
+      this.contractSite?.renderPrompt(ctx, camX, camY, active, this.occupantTalkTiles(active)) ===
+        true
+    ) {
+      return;
+    }
     const target = this.occupants?.findTalkTarget(active.x, active.y) ?? null;
     if (target !== null) {
       drawInteractionPrompt(
@@ -3690,14 +3889,10 @@ export class BuildingInteriorScene extends GameplayScene {
     ctx.fillRect(0, 0, viewportWidth(), viewportHeight());
 
     this.map.renderCanvas(ctx, camX, camY, viewportWidth(), viewportHeight());
-    drawTownInteriorGroundProps(
-      ctx,
-      this.map,
-      camX,
-      camY,
-      TILE_SIZE,
-      this.interiorPropDestruction?.broken,
-    );
+    const hiddenProps =
+      this.contractSite?.hiddenProps(this.interiorPropDestruction?.broken) ??
+      this.interiorPropDestruction?.broken;
+    drawTownInteriorGroundProps(ctx, this.map, camX, camY, TILE_SIZE, hiddenProps);
 
     // Before the entity pass, not after: the Bopca render redraws the counter's
     // front face over itself, and a player standing at the counter reaches up
@@ -3728,6 +3923,7 @@ export class BuildingInteriorScene extends GameplayScene {
     const destruction = this.destruction;
     destruction.renderGround(ctx, camX, camY);
     this.interiorPropDestruction?.renderGround(ctx, camX, camY);
+    this.contractSite?.renderGround(ctx, camX, camY, this.active());
     combat.renderGround(ctx, camX, camY);
     this.fairies.renderGround(ctx, camX, camY);
     // Under the figures: the highlight rings sit on the floor around the broken
@@ -3748,7 +3944,9 @@ export class BuildingInteriorScene extends GameplayScene {
       ...(this.occupants?.people ?? []),
       ...safeRoomFigures,
       ...(this.club?.sortedRenderables() ?? []),
-      ...townInteriorPropFigures(this.map, this.interiorPropDestruction?.broken),
+      ...townInteriorPropFigures(this.map, hiddenProps),
+      // After the props: a tie in the sort keeps a prop under its own damage.
+      ...(this.contractSite?.sortedFigures() ?? []),
       ...destruction.groundPickups.renderEntities(),
       ...(this.bigTopMaze?.sortedFigures() ?? []),
     ]);
@@ -3760,6 +3958,7 @@ export class BuildingInteriorScene extends GameplayScene {
     this.fairies.render(ctx, camX, camY);
     destruction.renderEffects(ctx, camX, camY, this.human);
     this.interiorPropDestruction?.renderEffects(ctx, camX, camY);
+    this.contractSite?.renderAbove(ctx, camX, camY);
     // Over the crawlers, so a column standing between the camera and one of them
     // still reads as fire they are inside rather than fire they are behind.
     // Through `activeEncounter` rather than named directly, so an encounter's
@@ -4082,6 +4281,7 @@ export class BuildingInteriorScene extends GameplayScene {
     const entries: (TopBandEntry | null)[] = [
       ...(this.activeEncounter?.topBandEntries() ?? []),
       this.soulCrystal.topBandEntry(),
+      contractCounterEntry(this.briarHollowState.contracts.active),
       this.companionDownIndoors ? knockedOutBandEntry(this.inactive()) : null,
       roomNameEntry(interiorRoomTitle(this.entry.name, towerFloor)),
     ];
@@ -4185,6 +4385,13 @@ export class BuildingInteriorScene extends GameplayScene {
     // at the vine he is there to save.
     if (this.scriptOwnsParty) return;
     const dialogUpBeforeTap = this.citizenDialogTarget !== null || this.tapTargetOpen();
+    if (
+      !dialogUpBeforeTap &&
+      this.questResidentInReach(this.active()) &&
+      this.tryTalkToOccupant(this.active())
+    ) {
+      return;
+    }
     const safeRoomSpeaker = safeRoomSpeakerFor(this.bopca, this.safeRoom, this.active());
     if (this.bopca !== null && !this.bopca.isDialogOpen && safeRoomSpeaker === 'bopca') {
       this.bopca.tryInteract(this.active());
@@ -4217,12 +4424,37 @@ export class BuildingInteriorScene extends GameplayScene {
         !repaired &&
         !poured &&
         !this.tryGroundPickup(active) &&
+        !this.tryContractTap(active, tapScreenX, tapScreenY) &&
         !this.tryTalkToOccupant(active) &&
         !this.tryReadNearby(active)
       ) {
         this.attackTowardTap(active, tapScreenX, tapScreenY);
       }
     }
+  }
+
+  /** A tap on the contract spot in reach starts its work, as Space would. */
+  private tryContractTap(
+    active: HumanPlayer | CatPlayer,
+    tapScreenX: number,
+    tapScreenY: number,
+  ): boolean {
+    const site = this.contractSite;
+    if (site === null || hostileWithinAttackRange(active, this.world.roster.grid)) return false;
+    const cam = this.computeCamera(this.map);
+    return site.handleTap(
+      tapScreenX + cam.x,
+      tapScreenY + cam.y,
+      active,
+      this.occupantTalkTiles(active),
+    );
+  }
+
+  /** How far the occupant a press would talk to stands, in tiles; null when nobody would answer. */
+  private occupantTalkTiles(active: HumanPlayer | CatPlayer): number | null {
+    const target = this.occupants?.findTalkTarget(active.x, active.y) ?? null;
+    if (target === null) return null;
+    return Math.hypot(target.x - active.x, target.y - active.y) / TILE_SIZE;
   }
 
   /** Whether a counter, a panel or a safe-room conversation already has the party's attention. */

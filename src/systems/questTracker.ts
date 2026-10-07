@@ -49,6 +49,14 @@ export interface TrackerTarget extends ObjectiveBeaconFootprint {
    */
   readonly wearsOwnMarker?: boolean;
   /**
+   * The beam stands here only while the player has pinned this entry, never
+   * merely because it is on offer. For a giver who waits indoors and wears his
+   * own glow there: an unasked-for beam on his door would read as a quest
+   * already under way, but once the player picks the entry the door is the
+   * answer to where to go.
+   */
+  readonly litOnlyWhenPinned?: boolean;
+  /**
    * The world arrow stands down as soon as the target is anywhere on screen,
    * rather than only once the player is nearly on top of it. For a target
    * that is plain to see from a distance, like an army on the march.
@@ -218,6 +226,32 @@ export function availableTargets(
     targets.push(entry.target);
   }
   return targets;
+}
+
+/**
+ * Every place that gets the overlay beam this frame, each once: every quest
+ * still on offer, then the pinned objective's tile.
+ *
+ * A pinned quest that is still only on offer is also in the available list;
+ * drawing it twice would stack two additive beams at double brightness.
+ */
+export function objectiveBeamTargets(
+  pinned: TrackerTarget | null,
+  entries: ReadonlyArray<TrackerEntry>,
+): TrackerTarget[] {
+  const beams: TrackerTarget[] = [];
+  let pinnedAlreadyLit = false;
+  for (const target of availableTargets(entries)) {
+    if (target.wearsOwnMarker === true || target.litOnlyWhenPinned === true) continue;
+    if (pinned !== null && pinned.x === target.x && pinned.y === target.y) {
+      pinnedAlreadyLit = true;
+    }
+    beams.push(target);
+  }
+  if (pinned !== null && pinned.wearsOwnMarker !== true && !pinnedAlreadyLit) {
+    beams.push(pinned);
+  }
+  return beams;
 }
 
 /**

@@ -32,6 +32,15 @@ import {
   type BlueprintsQuestPhase,
   type BlueprintsStationId,
 } from './blueprintsQuestPhase';
+import {
+  contractSiteBySlug,
+  contractSiteKey,
+  contractSpot,
+  skyfowlContractSite,
+  type ContractSiteDef,
+  type ContractSiteKey,
+  type ContractSpotId,
+} from '../systems/constructionContracts/contractCatalog';
 
 // ── Quest state ──────────────────────────────────────────────────────────
 
@@ -160,6 +169,66 @@ function copyBlueprintsQuestState(quest: BlueprintsQuestState): BlueprintsQuestS
   };
 }
 
+// ── Construction contracts ───────────────────────────────────────────────
+
+/** The one contract the party holds: a site and the spots chosen from its pool. */
+export interface ActiveContract {
+  site: ContractSiteKey;
+  spotIds: readonly ContractSpotId[];
+  /** Parallel to `spotIds`. Ready to collect when every entry is true; never stored as its own flag. */
+  spotsDone: boolean[];
+}
+
+/** Wendell's repeatable construction contracts, unlocked by finishing the Borrowed Blueprints. */
+export interface ConstructionContractsState {
+  /** Whether Wendell has given his long introduction; afterwards he offers in one line. */
+  introSeen: boolean;
+  /** Also the index of the RNG stream the next contract is drawn from, so a save reproduces it. */
+  contractsIssued: number;
+  contractsCompleted: number;
+  active: ActiveContract | null;
+  /** Slug of the last site finished or dropped, so the same building never comes up twice running. */
+  lastSiteKey: string | null;
+  /** Each site's last spot set, by slug, so a building never repeats its exact set back to back. */
+  lastSpotSetBySite: Record<string, readonly ContractSpotId[]>;
+}
+
+export function createConstructionContractsState(): ConstructionContractsState {
+  return {
+    introSeen: false,
+    contractsIssued: 0,
+    contractsCompleted: 0,
+    active: null,
+    lastSiteKey: null,
+    lastSpotSetBySite: {},
+  };
+}
+
+function copyActiveContract(active: ActiveContract): ActiveContract {
+  return {
+    site: { ...active.site },
+    spotIds: [...active.spotIds],
+    spotsDone: [...active.spotsDone],
+  };
+}
+
+function copyConstructionContractsState(
+  contracts: ConstructionContractsState,
+): ConstructionContractsState {
+  const lastSpotSetBySite: Record<string, readonly ContractSpotId[]> = {};
+  for (const [slug, spotIds] of Object.entries(contracts.lastSpotSetBySite)) {
+    lastSpotSetBySite[slug] = [...spotIds];
+  }
+  return {
+    introSeen: contracts.introSeen,
+    contractsIssued: contracts.contractsIssued,
+    contractsCompleted: contracts.contractsCompleted,
+    active: contracts.active === null ? null : copyActiveContract(contracts.active),
+    lastSiteKey: contracts.lastSiteKey,
+    lastSpotSetBySite,
+  };
+}
+
 // ── Structures ───────────────────────────────────────────────────────────
 
 /** A wall segment's tier, plus the two states a segment reaches at 0 HP. */
@@ -256,6 +325,8 @@ export interface BriarHollowState {
   quest: VillageQuestState;
   /** Fenna's side quest, "The Borrowed Blueprints". */
   blueprints: BlueprintsQuestState;
+  /** Wendell's construction contracts, once the Borrowed Blueprints is finished. */
+  contracts: ConstructionContractsState;
   unlocks: VillageUnlocks;
   structures: StructureRecord[];
   soldierOrders: SoldierOrderRecord[];
@@ -382,6 +453,7 @@ export function createBriarHollowState(): BriarHollowState {
   return {
     quest: createVillageQuestState(),
     blueprints: createBlueprintsQuestState(),
+    contracts: createConstructionContractsState(),
     unlocks: createVillageUnlocks(),
     structures: [],
     soldierOrders: [],
@@ -416,6 +488,7 @@ export function captureBriarHollowState(state: BriarHollowState): BriarHollowSta
   return {
     quest: persistableQuest(state.quest),
     blueprints: copyBlueprintsQuestState(state.blueprints),
+    contracts: copyConstructionContractsState(state.contracts),
     unlocks: copyUnlocks(state.unlocks),
     structures: state.structures.map((structure) => ({ ...structure })),
     soldierOrders: state.soldierOrders.map(copySoldierOrder),
@@ -438,6 +511,7 @@ export function restoreBriarHollowState(
 ): void {
   target.quest = persistableQuest(snapshot.quest);
   target.blueprints = copyBlueprintsQuestState(snapshot.blueprints);
+  target.contracts = copyConstructionContractsState(snapshot.contracts);
   target.unlocks = copyUnlocks(snapshot.unlocks);
   target.structures = snapshot.structures.map((structure) => ({ ...structure }));
   target.soldierOrders = snapshot.soldierOrders.map(copySoldierOrder);
@@ -569,6 +643,73 @@ function parseBlueprintsQuestState(value: unknown): BlueprintsQuestState {
     ? value.completionScreenSeen
     : phase === 'complete';
   return { phase, fenceSectionsBuilt, grain, stationsUpgraded, completionScreenSeen };
+}
+
+/** The catalogue site a saved key names, or undefined for a building that no longer hosts one. */
+function parseContractSiteKey(value: unknown): ContractSiteDef | undefined {
+  if (!isRecord(value)) return undefined;
+  if (value.town === 'skyfowl' && isString(value.buildingName)) {
+    return skyfowlContractSite(value.buildingName);
+  }
+  if (value.town === 'briar_hollow' && isString(value.buildingId)) {
+    const site = contractSiteBySlug(value.buildingId);
+    return site?.town === 'briar_hollow' ? site : undefined;
+  }
+  return undefined;
+}
+
+/**
+ * Keeps only the spots the site's pool still has, with their done flags. A
+ * contract left with no spot at all reads as no contract; Wendell re-offers.
+ */
+function parseActiveContract(value: unknown): ActiveContract | null {
+  if (!isRecord(value)) return null;
+  const site = parseContractSiteKey(value.site);
+  if (site === undefined) return null;
+  const savedIds = Array.isArray(value.spotIds) ? value.spotIds : [];
+  const savedDone = Array.isArray(value.spotsDone) ? value.spotsDone : [];
+  const spotIds: ContractSpotId[] = [];
+  const spotsDone: boolean[] = [];
+  savedIds.forEach((id: unknown, index) => {
+    if (!isString(id) || contractSpot(site, id) === undefined || spotIds.includes(id)) return;
+    const done: unknown = savedDone[index];
+    spotIds.push(id);
+    spotsDone.push(isBoolean(done) ? done : false);
+  });
+  if (spotIds.length === 0) return null;
+  return { site: contractSiteKey(site), spotIds, spotsDone };
+}
+
+function parseSpotSetsBySite(value: unknown): Record<string, readonly ContractSpotId[]> {
+  const sets: Record<string, readonly ContractSpotId[]> = {};
+  if (!isRecord(value)) return sets;
+  for (const [slug, saved] of Object.entries(value)) {
+    const site = contractSiteBySlug(slug);
+    if (site === undefined || !Array.isArray(saved)) continue;
+    sets[slug] = saved.filter(
+      (id: unknown): id is ContractSpotId => isString(id) && contractSpot(site, id) !== undefined,
+    );
+  }
+  return sets;
+}
+
+/** A save written before contracts existed has no `contracts` and reads as never unlocked or offered. */
+function parseConstructionContractsState(value: unknown): ConstructionContractsState {
+  const defaults = createConstructionContractsState();
+  if (!isRecord(value)) return defaults;
+  const count = (field: unknown): number => (isNumber(field) ? Math.max(0, Math.floor(field)) : 0);
+  const lastSiteKey =
+    isString(value.lastSiteKey) && contractSiteBySlug(value.lastSiteKey) !== undefined
+      ? value.lastSiteKey
+      : null;
+  return {
+    introSeen: isBoolean(value.introSeen) ? value.introSeen : defaults.introSeen,
+    contractsIssued: count(value.contractsIssued),
+    contractsCompleted: count(value.contractsCompleted),
+    active: parseActiveContract(value.active),
+    lastSiteKey,
+    lastSpotSetBySite: parseSpotSetsBySite(value.lastSpotSetBySite),
+  };
 }
 
 function isConstructionUnlockId(value: unknown): value is ConstructionUnlockId {
@@ -801,6 +942,7 @@ export function parseBriarHollowStateSnapshot(
   return {
     quest,
     blueprints: parseBlueprintsQuestState(value.blueprints),
+    contracts: parseConstructionContractsState(value.contracts),
     unlocks: parseVillageUnlocks(value.unlocks, quest.phase),
     structures,
     soldierOrders,

@@ -21,7 +21,11 @@ import {
   type MercenaryRosterCheckpoint,
 } from './MercenaryRoster';
 import type { MongoPetStateCheckpoint } from './MongoPetState';
-import { migrateRoomKey, type TownMemoryCheckpoint } from './TownMemory';
+import {
+  migrateInteriorPropPayoutKey,
+  migrateRoomKey,
+  type TownMemoryCheckpoint,
+} from './TownMemory';
 import type { JournalProgressCheckpoint } from './JournalProgress';
 import { TACTICS_TRAITS, type TacticsTrait } from '../creatures/tactics/tacticsTraits';
 import type { MarketStockCheckpoint } from '../systems/market/MarketStock';
@@ -1033,7 +1037,7 @@ export function parseTownMemoryCheckpoint(value: unknown): TownMemoryCheckpoint 
     poulticesLeft,
     clearedRooms: clearedRooms.map(migrateRoomKey),
     clearedCamps,
-    paidOutInteriorProps: paidOutInteriorProps.map(migrateRoomKey),
+    paidOutInteriorProps: paidOutInteriorProps.map(migrateInteriorPropPayoutKey),
   };
 }
 

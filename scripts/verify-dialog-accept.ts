@@ -49,11 +49,8 @@ import { speakerLines, type NonEmpty } from '../src/dialog/line';
 import type { Choice, ConversationRequest, ConversationTopic } from '../src/dialog/request';
 import { topicMenu } from '../src/dialog/topics';
 import { GameMap } from '../src/map/GameMap';
-import {
-  AnchorInteriorSystem,
-  HILDA_COTTAGE_NAME,
-  SKY_TEMPLE_NAME,
-} from '../src/systems/AnchorInteriorSystem';
+import { AnchorInteriorSystem } from '../src/systems/AnchorInteriorSystem';
+import { HILDA_COTTAGE_NAME, SKY_TEMPLE_NAME } from '../src/systems/interiorStoryOwnership';
 import { AnchorQuestSystem } from '../src/systems/AnchorQuestSystem';
 import { RewardGrantedDialog } from '../src/ui/RewardGrantedDialog';
 import { UiRoot } from '../src/ui/core/UiRoot';

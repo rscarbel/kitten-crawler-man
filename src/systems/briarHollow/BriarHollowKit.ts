@@ -77,6 +77,10 @@ import { VillageAssaultSystem, type SiegeMusicClaim } from './VillageAssaultSyst
 import { VillageQuestSystem } from './VillageQuestSystem';
 import { VillageQuestGuide } from './VillageQuestGuide';
 import { BlueprintsQuestSystem } from './BlueprintsQuestSystem';
+import { ConstructionContractSystem } from '../constructionContracts/ConstructionContractSystem';
+import { pinningContractSite } from '../constructionContracts/contractContactPin';
+import type { VillagerId } from '../../dialog/scripts/briarHollow';
+import type { RatkinSoldier } from '../../creatures/RatkinSoldier';
 import { RecruiterSystem } from './RecruiterSystem';
 import type { Conversation } from '../../dialog/Conversation';
 import type { ConversationHandle } from '../../dialog/request';
@@ -163,6 +167,13 @@ export interface BriarHollowKitDeps {
   readonly onBlueprintsCue?: (cue: BlueprintsCue) => void;
   /** Handed to the questline for its reward screen's travel card. */
   readonly travelUnlocks: Pick<TravelUnlockState, 'anchor'>;
+  /** Flies paid coins from a world position to the HUD's coin pill. Absent means no flight. */
+  readonly flyCoins?: (coins: number, worldX: number, worldY: number) => void;
+  /**
+   * Whether a story state owns a Skyfowl Town room right now, for a
+   * construction contract held there. Absent means none ever does.
+   */
+  readonly skyfowlRoomOwnedByStory?: (buildingName: string) => boolean;
 }
 
 /** The HUD chrome `BriarHollowKit.renderHud` draws around, in CSS pixels. */
@@ -236,6 +247,8 @@ export class BriarHollowKit {
    * village. Built after the Plea so the Plea's villager lines outrank it.
    */
   readonly blueprints: BlueprintsQuestSystem | null;
+  /** Wendell's construction contracts: a village building's spots, the counter, the Journal row and a village contact's payout; null on a map with no village. */
+  readonly contracts: ConstructionContractSystem | null;
   /**
    * The questline's in-world "how": the highlighted tree, rock, station, wall
    * segment or trebuchet a step means, and the arrow and caption over it.
@@ -421,6 +434,28 @@ export class BriarHollowKit {
                 ? (this.questGuide?.target() ?? null)
                 : null,
           });
+    this.contracts =
+      site === null || villagers === null
+        ? null
+        : new ConstructionContractSystem({
+            state: deps.state,
+            gameMap: sceneWorld.gameMap,
+            site,
+            human: deps.human,
+            cat: deps.cat,
+            audio: deps.audio,
+            bus: sceneWorld.bus,
+            conversation: deps.conversation,
+            villagers,
+            flyCoins: (coins, worldX, worldY) => deps.flyCoins?.(coins, worldX, worldY),
+            skyfowlRoomOwnedByStory: deps.skyfowlRoomOwnedByStory,
+            soldierTile: (id) =>
+              this.soldiers?.soldiers.find((soldier) => soldier.soldierId === id)?.tile ?? null,
+            announce: (message) => deps.menus.announce(message),
+            noteResourceActivity: deps.noteResourceActivity,
+            worldHalted: () => deps.worldHalted?.() === true,
+            pleaPhase: () => deps.state.quest.phase,
+          });
     this.questGuide =
       site === null || villagers === null || defense === null
         ? null
@@ -435,7 +470,11 @@ export class BriarHollowKit {
             // Lazy: read fresh every tick, since the quests are rebuilt with the
             // kit. The Plea's own step comes first; the side quest's shows only
             // while the Plea has nothing for the party's hands.
-            guidance: () => this.quest?.guidance() ?? this.blueprints?.guidance() ?? null,
+            guidance: () =>
+              this.quest?.guidance() ??
+              this.blueprints?.guidance() ??
+              this.contracts?.guidance() ??
+              null,
             isDefaultTrebuchetPromptShowing: (at) =>
               this.defences?.isTrebuchetPromptShowing(at) ?? false,
             isDefaultWallPromptShowing: () => this.defences?.isWallPromptShowing() ?? false,
@@ -563,6 +602,7 @@ export class BriarHollowKit {
     this.recruiter?.update();
     this.quest?.update();
     this.blueprints?.update();
+    this.contracts?.update();
     this.questGuide?.update();
     this.drainQuestLineQueue();
     this.services?.sawmill.setQuestForcedKinds(this.questGuide?.activeProcessStationKinds() ?? []);
@@ -657,6 +697,7 @@ export class BriarHollowKit {
     this.defences?.renderGround(ctx, camX, camY);
     this.services?.renderGround(ctx, camX, camY);
     this.blueprints?.renderGround(ctx, camX, camY);
+    this.contracts?.renderGround(ctx, camX, camY, this.activeCrawler);
     if (this.blueprints?.busyWithWork !== true) this.questGuide?.renderGround(ctx, camX, camY);
     renderNecromancerTelegraphs(ctx, camX, camY, this.world.roster.mobs);
   }
@@ -675,6 +716,7 @@ export class BriarHollowKit {
     for (const piece of this.recruiter?.renderEntities() ?? []) buffer.push(piece);
     for (const piece of this.ambience.renderEntities()) buffer.push(piece);
     for (const piece of this.defences?.renderEntities() ?? []) buffer.push(piece);
+    for (const piece of this.contracts?.renderEntities() ?? []) buffer.push(piece);
     return buffer;
   }
 
@@ -690,6 +732,7 @@ export class BriarHollowKit {
     this.defences?.renderAbove(ctx, camX, camY);
     this.services?.renderAbove(ctx, camX, camY);
     this.blueprints?.renderAbove(ctx, camX, camY);
+    this.contracts?.renderAbove(ctx, camX, camY);
     this.assault?.renderAbove(ctx, camX, camY);
     this.soldiers?.renderAbove(ctx, camX, camY);
     // A downed crawler's arrow is the only arrow the game allows on screen, so
@@ -717,6 +760,7 @@ export class BriarHollowKit {
     const siege = this.assault?.topBandEntry() ?? null;
     if (siege !== null) entries.push(siege);
     entries.push(...(this.blueprints?.topBandEntries() ?? []));
+    entries.push(...(this.contracts?.topBandEntries() ?? []));
     return entries;
   }
 
@@ -751,12 +795,24 @@ export class BriarHollowKit {
     if (interactionPromptsDrawnThisFrame() > 0) return false;
     // Same order as `tryInteract`: the side quest's fence and harvest first.
     if (this.blueprints?.renderPrompt(ctx, camX, camY, active) === true) return true;
+    if (
+      this.contracts?.renderPrompt(ctx, camX, camY, active, this.competingTiles(active)) === true
+    ) {
+      return true;
+    }
     // A wall in reach and in front of the crawler is the most specific target
     // there is: nothing else stands where it stands.
     if (this.defences?.renderWallBuildPrompt(ctx, camX, camY, active) === true) return true;
     // Same order as `tryInteract`, so the prompt names what the press reaches.
     if (this.livestock?.renderPrompt(ctx, camX, camY, active) === true) return true;
     if (this.services?.renderPrompt(ctx, camX, camY, active) === true) return true;
+    const owedContact = this.owedContactInReach(active);
+    if (owedContact?.kind === 'villager') {
+      return this.villagers?.renderPrompt(ctx, camX, camY, active) === true;
+    }
+    if (owedContact?.kind === 'soldier') {
+      return this.soldiers?.renderPrompt(ctx, camX, camY, active) === true;
+    }
     if (this.recruiter?.renderPrompt(ctx, camX, camY, active) === true) return true;
     if (this.soldierIsNearer(active)) {
       return this.soldiers?.renderPrompt(ctx, camX, camY, active) === true;
@@ -779,6 +835,9 @@ export class BriarHollowKit {
     // only takes the press in its own step and only when something is in
     // reach, so outside those it falls straight through.
     if (this.blueprints?.tryInteract(active) === true) return true;
+    // A contract spot in reach, unless the villager the press would talk to
+    // stands nearer: a householder at their own bed is spoken to first.
+    if (this.contracts?.tryInteract(active, this.competingTiles(active)) === true) return true;
     // A wall the crawler is squarely facing is the most specific thing a press
     // can mean, and never overlaps a villager or a fixture.
     if (this.defences?.tryBuildWall(fromTap) === true) return true;
@@ -789,6 +848,7 @@ export class BriarHollowKit {
     // A machine at the sawmill before whoever works beside it, unless that
     // villager stands nearer than the machine does.
     if (this.services?.tryInteract(active) === true) return true;
+    if (this.tryTalkToOwedContact(active)) return true;
     if (this.recruiter?.tryInteract(active) === true) return true;
     const soldier = this.soldierIsNearer(active) ? this.soldiers?.talkTarget(active) : null;
     if (soldier !== null && soldier !== undefined) {
@@ -800,6 +860,81 @@ export class BriarHollowKit {
     if (fallback === null || this.isConversationOpen) return false;
     this.soldiers?.talkTo(fallback.soldier, active);
     return true;
+  }
+
+  /**
+   * Who a press from `active` reaches when it is the client a finished
+   * construction contract waits to be paid by: they are spoken to ahead of
+   * the recruiter and of a nearer soldier, so the payment can always be
+   * collected. Only after the sawmill has had its say, so a nearer machine
+   * or a cut in progress keeps the press.
+   */
+  private owedContactInReach(
+    active: HumanPlayer | CatPlayer,
+  ):
+    | { readonly kind: 'villager' }
+    | { readonly kind: 'soldier'; readonly soldier: RatkinSoldier }
+    | null {
+    const contact = this.contracts?.owedContact ?? null;
+    if (contact === null || this.services?.wouldInteract(active) === true) return null;
+    if (this.villagers?.talkTarget(active)?.id === contact) return { kind: 'villager' };
+    const soldier = this.soldiers?.talkTarget(active)?.soldier ?? null;
+    return soldier?.soldierId === contact ? { kind: 'soldier', soldier } : null;
+  }
+
+  private tryTalkToOwedContact(active: HumanPlayer | CatPlayer): boolean {
+    const contact = this.owedContactInReach(active);
+    if (contact === null || this.isConversationOpen) return false;
+    if (contact.kind === 'villager') return this.villagers?.tryTalk(active) === true;
+    this.soldiers?.talkTo(contact.soldier, active);
+    return true;
+  }
+
+  /**
+   * How far the nearest other target a press from `active` would reach
+   * stands, in tiles, for a contract spot to yield to; null when nothing else
+   * would take the press. A machine at the sawmill and a villager or soldier
+   * are measured. A wall facing the crawler, a cow in reach and the recruiter
+   * have no distance worth comparing and always come first. The contact a
+   * contract holds indoors is not counted until the work is done: they have
+   * nothing to pay yet, and they may be standing where the party has to stand
+   * to reach a spot.
+   */
+  private competingTiles(active: HumanPlayer | CatPlayer): number | null {
+    if (
+      this.defences?.isWallPromptShowing(active) === true ||
+      this.livestock?.wouldPet(active) === true ||
+      this.recruiter?.wouldInteract(active) === true
+    ) {
+      return 0;
+    }
+    const distances: number[] = [];
+    const sawmill = this.services?.sawmill ?? null;
+    if (sawmill?.isWorking === true) distances.push(0);
+    else if (sawmill !== null && sawmill.stationFor(active) !== null) {
+      distances.push(sawmill.tilesToStation(active));
+    }
+    const waitingContact = this.unpaidPinnedContact();
+    const villager = this.villagers?.talkTarget(active) ?? null;
+    if (villager !== null && villager.id !== waitingContact) {
+      distances.push(Math.hypot(villager.x - active.x, villager.y - active.y) / TILE_SIZE);
+    }
+    const soldier = this.soldiers?.talkTarget(active) ?? null;
+    if (soldier !== null && soldier.soldier.soldierId !== waitingContact) {
+      distances.push(soldier.tiles);
+    }
+    return distances.length === 0 ? null : Math.min(...distances);
+  }
+
+  /** The contact the active contract holds indoors while its spots are still unfinished; null otherwise. */
+  private unpaidPinnedContact(): VillagerId | null {
+    const contracts = this.contracts;
+    if (contracts === null || contracts.isReady) return null;
+    return pinningContractSite(contracts.state)?.contact ?? null;
+  }
+
+  private get activeCrawler(): HumanPlayer | CatPlayer {
+    return this.deps.human.isActive ? this.deps.human : this.deps.cat;
   }
 
   /**
@@ -846,6 +981,7 @@ export class BriarHollowKit {
     if (hostileWithinAttackRange(active, this.world.roster.grid)) return false;
     if (this.blueprints?.harvest.wouldInteract(active) === true) return true;
     if ((this.blueprints?.fence.sectionInReach(active) ?? null) !== null) return true;
+    if (this.contracts?.wouldInteract(active, this.competingTiles(active)) === true) return true;
     if (this.livestock?.wouldPet(active) === true) return true;
     if (this.services?.wouldInteract(active) === true) return true;
     if (this.recruiter?.wouldInteract(active) === true) return true;
@@ -1015,6 +1151,12 @@ export class BriarHollowKit {
     ) {
       return true;
     }
+    if (
+      !hostileNear &&
+      this.contracts?.handleTap(worldX, worldY, active, this.competingTiles(active)) === true
+    ) {
+      return true;
+    }
     // The cow comes before the hostile check: it decides for itself whether a hostile would take the tap.
     if (this.tapCow(worldX, worldY, active)) return true;
     if (hostileNear) return false;
@@ -1097,6 +1239,7 @@ export class BriarHollowKit {
    */
   dismissDialog(): boolean {
     if (this.defences?.dismissDialog() === true) return true;
+    if (this.contracts?.dismissFollowUp() === true) return true;
     if (this.recruiter?.isDialogOpen === true) {
       this.deps.conversation.dismiss();
       return true;
@@ -1130,7 +1273,11 @@ export class BriarHollowKit {
 
   /** Minimap pips for anything the village's questlines want pointed at. */
   get questMarkers(): Array<{ x: number; y: number; type: QuestMarkerType }> {
-    return [...(this.quest?.questMarkers ?? []), ...(this.blueprints?.questMarkers ?? [])];
+    return [
+      ...(this.quest?.questMarkers ?? []),
+      ...(this.blueprints?.questMarkers ?? []),
+      ...(this.contracts?.questMarkers ?? []),
+    ];
   }
 
   /** The sawmill's machines, in tile coordinates with their output, for the minimap. */
@@ -1147,9 +1294,13 @@ export class BriarHollowKit {
     return this.services?.minimapVendorPositions() ?? [];
   }
 
-  /** Quest Journal rows for the village's questlines: the Plea, then Fenna's side quest. */
+  /** Quest Journal rows for the village's questlines: the Plea, Fenna's side quest, then Wendell's contracts. */
   trackerEntries(): ReadonlyArray<TrackerEntry> {
-    return [...(this.quest?.trackerEntries() ?? []), ...(this.blueprints?.trackerEntries() ?? [])];
+    return [
+      ...(this.quest?.trackerEntries() ?? []),
+      ...(this.blueprints?.trackerEntries() ?? []),
+      ...(this.contracts?.trackerEntries() ?? []),
+    ];
   }
 
   /**
@@ -1169,6 +1320,7 @@ export class BriarHollowKit {
     // the herd, and the escort then finds her gone.
     this.livestock?.onRewind();
     this.blueprints?.onRewind();
+    this.contracts?.onRewind();
     if (this.isQuestLineShowing()) {
       this.deps.conversation.close();
     }
@@ -1204,6 +1356,7 @@ export class BriarHollowKit {
     this.soldiers?.dispose();
     this.quest?.dispose();
     this.blueprints?.dispose();
+    this.contracts?.dispose();
     this.assault?.dispose();
     if (this.defences !== null) this.deps.dynamite.onStructureBlast = null;
   }

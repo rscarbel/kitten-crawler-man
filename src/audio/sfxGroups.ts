@@ -1,6 +1,7 @@
 import type { SoundId } from './sounds';
 import type { BuildingEntry } from '../systems/BuildingSystem';
 import { interiorSellsSomething } from '../systems/townServices';
+import { CONTRACT_CUES } from '../systems/constructionContracts/contractSoundCues';
 
 /**
  * Where a group of non-streaming sound effects can be heard. The 144
@@ -19,6 +20,7 @@ export type SfxGroup =
   | 'level2'
   | 'level3'
   | 'briarHollow'
+  | 'constructionContracts'
   | 'bounty'
   | 'circusQuest'
   | 'murderMysteryQuest'
@@ -464,6 +466,14 @@ export const SFX_GROUPS: Record<SfxGroup, readonly SoundId[]> = {
   ],
 
   /**
+   * Every sound behind Wendell's construction contracts (`CONTRACT_CUES`).
+   * Contract spots sit on the streets and inside buildings, so the floor-3
+   * bundle and every interior load this group rather than trusting the
+   * overworld's bundle to still be resident behind a door.
+   */
+  constructionContracts: Object.values(CONTRACT_CUES).flat(),
+
+  /**
    * Shady's five bounty bosses (`bountyDefs.ts`/`BountySystem`, floor-3
    * overworld only), plus the bounty hand-off cues themselves. Each boss now
    * owns most of its voice, but the ids still borrowed from a level1/level2
@@ -648,6 +658,7 @@ export const CORE_SFX_IDS: readonly SoundId[] = SFX_GROUPS.universal;
 const LEVEL3_SFX_GROUPS: readonly SfxGroup[] = [
   'level3',
   'briarHollow',
+  'constructionContracts',
   'bounty',
   'circusQuest',
   'murderMysteryQuest',
@@ -683,6 +694,7 @@ export function sfxGroupsForBuildingEntry(entry: BuildingEntry): readonly SoundI
     entry.type === 'store' ||
     (entry.type === 'house' && interiorSellsSomething(entry.name));
   const groups: readonly SfxGroup[] = [
+    'constructionContracts',
     ...(entry.hasSafeRoom === true ? (['interiorBopca'] as const) : []),
     ...(entry.type === 'club' ? (['interiorCasino'] as const) : []),
     ...(sellsSomething ? (['interiorCommerce'] as const) : []),

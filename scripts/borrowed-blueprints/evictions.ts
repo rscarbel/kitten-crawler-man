@@ -32,9 +32,9 @@ import { PASTURE_FENCE_SECTION_COUNT } from '../../src/map/overworld/briarHollow
 import type { Player } from '../../src/Player';
 import {
   AnchorInteriorSystem,
-  HILDA_COTTAGE_NAME,
   WOOD_PILE_RESPAWN_SECONDS,
 } from '../../src/systems/AnchorInteriorSystem';
+import { HILDA_COTTAGE_NAME } from '../../src/systems/interiorStoryOwnership';
 import {
   PLUMBLINE_FARM_NAME,
   grantBlueprintsItem,

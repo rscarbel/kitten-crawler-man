@@ -8,20 +8,28 @@
  */
 
 import type { TownInteriorLayoutEntry } from './types';
+import type { ContractAreaRecord } from '../../contractAreas';
+import type { PlannedBuildingName } from '../townPlan';
 import { buildPlumblineFarmLayout } from './plumblineFarm';
-import { buildBlackwoodLodgeLayout } from './blackwoodLodge';
-import { buildOldHildasCottageLayout } from './oldHildasCottage';
-import { buildCartwrightsWorkshopLayout } from './cartwrightsWorkshop';
-import { buildHerbAndRemedyLayout } from './herbAndRemedy';
-import { buildSleepingCatInnLayout } from './sleepingCatInn';
-import { buildRustyAnvilLayout } from './rustyAnvil';
-import { buildMillersFarmLayout } from './millersFarm';
-import { buildHornedFlagonLayout } from './hornedFlagon';
-import { buildSunkenStumpPubLayout } from './sunkenStumpPub';
-import { buildTempleOfTheSkyLayout } from './templeOfTheSky';
-import { buildQuietNeedleLayout } from './quietNeedle';
-import { buildBarracksLayout } from './barracks';
-import { buildGeneralStoreLayout } from './generalStore';
+import { buildBlackwoodLodgeContractAreas, buildBlackwoodLodgeLayout } from './blackwoodLodge';
+import {
+  buildOldHildasCottageContractAreas,
+  buildOldHildasCottageLayout,
+} from './oldHildasCottage';
+import {
+  buildCartwrightsWorkshopContractAreas,
+  buildCartwrightsWorkshopLayout,
+} from './cartwrightsWorkshop';
+import { buildHerbAndRemedyContractAreas, buildHerbAndRemedyLayout } from './herbAndRemedy';
+import { buildSleepingCatInnContractAreas, buildSleepingCatInnLayout } from './sleepingCatInn';
+import { buildRustyAnvilContractAreas, buildRustyAnvilLayout } from './rustyAnvil';
+import { buildMillersFarmContractAreas, buildMillersFarmLayout } from './millersFarm';
+import { buildHornedFlagonContractAreas, buildHornedFlagonLayout } from './hornedFlagon';
+import { buildSunkenStumpPubContractAreas, buildSunkenStumpPubLayout } from './sunkenStumpPub';
+import { buildTempleOfTheSkyContractAreas, buildTempleOfTheSkyLayout } from './templeOfTheSky';
+import { buildQuietNeedleContractAreas, buildQuietNeedleLayout } from './quietNeedle';
+import { buildBarracksContractAreas, buildBarracksLayout } from './barracks';
+import { buildGeneralStoreContractAreas, buildGeneralStoreLayout } from './generalStore';
 
 export type TownInteriorLayoutBuilder = (
   w: number,
@@ -51,7 +59,34 @@ export const NAMED_INTERIOR_LAYOUTS: ReadonlyMap<string, TownInteriorLayoutBuild
 ]);
 
 /** The `store`-kind layout (today: only the General Store), applied by building type rather than name. */
-export { buildGeneralStoreLayout };
+export { buildGeneralStoreLayout, buildGeneralStoreContractAreas };
+
+/** One building's construction-contract rects, computed from the same room shell its layout is. */
+export type TownInteriorContractAreasBuilder = (w: number, h: number) => ContractAreaRecord;
+
+/**
+ * Every named building's construction-contract rects, keyed exactly as
+ * `NAMED_INTERIOR_LAYOUTS`. Each builder lives beside its layout and reads
+ * the same derived positions, so a moved fitting carries its rects with it.
+ * A building absent here offers no area spots.
+ */
+export const NAMED_INTERIOR_CONTRACT_AREAS: ReadonlyMap<
+  PlannedBuildingName,
+  TownInteriorContractAreasBuilder
+> = new Map([
+  ['Blackwood Lodge', buildBlackwoodLodgeContractAreas],
+  ["Old Hilda's Cottage", buildOldHildasCottageContractAreas],
+  ["Cartwright's Workshop", buildCartwrightsWorkshopContractAreas],
+  ['Herb & Remedy', buildHerbAndRemedyContractAreas],
+  ['The Sleeping Cat Inn', buildSleepingCatInnContractAreas],
+  ['The Rusty Anvil', buildRustyAnvilContractAreas],
+  ["Miller's Farm", buildMillersFarmContractAreas],
+  ['The Horned Flagon', buildHornedFlagonContractAreas],
+  ['The Sunken Stump Pub', buildSunkenStumpPubContractAreas],
+  ['Temple of the Sky', buildTempleOfTheSkyContractAreas],
+  ['The Quiet Needle', buildQuietNeedleContractAreas],
+  ['The Barracks', buildBarracksContractAreas],
+]);
 
 export {
   INN_INTERIOR_W,

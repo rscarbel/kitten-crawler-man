@@ -32,13 +32,21 @@ Two worked examples stand a quest on people another system owns, instead of on a
   `removeQuestLineProvider()` on dispose. Providers are an ordered list: the first with an opening
   (or a marker other than `'none'`) for a villager speaks, so registration order is priority. The
   Plea (`VillageQuestSystem`) registers first and "The Borrowed Blueprints"
-  (`BlueprintsQuestSystem`) second, so a side quest never talks over the main questline. Never add
-  a special case for one questline to `VillagerSystem` or `openingLine`.
+  (`BlueprintsQuestSystem`) second, so a side quest never talks over the main questline. A
+  provider that speaks only briefly and must not be talked over registers with
+  `addQuestLineProvider(this, { first: true })`: Wendell's construction contracts
+  (`ConstructionContractSystem`) do, because they answer only while a client owes a payment, and
+  behind the Plea the Mayor's lines would take every talk and the payment could never be made.
+  Never add a special case for one questline to `VillagerSystem` or `openingLine`.
 - **Town residents indoors.** `BuildingInteriorScene` holds an ordered list of `ResidentQuestHook`s
-  (`src/systems/residentQuestHooks.ts`): the Anchor's (`AnchorInteriorSystem`) first, then
-  `WendellBlueprintsHook`. Each gets first refusal on talking to a resident (`tryOpenDialog`) and
-  a say in the glyph over their head (`markerFor`, folded by `firstResidentMarker` in
-  `applyResidentQuestMarkers`). A new indoor questline is one more entry in that list. A quest
+  (`src/systems/residentQuestHooks.ts`): `ContractContactHook` first, then the Anchor's
+  (`AnchorInteriorSystem`), `WendellBlueprintsHook` and `WendellContractsHook`. The contract's
+  client goes first because it answers only while a payment is owed; behind the Anchor, its terms
+  for Aviel or Hilda would take every talk. Each hook gets first refusal on talking to a resident
+  (`tryOpenDialog`) and a say in the glyph over their head (`markerFor`, folded by
+  `firstResidentMarker` in `applyResidentQuestMarkers`; a resident no hook claims wears none). A
+  marked resident in reach is talked to ahead of the shop counter or safe room they stand at
+  (`questResidentInReach`). A new indoor questline is one more entry in that list. A quest
   whose state lives in the village is threaded into the interior by reference (the way
   `BriarHollowState` is) and moves its phase through the same helper as the overworld, so the
   same events fire on both sides of the door.
@@ -54,7 +62,8 @@ evicts whatever other quest item was there, reported as `questItemEvicted`. So:
   that respawns, an NPC who hands it back);
 - retire it with `clearQuestItem(id)` or `removeItems`, which touch only your own item.
 
-`docs/town.md` (The Borrowed Blueprints) describes one quest built end to end on these rules.
+`docs/town.md` (The Borrowed Blueprints) describes one quest built end to end on these rules;
+its Construction contracts section describes a repeatable job on the same seams.
 
 ## Telling the player where to go
 

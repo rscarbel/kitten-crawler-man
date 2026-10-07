@@ -61,9 +61,12 @@ import {
   HILDA_REQUEST_TERMS,
   HILDA_REWARD,
 } from '../dialog/scripts/scenes/anchor';
-
-export const HILDA_COTTAGE_NAME = "Old Hilda's Cottage";
-export const SKY_TEMPLE_NAME = 'Temple of the Sky';
+import {
+  HILDA_COTTAGE_NAME,
+  SKY_TEMPLE_NAME,
+  hildasWreckMended,
+  templeVerminHoldRoom,
+} from './interiorStoryOwnership';
 
 /** Her worktable, its chair and one wall shelf. */
 const HILDA_REPAIRS_REQUIRED = 3;
@@ -209,6 +212,7 @@ export class AnchorInteriorSystem {
    * becomes broken the moment a quest says so reads as a stage flat.
    */
   private breakHildasFurniture(): void {
+    if (hildasWreckMended(this.progress)) return;
     const furnishings = this.pickRepairableFurnishings();
     for (const furnishing of furnishings) {
       if (this.progress.hildaRepairedTypes.includes(furnishing.intactType)) continue;
@@ -316,7 +320,7 @@ export class AnchorInteriorSystem {
    * `TEMPLE_VERMIN_COUNT`, or walking out and back in would restock the nave.
    */
   private restockNave(): void {
-    if (this.progress.temple !== 'in_progress') return;
+    if (!templeVerminHoldRoom(this.buildingName, this.progress)) return;
     this.spawnVermin(this.progress.templeVerminRemaining);
     // Read back what actually found floor to stand on rather than trusting the
     // record: a nave with no room left for any of them must not leave the step

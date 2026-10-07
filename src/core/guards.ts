@@ -10,3 +10,12 @@ export function isRecord(value: unknown): value is Record<string, unknown> {
 export function assertNoFieldsLeft(_rest: Record<string, never>): void {
   // The parameter type is the whole check; there is nothing to do at runtime.
 }
+
+/**
+ * A string-keyed record's own entry, or undefined when the key is absent. The
+ * index type of a `Record<string, T>` claims every key holds a `T`; this is the
+ * honest lookup for a key that came from data.
+ */
+export function ownEntry<T>(record: Readonly<Record<string, T>>, key: string): T | undefined {
+  return Object.prototype.hasOwnProperty.call(record, key) ? record[key] : undefined;
+}

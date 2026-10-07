@@ -22,6 +22,7 @@
 
 import { TILE_SIZE } from '../core/constants';
 import type { GameMap } from '../map/GameMap';
+import { interiorHoldsOccupants } from './interiorStoryOwnership';
 import { findPartyArrivalTiles, hasRoomToMove } from '../map/findWalkableTile';
 import { SOUTHWARD_PROBE_DROP } from '../map/collisionAnchors';
 import { Townsperson } from '../creatures/Townsperson';
@@ -572,7 +573,7 @@ export class InteriorOccupantSystem implements GameSystem {
     name: string,
     focus: RoamerFocus = () => null,
   ): InteriorOccupantSystem | null {
-    if (type === 'tower' || type === 'club' || name === 'Big Top') return null;
+    if (!interiorHoldsOccupants(type, name)) return null;
     const specs = BUILDING_OCCUPANTS.get(name) ?? TYPE_OCCUPANTS[type];
     if (specs === undefined || specs.length === 0) return null;
     const system = new InteriorOccupantSystem(map, specs, name, focus);

@@ -29,6 +29,16 @@ export function createJournalProgress(): JournalProgress {
   return { pinnedTrackerId: null, pinSource: null };
 }
 
+/**
+ * Unpins `questId` if the pin is still the automatic one its start set. A
+ * player's own pin is theirs to keep.
+ */
+export function releaseAutoPin(progress: JournalProgress, questId: string): void {
+  if (progress.pinSource !== 'auto' || progress.pinnedTrackerId !== questId) return;
+  progress.pinnedTrackerId = null;
+  progress.pinSource = null;
+}
+
 /** A point-in-time copy, for the in-run safe-room checkpoint. */
 export interface JournalProgressCheckpoint {
   readonly pinnedTrackerId: string | null;

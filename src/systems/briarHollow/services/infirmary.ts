@@ -66,7 +66,7 @@ export function buildInfirmaryMenu(party: ServiceParty): ShopMenu {
   return {
     title: INFIRMARY_TITLE,
     bark: sellerLine(SELLA.shopOpen),
-    byline: SPEAKERS.sella.name ?? undefined,
+    byline: SPEAKERS.sella.name,
     options: [option],
   };
 }

@@ -16,16 +16,49 @@
  */
 
 import { INTERIOR_WALL } from '../../tileTypes';
-import { prop, tile, tileRow, type TownInteriorLayoutEntry } from './types';
+import { contractTarget, prop, tile, tileRow, type TownInteriorLayoutEntry } from './types';
+import type { ContractAreaRecord } from '../../contractAreas';
+
+const CONTRACT_SITE = 'herb_and_remedy';
+const DRYING_FLOOR_SPOT_W = 3;
+const DRYING_FLOOR_SPOT_H = 2;
+
+/** The drying room's north wall run, shared by the layout and its contract rects. */
+function dryingRoomNorthWall() {
+  const westCol = 1;
+  const northRow = 1;
+  const pottingBenchCol = westCol + 1;
+  const dryingRackCol = pottingBenchCol + 2;
+  const dryingRackWidth = 5;
+  const stillCol = dryingRackCol + dryingRackWidth;
+  const stillWidth = 3;
+  return { westCol, northRow, pottingBenchCol, dryingRackCol, stillCol, stillWidth };
+}
+
+/** Herb & Remedy's floor and wall rects a construction contract can mark, keyed by spot id. */
+export function buildHerbAndRemedyContractAreas(_w: number, _h: number): ContractAreaRecord {
+  const { northRow, pottingBenchCol, stillCol, stillWidth } = dryingRoomNorthWall();
+  return {
+    // The boards in front of the potting bench, west of the sorting table.
+    drying_floor: {
+      kind: 'floor',
+      x: pottingBenchCol,
+      y: northRow + 1,
+      w: DRYING_FLOOR_SPOT_W,
+      h: DRYING_FLOOR_SPOT_H,
+    },
+    hearth_wall: { kind: 'wall', x: stillCol, y: northRow - 1, w: stillWidth, h: 1 },
+  };
+}
 
 export function buildHerbAndRemedyLayout(
   w: number,
   h: number,
   floorType: number,
 ): TownInteriorLayoutEntry[] {
-  const westCol = 1;
+  const { westCol, northRow, pottingBenchCol, dryingRackCol, stillCol, stillWidth } =
+    dryingRoomNorthWall();
   const eastCol = w - 2;
-  const northRow = 1;
   const southRow = h - 2;
 
   // Drying room.
@@ -33,13 +66,9 @@ export function buildHerbAndRemedyLayout(
   const partitionRow = dryingLastRow + 1;
   const doorwayEastCol = eastCol - 1;
   const doorwayWestCol = doorwayEastCol - 1;
-  const pottingBenchCol = westCol + 1;
-  const dryingRackCol = pottingBenchCol + 2;
-  const dryingRackWidth = 5;
-  const stillCol = dryingRackCol + dryingRackWidth;
-  const stillWidth = 3;
-  const stillFuelCol = stillCol + stillWidth;
-  const eastWindowCol = stillFuelCol + 1;
+  // Left bare: the only floor touching the hearth wall, so it is worked from here.
+  const stillStepCol = stillCol + stillWidth;
+  const eastWindowCol = stillStepCol + 1;
   const harvestRow = northRow + 2;
   const harvestCol = dryingRackCol + 1;
   const sortingTableCol = harvestCol + 1;
@@ -65,6 +94,10 @@ export function buildHerbAndRemedyLayout(
   const waitingBenchCol = binsCol;
   const harvestSackCol = sortingTableCol + 2;
   const stillTenderStoolCol = stillCol + 1;
+  // The still's fuel stands at its firebox, beside the tender's stool.
+  const fuelBarrelCol = stillCol;
+  // The payout key it was first placed under, on the tile beside the still.
+  const fuelBarrelId = `barrel@${stillStepCol},${northRow}`;
 
   const entries: TownInteriorLayoutEntry[] = [];
   // Storeroom offcuts first: the first breakable in placement order is the
@@ -72,19 +105,37 @@ export function buildHerbAndRemedyLayout(
   entries.push(
     prop(westCol, harvestRow, 'crate'),
     prop(westCol, dryingLastRow, 'sack'),
-    prop(stillFuelCol, northRow, 'barrel'),
+    prop(fuelBarrelCol, harvestRow, 'barrel', 0, { id: fuelBarrelId }),
   );
   entries.push(
     prop(westCol, northRow, 'window_dressing'),
     prop(westCol, northRow + 1, 'live_herb_pots'),
-    prop(pottingBenchCol, northRow, 'potting_bench'),
-    prop(dryingRackCol, northRow, 'herb_drying_rack'),
-    prop(stillCol, northRow, 'still'),
+    prop(
+      pottingBenchCol,
+      northRow,
+      'potting_bench',
+      0,
+      contractTarget(CONTRACT_SITE, 'potting_bench'),
+    ),
+    prop(
+      dryingRackCol,
+      northRow,
+      'herb_drying_rack',
+      0,
+      contractTarget(CONTRACT_SITE, 'drying_rack'),
+    ),
+    prop(stillCol, northRow, 'still', 0, contractTarget(CONTRACT_SITE, 'still')),
     prop(eastWindowCol, northRow, 'window_dressing'),
     prop(eastCol, northRow, 'live_herb_pots', 1),
     // The day's cut, brought in and waiting to be bunched.
     prop(harvestCol, harvestRow, 'basket'),
-    prop(sortingTableCol, harvestRow, 'sorting_table'),
+    prop(
+      sortingTableCol,
+      harvestRow,
+      'sorting_table',
+      0,
+      contractTarget(CONTRACT_SITE, 'sorting_table'),
+    ),
     prop(harvestSackCol, harvestRow, 'sack'),
     prop(stillTenderStoolCol, harvestRow, 'stool'),
     prop(seedDrawerCol, harvestRow, 'drawer_unit'),
@@ -104,11 +155,23 @@ export function buildHerbAndRemedyLayout(
     prop(eastCol, cabinetRow, 'crate'),
     prop(eastCol, cabinetRow + 1, 'sack'),
     prop(counterWestCol, counterRow, 'apothecary_counter', 0),
-    prop(counterEastSectionCol, counterRow, 'apothecary_counter', 1),
+    prop(
+      counterEastSectionCol,
+      counterRow,
+      'apothecary_counter',
+      1,
+      contractTarget(CONTRACT_SITE, 'counter'),
+    ),
     prop(rugCol, firstShopRow, 'rug_large', rugColourway),
     prop(westCol, displayRow, 'remedy_display', 0, { dropsLoot: false }),
-    prop(specimenCaseCol, specimenCaseRow, 'specimen_case'),
-    prop(westCol, southRow, 'live_herb_pots'),
+    prop(
+      specimenCaseCol,
+      specimenCaseRow,
+      'specimen_case',
+      0,
+      contractTarget(CONTRACT_SITE, 'specimen_case'),
+    ),
+    prop(westCol, southRow, 'live_herb_pots', 0, contractTarget(CONTRACT_SITE, 'planters')),
     prop(eastCol, firstShopRow, 'potted_bay'),
     prop(binsCol, binsRow, 'herb_bins', 0, { dropsLoot: false }),
     prop(waitingBenchCol, southRow, 'bench_seat'),

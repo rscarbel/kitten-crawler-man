@@ -1286,21 +1286,257 @@ waits for, and until it lands the cue borrows the nearest existing sound or is a
 list and stays silent. Every id a cue names must be preloaded in the `briarHollow` or
 `universal` SFX group, which `verify:borrowed-blueprints` checks.
 
+### Construction contracts
+
+Wendell's repeatable jobs, opened by finishing The Borrowed Blueprints
+(`contractsUnlocked`: `blueprints.phase === 'complete'`; the reward screen's unlock card
+"Construction contracts from Wendell" is in `blueprintsRewardSpec`). Each contract sends the
+party to one building in Skyfowl Town or Briar Hollow with 4–6 marked spots to repair or
+rebuild. When every spot is done the building's contact pays out, and Wendell sends a note
+asking them back. One contract is active at a time. Nothing in the world stays broken
+between contracts: damage and build sites exist only while their contract does.
+
+Code lives in `src/systems/constructionContracts/`; the Journal id and quest id is
+`construction_contract` (`CONSTRUCTION_CONTRACT_QUEST_ID`). There is no `QuestManager`.
+
+**State.** `BriarHollowState.contracts` (`ConstructionContractsState`,
+`src/core/briarHollowState.ts`): `introSeen`, `contractsIssued`, `contractsCompleted`,
+`active` (`ActiveContract`: a `ContractSiteKey`, `spotIds`, a parallel `spotsDone`),
+`lastSiteKey` and `lastSpotSetBySite`. "Ready to collect" is derived (`isContractReady`),
+never stored. The parser defaults the whole record for a save without it, and drops any
+saved site or spot id the catalogue no longer has; an active contract left with no spots
+reads as none, and Wendell re-offers.
+
+**The catalogue** (`contractCatalog.ts`, pure data). `CONTRACT_SITES` holds every
+enterable building in both towns, 13 in Skyfowl Town and 15 in Briar Hollow, except
+`CONTRACT_EXCLUDED_TOWN_BUILDINGS` (Town Center Tower, The Desperado Club, Plumbline Farm),
+which the `ContractTownBuildingName` type rules out at compile time. Each site has a
+`slug` unique across both towns, a contact (a `ResidentId` in Skyfowl Town, a `VillagerId`
+in Briar Hollow; the name is read from the contact's own record by `contractContactName`)
+and a pool of `ContractSpotDef`s: `kind`, `label`, `cost` in `wood_board` / `rope` /
+`stone`, `material` (`wood`, `stone`, `rope`, `plaster`; picks the art and the sounds) and
+a `target`. Spot kinds:
+
+- `repair` draws a damage overlay over something that still draws and still blocks: a
+  prop, a floor rect, a wall run, a doorway or an open side.
+- `rebuild` hides a prop and draws a stripped build site in its footprint, which stays
+  blocked; finishing the spot brings the prop back.
+
+The catalogue holds no coordinates. A prop spot names the placed prop whose explicit id is
+`contract:<slug>:<spot>` (`contractPropId`, `src/map/contractAreas.ts`): Skyfowl Town
+layouts give it through `contractTarget(slug, spot)` in `src/map/town/interiors/*`, Briar
+Hollow's `PropTemplate`s through `contractSpotId` in `briarHollowLayout.ts`. An area spot
+names a `ContractArea` (`floor`, `wall`, `doorway`, `open_side`) exported beside the
+layout: each Skyfowl Town interior's `build<Building>ContractAreas(w, h)`, gathered in
+`NAMED_INTERIOR_CONTRACT_AREAS` (`src/map/town/interiors/index.ts`; the General Store's
+`buildGeneralStoreContractAreas` is looked up by kind), in the interior's own grid; and
+`BRIAR_HOLLOW_CONTRACT_AREAS`, relative to the building rect's north-west corner (an area
+may lie just outside it, as the quarry hut's step does). `contractTargets.ts`
+(`skyfowlSpotFootprint`, `briarHollowSpotFootprint`) resolves both against the built map.
+
+Rules for picking targets, to keep when tuning a pool:
+
+- **One spot per target.** No two spots share a prop, rect or wall run.
+- **Never a quest or encounter piece:** Merrit's `scythe_pegs`; the sawmill's
+  `sawmill_machine` and `rope_walk` (they have quest upgrade variants); Blackwood Lodge's
+  `cellar_trapdoor` and `kessler_footlocker`; the Sunken Stump's `bolted_door`; Old
+  Hilda's raw `TABLE` / `CHAIR` / `BOOKSHELF` tiles (`HILDA_REPAIRABLE_TYPES`, the
+  anchor-quest wreck); the Inn's safe-room counters and Mordecai.
+- **Temple floor spots never touch `RUG` tiles**: `AnchorInteriorSystem.naveSpawnAnchors`
+  scans for them to spread the vermin down the nave.
+- **Wall runs sit where the wall face shows**: the north wall's face in Skyfowl Town; in
+  Briar Hollow the full-height north wall plus the cut-down south, east and west walls.
+  Wall runs stay off corner posts and doorways; floor rects stay off furniture, rugs and
+  threshold tiles.
+- **Every spot is workable from walkable floor.** Some tile the party can walk to from the
+  way in must sit within `CONTRACT_REACH_TILES` of the spot's footprint (`tilesToFootprint`,
+  the work channel's own measure, from a tile's centre). Movement collides one axis at a
+  time, so the walk is orthogonal and never squeezes between two blocked corners. A wall
+  run behind wall-to-wall furniture is out of reach from the row in front of it (two
+  tiles), so the Skyfowl Town rooms leave a bare north-wall tile beside each wall spot
+  (Blackwood Lodge, the General Store, Herb & Remedy, the Horned Flagon, Old Hilda's,
+  the Sunken Stump, the Quiet Needle), and the Cartwright's wall spot is the foot of the
+  timber bay's partition. Villagers and occupants never block the party (movement tests
+  map tiles only), so a contact pinned indoors cannot wall off a spot.
+
+**The generator** (`contractGenerator.ts`). A contract is a 4–6 spot subset
+(`CONTRACT_MIN_SPOTS`, `CONTRACT_MAX_SPOTS`) of one site's pool whose totals land in every
+band of `CONTRACT_MATERIAL_BANDS`: 15–20 boards, 3–5 rope, 15–25 stone. `validSpotSets`
+enumerates every such subset (pools are small); every pool must offer at least
+`CONTRACT_MIN_DISTINCT_SETS` (8). `pickContract` picks a site uniformly from the eligible
+ones, never `lastSiteKey`, then a set uniformly from that site's, never its last
+(`lastSpotSetBySite`). The draw comes from `contractRng(worldSeed, contractsIssued)`, a
+stream of its own salted off the world seed, so a save reproduces its next contract and a
+headless check is deterministic; never `Math.random` or a shared stream. The payout is
+always derived, `contractPayout` = `CONTRACT_COINS_PER_MATERIAL` (7) × every board, rope
+and stone in the contract, never stored. `issueContract`, `completeContract` (clears
+`active` before anything else, so a re-entrant settle pays nothing) and `dropContract`
+(recorded like a finished one, so the next offer is a different building) are the only
+writers.
+
+**Eligibility and story ownership** (`contractEligibility.ts`, read through
+`buildContractWorld` in `contractQuest.ts`). `contractSiteEligible` is asked only when a
+contract is issued; a contract already held waits out whatever blocks it.
+`contractSiteOwnedByStory` defers to `interiorRoomOwnedByStory`
+(`src/systems/interiorStoryOwnership.ts`), the same rule `BuildingInteriorScene` uses to
+decide who stands in a room: Blackwood Lodge while the cult hideout is pending or live, the
+Temple while the anchor quest's vermin are loose. Every Briar Hollow site is owned while
+`isVillageUnderSiege`. Old Hilda's Cottage is eligible only once `hildasWreckMended`. No
+contact is ever written out of the world by a story flag, so a contact is absent only when
+their room is owned. While a held contract's site is owned its spots go inert, its contact
+does not pay, the guide stands down, and the Journal hint reads "Wait out the siege." or
+"Come back once things settle down."
+
+**Wendell** (`WendellContractsHook`, `BuildingInteriorScene`'s resident quest hook after
+`WendellBlueprintsHook`, which returns false once the quest is `complete`). Once contracts
+are unlocked it takes every talk with him; lines are in
+`src/dialog/scripts/wendellContracts.ts` (`WENDELL_CONTRACTS`). His `!` shows while
+contracts are unlocked and none is held. Branches, first match wins:
+
+| State           | Opens with                             | Ending                                                                                                   |
+| --------------- | -------------------------------------- | -------------------------------------------------------------------------------------------------------- |
+| `!introSeen`    | the intro                              | confirm: "I'll take a contract" (keyboard default) issues one; "Not right now" closes; both set the flag |
+| none held       | `reOffer` (none issued yet) or `idle`  | Take another contract (Space default) · Rest in the hayloft · Chat · Leave                               |
+| held, not ready | the site and its remaining spot labels | Take another contract · Drop this contract · Rest in the hayloft · Chat · Leave                          |
+| held, ready     | go and see the contact                 | the same, without Drop                                                                                   |
+
+"Take another contract" issues on one press with none held and plays the issue line (site,
+contact and `formatCost` of the bill) in the same box, then emits `questStarted` (the
+Journal pins it) and plays `contractSigned`. With a contract held it says to finish or
+drop it first (or to collect, when ready). Drop is never the keyboard default and asks to
+confirm; spent materials stay spent. When no site is eligible he says so and issues
+nothing. The hayloft row opens his rest service (`openWendellHayloft`); Chat plays his
+ordinary resident line.
+
+**Working a spot** (`ContractSiteWork`, shared by both scenes, on the `WorkChannel`).
+Reach is `CONTRACT_REACH_TILES` (1.5) to the nearest tile of the spot's whole footprint.
+Every unfinished spot wears the shared area highlight (`AreaHighlight`, as the Blueprints
+station upgrades use it): the ground outline under every body, plus corner brackets over
+every body for standing spots (props and walls), gold `ready` while the spot could be worked
+and orange `pending` while it would refuse (materials short, or the siege). The spot a press
+would work also gets the pulsing reach glow, and the spot in reach shows its label and cost
+row. Space or a tap on the footprint starts the channel: `CONTRACT_SPOT_BASE_SECONDS` +
+`CONTRACT_SECONDS_PER_MATERIAL` × the spot's materials, scaled by the builder's
+Construction level; Carl loops `REPAIR_ROWS`. A short party is told
+`CONTRACT_SHORT_MESSAGE` ("Not enough materials."), and a spot that would only refuse
+steps aside for any competing press target (a person, a machine). Nothing is spent on
+accept: the finish re-counts and `spend`s the spot's cost all or nothing, marks it done,
+floats "Repaired" / "Rebuilt", and grants Construction XP (`CONTRACT_XP_PER_MATERIAL` per
+material). The last spot toasts "<site> is done. See <contact>." The top band shows
+"Repairs N/M" (`contractCounterEntry`) in both scenes while spots remain.
+
+- **Skyfowl Town:** `ContractInteriorSite.forBuilding` in `BuildingInteriorScene`, only
+  on the ground floor of the building holding the active contract and never while an
+  encounter owns the room. Its Space handling runs before examine/search/use, a nearer
+  occupant still wins the talk, and taps arrive through `handleWorldPointer`. Rebuild
+  props are filtered out of the room's prop draw lists (`hiddenProps`), and
+  `TownInteriorPropDestructionSystem.protectedIds` keeps every targeted prop standing.
+- **Briar Hollow:** `ConstructionContractSystem`, owned by `BriarHollowKit` after
+  `BlueprintsQuestSystem` and routed through the kit's `tryInteract` / `handleTap`. Under
+  siege every spot refuses with `CONTRACT_SIEGE_LINE` ("Not while the village is under
+  siege."). Rebuild props are held out of the Y-sorted pass through
+  `GameMap.hiddenDecorationTiles` (the tile is never edited), and overlays are a dynamic
+  layer, never baked into a chunk cache.
+
+**Payout** (`ContractSettlement`). The contact wears the green `?` while the contract is
+ready: `ContractContactHook` indoors, and `ConstructionContractSystem` as a
+`QuestLineProvider` in the village (withheld under siege). Both go **first**: the hook
+heads `BuildingInteriorScene`'s resident hook list and the provider registers with
+`addQuestLineProvider(this, { first: true })`. They answer only while a payment is owed,
+so they never talk over anything else; behind the others, the Anchor's terms for Aviel or
+Hilda and the Mayor's lines after the Plea would take every talk and the payment could
+never be made. A press in reach of a client owed a payment reaches them ahead of a shop
+counter or safe room indoors and of the recruiter or a nearer soldier in the village, but
+never ahead of a nearer sawmill machine or a cut in progress. Their thanks
+(`src/dialog/scripts/contractThanks.ts`, two lines per contact in their own voice, typed
+against every contact id) names the amount; closing or dismissing it pays. `settle` pays
+the talker `earnCoins`, flies the coins to the HUD, plays `payout` and `payoutFanfare`,
+and emits `questCompleted`. No `QuestRewardScreen`: a repeatable job stays quick. Wendell's
+follow-up (`wendellFollowUp`, rotating lines naming the building) opens once the
+conversation box is free, as a non-halting, unanchored box under his name, with the
+`wendellNote` cue. His `!` and the Journal's "available" row return as soon as the
+contract is settled.
+
+**The contact stays home** (`contractContactPin.ts`). While a Briar Hollow contract is
+held, worked or ready, its contact waits inside the building instead of living their
+routine: `contractContactPin` picks the building's occupant anchor, or the interior tile
+nearest it that is standable and not another villager's post. Tiers, first that yields a
+tile: off every spot's footprint and off any tile that would take the press from every
+place some spot can be worked from (within `VILLAGER_TALK_RANGE_TILES` and nearer than the
+spot); off every footprint; then both again with floor patches allowed (the quarry hut's
+`floor` spot covers the whole room). Independently, `BriarHollowKit.competingTiles`
+leaves the pinned contact out of the press competition until the contract is ready, so
+Space beside a spot always works it; once ready the contact competes again and Space
+beside them opens the payout. Merrit is held in whichever of the farmhouse or the barn the contract is at. A civilian's pin is
+`Villager.pin`, and `Villager.station` (the pin, else the post) is where `VillagerSystem`
+sends them home, after a talk, a shop, or the siege; a pinned villager never strolls, and
+plays idle rather than their work loop when the pin is not their own post. Sedge, the
+guardhouse's contact, gets a `stand` duty on his pin in place of his wall beat from
+`SoldierSystem.dutyFor`; a standing order (follow, hold, patrol) still outranks it, and
+"Return to your post" sends him to the guardhouse. Nothing is stored: both systems
+re-derive the pin from `contracts.active` and the Plea's phase, so a payout, a drop, a
+load or a rewind releases or restores it, and a rebuilt scene places the contact on it at
+once (a live change walks them). The siege wins: under siege there is no pin, villagers
+shelter and the militia man the walls, and the pin returns when it ends. No story script
+moves a villager (Midge in the escort is a cow), so nothing else contends for the contact.
+
+**Journal and guidance.** `ConstructionContractSystem` is the `TrackerSource` (after the
+Plea and the Blueprints in `BriarHollowKit.trackerEntries`); indoors the row arrives
+through `InteriorJournalSource`. There is no indoor arrow; the spot highlights do that job.
+Plumbline Farm's door carries `litOnlyWhenPinned`: no beam while the idle row is merely on
+offer (Wendell wears his own `!` and glow indoors), a beam once the player pins it; the
+minimap `!` shows either way. Because the offer reuses the contract's tracker id, both
+scenes call `releaseContractAutoPinOnEnd` (`contractQuest.ts`): on `questCompleted` (payout)
+or `questAbandoned` (Wendell's drop) for the contract, an `auto` pin is cleared; a `player`
+pin survives and keeps lighting the door. A village site's doorway target turns `wearsOwnMarker` while
+the active crawler stands inside the building's rect, so the pinned beam goes and the
+spots' highlights take over; the minimap pip stays. `objectiveBeamTargets`
+(`questTracker.ts`) is the one beam selection the scene and the gate both call.
+
+| State   | Status      | Objective                               | Hint                                                     | Target                                                    |
+| ------- | ----------- | --------------------------------------- | -------------------------------------------------------- | --------------------------------------------------------- |
+| locked  | (no row)    |                                         |                                                          |                                                           |
+| idle    | `available` | Ask Wendell for a construction contract | —                                                        | Plumbline Farm's door                                     |
+| working | `active`    | Repairs at <site>: N/M done             | unfinished spots with their costs, then "Still short: …" | the town door, or the tile outside a village doorway      |
+| ready   | `active`    | Collect payment from <contact>          | —                                                        | the town door, or the village contact (`characterTarget`) |
+
+For the forge, sawmill and barn the village target is the middle of the open side. The
+village guide falls back to `ConstructionContractSystem.guidance()` after the Plea and the
+Blueprints: `shortfallGuidance` while the party is short of the remaining bill, else the
+site; null while the site is story-owned or the contract is ready.
+
+**Sound.** Every play site raises a cue from `CONTRACT_CUES` (`contractSoundCues.ts`);
+`contractMaterialCues` picks a spot's work loop, start and finish. Cues that wait on a
+recording name it in their JSDoc and borrow a stand-in or stay silent. The ids preload through the `constructionContracts`
+SFX group, which both the floor-3 overworld and every interior load.
+
+**Art** (`src/sprites/art/constructionContracts/`, runtime-painted, nothing baked).
+`contractDamageArt.ts` has one painter per material for each target shape (props; floors
+as a low-contrast tonal read; walls on the visible face, darkening into the cap's shadow;
+doorways and open sides with a broken member across), clipped to the footprint and seeded
+per spot. `contractBuildSiteArt.ts` draws the rebuild site (chalk outline, a stack of the
+material, loose nails). `contractPalette.ts` resolves each settlement's ramps from the art
+it sits on; `contractEffectsArt.ts` draws the reach glow (on the spot in reach only) and the finish puff and sheen.
+`contractArtCache.ts` caches per spot and `releaseContractArt` drops it all. Damage on
+walls and standing props sorts with what it marks, so Briar Hollow's full-height north
+wall covers it the way it covers the prop.
+
 ### Persistence
 
 Village state is split by who owns it:
 
-| What                                                                | Where                                                                     | Scope         |
-| ------------------------------------------------------------------- | ------------------------------------------------------------------------- | ------------- |
-| Quest phase, structures, soldier orders, merchant stock, once-flags | `BriarHollowState` → `PersistedWorldState` / `WorldCheckpoint`            | per floor     |
-| Tool tiers, explainers seen                                         | `PartyCraftsState` → `GameProgress.crafts` / `LevelCheckpoint`            | party         |
-| Resourcing and Construction levels and XP                           | `Player.craftSkills` → `PlayerSnapshot`                                   | per crawler   |
-| Harvest-node capacity and regrowth                                  | threaded `BriarHollowState`, checkpointed by `GatheringKit`, not saved    | page lifetime |
-| Villager memory                                                     | threaded `BriarHollowState`, neither checkpointed nor saved               | page lifetime |
-| The Borrowed Blueprints: phase, fence sections, grain, stations     | `BriarHollowState.blueprints` → `PersistedWorldState` / `WorldCheckpoint` | per floor     |
-| Midge's place and health mid-escort, ambush waves sprung            | `MidgeEscortCarry`, handed scene to scene, never saved or checkpointed    | door visits   |
-| Grain stands cut                                                    | `GrainHarvest`, not saved                                                 | scene         |
-| Session harvest tallies, thrall cooldowns                           | module state                                                              | page lifetime |
+| What                                                                    | Where                                                                     | Scope         |
+| ----------------------------------------------------------------------- | ------------------------------------------------------------------------- | ------------- |
+| Quest phase, structures, soldier orders, merchant stock, once-flags     | `BriarHollowState` → `PersistedWorldState` / `WorldCheckpoint`            | per floor     |
+| Tool tiers, explainers seen                                             | `PartyCraftsState` → `GameProgress.crafts` / `LevelCheckpoint`            | party         |
+| Resourcing and Construction levels and XP                               | `Player.craftSkills` → `PlayerSnapshot`                                   | per crawler   |
+| Harvest-node capacity and regrowth                                      | threaded `BriarHollowState`, checkpointed by `GatheringKit`, not saved    | page lifetime |
+| Villager memory                                                         | threaded `BriarHollowState`, neither checkpointed nor saved               | page lifetime |
+| The Borrowed Blueprints: phase, fence sections, grain, stations         | `BriarHollowState.blueprints` → `PersistedWorldState` / `WorldCheckpoint` | per floor     |
+| Construction contracts: the active contract, counts, last site and sets | `BriarHollowState.contracts` → `PersistedWorldState` / `WorldCheckpoint`  | per floor     |
+| Midge's place and health mid-escort, ambush waves sprung                | `MidgeEscortCarry`, handed scene to scene, never saved or checkpointed    | door visits   |
+| Grain stands cut                                                        | `GrainHarvest`, not saved                                                 | scene         |
+| Session harvest tallies, thrall cooldowns                               | module state                                                              | page lifetime |
 
 `BriarHollowState` is threaded by reference through `DungeonScene` and
 `BuildingInteriorScene`, like `TownMemory`, because both scenes are rebuilt on every
@@ -1335,6 +1571,26 @@ damaged since the party last saved in town.
   blueprints in hand with the materials for both upgrades. The village state is seeded
   before the scene is built (`blueprintsPlaytestState`), so the herd is raised knowing
   whether Midge has left it.
+- `?playtest=contracts` stands the party outside Plumbline Farm with The Borrowed
+  Blueprints finished, so Wendell offers construction contracts, and 40 boards, 10 rope
+  and 50 stone to work one. The Plea is complete and Carl's hotbar key 7 holds the
+  Wayfinder's Anchor (his treadmills moved to the bag), so the stone travels to Briar
+  Hollow. `contracts-last-spot` adds a contract already issued at the
+  Mayor's Hall with every spot done but one, the party on the hall's threshold; both
+  seed the village state before the scene is built (`contractsPlaytestState`).
+- `npm run render:construction-contracts` renders every material's damage on every target
+  kind, a rebuild site per material, the reach glow and the finish puff, then every spot
+  of one Skyfowl Town and one Briar Hollow pool, highlights included, on the real room (`--skyfowl=<slug>`,
+  `--hollow=<buildingId>`), each at 1x, 1x zoomed and 2x.
+- `npm run verify:construction-contracts` is the contracts' headless gate: every catalogue
+  target resolves in its built layout and no two spots share one, no excluded building
+  appears, every pool offers `CONTRACT_MIN_DISTINCT_SETS`, the generator stays in the
+  bands with payout 7 × materials and no back-to-back site or set, save round-trip and
+  old-save parsing, and an issue-work-payout flow through the real finish path. Its
+  reachability pass floods the walkable tiles of every site (Skyfowl Town rooms from their
+  spawn and exit tiles, Briar Hollow from the main gate, every prop spot's footprint
+  blocked) on four world seeds and names every spot of every pool no reached tile can
+  work; a negative check walls one spot in and proves it is named.
 - `npm run verify:borrowed-blueprints` is the quest's headless gate: the phase order and
   every transition, persistence (an old save with no `blueprints` included), provider
   order, quest-slot eviction and recovery with its barks, markers and journal rows,

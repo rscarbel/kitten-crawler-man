@@ -22,6 +22,7 @@ import { transientSpeaker } from '../dialog/line';
 import type { CitizenSpeechStyle } from '../dialog/speakers';
 import type { DialogLine, Paragraphs } from '../dialog/line';
 import type { TownSpecies } from './townSpecies';
+import type { PlannedBuildingName } from '../map/town/townPlan';
 
 export type ResidentId =
   | 'old_hilda'
@@ -49,7 +50,7 @@ export interface ResidentDef {
   readonly role: TownRole;
   readonly species: TownSpecies;
   /** The building this resident anchors, keyed by `entry.name` exactly. */
-  readonly home: string;
+  readonly home: PlannedBuildingName;
 }
 
 const RESIDENT_DEFS: ReadonlyArray<ResidentDef> = [

@@ -20,7 +20,8 @@
  */
 
 import { INTERIOR_WALL } from '../../tileTypes';
-import { prop, tileColumn, type TownInteriorLayoutEntry } from './types';
+import { contractTarget, prop, tileColumn, type TownInteriorLayoutEntry } from './types';
+import type { ContractAreaRecord } from '../../contractAreas';
 
 const BENCH_WIDTH = 5;
 const LATHE_WIDTH = 3;
@@ -35,13 +36,14 @@ const WORK_AISLE_ROWS = 2;
 /** Tiles east of the door the firewood starts, leaving a clear approach to the door. */
 const FIREWOOD_DOOR_CLEARANCE = 3;
 
-export function buildCartwrightsWorkshopLayout(w: number, h: number): TownInteriorLayoutEntry[] {
-  const westCol = 1;
-  const eastCol = w - 2;
-  const northRow = 1;
-  const southRow = h - 2;
-  const doorWestCol = Math.floor(w / 2) - 1;
+const CONTRACT_SITE = 'cartwrights_workshop';
+/** The bay's open floor under the rack and the step out of it, two tiles square. */
+const BAY_PAD_SPOT_SIZE = 2;
 
+/** The north wall's run and the timber bay, shared by the layout and its contract rects. */
+function workshopNorthWall() {
+  const westCol = 1;
+  const northRow = 1;
   // North wall: wheels, bench, lathe, then the bay.
   const finishedWheelsCol = westCol;
   const benchCol = finishedWheelsCol + FINISHED_WHEELS_WIDTH;
@@ -49,6 +51,50 @@ export function buildCartwrightsWorkshopLayout(w: number, h: number): TownInteri
   const bayWallCol = latheCol + LATHE_WIDTH;
   const bayFirstCol = bayWallCol + 1;
   const bayWallLastRow = northRow + BAY_DEPTH_ROWS - 1;
+  return {
+    westCol,
+    northRow,
+    finishedWheelsCol,
+    benchCol,
+    latheCol,
+    bayWallCol,
+    bayFirstCol,
+    bayWallLastRow,
+  };
+}
+
+/** Cartwright's Workshop's floor and wall rects a construction contract can mark, keyed by spot id. */
+export function buildCartwrightsWorkshopContractAreas(_w: number, _h: number): ContractAreaRecord {
+  const { bayWallCol, bayFirstCol, bayWallLastRow } = workshopNorthWall();
+  return {
+    bay_pad: {
+      kind: 'floor',
+      x: bayFirstCol,
+      y: bayWallLastRow,
+      w: BAY_PAD_SPOT_SIZE,
+      h: BAY_PAD_SPOT_SIZE,
+    },
+    // The foot of the bay's partition: the north wall is lined wall to wall
+    // with the stand, the bench and the lathe, so this is the one stretch of
+    // stonework the floor touches.
+    north_wall: { kind: 'wall', x: bayWallCol, y: bayWallLastRow, w: 1, h: 1 },
+  };
+}
+
+export function buildCartwrightsWorkshopLayout(w: number, h: number): TownInteriorLayoutEntry[] {
+  const {
+    westCol,
+    northRow,
+    finishedWheelsCol,
+    benchCol,
+    latheCol,
+    bayWallCol,
+    bayFirstCol,
+    bayWallLastRow,
+  } = workshopNorthWall();
+  const eastCol = w - 2;
+  const southRow = h - 2;
+  const doorWestCol = Math.floor(w / 2) - 1;
   // South-west of the bench's anchor tile: blocked so the stand search
   // lands on the tile directly in front of the bench instead.
   const spokeTubCol = benchCol - 1;
@@ -87,19 +133,28 @@ export function buildCartwrightsWorkshopLayout(w: number, h: number): TownInteri
 
   entries.push(
     prop(finishedWheelsCol, northRow, 'wheelwright_stand'),
-    prop(benchCol, northRow, 'joiner_bench'),
+    prop(benchCol, northRow, 'joiner_bench', 0, contractTarget(CONTRACT_SITE, 'joiner_bench')),
     prop(spokeTubCol, aisleRow, 'spoke_tub', 0, { dropsLoot: false }),
-    prop(latheCol, northRow, 'lathe'),
-    prop(gluePotCol, gluePotRow, 'glue_pot'),
+    prop(latheCol, northRow, 'lathe', 0, contractTarget(CONTRACT_SITE, 'lathe')),
+    prop(gluePotCol, gluePotRow, 'glue_pot', 0, contractTarget(CONTRACT_SITE, 'glue_hearth')),
   );
 
   entries.push(...tileColumn(bayWallCol, northRow, bayWallLastRow, INTERIOR_WALL));
-  entries.push(prop(bayFirstCol, northRow, 'timber_rack'), prop(eastCol, bayWallLastRow, 'crate'));
+  entries.push(
+    prop(bayFirstCol, northRow, 'timber_rack', 0, contractTarget(CONTRACT_SITE, 'timber_rack')),
+    prop(eastCol, bayWallLastRow, 'crate'),
+  );
 
   entries.push(
     prop(westCol, wheelStandRow, 'barrel'),
     prop(westCol, wheelStandRow + 1, 'crate'),
-    prop(wheelStandCol, wheelStandRow, 'wheel_build_stand'),
+    prop(
+      wheelStandCol,
+      wheelStandRow,
+      'wheel_build_stand',
+      0,
+      contractTarget(CONTRACT_SITE, 'wheel_stand'),
+    ),
     prop(wheelStandCol, wheelShavingsRow, 'shavings_floor', 1),
     prop(shavingHorseCol, shavingHorseRow, 'shaving_horse'),
     prop(shavingHorseCol, shavingHorseRow + 1, 'shavings_floor', 0),
@@ -116,7 +171,7 @@ export function buildCartwrightsWorkshopLayout(w: number, h: number): TownInteri
   );
 
   entries.push(
-    prop(wagonCol, wagonRow, 'wagon_bed'),
+    prop(wagonCol, wagonRow, 'wagon_bed', 0, contractTarget(CONTRACT_SITE, 'wagon_bed')),
     prop(toolboxCol, southRow, 'chest', 0, { id: 'cartwright_toolbox' }),
     prop(firewoodCol, southRow, 'firewood_stack'),
   );

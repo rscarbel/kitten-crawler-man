@@ -51,7 +51,7 @@ export function buildCookMenu(): ShopMenu {
   return {
     title: COOKHOUSE_TITLE,
     bark: sellerLine(PIPKIN.shopOpen),
-    byline: SPEAKERS.pipkin.name ?? undefined,
+    byline: SPEAKERS.pipkin.name,
     options,
   };
 }

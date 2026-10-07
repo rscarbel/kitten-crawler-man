@@ -137,6 +137,12 @@ export class Villager implements TownPropRenderable {
   resumeDelayFrames = 0;
   /** Walks at a hurried pace: fleeing to shelter, or a shopkeeper heading back to the counter. */
   hurrying = false;
+  /**
+   * Where a construction contract on their building holds them, in place of
+   * their post and their outings; null when nothing does. Set every frame by
+   * `VillagerSystem` from the contract record, never saved.
+   */
+  pin: TilePoint | null = null;
   /** Who they are talking to while `state` is `talking`. */
   talkPartner: { readonly x: number; readonly y: number } | null = null;
 
@@ -169,6 +175,17 @@ export class Villager implements TownPropRenderable {
     this.loopOffsetSeconds = loopOffsetSeconds;
     this.tilesPerWalkCycle = ratkinCastTilesPerWalkCycle(id);
     this.hasWorkRow = RATKIN_WORK_MOTIONS[id] !== undefined;
+  }
+
+  /** Where they stand when they are not out and about: the tile a contract holds them on, or their post. */
+  get station(): TilePoint {
+    return this.pin ?? this.post;
+  }
+
+  /** Whether a contract holds them somewhere other than their own post, where their work loop has nothing to work at. */
+  private get pinnedAwayFromPost(): boolean {
+    const pin = this.pin;
+    return pin !== null && (pin.x !== this.post.x || pin.y !== this.post.y);
   }
 
   /** The tile under the villager's body. */
@@ -300,7 +317,7 @@ export class Villager implements TownPropRenderable {
     if (this.moving) return 'walk';
     if (this.state === 'talking') return 'talk';
     if (this.state === 'sheltering') return 'cower';
-    if (this.state === 'working' && this.hasWorkRow) return 'work';
+    if (this.state === 'working' && this.hasWorkRow && !this.pinnedAwayFromPost) return 'work';
     return 'idle';
   }
 

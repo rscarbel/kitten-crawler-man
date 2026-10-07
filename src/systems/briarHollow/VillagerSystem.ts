@@ -13,7 +13,7 @@ import type { AudioManager } from '../../audio/AudioManager';
 import type { SoundId } from '../../audio/sounds';
 import { TILE_SIZE } from '../../core/constants';
 import type { EventBus } from '../../core/EventBus';
-import type { BriarHollowState, VillagerMemory } from '../../core/briarHollowState';
+import type { ActiveContract, BriarHollowState, VillagerMemory } from '../../core/briarHollowState';
 import type { VillageQuestPhase } from '../../core/villageQuestPhase';
 import {
   pickByTalkPriority,
@@ -26,6 +26,7 @@ import type { BriarHollowSite, VillagerAnchorKind } from '../../map/overworld/br
 import type { TilePoint } from '../../map/town/townPlan';
 import { ratkinCastEventFrame, ratkinCastLoopFrame } from '../../sprites/ratkinCastSprite';
 import { drawInteractionPrompt } from '../../ui/InteractionPrompt';
+import type { NPCMarkerType } from '../../creatures/QuestNPC';
 import type { Conversation } from '../../dialog/Conversation';
 import type { BarkLine, DialogLine, NonEmpty } from '../../dialog/line';
 import type {
@@ -70,6 +71,11 @@ import {
 import { CIVILIAN_CAST_IDS, type CivilianCastId, VILLAGER_ROUTINES } from './villagerRoutines';
 import { SHELTERING_LINE, isUnnamedVillager } from '../../dialog/scripts/briarHollow/unnamed';
 import { UNNAMED_VILLAGERS } from '../../dialog/villagerRegistry';
+import {
+  contractContactPin,
+  pinningContractSite,
+  type ContractContactPin,
+} from '../constructionContracts/contractContactPin';
 
 const UPDATES_PER_SECOND = 60;
 const SECONDS_PER_UPDATE = 1 / UPDATES_PER_SECOND;
@@ -212,6 +218,13 @@ export interface ConversationSpeaker {
   endTalk(): void;
 }
 
+/** The contract pin as last worked out, kept while neither the contract nor the siege has changed. */
+interface ContractPinMemo {
+  readonly active: ActiveContract | null;
+  readonly underSiege: boolean;
+  readonly pin: ContractContactPin | null;
+}
+
 interface ConversationSession {
   readonly speaker: ConversationSpeaker;
   readonly talker: VillagerCrawler;
@@ -255,6 +268,11 @@ function eventualCloseOf(after: OpeningAfter): (() => void) | null {
 
 function asVillagerId(id: CivilianCastId): VillagerId | null {
   return VILLAGER_IDS.find((villagerId) => villagerId === id) ?? null;
+}
+
+/** The civilian cast member a villager id names, or null for one of the militia. */
+function asCivilianId(id: VillagerId): CivilianCastId | null {
+  return CIVILIAN_CAST_IDS.find((castId) => castId === id) ?? null;
 }
 
 export class VillagerSystem {
@@ -302,6 +320,7 @@ export class VillagerSystem {
    * cut a new conversation short.
    */
   private pendingResume: CivilianCastId | null = null;
+  private contractPinMemo: ContractPinMemo | null = null;
 
   constructor(private readonly deps: VillagerSystemDeps) {
     this.random = deps.random ?? Math.random;
@@ -313,6 +332,7 @@ export class VillagerSystem {
     // included) is already faced correctly, not corrected a tick later.
     this.orenAnvilPoint = this.findAnvilPoint();
     this.villagers = this.populate();
+    this.syncContractPin('place');
     this.oren = this.villagers.find((villager) => villager.id === 'oren') ?? null;
     this.subscribe();
   }
@@ -556,10 +576,28 @@ export class VillagerSystem {
    * Adds a questline's openings and markers, ranked after every provider
    * already added: the first provider with an opening (or a marker other
    * than `'none'`) for a villager is the one that speaks. The village's main
-   * questline registers first, so a side quest never talks over it.
+   * questline registers first, so a side quest never talks over it. `first`
+   * ranks this provider ahead of all of them instead, for one that speaks
+   * only briefly and must not be talked over, such as a client paying for
+   * finished work.
    */
-  addQuestLineProvider(provider: QuestLineProvider): void {
-    if (!this.questLines.includes(provider)) this.questLines.push(provider);
+  addQuestLineProvider(provider: QuestLineProvider, opts?: { readonly first?: boolean }): void {
+    if (this.questLines.includes(provider)) return;
+    if (opts?.first === true) this.questLines.unshift(provider);
+    else this.questLines.push(provider);
+  }
+
+  /**
+   * The glyph the questlines put over a named villager who is not one of
+   * this system's civilians (a soldier), read from the same providers.
+   */
+  questMarkerFor(
+    id: VillagerId,
+    position: VillagerCrawler,
+    soldierStance: SoldierStance | null,
+  ): NPCMarkerType {
+    if (this.questLines.length === 0) return 'none';
+    return firstQuestMarker(id, this.contextFor(id, position, soldierStance), this.questLines);
   }
 
   /** Takes a questline's provider back out, for a system being disposed. */
@@ -964,6 +1002,83 @@ export class VillagerSystem {
     session.speaker.endTalk();
   }
 
+  // ── The contract pin ───────────────────────────────────────────────────
+
+  /**
+   * The civilian the active contract holds indoors, and where; null with no
+   * Briar Hollow contract, under siege, or when its contact is a soldier.
+   * Worked out again only when the contract record or the siege changes.
+   */
+  private contractPin(): ContractContactPin | null {
+    const { state } = this.deps;
+    const active = state.contracts.active;
+    const underSiege = SIEGE_PHASES.has(state.quest.phase);
+    const memo = this.contractPinMemo;
+    if (memo?.active === active && memo.underSiege === underSiege) return memo.pin;
+    const pin = this.resolveContractPin();
+    this.contractPinMemo = { active, underSiege, pin };
+    return pin;
+  }
+
+  private resolveContractPin(): ContractContactPin | null {
+    const site = pinningContractSite(this.deps.state);
+    const contact = site === null ? null : asCivilianId(site.contact);
+    const villager = contact === null ? undefined : this.villagerById(contact);
+    if (villager === undefined) return null;
+    const navigator = this.navigatorFor(villager);
+    const othersPosts = new Set<number>();
+    for (const other of this.villagers) {
+      if (other === villager || this.navigatorFor(other) !== navigator) continue;
+      othersPosts.add(navigator.keyOf(other.post.x, other.post.y));
+    }
+    return contractContactPin(
+      this.deps.state,
+      this.deps.site,
+      (tile) =>
+        navigator.isStandable(tile.x, tile.y) && !othersPosts.has(navigator.keyOf(tile.x, tile.y)),
+      {
+        canStand: (tile) => this.deps.gameMap.isWalkable(tile.x, tile.y),
+        talkRangeTiles: VILLAGER_TALK_RANGE_TILES,
+      },
+    );
+  }
+
+  /**
+   * Holds the active contract's contact on their pin, and lets go of anyone
+   * it no longer holds. `place` stands them there at once, for a scene being
+   * built; `walk` sends them there on foot. Someone talking, sheltering, or
+   * waiting out their turn to leave shelter is left alone: each of those ends
+   * by heading for `Villager.station`, which already reads the pin.
+   */
+  private syncContractPin(how: 'place' | 'walk'): void {
+    const pin = this.contractPin();
+    for (const villager of this.villagers) {
+      const wanted = pin !== null && pin.contact === villager.id ? pin.tile : null;
+      const current = villager.pin;
+      const unchanged =
+        current === null || wanted === null ? current === wanted : sameTile(current, wanted);
+      if (unchanged) continue;
+      villager.pin = wanted;
+      const busy =
+        villager.state === 'talking' ||
+        villager.state === 'sheltering' ||
+        villager.resumeDelayFrames > 0 ||
+        this.pendingResume === villager.id;
+      if (busy) continue;
+      villager.followFramesLeft = 0;
+      villager.clearPath();
+      if (how === 'place' && wanted !== null) {
+        villager.x = wanted.x * TILE_SIZE;
+        villager.y = wanted.y * TILE_SIZE;
+        villager.state = 'working';
+        this.faceWork(villager);
+        villager.standFrames = this.randomFrames(POST_DWELL_MIN_FRAMES, POST_DWELL_MAX_FRAMES);
+        continue;
+      }
+      this.goToPost(villager, false);
+    }
+  }
+
   // ── Routines ───────────────────────────────────────────────────────────
 
   private isPartyNear(point: TilePoint, frame: VillagerFrame, tiles: number): boolean {
@@ -991,12 +1106,12 @@ export class VillagerSystem {
   private goToPost(villager: Villager, hurrying: boolean): void {
     villager.state = 'returning';
     villager.hurrying = hurrying;
-    if (sameTile(villager.tile, villager.post)) {
+    if (sameTile(villager.tile, villager.station)) {
       villager.clearPath();
       this.arrive(villager);
       return;
     }
-    if (!this.walkTo(villager, villager.post)) villager.standFrames = RETRY_FRAMES;
+    if (!this.walkTo(villager, villager.station)) villager.standFrames = RETRY_FRAMES;
   }
 
   private goToShelter(villager: Villager): void {
@@ -1014,6 +1129,10 @@ export class VillagerSystem {
 
   /** One leg of an outing: somewhere on the routine's list, reachable and free. */
   private strollLeg(villager: Villager): void {
+    if (villager.pin !== null) {
+      this.goToPost(villager, false);
+      return;
+    }
     const navigator = this.navigatorFor(villager);
     const taken = this.occupiedKeys(navigator, villager);
     for (let attempt = 0; attempt < STROLL_ATTEMPTS; attempt++) {
@@ -1066,6 +1185,14 @@ export class VillagerSystem {
         else villager.standFrames = SHELTER_HOLD_FRAMES;
         return;
       case 'working': {
+        if (villager.pin !== null) {
+          if (sameTile(villager.tile, villager.pin)) {
+            villager.standFrames = this.randomFrames(POST_DWELL_MIN_FRAMES, POST_DWELL_MAX_FRAMES);
+          } else {
+            this.goToPost(villager, false);
+          }
+          return;
+        }
         const keptAtCounter =
           villager.routine.service && this.isPartyNear(villager.post, frame, SERVICE_RECALL_TILES);
         if (keptAtCounter || this.random() < villager.routine.postShare) {
@@ -1097,12 +1224,13 @@ export class VillagerSystem {
       this.goToShelter(villager);
       return;
     }
-    if (sameTile(villager.tile, villager.post)) {
+    const station = villager.station;
+    if (sameTile(villager.tile, station)) {
       // Snapped exactly rather than trusting the tile check alone: talking
       // never moves a villager, but this is also the "may still be there
       // stale from a route" fallback everywhere else `arrive` is not.
-      villager.x = villager.post.x * TILE_SIZE;
-      villager.y = villager.post.y * TILE_SIZE;
+      villager.x = station.x * TILE_SIZE;
+      villager.y = station.y * TILE_SIZE;
       villager.state = 'working';
       this.faceWork(villager);
       villager.standFrames = this.randomFrames(POST_DWELL_MIN_FRAMES, POST_DWELL_MAX_FRAMES);
@@ -1360,6 +1488,7 @@ export class VillagerSystem {
       this.onPhaseChanged(from, phase);
     }
     this.checkPendingResume();
+    this.syncContractPin('walk');
     for (const villager of this.villagers) this.updateVillager(villager, frame);
     this.updateOrenHammer(frame);
     this.lastCatPosition = { x: frame.cat.x, y: frame.cat.y };

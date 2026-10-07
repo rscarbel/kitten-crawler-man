@@ -15,7 +15,15 @@
  */
 
 import { INTERIOR_WALL } from '../../tileTypes';
-import { prop, tile, tileColumn, tileRow, type TownInteriorLayoutEntry } from './types';
+import {
+  contractTarget,
+  prop,
+  tile,
+  tileColumn,
+  tileRow,
+  type TownInteriorLayoutEntry,
+} from './types';
+import type { ContractAreaRecord } from '../../contractAreas';
 
 const GOODS_WALL_WIDTH = 4;
 const POTION_CABINET_WIDTH = 2;
@@ -51,23 +59,119 @@ const GOODS_STOCKROOM = 3;
 const DISPLAY_HOUSEHOLD = 0;
 const DISPLAY_HARDWARE = 1;
 
-export function buildGeneralStoreLayout(
-  w: number,
-  h: number,
-  floorType: number,
-): TownInteriorLayoutEntry[] {
+const CONTRACT_SITE = 'general_store';
+/** The worn boards span the door's own two columns and the row in front of them. */
+const DOOR_BOARDS_SPOT_SIZE = 2;
+
+/**
+ * The storeroom bay, the shop's north wall run and the street door: shared
+ * by the layout and by the contract rects measured against them.
+ */
+function storeGeometry(w: number, h: number) {
   const westCol = 1;
   const eastCol = w - 2;
   const northRow = 1;
   const southRow = h - 2;
-  const merchandise = { dropsLoot: false } as const;
-
   // ── Storeroom bay: the north-west corner behind one doorway gap ─────────
   // The corner farthest from the street door, so its stock wall is the
   // shelf the clerk's `post: 'back'` roster spec picks.
   const storeroomLastCol = westCol + STOREROOM_WIDTH - 1;
   const storeroomWallCol = storeroomLastCol + 1;
   const storeroomLastRow = 3;
+  const stockStackRow = northRow + 1;
+  const clerkDeskCol = westCol + STOCK_STACK_SIZE;
+  // North wall of the shop: the pantry wall, the price board, the potion
+  // cabinet, one bare tile, the hardware wall. The bare tile is the only floor
+  // touching the shop's north face, so the plinth can be worked from it.
+  const pantryWallCol = storeroomWallCol + 1;
+  const priceBoardCol = pantryWallCol + GOODS_WALL_WIDTH;
+  const potionCabinetCol = priceBoardCol + 1;
+  const bareWallCol = potionCabinetCol + POTION_CABINET_WIDTH;
+  const hardwareWallCol = bareWallCol + 1;
+  const doorWestCol = Math.floor(w / 2) - 1;
+  return {
+    westCol,
+    eastCol,
+    northRow,
+    southRow,
+    storeroomLastCol,
+    storeroomWallCol,
+    storeroomLastRow,
+    stockStackRow,
+    clerkDeskCol,
+    pantryWallCol,
+    priceBoardCol,
+    potionCabinetCol,
+    bareWallCol,
+    hardwareWallCol,
+    doorWestCol,
+  };
+}
+
+/** The General Store's floor and wall rects a construction contract can mark, keyed by spot id. */
+export function buildGeneralStoreContractAreas(w: number, h: number): ContractAreaRecord {
+  const {
+    northRow,
+    southRow,
+    storeroomLastCol,
+    stockStackRow,
+    clerkDeskCol,
+    priceBoardCol,
+    bareWallCol,
+    doorWestCol,
+  } = storeGeometry(w, h);
+  return {
+    door_boards: {
+      kind: 'floor',
+      x: doorWestCol,
+      y: southRow - DOOR_BOARDS_SPOT_SIZE + 1,
+      w: DOOR_BOARDS_SPOT_SIZE,
+      h: DOOR_BOARDS_SPOT_SIZE,
+    },
+    // The wall behind the price board, the potion cabinet and the bare
+    // tile: the one stretch of the shop's north face no goods wall hides.
+    plinth: {
+      kind: 'wall',
+      x: priceBoardCol,
+      y: northRow - 1,
+      w: bareWallCol - priceBoardCol + 1,
+      h: 1,
+    },
+    // The clerk's aisle in front of the desk: the only storeroom floor the
+    // stock stack and the desk leave bare.
+    storeroom_flags: {
+      kind: 'floor',
+      x: clerkDeskCol,
+      y: stockStackRow,
+      w: storeroomLastCol - clerkDeskCol + 1,
+      h: 1,
+    },
+  };
+}
+
+export function buildGeneralStoreLayout(
+  w: number,
+  h: number,
+  floorType: number,
+): TownInteriorLayoutEntry[] {
+  const {
+    westCol,
+    eastCol,
+    northRow,
+    southRow,
+    storeroomLastCol,
+    storeroomWallCol,
+    storeroomLastRow,
+    stockStackRow,
+    clerkDeskCol,
+    pantryWallCol,
+    priceBoardCol,
+    potionCabinetCol,
+    hardwareWallCol,
+    doorWestCol,
+  } = storeGeometry(w, h);
+  const merchandise = { dropsLoot: false } as const;
+
   const storeroomPartitionRow = storeroomLastRow + 1;
   const storeroomDoorRow = northRow + 1;
 
@@ -100,28 +204,24 @@ export function buildGeneralStoreLayout(
   entries.push(...tileColumn(storeroomWallCol, northRow, storeroomLastRow, INTERIOR_WALL));
   entries.push(...tileRow(storeroomPartitionRow, westCol, storeroomLastCol, INTERIOR_WALL));
   entries.push(tile(storeroomWallCol, storeroomDoorRow, floorType));
-  const stockStackRow = northRow + 1;
-  const clerkDeskCol = westCol + STOCK_STACK_SIZE;
   entries.push(
     prop(westCol, northRow, 'goods_wall', GOODS_STOCKROOM, merchandise),
     prop(westCol, stockStackRow, 'stock_stack', 0, merchandise),
     prop(clerkDeskCol, storeroomLastRow, 'clerk_desk'),
     prop(clerkDeskCol + CLERK_DESK_WIDTH, storeroomLastRow, 'open_crate'),
-    prop(storeroomLastCol, northRow, 'shelving_unit', 2, merchandise),
+    prop(storeroomLastCol, northRow, 'shelving_unit', 2, {
+      ...merchandise,
+      ...contractTarget(CONTRACT_SITE, 'storeroom_shelf'),
+    }),
   );
 
-  // North wall of the shop: the pantry wall, the price board, the potion
-  // cabinet, a window, the hardware wall.
-  const pantryWallCol = storeroomWallCol + 1;
-  const priceBoardCol = pantryWallCol + GOODS_WALL_WIDTH;
-  const potionCabinetCol = priceBoardCol + 1;
-  const windowCol = potionCabinetCol + POTION_CABINET_WIDTH;
-  const hardwareWallCol = windowCol + 1;
   entries.push(
-    prop(pantryWallCol, northRow, 'goods_wall', GOODS_PANTRY, merchandise),
+    prop(pantryWallCol, northRow, 'goods_wall', GOODS_PANTRY, {
+      ...merchandise,
+      ...contractTarget(CONTRACT_SITE, 'goods_wall'),
+    }),
     prop(priceBoardCol, northRow, 'notice_board'),
     prop(potionCabinetCol, northRow, 'potion_cabinet', 0, merchandise),
-    prop(windowCol, northRow, 'window_dressing'),
     prop(hardwareWallCol, northRow, 'goods_wall', GOODS_HARDWARE, merchandise),
   );
   if (hardwareWallCol + GOODS_WALL_WIDTH - 1 !== eastCol) {
@@ -145,16 +245,25 @@ export function buildGeneralStoreLayout(
   const binsCol = eastCol - BULK_BINS_WIDTH;
   const binsRow = northRow + FLOOR_STOCK_ROWS_FROM_NORTH;
   entries.push(
-    prop(binsCol, binsRow, 'bulk_bins', 0, merchandise),
+    prop(binsCol, binsRow, 'bulk_bins', 0, {
+      ...merchandise,
+      ...contractTarget(CONTRACT_SITE, 'bulk_bins'),
+    }),
     prop(binsCol + BULK_BINS_WIDTH, binsRow, 'sack', 0, merchandise),
   );
 
   // The counter, its bell end, the dynamite behind it and a perch for the keeper.
   entries.push(
-    prop(counterCol, counterRow, 'store_counter'),
+    prop(counterCol, counterRow, 'store_counter', 0, contractTarget(CONTRACT_SITE, 'counter')),
     prop(bellEndCol, counterRow, 'counter_bell_end'),
     prop(keeperBlockerCol, behindCounterRow, 'dynamite_crate'),
-    prop(counterCol + KEEPER_PERCH_OFFSET, behindCounterRow, 'perch_rail'),
+    prop(
+      counterCol + KEEPER_PERCH_OFFSET,
+      behindCounterRow,
+      'perch_rail',
+      0,
+      contractTarget(CONTRACT_SITE, 'perch_rail'),
+    ),
   );
   entries.push(prop(counterCol + 1, counterRow + 1, 'rug_medium', 1));
 
@@ -163,7 +272,10 @@ export function buildGeneralStoreLayout(
   const eastTableCol = eastCol - DISPLAY_TABLE_WIDTH;
   const tableRow = counterRow;
   entries.push(
-    prop(westTableCol, tableRow, 'display_table', DISPLAY_HOUSEHOLD, merchandise),
+    prop(westTableCol, tableRow, 'display_table', DISPLAY_HOUSEHOLD, {
+      ...merchandise,
+      ...contractTarget(CONTRACT_SITE, 'display_table'),
+    }),
     prop(eastTableCol, tableRow, 'display_table', DISPLAY_HARDWARE, merchandise),
   );
   // A one-tile lane between the west table and the dynamite crate keeps the
@@ -187,7 +299,6 @@ export function buildGeneralStoreLayout(
 
   // Stock stood out along the front wall either side of the door, where a
   // customer walking in sees it first.
-  const doorWestCol = Math.floor(w / 2) - 1;
   const frontWestCol = doorWestCol - FRONT_STOCK_DOOR_GAP;
   const frontEastCol = doorWestCol + FRONT_STOCK_DOOR_GAP;
   entries.push(

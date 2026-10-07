@@ -21,7 +21,8 @@
  */
 
 import { INTERIOR_WALL } from '../../tileTypes';
-import { prop, tile, tileRow, type TownInteriorLayoutEntry } from './types';
+import { contractTarget, prop, tile, tileRow, type TownInteriorLayoutEntry } from './types';
+import type { ContractAreaRecord } from '../../contractAreas';
 
 const SHOP_DEPTH = 3;
 const BAR_STOCK_WIDTH = 2;
@@ -36,11 +37,12 @@ const DELIVERY_OFFSET_FROM_WALL = 2;
 const FORGE_FLOOR_WEST_MARGIN = 2;
 const BLADE_RACK_AXES_VARIANT = 1;
 
-export function buildRustyAnvilLayout(
-  w: number,
-  h: number,
-  floorType: number,
-): TownInteriorLayoutEntry[] {
+const CONTRACT_SITE = 'rusty_anvil';
+const SHOP_FLAGS_SPOT_W = 3;
+const SHOP_FLAGS_SPOT_H = 2;
+
+/** The partition, its doorway and the shop's rows, shared by the layout and its contract rects. */
+function smithyFrame(w: number, h: number) {
   const westCol = 1;
   const eastCol = w - 2;
   const northRow = 1;
@@ -48,6 +50,53 @@ export function buildRustyAnvilLayout(
   const partitionRow = southRow - SHOP_DEPTH;
   const doorwayWestCol = Math.floor(w / 2) - 1;
   const doorwayEastCol = doorwayWestCol + 1;
+  const shopBackRow = partitionRow + 1;
+  const counterRow = shopBackRow + 1;
+  return {
+    westCol,
+    eastCol,
+    northRow,
+    southRow,
+    partitionRow,
+    doorwayWestCol,
+    doorwayEastCol,
+    shopBackRow,
+    counterRow,
+  };
+}
+
+/** The Rusty Anvil's floor rects a construction contract can mark, keyed by spot id. */
+export function buildRustyAnvilContractAreas(w: number, h: number): ContractAreaRecord {
+  const { doorwayWestCol, counterRow } = smithyFrame(w, h);
+  return {
+    // The customers' side of the shop, between the counter's east end and
+    // the street door, in line with the partition doorway.
+    shop_flags: {
+      kind: 'floor',
+      x: doorwayWestCol,
+      y: counterRow,
+      w: SHOP_FLAGS_SPOT_W,
+      h: SHOP_FLAGS_SPOT_H,
+    },
+  };
+}
+
+export function buildRustyAnvilLayout(
+  w: number,
+  h: number,
+  floorType: number,
+): TownInteriorLayoutEntry[] {
+  const {
+    westCol,
+    eastCol,
+    northRow,
+    southRow,
+    partitionRow,
+    doorwayWestCol,
+    doorwayEastCol,
+    shopBackRow,
+    counterRow,
+  } = smithyFrame(w, h);
 
   // ── North wall: stock rack, bellows, forge, slack tub, tool wall ─────────
   const barStockCol = westCol + 1;
@@ -94,13 +143,13 @@ export function buildRustyAnvilLayout(
   entries.push(
     prop(westCol, northRow, 'window_dressing'),
     prop(barStockCol, northRow, 'bar_stock'),
-    prop(bellowsCol, northRow, 'smith_bellows'),
-    prop(forgeCol, northRow, 'forge'),
+    prop(bellowsCol, northRow, 'smith_bellows', 0, contractTarget(CONTRACT_SITE, 'bellows')),
+    prop(forgeCol, northRow, 'forge', 0, contractTarget(CONTRACT_SITE, 'forge')),
     prop(slackTubCol, northRow, 'slack_tub'),
-    prop(toolWallCol, northRow, 'smith_tool_wall'),
+    prop(toolWallCol, northRow, 'smith_tool_wall', 0, contractTarget(CONTRACT_SITE, 'tool_wall')),
     prop(eastWindowCol, northRow, 'window_dressing'),
     prop(coalHeapCol, coalHeapRow, 'coal_heap'),
-    prop(quenchCol, quenchRow, 'quench_trough'),
+    prop(quenchCol, quenchRow, 'quench_trough', 0, contractTarget(CONTRACT_SITE, 'quench')),
     prop(anvilCol, anvilRow, 'anvil'),
     prop(grindstoneCol, anvilRow, 'grindstone'),
   );
@@ -118,7 +167,7 @@ export function buildRustyAnvilLayout(
   );
 
   entries.push(
-    prop(benchCol, benchRow, 'vice_bench'),
+    prop(benchCol, benchRow, 'vice_bench', 0, contractTarget(CONTRACT_SITE, 'vice_bench')),
     prop(eastCol, benchRow, 'chest', 0, { id: 'rusty_anvil_footlocker' }),
     prop(benchCol + 1, lowerRow, 'stool'),
     prop(eastCol, footlockerBarrelRow, 'barrel'),
@@ -141,14 +190,12 @@ export function buildRustyAnvilLayout(
   // fills that row up to the counter's second tile, so the smith lands
   // behind the middle of her counter, and the row stays open eastward to
   // the partition door.
-  const shopBackRow = partitionRow + 1;
-  const counterRow = shopBackRow + 1;
   const counterCol = westCol + 2;
   const eastRackCol = doorwayEastCol + 2;
   entries.push(
-    prop(westCol, shopBackRow, 'blade_rack'),
-    prop(counterCol, counterRow, 'smith_counter'),
-    prop(westCol, counterRow, 'mail_stand'),
+    prop(westCol, shopBackRow, 'blade_rack', 0, contractTarget(CONTRACT_SITE, 'blade_rack')),
+    prop(counterCol, counterRow, 'smith_counter', 0, contractTarget(CONTRACT_SITE, 'counter')),
+    prop(westCol, counterRow, 'mail_stand', 0, contractTarget(CONTRACT_SITE, 'mail_stand')),
     prop(westCol + 1, counterRow, 'barrel', 0, { dropsLoot: false }),
     prop(eastRackCol, shopBackRow, 'blade_rack', BLADE_RACK_AXES_VARIANT),
     prop(eastRackCol, southRow, 'ironmongery_table', 0, { dropsLoot: false }),

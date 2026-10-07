@@ -6,8 +6,9 @@
  * service alley, barred with a beam — he can reach it and nobody else can
  * without walking past him. The empties wait stacked beside it for the
  * alley. The north-east corner is the games end: an iron stove, the
- * dartboard and its chalked scores, with the throwing lane in front left
- * clear.
+ * dartboard and a bare tile of wall beside it, with the throwing lane in
+ * front left clear. The bare tile is the only floor touching the games
+ * end's plaster, so it is worked from there.
  *
  * The floor is packed tight on purpose: scarred tables and upturned barrels
  * three columns apart, so a crawler crossing the room squeezes past
@@ -15,7 +16,8 @@
  * door's own column is kept clear so the room is enterable.
  */
 
-import { prop, type TownInteriorLayoutEntry } from './types';
+import { contractTarget, prop, type TownInteriorLayoutEntry } from './types';
+import type { ContractAreaRecord } from '../../contractAreas';
 
 const KEG_END = 0;
 const TILL_END = 1;
@@ -25,28 +27,85 @@ const ALE_SLICK = 0;
 const SWEPT_GLASS = 1;
 const OLD_STAIN = 2;
 
-export function buildSunkenStumpPubLayout(w: number, h: number): TownInteriorLayoutEntry[] {
-  const westCol = 1;
-  const eastCol = w - 2;
-  const northRow = 1;
-  const southRow = h - 2;
-  const doorCol = Math.floor(w / 2);
+const CONTRACT_SITE = 'sunken_stump_pub';
+/** The second table of the north rank, in from the west wall. */
+const CONTRACT_STUMP_TABLE_INDEX = 1;
+const MUD_FLAGS_SPOT_W = 3;
+const MUD_FLAGS_SPOT_H = 2;
 
+/** Marlow's bar and the games end along the north wall, shared by the layout and its contract rects. */
+function stumpNorthWall() {
+  const westCol = 1;
+  const northRow = 1;
   // ── Marlow's bar ────────────────────────────────────────────────────────
   const barSectionWidth = 3;
   const barRow = northRow + 2;
   const barTillCol = westCol + barSectionWidth;
   const barEndCol = barTillCol + barSectionWidth - 1;
   const barStoolRow = barRow + 1;
-  const barStoolPitch = 2;
   /** The back door stands at the end of the barkeep's lane, one column past the bar. */
   const backDoorCol = barEndCol + 1;
   const emptiesCol = backDoorCol + 1;
-
   // ── The games end ───────────────────────────────────────────────────────
   const stoveCol = emptiesCol + 2;
   const dartboardCol = stoveCol + 1;
-  const chalkTallyCol = dartboardCol + 1;
+  const bareWallCol = dartboardCol + 1;
+  return {
+    westCol,
+    northRow,
+    barRow,
+    barTillCol,
+    barEndCol,
+    barStoolRow,
+    backDoorCol,
+    emptiesCol,
+    stoveCol,
+    dartboardCol,
+    bareWallCol,
+  };
+}
+
+/** The Sunken Stump Pub's floor and wall rects a construction contract can mark, keyed by spot id. */
+export function buildSunkenStumpPubContractAreas(_w: number, _h: number): ContractAreaRecord {
+  const { northRow, barStoolRow, backDoorCol, dartboardCol, bareWallCol } = stumpNorthWall();
+  return {
+    // The packed earth south of the empties, between the bar stools and the
+    // dartboard's throwing lane.
+    mud_flags: {
+      kind: 'floor',
+      x: backDoorCol,
+      y: barStoolRow,
+      w: MUD_FLAGS_SPOT_W,
+      h: MUD_FLAGS_SPOT_H,
+    },
+    // Behind the dartboard and the bare tile, well clear of the bolted back door.
+    plaster: {
+      kind: 'wall',
+      x: dartboardCol,
+      y: northRow - 1,
+      w: bareWallCol - dartboardCol + 1,
+      h: 1,
+    },
+  };
+}
+
+export function buildSunkenStumpPubLayout(w: number, h: number): TownInteriorLayoutEntry[] {
+  const {
+    westCol,
+    northRow,
+    barRow,
+    barTillCol,
+    barEndCol,
+    barStoolRow,
+    backDoorCol,
+    emptiesCol,
+    stoveCol,
+    dartboardCol,
+  } = stumpNorthWall();
+  const eastCol = w - 2;
+  const southRow = h - 2;
+  const doorCol = Math.floor(w / 2);
+  const barStoolPitch = 2;
 
   // ── The floor ───────────────────────────────────────────────────────────
   /*
@@ -84,17 +143,16 @@ export function buildSunkenStumpPubLayout(w: number, h: number): TownInteriorLay
   );
 
   entries.push(
-    prop(westCol, northRow, 'stump_back_shelf', 0),
+    prop(westCol, northRow, 'stump_back_shelf', 0, contractTarget(CONTRACT_SITE, 'back_shelf')),
     prop(barTillCol, northRow, 'stump_back_shelf', 1),
-    prop(westCol, barRow, 'stump_bar', KEG_END),
+    prop(westCol, barRow, 'stump_bar', KEG_END, contractTarget(CONTRACT_SITE, 'bar')),
     prop(barTillCol, barRow, 'stump_bar', TILL_END),
     prop(backDoorCol, northRow, 'bolted_door'),
-    prop(emptiesCol, northRow, 'keg_stack'),
-    prop(stoveCol, northRow, 'stump_stove'),
+    prop(emptiesCol, northRow, 'keg_stack', 0, contractTarget(CONTRACT_SITE, 'keg_cradle')),
+    prop(stoveCol, northRow, 'stump_stove', 0, contractTarget(CONTRACT_SITE, 'stove')),
     prop(stoveCol - 1, barRow, 'barrel_table', 0),
     prop(dartboardCol, northRow, 'dartboard'),
-    prop(chalkTallyCol, northRow, 'chalk_tally'),
-    prop(eastCol, northRow, 'smoky_lamp'),
+    prop(eastCol, northRow, 'smoky_lamp', 0, contractTarget(CONTRACT_SITE, 'lamp')),
   );
   for (let rx = westCol; rx <= barEndCol; rx += barStoolPitch)
     entries.push(prop(rx, barStoolRow, 'stool', rx % 2));
@@ -103,15 +161,17 @@ export function buildSunkenStumpPubLayout(w: number, h: number): TownInteriorLay
     ...northTables.map((table) => ({ ...table, row: northRankRow })),
     ...southTables.map((table) => ({ ...table, row: southRankRow })),
   ];
+  const contractTable = tables[CONTRACT_STUMP_TABLE_INDEX];
   for (const table of tables) {
+    const tableTarget = table === contractTable ? contractTarget(CONTRACT_SITE, 'stump_table') : {};
     entries.push(
-      prop(table.col, table.row, 'stump_table', table.variant),
+      prop(table.col, table.row, 'stump_table', table.variant, tableTarget),
       prop(table.col, table.row + 1, 'stool'),
       prop(table.col + 1, table.row + 1, 'stool', 1),
     );
   }
   entries.push(
-    prop(diceTableCol, northRankRow, 'dice_table'),
+    prop(diceTableCol, northRankRow, 'dice_table', 0, contractTarget(CONTRACT_SITE, 'dice_table')),
     prop(diceTableCol, northRankRow + 1, 'stool', 1),
     prop(diceTableCol + 1, northRankRow + 1, 'stool'),
   );

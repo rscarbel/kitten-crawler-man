@@ -3,8 +3,8 @@
  * `BuildingInteriorScene` sees it: the first refusal on talking to a
  * resident, the glyph over their head, and the conversation it opened.
  *
- * The scene holds an ordered list of these (the Anchor's first, then "The
- * Borrowed Blueprints") and asks each in turn, so a second questline indoors
+ * The scene holds an ordered list of these (a construction contract's
+ * client, then the Anchor's, then Wendell's) and asks each in turn, so a second questline indoors
  * is one more entry in the list rather than another special case threaded
  * through every input and render path.
  */

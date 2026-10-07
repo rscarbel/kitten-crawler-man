@@ -125,7 +125,7 @@ export function buildTradingPostMenu(state: BriarHollowState): ShopMenu {
   return {
     title: TRADING_POST_TITLE,
     bark: sellerLine(VETCH.shopOpen),
-    byline: SPEAKERS.vetch.name ?? undefined,
+    byline: SPEAKERS.vetch.name,
     options,
   };
 }

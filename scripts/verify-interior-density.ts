@@ -43,7 +43,9 @@ const DOORWAY_EXEMPTION_RADIUS_TILES = 1;
 
 const PLAN_SIZE = 5;
 const plan = createTownPlan(PLAN_SIZE);
-const buildingKindByName = new Map(plan.buildings.map((b) => [b.name, b.kind]));
+const buildingKindByName = new Map<string, BuildingKind>(
+  plan.buildings.map((b) => [b.name, b.kind]),
+);
 
 function buildInterior(name: string, kind: BuildingKind): GameMap {
   const map = new GameMap({ tileHeight: TILE_SIZE, prebuiltStructure: [] });

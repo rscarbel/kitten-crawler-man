@@ -17,6 +17,7 @@
  */
 
 import type { TilePoint, TileRect } from '../town/townPlan';
+import { contractPropId, type ContractAreaRecord } from '../contractAreas';
 
 // ── The palisade ──────────────────────────────────────────────────────────────
 
@@ -349,6 +350,11 @@ export interface PropTemplate {
   readonly prop: VillagePropId;
   readonly x: number;
   readonly y: number;
+  /**
+   * The placed-prop id a construction contract names this piece by
+   * (`contractPropId`). Only furniture a contract can target carries one.
+   */
+  readonly contractSpotId?: string;
 }
 
 /** A prop placed on the map, with its footprint resolved. */
@@ -442,13 +448,18 @@ export const BUILDINGS: ReadonlyArray<BuildingTemplate> = [
     floor: 'planks',
     occupantAnchors: [{ x: 8, y: 2 }],
     furniture: [
-      { prop: 'shelf_records', x: 1, y: 1 },
+      {
+        prop: 'shelf_records',
+        x: 1,
+        y: 1,
+        contractSpotId: contractPropId('hall', 'records_shelf'),
+      },
       { prop: 'shelf_records', x: 2, y: 1 },
-      { prop: 'banner', x: 5, y: 1 },
-      { prop: 'desk', x: 8, y: 1 },
-      { prop: 'hearth', x: 10, y: 3 },
-      { prop: 'long_table', x: 3, y: 3 },
-      { prop: 'bench', x: 3, y: 4 },
+      { prop: 'banner', x: 5, y: 1, contractSpotId: contractPropId('hall', 'banner') },
+      { prop: 'desk', x: 8, y: 1, contractSpotId: contractPropId('hall', 'desk') },
+      { prop: 'hearth', x: 10, y: 3, contractSpotId: contractPropId('hall', 'hearth') },
+      { prop: 'long_table', x: 3, y: 3, contractSpotId: contractPropId('hall', 'long_table') },
+      { prop: 'bench', x: 3, y: 4, contractSpotId: contractPropId('hall', 'bench') },
       { prop: 'bench', x: 6, y: 4 },
       { prop: 'rug', x: 8, y: 3 },
     ],
@@ -465,11 +476,11 @@ export const BUILDINGS: ReadonlyArray<BuildingTemplate> = [
     // sits between Oren and the doorway, where the hammer swing lands.
     occupantAnchors: [{ x: 4, y: 1 }],
     furniture: [
-      { prop: 'forge_hearth', x: 1, y: 1 },
-      { prop: 'anvil', x: 4, y: 2 },
-      { prop: 'quench_trough', x: 6, y: 1 },
-      { prop: 'tool_rack', x: 7, y: 3 },
-      { prop: 'coal_bin', x: 1, y: 4 },
+      { prop: 'forge_hearth', x: 1, y: 1, contractSpotId: contractPropId('forge', 'forge_hearth') },
+      { prop: 'anvil', x: 4, y: 2, contractSpotId: contractPropId('forge', 'anvil_block') },
+      { prop: 'quench_trough', x: 6, y: 1, contractSpotId: contractPropId('forge', 'quench') },
+      { prop: 'tool_rack', x: 7, y: 3, contractSpotId: contractPropId('forge', 'tool_rack') },
+      { prop: 'coal_bin', x: 1, y: 4, contractSpotId: contractPropId('forge', 'coal_bin') },
       { prop: 'soot', x: 3, y: 2 },
     ],
   },
@@ -485,12 +496,17 @@ export const BUILDINGS: ReadonlyArray<BuildingTemplate> = [
     floor: 'planks',
     occupantAnchors: [{ x: 5, y: 1 }],
     furniture: [
-      { prop: 'cooking_hearth', x: 1, y: 1 },
-      { prop: 'serving_counter', x: 4, y: 2 },
+      { prop: 'cooking_hearth', x: 1, y: 1, contractSpotId: contractPropId('cookhouse', 'hearth') },
+      {
+        prop: 'serving_counter',
+        x: 4,
+        y: 2,
+        contractSpotId: contractPropId('cookhouse', 'counter'),
+      },
       { prop: 'sack', x: 8, y: 1 },
-      { prop: 'table', x: 1, y: 4 },
+      { prop: 'table', x: 1, y: 4, contractSpotId: contractPropId('cookhouse', 'table') },
       { prop: 'table', x: 6, y: 4 },
-      { prop: 'bench', x: 2, y: 5 },
+      { prop: 'bench', x: 2, y: 5, contractSpotId: contractPropId('cookhouse', 'bench') },
       { prop: 'bench', x: 7, y: 5 },
     ],
   },
@@ -503,12 +519,17 @@ export const BUILDINGS: ReadonlyArray<BuildingTemplate> = [
     floor: 'planks',
     occupantAnchors: [{ x: 4, y: 2 }],
     furniture: [
-      { prop: 'cot', x: 5, y: 1 },
-      { prop: 'cot', x: 6, y: 1 },
-      { prop: 'shelf_herbs', x: 1, y: 1 },
-      { prop: 'washbasin', x: 6, y: 4 },
-      { prop: 'stool', x: 4, y: 3 },
-      { prop: 'table', x: 2, y: 4 },
+      { prop: 'cot', x: 5, y: 1, contractSpotId: contractPropId('infirmary', 'cot_a') },
+      { prop: 'cot', x: 6, y: 1, contractSpotId: contractPropId('infirmary', 'cot_b') },
+      {
+        prop: 'shelf_herbs',
+        x: 1,
+        y: 1,
+        contractSpotId: contractPropId('infirmary', 'herb_shelf'),
+      },
+      { prop: 'washbasin', x: 6, y: 4, contractSpotId: contractPropId('infirmary', 'basin') },
+      { prop: 'table', x: 2, y: 4, contractSpotId: contractPropId('infirmary', 'table') },
+      { prop: 'stool', x: 4, y: 4 },
     ],
   },
   {
@@ -520,12 +541,12 @@ export const BUILDINGS: ReadonlyArray<BuildingTemplate> = [
     floor: 'planks',
     occupantAnchors: [{ x: 3, y: 1 }],
     furniture: [
-      { prop: 'serving_counter', x: 2, y: 2 },
-      { prop: 'shelf_goods', x: 1, y: 1 },
-      { prop: 'shelf_goods', x: 1, y: 3 },
+      { prop: 'serving_counter', x: 2, y: 2, contractSpotId: contractPropId('store', 'counter') },
+      { prop: 'shelf_goods', x: 1, y: 1, contractSpotId: contractPropId('store', 'shelf_a') },
+      { prop: 'shelf_goods', x: 1, y: 3, contractSpotId: contractPropId('store', 'shelf_b') },
       { prop: 'crate', x: 1, y: 4 },
-      { prop: 'barrel', x: 2, y: 4 },
-      { prop: 'sack', x: 5, y: 4 },
+      { prop: 'barrel', x: 2, y: 4, contractSpotId: contractPropId('store', 'barrel') },
+      { prop: 'sack', x: 5, y: 4, contractSpotId: contractPropId('store', 'sack_plinth') },
       { prop: 'barrel', x: 6, y: 4 },
     ],
   },
@@ -545,11 +566,31 @@ export const BUILDINGS: ReadonlyArray<BuildingTemplate> = [
       { x: 5, y: 3 },
     ],
     furniture: [
-      { prop: 'drafting_table', x: 3, y: 1 },
-      { prop: 'gear_crate', x: 6, y: 1 },
-      { prop: 'gear_crate', x: 6, y: 2 },
-      { prop: 'trebuchet_model', x: 6, y: 5 },
-      { prop: 'workbench', x: 3, y: 5 },
+      {
+        prop: 'drafting_table',
+        x: 3,
+        y: 1,
+        contractSpotId: contractPropId('workshop', 'drafting_table'),
+      },
+      {
+        prop: 'gear_crate',
+        x: 6,
+        y: 1,
+        contractSpotId: contractPropId('workshop', 'gear_crate_a'),
+      },
+      {
+        prop: 'gear_crate',
+        x: 6,
+        y: 2,
+        contractSpotId: contractPropId('workshop', 'gear_crate_b'),
+      },
+      {
+        prop: 'trebuchet_model',
+        x: 6,
+        y: 5,
+        contractSpotId: contractPropId('workshop', 'trebuchet_model'),
+      },
+      { prop: 'workbench', x: 3, y: 5, contractSpotId: contractPropId('workshop', 'workbench') },
     ],
   },
   {
@@ -564,8 +605,8 @@ export const BUILDINGS: ReadonlyArray<BuildingTemplate> = [
     furniture: [
       { prop: 'sawmill_machine', x: 1, y: 2 },
       { prop: 'rope_walk', x: 5, y: 4 },
-      { prop: 'log_pile', x: 7, y: 2 },
-      { prop: 'board_stack', x: 8, y: 4 },
+      { prop: 'log_pile', x: 7, y: 2, contractSpotId: contractPropId('sawmill', 'log_chocks') },
+      { prop: 'board_stack', x: 8, y: 4, contractSpotId: contractPropId('sawmill', 'board_rack') },
       { prop: 'sawdust', x: 3, y: 2 },
       { prop: 'sawdust', x: 4, y: 4 },
     ],
@@ -582,10 +623,15 @@ export const BUILDINGS: ReadonlyArray<BuildingTemplate> = [
       { x: 3, y: 2 },
     ],
     furniture: [
-      { prop: 'table', x: 3, y: 1 },
-      { prop: 'weapon_rack', x: 5, y: 1 },
-      { prop: 'bunk', x: 4, y: 3 },
-      { prop: 'bunk', x: 5, y: 3 },
+      { prop: 'table', x: 3, y: 1, contractSpotId: contractPropId('guardhouse', 'table') },
+      {
+        prop: 'weapon_rack',
+        x: 5,
+        y: 1,
+        contractSpotId: contractPropId('guardhouse', 'weapon_rack'),
+      },
+      { prop: 'bunk', x: 4, y: 3, contractSpotId: contractPropId('guardhouse', 'bunk_a') },
+      { prop: 'bunk', x: 5, y: 3, contractSpotId: contractPropId('guardhouse', 'bunk_b') },
     ],
   },
   {
@@ -597,11 +643,16 @@ export const BUILDINGS: ReadonlyArray<BuildingTemplate> = [
     floor: 'planks',
     occupantAnchors: [{ x: 3, y: 2 }],
     furniture: [
-      { prop: 'bed', x: 1, y: 1 },
-      { prop: 'table', x: 3, y: 1 },
-      { prop: 'seed_sacks', x: 5, y: 1 },
+      { prop: 'bed', x: 1, y: 1, contractSpotId: contractPropId('farmhouse', 'bed') },
+      { prop: 'table', x: 3, y: 1, contractSpotId: contractPropId('farmhouse', 'table') },
+      {
+        prop: 'seed_sacks',
+        x: 5,
+        y: 1,
+        contractSpotId: contractPropId('farmhouse', 'seed_platform'),
+      },
       { prop: 'seed_sacks', x: 5, y: 2 },
-      { prop: 'hoe_rack', x: 5, y: 4 },
+      { prop: 'hoe_rack', x: 5, y: 4, contractSpotId: contractPropId('farmhouse', 'hoe_rack') },
     ],
   },
   {
@@ -614,12 +665,12 @@ export const BUILDINGS: ReadonlyArray<BuildingTemplate> = [
     floor: 'working',
     occupantAnchors: [{ x: 4, y: 3 }],
     furniture: [
-      { prop: 'hay_bale', x: 1, y: 1 },
+      { prop: 'hay_bale', x: 1, y: 1, contractSpotId: contractPropId('barn', 'hay_rack') },
       { prop: 'hay_bale', x: 2, y: 1 },
       { prop: 'hay_bale', x: 1, y: 2 },
       { prop: 'scythe_pegs', x: 5, y: 1 },
-      { prop: 'water_trough', x: 3, y: 5 },
-      { prop: 'feed_bin', x: 1, y: 5 },
+      { prop: 'water_trough', x: 3, y: 5, contractSpotId: contractPropId('barn', 'trough') },
+      { prop: 'feed_bin', x: 1, y: 5, contractSpotId: contractPropId('barn', 'feed_bin') },
     ],
   },
   {
@@ -631,9 +682,14 @@ export const BUILDINGS: ReadonlyArray<BuildingTemplate> = [
     floor: 'planks',
     occupantAnchors: [{ x: 3, y: 2 }],
     furniture: [
-      { prop: 'bed', x: 1, y: 1 },
-      { prop: 'loom', x: 3, y: 1 },
-      { prop: 'fabric_bolts', x: 4, y: 3 },
+      { prop: 'bed', x: 1, y: 1, contractSpotId: contractPropId('home_nella', 'bed') },
+      { prop: 'loom', x: 3, y: 1, contractSpotId: contractPropId('home_nella', 'loom') },
+      {
+        prop: 'fabric_bolts',
+        x: 4,
+        y: 3,
+        contractSpotId: contractPropId('home_nella', 'bolt_shelf'),
+      },
       { prop: 'rug', x: 2, y: 2 },
     ],
   },
@@ -646,9 +702,14 @@ export const BUILDINGS: ReadonlyArray<BuildingTemplate> = [
     floor: 'planks',
     occupantAnchors: [{ x: 3, y: 2 }],
     furniture: [
-      { prop: 'bed', x: 4, y: 1 },
-      { prop: 'tool_pegs', x: 1, y: 1 },
-      { prop: 'bucket', x: 2, y: 3 },
+      { prop: 'bed', x: 4, y: 1, contractSpotId: contractPropId('home_cricket', 'bed') },
+      {
+        prop: 'tool_pegs',
+        x: 1,
+        y: 1,
+        contractSpotId: contractPropId('home_cricket', 'tool_pegs'),
+      },
+      { prop: 'bucket', x: 2, y: 3, contractSpotId: contractPropId('home_cricket', 'bucket') },
       { prop: 'rug', x: 2, y: 2 },
     ],
   },
@@ -661,9 +722,14 @@ export const BUILDINGS: ReadonlyArray<BuildingTemplate> = [
     floor: 'planks',
     occupantAnchors: [{ x: 4, y: 2 }],
     furniture: [
-      { prop: 'bed', x: 1, y: 1 },
-      { prop: 'workbench', x: 4, y: 3 },
-      { prop: 'board_stack', x: 5, y: 1 },
+      { prop: 'bed', x: 1, y: 1, contractSpotId: contractPropId('home_wicker', 'bed') },
+      { prop: 'workbench', x: 4, y: 3, contractSpotId: contractPropId('home_wicker', 'workbench') },
+      {
+        prop: 'board_stack',
+        x: 5,
+        y: 1,
+        contractSpotId: contractPropId('home_wicker', 'board_stack'),
+      },
       { prop: 'rug', x: 2, y: 2 },
     ],
   },
@@ -676,9 +742,14 @@ export const BUILDINGS: ReadonlyArray<BuildingTemplate> = [
     floor: 'planks',
     occupantAnchors: [{ x: 3, y: 2 }],
     furniture: [
-      { prop: 'bed', x: 4, y: 2 },
-      { prop: 'lamp_shelf', x: 1, y: 2 },
-      { prop: 'oil_cans', x: 1, y: 3 },
+      { prop: 'bed', x: 4, y: 2, contractSpotId: contractPropId('home_midge', 'bed') },
+      {
+        prop: 'lamp_shelf',
+        x: 1,
+        y: 2,
+        contractSpotId: contractPropId('home_midge', 'lamp_shelf'),
+      },
+      { prop: 'oil_cans', x: 1, y: 3, contractSpotId: contractPropId('home_midge', 'oil_rack') },
       { prop: 'rug', x: 2, y: 3 },
     ],
   },
@@ -691,11 +762,117 @@ export const BUILDINGS: ReadonlyArray<BuildingTemplate> = [
     floor: 'planks',
     occupantAnchors: [{ x: 2, y: 2 }],
     furniture: [
-      { prop: 'stool', x: 3, y: 1 },
-      { prop: 'pick_rack', x: 3, y: 2 },
+      { prop: 'stool', x: 3, y: 1, contractSpotId: contractPropId('garn_hut', 'stool') },
+      { prop: 'pick_rack', x: 3, y: 2, contractSpotId: contractPropId('garn_hut', 'pick_rack') },
     ],
   },
 ];
+
+/**
+ * The floor rects, wall runs, doorways and open sides a construction contract
+ * can mark in each building, keyed by contract spot id and relative to the
+ * building rect's north-west corner. Wall runs stay off the corner posts and
+ * doorways; floor rects stay off furniture, rugs and threshold tiles. The
+ * quarry hut's `step` lies just outside its west door, on open ground.
+ */
+export const BRIAR_HOLLOW_CONTRACT_AREAS: Readonly<Record<VillageBuildingId, ContractAreaRecord>> =
+  {
+    hall: {
+      north_wall: { kind: 'wall', x: 2, y: 0, w: 4, h: 1 },
+      floor: { kind: 'floor', x: 7, y: 4, w: 3, h: 2 },
+      threshold: { kind: 'doorway', x: 5, y: 7, w: 2, h: 1 },
+    },
+    forge: {
+      back_wall: { kind: 'wall', x: 2, y: 0, w: 4, h: 1 },
+      walkway: { kind: 'floor', x: 2, y: 3, w: 3, h: 2 },
+      awning: { kind: 'open_side', x: 3, y: 6, w: 3, h: 1 },
+    },
+    cookhouse: {
+      north_wall: { kind: 'wall', x: 3, y: 0, w: 4, h: 1 },
+      floor: { kind: 'floor', x: 3, y: 3, w: 3, h: 2 },
+      hearth_apron: { kind: 'floor', x: 1, y: 2, w: 2, h: 2 },
+      east_door: { kind: 'doorway', x: 9, y: 3, w: 1, h: 1 },
+    },
+    infirmary: {
+      north_wall: { kind: 'wall', x: 2, y: 0, w: 3, h: 1 },
+      floor: { kind: 'floor', x: 2, y: 2, w: 2, h: 2 },
+      wash_floor: { kind: 'floor', x: 5, y: 3, w: 2, h: 1 },
+    },
+    store: {
+      floor: { kind: 'floor', x: 3, y: 3, w: 2, h: 2 },
+      north_wall: { kind: 'wall', x: 2, y: 0, w: 4, h: 1 },
+      rat_floor: { kind: 'floor', x: 5, y: 1, w: 2, h: 2 },
+    },
+    workshop: {
+      north_wall: { kind: 'wall', x: 2, y: 0, w: 3, h: 1 },
+      floor: { kind: 'floor', x: 1, y: 4, w: 2, h: 2 },
+      test_pad: { kind: 'floor', x: 5, y: 3, w: 2, h: 2 },
+      threshold: { kind: 'doorway', x: 0, y: 3, w: 1, h: 1 },
+    },
+    sawmill: {
+      south_wall: { kind: 'wall', x: 3, y: 5, w: 4, h: 1 },
+      saw_flags: { kind: 'floor', x: 4, y: 2, w: 2, h: 2 },
+      loading_floor: { kind: 'floor', x: 6, y: 1, w: 3, h: 1 },
+      hoist: { kind: 'open_side', x: 1, y: 0, w: 8, h: 1 },
+      west_wall: { kind: 'wall', x: 0, y: 2, w: 1, h: 3 },
+      east_wall: { kind: 'wall', x: 9, y: 2, w: 1, h: 3 },
+    },
+    guardhouse: {
+      north_wall: { kind: 'wall', x: 2, y: 0, w: 3, h: 1 },
+      floor: { kind: 'floor', x: 1, y: 3, w: 3, h: 2 },
+      entry_flags: { kind: 'floor', x: 1, y: 1, w: 2, h: 2 },
+      west_door: { kind: 'doorway', x: 0, y: 2, w: 1, h: 1 },
+    },
+    farmhouse: {
+      north_wall: { kind: 'wall', x: 2, y: 0, w: 3, h: 1 },
+      floor: { kind: 'floor', x: 1, y: 3, w: 2, h: 2 },
+      door_flags: { kind: 'floor', x: 3, y: 3, w: 2, h: 2 },
+      west_wall: { kind: 'wall', x: 0, y: 2, w: 1, h: 3 },
+    },
+    barn: {
+      north_wall: { kind: 'wall', x: 2, y: 0, w: 3, h: 1 },
+      stall_floor: { kind: 'floor', x: 2, y: 2, w: 3, h: 2 },
+      barn_door: { kind: 'open_side', x: 8, y: 2, w: 1, h: 3 },
+      drain: { kind: 'floor', x: 5, y: 4, w: 2, h: 2 },
+      south_wall: { kind: 'wall', x: 3, y: 6, w: 3, h: 1 },
+    },
+    home_nella: {
+      north_wall: { kind: 'wall', x: 2, y: 0, w: 3, h: 1 },
+      floor: { kind: 'floor', x: 3, y: 2, w: 2, h: 1 },
+      threshold: { kind: 'doorway', x: 2, y: 4, w: 1, h: 1 },
+      west_wall: { kind: 'wall', x: 0, y: 1, w: 1, h: 3 },
+      east_wall: { kind: 'wall', x: 5, y: 1, w: 1, h: 3 },
+    },
+    home_cricket: {
+      north_wall: { kind: 'wall', x: 2, y: 0, w: 3, h: 1 },
+      floor: { kind: 'floor', x: 2, y: 1, w: 2, h: 1 },
+      west_door: { kind: 'doorway', x: 0, y: 2, w: 1, h: 1 },
+      east_wall: { kind: 'wall', x: 5, y: 1, w: 1, h: 3 },
+      south_wall: { kind: 'wall', x: 2, y: 4, w: 3, h: 1 },
+    },
+    home_wicker: {
+      north_wall: { kind: 'wall', x: 4, y: 0, w: 2, h: 1 },
+      floor: { kind: 'floor', x: 3, y: 1, w: 2, h: 2 },
+      threshold: { kind: 'doorway', x: 3, y: 0, w: 1, h: 1 },
+      west_wall: { kind: 'wall', x: 0, y: 1, w: 1, h: 3 },
+      east_wall: { kind: 'wall', x: 6, y: 1, w: 1, h: 3 },
+    },
+    home_midge: {
+      north_wall: { kind: 'wall', x: 3, y: 0, w: 2, h: 1 },
+      floor: { kind: 'floor', x: 2, y: 1, w: 2, h: 2 },
+      threshold: { kind: 'doorway', x: 2, y: 0, w: 1, h: 1 },
+      east_wall: { kind: 'wall', x: 5, y: 1, w: 1, h: 3 },
+      west_wall: { kind: 'wall', x: 0, y: 1, w: 1, h: 3 },
+    },
+    garn_hut: {
+      north_wall: { kind: 'wall', x: 1, y: 0, w: 3, h: 1 },
+      floor: { kind: 'floor', x: 1, y: 1, w: 2, h: 2 },
+      west_door: { kind: 'doorway', x: 0, y: 1, w: 1, h: 1 },
+      east_wall: { kind: 'wall', x: 4, y: 1, w: 1, h: 2 },
+      south_wall: { kind: 'wall', x: 1, y: 3, w: 3, h: 1 },
+      step: { kind: 'floor', x: -1, y: 1, w: 1, h: 1 },
+    },
+  };
 
 /** The buildings that stand inside the palisade — every one but the quarry hut. */
 export const OUTSIDE_BUILDINGS: ReadonlySet<VillageBuildingId> = new Set(['garn_hut']);

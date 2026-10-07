@@ -7,6 +7,7 @@
     "types": ["node"]
   },
   "include": [
+    "scripts/render-construction-contracts.ts",
     "scripts/verify-loading-screen.ts",
     "scripts/verify-pause-keyboard.ts",
     "scripts/verify-chat-input.ts",
@@ -365,6 +366,8 @@
     "scripts/borrowed-blueprints/agreement.ts",
     "scripts/borrowed-blueprints/escortRoute.ts",
     "scripts/borrowed-blueprints/midgeFriendlyFire.ts",
+    "scripts/verify-construction-contracts.ts",
+    "scripts/construction-contracts/*.ts",
     "scripts/verify-conversation-ownership.ts",
     "scripts/verify-walk-away.ts",
     "scripts/verify-walk-away-scene.ts",

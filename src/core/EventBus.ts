@@ -99,6 +99,9 @@ export interface GameEvents {
 
   questFailed: { questId: string };
 
+  /** The player gave up a quest under way, as Wendell's "drop this contract" does. */
+  questAbandoned: { questId: string };
+
   /**
    * A quest item was pushed out of a crawler's quest slot by a different one
    * (`Inventory.replaceQuestSlot`) and is no longer held. The quest that owns

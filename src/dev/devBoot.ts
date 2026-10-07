@@ -54,6 +54,7 @@ import { settings } from '../core/Settings';
 import { getMercenaryTemplate } from '../core/mercenaryTemplates';
 import { buildPlaytestBoot, resolvePlaytestSpawn } from './playtestBoot';
 import { blueprintsPlaytestState } from './blueprintsPlaytest';
+import { contractsPlaytestState } from './contractsPlaytest';
 
 /**
  * Dev-only entry points, reachable by query parameter.
@@ -409,6 +410,8 @@ export function devBootScene(
         }
         options.prepareBriarHollow = (kit, gameMap) =>
           fortifyBriarHollow(kit, gameMap, { wallTier, trebuchets });
+      } else if (preset.constructionContracts !== undefined) {
+        options.briarHollowState = contractsPlaytestState(preset.constructionContracts);
       } else if (preset.briarHollowBlueprints !== undefined) {
         options.briarHollowState = blueprintsPlaytestState(preset.briarHollowBlueprints);
       } else if (preset.briarHollowUnlockAll === true) {

@@ -930,6 +930,13 @@ export class GameMap {
   private _modestDecorationExtents: MapSpriteExtentsPx = { left: 0, up: 0, right: 0, down: 0 };
   /** Reused result of `getVisibleDecorationTiles` — holds references, never copies. */
   private readonly _visibleDecorations: DecorationTile[] = [];
+  /**
+   * Decoration tiles held out of the Y-sorted pass, by `tileCoordKey`: a
+   * construction contract's rebuild spot stands stripped while the tile under
+   * it keeps its prop, so the prop comes back the moment the key is removed.
+   * Owned by whoever adds a key; nothing here ever clears it.
+   */
+  readonly hiddenDecorationTiles = new Set<number>();
 
   /**
    * Memoized results of `tilesOfType`. Exiting a building rebuilds the town's
@@ -2461,9 +2468,11 @@ export class GameMap {
 
     const visible = this._visibleDecorations;
     visible.length = 0;
+    const hidden = this.hiddenDecorationTiles;
     for (let y = startY; y <= endY; y++) {
       for (const entry of this._decorationRows[y]) {
         if (entry.tx < startX || entry.tx > endX) continue;
+        if (hidden.size > 0 && hidden.has(tileCoordKey(entry.tx, entry.ty))) continue;
         visible.push(entry);
       }
     }
@@ -2477,10 +2486,23 @@ export class GameMap {
       const right = (entry.tx + 1) * ts + extents.right;
       const bottom = (entry.ty + 1) * ts + extents.down;
       if (right < camX || left > camX + viewW || bottom < camY || top > camY + viewH) continue;
+      if (hidden.size > 0 && hidden.has(tileCoordKey(entry.tx, entry.ty))) continue;
       visible.push(entry);
     }
 
     return visible;
+  }
+
+  /**
+   * The world-pixel line the decoration drawn from tile (`tx`, `ty`) sorts on
+   * in the Y-sorted pass, or null when that tile draws no decoration.
+   */
+  decorationSortYAt(tx: number, ty: number): number | null {
+    this.ensureDecorationIndex();
+    const entry =
+      this._decorationRows[ty]?.find((candidate) => candidate.tx === tx) ??
+      this._oversizedDecorations.find((candidate) => candidate.tx === tx && candidate.ty === ty);
+    return entry === undefined ? null : entry.ty * this.tileHeight + entry.sortYAnchorPx;
   }
 
   /**

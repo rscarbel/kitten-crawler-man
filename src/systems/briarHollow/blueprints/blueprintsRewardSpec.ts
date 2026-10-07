@@ -2,12 +2,14 @@
  * What "The Borrowed Blueprints"' quest-complete screen says: the saw and the
  * rope walk, upgraded for good, with what each now does in numbers read from
  * the constants the sawmill itself works by, so the promise on screen is the
- * machine's behaviour.
+ * machine's behaviour. Beside them, the construction contracts Wendell now
+ * hands out.
  */
 
 import type { BlueprintsStationId } from '../../../core/blueprintsQuestPhase';
 import type { Rect } from '../../../ui/core/geom';
 import { drawBlueprintsQuestIcon } from '../../../ui/icons/blueprintsQuestIcons';
+import { drawConstructionIcon } from '../../../ui/icons/constructionIcon';
 import { iconSquare } from '../../../ui/icons/iconSquare';
 import { drawRopeCoilGlyph, drawSawBladeGlyph } from '../../../ui/icons/stationGlyphs';
 import type { QuestRewardSpec, RewardUnlockCard } from '../../../ui/questReward/types';
@@ -80,6 +82,19 @@ function drawRopeIcon(ctx: CanvasRenderingContext2D, rect: Rect): void {
   drawRopeCoilGlyph(ctx, x + size / 2, y + size / 2, size / 2);
 }
 
+/** Wendell's repeatable jobs, opened by finishing the quest; the rate is the contracts' own constant. */
+export function constructionContractsCard(): RewardUnlockCard {
+  return {
+    renderIcon: drawConstructionIcon,
+    title: 'Construction contracts from Wendell',
+    body: [
+      { text: 'Paid repair jobs', emphasis: true },
+      { text: 'In Skyfowl Town and Briar Hollow' },
+    ],
+    condition: 'Ask Wendell at Plumbline Farm',
+  };
+}
+
 function stationCard(reward: StationReward): RewardUnlockCard {
   return {
     renderIcon: reward.station === 'saw' ? drawSpinningSawIcon : drawRopeIcon,
@@ -101,7 +116,7 @@ export function blueprintsRewardSpec(onDismissed: () => void): QuestRewardSpec {
       {
         kind: 'unlocks',
         heading: BLUEPRINTS_REWARDS_HEADING,
-        cards: blueprintsStationRewards().map(stationCard),
+        cards: [...blueprintsStationRewards().map(stationCard), constructionContractsCard()],
       },
     ],
     footnote: BLUEPRINTS_REWARDS_FOOTNOTE,

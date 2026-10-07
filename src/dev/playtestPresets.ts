@@ -10,6 +10,8 @@ import type { CircusQuestStage } from '../core/CircusQuestProgress';
 import type { PartyToolsState } from '../core/PartyTools';
 import type { PalisadeTier } from '../map/tileTypes';
 import type { BlueprintsQuestPhase } from '../core/blueprintsQuestPhase';
+import type { VillageBuildingId } from '../map/overworld/briarHollowLayout';
+import type { TownBuildingName } from '../map/town/townPlan';
 import { TOOL_TIER_BASIC, TOOL_TIER_LONG_HAFT } from '../core/toolTiers';
 
 /**
@@ -33,7 +35,11 @@ export type PlaytestSpawn =
   /** The tile just inside the goblin mother's nursery, by the way in. */
   | { readonly kind: 'questRoomEntrance' }
   /** Just inside Briar Hollow's gate, on the main street. */
-  | { readonly kind: 'briarHollowGate' };
+  | { readonly kind: 'briarHollowGate' }
+  /** The street tile just south of a town building's door. */
+  | { readonly kind: 'townBuildingDoor'; readonly buildingName: TownBuildingName }
+  /** On the threshold of a Briar Hollow building. */
+  | { readonly kind: 'briarHollowBuilding'; readonly buildingId: VillageBuildingId };
 
 /** One stack of items placed in a fixed slot. */
 export interface PlaytestStack {
@@ -82,6 +88,16 @@ export interface PlaytestBlueprintsSetup {
   /** Whether Merrit's pasture fence stands rebuilt all round, or not a section of it. */
   readonly fence: 'unbuilt' | 'built';
   readonly grain: number;
+}
+
+/**
+ * Wendell's construction contracts open: "The Borrowed Blueprints" finished
+ * outright (the Plea won, every plan held, both stations upgraded), and,
+ * when `lastSpotAt` names a building, a contract already issued there with
+ * every spot but its last one done and Wendell's introduction already given.
+ */
+export interface PlaytestContractsSetup {
+  readonly lastSpotAt?: VillageBuildingId;
 }
 
 export interface PlaytestPreset {
@@ -142,6 +158,8 @@ export interface PlaytestPreset {
   readonly briarHollowUnlockAll?: boolean;
   /** Fenna's side quest already at a step; see {@link PlaytestBlueprintsSetup}. */
   readonly briarHollowBlueprints?: PlaytestBlueprintsSetup;
+  /** Construction contracts unlocked, and optionally one nearly finished; see {@link PlaytestContractsSetup}. */
+  readonly constructionContracts?: PlaytestContractsSetup;
 }
 
 const HOARDER: PlaytestPreset = {
@@ -934,6 +952,62 @@ const BLUEPRINTS_STATIONS: PlaytestPreset = {
   },
 };
 
+/** The contracts presets' stockpile: comfortably more than any one contract's bill. */
+const CONTRACTS_PRESET_BOARDS = 40;
+const CONTRACTS_PRESET_ROPE = 10;
+const CONTRACTS_PRESET_STONE = 50;
+
+const CONTRACTS_PRESET_TREADMILLS = 2;
+/**
+ * The hotbar slot the HUD labels 7 (keys run 1 to 8 over indices 0 to 7). Not
+ * the reserved quest slot, which is the eighth: the next quest item picked up
+ * would overwrite the stone there.
+ */
+const CONTRACTS_ANCHOR_HOTBAR_IDX = 6;
+
+/**
+ * Outside Plumbline Farm with the Borrowed Blueprints finished, so Wendell
+ * offers construction contracts, and the boards, rope and stone to work one.
+ * The Plea is complete, so the Wayfinder's Anchor on Carl's hotbar can carry
+ * the party between the town and Briar Hollow.
+ */
+const CONTRACTS: PlaytestPreset = {
+  ...BRIAR_HOLLOW_VILLAGE,
+  id: 'contracts',
+  description:
+    "Outside Plumbline Farm, Borrowed Blueprints done, Wendell's contracts open, Anchor in hand",
+  spawn: { kind: 'townBuildingDoor', buildingName: 'Plumbline Farm' },
+  human: {
+    ...BRIAR_HOLLOW_VILLAGE.human,
+    constructionLevel: BLUEPRINTS_PRESET_CONSTRUCTION,
+    hotbar: BRIAR_HOLLOW_VILLAGE.human.hotbar.map((stack, slotIdx) =>
+      slotIdx === CONTRACTS_ANCHOR_HOTBAR_IDX ? { id: 'wayfinders_anchor', quantity: 1 } : stack,
+    ),
+    bag: [
+      ...withQuantities(BRIAR_HOLLOW_VILLAGE.human.bag, {
+        wood_board: CONTRACTS_PRESET_BOARDS,
+        rope: CONTRACTS_PRESET_ROPE,
+        stone: CONTRACTS_PRESET_STONE,
+      }),
+      { id: 'gym_treadmill', quantity: CONTRACTS_PRESET_TREADMILLS },
+    ],
+  },
+  cat: { ...BRIAR_HOLLOW_VILLAGE.cat, constructionLevel: BLUEPRINTS_PRESET_CONSTRUCTION },
+  constructionContracts: {},
+};
+
+/**
+ * A contract at the Mayor's Hall with one spot left to work, the party on the
+ * hall's threshold with the materials for it, and the mayor inside to pay out.
+ */
+const CONTRACTS_LAST_SPOT: PlaytestPreset = {
+  ...CONTRACTS,
+  id: 'contracts-last-spot',
+  description: "Construction contract at the Mayor's Hall, every spot done but one",
+  spawn: { kind: 'briarHollowBuilding', buildingId: 'hall' },
+  constructionContracts: { lastSpotAt: 'hall' },
+};
+
 /** Carl's Resourcing in the thralls preset: the level the summon unlocks at. */
 const THRALL_PRESET_HUMAN_RESOURCING = 10;
 /** Donut's: the top level, which summons three at once. */
@@ -996,6 +1070,8 @@ export const PLAYTEST_PRESETS: readonly PlaytestPreset[] = [
   BLUEPRINTS_HARVEST,
   BLUEPRINTS_ESCORT,
   BLUEPRINTS_STATIONS,
+  CONTRACTS,
+  CONTRACTS_LAST_SPOT,
   RESOURCING_THRALLS,
 ];
 

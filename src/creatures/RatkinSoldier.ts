@@ -14,6 +14,9 @@ import {
 } from '../sprites/ratkinCastSprite';
 import { ratkinCastRow } from '../sprites/art/ratkinCastFigure';
 import { TimedSpeech } from '../sprites/speechBubble';
+import { drawQuestBeacon } from '../sprites/questBeacon';
+import { drawQuestMarker, questMarkerColorFor } from '../sprites/questNPCSprite';
+import type { NPCMarkerType } from './QuestNPC';
 import { GHOUL_ATTACK_COOLDOWN_FRAMES, GHOUL_ATTACK_DAMAGE, GHOUL_HP } from './RuinsGhoul';
 
 /**
@@ -272,6 +275,8 @@ export class RatkinSoldier extends Mob {
   gateCentre: { readonly x: number; readonly y: number } | null = null;
   /** Whoever the soldier is talking to; it stands and faces them. */
   talkPartner: { readonly x: number; readonly y: number } | null = null;
+  /** The glyph a questline puts over this soldier, written by `SoldierSystem` each frame. */
+  questMarker: NPCMarkerType = 'none';
 
   /** What the soldier is calling out; drawn by `SoldierSystem` over every body. */
   readonly speech = new TimedSpeech();
@@ -988,6 +993,12 @@ export class RatkinSoldier extends Mob {
     const sx = this.x - camX;
     const sy = this.y - camY;
     const { action, progress } = this.drawAction();
+    const markerColor =
+      this.downed || this.talkPartner !== null ? undefined : questMarkerColorFor(this.questMarker);
+    // Behind the body, so the column stands behind the soldier and follows them frame by frame.
+    if (markerColor !== undefined) {
+      drawQuestBeacon(ctx, sx, sy, tileSize, camX, camY, performance.now(), markerColor);
+    }
     const heading =
       this.facingX === 0 && this.facingY === 0
         ? { x: 0, y: 1 }
@@ -1005,6 +1016,10 @@ export class RatkinSoldier extends Mob {
     if (this.downed) {
       this.renderKnockedOutOverlay(ctx, sx, sy);
       return;
+    }
+    if (markerColor !== undefined) {
+      const glyph = this.questMarker === 'question' ? '?' : '!';
+      drawQuestMarker(ctx, sx, artTopY, tileSize, glyph, markerColor);
     }
     this.renderMobHealthBar(ctx, sx, sy, artTopY);
   }

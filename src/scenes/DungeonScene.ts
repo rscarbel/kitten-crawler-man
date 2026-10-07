@@ -20,6 +20,7 @@ import { promptSurface } from '../ui/hud/prompt';
 import type { TopBandEntry } from '../ui/hud/topBand';
 import { hotbarPressInput, hotbarSlotModels } from '../systems/kits/hudHotbar';
 import { toastBagFullLosses } from '../systems/bagFullToasts';
+import { interiorRoomOwnedByStory } from '../systems/interiorStoryOwnership';
 import { GameMap } from '../map/GameMap';
 import { DEFAULT_DUNGEON_FLOOR_THEME, setDungeonFloorTheme } from '../map/dungeon/floorTheme';
 import type { GameProgressInput } from '../auth/AuthClient';
@@ -83,7 +84,7 @@ import {
 } from '../ui/WorldArrow';
 import { drawObjectiveBeacon } from '../ui/ObjectiveBeacon';
 import {
-  availableTargets,
+  objectiveBeamTargets,
   characterTarget,
   collectTrackerEntries,
   isOutstanding,
@@ -92,6 +93,7 @@ import {
   type TrackerEntry,
   type TrackerTarget,
 } from '../systems/questTracker';
+import { releaseContractAutoPinOnEnd } from '../systems/constructionContracts/contractQuest';
 import { SafeRoomSystem, type SafeRoomInfo } from '../systems/SafeRoomSystem';
 import { SkillPointReminderSystem } from '../systems/SkillPointReminderSystem';
 import { BopcaSystem } from '../systems/BopcaSystem';
@@ -2509,6 +2511,15 @@ export class DungeonScene extends GameplayScene {
                 ),
               midgeEscortCarry: this.midgeEscortCarry,
               travelUnlocks: this.travelUnlocks,
+              flyCoins: (coins, worldX, worldY) => {
+                const cam = this.camera();
+                this.rewardFly.enqueueCoins(coins, worldX - cam.x, worldY - cam.y);
+              },
+              skyfowlRoomOwnedByStory: (buildingName) =>
+                interiorRoomOwnedByStory(buildingName, {
+                  murderStage: this.murderQuestProgress.stage,
+                  anchor: this.anchorQuestProgress,
+                }),
             })
           : null;
       // Regrowth must never stand a rock or a tree back up under a trebuchet or a snare.
@@ -3297,6 +3308,8 @@ export class DungeonScene extends GameplayScene {
       }
     });
 
+    releaseContractAutoPinOnEnd(bus, this.journalProgress);
+
     bus.on('questFailed', (e) => {
       if (e.questId === DEFEND_QUEST_ID) {
         this.human.inventory.clearQuestItem('quest_wood_board');
@@ -3785,14 +3798,7 @@ export class DungeonScene extends GameplayScene {
         y <= camY + viewportHeight() + reach
       );
     };
-    const pinned = this.pinnedObjectiveTile;
-    if (pinned !== null && pinned.wearsOwnMarker !== true && inView(pinned.x, pinned.y)) {
-      return true;
-    }
-    for (const target of availableTargets(this._trackerEntries)) {
-      if (target.wearsOwnMarker !== true && inView(target.x, target.y)) return true;
-    }
-    return false;
+    return this.objectiveBeamTargets().some((target) => inView(target.x, target.y));
   }
 
   /**
@@ -3833,28 +3839,10 @@ export class DungeonScene extends GameplayScene {
     }
   }
 
-  /**
-   * Every place that gets a beam this frame, each once.
-   *
-   * A pinned quest that is still only on offer is also in the available list;
-   * drawing it twice would stack two additive beams at double brightness.
-   */
+  /** Every place that gets a beam this frame; see the `objectiveBeamTargets` it wraps. */
   private objectiveBeamTargets(): ReadonlyArray<TrackerTarget> {
     if (this.gameOver || this.menus.pauseScreen.isOpen) return [];
-    const pinned = this.pinnedObjectiveTile;
-    const beams: TrackerTarget[] = [];
-    let pinnedAlreadyLit = false;
-    for (const target of availableTargets(this._trackerEntries)) {
-      if (target.wearsOwnMarker === true) continue;
-      if (pinned !== null && pinned.x === target.x && pinned.y === target.y) {
-        pinnedAlreadyLit = true;
-      }
-      beams.push(target);
-    }
-    if (pinned !== null && pinned.wearsOwnMarker !== true && !pinnedAlreadyLit) {
-      beams.push(pinned);
-    }
-    return beams;
+    return objectiveBeamTargets(this.pinnedObjectiveTile, this._trackerEntries);
   }
 
   /**
@@ -5669,7 +5657,11 @@ export class DungeonScene extends GameplayScene {
     if (this.gameplayHalted) return null;
     if (this.citizenDialogTarget !== null || this.signDialogTarget !== null) return dismiss;
     const village = this.briarHollowKit;
-    if (village?.isConversationOpen === true || village?.recruiter?.isDialogOpen === true) {
+    if (
+      village?.isConversationOpen === true ||
+      village?.recruiter?.isDialogOpen === true ||
+      village?.contracts?.isFollowUpOpen === true
+    ) {
       return () => void village.dismissDialog();
     }
     return null;
@@ -8086,6 +8078,8 @@ export class DungeonScene extends GameplayScene {
       difficultyStats.recordDeath();
       this.gameStats.recordDeath();
       this.barriers.cancelConstruct();
+      // The death screen stops the village's ticks, so a contract's work loop would play on under it.
+      this.briarHollowKit?.contracts?.cancelWork();
       const deathCause = resolveDeathCause(
         this.human,
         this.cat,

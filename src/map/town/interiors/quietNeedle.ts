@@ -26,7 +26,16 @@
 
 import { INTERIOR_INK_FLOOR, INTERIOR_WALL } from '../../tileTypes';
 import { TOWN_INTERIOR_PROPS } from '../../../sprites/art/townInterior/townInteriorProps';
-import { prop, tile, tileColumn, tileRect, tileRow, type TownInteriorLayoutEntry } from './types';
+import {
+  contractTarget,
+  prop,
+  tile,
+  tileColumn,
+  tileRect,
+  tileRow,
+  type TownInteriorLayoutEntry,
+} from './types';
+import type { ContractAreaRecord } from '../../contractAreas';
 
 /** The flash wall's two design sets, so its two runs never repeat a sheet. */
 const FLASH_SET_WEST = 0;
@@ -39,13 +48,68 @@ const WAITING_CARPET_COLOURWAY = 3;
 /** The arm lamp's reach: variant 0 reaches east, over the chair it stands west of. */
 const LAMP_REACHES_EAST = 0;
 
-export function buildQuietNeedleLayout(w: number, h: number): TownInteriorLayoutEntry[] {
+const CONTRACT_SITE = 'quiet_needle';
+const WAITING_FLOOR_SPOT_W = 3;
+const PLASTER_SPOT_W = 3;
+
+/** The alcove's north wall and chair, shared by the layout and its contract rects. */
+function needleAlcove(h: number) {
   const westCol = 1;
-  const eastWallCol = w - 2;
   const southRow = h - 2;
   const northRow = 1;
   const partitionRow = 6;
   const workroomLastRow = partitionRow - 1;
+  const cabinetCol = westCol;
+  const chartCol = cabinetCol + TOWN_INTERIOR_PROPS.pigment_cabinet.footprint.w + 1;
+  const chairRow = northRow + 2;
+  const chairCol = westCol + 1;
+  const chairWidth = TOWN_INTERIOR_PROPS.ink_chair.footprint.w;
+  // The tile between the cabinet and the charts stays bare: it is the only
+  // floor touching the alcove's north wall, so the plaster is worked from it.
+  const plasterCol = chartCol - 1;
+  return {
+    westCol,
+    southRow,
+    northRow,
+    partitionRow,
+    workroomLastRow,
+    cabinetCol,
+    chartCol,
+    chairRow,
+    chairCol,
+    chairWidth,
+    plasterCol,
+  };
+}
+
+/** The Quiet Needle's floor and wall rects a construction contract can mark, keyed by spot id. */
+export function buildQuietNeedleContractAreas(_w: number, h: number): ContractAreaRecord {
+  const { westCol, southRow, northRow, workroomLastRow, chairCol, chairWidth, plasterCol } =
+    needleAlcove(h);
+  return {
+    // The waiting room's south-west corner, under the violet settee's table.
+    waiting_floor: { kind: 'floor', x: westCol, y: southRow, w: WAITING_FLOOR_SPOT_W, h: 1 },
+    plaster: { kind: 'wall', x: plasterCol, y: northRow - 1, w: PLASTER_SPOT_W, h: 1 },
+    // At the foot of the ink chair's rug, where the customer steps down.
+    wash_floor: { kind: 'floor', x: chairCol, y: workroomLastRow, w: chairWidth, h: 1 },
+  };
+}
+
+export function buildQuietNeedleLayout(w: number, h: number): TownInteriorLayoutEntry[] {
+  const {
+    westCol,
+    southRow,
+    northRow,
+    partitionRow,
+    workroomLastRow,
+    cabinetCol,
+    chartCol,
+    chairRow,
+    chairCol,
+    chairWidth,
+    plasterCol,
+  } = needleAlcove(h);
+  const eastWallCol = w - 2;
   const waitingFirstRow = partitionRow + 1;
   const zoneDividerCol = 8;
   const backRoomFirstCol = zoneDividerCol + 1;
@@ -54,18 +118,14 @@ export function buildQuietNeedleLayout(w: number, h: number): TownInteriorLayout
   const backRoomDoorwayCol = 10;
 
   // ── The alcove ──
-  const cabinetCol = westCol;
-  const chartCol = cabinetCol + TOWN_INTERIOR_PROPS.pigment_cabinet.footprint.w + 1;
-  const chairRow = northRow + 2;
-  const chairCol = westCol + 1;
-  const chairWidth = TOWN_INTERIOR_PROPS.ink_chair.footprint.w;
   const lampCol = westCol;
   const trolleyCol = chairCol + chairWidth;
-  // Pushed back against the wall between the cabinet and the charts, not
-  // drawn up to the chair: the strip behind the chair is the alcove's only
-  // way to its west end, and a stool on it would wall that end off.
-  const nimStoolCol = chartCol - 1;
-  const nimStoolRow = northRow;
+  // The dead west end of the strip behind the chair: the strip is the
+  // alcove's only way west, and a stool anywhere else on it would cut it.
+  const nimStoolCol = westCol;
+  const nimStoolRow = chairRow - 1;
+  // The payout key it was first placed under, against the wall at the plaster.
+  const nimStoolId = `stool@${plasterCol},${northRow}`;
   const alcoveEastCol = zoneDividerCol - 1;
 
   // ── The back room ──
@@ -96,14 +156,20 @@ export function buildQuietNeedleLayout(w: number, h: number): TownInteriorLayout
   );
 
   entries.push(
-    prop(cabinetCol, northRow, 'pigment_cabinet'),
+    prop(
+      cabinetCol,
+      northRow,
+      'pigment_cabinet',
+      0,
+      contractTarget(CONTRACT_SITE, 'pigment_cabinet'),
+    ),
     prop(chartCol, northRow, 'feather_chart'),
     prop(alcoveEastCol, northRow, 'crock_cluster', 1),
     prop(chairCol, chairRow, 'rug_medium', 2),
-    prop(chairCol, chairRow, 'ink_chair'),
+    prop(chairCol, chairRow, 'ink_chair', 0, contractTarget(CONTRACT_SITE, 'ink_chair')),
     prop(lampCol, chairRow, 'arm_lamp', LAMP_REACHES_EAST),
     prop(trolleyCol, chairRow, 'needle_tray'),
-    prop(nimStoolCol, nimStoolRow, 'stool'),
+    prop(nimStoolCol, nimStoolRow, 'stool', 0, { id: nimStoolId }),
     // The stand the design book is left open on, beside the chair: the one
     // alcove table sits furthest from the south wall, so both waiting
     // customers (posted south) still take the waiting-room tables first.
@@ -114,7 +180,13 @@ export function buildQuietNeedleLayout(w: number, h: number): TownInteriorLayout
   );
 
   entries.push(
-    prop(grindingBenchCol, northRow, 'grinding_bench'),
+    prop(
+      grindingBenchCol,
+      northRow,
+      'grinding_bench',
+      0,
+      contractTarget(CONTRACT_SITE, 'grinding_bench'),
+    ),
     prop(grinderStoolCol, grinderStoolRow, 'stool'),
     prop(eastWallCol - 1, northRow, 'potion_shelf'),
     prop(eastWallCol, northRow, 'barrel'),
@@ -127,13 +199,25 @@ export function buildQuietNeedleLayout(w: number, h: number): TownInteriorLayout
   );
 
   entries.push(
-    prop(westFlashCol, waitingFirstRow, 'flash_wall', FLASH_SET_WEST),
+    prop(
+      westFlashCol,
+      waitingFirstRow,
+      'flash_wall',
+      FLASH_SET_WEST,
+      contractTarget(CONTRACT_SITE, 'flash_wall'),
+    ),
     prop(eastFlashCol, waitingFirstRow, 'flash_wall', FLASH_SET_EAST),
     prop(eastFlashLastCol + 2, waitingFirstRow, 'potted_bay'),
     prop(eastWallCol, waitingFirstRow, 'coat_stand'),
     prop(carpetCol, carpetRow, 'rug_large', WAITING_CARPET_COLOURWAY),
-    prop(westSetteeCol, settingRow, 'settee', SETTEE_VIOLET),
-    prop(westTableCol, tableRow, 'low_table'),
+    prop(
+      westSetteeCol,
+      settingRow,
+      'settee',
+      SETTEE_VIOLET,
+      contractTarget(CONTRACT_SITE, 'settee'),
+    ),
+    prop(westTableCol, tableRow, 'low_table', 0, contractTarget(CONTRACT_SITE, 'low_table')),
     prop(eastSetteeCol, settingRow, 'settee', SETTEE_TEAL),
     prop(eastTableCol, tableRow, 'side_table'),
     prop(eastWallCol, settingRow, 'potted_bay'),

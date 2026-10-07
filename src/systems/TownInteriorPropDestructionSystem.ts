@@ -398,6 +398,8 @@ function paintCrackOverlay(ctx: Ctx, cx: number, cy: number, seed: number): void
   ctx.restore();
 }
 
+const NOTHING_PROTECTED: ReadonlySet<string> = new Set();
+
 export class TownInteriorPropDestructionSystem {
   private readonly hp = new Map<string, PropHp>();
   private readonly brokenIds = new Set<string>();
@@ -407,6 +409,12 @@ export class TownInteriorPropDestructionSystem {
   private lootOwner: HumanPlayer | CatPlayer | null = null;
   /** Which of a kind's break cues plays next, so back-to-back breaks alternate. */
   private cueRotation = 0;
+  /**
+   * Placed-prop ids no blow may touch, asked live: a construction contract's
+   * targets, which a stray swing would otherwise flatten mid-job for the
+   * rest of the visit.
+   */
+  protectedIds: () => ReadonlySet<string> = () => NOTHING_PROTECTED;
 
   constructor(
     private readonly gameMap: GameMap,
@@ -475,10 +483,11 @@ export class TownInteriorPropDestructionSystem {
     facing: { x: number; y: number } | null,
   ): boolean {
     let hitAnything = false;
+    const protectedIds = this.protectedIds();
     for (const placed of this.gameMap.placedInteriorProps) {
       const spec = TOWN_INTERIOR_PROPS[placed.propId].destructible;
       if (spec === undefined) continue;
-      if (this.brokenIds.has(placed.id)) continue;
+      if (this.brokenIds.has(placed.id) || protectedIds.has(placed.id)) continue;
       const footprint = footprintOf(placed);
       if (!this.reachesFootprint(footprint, originX, originY, range, facing)) continue;
 

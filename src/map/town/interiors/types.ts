@@ -21,6 +21,7 @@
  */
 
 import type { TownInteriorPropId } from '../../../sprites/art/townInterior/townInteriorProps';
+import { contractPropId } from '../../contractAreas';
 
 export interface TownInteriorPropEntry {
   readonly kind: 'prop';
@@ -33,8 +34,11 @@ export interface TownInteriorPropEntry {
    * key a payout record (a room's `GameMap` — and with it `placedInteriorProps`'
    * array order — is rebuilt fresh every visit). Defaults to `propId@x,y`,
    * which is already stable as long as a building's layout doesn't move the
-   * instance; set explicitly only when a layout wants to keep an id fixed
-   * across a future position edit.
+   * instance; set explicitly when a layout wants to keep an id fixed across a
+   * future position edit, or when something else names this instance (a
+   * construction contract spot, via {@link contractTarget}). Giving a
+   * breakable that already shipped an explicit id changes its payout key, so
+   * it needs a `RENAMED_INTERIOR_PROPS` entry in `TownMemory`.
    */
   readonly id?: string;
   /**
@@ -79,6 +83,15 @@ export function prop(
   options: { readonly id?: string; readonly dropsLoot?: boolean } = {},
 ): TownInteriorPropEntry {
   return { kind: 'prop', x, y, propId, variant, id: options.id, dropsLoot: options.dropsLoot };
+}
+
+/**
+ * The `prop` options that make an entry the target of a construction
+ * contract spot. A contract finds its prop by this id alone, so an entry
+ * carrying it can move freely within its layout.
+ */
+export function contractTarget(siteSlug: string, spotId: string): { readonly id: string } {
+  return { id: contractPropId(siteSlug, spotId) };
 }
 
 /** A run of the same tile type along a row, inclusive of both ends. */

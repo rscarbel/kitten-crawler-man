@@ -13,6 +13,8 @@ import { MONGO_DEF } from '../abilities/mongo';
 import { getLevelDef, type LevelDef } from '../levels/index';
 import type { GameMap } from '../map/GameMap';
 import type { MobSpawnRule } from '../levels/types';
+import type { VillageBuildingId } from '../map/overworld/briarHollowLayout';
+import type { TownBuildingName } from '../map/town/townPlan';
 import type { PlaytestLoadout, PlaytestPreset, PlaytestSpawn } from './playtestPresets';
 
 /**
@@ -208,6 +210,28 @@ function questRoomApproachTile(gameMap: GameMap): { x: number; y: number } | nul
   return gameMap.isWalkable(inside.x, inside.y) ? inside : entranceTile;
 }
 
+/** Rows south of a town door the party stands, clear of the door itself so arriving never walks in. */
+const TOWN_DOORSTEP_ROWS_SOUTH = 1;
+
+function townBuildingDoorstep(
+  gameMap: GameMap,
+  buildingName: TownBuildingName,
+): { x: number; y: number } | null {
+  const entry = gameMap.buildingEntries.find((candidate) => candidate.name === buildingName);
+  if (entry === undefined) return null;
+  const doorstep = { x: entry.doorTile.x, y: entry.doorTile.y + TOWN_DOORSTEP_ROWS_SOUTH };
+  return gameMap.isWalkable(doorstep.x, doorstep.y) ? doorstep : null;
+}
+
+function briarHollowThreshold(
+  gameMap: GameMap,
+  buildingId: VillageBuildingId,
+): { x: number; y: number } | null {
+  const building = gameMap.briarHollow?.buildings.find((candidate) => candidate.id === buildingId);
+  const threshold = building?.doorways.find((tile) => gameMap.isWalkable(tile.x, tile.y));
+  return threshold === undefined ? null : { x: threshold.x, y: threshold.y };
+}
+
 /**
  * The tile a preset's spawn names, or null when this map has no such landmark —
  * in which case the caller falls back to the floor's own start tile.
@@ -227,5 +251,9 @@ export function resolvePlaytestSpawn(
       return questRoomApproachTile(gameMap);
     case 'briarHollowGate':
       return gameMap.briarHollow?.gate.inside ?? null;
+    case 'townBuildingDoor':
+      return townBuildingDoorstep(gameMap, spawn.buildingName);
+    case 'briarHollowBuilding':
+      return briarHollowThreshold(gameMap, spawn.buildingId);
   }
 }

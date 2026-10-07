@@ -3,7 +3,8 @@
  * seating chart in Brend's head says it has always been.
  *
  * The north wall is the house's face — the great fireplace dead centre with
- * the curled horns over it, torchères and trophies of arms either side, the
+ * the curled horns over it, torchères either side, a trophy of arms to the
+ * west and the bare stone of the fire wall to the east, the
  * guild's panelled booth in the west corner behind its screen, and Brend's
  * mirrored back bar in the east. The feast table runs down the middle of the
  * hall in walnut sections on a crimson carpet, with a carpet runner from the
@@ -11,22 +12,74 @@
  * south half, where the benches are deal and the mugs are clay.
  */
 
-import { prop, type TownInteriorLayoutEntry } from './types';
+import { contractTarget, prop, type TownInteriorLayoutEntry } from './types';
+import type { ContractAreaRecord } from '../../contractAreas';
 
 const ROAST = 0;
 const CANDELABRUM = 1;
 const FLAGONS = 2;
 const TARGE_AND_AXES = 0;
-const SHIELD_AND_SWORDS = 1;
 const SUPPER_TRESTLE = 0;
 const PIPE_AND_HAT_TRESTLE = 1;
 
+const CONTRACT_SITE = 'horned_flagon';
+/** The roast in the middle of the feast table, and the westernmost section's bench. */
+const CONTRACT_FEAST_TABLE_SECTION = 2;
+const CONTRACT_FEAST_BENCH_SECTION = 0;
+/** The inner west trestle of the labourers' end. */
+const CONTRACT_TRESTLE_INDEX = 3;
+const HEARTH_FLAGS_SPOT_H = 1;
+
+/** The fireplace wall, shared by the layout and by the contract rects in front of and beside it. */
+function flagonFireplaceWall(w: number) {
+  const northRow = 1;
+  const doorCol = Math.floor(w / 2);
+  const hearthWidth = 4;
+  const hearthCol = doorCol - hearthWidth / 2;
+  const hearthRugRow = northRow + 2;
+  const eastTorchereCol = hearthCol + hearthWidth;
+  // Left bare: the only floor touching the fire wall, where it is worked from.
+  const fireWallBareCol = eastTorchereCol + 1;
+  return {
+    northRow,
+    doorCol,
+    hearthWidth,
+    hearthCol,
+    hearthRugRow,
+    eastTorchereCol,
+    fireWallBareCol,
+  };
+}
+
+/** The Horned Flagon's floor and wall rects a construction contract can mark, keyed by spot id. */
+export function buildHornedFlagonContractAreas(w: number, _h: number): ContractAreaRecord {
+  const { northRow, hearthWidth, hearthCol, hearthRugRow, eastTorchereCol, fireWallBareCol } =
+    flagonFireplaceWall(w);
+  return {
+    // The one row of bare flags between the hearth rug and the feast
+    // carpet's north edge.
+    hearth_flags: {
+      kind: 'floor',
+      x: hearthCol,
+      y: hearthRugRow + 1,
+      w: hearthWidth,
+      h: HEARTH_FLAGS_SPOT_H,
+    },
+    fire_wall: {
+      kind: 'wall',
+      x: eastTorchereCol,
+      y: northRow - 1,
+      w: fireWallBareCol - eastTorchereCol + 1,
+      h: 1,
+    },
+  };
+}
+
 export function buildHornedFlagonLayout(w: number, h: number): TownInteriorLayoutEntry[] {
+  const { northRow, doorCol, hearthCol, hearthRugRow, eastTorchereCol } = flagonFireplaceWall(w);
   const westCol = 1;
   const eastCol = w - 2;
-  const northRow = 1;
   const southRow = h - 2;
-  const doorCol = Math.floor(w / 2);
 
   // ── The guild corner ────────────────────────────────────────────────────
   const boothWidth = 4;
@@ -43,14 +96,9 @@ export function buildHornedFlagonLayout(w: number, h: number): TownInteriorLayou
   const boothTorchereCol = boothScreenCol;
 
   // ── The fireplace wall ──────────────────────────────────────────────────
-  const hearthWidth = 4;
-  const hearthCol = doorCol - hearthWidth / 2;
-  const hearthRugRow = northRow + 2;
   const westTorchereCol = hearthCol - 1;
-  const eastTorchereCol = hearthCol + hearthWidth;
   const westTrophyCol = boothTorchereCol + 1;
   const guildBannerCol = westTrophyCol + 1;
-  const eastTrophyCol = eastTorchereCol + 1;
   const honouredChairRow = hearthRugRow;
 
   // ── Brend's bar ─────────────────────────────────────────────────────────
@@ -125,15 +173,26 @@ export function buildHornedFlagonLayout(w: number, h: number): TownInteriorLayou
   entries.push(
     prop(westCol, northRow, 'guild_booth'),
     prop(boothTableCol, boothTableRow, 'booth_table'),
-    prop(boothScreenCol, boothScreenRow, 'booth_screen'),
+    prop(
+      boothScreenCol,
+      boothScreenRow,
+      'booth_screen',
+      0,
+      contractTarget(CONTRACT_SITE, 'booth_screen'),
+    ),
     prop(boothTorchereCol, northRow, 'torchere'),
     prop(westTrophyCol, northRow, 'flagon_trophy', TARGE_AND_AXES),
-    prop(guildBannerCol, northRow, 'trophy_banner'),
+    prop(
+      guildBannerCol,
+      northRow,
+      'trophy_banner',
+      0,
+      contractTarget(CONTRACT_SITE, 'trophy_banner'),
+    ),
     prop(westTorchereCol, northRow, 'torchere'),
-    prop(hearthCol, northRow, 'flagon_hearth'),
+    prop(hearthCol, northRow, 'flagon_hearth', 0, contractTarget(CONTRACT_SITE, 'hearth')),
     prop(hearthCol, hearthRugRow, 'flagon_hearth_rug'),
     prop(eastTorchereCol, northRow, 'torchere'),
-    prop(eastTrophyCol, northRow, 'flagon_trophy', SHIELD_AND_SWORDS),
     prop(westTorchereCol, honouredChairRow, 'flagon_chair'),
     prop(eastTorchereCol, honouredChairRow, 'flagon_chair'),
   );
@@ -141,7 +200,7 @@ export function buildHornedFlagonLayout(w: number, h: number): TownInteriorLayou
   entries.push(
     prop(tabLedgerCol, northRow, 'tab_ledger'),
     prop(barCol, northRow, 'flagon_back_bar'),
-    prop(barCol, barRow, 'flagon_bar'),
+    prop(barCol, barRow, 'flagon_bar', 0, contractTarget(CONTRACT_SITE, 'bar')),
   );
   for (let rx = barCol; rx <= eastCol; rx += barStoolPitch)
     entries.push(prop(rx, barStoolRow, 'stool', 1));
@@ -152,15 +211,22 @@ export function buildHornedFlagonLayout(w: number, h: number): TownInteriorLayou
   );
   for (let section = 0; section < feastSections; section++) {
     const col = feastCol + section * feastSectionWidth;
+    const tableTarget =
+      section === CONTRACT_FEAST_TABLE_SECTION ? contractTarget(CONTRACT_SITE, 'feast_table') : {};
+    const benchTarget =
+      section === CONTRACT_FEAST_BENCH_SECTION ? contractTarget(CONTRACT_SITE, 'feast_bench') : {};
     entries.push(
-      prop(col, feastRow, 'feast_table', feastCourses[section]),
-      prop(col, feastBenchRow, 'feast_bench'),
+      prop(col, feastRow, 'feast_table', feastCourses[section], tableTarget),
+      prop(col, feastBenchRow, 'feast_bench', 0, benchTarget),
     );
   }
 
+  const contractTrestle = trestles[CONTRACT_TRESTLE_INDEX];
   for (const trestle of trestles) {
+    const trestleTarget =
+      trestle === contractTrestle ? contractTarget(CONTRACT_SITE, 'trestle') : {};
     entries.push(
-      prop(trestle.col, trestle.row, 'trestle_table', trestle.variant),
+      prop(trestle.col, trestle.row, 'trestle_table', trestle.variant, trestleTarget),
       prop(trestle.col, trestle.row + 1, 'deal_bench'),
     );
   }
