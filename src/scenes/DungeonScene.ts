@@ -6633,26 +6633,38 @@ export class DungeonScene extends GameplayScene {
           if (gesture.tap) this.collectWorldPickupAt(x, y);
           return;
         }
-        if (gesture.pointerId === this.touch.moveTouchId)
+        if (gesture.pointerId === this.touch.moveTouchId) {
           this.endWorldTouch(x, y, gesture.timeStamp);
+        } else {
+          const pressedAt = this.touch.endExtraFinger(gesture.pointerId, x, y);
+          if (pressedAt !== null) this.tapWorld(x, y, pressedAt);
+        }
         return;
       case 'cancel':
         if (gesture.pointerId === this.touch.moveTouchId) this.clearWorldTouch();
+        else this.touch.cancelExtraFinger(gesture.pointerId);
         return;
       case 'wheel':
         return;
     }
   }
 
-  /** The finger that walks the crawler: the first one down on the world. */
+  /**
+   * The finger that walks the crawler: the first one down on the world. Any
+   * finger after it only taps, leaving the walk running.
+   */
   private beginWorldTouch(
     pointerId: number,
     x: number,
     y: number,
     timeStamp: number | undefined,
   ): void {
-    if (this.touch.moveTouchId !== null) return;
-    this.touch.startMove(pointerId, x, y, timeStamp ?? performance.now());
+    const pressedAt = timeStamp ?? performance.now();
+    if (this.touch.moveTouchId !== null) {
+      this.touch.startExtraFinger(pointerId, x, y, pressedAt);
+      return;
+    }
+    this.touch.startMove(pointerId, x, y, pressedAt);
     this.structureHold.begin(this.fingerOnWorkableStructure(x, y), x, y);
     const starter = this.active();
     this.holdStartActivePos = { x: starter.x, y: starter.y };
@@ -6661,7 +6673,7 @@ export class DungeonScene extends GameplayScene {
   private endWorldTouch(x: number, y: number, timeStamp: number | undefined): void {
     if (this.touch.tapStart !== null) {
       if (this.touch.isTap(x, y)) {
-        this.tapWorld(x, y, timeStamp);
+        this.tapWorld(x, y, this.touch.tapStartEventMs ?? timeStamp ?? performance.now());
       } else if (this.touch.heldInPlace(x, y) && !this.crawlerWalkedDuringHold()) {
         // Held roughly in place past tap duration, rather than dragged — and
         // without the hold having walked the crawler, which is just the end of
@@ -6687,8 +6699,11 @@ export class DungeonScene extends GameplayScene {
    * charged dynamite at the tap, picks up loot or opens a chest under it, is
    * offered to whoever the crawler walked up to mid-conversation, works the
    * village, boards a grate, and otherwise interacts or swings toward it.
+   *
+   * @param pressedAt When the tapping finger came down, which a timed press
+   *   is graded by.
    */
-  private tapWorld(x: number, y: number, timeStamp: number | undefined): void {
+  private tapWorld(x: number, y: number, pressedAt: number): void {
     if (this.destruction.dynamite.isCharging && this.human.isActive) {
       const cam = this.camera();
       const ddx = x + cam.x - (this.human.x + TILE_SIZE / 2);
@@ -6725,7 +6740,6 @@ export class DungeonScene extends GameplayScene {
       this.briarHollowLastWorldTapAt = now;
       // A live scythe swing takes every tap as its timed press, graded by when
       // the finger came down, however soon after the tap that started it.
-      const pressedAt = this.touch.tapStartEventMs ?? timeStamp ?? performance.now();
       const villageTook =
         isDoubleTap && !kit.claimsWorldTaps
           ? kit.handleDoubleTap(x, y, cam.x, cam.y, this.active())

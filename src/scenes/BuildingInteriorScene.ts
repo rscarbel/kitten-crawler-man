@@ -4319,8 +4319,17 @@ export class BuildingInteriorScene extends GameplayScene {
     const isMoveTouch = gesture.pointerId === this.touch.moveTouchId;
     switch (gesture.kind) {
       case 'down':
-        if (gesture.source === 'touch' && this.touch.moveTouchId === null) {
+        if (gesture.source !== 'touch') return;
+        // A finger after the walking one only taps, leaving the walk running.
+        if (this.touch.moveTouchId === null) {
           this.touch.startMove(gesture.pointerId, x, y, gesture.timeStamp);
+        } else {
+          this.touch.startExtraFinger(
+            gesture.pointerId,
+            x,
+            y,
+            gesture.timeStamp ?? performance.now(),
+          );
         }
         return;
       case 'move':
@@ -4331,12 +4340,18 @@ export class BuildingInteriorScene extends GameplayScene {
           if (gesture.tap) this.collectLootAt(x, y);
           return;
         }
-        if (!isMoveTouch) return;
+        if (!isMoveTouch) {
+          if (this.touch.endExtraFinger(gesture.pointerId, x, y) !== null) {
+            this.handleWorldTap(x, y);
+          }
+          return;
+        }
         if (this.touch.isTap(x, y)) this.handleWorldTap(x, y);
         this.touch.endMove();
         return;
       case 'cancel':
         if (isMoveTouch) this.touch.endMove();
+        else this.touch.cancelExtraFinger(gesture.pointerId);
         return;
       case 'wheel':
         return;
