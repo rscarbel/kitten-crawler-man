@@ -63,12 +63,17 @@ export interface BossRoomFightListener {
  */
 export interface BossRoomDressing extends GameSystem, GroundHazardSource, BossFightHooks {
   update(ctx: SystemContext): void;
-  /** Floor paint over the chunk bake and under every entity: stains, telegraphs, belts. */
+  /**
+   * Floor paint over the chunk bake and under every entity: stains, telegraphs, belts.
+   *
+   * @param promptFor The crawler the room may float interaction prompts for,
+   *   or undefined while a press from them would not reach the room.
+   */
   renderGround(
     ctx: CanvasRenderingContext2D,
     camX: number,
     camY: number,
-    active: HumanPlayer | CatPlayer,
+    promptFor: HumanPlayer | CatPlayer | undefined,
   ): void;
   /**
    * Live objects to merge into the Y-sorted pass this frame. Return a list the

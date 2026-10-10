@@ -628,7 +628,7 @@ function findBossHealerTile(
         if (Math.max(Math.abs(dx), Math.abs(dy)) !== radius) continue;
         const tileX = centreTileX + dx;
         const tileY = centreTileY + dy;
-        if (!map.isWalkable(tileX, tileY) || map.isStairwellTile(tileX, tileY)) continue;
+        if (!map.isMobSpawnTile(tileX, tileY)) continue;
         if (!isAllowed(tileX, tileY)) continue;
         const tileCentreX = tileX * ts + ts / 2;
         const tileCentreY = tileY * ts + ts / 2;

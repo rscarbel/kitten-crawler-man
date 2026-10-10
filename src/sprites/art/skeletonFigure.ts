@@ -23,6 +23,7 @@ import {
   FIGURE_HEIGHT,
   SHOULDER_JOINT_DROP,
   SHOULDER_Y,
+  SKELETON_EYE_RIG,
   type ArmAngles,
   type Pt,
   type SkeletonPose,
@@ -1013,6 +1014,29 @@ export function figureScaleOf(variant: SkeletonVariant): number {
 }
 
 /**
+ * How far down its tile a skeleton's feet stand, in tiles: a pose is anchored
+ * here rather than at the tile's foot edge.
+ */
+const GROUND_LINE_TILE_Y = 0.5;
+
+/**
+ * Where a standing skeleton's eye sockets are inside its creature's tile, in
+ * tiles from the tile's top-left, shaped as `Mob`'s eye placement. The skull of
+ * every variant stands well above the tile its feet are on.
+ */
+export function skeletonEyePlacement(variant: SkeletonVariant) {
+  const tilesPerRigUnit = figureScaleOf(variant);
+  const eyeHeight = GROUND_LINE_TILE_Y + SKELETON_EYE_RIG.y * tilesPerRigUnit;
+  return {
+    sideForward: SKELETON_EYE_RIG.profileForward * tilesPerRigUnit,
+    sideHeight: eyeHeight,
+    sideSpacing: SKELETON_EYE_RIG.profileWidth * tilesPerRigUnit,
+    frontHeight: eyeHeight,
+    frontSpacing: SKELETON_EYE_RIG.frontSpread * 2 * tilesPerRigUnit,
+  };
+}
+
+/**
  * Cell pixels per unit of a loose bone's own drawing space.
  *
  * Scaled by the variant exactly like the figure is: the pieces are drawn at
@@ -1129,7 +1153,7 @@ function paintSkeletonFrame(
   }
   const scale = TILE_SCALE * figureScaleOf(variant);
   ctx.save();
-  ctx.translate(cell.frameWidth / 2, cell.tileY + TILE_SCALE / 2);
+  ctx.translate(cell.frameWidth / 2, cell.tileY + TILE_SCALE * GROUND_LINE_TILE_Y);
   // Scaled about the ground line, so a taller variant still stands on the tile
   // its feet belong to rather than floating above it.
   ctx.scale(scale, scale);

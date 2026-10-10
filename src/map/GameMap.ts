@@ -107,6 +107,7 @@ import {
 } from './tiles/bossRooms/colosseumGeometry';
 import {
   generateDungeon,
+  STAIRWELL_FOOTPRINT_SPAN,
   type DungeonLevelOptions,
   type GenerateDungeonOptions,
   type SafeRoomData,
@@ -1280,8 +1281,8 @@ export class GameMap {
   }
 
   private addToStairwellBlockedSet(s: { x: number; y: number }): void {
-    for (let dy = 0; dy <= 1; dy++) {
-      for (let dx = 0; dx <= 1; dx++) {
+    for (let dy = 0; dy < STAIRWELL_FOOTPRINT_SPAN; dy++) {
+      for (let dx = 0; dx < STAIRWELL_FOOTPRINT_SPAN; dx++) {
         this.stairwellBlockedSet.add(tileCoordKey(s.x + dx, s.y + dy));
         this.addBlockFlag(s.x + dx, s.y + dy, BLOCK_STAIRWELL);
       }
@@ -1644,7 +1645,42 @@ export class GameMap {
     maxDistanceTiles = MOB_MAX_PATH_DISTANCE_TILES,
     forHostile = false,
   ): Array<{ x: number; y: number }> {
+    return this.searchPath(startX, startY, goalX, goalY, maxDistanceTiles, forHostile, false);
+  }
+
+  /**
+   * {@link findPath} for a mob's own feet, which `Mob.moveWithCollision` never
+   * lets onto a stairwell: a route through one is a route the mob stalls on,
+   * pressing against the footprint's edge. The goal itself may be a stairwell
+   * tile, so a mob can still close on a crawler standing on the stairs.
+   */
+  findMobPath(
+    startX: number,
+    startY: number,
+    goalX: number,
+    goalY: number,
+    maxDistanceTiles = MOB_MAX_PATH_DISTANCE_TILES,
+    forHostile = false,
+  ): Array<{ x: number; y: number }> {
+    return this.searchPath(startX, startY, goalX, goalY, maxDistanceTiles, forHostile, true);
+  }
+
+  private searchPath(
+    startX: number,
+    startY: number,
+    goalX: number,
+    goalY: number,
+    maxDistanceTiles: number,
+    forHostile: boolean,
+    avoidStairwells: boolean,
+  ): Array<{ x: number; y: number }> {
     if (!this.isWalkableFor(goalX, goalY, forHostile)) return [];
+    const isStep = (tileX: number, tileY: number): boolean => {
+      if (!this.isWalkableFor(tileX, tileY, forHostile)) return false;
+      if (!avoidStairwells) return true;
+      const isGoal = tileX === goalX && tileY === goalY;
+      return isGoal || !this.isStairwellTile(tileX, tileY);
+    };
     if (startX === goalX && startY === goalY) return [{ x: goalX, y: goalY }];
 
     const goalDistanceTiles = Math.max(Math.abs(goalX - startX), Math.abs(goalY - startY));
@@ -1688,7 +1724,7 @@ export class GameMap {
 
       for (let i = 0; i < CARDINAL_STEPS.length; i++) {
         const step = CARDINAL_STEPS[i];
-        this.cardinalWalkable[i] = this.isWalkableFor(cx + step.dx, cy + step.dy, forHostile);
+        this.cardinalWalkable[i] = isStep(cx + step.dx, cy + step.dy);
         if (!this.cardinalWalkable[i]) continue;
         this.relaxNeighbor(
           cx + step.dx,
@@ -1708,7 +1744,7 @@ export class GameMap {
         if (!this.cardinalWalkable[diagonal.vertical]) continue;
         const nx = cx + diagonal.dx;
         const ny = cy + diagonal.dy;
-        if (!this.isWalkableFor(nx, ny, forHostile)) continue;
+        if (!isStep(nx, ny)) continue;
         this.relaxNeighbor(
           nx,
           ny,
@@ -2187,6 +2223,15 @@ export class GameMap {
   isStairwellTile(tileX: number, tileY: number): boolean {
     if (!this.isInsideGrid(tileX, tileY)) return false;
     return (this.blockedMask[tileIndex(tileX, tileY, this.maskWidth)] & BLOCK_STAIRWELL) !== 0;
+  }
+
+  /**
+   * Whether a mob may be set down on this tile by any spawner. A stairwell is
+   * walkable for the crawlers but never for a mob's own steps, so a mob placed
+   * on one starts inside ground its movement refuses.
+   */
+  isMobSpawnTile(tileX: number, tileY: number): boolean {
+    return this.isWalkable(tileX, tileY) && !this.isStairwellTile(tileX, tileY);
   }
 
   /**

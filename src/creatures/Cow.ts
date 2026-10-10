@@ -1325,7 +1325,7 @@ export class Cow extends Mob {
    */
   private wayBackTo(entry: TilePoint): TilePoint[] {
     const here = this.tile;
-    const path = this.map?.findPath(here.x, here.y, entry.x, entry.y) ?? [];
+    const path = this.map?.findMobPath(here.x, here.y, entry.x, entry.y) ?? [];
     return path.length > 1 ? path.slice(1) : [entry];
   }
 

@@ -1,6 +1,8 @@
 import type { Player } from '../Player';
 import { RisingSkeleton } from './RisingSkeleton';
+import type { EyePlacement } from './Mob';
 import { SKELETON_ARCHER_BODY_PART_KEY, drawSkeletonArcherSprite } from '../sprites/skeletonSprite';
+import { skeletonEyePlacement } from '../sprites/art/skeletonFigure';
 import { BONE_ARROW_DRAW_FRAMES, boneArrowReleaseFrame } from '../sprites/skeletonTiming';
 import { prewarmBoneArrow } from '../sprites/skeletonEffectsSprite';
 import { SKELETON_ESCORT_XP } from './SkeletonWarrior';
@@ -53,7 +55,13 @@ const ARCHER_TACTICS: readonly TacticsTrait[] = ['kite', 'regroup'];
 
 const ARCHER_SIEGE_STRUCTURE_MULTIPLIER = 0;
 
+const ARCHER_SKELETON_EYES = skeletonEyePlacement('archer');
+
 export class SkeletonArcher extends RisingSkeleton {
+  protected override get eyePlacement(): EyePlacement {
+    return ARCHER_SKELETON_EYES;
+  }
+
   readonly xpValue = SKELETON_ESCORT_XP;
   protected coinDropMin = COIN_DROP_MIN;
   protected coinDropMax = COIN_DROP_MAX;

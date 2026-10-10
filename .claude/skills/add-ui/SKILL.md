@@ -236,7 +236,7 @@ surface.
 - `text(ui, rect, { text, role?, style?, color?, align?, valign?, wrap?, maxLines?, tabular?, halo? })` — every string. Without `wrap`, a long line ends in an ellipsis; `maxLines` caps a wrapped block. `tabular: true` (or `tabularNumber`) for numbers that change every frame. `measureText`, `measureTextHeight`, `lineHeightOf`, `wrapToWidth` for layout.
 - `button(ui, rect, { id?, label, variant?, size?, icon?, selected?, disabled?, primary?, sound?, onTap })` — `measureButton`, `buttonHeight`.
 - `iconButton(ui, rect, { id, icon, label, variant?, size?, selected?, disabled?, badge?, tooltip?, primary?, sound?, onTap })` — the label is a tooltip, never drawn; `iconButtonSize`.
-- `panel(ui, { id, title?, subtitle?, width, height?, contentHeight?, onClose?, onBack?, footer?, footerLayout?, footerSize?, scrollBody?, content?, scrim?, onScrimTap?, onCardTap? })` → `{ frame, body, sheet }` — the one container; see below.
+- `panel(ui, { id, title?, subtitle?, header?, width, height?, contentHeight?, onClose?, onBack?, footer?, footerLayout?, footerSize?, scrollBody?, content?, scrim?, onScrimTap?, onCardTap? })` → `{ frame, body, sheet }` — the one container; see below.
 - `scrollView(ui, rect, { id, contentHeight, draw })` → `{ offset, maxOffset, visible }` — wheel, drag anywhere, draggable thumb; `scrollIntoView`.
 - `tabs(ui, rect, { id, items, selected, onSelect, variant? })` — `segmented` or `underline`; `measureTabs`.
 - `listRow(ui, rect, { id, title, subtitle?, leading?, trailing?, accent?, selected?, disabled?, onTap?, … })` — priced rows, journal rows, roster rows; `listRowHeight`.
@@ -268,7 +268,10 @@ hover/press treatment). Feature code never calls it; it calls widgets.
   `scrollView`. Otherwise fill the returned `body` yourself.
 - A panel blocks its own frame; with a scrim (the default) it blocks the whole
   screen. `onClose` draws ✕ (Escape is the surface's own `close`); `onBack`
-  draws a back chevron for drill-in navigation. Helpers: `panelBodyWidth`,
+  draws a back chevron for drill-in navigation. A header row that carries its
+  own controls (tabs, a switcher) passes `header: (rect) => …` instead of a
+  title: the panel keeps ✕ and the chevron and clips the slot between them, so
+  ✕ can never be pushed off a phone. Never draw a ✕ of your own. Helpers: `panelBodyWidth`,
   `panelBodyMaxHeight`, `panelChromeHeight`.
 - **Motion:** a surface fades in and scales from `OPEN_SCALE_FROM` (a sheet
   slides) over `motion.base`; close is instant; hover brightens and strengthens
@@ -565,6 +568,12 @@ render:loading-screen`.
   interiors, plus every gallery fixture, must be reachable and operable by
   keyboard alone while it is the topmost focus scope. Its self-test feeds it a
   ringless halting surface and a focus-stealing floating one and must catch both.
+  It also replays every settled gallery fixture on phones (both ways up, every
+  UI size, with and without a notch) through `scripts/closeButtonAudit.ts`:
+  each ✕ or `leave` button must sit inside the safe area, uncut and uncovered,
+  and a surface that shows one on desktop must show one on a phone. The scene
+  surfaces are replayed the same way on a notched phone each way up, in child
+  processes (`--phone-scenes=`), since density is decided once per load.
 - **`npm run render:ui-gallery`** — above. Also the HUD gates, kept on the
   current API, never deleted: `verify:hud-parity`, `gates:hud-column`,
   `gates:phone-hud`, `verify:interior-camera`, `verify:interior-hud-clicks`,

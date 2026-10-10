@@ -495,8 +495,10 @@ function spawnsOffTheStairwell(): { avoided: boolean; blindLandsOnIt: boolean } 
   const map = makeRoom();
   const behind = behindEastFacing(SPAWN_ROOM_TILE_X, SPAWN_ROOM_TILE_Y);
   map.setStairwellTiles([behind]);
-  const blind = findNearbyWalkableTile(map, behind.x, behind.y, SPAWN_SEARCH_RADIUS_TILES);
-  const blindLandsOnIt = blind !== null && map.isStairwellTile(blind.x, blind.y);
+  // A ring search that admitted stairwells would stop at radius zero: the
+  // requested tile is walkable, so it is the answer.
+  const blindLandsOnIt =
+    map.isWalkable(behind.x, behind.y) && map.isStairwellTile(behind.x, behind.y);
   const scene = buildSceneAround(
     'splash_zone',
     map,

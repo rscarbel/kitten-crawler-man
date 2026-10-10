@@ -3160,7 +3160,7 @@ export class DungeonScene extends GameplayScene {
               );
               const gtx = tx + ox;
               const gty = ty + oy;
-              if (!this.gameMap.isWalkable(gtx, gty)) continue;
+              if (!this.gameMap.isMobSpawnTile(gtx, gty)) continue;
               const spawned = createMob(rule.type, gtx, gty, this.gameMap);
               // Inherited rather than left at 1: these burst out of a mob the
               // party has just fought, and a level-1 grub swarm on floor 2 was
@@ -3974,7 +3974,7 @@ export class DungeonScene extends GameplayScene {
     for (let attempt = 0; attempt < FAIRY_CHEAT_ATTEMPTS && spawned < count; attempt++) {
       const tileX = originX + randomInt(-FAIRY_CHEAT_SPREAD_TILES, FAIRY_CHEAT_SPREAD_TILES);
       const tileY = originY + randomInt(-FAIRY_CHEAT_SPREAD_TILES, FAIRY_CHEAT_SPREAD_TILES);
-      if (!this.gameMap.isWalkable(tileX, tileY)) continue;
+      if (!this.gameMap.isMobSpawnTile(tileX, tileY)) continue;
       const mob = createMob(FAIRY_SPAWN_KEYS[kind], tileX, tileY, this.gameMap);
       if (!(mob instanceof Fairy)) continue;
       this.world.roster.add(mob);
@@ -5278,13 +5278,43 @@ export class DungeonScene extends GameplayScene {
    */
   private earlierSpaceLinkClaims(active: HumanPlayer | CatPlayer): boolean {
     return (
+      this.linksBeforeBarriersClaim(active) ||
+      this.barriers.wouldPickUp(active) ||
+      this.bossRoomDressings.wouldInteract(active)
+    );
+  }
+
+  /** {@link earlierSpaceLinkClaims} for the links ahead of a placed gym barrier. */
+  private linksBeforeBarriersClaim(active: HumanPlayer | CatPlayer): boolean {
+    return (
       this.treasureChests.wouldInteract(active) ||
       this.defendQuest.wouldInteract(active) ||
       this.spiderQuest.wouldInteract(active) ||
       this.circusQuest.wouldInteract(active) ||
-      this.murderQuest.wouldInteract(active) ||
-      this.bossRoomDressings.wouldInteract(active)
+      this.murderQuest.wouldInteract(active)
     );
+  }
+
+  /**
+   * Who the placed barriers and the boss rooms may float a prompt for this
+   * frame: nobody while a hostile in reach turns the press into a swing, and
+   * each only when no link ahead of it in the Space chain would take the press.
+   */
+  private gymPromptTargets(): {
+    barrier: HumanPlayer | CatPlayer | undefined;
+    bossRoom: HumanPlayer | CatPlayer | undefined;
+  } {
+    const active = this.active();
+    const pressReachesWorld =
+      !this.overlayOpen &&
+      !this.safeRoom.isEntityInSafeRoom(active) &&
+      this.shouldShowInteractionPrompts(active);
+    const barrierReached = pressReachesWorld && !this.linksBeforeBarriersClaim(active);
+    const bossRoomReached = barrierReached && !this.barriers.wouldPickUp(active);
+    return {
+      barrier: barrierReached ? active : undefined,
+      bossRoom: bossRoomReached ? active : undefined,
+    };
   }
 
   /**
@@ -6308,13 +6338,19 @@ export class DungeonScene extends GameplayScene {
     if (this.murderQuest.tryInteract(active)) {
       return true;
     }
+    // Ahead of the boss room: standing on a placed piece singles it out, where
+    // a gym rack answers anyone merely near it.
+    if (this.barriers.tryPickupNear(active)) {
+      this.audio?.play('picking_up_ground_object');
+      return true;
+    }
     if (this.bossRoomDressings.tryInteract(active)) {
       return true;
     }
     if (this.destruction.groundPickups.tryPickupNear(active)) {
       return true;
     }
-    if (this.arenaRoom.tryPickupNear(active) || this.barriers.tryPickupNear(active)) {
+    if (this.arenaRoom.tryPickupNear(active)) {
       this.audio?.play('picking_up_ground_object');
       return true;
     }
@@ -6750,7 +6786,10 @@ export class DungeonScene extends GameplayScene {
     this.triggerSpaceAction(x, y);
   }
 
-  /** Loot or an openable chest under a click or tap. Returns whether either took it. */
+  /**
+   * Loot, an openable chest or a gym piece in reach under a click or tap.
+   * Returns whether any took it.
+   */
   private collectWorldPickupAt(x: number, y: number): boolean {
     const active = this.active();
     const { x: camX, y: camY } = this.camera();
@@ -6767,7 +6806,14 @@ export class DungeonScene extends GameplayScene {
       };
       if (pointInRect(x, y, chestRect) && this.treasureChests.tryInteract(active)) return true;
     }
-    return false;
+    const worldX = x + camX;
+    const worldY = y + camY;
+    const gymPieceTaken =
+      this.barriers.tryPickupAt(worldX, worldY, active) ||
+      this.bossRoomDressings.parts.juicer?.tryPickupBenchAt(worldX, worldY, active) === true ||
+      this.arenaRoom.tryPickupAt(worldX, worldY, active);
+    if (gymPieceTaken) this.audio?.play('picking_up_ground_object');
+    return gymPieceTaken;
   }
 
   update(): void {
@@ -7176,6 +7222,7 @@ export class DungeonScene extends GameplayScene {
       loot: this.destruction.loot,
       groundPickups: this.destruction.groundPickups,
       interactionPromptsAllowed: this.shouldShowInteractionPrompts(this.active()),
+      gymPromptTargets: this.gymPromptTargets(),
       treasureChests: this.treasureChests,
       miniMap: this.miniMap,
       mongoSystem: this.mongoSystem,

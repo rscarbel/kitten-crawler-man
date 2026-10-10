@@ -6,7 +6,7 @@
 
 import type { InventoryItem } from '../../../core/ItemDefs';
 import { ITEM_DEF } from '../../../core/ItemDefs';
-import { inset, splitH, type Rect } from '../../core/geom';
+import { inset, splitH, splitV, type Rect } from '../../core/geom';
 import type { Ui } from '../../core/UiRoot';
 import type { ButtonVariant } from '../../theme/skins';
 import type { GlyphId } from '../../theme/glyphs';
@@ -77,6 +77,12 @@ function deltaText(delta: StatDelta): string {
   const sign = delta.delta > 0 ? '+' : MINUS_SIGN;
   return `${arrow} ${sign}${Math.abs(delta.delta)} ${STAT_ABBREVIATIONS[delta.stat]}`;
 }
+
+/** Which of the pane's parts a draw covers: everything, the scrolling text, or the pinned buttons. */
+type DetailPart = 'all' | 'info' | 'actions';
+
+/** Pinned buttons may take at most this share of a short pane; past it, everything scrolls. */
+const MAX_PINNED_ACTIONS_FRACTION = 0.5;
 
 interface DetailLayout {
   readonly headerH: number;
@@ -156,19 +162,47 @@ export function measureDetail(ui: Ui, width: number, model: DetailModel): number
   return layoutDetail(ui, width, model).total;
 }
 
-/** Draws the pane's content into `rect`, scrolling when it is taller. */
+/** The action buttons and hotbar picker stacked, as the pane draws them below the item's text. */
+function actionsBlockHeight(ui: Ui, layout: DetailLayout): number {
+  const { space, size } = ui.theme;
+  const actionsH = rowsHeight(layout.actionRows, size.control, space.sm);
+  const pickerH = rowsHeight(layout.pickerRows, size.control, space.xs);
+  if (actionsH > 0 && pickerH > 0) return actionsH + space.md + pickerH;
+  return actionsH + pickerH;
+}
+
+/**
+ * Draws the pane's content into `rect`, scrolling when it is taller. A short
+ * pane keeps the action buttons pinned under the scrolling text, so what the
+ * item can do is never below the fold.
+ */
 export function detailPane(ui: Ui, rect: Rect, id: string, model: DetailModel): void {
-  const naturalW = rect.w;
-  const natural = layoutDetail(ui, naturalW, model);
+  const { space } = ui.theme;
+  const natural = layoutDetail(ui, rect.w, model);
   if (natural.total <= rect.h) {
-    drawDetail(ui, rect, id, model, natural);
+    drawDetail(ui, rect, id, model, natural, 'all');
     return;
   }
-  scrollView(ui, rect, {
+  const pinnedH = actionsBlockHeight(ui, natural);
+  const canPin = pinnedH > 0 && pinnedH <= rect.h * MAX_PINNED_ACTIONS_FRACTION;
+  if (!canPin) {
+    scrollView(ui, rect, {
+      id: `${id}/scroll`,
+      contentHeight: layoutDetail(ui, rect.w - scrollGutterWidth(ui), model).total,
+      draw: (content) =>
+        drawDetail(ui, content, id, model, layoutDetail(ui, content.w, model), 'all'),
+    });
+    return;
+  }
+  const [infoRect, actionsRect] = splitV(rect, ['fill', pinnedH], space.md);
+  const scrolled = layoutDetail(ui, infoRect.w - scrollGutterWidth(ui), model);
+  scrollView(ui, infoRect, {
     id: `${id}/scroll`,
-    contentHeight: layoutDetail(ui, rect.w - scrollGutterWidth(ui), model).total,
-    draw: (content) => drawDetail(ui, content, id, model, layoutDetail(ui, content.w, model)),
+    contentHeight: scrolled.total - actionsBlockHeight(ui, scrolled) - space.md,
+    draw: (content) =>
+      drawDetail(ui, content, id, model, layoutDetail(ui, content.w, model), 'info'),
   });
+  drawDetail(ui, actionsRect, id, model, natural, 'actions');
 }
 
 function drawDetail(
@@ -177,8 +211,20 @@ function drawDetail(
   id: string,
   model: DetailModel,
   layout: DetailLayout,
+  part: DetailPart,
 ): void {
-  const { space, palette, size } = ui.theme;
+  if (part !== 'actions') drawInfo(ui, rect, id, model, layout);
+  const actionsTop = part === 'actions' ? rect.y : rect.y + infoHeight(ui, layout);
+  if (part !== 'info') drawActions(ui, { ...rect, y: actionsTop }, id, model, layout);
+}
+
+/** The item's icon, name, text and stat lines, with the gap that follows them. */
+function infoHeight(ui: Ui, layout: DetailLayout): number {
+  return layout.total - actionsBlockHeight(ui, layout);
+}
+
+function drawInfo(ui: Ui, rect: Rect, id: string, model: DetailModel, layout: DetailLayout): void {
+  const { space, palette } = ui.theme;
   const item = model.item;
   const category = ITEM_DEF[item.id].category;
   const icon = iconSide(ui);
@@ -300,7 +346,17 @@ function drawDetail(
     );
     y += layout.noticeH + space.md;
   }
+}
 
+function drawActions(
+  ui: Ui,
+  rect: Rect,
+  id: string,
+  model: DetailModel,
+  layout: DetailLayout,
+): void {
+  const { space, size } = ui.theme;
+  let y = rect.y;
   if (layout.actionRows > 0) {
     const columns = layout.actionColumns;
     const cellW = (rect.w - space.sm * (columns - 1)) / columns;

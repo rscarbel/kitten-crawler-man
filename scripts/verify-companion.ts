@@ -30,7 +30,13 @@ import { makeSepsis, makeBurn } from '../src/core/StatusEffect';
 import { CompanionSystem } from '../src/systems/CompanionSystem';
 import { MELEE_POINT_BLANK_RANGE } from '../src/systems/CombatSystem';
 import { MIN_STAT_VALUE } from '../src/Player';
-import { BossRoomSystem } from '../src/systems/BossRoomSystem';
+import {
+  BossRoomSystem,
+  LOOT_SEAL_NOTICE,
+  LOOT_SEAL_WARNING_COOLDOWN_FRAMES,
+  LOOT_SEAL_WARNING_REARM_TILES,
+} from '../src/systems/BossRoomSystem';
+import { roomDoorways } from '../src/map/roomDoorways';
 import { MiniMapSystem } from '../src/systems/MiniMapSystem';
 import { TreasureChestSystem, isChestOpenable } from '../src/systems/TreasureChestSystem';
 import { SpellSystem } from '../src/systems/SpellSystem';
@@ -1816,6 +1822,95 @@ console.log('\nA won boss room holds the party until its chest is opened');
       !isInRoom(party.human) && !isInRoom(party.cat),
       'once it is looted the party walks out freely',
     );
+  }
+}
+
+console.log('\nWalking up to a way out of an unlooted room warns once per approach');
+{
+  const map = makeBossRoomMap();
+  const room = map?.bossRooms[0];
+  const mouth =
+    map === null || room === undefined
+      ? undefined
+      : roomDoorways(map.structure, room.bounds)[0]?.tile;
+  if (map === null || room === undefined || mouth === undefined) {
+    check(false, 'a generated dungeon offered a boss room with a doorway to test with');
+  } else {
+    const party = makeParty(map);
+    const chests = new TreasureChestSystem();
+    chests.addBossChest(room.centre.x, room.centre.y, BOSS_ROOM_UNDER_TEST);
+    const bossRoom = new BossRoomSystem(
+      map,
+      new MiniMapSystem(map),
+      new EventBus(),
+      ['krakaren_clone'],
+      (roomIndex) => chests.hasUnopenedBossChest(roomIndex),
+    );
+    const boss = addMob(party, 'krakaren_clone', room.centre.x, room.centre.y);
+    const standAt = (tile: { x: number; y: number }): void => {
+      party.human.x = tile.x * TILE_SIZE;
+      party.human.y = tile.y * TILE_SIZE;
+      party.cat.x = party.human.x;
+      party.cat.y = party.human.y;
+    };
+    const warnings = (): number =>
+      party.human.pendingSystemNotices.filter((line) => line === LOOT_SEAL_NOTICE).length;
+    const clearNotices = (): void => {
+      party.human.pendingSystemNotices.length = 0;
+    };
+    const stepFrame = (): void => {
+      bossRoom.update(makeContext(party, bossRoom));
+      bossRoom.clampJoinedPlayers(party.human, party.cat);
+    };
+    const doorways = roomDoorways(map.structure, room.bounds);
+    const farFromEveryDoor = (tile: { x: number; y: number }): boolean =>
+      doorways.every((doorway) =>
+        doorway.tiles.every(
+          (t) => Math.hypot(t.x - tile.x, t.y - tile.y) > LOOT_SEAL_WARNING_REARM_TILES,
+        ),
+      );
+    let interior: { x: number; y: number } | undefined;
+    for (let y = room.bounds.y + 1; y < room.bounds.y + room.bounds.h - 1 && !interior; y++) {
+      for (let x = room.bounds.x + 1; x < room.bounds.x + room.bounds.w - 1 && !interior; x++) {
+        if (farFromEveryDoor({ x, y }) && map.isWalkable(x, y)) interior = { x, y };
+      }
+    }
+
+    standAt(mouth);
+    stepFrame();
+    check(warnings() === 0, 'no warning at the doorway while the boss still lives');
+
+    boss.takeDamageFrom(boss.maxHp, party.human, 'missile');
+    standAt(interior ?? room.centre);
+    clearNotices();
+    stepFrame();
+    check(bossRoom.getBossRoomStates()[0].defeated, 'the boss is down and the room is won');
+    check(interior !== undefined, 'the room has floor well away from every doorway');
+    check(warnings() === 0, 'no warning in the middle of the won room');
+
+    standAt(mouth);
+    stepFrame();
+    check(warnings() === 1, 'walking up to the doorway before looting warns the player');
+    const framesPastCooldown = LOOT_SEAL_WARNING_COOLDOWN_FRAMES + 1;
+    for (let frame = 0; frame < framesPastCooldown; frame++) stepFrame();
+    check(warnings() === 1, 'and lingering there past the cooldown does not repeat it');
+
+    clearNotices();
+    standAt(interior ?? room.centre);
+    for (let frame = 0; frame < LOOT_SEAL_WARNING_COOLDOWN_FRAMES; frame++) stepFrame();
+    standAt(mouth);
+    stepFrame();
+    check(warnings() === 1, 'stepping away and coming back warns again');
+
+    clearNotices();
+    chests.receiveBossLoot(BOSS_ROOM_UNDER_TEST, { coins: 1, items: [] });
+    standAt(room.centre);
+    chests.tryInteract(party.human);
+    standAt(interior ?? room.centre);
+    for (let frame = 0; frame < LOOT_SEAL_WARNING_COOLDOWN_FRAMES; frame++) stepFrame();
+    standAt(mouth);
+    stepFrame();
+    check(warnings() === 0, 'once the chest is opened the doorway says nothing');
   }
 }
 

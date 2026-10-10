@@ -232,6 +232,17 @@ export function installBrowserShim(viewport: {
   readonly width: number;
   readonly height: number;
   readonly devicePixelRatio: number;
+  /**
+   * The device's safe-area insets in CSS pixels, reported as every element's
+   * computed padding, which is how the game's safe-area probe reads them.
+   * Without it there is no `getComputedStyle` and the game sees no insets.
+   */
+  readonly safeArea?: {
+    readonly t: number;
+    readonly r: number;
+    readonly b: number;
+    readonly l: number;
+  };
 }): BrowserShim {
   const windowTarget = new RecordingEventTarget();
   const documentTarget = new RecordingEventTarget();
@@ -296,6 +307,17 @@ export function installBrowserShim(viewport: {
     innerHeight: viewport.height,
     devicePixelRatio: viewport.devicePixelRatio,
   });
+  const safeArea = viewport.safeArea;
+  if (safeArea !== undefined) {
+    Object.assign(globalThis, {
+      getComputedStyle: () => ({
+        paddingTop: `${safeArea.t}px`,
+        paddingRight: `${safeArea.r}px`,
+        paddingBottom: `${safeArea.b}px`,
+        paddingLeft: `${safeArea.l}px`,
+      }),
+    });
+  }
 
   return {
     window: windowTarget,

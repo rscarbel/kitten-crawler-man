@@ -1,9 +1,16 @@
 import type { Player } from '../Player';
-import { BOSS_BLAST_DAMAGE_SCALE, Mob, type LootDrop, type PlayerDamageType } from './Mob';
+import {
+  BOSS_BLAST_DAMAGE_SCALE,
+  Mob,
+  type EyePlacement,
+  type LootDrop,
+  type PlayerDamageType,
+} from './Mob';
 import { MAX_MOB_CULL_MARGIN_TILES } from '../core/constants';
 import { makeStuck } from '../core/StatusEffect';
 import { drawDangerCone } from '../sprites/dangerTelegraph';
 import { SKELETON_LORD_BODY_PART_KEY, drawSkeletonLordSprite } from '../sprites/skeletonSprite';
+import { skeletonEyePlacement } from '../sprites/art/skeletonFigure';
 import {
   drawGraspingHands,
   prewarmGraspingHands,
@@ -159,7 +166,13 @@ const LORD_CULL_MARGIN_TILES = Math.min(MAX_MOB_CULL_MARGIN_TILES, HANDS_RANGE_T
 /** The composite also has to hold the grasping-hands cone, which reaches further. */
 const LORD_SILHOUETTE_MARGIN_TILES = HANDS_RANGE_TILES + 1;
 
+const SKELETON_LORD_EYES = skeletonEyePlacement('lord');
+
 export class SkeletonLord extends Mob {
+  protected override get eyePlacement(): EyePlacement {
+    return SKELETON_LORD_EYES;
+  }
+
   /** Not every system that runs this boss sets `isBoss`, so the blast share is claimed here rather than read from it. */
   override get blastDamageScale(): number {
     return BOSS_BLAST_DAMAGE_SCALE;

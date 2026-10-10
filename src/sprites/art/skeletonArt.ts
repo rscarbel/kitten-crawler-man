@@ -1266,6 +1266,21 @@ const PROFILE_JAW_FORWARD = 0.34;
 const PROFILE_FACE_FORWARD = 0.22;
 /** Where the single visible orbit sits along that depth, edge-on. */
 const PROFILE_ORBIT_FORWARD = 0.44;
+
+/**
+ * Where a standing skeleton's eye sockets are, in rig units from its ground
+ * point, for anything that has to find its eyes without painting it.
+ */
+export const SKELETON_EYE_RIG = {
+  /** Height of the sockets, negative being up from the ground. */
+  y: HEAD_CENTRE_Y + ORBIT_Y,
+  /** Facing the camera: each socket's distance either side of the centreline. */
+  frontSpread: ORBIT_SPREAD,
+  /** Edge-on: how far ahead of the centreline the one visible socket sits. */
+  profileForward: SKULL_DEPTH * PROFILE_ORBIT_FORWARD,
+  /** Edge-on: the width of that socket. */
+  profileWidth: ORBIT_RX * 2,
+} as const;
 const JAW_MAX_OPEN = 0.07;
 
 /**

@@ -48,6 +48,13 @@ export interface PanelOptions {
   readonly height?: 'content' | 'fill';
   /** The body's natural height, for `height: 'content'` and for `scrollBody`. */
   readonly contentHeight?: number;
+  /**
+   * Draws the header's middle in place of `title`, between the back chevron
+   * and ✕, for a menu whose header row carries its own controls (tabs, a
+   * party switcher). The panel keeps ✕ and the chevron, so they stay inside
+   * the frame however crowded the row gets; the slot is clipped to its rect.
+   */
+  readonly header?: (rect: Rect) => void;
   /** Draws ✕ in the header. Escape is wired by the surface's own `close()`. */
   readonly onClose?: () => void;
   /** Draws a back chevron in the header, for drill-in navigation. */
@@ -91,7 +98,10 @@ const animated = new WeakSet<Ui>();
 /** The chrome height a panel adds round its body: padding, header and footer. */
 export function panelChromeHeight(
   ui: Ui,
-  opts: Pick<PanelOptions, 'title' | 'subtitle' | 'footer' | 'footerSize' | 'onClose' | 'onBack'>,
+  opts: Pick<
+    PanelOptions,
+    'title' | 'subtitle' | 'header' | 'footer' | 'footerSize' | 'onClose' | 'onBack'
+  >,
 ): number {
   const skin = skinsFor(ui.theme).panel.card;
   const { space } = ui.theme;
@@ -109,10 +119,13 @@ function footerHeight(ui: Ui, opts: Pick<PanelOptions, 'footer' | 'footerSize'>)
 
 function headerHeight(
   ui: Ui,
-  opts: Pick<PanelOptions, 'title' | 'subtitle' | 'onClose' | 'onBack'>,
+  opts: Pick<PanelOptions, 'title' | 'subtitle' | 'header' | 'onClose' | 'onBack'>,
 ): number {
   const hasHeader =
-    opts.title !== undefined || opts.onClose !== undefined || opts.onBack !== undefined;
+    opts.title !== undefined ||
+    opts.header !== undefined ||
+    opts.onClose !== undefined ||
+    opts.onBack !== undefined;
   if (!hasHeader) return 0;
   const titleBlock =
     lineHeightOf(ui, 'title') + (opts.subtitle === undefined ? 0 : lineHeightOf(ui, 'caption'));
@@ -148,7 +161,7 @@ export function panelBodyMaxHeight(
   ui: Ui,
   opts: Pick<
     PanelOptions,
-    'width' | 'title' | 'subtitle' | 'footer' | 'footerSize' | 'onClose' | 'onBack'
+    'width' | 'title' | 'subtitle' | 'header' | 'footer' | 'footerSize' | 'onClose' | 'onBack'
   >,
 ): number {
   return Math.max(0, frameMaxHeight(ui, opts.width) - panelChromeHeight(ui, opts));
@@ -299,6 +312,11 @@ function drawHeader(ui: Ui, header: Rect, opts: PanelOptions): void {
       },
     );
     titleRect = inset(titleRect, { r: side + ui.theme.space.sm });
+  }
+  const custom = opts.header;
+  if (custom !== undefined) {
+    ui.clip(titleRect, () => custom(titleRect));
+    return;
   }
   if (opts.title === undefined) return;
   const titleH = lineHeightOf(ui, 'title');

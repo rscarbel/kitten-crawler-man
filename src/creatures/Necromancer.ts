@@ -998,8 +998,14 @@ export class Necromancer extends Mob {
     if (anchor === null) return this.speed;
     const here = tileUnder(this);
     const path =
-      this.map?.findPath(here.x, here.y, anchor.x, anchor.y, PROCESSION_PATH_SEARCH_TILES, true) ??
-      [];
+      this.map?.findMobPath(
+        here.x,
+        here.y,
+        anchor.x,
+        anchor.y,
+        PROCESSION_PATH_SEARCH_TILES,
+        true,
+      ) ?? [];
     let routeTiles = Math.hypot(anchor.x - here.x, anchor.y - here.y);
     if (path.length > 1) {
       routeTiles = 0;

@@ -10,7 +10,6 @@ type ArenaGymItemId = 'gym_bench_press' | 'gym_treadmill';
 
 const RESPAWN_FRAMES = 300;
 
-const TILE_CENTER_OFFSET = 0.5;
 const PICKUP_COLLECT_RADIUS_RATIO = 1.2;
 
 /**
@@ -112,22 +111,39 @@ export class ArenaRoomSystem implements GameSystem {
 
   tryPickupNear(player: HumanPlayer | CatPlayer): boolean {
     if (!this.hasArena) return false;
-    const ts = TILE_SIZE;
-    const collectRadius = ts * PICKUP_COLLECT_RADIUS_RATIO;
-    const pcx = player.x + ts * TILE_CENTER_OFFSET;
-    const pcy = player.y + ts * TILE_CENTER_OFFSET;
-    for (const pickup of this.pickups) {
-      if (!pickup.active) continue;
-      const wcx = pickup.worldX + ts * TILE_CENTER_OFFSET;
-      const wcy = pickup.worldY + ts * TILE_CENTER_OFFSET;
-      if (Math.hypot(pcx - wcx, pcy - wcy) < collectRadius) {
-        player.inventory.addItem(pickup.itemId, 1);
-        pickup.active = false;
-        pickup.respawnTimer = RESPAWN_FRAMES;
-        return true;
-      }
-    }
-    return false;
+    const pickup = this.pickups.find((candidate) => this.inReach(candidate, player));
+    if (pickup === undefined) return false;
+    this.take(pickup, player);
+    return true;
+  }
+
+  /**
+   * Takes the gym item under a tapped or clicked world point, when `player` is
+   * in reach of it. Pointing at the item says what the press is for, so this
+   * holds even with a hostile in reach, where a bare press would swing.
+   */
+  tryPickupAt(worldX: number, worldY: number, player: HumanPlayer | CatPlayer): boolean {
+    if (!this.hasArena) return false;
+    const tileLeft = Math.floor(worldX / TILE_SIZE) * TILE_SIZE;
+    const tileTop = Math.floor(worldY / TILE_SIZE) * TILE_SIZE;
+    const tapped = this.pickups.find(
+      (pickup) => pickup.worldX === tileLeft && pickup.worldY === tileTop,
+    );
+    if (tapped === undefined || !this.inReach(tapped, player)) return false;
+    this.take(tapped, player);
+    return true;
+  }
+
+  private inReach(pickup: ArenaGymPickup, player: HumanPlayer | CatPlayer): boolean {
+    if (!pickup.active) return false;
+    const distance = Math.hypot(player.x - pickup.worldX, player.y - pickup.worldY);
+    return distance < TILE_SIZE * PICKUP_COLLECT_RADIUS_RATIO;
+  }
+
+  private take(pickup: ArenaGymPickup, player: HumanPlayer | CatPlayer): void {
+    player.inventory.addItem(pickup.itemId, 1);
+    pickup.active = false;
+    pickup.respawnTimer = RESPAWN_FRAMES;
   }
 
   update(_ctx: SystemContext): void {
@@ -149,9 +165,6 @@ export class ArenaRoomSystem implements GameSystem {
   ): void {
     if (!this.hasArena) return;
 
-    const ts = TILE_SIZE;
-    const collectRadius = ts * PICKUP_COLLECT_RADIUS_RATIO;
-
     for (const pickup of this.pickups) {
       if (!pickup.active) continue;
       const sx = pickup.worldX - camX;
@@ -162,17 +175,11 @@ export class ArenaRoomSystem implements GameSystem {
         pickup.itemId === 'gym_bench_press' ? 'bench' : 'treadmill',
         sx,
         sy,
-        ts,
+        TILE_SIZE,
       );
 
-      if (activePlayer) {
-        const pcx = activePlayer.x + ts * TILE_CENTER_OFFSET;
-        const pcy = activePlayer.y + ts * TILE_CENTER_OFFSET;
-        const wcx = pickup.worldX + ts * TILE_CENTER_OFFSET;
-        const wcy = pickup.worldY + ts * TILE_CENTER_OFFSET;
-        if (Math.hypot(pcx - wcx, pcy - wcy) < collectRadius) {
-          drawInteractionPrompt(ctx, sx, sy, ts, 'Pick up');
-        }
+      if (activePlayer !== undefined && this.inReach(pickup, activePlayer)) {
+        drawInteractionPrompt(ctx, sx, sy, TILE_SIZE, 'Pick up');
       }
     }
   }

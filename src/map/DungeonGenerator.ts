@@ -358,7 +358,7 @@ function chokeSlotsFor(
 }
 
 /** Side length, in tiles, of the square a stairwell blocks. */
-const STAIRWELL_FOOTPRINT_SPAN = 2;
+export const STAIRWELL_FOOTPRINT_SPAN = 2;
 
 /** Tiles beyond an arena's radius that no sign pocket is cut into, so its wall ring is never nicked. */
 const SIGN_POCKET_ARENA_MARGIN_TILES = 6;

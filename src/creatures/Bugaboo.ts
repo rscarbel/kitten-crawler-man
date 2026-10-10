@@ -1,5 +1,5 @@
 import type { Player } from '../Player';
-import { Mob } from './Mob';
+import { Mob, type EyePlacement } from './Mob';
 import { TILE_SIZE } from '../core/constants';
 import type { TacticsTrait } from './tactics/tacticsTraits';
 import {
@@ -64,12 +64,27 @@ const NO_BUGABOO_TACTICS: readonly TacticsTrait[] = [];
 /** What a Bugaboo is doing with its arms this frame, in priority order. */
 type SwingTarget = { readonly player: Player } | { readonly barrier: { x: number; y: number } };
 
+/** Its owl eyes, on a head carried well above its tile on long legs. */
+const BUGABOO_EYES: EyePlacement = {
+  sideForward: 0.12,
+  sideHeight: -0.68,
+  sideSpacing: 0.06,
+  frontHeight: -0.68,
+  frontSpacing: 0.25,
+};
+
 export class Bugaboo extends Mob {
   readonly xpValue = 3;
   protected coinDropMin = 0;
   protected coinDropMax = 1;
   displayName = 'Bugaboo';
   description = 'A hulking, owl-eyed beast that bursts from the floor grates.';
+
+  /** Breaking in, it is still under the grate. */
+  protected override get eyePlacement(): EyePlacement | null {
+    if (this.isBreakingIn) return null;
+    return BUGABOO_EYES;
+  }
 
   /** Grate tile this Bugaboo spawned from (used by quest system for barrier targeting). */
   assignedGrate: { x: number; y: number } | null = null;

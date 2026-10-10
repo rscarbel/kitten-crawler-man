@@ -64,6 +64,7 @@ const { signLine } = await import('../src/dialog/scripts/crawlerSigns.js');
 const { toCssRect } = await import('../src/ui/hud/HudSurface.js');
 const { LONG_PRESS_MS } = await import('../src/ui/screens/inventory/InventoryScreen.js');
 const { ACHIEVEMENT_DEFS } = await import('../src/core/AchievementManager.js');
+const { Juicer } = await import('../src/creatures/Juicer.js');
 
 type Scene = InstanceType<typeof DungeonScene>;
 type DockId = Parameters<Scene['hud']['cssDockRect']>[0];
@@ -80,6 +81,8 @@ interface Rect extends Point {
 /** More frames than the town's arrival screen ever needs to finish its work. */
 const MAX_ARRIVAL_FRAMES = 3000;
 const SECONDARY_BUTTON = 2;
+/** Where the hostile stands from a placed bench, in tiles: well inside either crawler's swing range. */
+const HOSTILE_OFFSET_TILES = 2;
 const FINGER_ID = 1;
 const POTION_COUNT = 3;
 const HOTBAR_LAST_SLOT = 7;
@@ -365,7 +368,7 @@ section('whichever menu is on top declares the focus ring the keyboard drives');
 
 /** Held past the long press, so a frame drawn after it sees the hold as long enough. */
 const LONG_PRESS_SLACK_MS = 50;
-const INVENTORY_CLOSE_REGION_ID = 'inventory/close';
+const INVENTORY_CLOSE_REGION_ID = 'inventory/inventory/close';
 
 /** A HUD hotbar slot's centre as the HUD last drew it, in CSS pixels. */
 function hudHotbarPoint(scene: Scene, index: number): Point {
@@ -784,6 +787,89 @@ section('a Keyboard Hero lane tap that slides a little still counts');
     );
     frame(street);
   }
+}
+
+// ── A placed bench press ───────────────────────────────────────────────────
+
+{
+  section('a tap or click on a placed bench press picks it up, a boss in reach or not');
+  closeEverything(street);
+  const human = street['human'];
+  if (!human.isActive) street['triggerSwitchCharacter'](true);
+  const barriers = street['barriers'];
+  const roster = street['world'].roster;
+  const tileX = Math.floor((human.x + TILE_SIZE / 2) / TILE_SIZE);
+  const tileY = Math.floor((human.y + TILE_SIZE / 2) / TILE_SIZE);
+  const placeBench = (): void => {
+    barriers['barriers'].length = 0;
+    barriers['barriers'].push({
+      tileX,
+      tileY,
+      worldX: tileX * TILE_SIZE,
+      worldY: tileY * TILE_SIZE,
+      itemId: 'gym_bench_press',
+      placer: human,
+    });
+  };
+  const benchesHeld = (): number => human.inventory.countOf('gym_bench_press');
+  const benchOnScreen = (): Point => {
+    const cam = street['camera']();
+    return {
+      x: (tileX + 1 / 2) * TILE_SIZE - cam.x,
+      y: (tileY + 1 / 2) * TILE_SIZE - cam.y,
+    };
+  };
+  const pickedUpBy = (press: () => void): boolean => {
+    placeBench();
+    frame(street);
+    const before = benchesHeld();
+    press();
+    frame(street);
+    return benchesHeld() === before + 1 && !barriers.wouldPickUp(human);
+  };
+
+  check(
+    street['gymPromptTargets']().barrier === human,
+    'standing on it with nothing hostile near, the "Pick up" prompt is offered',
+  );
+  check(
+    pickedUpBy(() => tap(street, benchOnScreen())),
+    `${onPhone ? 'a tap' : 'a click'} on it puts it back in the bag`,
+  );
+  check(
+    pickedUpBy(() => street['triggerSpaceAction']()),
+    'the interact press picks it up too',
+  );
+
+  const juicer = new Juicer(tileX + HOSTILE_OFFSET_TILES, tileY, TILE_SIZE);
+  roster.add(juicer);
+  try {
+    placeBench();
+    frame(street);
+    check(
+      street['gymPromptTargets']().barrier === undefined,
+      'with the Juicer in swing range no prompt promises the bare press',
+    );
+    check(
+      pickedUpBy(() => tap(street, benchOnScreen())),
+      `but ${onPhone ? 'a tap' : 'a click'} on the bench itself still picks it up`,
+    );
+    const tryPickupAt = barriers.tryPickupAt.bind(barriers);
+    barriers.tryPickupAt = () => false;
+    try {
+      check(
+        !pickedUpBy(() => tap(street, benchOnScreen())),
+        'control: without the pointed pickup the same tap leaves the bench on the floor',
+      );
+    } finally {
+      barriers.tryPickupAt = tryPickupAt;
+    }
+  } finally {
+    roster.replaceAll(roster.mobs.filter((mob) => mob !== juicer));
+    roster.rebuildGrid();
+    barriers['barriers'].length = 0;
+  }
+  frame(street);
 }
 
 // ── Keys held across a menu opening ────────────────────────────────────────

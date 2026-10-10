@@ -137,7 +137,7 @@ export function executeAIAction(action: AIAction, ctx: AISceneContext): void {
         );
         const tx = tileX + ox;
         const ty = tileY + oy;
-        if (!map.isWalkable(tx, ty)) continue;
+        if (!map.isMobSpawnTile(tx, ty)) continue;
         ctx.spawnMob(createMob(mobType, tx, ty, map));
         spawned++;
       }

@@ -806,7 +806,7 @@ export class KrakarenRoomSystem
     ctx: CanvasRenderingContext2D,
     camX: number,
     camY: number,
-    _active: HumanPlayer | CatPlayer,
+    _promptFor: HumanPlayer | CatPlayer | undefined,
   ): void {
     if (!this.onScreen(camX, camY)) return;
     const cell = Math.floor(frameTime * SPRITE_BUILDING_OVERLAY_FPS);

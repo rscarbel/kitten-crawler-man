@@ -216,6 +216,7 @@
     "verify:mordecai-debrief": "tsx scripts/verify-mordecai-debrief.ts",
     "verify:progression": "tsx scripts/verify-progression.ts",
     "verify:start-room-spawns": "tsx scripts/verify-start-room-spawn-safety.ts",
+    "verify:stairwell-mobs": "tsx scripts/verify-stairwell-mobs.ts",
     "verify:quantity-picker": "tsx scripts/verify-quantity-picker.ts",
     "verify:quest-choke": "tsx scripts/verify-quest-choke.ts",
     "verify:nursery": "tsx scripts/verify-nursery.ts",

@@ -17,7 +17,7 @@ import type { AudioManager } from '../audio/AudioManager';
 import type { ClubMembership } from '../core/ClubMembership';
 import { viewportWidth, viewportHeight } from '../core/Viewport';
 import { keybindings } from '../core/Keybindings';
-import { ACTIVATE_KEYS, type Surface } from '../ui/core/UiRoot';
+import { ACTIVATE_KEYS, type Surface, type Ui } from '../ui/core/UiRoot';
 import {
   BlackjackTable,
   CHIP_DENOMINATIONS,
@@ -190,9 +190,12 @@ export interface CasinoSeat {
   readonly companion: () => Player;
 }
 
-/** The fit and screen the table was last drawn at, in UI units. */
+/** The fit and safe area the table was last drawn at, in UI units. */
 interface TableFrame {
   readonly fit: CasinoFit;
+  /** Where the table's own origin sits on the screen: the safe area's top left. */
+  readonly originX: number;
+  readonly originY: number;
   readonly screenW: number;
   readonly screenH: number;
   /** CSS pixels per UI unit. */
@@ -220,6 +223,8 @@ export interface CasinoPaintFrame {
   readonly target: PaintTarget;
   readonly viewportW: number;
   readonly viewportH: number;
+  /** What the scrim dims, in the frame's coordinates; the whole viewport when omitted. */
+  readonly scrim?: Rect;
   /** The panel's shrink about the viewport centre; see `casinoFit`. */
   readonly fit: CasinoFit;
   /** Whether labels name their keyboard shortcuts. */
@@ -341,14 +346,24 @@ export class ClubCasinoSystem {
     const layout = computeCasinoLayout(frame.screenW, frame.screenH, frame.fit.scale);
     const trayCentre = rectCentre(layout.chipTray);
     const onScreen = fitToScreen(frame.fit, trayCentre.x, trayCentre.y);
-    return { x: onScreen.x * frame.uiScale, y: onScreen.y * frame.uiScale };
+    return {
+      x: (frame.originX + onScreen.x) * frame.uiScale,
+      y: (frame.originY + onScreen.y) * frame.uiScale,
+    };
   }
 
   /** The canvas taken at one UI unit per CSS pixel, for a table closed before it ever drew. */
   private unscaledFrame(): TableFrame {
     const screenW = viewportWidth();
     const screenH = viewportHeight();
-    return { fit: casinoFit(screenW, screenH), screenW, screenH, uiScale: 1 };
+    return {
+      fit: casinoFit(screenW, screenH),
+      originX: 0,
+      originY: 0,
+      screenW,
+      screenH,
+      uiScale: 1,
+    };
   }
 
   /** Flies the whole session's accumulated winnings as one, then clears the tally. Safe to call on a session with nothing to fly. */
@@ -734,14 +749,25 @@ export class ClubCasinoSystem {
       locksKeyboard: true,
       isOpen: () => this.open,
       render: (ui) => {
-        const fit = casinoFit(ui.screen.w, ui.screen.h);
-        this.lastFrame = { fit, screenW: ui.screen.w, screenH: ui.screen.h, uiScale: ui.uiScale };
+        const safe = ui.viewport;
+        const fit = casinoFit(safe.w, safe.h);
+        this.lastFrame = {
+          fit,
+          originX: safe.x,
+          originY: safe.y,
+          screenW: safe.w,
+          screenH: safe.h,
+          uiScale: ui.uiScale,
+        };
         let keyboardOnAControl = false;
+        ui.ctx.save();
+        ui.ctx.translate(safe.x, safe.y);
         this.paintTable(
           {
             target: ui,
-            viewportW: ui.screen.w,
-            viewportH: ui.screen.h,
+            viewportW: safe.w,
+            viewportH: safe.h,
+            scrim: screenInSafeArea(ui),
             fit,
             keyHints: ui.density === 'pointer',
             control: (control) => {
@@ -759,6 +785,7 @@ export class ClubCasinoSystem {
           seat.active(),
           seat.companion(),
         );
+        ui.ctx.restore();
         const phase = this.table.phase;
         const decisionRowUp = phase === 'player_turn' || phase === 'settled';
         decisionRowLive = decisionRowUp || keyboardOnAControl;
@@ -793,7 +820,8 @@ export class ClubCasinoSystem {
     const { ctx } = frame.target;
     ctx.save();
     ctx.fillStyle = skinsFor(frame.target.theme).scrim;
-    ctx.fillRect(0, 0, frame.viewportW, frame.viewportH);
+    const scrim = frame.scrim ?? { x: 0, y: 0, w: frame.viewportW, h: frame.viewportH };
+    ctx.fillRect(scrim.x, scrim.y, scrim.w, scrim.h);
     ctx.restore();
 
     const layout = computeCasinoLayout(frame.viewportW, frame.viewportH, frame.fit.scale);
@@ -1782,4 +1810,17 @@ function hintWrap(layout: CasinoLayout): Pick<TextOptions, 'wrap' | 'maxLines' |
 function leaveLabel(keyHints: boolean, mode: CasinoLayout['mode']): string {
   if (!keyHints) return 'Leave Table';
   return mode === 'landscape' ? 'Leave [Esc]' : 'Leave Table [Esc]';
+}
+
+/**
+ * The whole screen in the coordinates of a table laid out in the safe area,
+ * so the scrim still reaches under a notch the table keeps clear of.
+ */
+export function screenInSafeArea(ui: Pick<Ui, 'screen' | 'viewport'>): Rect {
+  return {
+    x: ui.screen.x - ui.viewport.x,
+    y: ui.screen.y - ui.viewport.y,
+    w: ui.screen.w,
+    h: ui.screen.h,
+  };
 }

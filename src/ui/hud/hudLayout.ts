@@ -126,7 +126,7 @@ export interface HudGeometry {
   readonly topBandFloor: number;
   /** Toasts stack upward from here. */
   /** Toasts stack upward from here, no wider than the lane the bottom buttons leave. */
-  readonly toastAnchor: { readonly x: number; readonly bottom: number; readonly maxWidth: number };
+  readonly toastAnchor: ToastAnchorGeometry;
 }
 
 export function miniMapSide(size: SizeClass, expanded: boolean): number {
@@ -380,20 +380,27 @@ function trimmedBand(band: Rect, buttons: readonly Rect[], gap: number): Rect {
 
 /** How far above the hotbar the toast stack reaches, for finding the buttons beside it. */
 const TOAST_ZONE_H = 120;
-
 /**
- * Toasts stack above the hotbar's middle, as wide as the lane between the
- * buttons standing beside that stretch of screen — Summon and the switch on
- * the left, the Follower on the right — so a long notice wraps rather than
- * running under a button.
+ * The narrowest lane a toast stack settles for before rising: wide enough that
+ * a short status such as "Game Saved" reads whole beside its icon. Kept small
+ * so a landscape phone's stack stays down by the hotbar, off the player.
  */
-function toastAnchor(
+const TOAST_MIN_LANE_W = 160;
+
+interface ToastAnchorGeometry {
+  readonly x: number;
+  readonly bottom: number;
+  readonly maxWidth: number;
+}
+
+/** The lane centred on `x` between the buttons standing beside the zone that ends at `bottom`. */
+function toastLaneAt(
+  x: number,
+  bottom: number,
   strip: Rect,
   buttons: readonly Rect[],
   theme: Theme,
-): { x: number; bottom: number; maxWidth: number } {
-  const x = strip.x + strip.w / 2;
-  const bottom = strip.y - theme.space.md;
+): ToastAnchorGeometry {
   const zoneTop = bottom - TOAST_ZONE_H;
   let left = -Infinity;
   let right = Infinity;
@@ -401,9 +408,36 @@ function toastAnchor(
     if (button.y + button.h <= zoneTop || button.y >= bottom) continue;
     if (button.x + button.w <= x) left = Math.max(left, button.x + button.w);
     else if (button.x >= x) right = Math.min(right, button.x);
+    else return { x, bottom, maxWidth: 0 };
   }
   const halfLane = Math.min(x - left, right - x) - theme.space.sm;
   return { x, bottom, maxWidth: Math.max(0, Math.min(strip.w, halfLane * 2)) };
+}
+
+/**
+ * Toasts stack above the hotbar's middle, as wide as the lane between the
+ * buttons standing beside that stretch of screen — Summon and the switch on
+ * the left, the Follower on the right — so a long notice wraps rather than
+ * running under a button. A phone held upright packs those buttons close to
+ * the middle, leaving a lane too thin for a word; there the stack rises to
+ * sit above the lowest buttons crowding it, where the lane opens up again.
+ */
+function toastAnchor(strip: Rect, buttons: readonly Rect[], theme: Theme): ToastAnchorGeometry {
+  const x = strip.x + strip.w / 2;
+  const restingBottom = strip.y - theme.space.md;
+  const neededWidth = Math.min(strip.w, TOAST_MIN_LANE_W);
+  const raisedBottoms = buttons
+    .map((button) => button.y - theme.space.md)
+    .filter((bottom) => bottom < restingBottom)
+    .sort((a, b) => b - a);
+  let widest = toastLaneAt(x, restingBottom, strip, buttons, theme);
+  if (widest.maxWidth >= neededWidth) return widest;
+  for (const bottom of raisedBottoms) {
+    const lane = toastLaneAt(x, bottom, strip, buttons, theme);
+    if (lane.maxWidth >= neededWidth) return lane;
+    if (lane.maxWidth > widest.maxWidth) widest = lane;
+  }
+  return widest;
 }
 
 /**

@@ -33,6 +33,7 @@
     "scripts/bossRooms/*.ts",
     "scripts/verify-progression.ts",
     "scripts/verify-start-room-spawn-safety.ts",
+    "scripts/verify-stairwell-mobs.ts",
     "scripts/verify-quest-choke.ts",
     "scripts/verify-world-seed.ts",
     "scripts/verify-town-save.ts",

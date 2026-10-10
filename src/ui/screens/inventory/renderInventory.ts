@@ -85,6 +85,7 @@ const SHEET_MAX_FRACTION = 0.85;
 const GHOST_ALPHA = 0.8;
 const SHEET_BORDER_WIDTH = 1;
 const TITLE = 'Inventory';
+const PANEL_ID = 'inventory';
 /** Chip labels short enough for a phone's chip row. */
 const SHORT_FILTER_LABELS: Readonly<Record<BagFilter, string>> = {
   all: 'All',
@@ -117,22 +118,23 @@ export function renderInventory(ui: Ui, screen: InventoryScreen): void {
   const compact = ui.size === 'compact';
   const sound = screen.beginFrame(ui.now, ui.openedAt, ui.density === 'touch', compact);
   if (sound !== null) ui.playSound(sound);
-  const { space, size } = ui.theme;
 
+  const back = screen.backHandler;
   const p = panel(ui, {
-    id: 'inventory',
+    id: PANEL_ID,
     width: 'xl',
     height: compact ? 'fill' : 'content',
     contentHeight: naturalBodyHeight(ui),
     scrim: false,
+    header: (rect) => drawHeader(ui, rect, screen, member),
+    onBack: back === null ? undefined : () => screen.goBack(),
+    onClose: () => screen.close(),
   });
   screen.geometry.frame = p.frame;
-  const [header, main] = splitV(p.body, [size.control, 'fill'], compact ? space.sm : space.md);
-  drawHeader(ui, header, screen, member);
-  if (screen.tab === 'bag') drawBagTab(ui, main, screen, member);
-  else drawCharacterTab(ui, main, screen, member);
+  if (screen.tab === 'bag') drawBagTab(ui, p.body, screen, member);
+  else drawCharacterTab(ui, p.body, screen, member);
 
-  if (compact && screen.sheetOpen) drawDetailSheet(ui, p.frame, screen, member);
+  if (compact && screen.sheetOpen) drawDetailSheet(ui, p.frame, p.body.y, screen, member);
   drawMenu(ui, screen, member);
   drawDragGhost(ui, screen);
 }
@@ -180,41 +182,50 @@ function naturalBodyHeight(ui: Ui): number {
   const rows = Math.min(MAX_REGULAR_GRID_ROWS, Math.ceil(SLOT_COUNT / columns));
   const gridH = rows * cell + (rows - 1) * gap;
   const bagMain = size.control + space.sm + gridH + space.sm + size.control;
-  return size.control + space.md + bagMain + space.md + hotbarRowHeight(ui);
+  return bagMain + space.md + hotbarRowHeight(ui);
 }
 
 // ── Header ──────────────────────────────────────────────────────────────────
 
-function drawHeader(ui: Ui, rect: Rect, screen: InventoryScreen, member: InventoryMember): void {
+/**
+ * The tabs, party switcher and coin count, in the slot the panel leaves
+ * between its back chevron and ✕. A row too narrow for them all first
+ * drops the title, then shrinks the switcher to its icon, then the tabs.
+ */
+function drawHeader(ui: Ui, slot: Rect, screen: InventoryScreen, member: InventoryMember): void {
   const { space, size, palette } = ui.theme;
-  const compact = ui.size === 'compact';
+  const rect = centerIn(slot, slot.w, Math.min(slot.h, size.control));
   const party = screen.host.party();
   const coins = screen.host.coins().toLocaleString('en-US');
   const coinsW = size.icon + space.xs + measureText(ui, coins, { role: 'label', tabular: true });
-  const switcherW = party.length > 1 ? measureButton(ui, { label: member.name, icon: 'users' }) : 0;
+  const switcherLabelW =
+    party.length > 1 ? measureButton(ui, { label: member.name, icon: 'users' }) : 0;
   const widestTab = Math.max(...TABS.map((tab) => measureTabs(ui, [tab])));
-  const tabsW = Math.min(rect.w / 2, widestTab * TABS.length);
-  const titleW = compact ? 0 : measureText(ui, TITLE, { role: 'title' });
+  const naturalTabsW = Math.min(rect.w / 2, widestTab * TABS.length);
+  const naturalTitleW = ui.size === 'compact' ? 0 : measureText(ui, TITLE, { role: 'title' });
+
+  /** The fixed parts with one gap each: with the row's one fill track, every gap the row has. */
+  const rowWidth = (parts: readonly number[]): number => {
+    const shown = parts.filter((w) => w > 0);
+    return shown.reduce((sum, w) => sum + w, 0) + space.sm * shown.length;
+  };
+  const titleW =
+    rowWidth([naturalTitleW, naturalTabsW, switcherLabelW, coinsW]) <= rect.w ? naturalTitleW : 0;
+  const switcherIconOnly =
+    switcherLabelW > 0 && rowWidth([naturalTabsW, switcherLabelW, coinsW]) > rect.w;
+  const switcherW = switcherIconOnly ? size.control : switcherLabelW;
+  const roomForTabs = rect.w - rowWidth([titleW, switcherW, coinsW]) - space.sm;
+  const tabsW = Math.max(0, Math.min(naturalTabsW, roomForTabs));
 
   const tracks: Track[] = [];
-  const back = screen.backHandler !== null;
-  if (back) tracks.push(size.control);
   if (titleW > 0) tracks.push(titleW);
   tracks.push(tabsW, 'fill');
   if (switcherW > 0) tracks.push(switcherW);
-  tracks.push(coinsW, size.control);
+  tracks.push(coinsW);
   const cells = splitH(rect, tracks, space.sm);
   let index = 0;
   const next = (): Rect => cells[index++] ?? rect;
 
-  if (back) {
-    iconButton(ui, next(), {
-      id: 'back',
-      icon: 'back',
-      label: 'Back',
-      onTap: () => screen.goBack(),
-    });
-  }
   if (titleW > 0) text(ui, next(), { text: TITLE, role: 'title' });
   tabs(ui, next(), {
     id: TABS_ID,
@@ -225,15 +236,26 @@ function drawHeader(ui: Ui, rect: Rect, screen: InventoryScreen, member: Invento
   next();
   if (switcherW > 0) {
     const cell = next();
-    button(ui, cell, {
-      id: 'switcher',
-      label: member.name,
-      icon: 'users',
-      variant: 'ghost',
-      onTap: () => {
-        screen.menu = { kind: 'party', at: { x: cell.x, y: cell.y + cell.h } };
-      },
-    });
+    const openSwitcher = (): void => {
+      screen.menu = { kind: 'party', at: { x: cell.x, y: cell.y + cell.h } };
+    };
+    if (switcherIconOnly) {
+      iconButton(ui, cell, {
+        id: 'switcher',
+        icon: 'users',
+        label: member.name,
+        variant: 'ghost',
+        onTap: openSwitcher,
+      });
+    } else {
+      button(ui, cell, {
+        id: 'switcher',
+        label: member.name,
+        icon: 'users',
+        variant: 'ghost',
+        onTap: openSwitcher,
+      });
+    }
   }
   const coinCell = next();
   const coinState = ui.hit('coins', coinCell, { focusable: false });
@@ -257,12 +279,6 @@ function drawHeader(ui: Ui, rect: Rect, screen: InventoryScreen, member: Invento
       placement: 'below',
     });
   }
-  iconButton(ui, next(), {
-    id: 'close',
-    icon: 'close',
-    label: 'Close',
-    onTap: () => screen.close(),
-  });
 }
 
 // ── Bag tab ─────────────────────────────────────────────────────────────────
@@ -835,9 +851,14 @@ function drawDetailCard(
   detailPane(ui, shown.body, 'detail', model);
 }
 
+/**
+ * The phone's item detail, slid up over the bag. Its top never rises past
+ * `bodyTop`, so the panel's header and ✕ stay uncovered.
+ */
 function drawDetailSheet(
   ui: Ui,
   frame: Rect,
+  bodyTop: number,
   screen: InventoryScreen,
   member: InventoryMember,
 ): void {
@@ -847,15 +868,27 @@ function drawDetailSheet(
     const { space, palette, radius } = ui.theme;
     const pad = space.md;
     const closeSide = iconButtonSize(ui, 'sm');
-    const innerW = frame.w - pad * 2 - closeSide - space.sm;
-    const natural = measureDetail(ui, innerW, model) + pad * 2;
-    const h = Math.min(natural, frame.h * SHEET_MAX_FRACTION);
+    const view = ui.viewport;
+    const safeLeft = Math.max(frame.x, view.x);
+    const safeRight = Math.min(frame.x + frame.w, view.x + view.w);
+    const safeBottom = Math.min(frame.y + frame.h, view.y + view.h);
+    const bottomInset = frame.y + frame.h - safeBottom;
+    const innerW = safeRight - safeLeft - pad * 2 - closeSide - space.sm;
+    const natural = measureDetail(ui, innerW, model) + pad * 2 + bottomInset;
+    const belowHeader = frame.y + frame.h - bodyTop;
+    const h = Math.min(natural, frame.h * SHEET_MAX_FRACTION, belowHeader);
     const sheet: Rect = { x: frame.x, y: frame.y + frame.h - h, w: frame.w, h };
     const sheetRadius = { tl: radius.lg, tr: radius.lg, br: 0, bl: 0 };
     ui.block(sheet);
     fillRounded(ui.ctx, sheet, sheetRadius, palette.surface.raised);
     strokeRounded(ui.ctx, sheet, sheetRadius, palette.border.strong, SHEET_BORDER_WIDTH);
-    const content = inset(sheet, pad);
+    const safeSheet: Rect = {
+      x: safeLeft,
+      y: sheet.y,
+      w: safeRight - safeLeft,
+      h: Math.max(0, safeBottom - sheet.y),
+    };
+    const content = inset(safeSheet, pad);
     iconButton(
       ui,
       { x: content.x + content.w - closeSide, y: content.y, w: closeSide, h: closeSide },

@@ -2,8 +2,10 @@
  * Fixtures for the two mini-games that keep their own layouts: the Desperado
  * Club's blackjack table (betting, mid-hand, a won hand, turned away) and the
  * keyboard-hero board (mid-song, a breached firewall, access granted). Each is
- * the real system driven to that state on a fake clock and painted through its
- * `PaintTarget` entry point at UI units, the way a surface would.
+ * the real system driven to that state on a fake clock. The table is the
+ * club's own `tableSurface`, so the phone close-button audit tests the layout
+ * the game ships; the board is painted through its `PaintTarget` entry point
+ * at UI units, the way its surface does.
  */
 
 import { HumanPlayer } from '../../../creatures/HumanPlayer';
@@ -16,7 +18,6 @@ import { RANKS, SUITS, type Card, type Rank, type Suit } from '../../../systems/
 import { KeyboardHeroSystem } from '../../../systems/KeyboardHeroSystem';
 import { KEYBOARD_HERO_CHART } from '../../../systems/keyboardHeroChart';
 import { computeKeyboardHeroLayout } from '../../../systems/keyboardHeroLayout';
-import { casinoFit, fitRectToScreen } from '../../../ui/casino/casinoLayout';
 import type { Surface } from '../../../ui/core/UiRoot';
 import type { DialogFixture } from './fixture';
 
@@ -92,34 +93,13 @@ function casinoFixture(name: string, state: TableState): DialogFixture {
         act({ kind: 'stand' });
       }
 
+      const table = casino.tableSurface(name, {
+        active: () => player,
+        companion: () => companion,
+      });
       const surface: Surface = {
-        id: name,
-        band: 'modal',
-        haltsWorld: true,
-        locksKeyboard: true,
-        isOpen: () => shown() && casino.open,
-        render: (ui) => {
-          const fit = casinoFit(ui.screen.w, ui.screen.h);
-          casino.paintTable(
-            {
-              target: ui,
-              viewportW: ui.screen.w,
-              viewportH: ui.screen.h,
-              fit,
-              keyHints: ui.density === 'pointer',
-              control: (control) =>
-                ui.hit(`${name}/${control.id}`, fitRectToScreen(fit, control.rect), {
-                  onTap: () => casino.act(control.action, player, companion),
-                  disabled: control.disabled,
-                  primary: control.primary,
-                  focusable: control.focusable,
-                }),
-              focusGroup: () => undefined,
-            },
-            player,
-            companion,
-          );
-        },
+        ...table,
+        isOpen: () => shown() && table.isOpen(),
       };
       return [surface];
     },

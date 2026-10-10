@@ -69,6 +69,8 @@ export const worldPalette = {
     fogTimer: '#d0d0e0',
     barrierPlacing: '#60a5fa',
     barrierTrack: '#4b5563',
+    /** The pulsing ring round a placed gym barrier, marking where it slows mobs. */
+    barrierSlowZone: '#60a5fa',
   },
   /** The spider lab's alarm, the scientist's line and the terminal's boot text. */
   spiderLab: {

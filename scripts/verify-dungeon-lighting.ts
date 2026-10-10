@@ -20,7 +20,9 @@
  * - A crawler's light walked through a doorway never jumps between frames,
  *   and no frame, moving light or torch-lit, shows a hard line.
  * - A flame flickers over about the share of its cut it is tuned to move.
- * - Eye-shine sits on the head for every facing and is gone facing away.
+ * - Eye-shine sits on the head for every facing and is gone facing away, and
+ *   never shows on a creature with no eyes to show: a grub, a skeleton still
+ *   climbing out of the floor, a bugaboo still under its grate.
  *
  * The sight, backface, crawler-light, order, health-bar, breaking, spider-lab
  * and eye checks are also run against a broken input they must catch, so a
@@ -64,6 +66,11 @@ import { Llama } from '../src/creatures/Llama.js';
 import { Goblin } from '../src/creatures/Goblin.js';
 import { GoblinArcher } from '../src/creatures/GoblinArcher.js';
 import { Troglodyte } from '../src/creatures/Troglodyte.js';
+import { Bugaboo } from '../src/creatures/Bugaboo.js';
+import { SkeletonWarrior } from '../src/creatures/SkeletonWarrior.js';
+import { SkeletonArcher } from '../src/creatures/SkeletonArcher.js';
+import { SkeletonLord } from '../src/creatures/SkeletonLord.js';
+import { DEFAULT_EYE_PLACEMENT, type EyePlacement } from '../src/creatures/Mob.js';
 import { BrindleGrub, type GrubStage } from '../src/creatures/BrindleGrub.js';
 import { IceFairy } from '../src/creatures/fairies/IceFairy.js';
 import { FireFairy } from '../src/creatures/fairies/FireFairy.js';
@@ -668,7 +675,7 @@ const AFTER_DARKNESS = [
   'this.combat.floatingText.render(',
   'this.renderPipeline.renderEffects(',
   'this.renderPipeline.renderVisibilityFog(',
-  'drawHUD(',
+  'this.ui.frame(ctx)',
   'this.destruction.loot.render(',
 ];
 
@@ -992,8 +999,8 @@ interface EyeSubject {
 
 /** Pixels a tile spans when a creature is drawn for the eye check: big enough to find a head. */
 const EYE_CHECK_SCALE = 3;
-/** Tiles of canvas round the creature's own tile, for art that reaches past it. */
-const EYE_CHECK_MARGIN_TILES = 2;
+/** Tiles of canvas round the creature's own tile, for art that reaches past it: the Skeleton Lord's crown is near three tiles up. */
+const EYE_CHECK_MARGIN_TILES = 3;
 /** Alpha above which a pixel is the creature's body rather than a soft shadow or glow. */
 const BODY_ALPHA = 160;
 /** How far down the drawn body the eyes may sit, as a share of its height: the head end. */
@@ -1066,7 +1073,7 @@ function bodyBox(subject: EyeSubject): BodyBox | null {
  * it actually draws: shown while it faces away, missing while it faces the
  * camera, off its body, low on its body, or on the back end of a profile.
  */
-function eyeErrors(subject: EyeSubject, facing: Facing, headEnd: HeadEnd = 'top'): string | null {
+function eyeErrors(subject: EyeSubject, facing: Facing): string | null {
   subject.facingX = facing.x;
   subject.facingY = facing.y;
   subject.isMoving = false;
@@ -1080,9 +1087,9 @@ function eyeErrors(subject: EyeSubject, facing: Facing, headEnd: HeadEnd = 'top'
     return 'eyes off the body';
   }
   const height = box.bottom - box.top;
-  const headDepth = headEnd === 'top' ? eyes.y - box.top : box.bottom - eyes.y;
+  const headDepth = eyes.y - box.top;
   if (headDepth > height * HEAD_SHARE_OF_HEIGHT) return 'eyes away from the head end of the body';
-  if (facing.x !== 0 && headEnd === 'top') {
+  if (facing.x !== 0) {
     const margin = (box.headRight - box.headLeft) * PROFILE_BACK_SLACK;
     if (eyes.x < box.headLeft - margin || eyes.x > box.headRight + margin) {
       return 'eyes beside the head end, not on it';
@@ -1102,22 +1109,38 @@ function grubAt(stage: GrubStage): () => EyeSubject {
   };
 }
 
-/**
- * Which end of a creature's drawn body its head is at: the top for anything
- * standing or flying, the bottom for a grub seen from above, head down.
- */
-type HeadEnd = 'top' | 'bottom';
+function risingSkeleton(): EyeSubject {
+  const skeleton = new SkeletonWarrior(0, 0, TILE_SIZE);
+  skeleton.beginRising();
+  return skeleton;
+}
+
+function bugabooBreakingIn(): EyeSubject {
+  const bugaboo = new Bugaboo(0, 0, TILE_SIZE);
+  bugaboo.isBreakingIn = true;
+  return bugaboo;
+}
+
+/** Hostiles that must never show eye-shine, whichever way they face. */
+const EYELESS_CREATURES: ReadonlyArray<readonly [string, () => EyeSubject]> = [
+  ['brindle grub', grubAt(1)],
+  ['cow-tailed grub', grubAt(2)],
+  ['rising skeleton', risingSkeleton],
+  ['bugaboo breaking in', bugabooBreakingIn],
+];
 
 /** Every floor-1 and floor-2 hostile that can stand in a dark room, with its own silhouette. */
-const EYE_CREATURES: ReadonlyArray<readonly [string, () => EyeSubject, HeadEnd?]> = [
+const EYE_CREATURES: ReadonlyArray<readonly [string, () => EyeSubject]> = [
   ['llama', () => new Llama(0, 0, TILE_SIZE)],
   ['rat', () => new Rat(0, 0, TILE_SIZE)],
   ['goblin', () => new Goblin(0, 0, TILE_SIZE, 'mace')],
   ['goblin archer', () => new GoblinArcher(0, 0, TILE_SIZE)],
   ['troglodyte', () => new Troglodyte(0, 0, TILE_SIZE)],
-  ['brindle grub', grubAt(1)],
-  ['cow-tailed grub', grubAt(2), 'bottom'],
   ['brindled vespa', grubAt(VESPA_STAGE)],
+  ['skeleton warrior', () => new SkeletonWarrior(0, 0, TILE_SIZE)],
+  ['skeleton archer', () => new SkeletonArcher(0, 0, TILE_SIZE)],
+  ['skeleton lord', () => new SkeletonLord(0, 0, TILE_SIZE)],
+  ['bugaboo', () => new Bugaboo(0, 0, TILE_SIZE)],
   ['ice fairy', () => new IceFairy(0, 0, TILE_SIZE)],
   ['fire fairy', () => new FireFairy(0, 0, TILE_SIZE)],
   ['necro fairy', () => new NecroFairy(0, 0, TILE_SIZE)],
@@ -1136,13 +1159,36 @@ class CentredEyesLlama extends Llama {
   }
 }
 
+/**
+ * A skeleton given a one-tile biped's eyes, for the negative test: they land
+ * by its feet, under a skull that stands nearly a tile above its own tile.
+ */
+class TileHighEyesSkeleton extends SkeletonWarrior {
+  protected override get eyePlacement(): EyePlacement {
+    return DEFAULT_EYE_PLACEMENT;
+  }
+}
+
 function checkEyeShine(): void {
-  for (const [name, make, headEnd] of EYE_CREATURES) {
+  for (const [name, make] of EYELESS_CREATURES) {
+    for (const facing of FACINGS) {
+      const subject = make();
+      subject.facingX = facing.x;
+      subject.facingY = facing.y;
+      if (subject.eyeShineAnchor({ x: 0, y: 0, spacingPx: 0 })) {
+        fail(
+          'eye-shine',
+          `${name} facing (${facing.x},${facing.y}): eyes shown on an eyeless creature`,
+        );
+      }
+    }
+  }
+  for (const [name, make] of EYE_CREATURES) {
     for (const facing of FACINGS) {
       const subject = make();
       subject.x = EYE_CHECK_TILE * TILE_SIZE;
       subject.y = EYE_CHECK_TILE * TILE_SIZE;
-      const error = eyeErrors(subject, facing, headEnd);
+      const error = eyeErrors(subject, facing);
       if (error !== null) fail('eye-shine', `${name} facing (${facing.x},${facing.y}): ${error}`);
     }
   }
@@ -1151,6 +1197,10 @@ function checkEyeShine(): void {
   const fixed = new CentredEyesLlama(EYE_CHECK_TILE, EYE_CHECK_TILE, TILE_SIZE);
   if (FACINGS.every((facing) => eyeErrors(fixed, facing) === null)) {
     fail('eye-shine', 'negative test: eyes fixed to the middle of the tile went unnoticed');
+  }
+  const tileHigh = new TileHighEyesSkeleton(EYE_CHECK_TILE, EYE_CHECK_TILE, TILE_SIZE);
+  if (FACINGS.every((facing) => eyeErrors(tileHigh, facing) === null)) {
+    fail('eye-shine', "negative test: a skeleton's eyes down by its feet went unnoticed");
   }
 }
 

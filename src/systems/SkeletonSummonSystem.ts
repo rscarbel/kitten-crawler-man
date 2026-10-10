@@ -295,7 +295,10 @@ export class SkeletonSummonSystem implements GameSystem {
     taken: Set<string>,
   ): { x: number; y: number } | null {
     const key = tileKey(request.tileX, request.tileY);
-    if (!taken.has(key) && this.gameMap.isWalkableForHostile(request.tileX, request.tileY)) {
+    const standable =
+      this.gameMap.isWalkableForHostile(request.tileX, request.tileY) &&
+      this.gameMap.isMobSpawnTile(request.tileX, request.tileY);
+    if (!taken.has(key) && standable) {
       taken.add(key);
       return { x: request.tileX, y: request.tileY };
     }
@@ -433,7 +436,7 @@ export class SkeletonSummonSystem implements GameSystem {
           if (Math.max(Math.abs(dx), Math.abs(dy)) !== radius) continue;
           const tileX = centreTileX + dx;
           const tileY = centreTileY + dy;
-          if (!this.gameMap.isWalkable(tileX, tileY)) continue;
+          if (!this.gameMap.isMobSpawnTile(tileX, tileY)) continue;
           const tile = { x: tileX, y: tileY };
           if (taken.has(tileKey(tileX, tileY))) doubledUp.push(tile);
           else if (hasRoomToMove(this.gameMap, tileX, tileY)) roomy.push(tile);

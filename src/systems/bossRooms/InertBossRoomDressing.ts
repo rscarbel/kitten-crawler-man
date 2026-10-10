@@ -21,7 +21,7 @@ export abstract class InertBossRoomDressing implements BossRoomDressing {
     _ctx: CanvasRenderingContext2D,
     _camX: number,
     _camY: number,
-    _active: HumanPlayer | CatPlayer,
+    _promptFor: HumanPlayer | CatPlayer | undefined,
   ): void {
     // Its floor is entirely in the chunk bake.
   }

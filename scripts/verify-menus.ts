@@ -1,15 +1,22 @@
 #!/usr/bin/env tsx
 /**
  * Every menu that takes the keyboard away from play can be answered by the
- * keyboard alone. The rule itself lives in `menuFocusAudit`; this script
- * stands up the places menus open and runs it against each one:
+ * keyboard alone, and every close button a menu draws can be tapped on a
+ * phone. The rules live in `menuFocusAudit` and `closeButtonAudit`; this
+ * script stands up the places menus open and runs them against each one:
  *
  *  - a deliberately ringless halting surface, which the audit must flag, so
- *    an audit that has stopped seeing the bug fails instead of passing;
- *  - every UI-gallery sheet and fixture, before and after its scripted input;
+ *    an audit that has stopped seeing the bug fails instead of passing, and
+ *    likewise a close button pushed off a phone;
+ *  - every UI-gallery sheet and fixture, before and after its scripted input,
+ *    and each settled fixture again on phones both ways up, at every UI size,
+ *    with and without a notch;
  *  - the real `DungeonScene` (the town) and `BuildingInteriorScene`, headless,
  *    with each surface they mount opened in turn through the game's own
- *    openers and settled until its entrance has played.
+ *    openers and settled until its entrance has played; and the same scenes
+ *    replayed on a notched phone each way up, in child processes run beside
+ *    the desktop pass, whose close buttons must be tappable and must be
+ *    there wherever the desktop shows one.
  *
  * Every panel, modal and system surface a scene mounts must be opened by this
  * script unless both of its keyboard claims are fixed `false` or another case
@@ -20,31 +27,82 @@
  * Run: npm run verify:menus
  */
 
+import { spawn } from 'node:child_process';
+import { fileURLToPath } from 'node:url';
 import type { Surface } from '../src/ui/core/UiRoot.js';
 import type { FocusClaimant } from './menuFocusAudit.js';
+import type { UiSize } from '../src/core/Settings.js';
+import type { SafeAreaInsets, ViewportInput } from '../src/ui/core/viewport.js';
 import type { MenusKit } from '../src/systems/kits/MenusKit.js';
 
 export {};
 
+/** A notched phone held sideways: the notch and the home indicator eat the edges. */
+const NOTCH_LANDSCAPE_INSETS: SafeAreaInsets = { t: 0, r: 47, b: 21, l: 47 };
+/** The same phone upright: the notch takes the top, the home indicator the bottom. */
+const NOTCH_PORTRAIT_INSETS: SafeAreaInsets = { t: 47, r: 0, b: 34, l: 0 };
+
+/**
+ * The phones the scenes are replayed on, each in a process of its own: touch
+ * density and the platform are decided once per page load, so a desktop
+ * process cannot become a phone. Notched and at the largest UI size, the
+ * tightest room each way up.
+ */
+const PHONE_PASS_IDS = ['portrait-notched', 'landscape-notched'] as const;
+type PhonePassId = (typeof PHONE_PASS_IDS)[number];
+const PHONE_SCENE_PASSES: Record<
+  PhonePassId,
+  { readonly width: number; readonly height: number; readonly safeArea: SafeAreaInsets }
+> = {
+  'portrait-notched': { width: 390, height: 844, safeArea: NOTCH_PORTRAIT_INSETS },
+  'landscape-notched': { width: 844, height: 390, safeArea: NOTCH_LANDSCAPE_INSETS },
+};
+const PHONE_SCENE_UI_SIZE: UiSize = 'large';
+const PHONE_PASS_FLAG = '--phone-scenes=';
+
+function isPhonePassId(value: string): value is PhonePassId {
+  return PHONE_PASS_IDS.some((id) => id === value);
+}
+
+function phonePassFromArgs(): PhonePassId | null {
+  const arg = process.argv.find((candidate) => candidate.startsWith(PHONE_PASS_FLAG));
+  if (arg === undefined) return null;
+  const id = arg.slice(PHONE_PASS_FLAG.length);
+  if (!isPhonePassId(id)) throw new Error(`verify:menus: no phone pass "${id}"`);
+  return id;
+}
+
+/** Set in a child process that replays the scenes on one phone and reports back. */
+const phonePass = phonePassFromArgs();
+
 // Before any game module loads: the platform is decided once, at import.
 Object.defineProperty(globalThis, 'navigator', {
-  value: { maxTouchPoints: 0, userAgent: 'Desktop' },
+  value:
+    phonePass === null
+      ? { maxTouchPoints: 0, userAgent: 'Desktop' }
+      : { maxTouchPoints: 1, userAgent: 'iPhone' },
   configurable: true,
 });
 
 const DESKTOP = { width: 1280, height: 800, devicePixelRatio: 1 } as const;
+const SCREEN =
+  phonePass === null ? DESKTOP : { ...PHONE_SCENE_PASSES[phonePass], devicePixelRatio: 1 };
 const { installBrowserShim } = await import('./browserShim.js');
 const { settleArrival } = await import('./settleArrival.js');
-installBrowserShim(DESKTOP);
+installBrowserShim(SCREEN);
 const WORLD_SEED = 7;
 const { mulberry32 } = await import('../src/sprites/person/rng.js');
 Math.random = mulberry32(WORLD_SEED);
 
+const { auditCloseButtons, missingCloseButtons, openMenuSurfaceIds, surfacesWithCloseButtons } =
+  await import('./closeButtonAudit.js');
+const { motion } = await import('../src/ui/theme/tokens.js');
 const { auditFocus, claimsKeyboard, mountedSurfaces, neverClaimsKeyboard } =
   await import('./menuFocusAudit.js');
 const { gameContext } = await import('./nodeGameContext.js');
 const { loadSprites } = await import('../src/core/SpriteLoader.js');
 const { setViewportSize } = await import('../src/core/Viewport.js');
+const { settings } = await import('../src/core/Settings.js');
 const { UiRoot } = await import('../src/ui/core/UiRoot.js');
 const { NO_INSETS } = await import('../src/ui/core/viewport.js');
 const { MOUSE_POINTER_ID, PRIMARY_BUTTON } = await import('../src/ui/core/pointer.js');
@@ -85,22 +143,146 @@ function section(title: string): void {
   console.log(`\n── ${title}`);
 }
 
-await loadSprites('src/images/');
-setViewportSize(DESKTOP.width, DESKTOP.height);
-const ctx = gameContext(DESKTOP.width, DESKTOP.height);
+// ── Phone passes ───────────────────────────────────────────────────────────
 
-/** A bare root at the desktop viewport with its own clock, for surfaces mounted outside any scene. */
-function bareRoot(): { readonly root: Root; frame(): void; settle(): void } {
+/** One opened state of a scene: the menus open in it and those that drew a close button. */
+interface CloseButtonState {
+  readonly label: string;
+  readonly open: readonly string[];
+  readonly withClose: readonly string[];
+}
+
+/** What a phone pass hands back to the desktop run. */
+interface PhoneReport {
+  readonly states: readonly CloseButtonState[];
+  readonly failures: readonly string[];
+}
+
+interface PhonePassResult {
+  readonly id: PhonePassId;
+  readonly status: number | null;
+  readonly output: string;
+}
+
+const PHONE_REPORT_MARKER = 'verify:menus phone report ';
+/** Lines of a phone pass's own output shown when it fails to report. */
+const PHONE_OUTPUT_TAIL_LINES = 40;
+
+/**
+ * Surfaces only the scenes open, with no gallery fixture of their own; each
+ * must be reached on every phone, so a scene opener that stops working on a
+ * phone cannot drop one out of the audit unnoticed.
+ */
+const PHONE_REQUIRED_SURFACES = [
+  'travel-menu',
+  'notice-board',
+  'market-stall',
+  'village-priced-menu',
+  'village-services-picker',
+  'construction-picker',
+  'priced-menu',
+  'club-bar-shop',
+  'club-market-shop',
+  'club-guild',
+  'follower-menu',
+  'chest-reward',
+  'quest-reward',
+  'run-complete',
+] as const;
+
+function isStringArray(value: unknown): value is string[] {
+  return Array.isArray(value) && value.every((item) => typeof item === 'string');
+}
+
+function isCloseButtonState(value: unknown): value is CloseButtonState {
+  return (
+    typeof value === 'object' &&
+    value !== null &&
+    'label' in value &&
+    typeof value.label === 'string' &&
+    'open' in value &&
+    isStringArray(value.open) &&
+    'withClose' in value &&
+    isStringArray(value.withClose)
+  );
+}
+
+function isPhoneReport(value: unknown): value is PhoneReport {
+  return (
+    typeof value === 'object' &&
+    value !== null &&
+    'states' in value &&
+    Array.isArray(value.states) &&
+    value.states.every(isCloseButtonState) &&
+    'failures' in value &&
+    isStringArray(value.failures)
+  );
+}
+
+function parsePhoneReport(output: string): PhoneReport | null {
+  const line = output.split('\n').find((candidate) => candidate.startsWith(PHONE_REPORT_MARKER));
+  if (line === undefined) return null;
+  const parsed: unknown = JSON.parse(line.slice(PHONE_REPORT_MARKER.length));
+  return isPhoneReport(parsed) ? parsed : null;
+}
+
+/** Replays the scenes on one phone in a child process, alongside the desktop run. */
+function runPhoneScenePass(id: PhonePassId): Promise<PhonePassResult> {
+  return new Promise((resolve) => {
+    const child = spawn(
+      process.execPath,
+      [...process.execArgv, fileURLToPath(import.meta.url), `${PHONE_PASS_FLAG}${id}`],
+      { stdio: ['ignore', 'pipe', 'pipe'] },
+    );
+    let output = '';
+    const collect = (chunk: unknown): void => {
+      output += String(chunk);
+    };
+    child.stdout.on('data', collect);
+    child.stderr.on('data', collect);
+    child.on('close', (status) => resolve({ id, status, output }));
+  });
+}
+
+const closeButtonStates: CloseButtonState[] = [];
+
+/**
+ * Notes which menus are open and which drew a close button. On a phone the
+ * close buttons are audited in place too; whether one a desktop shows is
+ * missing here is decided by the desktop run, which holds both sides.
+ */
+function recordCloseButtons(ui: Root, label: string): void {
+  closeButtonStates.push({
+    label,
+    open: openMenuSurfaceIds(ui),
+    withClose: [...surfacesWithCloseButtons(ui)],
+  });
+  if (phonePass !== null) failures.push(...auditCloseButtons(ui, `${phonePass} ${label}`));
+}
+
+await loadSprites('src/images/');
+setViewportSize(SCREEN.width, SCREEN.height);
+const ctx = gameContext(SCREEN.width, SCREEN.height);
+if (phonePass !== null) settings.setUiSize(PHONE_SCENE_UI_SIZE);
+
+const DESKTOP_VIEWPORT: ViewportInput = {
+  cssWidth: DESKTOP.width,
+  cssHeight: DESKTOP.height,
+  density: 'pointer',
+  uiSize: 'medium',
+  safeArea: NO_INSETS,
+};
+
+/** A bare root with its own clock, for surfaces mounted outside any scene; the desktop unless told otherwise. */
+function bareRoot(viewport: ViewportInput = DESKTOP_VIEWPORT): {
+  readonly root: Root;
+  frame(): void;
+  settle(): void;
+} {
   let clock = 0;
   const root = new UiRoot({
     audio: null,
-    viewport: () => ({
-      cssWidth: DESKTOP.width,
-      cssHeight: DESKTOP.height,
-      density: 'pointer',
-      uiSize: 'medium',
-      safeArea: NO_INSETS,
-    }),
+    viewport: () => viewport,
     now: () => clock,
     warn: () => undefined,
   });
@@ -119,140 +301,242 @@ function bareRoot(): { readonly root: Root; frame(): void; settle(): void } {
   };
 }
 
-// ── Self test ──────────────────────────────────────────────────────────────
+const phoneScenePasses = phonePass === null ? PHONE_PASS_IDS.map(runPhoneScenePass) : [];
 
-section('self test: the audit flags a menu a keyboard cannot reach');
-{
-  const panelRect = { x: 100, y: 100, w: 300, h: 200 };
-  const buttonRect = { x: 120, y: 240, w: 120, h: 40 };
-  const ringless: Surface = {
-    id: 'ringless-fake',
-    band: 'modal',
-    haltsWorld: true,
-    isOpen: () => true,
-    render: (ui) => {
-      ui.block(panelRect);
-      ui.hit('ok', buttonRect, { onTap: () => undefined, focusable: false });
-    },
+if (phonePass === null) {
+  // ── Self test ──────────────────────────────────────────────────────────────
+
+  section('self test: the audit flags a menu a keyboard cannot reach');
+  {
+    const panelRect = { x: 100, y: 100, w: 300, h: 200 };
+    const buttonRect = { x: 120, y: 240, w: 120, h: 40 };
+    const ringless: Surface = {
+      id: 'ringless-fake',
+      band: 'modal',
+      haltsWorld: true,
+      isOpen: () => true,
+      render: (ui) => {
+        ui.block(panelRect);
+        ui.hit('ok', buttonRect, { onTap: () => undefined, focusable: false });
+      },
+    };
+    const floating: Surface = {
+      id: 'floating-fake',
+      band: 'system',
+      haltsWorld: false,
+      isOpen: () => true,
+      render: (ui) => void ui.hit('tip', buttonRect, { onTap: () => undefined, focusable: false }),
+    };
+    const rig = bareRoot();
+    rig.root.mount(ringless);
+    rig.frame();
+    const caught = auditFocus(rig.root, 'self test').failures;
+    console.log(caught.map((failure) => `  caught: ${failure}`).join('\n'));
+    check(
+      caught.some((failure) => failure.includes('"ringless-fake"')),
+      'self test: a halting modal with only an unfocusable button is not flagged',
+    );
+    rig.root.mount(floating);
+    rig.frame();
+    const stolen = auditFocus(rig.root, 'self test').failures;
+    console.log(stolen.map((failure) => `  caught: ${failure}`).join('\n'));
+    check(
+      stolen.some((failure) => failure.includes('focus belongs to "floating-fake"')),
+      'self test: a non-halting surface that steals focus from a halting one is not flagged',
+    );
+  }
+
+  // ── UI gallery ─────────────────────────────────────────────────────────────
+
+  const SHEET_FIXTURES: Readonly<Partial<Record<GallerySheet, FixtureList>>> = {
+    dialogs: DIALOG_FIXTURES,
+    inventory: INVENTORY_FIXTURES,
+    shop: SHOP_FIXTURES,
+    construction: CONSTRUCTION_FIXTURES,
+    pause: PAUSE_FIXTURES,
+    hud: HUD_FIXTURES,
   };
-  const floating: Surface = {
-    id: 'floating-fake',
-    band: 'system',
-    haltsWorld: false,
-    isOpen: () => true,
-    render: (ui) => void ui.hit('tip', buttonRect, { onTap: () => undefined, focusable: false }),
-  };
-  const rig = bareRoot();
-  rig.root.mount(ringless);
-  rig.frame();
-  const caught = auditFocus(rig.root, 'self test').failures;
-  console.log(caught.map((failure) => `  caught: ${failure}`).join('\n'));
-  check(
-    caught.some((failure) => failure.includes('"ringless-fake"')),
-    'self test: a halting modal with only an unfocusable button is not flagged',
-  );
-  rig.root.mount(floating);
-  rig.frame();
-  const stolen = auditFocus(rig.root, 'self test').failures;
-  console.log(stolen.map((failure) => `  caught: ${failure}`).join('\n'));
-  check(
-    stolen.some((failure) => failure.includes('focus belongs to "floating-fake"')),
-    'self test: a non-halting surface that steals focus from a halting one is not flagged',
-  );
-}
 
-// ── UI gallery ─────────────────────────────────────────────────────────────
+  function centre(region: HitRegion): { x: number; y: number } {
+    return { x: region.rect.x + region.rect.w / 2, y: region.rect.y + region.rect.h / 2 };
+  }
 
-const SHEET_FIXTURES: Readonly<Partial<Record<GallerySheet, FixtureList>>> = {
-  dialogs: DIALOG_FIXTURES,
-  inventory: INVENTORY_FIXTURES,
-  shop: SHOP_FIXTURES,
-  construction: CONSTRUCTION_FIXTURES,
-  pause: PAUSE_FIXTURES,
-  hud: HUD_FIXTURES,
-};
+  function galleryRig(
+    sheet: GallerySheet,
+    fixture: string | null,
+    viewport: ViewportInput = DESKTOP_VIEWPORT,
+  ) {
+    const bare = bareRoot(viewport);
+    const { root } = bare;
+    const model = new GalleryModel();
+    model.sheet = sheet;
+    model.screenFixture = fixture;
+    for (const surface of createUiGallery(model, null).surfaces) root.mount(surface);
+    const gesture = (kind: 'down' | 'move' | 'up', region: HitRegion): void => {
+      const point = centre(region);
+      root.pointer({
+        kind,
+        pointerId: MOUSE_POINTER_ID,
+        source: 'mouse',
+        x: point.x,
+        y: point.y,
+        cssX: point.x * root.uiScale,
+        cssY: point.y * root.uiScale,
+        button: PRIMARY_BUTTON,
+        deltaY: 0,
+      });
+    };
+    const region = (id: string): HitRegion | null =>
+      root.regions().find((candidate) => candidate.id === id) ?? null;
+    const rig: FixtureRig = {
+      region,
+      need: (id) => {
+        const found = region(id);
+        if (found === null) throw new Error(`verify:menus: no region "${id}" was registered`);
+        return found;
+      },
+      hover: (target) => gesture('move', target),
+      tap: (target) => {
+        gesture('down', target);
+        gesture('up', target);
+      },
+      key: (key) => void root.key(key, {}),
+      frame: () => bare.frame(),
+      settle: () => bare.settle(),
+    };
+    return { root, rig, model };
+  }
 
-function centre(region: HitRegion): { x: number; y: number } {
-  return { x: region.rect.x + region.rect.w / 2, y: region.rect.y + region.rect.h / 2 };
-}
-
-function galleryRig(sheet: GallerySheet, fixture: string | null) {
-  const bare = bareRoot();
-  const { root } = bare;
-  const model = new GalleryModel();
-  model.sheet = sheet;
-  model.screenFixture = fixture;
-  for (const surface of createUiGallery(model, null).surfaces) root.mount(surface);
-  const gesture = (kind: 'down' | 'move' | 'up', region: HitRegion): void => {
-    const point = centre(region);
-    root.pointer({
-      kind,
-      pointerId: MOUSE_POINTER_ID,
-      source: 'mouse',
-      x: point.x,
-      y: point.y,
-      cssX: point.x * root.uiScale,
-      cssY: point.y * root.uiScale,
-      button: PRIMARY_BUTTON,
-      deltaY: 0,
-    });
-  };
-  const region = (id: string): HitRegion | null =>
-    root.regions().find((candidate) => candidate.id === id) ?? null;
-  const rig: FixtureRig = {
-    region,
-    need: (id) => {
-      const found = region(id);
-      if (found === null) throw new Error(`verify:menus: no region "${id}" was registered`);
-      return found;
-    },
-    hover: (target) => gesture('move', target),
-    tap: (target) => {
-      gesture('down', target);
-      gesture('up', target);
-    },
-    key: (key) => void root.key(key, {}),
-    frame: () => bare.frame(),
-    settle: () => bare.settle(),
-  };
-  return { root, rig, model };
-}
-
-section('UI gallery');
-{
-  let galleryClaimants = 0;
-  const audit = (root: Root, label: string): void => {
-    const outcome = auditFocus(root, label);
-    failures.push(...outcome.failures);
-    galleryClaimants += outcome.claimants.length;
-    console.log(`  ${label}: ${describeClaimants(outcome.claimants)}`);
-  };
-  for (const sheet of GALLERY_SHEETS) {
-    const fixtures = SHEET_FIXTURES[sheet] ?? [];
-    // One rig walks the sheet's fixtures: only the shown fixture's surfaces are open.
-    const walk = galleryRig(sheet, null);
-    if (fixtures.length === 0) {
-      walk.rig.frame();
-      walk.rig.settle();
-      audit(walk.root, `gallery ${sheet}`);
+  section('UI gallery');
+  {
+    let galleryClaimants = 0;
+    const audit = (root: Root, label: string): void => {
+      const outcome = auditFocus(root, label);
+      failures.push(...outcome.failures);
+      galleryClaimants += outcome.claimants.length;
+      console.log(`  ${label}: ${describeClaimants(outcome.claimants)}`);
+    };
+    for (const sheet of GALLERY_SHEETS) {
+      const fixtures = SHEET_FIXTURES[sheet] ?? [];
+      // One rig walks the sheet's fixtures: only the shown fixture's surfaces are open.
+      const walk = galleryRig(sheet, null);
+      if (fixtures.length === 0) {
+        walk.rig.frame();
+        walk.rig.settle();
+        audit(walk.root, `gallery ${sheet}`);
+      }
+      for (const fixture of fixtures) {
+        walk.model.screenFixture = fixture.name;
+        walk.rig.frame();
+        walk.rig.settle();
+        audit(walk.root, `gallery ${sheet}/${fixture.name}`);
+        const interact = fixture.interact;
+        if (interact === undefined) continue;
+        const fresh = galleryRig(sheet, fixture.name);
+        fresh.rig.frame();
+        fresh.rig.settle();
+        interact(fresh.rig);
+        fresh.rig.frame();
+        fresh.rig.settle();
+        audit(fresh.root, `gallery ${sheet}/${fixture.name} (after its input)`);
+      }
     }
-    for (const fixture of fixtures) {
-      walk.model.screenFixture = fixture.name;
-      walk.rig.frame();
-      walk.rig.settle();
-      audit(walk.root, `gallery ${sheet}/${fixture.name}`);
-      const interact = fixture.interact;
-      if (interact === undefined) continue;
-      const fresh = galleryRig(sheet, fixture.name);
-      fresh.rig.frame();
-      fresh.rig.settle();
-      interact(fresh.rig);
-      fresh.rig.frame();
-      fresh.rig.settle();
-      audit(fresh.root, `gallery ${sheet}/${fixture.name} (after its input)`);
+    check(galleryClaimants > 0, 'the gallery audit saw no surface that claims the keyboard');
+  }
+
+  // ── Close buttons on phones ────────────────────────────────────────────────
+
+  /** Phone screens in CSS pixels, both ways up, down to the shortest landscape. */
+  const PHONE_SCREENS = [
+    { w: 844, h: 390 },
+    { w: 667, h: 375 },
+    { w: 568, h: 320 },
+    { w: 390, h: 844 },
+    { w: 360, h: 640 },
+  ] as const;
+  const PHONE_UI_SIZES: readonly UiSize[] = ['small', 'medium', 'large'];
+  function phoneViewports(): { readonly label: string; readonly input: ViewportInput }[] {
+    const viewports: { label: string; input: ViewportInput }[] = [];
+    for (const screen of PHONE_SCREENS) {
+      const landscape = screen.w > screen.h;
+      const notch = landscape ? NOTCH_LANDSCAPE_INSETS : NOTCH_PORTRAIT_INSETS;
+      for (const uiSize of PHONE_UI_SIZES) {
+        for (const [inset, safeArea] of [
+          ['', NO_INSETS],
+          [' notched', notch],
+        ] as const) {
+          viewports.push({
+            label: `${screen.w}x${screen.h} ${uiSize}${inset}`,
+            input: { cssWidth: screen.w, cssHeight: screen.h, density: 'touch', uiSize, safeArea },
+          });
+        }
+      }
+    }
+    return viewports;
+  }
+
+  section('self test: the close audit flags a close button pushed off a phone screen');
+  {
+    /** A panel whose ✕ starts `overhang` of its own width past the right edge of the safe area. */
+    const overhangingClose = (id: string, overhang: number): Surface => ({
+      id,
+      band: 'panel',
+      haltsWorld: true,
+      isOpen: () => true,
+      close: () => undefined,
+      render: (ui) => {
+        const side = ui.theme.size.control;
+        const x = ui.viewport.x + ui.viewport.w - side * (1 - overhang);
+        ui.hit('close', { x, y: ui.viewport.y, w: side, h: side }, { onTap: () => undefined });
+      },
+    });
+    const HALF_OFF = 0.5;
+    const WHOLLY_OFF = 1;
+    const cases = [
+      { surface: overhangingClose('half-off-close-fake', HALF_OFF), what: 'half past the edge' },
+      { surface: overhangingClose('off-screen-close-fake', WHOLLY_OFF), what: 'wholly off screen' },
+    ];
+    for (const { surface, what } of cases) {
+      const bare = bareRoot(phoneViewports()[0].input);
+      bare.root.mount(surface);
+      bare.frame();
+      const found = auditCloseButtons(bare.root, 'self test', new Set([surface.id]));
+      check(found.length > 0, `self test: a close button ${what} on a phone is not flagged`);
     }
   }
-  check(galleryClaimants > 0, 'the gallery audit saw no surface that claims the keyboard');
+
+  section('close buttons on phones');
+  {
+    const phones = phoneViewports();
+    const failuresByPhone = new Map<string, number>();
+    let audited = 0;
+    // Settled fixtures only: replaying each fixture's scripted input on every phone would take most of an hour.
+    const auditState = (sheet: GallerySheet, fixture: string | null, label: string): void => {
+      const settled = (viewport?: ViewportInput): Root => {
+        const gallery = galleryRig(sheet, fixture, viewport);
+        gallery.rig.frame();
+        gallery.rig.settle();
+        return gallery.root;
+      };
+      const expected = surfacesWithCloseButtons(settled());
+      for (const phone of phones) {
+        const found = auditCloseButtons(settled(phone.input), `${phone.label} ${label}`, expected);
+        failures.push(...found);
+        failuresByPhone.set(phone.label, (failuresByPhone.get(phone.label) ?? 0) + found.length);
+        audited++;
+      }
+    };
+    for (const sheet of GALLERY_SHEETS) {
+      const fixtures = SHEET_FIXTURES[sheet] ?? [];
+      if (fixtures.length === 0) auditState(sheet, null, `gallery ${sheet}`);
+      for (const fixture of fixtures)
+        auditState(sheet, fixture.name, `gallery ${sheet}/${fixture.name}`);
+    }
+    for (const [phone, count] of failuresByPhone) {
+      console.log(`  ${phone}: ${count === 0 ? 'ok' : `${count} failure(s)`}`);
+    }
+    check(audited > 0, 'the close-button audit saw no gallery state');
+  }
 }
 
 // ── Scenes ─────────────────────────────────────────────────────────────────
@@ -293,6 +577,15 @@ function settle(scene: SceneUnderAudit, surfaceId: string): void {
   }
 }
 
+/** Longer than any surface's opening motion, so a close button is audited where it comes to rest. */
+const ENTRANCE_MS = motion.slow;
+
+/** Runs frames until the surface's opening motion has played out, on the scene's own clock. */
+function settleEntrance(scene: SceneUnderAudit, surfaceId: string): void {
+  const start = performance.now();
+  while (performance.now() - start < ENTRANCE_MS && scene.ui.isOpen(surfaceId)) step(scene);
+}
+
 /**
  * Opens each surface in turn, audits the settled frame, closes it, and checks
  * every panel, modal and system surface the scene mounts was either opened or
@@ -317,9 +610,19 @@ function auditScene<S extends SceneUnderAudit>(
     settle(scene, opener.surfaceId);
     for (const id of scene.ui.openSurfaceIds()) opened.add(id);
     const settledNote = scene.ui.isOpen(opener.surfaceId) ? '' : ' [closed itself while settling]';
-    const outcome = auditFocus(scene.ui, stateLabel);
-    failures.push(...outcome.failures);
-    console.log(`  ${stateLabel}: ${describeClaimants(outcome.claimants)}${settledNote}`);
+    if (phonePass === null) {
+      const outcome = auditFocus(scene.ui, stateLabel);
+      failures.push(...outcome.failures);
+      console.log(`  ${stateLabel}: ${describeClaimants(outcome.claimants)}${settledNote}`);
+    }
+    settleEntrance(scene, opener.surfaceId);
+    recordCloseButtons(scene.ui, stateLabel);
+    if (phonePass !== null) {
+      const open = openMenuSurfaceIds(scene.ui).join(', ') || 'no menu';
+      const closers = [...surfacesWithCloseButtons(scene.ui)].join(', ') || 'nothing';
+      const closedNote = scene.ui.isOpen(opener.surfaceId) ? '' : ' [closed itself]';
+      console.log(`  ${stateLabel}: ${open} open, close buttons on ${closers}${closedNote}`);
+    }
     opener.close(scene);
     for (let frame = 0; frame < CLOSE_FRAMES; frame++) step(scene);
     const mounted = mountedSurfaces(scene.ui);
@@ -702,8 +1005,21 @@ function townOpeners(): Opener<Town>[] {
     ),
     menu(
       'village-services-picker',
-      (scene) => services(scene).picker.open(SAMPLE_QUANTITY),
-      (scene) => services(scene).picker.close(),
+      (scene) => {
+        // The picker is Fenna's question and closes on the next tick she is not being talked to.
+        const villagers = briar(scene).villagers;
+        const fenna = villagers?.villagerFor('fenna') ?? null;
+        if (villagers === null || fenna === null) throw new Error('the town has no Fenna');
+        const active = scene['active']();
+        active.x = fenna.x;
+        active.y = fenna.y;
+        villagers.talkTo(fenna, active);
+        services(scene).picker.open(SAMPLE_QUANTITY);
+      },
+      (scene) => {
+        services(scene).picker.close();
+        scene['conversation'].close();
+      },
     ),
     menu(
       'follower-menu',
@@ -987,6 +1303,48 @@ for (const { label, entry, openers } of cases) {
 }
 
 // ── Report ─────────────────────────────────────────────────────────────────
+
+if (phonePass !== null) {
+  const report: PhoneReport = { states: closeButtonStates, failures };
+  console.log(`${PHONE_REPORT_MARKER}${JSON.stringify(report)}`);
+  process.exit(0);
+}
+
+section('close buttons on phones, in the scenes');
+for (const pass of await Promise.all(phoneScenePasses)) {
+  const report = parsePhoneReport(pass.output);
+  if (report === null) {
+    const tail = pass.output.trimEnd().split('\n').slice(-PHONE_OUTPUT_TAIL_LINES).join('\n');
+    console.error(tail);
+    failures.push(`${pass.id}: the phone pass exited ${pass.status} without a report`);
+    continue;
+  }
+  const passFailures = [...report.failures];
+  const phoneStates = new Map(report.states.map((state) => [state.label, state]));
+  for (const desktop of closeButtonStates) {
+    const phone = phoneStates.get(desktop.label);
+    if (phone === undefined) {
+      passFailures.push(`${pass.id} ${desktop.label}: never reached on the phone`);
+      continue;
+    }
+    passFailures.push(
+      ...missingCloseButtons(
+        `${pass.id} ${desktop.label}`,
+        new Set(desktop.withClose),
+        phone.open,
+        new Set(phone.withClose),
+      ),
+    );
+  }
+  const openedOnPhone = new Set(report.states.flatMap((state) => state.open));
+  for (const id of PHONE_REQUIRED_SURFACES) {
+    if (!openedOnPhone.has(id))
+      passFailures.push(`${pass.id}: "${id}" was never open on the phone`);
+  }
+  failures.push(...passFailures);
+  const outcome = passFailures.length === 0 ? 'ok' : `${passFailures.length} failure(s)`;
+  console.log(`  ${pass.id}: ${report.states.length} states, ${outcome}`);
+}
 
 if (failures.length > 0) {
   console.error(`\nverify:menus — ${failures.length} failure(s)\n`);

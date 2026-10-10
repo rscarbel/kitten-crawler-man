@@ -188,9 +188,9 @@ export class BossRoomDressings implements GroundHazardSource, BossRoomFightListe
     ctx: CanvasRenderingContext2D,
     camX: number,
     camY: number,
-    active: HumanPlayer | CatPlayer,
+    promptFor: HumanPlayer | CatPlayer | undefined,
   ): void {
-    for (const dressing of this.all) dressing.renderGround(ctx, camX, camY, active);
+    for (const dressing of this.all) dressing.renderGround(ctx, camX, camY, promptFor);
   }
 
   /** Every room's Y-sorted objects this frame, in one reused list. */

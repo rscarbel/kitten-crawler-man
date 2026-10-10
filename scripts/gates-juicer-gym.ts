@@ -450,7 +450,7 @@ for (const side of SIDES) {
 
 // ── 5. Interactables ─────────────────────────────────────────────────────────
 
-console.log('5. console, boombox, chalk');
+console.log('5. console, boombox, chalk, benches');
 {
   const { env, gym } = gymOn('south');
   const layout = gym.layout;
@@ -502,6 +502,24 @@ console.log('5. console, boombox, chalk');
       gym.livePuffCount <= CHALK_PUFF_CAP,
       `${gym.livePuffCount} chalk puffs alive, cap ${CHALK_PUFF_CAP}`,
     );
+    const bench = layout.benches.length > 0 ? layout.benches[0] : undefined;
+    check(bench !== undefined, 'the gym has no floor bench');
+    if (bench !== undefined) {
+      human.x = bench.x * TILE_SIZE;
+      human.y = bench.y * TILE_SIZE;
+      check(gym.wouldInteract(human), 'standing on a floor bench, a press is not claimed');
+      const held = human.inventory.countOf('gym_bench_press');
+      const besideBench = (bench.x + 1 + 1 / 2) * TILE_SIZE;
+      check(
+        !gym.tryPickupBenchAt(besideBench, (bench.y + 1 / 2) * TILE_SIZE, human),
+        'a tap beside the floor bench took it',
+      );
+      check(
+        gym.tryPickupBenchAt((bench.x + 1 / 2) * TILE_SIZE, (bench.y + 1 / 2) * TILE_SIZE, human) &&
+          human.inventory.countOf('gym_bench_press') === held + 1,
+        'a tap on the floor bench in reach did not put it in the bag',
+      );
+    }
   }
 }
 

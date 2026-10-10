@@ -49,6 +49,8 @@ const VIEWPORTS: readonly ReviewViewport[] = [
   { w: 1024, h: 640, density: 'pointer' },
   { w: 844, h: 390, density: 'touch' },
   { w: 568, h: 320, density: 'touch' },
+  { w: 390, h: 844, density: 'touch' },
+  { w: 360, h: 640, density: 'touch' },
 ];
 
 const UI_SIZES: readonly UiSize[] = ['small', 'medium', 'large'];

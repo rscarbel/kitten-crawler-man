@@ -447,30 +447,69 @@ export class JuicerRoomSystem
 
   /** Takes a dumbbell off a rack or a bench off the floor near `player`. True when one was collected. */
   override tryInteract(player: HumanPlayer | CatPlayer): boolean {
-    const px = player.x + TILE_SIZE * TILE_CENTER;
-    const py = player.y + TILE_SIZE * TILE_CENTER;
-    const rack = this.rackNear(px, py);
-    if (rack !== null) {
-      const slot = this.topFilledSlot(rack);
-      if (slot !== null) {
-        slot.filled = false;
-        slot.respawnTimer = DUMBBELL_RESPAWN_FRAMES;
-        player.inventory.addItem('gym_dumbbell', 1);
-        this.publishPropState();
-        return true;
-      }
-    }
-    for (const bench of this.benches) {
-      if (!bench.active) continue;
-      const centre = tileCentre(bench.tile);
-      if (Math.hypot(px - centre.x, py - centre.y) >= TILE_SIZE * PICKUP_COLLECT_RADIUS_RATIO)
-        continue;
-      bench.active = false;
-      bench.respawnTimer = BENCH_RESPAWN_FRAMES;
-      player.inventory.addItem('gym_bench_press', 1);
+    const target = this.interactTarget(player);
+    if (target === null) return false;
+    if (target.kind === 'rack') {
+      target.slot.filled = false;
+      target.slot.respawnTimer = DUMBBELL_RESPAWN_FRAMES;
+      player.inventory.addItem('gym_dumbbell', 1);
+      this.publishPropState();
       return true;
     }
-    return false;
+    this.takeBench(target.bench, player);
+    return true;
+  }
+
+  override wouldInteract(player: HumanPlayer | CatPlayer): boolean {
+    return this.interactTarget(player) !== null;
+  }
+
+  /**
+   * Takes the floor bench under a tapped or clicked world point, when `player`
+   * is in reach of it. Pointing at the bench says what the press is for, so
+   * this holds even with the Juicer in reach, where a bare press would swing.
+   */
+  tryPickupBenchAt(worldX: number, worldY: number, player: HumanPlayer | CatPlayer): boolean {
+    const tileX = Math.floor(worldX / TILE_SIZE);
+    const tileY = Math.floor(worldY / TILE_SIZE);
+    const tapped = this.benches.find(
+      (bench) => bench.active && bench.tile.x === tileX && bench.tile.y === tileY,
+    );
+    if (tapped === undefined || !this.benchReaches(tapped, player)) return false;
+    this.takeBench(tapped, player);
+    return true;
+  }
+
+  private interactTarget(
+    player: HumanPlayer | CatPlayer,
+  ): { kind: 'rack'; rack: Rack; slot: RackSlot } | { kind: 'bench'; bench: Bench } | null {
+    const rack = this.rackNear(
+      player.x + TILE_SIZE * TILE_CENTER,
+      player.y + TILE_SIZE * TILE_CENTER,
+    );
+    const slot = rack === null ? null : this.topFilledSlot(rack);
+    if (rack !== null && slot !== null) return { kind: 'rack', rack, slot };
+    const bench = this.benchInReach(player);
+    return bench === null ? null : { kind: 'bench', bench };
+  }
+
+  private benchInReach(player: HumanPlayer | CatPlayer): Bench | null {
+    return this.benches.find((bench) => bench.active && this.benchReaches(bench, player)) ?? null;
+  }
+
+  private benchReaches(bench: Bench, player: HumanPlayer | CatPlayer): boolean {
+    const centre = tileCentre(bench.tile);
+    const distance = Math.hypot(
+      player.x + TILE_SIZE * TILE_CENTER - centre.x,
+      player.y + TILE_SIZE * TILE_CENTER - centre.y,
+    );
+    return distance < TILE_SIZE * PICKUP_COLLECT_RADIUS_RATIO;
+  }
+
+  private takeBench(bench: Bench, player: HumanPlayer | CatPlayer): void {
+    bench.active = false;
+    bench.respawnTimer = BENCH_RESPAWN_FRAMES;
+    player.inventory.addItem('gym_bench_press', 1);
   }
 
   private rackNear(px: number, py: number): Rack | null {
@@ -802,7 +841,7 @@ export class JuicerRoomSystem
     ctx: CanvasRenderingContext2D,
     camX: number,
     camY: number,
-    activePlayer: HumanPlayer | CatPlayer,
+    promptFor: HumanPlayer | CatPlayer | undefined,
   ): void {
     const layout = this.layout;
     if (layout === null) return;
@@ -843,28 +882,21 @@ export class JuicerRoomSystem
     const lane = this.juicer?.plateRollLane ?? null;
     if (lane !== null && lane.length >= 2) this.drawPlateLane(ctx, lane, camX, camY);
 
-    const px = activePlayer.x + ts * TILE_CENTER;
-    const py = activePlayer.y + ts * TILE_CENTER;
     for (const bench of this.benches) {
       if (!bench.active) continue;
-      const sx = bench.tile.x * ts - camX;
-      const sy = bench.tile.y * ts - camY;
-      drawGymPickupSprite(ctx, 'bench', sx, sy, ts);
-      const centre = tileCentre(bench.tile);
-      if (Math.hypot(px - centre.x, py - centre.y) < ts * PICKUP_COLLECT_RADIUS_RATIO) {
-        drawInteractionPrompt(ctx, sx, sy, ts, 'Pick up');
-      }
+      drawGymPickupSprite(ctx, 'bench', bench.tile.x * ts - camX, bench.tile.y * ts - camY, ts);
     }
-    const rack = this.rackNear(px, py);
-    if (rack !== null && this.topFilledSlot(rack) !== null) {
-      drawInteractionPrompt(
-        ctx,
-        rack.tile.x * ts - camX,
-        rack.tile.y * ts - camY,
-        ts,
-        'Take dumbbell',
-      );
-    }
+    if (promptFor === undefined) return;
+    const target = this.interactTarget(promptFor);
+    if (target === null) return;
+    const promptTile = target.kind === 'rack' ? target.rack.tile : target.bench.tile;
+    drawInteractionPrompt(
+      ctx,
+      promptTile.x * ts - camX,
+      promptTile.y * ts - camY,
+      ts,
+      target.kind === 'rack' ? 'Take dumbbell' : 'Pick up',
+    );
   }
 
   private drawMirrorCrack(

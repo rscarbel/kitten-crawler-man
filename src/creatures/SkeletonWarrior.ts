@@ -1,11 +1,12 @@
 import type { Player } from '../Player';
 import { RisingSkeleton } from './RisingSkeleton';
 import { SKELETON_SWORD_BODY_PART_KEY, drawSkeletonWarriorSprite } from '../sprites/skeletonSprite';
+import { skeletonEyePlacement } from '../sprites/art/skeletonFigure';
 import { SWORD_SLASH_FRAMES, swordSlashImpactFrame } from '../sprites/skeletonTiming';
 import { PLAYER_SPEED } from '../core/constants';
 import { riposteCooldown } from './tactics/riposte';
 import type { TacticsTrait } from './tactics/tacticsTraits';
-import type { StructureStrikeTiming } from './Mob';
+import type { EyePlacement, StructureStrikeTiming } from './Mob';
 import { siegeAdvance, siegeCanEngage } from './siege/siegeCapability';
 
 /**
@@ -53,11 +54,18 @@ const SKELETON_STRUCTURE_STRIKE_TIMING: StructureStrikeTiming = {
   cooldownFrames: ATTACK_COOLDOWN_FRAMES,
 };
 
+const SWORD_SKELETON_EYES = skeletonEyePlacement('sword');
+
 export class SkeletonWarrior extends RisingSkeleton {
   readonly xpValue = SKELETON_ESCORT_XP;
   protected coinDropMin = COIN_DROP_MIN;
   protected coinDropMax = COIN_DROP_MAX;
   override readonly audioTag = 'skeleton';
+
+  protected override get eyePlacement(): EyePlacement {
+    return SWORD_SKELETON_EYES;
+  }
+
   override readonly bodyPartKey = SKELETON_SWORD_BODY_PART_KEY;
   displayName = 'Skeleton Warrior';
   description = 'A rattling swordsman held together by somebody else’s will.';

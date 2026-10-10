@@ -45,6 +45,7 @@ const SLOW_PULSE_ALPHA_BASE = 0.18;
 const SLOW_PULSE_ALPHA_RANGE = 0.08;
 /** Pulse speed for slow zone ring animation. */
 const SLOW_PULSE_SPEED = 0.004;
+const SLOW_RING_WIDTH = 2;
 
 export interface PlacedBarrier {
   tileX: number;
@@ -245,29 +246,58 @@ export class BarrierSystem implements GameSystem {
     });
   }
 
+  /** Whether an interact press from `player` would reclaim the barrier under them. */
+  wouldPickUp(player: Player): boolean {
+    return player.isAlive && this.indexUnder(player) !== -1;
+  }
+
   /**
-   * Attempt to pick up a placed barrier that `player` is standing on.
-   * Called on explicit Space press — returns true if an item was reclaimed.
+   * Reclaims the barrier `player` is standing on, on an interact press.
+   * Returns true if an item was reclaimed.
    */
   tryPickupNear(player: Player): boolean {
     if (!player.isAlive) return false;
-    const ts = TILE_SIZE;
-    const ptx = Math.floor((player.x + ts * TILE_CENTER_FRACTION) / ts);
-    const pty = Math.floor((player.y + ts * TILE_CENTER_FRACTION) / ts);
-    const idx = this.barriers.findIndex((b) => b.tileX === ptx && b.tileY === pty);
-    if (idx !== -1) {
-      const b = this.barriers[idx];
-      player.inventory.addItem(b.itemId, 1);
-      this.barriers.splice(idx, 1);
-      return true;
-    }
-    return false;
+    return this.reclaim(player, this.indexUnder(player));
+  }
+
+  /**
+   * Reclaims the barrier at a tapped or clicked world point, when `player`
+   * stands on it. Pointing at the piece says what the press is for, so this
+   * holds even with a hostile in reach, where a bare press would swing.
+   */
+  tryPickupAt(worldX: number, worldY: number, player: Player): boolean {
+    if (!player.isAlive) return false;
+    const index = this.indexUnder(player);
+    if (index === -1) return false;
+    const barrier = this.barriers[index];
+    const tappedOwnTile =
+      Math.floor(worldX / TILE_SIZE) === barrier.tileX &&
+      Math.floor(worldY / TILE_SIZE) === barrier.tileY;
+    return tappedOwnTile && this.reclaim(player, index);
+  }
+
+  private indexUnder(player: Player): number {
+    const ptx = Math.floor((player.x + TILE_SIZE * TILE_CENTER_FRACTION) / TILE_SIZE);
+    const pty = Math.floor((player.y + TILE_SIZE * TILE_CENTER_FRACTION) / TILE_SIZE);
+    return this.barriers.findIndex((b) => b.tileX === ptx && b.tileY === pty);
+  }
+
+  private reclaim(player: Player, index: number): boolean {
+    if (index === -1) return false;
+    player.inventory.addItem(this.barriers[index].itemId, 1);
+    this.barriers.splice(index, 1);
+    return true;
   }
 
   // Render
 
-  render(ctx: CanvasRenderingContext2D, camX: number, camY: number, activePlayer?: Player): void {
-    for (const b of this.barriers) {
+  /**
+   * @param promptFor The crawler a "Pick up" prompt is offered to, or undefined
+   *   while a press from them would not reach a barrier.
+   */
+  render(ctx: CanvasRenderingContext2D, camX: number, camY: number, promptFor?: Player): void {
+    const promptIndex = promptFor === undefined ? -1 : this.indexUnder(promptFor);
+    this.barriers.forEach((b, index) => {
       const sx = b.worldX - camX;
       const sy = b.worldY - camY;
 
@@ -286,8 +316,8 @@ export class BarrierSystem implements GameSystem {
       ctx.save();
       ctx.globalAlpha =
         SLOW_PULSE_ALPHA_BASE + SLOW_PULSE_ALPHA_RANGE * Math.sin(Date.now() * SLOW_PULSE_SPEED);
-      ctx.strokeStyle = '#60a5fa';
-      ctx.lineWidth = 2;
+      ctx.strokeStyle = worldPalette.spell.barrierSlowZone;
+      ctx.lineWidth = SLOW_RING_WIDTH;
       ctx.beginPath();
       ctx.arc(
         sx + TILE_SIZE * TILE_CENTER_FRACTION,
@@ -299,15 +329,8 @@ export class BarrierSystem implements GameSystem {
       ctx.stroke();
       ctx.restore();
 
-      if (activePlayer) {
-        const ts = TILE_SIZE;
-        const ptx = Math.floor((activePlayer.x + ts * TILE_CENTER_FRACTION) / ts);
-        const pty = Math.floor((activePlayer.y + ts * TILE_CENTER_FRACTION) / ts);
-        if (ptx === b.tileX && pty === b.tileY) {
-          drawInteractionPrompt(ctx, sx, sy, ts, 'Pick up');
-        }
-      }
-    }
+      if (index === promptIndex) drawInteractionPrompt(ctx, sx, sy, TILE_SIZE, 'Pick up');
+    });
   }
 
   /**

@@ -1,6 +1,6 @@
 import type { Player } from '../Player';
 import { Mob } from './Mob';
-import type { PlayerDamageType } from './Mob';
+import type { EyeAnchor, PlayerDamageType } from './Mob';
 import { SKELETON_RISE_FRAMES } from '../sprites/skeletonTiming';
 
 /** The group every risen skeleton answers to; see {@link Mob.packKind}. */
@@ -56,6 +56,12 @@ export abstract class RisingSkeleton extends Mob {
   /** True while it is still coming out of the ground. */
   get isRising(): boolean {
     return this.riseTimer > 0;
+  }
+
+  /** Its skull is still under the floor, or climbing out of it, while it rises. */
+  override eyeShineAnchor(out: EyeAnchor): boolean {
+    if (this.isRising) return false;
+    return super.eyeShineAnchor(out);
   }
 
   /** 0 to 1 across the climb, or null once it is out. For the sprite wrapper. */

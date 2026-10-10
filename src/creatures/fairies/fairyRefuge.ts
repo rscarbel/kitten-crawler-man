@@ -141,7 +141,7 @@ function routeRunsThroughParty(query: FairyRefugeQuery, x: number, y: number): b
   const ts = query.tileSize;
   const start = tileOf(query.fromX, query.fromY, ts);
   const goal = tileOf(x, y, ts);
-  const route = query.map.findPath(start.x, start.y, goal.x, goal.y, REFUGE_SEARCH_TILES);
+  const route = query.map.findMobPath(start.x, start.y, goal.x, goal.y, REFUGE_SEARCH_TILES);
   if (route.length === 0) return true;
   const clearancePx = ts * FAIRY_REFUGE_PARTY_CLEARANCE_TILES;
   const slackPx = ts * ROUTE_GRID_SLACK_TILES;

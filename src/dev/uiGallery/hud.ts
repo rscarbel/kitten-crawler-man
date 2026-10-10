@@ -21,6 +21,7 @@ import type {
 } from '../../ui/hud/hudModel';
 import { levelTimerEntry } from '../../ui/hud/levelTimer';
 import { HudToasts } from '../../ui/hud/toasts';
+import { LOOT_SEAL_NOTICE } from '../../systems/BossRoomSystem';
 import type { TopBandEntry } from '../../ui/hud/topBand';
 import { stackedBandEntry } from '../../ui/hud/topBandStack';
 import { QUEST_BANNER_FRAMES, questBannerEntry } from '../../ui/QuestBanners';
@@ -218,6 +219,13 @@ function encounterEntry(): TopBandEntry {
   });
 }
 
+/**
+ * `saving` is the lone save toast, the notice most often seen on a phone held
+ * upright. `lootSeal` is the warning at a won boss room's sealed doorway,
+ * which has to read in full on a phone rather than be ellipsized.
+ */
+type FixtureToasts = 'none' | 'mixed' | 'saving' | 'lootSeal';
+
 interface HudFixtureSpec {
   readonly name: string;
   readonly status: readonly StatusPillModel[];
@@ -225,7 +233,7 @@ interface HudFixtureSpec {
   readonly dockExtras: readonly DockButtonModel['id'][];
   readonly topBand: () => TopBandEntry[];
   readonly lootBanner: boolean;
-  readonly toasts: boolean;
+  readonly toasts: FixtureToasts;
   readonly expanded: boolean;
 }
 
@@ -234,7 +242,13 @@ function hudFixture(spec: HudFixtureSpec): DialogFixture {
     name: spec.name,
     surfaces: (shown) => {
       const toasts = new HudToasts();
-      if (spec.toasts) {
+      if (spec.toasts === 'saving') {
+        toasts.post('Saving...', { tone: 'neutral', icon: 'save' });
+      }
+      if (spec.toasts === 'lootSeal') {
+        toasts.post(LOOT_SEAL_NOTICE, { tone: 'info' });
+      }
+      if (spec.toasts === 'mixed') {
         toasts.post('Health restored', { tone: 'success', icon: 'flask' });
         toasts.post('Bag full — Goblin Dynamite was left behind', { tone: 'warning', icon: 'bag' });
         toasts.post('Game Saved', { tone: 'success', icon: 'save' });
@@ -242,8 +256,8 @@ function hudFixture(spec: HudFixtureSpec): DialogFixture {
         toasts.post('The boxers are already doing their job — just equip them!', {
           tone: 'warning',
         });
-        for (let tick = 0; tick < FIXTURE_TOAST_TICKS; tick++) toasts.update();
       }
+      for (let tick = 0; tick < FIXTURE_TOAST_TICKS; tick++) toasts.update();
       const model = (): HudModel => ({
         crawlers: crawlers(spec.status, spec.skillPoints),
         activeCrawler: 'human',
@@ -314,7 +328,7 @@ function hotbarTooltipOverMenu(): DialogFixture {
     dockExtras: [],
     topBand: () => [],
     lootBanner: false,
-    toasts: false,
+    toasts: 'none',
     expanded: false,
   });
   const bag = inventoryFixture({ name, tab: 'bag' });
@@ -333,7 +347,7 @@ export const HUD_FIXTURES: readonly DialogFixture[] = [
     dockExtras: ['chip'],
     topBand: () => [],
     lootBanner: false,
-    toasts: true,
+    toasts: 'mixed',
     expanded: false,
   }),
   hudFixture({
@@ -353,7 +367,7 @@ export const HUD_FIXTURES: readonly DialogFixture[] = [
       }),
     ],
     lootBanner: false,
-    toasts: false,
+    toasts: 'none',
     expanded: false,
   }),
   hudFixture({
@@ -372,8 +386,28 @@ export const HUD_FIXTURES: readonly DialogFixture[] = [
       return banner === null ? [] : [banner];
     },
     lootBanner: true,
-    toasts: false,
+    toasts: 'none',
     expanded: true,
+  }),
+  hudFixture({
+    name: 'saving',
+    status: [],
+    skillPoints: 0,
+    dockExtras: [],
+    topBand: () => [],
+    lootBanner: false,
+    toasts: 'saving',
+    expanded: false,
+  }),
+  hudFixture({
+    name: 'loot-seal',
+    status: [],
+    skillPoints: 0,
+    dockExtras: [],
+    topBand: () => [],
+    lootBanner: false,
+    toasts: 'lootSeal',
+    expanded: false,
   }),
   hotbarTooltipOverMenu(),
 ];

@@ -1515,9 +1515,11 @@ export abstract class Mob extends Player {
    * Where this creature's eyes sit, for the eye-shine the dungeon's dark
    * shows of it; see {@link EyePlacement}. Bipeds keep the default; a
    * creature whose head is not over the middle of its tile returns its own,
-   * and one that changes shape returns the placement of its current shape.
+   * one that changes shape returns the placement of its current shape, and
+   * one with no eyes to catch the light, or none showing right now, returns
+   * null.
    */
-  protected get eyePlacement(): EyePlacement {
+  protected get eyePlacement(): EyePlacement | null {
     return DEFAULT_EYE_PLACEMENT;
   }
 
@@ -1525,10 +1527,11 @@ export abstract class Mob extends Player {
    * Writes the world point between this creature's eyes for the way it faces,
    * and how far apart they are in pixels, into `out`. Returns false, leaving
    * `out` alone, when it faces away from the camera and shows the back of its
-   * head.
+   * head, or has no eyes showing.
    */
   eyeShineAnchor(out: EyeAnchor): boolean {
     const placement = this.eyePlacement;
+    if (placement === null) return false;
     const tile = this.tileSize;
     const facingAway = this.facingY < 0 && Math.abs(this.facingY) > Math.abs(this.facingX);
     if (facingAway) return false;
@@ -2251,7 +2254,7 @@ export abstract class Mob extends Player {
       if (mustSearch || tryConsumePathfind()) {
         const myTileX = Math.floor((this.x + ts * MOB_TILE_CENTER) / ts);
         const myTileY = Math.floor((this.y + ts * MOB_TILE_CENTER) / ts);
-        const foundPath = this.map.findPath(
+        const foundPath = this.map.findMobPath(
           myTileX,
           myTileY,
           goalTileX,
@@ -2583,16 +2586,26 @@ export abstract class Mob extends Player {
    * still slides as far as it may.
    */
   shoveTo(x: number, y: number): void {
-    if (this.acceptsShove(x, y)) {
+    if (this.mayBeShovedTo(x, y)) {
       this.x = x;
       this.y = y;
       return;
     }
-    if (this.acceptsShove(x, this.y)) {
+    if (this.mayBeShovedTo(x, this.y)) {
       this.x = x;
       return;
     }
-    if (this.acceptsShove(this.x, y)) this.y = y;
+    if (this.mayBeShovedTo(this.x, y)) this.y = y;
+  }
+
+  /**
+   * {@link acceptsShove} plus the one ground no push may carry any mob onto:
+   * a stairwell, which its own steps would then refuse to leave by. Kept out
+   * of `acceptsShove` so a subclass override cannot drop it.
+   */
+  private mayBeShovedTo(x: number, y: number): boolean {
+    const entersStairwell = !this.standsInStairwell() && this.centreOnStairwell(x, y);
+    return !entersStairwell && this.acceptsShove(x, y);
   }
 
   /**
@@ -2610,7 +2623,7 @@ export abstract class Mob extends Player {
    * the mob will take rather than find out after the push.
    */
   canBeShovedTo(x: number, y: number): boolean {
-    return this.acceptsShove(x, y);
+    return this.mayBeShovedTo(x, y);
   }
 
   /**
@@ -2670,6 +2683,14 @@ export abstract class Mob extends Player {
       dx *= statusFactor;
       dy *= statusFactor;
     }
+    const map = this.map;
+    // A mob already inside a footprint (set down there, or shoved in by
+    // something that ignores the rule) is let walk anywhere walkable: refusing
+    // every stairwell tile would refuse the tile it stands on, and freeze it.
+    const alreadyInStairwell = this.standsInStairwell();
+    const mayStepOnto = (tileX: number, tileY: number): boolean =>
+      map.isWalkableFor(tileX, tileY, this.isHostile) &&
+      (alreadyInStairwell || !map.isStairwellTile(tileX, tileY));
     if (dx !== 0) {
       const nextX = this.x + dx;
       const tileXnext =
@@ -2677,11 +2698,7 @@ export abstract class Mob extends Player {
           ? Math.floor((nextX + ts * MOB_COLLISION_FRONT_FRACTION) / ts)
           : Math.floor((nextX + ts * MOB_COLLISION_BACK_FRACTION) / ts);
       const tileYcur = Math.floor((this.y + ts / 2) / ts);
-      if (
-        this.map.isWalkableFor(tileXnext, tileYcur, this.isHostile) &&
-        !this.map.isStairwellTile(tileXnext, tileYcur)
-      )
-        this.x = nextX;
+      if (mayStepOnto(tileXnext, tileYcur)) this.x = nextX;
     }
     if (dy !== 0) {
       const nextY = this.y + dy;
@@ -2690,12 +2707,22 @@ export abstract class Mob extends Player {
       // player follows. Without it a mob walks until its waist meets a south
       // wall and stands with its whole lower half on the masonry.
       const tileYnext = Math.floor((nextY + ts * verticalCollisionOffset(dy)) / ts);
-      if (
-        this.map.isWalkableFor(tileXcur, tileYnext, this.isHostile) &&
-        !this.map.isStairwellTile(tileXcur, tileYnext)
-      )
-        this.y = nextY;
+      if (mayStepOnto(tileXcur, tileYnext)) this.y = nextY;
     }
+  }
+
+  /** Whether the tile under this mob's centre is part of a stairwell footprint. */
+  private standsInStairwell(): boolean {
+    return this.centreOnStairwell(this.x, this.y);
+  }
+
+  private centreOnStairwell(x: number, y: number): boolean {
+    if (!this.map) return false;
+    const ts = this.tileSize;
+    return this.map.isStairwellTile(
+      Math.floor((x + ts * MOB_TILE_CENTER) / ts),
+      Math.floor((y + ts * MOB_TILE_CENTER) / ts),
+    );
   }
 
   /**

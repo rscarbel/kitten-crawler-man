@@ -103,19 +103,14 @@ export interface AcidSpit {
   hitAge: number;
 }
 
-/** Where each stage's eyes sit, for eye-shine in the dark. */
-const GRUB_STAGE_EYES: Readonly<Record<GrubStage, EyePlacement>> = {
-  // A small worm on the floor of its tile.
-  1: {
-    sideForward: 0.05,
-    sideHeight: 0.72,
-    sideSpacing: 0.04,
-    frontHeight: 0.72,
-    frontSpacing: 0.08,
-  },
-  // The cow-tailed grub is seen from above, tail up and head down at the
-  // blunt end of its body, whichever way it crawls.
-  2: { sideForward: 0, sideHeight: 0.86, sideSpacing: 0.1, frontHeight: 0.86, frontSpacing: 0.1 },
+/**
+ * Where each stage's eyes sit, for eye-shine in the dark. The two grub stages
+ * are harmless litter crawling on the floor rather than something lurking in
+ * the dark, so only the vespa shows eyes.
+ */
+const GRUB_STAGE_EYES: Readonly<Record<GrubStage, EyePlacement | null>> = {
+  1: null,
+  2: null,
   // The vespa flies above its tile, its head well ahead of the body in profile.
   3: {
     sideForward: 0.3,
@@ -136,7 +131,7 @@ const GRUB_STAGE_EYES: Readonly<Record<GrubStage, EyePlacement>> = {
  *                                  mobs will retaliate.
  */
 export class BrindleGrub extends Mob {
-  protected override get eyePlacement(): EyePlacement {
+  protected override get eyePlacement(): EyePlacement | null {
     return GRUB_STAGE_EYES[this.stage];
   }
 

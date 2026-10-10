@@ -127,10 +127,10 @@ export function findWalkableSpawnTile(
   const roomy = probeSpawnTile(
     map,
     bounds,
-    (x, y) => map.isWalkable(x, y) && hasRoomToMove(map, x, y),
+    (x, y) => map.isMobSpawnTile(x, y) && hasRoomToMove(map, x, y),
   );
   if (roomy !== null) return roomy;
-  return probeSpawnTile(map, bounds, (x, y) => map.isWalkable(x, y));
+  return probeSpawnTile(map, bounds, (x, y) => map.isMobSpawnTile(x, y));
 }
 
 /**
@@ -787,7 +787,7 @@ function findWalkableTileInCamp(
     const reach = Math.sqrt(Math.random()) * radiusTiles;
     const tx = Math.round(centre.x + Math.cos(angle) * reach);
     const ty = Math.round(centre.y + Math.sin(angle) * reach);
-    if (map.isWalkable(tx, ty)) return { x: tx, y: ty };
+    if (map.isMobSpawnTile(tx, ty)) return { x: tx, y: ty };
   }
   return null;
 }

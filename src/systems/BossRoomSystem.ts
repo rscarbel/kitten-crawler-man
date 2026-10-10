@@ -33,6 +33,7 @@ import {
 } from '../creatures/KrakarenClone';
 import { KrakarenTentacle } from '../creatures/KrakarenTentacle';
 import { hasRoomToMove } from '../map/findWalkableTile';
+import { roomDoorways, type Point } from '../map/roomDoorways';
 import { isLabFloodAtPx } from './bossRooms/krakarenLabLayout';
 import {
   drawSlamShadow,
@@ -149,11 +150,23 @@ const UNENTERED_BOSS_REGEN_NOTICE = 'The boss is healing — this fight starts i
 const REGEN_NOTICE_RANGE_TILES = 20;
 
 /**
- * Said the first time a player is held inside a won room, because a boss that
- * is plainly dead and a door that will not let you through otherwise reads as
- * the lock failing to release.
+ * Said as the player walks up to a way out of a won room whose chest is still
+ * shut, because a boss that is plainly dead and a door that will not let you
+ * through otherwise reads as the lock failing to release.
  */
-const LOOT_SEAL_NOTICE = 'The room stays sealed until the boss chest is opened';
+export const LOOT_SEAL_NOTICE = 'Take the treasure first!';
+
+/** How close to a doorway's mouth, centre to centre, the active player has to come to be warned. */
+export const LOOT_SEAL_WARNING_RADIUS_TILES = 1;
+/**
+ * How far back from every doorway the player has to step before walking up to
+ * one warns again. Wider than the warning radius so a player idling on its
+ * edge is not told over and over.
+ */
+export const LOOT_SEAL_WARNING_REARM_TILES = 2.5;
+/** Three seconds, so stepping just past the re-arm distance and straight back cannot repeat the toast at once. */
+export const LOOT_SEAL_WARNING_COOLDOWN_FRAMES = 180;
+const TILE_CENTRE_FRACTION = 0.5;
 
 /**
  * Drops every hazard a given boss laid, in place. In place because the arrays
@@ -435,8 +448,16 @@ export class BossRoomSystem implements GameSystem, GroundHazardSource {
   private readonly roomHasLivingBoss: boolean[];
   /** Whether the un-entered-regen lesson has already been given for each room. */
   private readonly regenNoticeGiven: boolean[];
-  /** Whether the loot-seal explanation has already been given for each room. */
-  private readonly lootSealNoticeGiven: boolean[];
+  /** Whether walking up to a doorway of each room will warn about its unopened chest. */
+  private readonly lootSealWarningArmed: boolean[];
+  /** Frames before each room may warn about its unopened chest again. */
+  private readonly lootSealWarningCooldown: number[];
+  /**
+   * Every doorway-mouth tile of each room, worked out the first time the room
+   * holds the party rather than up front: room dressings stamp the grid after
+   * this system is built.
+   */
+  private readonly exitMouthTiles: Array<readonly Point[] | null>;
   /**
    * Who is being held in each won-but-unlooted room. Remembered rather than
    * re-read from position, because a body knocked or walked across the edge in
@@ -499,7 +520,9 @@ export class BossRoomSystem implements GameSystem, GroundHazardSource {
     this.unenteredRegenDelay = gameMap.bossRooms.map(() => 0);
     this.roomHasLivingBoss = gameMap.bossRooms.map(() => true);
     this.regenNoticeGiven = gameMap.bossRooms.map(() => false);
-    this.lootSealNoticeGiven = gameMap.bossRooms.map(() => false);
+    this.lootSealWarningArmed = gameMap.bossRooms.map(() => true);
+    this.lootSealWarningCooldown = gameMap.bossRooms.map(() => 0);
+    this.exitMouthTiles = gameMap.bossRooms.map(() => null);
     this.humanHeldForLoot = gameMap.bossRooms.map(() => false);
     this.catHeldForLoot = gameMap.bossRooms.map(() => false);
   }
@@ -548,16 +571,62 @@ export class BossRoomSystem implements GameSystem, GroundHazardSource {
     if (this.catHeldForLoot[roomIndex]) this.clampToBossRoom(cat, bounds);
 
     const activeWasPulledBack = active.x !== activeX || active.y !== activeY;
-    if (activeWasPulledBack && !this.lootSealNoticeGiven[roomIndex]) {
-      this.lootSealNoticeGiven[roomIndex] = true;
-      active.queueSystemNotice(LOOT_SEAL_NOTICE);
+    this.warnAtLootSealedExit(roomIndex, active, activeWasPulledBack);
+  }
+
+  /**
+   * Tells the active player to open the chest as they walk up to a way out,
+   * once per approach. Being pulled back counts as an approach too: a room
+   * whose bounds overhang its doorways can hold someone well short of a mouth.
+   */
+  private warnAtLootSealedExit(
+    roomIndex: number,
+    active: HumanPlayer | CatPlayer,
+    activeWasPulledBack: boolean,
+  ): void {
+    const tilesToExit = this.tilesToNearestExit(roomIndex, active);
+    if (!this.lootSealWarningArmed[roomIndex]) {
+      if (tilesToExit > LOOT_SEAL_WARNING_REARM_TILES) this.lootSealWarningArmed[roomIndex] = true;
+      return;
     }
+    const approachingExit = activeWasPulledBack || tilesToExit <= LOOT_SEAL_WARNING_RADIUS_TILES;
+    if (!approachingExit || this.lootSealWarningCooldown[roomIndex] > 0) return;
+    if (!active.queueSystemNotice(LOOT_SEAL_NOTICE)) return;
+    this.lootSealWarningArmed[roomIndex] = false;
+    this.lootSealWarningCooldown[roomIndex] = LOOT_SEAL_WARNING_COOLDOWN_FRAMES;
+  }
+
+  /** Centre-to-centre distance, in tiles, from an entity to the nearest doorway mouth of a room. */
+  private tilesToNearestExit(roomIndex: number, entity: { x: number; y: number }): number {
+    const centreX = entity.x / TILE_SIZE + TILE_CENTRE_FRACTION;
+    const centreY = entity.y / TILE_SIZE + TILE_CENTRE_FRACTION;
+    let nearest = Infinity;
+    for (const mouth of this.exitMouthsOf(roomIndex)) {
+      const distance = Math.hypot(
+        mouth.x + TILE_CENTRE_FRACTION - centreX,
+        mouth.y + TILE_CENTRE_FRACTION - centreY,
+      );
+      nearest = Math.min(nearest, distance);
+    }
+    return nearest;
+  }
+
+  private exitMouthsOf(roomIndex: number): readonly Point[] {
+    const cached = this.exitMouthTiles[roomIndex];
+    if (cached !== null) return cached;
+    const mouths = roomDoorways(this.gameMap.structure, this.states[roomIndex].bounds).flatMap(
+      (doorway) => doorway.tiles,
+    );
+    this.exitMouthTiles[roomIndex] = mouths;
+    return mouths;
   }
 
   /** Lets go of everyone held in a room, once its chest is opened or the room restored. */
   private releaseLootHold(roomIndex: number): void {
     this.humanHeldForLoot[roomIndex] = false;
     this.catHeldForLoot[roomIndex] = false;
+    this.lootSealWarningArmed[roomIndex] = true;
+    this.lootSealWarningCooldown[roomIndex] = 0;
   }
 
   /** The Hoarder's bile in the air, read by her lair so a bolus can knock a tower over. */
@@ -882,6 +951,7 @@ export class BossRoomSystem implements GameSystem, GroundHazardSource {
     for (let i = 0; i < this.states.length; i++) {
       const state = this.states[i];
       if (state.locked || state.defeatTimer > 0 || this.isSealedForLoot(i)) state.pulse++;
+      if (this.lootSealWarningCooldown[i] > 0) this.lootSealWarningCooldown[i]--;
       if (state.defeated) {
         this.roomHasLivingBoss[i] = false;
         if (this.isSealedForLoot(i)) this.holdPartyForLoot(i, human, cat);

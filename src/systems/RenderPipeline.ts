@@ -252,6 +252,14 @@ export interface RenderContext {
    * the active crawler's attack range, when Space swings instead.
    */
   interactionPromptsAllowed: boolean;
+  /**
+   * Who the placed gym barriers and the boss rooms may float a prompt for this
+   * frame, or undefined where a press would not reach them.
+   */
+  gymPromptTargets: {
+    barrier: HumanPlayer | CatPlayer | undefined;
+    bossRoom: HumanPlayer | CatPlayer | undefined;
+  };
   treasureChests: TreasureChestSystem;
   miniMap: MiniMapSystem;
   mongoSystem: MongoSystem;
@@ -409,7 +417,7 @@ export class RenderPipeline {
 
     safeRoom.renderObjects(ctx, camX, camY, active);
     bossRoom.renderObjects(ctx, camX, camY);
-    bossRoomDressings.renderGround(ctx, camX, camY, active);
+    bossRoomDressings.renderGround(ctx, camX, camY, rc.gymPromptTargets.bossRoom);
     arenaRoom.render(ctx, camX, camY, rc.interactionPromptsAllowed ? active : undefined);
     stairwell.renderStairwells(ctx, camX, camY);
     building?.renderDoorHints(ctx, camX, camY);
@@ -675,7 +683,6 @@ export class RenderPipeline {
       dynamite,
       mongoSystem,
       crawlerBarks,
-      active,
       pm,
     } = rc;
 
@@ -689,7 +696,7 @@ export class RenderPipeline {
     rc.water?.renderSplashes(ctx, camX, camY);
     rc.destructibles.renderEffects(ctx, camX, camY, rc.goreUnderDarkness === true);
     rc.trees?.render(ctx, camX, camY);
-    barriers.render(ctx, camX, camY, active);
+    barriers.render(ctx, camX, camY, rc.gymPromptTargets.barrier);
     spells.renderShell(ctx, camX, camY);
     spells.renderCatMiniShell(ctx, camX, camY, pm.cat);
     spells.renderChainLightning(ctx, camX, camY);

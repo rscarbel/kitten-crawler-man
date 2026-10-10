@@ -138,6 +138,9 @@ const NEIGHBOUR_OFFSETS = [
  * nothing — a spawn suppressed because the map is tight is a missing boss,
  * which is worse than a cramped one.
  *
+ * A stairwell is never offered: a mob's own steps refuse one, and a crawler
+ * set down on one is asked whether to descend.
+ *
  * `isAcceptable` narrows the search further for callers that own a region as
  * well as a point — an arena encounter must not nudge a blocked spawn out past
  * its own boundary and into the wilderness.
@@ -150,7 +153,7 @@ export function findNearbyWalkableTile(
   isAcceptable?: (x: number, y: number) => boolean,
 ): { x: number; y: number } | null {
   const isPermitted = (x: number, y: number): boolean =>
-    map.isWalkable(x, y) && (isAcceptable === undefined || isAcceptable(x, y));
+    map.isMobSpawnTile(x, y) && (isAcceptable === undefined || isAcceptable(x, y));
 
   const roomy = searchRings(tileX, tileY, maxRadiusTiles, (x, y) => {
     return isPermitted(x, y) && hasRoomToMove(map, x, y);
