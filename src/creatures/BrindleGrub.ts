@@ -1,5 +1,6 @@
 import type { Player } from '../Player';
-import { Mob, type EyePlacement } from './Mob';
+import type { EyePlacement } from '../sprites/eyePlacement';
+import { Mob } from './Mob';
 import { maybeDropSkillBook } from './skillBookDrop';
 import type { LootDrop } from './Mob';
 import { randomInt, normalize } from '../utils';
@@ -116,8 +117,10 @@ const GRUB_STAGE_EYES: Readonly<Record<GrubStage, EyePlacement | null>> = {
     sideForward: 0.3,
     sideHeight: 0.28,
     sideSpacing: 0.04,
-    frontHeight: 0.27,
-    frontSpacing: 0.12,
+    frontMirrors: false,
+    frontAcross: 0,
+    frontHeight: 0.12,
+    frontSpacing: 0.1,
   },
 };
 

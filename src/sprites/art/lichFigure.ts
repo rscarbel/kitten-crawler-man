@@ -44,12 +44,14 @@ import {
   LICH_RIM_EDGE,
   LICH_SHOULDER_JOINT_DROP,
   LICH_SHOULDER_Y,
+  LICH_EYE_RIG,
   drawLichBack,
   drawLichContactShadow,
   drawLichFront,
   drawLichSide,
   type LichView,
 } from './lichArt';
+import type { EyePlacement } from '../eyePlacement';
 import { SKELETON_GORE_STATES, skeletonGorePieces, type SkeletonGorePiece } from './skeletonGore';
 // The release fraction is shared with the runtime rather than copied here, so
 // the thrust cannot drift away from the frame the bolt is queued on.
@@ -95,6 +97,20 @@ export const GORE_ORIGIN_Y = FRAME_HEIGHT / 2;
  */
 const LICH_HEIGHT_TILES = 2.68;
 export const FIGURE_SCALE = LICH_HEIGHT_TILES / LICH_FIGURE_HEIGHT;
+
+/** How far down its tile the Lich's feet stand, in tiles: the ground line every pose is painted on. */
+const GROUND_LINE_TILE_Y = (POSE_ORIGIN_Y - TILE_Y) / TILE_SCALE;
+
+/** Where the Lich's eye-lights are inside its tile, in tiles from the tile's top-left: far above it. */
+export const LICH_EYE_PLACEMENT: EyePlacement = {
+  sideForward: LICH_EYE_RIG.profileForward * FIGURE_SCALE,
+  sideHeight: GROUND_LINE_TILE_Y + LICH_EYE_RIG.y * FIGURE_SCALE,
+  sideSpacing: LICH_EYE_RIG.profileWidth * FIGURE_SCALE,
+  frontMirrors: false,
+  frontAcross: 0,
+  frontHeight: GROUND_LINE_TILE_Y + LICH_EYE_RIG.y * FIGURE_SCALE,
+  frontSpacing: LICH_EYE_RIG.frontSpread * 2 * FIGURE_SCALE,
+};
 
 /** Cell pixels per unit of a loose bone's own drawing space. */
 export const GORE_UNIT = TILE_SCALE * FIGURE_SCALE;

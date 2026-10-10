@@ -1,8 +1,10 @@
 import { prewarmGolemRock } from '../sprites/golemRockSprite';
+import type { EyePlacement } from '../sprites/eyePlacement';
 import type { Player } from '../Player';
 import { Mob } from './Mob';
 import {
   ROCK_GOLEM_BODY_PART_KEY,
+  ROCK_GOLEM_SHEET_EYES,
   drawRockGolemSprite,
   type GolemAttack,
   type RockGolemSheet,
@@ -111,6 +113,10 @@ const FRAMES_PER_SHEET_FRAME = 4;
  * so every golem in the game shares its animations and its attacks.
  */
 export class RockGolem extends Mob {
+  protected override get eyePlacement(): EyePlacement {
+    return ROCK_GOLEM_SHEET_EYES[this.sheet];
+  }
+
   readonly xpValue: number = GOLEM_XP_VALUE;
   protected coinDropMin = COIN_DROP_MIN;
   protected coinDropMax = COIN_DROP_MAX;

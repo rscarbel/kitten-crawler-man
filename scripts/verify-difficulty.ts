@@ -817,6 +817,9 @@ const SPEED_CAP_TEST_MOB_CAP = 3.0;
  */
 class SpeedCapTestMob extends Mob {
   readonly xpValue = 0;
+  protected override get eyePlacement(): null {
+    return null;
+  }
 
   constructor(tileX: number, tileY: number, tileSize: number) {
     super(tileX, tileY, tileSize, 1, SPEED_CAP_TEST_MOB_BASE_SPEED);

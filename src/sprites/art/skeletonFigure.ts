@@ -18,6 +18,7 @@
  */
 
 import { type FigureDef, figureStates } from '../figure/figureDef';
+import type { EyePlacement } from '../eyePlacement';
 import {
   ARM_LENGTH,
   FIGURE_HEIGHT,
@@ -1021,16 +1022,18 @@ const GROUND_LINE_TILE_Y = 0.5;
 
 /**
  * Where a standing skeleton's eye sockets are inside its creature's tile, in
- * tiles from the tile's top-left, shaped as `Mob`'s eye placement. The skull of
- * every variant stands well above the tile its feet are on.
+ * tiles from the tile's top-left. The skull of every variant stands well above
+ * the tile its feet are on.
  */
-export function skeletonEyePlacement(variant: SkeletonVariant) {
+export function skeletonEyePlacement(variant: SkeletonVariant): EyePlacement {
   const tilesPerRigUnit = figureScaleOf(variant);
   const eyeHeight = GROUND_LINE_TILE_Y + SKELETON_EYE_RIG.y * tilesPerRigUnit;
   return {
     sideForward: SKELETON_EYE_RIG.profileForward * tilesPerRigUnit,
     sideHeight: eyeHeight,
     sideSpacing: SKELETON_EYE_RIG.profileWidth * tilesPerRigUnit,
+    frontMirrors: false,
+    frontAcross: 0,
     frontHeight: eyeHeight,
     frontSpacing: SKELETON_EYE_RIG.frontSpread * 2 * tilesPerRigUnit,
   };

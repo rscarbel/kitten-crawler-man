@@ -1,4 +1,5 @@
 import type { DamageSource, Player } from '../Player';
+import type { EyePlacement } from '../sprites/eyePlacement';
 import { BOSS_BLAST_DAMAGE_SCALE, Mob, type LootDrop, type PlayerDamageType } from './Mob';
 import type { TacticsTrait } from './tactics/tacticsTraits';
 import type { SkeletonShot } from '../systems/SkeletonProjectileSystem';
@@ -358,6 +359,16 @@ function pickSiegeRaiseKind(): NecromancerTroopKind {
   return 'ratkin';
 }
 
+const NECROMANCER_EYES: EyePlacement = {
+  sideForward: 0.27,
+  sideHeight: -1.19,
+  sideSpacing: 0.05,
+  frontMirrors: false,
+  frontAcross: -0.07,
+  frontHeight: -1.3,
+  frontSpacing: 0.08,
+};
+
 /**
  * Vordrick Boneharrow, the necromancer who brings Briar Hollow's own dead
  * back against it.
@@ -383,6 +394,10 @@ function pickSiegeRaiseKind(): NecromancerTroopKind {
  * his health and `justDied` latches exactly once.
  */
 export class Necromancer extends Mob {
+  protected override get eyePlacement(): EyePlacement {
+    return NECROMANCER_EYES;
+  }
+
   readonly xpValue = NECRO_XP;
   protected coinDropMin = COIN_DROP_MIN;
   protected coinDropMax = COIN_DROP_MAX;

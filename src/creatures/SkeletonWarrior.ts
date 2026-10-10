@@ -1,4 +1,5 @@
 import type { Player } from '../Player';
+import type { EyePlacement } from '../sprites/eyePlacement';
 import { RisingSkeleton } from './RisingSkeleton';
 import { SKELETON_SWORD_BODY_PART_KEY, drawSkeletonWarriorSprite } from '../sprites/skeletonSprite';
 import { skeletonEyePlacement } from '../sprites/art/skeletonFigure';
@@ -6,7 +7,7 @@ import { SWORD_SLASH_FRAMES, swordSlashImpactFrame } from '../sprites/skeletonTi
 import { PLAYER_SPEED } from '../core/constants';
 import { riposteCooldown } from './tactics/riposte';
 import type { TacticsTrait } from './tactics/tacticsTraits';
-import type { EyePlacement, StructureStrikeTiming } from './Mob';
+import type { StructureStrikeTiming } from './Mob';
 import { siegeAdvance, siegeCanEngage } from './siege/siegeCapability';
 
 /**
@@ -62,7 +63,7 @@ export class SkeletonWarrior extends RisingSkeleton {
   protected coinDropMax = COIN_DROP_MAX;
   override readonly audioTag = 'skeleton';
 
-  protected override get eyePlacement(): EyePlacement {
+  protected override get standingEyePlacement(): EyePlacement {
     return SWORD_SKELETON_EYES;
   }
 

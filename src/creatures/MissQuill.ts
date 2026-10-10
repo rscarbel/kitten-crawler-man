@@ -1,4 +1,5 @@
 import { Mob } from './Mob';
+import type { EyePlacement } from '../sprites/eyePlacement';
 import type { Player } from '../Player';
 import type { Remex } from './Remex';
 import { drawMissQuillSprite } from '../sprites/missQuillSprite';
@@ -40,6 +41,17 @@ const COIN_DROP_MIN = 25;
 const COIN_DROP_MAX = 50;
 const CENTER_OFFSET = 0.5;
 
+/** Drawn only face-on, so in profile it still shows that face. */
+const MISS_QUILL_EYES: EyePlacement = {
+  sideForward: 0,
+  sideHeight: 0.25,
+  sideSpacing: 0.1,
+  frontMirrors: true,
+  frontAcross: 0,
+  frontHeight: 0.25,
+  frontSpacing: 0.1,
+};
+
 /**
  * Miss Quill — the sky fowl schoolteacher revealed as the necromancer behind
  * the krasue murders, and the boss of the tower confrontation. A stationary
@@ -48,6 +60,10 @@ const CENTER_OFFSET = 0.5;
  * Grimaldi's tendril shield).
  */
 export class MissQuill extends Mob {
+  protected override get eyePlacement(): EyePlacement {
+    return MISS_QUILL_EYES;
+  }
+
   readonly xpValue = 600;
   protected coinDropMin = COIN_DROP_MIN;
   protected coinDropMax = COIN_DROP_MAX;

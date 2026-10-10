@@ -1,5 +1,6 @@
 import { Mob, type PlayerDamageType } from './Mob';
 import type { Player } from '../Player';
+import type { EyePlacement } from '../sprites/eyePlacement';
 import type { LootDrop } from './Mob';
 import { MAZE_TARGET_OWNER, type MazeHalf, type MazeTargetKind } from '../map/bigTopMazeLayout';
 
@@ -116,6 +117,11 @@ export abstract class MazePropTarget<K extends MazeTargetKind = MazeTargetKind> 
 
   /** True while this is the thing the act is currently asking for. Drives the pulse. */
   pulsing = false;
+
+  /** A prop, not a creature. */
+  protected override get eyePlacement(): EyePlacement | null {
+    return null;
+  }
 
   constructor(
     tileX: number,

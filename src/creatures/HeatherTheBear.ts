@@ -1,4 +1,5 @@
 import { Mob } from './Mob';
+import type { EyePlacement } from '../sprites/eyePlacement';
 import type { PlayerDamageType } from './Mob';
 import type { Player } from '../Player';
 import { drawHeatherBearSprite, prewarmHeatherBear } from '../sprites/heatherBearSprite';
@@ -36,6 +37,17 @@ const COIN_DROP_MAX = 18;
  */
 const MAX_GAIT_RADIANS_PER_FRAME = (Math.PI * 2) / HEATHER_WALK_FRAMES;
 
+/** Drawn only in profile, so facing the camera it still shows that profile. */
+const HEATHER_EYES: EyePlacement = {
+  sideForward: 0.9,
+  sideHeight: 0.21,
+  sideSpacing: 0.05,
+  frontMirrors: true,
+  frontAcross: 0.9,
+  frontHeight: 0.21,
+  frontSpacing: 0.05,
+};
+
 /**
  * Heather the Bear — the circus's beloved performing bear, now a
  * Neighborhood Boss with an exposed skull and parasite worms in her paws.
@@ -43,6 +55,10 @@ const MAX_GAIT_RADIANS_PER_FRAME = (Math.PI * 2) / HEATHER_WALK_FRAMES;
  * there, deep deep down, there is a spark of the old Heather.
  */
 export class HeatherTheBear extends Mob {
+  protected override get eyePlacement(): EyePlacement {
+    return HEATHER_EYES;
+  }
+
   readonly xpValue = 120;
   protected coinDropMin = COIN_DROP_MIN;
   protected coinDropMax = COIN_DROP_MAX;

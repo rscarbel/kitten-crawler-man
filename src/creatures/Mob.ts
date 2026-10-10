@@ -1,4 +1,5 @@
 import { Player, HP_BAR_HEIGHT, HP_BAR_Y_OFFSET } from '../Player';
+import type { EyePlacement } from '../sprites/eyePlacement';
 import type { DamageSource } from '../Player';
 import { FAIRY_AEGIS_STATUS, type StatusEffect } from '../core/StatusEffect';
 import { AEGIS_DAMAGE_SCALE } from '../core/statusTuning';
@@ -380,38 +381,12 @@ const LEASH_SETTLE_FRACTION = 0.5;
 /** How far ahead a resident paths on each leg of its walk home, in tiles. */
 const LEASH_RETURN_HOP_TILES = 10;
 
-/**
- * Where a creature's eyes sit within its tile, in tiles from the tile's
- * top-left, for each way it can face. A creature facing away shows none.
- */
-export interface EyePlacement {
-  /** Side view: how far ahead of the tile's centre the eyes are, toward the way it faces. */
-  readonly sideForward: number;
-  /** Side view: how far down from the top of the tile. */
-  readonly sideHeight: number;
-  /** Side view: the gap between the two eyes; small, the far eye is half hidden. */
-  readonly sideSpacing: number;
-  /** Facing the camera: how far down from the top of the tile. */
-  readonly frontHeight: number;
-  /** Facing the camera: the gap between the two eyes. */
-  readonly frontSpacing: number;
-}
-
 /** Where a creature's eyes are this frame, in world pixels, and how far apart. */
 export interface EyeAnchor {
   x: number;
   y: number;
   spacingPx: number;
 }
-
-/** A biped's eyes: over the middle of the tile, a third of the way down. */
-export const DEFAULT_EYE_PLACEMENT: EyePlacement = {
-  sideForward: 0.08,
-  sideHeight: 0.3,
-  sideSpacing: 0.06,
-  frontHeight: 0.3,
-  frontSpacing: 0.16,
-};
 
 const EYE_TILE_CENTRE = 0.5;
 
@@ -1513,37 +1488,46 @@ export abstract class Mob extends Player {
 
   /**
    * Where this creature's eyes sit, for the eye-shine the dungeon's dark
-   * shows of it; see {@link EyePlacement}. Bipeds keep the default; a
-   * creature whose head is not over the middle of its tile returns its own,
-   * one that changes shape returns the placement of its current shape, and
-   * one with no eyes to catch the light, or none showing right now, returns
-   * null.
+   * shows of it; see {@link EyePlacement}. Abstract so that every creature
+   * decides: its art is drawn at its own height above its tile, and no
+   * single guess lands on every head. Read each frame, so a creature that
+   * changes shape returns the placement of its current shape, and one with
+   * no eyes to catch the light, or none showing right now, returns null.
+   * `npm run verify:eye-shine` holds every creature's placement to its art.
    */
-  protected get eyePlacement(): EyePlacement | null {
-    return DEFAULT_EYE_PLACEMENT;
-  }
+  protected abstract get eyePlacement(): EyePlacement | null;
 
   /**
    * Writes the world point between this creature's eyes for the way it faces,
    * and how far apart they are in pixels, into `out`. Returns false, leaving
-   * `out` alone, when it faces away from the camera and shows the back of its
-   * head, or has no eyes showing.
+   * `out` alone, when it has no eyes showing, or when art drawn in views faces
+   * away from the camera and shows the back of its head.
    */
   eyeShineAnchor(out: EyeAnchor): boolean {
     const placement = this.eyePlacement;
     if (placement === null) return false;
     const tile = this.tileSize;
+    if ('rotation' in placement) {
+      const angle = placement.rotation(this.facingX, this.facingY);
+      const cos = Math.cos(angle);
+      const sin = Math.sin(angle);
+      out.x = this.x + tile * (placement.pivotX + placement.headX * cos - placement.headY * sin);
+      out.y = this.y + tile * (placement.pivotY + placement.headX * sin + placement.headY * cos);
+      out.spacingPx = tile * placement.spacing;
+      return true;
+    }
     const facingAway = this.facingY < 0 && Math.abs(this.facingY) > Math.abs(this.facingX);
     if (facingAway) return false;
     const side = Math.abs(this.facingX) >= Math.abs(this.facingY);
+    const forward = this.facingX < 0 ? -1 : 1;
     if (side) {
-      const forward = this.facingX < 0 ? -1 : 1;
       out.x = this.x + tile * (EYE_TILE_CENTRE + forward * placement.sideForward);
       out.y = this.y + tile * placement.sideHeight;
       out.spacingPx = tile * placement.sideSpacing;
       return true;
     }
-    out.x = this.x + tile * EYE_TILE_CENTRE;
+    const across = placement.frontMirrors ? forward * placement.frontAcross : placement.frontAcross;
+    out.x = this.x + tile * (EYE_TILE_CENTRE + across);
     out.y = this.y + tile * placement.frontHeight;
     out.spacingPx = tile * placement.frontSpacing;
     return true;

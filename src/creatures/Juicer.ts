@@ -1,4 +1,5 @@
 import type { Player } from '../Player';
+import type { EyePlacement } from '../sprites/eyePlacement';
 import type { LootDrop } from './Mob';
 import { Mob } from './Mob';
 import { TILE_SIZE } from '../core/constants';
@@ -251,7 +252,21 @@ function prewarmAttackRows(rows: ReadonlyArray<string>): void {
   for (const row of rows) prewarmFigureState(JUICER_FIGURE, row);
 }
 
+const JUICER_EYES: EyePlacement = {
+  sideForward: 0.06,
+  sideHeight: -1.16,
+  sideSpacing: 0.05,
+  frontMirrors: false,
+  frontAcross: 0,
+  frontHeight: -1.18,
+  frontSpacing: 0.16,
+};
+
 export class Juicer extends Mob {
+  protected override get eyePlacement(): EyePlacement {
+    return JUICER_EYES;
+  }
+
   override readonly audioTag = 'juicer';
   override readonly bodyPartKey = JUICER_BODY_PART_KEY;
   readonly xpValue = 600;

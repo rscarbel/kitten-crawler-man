@@ -1,4 +1,5 @@
 import { Mob } from './Mob';
+import type { EyePlacement } from '../sprites/eyePlacement';
 import type { LootDrop, PlayerDamageType } from './Mob';
 import type { DamageSource, Player } from '../Player';
 import { TILE_SIZE } from '../core/constants';
@@ -129,6 +130,10 @@ class ShellKitContext implements MercenaryKitContext {
 }
 
 export class Mercenary extends Mob {
+  protected override get eyePlacement(): EyePlacement {
+    return this.art.eyes;
+  }
+
   readonly xpValue = 0; // ally — no XP on death
   protected coinDropMin = 0;
   protected coinDropMax = 0;

@@ -1,4 +1,5 @@
 import type { Player } from '../Player';
+import type { EyePlacement } from '../sprites/eyePlacement';
 import { Mob } from './Mob';
 import type { LootDrop } from './Mob';
 import { maybeDropSkillBook } from './skillBookDrop';
@@ -98,7 +99,22 @@ function randomSign(): number {
   return Math.random() < EVEN_ODDS ? -1 : 1;
 }
 
+/** Seen from above: facing the camera, its head is at the bottom of its body. */
+const COCKROACH_EYES: EyePlacement = {
+  sideForward: 0.35,
+  sideHeight: 0.5,
+  sideSpacing: 0.06,
+  frontMirrors: false,
+  frontAcross: 0,
+  frontHeight: 0.8,
+  frontSpacing: 0.06,
+};
+
 export class Cockroach extends Mob {
+  protected override get eyePlacement(): EyePlacement {
+    return COCKROACH_EYES;
+  }
+
   /** Knee-high to a man, so a crawler kicks or stomps it rather than punching. */
   override get lowProfile(): boolean {
     return true;

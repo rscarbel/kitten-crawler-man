@@ -1,4 +1,5 @@
 import type { Player } from '../Player';
+import type { EyePlacement } from '../sprites/eyePlacement';
 import { Mob } from './Mob';
 import type { LootDrop } from './Mob';
 import { maybeDropSkillBook } from './skillBookDrop';
@@ -83,7 +84,22 @@ const NO_SHOTS: readonly GoblinArrowShot[] = [];
 
 const ARCHER_TACTICS: readonly TacticsTrait[] = ['kite', 'regroup'];
 
+/** Drawn only in profile, so facing the camera it still shows that profile. */
+const GOBLIN_ARCHER_EYES: EyePlacement = {
+  sideForward: 0.14,
+  sideHeight: 0.2,
+  sideSpacing: 0.05,
+  frontMirrors: true,
+  frontAcross: 0.14,
+  frontHeight: 0.2,
+  frontSpacing: 0.05,
+};
+
 export class GoblinArcher extends Mob {
+  protected override get eyePlacement(): EyePlacement {
+    return GOBLIN_ARCHER_EYES;
+  }
+
   readonly xpValue = 7;
   protected coinDropMin = COIN_DROP_MIN;
   protected coinDropMax = COIN_DROP_MAX;

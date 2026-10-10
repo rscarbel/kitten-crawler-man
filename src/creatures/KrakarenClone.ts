@@ -1,4 +1,5 @@
 import type { Player } from '../Player';
+import type { EyePlacement } from '../sprites/eyePlacement';
 import type { LootDrop } from './Mob';
 import { Mob } from './Mob';
 import { TILE_SIZE } from '../core/constants';
@@ -159,6 +160,11 @@ export interface SlamTentacleMarker {
 type KrakarenState = 'idle' | 'melee_windup' | 'melee_swing' | 'melee_cooldown' | 'slam_charging';
 
 export class KrakarenClone extends Mob {
+  /** Its eyes are scattered along its tentacles; no one point is its head. */
+  protected override get eyePlacement(): EyePlacement | null {
+    return null;
+  }
+
   readonly xpValue = 700;
   protected coinDropMin = COIN_DROP_MIN;
   protected coinDropMax = COIN_DROP_MAX;

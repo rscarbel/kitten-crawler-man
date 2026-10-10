@@ -1,4 +1,5 @@
 import { FACING_FLIP_DEADZONE_TILE_RATIO, Mob } from './Mob';
+import type { EyePlacement } from '../sprites/eyePlacement';
 import type { Player } from '../Player';
 import {
   drawCircusLemurSprite,
@@ -61,12 +62,27 @@ const LEMUR_TACTICS: readonly TacticsTrait[] = ['flank', 'kite', 'regroup'];
 const TICKS_PER_WALK_FRAME = 2;
 const LEMUR_WALK_FRAME_SPEED = (Math.PI * 2) / (LEMUR_WALK_FRAMES * TICKS_PER_WALK_FRAME);
 
+/** Drawn only in profile, so facing the camera it still shows that profile. */
+const LEMUR_EYES: EyePlacement = {
+  sideForward: 0.36,
+  sideHeight: 0.47,
+  sideSpacing: 0.04,
+  frontMirrors: true,
+  frontAcross: 0.36,
+  frontHeight: 0.47,
+  frontSpacing: 0.04,
+};
+
 /**
  * A Former Circus Lemur — one of Grimaldi's mutated sideshow performers.
  * The knife-throwing act survived the transformation: it kites at range
  * hurling knives, falling back to quick nips when cornered.
  */
 export class CircusLemur extends Mob {
+  protected override get eyePlacement(): EyePlacement {
+    return LEMUR_EYES;
+  }
+
   readonly xpValue = 6;
   protected coinDropMin = 0;
   protected coinDropMax = COIN_DROP_MAX;

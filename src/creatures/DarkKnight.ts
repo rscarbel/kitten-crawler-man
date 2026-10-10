@@ -1,4 +1,5 @@
 import { BOSS_BLAST_DAMAGE_SCALE, Mob } from './Mob';
+import type { EyePlacement } from '../sprites/eyePlacement';
 import type { LootDrop } from './Mob';
 import type { Player } from '../Player';
 import { randomInt } from '../utils';
@@ -270,7 +271,21 @@ function prewarmRows(states: ReadonlyArray<string>): void {
   for (const state of states) prewarmFigureState(DARK_KNIGHT_FIGURE, state);
 }
 
+const DARK_KNIGHT_EYES: EyePlacement = {
+  sideForward: 0.07,
+  sideHeight: -1.02,
+  sideSpacing: 0.05,
+  frontMirrors: false,
+  frontAcross: 0,
+  frontHeight: -1.02,
+  frontSpacing: 0.08,
+};
+
 export class DarkKnight extends Mob {
+  protected override get eyePlacement(): EyePlacement {
+    return DARK_KNIGHT_EYES;
+  }
+
   /** Not every system that runs this boss sets `isBoss`, so the blast share is claimed here rather than read from it. */
   override get blastDamageScale(): number {
     return BOSS_BLAST_DAMAGE_SCALE;

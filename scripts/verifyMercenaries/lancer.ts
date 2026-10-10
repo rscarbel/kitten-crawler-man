@@ -120,6 +120,9 @@ const NEIGHBOUR_ROWS_OFF_LANE = 2;
 /** A target that stands where it is put and decides nothing. */
 class SparringDummy extends Mob {
   readonly xpValue = 0;
+  protected override get eyePlacement(): null {
+    return null;
+  }
 
   constructor(
     tileX: number,

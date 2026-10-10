@@ -183,6 +183,9 @@ function check(ok: boolean, label: string): void {
  */
 class ProbeMob extends Mob {
   readonly xpValue = PROBE_MOB_XP;
+  protected override get eyePlacement(): null {
+    return null;
+  }
 
   constructor(tileX: number, tileY: number) {
     super(tileX, tileY, TILE_SIZE, PROBE_MOB_HP, PROBE_MOB_SPEED);

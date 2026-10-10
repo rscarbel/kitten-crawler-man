@@ -1,4 +1,5 @@
 import { BOSS_BLAST_DAMAGE_SCALE, Mob } from './Mob';
+import type { EyePlacement } from '../sprites/eyePlacement';
 import type { LootDrop, PlayerDamageType } from './Mob';
 import type { Player } from '../Player';
 import {
@@ -448,7 +449,21 @@ function hpPhaseForFraction(hpFraction: number): SpiderHpPhase {
   return FINAL_HP_PHASE;
 }
 
+/** Her great central eye, seen from above and turned with her; measured off the painted figure. */
+const GROTESQUE_SPIDER_EYES: EyePlacement = {
+  pivotX: TILE_CENTER,
+  pivotY: TILE_CENTER,
+  headX: 0.04,
+  headY: 0.48,
+  spacing: 0.1,
+  rotation: grotesqueSpiderFacingRotation,
+};
+
 export class GrotesqueSpider extends Mob {
+  protected override get eyePlacement(): EyePlacement {
+    return GROTESQUE_SPIDER_EYES;
+  }
+
   /** Not every system that runs this boss sets `isBoss`, so the blast share is claimed here rather than read from it. */
   override get blastDamageScale(): number {
     return BOSS_BLAST_DAMAGE_SCALE;

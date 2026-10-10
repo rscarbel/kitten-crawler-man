@@ -1,4 +1,5 @@
 import { Mob } from './Mob';
+import type { EyePlacement } from '../sprites/eyePlacement';
 import type { Player } from '../Player';
 import type { LootDrop } from './Mob';
 import {
@@ -32,6 +33,11 @@ const HIT_FLASH_FRAMES = 8;
  * the only thing he does under his own power is breathe.
  */
 export class GrimaldiVine extends Mob {
+  /** A vine has no eyes. */
+  protected override get eyePlacement(): EyePlacement | null {
+    return null;
+  }
+
   /**
    * His foliage clears four tiles of air above his own, so an interaction prompt
    * anchored to the tile would land somewhere inside the mass.

@@ -1,4 +1,5 @@
 import { Mob, type LootDrop, type PlayerDamageType } from './Mob';
+import type { EyePlacement } from '../sprites/eyePlacement';
 import type { Player } from '../Player';
 import { CASTER_HELD_STATUSES, type StatusEffect } from '../core/StatusEffect';
 import { drawSpiderEggSprite, type SpiderEggState } from '../sprites/spiderEggSprite';
@@ -59,6 +60,11 @@ type SpiderEggEnd = 'hatched' | 'destroyed';
  * mob grid when the decal runs out.
  */
 export class SpiderEgg extends Mob {
+  /** An egg. */
+  protected override get eyePlacement(): EyePlacement | null {
+    return null;
+  }
+
   readonly xpValue = EGG_DESTROY_XP;
   protected coinDropMin = 0;
   protected coinDropMax = 0;

@@ -484,6 +484,9 @@ console.log('\nA damage-over-time tick cannot walk through a boss shield');
    */
   class ShieldedDummy extends Mob {
     readonly xpValue = 0;
+    protected override get eyePlacement(): null {
+      return null;
+    }
     protected override get isDamageImmune(): boolean {
       return true;
     }

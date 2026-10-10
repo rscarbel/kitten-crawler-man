@@ -10,6 +10,8 @@ import {
   type LichAttack,
 } from '../sprites/lichSprite';
 import { prewarmSkeletonEscortSprites } from '../sprites/skeletonSprite';
+import { LICH_EYE_PLACEMENT } from '../sprites/art/lichFigure';
+import type { EyePlacement } from '../sprites/eyePlacement';
 import { drawGraspingHands, prewarmGraspingHands } from '../sprites/skeletonEffectsSprite';
 import { SOUL_BOLT_CAST_FRAMES, soulBoltReleaseFrame } from '../sprites/skeletonTiming';
 import type { SkeletonShot } from '../systems/SkeletonProjectileSystem';
@@ -258,6 +260,10 @@ const LICH_CULL_MARGIN_TILES = Math.min(MAX_MOB_CULL_MARGIN_TILES, HANDS_RANGE_T
 const LICH_SILHOUETTE_MARGIN_TILES = HANDS_RANGE_TILES + 1;
 
 export class TheLich extends Mob {
+  protected override get eyePlacement(): EyePlacement {
+    return LICH_EYE_PLACEMENT;
+  }
+
   /** Not every system that runs this boss sets `isBoss`, so the blast share is claimed here rather than read from it. */
   override get blastDamageScale(): number {
     return BOSS_BLAST_DAMAGE_SCALE;

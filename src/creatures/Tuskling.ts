@@ -1,4 +1,5 @@
 import { Mob } from './Mob';
+import type { EyePlacement } from '../sprites/eyePlacement';
 import { maybeDropSkillBook } from './skillBookDrop';
 import type { Player } from '../Player';
 import {
@@ -51,7 +52,21 @@ const HOOK_IMPACT_FRAME = tusklingImpactFrame(TUSKLING_HOOK_FRAMES, TUSKLING_HOO
 
 type TuskState = 'idle' | 'stalking' | 'hooking' | 'charge_windup' | 'charging' | 'cooldown';
 
+const TUSKLING_EYES: EyePlacement = {
+  sideForward: 0.08,
+  sideHeight: -0.07,
+  sideSpacing: 0.05,
+  frontMirrors: false,
+  frontAcross: 0,
+  frontHeight: -0.05,
+  frontSpacing: 0.14,
+};
+
 export class Tuskling extends Mob {
+  protected override get eyePlacement(): EyePlacement {
+    return TUSKLING_EYES;
+  }
+
   /** Knee-high to a man, so a crawler kicks or stomps it rather than punching. */
   override get lowProfile(): boolean {
     return true;

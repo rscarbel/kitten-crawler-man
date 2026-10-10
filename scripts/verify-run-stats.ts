@@ -108,6 +108,9 @@ function section(name: string): void {
 /** A target that stands where it is put and decides nothing. */
 class Dummy extends Mob {
   readonly xpValue = 0;
+  protected override get eyePlacement(): null {
+    return null;
+  }
 
   constructor(
     tileX: number,

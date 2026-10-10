@@ -1,4 +1,5 @@
 import { Mob } from './Mob';
+import type { EyePlacement } from '../sprites/eyePlacement';
 import type { Player } from '../Player';
 import type { LootDrop } from './Mob';
 import {
@@ -56,12 +57,41 @@ function randomForm(): InkMarauderForm {
   return Math.random() < FORM_SPLIT ? 'ogre' : 'shark';
 }
 
+const INK_MARAUDER_EYES: Readonly<Record<InkMarauderForm, EyePlacement>> = {
+  // Three heads abreast, drawn face-on whichever way it walks: the middle one leads.
+  ogre: {
+    sideForward: 0,
+    sideHeight: -1.52,
+    sideSpacing: 0.2,
+    frontMirrors: true,
+    frontAcross: 0,
+    frontHeight: -1.52,
+    frontSpacing: 0.2,
+  },
+  // Drawn only in profile, so facing the camera it still shows that profile.
+  shark: {
+    sideForward: 0.5,
+    sideHeight: -0.34,
+    sideSpacing: 0.05,
+    frontMirrors: true,
+    frontAcross: 0.5,
+    frontHeight: -0.34,
+    frontSpacing: 0.05,
+  },
+};
+
 /**
  * An Ink Marauder — one of Tsarina Signet's tattoos torn from her skin and
  * given a body. It fights alongside the crawlers as a towering blue outline,
  * then bleeds back into ink when its lifespan ends.
  */
 export class InkMarauder extends Mob {
+  /** Emerging, it is still a swirl of ink rising off the floor. */
+  protected override get eyePlacement(): EyePlacement | null {
+    if (this.age < INK_EMERGE_FRAMES) return null;
+    return INK_MARAUDER_EYES[this.form];
+  }
+
   readonly xpValue = 0;
   protected coinDropMin = 0;
   protected coinDropMax = 0;

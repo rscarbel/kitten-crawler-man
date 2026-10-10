@@ -1,4 +1,5 @@
 import type { Player } from '../Player';
+import type { EyePlacement } from '../sprites/eyePlacement';
 import { Mob, type LootDrop } from './Mob';
 import { PLAYER_SPEED } from '../core/constants';
 import type { TacticsTrait } from './tactics/tacticsTraits';
@@ -98,6 +99,16 @@ function viewForFacing(facingX: number, facingY: number): CowView {
   return facingY > 0 ? 'front' : 'back';
 }
 
+const GRAVE_BULL_EYES: EyePlacement = {
+  sideForward: 0.9,
+  sideHeight: 0.0,
+  sideSpacing: 0.05,
+  frontMirrors: false,
+  frontAcross: 0,
+  frontHeight: 0.05,
+  frontSpacing: 0.27,
+};
+
 /**
  * A stray bull from the ruins' old pastures, raised to knock down walls.
  *
@@ -109,6 +120,10 @@ function viewForFacing(facingX: number, facingY: number): CowView {
  * a charge on the spot, which is what makes snares its answer.
  */
 export class GraveBull extends Mob {
+  protected override get eyePlacement(): EyePlacement {
+    return GRAVE_BULL_EYES;
+  }
+
   readonly xpValue = XP_VALUE;
   protected coinDropMin = COIN_DROP_MIN;
   protected coinDropMax = COIN_DROP_MAX;

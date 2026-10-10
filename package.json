@@ -184,6 +184,7 @@
     "verify:cellar-props": "tsx scripts/verify-cellar-props.ts",
     "render:cellar-props": "tsx scripts/render-cellar-props.ts",
     "verify:dungeon-lighting": "tsx scripts/verify-dungeon-lighting.ts",
+    "verify:eye-shine": "tsx scripts/verify-eye-shine.ts",
     "verify:dungeon-life": "tsx scripts/verify-dungeon-life.ts",
     "verify:wall-fixtures": "tsx scripts/verify-wall-fixtures.ts",
     "verify:difficulty-curve": "tsx scripts/verify-difficulty-curve.ts",

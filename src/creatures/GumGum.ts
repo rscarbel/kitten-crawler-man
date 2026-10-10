@@ -1,4 +1,5 @@
 import { Mob } from './Mob';
+import type { EyePlacement } from '../sprites/eyePlacement';
 import type { Player } from '../Player';
 import type { LootDrop } from './Mob';
 import { drawGumGumSprite, GUMGUM_DRAW_SCALE, prewarmGumGumSprite } from '../sprites/gumGumSprite';
@@ -13,6 +14,17 @@ import { drawQuestBeacon } from '../sprites/questBeacon';
 const GUMGUM_HP = 30;
 const GUMGUM_SPEED = 0;
 
+/** Drawn only face-on, so in profile it still shows that face. */
+const GUMGUM_EYES: EyePlacement = {
+  sideForward: 0,
+  sideHeight: -0.38,
+  sideSpacing: 0.12,
+  frontMirrors: false,
+  frontAcross: -0.05,
+  frontHeight: -0.38,
+  frontSpacing: 0.12,
+};
+
 /**
  * GumGum — the kindly orc whose plea opens "The Krasue Murders".
  * A stationary, non-combatant hook NPC: MurderMysteryQuestSystem owns her
@@ -20,6 +32,10 @@ const GUMGUM_SPEED = 0;
  * from there). Non-hostile, so player attacks pass through her.
  */
 export class GumGum extends Mob {
+  protected override get eyePlacement(): EyePlacement {
+    return GUMGUM_EYES;
+  }
+
   readonly xpValue = 0;
   protected coinDropMin = 0;
   protected coinDropMax = 0;

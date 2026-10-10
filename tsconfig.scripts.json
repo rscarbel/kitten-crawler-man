@@ -57,6 +57,7 @@
     "scripts/verify-floor-surface.ts",
     "scripts/verify-dungeon-placement.ts",
     "scripts/verify-dungeon-lighting.ts",
+    "scripts/verify-eye-shine.ts",
     "scripts/verify-dungeon-life.ts",
     "scripts/verify-wall-fixtures.ts",
     "scripts/verify-cellar-props.ts",

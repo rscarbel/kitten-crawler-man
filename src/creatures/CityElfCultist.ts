@@ -1,4 +1,5 @@
 import { Mob } from './Mob';
+import type { EyePlacement } from '../sprites/eyePlacement';
 import type { Player } from '../Player';
 import {
   CITY_ELF_CULTIST_TILES_PER_WALK_CYCLE,
@@ -61,12 +62,26 @@ const IDLE_OFFSET_SPAN_SECONDS = 4;
 const IDLE_OFFSET_TILE_X_STEP = 0.37;
 const IDLE_OFFSET_TILE_Y_STEP = 0.71;
 
+const CULTIST_EYES: EyePlacement = {
+  sideForward: 0.06,
+  sideHeight: -0.36,
+  sideSpacing: 0.05,
+  frontMirrors: false,
+  frontAcross: 0,
+  frontHeight: -0.3,
+  frontSpacing: 0.08,
+};
+
 /**
  * A city elf cultist — one of Miss Quill's hooded faithful, who believe the
  * skyfowl circling the Over City are angels. A ranged caster that holds its
  * distance and hurls soul bolts (pattern: Lava Llama's spit cycle).
  */
 export class CityElfCultist extends Mob {
+  protected override get eyePlacement(): EyePlacement {
+    return CULTIST_EYES;
+  }
+
   readonly xpValue = 14;
   protected coinDropMin = COIN_DROP_MIN;
   protected coinDropMax = COIN_DROP_MAX;

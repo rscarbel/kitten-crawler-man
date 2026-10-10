@@ -1,4 +1,5 @@
 import { Mob } from './Mob';
+import type { EyePlacement } from '../sprites/eyePlacement';
 import { MAX_MOB_CULL_MARGIN_TILES } from '../core/constants';
 import type { Player } from '../Player';
 import type { LootDrop } from './Mob';
@@ -98,6 +99,17 @@ const STRIDE_TILES_PER_CYCLE = 1.7;
 /** Ceiling so a separation shove or a repositioning jump can't snap the cycle forward. */
 const MAX_GAIT_RADIANS_PER_FRAME = 0.28;
 
+/** Drawn only face-on, so in profile it still shows that face. */
+const SIGNET_EYES: EyePlacement = {
+  sideForward: 0,
+  sideHeight: -0.61,
+  sideSpacing: 0.08,
+  frontMirrors: true,
+  frontAcross: 0,
+  frontHeight: -0.61,
+  frontSpacing: 0.08,
+};
+
 /**
  * Tsarina Signet — the half-naiad, half-high-elf Summoner who catches the
  * player spying on Grimaldi's circus. Before the ambush she's a static
@@ -106,6 +118,10 @@ const MAX_GAIT_RADIANS_PER_FRAME = 0.28;
  * conjures a short-lived `InkMarauder` ally.
  */
 export class Signet extends Mob {
+  protected override get eyePlacement(): EyePlacement {
+    return SIGNET_EYES;
+  }
+
   /**
    * Her horns and elite marker sit well above her tile, so a status label
    * anchored to the tile would land across her face. Same clearance the rest of

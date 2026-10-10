@@ -1,9 +1,11 @@
 import type { MercenaryArtId } from '../core/mercenaryTemplates';
+import type { EyePlacement } from './eyePlacement';
 import type { MercenaryDrawState, MercenaryRow } from '../creatures/mercenaries/MercenaryKit';
 import {
   drawRockGolemSprite,
   prewarmRockGolemApproach,
   ROCK_GOLEM_ALLY_BODY_PART_KEY,
+  ROCK_GOLEM_SHEET_EYES,
   type GolemAttack,
 } from './rockGolemSprite';
 import {
@@ -76,6 +78,56 @@ import {
 import { FIGURE_HEIGHT as CRETIN_FIGURE_HEIGHT_TILES } from './art/cretinArt';
 import { CRETIN_TILE_X, CRETIN_TILE_Y, TILE_SCALE as CRETIN_TILE_SCALE } from './art/cretinFigure';
 
+const GLUTEUS_MAXX_EYES: EyePlacement = {
+  sideForward: 0.09,
+  sideHeight: -0.1,
+  sideSpacing: 0.05,
+  frontMirrors: false,
+  frontAcross: 0,
+  frontHeight: -0.07,
+  frontSpacing: 0.1,
+};
+
+const SPLASH_ZONE_EYES: EyePlacement = {
+  sideForward: 0.16,
+  sideHeight: 0.13,
+  sideSpacing: 0.05,
+  frontMirrors: false,
+  frontAcross: 0,
+  frontHeight: 0.17,
+  frontSpacing: 0.16,
+};
+
+const BUCKET_BOY_EYES: EyePlacement = {
+  sideForward: 0.16,
+  sideHeight: -0.05,
+  sideSpacing: 0.05,
+  frontMirrors: false,
+  frontAcross: 0,
+  frontHeight: -0.04,
+  frontSpacing: 0.12,
+};
+
+const DONG_QUIXOTE_EYES: EyePlacement = {
+  sideForward: -0.05,
+  sideHeight: -0.75,
+  sideSpacing: 0.05,
+  frontMirrors: false,
+  frontAcross: -0.07,
+  frontHeight: -0.7,
+  frontSpacing: 0.1,
+};
+
+const CRETIN_HIRE_EYES: EyePlacement = {
+  sideForward: 0.15,
+  sideHeight: -1.17,
+  sideSpacing: 0.05,
+  frontMirrors: false,
+  frontAcross: 0,
+  frontHeight: -1.14,
+  frontSpacing: 0.13,
+};
+
 /**
  * The one place a hireling's look is chosen: every `MercenaryArtId` maps to a
  * {@link MercenaryArt}, and `Mercenary` draws only through it.
@@ -113,6 +165,8 @@ export interface MercenaryArt {
   readonly cullMarginTiles: number | null;
   /** How far above its tile's top edge the figure's head sits, in tiles, for speech. */
   readonly headLiftTiles: number;
+  /** Where the hireling's eyes are, for eye-shine in the dark; see `Mob.eyePlacement`. */
+  readonly eyes: EyePlacement;
   /** Frames the `death` row plays before the body lies still as a corpse. */
   readonly deathFrames: number;
   /**
@@ -185,6 +239,7 @@ const TUMBLEDOWN_ART: MercenaryArt = {
   },
   cullMarginTiles: GOLEM_CULL_MARGIN_TILES,
   headLiftTiles: GOLEM_HEAD_LIFT_TILES,
+  eyes: ROCK_GOLEM_SHEET_EYES.rock_golem_ally,
   deathFrames: TUMBLEDOWN_DEATH_FRAMES,
   goreBodyPartKey: ROCK_GOLEM_ALLY_BODY_PART_KEY,
   prewarm: () => prewarmRockGolemApproach('rock_golem_ally'),
@@ -225,6 +280,7 @@ const GLUTEUS_MAXX_ART: MercenaryArt = {
   },
   cullMarginTiles: MAXX_CULL_MARGIN_TILES,
   headLiftTiles: GLUTEUS_MAXX_HEAD_ABOVE_TILE_TILES,
+  eyes: GLUTEUS_MAXX_EYES,
   deathFrames: MAXX_DEATH_TICKS,
   prewarm: prewarmGluteusMaxx,
   prewarmForFight: () => {
@@ -267,6 +323,7 @@ const SPLASH_ZONE_ART: MercenaryArt = {
   },
   cullMarginTiles: SPLASH_ZONE_CULL_MARGIN_TILES,
   headLiftTiles: SPLASH_ZONE_STANDING_TOP_ABOVE_TILE,
+  eyes: SPLASH_ZONE_EYES,
   deathFrames: SPLASH_ZONE_DEATH_TICKS,
   prewarm: prewarmSplashZone,
   prewarmForFight: prewarmSplashZoneCombat,
@@ -325,6 +382,7 @@ const BUCKET_BOY_ART: MercenaryArt = {
   },
   cullMarginTiles: BUCKET_BOY_CULL_MARGIN_TILES,
   headLiftTiles: BUCKET_BOY_HEAD_ABOVE_TILE_TILES,
+  eyes: BUCKET_BOY_EYES,
   deathFrames: BUCKET_BOY_DEATH_TICKS,
   prewarm: prewarmBucketBoy,
   gait: {
@@ -397,6 +455,7 @@ const DONG_QUIXOTE_ART: MercenaryArt = {
   },
   cullMarginTiles: DONG_CULL_MARGIN_TILES,
   headLiftTiles: DONG_HEAD_TOP_ABOVE_TILE,
+  eyes: DONG_QUIXOTE_EYES,
   deathFrames: DONG_DEATH_TICKS,
   prewarm: () => {
     prewarmDongQuixote();
@@ -494,6 +553,7 @@ function cretinHireArt(variant: CretinVariant, fightRows: readonly CretinAction[
     },
     cullMarginTiles: CRETIN_CULL_MARGIN_TILES,
     headLiftTiles: CRETIN_HEAD_ABOVE_TILE_TILES,
+    eyes: CRETIN_HIRE_EYES,
     deathFrames: CRETIN_ROW_TICKS.death,
     prewarm: () => prewarmCretin(variant),
     prewarmForFight: () => {

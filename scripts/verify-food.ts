@@ -145,6 +145,9 @@ function fedTicksLeft(player: Player): number | null {
 
 class ProbeMob extends Mob {
   readonly xpValue = PROBE_MOB_XP;
+  protected override get eyePlacement(): null {
+    return null;
+  }
   constructor(
     tileX: number,
     tileY: number,

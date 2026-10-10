@@ -927,6 +927,23 @@ const EYE_Y = -0.03;
 const EYE_WHITE_SHARE = 0.45;
 const EYE_CORE_RADIUS = 0.014;
 const EYE_HALO_RADIUS = 0.052;
+/** How far forward of the hood's centre the face sits edge-on, as a share of the hood's front depth. */
+const PROFILE_FACE_FORWARD = 0.34;
+
+/**
+ * Where the Lich's eye-lights are, in rig units from its ground point, for
+ * anything that has to find its eyes without painting it.
+ */
+export const LICH_EYE_RIG = {
+  /** Height of the eyes, negative being up from the ground. */
+  y: HEAD_CENTRE_Y + EYE_Y,
+  /** Facing the camera: each eye's distance either side of the centreline. */
+  frontSpread: EYE_SPREAD,
+  /** Edge-on: how far ahead of the centreline the one visible eye sits. */
+  profileForward: COWL_DEPTH_FRONT * PROFILE_FACE_FORWARD,
+  /** Edge-on: the width of that eye's halo. */
+  profileWidth: EYE_HALO_RADIUS,
+} as const;
 
 const JAW_TOP_Y = 0.048;
 const JAW_HALF = 0.038;
@@ -1027,7 +1044,7 @@ function paintCowl(paint: PaintContext, centre: Pt): void {
 
   const back = view.profile ? COWL_DEPTH_BACK : COWL_HALF;
   const front = view.profile ? COWL_DEPTH_FRONT : COWL_HALF;
-  const faceShift = view.profile ? front * 0.34 : 0;
+  const faceShift = view.profile ? front * PROFILE_FACE_FORWARD : 0;
 
   // The two sides of the drape hang to different lengths. A symmetrical hood is
   // a garment on a mannequin; an uneven one has been worn.

@@ -1,4 +1,5 @@
 import { Mob } from './Mob';
+import type { EyePlacement } from '../sprites/eyePlacement';
 import type { Player } from './../Player';
 import type { LootDrop } from './Mob';
 import { drawShadySprite, SCRATCH_DURATION_FRAMES } from '../sprites/shadySprite';
@@ -26,6 +27,17 @@ const LOOP_OFFSET_SPREAD_SECONDS = 4;
 /** Which glyph floats over him, or none. Driven by `BountyProgress.phase`. */
 export type ShadyMarker = QuestMarkerState;
 
+/** Drawn only face-on, so in profile it still shows that face. */
+const SHADY_EYES: EyePlacement = {
+  sideForward: 0,
+  sideHeight: -0.25,
+  sideSpacing: 0.1,
+  frontMirrors: false,
+  frontAcross: 0,
+  frontHeight: -0.25,
+  frontSpacing: 0.1,
+};
+
 /**
  * Shady — the hooded man beside the town notice board who issues and pays out
  * bounties.
@@ -36,6 +48,10 @@ export type ShadyMarker = QuestMarkerState;
  * hands, and which glyph is over his head.
  */
 export class Shady extends Mob {
+  protected override get eyePlacement(): EyePlacement {
+    return SHADY_EYES;
+  }
+
   readonly xpValue = 0;
   protected coinDropMin = 0;
   protected coinDropMax = 0;

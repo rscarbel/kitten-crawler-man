@@ -20,12 +20,10 @@
  * - A crawler's light walked through a doorway never jumps between frames,
  *   and no frame, moving light or torch-lit, shows a hard line.
  * - A flame flickers over about the share of its cut it is tuned to move.
- * - Eye-shine sits on the head for every facing and is gone facing away, and
- *   never shows on a creature with no eyes to show: a grub, a skeleton still
- *   climbing out of the floor, a bugaboo still under its grate.
+ * - Where each creature's eye-shine sits is held by `verify:eye-shine`.
  *
- * The sight, backface, crawler-light, order, health-bar, breaking, spider-lab
- * and eye checks are also run against a broken input they must catch, so a
+ * The sight, backface, crawler-light, order, health-bar, breaking and
+ * spider-lab checks are also run against a broken input they must catch, so a
  * check that has stopped being able to fail turns the gate red. The edge,
  * jump and flicker checks have no broken twin; their thresholds sit well
  * clear of what a hard clip or a multiplied-away flicker measures.
@@ -62,21 +60,6 @@ import {
 } from '../src/systems/lighting/aboveDarkness.js';
 import { registerBossRoomMoodLights } from '../src/systems/bossRooms/BossRoomDressings.js';
 import { Rat } from '../src/creatures/Rat.js';
-import { Llama } from '../src/creatures/Llama.js';
-import { Goblin } from '../src/creatures/Goblin.js';
-import { GoblinArcher } from '../src/creatures/GoblinArcher.js';
-import { Troglodyte } from '../src/creatures/Troglodyte.js';
-import { Bugaboo } from '../src/creatures/Bugaboo.js';
-import { SkeletonWarrior } from '../src/creatures/SkeletonWarrior.js';
-import { SkeletonArcher } from '../src/creatures/SkeletonArcher.js';
-import { SkeletonLord } from '../src/creatures/SkeletonLord.js';
-import { DEFAULT_EYE_PLACEMENT, type EyePlacement } from '../src/creatures/Mob.js';
-import { BrindleGrub, type GrubStage } from '../src/creatures/BrindleGrub.js';
-import { IceFairy } from '../src/creatures/fairies/IceFairy.js';
-import { FireFairy } from '../src/creatures/fairies/FireFairy.js';
-import { NecroFairy } from '../src/creatures/fairies/NecroFairy.js';
-import { ShieldFairy } from '../src/creatures/fairies/ShieldFairy.js';
-import { HealingFairy } from '../src/creatures/fairies/HealingFairy.js';
 
 /** Generated floors checked per level, from fixed seeds so a failure replays. */
 const SEED_COUNT = 3;
@@ -973,237 +956,6 @@ function checkStaticEdges(gameMap: GameMap, label: string): void {
   }
 }
 
-// ── Check: eye-shine sits on the head ───────────────────────────────────────
-
-interface Facing {
-  readonly x: number;
-  readonly y: number;
-}
-
-const FACINGS: ReadonlyArray<Facing> = [
-  { x: 1, y: 0 },
-  { x: -1, y: 0 },
-  { x: 0, y: 1 },
-  { x: 0, y: -1 },
-];
-
-interface EyeSubject {
-  x: number;
-  y: number;
-  facingX: number;
-  facingY: number;
-  isMoving: boolean;
-  eyeShineAnchor(out: { x: number; y: number; spacingPx: number }): boolean;
-  render(ctx: CanvasRenderingContext2D, camX: number, camY: number, tileSize: number): void;
-}
-
-/** Pixels a tile spans when a creature is drawn for the eye check: big enough to find a head. */
-const EYE_CHECK_SCALE = 3;
-/** Tiles of canvas round the creature's own tile, for art that reaches past it: the Skeleton Lord's crown is near three tiles up. */
-const EYE_CHECK_MARGIN_TILES = 3;
-/** Alpha above which a pixel is the creature's body rather than a soft shadow or glow. */
-const BODY_ALPHA = 160;
-/** How far down the drawn body the eyes may sit, as a share of its height: the head end. */
-const HEAD_SHARE_OF_HEIGHT = 0.45;
-/**
- * The top share of the drawn body whose width a profile's eyes are judged
- * against: the head end, above a weapon or a bow held out in front.
- */
-const HEAD_ROWS_SHARE = 0.3;
-/** How far outside a profile's head end the eyes may sit, as a share of its width. */
-const PROFILE_BACK_SLACK = 0.05;
-
-/** The box round a creature's drawn body, in world pixels, or null when nothing was drawn. */
-interface BodyBox {
-  left: number;
-  top: number;
-  right: number;
-  bottom: number;
-  /** The horizontal extent of the top {@link HEAD_ROWS_SHARE} of the body. */
-  headLeft: number;
-  headRight: number;
-}
-
-function bodyBox(subject: EyeSubject): BodyBox | null {
-  const tiles = 1 + EYE_CHECK_MARGIN_TILES * 2;
-  const size = tiles * TILE_SIZE * EYE_CHECK_SCALE;
-  const canvas = createCanvas(size, size);
-  const ctx = canvas.getContext('2d');
-  ctx.scale(EYE_CHECK_SCALE, EYE_CHECK_SCALE);
-  const camX = subject.x - EYE_CHECK_MARGIN_TILES * TILE_SIZE;
-  const camY = subject.y - EYE_CHECK_MARGIN_TILES * TILE_SIZE;
-  subject.render(asGameContext(ctx), camX, camY, TILE_SIZE);
-  const data = ctx.getImageData(0, 0, size, size).data;
-  let left = Infinity;
-  let top = Infinity;
-  let right = -Infinity;
-  let bottom = -Infinity;
-  for (let y = 0; y < size; y++) {
-    for (let x = 0; x < size; x++) {
-      if (data[(y * size + x) * RGBA + RGBA - 1] < BODY_ALPHA) continue;
-      left = Math.min(left, x);
-      right = Math.max(right, x);
-      top = Math.min(top, y);
-      bottom = Math.max(bottom, y);
-    }
-  }
-  if (left > right) return null;
-  const headBottom = top + (bottom - top) * HEAD_ROWS_SHARE;
-  let headLeft = Infinity;
-  let headRight = -Infinity;
-  for (let y = top; y <= headBottom; y++) {
-    for (let x = 0; x < size; x++) {
-      if (data[(y * size + x) * RGBA + RGBA - 1] < BODY_ALPHA) continue;
-      headLeft = Math.min(headLeft, x);
-      headRight = Math.max(headRight, x);
-    }
-  }
-  return {
-    left: camX + left / EYE_CHECK_SCALE,
-    right: camX + right / EYE_CHECK_SCALE,
-    top: camY + top / EYE_CHECK_SCALE,
-    bottom: camY + bottom / EYE_CHECK_SCALE,
-    headLeft: camX + headLeft / EYE_CHECK_SCALE,
-    headRight: camX + headRight / EYE_CHECK_SCALE,
-  };
-}
-
-/**
- * What is wrong with a creature's eyes at a facing, judged against the body
- * it actually draws: shown while it faces away, missing while it faces the
- * camera, off its body, low on its body, or on the back end of a profile.
- */
-function eyeErrors(subject: EyeSubject, facing: Facing): string | null {
-  subject.facingX = facing.x;
-  subject.facingY = facing.y;
-  subject.isMoving = false;
-  const eyes = { x: 0, y: 0, spacingPx: 0 };
-  const shown = subject.eyeShineAnchor(eyes);
-  if (facing.y < 0) return shown ? 'eyes shown while facing away' : null;
-  if (!shown) return 'no eyes while facing the camera';
-  const box = bodyBox(subject);
-  if (box === null) return 'nothing drawn';
-  if (eyes.x < box.left || eyes.x > box.right || eyes.y < box.top || eyes.y > box.bottom) {
-    return 'eyes off the body';
-  }
-  const height = box.bottom - box.top;
-  const headDepth = eyes.y - box.top;
-  if (headDepth > height * HEAD_SHARE_OF_HEIGHT) return 'eyes away from the head end of the body';
-  if (facing.x !== 0) {
-    const margin = (box.headRight - box.headLeft) * PROFILE_BACK_SLACK;
-    if (eyes.x < box.headLeft - margin || eyes.x > box.headRight + margin) {
-      return 'eyes beside the head end, not on it';
-    }
-  }
-  return null;
-}
-
-/** The brindle grub's last stage, the flying vespa. */
-const VESPA_STAGE: GrubStage = 3;
-
-function grubAt(stage: GrubStage): () => EyeSubject {
-  return () => {
-    const grub = new BrindleGrub(0, 0, TILE_SIZE);
-    grub.stage = stage;
-    return grub;
-  };
-}
-
-function risingSkeleton(): EyeSubject {
-  const skeleton = new SkeletonWarrior(0, 0, TILE_SIZE);
-  skeleton.beginRising();
-  return skeleton;
-}
-
-function bugabooBreakingIn(): EyeSubject {
-  const bugaboo = new Bugaboo(0, 0, TILE_SIZE);
-  bugaboo.isBreakingIn = true;
-  return bugaboo;
-}
-
-/** Hostiles that must never show eye-shine, whichever way they face. */
-const EYELESS_CREATURES: ReadonlyArray<readonly [string, () => EyeSubject]> = [
-  ['brindle grub', grubAt(1)],
-  ['cow-tailed grub', grubAt(2)],
-  ['rising skeleton', risingSkeleton],
-  ['bugaboo breaking in', bugabooBreakingIn],
-];
-
-/** Every floor-1 and floor-2 hostile that can stand in a dark room, with its own silhouette. */
-const EYE_CREATURES: ReadonlyArray<readonly [string, () => EyeSubject]> = [
-  ['llama', () => new Llama(0, 0, TILE_SIZE)],
-  ['rat', () => new Rat(0, 0, TILE_SIZE)],
-  ['goblin', () => new Goblin(0, 0, TILE_SIZE, 'mace')],
-  ['goblin archer', () => new GoblinArcher(0, 0, TILE_SIZE)],
-  ['troglodyte', () => new Troglodyte(0, 0, TILE_SIZE)],
-  ['brindled vespa', grubAt(VESPA_STAGE)],
-  ['skeleton warrior', () => new SkeletonWarrior(0, 0, TILE_SIZE)],
-  ['skeleton archer', () => new SkeletonArcher(0, 0, TILE_SIZE)],
-  ['skeleton lord', () => new SkeletonLord(0, 0, TILE_SIZE)],
-  ['bugaboo', () => new Bugaboo(0, 0, TILE_SIZE)],
-  ['ice fairy', () => new IceFairy(0, 0, TILE_SIZE)],
-  ['fire fairy', () => new FireFairy(0, 0, TILE_SIZE)],
-  ['necro fairy', () => new NecroFairy(0, 0, TILE_SIZE)],
-  ['shield fairy', () => new ShieldFairy(0, 0, TILE_SIZE)],
-  ['healing fairy', () => new HealingFairy(0, 0, TILE_SIZE)],
-];
-
-const EYE_CHECK_TILE = 4;
-
-/** A llama whose eyes are pinned to the middle of its tile, for the negative test. */
-class CentredEyesLlama extends Llama {
-  override eyeShineAnchor(out: { x: number; y: number; spacingPx: number }): boolean {
-    out.x = this.x + TILE_SIZE * HALF;
-    out.y = this.y + TILE_SIZE * HALF;
-    return true;
-  }
-}
-
-/**
- * A skeleton given a one-tile biped's eyes, for the negative test: they land
- * by its feet, under a skull that stands nearly a tile above its own tile.
- */
-class TileHighEyesSkeleton extends SkeletonWarrior {
-  protected override get eyePlacement(): EyePlacement {
-    return DEFAULT_EYE_PLACEMENT;
-  }
-}
-
-function checkEyeShine(): void {
-  for (const [name, make] of EYELESS_CREATURES) {
-    for (const facing of FACINGS) {
-      const subject = make();
-      subject.facingX = facing.x;
-      subject.facingY = facing.y;
-      if (subject.eyeShineAnchor({ x: 0, y: 0, spacingPx: 0 })) {
-        fail(
-          'eye-shine',
-          `${name} facing (${facing.x},${facing.y}): eyes shown on an eyeless creature`,
-        );
-      }
-    }
-  }
-  for (const [name, make] of EYE_CREATURES) {
-    for (const facing of FACINGS) {
-      const subject = make();
-      subject.x = EYE_CHECK_TILE * TILE_SIZE;
-      subject.y = EYE_CHECK_TILE * TILE_SIZE;
-      const error = eyeErrors(subject, facing);
-      if (error !== null) fail('eye-shine', `${name} facing (${facing.x},${facing.y}): ${error}`);
-    }
-  }
-  // Eyes fixed to the middle of the tile whatever the facing sit on a llama's
-  // rump and a fairy's chest, and must be caught.
-  const fixed = new CentredEyesLlama(EYE_CHECK_TILE, EYE_CHECK_TILE, TILE_SIZE);
-  if (FACINGS.every((facing) => eyeErrors(fixed, facing) === null)) {
-    fail('eye-shine', 'negative test: eyes fixed to the middle of the tile went unnoticed');
-  }
-  const tileHigh = new TileHighEyesSkeleton(EYE_CHECK_TILE, EYE_CHECK_TILE, TILE_SIZE);
-  if (FACINGS.every((facing) => eyeErrors(tileHigh, facing) === null)) {
-    fail('eye-shine', "negative test: a skeleton's eyes down by its feet went unnoticed");
-  }
-}
-
 // ── Check: flicker swings as far as it is tuned to ──────────────────────────
 
 /** Moments the flicker is sampled at, and how far apart. */
@@ -1283,7 +1035,6 @@ await loadGameSpritesInNode();
 checkOneTileWall();
 checkRenderOrder();
 checkHealthBarDeferral();
-checkEyeShine();
 checkBackfaces();
 let labsSeen = 0;
 let bossRegionsSeen = 0;

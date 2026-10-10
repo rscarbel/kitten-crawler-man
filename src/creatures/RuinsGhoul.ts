@@ -1,4 +1,5 @@
 import { Mob, type StructureStrikeTiming } from './Mob';
+import type { EyePlacement } from '../sprites/eyePlacement';
 import type { Player } from '../Player';
 import { drawRuinsGhoulSprite, ruinsGhoulArtTopY } from '../sprites/ruinsGhoulSprite';
 import { riposteCooldown } from './tactics/riposte';
@@ -34,12 +35,27 @@ const GHOUL_STRUCTURE_STRIKE_TIMING: StructureStrikeTiming = {
   cooldownFrames: GHOUL_ATTACK_COOLDOWN_FRAMES,
 };
 
+/** Drawn only face-on, so in profile it still shows that face. */
+const RUINS_GHOUL_EYES: EyePlacement = {
+  sideForward: 0,
+  sideHeight: 0.02,
+  sideSpacing: 0.08,
+  frontMirrors: true,
+  frontAcross: 0,
+  frontHeight: 0.02,
+  frontSpacing: 0.08,
+};
+
 /**
  * A former Over City citizen twisted by Scolopendra's poison catastrophe into
  * a shambling ruins ghoul — the bread-and-butter hostile of the ruined city
  * outside the safety of town.
  */
 export class RuinsGhoul extends Mob {
+  protected override get eyePlacement(): EyePlacement {
+    return RUINS_GHOUL_EYES;
+  }
+
   readonly xpValue = 12;
   protected coinDropMin = 0;
   protected coinDropMax = COIN_DROP_MAX;

@@ -1,4 +1,5 @@
 import { Mob, type LootDrop, type PlayerDamageType } from './Mob';
+import type { EyePlacement } from '../sprites/eyePlacement';
 import type { DamageSource, Player } from '../Player';
 import { PLAYER_SPEED, TILE_SIZE } from '../core/constants';
 import { normalize } from '../utils';
@@ -247,7 +248,21 @@ function distanceToSegment(
   return Math.hypot(px - (ax + abx * t), py - (ay + aby * t));
 }
 
+const RATKIN_SOLDIER_EYES: EyePlacement = {
+  sideForward: 0.13,
+  sideHeight: -0.26,
+  sideSpacing: 0.05,
+  frontMirrors: false,
+  frontAcross: 0,
+  frontHeight: -0.25,
+  frontSpacing: 0.1,
+};
+
 export class RatkinSoldier extends Mob {
+  protected override get eyePlacement(): EyePlacement {
+    return RATKIN_SOLDIER_EYES;
+  }
+
   readonly xpValue: number = 0;
   protected coinDropMin = 0;
   protected coinDropMax = 0;

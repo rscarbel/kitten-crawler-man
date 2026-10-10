@@ -1,4 +1,5 @@
 import { walkFrameIndex, progressFrameIndex, timeFrameIndex } from '../core/SpriteRenderer';
+import type { EyePlacement } from './eyePlacement';
 import { figureFrameCount, type FigureDef } from './figure/figureDef';
 import { drawFigureCached, prewarmFigureState } from './figure/figureFrameCache';
 import {
@@ -16,6 +17,31 @@ import {
  * so a hired golem never shares a sheet with a hostile one.
  */
 export type RockGolemSheet = 'rock_golem' | 'rock_golem_boss' | 'rock_golem_ally';
+
+const ROCK_GOLEM_EYES: EyePlacement = {
+  sideForward: 0.04,
+  sideHeight: -0.68,
+  sideSpacing: 0.05,
+  frontMirrors: false,
+  frontAcross: -0.07,
+  frontHeight: -0.68,
+  frontSpacing: 0.19,
+};
+
+/** Where each sheet's eyes sit; the hired golem is drawn from the same figure as the hostile one. */
+export const ROCK_GOLEM_SHEET_EYES: Readonly<Record<RockGolemSheet, EyePlacement>> = {
+  rock_golem: ROCK_GOLEM_EYES,
+  rock_golem_ally: ROCK_GOLEM_EYES,
+  rock_golem_boss: {
+    sideForward: 0.08,
+    sideHeight: -1.14,
+    sideSpacing: 0.06,
+    frontMirrors: false,
+    frontAcross: -0.05,
+    frontHeight: -1.12,
+    frontSpacing: 0.24,
+  },
+};
 
 function figureFor(sheet: RockGolemSheet): FigureDef {
   if (sheet === 'rock_golem_boss') return ROCK_GOLEM_BOSS_FIGURE;

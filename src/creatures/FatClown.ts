@@ -1,4 +1,5 @@
 import { Mob } from './Mob';
+import type { EyePlacement } from '../sprites/eyePlacement';
 import type { Player } from '../Player';
 import {
   FAT_CLOWN_ATTACK_STATES,
@@ -56,11 +57,26 @@ const FAT_CLOWN_TACTICS: readonly TacticsTrait[] = ['flank', 'block', 'regroup',
  */
 export const CIRCUS_CLOWN_PACK_KIND = 'circus_clown';
 
+/** Drawn only face-on, so in profile it still shows that face. */
+const FAT_CLOWN_EYES: EyePlacement = {
+  sideForward: 0.05,
+  sideHeight: -0.4,
+  sideSpacing: 0.2,
+  frontMirrors: true,
+  frontAcross: 0.05,
+  frontHeight: -0.4,
+  frontSpacing: 0.2,
+};
+
 /**
  * A Fat Clown — one of Grimaldi's corrupted performers, tanky and slow with
  * a heavy shoulder-slam attack. The circus questline's bread-and-butter bruiser.
  */
 export class FatClown extends Mob {
+  protected override get eyePlacement(): EyePlacement {
+    return FAT_CLOWN_EYES;
+  }
+
   readonly xpValue = 20;
   protected coinDropMin = COIN_DROP_MIN;
   protected coinDropMax = COIN_DROP_MAX;

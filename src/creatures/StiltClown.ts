@@ -1,4 +1,5 @@
 import { Mob } from './Mob';
+import type { EyePlacement } from '../sprites/eyePlacement';
 import type { Player } from '../Player';
 import {
   STILT_CLOWN_ATTACK_STATES,
@@ -50,11 +51,26 @@ const FOLLOW_STOP_FRACTION = 0.75;
 const CULL_MARGIN_TILES = 3;
 const STILT_CLOWN_TACTICS: readonly TacticsTrait[] = ['flank', 'block', 'regroup', 'riposte'];
 
+/** Drawn only face-on, so in profile it still shows that face. */
+const STILT_CLOWN_EYES: EyePlacement = {
+  sideForward: -0.04,
+  sideHeight: -1.13,
+  sideSpacing: 0.1,
+  frontMirrors: true,
+  frontAcross: -0.04,
+  frontHeight: -1.13,
+  frontSpacing: 0.1,
+};
+
 /**
  * A Stilt Clown — one of Grimaldi's corrupted performers, towering on
  * spindly stilt legs with a long-reaching, telegraphed lunging strike.
  */
 export class StiltClown extends Mob {
+  protected override get eyePlacement(): EyePlacement {
+    return STILT_CLOWN_EYES;
+  }
+
   readonly xpValue = 14;
   protected coinDropMin = 0;
   protected coinDropMax = COIN_DROP_MAX;

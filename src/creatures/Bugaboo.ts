@@ -1,5 +1,6 @@
 import type { Player } from '../Player';
-import { Mob, type EyePlacement } from './Mob';
+import type { EyePlacement } from '../sprites/eyePlacement';
+import { Mob } from './Mob';
 import { TILE_SIZE } from '../core/constants';
 import type { TacticsTrait } from './tactics/tacticsTraits';
 import {
@@ -69,6 +70,8 @@ const BUGABOO_EYES: EyePlacement = {
   sideForward: 0.12,
   sideHeight: -0.68,
   sideSpacing: 0.06,
+  frontMirrors: false,
+  frontAcross: 0,
   frontHeight: -0.68,
   frontSpacing: 0.25,
 };

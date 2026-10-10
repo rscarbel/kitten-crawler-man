@@ -24,6 +24,19 @@ const TILE_CENTER_FRACTION = 0.5;
 /** The art faces -Y, so a heading of (1,0) needs a quarter turn to face east. */
 const SPRITE_FACING_OFFSET = Math.PI / 2;
 
+/**
+ * Where its eyes are in the art's own unturned frame, in tiles from the pivot
+ * at one tile's draw size: on the clypeus at the front of the carapace,
+ * measured off the painted figure.
+ */
+export const SPIDER_EYES_AHEAD_TILES = 0.24;
+export const SPIDER_EYE_SPACING_TILES = 0.08;
+
+/** The angle the art is turned by to face (facingX, facingY). */
+export function spiderFacingRotation(facingX: number, facingY: number): number {
+  return Math.atan2(facingY, facingX) + SPRITE_FACING_OFFSET;
+}
+
 export type SpiderDeathStyle = 'death_curl' | 'death_spasm' | 'death_flip';
 
 /**
@@ -49,7 +62,7 @@ export function drawSpiderSprite(
 ): void {
   const anchorX = sx + tileSize * TILE_CENTER_FRACTION;
   const anchorY = sy + tileSize * TILE_CENTER_FRACTION;
-  const rotation = Math.atan2(facingY, facingX) + SPRITE_FACING_OFFSET;
+  const rotation = spiderFacingRotation(facingX, facingY);
   const opts = { rotation, alpha };
 
   switch (animation.kind) {

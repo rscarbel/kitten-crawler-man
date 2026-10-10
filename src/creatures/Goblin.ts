@@ -1,4 +1,5 @@
 import type { Player } from '../Player';
+import type { EyePlacement } from '../sprites/eyePlacement';
 import { Mob } from './Mob';
 import { maybeDropSkillBook } from './skillBookDrop';
 import type { LootDrop } from './Mob';
@@ -78,7 +79,22 @@ const MILLISECONDS_PER_SECOND = 1000;
 const FRAME_MIDPOINT = 0.5;
 const GOBLIN_TACTICS: readonly TacticsTrait[] = ['flank', 'block', 'kite', 'regroup', 'riposte'];
 
+/** Drawn only in profile, so facing the camera it still shows that profile. */
+const GOBLIN_EYES: EyePlacement = {
+  sideForward: 0.13,
+  sideHeight: 0.3,
+  sideSpacing: 0.05,
+  frontMirrors: true,
+  frontAcross: 0.13,
+  frontHeight: 0.3,
+  frontSpacing: 0.05,
+};
+
 export class Goblin extends Mob {
+  protected override get eyePlacement(): EyePlacement {
+    return GOBLIN_EYES;
+  }
+
   readonly xpValue = 5;
   protected coinDropMin = 1;
   protected coinDropMax = COIN_DROP_MAX;

@@ -1,4 +1,5 @@
 import { BOSS_BLAST_DAMAGE_SCALE, Mob } from './Mob';
+import type { EyePlacement } from '../sprites/eyePlacement';
 import type { DamageSource, Player } from '../Player';
 import { TILE_SIZE } from '../core/constants';
 import {
@@ -347,6 +348,11 @@ export interface StenchBurst {
  * instantly on contact, and stopped for twenty to forty seconds at random.
  */
 export class BallOfSwine extends Mob {
+  /** A rolling knot of pig faces turns its eyes with the roll; no one point is its head. */
+  protected override get eyePlacement(): EyePlacement | null {
+    return null;
+  }
+
   /** Not every system that runs this boss sets `isBoss`, so the blast share is claimed here rather than read from it. */
   override get blastDamageScale(): number {
     return BOSS_BLAST_DAMAGE_SCALE;

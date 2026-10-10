@@ -1,8 +1,12 @@
 import { Mob } from './Mob';
+import type { EyePlacement } from '../sprites/eyePlacement';
 import { maybeDropSkillBook } from './skillBookDrop';
 import {
+  SPIDER_EYES_AHEAD_TILES,
+  SPIDER_EYE_SPACING_TILES,
   drawSpiderSprite,
   prewarmSmallSpiderCombat,
+  spiderFacingRotation,
   type SpiderAnimation,
   type SpiderDeathStyle,
 } from '../sprites/spiderSprite';
@@ -113,6 +117,18 @@ function leapSpeedFactor(flightProgress: number): number {
 }
 
 export class SmallSpider extends Mob {
+  /** Seen from above and turned to its facing, scaled with its body. */
+  protected override get eyePlacement(): EyePlacement {
+    return {
+      pivotX: TILE_CENTER_FRACTION,
+      pivotY: TILE_CENTER_FRACTION,
+      headX: 0,
+      headY: -SPIDER_EYES_AHEAD_TILES * this.drawScale,
+      spacing: SPIDER_EYE_SPACING_TILES * this.drawScale,
+      rotation: spiderFacingRotation,
+    };
+  }
+
   readonly xpValue: number = SPIDER_XP;
   protected override coinDropMin = 0;
   protected override coinDropMax = SPIDER_COIN_DROP_MAX;

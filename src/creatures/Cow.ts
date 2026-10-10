@@ -17,6 +17,7 @@
  */
 
 import { Mob, type PlayerDamageType, type LootDrop } from './Mob';
+import type { EyePlacement } from '../sprites/eyePlacement';
 import type { LevelledCurve } from './mobLevelScaling';
 import type { Player } from '../Player';
 import { TILE_SIZE } from '../core/constants';
@@ -294,7 +295,32 @@ function secondsToUpdates(seconds: number): number {
   return Math.round(seconds * UPDATES_PER_SECOND);
 }
 
+const COW_EYES: Readonly<Record<CowAge, EyePlacement>> = {
+  adult: {
+    sideForward: 0.77,
+    sideHeight: 0.25,
+    sideSpacing: 0.05,
+    frontMirrors: false,
+    frontAcross: 0,
+    frontHeight: 0.18,
+    frontSpacing: 0.2,
+  },
+  calf: {
+    sideForward: 0.4,
+    sideHeight: 0.42,
+    sideSpacing: 0.04,
+    frontMirrors: false,
+    frontAcross: 0,
+    frontHeight: 0.38,
+    frontSpacing: 0.16,
+  },
+};
+
 export class Cow extends Mob {
+  protected override get eyePlacement(): EyePlacement {
+    return COW_EYES[this.age];
+  }
+
   readonly xpValue = 0;
   override readonly audioTag = 'cow';
   override readonly bodyPartKey: string;

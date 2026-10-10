@@ -260,7 +260,9 @@ Two lint rules bite modules that live under `src/`:
     optional and it is not one pass. See `references/review.md`.
 12. **Wire it up** via `add-creature`, and re-measure the tile anchor — health
     bars and aggro markers key off it and _will_ be wrong after a redraw
-    (`references/anatomy.md#anchor`).
+    (`references/anatomy.md#anchor`). The creature's eye placement keys off it
+    too: derive it from the rig's head constants (see `skeletonEyePlacement`)
+    and run `npm run verify:eye-shine`.
 13. **Validation gates:** `npm run typecheck`, `npm run lint`, `npm run format`,
     `npm run gates:figure-cache`, `npm run render:<x>` must all exit 0 (for
     Carl, `render:human` gates three outfits and `bench:figure-paint` gates his

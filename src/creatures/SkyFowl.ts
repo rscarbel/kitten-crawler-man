@@ -1,4 +1,5 @@
 import { Mob } from './Mob';
+import type { EyePlacement } from '../sprites/eyePlacement';
 import type { PlayerDamageType } from './Mob';
 import { maybeDropSkillBook } from './skillBookDrop';
 import type { Player } from '../Player';
@@ -92,7 +93,21 @@ export function skyfowlMobRunsAt(tilesPerTick: number): boolean {
 
 const TWO_PI = Math.PI * 2;
 
+const SKYFOWL_EYES: EyePlacement = {
+  sideForward: 0.17,
+  sideHeight: -0.43,
+  sideSpacing: 0.05,
+  frontMirrors: false,
+  frontAcross: 0,
+  frontHeight: -0.43,
+  frontSpacing: 0.17,
+};
+
 export class SkyFowl extends Mob {
+  protected override get eyePlacement(): EyePlacement {
+    return SKYFOWL_EYES;
+  }
+
   readonly xpValue = 8;
   protected coinDropMin = 0;
   protected coinDropMax = 2;

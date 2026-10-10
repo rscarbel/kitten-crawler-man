@@ -1,8 +1,8 @@
+import type { EyePlacement } from '../../sprites/eyePlacement';
 import {
   ASTAR_FAILURE_BACKOFF_FRAMES,
   ASTAR_MAX_DENIED_FRAMES,
   Mob,
-  type EyeAnchor,
   type PlayerDamageType,
 } from '../Mob';
 import type { Player } from '../../Player';
@@ -225,6 +225,10 @@ const NO_SIGHTLINE_PENALTY_TILES = 12;
 
 /** The gap between a fairy's eyes, in tiles: its head is small. */
 const FAIRY_EYE_SPACING = 0.08;
+
+/** A tile one unit across, so the sprite's eye point comes back in tiles from its top-left. */
+const UNIT_TILE_SIZE = 1;
+const UNIT_TILE_CENTRE = 0.5;
 
 /**
  * A fragile flying caster that changes the fight around it, and keeps its
@@ -1059,13 +1063,23 @@ export abstract class Fairy extends Mob {
     return facing;
   }
 
+  private readonly eyePoint = { x: 0, y: 0 };
+
   /** Its eyes on the face it is drawn with this frame; it hovers with its head above its tile. */
-  override eyeShineAnchor(out: EyeAnchor): boolean {
-    if (!fairyEyePoint(this.kind, this.x, this.y, this.tileSize, this.spriteState(), out)) {
-      return false;
-    }
-    out.spacingPx = this.tileSize * FAIRY_EYE_SPACING;
-    return true;
+  protected override get eyePlacement(): EyePlacement | null {
+    const point = this.eyePoint;
+    if (!fairyEyePoint(this.kind, 0, 0, UNIT_TILE_SIZE, this.spriteState(), point)) return null;
+    const forward = this.facingX < 0 ? -1 : 1;
+    const across = point.x - UNIT_TILE_CENTRE;
+    return {
+      sideForward: across * forward,
+      sideHeight: point.y,
+      sideSpacing: FAIRY_EYE_SPACING,
+      frontMirrors: false,
+      frontAcross: across,
+      frontHeight: point.y,
+      frontSpacing: FAIRY_EYE_SPACING,
+    };
   }
 
   /**

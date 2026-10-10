@@ -1,4 +1,5 @@
 import type { Player } from '../Player';
+import type { EyePlacement } from '../sprites/eyePlacement';
 import { Mob } from './Mob';
 import type { LootDrop, PlayerDamageType } from './Mob';
 import { TILE_SIZE } from '../core/constants';
@@ -117,7 +118,21 @@ const COIN_DROP_MAX = 100;
 
 type HoarderState = 'fleeing' | 'vomit_windup';
 
+const HOARDER_EYES: EyePlacement = {
+  sideForward: 0.1,
+  sideHeight: -2.3,
+  sideSpacing: 0.05,
+  frontMirrors: false,
+  frontAcross: 0,
+  frontHeight: -2.3,
+  frontSpacing: 0.15,
+};
+
 export class TheHoarder extends Mob {
+  protected override get eyePlacement(): EyePlacement {
+    return HOARDER_EYES;
+  }
+
   override readonly audioTag = 'hoarder';
   readonly xpValue = 500;
   override readonly bodyPartKey = HOARDER_BODY_PART_KEY;

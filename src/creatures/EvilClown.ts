@@ -1,4 +1,5 @@
 import { BOSS_BLAST_DAMAGE_SCALE, Mob } from './Mob';
+import type { EyePlacement } from '../sprites/eyePlacement';
 import type { Player } from '../Player';
 import type { LootDrop } from './Mob';
 import {
@@ -157,7 +158,22 @@ const EMPTY_VIALS: readonly PendingVial[] = [];
 
 type ClownPhase = 'hunting' | 'laughing' | 'juggling';
 
+/** Drawn only face-on, so in profile it still shows that face. */
+const EVIL_CLOWN_EYES: EyePlacement = {
+  sideForward: 0,
+  sideHeight: -1.75,
+  sideSpacing: 0.18,
+  frontMirrors: false,
+  frontAcross: -0.11,
+  frontHeight: -1.75,
+  frontSpacing: 0.18,
+};
+
 export class EvilClown extends Mob {
+  protected override get eyePlacement(): EyePlacement {
+    return EVIL_CLOWN_EYES;
+  }
+
   /** Not every system that runs this boss sets `isBoss`, so the blast share is claimed here rather than read from it. */
   override get blastDamageScale(): number {
     return BOSS_BLAST_DAMAGE_SCALE;

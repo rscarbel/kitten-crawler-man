@@ -1,4 +1,5 @@
 import type { Player } from '../Player';
+import type { EyePlacement } from '../sprites/eyePlacement';
 import { PLAYER_SPEED } from '../core/constants';
 import { Mob } from './Mob';
 import {
@@ -57,7 +58,21 @@ const MASS = 1.2;
 const PURSUIT_STOP_RATIO = 0.85;
 const MANTIS_TACTICS: readonly TacticsTrait[] = ['flank', 'block', 'kite', 'regroup', 'riposte'];
 
+const MANTIS_CRONY_EYES: EyePlacement = {
+  sideForward: 0.34,
+  sideHeight: -0.06,
+  sideSpacing: 0.05,
+  frontMirrors: false,
+  frontAcross: -0.05,
+  frontHeight: -0.02,
+  frontSpacing: 0.16,
+};
+
 export class MantisCrony extends Mob {
+  protected override get eyePlacement(): EyePlacement {
+    return MANTIS_CRONY_EYES;
+  }
+
   readonly xpValue = XP_VALUE;
   protected coinDropMin = COIN_DROP_MIN;
   protected coinDropMax = COIN_DROP_MAX;

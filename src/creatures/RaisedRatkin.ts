@@ -1,4 +1,5 @@
 import type { Player } from '../Player';
+import type { EyePlacement } from '../sprites/eyePlacement';
 import { RisingSkeleton } from './RisingSkeleton';
 import type { LootDrop, PlayerDamageType, StructureStrikeTiming } from './Mob';
 import { GHOUL_SPEED } from './RuinsGhoul';
@@ -68,6 +69,16 @@ function viewForFacing(facingX: number, facingY: number): RatKinView {
   return facingY > 0 ? 'front' : 'away';
 }
 
+const RAISED_RATKIN_EYES: EyePlacement = {
+  sideForward: 0.37,
+  sideHeight: -0.04,
+  sideSpacing: 0.05,
+  frontMirrors: false,
+  frontAcross: 0,
+  frontHeight: 0.08,
+  frontSpacing: 0.08,
+};
+
 /**
  * One of Briar Hollow's own dead, dragged back up by the necromancer: a
  * ratkin villager in the smock, militia jack or shroud it was buried in.
@@ -78,6 +89,10 @@ function viewForFacing(facingX: number, facingY: number): RatKinView {
  * tactics — a corpse on somebody else's strings learns nothing.
  */
 export class RaisedRatkin extends RisingSkeleton {
+  protected override get standingEyePlacement(): EyePlacement {
+    return RAISED_RATKIN_EYES;
+  }
+
   readonly xpValue = XP_VALUE;
   protected coinDropMin = COIN_DROP_MIN;
   protected coinDropMax = COIN_DROP_MAX;

@@ -1,4 +1,5 @@
 import { Mob, TACTICAL_RETREAT_MAX_SPEED } from './Mob';
+import type { EyePlacement } from '../sprites/eyePlacement';
 import type { Player } from '../Player';
 import { drawKrasueSprite } from '../sprites/krasueSprite';
 import type { TacticsTrait } from './tactics/tacticsTraits';
@@ -24,12 +25,27 @@ const WOBBLE_AMOUNT = 0.65;
 const FLOAT_PHASE_SPEED = 0.12;
 const KRASUE_TACTICS: readonly TacticsTrait[] = ['flank', 'block', 'regroup', 'riposte'];
 
+/** Drawn only face-on, so in profile it still shows that face. */
+const KRASUE_EYES: EyePlacement = {
+  sideForward: 0,
+  sideHeight: 0.49,
+  sideSpacing: 0.1,
+  frontMirrors: true,
+  frontAcross: 0,
+  frontHeight: 0.49,
+  frontSpacing: 0.1,
+};
+
 /**
  * A krasue — a disembodied flying head trailing entrails, born from
  * Scolopendra's poison catastrophe. Fast, erratic, and low-HP but
  * dangerous in a straight fight; the Over City ruins' aerial threat.
  */
 export class Krasue extends Mob {
+  protected override get eyePlacement(): EyePlacement {
+    return KRASUE_EYES;
+  }
+
   readonly xpValue = 10;
   protected coinDropMin = 0;
   protected coinDropMax = 1;

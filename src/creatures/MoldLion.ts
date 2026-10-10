@@ -1,4 +1,5 @@
 import { Mob } from './Mob';
+import type { EyePlacement } from '../sprites/eyePlacement';
 import type { Player } from '../Player';
 import type { LootDrop } from './Mob';
 import { drawMoldLionSprite } from '../sprites/moldLionSprite';
@@ -31,11 +32,26 @@ const AURA_TICK_COOLDOWN = 180;
 const AURA_ARM_TOUCH_RANGE_TILES = 1;
 const MOLD_LION_TACTICS: readonly TacticsTrait[] = ['flank', 'block', 'regroup', 'riposte'];
 
+/** Drawn only in profile, so facing the camera it still shows that profile. */
+const MOLD_LION_EYES: EyePlacement = {
+  sideForward: 0.49,
+  sideHeight: 0.3,
+  sideSpacing: 0.05,
+  frontMirrors: true,
+  frontAcross: 0.49,
+  frontHeight: 0.3,
+  frontSpacing: 0.05,
+};
+
 /**
  * A Mold Lion — one of Grimaldi's corrupted performers, a mid-tier bruiser
  * whose fungal mane emits a passive poison aura in addition to its bite.
  */
 export class MoldLion extends Mob {
+  protected override get eyePlacement(): EyePlacement {
+    return MOLD_LION_EYES;
+  }
+
   readonly xpValue = 22;
   protected coinDropMin = COIN_DROP_MIN;
   protected coinDropMax = COIN_DROP_MAX;

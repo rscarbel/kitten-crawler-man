@@ -95,7 +95,7 @@ export class ShrineVermin extends Rat {
     tileSize: number,
   ): void {
     super.drawSelf(ctx, camX, camY, tileSize);
-    if (!this.isAlive) return;
+    if (!this.isAlive || this.paintingBodyOnly) return;
     const sy = this.y - camY;
     const artTop = this.drawnRow === undefined ? sy : figureRowInkTop(this.drawnRow, sy, tileSize);
     const clearOf = this.overheadClearTop(artTop, sy);

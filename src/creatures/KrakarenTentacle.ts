@@ -1,4 +1,5 @@
 import type { Player } from '../Player';
+import type { EyePlacement } from '../sprites/eyePlacement';
 import { Mob } from './Mob';
 import { TILE_SIZE } from '../core/constants';
 import {
@@ -100,6 +101,11 @@ type KrakarenTentacleState =
  * them down rather than to keep swinging at the mantle.
  */
 export class KrakarenTentacle extends Mob {
+  /** A tentacle has no head; its eyes belong to the body. */
+  protected override get eyePlacement(): EyePlacement | null {
+    return null;
+  }
+
   readonly xpValue = GUARD_TENTACLE_XP;
   protected coinDropMin = 0;
   protected coinDropMax = 0;

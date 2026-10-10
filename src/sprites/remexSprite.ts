@@ -1,3 +1,5 @@
+import type { EyePlacement } from './eyePlacement';
+
 /** Pillar proportions (fractions of tile size, centred coordinates). */
 const REMEX_BASE_HALF_WIDTH = 0.22;
 const REMEX_TOP_HALF_WIDTH = 0.13;
@@ -9,6 +11,19 @@ const REMEX_FACE_Y = -0.12;
 const REMEX_EYE_R = 0.025;
 const REMEX_EYE_X = 0.05;
 const REMEX_MOUTH_HALF_WIDTH = 0.05;
+/** The pillar's coordinates are centred on its tile; eye placements count from the tile's top-left. */
+const TILE_CENTRE = 0.5;
+
+/** Remex's eyes are the ones in the face set into the column; it has no other head. */
+export const REMEX_EYES: EyePlacement = {
+  sideForward: 0,
+  sideHeight: TILE_CENTRE + REMEX_FACE_Y,
+  sideSpacing: REMEX_EYE_X * 2,
+  frontMirrors: false,
+  frontAcross: 0,
+  frontHeight: TILE_CENTRE + REMEX_FACE_Y,
+  frontSpacing: REMEX_EYE_X * 2,
+};
 const REMEX_MOUTH_Y_OFFSET = 0.09;
 
 /** Soul conduits — glowing veins running up the column. */

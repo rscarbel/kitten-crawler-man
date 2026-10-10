@@ -1,11 +1,6 @@
 import type { Player } from '../Player';
-import {
-  BOSS_BLAST_DAMAGE_SCALE,
-  Mob,
-  type EyePlacement,
-  type LootDrop,
-  type PlayerDamageType,
-} from './Mob';
+import type { EyePlacement } from '../sprites/eyePlacement';
+import { BOSS_BLAST_DAMAGE_SCALE, Mob, type LootDrop, type PlayerDamageType } from './Mob';
 import { MAX_MOB_CULL_MARGIN_TILES } from '../core/constants';
 import { makeStuck } from '../core/StatusEffect';
 import { drawDangerCone } from '../sprites/dangerTelegraph';

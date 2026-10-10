@@ -1,6 +1,6 @@
 import type { Player } from '../Player';
+import type { EyePlacement } from '../sprites/eyePlacement';
 import { RisingSkeleton } from './RisingSkeleton';
-import type { EyePlacement } from './Mob';
 import { SKELETON_ARCHER_BODY_PART_KEY, drawSkeletonArcherSprite } from '../sprites/skeletonSprite';
 import { skeletonEyePlacement } from '../sprites/art/skeletonFigure';
 import { BONE_ARROW_DRAW_FRAMES, boneArrowReleaseFrame } from '../sprites/skeletonTiming';
@@ -58,7 +58,7 @@ const ARCHER_SIEGE_STRUCTURE_MULTIPLIER = 0;
 const ARCHER_SKELETON_EYES = skeletonEyePlacement('archer');
 
 export class SkeletonArcher extends RisingSkeleton {
-  protected override get eyePlacement(): EyePlacement {
+  protected override get standingEyePlacement(): EyePlacement {
     return ARCHER_SKELETON_EYES;
   }
 

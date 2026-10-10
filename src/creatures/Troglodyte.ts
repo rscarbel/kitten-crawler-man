@@ -1,4 +1,5 @@
-import { Mob, type EyePlacement } from './Mob';
+import { Mob } from './Mob';
+import type { EyePlacement } from '../sprites/eyePlacement';
 import { scaledCooldownFramesForLevel } from './mobLevelScaling';
 import { maybeDropSkillBook } from './skillBookDrop';
 import type { Player } from '../Player';
@@ -111,7 +112,9 @@ const TROGLODYTE_EYES: EyePlacement = {
   sideForward: 0.2,
   sideHeight: -0.08,
   sideSpacing: 0.06,
-  frontHeight: -0.1,
+  frontMirrors: false,
+  frontAcross: 0,
+  frontHeight: -0.05,
   frontSpacing: 0.16,
 };
 

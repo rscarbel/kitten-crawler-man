@@ -1,5 +1,6 @@
 import type { Player } from '../Player';
-import { Mob, type EyePlacement } from './Mob';
+import type { EyePlacement } from '../sprites/eyePlacement';
+import { Mob } from './Mob';
 import type { LootDrop } from './Mob';
 import { maybeDropSkillBook } from './skillBookDrop';
 import type { TacticsTrait } from './tactics/tacticsTraits';
@@ -39,6 +40,8 @@ const RAT_EYES: EyePlacement = {
   sideForward: 0.36,
   sideHeight: 0.5,
   sideSpacing: 0.04,
+  frontMirrors: false,
+  frontAcross: 0,
   frontHeight: 0.33,
   frontSpacing: 0.1,
 };

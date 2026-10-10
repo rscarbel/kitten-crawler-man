@@ -1,4 +1,5 @@
 import { ASTAR_FAILURE_BACKOFF_FRAMES, ASTAR_MAX_DENIED_FRAMES, Mob } from './Mob';
+import type { EyePlacement } from '../sprites/eyePlacement';
 import type { DamageSource, Player } from '../Player';
 import { TILE_SIZE } from '../core/constants';
 import {
@@ -290,7 +291,42 @@ interface PendingBlow {
   framesLeft: number;
 }
 
+/** He grows from a hunched hatchling into a tall-necked adult, so each stage carries its head somewhere else. */
+const MONGO_EYES: Readonly<Record<MongoStage, EyePlacement>> = {
+  juvenile: {
+    sideForward: 0.28,
+    sideHeight: 0.44,
+    sideSpacing: 0.04,
+    frontMirrors: false,
+    frontAcross: 0,
+    frontHeight: 0.4,
+    frontSpacing: 0.16,
+  },
+  adolescent: {
+    sideForward: 0.52,
+    sideHeight: 0.14,
+    sideSpacing: 0.04,
+    frontMirrors: false,
+    frontAcross: 0,
+    frontHeight: 0.07,
+    frontSpacing: 0.17,
+  },
+  adult: {
+    sideForward: 0.65,
+    sideHeight: 0.04,
+    sideSpacing: 0.04,
+    frontMirrors: false,
+    frontAcross: 0,
+    frontHeight: -0.17,
+    frontSpacing: 0.17,
+  },
+};
+
 export class Mongo extends Mob {
+  protected override get eyePlacement(): EyePlacement {
+    return MONGO_EYES[this.stats.stage];
+  }
+
   readonly xpValue = 0; // ally — no XP on death
   protected coinDropMin = 0;
   protected coinDropMax = 0;

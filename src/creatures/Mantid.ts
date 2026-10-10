@@ -1,4 +1,5 @@
 import type { Player } from '../Player';
+import type { EyePlacement } from '../sprites/eyePlacement';
 import { BOSS_BLAST_DAMAGE_SCALE, Mob, type LootDrop } from './Mob';
 import {
   MANTID_BODY_PART_KEY,
@@ -180,7 +181,21 @@ const COMMITTED_STATES: ReadonlySet<MantidState> = new Set<MantidState>([
   'flurry',
 ]);
 
+const MANTID_EYES: EyePlacement = {
+  sideForward: 0.65,
+  sideHeight: -0.9,
+  sideSpacing: 0.06,
+  frontMirrors: false,
+  frontAcross: -0.12,
+  frontHeight: -0.89,
+  frontSpacing: 0.3,
+};
+
 export class Mantid extends Mob {
+  protected override get eyePlacement(): EyePlacement {
+    return MANTID_EYES;
+  }
+
   /** Not every system that runs this boss sets `isBoss`, so the blast share is claimed here rather than read from it. */
   override get blastDamageScale(): number {
     return BOSS_BLAST_DAMAGE_SCALE;

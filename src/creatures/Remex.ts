@@ -1,7 +1,8 @@
 import { BOSS_BLAST_DAMAGE_SCALE, Mob } from './Mob';
+import type { EyePlacement } from '../sprites/eyePlacement';
 import type { Player } from '../Player';
 import type { LootDrop } from './Mob';
-import { drawRemexSprite, remexArtTopY } from '../sprites/remexSprite';
+import { REMEX_EYES, drawRemexSprite, remexArtTopY } from '../sprites/remexSprite';
 
 const REMEX_HP = 140;
 /** Rooted in place — a capacitor does not walk. */
@@ -14,6 +15,10 @@ const REMEX_SPEED = 0;
  * attacks — a stationary, always-targetable objective.
  */
 export class Remex extends Mob {
+  protected override get eyePlacement(): EyePlacement {
+    return REMEX_EYES;
+  }
+
   /** Not every system that runs this boss sets `isBoss`, so the blast share is claimed here rather than read from it. */
   override get blastDamageScale(): number {
     return BOSS_BLAST_DAMAGE_SCALE;

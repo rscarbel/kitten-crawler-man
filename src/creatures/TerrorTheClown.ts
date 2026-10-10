@@ -1,4 +1,5 @@
 import { BOSS_BLAST_DAMAGE_SCALE, Mob } from './Mob';
+import type { EyePlacement } from '../sprites/eyePlacement';
 import type { Player } from '../Player';
 import {
   TERROR_CLOWN_LOCOMOTION_STATES,
@@ -34,11 +35,26 @@ const FOLLOW_STOP_FRACTION = 0.75;
  */
 const CULL_MARGIN_TILES = 3;
 
+/** Drawn only face-on, so in profile it still shows that face. */
+const TERROR_EYES: EyePlacement = {
+  sideForward: 0,
+  sideHeight: -1.1,
+  sideSpacing: 0.25,
+  frontMirrors: true,
+  frontAcross: 0,
+  frontHeight: -1.1,
+  frontSpacing: 0.25,
+};
+
 /**
  * Terror the Clown — Grimaldi's largest and most feared performer, a
  * hulking mini-boss guarding the big top's sideshow tents.
  */
 export class TerrorTheClown extends Mob {
+  protected override get eyePlacement(): EyePlacement {
+    return TERROR_EYES;
+  }
+
   /** Not every system that runs this boss sets `isBoss`, so the blast share is claimed here rather than read from it. */
   override get blastDamageScale(): number {
     return BOSS_BLAST_DAMAGE_SCALE;
