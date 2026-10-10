@@ -7,13 +7,13 @@
  * show. Pure in its inputs, so a layout check can ask about any screen.
  */
 
-import { layoutTopBand, topBandCard, type TopBandEntry } from '../ui/hud/topBand';
+import { bandCardInsets, layoutTopBand, topBandCard, type TopBandEntry } from '../ui/hud/topBand';
 import { text } from '../ui/widgets/text';
 import type { Theme } from '../ui/theme/tokens';
 import { TOP_BAND_WIDTH } from '../ui/hud/topBandStack';
 import type { HudGeometry } from '../ui/hud/hudLayout';
 import type { Rect } from '../ui/core/geom';
-import { skinsFor } from '../ui/theme/skins';
+import type { SizeClass } from '../ui/core/viewport';
 
 /** The tower's storeys, bottom up, as the room's banner names them. */
 const TOWER_FLOOR_LABELS: readonly string[] = [
@@ -33,8 +33,8 @@ export function interiorRoomTitle(buildingName: string, towerFloor: number | nul
 }
 
 /** The room-name banner's height: one line of label text on the band's card. */
-function roomNameHeight(theme: Theme): number {
-  return theme.type.label.lineHeight + skinsFor(theme).panel.hud.padding * 2;
+function roomNameHeight(theme: Theme, size: SizeClass): number {
+  return theme.type.label.lineHeight + bandCardInsets(theme, size).y * 2;
 }
 
 /**
@@ -47,7 +47,7 @@ export function roomNameEntry(title: string): TopBandEntry {
     id: ROOM_NAME_ENTRY_ID,
     priority: 'banner',
     maxWidth: TOP_BAND_WIDTH.regular,
-    height: (ui) => roomNameHeight(ui.theme),
+    height: (ui) => roomNameHeight(ui.theme, ui.size),
     render: (ui, rect) => {
       const inner = topBandCard(ui, rect);
       text(ui, inner, { text: `Inside: ${title}`, role: 'label', align: 'center' });
@@ -71,7 +71,7 @@ function toCanvasRect(rect: Rect, uiScale: number): Rect {
 export function roomNameSlot(geometry: HudGeometry): Rect | null {
   const { theme } = geometry;
   const area = geometry.topBand;
-  const height = roomNameHeight(theme);
+  const height = roomNameHeight(theme, geometry.size);
   const slots = layoutTopBand(
     area,
     [
@@ -85,6 +85,7 @@ export function roomNameSlot(geometry: HudGeometry): Rect | null {
     geometry.topBandObstacles,
     theme.space.sm,
     geometry.topBandFloor,
+    geometry.topBandKeepClear,
   );
   return slots.length > 0 ? slots[0].rect : null;
 }

@@ -3851,7 +3851,7 @@ export class BuildingInteriorScene extends GameplayScene {
     const occluders = interiorHudOccluders(live.geometry, live.uiScale, this.interiorChrome());
     const key = JSON.stringify({ occluders, view, bounds });
     return this.clearViewMemo.clearView(map, key, (mustSee) =>
-      hudClearView(view, occluders, bounds, mustSee),
+      hudClearView(view, occluders, bounds, mustSee, interiorFocusRange(map)),
     );
   }
 
@@ -4170,6 +4170,7 @@ export class BuildingInteriorScene extends GameplayScene {
           }
         : null,
       topBand: this.topBandEntries(),
+      levelTimer: null,
     };
   }
 

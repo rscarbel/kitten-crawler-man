@@ -16,7 +16,12 @@ import type { HumanPlayer } from '../../creatures/HumanPlayer';
 import type { CatPlayer } from '../../creatures/CatPlayer';
 import type { Rect } from '../../ui/core/geom';
 import type { Ui } from '../../ui/core/UiRoot';
-import { topBandCard, topBandCardPadding, type TopBandEntry } from '../../ui/hud/topBand';
+import {
+  topBandCard,
+  topBandCardInnerWidth,
+  topBandCardPadding,
+  type TopBandEntry,
+} from '../../ui/hud/topBand';
 import { drawResourceIcon } from '../../ui/icons/resourceIcons';
 import { badge, badgeSize } from '../../ui/widgets/badge';
 import { lineHeightOf, measureText, tabularNumber } from '../../ui/widgets/text';
@@ -167,7 +172,7 @@ function thrallLabel(frame: ResourceHudFrame): string | null {
 
 /** The card's inside for a card `width` wide, placed at the origin, for measuring. */
 function contentRect(ui: Ui, width: number): Rect {
-  return { x: 0, y: 0, w: Math.max(0, width - ui.theme.space.md * 2), h: 0 };
+  return { x: 0, y: 0, w: topBandCardInnerWidth(ui, width), h: 0 };
 }
 
 interface StripLayout {

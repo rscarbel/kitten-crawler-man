@@ -25,7 +25,12 @@ import type { QuestMarkerState } from '../../../sprites/questNPCSprite';
 import { worldText } from '../../../ui/world/worldText';
 import type { Rect } from '../../../ui/core/geom';
 import type { Ui } from '../../../ui/core/UiRoot';
-import { topBandCard, topBandCardPadding, type TopBandEntry } from '../../../ui/hud/topBand';
+import {
+  topBandCard,
+  topBandCardInnerWidth,
+  topBandCardPadding,
+  type TopBandEntry,
+} from '../../../ui/hud/topBand';
 import { measureTextHeight, text } from '../../../ui/widgets/text';
 import { UPDATES_PER_SECOND } from '../structureRules';
 import type { BlueprintsQuestContext } from './blueprintsContext';
@@ -238,7 +243,7 @@ function subtitleText(banner: BlueprintsStepBanner) {
 }
 
 function contentWidth(ui: Ui, width: number): number {
-  return Math.max(0, width - ui.theme.space.md * 2);
+  return topBandCardInnerWidth(ui, width);
 }
 
 function stepBannerLayout(

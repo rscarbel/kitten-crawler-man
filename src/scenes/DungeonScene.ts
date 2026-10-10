@@ -15,7 +15,7 @@ import type { DockButtonModel, HudModel, HudViewState, MinimapModel } from '../u
 import { HudSurface, surfacesOverHud, toCssRect } from '../ui/hud/HudSurface';
 import { inventoryTabRect, itemMenuEntryRects } from '../ui/screens/inventory/renderInventory';
 import type { Rect } from '../ui/core/geom';
-import { levelTimerCue, levelTimerEntry, type LevelTimerCue } from '../ui/hud/levelTimer';
+import { levelTimerCue, type LevelTimerCue } from '../ui/hud/levelTimer';
 import { promptSurface } from '../ui/hud/prompt';
 import type { TopBandEntry } from '../ui/hud/topBand';
 import { hotbarPressInput, hotbarSlotModels } from '../systems/kits/hudHotbar';
@@ -6486,6 +6486,10 @@ export class DungeonScene extends GameplayScene {
         ),
       },
       topBand: this.topBandEntries(),
+      levelTimer:
+        this.levelDef.hasCollapseTimer === true && this.tutorial === null
+          ? { frames: this.levelTimerFrames, paused: this.isLevelTimerPaused() }
+          : null,
     };
   }
 
@@ -6618,9 +6622,6 @@ export class DungeonScene extends GameplayScene {
       ...(this.gathering?.topBandEntries(this.active()) ?? []),
       knockedOutBandEntry(this.inactive()),
     ];
-    if (this.levelDef.hasCollapseTimer === true && this.tutorial === null) {
-      entries.push(levelTimerEntry(this.levelTimerFrames, this.isLevelTimerPaused()));
-    }
     return entries.filter((entry): entry is TopBandEntry => entry !== null);
   }
 

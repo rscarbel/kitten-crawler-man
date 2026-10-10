@@ -19,7 +19,6 @@ import type {
   StatusPillModel,
   UnitFrameModel,
 } from '../../ui/hud/hudModel';
-import { levelTimerEntry } from '../../ui/hud/levelTimer';
 import { HudToasts } from '../../ui/hud/toasts';
 import { LOOT_SEAL_NOTICE } from '../../systems/BossRoomSystem';
 import type { TopBandEntry } from '../../ui/hud/topBand';
@@ -37,6 +36,12 @@ const BOSS_MIDLINE = 0.5;
 /** Four minutes left on a floor's collapse timer, in frames: its red tier. */
 const LATE_TIMER_FRAMES = 14_400;
 const DOOMSDAY_MS_LEFT = 200_000;
+/** Most of an hour left on the collapse timer, in frames: its calm tier. */
+const EARLY_TIMER_FRAMES = 212_520;
+const REVIVE_SECONDS_LEFT = 49;
+const BUGABOO_SECONDS_LEFT = 18;
+const BUGABOO_APPROACH_FRACTION = 0.3;
+const GRATE_COUNT = 4;
 const POTION_STACK = 6;
 const DYNAMITE_STACK = 3;
 /** The stand-in map's floor strips are this many tiles apart. */
@@ -85,6 +90,7 @@ function hotbarSlots(cooling: boolean): HotbarSlotModel[] {
 function crawlers(
   status: readonly StatusPillModel[],
   skillPoints: number,
+  companionStatus: readonly StatusPillModel[],
 ): [UnitFrameModel, UnitFrameModel] {
   return [
     {
@@ -108,7 +114,7 @@ function crawlers(
       maxHp: 96,
       xp: 120,
       xpMax: 610,
-      status: [],
+      status: companionStatus,
       skillPoints: 0,
     },
   ];
@@ -117,6 +123,16 @@ function crawlers(
 const FIGHT_STATUS: readonly StatusPillModel[] = [
   { id: 'burn', label: 'BURN', color: palette.state.danger, remaining: STATUS_HALF, harmful: true },
   { id: 'haste', label: 'FAST', color: palette.state.info, remaining: STATUS_MOST, harmful: false },
+];
+
+const COMPANION_ROACH_STATUS: readonly StatusPillModel[] = [
+  {
+    id: 'cockroach',
+    label: 'ROACH',
+    color: palette.state.success,
+    remaining: null,
+    harmful: false,
+  },
 ];
 
 const record = (): void => undefined;
@@ -229,9 +245,12 @@ type FixtureToasts = 'none' | 'mixed' | 'saving' | 'lootSeal';
 interface HudFixtureSpec {
   readonly name: string;
   readonly status: readonly StatusPillModel[];
+  readonly companionStatus?: readonly StatusPillModel[];
   readonly skillPoints: number;
   readonly dockExtras: readonly DockButtonModel['id'][];
   readonly topBand: () => TopBandEntry[];
+  /** Frames left on the floor's collapse timer; absent on a floor without one. */
+  readonly levelTimerFrames?: number;
   readonly lootBanner: boolean;
   readonly toasts: FixtureToasts;
   readonly expanded: boolean;
@@ -259,7 +278,7 @@ function hudFixture(spec: HudFixtureSpec): DialogFixture {
       }
       for (let tick = 0; tick < FIXTURE_TOAST_TICKS; tick++) toasts.update();
       const model = (): HudModel => ({
-        crawlers: crawlers(spec.status, spec.skillPoints),
+        crawlers: crawlers(spec.status, spec.skillPoints, spec.companionStatus ?? []),
         activeCrawler: 'human',
         coins: { shown: 1240, split: 'Carl 900 · Donut 340', pulse: 0 },
         skillPoints: { hidden: false, nag: spec.skillPoints > 0, open: record },
@@ -302,6 +321,10 @@ function hudFixture(spec: HudFixtureSpec): DialogFixture {
           input: { press: record, release: record },
         },
         topBand: spec.topBand(),
+        levelTimer:
+          spec.levelTimerFrames === undefined
+            ? null
+            : { frames: spec.levelTimerFrames, paused: false },
       });
       const hud = new HudSurface({
         id: `hud-${spec.name}`,
@@ -313,6 +336,52 @@ function hudFixture(spec: HudFixtureSpec): DialogFixture {
       return surfaces;
     },
   };
+}
+
+/** A downed companion's call to revive, as `knockedOutBandEntry` draws it. */
+function reviveEntry(): TopBandEntry {
+  return stackedBandEntry({
+    id: 'knockout',
+    priority: 'countdown',
+    accentTone: 'danger',
+    rows: [
+      { kind: 'text', text: 'Revive your teammate!', role: 'title', tone: 'danger', maxLines: 2 },
+      {
+        kind: 'text',
+        text: `${REVIVE_SECONDS_LEFT}s`,
+        role: 'heading',
+        tone: 'warning',
+        tabular: true,
+      },
+    ],
+  });
+}
+
+/** The grate-defence quest's approach card, as `DefendQuestSystem` draws it. */
+function bugabooEntry(): TopBandEntry {
+  return stackedBandEntry({
+    id: 'defend-status',
+    priority: 'encounter',
+    accentTone: 'warning',
+    rows: [
+      { kind: 'text', text: 'BUGABOOS INCOMING', role: 'title', tone: 'warning' },
+      {
+        kind: 'text',
+        text: `Bugaboos in ${BUGABOO_SECONDS_LEFT}s — board up the grates`,
+        role: 'label',
+        tabular: true,
+        maxLines: 2,
+      },
+      {
+        kind: 'meter',
+        id: 'defend-status/time',
+        value: BUGABOO_APPROACH_FRACTION,
+        max: 1,
+        meterKind: 'progress',
+      },
+      { kind: 'text', text: `Grates 0/${GRATE_COUNT}`, role: 'caption', tone: 'muted' },
+    ],
+  });
 }
 
 /**
@@ -358,7 +427,6 @@ export const HUD_FIXTURES: readonly DialogFixture[] = [
     topBand: () => [
       bossEntry(),
       encounterEntry(),
-      levelTimerEntry(LATE_TIMER_FRAMES, false),
       doomsdayCountdownEntry({
         id: 'doomsday',
         label: CONTAINMENT_LABEL,
@@ -366,6 +434,19 @@ export const HUD_FIXTURES: readonly DialogFixture[] = [
         objective: DOOMSDAY_CONTAIN_OBJECTIVE,
       }),
     ],
+    levelTimerFrames: LATE_TIMER_FRAMES,
+    lootBanner: false,
+    toasts: 'none',
+    expanded: false,
+  }),
+  hudFixture({
+    name: 'grate-defence',
+    status: [],
+    companionStatus: COMPANION_ROACH_STATUS,
+    skillPoints: 0,
+    dockExtras: ['build'],
+    topBand: () => [bugabooEntry(), reviveEntry()],
+    levelTimerFrames: EARLY_TIMER_FRAMES,
     lootBanner: false,
     toasts: 'none',
     expanded: false,

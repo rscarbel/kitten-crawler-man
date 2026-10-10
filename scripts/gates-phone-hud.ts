@@ -12,7 +12,12 @@
  *   covers the band's leading bars, a boss and an encounter (buttons and bars
  *   may lie over the part an expanded minimap grew into);
  * - no button covers either crawler's HP meter;
- * - the leading bars always find room, and every bar placed is on screen.
+ * - the leading bars always find room, and every bar placed is on screen;
+ * - on a compact screen no bar covers the box around the screen's middle
+ *   where the camera holds the player, except a fight's leading bar where
+ *   the screen leaves it no other room; on a phone upright at least
+ *   {@link ROOMY_PORTRAIT_MIN_W} wide at a small or medium UI size, not even
+ *   those.
  *
  *   npm run gates:phone-hud
  */
@@ -47,6 +52,10 @@ const REQUIRED_PIECES: readonly string[] = [
 
 const UI_SIZES: readonly UiSize[] = ['small', 'medium', 'large'];
 
+/** A phone upright at least this wide has room for a fight's bars above the player. */
+const ROOMY_PORTRAIT_MIN_W = 390;
+const UI_SIZES_WITH_ROOM_ABOVE_PLAYER: ReadonlySet<UiSize> = new Set(['small', 'medium']);
+
 function describe(rect: Rect): string {
   return `(${Math.round(rect.x)},${Math.round(rect.y)} ${Math.round(rect.w)}×${Math.round(rect.h)})`;
 }
@@ -58,6 +67,7 @@ function offScreen(rect: Rect, width: number, height: number): boolean {
 const failures: string[] = [];
 let layouts = 0;
 let buttonsChecked = 0;
+let layoutsKeepingPlayerClear = 0;
 
 for (const uiSize of UI_SIZES) {
   for (const [cssWidth, cssHeight] of VIEWPORTS) {
@@ -99,17 +109,40 @@ for (const uiSize of UI_SIZES) {
       if (leading.length < LEADING_BARS.length) {
         failures.push(`${where}: only ${leading.length} of the leading bars found room`);
       }
+      const roomAbovePlayer =
+        cssHeight > cssWidth &&
+        cssWidth >= ROOMY_PORTRAIT_MIN_W &&
+        UI_SIZES_WITH_ROOM_ABOVE_PLAYER.has(uiSize);
+      const leadingNames = new Set<string>(LEADING_BARS.map((priority) => `band-${priority}`));
       for (const bar of representativeTopBand(state.geometry)) {
         if (offScreen(bar.rect, width, height)) {
           failures.push(`${where}: the ${bar.name} bar ${describe(bar.rect)} is off screen`);
+        }
+        const mayCoverPlayer = !roomAbovePlayer && leadingNames.has(bar.name);
+        for (const clearance of state.geometry.topBandKeepClear) {
+          if (!mayCoverPlayer && overlaps(bar.rect, clearance)) {
+            failures.push(
+              `${where}: the ${bar.name} bar ${describe(bar.rect)} covers the player ${describe(clearance)}`,
+            );
+          }
+        }
+      }
+      if (state.geometry.size === 'compact') {
+        if (state.geometry.topBandKeepClear.length === 0) {
+          failures.push(`${where}: a compact top band keeps nothing clear of the player`);
+        } else {
+          layoutsKeepingPlayerClear++;
         }
       }
     }
   }
 }
 
+if (layoutsKeepingPlayerClear === 0) {
+  failures.push('no layout was compact, so the player clearance was never checked');
+}
 console.log(
-  `phone hud: ${layouts} layouts over ${VIEWPORTS.length} viewports, ${buttonsChecked} tap targets checked`,
+  `phone hud: ${layouts} layouts over ${VIEWPORTS.length} viewports, ${buttonsChecked} tap targets checked, ${layoutsKeepingPlayerClear} keeping the player clear`,
 );
 if (failures.length > 0) {
   for (const failure of failures) console.error(`  FAIL ${failure}`);

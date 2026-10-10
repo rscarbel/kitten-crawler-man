@@ -103,6 +103,20 @@ export const type = {
 
 export type TypeRole = keyof typeof type;
 
+/**
+ * One step down the ramp, for text that has to give room back: the top band's
+ * lines on a phone, where the band shares the column the player stands in.
+ */
+export const condensedType: Readonly<Record<TypeRole, TypeRole>> = {
+  display: 'heading',
+  heading: 'title',
+  title: 'label',
+  label: 'caption',
+  body: 'caption',
+  caption: 'caption',
+  overline: 'overline',
+};
+
 /** A soft drop shadow. */
 export interface Elevation {
   readonly blur: number;

@@ -210,17 +210,41 @@ function pushOffAxis(clear: Rect, view: Rect, occluder: Rect, axis: Axis): Rect 
 }
 
 /**
+ * The least clear span along `axis` that still shows the party whole at
+ * either end of the room. When the room is wider than the clear span the
+ * camera clamps a room edge to the clear edge as the party reaches the
+ * outermost tile, so that tile lies as far in from the clear edge as it lies
+ * from the room's edge; a shorter span frames it partly under the chrome.
+ */
+function edgeTileSpan(bounds: WorldRect, focusRange: WorldRect, axis: Axis): number {
+  const room = worldSpan(bounds, axis);
+  const focus = worldSpan(focusRange, axis);
+  const halfTile = TILE_SIZE * CENTRE_OF_TILE;
+  return Math.max(focus.start + halfTile - room.start, room.end - (focus.end - halfTile));
+}
+
+/**
  * The largest clear rect — by the share of each axis kept, multiplied — that
  * pushes every occluder off one axis or the other, trying every assignment:
  * the HUD comes in columns and rows (Pause, Gear and Bag under the minimap),
  * and choosing one piece at a time splits a column between two axes and pays
- * for both. A handful of occluders makes that a few hundred rects. Null when
- * no assignment leaves {@link MIN_CLEAR_SPAN_PX} on both axes.
+ * for both. A handful of occluders makes that a few hundred rects. A rect
+ * that frames the outermost tiles whole ({@link edgeTileSpan}) beats any that
+ * does not, however much larger. Null when no assignment leaves
+ * {@link MIN_CLEAR_SPAN_PX} on both axes.
  */
-function bestClearFor(view: Rect, occluders: readonly Rect[]): Rect | null {
+function bestClearFor(
+  view: Rect,
+  occluders: readonly Rect[],
+  bounds: WorldRect,
+  focusRange: WorldRect,
+): Rect | null {
   const assignments = 1 << occluders.length;
+  const needW = edgeTileSpan(bounds, focusRange, 'x');
+  const needH = edgeTileSpan(bounds, focusRange, 'y');
   let best: Rect | null = null;
   let bestScore = -1;
+  let bestShowsEdges = false;
   for (let assignment = 0; assignment < assignments; assignment++) {
     let clear = view;
     occluders.forEach((occluder, index) => {
@@ -228,10 +252,13 @@ function bestClearFor(view: Rect, occluders: readonly Rect[]): Rect | null {
       clear = pushOffAxis(clear, view, occluder, axis);
     });
     if (clear.w < MIN_CLEAR_SPAN_PX || clear.h < MIN_CLEAR_SPAN_PX) continue;
+    const showsEdges = clear.w >= needW && clear.h >= needH;
     const score = (clear.w / view.w) * (clear.h / view.h);
-    if (score > bestScore) {
+    const better = showsEdges === bestShowsEdges ? score > bestScore : showsEdges;
+    if (better) {
       best = clear;
       bestScore = score;
+      bestShowsEdges = showsEdges;
     }
   }
   return best;
@@ -250,7 +277,9 @@ function bestClearFor(view: Rect, occluders: readonly Rect[]): Rect | null {
  * `mustSee` depends on the clear rect itself — narrowing an axis can stop the
  * room fitting it — so the choice is repeated until it settles, and an
  * occluder once pushed out stays pushed out, or a room that fits only once
- * the HUD panel is cleared would flip between the two framings. If the chrome
+ * the HUD panel is cleared would flip between the two framings. `focusRange`
+ * is how far the party can walk, so a rect too short to show the outermost
+ * tiles whole is passed over where a shorter one would. If the chrome
  * leaves no workable rect at all, the occluder costliest to clear is let be,
  * one at a time, until one is found.
  */
@@ -259,6 +288,7 @@ export function hudClearView(
   occluders: readonly Rect[],
   bounds: WorldRect,
   mustSee: WorldRect,
+  focusRange: WorldRect,
 ): Rect {
   const onScreen = occluders.flatMap((occluder) => {
     const clipped = intersect(occluder, view);
@@ -275,12 +305,12 @@ export function hudClearView(
       if (mayHide) everActive.add(occluder);
     }
     let active = onScreen.filter((occluder) => everActive.has(occluder));
-    let next = bestClearFor(view, active);
+    let next = bestClearFor(view, active, bounds, focusRange);
     while (next === null && active.length > 0) {
       const areaOf = (rect: Rect): number => rect.w * rect.h;
       const largest = active.reduce((a, b) => (areaOf(b) > areaOf(a) ? b : a));
       active = active.filter((occluder) => occluder !== largest);
-      next = bestClearFor(view, active);
+      next = bestClearFor(view, active, bounds, focusRange);
     }
     const settled = next ?? view;
     const unchanged =

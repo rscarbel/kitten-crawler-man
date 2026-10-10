@@ -9,12 +9,19 @@ import type { Rect } from '../core/geom';
 import type { Ui } from '../core/UiRoot';
 import {
   topBandCard,
+  topBandCardInnerWidth,
   topBandCardPadding,
   type TopBandEntry,
   type TopBandPriority,
 } from './topBand';
 import { skinsFor, type MeterKind, type TextRole } from '../theme/skins';
-import { panelWidths, type Theme, type TypeStyle } from '../theme/tokens';
+import {
+  condensedType,
+  panelWidths,
+  type Theme,
+  type TypeRole,
+  type TypeStyle,
+} from '../theme/tokens';
 import { meter } from '../widgets/meter';
 import { fillRounded } from '../widgets/paint';
 import { measureTextHeight, resolveText, text, type TextAlign } from '../widgets/text';
@@ -126,6 +133,28 @@ function textRowMaxLines(row: BandTextRow): number {
   return row.maxLines ?? DEFAULT_TEXT_ROW_MAX_LINES;
 }
 
+/**
+ * The type a band line is set in: its own on a roomy screen, one step down the
+ * ramp on a compact one. A style off the ramp is kept as given.
+ */
+function bandRowStyle(ui: Ui, row: BandTextRow): TypeStyle | undefined {
+  if (ui.size !== 'compact') return row.style;
+  const base = resolveText(ui.theme, row).style;
+  const ramp = ui.theme.type;
+  const name = TYPE_ROLES.find((candidate) => ramp[candidate] === base);
+  return name === undefined ? base : ramp[condensedType[name]];
+}
+
+const TYPE_ROLES: readonly TypeRole[] = [
+  'caption',
+  'body',
+  'label',
+  'title',
+  'heading',
+  'display',
+  'overline',
+];
+
 function meterHeight(ui: Ui, row: BandMeterRow): number {
   const skinHeight = skinsFor(ui.theme).meter[row.meterKind ?? 'progress'].height;
   const carriesText = row.valueText !== undefined || row.label !== undefined;
@@ -136,17 +165,19 @@ function meterHeight(ui: Ui, row: BandMeterRow): number {
 
 function rowHeight(ui: Ui, width: number, row: BandRow): number {
   switch (row.kind) {
-    case 'text':
+    case 'text': {
+      const style = bandRowStyle(ui, row);
       if (textRowWraps(row)) {
         return measureTextHeight(ui, width, {
           text: row.text,
           role: row.role,
-          style: row.style,
+          style,
           tabular: row.tabular,
           maxLines: textRowMaxLines(row),
         });
       }
-      return resolveText(ui.theme, row).style.lineHeight;
+      return resolveText(ui.theme, { role: row.role, style }).style.lineHeight;
+    }
     case 'meter':
       return meterHeight(ui, row);
     case 'custom':
@@ -161,7 +192,7 @@ function renderTextRow(ui: Ui, rect: Rect, row: BandTextRow): void {
     text(ui, rect, {
       text: row.text,
       role: row.role,
-      style: row.style,
+      style: bandRowStyle(ui, row),
       color,
       align: row.align ?? 'center',
       tabular: row.tabular,
@@ -214,11 +245,6 @@ function renderRow(ui: Ui, rect: Rect, row: BandRow): void {
   }
 }
 
-/** The card's inner width for an entry `width` wide; matches the side padding {@link topBandCard} applies. */
-function innerWidth(ui: Ui, width: number): number {
-  return Math.max(0, width - ui.theme.space.md * 2);
-}
-
 function stackHeight(ui: Ui, width: number, rows: readonly BandRow[]): number {
   const gap = ui.theme.space.xs;
   const heights = rows.map((row) => rowHeight(ui, width, row));
@@ -232,7 +258,8 @@ export function stackedBandEntry(opts: StackedBandOptions): TopBandEntry {
     id: opts.id,
     priority: opts.priority,
     maxWidth: opts.maxWidth ?? TOP_BAND_WIDTH.regular,
-    height: (ui, width) => stackHeight(ui, innerWidth(ui, width), rows) + topBandCardPadding(ui),
+    height: (ui, width) =>
+      stackHeight(ui, topBandCardInnerWidth(ui, width), rows) + topBandCardPadding(ui),
     render: (ui, rect) => {
       const { ctx } = ui;
       ctx.save();

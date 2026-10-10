@@ -62,6 +62,8 @@ import { GLYPH_IDS, GLYPH_PATHS, parsePathData } from '../src/ui/theme/glyphs.js
 import { resolveTheme } from '../src/ui/theme/tokens.js';
 import { skinsFor } from '../src/ui/theme/skins.js';
 import { itemSlot } from '../src/ui/widgets/itemSlot.js';
+import { renderTopBand, type TopBandEntry } from '../src/ui/hud/topBand.js';
+import { stackedBandEntry } from '../src/ui/hud/topBandStack.js';
 
 let failures = 0;
 function check(ok: boolean, message: string): void {
@@ -757,6 +759,53 @@ section('the world receives only gestures it owned on down');
     'with two pointers down, the world sees only the one it owns',
   );
   check(rec.fired.join() === 'hud/bag', 'and the other pointer taps its button');
+}
+
+section(
+  'a top-band readout lets a tap through to the world; a control inside an entry keeps its own',
+);
+{
+  const BAND_AREA: Rect = { x: 200, y: 20, w: 400, h: 400 };
+  const BAND_BUTTON_H = 40;
+  const readout = stackedBandEntry({
+    id: 'readout',
+    priority: 'encounter',
+    rows: [{ kind: 'text', text: 'Bugaboos in 18s', role: 'label' }],
+  });
+  const withControl: TopBandEntry = {
+    id: 'with-control',
+    priority: 'banner',
+    maxWidth: BAND_AREA.w,
+    height: () => BAND_BUTTON_H,
+    render: (ui, rect) => {
+      ui.hit('band-button', rect, { onTap: () => rec.fired.push('hud/band-button') });
+    },
+  };
+  let placed: { readonly id: string; readonly rect: Rect }[] = [];
+  let rec = recorder();
+  const band = new FakeSurface({
+    id: 'hud',
+    band: 'hud',
+    draw: (ui) => {
+      placed = renderTopBand(ui, BAND_AREA, [readout, withControl], []);
+    },
+  });
+  const h = harness([band]);
+  rec = h.rec;
+  h.frame();
+  const readoutRect = placed.find((slot) => slot.id === 'readout')?.rect ?? null;
+  const controlRect = placed.find((slot) => slot.id === 'with-control')?.rect ?? null;
+  check(readoutRect !== null && controlRect !== null, 'both band entries are placed');
+  if (readoutRect !== null && controlRect !== null) {
+    h.tap(mid(readoutRect));
+    const kinds = rec.world.map((gesture) => gesture.kind).join();
+    check(kinds === 'down,up', `a tap on a readout reaches the world as down,up (got ${kinds})`);
+    clear(rec);
+    h.frame();
+    h.tap(mid(controlRect));
+    check(rec.fired.join() === 'hud/band-button', 'a control inside a band entry still fires');
+    check(rec.world.length === 0, 'and the world does not see that tap');
+  }
 }
 
 section('the world is halted while a halting surface is open');

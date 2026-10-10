@@ -1,8 +1,9 @@
 /**
  * One crawler's card in the top-left stack: a portrait glyph ringed in the
  * crawler's colour, its name, a level disc, the HP meter with its numbers
- * inside and a draining ghost, a thin XP meter, and the status pills hung
- * under the card. Unspent skill points put a gold `+N` badge on the portrait,
+ * inside and a draining ghost, a thin XP meter, and the status pills: hung
+ * under the card on a roomy screen, right-aligned in the name row on a
+ * compact one. Unspent skill points put a gold `+N` badge on the portrait,
  * beside the level disc, that opens the Spend section.
  */
 
@@ -39,6 +40,8 @@ const BADGE_PULSE_MS = 900;
 const BADGE_NAG_PULSE_MS = 380;
 const BADGE_GLOW_MIN = 0.35;
 const BADGE_NAG_GLOW_BLUR_SCALE = 2;
+/** Pills in the name row stop short of this much name, so the crawler stays identifiable. */
+const INLINE_NAME_MIN_W = 36;
 
 export interface UnitFrameOptions {
   readonly active: boolean;
@@ -66,7 +69,20 @@ export function unitFrame(
   }
   portrait(ui, rects.portrait, model, opts.color);
   levelDisc(ui, rects.levelDisc, model.level);
-  text(ui, rects.name, {
+  const inlinePills = rects.statusInline
+    ? fitStatusPills(
+        ui,
+        rects.status.h,
+        Math.max(0, rects.status.w - INLINE_NAME_MIN_W),
+        model.status,
+      )
+    : null;
+  const inlineGap = inlinePills === null || inlinePills.width === 0 ? 0 : ui.theme.space.xs;
+  const nameRect: Rect = {
+    ...rects.name,
+    w: rects.name.w - (inlinePills?.width ?? 0) - inlineGap,
+  };
+  text(ui, nameRect, {
     text: model.name,
     role: opts.active ? 'label' : 'caption',
     valign: 'middle',
@@ -100,7 +116,17 @@ export function unitFrame(
     text: `${model.xp} / ${model.xpMax} XP`,
     show: xpHover.hovered,
   });
-  statusRow(ui, rects.status, model.status);
+  if (inlinePills === null) {
+    drawStatusPills(
+      ui,
+      rects.status,
+      rects.status.x,
+      fitStatusPills(ui, rects.status.h, rects.status.w, model.status),
+    );
+  } else {
+    const right = rects.status.x + rects.status.w;
+    drawStatusPills(ui, rects.status, right - inlinePills.width, inlinePills);
+  }
   if (model.skillPoints <= 0 || opts.skillPoints.hidden) return null;
   return skillBadge(ui, rects, model, opts);
 }
@@ -173,28 +199,54 @@ function skillBadge(
   return target;
 }
 
+type FittedPill =
+  | { readonly kind: 'pill'; readonly pill: StatusPillModel; readonly w: number }
+  | { readonly kind: 'count'; readonly count: number; readonly w: number };
+
+interface FittedPills {
+  readonly items: readonly FittedPill[];
+  /** From the first pill's left edge to the last one's right. */
+  readonly width: number;
+}
+
 /**
- * The pills that fit the row, each measured before it is drawn; when some
+ * The pills that fit in `maxW`, each measured before it is placed; when some
  * don't fit, the last place goes to a `+N` pill counting the rest.
  */
-function statusRow(ui: Ui, row: Rect, pills: readonly StatusPillModel[]): void {
+function fitStatusPills(
+  ui: Ui,
+  h: number,
+  maxW: number,
+  pills: readonly StatusPillModel[],
+): FittedPills {
   const gap = ui.theme.space.xs;
-  const right = row.x + row.w;
-  let x = row.x;
+  const items: FittedPill[] = [];
+  let x = 0;
   for (const [index, pill] of pills.entries()) {
-    const w = statusPillWidth(ui, row.h, pill.label);
+    const w = statusPillWidth(ui, h, pill.label);
     const left = pills.length - index - 1;
-    const overflowW = left > 0 ? gap + countPillWidth(ui, row.h, left) : 0;
-    if (x + w + overflowW > right) {
-      countPill(
-        ui,
-        { x, y: row.y, w: countPillWidth(ui, row.h, pills.length - index), h: row.h },
-        pills.length - index,
-      );
-      return;
+    const overflowW = left > 0 ? gap + countPillWidth(ui, h, left) : 0;
+    if (x + w + overflowW > maxW) {
+      const count = pills.length - index;
+      const countW = countPillWidth(ui, h, count);
+      items.push({ kind: 'count', count, w: countW });
+      return { items, width: x + countW };
     }
-    statusPill(ui, { x, y: row.y, w, h: row.h }, pill);
+    items.push({ kind: 'pill', pill, w });
     x += w + gap;
+  }
+  return { items, width: Math.max(0, x - gap) };
+}
+
+/** Draws fitted pills left to right from `x` along `row`. */
+function drawStatusPills(ui: Ui, row: Rect, x: number, fitted: FittedPills): void {
+  const gap = ui.theme.space.xs;
+  let cursor = x;
+  for (const item of fitted.items) {
+    const r: Rect = { x: cursor, y: row.y, w: item.w, h: row.h };
+    if (item.kind === 'pill') statusPill(ui, r, item.pill);
+    else countPill(ui, r, item.count);
+    cursor += item.w + gap;
   }
 }
 

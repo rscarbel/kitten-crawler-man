@@ -291,7 +291,13 @@ for (const roomName of roomNames) {
     const oldOccluders: Rect[] = [...withoutRoomName, { x: 0, y: 0, w, h: OLD_LABEL_BAR_HEIGHT }];
     const oldCamera = (tile: Tile): Camera => followCamera(focusOn(tile), bounds, oldView);
     const view: Rect = { x: 0, y: 0, w, h: hotbarTop };
-    const clear = hudClearView(view, occluders, bounds, interiorMustSeeBounds(map));
+    const clear = hudClearView(
+      view,
+      occluders,
+      bounds,
+      interiorMustSeeBounds(map),
+      interiorFocusRange(map),
+    );
     const newCamera = (tile: Tile): Camera =>
       followCamera(focusOn(tile), bounds, view, clear, interiorFocusRange(map));
 

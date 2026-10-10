@@ -1,15 +1,28 @@
 /**
- * The level's collapse timer, as a top-band entry, and the audible cues it
- * owes as it crosses each warning tier.
+ * The level's collapse timer — a card in the top band on a roomy screen, a
+ * chip beside the coin pill on a compact one — and the audible cues it owes
+ * as it crosses each warning tier.
  *
  * Urgency grows through colour, weight and pulse rather than size: amber at
- * ten minutes, red and throbbing at five, and in the final minute a large
- * pulsing readout that is the only thing the card says.
+ * ten minutes, red and throbbing at five, and in the final minute a pulsing
+ * red readout (on the card, large digits that are the only thing it says). A
+ * paused clock reads blue.
  */
 
+import { centerIn, type Rect } from '../core/geom';
 import type { Ui } from '../core/UiRoot';
-import { stackedBandEntry, TOP_BAND_WIDTH, type BandRow, type BandTone } from './topBandStack';
-import { tabularNumber } from '../widgets/text';
+import { drawGlyph } from '../theme/glyphs';
+import { skinsFor } from '../theme/skins';
+import { drawGlass } from '../widgets/paint';
+import {
+  bandToneColor,
+  stackedBandEntry,
+  TOP_BAND_WIDTH,
+  type BandRow,
+  type BandTone,
+} from './topBandStack';
+import { measureText, tabularNumber } from '../widgets/text';
+import type { LevelTimerModel } from './hudModel';
 import type { TopBandEntry } from './topBand';
 
 const SECONDS_PER_MINUTE = 60;
@@ -30,6 +43,8 @@ const URGENT_WAVE_AMP = 0.12;
 const URGENT_WAVE_PERIOD = 160;
 /** How far the final minute's digits swell above their base size, once per second. */
 const CRITICAL_PULSE_AMPLITUDE = 0.18;
+/** The chip's final-minute pulse: its faintest opacity, reached between beats. */
+const CRITICAL_CHIP_MIN_OPACITY = 0.55;
 
 const TIME_REMAINING_LABEL = 'TIME REMAINING';
 /**
@@ -96,6 +111,59 @@ function runningTone(totalSeconds: number): BandTone | null {
   return null;
 }
 
+const urgentThrob = (now: number): number =>
+  URGENT_OPACITY + Math.sin(now / URGENT_WAVE_PERIOD) * URGENT_WAVE_AMP;
+
+/** The chip's opacity this frame: a beat each second in the final minute, a throb under five. */
+function chipOpacity(ui: Ui, model: LevelTimerModel, totalSeconds: number): number {
+  if (model.paused) return 1;
+  if (totalSeconds <= ONE_MINUTE_CRITICAL_SECONDS) {
+    const secondPhase = (model.frames % FRAMES_PER_SECOND) / FRAMES_PER_SECOND;
+    const beat = Math.sin(secondPhase * Math.PI);
+    return CRITICAL_CHIP_MIN_OPACITY + (1 - CRITICAL_CHIP_MIN_OPACITY) * beat;
+  }
+  return totalSeconds <= FIVE_MINUTE_WARNING_SECONDS ? urgentThrob(ui.now) : 1;
+}
+
+/**
+ * The collapse timer as one pill-shaped line — a clock glyph and the time —
+ * drawn from `slot`'s top-left corner and sized to its reading. Returns the
+ * drawn chip.
+ */
+export function levelTimerChip(ui: Ui, slot: Rect, model: LevelTimerModel): Rect {
+  const { ctx, theme } = ui;
+  const { space, palette } = theme;
+  const totalSeconds = secondsShown(model.frames);
+  const clock = clockText(totalSeconds);
+  const tone: BandTone | null = model.paused ? 'info' : runningTone(totalSeconds);
+  const color = tone === null ? palette.text.primary : bandToneColor(theme, tone);
+  const icon = theme.size.icon;
+  const clockW = measureText(ui, clock, { role: 'label', tabular: true });
+  const chip: Rect = {
+    x: slot.x,
+    y: slot.y,
+    w: Math.ceil(space.sm + icon + space.xs + clockW + space.md),
+    h: slot.h,
+  };
+  const skin = skinsFor(theme).panel.hud;
+  drawGlass(ui, chip, tone === null ? skin : { ...skin, border: color }, theme.radius.pill);
+  ctx.save();
+  ctx.globalAlpha *= chipOpacity(ui, model, totalSeconds);
+  drawGlyph(
+    ctx,
+    'clock',
+    centerIn({ x: chip.x + space.sm, y: chip.y, w: icon, h: chip.h }, icon, icon),
+    { color: tone === null ? palette.text.muted : color },
+  );
+  tabularNumber(
+    ui,
+    { x: chip.x + space.sm + icon + space.xs, y: chip.y, w: clockW + space.xs, h: chip.h },
+    { value: clock, role: 'label', color },
+  );
+  ctx.restore();
+  return chip;
+}
+
 /** The collapse timer's card for `timerFrames` left on the clock. */
 export function levelTimerEntry(timerFrames: number, paused: boolean): TopBandEntry {
   const totalSeconds = secondsShown(timerFrames);
@@ -127,9 +195,7 @@ export function levelTimerEntry(timerFrames: number, paused: boolean): TopBandEn
 
   const tone = runningTone(totalSeconds);
   const throbbing = totalSeconds <= FIVE_MINUTE_WARNING_SECONDS;
-  const throb = throbbing
-    ? (now: number): number => URGENT_OPACITY + Math.sin(now / URGENT_WAVE_PERIOD) * URGENT_WAVE_AMP
-    : undefined;
+  const throb = throbbing ? urgentThrob : undefined;
   return stackedBandEntry({
     ...base,
     accentTone: tone ?? undefined,

@@ -13,6 +13,7 @@ import { contains, type Rect } from '../core/geom';
 import type { Surface, Ui, UiRoot } from '../core/UiRoot';
 import { coinPill } from './coinPill';
 import { dock, summonCard } from './dock';
+import { levelTimerChip, levelTimerEntry } from './levelTimer';
 import { lootBannerEntry } from './lootBanner';
 import { hotbar } from './hotbar';
 import { hudLayout, type HudGeometry } from './hudLayout';
@@ -144,6 +145,14 @@ export class HudSurface implements Surface {
       }),
     ].filter((badge): badge is Rect => badge !== null);
     const coins = coinPill(ui, geometry.coins, model.coins);
+    const chipSlot = geometry.levelTimerChip;
+    if (model.levelTimer !== null && chipSlot !== null) {
+      levelTimerChip(
+        ui,
+        { ...chipSlot, x: coins.x + coins.w + ui.theme.space.xs },
+        model.levelTimer,
+      );
+    }
     if (model.minimap !== null) {
       minimapFrame(ui, geometry.miniMap, model.minimap, { touch: ui.density === 'touch' });
     }
@@ -151,7 +160,7 @@ export class HudSurface implements Surface {
       keyHints: ui.density === 'pointer',
     });
     if (model.summon !== null) summonCard(ui, geometry.buttons.summon, model.summon);
-    const bandEntries = topBandEntries(model);
+    const bandEntries = topBandEntries(model, geometry.levelTimerChip === null);
     if (this.host.liftTopBand?.() !== true) {
       renderTopBand(
         ui,
@@ -159,6 +168,7 @@ export class HudSurface implements Surface {
         bandEntries,
         geometry.topBandObstacles,
         geometry.topBandFloor,
+        geometry.topBandKeepClear,
       );
     }
     if (model.hotbar !== null) hotbar(ui, geometry.hotbar, model.hotbar);
@@ -186,6 +196,7 @@ export class HudSurface implements Surface {
             this.lastBand,
             frame.geometry.topBandObstacles,
             frame.geometry.topBandFloor,
+            frame.geometry.topBandKeepClear,
           );
         }
         renderToasts(ui, this.host.toasts(), frame.geometry.toastAnchor);
@@ -198,9 +209,14 @@ export class HudSurface implements Surface {
   }
 }
 
-/** The scene's bars, then the safe room's call to collect, the band's lowest. */
-function topBandEntries(model: HudModel): TopBandEntry[] {
-  return model.lootBanner === null
-    ? [...model.topBand]
-    : [...model.topBand, lootBannerEntry(model.lootBanner)];
+/**
+ * The scene's bars, the level timer's card where it is not a chip, then the
+ * safe room's call to collect, the band's lowest.
+ */
+function topBandEntries(model: HudModel, timerInBand: boolean): TopBandEntry[] {
+  const timer = model.levelTimer;
+  const timerCard =
+    timer !== null && timerInBand ? [levelTimerEntry(timer.frames, timer.paused)] : [];
+  const loot = model.lootBanner === null ? [] : [lootBannerEntry(model.lootBanner)];
+  return [...model.topBand, ...timerCard, ...loot];
 }

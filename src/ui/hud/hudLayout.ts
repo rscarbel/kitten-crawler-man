@@ -1,6 +1,7 @@
 /**
  * Where every piece of the HUD sits, computed without drawing anything: the
- * unit frames and the coin pill top left, the minimap top right with the dock
+ * unit frames and the readout row (the coin pill, and on a compact screen the
+ * level timer's chip) top left, the minimap top right with the dock
  * under it, the hotbar bottom centre, the top band between the frames and the
  * minimap, and the toasts above the hotbar.
  *
@@ -78,6 +79,20 @@ const BARS_RESERVE_W = 360;
 const BARS_RESERVE_H = 150;
 /** Below this the band between the frames and the minimap is too narrow for a bar; it drops under the frames. */
 const TOP_BAND_MIN_W = 120;
+/**
+ * The level timer's chip beside the coin pill on a compact screen: room for a
+ * clock glyph and the widest reading, "59:59".
+ */
+const LEVEL_TIMER_CHIP_RESERVED_W = 84;
+/**
+ * The camera holds the player at the middle of the screen. On a compact
+ * screen the top band keeps clear of a box around that point: half as wide
+ * as the widest interaction prompt over his head, and from the top of that
+ * prompt down to his feet.
+ */
+const PLAYER_CLEARANCE_HALF_W = 72;
+const PLAYER_CLEARANCE_ABOVE = 76;
+const PLAYER_CLEARANCE_BELOW = 28;
 
 export interface HudLayoutOptions {
   /** The safe area in UI units (`ui.viewport`). */
@@ -97,8 +112,13 @@ export interface UnitFrameRects {
   readonly name: Rect;
   readonly hp: Rect;
   readonly xp: Rect;
-  /** The row of status pills hung under the card. */
+  /**
+   * Where the status pills go: a row hung under the card on a roomy screen;
+   * on a compact one the name row itself, the pills right-aligned after the
+   * name, so no row is held open under the card.
+   */
   readonly status: Rect;
+  readonly statusInline: boolean;
 }
 
 export interface HotbarRects {
@@ -109,10 +129,16 @@ export interface HotbarRects {
 
 export interface HudGeometry {
   readonly theme: Theme;
+  readonly size: SizeClass;
   readonly frames: { readonly active: UnitFrameRects; readonly companion: UnitFrameRects };
-  /** Both unit frames and the coin pill: what the dock keeps clear of. */
+  /** Both unit frames and the readout row under them: what the dock keeps clear of. */
   readonly framesBlock: Rect;
   readonly coins: Rect;
+  /**
+   * Where the level timer's chip may stand, beside the coin pill, on a
+   * compact screen; null where the timer is a card in the top band.
+   */
+  readonly levelTimerChip: Rect | null;
   readonly miniMap: Rect;
   /** The minimap's square at its normal size: the part no button or bar ever covers. */
   readonly normalMiniMap: Rect;
@@ -124,7 +150,12 @@ export interface HudGeometry {
   readonly topBandObstacles: readonly Rect[];
   /** No bar in the top band reaches below this: the hotbar's top. */
   readonly topBandFloor: number;
-  /** Toasts stack upward from here. */
+  /**
+   * What the top band keeps clear of where it can: on a compact screen, the
+   * box around the middle where the camera holds the player and his
+   * interaction prompt; nothing on a roomy one.
+   */
+  readonly topBandKeepClear: readonly Rect[];
   /** Toasts stack upward from here, no wider than the lane the bottom buttons leave. */
   readonly toastAnchor: ToastAnchorGeometry;
 }
@@ -164,6 +195,7 @@ function unitFrameRects(
   portraitSide: number,
   rows: CardRows,
   statusH: number,
+  statusInline: boolean,
 ): UnitFrameRects {
   const { space } = theme;
   const body = inset(card, pad);
@@ -186,8 +218,10 @@ function unitFrameRects(
   const name: Rect = { x: columnX, y: body.y, w: columnW, h: rows.nameLine };
   const hp: Rect = { x: columnX, y: name.y + name.h + space.xxs, w: columnW, h: rows.hp };
   const xp: Rect = { x: columnX, y: hp.y + hp.h + space.xs, w: columnW, h: rows.xp };
-  const status: Rect = { x: card.x, y: card.y + card.h + space.xs, w: card.w, h: statusH };
-  return { card, portrait, levelDisc, name, hp, xp, status };
+  const status: Rect = statusInline
+    ? name
+    : { x: card.x, y: card.y + card.h + space.xs, w: card.w, h: statusH };
+  return { card, portrait, levelDisc, name, hp, xp, status, statusInline };
 }
 
 /** The level disc's diameter as a fraction of the portrait's. */
@@ -243,6 +277,7 @@ export function hudLayout(opts: HudLayoutOptions): HudGeometry {
   const top = viewport.y + margin;
   const roomBeside = right - normalMapSide - space.sm - left;
   const metrics = frameMetrics(opts.size, roomBeside);
+  const compact = opts.size === 'compact';
   const statusH = statusPillHeight(theme);
   const pad = cardPadding(theme, opts.size);
   const activeRows: CardRows = {
@@ -268,10 +303,11 @@ export function hudLayout(opts: HudLayoutOptions): HudGeometry {
     metrics.portraitActive,
     activeRows,
     statusH,
+    compact,
   );
   const companionCard: Rect = {
     x: left,
-    y: active.status.y + active.status.h + space.xs,
+    y: belowFrame(active) + space.xs,
     w: metrics.companionW,
     h: cardHeight(theme, pad, companionRows),
   };
@@ -282,17 +318,22 @@ export function hudLayout(opts: HudLayoutOptions): HudGeometry {
     metrics.portraitCompanion,
     companionRows,
     statusH,
+    compact,
   );
   const coins: Rect = {
     x: left,
-    y: companion.status.y + companion.status.h + space.xs,
+    y: belowFrame(companion) + space.xs,
     w: COIN_PILL_RESERVED_W,
     h: coinPillHeight(theme),
   };
+  const levelTimerChip: Rect | null = compact
+    ? { x: coins.x + coins.w + space.xs, y: coins.y, w: LEVEL_TIMER_CHIP_RESERVED_W, h: coins.h }
+    : null;
+  const readoutRight = (levelTimerChip ?? coins).x + (levelTimerChip ?? coins).w;
   const framesBlock: Rect = {
     x: left,
     y: top,
-    w: Math.max(metrics.activeW, COIN_PILL_RESERVED_W),
+    w: Math.max(metrics.activeW, readoutRight - left),
     h: coins.y + coins.h - top,
   };
 
@@ -308,7 +349,8 @@ export function hudLayout(opts: HudLayoutOptions): HudGeometry {
     w: normalMapSide,
     h: normalMapSide,
   };
-  const bandArea = topBandArea(viewport, framesBlock, miniMap, normalMapSide, theme);
+  const band = topBandArea(viewport, framesBlock, miniMap, normalMapSide, theme);
+  const bandArea = band.rect;
   const reserveW = Math.min(BARS_RESERVE_W, bandArea.w);
   const barsReserve: Rect = {
     x: bandArea.x + (bandArea.w - reserveW) / 2,
@@ -343,12 +385,25 @@ export function hudLayout(opts: HudLayoutOptions): HudGeometry {
     ...(buttons.build === null ? [] : [buttons.build]),
     ...(buttons.switchButton === null ? [] : [buttons.switchButton]),
   ];
-  const topBand = trimmedBand(bandArea, dockRects, space.sm);
+  const topBandFloor = hotbar.strip.y - space.sm;
+  // The dock is packed against the narrower band first, so widening the band
+  // afterwards never moves a button: the band only takes room the dock left.
+  const topBand =
+    compact && band.under
+      ? clearOfDock(
+          { ...bandArea, w: right - bandArea.x },
+          dockRects,
+          space.sm,
+          topBandFloor - bandArea.y,
+        )
+      : clearOfDock(bandArea, dockRects, space.sm, BARS_RESERVE_H);
   return {
     theme,
+    size: opts.size,
     frames: { active, companion },
     framesBlock,
     coins,
+    levelTimerChip,
     miniMap,
     normalMiniMap,
     buttons,
@@ -357,18 +412,38 @@ export function hudLayout(opts: HudLayoutOptions): HudGeometry {
     // The normal minimap's square, not the expanded one: the player expands it
     // to look for a moment, and the bars may lie over the part it grew into.
     topBandObstacles: [...dockRects, hotbar.strip, normalMiniMap],
-    topBandFloor: hotbar.strip.y - space.sm,
+    topBandFloor,
+    topBandKeepClear: compact ? [playerClearanceRect(viewport)] : [],
     toastAnchor: toastAnchor(hotbar.strip, dockRects, theme),
+  };
+}
+
+/** The bottom of a unit frame's footprint: its card, or the status row hung under it. */
+function belowFrame(frame: UnitFrameRects): number {
+  const lowest = frame.statusInline ? frame.card : frame.status;
+  return lowest.y + lowest.h;
+}
+
+/** The box around the middle of the screen, where the camera holds the player. */
+function playerClearanceRect(viewport: Rect): Rect {
+  const centreX = viewport.x + viewport.w / 2;
+  const centreY = viewport.y + viewport.h / 2;
+  return {
+    x: centreX - PLAYER_CLEARANCE_HALF_W,
+    y: centreY - PLAYER_CLEARANCE_ABOVE,
+    w: PLAYER_CLEARANCE_HALF_W * 2,
+    h: PLAYER_CLEARANCE_ABOVE + PLAYER_CLEARANCE_BELOW,
   };
 }
 
 /**
  * The band with its right edge pulled in to the leftmost button standing in
- * its top rows — a short screen's dock spills left of the minimap — so a bar
- * is narrowed to fit beside the buttons rather than slid down past them.
+ * its top `rowsH` units — a short screen's dock spills left of the minimap,
+ * and a phone held upright stacks it down the right edge — so a bar is
+ * narrowed to fit beside the buttons rather than slid down past them.
  */
-function trimmedBand(band: Rect, buttons: readonly Rect[], gap: number): Rect {
-  const rows = { ...band, h: BARS_RESERVE_H };
+function clearOfDock(band: Rect, buttons: readonly Rect[], gap: number, rowsH: number): Rect {
+  const rows = { ...band, h: rowsH };
   let right = band.x + band.w;
   for (const button of buttons) {
     const inRows = overlaps(button, rows);
@@ -443,7 +518,8 @@ function toastAnchor(strip: Rect, buttons: readonly Rect[], theme: Theme): Toast
 /**
  * Between the unit frames and the minimap where that gap is wide enough for a
  * bar — a desktop, or a phone on its side; otherwise — a phone upright — under
- * the frames, as wide as the minimap allows.
+ * the frames, as wide as the minimap allows. `under` says which; the dock is
+ * packed against this area before a compact screen widens the band under it.
  */
 function topBandArea(
   viewport: Rect,
@@ -451,7 +527,7 @@ function topBandArea(
   miniMap: Rect,
   normalMapSide: number,
   theme: Theme,
-): Rect {
+): { readonly rect: Rect; readonly under: boolean } {
   const { space } = theme;
   const margin = space.sm;
   const top = viewport.y + margin;
@@ -459,14 +535,20 @@ function topBandArea(
   const besideLeft = framesBlock.x + framesBlock.w + space.lg;
   const besideRight = mapLeft - space.lg;
   if (besideRight - besideLeft >= TOP_BAND_MIN_W) {
-    return { x: besideLeft, y: top, w: besideRight - besideLeft, h: miniMap.h };
+    return {
+      rect: { x: besideLeft, y: top, w: besideRight - besideLeft, h: miniMap.h },
+      under: false,
+    };
   }
   const underTop = framesBlock.y + framesBlock.h + space.sm;
   const underRight = mapLeft - space.sm;
   return {
-    x: framesBlock.x,
-    y: underTop,
-    w: Math.max(0, underRight - framesBlock.x),
-    h: Math.max(0, viewport.y + viewport.h - underTop),
+    rect: {
+      x: framesBlock.x,
+      y: underTop,
+      w: Math.max(0, underRight - framesBlock.x),
+      h: Math.max(0, viewport.y + viewport.h - underTop),
+    },
+    under: true,
   };
 }

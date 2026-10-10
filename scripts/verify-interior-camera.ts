@@ -334,6 +334,7 @@ function frameFor(room: Room, hud: HudOnScreen, viewport: Viewport): Frame {
     occluders,
     interiorCameraBounds(room.map),
     interiorMustSeeBounds(room.map),
+    interiorFocusRange(room.map),
   );
   return { view, clear, occluders };
 }
@@ -693,7 +694,7 @@ const touchVariant = HUD_VARIANTS.find(
       const key = JSON.stringify({ occluders, view, bounds });
       memo.clearView(map, key, (mustSee) => {
         recomputes++;
-        return hudClearView(view, occluders, bounds, mustSee);
+        return hudClearView(view, occluders, bounds, mustSee, interiorFocusRange(map));
       });
     };
     for (let frame = 0; frame < MEMO_FRAMES; frame++) askFor(phoneViewport);

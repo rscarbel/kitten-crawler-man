@@ -7,7 +7,12 @@
 
 import type { Rect } from '../../ui/core/geom';
 import type { Ui } from '../../ui/core/UiRoot';
-import { topBandCard, topBandCardPadding, type TopBandEntry } from '../../ui/hud/topBand';
+import {
+  topBandCard,
+  topBandCardInnerWidth,
+  topBandCardPadding,
+  type TopBandEntry,
+} from '../../ui/hud/topBand';
 import { skinsFor } from '../../ui/theme/skins';
 import { meter } from '../../ui/widgets/meter';
 import { fillRounded } from '../../ui/widgets/paint';
@@ -69,7 +74,7 @@ function barRows(view: SiegeHudView, compact: boolean): SiegeHudBar[][] {
 }
 
 function contentWidth(ui: Ui, width: number): number {
-  return Math.max(0, width - ui.theme.space.md * 2);
+  return topBandCardInnerWidth(ui, width);
 }
 
 function contentHeight(ui: Ui, view: SiegeHudView, width: number): number {

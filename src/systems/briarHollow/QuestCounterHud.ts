@@ -5,7 +5,12 @@
  */
 
 import type { Ui } from '../../ui/core/UiRoot';
-import { topBandCard, topBandCardPadding, type TopBandEntry } from '../../ui/hud/topBand';
+import {
+  topBandCard,
+  topBandCardInnerWidth,
+  topBandCardPadding,
+  type TopBandEntry,
+} from '../../ui/hud/topBand';
 import { measureTextHeight, text } from '../../ui/widgets/text';
 
 const QUEST_COUNTER_MAX_WIDTH = 220;
@@ -16,7 +21,7 @@ function counterText(label: string) {
 }
 
 function contentWidth(ui: Ui, width: number): number {
-  return Math.max(0, width - ui.theme.space.md * 2);
+  return topBandCardInnerWidth(ui, width);
 }
 
 /** A counter card reading `label`. */

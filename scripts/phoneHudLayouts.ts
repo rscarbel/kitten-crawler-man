@@ -68,6 +68,17 @@ const BAND_ENTRY_HEIGHTS: Readonly<Record<TopBandPriority, number>> = {
   banner: 40,
 };
 
+/**
+ * The same on a compact screen, where the cards are condensed; the tallest
+ * encounter there is the grate defence's, with its pips row.
+ */
+const COMPACT_BAND_ENTRY_HEIGHTS: Readonly<Record<TopBandPriority, number>> = {
+  boss: 64,
+  encounter: 72,
+  countdown: 56,
+  banner: 36,
+};
+
 const BAND_ENTRY_WIDTHS: Readonly<Record<TopBandPriority, number>> = {
   boss: TOP_BAND_WIDTH.regular,
   encounter: TOP_BAND_WIDTH.regular,
@@ -87,11 +98,12 @@ export function representativeTopBand(
       id: `band-${priority}`,
       priority,
       w: Math.min(BAND_ENTRY_WIDTHS[priority], area.w),
-      h: BAND_ENTRY_HEIGHTS[priority],
+      h: (geometry.size === 'compact' ? COMPACT_BAND_ENTRY_HEIGHTS : BAND_ENTRY_HEIGHTS)[priority],
     })),
     geometry.topBandObstacles,
     geometry.theme.space.sm,
     geometry.topBandFloor,
+    geometry.topBandKeepClear,
   );
   return slots.map((slot) => ({
     name: slot.id,

@@ -369,16 +369,30 @@ companion (band `toast`) carries the toast stack, and the top band whenever the
 host lifts it over its own panels. Mount both.
 
 - **Layout** is `hudLayout` (`hudLayout.ts`), pure in its inputs and shared by
-  both scenes, so walking through a door moves nothing: unit frames and the coin
-  pill top left, the minimap top right with the dock under it, the hotbar bottom
-  centre, the top band between frames and minimap (under the frames on
-  `compact`), toasts above the hotbar. `liveHudLayout` gives the same answer
+  both scenes, so walking through a door moves nothing: unit frames and the
+  readout row (the coin pill) top left, the minimap top right with the dock
+  under it, the hotbar bottom centre, the top band between frames and minimap
+  (under the frames on `compact`), toasts above the hotbar.
+- **Compact (phones):** status pills ride right-aligned in each card's name
+  row (the name ellipsises) instead of a row hung under the card, and the
+  companion card sits right under the active one. The readout row holds the
+  coin pill and the level timer's chip (`levelTimerChip`: clock glyph and
+  time, amber at 10 min, red and throbbing at 5, a beat each second in the
+  last minute, blue while paused); roomy sizes show the timer as a band card
+  instead. The top band under the frames widens right to the dock buttons
+  standing beside it, its cards are condensed (`topBandCardInsets`, each line
+  one step down `condensedType`), and it keeps clear of the box around the
+  screen's middle where the camera holds the player
+  (`HudGeometry.topBandKeepClear`): entries move to an edge, below it, or are
+  left out — only a boss or encounter bar with no other room may lie over
+  the player. `liveHudLayout` gives the same answer
   outside the render (the interior camera frames the room clear of it).
   `HudSurface.frame` (and `cssDockRect`) report what was last drawn, for code
   that aims at the HUD.
 - **`HudModel`**: `crawlers` (active first), `activeCrawler`, `coins`,
   `skillPoints`, `minimap` (`MinimapModel` with its own `paint`, `toggle`,
-  `pan?`), `dock`, `summon`, `lootBanner`, `hotbar`, `topBand`.
+  `pan?`), `dock`, `summon`, `lootBanner`, `hotbar`, `topBand`, `levelTimer`
+  (`{ frames, paused } | null`; the HUD decides chip or band card).
 - **Dock:** `DockButtonModel { id, icon, label, key?, badge?, selected?, pulse?, bounce?, onTap }`.
   Buttons fire on release. `hudButtonLayout` fixes the column order (Pause, Bag,
   Build, achievement chip, Journal, then a scene's `extras`, which never shift
@@ -388,10 +402,13 @@ host lifts it over its own panels. Mount both.
 - **Top band** (`topBand.ts`, `topBandStack.ts`): a `TopBandEntry
 { id, priority, maxWidth, height(ui, w), render(ui, rect) }` asks for a slot;
   `TOP_BAND_PRIORITIES` stacks `boss` > `encounter` > `countdown` > `banner`.
-  Build entries from rows with `stackedBandEntry`, or draw into `topBandCard`.
-  An entry with no clear place above the floor is left out rather than laid over
-  a button. Boss and encounter bars, timers, banners and village counters all
-  live here.
+  Build entries from rows with `stackedBandEntry`, or draw into `topBandCard`
+  (size custom content with `topBandCardInnerWidth`/`topBandCardPadding`, so a
+  compact card's tighter padding applies). An entry with no clear place above
+  the floor is left out rather than laid over a button. Band cards are
+  readouts: they register no region, so a tap on one reaches the world; an
+  entry with its own control registers it with `ui.hit`. Boss and encounter
+  bars, countdowns, banners and village counters all live here.
 - **Toasts** (`toasts.ts`): `menus.toasts.post(text, { icon?, tone?, urgent?, merge?, key?, durationTicks? })`
   on the scene's `MenusKit`. At most `MAX_VISIBLE_TOASTS`; they age by update
   tick, slide in and fade on their own. `key` updates one toast in place.

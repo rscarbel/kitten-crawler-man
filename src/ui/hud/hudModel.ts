@@ -141,6 +141,14 @@ export interface HotbarModel {
   readonly input: HotbarInput;
 }
 
+/** A floor's collapse timer. */
+export interface LevelTimerModel {
+  /** Frames left on the clock. */
+  readonly frames: number;
+  /** Held (in the safe room): the clock reads blue and still. */
+  readonly paused: boolean;
+}
+
 export interface HudModel {
   /** Active crawler first. */
   readonly crawlers: readonly [UnitFrameModel, UnitFrameModel];
@@ -155,6 +163,12 @@ export interface HudModel {
   /** Null while a scene's own menu stands over the bar. */
   readonly hotbar: HotbarModel | null;
   readonly topBand: readonly TopBandEntry[];
+  /**
+   * The floor's collapse timer, null where there is none. The HUD draws it as
+   * a top-band card on a roomy screen and a chip by the coin pill on a
+   * compact one.
+   */
+  readonly levelTimer: LevelTimerModel | null;
 }
 
 /**
