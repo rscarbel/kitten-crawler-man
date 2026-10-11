@@ -16,20 +16,24 @@ import type { AudioManager } from '../../audio/AudioManager';
 import type { SoundId } from '../../audio/sounds';
 
 export const PRISON_CUES = {
-  /** The locked gate bumped or tried. Waits on `metal_gate_locked_rattle_1` … `_2`; `gate_thud` stands in. */
-  gateLocked: ['gate_thud'],
-  /** The gate guard turning the key. Waits on `gate_key_unlock`; `coin_pouch` stands in. */
-  gateUnlock: ['coin_pouch'],
+  /** The locked gate bumped or tried. */
+  gateLocked: [
+    'metal_gate_locked_rattle_1',
+    'metal_gate_locked_rattle_2',
+    'metal_gate_locked_rattle_3',
+  ],
+  /** The gate guard turning the key. */
+  gateUnlock: ['gate_key_unlock'],
   /** The gate raised. Waits on `heavy_metal_gate_raise`; `gate_opening` stands in. */
   gateOpen: ['gate_opening'],
-  /** The prison's double door. Waits on `prison_door_heavy_open`; `gate_opening` stands in. */
-  prisonDoorOpen: ['gate_opening'],
-  /** Room tone inside the prison. Waits on `prison_ambience_loop`. */
-  prisonAmbience: [],
+  /** The prison's double door. */
+  prisonDoorOpen: ['prison_door_heavy_open'],
+  /** Room tone inside the prison. */
+  prisonAmbience: ['prison_ambience_loop'],
   /** The sneaking music. */
   stealthMusic: ['stealth_music'],
-  /** A spotlight's positional hum. Waits on `spotlight_hum_loop`. */
-  spotlightHum: [],
+  /** A spotlight's positional hum. */
+  spotlightHum: ['spotlight_hum_loop'],
   /** A spotlight reversing on its track. Waits on `spotlight_motor_turn_1` … `_2`. */
   spotlightTurn: [],
   /** A patrolling guard's positional footsteps. Waits on `guard_footsteps_loop`. */
@@ -40,28 +44,37 @@ export const PRISON_CUES = {
   guardMutter: ['goblin_2'],
   /** A guard's suspicion starting to rise. Waits on `goblin_guard_huh_1` … `_3`; `goblin_1` stands in. */
   guardSuspicious: ['goblin_1'],
-  /** A guard spotting the party. Waits on `goblin_guard_hey_1` … `_3`; `goblin_found_you` stands in. */
-  guardHey: ['goblin_found_you'],
+  /** A guard spotting the party. */
+  guardHey: [
+    'goblin_guard_hey_1',
+    'goblin_guard_hey_2',
+    'goblin_guard_hey_3',
+    'goblin_guard_hey_4',
+  ],
   /** A guard going to look at a noise. Waits on `goblin_guard_what_was_that_1` … `_2`; `goblin_2` stands in. */
   guardInvestigate: ['goblin_2'],
   /** A guard giving up on a noise. Waits on `goblin_guard_all_clear_1` … `_2`. */
   guardGivesUp: [],
   /** A light's suspicion climbing. Waits on `stealth_suspicion_heartbeat_loop`; `level_timer_final_minute_heartbeat` stands in. */
   suspicionRising: ['level_timer_final_minute_heartbeat'],
-  /** The alarm sting of a capture. Waits on `caught_alarm_sting`; `bell_alarm` stands in. */
-  caught: ['bell_alarm'],
-  /** A holding cell's door slammed on the party. Waits on `cell_door_slam`; `gate_thud` stands in. */
-  cellDoorSlam: ['gate_thud'],
-  /** A flimsy cell door broken. Waits on `flimsy_cell_door_break_1` … `_2`; `wood_smashing_1` and `_2` stand in. */
-  cellDoorBreak: ['wood_smashing_1', 'wood_smashing_2'],
+  /** The alarm sting of a capture. */
+  caught: ['caught_alarm_sting'],
+  /** A holding cell's door slammed on the party. */
+  cellDoorSlam: ['cell_door_slam'],
+  /** A flimsy cell door broken. */
+  cellDoorBreak: [
+    'flimsy_cell_door_break_1',
+    'flimsy_cell_door_break_2',
+    'flimsy_cell_door_break_3',
+  ],
   /** A prisoner rattling its bars. Waits on `prisoner_bar_rattle_1` … `_3`. */
   prisonerRattle: [],
   /** A prisoner heckling. Waits on `prisoner_goblin_heckle_1` … `_3`; `goblin_1` stands in. */
   prisonerHeckle: ['goblin_1'],
   /** The key's shimmer on its pedestal. Waits on `prison_key_shimmer_loop`. */
   keyShimmer: [],
-  /** The key lifted. Waits on `prison_key_pickup_fanfare`; `objective_complete` stands in. */
-  keyPickup: ['objective_complete'],
+  /** The key lifted. */
+  keyPickup: ['prison_key_pickup_fanfare'],
   /** The gate guard's proud talk. Waits on `gate_guard_proud_hmph_1` … `_2`; `goblin_2` stands in. */
   gateGuardTalk: ['goblin_2'],
 } as const satisfies Record<string, readonly SoundId[]>;

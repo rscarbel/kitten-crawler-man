@@ -25,7 +25,7 @@ import {
 } from '../systems/stealthKeySnatch/GoblinPrisonSystem';
 import { partyHoldsPrisonKey } from '../systems/stealthKeySnatch/stealthKeySnatchVisit';
 import { detachedPrisonVisit } from '../systems/stealthKeySnatch/prisonVisit';
-import { prisonCueSound } from '../systems/stealthKeySnatch/prisonSoundCues';
+import { playPrisonCue, prisonCueSound } from '../systems/stealthKeySnatch/prisonSoundCues';
 import { PRISON_TRAIL_SPACING_TILES } from '../systems/stealthKeySnatch/prisonTuning';
 import { setFloorArtSeed } from '../map/ground/floorArtSeed';
 import { requestGroundSheets } from '../map/ground/runtimeGroundSheets';
@@ -2089,6 +2089,7 @@ export class BuildingInteriorScene extends GameplayScene {
     if (this.prisonKey !== null) {
       const prisonKey = this.prisonKey;
       this.arrivalLoading.whenClosed(() => {
+        playPrisonCue(this.audio, 'prisonDoorOpen');
         this.startPrisonMusic();
         prisonKey.openExplainerIfFirstVisit();
       });
@@ -3317,6 +3318,7 @@ export class BuildingInteriorScene extends GameplayScene {
     const humanSnap = snapPlayer(this.human);
     const catSnap = snapPlayer(this.cat);
     if (this.hudView !== null) this.hudView.miniMapExpanded = this.miniMapExpanded;
+    if (this.prisonKey !== null) playPrisonCue(this.audio, 'prisonDoorOpen');
     this.onExitCallback(humanSnap, catSnap, defeated, companions);
   }
 
