@@ -18,42 +18,45 @@ import type { AudioManager } from '../../audio/AudioManager';
 import type { SoundId } from '../../audio/sounds';
 
 export const BATHROOM_CUES = {
-  /** A board tile turned a quarter. Waits on `pvc_pipe_turn_1` … `pvc_pipe_turn_3`; `menu_click` stands in. */
-  pipeTurn: ['menu_click'],
-  /** A tap on the bolted brass cross that won't budge. Waits on `pipe_bolted_clunk`; `error` stands in. */
-  pipeBolted: ['error'],
-  /** Water reaching newly connected pipe. Waits on `pipe_water_rush`; `player_wading` stands in. */
-  waterRush: ['player_wading'],
-  /** Water draining out of pipe that was cut off. Waits on `pipe_drain_gurgle`. */
-  pipeDrain: [],
-  /** An open pipe end spraying water. Waits on `pipe_leak_spray_loop`; `miasma_hiss` stands in. */
-  leakSprayLoop: ['miasma_hiss'],
-  /** A fixture filling with water. Waits on `fixture_fill_ding`; `objective_complete` stands in. */
-  fixtureFill: ['objective_complete'],
-  /** The pressure surge as the solved board runs. Waits on `plumbing_surge`; `metal_winding_up` stands in. */
-  surge: ['metal_winding_up'],
-  /** A toilet flushing. Waits on `toilet_flush_1` … `toilet_flush_3`; `mob_splash` stands in. */
-  flush: ['mob_splash'],
-  /** The board solved. Waits on `plumbing_fixed_sting`; `quest_complete` stands in. */
-  boardSolved: ['quest_complete'],
-  /** The broken plumbing groaning in the room until the solve. Waits on `broken_plumbing_loop`. */
-  brokenPipesLoop: [],
-  /** The queue's impatient murmur. Waits on `goblin_queue_grumble_loop`; `ambient_bar_crowd` stands in. */
-  queueMurmurLoop: ['ambient_bar_crowd'],
-  /** A queue goblin struck. Waits on `goblin_ow_1` … `goblin_ow_4`; `goblin_1` and `goblin_2` stand in. */
-  goblinOw: ['goblin_1', 'goblin_2'],
-  /** A queue goblin complaining. Waits on `goblin_impatient_grumble_1` … `goblin_impatient_grumble_3`; `goblin_2` stands in. */
-  goblinGrumble: ['goblin_2'],
-  /** A goblin leaving the line relieved. Waits on `goblin_relieved_sigh_1` … `goblin_relieved_sigh_2`. */
-  goblinRelief: [],
-  /** The plumber hitting the pipes. Waits on `wrench_on_pipe_clank_1` … `wrench_on_pipe_clank_2`; `hammer_strike` stands in. */
-  plumberWrench: ['hammer_strike'],
-  /** A stall door creaking open. Waits on `stall_door_creak`; `gate_opening` stands in. */
-  stallDoorOpen: ['gate_opening'],
-  /** A stall door shutting and latching. Waits on `stall_door_latch`. */
-  stallDoorLatch: [],
-  /** The crawler stepping out with the buff. Waits on `refreshed_sting`; `stat_boost` stands in. */
-  refreshed: ['stat_boost'],
+  /** A board tile turned a quarter. */
+  pipeTurn: ['pvc_pipe_turn_1', 'pvc_pipe_turn_2', 'pvc_pipe_turn_3'],
+  /** A tap on the bolted brass cross that won't budge. */
+  pipeBolted: ['pipe_bolted_clunk'],
+  /** Water reaching newly connected pipe. */
+  waterRush: ['pipe_water_rush_1', 'pipe_water_rush_2', 'pipe_water_rush_3', 'pipe_water_rush_4'],
+  /** Water draining out of pipe that was cut off. */
+  pipeDrain: ['pipe_drain_gurgle_1', 'pipe_drain_gurgle_2'],
+  /** An open pipe end spraying water. */
+  leakSprayLoop: ['pipe_leak_spray_loop'],
+  /** A fixture filling with water. */
+  fixtureFill: ['fixture_fill_ding'],
+  /** The pressure surge as the solved board runs. */
+  surge: ['plumbing_surge'],
+  /** A toilet flushing. */
+  flush: ['toilet_flush_1', 'toilet_flush_2', 'toilet_flush_3'],
+  /** The board solved. */
+  boardSolved: ['plumbing_fixed_sting'],
+  /** The broken plumbing groaning in the room until the solve. */
+  brokenPipesLoop: ['ambient_broken_plumbing'],
+  /** A queue goblin struck. */
+  goblinOw: [
+    'goblin_ow_1',
+    'goblin_ow_2',
+    'goblin_ouch_1',
+    'goblin_ouch_2',
+    'goblin_oof_1',
+    'goblin_oof_2',
+  ],
+  /** A queue goblin complaining. */
+  goblinGrumble: ['goblin_impatient_grumble_1', 'goblin_impatient_grumble_2'],
+  /** A goblin leaving the line relieved. */
+  goblinRelief: ['goblin_relieved_sigh_1'],
+  /** A stall door creaking open. */
+  stallDoorOpen: ['stall_door_creak'],
+  /** A stall door shutting and latching. */
+  stallDoorLatch: ['stall_door_latch'],
+  /** The crawler stepping out with the buff. */
+  refreshed: ['refreshed_sting'],
   /** The music while the pipe board is on screen. */
   plumbingMusic: ['fix_the_plumbing_music'],
   /** A sink tap running. Waits on `sink_tap_running_loop`; `ambient_fountain` stands in. */

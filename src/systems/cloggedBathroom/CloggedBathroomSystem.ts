@@ -158,19 +158,11 @@ const STALL_OVER_MARKED_PLUMBER_MARGIN_TILES = 0.35;
  */
 const COPY_REACH_TILES = QUEUE_CORRIDOR_SPILL_TILES + 2;
 
-/** Interval, in frames, between the plumber's wrench clanks and the line's grumbles while broken. */
-const PLUMBER_WRENCH_INTERVAL_FRAMES = 330;
-const QUEUE_GRUMBLE_INTERVAL_FRAMES = 450;
-
 /** Wall-clock budget, in ms, the board's generation may take of one frame. */
 const GENERATION_FRAME_BUDGET_MS = 6;
 /** Progress shown while generating reaches one half after this many attempts, and creeps on from there. */
 const GENERATION_PROGRESS_HALF_ATTEMPTS = 40;
 
-const MURMUR_RADIUS_TILES = 12;
-const MURMUR_BROKEN_VOLUME = 0.3;
-const MURMUR_FIXED_VOLUME = 0.1;
-const MURMUR_FIXED_RADIUS_TILES = 7;
 const BROKEN_PIPES_RADIUS_TILES = 8;
 const BROKEN_PIPES_VOLUME = 0.35;
 const SINK_RADIUS_TILES = 5;
@@ -336,7 +328,6 @@ export class CloggedBathroomSystem
   private plumberTalks = 0;
   private plumberLastLine: DialogLine | null = null;
   private noCuttingCount = 0;
-  private framesAtCopy = 0;
   private conversationHandle: ConversationHandle | null = null;
   private readonly ambience: AmbientSoundSystem | null;
   private readonly worldSeed: number;
@@ -962,6 +953,7 @@ export class CloggedBathroomSystem
     const line = pickQueueLine(plumbing, slot.goblin.seed, slot.talkCount, slot.lastLine);
     slot.lastLine = line;
     slot.talkCount++;
+    this.cue('goblinGrumble');
     const goblin = slot.goblin;
     const request: ConversationRequest = {
       lines: [line],
@@ -1142,7 +1134,6 @@ export class CloggedBathroomSystem
       this.drainOw(copy.plumber);
       this.tickDoors(copy);
     }
-    this.tickIdleCues();
     this.ambience?.updateListener(ctx.active.x, ctx.active.y);
     this.syncMarkers();
   }
@@ -1153,21 +1144,11 @@ export class CloggedBathroomSystem
     this.cue('goblinOw');
   }
 
-  private tickIdleCues(): void {
-    if (this.here === null || this.isSolved) {
-      this.framesAtCopy = 0;
-      return;
-    }
-    this.framesAtCopy++;
-    if (this.framesAtCopy % PLUMBER_WRENCH_INTERVAL_FRAMES === 0) this.cue('plumberWrench');
-    if (this.framesAtCopy % QUEUE_GRUMBLE_INTERVAL_FRAMES === 0) this.cue('goblinGrumble');
-  }
-
   private cue(cue: BathroomCue): void {
     playBathroomCue(this.deps.audio, cue);
   }
 
-  /** The positional loops: broken pipes and an impatient murmur while broken, a quieter room and running sinks after. */
+  /** The positional loops: broken pipes while broken, a quieter room and running sinks after. */
   private refreshAmbience(): void {
     const ambience = this.ambience;
     if (ambience === null) return;
@@ -1180,12 +1161,10 @@ export class CloggedBathroomSystem
     for (const copy of this.copies) {
       const { room } = copy;
       if (this.isSolved) {
-        add('queueMurmurLoop', room.centre, MURMUR_FIXED_RADIUS_TILES, MURMUR_FIXED_VOLUME);
         for (const sink of room.sinkTiles) add('sinkRunning', sink, SINK_RADIUS_TILES, SINK_VOLUME);
         continue;
       }
       add('brokenPipesLoop', room.pipeWallTile, BROKEN_PIPES_RADIUS_TILES, BROKEN_PIPES_VOLUME);
-      add('queueMurmurLoop', room.centre, MURMUR_RADIUS_TILES, MURMUR_BROKEN_VOLUME);
     }
     ambience.setEmitters(emitters);
   }
