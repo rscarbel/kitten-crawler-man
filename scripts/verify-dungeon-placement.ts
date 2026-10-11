@@ -6,7 +6,8 @@
  * Per map:
  * - progression validation passes on the dressed floor, and the same seed
  *   built without props is accepted on the same attempt with the same floor
- *   under the props, so no prop ever forced the generator to re-roll
+ *   under the props, so no prop ever forced the generator to re-roll; crawler
+ *   signs are left out, since they are planned on the dressed floor
  * - no blocking prop stands within a tile of a doorway
  * - no room and no hallway segment is cut into more walkable pieces than it
  *   had bare
@@ -483,11 +484,19 @@ function generate(levelDef: LevelDef, worldSeed: number, placeProps = true): Dun
   );
 }
 
-function sameTileTypes(a: TileContent[][], b: TileContent[][]): boolean {
+/**
+ * Whether two grids hold the same tile types, crawler signs aside: signs are
+ * planned on the dressed floor, so a prop that lengthens a walk is meant to
+ * move or add one.
+ */
+function sameTileTypesBesideSigns(a: TileContent[][], b: TileContent[][]): boolean {
+  const isSign = (tile: TileContent): boolean => tile.type === CRAWLER_SIGN;
   return (
     a.length === b.length &&
     a.every(
-      (row, y) => row.length === b[y].length && row.every((tile, x) => tile.type === b[y][x].type),
+      (row, y) =>
+        row.length === b[y].length &&
+        row.every((tile, x) => isSign(tile) || isSign(b[y][x]) || tile.type === b[y][x].type),
     )
   );
 }
@@ -768,7 +777,7 @@ function sweepFloor(name: string, levelDef: LevelDef, floorIndex: number, seeds:
         rule: 'rejection',
         message: `accepted on attempt ${dressedAttempts} with props, ${undressedAttempts} without`,
       });
-    } else if (!sameTileTypes(bareGrid(dressed.grid), undressed.grid)) {
+    } else if (!sameTileTypesBesideSigns(bareGrid(dressed.grid), undressed.grid)) {
       violations.push({
         rule: 'rejection',
         message: 'the floor under the props differs from the bare build',

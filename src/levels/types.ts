@@ -1,5 +1,6 @@
 import type { CampKind } from '../map/overworld/camps';
 import type { BathroomRequest } from '../map/gauntletLayout';
+import type { StealthGateRequest } from '../map/spineLayout';
 import type { SoundId } from '../audio/sounds';
 import type { DungeonFloorThemeId } from '../map/dungeon/floorTheme';
 import type { XpDiminishingTier } from './xpDiminishing';
@@ -234,6 +235,12 @@ export interface SpineDef {
   rooms: { min: number; max: number };
   /** Chain positions that fork into a second, reconverging lane. */
   splits: { min: number; max: number };
+  /**
+   * Seats a room of this size at the chain's halfway index whose onward
+   * doorway is shut by a locked gate, with the prison door in its side wall.
+   * Every chain room is a cut vertex, so the gate is on every route through.
+   */
+  stealthGate?: StealthGateRequest;
 }
 
 /**

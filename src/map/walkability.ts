@@ -21,6 +21,7 @@ import {
   CHAIR,
   BARREL_SIDE,
   CRATE,
+  PRISON_COVER,
   BRAZIER,
   SPRITE_BUILDING,
   RUINED_WALL,
@@ -216,6 +217,7 @@ const NON_WALKABLE_TILE_TYPES: readonly number[] = [
   // scatter, `BONES`, is absent — it is floor dressing.
   BONE_PILE,
   SLUMPED_SKELETON,
+  PRISON_COVER,
 ];
 
 /**

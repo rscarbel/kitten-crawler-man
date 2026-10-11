@@ -145,7 +145,47 @@ function alternatingOffsets(step: number, steps: number): number[] {
 }
 
 /** What a room seated on the spine is for. */
-export type SpineRoomKind = 'chain' | 'quest';
+export type SpineRoomKind = 'chain' | 'quest' | 'stealth_gate';
+
+/**
+ * A self-test switch for `verify:stealth-gate`: breaks one placement rule so the
+ * check that enforces it can be watched failing. Never set by a level.
+ *
+ * - `nursery-beside-gate`: the nursery is seated next to the gate room.
+ * - `lane-at-gate`: a lane forks on a link that touches the gate room.
+ * - `lab-on-gate`: the spider lab hangs off the gate room.
+ * - `pocket-on-gate`: a safe pocket that falls on the gate room stays there.
+ * - `gate-off-halfway`: the gate room is seated one room late.
+ */
+export type StealthGatePlanFault =
+  'nursery-beside-gate' | 'lane-at-gate' | 'lab-on-gate' | 'pocket-on-gate' | 'gate-off-halfway';
+
+/** The locked gate room the spine seats halfway along its chain. */
+export interface StealthGateRequest {
+  w: number;
+  h: number;
+  /** See {@link StealthGatePlanFault}. */
+  faultForGate?: StealthGatePlanFault;
+}
+
+/**
+ * Chain index of the stealth gate room: halfway between the room the spine
+ * leaves and the antechamber it reaches. Every chain room is a cut vertex, so
+ * the halfway room is on every route through.
+ */
+export function stealthGateChainIndex(roomCount: number): number {
+  return Math.floor(roomCount / 2);
+}
+
+/**
+ * Whether a room index sits on the gate room or right beside it, which is
+ * where neither the nursery nor a lane fork may go: two puzzle chokes in a row
+ * read as one muddle, and a lane leaving the gate room adds a doorway the gate
+ * does not hold.
+ */
+function touchesGate(index: number, gateIndex: number | null): boolean {
+  return gateIndex !== null && Math.abs(index - gateIndex) <= 1;
+}
 
 export interface SpineChainRoom {
   rect: Rect;
@@ -183,6 +223,15 @@ export interface SpinePlan {
    * from.
    */
   questEntryCorridor: PlannedCorridor | null;
+  /** Index into {@link chain} of the stealth gate room, or null when none was asked for. */
+  stealthGateIndex: number | null;
+  /**
+   * The corridors the player arrives at and leaves the gate room by, named for
+   * the reason {@link questEntryCorridor} is: the doorway scan needs to know
+   * which opening the gate goes across.
+   */
+  stealthGateEntryCorridor: PlannedCorridor | null;
+  stealthGateExitCorridor: PlannedCorridor | null;
   lanes: SpineLane[];
   labRoom: Rect | null;
   pockets: SpinePocket[];
@@ -203,6 +252,8 @@ export interface SpineRequest {
   rooms: { min: number; max: number };
   splits: { min: number; max: number };
   questRoom: { w: number; h: number };
+  /** Null on a floor with no stealth gate room. */
+  stealthGate: StealthGateRequest | null;
   /** Null on a floor with no spider lab. */
   labRoom: { w: number; h: number } | null;
   /**
@@ -354,7 +405,20 @@ export function planSpine(segments: SegmentMap, request: SpineRequest): SpinePla
   // landmark rather than as a room of its own. A chain too short to hold an
   // interior room is refused rather than fudged into breaking that.
   if (roomCount < MIN_CHAIN_ROOMS) return null;
-  const questIndex = randomInt(1, roomCount - 2);
+  const gateFault = request.stealthGate?.faultForGate ?? null;
+  const gateIndex =
+    request.stealthGate === null
+      ? null
+      : stealthGateChainIndex(roomCount) + (gateFault === 'gate-off-halfway' ? 1 : 0);
+  const questCandidates: number[] = [];
+  for (let index = 1; index <= roomCount - 2; index++) {
+    if (!touchesGate(index, gateIndex)) questCandidates.push(index);
+  }
+  if (questCandidates.length === 0) return null;
+  const questIndex =
+    gateFault === 'nursery-beside-gate' && gateIndex !== null
+      ? gateIndex - 1
+      : questCandidates[randomInt(0, questCandidates.length - 1)];
 
   // A turn that persists over several rooms is what makes the route read as a
   // winding passage rather than as a drunk walk: the chain leans one way, then
@@ -379,8 +443,10 @@ export function planSpine(segments: SegmentMap, request: SpineRequest): SpinePla
       turnSign * (TURN_PER_ROOM_MIN + worldRandom() * (TURN_PER_ROOM_MAX - TURN_PER_ROOM_MIN));
 
     const isQuest = index === questIndex;
-    const w = isQuest ? request.questRoom.w : randomInt(SPINE_ROOM_W_MIN, SPINE_ROOM_W_MAX);
-    const h = isQuest ? request.questRoom.h : randomInt(SPINE_ROOM_H_MIN, SPINE_ROOM_H_MAX);
+    const isGate = index === gateIndex;
+    const fixedSize = isQuest ? request.questRoom : isGate ? request.stealthGate : null;
+    const w = fixedSize?.w ?? randomInt(SPINE_ROOM_W_MIN, SPINE_ROOM_W_MAX);
+    const h = fixedSize?.h ?? randomInt(SPINE_ROOM_H_MIN, SPINE_ROOM_H_MAX);
 
     let seated: Rect | null = null;
     for (const nudge of HEADING_NUDGES) {
@@ -398,7 +464,7 @@ export function planSpine(segments: SegmentMap, request: SpineRequest): SpinePla
       }
     }
     if (seated === null) return null;
-    chain.push({ rect: seated, kind: isQuest ? 'quest' : 'chain' });
+    chain.push({ rect: seated, kind: isQuest ? 'quest' : isGate ? 'stealth_gate' : 'chain' });
     current = rectCentre(seated);
   }
 
@@ -418,11 +484,16 @@ export function planSpine(segments: SegmentMap, request: SpineRequest): SpinePla
   const forkCandidates: number[] = [];
   for (let index = 0; index + 1 < roomCount; index++) {
     if (index === questIndex || index + 1 === questIndex) continue;
+    if (gateIndex !== null && (index === gateIndex || index + 1 === gateIndex)) continue;
     forkCandidates.push(index);
   }
   const lanes: SpineLane[] = [];
   const usedForks: number[] = [];
-  for (const forkIndex of shuffled(forkCandidates)) {
+  const forkOrder =
+    gateFault === 'lane-at-gate' && gateIndex !== null
+      ? [gateIndex, ...shuffled(forkCandidates.filter((index) => index !== gateIndex))]
+      : shuffled(forkCandidates);
+  for (const forkIndex of forkOrder) {
     if (lanes.length >= laneCount) break;
     // Non-adjacent, so two lanes never share a room and the "at most two paths"
     // rule holds between every consecutive pair rather than only most of them.
@@ -433,18 +504,27 @@ export function planSpine(segments: SegmentMap, request: SpineRequest): SpinePla
     usedForks.push(forkIndex);
   }
   if (lanes.length < request.splits.min) return null;
+  if (gateFault === 'lane-at-gate' && !lanes.some((lane) => lane.forkIndex === gateIndex)) {
+    return null;
+  }
 
   // ── Spider lab ──────────────────────────────────────────────────────────
   let labRoom: Rect | null = null;
   let labHostIndex = 0;
   if (request.labRoom !== null) {
-    const labHosts = shuffled(
-      chain
-        .map((_, index) => index)
-        .filter(
-          (index) => index !== questIndex && index < Math.floor(roomCount * LAB_CHAIN_FRACTION),
-        ),
-    );
+    const labHosts =
+      gateFault === 'lab-on-gate' && gateIndex !== null
+        ? [gateIndex]
+        : shuffled(
+            chain
+              .map((_, index) => index)
+              .filter(
+                (index) =>
+                  index !== questIndex &&
+                  index !== gateIndex &&
+                  index < Math.floor(roomCount * LAB_CHAIN_FRACTION),
+              ),
+          );
     for (const hostIndex of labHosts) {
       // Two offsets per host, because the lab is 40×32 and the difference between
       // fitting and not is often a handful of tiles further out.
@@ -491,13 +571,20 @@ export function planSpine(segments: SegmentMap, request: SpineRequest): SpinePla
   // The quest room is never chain[0] — it is drawn from the chain's interior —
   // so the corridor that reaches it is always one of the chain's own links.
   let questEntryCorridor: PlannedCorridor | null = null;
+  let stealthGateEntryCorridor: PlannedCorridor | null = null;
+  let stealthGateExitCorridor: PlannedCorridor | null = null;
   if (!link(request.entryRoom, chain[0].rect, true)) return null;
+  if (gateIndex === 0) stealthGateEntryCorridor = corridors[corridors.length - 1];
   for (let index = 0; index + 1 < roomCount; index++) {
-    const joinsQuestRoom = chain[index].kind === 'quest' || chain[index + 1].kind === 'quest';
-    if (!link(chain[index].rect, chain[index + 1].rect, joinsQuestRoom)) return null;
-    if (chain[index + 1].kind === 'quest') questEntryCorridor = corridors[corridors.length - 1];
+    const joinsSpecialRoom = chain[index].kind !== 'chain' || chain[index + 1].kind !== 'chain';
+    if (!link(chain[index].rect, chain[index + 1].rect, joinsSpecialRoom)) return null;
+    const latest = corridors[corridors.length - 1];
+    if (chain[index + 1].kind === 'quest') questEntryCorridor = latest;
+    if (index + 1 === gateIndex) stealthGateEntryCorridor = latest;
+    if (index === gateIndex) stealthGateExitCorridor = latest;
   }
   if (!link(chain[roomCount - 1].rect, request.exitRoom, true)) return null;
+  if (gateIndex === roomCount - 1) stealthGateExitCorridor = corridors[corridors.length - 1];
 
   for (const lane of lanes) {
     const run = [chain[lane.forkIndex].rect, ...lane.rooms, chain[lane.forkIndex + 1].rect];
@@ -521,10 +608,25 @@ export function planSpine(segments: SegmentMap, request: SpineRequest): SpinePla
   // safe-room access gets one seated after the run's SAFE_ACCESS_POCKET_ROOM-th
   // room. Mandatory: a one-way journey this long with no respawn point turns
   // one bad pull into a walk all the way back to the last gateway.
+  //
+  // Never off the gate room: a pocket there opens either behind the locked
+  // gate, where it is unreachable, or on the entrance side, where it is a
+  // third doorway the gate room must not have. One that falls on it moves to
+  // the room before, as a bathroom branch's does.
   const pockets: SpinePocket[] = [];
+  const pocketsMayUseGate = gateFault === 'pocket-on-gate';
   const usedHosts = new Set<number>([questIndex]);
+  if (gateIndex !== null && !pocketsMayUseGate) usedHosts.add(gateIndex);
   const hostSearchOffsets = alternatingOffsets(1, SAFE_ACCESS_HOST_SEARCH_STEPS);
-  for (const nominalHost of safeAccessPocketIndices(roomCount)) {
+  let pocketHungOffGate = false;
+  const nominalSafeHosts = safeAccessPocketIndices(roomCount).map((index) =>
+    index === gateIndex ? index - 1 : index,
+  );
+  const safeHosts =
+    pocketsMayUseGate && gateIndex !== null
+      ? [gateIndex, ...nominalSafeHosts.slice(1)]
+      : nominalSafeHosts;
+  for (const nominalHost of safeHosts) {
     let placed = false;
     for (const offset of hostSearchOffsets) {
       const hostIndex = nominalHost + offset;
@@ -549,6 +651,7 @@ export function planSpine(segments: SegmentMap, request: SpineRequest): SpinePla
       if (seated !== null && link(chain[hostIndex].rect, seated, true)) {
         pockets.push({ rect: seated, role: 'safe' });
         usedHosts.add(hostIndex);
+        if (hostIndex === gateIndex) pocketHungOffGate = true;
         placed = true;
         break;
       }
@@ -592,7 +695,18 @@ export function planSpine(segments: SegmentMap, request: SpineRequest): SpinePla
     }
   }
 
-  return { chain, questEntryCorridor, lanes, labRoom, pockets, corridors };
+  if (pocketsMayUseGate && !pocketHungOffGate) return null;
+  return {
+    chain,
+    questEntryCorridor,
+    stealthGateIndex: gateIndex,
+    stealthGateEntryCorridor,
+    stealthGateExitCorridor,
+    lanes,
+    labRoom,
+    pockets,
+    corridors,
+  };
 }
 
 /** Seats a lane's one or two rooms alongside the chain link it bridges. */

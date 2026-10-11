@@ -759,11 +759,40 @@ export const BATHROOM_SINK = 172;
 /** A walkable plunger standing on the floor. Baked flat. */
 export const BATHROOM_PLUNGER = 173;
 
+// ── Stealth gate (floor 2) ───────────────────────────────────────────────────
+
+/**
+ * The iron gate across the stealth gate room's onward doorway, shut.
+ *
+ * Walkable by tile type, like `QUEST_EXIT_DOOR_CLOSED`, because the offline
+ * progression validator flood-fills the raw grid; passage is denied by
+ * `GameMap`'s stealth gate block flag while the gate is locked.
+ */
+export const STEALTH_GATE_CLOSED = 174;
+
+/**
+ * The same gate once unlocked: hauled up into the lintel, its spiked bottom
+ * rail showing under the jambs. A tile type of its own because the floor is
+ * baked into reusable chunk canvases, so the open state has to be written into
+ * the grid and announced as a dirty tile.
+ */
+export const STEALTH_GATE_OPEN = 175;
+
+// ── Goblin High Security Prison ──────────────────────────────────────────────
+
+/**
+ * Tall cover in the prison yard and halls: crate stacks, a guard hut, a wagon.
+ * Its own type rather than `CRATE` because the stealth system treats it as
+ * the thing that stops a flashlight, so nothing may smash it: prop destruction
+ * only breaks the types it knows.
+ */
+export const PRISON_COVER = 176;
+
 /**
  * One past the highest tile type value above — the length of any array indexed
  * by tile type. Bump this when a new tile type exceeds it.
  */
-export const TILE_TYPE_COUNT = 174;
+export const TILE_TYPE_COUNT = 177;
 
 /**
  * Variant indices (row * 10 + col) from the modern_decorations sprite sheet

@@ -1,4 +1,5 @@
 import { boneScatterVariant, propVariantIndex } from '../dungeon/propVariants';
+import { drawStealthGateBase, drawStealthGatePortcullis } from './stealthGateTiles';
 import { themedPropLookFrame, themedPropSpriteKey } from '../../sprites/breakablePropSprites';
 import { BRAZIER_FLAME_FRAMES, FLAME_FRAMES } from '../../sprites/art/destructiblePropArt';
 import type { FenceStyle, TileContent } from '../tileTypes';
@@ -64,6 +65,8 @@ import {
   HOLLOW_PROP_TALL,
   HOLLOW_PALISADE,
   HOLLOW_GATE,
+  STEALTH_GATE_CLOSED,
+  STEALTH_GATE_OPEN,
   ROCK_DEPOSIT,
   CIRCUS_STRUCTURE_TALL,
   CIRCUS_STRUCTURE_LOW,
@@ -2059,6 +2062,10 @@ export function drawDecorationTile(
   if (drawCellarPropTile(ctx, structure, type, sx, sy, ts, tx, ty, baseOnly)) return true;
   if (baseOnly) {
     switch (type) {
+      case STEALTH_GATE_CLOSED:
+      case STEALTH_GATE_OPEN:
+        drawStealthGateBase(ctx, structure, type === STEALTH_GATE_OPEN, sx, sy, ts, tx, ty);
+        return true;
       case TENT_POLE:
         drawTentPoleBaseTile(ctx, structure, sx, sy, ts, tx, ty);
         return true;
@@ -2662,6 +2669,11 @@ export function drawDecorationTile(
     }
     case HOLLOW_GATE: {
       drawHollowGateTile(ctx, structure, sx, sy, ts, tx, ty);
+      return true;
+    }
+    case STEALTH_GATE_CLOSED:
+    case STEALTH_GATE_OPEN: {
+      drawStealthGatePortcullis(ctx, structure, type === STEALTH_GATE_OPEN, sx, sy, ts, tx, ty);
       return true;
     }
     case HOLLOW_PROP_LOW:

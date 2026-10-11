@@ -2138,6 +2138,13 @@ export class DefendQuestSystem implements GameSystem {
     this.audienceAbsenceFrames = snapshot.audienceAbsenceFrames;
     this.encounterAborted = snapshot.encounterAborted;
     this.questMobs = [...snapshot.questMobs];
+    // A scene rebuilt around a held floor hands this system the bugs another
+    // instance spawned, still reporting their blows on the boards to it.
+    for (const bug of this.questMobs) {
+      if (bug.onBarrierAttack !== null) {
+        bug.onBarrierAttack = (target, damage) => this.damageBarrier(target, damage, bug);
+      }
+    }
 
     // The map's own checkpoint carries the doorway too, but the quest's phase
     // is the authority on what is happening in the room, so the two are

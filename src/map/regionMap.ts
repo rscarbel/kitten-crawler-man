@@ -9,7 +9,15 @@ import { roomDoorways, type Point, type Rect, type RoomDoorway } from './roomDoo
  * {@link RegionMap}) asks the room what it is.
  */
 export type RoomRole =
-  'start' | 'safe' | 'boss' | 'quest' | 'spider_lab' | 'bathroom' | 'chain' | 'regular';
+  | 'start'
+  | 'safe'
+  | 'boss'
+  | 'quest'
+  | 'spider_lab'
+  | 'bathroom'
+  | 'stealth_gate'
+  | 'chain'
+  | 'regular';
 
 /**
  * How deep into the floor a point lies, by straight-line distance from the

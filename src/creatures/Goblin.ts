@@ -59,11 +59,11 @@ export const GOBLIN_PACK_KIND = 'goblin';
 /** How often a goblin off cooldown and in range commits to its heavy attack. */
 const HEAVY_ATTACK_CHANCE = 0.35;
 /**
- * How far the sheets overhang the goblin's own tile.
+ * How far the painted cells overhang the goblin's own tile.
  *
- * Measured from the baked frames: the tallest is the war hammer's, whose frame
- * is 208 px against a 64-px tile with the anchor 155 px down, so the art reaches
- * ~1.4 tiles above the tile and ~1.2 to either side. Without the override a
+ * Measured off the painted frames: the war hammer hauled overhead reaches about
+ * half a tile above its tile and its swing about half a tile past either side,
+ * and 1.5 keeps a margin over both. Without the override a
  * goblin mid-swing pops in at the screen edge with its hammer already visible.
  */
 const GOBLIN_CULL_MARGIN_TILES = 1.5;
@@ -81,13 +81,13 @@ const GOBLIN_TACTICS: readonly TacticsTrait[] = ['flank', 'block', 'kite', 'regr
 
 /** Drawn only in profile, so facing the camera it still shows that profile. */
 export const GOBLIN_EYES: EyePlacement = {
-  sideForward: 0.13,
-  sideHeight: 0.3,
-  sideSpacing: 0.05,
+  sideForward: 0.23,
+  sideHeight: 0.31,
+  sideSpacing: 0.08,
   frontMirrors: true,
-  frontAcross: 0.13,
-  frontHeight: 0.3,
-  frontSpacing: 0.05,
+  frontAcross: 0.23,
+  frontHeight: 0.31,
+  frontSpacing: 0.08,
 };
 
 export class Goblin extends Mob {
@@ -270,9 +270,23 @@ export class Goblin extends Mob {
     if (this.attackCooldown > 0) this.attackCooldown--;
     if (this.attackAnimTimer > 0) this.attackAnimTimer--;
     this.resolvePendingImpact(target);
+  }
+
+  /**
+   * The animator runs here, not in `updateAI`, because the mob loop skips
+   * `updateAI` on a frame a siege directive or a trebuchet threat claims — and
+   * a goblin marched on those frames would glide on frozen legs.
+   */
+  override tickTimers(): void {
+    super.tickTimers();
     if (this.hp < this.previousHp && this.attackAnimTimer === 0) this.animator.startFlinch();
     this.previousHp = this.hp;
-    this.animator.tick(this.isMoving, this.attackAnimTimer > 0, SECONDS_PER_FRAME);
+    this.animator.tick(
+      this.isMoving,
+      this.attackAnimTimer > 0,
+      SECONDS_PER_FRAME,
+      this.ownStridePx,
+    );
   }
 
   private canStrike(target: Player, distance: number): boolean {
@@ -443,7 +457,6 @@ export class Goblin extends Mob {
         : null;
     const resolved = this.animator.resolve(
       performance.now() / MILLISECONDS_PER_SECOND,
-      this.walkFrame,
       this.isMoving,
       attack,
     );

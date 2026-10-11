@@ -62,8 +62,11 @@ const DECORATION_WEIGHT = 1;
 
 const COMPLETE = 1;
 
+/** What the arrival bakes the ground through: the floor's map, or a room's own ground painter. */
+export type ArrivalGroundArt = Pick<GameMap, 'bakeTileArtForView' | 'bakeDecorationArtForView'>;
+
 export interface FloorArrivalLoadDeps {
-  readonly gameMap: GameMap;
+  readonly gameMap: ArrivalGroundArt;
   /** Top-left of the camera the first frame of play will draw from, in world px. */
   readonly camera: () => { readonly x: number; readonly y: number };
   /** The viewport the first frame of play will draw, in CSS px. */

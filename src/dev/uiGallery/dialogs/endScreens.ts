@@ -24,6 +24,7 @@ import { deathScreenSurface } from '../../../ui/screens/dialogs/deathScreen';
 import { LevelCompleteScreen } from '../../../ui/screens/dialogs/LevelCompleteScreen';
 import { questRewardSurface } from '../../../ui/screens/dialogs/questRewardScreen';
 import { RunCompleteScreen, type RunSummary } from '../../../ui/screens/dialogs/RunCompleteScreen';
+import { screenFadeSurface } from '../../../ui/ScreenFade';
 import type { DialogFixture, FixtureRig } from './fixture';
 
 /** Render frames that carry the death fade to full and the button live. */
@@ -41,6 +42,9 @@ const QUEST_REWARD_SETTLED_FRAMES = 160;
 const CHEST_OPENING_TICKS = 12;
 const CHEST_OPENED_TICKS = 42;
 const FRAMES_PER_SECOND = 60;
+/** The full-screen fade halfway down, and fully black. */
+const FADE_HALF_ALPHA = 0.5;
+const FADE_BLACK_ALPHA = 1;
 const PLAYED_MINUTES = 197;
 const SECONDS_PER_MINUTE = 60;
 
@@ -217,7 +221,16 @@ function chestFixture(
   };
 }
 
+function fadeFixture(name: string, alpha: number): DialogFixture {
+  return {
+    name,
+    surfaces: (shown) => [gated(shown, screenFadeSurface(name, { alpha: () => alpha }))],
+  };
+}
+
 export const FIXTURES: readonly DialogFixture[] = [
+  fadeFixture('screen-fade-half', FADE_HALF_ALPHA),
+  fadeFixture('screen-fade-black', FADE_BLACK_ALPHA),
   deathFixture('death', 'A goblin stabbed you. Repeatedly. With enthusiasm.', 'checkpoint'),
   deathFixture(
     'death-long-explanation',

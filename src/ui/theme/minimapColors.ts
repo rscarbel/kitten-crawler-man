@@ -73,6 +73,8 @@ export const MINIMAP_MARKER_COLORS = {
   companion: '#60a5fa',
   player: '#4ade80',
   pet: '#f0abfc',
+  /** What the room is built around (the prison's key): a gold diamond, apart from the round exit dots. */
+  objective: '#fde047',
   /** The dark edge round a marker drawn over busy art. */
   outline: '#000000',
 } as const;

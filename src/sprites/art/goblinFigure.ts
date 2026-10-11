@@ -31,10 +31,13 @@ import {
   easeIn,
   easeInOut,
   easeOut,
+  farArmSpan,
+  hipJointOffset,
   hump,
   lerp,
   pt,
   restingPose,
+  buildSkeleton,
   seededNoise,
   shoulderHeight,
   type GoblinArchetype,
@@ -75,7 +78,7 @@ export interface RowSpec {
  */
 export const ROWS: readonly RowSpec[] = [
   { name: 'walk', frameCount: 12, kind: 'loop' },
-  { name: 'idle', frameCount: 12, kind: 'loop' },
+  { name: 'idle', frameCount: 16, kind: 'loop' },
   { name: 'idle_break', frameCount: 18, kind: 'oneShot' },
   { name: 'attack_light', frameCount: 14, kind: 'oneShot' },
   { name: 'attack_heavy', frameCount: 18, kind: 'oneShot' },
@@ -140,24 +143,38 @@ function impactProgress(archetype: GoblinArchetype, kind: 'light' | 'heavy'): nu
 const CONTACT_FRACTION = 0.62;
 /** Two footfalls per cycle, so the pelvis rises twice as fast as it strides. */
 const BOB_PER_CYCLE = 2;
-/** Ears trail the head by this fraction of a cycle. */
-const EAR_LAG_PHASE = 2 / 12;
+/** Ears trail the head by this many frames of the walk row. */
+const EAR_LAG_FRAMES = 2;
+const EAR_LAG_PHASE = EAR_LAG_FRAMES / rowByName('walk').frameCount;
 
 interface GaitConfig {
   /** Half the distance between the forward and rear extremes of a stride. */
   readonly stride: number;
   readonly lift: number;
   readonly bob: number;
-  readonly sway: number;
   readonly leanSwing: number;
   /** Forward/back travel of the free hand as it counter-swings the legs. */
   readonly armSwing: number;
   /** The weapon arm swings less: the weapon's mass damps it. */
   readonly weaponArmDamping: number;
-  /** Knees splay outward; this is how far the foot tracks outside the hip. */
-  readonly splay: number;
   /** A bird-like forward-and-back head bob, not an up-and-down one. */
   readonly headLead: number;
+}
+
+/**
+ * Ground one walk cycle covers, in tiles, for a gait drawn at `drawScale`: a
+ * planted foot travels the whole stride, twice its half-stride, during the
+ * contact share of the cycle. The runtime advances the cycle by ground actually
+ * covered at this rate, which is the only pacing that keeps a planted foot
+ * still on the floor.
+ */
+function groundPerCycleTiles(gait: GaitConfig, drawScale: number): number {
+  return (2 * gait.stride * drawScale) / CONTACT_FRACTION;
+}
+
+/** Ground one of an archetype's walk cycles covers, in tiles. */
+export function goblinWalkGroundPerCycleTiles(archetype: GoblinArchetype): number {
+  return groundPerCycleTiles(GAITS[archetype], ARCHETYPE_SCALE[archetype]);
 }
 
 /** Where a foot sits at `phase` (0–1) of its own stride cycle. */
@@ -178,47 +195,39 @@ function footTarget(phase: number, config: GaitConfig): Pt {
 
 const GAITS: Record<GoblinArchetype, GaitConfig> = {
   sword: {
-    stride: 0.32,
+    stride: 0.34,
     lift: 0.13,
     bob: 0.055,
-    sway: 0.042,
     leanSwing: deg(3),
     armSwing: 0.24,
     weaponArmDamping: 0.45,
-    splay: 0.03,
     headLead: 0.035,
   },
   axe: {
-    stride: 0.26,
+    stride: 0.32,
     lift: 0.105,
     bob: 0.062,
-    sway: 0.046,
     leanSwing: deg(3.5),
     armSwing: 0.2,
     weaponArmDamping: 0.3,
-    splay: 0.045,
     headLead: 0.03,
   },
   mace: {
-    stride: 0.23,
+    stride: 0.3,
     lift: 0.095,
     bob: 0.078,
-    sway: 0.063,
     leanSwing: deg(4),
     armSwing: 0.19,
     weaponArmDamping: 0.5,
-    splay: 0.055,
     headLead: 0.026,
   },
   warhammer: {
-    stride: 0.25,
+    stride: 0.32,
     lift: 0.088,
     bob: 0.086,
-    sway: 0.075,
     leanSwing: deg(3),
     armSwing: 0.15,
     weaponArmDamping: 0.2,
-    splay: 0.06,
     headLead: 0.02,
   },
   // The longest stride in the set: this one is not scuttling in to swing at
@@ -227,14 +236,12 @@ const GAITS: Record<GoblinArchetype, GaitConfig> = {
   // figure on a conveyor — a stride needs the hips to rise and fall, or nothing
   // about it lands.
   bow: {
-    stride: 0.42,
+    stride: 0.36,
     lift: 0.15,
-    bob: 0.1,
-    sway: 0.05,
+    bob: 0.07,
     leanSwing: deg(3),
     armSwing: 0.3,
     weaponArmDamping: 0.6,
-    splay: 0.022,
     headLead: 0.045,
   },
 };
@@ -384,6 +391,30 @@ function gripFarHand(prop: GoblinProp, nearHand: Pt, weaponAngle: number, fallba
   return along(nearHand, weaponAngle, prop.offGripDistance);
 }
 
+/**
+ * How much higher a walking goblin carries its weapon than a standing one, in
+ * tile units: clear of the knees and the floor, riding across the body.
+ */
+const WALK_CARRY_LIFT = 0.16;
+/**
+ * How much lower a walking goblin carries its hips than a standing one, in
+ * tile units: the sneaking crouch, and the bend that lets a short leg reach a
+ * long stride without straightening at contact.
+ */
+const WALK_CROUCH = 0.06;
+/** How far each hand rises at the ends of its swing, as a share of the swing. */
+const ARM_SWING_RISE = 0.2;
+/** How far the ears trail the head's bob, in radians at the top of each bounce. */
+const WALK_EAR_LAG = deg(-8);
+/**
+ * The free arm's swing as a share of the gait's. It hangs from the far shoulder
+ * behind the body, so its back-swing is the only half the camera sees, and at
+ * the gait's full swing that half stuck out behind like a reaching arm.
+ */
+const FREE_ARM_SWING_SHARE = 0.7;
+/** The head nods with each step by this much. */
+const WALK_HEAD_NOD = deg(2);
+
 function walkPose(
   archetype: GoblinArchetype,
   style: GoblinStyle,
@@ -393,125 +424,101 @@ function walkPose(
   const rest = restingPose(style);
   const gait = GAITS[archetype];
   const swingAngle = phase * FULL_CYCLE;
-  const armPhase = Math.sin(swingAngle);
+  // Phase 0 is the near foot's contact, where the near leg is furthest forward:
+  // a cosine puts the far arm furthest forward on that same frame and the
+  // weapon arm furthest back, which is where opposite arms peak in a real gait.
+  const armSwing = Math.cos(swingAngle);
+  const stepBounce = 0.5 - 0.5 * Math.cos(swingAngle * BOB_PER_CYCLE);
   const near = footTarget(phase, gait);
   const far = footTarget(phase + 0.5, gait);
+  // Lowest on each contact frame and highest at mid-stance, as the hips vault
+  // over the planted leg.
+  const bob = WALK_CROUCH - gait.bob * stepBounce;
 
-  // A walking goblin carries its weapon clear of the floor; only a standing one
-  // rests the head on it. Without this lift the axe ploughs a furrow.
-  const WALK_CARRY_LIFT = 0.12;
-  /**
-   * The carried weapon rises and falls with the hips, twice per stride.
-   *
-   * Small on purpose: the hand is already swinging fore-and-aft on a once-per
-   * -stride sine, and a large second-harmonic bob on top of it makes the tip
-   * lurch where the two are in phase.
-   */
-  const WEAPON_BOB = 0.022;
   const carry = carryHand(archetype, style);
   const nearHand: Pt = {
-    x: carry.x - armPhase * gait.armSwing * gait.weaponArmDamping,
+    x: carry.x - armSwing * gait.armSwing * gait.weaponArmDamping,
     y:
       carry.y -
-      WALK_CARRY_LIFT -
-      Math.abs(armPhase) * gait.armSwing * 0.18 -
-      WEAPON_BOB * Math.cos(swingAngle * BOB_PER_CYCLE),
+      WALK_CARRY_LIFT +
+      bob -
+      Math.abs(armSwing) * gait.armSwing * gait.weaponArmDamping * ARM_SWING_RISE,
   };
   const weaponAngle = carryAngleFor(archetype, style, prop, nearHand.y);
   const freeHand: Pt = {
-    x: rest.farHand.x + armPhase * gait.armSwing,
-    y: rest.farHand.y - Math.abs(armPhase) * gait.armSwing * 0.22,
+    x: rest.farHand.x + armSwing * gait.armSwing * FREE_ARM_SWING_SHARE,
+    y: rest.farHand.y + bob - Math.abs(armSwing) * gait.armSwing * ARM_SWING_RISE,
   };
 
   return {
     ...rest,
-    bob: -gait.bob * (0.5 - 0.5 * Math.cos(swingAngle * BOB_PER_CYCLE)),
-    sway: gait.sway * Math.sin(swingAngle),
-    lean: gait.leanSwing * Math.sin(swingAngle * BOB_PER_CYCLE),
-    // Knees splay outward, which is what makes the gait bandy rather than a march.
-    nearFoot: { x: near.x + gait.splay, y: near.y },
-    farFoot: { x: far.x - gait.splay, y: far.y },
+    bob,
+    lean: gait.leanSwing * (1 - stepBounce),
+    // Each leg strides about its own hip joint, or the leg whose hip sits
+    // behind reaches further forward and straightens at contact.
+    nearFoot: { x: near.x + hipJointOffset(style.proportions), y: near.y },
+    farFoot: { x: far.x - hipJointOffset(style.proportions), y: far.y },
     nearHand,
     farHand: gripFarHand(prop, nearHand, weaponAngle, freeHand),
     weaponAngle,
-    headLead: gait.headLead * Math.sin(swingAngle * BOB_PER_CYCLE + Math.PI / 3),
-    earLag: deg(-14) * Math.sin((phase - EAR_LAG_PHASE) * FULL_CYCLE * BOB_PER_CYCLE),
-    headTilt: -armPhase * deg(2.5),
+    headLead: gait.headLead * (1 - stepBounce),
+    headTilt: WALK_HEAD_NOD * (1 - stepBounce),
+    earLag: WALK_EAR_LAG * Math.cos((phase - EAR_LAG_PHASE) * FULL_CYCLE * BOB_PER_CYCLE),
     eyeOpen: 1,
   };
 }
 
 // ── Idle ─────────────────────────────────────────────────────────────────────
 
+/**
+ * The idle is one slow breath and nothing else that moves the body.
+ *
+ * Every amplitude here is a fraction of a screen pixel at the 32-px tile, and
+ * that is the point: a goblin that bobs, rocks and rolls its head on top of the
+ * breath reads as a jitter at in-game size, however smooth the sine under it.
+ * The only beats on top are a one-frame blink and one slow ear flick a cycle.
+ */
 interface IdleConfig {
-  readonly breathDepth: number;
-  readonly bob: number;
-  /** A slow weight shift from one foot to the other, once per loop. */
-  readonly weightShift: number;
-  readonly headRoll: number;
-  /** Frame of the loop the two-frame blink starts on. */
+  /** Frame of the loop the blink lands on. */
   readonly blinkFrame: number;
-  /** Frame the ear twitch starts on; deliberately not the blink's. */
-  readonly twitchFrame: number;
+  /**
+   * Frame the slow ear flick starts on; deliberately far from the blink. The
+   * flick must end inside the loop, `earFlickFrame + EAR_FLICK_FRAMES` at most
+   * the row's frame count: one that wraps lands on frame 0, the rest pose every
+   * one-shot hands back to.
+   */
+  readonly earFlickFrame: number;
 }
 
 const IDLES: Record<GoblinArchetype, IdleConfig> = {
-  sword: {
-    breathDepth: 0.075,
-    bob: 0.055,
-    weightShift: 0.085,
-    headRoll: deg(4),
-    blinkFrame: 3,
-    twitchFrame: 8,
-  },
-  axe: {
-    breathDepth: 0.09,
-    bob: 0.05,
-    weightShift: 0.07,
-    headRoll: deg(3),
-    blinkFrame: 7,
-    twitchFrame: 2,
-  },
-  mace: {
-    breathDepth: 0.12,
-    bob: 0.065,
-    weightShift: 0.1,
-    headRoll: deg(5),
-    blinkFrame: 5,
-    twitchFrame: 10,
-  },
-  warhammer: {
-    breathDepth: 0.115,
-    bob: 0.075,
-    weightShift: 0.06,
-    headRoll: deg(2),
-    blinkFrame: 9,
-    twitchFrame: 4,
-  },
-  // Deeper than it looks it should be. At 0.07/0.045 the idle moved about two
-  // pixels across its whole loop and read as a still frame; the archer is the
-  // one goblin a player stands and watches, so its idle has to breathe.
-  bow: {
-    breathDepth: 0.16,
-    bob: 0.105,
-    weightShift: 0.15,
-    headRoll: deg(9),
-    blinkFrame: 1,
-    twitchFrame: 6,
-  },
+  sword: { blinkFrame: 5, earFlickFrame: 11 },
+  axe: { blinkFrame: 9, earFlickFrame: 2 },
+  mace: { blinkFrame: 7, earFlickFrame: 11 },
+  warhammer: { blinkFrame: 12, earFlickFrame: 4 },
+  bow: { blinkFrame: 3, earFlickFrame: 9 },
 };
 
-/** A blink is two frames of a twelve-frame loop; any longer reads as a doze. */
-/** The head's fore-and-aft drift, as a multiple of the idle bob. */
-const IDLE_HEAD_LEAD = 1.4;
-/** The head rolls twice per breath, so the two never lock into one motion. */
-const HEAD_ROLL_PER_CYCLE = 2;
-const BLINK_FRAMES = 2;
-const TWITCH_FRAMES = 3;
+/** How far the torso swells on the in-breath, as a share of its length. */
+const BREATH_SWELL = 0.02;
+/** How far the hips settle on the out-breath, in tile units. */
+const BREATH_SETTLE = 0.006;
+/** How far the head lifts on the in-breath. */
+const BREATH_HEAD_LIFT = deg(0.75);
+/** How far the hands ride up with the shoulders on the in-breath, in tile units. */
+const BREATH_HAND_RISE = 0.008;
+/** How far the ear droops at the bottom of its flick. */
+const EAR_FLICK = deg(-6);
+/** Frames the ear flick takes from rest, through its droop, back to rest. */
+const EAR_FLICK_FRAMES = 5;
+const BLINK_FRAMES = 1;
 
+/**
+ * A 0→1→0 envelope of `length` frames starting at `start`, eased at both ends
+ * so the beat grows out of the loop and settles back into it.
+ */
 function windowedAt(frame: number, start: number, length: number, frameCount: number): number {
   const since = (frame - start + frameCount) % frameCount;
-  return since < length ? hump((since + 0.5) / length) : 0;
+  return since < length ? smoothHump((since + 0.5) / length) : 0;
 }
 
 function idlePose(
@@ -523,44 +530,28 @@ function idlePose(
 ): GoblinPose {
   const rest = restingPose(style);
   const config = IDLES[archetype];
-  const phase = cyclePhase(frame, frameCount);
-  const breath = Math.sin(phase * FULL_CYCLE);
-  /**
-   * The weight shift, phased so it is **zero at frame 0**.
-   *
-   * Every one-shot row ends by handing back to idle frame 0, so any field that
-   * is non-zero there is a pop on every swing, blink and flinch. A raw
-   * `sin(θ − π/2)` sits at −1 on frame 0. Offsetting it makes the goblin lean
-   * onto one foot and back rather than rocking between them, which is what a
-   * bored scavenger does anyway.
-   */
-  const shift = (Math.sin(phase * FULL_CYCLE - Math.PI / 2) + 1) / 2;
+  // Zero at frame 0, because every one-shot row hands back to idle frame 0 and
+  // anything non-zero there is a pop at the end of every swing and flinch.
+  const breath = Math.sin(cyclePhase(frame, frameCount) * FULL_CYCLE);
   const blink = windowedAt(frame, config.blinkFrame, BLINK_FRAMES, frameCount);
-  const twitch = windowedAt(frame, config.twitchFrame, TWITCH_FRAMES, frameCount);
+  const earFlick = windowedAt(frame, config.earFlickFrame, EAR_FLICK_FRAMES, frameCount);
 
   const carry = carryHand(archetype, style);
-  const nearHand: Pt = { x: carry.x, y: carry.y - config.bob * breath };
+  const nearHand: Pt = { x: carry.x, y: carry.y - BREATH_HAND_RISE * breath };
   const weaponAngle = carryAngleFor(archetype, style, prop, nearHand.y);
 
   return {
     ...rest,
-    bob: config.bob * breath,
-    sway: config.weightShift * shift,
-    torsoSquash: 1 + config.breathDepth * breath,
+    bob: -BREATH_SETTLE * breath,
+    torsoSquash: 1 + BREATH_SWELL * breath,
     nearHand,
     farHand: gripFarHand(prop, nearHand, weaponAngle, {
       x: rest.farHand.x,
-      y: rest.farHand.y + config.bob * breath * 0.6,
+      y: rest.farHand.y - BREATH_HAND_RISE * breath,
     }),
     weaponAngle,
-    // The head leads and trails the breath rather than only rolling, so an idle
-    // goblin looks like it is looking around rather than like a still frame.
-    headTilt: config.headRoll * Math.sin(phase * FULL_CYCLE * HEAD_ROLL_PER_CYCLE),
-    // Phased to be zero at frame 0, because every one-shot row hands back to
-    // idle frame 0 and a non-zero value there is a pop on every single swing.
-    headLead: config.bob * IDLE_HEAD_LEAD * Math.sin(phase * FULL_CYCLE),
-    lean: deg(-2) * breath,
-    earLag: deg(-18) * twitch,
+    headTilt: -BREATH_HEAD_LIFT * breath,
+    earLag: EAR_FLICK * earFlick,
     eyeOpen: 1 - blink,
   };
 }
@@ -580,8 +571,91 @@ function smoothHump(t: number): number {
 }
 
 /**
- * The occasional flourish that gives each archetype its personality. Every one
- * starts and ends on the idle pose, so it can be dropped on top of the loop.
+ * A 0→1 ramp over the opening `rampShare` of a beat, a hold, and a 1→0 ramp
+ * over its closing `rampShare`, eased at every corner.
+ */
+function plateau(progress: number, rampShare: number): number {
+  const rampIn = easeInOut(clamp01(progress / rampShare));
+  const rampOut = easeInOut(clamp01((progress - (1 - rampShare)) / rampShare));
+  return rampIn * (1 - rampOut);
+}
+
+/** Share of a fidget spent reaching into it, and again easing out of it. */
+const FIDGET_RAMP = 0.4;
+/**
+ * Where the fist sits on a planted sword's pommel, from its carry, in tile
+ * units: forward and up, so the blade stands steeply with its point on the
+ * floor.
+ */
+const PLANTED_POMMEL_FORWARD = 0.1;
+const PLANTED_POMMEL_RISE = 0.22;
+/** How far the stretching fist reaches above the far shoulder, in far-arm spans. */
+const STRETCH_REACH = 0.95;
+/** How far back of the shoulder the stretch leans, in far-arm spans. */
+const STRETCH_BACK = 0.15;
+const SNIFFS = 3;
+const SNIFF_PUSH = 0.014;
+/** How far a goblin lets its weapon sag while its attention is elsewhere. */
+const FIDGET_WEAPON_SAG = 0.02;
+
+/**
+ * Each archetype's fidget, at its fullest: lengths in tile units, the rest
+ * angles, eye closure and mouth opening as shares of shut and of a full gape.
+ */
+const SWORD_FIDGET = {
+  lean: deg(4),
+  headRoll: deg(10),
+  earRoll: deg(-10),
+  eyeClose: 0.5,
+  mouthOpen: 0.15,
+} as const;
+const AXE_FIDGET = {
+  crouch: 0.008,
+  chinUp: deg(-7),
+  noseReach: 0.02,
+  earsBack: deg(-12),
+  eyeClose: 0.3,
+  sniffMouth: 0.1,
+} as const;
+const MACE_FIDGET = {
+  /** The yawn starts this far into the fidget and lasts this share of it. */
+  yawnStart: 0.2,
+  yawnLength: 0.6,
+  leanBack: deg(-4),
+  chestSwell: 0.04,
+  headBack: deg(-14),
+  earsUp: deg(14),
+  eyeClose: 0.85,
+} as const;
+const WARHAMMER_FIDGET = {
+  shoulderSwell: 0.04,
+  headRoll: deg(12),
+  headReach: 0.025,
+  earRoll: deg(-12),
+  eyeClose: 0.6,
+  mouthOpen: 0.25,
+} as const;
+const BOW_FIDGET = {
+  /** The pluck takes the opening share of the fidget; the scan starts partway through it. */
+  pluckLength: 0.6,
+  scanStart: 0.35,
+  scanLength: 0.65,
+  pluckForward: 0.1,
+  /** How far the thumb rises up the string, as a share of the whole arm. */
+  pluckRise: 0.25,
+  pluckHeadTilt: deg(6),
+  scanHeadTilt: deg(8),
+  pluckHeadLead: 0.02,
+  scanEars: deg(12),
+} as const;
+
+/**
+ * The occasional fidget that gives each archetype its personality.
+ *
+ * Every one is unmistakably *not* an attack: the weapon stays at its carry,
+ * sagging if anything, and never comes up or points forward, so the attack
+ * telegraphs keep their meaning. Every one starts and ends on idle frame 0, so
+ * it can be dropped on top of the loop.
  */
 function idleBreakPose(
   archetype: GoblinArchetype,
@@ -589,132 +663,108 @@ function idleBreakPose(
   prop: GoblinProp,
   progress: number,
 ): GoblinPose {
-  const rest = restingPose(style);
+  const p = style.proportions;
   const base = idlePose(archetype, style, prop, 0, rowByName('idle').frameCount);
-  const carry = carryHand(archetype, style);
-  // A single 0→1→0 hump, so the break always returns to where idle frame 0 is.
-  const swell = smoothHump(progress);
-  const armLength = style.proportions.upperArmLength + style.proportions.forearmLength;
+  const skeleton = buildSkeleton(style, base);
+  const into = plateau(progress, FIDGET_RAMP);
+  const sagged: Pt = { x: base.nearHand.x, y: base.nearHand.y + FIDGET_WEAPON_SAG * into };
+  const saggedAngle = carryAngleFor(archetype, style, prop, sagged.y);
+  const carried = {
+    nearHand: sagged,
+    weaponAngle: saggedAngle,
+    farHand: gripFarHand(prop, sagged, saggedAngle, base.farHand),
+  };
 
   switch (archetype) {
     case 'sword': {
-      // Raises the blade to thumb the edge and levels the point forward in one
-      // continuous gesture, then lowers it.
-      //
-      // Splitting this into two beats with a gap between them stalls the blade
-      // for a frame and then makes it leap — a spacing cliff rather than a
-      // pause. One envelope cannot stall.
-      const raise = smoothHump(progress);
-      const LEVELLED_ANGLE = deg(-6);
-      const nearHand: Pt = {
-        x: lerp(carry.x, carry.x + armLength * 0.3, raise),
-        y: lerp(carry.y, -shoulderHeight(style.proportions) * 0.82, raise),
+      // Plants its point on the floor, leans on the pommel and rolls its neck.
+      // The blade only ever turns further down from its carry.
+      const leaning: Pt = {
+        x: lerp(base.nearHand.x, base.nearHand.x + PLANTED_POMMEL_FORWARD, into),
+        y: lerp(base.nearHand.y, base.nearHand.y - PLANTED_POMMEL_RISE, into),
       };
+      const roll = Math.sin(clamp01((progress - FIDGET_RAMP) / (1 - 2 * FIDGET_RAMP)) * FULL_CYCLE);
       return {
         ...base,
-        nearHand,
-        weaponAngle: lerp(carryAngleFor(archetype, style, prop, nearHand.y), LEVELLED_ANGLE, raise),
-        farHand: {
-          x: rest.farHand.x - 0.05 * raise,
-          y: rest.farHand.y - armLength * 0.16 * raise,
-        },
-        lean: deg(-4) * raise,
-        headTilt: deg(-8) * raise,
-        headLead: 0.03 * raise,
-        mouthOpen: raise * 0.7,
-        eyeOpen: 1,
+        nearHand: leaning,
+        weaponAngle: groundLandingAngle(prop, leaning.y),
+        lean: SWORD_FIDGET.lean * into,
+        headTilt: SWORD_FIDGET.headRoll * roll * into,
+        earLag: SWORD_FIDGET.earRoll * roll * into,
+        eyeOpen: 1 - SWORD_FIDGET.eyeClose * into,
+        mouthOpen: SWORD_FIDGET.mouthOpen * into,
       };
     }
     case 'axe': {
-      // Hefts the axe up and lets it drop back into the palm, twice.
-      const HEFTS = 2;
-      const heft = smoothHump((progress * HEFTS) % 1) * swell;
-      const nearHand: Pt = {
-        x: carry.x + 0.09 * heft,
-        y: carry.y - armLength * 0.52 * heft,
-      };
-      const weaponAngle = carryAngleFor(archetype, style, prop, nearHand.y) - deg(26) * heft;
+      // Both fists are on the haft, so the fidget is all head: the chin comes
+      // up and the nose tests the air three times.
+      const sniff = (0.5 - 0.5 * Math.cos(progress * FULL_CYCLE * SNIFFS)) * into;
       return {
         ...base,
-        bob: -0.02 * heft,
-        nearHand,
-        weaponAngle,
-        farHand: gripFarHand(prop, nearHand, weaponAngle, rest.farHand),
-        headTilt: deg(8) * heft,
-        lean: deg(-7) * heft,
+        ...carried,
+        bob: base.bob - AXE_FIDGET.crouch * into,
+        headTilt: AXE_FIDGET.chinUp * into,
+        headLead: base.headLead + AXE_FIDGET.noseReach * into + SNIFF_PUSH * sniff,
+        earLag: AXE_FIDGET.earsBack * into,
+        eyeOpen: 1 - AXE_FIDGET.eyeClose * into,
+        mouthOpen: AXE_FIDGET.sniffMouth * sniff,
       };
     }
     case 'mace': {
-      // A lazy one-handed twirl beside the hip.
-      // Across the whole row, not 85% of it: clamping the twirl early parks the
-      // head for the last three frames while the hand keeps moving, which is a
-      // stall followed by a jump rather than a wind-down.
-      const twirl = easeInOut(progress) * FULL_CYCLE;
-      const nearHand: Pt = {
-        x: carry.x + 0.05 * swell,
-        y: carry.y - 0.06 * swell,
+      // Stretches the free arm up over its head and yawns.
+      const span = farArmSpan(p);
+      const overhead: Pt = {
+        x: skeleton.farShoulder.x - span * STRETCH_BACK,
+        y: skeleton.farShoulder.y - span * STRETCH_REACH,
       };
+      const yawn = smoothHump(clamp01((progress - MACE_FIDGET.yawnStart) / MACE_FIDGET.yawnLength));
       return {
         ...base,
-        nearHand,
-        weaponAngle: carryAngleFor(archetype, style, prop, nearHand.y) - twirl,
-        propBehind: Math.sin(twirl) < -0.2,
-        headTilt: deg(6) * swell,
-        mouthOpen: 0.3 * swell,
+        ...carried,
+        farHand: {
+          x: lerp(base.farHand.x, overhead.x, into),
+          y: lerp(base.farHand.y, overhead.y, into),
+        },
+        lean: MACE_FIDGET.leanBack * yawn,
+        torsoSquash: base.torsoSquash + MACE_FIDGET.chestSwell * yawn,
+        headTilt: MACE_FIDGET.headBack * yawn,
+        earLag: MACE_FIDGET.earsUp * yawn,
+        mouthOpen: yawn,
+        eyeOpen: 1 - MACE_FIDGET.eyeClose * yawn,
       };
     }
     case 'warhammer': {
-      // Shoulder roll, neck crack, spits.
-      const roll = smoothHump(clamp01(progress / 0.45));
-      const crack = smoothHump(clamp01((progress - 0.4) / 0.3));
-      const spit = smoothHump(clamp01((progress - 0.7) / 0.3));
-      const nearHand: Pt = {
-        x: carry.x + 0.07 * roll,
-        y: carry.y - 0.12 * roll,
-      };
-      const weaponAngle = carryAngleFor(archetype, style, prop, nearHand.y);
+      // Rolls its neck down, round and back up, and its shoulders with it.
+      const roll = Math.sin(progress * FULL_CYCLE) * into;
+      const shrug = smoothHump(progress);
       return {
         ...base,
-        torsoSquash: base.torsoSquash + 0.11 * roll,
-        lean: deg(-11) * roll + deg(14) * spit,
-        bob: base.bob - 0.05 * roll,
-        nearHand,
-        weaponAngle,
-        farHand: gripFarHand(prop, nearHand, weaponAngle, rest.farHand),
-        headTilt: deg(-26) * crack + deg(20) * spit,
-        headLead: 0.11 * spit - 0.05 * crack,
-        mouthOpen: spit,
-        earLag: deg(-22) * crack,
+        ...carried,
+        torsoSquash: base.torsoSquash + WARHAMMER_FIDGET.shoulderSwell * shrug,
+        headTilt: WARHAMMER_FIDGET.headRoll * roll,
+        headLead: base.headLead + WARHAMMER_FIDGET.headReach * roll,
+        earLag: WARHAMMER_FIDGET.earRoll * roll,
+        eyeOpen: 1 - WARHAMMER_FIDGET.eyeClose * into,
+        mouthOpen: WARHAMMER_FIDGET.mouthOpen * shrug,
       };
     }
     case 'bow': {
-      // Checks the string, then scans the room over one shoulder. Neither beat
-      // raises the bow: the flourish has to be unmistakably *not* an aim, or an
-      // idling archer reads as one about to shoot and the telegraph loses its
-      // meaning.
-      // Both envelopes span the whole row rather than a leading slice of it.
-      // Compressed into the first 40% the pluck would leave the idle pose at
-      // speed and the opening frames would jump — the same spacing cliff a
-      // leading-slice envelope produces anywhere in this rig.
-      const pluck = smoothHump(progress);
-      const scan = Math.sin(progress * Math.PI * SCAN_SWEEPS) * swell;
-      const nearHand: Pt = {
-        x: carry.x + 0.05 * pluck,
-        y: carry.y - armLength * 0.18 * pluck,
-      };
-      const weaponAngle = carryAngleFor(archetype, style, prop, nearHand.y) - deg(12) * pluck;
+      // Thumbs the string, then looks the room over once. Neither beat raises
+      // the bow: an idling archer must never read as one about to shoot.
+      const armLength = p.upperArmLength + p.forearmLength;
+      const pluck = smoothHump(clamp01(progress / BOW_FIDGET.pluckLength));
+      const scanProgress = clamp01((progress - BOW_FIDGET.scanStart) / BOW_FIDGET.scanLength);
+      const scan = Math.sin(scanProgress * FULL_CYCLE) * into;
       return {
         ...base,
-        nearHand,
-        weaponAngle,
+        ...carried,
         farHand: {
-          x: rest.farHand.x + 0.12 * pluck,
-          y: rest.farHand.y - armLength * 0.34 * pluck,
+          x: base.farHand.x + BOW_FIDGET.pluckForward * pluck,
+          y: base.farHand.y - armLength * BOW_FIDGET.pluckRise * pluck,
         },
-        lean: deg(-3) * pluck,
-        headTilt: deg(-14) * pluck + deg(18) * scan,
-        headLead: 0.04 * pluck - 0.03 * scan,
-        earLag: deg(24) * scan,
+        headTilt: BOW_FIDGET.pluckHeadTilt * pluck + BOW_FIDGET.scanHeadTilt * scan,
+        headLead: base.headLead + BOW_FIDGET.pluckHeadLead * pluck,
+        earLag: BOW_FIDGET.scanEars * scan,
         eyeOpen: 1,
       };
     }
@@ -734,6 +784,29 @@ function idleBreakPose(
 interface SwingSpec {
   /** Progress at which the wind is fully loaded. */
   readonly windEnd: number;
+  /**
+   * Progress the loaded pose is held until before the drive starts. The hold
+   * is the telegraph: the weapon creeps a little further back through it, so
+   * it reads as a coiled pause rather than a dropped frame.
+   */
+  readonly holdEnd: number;
+  /** How far the wound weapon creeps back through the hold, in radians. */
+  readonly holdCreep: number;
+  /** How deep the anticipation crouch sinks the hips, held until the drive. */
+  readonly crouch: number;
+  /**
+   * A point the fist bows through on its way to the wind, behind the hip, so
+   * the weapon turns up behind the body instead of in front of the face.
+   */
+  readonly windVia: Pt;
+  /** How far the strike drives the hips down into the blow. */
+  readonly impactBob: number;
+  /**
+   * How far the fist bows forward and up off the straight line mid-drive. A
+   * fist driven straight from behind the skull to the target passes through
+   * the face; the bow carries it round in front of it.
+   */
+  readonly driveArc: Pt;
   /** Progress the weapon connects on — always derived from the timing table. */
   readonly impactAt: number;
   /** Progress the follow-through has fully played out. */
@@ -782,20 +855,85 @@ function steppingFoot(
 
 const STEP_LIFT = 0.05;
 
-/** Head sweeps the archer's idle break makes while it looks the room over. */
-const SCAN_SWEEPS = 2;
+/**
+ * Progress by which a stepped foot is back on its rest mark. Short of the last
+ * frame's sample, so the last frame stands where idle frame 0 does and the
+ * hand-off to idle moves no foot.
+ */
+const STEP_HOME_BY = 0.95;
+/** How far into a swing's recovery its feet start home. */
+const STEP_HOME_FROM_SHARE = 0.3;
+
+/** A progress window: a step taken out, or a step taken home. */
+interface StepWindow {
+  readonly from: number;
+  readonly to: number;
+}
 
 /**
- * Elevation past which a weapon is over the goblin's own skull. Angles run 0
- * forward and negative upward.
+ * A foot that steps out over `out` and steps home again over `home`, moving
+ * only while it is off the ground. A foot left on its stepped mark at the end
+ * of a row jumps back to its rest mark on the first idle frame.
  */
-const OVERHEAD_FROM = deg(-45);
-/** Past here the weapon has swung all the way over and is descending in front. */
-const OVERHEAD_TO = deg(-235);
+function steppingOutAndHome(
+  base: number,
+  distance: number,
+  out: StepWindow,
+  home: StepWindow,
+  progress: number,
+  lift: number,
+): Pt {
+  if (progress < home.from) return steppingFoot(base, distance, out.from, out.to, progress, lift);
+  return steppingFoot(base + distance, -distance, home.from, home.to, progress, lift);
+}
+
+function lerpPt(from: Pt, to: Pt, t: number): Pt {
+  return { x: lerp(from.x, to.x, t), y: lerp(from.y, to.y, t) };
+}
+
+/** A point `t` of the way along the quadratic curve from `from` to `to` bowed toward `via`. */
+function quadraticAt(from: Pt, via: Pt, to: Pt, t: number): Pt {
+  return lerpPt(lerpPt(from, via, t), lerpPt(via, to, t), t);
+}
+
+/**
+ * The band of elevations in which a weapon points up over the goblin's own
+ * skull. Angles run 0 forward and negative upward; a weapon pointing back at
+ * about level is not overhead, it is behind the body.
+ */
+const OVERHEAD_FROM = deg(-80);
+const OVERHEAD_TO = deg(-160);
 
 function pointsOverhead(weaponAngle: number): boolean {
   return weaponAngle < OVERHEAD_FROM && weaponAngle > OVERHEAD_TO;
 }
+
+/**
+ * Where the head, ears and jaw sit at the end of each swing stage. They lag the
+ * torso, so nothing arrives at its extreme on the same frame as the body does.
+ */
+const SWING_HEAD_LAG = {
+  windTilt: deg(-10),
+  driveTilt: deg(12),
+  followTilt: deg(6),
+  windLead: -0.02,
+  driveLead: 0.05,
+  followLead: 0.02,
+  windEar: deg(16),
+  driveEar: deg(-26),
+  followEar: deg(-8),
+} as const;
+
+/** The share of the impact sway still held through the follow-through. */
+const SWING_FOLLOW_SWAY_SHARE = 0.5;
+/** The torso stays a touch stretched as the weapon carries past impact. */
+const SWING_FOLLOW_STRETCH = 1.02;
+/** The rear foot only shuffles back to brace, so it barely leaves the floor. */
+const REAR_BRACE_LIFT_SHARE = 0.4;
+/** The jaw opens a little in the wind-up and bares its fangs on the drive. */
+const SWING_WIND_SNARL = 0.4;
+/** How far the jaw closes again over the follow-through. */
+const SWING_FOLLOW_JAW_CLOSE = 0.5;
 
 function swingPose(
   archetype: GoblinArchetype,
@@ -809,7 +947,8 @@ function swingPose(
   const restAngle = carryAngleFor(archetype, style, prop, carry.y);
 
   const wind = easeInOut(clamp01(progress / spec.windEnd));
-  const drive = easeIn(clamp01((progress - spec.windEnd) / (spec.impactAt - spec.windEnd)));
+  const held = easeInOut(clamp01((progress - spec.windEnd) / (spec.holdEnd - spec.windEnd)));
+  const drive = easeIn(clamp01((progress - spec.holdEnd) / (spec.impactAt - spec.holdEnd)));
   const follow = easeOut(clamp01((progress - spec.impactAt) / (spec.followEnd - spec.impactAt)));
   /**
    * Where the recovery starts, as a fraction of the way from impact to the end
@@ -817,11 +956,9 @@ function swingPose(
    *
    * Not zero and not one. Back to back, `follow`'s ease-out and `recover`'s
    * ease-in are both flat at the boundary, so the weapon stalls for a frame and
-   * then leaps. Overlapping them by half, which was the first fix, cancelled
-   * most of the follow-through instead: the recovery was already hauling back
-   * while the swing was still travelling, and the tip barely moved past the hit.
-   * A late overlap keeps something moving at every frame *and* lets the strike
-   * carry well past contact before it is undone.
+   * then leaps; overlapped by half, the recovery cancels most of the
+   * follow-through. A late overlap keeps something moving on every frame and
+   * lets the strike carry past contact before it is undone.
    */
   const RECOVERY_OVERLAP = 0.82;
   const recoverStart = lerp(spec.impactAt, spec.followEnd, RECOVERY_OVERLAP);
@@ -839,22 +976,61 @@ function swingPose(
     y: stage(base.y, atWind.y, atImpact.y, atFollow.y),
   });
 
-  const nearHand = stagePt(carry, spec.windHand, spec.impactHand, spec.followHand);
-  const swungAngle = stage(restAngle, spec.windAngle, spec.impactAngle, spec.followAngle);
+  const loaded = held * (1 - drive);
+  const arcing = hump(drive) * (1 - follow);
+  const wound = quadraticAt(carry, spec.windVia, spec.windHand, wind);
+  const staged = lerpPt(
+    lerpPt(lerpPt(wound, spec.impactHand, drive), spec.followHand, follow),
+    carry,
+    recover,
+  );
+  const nearHand: Pt = {
+    x: staged.x + spec.driveArc.x * arcing,
+    y: staged.y + spec.driveArc.y * arcing,
+  };
+  const swungAngle =
+    lerp(
+      lerp(
+        lerp(lerp(restAngle, spec.windAngle, wind), spec.impactAngle, drive),
+        spec.followAngle,
+        follow,
+      ),
+      restAngle,
+      recover,
+    ) +
+    spec.holdCreep * loaded;
   const weaponAngle = Math.min(swungAngle, groundLandingAngle(prop, nearHand.y));
   const freeHand = stagePt(rest.farHand, spec.freeHandWind, spec.freeHandImpact, rest.farHand);
 
-  const stanceNear = rest.nearFoot.x;
-  const stanceFar = rest.farFoot.x;
+  const stepHome: StepWindow = {
+    from: lerp(recoverStart, 1, STEP_HOME_FROM_SHARE),
+    to: STEP_HOME_BY,
+  };
+  const coiled = wind * (1 - drive) * spec.crouch;
+  const slammed = drive * (1 - recover) * spec.impactBob;
 
   return {
     ...rest,
     lean: stage(0, spec.windLean, spec.impactLean, spec.followLean),
-    sway: stage(0, spec.windSway, spec.impactSway, spec.impactSway * 0.5),
-    torsoSquash: stage(1, spec.windSquash, spec.impactSquash, 1.02),
-    bob: stage(0, -0.02, 0.02, 0.01),
-    nearFoot: steppingFoot(stanceNear, spec.step, spec.stepFrom, spec.stepTo, progress, STEP_LIFT),
-    farFoot: steppingFoot(stanceFar, spec.rearBrace, 0, spec.windEnd, progress, STEP_LIFT * 0.4),
+    sway: stage(0, spec.windSway, spec.impactSway, spec.impactSway * SWING_FOLLOW_SWAY_SHARE),
+    torsoSquash: stage(1, spec.windSquash, spec.impactSquash, SWING_FOLLOW_STRETCH),
+    bob: coiled + slammed,
+    nearFoot: steppingOutAndHome(
+      rest.nearFoot.x,
+      spec.step,
+      { from: spec.stepFrom, to: spec.stepTo },
+      stepHome,
+      progress,
+      STEP_LIFT,
+    ),
+    farFoot: steppingOutAndHome(
+      rest.farFoot.x,
+      spec.rearBrace,
+      { from: 0, to: spec.windEnd },
+      stepHome,
+      progress,
+      STEP_LIFT * REAR_BRACE_LIFT_SHARE,
+    ),
     nearHand,
     farHand: gripFarHand(prop, nearHand, weaponAngle, freeHand),
     weaponAngle,
@@ -865,15 +1041,27 @@ function swingPose(
     // blade sitting on the scalp like a bucket.
     propBehind:
       progress >= spec.behindFrom && progress < spec.behindTo && !pointsOverhead(weaponAngle),
-    // Head, ears and jaw all lag the torso: nothing arrives at its extreme on
-    // the same frame as the body does.
-    headTilt: stage(0, deg(-12), deg(14), deg(8)),
-    headLead: stage(0, -0.02, 0.05, 0.02),
-    earLag: stage(0, deg(16), deg(-26), deg(-8)),
-    mouthOpen: Math.max(wind * 0.4, drive * (1 - follow * 0.5)),
+    headTilt: stage(
+      0,
+      SWING_HEAD_LAG.windTilt,
+      SWING_HEAD_LAG.driveTilt,
+      SWING_HEAD_LAG.followTilt,
+    ),
+    headLead: stage(
+      0,
+      SWING_HEAD_LAG.windLead,
+      SWING_HEAD_LAG.driveLead,
+      SWING_HEAD_LAG.followLead,
+    ),
+    earLag: stage(0, SWING_HEAD_LAG.windEar, SWING_HEAD_LAG.driveEar, SWING_HEAD_LAG.followEar),
+    mouthOpen: Math.max(wind * SWING_WIND_SNARL, drive * (1 - follow * SWING_FOLLOW_JAW_CLOSE)),
     eyeOpen: 1,
   };
 }
+
+/** How far the hips sink as the stab coils, and stay sunk into the lunge, in tile units. */
+const THRUST_COIL = 0.06;
+const THRUST_DRIVE_DROP = 0.04;
 
 /** Progress at which the stab's anticipation is fully loaded. */
 const THRUST_WIND_END = 0.32;
@@ -896,18 +1084,22 @@ function thrustPose(
   const shoulderY = -shoulderHeight(p);
   const WIND_END = THRUST_WIND_END;
   /**
-   * The recovery gets the back 42% of the row — six frames.
-   *
-   * Fewer than six recovery frames gives `easeInOut` a middle step several
-   * times its end steps: the blade snaps back to guard instead of retracting.
-   * Six frames keeps the steepest step inside 1.9× its neighbours.
+   * The lunge settles for one frame and the recovery takes the rest of the
+   * row, six frames and a half: held longer at full reach the stab reads as a
+   * pose, and with fewer than six recovery frames `easeInOut` gives a middle
+   * step several times its end steps, so the blade snaps back to guard
+   * instead of retracting.
    */
-  const SETTLE_END = 0.58;
+  const SETTLE_END = 0.53;
   const LEVELLED_ANGLE = deg(-3);
-  const LUNGE = 0.5;
+  const LUNGE = 0.28;
   const OVERSHOOT = 1.06;
   const PULL_BACK = 0.85;
 
+  const thrustHome: StepWindow = {
+    from: lerp(SETTLE_END, 1, STEP_HOME_FROM_SHARE),
+    to: STEP_HOME_BY,
+  };
   const wind = easeInOut(clamp01(progress / WIND_END));
   const driveRaw = clamp01((progress - WIND_END) / (impactAt - WIND_END));
   const drive = easeIn(driveRaw);
@@ -932,10 +1124,25 @@ function thrustPose(
     lean: (deg(-8) * wind + deg(18) * drive) * (1 - recover),
     sway: (-0.04 * wind + 0.09 * drive) * (1 - recover),
     torsoSquash: 1 + 0.03 * wind - 0.02 * drive,
-    nearFoot: steppingFoot(rest.nearFoot.x, LUNGE, WIND_END, impactAt, progress, STEP_LIFT * 0.8),
+    bob: (THRUST_COIL * wind * (1 - drive) + THRUST_DRIVE_DROP * drive) * (1 - recover),
+    nearFoot: steppingOutAndHome(
+      rest.nearFoot.x,
+      LUNGE,
+      { from: WIND_END, to: impactAt },
+      thrustHome,
+      progress,
+      STEP_LIFT * 0.8,
+    ),
     // The rear foot must leave the ground to brace back, or it is dragging
     // rather than stepping.
-    farFoot: steppingFoot(rest.farFoot.x, -0.1, 0, WIND_END, progress, STEP_LIFT * 0.35),
+    farFoot: steppingOutAndHome(
+      rest.farFoot.x,
+      -0.1,
+      { from: 0, to: WIND_END },
+      thrustHome,
+      progress,
+      STEP_LIFT * 0.35,
+    ),
     nearHand,
     // Off hand thrown back and out for balance.
     farHand: {
@@ -975,6 +1182,20 @@ const BOW_AIM_ANGLE = deg(-90);
  * motion actually works.
  */
 const BOW_RAISE_END = 0.5;
+/**
+ * How far each shot sits back into its draw. The aimed shot leans back
+ * further, which is what tells it from the snap shot at a glance; neither
+ * leans far enough to straighten the hunch.
+ */
+const BOW_DRAW_LEAN: Record<'light' | 'heavy', number> = { light: deg(2), heavy: deg(6) };
+/** How far the loose kicks the shoulders back. */
+const BOW_LOOSE_KICK = deg(2);
+/**
+ * How far the stave's turn upright leads the bow fist's rise, as the power of
+ * an ease-out: a smooth lead, where a clamped one leaves the stave standing
+ * still and then whipping round on the way down.
+ */
+const BOW_UPRIGHT_LEAD = 2;
 /** Progress the string starts moving at. */
 const BOW_DRAW_START = 0.12;
 /**
@@ -1086,7 +1307,10 @@ function bowShotPose(
     x: lerp(carry.x, aimHand.x, aiming) - BOW_HAND_RECOIL * loosed,
     y: lerp(carry.y, aimHand.y, aiming),
   };
-  const weaponAngle = lerp(restAngle, BOW_AIM_ANGLE, aiming);
+  // The stave turns upright ahead of the fist, on the way up and on the way
+  // down, so it is never held level and pointed like a crossbow.
+  const upright = 1 - (1 - aiming) ** BOW_UPRIGHT_LEAD;
+  const weaponAngle = lerp(restAngle, BOW_AIM_ANGLE, upright);
 
   const draw = bowShotDraw(kind, progress, impactAt);
   // The *hand* does not follow the string's snap to zero. The string is released
@@ -1106,21 +1330,33 @@ function bowShotPose(
   // archer that draws with its feet where it was walking reads as a mannequin
   // holding a bow.
   const BRACE_STEP = 0.09;
+  const braceOut: StepWindow = { from: 0, to: BOW_RAISE_END };
+  const braceHome: StepWindow = {
+    from: lerp(impactAt, 1, STEP_HOME_FROM_SHARE),
+    to: STEP_HOME_BY,
+  };
   return {
     ...rest,
-    lean: deg(-5) * aiming - deg(7) * loosed,
+    lean: -BOW_DRAW_LEAN[kind] * aiming - BOW_LOOSE_KICK * loosed,
     sway: -0.03 * aiming,
     torsoSquash: 1 - 0.04 * aiming + 0.05 * loosed,
     bob: -0.015 * aiming,
-    nearFoot: steppingFoot(
+    nearFoot: steppingOutAndHome(
       rest.nearFoot.x,
       BRACE_STEP,
-      0,
-      BOW_RAISE_END,
+      braceOut,
+      braceHome,
       progress,
       STEP_LIFT * 0.5,
     ),
-    farFoot: steppingFoot(rest.farFoot.x, -BRACE_STEP, 0, BOW_RAISE_END, progress, STEP_LIFT * 0.5),
+    farFoot: steppingOutAndHome(
+      rest.farFoot.x,
+      -BRACE_STEP,
+      braceOut,
+      braceHome,
+      progress,
+      STEP_LIFT * 0.5,
+    ),
     nearHand,
     farHand: drawHand,
     weaponAngle,
@@ -1141,106 +1377,120 @@ function isMeleeArchetype(archetype: GoblinArchetype): archetype is MeleeArchety
   return archetype !== 'bow';
 }
 
+/**
+ * Every strike shares one shape: a crouch and a wind, a hold, a fast drive into
+ * the most extended pose of the row on the impact frame, and a short recovery.
+ *
+ * Every wind takes the fist back behind the hip before it climbs, and the
+ * weapon turns up behind the body after it, so the weapon never sweeps across
+ * the face on the way up. Leans stay small on the wind so the hunch never
+ * straightens into an upright stance.
+ */
 const SWING_SPECS: Record<MeleeArchetype, { light: SwingSpec | null; heavy: SwingSpec }> = {
   sword: {
     // The light attack is the stab, which `thrustPose` handles instead.
     light: null,
     heavy: {
-      // Diagonal slash: blade swept up over the far shoulder, cut through ~150°.
-      windEnd: 0.3,
+      // Overhead slash: crouch, rise with the blade high behind the skull, hold,
+      // and cut down and through.
+      windEnd: 0.26,
+      holdEnd: 0.36,
       impactAt: 0,
-      followEnd: 0.72,
-      windHand: pt(-0.16, -1.02),
-      impactHand: pt(0.44, -0.62),
-      followHand: pt(0.46, -0.1),
-      windAngle: deg(-152),
-      impactAngle: deg(6),
-      followAngle: deg(64),
-      windLean: deg(-16),
-      impactLean: deg(20),
+      followEnd: 0.62,
+      holdCreep: deg(12),
+      crouch: 0.07,
+      windVia: pt(-0.35, -0.5),
+      impactBob: 0.05,
+      driveArc: pt(0.14, -0.12),
+      windHand: pt(-0.15, -1.25),
+      impactHand: pt(0.6, -0.7),
+      followHand: pt(0.5, -0.5),
+      windAngle: deg(-125),
+      impactAngle: deg(25),
+      followAngle: deg(60),
+      windLean: 0,
+      impactLean: deg(24),
       followLean: deg(26),
-      windSway: -0.07,
-      impactSway: 0.09,
-      step: 0.26,
-      stepFrom: 0.3,
+      windSway: -0.05,
+      impactSway: 0.08,
+      step: 0.22,
+      stepFrom: 0.36,
       stepTo: 0.5,
-      rearBrace: -0.16,
+      rearBrace: -0.14,
       behindFrom: 0,
-      behindTo: 0.24,
+      behindTo: 0.36,
       windSquash: 1.04,
-      impactSquash: 0.95,
-      freeHandWind: pt(-0.26, -0.72),
+      impactSquash: 0.94,
+      freeHandWind: pt(-0.3, -0.75),
       freeHandImpact: pt(-0.34, -0.5),
     },
   },
   axe: {
     heavy: {
       /**
-       * Overhead chop: haft past vertical, driven down hips-first onto a target
-       * at waist height, and rebounding off it.
-       *
-       * The hand stays high through the strike, and both of this swing's
-       * defects came from it not doing so. Driving it down to 0.46 put it near
-       * the goblin's own knee, and from there {@link groundLandingAngle} — which
-       * is a hard floor, not a suggestion — clamped the authored 58° and 88° to
-       * 16° and 0°: the blade did not chop, it lay down flat and stayed there
-       * for the rest of the row. Authoring under the clamp instead is what buys
-       * a chop that visibly descends.
-       *
-       * The follow keys are the **rebound**, not more of the swing. `follow` is
-       * eased out, so it moves fastest in the frames immediately after impact,
-       * which is exactly where a bite-and-kick-back belongs; the arms recover
-       * ahead of the body, so the lean is still forward while the blade is
-       * already coming up.
+       * Overhead chop with both hands on the haft. Both fists stay high
+       * through the strike: driving them low hands the swing to
+       * {@link groundLandingAngle}, which flattens the chop.
        */
-      windEnd: 0.38,
+      windEnd: 0.28,
+      holdEnd: 0.4,
       impactAt: 0,
-      followEnd: 0.62,
-      windHand: pt(-0.16, -1.12),
-      impactHand: pt(0.46, -0.76),
-      followHand: pt(0.46, -0.72),
-      windAngle: deg(-104),
-      impactAngle: deg(38),
-      followAngle: deg(12),
-      windLean: deg(-20),
-      impactLean: deg(34),
-      followLean: deg(40),
-      windSway: -0.06,
+      followEnd: 0.66,
+      holdCreep: deg(10),
+      crouch: 0.08,
+      windVia: pt(-0.3, -0.6),
+      impactBob: 0.06,
+      driveArc: pt(0.1, -0.08),
+      windHand: pt(-0.1, -1.38),
+      impactHand: pt(0.55, -0.8),
+      followHand: pt(0.5, -0.72),
+      windAngle: deg(-130),
+      impactAngle: deg(35),
+      followAngle: deg(15),
+      windLean: 0,
+      impactLean: deg(26),
+      followLean: deg(28),
+      windSway: -0.05,
       impactSway: 0.08,
-      step: 0.28,
-      stepFrom: 0.38,
-      stepTo: 0.54,
-      rearBrace: -0.18,
+      step: 0.24,
+      stepFrom: 0.4,
+      stepTo: 0.56,
+      rearBrace: -0.16,
       behindFrom: 0,
-      behindTo: 0.3,
-      windSquash: 1.06,
+      behindTo: 0.4,
+      windSquash: 1.05,
       impactSquash: 0.92,
       freeHandWind: pt(-0.2, -0.9),
       freeHandImpact: pt(0.24, -0.62),
     },
     light: {
-      // Hooking cleave: waist-height sweep from the far side that over-rotates
-      // the shoulder, so the recovery is a stagger.
-      windEnd: 0.3,
+      // Hooking cleave at waist height.
+      windEnd: 0.26,
+      holdEnd: 0.32,
       impactAt: 0,
-      followEnd: 0.7,
-      windHand: pt(-0.3, -0.62),
-      impactHand: pt(0.46, -0.52),
-      followHand: pt(0.54, -0.3),
-      windAngle: deg(-168),
-      impactAngle: deg(-12),
-      followAngle: deg(72),
-      windLean: deg(-13),
-      impactLean: deg(16),
-      followLean: deg(30),
+      followEnd: 0.64,
+      holdCreep: deg(8),
+      crouch: 0.04,
+      windVia: pt(-0.3, -0.45),
+      impactBob: 0.03,
+      driveArc: pt(0, 0),
+      windHand: pt(-0.25, -0.8),
+      impactHand: pt(0.6, -0.6),
+      followHand: pt(0.5, -0.5),
+      windAngle: deg(-158),
+      impactAngle: deg(-8),
+      followAngle: deg(40),
+      windLean: deg(-4),
+      impactLean: deg(18),
+      followLean: deg(22),
       windSway: -0.06,
       impactSway: 0.07,
       step: 0.14,
-      stepFrom: 0.52,
-      stepTo: 0.74,
+      stepFrom: 0.32,
+      stepTo: 0.5,
       rearBrace: -0.06,
       behindFrom: 0,
-      behindTo: 0.22,
+      behindTo: 0.32,
       windSquash: 1.03,
       impactSquash: 0.97,
       freeHandWind: pt(-0.24, -0.56),
@@ -1249,116 +1499,138 @@ const SWING_SPECS: Record<MeleeArchetype, { light: SwingSpec | null; heavy: Swin
   },
   mace: {
     light: {
-      // Full 360° orbit around the body; the head passes behind the goblin for
-      // the back half of the arc or it paints over its own face.
-      windEnd: 0.26,
+      // Round-arm whirl, swung over into the target.
+      windEnd: 0.3,
+      holdEnd: 0.38,
       impactAt: 0,
-      followEnd: 0.74,
-      windHand: pt(-0.18, -0.78),
-      impactHand: pt(0.4, -0.56),
-      followHand: pt(0.08, -0.28),
-      windAngle: deg(-190),
+      followEnd: 0.7,
+      holdCreep: deg(10),
+      crouch: 0.04,
+      windVia: pt(-0.3, -0.5),
+      impactBob: 0.03,
+      driveArc: pt(0.1, -0.1),
+      windHand: pt(-0.2, -0.85),
+      impactHand: pt(0.55, -0.6),
+      followHand: pt(0.42, -0.45),
+      windAngle: deg(-158),
       impactAngle: deg(20),
-      followAngle: deg(150),
-      windLean: deg(-10),
-      impactLean: deg(15),
-      followLean: deg(-6),
+      followAngle: deg(70),
+      windLean: deg(-4),
+      impactLean: deg(16),
+      followLean: deg(18),
       windSway: -0.05,
       impactSway: 0.07,
       step: 0.1,
-      stepFrom: 0.6,
-      stepTo: 0.8,
+      stepFrom: 0.38,
+      stepTo: 0.56,
       rearBrace: -0.05,
       behindFrom: 0,
-      behindTo: 0.34,
+      behindTo: 0.38,
       windSquash: 1.02,
       impactSquash: 0.98,
       freeHandWind: pt(-0.22, -0.6),
       freeHandImpact: pt(-0.3, -0.52),
     },
     heavy: {
-      // Straight up on a stiff arm with a small hop, then down a short fast arc
-      // that buckles the knees on landing.
-      windEnd: 0.36,
+      // Overhead crush: crouch, rise with the head of the mace high behind the
+      // skull, hold, and drive it straight down.
+      windEnd: 0.26,
+      holdEnd: 0.36,
       impactAt: 0,
       followEnd: 0.62,
-      windHand: pt(0.14, -1.16),
-      impactHand: pt(0.4, -0.4),
-      followHand: pt(0.28, -0.14),
-      windAngle: deg(-88),
-      impactAngle: deg(74),
-      followAngle: deg(96),
-      windLean: deg(-14),
-      impactLean: deg(28),
-      followLean: deg(22),
+      holdCreep: deg(12),
+      crouch: 0.08,
+      windVia: pt(-0.3, -0.5),
+      impactBob: 0.06,
+      driveArc: pt(0.14, -0.12),
+      windHand: pt(-0.1, -1.25),
+      impactHand: pt(0.55, -0.6),
+      followHand: pt(0.45, -0.42),
+      windAngle: deg(-125),
+      impactAngle: deg(60),
+      followAngle: deg(85),
+      windLean: 0,
+      impactLean: deg(26),
+      followLean: deg(24),
       windSway: -0.03,
       impactSway: 0.05,
-      step: 0.22,
+      step: 0.2,
       stepFrom: 0.36,
-      stepTo: 0.52,
-      rearBrace: -0.16,
+      stepTo: 0.5,
+      rearBrace: -0.14,
       behindFrom: 0,
-      behindTo: 0.2,
+      behindTo: 0.36,
       windSquash: 1.05,
-      impactSquash: 0.88,
+      impactSquash: 0.9,
       freeHandWind: pt(-0.2, -0.72),
       freeHandImpact: pt(-0.24, -0.4),
     },
   },
   warhammer: {
     light: {
-      // Two-handed horizontal sweep at chest height; the mass carries the goblin
-      // round so it finishes with its back partly turned.
-      windEnd: 0.32,
+      // Chest-height sweep.
+      windEnd: 0.3,
+      holdEnd: 0.38,
       impactAt: 0,
       followEnd: 0.72,
-      windHand: pt(-0.34, -0.78),
-      impactHand: pt(0.4, -0.76),
-      followHand: pt(0.56, -0.46),
-      windAngle: deg(-186),
+      holdCreep: deg(8),
+      crouch: 0.05,
+      windVia: pt(-0.35, -0.55),
+      impactBob: 0.03,
+      driveArc: pt(0.08, -0.06),
+      windHand: pt(-0.25, -0.9),
+      impactHand: pt(0.65, -0.78),
+      followHand: pt(0.5, -0.55),
+      windAngle: deg(-158),
       impactAngle: deg(-6),
-      followAngle: deg(84),
-      windLean: deg(-14),
-      impactLean: deg(14),
-      followLean: deg(34),
+      followAngle: deg(60),
+      windLean: deg(-4),
+      impactLean: deg(16),
+      followLean: deg(22),
       windSway: -0.08,
       impactSway: 0.1,
       step: 0.16,
-      stepFrom: 0.56,
-      stepTo: 0.8,
+      stepFrom: 0.38,
+      stepTo: 0.58,
       rearBrace: -0.1,
       behindFrom: 0,
-      behindTo: 0.26,
+      behindTo: 0.38,
       windSquash: 1.03,
       impactSquash: 0.96,
       freeHandWind: pt(-0.3, -0.7),
       freeHandImpact: pt(0.1, -0.68),
     },
     heavy: {
-      // The slowest, most telegraphed animation in the goblin set: the wind eats
-      // the first 0.42 of the row so a player can actually react to it.
-      windEnd: 0.42,
+      // The slowest, most telegraphed blow in the set: the deepest crouch, the
+      // highest wind and the longest hold before it comes down.
+      windEnd: 0.3,
+      holdEnd: 0.46,
       impactAt: 0,
       followEnd: 0.72,
-      windHand: pt(-0.22, -1.3),
-      impactHand: pt(0.5, -0.62),
-      followHand: pt(0.32, -0.16),
-      windAngle: deg(-98),
-      impactAngle: deg(66),
-      followAngle: deg(92),
-      windLean: deg(-26),
-      impactLean: deg(30),
-      followLean: deg(46),
+      holdCreep: deg(12),
+      crouch: 0.09,
+      windVia: pt(-0.35, -0.6),
+      impactBob: 0.07,
+      driveArc: pt(0.16, -0.12),
+      windHand: pt(-0.05, -1.55),
+      impactHand: pt(0.7, -0.75),
+      followHand: pt(0.55, -0.5),
+      windAngle: deg(-125),
+      impactAngle: deg(55),
+      followAngle: deg(80),
+      windLean: 0,
+      impactLean: deg(26),
+      followLean: deg(30),
       windSway: -0.1,
       impactSway: 0.12,
-      step: 0.34,
-      stepFrom: 0.42,
-      stepTo: 0.6,
-      rearBrace: -0.24,
+      step: 0.3,
+      stepFrom: 0.46,
+      stepTo: 0.62,
+      rearBrace: -0.2,
       behindFrom: 0,
-      behindTo: 0.36,
-      windSquash: 1.08,
-      impactSquash: 0.88,
+      behindTo: 0.46,
+      windSquash: 1.06,
+      impactSquash: 0.9,
       freeHandWind: pt(-0.26, -1.02),
       freeHandImpact: pt(0.26, -0.4),
     },
@@ -1407,6 +1679,34 @@ function attackPose(
 
 // ── Flinch ───────────────────────────────────────────────────────────────────
 
+/** Progress through which the flinch holds its full snap: the first frame. */
+const FLINCH_SNAP_END = 0.1;
+/** The rear foot staggers back this far, in tile units, and then steps home. */
+const FLINCH_STAGGER_STEP = -0.08;
+const FLINCH_STAGGER_END = 0.5;
+const FLINCH_STAGGER_LIFT = 0.02;
+
+/**
+ * The flinch's pose at full recoil; every field eases back to rest with the
+ * recoil. The body is thrown back and away from the blow while the hands are
+ * flung back and the free one up, so the snap frame changes the silhouette
+ * rather than reading as a nod.
+ */
+const FLINCH_RECOIL = {
+  handBack: 0.12,
+  carryHandDropOfArm: 0.08,
+  freeHandRiseOfArm: 0.25,
+  weaponTip: deg(14),
+  lean: deg(-26),
+  bob: 0.03,
+  sway: -0.09,
+  torsoSquash: 0.07,
+  headTilt: deg(-34),
+  headLead: -0.09,
+  earLag: deg(38),
+  eyeClose: 0.75,
+} as const;
+
 /**
  * Five frames, and disproportionately effective: without it a hit that does not
  * kill produces no reaction at all and the goblin reads as unhittable.
@@ -1419,35 +1719,46 @@ function flinchPose(
 ): GoblinPose {
   const rest = restingPose(style);
   const carry = carryHand(archetype, style);
-  const snap = smoothHump(clamp01(progress / 0.5));
-  const settle = easeInOut(clamp01((progress - 0.4) / 0.6));
-  const recoil = snap * (1 - settle * 0.4);
+  // At full recoil on the very first frame: the blow has already landed when
+  // the row starts, so anything that builds up to the snap reads as a nod.
+  const recoil =
+    progress <= FLINCH_SNAP_END
+      ? 1
+      : 1 - easeInOut((progress - FLINCH_SNAP_END) / (1 - FLINCH_SNAP_END));
   const armLength = style.proportions.upperArmLength + style.proportions.forearmLength;
   const nearHand: Pt = {
-    x: carry.x - 0.11 * recoil,
-    y: carry.y + armLength * 0.1 * recoil,
+    x: carry.x - FLINCH_RECOIL.handBack * recoil,
+    y: carry.y + armLength * FLINCH_RECOIL.carryHandDropOfArm * recoil,
   };
-  const weaponAngle = carryAngleFor(archetype, style, prop, nearHand.y) + deg(14) * recoil;
+  const weaponAngle =
+    carryAngleFor(archetype, style, prop, nearHand.y) + FLINCH_RECOIL.weaponTip * recoil;
 
   return {
     ...rest,
-    lean: deg(-26) * recoil,
-    bob: 0.04 * recoil,
-    sway: -0.09 * recoil,
-    torsoSquash: 1 - 0.09 * recoil,
+    lean: FLINCH_RECOIL.lean * recoil,
+    bob: FLINCH_RECOIL.bob * recoil,
+    sway: FLINCH_RECOIL.sway * recoil,
+    torsoSquash: 1 - FLINCH_RECOIL.torsoSquash * recoil,
     nearFoot: rest.nearFoot,
-    farFoot: steppingFoot(rest.farFoot.x, -0.08, 0, 0.5, progress, 0.02),
+    farFoot: steppingOutAndHome(
+      rest.farFoot.x,
+      FLINCH_STAGGER_STEP,
+      { from: FLINCH_SNAP_END, to: FLINCH_STAGGER_END },
+      { from: FLINCH_STAGGER_END, to: STEP_HOME_BY },
+      progress,
+      FLINCH_STAGGER_LIFT,
+    ),
     nearHand,
     farHand: gripFarHand(prop, nearHand, weaponAngle, {
-      x: rest.farHand.x - 0.05 * recoil,
-      y: rest.farHand.y - 0.04 * recoil,
+      x: rest.farHand.x - FLINCH_RECOIL.handBack * recoil,
+      y: rest.farHand.y - armLength * FLINCH_RECOIL.freeHandRiseOfArm * recoil,
     }),
     weaponAngle,
-    headTilt: deg(-34) * recoil,
-    headLead: -0.09 * recoil,
-    earLag: deg(38) * recoil,
+    headTilt: FLINCH_RECOIL.headTilt * recoil,
+    headLead: FLINCH_RECOIL.headLead * recoil,
+    earLag: FLINCH_RECOIL.earLag * recoil,
     mouthOpen: recoil,
-    eyeOpen: 1 - recoil * 0.75,
+    eyeOpen: 1 - recoil * FLINCH_RECOIL.eyeClose,
   };
 }
 
@@ -1554,7 +1865,12 @@ function bowDrawFor(archetype: GoblinArchetype, row: RowSpec, frame: number): Bo
   return bowDrawAt(kind, frame, row.frameCount);
 }
 
-function poseFor(
+/**
+ * One frame of one of the shared rows, posed for any goblin build carrying any
+ * prop with one archetype's movement; the non-combat goblins borrow their walk
+ * and idle through it.
+ */
+export function poseFor(
   archetype: GoblinArchetype,
   style: GoblinStyle,
   prop: GoblinProp,
@@ -1601,11 +1917,11 @@ interface CellGeometry {
 }
 
 const GEOMETRY: Record<GoblinArchetype, CellGeometry> = {
-  sword: { frameWidth: 128, frameHeight: 80, tileX: 32, tileY: 1 },
-  axe: { frameWidth: 112, frameHeight: 88, tileX: 24, tileY: 11 },
-  mace: { frameWidth: 80, frameHeight: 80, tileX: 8, tileY: 5 },
-  warhammer: { frameWidth: 112, frameHeight: 96, tileX: 24, tileY: 18 },
-  bow: { frameWidth: 112, frameHeight: 80, tileX: 24, tileY: 3 },
+  sword: { frameWidth: 152, frameHeight: 104, tileX: 44, tileY: 28 },
+  axe: { frameWidth: 128, frameHeight: 112, tileX: 32, tileY: 36 },
+  mace: { frameWidth: 112, frameHeight: 104, tileX: 24, tileY: 28 },
+  warhammer: { frameWidth: 144, frameHeight: 120, tileX: 40, tileY: 44 },
+  bow: { frameWidth: 128, frameHeight: 96, tileX: 32, tileY: 20 },
 };
 
 /** The cell row the soles stand on: the bottom of the creature's own tile. */
@@ -1648,59 +1964,59 @@ export const GOBLIN_GORE_STATES: readonly string[] = [
  */
 export const GORE_RECENTRE: Readonly<Record<GoblinArchetype, ReadonlyMap<string, Pt>>> = {
   sword: new Map([
-    ['gore_head', pt(0.1171875, -0.03125)],
-    ['gore_torso', pt(0.0078125, 0.0078125)],
-    ['gore_arm_near', pt(0.1015625, 0.0078125)],
-    ['gore_arm_far', pt(0.1015625, -0.015625)],
-    ['gore_leg_near', pt(0.125, 0)],
-    ['gore_leg_far', pt(0.0546875, 0.0078125)],
-    ['gore_ribchunk', pt(0, 0.0234375)],
-    ['gore_entrails', pt(0.0078125, 0.0078125)],
-    ['gore_jaw', pt(-0.0078125, 0.0078125)],
-  ]),
-  axe: new Map([
-    ['gore_head', pt(0.09375, -0.0390625)],
-    ['gore_torso', pt(0.0078125, 0)],
-    ['gore_arm_near', pt(0.125, 0.0078125)],
-    ['gore_arm_far', pt(0.125, -0.015625)],
-    ['gore_leg_near', pt(0.140625, 0.0078125)],
-    ['gore_leg_far', pt(0.0703125, 0.0078125)],
-    ['gore_ribchunk', pt(0, 0.03125)],
-    ['gore_entrails', pt(0.0078125, 0.0078125)],
-    ['gore_jaw', pt(-0.0078125, 0.015625)],
-  ]),
-  mace: new Map([
-    ['gore_head', pt(0.0703125, -0.0390625)],
-    ['gore_torso', pt(0, 0.0078125)],
-    ['gore_arm_near', pt(0.109375, 0.0078125)],
-    ['gore_arm_far', pt(0.109375, -0.015625)],
-    ['gore_leg_near', pt(0.125, 0)],
-    ['gore_leg_far', pt(0.0546875, 0.0078125)],
-    ['gore_ribchunk', pt(0, 0.0234375)],
-    ['gore_entrails', pt(0.0078125, 0.0078125)],
-    ['gore_jaw', pt(-0.0078125, 0.0078125)],
-  ]),
-  warhammer: new Map([
-    ['gore_head', pt(0.0625, -0.0390625)],
-    ['gore_torso', pt(0, 0)],
-    ['gore_arm_near', pt(0.125, 0.015625)],
-    ['gore_arm_far', pt(0.1328125, -0.0078125)],
-    ['gore_leg_near', pt(0.15625, 0.0078125)],
-    ['gore_leg_far', pt(0.078125, 0.015625)],
-    ['gore_ribchunk', pt(-0.0078125, 0.03125)],
-    ['gore_entrails', pt(0.0078125, 0.0078125)],
-    ['gore_jaw', pt(-0.0078125, 0.0078125)],
-  ]),
-  bow: new Map([
-    ['gore_head', pt(0.1171875, -0.0390625)],
+    ['gore_head', pt(0.0703125, -0.0234375)],
     ['gore_torso', pt(0, 0)],
     ['gore_arm_near', pt(0.1171875, -0.0078125)],
-    ['gore_arm_far', pt(0.1171875, -0.03125)],
-    ['gore_leg_near', pt(0.1484375, -0.015625)],
-    ['gore_leg_far', pt(0.0546875, 0)],
+    ['gore_arm_far', pt(0.1015625, -0.0390625)],
+    ['gore_leg_near', pt(0.1328125, -0.0234375)],
+    ['gore_leg_far', pt(0.0390625, -0.0078125)],
     ['gore_ribchunk', pt(0, 0.0234375)],
     ['gore_entrails', pt(0.0078125, 0.0078125)],
-    ['gore_jaw', pt(-0.0078125, 0.0078125)],
+    ['gore_jaw', pt(-0.015625, 0.015625)],
+  ]),
+  axe: new Map([
+    ['gore_head', pt(0.0625, -0.0390625)],
+    ['gore_torso', pt(0, -0.0078125)],
+    ['gore_arm_near', pt(0.140625, 0)],
+    ['gore_arm_far', pt(0.125, -0.0390625)],
+    ['gore_leg_near', pt(0.140625, -0.0234375)],
+    ['gore_leg_far', pt(0.046875, 0)],
+    ['gore_ribchunk', pt(0, 0.03125)],
+    ['gore_entrails', pt(0.0078125, 0.0078125)],
+    ['gore_jaw', pt(-0.0234375, 0.015625)],
+  ]),
+  mace: new Map([
+    ['gore_head', pt(0.046875, -0.0546875)],
+    ['gore_torso', pt(0.0078125, -0.0078125)],
+    ['gore_arm_near', pt(0.125, -0.0078125)],
+    ['gore_arm_far', pt(0.109375, -0.0390625)],
+    ['gore_leg_near', pt(0.1328125, -0.0234375)],
+    ['gore_leg_far', pt(0.0390625, -0.0078125)],
+    ['gore_ribchunk', pt(-0.0078125, 0.03125)],
+    ['gore_entrails', pt(0.0078125, 0.0078125)],
+    ['gore_jaw', pt(-0.015625, 0.015625)],
+  ]),
+  warhammer: new Map([
+    ['gore_head', pt(0.0546875, -0.046875)],
+    ['gore_torso', pt(0, -0.0078125)],
+    ['gore_arm_near', pt(0.1328125, 0.0078125)],
+    ['gore_arm_far', pt(0.125, -0.03125)],
+    ['gore_leg_near', pt(0.15625, -0.015625)],
+    ['gore_leg_far', pt(0.0546875, 0.0078125)],
+    ['gore_ribchunk', pt(-0.0078125, 0.03125)],
+    ['gore_entrails', pt(0.0078125, 0.0078125)],
+    ['gore_jaw', pt(-0.015625, 0.015625)],
+  ]),
+  bow: new Map([
+    ['gore_head', pt(0.0703125, -0.0078125)],
+    ['gore_torso', pt(0.0078125, -0.0078125)],
+    ['gore_arm_near', pt(0.1328125, -0.015625)],
+    ['gore_arm_far', pt(0.1171875, -0.046875)],
+    ['gore_leg_near', pt(0.1484375, -0.03125)],
+    ['gore_leg_far', pt(0.0390625, -0.0078125)],
+    ['gore_ribchunk', pt(0, 0.0234375)],
+    ['gore_entrails', pt(0.0078125, 0.0078125)],
+    ['gore_jaw', pt(-0.015625, 0.015625)],
   ]),
 };
 
@@ -1833,6 +2149,9 @@ function goblinFigureOf(archetype: GoblinArchetype): FigureDef {
     tileX: geometry.tileX,
     tileY: geometry.tileY,
     tileScale: TILE_SCALE,
+    // The painter composes on a surface of its own at the cell's density; a
+    // supersampled bake would only smear its one-pixel outline and rim.
+    skipSupersample: true,
     states: figureStates(goblinStateFrames()),
     paintFrame: (ctx, state, frame) => {
       paintGoblinFrame(archetype, ctx, state, frame);
@@ -1868,13 +2187,19 @@ export const GOBLIN_PLUMBER_ROWS: readonly RowSpec[] = ROWS.filter(
 );
 
 /**
- * Whose movement the plumber borrows. The sword goblin's idle break lifts the
- * held tool to eye level and levels it, which on a wrench reads as a tradesman
- * squinting at his tool rather than as a threat.
+ * Whose movement the plumber borrows. The sword goblin's idle break plants the
+ * held tool's head on the floor and leans on it while it rolls its neck, which
+ * on a wrench reads as a tradesman taking a breather rather than as a threat.
  */
 const PLUMBER_CHOREOGRAPHY: GoblinArchetype = 'sword';
 
-const PLUMBER_GEOMETRY: CellGeometry = { frameWidth: 80, frameHeight: 72, tileX: 8, tileY: 2 };
+/** Ground one of the plumber's walk cycles covers, in tiles. */
+export const GOBLIN_PLUMBER_WALK_GROUND_PER_CYCLE_TILES = groundPerCycleTiles(
+  GAITS[PLUMBER_CHOREOGRAPHY],
+  GOBLIN_PLUMBER_SCALE,
+);
+
+const PLUMBER_GEOMETRY: CellGeometry = { frameWidth: 96, frameHeight: 88, tileX: 16, tileY: 12 };
 
 const PLUMBER_WRENCH: GoblinProp = makePipeWrenchProp(GOBLIN_PLUMBER_STYLE.palette);
 
@@ -1920,6 +2245,7 @@ export const GOBLIN_PLUMBER_FIGURE: FigureDef = {
   tileX: PLUMBER_GEOMETRY.tileX,
   tileY: PLUMBER_GEOMETRY.tileY,
   tileScale: TILE_SCALE,
+  skipSupersample: true,
   states: figureStates(plumberStateFrames()),
   paintFrame: paintPlumberFrame,
 };

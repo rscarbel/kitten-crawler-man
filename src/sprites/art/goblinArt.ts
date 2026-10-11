@@ -1,11 +1,12 @@
 /**
  * Drawing engine for the dungeon's goblins.
  *
- * A goblin is a small, wiry, mean scavenger — undernourished, permanently
- * hunched, wearing whatever it stripped off something it killed. At the 32-px
- * tile size players actually see, only two features survive: the swept-back
- * notched ears and the weapon. Everything in here is built so those two carry
- * the silhouette and the rest reads as a believable body behind them.
+ * A goblin is a small, mean, big-headed scavenger: a bulbous skull carried
+ * forward of its hips, two huge pointed ears standing out sideways, a long
+ * hooked nose, glowing eyes under a heavy brow and a grin with fangs in it,
+ * on skinny limbs with oversized hands and big flat feet. At the 32-px tile
+ * size players actually see, the ears, the head and the weapon carry the
+ * silhouette, so all three are built big enough to break it.
  *
  * The figure is posed by *targets*, not joint angles: a pose says where the
  * feet and hands are and {@link solveTwoBone} finds the knee and elbow. That is
@@ -17,13 +18,35 @@
  * caller translates to the ground point and scales by one tile, so a sheet can
  * be baked at any resolution.
  *
- * Colour is a set of five-stop ramps under one {@link LIGHT} vector rather than
- * a bag of flat hex strings, because the old art's single saturated green with
- * one darker green is the largest single reason it looked cheap.
+ * No part draws its own outline. The parts are composed on a surface of the
+ * painter's own (`figureCompose.ts`), and the hard dark line, the lit rim and
+ * the shadows one part casts on another are derived from the finished
+ * silhouette: drawn per part, every arm over the chest gets an ink ring and
+ * the goblin reads as a paper doll while its outer edge stays soft against the
+ * floor.
  *
  * Glow and soft shadow are radial gradients, never `shadowBlur` — blur is
  * measured in device pixels and would not survive the caller's scale.
  */
+
+import { addCapsule } from './carl/paint';
+import {
+  blitLayer,
+  crossOffsets,
+  dilationOffsets,
+  inFigureSpace,
+  laySlab,
+  lightRim,
+  makeLayer,
+  clear,
+  layerBounds,
+  occludeAround,
+  outlineInto,
+  pixelStep,
+  scratchPx,
+  type InkReach,
+} from './figureCompose';
+import { withClip } from './softShade';
 
 type Ctx = CanvasRenderingContext2D;
 
@@ -289,90 +312,102 @@ export function fillCapsule(
 }
 
 /**
- * A starved limb is a thin bone between wide ends, so every segment narrows to a
- * waist at its middle and widens again at both joints.
- *
- * A constant-width capsule with an oversized disc at the joint sticks out past
- * the capsule and carries a ring of its own outline — four ball joints per limb,
- * which reads as an artist's mannequin. Shaping the bone rather than bolting on
- * a knuckle avoids that: the joint here is never wider than the segment that
- * meets it.
+ * A starved limb is a thin bone between knobbly ends, so every segment narrows
+ * to a waist at its middle and swells again at both joints. The knee and the
+ * elbow are the widest part of a goblin's limb — the knobs are what say "bony"
+ * where an even tube says "noodle".
  */
-const LIMB_WAIST_FRACTION = 0.66;
+const LIMB_WAIST_FRACTION = 0.62;
 /** The joint end of a segment, relative to its root. */
-const LIMB_JOINT_FRACTION = 0.94;
+const LIMB_JOINT_FRACTION = 1.04;
 /** The wrist/ankle end, which is the narrowest part of the whole limb. */
-const LIMB_TIP_FRACTION = 0.72;
-/** Dark silhouette drawn under every limb, as a fraction of the limb width. */
-const LIMB_OUTLINE_FRACTION = 0.13;
+const LIMB_TIP_FRACTION = 0.7;
+/**
+ * The core shadow runs down the side of each segment turned away from the key,
+ * as a copy of the segment pushed that way by this share of its width and
+ * clipped to it: the terminator then follows the limb's own axis.
+ */
+const LIMB_SHADE_SHIFT = 0.55;
 /** Sheen runs down the light-facing edge of each near segment. */
-const LIMB_SHEEN_FRACTION = 0.17;
-const LIMB_SHEEN_OFFSET = 0.62;
+const LIMB_SHEEN_FRACTION = 0.2;
+const LIMB_SHEEN_OFFSET = 0.5;
 
 export interface LimbPaint {
   readonly fill: string;
-  readonly outline: string;
+  /** The core shadow down the side of the limb turned away from the key. */
+  readonly shade: string;
   /** Null on far limbs; the missing highlight is the depth cue. */
   readonly sheen: string | null;
 }
 
-/** One segment, drawn root → waist → end so the bone has a visible taper. */
-function fillSegment(
-  ctx: Ctx,
-  from: Pt,
-  to: Pt,
-  rootRadius: number,
-  endRadius: number,
-  waistRadius: number,
-  color: string,
-): void {
-  const middle = mixPt(from, to, 0.5);
-  fillCapsule(ctx, from, middle, rootRadius, waistRadius, color);
-  fillCapsule(ctx, middle, to, waistRadius, endRadius, color);
+interface SegmentRadii {
+  readonly root: number;
+  readonly waist: number;
+  readonly end: number;
 }
 
-/** Draw a solved chain as one continuous outlined, tapered, shaded limb. */
+/** Adds one segment, root → waist → end, to the current path. */
+function addSegment(ctx: Ctx, from: Pt, to: Pt, radii: SegmentRadii): void {
+  const middle = mixPt(from, to, 0.5);
+  addCapsule(ctx, from, middle, radii.root, radii.waist);
+  addCapsule(ctx, middle, to, radii.waist, radii.end);
+}
+
+function traceLimb(ctx: Ctx, chain: BoneChain, upper: SegmentRadii, lower: SegmentRadii): void {
+  ctx.beginPath();
+  addSegment(ctx, chain.anchor, chain.joint, upper);
+  addSegment(ctx, chain.joint, chain.end, lower);
+}
+
+/** Draw a solved chain as one continuous tapered, shaded limb. */
 export function drawLimb(ctx: Ctx, chain: BoneChain, rootWidth: number, paint: LimbPaint): void {
   const rootRadius = rootWidth / 2;
   const jointRadius = rootRadius * LIMB_JOINT_FRACTION;
-  const tipRadius = rootRadius * LIMB_TIP_FRACTION;
-  const upperWaist = rootRadius * LIMB_WAIST_FRACTION;
-  const lowerWaist = jointRadius * LIMB_WAIST_FRACTION;
-  const growth = rootWidth * LIMB_OUTLINE_FRACTION;
+  const upper: SegmentRadii = {
+    root: rootRadius,
+    waist: rootRadius * LIMB_WAIST_FRACTION,
+    end: jointRadius,
+  };
+  const lower: SegmentRadii = {
+    root: jointRadius,
+    waist: jointRadius * LIMB_WAIST_FRACTION,
+    end: rootRadius * LIMB_TIP_FRACTION,
+  };
 
-  fillSegment(
-    ctx,
-    chain.anchor,
-    chain.joint,
-    rootRadius + growth,
-    jointRadius + growth,
-    upperWaist + growth,
-    paint.outline,
-  );
-  fillSegment(
-    ctx,
-    chain.joint,
-    chain.end,
-    jointRadius + growth,
-    tipRadius + growth,
-    lowerWaist + growth,
-    paint.outline,
-  );
+  ctx.fillStyle = paint.fill;
+  traceLimb(ctx, chain, upper, lower);
+  ctx.fill();
 
-  fillSegment(ctx, chain.anchor, chain.joint, rootRadius, jointRadius, upperWaist, paint.fill);
-  fillSegment(ctx, chain.joint, chain.end, jointRadius, tipRadius, lowerWaist, paint.fill);
+  const shift = rootWidth * LIMB_SHADE_SHIFT;
+  const shaded = (at: Pt): Pt => offset(at, -LIGHT.x * shift, -LIGHT.y * shift);
+  const shadedChain: BoneChain = {
+    anchor: shaded(chain.anchor),
+    joint: shaded(chain.joint),
+    end: shaded(chain.end),
+  };
+  withClip(
+    ctx,
+    () => traceLimb(ctx, chain, upper, lower),
+    () => {
+      ctx.fillStyle = paint.shade;
+      traceLimb(ctx, shadedChain, upper, lower);
+      ctx.fill();
+    },
+  );
 
   if (paint.sheen === null) return;
-  const shift = rootWidth * LIMB_SHEEN_OFFSET;
-  const lit = (at: Pt): Pt => offset(at, LIGHT.x * shift, LIGHT.y * shift);
-  fillCapsule(
+  const sheenShift = rootWidth * LIMB_SHEEN_OFFSET;
+  const lit = (at: Pt): Pt => offset(at, LIGHT.x * sheenShift, LIGHT.y * sheenShift);
+  ctx.fillStyle = paint.sheen;
+  ctx.beginPath();
+  addCapsule(
     ctx,
     lit(mixPt(chain.anchor, chain.joint, 0.15)),
     lit(mixPt(chain.anchor, chain.joint, 0.8)),
-    upperWaist * LIMB_SHEEN_FRACTION * 2,
-    upperWaist * LIMB_SHEEN_FRACTION * 1.6,
-    paint.sheen,
+    upper.waist * LIMB_SHEEN_FRACTION * 2,
+    upper.waist * LIMB_SHEEN_FRACTION * 1.6,
   );
+  ctx.fill();
 }
 
 // ── Style description ────────────────────────────────────────────────────────
@@ -387,8 +422,11 @@ export interface GoblinPalette {
   /** Necklace teeth, and every bone that shows through a wound. */
   readonly bone: Ramp;
   readonly wood: Ramp;
+  /** The glowing almond of the eye. */
   readonly eye: string;
-  /** Amber sits in a dark sclera; the socket rim is darker still. */
+  /** The paler, hotter core at the eye's centre. */
+  readonly eyeCore: string;
+  /** The dark socket the glowing eye sits in. */
   readonly sclera: string;
   readonly toothEnamel: string;
   readonly mouthInner: string;
@@ -468,37 +506,78 @@ export interface GoblinStyle {
   readonly spineLean: number;
   /** Notches torn out of each ear; near and far ears are cut differently. */
   readonly earNotches: number;
+  /** Clothing painted by another module, composed inside the figure like the built-in gear. */
+  readonly outfit?: GoblinOutfit;
 }
 
 /**
- * How much of the leg's length a planted stance uses up. Short of 1 so the knee
- * keeps a visible bend — a leg solved dead straight reads as broken and lets
- * the knee flip sides between frames.
+ * Clothing a module outside the rig paints onto the goblin, at the same points
+ * in the draw order the built-in gear uses, so it shares the figure's outline,
+ * rim and cast shadows instead of reading as a sticker laid over it.
  */
-const STANDING_LEG_EXTENSION = 0.93;
+export interface GoblinOutfit {
+  /** Inside the torso's clip, in spine space: hip at the origin, shoulders at `-torsoLength`. */
+  readonly torso?: (ctx: Ctx, style: GoblinStyle) => void;
+  /** Over the hips in spine space, outside the torso's clip, in place of the loincloth. */
+  readonly hips?: (ctx: Ctx, style: GoblinStyle) => void;
+  /** Over one solved leg, after the bare leg is painted. */
+  readonly leg?: (ctx: Ctx, chain: BoneChain, style: GoblinStyle, near: boolean) => void;
+  /** Headwear in head space (+X forward), over the face and under the near ear. */
+  readonly head?: (ctx: Ctx, style: GoblinStyle) => void;
+}
+
+/**
+ * How much of the leg's length an upright stance would use up. Only the figure's
+ * nominal height is measured at it, so the draw scale every archetype is sized
+ * by does not shrink when the stance crouches.
+ */
+const UPRIGHT_LEG_EXTENSION = 0.93;
+
+/**
+ * How much of the leg's length the goblin's own stance uses up.
+ *
+ * Well short of the upright figure's: a goblin never stands up straight, and a
+ * leg solved near full reach reads as a lanky human however hunched the back
+ * is. At this extension the knees carry a clear forward bend in every row, and
+ * every foot target is still comfortably inside the leg's reach.
+ */
+const CROUCHED_LEG_EXTENSION = 0.8;
+
+/**
+ * Forward hunch every pose carries on top of its style's, in the spine only.
+ *
+ * The head is not tipped with it: the face and ears were drawn level at the
+ * style's own hunch, so the extra bend is taken up at the neck and the goblin
+ * keeps looking ahead rather than at its feet.
+ */
+export const CROUCH_HUNCH = deg(8);
 
 /**
  * Hip height for a planted stance, measured to the ground the figure stands on.
  *
  * Foot targets in a {@link GoblinPose} are ground-level, but the ankle rides one
  * foot-height above them (see {@link ankleTarget}), so the leg only ever has to
- * span `(thigh + shin) * STANDING_LEG_EXTENSION`. Folding the foot into this
+ * span `(thigh + shin) * CROUCHED_LEG_EXTENSION`. Folding the foot into this
  * height *without* that lift would put every target outside the leg's reach and
  * the IK would quietly replace the authored gait with an arc at max reach —
  * which no automated check catches, only a picture.
  */
 export function groundedHipHeight(p: GoblinProportions): number {
-  return (p.thighLength + p.shinLength) * STANDING_LEG_EXTENSION + p.footHeight;
+  return (p.thighLength + p.shinLength) * CROUCHED_LEG_EXTENSION + p.footHeight;
 }
 
-/** Height of the shoulder line above the ground in a standing pose. */
+/** Height of the shoulder line above the ground in the goblin's crouched stance. */
 export function shoulderHeight(p: GoblinProportions): number {
   return groundedHipHeight(p) + p.torsoLength;
 }
 
-/** Sole-to-skull-top height, tuned separately per archetype below. */
+/**
+ * Sole-to-skull-top height of the build stood upright, which is what each
+ * archetype's draw scale is tuned against. The crouch is drawn shorter.
+ */
 export function figureHeight(p: GoblinProportions): number {
-  return shoulderHeight(p) + p.neckLength + p.headRadius * 2;
+  const uprightHip = (p.thighLength + p.shinLength) * UPRIGHT_LEG_EXTENSION + p.footHeight;
+  return uprightHip + p.torsoLength + p.neckLength + p.headRadius * 2;
 }
 
 /** Where the ankle goes for a foot planted at `target`. */
@@ -543,7 +622,7 @@ export interface GoblinPose {
   readonly headTilt: number;
   /** Forward push of the head beyond the spine, for leading with the face. */
   readonly headLead: number;
-  /** Ears lag the head; this is their extra swept-back droop, in radians. */
+  /** Ears lag the head; this is their extra droop, in radians. */
   readonly earLag: number;
   readonly mouthOpen: number;
   /** 0 fully closes the eyes — a blink — and 1 is a wide aggressive stare. */
@@ -559,6 +638,16 @@ export interface GoblinPose {
   /** Which way the knee bends; flipped when a leg crosses behind the body. */
   readonly nearKneeSign: number;
   readonly farKneeSign: number;
+  /**
+   * Absolute angle of whatever the far hand holds, when it holds something of
+   * its own. Absent follows the far forearm, turned forward at the wrist.
+   */
+  readonly offHandAngle?: number;
+  /**
+   * Paint the far arm and its held prop over the body rather than behind it,
+   * for a far arm raised and thrust out ahead of the chest.
+   */
+  readonly offHandInFront?: boolean;
 }
 
 /** How much of the arm's length is used up when it hangs slack at the side. */
@@ -574,7 +663,7 @@ const ARM_HANG_EXTENSION = 0.88;
 const FAR_ARM_LENGTH_SCALE = 0.72;
 
 /** Shoulder-to-fingertip span of the far arm, after foreshortening. */
-function farArmSpan(p: GoblinProportions): number {
+export function farArmSpan(p: GoblinProportions): number {
   return (p.upperArmLength + p.forearmLength) * FAR_ARM_LENGTH_SCALE;
 }
 const STANCE_HALF_WIDTH_FRACTION = 1.15;
@@ -642,13 +731,18 @@ export interface Skeleton {
   readonly farLeg: BoneChain;
   readonly nearArm: BoneChain;
   readonly farArm: BoneChain;
-  /** Total spine tilt: the style's permanent hunch plus this frame's lean. */
+  /** Total spine tilt: the style's permanent hunch, the crouch, and this frame's lean. */
   readonly lean: number;
 }
 
 /** Arms hang from just inside the shoulder line, not off its very edge. */
 const ARM_INSET_FRACTION = 0.86;
 const HIP_INSET_FRACTION = 0.62;
+
+/** How far each hip joint sits either side of the pelvis centre, in tile units. */
+export function hipJointOffset(p: GoblinProportions): number {
+  return p.hipHalfWidth * HIP_INSET_FRACTION;
+}
 /** Shoulders sit slightly below the top of the torso silhouette. */
 const SHOULDER_DROP_FRACTION = 0.26;
 
@@ -659,7 +753,7 @@ function spineOffset(length: number, lean: number): Pt {
 
 export function buildSkeleton(style: GoblinStyle, pose: GoblinPose): Skeleton {
   const p = style.proportions;
-  const lean = style.spineLean + pose.lean;
+  const lean = style.spineLean + CROUCH_HUNCH + pose.lean;
   const torso = p.torsoLength * pose.torsoSquash;
 
   const hip: Pt = { x: pose.sway, y: -groundedHipHeight(p) + pose.bob };
@@ -668,8 +762,8 @@ export function buildSkeleton(style: GoblinStyle, pose: GoblinPose): Skeleton {
 
   const nearShoulder = offset(spineTop, p.shoulderHalfWidth * ARM_INSET_FRACTION, shoulderDrop);
   const farShoulder = offset(spineTop, -p.shoulderHalfWidth * ARM_INSET_FRACTION, shoulderDrop);
-  const nearHip = offset(hip, p.hipHalfWidth * HIP_INSET_FRACTION, 0);
-  const farHip = offset(hip, -p.hipHalfWidth * HIP_INSET_FRACTION, 0);
+  const nearHip = offset(hip, hipJointOffset(p), 0);
+  const farHip = offset(hip, -hipJointOffset(p), 0);
 
   const headOffset = spineOffset(torso + p.neckLength + p.headRadius, lean);
   const headCentre = offset(hip, headOffset.x + pose.headLead, headOffset.y);
@@ -680,7 +774,7 @@ export function buildSkeleton(style: GoblinStyle, pose: GoblinPose): Skeleton {
     nearShoulder,
     farShoulder,
     headCentre,
-    headAngle: lean + pose.headTilt,
+    headAngle: lean - CROUCH_HUNCH + pose.headTilt,
     nearLeg: solveTwoBone(
       nearHip,
       ankleTarget(pose.nearFoot, p),
@@ -715,36 +809,130 @@ export function buildSkeleton(style: GoblinStyle, pose: GoblinPose): Skeleton {
 
 // ── Ground shadow ────────────────────────────────────────────────────────────
 
-const SHADOW_INNER_ALPHA = 0.46;
-const SHADOW_HEIGHT_FRACTION = 0.26;
-const SHADOW_RADIUS_FRACTION = 1.6;
+/**
+ * A tight, dark pool under the feet. A wide soft halo reads as a smudge on the
+ * floor round a small figure; a tight dark one pins the soles to the ground.
+ * Both alphas together stay under the gates' solid-ink threshold, so the
+ * anchor gate measures the soles and never the shadow under them.
+ */
+const SHADOW_INNER_ALPHA = 0.5;
+const SHADOW_CORE_STOP = 0.45;
+const SHADOW_HEIGHT_FRACTION = 0.24;
+/** The pool's half-width, as a share of the stance plus a foot's length. */
+const SHADOW_SPAN_FRACTION = 0.95;
+/** A planted foot presses a darker patch of its own into the pool. */
+const FOOT_CONTACT_ALPHA = 0.4;
+const FOOT_CONTACT_HEIGHT = 0.035;
+/** The planted foot's patch reaches this share of the foot's length either side of it. */
+const FOOT_CONTACT_SPAN = 0.7;
+/** A foot this close to the floor, in tile units, counts as planted. */
+const FOOT_PLANTED_LIFT = 0.015;
+/** A lifted figure's pool shrinks and fades by this much per tile of lift. */
+const SHADOW_LIFT_FADE = 2.4;
+const SHADOW_TONE = '#0b1006';
 
-function drawGroundShadow(ctx: Ctx, radius: number): void {
-  const gradient = ctx.createRadialGradient(0, 0, 0, 0, 0, radius);
-  gradient.addColorStop(0, `rgba(0,0,0,${SHADOW_INNER_ALPHA})`);
-  gradient.addColorStop(1, 'rgba(0,0,0,0)');
+function drawSoftPool(ctx: Ctx, x: number, radius: number, height: number, alpha: number): void {
   ctx.save();
-  ctx.scale(1, SHADOW_HEIGHT_FRACTION);
+  ctx.translate(x, 0);
+  ctx.scale(radius, height);
+  const gradient = ctx.createRadialGradient(0, 0, 0, 0, 0, 1);
+  gradient.addColorStop(0, rgba(SHADOW_TONE, alpha));
+  gradient.addColorStop(SHADOW_CORE_STOP, rgba(SHADOW_TONE, alpha));
+  gradient.addColorStop(1, rgba(SHADOW_TONE, 0));
   ctx.fillStyle = gradient;
   ctx.beginPath();
-  ctx.arc(0, 0, radius, 0, FULL_CIRCLE);
+  ctx.arc(0, 0, 1, 0, FULL_CIRCLE);
   ctx.fill();
   ctx.restore();
+}
+
+function drawGroundShadow(ctx: Ctx, style: GoblinStyle, pose: GoblinPose): void {
+  const p = style.proportions;
+  const lift = Math.max(0, -Math.max(pose.nearFoot.y, pose.farFoot.y));
+  const fade = clamp01(1 - lift * SHADOW_LIFT_FADE);
+  const centre = (pose.nearFoot.x + pose.farFoot.x) / 2;
+  const halfStance = Math.abs(pose.nearFoot.x - pose.farFoot.x) / 2;
+  const radius = (halfStance + p.footLength) * SHADOW_SPAN_FRACTION;
+  drawSoftPool(ctx, centre, radius, radius * SHADOW_HEIGHT_FRACTION, SHADOW_INNER_ALPHA * fade);
+  for (const foot of [pose.nearFoot, pose.farFoot]) {
+    if (-foot.y > FOOT_PLANTED_LIFT) continue;
+    const heelToToe = p.footLength * (1 - 2 * FOOT_HEEL_FRACTION);
+    drawSoftPool(
+      ctx,
+      foot.x + heelToToe / 2,
+      p.footLength * FOOT_CONTACT_SPAN,
+      FOOT_CONTACT_HEIGHT,
+      FOOT_CONTACT_ALPHA,
+    );
+  }
 }
 
 // ── Extremities ──────────────────────────────────────────────────────────────
 
 /** Three toes, not four — a fourth turns the foot into a paddle at 32 px. */
 const TOE_COUNT = 3;
-const FOOT_HEEL_FRACTION = 0.28;
-/** A near foot sits below the key light, so it stays under the body's own `mid`. */
-const NEAR_FOOT_LIFT = 0.75;
+const FOOT_HEEL_FRACTION = 0.24;
 /** Feet stay flatter than the shin they hang off; a full follow reads broken. */
 const FOOT_ANGLE_FOLLOW = 0.22;
+const SHIN_UPRIGHT = Math.PI / 2;
+
+/** How high a foot is lifted, in tile units, before it tips with its shin in full. */
+const FOOT_TILT_FULL_LIFT = 0.05;
 
 /**
- * A splayed scavenger's foot, seen in profile: flat sole, high arch, and three
- * toes staggered along the front so they read as toes rather than as one lump.
+ * A foot's tilt off flat: a share of how far its shin leans off upright, faded
+ * in as the foot leaves the floor. A planted sole lies flat however far the
+ * crouch leans the shin, and a swinging leg tips its toes with the shin.
+ */
+function footAngle(leg: BoneChain, foot: Pt): number {
+  const lifted = clamp01(-foot.y / FOOT_TILT_FULL_LIFT);
+  return (segmentAngle(leg.joint, leg.end) - SHIN_UPRIGHT) * FOOT_ANGLE_FOLLOW * lifted;
+}
+/** How far the toes splay apart along the sole, as a share of the foot's length. */
+const TOE_SPREAD = 0.3;
+const TOE_RADIUS = 0.13;
+/** The instep rises this many foot-heights over the sole: a flat, low foot. */
+const ARCH_RISE = 1.6;
+const CLAW_LENGTH = 1.1;
+/**
+ * The foot's profile, each entry a share of the heel's reach behind the ankle,
+ * the toe's reach in front of it, the foot's height or the arch's rise.
+ */
+const FOOT_SHAPE = {
+  /** The top of the heel, in foot-heights above the ankle line. */
+  heelTop: 0.4,
+  /** The heel's round bulges back past the heel point. */
+  heelBulge: 1.15,
+  /** Where the sole flattens out from under the heel. */
+  soleFromHeel: 0.4,
+  /** Where the flat sole ends, under the toes. */
+  soleToToe: 0.82,
+  /** The control point that rounds the toes up off the sole. */
+  toeRoundX: 0.95,
+  toeRoundY: 0.2,
+  /** The front of the instep, and its height as a share of the arch's rise. */
+  instepX: 0.62,
+  instepRise: 0.45,
+  /** The control point the instep curves back to the heel through. */
+  archX: 0.15,
+  /** The dark sole band reaches this many foot-heights up from the sole. */
+  soleShadeDepth: 0.55,
+} as const;
+/** The sole shade's rectangle is oversized this many times so it covers the tilted foot. */
+const FOOT_SHADE_COVER = 2;
+/** The rearmost toe's radius, as a share of the front toe's. */
+const BACK_TOE_SCALE = 0.78;
+/** Where the front toe sits along the toe's reach. */
+const FRONT_TOE_AT = 0.86;
+/** The toes behind the front one sit this far from the foot's tone toward its shadow. */
+const BACK_TOE_SHADE = 0.35;
+/** A toe's claw, in toe radii from the toe's centre. */
+const TOE_CLAW = { rootX: 0.55, rootRise: 0.45, tipDrop: 0.35, heelX: 0.6, heelDrop: 0.7 } as const;
+
+/**
+ * A big, flat, splayed goblin foot in profile: a long low sole, a bony heel,
+ * and three fat toes fanned along the front with a claw on each. The size is
+ * the point — oversized feet are a third of what says "goblin" below the waist.
  * Drawn in ankle-local space, where the ground is `footHeight` below the origin.
  */
 function drawFoot(ctx: Ctx, ankle: Pt, angle: number, style: GoblinStyle, near: boolean): void {
@@ -753,89 +941,59 @@ function drawFoot(ctx: Ctx, ankle: Pt, angle: number, style: GoblinStyle, near: 
   const heel = -footLength * FOOT_HEEL_FRACTION;
   const toe = footLength * (1 - FOOT_HEEL_FRACTION);
   const sole = footHeight;
-  const ARCH_RISE = 1.5;
-  const TOE_RADIUS = 0.16;
+  const fill = near ? skin.mid : farLimbTone(skin);
 
   ctx.save();
   ctx.translate(ankle.x, ankle.y);
   ctx.rotate(angle);
 
-  const traceSole = (grow: number): void => {
+  const heelTopY = -footHeight * FOOT_SHAPE.heelTop;
+  const traceFoot = (): void => {
     ctx.beginPath();
-    ctx.moveTo(heel - grow, -footHeight * 0.2);
-    ctx.quadraticCurveTo(heel - grow, sole + grow, heel * 0.35, sole + grow);
-    ctx.lineTo(toe * 0.9, sole + grow);
-    ctx.quadraticCurveTo(toe + grow, sole * 0.4, toe * 0.72, -footHeight * ARCH_RISE * 0.35 - grow);
+    ctx.moveTo(heel, heelTopY);
+    ctx.quadraticCurveTo(heel * FOOT_SHAPE.heelBulge, sole, heel * FOOT_SHAPE.soleFromHeel, sole);
+    ctx.lineTo(toe * FOOT_SHAPE.soleToToe, sole);
     ctx.quadraticCurveTo(
-      toe * 0.2,
-      -footHeight * ARCH_RISE * 0.6 - grow,
-      heel - grow,
-      -footHeight * 0.2,
+      toe * FOOT_SHAPE.toeRoundX,
+      sole * FOOT_SHAPE.toeRoundY,
+      toe * FOOT_SHAPE.instepX,
+      -footHeight * ARCH_RISE * FOOT_SHAPE.instepRise,
     );
+    ctx.quadraticCurveTo(toe * FOOT_SHAPE.archX, -footHeight * ARCH_RISE, heel, heelTopY);
     ctx.closePath();
   };
-
-  ctx.fillStyle = style.palette.outline;
-  traceSole(footHeight * 0.22);
+  ctx.fillStyle = fill;
+  traceFoot();
   ctx.fill();
-
-  // The far foot takes the same lift off `dark` as every other far limb. At
-  // plain `dark` it sat a whole step deeper than the shin above it, and the two
-  // read as separate objects rather than one leg.
-  ctx.fillStyle = near
-    ? mix(skin.dark, skin.mid, NEAR_FOOT_LIFT)
-    : mix(skin.dark, skin.mid, FAR_LIMB_LIFT);
-  traceSole(0);
-  ctx.fill();
-
-  // The instep catches the key light; without it the foot is a flat paddle.
-  if (near) {
-    ctx.fillStyle = rgba(skin.light, 0.24);
-    ctx.beginPath();
-    ctx.moveTo(heel * 0.5, -footHeight * 0.5);
-    ctx.quadraticCurveTo(
-      toe * 0.35,
-      -footHeight * ARCH_RISE * 0.55,
-      toe * 0.68,
-      -footHeight * 0.25,
+  withClip(ctx, traceFoot, () => {
+    ctx.fillStyle = skin.dark;
+    ctx.fillRect(
+      heel * FOOT_SHADE_COVER,
+      sole - footHeight * FOOT_SHAPE.soleShadeDepth,
+      footLength * FOOT_SHADE_COVER,
+      footHeight * FOOT_SHADE_COVER,
     );
-    ctx.lineTo(toe * 0.6, footHeight * 0.15);
-    ctx.quadraticCurveTo(toe * 0.2, -footHeight * 0.15, heel * 0.5, -footHeight * 0.5);
-    ctx.closePath();
-    ctx.fill();
-  }
+  });
 
-  // Toes stagger forward and down along the front of the foot, so the profile
-  // shows three bumps instead of one ball.
-  const toeTone = near ? skin.mid : skin.dark;
-  for (let i = 0; i < TOE_COUNT; i++) {
+  // Toes fan forward along the front of the sole, each a fat bump of its own
+  // with a pale claw past it; their undersides sit *on* the sole line, since a
+  // toe hanging below it reads as a castor and lifts the goblin off the floor.
+  for (let i = TOE_COUNT - 1; i >= 0; i--) {
     const t = i / (TOE_COUNT - 1);
-    const toeR = footLength * TOE_RADIUS * lerp(1, 0.7, t);
-    const toeX = toe * lerp(0.98, 0.7, t);
-    // Every toe's underside sits *on* the sole line, never below it: a toe that
-    // hangs past the sole reads as a castor and lifts the whole figure off the
-    // floor.
+    const toeR = footLength * TOE_RADIUS * lerp(1, BACK_TOE_SCALE, t);
+    const toeX = toe * (FRONT_TOE_AT - t * TOE_SPREAD) + toeR;
     const toeY = sole - toeR;
-    ctx.fillStyle = toeTone;
+    ctx.fillStyle = i === 0 ? fill : mix(fill, skin.dark, BACK_TOE_SHADE);
     ctx.beginPath();
     ctx.arc(toeX, toeY, toeR, 0, FULL_CIRCLE);
     ctx.fill();
-    ctx.strokeStyle = rgba(skin.shadow, 0.55);
-    ctx.lineWidth = footHeight * 0.09;
+    ctx.fillStyle = style.palette.bone.light;
     ctx.beginPath();
-    ctx.arc(toeX, toeY, toeR, deg(-150), deg(-30));
-    ctx.stroke();
-    // A claw on the leading toe: the cheapest thing that stops a bare foot
-    // reading as a slipper.
-    if (i === 0) {
-      ctx.fillStyle = style.palette.bone.dark;
-      ctx.beginPath();
-      ctx.moveTo(toeX + toeR * 0.5, toeY - toeR * 0.5);
-      ctx.lineTo(toeX + toeR * 1.5, toeY + toeR * 0.1);
-      ctx.lineTo(toeX + toeR * 0.55, toeY + toeR * 0.6);
-      ctx.closePath();
-      ctx.fill();
-    }
+    ctx.moveTo(toeX + toeR * TOE_CLAW.rootX, toeY - toeR * TOE_CLAW.rootRise);
+    ctx.lineTo(toeX + toeR * (1 + CLAW_LENGTH), toeY + toeR * TOE_CLAW.tipDrop);
+    ctx.lineTo(toeX + toeR * TOE_CLAW.heelX, toeY + toeR * TOE_CLAW.heelDrop);
+    ctx.closePath();
+    ctx.fill();
   }
 
   ctx.restore();
@@ -843,9 +1001,9 @@ function drawFoot(ctx: Ctx, ankle: Pt, angle: number, style: GoblinStyle, near: 
 
 /** Three fingers plus a thumb; a fourth finger reads as a mitten at 32 px. */
 const FINGER_COUNT = 3;
-const FINGER_LENGTH_FRACTION = 1.05;
-const FINGER_WIDTH_FRACTION = 0.34;
-const THUMB_LENGTH_FRACTION = 1.05;
+const FINGER_LENGTH_FRACTION = 1.15;
+const FINGER_WIDTH_FRACTION = 0.36;
+const THUMB_LENGTH_FRACTION = 1.0;
 /** Where the thumb sits on an open hand: well out to the side of the palm. */
 const THUMB_OPEN_FAN = deg(-104);
 /** …and on a closed fist: folded in almost against the fingers. */
@@ -856,9 +1014,32 @@ const THUMB_TUCKED_FRACTION = 0.58;
 const THUMB_THICKNESS_FACTOR = 1.18;
 const PALM_FRACTION = 0.95;
 /** Fingers fan from just outside the palm, not from its centre. */
-const KNUCKLE_FRACTION = 0.82;
+const KNUCKLE_FRACTION = 0.78;
+/** The long, bony goblin fingers end in a pale claw. */
+const FINGER_CLAW_FRACTION = 0.5;
+/** Fingers sit this far from the palm's tone toward its shadow, so they read over it. */
+const FINGER_SHADE = 0.3;
+/** How wide the fingers fan, from a closed grip to an open hand. */
+const FINGER_FAN_CLOSED = deg(30);
+const FINGER_FAN_OPEN = deg(62);
+/** A curled finger reaches this share of its open length. */
+const FINGER_CURLED_REACH = 0.72;
+/** How far a closed grip hooks the outer finger segment back toward the palm. */
+const FINGER_CURL = deg(82);
+/** Each finger is two equal segments, so a curl bends instead of kinking. */
+const FINGER_SEGMENT_SHARE = 0.5;
+/** A finger's width at its middle joint and at its tip, as a share of its root. */
+const FINGER_JOINT_TAPER = 0.9;
+const FINGER_TIP_TAPER = 0.62;
+/** A hand any more closed than this hides its claws inside the fist. */
+const CLAWS_SHOW_OPENNESS = 0.1;
+/** A claw's width at its root and at its point, as a share of the finger's root. */
+const CLAW_ROOT_TAPER = 0.45;
+const CLAW_TIP_TAPER = 0.12;
 
 /**
+ * An oversized, long-fingered goblin hand.
+ *
  * `openness` 0 curls the fingers into a grip around whatever the hand holds; 1
  * splays them. The far hand of a two-handed weapon and the near hand of every
  * armed pose want 0, an empty balance hand wants ~0.75.
@@ -877,18 +1058,13 @@ function drawHand(
 ): void {
   const r = style.proportions.handRadius;
   const skin = style.palette.skin;
-  const palmTone = near ? skin.mid : mix(skin.dark, skin.mid, FAR_LIMB_LIFT);
-  const fingerTone = near ? mix(skin.dark, skin.mid, 0.7) : skin.dark;
+  const palmTone = near ? skin.mid : farLimbTone(skin);
+  const fingerTone = mix(palmTone, skin.dark, FINGER_SHADE);
   const open = clamp01(openness);
 
   ctx.save();
   ctx.translate(at.x, at.y);
   ctx.rotate(angle);
-
-  ctx.fillStyle = style.palette.outline;
-  ctx.beginPath();
-  ctx.arc(0, 0, r * PALM_FRACTION * 1.22, 0, FULL_CIRCLE);
-  ctx.fill();
 
   ctx.fillStyle = palmTone;
   ctx.beginPath();
@@ -897,9 +1073,9 @@ function drawHand(
 
   // A curled grip hooks the fingers back toward the palm; an open hand throws
   // them straight out. Two segments each, so a curl bends instead of kinking.
-  const spreadArc = lerp(deg(26), deg(58), open);
-  const reach = r * FINGER_LENGTH_FRACTION * lerp(0.7, 1, open);
-  const curl = lerp(deg(78), 0, open);
+  const spreadArc = lerp(FINGER_FAN_CLOSED, FINGER_FAN_OPEN, open);
+  const reach = r * FINGER_LENGTH_FRACTION * lerp(FINGER_CURLED_REACH, 1, open);
+  const curl = lerp(FINGER_CURL, 0, open);
   // The thumb tucks in as the hand closes. Thrown out to the side on a fist
   // wrapped round a haft, it reads as a stray sixth finger stuck to the weapon
   // rather than as part of the hand.
@@ -916,13 +1092,23 @@ function drawHand(
 
   for (const [fan, length, thickness] of digits) {
     const knuckle = along(pt(0, 0), fan, r * KNUCKLE_FRACTION);
-    const midJoint = along(knuckle, fan, length * 0.5);
-    const tip = along(midJoint, fan + curl, length * 0.5);
+    const midJoint = along(knuckle, fan, length * FINGER_SEGMENT_SHARE);
+    const tip = along(midJoint, fan + curl, length * FINGER_SEGMENT_SHARE);
     const rootW = r * FINGER_WIDTH_FRACTION * thickness;
-    fillCapsule(ctx, knuckle, midJoint, rootW * 1.4, rootW * 1.25, style.palette.outline);
-    fillCapsule(ctx, midJoint, tip, rootW * 1.25, rootW * 1.05, style.palette.outline);
-    fillCapsule(ctx, knuckle, midJoint, rootW, rootW * 0.88, fingerTone);
-    fillCapsule(ctx, midJoint, tip, rootW * 0.88, rootW * 0.7, fingerTone);
+    const jointW = rootW * FINGER_JOINT_TAPER;
+    fillCapsule(ctx, knuckle, midJoint, rootW, jointW, fingerTone);
+    fillCapsule(ctx, midJoint, tip, jointW, rootW * FINGER_TIP_TAPER, fingerTone);
+    if (open > CLAWS_SHOW_OPENNESS) {
+      const claw = along(tip, fan + curl, rootW * FINGER_CLAW_FRACTION * 2);
+      fillCapsule(
+        ctx,
+        tip,
+        claw,
+        rootW * CLAW_ROOT_TAPER,
+        rootW * CLAW_TIP_TAPER,
+        style.palette.bone.light,
+      );
+    }
   }
 
   ctx.restore();
@@ -930,30 +1116,112 @@ function drawHand(
 
 // ── Torso ────────────────────────────────────────────────────────────────────
 
-const TORSO_OUTLINE_GROWTH = 0.028;
-const RIB_COUNT = 3;
-const RIB_ALPHA = 0.34;
+const RIB_COUNT = 2;
+const RIB_ALPHA = 0.3;
 const LOINCLOTH_DROP = 0.36;
+/**
+ * The belly's front curve, in shares of the belly bulge: the control past the
+ * shoulder, the fullest point past the hip, and where it tucks back in at the hip.
+ */
+const BELLY_SHOULDER_BULGE = 0.4;
+const BELLY_FULLEST_BULGE = 2.2;
+const BELLY_HIP_BULGE = 1.2;
+/** The back's lower control bows half as far as the upper one. */
+const LOWER_BACK_BOW_SHARE = 0.5;
+
+/**
+ * The torso's key-light gradient, lit back to shadowed gut, as stops and the
+ * alpha of the tone at each.
+ */
+const TORSO_SHADING = {
+  litAlpha: 0.7,
+  midStop: 0.45,
+  shadowStop: 0.62,
+  shadowAlpha: 0.55,
+  coreAlpha: 0.95,
+} as const;
+/** The shading rectangle, in torso lengths above and past the torso, so it covers any squash. */
+const TORSO_SHADE_TOP = 1.2;
+const TORSO_SHADE_HEIGHT = 1.6;
+/** The shading rectangle reaches this many half-spans either side of the hips. */
+const TORSO_SHADE_REACH = 2;
+
+/** The core shadow under the belly, in shares of the hip half-width and torso length. */
+const BELLY_SHADOW = {
+  alpha: 0.8,
+  hipShare: 0.6,
+  drop: 0.16,
+  height: 0.2,
+} as const;
+
+/** The two rib lines, in shares of the shoulder half-width and the torso length. */
+const RIB_LINE = {
+  width: 0.04,
+  backX: 0.6,
+  sagX: 0.1,
+  sag: 0.07,
+  frontX: 0.7,
+  frontRise: 0.02,
+} as const;
+
+/** The loincloth wrap, in shares of the torso length and hip half-width. */
+const LOINCLOTH = {
+  /** The wrap's top edge, up from the hip. */
+  top: 0.26,
+  /** How far the hem hangs below the hip, past the loincloth's own drop. */
+  hang: 0.16,
+  /** The front and back edges, past the hip half-width. */
+  hipReach: 1.2,
+  frontBulge: 1.3,
+  /** The front flap's lower corner, in shares of the front and the hem. */
+  flapCornerX: 0.86,
+  flapCornerY: 0.7,
+  /** The torn hem runs back to this share of the back edge. */
+  hemBack: 0.82,
+  /** The shallow tears hang this share of the deep ones. */
+  shallowTear: 0.55,
+  /** The hem rises to this share of its depth at the back. */
+  hemBackDepth: 0.45,
+  /** Where the back edge meets the hem. */
+  backCorner: 0.32,
+} as const;
+/** The loincloth's lit back panel and shadowed front, as shares of its width. */
+const LOINCLOTH_LIT_ALPHA = 0.5;
+const LOINCLOTH_LIT_SHARE = 0.35;
+const LOINCLOTH_SHADE_ALPHA = 0.7;
+const LOINCLOTH_SHADE_FROM = 0.25;
+/** The rope belt and its knot, in torso lengths. */
+const BELT = {
+  height: 0.07,
+  highlightInset: 0.012,
+  highlightHeight: 0.025,
+  knotX: 0.42,
+  knotDrop: 0.035,
+  knotRadius: 0.05,
+} as const;
 
 /**
  * Torso silhouette in spine space: the hip sits at the origin and the shoulders
  * at -torsoLength, so the caller can rotate the whole path by the body lean.
+ * Narrow sloping shoulders over a pot belly that sags forward of the hips.
  */
-function traceTorso(ctx: Ctx, p: GoblinProportions, grow: number): void {
-  const hipHalf = p.hipHalfWidth + grow;
-  const shoulderHalf = p.shoulderHalfWidth + grow;
+function traceTorso(ctx: Ctx, p: GoblinProportions): void {
+  const hipHalf = p.hipHalfWidth;
+  const shoulderHalf = p.shoulderHalfWidth;
   const bulge = p.bellyBulge;
   const top = -p.torsoLength;
   const WAIST_HEIGHT = 0.38;
   const CHEST_HEIGHT = 0.8;
   const SHOULDER_ROUND = 0.34;
   const CROTCH_ROUND = 0.34;
+  /** The belly's lowest, fullest point, as a share of the torso up from the hip. */
+  const BELLY_LOW = 0.32;
 
   ctx.beginPath();
   const SPINE_BOW = 0.22;
   ctx.moveTo(-hipHalf, 0);
   ctx.bezierCurveTo(
-    -hipHalf - p.torsoLength * SPINE_BOW * 0.5,
+    -hipHalf - p.torsoLength * SPINE_BOW * LOWER_BACK_BOW_SHARE,
     top * WAIST_HEIGHT,
     -shoulderHalf - p.torsoLength * SPINE_BOW,
     top * CHEST_HEIGHT,
@@ -962,114 +1230,85 @@ function traceTorso(ctx: Ctx, p: GoblinProportions, grow: number): void {
   );
   ctx.quadraticCurveTo(0, top - p.shoulderHalfWidth * SHOULDER_ROUND, shoulderHalf, top);
   ctx.bezierCurveTo(
-    shoulderHalf + bulge * 0.5,
+    shoulderHalf + bulge * BELLY_SHOULDER_BULGE,
     top * CHEST_HEIGHT,
-    hipHalf + bulge * 1.5,
-    top * WAIST_HEIGHT * 0.55,
-    hipHalf + bulge * 1.1,
+    hipHalf + bulge * BELLY_FULLEST_BULGE,
+    top * BELLY_LOW,
+    hipHalf + bulge * BELLY_HIP_BULGE,
     0,
   );
   ctx.quadraticCurveTo(0, p.hipHalfWidth * CROTCH_ROUND, -hipHalf, 0);
   ctx.closePath();
 }
 
-/** Speckle seed. Fixed, so the hide's blemishes land identically on every bake. */
-const HIDE_SPECKLE_SEED = 20260802;
-const HIDE_SPECKLE_COUNT = 26;
-const HIDE_SPECKLE_ALPHA = 0.16;
-
 function drawTorso(ctx: Ctx, style: GoblinStyle, squash: number): void {
   const p = style.proportions;
-  const { skin, cloth, outline } = style.palette;
+  const { skin, cloth } = style.palette;
   const top = -p.torsoLength;
-  const halfSpan = p.hipHalfWidth + p.bellyBulge;
+  const halfSpan = p.hipHalfWidth + p.bellyBulge * BELLY_FULLEST_BULGE;
 
   ctx.save();
   ctx.scale(1, squash);
 
-  ctx.fillStyle = outline;
-  traceTorso(ctx, p, TORSO_OUTLINE_GROWTH);
-  ctx.fill();
-
-  traceTorso(ctx, p, 0);
   ctx.fillStyle = skin.mid;
+  traceTorso(ctx, p);
   ctx.fill();
 
   ctx.save();
-  traceTorso(ctx, p, 0);
+  traceTorso(ctx, p);
   ctx.clip();
 
   // The key comes from the upper left, so the lit side of a figure facing +X is
-  // its far side; the belly that leads the walk falls into shadow.
+  // its back and shoulders; the underside of the gut falls into core shadow.
   const shading = ctx.createLinearGradient(-p.shoulderHalfWidth, top, halfSpan, 0);
-  shading.addColorStop(0, rgba(skin.light, 0.55));
-  shading.addColorStop(0.42, 'rgba(0,0,0,0)');
-  shading.addColorStop(1, rgba(skin.shadow, 0.6));
+  shading.addColorStop(0, rgba(skin.light, TORSO_SHADING.litAlpha));
+  shading.addColorStop(TORSO_SHADING.midStop, rgba(skin.mid, 0));
+  shading.addColorStop(TORSO_SHADING.shadowStop, rgba(skin.dark, TORSO_SHADING.shadowAlpha));
+  shading.addColorStop(1, rgba(skin.dark, TORSO_SHADING.coreAlpha));
   ctx.fillStyle = shading;
-  ctx.fillRect(-halfSpan * 2, top * 1.2, halfSpan * 4, -top * 1.6);
-
-  // Collarbone, pectoral shelf and gut. Without these the torso is a smooth
-  // lozenge and the whole upper body reads as a head with arms bolted to it.
-  const COLLAR_Y = 0.86;
-  const PECTORAL_Y = 0.62;
-  ctx.strokeStyle = rgba(skin.shadow, 0.5);
-  ctx.lineWidth = p.torsoLength * 0.045;
-  ctx.lineCap = 'round';
-  ctx.beginPath();
-  ctx.moveTo(-p.shoulderHalfWidth * 0.82, top * COLLAR_Y);
-  ctx.quadraticCurveTo(0, top * (COLLAR_Y - 0.1), p.shoulderHalfWidth * 0.78, top * COLLAR_Y);
-  ctx.stroke();
-
-  ctx.fillStyle = rgba(skin.light, 0.3);
-  ctx.beginPath();
-  ctx.moveTo(-p.shoulderHalfWidth * 0.7, top * (COLLAR_Y - 0.06));
-  ctx.quadraticCurveTo(
-    0,
-    top * (PECTORAL_Y + 0.14),
-    p.shoulderHalfWidth * 0.68,
-    top * (COLLAR_Y - 0.06),
+  ctx.fillRect(
+    -halfSpan * TORSO_SHADE_REACH,
+    top * TORSO_SHADE_TOP,
+    halfSpan * TORSO_SHADE_REACH * 2,
+    -top * TORSO_SHADE_HEIGHT,
   );
-  ctx.quadraticCurveTo(
+
+  // The belly's round underside: a crescent of core shadow under the bulge, so
+  // the gut reads as a ball hung off the front rather than as a flat lozenge.
+  const BELLY_CENTRE_Y = 0.3;
+  ctx.fillStyle = rgba(skin.dark, BELLY_SHADOW.alpha);
+  ctx.beginPath();
+  ctx.ellipse(
+    p.hipHalfWidth * BELLY_SHADOW.hipShare + p.bellyBulge,
+    top * BELLY_CENTRE_Y + p.torsoLength * BELLY_SHADOW.drop,
+    p.hipHalfWidth + p.bellyBulge,
+    p.torsoLength * BELLY_SHADOW.height,
     0,
-    top * (PECTORAL_Y - 0.06),
-    -p.shoulderHalfWidth * 0.7,
-    top * (COLLAR_Y - 0.06),
+    0,
+    FULL_CIRCLE,
   );
-  ctx.closePath();
   ctx.fill();
 
   ctx.strokeStyle = rgba(skin.shadow, RIB_ALPHA);
-  ctx.lineWidth = p.torsoLength * 0.035;
+  ctx.lineWidth = p.torsoLength * RIB_LINE.width;
+  ctx.lineCap = 'round';
   for (let i = 0; i < RIB_COUNT; i++) {
-    const RIB_TOP_FRACTION = 0.52;
-    const RIB_SPACING = 0.11;
+    const RIB_TOP_FRACTION = 0.7;
+    const RIB_SPACING = 0.13;
     const ribY = top * (RIB_TOP_FRACTION - i * RIB_SPACING);
-    const RIB_SHORTENING = 0.18;
-    const span = 1 - i * RIB_SHORTENING;
     ctx.beginPath();
-    ctx.moveTo(-p.shoulderHalfWidth * 0.66 * span, ribY - p.torsoLength * 0.02);
+    ctx.moveTo(-p.shoulderHalfWidth * RIB_LINE.backX, ribY);
     ctx.quadraticCurveTo(
-      p.hipHalfWidth * 0.1,
-      ribY + p.torsoLength * (0.05 + i * 0.02),
-      (p.hipHalfWidth * 0.92 + p.bellyBulge * 0.7) * span,
-      ribY - p.torsoLength * 0.01,
+      p.hipHalfWidth * RIB_LINE.sagX,
+      ribY + p.torsoLength * RIB_LINE.sag,
+      p.shoulderHalfWidth * RIB_LINE.frontX,
+      ribY - p.torsoLength * RIB_LINE.frontRise,
     );
     ctx.stroke();
   }
 
-  // A mottled hide. Flat fills are the second-biggest reason the old goblin
-  // looked cheap, after the palette.
-  const speckle = seededNoise(HIDE_SPECKLE_SEED);
-  for (let i = 0; i < HIDE_SPECKLE_COUNT; i++) {
-    const sx = lerp(-p.shoulderHalfWidth, halfSpan, speckle());
-    const sy = lerp(top, p.hipHalfWidth * 0.3, speckle());
-    const size = p.torsoLength * lerp(0.018, 0.05, speckle());
-    ctx.fillStyle = rgba(speckle() > 0.5 ? skin.shadow : skin.light, HIDE_SPECKLE_ALPHA);
-    ctx.beginPath();
-    ctx.ellipse(sx, sy, size, size * 0.72, 0, 0, FULL_CIRCLE);
-    ctx.fill();
-  }
   if (style.gear.overalls) drawOverallsBib(ctx, style);
+  style.outfit?.torso?.(ctx, style);
   ctx.restore();
 
   if (style.gear.overalls) {
@@ -1077,55 +1316,70 @@ function drawTorso(ctx: Ctx, style: GoblinStyle, squash: number): void {
     ctx.restore();
     return;
   }
+  const outfitHips = style.outfit?.hips;
+  if (outfitHips !== undefined) {
+    outfitHips(ctx, style);
+    ctx.restore();
+    return;
+  }
 
-  // The wrap sits over the hips and hangs below the torso path, so it is drawn
-  // after the clip is released.
-  const wrapTop = -p.torsoLength * 0.22;
-  const wrapBottom = p.hipHalfWidth * LOINCLOTH_DROP + p.torsoLength * 0.1;
-  const front = p.hipHalfWidth * 1.1 + p.bellyBulge * 0.6;
-  const back = -p.hipHalfWidth * 1.08;
+  // The rag loincloth is the goblin's warm accent: a rust red that parts the
+  // figure from a green floor by hue where green skin cannot.
+  const wrapTop = -p.torsoLength * LOINCLOTH.top;
+  const wrapBottom = p.hipHalfWidth * LOINCLOTH_DROP + p.torsoLength * LOINCLOTH.hang;
+  const front = p.hipHalfWidth * LOINCLOTH.hipReach + p.bellyBulge * LOINCLOTH.frontBulge;
+  const back = -p.hipHalfWidth * LOINCLOTH.hipReach;
   /** The long front flap hangs well past the short back one; nothing matches. */
-  const FRONT_HANG = 2.1;
+  const FRONT_HANG = 2.6;
   const TEAR_COUNT = 4;
 
-  const traceWrap = (grow: number): void => {
+  const traceWrap = (): void => {
     ctx.beginPath();
-    ctx.moveTo(back - grow, wrapTop - grow);
-    ctx.lineTo(front + grow, wrapTop - grow);
-    ctx.lineTo(front * 0.86, wrapBottom * 0.7);
+    ctx.moveTo(back, wrapTop);
+    ctx.lineTo(front, wrapTop);
+    ctx.lineTo(front * LOINCLOTH.flapCornerX, wrapBottom * LOINCLOTH.flapCornerY);
     // A torn hem: alternating points across the bottom of the front flap.
     for (let i = 0; i <= TEAR_COUNT; i++) {
       const t = i / TEAR_COUNT;
-      const x = lerp(front * 0.86, back * 0.82, t);
-      const deep = i % 2 === 0 ? FRONT_HANG : FRONT_HANG * 0.55;
-      ctx.lineTo(x, wrapBottom * lerp(deep, 0.45, t) + grow);
+      const x = lerp(front * LOINCLOTH.flapCornerX, back * LOINCLOTH.hemBack, t);
+      const deep = i % 2 === 0 ? FRONT_HANG : FRONT_HANG * LOINCLOTH.shallowTear;
+      ctx.lineTo(x, wrapBottom * lerp(deep, LOINCLOTH.hemBackDepth, t));
     }
-    ctx.lineTo(back - grow, wrapBottom * 0.32);
+    ctx.lineTo(back, wrapBottom * LOINCLOTH.backCorner);
     ctx.closePath();
   };
 
-  ctx.fillStyle = outline;
-  traceWrap(TORSO_OUTLINE_GROWTH);
-  ctx.fill();
-  ctx.fillStyle = cloth.mid;
-  traceWrap(0);
+  ctx.fillStyle = cloth.light;
+  traceWrap();
   ctx.fill();
 
-  ctx.save();
-  traceWrap(0);
-  ctx.clip();
-  ctx.fillStyle = rgba(cloth.shadow, 0.6);
-  ctx.fillRect(front * 0.1, wrapTop, front, wrapBottom * FRONT_HANG * 2);
-  // The rope belt, knotted off to one side.
-  ctx.fillStyle = outline;
-  ctx.fillRect(back, wrapTop + p.torsoLength * 0.02, front - back, p.torsoLength * 0.055);
-  ctx.fillStyle = style.palette.leather.mid;
-  ctx.fillRect(back, wrapTop + p.torsoLength * 0.03, front - back, p.torsoLength * 0.035);
-  ctx.restore();
+  withClip(ctx, traceWrap, () => {
+    const panelHeight = wrapBottom * FRONT_HANG * 2;
+    ctx.fillStyle = rgba(cloth.rim, LOINCLOTH_LIT_ALPHA);
+    ctx.fillRect(back, wrapTop, (front - back) * LOINCLOTH_LIT_SHARE, panelHeight);
+    ctx.fillStyle = rgba(cloth.dark, LOINCLOTH_SHADE_ALPHA);
+    ctx.fillRect(front * LOINCLOTH_SHADE_FROM, wrapTop, front, panelHeight);
+    // The rope belt, knotted off to one side.
+    ctx.fillStyle = style.palette.leather.dark;
+    ctx.fillRect(back, wrapTop, front - back, p.torsoLength * BELT.height);
+    ctx.fillStyle = style.palette.leather.light;
+    ctx.fillRect(
+      back,
+      wrapTop + p.torsoLength * BELT.highlightInset,
+      front - back,
+      p.torsoLength * BELT.highlightHeight,
+    );
+  });
 
-  ctx.fillStyle = style.palette.leather.dark;
+  ctx.fillStyle = style.palette.leather.light;
   ctx.beginPath();
-  ctx.arc(front * 0.42, wrapTop + p.torsoLength * 0.048, p.torsoLength * 0.05, 0, FULL_CIRCLE);
+  ctx.arc(
+    front * BELT.knotX,
+    wrapTop + p.torsoLength * BELT.knotDrop,
+    p.torsoLength * BELT.knotRadius,
+    0,
+    FULL_CIRCLE,
+  );
   ctx.fill();
 
   ctx.restore();
@@ -1140,24 +1394,16 @@ const PAULDRON_STUD_COUNT = 3;
 /** One scavenged shoulder plate, strapped on over the near shoulder only. */
 function drawPauldron(ctx: Ctx, shoulder: Pt, lean: number, style: GoblinStyle): void {
   const p = style.proportions;
-  const { iron, leather, outline } = style.palette;
-  const RUST = 0.42;
-  const plate = mix(iron.dark, leather.dark, RUST);
-  const plateSheen = mix(iron.light, leather.light, RUST);
+  const { iron, leather } = style.palette;
+  const RUST = 0.25;
+  const plate = mix(iron.mid, leather.mid, RUST);
+  const plateSheen = iron.rim;
   const halfWidth = p.armWidth * PAULDRON_WIDTH_FRACTION * 0.5;
   const height = p.armWidth * PAULDRON_HEIGHT_FRACTION;
 
   ctx.save();
   ctx.translate(shoulder.x, shoulder.y);
   ctx.rotate(lean);
-
-  ctx.fillStyle = outline;
-  ctx.beginPath();
-  ctx.ellipse(0, 0, halfWidth * 1.12, height * 0.72, 0, Math.PI, FULL_CIRCLE);
-  ctx.lineTo(halfWidth * 1.05, height * 0.5);
-  ctx.lineTo(-halfWidth * 1.05, height * 0.5);
-  ctx.closePath();
-  ctx.fill();
 
   ctx.fillStyle = plate;
   ctx.beginPath();
@@ -1167,7 +1413,7 @@ function drawPauldron(ctx: Ctx, shoulder: Pt, lean: number, style: GoblinStyle):
   ctx.closePath();
   ctx.fill();
 
-  ctx.fillStyle = rgba(plateSheen, 0.45);
+  ctx.fillStyle = rgba(plateSheen, 0.7);
   ctx.beginPath();
   ctx.ellipse(
     -halfWidth * 0.34,
@@ -1210,8 +1456,8 @@ function drawBracer(ctx: Ctx, chain: BoneChain, style: GoblinStyle, widthScale =
   const a = mixPt(chain.joint, chain.end, BRACER_START);
   const b = mixPt(chain.joint, chain.end, BRACER_END);
 
-  fillCapsule(ctx, a, b, width * 0.62, width * 0.56, style.palette.outline);
-  fillCapsule(ctx, a, b, width * 0.54, width * 0.48, leather.dark);
+  fillCapsule(ctx, a, b, width * 0.58, width * 0.52, leather.mid);
+  fillCapsule(ctx, a, b, width * 0.3, width * 0.26, leather.light);
   const RIVET_POSITIONS: readonly number[] = [0.3, 0.72];
   for (const at of RIVET_POSITIONS) {
     const rivet = mixPt(a, b, at);
@@ -1222,23 +1468,43 @@ function drawBracer(ctx: Ctx, chain: BoneChain, style: GoblinStyle, widthScale =
   }
 }
 
-/** A single shin greave, on the near leg. Rusted, because nothing here is kept. */
+/** Bands of cord binding the wrap, and the stud riveted through its middle. */
+const SHIN_WRAP_BANDS = 3;
+const SHIN_WRAP_STUD = 0.16;
+
+/**
+ * A leather shin wrap on the near leg, bound with cord and studded with one
+ * iron rivet. Leather rather than plate: a grey greave on a green shin reads
+ * at 32 px as a bare bone leg.
+ */
 function drawGreave(ctx: Ctx, chain: BoneChain, style: GoblinStyle): void {
-  const { iron, leather, outline } = style.palette;
-  const RUST = 0.42;
-  const plate = mix(iron.dark, leather.dark, RUST);
-  const plateSheen = mix(iron.light, leather.light, RUST);
+  const { iron, leather } = style.palette;
   const width = style.proportions.legWidth;
   const GREAVE_START = 0.22;
   const GREAVE_END = 0.82;
   const a = mixPt(chain.joint, chain.end, GREAVE_START);
   const b = mixPt(chain.joint, chain.end, GREAVE_END);
 
-  fillCapsule(ctx, a, b, width * 0.66, width * 0.58, outline);
-  fillCapsule(ctx, a, b, width * 0.58, width * 0.5, plate);
+  fillCapsule(ctx, a, b, width * 0.62, width * 0.54, leather.mid);
   const sheenA = offset(a, LIGHT.x * width * 0.18, LIGHT.y * width * 0.18);
   const sheenB = offset(b, LIGHT.x * width * 0.18, LIGHT.y * width * 0.18);
-  fillCapsule(ctx, sheenA, sheenB, width * 0.12, width * 0.09, rgba(plateSheen, 0.34));
+  fillCapsule(ctx, sheenA, sheenB, width * 0.14, width * 0.1, rgba(leather.rim, 0.7));
+  for (let i = 0; i < SHIN_WRAP_BANDS; i++) {
+    const band = mixPt(a, b, (i + 0.5) / SHIN_WRAP_BANDS);
+    fillCapsule(
+      ctx,
+      offset(band, -width * 0.55, -width * 0.12),
+      offset(band, width * 0.55, width * 0.12),
+      width * 0.07,
+      width * 0.07,
+      leather.dark,
+    );
+  }
+  const stud = mixPt(a, b, 0.5);
+  ctx.fillStyle = iron.rim;
+  ctx.beginPath();
+  ctx.arc(stud.x, stud.y, width * SHIN_WRAP_STUD, 0, FULL_CIRCLE);
+  ctx.fill();
 }
 
 const NECKLACE_TOOTH_COUNT = 3;
@@ -1266,7 +1532,7 @@ function drawNecklace(ctx: Ctx, spineTop: Pt, lean: number, style: GoblinStyle):
     const t = (i + 1) / (NECKLACE_TOOTH_COUNT + 1);
     const x = lerp(-spanHalf, spanHalf, t);
     const y = drop * 1.5 * (1 - (2 * t - 1) * (2 * t - 1)) * 0.75;
-    ctx.fillStyle = i % 2 === 0 ? bone.shadow : bone.dark;
+    ctx.fillStyle = i % 2 === 0 ? bone.light : bone.mid;
     ctx.beginPath();
     ctx.moveTo(x - drop * 0.11, y);
     ctx.lineTo(x + drop * 0.11, y);
@@ -1306,7 +1572,7 @@ const QUIVER_SPREAD_CENTRE = 0.5;
  */
 function drawQuiver(ctx: Ctx, spineTop: Pt, lean: number, style: GoblinStyle): void {
   const p = style.proportions;
-  const { leather, wood, bone, outline } = style.palette;
+  const { leather, wood, bone, cloth } = style.palette;
   const length = p.torsoLength * QUIVER_LENGTH_FRACTION;
   const halfWidth = p.torsoLength * QUIVER_HALF_WIDTH_FRACTION;
   const overhang = length * QUIVER_SHAFT_OVERHANG;
@@ -1322,44 +1588,32 @@ function drawQuiver(ctx: Ctx, spineTop: Pt, lean: number, style: GoblinStyle): v
     const shaftHalf = halfWidth * 0.16;
     ctx.save();
     ctx.translate(spread, 0);
-    ctx.fillStyle = outline;
-    ctx.fillRect(-shaftHalf * 2, -reach, shaftHalf * 4, reach);
     ctx.fillStyle = wood.light;
-    ctx.fillRect(-shaftHalf, -reach, shaftHalf * 2, reach);
+    ctx.fillRect(-shaftHalf * 1.5, -reach, shaftHalf * 3, reach);
     // Fletching: a wedge at the very top, which is the part that has to survive
     // as a distinct bump on the silhouette.
-    ctx.fillStyle = outline;
+    ctx.fillStyle = i % 2 === 0 ? bone.rim : cloth.light;
     ctx.beginPath();
     ctx.moveTo(0, -reach - shaftHalf);
-    ctx.lineTo(-shaftHalf * 4, -reach + overhang * 0.3);
-    ctx.lineTo(shaftHalf * 4, -reach + overhang * 0.3);
-    ctx.closePath();
-    ctx.fill();
-    ctx.fillStyle = i % 2 === 0 ? bone.light : bone.mid;
-    ctx.beginPath();
-    ctx.moveTo(0, -reach);
-    ctx.lineTo(-shaftHalf * 2.6, -reach + overhang * 0.26);
-    ctx.lineTo(shaftHalf * 2.6, -reach + overhang * 0.26);
+    ctx.lineTo(-shaftHalf * 3.6, -reach + overhang * 0.3);
+    ctx.lineTo(shaftHalf * 3.6, -reach + overhang * 0.3);
     ctx.closePath();
     ctx.fill();
     ctx.restore();
   }
 
-  const traceTube = (grow: number): void => {
+  const traceTube = (): void => {
     ctx.beginPath();
-    ctx.moveTo(-halfWidth - grow, -grow);
-    ctx.lineTo(halfWidth + grow, -grow);
-    ctx.lineTo(halfWidth * 0.7 + grow, length + grow);
-    ctx.lineTo(-halfWidth * 0.7 - grow, length + grow);
+    ctx.moveTo(-halfWidth, 0);
+    ctx.lineTo(halfWidth, 0);
+    ctx.lineTo(halfWidth * 0.7, length);
+    ctx.lineTo(-halfWidth * 0.7, length);
     ctx.closePath();
   };
-  ctx.fillStyle = outline;
-  traceTube(p.torsoLength * 0.02);
+  ctx.fillStyle = leather.light;
+  traceTube();
   ctx.fill();
-  ctx.fillStyle = leather.mid;
-  traceTube(0);
-  ctx.fill();
-  ctx.fillStyle = rgba(leather.light, 0.6);
+  ctx.fillStyle = rgba(leather.rim, 0.6);
   ctx.fillRect(-halfWidth, 0, halfWidth * 0.55, length);
   ctx.fillStyle = rgba(leather.shadow, 0.5);
   ctx.fillRect(halfWidth * 0.3, 0, halfWidth * 0.5, length);
@@ -1404,18 +1658,17 @@ const PLUNGER_RUBBER: Ramp = {
 const BRASS = '#c9a24a';
 
 /** Where the bib's top edge sits, as a fraction of the torso up from the hip. */
-const BIB_TOP = 0.7;
+const BIB_TOP = 0.9;
 /** Where the bib meets the trousers, as a fraction of the torso up from the hip. */
 const BIB_WAIST = 0.24;
 /** The bib's two side edges, in shoulder half-widths; biased forward for the three-quarter view. */
-const BIB_BACK_EDGE = -0.34;
+const BIB_BACK_EDGE = -0.85;
 const BIB_FRONT_EDGE = 0.86;
 /** Where each strap crosses the top of the shoulder, in shoulder half-widths. */
 const STRAP_BACK_SHOULDER = -0.66;
 const STRAP_FRONT_SHOULDER = 0.5;
-/** Strap and outline widths, as fractions of the torso length. */
+/** Strap width, as a fraction of the torso length. */
 const STRAP_WIDTH = 0.085;
-const STRAP_OUTLINE_WIDTH = 0.14;
 const BIB_BUTTON_RADIUS = 0.04;
 /** How far below the strap's foot its button sits, in strap widths. */
 const BIB_BUTTON_DROP = 0.6;
@@ -1441,7 +1694,6 @@ const SHADE_MIDPOINT = 0.5;
 /** The overalls' bib and straps, painted inside the torso's clip in spine space. */
 function drawOverallsBib(ctx: Ctx, style: GoblinStyle): void {
   const p = style.proportions;
-  const { outline } = style.palette;
   const top = -p.torsoLength;
   const bibTop = top * BIB_TOP;
   const waist = top * BIB_WAIST;
@@ -1449,16 +1701,18 @@ function drawOverallsBib(ctx: Ctx, style: GoblinStyle): void {
   const front = p.shoulderHalfWidth * BIB_FRONT_EDGE;
   const reach = p.torsoLength * CLIP_OVERREACH;
 
-  const traceDenim = (grow: number): void => {
+  // The bib's front runs on past the belly and the torso's clip ends it: a
+  // pot belly bulging out round the side of a bib reads as bare skin.
+  const traceDenim = (): void => {
     ctx.beginPath();
-    ctx.moveTo(back - grow, bibTop - grow);
-    ctx.lineTo(front + grow, bibTop - grow);
-    ctx.lineTo(front + grow, waist - grow);
-    ctx.lineTo(reach, waist - grow);
+    ctx.moveTo(back, bibTop);
+    ctx.lineTo(reach, bibTop);
+    ctx.lineTo(reach, waist);
+    ctx.lineTo(reach, waist);
     ctx.lineTo(reach, reach);
     ctx.lineTo(-reach, reach);
-    ctx.lineTo(-reach, waist - grow);
-    ctx.lineTo(back - grow, waist - grow);
+    ctx.lineTo(-reach, waist);
+    ctx.lineTo(back, waist);
     ctx.closePath();
   };
 
@@ -1468,20 +1722,8 @@ function drawOverallsBib(ctx: Ctx, style: GoblinStyle): void {
     [pt(front - strapWidth, bibTop), pt(p.shoulderHalfWidth * STRAP_FRONT_SHOULDER, top)],
   ];
   ctx.lineCap = 'round';
-  ctx.strokeStyle = outline;
-  ctx.lineWidth = p.torsoLength * STRAP_OUTLINE_WIDTH;
-  for (const [foot, over] of straps) {
-    ctx.beginPath();
-    ctx.moveTo(foot.x, foot.y);
-    ctx.lineTo(over.x, over.y * CLIP_OVERREACH);
-    ctx.stroke();
-  }
-
-  ctx.fillStyle = outline;
-  traceDenim(TORSO_OUTLINE_GROWTH);
-  ctx.fill();
   ctx.fillStyle = DENIM.mid;
-  traceDenim(0);
+  traceDenim();
   ctx.fill();
 
   ctx.strokeStyle = DENIM.light;
@@ -1498,7 +1740,7 @@ function drawOverallsBib(ctx: Ctx, style: GoblinStyle): void {
   shading.addColorStop(SHADE_MIDPOINT, rgba(DENIM.mid, 0));
   shading.addColorStop(1, rgba(DENIM.shadow, DENIM_SHADED_ALPHA));
   ctx.fillStyle = shading;
-  traceDenim(0);
+  traceDenim();
   ctx.fill();
 
   const pocketLeft = lerp(back, front, BIB_POCKET_INSET);
@@ -1545,8 +1787,6 @@ const SEAT_CROTCH_SAG = 1.25;
 const SEAT_SHADOW_START = 0.15;
 const SEAT_SHADOW_ALPHA = 0.55;
 const TOOL_BELT_HEIGHT = 0.075;
-/** The belt's outline band, as a multiple of the belt's own height. */
-const TOOL_BELT_OUTLINE_SPAN = 1.5;
 /** The pouch hung off the belt on the front hip, as fractions of the torso. */
 const POUCH_WIDTH = 0.26;
 const POUCH_DEPTH = 0.3;
@@ -1560,58 +1800,39 @@ const BUCKLE_BACK_SHIFT = 0.3;
 /** The trousers' seat and the tool belt over the waist, in spine space. */
 function drawOverallsSeat(ctx: Ctx, style: GoblinStyle): void {
   const p = style.proportions;
-  const { outline, leather } = style.palette;
+  const { leather } = style.palette;
   const top = -p.torsoLength;
   const waist = top * BIB_WAIST;
   const front = p.hipHalfWidth * SEAT_HIP_FLARE + p.bellyBulge * SEAT_BELLY_WRAP;
   const back = -p.hipHalfWidth * SEAT_HIP_FLARE;
   const seat = p.hipHalfWidth * SEAT_DROP;
 
-  const traceSeat = (grow: number): void => {
+  const traceSeat = (): void => {
     ctx.beginPath();
-    ctx.moveTo(back - grow, waist);
-    ctx.lineTo(front + grow, waist);
-    ctx.quadraticCurveTo(
-      front + grow,
-      seat * SEAT_SIDE_CURVE,
-      front * SEAT_FRONT_HEM_INSET,
-      seat + grow,
-    );
-    ctx.quadraticCurveTo(0, seat * SEAT_CROTCH_SAG + grow, back * SEAT_BACK_HEM_INSET, seat + grow);
-    ctx.quadraticCurveTo(back - grow, seat * SEAT_SIDE_CURVE, back - grow, waist);
+    ctx.moveTo(back, waist);
+    ctx.lineTo(front, waist);
+    ctx.quadraticCurveTo(front, seat * SEAT_SIDE_CURVE, front * SEAT_FRONT_HEM_INSET, seat);
+    ctx.quadraticCurveTo(0, seat * SEAT_CROTCH_SAG, back * SEAT_BACK_HEM_INSET, seat);
+    ctx.quadraticCurveTo(back, seat * SEAT_SIDE_CURVE, back, waist);
     ctx.closePath();
   };
-  ctx.fillStyle = outline;
-  traceSeat(TORSO_OUTLINE_GROWTH);
-  ctx.fill();
   ctx.fillStyle = DENIM.mid;
-  traceSeat(0);
+  traceSeat();
   ctx.fill();
   ctx.save();
-  traceSeat(0);
+  traceSeat();
   ctx.clip();
   ctx.fillStyle = rgba(DENIM.shadow, SEAT_SHADOW_ALPHA);
   ctx.fillRect(front * SEAT_SHADOW_START, waist, front, seat * 2);
   ctx.restore();
 
   const beltHeight = p.torsoLength * TOOL_BELT_HEIGHT;
-  const beltOutlineHeight = beltHeight * TOOL_BELT_OUTLINE_SPAN;
-  ctx.fillStyle = outline;
-  ctx.fillRect(back, waist - beltOutlineHeight / 2, front - back, beltOutlineHeight);
   ctx.fillStyle = leather.mid;
   ctx.fillRect(back, waist - beltHeight / 2, front - back, beltHeight);
 
   const pouchWidth = p.torsoLength * POUCH_WIDTH;
   const pouchLeft = front * POUCH_FRONT_SHIFT;
   const pouchDepth = p.torsoLength * POUCH_DEPTH;
-  const growth = TORSO_OUTLINE_GROWTH;
-  ctx.fillStyle = outline;
-  ctx.fillRect(
-    pouchLeft - growth,
-    waist - growth,
-    pouchWidth + growth * 2,
-    pouchDepth + growth * 2,
-  );
   ctx.fillStyle = leather.light;
   ctx.fillRect(pouchLeft, waist, pouchWidth, pouchDepth);
   ctx.fillStyle = leather.dark;
@@ -1623,12 +1844,11 @@ function drawOverallsSeat(ctx: Ctx, style: GoblinStyle): void {
 }
 
 /** Trouser legs are wider than the starved leg inside them. */
-const TROUSER_WIDTH = 1.45;
+const TROUSER_WIDTH = 1.9;
 /** Where along the shin the hem sits; below it the bare goblin leg shows. */
-const TROUSER_HEM = 0.55;
+const TROUSER_HEM = 0.92;
 /** The rolled cuff, as the last part of the shin the trousers cover. */
-const TROUSER_CUFF_START = 0.38;
-const TROUSER_OUTLINE = 0.16;
+const TROUSER_CUFF_START = 0.72;
 /** Half-widths at the knee and at the cuff's top, as fractions of the half-width at the hip. */
 const TROUSER_KNEE_TAPER = 0.9;
 const TROUSER_CUFF_TAPER = 0.95;
@@ -1646,15 +1866,10 @@ function drawTrouserLeg(ctx: Ctx, chain: BoneChain, style: GoblinStyle, near: bo
   const half = width / 2;
   const knee = half * TROUSER_KNEE_TAPER;
   const cuffTop = half * TROUSER_CUFF_TAPER;
-  const growth = width * TROUSER_OUTLINE;
   const hem = mixPt(chain.joint, chain.end, TROUSER_HEM);
   const cuff = mixPt(chain.joint, chain.end, TROUSER_CUFF_START);
-  const fill = near ? DENIM.mid : mix(DENIM.dark, DENIM.mid, FAR_LIMB_LIFT);
+  const fill = near ? DENIM.mid : mix(DENIM.dark, DENIM.mid, FAR_LIMB_SHARE);
   const cuffFill = near ? DENIM.light : DENIM.mid;
-  const outline = style.palette.outline;
-
-  fillCapsule(ctx, chain.anchor, chain.joint, half + growth, knee + growth, outline);
-  fillCapsule(ctx, chain.joint, hem, knee + growth, half + growth, outline);
   fillCapsule(ctx, chain.anchor, chain.joint, half, knee, fill);
   fillCapsule(ctx, chain.joint, cuff, knee, cuffTop, fill);
   fillCapsule(ctx, cuff, hem, cuffTop, half, cuffFill);
@@ -1671,8 +1886,6 @@ function drawTrouserLeg(ctx: Ctx, chain: BoneChain, style: GoblinStyle, near: bo
   );
 }
 
-/** Line width of the cap's outline, as a fraction of the head radius. */
-const CAP_OUTLINE_WIDTH = 0.12;
 const CAP_BUTTON_RADIUS = 0.09;
 
 /**
@@ -1716,7 +1929,7 @@ function drawFlatCap(ctx: Ctx, style: GoblinStyle): void {
   const p = style.proportions;
   const r = p.headRadius;
   const rx = r * p.headWidthFactor;
-  const { outline, skin } = style.palette;
+  const { skin } = style.palette;
   const at = (point: Pt): Pt => pt(rx * point.x, r * point.y);
 
   const traceCap = (): void => {
@@ -1756,12 +1969,8 @@ function drawFlatCap(ctx: Ctx, style: GoblinStyle): void {
   ctx.ellipse(shadowCentre.x, shadowCentre.y, shadowRadii.x, shadowRadii.y, 0, 0, FULL_CIRCLE);
   ctx.fill();
 
-  ctx.lineJoin = 'round';
-  ctx.strokeStyle = outline;
-  ctx.lineWidth = r * CAP_OUTLINE_WIDTH;
-  traceCap();
-  ctx.stroke();
   ctx.fillStyle = CAP_CLOTH.mid;
+  traceCap();
   ctx.fill();
 
   ctx.save();
@@ -1820,7 +2029,6 @@ const PLUNGER_BACK_OFFSET = 1.05;
 const PLUNGER_TILT = deg(-34);
 const PLUNGER_CUP_HALF_WIDTH = 0.15;
 const PLUNGER_CUP_DEPTH = 0.15;
-const PLUNGER_OUTLINE = 0.016;
 /** Where the cup's flanks start rounding toward the handle, as a fraction of its depth. */
 const PLUNGER_CUP_FLANK = 0.7;
 /** How wide the cup's neck is where it grips the handle, in handle half-widths. */
@@ -1841,7 +2049,7 @@ const PLUNGER_MOUTH_HEIGHT = 0.22;
 /** The plunger, drawn behind the torso so the body overlaps its handle. */
 function drawPlunger(ctx: Ctx, spineTop: Pt, lean: number, style: GoblinStyle): void {
   const p = style.proportions;
-  const { wood, outline } = style.palette;
+  const { wood } = style.palette;
   const below = PLUNGER_HANDLE_LENGTH * PLUNGER_HANG;
   const above = PLUNGER_HANDLE_LENGTH - below;
   const half = PLUNGER_HANDLE_HALF_WIDTH;
@@ -1850,13 +2058,6 @@ function drawPlunger(ctx: Ctx, spineTop: Pt, lean: number, style: GoblinStyle): 
   ctx.translate(spineTop.x - p.shoulderHalfWidth * PLUNGER_BACK_OFFSET, spineTop.y);
   ctx.rotate(lean + PLUNGER_TILT);
 
-  ctx.fillStyle = outline;
-  ctx.fillRect(
-    -half - PLUNGER_OUTLINE,
-    -above,
-    (half + PLUNGER_OUTLINE) * 2,
-    PLUNGER_HANDLE_LENGTH,
-  );
   ctx.fillStyle = wood.light;
   ctx.fillRect(-half, -above, half * 2, PLUNGER_HANDLE_LENGTH);
   ctx.fillStyle = rgba(wood.shadow, PLUNGER_HANDLE_SHADE_ALPHA);
@@ -1867,29 +2068,19 @@ function drawPlunger(ctx: Ctx, spineTop: Pt, lean: number, style: GoblinStyle): 
   const flankY = rimY + PLUNGER_CUP_DEPTH * PLUNGER_CUP_FLANK;
   const neck = half * PLUNGER_CUP_NECK;
   const baseY = -above + PLUNGER_CUP_DEPTH * PLUNGER_CUP_BASE_OVERLAP;
-  const traceCup = (grow: number): void => {
+  const traceCup = (): void => {
     ctx.beginPath();
-    ctx.moveTo(-cupHalf - grow, rimY - grow);
-    ctx.lineTo(cupHalf + grow, rimY - grow);
-    ctx.bezierCurveTo(cupHalf + grow, flankY, neck + grow, -above + grow, 0, baseY + grow);
-    ctx.bezierCurveTo(
-      -neck - grow,
-      -above + grow,
-      -cupHalf - grow,
-      flankY,
-      -cupHalf - grow,
-      rimY - grow,
-    );
+    ctx.moveTo(-cupHalf, rimY);
+    ctx.lineTo(cupHalf, rimY);
+    ctx.bezierCurveTo(cupHalf, flankY, neck, -above, 0, baseY);
+    ctx.bezierCurveTo(-neck, -above, -cupHalf, flankY, -cupHalf, rimY);
     ctx.closePath();
   };
-  ctx.fillStyle = outline;
-  traceCup(PLUNGER_OUTLINE);
-  ctx.fill();
   ctx.fillStyle = PLUNGER_RUBBER.mid;
-  traceCup(0);
+  traceCup();
   ctx.fill();
   ctx.save();
-  traceCup(0);
+  traceCup();
   ctx.clip();
   const bandLength = PLUNGER_CUP_DEPTH * PLUNGER_CUP_BAND_REACH;
   ctx.fillStyle = rgba(PLUNGER_RUBBER.rim, PLUNGER_CUP_LIT_ALPHA);
@@ -1915,415 +2106,676 @@ function drawPlunger(ctx: Ctx, spineTop: Pt, lean: number, style: GoblinStyle): 
 
 // ── Head ─────────────────────────────────────────────────────────────────────
 //
-// Face layout as fractions of the head radius (X fractions of the half-width).
-// The head is seen three-quarters on, so features are pushed toward the facing
-// side and the far eye is smaller and closer to the centre.
+// Face layout as fractions of the head radius (X fractions of the half-width),
+// in head-local space with +X forward. The head is turned partly toward the
+// camera: the face sits on the forward half of a big round skull, the far eye
+// is foreshortened toward the brow's edge, and the far ear shows over the
+// forehead as well as the near ear behind the skull.
 
-/** More than three bites and the ear stops reading as one shape. */
-const MAX_EAR_NOTCHES = 3;
-const EYE_NEAR_X = 0.48;
-const EYE_FAR_X = -0.26;
-const EYE_Y = -0.16;
-const EYE_RADIUS = 0.105;
-const FAR_EYE_SCALE = 0.78;
-const PUPIL_FRACTION = 0.52;
-const BROW_THICKNESS = 0.17;
-const BROW_LENGTH = 0.5;
-const MOUTH_X = 0.44;
-const MOUTH_Y = 0.46;
-const MOUTH_HALF_WIDTH = 0.36;
-const MOUTH_OPEN_HEIGHT = 0.3;
+/** More than two bites and a small ear stops reading as one shape. */
+const MAX_EAR_NOTCHES = 2;
 
-/** Trace the goblin skull in head-local space: origin at centre, +X forward. */
+/**
+ * Where the near ear meets the skull, and the direction it points: out to the
+ * back and up, a little above horizontal. Each ear is a long leaf as wide as
+ * the head and standing clear of it — two points either side of a ball is the
+ * one goblin read no other creature here shares.
+ */
+const NEAR_EAR_BASE = { x: -0.66, y: -0.12 } as const;
+const NEAR_EAR_LIFT = deg(22);
+/**
+ * The far ear stands out over the far side of the skull, toward the face and
+ * up, behind the brow; turned partly away, it is drawn shorter.
+ */
+const FAR_EAR_BASE = { x: 0.5, y: -0.5 } as const;
+const FAR_EAR_LIFT = deg(18);
+const FAR_EAR_LENGTH = 0.72;
+/**
+ * The ears hold their angle on the screen whatever the goblin's permanent
+ * hunch is: tipped forward with the head, a 20° ear on a 20° hunch would point
+ * straight up at the back and flat along the brow at the front.
+ */
+const EAR_HUNCH_COUNTER = 1;
+/** The ear's root, as a share of the head radius either side of its spine. */
+const EAR_ROOT_HALF_HEIGHT = 0.36;
+/** How far the leaf bellies below its spine before tapering to the point. */
+const EAR_BELLY = 1.25;
+/** The point droops off the spine by this much, so the ear hangs a little. */
+const EAR_TIP_DROOP = deg(8);
+
+/** The near eye — big — and the far eye, foreshortened toward the brow edge. */
+const EYE_NEAR = { x: 0.3, y: -0.1, rx: 0.22, ry: 0.13 } as const;
+const EYE_FAR = { x: 0.76, y: -0.12, rx: 0.15, ry: 0.11 } as const;
+/** The dark hollow each eye sits in, as a multiple of the eye's own radii. */
+const EYE_SOCKET_SCALE = 1.55;
+/** A glow halo past the eye, so it reads as lit from inside. */
+const EYE_GLOW_SCALE = 2.2;
+const EYE_GLOW_ALPHA = 0.35;
+/** The hot core of the eye, as a share of its radius. */
+const EYE_CORE_FRACTION = 0.5;
+/** A blink below this openness paints the shut lid only. */
+const EYE_SHUT = 0.2;
+/** The socket tips down toward the nose with the scowl. */
+const EYE_SOCKET_TILT = deg(-8);
+/**
+ * The almond, in eye radii: its back corner below centre, its front corner
+ * raised, and how far the upper and lower lids bow at full open.
+ */
+const EYE_ALMOND = {
+  backCornerDrop: 0.2,
+  upperLidBow: 1.3,
+  frontCornerRise: 0.5,
+  lowerLidBow: 1.5,
+} as const;
+
+const BROW_Y = -0.3;
+const MOUTH_Y = 0.5;
+const MOUTH_BACK_X = 0.02;
+const MOUTH_FRONT_X = 0.98;
+const MOUTH_LINE_WIDTH = 0.1;
+const MOUTH_OPEN_HEIGHT = 0.34;
+/**
+ * The grin's shape off `MOUTH_Y`, in head radii: the back corner kinked up, the
+ * front corner level with it, and the lip line sagging below both.
+ */
+const MOUTH_BACK_RISE = 0.14;
+const MOUTH_FRONT_RISE = 0.04;
+const MOUTH_SAG = 0.08;
+/** Where along the head's width the grin's curves bow, at its middle. */
+const MOUTH_BOW_X = 0.5;
+/** The upper lip lifts this share of the gape: the jaw drops, the lip barely moves. */
+const UPPER_LIP_GAPE_SHARE = 0.4;
+/** A fang's root is sunk this far below the lip, in head radii, so it grows out of it. */
+const FANG_ROOT_SINK = 0.03;
+/** A fang's point leans forward of its root's centre by this share of its width. */
+const FANG_POINT_LEAN = 0.15;
+/** The two lower fangs standing up out of the underbite: centre, width and height. */
+const FANGS: ReadonlyArray<{ readonly x: number; readonly w: number; readonly h: number }> = [
+  { x: 0.5, w: 0.19, h: 0.32 },
+  { x: 0.82, w: 0.15, h: 0.26 },
+];
+
+/**
+ * Trace the goblin skull in head-local space: origin at centre, +X forward.
+ *
+ * A big round cranium bulging up and back, a heavy brow shelf, and a long
+ * lower face that juts forward into an underbite — the jaw, not the cranium, is
+ * where the face's mass is.
+ */
+/**
+ * The skull's outline, x in head widths and y in head radii, walked from the
+ * nape over the crown, down the brow and face, and back along the jaw.
+ */
+const SKULL = {
+  nape: { x: -0.5, y: 0.78 },
+  backOfSkull: { x: -1.08, y: 0.48 },
+  crownBack: { x: -1.06, y: -0.88 },
+  crown: { x: -0.05, y: -1.0 },
+  crownFront: { x: 0.55, y: -1.04 },
+  forehead: { x: 0.92, y: -0.7 },
+  browShelf: { x: 0.96, y: -0.3 },
+  browOverhang: { x: 1.04, y: -0.18 },
+  eyeNotch: { x: 0.86, y: -0.04 },
+  cheek: { x: 0.88, y: 0.25 },
+  upperJaw: { x: 0.94, y: 0.5 },
+  underbite: { x: 0.98, y: 0.82 },
+  chin: { x: 0.62, y: 0.86 },
+  jawline: { x: 0.1, y: 0.98 },
+} as const;
+
 function traceSkull(ctx: Ctx, p: GoblinProportions): void {
   const r = p.headRadius;
   const rx = r * p.headWidthFactor;
+  const at = (point: { readonly x: number; readonly y: number }): Pt =>
+    pt(rx * point.x, r * point.y);
+  const nape = at(SKULL.nape);
+  const backOfSkull = at(SKULL.backOfSkull);
+  const crownBack = at(SKULL.crownBack);
+  const crown = at(SKULL.crown);
+  const crownFront = at(SKULL.crownFront);
+  const forehead = at(SKULL.forehead);
+  const browShelf = at(SKULL.browShelf);
+  const browOverhang = at(SKULL.browOverhang);
+  const eyeNotch = at(SKULL.eyeNotch);
+  const cheek = at(SKULL.cheek);
+  const upperJaw = at(SKULL.upperJaw);
+  const underbite = at(SKULL.underbite);
+  const chin = at(SKULL.chin);
+  const jawline = at(SKULL.jawline);
 
   ctx.beginPath();
-  ctx.moveTo(-rx * 0.98, r * 0.04);
-  ctx.bezierCurveTo(-rx * 1.02, -r * 0.72, -rx * 0.42, -r * 1.05, rx * 0.16, -r * 0.98);
-  ctx.bezierCurveTo(rx * 0.62, -r * 0.92, rx * 0.86, -r * 0.62, rx * 0.9, -r * 0.3);
-  ctx.quadraticCurveTo(rx * 0.82, -r * 0.06, rx * 0.72, r * 0.12);
-  ctx.quadraticCurveTo(rx * 0.66, r * 0.34, rx * 0.94, r * 0.52);
-  ctx.quadraticCurveTo(rx * 0.86, r * 0.86, rx * 0.3, r * 0.94);
-  ctx.bezierCurveTo(-rx * 0.24, r * 1.0, -rx * 0.78, r * 0.7, -rx * 0.98, r * 0.04);
+  ctx.moveTo(nape.x, nape.y);
+  ctx.bezierCurveTo(backOfSkull.x, backOfSkull.y, crownBack.x, crownBack.y, crown.x, crown.y);
+  ctx.bezierCurveTo(crownFront.x, crownFront.y, forehead.x, forehead.y, browShelf.x, browShelf.y);
+  ctx.quadraticCurveTo(browOverhang.x, browOverhang.y, eyeNotch.x, eyeNotch.y);
+  ctx.quadraticCurveTo(cheek.x, cheek.y, upperJaw.x, upperJaw.y);
+  ctx.quadraticCurveTo(underbite.x, underbite.y, chin.x, chin.y);
+  ctx.quadraticCurveTo(jawline.x, jawline.y, nape.x, nape.y);
   ctx.closePath();
 }
 
-/**
- * One ear: a long swept-back cone with notches bitten out of its upper edge.
- * `droop` swings the whole ear down; the walk lags it behind the head, which is
- * the cheapest bit of overlapping action on the whole figure.
- */
-function drawEar(
-  ctx: Ctx,
-  style: GoblinStyle,
-  droop: number,
-  near: boolean,
-  notchSeed: number,
-): void {
+/** The ear's geometry, in head-local space. */
+interface EarShape {
+  readonly base: Pt;
+  readonly tip: Pt;
+  readonly angle: number;
+  readonly halfHeight: number;
+}
+
+function earShape(style: GoblinStyle, near: boolean, lag: number): EarShape {
   const p = style.proportions;
   const r = p.headRadius;
   const rx = r * p.headWidthFactor;
-  const skin = style.palette.skin;
-  /** Attachment point on the skull, in head-local space. */
-  const EAR_BASE_X = -0.72;
-  const EAR_BASE_Y = -0.22;
-  /**
-   * Back and down. Angles run *toward* 180° as they flatten, so the head's own
-   * lean (8–20°) adds to this — 158° on a 20° hunch comes out 2° below
-   * horizontal, which reads as a blade through the skull rather than as an ear.
-   */
-  const EAR_SWEEP = deg(148);
-  /** The tip curls further down still, so the ear hangs instead of pointing. */
-  const EAR_TIP_DROOP = deg(-22);
-  const EAR_BASE_HALF_HEIGHT = 0.3;
-  const EAR_OUTLINE_GROWTH = 1.18;
-  const INNER_REACH = 0.72;
-  /** How far a torn notch bites into the ear, as a fraction of its half-height. */
-  const NOTCH_DEPTH = 0.36;
-  const NOTCH_SPAN = 0.44;
-  const NOTCH_FIRST = 0.24;
+  const hunch = style.spineLean * EAR_HUNCH_COUNTER;
+  const anchor = near ? NEAR_EAR_BASE : FAR_EAR_BASE;
+  const base = pt(rx * anchor.x, r * anchor.y);
+  // Back is toward -X: the near ear points along 180° lifted up, the far ear
+  // along 0° lifted up. A lag droops both, toward the back of the head.
+  const angle = near
+    ? Math.PI + NEAR_EAR_LIFT - hunch - lag
+    : -FAR_EAR_LIFT - hunch + lag * FAR_EAR_LENGTH;
+  const length = p.earLength * (near ? 1 : FAR_EAR_LENGTH);
+  const droop = near ? -EAR_TIP_DROOP : EAR_TIP_DROOP;
+  return {
+    base,
+    tip: along(base, angle + droop, length),
+    angle,
+    halfHeight: r * EAR_ROOT_HALF_HEIGHT * (near ? 1 : FAR_EAR_LENGTH),
+  };
+}
 
-  const base = pt(rx * EAR_BASE_X, r * EAR_BASE_Y);
-  const angle = EAR_SWEEP + droop;
-  const tip = along(base, angle + EAR_TIP_DROOP, p.earLength);
-  const halfHeight = r * EAR_BASE_HALF_HEIGHT;
+/**
+ * Where an ear meets the skull and where its point is, in head-local space.
+ * Exported for the gates, which walk the rig out along each ear and look for
+ * ink standing clear of the skull there.
+ */
+export function goblinEarSpine(
+  style: GoblinStyle,
+  near: boolean,
+  lag: number,
+): { readonly base: Pt; readonly tip: Pt } {
+  const { base, tip } = earShape(style, near, lag);
+  return { base, tip };
+}
+
+/**
+ * One ear: a long pointed leaf, fat at the root and tapering to a fine point,
+ * with a notch torn out of its upper edge and a dark hollow inside.
+ * `lag` swings the whole ear down; the walk trails it behind the head, which
+ * is the cheapest bit of overlapping action on the whole figure.
+ */
+function drawEar(ctx: Ctx, style: GoblinStyle, lag: number, near: boolean): void {
+  const skin = style.palette.skin;
+  const shape = earShape(style, near, lag);
+  const { base, tip, angle, halfHeight } = shape;
   const acrossX = -Math.sin(angle);
   const acrossY = Math.cos(angle);
-  /** A point `t` along the ear's spine, `lift` half-heights off it. */
+  // Lift is measured on the "top" side of the leaf, whichever way it points.
+  const topSign = near ? 1 : -1;
+  /** A point `t` along the ear's spine, `lift` half-heights to its upper side. */
   const onEar = (t: number, lift: number): Pt => {
     const spine = mixPt(base, tip, t);
-    const width = halfHeight * (1 - t * 0.86);
-    return { x: spine.x + acrossX * width * lift, y: spine.y + acrossY * width * lift };
+    const width = halfHeight * (1 - t) * lift * topSign;
+    return { x: spine.x + acrossX * width, y: spine.y + acrossY * width };
   };
+  const notches = Math.min(style.earNotches, MAX_EAR_NOTCHES);
+  const NOTCH_AT = [0.45, 0.66] as const;
+  const NOTCH_DEPTH = 0.55;
+  /** A notch's half-width along the ear's spine. */
+  const NOTCH_HALF_WIDTH = 0.05;
+  /** The upper edge swells past the spine's width between notches, then near the tip. */
+  const RIDGE_SWELL = 1.15;
+  const TIP_RIDGE_SWELL = 1.05;
+  /** Where along the spine the leaf's belly is fullest. */
+  const BELLY_AT = 0.4;
 
-  /** Where each notch sits along the ear, and how deep it bites. */
-  const notches = Array.from(
-    { length: Math.min(style.earNotches, MAX_EAR_NOTCHES) },
-    (unused, i) => ({
-      at: NOTCH_FIRST + ((i * 0.31 + notchSeed * 0.17) % NOTCH_SPAN),
-      depth: NOTCH_DEPTH * (0.7 + ((i + notchSeed) % 3) * 0.22),
-    }),
-  ).sort((a, b) => a.at - b.at);
-
-  /**
-   * The notches are cut into the traced path rather than painted over it.
-   * Painted on top as dark blobs, they read as rivets and leave the silhouette
-   * perfectly smooth — the one feature the ear is supposed to contribute at
-   * 32 px would contribute nothing.
-   */
-  const traceEar = (grow: number): void => {
+  const traceEar = (): void => {
     ctx.beginPath();
-    ctx.moveTo(base.x + acrossX * halfHeight * grow, base.y + acrossY * halfHeight * grow);
-    let previous = 0;
-    for (const notch of notches) {
-      const ridge = onEar((previous + notch.at) / 2, 1.28 * grow);
-      const rim = onEar(notch.at - 0.05, 1.2 * grow);
-      const floorOfNotch = onEar(notch.at, (1.2 - notch.depth) * grow);
-      const farRim = onEar(notch.at + 0.05, 1.2 * grow);
-      ctx.quadraticCurveTo(ridge.x, ridge.y, rim.x, rim.y);
+    const root = onEar(0, 1);
+    ctx.moveTo(root.x, root.y);
+    let from = 0;
+    for (let i = 0; i < notches; i++) {
+      const at = NOTCH_AT[i];
+      const before = onEar(at - NOTCH_HALF_WIDTH, 1);
+      const floorOfNotch = onEar(at, 1 - NOTCH_DEPTH);
+      const after = onEar(at + NOTCH_HALF_WIDTH, 1);
+      const ridge = onEar((from + at) / 2, RIDGE_SWELL);
+      ctx.quadraticCurveTo(ridge.x, ridge.y, before.x, before.y);
       ctx.lineTo(floorOfNotch.x, floorOfNotch.y);
-      ctx.lineTo(farRim.x, farRim.y);
-      previous = notch.at + 0.05;
+      ctx.lineTo(after.x, after.y);
+      from = at + NOTCH_HALF_WIDTH;
     }
-    const lastRidge = onEar((previous + 1) / 2, 1.2 * grow);
+    const lastRidge = onEar((from + 1) / 2, TIP_RIDGE_SWELL);
     ctx.quadraticCurveTo(lastRidge.x, lastRidge.y, tip.x, tip.y);
-    ctx.quadraticCurveTo(
-      onEar(0.45, -1.1 * grow).x,
-      onEar(0.45, -1.1 * grow).y,
-      base.x - acrossX * halfHeight * grow,
-      base.y - acrossY * halfHeight * grow,
-    );
+    const belly = onEar(BELLY_AT, -EAR_BELLY);
+    const underRoot = onEar(0, -1);
+    ctx.quadraticCurveTo(belly.x, belly.y, underRoot.x, underRoot.y);
     ctx.closePath();
   };
 
-  ctx.save();
-  ctx.fillStyle = style.palette.outline;
-  traceEar(EAR_OUTLINE_GROWTH);
+  ctx.fillStyle = near ? skin.mid : farLimbTone(skin);
+  traceEar();
   ctx.fill();
 
-  // A dark wedge where the ear meets the skull. Without it the two merge into a
-  // single swept lump at 32 px and read as a hood rather than as an ear.
-  const rootShade = onEar(0.16, 0);
-  ctx.fillStyle = style.palette.outline;
-  ctx.beginPath();
-  ctx.ellipse(
-    rootShade.x,
-    rootShade.y,
-    halfHeight * 0.55,
-    halfHeight * 1.15,
-    angle,
-    0,
-    FULL_CIRCLE,
-  );
-  ctx.fill();
-
-  ctx.fillStyle = near ? skin.mid : skin.dark;
-  traceEar(1);
-  ctx.fill();
-
-  if (near) {
-    ctx.save();
-    traceEar(1);
-    ctx.clip();
-    // The hollow of the ear, one shade down — without it a long ear is a spike.
-    ctx.fillStyle = rgba(skin.shadow, 0.5);
-    ctx.beginPath();
-    ctx.moveTo(onEar(0.06, 0.35).x, onEar(0.06, 0.35).y);
-    ctx.quadraticCurveTo(
-      onEar(0.42, 0.85).x,
-      onEar(0.42, 0.85).y,
-      onEar(INNER_REACH, 0.1).x,
-      onEar(INNER_REACH, 0.1).y,
-    );
-    ctx.quadraticCurveTo(
-      onEar(0.4, -0.2).x,
-      onEar(0.4, -0.2).y,
-      onEar(0.06, 0.35).x,
-      onEar(0.06, 0.35).y,
-    );
-    ctx.closePath();
+  withClip(ctx, traceEar, () => {
+    // The hollow of the ear: a long dark scoop with a warm flush in its depth,
+    // so the leaf reads as a cupped ear rather than as a blade.
+    const hollow = (): void => {
+      const start = onEar(EAR_HOLLOW.start.t, EAR_HOLLOW.start.lift);
+      const outer = onEar(EAR_HOLLOW.outer.t, EAR_HOLLOW.outer.lift);
+      const end = onEar(EAR_HOLLOW.end.t, EAR_HOLLOW.end.lift);
+      const inner = onEar(EAR_HOLLOW.inner.t, EAR_HOLLOW.inner.lift);
+      ctx.beginPath();
+      ctx.moveTo(start.x, start.y);
+      ctx.quadraticCurveTo(outer.x, outer.y, end.x, end.y);
+      ctx.quadraticCurveTo(inner.x, inner.y, start.x, start.y);
+      ctx.closePath();
+    };
+    ctx.fillStyle = skin.dark;
+    hollow();
     ctx.fill();
-    ctx.restore();
-  }
-  ctx.restore();
+    ctx.fillStyle = rgba(EAR_FLUSH, near ? EAR_FLUSH_ALPHA : EAR_FLUSH_ALPHA / 2);
+    hollow();
+    ctx.fill();
+  });
 }
+
+const EAR_FLUSH = '#c0604a';
+const EAR_FLUSH_ALPHA = 0.45;
+/**
+ * The ear's hollow: its root, the deep outer curve, its far end and the inner
+ * curve back, each `t` along the spine and `lift` half-heights above it.
+ */
+const EAR_HOLLOW = {
+  start: { t: 0.06, lift: 0.1 },
+  outer: { t: 0.42, lift: -0.85 },
+  end: { t: 0.82, lift: -0.05 },
+  inner: { t: 0.4, lift: 0.35 },
+} as const;
 
 function drawEye(
   ctx: Ctx,
-  x: number,
-  y: number,
+  eye: { readonly x: number; readonly y: number; readonly rx: number; readonly ry: number },
   r: number,
-  scale: number,
+  rx: number,
   openness: number,
   style: GoblinStyle,
 ): void {
-  const { eye, sclera, outline } = style.palette;
-  const radius = r * EYE_RADIUS * scale;
+  const { sclera, eye: eyeTone, eyeCore } = style.palette;
+  const x = rx * eye.x;
+  const y = r * eye.y;
+  const radiusX = r * eye.rx;
+  const radiusY = r * eye.ry;
   const open = clamp01(openness);
 
-  const SOCKET_RX = 2.1;
-  const SOCKET_RY = 1.8;
   ctx.fillStyle = sclera;
   ctx.beginPath();
   ctx.ellipse(
     x,
     y,
-    radius * SOCKET_RX,
-    radius * SOCKET_RY * Math.max(open, 0.1),
-    0,
+    radiusX * EYE_SOCKET_SCALE,
+    radiusY * EYE_SOCKET_SCALE,
+    EYE_SOCKET_TILT,
     0,
     FULL_CIRCLE,
   );
   ctx.fill();
 
-  if (open < 0.2) return;
+  if (open < EYE_SHUT) return;
 
-  ctx.fillStyle = eye;
+  const glow = ctx.createRadialGradient(x, y, 0, x, y, radiusX * EYE_GLOW_SCALE);
+  glow.addColorStop(0, rgba(eyeTone, EYE_GLOW_ALPHA * open));
+  glow.addColorStop(1, rgba(eyeTone, 0));
+  ctx.fillStyle = glow;
   ctx.beginPath();
-  ctx.ellipse(x, y, radius, radius * open, 0, 0, FULL_CIRCLE);
+  ctx.arc(x, y, radiusX * EYE_GLOW_SCALE, 0, FULL_CIRCLE);
   ctx.fill();
 
-  ctx.fillStyle = outline;
-  ctx.beginPath();
-  ctx.ellipse(
-    x,
-    y,
-    radius * PUPIL_FRACTION,
-    radius * PUPIL_FRACTION * open * 1.6,
-    0,
-    0,
-    FULL_CIRCLE,
-  );
+  // A slanted almond, its upper lid cut flat by the brow: an angry eye.
+  const traceAlmond = (scale: number): void => {
+    ctx.beginPath();
+    const backCornerY = y + radiusY * EYE_ALMOND.backCornerDrop * scale;
+    ctx.moveTo(x - radiusX * scale, backCornerY);
+    ctx.quadraticCurveTo(
+      x,
+      y - radiusY * EYE_ALMOND.upperLidBow * open * scale,
+      x + radiusX * scale,
+      y - radiusY * EYE_ALMOND.frontCornerRise * scale,
+    );
+    ctx.quadraticCurveTo(
+      x,
+      y + radiusY * EYE_ALMOND.lowerLidBow * open * scale,
+      x - radiusX * scale,
+      backCornerY,
+    );
+    ctx.closePath();
+  };
+  ctx.fillStyle = eyeTone;
+  traceAlmond(1);
+  ctx.fill();
+  ctx.fillStyle = eyeCore;
+  traceAlmond(EYE_CORE_FRACTION);
   ctx.fill();
 }
 
 /**
- * A lipless slot with two asymmetric fangs.
+ * A wide, crooked grin with two fangs standing up out of an underbite.
  *
- * An even row of rectangular teeth reads as a jack-o'-lantern grin. Two
- * mismatched teeth breaking an otherwise dark line reads as a mouth that bites.
+ * The grin runs most of the way across the lower face and kinks up at the
+ * back, so the mouth reads at 32 px as a slash; the fangs are big enough to
+ * survive as two pale pixels. Symmetric rows of teeth read as a jack-o'-lantern.
  */
 function drawMouth(ctx: Ctx, style: GoblinStyle, mouthOpen: number): void {
   const p = style.proportions;
   const r = p.headRadius;
   const rx = r * p.headWidthFactor;
   const { mouthInner, toothEnamel, outline } = style.palette;
-  const cx = rx * MOUTH_X;
-  const cy = r * MOUTH_Y;
-  const halfWidth = rx * MOUTH_HALF_WIDTH;
   const open = clamp01(mouthOpen);
-  const height = r * lerp(0.035, MOUTH_OPEN_HEIGHT, open);
+  const back = pt(rx * MOUTH_BACK_X, r * (MOUTH_Y - MOUTH_BACK_RISE));
+  const front = pt(rx * MOUTH_FRONT_X, r * (MOUTH_Y - MOUTH_FRONT_RISE));
+  const sag = r * (MOUTH_Y + MOUTH_SAG);
+  const gape = r * MOUTH_OPEN_HEIGHT * open;
+  const bowX = rx * MOUTH_BOW_X;
+  const upperLipY = sag - gape * UPPER_LIP_GAPE_SHARE;
 
-  const traceSlot = (): void => {
-    ctx.beginPath();
-    ctx.moveTo(cx - halfWidth, cy - height * 0.2);
-    ctx.quadraticCurveTo(
-      cx - halfWidth * 0.1,
-      cy + height * 1.7,
-      cx + halfWidth,
-      cy - height * 0.6,
-    );
-    ctx.quadraticCurveTo(cx, cy - height * 1.1, cx - halfWidth, cy - height * 0.2);
-    ctx.closePath();
-  };
-
-  ctx.fillStyle = open > 0.15 ? mouthInner : outline;
-  traceSlot();
-  ctx.fill();
-
-  ctx.save();
-  traceSlot();
-  ctx.clip();
-  ctx.fillStyle = toothEnamel;
-  // Deliberately mismatched: one long lower fang forward, one short upper one
-  // set back. Symmetric teeth here read as a grin.
-  const HANGING_FANG_X = 0.3;
-  const HANGING_FANG_WIDTH = 0.28;
-  const SNAGGLE_X = -0.5;
-  const SNAGGLE_WIDTH = 0.2;
+  ctx.fillStyle = mouthInner;
   ctx.beginPath();
-  ctx.moveTo(cx + halfWidth * HANGING_FANG_X, cy - height * 1.5);
-  ctx.lineTo(cx + halfWidth * (HANGING_FANG_X + HANGING_FANG_WIDTH), cy - height * 1.5);
-  ctx.lineTo(cx + halfWidth * (HANGING_FANG_X + HANGING_FANG_WIDTH * 0.35), cy + height * 1.5);
+  ctx.moveTo(back.x, back.y);
+  ctx.quadraticCurveTo(bowX, sag + gape, front.x, front.y);
+  ctx.quadraticCurveTo(bowX, upperLipY, back.x, back.y);
   ctx.closePath();
   ctx.fill();
-  ctx.beginPath();
-  ctx.moveTo(cx + halfWidth * SNAGGLE_X, cy + height * 1.5);
-  ctx.lineTo(cx + halfWidth * (SNAGGLE_X + SNAGGLE_WIDTH), cy + height * 1.5);
-  ctx.lineTo(cx + halfWidth * (SNAGGLE_X + SNAGGLE_WIDTH * 0.6), cy - height * 0.7);
-  ctx.closePath();
-  ctx.fill();
-  ctx.restore();
 
-  // The lower lip line: a lit edge under the slot, so the mouth sits in a jaw
-  // rather than floating on the cheek.
-  ctx.strokeStyle = rgba(style.palette.skin.light, 0.4);
-  ctx.lineWidth = r * 0.035;
+  ctx.strokeStyle = outline;
+  ctx.lineWidth = r * MOUTH_LINE_WIDTH;
+  ctx.lineCap = 'round';
   ctx.beginPath();
-  ctx.moveTo(cx - halfWidth * 0.9, cy + height * 0.6);
-  ctx.quadraticCurveTo(cx, cy + height * 2.1, cx + halfWidth * 0.94, cy + height * 0.1);
+  ctx.moveTo(back.x, back.y);
+  ctx.quadraticCurveTo(bowX, upperLipY, front.x, front.y);
   ctx.stroke();
+
+  // The lower lip line the fangs stand on.
+  const lipAt = (x: number): number => {
+    const t = (x / rx - MOUTH_BACK_X) / (MOUTH_FRONT_X - MOUTH_BACK_X);
+    return lerp(back.y, front.y, t) + (sag + gape - lerp(back.y, front.y, t)) * 2 * t * (1 - t);
+  };
+  ctx.fillStyle = toothEnamel;
+  for (const fang of FANGS) {
+    const cx = rx * fang.x;
+    const baseY = lipAt(cx);
+    const rootY = baseY + r * FANG_ROOT_SINK;
+    const halfWidth = (r * fang.w) / 2;
+    ctx.beginPath();
+    ctx.moveTo(cx - halfWidth, rootY);
+    ctx.lineTo(cx + halfWidth, rootY);
+    ctx.lineTo(cx + r * fang.w * FANG_POINT_LEAN, baseY - r * fang.h);
+    ctx.closePath();
+    ctx.fill();
+  }
 }
 
+/** How far below the eyes the hooked tip droops, in head radii: past the upper lip. */
+const NOSE_TIP_DROP = 0.42;
 /**
- * The hooked nose, drawn over the face so its overhang breaks the skull line.
+ * The nose, x in head widths and y in head radii. `tipX` is where the face
+ * plane ends; the nose's own projection is added past it.
+ */
+const NOSE = {
+  root: { x: 0.55, y: -0.22 },
+  tipX: 0.98,
+  /** The septum sits this share of the way from the tip back to `septumBackX`. */
+  septumBackX: 0.7,
+  septumShare: 0.45,
+  septumY: 0.3,
+} as const;
+/** The nose outline, in head radii unless a key says head widths (`…X`). */
+const NOSE_OUTLINE = {
+  bridgeTop: 0.08,
+  bridgeX: 0.95,
+  bridgeY: -0.3,
+  overTip: 0.1,
+  overTipY: -0.05,
+  hookDrop: 0.14,
+  /** The hook's control point sits just behind the tip, as a share of its x. */
+  hookBack: 0.99,
+  underX: 0.74,
+  underY: 0.14,
+  nostrilWingX: 0.58,
+  nostrilWingY: 0.16,
+  cheekX: 0.44,
+  cheekY: 0.02,
+  rootUnder: 0.04,
+} as const;
+/** The dark underside of the hook, in the same units as {@link NOSE_OUTLINE}. */
+const NOSE_UNDERSIDE = {
+  backX: 0.5,
+  topY: 0.06,
+  curveX: 0.8,
+  curveY: 0.18,
+  tipRise: 0.04,
+  bottomY: 0.3,
+} as const;
+/** The lit bridge, in the same units as {@link NOSE_OUTLINE}. */
+const NOSE_HIGHLIGHT = {
+  rootTop: 0.06,
+  bridgeX: 0.9,
+  bridgeY: -0.2,
+  /** The highlight stops short of the tip, as shares of its x. */
+  tipNear: 0.97,
+  tipRise: 0.1,
+  tipFar: 0.9,
+  tipFarRise: 0.06,
+  returnX: 0.82,
+  returnY: -0.12,
+  rootUnder: 0.02,
+} as const;
+/** The one nostril, in head radii, and where it sits between tip and septum. */
+const NOSTRIL = {
+  towardSeptum: 0.55,
+  rise: 0.05,
+  rx: 0.07,
+  ry: 0.03,
+  tilt: deg(24),
+} as const;
+
+/**
+ * The long hooked nose, projecting well past the face so it breaks the head's
+ * silhouette as a third point between the two ears.
  *
  * A hook is a convex bridge over a *concave* underside meeting at a downturned
- * tip. Drawn as a plain wedge, the head reads as a bird's, and no amount of ear
- * tuning fixes that.
+ * tip. Drawn as a plain wedge, the head reads as a bird's.
  */
 function drawNose(ctx: Ctx, style: GoblinStyle): void {
   const p = style.proportions;
   const r = p.headRadius;
   const rx = r * p.headWidthFactor;
   const skin = style.palette.skin;
-  const bridgeX = rx * 0.5;
-  const bridgeY = -r * 0.36;
-  const tipX = rx * 0.72 + p.noseProjection;
-  const tipY = r * 0.18;
-  /** How far the underside scoops back in toward the face beneath the tip. */
-  const SEPTUM_INSET = 0.38;
-  const septumX = lerp(tipX, rx * 0.44, SEPTUM_INSET);
-  const septumY = r * 0.3;
+  const root = pt(rx * NOSE.root.x, r * NOSE.root.y);
+  const tipX = rx * NOSE.tipX + p.noseProjection;
+  const tipY = r * NOSE_TIP_DROP;
+  const septum = pt(lerp(tipX, rx * NOSE.septumBackX, NOSE.septumShare), r * NOSE.septumY);
+  const o = NOSE_OUTLINE;
 
-  const traceNose = (grow: number): void => {
+  const traceNose = (): void => {
     ctx.beginPath();
-    ctx.moveTo(bridgeX - grow, bridgeY - grow);
-    // Bridge: convex, bulging forward as it drops.
-    ctx.bezierCurveTo(rx * 0.78 + grow, -r * 0.24, tipX + grow, -r * 0.06, tipX + grow, tipY);
-    // Tip turns down and then the underside scoops back under it.
-    ctx.quadraticCurveTo(tipX * 0.98 + grow, tipY + r * 0.16 + grow, septumX, septumY + grow);
-    // Concave run back to the cheek, which is what makes it a hook.
-    ctx.quadraticCurveTo(rx * 0.56, r * 0.16, rx * 0.42 - grow, r * 0.02);
-    ctx.quadraticCurveTo(rx * 0.4 - grow, -r * 0.18, bridgeX - grow, bridgeY - grow);
+    ctx.moveTo(root.x, root.y - r * o.bridgeTop);
+    // Bridge: convex, bulging forward and down to the tip.
+    ctx.bezierCurveTo(
+      rx * o.bridgeX,
+      r * o.bridgeY,
+      tipX + r * o.overTip,
+      r * o.overTipY,
+      tipX,
+      tipY,
+    );
+    // The tip hooks down, then the underside scoops back under it.
+    ctx.quadraticCurveTo(tipX * o.hookBack, tipY + r * o.hookDrop, septum.x, septum.y);
+    ctx.quadraticCurveTo(rx * o.underX, r * o.underY, rx * o.nostrilWingX, r * o.nostrilWingY);
+    ctx.quadraticCurveTo(rx * o.cheekX, r * o.cheekY, root.x, root.y + r * o.rootUnder);
     ctx.closePath();
   };
 
-  ctx.fillStyle = style.palette.outline;
-  traceNose(0.005);
-  ctx.fill();
-
   ctx.fillStyle = skin.mid;
-  traceNose(0);
+  traceNose();
   ctx.fill();
 
-  ctx.save();
-  traceNose(0);
-  ctx.clip();
-  // The underside of a hook is always the darkest part of the face.
-  ctx.fillStyle = rgba(skin.shadow, 0.65);
-  ctx.beginPath();
-  ctx.moveTo(rx * 0.4, r * 0.02);
-  ctx.quadraticCurveTo(rx * 0.62, r * 0.26, tipX, tipY);
-  ctx.lineTo(tipX, tipY + r * 0.3);
-  ctx.lineTo(rx * 0.4, r * 0.3);
-  ctx.closePath();
-  ctx.fill();
+  withClip(ctx, traceNose, () => {
+    // The underside of a hook is the darkest part of the face.
+    const u = NOSE_UNDERSIDE;
+    ctx.fillStyle = skin.dark;
+    ctx.beginPath();
+    ctx.moveTo(rx * u.backX, r * u.topY);
+    ctx.quadraticCurveTo(rx * u.curveX, r * u.curveY, tipX, tipY - r * u.tipRise);
+    ctx.lineTo(tipX, tipY + r * u.bottomY);
+    ctx.lineTo(rx * u.backX, r * u.bottomY);
+    ctx.closePath();
+    ctx.fill();
 
-  ctx.fillStyle = rgba(skin.light, 0.5);
-  ctx.beginPath();
-  ctx.moveTo(bridgeX, bridgeY);
-  ctx.quadraticCurveTo(rx * 0.76, -r * 0.24, tipX * 0.98, tipY - r * 0.08);
-  ctx.lineTo(tipX * 0.9, tipY - r * 0.02);
-  ctx.quadraticCurveTo(rx * 0.7, -r * 0.18, bridgeX, bridgeY + r * 0.08);
-  ctx.closePath();
-  ctx.fill();
-  ctx.restore();
+    const h = NOSE_HIGHLIGHT;
+    ctx.fillStyle = skin.light;
+    ctx.beginPath();
+    ctx.moveTo(root.x, root.y - r * h.rootTop);
+    ctx.quadraticCurveTo(rx * h.bridgeX, r * h.bridgeY, tipX * h.tipNear, tipY - r * h.tipRise);
+    ctx.lineTo(tipX * h.tipFar, tipY - r * h.tipFarRise);
+    ctx.quadraticCurveTo(rx * h.returnX, r * h.returnY, root.x, root.y + r * h.rootUnder);
+    ctx.closePath();
+    ctx.fill();
+  });
 
-  // A single nostril slit under the hook. One is enough at this size, and it is
-  // what stops the tip reading as a rounded knob.
+  // One nostril, which stops the tip reading as a rounded knob.
   ctx.fillStyle = style.palette.outline;
   ctx.beginPath();
   ctx.ellipse(
-    lerp(tipX, septumX, 0.5),
-    septumY - r * 0.04,
-    r * 0.06,
-    r * 0.018,
-    deg(28),
+    lerp(tipX, septum.x, NOSTRIL.towardSeptum),
+    septum.y - r * NOSTRIL.rise,
+    r * NOSTRIL.rx,
+    r * NOSTRIL.ry,
+    NOSTRIL.tilt,
     0,
     FULL_CIRCLE,
   );
   ctx.fill();
 }
 
-/** The rag hood, pulled back off the ears. */
+/**
+ * The rag hood: a scrap of rust-red cloth knotted over the cranium. It stops
+ * short of the ears — they poke out under its edge — because a hood that
+ * swallows the ears swallows the goblin.
+ */
+/**
+ * The hood's outline, x in head widths and y in head radii: down the back of
+ * the skull, over the crown to the brow, and back along its lower edge.
+ */
+const HOOD = {
+  backHem: { x: -1.06, y: 0.22 },
+  backOfSkull: { x: -1.14, y: -0.82 },
+  crownBack: { x: -0.4, y: -1.14 },
+  crown: { x: 0.12, y: -1.08 },
+  crownFront: { x: 0.62, y: -1.02 },
+  forehead: { x: 0.92, y: -0.72 },
+  brow: { x: 0.98, y: -0.42 },
+  browHem: { x: 0.7, y: -0.5 },
+  hemFront: { x: 0.3, y: -0.62 },
+  hemBack: { x: -0.3, y: -0.5 },
+  aboveEar: { x: -0.62, y: -0.08 },
+  behindEar: { x: -0.8, y: 0.28 },
+} as const;
+/** The lit fold across the crown, in head widths and radii. */
+const HOOD_FOLD = { alpha: 0.75, x: -0.35, y: -0.85, rx: 0.5, ry: 0.22, tilt: deg(-15) } as const;
+/** The front of the hood falls into shadow from this share of the head's width. */
+const HOOD_SHADOW_ALPHA = 0.7;
+const HOOD_SHADOW_FROM = 0.35;
+/** The shadow rectangle's top, in head radii above centre, so it covers the crown. */
+const HOOD_SHADOW_TOP = 1.2;
+
 function drawHood(ctx: Ctx, style: GoblinStyle): void {
   const p = style.proportions;
   const r = p.headRadius;
   const rx = r * p.headWidthFactor;
-  const { cloth, outline } = style.palette;
+  const { cloth } = style.palette;
+  const at = (point: { readonly x: number; readonly y: number }): Pt =>
+    pt(rx * point.x, r * point.y);
+  const backHem = at(HOOD.backHem);
+  const backOfSkull = at(HOOD.backOfSkull);
+  const crownBack = at(HOOD.crownBack);
+  const crown = at(HOOD.crown);
+  const crownFront = at(HOOD.crownFront);
+  const forehead = at(HOOD.forehead);
+  const brow = at(HOOD.brow);
+  const browHem = at(HOOD.browHem);
+  const hemFront = at(HOOD.hemFront);
+  const hemBack = at(HOOD.hemBack);
+  const aboveEar = at(HOOD.aboveEar);
+  const behindEar = at(HOOD.behindEar);
 
-  ctx.fillStyle = outline;
-  ctx.beginPath();
-  ctx.moveTo(-rx * 1.04, r * 0.06);
-  ctx.bezierCurveTo(-rx * 1.1, -r * 0.8, -rx * 0.4, -r * 1.16, rx * 0.2, -r * 1.06);
-  ctx.bezierCurveTo(rx * 0.68, -r * 0.98, rx * 0.94, -r * 0.66, rx * 0.94, -r * 0.32);
-  ctx.lineTo(rx * 0.6, -r * 0.42);
-  ctx.bezierCurveTo(rx * 0.4, -r * 0.8, -rx * 0.4, -r * 0.86, -rx * 0.74, -r * 0.2);
-  ctx.closePath();
-  ctx.fill();
-
+  const traceHood = (): void => {
+    ctx.beginPath();
+    ctx.moveTo(backHem.x, backHem.y);
+    ctx.bezierCurveTo(backOfSkull.x, backOfSkull.y, crownBack.x, crownBack.y, crown.x, crown.y);
+    ctx.bezierCurveTo(crownFront.x, crownFront.y, forehead.x, forehead.y, brow.x, brow.y);
+    ctx.lineTo(browHem.x, browHem.y);
+    ctx.bezierCurveTo(hemFront.x, hemFront.y, hemBack.x, hemBack.y, aboveEar.x, aboveEar.y);
+    ctx.lineTo(behindEar.x, behindEar.y);
+    ctx.closePath();
+  };
   ctx.fillStyle = cloth.mid;
-  ctx.beginPath();
-  ctx.moveTo(-rx * 0.98, r * 0.02);
-  ctx.bezierCurveTo(-rx * 1.04, -r * 0.78, -rx * 0.38, -r * 1.1, rx * 0.18, -r * 1.0);
-  ctx.bezierCurveTo(rx * 0.64, -r * 0.92, rx * 0.88, -r * 0.64, rx * 0.88, -r * 0.36);
-  ctx.lineTo(rx * 0.58, -r * 0.46);
-  ctx.bezierCurveTo(rx * 0.38, -r * 0.82, -rx * 0.38, -r * 0.88, -rx * 0.7, -r * 0.24);
-  ctx.closePath();
+  traceHood();
   ctx.fill();
-
-  ctx.fillStyle = rgba(cloth.shadow, 0.5);
-  ctx.beginPath();
-  ctx.moveTo(rx * 0.1, -r * 1.0);
-  ctx.quadraticCurveTo(rx * 0.8, -r * 0.86, rx * 0.88, -r * 0.36);
-  ctx.lineTo(rx * 0.58, -r * 0.46);
-  ctx.quadraticCurveTo(rx * 0.5, -r * 0.84, rx * 0.05, -r * 0.94);
-  ctx.closePath();
-  ctx.fill();
+  withClip(ctx, traceHood, () => {
+    ctx.fillStyle = rgba(cloth.light, HOOD_FOLD.alpha);
+    ctx.beginPath();
+    ctx.ellipse(
+      rx * HOOD_FOLD.x,
+      r * HOOD_FOLD.y,
+      rx * HOOD_FOLD.rx,
+      r * HOOD_FOLD.ry,
+      HOOD_FOLD.tilt,
+      0,
+      FULL_CIRCLE,
+    );
+    ctx.fill();
+    ctx.fillStyle = rgba(cloth.shadow, HOOD_SHADOW_ALPHA);
+    ctx.fillRect(rx * HOOD_SHADOW_FROM, -r * HOOD_SHADOW_TOP, rx, r * HOOD_SHADOW_TOP);
+  });
 }
+
+/** The face's key-light gradient, from the lit crown to the shadowed jaw. */
+const FACE_SHADING = {
+  fromX: -0.6,
+  toX: 0.7,
+  litAlpha: 0.8,
+  midStop: 0.42,
+  shadowStop: 0.7,
+  shadowAlpha: 0.6,
+  coreAlpha: 0.95,
+} as const;
+/** The shading rectangle's half-size, in head widths and radii: past the whole skull. */
+const FACE_SHADE_REACH = 1.2;
+/** The cheekbone's shadow over the lower face, in head widths and radii. */
+const CHEEK_SHADOW = { alpha: 0.6, x: 0.35, y: 0.42, rx: 0.5, ry: 0.26, tilt: deg(-10) } as const;
+/**
+ * The brow ridge off `BROW_Y`, in head widths (`…X`) and radii: its back end
+ * high, its front end low over the nose, and the scowl crease along its foot.
+ */
+const BROW = {
+  backX: -0.05,
+  backRise: 0.16,
+  frontX: 1.0,
+  frontDrop: 0.02,
+  topX: 0.45,
+  topRise: 0.26,
+  underX: 0.55,
+  underDrop: 0.22,
+  backDepth: 0.1,
+} as const;
+const BROW_CREASE = {
+  backX: 0.1,
+  backRise: 0.02,
+  midX: 0.5,
+  midDrop: 0.02,
+  frontX: 0.62,
+  frontDrop: 0.14,
+} as const;
 
 /** Draw the head in head-local space: origin at its centre, +X is forward. */
 function drawHead(ctx: Ctx, style: GoblinStyle, pose: GoblinPose): void {
@@ -2331,144 +2783,121 @@ function drawHead(ctx: Ctx, style: GoblinStyle, pose: GoblinPose): void {
   const r = p.headRadius;
   const rx = r * p.headWidthFactor;
   const skin = style.palette.skin;
-
-  const FAR_EAR_DROOP = deg(10);
-  const FAR_EAR_NOTCH_SEED = 1;
-  const NEAR_EAR_NOTCH_SEED = 0;
+  const headwear = style.gear.hood || style.gear.flatCap || style.outfit?.head !== undefined;
 
   ctx.save();
-  ctx.save();
-  ctx.translate(rx * 0.06, -r * 0.05);
-  drawEar(ctx, style, pose.earLag + FAR_EAR_DROOP, false, FAR_EAR_NOTCH_SEED);
-  ctx.restore();
-  drawEar(ctx, style, pose.earLag, true, NEAR_EAR_NOTCH_SEED);
+  drawEar(ctx, style, pose.earLag, false);
+  if (!headwear) drawEar(ctx, style, pose.earLag, true);
 
-  ctx.fillStyle = style.palette.outline;
-  ctx.save();
-  ctx.scale(1.04, 1.04);
-  traceSkull(ctx, p);
-  ctx.fill();
-  ctx.restore();
-
-  traceSkull(ctx, p);
   ctx.fillStyle = skin.mid;
-  ctx.fill();
-
-  ctx.save();
   traceSkull(ctx, p);
-  ctx.clip();
-
-  const faceShading = ctx.createLinearGradient(-rx, -r, rx, r);
-  faceShading.addColorStop(0, rgba(skin.light, 0.6));
-  faceShading.addColorStop(0.45, 'rgba(0,0,0,0)');
-  faceShading.addColorStop(1, rgba(skin.shadow, 0.5));
-  ctx.fillStyle = faceShading;
-  ctx.fillRect(-rx * 1.2, -r * 1.2, rx * 2.4, r * 2.4);
-
-  // A heavy brow ridge is most of what stops the face reading as cute: it puts
-  // the eyes in shadow and gives the skull a hard horizontal above them.
-  const browY = r * EYE_Y - r * BROW_THICKNESS * 1.2;
-  ctx.fillStyle = rgba(skin.shadow, 0.5);
-  ctx.beginPath();
-  ctx.moveTo(-rx * 0.34, browY - r * BROW_THICKNESS * 0.4);
-  ctx.quadraticCurveTo(
-    rx * 0.3,
-    browY - r * BROW_THICKNESS * 1.5,
-    rx * 0.9,
-    browY - r * BROW_THICKNESS * 0.6,
-  );
-  ctx.quadraticCurveTo(
-    rx * 0.82,
-    browY + r * BROW_THICKNESS * 1.1,
-    rx * 0.52,
-    browY + r * BROW_THICKNESS * 0.9,
-  );
-  ctx.quadraticCurveTo(
-    rx * 0.1,
-    browY + r * BROW_THICKNESS * 0.4,
-    -rx * 0.3,
-    browY + r * BROW_THICKNESS * 0.3,
-  );
-  ctx.closePath();
   ctx.fill();
 
-  // A hard lit edge along the top of the ridge is what turns a shadow into bone.
-  ctx.strokeStyle = rgba(skin.light, 0.5);
-  ctx.lineWidth = r * 0.045;
-  ctx.beginPath();
-  ctx.moveTo(-rx * 0.3, browY - r * BROW_THICKNESS * 0.5);
-  ctx.quadraticCurveTo(
-    rx * 0.3,
-    browY - r * BROW_THICKNESS * 1.6,
-    rx * 0.88,
-    browY - r * BROW_THICKNESS * 0.7,
+  withClip(
+    ctx,
+    () => traceSkull(ctx, p),
+    () => {
+      const shade = FACE_SHADING;
+      const faceShading = ctx.createLinearGradient(rx * shade.fromX, -r, rx * shade.toX, r);
+      faceShading.addColorStop(0, rgba(skin.light, shade.litAlpha));
+      faceShading.addColorStop(shade.midStop, rgba(skin.mid, 0));
+      faceShading.addColorStop(shade.shadowStop, rgba(skin.dark, shade.shadowAlpha));
+      faceShading.addColorStop(1, rgba(skin.dark, shade.coreAlpha));
+      ctx.fillStyle = faceShading;
+      ctx.fillRect(
+        -rx * FACE_SHADE_REACH,
+        -r * FACE_SHADE_REACH,
+        rx * FACE_SHADE_REACH * 2,
+        r * FACE_SHADE_REACH * 2,
+      );
+
+      // The cheekbone throws the long lower face into shadow under it.
+      ctx.fillStyle = rgba(skin.dark, CHEEK_SHADOW.alpha);
+      ctx.beginPath();
+      ctx.ellipse(
+        rx * CHEEK_SHADOW.x,
+        r * CHEEK_SHADOW.y,
+        rx * CHEEK_SHADOW.rx,
+        r * CHEEK_SHADOW.ry,
+        CHEEK_SHADOW.tilt,
+        0,
+        FULL_CIRCLE,
+      );
+      ctx.fill();
+
+      drawEye(ctx, EYE_FAR, r, rx, pose.eyeOpen, style);
+      drawEye(ctx, EYE_NEAR, r, rx, pose.eyeOpen, style);
+
+      // A heavy brow ridge shelving over the eyes, lit along its top and
+      // knotted into a scowl that slopes down toward the nose.
+      const browBack = pt(rx * BROW.backX, r * (BROW_Y - BROW.backRise));
+      const browFront = pt(rx * BROW.frontX, r * (BROW_Y + BROW.frontDrop));
+      const traceBrow = (): void => {
+        ctx.beginPath();
+        ctx.moveTo(browBack.x, browBack.y);
+        ctx.quadraticCurveTo(rx * BROW.topX, r * (BROW_Y - BROW.topRise), browFront.x, browFront.y);
+        ctx.quadraticCurveTo(
+          rx * BROW.underX,
+          r * (BROW_Y + BROW.underDrop),
+          browBack.x,
+          browBack.y + r * BROW.backDepth,
+        );
+        ctx.closePath();
+      };
+      ctx.fillStyle = skin.light;
+      traceBrow();
+      ctx.fill();
+      ctx.strokeStyle = style.palette.outline;
+      ctx.lineWidth = r * MOUTH_LINE_WIDTH;
+      ctx.lineCap = 'round';
+      ctx.beginPath();
+      const crease = BROW_CREASE;
+      ctx.moveTo(rx * crease.backX, r * (BROW_Y - crease.backRise));
+      ctx.quadraticCurveTo(
+        rx * crease.midX,
+        r * (BROW_Y + crease.midDrop),
+        rx * crease.frontX,
+        r * (BROW_Y + crease.frontDrop),
+      );
+      ctx.stroke();
+
+      drawMouth(ctx, style, pose.mouthOpen);
+    },
   );
-  ctx.stroke();
-
-  const nearEyeX = rx * EYE_NEAR_X;
-  const farEyeX = rx * EYE_FAR_X;
-  const eyeY = r * EYE_Y;
-  drawEye(ctx, farEyeX, eyeY, r, FAR_EYE_SCALE, pose.eyeOpen * FAR_EYE_SCALE, style);
-  drawEye(ctx, nearEyeX, eyeY, r, 1, pose.eyeOpen, style);
-
-  ctx.strokeStyle = style.palette.outline;
-  ctx.lineWidth = r * 0.055;
-  ctx.lineCap = 'round';
-  for (const [eyeX, browScale] of [
-    [nearEyeX, 1],
-    [farEyeX, FAR_EYE_SCALE],
-  ] as const) {
-    ctx.beginPath();
-    ctx.moveTo(eyeX - rx * BROW_LENGTH * 0.4 * browScale, eyeY - r * 0.24 * browScale);
-    ctx.lineTo(eyeX + rx * BROW_LENGTH * 0.5 * browScale, eyeY - r * 0.15 * browScale);
-    ctx.stroke();
-  }
-
-  // A sunken cheek under the near eye finishes the undernourished read.
-  ctx.fillStyle = rgba(skin.shadow, 0.35);
-  ctx.beginPath();
-  ctx.ellipse(rx * 0.34, r * 0.24, rx * 0.24, r * 0.2, deg(-15), 0, FULL_CIRCLE);
-  ctx.fill();
-
-  drawMouth(ctx, style, pose.mouthOpen);
-  ctx.restore();
 
   drawNose(ctx, style);
   if (style.gear.hood) drawHood(ctx, style);
   if (style.gear.flatCap) drawFlatCap(ctx, style);
+  style.outfit?.head?.(ctx, style);
+  // Under a hood or a cap the near ear comes out from under the cloth.
+  if (headwear) drawEar(ctx, style, pose.earLag, true);
   ctx.restore();
 }
 
 // ── Assembly ─────────────────────────────────────────────────────────────────
 
 /**
- * Far limbs sit between `dark` and `mid`: at `dark` they merge with the outline,
- * and against the darker floor palettes at 32 px the far leg disappears
- * altogether and the goblin looks one-legged. The depth cue that survives the
- * lift is the missing sheen, not the fill.
+ * Far limbs sit this share of the way from `mid` down to `dark`: far enough to
+ * read as further from the camera, never so far that a far leg sinks into the
+ * floor and the goblin looks one-legged.
  */
-const FAR_LIMB_LIFT = 0.55;
+const FAR_LIMB_SHARE = 0.4;
+
+function farLimbTone(skin: Ramp): string {
+  return mix(skin.mid, skin.dark, FAR_LIMB_SHARE);
+}
+
 /** How much narrower the free far arm is than the weapon arm. */
 const FAR_ARM_SCALE = 0.82;
 /** A far hand brought across onto a haft is less foreshortened, but not by much. */
 const FAR_ARM_ON_HAFT_SCALE = 0.86;
-/** The far limb's missing highlight is the depth cue; `null` is the whole point. */
-const NECK_WIDTH_FRACTION = 0.46;
-
-/** Occlusion where a limb enters the body. Limbs without it look glued on. */
-const SOCKET_SHADE_ALPHA = 0.34;
-const SOCKET_SHADE_GROWTH = 0.72;
-
-function drawSocketShade(ctx: Ctx, at: Pt, limbWidth: number, skin: Ramp): void {
-  const radius = limbWidth * SOCKET_SHADE_GROWTH;
-  const gradient = ctx.createRadialGradient(at.x, at.y, 0, at.x, at.y, radius);
-  gradient.addColorStop(0, rgba(skin.shadow, SOCKET_SHADE_ALPHA));
-  gradient.addColorStop(1, rgba(skin.shadow, 0));
-  ctx.fillStyle = gradient;
-  ctx.beginPath();
-  ctx.arc(at.x, at.y, radius, 0, FULL_CIRCLE);
-  ctx.fill();
-}
+const NECK_WIDTH_FRACTION = 0.36;
+/** The neck's top end, as a share of the head radius below the head's centre: inside the skull. */
+const NECK_INTO_HEAD = 0.6;
+/** The neck narrows to this share of its root width where it meets the skull. */
+const NECK_TAPER = 0.82;
+/** The lit sheen down the near limbs. */
+const LIMB_SHEEN_ALPHA = 0.7;
 
 /**
  * Anything the goblin carries, drawn in figure space with the origin at the
@@ -2513,10 +2942,102 @@ export interface GoblinProp {
   readonly headHalfHeight: number;
 }
 
+/** The silhouette line: one screen pixel at the 32 px tile. */
+const OUTLINE_PX = 2;
+const OUTLINE_SAMPLES = 8;
+/**
+ * The goblin is drawn in profile, where the slivers of floor between a hanging
+ * arm, the loincloth and the legs are a few pixels across: inked shut they
+ * read as one dark separation, while left open they show the floor through a
+ * speckle of unoutlined antialiased edges.
+ */
+const OUTLINE_CLOSES_GAPS = false;
+/** How far a part's shadow falls on whatever is behind it, in cell pixels. */
+const CAST_DROP_PX = 2;
+const CAST_SHADOW_ALPHA = 0.55;
+/**
+ * A cool blue-black: a shadow falling on green skin reads cooler than the lit
+ * skin round it, and on the plumber's denim it stays blue instead of greening.
+ */
+const CAST_SHADOW_TONE = '#0e1c26';
+/** The contact band all round the front arm where it lies over the body. */
+const OCCLUSION_PX = 1;
+const OCCLUSION_ALPHA = 0.3;
+/** The lit rim along the silhouette's edges turned toward the key light. */
+const RIM_PX = 2;
+const RIM_ALPHA = 0.7;
+/**
+ * How far past the skeleton's joints the composing surface reaches: the feet,
+ * the ears, the nose and the hands all paint past the joint they hang off.
+ */
+const LAYER_MARGIN = 0.5;
+/** Margin round a held weapon's reach, past its tip and its widest head. */
+const PROP_MARGIN = 0.3;
+
+/** The direction a cast shadow falls: straight away from the key light. */
+const SHADOW_FALL: Pt = { x: -LIGHT.x, y: -LIGHT.y };
+
+function inkReaches(
+  style: GoblinStyle,
+  skeleton: Skeleton,
+  prop: GoblinProp | undefined,
+  offHandProp: GoblinProp | undefined,
+): InkReach[] {
+  const p = style.proportions;
+  const headReach = p.headRadius + p.earLength + p.noseProjection;
+  const joints = [
+    skeleton.hip,
+    skeleton.spineTop,
+    skeleton.nearArm.joint,
+    skeleton.nearArm.end,
+    skeleton.farArm.joint,
+    skeleton.farArm.end,
+    skeleton.nearLeg.joint,
+    skeleton.nearLeg.end,
+    skeleton.farLeg.joint,
+    skeleton.farLeg.end,
+  ];
+  const head = skeleton.headCentre;
+  const reaches: InkReach[] = [
+    { points: joints, margin: LAYER_MARGIN },
+    {
+      points: [offset(head, -headReach, -headReach), offset(head, headReach, headReach)],
+      margin: 0,
+    },
+  ];
+  if (prop !== undefined) {
+    const span = prop.tipDistance + PROP_MARGIN;
+    const hand = skeleton.nearArm.end;
+    reaches.push({ points: [offset(hand, -span, -span), offset(hand, span, span)], margin: 0 });
+  }
+  if (offHandProp !== undefined) {
+    const span = offHandProp.tipDistance + PROP_MARGIN;
+    const hand = skeleton.farArm.end;
+    reaches.push({ points: [offset(hand, -span, -span), offset(hand, span, span)], margin: 0 });
+  }
+  return reaches;
+}
+
+/**
+ * The angle a prop held in the far hand is painted at: the pose's own
+ * `offHandAngle`, or the far forearm turned forward at the wrist as a free hand
+ * is. Exported so a prop's anchor (a lamp's lens) can be located off the rig
+ * without painting.
+ */
+export function offHandWristAngle(skeleton: Skeleton, pose: GoblinPose): number {
+  return (
+    pose.offHandAngle ??
+    segmentAngle(skeleton.farArm.joint, skeleton.farArm.end) + WRIST_FORWARD_TURN
+  );
+}
+
 /**
  * Draw one goblin frame. `originX`/`originY` is the point between the feet and
  * `unit` is the pixel size of one tile; the figure always faces +X, so callers
  * mirror it at runtime rather than baking a second facing.
+ *
+ * `offHandProp` is a one-handed prop closed in the far hand, for a goblin
+ * carrying something in each hand; it is ignored while `prop` is two-handed.
  */
 export function drawGoblin(
   ctx: Ctx,
@@ -2526,142 +3047,183 @@ export function drawGoblin(
   style: GoblinStyle,
   pose: GoblinPose,
   prop?: GoblinProp,
+  offHandProp?: GoblinProp,
 ): void {
-  const p = style.proportions;
-  const { skin, outline } = style.palette;
   const skeleton = buildSkeleton(style, pose);
 
   ctx.save();
   ctx.translate(originX, originY);
   ctx.scale(unit, unit);
+  try {
+    drawGroundShadow(ctx, style, pose);
+    composeGoblin(ctx, unit, style, pose, skeleton, prop, offHandProp);
+  } finally {
+    ctx.restore();
+  }
+}
 
-  drawGroundShadow(ctx, p.shoulderHalfWidth * SHADOW_RADIUS_FRACTION);
+/**
+ * The figure as three slabs, back to front, composed on a surface of its own.
+ * Each slab casts a shadow on everything laid before it: the body over the far
+ * limbs, and the front arm with its weapon over the body.
+ */
+function composeGoblin(
+  ctx: Ctx,
+  unit: number,
+  style: GoblinStyle,
+  pose: GoblinPose,
+  skeleton: Skeleton,
+  prop: GoblinProp | undefined,
+  offHandProp: GoblinProp | undefined,
+): void {
+  const p = style.proportions;
+  const { skin } = style.palette;
 
   const nearPaint: LimbPaint = {
     fill: skin.mid,
-    outline,
-    sheen: rgba(skin.rim, 0.2),
+    shade: skin.dark,
+    sheen: rgba(skin.light, LIMB_SHEEN_ALPHA),
   };
   const farPaint: LimbPaint = {
-    fill: mix(skin.dark, skin.mid, FAR_LIMB_LIFT),
-    outline,
+    fill: farLimbTone(skin),
+    shade: mix(skin.dark, skin.shadow, FAR_LIMB_SHARE),
     sheen: null,
   };
 
   const nearWristAngle =
     pose.weaponAngle ??
     segmentAngle(skeleton.nearArm.joint, skeleton.nearArm.end) + pose.wristTwist;
-  const paintProp = (): void => {
+  const paintProp = (layer: Ctx): void => {
     if (prop === undefined) return;
-    prop.paint(ctx, skeleton.nearArm.end, nearWristAngle);
+    prop.paint(layer, skeleton.nearArm.end, nearWristAngle);
   };
 
   const twoHanded =
     prop !== undefined && (prop.offGripDistance !== null || prop.offHandCloses === true);
-  // The far arm is further from the camera in a three-quarter view, so it is
-  // drawn narrower — without this the free arm reads as the same mass as the
-  // weapon arm and the figure looks slab-sided. A hand brought across the body
-  // onto a two-handed haft is much less foreshortened than one hanging at the
-  // far hip, so it keeps most of its width.
+  const heldOffHand = twoHanded ? undefined : offHandProp;
+  const bounds = layerBounds(ctx, inkReaches(style, skeleton, prop, heldOffHand));
+  // `unit` is how many cell pixels one figure unit spans, whatever density the
+  // cell itself is being painted at.
+  const px = (cellPx: number): number => scratchPx(bounds, cellPx, unit);
+  const body = makeLayer(bounds);
+  const part = makeLayer(bounds);
+  const scratch = makeLayer(bounds);
+  const farArmInFront = twoHanded || (heldOffHand !== undefined && pose.offHandInFront === true);
+  const farWristAngle = twoHanded ? nearWristAngle : offHandWristAngle(skeleton, pose);
+  // The far arm is further from the camera, so it is drawn narrower — without
+  // this the free arm reads as the same mass as the weapon arm and the figure
+  // looks slab-sided. A hand brought across the body onto a two-handed haft is
+  // much less foreshortened than one hanging at the far hip, so it keeps most
+  // of its width.
   const farArmScale = twoHanded ? FAR_ARM_ON_HAFT_SCALE : FAR_ARM_SCALE;
   const farStyle: GoblinStyle = {
     ...style,
     proportions: { ...p, handRadius: p.handRadius * farArmScale },
   };
-  const paintFarArm = (): void => {
-    // Far paint even on a haft: the off arm crosses in front of the torso, and
-    // painting it at near value merges it with the weapon arm and the haft into
-    // one unreadable mass. The darker ramp is what separates the two arms.
-    drawLimb(ctx, skeleton.farArm, p.armWidth * farArmScale, farPaint);
-    if (style.gear.bracer) drawBracer(ctx, skeleton.farArm, style, farArmScale);
+  const paintFarArm = (layer: Ctx): void => {
+    drawLimb(layer, skeleton.farArm, p.armWidth * farArmScale, farPaint);
+    if (style.gear.bracer) drawBracer(layer, skeleton.farArm, style, farArmScale);
+    heldOffHand?.paint(layer, skeleton.farArm.end, farWristAngle);
     drawHand(
-      ctx,
+      layer,
       skeleton.farArm.end,
-      twoHanded
-        ? nearWristAngle
-        : segmentAngle(skeleton.farArm.joint, skeleton.farArm.end) + WRIST_FORWARD_TURN,
+      farWristAngle,
       farStyle,
-      !twoHanded,
-      twoHanded ? CLOSED_GRIP : OPEN_HAND,
+      false,
+      twoHanded || heldOffHand !== undefined ? CLOSED_GRIP : OPEN_HAND,
     );
   };
-  if (!twoHanded) paintFarArm();
 
-  drawLimb(ctx, skeleton.farLeg, p.legWidth, farPaint);
-  if (style.gear.overalls) drawTrouserLeg(ctx, skeleton.farLeg, style, false);
-  drawFoot(
-    ctx,
-    skeleton.farLeg.end,
-    segmentAngle(skeleton.farLeg.joint, skeleton.farLeg.end) * FOOT_ANGLE_FOLLOW,
-    style,
-    false,
-  );
+  const rearSlab = (layer: Ctx): void => {
+    if (!farArmInFront) paintFarArm(layer);
+    drawLimb(layer, skeleton.farLeg, p.legWidth, farPaint);
+    if (style.gear.overalls) drawTrouserLeg(layer, skeleton.farLeg, style, false);
+    style.outfit?.leg?.(layer, skeleton.farLeg, style, false);
+    drawFoot(layer, skeleton.farLeg.end, footAngle(skeleton.farLeg, pose.farFoot), style, false);
+    if (pose.propBehind) paintProp(layer);
+    // Behind the torso: it is on the creature's back, and painting it in front
+    // would put a leather tube across its chest.
+    if (style.gear.quiver) drawQuiver(layer, skeleton.spineTop, skeleton.lean, style);
+    if (style.gear.plunger) drawPlunger(layer, skeleton.spineTop, skeleton.lean, style);
+  };
 
-  if (pose.propBehind) paintProp();
+  const bodySlab = (layer: Ctx): void => {
+    layer.save();
+    layer.translate(skeleton.hip.x, skeleton.hip.y);
+    layer.rotate(skeleton.lean);
+    drawTorso(layer, style, pose.torsoSquash);
+    layer.restore();
 
-  // Behind the torso: it is on the creature's back, and painting it in front
-  // would put a leather tube across its chest.
-  if (style.gear.quiver) drawQuiver(ctx, skeleton.spineTop, skeleton.lean, style);
-  if (style.gear.plunger) drawPlunger(ctx, skeleton.spineTop, skeleton.lean, style);
+    drawLimb(layer, skeleton.nearLeg, p.legWidth, nearPaint);
+    if (style.gear.overalls) drawTrouserLeg(layer, skeleton.nearLeg, style, true);
+    style.outfit?.leg?.(layer, skeleton.nearLeg, style, true);
+    if (style.gear.greave) drawGreave(layer, skeleton.nearLeg, style);
+    drawFoot(layer, skeleton.nearLeg.end, footAngle(skeleton.nearLeg, pose.nearFoot), style, true);
 
-  ctx.save();
-  ctx.translate(skeleton.hip.x, skeleton.hip.y);
-  ctx.rotate(skeleton.lean);
-  drawTorso(ctx, style, pose.torsoSquash);
-  ctx.restore();
+    fillCapsule(
+      layer,
+      skeleton.spineTop,
+      offset(skeleton.headCentre, 0, p.headRadius * NECK_INTO_HEAD),
+      p.headRadius * NECK_WIDTH_FRACTION,
+      p.headRadius * NECK_WIDTH_FRACTION * NECK_TAPER,
+      skin.dark,
+    );
+    if (style.gear.necklace) drawNecklace(layer, skeleton.spineTop, skeleton.lean, style);
 
-  drawSocketShade(ctx, skeleton.farShoulder, p.armWidth, skin);
-  drawSocketShade(ctx, skeleton.nearShoulder, p.armWidth, skin);
-
-  drawLimb(ctx, skeleton.nearLeg, p.legWidth, nearPaint);
-  if (style.gear.overalls) drawTrouserLeg(ctx, skeleton.nearLeg, style, true);
-  if (style.gear.greave) drawGreave(ctx, skeleton.nearLeg, style);
-  drawFoot(
-    ctx,
-    skeleton.nearLeg.end,
-    segmentAngle(skeleton.nearLeg.joint, skeleton.nearLeg.end) * FOOT_ANGLE_FOLLOW,
-    style,
-    true,
-  );
-
-  fillCapsule(
-    ctx,
-    skeleton.spineTop,
-    offset(skeleton.headCentre, 0, p.headRadius * 0.82),
-    p.headRadius * NECK_WIDTH_FRACTION,
-    p.headRadius * NECK_WIDTH_FRACTION * 0.82,
-    skin.dark,
-  );
-
-  if (style.gear.necklace) drawNecklace(ctx, skeleton.spineTop, skeleton.lean, style);
-
-  ctx.save();
-  ctx.translate(skeleton.headCentre.x, skeleton.headCentre.y);
-  ctx.rotate(skeleton.headAngle);
-  drawHead(ctx, style, pose);
-  ctx.restore();
-
-  if (twoHanded) paintFarArm();
-  drawLimb(ctx, skeleton.nearArm, p.armWidth, nearPaint);
-  if (style.gear.pauldron) drawPauldron(ctx, skeleton.nearShoulder, skeleton.lean, style);
+    layer.save();
+    layer.translate(skeleton.headCentre.x, skeleton.headCentre.y);
+    layer.rotate(skeleton.headAngle);
+    drawHead(layer, style, pose);
+    layer.restore();
+  };
 
   // The gripping fist goes on top of whatever it is gripping. A haft is wider
   // than a goblin's fist, so painting the weapon over the hand buries it, and on
   // the overhead frames — where the haft crosses the whole body — the figure
-  // ends up swinging something nobody is holding. The haft still passes in front
-  // of the face, which is where a weapon held up in front of the chest belongs;
-  // it is only the hand that has to come back over it.
-  if (!pose.propBehind) paintProp();
-  drawHand(
-    ctx,
-    skeleton.nearArm.end,
-    nearWristAngle,
-    style,
-    true,
-    prop === undefined ? OPEN_HAND : CLOSED_GRIP,
-  );
+  // ends up swinging something nobody is holding.
+  const frontSlab = (layer: Ctx): void => {
+    if (farArmInFront) paintFarArm(layer);
+    drawLimb(layer, skeleton.nearArm, p.armWidth, nearPaint);
+    if (style.gear.pauldron) drawPauldron(layer, skeleton.nearShoulder, skeleton.lean, style);
+    if (!pose.propBehind) paintProp(layer);
+    drawHand(
+      layer,
+      skeleton.nearArm.end,
+      nearWristAngle,
+      style,
+      true,
+      prop === undefined ? OPEN_HAND : CLOSED_GRIP,
+    );
+  };
 
-  ctx.restore();
+  const cast = pixelStep(SHADOW_FALL, px(CAST_DROP_PX));
+  const castTone = rgba(CAST_SHADOW_TONE, CAST_SHADOW_ALPHA);
+  inFigureSpace(body, bounds, rearSlab);
+  clear(part);
+  inFigureSpace(part, bounds, bodySlab);
+  laySlab(body, part, scratch, cast, castTone);
+  clear(part);
+  inFigureSpace(part, bounds, frontSlab);
+  occludeAround(
+    body,
+    part,
+    scratch,
+    crossOffsets(px(OCCLUSION_PX)),
+    rgba(CAST_SHADOW_TONE, OCCLUSION_ALPHA),
+  );
+  laySlab(body, part, scratch, cast, castTone);
+
+  lightRim(body, scratch, pixelStep(LIGHT, px(RIM_PX)), rgba(skin.rim, RIM_ALPHA));
+  outlineInto(
+    part,
+    body,
+    scratch,
+    dilationOffsets(px(OUTLINE_PX), OUTLINE_SAMPLES),
+    style.palette.outline,
+    style.palette.outline,
+    OUTLINE_CLOSES_GAPS,
+  );
+  blitLayer(ctx, part, bounds);
 }
 
 /** A hand wrapped round a haft. */
@@ -2671,34 +3233,37 @@ const OPEN_HAND = 0.16;
 /** Hands turn forward off the forearm line rather than dangling down it. */
 const WRIST_FORWARD_TURN = deg(-46);
 
-// ── The four archetypes ──────────────────────────────────────────────────────
+// ── The five archetypes ──────────────────────────────────────────────────────
 //
-// The height spread and the ear-length spread (0.36 → 0.24, before scaling)
-// are what make the four read as different creatures in a 32-px silhouette;
-// do not collapse either.
+// One skin for every goblin: archetypes are told apart by build, gear and
+// weapon, never by colour. A skin per archetype, each tuned to stand off one
+// floor, is camouflage on another.
 //
-// Goblins are small: the tallest of them stands a little over half of Carl's
-// 2.03 tiles. These tables author *shape* — how a gut sits against a shoulder
-// line — and {@link ARCHETYPE_SCALE} sets the height the figure is drawn at, so
-// tuning the bulk of one archetype can never quietly change how tall it stands
-// next to the player.
+// Every build is ~2.7 heads tall: the head is over a third of the figure's
+// height. That is the goblin proportion — a big skull on a small, stooped
+// body — and it is set by the head radius against the torso and legs, never by
+// deriving limbs from the head. Leg and arm bones keep the lengths the
+// choreography's strides and reaches were authored against.
+//
+// These tables author *shape*; {@link ARCHETYPE_SCALE} sets the height the
+// figure is drawn at, so tuning the bulk of one archetype can never quietly
+// change how tall it stands next to the player.
 
 /** Sole-to-skull height each archetype stands at in play, in tile units. */
 const ARCHETYPE_HEIGHTS: Record<GoblinArchetype, number> = {
-  sword: 0.76,
-  axe: 0.84,
-  mace: 0.8,
-  warhammer: 0.86,
+  sword: 0.94,
+  axe: 1.0,
+  mace: 0.97,
+  warhammer: 1.03,
   /**
    * The tallest of the five, and the only one that is *thin*.
    *
-   * The other four are identified by weapon and ear length; an archer has to be
-   * identifiable before its bow is drawn, because the whole point of it is that
-   * the player picks it out of a mixed room and goes for it first. Height plus a
-   * narrow build is the one silhouette cue that survives the bow being held
-   * along the body at rest.
+   * An archer has to be identifiable before its bow is drawn, because the whole
+   * point of it is that the player picks it out of a mixed room and goes for it
+   * first. Height plus a narrow build is the one silhouette cue that survives
+   * the bow being held along the body at rest.
    */
-  bow: 0.88,
+  bow: 1.05,
 };
 
 export type GoblinArchetype = 'sword' | 'axe' | 'mace' | 'warhammer' | 'bow';
@@ -2711,304 +3276,237 @@ export const GOBLIN_ARCHETYPES: readonly GoblinArchetype[] = [
   'bow',
 ] as const;
 
-/** Filthy rag: the loincloth, the hood and every binding. */
+/**
+ * Bright goblin green, hue-shifted: the shadows cool toward blue-green, the
+ * lit planes warm toward yellow-green.
+ *
+ * Bright on purpose. Every floor the goblins stand on runs L* 45–63, and a
+ * skin at L* 25–50 sits under all of them — camouflage, worst on the grass. `mid` is the lit plane every form is filled with (L* ≈ 67), `dark` the
+ * core shadow (L* ≈ 40), and `rim` the pale yellow-green the silhouette's lit
+ * edge is painted in (L* ≈ 93). The value range inside the figure is what lets
+ * a face and a fist survive 32 px; the hard dark outline separates the figure
+ * from the floor whatever the floor's value.
+ */
+const GOBLIN_SKIN: Ramp = {
+  shadow: '#173a22',
+  dark: '#2e6a2c',
+  mid: '#6cb43a',
+  light: '#93d24e',
+  rim: '#d8f59a',
+};
+
+/**
+ * The rag: loincloth, hood and bindings. Rust red, because it is the goblin's
+ * one warm accent — on a green floor, green skin separates by value alone,
+ * and a patch of red-brown separates by hue as well.
+ */
 const CLOTH: Ramp = {
-  shadow: '#2a2620',
-  dark: '#3f382c',
-  mid: '#574d3b',
-  light: '#6f6349',
-  rim: '#8a7c5e',
+  shadow: '#3d140c',
+  dark: '#6e2414',
+  mid: '#a8401f',
+  light: '#cf6a32',
+  rim: '#ec9a5a',
 };
 
 const LEATHER: Ramp = {
-  shadow: '#241a12',
-  dark: '#3a2a1b',
-  mid: '#543c26',
-  light: '#6d4f31',
-  rim: '#8b6742',
+  shadow: '#2a1a10',
+  dark: '#4a2e1a',
+  mid: '#6f4826',
+  light: '#946634',
+  rim: '#b98a4e',
 };
 
-/** Pitted, scavenged plate — never polished, because none of it was earned. */
+/**
+ * Scavenged iron, kept bright: the weapon is the archetype's identity, so its
+ * steel has to stand off every floor — a pale edge over a dark spine.
+ */
 const IRON: Ramp = {
-  shadow: '#1e2126',
-  dark: '#333940',
-  mid: '#4e565f',
-  light: '#737d87',
-  rim: '#a8b2bb',
+  shadow: '#2a3038',
+  dark: '#4f5965',
+  mid: '#8a96a3',
+  light: '#b9c4cf',
+  rim: '#eef4f8',
 };
 
 const BONE: Ramp = {
   shadow: '#6d654f',
   dark: '#918766',
   mid: '#b8ad88',
-  light: '#d8cfae',
-  rim: '#eee7cd',
+  light: '#e2dabb',
+  rim: '#f6f1de',
 };
 
+/** Raw tan wood, light enough that a haft or a bow stave is not floor-coloured. */
 const WOOD: Ramp = {
-  shadow: '#2b1f14',
-  dark: '#43301d',
-  mid: '#5e452a',
-  light: '#7a5c39',
-  rim: '#9a7a4f',
+  shadow: '#3d2814',
+  dark: '#6b4826',
+  mid: '#9a6e3d',
+  light: '#c49a5e',
+  rim: '#e6c58c',
 };
 
-const GOBLIN_OUTLINE = '#14110e';
-const GOBLIN_EYE = '#e8a33a';
-const GOBLIN_SCLERA = '#1a1410';
-const GOBLIN_TOOTH = '#d9d2b4';
-const GOBLIN_MOUTH_INNER = '#40161a';
+/**
+ * The silhouette line: a green-black, hue-shifted toward the skin rather than
+ * neutral, and dark enough (L* ≈ 7) to part the figure from every floor.
+ */
+const GOBLIN_OUTLINE = '#0d160a';
+/** The eyes glow: a hot yellow almond with a paler core, in a dark socket. */
+const GOBLIN_EYE = '#ffd23a';
+const GOBLIN_EYE_CORE = '#fff4b0';
+const GOBLIN_SOCKET = '#10180a';
+const GOBLIN_TOOTH = '#f4efd8';
+const GOBLIN_MOUTH_INNER = '#4a1010';
 
-function goblinPalette(skin: Ramp): GoblinPalette {
+function goblinPalette(): GoblinPalette {
   return {
-    skin,
+    skin: GOBLIN_SKIN,
     cloth: CLOTH,
     leather: LEATHER,
     iron: IRON,
     bone: BONE,
     wood: WOOD,
     eye: GOBLIN_EYE,
-    sclera: GOBLIN_SCLERA,
+    eyeCore: GOBLIN_EYE_CORE,
+    sclera: GOBLIN_SOCKET,
     toothEnamel: GOBLIN_TOOTH,
     mouthInner: GOBLIN_MOUTH_INNER,
     outline: GOBLIN_OUTLINE,
   };
 }
 
-/**
- * Skin `mid` luminances are spread 94–128, and every ramp spans from roughly a
- * third of its `mid` at `shadow` to nearly double at `rim`.
- *
- * The span is the point. Chasing separation from the floor by dropping the
- * whole set to a uniform low luminance buys contrast against the ground but
- * turns the goblins into dark silhouettes — at 32 px with the renderer's 0.5×
- * downscale there is nothing inside the outline to see. Contrast *within* the
- * figure is what makes a face and a fist survive that downscale, and a narrow
- * ramp has none to give however dark you push it.
- *
- * The spread matters as much as the values. Floors run 101 through 185, so
- * there is no single luminance that clears all of them — setting the four
- * archetypes to one value simply picks a floor for all four to disappear
- * against at once. Spread out, no single floor can take more than one of them,
- * and the dark outline carries the rest.
- *
- * Do not flatten these ramps to buy luminance contrast back — a uniform low
- * value produces four dark silhouettes with nothing legible inside them.
- */
-const SWORD_SKIN: Ramp = {
-  shadow: '#20261c',
-  dark: '#394432',
-  mid: '#596a4f',
-  light: '#7b936d',
-  rim: '#a6c693',
-};
-
-const AXE_SKIN: Ramp = {
-  shadow: '#282c17',
-  dark: '#474e29',
-  mid: '#6f7a41',
-  light: '#98a859',
-  rim: '#cee378',
-};
-
-const MACE_SKIN: Ramp = {
-  shadow: '#392e13',
-  dark: '#665122',
-  mid: '#9f7f35',
-  light: '#dcaf49',
-  rim: '#ffeb63',
-};
-
-const WARHAMMER_SKIN: Ramp = {
-  shadow: '#19241e',
-  dark: '#2c3f35',
-  mid: '#456352',
-  light: '#5f8872',
-  rim: '#81b899',
-};
-
-/**
- * A vivid spring green — the archer separates from the other four by *chroma and
- * value*, not by hue. The others are a desaturated olive, a yellow-green, a cold
- * teal and a gold; this is the only one that is both bright and fully saturated,
- * so it is still the figure the eye lands on first in a mixed pack.
- *
- * The span from `shadow` to `rim` is close to the widest in the set on purpose.
- * An earlier cold-blue pass sat every tone under the darkest floor, which bought
- * separation from the ground and left nothing legible *inside* the silhouette at
- * 32 px — a face and a fist need internal contrast more than the outline needs
- * to win against the floor, and the near-black `shadow` plus the pale `rim` give
- * the figure both.
- */
-const BOW_SKIN: Ramp = {
-  shadow: '#0d2515',
-  dark: '#1e5230',
-  mid: '#3f9e57',
-  light: '#6ec97f',
-  rim: '#b6f0bd',
+const NO_GEAR: GoblinGear = {
+  pauldron: false,
+  bracer: false,
+  greave: false,
+  necklace: false,
+  hood: false,
+  quiver: false,
+  flatCap: false,
+  overalls: false,
+  plunger: false,
 };
 
 const SWORD_BUILD: GoblinProportions = {
   thighLength: 0.29,
   shinLength: 0.27,
   footHeight: 0.05,
-  torsoLength: 0.34,
-  neckLength: 0.06,
-  headRadius: 0.175,
-  headWidthFactor: 0.98,
-  shoulderHalfWidth: 0.175,
+  torsoLength: 0.27,
+  neckLength: 0.02,
+  headRadius: 0.25,
+  headWidthFactor: 1.0,
+  shoulderHalfWidth: 0.17,
   hipHalfWidth: 0.13,
-  bellyBulge: 0.01,
+  bellyBulge: 0.07,
   upperArmLength: 0.36,
   forearmLength: 0.4,
-  legWidth: 0.12,
-  armWidth: 0.1,
-  handRadius: 0.075,
-  footLength: 0.25,
-  earLength: 0.36,
-  noseProjection: 0.1,
+  legWidth: 0.105,
+  armWidth: 0.085,
+  handRadius: 0.1,
+  footLength: 0.34,
+  earLength: 0.42,
+  noseProjection: 0.16,
 };
 
+/** A rag and a tooth necklace: the sword goblin is the bare-skinned one. */
 const SWORD_STYLE: GoblinStyle = {
-  palette: goblinPalette(SWORD_SKIN),
+  palette: goblinPalette(),
   proportions: SWORD_BUILD,
-  gear: {
-    pauldron: false,
-    bracer: true,
-    greave: false,
-    necklace: true,
-    hood: false,
-    quiver: false,
-    flatCap: false,
-    overalls: false,
-    plunger: false,
-  },
-  spineLean: deg(8),
-  // Three, not four: `MAX_EAR_NOTCHES` clamps past that anyway, and a fourth
-  // bite cuts the ear into separate shards rather than nicking one edge.
-  earNotches: 3,
+  gear: { ...NO_GEAR, bracer: true, necklace: true },
+  spineLean: deg(14),
+  earNotches: 2,
 };
 
 const AXE_BUILD: GoblinProportions = {
   thighLength: 0.3,
   shinLength: 0.28,
   footHeight: 0.06,
-  torsoLength: 0.39,
-  neckLength: 0.06,
-  headRadius: 0.2,
-  headWidthFactor: 1.06,
+  torsoLength: 0.31,
+  neckLength: 0.02,
+  headRadius: 0.27,
+  headWidthFactor: 1.04,
   shoulderHalfWidth: 0.21,
   hipHalfWidth: 0.16,
-  bellyBulge: 0.04,
+  bellyBulge: 0.08,
   upperArmLength: 0.37,
   forearmLength: 0.46,
-  legWidth: 0.155,
-  armWidth: 0.125,
-  handRadius: 0.085,
-  footLength: 0.26,
-  earLength: 0.3,
-  noseProjection: 0.09,
+  legWidth: 0.13,
+  armWidth: 0.105,
+  handRadius: 0.11,
+  footLength: 0.36,
+  earLength: 0.4,
+  noseProjection: 0.15,
 };
 
 const AXE_STYLE: GoblinStyle = {
-  palette: goblinPalette(AXE_SKIN),
+  palette: goblinPalette(),
   proportions: AXE_BUILD,
-  gear: {
-    pauldron: true,
-    bracer: false,
-    greave: true,
-    necklace: false,
-    hood: false,
-    quiver: false,
-    flatCap: false,
-    overalls: false,
-    plunger: false,
-  },
-  spineLean: deg(12),
-  earNotches: 3,
+  gear: { ...NO_GEAR, pauldron: true, greave: true },
+  spineLean: deg(16),
+  earNotches: 2,
 };
 
 /**
- * Short and wiry, not heavy — the shortest of the four archetypes and barely
- * bulkier than the sword goblin. What identifies it at 32 px is not its mass:
- * it is the shortest ears in the set (0.24) and the flanged head of the mace.
+ * Short, pot-bellied and hooded: the rag hood over its skull and the flanged
+ * head of the mace are what name it at 32 px; its ears are the shortest in
+ * the set and poke out under the hood's edge.
  */
 const MACE_BUILD: GoblinProportions = {
   thighLength: 0.27,
   shinLength: 0.26,
   footHeight: 0.06,
-  torsoLength: 0.38,
-  neckLength: 0.06,
-  headRadius: 0.205,
+  torsoLength: 0.3,
+  neckLength: 0.02,
+  headRadius: 0.265,
   headWidthFactor: 1.0,
   shoulderHalfWidth: 0.195,
-  hipHalfWidth: 0.145,
-  bellyBulge: 0.04,
+  hipHalfWidth: 0.15,
+  bellyBulge: 0.1,
   upperArmLength: 0.38,
   forearmLength: 0.42,
-  legWidth: 0.135,
-  armWidth: 0.112,
-  handRadius: 0.082,
-  footLength: 0.26,
-  earLength: 0.24,
-  noseProjection: 0.12,
+  legWidth: 0.115,
+  armWidth: 0.095,
+  handRadius: 0.105,
+  footLength: 0.34,
+  earLength: 0.34,
+  noseProjection: 0.17,
 };
 
 const MACE_STYLE: GoblinStyle = {
-  palette: goblinPalette(MACE_SKIN),
+  palette: goblinPalette(),
   proportions: MACE_BUILD,
-  gear: {
-    pauldron: false,
-    bracer: true,
-    greave: false,
-    necklace: false,
-    hood: true,
-    quiver: false,
-    flatCap: false,
-    overalls: false,
-    plunger: false,
-  },
-  spineLean: deg(16),
-  earNotches: 2,
+  gear: { ...NO_GEAR, bracer: true, hood: true },
+  spineLean: deg(18),
+  earNotches: 1,
 };
 
 const WARHAMMER_BUILD: GoblinProportions = {
   thighLength: 0.35,
   shinLength: 0.33,
   footHeight: 0.07,
-  torsoLength: 0.45,
-  neckLength: 0.07,
-  headRadius: 0.23,
+  torsoLength: 0.36,
+  neckLength: 0.03,
+  headRadius: 0.3,
   headWidthFactor: 1.04,
-  shoulderHalfWidth: 0.29,
-  hipHalfWidth: 0.175,
-  bellyBulge: 0.03,
+  shoulderHalfWidth: 0.27,
+  hipHalfWidth: 0.18,
+  bellyBulge: 0.08,
   upperArmLength: 0.47,
   forearmLength: 0.51,
-  legWidth: 0.21,
-  armWidth: 0.17,
-  handRadius: 0.105,
-  footLength: 0.33,
-  earLength: 0.26,
-  noseProjection: 0.11,
+  legWidth: 0.17,
+  armWidth: 0.14,
+  handRadius: 0.13,
+  footLength: 0.42,
+  earLength: 0.4,
+  noseProjection: 0.17,
 };
 
+/** The heavy: every scrap of plate the others did not get. */
 const WARHAMMER_STYLE: GoblinStyle = {
-  palette: goblinPalette(WARHAMMER_SKIN),
+  palette: goblinPalette(),
   proportions: WARHAMMER_BUILD,
-  gear: {
-    pauldron: true,
-    bracer: true,
-    greave: true,
-    necklace: true,
-    hood: false,
-    quiver: false,
-    flatCap: false,
-    overalls: false,
-    plunger: false,
-  },
-  spineLean: deg(20),
-  earNotches: 3,
+  gear: { ...NO_GEAR, pauldron: true, bracer: true, greave: true, necklace: true },
+  spineLean: deg(22),
+  earNotches: 2,
 };
 
 /**
@@ -3016,41 +3514,36 @@ const WARHAMMER_STYLE: GoblinStyle = {
  * shoulders, because a bow is drawn with the whole span of both arms and a
  * stocky archer cannot reach full draw without the rig clamping the arm.
  *
- * The ears are the longest of the five (0.38). With the bow held along the body
- * at rest there is no weapon shape to name it by, so the ears carry the whole
- * identity on every non-shooting frame.
+ * The ears are the longest of the five. With the bow held along the body at
+ * rest there is no weapon shape to name it by, so the ears and the quiver's
+ * fletchings carry the identity on every non-shooting frame.
  */
 const BOW_BUILD: GoblinProportions = {
   thighLength: 0.33,
   shinLength: 0.32,
   footHeight: 0.05,
-  // Long torso on narrow hips, and shoulders nearly twice the hips' width. Lean
-  // is not the same as *tubular*: at equal shoulder and hip width the figure has
-  // no chest for a bow arm to hang off and reads as a pipe. Wide-and-flat is also
-  // the shape nothing else in the goblin set has — the other four are wide *and*
-  // thick.
-  torsoLength: 0.45,
-  neckLength: 0.07,
-  headRadius: 0.175,
-  headWidthFactor: 0.95,
-  shoulderHalfWidth: 0.19,
-  hipHalfWidth: 0.115,
-  bellyBulge: 0.0,
+  torsoLength: 0.34,
+  neckLength: 0.03,
+  headRadius: 0.27,
+  headWidthFactor: 0.96,
+  shoulderHalfWidth: 0.18,
+  hipHalfWidth: 0.11,
+  bellyBulge: 0.03,
   upperArmLength: 0.46,
   forearmLength: 0.5,
   // Legs a good deal thicker than the arms, and not only for looks: the gore
   // sheet cuts a limb straight off these numbers, and at equal widths the
   // severed arm and the severed leg render as the same 16-px blob.
-  legWidth: 0.135,
-  armWidth: 0.09,
-  handRadius: 0.092,
-  footLength: 0.34,
-  earLength: 0.38,
-  noseProjection: 0.085,
+  legWidth: 0.115,
+  armWidth: 0.08,
+  handRadius: 0.11,
+  footLength: 0.4,
+  earLength: 0.48,
+  noseProjection: 0.15,
 };
 
 const BOW_STYLE: GoblinStyle = {
-  palette: goblinPalette(BOW_SKIN),
+  palette: goblinPalette(),
   proportions: BOW_BUILD,
   // A hood, a bracer and a quiver, and nothing heavy: an archer that has looted
   // plate is an archer that cannot draw. The quiver is not decoration — it is
@@ -3059,18 +3552,8 @@ const BOW_STYLE: GoblinStyle = {
   // gore sheet cuts limbs off the same proportions, and with this archer's long
   // arms its severed arm and severed leg render as the same 16-px blob without
   // it. A shin guard is what makes the leg nameable on the floor.
-  gear: {
-    pauldron: false,
-    bracer: true,
-    greave: true,
-    necklace: false,
-    hood: true,
-    quiver: true,
-    flatCap: false,
-    overalls: false,
-    plunger: false,
-  },
-  spineLean: deg(4),
+  gear: { ...NO_GEAR, bracer: true, greave: true, hood: true, quiver: true },
+  spineLean: deg(10),
   earNotches: 2,
 };
 
@@ -3104,33 +3587,25 @@ export const ARCHETYPE_SCALE: Record<GoblinArchetype, number> = {
   bow: ARCHETYPE_HEIGHTS.bow / figureHeight(BOW_BUILD),
 };
 
-const PLUMBER_SKIN: Ramp = {
-  shadow: '#202c17',
-  dark: '#384d27',
-  mid: '#58763d',
-  light: '#7ea05a',
-  rim: '#b0d488',
-};
-
 const PLUMBER_BUILD: GoblinProportions = {
   thighLength: 0.28,
   shinLength: 0.27,
   footHeight: 0.06,
-  torsoLength: 0.4,
-  neckLength: 0.05,
-  headRadius: 0.2,
+  torsoLength: 0.38,
+  neckLength: 0.02,
+  headRadius: 0.26,
   headWidthFactor: 1.02,
   shoulderHalfWidth: 0.2,
   hipHalfWidth: 0.16,
-  bellyBulge: 0.07,
+  bellyBulge: 0.14,
   upperArmLength: 0.36,
   forearmLength: 0.42,
-  legWidth: 0.13,
-  armWidth: 0.11,
-  handRadius: 0.082,
-  footLength: 0.26,
-  earLength: 0.36,
-  noseProjection: 0.12,
+  legWidth: 0.11,
+  armWidth: 0.095,
+  handRadius: 0.105,
+  footLength: 0.34,
+  earLength: 0.42,
+  noseProjection: 0.16,
 };
 
 /**
@@ -3143,25 +3618,15 @@ const PLUMBER_BUILD: GoblinProportions = {
  * own figure.
  */
 export const GOBLIN_PLUMBER_STYLE: GoblinStyle = {
-  palette: goblinPalette(PLUMBER_SKIN),
+  palette: goblinPalette(),
   proportions: PLUMBER_BUILD,
-  gear: {
-    pauldron: false,
-    bracer: false,
-    greave: false,
-    necklace: false,
-    hood: false,
-    quiver: false,
-    flatCap: true,
-    overalls: true,
-    plunger: true,
-  },
-  spineLean: deg(10),
+  gear: { ...NO_GEAR, flatCap: true, overalls: true, plunger: true },
+  spineLean: deg(12),
   earNotches: 1,
 };
 
 /** Sole-to-skull height the plumber stands at in play, in tile units. */
-const PLUMBER_HEIGHT = 0.8;
+const PLUMBER_HEIGHT = 0.97;
 
 /** The plumber's equivalent of {@link ARCHETYPE_SCALE}. */
 export const GOBLIN_PLUMBER_SCALE = PLUMBER_HEIGHT / figureHeight(PLUMBER_BUILD);

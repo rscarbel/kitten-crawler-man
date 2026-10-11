@@ -38,6 +38,7 @@ export type ItemId =
   | 'doomsday_scenario'
   | 'quest_scythe'
   | 'quest_blueprints'
+  | 'quest_prison_key'
   | 'skill_book_cockroach'
   | 'skill_book_cat_reflexes'
   | 'skill_book_pugilism'
@@ -708,6 +709,19 @@ export const ITEM_DEF: Record<ItemId, ItemDef> = {
     description:
       "Tikka's drawings for a proper saw bench and a geared rope walk, borrowed back from Wendell. " +
       "Take them to Fenna's saw and rope walk to build the upgrades.",
+  },
+  quest_prison_key: {
+    id: 'quest_prison_key',
+    category: 'quest',
+    baseValue: 0,
+    name: 'The Key',
+    stackable: false,
+    canHotlist: false,
+    canDrop: false,
+    isQuestItem: true,
+    description:
+      'An absurdly large gold key, lifted from the vault of the Goblin High Security Prison. ' +
+      'The gate guard outside will want it back. He will be insufferable about it.',
   },
   nightgaunt_cloak: {
     id: 'nightgaunt_cloak',

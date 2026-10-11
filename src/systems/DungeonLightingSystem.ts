@@ -51,7 +51,7 @@ import type { AmbientLevel, LightColour, LightingProfile } from '../map/dungeon/
 import { LIGHTING_TUNING } from './lighting/lightingTuning';
 import { dungeonFloorTheme, type DungeonFloorThemeId } from '../map/dungeon/floorTheme';
 import { drawRadialGlow } from '../sprites/radialGlow';
-import { EYE_COLOR, EYE_GLOW_STOPS } from '../sprites/nurserySprites';
+import { drawEyePair, eyesOpenAt } from './lighting/eyeShine';
 import type { GameSystem } from './GameSystem';
 import {
   GLOW_COLOURS,
@@ -131,7 +131,6 @@ const MIN_VISIBLE_ALPHA = 0.004;
 const MS_PER_SECOND = 1000;
 /** Bytes of shadow colour stored per tile. */
 const RGB_CHANNELS = 3;
-const FULL_TURN = Math.PI * 2;
 const HALF = 0.5;
 const QUARTER = 0.25;
 
@@ -184,13 +183,6 @@ const DOORWAY_SPILL_PASSES = 3;
 const EYE_SHINE_MAX_STATIC_LIGHT = 0.3;
 /** A dynamic light counts as lighting a creature inside this share of its reach. */
 const EYE_SHINE_LIGHT_REACH_SHARE = 0.85;
-const EYE_SHINE_DOT_RADIUS = 0.035;
-const EYE_SHINE_GLOW_RADIUS = 0.22;
-const EYE_BLINK_PERIOD_MS = 3700;
-/** The share of each blink period the eyes are shut. */
-const EYE_BLINK_SHUT_SHARE = 0.06;
-/** Spreads blink phases so a pack does not blink in unison. */
-const EYE_BLINK_SEED_STEP = 0.37;
 
 /** Bytes per pixel of an image the CPU paints. */
 const RGBA_CHANNELS = 4;
@@ -841,11 +833,7 @@ export class DungeonLightingSystem implements GameSystem {
       if (!this.isInDarkness(creature.x + TILE_SIZE * HALF, creature.y + TILE_SIZE * HALF)) {
         continue;
       }
-      const blink =
-        (((nowMs / EYE_BLINK_PERIOD_MS + this.blinkSeedOf(creature) * EYE_BLINK_SEED_STEP) % 1) +
-          1) %
-        1;
-      if (blink < EYE_BLINK_SHUT_SHARE) continue;
+      if (!eyesOpenAt(nowMs, this.blinkSeedOf(creature))) continue;
       const eyes = this.eyeScratch;
       if (!creature.eyeShineAnchor(eyes)) continue;
       drawEyePair(ctx, eyes.x - camX, eyes.y - camY, eyes.spacingPx);
@@ -1802,27 +1790,3 @@ function powerDownAlpha(age: number): number {
   const inLastFlicker = age >= POWER_DOWN_FLICKER_START_MS && age < POWER_DOWN_FLICKER_END_MS;
   return inLastFlicker ? fade * POWER_DOWN_FLICKER_DEPTH : fade;
 }
-
-function drawEyePair(
-  ctx: CanvasRenderingContext2D,
-  cx: number,
-  cy: number,
-  spacingPx: number,
-): void {
-  ctx.save();
-  ctx.globalCompositeOperation = 'lighter';
-  drawRadialGlow(ctx, cx, cy, TILE_SIZE * EYE_SHINE_GLOW_RADIUS, EYE_GLOW_STOPS);
-  ctx.restore();
-  ctx.fillStyle = EYE_SHINE_FILL;
-  const radius = TILE_SIZE * EYE_SHINE_DOT_RADIUS;
-  const halfSpacing = spacingPx * HALF;
-  ctx.beginPath();
-  ctx.arc(cx - halfSpacing, cy, radius, 0, FULL_TURN);
-  ctx.fill();
-  ctx.beginPath();
-  ctx.arc(cx + halfSpacing, cy, radius, 0, FULL_TURN);
-  ctx.fill();
-}
-
-/** An eye's glint at full strength. */
-const EYE_SHINE_FILL = `${EYE_COLOR}1)`;

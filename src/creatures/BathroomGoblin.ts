@@ -4,7 +4,8 @@ import type { EyePlacement } from '../sprites/eyePlacement';
 import type { Point } from '../map/roomDoorways';
 import { GOBLIN_EYES } from './Goblin';
 import {
-  GoblinPassiveAnimator,
+  type GoblinPassiveAnimator,
+  bathroomGoblinAnimator,
   drawGoblinPlumberSprite,
   drawGoblinSprite,
   type GoblinArchetype,
@@ -34,7 +35,6 @@ const FRAMES_PER_SECOND = 60;
 const SECONDS_PER_FRAME = 1 / FRAMES_PER_SECOND;
 const MILLISECONDS_PER_SECOND = 1000;
 const HALF = 0.5;
-const FULL_TURN = Math.PI * 2;
 /** The goblin painter overhangs its tile like the hostile goblins' does. */
 const BATHROOM_GOBLIN_CULL_MARGIN_TILES = 1.5;
 
@@ -47,24 +47,6 @@ export const OW_THROTTLE_FRAMES = 45;
 /** How long an "Ow!" stays over his head. */
 const OW_BUBBLE_FRAMES = 60;
 
-/**
- * The potty dance: a knee-bounce that only ever dips (a goblin clenching does
- * not rise above his own height) and a slow side-to-side shuffle. Every goblin
- * draws his own rate and phase from his seed, so a line of twenty never bounces
- * in step.
- */
-export const POTTY_DANCE_BOB_TILES = 0.035;
-export const POTTY_DANCE_SHUFFLE_TILES = 0.03;
-export const POTTY_DANCE_BOB_HZ = 2.1;
-export const POTTY_DANCE_BOB_HZ_SPREAD = 0.7;
-export const POTTY_DANCE_SHUFFLE_HZ = 0.8;
-export const POTTY_DANCE_SHUFFLE_HZ_SPREAD = 0.35;
-
-/** Seed salts, so the dance's four rolls are unrelated to each other. */
-const BOB_RATE_SALT = 1;
-const BOB_PHASE_SALT = 2;
-const SHUFFLE_RATE_SALT = 3;
-const SHUFFLE_PHASE_SALT = 4;
 const HASH_MULTIPLIER_A = 0x9e3779b1;
 const HASH_MULTIPLIER_B = 0x85ebca6b;
 const HASH_SHIFT = 16;
@@ -101,7 +83,7 @@ const PLUMBER_BUBBLE_STYLE: TimedBubbleStyle = {
  *
  * He does not decide where to stand. `CloggedBathroomSystem` sets his post,
  * the route he walks after the fix and when he is behind a stall door; this
- * class walks the route, flinches, talks and dances.
+ * class walks the route, flinches and talks.
  */
 export class BathroomGoblin extends Mob {
   readonly xpValue = 0;
@@ -111,15 +93,13 @@ export class BathroomGoblin extends Mob {
   description: string;
 
   readonly role: BathroomGoblinRole;
-  /** Fixes his look, his dance and which lines he picks. */
+  /** Fixes his look and which lines he picks. */
   readonly seed: number;
   readonly archetype: GoblinArchetype;
   readonly speech = new TimedSpeech();
 
   /** The glyph over his head; only the plumber ever wears one. */
   marker: BathroomGoblinMarker = 'none';
-  /** Bouncing on his knees in line: true while the plumbing is broken. */
-  dancing = true;
   /** Behind a shut stall door: not drawn, not hit, not talked to. */
   hidden = false;
   /** Whether nothing may shove him: true while he holds his place in line. */
@@ -129,15 +109,11 @@ export class BathroomGoblin extends Mob {
   /** How many "ow" barks he has said, for a gate to count and for picking the next. */
   owBarks = 0;
 
-  private readonly animator = new GoblinPassiveAnimator();
+  private readonly animator: GoblinPassiveAnimator;
   private owThrottle = 0;
   private lastOw: BarkLine | null = null;
   private route: readonly Point[] = [];
   private routeIndex = 0;
-  private readonly bobHz: number;
-  private readonly bobPhase: number;
-  private readonly shuffleHz: number;
-  private readonly shufflePhase: number;
 
   protected override get eyePlacement(): EyePlacement {
     return GOBLIN_EYES;
@@ -155,6 +131,7 @@ export class BathroomGoblin extends Mob {
     this.role = role;
     this.seed = seed;
     this.archetype = archetype;
+    this.animator = bathroomGoblinAnimator(role === 'plumber' ? 'plumber' : archetype);
     this.paysNoRewards = true;
     this.cannotBeKilled = true;
     this.immuneToConfusion = true;
@@ -163,14 +140,6 @@ export class BathroomGoblin extends Mob {
       role === 'plumber'
         ? 'Has the hat. Does not have the faintest idea how pipes work.'
         : 'Waiting for the bathroom. Has been for a while.';
-    this.bobHz =
-      POTTY_DANCE_BOB_HZ +
-      (bathroomSeedFraction(seed, BOB_RATE_SALT) - HALF) * POTTY_DANCE_BOB_HZ_SPREAD;
-    this.bobPhase = bathroomSeedFraction(seed, BOB_PHASE_SALT) * FULL_TURN;
-    this.shuffleHz =
-      POTTY_DANCE_SHUFFLE_HZ +
-      (bathroomSeedFraction(seed, SHUFFLE_RATE_SALT) - HALF) * POTTY_DANCE_SHUFFLE_HZ_SPREAD;
-    this.shufflePhase = bathroomSeedFraction(seed, SHUFFLE_PHASE_SALT) * FULL_TURN;
   }
 
   override get isHostile(): boolean {
@@ -294,11 +263,13 @@ export class BathroomGoblin extends Mob {
       if (distance <= budget) {
         this.x = goalX;
         this.y = goalY;
+        this.recordOwnStride(distance);
         budget -= distance;
         this.routeIndex++;
       } else {
         this.x += (dx / distance) * budget;
         this.y += (dy / distance) * budget;
+        this.recordOwnStride(budget);
         budget = 0;
       }
       if (distance > 0) {
@@ -310,22 +281,16 @@ export class BathroomGoblin extends Mob {
     this.isMoving = moved;
   }
 
-  /** His animation, speech and "ow" throttle. Runs only near the party, so far copies sit still. */
+  /** His speech and "ow" throttle. Runs only near the party, so far copies sit still. */
   updateAI(_targets: Player[]): void {
-    this.animator.tick(this.isMoving, false, SECONDS_PER_FRAME);
     this.speech.tick();
     if (this.owThrottle > 0) this.owThrottle--;
   }
 
-  /** The dance's offset this instant, in pixels; none while he walks, flinches or has stopped dancing. */
-  private danceOffset(tileSize: number, seconds: number): Point {
-    if (!this.dancing || this.isMoving || this.animator.isFlinching) return { x: 0, y: 0 };
-    const bob = Math.abs(Math.sin(seconds * this.bobHz * FULL_TURN + this.bobPhase));
-    const shuffle = Math.sin(seconds * this.shuffleHz * FULL_TURN + this.shufflePhase);
-    return {
-      x: shuffle * POTTY_DANCE_SHUFFLE_TILES * tileSize,
-      y: bob * POTTY_DANCE_BOB_TILES * tileSize,
-    };
+  /** His animation, ticked alongside every other goblin's so all three walk the same way. */
+  override tickTimers(): void {
+    super.tickTimers();
+    this.animator.tick(this.isMoving, false, SECONDS_PER_FRAME, this.ownStridePx);
   }
 
   protected override drawSelf(
@@ -336,15 +301,14 @@ export class BathroomGoblin extends Mob {
   ): void {
     if (!this.isAlive || this.hidden) return;
     const seconds = performance.now() / MILLISECONDS_PER_SECOND;
-    const dance = this.danceOffset(tileSize, seconds);
-    const sx = this.x - camX + dance.x;
-    const sy = this.y - camY + dance.y;
+    const sx = this.x - camX;
+    const sy = this.y - camY;
     const showsMarker = this.marker !== 'none';
-    // Behind the body, so the column stands behind him and follows his dance.
+    // Behind the body, so the column stands behind him.
     if (showsMarker) {
       drawQuestBeacon(ctx, sx, sy, tileSize, camX, camY, performance.now(), QUEST_MARKER_GOLD);
     }
-    const resolved = this.animator.resolvePassive(seconds, this.walkFrame, this.isMoving);
+    const resolved = this.animator.resolvePassive(seconds, this.isMoving);
     const artTopY = this.paintSpriteMeasuringTop(ctx, sy, () => {
       if (this.role === 'plumber') {
         drawGoblinPlumberSprite(ctx, {

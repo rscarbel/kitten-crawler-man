@@ -170,6 +170,23 @@ export const worldPalette = {
     hintOutline: 'rgba(0,0,0,0.85)',
     burnoutFlash: '#ffe8c0',
   },
+  /**
+   * The Goblin High Security Prison: the glyph over a guard whose suspicion is
+   * rising and the one that means it has seen enough, the badge behind both,
+   * and the tints a light takes on while it is catching someone.
+   */
+  prison: {
+    suspicion: '#facc15',
+    alarm: '#ef4444',
+    badge: 'rgba(12,10,8,0.82)',
+    badgeEdge: 'rgba(255,240,200,0.35)',
+    /** The warm wash inside a flashlight cone or a spotlight disc nobody is caught in, as `r,g,b`. */
+    lightWarmRgb: '255,206,132',
+    /** The amber the same light turns while its suspicion rises, as `r,g,b`. */
+    lightCatchingRgb: '255,150,40',
+    /** A spotlight's bright rim, as `r,g,b`. */
+    spotRimRgb: '255,246,214',
+  },
   /** Minimap marks beyond the shared dots in `MINIMAP_MARKER_COLORS`. */
   minimap: {
     unexplored: '#111111',
@@ -325,6 +342,17 @@ export const WORLD_TEXT = {
   ready: style({ size: 11, bold: true, color: worldPalette.ink.gold, outline: true }),
   /** A tiny rank mark beside a health bar. */
   tacticsMark: style({ size: 7, bold: true, color: worldPalette.ink.gold, outline: true }),
+  /** The caption over a prize the room is built around: "THE KEY". */
+  prizeLabel: style({ size: 16, bold: true, color: worldPalette.ink.gold, outline: true }),
+  /** The ? and ! over a guard in an explainer's illustration, drawn larger than in play to read at panel scale. */
+  suspicionMark: style({
+    size: 22,
+    bold: true,
+    color: worldPalette.prison.suspicion,
+    outline: true,
+  }),
+  /** A sound written into an explainer's illustration: "THUD". */
+  soundWord: style({ size: 12, bold: true, color: worldPalette.ink.secondary, outline: true }),
 } as const satisfies Record<string, WorldTextStyle>;
 
 export type WorldTextStyleId = keyof typeof WORLD_TEXT;

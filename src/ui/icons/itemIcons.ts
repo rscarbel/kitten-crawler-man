@@ -20,6 +20,7 @@ import {
 } from '../../sprites/art/itemIcons/enchantedApparelIcons';
 import { drawFoodIcon, type FoodIconId } from './foodIcons';
 import { drawIssueKitIcon, type IssueKitItemId } from '../../sprites/art/itemIcons/issueKitIcon';
+import { drawPrisonKeyIcon } from '../../sprites/art/itemIcons/prisonKeyIcon';
 import { drawKitIcon, type KitIconId } from './kitIcons';
 import { drawMagistratesWritIcon, drawUnreadableLetterIcon } from './murderMysteryLetterIcons';
 import {
@@ -126,6 +127,7 @@ export const ITEM_ICONS: Record<ItemId, ItemIconPainter> = {
   doomsday_scenario: (ctx, rect) => drawSoulCrystalIcon(ctx, rect),
   quest_scythe: blueprintsQuest('quest_scythe'),
   quest_blueprints: blueprintsQuest('quest_blueprints'),
+  quest_prison_key: drawPrisonKeyIcon,
 
   wood: resource('wood'),
   stone: resource('stone'),

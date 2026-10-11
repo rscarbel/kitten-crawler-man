@@ -86,13 +86,13 @@ const ARCHER_TACTICS: readonly TacticsTrait[] = ['kite', 'regroup'];
 
 /** Drawn only in profile, so facing the camera it still shows that profile. */
 const GOBLIN_ARCHER_EYES: EyePlacement = {
-  sideForward: 0.14,
+  sideForward: 0.23,
   sideHeight: 0.2,
-  sideSpacing: 0.05,
+  sideSpacing: 0.08,
   frontMirrors: true,
-  frontAcross: 0.14,
+  frontAcross: 0.23,
   frontHeight: 0.2,
-  frontSpacing: 0.05,
+  frontSpacing: 0.08,
 };
 
 export class GoblinArcher extends Mob {
@@ -280,7 +280,6 @@ export class GoblinArcher extends Mob {
 
     if (this.drawTimer > 0) {
       this.tickDraw(nearest);
-      this.advanceAnimator();
       return;
     }
 
@@ -292,13 +291,11 @@ export class GoblinArcher extends Mob {
       // Not `doWander`: a floor-3 camp resident is leashed to its camp, and only
       // this path consults the leash.
       this.returnHomeOrWander();
-      this.advanceAnimator();
       return;
     }
 
     this.beginEngagement();
     this.hold(nearest);
-    this.advanceAnimator();
   }
 
   /**
@@ -486,10 +483,16 @@ export class GoblinArcher extends Mob {
     this.projectileSoundPending = true;
   }
 
-  private advanceAnimator(): void {
+  /**
+   * The animator runs here, not in `updateAI`, because the mob loop skips
+   * `updateAI` on a frame a siege directive or a trebuchet threat claims — and
+   * an archer marched on those frames would glide on frozen legs.
+   */
+  override tickTimers(): void {
+    super.tickTimers();
     if (this.hp < this.previousHp && this.drawTimer === 0) this.animator.startFlinch();
     this.previousHp = this.hp;
-    this.animator.tick(this.isMoving, this.drawTimer > 0, SECONDS_PER_FRAME);
+    this.animator.tick(this.isMoving, this.drawTimer > 0, SECONDS_PER_FRAME, this.ownStridePx);
   }
 
   protected override drawSelf(
@@ -505,7 +508,6 @@ export class GoblinArcher extends Mob {
     const progress = this.drawProgress;
     const resolved = this.animator.resolve(
       performance.now() / MILLISECONDS_PER_SECOND,
-      this.walkFrame,
       this.isMoving,
       progress === null ? null : { kind: this.shotKind, progress },
     );

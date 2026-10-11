@@ -14,6 +14,10 @@ import {
   parseCloggedBathroomCheckpoint,
   type CloggedBathroomCheckpoint,
 } from '../systems/cloggedBathroom/cloggedBathroomCheckpoint';
+import {
+  parseStealthKeySnatchCheckpoint,
+  type StealthKeySnatchCheckpoint,
+} from '../systems/stealthKeySnatch/stealthKeySnatchCheckpoint';
 import type { MurderMysteryQuestCheckpoint } from '../systems/MurderMysteryQuestSystem';
 import type { SpiderQuestCheckpoint } from '../systems/SpiderQuestSystem';
 import type { CircusQuestCheckpoint } from '../systems/CircusQuestSystem';
@@ -114,6 +118,11 @@ export interface PersistedWorldState {
    * Optional: a save written before the bathroom loads it broken and unmet.
    */
   cloggedBathroom?: CloggedBathroomCheckpoint;
+  /**
+   * The stealth gate's key quest and whether the prison's explainer was seen.
+   * Optional: a save written without it loads unmet, with the gate locked.
+   */
+  stealthKeySnatch?: StealthKeySnatchCheckpoint;
 
   krakarenKilled: boolean;
   krakarenBossRoomIdx: number;
@@ -1359,6 +1368,7 @@ export function parsePersistedWorldState(value: unknown): PersistedWorldState | 
   const bossRoomDressing = parseBossRoomDressingCheckpoint(value.bossRoomDressing);
   const briarHollow = parseBriarHollowStateSnapshot(value.briarHollow);
   const cloggedBathroom = parseCloggedBathroomCheckpoint(value.cloggedBathroom);
+  const stealthKeySnatch = parseStealthKeySnatchCheckpoint(value.stealthKeySnatch);
   const { krakarenKilled, krakarenBossRoomIdx, juicerKilled, juicerBossRoomIdx } = value;
 
   if (
@@ -1413,6 +1423,7 @@ export function parsePersistedWorldState(value: unknown): PersistedWorldState | 
     bossRoomDressing,
     briarHollow,
     cloggedBathroom,
+    stealthKeySnatch,
     krakarenKilled,
     krakarenBossRoomIdx,
     juicerKilled,

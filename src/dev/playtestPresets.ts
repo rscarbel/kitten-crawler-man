@@ -36,6 +36,8 @@ export type PlaytestSpawn =
   | { readonly kind: 'questRoomEntrance' }
   /** The tile just inside the first clogged bathroom, by the way in. */
   | { readonly kind: 'bathroomEntrance' }
+  /** Floor 2's stealth gate room, in front of the gate guard, gate still locked. */
+  | { readonly kind: 'stealthGateRoom' }
   /** Just inside Briar Hollow's gate, on the main street. */
   | { readonly kind: 'briarHollowGate' }
   /** The street tile just south of a town building's door. */
@@ -692,6 +694,20 @@ const BATHROOM: PlaytestPreset = {
 };
 
 /**
+ * Floor 2's stealth gate room, standing in front of the gate guard with the
+ * gate locked and the prison door in the north wall. The room sits halfway
+ * between the Krakaren and the swine gauntlet, so the party is the `krakaren`
+ * one with the Krakaren skipped and marked won.
+ */
+const PRISON: PlaytestPreset = {
+  ...KRAKAREN,
+  id: 'prison',
+  description: 'Stealth gate room past the Krakaren, in front of the gate guard, gate locked',
+  spawn: { kind: 'stealthGateRoom' },
+  preDefeatedBossTypes: ['krakaren_clone'],
+};
+
+/**
  * Floor 2, past the Krakaren, hard difficulty: the fairy encounter band the
  * fairness doc gates against. Reuses the `krakaren` party rather than a fresh
  * one — that gear and level is what a crawler actually has by this point in
@@ -1065,6 +1081,7 @@ export const PLAYTEST_PRESETS: readonly PlaytestPreset[] = [
   LEVEL2,
   BATHROOM,
   KRAKAREN,
+  PRISON,
   SWINE,
   SPIDER,
   LEVEL3,

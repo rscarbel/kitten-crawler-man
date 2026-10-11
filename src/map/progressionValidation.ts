@@ -3,10 +3,11 @@ import { isWalkableTileType } from './walkability';
 import type { DungeonData, QuestChokeData } from './DungeonGenerator';
 import { QUEST_EXIT_DOOR_CLOSED } from './tileTypes';
 import { roomDoorways } from './roomDoorways';
-import { MIN_CHAIN_ROOMS, SPLIT_LANE_MAX_ROOMS } from './spineLayout';
+import { MIN_CHAIN_ROOMS, SPLIT_LANE_MAX_ROOMS, stealthGateChainIndex } from './spineLayout';
 import { SAFE_ACCESS_RUN_LIMIT, bathroomBranchIndex } from './gauntletLayout';
 import { bathroomBlockedTiles, bathroomImpassableTiles, plumberTalkTiles } from './bathroomLayout';
 import { tileCoordKey } from './tileIndex';
+import { STEALTH_GATE_CLOSED } from './tileTypes';
 import { arenaReserveRect, ARENA_RADIUS, ARENA_CONCOURSE_REACH } from './arenaGeometry';
 
 /** Boss the arena's antechamber warns the player about. */
@@ -41,6 +42,11 @@ export interface ProgressionExpectations {
    * not there, so S6 must judge it by the same mistaken rule.
    */
   bathroomPlumberBlocks: boolean;
+  /**
+   * Whether the floor's spine seats a locked stealth gate room halfway along
+   * it. Stated by the caller for the reason {@link hasQuestChoke} is.
+   */
+  hasStealthGate: boolean;
   /** Whether this floor replaces its free region with a forced spine. */
   hasSpine: boolean;
   /**
@@ -684,6 +690,118 @@ function validateBathroomChoke(
   }
 }
 
+/** A gate room has exactly two ways through: in, and the one its gate shuts. */
+const STEALTH_GATE_ROOM_DOORWAYS = 2;
+
+/**
+ * S7, for {@link validateProgression}: the stealth gate room is a choke on the
+ * spine that its locked gate turns into a wall, and nothing the planner hangs
+ * off the chain may sit on it or beside it.
+ */
+function validateStealthGate(
+  data: DungeonData,
+  antechamberBounds: Rect | null,
+  roomGraph: RoomGraph,
+  roomIndexOf: (rect: Rect) => number,
+  fail: (id: string, message: string) => void,
+): void {
+  const { grid, startTile } = data;
+  const room = data.stealthGateRoom;
+  const spine = data.progressionLayout?.spine ?? null;
+  const planned = data.progressionLayout?.stealthGate ?? null;
+  if (room === null || planned === null || spine === null) {
+    fail('S7', 'this floor expects a stealth gate room on its spine and seated none');
+    return;
+  }
+  if (antechamberBounds === null) {
+    fail('S7', 'a stealth gate room was built on a floor with no antechamber');
+    return;
+  }
+
+  const halfway = stealthGateChainIndex(spine.chain.length);
+  const atHalfway = halfway < spine.chain.length ? spine.chain[halfway] : null;
+  const seatedAtHalfway =
+    room.chainIndex === halfway && atHalfway?.x === room.bounds.x && atHalfway.y === room.bounds.y;
+  if (!seatedAtHalfway) {
+    fail('S7', `the gate room is chain room ${room.chainIndex}, not the halfway room ${halfway}`);
+  }
+
+  const doorways = roomDoorways(grid, room.bounds);
+  if (doorways.length !== STEALTH_GATE_ROOM_DOORWAYS) {
+    fail('S7', `the gate room has ${doorways.length} doorways, expected exactly 2`);
+  }
+  for (const tile of room.gateTiles) {
+    if (grid[tile.y]?.[tile.x]?.type !== STEALTH_GATE_CLOSED) {
+      fail('S7', `the gate tile at (${tile.x},${tile.y}) does not generate as a shut gate`);
+    }
+  }
+
+  // Every route passes through a gate room: with it removed, nothing reaches
+  // the antechamber.
+  const withoutGateRoom = floodFill(grid, startTile, [room.bounds]);
+  if (isRectReachable(withoutGateRoom, antechamberBounds)) {
+    fail('S7', 'the antechamber is reachable without passing through the gate room');
+  }
+
+  // Locked, as the block flag will hold it, with the guard anchored on his tile.
+  const lockedKeys = new Set(
+    [...room.gateTiles, room.guardTile].map((tile) => tileCoordKey(tile.x, tile.y)),
+  );
+  const locked = floodFill(grid, startTile, [], (point) =>
+    lockedKeys.has(tileCoordKey(point.x, point.y)),
+  );
+  if (isRectReachable(locked, antechamberBounds)) {
+    fail('S7', 'the antechamber is reachable while the gate is locked');
+  }
+  if (!room.guardTalkTiles.some((tile) => isReachable(locked, tile))) {
+    fail('S7', 'the gate guard cannot be talked to while the gate is locked');
+  }
+  for (const tile of room.prisonDoor.approachTiles) {
+    if (!isReachable(locked, tile)) {
+      fail('S7', `the prison door approach at (${tile.x},${tile.y}) cannot be reached`);
+    }
+  }
+  const open = floodFill(grid, startTile, []);
+  if (!isRectReachable(open, antechamberBounds)) {
+    fail('S7', 'the antechamber is unreachable even with the gate open');
+  }
+
+  // The exclusions the planner enforces, each measured on what was built.
+  for (const nursery of data.questRooms) {
+    const nurseryIndex = spine.chain.findIndex(
+      (rect) => rect.x === nursery.bounds.x && rect.y === nursery.bounds.y,
+    );
+    if (nurseryIndex >= 0 && Math.abs(nurseryIndex - room.chainIndex) <= 1) {
+      fail('S7', `the nursery is chain room ${nurseryIndex}, on or beside the gate room`);
+    }
+  }
+  for (const lane of spine.lanes) {
+    if (lane.forkIndex === room.chainIndex || lane.forkIndex + 1 === room.chainIndex) {
+      fail(
+        'S7',
+        `a lane forks on the link at chain room ${lane.forkIndex}, touching the gate room`,
+      );
+    }
+  }
+
+  const gateIndex = roomIndexOf(room.bounds);
+  if (gateIndex < 0) {
+    fail('S7', 'the gate room is missing from the floor’s room list');
+    return;
+  }
+  const chainNeighbours = new Set(
+    spine.chain.filter((_, index) => Math.abs(index - room.chainIndex) === 1).map(roomIndexOf),
+  );
+  const labIndex = data.spiderLabRoom === null ? -1 : roomIndexOf(data.spiderLabRoom.bounds);
+  const laneIndices = new Set(spine.lanes.flatMap((lane) => lane.rooms.map(roomIndexOf)));
+  for (const neighbour of roomGraph[gateIndex].keys()) {
+    if (chainNeighbours.has(neighbour)) continue;
+    if (neighbour === labIndex) fail('S7', 'the spider lab hangs off the gate room');
+    else if (laneIndices.has(neighbour)) fail('S7', 'a lane room opens off the gate room');
+    else fail('S7', `room ${neighbour} hangs off the gate room as a pocket`);
+  }
+}
+
 /**
  * Checks every topology invariant the forced-progression design depends on.
  * Pure: grid and layout data in, a list of failures out. Run both by the
@@ -706,6 +824,7 @@ export function validateProgression(
     hasQuestChoke,
     hasBathroomChoke,
     bathroomPlumberBlocks,
+    hasStealthGate,
     hasSpine,
     spiderLabIsDeadEnd,
     spineMinRooms,
@@ -1215,6 +1334,13 @@ export function validateProgression(
         }
       }
     }
+  }
+
+  // S7 — the stealth gate room halfway along the spine: on every route, shut
+  // while locked without shutting the party out of its guard or the prison
+  // door, and nothing else seated on it or beside it.
+  if (hasStealthGate) {
+    validateStealthGate(data, antechamber?.bounds ?? null, roomGraph, roomIndexOf, fail);
   }
 
   // S3 — the spider lab hangs off the route as a dead end, so walking past its

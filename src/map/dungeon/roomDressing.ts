@@ -45,7 +45,6 @@ import {
   CELLAR_TABLE,
   CLAY_URN,
   CRATE,
-  CRAWLER_SIGN,
   FALLEN_BEAM,
   FloorTypeValue,
   GLOW_FUNGUS,
@@ -178,6 +177,13 @@ export const DRESSING_TILE_TYPES: ReadonlySet<number> = new Set<number>([
   BATHROOM_SINK,
   BATHROOM_PLUNGER,
 ]);
+
+/** Whether dressing stood a solid piece on this tile: one a crawler walks round, not over. */
+export function isBlockingDressingTile(tile: TileContent): boolean {
+  return (
+    tile.groundType !== undefined && DRESSING_TILE_TYPES.has(tile.type) && !isWalkableTileType(tile)
+  );
+}
 
 // ── Stamps ──────────────────────────────────────────────────────────────────
 
@@ -323,8 +329,8 @@ const WALL_BAND_DEPTH = 1;
  */
 export const STAMP_BAND_DEPTH = 2;
 
-/** Tiles kept free of blocking props on every side of a doorway, spawn point, stairwell or chest. */
-const BLOCKING_CLEARANCE_TILES = 1;
+/** Tiles kept free of blocking props on every side of a doorway, spawn point, stairwell, chest or crawler sign. */
+export const BLOCKING_CLEARANCE_TILES = 1;
 
 /**
  * How far a gas bottle stands from every doorway and every spawn point: its
@@ -369,12 +375,6 @@ const CORNER_CLUSTER_MAX = 2;
 
 /** Blocking props a nook's alcove may hold. */
 const MAX_NOOK_PROPS = 2;
-
-/**
- * How far from a crawler sign a nook keeps its alcove bare: wide enough that
- * a five-tile alcove is clear end to end from a sign on any of its walls.
- */
-const SIGN_KEEP_CLEAR_TILES = 8;
 
 /** Junctions in one hallway segment that may take scatter. */
 const MAX_SCATTER_JUNCTIONS = 3;
@@ -1077,22 +1077,6 @@ export function isOpenAreaCorner(grid: TileContent[][], x: number, y: number): b
 }
 
 /**
- * Whether a crawler sign stands within {@link SIGN_KEEP_CLEAR_TILES} of a tile.
- * A sign's arrow is aimed across the open floor of the junction it was
- * planned on; a prop standing in that floor afterwards changes the
- * junction's shape and can leave the arrow pointing at a way out that is no
- * longer the first one a crawler meets.
- */
-function nearCrawlerSign(grid: TileContent[][], tile: Point): boolean {
-  for (let dy = -SIGN_KEEP_CLEAR_TILES; dy <= SIGN_KEEP_CLEAR_TILES; dy++) {
-    for (let dx = -SIGN_KEEP_CLEAR_TILES; dx <= SIGN_KEEP_CLEAR_TILES; dx++) {
-      if (grid[tile.y + dy]?.[tile.x + dx]?.type === CRAWLER_SIGN) return true;
-    }
-  }
-  return false;
-}
-
-/**
  * Dresses one hallway segment: walkable scatter where corridors meet, and at
  * most {@link MAX_NOOK_PROPS} blocking pieces tucked into the corners of a
  * nook's alcove. The walking lane never takes a blocking prop.
@@ -1179,7 +1163,6 @@ export function dressHallway(
       if (!isPlainFloor(grid, tile.x, tile.y)) continue;
       if (!isOpenAreaCorner(grid, tile.x, tile.y)) continue;
       if (nearRoomOrReserved(tile.x, tile.y) || touchesPlacedProp(tile)) continue;
-      if (nearCrawlerSign(grid, tile)) continue;
       placeProp(grid[tile.y][tile.x], tileType);
       nookPropsPlaced.push(tile);
       remaining--;

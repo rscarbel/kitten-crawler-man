@@ -56,8 +56,12 @@ import { getMercenaryTemplate } from '../core/mercenaryTemplates';
 import {
   buildPlaytestBoot,
   playtestStartsPastBathroom,
+  playtestStartsPastStealthGate,
   resolvePlaytestSpawn,
+  type PlaytestBoot,
 } from './playtestBoot';
+import { PRISON_LAYOUTS, type PrisonLayout } from '../map/goblinPrisonLayouts';
+import type { Difficulty } from '../core/difficultyProfiles';
 import { blueprintsPlaytestState } from './blueprintsPlaytest';
 import { contractsPlaytestState } from './contractsPlaytest';
 
@@ -181,13 +185,55 @@ function devFloorOptions(
 }
 
 /**
+ * A copy of `options` with what every preset boot shares: the party, its spawn
+ * and the puzzle chokes behind it. Never written into `options` itself, which
+ * the caller goes on handing to the start menu: a preset's kit left there
+ * would start the next real run and be saved over the player's own.
+ */
+function withPlaytestBoot(options: DungeonSceneOptions, boot: PlaytestBoot): DungeonSceneOptions {
+  return {
+    ...options,
+    humanSnap: boot.humanSnap,
+    catSnap: boot.catSnap,
+    abilityManager: boot.abilityManager,
+    // The pet is unlocked from a treasure chest most presets start well past,
+    // and a playtest drop-in that cannot summon him cannot test him.
+    mongoUnlocked: true,
+    resolveSpawnTile: (gameMap) => resolvePlaytestSpawn(boot.spawn, gameMap),
+    bathroomSolvedAtStart: (gameMap) => playtestStartsPastBathroom(boot.spawn, gameMap),
+    stealthGateOpenAtStart: (gameMap) => playtestStartsPastStealthGate(boot.spawn, gameMap),
+    preDefeatedBossTypes: boot.preDefeatedBossTypes,
+  };
+}
+
+const DIFFICULTIES: ReadonlyArray<Difficulty> = ['easy', 'normal', 'hard'];
+
+/** The preset `?prison` boots, whose spawn is the gate room the prison door opens from. */
+const PRISON_ROUTE_PRESET_ID = 'prison';
+
+/**
+ * The layout a `?prison=` value names: its 1-based place in the authored list
+ * or its id (`?prison=2`, `?prison=pit`). Anything else, a bare `?prison`
+ * included, is null and the world's own layout is built.
+ */
+function prisonLayoutNamed(value: string): PrisonLayout | null {
+  const byId = PRISON_LAYOUTS.find((layout) => layout.id === value);
+  if (byId !== undefined) return byId;
+  const position = Number(value);
+  if (!Number.isInteger(position)) return null;
+  return PRISON_LAYOUTS[position - 1] ?? null;
+}
+
+/**
  * Replaces the opening scene when a dev-only parameter asks for one.
  *
  * `?playtest=spider` opens a named preset — a floor, a spawn landmark and a
  * fully kitted party. `?level=level3&quest=bigtop_ready` opens a bare floor,
  * optionally seeding circus-quest state; `?level=level3&murder=cult_hideout`
- * does the same for the Krasue Murders questline. The rest are art preview
- * harnesses.
+ * does the same for the Krasue Murders questline. `?prison=1&difficulty=hard`
+ * walks the `prison` preset's party straight into the Goblin High Security
+ * Prison, built from that layout on that difficulty; leaving it comes out in
+ * floor 2's gate room. The rest are art preview harnesses.
  *
  * A booted floor never writes the real saved game unless `&save` is added (e.g.
  * `?playtest=spider&save`): a kitted preset or a seeded quest stage written over
@@ -382,23 +428,36 @@ export function devBootScene(
     return true;
   }
 
+  const prisonParam = params.get('prison');
+  const prisonPreset = getPlaytestPreset(PRISON_ROUTE_PRESET_ID);
+  if (prisonParam !== null && prisonPreset !== null) {
+    const difficultyParam = params.get('difficulty');
+    const difficulty = DIFFICULTIES.find((candidate) => candidate === difficultyParam);
+    if (difficulty !== undefined) settings.setDifficultyForSession(difficulty);
+    const layout = prisonLayoutNamed(prisonParam);
+    if (layout === null && prisonParam !== '') {
+      console.error(`Unknown prison layout "${prisonParam}"; building the world's own`);
+    }
+    const boot = buildPlaytestBoot(prisonPreset);
+    sceneManager.replace(
+      new DungeonScene(boot.levelDef, input, sceneManager, {
+        ...devFloorOptions(withPlaytestBoot(options, boot), params),
+        devEnterPrisonAtStart: true,
+        devPrisonLayout: layout ?? undefined,
+      }),
+    );
+    return true;
+  }
+
   const playtestId = params.get('playtest');
   if (playtestId !== null) {
     const preset = getPlaytestPreset(playtestId);
     if (preset !== null) {
       if (preset.difficulty !== undefined) settings.setDifficultyForSession(preset.difficulty);
       const boot = buildPlaytestBoot(preset);
-      options.humanSnap = boot.humanSnap;
-      options.catSnap = boot.catSnap;
-      options.abilityManager = boot.abilityManager;
-      // The pet is unlocked from a treasure chest most presets start well past,
-      // and a playtest drop-in that cannot summon him cannot test him.
-      options.mongoUnlocked = true;
-      options.resolveSpawnTile = (gameMap) => resolvePlaytestSpawn(boot.spawn, gameMap);
-      options.bathroomSolvedAtStart = (gameMap) => playtestStartsPastBathroom(boot.spawn, gameMap);
-      options.preDefeatedBossTypes = boot.preDefeatedBossTypes;
+      const floorOptions = withPlaytestBoot(options, boot);
       if (preset.hire !== undefined) {
-        options.mercenaryRoster = {
+        floorOptions.mercenaryRoster = {
           active: {
             id: preset.hire,
             name: getMercenaryTemplate(preset.hire).name,
@@ -409,7 +468,7 @@ export function devBootScene(
           floorLevelId: null,
         };
       }
-      if (preset.mongoOut === true) options.mongoWasOut = true;
+      if (preset.mongoOut === true) floorOptions.mongoWasOut = true;
       const defences = preset.briarHollowDefences;
       if (defences !== undefined) {
         const wallsFlag = params.get('walls');
@@ -419,38 +478,38 @@ export function devBootScene(
         if (wallsFlag !== null && parseWallTier(wallsFlag) === null) {
           console.error(`Unknown walls "${wallsFlag}"; standing the ring at ${defences.wallTier}`);
         }
-        options.prepareBriarHollow = (kit, gameMap) =>
+        floorOptions.prepareBriarHollow = (kit, gameMap) =>
           fortifyBriarHollow(kit, gameMap, { wallTier, trebuchets });
       } else if (preset.constructionContracts !== undefined) {
-        options.briarHollowState = contractsPlaytestState(preset.constructionContracts);
+        floorOptions.briarHollowState = contractsPlaytestState(preset.constructionContracts);
       } else if (preset.briarHollowBlueprints !== undefined) {
-        options.briarHollowState = blueprintsPlaytestState(preset.briarHollowBlueprints);
+        floorOptions.briarHollowState = blueprintsPlaytestState(preset.briarHollowBlueprints);
       } else if (preset.briarHollowUnlockAll === true) {
-        options.prepareBriarHollow = (kit) => unlockEverythingForPlaytest(kit.state.unlocks);
+        floorOptions.prepareBriarHollow = (kit) => unlockEverythingForPlaytest(kit.state.unlocks);
       }
       if (preset.toolTiers !== undefined) {
-        options.partyCrafts = { ...createPartyCraftsState(), tools: { ...preset.toolTiers } };
+        floorOptions.partyCrafts = { ...createPartyCraftsState(), tools: { ...preset.toolTiers } };
       }
       if (preset.circusQuest !== undefined) {
         const circus = createCircusQuestProgress();
         circus.stage = preset.circusQuest.stage;
         circus.heatherSlain = preset.circusQuest.heatherSlain;
-        options.circusQuestProgress = circus;
-        options.spawnAtCircus = true;
+        floorOptions.circusQuestProgress = circus;
+        floorOptions.spawnAtCircus = true;
       }
       if (boot.doomsdayStage !== undefined) {
         const doomsday = createDoomsdayProgress();
         doomsday.stage = boot.doomsdayStage;
         doomsday.deadlineAt = Date.now() + DOOMSDAY_COUNTDOWN_MS;
-        options.doomsdayQuestProgress = doomsday;
+        floorOptions.doomsdayQuestProgress = doomsday;
         // The countdown starts at the Lich's death, so the questline it ends is
         // already at that beat; the crystal's spot is filled in by the tower's
         // top floor the first time the party climbs to it.
-        options.murderQuestProgress =
-          parseMurderQuestProgress('lich_slain') ?? options.murderQuestProgress;
+        floorOptions.murderQuestProgress =
+          parseMurderQuestProgress('lich_slain') ?? floorOptions.murderQuestProgress;
       }
       sceneManager.replace(
-        new DungeonScene(boot.levelDef, input, sceneManager, devFloorOptions(options, params)),
+        new DungeonScene(boot.levelDef, input, sceneManager, devFloorOptions(floorOptions, params)),
       );
       return true;
     }
@@ -460,6 +519,7 @@ export function devBootScene(
   const levelId = params.get('level');
   if (levelId === null) return false;
 
+  const floorOptions: DungeonSceneOptions = { ...options };
   const questStage = params.get('quest');
   if (questStage !== null && CIRCUS_STAGES.some((s) => s === questStage)) {
     const progress = createCircusQuestProgress();
@@ -469,15 +529,15 @@ export function devBootScene(
     if (stage === 'heather_hunt' && params.get('heatherSlain') === '1') {
       progress.heatherSlain = true;
     }
-    options.circusQuestProgress = progress;
+    floorOptions.circusQuestProgress = progress;
   }
 
-  if (params.get('spawn') === 'circus') options.spawnAtCircus = true;
+  if (params.get('spawn') === 'circus') floorOptions.spawnAtCircus = true;
 
   try {
     const levelDef = getLevelDef(levelId);
     sceneManager.replace(
-      new DungeonScene(levelDef, input, sceneManager, devFloorOptions(options, params)),
+      new DungeonScene(levelDef, input, sceneManager, devFloorOptions(floorOptions, params)),
     );
     return true;
   } catch {

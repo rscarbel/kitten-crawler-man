@@ -17,6 +17,7 @@ import { prewarmFigureState } from '../../../sprites/figure/figureFrameCache';
 import {
   drawGoblinSprite,
   GOBLIN_ATTACKS,
+  GOBLIN_IDLE_FPS,
   goblinFigure,
   type GoblinState,
 } from '../../../sprites/goblinSprite';
@@ -69,7 +70,8 @@ const SPRITE_FOOT_TILES = 0.95;
 const SPRITE_CENTRE_TILES = 0.5;
 /** Where the cat's head sits above her feet, in tiles, for her marker and barks. */
 const CAT_HEAD_TILES = 0.72;
-const GOBLIN_HEAD_TILES = 0.8;
+/** Where the sword goblin's head tops out above its feet, in tiles — measured off its idle. */
+const GOBLIN_HEAD_TILES = 1.0;
 /** Mongo's head height above his feet, per growth stage, in tiles. */
 const MONGO_HEAD_TILES: Record<MongoStage, number> = {
   juvenile: 0.66,
@@ -126,14 +128,20 @@ const BOLT_GLOW = 'rgba(168,85,247,0.45)';
 const BOLT_HEIGHT_TILES = 0.4;
 
 const GOBLIN_ARCHETYPE = 'sword';
-const GOBLIN_IDLE_FPS = 6;
-/** Offsets each goblin's idle so a row of them does not breathe in lockstep. */
-const GOBLIN_IDLE_PHASE_STEP = 5;
 const FLINCH_HOLD_FRAMES = 2;
 const GOBLIN_STATES_DRAWN: readonly GoblinState[] = ['idle', 'attack_light', 'flinch'];
 
 const HALF = 0.5;
 const FRAMES_PER_SECOND = 60;
+/**
+ * How many idle frames apart neighbouring goblins breathe. Any less than a
+ * whole idle frame and the row shows the same frame and breathes in lockstep.
+ */
+const GOBLIN_IDLE_PHASE_STEP_IDLE_FRAMES = 2;
+/** {@link GOBLIN_IDLE_PHASE_STEP_IDLE_FRAMES} in game frames, the clock each goblin is offset on. */
+const GOBLIN_IDLE_PHASE_STEP = Math.round(
+  (GOBLIN_IDLE_PHASE_STEP_IDLE_FRAMES * FRAMES_PER_SECOND) / GOBLIN_IDLE_FPS,
+);
 const TWO_PI = Math.PI * 2;
 
 // ── Controls: keycaps, taps, the Summon button ──────────────────────────────

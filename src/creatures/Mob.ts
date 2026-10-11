@@ -1464,6 +1464,12 @@ export abstract class Mob extends Player {
 
   /** True only inside {@link advanceKnockback}'s own step; see `moveWithCollision`. */
   private knockbackStepInProgress = false;
+  /** True only inside {@link applySeparation}'s step; see {@link ownStridePx}. */
+  private separationStepInProgress = false;
+  /** Ground this mob's own steps have covered since its last `tickTimers`. */
+  private ownStrideSinceTickPx = 0;
+  /** {@link ownStrideSinceTickPx} as it stood when `tickTimers` last ran. */
+  private ownStrideLastTickPx = 0;
 
   /**
    * Whether the most recent {@link takeDamageFrom} was turned aside by this
@@ -2633,6 +2639,32 @@ export abstract class Mob extends Player {
     if (this.knockbackFramesRemaining > 0 && !this.knockbackStepInProgress) return;
     // A root holds the mob's own feet the same way; a shove still carries it.
     if (this.rootFrames > 0 && !this.knockbackStepInProgress) return;
+    const startX = this.x;
+    const startY = this.y;
+    this.stepAvoidingMarkedGround(dx, dy);
+    if (this.knockbackStepInProgress || this.separationStepInProgress) return;
+    this.recordOwnStride(Math.hypot(this.x - startX, this.y - startY));
+  }
+
+  /**
+   * Charges `px` of ground to this mob's own feet, for {@link ownStridePx}. For a
+   * subclass that walks itself without {@link moveWithCollision}.
+   */
+  protected recordOwnStride(px: number): void {
+    this.ownStrideSinceTickPx += px;
+  }
+
+  /**
+   * Ground this mob's own steps covered over the frame its last `tickTimers`
+   * closed — chase, wander, siege march, flee — and nothing a knockback or a
+   * separation shove carried it. A gait paced from its plain change of position
+   * runs its legs forward while a blow carries it backwards.
+   */
+  protected get ownStridePx(): number {
+    return this.ownStrideLastTickPx;
+  }
+
+  private stepAvoidingMarkedGround(dx: number, dy: number): void {
     // Only a step that *enters* marked ground is refused: one taken from inside
     // it is the flee, and refusing that would pin the mob in the fire. Without
     // the refusal the flee and the follow take turns — the flee steps it clear,
@@ -3334,6 +3366,8 @@ export abstract class Mob extends Player {
   /** Extends Player.tickTimers to also decrement the health bar visibility timer. */
   tickTimers() {
     super.tickTimers();
+    this.ownStrideLastTickPx = this.ownStrideSinceTickPx;
+    this.ownStrideSinceTickPx = 0;
     if (this.reviveRiseFramesLeft > 0) {
       this.reviveRiseFramesLeft--;
       this.isMoving = false;
@@ -3723,12 +3757,13 @@ export abstract class Mob extends Player {
     const length = Math.hypot(dx, dy);
     if (length === 0) return;
     const limit = this.speed * MAX_SEPARATION_STEP_FRACTION;
-    if (length <= limit) {
-      this.moveWithCollision(dx, dy);
-      return;
+    const scale = length <= limit ? 1 : limit / length;
+    this.separationStepInProgress = true;
+    try {
+      this.moveWithCollision(dx * scale, dy * scale);
+    } finally {
+      this.separationStepInProgress = false;
     }
-    const scale = limit / length;
-    this.moveWithCollision(dx * scale, dy * scale);
   }
 
   /**

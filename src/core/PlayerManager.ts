@@ -18,11 +18,24 @@ export class PlayerManager {
    *   or `undefined` for a floor that has none. Required rather than optional
    *   so that no scene — an interior hanging off a floor included — can build
    *   a party that quietly earns XP at full rate.
+   * @param heldParty The two crawlers to keep rather than build: a scene rebuilt
+   *   around a floor held aside keeps the very objects the floor's creatures
+   *   and systems point at.
    */
-  constructor(spawnX: number, spawnY: number, xpCurve: readonly XpDiminishingTier[] | undefined) {
-    this.human = new HumanPlayer(spawnX, spawnY, TILE_SIZE);
-    this.cat = new CatPlayer(spawnX + 1, spawnY, TILE_SIZE);
-    this.human.isActive = true;
+  constructor(
+    spawnX: number,
+    spawnY: number,
+    xpCurve: readonly XpDiminishingTier[] | undefined,
+    heldParty?: { readonly human: HumanPlayer; readonly cat: CatPlayer },
+  ) {
+    if (heldParty === undefined) {
+      this.human = new HumanPlayer(spawnX, spawnY, TILE_SIZE);
+      this.cat = new CatPlayer(spawnX + 1, spawnY, TILE_SIZE);
+      this.human.isActive = true;
+    } else {
+      this.human = heldParty.human;
+      this.cat = heldParty.cat;
+    }
     this.human.xpCurve = xpCurve;
     this.cat.xpCurve = xpCurve;
   }

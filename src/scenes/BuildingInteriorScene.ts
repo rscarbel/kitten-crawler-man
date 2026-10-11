@@ -17,6 +17,16 @@ import { type InputManager } from '../core/InputManager';
 import { keybindings } from '../core/Keybindings';
 import { TILE_SIZE } from '../core/constants';
 import { GameMap, TOWER_FLOOR_COUNT, TOWER_INTERIOR_W, type InteriorVariant } from '../map/GameMap';
+import { planGoblinPrison, type PrisonPlan } from '../map/goblinPrisonPlan';
+import { PrisonKeySystem } from '../systems/stealthKeySnatch/PrisonKeySystem';
+import {
+  CAPTURE_WITH_KEY_TOAST,
+  GoblinPrisonSystem,
+} from '../systems/stealthKeySnatch/GoblinPrisonSystem';
+import { partyHoldsPrisonKey } from '../systems/stealthKeySnatch/stealthKeySnatchVisit';
+import { detachedPrisonVisit } from '../systems/stealthKeySnatch/prisonVisit';
+import { prisonCueSound } from '../systems/stealthKeySnatch/prisonSoundCues';
+import { PRISON_TRAIL_SPACING_TILES } from '../systems/stealthKeySnatch/prisonTuning';
 import { setFloorArtSeed } from '../map/ground/floorArtSeed';
 import { requestGroundSheets } from '../map/ground/runtimeGroundSheets';
 import { requestEnvironmentSheetsForGroups } from '../sprites/sheets/environmentSheets';
@@ -38,7 +48,14 @@ import {
   renderLevelUpFlash,
   renderStatBoostFlash,
 } from '../systems/worldEffects';
-import type { DockButtonModel, HudModel, HudViewState, MinimapModel } from '../ui/hud/hudModel';
+import type {
+  DockButtonModel,
+  HudModel,
+  HudViewState,
+  LevelTimerModel,
+  MinimapModel,
+} from '../ui/hud/hudModel';
+import { TOWN_INTERIOR_FLOOR, type InteriorFloorContext } from './interiorFloorContext';
 import { HudSurface, surfacesOverHud } from '../ui/hud/HudSurface';
 import { liveHudLayout } from '../ui/hud/liveHudLayout';
 import { promptSurface } from '../ui/hud/prompt';
@@ -312,6 +329,9 @@ import { getMongoStats } from '../abilities/mongo';
 const CONVERSATION_SURFACE_ID = 'conversation';
 /** The line over a building's name on its loading screen. */
 const INTERIOR_LOADING_KICKER = 'Stepping inside';
+const PRISON_LOADING_KICKER = 'Entering';
+const PRISON_AMBIENT_VOLUME = 0.3;
+const TRAIL_FOLLOW_REFUSAL = 'No orders in here: your partner walks in your footsteps.';
 const SHOP_SURFACE_ID = 'shop';
 const CLUB_SURFACE_ID = 'club';
 const SERVICE_SURFACE_ID = 'priced-menu';
@@ -388,11 +408,6 @@ const TILE_CENTER_RATIO = 0.5;
 const SAFE_ROOM_PULSE_BASE = 0.6;
 const SAFE_ROOM_PULSE_PERIOD_MS = 600;
 const PULSE_SWING = 0.3;
-/**
- * How far the active crawler can see indoors, for the pet's off-screen marker.
- * Interiors are lit end to end, so only the viewport edge can hide him.
- */
-const INTERIOR_SIGHT_RADIUS_PX = Number.POSITIVE_INFINITY;
 const EXIT_HINT_PULSE_PERIOD_MS = 500;
 const EXIT_ARROW_Y_OFFSET = 15;
 /** Shown when the party falls indoors to something no quest encounter owns. */
@@ -444,6 +459,11 @@ interface InteriorEncounter {
    * wall of fire is something a crawler stands inside, not behind.
    */
   renderEffects?(ctx: CanvasRenderingContext2D, camX: number, camY: number): void;
+  /**
+   * A room's own darkness, drawn straight after the sorted pass and before
+   * every shot, blast and spell, so those keep their own light over it.
+   */
+  renderDarkness?(ctx: CanvasRenderingContext2D, camX: number, camY: number): void;
   /**
    * The party has walked off the storey this encounter lives on. Anything the
    * encounter is holding that only its own update can release — a scripted
@@ -532,9 +552,6 @@ export interface BuildingInteriorCircusContext {
   readonly worldSeed: number;
 }
 
-/** Every enterable building stands on the level-3 overworld. */
-const OVERWORLD_FLOOR_NUMBER = 3;
-
 /**
  * The contract stream's seed in a harness that builds a room with no overworld
  * behind it; the game always hands the overworld's own seed across.
@@ -547,17 +564,22 @@ const WENDELL_FALLBACK_SPEECH_STYLE: CitizenSpeechStyle = 'townsfolkMasculine';
 /**
  * Which shape this room is built in.
  *
- * The Big Top is the only building with more than one, and only for the length
+ * The Goblin High Security Prison is always one of its authored layouts,
+ * picked by the world seed so every visit is the same prison. The Big Top is
+ * the only other building with more than one shape, and only for the length
  * of the circus questline's final act: at `bigtop_ready` the tent is the trap
  * maze, and at every other enterable stage it is the calm ring the questline
  * leaves behind.
  */
 function interiorVariantFor(
-  buildingName: string,
+  entry: BuildingEntry,
   circus: BuildingInteriorCircusContext | undefined,
 ): InteriorVariant {
-  const isMaze =
-    buildingName === BIG_TOP_BUILDING_NAME && circus?.progress.stage === 'bigtop_ready';
+  if (entry.type === 'prison') {
+    const worldSeed = circus?.worldSeed ?? DETACHED_ROOM_WORLD_SEED;
+    return { kind: 'goblin_prison', plan: planGoblinPrison(worldSeed, settings.difficulty) };
+  }
+  const isMaze = entry.name === BIG_TOP_BUILDING_NAME && circus?.progress.stage === 'bigtop_ready';
   if (!isMaze) return 'default';
   // Dealt before the room exists: the hall's tiles, its floor marks and its
   // stage lights are all built from the board, once.
@@ -706,6 +728,20 @@ export class BuildingInteriorScene extends GameplayScene {
    * and the render pass all ask it questions no other encounter answers.
    */
   private bigTopMaze: BigTopMazeSystem | null = null;
+  /** The prison's key, its guidance and its explainer; null in every other building. */
+  private prisonKey: PrisonKeySystem | null = null;
+  /**
+   * The prison's patrols, lights, captures and cells, held by its own type as
+   * well as by `encounter`: its ground replaces the map's tiles, its doors
+   * answer Space, and its captures own the party. Null in every other building.
+   */
+  private prison: GoblinPrisonSystem | null = null;
+  /**
+   * The hireling waits outside this building (the prison's rules), so the
+   * hire on the roster is never stood up indoors. Mongo is kept out by the
+   * floor, which hands the prison an arrival with no companions.
+   */
+  private readonly companionsWaitOutside: boolean;
   /**
    * The maze's hazards as the companion and the mob tactics see them, through
    * whichever tent is standing: registered once, because a restarted tent is a
@@ -879,6 +915,7 @@ export class BuildingInteriorScene extends GameplayScene {
     briarHollowState?: BriarHollowState,
     overworldJournal?: InteriorJournalSource,
     hudView?: HudViewState,
+    private readonly floor: InteriorFloorContext = TOWN_INTERIOR_FLOOR,
   ) {
     super(input, sceneManager);
     this.overworldJournal = overworldJournal ?? null;
@@ -937,7 +974,10 @@ export class BuildingInteriorScene extends GameplayScene {
     // Read once and reused below: the room's shape and where the two crawlers are
     // put down have to be the same decision, or the maze gets built and then
     // entered through the ring's single door.
-    const variant = interiorVariantFor(entry.name, this.circus);
+    const variant = floor.variant ?? interiorVariantFor(entry, this.circus);
+    const prisonPlan =
+      variant !== 'default' && variant.kind === 'goblin_prison' ? variant.plan : null;
+    this.companionsWaitOutside = prisonPlan !== null;
 
     // prebuiltStructure skips dungeon generation entirely (mapSize 0 would
     // crash the generator); generateInterior() builds the real room next.
@@ -974,11 +1014,11 @@ export class BuildingInteriorScene extends GameplayScene {
     const repaintTileArt = (): void => {
       for (const floor of isTower ? this.towerFloors : [this.map]) floor.invalidateAllTileArt();
     };
-    requestGroundSheets(['ground_interior'], repaintTileArt);
+    requestGroundSheets(floor.groundSheets, repaintTileArt);
     // The town's furniture stands indoors too — a shop counter and a notice
     // board are the same sheets the street uses — and entering a building never
     // releases them, so this is a no-op on every visit after the first.
-    requestEnvironmentSheetsForGroups(['town'], { onSheetPainted: repaintTileArt });
+    requestEnvironmentSheetsForGroups(floor.spriteGroups, { onSheetPainted: repaintTileArt });
 
     this.mapW = this.map.structure[0]?.length ?? DEFAULT_MAP_FALLBACK_WIDTH;
 
@@ -995,7 +1035,7 @@ export class BuildingInteriorScene extends GameplayScene {
     // built above from the same 'town' group, so one resolution covers all
     // of them; `changeFloor` never re-triggers this load.
     const interiorMaps = isTower ? this.towerFloors : [this.map];
-    const spriteGroupsReady = prewarmGroups(['town']).then(() => {
+    const spriteGroupsReady = prewarmGroups(floor.spriteGroups).then(() => {
       for (const m of interiorMaps) m.invalidateAllTileArt();
     });
 
@@ -1005,6 +1045,10 @@ export class BuildingInteriorScene extends GameplayScene {
 
     restorePlayer(this.human, humanSnap);
     restorePlayer(this.cat, catSnap);
+    // Spell levels live on the run's ability manager, not the crawler: without
+    // this a missile cast indoors flies at level 1 whatever the cat has earned.
+    this.cat.setAbilityManager(this.abilityManager);
+    this.human.setAbilityManager(this.abilityManager);
     this.plumblineFarmRoom =
       entry.name === PLUMBLINE_FARM_NAME ? new PlumblineFarmRoomSync(this.map) : null;
     this.syncPlumblineFarmRoom();
@@ -1013,7 +1057,7 @@ export class BuildingInteriorScene extends GameplayScene {
     this.pm.setPartyDown(findPartyArrivalTiles(this.map, this.map.startTile));
     // The maze is two people walking two sealed halves, so they come in through
     // two flaps rather than side by side at one door.
-    if (variant !== 'default') {
+    if (variant !== 'default' && variant.kind === 'bigtop_maze') {
       this.human.x = MAZE_HUMAN_SPAWN_TILE.x * TILE_SIZE;
       this.human.y = MAZE_HUMAN_SPAWN_TILE.y * TILE_SIZE;
       this.cat.x = MAZE_CAT_SPAWN_TILE.x * TILE_SIZE;
@@ -1053,9 +1097,24 @@ export class BuildingInteriorScene extends GameplayScene {
     // After the safe room's fittings are stamped: the arrival has to keep clear
     // of them just as it keeps clear of the room's own furniture. The maze's
     // two flaps are fixed marks on two sealed halves and are left as set.
-    if (variant === 'default') {
+    if (variant === 'default' || variant.kind === 'goblin_prison') {
       this.setPartyDown(this.map.startTile);
       this.companion.setMap(this.map, this.human, this.cat);
+    }
+    if (prisonPlan !== null) {
+      this.companion.setTrailFollow(PRISON_TRAIL_SPACING_TILES * TILE_SIZE);
+      this.prisonKey = new PrisonKeySystem({
+        plan: prisonPlan,
+        human: this.human,
+        cat: this.cat,
+        link: floor.stealthKeySnatch ?? detachedPrisonVisit(),
+        audio: this.audio,
+        toast: (text, opts) => this.menus.toasts.post(text, opts),
+        flyItem: (id, worldX, worldY) => {
+          const cam = this.computeCamera(this.map);
+          this.rewardFly.enqueueItem(id, ITEM_DEF[id].name, worldX - cam.x, worldY - cam.y);
+        },
+      });
     }
 
     // Keyed by the building's own name rather than a shared constant: two
@@ -1120,7 +1179,7 @@ export class BuildingInteriorScene extends GameplayScene {
       const skeletonSummons = new SkeletonSummonSystem(floorMap, (mob) => world.roster.add(mob));
       this.floors.push({
         world,
-        destruction: new DestructionKit(world, OVERWORLD_FLOOR_NUMBER),
+        destruction: new DestructionKit(world, floor.floorNumber),
         skeletonShots: new SkeletonProjectileSystem(floorMap),
         rockThrows: new RockThrowSystem(floorMap),
         hirelingShots: new HirelingBoltSystem(
@@ -1222,7 +1281,11 @@ export class BuildingInteriorScene extends GameplayScene {
     });
     bindCraftLevelUps({ bus: this.bus, menus: this.menus, audio: this.audio });
     this.wireCombatGore();
-    this.initEntryEncounter(this.circus, variant === 'default' ? null : variant.plan);
+    this.initEntryEncounter(
+      this.circus,
+      variant !== 'default' && variant.kind === 'bigtop_maze' ? variant.plan : null,
+    );
+    if (prisonPlan !== null) this.raiseGoblinPrison(prisonPlan);
     this.populateHostileRooms();
 
     // Before the occupants are placed, because breaking Hilda's shelf takes it
@@ -1403,13 +1466,13 @@ export class BuildingInteriorScene extends GameplayScene {
     // After everything that warms figures or queues art — the occupants, the
     // party, the companions — so the loader measures what this room really owes.
     this.arrivalLoading.begin({
-      kicker: INTERIOR_LOADING_KICKER,
+      kicker: prisonPlan === null ? INTERIOR_LOADING_KICKER : PRISON_LOADING_KICKER,
       title: entry.name,
       screen: loadingScreen,
       returning: false,
       tasks: () =>
         floorArrivalLoadTasks({
-          gameMap: this.map,
+          gameMap: this.prison?.ground ?? this.map,
           camera: () => this.computeCamera(this.map),
           viewport: () => ({ width: viewportWidth(), height: viewportHeight() }),
           spriteGroupsReady,
@@ -1441,7 +1504,8 @@ export class BuildingInteriorScene extends GameplayScene {
     }
     const roomBed =
       INTERIOR_AMBIENT_BEDS.get(this.entry.name) ??
-      (this.entry.name === BIG_TOP_BUILDING_NAME ? BIG_TOP_AMBIENT_BED : null);
+      (this.entry.name === BIG_TOP_BUILDING_NAME ? BIG_TOP_AMBIENT_BED : null) ??
+      this.prisonAmbientBed();
     if (roomBed !== null) {
       emitters.push({
         soundId: roomBed.soundId,
@@ -1453,6 +1517,26 @@ export class BuildingInteriorScene extends GameplayScene {
       });
     }
     return emitters;
+  }
+
+  /** The prison's room tone, once its recording lands; silent until then. */
+  private prisonAmbientBed(): { soundId: SoundId; volume: number } | null {
+    if (this.prisonKey === null) return null;
+    const soundId = prisonCueSound('prisonAmbience');
+    return soundId === null ? null : { soundId, volume: PRISON_AMBIENT_VOLUME };
+  }
+
+  /**
+   * The prison plays its sneaking music, or silence while that recording is
+   * still missing: the floor's own soundtrack stops at the door either way.
+   */
+  private startPrisonMusic(): void {
+    const track = prisonCueSound('stealthMusic');
+    if (track === null) {
+      this.audio?.stopMusic();
+      return;
+    }
+    this.audio?.playMusic(track, { fadeInMs: INTERIOR_MUSIC_FADE_IN_MS });
   }
 
   /** The floor the player is standing on, with its map, bus, audio and roster. */
@@ -1722,6 +1806,45 @@ export class BuildingInteriorScene extends GameplayScene {
     }
   }
 
+  /** Stands the prison's patrols and cells up on the map already built from `plan`. */
+  private raiseGoblinPrison(plan: PrisonPlan): void {
+    const { world } = this.floors[GROUND_FLOOR_INDEX];
+    const prison = new GoblinPrisonSystem({
+      map: this.map,
+      plan,
+      bus: this.bus,
+      audio: this.audio,
+      addMob: (mob) => world.roster.add(mob),
+      toast: (text, tone) => this.menus.toasts.post(text, { tone }),
+      triggerAttack: () =>
+        triggerPlayerAttack(this.human, this.cat, this.world.roster.grid, this.map, this.audio),
+    });
+    this.startEncounter(GROUND_FLOOR_INDEX, () => prison);
+    this.prison = prison;
+    // Guards don't search you: a capture with the key in hand keeps it, and says so.
+    prison.onCapture((capture) => {
+      if (partyHoldsPrisonKey(this.pm)) capture.toast = CAPTURE_WITH_KEY_TOAST;
+    });
+    const prisonKey = this.prisonKey;
+    if (prisonKey !== null) {
+      prison.addLightSource({
+        get x() {
+          return prisonKey.lightPool().x;
+        },
+        get y() {
+          return prisonKey.lightPool().y;
+        },
+        get radiusPx() {
+          return prisonKey.lightPool().radiusPx;
+        },
+        get strength() {
+          return prisonKey.lightPool().strength;
+        },
+      });
+    }
+    prison.lighting.prewarm();
+  }
+
   /** Stands the maze up on the map already built from `plan`. */
   private raiseBigTopMaze(progress: CircusQuestProgress, plan: BigTopMazePlan): BigTopMazeSystem {
     const { world } = this.floors[GROUND_FLOOR_INDEX];
@@ -1939,7 +2062,7 @@ export class BuildingInteriorScene extends GameplayScene {
    * started its own battle music.
    */
   private interiorMusicTracks(): ReadonlyArray<SoundId> | null {
-    if (this.encounter !== null) return null;
+    if (this.encounter !== null || !this.floor.ownsMusic) return null;
     if (this.entry.type === 'club') return CLUB_MUSIC_TRACKS;
     if (this.entry.type === 'tower') return TOWER_MUSIC_TRACKS;
     if (this.entry.name === SKY_TEMPLE_NAME) return TEMPLE_MUSIC_TRACKS;
@@ -1959,6 +2082,13 @@ export class BuildingInteriorScene extends GameplayScene {
     // Override the overworld's persisted music with the room's own; the
     // overworld's zone music (OverworldMusicSystem) restores itself on exit.
     // Started as the room is shown, not under its loading screen.
+    if (this.prisonKey !== null) {
+      const prisonKey = this.prisonKey;
+      this.arrivalLoading.whenClosed(() => {
+        this.startPrisonMusic();
+        prisonKey.openExplainerIfFirstVisit();
+      });
+    }
     const musicTracks = this.interiorMusicTracks();
     if (musicTracks !== null) {
       this.arrivalLoading.whenClosed(() =>
@@ -1980,6 +2110,9 @@ export class BuildingInteriorScene extends GameplayScene {
       companionFollow: () => {
         if (this.followDisabled) {
           this.audio?.play('error');
+          if (this.companion.followTrail !== null) {
+            this.menus.toasts.post(TRAIL_FOLLOW_REFUSAL, { key: TRAIL_FOLLOW_REFUSAL });
+          }
           return;
         }
         if (this.canOpenFollowerMenu()) this.followerMenu.open();
@@ -2221,6 +2354,8 @@ export class BuildingInteriorScene extends GameplayScene {
         shows: () => this.roomStatusLayer === 'underEverything',
       }),
     ];
+    if (this.prisonKey !== null) surfaces.push(...this.prisonKey.surfaces());
+    if (this.prison !== null) surfaces.push(this.prison.fadeSurface());
     if (this.servicePanel !== null) {
       surfaces.push(
         shopScreenSurface({ id: SERVICE_SURFACE_ID, session: this.servicePanel, party }),
@@ -2302,12 +2437,13 @@ export class BuildingInteriorScene extends GameplayScene {
   /**
    * Whether this room refuses the follow command outright.
    *
-   * The Big Top's maze is the only one that does: it is two people solving one
-   * room from opposite sides, and a companion trailing the active crawler would
-   * walk into a corridor nobody is steering them through.
+   * The Big Top's maze does: it is two people solving one room from opposite
+   * sides, and a companion trailing the active crawler would walk into a
+   * corridor nobody is steering them through. So does the prison, whose
+   * follower walks the leader's own trail and takes no orders at all.
    */
   private get followDisabled(): boolean {
-    return this.bigTopMaze?.followDisabled === true;
+    return this.bigTopMaze?.followDisabled === true || this.companion.followTrail !== null;
   }
 
   /** Hook the shared follower menu to the companion's commands (same set as the overworld). */
@@ -2432,7 +2568,11 @@ export class BuildingInteriorScene extends GameplayScene {
    * from under the code writing their positions.
    */
   private get scriptOwnsParty(): boolean {
-    return this.bigTopMaze?.playerLocked === true || this.towerConfrontation?.playerLocked === true;
+    return (
+      this.bigTopMaze?.playerLocked === true ||
+      this.towerConfrontation?.playerLocked === true ||
+      this.prison?.playerLocked === true
+    );
   }
 
   /** Hands control to the companion, unless they're lying knocked out. */
@@ -2746,6 +2886,16 @@ export class BuildingInteriorScene extends GameplayScene {
       keybindings.release(this.input, 'attack');
     }
 
+    if (interactPressed() && this.prisonKey?.tryInteract(player) === true) {
+      keybindings.release(this.input, 'attack');
+    }
+
+    // A crawler in a holding cell breaks its door with one press from
+    // anywhere in the cell: the press is the swing, aimed at the door.
+    if (interactPressed() && this.prison?.tryInteract(this.buildSystemContext()) === true) {
+      keybindings.release(this.input, 'attack');
+    }
+
     if (interactPressed() && this.tryGroundPickup(player)) {
       keybindings.release(this.input, 'attack');
     }
@@ -2803,6 +2953,7 @@ export class BuildingInteriorScene extends GameplayScene {
     this.applyResidentQuestMarkers();
     for (const hook of this.residentQuestHooks) hook.update();
     this.contractSite?.update();
+    this.prisonKey?.update(player);
     this.ambientSound?.updateListener(player.x, player.y);
     if (this.shop !== null) this.playShopTradeSound(this.shop);
 
@@ -2965,7 +3116,7 @@ export class BuildingInteriorScene extends GameplayScene {
       this.hireContract = this.mercenaryRoster.active;
       this.mercenarySystem.onContractChanged(ctx.roster.mobs, ctx.roster.grid);
     }
-    this.mercenarySystem.update(ctx);
+    if (!this.companionsWaitOutside) this.mercenarySystem.update(ctx);
     this.drainWardExplainerBarks();
     this.crawlerBarks.update();
     this.breakReactions.update();
@@ -3631,7 +3782,7 @@ export class BuildingInteriorScene extends GameplayScene {
     const stage = this.circus?.progress.stage;
     const complete = stage === 'grimaldi_redeemed' || stage === 'complete';
     return {
-      floorNumber: OVERWORLD_FLOOR_NUMBER,
+      floorNumber: this.floor.floorNumber,
       bearingOrigin: this.entry.doorTile,
       objectives: [adviceObjective('the_circus', complete, this.circus?.overworldCentre ?? null)],
     };
@@ -3888,7 +4039,11 @@ export class BuildingInteriorScene extends GameplayScene {
     ctx.fillStyle = worldPalette.shade;
     ctx.fillRect(0, 0, viewportWidth(), viewportHeight());
 
-    this.map.renderCanvas(ctx, camX, camY, viewportWidth(), viewportHeight());
+    if (this.prison === null) {
+      this.map.renderCanvas(ctx, camX, camY, viewportWidth(), viewportHeight());
+    } else {
+      this.prison.renderGround(ctx, camX, camY);
+    }
     const hiddenProps =
       this.contractSite?.hiddenProps(this.interiorPropDestruction?.broken) ??
       this.interiorPropDestruction?.broken;
@@ -3949,7 +4104,10 @@ export class BuildingInteriorScene extends GameplayScene {
       ...(this.contractSite?.sortedFigures() ?? []),
       ...destruction.groundPickups.renderEntities(),
       ...(this.bigTopMaze?.sortedFigures() ?? []),
+      ...(this.prisonKey === null ? [] : [this.prisonKey.sortedFigure()]),
+      ...(this.prison?.sortedFigures(camX, camY) ?? []),
     ]);
+    this.activeEncounter?.renderDarkness?.(ctx, camX, camY);
     combat.renderEffects(ctx, camX, camY, this.cat);
     // Over the creatures, so a shot never disappears behind the one it passes.
     this.skeletonShots.render(ctx, camX, camY);
@@ -3967,6 +4125,7 @@ export class BuildingInteriorScene extends GameplayScene {
     // burning over the room below at the floor above's coordinates.
     this.activeEncounter?.renderEffects?.(ctx, camX, camY);
     this.bigTopMaze?.renderPrompts(ctx, camX, camY, this.buildSystemContext());
+    this.prisonKey?.renderOverDarkness(ctx, camX, camY, this.active());
     destruction.renderLoot(ctx, camX, camY, this.active());
     if (shouldShowInteractionPrompts(this.active(), this.world.roster.grid)) {
       destruction.groundPickups.renderPrompt(ctx, camX, camY, this.active());
@@ -4007,7 +4166,7 @@ export class BuildingInteriorScene extends GameplayScene {
         camX,
         camY,
         this.active(),
-        INTERIOR_SIGHT_RADIUS_PX,
+        this.floor.sightRadiusPx,
       );
     }
 
@@ -4023,9 +4182,10 @@ export class BuildingInteriorScene extends GameplayScene {
           camX,
           camY,
           this.active(),
-          INTERIOR_SIGHT_RADIUS_PX,
+          this.floor.sightRadiusPx,
         ),
         this.soulCrystalArrowCandidate(ctx, camX, camY),
+        this.prisonKey?.arrowCandidate(ctx, camX, camY, this.active()) ?? null,
       ]);
     }
 
@@ -4170,8 +4330,17 @@ export class BuildingInteriorScene extends GameplayScene {
           }
         : null,
       topBand: this.topBandEntries(),
-      levelTimer: null,
+      levelTimer: this.heldLevelTimer(),
     };
+  }
+
+  /**
+   * The floor's collapse clock, held where it stood at the door. Shown rather
+   * than dropped so the player can see it is not running.
+   */
+  private heldLevelTimer(): LevelTimerModel | null {
+    const frames = this.floor.heldLevelTimerFrames;
+    return frames === null ? null : { frames, paused: true };
   }
 
   private hudMinimap(): MinimapModel {
@@ -4179,7 +4348,14 @@ export class BuildingInteriorScene extends GameplayScene {
       expanded: this.miniMapExpanded,
       hint: platform.miniMapHint(this.miniMapExpanded),
       paint: (ctx, rect) =>
-        paintInteriorMiniMap(ctx, rect, this.map, this.active(), this.inactive()),
+        paintInteriorMiniMap(
+          ctx,
+          rect,
+          this.map,
+          this.active(),
+          this.inactive(),
+          this.prisonKey?.minimapKeyTile ?? null,
+        ),
       toggle: () => this.toggleMiniMap(),
     };
   }
@@ -4282,6 +4458,7 @@ export class BuildingInteriorScene extends GameplayScene {
     const entries: (TopBandEntry | null)[] = [
       ...(this.activeEncounter?.topBandEntries() ?? []),
       this.soulCrystal.topBandEntry(),
+      this.prisonKey?.topBandEntry() ?? null,
       contractCounterEntry(this.briarHollowState.contracts.active),
       this.companionDownIndoors ? knockedOutBandEntry(this.inactive()) : null,
       roomNameEntry(interiorRoomTitle(this.entry.name, towerFloor)),

@@ -67,7 +67,7 @@ import {
   type BathroomStallLook,
 } from '../../sprites/bathroomRoomSprites';
 import {
-  prewarmGoblin,
+  prewarmGoblinBystander,
   prewarmGoblinPlumber,
   type GoblinArchetype,
 } from '../../sprites/goblinSprite';
@@ -337,7 +337,7 @@ export class CloggedBathroomSystem implements GameSystem, PipeBoardSource, PipeB
     this.copies = deps.gameMap.bathroomRooms.map((room, index) => this.buildCopy(room, index));
     if (this.copies.length > 0) {
       prewarmGoblinPlumber();
-      for (const archetype of BATHROOM_GOBLIN_ARCHETYPES) prewarmGoblin(archetype);
+      for (const archetype of BATHROOM_GOBLIN_ARCHETYPES) prewarmGoblinBystander(archetype);
     }
     this.ambience =
       deps.audio === null || this.copies.length === 0
@@ -541,7 +541,6 @@ export class CloggedBathroomSystem implements GameSystem, PipeBoardSource, PipeB
       this.moveGoblin(goblin, () => goblin.placeAtTile(slot.post));
       goblin.faceTile(slot.facing);
       goblin.hidden = false;
-      goblin.dancing = true;
       goblin.holdsPlace = true;
       slot.beat = { kind: 'post' };
     }
@@ -554,7 +553,6 @@ export class CloggedBathroomSystem implements GameSystem, PipeBoardSource, PipeB
       this.moveGoblin(goblin, () => goblin.placeAtTile(slot.loiter));
       goblin.faceTile(copy.room.centre);
       goblin.hidden = false;
-      goblin.dancing = false;
       goblin.holdsPlace = false;
       slot.beat = { kind: 'post' };
     }
@@ -572,7 +570,6 @@ export class CloggedBathroomSystem implements GameSystem, PipeBoardSource, PipeB
 
   private startClearing(copy: BathroomCopy): void {
     copy.line.forEach((slot, position) => {
-      slot.goblin.dancing = false;
       slot.goblin.holdsPlace = false;
       slot.beat = { kind: 'waiting', frames: position * CLEAR_STAGGER_FRAMES };
     });

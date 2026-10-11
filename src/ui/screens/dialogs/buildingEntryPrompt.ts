@@ -26,6 +26,7 @@ const KIND_LABELS: Record<BuildingKind, string> = {
   store: 'Shop',
   club: 'Club',
   house: 'House',
+  prison: 'Prison',
 };
 
 /**

@@ -151,3 +151,83 @@ export function detectRoomEntrance(
   if (best !== null) return { wall: best.wall, tile: best.tile };
   return { wall: 'south', tile: { x: Math.floor(bounds.x + bounds.w / 2), y: lastY } };
 }
+
+/**
+ * Margin a room's floor-connectivity test is padded by, so a corridor's
+ * approach tile just outside the room's wall is part of what the test proves
+ * stays connected — a corridor is one tile wide and its doorway can funnel
+ * straight into a room's centre with no lateral spread, so testing the room's
+ * interior alone would miss a solid tile that seals that sole approach.
+ */
+const ROOM_CONNECTIVITY_MARGIN = 2;
+
+/**
+ * Whether making every tile of `blocked` solid would disconnect walkable tiles
+ * around `room` that are connected now — its own floor, plus a short reach past
+ * each wall for the corridors that approach it — judged by 4-connectivity
+ * inside that window. `blocked` is one connected footprint.
+ *
+ * Every walkable tile next to the footprint is in the same piece as it, so
+ * blocking it splits something exactly when those neighbours can no longer
+ * all reach one another without it. Asking that, rather than whether the
+ * whole window is one piece, keeps a corridor that merely passes the room
+ * inside the margin, joined to nothing in the window, from making every
+ * tile of the room read as a split. A path that leaves the window is never
+ * counted, so the test only ever errs towards refusing a tile.
+ *
+ * A room's doorways, and the corridor tiles just outside them, are ordinary
+ * walkable tiles this test walks, so nothing placed through it can cost a room
+ * whose only route in and out threads through it the doorway that route uses.
+ */
+export function blockingWouldSplitRoom(
+  grid: TileContent[][],
+  room: Rect,
+  blocked: ReadonlyArray<Point>,
+): boolean {
+  const columns = grid[0]?.length ?? 0;
+  const minX = Math.max(0, room.x - ROOM_CONNECTIVITY_MARGIN);
+  const maxX = Math.min(columns - 1, room.x + room.w - 1 + ROOM_CONNECTIVITY_MARGIN);
+  const minY = Math.max(0, room.y - ROOM_CONNECTIVITY_MARGIN);
+  const maxY = Math.min(grid.length - 1, room.y + room.h - 1 + ROOM_CONNECTIVITY_MARGIN);
+  const keyOf = (x: number, y: number): number => y * columns + x;
+  const blockedKeys = new Set(blocked.map((tile) => keyOf(tile.x, tile.y)));
+  const walkableInWindow = (x: number, y: number): boolean =>
+    x >= minX &&
+    x <= maxX &&
+    y >= minY &&
+    y <= maxY &&
+    !blockedKeys.has(keyOf(x, y)) &&
+    isOpenFloor(grid, x, y);
+
+  const neighbourKeys = new Set<number>();
+  const neighbours: Point[] = [];
+  for (const tile of blocked) {
+    for (const side of ROOM_WALL_OUTWARD) {
+      const x = tile.x + side.dx;
+      const y = tile.y + side.dy;
+      if (!walkableInWindow(x, y) || neighbourKeys.has(keyOf(x, y))) continue;
+      neighbourKeys.add(keyOf(x, y));
+      neighbours.push({ x, y });
+    }
+  }
+  if (neighbours.length <= 1) return false;
+  const start = neighbours[0];
+
+  const seen = new Set<number>([keyOf(start.x, start.y)]);
+  const stack: Point[] = [start];
+  let unreached = neighbours.length - 1;
+  while (stack.length > 0 && unreached > 0) {
+    const tile = stack.pop();
+    if (tile === undefined) continue;
+    for (const side of ROOM_WALL_OUTWARD) {
+      const x = tile.x + side.dx;
+      const y = tile.y + side.dy;
+      const key = keyOf(x, y);
+      if (seen.has(key) || !walkableInWindow(x, y)) continue;
+      seen.add(key);
+      if (neighbourKeys.has(key)) unreached--;
+      stack.push({ x, y });
+    }
+  }
+  return unreached > 0;
+}

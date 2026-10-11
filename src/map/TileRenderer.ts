@@ -1,4 +1,5 @@
 import { SERVICE_PROP_TILE_TYPES } from './serviceLevelProps';
+import { stealthGateExtentsPx } from './tiles/stealthGateTiles';
 import { serviceLevelPropExtentsPx } from './tiles/serviceLevelPropTiles';
 import { CELLAR_OVERLAY_TILE_TYPES } from './cellarProps';
 import { cellarPropExtentsPx } from './tiles/cellarPropTiles';
@@ -41,6 +42,8 @@ import {
   HOLLOW_PROP_TALL,
   HOLLOW_PALISADE,
   HOLLOW_GATE,
+  STEALTH_GATE_CLOSED,
+  STEALTH_GATE_OPEN,
   ROCK_DEPOSIT,
   CIRCUS_STRUCTURE_TALL,
   CIRCUS_STRUCTURE_LOW,
@@ -171,6 +174,10 @@ const DECORATION_TYPES = new Set([
   HOLLOW_PALISADE,
   HOLLOW_GATE,
   ROCK_DEPOSIT,
+  // The stealth gate's portcullis stands up out of its slot, so a crawler
+  // north of it is drawn behind the bars.
+  STEALTH_GATE_CLOSED,
+  STEALTH_GATE_OPEN,
   // The circus grounds' tents, pavilions and arch posts. Y-sorted so a crawler
   // standing north of a tent is drawn behind it.
   CIRCUS_STRUCTURE_TALL,
@@ -598,6 +605,9 @@ export function decorationTileExtentsPx(
   if (type === HOLLOW_WALL) return hollowWallExtentsPx(structure, tx, ty, ts);
   if (type === HOLLOW_PALISADE) return hollowPalisadeExtentsPx(ts);
   if (type === HOLLOW_GATE) return hollowGateExtentsPx(structure, tx, ty, ts);
+  if (type === STEALTH_GATE_CLOSED || type === STEALTH_GATE_OPEN) {
+    return stealthGateExtentsPx(structure, tx, ty, ts);
+  }
   if (type === SPRITE_BUILDING) {
     const spriteKey = structure[ty][tx].spriteKey;
     const extents = spriteKey === undefined ? undefined : getSpriteExtentsPxByKey(spriteKey);

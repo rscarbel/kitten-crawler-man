@@ -32,6 +32,8 @@ import type { DungeonFloorThemeId } from '../dungeon/floorTheme';
 import { wallTileLight } from '../dungeon/wallLight';
 import { wallDressingAt } from '../dungeon/wallDressing';
 import { drawDungeonWallTile } from '../../sprites/art/dungeonWallArt';
+import { drawPrisonDoorTile, drawPrisonSignTile } from '../../sprites/art/prisonDoorArt';
+import { prisonWallArtAt } from '../dungeon/prisonDoorFaces';
 import type { NeighbourFace } from '../../sprites/art/dungeonWallDressing';
 import { OVERWORLD_GROUND } from '../town/groundMaterials';
 import { dungeonFloorTheme } from '../dungeon/floorTheme';
@@ -297,6 +299,9 @@ function drawDungeonWall(
   applyWorldNoise(ctx, sx, sy, ts, tx, ty);
   // The gym's mirror and whiteboard hang on its north wall, baked with it.
   drawGymWallDressing(ctx, structure, sx, sy, ts, tx, ty);
+  const prisonArt = prisonWallArtAt(structure, tx, ty);
+  if (prisonArt?.kind === 'door') drawPrisonDoorTile(ctx, prisonArt.part, sx, sy, ts);
+  else if (prisonArt?.kind === 'sign') drawPrisonSignTile(ctx, prisonArt.arrow, sx, sy, ts);
 }
 
 export function drawTerrainTile(

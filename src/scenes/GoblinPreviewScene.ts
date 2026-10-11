@@ -30,6 +30,8 @@ import {
   GOBLIN_BOW_SHOTS,
   type GoblinArchetype,
   type GoblinState,
+  GOBLIN_IDLE_BREAK_FPS,
+  GOBLIN_IDLE_FPS,
 } from '../sprites/goblinSprite';
 import { figureFrameCount } from '../sprites/figure/figureDef';
 import { previewInk } from '../ui/theme/previewInk';
@@ -72,8 +74,8 @@ interface RowSpec {
  */
 const ROWS: ReadonlyArray<RowSpec> = [
   { state: 'walk', fps: 10 },
-  { state: 'idle', fps: 8 },
-  { state: 'idle_break', fps: 14 },
+  { state: 'idle', fps: GOBLIN_IDLE_FPS },
+  { state: 'idle_break', fps: GOBLIN_IDLE_BREAK_FPS },
   { state: 'attack_light', fps: 14 },
   { state: 'attack_heavy', fps: 14 },
   { state: 'flinch', fps: 12 },

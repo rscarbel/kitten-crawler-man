@@ -528,6 +528,88 @@ const LEG_NEAR_ANKLE_BREAK = deg(74);
 const LEG_FAR_ANKLE_BREAK = deg(-58);
 
 /**
+ * The severed skull's radius, as a share of the living head's.
+ *
+ * A touch under full size because the skull is not the piece's footprint: the
+ * full-size ears and the slack nose already spread it well past the skull, and
+ * a full-size ball inside them makes the head the bulkiest chunk on the floor.
+ */
+const GORE_HEAD_SCALE = 0.95;
+/**
+ * The ears are drawn longer than the goblin wears them in life.
+ *
+ * They are the only thing that makes this piece a *head* rather than one more
+ * rounded lump — and the set has two other rounded lumps, the torso slab and
+ * the rib chunk. Two big pointed leaves standing out either side of a ball, as
+ * the living goblin wears them, is a silhouette nothing else here can imitate.
+ */
+const EAR_LEGIBILITY_SCALE = 1.2;
+/** The ears stand out either side and up, as the living goblin wears them. */
+const GORE_EAR_LIFT = deg(24);
+/** The whole head lies tipped on the floor rather than upright. */
+const GORE_HEAD_ROLL = deg(-18);
+/** Where each ear leaves the skull, in skull radii either side of centre and above it. */
+const GORE_EAR_ROOT_X = 0.62;
+const GORE_EAR_ROOT_RISE = 0.2;
+/** The ear's half-width at its root, in skull radii. */
+const GORE_EAR_HALF_WIDTH = 0.34;
+/**
+ * The leaf's two edges bow out from the spine's midpoint by these shares of
+ * its root half-width: a slim upper edge over a full belly.
+ */
+const GORE_EAR_UPPER_BOW = 0.6;
+const GORE_EAR_BELLY_BOW = 1.1;
+/** The far ear sits this far from the skin's tone toward its shadow. */
+const GORE_FAR_EAR_SHADE = 0.4;
+/**
+ * The ear's hollow: its alpha, how far it bows, and its far end, weighted this
+ * much toward the tip and the rest toward the root.
+ */
+const GORE_EAR_HOLLOW_ALPHA = 0.8;
+const GORE_EAR_HOLLOW_BOW = 0.5;
+const GORE_EAR_HOLLOW_TIP_WEIGHT = 0.8;
+const GORE_EAR_HOLLOW_ROOT_WEIGHT = 0.2;
+/** The slack nose, in skull radii: its root on the face, its hanging tip and its base. */
+const GORE_NOSE = {
+  tipX: 0.95,
+  /** The tip hangs past the face by this share of the living nose's projection. */
+  projectionShare: 0.8,
+  tipY: 0.3,
+  rootX: 0.5,
+  rootY: -0.2,
+  bridgeY: -0.05,
+  baseX: 0.55,
+  baseY: 0.3,
+} as const;
+/** The nose's flesh inside its outline, in skull radii. */
+const GORE_NOSE_FLESH = {
+  rootX: 0.52,
+  rootY: -0.14,
+  /** The bridge's control point sits just behind the tip, as a share of its x. */
+  bridgeBack: 0.97,
+  bridgeY: -0.02,
+  tipRise: 0.04,
+  baseX: 0.58,
+  baseY: 0.24,
+} as const;
+/** The slack jaw's open mouth and its one fang, in skull radii. */
+const GORE_MOUTH = { x: 0.36, y: 0.5, rx: 0.32, ry: 0.18, tilt: deg(10) } as const;
+const GORE_FANG = { backX: 0.3, frontX: 0.46, rootY: 0.64, pointX: 0.4, pointY: 0.36 } as const;
+/** The eye rolled back to white: its socket, then the white, in skull radii. */
+const GORE_DEAD_SOCKET = { x: 0.3, y: -0.16, rx: 0.2, ry: 0.14 } as const;
+const GORE_DEAD_WHITE = { x: 0.3, y: -0.18, rx: 0.13, ry: 0.08 } as const;
+/** The far eye, still holding a dimming yellow, in skull radii. */
+const GORE_LIVE_EYE = { x: -0.1, y: -0.16, rx: 0.12, ry: 0.07 } as const;
+
+/** An oval on the severed head, in skull radii. */
+interface GoreOval {
+  readonly x: number;
+  readonly y: number;
+  readonly rx: number;
+  readonly ry: number;
+}
+
+/**
  * The nine pieces of a goblin, in the order `BodyPartGoreSystem` spawns them.
  *
  * Sizes are deliberately unequal — the torso is roughly three times the area of
@@ -553,39 +635,54 @@ export function gorePieces(style: GoblinStyle): readonly GorePiece[] {
   const head: GorePiece = {
     state: 'gore_head',
     paint: (ctx) => {
-      const r = p.headRadius * 1.05;
-      /**
-       * The ears are drawn longer than the goblin wears them in life.
-       *
-       * They are the only thing that makes this piece a *head* rather than one
-       * more rounded lump — and the set has two other rounded lumps, the torso
-       * slab and the rib chunk, which read as near-identical to it at anatomical
-       * ear length. Two spikes off a ball is a silhouette nothing else here can
-       * imitate, and a severed head is not the piece to be shy about.
-       */
-      const EAR_LEGIBILITY_SCALE = 1.45;
+      const r = p.headRadius * GORE_HEAD_SCALE;
       const earLength = p.earLength * EAR_LEGIBILITY_SCALE;
+      const earHalfWidth = r * GORE_EAR_HALF_WIDTH;
       ctx.save();
-      ctx.rotate(deg(-24));
-      ctx.translate(-r * 0.1, -r * 0.12);
+      ctx.rotate(GORE_HEAD_ROLL);
       for (const side of [-1, 1] as const) {
-        ctx.save();
-        ctx.rotate(deg(150 * side * 0.12));
+        const root = pt(side * r * GORE_EAR_ROOT_X, -r * GORE_EAR_ROOT_RISE);
+        const angle = side < 0 ? Math.PI + GORE_EAR_LIFT : -GORE_EAR_LIFT;
+        const tip = pt(root.x + Math.cos(angle) * earLength, root.y + Math.sin(angle) * earLength);
+        const across = pt(
+          -Math.sin(angle) * r * GORE_EAR_HALF_WIDTH,
+          Math.cos(angle) * r * GORE_EAR_HALF_WIDTH,
+        );
+        const traceEar = (grow: number): void => {
+          const g = 1 + grow / earHalfWidth;
+          ctx.beginPath();
+          ctx.moveTo(root.x + across.x * g, root.y + across.y * g);
+          ctx.quadraticCurveTo(
+            (root.x + tip.x) / 2 + across.x * GORE_EAR_UPPER_BOW * g,
+            (root.y + tip.y) / 2 + across.y * GORE_EAR_UPPER_BOW * g,
+            tip.x + Math.cos(angle) * grow,
+            tip.y + Math.sin(angle) * grow,
+          );
+          ctx.quadraticCurveTo(
+            (root.x + tip.x) / 2 - across.x * GORE_EAR_BELLY_BOW * g,
+            (root.y + tip.y) / 2 - across.y * GORE_EAR_BELLY_BOW * g,
+            root.x - across.x * g,
+            root.y - across.y * g,
+          );
+          ctx.closePath();
+        };
         ctx.fillStyle = outline;
+        traceEar(FLESH_OUTLINE_GROW);
+        ctx.fill();
+        ctx.fillStyle = side < 0 ? skin.mid : mix(skin.mid, skin.dark, GORE_FAR_EAR_SHADE);
+        traceEar(0);
+        ctx.fill();
+        ctx.fillStyle = rgba(skin.dark, GORE_EAR_HOLLOW_ALPHA);
         ctx.beginPath();
-        ctx.moveTo(-r * 0.5, -r * 0.28 + side * r * 0.12);
-        ctx.lineTo(-r * 0.5 - earLength * 0.9, r * 0.16 + side * r * 0.2);
-        ctx.lineTo(-r * 0.42, r * 0.1 + side * r * 0.1);
+        ctx.moveTo(root.x, root.y);
+        ctx.quadraticCurveTo(
+          (root.x + tip.x) / 2 - across.x * GORE_EAR_HOLLOW_BOW,
+          (root.y + tip.y) / 2 - across.y * GORE_EAR_HOLLOW_BOW,
+          tip.x * GORE_EAR_HOLLOW_TIP_WEIGHT + root.x * GORE_EAR_HOLLOW_ROOT_WEIGHT,
+          tip.y * GORE_EAR_HOLLOW_TIP_WEIGHT + root.y * GORE_EAR_HOLLOW_ROOT_WEIGHT,
+        );
         ctx.closePath();
         ctx.fill();
-        ctx.fillStyle = side < 0 ? skin.dark : skin.mid;
-        ctx.beginPath();
-        ctx.moveTo(-r * 0.5, -r * 0.22 + side * r * 0.12);
-        ctx.lineTo(-r * 0.5 - earLength * 0.82, r * 0.16 + side * r * 0.2);
-        ctx.lineTo(-r * 0.44, r * 0.06 + side * r * 0.1);
-        ctx.closePath();
-        ctx.fill();
-        ctx.restore();
       }
 
       const traceHead = (grow: number): void => {
@@ -595,31 +692,70 @@ export function gorePieces(style: GoblinStyle): readonly GorePiece[] {
       };
       paintFlesh(ctx, traceHead, style);
 
-      // A slack jaw hanging open, and one eye rolled back to white.
+      // The long nose, slack now, hanging off the face.
+      const noseTip = pt(
+        r * GORE_NOSE.tipX + p.noseProjection * GORE_NOSE.projectionShare,
+        r * GORE_NOSE.tipY,
+      );
+      ctx.fillStyle = outline;
+      ctx.beginPath();
+      ctx.moveTo(r * GORE_NOSE.rootX, r * GORE_NOSE.rootY);
+      ctx.quadraticCurveTo(
+        noseTip.x,
+        r * GORE_NOSE.bridgeY,
+        noseTip.x + FLESH_OUTLINE_GROW,
+        noseTip.y,
+      );
+      ctx.lineTo(r * GORE_NOSE.baseX, r * GORE_NOSE.baseY);
+      ctx.closePath();
+      ctx.fill();
+      const flesh = GORE_NOSE_FLESH;
+      ctx.fillStyle = skin.mid;
+      ctx.beginPath();
+      ctx.moveTo(r * flesh.rootX, r * flesh.rootY);
+      ctx.quadraticCurveTo(
+        noseTip.x * flesh.bridgeBack,
+        r * flesh.bridgeY,
+        noseTip.x,
+        noseTip.y - r * flesh.tipRise,
+      );
+      ctx.lineTo(r * flesh.baseX, r * flesh.baseY);
+      ctx.closePath();
+      ctx.fill();
+
+      // A slack jaw hanging open with a fang in it, and one eye rolled back to
+      // white while the other still holds a dimming yellow.
+      const fillOval = (oval: GoreOval): void => {
+        ctx.beginPath();
+        ctx.ellipse(r * oval.x, r * oval.y, r * oval.rx, r * oval.ry, 0, 0, FULL_CIRCLE_ANGLE);
+        ctx.fill();
+      };
       ctx.fillStyle = mouthInner;
       ctx.beginPath();
-      ctx.ellipse(r * 0.42, r * 0.42, r * 0.3, r * 0.2, deg(16), 0, FULL_CIRCLE_ANGLE);
+      ctx.ellipse(
+        r * GORE_MOUTH.x,
+        r * GORE_MOUTH.y,
+        r * GORE_MOUTH.rx,
+        r * GORE_MOUTH.ry,
+        GORE_MOUTH.tilt,
+        0,
+        FULL_CIRCLE_ANGLE,
+      );
       ctx.fill();
       ctx.fillStyle = toothEnamel;
       ctx.beginPath();
-      ctx.moveTo(r * 0.24, r * 0.32);
-      ctx.lineTo(r * 0.36, r * 0.3);
-      ctx.lineTo(r * 0.3, r * 0.52);
+      ctx.moveTo(r * GORE_FANG.backX, r * GORE_FANG.rootY);
+      ctx.lineTo(r * GORE_FANG.frontX, r * GORE_FANG.rootY);
+      ctx.lineTo(r * GORE_FANG.pointX, r * GORE_FANG.pointY);
       ctx.closePath();
       ctx.fill();
 
       ctx.fillStyle = sclera;
-      ctx.beginPath();
-      ctx.ellipse(r * 0.36, -r * 0.2, r * 0.17, r * 0.14, 0, 0, FULL_CIRCLE_ANGLE);
-      ctx.fill();
+      fillOval(GORE_DEAD_SOCKET);
       ctx.fillStyle = bone.light;
-      ctx.beginPath();
-      ctx.ellipse(r * 0.38, -r * 0.24, r * 0.1, r * 0.08, 0, 0, FULL_CIRCLE_ANGLE);
-      ctx.fill();
+      fillOval(GORE_DEAD_WHITE);
       ctx.fillStyle = eye;
-      ctx.beginPath();
-      ctx.arc(-r * 0.06, -r * 0.18, r * 0.06, 0, FULL_CIRCLE_ANGLE);
-      ctx.fill();
+      fillOval(GORE_LIVE_EYE);
       ctx.restore();
 
       // The neck stump: a vertebra ring and a ribbed trachea, not a long bone.

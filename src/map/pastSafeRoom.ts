@@ -26,9 +26,9 @@ function isInRect(tileX: number, tileY: number, rect: TileRect): boolean {
  *
  * Answered by walking the built floor rather than by distance or by region,
  * because "past" is about the route: a room across a wall from the safe room
- * can still be one the party passes long before it. The bathroom queue is
- * ignored because it is asked at floor load, while the queue still stands, and
- * the queue only delays the route rather than changing it.
+ * can still be one the party passes long before it. The bathroom queue and the
+ * stealth gate are ignored because this is asked at floor load, while both
+ * still stand, and each only delays the route rather than changing it.
  */
 export function pastSafeRoomTest(
   map: GameMap,
@@ -42,7 +42,7 @@ export function pastSafeRoomTest(
   const start = map.startTile;
   const queue: { x: number; y: number }[] = [];
   if (
-    map.isWalkableIgnoringBathroomQueue(start.x, start.y) &&
+    map.isWalkableIgnoringPuzzleChokes(start.x, start.y) &&
     !isInRect(start.x, start.y, safeRoom.bounds)
   ) {
     reached[start.y * columns + start.x] = 1;
@@ -56,7 +56,7 @@ export function pastSafeRoomTest(
       if (x < 0 || y < 0 || x >= columns || y >= rows) continue;
       const index = y * columns + x;
       if (reached[index] === 1) continue;
-      if (!map.isWalkableIgnoringBathroomQueue(x, y) || isInRect(x, y, safeRoom.bounds)) continue;
+      if (!map.isWalkableIgnoringPuzzleChokes(x, y) || isInRect(x, y, safeRoom.bounds)) continue;
       reached[index] = 1;
       queue.push({ x, y });
     }

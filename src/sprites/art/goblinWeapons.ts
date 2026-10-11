@@ -1,5 +1,6 @@
 /**
- * The four goblin weapons — sword, axe, mace and war hammer.
+ * The goblin weapons — cleaver, axe, mace, war hammer and bow, plus the
+ * plumber's pipe wrench.
  *
  * Split out of `goblinArt.ts` because the weapons are as much of the art as the
  * body is: at 32 px the ears and the weapon carry the whole job of
@@ -171,20 +172,44 @@ function paintPitting(
   }
 }
 
-// ── Sword ────────────────────────────────────────────────────────────────────
+// ── Cleaver ──────────────────────────────────────────────────────────────────
 //
-// A straight cut-down arming sword the goblin took off a body: no fuller, a
-// crossguard bent out of a bar, and a pommel that is just a lump of iron.
+// The sword goblin's blade: a crude, heavy chopper hammered out of scrap — a
+// straight spine with teeth knocked into it, a belly that widens toward a
+// squared, slanted end, a bar of a guard and a lump of a pommel. A slim
+// realistic sword reads at 32 px as a needle; a cleaver reads as a goblin's.
 
 const SWORD_OVERHANG = 0.1;
 const SWORD_TIP = 0.74;
 const SWORD_GUARD_HALF_WIDTH = 0.11;
 const SWORD_GUARD_THICKNESS = 0.035;
-const SWORD_BLADE_HALF_WIDTH = 0.028;
+const SWORD_BLADE_HALF_WIDTH = 0.032;
+/**
+ * How far the cleaver's edge drops below its spine at the widest, just short
+ * of the end. Kept under the guard's half-width, which is the prop's
+ * `headHalfHeight` and decides how steeply the blade can hang at rest.
+ */
+const CLEAVER_DROP = 0.105;
+/** Where along the blade the belly is widest, as a share of the tip distance. */
+const CLEAVER_WIDEST = 0.9;
+/** Teeth knocked into the spine, and how deep each bite is. */
+const CLEAVER_NOTCHES = 3;
+const CLEAVER_NOTCH_DEPTH = 0.02;
+/** The edge's bright bevel, as a share of the blade's depth. */
+const CLEAVER_BEVEL = 0.3;
+/** Each tooth's bite spans this share of the gap between teeth, either side of its centre. */
+const CLEAVER_NOTCH_HALF_SPAN = 0.25;
+/** The edge's curve bellies out to this share of the full drop, midway along. */
+const CLEAVER_BELLY = 0.95;
+/** The dark band under the spine, as a share of the drop, and its alpha. */
+const CLEAVER_SPINE_SHADE = 0.35;
+const CLEAVER_SPINE_SHADE_ALPHA = 0.55;
+/** The bevel's fill runs past the edge so the clip, not the fill, decides where it ends. */
+const CLEAVER_BEVEL_OVERRUN = 1.2;
+/** Pitting scatters this share of the drop either side of the blade's axis: clear of the ground edge. */
+const CLEAVER_PITTING_DEPTH = 0.5;
 const SWORD_GRIP_END = 0.055;
 const SWORD_POMMEL_RADIUS = 0.045;
-/** Where the blade stops widening and starts running to the point. */
-const SWORD_TAPER_START = 0.58;
 
 export function makeSwordProp(palette: GoblinPalette, seed: () => number): GoblinProp {
   const { iron, leather, outline } = palette;
@@ -250,34 +275,62 @@ export function makeSwordProp(palette: GoblinPalette, seed: () => number): Gobli
       });
 
       const bladeStart = SWORD_GRIP_END + SWORD_GUARD_THICKNESS;
+      const spineY = -SWORD_BLADE_HALF_WIDTH;
+      const widestX = SWORD_TIP * CLEAVER_WIDEST;
       const traceBlade = (grow: number): void => {
         ctx.beginPath();
-        ctx.moveTo(bladeStart - grow, -SWORD_BLADE_HALF_WIDTH - grow);
-        ctx.lineTo(SWORD_TIP * SWORD_TAPER_START, -SWORD_BLADE_HALF_WIDTH - grow);
-        ctx.lineTo(SWORD_TIP + grow, -SWORD_BLADE_HALF_WIDTH * 0.1);
-        ctx.lineTo(SWORD_TIP + grow, SWORD_BLADE_HALF_WIDTH * 0.1);
-        ctx.lineTo(SWORD_TIP * SWORD_TAPER_START, SWORD_BLADE_HALF_WIDTH + grow);
-        ctx.lineTo(bladeStart - grow, SWORD_BLADE_HALF_WIDTH + grow);
+        ctx.moveTo(bladeStart - grow, spineY - grow);
+        const notchSpan = (widestX - bladeStart) / (CLEAVER_NOTCHES + 1);
+        for (let i = 1; i <= CLEAVER_NOTCHES; i++) {
+          const x = bladeStart + notchSpan * i;
+          ctx.lineTo(x - notchSpan * CLEAVER_NOTCH_HALF_SPAN, spineY - grow);
+          ctx.lineTo(x, spineY + CLEAVER_NOTCH_DEPTH - grow);
+          ctx.lineTo(x + notchSpan * CLEAVER_NOTCH_HALF_SPAN, spineY - grow);
+        }
+        ctx.lineTo(SWORD_TIP + grow, spineY - grow);
+        // The squared end, chopped off on a slant back toward the edge.
+        ctx.lineTo(widestX + grow, CLEAVER_DROP + grow);
+        ctx.quadraticCurveTo(
+          (bladeStart + widestX) / 2,
+          CLEAVER_DROP * CLEAVER_BELLY + grow,
+          bladeStart - grow,
+          SWORD_BLADE_HALF_WIDTH + grow,
+        );
         ctx.closePath();
       };
       paintSteel(ctx, traceBlade, iron, outline, () => {
-        // The spine stays dark and the edge band catches the light, which is
-        // what makes a flat quad read as a ground blade.
-        ctx.fillStyle = rgba(iron.rim, 0.62);
+        // A dark spine and a bright ground edge: what makes a flat plate read
+        // as a blade, and the edge is the one part of the weapon that has to
+        // stand off any floor.
+        ctx.fillStyle = rgba(iron.shadow, CLEAVER_SPINE_SHADE_ALPHA);
         ctx.fillRect(
           bladeStart,
-          -SWORD_BLADE_HALF_WIDTH,
+          spineY,
           SWORD_TIP - bladeStart,
-          SWORD_BLADE_HALF_WIDTH * BEVEL_FRACTION,
+          CLEAVER_DROP * CLEAVER_SPINE_SHADE,
         );
-        ctx.fillStyle = rgba(iron.shadow, 0.5);
-        ctx.fillRect(
+        ctx.fillStyle = iron.rim;
+        ctx.beginPath();
+        ctx.moveTo(bladeStart, SWORD_BLADE_HALF_WIDTH * (1 - CLEAVER_BEVEL));
+        ctx.quadraticCurveTo(
+          (bladeStart + widestX) / 2,
+          CLEAVER_DROP * (CLEAVER_BELLY - CLEAVER_BEVEL),
+          widestX,
+          CLEAVER_DROP * (1 - CLEAVER_BEVEL),
+        );
+        ctx.lineTo(widestX, CLEAVER_DROP * CLEAVER_BEVEL_OVERRUN);
+        ctx.lineTo(bladeStart, CLEAVER_DROP * CLEAVER_BEVEL_OVERRUN);
+        ctx.closePath();
+        ctx.fill();
+        paintPitting(
+          ctx,
           bladeStart,
-          SWORD_BLADE_HALF_WIDTH * 0.25,
-          SWORD_TIP - bladeStart,
-          SWORD_BLADE_HALF_WIDTH * 0.75,
+          SWORD_TIP,
+          CLEAVER_DROP * CLEAVER_PITTING_DEPTH,
+          iron,
+          leather,
+          seed,
         );
-        paintPitting(ctx, bladeStart, SWORD_TIP, SWORD_BLADE_HALF_WIDTH, iron, leather, seed);
       });
 
       ctx.restore();
@@ -422,7 +475,7 @@ export function makeAxeProp(palette: GoblinPalette, seed: () => number): GoblinP
 
       paintSteel(ctx, traceHead, iron, outline, () => {
         // The bevel runs along the edge itself, which is the outer arc.
-        ctx.fillStyle = rgba(iron.rim, 0.6);
+        ctx.fillStyle = iron.rim;
         ctx.beginPath();
         ctx.moveTo(AXE_BEARD_END, AXE_BIT_DROP * 0.66);
         ctx.lineTo(AXE_BEARD_END * 0.86, AXE_BIT_DROP);
@@ -459,6 +512,8 @@ export function makeAxeProp(palette: GoblinPalette, seed: () => number): GoblinP
 const MACE_OVERHANG = 0.09;
 const MACE_TIP = 0.56;
 const MACE_HEAD_RADIUS = 0.135;
+/** Strong enough that the flanges still catch light at 32 px, where steel otherwise matches the floor. */
+const MACE_FLANGE_GLINT_ALPHA = 0.75;
 const MACE_FLANGE_COUNT = 5;
 const MACE_FLANGE_REACH = 1.52;
 const MACE_HAFT_HALF_WIDTH = 0.025;
@@ -519,7 +574,7 @@ export function makeMaceProp(palette: GoblinPalette, seed: () => number): Goblin
       };
 
       paintSteel(ctx, traceFlanges, iron, outline, () => {
-        ctx.fillStyle = rgba(iron.rim, 0.5);
+        ctx.fillStyle = rgba(iron.rim, MACE_FLANGE_GLINT_ALPHA);
         ctx.beginPath();
         ctx.arc(
           headCentre - MACE_HEAD_RADIUS * 0.3,
@@ -619,6 +674,8 @@ const HAMMER_EYE_START = 0.6;
 const HAMMER_EYE_END = 0.92;
 /** Half-height of the block, which straddles the haft evenly either side. */
 const HAMMER_FACE_HALF = 0.145;
+/** The striking face's lit edge, bright enough to separate the head from a stone floor. */
+const HAMMER_FACE_GLINT_ALPHA = 0.8;
 
 export function makeWarhammerProp(palette: GoblinPalette, seed: () => number): GoblinProp {
   const { iron, leather, wood, outline } = palette;
@@ -663,7 +720,7 @@ export function makeWarhammerProp(palette: GoblinPalette, seed: () => number): G
         ctx.closePath();
       };
       paintSteel(ctx, traceFace, iron, outline, () => {
-        ctx.fillStyle = rgba(iron.rim, 0.45);
+        ctx.fillStyle = rgba(iron.rim, HAMMER_FACE_GLINT_ALPHA);
         ctx.fillRect(
           HAMMER_EYE_START,
           -HAMMER_FACE_HALF,
@@ -754,7 +811,9 @@ const BOW_RISER = 0.085;
  * in near-white, which is the only value that reads against both the brown
  * limbs and a dungeon floor.
  */
-const BOW_STRING_WIDTH = 0.026;
+const BOW_STRING_WIDTH = 0.036;
+/** The dark line either side of the string, as a multiple of its width. */
+const BOW_STRING_OUTLINE = 1.9;
 /** Arrow length forward of the nocking point. */
 const BOW_ARROW_LENGTH = 0.76;
 /**
@@ -891,17 +950,17 @@ export function makeBowProp(palette: GoblinPalette, seed: () => number): GoblinP
       // bow shows the sharp V that a chord never does.
       ctx.lineJoin = 'round';
       ctx.strokeStyle = outline;
-      ctx.lineWidth = BOW_STRING_WIDTH * 2.6;
+      ctx.lineWidth = BOW_STRING_WIDTH * BOW_STRING_OUTLINE;
       ctx.beginPath();
       ctx.moveTo(BOW_LIMB, -BOW_TIP_SETBACK);
       ctx.lineTo(0, pull);
       ctx.lineTo(-BOW_LIMB, -BOW_TIP_SETBACK);
       ctx.stroke();
-      // Brightest at full draw and dull at rest. The string is the whole warning
-      // that a shot is coming, so it should be the loudest thing on the sprite
-      // exactly then — and at rest a near-white bar across the stave is what
-      // turned the carried bow into a shield with a boss on it.
-      ctx.strokeStyle = mix(bone.dark, bone.rim, amount);
+      // Brightest at full draw: the string is the whole warning that a shot is
+      // coming, so it is the loudest thing on the sprite exactly then. At rest it
+      // stays a light bone tan rather than near-white — a near-white bar across
+      // the stave turned the carried bow into a shield with a boss on it.
+      ctx.strokeStyle = mix(bone.mid, bone.rim, amount);
       ctx.lineWidth = BOW_STRING_WIDTH;
       ctx.stroke();
 

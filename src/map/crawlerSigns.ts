@@ -2,6 +2,7 @@ import { FloorTypeValue, type TileContent } from './tileTypes';
 import type { CardinalDirection } from '../utils';
 import { buildRoomGraph, corridorComponents, type RoomGraph } from './progressionValidation';
 import {
+  blockingWouldSplitRoom,
   ROOM_WALL_OUTWARD,
   roomDoorways,
   type Point,
@@ -112,6 +113,14 @@ const UNWALKED = -1;
 /** Marks a room on no forced stage: the stair-search territory, or a room the player can never reach. */
 const NO_STAGE = -1;
 
+/**
+ * Planning passes allowed for the room signs to settle. Each pass measures the
+ * level around the previous pass's signs; a level whose signs still move after
+ * this many is rejected rather than shipped with a sign its own neighbours
+ * disagree with.
+ */
+const MAX_SIGN_SETTLING_ROUNDS = 6;
+
 /** Keeps distance from a run's middle the primary sort and the matching wall only a tiebreak. */
 const WALL_TIE_WEIGHT = 2;
 
@@ -205,7 +214,8 @@ function arrowBearing(from: Point, target: Point, facing: Point): number {
  * Every footprint tile has to be interior floor, clear of every doorway and
  * unclaimed, and the sign must leave whatever borders it somewhere a creature
  * can still operate — the same test the spawner applies to a spawn tile, run
- * with the sign counted as solid. Any tile of the room qualifies rather than
+ * with the sign counted as solid. Signs are seated after the room is dressed, so
+ * a seat that would cut the floor apart between two props is refused too. Any tile of the room qualifies rather than
  * only the straight line in from the doorway: a hub room's fixtures and its other
  * doorways routinely rule that one line out while leaving the rest of the room
  * open. Nearness to the doorway keeps the arrow short and steep, and ties fall
@@ -257,6 +267,7 @@ function seatSign(
       const footprintKeys = new Set(footprint.map((tile) => tileCoordKey(tile.x, tile.y)));
       const walkableWithSign = (x: number, y: number): boolean =>
         isWalkableTileType(grid[y][x]) && !footprintKeys.has(tileCoordKey(x, y));
+      if (blockingWouldSplitRoom(grid, room, footprint)) return false;
       return footprint.every((tile) =>
         ROOM_WALL_OUTWARD.every((side) => {
           const x = tile.x + side.dx;
@@ -528,8 +539,42 @@ function walkableTileKeys(input: CrawlerSignInput, room: Rect): Set<number> {
  * away from something they would see the end of anyway (and away from a
  * respawn point, which is never actually a wrong answer). Pure: the grid is
  * read, never written.
+ *
+ * Walks are measured with the room signs standing (see {@link planAroundSigns}),
+ * so the plan describes the level it leaves behind. Null when the signs never
+ * settle on one set.
  */
-export function planCrawlerSigns(input: CrawlerSignInput): PlannedCrawlerSign[] {
+export function planCrawlerSigns(input: CrawlerSignInput): PlannedCrawlerSign[] | null {
+  let assumedSigns = new Set<number>();
+  for (let round = 0; round < MAX_SIGN_SETTLING_ROUNDS; round++) {
+    const placements = planAroundSigns(input, assumedSigns);
+    const seated = new Set(
+      placements
+        .filter((placement) => placement.kind === 'room')
+        .flatMap((placement) => crawlerSignFootprint(placement.tile))
+        .map((tile) => tileCoordKey(tile.x, tile.y)),
+    );
+    const settled =
+      seated.size === assumedSigns.size && [...seated].every((key) => assumedSigns.has(key));
+    if (settled) return placements;
+    assumedSigns = seated;
+  }
+  return null;
+}
+
+/**
+ * One planning pass with the room signs at `assumedSigns` already standing.
+ *
+ * A room sign is solid, so it can lengthen a walk through its room by a tile or
+ * two, and that is enough to carry another junction's detour or loop across
+ * {@link MIN_TRAP_DETOUR_TILES}. Every walk is therefore measured around the
+ * assumed signs, while seats are chosen on the grid as it is: a room holds only
+ * its own sign, so the signs of other rooms never change where it stands.
+ */
+function planAroundSigns(
+  input: CrawlerSignInput,
+  assumedSigns: ReadonlySet<number>,
+): PlannedCrawlerSign[] {
   const { grid, rooms } = input;
   const bounds: Rect[] = rooms.map(({ x, y, w, h }) => ({ x, y, w, h }));
   const graph = buildRoomGraph(grid, bounds);
@@ -555,7 +600,9 @@ export function planCrawlerSigns(input: CrawlerSignInput): PlannedCrawlerSign[] 
     rows: grid.length,
     walkable: (x: number, y: number): boolean => {
       const tile = tileAt(grid, x, y);
-      return tile !== undefined && isWalkableTileType(tile);
+      return (
+        tile !== undefined && isWalkableTileType(tile) && !assumedSigns.has(tileCoordKey(x, y))
+      );
     },
     roomAt,
     startTiles,
@@ -736,8 +783,7 @@ function planHallwaySigns(
   const columns = grid[0]?.length ?? 0;
 
   const inGrid = (x: number, y: number): boolean => x >= 0 && y >= 0 && x < columns && y < rows;
-  const walkable = (x: number, y: number): boolean =>
-    inGrid(x, y) && isWalkableTileType(grid[y][x]);
+  const { walkable } = floodInput;
   const inRoom = (x: number, y: number): boolean => inGrid(x, y) && roomAt[y][x] !== NO_ROOM;
   const claimed = (x: number, y: number): boolean => input.claimedTiles.has(tileCoordKey(x, y));
 

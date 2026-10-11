@@ -50,8 +50,11 @@ export interface TownOffset {
   readonly dy: number;
 }
 
-/** Categories `BuildingInteriorScene` keys its interiors off. */
-export type BuildingKind = 'house' | 'tower' | 'store' | 'club';
+/**
+ * Categories `BuildingInteriorScene` keys its interiors off. `prison` is not a
+ * town building: it is the door in floor 2's stealth gate room.
+ */
+export type BuildingKind = 'house' | 'tower' | 'store' | 'club' | 'prison';
 
 /**
  * Every sprite building's name, exactly as `buildingEntries` and the interior

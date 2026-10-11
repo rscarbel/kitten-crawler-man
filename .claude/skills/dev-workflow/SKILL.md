@@ -25,6 +25,7 @@ npm run verify:difficulty-curve # P1: HP share per fight across party levels, ev
 npm run verify:tactics       # P6: tactics trait rolls, guard, kite, flank, riposte bounds
 npm run verify:progression   # 50 generated maps per floor: reachability and bypass invariants
 npm run verify:quest-choke   # the defense quest's room, on the live GameMap
+npm run verify:stealth-gate  # floor 2's stealth gate room: S7 placement plus the live gate (prison gates are in add-level)
 npm run verify:bounty        # bounty registry, encounters, state machine, site scatter
 npm run verify:separation    # mob push-apart force math and strategy equivalence
 npm run verify:assets        # every mob a floor can produce vs. its declared sprite groups
@@ -83,7 +84,7 @@ saves. Without it, saves still happen in memory, so a death still respawns at th
 last save point.
 
 **All dev-only routes are release-stripped.** `?playtest=`, `?level=`, and the
-art preview routes (`?goblins`, `?tiles`, …) live in `src/dev/devBoot.ts`, which
+art preview routes (`?goblins`, `?tiles`, …) and `?prison=<layout>&difficulty=<d>` (straight into the Goblin High Security Prison) live in `src/dev/devBoot.ts`, which
 `scripts/build.js` resolves to an inert stub unless the build passed
 `--dev-boot` (`serve` implies it). Plain `npm run build` — what `build:site`
 deploys — contains none of it. Put nothing a player is meant to reach in that

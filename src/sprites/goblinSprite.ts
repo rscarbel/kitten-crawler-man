@@ -5,8 +5,11 @@ import {
   GOBLIN_FIGURES,
   GOBLIN_GORE_STATES,
   GOBLIN_PLUMBER_FIGURE,
+  GOBLIN_PLUMBER_WALK_GROUND_PER_CYCLE_TILES,
   goblinRowFrameCount,
+  goblinWalkGroundPerCycleTiles,
 } from './art/goblinFigure';
+import { TILE_SIZE } from '../core/constants';
 
 export type GoblinWeapon = 'sword' | 'axe' | 'mace' | 'warhammer';
 export type GoblinAttackKind = 'light' | 'heavy';
@@ -240,15 +243,25 @@ const WALK_FRAMES = goblinRowFrameCount('walk');
 const IDLE_FRAMES = goblinRowFrameCount('idle');
 const IDLE_BREAK_FRAMES = goblinRowFrameCount('idle_break');
 const FLINCH_FRAMES = goblinRowFrameCount('flinch');
-/** Breathing speed of the always-on idle loop. */
-const IDLE_FPS = 8;
-const IDLE_BREAK_FPS = 14;
+/**
+ * Breathing speed of the always-on idle loop: one breath every
+ * `IDLE_FRAMES / GOBLIN_IDLE_FPS` seconds, the slow rest rate of a creature
+ * that is not doing anything. Faster than this the breath reads as a jitter.
+ */
+export const GOBLIN_IDLE_FPS = 5;
+/** The fidget plays at an unhurried pace, so it never reads as a telegraph. */
+export const GOBLIN_IDLE_BREAK_FPS = 9;
 
 /** Frames a flinch plays for; short on purpose, so it never eats an attack. */
 export const GOBLIN_FLINCH_FRAMES = 12;
 
-const IDLE_BREAK_MIN_SECONDS = 4;
-const IDLE_BREAK_RANDOM_SECONDS = 5;
+/**
+ * Seconds between fidgets. Long, because goblins stand in groups: at a few
+ * seconds apart a camp or a queue of them always has someone fidgeting, and
+ * the whole crowd reads as shifting about.
+ */
+const IDLE_BREAK_MIN_SECONDS = 8;
+const IDLE_BREAK_RANDOM_SECONDS = 8;
 
 /** A resolved animation state, ready to hand to the sprite renderer. */
 interface ResolvedFrame<State extends GoblinState = GoblinState> {
@@ -257,15 +270,28 @@ interface ResolvedFrame<State extends GoblinState = GoblinState> {
 }
 
 /**
+ * The most the walk cycle may advance in one tick, in radians: one frame of
+ * the row. Past that a tick skips a frame of the cycle, and skipped frames
+ * read as strobing legs rather than as a faster stride.
+ */
+const MAX_GAIT_ADVANCE = (Math.PI * 2) / WALK_FRAMES;
+
+/**
  * Owns a single goblin's animation timers.
  *
  * `idlePhaseOffset` is the part that is easy to forget and immediately visible
  * once forgotten: without it every goblin in a camp breathes and blinks on the
  * same frame, which reads as a rack of clones rather than as five creatures.
+ *
+ * The walk is paced by the ground the goblin actually covered, at the rate its
+ * own stride covers it, so a planted foot stays put on the floor whatever the
+ * goblin's speed. Paced by time, a goblin faster than its stride skates.
  */
 export class GoblinPassiveAnimator {
   /** Per-instance phase shift, in seconds, added to the idle time index. */
-  private readonly idlePhaseOffset = Math.random() * (IDLE_FRAMES / IDLE_FPS);
+  private readonly idlePhaseOffset = Math.random() * (IDLE_FRAMES / GOBLIN_IDLE_FPS);
+  private readonly radiansPerPx: number;
+  private gaitPhase = 0;
   private idleSeconds = 0;
   private secondsUntilBreak = GoblinPassiveAnimator.rollBreakDelay();
   private breakFramesLeft = 0;
@@ -279,12 +305,18 @@ export class GoblinPassiveAnimator {
   private breakTotalFrames = 1;
   private flinchFramesLeft = 0;
 
+  /** @param walkGroundPerCycleTiles ground one walk cycle of this figure covers. */
+  constructor(walkGroundPerCycleTiles: number) {
+    this.radiansPerPx = (Math.PI * 2) / (walkGroundPerCycleTiles * TILE_SIZE);
+  }
+
   private static rollBreakDelay(): number {
     return IDLE_BREAK_MIN_SECONDS + Math.random() * IDLE_BREAK_RANDOM_SECONDS;
   }
 
   /** Drops every animation in flight — used when a scene resets combat state. */
   reset(): void {
+    this.gaitPhase = 0;
     this.idleSeconds = 0;
     this.secondsUntilBreak = GoblinPassiveAnimator.rollBreakDelay();
     this.breakFramesLeft = 0;
@@ -297,8 +329,18 @@ export class GoblinPassiveAnimator {
     this.breakFramesLeft = 0;
   }
 
-  /** Advances timers by one game frame. Call once per frame, before rendering. */
-  tick(isMoving: boolean, isAttacking: boolean, secondsPerFrame: number): void {
+  /**
+   * Advances timers by one game frame. Call once per frame, before rendering,
+   * with the ground the goblin's own feet covered this frame — not what a
+   * knockback or a shove carried it, or its legs run forward as it flies back.
+   */
+  tick(
+    isMoving: boolean,
+    isAttacking: boolean,
+    secondsPerFrame: number,
+    ownStridePx: number,
+  ): void {
+    this.advanceGait(isMoving, ownStridePx);
     if (this.flinchFramesLeft > 0) this.flinchFramesLeft--;
     if (this.breakFramesLeft > 0) this.breakFramesLeft--;
 
@@ -311,10 +353,19 @@ export class GoblinPassiveAnimator {
 
     this.idleSeconds += secondsPerFrame;
     if (this.breakFramesLeft > 0 || this.idleSeconds < this.secondsUntilBreak) return;
-    this.breakFramesLeft = Math.round(IDLE_BREAK_FRAMES / IDLE_BREAK_FPS / secondsPerFrame);
+    this.breakFramesLeft = Math.round(IDLE_BREAK_FRAMES / GOBLIN_IDLE_BREAK_FPS / secondsPerFrame);
     this.breakTotalFrames = this.breakFramesLeft;
     this.idleSeconds = 0;
     this.secondsUntilBreak = GoblinPassiveAnimator.rollBreakDelay();
+  }
+
+  private advanceGait(isMoving: boolean, ownStridePx: number): void {
+    if (!isMoving) {
+      this.gaitPhase = 0;
+      return;
+    }
+    const advance = Math.min(ownStridePx * this.radiansPerPx, MAX_GAIT_ADVANCE);
+    this.gaitPhase = (this.gaitPhase + advance) % (Math.PI * 2);
   }
 
   get isFlinching(): boolean {
@@ -326,36 +377,32 @@ export class GoblinPassiveAnimator {
    *
    * Priority is flinch → walk → idle_break → idle.
    */
-  resolvePassive(
-    elapsedSeconds: number,
-    walkFrame: number,
-    isMoving: boolean,
-  ): ResolvedFrame<GoblinPassiveState> {
+  resolvePassive(elapsedSeconds: number, isMoving: boolean): ResolvedFrame<GoblinPassiveState> {
     if (this.flinchFramesLeft > 0) {
       const progress = 1 - this.flinchFramesLeft / GOBLIN_FLINCH_FRAMES;
       return { state: 'flinch', frame: progressFrameIndex(progress, FLINCH_FRAMES) };
     }
     if (isMoving) {
-      return { state: 'walk', frame: walkFrameIndex(walkFrame, WALK_FRAMES) };
+      return { state: 'walk', frame: walkFrameIndex(this.gaitPhase, WALK_FRAMES) };
     }
     if (this.breakFramesLeft > 0) {
       const progress = 1 - this.breakFramesLeft / this.breakTotalFrames;
       return { state: 'idle_break', frame: progressFrameIndex(progress, IDLE_BREAK_FRAMES) };
     }
     // The always-on breathing loop is the one thing driven by the clock, because
-    // it has no start: `walkFrame` resets to 0 the moment a mob stops, so a
-    // walk-driven idle freezes on frame 0 and the goblin becomes a corpse that
+    // it has no start: the gait resets to 0 the moment a goblin stops, so a
+    // gait-driven idle freezes on frame 0 and the goblin becomes a corpse that
     // has not fallen over. The per-instance phase offset is what keeps a camp of
     // five from breathing and blinking in lockstep.
     const phased = elapsedSeconds + this.idlePhaseOffset;
-    return { state: 'idle', frame: timeFrameIndex(phased, IDLE_FPS, IDLE_FRAMES) };
+    return { state: 'idle', frame: timeFrameIndex(phased, GOBLIN_IDLE_FPS, IDLE_FRAMES) };
   }
 }
 
 /** A fighting goblin's animator: the passive rows plus its archetype's attacks. */
 export class GoblinAnimator extends GoblinPassiveAnimator {
   constructor(private readonly archetype: GoblinArchetype) {
-    super();
+    super(goblinWalkGroundPerCycleTiles(archetype));
   }
 
   /**
@@ -365,11 +412,10 @@ export class GoblinAnimator extends GoblinPassiveAnimator {
    */
   resolve(
     elapsedSeconds: number,
-    walkFrame: number,
     isMoving: boolean,
     attack: { readonly kind: GoblinAttackKind; readonly progress: number } | null,
   ): ResolvedFrame {
-    if (attack === null) return this.resolvePassive(elapsedSeconds, walkFrame, isMoving);
+    if (attack === null) return this.resolvePassive(elapsedSeconds, isMoving);
     const state: GoblinState = attack.kind === 'light' ? 'attack_light' : 'attack_heavy';
     const frames = attackSpriteFrames(this.archetype, attack.kind);
     return { state, frame: progressFrameIndex(attack.progress, frames) };
@@ -423,6 +469,15 @@ export function drawGoblinPlumberSprite(
     sprite.y,
     sprite.tileSize,
     { flipX: sprite.facingX < 0 },
+  );
+}
+
+/** The passive animator for a bathroom goblin: the plumber's own build, or a queue goblin's archetype. */
+export function bathroomGoblinAnimator(figure: GoblinArchetype | 'plumber'): GoblinPassiveAnimator {
+  return new GoblinPassiveAnimator(
+    figure === 'plumber'
+      ? GOBLIN_PLUMBER_WALK_GROUND_PER_CYCLE_TILES
+      : goblinWalkGroundPerCycleTiles(figure),
   );
 }
 
@@ -485,7 +540,7 @@ export const GOBLIN_STATES: ReadonlyArray<GoblinState> = [
  * The rows warmed when a goblin's spawn is scheduled.
  *
  * A body that has just arrived stands and walks, and nothing else: an
- * `idle_break` is four seconds away at the earliest and an attack needs the
+ * `idle_break` is eight seconds away at the earliest and an attack needs the
  * player inside reach. Those two rows are what the frame the pack lands on
  * draws.
  */
@@ -517,6 +572,24 @@ const ENGAGED_WARMED_STATES: ReadonlyArray<GoblinState> = [
 export function prewarmGoblin(archetype: GoblinArchetype): void {
   const figure = GOBLIN_FIGURES[archetype];
   for (const state of SPAWN_WARMED_STATES) prewarmFigureState(figure, state);
+}
+
+/**
+ * The rows a goblin that is placed with its room and never fights draws: it
+ * stands, shuffles, fidgets and flinches, and none of those has a telegraph to
+ * warm behind.
+ */
+const BYSTANDER_WARMED_STATES: ReadonlyArray<GoblinPassiveState> = [
+  'idle',
+  'walk',
+  'idle_break',
+  'flinch',
+];
+
+/** Warms every row a non-fighting goblin can draw, for one placed with its room. */
+export function prewarmGoblinBystander(archetype: GoblinArchetype): void {
+  const figure = GOBLIN_FIGURES[archetype];
+  for (const state of BYSTANDER_WARMED_STATES) prewarmFigureState(figure, state);
 }
 
 /** Warms the combat rows, from the moment a goblin has a target to use them on. */

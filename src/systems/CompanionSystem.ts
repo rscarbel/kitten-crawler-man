@@ -19,6 +19,7 @@ import {
   type HazardEscape,
 } from './GroundHazardSource';
 import type { BossRoomSystem } from './BossRoomSystem';
+import { PartyTrail, type TrailBody, type TrailPoint } from './partyTrail';
 import { normalize, clamp, randomInt } from '../utils';
 
 type Entity = {
@@ -98,6 +99,8 @@ const HUMAN_EVADE_ANGLE_SPEED = 0.04;
 
 // Magic number constants
 const TILE_CENTER_OFFSET = 0.5;
+/** How far a restarted trail may route between the two crawlers before the follower is stood on the leader instead. */
+const TRAIL_ROUTE_MAX_TILES = 24;
 
 const COLLISION_BOX_RIGHT_FRACTION = 0.72;
 const COLLISION_BOX_LEFT_FRACTION = 0.28;
@@ -273,6 +276,9 @@ export class CompanionSystem implements GameSystem {
   /** The gathering system, so a harvesting companion can be left alone or cut off. See {@link CompanionHarvestSource}. */
   private harvestSource: CompanionHarvestSource | null = null;
 
+  /** Set while the follower walks the leader's own trail instead of being driven; see {@link setTrailFollow}. */
+  private trail: PartyTrail | null = null;
+
   constructor(
     private gameMap: GameMap,
     startTileX: number,
@@ -365,6 +371,41 @@ export class CompanionSystem implements GameSystem {
     this.catStance.anchorY = cat.y;
     this.catWanderTargetX = cat.x;
     this.catWanderTargetY = cat.y;
+  }
+
+  /**
+   * Puts the follower on the leader's breadcrumb trail at `spacingPx` of walked
+   * distance, or (null) hands it back to the ordinary follow drive.
+   *
+   * On the trail the follower neither paths, fights, flees nor heeds a
+   * movement order: it stands where the leader stood, so the route the player
+   * walks decides both bodies. A room that judges both crawlers by where they
+   * stand (the prison's lights) needs exactly that.
+   */
+  setTrailFollow(spacingPx: number | null): void {
+    this.trail =
+      spacingPx === null
+        ? null
+        : new PartyTrail(spacingPx, (from, to) => this.trailRoute(from, to));
+  }
+
+  /** The tile corners of a walkable path between two bodies, for a trail starting again. */
+  private trailRoute(from: TrailBody, to: TrailBody): readonly TrailPoint[] | null {
+    const tileOf = (body: TrailBody): { x: number; y: number } => ({
+      x: Math.floor((body.x + TILE_SIZE * TILE_CENTER_OFFSET) / TILE_SIZE),
+      y: Math.floor((body.y + TILE_SIZE * TILE_CENTER_OFFSET) / TILE_SIZE),
+    });
+    const start = tileOf(from);
+    const goal = tileOf(to);
+    if (start.x === goal.x && start.y === goal.y) return [];
+    const path = this.gameMap.findPath(start.x, start.y, goal.x, goal.y, TRAIL_ROUTE_MAX_TILES);
+    if (path.length === 0) return null;
+    return path.map((tile) => ({ x: tile.x * TILE_SIZE, y: tile.y * TILE_SIZE }));
+  }
+
+  /** The trail the follower is walking, when it is on one. */
+  get followTrail(): PartyTrail | null {
+    return this.trail;
   }
 
   get isFollowOverride(): boolean {
@@ -546,6 +587,10 @@ export class CompanionSystem implements GameSystem {
     // would read as a bug rather than a freeze.
     if (companion.isKnockedOut || !companion.canAct) {
       companion.isMoving = false;
+      return;
+    }
+    if (this.trail !== null) {
+      this.trail.tick(human.isActive ? human : cat, companion);
       return;
     }
     this.companionMoveFactor = companion.statusMoveFactor;

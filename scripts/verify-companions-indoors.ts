@@ -1748,8 +1748,9 @@ function checkSceneWiring(): void {
 
   section('The overworld door hands Mongo across');
   const dungeon = readFileSync(DUNGEON_SCENE_PATH, 'utf8');
-  const door = between(dungeon, 'this.building = new BuildingSystem(', 'blockedMessage:');
+  const door = methodBody(dungeon, 'private enterBuilding(entry: BuildingEntry): void {');
   check(door !== null, 'the building door’s callback is found');
+  const exitOptions = methodBody(dungeon, 'private buildingExitOptions(');
   check(
     inOrder(door, 'mongoWasOut: this.mongoSystem.followsThroughDoor', 'this.mongoSystem.dismiss('),
     'the door reads whether he was out before putting him away',
@@ -1759,7 +1760,7 @@ function checkSceneWiring(): void {
     'and puts him away before the interior is built',
   );
   check(
-    door?.includes('mongoWasOut: companionDeparture.mongoWasOut') === true,
+    exitOptions?.includes('mongoWasOut: companionDeparture.mongoWasOut') === true,
     'the rebuilt overworld is told he walked out',
   );
   const gameplay = methodBody(dungeon, 'private updateGameplay(): void {');

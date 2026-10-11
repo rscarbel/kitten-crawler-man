@@ -3,9 +3,9 @@
  * the toddler who comes home to her once the nursery has been held.
  *
  * She is the one goblin in the dungeon the player protects, so everything that
- * names an enemy goblin — the hunched profile, the notched swept-back ears, the
- * weapon, the cold olive and teal skins, the dark sclera — is absent on
- * purpose. She stands upright and head-on, round through the hips and the
+ * names an enemy goblin — the hunched profile, the stiff pointed ears standing
+ * out level, the weapon, the hard saturated lime skin, the glowing yellow eyes —
+ * is absent on purpose. She stands upright and head-on, round through the hips and the
  * shoulders, in a headscarf, a knitted shawl and an apron, cradling the baby
  * at her chest. At the 32 px tile three shapes carry her: the red headscarf
  * with two soft ears out of it, the pale bundle at her chest, and a bell of
@@ -30,9 +30,9 @@ const OUTLINE = '#2a1a16';
 const SHADOW = '#000000';
 
 /**
- * A soft, warm sage lit well above every enemy skin: the war-band ramps are
- * olive, yellow-green, gold, teal and a hard spring green, all darker and more
- * saturated than this.
+ * A soft, warm, greyed sage: the war band all share one hard, saturated lime,
+ * and a mother as bright but far greyer and warmer reads as a different kind
+ * of goblin rather than as one of them.
  */
 const SKIN = '#93ae6c';
 const SKIN_LIGHT = '#b9d08f';
@@ -318,7 +318,7 @@ export const MOTHER_CROWN_Y = HEAD_Y - HEAD_RY * 1.34;
 
 const EAR_LENGTH = 0.17;
 const EAR_HALF_WIDTH = 0.042;
-/** Her ears hang a little below level at rest — relaxed, where a raider's are swept back. */
+/** Her ears hang a little below level at rest — relaxed, where a raider's stand out stiff and lifted. */
 const EAR_REST_DROOP = 0.5;
 
 const SLEEVE_WIDTH = 0.08;

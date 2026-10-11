@@ -109,6 +109,7 @@ export type AdviceObjectiveId =
   | 'juicer'
   | 'defend_goblin_mother'
   | 'krakaren_clone'
+  | 'stealth_gate'
   | 'spider_lab'
   | 'ball_of_swine'
   | 'ball_of_swine_distant'

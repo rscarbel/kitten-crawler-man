@@ -237,6 +237,17 @@ function bathroomApproachTile(gameMap: GameMap): { x: number; y: number } | null
   return gameMap.isWalkable(inside.x, inside.y) ? inside : entranceTile;
 }
 
+/**
+ * A tile the gate guard is talked to from, so the preset opens face to face
+ * with him; the room's centre when none of them is open.
+ */
+function stealthGateGuardFront(gameMap: GameMap): { x: number; y: number } | null {
+  const room = gameMap.stealthGateRoom;
+  if (room === null) return null;
+  const talkTile = room.guardTalkTiles.find((tile) => gameMap.isWalkable(tile.x, tile.y));
+  return talkTile === undefined ? room.centre : { x: talkTile.x, y: talkTile.y };
+}
+
 /** Rows south of a town door the party stands, clear of the door itself so arriving never walks in. */
 const TOWN_DOORSTEP_ROWS_SOUTH = 1;
 
@@ -266,12 +277,16 @@ const PLAYTEST_FLOOD_STEPS = [
   { dx: 0, dy: -1 },
 ] as const;
 
-/** Whether `tile` can be walked to from the floor's start as the map stands now. */
-function reachableFromStart(gameMap: GameMap, tile: { x: number; y: number }): boolean {
+/** Whether `tile` can be walked to from the floor's start, stepping only where `walkable` allows. */
+function reachableFromStart(
+  gameMap: GameMap,
+  tile: { x: number; y: number },
+  walkable: (x: number, y: number) => boolean,
+): boolean {
   const width = gameMap.structure[0]?.length ?? 0;
   const keyOf = (x: number, y: number): number => y * width + x;
   const start = gameMap.startTile;
-  if (!gameMap.isWalkable(start.x, start.y)) return false;
+  if (!walkable(start.x, start.y)) return false;
   const seen = new Set<number>([keyOf(start.x, start.y)]);
   const queue = [start];
   // The iterator re-reads `length`, so tiles pushed below are visited by this loop.
@@ -280,7 +295,7 @@ function reachableFromStart(gameMap: GameMap, tile: { x: number; y: number }): b
     for (const step of PLAYTEST_FLOOD_STEPS) {
       const x = current.x + step.dx;
       const y = current.y + step.dy;
-      if (seen.has(keyOf(x, y)) || !gameMap.isWalkable(x, y)) continue;
+      if (seen.has(keyOf(x, y)) || !walkable(x, y)) continue;
       seen.add(keyOf(x, y));
       queue.push({ x, y });
     }
@@ -307,7 +322,23 @@ export function resolvePlaytestSpawn(
 export function playtestStartsPastBathroom(spawn: PlaytestSpawn, gameMap: GameMap): boolean {
   if (gameMap.bathroomRooms.length === 0) return false;
   const tile = resolveSpawnLandmark(spawn, gameMap);
-  return tile !== null && !reachableFromStart(gameMap, tile);
+  return tile !== null && !reachableFromStart(gameMap, tile, (x, y) => gameMap.isWalkable(x, y));
+}
+
+/**
+ * Whether a preset drops the party past floor 2's stealth gate: then the floor
+ * starts with the gate open and the quest `opened`, or the way back would be
+ * shut behind a gate whose guard the party never met. Asked of the map as
+ * generated, gate locked; the bathrooms are ignored, since a start past them
+ * is answered by {@link playtestStartsPastBathroom}.
+ */
+export function playtestStartsPastStealthGate(spawn: PlaytestSpawn, gameMap: GameMap): boolean {
+  if (gameMap.stealthGateRoom === null) return false;
+  const tile = resolveSpawnLandmark(spawn, gameMap);
+  return (
+    tile !== null &&
+    !reachableFromStart(gameMap, tile, (x, y) => gameMap.isWalkableIgnoringBathroomQueue(x, y))
+  );
 }
 
 function resolveSpawnLandmark(
@@ -325,6 +356,8 @@ function resolveSpawnLandmark(
       return questRoomApproachTile(gameMap);
     case 'bathroomEntrance':
       return bathroomApproachTile(gameMap);
+    case 'stealthGateRoom':
+      return stealthGateGuardFront(gameMap);
     case 'briarHollowGate':
       return gameMap.briarHollow?.gate.inside ?? null;
     case 'townBuildingDoor':

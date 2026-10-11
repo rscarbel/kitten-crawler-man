@@ -55,6 +55,8 @@ import {
   INTERIOR_FLAG_FLOOR,
   INTERIOR_STONE_FLOOR,
   INTERIOR_WALL,
+  METAL_WALL,
+  PRISON_COVER,
   BOULDER_SMALL,
   BOULDER_LARGE,
   CAMPFIRE,
@@ -68,6 +70,8 @@ import {
   GRINDING_SLAB,
   QUEST_EXIT_DOOR_CLOSED,
   QUEST_EXIT_DOOR_OPEN,
+  STEALTH_GATE_CLOSED,
+  STEALTH_GATE_OPEN,
   BOSS_ROOM_PROP_TILE_TYPES,
   HOLLOW_WALL,
   HOLLOW_PROP_LOW,
@@ -84,6 +88,7 @@ import { RegionMap, type RegionKind } from './regionMap';
 import { RegionCharacters } from './dungeon/regionCharacters';
 import { buildFloorSurface, FloorSurface, registerFloorSurface } from './dungeon/floorSurface';
 import { registerWallCharacters, registerWallFixtureFeet } from './dungeon/wallDressing';
+import { registerPrisonWallArt } from './dungeon/prisonDoorFaces';
 import { fixtureFoot, type WallFixture } from './dungeon/wallFixtures';
 import type { RegionCharacter } from './dungeon/roomCharacters';
 import type { Mob } from '../creatures/Mob';
@@ -94,6 +99,12 @@ import {
   type BathroomPlumbing,
   type BathroomRoomData,
 } from './bathroomLayout';
+import {
+  prisonBuildingEntry,
+  stealthGateBlockedTiles,
+  type StealthGateRoomData,
+  type StealthGateState,
+} from './stealthGateLayout';
 import { drawFloorArtSeed } from './ground/floorArtSeed';
 import { MinHeap, HEAP_EMPTY } from '../core/MinHeap';
 import { drawWorldSeed, withWorldSeed } from '../core/WorldRandom';
@@ -151,6 +162,12 @@ import {
 import { setTownInteriorWallMaterial } from './town/interiorWallMaterial';
 import { setBigTopDecorLayout } from './bigTopMazeDecor';
 import {
+  PRISON_TILE,
+  prisonTileAt,
+  type PrisonPlan,
+  type PrisonTileCode,
+} from './goblinPrisonPlan';
+import {
   TOWN_INTERIOR_PROPS,
   type TownInteriorPropId,
 } from '../sprites/art/townInterior/townInteriorProps';
@@ -206,7 +223,30 @@ export type InteriorVariant =
       readonly kind: 'bigtop_maze';
       /** The tent as dealt to this world and difficulty: its board written into the floor plan. */
       readonly plan: BigTopMazePlan;
+    }
+  | {
+      readonly kind: 'goblin_prison';
+      /** The authored layout this world's seed picked, parsed. */
+      readonly plan: PrisonPlan;
     };
+
+/** The tile type each prison grid code is built as. */
+function prisonTileTypeFor(code: PrisonTileCode): number {
+  switch (code) {
+    case PRISON_TILE.wall:
+      return INTERIOR_WALL;
+    case PRISON_TILE.bars:
+      return METAL_WALL;
+    case PRISON_TILE.cover:
+      return PRISON_COVER;
+    case PRISON_TILE.floor:
+    case PRISON_TILE.holdingFloor:
+    case PRISON_TILE.holdingDoor:
+    case PRISON_TILE.prisonerFloor:
+    case PRISON_TILE.pedestal:
+      return INTERIOR_STONE_FLOOR;
+  }
+}
 
 /** The tile the maze layout's legend character stands for. */
 function mazeTileTypeFor(legend: string): number {
@@ -280,6 +320,7 @@ const INTERIOR_BY_KIND: Record<BuildingKind, InteriorShell> = {
   store: { w: STORE_INTERIOR_W, h: STORE_INTERIOR_H, floorType: INTERIOR_BOARD_FLOOR },
   club: { w: CLUB_INTERIOR_W, h: CLUB_INTERIOR_H, floorType: CLUB_FLOOR },
   house: { w: HOUSE_INTERIOR_W, h: HOUSE_INTERIOR_H, floorType: INTERIOR_BOARD_FLOOR },
+  prison: { w: HOUSE_INTERIOR_W, h: HOUSE_INTERIOR_H, floorType: INTERIOR_STONE_FLOOR },
 };
 
 /**
@@ -435,6 +476,9 @@ const DECORATION_OVERLAY_TYPES: ReadonlySet<number> = new Set([
   HOLLOW_PALISADE,
   HOLLOW_GATE,
   ROCK_DEPOSIT,
+  // The stealth gate's portcullis, standing up out of its slot.
+  STEALTH_GATE_CLOSED,
+  STEALTH_GATE_OPEN,
   // The circus grounds' tents, pavilions and arch posts.
   CIRCUS_STRUCTURE_TALL,
   CIRCUS_STRUCTURE_LOW,
@@ -504,6 +548,34 @@ const BLOCK_HOSTILE_ONLY = 64;
  * aside, and the validators and A* never see entities at all.
  */
 const BLOCK_BATHROOM = 128;
+/**
+ * Tile is spanned by the stealth gate across the gate room's onward doorway.
+ * Blocking only while the floor's gate is `locked`. A flag rather than a tile
+ * type for the same reason as `BLOCK_QUEST_EXIT`.
+ */
+const BLOCK_STEALTH_GATE = 256;
+/**
+ * Tile is held by a prop that is a body in the mob grid — a prison holding
+ * cell's flimsy door. Nothing walks through it, but a shot flies on into it
+ * and lands on the prop as a body, rather than stopping at its tile's edge
+ * as it would at a wall.
+ */
+const BLOCK_BODY = 512;
+
+/**
+ * The floor tiles at the foot of the prison door's and sign's faces. They are
+ * registered as fixture feet so the baked face dressing leaves those faces
+ * bare rather than running a pipe or a cage through the door.
+ */
+function prisonWallArtFeet(room: StealthGateRoomData | null): Array<{ x: number; y: number }> {
+  if (room === null) return [];
+  return [...room.prisonDoor.approachTiles, { x: room.signTile.x, y: room.signTile.y + 1 }];
+}
+
+/** The art a stealth gate tile wears in a given state. */
+function stealthGateTileType(state: StealthGateState): number {
+  return state === 'locked' ? STEALTH_GATE_CLOSED : STEALTH_GATE_OPEN;
+}
 
 /**
  * What the defense quest's onward doorway is doing.
@@ -783,6 +855,14 @@ export class GameMap {
   private bathroomPlumbing: BathroomPlumbing = 'broken';
   /** `tileCoordKey` of every tile `BLOCK_BATHROOM` covers, so a mask rebuild keeps it. */
   private readonly bathroomBlockedSet = new Set<number>();
+  /** The spine's locked gate room; null on a floor without one. */
+  stealthGateRoom: StealthGateRoomData | null = null;
+  /** Whether the stealth gate still shuts its doorway. One state for the floor. */
+  private stealthGate: StealthGateState = 'locked';
+  /** `tileCoordKey` of every tile `BLOCK_STEALTH_GATE` covers, so a mask rebuild keeps it. */
+  private readonly stealthGateBlockedSet = new Set<number>();
+  /** `tileCoordKey` of every tile `BLOCK_BODY` covers, so a mask rebuild keeps it. */
+  private readonly bodyBlockedSet = new Set<number>();
   /**
    * What forced-progression mode built, when this map is a progression floor.
    *
@@ -928,9 +1008,10 @@ export class GameMap {
   /**
    * Per-tile block flags (`BLOCK_*`) for the current structure, indexed
    * `tileIndex(tx, ty, maskWidth)`. This is the read model for every
-   * walkability test — the hottest call in the game.
+   * walkability test — the hottest call in the game. Sixteen bits wide
+   * because the flags run past the eighth bit.
    */
-  private blockedMask = new Uint8Array(0);
+  private blockedMask = new Uint16Array(0);
   /**
    * Tiles covered by a SPRITE_BUILDING's art. Only the anchor tile carries the
    * SPRITE_BUILDING type, so anything that reads the map by tile type — the
@@ -1073,7 +1154,11 @@ export class GameMap {
     this.regionCharacters = data.regionCharacters;
     registerWallCharacters(data.grid, data.regionCharacters);
     this.wallFixtures = data.wallFixtures;
-    registerWallFixtureFeet(data.grid, data.wallFixtures.map(fixtureFoot));
+    registerWallFixtureFeet(data.grid, [
+      ...data.wallFixtures.map(fixtureFoot),
+      ...prisonWallArtFeet(data.stealthGateRoom),
+    ]);
+    registerPrisonWallArt(data.grid, data.stealthGateRoom);
     // The flag goes on now and stays on; what changes is whether it is being
     // honoured. Every floor starts `clear`: the nursery is a room on the way,
     // not a toll gate, and nothing is shut until the player takes the wave.
@@ -1088,6 +1173,15 @@ export class GameMap {
       for (const tile of bathroomBlockedTiles(room)) {
         this.bathroomBlockedSet.add(tileCoordKey(tile.x, tile.y));
       }
+    }
+    this.stealthGateRoom = data.stealthGateRoom;
+    if (data.stealthGateRoom !== null) {
+      for (const tile of stealthGateBlockedTiles(data.stealthGateRoom)) {
+        this.stealthGateBlockedSet.add(tileCoordKey(tile.x, tile.y));
+      }
+      // A door in a dungeon wall rather than a town facade: it opens on the
+      // floor in front of it, and the floor grid gains no opening.
+      this.buildingEntries = [prisonBuildingEntry(data.stealthGateRoom)];
     }
     this.treasureRooms = data.treasureRooms;
     this.spiderLabRoom = data.spiderLabRoom;
@@ -1127,6 +1221,35 @@ export class GameMap {
   /** Sets the plumbing of every bathroom copy at once: `fixed` opens all their blocked tiles. */
   setBathroomPlumbing(state: BathroomPlumbing): void {
     this.bathroomPlumbing = state;
+  }
+
+  /** Whether the floor's stealth gate still shuts the gate room's onward doorway. */
+  stealthGateState(): StealthGateState {
+    return this.stealthGate;
+  }
+
+  /**
+   * Locks or opens the floor's stealth gate, swapping its art with it. Each
+   * state is its own tile type because base tiles are baked into chunk
+   * canvases, so every gate tile is announced as dirty.
+   */
+  setStealthGate(state: StealthGateState): void {
+    this.stealthGate = state;
+    const gateType = stealthGateTileType(state);
+    for (const key of this.stealthGateBlockedSet) {
+      const tileX = tileKeyX(key);
+      const tileY = tileKeyY(key);
+      if (!this.isInsideGrid(tileX, tileY)) continue;
+      const tile = this.structure[tileY][tileX];
+      if (tile.type === gateType) continue;
+      tile.type = gateType;
+      this.markTileDirty(tileX, tileY);
+    }
+  }
+
+  /** Whether a tile is spanned by the stealth gate, locked or open. */
+  isStealthGateTile(tileX: number, tileY: number): boolean {
+    return this.stealthGateBlockedSet.has(tileCoordKey(tileX, tileY));
   }
 
   /** Locks the arena door so players cannot exit while the fight is active. */
@@ -1371,7 +1494,8 @@ export class GameMap {
     setTownInteriorWallMaterial(buildingName);
     setBigTopDecorLayout(null);
     if (variant !== 'default') {
-      this.generateBigTopMaze(variant.plan);
+      if (variant.kind === 'bigtop_maze') this.generateBigTopMaze(variant.plan);
+      else this.generateGoblinPrison(variant.plan);
       return;
     }
     const isTower = buildingType === 'tower';
@@ -1653,6 +1777,47 @@ export class GameMap {
     this._bigtopRingCentre = null;
   }
 
+  /**
+   * The Goblin High Security Prison: one of the authored layouts in
+   * `goblinPrisonLayouts.ts`, built tile for tile from the same parse the
+   * stealth system casts its lights against.
+   *
+   * The key's pedestal and the occupied cells' floors are blocked rather than
+   * given tile types of their own: the key is lifted from the floor in front
+   * of the pedestal, and the prisoners behind the bars are never reached.
+   */
+  generateGoblinPrison(plan: PrisonPlan): void {
+    const { parsed } = plan;
+    const { grid: prisonGrid } = parsed;
+    const grid: TileContent[][] = Array.from({ length: prisonGrid.height }, (_row, y) =>
+      Array.from({ length: prisonGrid.width }, (_column, x) => ({
+        tileId: `${x}#${y}`,
+        type: prisonTileTypeFor(prisonTileAt(prisonGrid, x, y)),
+      })),
+    );
+    this.structure = grid;
+    this.rebuildBlockedMasks();
+    this.blockTilePermanently(parsed.pedestal.x, parsed.pedestal.y);
+    for (let y = 0; y < prisonGrid.height; y++) {
+      for (let x = 0; x < prisonGrid.width; x++) {
+        if (prisonTileAt(prisonGrid, x, y) === PRISON_TILE.prisonerFloor) {
+          this.blockTilePermanently(x, y);
+        }
+      }
+    }
+    this.startTile = { x: parsed.entry.x, y: parsed.entry.y };
+    this.setStairwellTiles([]);
+    this.buildingEntries = [];
+    this.bossRooms = [];
+    this.mobSpawnPoints = [];
+    this.hallwaySpawnPoints = [];
+    this.safeRooms = [];
+    this._interiorExitTiles = parsed.exits.map((tile) => ({ x: tile.x, y: tile.y }));
+    this._interiorStairUpTiles = [];
+    this._interiorStairDownTiles = [];
+    this._bigtopRingCentre = null;
+  }
+
   /** Exit tile positions populated by generateInterior — used by BuildingInteriorScene. */
   _interiorExitTiles: Array<{ x: number; y: number }> = [];
   /** Centre of the big top's performance ring — set only for the Big Top interior. */
@@ -1862,7 +2027,7 @@ export class GameMap {
     this.maskHeight = this.structure.length;
     this.maskWidth = this.structure[0]?.length ?? 0;
     const cellCount = this.maskWidth * this.maskHeight;
-    this.blockedMask = new Uint8Array(cellCount);
+    this.blockedMask = new Uint16Array(cellCount);
     this.spriteBuildingMask = new Uint8Array(cellCount);
 
     for (let ty = 0; ty < this.maskHeight; ty++) {
@@ -1889,6 +2054,8 @@ export class GameMap {
     this.applyBlockKeySet(this.structureBlockedSet, BLOCK_STRUCTURE);
     this.applyBlockKeySet(this.hostileOnlyBlockedSet, BLOCK_HOSTILE_ONLY);
     this.applyBlockKeySet(this.bathroomBlockedSet, BLOCK_BATHROOM);
+    this.applyBlockKeySet(this.stealthGateBlockedSet, BLOCK_STEALTH_GATE);
+    this.applyBlockKeySet(this.bodyBlockedSet, BLOCK_BODY);
   }
 
   private applyBlockKeySet(keys: Iterable<number>, flag: number): void {
@@ -1951,6 +2118,21 @@ export class GameMap {
     this.removeBlockFlag(tileX, tileY, BLOCK_HOSTILE_ONLY);
   }
 
+  /**
+   * Holds a tile shut for walking, but not for shots, while a prop that is a
+   * body stands on it (see `BLOCK_BODY`); `on: false` opens it again.
+   */
+  setBodyBlock(tileX: number, tileY: number, on: boolean): void {
+    const key = tileCoordKey(tileX, tileY);
+    if (on) {
+      this.bodyBlockedSet.add(key);
+      this.addBlockFlag(tileX, tileY, BLOCK_BODY);
+      return;
+    }
+    this.bodyBlockedSet.delete(key);
+    this.removeBlockFlag(tileX, tileY, BLOCK_BODY);
+  }
+
   blockTilePermanently(tileX: number, tileY: number): void {
     this.permanentBlockedTiles.add(tileCoordKey(tileX, tileY));
     this.addBlockFlag(tileX, tileY, BLOCK_PERMANENT);
@@ -1980,6 +2162,7 @@ export class GameMap {
       arenaDoorLocked: this.arenaDoorLocked,
       questExitDoorState: this.questExitDoorState,
       bathroomPlumbing: this.bathroomPlumbing,
+      stealthGate: this.stealthGate,
       permanentBlockedTiles: [...this.permanentBlockedTiles],
       stairwellTiles: this._stairwellTiles.map((tile) => ({ x: tile.x, y: tile.y })),
       structureBlockedTiles: [...this.structureBlockedSet],
@@ -1993,6 +2176,7 @@ export class GameMap {
     // before it.
     this.setQuestExitDoorState(snapshot.questExitDoorState);
     this.setBathroomPlumbing(snapshot.bathroomPlumbing);
+    this.setStealthGate(snapshot.stealthGate);
 
     // The mask is only rebuilt wholesale when the structure changes, so a key
     // dropped from the set without its bit being cleared leaves the tile
@@ -2203,16 +2387,29 @@ export class GameMap {
 
   isWalkable(tileX: number, tileY: number): boolean {
     if (!this.isWalkableIgnoringBathroomQueue(tileX, tileY)) return false;
+    if ((this.blockedMask[tileIndex(tileX, tileY, this.maskWidth)] & BLOCK_BODY) !== 0)
+      return false;
     if (this.bathroomPlumbing === 'fixed') return true;
     return (this.blockedMask[tileIndex(tileX, tileY, this.maskWidth)] & BLOCK_BATHROOM) === 0;
   }
 
   /**
    * {@link isWalkable} as if the bathrooms' plumbing were already fixed. For
-   * questions about the route as built, such as which rooms lie past a safe
-   * room, whose answer must not change when the queue clears.
+   * shots in flight, which meet the queue's goblins as bodies rather than as a
+   * wall. The stealth gate still stops them: it is iron, not a crowd.
    */
   isWalkableIgnoringBathroomQueue(tileX: number, tileY: number): boolean {
+    if (!this.isWalkableIgnoringPuzzleChokes(tileX, tileY)) return false;
+    if (this.stealthGate === 'open') return true;
+    return (this.blockedMask[tileIndex(tileX, tileY, this.maskWidth)] & BLOCK_STEALTH_GATE) === 0;
+  }
+
+  /**
+   * {@link isWalkable} as if the bathrooms' plumbing were fixed and the stealth
+   * gate open. For questions about the route as built, such as which rooms lie
+   * past a safe room, whose answer must not change when a puzzle is solved.
+   */
+  isWalkableIgnoringPuzzleChokes(tileX: number, tileY: number): boolean {
     if (!this.isInsideGrid(tileX, tileY)) return false;
     const flags = this.blockedMask[tileIndex(tileX, tileY, this.maskWidth)];
     if ((flags & BLOCK_UNCONDITIONAL) !== 0) return false;
@@ -2267,6 +2464,7 @@ export class GameMap {
     if (this.arenaDoorLocked && (flags & BLOCK_ARENA_DOOR) !== 0) return false;
     if (this.questExitDoorState === 'barred' && (flags & BLOCK_QUEST_EXIT) !== 0) return false;
     if (this.bathroomPlumbing === 'broken' && (flags & BLOCK_BATHROOM) !== 0) return false;
+    if (this.stealthGate === 'locked' && (flags & BLOCK_STEALTH_GATE) !== 0) return false;
     return isWalkableTileType(this.structure[tileY][tileX]);
   }
 
@@ -2724,6 +2922,7 @@ export interface GameMapCheckpoint {
   arenaDoorLocked: boolean;
   questExitDoorState: QuestExitDoorState;
   bathroomPlumbing: BathroomPlumbing;
+  stealthGate: StealthGateState;
   /** `tileCoordKey` values, so the entries survive a structure replacement. */
   permanentBlockedTiles: number[];
   stairwellTiles: ReadonlyArray<{ x: number; y: number }>;

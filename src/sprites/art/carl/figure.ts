@@ -72,7 +72,25 @@ import {
 import { drawJacket } from './torso';
 import { clamp01, lerp, type Pt, rgba } from '../carlArt';
 import { fillSoftEllipse } from '../softShade';
-import { allocCanvas, type CanvasSurface, surfaceContext } from '../../../core/canvasSurface';
+import {
+  blitLayer,
+  clear,
+  crossOffsets,
+  dilationOffsets,
+  drawAtop,
+  inFigureSpace,
+  type Layer,
+  type LayerBounds,
+  layerBounds,
+  laySlab,
+  lightRim,
+  makeLayer,
+  occludeAround,
+  outlineInto,
+  pixelStep,
+  scratchPx,
+  tint,
+} from '../figureCompose';
 import { HUMAN_CELL_PX_PER_UNIT } from '../human/figureScale';
 
 type Ctx = CanvasRenderingContext2D;
@@ -90,22 +108,9 @@ const SHADOW_FOLLOW = 0.6;
 const SHADOW_LIFT_SHRINK = 0.55;
 
 // ── The composing surface ────────────────────────────────────────────────────
-
-/**
- * The composing surface has one scratch pixel per pixel of the surface the
- * figure is finally painted into, whatever density that is. The frame cache
- * sets that density — the cell's own pixels on a full bake, half of them on a
- * low-end display's — and composing at any other density only resamples the
- * finished figure once more on the way in: finer, and the cell is a blurred
- * downsample of it; coarser, and a blurred upsample.
- *
- * Reading the density off the transform is not reading caller state: it is
- * the scale the figure is being painted at, which a painter drawing straight
- * into its context honours by construction. The composing surface honours it
- * the same way, and every effect below is sized in cell pixels and turned into
- * scratch pixels by it, so the output is the same figure at any density.
- */
-const DEGENERATE_DENSITY = 1e-3;
+//
+// Composed on a surface of its own at the density the frame cache paints at;
+// `figureCompose.ts` says why, and owns the machinery.
 
 /**
  * How far past the extreme points it is sized round — the skeleton's joints,
@@ -140,17 +145,6 @@ const CAST_SHADOW_ALPHA = 0.55;
 
 /** Width of the bounce rim on the shadow side, in cell pixels. */
 const RIM_PX = 1;
-
-/** The figure-space rectangle the composing surface covers, and its density. */
-interface LayerBounds {
-  readonly minX: number;
-  readonly minY: number;
-  /** In scratch pixels. */
-  readonly width: number;
-  readonly height: number;
-  /** Scratch pixels per figure unit. */
-  readonly pxPerUnit: number;
-}
 
 /** Paints one attachment in figure space, from the skeleton the body was solved to. */
 export type CarlAttachmentPainter = (
@@ -189,50 +183,6 @@ export interface CarlComposeOptions {
   /** False leaves the silhouette outline off, so a gate can tell its ink from the parts'. */
   readonly silhouetteOutline?: boolean;
   readonly attachments?: CarlAttachments;
-}
-
-function fraction(value: number): number {
-  return value - Math.floor(value);
-}
-
-/**
- * The surface round `extents`, at the density `ctx` is painting at.
- *
- * The surface's pixel grid is laid on the target's own: its origin is snapped
- * to a whole target pixel. Left fractional, it slides a sub-pixel with every
- * hand that moves, every edge of the figure is rasterised a little
- * differently, and a standing idle shimmers from frame to frame.
- */
-function layerBounds(ctx: Ctx, reaches: readonly InkReach[]): LayerBounds {
-  const transform = ctx.getTransform();
-  const pxPerUnit = Math.max(Math.hypot(transform.a, transform.b), DEGENERATE_DENSITY);
-  const gridX = fraction(transform.e);
-  const gridY = fraction(transform.f);
-  let left = Infinity;
-  let top = Infinity;
-  let right = -Infinity;
-  let bottom = -Infinity;
-  for (const { points, margin } of reaches) {
-    for (const p of points) {
-      left = Math.min(left, p.x - margin);
-      top = Math.min(top, p.y - margin);
-      right = Math.max(right, p.x + margin);
-      bottom = Math.max(bottom, p.y + margin);
-    }
-  }
-  const snap = (value: number, grid: number): number =>
-    (Math.floor(value * pxPerUnit + grid) - grid) / pxPerUnit;
-  const minX = snap(left, gridX);
-  const minY = snap(top, gridY);
-  const width = Math.ceil((right - minX) * pxPerUnit);
-  const height = Math.ceil((bottom - minY) * pxPerUnit);
-  return { minX, minY, width, height, pxPerUnit };
-}
-
-/** Points a figure's ink reaches toward, and how far past them it can still run. */
-interface InkReach {
-  readonly points: readonly Pt[];
-  readonly margin: number;
 }
 
 /** The skeleton's extreme points: every joint, and the head's box. */
@@ -283,22 +233,15 @@ function paintedExtents(skeleton: Skeleton, view: ViewSpec, pose: CarlPose): Pt[
   return extents;
 }
 
-/** How many cell pixels one scratch pixel of `bounds` is. */
-function scratchPx(bounds: LayerBounds, cellPx: number): number {
-  return Math.max(1, Math.round((cellPx * bounds.pxPerUnit) / HUMAN_CELL_PX_PER_UNIT));
+function carlPx(bounds: LayerBounds, cellPx: number): number {
+  return scratchPx(bounds, cellPx, HUMAN_CELL_PX_PER_UNIT);
 }
 
 /** The direction a shadow falls in: straight away from the key light. */
 const SHADOW_FALL: Pt = { x: -LIGHT.x, y: -LIGHT.y };
 
-/**
- * `SHADOW_FALL` scaled to `distance` scratch pixels and snapped to whole ones.
- * Every layer-to-layer blit here lands on the pixel grid: a fractional offset
- * makes the rasteriser resample the whole surface, which in node-canvas cost
- * several times the rest of the painter put together.
- */
 function fallBy(distance: number): Pt {
-  return { x: Math.round(SHADOW_FALL.x * distance), y: Math.round(SHADOW_FALL.y * distance) };
+  return pixelStep(SHADOW_FALL, distance);
 }
 
 /** The whole-pixel offsets every compositing pass uses, at one surface's density. */
@@ -313,78 +256,13 @@ interface LayerOffsets {
 }
 
 function layerOffsets(bounds: LayerBounds): LayerOffsets {
-  const outlinePx = scratchPx(bounds, OUTLINE_PX);
-  const occlusionPx = scratchPx(bounds, OCCLUSION_PX);
   return {
-    cast: fallBy(scratchPx(bounds, CAST_DROP_PX)),
-    farCast: fallBy(scratchPx(bounds, KNEE_CAST_DROP_PX)),
-    rim: fallBy(scratchPx(bounds, RIM_PX)),
-    outline: Array.from({ length: OUTLINE_SAMPLES }, (_unused, i) => {
-      const angle = (i / OUTLINE_SAMPLES) * TWO_PI;
-      return {
-        x: Math.round(Math.cos(angle) * outlinePx),
-        y: Math.round(Math.sin(angle) * outlinePx),
-      };
-    }),
-    occlusion: [
-      { x: occlusionPx, y: 0 },
-      { x: -occlusionPx, y: 0 },
-      { x: 0, y: occlusionPx },
-      { x: 0, y: -occlusionPx },
-    ],
+    cast: fallBy(carlPx(bounds, CAST_DROP_PX)),
+    farCast: fallBy(carlPx(bounds, KNEE_CAST_DROP_PX)),
+    rim: fallBy(carlPx(bounds, RIM_PX)),
+    outline: dilationOffsets(carlPx(bounds, OUTLINE_PX), OUTLINE_SAMPLES),
+    occlusion: crossOffsets(carlPx(bounds, OCCLUSION_PX)),
   };
-}
-
-interface Layer {
-  readonly surface: CanvasSurface;
-  readonly ctx: Ctx;
-}
-
-function makeLayer(bounds: LayerBounds): Layer {
-  const surface = allocCanvas(bounds.width, bounds.height);
-  return { surface, ctx: surfaceContext(surface) };
-}
-
-/** Runs `paint` on a layer in figure units, leaving the layer's own state as it found it. */
-function inFigureSpace(layer: Layer, bounds: LayerBounds, paint: (ctx: Ctx) => void): void {
-  const { ctx } = layer;
-  ctx.save();
-  try {
-    ctx.scale(bounds.pxPerUnit, bounds.pxPerUnit);
-    ctx.translate(-bounds.minX, -bounds.minY);
-    paint(ctx);
-  } finally {
-    ctx.restore();
-  }
-}
-
-/** Replaces every pixel's colour with `colour`, multiplying its alpha by the colour's own. */
-function tint(layer: Layer, colour: string): void {
-  const { ctx, surface } = layer;
-  ctx.save();
-  ctx.globalCompositeOperation = 'source-in';
-  ctx.fillStyle = colour;
-  ctx.fillRect(0, 0, surface.width, surface.height);
-  ctx.restore();
-}
-
-function clear(layer: Layer): void {
-  layer.ctx.clearRect(0, 0, layer.surface.width, layer.surface.height);
-}
-
-/**
- * Draws `source` onto `target` only where `target` already has ink.
- *
- * Any fade belongs in `source`'s own alpha (see {@link tint}), not in
- * `globalAlpha`: a masked composite under a global alpha takes node-canvas's
- * slow path and cost more than the whole rest of the figure.
- */
-function drawAtop(target: Layer, source: Layer, dx: number, dy: number): void {
-  const { ctx } = target;
-  ctx.save();
-  ctx.globalCompositeOperation = 'source-atop';
-  ctx.drawImage(source.surface, dx, dy);
-  ctx.restore();
 }
 
 /**
@@ -397,12 +275,8 @@ function drawAtop(target: Layer, source: Layer, dx: number, dy: number): void {
  * on its own. A part that needs one at a specific overlap paints it with
  * `castShadow`.
  */
-function laySlab(body: Layer, part: Layer, scratch: Layer, offsets: LayerOffsets): void {
-  clear(scratch);
-  scratch.ctx.drawImage(part.surface, 0, 0);
-  tint(scratch, rgba(CAST_SHADOW_TONE, CAST_SHADOW_ALPHA));
-  drawAtop(body, scratch, offsets.cast.x, offsets.cast.y);
-  body.ctx.drawImage(part.surface, 0, 0);
+function carlSlab(body: Layer, part: Layer, scratch: Layer, offsets: LayerOffsets): void {
+  laySlab(body, part, scratch, offsets.cast, rgba(CAST_SHADOW_TONE, CAST_SHADOW_ALPHA));
 }
 
 /**
@@ -416,17 +290,14 @@ function laySlab(body: Layer, part: Layer, scratch: Layer, offsets: LayerOffsets
  * touches the body — is what says the arm is a separate form lying on it. It
  * is a cool, half-strength shadow, not an ink line.
  */
-function occludeAround(
+function occludeCarl(
   body: Layer,
   part: Layer,
   scratch: Layer,
   offsets: LayerOffsets,
   alpha: number,
 ): void {
-  clear(scratch);
-  for (const offset of offsets.occlusion) scratch.ctx.drawImage(part.surface, offset.x, offset.y);
-  tint(scratch, rgba(CAST_SHADOW_TONE, alpha));
-  drawAtop(body, scratch, 0, 0);
+  occludeAround(body, part, scratch, offsets.occlusion, rgba(CAST_SHADOW_TONE, alpha));
 }
 
 /**
@@ -479,63 +350,7 @@ function lightShadowRim(
   offsets: LayerOffsets,
   clearRim: (layer: Layer) => void,
 ): void {
-  clear(scratch);
-  const { ctx } = scratch;
-  ctx.drawImage(body.surface, 0, 0);
-  ctx.save();
-  ctx.globalCompositeOperation = 'destination-out';
-  ctx.drawImage(body.surface, -offsets.rim.x, -offsets.rim.y);
-  ctx.restore();
-  tint(scratch, rgba(RIM_LIGHT, RIM_ALPHA));
-  clearRim(scratch);
-  drawAtop(body, scratch, 0, 0);
-}
-
-/**
- * Builds the finished figure with its outline into `out`: the silhouette
- * dilated by {@link OUTLINE_PX}, tinted and faded to the outline's alpha, with
- * the figure laid over it so only the outside ring shows.
- *
- * Head-on (`closeGaps`) the ring is the dilation minus its own erosion back by
- * the same amount — the silhouette *closed* — rather than minus the silhouette
- * itself. There the arms hang a pixel or two off the jacket's and the shorts'
- * sides, and the plain difference fills that sliver with outline: the very ink
- * line between arm and body the outline must never draw. Closed, the sliver
- * stays open to the floor. Edge-on the near arm lies over the body instead,
- * and its contact shadow parts it. `scratch` is free to reuse afterwards.
- */
-function outlineInto(
-  out: Layer,
-  body: Layer,
-  scratch: Layer,
-  offsets: LayerOffsets,
-  closeGaps: boolean,
-): void {
-  clear(out);
-  const { ctx } = out;
-  for (const offset of offsets.outline) ctx.drawImage(body.surface, offset.x, offset.y);
-
-  if (closeGaps) {
-    clear(scratch);
-    const closed = scratch.ctx;
-    closed.drawImage(out.surface, 0, 0);
-    closed.save();
-    closed.globalCompositeOperation = 'destination-in';
-    for (const offset of offsets.outline) closed.drawImage(out.surface, -offset.x, -offset.y);
-    closed.restore();
-  }
-
-  tint(out, SILHOUETTE_OUTLINE);
-  ctx.save();
-  if (closeGaps) {
-    ctx.globalCompositeOperation = 'destination-out';
-    ctx.drawImage(scratch.surface, 0, 0);
-  }
-  ctx.globalCompositeOperation = 'destination-in';
-  ctx.fillStyle = rgba(SILHOUETTE_OUTLINE, SILHOUETTE_OUTLINE_ALPHA);
-  ctx.fillRect(0, 0, out.surface.width, out.surface.height);
-  ctx.restore();
-  ctx.drawImage(body.surface, 0, 0);
+  lightRim(body, scratch, offsets.rim, rgba(RIM_LIGHT, RIM_ALPHA), clearRim);
 }
 
 // ── Draw order ───────────────────────────────────────────────────────────────
@@ -1129,31 +944,44 @@ function drawFigure(
     clear(part);
     inFigureSpace(part, bounds, paintSlab);
     if (index === slabs.nearLegSlab) {
-      occludeAround(body, part, scratch, offsets, OCCLUSION_ALPHA_NEAR_LEG);
+      occludeCarl(body, part, scratch, offsets, OCCLUSION_ALPHA_NEAR_LEG);
     }
     if (index === slabs.kneeSlab) {
-      occludeAround(body, part, scratch, offsets, OCCLUSION_ALPHA_KNEE);
+      occludeCarl(body, part, scratch, offsets, OCCLUSION_ALPHA_KNEE);
       castFar(body, part, scratch, offsets);
     }
-    laySlab(body, part, scratch, offsets);
+    carlSlab(body, part, scratch, offsets);
   });
   clear(part);
   inFigureSpace(part, bounds, slabs.frontArms);
-  occludeAround(
+  occludeCarl(
     body,
     part,
     scratch,
     offsets,
     view.profile ? OCCLUSION_ALPHA_EDGE_ON : OCCLUSION_ALPHA_HEAD_ON,
   );
-  laySlab(body, part, scratch, offsets);
+  carlSlab(body, part, scratch, offsets);
 
   lightShadowRim(body, scratch, offsets, (layer) =>
     inFigureSpace(layer, bounds, (layerCtx) => clearSoleRims(layerCtx, skeleton, view, pose)),
   );
   // The outline is built on the part surface, which is free once every slab is laid.
   const finished = options.silhouetteOutline === false ? body : part;
-  if (finished === part) outlineInto(part, body, scratch, offsets, !view.profile);
+  // Head-on the arms hang a pixel or two off the jacket's and the shorts'
+  // sides, so that outline closes its gaps; edge-on the near arm lies over the
+  // body instead, and its contact shadow parts it.
+  if (finished === part) {
+    outlineInto(
+      part,
+      body,
+      scratch,
+      offsets.outline,
+      SILHOUETTE_OUTLINE,
+      rgba(SILHOUETTE_OUTLINE, SILHOUETTE_OUTLINE_ALPHA),
+      !view.profile,
+    );
+  }
   if (pose.palmGlow) {
     const glow = pose.palmGlow;
     inFigureSpace(finished, bounds, (layer) => drawPalmGlow(layer, skeleton, pose, glow));
@@ -1162,13 +990,7 @@ function drawFigure(
     inFigureSpace(finished, bounds, (layer) => drawGauntletSmoke(layer, pose, view, skeleton));
   }
 
-  ctx.drawImage(
-    finished.surface,
-    bounds.minX,
-    bounds.minY,
-    bounds.width / bounds.pxPerUnit,
-    bounds.height / bounds.pxPerUnit,
-  );
+  blitLayer(ctx, finished, bounds);
 }
 
 /** Carl seen head-on, walking toward the camera. */

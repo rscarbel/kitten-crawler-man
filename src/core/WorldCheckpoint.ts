@@ -9,6 +9,7 @@ import type { BountyCheckpoint } from '../systems/BountySystem';
 import type { CircusQuestCheckpoint } from '../systems/CircusQuestSystem';
 import type { DefendQuestCheckpoint } from '../systems/DefendQuestSystem';
 import type { CloggedBathroomCheckpoint } from '../systems/cloggedBathroom/cloggedBathroomCheckpoint';
+import type { StealthKeySnatchCheckpoint } from '../systems/stealthKeySnatch/stealthKeySnatchCheckpoint';
 import type { DestructionCheckpoint } from '../systems/kits/DestructionKit';
 import type { DifficultyTelemetryCheckpoint } from '../systems/DifficultyTelemetrySystem';
 import type { DoomsdayEscapeCheckpoint } from '../systems/DoomsdayEscapeSystem';
@@ -73,6 +74,8 @@ export interface WorldCheckpoint {
   defendQuest: DefendQuestCheckpoint;
   /** Where the bathroom quest stands and whether its explainer was seen; the board's turns are not kept. */
   cloggedBathroom: CloggedBathroomCheckpoint;
+  /** Where the stealth gate's key quest stands; the gate itself is in `gameMap`. */
+  stealthKeySnatch: StealthKeySnatchCheckpoint;
   spiderQuest: SpiderQuestCheckpoint;
   circusQuest: CircusQuestCheckpoint;
   murderQuest: MurderMysteryQuestCheckpoint;

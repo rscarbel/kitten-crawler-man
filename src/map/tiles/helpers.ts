@@ -66,6 +66,8 @@ import {
   HOLLOW_PROP_TALL,
   HOLLOW_PALISADE,
   HOLLOW_GATE,
+  STEALTH_GATE_CLOSED,
+  STEALTH_GATE_OPEN,
   ROCK_DEPOSIT,
   CIRCUS_STRUCTURE_TALL,
   CIRCUS_STRUCTURE_LOW,
@@ -225,6 +227,8 @@ const NON_FLOOR_TYPES = new Set<number>([
   ROCK_DEPOSIT,
   CIRCUS_STRUCTURE_TALL,
   CIRCUS_STRUCTURE_LOW,
+  STEALTH_GATE_CLOSED,
+  STEALTH_GATE_OPEN,
   // The service level's furniture and its floor clutter: a decal has no floor
   // of its own to report, any more than a rug does.
   ...SERVICE_LEVEL_TILE_TYPES,

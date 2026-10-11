@@ -3,7 +3,8 @@
  * Idle stillness gates for every figure that stands on Carl's breathing idle —
  * Carl, the human townsfolk cast and named residents, Gum Gum, the city elf
  * cultists, Mordecai's Incubus — and for the skyfowl cast and the Cretin hirelings that
- * stand beside them.
+ * stand beside them, and the goblins (all five archetypes and the plumber), whose
+ * camps and bathroom queue stand about in groups.
  *
  *   I1  a standing figure does not sway: across its idle row, the head, the
  *       hips and the whole silhouette each travel sideways less than
@@ -62,6 +63,12 @@ import {
   TICKS_PER_SECOND,
 } from '../src/sprites/art/human/timing.js';
 import { townCastLoopFrame } from '../src/sprites/townCastSprite.js';
+import {
+  GOBLIN_ARCHETYPES,
+  GOBLIN_FIGURES,
+  GOBLIN_PLUMBER_FIGURE,
+} from '../src/sprites/art/goblinFigure.js';
+import { bathroomGoblinAnimator, type GoblinPassiveAnimator } from '../src/sprites/goblinSprite.js';
 import { skyfowlCastLoopFrame } from '../src/sprites/skyfowlCastSprite.js';
 
 /**
@@ -158,7 +165,20 @@ function idleSubjects(): IdleSubject[] {
       });
     }
   }
+  for (const archetype of GOBLIN_ARCHETYPES) {
+    subjects.push({
+      label: `goblin_${archetype}.idle`,
+      def: GOBLIN_FIGURES[archetype],
+      state: 'idle',
+    });
+  }
+  subjects.push({ label: 'goblin_plumber.idle', def: GOBLIN_PLUMBER_FIGURE, state: 'idle' });
   return subjects;
+}
+
+/** The frame a standing goblin's own animator draws at `seconds`, with no fidget due. */
+function goblinIdleFrameAt(animator: GoblinPassiveAnimator, seconds: number): number {
+  return animator.resolvePassive(seconds, false).frame;
 }
 
 interface Measures {
@@ -372,10 +392,12 @@ function breathSeconds(frameAt: (seconds: number) => number): number | null {
 }
 
 function gateBreathLength(): void {
+  const goblinAnimator = bathroomGoblinAnimator('sword');
   const clocks: ReadonlyArray<readonly [string, (seconds: number) => number]> = [
     ['the shared idle clock (Gum Gum, cultists, Incubus)', idleFrameAtSeconds],
     ['the town cast idle', (t) => townCastLoopFrame('idle', TOWN_CAST_IDLE_FRAMES, t)],
     ['the skyfowl cast idle', (t) => skyfowlCastLoopFrame('idle', SKYFOWL_IDLE_FRAMES, t)],
+    ['the goblin idle', (t) => goblinIdleFrameAt(goblinAnimator, t)],
   ];
   for (const [label, frameAt] of clocks) {
     const seconds = breathSeconds(frameAt);
@@ -416,6 +438,9 @@ function writePreview(): void {
     'cultist.idle_side',
     'incubus.idle',
     'cretin_sledge.idle',
+    'goblin_sword.idle',
+    'goblin_bow.idle',
+    'goblin_plumber.idle',
     `skyfowl_${SKYFOWL_CIVILIAN_LOOKS[0].id}.idle`,
   ]);
   const subjects = idleSubjects().filter((subject) => wanted.has(subject.label));

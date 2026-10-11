@@ -14,6 +14,7 @@ import { readableBuildings, readablesFor, type Readable } from '../../../systems
 import { BlackjackRules } from '../../../ui/screens/dialogs/BlackjackRules';
 import { defendTutorialSurface } from '../../../ui/screens/dialogs/defendTutorial';
 import { pipeBoardExplainerSurface } from '../../../ui/screens/dialogs/pipeBoardExplainer';
+import { prisonExplainerSurface } from '../../../ui/screens/dialogs/prisonExplainer';
 import { nearGoblinHintSurface } from '../../../ui/screens/dialogs/nearGoblinHint';
 import { NoticeBoard } from '../../../ui/screens/dialogs/NoticeBoard';
 import { ReadableOverlay } from '../../../ui/screens/dialogs/ReadableOverlay';
@@ -243,6 +244,40 @@ function pipeBoardExplainerFixtures(): readonly DialogFixture[] {
     };
   });
 }
+const PRISON_PAGES = 3;
+
+function prisonExplainerFixtures(): readonly DialogFixture[] {
+  const name = 'prison-explainer';
+  return Array.from({ length: PRISON_PAGES }, (_unused, page) => {
+    const fixtureName = page === 0 ? name : `${name}-page${page + 1}`;
+    return {
+      name: fixtureName,
+      surfaces: (shown: () => boolean) => {
+        let open = false;
+        const surface = prisonExplainerSurface(
+          {
+            get isPrisonExplainerOpen() {
+              return open;
+            },
+            finishPrisonExplainer: () => {
+              open = false;
+            },
+            dismissPrisonExplainer: () => {
+              open = false;
+            },
+          },
+          fixtureName,
+        );
+        return [
+          gated(surface, shown, () => {
+            open = true;
+          }),
+        ];
+      },
+      interact: page === 0 ? undefined : pressTimes('ArrowRight', page),
+    };
+  });
+}
 const THREE_PAGES = 3;
 
 export const FIXTURES: readonly DialogFixture[] = [
@@ -305,6 +340,7 @@ export const FIXTURES: readonly DialogFixture[] = [
     ),
   ),
   ...pipeBoardExplainerFixtures(),
+  ...prisonExplainerFixtures(),
   readableFixture('readable', 0),
   readableFixture('readable-page2', 1),
   noticeFixture('notice-board', 0),

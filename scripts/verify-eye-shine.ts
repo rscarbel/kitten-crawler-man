@@ -69,6 +69,9 @@ const { NecroFairy } = await import('../src/creatures/fairies/NecroFairy.js');
 const { ShieldFairy } = await import('../src/creatures/fairies/ShieldFairy.js');
 const { Goblin } = await import('../src/creatures/Goblin.js');
 const { BathroomGoblin } = await import('../src/creatures/BathroomGoblin.js');
+const { PrisonGoblin } = await import('../src/creatures/PrisonGoblin.js');
+const { PrisonerGoblin } = await import('../src/creatures/PrisonerGoblin.js');
+const { PrisonCellDoor } = await import('../src/creatures/PrisonCellDoor.js');
 const { GoblinArcher } = await import('../src/creatures/GoblinArcher.js');
 const { GraveBull } = await import('../src/creatures/GraveBull.js');
 const { GrimaldiVine } = await import('../src/creatures/GrimaldiVine.js');
@@ -145,16 +148,6 @@ interface Subject {
 const SUBJECT_TILE = 6;
 const at = [SUBJECT_TILE, SUBJECT_TILE, TILE_SIZE] as const;
 
-/**
- * A bathroom goblin standing still: his potty dance shifts the whole body a
- * few pixels each frame, which the gate would read as eyes off the head.
- */
-function stillBathroomGoblin(role: 'queue' | 'plumber', archetype: 'sword' | 'bow'): MobInstance {
-  const goblin = new BathroomGoblin(...at, role, 1, archetype);
-  goblin.dancing = false;
-  return goblin;
-}
-
 function eyed(label: string, mob: MobInstance, headEnd: HeadEnd = 'upright'): Subject {
   return { label, mob, eyeless: false, headEnd };
 }
@@ -166,7 +159,15 @@ function eyeless(label: string, mob: MobInstance): Subject {
 const GOBLIN_WEAPONS = ['sword', 'axe', 'mace', 'warhammer'] as const;
 const RAISED_RATKIN_LOOKS = ['smock', 'jack', 'shroud'] as const;
 const COW_AGES = ['adult', 'calf'] as const;
-const MONGO_STAGE_LEVELS = [1, 5, 10] as const;
+/** The Mongo levels at which his figure changes stage. */
+const MONGO_FIRST_STAGE_LEVEL = 1;
+const MONGO_SECOND_STAGE_LEVEL = 5;
+const MONGO_THIRD_STAGE_LEVEL = 10;
+const MONGO_STAGE_LEVELS = [
+  MONGO_FIRST_STAGE_LEVEL,
+  MONGO_SECOND_STAGE_LEVEL,
+  MONGO_THIRD_STAGE_LEVEL,
+] as const;
 const MERCENARY_IDS = [
   'sledge',
   'bomo',
@@ -258,10 +259,16 @@ const SUBJECTS: Readonly<Record<string, () => readonly Subject[]>> = {
   ShieldFairy: () => [eyed('shield fairy', new ShieldFairy(...at))],
   Goblin: () => GOBLIN_WEAPONS.map((weapon) => eyed(`goblin ${weapon}`, new Goblin(...at, weapon))),
   BathroomGoblin: () => [
-    eyed('bathroom goblin in line', stillBathroomGoblin('queue', 'sword')),
-    eyed('bathroom goblin with a bow', stillBathroomGoblin('queue', 'bow')),
-    eyed('bathroom plumber', stillBathroomGoblin('plumber', 'sword')),
+    eyed('bathroom goblin in line', new BathroomGoblin(...at, 'queue', 1, 'sword')),
+    eyed('bathroom goblin with a bow', new BathroomGoblin(...at, 'queue', 1, 'bow')),
+    eyed('bathroom plumber', new BathroomGoblin(...at, 'plumber', 1, 'sword')),
   ],
+  PrisonGoblin: () => [
+    eyed('prison gate guard', new PrisonGoblin(...at, 'gateGuard', 1)),
+    eyed('prison patrol guard', new PrisonGoblin(...at, 'patrol', 1)),
+  ],
+  PrisonerGoblin: () => [eyed('goblin prisoner', new PrisonerGoblin(...at, 1))],
+  PrisonCellDoor: () => [eyeless('prison cell door', new PrisonCellDoor(...at, 'across'))],
   GoblinArcher: () => [eyed('goblin archer', new GoblinArcher(...at))],
   GraveBull: () => [eyed('grave bull', new GraveBull(...at))],
   GrimaldiVine: () => [eyeless('Grimaldi vine', new GrimaldiVine(...at))],
@@ -369,7 +376,9 @@ async function concreteCreatureClasses(): Promise<Map<string, string>> {
     const abstractNames = new Set(
       [...source.matchAll(/abstract class (\w+)/g)].map((match) => match[1]),
     );
-    const module: Record<string, unknown> = await import(pathToFileURL(file).href);
+    const imported: unknown = await import(pathToFileURL(file).href);
+    if (typeof imported !== 'object' || imported === null) continue;
+    const module: object = imported;
     for (const [name, value] of Object.entries(module)) {
       if (typeof value !== 'function' || value === Mob) continue;
       if (!Object.prototype.isPrototypeOf.call(Mob, value)) continue;
@@ -619,6 +628,9 @@ function glintError(
 // ── Contact sheet ────────────────────────────────────────────────────────────
 
 const LABEL_HEIGHT = 18;
+/** Where a cell's label sits: inset from the cell's left edge, and up from the label band's bottom. */
+const LABEL_INSET_X = 4;
+const LABEL_BASELINE_LIFT = 5;
 const BACKDROP = '#3b3b40';
 const TILE_GUIDE = 'rgba(120,220,255,0.7)';
 const GRID_TENTH = 'rgba(255,255,255,0.08)';
@@ -684,7 +696,11 @@ function writeSheet(path: string, rows: readonly (readonly Cell[])[]): void {
       ctx.restore();
       ctx.fillStyle = LABEL_COLOR;
       ctx.font = LABEL_FONT;
-      ctx.fillText(`${cell.label} ${FACINGS[column].name}`, left + 4, top + LABEL_HEIGHT - 5);
+      ctx.fillText(
+        `${cell.label} ${FACINGS[column].name}`,
+        left + LABEL_INSET_X,
+        top + LABEL_HEIGHT - LABEL_BASELINE_LIFT,
+      );
     });
   });
   console.log(`contact sheet: ${writePreviewPng(path, sheet.toBuffer('image/png'))}`);

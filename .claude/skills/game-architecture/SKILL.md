@@ -46,6 +46,15 @@ Kit fields stay concrete types: `update` signatures are not uniform, so a `GameS
 
 `CloggedBathroomSystem` (`src/systems/cloggedBathroom/`, `DungeonScene.cloggedBathroom`) runs floor 2's clogged bathrooms: the invulnerable `BathroomGoblin` queue and plumber in every copy, the floor's one pipe board (generated on first open, behind its explainer) and its surfaces, the stall visit and its `refreshed` status, and the "The Clogged Bathroom" mini quest. Its link in the interact chain, its render slots (`renderGround`, `sortedFixtures`, `renderAbove`, the `isCrawlerHidden` render predicate), `questMarkers` and `trackerEntries()` follow the boss-room dressing slots below. The map half is in `add-level`.
 
+`StealthKeySnatchSystem` (`src/systems/stealthKeySnatch/`, `DungeonScene.stealthKeySnatch`) owns floor 2's stealth gate: the gate guard (a `PrisonGoblin` in the `gateGuard` role), the PRISON sign, the mini quest "The Stealth Key Snatch" and its phase (`StealthKeySnatchPhase`: `unmet` → `briefed` → `keyHeld` → `opened`, following `quest_prison_key` in the inventories), and `gameMap.setStealthGate`. The prison door refuses an unbriefed party (`prisonDoorRefusal`, read by `DungeonScene.sealedBuildingMessage`). The quest is checkpointed and saved as `StealthKeySnatchCheckpoint` (`WorldCheckpoint.stealthKeySnatch`, `PersistedWorldState.stealthKeySnatch`, absent in older saves, which load unmet and locked). The system is the `StealthKeySnatchVisit` the prison reads through its floor context; `detachedPrisonVisit` stands in for a dev route or harness with no floor outside.
+
+The prison interior (`goblin_prison` variant, map half in `add-level`) runs two systems in `BuildingInteriorScene`:
+
+- `GoblinPrisonSystem` — patrols, lights, suspicion, capture (freeze, fade, both crawlers thrown in the first holding cell, every loop reset; the key and phase are kept) and the breakable `PrisonCellDoor`s. Guards are invulnerable `PrisonGoblin`s; `PrisonerGoblin`s fill the cells. Drawn is caught: one light shape per frame is what the darkness is cut with and what detection tests.
+- `PrisonKeySystem` — the key on its pedestal (there exactly when no crawler holds it and the gate is still shut; never stored), guidance and the first-visit explainer. Recall and travel are refused indoors (`refuseAnchorIndoors`), so the only way out is the exit tiles.
+
+Pure modules they share with the solver: `detection.ts` (`castCone`, `castDisc`, `lightSeesBody`), `prisonPatrols.ts` (`prisonStateAt`, a pure function of the frame), `prisonNoise.ts` (`respondToNoise`: alarm when seen, investigate when only heard), `prisonTuning.ts` (`PRISON_TUNING` per difficulty). Art and sound: `prisonGround.ts`, `prisonLighting.ts`, `prisonSoundCues.ts` (`PRISON_CUES`, preloaded through the `stealthKeySnatch` sfx group). Neither companion is admitted: they wait on the gate room's `waitingTiles` (`seatCompanionsWaitingOutsidePrison`). Gates: `verify:stealth-key-snatch-play`, `verify:prison-capture`, `verify:prison-stealth`.
+
 `EmoteEffectSystem` (`src/systems/EmoteEffectSystem.ts`) draws floating emotes (a petted cow's hearts) and is built to take other emote kinds.
 
 ### The town
@@ -62,6 +71,18 @@ The floor-3 town's systems, and where each rule lives. The durable description i
 - **Memory:** `TownMemory` (`src/core/TownMemory.ts`) is threaded by reference through both scenes, like `BriarHollowState`: resident talks, cleared rooms and camps, and props that have paid out. `RENAMED_BUILDINGS` migrates old building names in saves.
 - **Talk:** `src/dialog/walkAway.ts` is the one walk-away rule. `src/systems/safeRoomSpeaker.ts` decides whether a press in the safe room is for the Bopca or Mordecai.
 - **Arrival:** `findPartyArrivalTiles` (`src/map/findWalkableTile.ts`) sets the party down on every arrival. Every gameplay scene, on every floor, arrives behind an `ArrivalLoader` (`src/scenes/ArrivalLoader.ts`, abstract on `GameplayScene`); `src/scenes/floorArrivalLoad.ts` builds its tasks, run by `LoadRunner` (`src/core/LoadRunner.ts`). See `add-level`.
+
+### Buildings under a dungeon floor
+
+`DungeonScene` builds a `BuildingSystem` on any floor whose map has `buildingEntries` (floor 2's prison door is one), not only the overworld. `floorRegeneratesAroundBuildings` decides what a door does with the floor:
+
+- **Overworld:** regenerated around the party on the way out.
+- **Any other floor:** held aside. `holdFloorForInterior` writes a save at the door when one is allowed (no fight, boss or revive pending), then returns a `DungeonInteriorReturn` (`src/scenes/dungeonInteriorReturn.ts`, memory only): the live crawlers and population (corpses included, less the mobs systems stand up themselves), a `WorldCheckpoint`, the collapse clock, the return tile and the last save. The scene rebuilt on the way out takes it as `interiorReturn` and calls `applyWorldCheckpoint(world, frames, 'keep')` instead of spawning a floor; `withVisitOutcome` folds back the quest state the interior changed.
+- `applyWorldCheckpoint` is shared with the death rewind (`'rewind'`): both run `restoreFloorCheckpoint` (the floor's systems); only a death also runs `restoreRunProgress` (tallies, companions, threaded objects), because the party kept spending and earning indoors.
+- The interior reads its floor through `InteriorFloorContext` (`src/scenes/interiorFloorContext.ts`; `TOWN_INTERIOR_FLOOR` for the town): floor number, ground sheets and sprite groups, sight radius, whether it owns the music, `heldLevelTimerFrames` (the collapse clock shown paused; nothing indoors ticks it), and the optional `variant` and `stealthKeySnatch` visit for the prison.
+- A defeat indoors rebuilds the held floor first and then calls `respawnAfterDeath()`, so it rewinds exactly like a death outside.
+
+Gate: `npm run verify:dungeon-interior-return` (same creatures and systems back, party at the door, clock held then running, door save resumes in front of the door).
 
 ### Boss-room dressing
 

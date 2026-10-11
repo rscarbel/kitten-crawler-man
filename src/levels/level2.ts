@@ -24,6 +24,14 @@ const BATHROOM_ROOM_W = 14;
 const BATHROOM_ROOM_H = 12;
 
 /**
+ * The stealth gate room halfway along the spine. The largest chain room, so it
+ * seats at the spine's pitch and leaves north wall either side of a doorway
+ * for the prison door.
+ */
+const STEALTH_GATE_ROOM_W = 14;
+const STEALTH_GATE_ROOM_H = 12;
+
+/**
  * Rooms walked between the Krakaren Clone's lair and the arena's antechamber.
  *
  * The two are only a few dozen tiles apart on a compact floor, so this is a
@@ -230,6 +238,7 @@ export const level2: LevelDef = {
     spine: {
       rooms: { min: SPINE_ROOMS_MIN, max: SPINE_ROOMS_MAX },
       splits: { min: SPINE_SPLITS_MIN, max: SPINE_SPLITS_MAX },
+      stealthGate: { w: STEALTH_GATE_ROOM_W, h: STEALTH_GATE_ROOM_H },
     },
     // No scatterSafeRooms: the spine's safe-access pockets come entirely from
     // its own mandatory pocket count, not a configured minimum.

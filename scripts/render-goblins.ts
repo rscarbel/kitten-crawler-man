@@ -165,12 +165,12 @@ interface PartWindow {
  * review on Carl only became possible once the face could be looked at alone.
  */
 const PART_WINDOWS: Record<string, PartWindow> = {
-  head: { x: 0.34, y: 0.02, w: 0.42, h: 0.3 },
-  ears: { x: 0.22, y: 0.02, w: 0.4, h: 0.26 },
-  hands: { x: 0.28, y: 0.38, w: 0.56, h: 0.34 },
-  weapon: { x: 0.4, y: 0.3, w: 0.6, h: 0.55 },
-  feet: { x: 0.24, y: 0.72, w: 0.5, h: 0.28 },
-  wound: { x: 0.2, y: 0.2, w: 0.6, h: 0.6 },
+  head: { x: 0.3, y: 0.05, w: 0.45, h: 0.55 },
+  ears: { x: 0.2, y: 0.02, w: 0.62, h: 0.55 },
+  hands: { x: 0.3, y: 0.32, w: 0.52, h: 0.46 },
+  weapon: { x: 0.4, y: 0.15, w: 0.6, h: 0.8 },
+  feet: { x: 0.22, y: 0.68, w: 0.6, h: 0.32 },
+  wound: { x: 0.25, y: 0.15, w: 0.5, h: 0.7 },
 };
 
 function parseFlag(name: string, fallback: string): string {

@@ -3,6 +3,7 @@ import type { BuildingEntry } from '../systems/BuildingSystem';
 import { interiorSellsSomething } from '../systems/townServices';
 import { CONTRACT_CUES } from '../systems/constructionContracts/contractSoundCues';
 import { BATHROOM_CUES } from '../systems/cloggedBathroom/bathroomSoundCues';
+import { PRISON_CUES } from '../systems/stealthKeySnatch/prisonSoundCues';
 
 /**
  * Where a group of non-streaming sound effects can be heard. The 144
@@ -23,6 +24,7 @@ export type SfxGroup =
   | 'briarHollow'
   | 'constructionContracts'
   | 'cloggedBathroom'
+  | 'stealthKeySnatch'
   | 'bounty'
   | 'circusQuest'
   | 'murderMysteryQuest'
@@ -482,6 +484,12 @@ export const SFX_GROUPS: Record<SfxGroup, readonly SoundId[]> = {
   cloggedBathroom: Object.values(BATHROOM_CUES).flat(),
 
   /**
+   * Every sound behind the Stealth Key Snatch (`PRISON_CUES`): the gate room
+   * on floor 2's spine and the prison behind its door.
+   */
+  stealthKeySnatch: Object.values(PRISON_CUES).flat(),
+
+  /**
    * Shady's five bounty bosses (`bountyDefs.ts`/`BountySystem`, floor-3
    * overworld only), plus the bounty hand-off cues themselves. Each boss now
    * owns most of its voice, but the ids still borrowed from a level1/level2
@@ -673,8 +681,8 @@ const LEVEL3_SFX_GROUPS: readonly SfxGroup[] = [
   'mongoMercenary',
 ];
 
-/** Floor 2's own cues plus the Clogged Bathroom, which only appears there. */
-const LEVEL2_SFX_GROUPS: readonly SfxGroup[] = ['level2', 'cloggedBathroom'];
+/** Floor 2's own cues plus the Clogged Bathroom and the Stealth Key Snatch, which only appear there. */
+const LEVEL2_SFX_GROUPS: readonly SfxGroup[] = ['level2', 'cloggedBathroom', 'stealthKeySnatch'];
 
 /** Which `SfxGroup`s a `DungeonScene` should preload for the level it just entered. */
 export function sfxGroupsForLevelId(levelId: string): readonly SoundId[] {
@@ -709,6 +717,7 @@ export function sfxGroupsForBuildingEntry(entry: BuildingEntry): readonly SoundI
     ...(entry.hasSafeRoom === true ? (['interiorBopca'] as const) : []),
     ...(entry.type === 'club' ? (['interiorCasino'] as const) : []),
     ...(sellsSomething ? (['interiorCommerce'] as const) : []),
+    ...(entry.type === 'prison' ? (['stealthKeySnatch'] as const) : []),
   ];
   return groups.flatMap((group) => SFX_GROUPS[group]);
 }

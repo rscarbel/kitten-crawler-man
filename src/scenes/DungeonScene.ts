@@ -361,13 +361,24 @@ import { resolveDeathCause } from '../systems/DeathCauseSystem';
 import { pickDeathExplanation } from '../ui/DeathExplanations';
 import { BuildingInteriorScene } from './BuildingInteriorScene';
 import { MongoSystem, mongoXpFraction } from '../systems/MongoSystem';
-import type { InteriorCompanionArrival } from '../systems/companionCarry';
+import {
+  NO_INTERIOR_COMPANIONS,
+  type InteriorCompanionArrival,
+  type InteriorCompanionDeparture,
+} from '../systems/companionCarry';
+import type { DungeonInteriorReturn } from './dungeonInteriorReturn';
+import { TOWN_INTERIOR_FLOOR, type InteriorFloorContext } from './interiorFloorContext';
 import {
   DEFEND_LOOT_BOX_TIER,
   DEFEND_QUEST_ID,
   DefendQuestSystem,
 } from '../systems/DefendQuestSystem';
 import { CloggedBathroomSystem } from '../systems/cloggedBathroom/CloggedBathroomSystem';
+import { StealthKeySnatchSystem } from '../systems/stealthKeySnatch/StealthKeySnatchSystem';
+import { prisonDoorRefusal } from '../systems/stealthKeySnatch/prisonDoorGate';
+import { seatCompanionsWaitingOutsidePrison } from '../systems/stealthKeySnatch/prisonCompanions';
+import { planGoblinPrison } from '../map/goblinPrisonPlan';
+import type { PrisonLayout } from '../map/goblinPrisonLayouts';
 import type { QuestRewardSpec } from '../ui/questReward/types';
 import { DungeonLightingSystem, type OverDarknessPainter } from '../systems/DungeonLightingSystem';
 import {
@@ -691,6 +702,24 @@ export interface DungeonSceneOptions {
    * freshly generated map, before the bathroom system is built.
    */
   bathroomSolvedAtStart?: (gameMap: GameMap) => boolean;
+  /**
+   * Dev bootstrap only: whether the floor's stealth gate starts open, for a
+   * start dropped past the gate room. Asked of the freshly generated map,
+   * before the gate's system is built.
+   */
+  stealthGateOpenAtStart?: (gameMap: GameMap) => boolean;
+  /**
+   * Dev bootstrap only: the party walks straight through the prison door on
+   * the first gameplay frame, the guard's briefing taken as given. Never
+   * carried to a rebuilt scene, or every exit would walk straight back in.
+   */
+  devEnterPrisonAtStart?: boolean;
+  /**
+   * Dev bootstrap only: the prison is built from this layout rather than the
+   * world's own, on every visit from this floor. Carried through every rebuild
+   * of the same floor: a building exit, a respawn and a floor restart.
+   */
+  devPrisonLayout?: PrisonLayout;
   /** Skip the level-intro banner and fanfare — set when re-entering a level already introduced (e.g. leaving a building). */
   skipIntro?: boolean;
   /**
@@ -707,13 +736,26 @@ export interface DungeonSceneOptions {
    * — a building exit, or a respawn from the save itself. A death before this
    * scene takes its own save respawns from it. Only the save crosses over, never
    * its in-place checkpoint: a rebuilt scene regenerates its population, and a
-   * checkpoint's mob flags belong to the roster that captured it.
+   * checkpoint's mob flags belong to the roster that captured it. A floor held
+   * aside for a building visit keeps both, through `interiorReturn` instead.
    *
    * Absent on a new floor, which takes its own save on arrival.
    */
   lastSave?: GameProgressInput;
   /** Floor and run state from a resumed save; absent on a fresh game or an older save. */
   persistedWorldState?: PersistedWorldState;
+  /**
+   * The floor this scene was built from, held aside while the party was inside
+   * one of its buildings. The scene keeps that party and population rather
+   * than spawning its own, and puts every system back the way it was at the
+   * door. Only meaningful alongside `existingMap`.
+   */
+  interiorReturn?: DungeonInteriorReturn;
+  /**
+   * The party is walking out of the prison, which admits neither Mongo nor the
+   * hire: both are found standing on the gate room's waiting tiles.
+   */
+  companionsWaitAtPrisonDoor?: boolean;
 }
 
 // Items with a designated owner — kept in sync with non-boss floor loot routing below
@@ -1195,6 +1237,8 @@ export class DungeonScene extends GameplayScene {
   private defendQuest: DefendQuestSystem;
   /** Floor 2's clogged bathrooms, their queue, their plumber and the floor's one pipe board; inert on every other floor. */
   readonly cloggedBathroom: CloggedBathroomSystem;
+  /** Floor 2's stealth gate, its guard and the prison key quest; inert on every other floor. */
+  readonly stealthKeySnatch: StealthKeySnatchSystem;
   /** Light and dark on floors 1 and 2; null on every other map. */
   private readonly dungeonLighting: DungeonLightingSystem | null;
   /** Beds, positional loops and distant one-shots on floors 1 and 2; null elsewhere. */
@@ -1287,6 +1331,11 @@ export class DungeonScene extends GameplayScene {
    * constructor, which runs before the party is placed at the door.
    */
   private mongoCarryPending = false;
+  /** Set for the first gameplay frame after the prison: see {@link DungeonSceneOptions.companionsWaitAtPrisonDoor}. */
+  private companionsWaitingAtPrisonDoor = false;
+  /** See {@link DungeonSceneOptions.devPrisonLayout}. */
+  private readonly devPrisonLayout: PrisonLayout | null;
+  private devPrisonEntryPending: boolean;
   private readonly mercenarySystem: MercenarySystem;
   private renderPipeline = new RenderPipeline();
   private bus = new EventBus();
@@ -1398,6 +1447,12 @@ export class DungeonScene extends GameplayScene {
    * own constructor computes its own fresh set from its own fresh spawn.
    */
   private roomsClearAtFloorStart: ReadonlySet<number> = new Set();
+  /**
+   * The creatures a system stood up in this scene's constructor (the bathroom's
+   * queue, say). A scene rebuilt from a held floor gets these from its own
+   * systems again, so they are the ones a held floor leaves behind.
+   */
+  private systemSpawnedMobs: ReadonlySet<Mob> = new Set();
   /**
    * A stairwell room whose guards are all dead but whose save was withheld
    * because a hostile was still engaged near the active crawler — retried
@@ -1514,6 +1569,7 @@ export class DungeonScene extends GameplayScene {
     this.abilityManager.register(MONGO_DEF);
 
     const tutorialController = options?.tutorialController ?? null;
+    const interiorReturn = options?.interiorReturn ?? null;
     /**
      * The floor's starting population, held aside until the roster exists —
      * `MobRoster.add` is what gives a mob its map and spell context, so nothing
@@ -1592,7 +1648,20 @@ export class DungeonScene extends GameplayScene {
       const spawn = circusSpawn ?? resolvedSpawn ?? options?.spawnAt ?? this.gameMap.startTile;
       spawnTileX = spawn.x;
       spawnTileY = spawn.y;
-      this.pm = new PlayerManager(spawnTileX, spawnTileY, levelDef.xpDiminishingTiers);
+      this.pm = new PlayerManager(
+        spawnTileX,
+        spawnTileY,
+        levelDef.xpDiminishingTiers,
+        interiorReturn ?? undefined,
+      );
+      if (interiorReturn !== null) {
+        // Built fresh, a crawler carries nothing a snapshot does not; a held one
+        // must match, or the swing it was frozen in at the door resumes outside.
+        for (const crawler of this.pm.players()) {
+          crawler.clearTransientCombatState();
+          crawler.resetCombatState();
+        }
+      }
 
       if (options?.humanSnap) restorePlayer(this.human, options.humanSnap);
       if (options?.catSnap) restorePlayer(this.cat, options.catSnap);
@@ -1619,64 +1688,70 @@ export class DungeonScene extends GameplayScene {
       // this line, so this is the party that is about to walk in. The
       // difficulty profile is captured alongside it for the same reason — a
       // settings flip mid-floor must not re-level anything already spawned.
-      const partyLevel = partyLevelOf(this.human.level, this.cat.level);
-      const difficultyProfile = activeDifficultyProfile();
-      // Read from the save itself on a resume: the saved `townMemory` is only
-      // applied once every system exists, long after the roster is filled.
-      const clearedCamps = new Set(
-        options?.persistedWorldState?.townMemory.clearedCamps ?? options?.townMemory?.clearedCamps,
-      );
-      const preDefeatedBossTypes = options?.preDefeatedBossTypes ?? [];
-      initialMobs.push(
-        ...spawnForLevel(
-          levelDef,
-          this.gameMap,
-          partyLevel,
-          difficultyProfile,
-          clearedCamps,
-        ).filter(
-          // Left out of the roster entirely, not just marked dead: a boss
-          // skipped this way never fights, so nothing should ever find it
-          // alive, and the hard-mode healer spawn below only puts one beside a
-          // boss it can find in its room.
-          (mob) => !(mob.isBoss && preDefeatedBossTypes.some((type) => type === mob.spawnTypeKey)),
-        ),
-      );
-      // The difficulty key is read here with the profile, for the same reason:
-      // a fairy's potency is stamped once and a settings flip must not move it.
-      fairyLedger = new FairyRoomLedger(
-        levelDef,
-        partyLevel,
-        difficultyProfile,
-        settings.difficulty,
-      );
-      initialMobs.push(...spawnRoomFairies(this.gameMap, fairyLedger));
-      initialMobs.push(...spawnOverworldFairies(this.gameMap, fairyLedger));
-      // A resumed save's won rooms are still in the save rather than in the
-      // boss-room system, which only learns them once every system exists.
-      const persistedBossRooms = options?.persistedWorldState?.bossRoom.rooms ?? [];
-      initialMobs.push(
-        ...spawnBossRoomHealers(
-          fairyLedger,
-          this.gameMap,
-          initialMobs,
-          (roomIndex) =>
-            roomIndex < persistedBossRooms.length && persistedBossRooms[roomIndex].defeated,
-        ),
-      );
-      initialMobs.push(...spawnExtraMobs(levelDef, this.gameMap, partyLevel, difficultyProfile));
-
-      // Treasure room mobs (extra enemies guarding wooden chests)
-      if (levelDef.hasTreasureRoomGuards === true) {
+      if (interiorReturn !== null) {
+        initialMobs.push(...interiorReturn.mobs);
+        fairyLedger = interiorReturn.fairyLedger;
+      } else {
+        const partyLevel = partyLevelOf(this.human.level, this.cat.level);
+        const difficultyProfile = activeDifficultyProfile();
+        // Read from the save itself on a resume: the saved `townMemory` is only
+        // applied once every system exists, long after the roster is filled.
+        const clearedCamps = new Set(
+          options?.persistedWorldState?.townMemory.clearedCamps ??
+            options?.townMemory?.clearedCamps,
+        );
+        const preDefeatedBossTypes = options?.preDefeatedBossTypes ?? [];
         initialMobs.push(
-          ...spawnTreasureRoomMobs(
-            this.gameMap.treasureRooms,
+          ...spawnForLevel(
             levelDef,
             this.gameMap,
             partyLevel,
             difficultyProfile,
+            clearedCamps,
+          ).filter(
+            // Left out of the roster entirely, not just marked dead: a boss
+            // skipped this way never fights, so nothing should ever find it
+            // alive, and the hard-mode healer spawn below only puts one beside a
+            // boss it can find in its room.
+            (mob) =>
+              !(mob.isBoss && preDefeatedBossTypes.some((type) => type === mob.spawnTypeKey)),
           ),
         );
+        // The difficulty key is read here with the profile, for the same reason:
+        // a fairy's potency is stamped once and a settings flip must not move it.
+        fairyLedger = new FairyRoomLedger(
+          levelDef,
+          partyLevel,
+          difficultyProfile,
+          settings.difficulty,
+        );
+        initialMobs.push(...spawnRoomFairies(this.gameMap, fairyLedger));
+        initialMobs.push(...spawnOverworldFairies(this.gameMap, fairyLedger));
+        // A resumed save's won rooms are still in the save rather than in the
+        // boss-room system, which only learns them once every system exists.
+        const persistedBossRooms = options?.persistedWorldState?.bossRoom.rooms ?? [];
+        initialMobs.push(
+          ...spawnBossRoomHealers(
+            fairyLedger,
+            this.gameMap,
+            initialMobs,
+            (roomIndex) =>
+              roomIndex < persistedBossRooms.length && persistedBossRooms[roomIndex].defeated,
+          ),
+        );
+        initialMobs.push(...spawnExtraMobs(levelDef, this.gameMap, partyLevel, difficultyProfile));
+
+        if (levelDef.hasTreasureRoomGuards === true) {
+          initialMobs.push(
+            ...spawnTreasureRoomMobs(
+              this.gameMap.treasureRooms,
+              levelDef,
+              this.gameMap,
+              partyLevel,
+              difficultyProfile,
+            ),
+          );
+        }
       }
     }
 
@@ -1724,15 +1799,17 @@ export class DungeonScene extends GameplayScene {
 
     // After the initial spawn, and only ever here: this is the floor's true
     // starting occupancy, which a stairwell room's *entry* save is gated on.
-    this.roomsClearAtFloorStart = new Set(
-      this.gameMap.roomBounds
-        .map((_room, roomIndex) => roomIndex)
-        .filter(
-          (roomIndex) =>
-            this.roomIndexOfStairwellRoom(roomIndex) &&
-            this.gameMap.hostilesInRoom(roomIndex, this.world.roster.mobs).length === 0,
-        ),
-    );
+    this.roomsClearAtFloorStart =
+      interiorReturn?.roomsClearAtFloorStart ??
+      new Set(
+        this.gameMap.roomBounds
+          .map((_room, roomIndex) => roomIndex)
+          .filter(
+            (roomIndex) =>
+              this.roomIndexOfStairwellRoom(roomIndex) &&
+              this.gameMap.hostilesInRoom(roomIndex, this.world.roster.mobs).length === 0,
+          ),
+      );
 
     this.grotesqueSpiders = this.world.roster.mobs.filter(
       (m): m is GrotesqueSpider => m instanceof GrotesqueSpider,
@@ -1883,6 +1960,15 @@ export class DungeonScene extends GameplayScene {
       audio: this.audio,
       announce: (message, opts) => this.menus.announce(message, opts),
       startSolved: options?.bathroomSolvedAtStart?.(this.gameMap) ?? false,
+    });
+    this.stealthKeySnatch = new StealthKeySnatchSystem({
+      gameMap: this.gameMap,
+      bus: this.bus,
+      roster: this.world.roster,
+      conversation: this.conversation,
+      audio: this.audio,
+      announce: (message, opts) => this.menus.announce(message, opts),
+      startOpened: options?.stealthGateOpenAtStart?.(this.gameMap) ?? false,
     });
     this.grateSpikes = new GrateSpikesMenu({
       defendQuest: this.defendQuest,
@@ -2245,161 +2331,17 @@ export class DungeonScene extends GameplayScene {
       this.destruction.groundPickups.restoreCheckpoint(options.existingGroundPickups);
     }
 
+    if (this.gameMap.buildingEntries.length > 0) {
+      this.building = new BuildingSystem(this.gameMap, (entry) => this.enterBuilding(entry), {
+        blockedMessage: (entry) => this.sealedBuildingMessage(entry),
+        onRefused: (message) => {
+          this.audio?.play('error');
+          this.menus.toasts.post(message);
+        },
+      });
+    }
+
     if (levelDef.isOverworld) {
-      this.building = new BuildingSystem(
-        this.gameMap,
-        (entry) => {
-          // Spawn one tile south of the door so the player exits outside and
-          // doesn't immediately re-trigger the "Enter building?" prompt.
-          const returnTile = {
-            x: entry.doorTile.x,
-            y: entry.doorTile.y + 1,
-          };
-          // Read before the dismiss that clears it. The dismiss still has to
-          // happen: this scene's roster is thrown away with it, and the dismiss
-          // is what writes his remaining health into the pet state the interior
-          // rebuilds him from.
-          const companionArrival: InteriorCompanionArrival = {
-            mongoUnlocked: this.mongoSystem.unlocked,
-            mongoWasOut: this.mongoSystem.followsThroughDoor,
-          };
-          this.mongoSystem.dismiss(this.world.roster.mobs, this.world.roster.grid);
-          // A standing hire's health goes into the roster the interior stands it
-          // up from; a hire lying downed at the door is lost with this scene.
-          this.mercenarySystem.dismissForTransition(this.world.roster.mobs, this.world.roster.grid);
-          this.musicPersistsAcrossExit = true;
-          const humanSnap = snapPlayer(this.human);
-          const catSnap = snapPlayer(this.cat);
-          const hudView: HudViewState = { miniMapExpanded: this.miniMap.isExpanded };
-          this.sceneManager.replace(
-            new BuildingInteriorScene(
-              entry,
-              humanSnap,
-              catSnap,
-              levelDef.xpDiminishingTiers,
-              levelDef.arrivalLoadingScreen,
-              this.input,
-              this.sceneManager,
-              (hSnap, cSnap, defeated, companionDeparture) => {
-                // A defeat indoors is a death like any other, so it lands on the
-                // last save rather than on the doorstep the party died behind.
-                const lastSave = this.lastSave;
-                if (defeated) rearmExpiredDoomsday(this.doomsdayQuestProgress, Date.now());
-                if (defeated && lastSave !== null) {
-                  this.respawnFromSave(lastSave.progress);
-                  return;
-                }
-                // Unreachable once the floor has taken its arrival save, which
-                // the overworld does on its first frame; the start tile at least
-                // keeps a defeat off the doorstep.
-                const exitTile = defeated ? this.gameMap.startTile : returnTile;
-                // A building-exit rebuild is still the same floor, so the crowd
-                // the new scene's own `TownLifeSystem` pins moments from now is
-                // the same working set — cheap to give back and re-pin, and the
-                // only way every leave-town path stays covered without special
-                // cases for which ones happen to be "the same floor."
-                this.townLife?.dispose();
-                this.sceneManager.replace(
-                  new DungeonScene(levelDef, this.input, this.sceneManager, {
-                    spawnAt: exitTile,
-                    hudView,
-                    humanSnap: hSnap,
-                    catSnap: cSnap,
-                    // Entering a building is a detour, not a new floor — the floor
-                    // restart has to stay pinned to where this floor began.
-                    floorEntryHumanSnap: this.floorEntryHumanSnap,
-                    floorEntryCatSnap: this.floorEntryCatSnap,
-                    floorEntryHumanAchievements: this.floorEntryHumanAchievements,
-                    floorEntryCatAchievements: this.floorEntryCatAchievements,
-                    floorEntryAbilityManager: this.floorEntryAbilityManager,
-                    floorEntryGameStats: this.floorEntryGameStats,
-                    floorEntryMercenaryRoster: this.floorEntryMercenaryRoster,
-                    // The save, not its checkpoint: the rebuilt scene regenerates the
-                    // overworld's creatures, so mob flags captured against this
-                    // scene would mean nothing there. An exit inside the town wall
-                    // saves afresh on its first frame whenever a town save is
-                    // allowed; until then — and for good after an exit outside the
-                    // wall, such as the Big Top's — a death respawns from this save.
-                    lastSave: this.lastSave?.progress,
-                    existingMap: this.gameMap,
-                    existingMiniMap: this.miniMap,
-                    existingRecallState: this.recall.captureCheckpoint(),
-                    existingGroundPickups: this.destruction.groundPickups.captureCheckpoint(),
-                    humanAchievements: this.humanAchievements,
-                    catAchievements: this.catAchievements,
-                    mongoUnlocked: this.mongoSystem.unlocked,
-                    mongoPetState: this.mongoPetState,
-                    mongoWasOut: companionDeparture.mongoWasOut,
-                    abilityManager: this._cleanAbilityManager(),
-                    partyCrafts: this.partyCrafts,
-                    saveProgress: this.onSaveProgress,
-                    audio: this.audio ?? undefined,
-                    onResetGame: this.onResetGameCallback ?? undefined,
-                    circusQuestProgress: this.circusQuestProgress,
-                    murderQuestProgress: this.murderQuestProgress,
-                    anchorQuestProgress: this.anchorQuestProgress,
-                    journalProgress: this.journalProgress,
-                    bountyProgress: this.bountyProgress,
-                    midgeEscortCarry: this.midgeEscortCarry,
-                    doomsdayQuestProgress: this.doomsdayQuestProgress,
-                    clubMembership: this.clubMembership,
-                    townMemory: this.townMemory,
-                    briarHollowState: this.briarHollowState,
-                    marketStock: this.marketStock,
-                    mercenaryRoster: this.mercenaryRoster,
-                    godModeState: this.godModeState,
-                    companionStance: this.companionStance,
-                    gameStats: this.gameStats,
-                    tacticsNoticesSeen: this.tacticsNoticesSeen,
-                    skipIntro: true,
-                  }),
-                );
-              },
-              this.marketStock,
-              this.humanAchievements,
-              this.catAchievements,
-              this.audio ?? undefined,
-              this.abilityManager,
-              {
-                progress: this.circusQuestProgress,
-                overworldCentre: this.gameMap.circusCentre,
-                worldSeed: this.gameMap.worldSeed,
-              },
-              this.murderQuestProgress,
-              this.doomsdayQuestProgress,
-              this.clubMembership,
-              this.townMemory,
-              this.mercenaryRoster,
-              this.godModeState,
-              this.companionStance,
-              this.mongoPetState,
-              () => this.abilityManager.getLevel('mongo'),
-              this.gameStats,
-              this.anchorQuestProgress,
-              this.gameMap.artSeed,
-              this.tacticsNoticesSeen,
-              respawnModeFor(respawnRouteFor(this.lastSave)),
-              companionArrival,
-              this.partyCrafts,
-              this.briarHollowState,
-              // Asked live rather than snapshotted: progress threaded by
-              // reference (the anchor shards, the murders) moves indoors, and
-              // the Journal should say so while the party is still inside.
-              this.hasQuestJournal
-                ? { entries: () => this.collectTrackerEntries(), progress: this.journalProgress }
-                : undefined,
-              hudView,
-            ),
-          );
-        },
-        {
-          blockedMessage: (entry) => this.sealedBuildingMessage(entry),
-          onRefused: (message) => {
-            this.audio?.play('error');
-            this.menus.toasts.post(message);
-          },
-        },
-      );
       this.noticeBoard = new NoticeBoard();
       this.marketPanel = new ShopSession();
       this.fortuneTeller = new FortuneTable();
@@ -2607,6 +2549,9 @@ export class DungeonScene extends GameplayScene {
       this.mongoSystem.unlocked = true;
     }
     this.mongoCarryPending = options?.mongoWasOut === true;
+    this.companionsWaitingAtPrisonDoor = options?.companionsWaitAtPrisonDoor === true;
+    this.devPrisonLayout = options?.devPrisonLayout ?? null;
+    this.devPrisonEntryPending = options?.devEnterPrisonAtStart === true;
     this.floorEntryAbilityManager =
       options?.floorEntryAbilityManager ?? this.abilityManager.clone();
     bindAbilityLevelUps({
@@ -2650,6 +2595,16 @@ export class DungeonScene extends GameplayScene {
       options?.suppressArrivalSave === true,
       this.tutorial !== null,
     );
+    if (interiorReturn !== null) {
+      this.lastSave = interiorReturn.lastSave;
+      this.lastSavePointTile = interiorReturn.lastSavePointTile;
+      this.staleCarriedSave = interiorReturn.staleCarriedSave;
+      this.arrivalSavePending = false;
+      for (const roomIndex of interiorReturn.stairwellRoomsSaved) {
+        this.stairwellRoomsSaved.add(roomIndex);
+      }
+      this.mordecaiDebrief = { ...interiorReturn.mordecaiDebrief };
+    }
     this.wasInTown = options?.suppressArrivalSave === true;
     this.wasInBriarHollowSquare = options?.suppressArrivalSave === true;
     this.onResetGameCallback = options?.onResetGame ?? null;
@@ -2821,6 +2776,7 @@ export class DungeonScene extends GameplayScene {
     if (options?.persistedWorldState !== undefined) {
       this.applyPersistedWorldState(options.persistedWorldState);
     }
+    if (interiorReturn !== null) this.applyInteriorReturn(interiorReturn);
 
     this.wireEventBus();
     this.checkFloorEntryAchievements();
@@ -2845,6 +2801,11 @@ export class DungeonScene extends GameplayScene {
         }),
     });
     for (const surface of this.surfaces()) this.ui.mount(surface);
+    const startingPopulation = new Set(initialMobs);
+    this.systemSpawnedMobs = new Set(
+      this.world.roster.mobs.filter((mob) => !startingPopulation.has(mob)),
+    );
+    if (interiorReturn !== null) this.enrolSystemSpawnedMobsInCarriedCheckpoint();
   }
 
   /**
@@ -3467,6 +3428,7 @@ export class DungeonScene extends GameplayScene {
     this.dungeonAmbience?.dispose();
     this.bopca.dispose();
     this.cloggedBathroom.dispose();
+    this.stealthKeySnatch.dispose();
     this.menus.dispose();
     if (!this.musicPersistsAcrossExit) this.audio?.stopMusic();
     this.inputHandler.unbind();
@@ -4241,6 +4203,48 @@ export class DungeonScene extends GameplayScene {
     );
   }
 
+  /** Once, on the first gameplay frame of a dev boot that opens inside the prison. */
+  private enterPrisonForDev(): void {
+    if (!this.devPrisonEntryPending) return;
+    this.devPrisonEntryPending = false;
+    const entry = this.gameMap.buildingEntries.find((candidate) => candidate.type === 'prison');
+    if (entry === undefined) return;
+    if (this.stealthKeySnatch.phase === 'unmet') {
+      this.stealthKeySnatch.restoreCheckpoint({
+        ...this.stealthKeySnatch.captureCheckpoint(),
+        phase: 'briefed',
+      });
+    }
+    this.enterBuilding(entry);
+  }
+
+  /** What only the prison's door adds to {@link interiorFloorContext}. */
+  private prisonVisitContext(): Pick<InteriorFloorContext, 'stealthKeySnatch' | 'variant'> {
+    const layout = this.devPrisonLayout;
+    if (layout === null) return { stealthKeySnatch: this.stealthKeySnatch };
+    return {
+      stealthKeySnatch: this.stealthKeySnatch,
+      variant: {
+        kind: 'goblin_prison',
+        plan: planGoblinPrison(this.gameMap.worldSeed, settings.difficulty, layout),
+      },
+    };
+  }
+
+  /** Once, on the first frame after the prison, after Mongo and the hire have been stood up. */
+  private seatCompanionsAtPrisonDoor(): void {
+    if (!this.companionsWaitingAtPrisonDoor) return;
+    this.companionsWaitingAtPrisonDoor = false;
+    const room = this.gameMap.stealthGateRoom;
+    if (room === null) return;
+    seatCompanionsWaitingOutsidePrison(
+      room,
+      this.mongoSystem.mongo,
+      this.mercenarySystem.activeMerc,
+      this.world.roster.grid,
+    );
+  }
+
   private carryMongoIn(): void {
     if (!this.mongoCarryPending) return;
     this.mongoCarryPending = false;
@@ -4331,6 +4335,303 @@ export class DungeonScene extends GameplayScene {
   }
 
   /**
+   * Takes the party through a building's door into its interior, and sets up
+   * how they come back out.
+   *
+   * The overworld is rebuilt around the party on the way out, its creatures
+   * regenerated. Any other floor is held aside instead ({@link holdFloorForInterior})
+   * and handed back exactly as it was left.
+   */
+  private enterBuilding(entry: BuildingEntry): void {
+    const levelDef = this.levelDef;
+    // Spawn one tile south of the door so the player exits outside and
+    // doesn't immediately re-trigger the "Enter building?" prompt.
+    const returnTile = {
+      x: entry.doorTile.x,
+      y: entry.doorTile.y + 1,
+    };
+    // Read before the dismiss that clears it. The dismiss still has to
+    // happen: this scene's roster is thrown away with it, and the dismiss
+    // is what writes his remaining health into the pet state the interior
+    // rebuilds him from.
+    const companionArrival: InteriorCompanionArrival = {
+      mongoUnlocked: this.mongoSystem.unlocked,
+      mongoWasOut: this.mongoSystem.followsThroughDoor,
+    };
+    this.mongoSystem.dismiss(this.world.roster.mobs, this.world.roster.grid);
+    // A standing hire's health goes into the roster the interior stands it
+    // up from; a hire lying downed at the door is lost with this scene.
+    this.mercenarySystem.dismissForTransition(this.world.roster.mobs, this.world.roster.grid);
+    // The prison admits neither companion: they wait in the gate room, and
+    // Mongo walks back out with the party exactly as he stood at the door.
+    const companionsWaitOutside = entry.type === 'prison';
+    const departureFor = (indoors: InteriorCompanionDeparture): InteriorCompanionDeparture =>
+      companionsWaitOutside ? { mongoWasOut: companionArrival.mongoWasOut } : indoors;
+    this.musicPersistsAcrossExit = true;
+    const heldFloor = this.floorRegeneratesAroundBuildings
+      ? null
+      : this.holdFloorForInterior(returnTile);
+    const humanSnap = snapPlayer(this.human);
+    const catSnap = snapPlayer(this.cat);
+    const hudView: HudViewState = { miniMapExpanded: this.miniMap.isExpanded };
+    this.sceneManager.replace(
+      new BuildingInteriorScene(
+        entry,
+        humanSnap,
+        catSnap,
+        levelDef.xpDiminishingTiers,
+        levelDef.arrivalLoadingScreen,
+        this.input,
+        this.sceneManager,
+        (hSnap, cSnap, defeated, companionDeparture) => {
+          if (heldFloor !== null) {
+            const outside = new DungeonScene(levelDef, this.input, this.sceneManager, {
+              ...this.buildingExitOptions(hudView, hSnap, cSnap, departureFor(companionDeparture)),
+              spawnAt: heldFloor.returnTile,
+              levelTimerFrames: heldFloor.levelTimerFrames,
+              interiorReturn: this.withVisitOutcome(heldFloor),
+              companionsWaitAtPrisonDoor: companionsWaitOutside,
+            });
+            this.sceneManager.replace(outside);
+            // The floor comes back first, so a defeat indoors is answered exactly
+            // as a death outside would be: rewound in place to the last save's
+            // checkpoint, with the creatures killed before it still dead.
+            if (defeated) outside.respawnAfterDeath();
+            return;
+          }
+          // A defeat indoors is a death like any other, so it lands on the
+          // last save rather than on the doorstep the party died behind.
+          const lastSave = this.lastSave;
+          if (defeated) rearmExpiredDoomsday(this.doomsdayQuestProgress, Date.now());
+          if (defeated && lastSave !== null) {
+            this.respawnFromSave(lastSave.progress);
+            return;
+          }
+          // Unreachable once the floor has taken its arrival save, which
+          // the overworld does on its first frame; the start tile at least
+          // keeps a defeat off the doorstep.
+          const exitTile = defeated ? this.gameMap.startTile : returnTile;
+          // A building-exit rebuild is still the same floor, so the crowd
+          // the new scene's own `TownLifeSystem` pins moments from now is
+          // the same working set — cheap to give back and re-pin, and the
+          // only way every leave-town path stays covered without special
+          // cases for which ones happen to be "the same floor."
+          this.townLife?.dispose();
+          this.sceneManager.replace(
+            new DungeonScene(levelDef, this.input, this.sceneManager, {
+              ...this.buildingExitOptions(hudView, hSnap, cSnap, companionDeparture),
+              spawnAt: exitTile,
+              // The save, not its checkpoint: the rebuilt scene regenerates the
+              // overworld's creatures, so mob flags captured against this
+              // scene would mean nothing there. An exit inside the town wall
+              // saves afresh on its first frame whenever a town save is
+              // allowed; until then — and for good after an exit outside the
+              // wall, such as the Big Top's — a death respawns from this save.
+              lastSave: this.lastSave?.progress,
+              existingRecallState: this.recall.captureCheckpoint(),
+              existingGroundPickups: this.destruction.groundPickups.captureCheckpoint(),
+            }),
+          );
+        },
+        this.marketStock,
+        this.humanAchievements,
+        this.catAchievements,
+        this.audio ?? undefined,
+        this.abilityManager,
+        {
+          progress: this.circusQuestProgress,
+          overworldCentre: this.gameMap.circusCentre,
+          worldSeed: this.gameMap.worldSeed,
+        },
+        this.murderQuestProgress,
+        this.doomsdayQuestProgress,
+        this.clubMembership,
+        this.townMemory,
+        this.mercenaryRoster,
+        this.godModeState,
+        this.companionStance,
+        this.mongoPetState,
+        () => this.abilityManager.getLevel('mongo'),
+        this.gameStats,
+        this.anchorQuestProgress,
+        this.gameMap.artSeed,
+        this.tacticsNoticesSeen,
+        respawnModeFor(respawnRouteFor(this.lastSave)),
+        companionsWaitOutside ? NO_INTERIOR_COMPANIONS : companionArrival,
+        this.partyCrafts,
+        this.briarHollowState,
+        // Asked live rather than snapshotted: progress threaded by
+        // reference (the anchor shards, the murders) moves indoors, and
+        // the Journal should say so while the party is still inside.
+        this.hasQuestJournal
+          ? { entries: () => this.collectTrackerEntries(), progress: this.journalProgress }
+          : undefined,
+        hudView,
+        heldFloor === null ? TOWN_INTERIOR_FLOOR : this.interiorFloorContext(heldFloor, entry),
+      ),
+    );
+  }
+
+  /**
+   * Whether a building's door rebuilds this floor around the party on the way
+   * out, creatures regenerated, rather than handing back the floor they left.
+   * Only the overworld can afford to: its townsfolk and wildlife are scenery,
+   * where a dungeon floor's creatures are the record of the party's progress.
+   */
+  private get floorRegeneratesAroundBuildings(): boolean {
+    return this.levelDef.isOverworld === true;
+  }
+
+  /**
+   * Holds this floor aside for the length of a building visit: the live party
+   * and population, a checkpoint of every system, and the save a death returns
+   * to. See {@link DungeonInteriorReturn}.
+   *
+   * Writes a save at the door first, when one is allowed, so a reload inside
+   * resumes on this floor in front of the door rather than at an older save
+   * point the party has since walked a long way from. Never with a fight
+   * going on at the door: a save cannot hold the creatures in it.
+   */
+  private holdFloorForInterior(returnTile: TilePoint): DungeonInteriorReturn {
+    const saveAllowed =
+      this.tutorial === null &&
+      !this.isBossFightInProgress &&
+      !this.isRevivePending &&
+      !this.hasEngagedHostileNearActive();
+    if (saveAllowed) this.captureSavePoint(returnTile);
+    return {
+      human: this.human,
+      cat: this.cat,
+      mobs: this.world.roster.mobs.filter((mob) => !this.systemSpawnedMobs.has(mob)),
+      fairyLedger: this.fairies.ledger,
+      world: this.captureWorldCheckpoint(),
+      levelTimerFrames: this.levelTimerFrames,
+      returnTile,
+      lastSave: this.lastSave,
+      lastSavePointTile: this.lastSavePointTile,
+      staleCarriedSave: this.staleCarriedSave,
+      roomsClearAtFloorStart: this.roomsClearAtFloorStart,
+      stairwellRoomsSaved: new Set(this.stairwellRoomsSaved),
+      mordecaiDebrief: { ...this.mordecaiDebrief },
+    };
+  }
+
+  /** How a building under this floor is painted, lit and clocked. */
+  private interiorFloorContext(
+    heldFloor: DungeonInteriorReturn,
+    entry: BuildingEntry,
+  ): InteriorFloorContext {
+    const levelDef = this.levelDef;
+    return {
+      ...(entry.type === 'prison' ? this.prisonVisitContext() : {}),
+      floorNumber: levelDef.floorNumber,
+      groundSheets: groundSheetKeysAmong(
+        requiredSpriteKeysForLevel(levelDef.id, levelDef.spriteGroups),
+      ),
+      spriteGroups: levelDef.spriteGroups,
+      sightRadiusPx: visibilityRadiusPx(this.active()),
+      ownsMusic: false,
+      heldLevelTimerFrames: levelDef.hasCollapseTimer === true ? heldFloor.levelTimerFrames : null,
+    };
+  }
+
+  /**
+   * The held floor with what the visit changed folded back in. The checkpoint
+   * was taken at the door, but this scene's own stealth gate quest stayed live
+   * through the visit as the prison's {@link InteriorFloorContext.stealthKeySnatch},
+   * so its explainer and key state are re-captured here on the way out.
+   */
+  private withVisitOutcome(heldFloor: DungeonInteriorReturn): DungeonInteriorReturn {
+    return {
+      ...heldFloor,
+      world: { ...heldFloor.world, stealthKeySnatch: this.stealthKeySnatch.captureCheckpoint() },
+    };
+  }
+
+  /**
+   * What every scene rebuilt at a building's door carries over from this one:
+   * the party as it walked out, the run's threaded progress, and the floor's
+   * entry snapshots — entering a building is a detour, not a new floor, so a
+   * floor restart stays pinned to where this floor began.
+   */
+  private buildingExitOptions(
+    hudView: HudViewState,
+    humanSnap: PlayerSnapshot,
+    catSnap: PlayerSnapshot,
+    companionDeparture: InteriorCompanionDeparture,
+  ): DungeonSceneOptions {
+    return {
+      hudView,
+      humanSnap,
+      catSnap,
+      floorEntryHumanSnap: this.floorEntryHumanSnap,
+      floorEntryCatSnap: this.floorEntryCatSnap,
+      floorEntryHumanAchievements: this.floorEntryHumanAchievements,
+      floorEntryCatAchievements: this.floorEntryCatAchievements,
+      floorEntryAbilityManager: this.floorEntryAbilityManager,
+      floorEntryGameStats: this.floorEntryGameStats,
+      floorEntryMercenaryRoster: this.floorEntryMercenaryRoster,
+      devPrisonLayout: this.devPrisonLayout ?? undefined,
+      existingMap: this.gameMap,
+      existingMiniMap: this.miniMap,
+      humanAchievements: this.humanAchievements,
+      catAchievements: this.catAchievements,
+      mongoUnlocked: this.mongoSystem.unlocked,
+      mongoPetState: this.mongoPetState,
+      mongoWasOut: companionDeparture.mongoWasOut,
+      abilityManager: this._cleanAbilityManager(),
+      partyCrafts: this.partyCrafts,
+      saveProgress: this.onSaveProgress,
+      audio: this.audio ?? undefined,
+      onResetGame: this.onResetGameCallback ?? undefined,
+      circusQuestProgress: this.circusQuestProgress,
+      murderQuestProgress: this.murderQuestProgress,
+      anchorQuestProgress: this.anchorQuestProgress,
+      journalProgress: this.journalProgress,
+      bountyProgress: this.bountyProgress,
+      midgeEscortCarry: this.midgeEscortCarry,
+      doomsdayQuestProgress: this.doomsdayQuestProgress,
+      clubMembership: this.clubMembership,
+      townMemory: this.townMemory,
+      briarHollowState: this.briarHollowState,
+      marketStock: this.marketStock,
+      mercenaryRoster: this.mercenaryRoster,
+      godModeState: this.godModeState,
+      companionStance: this.companionStance,
+      gameStats: this.gameStats,
+      tacticsNoticesSeen: this.tacticsNoticesSeen,
+      skipIntro: true,
+    };
+  }
+
+  /**
+   * Hands a floor held aside for a building visit back to this freshly built
+   * scene: the systems are put back to the checkpoint taken at the door, and
+   * the scene's own save-point bookkeeping is carried on where it left off.
+   * The party and the population were already handed to the constructor.
+   */
+  private applyInteriorReturn(heldFloor: DungeonInteriorReturn): void {
+    this.applyWorldCheckpoint(heldFloor.world, heldFloor.levelTimerFrames, 'keep');
+    // Every carried creature joined through `MobRoster.add`, corpses included,
+    // and only the living belong in the index.
+    this.world.roster.rebuildGrid();
+  }
+
+  /**
+   * Enrols the creatures this scene's own systems stood up in the checkpoint
+   * the held floor carried in. That checkpoint was taken before they existed,
+   * so without this a death's rewind would drop them as having arrived after
+   * the save, and the system that owns them would be left with no one.
+   */
+  private enrolSystemSpawnedMobsInCarriedCheckpoint(): void {
+    for (const mob of this.systemSpawnedMobs) {
+      mob.presentAtCheckpoint = true;
+      mob.aliveAtCheckpoint = mob.isAlive;
+      mob.resurrectedAtCheckpoint = mob.wasResurrected;
+    }
+  }
+
+  /**
    * Rebuilds the floor from a save, exactly as a page reload would, for a scene
    * that holds the save but not a checkpoint of it: one rebuilt around a
    * regenerated population after a building exit, one that was itself resumed
@@ -4368,6 +4669,7 @@ export class DungeonScene extends GameplayScene {
         floorEntryAbilityManager: sameFloor ? this.floorEntryAbilityManager : undefined,
         floorEntryGameStats: sameFloor ? this.floorEntryGameStats : undefined,
         floorEntryMercenaryRoster: sameFloor ? this.floorEntryMercenaryRoster : undefined,
+        devPrisonLayout: sameFloor ? (this.devPrisonLayout ?? undefined) : undefined,
         doomsdayQuestProgress: this.doomsdayQuestProgress,
         godModeState: this.godModeState,
         companionStance: this.companionStance,
@@ -4449,8 +4751,6 @@ export class DungeonScene extends GameplayScene {
     // After the placement, so the companion's fresh anchors name the save point.
     this.companion.resetForRespawn(this.human, this.cat);
 
-    this.levelTimerFrames = cp.levelTimerFrames;
-
     // The pet goes home rather than being healed where he stands: his HP is the
     // whole cost of using him, and a free full heal on every safe-room restore
     // would hand it back. Dismissing also writes his real remaining HP into the
@@ -4481,18 +4781,13 @@ export class DungeonScene extends GameplayScene {
     // Last, so the snapshot has the final word. The two resets above clear the
     // same room locks and entry windows the snapshot describes, and they clear
     // them to "no fight in progress" rather than to what was actually captured.
-    this.restoreWorldCheckpoint(cp.world);
+    this.applyWorldCheckpoint(cp.world, cp.levelTimerFrames, 'rewind');
     if (this.briarHollowKitCheckpoint !== null) {
       this.briarHollowKit?.restoreCheckpoint(this.briarHollowKitCheckpoint);
     }
     if (this.gatheringCheckpoint !== null) {
       this.gathering?.restoreCheckpoint(this.gatheringCheckpoint);
     }
-    this.fairies.resetForCheckpoint(
-      this.world.roster.mobs,
-      deadFairyUpgradeBosses(this.bossRoom, this.arena),
-    );
-    this.forgetDebriefsOfLivingBosses();
 
     this.bossIntro.cancel();
     this.combatCooldownFrames = 0;
@@ -4524,6 +4819,29 @@ export class DungeonScene extends GameplayScene {
   }
 
   /**
+   * Puts the floor's systems, and its clock, back to a checkpoint. Shared by a
+   * death rewind in place and by a scene rebuilt from a floor held aside for a
+   * building visit, which differ only in what they do to the party and the
+   * population before this. A death rewinds the run's progress with the floor;
+   * a building exit keeps it, because the party went on spending, earning and
+   * questing indoors and the run-wide objects already hold that.
+   */
+  private applyWorldCheckpoint(
+    world: WorldCheckpoint,
+    levelTimerFrames: number,
+    runProgress: 'rewind' | 'keep',
+  ): void {
+    this.levelTimerFrames = levelTimerFrames;
+    this.restoreFloorCheckpoint(world);
+    if (runProgress === 'rewind') this.restoreRunProgress(world);
+    this.fairies.resetForCheckpoint(
+      this.world.roster.mobs,
+      deadFairyUpgradeBosses(this.bossRoom, this.arena),
+    );
+    this.forgetDebriefsOfLivingBosses();
+  }
+
+  /**
    * Asks every owner of durable state to describe itself.
    *
    * Systems rather than a flat field list because the invariants live with the
@@ -4552,6 +4870,7 @@ export class DungeonScene extends GameplayScene {
 
       defendQuest: this.defendQuest.captureCheckpoint(),
       cloggedBathroom: this.cloggedBathroom.captureCheckpoint(),
+      stealthKeySnatch: this.stealthKeySnatch.captureCheckpoint(),
       spiderQuest: this.spiderQuest.captureCheckpoint(),
       circusQuest: this.circusQuest.captureCheckpoint(),
       murderQuest: this.murderQuest.captureCheckpoint(),
@@ -4580,18 +4899,18 @@ export class DungeonScene extends GameplayScene {
   }
 
   /**
-   * Puts every owner of durable state back to what it described at capture.
+   * Puts every owner of the floor's durable state back to what it described at
+   * capture; the run's own progress is {@link restoreRunProgress}.
    *
    * Ordering is load-bearing in three places, each noted below; everything else
    * is independent and listed in the same order as the capture above.
    */
-  private restoreWorldCheckpoint(world: WorldCheckpoint): void {
+  private restoreFloorCheckpoint(world: WorldCheckpoint): void {
     // Before the systems that might re-issue one: a rewind puts the party back
     // before the fight that gave the companion its standing order, and nothing
     // in `CompanionSystem` revokes an order on its own.
     this.companion.clearDirective();
     this.gameMap.restoreCheckpoint(world.gameMap);
-    this.gameStats.restore(world.gameStats);
 
     this.bossRoom.restoreCheckpoint(world.bossRoom);
     this.arena.restoreCheckpoint(world.arena);
@@ -4610,13 +4929,13 @@ export class DungeonScene extends GameplayScene {
     this.dungeonLife?.rescan();
     this.bopca.restoreCheckpoint(world.bopca);
     this.difficultyTelemetry.restoreCheckpoint(world.difficultyTelemetry);
-    this.mercenarySystem.restoreCheckpoint(world.mercenary);
-    this.mongoSystem.restoreCheckpoint(world.mongo);
 
     this.defendQuest.restoreCheckpoint(world.defendQuest);
     // After the map's own restore, which already put the plumbing back: this
     // re-seats every goblin to match it and drops any stall visit in progress.
     this.cloggedBathroom.restoreCheckpoint(world.cloggedBathroom);
+    // After the map's restore too: the gate follows the quest's phase.
+    this.stealthKeySnatch.restoreCheckpoint(world.stealthKeySnatch);
     this.spiderQuest.restoreCheckpoint(world.spiderQuest);
     // The grid the mob rewind just rebuilt, not the one the last frame saw:
     // Signet's move back to the Big Top door has to land in the live one.
@@ -4642,6 +4961,23 @@ export class DungeonScene extends GameplayScene {
       this.bounty.restoreCheckpoint(world.bounty);
     }
 
+    this.krakarenKilled = world.krakarenKilled;
+    this.krakarenBossRoomIdx = world.krakarenBossRoomIdx;
+    this.juicerKilled = world.juicerKilled;
+    this.juicerBossRoomIdx = world.juicerBossRoomIdx;
+  }
+
+  /**
+   * Puts the run's own progress back to what it was at capture: the tallies,
+   * the companions, and every object threaded by reference from scene to
+   * scene. After {@link restoreFloorCheckpoint}, whose systems some of these
+   * pair with.
+   */
+  private restoreRunProgress(world: WorldCheckpoint): void {
+    this.gameStats.restore(world.gameStats);
+    this.mercenarySystem.restoreCheckpoint(world.mercenary);
+    this.mongoSystem.restoreCheckpoint(world.mongo);
+
     restoreCircusQuestProgress(this.circusQuestProgress, world.circusQuestProgress);
     restoreMurderQuestProgress(this.murderQuestProgress, world.murderQuestProgress);
     restoreAnchorQuestProgress(this.anchorQuestProgress, world.anchorQuestProgress);
@@ -4659,11 +4995,6 @@ export class DungeonScene extends GameplayScene {
     // would hand the despawn a snapshot to overwrite.
     restoreMongoPetState(this.mongoPetState, world.mongoPetState);
     restoreBriarHollowState(this.briarHollowState, world.briarHollow);
-
-    this.krakarenKilled = world.krakarenKilled;
-    this.krakarenBossRoomIdx = world.krakarenBossRoomIdx;
-    this.juicerKilled = world.juicerKilled;
-    this.juicerBossRoomIdx = world.juicerBossRoomIdx;
   }
 
   /**
@@ -4677,6 +5008,7 @@ export class DungeonScene extends GameplayScene {
       treasureChests: toPersistedTreasureChestCheckpoint(this.treasureChests.captureCheckpoint()),
       defendQuest: toPersistedDefendQuestCheckpoint(this.defendQuest.captureCheckpoint()),
       cloggedBathroom: this.cloggedBathroom.captureCheckpoint(),
+      stealthKeySnatch: this.stealthKeySnatch.captureCheckpoint(),
       spiderQuest: toPersistedSpiderQuestCheckpoint(this.spiderQuest.captureCheckpoint()),
       circusQuest: toPersistedCircusQuestCheckpoint(this.circusQuest.captureCheckpoint()),
       murderQuest: toPersistedMurderMysteryQuestCheckpoint(this.murderQuest.captureCheckpoint()),
@@ -4731,6 +5063,7 @@ export class DungeonScene extends GameplayScene {
       treasureChests,
       defendQuest,
       cloggedBathroom,
+      stealthKeySnatch,
       spiderQuest,
       circusQuest,
       murderQuest,
@@ -4777,6 +5110,8 @@ export class DungeonScene extends GameplayScene {
     this.defendQuest.restoreCheckpoint(fromPersistedDefendQuestCheckpoint(defendQuest));
     // A save older than the bathroom loads it as the map generated it: broken, unmet.
     if (cloggedBathroom !== undefined) this.cloggedBathroom.restoreCheckpoint(cloggedBathroom);
+    // A save written without the quest loads it unmet, with the gate locked.
+    this.stealthKeySnatch.restoreCheckpoint(stealthKeySnatch);
     this.spiderQuest.restoreCheckpoint(fromPersistedSpiderQuestCheckpoint(spiderQuest));
     if (bossRoomDressing !== undefined) this.bossRoomDressings.restoreCheckpoint(bossRoomDressing);
     // A save older than the dressings restores none of them, so the rooms
@@ -5255,6 +5590,7 @@ export class DungeonScene extends GameplayScene {
         floorEntryGameStats: this.floorEntryGameStats,
         floorEntryMercenaryRoster: this.floorEntryMercenaryRoster,
         floorEntryCatAchievements: this.floorEntryCatAchievements,
+        devPrisonLayout: this.devPrisonLayout ?? undefined,
         abilityManager: this.floorEntryAbilityManager.clone(),
         mongoUnlocked: this.mongoSystem.unlocked,
         mongoPetState: this.mongoPetState,
@@ -5320,7 +5656,8 @@ export class DungeonScene extends GameplayScene {
       this.spiderQuest.wouldInteract(active) ||
       this.circusQuest.wouldInteract(active) ||
       this.murderQuest.wouldInteract(active) ||
-      this.cloggedBathroom.wouldInteract(active)
+      this.cloggedBathroom.wouldInteract(active) ||
+      this.stealthKeySnatch.wouldInteract(active)
     );
   }
 
@@ -5708,6 +6045,7 @@ export class DungeonScene extends GameplayScene {
       this.murderQuest.isDialogOpen ||
       this.anchorQuest.isDialogOpen ||
       this.cloggedBathroom.isDialogOpen ||
+      this.stealthKeySnatch.isDialogOpen ||
       this.safeRoom.mordecaiDialogOpen
     ) {
       return dismiss;
@@ -6109,6 +6447,7 @@ export class DungeonScene extends GameplayScene {
         return [
           this.bossObjective('krakaren_clone'),
           this.defendQuestObjective(),
+          this.stealthGateObjective(),
           asOptional(this.spiderLabObjective()),
           asOptional(this.ballOfSwineObjective('ball_of_swine_distant')),
         ];
@@ -6191,6 +6530,15 @@ export class DungeonScene extends GameplayScene {
       DEFEND_QUEST_ID,
       this.defendQuest.isSpentAsAdvice,
       hasNursery ? this.gameMap.questRooms[0].centre : null,
+    );
+  }
+
+  /** The stealth gate: mandatory, on the only way to the arena, and spent once it is open. */
+  private stealthGateObjective(): AdviceObjective {
+    return adviceObjective(
+      'stealth_gate',
+      this.stealthKeySnatch.phase === 'opened',
+      this.gameMap.stealthGateRoom?.centre ?? null,
     );
   }
 
@@ -6372,6 +6720,9 @@ export class DungeonScene extends GameplayScene {
       return true;
     }
     if (this.cloggedBathroom.tryInteract(active, { human: this.human, cat: this.cat })) {
+      return true;
+    }
+    if (this.stealthKeySnatch.tryInteract(active, { human: this.human, cat: this.cat })) {
       return true;
     }
     // Ahead of the boss room: standing on a placed piece singles it out, where
@@ -6952,6 +7303,7 @@ export class DungeonScene extends GameplayScene {
     // which halt the world, so it is stepped ahead of the halt.
     this.cloggedBathroom.tickGeneration();
     this.cloggedBathroom.syncMarkers();
+    this.stealthKeySnatch.syncMarkers();
 
     // Also drained ahead of the early returns: the request is raised by a
     // right-click or a hotbar key, neither of which routes through the panel's
@@ -7297,6 +7649,12 @@ export class DungeonScene extends GameplayScene {
       camY,
       rc.interactionPromptsAllowed && !this.overlayOpen ? activeCrawler : undefined,
     );
+    this.stealthKeySnatch.renderPrompt(
+      ctx,
+      camX,
+      camY,
+      rc.interactionPromptsAllowed && !this.overlayOpen ? activeCrawler : undefined,
+    );
     this.spiderQuest.render(ctx, camX, camY, this.active());
     this.circusQuest.render(ctx, camX, camY, this.active());
     this.murderQuest.render(ctx, camX, camY, this.active());
@@ -7590,16 +7948,18 @@ export class DungeonScene extends GameplayScene {
   /**
    * The refusal a doorway answers with, or null when it opens normally.
    *
-   * Every door refuses while the partner is down. Beyond that, the Big Top is
-   * the only door in town a quest holds shut. `BuildingSystem` asks rather than
-   * decides, so the tent's reason for being closed stays with the questline that
-   * closes it.
+   * Every door refuses while the partner is down. Beyond that, two doors are
+   * held shut by a quest: the Big Top in town, and floor 2's prison until the
+   * gate guard has explained it. `BuildingSystem` asks rather than decides, so
+   * each reason for being closed stays with the questline that closes it.
    */
   private sealedBuildingMessage(entry: BuildingEntry): string | null {
     const partner = this.inactive();
     const partnerName = partner === this.human ? CRAWLER_NAMES.human : CRAWLER_NAMES.cat;
     const partnerDown = downedPartnerEntryRefusal(partner, partnerName);
     if (partnerDown !== null) return partnerDown;
+    const prisonRefusal = prisonDoorRefusal(entry, this.stealthKeySnatch.isGuardBriefed);
+    if (prisonRefusal !== null) return prisonRefusal;
     if (entry.name !== BIG_TOP_BUILDING_NAME) return null;
     return isBigTopSealed(this.circusQuestProgress.stage) ? BIG_TOP_SEALED_MESSAGE : null;
   }
@@ -7627,6 +7987,7 @@ export class DungeonScene extends GameplayScene {
     markers.length = 0;
     markers.push(...this.defendQuest.questMarkers);
     markers.push(...this.cloggedBathroom.questMarkers);
+    markers.push(...this.stealthKeySnatch.questMarkers);
     markers.push(...this.circusQuest.questMarkers);
     markers.push(...this.murderQuest.questMarkers);
     markers.push(...this.anchorQuest.questMarkers);
@@ -7657,6 +8018,7 @@ export class DungeonScene extends GameplayScene {
       ...collectTrackerEntries([
         this.defendQuest,
         this.cloggedBathroom,
+        this.stealthKeySnatch,
         this.spiderQuest,
         this.circusQuest,
         this.murderQuest,
@@ -7829,6 +8191,7 @@ export class DungeonScene extends GameplayScene {
     this.barriers.update(ctx);
     this.defendQuest.update(ctx);
     this.cloggedBathroom.update(ctx);
+    this.stealthKeySnatch.update(ctx);
     this.briarHollowKit?.updateSiege(ctx);
     this.grateSpikes.update();
     if (this.defendQuest.hammerSoundPending) {
@@ -8047,6 +8410,8 @@ export class DungeonScene extends GameplayScene {
     this.mongoSystem.update(ctx);
     this.autoSummonMongo(ctx);
     this.mercenarySystem.update(ctx);
+    this.seatCompanionsAtPrisonDoor();
+    this.enterPrisonForDev();
     this.drainWardExplainerBarks();
     this.crawlerBarks.update();
     if (this.building?.menuOpen === true || this.recall.isChannelling) {
@@ -8217,6 +8582,12 @@ export class DungeonScene extends GameplayScene {
    * mobs: standing in one to cook, craft or sort a bag must not cost the run
    * its clock. Keyed on the controlled character only, so parking the other
    * one inside while the active one explores does not stop the countdown.
+   *
+   * A visit to one of the floor's buildings stops the clock too, for all of
+   * it: this scene is not updated while the party is indoors, and the scene
+   * rebuilt at the door resumes from the frame the party walked in on. A
+   * building under a dungeon floor is a puzzle, and the floor's collapse must
+   * not punish taking one slowly.
    */
   private isLevelTimerPaused(): boolean {
     return this.safeRoom.isEntityInSafeRoom(this.active());

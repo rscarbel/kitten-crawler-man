@@ -198,6 +198,14 @@ export const MORDECAI_ADVICE = {
     "Krakaren is also a rather... politically complicated figure. We don't have time for that conversation right now.",
   ]),
 
+  stealth_gate: adviceLine(
+    [
+      "There's a locked gate on the way forward, and a goblin guarding it who is far too pleased with himself. He won't open it without the key.",
+      "The key is in a goblin prison next door. Sneaking is the only way through that place. You can't fight your way past the guards, so don't try.",
+    ],
+    'Another crawler spotted the gate {direction} of here.',
+  ),
+
   spider_lab: adviceLine(
     [
       'Something has gone wrong with the Arachnid Experiments. You should probably deal with it before whatever is happening in that room finds a way to become your problem somewhere else.',

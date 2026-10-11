@@ -17,6 +17,7 @@ import {
   LAB_WEB,
   placeProp,
   CRAWLER_SIGN,
+  STEALTH_GATE_CLOSED,
 } from './tileTypes';
 import { randomFromArray, randomInt, clamp } from '../utils';
 import { tileCoordKey } from './tileIndex';
@@ -64,6 +65,14 @@ import {
 } from './gauntletLayout';
 import { bathroomBlockedTiles, layOutBathroom, type BathroomRoomData } from './bathroomLayout';
 import {
+  PRISON_DOOR_SIDE_FACE_TILES,
+  layOutStealthGateRoom,
+  prisonBuildingEntry,
+  type StealthGateRoomData,
+} from './stealthGateLayout';
+import { doorwayKeepClearTiles } from '../systems/doorwayKeepClear';
+import { tileKey } from '../systems/tileKey';
+import {
   validateProgression,
   distanceToRect,
   SCATTER_SAFE_ROOM_SEPARATION,
@@ -83,6 +92,7 @@ import { planSpine, type SpinePlan, type SpinePocketRequest } from './spineLayou
 import { layOutSpiderLab } from './spiderLabLayout';
 import { registerSpiderLabFloorPlan } from './tiles/bossRooms/labFloorPlan';
 import {
+  blockingWouldSplitRoom,
   roomDoorways,
   detectRoomEntrance,
   ROOM_WALL_OUTWARD,
@@ -112,7 +122,13 @@ import {
   rollRoomCharacter,
   type RegionAssignment,
 } from './dungeon/regionCharacters';
-import { dressHallway, dressRoom, dressSpecialRoom } from './dungeon/roomDressing';
+import {
+  BLOCKING_CLEARANCE_TILES,
+  dressHallway,
+  dressRoom,
+  dressSpecialRoom,
+  isBlockingDressingTile,
+} from './dungeon/roomDressing';
 import { dressBathroom } from './dungeon/bathroomDressing';
 import { placeWallFixtures, type WallFixture } from './dungeon/wallFixtures';
 
@@ -315,6 +331,11 @@ export interface ProgressionLayoutData {
   /** The gauntlet whose branches each seat a bathroom, or null on a floor with none. */
   bathroomGauntletIndex: number | null;
   /**
+   * The stealth gate room the spine seated, by its position in `spine.chain`,
+   * or null on a floor with none.
+   */
+  stealthGate: { chainIndex: number; bounds: Rect } | null;
+  /**
    * The forced chain past the last gateway boss, or null on a free-region floor.
    *
    * `chain` is in walking order and every one of its rooms is meant to be a cut
@@ -403,6 +424,30 @@ function bathroomStandingTiles(room: BathroomRoomData): Point[] {
   ];
 }
 
+/** A gate room has exactly two ways through it: the way in, and the way the gate shuts. */
+const STEALTH_GATE_DOORWAY_COUNT = 2;
+
+/** Every tile of the stealth gate room nothing else may be placed on; empty without one. */
+function stealthGateKeepClear(room: StealthGateRoomData | null): Point[] {
+  return room === null ? [] : room.keepClearTiles;
+}
+
+/**
+ * The wall tiles the prison door and its sign are painted on, with a column of
+ * face either side, so no sign pocket is cut into them.
+ */
+function stealthGateWallArtTiles(room: StealthGateRoomData | null): Point[] {
+  if (room === null) return [];
+  const { prisonDoor } = room;
+  const tiles: Point[] = [room.signTile];
+  const lastColumn = prisonDoor.x0 + prisonDoor.faceTiles.length - 1 + PRISON_DOOR_SIDE_FACE_TILES;
+  for (let x = prisonDoor.x0 - PRISON_DOOR_SIDE_FACE_TILES; x <= lastColumn; x++) {
+    for (const row of [prisonDoor.approachRow - 1, prisonDoor.approachRow - 2])
+      tiles.push({ x, y: row });
+  }
+  return tiles;
+}
+
 /** See {@link MobSpawnPoint.region}. */
 function progressionRegionOf(room: Rect, layout: ProgressionLayoutData | undefined): number {
   if (layout === undefined) return 0;
@@ -423,6 +468,8 @@ export interface DungeonData {
   questRooms: QuestRoomData[];
   /** Every copy of the clogged bathroom, one per branch of the gauntlet that seats them. */
   bathroomRooms: BathroomRoomData[];
+  /** The spine's locked gate room, or null on a floor without one. */
+  stealthGateRoom: StealthGateRoomData | null;
   treasureRooms: TreasureRoomData[];
   spiderLabRoom: SpiderLabRoomData | null;
   mobSpawnPoints: MobSpawnPoint[];
@@ -585,6 +632,7 @@ const SPECIAL_ROLE_TAGS = {
   quest: 'quest',
   spider_lab: 'spider_lab',
   bathroom: 'clogged_bathroom',
+  stealth_gate: 'stealth_gate',
   chain: null,
   regular: null,
 } as const satisfies Record<RoomRole, SpecialRegionTag | null>;
@@ -1413,6 +1461,16 @@ function buildDungeon(
    */
   const plannedBathrooms: Array<PlannedBathroom & { entryTiles: Set<number> }> = [];
   let bathroomGauntletIndex: number | null = null;
+  /**
+   * The stealth gate room the spine seated, with the tiles of the corridors it
+   * is entered and left by, for the reason `questChokeEntryTiles` is kept.
+   */
+  let plannedStealthGate: {
+    rect: Rect;
+    chainIndex: number;
+    entryTiles: Set<number>;
+    exitTiles: Set<number>;
+  } | null = null;
   let arenaReservation: ArenaReservation | null = null;
   let antechamberSafeRoom: SafeRoomData | null = null;
   /** Indices into `rooms` of the beyond pocket, index 0 always the landing room. */
@@ -1794,6 +1852,7 @@ function buildDungeon(
             rooms: spineDef.rooms,
             splits: spineDef.splits,
             questRoom: { w: QUEST_ROOM_W, h: QUEST_ROOM_H },
+            stealthGate: spineDef.stealthGate ?? null,
             labRoom: hasSpiderLab ? { w: SPIDER_LAB_W, h: SPIDER_LAB_H } : null,
             pockets: spinePockets,
             safeRoomSize: () => ({ w: randomInt(MIN_W, MAX_W), h: randomInt(MIN_H, MAX_H) }),
@@ -1945,8 +2004,18 @@ function buildDungeon(
     const spineChainBounds: Rect[] = [];
     const spineLanes: Array<{ forkIndex: number; rooms: Rect[] }> = [];
     if (spinePlan !== null) {
-      for (const room of spinePlan.chain) {
+      for (const [chainIndex, room] of spinePlan.chain.entries()) {
         spineChainBounds.push(room.rect);
+        if (room.kind === 'stealth_gate') {
+          addRoom(room.rect, FloorTypeValue.concrete, 'stealth_gate');
+          plannedStealthGate = {
+            rect: room.rect,
+            chainIndex,
+            entryTiles: corridorTileKeys(spinePlan.stealthGateEntryCorridor?.tiles ?? []),
+            exitTiles: corridorTileKeys(spinePlan.stealthGateExitCorridor?.tiles ?? []),
+          };
+          continue;
+        }
         if (room.kind === 'quest') {
           addRoom(room.rect, FloorTypeValue.tile_floor, 'quest');
           questChokeEntryTiles = corridorTileKeys(spinePlan.questEntryCorridor?.tiles ?? []);
@@ -2205,6 +2274,10 @@ function buildDungeon(
       bandedStairwellTiles: [],
       questChoke: questChokeData,
       bathroomGauntletIndex,
+      stealthGate:
+        plannedStealthGate === null
+          ? null
+          : { chainIndex: plannedStealthGate.chainIndex, bounds: plannedStealthGate.rect },
       spine: spinePlan === null ? null : { chain: spineChainBounds, lanes: spineLanes },
     };
   } else {
@@ -2683,6 +2756,57 @@ function buildDungeon(
     });
   }
 
+  let stealthGateRoom: StealthGateRoomData | null = null;
+  if (plannedStealthGate !== null) {
+    const planned = plannedStealthGate;
+    const bounds = planned.rect;
+    const doorways = roomDoorways(grid, bounds);
+    // A self-test fault ships the extra doorway its broken rule makes, so the
+    // gate's own checks are what catch it.
+    const underSelfTest = progression?.spine?.stealthGate?.faultForGate !== undefined;
+    if (doorways.length !== STEALTH_GATE_DOORWAY_COUNT && !underSelfTest) {
+      return reject('stealth gate doorways');
+    }
+    const touches = (doorway: RoomDoorway, corridorTiles: Set<number>): boolean =>
+      doorway.tiles.some((tile) => corridorTiles.has(tileCoordKey(tile.x, tile.y)));
+    // The way in is the doorway the arrival corridor cuts, unless the corridors
+    // as built only reach it through the room itself; see
+    // `doorwaysReachableAroundRoom`. The way on is the one the onward corridor
+    // cuts, and with only two doorways it must be the other one.
+    const plannedEntrance = doorways.find((doorway) => touches(doorway, planned.entryTiles));
+    const approachable = doorwaysReachableAroundRoom(grid, startTile, bounds, doorways);
+    const entranceDoorway =
+      plannedEntrance !== undefined && approachable.has(plannedEntrance)
+        ? plannedEntrance
+        : doorways.find((doorway) => approachable.has(doorway));
+    const onwardDoorway = doorways.find(
+      (doorway) => doorway !== entranceDoorway && touches(doorway, planned.exitTiles),
+    );
+    if (entranceDoorway === undefined || onwardDoorway === undefined) {
+      return reject('stealth gate doorways');
+    }
+    const layout = layOutStealthGateRoom({
+      bounds,
+      entrance: entranceDoorway,
+      onward: onwardDoorway,
+      isOpen: isOpenFloor,
+      isWall: (x, y) => grid[y]?.[x]?.type === FloorTypeValue.wall,
+    });
+    if (layout === null) return reject('stealth gate layout');
+    for (const tile of layout.gateTiles) {
+      placeProp(grid[tile.y][tile.x], STEALTH_GATE_CLOSED);
+    }
+    stealthGateRoom = {
+      bounds,
+      centre: rectCentre(bounds),
+      chainIndex: planned.chainIndex,
+      entranceTile: entranceDoorway.tile,
+      entranceDoorway,
+      onwardDoorway,
+      ...layout,
+    };
+  }
+
   // Spider lab room data
   let spiderLabRoom: SpiderLabRoomData | null = null;
   const spiderLabIdx = rooms.findIndex((r) => r.role === 'spider_lab');
@@ -3002,7 +3126,9 @@ function buildDungeon(
   // A bathroom's queue spills into its corridors, and a rat set down on a tile
   // the queue blocks would start inside ground it cannot walk.
   const bathroomTileKeys = new Set(
-    bathroomRooms.flatMap(bathroomStandingTiles).map((tile) => tileCoordKey(tile.x, tile.y)),
+    [...bathroomRooms.flatMap(bathroomStandingTiles), ...stealthGateKeepClear(stealthGateRoom)].map(
+      (tile) => tileCoordKey(tile.x, tile.y),
+    ),
   );
   const validHallway = hallwayTiles.filter(
     (t) =>
@@ -3233,6 +3359,8 @@ function buildDungeon(
         ...quest.exitDoorTiles,
       ]),
       bathroomRooms.flatMap(bathroomStandingTiles),
+      stealthGateKeepClear(stealthGateRoom),
+      stealthGateWallArtTiles(stealthGateRoom),
       spiderLabRoom === null
         ? []
         : [
@@ -3250,155 +3378,13 @@ function buildDungeon(
     ]) {
       for (const tile of list) claim(tile);
     }
-    // A tile whose type is no longer its room's floor was stamped by a fixture,
-    // a prop or a vignette; none of those record themselves anywhere else.
-    for (const room of rooms) {
-      for (let y = room.y; y < room.y + room.h; y++) {
-        for (let x = room.x; x < room.x + room.w; x++) {
-          if (grid[y]?.[x]?.type !== room.floor) claimedTiles.add(tileCoordKey(x, y));
-        }
-      }
-    }
-
-    const signPlacements = planCrawlerSigns({
-      grid,
-      rooms: rooms.map((room) => ({
-        ...rectOfRoom(room),
-        eligible: SIGN_ROOM_ROLES.has(room.role),
-      })),
-      startRoom: progressionLayout.startRoom,
-      goalRooms: [
-        ...bossRooms.map((boss) => boss.bounds),
-        ...(antechamberSafeRoom === null ? [] : [antechamberSafeRoom.bounds]),
-      ],
-      claimedTiles,
-      keepClear: arenaExteriors.map((arena) => ({
-        centre: arena.centre,
-        radius: arena.radius + SIGN_POCKET_ARENA_MARGIN_TILES,
-      })),
-    });
-
-    const spawnLists: ReadonlyArray<ReadonlyArray<Point>> = [
-      mobSpawnPoints,
-      hallwaySpawnPoints,
-      treasureRooms.map((room) => room.centre),
-    ];
-    for (const placement of signPlacements) {
-      for (const tile of crawlerSignFootprint(placement.tile)) {
-        const target = grid[tile.y][tile.x];
-        const pocketFloor = placement.pocketFloor;
-        const owner = rooms.find(
-          (room) =>
-            tile.x >= room.x &&
-            tile.x < room.x + room.w &&
-            tile.y >= room.y &&
-            tile.y < room.y + room.h,
-        );
-        const heldDecoration =
-          pocketFloor === null
-            ? owner?.floor !== target.type
-            : owner !== undefined || target.type !== FloorTypeValue.wall;
-        const onSpawn = spawnLists.some((list) =>
-          list.some((point) => point.x === tile.x && point.y === tile.y),
-        );
-        if (heldDecoration || onSpawn) {
-          throw new Error(
-            `crawler sign seated on a claimed tile (${tile.x}, ${tile.y}); a claim source is missing from the planner's input`,
-          );
-        }
-        if (pocketFloor !== null) target.groundType = pocketFloor;
-        target.type = CRAWLER_SIGN;
-        target.crawlerSignDirection = placement.direction;
-        target.crawlerSignArrowAngle = placement.arrowAngleRadians;
-      }
-    }
-    crawlerSigns.push(...signPlacements);
   }
 
   // ── Room dressing ─────────────────────────────────────────────────────────
 
-  /** The four tile-adjacent steps, used only to test a room's own floor connectivity. */
-  const ROOM_FLOOD_STEPS: ReadonlyArray<Point> = [
-    { x: 1, y: 0 },
-    { x: -1, y: 0 },
-    { x: 0, y: 1 },
-    { x: 0, y: -1 },
-  ];
-
-  /**
-   * Margin a room's own floor-connectivity test is padded by, so a corridor's
-   * approach tile just outside the room's wall is part of what the test proves
-   * stays connected — a corridor is one tile wide and its doorway can funnel
-   * straight into a room's centre with no lateral spread, so testing the room's
-   * interior alone would miss a decoration that seals that sole approach.
-   */
-  const ROOM_CONNECTIVITY_MARGIN = 2;
-
-  /**
-   * Whether making `(blockedX, blockedY)` solid would disconnect walkable
-   * tiles around a room that are connected now — its own floor, plus a short
-   * reach past each wall for the corridors that approach it — judged by
-   * 4-connectivity inside that window.
-   *
-   * Every walkable tile next to the blocked one is in the same piece as it, so
-   * blocking it splits something exactly when those neighbours can no longer
-   * all reach one another without it. Asking that, rather than whether the
-   * whole window is one piece, keeps a corridor that merely passes the room
-   * inside the margin, joined to nothing in the window, from making every
-   * tile of the room read as a split. A path that leaves the window is never
-   * counted, so the test only ever errs towards refusing a tile.
-   *
-   * A room's doorways, and the corridor tiles just outside them, are ordinary
-   * walkable tiles this test walks, so no decoration can cost a room whose
-   * only route in and out threads through it the doorway that route uses.
-   */
-  const blockingTileWouldSplitRoom = (
-    room: { x: number; y: number; w: number; h: number },
-    blockedX: number,
-    blockedY: number,
-  ): boolean => {
-    const minX = Math.max(0, room.x - ROOM_CONNECTIVITY_MARGIN);
-    const maxX = Math.min(grid[0].length - 1, room.x + room.w - 1 + ROOM_CONNECTIVITY_MARGIN);
-    const minY = Math.max(0, room.y - ROOM_CONNECTIVITY_MARGIN);
-    const maxY = Math.min(grid.length - 1, room.y + room.h - 1 + ROOM_CONNECTIVITY_MARGIN);
-    const walkableInWindow = (x: number, y: number): boolean =>
-      x >= minX &&
-      x <= maxX &&
-      y >= minY &&
-      y <= maxY &&
-      !(x === blockedX && y === blockedY) &&
-      isWalkableTileType(grid[y][x]);
-
-    const neighbours = ROOM_FLOOD_STEPS.map((step) => ({
-      x: blockedX + step.x,
-      y: blockedY + step.y,
-    })).filter((tile) => walkableInWindow(tile.x, tile.y));
-    if (neighbours.length <= 1) return false;
-
-    const seen = new Set<number>();
-    const start = neighbours[0];
-    const stack: Point[] = [start];
-    seen.add(tileCoordKey(start.x, start.y));
-    let unreached = neighbours.length - 1;
-    const neighbourKeys = new Set(neighbours.map((tile) => tileCoordKey(tile.x, tile.y)));
-    while (stack.length > 0 && unreached > 0) {
-      const tile = stack.pop();
-      if (tile === undefined) continue;
-      for (const step of ROOM_FLOOD_STEPS) {
-        const nx = tile.x + step.x;
-        const ny = tile.y + step.y;
-        const key = tileCoordKey(nx, ny);
-        if (seen.has(key) || !walkableInWindow(nx, ny)) continue;
-        seen.add(key);
-        if (neighbourKeys.has(key)) unreached--;
-        stack.push({ x: nx, y: ny });
-      }
-    }
-    return unreached > 0;
-  };
-
-  // Dressing comes after every other placement, signs included, so nothing
-  // the floor is built from ever reads where a prop stands. It draws exactly
+  // Dressing comes after every placement the floor is built from, so none of
+  // them ever reads where a prop stands; only the crawler signs, which choose
+  // no geometry and draw no randomness, are planned after it. It draws exactly
   // one number from the world stream and runs on streams of its own from
   // there, so a change to a character table leaves this attempt's layout and
   // spawns as they were. It can still change the floor if it ever makes an
@@ -3420,13 +3406,19 @@ function buildDungeon(
     buildingEntries.map((entry) => entry.doorTile),
     arenaExteriors.map((arena) => arena.stairwellTile),
     bathroomRooms.flatMap(bathroomStandingTiles),
+    stealthGateKeepClear(stealthGateRoom),
   ]) {
     for (const tile of list) dressingReserved.add(tileCoordKey(tile.x, tile.y));
   }
+  // A door tile is a dead end, so a prop on its approach strands nothing else
+  // and would pass every connectivity check while sealing the door.
+  const prisonDoorKeepClear = doorwayKeepClearTiles(
+    stealthGateRoom === null ? [] : [prisonBuildingEntry(stealthGateRoom)],
+  );
   const isDressingReserved = (x: number, y: number): boolean =>
     dressingReserved.has(tileCoordKey(x, y)) ||
-    stairwellBlockedSet.has(`${x},${y}`) ||
-    grid[y]?.[x]?.type === CRAWLER_SIGN;
+    prisonDoorKeepClear.has(tileKey(x, y)) ||
+    stairwellBlockedSet.has(`${x},${y}`);
 
   const roomAssignments: Array<RegionAssignment | null> = rooms.map((room) => {
     const tag = SPECIAL_ROLE_TAGS[room.role];
@@ -3447,7 +3439,7 @@ function buildDungeon(
         zone,
         doorways: roomDoorways(grid, bounds),
         isReserved: isDressingReserved,
-        wouldSplitRoom: (x, y) => blockingTileWouldSplitRoom(room, x, y),
+        wouldSplitRoom: (x, y) => blockingWouldSplitRoom(grid, rectOfRoom(room), [{ x, y }]),
       },
       assignment,
       placementRng,
@@ -3468,7 +3460,7 @@ function buildDungeon(
         zone: getZone(rectCentre(bounds), sc),
         doorways: roomDoorways(grid, bounds),
         isReserved: isDressingReserved,
-        wouldSplitRoom: (x, y) => blockingTileWouldSplitRoom(room, x, y),
+        wouldSplitRoom: (x, y) => blockingWouldSplitRoom(grid, rectOfRoom(room), [{ x, y }]),
       },
       SPECIAL_REGION_LIGHTING[tag],
       SPECIAL_REGION_PROPS[floorTheme][tag] ?? [],
@@ -3527,6 +3519,84 @@ function buildDungeon(
     }
     return assignment;
   });
+  // Planned on the dressed floor, props and all, so every route length a
+  // sign's trap rule measures is the one a crawler walks.
+  if (progression !== undefined && progressionLayout !== undefined) {
+    // A tile whose type is no longer its room's floor was stamped by a fixture,
+    // a prop or a vignette; none of those record themselves anywhere else.
+    for (const room of rooms) {
+      for (let y = room.y; y < room.y + room.h; y++) {
+        for (let x = room.x; x < room.x + room.w; x++) {
+          if (grid[y]?.[x]?.type !== room.floor) claimedTiles.add(tileCoordKey(x, y));
+        }
+      }
+    }
+    for (const [y, row] of grid.entries()) {
+      for (const [x, tile] of row.entries()) {
+        if (!isBlockingDressingTile(tile)) continue;
+        for (let dy = -BLOCKING_CLEARANCE_TILES; dy <= BLOCKING_CLEARANCE_TILES; dy++) {
+          for (let dx = -BLOCKING_CLEARANCE_TILES; dx <= BLOCKING_CLEARANCE_TILES; dx++) {
+            claimedTiles.add(tileCoordKey(x + dx, y + dy));
+          }
+        }
+      }
+    }
+
+    const signPlacements = planCrawlerSigns({
+      grid,
+      rooms: rooms.map((room) => ({
+        ...rectOfRoom(room),
+        eligible: SIGN_ROOM_ROLES.has(room.role),
+      })),
+      startRoom: progressionLayout.startRoom,
+      goalRooms: [
+        ...bossRooms.map((boss) => boss.bounds),
+        ...(antechamberSafeRoom === null ? [] : [antechamberSafeRoom.bounds]),
+      ],
+      claimedTiles,
+      keepClear: arenaExteriors.map((arena) => ({
+        centre: arena.centre,
+        radius: arena.radius + SIGN_POCKET_ARENA_MARGIN_TILES,
+      })),
+    });
+    if (signPlacements === null) return reject('crawler signs never settled');
+
+    const spawnLists: ReadonlyArray<ReadonlyArray<Point>> = [
+      mobSpawnPoints,
+      hallwaySpawnPoints,
+      treasureRooms.map((room) => room.centre),
+    ];
+    for (const placement of signPlacements) {
+      for (const tile of crawlerSignFootprint(placement.tile)) {
+        const target = grid[tile.y][tile.x];
+        const pocketFloor = placement.pocketFloor;
+        const owner = rooms.find(
+          (room) =>
+            tile.x >= room.x &&
+            tile.x < room.x + room.w &&
+            tile.y >= room.y &&
+            tile.y < room.y + room.h,
+        );
+        const heldDecoration =
+          pocketFloor === null
+            ? owner?.floor !== target.type
+            : owner !== undefined || target.type !== FloorTypeValue.wall;
+        const onSpawn = spawnLists.some((list) =>
+          list.some((point) => point.x === tile.x && point.y === tile.y),
+        );
+        if (heldDecoration || onSpawn) {
+          throw new Error(
+            `crawler sign seated on a claimed tile (${tile.x}, ${tile.y}); a claim source is missing from the planner's input`,
+          );
+        }
+        if (pocketFloor !== null) target.groundType = pocketFloor;
+        target.type = CRAWLER_SIGN;
+        target.crawlerSignDirection = placement.direction;
+        target.crawlerSignArrowAngle = placement.arrowAngleRadians;
+      }
+    }
+    crawlerSigns.push(...signPlacements);
+  }
   const regionCharacters =
     progressionLayout === undefined
       ? RegionCharacters.empty()
@@ -3548,6 +3618,7 @@ function buildDungeon(
     bossRooms,
     questRooms,
     bathroomRooms,
+    stealthGateRoom,
     treasureRooms,
     spiderLabRoom,
     mobSpawnPoints: filteredMobSpawns,
@@ -3594,6 +3665,11 @@ export function progressionExpectations(options: GenerateDungeonOptions): Progre
     hasBathroomChoke:
       progression?.gauntlets.some((gauntlet) => gauntlet.bathroomChoke !== undefined) ?? false,
     bathroomPlumberBlocks: plumberBlocksOnFloor(progression),
+    // Disarmed only under a `verify:stealth-gate` self-test fault, so the faulty
+    // layout ships and that gate's own checks have to be the ones to catch it.
+    hasStealthGate:
+      progression?.spine?.stealthGate !== undefined &&
+      progression.spine.stealthGate.faultForGate === undefined,
     hasSpine: progression?.spine !== undefined,
     spiderLabIsDeadEnd: (options.hasSpiderLab ?? false) && progression?.spine !== undefined,
     spineMinRooms: progression?.spine?.rooms.min ?? 0,

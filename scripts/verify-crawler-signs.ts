@@ -47,6 +47,8 @@ import {
 import { GameMap } from '../src/map/GameMap.js';
 import { findHallwayForks } from '../src/map/hallwayForks.js';
 import { hasOpenRegion } from '../src/map/findWalkableTile.js';
+import { isBlockingDressingTile } from '../src/map/dungeon/roomDressing.js';
+import { blockingWouldSplitRoom } from '../src/map/roomDoorways.js';
 import { applyMovement } from '../src/systems/PlayerMovementSystem.js';
 import { TILE_KEY_STRIDE, tileCoordKey } from '../src/map/tileIndex.js';
 import { CRAWLER_SIGN, FloorTypeValue, type TileContent } from '../src/map/tileTypes.js';
@@ -147,6 +149,9 @@ const PROPS_MANIFEST_PATH = '../src/images/environment/props/manifest.json';
 
 /** Marks a tile that belongs to no room, or a tile with no corridor component. */
 const NO_ROOM = -1;
+
+/** Tiles on every side of a solid dressing piece where no sign may stand. */
+const PROP_CLEARANCE_TILES = 1;
 
 /** Marks a room on no leg of the forced path. */
 const NO_STAGE = -1;
@@ -646,6 +651,8 @@ interface FloorStats {
   deadEndJunctions: number;
   detourJunctions: number;
   safeRoomControls: number;
+  /** Times a tile beside a solid prop was offered as a seat and refused. */
+  propClearanceControls: number;
   safeExcludedRooms: number;
   /** Unsigned trap rooms whose role rules a sign out: start, safe, boss, quest or lab. */
   roleExcludedRooms: number;
@@ -1986,12 +1993,46 @@ function unsignedJunctionReason(
   return noPocketReason(model, junction, claimed);
 }
 
+/**
+ * Tiles beside a solid dressing piece. Signs are seated after the floor is dressed,
+ * and no sign may stand crowded against a piece, room sign or wall pocket alike.
+ */
+function tilesBesideBlockingProps(map: GameMap): Set<number> {
+  const beside = new Set<number>();
+  for (const [y, row] of map.structure.entries()) {
+    for (const [x, tile] of row.entries()) {
+      if (!isBlockingDressingTile(tile)) continue;
+      for (let dy = -PROP_CLEARANCE_TILES; dy <= PROP_CLEARANCE_TILES; dy++) {
+        for (let dx = -PROP_CLEARANCE_TILES; dx <= PROP_CLEARANCE_TILES; dx++) {
+          beside.add(tileKeyOf({ x: x + dx, y: y + dy }));
+        }
+      }
+    }
+  }
+  return beside;
+}
+
+/** A walkable tile orthogonally beside the first solid dressing piece, or null on a bare floor. */
+function firstTileBesideBlockingProp(map: GameMap): Point | null {
+  for (const [y, row] of map.structure.entries()) {
+    for (const [x, tile] of row.entries()) {
+      if (!isBlockingDressingTile(tile)) continue;
+      const open = ORTHOGONAL_STEPS.map((step) => ({ x: x + step.x, y: y + step.y })).find(
+        (beside) => map.isWalkable(beside.x, beside.y),
+      );
+      if (open !== undefined) return open;
+    }
+  }
+  return null;
+}
+
 /** Tiles of `room` the planner's own claim rules would treat as taken, judged from the live map. */
 function claimedTilesOf(model: FloorModel): Set<number> {
   const claimed = new Set(claimLists(model.map).flatMap((list) => list.points.map(tileKeyOf)));
   for (const stairwell of model.map.stairwellTiles) {
     for (const tile of stairwellFootprint(stairwell)) claimed.add(tileKeyOf(tile));
   }
+  for (const key of tilesBesideBlockingProps(model.map)) claimed.add(key);
   return claimed;
 }
 
@@ -2020,7 +2061,8 @@ function dominantFloorType(model: FloorModel, room: number, ignored: Point | nul
 /**
  * Every interior tile of `room` where a sign could legally stand: unclaimed floor of
  * the room's own type, at least {@link MIN_DOORWAY_CLEARANCE_TILES} from every
- * doorway, that leaves each walkable neighbour somewhere to move once it is solid.
+ * doorway, that leaves each walkable neighbour somewhere to move once it is solid
+ * and does not cut the room's floor apart.
  *
  * `ignoredSign` is a sign the caller is pretending is absent: its tile counts as
  * open floor, which is how a control removes a real sign and asks the same question.
@@ -2061,7 +2103,8 @@ function legalSignSeats(
         if (!walkableWithSeat(nx, ny)) return true;
         return hasOpenRegion(walkableWithSeat, size, size, nx, ny);
       });
-      if (leavesNeighboursRoom) seats.push(tile);
+      const cutsRoomApart = blockingWouldSplitRoom(map.structure, bounds, [tile]);
+      if (leavesNeighboursRoom && !cutsRoomApart) seats.push(tile);
     }
   }
   return seats;
@@ -2207,6 +2250,7 @@ function verifyCoverage(
   stats: FloorStats,
 ): void {
   const claimed = new Set(claimLists(model.map).flatMap((l) => l.points.map(tileKeyOf)));
+  for (const key of tilesBesideBlockingProps(model.map)) claimed.add(key);
   const signKeys = new Set(signs.map((sign) => tileKeyOf(sign.tile)));
   const signsTouching = (junction: Junction): number[] => {
     const touching = new Set<number>();
@@ -2368,7 +2412,9 @@ function plannedSigns(scene: Scene): {
   rooms: PlannedCrawlerSign[];
   hallways: PlannedCrawlerSign[];
 } {
-  const signs = planCrawlerSigns(scene.plan);
+  const planned = planCrawlerSigns(scene.plan);
+  check(planned !== null, `${scene.name}: the planner's signs never settled`);
+  const signs = planned ?? [];
   return {
     rooms: signs.filter((sign) => sign.kind === 'room'),
     hallways: signs.filter((sign) => sign.kind === 'hallway'),
@@ -2903,6 +2949,7 @@ function verifyFloor(levelDef: LevelDef, floorIndex: number): void {
     deadEndJunctions: 0,
     detourJunctions: 0,
     safeRoomControls: 0,
+    propClearanceControls: 0,
     safeExcludedRooms: 0,
     roleExcludedRooms: 0,
   };
@@ -2917,10 +2964,12 @@ function verifyFloor(levelDef: LevelDef, floorIndex: number): void {
       mapType: 'dungeon',
       dungeon: dungeonOptionsForLevel(levelDef),
     });
-    // The signs describe the route as built. The clogged bathrooms on floor 2 are
-    // rooms on that route whose queue only blocks it until the plumbing is fixed,
-    // which is `verify:clogged-bathroom`'s to check.
+    // The signs describe the route as built. The clogged bathrooms and the
+    // stealth gate on floor 2 stand on that route and only block it until they
+    // are solved, which is `verify:clogged-bathroom`'s and `verify:stealth-gate`'s
+    // to check.
     map.setBathroomPlumbing('fixed');
+    map.setStealthGate('open');
     const layout = map.progressionLayout;
     if (layout === undefined) {
       check(false, 'the floor generated no progression layout to read rooms from');
@@ -2940,6 +2989,17 @@ function verifyFloor(levelDef: LevelDef, floorIndex: number): void {
       ...(map.spiderLabRoom === null ? [] : [map.spiderLabRoom.bounds]),
     ];
     const reach = reachableFromStart(map);
+    const besideProps = tilesBesideBlockingProps(map);
+    const crowdsProp = (anchor: Point): boolean =>
+      crawlerSignFootprint(anchor).some((tile) => besideProps.has(tileKeyOf(tile)));
+    const plantedBesideProp = firstTileBesideBlockingProp(map);
+    if (plantedBesideProp !== null) {
+      stats.propClearanceControls++;
+      check(
+        crowdsProp(plantedBesideProp),
+        `negative control: a sign planted at (${plantedBesideProp.x},${plantedBesideProp.y}) beside a solid prop was not flagged`,
+      );
+    }
 
     for (const sign of signs) {
       const { x, y } = sign.tile;
@@ -2965,6 +3025,8 @@ function verifyFloor(levelDef: LevelDef, floorIndex: number): void {
         ),
         `${where} stands inside the arena`,
       );
+
+      check(!crowdsProp(sign.tile), `${where} stands beside a solid dressing prop`);
 
       for (const list of lists) {
         const clash = list.points.find((point) => point.x === x && point.y === y);
@@ -3032,6 +3094,7 @@ function verifyFloor(levelDef: LevelDef, floorIndex: number): void {
     ['loop trap junctions', stats.loopJunctions],
     ['long-way-round trap junctions', stats.detourJunctions],
     ['search-territory negative controls', stats.searchControls],
+    ['prop-clearance negative controls', stats.propClearanceControls],
   ];
   chainedAcrossFloors += stats.chainedSigns;
   roomGateTotals.signs += stats.roomSigns;

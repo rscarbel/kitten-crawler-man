@@ -9,8 +9,10 @@ import type { PartyCraftsState } from './partyCrafts';
  * a `SavePoint`. Restoring it puts the current `DungeonScene` back the way
  * it was at capture time rather than rebuilding the scene, which keeps what the
  * save cannot: which ordinary mobs are already dead, the fog, the felled trees.
- * In-memory only, and bound to the scene that captured it — its mob flags live
- * on that scene's roster — so a rebuilt scene falls back to the save itself.
+ * In-memory only, and bound to the creatures that captured it — its mob flags
+ * live on them — so a scene rebuilt around a regenerated roster falls back to
+ * the save itself. A scene rebuilt around a floor held aside for a building
+ * visit keeps those very creatures, and so keeps the checkpoint too.
  */
 export interface LevelCheckpoint {
   /**

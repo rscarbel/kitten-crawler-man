@@ -284,7 +284,14 @@ export interface LightingProfile {
  * lighting profile of their own.
  */
 export type SpecialRegionTag =
-  'start' | 'safe' | 'boss' | 'quest' | 'spider_lab' | 'clogged_bathroom' | 'arena';
+  | 'start'
+  | 'safe'
+  | 'boss'
+  | 'quest'
+  | 'spider_lab'
+  | 'clogged_bathroom'
+  | 'stealth_gate'
+  | 'arena';
 
 const FIXED_ONE: CountRange = { min: 1, max: 1 };
 const FIXED_TWO: CountRange = { min: 2, max: 2 };
@@ -311,6 +318,9 @@ export const SPECIAL_REGION_LIGHTING = {
   },
   spider_lab: null,
   clogged_bathroom: { ambient: 'lit', colour: 'cool_white', sources: [] },
+  // Never dark: the gate, its guard and the prison sign have to read the moment
+  // the party walks in.
+  stealth_gate: { ambient: 'lit', colour: 'sodium', sources: [] },
   arena: { ambient: 'lit', colour: 'cool_white', sources: [] },
 } as const satisfies Record<SpecialRegionTag, LightingProfile | null>;
 
@@ -1063,12 +1073,13 @@ export const SPECIAL_REGION_PROPS: Record<
  * The floor a special region is laid in, where it has one of its own; every
  * other special region keeps the floor its tile type maps to. The clogged
  * bathroom is only ever seated on the service level, whose sheet carries its
- * washroom mosaic.
+ * washroom mosaic, and so is the stealth gate room, floored in checker plate.
  */
 export const SPECIAL_REGION_FLOOR_MATERIALS: Partial<
   Record<SpecialRegionTag, CharacterFloorMaterial>
 > = {
   clogged_bathroom: 'f2_washroom',
+  stealth_gate: 'f2_plate',
 };
 
 /** Every character on every floor, for lookups by id. */

@@ -34,6 +34,7 @@ import {
   accelerationWindow,
   bowDrawAt,
   cyclePhase,
+  goblinPlumberPose,
   goblinPose,
   goblinWeapon,
   goblinWeaponTip,
@@ -41,7 +42,15 @@ import {
   type GoblinArchetype,
   type RowSpec,
 } from '../src/sprites/art/goblinFigure.js';
-import { along, buildSkeleton, type GoblinPose, type Pt } from '../src/sprites/art/goblinArt.js';
+import {
+  along,
+  buildSkeleton,
+  deg,
+  goblinEarSpine,
+  type GoblinPose,
+  type Pt,
+} from '../src/sprites/art/goblinArt.js';
+import { previewInk } from '../src/ui/theme/previewInk.js';
 import { BONELESS_GORE_STATES, gorePieces } from '../src/sprites/art/goblinGore.js';
 import {
   GOBLIN_ATTACKS,
@@ -1113,11 +1122,9 @@ function gateRotationSafety(archetype: GoblinArchetype): void {
  * out of the figure's memory accounting entirely.
  *
  * Read the logged line as the number that matters and the threshold as an
- * alarm rather than a tight bound: the shipped widest row is 0.70 MB, an
- * eighth of the budget, and mutation testing put the trip point at roughly
- * eleven times the frame count these rows declare or a threefold growth of the
- * cell. Nothing a painter can do moves it; only a much longer row or a much
- * bigger cell will.
+ * alarm rather than a tight bound: the widest row is about a fifth of the
+ * budget. Nothing a painter can do moves it; only a row several times longer
+ * or a much bigger cell will.
  */
 const ROW_BUDGET_MEGABYTES = 6;
 
@@ -1500,6 +1507,523 @@ function gateRuntimeStateNames(archetype: GoblinArchetype): void {
   failUnlessMeasured('G18', archetype, partsMeasured, 'gore parts');
 }
 
+// ── G19 · the goblin stands off every floor it stands on ─────────────────────
+
+/**
+ * The floors a goblin is judged on: the mids of every floor it spawns on, plus
+ * floor 2's concrete with the lights off, which is the tone the party mostly
+ * sees. Taken from the review scenes' own swatches so the gate and the
+ * `?goblins` review judge the same ground.
+ */
+const CONTRAST_FLOORS: ReadonlyArray<readonly [string, string]> = [
+  ['cellar stone', previewInk.floor.cellarStone],
+  ['dressed stone', previewInk.floor.dressedStone],
+  ['poured concrete', previewInk.floor.pouredConcrete],
+  ['unlit concrete', previewInk.floor.unlitConcrete],
+  ['grass', previewInk.floor.grass],
+];
+
+/**
+ * The frames contrast is judged on: standing, mid-stride, and both blows
+ * landing — the poses a player has to pick a goblin out of a room in.
+ */
+function contrastFrames(archetype: GoblinArchetype): ReadonlyArray<readonly [string, number]> {
+  const walk = rowByName('walk');
+  return [
+    ['idle', 0],
+    ['walk', 0],
+    ['walk', Math.floor(walk.frameCount / 2)],
+    ['attack_light', IMPACT_FRAMES[archetype].light],
+    ['attack_heavy', IMPACT_FRAMES[archetype].heavy],
+  ];
+}
+
+/**
+ * How much of the figure may be indistinguishable from the floor: solid pixels
+ * within {@link CAMOUFLAGE_DELTA_E} of it in CIELAB.
+ *
+ * Measured as a colour distance rather than as lightness alone. The goblin's lit
+ * skin and the dressed-stone floor are both near L* 65, so a lightness-only
+ * test cannot pass with a bright green goblin on a sand floor at all — yet green
+ * on sand is about as easy a read as there is. What it catches is a skin or a
+ * garment painted in the floor's own colour; that the figure out-values the
+ * floors at all is {@link gateLitPlanes}'s job.
+ */
+const CAMOUFLAGE_DELTA_E = 10;
+const CAMOUFLAGE_FRACTION_MAX = 0.1;
+const PERCENT = 100;
+/**
+ * How strongly the silhouette's edge has to part from the floor: the median,
+ * over every edge pixel, of the best WCAG contrast any solid pixel near that
+ * edge makes against the floor. Three to one is WCAG's own floor for large
+ * shapes.
+ *
+ * "Near the edge" rather than "the edge pixel itself" because the goblin parts
+ * from a light floor by its dark outline and from a dark floor by the bright
+ * body just inside it; either one makes the edge. Without the outline the
+ * bright skin alone makes about two to one on the grass floor and fails.
+ */
+const EDGE_CONTRAST_MIN = 3;
+/** How far inside an edge pixel the gate looks for the pixel that parts it from the floor. */
+const EDGE_BAND_PX = 3;
+
+interface Lab {
+  readonly l: number;
+  readonly a: number;
+  readonly b: number;
+}
+
+const SRGB_LINEAR_KNEE = 0.04045;
+const SRGB_LINEAR_SLOPE = 12.92;
+const SRGB_GAMMA_OFFSET = 0.055;
+const SRGB_GAMMA = 2.4;
+
+function linearChannel(value: number): number {
+  const c = value / CHANNEL_MAX;
+  return c <= SRGB_LINEAR_KNEE
+    ? c / SRGB_LINEAR_SLOPE
+    : ((c + SRGB_GAMMA_OFFSET) / (1 + SRGB_GAMMA_OFFSET)) ** SRGB_GAMMA;
+}
+
+/** Linear sRGB to CIE XYZ (D65); the Y row is relative luminance. */
+const X_FROM_R = 0.4124;
+const X_FROM_G = 0.3576;
+const X_FROM_B = 0.1805;
+const Y_FROM_R = 0.2126;
+const Y_FROM_G = 0.7152;
+const Y_FROM_B = 0.0722;
+const Z_FROM_R = 0.0193;
+const Z_FROM_G = 0.1192;
+const Z_FROM_B = 0.9505;
+const D65_WHITE_X = 0.95047;
+const D65_WHITE_Z = 1.08883;
+
+/** Relative luminance, Rec. 709 weights on linear sRGB — WCAG's definition. */
+function relativeLuminance(r: number, g: number, b: number): number {
+  return Y_FROM_R * linearChannel(r) + Y_FROM_G * linearChannel(g) + Y_FROM_B * linearChannel(b);
+}
+
+/** WCAG 2 contrast ratio between two relative luminances. */
+function wcagContrast(y1: number, y2: number): number {
+  const FLARE = 0.05;
+  return (Math.max(y1, y2) + FLARE) / (Math.min(y1, y2) + FLARE);
+}
+
+/** sRGB to CIELAB under D65. */
+function toLab(r: number, g: number, b: number): Lab {
+  const lr = linearChannel(r);
+  const lg = linearChannel(g);
+  const lb = linearChannel(b);
+  const x = (X_FROM_R * lr + X_FROM_G * lg + X_FROM_B * lb) / D65_WHITE_X;
+  const y = Y_FROM_R * lr + Y_FROM_G * lg + Y_FROM_B * lb;
+  const z = (Z_FROM_R * lr + Z_FROM_G * lg + Z_FROM_B * lb) / D65_WHITE_Z;
+  /** CIE's linear-segment threshold and slope, (6/29)³ and (29/3)³. */
+  const EPSILON = 0.008856;
+  const KAPPA = 903.3;
+  const LAB_OFFSET = 16;
+  const LAB_SCALE = 116;
+  const f = (t: number): number =>
+    t > EPSILON ? Math.cbrt(t) : (KAPPA * t + LAB_OFFSET) / LAB_SCALE;
+  const A_SCALE = 500;
+  const B_SCALE = 200;
+  return {
+    l: LAB_SCALE * f(y) - LAB_OFFSET,
+    a: A_SCALE * (f(x) - f(y)),
+    b: B_SCALE * (f(y) - f(z)),
+  };
+}
+
+function deltaE(p: Lab, q: Lab): number {
+  return Math.hypot(p.l - q.l, p.a - q.a, p.b - q.b);
+}
+
+/** `#rrggbb` to its three channels. */
+function hexChannels(hex: string): readonly [number, number, number] {
+  const HEX_RADIX = 16;
+  const BYTE_BITS = 8;
+  const BYTE_MASK = 0xff;
+  const packed = parseInt(hex.slice(1), HEX_RADIX);
+  return [
+    (packed >> (BYTE_BITS * 2)) & BYTE_MASK,
+    (packed >> BYTE_BITS) & BYTE_MASK,
+    packed & BYTE_MASK,
+  ];
+}
+
+interface FloorContrast {
+  readonly camouflaged: number;
+  readonly solid: number;
+  readonly edgeContrasts: readonly number[];
+}
+
+/** One cell laid over one floor: how much of it the floor swallows, and how its edge parts. */
+function floorContrastOf(cell: Cell, floor: string): FloorContrast {
+  const [fr, fg, fb] = hexChannels(floor);
+  const floorLab = toLab(fr, fg, fb);
+  const floorY = relativeLuminance(fr, fg, fb);
+  const isSolid = (x: number, y: number): boolean =>
+    x >= 0 &&
+    y >= 0 &&
+    x < cell.width &&
+    y < cell.height &&
+    alphaAt(cell, x, y) >= SOLID_ALPHA_THRESHOLD;
+  const luminance = new Float64Array(cell.width * cell.height);
+  let solid = 0;
+  let camouflaged = 0;
+  for (let y = 0; y < cell.height; y++) {
+    for (let x = 0; x < cell.width; x++) {
+      if (!isSolid(x, y)) continue;
+      const at = (y * cell.width + x) * CHANNELS;
+      const alpha = cell.data[at + ALPHA_OFFSET] / CHANNEL_MAX;
+      const over = (value: number, under: number): number => value * alpha + under * (1 - alpha);
+      const r = over(cell.data[at], fr);
+      const g = over(cell.data[at + 1], fg);
+      const b = over(cell.data[at + 2], fb);
+      luminance[y * cell.width + x] = relativeLuminance(r, g, b);
+      solid++;
+      if (deltaE(toLab(r, g, b), floorLab) < CAMOUFLAGE_DELTA_E) camouflaged++;
+    }
+  }
+  const edgeContrasts: number[] = [];
+  for (let y = 0; y < cell.height; y++) {
+    for (let x = 0; x < cell.width; x++) {
+      if (!isSolid(x, y)) continue;
+      const onEdge =
+        !isSolid(x + 1, y) || !isSolid(x - 1, y) || !isSolid(x, y + 1) || !isSolid(x, y - 1);
+      if (!onEdge) continue;
+      let best = 0;
+      for (let dy = -EDGE_BAND_PX; dy <= EDGE_BAND_PX; dy++) {
+        for (let dx = -EDGE_BAND_PX; dx <= EDGE_BAND_PX; dx++) {
+          if (!isSolid(x + dx, y + dy)) continue;
+          best = Math.max(best, wcagContrast(luminance[(y + dy) * cell.width + x + dx], floorY));
+        }
+      }
+      edgeContrasts.push(best);
+    }
+  }
+  return { camouflaged, solid, edgeContrasts };
+}
+
+/**
+ * The goblin's lit planes have to out-shine the brightest floor it stands on:
+ * this share of its solid pixels, from the top of its value range down, sit
+ * at least {@link LIT_PLANE_MARGIN_L} above that floor's lightness.
+ *
+ * Floor-independent on purpose. A goblin spanning L* 25–50 under floors of
+ * L* 45–63 is out-valued by every floor and reads as a dark smudge whatever
+ * its outline does; an outline round a figure no brighter than
+ * the ground parts it from the floor without making it legible.
+ */
+const LIT_PLANE_SHARE = 0.1;
+const LIT_PLANE_MARGIN_L = 5;
+
+function gateLitPlanes(archetype: GoblinArchetype): void {
+  const lightness: number[] = [];
+  for (const [state, frame] of contrastFrames(archetype)) {
+    const cell = cellOf(archetype, state, frame);
+    for (let y = 0; y < cell.height; y++) {
+      for (let x = 0; x < cell.width; x++) {
+        if (alphaAt(cell, x, y) < SOLID_ALPHA_THRESHOLD) continue;
+        const at = (y * cell.width + x) * CHANNELS;
+        lightness.push(toLab(cell.data[at], cell.data[at + 1], cell.data[at + 2]).l);
+      }
+    }
+  }
+  if (lightness.length === 0) {
+    fail('G19', archetype, 'no solid pixels to judge the lit planes by');
+    return;
+  }
+  const brightestFloor = Math.max(
+    ...CONTRAST_FLOORS.map(([, floor]) => toLab(...hexChannels(floor)).l),
+  );
+  const sorted = [...lightness].sort((a, b) => b - a);
+  const litPlane = sorted[Math.floor(sorted.length * LIT_PLANE_SHARE)];
+  console.log(
+    `  G19 ${archetype}: lit planes at L* ${litPlane.toFixed(1)} against the brightest floor's ` +
+      brightestFloor.toFixed(1),
+  );
+  if (litPlane < brightestFloor + LIT_PLANE_MARGIN_L) {
+    fail(
+      'G19',
+      archetype,
+      `its brightest ${LIT_PLANE_SHARE * PERCENT}% of pixels only reach L* ${litPlane.toFixed(1)}, ` +
+        `under the brightest floor's ${brightestFloor.toFixed(1)} + ${LIT_PLANE_MARGIN_L} — ` +
+        'every floor out-values it',
+    );
+  }
+}
+
+function gateFloorContrast(archetype: GoblinArchetype): void {
+  gateLitPlanes(archetype);
+  let measured = 0;
+  for (const [floorName, floor] of CONTRAST_FLOORS) {
+    let camouflaged = 0;
+    let solid = 0;
+    const edges: number[] = [];
+    for (const [state, frame] of contrastFrames(archetype)) {
+      const result = floorContrastOf(cellOf(archetype, state, frame), floor);
+      camouflaged += result.camouflaged;
+      solid += result.solid;
+      edges.push(...result.edgeContrasts);
+    }
+    if (solid === 0 || edges.length === 0) continue;
+    measured++;
+    const camouflageShare = camouflaged / solid;
+    const edgeMedian = median(edges);
+    console.log(
+      `  G19 ${archetype} on ${floorName}: ${(camouflageShare * PERCENT).toFixed(1)}% camouflaged, ` +
+        `edge contrast ${edgeMedian.toFixed(2)}:1`,
+    );
+    if (camouflageShare > CAMOUFLAGE_FRACTION_MAX) {
+      fail(
+        'G19',
+        archetype,
+        `${(camouflageShare * PERCENT).toFixed(1)}% of its solid pixels sit within ΔE ` +
+          `${CAMOUFLAGE_DELTA_E} of the ${floorName} floor, over the ` +
+          `${CAMOUFLAGE_FRACTION_MAX * PERCENT}% ceiling — it is camouflage there`,
+      );
+    }
+    if (edgeMedian < EDGE_CONTRAST_MIN) {
+      fail(
+        'G19',
+        archetype,
+        `its silhouette parts from the ${floorName} floor at a median ${edgeMedian.toFixed(2)}:1, ` +
+          `under ${EDGE_CONTRAST_MIN}:1 — the edge dissolves into the ground`,
+      );
+    }
+  }
+  failUnlessMeasured('G19', archetype, measured, 'floors for contrast');
+}
+
+// ── G20 · the ears break the skull's silhouette ──────────────────────────────
+
+/**
+ * How far out along each ear, from root to point, the gate looks for ink.
+ * Short of the point itself, whose last pixel is an antialiased sliver.
+ */
+const EAR_SAMPLE_ALONG = 0.8;
+/**
+ * How far clear of the skull that point must stand, in skull half-widths from
+ * the head's centre. An ear swept flat back along the skull never leaves the
+ * head's own outline, and the silhouette reads as a bald man.
+ */
+const EAR_CLEAR_OF_SKULL = 1.3;
+
+/**
+ * Walks the rig out along both ears on every idle and walk frame and asserts
+ * that a solid pixel stands there, clear of the skull: two ears breaking the
+ * outline of the head is the one goblin read no other creature here shares.
+ * Read off the solved rig, not off the ink, so a pose whose ears are painted
+ * somewhere else entirely fails rather than passing on stray ink.
+ */
+function gateEarsBreakSilhouette(archetype: GoblinArchetype): void {
+  const def = GOBLIN_FIGURES[archetype];
+  const style = GOBLIN_STYLES[archetype];
+  const unit = TILE_SCALE * ARCHETYPE_SCALE[archetype];
+  const groundY = def.tileY + def.tileScale;
+  const skullHalfWidth = style.proportions.headRadius * style.proportions.headWidthFactor;
+  let samples = 0;
+  for (const rowName of ['idle', 'walk']) {
+    const row = rowByName(rowName);
+    for (let frame = 0; frame < row.frameCount; frame++) {
+      const pose = goblinPose(archetype, row, frame);
+      const skeleton = buildSkeleton(style, pose);
+      const cell = cellOf(archetype, row.name, frame);
+      for (const near of [true, false]) {
+        const { base, tip } = goblinEarSpine(style, near, pose.earLag);
+        const local = {
+          x: base.x + (tip.x - base.x) * EAR_SAMPLE_ALONG,
+          y: base.y + (tip.y - base.y) * EAR_SAMPLE_ALONG,
+        };
+        samples++;
+        const ear = near ? 'near' : 'far';
+        const clearance = Math.hypot(local.x, local.y) / skullHalfWidth;
+        if (clearance < EAR_CLEAR_OF_SKULL) {
+          fail(
+            'G20',
+            archetype,
+            `${row.name} frame ${frame}: the ${ear} ear stands only ${clearance.toFixed(2)} skull ` +
+              `half-widths from the head's centre, under ${EAR_CLEAR_OF_SKULL} — it does not ` +
+              'break the outline of the head',
+          );
+          continue;
+        }
+        const turned = {
+          x: local.x * Math.cos(skeleton.headAngle) - local.y * Math.sin(skeleton.headAngle),
+          y: local.x * Math.sin(skeleton.headAngle) + local.y * Math.cos(skeleton.headAngle),
+        };
+        const px = Math.floor(def.frameWidth / 2 + (skeleton.headCentre.x + turned.x) * unit);
+        const py = Math.floor(groundY + (skeleton.headCentre.y + turned.y) * unit);
+        const inCell = px >= 0 && py >= 0 && px < def.frameWidth && py < def.frameHeight;
+        if (!inCell || alphaAt(cell, px, py) < SOLID_ALPHA_THRESHOLD) {
+          fail(
+            'G20',
+            archetype,
+            `${row.name} frame ${frame}: no solid ink out along the ${ear} ear at (${px}, ${py}) — ` +
+              'the ear is drawn under something or not drawn at all',
+          );
+        }
+      }
+    }
+  }
+  failUnlessMeasured('G20', archetype, samples, 'ear samples');
+}
+
+// ── G22 · a goblin never stands up straight ──────────────────────────────────
+
+/**
+ * The least spine tilt any frame may carry. The permanent crouch adds to every
+ * style's hunch; a wind that leans back far enough to cancel it is the heavy
+ * overhead that stood tall and turned to face the camera.
+ */
+const MIN_TOTAL_LEAN = deg(9);
+/** One degree in radians, for reporting angles. */
+const DEGREE = deg(1);
+/** The least the head may sit forward of the hips, in drawn tiles. */
+const MIN_HEAD_LEAD_TILES = 0.05;
+/**
+ * The most a planted leg may use of its reach on any frame. Past this the knee
+ * locks straight, which is either a stilt-legged human or a foot the rig could
+ * not reach.
+ */
+const MAX_PLANTED_LEG_EXTENSION = 0.95;
+/**
+ * The most a planted leg may use of its reach standing at rest, on idle frame
+ * 0. An upright stance uses 0.93 of it; the crouch uses about 0.82.
+ */
+const MAX_REST_LEG_EXTENSION = 0.86;
+/** A foot this close to the floor, in tile units, counts as planted. */
+const PLANTED_EPSILON = 1e-6;
+
+/** Share of its two bones' length a leg spans from hip to ankle. */
+function legExtension(
+  leg: { readonly anchor: Pt; readonly end: Pt },
+  proportions: { readonly thighLength: number; readonly shinLength: number },
+): number {
+  const span = Math.hypot(leg.end.x - leg.anchor.x, leg.end.y - leg.anchor.y);
+  return span / (proportions.thighLength + proportions.shinLength);
+}
+
+/**
+ * G22: every frame of every row keeps the goblin hunched, its head ahead of
+ * its hips and its planted knees bent; the flinch's own snap frames are the
+ * one exemption, because being knocked upright is what a flinch is. Pose
+ * space only, so it costs nothing to run.
+ */
+function gateNeverUpright(archetype: GoblinArchetype): void {
+  const style = GOBLIN_STYLES[archetype];
+  const scale = ARCHETYPE_SCALE[archetype];
+  let frames = 0;
+  let plantedLegs = 0;
+  for (const { row, frame, pose } of poseStream(archetype)) {
+    const skeleton = buildSkeleton(style, pose);
+    const legs = [
+      { name: 'near', leg: skeleton.nearLeg, foot: pose.nearFoot },
+      { name: 'far', leg: skeleton.farLeg, foot: pose.farFoot },
+    ] as const;
+    for (const { name, leg, foot } of legs) {
+      if (Math.abs(foot.y) > PLANTED_EPSILON) continue;
+      plantedLegs++;
+      const extension = legExtension(leg, style.proportions);
+      const atRest = row.name === 'idle' && frame === 0;
+      const limit = atRest ? MAX_REST_LEG_EXTENSION : MAX_PLANTED_LEG_EXTENSION;
+      if (extension > limit) {
+        fail(
+          'G22',
+          archetype,
+          `${row.name} frame ${frame}: the planted ${name} leg spans ${extension.toFixed(3)} of ` +
+            `its reach, over ${limit} — the knee has straightened out of the crouch`,
+        );
+      }
+    }
+    if (row.name === 'flinch' && frame <= FLINCH_SNAP_LAST_FRAME) continue;
+    frames++;
+    if (skeleton.lean < MIN_TOTAL_LEAN) {
+      fail(
+        'G22',
+        archetype,
+        `${row.name} frame ${frame}: the spine leans ${(skeleton.lean / DEGREE).toFixed(1)}°, ` +
+          `under ${(MIN_TOTAL_LEAN / DEGREE).toFixed(0)}° — the goblin is standing up straight`,
+      );
+    }
+    const headLead = (skeleton.headCentre.x - skeleton.hip.x) * scale;
+    if (headLead < MIN_HEAD_LEAD_TILES) {
+      fail(
+        'G22',
+        archetype,
+        `${row.name} frame ${frame}: the head sits ${headLead.toFixed(3)} tiles ahead of the ` +
+          `hips, under ${MIN_HEAD_LEAD_TILES} — the goblin is standing up straight`,
+      );
+    }
+  }
+  failUnlessMeasured('G22', archetype, frames, 'hunched frames');
+  failUnlessMeasured('G22', archetype, plantedLegs, 'planted legs');
+}
+
+// ── G23 · a fidget is never a telegraph ──────────────────────────────────────
+
+/**
+ * How far the weapon may turn *up* from its carry during an idle break. A
+ * fidget may lower or plant the weapon; one that raises it toward level reads
+ * as the wind-up of an attack and empties the real telegraphs of meaning.
+ */
+const FIDGET_MAX_WEAPON_RISE = deg(3);
+
+/** G23: through the whole idle break, the weapon never turns up from its idle carry. */
+function gateFidgetIsNoTelegraph(archetype: GoblinArchetype): void {
+  const idle = goblinPose(archetype, rowByName('idle'), 0);
+  if (idle.weaponAngle === null) {
+    fail('G23', archetype, 'idle frame 0 carries no weapon to measure the fidget against');
+    return;
+  }
+  const row = rowByName('idle_break');
+  let frames = 0;
+  for (let frame = 0; frame < row.frameCount; frame++) {
+    const pose = goblinPose(archetype, row, frame);
+    if (pose.weaponAngle === null) {
+      fail('G23', archetype, `idle_break frame ${frame} carries no weapon`);
+      continue;
+    }
+    frames++;
+    const rise = idle.weaponAngle - pose.weaponAngle;
+    if (rise > FIDGET_MAX_WEAPON_RISE) {
+      fail(
+        'G23',
+        archetype,
+        `idle_break frame ${frame}: the weapon turns ${(rise / DEGREE).toFixed(1)}° up from ` +
+          'its carry — a fidget that raises the weapon reads as an attack telegraph',
+      );
+    }
+  }
+  failUnlessMeasured('G23', archetype, frames, 'idle break frames');
+}
+
+// ── G24 · idle frame 0 is the rest pose ─────────────────────────────────────
+
+/**
+ * Whether `pose` has no idle beat on it: the ears at rest and the eyes open.
+ *
+ * Every one-shot hands back to idle frame 0 and every fidget is built on it, so
+ * a flick or blink that wraps past the end of the loop into frame 0 pops at the
+ * end of every swing, flinch and fidget.
+ */
+function restBeatFailure(pose: GoblinPose): string | null {
+  if (pose.earLag !== 0) return `idle frame 0 has an ear lag of ${pose.earLag.toFixed(3)}`;
+  if (pose.eyeOpen !== 1) return `idle frame 0 has its eyes ${pose.eyeOpen.toFixed(2)} open`;
+  return null;
+}
+
+/** G24: idle frame 0 carries no ear flick and no blink, for every build and the plumber. */
+function gateIdleRestFrame(): void {
+  const idle = rowByName('idle');
+  for (const archetype of GOBLIN_ARCHETYPES) {
+    const message = restBeatFailure(goblinPose(archetype, idle, 0));
+    if (message !== null) fail('G24', archetype, message);
+  }
+  const plumberMessage = restBeatFailure(goblinPlumberPose(idle, 0));
+  if (plumberMessage !== null) failures.push(`G24 goblin_plumber: ${plumberMessage}`);
+}
+
 // ── Run ──────────────────────────────────────────────────────────────────────
 
 // A painter that composes on its own scratch surface reaches
@@ -1530,7 +2054,12 @@ export function goblinGateFailures(): string[] {
     gateBowDraw(archetype);
     gateGoreRecentre(archetype);
     gateRuntimeStateNames(archetype);
+    gateFloorContrast(archetype);
+    gateEarsBreakSilhouette(archetype);
+    gateNeverUpright(archetype);
+    gateFidgetIsNoTelegraph(archetype);
   }
+  gateIdleRestFrame();
   for (const message of nothingMeasuredFailures(
     archetypesWithAnOffGrip,
     'builds carrying a declared off grip',
