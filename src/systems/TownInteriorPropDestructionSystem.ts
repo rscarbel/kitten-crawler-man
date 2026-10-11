@@ -134,13 +134,7 @@ export interface InteriorPropBreak {
   readonly kind: TownInteriorDestructibleKind;
 }
 
-/**
- * The broken silhouette family each kind falls back to — grouped by what the
- * thing was actually made of, so a smashed chair reads as splintered wood
- * next to a smashed jar's shard scatter rather than every kind sharing one
- * flat tint. Bespoke per-kind art (an actual broken-chair silhouette distinct
- * from a broken-stool one) is future work.
- */
+/** The broken silhouette each kind falls back to, grouped by material. */
 type DebrisShape = 'timber' | 'cloth' | 'shards' | 'ash';
 
 const DEBRIS_SHAPE: Record<TownInteriorDestructibleKind, DebrisShape> = {
@@ -152,6 +146,8 @@ const DEBRIS_SHAPE: Record<TownInteriorDestructibleKind, DebrisShape> = {
   sack: 'cloth',
   crockery: 'shards',
   jars: 'shards',
+  bottleShelf: 'shards',
+  hangingTools: 'timber',
   basket: 'timber',
   lamp: 'shards',
   chair: 'timber',
@@ -169,6 +165,8 @@ const DEBRIS_COLOR: Record<TownInteriorDestructibleKind, string> = {
   sack: '#8a5238',
   crockery: '#c8c2b0',
   jars: '#b3322b',
+  bottleShelf: '#b3322b',
+  hangingTools: '#4a5058',
   basket: '#9a6a38',
   lamp: '#3a4048',
   chair: '#6a4222',

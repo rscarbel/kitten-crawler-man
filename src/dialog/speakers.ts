@@ -56,6 +56,16 @@ const SKYFOWL_CITIZEN_VOICE_SOUNDS: ReadonlyArray<SoundId> = [
   'skyfowl_chatter_2',
 ];
 
+/** Slower and deeper: temple keepers and clerks. */
+const SKYFOWL_ELDER_VOICE_SOUNDS: ReadonlyArray<SoundId> = [
+  'skyfowl_elder_chatter_1',
+  'skyfowl_elder_chatter_2',
+  'skyfowl_elder_chatter_3',
+];
+
+/** Bright peeping for skyfowl children. */
+const SKYFOWL_FLEDGLING_VOICE_SOUNDS: ReadonlyArray<SoundId> = ['skyfowl_fledgling_chirp_1'];
+
 /** Wordless murmurs, so no line of dialog is ever contradicted by the audio. */
 const HUMAN_MASCULINE_VOICE_SOUNDS: ReadonlyArray<SoundId> = [
   'townsfolk_hm_male_1',
@@ -482,6 +492,20 @@ export const TRANSIENT_STYLES = {
     textCase: 'as-written',
     revealIntervalMs: SPEECH_REVEAL_INTERVAL_MS,
   },
+  /** An Over City skyfowl elder, clerk or temple keeper. */
+  townsfolkSkyfowlElder: {
+    voice: { kind: 'clips', sounds: SKYFOWL_ELDER_VOICE_SOUNDS },
+    reveal: 'word',
+    textCase: 'as-written',
+    revealIntervalMs: SPEECH_REVEAL_INTERVAL_MS,
+  },
+  /** An Over City skyfowl child. */
+  townsfolkSkyfowlFledgling: {
+    voice: { kind: 'clips', sounds: SKYFOWL_FLEDGLING_VOICE_SOUNDS },
+    reveal: 'word',
+    textCase: 'as-written',
+    revealIntervalMs: SPEECH_REVEAL_INTERVAL_MS,
+  },
   /** A crawler sign or notice — read, not spoken. */
   sign: {
     voice: { kind: 'typing' },
@@ -534,7 +558,11 @@ export type TransientStyleId = keyof typeof TRANSIENT_STYLES;
 /** The styles an Over City citizen speaks in; `townsfolk` itself stays the typed-click voice for Briar Hollow's ratkin. */
 export type CitizenSpeechStyle = Extract<
   TransientStyleId,
-  'townsfolkMasculine' | 'townsfolkFeminine' | 'townsfolkSkyfowl'
+  | 'townsfolkMasculine'
+  | 'townsfolkFeminine'
+  | 'townsfolkSkyfowl'
+  | 'townsfolkSkyfowlElder'
+  | 'townsfolkSkyfowlFledgling'
 >;
 
 /**

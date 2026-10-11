@@ -152,6 +152,7 @@ import {
 import { TownInteriorPropDestructionSystem } from '../systems/TownInteriorPropDestructionSystem';
 import { ContractInteriorSite } from '../systems/constructionContracts/ContractInteriorSite';
 import { InteriorBreakReactionBarks } from '../systems/InteriorBreakReactionBarks';
+import { InteriorSkyfowlFoley } from '../systems/InteriorSkyfowlFoley';
 import { AmbientSoundSystem, type AmbientEmitter } from '../systems/AmbientSoundSystem';
 import {
   buildCitizenConversation,
@@ -559,6 +560,8 @@ export interface BuildingInteriorCircusContext {
 const DETACHED_ROOM_WORLD_SEED = 0;
 
 /** Wendell's voice for his small talk on the rare frame he is not found standing in his room. */
+/** A human occupant's reaction to a break. */
+const HUMAN_TUT_SOUNDS: ReadonlyArray<SoundId> = ['townsfolk_tut_1', 'townsfolk_tut_2'];
 const WENDELL_FALLBACK_SPEECH_STYLE: CitizenSpeechStyle = 'townsfolkMasculine';
 
 /**
@@ -2950,6 +2953,7 @@ export class BuildingInteriorScene extends GameplayScene {
     this.shop?.update();
     this.club?.update(this.active(), this.inactive());
     this.occupants?.update();
+    this.skyfowlFoley.update(this.audio, this.occupants?.people ?? [], player.x, player.y);
     this.syncPlumblineFarmRoom();
     this.applyResidentQuestMarkers();
     for (const hook of this.residentQuestHooks) hook.update();
@@ -3163,10 +3167,14 @@ export class BuildingInteriorScene extends GameplayScene {
     const breaks = this.interiorPropDestruction.drainBreaks();
     if (breaks.length === 0) return;
     this.interiorPropDestruction.playBreakCues(this.audio, breaks);
-    this.breakReactions.react(breaks, this.occupants?.people ?? []);
+    const reacted = this.breakReactions.react(breaks, this.occupants?.people ?? []);
+    if (reacted && this.breakReactions.current?.speaker.species === 'human') {
+      this.audio?.playRandom(HUMAN_TUT_SOUNDS);
+    }
   }
 
   private readonly breakReactions = new InteriorBreakReactionBarks();
+  private readonly skyfowlFoley = new InteriorSkyfowlFoley();
 
   /**
    * The cues a caster's shots and summons leave behind.

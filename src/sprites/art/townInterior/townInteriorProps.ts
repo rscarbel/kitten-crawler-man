@@ -304,6 +304,8 @@ export type TownInteriorDestructibleKind =
   | 'sack'
   | 'crockery'
   | 'jars'
+  | 'bottleShelf'
+  | 'hangingTools'
   | 'basket'
   | 'lamp'
   | 'chair'
@@ -2496,20 +2498,36 @@ const BREAK_CUES_WOOD_LIGHT: readonly [SoundId, ...SoundId[]] = [
   'wood_breaking_2',
   'wood_breaking_3',
 ];
-const BREAK_CUES_GLASS: readonly [SoundId, ...SoundId[]] = [
-  'glass_break_1',
-  'glass_break_2',
-  'glass_break_3',
-  'glass_break_4',
+const BREAK_CUES_CLAY_POT: readonly [SoundId, ...SoundId[]] = [
+  'clay_pot_break_1',
+  'clay_pot_break_2',
+  'clay_pot_break_3',
+  'clay_pot_break_4',
+];
+const BREAK_CUES_BOTTLE_SHELF: readonly [SoundId, ...SoundId[]] = [
+  'bottle_shelf_crash_1',
+  'bottle_shelf_crash_2',
+  'bottle_shelf_crash_3',
+  'bottle_shelf_crash_4',
+];
+const BREAK_CUES_CROCKERY: readonly [SoundId, ...SoundId[]] = [
+  'crockery_smash_1',
+  'crockery_smash_2',
+  'crockery_smash_3',
+  'crockery_smash_4',
+];
+const BREAK_CUES_BASKET: readonly [SoundId, ...SoundId[]] = ['basket_crunch_1', 'basket_crunch_2'];
+const BREAK_CUES_LAMP: readonly [SoundId, ...SoundId[]] = ['lamp_break_1', 'lamp_break_2'];
+const BREAK_CUES_PANS: readonly [SoundId, ...SoundId[]] = [
+  'pans_clatter_1',
+  'pans_clatter_2',
+  'pans_clatter_3',
 ];
 const BREAK_CUES_CANDLE_STAND: readonly [SoundId, ...SoundId[]] = [
   'candle_stand_topple_1',
   'candle_stand_topple_2',
 ];
-const BREAK_CUES_SACK: readonly [SoundId, ...SoundId[]] = [
-  'garbage_bag_burst_1',
-  'garbage_bag_burst_2',
-];
+const BREAK_CUES_SACK: readonly [SoundId, ...SoundId[]] = ['sack_tear_1', 'sack_tear_2'];
 
 const DESTRUCTIBLE_BARREL: TownInteriorDestructibleSpec = {
   kind: 'barrel',
@@ -2559,7 +2577,20 @@ const DESTRUCTIBLE_SACK: TownInteriorDestructibleSpec = {
 const DESTRUCTIBLE_JARS: TownInteriorDestructibleSpec = {
   kind: 'jars',
   hp: 2,
-  breakCues: BREAK_CUES_GLASS,
+  breakCues: BREAK_CUES_CLAY_POT,
+  coinsMin: 0,
+  coinsMax: 1,
+  dropsLootByDefault: true,
+};
+const DESTRUCTIBLE_BOTTLE_SHELF: TownInteriorDestructibleSpec = {
+  ...DESTRUCTIBLE_JARS,
+  kind: 'bottleShelf',
+  breakCues: BREAK_CUES_BOTTLE_SHELF,
+};
+const DESTRUCTIBLE_HANGING_TOOLS: TownInteriorDestructibleSpec = {
+  kind: 'hangingTools',
+  hp: 3,
+  breakCues: BREAK_CUES_PANS,
   coinsMin: 0,
   coinsMax: 1,
   dropsLootByDefault: true,
@@ -2567,7 +2598,7 @@ const DESTRUCTIBLE_JARS: TownInteriorDestructibleSpec = {
 const DESTRUCTIBLE_CROCKERY: TownInteriorDestructibleSpec = {
   kind: 'crockery',
   hp: 3,
-  breakCues: BREAK_CUES_GLASS,
+  breakCues: BREAK_CUES_CROCKERY,
   coinsMin: 0,
   coinsMax: 1,
   dropsLootByDefault: true,
@@ -2575,7 +2606,7 @@ const DESTRUCTIBLE_CROCKERY: TownInteriorDestructibleSpec = {
 const DESTRUCTIBLE_BASKET: TownInteriorDestructibleSpec = {
   kind: 'basket',
   hp: 3,
-  breakCues: BREAK_CUES_WOOD_LIGHT,
+  breakCues: BREAK_CUES_BASKET,
   coinsMin: 0,
   coinsMax: 1,
   dropsLootByDefault: true,
@@ -2583,7 +2614,7 @@ const DESTRUCTIBLE_BASKET: TownInteriorDestructibleSpec = {
 const DESTRUCTIBLE_LAMP: TownInteriorDestructibleSpec = {
   kind: 'lamp',
   hp: 2,
-  breakCues: BREAK_CUES_GLASS,
+  breakCues: BREAK_CUES_LAMP,
   coinsMin: 0,
   coinsMax: 0,
   dropsLootByDefault: true,
@@ -3565,7 +3596,7 @@ export const TOWN_INTERIOR_PROPS = {
     2,
     paintRemedyDisplay,
     {
-      destructible: DESTRUCTIBLE_JARS,
+      destructible: DESTRUCTIBLE_BOTTLE_SHELF,
       interaction: { kind: 'examine', id: 'remedy_display' },
     },
   ),
@@ -3776,7 +3807,9 @@ export const TOWN_INTERIOR_PROPS = {
     3,
     paintWallShelfGoods,
   ),
-  hanging_tools: def('hanging_tools', ONE_BY_ONE, false, [], 'wall', 2, paintHangingTools),
+  hanging_tools: def('hanging_tools', ONE_BY_ONE, false, [], 'wall', 2, paintHangingTools, {
+    destructible: DESTRUCTIBLE_HANGING_TOOLS,
+  }),
   window_dressing: def('window_dressing', ONE_BY_ONE, false, [], 'wall', 1, (ctx, f, v) =>
     paintWindowDressing(ctx, f, v),
   ),
@@ -3900,7 +3933,7 @@ export const TOWN_INTERIOR_PROPS = {
     interaction: { kind: 'search', id: 'open_crate' },
   }),
   potion_shelf: def('potion_shelf', ONE_BY_ONE, false, ['shelf'], 'free', 3, paintPotionShelf, {
-    destructible: DESTRUCTIBLE_JARS,
+    destructible: DESTRUCTIBLE_BOTTLE_SHELF,
   }),
   perch_rail: def('perch_rail', ONE_BY_ONE, false, [], 'wall', 1, (ctx, f) =>
     paintPerchRail(ctx, f),
@@ -4112,6 +4145,7 @@ export const TOWN_INTERIOR_PROPS = {
   plan_chest: def('plan_chest', { w: 2, h: 1 }, false, [], 'free', 2, paintPlanChest),
   roll_bin: def('roll_bin', ONE_BY_ONE, false, [], 'free', 1, paintRollBin),
   tool_wall: def('tool_wall', { w: 3, h: 1 }, false, [], 'wall', 1, paintToolWall, {
+    destructible: DESTRUCTIBLE_HANGING_TOOLS,
     interaction: { kind: 'examine', id: 'tool_wall' },
   }),
   door_on_trestles: def(

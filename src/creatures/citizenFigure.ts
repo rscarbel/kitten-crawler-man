@@ -151,9 +151,17 @@ export function citizenDialogSeed(figure: CitizenFigure): number {
   return figure.species === 'skyfowl' ? fnv1a(figure.look.id) : figure.look.dialogSeed;
 }
 
+const SKYFOWL_ELDER_ROLES: ReadonlySet<SkyfowlRole> = new Set<SkyfowlRole>(['temple', 'clerk']);
+
+function skyfowlSpeechStyle(role: SkyfowlRole): CitizenSpeechStyle {
+  if (role === 'fledgling') return 'townsfolkSkyfowlFledgling';
+  if (SKYFOWL_ELDER_ROLES.has(role)) return 'townsfolkSkyfowlElder';
+  return 'townsfolkSkyfowl';
+}
+
 /** The dialog style a citizen speaks in: their species' voice, and for a human the one their look is painted for. */
 export function citizenSpeechStyle(figure: CitizenFigure): CitizenSpeechStyle {
-  if (figure.species === 'skyfowl') return 'townsfolkSkyfowl';
+  if (figure.species === 'skyfowl') return skyfowlSpeechStyle(figure.look.role);
   return figure.look.feminine ? 'townsfolkFeminine' : 'townsfolkMasculine';
 }
 

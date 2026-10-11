@@ -76,12 +76,32 @@ const RAISED_SKELETON_SFX_IDS: readonly SoundId[] = [
   'slash_strike_3',
 ];
 
-/**
- * The stand-ins the dungeon's cues borrow (`DUNGEON_CUES` in
- * `src/systems/dungeon/dungeonSoundCues.ts`) that no boot-loaded group
- * carries. Floors 1 and 2 share their props, fixtures and ambience, so both
- * floor groups carry the whole set.
- */
+/** Household breakables, shared by building interiors and the dungeon. */
+const INTERIOR_BREAK_SFX_IDS: readonly SoundId[] = [
+  'basket_crunch_1',
+  'basket_crunch_2',
+  'bottle_shelf_crash_1',
+  'bottle_shelf_crash_2',
+  'bottle_shelf_crash_3',
+  'bottle_shelf_crash_4',
+  'clay_pot_break_1',
+  'clay_pot_break_2',
+  'clay_pot_break_3',
+  'clay_pot_break_4',
+  'crockery_smash_1',
+  'crockery_smash_2',
+  'crockery_smash_3',
+  'crockery_smash_4',
+  'lamp_break_1',
+  'lamp_break_2',
+  'pans_clatter_1',
+  'pans_clatter_2',
+  'pans_clatter_3',
+  'sack_tear_1',
+  'sack_tear_2',
+];
+
+/** Sounds `DUNGEON_CUES` (`dungeonSoundCues.ts`) plays that no boot-loaded group carries; floors 1 and 2 share it. */
 const DUNGEON_CUE_SFX_IDS: readonly SoundId[] = [
   'rumble',
   'rock_breaking_1',
@@ -95,6 +115,7 @@ const DUNGEON_CUE_SFX_IDS: readonly SoundId[] = [
   'llama_fireball',
   'candle_stand_topple_1',
   'candle_stand_topple_2',
+  ...INTERIOR_BREAK_SFX_IDS,
 ];
 
 /**
@@ -108,6 +129,15 @@ const TOWN_VOICE_SFX_IDS: readonly SoundId[] = [
   'skyfowl_greeting_1',
   'skyfowl_greeting_2',
   'skyfowl_laugh_1',
+  'skyfowl_elder_chatter_1',
+  'skyfowl_elder_chatter_2',
+  'skyfowl_elder_chatter_3',
+  'skyfowl_fledgling_chirp_1',
+  'skyfowl_wing_ruffle_1',
+  'skyfowl_wing_ruffle_2',
+  'skyfowl_talon_steps',
+  'townsfolk_tut_1',
+  'townsfolk_tut_2',
   'townsfolk_hm_male_1',
   'townsfolk_hm_male_2',
   'townsfolk_hm_male_3',
@@ -349,6 +379,7 @@ export const SFX_GROUPS: Record<SfxGroup, readonly SoundId[]> = {
     ...TOWN_VOICE_SFX_IDS,
     'candle_stand_topple_1',
     'candle_stand_topple_2',
+    ...INTERIOR_BREAK_SFX_IDS,
     'krasue_attack',
     'sword_attack_1',
     'rumble',

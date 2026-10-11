@@ -95,18 +95,23 @@ export const DUNGEON_CUES = {
   glassSmash: ['glass_break_1', 'glass_break_2', 'glass_break_3'],
 
   // ── Breaking: floor 1 ──
-  /** A clay urn. Waits on `clay_pot_break_1..3`; the bag burst stands in. */
-  clayPotBreak: ['garbage_bag_burst_1', 'garbage_bag_burst_2'],
+  /** A clay urn. Final: `clay_pot_break_1..4`. */
+  clayPotBreak: ['clay_pot_break_1', 'clay_pot_break_2', 'clay_pot_break_3', 'clay_pot_break_4'],
   /** Layered on {@link DUNGEON_CUES.clayPotBreak} when the urn held coins. Waits on `urn_coins_spill`; `coin_pouch` stands in. */
   urnCoinsSpill: ['coin_pouch'],
-  /** A grain sack split. Waits on `sack_tear_1..2`; the bag burst stands in. */
-  sackTear: ['garbage_bag_burst_1', 'garbage_bag_burst_2'],
+  /** A grain sack split. Final: `sack_tear_1..2`. */
+  sackTear: ['sack_tear_1', 'sack_tear_2'],
   /** Layered on {@link DUNGEON_CUES.sackTear}: grain pouring out. Waits on `grain_spill`. */
   grainSpill: [],
   /** A wine cask staved in. Waits on `wine_cask_burst`; `wood_smashing_1` stands in. */
   wineCaskBurst: ['wood_smashing_1'],
-  /** A bottle rack coming down. Waits on `bottle_shelf_crash`; glass stands in. */
-  bottleShelfCrash: ['glass_break_1', 'glass_break_2', 'glass_break_3'],
+  /** A bottle rack coming down. Final: `bottle_shelf_crash_1..4`. */
+  bottleShelfCrash: [
+    'bottle_shelf_crash_1',
+    'bottle_shelf_crash_2',
+    'bottle_shelf_crash_3',
+    'bottle_shelf_crash_4',
+  ],
   /** A candle cluster knocked over. Final: `candle_stand_topple_1..2`. */
   candleStandTopple: ['candle_stand_topple_1', 'candle_stand_topple_2'],
   /** A rubble heap knocked down. Waits on `rubble_collapse`; `rock_breaking_1..2` stand in. */
