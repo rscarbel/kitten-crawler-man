@@ -1,4 +1,6 @@
+import { TILE_SIZE } from '../core/constants';
 import type { GameMap } from './GameMap';
+import type { Point, Rect } from './roomDoorways';
 
 /**
  * How many connected walkable tiles a creature needs around it to count as
@@ -291,4 +293,36 @@ function walkableRegionNear(
     }
   }
   return region;
+}
+
+/** How far from a save room's centre to look for a resume tile when the body stands in a pocket. */
+const ROOM_SAVE_TILE_SEARCH_RADIUS_TILES = 6;
+
+/**
+ * Where a save taken by `body` inside `room` would resume, or null when the
+ * tile under the body's centre lies outside the room's bounds. The standing
+ * tile when it has room to move, otherwise the nearest such tile to the room's
+ * centre, so a respawn is never set down in a pocket it cannot leave.
+ */
+export function roomSaveTile(
+  map: GameMap,
+  room: { readonly bounds: Rect; readonly centre: Point },
+  body: { readonly x: number; readonly y: number },
+): Point | null {
+  const halfTilePx = TILE_SIZE / 2;
+  const standingTile = {
+    x: Math.floor((body.x + halfTilePx) / TILE_SIZE),
+    y: Math.floor((body.y + halfTilePx) / TILE_SIZE),
+  };
+  const { bounds, centre } = room;
+  const insideRoom =
+    standingTile.x >= bounds.x &&
+    standingTile.y >= bounds.y &&
+    standingTile.x < bounds.x + bounds.w &&
+    standingTile.y < bounds.y + bounds.h;
+  if (!insideRoom) return null;
+  if (hasRoomToMove(map, standingTile.x, standingTile.y)) return standingTile;
+  return (
+    findNearbyWalkableTile(map, centre.x, centre.y, ROOM_SAVE_TILE_SEARCH_RADIUS_TILES) ?? centre
+  );
 }

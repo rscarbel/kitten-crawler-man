@@ -90,6 +90,7 @@ import {
   isOutstanding,
   pinMatchesEntry,
   resolvePinnedEntry,
+  type ObjectiveBeaconSource,
   type TrackerEntry,
   type TrackerTarget,
 } from '../systems/questTracker';
@@ -1060,6 +1061,8 @@ type Mutable<T> = { -readonly [K in keyof T]: T[K] };
 const PINNED_ARROW_SUPPRESS_TILES = 4;
 /** Gold, matching the pinned Journal row it belongs to. */
 const PINNED_ARROW_COLOR = worldPalette.ink.gold;
+/** The span of an objective target that does not say how wide it is. */
+const SINGLE_TILE_TARGET_WIDTH = 1;
 const STAIRWELL_ARROW_COLOR = worldPalette.ink.gold;
 
 function splitChestLoot(loot: LootDrop): { humanLoot: LootDrop; catLoot: LootDrop } {
@@ -1126,6 +1129,32 @@ function rollChestPotion(): ItemId {
   return 'stat_boost_potion';
 }
 
+/**
+ * A room that becomes a save point once its puzzle is done — walking in saves —
+ * without becoming a safe room: mobs still follow the party in.
+ */
+interface RoomSaveSource {
+  /** Where a save taken by `body` would resume, or null when it is not standing in a saving room. */
+  saveTileAt(body: { readonly x: number; readonly y: number }): TilePoint | null;
+}
+
+/**
+ * Edge detection for one {@link RoomSaveSource}. `wasInside` follows the same
+ * first-frame convention as the scene's `wasInTown`. Unlike the town gate, a
+ * refused entry stays `owed` while the crawler is still inside: a dungeon room
+ * is often entered one step ahead of a pursuer, and the save belongs to the
+ * room, not to the exact step through its door.
+ */
+interface RoomSaveLatch {
+  wasInside: boolean;
+  owed: boolean;
+}
+
+interface RoomSaveEntry {
+  readonly source: RoomSaveSource;
+  readonly latch: RoomSaveLatch;
+}
+
 export class DungeonScene extends GameplayScene {
   private gameMap: GameMap;
   readonly pm: PlayerManager;
@@ -1149,6 +1178,8 @@ export class DungeonScene extends GameplayScene {
   private readonly _vendorMinimapPositions: Array<{ x: number; y: number }> = [];
   /** Reused per-frame array of the Journal's entries, for the same reason. */
   private readonly _trackerEntries: TrackerEntry[] = [];
+  /** Systems that beam over their own objective places whether or not the Journal tracks them. */
+  private readonly objectiveBeaconSources: ObjectiveBeaconSource[] = [];
   private readonly _systemContext: SystemContext;
 
   // Systems
@@ -1408,6 +1439,8 @@ export class DungeonScene extends GameplayScene {
    * counts as entering it and takes a save.
    */
   private wasInBriarHollowSquare = false;
+  /** A fixed bathroom and the stealth gate room once its gate is open. */
+  private readonly roomSaves: readonly RoomSaveEntry[];
   /**
    * The last save point entered — a safe room's centre, or the tile where the
    * party entered town — which is where a resume puts them.
@@ -1961,6 +1994,7 @@ export class DungeonScene extends GameplayScene {
       announce: (message, opts) => this.menus.announce(message, opts),
       startSolved: options?.bathroomSolvedAtStart?.(this.gameMap) ?? false,
     });
+    this.objectiveBeaconSources.push(this.cloggedBathroom);
     this.stealthKeySnatch = new StealthKeySnatchSystem({
       gameMap: this.gameMap,
       bus: this.bus,
@@ -1970,6 +2004,11 @@ export class DungeonScene extends GameplayScene {
       announce: (message, opts) => this.menus.announce(message, opts),
       startOpened: options?.stealthGateOpenAtStart?.(this.gameMap) ?? false,
     });
+    this.objectiveBeaconSources.push(this.stealthKeySnatch);
+    this.roomSaves = [this.cloggedBathroom, this.stealthKeySnatch].map((source) => ({
+      source,
+      latch: { wasInside: false, owed: false },
+    }));
     this.grateSpikes = new GrateSpikesMenu({
       defendQuest: this.defendQuest,
       human: this.human,
@@ -2607,6 +2646,9 @@ export class DungeonScene extends GameplayScene {
     }
     this.wasInTown = options?.suppressArrivalSave === true;
     this.wasInBriarHollowSquare = options?.suppressArrivalSave === true;
+    for (const { latch } of this.roomSaves) {
+      latch.wasInside = options?.suppressArrivalSave === true;
+    }
     this.onResetGameCallback = options?.onResetGame ?? null;
     // Additive and cheap even on a re-entry: `preload` skips any id already in
     // `buffers`, so this just tops up whatever this floor needs without
@@ -3804,11 +3846,20 @@ export class DungeonScene extends GameplayScene {
    * Drawn before the Y-sorted pass, so the marked building or prop — and anyone
    * walking past it — stands in front of its own light. That reads the tracker
    * list a frame before this frame's rebuild, which no one can see.
+   *
+   * The beams that stand in front are left to the Y-sorted pass, except when
+   * restoring light over the darkness: there every beam is floor light the
+   * dark must not swallow, wherever it was first drawn.
    */
-  private renderObjectiveBeacons(ctx: CanvasRenderingContext2D, camX: number, camY: number): void {
+  private renderObjectiveBeacons(
+    ctx: CanvasRenderingContext2D,
+    camX: number,
+    camY: number,
+    frontBeams: 'withFrontBeams' | 'withoutFrontBeams' = 'withoutFrontBeams',
+  ): void {
     const now = performance.now();
     for (const target of this.objectiveBeamTargets()) {
-      if (target.standsInFront === true) continue;
+      if (target.standsInFront === true && frontBeams === 'withoutFrontBeams') continue;
       drawObjectiveBeacon(
         ctx,
         target.x * TILE_SIZE - camX,
@@ -3824,7 +3875,11 @@ export class DungeonScene extends GameplayScene {
   /** Every place that gets a beam this frame; see the `objectiveBeamTargets` it wraps. */
   private objectiveBeamTargets(): ReadonlyArray<TrackerTarget> {
     if (this.gameOver || this.menus.pauseScreen.isOpen) return [];
-    return objectiveBeamTargets(this.pinnedObjectiveTile, this._trackerEntries);
+    return objectiveBeamTargets(
+      this.pinnedObjectiveTile,
+      this._trackerEntries,
+      this.objectiveBeaconSources,
+    );
   }
 
   /**
@@ -3878,9 +3933,58 @@ export class DungeonScene extends GameplayScene {
     if (pinned !== null && pinMatchesEntry(BOUNTY_TRACKER_ID, pinned)) return null;
     const target = pinned?.target ?? null;
     if (target === null) return null;
+    return this.objectiveArrowCandidate(ctx, camX, camY, target, ARROW_PRIORITY.PINNED_OBJECTIVE);
+  }
 
+  /**
+   * The arrow toward the nearest room objective that is lit without a Journal
+   * pin — the pipe wall once the plumber has asked for help, the prison door
+   * once the guard has explained the key. Floor 2 has no Journal, so without
+   * this the beam is the only hint and it is invisible from the room next door.
+   * Stands down while the pipe board is up, since the player is already there.
+   */
+  private roomObjectiveArrowCandidate(
+    ctx: CanvasRenderingContext2D,
+    camX: number,
+    camY: number,
+  ): ArrowCandidate | null {
+    if (this.cloggedBathroom.isPipeBoardOpen || this.cloggedBathroom.isPipeBoardExplainerOpen) {
+      return null;
+    }
     const player = this.active();
-    const targetX = (target.x + TILE_CENTRE_FRACTION) * TILE_SIZE;
+    let nearest: TrackerTarget | null = null;
+    let nearestDistance = Infinity;
+    for (const source of this.objectiveBeaconSources) {
+      for (const target of source.objectiveBeacons()) {
+        const distance = Math.hypot(
+          target.x * TILE_SIZE - player.x,
+          target.y * TILE_SIZE - player.y,
+        );
+        if (distance < nearestDistance) {
+          nearest = target;
+          nearestDistance = distance;
+        }
+      }
+    }
+    if (nearest === null) return null;
+    return this.objectiveArrowCandidate(ctx, camX, camY, nearest, ARROW_PRIORITY.ROOM_OBJECTIVE);
+  }
+
+  /**
+   * The arrow above the player toward an objective target, aimed at the middle
+   * of its footprint so a three-tile doorway is pointed at, not its west tile.
+   */
+  private objectiveArrowCandidate(
+    ctx: CanvasRenderingContext2D,
+    camX: number,
+    camY: number,
+    target: TrackerTarget,
+    priority: number,
+  ): ArrowCandidate | null {
+    const player = this.active();
+    const footprintCentreTiles =
+      (target.widthTiles ?? SINGLE_TILE_TARGET_WIDTH) * TILE_CENTRE_FRACTION;
+    const targetX = (target.x + footprintCentreTiles) * TILE_SIZE;
     const targetY = (target.y + TILE_CENTRE_FRACTION) * TILE_SIZE;
     const viewport = { width: viewportWidth(), height: viewportHeight() };
     const suppressed =
@@ -3892,7 +3996,7 @@ export class DungeonScene extends GameplayScene {
     if (suppressed) return null;
 
     return {
-      priority: ARROW_PRIORITY.PINNED_OBJECTIVE,
+      priority,
       draw: () =>
         drawArrowAbovePlayer(
           ctx,
@@ -4816,6 +4920,10 @@ export class DungeonScene extends GameplayScene {
     this.wasInSafeRoom = true;
     this.wasInTown = this.isInsideTownWall(this.active());
     this.wasInBriarHollowSquare = this.isInBriarHollowSquare(this.active());
+    for (const { source, latch } of this.roomSaves) {
+      latch.wasInside = source.saveTileAt(this.active()) !== null;
+      latch.owed = false;
+    }
   }
 
   /**
@@ -5386,6 +5494,54 @@ export class DungeonScene extends GameplayScene {
     };
     if (hasRoomToMove(this.gameMap, standingTile.x, standingTile.y)) return standingTile;
     return this.gameMap.townSquareCentre ?? this.gameMap.startTile;
+  }
+
+  /**
+   * Swaps the floor's music for the pipe puzzle's own track while its board is
+   * on screen, and back once it closes. Only ever trades with the floor's
+   * music, so a boss or quest track that took over is never cut short.
+   */
+  private updatePipeBoardMusic(): void {
+    const audio = this.audio;
+    if (audio === null || this.overworldMusic !== null) return;
+    const playing = audio.currentMusicId;
+    const boardTrack = this.cloggedBathroom.pipeBoardMusic;
+    if (boardTrack !== null) {
+      if (playing === this.levelDef.music) {
+        audio.playMusic(boardTrack, { fadeInMs: MUSIC_FADE_IN_MS });
+      }
+      return;
+    }
+    const boardTrackStillPlaying =
+      playing !== null && playing === this.cloggedBathroom.pipeBoardMusicTrack;
+    if (boardTrackStillPlaying) {
+      audio.playMusic(this.levelDef.music, { fadeInMs: MUSIC_FADE_IN_MS });
+    }
+  }
+
+  /**
+   * Saves on entering any {@link RoomSaveSource}. Guarded like a stairwell
+   * room's save, so a reload can never skip a fight that is still on.
+   */
+  private updateRoomSaves(active: Pick<Mob, 'x' | 'y'>): void {
+    for (const entry of this.roomSaves) this.updateRoomSave(entry, active);
+  }
+
+  private updateRoomSave({ source, latch }: RoomSaveEntry, active: Pick<Mob, 'x' | 'y'>): void {
+    const saveTile = source.saveTileAt(active);
+    const inside = saveTile !== null;
+    if (inside && !latch.wasInside) latch.owed = true;
+    latch.wasInside = inside;
+    if (saveTile === null) {
+      latch.owed = false;
+      return;
+    }
+    if (!latch.owed) return;
+    if (this.isRevivePending || this.isBossFightInProgress || this.hasEngagedHostileNearActive()) {
+      return;
+    }
+    latch.owed = false;
+    this.captureSavePoint(saveTile);
   }
 
   private get canSaveInTown(): boolean {
@@ -7304,6 +7460,9 @@ export class DungeonScene extends GameplayScene {
     this.cloggedBathroom.tickGeneration();
     this.cloggedBathroom.syncMarkers();
     this.stealthKeySnatch.syncMarkers();
+    // Ahead of the halt: the pipe board halts the world, and it is the only
+    // time the puzzle's music plays.
+    this.updatePipeBoardMusic();
 
     // Also drained ahead of the early returns: the request is raised by a
     // right-click or a hotbar key, neither of which routes through the panel's
@@ -7515,7 +7674,9 @@ export class DungeonScene extends GameplayScene {
     paintOverDarkness: (target) => {
       const rc = this.overDarknessPainter.rc;
       if (rc === null) return;
-      if (this.overDarknessPainter.beacons) this.renderObjectiveBeacons(target, rc.camX, rc.camY);
+      if (this.overDarknessPainter.beacons) {
+        this.renderObjectiveBeacons(target, rc.camX, rc.camY, 'withFrontBeams');
+      }
       if (this.overDarknessPainter.warnings) this.renderPipeline.renderGroundWarnings(target, rc);
     },
   };
@@ -7760,6 +7921,7 @@ export class DungeonScene extends GameplayScene {
         this.stairwellRevealArrowCandidate(ctx, camX, camY),
         this.spiderLabArrowCandidate(ctx, camX, camY),
         this.pinnedObjectiveArrowCandidate(ctx, camX, camY),
+        this.roomObjectiveArrowCandidate(ctx, camX, camY),
         this.shouldShowBountyArrow()
           ? (this.bounty?.arrowCandidate(ctx, this.active(), camX, camY, framesRect) ?? null)
           : null,
@@ -8137,6 +8299,8 @@ export class DungeonScene extends GameplayScene {
       this.onBriarHollowSquareEntered(player);
     }
     this.wasInBriarHollowSquare = nowInBriarHollowSquare;
+
+    this.updateRoomSaves(player);
 
     // A stairwell room that was already empty of hostiles the moment this
     // floor's mobs first spawned — no last guard to die and trigger the

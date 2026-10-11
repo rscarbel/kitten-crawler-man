@@ -10,8 +10,9 @@
  *
  * A doorway in a north or south wall is seen face on: posts at each jamb, a
  * heavy lintel beam, a grille of round bars with riveted cross rails and spear
- * tips. A doorway in a side wall is seen obliquely, the grille leaning into the
- * room so its bars and rails still read. Raised, the grille is drawn lifted
+ * tips. A doorway in a side wall is seen edge-on, the way the Briar Hollow
+ * palisade's side gate is: the grille a thin upright slab, the lintel's top
+ * face along it and the posts as end-on columns. Raised, the grille is drawn lifted
  * into the lintel with only its spiked bottom rail hanging below it and open
  * floor underneath: an opened door drawn as bare floor reads as floor that was
  * always there.
@@ -50,6 +51,8 @@ const BAR_HIGHLIGHT_WIDTH = 0.03;
 /** Cross rails, as fractions of the grille's height above the ground line. */
 const RAIL_HEIGHTS = [0.22, 0.58] as const;
 const RAIL_THICKNESS = 0.1;
+/** Seen end-on, how far a rail's end stands out past the bars on each side. */
+const RAIL_PROUD = 0.05;
 const LINTEL_THICKNESS = 0.2;
 const RIVET_RADIUS = 0.03;
 const SPIKE_HEIGHT = 0.14;
@@ -63,8 +66,12 @@ const SLOT_WIDTH = 0.08;
 const SHADOW_DEPTH = 0.14;
 /** Raised: the share of the grille's height it hangs above the floor. */
 const RAISED_CLEARANCE = 0.55;
-/** Seen obliquely: how far the grille leans sideways per unit of height. */
-const SIDE_LEAN = 0.75;
+/**
+ * Seen edge-on in a side wall: the grille's thickness across the wall, and
+ * the posts'. The lintel spans both.
+ */
+const GRILLE_DEPTH = 0.2;
+const EDGE_POST_WIDTH = 0.3;
 /** Slack added to the reach so a rounded pixel at the edge is never culled. */
 const REACH_MARGIN = 0.1;
 
@@ -133,35 +140,18 @@ function endsRun(
 }
 
 /**
- * Which way a side gate leans: into the room, the side where floor carries on
- * past both ends of the run. On the corridor side the jambs are stone.
+ * Which side of a side gate's run the wall stands on: the side where stone
+ * closes both ends of the run. Room floor carries on past them the other way.
  */
-function sideLeanSign(structure: TileContent[][], tx: number, ty: number): -1 | 1 {
+function wallSideOf(structure: TileContent[][], tx: number, ty: number): -1 | 1 {
   let top = ty;
   while (isGateAt(structure, tx, top - 1)) top--;
   let bottom = ty;
   while (isGateAt(structure, tx, bottom + 1)) bottom++;
-  const roomward = (dx: number): number =>
-    (isSolidAt(structure, tx + dx, top - 1) ? 0 : 1) +
-    (isSolidAt(structure, tx + dx, bottom + 1) ? 0 : 1);
-  return roomward(1) >= roomward(-1) ? 1 : -1;
-}
-
-function line(
-  ctx: Ctx,
-  color: string,
-  width: number,
-  x0: number,
-  y0: number,
-  x1: number,
-  y1: number,
-) {
-  ctx.strokeStyle = color;
-  ctx.lineWidth = Math.max(1, width);
-  ctx.beginPath();
-  ctx.moveTo(x0, y0);
-  ctx.lineTo(x1, y1);
-  ctx.stroke();
+  const solidEnds = (dx: number): number =>
+    (isSolidAt(structure, tx + dx, top - 1) ? 1 : 0) +
+    (isSolidAt(structure, tx + dx, bottom + 1) ? 1 : 0);
+  return solidEnds(1) >= solidEnds(-1) ? 1 : -1;
 }
 
 function dot(ctx: Ctx, color: string, x: number, y: number, radius: number) {
@@ -304,99 +294,129 @@ function drawFaceOn(
 }
 
 /**
- * The side portcullis for one tile of run, seen obliquely: a point `h` above
- * the ground line at depth `y` is drawn at `(groundX + lean·h, y − h)`, so the
- * bars slope into the room and the rails stand upright between them.
+ * An upright member of a side gate seen end-on, standing on `footY`: its south
+ * face below, and above it its top face as a capstone a little wider, as deep
+ * as the post is wide.
  */
-function drawOblique(
+function uprightEdgeOn(
+  ctx: Ctx,
+  centreX: number,
+  footY: number,
+  width: number,
+  height: number,
+  ts: number,
+) {
+  const topY = footY - height;
+  bar(ctx, centreX, topY, footY, width, ts * BAR_HIGHLIGHT_WIDTH * 2);
+  ctx.strokeStyle = IRON_SHADOW;
+  ctx.lineWidth = 1;
+  ctx.strokeRect(centreX - width * HALF, topY, width, height);
+  const capWidth = width + ts * POST_CAP_OVERHANG * 2;
+  const capLeft = centreX - capWidth * HALF;
+  ctx.fillStyle = IRON_LIGHT;
+  ctx.fillRect(capLeft, topY - width, capWidth, width);
+  ctx.strokeRect(capLeft, topY - width, capWidth, width);
+  beam(ctx, capLeft, topY, capWidth, ts * POST_CAP_HEIGHT);
+}
+
+/**
+ * The side portcullis for one tile of run. A doorway in an east or west wall
+ * runs north–south, so the gate's plane is seen edge-on, the way the Briar
+ * Hollow palisade's side gate and every end-on wall column are: a point `h`
+ * above the floor at depth `y` is drawn at `(x, y − h)`, so nothing leans and
+ * nothing is turned. The grille is a slab no thicker than its bars, its bars
+ * stacked behind one another and the rails' bolt heads standing proud of both
+ * edges once per bar. Its frame, the posts rising as end-on columns at either
+ * end of the run and the lintel's top face between their caps, stands just
+ * wall-side of it, the grooves it runs in: a frame straight in front of the
+ * grille would hide everything below the lintel, whether its foot is down in
+ * the slot or hauled clear of the floor.
+ */
+function drawEdgeOn(
   ctx: Ctx,
   open: boolean,
   sx: number,
   sy: number,
   ts: number,
-  lean: -1 | 1,
+  wallSide: -1 | 1,
   postAtStart: boolean,
   postAtEnd: boolean,
 ): void {
-  const groundX = sx + ts * HALF;
+  const slotX = sx + ts * HALF;
   const height = ts * GATE_HEIGHT;
-  const at = (depth: number, rise: number): { x: number; y: number } => ({
-    x: groundX + lean * SIDE_LEAN * rise,
-    y: depth - rise,
-  });
   const lintel = ts * LINTEL_THICKNESS;
-  const lowest = open ? height * RAISED_CLEARANCE : 0;
-  const barWidth = ts * BAR_WIDTH;
+  const lift = open ? height * RAISED_CLEARANCE : 0;
+  const northY = sy;
+  const southY = sy + ts;
   const pitch = ts / BARS_PER_TILE;
+  const grilleWidth = ts * GRILLE_DEPTH;
+  const postWidth = ts * EDGE_POST_WIDTH;
+  const postHeight = height + ts * POST_CAP_HEIGHT;
+  const frameX = slotX + wallSide * (grilleWidth + postWidth) * HALF;
 
-  const lintelTop = at(sy, height);
-  const lintelBottom = at(sy + ts, height);
-  const backingNorth = at(sy, lowest);
-  const backingSouth = at(sy + ts, lowest);
-  ctx.fillStyle = PANEL_BACKING;
-  ctx.beginPath();
-  ctx.moveTo(backingNorth.x, backingNorth.y);
-  ctx.lineTo(backingSouth.x, backingSouth.y);
-  ctx.lineTo(lintelBottom.x, lintelBottom.y);
-  ctx.lineTo(lintelTop.x, lintelTop.y);
-  ctx.closePath();
-  ctx.fill();
-  for (let index = 0; index < BARS_PER_TILE; index++) {
-    const depth = sy + pitch * (index + HALF);
-    const foot = at(depth, lowest);
-    const head = at(depth, height - lintel);
-    line(ctx, IRON_SHADOW, barWidth, foot.x, foot.y, head.x, head.y);
-    line(
-      ctx,
-      IRON_LIGHT,
-      ts * BAR_HIGHLIGHT_WIDTH,
-      foot.x - barWidth * HALF * HALF,
-      foot.y,
-      head.x - barWidth * HALF * HALF,
-      head.y,
+  if (!open) {
+    ctx.fillStyle = CAST_SHADOW;
+    ctx.fillRect(
+      slotX - grilleWidth * HALF,
+      southY - ts * SHADOW_DEPTH,
+      grilleWidth,
+      ts * SHADOW_DEPTH,
     );
-    spike(ctx, foot.x, foot.y, barWidth * HALF, ts * SPIKE_HEIGHT * (open ? 1 : HALF));
   }
+  if (postAtStart) uprightEdgeOn(ctx, frameX, northY + postWidth, postWidth, postHeight, ts);
+
+  const grilleTop = northY - height + lintel;
+  const grilleBottom = southY - lift;
+  bar(ctx, slotX, grilleTop, grilleBottom, grilleWidth, ts * BAR_HIGHLIGHT_WIDTH);
+  ctx.strokeStyle = IRON_SHADOW;
+  ctx.lineWidth = 1;
+  ctx.strokeRect(slotX - grilleWidth * HALF, grilleTop, grilleWidth, grilleBottom - grilleTop);
+  const boltOffset = grilleWidth * HALF;
   const rails = open ? [RAISED_CLEARANCE] : RAIL_HEIGHTS;
   for (const share of rails) {
-    const north = at(sy, height * share);
-    const south = at(sy + ts, height * share);
-    line(ctx, IRON_SHADOW, ts * RAIL_THICKNESS, north.x, north.y, south.x, south.y);
-    line(ctx, IRON_MID, ts * RAIL_THICKNESS * HALF, north.x, north.y, south.x, south.y);
+    const rise = height * share;
     for (let index = 0; index < BARS_PER_TILE; index++) {
-      const rivet = at(sy + pitch * (index + HALF), height * share);
-      dot(ctx, RIVET, rivet.x, rivet.y, ts * RIVET_RADIUS);
+      const boltY = sy + pitch * (index + HALF) - rise;
+      if (boltY > grilleBottom) continue;
+      dot(ctx, IRON_SHADOW, slotX - boltOffset, boltY, ts * RIVET_RADIUS);
+      dot(ctx, RIVET, slotX + boltOffset, boltY, ts * RIVET_RADIUS);
+    }
+    if (postAtEnd) {
+      const railEndWidth = grilleWidth + ts * RAIL_PROUD * 2;
+      const railEndY = southY - rise - ts * RAIL_THICKNESS;
+      beam(ctx, slotX - railEndWidth * HALF, railEndY, railEndWidth, ts * RAIL_THICKNESS);
+      ctx.fillStyle = IRON_RUST;
+      ctx.fillRect(
+        slotX - railEndWidth * HALF,
+        railEndY + ts * RAIL_THICKNESS * HALF,
+        railEndWidth,
+        ts * RAIL_THICKNESS * HALF,
+      );
     }
   }
-  line(ctx, IRON_SHADOW, lintel, lintelTop.x, lintelTop.y, lintelBottom.x, lintelBottom.y);
-  line(
-    ctx,
-    IRON_LIGHT,
-    lintel * HALF * HALF,
-    lintelTop.x,
-    lintelTop.y,
-    lintelBottom.x,
-    lintelBottom.y,
-  );
-  for (const [atEnd, depth] of [
-    [postAtStart, sy],
-    [postAtEnd, sy + ts],
-  ] as const) {
-    if (!atEnd) continue;
-    const foot = at(depth, 0);
-    const head = at(depth, height + ts * POST_CAP_HEIGHT);
-    line(ctx, IRON_SHADOW, ts * POST_WIDTH, foot.x, foot.y, head.x, head.y);
-    line(ctx, IRON_MID, ts * POST_WIDTH * HALF, foot.x, foot.y, head.x, head.y);
-    line(
-      ctx,
-      IRON_LIGHT,
-      ts * BAR_HIGHLIGHT_WIDTH * 2,
-      foot.x - ts * POST_WIDTH * HALF * HALF,
-      foot.y,
-      head.x - ts * POST_WIDTH * HALF * HALF,
-      head.y,
-    );
-  }
+  if (postAtEnd)
+    spike(ctx, slotX, grilleBottom, grilleWidth * HALF, ts * SPIKE_HEIGHT * (open ? 1 : HALF));
+
+  const lintelLeft = Math.min(slotX - grilleWidth * HALF, frameX - postWidth * HALF);
+  const lintelWidth = grilleWidth + postWidth;
+  const lintelTop = northY - height;
+  ctx.fillStyle = IRON_MID;
+  ctx.fillRect(lintelLeft, lintelTop, lintelWidth, ts);
+  ctx.fillStyle = IRON_LIGHT;
+  ctx.fillRect(lintelLeft, lintelTop, Math.max(1, ts * BAR_HIGHLIGHT_WIDTH), ts);
+  ctx.fillStyle = IRON_RUST;
+  ctx.fillRect(lintelLeft + lintelWidth * HALF, lintelTop, lintelWidth * HALF * HALF, ts);
+  ctx.strokeStyle = IRON_SHADOW;
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  ctx.moveTo(lintelLeft, lintelTop);
+  ctx.lineTo(lintelLeft, lintelTop + ts);
+  ctx.moveTo(lintelLeft + lintelWidth, lintelTop);
+  ctx.lineTo(lintelLeft + lintelWidth, lintelTop + ts);
+  ctx.stroke();
+  if (postAtEnd) beam(ctx, lintelLeft, southY - height, lintelWidth, lintel);
+
+  if (postAtEnd) uprightEdgeOn(ctx, frameX, southY, postWidth, postHeight, ts);
 }
 
 /** The portcullis standing on one gate tile, drawn in the Y-sorted pass. */
@@ -415,7 +435,7 @@ export function drawStealthGatePortcullis(
   const atEnd = endsRun(structure, axis, tx, ty, 1);
   ctx.save();
   if (axis === 'horizontal') drawFaceOn(ctx, open, sx, sy, ts, atStart, atEnd);
-  else drawOblique(ctx, open, sx, sy, ts, sideLeanSign(structure, tx, ty), atStart, atEnd);
+  else drawEdgeOn(ctx, open, sx, sy, ts, wallSideOf(structure, tx, ty), atStart, atEnd);
   ctx.restore();
 }
 
@@ -432,12 +452,5 @@ export function stealthGateExtentsPx(
     const side = Math.ceil(ts * POST_CAP_OVERHANG);
     return { left: side, up, right: side, down: 0 };
   }
-  const leanReach = Math.ceil(ts * (SIDE_LEAN * rise + POST_WIDTH - HALF + REACH_MARGIN));
-  const lean = sideLeanSign(structure, tx, ty);
-  return {
-    left: lean < 0 ? leanReach : Math.ceil(ts * POST_WIDTH),
-    up: Math.ceil(ts * rise),
-    right: lean > 0 ? leanReach : Math.ceil(ts * POST_WIDTH),
-    down: 0,
-  };
+  return { left: 0, up: Math.ceil(ts * rise), right: 0, down: 0 };
 }

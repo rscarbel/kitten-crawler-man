@@ -57,6 +57,7 @@ import {
   type BathroomPlumbing,
   type BathroomRoomData,
 } from '../../map/bathroomLayout';
+import { roomSaveTile } from '../../map/findWalkableTile';
 import type { GameMap } from '../../map/GameMap';
 import type { Point, Rect } from '../../map/roomDoorways';
 import {
@@ -87,9 +88,11 @@ import { AmbientSoundSystem, type AmbientEmitter } from '../AmbientSoundSystem';
 import type { GameSystem, SystemContext } from '../GameSystem';
 import type { MobRoster } from '../kits/SceneWorld';
 import type { QuestMarkerType } from '../MiniMapSystem';
-import type { TrackerEntry } from '../questTracker';
+import type { ObjectiveBeaconSource, TrackerEntry, TrackerTarget } from '../questTracker';
+import { DUNGEON_BEACON_BRIGHTNESS } from '../../ui/ObjectiveBeacon';
 import type { TownPropRenderable } from '../townPropRenderable';
 import { bathroomCueSound, playBathroomCue, type BathroomCue } from './bathroomSoundCues';
+import type { SoundId } from '../../audio/sounds';
 import {
   createPipeBoard,
   resetToScramble,
@@ -137,6 +140,15 @@ const GOBLIN_ROUTE_MAX_TILES = 48;
 
 /** How close, in tiles, the party must stand to talk to a goblin or work a fixture. */
 export const BATHROOM_TALK_RANGE_TILES = 1.6;
+const NO_BEACONS: readonly TrackerTarget[] = [];
+/** Tall enough that the shaft climbs clear of the wall face the pipe panel is set into. */
+const PIPE_WALL_BEAM_HEIGHT_TILES = 4.2;
+/** How the pipe-wall beam is drawn, shared with the room render so the preview matches the game. */
+export const PIPE_WALL_BEACON_FOOTPRINT = {
+  heightTiles: PIPE_WALL_BEAM_HEIGHT_TILES,
+  brightness: DUNGEON_BEACON_BRIGHTNESS,
+  standsInFront: true,
+} as const;
 const BATHROOM_TALK_RANGE_PX = BATHROOM_TALK_RANGE_TILES * TILE_SIZE;
 /** How much nearer a stall's front than the marked plumber a crawler must stand for the press to go to the stall. */
 const STALL_OVER_MARKED_PLUMBER_MARGIN_TILES = 0.35;
@@ -298,8 +310,11 @@ function archetypeFor(seed: number): GoblinArchetype {
   return BATHROOM_GOBLIN_ARCHETYPES[pick] ?? BATHROOM_GOBLIN_ARCHETYPES[0];
 }
 
-export class CloggedBathroomSystem implements GameSystem, PipeBoardSource, PipeBoardExplainerModel {
+export class CloggedBathroomSystem
+  implements GameSystem, PipeBoardSource, PipeBoardExplainerModel, ObjectiveBeaconSource
+{
   readonly copies: readonly BathroomCopy[];
+  private readonly pipeWallBeacons: readonly TrackerTarget[];
   private readonly questManager = new QuestManager();
   private phase: CloggedBathroomPhase = 'unmet';
   private explainerSeen = false;
@@ -335,6 +350,11 @@ export class CloggedBathroomSystem implements GameSystem, PipeBoardSource, PipeB
       rewards: { xp: CLOGGED_BATHROOM_XP_REWARD },
     });
     this.copies = deps.gameMap.bathroomRooms.map((room, index) => this.buildCopy(room, index));
+    this.pipeWallBeacons = this.copies.map(({ room }) => ({
+      x: room.pipeWallStandTile.x,
+      y: room.pipeWallStandTile.y,
+      ...PIPE_WALL_BEACON_FOOTPRINT,
+    }));
     if (this.copies.length > 0) {
       prewarmGoblinPlumber();
       for (const archetype of BATHROOM_GOBLIN_ARCHETYPES) prewarmGoblinBystander(archetype);
@@ -1382,6 +1402,51 @@ export class CloggedBathroomSystem implements GameSystem, PipeBoardSource, PipeB
       case 'thanked':
         return [{ ...base, status: 'completed', objective: 'The line is moving again' }];
     }
+  }
+
+  /**
+   * A beam over every pipe wall from the moment the plumber has asked for the
+   * fix until it is done. Independent of the Journal, which floor 2 does not
+   * have: without it nothing would say which wall of a crowded room he meant.
+   * Stood on the tile the pipes are worked from, so its pool is where to stand,
+   * and drawn in front of the wall, since the panel and the wall face above
+   * the stand tile would otherwise hide the whole shaft and leave only the pool.
+   */
+  objectiveBeacons(): readonly TrackerTarget[] {
+    return this.phase === 'met' ? this.pipeWallBeacons : NO_BEACONS;
+  }
+
+  // ── Save zone ────────────────────────────────────────────────────────────
+
+  /**
+   * The track to play right now: the puzzle's own music while the pipe board
+   * is on screen, null otherwise so the floor's music plays everywhere else in
+   * the room, explainer included.
+   */
+  get pipeBoardMusic(): SoundId | null {
+    return this.boardOpen ? this.pipeBoardMusicTrack : null;
+  }
+
+  /** The puzzle's track, whether or not the board is up to hear it. */
+  get pipeBoardMusicTrack(): SoundId | null {
+    return bathroomCueSound('plumbingMusic');
+  }
+
+  /**
+   * Where a save taken by `body` would resume, or null when it is not standing
+   * in a bathroom whose plumbing is fixed. A fixed bathroom is a save point
+   * only, never a safe room: nothing about who may enter it changes.
+   *
+   * The room proper, not the reach its line spills into, so the doorway knots
+   * outside never count as being in it.
+   */
+  saveTileAt(body: { readonly x: number; readonly y: number }): Point | null {
+    if (!this.isSolved) return null;
+    for (const { room } of this.copies) {
+      const saveTile = roomSaveTile(this.deps.gameMap, room, body);
+      if (saveTile !== null) return saveTile;
+    }
+    return null;
   }
 
   // ── Checkpoint ───────────────────────────────────────────────────────────

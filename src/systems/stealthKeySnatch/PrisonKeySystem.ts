@@ -9,6 +9,10 @@
  * pedestal the same frame, and the puzzle's phase outside, which also follows
  * the inventories, agrees without being told.
  *
+ * A party caught with the key keeps it and wakes in a cell far from the door,
+ * so from then until it leaves the exit is framed and the world arrow points
+ * at it.
+ *
  * The only way out is the exit tiles beside the entrance. Recall and travel
  * are refused in every interior (`refuseAnchorIndoors`), so a party holding
  * the key cannot skip the walk back, and one without it cannot skip the walk in.
@@ -17,6 +21,8 @@
 import type { AudioManager } from '../../audio/AudioManager';
 import { TILE_SIZE } from '../../core/constants';
 import type { ItemId } from '../../core/ItemDefs';
+import { drawAreaHighlight } from '../../ui/AreaHighlight';
+import type { Rect } from '../../ui/core/geom';
 import type { Surface } from '../../ui/core/UiRoot';
 import type { PrisonPlan, PrisonTile } from '../../map/goblinPrisonPlan';
 import { prisonSectionAt } from '../../map/goblinPrisonPlan';
@@ -121,12 +127,16 @@ export class PrisonKeySystem implements PrisonExplainerModel {
    * quest item taking its slot.
    */
   private heldLastTick: boolean;
+  /** Whether a capture has thrown the party in a cell with the key in hand on this visit. */
+  private caughtWithKey = false;
   readonly pedestal: PrisonTile;
   readonly pedestalFront: PrisonTile;
+  private readonly exitRect: Rect;
 
   constructor(private readonly deps: PrisonKeyDeps) {
     this.pedestal = deps.plan.parsed.pedestal;
     this.pedestalFront = deps.plan.parsed.pedestalFront;
+    this.exitRect = PrisonKeySystem.exitWorldRect(deps.plan);
     this.heldLastTick = partyHoldsPrisonKey(deps);
   }
 
@@ -195,6 +205,35 @@ export class PrisonKeySystem implements PrisonExplainerModel {
       this.toldToTakeItOut = true;
       this.deps.toast(TOAST_TAKE_OUT, { tone: 'info', icon: 'compass' });
     }
+  }
+
+  /**
+   * Hears a capture once the party is in its cell. A capture without the key
+   * leaves the walk to the pedestal as it was; one with it turns the guidance
+   * round to the exit.
+   */
+  noteCapture(): void {
+    if (this.partyHoldsKey && !this.gateOpened) this.caughtWithKey = true;
+  }
+
+  /** Whether the exit is framed and pointed at: caught with the key, and still holding it. */
+  get guidesToExit(): boolean {
+    return this.caughtWithKey && this.partyHoldsKey && !this.gateOpened;
+  }
+
+  /** The exit tiles' bounds, in world pixels. */
+  private static exitWorldRect(plan: PrisonPlan): Rect {
+    const { exits } = plan.parsed;
+    const xs = exits.map((tile) => tile.x);
+    const ys = exits.map((tile) => tile.y);
+    const left = Math.min(...xs);
+    const top = Math.min(...ys);
+    return {
+      x: left * TILE_SIZE,
+      y: top * TILE_SIZE,
+      w: (Math.max(...xs) - left + 1) * TILE_SIZE,
+      h: (Math.max(...ys) - top + 1) * TILE_SIZE,
+    };
   }
 
   private otherOf(crawler: Player): Player {
@@ -280,6 +319,14 @@ export class PrisonKeySystem implements PrisonExplainerModel {
     active: Player,
   ): void {
     setQuestBeaconViewer(active.x, active.y);
+    if (this.guidesToExit) {
+      const exit = this.exitRect;
+      drawAreaHighlight(
+        ctx,
+        { x: exit.x - camX, y: exit.y - camY, w: exit.w, h: exit.h },
+        { color: worldPalette.objective.ready, nowMs: this.seconds * MS_PER_SECOND },
+      );
+    }
     if (!this.keyOnPedestal) return;
     const centre = this.keyCentre();
     worldText(ctx, LABEL_TEXT, {
@@ -325,9 +372,9 @@ export class PrisonKeySystem implements PrisonExplainerModel {
   }
 
   /**
-   * The world arrow to the key while the driven crawler is in the vault and
-   * the key is still there; once it is in view and near, the key needs no
-   * pointer.
+   * The world arrow: to the exit, all the way out, once the party has been
+   * caught with the key; otherwise to the key while the driven crawler is in
+   * the vault and the key is still there, until it is in view and near.
    */
   arrowCandidate(
     ctx: CanvasRenderingContext2D,
@@ -335,6 +382,13 @@ export class PrisonKeySystem implements PrisonExplainerModel {
     camY: number,
     active: Player,
   ): ArrowCandidate | null {
+    if (this.guidesToExit) {
+      const exit = this.exitRect;
+      return this.arrowTo(ctx, camX, camY, active, {
+        x: exit.x + exit.w * TILE_CENTRE,
+        y: exit.y + exit.h * TILE_CENTRE,
+      });
+    }
     if (!this.keyOnPedestal || this.sectionOf(active) !== 'vault') return null;
     const centre = this.keyCentre();
     const distanceTiles =
@@ -343,6 +397,16 @@ export class PrisonKeySystem implements PrisonExplainerModel {
         centre.y - (active.y + TILE_SIZE * TILE_CENTRE),
       ) / TILE_SIZE;
     if (distanceTiles < ARROW_SUPPRESS_TILES) return null;
+    return this.arrowTo(ctx, camX, camY, active, centre);
+  }
+
+  private arrowTo(
+    ctx: CanvasRenderingContext2D,
+    camX: number,
+    camY: number,
+    active: Player,
+    target: { readonly x: number; readonly y: number },
+  ): ArrowCandidate {
     return {
       priority: ARROW_PRIORITY.PINNED_OBJECTIVE,
       draw: () =>
@@ -350,8 +414,8 @@ export class PrisonKeySystem implements PrisonExplainerModel {
           ctx,
           active.x,
           active.y,
-          centre.x,
-          centre.y,
+          target.x,
+          target.y,
           camX,
           camY,
           worldPalette.objective.ready,

@@ -10,7 +10,8 @@
  *    plumber, hurts neither, moves neither, pays nothing and gets an "ow".
  *  - Neither companion ever picks a bathroom goblin to fight.
  *  - Playing the board to its answer through the turn API opens every copy
- *    and the way on to the gateway.
+ *    and the way on to the gateway, and the fixed room then saves the crawler
+ *    standing in it, once, on a tile inside the room.
  *  - A stall visit hides and protects the crawler for its whole length, then
  *    leaves him Refreshed; a second visit refreshes rather than stacks, and
  *    the walking boon lasts exactly as long as the status.
@@ -76,6 +77,8 @@ const FAULTS = [
   'old-save-loads-solved',
   /** A rewind leaves the bathroom as it is instead of as captured. */
   'restore-ignores-snapshot',
+  /** A fixed bathroom never counts as a save point. */
+  'fixed-room-never-saves',
 ] as const;
 type Fault = (typeof FAULTS)[number];
 
@@ -250,6 +253,9 @@ function injectFault(active: Fault | null): void {
     case 'restore-ignores-snapshot':
       bathroomProto.restoreCheckpoint = () => undefined;
       return;
+    case 'fixed-room-never-saves':
+      bathroomProto.saveTileAt = () => null;
+      return;
   }
 }
 
@@ -346,6 +352,7 @@ function injectSceneFault(scene: Scene, active: Fault | null): void {
     case 'checkpoint-forgets':
     case 'old-save-loads-solved':
     case 'restore-ignores-snapshot':
+    case 'fixed-room-never-saves':
       return;
   }
 }
@@ -820,7 +827,37 @@ function verifySolve(rig: Rig, copy: BathroomCopy, label: string): void {
     gateway !== null && anyTileReachable(reachAfter, map.gridSize, gateway),
     `${label}: the gateway is unreachable after the fix`,
   );
+  const savesBeforeFix = rig.saves.length;
   tickPinned(scene, AFTER_FIX_FRAMES);
+  verifyFixedRoomSaves(rig, copy, savesBeforeFix, label);
+}
+
+/** The crawler fixed the pipes standing in the room, so the fixed room has saved them there. */
+function verifyFixedRoomSaves(
+  rig: Rig,
+  copy: BathroomCopy,
+  savesBeforeFix: number,
+  label: string,
+): void {
+  const fixedRoomSaves = rig.saves.slice(savesBeforeFix);
+  check(
+    fixedRoomSaves.length === 1,
+    `${label}: standing in the fixed room wrote ${fixedRoomSaves.length} save(s), not one`,
+  );
+  const saved = fixedRoomSaves[fixedRoomSaves.length - 1]?.world;
+  check(
+    saved?.persisted?.cloggedBathroom?.phase === 'solved',
+    `${label}: the fixed room's save does not carry the fix`,
+  );
+  const resumeTile = saved?.safeRoomTile ?? null;
+  const { bounds } = copy.room;
+  const resumesInRoom =
+    resumeTile !== null &&
+    resumeTile.x >= bounds.x &&
+    resumeTile.y >= bounds.y &&
+    resumeTile.x < bounds.x + bounds.w &&
+    resumeTile.y < bounds.y + bounds.h;
+  check(resumesInRoom, `${label}: the fixed room's save resumes outside the room`);
 }
 
 // ── The stall ──────────────────────────────────────────────────────────────
@@ -1058,9 +1095,13 @@ for (const worldSeed of seeds) {
   verifyCompanions(rig, copy, label);
   // The save the death below comes back to: explainer seen, pipes still broken.
   rig.scene['captureSavePoint'](copy.room.pipeWallStandTile);
+  const saveBeforeFix = rig.scene['lastSave'];
   verifySolve(rig, copy, label);
   verifyCheckpoint(rig, label);
   verifyStall(rig, copy, label);
+  // Stands in for a fix whose room save was refused (a hostile at the
+  // crawler's heel), so the death comes back to the save before the fix.
+  rig.scene['lastSave'] = saveBeforeFix;
   verifyDeathRewind(rig, copy, label);
   verifySaves(rig, copy, label);
   rig.scene.onExit();

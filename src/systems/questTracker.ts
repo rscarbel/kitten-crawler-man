@@ -229,26 +229,42 @@ export function availableTargets(
 }
 
 /**
+ * A system that stands a beam over a place of its own, whatever the Journal
+ * says: on a floor with no Journal there is no tracker entry to carry a
+ * target, and an objective the player has just been sent to should not hide
+ * behind a pin they never set.
+ */
+export interface ObjectiveBeaconSource {
+  objectiveBeacons(): ReadonlyArray<TrackerTarget>;
+}
+
+/**
  * Every place that gets the overlay beam this frame, each once: every quest
- * still on offer, then the pinned objective's tile.
+ * still on offer, then each source's own beacons, then the pinned objective's
+ * tile.
  *
  * A pinned quest that is still only on offer is also in the available list;
- * drawing it twice would stack two additive beams at double brightness.
+ * drawing it twice would stack two additive beams at double brightness. The
+ * same goes for a source's beacon standing where the pin already points.
  */
 export function objectiveBeamTargets(
   pinned: TrackerTarget | null,
   entries: ReadonlyArray<TrackerEntry>,
+  sources: ReadonlyArray<ObjectiveBeaconSource> = [],
 ): TrackerTarget[] {
   const beams: TrackerTarget[] = [];
-  let pinnedAlreadyLit = false;
+  const alreadyLit = (target: TrackerTarget): boolean =>
+    beams.some((beam) => beam.x === target.x && beam.y === target.y);
   for (const target of availableTargets(entries)) {
     if (target.wearsOwnMarker === true || target.litOnlyWhenPinned === true) continue;
-    if (pinned !== null && pinned.x === target.x && pinned.y === target.y) {
-      pinnedAlreadyLit = true;
-    }
     beams.push(target);
   }
-  if (pinned !== null && pinned.wearsOwnMarker !== true && !pinnedAlreadyLit) {
+  for (const source of sources) {
+    for (const target of source.objectiveBeacons()) {
+      if (!alreadyLit(target)) beams.push(target);
+    }
+  }
+  if (pinned !== null && pinned.wearsOwnMarker !== true && !alreadyLit(pinned)) {
     beams.push(pinned);
   }
   return beams;

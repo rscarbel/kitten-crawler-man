@@ -1824,6 +1824,7 @@ export class BuildingInteriorScene extends GameplayScene {
     // Guards don't search you: a capture with the key in hand keeps it, and says so.
     prison.onCapture((capture) => {
       if (partyHoldsPrisonKey(this.pm)) capture.toast = CAPTURE_WITH_KEY_TOAST;
+      this.prisonKey?.noteCapture();
     });
     const prisonKey = this.prisonKey;
     if (prisonKey !== null) {

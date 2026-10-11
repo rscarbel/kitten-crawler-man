@@ -557,6 +557,7 @@ function checkCaptureKeepsKey(harness: PrisonHarness): void {
   check(keysHeld(harness) === 1, 'stepping onto the pedestal’s front tile lifts the key');
   check(phaseOf(harness) === 'keyHeld', `and the phase follows to keyHeld (${phaseOf(harness)})`);
   check(!prisonKeyOf(harness).keyOnPedestal, 'and the pedestal stands empty');
+  check(!prisonKeyOf(harness).guidesToExit, 'lifting the key alone does not frame the exit');
   if (!prison.isCapturing) prison.capture();
   runUntil(harness, CAPTURE_TOTAL_FRAMES * 2, () => !prison.isCapturing);
   const cellKeys = new Set(firstCell(harness).tiles.map((tile) => `${tile.x},${tile.y}`));
@@ -565,6 +566,10 @@ function checkCaptureKeepsKey(harness: PrisonHarness): void {
   check(keysHeld(harness) === 1, 'a capture with the key keeps the key');
   check(phaseOf(harness) === 'keyHeld', `and keeps the phase (${phaseOf(harness)})`);
   check(!prisonKeyOf(harness).keyOnPedestal, 'and the key does not reappear on the pedestal');
+  check(
+    prisonKeyOf(harness).guidesToExit,
+    'and the party wakes with the exit framed and pointed at',
+  );
 }
 
 function guardIsFiled(harness: PrisonHarness, guard: { x: number; y: number }): boolean {

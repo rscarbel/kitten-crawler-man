@@ -54,6 +54,8 @@ export const BATHROOM_CUES = {
   stallDoorLatch: [],
   /** The crawler stepping out with the buff. Waits on `refreshed_sting`; `stat_boost` stands in. */
   refreshed: ['stat_boost'],
+  /** The music while the pipe board is on screen. */
+  plumbingMusic: ['fix_the_plumbing_music'],
   /** A sink tap running. Waits on `sink_tap_running_loop`; `ambient_fountain` stands in. */
   sinkRunning: ['ambient_fountain'],
 } as const satisfies Record<string, readonly SoundId[]>;

@@ -3,8 +3,9 @@
  * and the fittings one at a time.
  *
  *  - `room`: one copy of the room off a real floor-2 map, broken (the line, the
- *    plumber, the signs, the drips, the pipe panel highlighted) and fixed (the
- *    goblins loitering, a stall in use, the sinks running), lit as the game
+ *    plumber, the signs, the drips, the pipe panel highlighted), briefed (the
+ *    same with the objective beam over the pipe wall) and fixed (the goblins
+ *    loitering, a stall in use, the sinks running), lit as the game
  *    lights it, at in-game size and at twice that.
  *  - `stalls`: the stall in every door and tag state, the pipe panel broken,
  *    fixed and highlighted, and the sink dry and running, at in-game size and
@@ -34,6 +35,9 @@ import { setDungeonFloorTheme } from '../src/map/dungeon/floorTheme.js';
 import { DungeonLightingSystem } from '../src/systems/DungeonLightingSystem.js';
 import { CRAWLER_LIGHT_REACH_TILES } from '../src/systems/lighting/lightKinds.js';
 import { setViewportSize } from '../src/core/Viewport.js';
+import { PIPE_WALL_BEACON_FOOTPRINT } from '../src/systems/cloggedBathroom/CloggedBathroomSystem.js';
+import { drawObjectiveBeacon } from '../src/ui/ObjectiveBeacon.js';
+import { worldPalette } from '../src/ui/theme/worldInk.js';
 import { bathroomSheetPlans } from '../src/sprites/sheets/bathroomSheets.js';
 import {
   bathroomSinkSpots,
@@ -204,7 +208,29 @@ function bodies(room: BathroomRoomData, broken: boolean, camX: number, camY: num
   return draws;
 }
 
-function renderRoom(gameMap: GameMap, room: BathroomRoomData, broken: boolean): Canvas {
+/**
+ * The room as the player meets it (`broken`), once the plumber has sent them
+ * to the pipes (`briefed`, with the objective beam over the pipe wall), and
+ * with the plumbing fixed.
+ */
+type RoomState = 'broken' | 'briefed' | 'fixed';
+const ROOM_STATES: readonly RoomState[] = ['broken', 'briefed', 'fixed'];
+
+function renderRoom(gameMap: GameMap, room: BathroomRoomData, state: RoomState): Canvas {
+  const broken = state !== 'fixed';
+  const beam = (target: CanvasRenderingContext2D): void => {
+    if (state !== 'briefed') return;
+    const stand = room.pipeWallStandTile;
+    drawObjectiveBeacon(
+      target,
+      stand.x * TILE_SIZE - camX,
+      stand.y * TILE_SIZE - camY,
+      TILE_SIZE,
+      worldPalette.ink.gold,
+      LIGHTING_CLOCK_MS,
+      PIPE_WALL_BEACON_FOOTPRINT,
+    );
+  };
   const view = roomView(room);
   const camX = view.x * TILE_SIZE;
   const camY = view.y * TILE_SIZE;
@@ -231,6 +257,9 @@ function renderRoom(gameMap: GameMap, room: BathroomRoomData, broken: boolean): 
     pipeWallHighlighted: broken,
     timeSeconds: SNAPSHOT_SECONDS,
   });
+  // Every body in the room stands south of the pipe wall, so drawing the beam
+  // ahead of all of them matches the game's Y-sorted pass here.
+  beam(ctx);
 
   const decorations: SortedDraw[] = gameMap
     .getVisibleDecorationTiles(camX, camY, viewW, viewH)
@@ -272,6 +301,7 @@ function renderRoom(gameMap: GameMap, room: BathroomRoomData, broken: boolean): 
       ),
   });
   lighting.render(ctx, camX, camY, viewW, viewH);
+  lighting.renderOverDarkness(ctx, 1, { paintOverDarkness: beam });
   return canvas;
 }
 
@@ -285,11 +315,10 @@ const roomSection = {
       throw new Error('render:clogged-bathroom: this map seats no bathroom');
     const room = gameMap.bathroomRooms[0];
     const written: string[] = [];
-    for (const broken of [true, false]) {
-      const label = broken ? 'broken' : 'fixed';
-      const canvas = renderRoom(gameMap, room, broken);
-      written.push(write(`room-${label}`, canvas));
-      written.push(write(`room-${label}-${ZOOM}x`, zoomed(canvas, ZOOM)));
+    for (const state of ROOM_STATES) {
+      const canvas = renderRoom(gameMap, room, state);
+      written.push(write(`room-${state}`, canvas));
+      written.push(write(`room-${state}-${ZOOM}x`, zoomed(canvas, ZOOM)));
     }
     return written;
   },

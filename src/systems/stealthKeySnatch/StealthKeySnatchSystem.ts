@@ -35,6 +35,7 @@ import {
   STEALTH_GATE_PROMPTS,
 } from '../../dialog/scripts/scenes/stealthKeySnatch';
 import { prisonSignLine } from '../../dialog/scripts/prisonSign';
+import { roomSaveTile } from '../../map/findWalkableTile';
 import type { GameMap } from '../../map/GameMap';
 import type { Point } from '../../map/roomDoorways';
 import type { StealthGateRoomData } from '../../map/stealthGateLayout';
@@ -46,7 +47,8 @@ import type { QuestRewardSpec } from '../../ui/questReward/types';
 import type { GameSystem, SystemContext } from '../GameSystem';
 import type { MobRoster } from '../kits/SceneWorld';
 import type { QuestMarkerType } from '../MiniMapSystem';
-import type { TrackerEntry } from '../questTracker';
+import type { ObjectiveBeaconSource, TrackerEntry, TrackerTarget } from '../questTracker';
+import { DUNGEON_BEACON_BRIGHTNESS } from '../../ui/ObjectiveBeacon';
 import { playPrisonCue, type PrisonCue } from './prisonSoundCues';
 import {
   UNMET_STEALTH_KEY_SNATCH,
@@ -85,6 +87,9 @@ const GATE_RATTLE_COOLDOWN_FRAMES = 90;
 /** Frames between the key turning and the gate going up, so the two sounds read as two steps. */
 const GATE_RAISE_DELAY_FRAMES = 40;
 const HALF = 0.5;
+/** The door stands in the wall one row north of its approach tile; its beam rises from there. */
+const PRISON_DOOR_BEAM_BACKSET_TILES = 1;
+const NO_BEACONS: ReadonlyArray<TrackerTarget> = [];
 
 /** What a press in the gate room reaches. */
 type StealthGateTarget =
@@ -133,10 +138,13 @@ const GUARD_SEED_SALT = 0x51ea1;
  * frame, read from both inventories: a key evicted from the quest slot drops
  * the phase back to `briefed` (and the prison's pedestal holds it again).
  */
-export class StealthKeySnatchSystem implements GameSystem, StealthKeySnatchVisit {
+export class StealthKeySnatchSystem
+  implements GameSystem, StealthKeySnatchVisit, ObjectiveBeaconSource
+{
   /** The gate guard, or null on a floor without a gate room. */
   readonly guard: PrisonGoblin | null;
   private readonly room: StealthGateRoomData | null;
+  private readonly prisonDoorBeacons: ReadonlyArray<TrackerTarget>;
   private readonly questManager = new QuestManager();
   private currentPhase: StealthKeySnatchPhase = 'unmet';
   private seenExplainer = false;
@@ -149,6 +157,7 @@ export class StealthKeySnatchSystem implements GameSystem, StealthKeySnatchVisit
 
   constructor(private readonly deps: StealthKeySnatchDeps) {
     this.room = deps.gameMap.stealthGateRoom;
+    this.prisonDoorBeacons = this.room === null ? NO_BEACONS : this.prisonDoorBeaconsFor(this.room);
     this.questManager.register({
       id: STEALTH_KEY_SNATCH_QUEST_ID,
       name: STEALTH_KEY_SNATCH_QUEST_NAME,
@@ -564,6 +573,31 @@ export class StealthKeySnatchSystem implements GameSystem, StealthKeySnatchVisit
 
   // ── Guidance ─────────────────────────────────────────────────────────────
 
+  /**
+   * A beam over the prison door from the guard's briefing until the key is in
+   * hand, whether or not the Journal tracks the quest: "through the side door"
+   * has to land on a door the player can see. Anchored on the door's approach
+   * tile, where the tracker's own target stands, so a pin never stacks a
+   * second beam on it, and set back one tile so the light rises from the
+   * door's foot across its full width.
+   */
+  objectiveBeacons(): ReadonlyArray<TrackerTarget> {
+    return this.currentPhase === 'briefed' ? this.prisonDoorBeacons : NO_BEACONS;
+  }
+
+  private prisonDoorBeaconsFor(room: StealthGateRoomData): ReadonlyArray<TrackerTarget> {
+    const anchor = this.prisonDoorTile(room);
+    return [
+      {
+        x: anchor.x,
+        y: anchor.y,
+        widthTiles: room.prisonDoor.faceTiles.length,
+        backsetTiles: PRISON_DOOR_BEAM_BACKSET_TILES,
+        brightness: DUNGEON_BEACON_BRIGHTNESS,
+      },
+    ];
+  }
+
   private prisonDoorTile(room: StealthGateRoomData): Point {
     return room.prisonDoor.approachTiles[0] ?? room.centre;
   }
@@ -608,6 +642,17 @@ export class StealthKeySnatchSystem implements GameSystem, StealthKeySnatchVisit
       case 'opened':
         return [{ ...base, status: 'completed', objective: 'The gate is open' }];
     }
+  }
+
+  /**
+   * Where a save taken by `body` would resume, or null when it is not standing
+   * in the gate room with the gate open. From then on the room is a save point
+   * only, never a safe room: nothing about who may enter it changes.
+   */
+  saveTileAt(body: { readonly x: number; readonly y: number }): Point | null {
+    const room = this.room;
+    if (room === null || this.currentPhase !== 'opened') return null;
+    return roomSaveTile(this.deps.gameMap, room, body);
   }
 
   // ── Checkpoint ───────────────────────────────────────────────────────────

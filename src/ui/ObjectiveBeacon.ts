@@ -58,10 +58,21 @@ export interface ObjectiveBeaconFootprint {
   readonly backsetTiles?: number;
   /** Beam height, for a target tall enough that the default stops partway up it. */
   readonly heightTiles?: number;
+  /**
+   * Multiplier on the beam's strength, 1 being the full beam. For a dim floor
+   * where the full beam glares against the darkness around it.
+   */
+  readonly brightness?: number;
 }
 
 const DEFAULT_WIDTH_TILES = 1;
 const DEFAULT_BACKSET_TILES = 0;
+const FULL_BRIGHTNESS = 1;
+/**
+ * Brightness for beams on the dungeon floors, whose low ambient light makes the
+ * full beam glare.
+ */
+export const DUNGEON_BEACON_BRIGHTNESS = 0.5;
 const HALF = 0.5;
 
 function placementFor(
@@ -80,7 +91,7 @@ function placementFor(
     coverWidth: tileSize * Math.max(MIN_COVER_WIDTH_TILES, spanTiles),
     height: tileSize * (footprint.heightTiles ?? BEAM_HEIGHT_TILES),
     color,
-    strength: BEAM_STRENGTH,
+    strength: BEAM_STRENGTH * (footprint.brightness ?? FULL_BRIGHTNESS),
     timeMs: nowMs,
   };
 }

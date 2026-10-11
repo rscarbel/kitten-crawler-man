@@ -26,8 +26,8 @@ export const PRISON_CUES = {
   prisonDoorOpen: ['gate_opening'],
   /** Room tone inside the prison. Waits on `prison_ambience_loop`. */
   prisonAmbience: [],
-  /** The sneaking music. Waits on `stealth_music_loop`. */
-  stealthMusic: [],
+  /** The sneaking music. */
+  stealthMusic: ['stealth_music'],
   /** A spotlight's positional hum. Waits on `spotlight_hum_loop`. */
   spotlightHum: [],
   /** A spotlight reversing on its track. Waits on `spotlight_motor_turn_1` … `_2`. */
