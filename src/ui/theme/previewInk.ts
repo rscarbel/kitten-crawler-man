@@ -78,6 +78,8 @@ export const previewInk = {
     dishGarnish: '#6f9f4a',
   },
   fairy: { backdrop: '#2a2f3d' },
+  /** The `?pipeboard` bench's backdrop, a bathroom wall in the dark. */
+  pipeBoard: { backdrop: '#141922' },
   casino: {
     backdrop: '#151d18',
     panel: '#1e2a22',

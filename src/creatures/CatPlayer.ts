@@ -682,7 +682,9 @@ export class CatPlayer extends Player {
         if (this.map) {
           const tx = Math.floor(nextX / this.tileSize);
           const ty = Math.floor(nextY / this.tileSize);
-          if (!this.map.isWalkable(tx, ty)) {
+          // The bathroom queue's block flag stands in for the goblins on it,
+          // and a missile meets them as bodies rather than as a wall.
+          if (!this.map.isWalkableIgnoringBathroomQueue(tx, ty)) {
             m.state = 'exploding';
             continue;
           }

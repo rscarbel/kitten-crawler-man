@@ -8,7 +8,8 @@ import { roomDoorways, type Point, type Rect, type RoomDoorway } from './roomDoo
  * eligibility, decoration, mob spawns, and anything reading the finished
  * {@link RegionMap}) asks the room what it is.
  */
-export type RoomRole = 'start' | 'safe' | 'boss' | 'quest' | 'spider_lab' | 'chain' | 'regular';
+export type RoomRole =
+  'start' | 'safe' | 'boss' | 'quest' | 'spider_lab' | 'bathroom' | 'chain' | 'regular';
 
 /**
  * How deep into the floor a point lies, by straight-line distance from the

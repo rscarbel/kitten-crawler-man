@@ -541,6 +541,17 @@ export abstract class Mob extends Player {
   paysNoRewards = false;
 
   /**
+   * Whether a crawler's blow on this body may only make it react: no ability
+   * XP, no on-hit proc, no splash or sub-missile, no stomp heal, and no
+   * "combat started". For a body that can be struck forever and never dies
+   * (the bathroom queue), where any of those would be a farm. Every attack
+   * site that pays for a landed blow asks this before paying.
+   */
+  get blowsEarnNothing(): boolean {
+    return false;
+  }
+
+  /**
    * Set on a body a necromancer called up mid-fight, of any kind — a raised
    * ratkin, a skeleton, or a Grave Bull. Counted against his own escort
    * cohort rather than a wave's scripted spawns, and against nobody's cap

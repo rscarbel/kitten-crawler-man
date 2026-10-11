@@ -16,6 +16,8 @@ import type { ServicePropKind } from '../../sprites/art/serviceProps/serviceFurn
 import { frameTime } from '../../utils';
 import { PROP_PART_TILE_TYPES, SERVICE_LEVEL_TILE_TYPES } from '../serviceLevelProps';
 import {
+  BATHROOM_PLUNGER,
+  BATHROOM_SINK,
   BOILER,
   CABLE_BUNDLE,
   DROPPED_TOWEL,
@@ -35,6 +37,7 @@ import { inferFloorType } from './helpers';
 import { drawSpecialFloorTile } from './specialFloorTiles';
 import { drawTerrainTile } from './terrainTiles';
 import { tileHash } from './hollowTileHash';
+import { bathroomSinkSide } from '../dungeon/bathroomDressing';
 
 /** The sheet each breakable piece is drawn from. */
 export const SERVICE_PROP_KIND_BY_TILE_TYPE: ReadonlyMap<number, ServicePropKind> = new Map<
@@ -104,8 +107,17 @@ export function drawServiceLevelTile(
     drawSpriteKey(ctx, 'service_decals', decalRow, servicePropVariant(tx, ty), sx, sy, ts);
     return true;
   }
+  if (type === BATHROOM_PLUNGER) {
+    drawFloorUnder(ctx, structure, sx, sy, ts, tx, ty);
+    drawSpriteKey(ctx, 'bathroom_decals', 'plunger', 0, sx, sy, ts);
+    return true;
+  }
   if (baseOnly || PROP_PART_TILE_TYPES.has(type)) {
     drawFloorUnder(ctx, structure, sx, sy, ts, tx, ty);
+    return true;
+  }
+  if (type === BATHROOM_SINK) {
+    drawSpriteKey(ctx, 'bathroom_sink', bathroomSinkSide(structure, tx, ty), 0, sx, sy, ts);
     return true;
   }
   if (type === BOILER) {
@@ -139,7 +151,12 @@ export function drawServiceLevelTile(
  * its sheet's envelope so culling and the sheet cannot disagree.
  */
 export function serviceLevelPropExtentsPx(type: number, ts: number): MapSpriteExtentsPx | null {
-  const key = type === BOILER ? 'boiler' : SERVICE_PROP_KIND_BY_TILE_TYPE.get(type);
+  const key =
+    type === BOILER
+      ? 'boiler'
+      : type === BATHROOM_SINK
+        ? 'bathroom_sink'
+        : SERVICE_PROP_KIND_BY_TILE_TYPE.get(type);
   if (key === undefined) return null;
   const entry = getManifestEntry(key);
   const scale = ts / entry.tileScale;

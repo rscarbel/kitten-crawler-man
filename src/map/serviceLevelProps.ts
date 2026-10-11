@@ -16,6 +16,8 @@
  */
 
 import {
+  BATHROOM_PLUNGER,
+  BATHROOM_SINK,
   BOILER,
   CELLAR_TABLE,
   FALLEN_BEAM,
@@ -49,6 +51,7 @@ export const SERVICE_PROP_TILE_TYPES: ReadonlySet<number> = new Set([
   SERVICE_DESK,
   LOCKER_BENCH,
   BOILER,
+  BATHROOM_SINK,
 ]);
 
 /** The tiles of a multi-tile piece other than its anchor. Solid, and drawn as bare floor. */
@@ -65,11 +68,13 @@ export const SERVICE_DECAL_TILE_TYPES: ReadonlySet<number> = new Set([
   CABLE_BUNDLE,
   PAPER_DRIFT,
   DROPPED_TOWEL,
+  BATHROOM_PLUNGER,
 ]);
 
 /**
  * Solid pieces low or slim enough to see and shoot past. A crawler crouched
- * behind a mop bucket is not hidden by it, and a gas bottle is a pole.
+ * behind a mop bucket is not hidden by it, a gas bottle is a pole, and a sink
+ * hangs on its wall at waist height.
  */
 export const SERVICE_SIGHT_TRANSPARENT_TILE_TYPES: ReadonlySet<number> = new Set([
   GAS_CYLINDER,
@@ -78,6 +83,7 @@ export const SERVICE_SIGHT_TRANSPARENT_TILE_TYPES: ReadonlySet<number> = new Set
   SERVICE_DESK,
   LOCKER_BENCH,
   PROP_PART_LOW,
+  BATHROOM_SINK,
 ]);
 
 /** Every service-level tile type the tile renderer paints. */

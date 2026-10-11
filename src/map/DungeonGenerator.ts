@@ -59,8 +59,10 @@ import {
   gauntletSegmentCeiling,
   type ChokeSlot,
   type GauntletPlan,
+  type PlannedBathroom,
   type PlannedCorridor,
 } from './gauntletLayout';
+import { bathroomBlockedTiles, layOutBathroom, type BathroomRoomData } from './bathroomLayout';
 import {
   validateProgression,
   distanceToRect,
@@ -111,6 +113,7 @@ import {
   type RegionAssignment,
 } from './dungeon/regionCharacters';
 import { dressHallway, dressRoom, dressSpecialRoom } from './dungeon/roomDressing';
+import { dressBathroom } from './dungeon/bathroomDressing';
 import { placeWallFixtures, type WallFixture } from './dungeon/wallFixtures';
 
 type Room = {
@@ -309,6 +312,8 @@ export interface ProgressionLayoutData {
   roomBounds: Rect[];
   /** Set when the floor seats the defense quest as a mandatory choke. */
   questChoke: QuestChokeData | null;
+  /** The gauntlet whose branches each seat a bathroom, or null on a floor with none. */
+  bathroomGauntletIndex: number | null;
   /**
    * The forced chain past the last gateway boss, or null on a free-region floor.
    *
@@ -370,6 +375,34 @@ const SIGN_POCKET_ARENA_MARGIN_TILES = 6;
  */
 const SIGN_ROOM_ROLES: ReadonlySet<RoomRole> = new Set<RoomRole>(['chain', 'regular']);
 
+/**
+ * Whether the bathroom plumber counts as standing in the way, which he always
+ * does in the game; only a gate's self-test switches it off.
+ */
+function plumberBlocksOnFloor(progression: ProgressionDef | undefined): boolean {
+  return !(
+    progression?.gauntlets.some(
+      (gauntlet) => gauntlet.bathroomChoke?.plumberWalkableForGate === true,
+    ) ?? false
+  );
+}
+
+/**
+ * Every tile a bathroom's fixtures, plumber and goblins stand on, which nothing
+ * else may be placed over: no sign, no prop, no dressing.
+ */
+function bathroomStandingTiles(room: BathroomRoomData): Point[] {
+  return [
+    room.entranceTile,
+    room.pipeWallStandTile,
+    room.plumberTile,
+    ...room.stallDoorTiles,
+    ...room.sinkTiles,
+    ...room.loiterTiles,
+    ...bathroomBlockedTiles(room),
+  ];
+}
+
 /** See {@link MobSpawnPoint.region}. */
 function progressionRegionOf(room: Rect, layout: ProgressionLayoutData | undefined): number {
   if (layout === undefined) return 0;
@@ -388,6 +421,8 @@ export interface DungeonData {
   safeRooms: SafeRoomData[];
   bossRooms: Array<{ bounds: Rect; centre: Point }>;
   questRooms: QuestRoomData[];
+  /** Every copy of the clogged bathroom, one per branch of the gauntlet that seats them. */
+  bathroomRooms: BathroomRoomData[];
   treasureRooms: TreasureRoomData[];
   spiderLabRoom: SpiderLabRoomData | null;
   mobSpawnPoints: MobSpawnPoint[];
@@ -549,6 +584,7 @@ const SPECIAL_ROLE_TAGS = {
   boss: 'boss',
   quest: 'quest',
   spider_lab: 'spider_lab',
+  bathroom: 'clogged_bathroom',
   chain: null,
   regular: null,
 } as const satisfies Record<RoomRole, SpecialRegionTag | null>;
@@ -1371,6 +1407,12 @@ function buildDungeon(
    */
   let questChokeEntryTiles: Set<number> | null = null;
   let questChokeData: QuestChokeData | null = null;
+  /**
+   * Every bathroom the gauntlets seated, with the tiles of the corridor each is
+   * entered by, for the reason `questChokeEntryTiles` is kept.
+   */
+  const plannedBathrooms: Array<PlannedBathroom & { entryTiles: Set<number> }> = [];
+  let bathroomGauntletIndex: number | null = null;
   let arenaReservation: ArenaReservation | null = null;
   let antechamberSafeRoom: SafeRoomData | null = null;
   /** Indices into `rooms` of the beyond pocket, index 0 always the landing room. */
@@ -1507,6 +1549,7 @@ function buildDungeon(
                 chokeSlot === undefined
                   ? undefined
                   : { w: QUEST_ROOM_W, h: QUEST_ROOM_H, slot: chokeSlot },
+              bathroom: gauntlet.bathroomChoke,
               pocketSize: () => ({ w: randomInt(MIN_W, MAX_W), h: randomInt(MIN_H, MAX_H) }),
               pickCorridorKind,
             });
@@ -1535,6 +1578,19 @@ function buildDungeon(
       for (const rect of plan.pockets) {
         addRoom(rect, SAFE_ROOM_FLOOR, 'safe', undefined, undefined, true);
       }
+      if (gauntlet.bathroomChoke !== undefined) {
+        if (plan.bathroomRooms.length !== plan.branchChains.length) {
+          return reject(`gauntlet ${index} bathrooms`);
+        }
+        bathroomGauntletIndex = index;
+      }
+      for (const bathroom of plan.bathroomRooms) {
+        addRoom(bathroom.rect, FloorTypeValue.tile_floor, 'bathroom');
+        plannedBathrooms.push({
+          ...bathroom,
+          entryTiles: corridorTileKeys(bathroom.entryCorridor.tiles),
+        });
+      }
       const chokeRooms: Rect[] = [];
       if (plan.chokeRoom !== null && plan.chokeSlot !== null) {
         addRoom(plan.chokeRoom, FloorTypeValue.tile_floor, 'quest');
@@ -1557,6 +1613,7 @@ function buildDungeon(
         plan.exitSafeRoom,
         ...chokeRooms,
         ...plan.chainRooms,
+        ...plan.bathroomRooms.map((bathroom) => bathroom.rect),
         ...plan.pockets,
       ]);
       branchRoomCounts.push(plan.branchRoomCounts);
@@ -2147,6 +2204,7 @@ function buildDungeon(
       stairwellSpacingWaived: false,
       bandedStairwellTiles: [],
       questChoke: questChokeData,
+      bathroomGauntletIndex,
       spine: spinePlan === null ? null : { chain: spineChainBounds, lanes: spineLanes },
     };
   } else {
@@ -2474,10 +2532,13 @@ function buildDungeon(
     startTile: Point,
     bounds: Rect,
     doorways: ReadonlyArray<RoomDoorway>,
+    alsoAvoiding: ReadonlyArray<Rect> = [],
   ): Set<RoomDoorway> {
     const size = grid.length;
     const insideRoom = (x: number, y: number): boolean =>
-      x >= bounds.x && x < bounds.x + bounds.w && y >= bounds.y && y < bounds.y + bounds.h;
+      [bounds, ...alsoAvoiding].some(
+        (rect) => x >= rect.x && x < rect.x + rect.w && y >= rect.y && y < rect.y + rect.h,
+      );
     const open = (x: number, y: number): boolean =>
       x >= 0 &&
       y >= 0 &&
@@ -2568,6 +2629,57 @@ function buildDungeon(
       exitDoorTiles,
       npcTile: { x: qcx, y: qcy },
       woodPileTile: { x: qr.x + 1, y: qr.y + 1 },
+    });
+  }
+
+  const bathroomRooms: BathroomRoomData[] = [];
+  const bathroomPlumberBlocks = plumberBlocksOnFloor(progression);
+  const insideAnyRoom = (x: number, y: number): boolean =>
+    rooms.some((room) => x >= room.x && x < room.x + room.w && y >= room.y && y < room.y + room.h);
+  const isOpenFloor = (x: number, y: number): boolean =>
+    y >= 0 && y < size && x >= 0 && x < grid[y].length && isWalkableTileType(grid[y][x]);
+  for (const planned of plannedBathrooms) {
+    const bounds = planned.rect;
+    const doorways = roomDoorways(grid, bounds);
+    // The way in is the doorway the planned arrival corridor cuts, unless the
+    // corridors as built only reach it through a bathroom; see
+    // `doorwaysReachableAroundRoom`. Every copy is avoided, not just this one:
+    // a doorway reached only by walking through another copy is one the queue
+    // there keeps the player from.
+    const plannedEntrance =
+      doorways.find((doorway) =>
+        doorway.tiles.some((tile) => planned.entryTiles.has(tileCoordKey(tile.x, tile.y))),
+      ) ?? null;
+    const approachable = doorwaysReachableAroundRoom(
+      grid,
+      startTile,
+      bounds,
+      doorways,
+      plannedBathrooms.map((other) => other.rect),
+    );
+    const entranceDoorway =
+      plannedEntrance !== null && approachable.has(plannedEntrance)
+        ? plannedEntrance
+        : (doorways.find((doorway) => approachable.has(doorway)) ?? null);
+    if (entranceDoorway === null) return reject('bathroom entrance');
+    const blockedDoorways = doorways.filter((doorway) => doorway !== entranceDoorway);
+    const layout = layOutBathroom({
+      bounds,
+      entrance: entranceDoorway,
+      blocked: blockedDoorways,
+      isOpen: isOpenFloor,
+      isCorridor: (x, y) => isOpenFloor(x, y) && !insideAnyRoom(x, y),
+      plumberBlocks: bathroomPlumberBlocks,
+    });
+    if (layout === null) return reject('bathroom layout');
+    bathroomRooms.push({
+      bounds,
+      centre: rectCentre(bounds),
+      branchIndex: planned.branchIndex,
+      entranceTile: entranceDoorway.tile,
+      entranceDoorway,
+      blockedDoorways,
+      ...layout,
     });
   }
 
@@ -2887,8 +2999,16 @@ function buildDungeon(
     x < startRoom.x + startRoom.w + START_ROOM_HALLWAY_SPAWN_MARGIN_TILES &&
     y >= startRoom.y - START_ROOM_HALLWAY_SPAWN_MARGIN_TILES &&
     y < startRoom.y + startRoom.h + START_ROOM_HALLWAY_SPAWN_MARGIN_TILES;
+  // A bathroom's queue spills into its corridors, and a rat set down on a tile
+  // the queue blocks would start inside ground it cannot walk.
+  const bathroomTileKeys = new Set(
+    bathroomRooms.flatMap(bathroomStandingTiles).map((tile) => tileCoordKey(tile.x, tile.y)),
+  );
   const validHallway = hallwayTiles.filter(
-    (t) => !nearRoomSet.has(t.y * size + t.x) && !inStartRoomMargin(t.x, t.y),
+    (t) =>
+      !nearRoomSet.has(t.y * size + t.x) &&
+      !inStartRoomMargin(t.x, t.y) &&
+      !bathroomTileKeys.has(tileCoordKey(t.x, t.y)),
   );
   for (let i = validHallway.length - 1; i > 0; i--) {
     const j = randomInt(0, i);
@@ -3112,6 +3232,7 @@ function buildDungeon(
         ...quest.grateTiles,
         ...quest.exitDoorTiles,
       ]),
+      bathroomRooms.flatMap(bathroomStandingTiles),
       spiderLabRoom === null
         ? []
         : [
@@ -3298,6 +3419,7 @@ function buildDungeon(
     treasureRooms.map((room) => room.centre),
     buildingEntries.map((entry) => entry.doorTile),
     arenaExteriors.map((arena) => arena.stairwellTile),
+    bathroomRooms.flatMap(bathroomStandingTiles),
   ]) {
     for (const tile of list) dressingReserved.add(tileCoordKey(tile.x, tile.y));
   }
@@ -3352,6 +3474,17 @@ function buildDungeon(
       SPECIAL_REGION_PROPS[floorTheme][tag] ?? [],
       specialRoomRng,
     );
+  }
+  // Fitted from the room's own layout rather than rolled, so it draws nothing
+  // from any stream.
+  for (const bathroom of placeProps ? bathroomRooms : []) {
+    const room = rooms.find(
+      (candidate) =>
+        candidate.role === 'bathroom' &&
+        candidate.x === bathroom.bounds.x &&
+        candidate.y === bathroom.bounds.y,
+    );
+    if (room !== undefined) dressBathroom(grid, bathroom, room.floor, bathroomPlumberBlocks);
   }
 
   // Built from the finished grid so every carve, pocket and door above is in
@@ -3414,6 +3547,7 @@ function buildDungeon(
     safeRooms,
     bossRooms,
     questRooms,
+    bathroomRooms,
     treasureRooms,
     spiderLabRoom,
     mobSpawnPoints: filteredMobSpawns,
@@ -3457,6 +3591,9 @@ export function progressionExpectations(options: GenerateDungeonOptions): Progre
       progression !== undefined &&
       (progression.spine !== undefined ||
         progression.gauntlets.some((gauntlet) => gauntlet.questChoke === true)),
+    hasBathroomChoke:
+      progression?.gauntlets.some((gauntlet) => gauntlet.bathroomChoke !== undefined) ?? false,
+    bathroomPlumberBlocks: plumberBlocksOnFloor(progression),
     hasSpine: progression?.spine !== undefined,
     spiderLabIsDeadEnd: (options.hasSpiderLab ?? false) && progression?.spine !== undefined,
     spineMinRooms: progression?.spine?.rooms.min ?? 0,

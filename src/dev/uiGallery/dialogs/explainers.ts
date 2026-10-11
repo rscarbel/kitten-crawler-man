@@ -13,6 +13,7 @@ import type { Notice } from '../../../systems/townNotices';
 import { readableBuildings, readablesFor, type Readable } from '../../../systems/townReadables';
 import { BlackjackRules } from '../../../ui/screens/dialogs/BlackjackRules';
 import { defendTutorialSurface } from '../../../ui/screens/dialogs/defendTutorial';
+import { pipeBoardExplainerSurface } from '../../../ui/screens/dialogs/pipeBoardExplainer';
 import { nearGoblinHintSurface } from '../../../ui/screens/dialogs/nearGoblinHint';
 import { NoticeBoard } from '../../../ui/screens/dialogs/NoticeBoard';
 import { ReadableOverlay } from '../../../ui/screens/dialogs/ReadableOverlay';
@@ -208,6 +209,40 @@ function noticeFixture(name: string, taps: number): DialogFixture {
 }
 
 const CONSTRUCTION_PAGES = 4;
+const PIPE_BOARD_PAGES = 4;
+
+function pipeBoardExplainerFixtures(): readonly DialogFixture[] {
+  const name = 'pipe-board-explainer';
+  return Array.from({ length: PIPE_BOARD_PAGES }, (_unused, page) => {
+    const fixtureName = page === 0 ? name : `${name}-page${page + 1}`;
+    return {
+      name: fixtureName,
+      surfaces: (shown: () => boolean) => {
+        let open = false;
+        const surface = pipeBoardExplainerSurface(
+          {
+            get isPipeBoardExplainerOpen() {
+              return open;
+            },
+            finishPipeBoardExplainer: () => {
+              open = false;
+            },
+            dismissPipeBoardExplainer: () => {
+              open = false;
+            },
+          },
+          fixtureName,
+        );
+        return [
+          gated(surface, shown, () => {
+            open = true;
+          }),
+        ];
+      },
+      interact: page === 0 ? undefined : pressTimes('ArrowRight', page),
+    };
+  });
+}
 const THREE_PAGES = 3;
 
 export const FIXTURES: readonly DialogFixture[] = [
@@ -269,6 +304,7 @@ export const FIXTURES: readonly DialogFixture[] = [
       id,
     ),
   ),
+  ...pipeBoardExplainerFixtures(),
   readableFixture('readable', 0),
   readableFixture('readable-page2', 1),
   noticeFixture('notice-board', 0),

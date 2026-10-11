@@ -1,6 +1,8 @@
 import { ITEM_DEF, type ItemId } from '../core/ItemDefs';
 import type { StatName } from '../Player';
 import { HAMBURGER_FED_DURATION_SECONDS, HAMBURGER_STR_BONUS } from '../core/foodEffects';
+import { REFRESHED_DURATION_SECONDS, REFRESHED_SPEED_FACTOR } from '../core/StatusEffect';
+import type { ToastOptions } from './hud/toasts';
 
 /**
  * Toast copy for potions and foods whose effect reads the same every time. Kept apart from
@@ -42,3 +44,22 @@ export function bagFullNotice(id: ItemId, quantity = 1): string {
   if (quantity > 1) return `Bag full — ${quantity} × ${name} were left behind`;
   return `Bag full — ${name} was left behind`;
 }
+
+const SECONDS_PER_MINUTE = 60;
+const PERCENT = 100;
+
+/** `m:ss` for a whole number of seconds. */
+function minutesSecondsText(totalSeconds: number): string {
+  const minutes = Math.floor(totalSeconds / SECONDS_PER_MINUTE);
+  const seconds = String(totalSeconds % SECONDS_PER_MINUTE).padStart(2, '0');
+  return `${minutes}:${seconds}`;
+}
+
+/** The line to toast when a crawler steps out of a bathroom stall with the refreshed boon. */
+export function refreshedNotice(): string {
+  const speedBonusPercent = Math.round((REFRESHED_SPEED_FACTOR - 1) * PERCENT);
+  return `Refreshed! Move speed +${speedBonusPercent}% for ${minutesSecondsText(REFRESHED_DURATION_SECONDS)}.`;
+}
+
+/** How the refreshed boon's toast is styled. */
+export const REFRESHED_TOAST: ToastOptions = { tone: 'success', icon: 'sparkle' };

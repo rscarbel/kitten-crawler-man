@@ -695,8 +695,7 @@ export class SpellSystem implements GameSystem {
           mob.takeDamageFrom(stats.expandDamage, this.shellOwner, 'shell');
         }
 
-        // Track unique mobs touched for XP
-        if (!shell.touchedMobIds.has(mob)) {
+        if (!shell.touchedMobIds.has(mob) && !mob.blowsEarnNothing) {
           shell.touchedMobIds.add(mob);
           this._pendingTouchXp++;
         }

@@ -283,7 +283,8 @@ export interface LightingProfile {
  * Regions that keep their own dressing and take no character, only a
  * lighting profile of their own.
  */
-export type SpecialRegionTag = 'start' | 'safe' | 'boss' | 'quest' | 'spider_lab' | 'arena';
+export type SpecialRegionTag =
+  'start' | 'safe' | 'boss' | 'quest' | 'spider_lab' | 'clogged_bathroom' | 'arena';
 
 const FIXED_ONE: CountRange = { min: 1, max: 1 };
 const FIXED_TWO: CountRange = { min: 2, max: 2 };
@@ -309,6 +310,7 @@ export const SPECIAL_REGION_LIGHTING = {
     sources: [{ kind: 'wall_sconce', placement: 'north-face', amount: { count: FIXED_TWO } }],
   },
   spider_lab: null,
+  clogged_bathroom: { ambient: 'lit', colour: 'cool_white', sources: [] },
   arena: { ambient: 'lit', colour: 'cool_white', sources: [] },
 } as const satisfies Record<SpecialRegionTag, LightingProfile | null>;
 
@@ -1055,6 +1057,18 @@ export const SPECIAL_REGION_PROPS: Record<
       { family: 'paper_drift', weight: 1, count: ONE_OR_TWO, placement: 'scatter' },
     ],
   },
+};
+
+/**
+ * The floor a special region is laid in, where it has one of its own; every
+ * other special region keeps the floor its tile type maps to. The clogged
+ * bathroom is only ever seated on the service level, whose sheet carries its
+ * washroom mosaic.
+ */
+export const SPECIAL_REGION_FLOOR_MATERIALS: Partial<
+  Record<SpecialRegionTag, CharacterFloorMaterial>
+> = {
+  clogged_bathroom: 'f2_washroom',
 };
 
 /** Every character on every floor, for lookups by id. */

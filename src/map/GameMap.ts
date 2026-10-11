@@ -89,6 +89,11 @@ import type { RegionCharacter } from './dungeon/roomCharacters';
 import type { Mob } from '../creatures/Mob';
 import { countsTowardRoomClear } from '../creatures/roomClear';
 import { tileIndex, tileCoordKey, tileKeyX, tileKeyY } from './tileIndex';
+import {
+  bathroomBlockedTiles,
+  type BathroomPlumbing,
+  type BathroomRoomData,
+} from './bathroomLayout';
 import { drawFloorArtSeed } from './ground/floorArtSeed';
 import { MinHeap, HEAP_EMPTY } from '../core/MinHeap';
 import { drawWorldSeed, withWorldSeed } from '../core/WorldRandom';
@@ -491,6 +496,14 @@ const BLOCK_STRUCTURE = 32;
  * offline reachability validators flood the raw grid.
  */
 const BLOCK_HOSTILE_ONLY = 64;
+/**
+ * Tile is held by the clogged bathroom's queue: its blocked doorways, the line
+ * and the knots. Blocking only while the floor's plumbing is `broken`. A flag
+ * rather than a tile type for the same reason as `BLOCK_QUEST_EXIT`, and rather
+ * than the goblins alone because a crowd cannot block: crawlers shove mobs
+ * aside, and the validators and A* never see entities at all.
+ */
+const BLOCK_BATHROOM = 128;
 
 /**
  * What the defense quest's onward doorway is doing.
@@ -764,6 +777,12 @@ export class GameMap {
   private townSafeRadiusTiles: number | null = null;
   /** Quest rooms generated in the dungeon (defend-NPC encounters). */
   questRooms: QuestRoomData[] = [];
+  /** Every copy of the clogged bathroom; empty on a floor without one. */
+  bathroomRooms: BathroomRoomData[] = [];
+  /** Whether the bathrooms' queue still holds their doorways shut. One state for every copy. */
+  private bathroomPlumbing: BathroomPlumbing = 'broken';
+  /** `tileCoordKey` of every tile `BLOCK_BATHROOM` covers, so a mask rebuild keeps it. */
+  private readonly bathroomBlockedSet = new Set<number>();
   /**
    * What forced-progression mode built, when this map is a progression floor.
    *
@@ -1064,6 +1083,12 @@ export class GameMap {
         this.addBlockFlag(tile.x, tile.y, BLOCK_QUEST_EXIT);
       }
     }
+    this.bathroomRooms = data.bathroomRooms;
+    for (const room of data.bathroomRooms) {
+      for (const tile of bathroomBlockedTiles(room)) {
+        this.bathroomBlockedSet.add(tileCoordKey(tile.x, tile.y));
+      }
+    }
     this.treasureRooms = data.treasureRooms;
     this.spiderLabRoom = data.spiderLabRoom;
     this.mobSpawnPoints = data.mobSpawnPoints;
@@ -1092,6 +1117,16 @@ export class GameMap {
       }
     }
     return data.grid;
+  }
+
+  /** Whether the floor's bathrooms are still blocked by their queue. */
+  get bathroomPlumbingState(): BathroomPlumbing {
+    return this.bathroomPlumbing;
+  }
+
+  /** Sets the plumbing of every bathroom copy at once: `fixed` opens all their blocked tiles. */
+  setBathroomPlumbing(state: BathroomPlumbing): void {
+    this.bathroomPlumbing = state;
   }
 
   /** Locks the arena door so players cannot exit while the fight is active. */
@@ -1853,6 +1888,7 @@ export class GameMap {
     this.applyBlockKeySet(this.stairwellBlockedSet, BLOCK_STAIRWELL);
     this.applyBlockKeySet(this.structureBlockedSet, BLOCK_STRUCTURE);
     this.applyBlockKeySet(this.hostileOnlyBlockedSet, BLOCK_HOSTILE_ONLY);
+    this.applyBlockKeySet(this.bathroomBlockedSet, BLOCK_BATHROOM);
   }
 
   private applyBlockKeySet(keys: Iterable<number>, flag: number): void {
@@ -1943,6 +1979,7 @@ export class GameMap {
     return {
       arenaDoorLocked: this.arenaDoorLocked,
       questExitDoorState: this.questExitDoorState,
+      bathroomPlumbing: this.bathroomPlumbing,
       permanentBlockedTiles: [...this.permanentBlockedTiles],
       stairwellTiles: this._stairwellTiles.map((tile) => ({ x: tile.x, y: tile.y })),
       structureBlockedTiles: [...this.structureBlockedSet],
@@ -1955,6 +1992,7 @@ export class GameMap {
     // not come back boarded behind a player who respawns at a checkpoint taken
     // before it.
     this.setQuestExitDoorState(snapshot.questExitDoorState);
+    this.setBathroomPlumbing(snapshot.bathroomPlumbing);
 
     // The mask is only rebuilt wholesale when the structure changes, so a key
     // dropped from the set without its bit being cleared leaves the tile
@@ -2164,6 +2202,17 @@ export class GameMap {
   }
 
   isWalkable(tileX: number, tileY: number): boolean {
+    if (!this.isWalkableIgnoringBathroomQueue(tileX, tileY)) return false;
+    if (this.bathroomPlumbing === 'fixed') return true;
+    return (this.blockedMask[tileIndex(tileX, tileY, this.maskWidth)] & BLOCK_BATHROOM) === 0;
+  }
+
+  /**
+   * {@link isWalkable} as if the bathrooms' plumbing were already fixed. For
+   * questions about the route as built, such as which rooms lie past a safe
+   * room, whose answer must not change when the queue clears.
+   */
+  isWalkableIgnoringBathroomQueue(tileX: number, tileY: number): boolean {
     if (!this.isInsideGrid(tileX, tileY)) return false;
     const flags = this.blockedMask[tileIndex(tileX, tileY, this.maskWidth)];
     if ((flags & BLOCK_UNCONDITIONAL) !== 0) return false;
@@ -2217,6 +2266,7 @@ export class GameMap {
     if ((flags & BLOCK_EXTRA) !== 0) return false;
     if (this.arenaDoorLocked && (flags & BLOCK_ARENA_DOOR) !== 0) return false;
     if (this.questExitDoorState === 'barred' && (flags & BLOCK_QUEST_EXIT) !== 0) return false;
+    if (this.bathroomPlumbing === 'broken' && (flags & BLOCK_BATHROOM) !== 0) return false;
     return isWalkableTileType(this.structure[tileY][tileX]);
   }
 
@@ -2673,6 +2723,7 @@ export class GameMap {
 export interface GameMapCheckpoint {
   arenaDoorLocked: boolean;
   questExitDoorState: QuestExitDoorState;
+  bathroomPlumbing: BathroomPlumbing;
   /** `tileCoordKey` values, so the entries survive a structure replacement. */
   permanentBlockedTiles: number[];
   stairwellTiles: ReadonlyArray<{ x: number; y: number }>;

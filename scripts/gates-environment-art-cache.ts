@@ -57,6 +57,7 @@ const { remainsSheetPlans } = await import('../src/sprites/sheets/remainsSheets.
 const { stairwellSheetPlans } = await import('../src/sprites/sheets/stairwellSheets.js');
 const { clubFurnitureSheetPlans } = await import('../src/sprites/sheets/clubFurnitureSheets.js');
 const { allBossRoomSheetPlans } = await import('../src/sprites/sheets/bossRoomSheets.js');
+const { bathroomSheetPlans } = await import('../src/sprites/sheets/bathroomSheets.js');
 const { getLevelDef } = await import('../src/levels/index.js');
 
 const MASK_SHEET_KEY = 'ground_masks';
@@ -183,6 +184,7 @@ const PROP_FAMILIES = [
   ...stairwellSheetPlans(),
   ...clubFurnitureSheetPlans(0),
   ...allBossRoomSheetPlans(0),
+  ...bathroomSheetPlans(),
 ];
 
 let plansChecked = 0;

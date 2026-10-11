@@ -1,4 +1,5 @@
 import type { CampKind } from '../map/overworld/camps';
+import type { BathroomRequest } from '../map/gauntletLayout';
 import type { SoundId } from '../audio/sounds';
 import type { DungeonFloorThemeId } from '../map/dungeon/floorTheme';
 import type { XpDiminishingTier } from './xpDiminishing';
@@ -211,6 +212,13 @@ export interface GauntletDef {
    * walks through.
    */
   questChoke?: boolean;
+  /**
+   * Seats a clogged bathroom of this size halfway along every branch. Its
+   * onward doorways stay blocked by the queue until the plumbing is fixed, and
+   * one fix opens every copy, so whichever branch the player takes, the way to
+   * the gateway runs through a bathroom.
+   */
+  bathroomChoke?: BathroomRequest;
 }
 
 /**

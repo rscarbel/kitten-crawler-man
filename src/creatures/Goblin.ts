@@ -80,7 +80,7 @@ const FRAME_MIDPOINT = 0.5;
 const GOBLIN_TACTICS: readonly TacticsTrait[] = ['flank', 'block', 'kite', 'regroup', 'riposte'];
 
 /** Drawn only in profile, so facing the camera it still shows that profile. */
-const GOBLIN_EYES: EyePlacement = {
+export const GOBLIN_EYES: EyePlacement = {
   sideForward: 0.13,
   sideHeight: 0.3,
   sideSpacing: 0.05,

@@ -34,6 +34,8 @@ export type PlaytestSpawn =
   | { readonly kind: 'spiderLabEntrance' }
   /** The tile just inside the goblin mother's nursery, by the way in. */
   | { readonly kind: 'questRoomEntrance' }
+  /** The tile just inside the first clogged bathroom, by the way in. */
+  | { readonly kind: 'bathroomEntrance' }
   /** Just inside Briar Hollow's gate, on the main street. */
   | { readonly kind: 'briarHollowGate' }
   /** The street tile just south of a town building's door. */
@@ -677,6 +679,19 @@ const NURSERY: PlaytestPreset = {
 };
 
 /**
+ * Inside the first clogged bathroom on floor 2, by its way in, with the
+ * floor's opening party. The bathrooms sit halfway along the pre-Krakaren
+ * branches, a few rooms' walk from the start, and the queue, the plumber and
+ * the pipe wall are only visible from inside.
+ */
+const BATHROOM: PlaytestPreset = {
+  ...LEVEL2,
+  id: 'bathroom',
+  description: 'Inside the clogged bathroom halfway to the Krakaren Clone, plumbing still broken',
+  spawn: { kind: 'bathroomEntrance' },
+};
+
+/**
  * Floor 2, past the Krakaren, hard difficulty: the fairy encounter band the
  * fairness doc gates against. Reuses the `krakaren` party rather than a fresh
  * one — that gear and level is what a crawler actually has by this point in
@@ -1048,6 +1063,7 @@ export const PLAYTEST_PRESETS: readonly PlaytestPreset[] = [
   JUICER,
   NURSERY,
   LEVEL2,
+  BATHROOM,
   KRAKAREN,
   SWINE,
   SPIDER,

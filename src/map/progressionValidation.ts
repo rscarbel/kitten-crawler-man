@@ -4,7 +4,9 @@ import type { DungeonData, QuestChokeData } from './DungeonGenerator';
 import { QUEST_EXIT_DOOR_CLOSED } from './tileTypes';
 import { roomDoorways } from './roomDoorways';
 import { MIN_CHAIN_ROOMS, SPLIT_LANE_MAX_ROOMS } from './spineLayout';
-import { SAFE_ACCESS_RUN_LIMIT } from './gauntletLayout';
+import { SAFE_ACCESS_RUN_LIMIT, bathroomBranchIndex } from './gauntletLayout';
+import { bathroomBlockedTiles, bathroomImpassableTiles, plumberTalkTiles } from './bathroomLayout';
+import { tileCoordKey } from './tileIndex';
 import { arenaReserveRect, ARENA_RADIUS, ARENA_CONCOURSE_REACH } from './arenaGeometry';
 
 /** Boss the arena's antechamber warns the player about. */
@@ -28,6 +30,17 @@ export interface ProgressionExpectations {
    * failed to build one fails red instead of passing vacuously.
    */
   hasQuestChoke: boolean;
+  /**
+   * Whether a gauntlet on this floor seats a clogged bathroom on every branch.
+   * Stated by the caller for the reason {@link hasQuestChoke} is.
+   */
+  hasBathroomChoke: boolean;
+  /**
+   * Whether S6 counts the bathroom plumber's tile as solid. True for every
+   * level; false only when a gate's self-test lays the room out as if he were
+   * not there, so S6 must judge it by the same mistaken rule.
+   */
+  bathroomPlumberBlocks: boolean;
   /** Whether this floor replaces its free region with a forced spine. */
   hasSpine: boolean;
   /**
@@ -581,6 +594,97 @@ function stairwellFootprint(tile: Point): Rect {
 }
 
 /**
+ * S6, for {@link validateProgression}. The gateway safe room it guards is the
+ * bathroom gauntlet's own.
+ */
+function validateBathroomChoke(
+  data: DungeonData,
+  gatewaySafeRooms: ReadonlyArray<{ bounds: Rect }>,
+  plumberBlocks: boolean,
+  fail: (id: string, message: string) => void,
+): void {
+  const { grid, startTile, bathroomRooms } = data;
+  const gauntletIndex = data.progressionLayout?.bathroomGauntletIndex ?? null;
+  if (gauntletIndex === null) {
+    fail('S6', 'this floor expects bathrooms on a gauntlet and seated none');
+    return;
+  }
+  const branches = data.progressionLayout?.gauntletBranchChains[gauntletIndex] ?? [];
+  if (gauntletIndex >= gatewaySafeRooms.length) {
+    fail('S6', `the bathroom gauntlet ${gauntletIndex} has no gateway safe room`);
+    return;
+  }
+  const gateway = gatewaySafeRooms[gauntletIndex];
+  if (bathroomRooms.length !== branches.length) {
+    fail('S6', `${bathroomRooms.length} bathrooms for ${branches.length} branches`);
+  }
+  for (const [branchIndex, chain] of branches.entries()) {
+    const halfway = bathroomBranchIndex(chain.length);
+    const seated = bathroomRooms.find((room) => room.branchIndex === branchIndex);
+    const expected = halfway < chain.length ? chain[halfway] : null;
+    if (seated === undefined || expected === null) {
+      fail('S6', `branch ${branchIndex} has no bathroom`);
+    } else if (seated.bounds.x !== expected.x || seated.bounds.y !== expected.y) {
+      fail('S6', `branch ${branchIndex}'s bathroom is not halfway along it`);
+    }
+  }
+
+  // Every bathroom removed at once, so branches that braid past one another
+  // cannot carry the player round the copy on their own branch.
+  const allBathrooms = bathroomRooms.map((room) => room.bounds);
+  const withoutBathrooms = floodFill(grid, startTile, allBathrooms);
+  if (isRectReachable(withoutBathrooms, gateway.bounds)) {
+    fail('S6', 'the gateway safe room is reachable without passing through a bathroom');
+  }
+  for (const [index, room] of bathroomRooms.entries()) {
+    const approaches = FLOOD_STEPS.some((step) =>
+      isReachable(withoutBathrooms, {
+        x: room.entranceTile.x + step.dx,
+        y: room.entranceTile.y + step.dy,
+      }),
+    );
+    if (!approaches) {
+      fail('S6', `bathroom ${index}'s entrance can only be reached through a bathroom`);
+    }
+  }
+
+  // The broken state, as the block flag will hold it: the line, the knots and
+  // the blocked doorways, plus the plumber anchored on his tile and the sinks
+  // in case they are dressed as props.
+  const blockedKeys = new Set<number>();
+  for (const room of bathroomRooms) {
+    const inTheWay = plumberBlocks ? bathroomImpassableTiles(room) : bathroomBlockedTiles(room);
+    for (const tile of [...inTheWay, ...room.sinkTiles]) {
+      blockedKeys.add(tileCoordKey(tile.x, tile.y));
+    }
+  }
+  const broken = floodFill(grid, startTile, [], (point) =>
+    blockedKeys.has(tileCoordKey(point.x, point.y)),
+  );
+  if (isRectReachable(broken, gateway.bounds)) {
+    fail('S6', 'the gateway safe room is reachable while the plumbing is broken');
+  }
+  for (const [index, room] of bathroomRooms.entries()) {
+    const targets: Array<{ label: string; tile: Point }> = [
+      { label: 'entrance', tile: room.entranceTile },
+      { label: 'pipe wall', tile: room.pipeWallStandTile },
+      ...room.stallDoorTiles.map((tile, stall) => ({ label: `stall ${stall}`, tile })),
+    ];
+    for (const target of targets) {
+      if (!isReachable(broken, target.tile)) {
+        fail('S6', `bathroom ${index}'s ${target.label} cannot be reached past the line`);
+      }
+    }
+    const plumberInReach = plumberTalkTiles(room.plumberTile).some((tile) =>
+      isReachable(broken, tile),
+    );
+    if (!plumberInReach) {
+      fail('S6', `bathroom ${index}'s plumber cannot be reached past the line`);
+    }
+  }
+}
+
+/**
  * Checks every topology invariant the forced-progression design depends on.
  * Pure: grid and layout data in, a list of failures out. Run both by the
  * generator's retry loop and by the offline verification harness.
@@ -600,6 +704,8 @@ export function validateProgression(
     gauntletCount,
     hasArena,
     hasQuestChoke,
+    hasBathroomChoke,
+    bathroomPlumberBlocks,
     hasSpine,
     spiderLabIsDeadEnd,
     spineMinRooms,
@@ -624,6 +730,11 @@ export function validateProgression(
   for (const [index, room] of questRooms.entries()) {
     if (!isRectReachable(fullFlood, room.bounds)) {
       fail('I7', `quest room ${index} is unreachable from the start tile`);
+    }
+  }
+  for (const [index, room] of data.bathroomRooms.entries()) {
+    if (!isRectReachable(fullFlood, room.bounds)) {
+      fail('I7', `bathroom ${index} is unreachable from the start tile`);
     }
   }
   if (data.spiderLabRoom !== null && !isRectReachable(fullFlood, data.spiderLabRoom.bounds)) {
@@ -1023,6 +1134,14 @@ export function validateProgression(
         }
       }
     }
+  }
+
+  // S6 — the clogged bathroom stands on every branch of its gauntlet, so the
+  // gateway cannot be reached around it, and while the plumbing is broken its
+  // line holds every way onward shut without shutting the player out of
+  // anything they need inside it.
+  if (hasBathroomChoke) {
+    validateBathroomChoke(data, gatewaySafeRooms, bathroomPlumberBlocks, fail);
   }
 
   // S1–S3 — the forced spine past the last gateway boss.

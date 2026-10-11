@@ -45,6 +45,8 @@ const { Cow } = await import('../src/creatures/Cow.js');
 const { Rat } = await import('../src/creatures/Rat.js');
 const { ShrineVermin } = await import('../src/creatures/ShrineVermin.js');
 const { Mantid } = await import('../src/creatures/Mantid.js');
+const { BathroomGoblin } = await import('../src/creatures/BathroomGoblin.js');
+const { prewarmGoblinPlumber } = await import('../src/sprites/goblinSprite.js');
 const { drawMantidSprite } = await import('../src/sprites/mantidSprite.js');
 const { Villager } = await import('../src/systems/briarHollow/Villager.js');
 const { VILLAGER_ROUTINES } = await import('../src/systems/briarHollow/villagerRoutines.js');
@@ -200,6 +202,16 @@ function namedSubjects(): Subject[] {
     0,
   );
   villager.state = 'strolling';
+  const PLUMBER_SEED = 1;
+  prewarmGoblinPlumber();
+  const plumber = new BathroomGoblin(
+    WORLD_TILE,
+    WORLD_TILE,
+    TILE_SIZE,
+    'plumber',
+    PLUMBER_SEED,
+    'sword',
+  );
   const recruiter = new RecruiterNPC(TILE_POINT);
   const seer = new FortuneTellerProp(TILE_POINT);
 
@@ -233,6 +245,7 @@ function namedSubjects(): Subject[] {
         mantid.render(ctx, camX, camY, TILE_SIZE);
       },
     },
+    mobSubject('goblin plumber', plumber, (m) => (plumber.marker = m ? 'exclamation' : 'none')),
     {
       label: 'ratkin villager',
       draw(ctx, sx, sy, marked) {

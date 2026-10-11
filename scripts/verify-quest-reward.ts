@@ -29,6 +29,10 @@ import { Conversation } from '../src/dialog/Conversation';
 import { CRAWLER_NAMES } from '../src/core/SkillManager';
 import { AnchorQuestSystem } from '../src/systems/AnchorQuestSystem';
 import { CircusQuestSystem } from '../src/systems/CircusQuestSystem';
+import {
+  CLOGGED_BATHROOM_QUEST_ID,
+  CloggedBathroomSystem,
+} from '../src/systems/cloggedBathroom/CloggedBathroomSystem';
 import { DefendQuestSystem } from '../src/systems/DefendQuestSystem';
 import { MurderMysteryQuestSystem } from '../src/systems/MurderMysteryQuestSystem';
 import { SpiderQuestSystem } from '../src/systems/SpiderQuestSystem';
@@ -268,6 +272,24 @@ const QUEST_CASES: readonly QuestCase[] = [
     paysXp: true,
     complete: ({ rig }) => {
       rig.kit.quest?.grantRewards();
+    },
+  },
+  {
+    questId: CLOGGED_BATHROOM_QUEST_ID,
+    paysXp: true,
+    complete: ({ rig, conversation }) => {
+      const quest = new CloggedBathroomSystem({
+        gameMap: rig.map,
+        bus: rig.bus,
+        roster: rig.world.roster,
+        conversation,
+        audio: null,
+        announce: () => undefined,
+        startSolved: false,
+      });
+      // The plumber's thanks pays out only once the pipes are fixed.
+      quest.restoreCheckpoint({ phase: 'solved', explainerSeen: true });
+      callCompletion(quest, 'completeQuest', [{ human: rig.human, cat: rig.cat }]);
     },
   },
   {

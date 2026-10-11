@@ -210,6 +210,33 @@ function questRoomApproachTile(gameMap: GameMap): { x: number; y: number } | nul
   return gameMap.isWalkable(inside.x, inside.y) ? inside : entranceTile;
 }
 
+/** How far inside its own doorway the bathroom preset stands the party. */
+const BATHROOM_DOORWAY_STEP_TILES = 1;
+
+/**
+ * A tile just inside the first bathroom's way in, or null on a floor with none.
+ * One step in rather than the nursery's two: the line keeps clear of the
+ * entrance by only a couple of tiles, and the party should land on open floor.
+ */
+function bathroomApproachTile(gameMap: GameMap): { x: number; y: number } | null {
+  if (gameMap.bathroomRooms.length === 0) return null;
+  const { bounds, entranceTile } = gameMap.bathroomRooms[0];
+  const inwardX =
+    entranceTile.x === bounds.x
+      ? BATHROOM_DOORWAY_STEP_TILES
+      : entranceTile.x === bounds.x + bounds.w - 1
+        ? -BATHROOM_DOORWAY_STEP_TILES
+        : 0;
+  const inwardY =
+    entranceTile.y === bounds.y
+      ? BATHROOM_DOORWAY_STEP_TILES
+      : entranceTile.y === bounds.y + bounds.h - 1
+        ? -BATHROOM_DOORWAY_STEP_TILES
+        : 0;
+  const inside = { x: entranceTile.x + inwardX, y: entranceTile.y + inwardY };
+  return gameMap.isWalkable(inside.x, inside.y) ? inside : entranceTile;
+}
+
 /** Rows south of a town door the party stands, clear of the door itself so arriving never walks in. */
 const TOWN_DOORSTEP_ROWS_SOUTH = 1;
 
@@ -232,11 +259,58 @@ function briarHollowThreshold(
   return threshold === undefined ? null : { x: threshold.x, y: threshold.y };
 }
 
+const PLAYTEST_FLOOD_STEPS = [
+  { dx: 1, dy: 0 },
+  { dx: -1, dy: 0 },
+  { dx: 0, dy: 1 },
+  { dx: 0, dy: -1 },
+] as const;
+
+/** Whether `tile` can be walked to from the floor's start as the map stands now. */
+function reachableFromStart(gameMap: GameMap, tile: { x: number; y: number }): boolean {
+  const width = gameMap.structure[0]?.length ?? 0;
+  const keyOf = (x: number, y: number): number => y * width + x;
+  const start = gameMap.startTile;
+  if (!gameMap.isWalkable(start.x, start.y)) return false;
+  const seen = new Set<number>([keyOf(start.x, start.y)]);
+  const queue = [start];
+  // The iterator re-reads `length`, so tiles pushed below are visited by this loop.
+  for (const current of queue) {
+    if (current.x === tile.x && current.y === tile.y) return true;
+    for (const step of PLAYTEST_FLOOD_STEPS) {
+      const x = current.x + step.dx;
+      const y = current.y + step.dy;
+      if (seen.has(keyOf(x, y)) || !gameMap.isWalkable(x, y)) continue;
+      seen.add(keyOf(x, y));
+      queue.push({ x, y });
+    }
+  }
+  return false;
+}
+
 /**
  * The tile a preset's spawn names, or null when this map has no such landmark —
  * in which case the caller falls back to the floor's own start tile.
  */
 export function resolvePlaytestSpawn(
+  spawn: PlaytestSpawn,
+  gameMap: GameMap,
+): { x: number; y: number } | null {
+  return resolveSpawnLandmark(spawn, gameMap);
+}
+
+/**
+ * Whether a preset drops the party past the clogged bathrooms: then the floor
+ * starts with them solved, or the way back to the start would be shut behind a
+ * queue the party never met. Asked of the map as generated, plumbing broken.
+ */
+export function playtestStartsPastBathroom(spawn: PlaytestSpawn, gameMap: GameMap): boolean {
+  if (gameMap.bathroomRooms.length === 0) return false;
+  const tile = resolveSpawnLandmark(spawn, gameMap);
+  return tile !== null && !reachableFromStart(gameMap, tile);
+}
+
+function resolveSpawnLandmark(
   spawn: PlaytestSpawn,
   gameMap: GameMap,
 ): { x: number; y: number } | null {
@@ -249,6 +323,8 @@ export function resolvePlaytestSpawn(
       return spiderLabApproachTile(gameMap);
     case 'questRoomEntrance':
       return questRoomApproachTile(gameMap);
+    case 'bathroomEntrance':
+      return bathroomApproachTile(gameMap);
     case 'briarHollowGate':
       return gameMap.briarHollow?.gate.inside ?? null;
     case 'townBuildingDoor':

@@ -167,7 +167,10 @@ export class MobUpdateLoop implements GameSystem {
 
     const playerTargets = this.playerTargets;
     playerTargets.length = 0;
-    playerTargets.push(human, cat);
+    // A crawler behind a shut stall door is out of the world: nothing may pick
+    // them, and a chase already on them loses them.
+    if (!human.concealed) playerTargets.push(human);
+    if (!cat.concealed) playerTargets.push(cat);
     if (extraTargets) {
       for (const t of extraTargets) {
         // Defend-quest NPCs (e.g. Goblin Mother) are handled by Bugaboo's own
@@ -310,7 +313,7 @@ export class MobUpdateLoop implements GameSystem {
     this.players.length = 0;
     this.players.push(human, cat);
     for (const player of this.players) {
-      if (!player.isAlive) continue;
+      if (!player.isAlive || player.concealed) continue;
       for (const mob of this.separationMobs) {
         if (!mob.isAlive || !mob.displacesPlayers) continue;
         const dx = player.x - mob.x;

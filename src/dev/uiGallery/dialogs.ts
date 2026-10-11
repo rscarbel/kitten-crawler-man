@@ -13,6 +13,7 @@ import { FIXTURES as CONVERSATION } from './dialogs/conversation';
 import { FIXTURES as END_SCREENS } from './dialogs/endScreens';
 import { FIXTURES as EXPLAINERS } from './dialogs/explainers';
 import type { DialogFixture } from './dialogs/fixture';
+import { FIXTURES as PIPE_BOARD } from './dialogs/pipeBoard';
 import { fixtureSheetSurfaces } from './fixturePicker';
 import type { GalleryModel } from './model';
 
@@ -23,6 +24,7 @@ export const DIALOG_FIXTURES: readonly DialogFixture[] = [
   ...CONVERSATION,
   ...BESPOKE,
   ...CASINO,
+  ...PIPE_BOARD,
 ];
 
 /** Every dialog fixture's surfaces; with `picker`, the live route's fixture strip too. */

@@ -16,6 +16,14 @@ const KRAKAREN_BRANCH_ROOMS_MIN = 3;
 const KRAKAREN_BRANCH_ROOMS_MAX = 9;
 
 /**
+ * The clogged bathroom seated halfway along each pre-Krakaren branch. The
+ * largest chain room, so it seats at the same pitch as any other room on the
+ * branch.
+ */
+const BATHROOM_ROOM_W = 14;
+const BATHROOM_ROOM_H = 12;
+
+/**
  * Rooms walked between the Krakaren Clone's lair and the arena's antechamber.
  *
  * The two are only a few dozen tiles apart on a compact floor, so this is a
@@ -216,6 +224,7 @@ export const level2: LevelDef = {
         bossType: 'krakaren_clone',
         branchCount: { min: KRAKAREN_BRANCH_MIN, max: KRAKAREN_BRANCH_MAX },
         branchRooms: { min: KRAKAREN_BRANCH_ROOMS_MIN, max: KRAKAREN_BRANCH_ROOMS_MAX },
+        bathroomChoke: { w: BATHROOM_ROOM_W, h: BATHROOM_ROOM_H },
       },
     ],
     spine: {

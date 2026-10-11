@@ -20,6 +20,7 @@ import {
   floorArtSubSeed,
 } from '../../map/ground/floorArtSeed';
 import { BOSS_ROOM_ASSET_GROUPS, bossRoomSheetPlans } from './bossRoomSheets';
+import { bathroomSheetPlans } from './bathroomSheets';
 import { campSheetPlans } from './campSheets';
 import { cellarPropSheetPlans } from './cellarPropSheets';
 import { circusSheetPlans } from './circusSheets';
@@ -118,6 +119,11 @@ export function requestEnvironmentSheetsForGroups(
     requestPropSheets(serviceFurnitureSheetPlans(), {
       // A locker is the same locker on every run; its variants are picked per
       // tile at draw time, so the sheet carries no floor seed.
+      variesWithFloorSeed: false,
+      onSheetPainted,
+    });
+    requestPropSheets(bathroomSheetPlans(), {
+      // Every copy of the clogged bathroom is fitted out alike, on every run.
       variesWithFloorSeed: false,
       onSheetPainted,
     });

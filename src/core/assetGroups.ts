@@ -231,6 +231,12 @@ export const ASSET_GROUPS: Readonly<Record<AssetGroup, readonly SpriteKey[]>> = 
     'locker_bench',
     'boiler',
     'service_decals',
+    // The clogged bathroom's fittings: every floor-2 world seats a copy on each
+    // gauntlet branch.
+    'bathroom_stall',
+    'bathroom_pipe_wall',
+    'bathroom_sink',
+    'bathroom_decals',
   ],
 
   boss_hoarder: [

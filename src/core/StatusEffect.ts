@@ -373,3 +373,30 @@ export function makeHamburgerFed(): StatusEffect {
     applier: null,
   };
 }
+
+// -- The Clogged Bathroom --------------------------------------------------------
+
+/** A quick turn in a fixed bathroom stall; see {@link makeRefreshed}. */
+export const REFRESHED_STATUS = 'refreshed';
+
+/** How much faster a refreshed crawler walks. */
+export const REFRESHED_SPEED_FACTOR = 1.1;
+
+export const REFRESHED_DURATION_SECONDS = 150;
+
+export const REFRESHED_DURATION_TICKS = REFRESHED_DURATION_SECONDS * TICKS_PER_SECOND;
+
+/**
+ * Refreshed: a mild walking-speed boon from using a bathroom stall. Using a
+ * stall again refreshes the clock rather than stacking, because `applyStatus`
+ * replaces an effect of the same type and `Player.speedMultiplier` reads the
+ * type once.
+ */
+export function makeRefreshed(): StatusEffect {
+  return {
+    type: REFRESHED_STATUS,
+    ticksRemaining: REFRESHED_DURATION_TICKS,
+    totalTicks: REFRESHED_DURATION_TICKS,
+    applier: null,
+  };
+}

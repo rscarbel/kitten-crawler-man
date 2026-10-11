@@ -101,6 +101,7 @@ export const GROUND_SHEETS: ReadonlyArray<GroundSheetConfig> = [
       'f2_wall',
       'f2_grating',
       'f2_rubber',
+      'f2_washroom',
     ],
     seedSlotBase: 300,
   },

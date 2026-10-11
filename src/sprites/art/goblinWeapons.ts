@@ -971,6 +971,228 @@ export function makeBowProp(palette: GoblinPalette, seed: () => number): GoblinP
   };
 }
 
+// ── Pipe wrench ──────────────────────────────────────────────────────────────
+//
+// The plumber's tool, carried where the others carry a weapon. What names it at
+// 32 px is the hook jaw standing off the end of the handle at a right angle: a
+// straight bar with a lump on the end is a club, and an L at the end is a
+// wrench.
+
+/** Handle red, the one colour every pipe wrench in a hardware shop shares. */
+const WRENCH_PAINT: Ramp = {
+  shadow: '#3c0d0a',
+  dark: '#6b1711',
+  mid: '#a3241a',
+  light: '#cf4630',
+  rim: '#ef8268',
+};
+
+const WRENCH_BUTT = 0.1;
+const WRENCH_HANDLE_HALF_WIDTH = 0.032;
+const WRENCH_HANG_HOLE_RADIUS = 0.013;
+/** The cast housing the jaws sit in, along the handle's axis. */
+const WRENCH_HOUSING_START = 0.27;
+const WRENCH_HOUSING_END = 0.4;
+const WRENCH_HOUSING_HALF_WIDTH = 0.048;
+/** The hook jaw's shank runs across the handle at this point along it. */
+const WRENCH_SHANK_X = 0.43;
+const WRENCH_SHANK_HALF_WIDTH = 0.026;
+/** How far the shank pokes out past the housing on the side away from the jaws. */
+const WRENCH_SHANK_TAIL = 0.07;
+/** How far the hook jaw stands off the handle's axis. */
+const WRENCH_JAW_REACH = 0.21;
+const WRENCH_JAW_THICKNESS = 0.055;
+/** Where the hook jaw's teeth reach back toward the grip, along the handle. */
+const WRENCH_JAW_BACK = 0.3;
+const WRENCH_HEEL_JAW_HEIGHT = 0.035;
+const WRENCH_TOOTH_COUNT = 3;
+/** The knurled adjusting nut on the shank, between the housing and the jaw. */
+const WRENCH_NUT_FROM = 0.07;
+const WRENCH_NUT_TO = 0.13;
+const WRENCH_NUT_HALF_WIDTH = 0.044;
+/** The handle narrows toward its butt, as a fraction of its width at the housing. */
+const WRENCH_BUTT_TAPER = 0.8;
+/** Where the hanging hole is punched, as a fraction of the way out to the butt. */
+const WRENCH_HANG_HOLE_AT = 0.6;
+/** The handle's painted bevel: the lit edge's strength, and the shadowed band's start, depth and strength. */
+const WRENCH_PAINT_LIT_ALPHA = 0.6;
+const WRENCH_PAINT_SHADE_START = 0.3;
+const WRENCH_PAINT_SHADE_DEPTH = 0.6;
+const WRENCH_PAINT_SHADE_ALPHA = 0.55;
+/** The steel's bevel: a lit strip along the jaw and a shadowed lower half of the housing. */
+const WRENCH_STEEL_BEVEL_ALPHA = 0.45;
+const WRENCH_JAW_LIT_DEPTH = 0.35;
+const WRENCH_HOUSING_SHADE_START = 0.3;
+/** How deep each tooth bites, as a fraction of the jaw's thickness. */
+const WRENCH_TOOTH_DEPTH = 0.35;
+/** Each knurl groove's width, as a fraction of its slot on the nut. */
+const WRENCH_KNURL_GROOVE = 0.6;
+const WRENCH_KNURL_COUNT = 3;
+const WRENCH_TIP = WRENCH_SHANK_X + WRENCH_SHANK_HALF_WIDTH;
+
+/** A rectangle from (x0, y0) to (x1, y1), grown by `grow` on every side. */
+function traceBox(ctx: Ctx, x0: number, y0: number, x1: number, y1: number, grow: number): void {
+  ctx.beginPath();
+  ctx.rect(x0 - grow, y0 - grow, x1 - x0 + grow * 2, y1 - y0 + grow * 2);
+}
+
+export function makePipeWrenchProp(palette: GoblinPalette): GoblinProp {
+  const { iron, outline } = palette;
+  return {
+    tipDistance: WRENCH_TIP,
+    offGripDistance: null,
+    headHalfHeight: WRENCH_JAW_REACH,
+    paint: (ctx, hand, wristAngle) => {
+      ctx.save();
+      ctx.translate(hand.x, hand.y);
+      ctx.rotate(wristAngle);
+
+      const jawTop = -WRENCH_JAW_REACH;
+      const shank = (grow: number): void => {
+        traceBox(
+          ctx,
+          WRENCH_SHANK_X - WRENCH_SHANK_HALF_WIDTH,
+          jawTop,
+          WRENCH_SHANK_X + WRENCH_SHANK_HALF_WIDTH,
+          WRENCH_HOUSING_HALF_WIDTH + WRENCH_SHANK_TAIL,
+          grow,
+        );
+      };
+      const hookJaw = (grow: number): void => {
+        traceBox(
+          ctx,
+          WRENCH_JAW_BACK,
+          jawTop,
+          WRENCH_SHANK_X + WRENCH_SHANK_HALF_WIDTH,
+          jawTop + WRENCH_JAW_THICKNESS,
+          grow,
+        );
+      };
+      const housing = (grow: number): void => {
+        traceBox(
+          ctx,
+          WRENCH_HOUSING_START,
+          -WRENCH_HOUSING_HALF_WIDTH - WRENCH_HEEL_JAW_HEIGHT,
+          WRENCH_HOUSING_END,
+          WRENCH_HOUSING_HALF_WIDTH,
+          grow,
+        );
+      };
+      const buttHalfWidth = WRENCH_HANDLE_HALF_WIDTH * WRENCH_BUTT_TAPER;
+      const handle = (grow: number): void => {
+        ctx.beginPath();
+        ctx.moveTo(-WRENCH_BUTT - grow, -buttHalfWidth - grow);
+        ctx.lineTo(WRENCH_HOUSING_START, -WRENCH_HANDLE_HALF_WIDTH - grow);
+        ctx.lineTo(WRENCH_HOUSING_START, WRENCH_HANDLE_HALF_WIDTH + grow);
+        ctx.lineTo(-WRENCH_BUTT - grow, buttHalfWidth + grow);
+        ctx.closePath();
+      };
+
+      ctx.fillStyle = outline;
+      for (const trace of [handle, shank, hookJaw, housing]) {
+        trace(PART_OUTLINE);
+        ctx.fill();
+      }
+
+      ctx.fillStyle = WRENCH_PAINT.mid;
+      handle(0);
+      ctx.fill();
+      ctx.fillStyle = rgba(WRENCH_PAINT.rim, WRENCH_PAINT_LIT_ALPHA);
+      ctx.fillRect(
+        -WRENCH_BUTT,
+        -buttHalfWidth,
+        WRENCH_HOUSING_START + WRENCH_BUTT,
+        WRENCH_HANDLE_HALF_WIDTH * BEVEL_FRACTION,
+      );
+      ctx.fillStyle = rgba(WRENCH_PAINT.shadow, WRENCH_PAINT_SHADE_ALPHA);
+      ctx.fillRect(
+        -WRENCH_BUTT,
+        WRENCH_HANDLE_HALF_WIDTH * WRENCH_PAINT_SHADE_START,
+        WRENCH_HOUSING_START + WRENCH_BUTT,
+        WRENCH_HANDLE_HALF_WIDTH * WRENCH_PAINT_SHADE_DEPTH,
+      );
+      ctx.fillStyle = outline;
+      ctx.beginPath();
+      ctx.arc(-WRENCH_BUTT * WRENCH_HANG_HOLE_AT, 0, WRENCH_HANG_HOLE_RADIUS, 0, FULL_CIRCLE_ANGLE);
+      ctx.fill();
+
+      for (const trace of [shank, hookJaw, housing]) {
+        paintSteel(ctx, trace, iron, outline, () => {
+          ctx.fillStyle = rgba(iron.rim, WRENCH_STEEL_BEVEL_ALPHA);
+          ctx.fillRect(
+            WRENCH_JAW_BACK,
+            jawTop,
+            WRENCH_TIP,
+            WRENCH_JAW_THICKNESS * WRENCH_JAW_LIT_DEPTH,
+          );
+          ctx.fillStyle = rgba(iron.shadow, WRENCH_STEEL_BEVEL_ALPHA);
+          ctx.fillRect(
+            WRENCH_HOUSING_START,
+            WRENCH_HOUSING_HALF_WIDTH * WRENCH_HOUSING_SHADE_START,
+            WRENCH_TIP,
+            WRENCH_HOUSING_HALF_WIDTH,
+          );
+        });
+      }
+
+      // Teeth on both jaws, facing each other across the gap: the bite is
+      // what separates a wrench's head from a hammer's.
+      ctx.fillStyle = iron.shadow;
+      const jawGapTop = jawTop + WRENCH_JAW_THICKNESS;
+      const heelTop = -WRENCH_HOUSING_HALF_WIDTH - WRENCH_HEEL_JAW_HEIGHT;
+      const toothSpan =
+        (WRENCH_SHANK_X - WRENCH_SHANK_HALF_WIDTH - WRENCH_JAW_BACK) / WRENCH_TOOTH_COUNT;
+      const toothDepth = WRENCH_JAW_THICKNESS * WRENCH_TOOTH_DEPTH;
+      for (let i = 0; i < WRENCH_TOOTH_COUNT; i++) {
+        const x = WRENCH_JAW_BACK + i * toothSpan;
+        ctx.beginPath();
+        ctx.moveTo(x, jawGapTop);
+        ctx.lineTo(x + toothSpan, jawGapTop);
+        ctx.lineTo(x + toothSpan / 2, jawGapTop - toothDepth);
+        ctx.closePath();
+        ctx.fill();
+        ctx.beginPath();
+        ctx.moveTo(x, heelTop);
+        ctx.lineTo(x + toothSpan, heelTop);
+        ctx.lineTo(x + toothSpan / 2, heelTop + toothDepth);
+        ctx.closePath();
+        ctx.fill();
+      }
+
+      const nutTop = -WRENCH_HOUSING_HALF_WIDTH - WRENCH_HEEL_JAW_HEIGHT - WRENCH_NUT_TO;
+      const nutBottom = -WRENCH_HOUSING_HALF_WIDTH - WRENCH_HEEL_JAW_HEIGHT - WRENCH_NUT_FROM;
+      const nut = (grow: number): void => {
+        traceBox(
+          ctx,
+          WRENCH_SHANK_X - WRENCH_NUT_HALF_WIDTH,
+          nutTop,
+          WRENCH_SHANK_X + WRENCH_NUT_HALF_WIDTH,
+          nutBottom,
+          grow,
+        );
+      };
+      ctx.fillStyle = outline;
+      nut(PART_OUTLINE);
+      ctx.fill();
+      ctx.fillStyle = iron.light;
+      nut(0);
+      ctx.fill();
+      ctx.fillStyle = iron.dark;
+      const knurlStep = (WRENCH_NUT_HALF_WIDTH * 2) / (WRENCH_KNURL_COUNT * 2);
+      for (let i = 0; i < WRENCH_KNURL_COUNT; i++) {
+        ctx.fillRect(
+          WRENCH_SHANK_X - WRENCH_NUT_HALF_WIDTH + (i * 2 + 1) * knurlStep,
+          nutTop,
+          knurlStep * WRENCH_KNURL_GROOVE,
+          nutBottom - nutTop,
+        );
+      }
+
+      ctx.restore();
+    },
+  };
+}
+
 /** Every weapon, keyed the same way the archetypes are. */
 export const WEAPON_FACTORIES = {
   sword: makeSwordProp,

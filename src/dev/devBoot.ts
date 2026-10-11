@@ -28,6 +28,7 @@ import { StatusPreviewScene } from '../scenes/StatusPreviewScene';
 import { FairyPreviewScene } from '../scenes/FairyPreviewScene';
 import { CasinoPreviewScene } from '../scenes/CasinoPreviewScene';
 import { KeyboardHeroPreviewScene } from '../scenes/KeyboardHeroPreviewScene';
+import { PipeBoardPreviewScene } from '../scenes/PipeBoardPreviewScene';
 import { TownMapScene } from '../scenes/TownMapScene';
 import { UiGalleryScene } from '../scenes/UiGalleryScene';
 import { getLevelDef } from '../levels/index';
@@ -52,7 +53,11 @@ import {
 import { DOOMSDAY_COUNTDOWN_MS, createDoomsdayProgress } from '../core/DoomsdayProgress';
 import { settings } from '../core/Settings';
 import { getMercenaryTemplate } from '../core/mercenaryTemplates';
-import { buildPlaytestBoot, resolvePlaytestSpawn } from './playtestBoot';
+import {
+  buildPlaytestBoot,
+  playtestStartsPastBathroom,
+  resolvePlaytestSpawn,
+} from './playtestBoot';
 import { blueprintsPlaytestState } from './blueprintsPlaytest';
 import { contractsPlaytestState } from './contractsPlaytest';
 
@@ -357,6 +362,11 @@ export function devBootScene(
     return true;
   }
 
+  if (params.get('pipeboard') !== null) {
+    sceneManager.replace(new PipeBoardPreviewScene());
+    return true;
+  }
+
   if (params.get('ui') !== null) {
     sceneManager.replace(new UiGalleryScene());
     return true;
@@ -385,6 +395,7 @@ export function devBootScene(
       // and a playtest drop-in that cannot summon him cannot test him.
       options.mongoUnlocked = true;
       options.resolveSpawnTile = (gameMap) => resolvePlaytestSpawn(boot.spawn, gameMap);
+      options.bathroomSolvedAtStart = (gameMap) => playtestStartsPastBathroom(boot.spawn, gameMap);
       options.preDefeatedBossTypes = boot.preDefeatedBossTypes;
       if (preset.hire !== undefined) {
         options.mercenaryRoster = {

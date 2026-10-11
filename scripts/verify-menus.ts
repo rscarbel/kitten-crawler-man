@@ -959,6 +959,41 @@ function townOpeners(): Opener<Town>[] {
       },
     ),
     menu(
+      'pipe-board',
+      (scene) => {
+        const bathroom = scene.cloggedBathroom;
+        bathroom.generateBoardNow();
+        bathroom['boardOpen'] = true;
+      },
+      (scene) => scene.cloggedBathroom.closePipeBoard(),
+    ),
+    menu(
+      'pipe-board-restart',
+      (scene) => {
+        const bathroom = scene.cloggedBathroom;
+        bathroom.generateBoardNow();
+        bathroom['boardOpen'] = true;
+        // The confirm is the board's own state, reached only through its
+        // "Start over" button, so the board is drawn once and the button pressed.
+        scene.render(ctx);
+        const restart = scene.ui
+          .regions()
+          .find((region) => region.surfaceId === 'pipe-board' && region.id.endsWith('/restart'));
+        if (restart?.onTap === undefined)
+          throw new Error('the pipe board drew no Start over button');
+        restart.onTap({ x: restart.rect.x, y: restart.rect.y, button: 0, source: 'keyboard' });
+      },
+      (scene) => {
+        scene.ui.escape();
+        scene.cloggedBathroom.closePipeBoard();
+      },
+    ),
+    menu(
+      'pipe-board-explainer',
+      (scene) => scene.cloggedBathroom.openPipeBoardExplainer(),
+      (scene) => scene.cloggedBathroom.dismissPipeBoardExplainer(),
+    ),
+    menu(
       'stairwell',
       (scene) => {
         scene['stairwell']['_menuOpen'] = true;

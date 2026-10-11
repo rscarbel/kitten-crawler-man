@@ -747,11 +747,23 @@ export const GLOW_FUNGUS = 170;
 /** The anchor of a two-tile slope of fallen masonry. Solid, seen past; breakable, and crumbles to walkable rubble. */
 export const RUBBLE_SLOPE = 171;
 
+// ── Clogged bathroom fittings (floor 2) ──────────────────────────────────────
+//
+// Stamped by `dressBathroom` and drawn by `serviceLevelPropTiles.ts` with the
+// service level's own furniture. The stalls and the pipe wall hang on the wall
+// face and are not tiles at all; see `bathroomRoomArt.ts`.
+
+/** A porcelain sink hung on a side wall under a strip of mirror. Solid, waist-high; not breakable. */
+export const BATHROOM_SINK = 172;
+
+/** A walkable plunger standing on the floor. Baked flat. */
+export const BATHROOM_PLUNGER = 173;
+
 /**
  * One past the highest tile type value above — the length of any array indexed
  * by tile type. Bump this when a new tile type exceeds it.
  */
-export const TILE_TYPE_COUNT = 172;
+export const TILE_TYPE_COUNT = 174;
 
 /**
  * Variant indices (row * 10 + col) from the modern_decorations sprite sheet

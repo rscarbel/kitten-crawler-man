@@ -50,7 +50,8 @@ const GROUND_BLEND_ORDER = {
   f2_plate: 3,
   f2_grating: 4,
   f2_rubber: 5,
-  f2_wall: 6,
+  f2_washroom: 6,
+  f2_wall: 7,
 } as const satisfies Record<Floor2Material, number>;
 
 /**
@@ -70,6 +71,7 @@ const GROUND_FALLBACK_COLOR = {
   f2_wall: '#313835',
   f2_grating: '#636971',
   f2_rubber: '#54565b',
+  f2_washroom: '#aab2af',
 } as const satisfies Record<Floor2Material, string>;
 
 /**
@@ -86,17 +88,20 @@ const GROUND_SPILL = {
   f2_wall: null,
   f2_grating: null,
   f2_rubber: null,
+  f2_washroom: null,
 } as const satisfies Record<Floor2Material, GroundSpill | null>;
 
 /**
  * A grating panel and a rubber mat are units dropped into a room, with straight
  * factory edges: where one meets the slab at a doorway the joint runs along the
  * tile edge rather than wandering through the corner masks, which would read as
- * the steel or the rubber having melted into the concrete.
+ * the steel or the rubber having melted into the concrete. A washroom's mosaic
+ * stops at its threshold the same way.
  */
 const HARD_EDGE_MATERIALS: ReadonlySet<string> = new Set<Floor2Material>([
   'f2_grating',
   'f2_rubber',
+  'f2_washroom',
 ]);
 
 /**

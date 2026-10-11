@@ -68,6 +68,7 @@ const { IceFairy } = await import('../src/creatures/fairies/IceFairy.js');
 const { NecroFairy } = await import('../src/creatures/fairies/NecroFairy.js');
 const { ShieldFairy } = await import('../src/creatures/fairies/ShieldFairy.js');
 const { Goblin } = await import('../src/creatures/Goblin.js');
+const { BathroomGoblin } = await import('../src/creatures/BathroomGoblin.js');
 const { GoblinArcher } = await import('../src/creatures/GoblinArcher.js');
 const { GraveBull } = await import('../src/creatures/GraveBull.js');
 const { GrimaldiVine } = await import('../src/creatures/GrimaldiVine.js');
@@ -143,6 +144,16 @@ interface Subject {
 
 const SUBJECT_TILE = 6;
 const at = [SUBJECT_TILE, SUBJECT_TILE, TILE_SIZE] as const;
+
+/**
+ * A bathroom goblin standing still: his potty dance shifts the whole body a
+ * few pixels each frame, which the gate would read as eyes off the head.
+ */
+function stillBathroomGoblin(role: 'queue' | 'plumber', archetype: 'sword' | 'bow'): MobInstance {
+  const goblin = new BathroomGoblin(...at, role, 1, archetype);
+  goblin.dancing = false;
+  return goblin;
+}
 
 function eyed(label: string, mob: MobInstance, headEnd: HeadEnd = 'upright'): Subject {
   return { label, mob, eyeless: false, headEnd };
@@ -246,6 +257,11 @@ const SUBJECTS: Readonly<Record<string, () => readonly Subject[]>> = {
   NecroFairy: () => [eyed('necro fairy', new NecroFairy(...at))],
   ShieldFairy: () => [eyed('shield fairy', new ShieldFairy(...at))],
   Goblin: () => GOBLIN_WEAPONS.map((weapon) => eyed(`goblin ${weapon}`, new Goblin(...at, weapon))),
+  BathroomGoblin: () => [
+    eyed('bathroom goblin in line', stillBathroomGoblin('queue', 'sword')),
+    eyed('bathroom goblin with a bow', stillBathroomGoblin('queue', 'bow')),
+    eyed('bathroom plumber', stillBathroomGoblin('plumber', 'sword')),
+  ],
   GoblinArcher: () => [eyed('goblin archer', new GoblinArcher(...at))],
   GraveBull: () => [eyed('grave bull', new GraveBull(...at))],
   GrimaldiVine: () => [eyeless('Grimaldi vine', new GrimaldiVine(...at))],

@@ -10,6 +10,10 @@ import type {
   TreasureChestProgressSnapshot,
 } from '../systems/TreasureChestSystem';
 import type { DefendQuestCheckpoint } from '../systems/DefendQuestSystem';
+import {
+  parseCloggedBathroomCheckpoint,
+  type CloggedBathroomCheckpoint,
+} from '../systems/cloggedBathroom/cloggedBathroomCheckpoint';
 import type { MurderMysteryQuestCheckpoint } from '../systems/MurderMysteryQuestSystem';
 import type { SpiderQuestCheckpoint } from '../systems/SpiderQuestSystem';
 import type { CircusQuestCheckpoint } from '../systems/CircusQuestSystem';
@@ -105,6 +109,11 @@ export interface PersistedWorldState {
    * save from any floor but 3 simply never carries one.
    */
   briarHollow?: BriarHollowStateSnapshot;
+  /**
+   * The clogged bathroom's quest and whether its explainer was seen.
+   * Optional: a save written before the bathroom loads it broken and unmet.
+   */
+  cloggedBathroom?: CloggedBathroomCheckpoint;
 
   krakarenKilled: boolean;
   krakarenBossRoomIdx: number;
@@ -1349,6 +1358,7 @@ export function parsePersistedWorldState(value: unknown): PersistedWorldState | 
   const doomsday = parsePersistedDoomsday(value.doomsday);
   const bossRoomDressing = parseBossRoomDressingCheckpoint(value.bossRoomDressing);
   const briarHollow = parseBriarHollowStateSnapshot(value.briarHollow);
+  const cloggedBathroom = parseCloggedBathroomCheckpoint(value.cloggedBathroom);
   const { krakarenKilled, krakarenBossRoomIdx, juicerKilled, juicerBossRoomIdx } = value;
 
   if (
@@ -1402,6 +1412,7 @@ export function parsePersistedWorldState(value: unknown): PersistedWorldState | 
     doomsday,
     bossRoomDressing,
     briarHollow,
+    cloggedBathroom,
     krakarenKilled,
     krakarenBossRoomIdx,
     juicerKilled,

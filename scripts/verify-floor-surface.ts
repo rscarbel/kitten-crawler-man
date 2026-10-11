@@ -123,19 +123,19 @@ function materialMismatches(map: GameMap): string[] {
     row.forEach((tile, x) => {
       if (!isWalkableTileType(tile)) return;
       const resolved = groundMaterialUnder(palette, map.structure, x, y);
-      const character = map.characterAt(x, y);
+      const regionMaterial = map.regionCharacters.floorMaterialAt(x, y);
       const wanted =
-        character === null
+        regionMaterial === null
           ? palette.materialForTileType(tile.type)
           : laidMaterial(
-              character.floorMaterial,
+              regionMaterial,
               map.regionMap.room(map.regionAt(x, y))?.bounds ?? null,
               x,
               y,
             );
       // A walkable tile whose type this palette does not map (a safe room's
       // floor, a stairwell) is drawn by its own painter, not as this ground.
-      if (character === null && wanted === undefined) return;
+      if (regionMaterial === null && wanted === undefined) return;
       if (resolved !== wanted) {
         problems.push(`(${x},${y}) resolves to ${resolved ?? 'nothing'}, expected ${wanted}`);
       }

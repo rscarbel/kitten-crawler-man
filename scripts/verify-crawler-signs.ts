@@ -2917,6 +2917,10 @@ function verifyFloor(levelDef: LevelDef, floorIndex: number): void {
       mapType: 'dungeon',
       dungeon: dungeonOptionsForLevel(levelDef),
     });
+    // The signs describe the route as built. The clogged bathrooms on floor 2 are
+    // rooms on that route whose queue only blocks it until the plumbing is fixed,
+    // which is `verify:clogged-bathroom`'s to check.
+    map.setBathroomPlumbing('fixed');
     const layout = map.progressionLayout;
     if (layout === undefined) {
       check(false, 'the floor generated no progression layout to read rooms from');

@@ -26,6 +26,7 @@ import {
   FROZEN_STATUS,
   HAMBURGER_FED_STATUS,
   OVERHEAL_STATUS,
+  REFRESHED_STATUS,
   SHIELD_STATUS,
   SPEED_FIZZ_STATUS,
   type StatusEffect,
@@ -275,6 +276,15 @@ const STATUS_VISUALS = new Map<string, StatusVisual>([
       label: 'FED',
       // Mustard, the burger's own cheese, so the pill reads as the food that granted it.
       color: '#e0a526',
+      harmful: false,
+    },
+  ],
+  [
+    REFRESHED_STATUS,
+    {
+      label: 'FRESH',
+      // Clean tap-water aqua, the plumbing that granted it.
+      color: '#5eead4',
       harmful: false,
     },
   ],

@@ -15,9 +15,11 @@ import type { DungeonFloorThemeId } from './floorTheme';
 import {
   HALLWAY_CHARACTERS_BY_FLOOR,
   ROOM_CHARACTERS_BY_FLOOR,
+  SPECIAL_REGION_FLOOR_MATERIALS,
   SPECIAL_REGION_LIGHTING,
   UNLIT_ROOM_CHANCE,
   UNLIT_ROOM_ZONES,
+  type CharacterFloorMaterial,
   type HallwayCharacter,
   type LightingProfile,
   type RegionCharacter,
@@ -86,6 +88,18 @@ export class RegionCharacters {
     const assignment = this.assignmentAt(tileX, tileY);
     if (assignment === null || assignment.type === 'special') return null;
     return assignment.character;
+  }
+
+  /**
+   * The material a tile's region is laid in: its character's, or a special
+   * region's own floor. Null where the tile type decides.
+   */
+  floorMaterialAt(tileX: number, tileY: number): CharacterFloorMaterial | null {
+    const assignment = this.assignmentAt(tileX, tileY);
+    if (assignment === null) return null;
+    if (assignment.type === 'special')
+      return SPECIAL_REGION_FLOOR_MATERIALS[assignment.tag] ?? null;
+    return assignment.character.floorMaterial;
   }
 
   /**

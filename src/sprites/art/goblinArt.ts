@@ -440,6 +440,24 @@ export interface GoblinGear {
    * every frame of every row.
    */
   readonly quiver: boolean;
+  /** A peaked cloth cap whose brim juts past the brow. */
+  readonly flatCap: boolean;
+  /**
+   * Denim overalls with a tool belt, in place of the loincloth.
+   *
+   * The trouser legs stop at mid-shin so the bare goblin feet still show: a
+   * fully clothed leg reads as a small human, and the feet are part of what
+   * says "goblin" once the ears are half under a cap.
+   */
+  readonly overalls: boolean;
+  /**
+   * A plunger slung across the back, rubber cup standing over the far shoulder.
+   *
+   * The cup above the shoulder line is the one plumbing cue that survives a
+   * 32-px silhouette on every frame; the wrench in the hand can be read as any
+   * club until the jaw is seen.
+   */
+  readonly plunger: boolean;
 }
 
 export interface GoblinStyle {
@@ -1051,7 +1069,14 @@ function drawTorso(ctx: Ctx, style: GoblinStyle, squash: number): void {
     ctx.ellipse(sx, sy, size, size * 0.72, 0, 0, FULL_CIRCLE);
     ctx.fill();
   }
+  if (style.gear.overalls) drawOverallsBib(ctx, style);
   ctx.restore();
+
+  if (style.gear.overalls) {
+    drawOverallsSeat(ctx, style);
+    ctx.restore();
+    return;
+  }
 
   // The wrap sits over the hips and hangs below the torso path, so it is drawn
   // after the clip is released.
@@ -1342,6 +1367,548 @@ function drawQuiver(ctx: Ctx, spineTop: Pt, lean: number, style: GoblinStyle): v
   ctx.fillStyle = leather.shadow;
   ctx.fillRect(-halfWidth, length * 0.22, halfWidth * 2, length * 0.08);
   ctx.fillRect(-halfWidth * 0.85, length * 0.66, halfWidth * 1.7, length * 0.08);
+
+  ctx.restore();
+}
+
+// ── Workwear ─────────────────────────────────────────────────────────────────
+//
+// The plumber's kit. Dressed in tradesman's colours rather than the scavenged
+// rag-and-rust the hostile goblins wear, so a player reads him as the one goblin
+// in the room who is not there to fight.
+
+const DENIM: Ramp = {
+  shadow: '#121a2c',
+  dark: '#203050',
+  mid: '#33497a',
+  light: '#4c67a2',
+  rim: '#7d97cc',
+};
+
+const CAP_CLOTH: Ramp = {
+  shadow: '#3a100c',
+  dark: '#631b14',
+  mid: '#902a1f',
+  light: '#b9402e',
+  rim: '#e0715a',
+};
+
+const PLUNGER_RUBBER: Ramp = {
+  shadow: '#3d1606',
+  dark: '#6e290c',
+  mid: '#a83f12',
+  light: '#d9631f',
+  rim: '#f39a52',
+};
+
+const BRASS = '#c9a24a';
+
+/** Where the bib's top edge sits, as a fraction of the torso up from the hip. */
+const BIB_TOP = 0.7;
+/** Where the bib meets the trousers, as a fraction of the torso up from the hip. */
+const BIB_WAIST = 0.24;
+/** The bib's two side edges, in shoulder half-widths; biased forward for the three-quarter view. */
+const BIB_BACK_EDGE = -0.34;
+const BIB_FRONT_EDGE = 0.86;
+/** Where each strap crosses the top of the shoulder, in shoulder half-widths. */
+const STRAP_BACK_SHOULDER = -0.66;
+const STRAP_FRONT_SHOULDER = 0.5;
+/** Strap and outline widths, as fractions of the torso length. */
+const STRAP_WIDTH = 0.085;
+const STRAP_OUTLINE_WIDTH = 0.14;
+const BIB_BUTTON_RADIUS = 0.04;
+/** How far below the strap's foot its button sits, in strap widths. */
+const BIB_BUTTON_DROP = 0.6;
+/** The bib pocket, as fractions of the bib's own width and height. */
+const BIB_POCKET_INSET = 0.28;
+const BIB_POCKET_DEPTH = 0.5;
+/** How far below the bib's top edge the pocket opens, as a fraction of the torso. */
+const BIB_POCKET_MOUTH_DROP = 0.08;
+const BIB_POCKET_SEAM_WIDTH = 0.03;
+const BIB_POCKET_SEAM_ALPHA = 0.85;
+/** How far the area painted under the clip reaches past the torso, so the clip alone shapes it. */
+const CLIP_OVERREACH = 3;
+/**
+ * Where the bib's shading gradient ends, as a fraction of the overreach: just
+ * past the belly, so the shadow side is the belly that faces away from the key.
+ */
+const BIB_SHADE_REACH = 0.2;
+const DENIM_LIT_ALPHA = 0.35;
+const DENIM_SHADED_ALPHA = 0.7;
+/** The midpoint of a three-stop lit → clear → shadowed gradient. */
+const SHADE_MIDPOINT = 0.5;
+
+/** The overalls' bib and straps, painted inside the torso's clip in spine space. */
+function drawOverallsBib(ctx: Ctx, style: GoblinStyle): void {
+  const p = style.proportions;
+  const { outline } = style.palette;
+  const top = -p.torsoLength;
+  const bibTop = top * BIB_TOP;
+  const waist = top * BIB_WAIST;
+  const back = p.shoulderHalfWidth * BIB_BACK_EDGE;
+  const front = p.shoulderHalfWidth * BIB_FRONT_EDGE;
+  const reach = p.torsoLength * CLIP_OVERREACH;
+
+  const traceDenim = (grow: number): void => {
+    ctx.beginPath();
+    ctx.moveTo(back - grow, bibTop - grow);
+    ctx.lineTo(front + grow, bibTop - grow);
+    ctx.lineTo(front + grow, waist - grow);
+    ctx.lineTo(reach, waist - grow);
+    ctx.lineTo(reach, reach);
+    ctx.lineTo(-reach, reach);
+    ctx.lineTo(-reach, waist - grow);
+    ctx.lineTo(back - grow, waist - grow);
+    ctx.closePath();
+  };
+
+  const strapWidth = p.torsoLength * STRAP_WIDTH;
+  const straps: ReadonlyArray<readonly [Pt, Pt]> = [
+    [pt(back + strapWidth, bibTop), pt(p.shoulderHalfWidth * STRAP_BACK_SHOULDER, top)],
+    [pt(front - strapWidth, bibTop), pt(p.shoulderHalfWidth * STRAP_FRONT_SHOULDER, top)],
+  ];
+  ctx.lineCap = 'round';
+  ctx.strokeStyle = outline;
+  ctx.lineWidth = p.torsoLength * STRAP_OUTLINE_WIDTH;
+  for (const [foot, over] of straps) {
+    ctx.beginPath();
+    ctx.moveTo(foot.x, foot.y);
+    ctx.lineTo(over.x, over.y * CLIP_OVERREACH);
+    ctx.stroke();
+  }
+
+  ctx.fillStyle = outline;
+  traceDenim(TORSO_OUTLINE_GROWTH);
+  ctx.fill();
+  ctx.fillStyle = DENIM.mid;
+  traceDenim(0);
+  ctx.fill();
+
+  ctx.strokeStyle = DENIM.light;
+  ctx.lineWidth = strapWidth;
+  for (const [foot, over] of straps) {
+    ctx.beginPath();
+    ctx.moveTo(foot.x, foot.y);
+    ctx.lineTo(over.x, over.y * CLIP_OVERREACH);
+    ctx.stroke();
+  }
+
+  const shading = ctx.createLinearGradient(back, bibTop, reach * BIB_SHADE_REACH, 0);
+  shading.addColorStop(0, rgba(DENIM.rim, DENIM_LIT_ALPHA));
+  shading.addColorStop(SHADE_MIDPOINT, rgba(DENIM.mid, 0));
+  shading.addColorStop(1, rgba(DENIM.shadow, DENIM_SHADED_ALPHA));
+  ctx.fillStyle = shading;
+  traceDenim(0);
+  ctx.fill();
+
+  const pocketLeft = lerp(back, front, BIB_POCKET_INSET);
+  const pocketRight = lerp(front, back, BIB_POCKET_INSET);
+  const pocketBottom = lerp(bibTop, waist, BIB_POCKET_DEPTH);
+  const pocketMouth = bibTop - top * BIB_POCKET_MOUTH_DROP;
+  ctx.strokeStyle = rgba(DENIM.shadow, BIB_POCKET_SEAM_ALPHA);
+  ctx.lineWidth = p.torsoLength * BIB_POCKET_SEAM_WIDTH;
+  ctx.beginPath();
+  ctx.moveTo(pocketLeft, pocketMouth);
+  ctx.lineTo(pocketLeft, pocketBottom);
+  ctx.lineTo(pocketRight, pocketBottom);
+  ctx.lineTo(pocketRight, pocketMouth);
+  ctx.stroke();
+
+  ctx.fillStyle = BRASS;
+  for (const [foot] of straps) {
+    ctx.beginPath();
+    ctx.arc(
+      foot.x,
+      foot.y + strapWidth * BIB_BUTTON_DROP,
+      p.torsoLength * BIB_BUTTON_RADIUS,
+      0,
+      FULL_CIRCLE,
+    );
+    ctx.fill();
+  }
+}
+
+/** How far below the hip joint the trouser seat hangs, in hip half-widths. */
+const SEAT_DROP = 0.5;
+/** How far the seat's sides stand out past the hips, in hip half-widths. */
+const SEAT_HIP_FLARE = 1.08;
+/** How much of the belly's bulge the seat's front wraps round. */
+const SEAT_BELLY_WRAP = 1.2;
+/** Where the seat's sides start curving in toward the crotch, as a fraction of its drop. */
+const SEAT_SIDE_CURVE = 0.6;
+/** How far in from each side the seat's hem meets the legs. */
+const SEAT_FRONT_HEM_INSET = 0.7;
+const SEAT_BACK_HEM_INSET = 0.8;
+/** How far the crotch sags below the hem's two corners, as a multiple of the drop. */
+const SEAT_CROTCH_SAG = 1.25;
+/** Where the seat's shadowed front starts, as a fraction of its front edge. */
+const SEAT_SHADOW_START = 0.15;
+const SEAT_SHADOW_ALPHA = 0.55;
+const TOOL_BELT_HEIGHT = 0.075;
+/** The belt's outline band, as a multiple of the belt's own height. */
+const TOOL_BELT_OUTLINE_SPAN = 1.5;
+/** The pouch hung off the belt on the front hip, as fractions of the torso. */
+const POUCH_WIDTH = 0.26;
+const POUCH_DEPTH = 0.3;
+const POUCH_FRONT_SHIFT = 0.42;
+/** The pouch's flap, as a fraction of its depth. */
+const POUCH_FLAP_DEPTH = 0.3;
+const BUCKLE_SIZE = 0.085;
+/** Where the buckle sits, as a fraction of the way out to the seat's back edge. */
+const BUCKLE_BACK_SHIFT = 0.3;
+
+/** The trousers' seat and the tool belt over the waist, in spine space. */
+function drawOverallsSeat(ctx: Ctx, style: GoblinStyle): void {
+  const p = style.proportions;
+  const { outline, leather } = style.palette;
+  const top = -p.torsoLength;
+  const waist = top * BIB_WAIST;
+  const front = p.hipHalfWidth * SEAT_HIP_FLARE + p.bellyBulge * SEAT_BELLY_WRAP;
+  const back = -p.hipHalfWidth * SEAT_HIP_FLARE;
+  const seat = p.hipHalfWidth * SEAT_DROP;
+
+  const traceSeat = (grow: number): void => {
+    ctx.beginPath();
+    ctx.moveTo(back - grow, waist);
+    ctx.lineTo(front + grow, waist);
+    ctx.quadraticCurveTo(
+      front + grow,
+      seat * SEAT_SIDE_CURVE,
+      front * SEAT_FRONT_HEM_INSET,
+      seat + grow,
+    );
+    ctx.quadraticCurveTo(0, seat * SEAT_CROTCH_SAG + grow, back * SEAT_BACK_HEM_INSET, seat + grow);
+    ctx.quadraticCurveTo(back - grow, seat * SEAT_SIDE_CURVE, back - grow, waist);
+    ctx.closePath();
+  };
+  ctx.fillStyle = outline;
+  traceSeat(TORSO_OUTLINE_GROWTH);
+  ctx.fill();
+  ctx.fillStyle = DENIM.mid;
+  traceSeat(0);
+  ctx.fill();
+  ctx.save();
+  traceSeat(0);
+  ctx.clip();
+  ctx.fillStyle = rgba(DENIM.shadow, SEAT_SHADOW_ALPHA);
+  ctx.fillRect(front * SEAT_SHADOW_START, waist, front, seat * 2);
+  ctx.restore();
+
+  const beltHeight = p.torsoLength * TOOL_BELT_HEIGHT;
+  const beltOutlineHeight = beltHeight * TOOL_BELT_OUTLINE_SPAN;
+  ctx.fillStyle = outline;
+  ctx.fillRect(back, waist - beltOutlineHeight / 2, front - back, beltOutlineHeight);
+  ctx.fillStyle = leather.mid;
+  ctx.fillRect(back, waist - beltHeight / 2, front - back, beltHeight);
+
+  const pouchWidth = p.torsoLength * POUCH_WIDTH;
+  const pouchLeft = front * POUCH_FRONT_SHIFT;
+  const pouchDepth = p.torsoLength * POUCH_DEPTH;
+  const growth = TORSO_OUTLINE_GROWTH;
+  ctx.fillStyle = outline;
+  ctx.fillRect(
+    pouchLeft - growth,
+    waist - growth,
+    pouchWidth + growth * 2,
+    pouchDepth + growth * 2,
+  );
+  ctx.fillStyle = leather.light;
+  ctx.fillRect(pouchLeft, waist, pouchWidth, pouchDepth);
+  ctx.fillStyle = leather.dark;
+  ctx.fillRect(pouchLeft, waist, pouchWidth, pouchDepth * POUCH_FLAP_DEPTH);
+
+  const buckle = p.torsoLength * BUCKLE_SIZE;
+  ctx.fillStyle = BRASS;
+  ctx.fillRect(back * BUCKLE_BACK_SHIFT - buckle / 2, waist - buckle / 2, buckle, buckle);
+}
+
+/** Trouser legs are wider than the starved leg inside them. */
+const TROUSER_WIDTH = 1.45;
+/** Where along the shin the hem sits; below it the bare goblin leg shows. */
+const TROUSER_HEM = 0.55;
+/** The rolled cuff, as the last part of the shin the trousers cover. */
+const TROUSER_CUFF_START = 0.38;
+const TROUSER_OUTLINE = 0.16;
+/** Half-widths at the knee and at the cuff's top, as fractions of the half-width at the hip. */
+const TROUSER_KNEE_TAPER = 0.9;
+const TROUSER_CUFF_TAPER = 0.95;
+/** The near leg's crease highlight: offset, span along the thigh, widths and strength. */
+const TROUSER_SHEEN_OFFSET = 0.55;
+const TROUSER_SHEEN_FROM = 0.2;
+const TROUSER_SHEEN_TO = 0.85;
+const TROUSER_SHEEN_ROOT_WIDTH = 0.22;
+const TROUSER_SHEEN_END_WIDTH = 0.18;
+const TROUSER_SHEEN_ALPHA = 0.4;
+
+/** One denim trouser leg over a solved leg chain, from the hip to mid-shin. */
+function drawTrouserLeg(ctx: Ctx, chain: BoneChain, style: GoblinStyle, near: boolean): void {
+  const width = style.proportions.legWidth * TROUSER_WIDTH;
+  const half = width / 2;
+  const knee = half * TROUSER_KNEE_TAPER;
+  const cuffTop = half * TROUSER_CUFF_TAPER;
+  const growth = width * TROUSER_OUTLINE;
+  const hem = mixPt(chain.joint, chain.end, TROUSER_HEM);
+  const cuff = mixPt(chain.joint, chain.end, TROUSER_CUFF_START);
+  const fill = near ? DENIM.mid : mix(DENIM.dark, DENIM.mid, FAR_LIMB_LIFT);
+  const cuffFill = near ? DENIM.light : DENIM.mid;
+  const outline = style.palette.outline;
+
+  fillCapsule(ctx, chain.anchor, chain.joint, half + growth, knee + growth, outline);
+  fillCapsule(ctx, chain.joint, hem, knee + growth, half + growth, outline);
+  fillCapsule(ctx, chain.anchor, chain.joint, half, knee, fill);
+  fillCapsule(ctx, chain.joint, cuff, knee, cuffTop, fill);
+  fillCapsule(ctx, cuff, hem, cuffTop, half, cuffFill);
+  if (!near) return;
+  const shift = half * TROUSER_SHEEN_OFFSET;
+  const lit = (at: Pt): Pt => offset(at, LIGHT.x * shift, LIGHT.y * shift);
+  fillCapsule(
+    ctx,
+    lit(mixPt(chain.anchor, chain.joint, TROUSER_SHEEN_FROM)),
+    lit(mixPt(chain.anchor, chain.joint, TROUSER_SHEEN_TO)),
+    half * TROUSER_SHEEN_ROOT_WIDTH,
+    half * TROUSER_SHEEN_END_WIDTH,
+    rgba(DENIM.rim, TROUSER_SHEEN_ALPHA),
+  );
+}
+
+/** Line width of the cap's outline, as a fraction of the head radius. */
+const CAP_OUTLINE_WIDTH = 0.12;
+const CAP_BUTTON_RADIUS = 0.09;
+
+/**
+ * The cap's points in head units: X in head half-widths, Y in head radii, with
+ * +X forward and -Y up. The crown sits a little over the skull's own top and
+ * slopes forward onto a brim that juts past the brow but clears the eyes.
+ */
+const CAP = {
+  backOfBand: pt(-1.0, -0.28),
+  backOfCrownControl: pt(-1.1, -0.92),
+  crownRiseControl: pt(-0.55, -1.24),
+  crownTop: pt(0.12, -1.18),
+  crownSlopeControl: pt(0.78, -1.1),
+  brimRoot: pt(1.02, -0.66),
+  brimTip: pt(1.46, -0.52),
+  brimLipControl: pt(1.52, -0.4),
+  brimUnderside: pt(1.34, -0.38),
+  bandFront: pt(0.66, -0.42),
+  bandControl: pt(-0.2, -0.44),
+  button: pt(0.05, -1.16),
+  seamStart: pt(-0.2, -1.2),
+  seamControl: pt(0.55, -0.95),
+  seamEnd: pt(0.95, -0.62),
+  brimShadeFront: pt(1.4, -0.4),
+  brimShadeBottom: -0.3,
+  shadingFrom: pt(-1, -1.2),
+  shadingTo: pt(1, -0.3),
+  shadingBoxCorner: pt(-1.2, -1.3),
+  shadingBoxSize: pt(2.8, 1.1),
+} as const;
+
+/** The shadow the brim throws across the brow: centre and radii in head units. */
+const BRIM_SHADOW = { centre: pt(0.55, -0.3), radii: pt(0.5, 0.12), alpha: 0.55 } as const;
+const CAP_LIT_ALPHA = 0.55;
+const CAP_SHADED_ALPHA = 0.6;
+const CAP_SEAM_ALPHA = 0.7;
+const CAP_SEAM_WIDTH = 0.05;
+
+/** The flat cap, in head-local space with +X forward. */
+function drawFlatCap(ctx: Ctx, style: GoblinStyle): void {
+  const p = style.proportions;
+  const r = p.headRadius;
+  const rx = r * p.headWidthFactor;
+  const { outline, skin } = style.palette;
+  const at = (point: Pt): Pt => pt(rx * point.x, r * point.y);
+
+  const traceCap = (): void => {
+    const band = at(CAP.backOfBand);
+    const backControl = at(CAP.backOfCrownControl);
+    const riseControl = at(CAP.crownRiseControl);
+    const crownTop = at(CAP.crownTop);
+    const slopeControl = at(CAP.crownSlopeControl);
+    const brimRoot = at(CAP.brimRoot);
+    const brimTip = at(CAP.brimTip);
+    const lipControl = at(CAP.brimLipControl);
+    const underside = at(CAP.brimUnderside);
+    const bandFront = at(CAP.bandFront);
+    const bandControl = at(CAP.bandControl);
+    ctx.beginPath();
+    ctx.moveTo(band.x, band.y);
+    ctx.bezierCurveTo(
+      backControl.x,
+      backControl.y,
+      riseControl.x,
+      riseControl.y,
+      crownTop.x,
+      crownTop.y,
+    );
+    ctx.quadraticCurveTo(slopeControl.x, slopeControl.y, brimRoot.x, brimRoot.y);
+    ctx.lineTo(brimTip.x, brimTip.y);
+    ctx.quadraticCurveTo(lipControl.x, lipControl.y, underside.x, underside.y);
+    ctx.lineTo(bandFront.x, bandFront.y);
+    ctx.quadraticCurveTo(bandControl.x, bandControl.y, band.x, band.y);
+    ctx.closePath();
+  };
+
+  const shadowCentre = at(BRIM_SHADOW.centre);
+  const shadowRadii = at(BRIM_SHADOW.radii);
+  ctx.fillStyle = rgba(skin.shadow, BRIM_SHADOW.alpha);
+  ctx.beginPath();
+  ctx.ellipse(shadowCentre.x, shadowCentre.y, shadowRadii.x, shadowRadii.y, 0, 0, FULL_CIRCLE);
+  ctx.fill();
+
+  ctx.lineJoin = 'round';
+  ctx.strokeStyle = outline;
+  ctx.lineWidth = r * CAP_OUTLINE_WIDTH;
+  traceCap();
+  ctx.stroke();
+  ctx.fillStyle = CAP_CLOTH.mid;
+  ctx.fill();
+
+  ctx.save();
+  traceCap();
+  ctx.clip();
+  const shadingFrom = at(CAP.shadingFrom);
+  const shadingTo = at(CAP.shadingTo);
+  const shading = ctx.createLinearGradient(shadingFrom.x, shadingFrom.y, shadingTo.x, shadingTo.y);
+  shading.addColorStop(0, rgba(CAP_CLOTH.rim, CAP_LIT_ALPHA));
+  shading.addColorStop(SHADE_MIDPOINT, rgba(CAP_CLOTH.mid, 0));
+  shading.addColorStop(1, rgba(CAP_CLOTH.shadow, CAP_SHADED_ALPHA));
+  ctx.fillStyle = shading;
+  const boxCorner = at(CAP.shadingBoxCorner);
+  const boxSize = at(CAP.shadingBoxSize);
+  ctx.fillRect(boxCorner.x, boxCorner.y, boxSize.x, boxSize.y);
+
+  const bandFront = at(CAP.bandFront);
+  const brimShadeFront = at(CAP.brimShadeFront);
+  const brimShadeBottom = r * CAP.brimShadeBottom;
+  ctx.fillStyle = CAP_CLOTH.dark;
+  ctx.beginPath();
+  ctx.moveTo(bandFront.x, bandFront.y);
+  ctx.lineTo(brimShadeFront.x, brimShadeFront.y);
+  ctx.lineTo(brimShadeFront.x, brimShadeBottom);
+  ctx.lineTo(bandFront.x, brimShadeBottom);
+  ctx.closePath();
+  ctx.fill();
+
+  const seamStart = at(CAP.seamStart);
+  const seamControl = at(CAP.seamControl);
+  const seamEnd = at(CAP.seamEnd);
+  ctx.strokeStyle = rgba(CAP_CLOTH.shadow, CAP_SEAM_ALPHA);
+  ctx.lineWidth = r * CAP_SEAM_WIDTH;
+  ctx.beginPath();
+  ctx.moveTo(seamStart.x, seamStart.y);
+  ctx.quadraticCurveTo(seamControl.x, seamControl.y, seamEnd.x, seamEnd.y);
+  ctx.stroke();
+  ctx.restore();
+
+  const button = at(CAP.button);
+  ctx.fillStyle = CAP_CLOTH.light;
+  ctx.beginPath();
+  ctx.arc(button.x, button.y, r * CAP_BUTTON_RADIUS, 0, FULL_CIRCLE);
+  ctx.fill();
+}
+
+/** Handle length and where it is strapped, in tile units and torso fractions. */
+const PLUNGER_HANDLE_LENGTH = 0.62;
+const PLUNGER_HANDLE_HALF_WIDTH = 0.026;
+const PLUNGER_HANDLE_SHADE_ALPHA = 0.6;
+/** How much of the handle hangs below the strap point at the shoulders. */
+const PLUNGER_HANG = 0.3;
+/** How far behind the spine the handle rides, in shoulder half-widths. */
+const PLUNGER_BACK_OFFSET = 1.05;
+/** Lean of the handle off vertical, back over the shoulder. */
+const PLUNGER_TILT = deg(-34);
+const PLUNGER_CUP_HALF_WIDTH = 0.15;
+const PLUNGER_CUP_DEPTH = 0.15;
+const PLUNGER_OUTLINE = 0.016;
+/** Where the cup's flanks start rounding toward the handle, as a fraction of its depth. */
+const PLUNGER_CUP_FLANK = 0.7;
+/** How wide the cup's neck is where it grips the handle, in handle half-widths. */
+const PLUNGER_CUP_NECK = 3;
+/** How far the cup's base sinks over the handle's end, as a fraction of its depth. */
+const PLUNGER_CUP_BASE_OVERLAP = 0.25;
+/** The lit and shadowed bands down the cup, as fractions of its half-width. */
+const PLUNGER_CUP_LIT_WIDTH = 0.6;
+const PLUNGER_CUP_SHADE_START = 0.35;
+/** Each band runs past the cup's base so the clip alone ends it. */
+const PLUNGER_CUP_BAND_REACH = 1.5;
+const PLUNGER_CUP_LIT_ALPHA = 0.55;
+const PLUNGER_CUP_SHADE_ALPHA = 0.5;
+/** The hollow seen in the cup's mouth: its width and its foreshortened height. */
+const PLUNGER_MOUTH_WIDTH = 0.86;
+const PLUNGER_MOUTH_HEIGHT = 0.22;
+
+/** The plunger, drawn behind the torso so the body overlaps its handle. */
+function drawPlunger(ctx: Ctx, spineTop: Pt, lean: number, style: GoblinStyle): void {
+  const p = style.proportions;
+  const { wood, outline } = style.palette;
+  const below = PLUNGER_HANDLE_LENGTH * PLUNGER_HANG;
+  const above = PLUNGER_HANDLE_LENGTH - below;
+  const half = PLUNGER_HANDLE_HALF_WIDTH;
+
+  ctx.save();
+  ctx.translate(spineTop.x - p.shoulderHalfWidth * PLUNGER_BACK_OFFSET, spineTop.y);
+  ctx.rotate(lean + PLUNGER_TILT);
+
+  ctx.fillStyle = outline;
+  ctx.fillRect(
+    -half - PLUNGER_OUTLINE,
+    -above,
+    (half + PLUNGER_OUTLINE) * 2,
+    PLUNGER_HANDLE_LENGTH,
+  );
+  ctx.fillStyle = wood.light;
+  ctx.fillRect(-half, -above, half * 2, PLUNGER_HANDLE_LENGTH);
+  ctx.fillStyle = rgba(wood.shadow, PLUNGER_HANDLE_SHADE_ALPHA);
+  ctx.fillRect(0, -above, half, PLUNGER_HANDLE_LENGTH);
+
+  const cupHalf = PLUNGER_CUP_HALF_WIDTH;
+  const rimY = -above - PLUNGER_CUP_DEPTH;
+  const flankY = rimY + PLUNGER_CUP_DEPTH * PLUNGER_CUP_FLANK;
+  const neck = half * PLUNGER_CUP_NECK;
+  const baseY = -above + PLUNGER_CUP_DEPTH * PLUNGER_CUP_BASE_OVERLAP;
+  const traceCup = (grow: number): void => {
+    ctx.beginPath();
+    ctx.moveTo(-cupHalf - grow, rimY - grow);
+    ctx.lineTo(cupHalf + grow, rimY - grow);
+    ctx.bezierCurveTo(cupHalf + grow, flankY, neck + grow, -above + grow, 0, baseY + grow);
+    ctx.bezierCurveTo(
+      -neck - grow,
+      -above + grow,
+      -cupHalf - grow,
+      flankY,
+      -cupHalf - grow,
+      rimY - grow,
+    );
+    ctx.closePath();
+  };
+  ctx.fillStyle = outline;
+  traceCup(PLUNGER_OUTLINE);
+  ctx.fill();
+  ctx.fillStyle = PLUNGER_RUBBER.mid;
+  traceCup(0);
+  ctx.fill();
+  ctx.save();
+  traceCup(0);
+  ctx.clip();
+  const bandLength = PLUNGER_CUP_DEPTH * PLUNGER_CUP_BAND_REACH;
+  ctx.fillStyle = rgba(PLUNGER_RUBBER.rim, PLUNGER_CUP_LIT_ALPHA);
+  ctx.fillRect(-cupHalf, rimY, cupHalf * PLUNGER_CUP_LIT_WIDTH, bandLength);
+  ctx.fillStyle = rgba(PLUNGER_RUBBER.shadow, PLUNGER_CUP_SHADE_ALPHA);
+  ctx.fillRect(cupHalf * PLUNGER_CUP_SHADE_START, rimY, cupHalf, bandLength);
+  ctx.restore();
+  ctx.fillStyle = PLUNGER_RUBBER.shadow;
+  ctx.beginPath();
+  ctx.ellipse(
+    0,
+    rimY,
+    cupHalf * PLUNGER_MOUTH_WIDTH,
+    PLUNGER_CUP_DEPTH * PLUNGER_MOUTH_HEIGHT,
+    0,
+    0,
+    FULL_CIRCLE,
+  );
+  ctx.fill();
 
   ctx.restore();
 }
@@ -1868,6 +2435,7 @@ function drawHead(ctx: Ctx, style: GoblinStyle, pose: GoblinPose): void {
 
   drawNose(ctx, style);
   if (style.gear.hood) drawHood(ctx, style);
+  if (style.gear.flatCap) drawFlatCap(ctx, style);
   ctx.restore();
 }
 
@@ -2020,6 +2588,7 @@ export function drawGoblin(
   if (!twoHanded) paintFarArm();
 
   drawLimb(ctx, skeleton.farLeg, p.legWidth, farPaint);
+  if (style.gear.overalls) drawTrouserLeg(ctx, skeleton.farLeg, style, false);
   drawFoot(
     ctx,
     skeleton.farLeg.end,
@@ -2033,6 +2602,7 @@ export function drawGoblin(
   // Behind the torso: it is on the creature's back, and painting it in front
   // would put a leather tube across its chest.
   if (style.gear.quiver) drawQuiver(ctx, skeleton.spineTop, skeleton.lean, style);
+  if (style.gear.plunger) drawPlunger(ctx, skeleton.spineTop, skeleton.lean, style);
 
   ctx.save();
   ctx.translate(skeleton.hip.x, skeleton.hip.y);
@@ -2044,6 +2614,7 @@ export function drawGoblin(
   drawSocketShade(ctx, skeleton.nearShoulder, p.armWidth, skin);
 
   drawLimb(ctx, skeleton.nearLeg, p.legWidth, nearPaint);
+  if (style.gear.overalls) drawTrouserLeg(ctx, skeleton.nearLeg, style, true);
   if (style.gear.greave) drawGreave(ctx, skeleton.nearLeg, style);
   drawFoot(
     ctx,
@@ -2308,6 +2879,9 @@ const SWORD_STYLE: GoblinStyle = {
     necklace: true,
     hood: false,
     quiver: false,
+    flatCap: false,
+    overalls: false,
+    plunger: false,
   },
   spineLean: deg(8),
   // Three, not four: `MAX_EAR_NOTCHES` clamps past that anyway, and a fourth
@@ -2346,6 +2920,9 @@ const AXE_STYLE: GoblinStyle = {
     necklace: false,
     hood: false,
     quiver: false,
+    flatCap: false,
+    overalls: false,
+    plunger: false,
   },
   spineLean: deg(12),
   earNotches: 3,
@@ -2387,6 +2964,9 @@ const MACE_STYLE: GoblinStyle = {
     necklace: false,
     hood: true,
     quiver: false,
+    flatCap: false,
+    overalls: false,
+    plunger: false,
   },
   spineLean: deg(16),
   earNotches: 2,
@@ -2416,7 +2996,17 @@ const WARHAMMER_BUILD: GoblinProportions = {
 const WARHAMMER_STYLE: GoblinStyle = {
   palette: goblinPalette(WARHAMMER_SKIN),
   proportions: WARHAMMER_BUILD,
-  gear: { pauldron: true, bracer: true, greave: true, necklace: true, hood: false, quiver: false },
+  gear: {
+    pauldron: true,
+    bracer: true,
+    greave: true,
+    necklace: true,
+    hood: false,
+    quiver: false,
+    flatCap: false,
+    overalls: false,
+    plunger: false,
+  },
   spineLean: deg(20),
   earNotches: 3,
 };
@@ -2469,7 +3059,17 @@ const BOW_STYLE: GoblinStyle = {
   // gore sheet cuts limbs off the same proportions, and with this archer's long
   // arms its severed arm and severed leg render as the same 16-px blob without
   // it. A shin guard is what makes the leg nameable on the floor.
-  gear: { pauldron: false, bracer: true, greave: true, necklace: false, hood: true, quiver: true },
+  gear: {
+    pauldron: false,
+    bracer: true,
+    greave: true,
+    necklace: false,
+    hood: true,
+    quiver: true,
+    flatCap: false,
+    overalls: false,
+    plunger: false,
+  },
   spineLean: deg(4),
   earNotches: 2,
 };
@@ -2503,3 +3103,65 @@ export const ARCHETYPE_SCALE: Record<GoblinArchetype, number> = {
   warhammer: ARCHETYPE_HEIGHTS.warhammer / figureHeight(WARHAMMER_BUILD),
   bow: ARCHETYPE_HEIGHTS.bow / figureHeight(BOW_BUILD),
 };
+
+const PLUMBER_SKIN: Ramp = {
+  shadow: '#202c17',
+  dark: '#384d27',
+  mid: '#58763d',
+  light: '#7ea05a',
+  rim: '#b0d488',
+};
+
+const PLUMBER_BUILD: GoblinProportions = {
+  thighLength: 0.28,
+  shinLength: 0.27,
+  footHeight: 0.06,
+  torsoLength: 0.4,
+  neckLength: 0.05,
+  headRadius: 0.2,
+  headWidthFactor: 1.02,
+  shoulderHalfWidth: 0.2,
+  hipHalfWidth: 0.16,
+  bellyBulge: 0.07,
+  upperArmLength: 0.36,
+  forearmLength: 0.42,
+  legWidth: 0.13,
+  armWidth: 0.11,
+  handRadius: 0.082,
+  footLength: 0.26,
+  earLength: 0.36,
+  noseProjection: 0.12,
+};
+
+/**
+ * The bathroom plumber: a stocky goblin with a tradesman's gut, in a cap,
+ * overalls and tool belt, with a plunger slung across his back.
+ *
+ * Not one of the {@link GoblinArchetype}s. Those are the hostile builds a floor
+ * spawns and every per-archetype table in the choreography is exhaustive over
+ * them; the plumber borrows one archetype's movement and is drawn through his
+ * own figure.
+ */
+export const GOBLIN_PLUMBER_STYLE: GoblinStyle = {
+  palette: goblinPalette(PLUMBER_SKIN),
+  proportions: PLUMBER_BUILD,
+  gear: {
+    pauldron: false,
+    bracer: false,
+    greave: false,
+    necklace: false,
+    hood: false,
+    quiver: false,
+    flatCap: true,
+    overalls: true,
+    plunger: true,
+  },
+  spineLean: deg(10),
+  earNotches: 1,
+};
+
+/** Sole-to-skull height the plumber stands at in play, in tile units. */
+const PLUMBER_HEIGHT = 0.8;
+
+/** The plumber's equivalent of {@link ARCHETYPE_SCALE}. */
+export const GOBLIN_PLUMBER_SCALE = PLUMBER_HEIGHT / figureHeight(PLUMBER_BUILD);

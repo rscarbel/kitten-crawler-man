@@ -15,6 +15,8 @@ import {
   CASTER_HELD_STATUSES,
   FAIRY_WARD_STATUS,
   SPEED_FIZZ_STATUS,
+  REFRESHED_STATUS,
+  REFRESHED_SPEED_FACTOR,
 } from './core/StatusEffect';
 import {
   CHILLED_ACTION_SPEED_FACTOR,
@@ -582,6 +584,12 @@ export abstract class Player implements AboveDarknessDrawer {
   }
   /** When true, incoming damage is ignored (standing in the Safe Room). */
   isProtected = false;
+  /**
+   * Out of the world for a moment, behind a shut bathroom stall door: not
+   * drawn, not chosen as anybody's target, not pushed by bodies, and not
+   * harmed. Only the system that shut the door clears it.
+   */
+  concealed = false;
   /** When true, incoming damage is ignored permanently (god mode). */
   godMode = false;
   /** When true, all damage this player deals to mobs is suppressed. */
@@ -590,9 +598,14 @@ export abstract class Player implements AboveDarknessDrawer {
   private _baseSpeedMultiplier = 1;
   /** Speed multiplier contributed by active Speed Fizz. Reset to 1 on expiry. */
   private _potionSpeedBoost = 1;
-  /** Movement speed multiplier — product of base, any active potion boost, and any chill. */
+  /** Movement speed multiplier — product of base, any active potion boost, any chill and any refreshed boon. */
   get speedMultiplier(): number {
-    return this._baseSpeedMultiplier * this._potionSpeedBoost * this.statusMoveFactor;
+    return (
+      this._baseSpeedMultiplier *
+      this._potionSpeedBoost *
+      this.statusMoveFactor *
+      this.refreshedMoveFactor
+    );
   }
   set speedMultiplier(v: number) {
     this._baseSpeedMultiplier = v;
@@ -605,6 +618,14 @@ export abstract class Player implements AboveDarknessDrawer {
    */
   get statusMoveFactor(): number {
     return this.hasStatus(CHILLED_STATUS) ? CHILLED_MOVE_SPEED_FACTOR : 1;
+  }
+
+  /**
+   * The bathroom stall's walking boon. Kept out of {@link statusMoveFactor},
+   * which the AI companion's fixed follow speed reads only to be slowed.
+   */
+  private get refreshedMoveFactor(): number {
+    return this.hasStatus(REFRESHED_STATUS) ? REFRESHED_SPEED_FACTOR : 1;
   }
 
   /**
@@ -880,7 +901,13 @@ export abstract class Player implements AboveDarknessDrawer {
    * fought the party — cannot drift out of step with {@link takeDamage}.
    */
   get canBeHarmed(): boolean {
-    return !this.isProtected && !this.godMode && !this.isKnockedOut && this.invulnerableFrames <= 0;
+    return (
+      !this.isProtected &&
+      !this.godMode &&
+      !this.isKnockedOut &&
+      !this.concealed &&
+      this.invulnerableFrames <= 0
+    );
   }
 
   /**

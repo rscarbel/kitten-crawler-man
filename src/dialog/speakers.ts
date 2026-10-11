@@ -298,6 +298,22 @@ export const SPEAKERS = {
     textCase: 'as-written',
     revealIntervalMs: SPEECH_REVEAL_INTERVAL_MS,
   },
+  bathroomPlumber: {
+    name: 'Grubnik, Plumber',
+    portrait: null,
+    voice: { kind: 'typing' },
+    reveal: 'sentence',
+    textCase: 'as-written',
+    revealIntervalMs: SPEECH_REVEAL_INTERVAL_MS,
+  },
+  queueGoblin: {
+    name: 'Goblin in Line',
+    portrait: null,
+    voice: { kind: 'typing' },
+    reveal: 'sentence',
+    textCase: 'as-written',
+    revealIntervalMs: SPEECH_REVEAL_INTERVAL_MS,
+  },
   scientist: {
     name: 'Scientist',
     portrait: null,

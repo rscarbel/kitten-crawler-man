@@ -267,6 +267,12 @@
         "frameCount": 32,
         "patchTiles": 4,
         "label": "Ribbed rubber matting"
+      },
+      "f2_washroom": {
+        "row": 7,
+        "frameCount": 32,
+        "patchTiles": 4,
+        "label": "Washroom mosaic tile"
       }
     }
   },

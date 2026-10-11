@@ -575,7 +575,9 @@ export class HumanPlayer extends Player {
       const nextY = rock.y + rock.vy;
       const tx = Math.floor(nextX / this.tileSize);
       const ty = Math.floor(nextY / this.tileSize);
-      if (!map.isWalkable(tx, ty)) {
+      // The bathroom queue's block flag stands in for the goblins on it, and a
+      // stone meets them as bodies rather than as a wall.
+      if (!map.isWalkableIgnoringBathroomQueue(tx, ty)) {
         rock.state = 'done';
         this.pendingSlingshotWallImpactSound = true;
         continue;
@@ -602,7 +604,10 @@ export class HumanPlayer extends Player {
     for (let taken = 0; taken < lookaheadSteps; taken++) {
       x += rock.vx;
       y += rock.vy;
-      const blocked = !map.isWalkable(Math.floor(x / this.tileSize), Math.floor(y / this.tileSize));
+      const blocked = !map.isWalkableIgnoringBathroomQueue(
+        Math.floor(x / this.tileSize),
+        Math.floor(y / this.tileSize),
+      );
       if (blocked) return taken * step;
     }
     return rock.convergeDistance;

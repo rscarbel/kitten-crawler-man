@@ -31,6 +31,8 @@ import {
   LOCKER_BANK,
   LOCKER_BENCH,
   MOP_BUCKET,
+  BATHROOM_PLUNGER,
+  BATHROOM_SINK,
   PALLET_STACK,
   PAPER_DRIFT,
   SERVICE_DESK,
@@ -172,6 +174,9 @@ export const DRESSING_TILE_TYPES: ReadonlySet<number> = new Set<number>([
   ),
   // A multi-tile piece's other tiles are dressing as much as its anchor is.
   ...PROP_PART_TILE_TYPES,
+  // The clogged bathroom's fittings, set by `dressBathroom`.
+  BATHROOM_SINK,
+  BATHROOM_PLUNGER,
 ]);
 
 // ── Stamps ──────────────────────────────────────────────────────────────────

@@ -236,5 +236,85 @@
         "frameCount": 3
       }
     }
+  },
+  "bathroom_stall": {
+    "frameWidth": 128,
+    "frameHeight": 136,
+    "tileX": 0,
+    "tileY": 128,
+    "tileScale": 64,
+    "states": {
+      "shut_vacant": {
+        "row": 0,
+        "frameCount": 1
+      },
+      "shut_occupied": {
+        "row": 1,
+        "frameCount": 1
+      },
+      "open_vacant": {
+        "row": 2,
+        "frameCount": 1
+      },
+      "open_occupied": {
+        "row": 3,
+        "frameCount": 1
+      },
+      "out_of_order": {
+        "row": 4,
+        "frameCount": 1
+      }
+    }
+  },
+  "bathroom_pipe_wall": {
+    "frameWidth": 64,
+    "frameHeight": 136,
+    "tileX": 0,
+    "tileY": 128,
+    "tileScale": 64,
+    "states": {
+      "broken": {
+        "row": 0,
+        "frameCount": 1
+      },
+      "fixed": {
+        "row": 1,
+        "frameCount": 1
+      }
+    }
+  },
+  "bathroom_sink": {
+    "frameWidth": 96,
+    "frameHeight": 144,
+    "tileX": 16,
+    "tileY": 64,
+    "tileScale": 64,
+    "states": {
+      "west": {
+        "row": 0,
+        "frameCount": 1
+      },
+      "east": {
+        "row": 1,
+        "frameCount": 1
+      }
+    }
+  },
+  "bathroom_decals": {
+    "frameWidth": 64,
+    "frameHeight": 64,
+    "tileX": 0,
+    "tileY": 0,
+    "tileScale": 64,
+    "states": {
+      "plunger": {
+        "row": 0,
+        "frameCount": 1
+      },
+      "puddle": {
+        "row": 1,
+        "frameCount": 3
+      }
+    }
   }
 }

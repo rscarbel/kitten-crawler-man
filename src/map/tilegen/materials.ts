@@ -68,6 +68,8 @@ import {
   GRATING_STEEL_RAMP,
   GRATING_DEPTH_RAMP,
   RUBBER_MAT_RAMP,
+  WASHROOM_GRIME_RAMP,
+  WASHROOM_TILE_RAMP,
   INTERIOR_BOARD_RAMP,
   INTERIOR_STONE_RAMP,
   INTERIOR_PLASTER_RAMP,
@@ -2173,6 +2175,60 @@ const serviceRubber: Material = {
   },
 };
 
+/**
+ * Three mosaic tiles across a game tile: small enough to read as a washroom's
+ * glazed floor rather than the corridor terrazzo's panels at a glance, and a
+ * whole number against the four-tile patch so the grid wraps.
+ */
+const F2_WASHROOM_TILES_PER_GAME_TILE = 3;
+const F2_WASHROOM_GROUT_WIDTH_PX = 0.9;
+/** Faint: a grout line every eleven screen pixels at full strength is a lattice, not a floor. */
+const F2_WASHROOM_GROUT_STRENGTH = 0.32;
+const F2_WASHROOM_BEVEL_PX = 1;
+const F2_WASHROOM_BEVEL_STRENGTH = 0.3;
+const F2_WASHROOM_TONE_SPREAD = 0.12;
+/** Broad grime pools: wide and faint, a tonal wash across many tiles rather than dirt specks. */
+const F2_WASHROOM_GRIME_COUNT = 2;
+const F2_WASHROOM_GRIME_MIN_RADIUS = 14;
+const F2_WASHROOM_GRIME_MAX_RADIUS = 26;
+const F2_WASHROOM_GRIME_ALPHA = 0.1;
+const F2_WASHROOM_GRIME_SOFTNESS = 1;
+/** Detail-seed salt of the washroom's grime. */
+const F2_WASHROOM_GRIME_SALT = 97;
+
+/**
+ * The clogged bathroom's floor: small glazed squares on faint grout, dulled in
+ * broad patches by old water. Calm on purpose — the room is packed with a
+ * queue of goblins, and the floor is the backdrop they are read against.
+ */
+const serviceWashroom: Material = {
+  id: 'f2_washroom',
+  label: 'Washroom mosaic tile',
+  patchTiles: 4,
+  variants: 2,
+  paint: (ctx) => {
+    paintCeramicTiles(ctx, {
+      tilesPerGameTile: F2_WASHROOM_TILES_PER_GAME_TILE,
+      ramp: WASHROOM_TILE_RAMP,
+      groutRamp: { ...WASHROOM_TILE_RAMP, mid: WASHROOM_TILE_RAMP.shadow },
+      groutWidthPx: F2_WASHROOM_GROUT_WIDTH_PX,
+      groutStrength: F2_WASHROOM_GROUT_STRENGTH,
+      bevelPx: F2_WASHROOM_BEVEL_PX,
+      bevelStrength: F2_WASHROOM_BEVEL_STRENGTH,
+      toneSpread: F2_WASHROOM_TONE_SPREAD,
+      gridPhase: COURSE_PHASE_OFFSET,
+    });
+    paintSpeckles(ctx, ctx.detail + F2_WASHROOM_GRIME_SALT, {
+      count: F2_WASHROOM_GRIME_COUNT,
+      minRadius: F2_WASHROOM_GRIME_MIN_RADIUS,
+      maxRadius: F2_WASHROOM_GRIME_MAX_RADIUS,
+      ramp: WASHROOM_GRIME_RAMP,
+      alpha: F2_WASHROOM_GRIME_ALPHA,
+      softness: F2_WASHROOM_GRIME_SOFTNESS,
+    });
+  },
+};
+
 const F2_WALL_COURSES_PER_TILE = 1;
 const F2_WALL_BLOCKS_PER_COURSE_PER_TILE = 0.5;
 const F2_WALL_JOINT_PX = 2.2;
@@ -3572,6 +3628,7 @@ export const MATERIALS: ReadonlyArray<Material> = [
   cellarHerringbone,
   serviceGrating,
   serviceRubber,
+  serviceWashroom,
 ];
 
 export function getMaterial(id: string): Material {

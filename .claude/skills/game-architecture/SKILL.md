@@ -44,6 +44,8 @@ Kit fields stay concrete types: `update` signatures are not uniform, so a `GameS
 - `GatheringKit` (`src/systems/briarHollow/GatheringKit.ts`) — harvesting any tree or boulder, thralls, the resource HUD and the village's node regrowth. Built on every overworld floor, village or not. It owns exactly one link in the Space chain, after citizen and village talk.
 - `BriarHollowKit` (`src/systems/briarHollow/BriarHollowKit.ts`) — Briar Hollow: villagers, the herd, services (`VillageServices`), construction and the siege engines (`ConstructionKit`, held as `defences`), soldiers, the Plea (`VillageQuestSystem`) and its assault, Fenna's side quest The Borrowed Blueprints (`BlueprintsQuestSystem`, whose parts live in `src/systems/briarHollow/blueprints/`; see `docs/town.md`), and Wendell's construction contracts' village side (`ConstructionContractSystem`, `src/systems/constructionContracts/`; see `docs/town.md`). Built only when `gameMap.briarHollow` is non-null (every floor-3 world). It is rebuilt on every door visit, so its systems keep nothing durable themselves: they read and write the `BriarHollowState` threaded by reference through both scenes (`src/core/briarHollowState.ts`), the same way `TownMemory` is. Its render hooks (`renderGround`, `renderEntities` merged into the Y-sort, `renderAbove`, `renderHud`), `topBandEntries()`, `surfaces(camera)`, `tryInteract`, quest markers and tracker entries follow the boss-room dressing slots below.
 
+`CloggedBathroomSystem` (`src/systems/cloggedBathroom/`, `DungeonScene.cloggedBathroom`) runs floor 2's clogged bathrooms: the invulnerable `BathroomGoblin` queue and plumber in every copy, the floor's one pipe board (generated on first open, behind its explainer) and its surfaces, the stall visit and its `refreshed` status, and the "The Clogged Bathroom" mini quest. Its link in the interact chain, its render slots (`renderGround`, `sortedFixtures`, `renderAbove`, the `isCrawlerHidden` render predicate), `questMarkers` and `trackerEntries()` follow the boss-room dressing slots below. The map half is in `add-level`.
+
 `EmoteEffectSystem` (`src/systems/EmoteEffectSystem.ts`) draws floating emotes (a petted cow's hearts) and is built to take other emote kinds.
 
 ### The town
@@ -77,8 +79,8 @@ Each boss room's props, slow ground, hazards and interactables belong to a dress
 ### Cross-cutting getters
 
 Two seams cut across the quest systems instead of living in one owner, because
-three of the five questlines keep a `QuestManager` privately and the other two have
-none at all — centralising the state would mean rewriting all five.
+some questlines keep a `QuestManager` privately and others have none at all —
+centralising the state would mean rewriting every one of them.
 
 - `questMarkers` — minimap pips, gathered by `DungeonScene.collectQuestMarkers()`.
 - `trackerEntries()` — Quest Journal rows, the `TrackerSource` interface in

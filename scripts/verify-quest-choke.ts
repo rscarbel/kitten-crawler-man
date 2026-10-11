@@ -144,6 +144,10 @@ function verifyFloor(levelDef: LevelDef): void {
       mapType: 'dungeon',
       dungeon: dungeonOptionsForLevel(levelDef),
     });
+    // Floor 2's nursery stands past the clogged bathrooms, whose queue blocks the
+    // way on until the plumbing is fixed. That gate is `verify:clogged-bathroom`'s;
+    // this one asks about the nursery alone.
+    gameMap.setBathroomPlumbing('fixed');
     const size = gameMap.gridSize;
     const room = gameMap.questRooms[0];
     if (room === undefined) {

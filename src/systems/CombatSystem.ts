@@ -256,6 +256,11 @@ export function resolvePlayerAttacks(ctx: CombatContext): void {
         if (dot <= 0.0) continue;
       }
       if (!gameMap.hasLineOfSight(hc.x, hc.y, mc.x, mc.y)) continue;
+      if (!human.zeroDamage && mob.blowsEarnNothing) {
+        mob.takeDamageFrom(crawlerMeleeStrikeDamage(human), human, 'melee');
+        humanHit = true;
+        continue;
+      }
       if (!human.zeroDamage) {
         mob.takeDamageFrom(crawlerMeleeStrikeDamage(human), human, 'melee');
         ctx.hitLanded = true;
@@ -320,6 +325,11 @@ export function resolvePlayerAttacks(ctx: CombatContext): void {
         if (dot <= 0.0) continue;
       }
       if (!gameMap.hasLineOfSight(cc.x, cc.y, mc.x, mc.y)) continue;
+      if (!cat.zeroDamage && mob.blowsEarnNothing) {
+        mob.takeDamageFrom(crawlerMeleeStrikeDamage(cat), cat, 'melee');
+        catHit = true;
+        continue;
+      }
       if (!cat.zeroDamage) {
         mob.takeDamageFrom(crawlerMeleeStrikeDamage(cat), cat, 'melee');
         ctx.hitLanded = true;
@@ -384,6 +394,10 @@ export function resolvePlayerAttacks(ctx: CombatContext): void {
       if (dist > outerRadius) continue;
       if (dodgesSmush(mob)) {
         mob.queueFloatingText(SMUSH_IMMUNE_LABEL, 'immune');
+        continue;
+      }
+      if (!human.zeroDamage && mob.blowsEarnNothing) {
+        mob.takeDamageFrom(baseDamage, human, 'smush');
         continue;
       }
       if (!human.zeroDamage) {
@@ -523,7 +537,10 @@ export function resolvePlayerAttacks(ctx: CombatContext): void {
         const mc = centerOf(mob);
         const dist = Math.hypot(missile.x - mc.x, missile.y - mc.y);
         if (dist < hitRadius) {
-          if (!cat.zeroDamage) {
+          if (!cat.zeroDamage && mob.blowsEarnNothing) {
+            mob.takeDamageFrom(damage, cat, 'missile');
+            ctx.bus.emit('missileImpact', {});
+          } else if (!cat.zeroDamage) {
             mob.takeDamageFrom(damage, cat, 'missile');
             ctx.hitLanded = true;
             ctx.bus.emit('missileImpact', {});
@@ -630,7 +647,7 @@ export function resolvePlayerAttacks(ctx: CombatContext): void {
         if (Math.hypot(rock.x - mc.x, rock.y - mc.y) >= rockHitRadius) continue;
         if (!human.zeroDamage) {
           mob.takeDamageFrom(damage, human, 'slingshot');
-          ctx.hitLanded = true;
+          if (!mob.blowsEarnNothing) ctx.hitLanded = true;
           ctx.bus.emit('slingshotImpact', {});
         }
         rock.hit = true;

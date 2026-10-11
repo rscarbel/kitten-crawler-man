@@ -8,6 +8,7 @@ import type { BossRoomDressingCheckpoint } from '../systems/bossRooms/bossRoomDr
 import type { BountyCheckpoint } from '../systems/BountySystem';
 import type { CircusQuestCheckpoint } from '../systems/CircusQuestSystem';
 import type { DefendQuestCheckpoint } from '../systems/DefendQuestSystem';
+import type { CloggedBathroomCheckpoint } from '../systems/cloggedBathroom/cloggedBathroomCheckpoint';
 import type { DestructionCheckpoint } from '../systems/kits/DestructionKit';
 import type { DifficultyTelemetryCheckpoint } from '../systems/DifficultyTelemetrySystem';
 import type { DoomsdayEscapeCheckpoint } from '../systems/DoomsdayEscapeSystem';
@@ -70,6 +71,8 @@ export interface WorldCheckpoint {
   mongo: MongoCheckpoint;
 
   defendQuest: DefendQuestCheckpoint;
+  /** Where the bathroom quest stands and whether its explainer was seen; the board's turns are not kept. */
+  cloggedBathroom: CloggedBathroomCheckpoint;
   spiderQuest: SpiderQuestCheckpoint;
   circusQuest: CircusQuestCheckpoint;
   murderQuest: MurderMysteryQuestCheckpoint;

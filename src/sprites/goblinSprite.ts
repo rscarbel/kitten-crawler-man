@@ -1,7 +1,12 @@
 import { progressFrameIndex, timeFrameIndex, walkFrameIndex } from '../core/SpriteRenderer';
 import type { FigureDef } from './figure/figureDef';
 import { drawFigureCached, prewarmFigureState } from './figure/figureFrameCache';
-import { GOBLIN_FIGURES, GOBLIN_GORE_STATES, goblinRowFrameCount } from './art/goblinFigure';
+import {
+  GOBLIN_FIGURES,
+  GOBLIN_GORE_STATES,
+  GOBLIN_PLUMBER_FIGURE,
+  goblinRowFrameCount,
+} from './art/goblinFigure';
 
 export type GoblinWeapon = 'sword' | 'axe' | 'mace' | 'warhammer';
 export type GoblinAttackKind = 'light' | 'heavy';
@@ -34,6 +39,9 @@ export type GoblinArchetype = GoblinWeapon | 'bow';
  */
 export type GoblinState =
   'walk' | 'idle' | 'idle_break' | 'attack_light' | 'attack_heavy' | 'flinch';
+
+/** The rows a goblin that is never handed an attack can be drawn in. */
+export type GoblinPassiveState = Exclude<GoblinState, 'attack_light' | 'attack_heavy'>;
 
 export interface GoblinAttackTiming {
   /** Frames the sprite row holds — must equal the generator's frameCount. */
@@ -243,8 +251,8 @@ const IDLE_BREAK_MIN_SECONDS = 4;
 const IDLE_BREAK_RANDOM_SECONDS = 5;
 
 /** A resolved animation state, ready to hand to the sprite renderer. */
-interface ResolvedFrame {
-  readonly state: GoblinState;
+interface ResolvedFrame<State extends GoblinState = GoblinState> {
+  readonly state: State;
   readonly frame: number;
 }
 
@@ -255,20 +263,18 @@ interface ResolvedFrame {
  * once forgotten: without it every goblin in a camp breathes and blinks on the
  * same frame, which reads as a rack of clones rather than as five creatures.
  */
-export class GoblinAnimator {
-  constructor(private readonly archetype: GoblinArchetype) {}
-
+export class GoblinPassiveAnimator {
   /** Per-instance phase shift, in seconds, added to the idle time index. */
   private readonly idlePhaseOffset = Math.random() * (IDLE_FRAMES / IDLE_FPS);
   private idleSeconds = 0;
-  private secondsUntilBreak = GoblinAnimator.rollBreakDelay();
+  private secondsUntilBreak = GoblinPassiveAnimator.rollBreakDelay();
   private breakFramesLeft = 0;
   /**
    * Frames the current break was given, so it can be played from its own start.
    *
-   * The break used to be sampled off the free-running wall clock, which meant it
-   * began on whatever frame that clock happened to be at — a flourish that
-   * starts three-quarters of the way through is a pop, not a flourish.
+   * Sampled off the free-running wall clock instead, a break would begin on
+   * whatever frame that clock happened to be at — and a flourish that starts
+   * three-quarters of the way through is a pop, not a flourish.
    */
   private breakTotalFrames = 1;
   private flinchFramesLeft = 0;
@@ -280,7 +286,7 @@ export class GoblinAnimator {
   /** Drops every animation in flight — used when a scene resets combat state. */
   reset(): void {
     this.idleSeconds = 0;
-    this.secondsUntilBreak = GoblinAnimator.rollBreakDelay();
+    this.secondsUntilBreak = GoblinPassiveAnimator.rollBreakDelay();
     this.breakFramesLeft = 0;
     this.breakTotalFrames = 1;
     this.flinchFramesLeft = 0;
@@ -299,7 +305,7 @@ export class GoblinAnimator {
     if (isMoving || isAttacking) {
       this.idleSeconds = 0;
       this.breakFramesLeft = 0;
-      this.secondsUntilBreak = GoblinAnimator.rollBreakDelay();
+      this.secondsUntilBreak = GoblinPassiveAnimator.rollBreakDelay();
       return;
     }
 
@@ -308,7 +314,7 @@ export class GoblinAnimator {
     this.breakFramesLeft = Math.round(IDLE_BREAK_FRAMES / IDLE_BREAK_FPS / secondsPerFrame);
     this.breakTotalFrames = this.breakFramesLeft;
     this.idleSeconds = 0;
-    this.secondsUntilBreak = GoblinAnimator.rollBreakDelay();
+    this.secondsUntilBreak = GoblinPassiveAnimator.rollBreakDelay();
   }
 
   get isFlinching(): boolean {
@@ -316,21 +322,15 @@ export class GoblinAnimator {
   }
 
   /**
-   * Resolve the state and frame to draw.
+   * Resolve the state and frame to draw for a goblin that is not attacking.
    *
-   * Priority is attack → flinch → walk → idle_break → idle.
+   * Priority is flinch → walk → idle_break → idle.
    */
-  resolve(
+  resolvePassive(
     elapsedSeconds: number,
     walkFrame: number,
     isMoving: boolean,
-    attack: { readonly kind: GoblinAttackKind; readonly progress: number } | null,
-  ): ResolvedFrame {
-    if (attack !== null) {
-      const state: GoblinState = attack.kind === 'light' ? 'attack_light' : 'attack_heavy';
-      const frames = attackSpriteFrames(this.archetype, attack.kind);
-      return { state, frame: progressFrameIndex(attack.progress, frames) };
-    }
+  ): ResolvedFrame<GoblinPassiveState> {
     if (this.flinchFramesLeft > 0) {
       const progress = 1 - this.flinchFramesLeft / GOBLIN_FLINCH_FRAMES;
       return { state: 'flinch', frame: progressFrameIndex(progress, FLINCH_FRAMES) };
@@ -349,6 +349,30 @@ export class GoblinAnimator {
     // five from breathing and blinking in lockstep.
     const phased = elapsedSeconds + this.idlePhaseOffset;
     return { state: 'idle', frame: timeFrameIndex(phased, IDLE_FPS, IDLE_FRAMES) };
+  }
+}
+
+/** A fighting goblin's animator: the passive rows plus its archetype's attacks. */
+export class GoblinAnimator extends GoblinPassiveAnimator {
+  constructor(private readonly archetype: GoblinArchetype) {
+    super();
+  }
+
+  /**
+   * Resolve the state and frame to draw.
+   *
+   * Priority is attack → flinch → walk → idle_break → idle.
+   */
+  resolve(
+    elapsedSeconds: number,
+    walkFrame: number,
+    isMoving: boolean,
+    attack: { readonly kind: GoblinAttackKind; readonly progress: number } | null,
+  ): ResolvedFrame {
+    if (attack === null) return this.resolvePassive(elapsedSeconds, walkFrame, isMoving);
+    const state: GoblinState = attack.kind === 'light' ? 'attack_light' : 'attack_heavy';
+    const frames = attackSpriteFrames(this.archetype, attack.kind);
+    return { state, frame: progressFrameIndex(attack.progress, frames) };
   }
 }
 
@@ -374,6 +398,51 @@ export function drawGoblinSprite(ctx: CanvasRenderingContext2D, sprite: GoblinSp
     sprite.tileSize,
     { flipX: sprite.facingX < 0 },
   );
+}
+
+/** Where and how to draw the bathroom plumber; he has only the passive rows. */
+export interface GoblinPlumberSpriteState extends Omit<GoblinSpriteState, 'archetype' | 'state'> {
+  readonly state: GoblinPassiveState;
+}
+
+/**
+ * Draw one frame of the bathroom plumber: a goblin in a cap and overalls, with a
+ * pipe wrench in hand and a plunger on his back. Drive it from
+ * {@link GoblinPassiveAnimator.resolvePassive}.
+ */
+export function drawGoblinPlumberSprite(
+  ctx: CanvasRenderingContext2D,
+  sprite: GoblinPlumberSpriteState,
+): void {
+  drawFigureCached(
+    ctx,
+    GOBLIN_PLUMBER_FIGURE,
+    sprite.state,
+    sprite.frame,
+    sprite.x,
+    sprite.y,
+    sprite.tileSize,
+    { flipX: sprite.facingX < 0 },
+  );
+}
+
+/** Every row the plumber can be drawn in, in the order `resolvePassive` prioritises them. */
+export const GOBLIN_PLUMBER_STATES: ReadonlyArray<GoblinPassiveState> = [
+  'flinch',
+  'walk',
+  'idle_break',
+  'idle',
+];
+
+/**
+ * Warms every row the plumber draws.
+ *
+ * All four rather than the spawn pair the hostile goblins warm: he is placed
+ * with the room rather than arriving, and a flinch from the first blow has no
+ * telegraph to warm it behind.
+ */
+export function prewarmGoblinPlumber(): void {
+  for (const state of GOBLIN_PLUMBER_STATES) prewarmFigureState(GOBLIN_PLUMBER_FIGURE, state);
 }
 
 /**

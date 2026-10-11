@@ -367,6 +367,7 @@ import {
   DEFEND_QUEST_ID,
   DefendQuestSystem,
 } from '../systems/DefendQuestSystem';
+import { CloggedBathroomSystem } from '../systems/cloggedBathroom/CloggedBathroomSystem';
 import type { QuestRewardSpec } from '../ui/questReward/types';
 import { DungeonLightingSystem, type OverDarknessPainter } from '../systems/DungeonLightingSystem';
 import {
@@ -683,6 +684,13 @@ export interface DungeonSceneOptions {
    * falls back to the floor's own start tile.
    */
   resolveSpawnTile?: (gameMap: GameMap) => { x: number; y: number } | null;
+  /**
+   * Dev bootstrap only: whether the floor's clogged bathrooms start fixed — a
+   * playtest preset dropping the party past them, whose way back to the start
+   * would otherwise be shut behind a queue the party never met. Asked of the
+   * freshly generated map, before the bathroom system is built.
+   */
+  bathroomSolvedAtStart?: (gameMap: GameMap) => boolean;
   /** Skip the level-intro banner and fanfare — set when re-entering a level already introduced (e.g. leaving a building). */
   skipIntro?: boolean;
   /**
@@ -1185,6 +1193,8 @@ export class DungeonScene extends GameplayScene {
   private arenaRoom: ArenaRoomSystem;
   private barriers: BarrierSystem;
   private defendQuest: DefendQuestSystem;
+  /** Floor 2's clogged bathrooms, their queue, their plumber and the floor's one pipe board; inert on every other floor. */
+  readonly cloggedBathroom: CloggedBathroomSystem;
   /** Light and dark on floors 1 and 2; null on every other map. */
   private readonly dungeonLighting: DungeonLightingSystem | null;
   /** Beds, positional loops and distant one-shots on floors 1 and 2; null elsewhere. */
@@ -1865,6 +1875,15 @@ export class DungeonScene extends GameplayScene {
       levelDef.levelledCurve,
       levelDef.defendQuestIntensity,
     );
+    this.cloggedBathroom = new CloggedBathroomSystem({
+      gameMap: this.gameMap,
+      bus: this.bus,
+      roster: this.world.roster,
+      conversation: this.conversation,
+      audio: this.audio,
+      announce: (message, opts) => this.menus.announce(message, opts),
+      startSolved: options?.bathroomSolvedAtStart?.(this.gameMap) ?? false,
+    });
     this.grateSpikes = new GrateSpikesMenu({
       defendQuest: this.defendQuest,
       human: this.human,
@@ -3447,6 +3466,7 @@ export class DungeonScene extends GameplayScene {
     this.ambientSound?.dispose();
     this.dungeonAmbience?.dispose();
     this.bopca.dispose();
+    this.cloggedBathroom.dispose();
     this.menus.dispose();
     if (!this.musicPersistsAcrossExit) this.audio?.stopMusic();
     this.inputHandler.unbind();
@@ -3579,7 +3599,7 @@ export class DungeonScene extends GameplayScene {
       this.audio?.play('error');
       return;
     }
-    if (this.inactive().isKnockedOut) {
+    if (this.inactive().isKnockedOut || this.cloggedBathroom.isStallVisitActive) {
       this.audio?.play('error');
       return;
     }
@@ -4531,6 +4551,7 @@ export class DungeonScene extends GameplayScene {
       mongo: this.mongoSystem.captureCheckpoint(),
 
       defendQuest: this.defendQuest.captureCheckpoint(),
+      cloggedBathroom: this.cloggedBathroom.captureCheckpoint(),
       spiderQuest: this.spiderQuest.captureCheckpoint(),
       circusQuest: this.circusQuest.captureCheckpoint(),
       murderQuest: this.murderQuest.captureCheckpoint(),
@@ -4593,6 +4614,9 @@ export class DungeonScene extends GameplayScene {
     this.mongoSystem.restoreCheckpoint(world.mongo);
 
     this.defendQuest.restoreCheckpoint(world.defendQuest);
+    // After the map's own restore, which already put the plumbing back: this
+    // re-seats every goblin to match it and drops any stall visit in progress.
+    this.cloggedBathroom.restoreCheckpoint(world.cloggedBathroom);
     this.spiderQuest.restoreCheckpoint(world.spiderQuest);
     // The grid the mob rewind just rebuilt, not the one the last frame saw:
     // Signet's move back to the Big Top door has to land in the live one.
@@ -4652,6 +4676,7 @@ export class DungeonScene extends GameplayScene {
       arena: toPersistedArenaCheckpoint(this.arena.captureCheckpoint()),
       treasureChests: toPersistedTreasureChestCheckpoint(this.treasureChests.captureCheckpoint()),
       defendQuest: toPersistedDefendQuestCheckpoint(this.defendQuest.captureCheckpoint()),
+      cloggedBathroom: this.cloggedBathroom.captureCheckpoint(),
       spiderQuest: toPersistedSpiderQuestCheckpoint(this.spiderQuest.captureCheckpoint()),
       circusQuest: toPersistedCircusQuestCheckpoint(this.circusQuest.captureCheckpoint()),
       murderQuest: toPersistedMurderMysteryQuestCheckpoint(this.murderQuest.captureCheckpoint()),
@@ -4705,6 +4730,7 @@ export class DungeonScene extends GameplayScene {
       arena,
       treasureChests,
       defendQuest,
+      cloggedBathroom,
       spiderQuest,
       circusQuest,
       murderQuest,
@@ -4749,6 +4775,8 @@ export class DungeonScene extends GameplayScene {
       fromPersistedTreasureChestCheckpoint(treasureChests, this.treasureChests.allChests),
     );
     this.defendQuest.restoreCheckpoint(fromPersistedDefendQuestCheckpoint(defendQuest));
+    // A save older than the bathroom loads it as the map generated it: broken, unmet.
+    if (cloggedBathroom !== undefined) this.cloggedBathroom.restoreCheckpoint(cloggedBathroom);
     this.spiderQuest.restoreCheckpoint(fromPersistedSpiderQuestCheckpoint(spiderQuest));
     if (bossRoomDressing !== undefined) this.bossRoomDressings.restoreCheckpoint(bossRoomDressing);
     // A save older than the dressings restores none of them, so the rooms
@@ -5291,7 +5319,8 @@ export class DungeonScene extends GameplayScene {
       this.defendQuest.wouldInteract(active) ||
       this.spiderQuest.wouldInteract(active) ||
       this.circusQuest.wouldInteract(active) ||
-      this.murderQuest.wouldInteract(active)
+      this.murderQuest.wouldInteract(active) ||
+      this.cloggedBathroom.wouldInteract(active)
     );
   }
 
@@ -5624,6 +5653,7 @@ export class DungeonScene extends GameplayScene {
         shows: () => !this.gameOver && !this.menus.pauseScreen.isOpen,
       }),
       keyboardHeroSurface('keyboard-hero', this.spiderQuest),
+      ...this.cloggedBathroom.surfaces(),
       spiderTutorialSurface(this.spiderQuest, 'spider-tutorial'),
       hackFailedPromptSurface('spider-hack-failed', this.spiderQuest),
       stairwellPromptSurface('stairwell', this.stairwell),
@@ -5677,6 +5707,7 @@ export class DungeonScene extends GameplayScene {
       this.circusQuest.isDialogOpen ||
       this.murderQuest.isDialogOpen ||
       this.anchorQuest.isDialogOpen ||
+      this.cloggedBathroom.isDialogOpen ||
       this.safeRoom.mordecaiDialogOpen
     ) {
       return dismiss;
@@ -6236,6 +6267,8 @@ export class DungeonScene extends GameplayScene {
     // The world behind it must not also see it, or an NPC conversation opens
     // underneath the building menu and both boxes fight over the same clicks.
     if (this.overlayOpen) return;
+    // Behind a stall door there is nothing to reach and nothing to swing at.
+    if (this.cloggedBathroom.isStallVisitActive) return;
 
     const fromTap = tapScreenX !== undefined;
     const active = this.active();
@@ -6338,6 +6371,9 @@ export class DungeonScene extends GameplayScene {
     if (this.murderQuest.tryInteract(active)) {
       return true;
     }
+    if (this.cloggedBathroom.tryInteract(active, { human: this.human, cat: this.cat })) {
+      return true;
+    }
     // Ahead of the boss room: standing on a placed piece singles it out, where
     // a gym rack answers anyone merely near it.
     if (this.barriers.tryPickupNear(active)) {
@@ -6430,6 +6466,10 @@ export class DungeonScene extends GameplayScene {
    *   act on it.
    */
   private trySceneHotbarSlot(slot: InventoryItem, hotbarIdx: number): boolean {
+    if (this.cloggedBathroom.isStallVisitActive) {
+      this.audio?.play('error');
+      return true;
+    }
     if (this.tutorial?.blockBoxersActivation === true && slot.id === 'enchanted_bigboi_boxers') {
       this.audio?.play('error');
       this.menus.toasts.post('The boxers are already doing their job — just equip them!', {
@@ -6908,6 +6948,10 @@ export class DungeonScene extends GameplayScene {
     // alone would leave a column of light standing over somebody mid-sentence.
     this.circusQuest.syncMarkers();
     this.murderQuest.syncMarkers();
+    // The board's generation runs behind the explainer and the board, both of
+    // which halt the world, so it is stepped ahead of the halt.
+    this.cloggedBathroom.tickGeneration();
+    this.cloggedBathroom.syncMarkers();
 
     // Also drained ahead of the early returns: the request is raised by a
     // right-click or a hotbar key, neither of which routes through the panel's
@@ -7232,6 +7276,8 @@ export class DungeonScene extends GameplayScene {
       speechBubblePulse: this.speechBubblePulse,
       goreUnderDarkness: this.dungeonLighting !== null,
       lightShining: this.lightShining,
+      isCrawlerHidden: (crawler) => this.cloggedBathroom.isCrawlerHidden(crawler),
+      sortedFixtures: this.cloggedBathroom.sortedFixtures(),
     };
 
     this.renderPipeline.renderWorld(ctx, rc);
@@ -7245,6 +7291,12 @@ export class DungeonScene extends GameplayScene {
     this.tutorial?.renderGatesAndLedge(ctx, camX, camY);
     const activeCrawler = this.active();
     this.defendQuest.renderObjects(ctx, camX, camY, activeCrawler, activeCrawler);
+    this.cloggedBathroom.renderGround(
+      ctx,
+      camX,
+      camY,
+      rc.interactionPromptsAllowed && !this.overlayOpen ? activeCrawler : undefined,
+    );
     this.spiderQuest.render(ctx, camX, camY, this.active());
     this.circusQuest.render(ctx, camX, camY, this.active());
     this.murderQuest.render(ctx, camX, camY, this.active());
@@ -7275,6 +7327,7 @@ export class DungeonScene extends GameplayScene {
     }
     this.spiderQuest.renderCutsceneEffects(ctx, camX, camY);
     this.defendQuest.renderAbove(ctx, camX, camY, this.active());
+    this.cloggedBathroom.renderAbove(ctx, camX, camY);
     this.briarHollowKit?.renderAbove(ctx, camX, camY);
     this.gathering?.renderAbove(ctx, camX, camY);
     this.circusAmbience?.renderAbove(ctx, camX, camY);
@@ -7573,6 +7626,7 @@ export class DungeonScene extends GameplayScene {
     const markers = this._questMarkers;
     markers.length = 0;
     markers.push(...this.defendQuest.questMarkers);
+    markers.push(...this.cloggedBathroom.questMarkers);
     markers.push(...this.circusQuest.questMarkers);
     markers.push(...this.murderQuest.questMarkers);
     markers.push(...this.anchorQuest.questMarkers);
@@ -7602,6 +7656,7 @@ export class DungeonScene extends GameplayScene {
     entries.push(
       ...collectTrackerEntries([
         this.defendQuest,
+        this.cloggedBathroom,
         this.spiderQuest,
         this.circusQuest,
         this.murderQuest,
@@ -7660,7 +7715,8 @@ export class DungeonScene extends GameplayScene {
     const catMoveBlocked = this.tutorial !== null && !this.tutorial.canCatMove && this.cat.isActive;
     const humanMoveBlocked =
       this.tutorial !== null && !this.tutorial.canHumanMove && this.human.isActive;
-    if (!this.spiderQuest.playerLocked && !catMoveBlocked && !humanMoveBlocked) {
+    const inStall = this.cloggedBathroom.isStallVisitActive;
+    if (!this.spiderQuest.playerLocked && !inStall && !catMoveBlocked && !humanMoveBlocked) {
       // A dungeon wall is a wall seen from in front, the same as an interior's,
       // so a crawler walking south into one has to stop with their feet on the
       // last floor tile rather than planting their whole lower half on the
@@ -7772,6 +7828,7 @@ export class DungeonScene extends GameplayScene {
 
     this.barriers.update(ctx);
     this.defendQuest.update(ctx);
+    this.cloggedBathroom.update(ctx);
     this.briarHollowKit?.updateSiege(ctx);
     this.grateSpikes.update();
     if (this.defendQuest.hammerSoundPending) {

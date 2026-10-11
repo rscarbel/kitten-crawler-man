@@ -21,6 +21,8 @@
 import {
   ARCHETYPE_SCALE,
   GOBLIN_ARCHETYPES,
+  GOBLIN_PLUMBER_SCALE,
+  GOBLIN_PLUMBER_STYLE,
   GOBLIN_STYLES,
   along,
   clamp01,
@@ -41,7 +43,13 @@ import {
   type GoblinStyle,
   type Pt,
 } from './goblinArt';
-import { WEAPON_FACTORIES, bowStringPull, setBowDraw, type BowDraw } from './goblinWeapons';
+import {
+  WEAPON_FACTORIES,
+  bowStringPull,
+  makePipeWrenchProp,
+  setBowDraw,
+  type BowDraw,
+} from './goblinWeapons';
 import { gorePieces, type GorePiece } from './goblinGore';
 import { type FigureDef, figureStates } from '../figure/figureDef';
 
@@ -1845,6 +1853,75 @@ export const GOBLIN_FIGURES: Record<GoblinArchetype, FigureDef> = {
   mace: GOBLIN_MACE_FIGURE,
   warhammer: GOBLIN_WARHAMMER_FIGURE,
   bow: GOBLIN_BOW_FIGURE,
+};
+
+// ── The plumber ──────────────────────────────────────────────────────────────
+
+/**
+ * The rows the plumber paints: the ones a goblin that never fights can enter.
+ *
+ * He stands, fidgets, walks and flinches when struck, which is everything
+ * `GoblinAnimator` resolves to when it is never handed an attack.
+ */
+export const GOBLIN_PLUMBER_ROWS: readonly RowSpec[] = ROWS.filter(
+  (row) => row.name !== 'attack_light' && row.name !== 'attack_heavy',
+);
+
+/**
+ * Whose movement the plumber borrows. The sword goblin's idle break lifts the
+ * held tool to eye level and levels it, which on a wrench reads as a tradesman
+ * squinting at his tool rather than as a threat.
+ */
+const PLUMBER_CHOREOGRAPHY: GoblinArchetype = 'sword';
+
+const PLUMBER_GEOMETRY: CellGeometry = { frameWidth: 80, frameHeight: 72, tileX: 8, tileY: 2 };
+
+const PLUMBER_WRENCH: GoblinProp = makePipeWrenchProp(GOBLIN_PLUMBER_STYLE.palette);
+
+function plumberRowOf(state: string): RowSpec {
+  const row = GOBLIN_PLUMBER_ROWS.find((candidate) => candidate.name === state);
+  if (row === undefined) throw new Error(`goblin_plumber paints no row "${state}"`);
+  return row;
+}
+
+/** The pose one frame of one of the plumber's rows resolves to, for the gates. */
+export function goblinPlumberPose(row: RowSpec, frame: number): GoblinPose {
+  return poseFor(PLUMBER_CHOREOGRAPHY, GOBLIN_PLUMBER_STYLE, PLUMBER_WRENCH, row, frame);
+}
+
+function paintPlumberFrame(ctx: CanvasRenderingContext2D, state: string, frame: number): void {
+  const pose = goblinPlumberPose(plumberRowOf(state), frame);
+  drawGoblin(
+    ctx,
+    PLUMBER_GEOMETRY.frameWidth / 2,
+    PLUMBER_GEOMETRY.tileY + TILE_SCALE,
+    TILE_SCALE * GOBLIN_PLUMBER_SCALE,
+    GOBLIN_PLUMBER_STYLE,
+    pose,
+    PLUMBER_WRENCH,
+  );
+}
+
+function plumberStateFrames(): Record<string, number> {
+  const frames: Record<string, number> = {};
+  for (const row of GOBLIN_PLUMBER_ROWS) frames[row.name] = row.frameCount;
+  return frames;
+}
+
+/**
+ * The bathroom plumber: cap, overalls, tool belt, a pipe wrench in hand and a
+ * plunger on his back. No attack rows and no gore pieces, because he neither
+ * fights nor dies.
+ */
+export const GOBLIN_PLUMBER_FIGURE: FigureDef = {
+  id: 'goblin_plumber',
+  frameWidth: PLUMBER_GEOMETRY.frameWidth,
+  frameHeight: PLUMBER_GEOMETRY.frameHeight,
+  tileX: PLUMBER_GEOMETRY.tileX,
+  tileY: PLUMBER_GEOMETRY.tileY,
+  tileScale: TILE_SCALE,
+  states: figureStates(plumberStateFrames()),
+  paintFrame: paintPlumberFrame,
 };
 
 export { ARCHETYPE_SCALE, GOBLIN_ARCHETYPES, GOBLIN_STYLES };

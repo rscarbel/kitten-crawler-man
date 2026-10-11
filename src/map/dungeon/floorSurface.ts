@@ -11,7 +11,9 @@
  *   gate read it — and the painters ask this record first. Anything with no
  *   character (start, safe, boss and quest rooms, the arena, the spider lab,
  *   undressed regions) answers null and falls back to the tile type, which is
- *   what keeps those rooms' own art.
+ *   what keeps those rooms' own art — except a special region that declares a
+ *   floor of its own (`SPECIAL_REGION_FLOOR_MATERIALS`), such as the clogged
+ *   bathroom's washroom mosaic.
  * - **The wear.** Where people walk, a floor is polished; where nobody does, and
  *   along the foot of every wall, dust settles. Each dressed room is worn along
  *   the shortest paths between its doorways and each dressed hallway down its
@@ -489,11 +491,9 @@ export function buildFloorSurface(input: FloorSurfaceInput): FloorSurface {
       // A prop standing in a room or hallway still has floor under it.
       open[index] = walkable[index] === 1 || region !== NO_REGION ? 1 : 0;
       const room = regionMap.room(region);
-      const character = characters.characterAt(x, y);
+      const material = characters.floorMaterialAt(x, y);
       materials[index] =
-        character === null
-          ? null
-          : laidMaterial(character.floorMaterial, room === null ? null : room.bounds, x, y);
+        material === null ? null : laidMaterial(material, room === null ? null : room.bounds, x, y);
     }
   }
 

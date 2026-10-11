@@ -278,6 +278,10 @@ export interface RenderContext {
    * through a faulty tube's dark beat — for fixture art that must match it.
    */
   lightShining?: (tileX: number, tileY: number) => boolean;
+  /** Whether a crawler is out of sight (inside a bathroom stall) and must not be drawn this frame. */
+  isCrawlerHidden?: (crawler: HumanPlayer | CatPlayer) => boolean;
+  /** Fixtures a floor system owns that sort with the bodies, such as the bathroom sinks' running water. */
+  sortedFixtures?: Iterable<TownPropRenderable>;
 }
 
 export class RenderPipeline {
@@ -582,6 +586,7 @@ export class RenderPipeline {
     }
 
     for (const player of [inactive, active]) {
+      if (rc.isCrawlerHidden?.(player) === true) continue;
       const e = this._getEntry();
       e.sortY = player.y + ENTITY_SORT_Y_OFFSET;
       e.kind = DRAW_KIND_PLAYER;
@@ -626,6 +631,7 @@ export class RenderPipeline {
     }
     for (const prop of rc.bossRoomDressings.renderEntities()) this._pushPropEntry(prop, camX, camY);
     for (const pickup of rc.groundPickups.renderEntities()) this._pushPropEntry(pickup, camX, camY);
+    for (const fixture of rc.sortedFixtures ?? []) this._pushPropEntry(fixture, camX, camY);
 
     // Sort only the active portion of the pool
     const items = this._drawPool;

@@ -2,6 +2,7 @@ import type { SoundId } from './sounds';
 import type { BuildingEntry } from '../systems/BuildingSystem';
 import { interiorSellsSomething } from '../systems/townServices';
 import { CONTRACT_CUES } from '../systems/constructionContracts/contractSoundCues';
+import { BATHROOM_CUES } from '../systems/cloggedBathroom/bathroomSoundCues';
 
 /**
  * Where a group of non-streaming sound effects can be heard. The 144
@@ -21,6 +22,7 @@ export type SfxGroup =
   | 'level3'
   | 'briarHollow'
   | 'constructionContracts'
+  | 'cloggedBathroom'
   | 'bounty'
   | 'circusQuest'
   | 'murderMysteryQuest'
@@ -474,6 +476,12 @@ export const SFX_GROUPS: Record<SfxGroup, readonly SoundId[]> = {
   constructionContracts: Object.values(CONTRACT_CUES).flat(),
 
   /**
+   * Every sound behind the Clogged Bathroom (`BATHROOM_CUES`). The bathroom
+   * only stands on floor 2's gauntlet branches, so floor 2 loads this group.
+   */
+  cloggedBathroom: Object.values(BATHROOM_CUES).flat(),
+
+  /**
    * Shady's five bounty bosses (`bountyDefs.ts`/`BountySystem`, floor-3
    * overworld only), plus the bounty hand-off cues themselves. Each boss now
    * owns most of its voice, but the ids still borrowed from a level1/level2
@@ -665,13 +673,16 @@ const LEVEL3_SFX_GROUPS: readonly SfxGroup[] = [
   'mongoMercenary',
 ];
 
+/** Floor 2's own cues plus the Clogged Bathroom, which only appears there. */
+const LEVEL2_SFX_GROUPS: readonly SfxGroup[] = ['level2', 'cloggedBathroom'];
+
 /** Which `SfxGroup`s a `DungeonScene` should preload for the level it just entered. */
 export function sfxGroupsForLevelId(levelId: string): readonly SoundId[] {
   const groups: readonly SfxGroup[] =
     levelId === 'level1'
       ? ['level1']
       : levelId === 'level2'
-        ? ['level2']
+        ? LEVEL2_SFX_GROUPS
         : levelId === 'level3'
           ? LEVEL3_SFX_GROUPS
           : // Tutorial and any future level with no dedicated group: universal

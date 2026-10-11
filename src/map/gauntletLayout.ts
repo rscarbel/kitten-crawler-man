@@ -41,14 +41,22 @@ export const SEGMENT_BEYOND = -3;
  * into it. It cannot share the sealed segment: the boss-to-exit corridor could
  * then run alongside the corridor that enters the boss room and join the room
  * before the boss straight to the room after it, bypassing the fight.
+ *
+ * The approach segment is used only by a gauntlet that seats a bathroom on every
+ * branch. It owns each branch's rooms and corridors up to and including the
+ * corridor into its bathroom, while the bathroom and everything after it stay in
+ * the branch segment with the gateway safe room. Branches braid freely within a
+ * segment, so without the split the near half of one branch could touch the far
+ * half of another and walk round every bathroom at once.
  */
-const SEGMENTS_PER_GAUNTLET = 4;
+const SEGMENTS_PER_GAUNTLET = 5;
 
-/** Offsets of a gauntlet's four segments within its block, from 1 so 0 stays "unowned". */
+/** Offsets of a gauntlet's five segments within its block, from 1 so 0 stays "unowned". */
 const BRANCH_SEGMENT_OFFSET = 1;
 const GATEWAY_SEGMENT_OFFSET = 2;
 const CHOKE_SEGMENT_OFFSET = 3;
 const EXIT_SEGMENT_OFFSET = 4;
+const BATHROOM_APPROACH_SEGMENT_OFFSET = 5;
 
 /** Segment owning gauntlet `index`'s branch chains and its gateway safe room. */
 export function gauntletSegment(index: number): number {
@@ -70,13 +78,18 @@ function exitSegment(index: number): number {
   return index * SEGMENTS_PER_GAUNTLET + EXIT_SEGMENT_OFFSET;
 }
 
+/** Segment owning gauntlet `index`'s branch halves in front of their bathrooms. */
+function bathroomApproachSegment(index: number): number {
+  return index * SEGMENTS_PER_GAUNTLET + BATHROOM_APPROACH_SEGMENT_OFFSET;
+}
+
 /**
  * Highest segment id the gauntlets can consume, so anything allocating segments
  * of its own — the floor-2 spine — starts past every gauntlet a floor can hold
  * rather than guessing at a gap.
  */
 export function gauntletSegmentCeiling(gauntletCount: number): number {
-  return exitSegment(Math.max(gauntletCount, 1) - 1);
+  return bathroomApproachSegment(Math.max(gauntletCount, 1) - 1);
 }
 
 // ── Geometry constants ────────────────────────────────────────────────────────
@@ -642,6 +655,12 @@ export interface GauntletRequest {
    * onto whichever slot happens to seat more easily.
    */
   choke?: { w: number; h: number; slot: ChokeSlot };
+  /**
+   * Seats a fixed-size bathroom halfway along every branch, or undefined for a
+   * gauntlet with none. Like {@link choke}, present means mandatory: a branch
+   * that cannot seat its bathroom fails rather than shipping without it.
+   */
+  bathroom?: BathroomRequest;
   /** Dimensions drawn for a branch's mandatory safe-access pocket. */
   pocketSize: () => { w: number; h: number };
   pickCorridorKind: (isSpecial: boolean, target: Point) => CorridorKind;
@@ -695,6 +714,61 @@ export interface GauntletPlan {
    * room it came from.
    */
   chokeEntryCorridor: PlannedCorridor | null;
+  /**
+   * One bathroom per branch when the request asked for them, else empty. Each
+   * bathroom's rect is also its branch's entry in {@link branchChains}, but not
+   * in {@link chainRooms}: it is seated as its own role.
+   */
+  bathroomRooms: PlannedBathroom[];
+}
+
+/** The bathroom a gauntlet seats on every branch. */
+export interface BathroomRequest {
+  w: number;
+  h: number;
+  /**
+   * For `verify:clogged-bathroom`'s self-test only: leaves a safe pocket that
+   * falls on the bathroom hanging off it, stranded behind the queue, so the
+   * check that forbids it can be watched failing. Never set by a level.
+   */
+  strandPocketsForGate?: boolean;
+  /**
+   * For `verify:clogged-bathroom`'s self-test only: lays the room out and dresses
+   * it as if the plumber did not stand in anyone's way, so the check that he
+   * never seals off the stalls or the pipes can be watched failing. Never set
+   * by a level.
+   */
+  plumberWalkableForGate?: boolean;
+}
+
+/** A bathroom seated on a gauntlet branch. */
+export interface PlannedBathroom {
+  rect: Rect;
+  /** Position of the branch in {@link GauntletPlan.branchChains}. */
+  branchIndex: number;
+  /**
+   * The corridor the player arrives through. Named for the reason
+   * {@link GauntletPlan.chokeEntryCorridor} is: it is what tells the doorway
+   * scan which opening is the way in and which are the ways onward.
+   */
+  entryCorridor: PlannedCorridor;
+}
+
+/** Position of a branch's bathroom within the branch's own room sequence. */
+export function bathroomBranchIndex(branchLength: number): number {
+  return Math.floor(branchLength / 2);
+}
+
+/**
+ * {@link safeAccessPocketIndices} for a branch carrying a bathroom. A pocket
+ * hanging off the bathroom would open off the side the queue blocks, a dead end
+ * the player cannot reach until the plumbing is fixed, so it moves to the room
+ * before.
+ */
+export function branchPocketIndices(roomCount: number, bathroomIndex: number | null): number[] {
+  return safeAccessPocketIndices(roomCount).map((index) =>
+    index === bathroomIndex ? index - 1 : index,
+  );
 }
 
 function nextHeading(previousHeading: number | null): number {
@@ -927,10 +1001,12 @@ export function planGauntlet(segments: SegmentMap, request: GauntletRequest): Ga
   const branchRoomCounts: number[] = [];
   const branchChains: Rect[][] = [];
   const pockets: Rect[] = [];
+  const bathroomRooms: PlannedBathroom[] = [];
 
   for (const exitAngle of exitAngles) {
     const branch = planBranch(segments, request, {
       segment,
+      approachSegment: bathroomApproachSegment(request.index),
       entryRoom: branchEntryRoom,
       entryCentre: branchEntryCentre,
       gatewayRoom: safeRoom,
@@ -939,7 +1015,15 @@ export function planGauntlet(segments: SegmentMap, request: GauntletRequest): Ga
       pullRange,
     });
     if (branch === null) return null;
-    chainRooms.push(...branch.rooms);
+    const bathroom = branch.bathroom;
+    if (bathroom !== null) {
+      bathroomRooms.push({
+        rect: bathroom.rect,
+        branchIndex: branchChains.length,
+        entryCorridor: bathroom.entryCorridor,
+      });
+    }
+    chainRooms.push(...branch.rooms.filter((room) => room !== bathroom?.rect));
     corridors.push(...branch.corridors);
     branchRoomCounts.push(branch.rooms.length);
     branchChains.push(branch.rooms);
@@ -961,11 +1045,14 @@ export function planGauntlet(segments: SegmentMap, request: GauntletRequest): Ga
     chokeRoom,
     chokeSlot: chokeRoom === null ? null : chokeSlot,
     chokeEntryCorridor,
+    bathroomRooms,
   };
 }
 
 interface BranchRequest {
   segment: number;
+  /** Segment for the rooms and corridors in front of a bathroom; unused without one. */
+  approachSegment: number;
   entryRoom: Rect;
   entryCentre: Point;
   gatewayRoom: Rect;
@@ -979,6 +1066,8 @@ interface BranchPlan {
   corridors: PlannedCorridor[];
   /** Mandatory safe-access pockets seated off this branch's own chain. */
   pockets: Rect[];
+  /** The branch's bathroom, also present in {@link rooms}; null when none was asked for. */
+  bathroom: { rect: Rect; entryCorridor: PlannedCorridor } | null;
 }
 
 function planBranch(
@@ -1008,30 +1097,46 @@ function attemptBranch(
     request.branchRooms,
   );
 
+  const bathroomIndex =
+    request.bathroom === undefined ? null : bathroomBranchIndex(waypoints.length);
+  // Rooms before the bathroom, and the corridor into it, are owned by the
+  // approach segment; see `SEGMENTS_PER_GAUNTLET`.
+  const segmentOfRoom = (roomIndex: number): number =>
+    bathroomIndex !== null && roomIndex < bathroomIndex ? branch.approachSegment : branch.segment;
+
   const rooms: Rect[] = [];
-  for (const waypoint of waypoints) {
-    const room = seatChainRoom(segments, branch.segment, waypoint);
+  for (const [roomIndex, waypoint] of waypoints.entries()) {
+    const roomSegment = segmentOfRoom(roomIndex);
+    const room =
+      roomIndex === bathroomIndex && request.bathroom !== undefined
+        ? seatFixedRoom(segments, roomSegment, waypoint, request.bathroom.w, request.bathroom.h)
+        : seatChainRoom(segments, roomSegment, waypoint);
     if (room === null) return null;
     rooms.push(room);
   }
 
   const chain: Rect[] = [branch.entryRoom, ...rooms, branch.gatewayRoom];
   const corridors: PlannedCorridor[] = [];
+  let bathroomEntryCorridor: PlannedCorridor | null = null;
   for (let i = 0; i + 1 < chain.length; i++) {
     const from = chain[i];
     const to = chain[i + 1];
     const targetCentre = rectCentre(to);
     const isSpecial = i === 0 || i + 2 === chain.length;
+    // Chain position i + 1 is room index i, so corridor i arrives at room i.
+    const arrivesAtBathroom = bathroomIndex !== null && i === bathroomIndex;
+    const corridorSegment = arrivesAtBathroom ? branch.approachSegment : segmentOfRoom(i);
     const corridor = planCorridorBetween(
       segments,
-      branch.segment,
+      corridorSegment,
       from,
       to,
       request.pickCorridorKind(isSpecial, targetCentre),
     );
     if (corridor === null) return null;
-    segments.claimCorridor(corridor.tiles, branch.segment);
+    segments.claimCorridor(corridor.tiles, corridorSegment);
     corridors.push(corridor);
+    if (arrivesAtBathroom) bathroomEntryCorridor = corridor;
   }
 
   // A branch this long without its own safe-room access is a bad pull away from
@@ -1040,12 +1145,14 @@ function attemptBranch(
   // without it.
   const pockets: Rect[] = [];
   const sequenceCentres = [branch.entryCentre, ...rooms.map(rectCentre), branch.gatewayCentre];
-  for (const roomIndex of safeAccessPocketIndices(rooms.length)) {
+  const pocketsAvoid = request.bathroom?.strandPocketsForGate === true ? null : bathroomIndex;
+  for (const roomIndex of branchPocketIndices(rooms.length, pocketsAvoid)) {
     const hostRect = rooms[roomIndex];
+    const pocketSegment = segmentOfRoom(roomIndex);
     const pocketSize = request.pocketSize();
     const seated = seatBranchPocket(
       segments,
-      branch.segment,
+      pocketSegment,
       rectCentre(hostRect),
       sequenceHeadingAt(sequenceCentres, roomIndex + 1),
       randomInt(BRANCH_POCKET_OFFSET_MIN, BRANCH_POCKET_OFFSET_MAX),
@@ -1055,18 +1162,48 @@ function attemptBranch(
     if (seated === null) return null;
     const corridor = planCorridorBetween(
       segments,
-      branch.segment,
+      pocketSegment,
       hostRect,
       seated,
       request.pickCorridorKind(false, rectCentre(seated)),
     );
     if (corridor === null) return null;
-    segments.claimCorridor(corridor.tiles, branch.segment);
+    segments.claimCorridor(corridor.tiles, pocketSegment);
     corridors.push(corridor);
     pockets.push(seated);
   }
 
-  return { rooms, corridors, pockets };
+  if (bathroomIndex === null) return { rooms, corridors, pockets, bathroom: null };
+  if (bathroomEntryCorridor === null) return null;
+  return {
+    rooms,
+    corridors,
+    pockets,
+    bathroom: { rect: rooms[bathroomIndex], entryCorridor: bathroomEntryCorridor },
+  };
+}
+
+/** Seats a room of exactly this size near a waypoint, widening the search each try. */
+function seatFixedRoom(
+  segments: SegmentMap,
+  segment: number,
+  waypoint: Point,
+  w: number,
+  h: number,
+): Rect | null {
+  for (let attempt = 0; attempt < MAX_BRANCH_ATTEMPTS; attempt++) {
+    const spread = attempt * CHAIN_ROOM_JITTER_STEP;
+    const rect = rectCentredOn(
+      { x: waypoint.x + randomInt(-spread, spread), y: waypoint.y + randomInt(-spread, spread) },
+      w,
+      h,
+    );
+    if (segments.canPlaceRoom(rect, segment)) {
+      segments.addRoom(rect, segment);
+      return rect;
+    }
+  }
+  return null;
 }
 
 function seatChainRoom(segments: SegmentMap, segment: number, waypoint: Point): Rect | null {

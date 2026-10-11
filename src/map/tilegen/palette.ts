@@ -353,6 +353,26 @@ export const RUBBER_MAT_RAMP: Ramp = {
 };
 
 /**
+ * Washroom mosaic: glazed off-white with the faintest cold green, a step under
+ * the terrazzo so the room never glares, and grout the same hue a few shades
+ * down so the grid reads as recessed lines rather than a drawn lattice.
+ */
+export const WASHROOM_TILE_RAMP: Ramp = {
+  shadow: [126, 134, 131],
+  mid: [170, 178, 175],
+  light: [194, 201, 198],
+  accent: [212, 218, 215],
+};
+
+/** The film of old water and soap that dulls a washroom floor in broad patches. */
+export const WASHROOM_GRIME_RAMP: Ramp = {
+  shadow: [112, 116, 104],
+  mid: [138, 142, 128],
+  light: [150, 154, 140],
+  accent: [162, 166, 152],
+};
+
+/**
  * Painted blockwork. Held to the same darkness as floor 1's wall — see
  * `CELLAR_WALL_RAMP` for why a wall has to recede — and separated from it by hue
  * and by unit size rather than by brightness.
