@@ -72,7 +72,7 @@ import { installCanvasGlobals } from './nodeCanvasGlobals.js';
 import { asGameContext } from './nodeGameContext.js';
 import { createCanvas } from 'canvas';
 import { setViewportSize } from '../src/core/Viewport.js';
-import { CHUNK_TILES } from '../src/map/TileRenderer.js';
+import { CHUNK_TILES } from '../src/map/tiles/chunkTiles.js';
 import { BED_PAINT_REACH } from '../src/map/tiles/bossRooms/krakarenTiles.js';
 
 installCanvasGlobals();

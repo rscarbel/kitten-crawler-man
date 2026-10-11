@@ -57,11 +57,13 @@ import {
   SAFE_ROOM_TABLE,
   SAFE_ROOM_THRESHOLD,
   SCREE,
+  BARE_EARTH,
   TOWN_WALL,
   TREE,
   VERGE_GRASS,
   VOID_TYPE,
   WILDFLOWER_TUFT,
+  RIVER_REEDS,
   YARD_GRAVEL,
   FloorTypeValue,
 } from '../../map/tileTypes';
@@ -169,8 +171,12 @@ export function minimapTileColor(type: number): string {
       return '#6f7048'; // upland turf — drier and paler than field grass
     case SCREE:
       return '#6a6660';
+    case BARE_EARTH:
+      return '#6e5640'; // torn upland earth
     case WILDFLOWER_TUFT:
       return '#4a7a48';
+    case RIVER_REEDS:
+      return '#466a34';
     case PEBBLE_SCATTER:
       return '#787268';
     case BRIDGE:

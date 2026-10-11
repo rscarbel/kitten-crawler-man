@@ -18,7 +18,12 @@
  *  - the quarry has 8–12 deposits and the grove 14–18 trees, each reachable;
  *  - the road from the gate to the town is a walk — road tiles end to end, and
  *    the game's own A* from the gate to the town's nearest gate;
- *  - the same seed generates the same site, and the same grid tile for tile, twice.
+ *  - the same seed generates the same site, and the same grid tile for tile, twice;
+ *  - the ground is level where the built places stand: over the town's wall
+ *    ring, the village's footprint, the circus lot and every camp, the macro
+ *    field's landform layers add nothing and each tile takes the floor's
+ *    periodic tone exactly — while the open wilderness does carry relief, so
+ *    the check cannot pass on a field that shades nothing.
  *
  * Negative tests: `--fault=palisade-hole` knocks one palisade tile out and
  * `--fault=doorway-prop` stands a prop on a doorway's inner tile after
@@ -56,6 +61,9 @@ import {
 import { OUTSIDE_BUILDINGS } from '../src/map/overworld/briarHollowLayout';
 import type { GridView } from '../src/map/overworld/reachability';
 import type { TilePoint, TileRect } from '../src/map/town/townPlan';
+import { groundMacroFieldFor, periodicToneAt } from '../src/map/tiles/groundTiles';
+import { overworldTerrainFor } from '../src/map/tiles/overworldTerrainRegistry';
+import { MACRO_MARGIN_SAMPLES } from '../src/map/overworld/macroField';
 
 const MAP_SIZE = 280;
 const DEFAULT_SEEDS = 200;
@@ -88,12 +96,29 @@ const ROAD_SURFACES: ReadonlySet<number> = new Set([
   HOLLOW_GATE,
 ]);
 
+/** The macro field's samples are 8-bit RGBA. */
+const RGBA_CHANNELS = 4;
+const ALPHA_CHANNEL = 3;
+const BYTE_MAX = 255;
+/** A tile's four corners, as offsets from its top-left corner. */
+const TILE_CORNERS: ReadonlyArray<readonly [number, number]> = [
+  [0, 0],
+  [1, 0],
+  [0, 1],
+  [1, 1],
+];
+
 type Fault = 'palisade-hole' | 'doorway-prop' | null;
+
+/** The `--` before an argument's name and the `=` after it. */
+const ARG_PUNCTUATION_LENGTH = '--='.length;
+const DECIMAL_RADIX = 10;
+const MS_PER_SECOND = 1000;
 
 function intArg(name: string, fallback: number): number {
   const raw = process.argv.find((arg) => arg.startsWith(`--${name}=`));
   if (raw === undefined) return fallback;
-  const value = Number.parseInt(raw.slice(name.length + 3), 10);
+  const value = Number.parseInt(raw.slice(name.length + ARG_PUNCTUATION_LENGTH), DECIMAL_RADIX);
   if (!Number.isFinite(value)) throw new Error(`--${name} must be an integer`);
   return value;
 }
@@ -249,6 +274,64 @@ function gridFingerprint(map: GameMap): number {
   return hash;
 }
 
+/**
+ * Every tile a built place stands on: what must read as level ground.
+ */
+function levelPlaceTiles(map: GameMap): { place: string; tiles: TilePoint[] }[] {
+  const terrain = overworldTerrainFor(map.structure);
+  if (terrain === undefined) return [];
+  const size = map.structure.length;
+  const all: TilePoint[] = [];
+  for (let y = 0; y < size; y++) for (let x = 0; x < size; x++) all.push({ x, y });
+  const inDisc = (disc: { centre: TilePoint; radiusTiles: number }) => (tile: TilePoint) =>
+    Math.hypot(tile.x - disc.centre.x, tile.y - disc.centre.y) <= disc.radiusTiles;
+  return [
+    { place: 'the town wall ring', tiles: tilesOf(terrain.town.wall) },
+    {
+      place: "Briar Hollow's footprint",
+      tiles: all.filter((tile) => terrain.briarHollowKeepOut.contains(tile.x, tile.y)),
+    },
+    { place: 'the circus lot', tiles: all.filter(inDisc(terrain.circus)) },
+    ...terrain.camps.map((camp) => ({
+      place: `the ${camp.kind} camp at (${camp.centre.x}, ${camp.centre.y})`,
+      tiles: all.filter(inDisc(camp)),
+    })),
+  ];
+}
+
+/**
+ * The town and every landmark sit on level ground: over them the macro field
+ * is the periodic tone alone, so they draw exactly as they would with no
+ * landform at all.
+ */
+function checkLevelGround(map: GameMap): string[] {
+  const field = groundMacroFieldFor(map.structure);
+  if (field === undefined) return ['no macro field for an overworld map'];
+  const problems: string[] = [];
+  const sampleIndex = (cornerX: number, cornerY: number) =>
+    (cornerY + MACRO_MARGIN_SAMPLES) * field.spanX + cornerX + MACRO_MARGIN_SAMPLES;
+  for (const { place, tiles } of levelPlaceTiles(map)) {
+    const uneven = tiles.find((tile) => {
+      if (!field.levelTiles.isLevel(tile.x, tile.y)) return true;
+      return TILE_CORNERS.some(([dx, dy]) => {
+        const cornerX = tile.x + dx;
+        const cornerY = tile.y + dy;
+        const index = sampleIndex(cornerX, cornerY);
+        const toneAlpha = Math.round(periodicToneAt(cornerX, cornerY) * BYTE_MAX);
+        const sampleAlpha = field.rgba[index * RGBA_CHANNELS + ALPHA_CHANNEL];
+        return field.landformAlpha[index] !== 0 || sampleAlpha !== toneAlpha;
+      });
+    });
+    if (uneven !== undefined) {
+      problems.push(`the ground over ${place} is not level at (${uneven.x}, ${uneven.y})`);
+    }
+  }
+  if (!field.landformAlpha.some((alpha) => alpha > 0)) {
+    problems.push('the macro field carries no relief anywhere');
+  }
+  return problems;
+}
+
 function checkMap(seed: number, fault: Fault): string[] {
   const problems: string[] = [];
   let map: GameMap;
@@ -369,6 +452,8 @@ function checkMap(seed: number, fault: Fault): string[] {
     }
   }
 
+  problems.push(...checkLevelGround(map));
+
   // The road.
   if (!roadReachesTown(map, site))
     problems.push('the road from the gate does not reach a town gate');
@@ -410,7 +495,7 @@ for (let index = 1; index <= seeds; index++) {
     console.error(`  … and ${problems.length - MAX_PROBLEMS_SHOWN} more`);
   }
 }
-const seconds = ((Date.now() - startedAt) / 1000).toFixed(1);
+const seconds = ((Date.now() - startedAt) / MS_PER_SECOND).toFixed(1);
 if (failedMaps > 0) {
   console.error(
     `\nFAIL: ${failedMaps} of ${seeds} maps (${seconds}s)${fault === null ? '' : ` [fault ${fault}]`}`,

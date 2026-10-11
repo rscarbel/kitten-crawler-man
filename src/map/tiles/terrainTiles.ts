@@ -23,6 +23,7 @@ import {
   YARD_GRAVEL,
   HIGHLAND_GRASS,
   SCREE,
+  BARE_EARTH,
   BRIDGE,
   BRIDGE_AXIS_EAST_WEST,
 } from '../tileTypes';
@@ -339,7 +340,8 @@ export function drawTerrainTile(
     case COBBLE_STREET:
     case PLAZA_STONE:
     case HIGHLAND_GRASS:
-    case SCREE: {
+    case SCREE:
+    case BARE_EARTH: {
       drawGroundTile(ctx, OVERWORLD_GROUND, structure, sx, sy, ts, tx, ty);
       break;
     }

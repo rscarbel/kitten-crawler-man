@@ -78,6 +78,19 @@ import {
   groundVariantCount,
 } from '../ground/groundFrames';
 import { positiveMod } from '../../utils';
+import {
+  buildOverworldMacroField,
+  drawOverworldMacroTone,
+  warmOverworldMacroTone,
+} from './overworldMacroTone';
+import type { MacroField } from '../overworld/macroField';
+import { drawRiverWaterColumn, warmRiverWaterColumn } from './riverWaterColumn';
+
+/**
+ * The ground material that is a river bed: the water over it is laid by
+ * `drawRiverWaterColumn` between the bed and the bank's fringe.
+ */
+const RIVER_BED_MATERIAL = 'water';
 import { floorArtSubSeed, GROUND_TONE_SALT, GROUND_VARIANT_SALT } from '../ground/floorArtSeed';
 import { UINT32_SPAN } from '../../core/WorldRandom';
 
@@ -236,11 +249,15 @@ export interface FringeMaterial {
   resolve(tx: number, ty: number): ResolvedMaterial | undefined;
 }
 
+/** Whether a tile draws its patch's hashed variant, or always the first. */
+type VariantChoice = 'all' | 'first';
+
 function resolveMaterial(
   palette: GroundPalette,
   material: string,
   tx: number,
   ty: number,
+  variants: VariantChoice = 'all',
 ): ResolvedMaterial | undefined {
   const def = getSpriteDef(palette.sheetKey);
   if (def === undefined) return undefined;
@@ -249,7 +266,7 @@ function resolveMaterial(
   const patchTiles = state.patchTiles ?? 1;
   const frame = groundFrameIndex(
     patchTiles,
-    groundVariantCount(state),
+    variants === 'first' ? 1 : groundVariantCount(state),
     tx,
     ty,
     floorArtSubSeed(GROUND_VARIANT_SALT),
@@ -770,6 +787,7 @@ function drawFringeQuadrant(
   ts: number,
   tx: number,
   ty: number,
+  overSoftest: OverSoftestLayer | undefined,
 ): void {
   const cellX = tx + quadrant.cellDX;
   const cellY = ty + quadrant.cellDY;
@@ -804,7 +822,17 @@ function drawFringeQuadrant(
     if (resolved === undefined) return;
 
     if (index === 0) {
-      if (layer.id !== own.id) drawMaterialQuarter(ctx, resolved, quadrant, sx, sy, ts);
+      if (layer.id === own.id) return;
+      drawMaterialQuarter(ctx, resolved, quadrant, sx, sy, ts);
+      const quarterX = 1 - quadrant.maskQuarterX;
+      const quarterY = 1 - quadrant.maskQuarterY;
+      overSoftest?.(
+        layer.id,
+        sx + quarterOrigin(ts, quarterX),
+        sy + quarterOrigin(ts, quarterY),
+        quarterExtent(ts, quarterX),
+        quarterExtent(ts, quarterY),
+      );
       return;
     }
 
@@ -823,6 +851,20 @@ function drawFringeQuadrant(
     );
   });
 }
+
+/**
+ * Paints over a quadrant just after the fringe has laid a softer neighbour's
+ * material across it, before the harder layers are composited back on top: the
+ * same treatment the base pass gives that material on its own tile, so it
+ * reads the same on both sides of the tile edge.
+ */
+export type OverSoftestLayer = (
+  material: string,
+  x: number,
+  y: number,
+  width: number,
+  height: number,
+) => void;
 
 /**
  * Draws the material boundaries running through one tile, over its already-drawn
@@ -853,6 +895,7 @@ export function drawFringe(
   ts: number,
   tx: number,
   ty: number,
+  overSoftest?: OverSoftestLayer,
 ): void {
   // Checked once, before anything is drawn. A quadrant paints its softest layer
   // unmasked and composites the harder ones back on top, so bailing out part way
@@ -862,7 +905,7 @@ export function drawFringe(
   if (mask === undefined) return;
 
   for (const quadrant of DUAL_CELL_QUADRANTS) {
-    drawFringeQuadrant(ctx, mask, own, materialAt, quadrant, sx, sy, ts, tx, ty);
+    drawFringeQuadrant(ctx, mask, own, materialAt, quadrant, sx, sy, ts, tx, ty, overSoftest);
   }
 }
 
@@ -1101,6 +1144,7 @@ function toneFields(): ReadonlyArray<ToneField> {
     surface.height = 0;
   }
   noiseFields.clear();
+  toneAlphaCache.clear();
   return toneFieldsForSeed;
 }
 
@@ -1185,6 +1229,64 @@ function noiseAtTile(field: ToneField, tileX: number, tileY: number): number {
   return total;
 }
 
+const ALPHA_MAX = 255;
+const toneAlphaCache = new Map<string, Uint8ClampedArray>();
+
+/**
+ * A field's darkening per sample, as the 8-bit alpha it is drawn with, over its
+ * period plus the wrap margin.
+ *
+ * Sampled first, then stretched to the range the depth is quoted against.
+ * A weighted sum of hashed octaves does not reach 0 and 1 on its own — the
+ * coarsest one has four lattice nodes for the whole period and can only span
+ * whatever those four happen to be — so the field measured 0.00..0.51, which
+ * is half the intended contrast plus a flat darkening of everything outdoors.
+ * Normalising makes the stated amplitude true by construction rather than by
+ * luck, in the way the mask warp's centring does for its boundary.
+ */
+function toneAlphas(field: ToneField): Uint8ClampedArray {
+  const cacheKey = `${field.periodTiles}|${field.seed}`;
+  const cached = toneAlphaCache.get(cacheKey);
+  if (cached !== undefined) return cached;
+  const span = field.periodTiles + NOISE_MARGIN_SAMPLES * 2;
+  const levels = new Float32Array(span * span);
+  let lowest = Infinity;
+  let highest = -Infinity;
+  for (let j = 0; j < span; j++) {
+    for (let i = 0; i < span; i++) {
+      const level = noiseAtTile(field, i - NOISE_MARGIN_SAMPLES, j - NOISE_MARGIN_SAMPLES);
+      levels[j * span + i] = level;
+      lowest = Math.min(lowest, level);
+      highest = Math.max(highest, level);
+    }
+  }
+  const spread = highest - lowest;
+  const alphas = new Uint8ClampedArray(span * span);
+  for (let index = 0; index < levels.length; index++) {
+    const level = spread <= 0 ? 1 : (levels[index] - lowest) / spread;
+    alphas[index] = Math.round(ALPHA_MAX * TONE_FIELD_DEPTH * (1 - level));
+  }
+  toneAlphaCache.set(cacheKey, alphas);
+  return alphas;
+}
+
+/**
+ * The periodic tone's total darkening at a tile corner, as an opacity of black:
+ * the two fields in series, each at the quantised alpha it is drawn with.
+ * Tile corner k is sample k of a field's period, which is where the upscale in
+ * `buildNoiseField` puts it.
+ */
+export function periodicToneAt(cornerX: number, cornerY: number): number {
+  let lightness = 1;
+  for (const field of toneFields()) {
+    const span = field.periodTiles + NOISE_MARGIN_SAMPLES * 2;
+    const i = positiveMod(cornerX, field.periodTiles) + NOISE_MARGIN_SAMPLES;
+    const j = positiveMod(cornerY, field.periodTiles) + NOISE_MARGIN_SAMPLES;
+    lightness *= 1 - toneAlphas(field)[j * span + i] / ALPHA_MAX;
+  }
+  return 1 - lightness;
+}
+
 const noiseFields = new Map<string, CanvasSurface>();
 
 /**
@@ -1202,36 +1304,9 @@ function buildNoiseField(field: ToneField, cell: number): CanvasSurface {
   const samples = allocCanvas(span, span);
   const samplesCtx = surfaceContext(samples);
   const image = samplesCtx.createImageData(span, span);
-  const ALPHA_MAX = 255;
-
-  // Sampled first, then stretched to the range the depth is quoted against.
-  // A weighted sum of hashed octaves does not reach 0 and 1 on its own — the
-  // coarsest one has four lattice nodes for the whole period and can only span
-  // whatever those four happen to be — so the field measured 0.00..0.51, which
-  // is half the intended contrast plus a flat darkening of everything outdoors.
-  // Normalising makes the stated amplitude true by construction rather than by
-  // luck, in the way the mask warp's centring does for its boundary.
-  const levels = new Float32Array(span * span);
-  let lowest = Infinity;
-  let highest = -Infinity;
-  for (let j = 0; j < span; j++) {
-    for (let i = 0; i < span; i++) {
-      const level = noiseAtTile(field, i - NOISE_MARGIN_SAMPLES, j - NOISE_MARGIN_SAMPLES);
-      levels[j * span + i] = level;
-      lowest = Math.min(lowest, level);
-      highest = Math.max(highest, level);
-    }
-  }
-  const spread = highest - lowest;
-
-  for (let j = 0; j < span; j++) {
-    for (let i = 0; i < span; i++) {
-      const index = j * span + i;
-      const level = spread <= 0 ? 1 : (levels[index] - lowest) / spread;
-      image.data[index * RGBA_CHANNELS + ALPHA_CHANNEL] = Math.round(
-        ALPHA_MAX * TONE_FIELD_DEPTH * (1 - level),
-      );
-    }
+  const alphas = toneAlphas(field);
+  for (let index = 0; index < alphas.length; index++) {
+    image.data[index * RGBA_CHANNELS + ALPHA_CHANNEL] = alphas[index];
   }
   samplesCtx.putImageData(image, 0, 0);
 
@@ -1277,6 +1352,41 @@ export function applyWorldNoise(
     const srcY = positiveMod(ty * cell, period);
     ctx.drawImage(surface, srcX, srcY, cell, cell, sx, sy, ts, ts);
   }
+}
+
+/**
+ * The broad light and shade a ground tile takes: the overworld's macro field
+ * (tone, hillshade, valley shade) out in the wilderness, and the floor's
+ * periodic tone everywhere else, including the overworld's level places.
+ */
+function applyGroundTone(
+  ctx: CanvasRenderingContext2D,
+  structure: TileContent[][],
+  sx: number,
+  sy: number,
+  ts: number,
+  tx: number,
+  ty: number,
+): void {
+  if (drawOverworldMacroTone(ctx, structure, sx, sy, ts, tx, ty, periodicToneAt)) return;
+  applyWorldNoise(ctx, sx, sy, ts, tx, ty);
+}
+
+/**
+ * Builds the macro field the overworld map `structure` is baked with, or
+ * undefined off the overworld, for checks that read it without drawing.
+ */
+export function groundMacroFieldFor(structure: TileContent[][]): MacroField | undefined {
+  return buildOverworldMacroField(structure, periodicToneAt);
+}
+
+/**
+ * Builds the ground tone `structure` will be baked with ahead of its first
+ * bake. Call once the floor's art seed is set; a no-op off the overworld.
+ */
+export function prepareGroundTone(structure: TileContent[][]): void {
+  warmOverworldMacroTone(structure, periodicToneAt);
+  warmRiverWaterColumn(structure);
 }
 
 // ---------------------------------------------------------------------------
@@ -1624,11 +1734,13 @@ function fringeMaterial(palette: GroundPalette, material: string): FringeMateria
   const existing = byMaterial.get(material);
   if (existing !== undefined) return existing;
 
+  const fringeVariants: VariantChoice =
+    palette.fringeFirstVariantMaterials?.has(material) === true ? 'first' : 'all';
   const built: FringeMaterial = {
     id: material,
     sheetKey: palette.sheetKey,
     order: palette.blendOrder[material],
-    resolve: (tx, ty) => resolveMaterial(palette, material, tx, ty),
+    resolve: (tx, ty) => resolveMaterial(palette, material, tx, ty, fringeVariants),
   };
   byMaterial.set(material, built);
   return built;
@@ -1696,7 +1808,10 @@ export function drawGroundTile(
     // the stand-in sits brighter than the thing it stands in for.
     ctx.fillStyle = palette.fallbackColor[material];
     ctx.fillRect(sx, sy, ts, ts);
-    applyWorldNoise(ctx, sx, sy, ts, tx, ty);
+    if (material === RIVER_BED_MATERIAL) {
+      drawRiverWaterColumn(ctx, structure, sx, sy, ts, tx, ty, sx, sy, ts, ts);
+    }
+    applyGroundTone(ctx, structure, sx, sy, ts, tx, ty);
     return;
   }
 
@@ -1740,14 +1855,25 @@ export function drawGroundTile(
   };
 
   drawResolved(ctx, resolved, sx, sy, ts);
+  // Under the fringe, so the bank is drawn over the water's edge rather than
+  // seen through it. A bank tile draws the water bulging into it from the
+  // fringe, and the column goes over that too, or the bed would show bare
+  // wherever the water crosses a tile edge.
+  if (material === RIVER_BED_MATERIAL) {
+    drawRiverWaterColumn(ctx, structure, sx, sy, ts, tx, ty, sx, sy, ts, ts);
+  }
+  const overSoftest: OverSoftestLayer = (layerMaterial, x, y, width, height) => {
+    if (layerMaterial !== RIVER_BED_MATERIAL) return;
+    drawRiverWaterColumn(ctx, structure, sx, sy, ts, tx, ty, x, y, width, height);
+  };
   if (!isHardEdged(palette, material)) {
-    drawFringe(ctx, fringeMaterial(palette, material), materialAt, sx, sy, ts, tx, ty);
+    drawFringe(ctx, fringeMaterial(palette, material), materialAt, sx, sy, ts, tx, ty, overSoftest);
     // Before the scatter, so tufts from the soft side spill over the kerb rather
     // than being buried by it — which is what grass at a kerb actually does.
     drawKerb(ctx, palette, structure, material, sx, sy, ts, tx, ty);
     drawScatter(ctx, palette, structure, material, sx, sy, ts, tx, ty);
   }
-  applyWorldNoise(ctx, sx, sy, ts, tx, ty);
+  applyGroundTone(ctx, structure, sx, sy, ts, tx, ty);
   drawFloorSurface(ctx, structure, sx, sy, ts, tx, ty);
   drawOcclusion(ctx, structure, sx, sy, ts, tx, ty);
 }

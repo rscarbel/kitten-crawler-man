@@ -23,7 +23,8 @@ import { mulberry32, subSeed, type Rng } from '../../sprites/person/rng';
  * implementation detail of this module and the thresholds below are the only
  * place they are compared.
  */
-export type ElevationBand = 'lowland' | 'meadow' | 'highland' | 'ridge';
+export const ELEVATION_BANDS = ['lowland', 'meadow', 'highland', 'ridge'] as const;
+export type ElevationBand = (typeof ELEVATION_BANDS)[number];
 
 /**
  * Upper bound of each band, in normalised elevation. Chosen so a typical map is
@@ -31,8 +32,8 @@ export type ElevationBand = 'lowland' | 'meadow' | 'highland' | 'ridge';
  * valley bottoms the rivers find, and ridge rare enough that a cliff line is a
  * landmark rather than scenery.
  */
-const LOWLAND_MAX = 0.36;
-const MEADOW_MAX = 0.6;
+export const LOWLAND_MAX = 0.36;
+export const MEADOW_MAX = 0.6;
 const HIGHLAND_MAX = 0.81;
 
 /** The value the town is flattened to: dead centre of the meadow band. */
@@ -86,38 +87,126 @@ const TOWN_FLATTEN_FALLOFF_TILES = 26;
 const OCTAVE_SEED_SALT_BASE = 4801;
 
 /**
- * How far a single tile's band threshold may be nudged, in normalised
- * elevation.
+ * How far the band thresholds may be nudged, in normalised elevation, and the
+ * period of the field that nudges them.
  *
  * Without it a band boundary is an exact iso-contour of a smooth field, and a
  * smooth field's contours are clean curves — so the map grows a hard outline
  * where the turf turns highland, which reads as a painted zone rather than as
- * ground. Dithering the threshold per tile frays that line into an interlocking
- * edge a few tiles deep, which the fringe then blends. It belongs on `bandAt`
- * rather than on `elevationAt` because only classification wants it: the river
- * router descends the smooth field, and a jittered one would make it stagger.
+ * ground. The nudge is itself a smooth field a few tiles across, so the edge
+ * grows lobes and tongues; a per-tile nudge instead breaks it into single
+ * tiles, each of which the fringe rounds into an isolated blotch. It belongs
+ * on `bandAt` rather than on `elevationAt` because only classification wants
+ * it: the river router descends the smooth field, and a nudged one would make
+ * it stagger.
  */
-const BAND_DITHER_RANGE = 0.055;
+const BAND_DITHER_RANGE = 0.1;
+const BAND_DITHER_PERIOD_TILES = 7;
+const BAND_DITHER_SEED_SALT = 4831;
 
-/** Position-hash mixing constants — the idiom used across the tile renderers. */
-const HASH_MIX_X = 2654435761;
-const HASH_MIX_Y = 2246822519;
-const HASH_UINT32 = 0x100000000;
+/** Centre of a noise octave's 0..1 range, so the nudge raises a threshold as often as it lowers it. */
+const NOISE_MIDPOINT = 0.5;
 
-/** Centre of the hash's [0, 1) range, so a dither is signed rather than one-sided. */
-const HASH_MIDPOINT = 0.5;
+/**
+ * A nudged tile stays in its nudged band only with at least this many
+ * cardinal neighbours in the same band; any fewer and it is a speck or a
+ * one-tile spur, which goes back to the band its own elevation gives it.
+ */
+const MIN_SAME_BAND_NEIGHBOURS = 2;
+const CARDINAL_STEPS: ReadonlyArray<readonly [number, number]> = [
+  [0, -1],
+  [1, 0],
+  [0, 1],
+  [-1, 0],
+];
 
-/** Stable per-tile value in [0, 1), independent of the field's seed. */
-function tileHash01(tx: number, ty: number): number {
-  const mixed = Math.imul(tx, HASH_MIX_X) ^ Math.imul(ty, HASH_MIX_Y);
-  return (mixed >>> 0) / HASH_UINT32;
+function bandForElevation(elevation: number): ElevationBand {
+  if (elevation < LOWLAND_MAX) return 'lowland';
+  if (elevation < MEADOW_MAX) return 'meadow';
+  if (elevation < HIGHLAND_MAX) return 'highland';
+  return 'ridge';
+}
+
+function bandIndex(band: ElevationBand): number {
+  return ELEVATION_BANDS.indexOf(band);
+}
+
+/** Off-map neighbours count as the same band, so the map edge never makes a tile look stranded. */
+function sameBandNeighbourCount(bands: Uint8Array, size: number, tx: number, ty: number): number {
+  const band = bands[ty * size + tx];
+  let count = 0;
+  for (const [stepX, stepY] of CARDINAL_STEPS) {
+    const nx = tx + stepX;
+    const ny = ty + stepY;
+    const offMap = nx < 0 || ny < 0 || nx >= size || ny >= size;
+    if (offMap || bands[ny * size + nx] === band) count++;
+  }
+  return count;
+}
+
+/**
+ * Returns every nudged tile without enough same-band support to the band its
+ * own elevation gives it, repeating until nothing changes: reverting one
+ * speck can strip the support a neighbouring nudged tile was counting on, and
+ * a single pass over the original grid would leave that neighbour stranded.
+ */
+function revertUnsupportedNudges(bands: Uint8Array, ownBands: Uint8Array, size: number): void {
+  let changed = true;
+  while (changed) {
+    changed = false;
+    for (let ty = 0; ty < size; ty++) {
+      for (let tx = 0; tx < size; tx++) {
+        const index = ty * size + tx;
+        if (bands[index] === ownBands[index]) continue;
+        if (sameBandNeighbourCount(bands, size, tx, ty) >= MIN_SAME_BAND_NEIGHBOURS) continue;
+        bands[index] = ownBands[index];
+        changed = true;
+      }
+    }
+  }
+}
+
+/**
+ * Moves any tile with no same-band cardinal neighbour into the band most of
+ * its neighbours share, since the corner-mask fringe rounds such a tile into
+ * a lone dot. Reverting a nudge can leave a tile whose own elevation band is
+ * stranded, and the raw field occasionally produces one too. Ties go to the
+ * band nearest the tile's own, so a meadow tile among highland and lowland
+ * never jumps two bands. A move never strands another tile, because nothing
+ * around the moved tile shared its old band, so one pass is enough.
+ */
+function absorbIsolatedTiles(bands: Uint8Array, ownBands: Uint8Array, size: number): void {
+  const neighbourCounts = new Array<number>(ELEVATION_BANDS.length);
+  for (let ty = 0; ty < size; ty++) {
+    for (let tx = 0; tx < size; tx++) {
+      if (sameBandNeighbourCount(bands, size, tx, ty) > 0) continue;
+      neighbourCounts.fill(0);
+      for (const [stepX, stepY] of CARDINAL_STEPS) {
+        neighbourCounts[bands[(ty + stepY) * size + tx + stepX]]++;
+      }
+      const index = ty * size + tx;
+      const ownBand = ownBands[index];
+      let chosen = bands[index];
+      let chosenCount = 0;
+      for (let band = 0; band < ELEVATION_BANDS.length; band++) {
+        const count = neighbourCounts[band];
+        const isCloserTie =
+          count === chosenCount && Math.abs(band - ownBand) < Math.abs(chosen - ownBand);
+        if (count > chosenCount || isCloserTie) {
+          chosen = band;
+          chosenCount = count;
+        }
+      }
+      bands[index] = chosen;
+    }
+  }
 }
 
 /** Hermite coefficients of `3t² - 2t³`, the standard smoothstep. */
 const SMOOTHSTEP_QUADRATIC_TERM = 3;
 const SMOOTHSTEP_CUBIC_TERM = 2;
 
-function smoothstepUnit(t: number): number {
+export function smoothstepUnit(t: number): number {
   return t * t * (SMOOTHSTEP_QUADRATIC_TERM - SMOOTHSTEP_CUBIC_TERM * t);
 }
 
@@ -134,7 +223,7 @@ function clamp01(v: number): number {
  * so paying once for `(size / period)²` floats is cheaper than hashing per
  * lookup, and it keeps the field trivially deterministic.
  */
-class NoiseOctave {
+export class NoiseOctave {
   private readonly values: Float64Array;
   private readonly cells: number;
 
@@ -239,10 +328,16 @@ export class ElevationField {
    * the field for painting — the band pass and the river router both do.
    */
   private readonly flattenZones: FlattenZone[];
+  private readonly ditherOctave: NoiseOctave;
+  /**
+   * Every tile's band, cleaned of specks, built on the first `bandAt` and
+   * dropped whenever a zone is flattened, since flattening moves the bands.
+   */
+  private bandIndices: Uint8Array | undefined;
 
   constructor(
     readonly seed: number,
-    mapSizeTiles: number,
+    private readonly mapSizeTiles: number,
     town: TownFlattening,
   ) {
     const octaves: NoiseOctave[] = [];
@@ -256,6 +351,11 @@ export class ElevationField {
     });
     this.octaves = octaves;
     this.amplitudeTotal = amplitudeTotal;
+    this.ditherOctave = new NoiseOctave(
+      BAND_DITHER_PERIOD_TILES,
+      mapSizeTiles,
+      mulberry32(subSeed(seed, BAND_DITHER_SEED_SALT)),
+    );
     this.flattenZones = [
       {
         kind: 'disc',
@@ -270,13 +370,14 @@ export class ElevationField {
   /** Holds another zone level, at the same meadow height as the town. */
   flatten(zone: FlattenZone): void {
     this.flattenZones.push(zone);
+    this.bandIndices = undefined;
   }
 
   /**
    * How much of the raw field survives at this position: 0 inside any
    * flattened zone, rising smoothly to 1 once past every zone's falloff band.
    */
-  private reliefWeightAt(tx: number, ty: number): number {
+  reliefWeightAt(tx: number, ty: number): number {
     let weight = 1;
     for (const zone of this.flattenZones) {
       weight = Math.min(weight, zoneReliefWeight(zone, tx, ty));
@@ -287,6 +388,11 @@ export class ElevationField {
 
   /** Normalised elevation in [0, 1]. Flat at `MEADOW_LEVEL` over every flattened zone. */
   elevationAt(tx: number, ty: number): number {
+    return this.elevationWithRelief(tx, ty, this.reliefWeightAt(tx, ty));
+  }
+
+  /** `elevationAt` for a caller that already holds `reliefWeightAt` for this position. */
+  elevationWithRelief(tx: number, ty: number, relief: number): number {
     let sum = 0;
     let amplitude = 1;
     for (const octave of this.octaves) {
@@ -295,22 +401,45 @@ export class ElevationField {
     }
     const fractal = sum / this.amplitudeTotal;
     const contrasted = clamp01((fractal - FIELD_MIDPOINT) * FIELD_CONTRAST + FIELD_MIDPOINT);
-    const relief = this.reliefWeightAt(tx, ty);
     return MEADOW_LEVEL + (contrasted - MEADOW_LEVEL) * relief;
   }
 
   /**
-   * The band this tile is painted as, with the per-tile dither of
-   * `BAND_DITHER_RANGE` applied so band edges interlock rather than following a
-   * clean iso-contour.
+   * The band this tile is painted as: its elevation classified against
+   * thresholds nudged by a smooth field, so band edges meander rather than
+   * following a clean iso-contour, with any speck the nudge leaves behind
+   * returned to its own elevation's band.
    */
   bandAt(tx: number, ty: number): ElevationBand {
-    const dither = (tileHash01(tx, ty) - HASH_MIDPOINT) * BAND_DITHER_RANGE;
-    const elevation = this.elevationAt(tx, ty) + dither;
-    if (elevation < LOWLAND_MAX) return 'lowland';
-    if (elevation < MEADOW_MAX) return 'meadow';
-    if (elevation < HIGHLAND_MAX) return 'highland';
-    return 'ridge';
+    const size = this.mapSizeTiles;
+    if (tx < 0 || ty < 0 || tx >= size || ty >= size) {
+      return this.nudgedBandAt(tx, ty, this.elevationAt(tx, ty));
+    }
+    const indices = this.bandIndices ?? this.buildBandIndices();
+    return ELEVATION_BANDS[indices[ty * size + tx]];
+  }
+
+  private nudgedBandAt(tx: number, ty: number, elevation: number): ElevationBand {
+    const nudge = (this.ditherOctave.sample(tx, ty) - NOISE_MIDPOINT) * BAND_DITHER_RANGE;
+    return bandForElevation(elevation + nudge);
+  }
+
+  private buildBandIndices(): Uint8Array {
+    const size = this.mapSizeTiles;
+    const ownBands = new Uint8Array(size * size);
+    const bands = new Uint8Array(size * size);
+    for (let ty = 0; ty < size; ty++) {
+      for (let tx = 0; tx < size; tx++) {
+        const index = ty * size + tx;
+        const elevation = this.elevationAt(tx, ty);
+        ownBands[index] = bandIndex(bandForElevation(elevation));
+        bands[index] = bandIndex(this.nudgedBandAt(tx, ty, elevation));
+      }
+    }
+    revertUnsupportedNudges(bands, ownBands, size);
+    absorbIsolatedTiles(bands, ownBands, size);
+    this.bandIndices = bands;
+    return bands;
   }
 
   /**

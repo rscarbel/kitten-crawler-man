@@ -48,12 +48,18 @@ import {
   CIRCUS_STRUCTURE_TALL,
   CIRCUS_STRUCTURE_LOW,
   TENT_POLE,
+  RIVER_REEDS,
 } from './tileTypes';
 import { drawTerrainTile } from './tiles/terrainTiles';
 import { drawBossRoomTile } from './tiles/bossRoomTiles';
 import { drawSpecialFloorTile } from './tiles/specialFloorTiles';
 import { drawBuildingTile } from './tiles/buildingTiles';
-import { drawDecorationTile, decorationAnimationFrame } from './tiles/decorationTiles';
+import {
+  drawDecorationTile,
+  decorationAnimationFrame,
+  REED_OVERHANG_PX,
+  reedStandVariant,
+} from './tiles/decorationTiles';
 import { allocCanvas, surfaceContext, type CanvasSurface } from '../core/canvasSurface';
 import { drawInteriorTile } from './tiles/interiorTiles';
 import { hollowPropExtentsPx } from './tiles/hollowVillageTiles';
@@ -69,7 +75,7 @@ import {
   type MapSpriteExtentsPx,
 } from '../core/SpriteLoader';
 
-export const CHUNK_TILES = 16;
+import { CHUNK_TILES } from './tiles/chunkTiles';
 
 /**
  * Cold-chunk baking allowed per frame, counted in tiles so the budget means the
@@ -185,6 +191,9 @@ const DECORATION_TYPES = new Set([
   // The Big Top's tent poles. Y-sorted so the mast rising out of view passes
   // behind a crawler south of it and in front of one north of it.
   TENT_POLE,
+  // Riverbank reeds stand taller than their tile, so a crawler wading behind
+  // a stand is hidden by it.
+  RIVER_REEDS,
   // The service level's furniture. Its part tiles are absent: they bake as
   // floor, and their anchor draws the whole piece over them.
   ...SERVICE_PROP_TILE_TYPES,
@@ -219,6 +228,10 @@ const CACHEABLE_OVERLAY_TYPES = new Set([
   // Many gradients, collars and a vine climbing out of view: static, and
   // costly to replay every frame.
   TENT_POLE,
+  // A dozen tapered stems each, and many to a screen along a bank. Entries are
+  // shared per stand variant, so the cache stays a few dozen canvases however
+  // long the river.
+  RIVER_REEDS,
 ]);
 
 /** Tile type used where a neighbour lookup falls off the grid. */
@@ -598,6 +611,7 @@ export function decorationTileExtentsPx(
     return circusStructureExtentsPx(structure, tx, ty);
   }
   if (type === TENT_POLE) return tentPoleExtentsPx(structure, tx, ty, ts);
+  if (type === RIVER_REEDS) return { left: 0, up: REED_OVERHANG_PX, right: 0, down: 0 };
   const serviceExtents = serviceLevelPropExtentsPx(type, ts);
   if (serviceExtents !== null) return serviceExtents;
   const cellarExtents = cellarPropExtentsPx(type, ts);
@@ -632,6 +646,15 @@ function unregisteredDecorationExtents(ts: number): MapSpriteExtentsPx {
 }
 
 /**
+ * The key of the entry a tile shares with every other tile drawing the same
+ * picture, or null when its picture is its own.
+ */
+function sharedOverlayKey(type: number, tx: number, ty: number): string | null {
+  if (type === RIVER_REEDS) return `${type}:${reedStandVariant(tx, ty)}`;
+  return null;
+}
+
+/**
  * Lazily-populated per-tile (or per-type) canvas cache for the decoration overlay pass.
  *
  * Each entry is a pre-rendered OffscreenCanvas covering the tile's full visual
@@ -641,11 +664,13 @@ function unregisteredDecorationExtents(ts: number): MapSpriteExtentsPx {
  *
  * Cache sharing rules:
  *  - BUILDING_WALL, ROOF_*: one canvas per tile (tx, ty) — each has position-dependent details.
+ *  - RIVER_REEDS: one canvas per stand variant, shared by every tile drawing it.
  *  - TREE / TORCH / BRAZIER / WELL / FOUNTAIN: excluded — they already resolve to
  *    one drawImage call.
  */
 export class OverlayTileCache {
   private readonly cache = new Map<number, OverlayCacheEntry>();
+  private readonly shared = new Map<string, OverlayCacheEntry>();
   private readonly gridWidth: number;
 
   constructor(
@@ -662,11 +687,15 @@ export class OverlayTileCache {
    * saves, and an animated tile would otherwise never count as warm.
    */
   has(type: number, tx: number, ty: number): boolean {
+    const sharedKey = sharedOverlayKey(type, tx, ty);
+    if (sharedKey !== null) return this.shared.has(sharedKey);
     return this.cache.get(tileIndex(tx, ty, this.gridWidth))?.type === type;
   }
 
   /** Returns the pre-rendered entry for this tile at its current animation frame. */
   get(type: number, tx: number, ty: number, animationFrame: number): OverlayCacheEntry {
+    const sharedKey = sharedOverlayKey(type, tx, ty);
+    if (sharedKey !== null) return this.getShared(sharedKey, type, tx, ty, animationFrame);
     const key = tileIndex(tx, ty, this.gridWidth);
     const hit = this.cache.get(key);
     if (hit?.type === type) {
@@ -679,6 +708,24 @@ export class OverlayTileCache {
     }
     const entry = this.renderEntry(type, tx, ty, animationFrame);
     this.cache.set(key, entry);
+    return entry;
+  }
+
+  private getShared(
+    sharedKey: string,
+    type: number,
+    tx: number,
+    ty: number,
+    animationFrame: number,
+  ): OverlayCacheEntry {
+    const hit = this.shared.get(sharedKey);
+    if (hit !== undefined) {
+      if (hit.animationFrame !== animationFrame)
+        this.redrawEntry(hit, type, tx, ty, animationFrame);
+      return hit;
+    }
+    const entry = this.renderEntry(type, tx, ty, animationFrame);
+    this.shared.set(sharedKey, entry);
     return entry;
   }
 

@@ -45,6 +45,7 @@ import {
   ROCK_DEPOSIT,
   CIRCUS_STRUCTURE_TALL,
   CIRCUS_STRUCTURE_LOW,
+  flowDirFromAngle,
 } from '../tileTypes';
 import type { TileRect } from './townPlan';
 
@@ -231,12 +232,35 @@ export class TileGrid {
    * `setStanding` for the reason that method documents — the river crosses
    * grass, highland turf and scree, and a plain `set` would erase which — plus
    * the flow direction, which `WaterAnimationSystem` reads off the tile because
-   * the map outlives the scene that animates it.
+   * the map outlives the scene that animates it. Recorded both exactly and as
+   * its nearest compass octant.
    */
-  setRiverWater(x: number, y: number, flowDir: number): void {
+  setRiverWater(x: number, y: number, flowAngle: number): void {
     if (!this.inBounds(x, y)) return;
     this.setStanding(x, y, FloorTypeValue.water);
-    this.cells[y][x].flowDir = flowDir;
+    const cell = this.cells[y][x];
+    cell.flowAngle = flowAngle;
+    cell.flowDir = flowDirFromAngle(flowAngle);
+  }
+
+  /**
+   * Gives a river tile back to the ground it drowned. Only for the carve's own
+   * bank smoothing, before anything has been built on or over the water.
+   */
+  clearRiverWater(x: number, y: number): void {
+    if (!this.inBounds(x, y)) return;
+    const cell = this.cells[y][x];
+    if (cell.type !== FloorTypeValue.water) return;
+    cell.type = cell.groundType ?? FloorTypeValue.grass;
+    delete cell.groundType;
+    delete cell.flowDir;
+    delete cell.flowAngle;
+  }
+
+  /** Records how far a channel tile sits from the bank; see `TileContent.waterDepth`. */
+  setWaterDepth(x: number, y: number, depth: number): void {
+    if (!this.inBounds(x, y)) return;
+    this.cells[y][x].waterDepth = depth;
   }
 
   /**

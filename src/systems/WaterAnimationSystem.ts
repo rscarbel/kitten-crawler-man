@@ -19,17 +19,23 @@
  * game-world rendering, not UI chrome.
  *
  * **The system is stateless.** Every mark is a pure function of the tile's
- * position hash, its recorded `flowDir`, and the shared `frameTime`. That is not
- * only cheap: `GameMap` outlives the scene, so walking into a town building and
- * back rebuilds every system around the same map, and anything holding per-tile
- * state here would have to reconcile itself the way `TreeSystem` does. Nothing
- * to reconcile is better than reconciling correctly.
+ * position hash, its recorded `flowAngle` and `waterDepth`, and the shared
+ * `frameTime`. That is not only cheap: `GameMap` outlives the scene, so walking
+ * into a town building and back rebuilds every system around the same map, and
+ * anything holding per-tile state here would have to reconcile itself the way
+ * `TreeSystem` does. Nothing to reconcile is better than reconciling correctly.
  */
 
 import { TILE_SIZE } from '../core/constants';
 import { viewportWidth, viewportHeight } from '../core/Viewport';
 import type { GameMap } from '../map/GameMap';
-import { FloorTypeValue, FLOW_DIR_VECTORS, RIVER_ROCK } from '../map/tileTypes';
+import {
+  FloorTypeValue,
+  FLOW_DIR_VECTORS,
+  MAX_WATER_DEPTH,
+  RIVER_ROCK,
+  type TileContent,
+} from '../map/tileTypes';
 import { drawRiverRockTile } from '../map/tiles/decorationTiles';
 import { frameTime } from '../utils';
 import type { GameSystem } from './GameSystem';
@@ -65,19 +71,85 @@ const STREAKS_PER_TILE = 2;
 const STREAK_SPEED_TILES_PER_SECOND = 0.42;
 const STREAK_LENGTH_MIN_PX = 4;
 const STREAK_LENGTH_RANGE_PX = 7;
-const STREAK_THICKNESS_PX = 1;
 const STREAK_COLOR = 'rgb(150, 205, 210)';
 const STREAK_ALPHA = 0.3;
+
+/**
+ * Streaks are drawn along the river's heading as **hairlines**, one device
+ * pixel wide, and grouped by opacity so each level is one stroked path.
+ *
+ * Every other way of drawing a slanted mark measured at about double the
+ * raster time of axis-aligned `fillRect`s over a wide river: a rotated
+ * `fillRect` (a `setTransform` per mark), a stroke a CSS pixel wide (which is
+ * tessellated), and sprites cut from a pre-rotated strip (`drawImage` per
+ * mark). A stroke no wider than a device pixel takes the rasteriser's hairline
+ * path instead, and costs less than the axis-aligned rects.
+ */
+const STREAK_HAIRLINE_DEVICE_PX = 1;
+/**
+ * A hairline is thinner than a CSS pixel on a high-DPR screen, so its opacity
+ * rises with the device scale to put down about the same light as a mark a CSS
+ * pixel wide — capped, so a DPR 3 phone's streaks do not go solid.
+ */
+const STREAK_MAX_HAIRLINE_ALPHA_GAIN = 2.5;
+/**
+ * How many distinct opacities the streak pass draws in. The step between
+ * levels is a fraction of a mark that is already faint, which the eye does not
+ * resolve as the swell drifts across it.
+ */
+const STREAK_ALPHA_LEVELS = 16;
+const STREAK_TOP_ALPHA_LEVEL = STREAK_ALPHA_LEVELS - 1;
+
+/**
+ * Per-`waterDepth` multipliers, bank first. The current runs fastest down the
+ * middle of a river and drags at its edges, and the shallows over a pale bed
+ * show less sky, so the marks there are slower and fainter. Flecks are foam,
+ * which gathers where the current is, so they fade harder than the streaks.
+ */
+const DEPTH_MARK_SCALES: ReadonlyArray<{
+  readonly speed: number;
+  readonly streakAlpha: number;
+  readonly fleckAlpha: number;
+}> = [
+  { speed: 0.55, streakAlpha: 0.65, fleckAlpha: 0.4 },
+  { speed: 0.85, streakAlpha: 0.9, fleckAlpha: 0.8 },
+  { speed: 1.1, streakAlpha: 1, fleckAlpha: 1 },
+  { speed: 1.3, streakAlpha: 1, fleckAlpha: 1.15 },
+];
+/** Water with no recorded depth (not an overworld river) reads as mid-channel. */
+const UNRECORDED_WATER_DEPTH = 1;
+
+/**
+ * Sun glints: brief twinkles where a ripple catches the light. Each channel
+ * tile rolls once per period whether to glint, so they turn up at random and
+ * never in step, and the per-screen cap keeps a wide river from glittering
+ * like a disco floor. Drawn into the fleck pass, in its colour.
+ */
+const GLINT_MIN_DEPTH = 1;
+const GLINT_PERIOD_SECONDS = 2.3;
+/** Share of a period a glint is lit for: about a third of a second. */
+const GLINT_LIT_FRACTION = 0.14;
+const GLINT_CHANCE_PER_PERIOD = 0.16;
+const MAX_GLINTS_PER_FRAME = 8;
+const GLINT_PEAK_ALPHA = 0.9;
+const GLINT_ARM_PX = 2.5;
+const GLINT_CORE_PX = 1;
+/** Glints stay this far inside their tile, so the cross is never trimmed. */
+const GLINT_INSET_FRACTION = 0.2;
+const SALT_GLINT_ROLL = 6;
+const SALT_GLINT_X = 7;
+const SALT_GLINT_Y = 8;
+const SALT_GLINT_PHASE = 9;
 
 /**
  * The swell: a slow travelling wave along the channel that brightens and dims
  * the drifting marks, rather than anything drawn in its own right.
  *
- * Two earlier versions painted it as light on the water and both failed for the
- * same reason — the flow direction is quantised to eight compass points and
- * changes tile to tile, so any *area* fill keyed off it lands on a different
- * axis in neighbouring tiles and the river comes out as a mosaic of rectangles.
- * A per-tile alpha was a checkerboard; sub-tile strips were smaller rectangles.
+ * Painting it as light on the water fails: the flow direction is constant
+ * across a tile and changes tile to tile, so any *area* fill keyed off it lands
+ * on a different axis in neighbouring tiles and the river comes out as a mosaic
+ * of rectangles. A per-tile alpha is a checkerboard; sub-tile strips are
+ * smaller rectangles.
  *
  * Carrying the swell in the **brightness of the streaks and flecks** has no area
  * to be blocky with. It also removes two to four `fillRect`s per tile, which was
@@ -95,17 +167,6 @@ const FLECK_SPEED_TILES_PER_SECOND = 0.55;
 const FLECK_RADIUS_PX = 0.9;
 const FLECK_COLOR = 'rgb(226, 244, 244)';
 const FLECK_ALPHA = 0.42;
-
-/**
- * Bank foam: broken dashes along the water side of an edge that meets land.
- *
- * **Dashes, not a lip.** A solid bar along every water tile's land-facing edge
- * traces the tile grid exactly, and the first version of it drew a hard
- * pixelated staircase right over the soft irregular fringe that the corner masks
- * produce — which *is* the riverbank, and the one thing on the map that must not
- * be outlined. Hash-jittered dashes read as foam catching on the bank without
- * ever describing a tile boundary.
- */
 
 /** Wakes: concentric arcs shed downstream of a rock standing in the channel. */
 const WAKE_RING_COUNT = 3;
@@ -259,6 +320,9 @@ interface WaderState {
 /** Half a tile — where a tile's centre is. */
 const TILE_CENTRE_FRACTION = 0.5;
 
+/** Half of a length — centres a mark on its position. */
+const HALF = 0.5;
+
 /** Stable value in [0, 1) for one element of one tile's animation. */
 function tileHash01(tx: number, ty: number, index: number, salt: number): number {
   const position = Math.imul(tx, HASH_MIX_X) ^ Math.imul(ty, HASH_MIX_Y);
@@ -268,7 +332,6 @@ function tileHash01(tx: number, ty: number, index: number, salt: number): number
   return (avalanched >>> 0) / HASH_UINT32;
 }
 
-/** Wraps a value into [0, 1), for a marker cycling along its drift. */
 /**
  * A stable pseudo-random unit value for droplet `index` of a splash thrown at
  * `wader`'s position — the position-hash idiom used throughout the tile
@@ -279,6 +342,7 @@ function splashHash01(wader: WaderState, index: number): number {
   return tileHash01(Math.round(wader.x), Math.round(wader.y), index, SALT_SPLASH);
 }
 
+/** Wraps a value into [0, 1), for a marker cycling along its drift. */
 function wrapUnit(value: number): number {
   return value - Math.floor(value);
 }
@@ -301,6 +365,10 @@ interface VisibleWaterTile {
   sy: number;
   flowX: number;
   flowY: number;
+  /** `waterDepth`, clamped, as an index into `DEPTH_MARK_SCALES`. */
+  depth: number;
+  /** This tile's opacity level in the streak pass. */
+  streakLevel: number;
 }
 
 export class WaterAnimationSystem implements GameSystem {
@@ -320,6 +388,10 @@ export class WaterAnimationSystem implements GameSystem {
    */
   private readonly clipRuns: { sx: number; sy: number; width: number }[] = [];
   private clipRunCount = 0;
+  /** Tiles per opacity level in the streak pass; see `STREAK_ALPHA_LEVELS`. */
+  private readonly streakLevelCounts = new Array<number>(STREAK_ALPHA_LEVELS).fill(0);
+  private readonly glints: { x: number; y: number; alpha: number }[] = [];
+  private glintCount = 0;
 
   private readonly waders = new Map<object, WaderState>();
   private frameCounter = 0;
@@ -470,8 +542,8 @@ export class WaterAnimationSystem implements GameSystem {
     ctx.restore();
     // The stones go back on top of everything the water just drew. A rock stands
     // *in* the river, so its own wake, the drifting streaks and any ripple that
-    // reaches it must all pass behind it — before this they were painted across
-    // the stone and read as marks on the rock rather than on the water.
+    // reaches it must all pass behind it — otherwise they read as marks on the
+    // rock rather than on the water.
     this.repaintRocks(ctx);
     ctx.globalAlpha = previousAlpha;
   }
@@ -512,21 +584,22 @@ export class WaterAnimationSystem implements GameSystem {
           continue;
         }
         if (runStartTx < 0) runStartTx = tx;
-        const flow = flowVector(row[tx].flowDir ?? (isRock ? this.flowDirNear(tx, ty) : undefined));
+        const cell = row[tx];
         const list = isRock ? this.rocks : this.visible;
         const index = isRock ? this.rockCount++ : this.visibleCount++;
-        const sx = tx * TILE_SIZE - camX;
-        const sy = ty * TILE_SIZE - camY;
-        if (index === list.length) {
-          list.push({ tx, ty, sx, sy, flowX: flow.x, flowY: flow.y });
-        } else {
-          const entry = list[index];
-          entry.tx = tx;
-          entry.ty = ty;
-          entry.sx = sx;
-          entry.sy = sy;
+        if (index === list.length) list.push(emptyVisibleWaterTile());
+        const entry = list[index];
+        entry.tx = tx;
+        entry.ty = ty;
+        entry.sx = tx * TILE_SIZE - camX;
+        entry.sy = ty * TILE_SIZE - camY;
+        entry.depth = depthIndex(cell);
+        if (isRock) {
+          const flow = this.flowAtCell(cell, tx, ty);
           entry.flowX = flow.x;
           entry.flowY = flow.y;
+        } else {
+          writeTileFlow(cell, entry);
         }
       }
       closeRun(lastTileX + 1);
@@ -572,45 +645,53 @@ export class WaterAnimationSystem implements GameSystem {
     ctx.clip();
   }
 
+  /**
+   * Streaks lie along the river's smoothed heading, so a diagonal or curving
+   * river's highlights run with it rather than square to the tile grid.
+   */
   private drawStreakPass(ctx: CanvasRenderingContext2D, time: number): void {
-    ctx.fillStyle = STREAK_COLOR;
+    const levelCounts = this.streakLevelCounts;
+    levelCounts.fill(0);
     for (let i = 0; i < this.visibleCount; i++) {
       const tile = this.visible[i];
-      ctx.globalAlpha = STREAK_ALPHA * swellAt(tile, time);
-      const isHorizontal = Math.abs(tile.flowX) >= Math.abs(tile.flowY);
-      for (let mark = 0; mark < STREAKS_PER_TILE; mark++) {
-        const cycle = wrapUnit(
-          tileHash01(tile.tx, tile.ty, mark, SALT_ALONG) + time * STREAK_SPEED_TILES_PER_SECOND,
-        );
-        const length =
-          STREAK_LENGTH_MIN_PX +
-          tileHash01(tile.tx, tile.ty, mark, SALT_LENGTH) * STREAK_LENGTH_RANGE_PX;
-        for (const offset of WRAPPED_MARK_OFFSETS) {
-          const { x, y } = markPosition(tile, mark, cycle + offset);
-          fillClampedToTile(
-            ctx,
-            tile.sx,
-            tile.sy,
-            x,
-            y,
-            isHorizontal ? length : STREAK_THICKNESS_PX,
-            isHorizontal ? STREAK_THICKNESS_PX : length,
-          );
-        }
+      const factor = swellAt(tile, time) * DEPTH_MARK_SCALES[tile.depth].streakAlpha;
+      tile.streakLevel = Math.max(
+        0,
+        Math.min(STREAK_TOP_ALPHA_LEVEL, Math.round(factor * STREAK_TOP_ALPHA_LEVEL)),
+      );
+      levelCounts[tile.streakLevel]++;
+    }
+    const transform = ctx.getTransform();
+    const deviceScale = Math.hypot(transform.a, transform.b);
+    ctx.strokeStyle = STREAK_COLOR;
+    ctx.lineWidth = STREAK_HAIRLINE_DEVICE_PX / deviceScale;
+    const peakAlpha = STREAK_ALPHA * Math.min(deviceScale, STREAK_MAX_HAIRLINE_ALPHA_GAIN);
+    for (let level = 1; level < STREAK_ALPHA_LEVELS; level++) {
+      if (levelCounts[level] === 0) continue;
+      ctx.globalAlpha = (peakAlpha * level) / STREAK_TOP_ALPHA_LEVEL;
+      ctx.beginPath();
+      for (let i = 0; i < this.visibleCount; i++) {
+        const tile = this.visible[i];
+        if (tile.streakLevel === level) traceStreaks(ctx, tile, time);
       }
+      ctx.stroke();
     }
   }
 
+  /**
+   * Foam flecks, then the sun glints, which share their colour so the river
+   * still sets one style per pass.
+   */
   private drawFleckPass(ctx: CanvasRenderingContext2D, time: number): void {
     ctx.fillStyle = FLECK_COLOR;
     const size = FLECK_RADIUS_PX * 2;
     for (let i = 0; i < this.visibleCount; i++) {
       const tile = this.visible[i];
-      ctx.globalAlpha = FLECK_ALPHA * swellAt(tile, time);
+      ctx.globalAlpha =
+        FLECK_ALPHA * swellAt(tile, time) * DEPTH_MARK_SCALES[tile.depth].fleckAlpha;
+      const speed = FLECK_SPEED_TILES_PER_SECOND * DEPTH_MARK_SCALES[tile.depth].speed;
       for (let mark = 0; mark < FLECKS_PER_TILE; mark++) {
-        const cycle = wrapUnit(
-          tileHash01(tile.tx, tile.ty, mark, SALT_ALONG) + time * FLECK_SPEED_TILES_PER_SECOND,
-        );
+        const cycle = wrapUnit(tileHash01(tile.tx, tile.ty, mark, SALT_ALONG) + time * speed);
         for (const offset of WRAPPED_MARK_OFFSETS) {
           const { x, y } = markPosition(tile, mark, cycle + offset);
           fillClampedToTile(
@@ -624,6 +705,44 @@ export class WaterAnimationSystem implements GameSystem {
           );
         }
       }
+    }
+
+    this.collectGlints(time);
+    const halfCore = GLINT_CORE_PX * HALF;
+    for (let g = 0; g < this.glintCount; g++) {
+      const glint = this.glints[g];
+      ctx.globalAlpha = glint.alpha;
+      ctx.fillRect(glint.x - GLINT_ARM_PX, glint.y - halfCore, GLINT_ARM_PX * 2, GLINT_CORE_PX);
+      ctx.fillRect(glint.x - halfCore, glint.y - GLINT_ARM_PX, GLINT_CORE_PX, GLINT_ARM_PX * 2);
+    }
+  }
+
+  /**
+   * Fills `glints` with the twinkles lit this frame, at most
+   * `MAX_GLINTS_PER_FRAME`. Each channel tile rolls once per
+   * `GLINT_PERIOD_SECONDS`, at its own phase, so a glint is a pure function of
+   * the tile and the clock like every other mark.
+   */
+  private collectGlints(time: number): void {
+    this.glintCount = 0;
+    const insetPx = TILE_SIZE * GLINT_INSET_FRACTION;
+    const usableSpan = TILE_SIZE - insetPx * 2;
+    for (let i = 0; i < this.visibleCount && this.glintCount < MAX_GLINTS_PER_FRAME; i++) {
+      const tile = this.visible[i];
+      if (tile.depth < GLINT_MIN_DEPTH) continue;
+      const cycles =
+        time / GLINT_PERIOD_SECONDS + tileHash01(tile.tx, tile.ty, 0, SALT_GLINT_PHASE);
+      const period = Math.floor(cycles);
+      const litProgress = (cycles - period) / GLINT_LIT_FRACTION;
+      if (litProgress >= 1) continue;
+      if (tileHash01(tile.tx, tile.ty, period, SALT_GLINT_ROLL) >= GLINT_CHANCE_PER_PERIOD) {
+        continue;
+      }
+      if (this.glintCount === this.glints.length) this.glints.push({ x: 0, y: 0, alpha: 0 });
+      const glint = this.glints[this.glintCount++];
+      glint.x = tile.sx + insetPx + tileHash01(tile.tx, tile.ty, period, SALT_GLINT_X) * usableSpan;
+      glint.y = tile.sy + insetPx + tileHash01(tile.tx, tile.ty, period, SALT_GLINT_Y) * usableSpan;
+      glint.alpha = GLINT_PEAK_ALPHA * Math.sin(litProgress * Math.PI);
     }
   }
 
@@ -901,8 +1020,16 @@ export class WaterAnimationSystem implements GameSystem {
   private flowAtPixel(x: number, y: number): { x: number; y: number } {
     const tx = Math.floor(x / TILE_SIZE);
     const ty = Math.floor(y / TILE_SIZE);
-    const flowDir = this.gameMap.structure[ty]?.[tx]?.flowDir ?? this.flowDirNear(tx, ty);
-    return flowVector(flowDir);
+    const structure = this.gameMap.structure;
+    const outside = ty < 0 || ty >= structure.length || tx < 0 || tx >= structure[ty].length;
+    if (outside) return STILL_WATER_FLOW;
+    return this.flowAtCell(structure[ty][tx], tx, ty);
+  }
+
+  /** A tile's own flow, or its neighbours' when it records none. */
+  private flowAtCell(cell: TileContent, tx: number, ty: number): { x: number; y: number } {
+    if (cell.flowAngle !== undefined || cell.flowDir !== undefined) return tileFlow(cell);
+    return flowVector(this.flowDirNear(tx, ty));
   }
 
   /**
@@ -912,8 +1039,8 @@ export class WaterAnimationSystem implements GameSystem {
    * A **fallback, not the rule.** `scatterRiverRocks` writes with `setStanding`,
    * which touches only `type` and `groundType`, so the `flowDir` the carve wrote
    * survives on the tile — measured at 121/121 rocks across 5 maps. Consulting
-   * the neighbours first ran this walk every frame for every visible rock and
-   * could pick a different octant than the rock's own, offsetting its wake
+   * the neighbours first would run this walk every frame for every visible rock
+   * and could pick a different octant than the rock's own, offsetting its wake
    * downstream in the wrong direction.
    */
   private flowDirNear(tx: number, ty: number): number | undefined {
@@ -959,12 +1086,11 @@ function swellAt(tile: VisibleWaterTile, time: number): number {
  * by one entering from upstream. Both are trimmed to the tile, so the ink drawn
  * is the same as one mark's worth; what it buys is continuity.
  *
- * Drawing a single copy at `along` in [0, 1) is what the first cut did, and it
- * has two faults that only measurement finds. The upstream half of every tile
- * can then never receive a mark at all — a permanently still stripe at a *fixed
- * offset inside each tile*, which is the tile grid drawn in negative, the same
- * failure that killed the ripple bands and the solid bank lip. And each mark
- * pops into existence at the tile centre when its cycle wraps.
+ * A single copy at `along` in [0, 1) would have two faults that only
+ * measurement finds. The upstream half of every tile could never receive a
+ * mark at all — a permanently still stripe at a *fixed offset inside each
+ * tile*, which is the tile grid drawn in negative. And each mark would pop into
+ * existence at the tile centre when its cycle wraps.
  */
 function markPosition(
   tile: VisibleWaterTile,
@@ -990,10 +1116,10 @@ const WRAPPED_MARK_OFFSETS: readonly number[] = [0, -1];
 /**
  * Fills a rect, trimmed to the tile that owns it.
  *
- * A streak drifts a whole tile's width over its cycle and is several pixels
- * long, so without this the ones near a bank paint bright dashes onto the grass.
- * Trimming rather than clipping because `ctx.clip()` per tile would cost a path
- * and a state save for every one of the ~1,300 tiles on screen.
+ * A mark drifts a whole tile's width over its cycle, so without this the ones
+ * near a bank paint bright dashes onto the grass. Trimming rather than
+ * clipping because `ctx.clip()` per tile would cost a path and a state save for
+ * every one of the ~1,300 tiles on screen.
  */
 function fillClampedToTile(
   ctx: CanvasRenderingContext2D,
@@ -1012,6 +1138,75 @@ function fillClampedToTile(
   ctx.fillRect(left, top, right - left, bottom - top);
 }
 
+/** Adds a tile's streaks to the current path, each trimmed to the tile. */
+function traceStreaks(ctx: CanvasRenderingContext2D, tile: VisibleWaterTile, time: number): void {
+  const isStill = tile.flowX === 0 && tile.flowY === 0;
+  const axisX = isStill ? 1 : tile.flowX;
+  const axisY = isStill ? 0 : tile.flowY;
+  const speed = STREAK_SPEED_TILES_PER_SECOND * DEPTH_MARK_SCALES[tile.depth].speed;
+  for (let mark = 0; mark < STREAKS_PER_TILE; mark++) {
+    const cycle = wrapUnit(tileHash01(tile.tx, tile.ty, mark, SALT_ALONG) + time * speed);
+    const length =
+      STREAK_LENGTH_MIN_PX +
+      tileHash01(tile.tx, tile.ty, mark, SALT_LENGTH) * STREAK_LENGTH_RANGE_PX;
+    const runX = axisX * length;
+    const runY = axisY * length;
+    for (const offset of WRAPPED_MARK_OFFSETS) {
+      const { x, y } = markPosition(tile, mark, cycle + offset);
+      const startX = x - runX * HALF;
+      const startY = y - runY * HALF;
+      const span = clipSegmentToTile(tile.sx, tile.sy, startX, startY, runX, runY);
+      if (span === null) continue;
+      ctx.moveTo(startX + runX * span.enter, startY + runY * span.enter);
+      ctx.lineTo(startX + runX * span.leave, startY + runY * span.leave);
+    }
+  }
+}
+
+/**
+ * The part of a segment — from (`x0`, `y0`) along (`dx`, `dy`) — that lies
+ * inside its tile, as fractions of its length, or null when none does. Trimmed
+ * for the same reason as `fillClampedToTile`. Liang–Barsky: each tile edge
+ * narrows the span of the segment that can still be inside.
+ */
+function clipSegmentToTile(
+  tileX: number,
+  tileY: number,
+  x0: number,
+  y0: number,
+  dx: number,
+  dy: number,
+): { readonly enter: number; readonly leave: number } | null {
+  const span = SEGMENT_SPAN_SCRATCH;
+  span.enter = 0;
+  span.leave = 1;
+  const inside =
+    narrowSpan(span, -dx, x0 - tileX) &&
+    narrowSpan(span, dx, tileX + TILE_SIZE - x0) &&
+    narrowSpan(span, -dy, y0 - tileY) &&
+    narrowSpan(span, dy, tileY + TILE_SIZE - y0);
+  return inside ? span : null;
+}
+
+/**
+ * Narrows `span` by one tile edge, given the segment's motion toward that edge
+ * and its start's distance inside it; false once nothing of the segment is left.
+ */
+function narrowSpan(
+  span: { enter: number; leave: number },
+  direction: number,
+  distance: number,
+): boolean {
+  if (direction === 0) return distance >= 0;
+  const crossing = distance / direction;
+  if (direction < 0) span.enter = Math.max(span.enter, crossing);
+  else span.leave = Math.min(span.leave, crossing);
+  return span.enter < span.leave;
+}
+
+/** Reused per segment, so trimming a streak allocates nothing. */
+const SEGMENT_SPAN_SCRATCH = { enter: 0, leave: 1 };
+
 /**
  * The unit flow vector for a tile, or a still surface when it has none.
  *
@@ -1025,3 +1220,34 @@ function flowVector(flowDir: number | undefined): { readonly x: number; readonly
 }
 
 const STILL_WATER_FLOW = { x: 0, y: 0 } as const;
+
+/**
+ * The unit flow vector along the river's smoothed heading. The octant
+ * `flowDir` is only the fallback: drawn along it, a gently curving river's
+ * streaks turn in 45° steps every few tiles.
+ */
+function tileFlow(cell: TileContent): { readonly x: number; readonly y: number } {
+  if (cell.flowAngle === undefined) return flowVector(cell.flowDir);
+  return { x: Math.cos(cell.flowAngle), y: Math.sin(cell.flowAngle) };
+}
+
+/** `tileFlow` written straight into a reused entry, so a frame's scan allocates nothing. */
+function writeTileFlow(cell: TileContent, target: Pick<VisibleWaterTile, 'flowX' | 'flowY'>): void {
+  if (cell.flowAngle === undefined) {
+    const flow = flowVector(cell.flowDir);
+    target.flowX = flow.x;
+    target.flowY = flow.y;
+    return;
+  }
+  target.flowX = Math.cos(cell.flowAngle);
+  target.flowY = Math.sin(cell.flowAngle);
+}
+
+function emptyVisibleWaterTile(): VisibleWaterTile {
+  return { tx: 0, ty: 0, sx: 0, sy: 0, flowX: 0, flowY: 0, depth: 0, streakLevel: 0 };
+}
+
+function depthIndex(cell: TileContent): number {
+  const depth = cell.waterDepth ?? UNRECORDED_WATER_DEPTH;
+  return Math.min(MAX_WATER_DEPTH, Math.max(0, Math.round(depth)));
+}

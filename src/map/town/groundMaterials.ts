@@ -23,7 +23,9 @@ import {
   YARD_GRAVEL,
   HIGHLAND_GRASS,
   SCREE,
+  BARE_EARTH,
   WILDFLOWER_TUFT,
+  RIVER_REEDS,
   RIVER_ROCK,
   HOLLOW_PLANK_FLOOR,
   HOLLOW_THRESHOLD,
@@ -92,9 +94,9 @@ const GROUND_BLEND_ORDER = {
  * levels too bright.
  */
 export const GROUND_FALLBACK_COLOR = {
-  water: '#1e434b',
+  water: '#5a5c3e',
   highland: '#7f7b49',
-  scree: '#696661',
+  scree: '#635e56',
   grass: '#667435',
   verge: '#6f773a',
   dirt: '#6b543b',
@@ -192,6 +194,12 @@ const FRINGE_STAND_IN_MATERIAL: GroundMaterial = 'grass';
  */
 const HARD_EDGE_MATERIALS: ReadonlySet<GroundMaterial> = new Set<GroundMaterial>(['hollow_planks']);
 
+/** The wilderness turf: four-tile patches of grain and blades, fringed along every bank and band edge. */
+const FRINGE_FIRST_VARIANT_MATERIALS: ReadonlySet<GroundMaterial> = new Set<GroundMaterial>([
+  'grass',
+  'highland',
+]);
+
 /**
  * The material a tile type stands on, or undefined when the tile is not
  * outdoor ground at all (dungeon floors, water, void, building interiors).
@@ -253,6 +261,8 @@ function groundMaterialForTileType(type: number): GroundMaterial | undefined {
     // and scree, so no single answer here is right for it, and it falls through
     // to the surface `setStanding` recorded under it instead.
     case WILDFLOWER_TUFT:
+    // Reeds grow only on the meadow's banks, so they report it the same way.
+    case RIVER_REEDS:
       return 'grass';
     case HIGHLAND_GRASS:
       return 'highland';
@@ -273,6 +283,7 @@ function groundMaterialForTileType(type: number): GroundMaterial | undefined {
       return 'verge';
     case FloorTypeValue.road:
     case DIRT_PATCH:
+    case BARE_EARTH:
       return 'dirt';
     case YARD_GRAVEL:
       return 'gravel';
@@ -308,5 +319,6 @@ export const OVERWORLD_GROUND: GroundPalette = {
   kerbSoftMaterials: KERB_SOFT_MATERIALS,
   fringeStandIn: FRINGE_STAND_IN_MATERIAL,
   hardEdgeMaterials: HARD_EDGE_MATERIALS,
+  fringeFirstVariantMaterials: FRINGE_FIRST_VARIANT_MATERIALS,
   materialForTileType: groundMaterialForTileType,
 };

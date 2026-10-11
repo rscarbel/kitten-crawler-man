@@ -82,9 +82,10 @@ import {
   INK_WOAD_RAMP,
   INK_GALL_RAMP,
   INK_MADDER_RAMP,
-  RIVER_WATER_RAMP,
+  RIVER_BED_RAMP,
   HIGHLAND_GRASS_RAMP,
   SCREE_RAMP,
+  SCREE_SOIL_RAMP,
   HOLLOW_PLANK_RAMP,
   PASTURE_GRASS_RAMP,
   TILLED_SOIL_RAMP,
@@ -240,14 +241,31 @@ function paintBlades(ctx: PaintContext, ramp: Ramp, seed: number, countPerTile: 
   }
 }
 
-const GRASS_GROUND: GroundOptions = { patchPeriod: 8, patchWeight: 0.55, contrast: 1.35 };
+/**
+ * Field grass carries grain and blades and almost no broad light and dark: its
+ * broad layer comes from `structure`, which every variant shares so that they
+ * meet without a seam, so any weight it carries repeats with the patch. The
+ * renderer's world-space tone supplies the broad variation instead, and does
+ * not repeat. `patchPeriod` keeps the broad layer's cells the size they are on
+ * a two-tile patch.
+ */
+const GRASS_GROUND: GroundOptions = { patchPeriod: 16, patchWeight: 0.15, contrast: 1.2 };
+/** The verge carries blotchier broad tone than field grass: it grows only in town, beside stone. */
+const VERGE_GROUND: GroundOptions = { patchPeriod: 8, patchWeight: 0.55, contrast: 1.35 };
 const GRASS_BLADE_COUNT = 950;
+
+/**
+ * Three variants rather than more because the sheet is as wide as its longest
+ * row: three four-tile patches fill the 48 frames the sheet already has, and a
+ * fourth would widen every row of it.
+ */
+const FIELD_PATCH_VARIANTS = 3;
 
 const grass: Material = {
   id: 'grass',
   label: 'Field grass',
-  patchTiles: 2,
-  variants: 4,
+  patchTiles: 4,
+  variants: FIELD_PATCH_VARIANTS,
   paint: (ctx) => {
     paintNoiseGround(ctx, GRASS_RAMP, GRASS_GROUND);
     paintBlades(ctx, GRASS_RAMP, ctx.detail, GRASS_BLADE_COUNT);
@@ -266,7 +284,7 @@ const verge: Material = {
   patchTiles: 2,
   variants: 4,
   paint: (ctx) => {
-    paintNoiseGround(ctx, GRASS_RAMP, GRASS_GROUND);
+    paintNoiseGround(ctx, GRASS_RAMP, VERGE_GROUND);
     paintSpeckles(ctx, ctx.detail + 31, {
       count: VERGE_DEAD_PATCH_COUNT,
       minRadius: 4,
@@ -346,57 +364,69 @@ const gravel: Material = {
 // ── the wilderness: river bed, uplands ─────────────────────────────────────
 
 /**
- * A long low swell rather than fine grain: still water at 32 px a tile has no
- * texture of its own, and any detail baked in here would sit motionless under
- * the drifting highlights `WaterAnimationSystem` lays on top and read as grit
- * frozen in the surface.
- *
- * The broad-tone weight is kept low: broad tone inside a patch makes each
- * *patch* read as a tonal block, and on a material as flat as water — with no
- * grain or joints to distract from it — a high weight turns a river into a
- * mosaic of slightly different squares. Large-scale variation belongs to the
- * renderer's world-space noise layer, not to the tile.
+ * The river bed, which is all the water material is: silt, sand and pebbles.
+ * The water itself is laid over it by the bake as a translucent column that
+ * thickens and darkens with depth, so the bed shows clearly along the shallow
+ * margins and is all but lost in the channel. Detail kept fine and soft: a bed
+ * seen through water has no hard edges, and anything crisp here would sit
+ * motionless under the drifting highlights `WaterAnimationSystem` draws on top.
  */
-const WATER_GROUND: GroundOptions = { patchPeriod: 12, patchWeight: 0.4, contrast: 0.32 };
-const WATER_DEPTH_POOL_COUNT = 5;
-const WATER_DEPTH_POOL_MIN_RADIUS = 8;
-const WATER_DEPTH_POOL_MAX_RADIUS = 20;
-const WATER_DEPTH_POOL_ALPHA = 0.2;
-const WATER_DEPTH_POOL_SOFTNESS = 1;
-const WATER_SILT_COUNT = 10;
-const WATER_SILT_MIN_RADIUS = 3;
-const WATER_SILT_MAX_RADIUS = 9;
-const WATER_SILT_ALPHA = 0.11;
-const WATER_SILT_SOFTNESS = 1;
+const RIVER_BED_GROUND: GroundOptions = { patchPeriod: 12, patchWeight: 0.35, contrast: 0.8 };
+const RIVER_BED_SILT_COUNT = 6;
+const RIVER_BED_SILT_MIN_RADIUS = 4;
+const RIVER_BED_SILT_MAX_RADIUS = 10;
+const RIVER_BED_SILT_ALPHA = 0.22;
+const RIVER_BED_SILT_SOFTNESS = 1;
+const RIVER_BED_SAND_COUNT = 4;
+const RIVER_BED_SAND_MIN_RADIUS = 3;
+const RIVER_BED_SAND_MAX_RADIUS = 8;
+const RIVER_BED_SAND_ALPHA = 0.18;
+const RIVER_BED_SAND_SOFTNESS = 1;
+const RIVER_BED_PEBBLE_COUNT = 16;
+const RIVER_BED_PEBBLE_MIN_RADIUS = 0.7;
+const RIVER_BED_PEBBLE_MAX_RADIUS = 1.8;
+const RIVER_BED_PEBBLE_ALPHA = 0.5;
+const RIVER_BED_PEBBLE_SOFTNESS = 0.5;
+const RIVER_BED_SILT_SEED_SALT = 41;
+const RIVER_BED_SAND_SEED_SALT = 43;
+const RIVER_BED_PEBBLE_SEED_SALT = 47;
 
 const water: Material = {
   id: 'water',
-  label: 'River water (static base — motion is a render overlay)',
+  label: 'River bed (the water over it is laid by the bake; motion is a render overlay)',
   patchTiles: 2,
   variants: 4,
   paint: (ctx) => {
-    paintNoiseGround(ctx, RIVER_WATER_RAMP, WATER_GROUND);
-    const deepRamp: Ramp = { ...RIVER_WATER_RAMP, mid: shade(RIVER_WATER_RAMP.shadow, 0.8) };
-    paintSpeckles(ctx, ctx.detail + 41, {
-      count: WATER_DEPTH_POOL_COUNT,
-      minRadius: WATER_DEPTH_POOL_MIN_RADIUS,
-      maxRadius: WATER_DEPTH_POOL_MAX_RADIUS,
-      ramp: deepRamp,
-      alpha: WATER_DEPTH_POOL_ALPHA,
-      softness: WATER_DEPTH_POOL_SOFTNESS,
+    paintNoiseGround(ctx, RIVER_BED_RAMP, RIVER_BED_GROUND);
+    paintSpeckles(ctx, ctx.detail + RIVER_BED_SILT_SEED_SALT, {
+      count: RIVER_BED_SILT_COUNT,
+      minRadius: RIVER_BED_SILT_MIN_RADIUS,
+      maxRadius: RIVER_BED_SILT_MAX_RADIUS,
+      ramp: { ...RIVER_BED_RAMP, mid: RIVER_BED_RAMP.shadow },
+      alpha: RIVER_BED_SILT_ALPHA,
+      softness: RIVER_BED_SILT_SOFTNESS,
     });
-    paintSpeckles(ctx, ctx.detail + 43, {
-      count: WATER_SILT_COUNT,
-      minRadius: WATER_SILT_MIN_RADIUS,
-      maxRadius: WATER_SILT_MAX_RADIUS,
-      ramp: { ...RIVER_WATER_RAMP, mid: DIRT_RAMP.shadow },
-      alpha: WATER_SILT_ALPHA,
-      softness: WATER_SILT_SOFTNESS,
+    paintSpeckles(ctx, ctx.detail + RIVER_BED_SAND_SEED_SALT, {
+      count: RIVER_BED_SAND_COUNT,
+      minRadius: RIVER_BED_SAND_MIN_RADIUS,
+      maxRadius: RIVER_BED_SAND_MAX_RADIUS,
+      ramp: { ...RIVER_BED_RAMP, mid: RIVER_BED_RAMP.light },
+      alpha: RIVER_BED_SAND_ALPHA,
+      softness: RIVER_BED_SAND_SOFTNESS,
+    });
+    paintSpeckles(ctx, ctx.detail + RIVER_BED_PEBBLE_SEED_SALT, {
+      count: RIVER_BED_PEBBLE_COUNT,
+      minRadius: RIVER_BED_PEBBLE_MIN_RADIUS,
+      maxRadius: RIVER_BED_PEBBLE_MAX_RADIUS,
+      ramp: GRAVEL_RAMP,
+      alpha: RIVER_BED_PEBBLE_ALPHA,
+      softness: RIVER_BED_PEBBLE_SOFTNESS,
     });
   },
 };
 
-const HIGHLAND_GROUND: GroundOptions = { patchPeriod: 8, patchWeight: 0.5, contrast: 1.15 };
+/** Little broad tone in the tile, for the reason field grass has little. */
+const HIGHLAND_GROUND: GroundOptions = { patchPeriod: 16, patchWeight: 0.15, contrast: 1.05 };
 const HIGHLAND_BLADE_COUNT = 620;
 const HIGHLAND_DEAD_BLADE_SHARE = 0.7;
 const HIGHLAND_OUTCROP_COUNT = 9;
@@ -414,8 +444,8 @@ const HIGHLAND_PEBBLE_SOFTNESS = 0.4;
 const highland: Material = {
   id: 'highland',
   label: 'Highland turf (thin upland grass)',
-  patchTiles: 2,
-  variants: 4,
+  patchTiles: 4,
+  variants: FIELD_PATCH_VARIANTS,
   paint: (ctx) => {
     paintNoiseGround(ctx, HIGHLAND_GRASS_RAMP, HIGHLAND_GROUND);
     paintSpeckles(ctx, ctx.detail + 61, {
@@ -445,123 +475,253 @@ const highland: Material = {
 };
 
 /**
- * Scree is `paintSetts` on a four-tile patch, not the gravel painter on a two.
+ * Scree is broken stone lying in soil on a slope, not paving. Its stones are
+ * Worley cells, but only some cells hold one, and each stone stops short of
+ * its neighbours by a gap whose width wanders, so soil shows between them in
+ * runs and pockets rather than as a joint of even width around every stone.
+ * The gap is soil a shade darker than the stone, and the stone fades into it,
+ * so there is no inked outline anywhere: on a hillside of tight dark joints the
+ * eye reads a cobbled plaza, whatever the stones look like.
  *
- * Gravel's discs of `nearest < edge` cells leave each chip a separated lump
- * with a lit rim and a shadowed underside — at scree's coarser cell size that
- * reads as a tray of ball bearings rather than *tessellating angular plates*.
- * The joint between a Worley cell and its neighbour is exactly that
- * tessellation, so this is a paving painter with the paving taken out of it.
+ * Two layers of stones, large and small, so the slope has the mixed sizes a
+ * rockfall leaves; the small ones only lie where the large leave soil. A few
+ * tufts of upland grass grow in the soil. The slope itself — which way it
+ * faces, how steep it is — comes from the world's hillshade, not the tile.
  *
- * A material with **visible units** repeats at its patch, not at its cell, so
- * a two-tile patch would show the same handful of plates every 64 screen
- * pixels however irregular one patch is on its own — hence the four-tile
- * patch, matching every other cell-structured material in this file.
+ * A four-tile patch, as every material with visible units has, so the same
+ * handful of stones is not seen again every 64 screen pixels.
+ */
+const SCREE_SOIL_GROUND: GroundOptions = { patchPeriod: 16, patchWeight: 0.2, contrast: 0.9 };
+
+interface ScreeStoneLayer {
+  /** Stones across one tile; times the four-tile patch it must be whole, or the lattice seams. */
+  readonly cellsPerTile: number;
+  /** Share of cells that hold a stone; the rest are soil. */
+  readonly occupancy: number;
+  /** Soil gap between neighbouring stones, in cell widths, before it wanders. */
+  readonly gapWidth: number;
+  /** How far the gap wanders either way, in cell widths. */
+  readonly gapWander: number;
+  readonly toneFloor: number;
+  readonly toneSpread: number;
+}
+
+const SCREE_STONE_LAYERS: readonly ScreeStoneLayer[] = [
+  {
+    cellsPerTile: 1.25,
+    occupancy: 0.62,
+    gapWidth: 0.22,
+    gapWander: 0.16,
+    toneFloor: 0.42,
+    toneSpread: 0.3,
+  },
+  {
+    cellsPerTile: 3,
+    occupancy: 0.45,
+    gapWidth: 0.42,
+    gapWander: 0.2,
+    toneFloor: 0.38,
+    toneSpread: 0.34,
+  },
+];
+const SCREE_STONE_JITTER = 0.9;
+const SCREE_WARP_AMPLITUDE = 2.2;
+const SCREE_WARP_PERIOD_PER_TILE = 6;
+const SCREE_GAP_PERIOD_PER_TILE = 8;
+const SCREE_GAP_OCTAVES = 2;
+/**
+ * Share of the gap over which a stone's edge fades into the soil. A wide fade
+ * is what keeps the boundary soft; at zero every stone gets a hard rim.
+ */
+const SCREE_EDGE_FADE_SHARE = 0.6;
+const SCREE_RELIEF_STRENGTH = 0.5;
+const SCREE_FACE_GRAIN_STRENGTH = 0.12;
+const SCREE_FACE_GRAIN_PERIOD_PER_TILE = 24;
+const SCREE_FACE_GRAIN_OCTAVES = 2;
+const SCREE_LAYER_SEED_STRIDE = 17;
+const SCREE_WARP_SEED_SALT = 3;
+const SCREE_GAP_SEED_SALT = 29;
+const SCREE_GRAIN_SEED_SALT = 5;
+
+const SCREE_FINES_COUNT = 14;
+const SCREE_FINES_MIN_RADIUS = 0.6;
+const SCREE_FINES_MAX_RADIUS = 1.6;
+const SCREE_FINES_ALPHA = 0.3;
+const SCREE_FINES_SOFTNESS = 0.6;
+const SCREE_FINES_SEED_SALT = 71;
+
+/** Tufts per tile, the blades in one, and how far a blade's root strays from its tuft's centre. */
+const SCREE_TUFT_COUNT = 1.1;
+const SCREE_TUFT_BLADES = 11;
+const SCREE_TUFT_SPREAD_PX = 3;
+/** A tuft only roots where the ground under its centre is at most this much stone. */
+const SCREE_TUFT_MAX_STONE = 0.5;
+const SCREE_TUFT_BLADE_MIN_PX = 3;
+const SCREE_TUFT_BLADE_RANGE_PX = 4;
+const SCREE_TUFT_ALPHA = 0.95;
+const SCREE_TUFT_TAPER = 0.4;
+/** Share of a tuft's blades that are dead straw rather than live grass. */
+const SCREE_TUFT_DEAD_SHARE = 0.4;
+const SCREE_TUFT_SEED_SALT = 81;
+/** A blade's root strays this much as far up or down its tuft as it does across it. */
+const SCREE_TUFT_ROOT_DEPTH_SHARE = 0.5;
+/** Blades grow up the screen. */
+const SCREE_TUFT_BLADE_STEP_Y = -1;
+/** One hash stream per quantity a tuft or blade draws, so no two of them correlate. */
+const SCREE_TUFT_STREAM = {
+  centreX: 1,
+  centreY: 2,
+  rootX: 3,
+  rootY: 4,
+  length: 5,
+  dead: 6,
+  tone: 7,
+} as const;
+
+interface ScreeSample {
+  /** 0 on bare soil, 1 on the face of a stone. */
+  readonly stone: number;
+  readonly color: RGB;
+}
+
+/**
+ * The stone, if any, at a pixel: the large layer first, the small only where it left soil.
  *
- * The cell size is 1.5, not smaller: a fixed wrap error is more visible on a
- * calm surface than a busy one, so the seam gate's ratio — wrap error over the
- * patch's own strongest interior edge — gets harder to pass as the material
- * calms down, even while the absolute wrap error falls. 1.5 is where the
- * plates are large and the wrap error is genuinely small.
+ * A whole scree patch is one indivisible paint step, so the two noise lookups
+ * that cannot change the answer are skipped: the gap's wander only moves a
+ * stone's edge within its widest and narrowest gap, so a pixel outside that
+ * band is wholly stone or wholly soil without it, and the face grain does not
+ * depend on the layer, so it is sampled at most once.
  */
-const SCREE_CELLS_PER_TILE = 1.5;
-const SCREE_JITTER = 0.85;
-const SCREE_JOINT_WIDTH = 0.14;
-const SCREE_JOINT_STRENGTH = 0.3;
-const SCREE_RELIEF_STRENGTH = 0.38;
-const SCREE_WARP_AMPLITUDE = 1.6;
-/**
- * Wider than the paving materials — a hillside's plates are freshly broken and
- * genuinely differ in tone — but well under the `paintSetts` default of 0.7,
- * which put a near-black plate beside a near-white one and read as static.
- */
-const SCREE_TONE_SPREAD = 0.3;
-const SCREE_SHADE_POOL_COUNT = 5;
-const SCREE_SHADE_POOL_MIN_RADIUS = 9;
-const SCREE_SHADE_POOL_MAX_RADIUS = 26;
-const SCREE_SHADE_POOL_ALPHA = 0.18;
-const SCREE_SHADE_POOL_SOFTNESS = 1;
-const SCREE_FINES_COUNT = 10;
-const SCREE_FINES_MIN_RADIUS = 0.8;
-const SCREE_FINES_MAX_RADIUS = 2.4;
-const SCREE_FINES_ALPHA = 0.22;
-const SCREE_FINES_SOFTNESS = 0.7;
-/**
- * The joint tops out a long way above the ramp's shadow. Taking it all the way
- * down inked every plate boundary, and at scree's plate count that is most of
- * what the tile is — the slope has to read as one surface with cracks in it,
- * not as a mosaic of outlined chips.
- */
-const SCREE_JOINT_DEPTH = 0.55;
-/**
- * Raised well above the paving default. Scree's plates are few and large now,
- * so the material's whole value is carried by a handful of faces — sitting them
- * between shadow and mid, as the default floor does, made the slope read as a
- * dark smear rather than as lit rock.
- */
-const SCREE_TONE_FLOOR = 0.42;
-/**
- * Fractures run *across* plates, not around them. The plate joints say where
- * the rock broke; these say it is still breaking, and they are what stops a
- * calm cell lattice from reading as upholstery.
- */
-const SCREE_FRACTURE_COUNT = 2.5;
-const SCREE_FRACTURE_LENGTH = 18;
-const SCREE_FRACTURE_ALPHA = 0.3;
-const SCREE_FRACTURE_SOFTNESS = 0.8;
+function screeStoneAt(ctx: PaintContext, x: number, y: number): ScreeSample {
+  const tiles = ctx.size / TILE_PX;
+  let best: ScreeSample = { stone: 0, color: SCREE_RAMP.mid };
+  let grain: number | undefined;
+  for (let index = 0; index < SCREE_STONE_LAYERS.length; index++) {
+    if (best.stone >= 1) break;
+    const layer = SCREE_STONE_LAYERS[index];
+    const seed = ctx.structure + index * SCREE_LAYER_SEED_STRIDE;
+    const warped = ctx.noise.warp(
+      x,
+      y,
+      seed + SCREE_WARP_SEED_SALT,
+      SCREE_WARP_AMPLITUDE,
+      SCREE_WARP_PERIOD_PER_TILE * tiles,
+    );
+    const cell = ctx.noise.worley(
+      warped.x,
+      warped.y,
+      layer.cellsPerTile * tiles,
+      seed,
+      SCREE_STONE_JITTER,
+    );
+    if (cell.cellHash >= layer.occupancy) continue;
+    const fromJoint = cell.secondNearest - cell.nearest;
+    const stone = screeStoneCover(ctx, layer, seed, x, y, tiles, fromJoint);
+    if (stone <= best.stone) continue;
+    grain ??=
+      (ctx.noise.fbm(
+        x,
+        y,
+        ctx.detail + SCREE_GRAIN_SEED_SALT,
+        SCREE_FACE_GRAIN_OCTAVES,
+        SCREE_FACE_GRAIN_PERIOD_PER_TILE * tiles,
+      ) -
+        0.5) *
+      SCREE_FACE_GRAIN_STRENGTH;
+    const tone = layer.toneFloor + (cell.cellHash / layer.occupancy) * layer.toneSpread + grain;
+    const face = sampleRamp(SCREE_RAMP, tone);
+    best = {
+      stone,
+      color: shade(face, reliefFactor(cell.offsetX, cell.offsetY, SCREE_RELIEF_STRENGTH)),
+    };
+  }
+  return best;
+}
+
+/** How much of a stone covers a pixel `fromJoint` cell widths in from its joint: 0 soil, 1 stone. */
+function screeStoneCover(
+  ctx: PaintContext,
+  layer: ScreeStoneLayer,
+  seed: number,
+  x: number,
+  y: number,
+  tiles: number,
+  fromJoint: number,
+): number {
+  const widestGap = layer.gapWidth + layer.gapWander;
+  if (fromJoint >= widestGap) return 1;
+  const narrowestSolid =
+    Math.max(0, layer.gapWidth - layer.gapWander) * (1 - SCREE_EDGE_FADE_SHARE);
+  if (fromJoint < narrowestSolid) return 0;
+  const wander =
+    signedUnit(
+      ctx.noise.fbm(
+        x,
+        y,
+        seed + SCREE_GAP_SEED_SALT,
+        SCREE_GAP_OCTAVES,
+        SCREE_GAP_PERIOD_PER_TILE * tiles,
+      ),
+    ) * layer.gapWander;
+  const gap = Math.max(0, layer.gapWidth + wander);
+  const fade = gap * SCREE_EDGE_FADE_SHARE;
+  const solid = gap - fade;
+  return fade <= 0 ? (fromJoint >= gap ? 1 : 0) : clamp01((fromJoint - solid) / fade);
+}
+
+function clamp01(value: number): number {
+  return value < 0 ? 0 : value > 1 ? 1 : value;
+}
+
+/** A unit sample in [0, 1) stretched to [-1, 1). */
+function signedUnit(sample: number): number {
+  return (sample - 0.5) * 2;
+}
+
+function paintScreeTufts(ctx: PaintContext): void {
+  const tiles = ctx.size / TILE_PX;
+  const tufts = Math.round(SCREE_TUFT_COUNT * tiles * tiles);
+  const seed = ctx.detail + SCREE_TUFT_SEED_SALT;
+  for (let tuft = 0; tuft < tufts; tuft++) {
+    const centreX = hashLattice(tuft, SCREE_TUFT_STREAM.centreX, seed) * ctx.size;
+    const centreY = hashLattice(tuft, SCREE_TUFT_STREAM.centreY, seed) * ctx.size;
+    if (screeStoneAt(ctx, centreX, centreY).stone > SCREE_TUFT_MAX_STONE) continue;
+    for (let blade = 0; blade < SCREE_TUFT_BLADES; blade++) {
+      const index = tuft * SCREE_TUFT_BLADES + blade;
+      const strayX = signedUnit(hashLattice(index, SCREE_TUFT_STREAM.rootX, seed));
+      const strayY = signedUnit(hashLattice(index, SCREE_TUFT_STREAM.rootY, seed));
+      const rootX = centreX + strayX * SCREE_TUFT_SPREAD_PX;
+      const rootY = centreY + strayY * SCREE_TUFT_ROOT_DEPTH_SHARE * SCREE_TUFT_SPREAD_PX;
+      const lean = (rootX - centreX) / SCREE_TUFT_SPREAD_PX;
+      const length =
+        SCREE_TUFT_BLADE_MIN_PX +
+        hashLattice(index, SCREE_TUFT_STREAM.length, seed) * SCREE_TUFT_BLADE_RANGE_PX;
+      const dead = hashLattice(index, SCREE_TUFT_STREAM.dead, seed) < SCREE_TUFT_DEAD_SHARE;
+      const ramp = dead ? DEAD_GRASS_RAMP : GRASS_RAMP;
+      wrappedStroke(
+        ctx.surface,
+        rootX,
+        rootY,
+        lean,
+        SCREE_TUFT_BLADE_STEP_Y,
+        length,
+        sampleRamp(ramp, hashLattice(index, SCREE_TUFT_STREAM.tone, seed)),
+        SCREE_TUFT_ALPHA,
+        SCREE_TUFT_TAPER,
+      );
+    }
+  }
+}
 
 const scree: Material = {
   id: 'scree',
-  label: 'Scree (broken hillside rock)',
+  label: 'Scree (broken stone in soil on a slope)',
   patchTiles: 4,
   variants: 2,
   paint: (ctx) => {
-    paintSetts(ctx, {
-      cellsPerTile: SCREE_CELLS_PER_TILE,
-      jitter: SCREE_JITTER,
-      ramp: SCREE_RAMP,
-      jointRamp: {
-        ...SCREE_RAMP,
-        mid: mix(SCREE_RAMP.mid, SCREE_RAMP.shadow, SCREE_JOINT_DEPTH),
-        light: mix(SCREE_RAMP.light, SCREE_RAMP.shadow, SCREE_JOINT_DEPTH),
-      },
-      jointWidth: SCREE_JOINT_WIDTH,
-      jointStrength: SCREE_JOINT_STRENGTH,
-      reliefStrength: SCREE_RELIEF_STRENGTH,
-      warpAmplitude: SCREE_WARP_AMPLITUDE,
-      toneSpread: SCREE_TONE_SPREAD,
-      toneFloor: SCREE_TONE_FLOOR,
-    });
-    const tiles = ctx.size / TILE_PX;
-    const fractures = Math.round(SCREE_FRACTURE_COUNT * tiles * tiles);
-    for (let i = 0; i < fractures; i++) {
-      const x = hashLattice(i, 51, ctx.detail) * ctx.size;
-      const y = hashLattice(i, 52, ctx.detail) * ctx.size;
-      const angle = hashLattice(i, 53, ctx.detail) * Math.PI * 2;
-      wrappedStroke(
-        ctx.surface,
-        x,
-        y,
-        Math.cos(angle),
-        Math.sin(angle),
-        SCREE_FRACTURE_LENGTH,
-        SCREE_RAMP.shadow,
-        SCREE_FRACTURE_ALPHA,
-        SCREE_FRACTURE_SOFTNESS,
-      );
-    }
-    // Broad soft shade pools over the plates, at a scale far larger than the
-    // cell lattice. Their job is to break up the regularity the lattice cannot
-    // avoid having, so the eye finds the slope's shape before it finds the grid.
-    paintSpeckles(ctx, ctx.detail + 73, {
-      count: SCREE_SHADE_POOL_COUNT,
-      minRadius: SCREE_SHADE_POOL_MIN_RADIUS,
-      maxRadius: SCREE_SHADE_POOL_MAX_RADIUS,
-      ramp: { ...SCREE_RAMP, mid: shade(SCREE_RAMP.shadow, 0.75) },
-      alpha: SCREE_SHADE_POOL_ALPHA,
-      softness: SCREE_SHADE_POOL_SOFTNESS,
-    });
-    paintSpeckles(ctx, ctx.detail + 71, {
+    paintNoiseGround(ctx, SCREE_SOIL_RAMP, SCREE_SOIL_GROUND);
+    paintSpeckles(ctx, ctx.detail + SCREE_FINES_SEED_SALT, {
       count: SCREE_FINES_COUNT,
       minRadius: SCREE_FINES_MIN_RADIUS,
       maxRadius: SCREE_FINES_MAX_RADIUS,
@@ -569,6 +729,11 @@ const scree: Material = {
       alpha: SCREE_FINES_ALPHA,
       softness: SCREE_FINES_SOFTNESS,
     });
+    ctx.surface.fill((x, y) => {
+      const sample = screeStoneAt(ctx, x, y);
+      return mix(ctx.surface.get(x, y), sample.color, sample.stone);
+    });
+    paintScreeTufts(ctx);
   },
 };
 

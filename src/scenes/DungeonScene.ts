@@ -26,6 +26,7 @@ import { DEFAULT_DUNGEON_FLOOR_THEME, setDungeonFloorTheme } from '../map/dungeo
 import type { GameProgressInput } from '../auth/AuthClient';
 import { parseSavedWorld, WORLD_GENERATOR_VERSION } from '../core/SavedWorld';
 import { setFloorArtSeed } from '../map/ground/floorArtSeed';
+import { prepareGroundTone } from '../map/tiles/groundTiles';
 import { groundSheetKeysAmong, requestGroundSheets } from '../map/ground/runtimeGroundSheets';
 import { releaseEnvironmentArt } from '../map/environmentArtCache';
 import { requestEnvironmentSheetsForGroups } from '../sprites/sheets/environmentSheets';
@@ -1794,6 +1795,7 @@ export class DungeonScene extends GameplayScene {
     // chunk or ground sheet is baked, and never again while this floor is live:
     // a chunk baked under one seed and drawn under another is a silent tear.
     setFloorArtSeed(this.gameMap.artSeed);
+    prepareGroundTone(this.gameMap.structure);
 
     // Queued, not painted: the cache spends a few milliseconds a frame on these
     // so the floor fades in while its ground arrives, and re-bakes the tile

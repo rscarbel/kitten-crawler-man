@@ -17,14 +17,26 @@
  * them. Nothing coordinates that; it falls out of there being one field.
  */
 
-import { CLIFF, HIGHLAND_GRASS, SCREE } from '../tileTypes';
+import {
+  BOULDER_LARGE,
+  BOULDER_SMALL,
+  CLIFF,
+  FloorTypeValue,
+  HIGHLAND_GRASS,
+  PEBBLE_SCATTER,
+  SCREE,
+  TREE,
+} from '../tileTypes';
+import { isWalkableTileType } from '../walkability';
 import type { TileGrid } from '../town/tileGrid';
 import type { TilePoint, TownPlan } from '../town/townPlan';
-import type { CampSite } from './camps';
+import { isWithinCamp, type CampSite } from './camps';
 import type { ElevationBand, ElevationField } from './elevation';
 import type { KeepOut } from './keepOut';
-import { NO_REGION, Reachability } from './reachability';
+import { Reachability } from './reachability';
 import { worldRandom } from '../../core/WorldRandom';
+import { tileHash01 } from '../tiles/hollowTileHash';
+import { DriftField, scatterSalt, type LandformSampler } from './landformScatter';
 
 /**
  * How steep the ground must be before a ledge shows, in normalised elevation per
@@ -63,31 +75,49 @@ const CLIFF_RUN_LENGTH_RANGE = MAX_CLIFF_RUN_TILES - MIN_CLIFF_RUN_TILES + 1;
  *
  * The seed marks where the drop is steepest; the rest of the ledge only has to
  * be part of the same fall. Without the relaxation a run stops at the first tile
- * that dips under the seeding threshold, which is what left the first version
- * drawing single tiles.
+ * that dips under the seeding threshold, and most ledges come out a single tile.
  */
 const CLIFF_RUN_GRADIENT_RELAXATION = 0.45;
 
 /** Tiles of clear ground kept between a camp's edge and the nearest ledge. */
 const CLIFF_CAMP_CLEARANCE_TILES = 2;
 
-function campKeepOut(camp: CampSite): number {
-  return camp.radiusTiles + CLIFF_CAMP_CLEARANCE_TILES;
-}
-
-/** Scree spilling from the foot of a ledge. */
-const CLIFF_SPOIL_CHANCE = 0.45;
+/**
+ * The talus fan below a ledge: stone that has fallen from the face and spread
+ * as it rolled. It reaches `TALUS_DEPTH_TILES` down the slope and widens by
+ * `TALUS_WIDENING` tiles either side per row, and thins with distance from the
+ * face. Bare scree lies where it is thickest, near the foot; loose stones on the
+ * turf beyond. A drift field breaks the fan up, so neighbouring ledges do not
+ * shed identical aprons.
+ */
+const TALUS_DEPTH_TILES = 4;
+const TALUS_WIDENING = 0.5;
+/** Fan strength above which the fallen stone has buried the turf entirely. */
+const TALUS_SCREE_STRENGTH = 0.55;
+const TALUS_SCREE_CHANCE = 0.85;
+const TALUS_PEBBLE_CHANCE = 0.5;
+/** How much of the fan the drift may take away. */
+const TALUS_PATCHINESS = 0.5;
+const TALUS_DRIFT_OCTAVES = [
+  { periodTiles: 5, weight: 0.7 },
+  { periodTiles: 3, weight: 0.3 },
+] as const;
+/**
+ * A boulder at the toe of a fan: the odd big block that rolled furthest. Only
+ * where the fan has thinned to this range, and only with open ground all round
+ * it, so a rock never closes a gap between ledges.
+ */
+const TALUS_BOULDER_MIN_STRENGTH = 0.15;
+const TALUS_BOULDER_MAX_STRENGTH = 0.45;
+const TALUS_BOULDER_CHANCE = 0.03;
+const TALUS_DRIFT_SALT = 9401;
+const TALUS_CHOICE_SALT = 9411;
+const TALUS_BOULDER_SALT = 9421;
 
 /**
- * How many rounds of ramp-cutting are run before the map is left as it is.
- *
- * A ledge deeper than one tile was tried and reverted: cutting a gully through
- * every stacked tier sounds right — a gap in the top tier does open onto the
- * face of the next — but it walked all four directions from the tile it found,
- * carving up to two dozen tiles out of an escarpment, and **measurement showed
- * no benefit**: large unreachable regions went from 9 per 2,500 maps to 13. The
- * cases that survive are composite barriers of forest, boulders and cliff, which
- * no amount of cliff-cutting opens.
+ * How many rounds of ramp-cutting are run before the map is left as it is. Each
+ * round re-floods the map, so a region opened onto a pocket that is itself
+ * still shut is reconsidered from its new, larger border.
  */
 const MAX_RAMP_REPAIR_ROUNDS = 6;
 
@@ -96,6 +126,24 @@ const MAX_RAMP_REPAIR_ROUNDS = 6;
  * threshold and the same reasoning as the river repair's.
  */
 const MIN_MAROONED_REGION_TILES = 80;
+
+/**
+ * What the ramp repair pays to cut through a tile on its way out of a marooned
+ * region. A ledge or a boulder is one tile of gully. A tree costs more, so a
+ * wood is only thinned where no ledge offers as short a way through, yet a
+ * region whose border is mostly forest fringe can still be opened by felling
+ * the one tree that closes it.
+ */
+const RAMP_CUT_COST_ROCK = 1;
+const RAMP_CUT_COST_TREE = 2;
+/**
+ * The dearest single cut the repair makes: a gully through an escarpment six
+ * ledges deep, or three trees. Anything costlier is a barrier, not a seam, and
+ * is left for the generator's reachability warning to report.
+ */
+const MAX_RAMP_CUT_COST = 6;
+const UNPRICED = Number.MAX_SAFE_INTEGER;
+const NO_PARENT = -1;
 
 const CARDINAL_STEPS: ReadonlyArray<readonly [number, number]> = [
   [0, 1],
@@ -116,11 +164,12 @@ const CARDINAL_STEPS: ReadonlyArray<readonly [number, number]> = [
 export function paintCliffs(
   grid: TileGrid,
   plan: TownPlan,
-  elevation: ElevationField,
+  landform: LandformSampler,
   camps: ReadonlyArray<CampSite>,
   border: number,
   keepOut: KeepOut,
 ): void {
+  const { elevation } = landform;
   const seeds: TilePoint[] = [];
   for (let ty = border + 1; ty < grid.size - border - 1; ty++) {
     for (let tx = border + 1; tx < grid.size - border - 1; tx++) {
@@ -132,14 +181,12 @@ export function paintCliffs(
       // **The top edge of a south-facing drop** — one tile thick, running along
       // the contour, facing the way its shadow falls.
       //
-      // Two earlier rules both failed, in opposite directions. Selecting every
-      // steep upland tile produced *areas*: 1,500–6,000 tiles a map, in blobs no
-      // run-cap could break and that walled off whole regions. Selecting where
-      // the *band* drops going south produced specks — runs of three tiles —
-      // because `bandAt` is deliberately dithered per tile, so the boundary it
-      // draws is frayed by design.
+      // Neither steepness alone nor a band change will do. Every steep upland
+      // tile makes *areas* — blobs no run-cap can break, walling off whole
+      // regions — and where the *band* drops going south makes specks, because
+      // `bandAt` nudges its thresholds off the contour by design.
       //
-      // The fix is to read the **smooth** field: a tile is a ledge when the
+      // So the ledge reads the **smooth** field: a tile is a ledge when the
       // ground falls away to its south steeply and the tile above it does not,
       // which is the leading edge of the drop and is continuous by construction.
       if (!isSouthFacingDrop(elevation, tx, ty, CLIFF_GRADIENT_THRESHOLD)) continue;
@@ -149,10 +196,10 @@ export function paintCliffs(
     }
   }
 
-  // Grown into runs, not placed as found. A seed on its own is a grey box, and
-  // the first version that placed seeds directly drew exactly that: isolated
-  // single tiles scattered over the hillside, each with its own drop-shadow, so
-  // they read as blocks dropped on the grass rather than as an escarpment. A
+  // Grown into runs, not placed as found. A seed on its own is a grey box:
+  // seeds placed directly are isolated single tiles scattered over the
+  // hillside, each with its own drop-shadow, so they read as blocks dropped on
+  // the grass rather than as an escarpment. A
   // ledge is a *line*; it has to be built as one.
   const claimed = new Set<number>();
   const placed: TilePoint[] = [];
@@ -165,7 +212,7 @@ export function paintCliffs(
   }
 
   breakLongRuns(grid, placed);
-  scatterSpoil(grid, camps, keepOut, placed);
+  spreadTalus(grid, landform, camps, keepOut, placed);
 }
 
 /**
@@ -174,8 +221,8 @@ export function paintCliffs(
  * `gradientAt().dy` is the change in elevation going *down* the screen, so a
  * negative value is ground getting lower southward — which is what a
  * south-facing escarpment is. Read off the smooth field rather than off
- * `bandAt`, whose per-tile dither exists to fray band edges and would fray this
- * contour into dots.
+ * `bandAt`, whose nudged thresholds exist to make band edges wander and would
+ * break this contour into pieces.
  */
 function isSouthFacingDrop(
   elevation: ElevationField,
@@ -192,9 +239,9 @@ function isSouthFacingDrop(
  *
  * Every rule about *where* a ledge may go lives here rather than in the seed
  * loop, because `growRun` extends a run past its seed and has to apply the same
- * rules. Filtering only the seeds is what the first version did, and a run
- * seeded beside a camp then grew straight through it: 134 cliff tiles inside
- * camp discs across 800 camps, with the seed filter working perfectly.
+ * rules. With only the seeds filtered, a run seeded beside a camp grows
+ * straight through it: 134 cliff tiles inside camp discs across 800 camps, with
+ * the seed filter working perfectly.
  */
 function canCarryLedge(
   grid: TileGrid,
@@ -206,10 +253,8 @@ function canCarryLedge(
   if (!isOpenUpland(grid, tx, ty)) return false;
   // A camp is cleared ground, and a troglodyte den's disc is cleared *to*
   // `SCREE` — which `isOpenUpland` accepts — so nothing about the tile itself
-  // says a ledge does not belong there. Goblin camps escaped only incidentally,
-  // because their disc is road.
-  if (camps.some((camp) => Math.hypot(tx - camp.centre.x, ty - camp.centre.y) <= campKeepOut(camp)))
-    return false;
+  // says a ledge does not belong there.
+  if (isWithinCamp(camps, tx, ty, CLIFF_CAMP_CLEARANCE_TILES)) return false;
   // Nor across a landmark's ground, nor with its shade falling on one.
   if (keepOut.contains(tx, ty) || keepOut.contains(tx, ty + 1)) return false;
   // The tile below is what the shade falls on, and a ledge with a solid
@@ -317,19 +362,79 @@ function breakLongRuns(grid: TileGrid, placed: ReadonlyArray<TilePoint>): void {
   }
 }
 
-/** Scree spilling from the foot of a ledge, where it would actually collect. */
-function scatterSpoil(
+/** Open ground a fan of fallen stone may spread over. */
+function canTakeTalus(
   grid: TileGrid,
+  camps: ReadonlyArray<CampSite>,
+  keepOut: KeepOut,
+  tx: number,
+  ty: number,
+): boolean {
+  const type = grid.typeAt(tx, ty);
+  const open = type === SCREE || type === HIGHLAND_GRASS || type === FloorTypeValue.grass;
+  if (!open || keepOut.contains(tx, ty)) return false;
+  return !isWithinCamp(camps, tx, ty, CLIFF_CAMP_CLEARANCE_TILES);
+}
+
+/** How thick each tile's talus is, the strongest fan reaching it winning: 1 at a ledge's foot. */
+function talusStrength(grid: TileGrid, placed: ReadonlyArray<TilePoint>): Map<number, number> {
+  const strength = new Map<number, number>();
+  for (const ledge of placed) {
+    if (grid.typeAt(ledge.x, ledge.y) !== CLIFF) continue;
+    for (let row = 1; row <= TALUS_DEPTH_TILES; row++) {
+      const reach = Math.round(row * TALUS_WIDENING);
+      const rowStrength = 1 - (row - 1) / TALUS_DEPTH_TILES;
+      for (let across = -reach; across <= reach; across++) {
+        const lateral = 1 - Math.abs(across) / (reach + 1);
+        const key = (ledge.y + row) * grid.size + ledge.x + across;
+        strength.set(key, Math.max(strength.get(key) ?? 0, rowStrength * lateral));
+      }
+    }
+  }
+  return strength;
+}
+
+function isOpenAllRound(grid: TileGrid, tx: number, ty: number): boolean {
+  for (let dy = -1; dy <= 1; dy++) {
+    for (let dx = -1; dx <= 1; dx++) {
+      if (grid.isSolid(tx + dx, ty + dy)) return false;
+    }
+  }
+  return true;
+}
+
+/** Fans of fallen stone below every ledge, thickest at its foot. */
+function spreadTalus(
+  grid: TileGrid,
+  landform: LandformSampler,
   camps: ReadonlyArray<CampSite>,
   keepOut: KeepOut,
   placed: ReadonlyArray<TilePoint>,
 ): void {
-  for (const tile of placed) {
-    if (grid.typeAt(tile.x, tile.y) !== CLIFF) continue;
-    if (worldRandom() >= CLIFF_SPOIL_CHANCE) continue;
-    const belowY = tile.y + 1;
-    if (!canCarryLedge(grid, camps, keepOut, tile.x, belowY)) continue;
-    grid.set(tile.x, belowY, SCREE);
+  const seed = landform.elevation.seed;
+  const drift = new DriftField(seed, TALUS_DRIFT_SALT, grid.size, TALUS_DRIFT_OCTAVES);
+  const choiceSalt = scatterSalt(seed, TALUS_CHOICE_SALT);
+  const boulderSalt = scatterSalt(seed, TALUS_BOULDER_SALT);
+  for (const [key, fanStrength] of talusStrength(grid, placed)) {
+    const tx = key % grid.size;
+    const ty = Math.floor(key / grid.size);
+    if (!canTakeTalus(grid, camps, keepOut, tx, ty)) continue;
+    const strength = fanStrength * (1 - TALUS_PATCHINESS * (1 - drift.sample(tx, ty)));
+    const roll = tileHash01(tx, ty, choiceSalt);
+    if (strength >= TALUS_SCREE_STRENGTH) {
+      if (roll < TALUS_SCREE_CHANCE) grid.set(tx, ty, SCREE);
+      continue;
+    }
+    const isToe = strength >= TALUS_BOULDER_MIN_STRENGTH && strength < TALUS_BOULDER_MAX_STRENGTH;
+    if (
+      isToe &&
+      tileHash01(tx, ty, boulderSalt) < TALUS_BOULDER_CHANCE &&
+      isOpenAllRound(grid, tx, ty)
+    ) {
+      grid.setStanding(tx, ty, BOULDER_SMALL);
+      continue;
+    }
+    if (roll < strength * TALUS_PEBBLE_CHANCE) grid.setStanding(tx, ty, PEBBLE_SCATTER);
   }
 }
 
@@ -340,40 +445,131 @@ function scatterSpoil(
  * than an assertion** for the same reason: a contour that happens to close on
  * itself would otherwise fail generation outright, and a map that refuses to
  * load is a far worse outcome than a ledge with one more gully in it.
+ *
+ * Only regions with a ledge on their border are opened, because a ledge is what
+ * this pass adds to a map; a pocket a wood closed on its own is pocket noise.
+ * Each is opened along the cheapest way out to reached ground, not at the first
+ * cliff tile that touches both sides. Escarpments stack — a run seeded on the
+ * row below another leaves a ledge two, three or more tiles thick — and a single
+ * tile cut from a stack opens onto the next tier rather than onto the far side.
+ * The cheapest way runs straight through the whole stack, takes any boulder
+ * resting against its foot or lip with it, and may cross other unreached
+ * ground and a forest's fringe where those close the rest of the border.
  */
-export function openCliffRamps(grid: TileGrid, from: TilePoint, border: number): void {
+export function openCliffRamps(
+  grid: TileGrid,
+  plan: TownPlan,
+  keepOut: KeepOut,
+  camps: readonly CampSite[],
+  from: TilePoint,
+  border: number,
+): void {
+  const mayCut = (tx: number, ty: number): boolean =>
+    tx >= border &&
+    ty >= border &&
+    tx < grid.size - border &&
+    ty < grid.size - border &&
+    !keepOut.contains(tx, ty) &&
+    !isWithinCamp(camps, tx, ty) &&
+    Math.hypot(tx - plan.centre.x, ty - plan.centre.y) > plan.safeRadiusTiles;
+
   for (let round = 0; round < MAX_RAMP_REPAIR_ROUNDS; round++) {
     const reachability = new Reachability(grid, from);
     const { labels, counts, touchesCliff } = reachability.marooned();
-    const worthOpening = new Set<number>();
+    const worthOpening: number[] = [];
     counts.forEach((count, label) => {
-      if (count >= MIN_MAROONED_REGION_TILES && touchesCliff[label]) worthOpening.add(label);
+      if (count >= MIN_MAROONED_REGION_TILES && touchesCliff[label]) worthOpening.push(label);
     });
-    if (worthOpening.size === 0) return;
+    if (worthOpening.length === 0) return;
 
-    const opened = new Set<number>();
-    for (let ty = border; ty < grid.size - border; ty++) {
-      for (let tx = border; tx < grid.size - border; tx++) {
-        if (grid.typeAt(tx, ty) !== CLIFF) continue;
-        // A cliff tile with the marooned side on one hand and reached ground on
-        // the other is exactly where a gully belongs.
-        let strandedLabel = NO_REGION;
-        let touchesReached = false;
-        for (const [dx, dy] of CARDINAL_STEPS) {
-          const nx = tx + dx;
-          const ny = ty + dy;
-          if (reachability.reached(nx, ny)) touchesReached = true;
-          const label = labels[ny * grid.size + nx];
-          if (label !== NO_REGION && worthOpening.has(label)) strandedLabel = label;
-        }
-        if (!touchesReached || strandedLabel === NO_REGION) continue;
-        if (opened.has(strandedLabel)) continue;
-        grid.set(tx, ty, grid.cells[ty][tx].groundType ?? SCREE);
-        opened.add(strandedLabel);
+    let openedAny = false;
+    for (const label of worthOpening) {
+      const cut = cheapestCutOut(grid, reachability, labels, label, mayCut);
+      if (cut === null) continue;
+      for (const tile of cut) {
+        grid.set(tile.x, tile.y, grid.cells[tile.y][tile.x].groundType ?? SCREE);
       }
+      openedAny = true;
     }
     // Nothing could be opened this round, so nothing will be in the next: what
-    // is left is walled off by something other than a cliff.
-    if (opened.size === 0) return;
+    // is left is walled off by more than the repair may cut.
+    if (!openedAny) return;
   }
+}
+
+/** What stepping onto a tile costs the ramp repair, or undefined where it may not go. */
+function rampStepCost(
+  grid: TileGrid,
+  mayCut: (tx: number, ty: number) => boolean,
+  tx: number,
+  ty: number,
+): number | undefined {
+  if (isWalkableTileType(grid.cells[ty][tx])) return 0;
+  if (!mayCut(tx, ty)) return undefined;
+  const type = grid.typeAt(tx, ty);
+  if (type === CLIFF || type === BOULDER_SMALL || type === BOULDER_LARGE) {
+    return RAMP_CUT_COST_ROCK;
+  }
+  if (type === TREE) return RAMP_CUT_COST_TREE;
+  return undefined;
+}
+
+/**
+ * The blocking tiles on the cheapest path from a marooned region to reached
+ * ground, or null when every way out costs more than `MAX_RAMP_CUT_COST`.
+ *
+ * A Dijkstra over small integer costs, so a bucket per cost stands in for the
+ * priority queue. Walkable ground that is not reached costs nothing to cross.
+ */
+function cheapestCutOut(
+  grid: TileGrid,
+  reachability: Reachability,
+  labels: Int32Array,
+  label: number,
+  mayCut: (tx: number, ty: number) => boolean,
+): TilePoint[] | null {
+  const size = grid.size;
+  const price = new Float64Array(size * size).fill(UNPRICED);
+  const parent = new Int32Array(size * size).fill(NO_PARENT);
+  const buckets: number[][] = Array.from({ length: MAX_RAMP_CUT_COST + 1 }, () => []);
+  labels.forEach((tileLabel, key) => {
+    if (tileLabel !== label) return;
+    price[key] = 0;
+    buckets[0].push(key);
+  });
+
+  for (let cost = 0; cost <= MAX_RAMP_CUT_COST; cost++) {
+    const bucket = buckets[cost];
+    for (let key = bucket.pop(); key !== undefined; key = bucket.pop()) {
+      if (price[key] !== cost) continue;
+      const tx = key % size;
+      const ty = Math.floor(key / size);
+      for (const [dx, dy] of CARDINAL_STEPS) {
+        const nx = tx + dx;
+        const ny = ty + dy;
+        if (reachability.reached(nx, ny)) return blockersBack(grid, parent, key);
+        if (nx < 0 || ny < 0 || nx >= size || ny >= size) continue;
+        const nextKey = ny * size + nx;
+        const stepCost = rampStepCost(grid, mayCut, nx, ny);
+        if (stepCost === undefined) continue;
+        const nextCost = cost + stepCost;
+        if (nextCost > MAX_RAMP_CUT_COST || nextCost >= price[nextKey]) continue;
+        price[nextKey] = nextCost;
+        parent[nextKey] = key;
+        buckets[nextCost].push(nextKey);
+      }
+    }
+  }
+  return null;
+}
+
+/** The tiles the path ending at `key` has to cut, walked back to the region it left. */
+function blockersBack(grid: TileGrid, parent: Int32Array, key: number): TilePoint[] {
+  const blockers: TilePoint[] = [];
+  for (let at = key; at !== NO_PARENT; at = parent[at]) {
+    const tx = at % grid.size;
+    const ty = Math.floor(at / grid.size);
+    if (!isWalkableTileType(grid.cells[ty][tx])) blockers.push({ x: tx, y: ty });
+  }
+  return blockers;
 }

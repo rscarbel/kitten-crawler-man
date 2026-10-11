@@ -37,7 +37,13 @@ function smoothstepUnit(t: number): number {
   return t * t * (3 - 2 * t);
 }
 
+/**
+ * Every sampler calls this several times a pixel and almost every index is
+ * already inside the period, so that case skips the two floating-point
+ * remainders, which dominate a Worley lookup's cost.
+ */
 function wrapIndex(value: number, period: number): number {
+  if (value >= 0 && value < period) return value;
   return ((value % period) + period) % period;
 }
 
@@ -127,11 +133,16 @@ export class NoiseField {
     const baseX = Math.floor(gx);
     const baseY = Math.floor(gy);
 
-    let nearest = Number.POSITIVE_INFINITY;
-    let secondNearest = Number.POSITIVE_INFINITY;
+    // Candidates are ranked by squared distance and only the winning two are
+    // measured with `Math.hypot`: it costs several times a sum of squares, and
+    // measuring all nine candidates would dominate the lookup.
+    let nearestSquared = Number.POSITIVE_INFINITY;
+    let secondSquared = Number.POSITIVE_INFINITY;
     let nearestHash = 0;
     let nearestOffsetX = 0;
     let nearestOffsetY = 0;
+    let secondOffsetX = 0;
+    let secondOffsetY = 0;
 
     for (let dy = -WORLEY_NEIGHBOURHOOD_RADIUS; dy <= WORLEY_NEIGHBOURHOOD_RADIUS; dy++) {
       for (let dx = -WORLEY_NEIGHBOURHOOD_RADIUS; dx <= WORLEY_NEIGHBOURHOOD_RADIUS; dx++) {
@@ -143,22 +154,26 @@ export class NoiseField {
         const jitterY = (hashLattice(wrappedX, wrappedY, seed + 1) - 0.5) * jitter;
         const offsetX = gx - (cellX + 0.5 + jitterX);
         const offsetY = gy - (cellY + 0.5 + jitterY);
-        const distance = Math.hypot(offsetX, offsetY);
-        if (distance < nearest) {
-          secondNearest = nearest;
-          nearest = distance;
+        const squared = offsetX * offsetX + offsetY * offsetY;
+        if (squared < nearestSquared) {
+          secondSquared = nearestSquared;
+          secondOffsetX = nearestOffsetX;
+          secondOffsetY = nearestOffsetY;
+          nearestSquared = squared;
           nearestHash = hashLattice(wrappedX, wrappedY, seed + WORLEY_CELL_HASH_SEED_STRIDE);
           nearestOffsetX = offsetX;
           nearestOffsetY = offsetY;
-        } else if (distance < secondNearest) {
-          secondNearest = distance;
+        } else if (squared < secondSquared) {
+          secondSquared = squared;
+          secondOffsetX = offsetX;
+          secondOffsetY = offsetY;
         }
       }
     }
 
     return {
-      nearest,
-      secondNearest,
+      nearest: Math.hypot(nearestOffsetX, nearestOffsetY),
+      secondNearest: Math.hypot(secondOffsetX, secondOffsetY),
       cellHash: nearestHash,
       offsetX: nearestOffsetX,
       offsetY: nearestOffsetY,

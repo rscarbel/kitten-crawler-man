@@ -159,9 +159,9 @@ const NON_WALKABLE_TILE_TYPES: readonly number[] = [
   PIGMENT_SHELF,
   INK_BENCH,
   GRINDING_SLAB,
-  // The floor-3 wilderness. `HIGHLAND_GRASS`, `SCREE`, `BRIDGE`,
+  // The floor-3 wilderness. `HIGHLAND_GRASS`, `SCREE`, `BARE_EARTH`, `BRIDGE`,
   // `WILDFLOWER_TUFT`, `PEBBLE_SCATTER` and `DEN_HOLLOW` are deliberately
-  // absent — the first three are ground the player is meant to cross and the
+  // absent — the first four are ground the player is meant to cross and the
   // last three are flat cover drawn on top of it.
   //
   // `RIVER_ROCK` replaces the water tile it stands in rather than sitting on

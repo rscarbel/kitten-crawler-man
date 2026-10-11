@@ -64,6 +64,18 @@ export interface GroundPalette {
    * wall base. Absent means none.
    */
   readonly hardEdgeMaterials?: ReadonlySet<string>;
+  /**
+   * Materials whose fringe quarters always draw the first variant at the
+   * tile's patch phase rather than the patch's own variant.
+   *
+   * Every fringe quarter is composited once and cached by its frame, so a
+   * material with many frames along a long edge — a meadow bank down a whole
+   * river — misses that cache far more often and slows every chunk bake. The
+   * first variant meets the neighbouring tile exactly as two variants meet at a
+   * patch boundary, which shared structure already makes seamless; for a
+   * material that is grain and blades, it cannot be seen. Absent means none.
+   */
+  readonly fringeFirstVariantMaterials?: ReadonlySet<string>;
   /** The material a tile type stands on, or undefined when it is not this palette's ground. */
   materialForTileType(type: number): string | undefined;
 }

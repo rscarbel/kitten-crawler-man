@@ -788,11 +788,28 @@ export const STEALTH_GATE_OPEN = 175;
  */
 export const PRISON_COVER = 176;
 
+// ── Floor-3 wilderness, continued ────────────────────────────────────────────
+
+/**
+ * Walkable riverbank cover: a stand of reeds and rushes on a lowland bank.
+ * Stands taller than its tile, so it is drawn in the Y-sorted pass; written
+ * with `setStanding`, so it records the meadow it grows from.
+ */
+export const RIVER_REEDS = 177;
+
+/**
+ * Exposed earth on the steepest upland slopes, where the turf has torn away.
+ * Walkable ground whose whole job is to name the `dirt` material, as
+ * `HIGHLAND_GRASS` names `highland`; not a track, so no route pass treats it as
+ * one.
+ */
+export const BARE_EARTH = 178;
+
 /**
  * One past the highest tile type value above — the length of any array indexed
  * by tile type. Bump this when a new tile type exceeds it.
  */
-export const TILE_TYPE_COUNT = 177;
+export const TILE_TYPE_COUNT = 179;
 
 /**
  * Variant indices (row * 10 + col) from the modern_decorations sprite sheet
@@ -949,6 +966,21 @@ export type TileContent = {
    */
   flowDir?: number;
   /**
+   * The river's heading across this tile in radians (screen coordinates, so
+   * south is +π/2), averaged along the course so it turns smoothly where
+   * `flowDir` steps between octants. For anything drawn along the current that
+   * would show the octant steps. Recorded beside `flowDir`, for the same reason.
+   */
+  flowAngle?: number;
+  /**
+   * How far a channel tile sits from dry land: 0 at the bank, rising toward
+   * the middle of the river, at most `MAX_WATER_DEPTH`. Set on every tile whose
+   * ground is the river — open water, a rock standing in it, a deck over it —
+   * once the map's last water-changing pass has run. On the tile for the reason
+   * `flowDir` is.
+   */
+  waterDepth?: number;
+  /**
    * Which way a `BRIDGE` tile's deck runs: one of the `BRIDGE_AXIS_*` constants.
    *
    * Recorded by the river painter as it lays each deck, because the renderer is
@@ -1029,6 +1061,19 @@ export const FLOW_DIR_VECTORS: ReadonlyArray<{ readonly x: number; readonly y: n
   { x: 0, y: -1 },
   { x: Math.SQRT1_2, y: -Math.SQRT1_2 },
 ];
+
+/**
+ * Whether a tile's ground is the river: open water, a rock standing in it, or
+ * a deck over it. A deck's abutments stand on the bank, and record it.
+ */
+export function isRiverChannel(cell: TileContent | undefined): boolean {
+  if (cell === undefined) return false;
+  if (cell.type === FloorTypeValue.water || cell.type === RIVER_ROCK) return true;
+  return cell.type === BRIDGE && cell.groundType === FloorTypeValue.water;
+}
+
+/** The deepest `waterDepth` a channel tile records. */
+export const MAX_WATER_DEPTH = 3;
 
 /** Packs a heading in radians into the nearest `FLOW_DIR_*` index. */
 export function flowDirFromAngle(angleRadians: number): number {

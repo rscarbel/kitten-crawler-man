@@ -19,12 +19,19 @@
  * Coordinates are in tiles and name the top-left of the view. With no arguments
  * it frames the whole town interior. `--scale` multiplies the output resolution
  * for reviewing detail (the game draws at 32 px a tile; 4x is legible for prop
- * art), and `--seed` is unused by the town, which is fixed data — it exists so a
- * caller can re-roll the wilderness outside the walls.
+ * art), and a fractional `--scale` shrinks it for a map-scale overview
+ * (`--x=0 --y=0 --w=280 --h=280 --scale=0.25`).
+ *
+ * `--seed` is the map's world seed. The town is fixed data, but the wilderness
+ * outside the walls is generated, and a before/after comparison is only honest
+ * when both images show the same wilderness — so a given seed always renders the
+ * same map, and leaving it out picks `DEFAULT_WORLD_SEED` rather than a random one.
+
  */
 
 import { createCanvas, type Canvas } from 'canvas';
 
+import { asGameContext } from './nodeGameContext.js';
 import { PREVIEW_DIR, writePreviewPng } from './previewOut.js';
 
 /**
@@ -53,6 +60,16 @@ const globals: CanvasGlobals = globalThis;
  */
 const REVIEW_DEVICE_PIXEL_RATIO = 2;
 
+/**
+ * Animated art — the river's water, the fountain, the tower's banners — reads
+ * the clock while it paints, so two runs a few milliseconds apart would differ
+ * wherever something moves. A review image is a still, and a before/after pair
+ * is only comparable pixel for pixel when both stills show the same instant.
+ */
+const FROZEN_CLOCK_MS = 0;
+performance.now = () => FROZEN_CLOCK_MS;
+Date.now = () => FROZEN_CLOCK_MS;
+
 const nodeCanvasModule = await import('canvas');
 globals.Image = nodeCanvasModule.Image;
 globals.window = { devicePixelRatio: REVIEW_DEVICE_PIXEL_RATIO };
@@ -78,6 +95,17 @@ const MAP_SIZE = 280;
 const ENTITY_SORT_Y_OFFSET = TILE_SIZE;
 const DEFAULT_SCALE = 1;
 const DEFAULT_OUT = `${PREVIEW_DIR}/town.png`;
+const DEFAULT_WORLD_SEED = 1;
+
+function numberArg(name: string, fallback: number): number {
+  const raw = process.argv.find((a) => a.startsWith(`--${name}=`));
+  if (raw === undefined) return fallback;
+  const value = Number.parseFloat(raw.slice(name.length + 3));
+  // A scale that rounds the surface to zero pixels makes node-canvas fail with
+  // the unhelpful "surface type is not appropriate for the operation".
+  if (!Number.isFinite(value) || value <= 0) throw new Error(`--${name} must be a positive number`);
+  return value;
+}
 
 function intArg(name: string, fallback: number): number {
   const raw = process.argv.find((a) => a.startsWith(`--${name}=`));
@@ -97,7 +125,8 @@ const viewTileX = intArg('x', plan.interior.x);
 const viewTileY = intArg('y', plan.interior.y);
 const viewTilesW = intArg('w', plan.interior.w);
 const viewTilesH = intArg('h', plan.interior.h);
-const scale = intArg('scale', DEFAULT_SCALE);
+const scale = numberArg('scale', DEFAULT_SCALE);
+const worldSeed = intArg('seed', DEFAULT_WORLD_SEED);
 const outPath = stringArg('out', DEFAULT_OUT);
 /** Which of the verified looks to paint the town in; 0 is the reviewed art. */
 const { FLOOR_ART_SEEDS } = await import('../src/map/ground/artSeedAlphabet.js');
@@ -111,7 +140,13 @@ await loadSprites('src/images/');
 const { paintEnvironmentArtInNode } = await import('./nodeCanvasGlobals.js');
 paintEnvironmentArtInNode(artSeed);
 
-const gameMap = new GameMap({ mapSize: MAP_SIZE, tileHeight: TILE_SIZE, mapType: 'overworld' });
+const gameMap = new GameMap({
+  mapSize: MAP_SIZE,
+  tileHeight: TILE_SIZE,
+  mapType: 'overworld',
+  worldSeed,
+  artSeed,
+});
 
 // Built in `DungeonScene`'s order, and for its reason: the market claims its
 // stall tiles first so the other props steer clear of them.
@@ -140,23 +175,21 @@ const camX = viewTileX * TILE_SIZE;
 const camY = viewTileY * TILE_SIZE;
 const viewW = viewTilesW * TILE_SIZE;
 const viewH = viewTilesH * TILE_SIZE;
+const sortedProps = [...props].sort(
+  (a, b) => a.y + ENTITY_SORT_Y_OFFSET - (b.y + ENTITY_SORT_Y_OFFSET),
+);
 
-const canvas: Canvas = createCanvas(viewW * scale, viewH * scale);
+const canvas: Canvas = createCanvas(Math.round(viewW * scale), Math.round(viewH * scale));
 const ctx = canvas.getContext('2d');
 ctx.scale(scale, scale);
-// eslint-disable-next-line @typescript-eslint/consistent-type-assertions
-const gameCtx = ctx as unknown as CanvasRenderingContext2D;
+const gameCtx = asGameContext(ctx);
 
 renderCanvas(gameCtx, gameMap.structure, TILE_SIZE, camX, camY, viewW, viewH);
 renderDecorationsOverlay(gameCtx, gameMap.structure, TILE_SIZE, camX, camY, viewW, viewH);
-
-for (const prop of [...props].sort(
-  (a, b) => a.y + ENTITY_SORT_Y_OFFSET - (b.y + ENTITY_SORT_Y_OFFSET),
-)) {
-  prop.render(gameCtx, camX, camY, TILE_SIZE);
-}
+for (const prop of sortedProps) prop.render(gameCtx, camX, camY, TILE_SIZE);
 
 const written = writePreviewPng(outPath, canvas.toBuffer('image/png'));
 console.log(
-  `${written}: ${viewTilesW}x${viewTilesH} tiles at ${scale}x from (${viewTileX}, ${viewTileY}), ${props.length} props`,
+  `${written}: ${viewTilesW}x${viewTilesH} tiles at ${scale}x from (${viewTileX}, ${viewTileY}), ` +
+    `world seed ${worldSeed}, ${props.length} props`,
 );

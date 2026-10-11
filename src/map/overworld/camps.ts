@@ -53,6 +53,25 @@ export function campSiteKey(camp: Pick<CampSite, 'kind' | 'centre'>): string {
   return `${camp.kind}@${camp.centre.x},${camp.centre.y}`;
 }
 
+/**
+ * Whether a tile lies within any camp's disc, widened by `clearanceTiles`.
+ *
+ * Every natural pass that runs after the camps asks this: a camp is ground
+ * somebody has cleared, and a troglodyte den's disc is cleared to `SCREE`,
+ * which those passes would otherwise take for open upland.
+ */
+export function isWithinCamp(
+  camps: ReadonlyArray<CampSite>,
+  tx: number,
+  ty: number,
+  clearanceTiles = 0,
+): boolean {
+  return camps.some(
+    (camp) =>
+      Math.hypot(tx - camp.centre.x, ty - camp.centre.y) <= camp.radiusTiles + clearanceTiles,
+  );
+}
+
 const CAMP_RADIUS_TILES = 7;
 
 /** Clearances a camp site must respect, past each site's own radius. */

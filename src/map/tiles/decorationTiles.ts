@@ -17,6 +17,7 @@ import {
   WILDFLOWER_TUFT,
   PEBBLE_SCATTER,
   RIVER_ROCK,
+  RIVER_REEDS,
   BOULDER_SMALL,
   BOULDER_LARGE,
   boulderSpriteKey,
@@ -90,6 +91,12 @@ import { isFaceMountedSign } from '../dungeon/wallShape';
 import { inferFloorType } from './helpers';
 import { drawTerrainTile } from './terrainTiles';
 import { drawGroundTile } from './groundTiles';
+import {
+  drawBoulderContactShade,
+  drawDirtPatchArt,
+  drawGrassyWeedArt,
+  drawRubbleArt,
+} from './groundScatterArt';
 import { OVERWORLD_GROUND } from '../town/groundMaterials';
 import { drawSpecialFloorTile } from './specialFloorTiles';
 import { drawSpriteKey, drawSprite, timeFrameIndex } from '../../core/SpriteRenderer';
@@ -100,22 +107,6 @@ import { drawCircusDecals } from './circusDecalTiles';
 import { drawServiceLevelTile } from './serviceLevelPropTiles';
 import { drawCellarPropTile } from './cellarPropTiles';
 import { UINT32_SPAN } from '../../core/WorldRandom';
-
-/** Number of broken-stone chunks drawn per RUBBLE tile. */
-const RUBBLE_CHUNK_COUNT = 4;
-/** Number of fine grit specks per RUBBLE tile. */
-const RUBBLE_GRIT_COUNT = 6;
-/** Number of grass tufts drawn over the rubble so it blends into the lawn. */
-const RUBBLE_TUFT_COUNT = 3;
-const RUBBLE_TUFT_HEIGHT = 6;
-/** Margin keeping the dirt patch off the tile edges so grass rings the debris. */
-const RUBBLE_PATCH_INSET = 4;
-/** Per-tile jitter applied to the dirt-patch position. */
-const RUBBLE_PATCH_JITTER = 5;
-/** Extra horizontal radius making the dirt patch an oval rather than a circle. */
-const RUBBLE_PATCH_RX_EXTRA = 3;
-const RUBBLE_CHUNK_MIN_SIZE = 3;
-const RUBBLE_CHUNK_SIZE_VARIANCE = 4;
 
 /** Playback rate and frame count of the main tower's glow overlay. */
 const MAIN_TOWER_GLOW_FPS = 4;
@@ -398,17 +389,17 @@ const FENCE_POST_CAP_HEIGHT_PX = 2;
  * wall, or the side-gate torch that closes Miller's kitchen garden, where the rail
  * ended a tile and a half short of what it was supposed to meet.
  *
- * **`SPRITE_BUILDING` and `MAIN_TOWER` are deliberately absent**, and the reason is
- * the one this whole phase keeps rediscovering: a building is *one anchor tile*,
- * and that tile is the **top-left of its art rect** — transparent sky above the
- * roof. Including them fired on two tiles in the whole town, both gate cheeks that
- * happened to sit above an anchor, and hung a rail off into open verge with the
- * roof half a tile (Miller's) and 1.84 tiles (Signet's) further down, measured by
- * alpha-scanning the rendered art. Meanwhile the 43 sides that really do abut a
- * facade were untouched, because a facade tile carries the *plan's* surface type
- * rather than `SPRITE_BUILDING`.
+ * **`SPRITE_BUILDING` and `MAIN_TOWER` are deliberately absent**, because a
+ * building is *one anchor tile*, and that tile is the **top-left of its art
+ * rect** — transparent sky above the roof. Including them would fire on two
+ * tiles in the whole town, both gate cheeks that sit above an anchor, and hang a
+ * rail off into open verge with the roof half a tile (Miller's) and 1.84 tiles
+ * (Signet's) further down, measured by alpha-scanning the rendered art. Nor
+ * would it anchor the 43 sides that really do abut a facade, because a facade
+ * tile carries the *plan's* surface type rather than `SPRITE_BUILDING`.
  *
- * **Closing those sides through the sprite footprints was tried and backed out.** `getBlockedTileOffsetsByKey` is not an opacity test either:
+ * **The sprite footprints cannot close those sides either.**
+ * `getBlockedTileOffsetsByKey` is not an opacity test:
  * `SpriteLoader` derives a footprint from the frame's whole width and height and
  * blocks all of it bar the doorway, so transparent sky and transparent side
  * columns are "blocked" exactly as solid wall is. Measured over the real grid,
@@ -1778,6 +1769,181 @@ function drawPebbleScatter(
   }
 }
 
+/** Stems in one tile's stand, spread over a few clumps. */
+const REED_STEM_COUNT = 16;
+const REED_CLUMP_COUNT = 3;
+/** How far a stem's foot strays from its clump's centre, each way. */
+const REED_CLUMP_SPREAD_PX = 4;
+/** Feet sit in the lower part of the tile, where the bank meets the water. */
+const REED_FOOT_MIN_Y_PX = 15;
+const REED_FOOT_RANGE_Y_PX = 13;
+/** How far a stem's foot sits above or below its clump's, so a clump's feet are not one flat line. */
+const REED_FOOT_JITTER_PX = HALF;
+const REED_STEM_MIN_HEIGHT_PX = 12;
+const REED_STEM_HEIGHT_RANGE_PX = 10;
+/** Widest a stem's sideways lean reaches at its tip. */
+const REED_MAX_LEAN_PX = 4;
+/** Half the stem's width at its foot; it tapers to a point. */
+const REED_STEM_HALF_WIDTH_PX = 0.8;
+/** Feet are kept this far in from the sides, so a leaning tip never crosses the tile edge. */
+const REED_SIDE_MARGIN_PX = REED_MAX_LEAN_PX + REED_CLUMP_SPREAD_PX;
+/** How far above its tile the tallest stem can reach. */
+export const REED_OVERHANG_PX = Math.ceil(
+  REED_STEM_MIN_HEIGHT_PX + REED_STEM_HEIGHT_RANGE_PX - (REED_FOOT_MIN_Y_PX - REED_FOOT_JITTER_PX),
+);
+/**
+ * Back stems are darkest and front stems lightest, so a stand has depth: lit
+ * from the upper left like every prop, and the colour of the meadow's own
+ * blades, pushed toward the blue-green of plants that stand in water.
+ */
+const REED_STEM_COLORS: ReadonlyArray<string> = ['#3c5222', '#5f7530', '#86934a'];
+const REED_HEAD_COLOR = '#5e3f22';
+const REED_HEAD_WIDTH_PX = 2;
+const REED_HEAD_LENGTH_PX = 5;
+/** Where a seed head sits along its stem, as a share of the stem's height. */
+const REED_HEAD_POSITION_SHARE = 0.78;
+/** Share of stems topped with a seed head, the rest are plain rushes. */
+const REED_HEAD_SHARE = 0.18;
+const REED_BASE_SHADOW_COLOR = 'rgba(18, 26, 10, 0.28)';
+const REED_BASE_SHADOW_RADIUS_X_PX = 5;
+const REED_BASE_SHADOW_RADIUS_Y_PX = 1.8;
+const REED_SALT_CLUMP = 5;
+const REED_SALT_LEAN = 6;
+const REED_SALT_HEIGHT = 7;
+const REED_SALT_HEAD = 8;
+const REED_SALT_CLUMP_PICK = 9;
+
+interface ReedStem {
+  readonly footX: number;
+  readonly footY: number;
+  readonly tipX: number;
+  readonly tipY: number;
+  readonly hasHead: boolean;
+}
+
+/**
+ * Distinct reed stands a map draws from. A tile picks one by its position
+ * rather than painting its own, so the overlay cache holds one canvas per
+ * stand instead of one per reed tile for the map's lifetime; along a bank the
+ * repeats sit far enough apart not to read as a pattern.
+ */
+export const REED_STAND_VARIANTS = 32;
+const REED_SALT_VARIANT = 10;
+/** The hash row a stand's own stems are drawn from, its column being the stand's index. */
+const REED_VARIANT_HASH_ROW = 0;
+
+/** Which of the `REED_STAND_VARIANTS` stands the reed tile at (tx, ty) draws. */
+export function reedStandVariant(tx: number, ty: number): number {
+  const pick = Math.floor(coverHash01(tx, ty, 0, REED_SALT_VARIANT) * REED_STAND_VARIANTS);
+  return Math.min(REED_STAND_VARIANTS - 1, pick);
+}
+
+/**
+ * A stand of reeds and rushes: tapered stems leaning a little apart from a
+ * few clumps, drawn back to front, with the odd brown seed head. Every stem
+ * stays inside its tile's width and at most `REED_OVERHANG_PX` above it. The
+ * picture depends only on the tile's stand variant, never on where it is.
+ */
+function drawRiverReeds(
+  ctx: CanvasRenderingContext2D,
+  sx: number,
+  sy: number,
+  ts: number,
+  tx: number,
+  ty: number,
+): void {
+  const variant = reedStandVariant(tx, ty);
+  const clumpSpanX = ts - REED_SIDE_MARGIN_PX * 2;
+  const clumps = Array.from({ length: REED_CLUMP_COUNT }, (_, clump) => ({
+    x:
+      sx +
+      REED_SIDE_MARGIN_PX +
+      coverHash01(variant, REED_VARIANT_HASH_ROW, clump, REED_SALT_CLUMP) * clumpSpanX,
+    y:
+      sy +
+      REED_FOOT_MIN_Y_PX +
+      coverHash01(variant, REED_VARIANT_HASH_ROW, clump, COVER_SALT_Y) * REED_FOOT_RANGE_Y_PX,
+  }));
+
+  ctx.fillStyle = REED_BASE_SHADOW_COLOR;
+  for (const clump of clumps) {
+    ctx.beginPath();
+    ctx.ellipse(
+      clump.x,
+      clump.y,
+      REED_BASE_SHADOW_RADIUS_X_PX,
+      REED_BASE_SHADOW_RADIUS_Y_PX,
+      0,
+      0,
+      Math.PI * 2,
+    );
+    ctx.fill();
+  }
+
+  const stems: ReedStem[] = [];
+  for (let i = 0; i < REED_STEM_COUNT; i++) {
+    const clumpIndex = Math.min(
+      REED_CLUMP_COUNT - 1,
+      Math.floor(
+        coverHash01(variant, REED_VARIANT_HASH_ROW, i, REED_SALT_CLUMP_PICK) * REED_CLUMP_COUNT,
+      ),
+    );
+    const clump = clumps[clumpIndex];
+    const spread =
+      (coverHash01(variant, REED_VARIANT_HASH_ROW, i, COVER_SALT_X) - HALF) *
+      2 *
+      REED_CLUMP_SPREAD_PX;
+    const footX = clump.x + spread;
+    const footY =
+      clump.y +
+      (coverHash01(variant, REED_VARIANT_HASH_ROW, i, COVER_SALT_SIZE) - HALF) *
+        2 *
+        REED_FOOT_JITTER_PX;
+    // Stems lean away from their clump's middle, the way a stand splays.
+    const lean =
+      Math.sign(spread) *
+      coverHash01(variant, REED_VARIANT_HASH_ROW, i, REED_SALT_LEAN) *
+      REED_MAX_LEAN_PX;
+    const height =
+      REED_STEM_MIN_HEIGHT_PX +
+      coverHash01(variant, REED_VARIANT_HASH_ROW, i, REED_SALT_HEIGHT) * REED_STEM_HEIGHT_RANGE_PX;
+    stems.push({
+      footX,
+      footY,
+      tipX: footX + lean,
+      tipY: footY - height,
+      hasHead: coverHash01(variant, REED_VARIANT_HASH_ROW, i, REED_SALT_HEAD) < REED_HEAD_SHARE,
+    });
+  }
+  // Back to front by foot, so a nearer stem crosses over a farther one.
+  stems.sort((a, b) => a.footY - b.footY);
+
+  const colorCount = REED_STEM_COLORS.length;
+  stems.forEach((stem, order) => {
+    const shade = Math.min(colorCount - 1, Math.floor((order / stems.length) * colorCount));
+    ctx.fillStyle = REED_STEM_COLORS[shade];
+    ctx.beginPath();
+    ctx.moveTo(stem.footX - REED_STEM_HALF_WIDTH_PX, stem.footY);
+    ctx.lineTo(stem.tipX, stem.tipY);
+    ctx.lineTo(stem.footX + REED_STEM_HALF_WIDTH_PX, stem.footY);
+    ctx.closePath();
+    ctx.fill();
+  });
+
+  ctx.fillStyle = REED_HEAD_COLOR;
+  for (const stem of stems) {
+    if (!stem.hasHead) continue;
+    const headX = stem.footX + (stem.tipX - stem.footX) * REED_HEAD_POSITION_SHARE;
+    const headY = stem.footY + (stem.tipY - stem.footY) * REED_HEAD_POSITION_SHARE;
+    ctx.fillRect(
+      headX - REED_HEAD_WIDTH_PX * HALF,
+      headY - REED_HEAD_LENGTH_PX * HALF,
+      REED_HEAD_WIDTH_PX,
+      REED_HEAD_LENGTH_PX,
+    );
+  }
+}
+
 /**
  * Wet granite: darker and bluer than the dry boulders, because a rock standing
  * in a river is wet, plus a bright waterline where the surface cuts across it.
@@ -1931,11 +2097,11 @@ function drawDenHollow(
   // Claw scrapes, hashed so a run of hollow tiles does not repeat one mark, and
   // kept **inside the hollow** rather than inside the tile.
   //
-  // The first version started a scrape up to `radius` from the centre and ran it
-  // a further 0.3 of a tile outward, so its ink reached 1.24 tiles from the tile
-  // origin: 352 of 400 sampled tiles painted outside themselves, by up to 36 px.
-  // `DEN_HOLLOW` is not a Y-sorted decoration, so that ink is baked into the
-  // 16x16-tile chunk — sheared along a straight line at every chunk boundary and
+  // A scrape started anywhere up to `radius` from the centre and run a further
+  // 0.3 of a tile outward would reach 1.24 tiles from the tile origin: 352 of 400
+  // sampled tiles would paint outside themselves, by up to 36 px. `DEN_HOLLOW` is
+  // not a Y-sorted decoration, so that ink would be baked into the 16x16-tile
+  // chunk — sheared along a straight line at every chunk boundary and
   // overdrawing its neighbours everywhere else.
   ctx.strokeStyle = DEN_HOLLOW_SCRAPE_COLOR;
   ctx.lineWidth = DEN_HOLLOW_SCRAPE_WIDTH_PX;
@@ -2069,17 +2235,18 @@ export function drawDecorationTile(
       case TENT_POLE:
         drawTentPoleBaseTile(ctx, structure, sx, sy, ts, tx, ty);
         return true;
-      case TREE:
       // A boulder is written with `setStanding`, so like a tree it records the
       // band it was dropped on and the outdoor ground path resolves the rest.
-      // Missing from here, the chunk bake drew *nothing* under the rock and
-      // every boulder on the map sat in a solid black one-tile square.
+      // The chunk bake draws nothing under a type missing from this switch, so
+      // the rock would sit in a solid black one-tile square.
       case BOULDER_SMALL:
       case BOULDER_LARGE:
+        drawTerrainTile(ctx, structure, FloorTypeValue.grass, sx, sy, ts, tx, ty);
+        drawBoulderContactShade(ctx, sx, sy, ts);
+        return true;
+      case TREE:
       // A tent and a fire stand on the camp's beaten earth, recorded the same
-      // way. Without a case here the chunk bake draws nothing under them and
-      // every one sits in a solid black square — which is exactly what shipped
-      // for the boulders until an in-situ render caught it.
+      // way, and need a case here for the same reason.
       case CAMPFIRE:
       case GOBLIN_TENT:
       case CLIFF:
@@ -2094,6 +2261,9 @@ export function drawDecorationTile(
       // a stack of hay bales, where every neighbour is another bale.
       case HOLLOW_PROP_LOW:
       case HOLLOW_PROP_TALL:
+      // Reeds grow out of the meadow they recorded; the stems stand in the
+      // Y-sorted pass.
+      case RIVER_REEDS:
         // Routed through the outdoor ground path; which material actually gets
         // drawn is resolved by `groundMaterialUnder` from the `groundType` the
         // tile recorded, not from the type passed here.
@@ -2121,7 +2291,7 @@ export function drawDecorationTile(
       case SLUMPED_SKELETON:
       // The garrison's and the inking shop's props. Without a case here the
       // chunk bake draws nothing under them and every one sits in a solid black
-      // square — which is exactly what shipped for the boulders once already.
+      // square.
       case TRAINING_DUMMY:
       case WEAPON_RACK:
       case MUSTER_BOARD:
@@ -2323,57 +2493,7 @@ export function drawDecorationTile(
     // Grassy weed — walkable grass tile with decorative tufts and occasional flowers
     case GRASSY_WEED: {
       drawGroundTile(ctx, OVERWORLD_GROUND, structure, sx, sy, ts, tx, ty);
-
-      // Deterministic hash from tile position
-      const h1 = (tx * 31 + ty * 17) % 97;
-      const h2 = (tx * 53 + ty * 41) % 89;
-
-      // First grass tuft. The blade colours track the generated grass material,
-      // which is olive — the mint greens they replaced belonged to the retired
-      // tileset and read as teal dashes on the new lawn.
-      const t1x = sx + 3 + ((h1 * 7) % (ts - 12));
-      const t1y = sy + 5 + ((h1 * 11) % (ts - 14));
-      ctx.fillStyle = '#6b7f35';
-      ctx.fillRect(t1x, t1y, 2, 7); // central blade
-      ctx.fillRect(t1x - 3, t1y + 3, 2, 5); // left blade (angled out)
-      ctx.fillRect(t1x + 3, t1y + 3, 2, 5); // right blade
-
-      // Second smaller tuft
-      const t2x = sx + 5 + ((h2 * 13) % (ts - 14));
-      const t2y = sy + 4 + ((h2 * 7) % (ts - 14));
-      ctx.fillStyle = '#55692a';
-      ctx.fillRect(t2x, t2y, 2, 5);
-      ctx.fillRect(t2x - 2, t2y + 2, 2, 3);
-      ctx.fillRect(t2x + 2, t2y + 2, 2, 3);
-
-      // Occasional small flower (about 1 in 9 tiles)
-      if ((tx * 7 + ty * 13) % 9 === 0) {
-        const fx = sx + 4 + (h1 % (ts - 10));
-        const fy = sy + 4 + (h2 % (ts - 12));
-        // Petals
-        ctx.fillStyle = '#f0e040';
-        ctx.beginPath();
-        ctx.arc(fx, fy, 3, 0, Math.PI * 2);
-        ctx.fill();
-        // Centre
-        ctx.fillStyle = '#e06010';
-        ctx.beginPath();
-        ctx.arc(fx, fy, 1.5, 0, Math.PI * 2);
-        ctx.fill();
-      }
-      // Alternate: small purple wildflower
-      if ((tx * 11 + ty * 7) % 13 === 0) {
-        const fx = sx + 6 + (h2 % (ts - 14));
-        const fy = sy + 5 + (h1 % (ts - 13));
-        ctx.fillStyle = '#c060d8';
-        ctx.beginPath();
-        ctx.arc(fx, fy, 2.5, 0, Math.PI * 2);
-        ctx.fill();
-        ctx.fillStyle = '#f0d000';
-        ctx.beginPath();
-        ctx.arc(fx, fy, 1, 0, Math.PI * 2);
-        ctx.fill();
-      }
+      drawGrassyWeedArt(ctx, sx, sy, ts, tx, ty);
       return true;
     }
 
@@ -2383,6 +2503,14 @@ export function drawDecorationTile(
     case WILDFLOWER_TUFT: {
       drawGroundTile(ctx, OVERWORLD_GROUND, structure, sx, sy, ts, tx, ty);
       drawWildflowerTuft(ctx, sx, sy, ts, tx, ty);
+      return true;
+    }
+
+    // Reeds on a riverbank. Stems only: the meadow under them is baked by the
+    // chunk's `baseOnly` pass, and they stand in the Y-sorted pass so a crawler
+    // wading past behind them is hidden to the knees.
+    case RIVER_REEDS: {
+      drawRiverReeds(ctx, sx, sy, ts, tx, ty);
       return true;
     }
 
@@ -2482,128 +2610,16 @@ export function drawDecorationTile(
     // Dirt patch — walkable road tile with pebble and soil texture
     case DIRT_PATCH: {
       drawGroundTile(ctx, OVERWORLD_GROUND, structure, sx, sy, ts, tx, ty);
-
-      // Deterministic hash from tile position
-      const h1 = (tx * 29 + ty * 19) % 97;
-      const h2 = (tx * 43 + ty * 37) % 89;
-
-      // Darker soil blotch
-      ctx.fillStyle = 'rgba(70,38,8,0.28)';
-      ctx.beginPath();
-      ctx.ellipse(
-        sx + 5 + ((h1 * 7) % (ts - 12)),
-        sy + 5 + ((h1 * 11) % (ts - 12)),
-        5 + (h1 % 5),
-        3 + (h1 % 4),
-        (h1 % 5) * 0.3,
-        0,
-        Math.PI * 2,
-      );
-      ctx.fill();
-      // Second smaller blotch
-      if (h2 % 3 !== 0) {
-        ctx.fillStyle = 'rgba(60,30,5,0.18)';
-        ctx.beginPath();
-        ctx.ellipse(
-          sx + 8 + ((h2 * 11) % (ts - 16)),
-          sy + 7 + ((h2 * 7) % (ts - 16)),
-          3 + (h2 % 3),
-          2 + (h2 % 2),
-          (h2 % 4) * 0.4,
-          0,
-          Math.PI * 2,
-        );
-        ctx.fill();
-      }
-
-      // Small pebbles
-      ctx.fillStyle = '#8a6030';
-      for (let i = 0; i < 3; i++) {
-        const px = sx + 4 + ((h1 * (i * 7 + 3)) % (ts - 8));
-        const py = sy + 4 + ((h2 * (i * 5 + 11)) % (ts - 8));
-        ctx.beginPath();
-        ctx.arc(px, py, 1.5, 0, Math.PI * 2);
-        ctx.fill();
-      }
-      // Lighter pebble highlight
-      ctx.fillStyle = '#c8a070';
-      for (let i = 0; i < 2; i++) {
-        const px = sx + 6 + ((h2 * (i * 9 + 5)) % (ts - 12));
-        const py = sy + 6 + ((h1 * (i * 7 + 3)) % (ts - 12));
-        ctx.beginPath();
-        ctx.arc(px, py, 1, 0, Math.PI * 2);
-        ctx.fill();
-      }
-
-      // Occasional crack/groove line
-      if ((tx * 13 + ty * 11) % 7 === 0) {
-        ctx.fillStyle = 'rgba(55,28,5,0.32)';
-        const crx = sx + 5 + (h1 % (ts - 14));
-        const cry = sy + 5 + (h2 % (ts - 14));
-        ctx.fillRect(crx, cry, 1, 5 + (h1 % 6));
-        ctx.fillRect(crx, cry, 4 + (h2 % 5), 1);
-      }
+      drawDirtPatchArt(ctx, sx, sy, ts, tx, ty);
       return true;
     }
 
-    // Rubble — walkable ground clutter scattered across the Over City's ruined
-    // outskirts. Drawn over the real grass sprite (like GRASSY_WEED) so the
-    // debris dissolves into the surrounding lawn instead of reading as an
-    // opaque square.
+    // Rubble — walkable ground clutter around the Over City's ruins. Drawn over
+    // the ground it recorded, so the debris settles into the meadow, the upland
+    // turf or the scree it lies on instead of reading as an opaque square.
     case RUBBLE: {
       drawGroundTile(ctx, OVERWORLD_GROUND, structure, sx, sy, ts, tx, ty);
-
-      const h1 = (tx * 37 + ty * 23) % 97;
-      const h2 = (tx * 59 + ty * 43) % 89;
-
-      // A faint dirt patch under the debris cluster — smaller than the tile so
-      // grass stays visible around every edge.
-      const patchX = sx + RUBBLE_PATCH_INSET + (h1 % RUBBLE_PATCH_JITTER);
-      const patchY = sy + RUBBLE_PATCH_INSET + (h2 % RUBBLE_PATCH_JITTER);
-      const patchSize = ts - RUBBLE_PATCH_INSET * 2 - RUBBLE_PATCH_JITTER;
-      ctx.fillStyle = 'rgba(74,70,62,0.55)';
-      ctx.beginPath();
-      ctx.ellipse(
-        patchX + patchSize / 2,
-        patchY + patchSize / 2,
-        patchSize / 2 + RUBBLE_PATCH_RX_EXTRA,
-        patchSize / 2,
-        0,
-        0,
-        Math.PI * 2,
-      );
-      ctx.fill();
-
-      // Broken-stone chunks clustered on the dirt patch, varied sizes.
-      for (let i = 0; i < RUBBLE_CHUNK_COUNT; i++) {
-        const cx = patchX + ((h1 * (i + 1) * 7) % patchSize);
-        const cy = patchY + ((h2 * (i + 1) * 5) % patchSize);
-        const cw = RUBBLE_CHUNK_MIN_SIZE + ((h1 * (i + 3)) % RUBBLE_CHUNK_SIZE_VARIANCE);
-        const chHeight = RUBBLE_CHUNK_MIN_SIZE + ((h2 * (i + 2)) % RUBBLE_CHUNK_SIZE_VARIANCE);
-        ctx.fillStyle = i % 2 === 0 ? '#6a655a' : '#7a6f5e';
-        ctx.fillRect(cx, cy, cw, chHeight);
-        ctx.fillStyle = '#847e70';
-        ctx.fillRect(cx, cy, cw, 1);
-      }
-
-      // Grass blades poking up between and over the chunk edges, so the
-      // debris reads as half-swallowed by the lawn — which only works while the
-      // blades are the lawn's colour, not the retired tileset's mint.
-      ctx.fillStyle = '#6b7f35';
-      for (let i = 0; i < RUBBLE_TUFT_COUNT; i++) {
-        const gx = sx + 2 + ((h2 * (i * 13 + 5)) % (ts - 6));
-        const gy = sy + 3 + ((h1 * (i * 9 + 7)) % (ts - 10));
-        ctx.fillRect(gx, gy, 2, RUBBLE_TUFT_HEIGHT);
-        ctx.fillRect(gx + 3, gy + 2, 2, RUBBLE_TUFT_HEIGHT - 2);
-      }
-
-      // Fine grit
-      ctx.fillStyle = 'rgba(0,0,0,0.18)';
-      for (let i = 0; i < RUBBLE_GRIT_COUNT; i++) {
-        const px = patchX + ((h1 * (i * 11 + 3)) % patchSize);
-        const py = patchY + ((h2 * (i * 7 + 5)) % patchSize);
-        ctx.fillRect(px, py, 1, 1);
-      }
+      drawRubbleArt(ctx, structure, sx, sy, ts, tx, ty);
       return true;
     }
 

@@ -170,8 +170,7 @@ export const NO_REGION = -1;
  *
  * River water reads as walkable here because it *is* walkable — everything
  * wades. That makes a river almost incapable of severing a map, so the marooned
- * regions this still finds are the ones cliffs and dense scenery make, and
- * `bridgeMaroonedRegions` now earns its keep only on those.
+ * regions this finds are the ones cliffs and dense scenery make.
  */
 function isWalkableAt(grid: GridView, x: number, y: number): boolean {
   if (x < 0 || y < 0 || x >= grid.size || y >= grid.size) return false;

@@ -23,9 +23,14 @@ import {
   BRIDGE_AXIS_EAST_WEST,
   BRIDGE_AXIS_NORTH_SOUTH,
   FloorTypeValue,
+  MAX_WATER_DEPTH,
+  PEBBLE_SCATTER,
+  RIVER_REEDS,
   RIVER_ROCK,
-  flowDirFromAngle,
+  VOID_TYPE,
+  isRiverChannel,
 } from '../tileTypes';
+import { tileHash01 } from '../tiles/hollowTileHash';
 import type { BridgeAxis, TileGrid } from '../town/tileGrid';
 import type { TilePoint, TownPlan } from '../town/townPlan';
 import type { ElevationField } from './elevation';
@@ -331,6 +336,25 @@ function routeRiver(
   return null;
 }
 
+/**
+ * Course steps either side of a point whose run is averaged into its flow.
+ * About five tiles each way: long enough that a gently curving river does not
+ * snap between compass octants every few tiles, short enough that a real bend
+ * still turns the current with it.
+ */
+const FLOW_SMOOTHING_WINDOW_STEPS = 6;
+
+/**
+ * The river's heading at `index`, from the run of the course around it rather
+ * than the step to the next point. The points are rounded to tiles, so
+ * consecutive ones can coincide or sit at any of eight angles to each other.
+ */
+function smoothedHeadingAt(path: ReadonlyArray<TilePoint>, index: number): number {
+  const before = path[Math.max(0, index - FLOW_SMOOTHING_WINDOW_STEPS)];
+  const after = path[Math.min(path.length - 1, index + FLOW_SMOOTHING_WINDOW_STEPS)];
+  return Math.atan2(after.y - before.y, after.x - before.x);
+}
+
 /** Half-width of the channel at a given fraction along the course. */
 function halfWidthAt(progress: number, step: number): number {
   const widening = RIVER_MIN_HALF_WIDTH + (RIVER_MAX_HALF_WIDTH - RIVER_MIN_HALF_WIDTH) * progress;
@@ -355,8 +379,7 @@ function carveChannel(
   path.forEach((point, index) => {
     const progress = index / Math.max(1, path.length - 1);
     const halfWidth = halfWidthAt(progress, index);
-    const next = path[Math.min(path.length - 1, index + 1)];
-    const flowDir = flowDirFromAngle(Math.atan2(next.y - point.y, next.x - point.x));
+    const flowAngle = smoothedHeadingAt(path, index);
     const reach = Math.ceil(halfWidth);
     for (let dy = -reach; dy <= reach; dy++) {
       for (let dx = -reach; dx <= reach; dx++) {
@@ -371,7 +394,7 @@ function carveChannel(
         // makes that a guarantee rather than a tuning assumption.
         if (grid.isSolid(tx, ty)) continue;
         if (landmarks.contains(tx, ty)) continue;
-        grid.setRiverWater(tx, ty, flowDir);
+        grid.setRiverWater(tx, ty, flowAngle);
       }
     }
   });
@@ -420,7 +443,90 @@ export function carveRivers(
       break;
     }
   }
+  smoothRiverBanks(grid, rivers, border, landmarks);
   return rivers;
+}
+
+/**
+ * Cellular passes over the carved banks. Stamping discs onto the tile grid
+ * leaves one-tile notches and spurs that read, at map scale, as a stair-stepped
+ * edge; two passes take out the ones the stamp left and the ones the first pass
+ * exposed.
+ */
+const BANK_SMOOTHING_PASSES = 2;
+/** Dry ground with at least this many water tiles beside it is a notch, and floods. */
+const NOTCH_MIN_WATER_NEIGHBOURS = 3;
+/** Water with at most this many water tiles beside it is a spur, and dries. */
+const SPUR_MAX_WATER_NEIGHBOURS = 1;
+
+const CARDINAL_STEPS: ReadonlyArray<readonly [number, number]> = [
+  [0, -1],
+  [0, 1],
+  [-1, 0],
+  [1, 0],
+];
+
+function cardinalWaterNeighbours(grid: TileGrid, x: number, y: number): number {
+  let count = 0;
+  for (const [dx, dy] of CARDINAL_STEPS) if (isWater(grid, x + dx, y + dy)) count++;
+  return count;
+}
+
+/** The mean current of the water beside (x, y), for a notch the smoothing floods. */
+function neighbouringFlowAngle(grid: TileGrid, x: number, y: number): number {
+  let sumX = 0;
+  let sumY = 0;
+  for (const [dx, dy] of CARDINAL_STEPS) {
+    const angle = grid.cells[y + dy]?.[x + dx]?.flowAngle;
+    if (angle === undefined) continue;
+    sumX += Math.cos(angle);
+    sumY += Math.sin(angle);
+  }
+  return Math.atan2(sumY, sumX);
+}
+
+/**
+ * Fills one-tile notches and erodes one-tile spurs along every carved bank.
+ *
+ * Runs straight after the carve, before anything is laid beside or over the
+ * water: the bridges span whatever channel this leaves, and the rocks and
+ * crossings keep their invariants because they are placed against the
+ * smoothed banks rather than having the banks moved under them. A tile on a
+ * course's own line is never eroded, so a narrow reach cannot be cut in two.
+ */
+function smoothRiverBanks(
+  grid: TileGrid,
+  rivers: ReadonlyArray<RiverCourse>,
+  border: number,
+  landmarks: KeepOut,
+): void {
+  const spine = new Set<number>();
+  for (const river of rivers) {
+    for (const point of river.path) spine.add(point.y * grid.size + point.x);
+  }
+  for (let pass = 0; pass < BANK_SMOOTHING_PASSES; pass++) {
+    const notches: TilePoint[] = [];
+    const spurs: TilePoint[] = [];
+    for (let y = border; y < grid.size - border; y++) {
+      for (let x = border; x < grid.size - border; x++) {
+        const waterNeighbours = cardinalWaterNeighbours(grid, x, y);
+        if (isWater(grid, x, y)) {
+          const onSpine = spine.has(y * grid.size + x);
+          if (!onSpine && waterNeighbours <= SPUR_MAX_WATER_NEIGHBOURS) spurs.push({ x, y });
+          continue;
+        }
+        if (waterNeighbours < NOTCH_MIN_WATER_NEIGHBOURS) continue;
+        if (grid.isSolid(x, y) || landmarks.contains(x, y)) continue;
+        notches.push({ x, y });
+      }
+    }
+    if (notches.length === 0 && spurs.length === 0) return;
+    // Decided from one snapshot and applied together, so a pass does not chase
+    // its own edits along a bank.
+    const notchAngles = notches.map((notch) => neighbouringFlowAngle(grid, notch.x, notch.y));
+    notches.forEach((notch, index) => grid.setRiverWater(notch.x, notch.y, notchAngles[index]));
+    for (const spur of spurs) grid.clearRiverWater(spur.x, spur.y);
+  }
 }
 
 /** The two axes a crossing can run along. */
@@ -731,4 +837,171 @@ function hasDeckWithin(grid: TileGrid, centre: TilePoint, radiusTiles: number): 
     }
   }
   return false;
+}
+
+const UNVISITED = -1;
+
+/**
+ * Records every channel tile's `waterDepth`: its distance in tiles from the
+ * nearest dry ground, less one, so the tiles along the bank are 0. Measured in
+ * steps along the grid's axes: counting a diagonal as one step leaves a river
+ * running diagonally all margin and no channel, because every tile across it
+ * then touches a bank corner.
+ *
+ * Runs once nothing else will change which tiles are water: after the
+ * crossings, the connectivity repair and the rocks. The void border is neither
+ * water nor bank, so a river running off the map stays deep to its end rather
+ * than shoaling against the edge of the world.
+ */
+export function recordWaterDepth(grid: TileGrid): void {
+  const { size } = grid;
+  const distance = new Int32Array(size * size).fill(UNVISITED);
+  const queue: number[] = [];
+  for (let y = 0; y < size; y++) {
+    for (let x = 0; x < size; x++) {
+      const cell = grid.cells[y][x];
+      if (isRiverChannel(cell) || cell.type === VOID_TYPE) continue;
+      distance[y * size + x] = 0;
+      queue.push(y * size + x);
+    }
+  }
+  // Iterating the queue while appending to it is the breadth-first walk itself:
+  // an array's iterator reads its length afresh at every step.
+  for (const at of queue) {
+    const x = at % size;
+    const y = Math.floor(at / size);
+    for (const [dx, dy] of CARDINAL_STEPS) {
+      const nx = x + dx;
+      const ny = y + dy;
+      if (nx < 0 || ny < 0 || nx >= size || ny >= size) continue;
+      const next = ny * size + nx;
+      if (distance[next] !== UNVISITED) continue;
+      if (!isRiverChannel(grid.cells[ny][nx])) continue;
+      distance[next] = distance[at] + 1;
+      queue.push(next);
+    }
+  }
+  for (let y = 0; y < size; y++) {
+    for (let x = 0; x < size; x++) {
+      if (!isRiverChannel(grid.cells[y][x])) continue;
+      const reached = distance[y * size + x];
+      const depth = reached === UNVISITED ? MAX_WATER_DEPTH : reached - 1;
+      grid.setWaterDepth(x, y, Math.min(MAX_WATER_DEPTH, depth));
+    }
+  }
+}
+
+/**
+ * Course steps either side of a point over which a bend is measured: the turn
+ * from the run arriving to the run leaving.
+ */
+const BEND_WINDOW_STEPS = 8;
+/** A turn this sharp, in radians over the window, puts the most reeds on its inside bank. */
+const BEND_FULL_RADIANS = 0.9;
+/** Tiles of bank past the widest channel a bend's inside reaches. */
+const BEND_BANK_REACH_TILES = 3;
+/** How far from a course point its bend reaches, in tiles: past the widest channel onto the bank. */
+const BEND_REACH_TILES = RIVER_MAX_HALF_WIDTH + BEND_BANK_REACH_TILES;
+
+/** Chance that a lowland tile at the water's edge grows reeds, on a straight reach. */
+const REED_EDGE_CHANCE = 0.2;
+/** Added on the inside of the sharpest bends, where slack water drops its silt. */
+const REED_INSIDE_BEND_BONUS = 0.5;
+/** Share of that bonus the next tile back from the edge gets, so a bend's stand is deeper. */
+const REED_SECOND_ROW_SHARE = 0.45;
+/** Chance a bank tile with no reeds gets a few stones instead. */
+const BANK_PEBBLE_CHANCE = 0.06;
+const REED_SALT = 7331;
+const BANK_PEBBLE_SALT = 7337;
+
+/**
+ * How much each tile near a course sits on the inside of a bend, 0 on a
+ * straight reach or the outside bank, 1 inside the sharpest.
+ */
+function insideBendStrength(grid: TileGrid, rivers: ReadonlyArray<RiverCourse>): Float32Array {
+  const { size } = grid;
+  const strength = new Float32Array(size * size);
+  for (const { path } of rivers) {
+    for (let index = 0; index < path.length; index++) {
+      const point = path[index];
+      const before = path[Math.max(0, index - BEND_WINDOW_STEPS)];
+      const after = path[Math.min(path.length - 1, index + BEND_WINDOW_STEPS)];
+      const arriving = Math.atan2(point.y - before.y, point.x - before.x);
+      const leaving = Math.atan2(after.y - point.y, after.x - point.x);
+      const turn = signedAngleBetween(leaving, arriving);
+      const bend = Math.min(1, Math.abs(turn) / BEND_FULL_RADIANS);
+      if (bend <= 0) continue;
+      const heading = smoothedHeadingAt(path, index);
+      // A positive turn swings the heading toward its own +90° normal, which is
+      // the side the bend's inside lies on.
+      const towardInside = Math.sign(turn);
+      const insideX = -Math.sin(heading) * towardInside;
+      const insideY = Math.cos(heading) * towardInside;
+      for (let dy = -BEND_REACH_TILES; dy <= BEND_REACH_TILES; dy++) {
+        for (let dx = -BEND_REACH_TILES; dx <= BEND_REACH_TILES; dx++) {
+          if (dx * insideX + dy * insideY <= 0) continue;
+          const x = point.x + dx;
+          const y = point.y + dy;
+          if (x < 0 || y < 0 || x >= size || y >= size) continue;
+          const at = y * size + x;
+          if (bend > strength[at]) strength[at] = bend;
+        }
+      }
+    }
+  }
+  return strength;
+}
+
+/** Tiles from (x, y) to the nearest open water, up to `limit`; `limit + 1` when none is that close. */
+function tilesToWater(grid: TileGrid, x: number, y: number, limit: number): number {
+  for (let ring = 1; ring <= limit; ring++) {
+    for (let dy = -ring; dy <= ring; dy++) {
+      for (let dx = -ring; dx <= ring; dx++) {
+        if (Math.max(Math.abs(dx), Math.abs(dy)) !== ring) continue;
+        if (isWater(grid, x + dx, y + dy)) return ring;
+      }
+    }
+  }
+  return limit + 1;
+}
+
+const SECOND_ROW_TILES = 2;
+
+/**
+ * Grows reeds and rushes along the lowland banks, thickest on the inside of
+ * the bends, with a few stones among them.
+ *
+ * Only on field grass: the upland banks are turf and rock where reeds do not
+ * take. Placed by a hash of the world's seed rather than the generator's
+ * random stream, so planting a bank does not reshuffle any pass after it.
+ * Reeds are walkable cover, so nothing about where a crawler can go changes.
+ */
+export function plantRiverbanks(
+  grid: TileGrid,
+  rivers: ReadonlyArray<RiverCourse>,
+  border: number,
+  landmarks: KeepOut,
+  seed: number,
+): void {
+  const inside = insideBendStrength(grid, rivers);
+  const reedSalt = (seed + REED_SALT) | 0;
+  const pebbleSalt = (seed + BANK_PEBBLE_SALT) | 0;
+  for (let y = border; y < grid.size - border; y++) {
+    for (let x = border; x < grid.size - border; x++) {
+      if (grid.typeAt(x, y) !== FloorTypeValue.grass) continue;
+      const toWater = tilesToWater(grid, x, y, SECOND_ROW_TILES);
+      if (toWater > SECOND_ROW_TILES) continue;
+      if (landmarks.contains(x, y)) continue;
+      const bend = inside[y * grid.size + x];
+      const atEdge = toWater === 1;
+      const reedChance = atEdge
+        ? REED_EDGE_CHANCE + REED_INSIDE_BEND_BONUS * bend
+        : REED_INSIDE_BEND_BONUS * REED_SECOND_ROW_SHARE * bend;
+      if (tileHash01(x, y, reedSalt) < reedChance) {
+        grid.setStanding(x, y, RIVER_REEDS);
+      } else if (atEdge && tileHash01(x, y, pebbleSalt) < BANK_PEBBLE_CHANCE) {
+        grid.setStanding(x, y, PEBBLE_SCATTER);
+      }
+    }
+  }
 }

@@ -42,8 +42,8 @@
     "states": {
       "grass": {
         "row": 0,
-        "frameCount": 16,
-        "patchTiles": 2,
+        "frameCount": 48,
+        "patchTiles": 4,
         "label": "Field grass"
       },
       "verge": {
@@ -90,8 +90,8 @@
       },
       "highland": {
         "row": 8,
-        "frameCount": 16,
-        "patchTiles": 2,
+        "frameCount": 48,
+        "patchTiles": 4,
         "label": "Highland turf (thin upland grass)"
       },
       "scree": {

@@ -89,17 +89,16 @@ export const GRAVEL_RAMP: Ramp = {
 
 // ── the wilderness: river, uplands ─────────────────────────────────────────
 //
-// A river is read through its bank, not its surface, so the water ramp is kept
-// dark and desaturated: the animated highlights `WaterAnimationSystem` lays over
-// it are the only bright pixels the river gets, and a bright base would drown
-// them. Green rather than blue because the river runs through a green field —
-// a saturated blue channel next to hue-73° grass reads as a painted stripe.
+// The river bed: olive silt and sand, the colour of the meadow's soil washed
+// out. It is only ever seen through the water column the bake lays over it,
+// which tints it green and hides it entirely in the channel, so it is pitched
+// lighter than the river is meant to read.
 
-export const RIVER_WATER_RAMP: Ramp = {
-  shadow: [16, 40, 46],
-  mid: [30, 68, 76],
-  light: [48, 98, 104],
-  accent: [86, 138, 140],
+export const RIVER_BED_RAMP: Ramp = {
+  shadow: [56, 60, 40],
+  mid: [90, 92, 62],
+  light: [124, 122, 86],
+  accent: [148, 144, 104],
 };
 
 /**
@@ -119,6 +118,18 @@ export const SCREE_RAMP: Ramp = {
   mid: [102, 99, 94],
   light: [146, 142, 136],
   accent: [176, 172, 164],
+};
+
+/**
+ * The soil scree's stones lie in: the stone's grey warmed toward earth, and
+ * only a shade darker, so the gaps between stones read as ground showing
+ * through rather than as joints drawn round them.
+ */
+export const SCREE_SOIL_RAMP: Ramp = {
+  shadow: [62, 57, 50],
+  mid: [94, 87, 76],
+  light: [126, 117, 102],
+  accent: [150, 140, 122],
 };
 
 // ── Briar Hollow: the ratkin village ───────────────────────────────────────

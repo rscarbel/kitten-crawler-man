@@ -45,6 +45,7 @@ import {
   SAWDUST_FLOOR,
   CIRCUS_RING_EDGE,
   TENT_POLE,
+  RIVER_REEDS,
   BLEACHER,
   CLUB_FLOOR,
   DANCE_FLOOR,
@@ -140,6 +141,7 @@ import type { BriarHollowSite, VillageDistrictId } from './overworld/briarHollow
 import type { CircusGroundsSite } from './overworld/circusGroundsLayout';
 import { registerBriarHollowSite } from './tiles/hollowSiteRegistry';
 import { registerCircusGroundsSite } from './tiles/circusSiteRegistry';
+import { registerOverworldTerrain } from './tiles/overworldTerrainRegistry';
 import { hollowPropDrawsAt } from './tiles/hollowVillageTiles';
 import { circusStructureDrawsAt } from './tiles/circusStructureTiles';
 import { tentPoleDrawsAt } from './tiles/tentPoleTiles';
@@ -484,6 +486,8 @@ const DECORATION_OVERLAY_TYPES: ReadonlySet<number> = new Set([
   CIRCUS_STRUCTURE_LOW,
   // The Big Top's tent poles: the mast rises out of view in the Y-sorted pass.
   TENT_POLE,
+  // Riverbank reeds, standing taller than their tile.
+  RIVER_REEDS,
   // The service level's furniture; its part tiles are drawn by their anchor.
   ...SERVICE_PROP_TILE_TYPES,
   // The cellars' furniture, candles and fungus.
@@ -1140,6 +1144,7 @@ export class GameMap {
     }
     registerBriarHollowSite(data.grid, data.briarHollow);
     registerCircusGroundsSite(data.grid, data.circusGrounds);
+    registerOverworldTerrain(data.grid, data.terrain);
     return data.grid;
   }
 

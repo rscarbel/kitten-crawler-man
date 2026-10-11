@@ -190,7 +190,7 @@ const NON_FLOOR_TYPES = new Set<number>([
   // The floor-3 wilderness solids. Without these a tile beside a boulder infers
   // the boulder as its own floor and draws whatever material a boulder claims.
   // The walkable wilderness types are absent on purpose: `HIGHLAND_GRASS`,
-  // `SCREE` and `BRIDGE` *are* floor, and `WILDFLOWER_TUFT`, `PEBBLE_SCATTER`
+  // `SCREE`, `BARE_EARTH` and `BRIDGE` *are* floor, and `WILDFLOWER_TUFT`, `PEBBLE_SCATTER`
   // and `DEN_HOLLOW` are ground cover written with `setStanding`, so they report
   // the surface they were scattered over exactly as `GRASSY_WEED` does.
   RIVER_ROCK,
