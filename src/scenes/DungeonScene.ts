@@ -524,6 +524,7 @@ import type { SoundId } from '../audio/sounds';
 import type { VillageBuildingId } from '../map/overworld/briarHollowLayout';
 import { rectCentre } from '../map/overworld/briarHollowSite';
 import { sfxGroupsForLevelId } from '../audio/sfxGroups';
+import { playDungeonCue, type DungeonCue } from '../systems/dungeon/dungeonSoundCues';
 import {
   downedCompanionArrowCandidate,
   knockedOutBandEntry,
@@ -1284,6 +1285,7 @@ export class DungeonScene extends GameplayScene {
   /** Where the active crawler stood when the current world touch began. */
   private holdStartActivePos: { x: number; y: number } | null = null;
   private spiderQuest: SpiderQuestSystem;
+  private readonly dungeonCuesPlayed = new Map<DungeonCue, number>();
   private circusQuest: CircusQuestSystem;
   private murderQuest: MurderMysteryQuestSystem;
   private anchorQuest: AnchorQuestSystem;
@@ -8874,6 +8876,10 @@ export class DungeonScene extends GameplayScene {
     if (lab?.glassShatterSoundPending === true) {
       lab.glassShatterSoundPending = false;
       this.audio?.play('glass_break_1');
+    }
+    if (lab?.webTearSoundPending === true) {
+      lab.webTearSoundPending = false;
+      playDungeonCue(this.audio ?? null, 'cobwebTear', this.dungeonCuesPlayed);
     }
     if (lab?.cocoonSplatSoundPending === true) {
       lab.cocoonSplatSoundPending = false;

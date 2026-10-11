@@ -206,6 +206,8 @@ export class SpiderLabDressing
   glassShatterSoundPending = false;
   /** A cocoon split, or tore under a blow; the scene plays it and clears it. */
   cocoonSplatSoundPending = false;
+  /** Web came down under a swing, a blast or her slam; the scene plays it and clears it. */
+  webTearSoundPending = false;
 
   private readonly plan: SpiderLabFloorPlan;
   private readonly originalWebs: ReadonlySet<number>;
@@ -318,6 +320,7 @@ export class SpiderLabDressing
     this.regrowing.clear();
     this.glassShatterSoundPending = false;
     this.cocoonSplatSoundPending = false;
+    this.webTearSoundPending = false;
     this.lightChangeFrames = DARKNESS_FADE_FRAMES;
   }
 
@@ -444,6 +447,7 @@ export class SpiderLabDressing
         const key = tileCoordKey(tx, ty);
         if (!this.originalWebs.has(key)) continue;
         this.regrowing.delete(key);
+        if (!this.isCleared(key)) this.webTearSoundPending = true;
         this.setWebbed(key, false);
       }
     }

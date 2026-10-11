@@ -61,8 +61,8 @@ export const DUNGEON_CUES = {
   torchBurn: ['ambient_fire_crackling'],
   /** A brazier. Final: `ambient_fire_crackling`. */
   brazierCrackle: ['ambient_fire_crackling'],
-  /** Fluorescent tubes and sodium lamps. Waits on `fluorescent_hum_loop`. */
-  fluorescentHum: [],
+  /** Fluorescent tubes and sodium lamps. */
+  fluorescentHum: ['fluorescent_hum_loop'],
   /** A leaking pipe or steam valve. Waits on `steam_leak_loop`. */
   steamLeak: [],
   /** A breaker panel, and the vending machine. Waits on `electrical_panel_buzz_loop`. */
@@ -103,8 +103,8 @@ export const DUNGEON_CUES = {
   sackTear: ['sack_tear_1', 'sack_tear_2'],
   /** Layered on {@link DUNGEON_CUES.sackTear}: grain pouring out. Waits on `grain_spill`. */
   grainSpill: [],
-  /** A wine cask staved in. Waits on `wine_cask_burst`; `wood_smashing_1` stands in. */
-  wineCaskBurst: ['wood_smashing_1'],
+  /** A wine cask staved in. */
+  wineCaskBurst: ['wine_cask_burst'],
   /** A bottle rack coming down. Final: `bottle_shelf_crash_1..4`. */
   bottleShelfCrash: [
     'bottle_shelf_crash_1',
@@ -114,24 +114,24 @@ export const DUNGEON_CUES = {
   ],
   /** A candle cluster knocked over. Final: `candle_stand_topple_1..2`. */
   candleStandTopple: ['candle_stand_topple_1', 'candle_stand_topple_2'],
-  /** A rubble heap knocked down. Waits on `rubble_collapse`; `rock_breaking_1..2` stand in. */
-  rubbleCollapse: ['rock_breaking_1', 'rock_breaking_2'],
-  /** A bone pile or slumped skeleton smashed. Waits on `bones_clatter_1..3`; `wood_breaking_1` stands in. */
-  bonesClatter: ['wood_breaking_1'],
-  /** Slashing through a cobweb curtain. Waits on `cobweb_tear`. */
-  cobwebTear: [],
-  /** A sconce, torch or candle cluster smashed and guttering out. Waits on `torch_extinguish`. */
-  torchExtinguish: [],
-  /** A brazier knocked over, coals skittering. Waits on `coals_scatter`; `hammer_strike` stands in. */
-  coalsScatter: ['hammer_strike'],
-  /** Hanging chains struck and swinging. Waits on `chain_rattle_1..2`; `hammer_strike` stands in. */
-  chainRattle: ['hammer_strike'],
-  /** A torn banner slashed further. Waits on `banner_rip`. */
-  bannerRip: [],
+  /** A rubble heap knocked down. */
+  rubbleCollapse: ['rubble_collapse_1', 'rubble_collapse_2', 'rubble_collapse_3'],
+  /** A bone pile or slumped skeleton smashed. */
+  bonesClatter: ['bones_clatter_1', 'bones_clatter_2', 'bones_clatter_3', 'bones_clatter_4'],
+  /** Webs in the spider lab torn by a swing, a blast or her slam. */
+  cobwebTear: ['cobweb_tear_1', 'cobweb_tear_2'],
+  /** A sconce, torch or candle cluster smashed and guttering out. */
+  torchExtinguish: ['torch_extinguish'],
+  /** A brazier knocked over, coals skittering. */
+  coalsScatter: ['coals_scatter'],
+  /** Hanging chains struck and swinging. */
+  chainRattle: ['chain_rattle_1', 'chain_rattle_2', 'chain_rattle_3'],
+  /** A torn banner slashed further. */
+  bannerRip: ['banner_rip'],
 
   // ── Breaking: floor 2 ──
-  /** A locker, steel drum or filing cabinet hit and dented, not broken. Waits on `metal_dent_1..2`; `massive_metal_hit` stands in. */
-  metalDent: ['massive_metal_hit'],
+  /** A locker, steel drum or filing cabinet hit and dented, not broken. */
+  metalDent: ['metal_dent_1', 'metal_dent_2', 'metal_dent_3'],
   /** A locker door wrenched open. Waits on `locker_burst`; `massive_metal_hit` stands in. */
   lockerBurst: ['massive_metal_hit'],
   /** A steel drum split. Waits on `drum_burst`; `massive_metal_hit` stands in. */
@@ -156,12 +156,13 @@ export const DUNGEON_CUES = {
    * hiss is the blast's warning and must not fall silent.
    */
   gasCylinderHiss: ['miasma_hiss'],
-  /**
-   * An oil spill catching light. Waits on `oil_fire_ignite`. The llama's
-   * fireball whoosh stands in: the brazier crackle is a streamed loop, which a
-   * one-shot cannot play.
-   */
-  oilFireIgnite: ['llama_fireball'],
+  /** An oil spill catching light. */
+  oilFireIgnite: [
+    'oil_fire_ignite_1',
+    'oil_fire_ignite_2',
+    'oil_fire_ignite_3',
+    'oil_fire_ignite_4',
+  ],
   /** A steam valve struck: a sharp burst of steam. Waits on `steam_valve_burst`. */
   steamValveBurst: [],
 
