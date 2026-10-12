@@ -20,7 +20,7 @@
 
 import { mulberry32, pick, subSeed } from './rng';
 import type { PersonAppearance, PersonBody, PersonHead, TownRole } from './PersonAppearance';
-import type { CarlGear } from '../art/carl/gear';
+import type { CastGear } from '../art/carl/gear';
 import { deriveGlossRamp, deriveRamp, type GlossRamp, type Ramp } from '../art/carl/palette';
 import {
   FACING_BROW_DEFAULT,
@@ -91,7 +91,7 @@ export interface TownCastLookCarl extends TownCastLookCommon {
    * are careful about, applied the only way Carl's fixed-height rig allows).
    */
   readonly buildWidthScale: number;
-  readonly gear: CarlGear;
+  readonly gear: CastGear;
   readonly skinRamp: Ramp;
   readonly hairRamp: Ramp;
   readonly hairStyle: HairStyleKind;
@@ -349,7 +349,6 @@ interface AdultSpec {
   readonly build: Exclude<TownCastBuild, 'child'>;
   readonly roles: ReadonlyArray<TownRole>;
   readonly hasWork: boolean;
-  readonly cloak: boolean;
   readonly pantsColor: string;
   readonly skin: number;
   readonly hair: number;
@@ -368,7 +367,6 @@ const ADULT_SPECS: readonly AdultSpec[] = [
     build: 'standard',
     roles: ['guard'],
     hasWork: false,
-    cloak: false,
     pantsColor: '#2a2a34',
     skin: 0,
     hair: 0,
@@ -383,7 +381,6 @@ const ADULT_SPECS: readonly AdultSpec[] = [
     build: 'slight',
     roles: ['merchant'],
     hasWork: false,
-    cloak: false,
     pantsColor: '#3a3a4a',
     skin: 1,
     hair: 2,
@@ -398,7 +395,6 @@ const ADULT_SPECS: readonly AdultSpec[] = [
     build: 'slight',
     roles: ['commoner'],
     hasWork: false,
-    cloak: false,
     pantsColor: '#2c3e50',
     skin: 2,
     hair: 1,
@@ -413,7 +409,6 @@ const ADULT_SPECS: readonly AdultSpec[] = [
     build: 'standard',
     roles: ['laborer'],
     hasWork: false,
-    cloak: false,
     pantsColor: '#4a3a2a',
     skin: 3,
     hair: 1,
@@ -428,7 +423,6 @@ const ADULT_SPECS: readonly AdultSpec[] = [
     build: 'standard',
     roles: ['farmer'],
     hasWork: false,
-    cloak: false,
     pantsColor: '#5a4a38',
     skin: 4,
     hair: 3,
@@ -443,7 +437,6 @@ const ADULT_SPECS: readonly AdultSpec[] = [
     build: 'standard',
     roles: ['innkeeper'],
     hasWork: false,
-    cloak: false,
     pantsColor: '#4a3a2a',
     skin: 1,
     hair: 4,
@@ -458,7 +451,6 @@ const ADULT_SPECS: readonly AdultSpec[] = [
     build: 'standard',
     roles: ['commoner'],
     hasWork: false,
-    cloak: false,
     pantsColor: '#34495e',
     skin: 2,
     hair: 3,
@@ -473,7 +465,6 @@ const ADULT_SPECS: readonly AdultSpec[] = [
     build: 'slight',
     roles: ['beggar', 'drunk'],
     hasWork: false,
-    cloak: false,
     pantsColor: '#3a3a3a',
     skin: 3,
     hair: 0,
@@ -488,7 +479,6 @@ const ADULT_SPECS: readonly AdultSpec[] = [
     build: 'heavy',
     roles: ['smith'],
     hasWork: false,
-    cloak: false,
     pantsColor: '#2a2420',
     skin: 4,
     hair: 0,
@@ -503,7 +493,6 @@ const ADULT_SPECS: readonly AdultSpec[] = [
     build: 'heavy',
     roles: ['priest'],
     hasWork: false,
-    cloak: true,
     pantsColor: '#2a2430',
     skin: 1,
     hair: 3,
@@ -518,7 +507,6 @@ const ADULT_SPECS: readonly AdultSpec[] = [
     build: 'heavy',
     roles: ['noble'],
     hasWork: false,
-    cloak: true,
     pantsColor: '#2a2a34',
     skin: 0,
     hair: 2,
@@ -531,7 +519,7 @@ const ADULT_SPECS: readonly AdultSpec[] = [
 ];
 
 function adultLook(spec: AdultSpec, index: number): TownCastLookCarl {
-  const gear: CarlGear = { trollskinShirt: true, cloak: spec.cloak };
+  const gear: CastGear = { trollskinShirt: true };
   const widthScale = BUILD_WIDTH_SCALE[spec.build] * (spec.feminine ? FEMININE_WIDTH_SCALE : 1);
   return {
     id: spec.id,
@@ -578,7 +566,6 @@ const RESIDENT_ADULT_SPECS: readonly AdultSpec[] = [
     build: 'slight',
     roles: [],
     hasWork: false,
-    cloak: false,
     pantsColor: WENDELL_TROUSER_COLOR,
     skin: 1,
     hair: GREYING_HAIR,
@@ -598,7 +585,6 @@ const RESIDENT_ADULT_SPECS: readonly AdultSpec[] = [
     build: 'slight',
     roles: [],
     hasWork: false,
-    cloak: false,
     pantsColor: '#2a2420',
     skin: 1,
     hair: 2,
@@ -613,7 +599,6 @@ const RESIDENT_ADULT_SPECS: readonly AdultSpec[] = [
     build: 'standard',
     roles: [],
     hasWork: false,
-    cloak: false,
     pantsColor: '#4a3a2a',
     skin: 2,
     hair: 3,
@@ -628,7 +613,6 @@ const RESIDENT_ADULT_SPECS: readonly AdultSpec[] = [
     build: 'slight',
     roles: [],
     hasWork: false,
-    cloak: false,
     pantsColor: '#2c3e50',
     skin: 0,
     hair: 4,
@@ -643,7 +627,6 @@ const RESIDENT_ADULT_SPECS: readonly AdultSpec[] = [
     build: 'heavy',
     roles: [],
     hasWork: false,
-    cloak: false,
     pantsColor: '#3a2a24',
     skin: 3,
     hair: 0,
@@ -658,7 +641,6 @@ const RESIDENT_ADULT_SPECS: readonly AdultSpec[] = [
     build: 'slight',
     roles: [],
     hasWork: false,
-    cloak: false,
     pantsColor: '#34495e',
     skin: 4,
     hair: 0,

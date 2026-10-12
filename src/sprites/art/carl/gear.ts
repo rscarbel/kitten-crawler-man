@@ -65,6 +65,14 @@ export interface CarlGear {
 }
 
 /**
+ * The gear a cast member painted on Carl's rig may wear. Every other field of
+ * {@link CarlGear} is a piece of loot only the player owns — the Nightgaunt
+ * Cloak, the Grull gauntlet, the toe ring — and a townsperson or club dancer
+ * seen in one reads as wearing his gear.
+ */
+export type CastGear = Pick<CarlGear, 'trollskinShirt'>;
+
+/**
  * The look a pose with no `gear` is painted in: the trollskin shirt and
  * nothing else. It is the figure every row was authored and reviewed against,
  * so an absent `gear` must not strip the shirt's band from the neckline.

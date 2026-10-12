@@ -41,6 +41,12 @@ export interface ClubMembership {
   pokerFast: boolean;
   /** The poker table's Show cards toggle: the player's losing hand is shown rather than mucked. */
   pokerShowCards: boolean;
+  /**
+   * The floor the VIP lounge's Private Escort was booked on, or null when none
+   * is booked. The booking runs until the party is on any other floor, so
+   * walking out of the club and back in finds the pair still on duty.
+   */
+  escortLevelId: string | null;
 }
 
 export function createClubMembership(): ClubMembership {
@@ -52,6 +58,7 @@ export function createClubMembership(): ClubMembership {
     pokerNotes: {},
     pokerFast: false,
     pokerShowCards: false,
+    escortLevelId: null,
   };
 }
 
@@ -64,6 +71,7 @@ export interface ClubMembershipCheckpoint {
   pokerNotes: PokerReads;
   pokerFast: boolean;
   pokerShowCards: boolean;
+  escortLevelId: string | null;
 }
 
 /**
@@ -106,6 +114,7 @@ export function captureClubMembership(membership: ClubMembership): ClubMembershi
     pokerNotes: copyPokerReads(membership.pokerNotes),
     pokerFast: membership.pokerFast,
     pokerShowCards: membership.pokerShowCards,
+    escortLevelId: membership.escortLevelId,
   };
 }
 
@@ -128,4 +137,5 @@ export function restoreClubMembership(
   membership.pokerNotes = copyPokerReads(snapshot.pokerNotes);
   membership.pokerFast = snapshot.pokerFast;
   membership.pokerShowCards = snapshot.pokerShowCards;
+  membership.escortLevelId = snapshot.escortLevelId;
 }

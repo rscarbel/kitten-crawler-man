@@ -1979,6 +1979,7 @@ function checkPersistence(): void {
     pokerNotes: { [secondRegular]: SAMPLE_READ },
     pokerFast: true,
     pokerShowCards: true,
+    escortLevelId: 'level-3',
   };
   const restored = viaSave(full);
   check(

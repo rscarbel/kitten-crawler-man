@@ -107,10 +107,21 @@ export const CLUB_ZONES: ReadonlyArray<ClubZone> = [
  * to the dancers) and out of the station rooms (a patron loitering behind the
  * bar reads as a bug, and they would shove the staff off their marks).
  *
+ * The border ring is excluded too: its only walkable tiles are the exit
+ * doorway, and a patron shoved into it blocks the door. So are the marks of the
+ * figures who never move — Clarabelle and the DJ stand on open floor, and a
+ * patron sent to stand on one of them would lean into that body forever.
+ *
  * Walkability is the caller's job: this only answers "is this somewhere a patron
  * belongs", and knows nothing about walls or furniture.
  */
 export function isClubPatronTile(tx: number, ty: number): boolean {
+  const onBorder = tx <= 0 || ty <= 0 || tx >= CLUB_INTERIOR_W - 1 || ty >= CLUB_INTERIOR_H - 1;
+  if (onBorder) return false;
+  const onFixedFigureMark =
+    (tx === CLUB_DJ_TILE.x && ty === CLUB_DJ_TILE.y) ||
+    CLUB_STATIONS.some((station) => station.tile.x === tx && station.tile.y === ty);
+  if (onFixedFigureMark) return false;
   const onDanceFloor =
     tx >= CLUB_DANCE_FLOOR.x0 &&
     tx <= CLUB_DANCE_FLOOR.x1 &&

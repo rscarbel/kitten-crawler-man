@@ -1161,7 +1161,14 @@ export function parseClubMembershipCheckpoint(
   value: unknown,
 ): ClubMembershipCheckpoint | undefined {
   if (!isRecord(value)) return undefined;
-  const { hasDesperadoPass, casinoShoe, casinoHintsEnabled, pokerFast, pokerShowCards } = value;
+  const {
+    hasDesperadoPass,
+    casinoShoe,
+    casinoHintsEnabled,
+    pokerFast,
+    pokerShowCards,
+    escortLevelId,
+  } = value;
   const parsedShoe = casinoShoe === null ? null : parseShoeState(casinoShoe);
   if (!isBoolean(hasDesperadoPass) || parsedShoe === undefined) return undefined;
   // A missing or unreadable hints preference reads as "never asked": rejecting
@@ -1177,6 +1184,8 @@ export function parseClubMembershipCheckpoint(
     pokerNotes: parsePokerReads(value.pokerNotes),
     pokerFast: isBoolean(pokerFast) ? pokerFast : false,
     pokerShowCards: isBoolean(pokerShowCards) ? pokerShowCards : false,
+    // A save without the field holds no booking.
+    escortLevelId: isString(escortLevelId) ? escortLevelId : null,
   };
 }
 

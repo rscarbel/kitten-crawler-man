@@ -3,6 +3,7 @@
  * data, one named fixture at a time.
  */
 
+import { createClubMembership } from '../../core/ClubMembership';
 import { TILE_SIZE } from '../../core/constants';
 import { createMercenaryRoster } from '../../core/MercenaryRoster';
 import { MERCENARY_TEMPLATES } from '../../core/mercenaryTemplates';
@@ -220,7 +221,7 @@ export const SHOP_FIXTURES: readonly DialogFixture[] = [
   {
     name: 'vip',
     surfaces: (shown) => {
-      const lounge = new ClubVipLoungeSystem(null, createMercenaryRoster());
+      const lounge = new ClubVipLoungeSystem(null, createMercenaryRoster(), createClubMembership());
       lounge.openPanel(0);
       const party = makeParty(FIXTURE_COINS);
       return [gate(vipLoungeSurface({ id: 'vip-lounge', lounge, party: () => party }), shown)];

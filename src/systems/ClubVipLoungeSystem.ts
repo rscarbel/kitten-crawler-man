@@ -4,6 +4,7 @@ import type { Player } from '../Player';
 import { canAffordCoins, spendPartyCoins } from '../core/partyCoins';
 import type { AudioManager } from '../audio/AudioManager';
 import type { MercenaryRoster } from '../core/MercenaryRoster';
+import type { ClubMembership } from '../core/ClubMembership';
 import type { MercenaryTemplateId } from '../core/mercenaryTemplates';
 import type { CretinVariant } from '../sprites/cretinSprite';
 
@@ -12,6 +13,13 @@ const VIP_HEAL_PRICE = 40;
 const VIP_COCKTAIL_PRICE = 60;
 /** The escort pair (canon: 300/crawler, 500/pair). Free when casino wagers exceed it. */
 export const BODYGUARD_PAIR_PRICE = 500;
+
+/**
+ * Stamped on a booking made where no scene has named the floor. Only harnesses
+ * build the lounge that way, and {@link ClubVipLoungeSystem.escortActive}
+ * honours any booking while the floor is unknown.
+ */
+const HARNESS_ESCORT_LEVEL_ID = 'harness';
 
 /** The two Cretins who shadow a crawler that books the Private Escort. */
 export interface EscortPair {
@@ -77,7 +85,7 @@ const VIP_SERVICES: ReadonlyArray<VipService> = [
   },
   {
     name: 'Private Escort',
-    desc: (escort) => `${escort.names} shadow you through the club.`,
+    desc: (escort) => `${escort.names} shadow you through the club until this floor is done.`,
     kind: 'escort',
   },
 ];
@@ -88,17 +96,16 @@ const VIP_SERVICES: ReadonlyArray<VipService> = [
  * full heal, a short buff cocktail, and a Cretin bodyguard escort. The
  * escort is free when the player's casino wagers this visit clear
  * {@link BODYGUARD_PAIR_PRICE} — the canon "spend enough at the tables and
- * security is free" perk. The escort is cosmetic (the club is a safe zone); the
- * host {@link DesperadoClubSystem} renders the two Cretins trailing the player.
+ * security is free" perk. The booking lasts until the party leaves the floor it
+ * was made on, so it is kept on the {@link ClubMembership} that outlives each
+ * visit. The escort is cosmetic (the club is a safe zone); the host
+ * {@link DesperadoClubSystem} renders the two Cretins trailing the player.
  */
 export class ClubVipLoungeSystem {
   open = false;
 
   /** Set when the escort is hired; the host clears it after firing the bodyguard achievement. */
   escortPending = false;
-
-  /** True once the escort has been hired this visit; the host renders the two Cretins. */
-  private escortHired = false;
 
   /** Casino coins wagered this visit, captured when the panel opens (the free-escort gate). */
   private wageredAtOpen = 0;
@@ -109,10 +116,19 @@ export class ClubVipLoungeSystem {
   constructor(
     private readonly audio: AudioManager | null,
     private readonly roster: MercenaryRoster,
+    private readonly membership: ClubMembership,
   ) {}
 
+  /**
+   * Whether the escort is on duty on the floor the party stands on. A roster
+   * that has not been told its floor is a harness with no floor to outlast, so
+   * a booking there lasts as long as the membership object does.
+   */
   get escortActive(): boolean {
-    return this.escortHired;
+    const bookedLevelId = this.membership.escortLevelId;
+    if (bookedLevelId === null) return false;
+    const floorLevelId = this.roster.floorLevelId;
+    return floorLevelId === null || bookedLevelId === floorLevelId;
   }
 
   /** Read live, so a Cretin hired at the desk mid-visit hands the escort to the relief pair. */
@@ -177,7 +193,7 @@ export class ClubVipLoungeSystem {
   }
 
   private hireEscort(player: Player, companion: Player): void {
-    if (this.escortHired) return;
+    if (this.escortActive) return;
     const cost = this.escortCost();
     if (!canAffordCoins(player, companion, cost)) {
       this.feedbackMsg = 'The escort costs more coins than you carry.';
@@ -185,7 +201,7 @@ export class ClubVipLoungeSystem {
       return;
     }
     spendPartyCoins(player, companion, cost, player);
-    this.escortHired = true;
+    this.membership.escortLevelId = this.roster.floorLevelId ?? HARNESS_ESCORT_LEVEL_ID;
     this.escortPending = true;
     this.feedbackMsg = this.escortIsFree
       ? 'On the house — the tables have been kind. Enjoy the muscle.'
@@ -253,11 +269,11 @@ export class ClubVipLoungeSystem {
         };
       }
       case 'escort': {
-        if (this.escortHired) {
+        if (this.escortActive) {
           return {
             label: 'Hired',
             disabled: true,
-            statusLine: `${this.escortPair.names} have your back.`,
+            statusLine: `${this.escortPair.names} have your back until this floor is done.`,
           };
         }
         const free = this.escortIsFree;

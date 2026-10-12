@@ -375,7 +375,7 @@ export class DesperadoClubSystem {
       this.onCasinoWinnings?.(coins, screenX, screenY);
     this.poker.onNotice = (message, tone) => this.onCasinoNotice?.(message, tone);
     this.guild = new MercenaryGuildSystem(roster, audio);
-    this.vip = new ClubVipLoungeSystem(audio, roster);
+    this.vip = new ClubVipLoungeSystem(audio, roster, membership);
     prewarmClarabelle();
     if (membership.hasDesperadoPass) {
       this.unlockAchievement('desperado_member');
@@ -1019,7 +1019,9 @@ export class DesperadoClubSystem {
   /**
    * Once the VIP escort is hired, two Cretins ease toward flanking offsets
    * behind the player. The pair is re-read every tick: hiring Sledge or Bomo at
-   * the desk mid-visit hands the escort to the relief pair on the spot.
+   * the desk mid-visit hands the escort to the relief pair on the spot. A pair
+   * booked on an earlier visit this floor falls in at the door, beside the
+   * player, the first tick of the new visit.
    */
   private updateEscort(active: Player): void {
     if (!this.vip.escortActive) return;

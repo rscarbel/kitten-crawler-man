@@ -2,11 +2,12 @@
  * The Desperado Club's cosmetic crowd: the patrons who stroll the floor between
  * the dance floor and the station rooms.
  *
- * Two things this owns that the old inline patron loop did not:
+ * It owns two things:
  *
- * - **Range.** Patrons roam the club's whole open floor rather than a hard-coded
- *   box by the door, gated by {@link isClubPatronTile} and real map walkability
- *   so they never clip a wall or a counter.
+ * - **Range.** Patrons roam the club's whole open floor, gated by
+ *   {@link isClubPatronTile} and real map walkability so they never clip a
+ *   wall or a counter, and only head for spots they can walk to in a straight
+ *   line so no pocket of the floor traps them.
  * - **Weight.** Every figure on the floor — patrons, staff, Clarabelle, the
  *   crawlers themselves — is a circular body, and patrons are pushed out of any
  *   overlap. They shoulder past each other, they refuse to stand inside the
@@ -29,6 +30,7 @@ import { gaitCyclesForDistance } from '../sprites/gaitCadence';
 import { CLUB_PATRON_REFS } from '../sprites/clubCastRoster';
 import { CLUB_ANIM_FRAMES_PER_SECOND } from '../sprites/clubNpcSprite';
 import { stepWander, type WanderParams, type WanderStep } from '../creatures/townWander';
+import { SOUTHWARD_PROBE_DROP } from '../map/collisionAnchors';
 import {
   CLUB_INTERIOR_W,
   CLUB_INTERIOR_H,
@@ -93,6 +95,10 @@ interface Patron {
   walkCycle: number;
   /** Ticks the legs keep walking since the patron last moved; zero is standing. */
   motionTicks: number;
+  /** Distance to the target at the end of the previous tick, for stall detection. */
+  lastTargetDist: number;
+  /** Consecutive walking ticks without closing on the target. */
+  stalledTicks: number;
 }
 
 /**
@@ -100,6 +106,24 @@ interface Patron {
  * blocked step or a shove does not snap the row to idle and back.
  */
 const PATRON_MOTION_HOLD_TICKS = 4;
+/**
+ * Ticks a walking patron may go without closing on its target before it gives
+ * up and picks another. Collision pushes a patron back as fast as it walks when
+ * its target sits behind a body that never moves — a crawler parked at a table,
+ * or a knot of other patrons — and without a give-up the whole crowd ends up
+ * leaning on whoever stands still longest.
+ */
+const PATRON_STALL_TICKS = 90;
+/** Closing on the target by less than this many pixels in a tick counts as no progress. */
+const PATRON_PROGRESS_EPSILON = 0.05;
+/**
+ * Random floor tiles tried for one with a clear straight walk before a patron
+ * settles for staying put. The open floor wraps around the dance floor, so from
+ * a corridor most of the club lies out of a straight line.
+ */
+const PATRON_TARGET_TRIES = 32;
+/** Spacing of the points sampled along a candidate walk, as a fraction of a tile. */
+const PATRON_WALK_PROBE_STEP_TILES = 0.125;
 const TWO_PI = Math.PI * 2;
 
 export class ClubCrowdSystem {
@@ -110,8 +134,10 @@ export class ClubCrowdSystem {
 
   /** Reused output for `stepWander`, so the patron loop allocates nothing. */
   private readonly wanderStep: WanderStep = { dx: 0, dy: 0, moving: false, distance: 0 };
+  /** The patron `stepWander` is advancing, so `pickTarget` knows where the walk starts. */
+  private wanderingPatron: Patron | null = null;
   private readonly wanderParams: WanderParams = {
-    pickTarget: () => this.randomPatronPoint(),
+    pickTarget: () => this.reachablePatronPoint(this.wanderingPatron),
     arriveDist: PATRON_ARRIVE_DIST,
     pauseMin: PATRON_PAUSE_MIN,
     pauseMax: PATRON_PAUSE_MAX,
@@ -130,6 +156,7 @@ export class ClubCrowdSystem {
     if (patrons === null) return;
 
     for (const p of patrons) {
+      this.wanderingPatron = p;
       stepWander(p, this.wanderParams, this.wanderStep);
       if (this.wanderStep.moving) {
         if (Math.abs(this.wanderStep.dx) >= Math.abs(this.wanderStep.dy)) {
@@ -155,12 +182,34 @@ export class ClubCrowdSystem {
         p.motionTicks--;
       }
     }
+    this.wanderingPatron = null;
 
     this.resolveCollisions(patrons, staticBodies);
+    for (const p of patrons) this.abandonStalledTarget(p);
 
     for (let i = 0; i < patrons.length; i++) {
       this.figures[i].y = patrons[i].y;
     }
+  }
+
+  private abandonStalledTarget(p: Patron): void {
+    if (p.pause > 0) {
+      p.lastTargetDist = Number.POSITIVE_INFINITY;
+      p.stalledTicks = 0;
+      return;
+    }
+    const targetDist = Math.hypot(p.targetX - p.x, p.targetY - p.y);
+    const closedIn = targetDist < p.lastTargetDist - PATRON_PROGRESS_EPSILON;
+    p.stalledTicks = closedIn ? 0 : p.stalledTicks + 1;
+    p.lastTargetDist = targetDist;
+    if (p.stalledTicks < PATRON_STALL_TICKS) return;
+
+    const next = this.reachablePatronPoint(p);
+    p.targetX = next.x;
+    p.targetY = next.y;
+    p.pause = PATRON_PAUSE_MIN + Math.floor(Math.random() * (PATRON_PAUSE_MAX - PATRON_PAUSE_MIN));
+    p.lastTargetDist = Number.POSITIVE_INFINITY;
+    p.stalledTicks = 0;
   }
 
   /** Push overlapping patrons apart, and out of anything immovable they've walked into. */
@@ -282,6 +331,36 @@ export class ClubCrowdSystem {
     return { x: tile.x * TILE_SIZE, y: tile.y * TILE_SIZE };
   }
 
+  /**
+   * A random spot the patron can walk to in a straight line. Wander has no
+   * pathfinding, so a target behind the dance floor or a divider is refused on
+   * the first step; drawing those anyway leaves a patron re-rolling and pausing
+   * in whichever pocket of the floor it reached, and over a long session the
+   * crowd collects in the pockets it cannot walk out of.
+   */
+  private reachablePatronPoint(from: Patron | null): { x: number; y: number } {
+    if (from === null) return this.randomPatronPoint();
+    for (let attempt = 0; attempt < PATRON_TARGET_TRIES; attempt++) {
+      const candidate = this.randomPatronPoint();
+      if (this.hasClearWalk(from, candidate)) return candidate;
+    }
+    return { x: from.x, y: from.y };
+  }
+
+  /** Whether every step of a straight walk passes the same probe `stepWander` applies. */
+  private hasClearWalk(from: { x: number; y: number }, to: { x: number; y: number }): boolean {
+    const dx = to.x - from.x;
+    const dy = to.y - from.y;
+    const probeStepPx = TILE_SIZE * PATRON_WALK_PROBE_STEP_TILES;
+    const probeCount = Math.ceil(Math.hypot(dx, dy) / probeStepPx);
+    const southwardDrop = dy > 0 ? TILE_SIZE * SOUTHWARD_PROBE_DROP : 0;
+    for (let i = 1; i <= probeCount; i++) {
+      const t = i / probeCount;
+      if (!this.isPatronSpot(from.x + dx * t, from.y + dy * t + southwardDrop)) return false;
+    }
+    return true;
+  }
+
   private ensurePatrons(): void {
     if (this.patrons !== null) return;
     const patrons: Patron[] = [];
@@ -303,6 +382,8 @@ export class ClubCrowdSystem {
           ref: CLUB_PATRON_REFS[i % CLUB_PATRON_REFS.length],
           walkCycle: 0,
           motionTicks: 0,
+          lastTargetDist: Number.POSITIVE_INFINITY,
+          stalledTicks: 0,
         };
         patrons.push(patron);
         this.figures.push({
