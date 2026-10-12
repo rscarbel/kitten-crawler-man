@@ -950,7 +950,6 @@ export class ClubCasinoSystem {
       this.paintInset(frame, bust, colors.portrait, colors.portraitBorder);
       drawDeucePortrait(ctx, bust.x, bust.y, bust.w, bust.h, state, this.animTime, {
         lookY,
-        showDeck: false,
       });
     }
     this.renderBanter(frame, layout);

@@ -43,6 +43,7 @@ import {
 import { CARD_ASPECT, drawCardBack, drawCardFace } from '../ui/casino/PlayingCard';
 import {
   drawCasinoDealer,
+  drawCasinoDealerHands,
   drawDeucePortrait,
   type DealerState,
 } from '../sprites/casinoDealerSprite';
@@ -674,6 +675,8 @@ export class CasinoPreviewScene extends PreviewScene {
   }
 
   private renderDealerTab(ctx: CanvasRenderingContext2D): void {
+    // Deuce's motion is timed on a real millisecond clock, not frames.
+    const phaseMs = performance.now();
     DEALER_STATES.forEach((state, i) => {
       const column = i % PORTRAIT_COLUMNS;
       const row = Math.floor(i / PORTRAIT_COLUMNS);
@@ -693,7 +696,7 @@ export class CasinoPreviewScene extends PreviewScene {
         PORTRAIT_CELL_W - PORTRAIT_INSET,
         PORTRAIT_CELL_H - PORTRAIT_INSET * PORTRAIT_CAPTION_INSETS,
         state,
-        this.frames,
+        phaseMs,
         { lookY: 1 },
       );
       worldText(ctx, state, {
@@ -715,14 +718,10 @@ export class CasinoPreviewScene extends PreviewScene {
       color: LABEL_COLOR,
     });
     [false, true].forEach((dealing, i) => {
-      drawCasinoDealer(
-        ctx,
-        MARGIN + i * (WORLD_FIGURE_TILE + WORLD_FIGURE_GAP),
-        worldRow + LINE_HEIGHT,
-        WORLD_FIGURE_TILE,
-        this.frames,
-        dealing,
-      );
+      const figureX = MARGIN + i * (WORLD_FIGURE_TILE + WORLD_FIGURE_GAP);
+      const figureY = worldRow + LINE_HEIGHT;
+      drawCasinoDealer(ctx, figureX, figureY, WORLD_FIGURE_TILE, phaseMs, dealing);
+      drawCasinoDealerHands(ctx, figureX, figureY, WORLD_FIGURE_TILE, phaseMs, dealing);
     });
   }
 

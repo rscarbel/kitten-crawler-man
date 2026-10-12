@@ -142,6 +142,7 @@
     "render:run-complete": "tsx scripts/render-run-complete.ts",
     "render:merc-desk": "tsx scripts/render-merc-desk.ts",
     "render:club-floor": "tsx scripts/render-club-floor.ts",
+    "render:casino-dealer": "tsx scripts/render-casino-dealer.ts",
     "render:cast-motion": "tsx scripts/render-cast-motion.ts",
     "render:shady": "tsx scripts/render-shady.ts",
     "render:gumgum": "tsx scripts/render-gumgum.ts",

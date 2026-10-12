@@ -30,7 +30,7 @@ import {
   CLUB_MARKET_VENDOR,
   CLUB_VIP_HOST,
 } from '../sprites/clubCastRoster';
-import { drawCasinoDealer } from '../sprites/casinoDealerSprite';
+import { drawCasinoDealer, drawCasinoDealerHands } from '../sprites/casinoDealerSprite';
 import { drawCrocodilianSprite, prewarmClarabelle } from '../sprites/crocodilianSprite';
 import { drawCretinSprite, prewarmCretin, type CretinVariant } from '../sprites/cretinSprite';
 import { CRETIN_WALK_FRAMES, CRETIN_WALK_TILES_PER_CYCLE } from '../sprites/cretinTiming';
@@ -62,6 +62,17 @@ const STATION_INTERACT_RANGE = 2.6;
  */
 const MS_PER_SECOND = 1000;
 const MS_PER_FRAME = MS_PER_SECOND / CLUB_ANIM_FRAMES_PER_SECOND;
+
+function casinoTableSortY(): number {
+  const table = CLUB_PROPS.find((prop) => prop.sprite === 'club_casino_table');
+  if (table === undefined) throw new Error('the club layout has no blackjack table');
+  return propSortY(table);
+}
+
+/** The blackjack table's place in the Y-sort; Deuce's hands sort just after it. */
+const CASINO_TABLE_SORT_Y = casinoTableSortY();
+/** Enough to break the tie with the table so the hands always paint over it. */
+const DEALER_HANDS_AFTER_TABLE_PX = 0.5;
 const TILE_HALF = 0.5;
 
 // VIP bodyguard escort: two Cretins that trail the player around the club (cosmetic — the club is a safe zone).
@@ -706,6 +717,7 @@ export class DesperadoClubSystem {
     for (const station of CLUB_STATIONS) {
       if (station.id === 'casino') {
         figures.push(this.dealerFigure(station.tile));
+        figures.push(this.dealerHandsFigure(station.tile));
         continue;
       }
       if (station.id === 'clarabelle') {
@@ -799,15 +811,34 @@ export class DesperadoClubSystem {
   }
 
   /**
-   * Deuce behind the blackjack table. Sweeps a hand across the felt while the
-   * table is open and rests otherwise, so the figure in the room tracks what the
-   * panel is doing.
+   * Deuce behind the blackjack table. Works the deck while the table is open
+   * and rests otherwise, so the figure in the room tracks what the panel is
+   * doing.
    */
   private dealerFigure(tile: { x: number; y: number }): InteriorFigure {
     return {
       y: tile.y * TILE_SIZE,
       render: (ctx, camX, camY, tileSize) =>
         drawCasinoDealer(
+          ctx,
+          tile.x * TILE_SIZE - camX,
+          tile.y * TILE_SIZE - camY,
+          tileSize,
+          this.animTime * MS_PER_FRAME,
+          this.casino.open,
+        ),
+    };
+  }
+
+  /**
+   * Deuce's arms and hands, which reach over the rim onto the felt: sorted just behind the
+   * blackjack table so they paint over it instead of vanishing under its rim.
+   */
+  private dealerHandsFigure(tile: { x: number; y: number }): InteriorFigure {
+    return {
+      y: CASINO_TABLE_SORT_Y + DEALER_HANDS_AFTER_TABLE_PX,
+      render: (ctx, camX, camY, tileSize) =>
+        drawCasinoDealerHands(
           ctx,
           tile.x * TILE_SIZE - camX,
           tile.y * TILE_SIZE - camY,
