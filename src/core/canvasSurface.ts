@@ -1,18 +1,18 @@
 /**
  * Off-screen drawing surfaces shared by the tile caches and the pre-rendered
  * sprite compositions.
+ *
+ * A detached `<canvas>` rather than an `OffscreenCanvas`. On the main thread
+ * the two are drawn by the same accelerated backend, but only the element's
+ * context is a `CanvasRenderingContext2D` — the type every painter in the
+ * engine is written against. An `OffscreenCanvas` hands back a distinct
+ * context type that could only be passed to those painters by asserting it was
+ * something it is not.
  */
-export type CanvasSurface = OffscreenCanvas | HTMLCanvasElement;
+export type CanvasSurface = HTMLCanvasElement;
 
-/**
- * Allocates an OffscreenCanvas when available, falling back to a regular
- * HTMLCanvasElement for environments that don't support OffscreenCanvas.
- * OffscreenCanvas avoids layout-tree involvement and is generally faster.
- */
+/** Allocates a detached canvas of the given size. */
 export function allocCanvas(w: number, h: number): CanvasSurface {
-  if (typeof OffscreenCanvas !== 'undefined') {
-    return new OffscreenCanvas(w, h);
-  }
   const c = document.createElement('canvas');
   c.width = w;
   c.height = h;
@@ -49,19 +49,25 @@ export function allocReadableCanvas(w: number, h: number): CanvasSurface {
 }
 
 /**
- * Returns the 2D drawing context of an off-screen surface.
- *
- * OffscreenCanvas yields an OffscreenCanvasRenderingContext2D — a distinct
- * nominal type exposing the identical drawing API. Every renderer in the engine
- * is written against CanvasRenderingContext2D, so the two are unified here once
- * rather than at each of the dozens of call sites.
+ * The browser refused a 2D context for a surface. In practice this is the
+ * browser's canvas memory budget running out — iOS enforces one across every
+ * canvas on the page — rather than a bug in the caller.
  */
+export class CanvasContextUnavailableError extends Error {
+  constructor() {
+    super('Failed to acquire a 2D canvas context');
+    this.name = 'CanvasContextUnavailableError';
+  }
+}
+
+/** Returns the 2D drawing context of an off-screen surface. */
 export function surfaceContext(surface: CanvasSurface): CanvasRenderingContext2D {
-  const settings = readFrequently.has(surface) ? { willReadFrequently: true } : undefined;
-  // eslint-disable-next-line @typescript-eslint/consistent-type-assertions
-  const ctx = surface.getContext('2d', settings) as CanvasRenderingContext2D | null;
+  const settings: CanvasRenderingContext2DSettings = {
+    willReadFrequently: readFrequently.has(surface),
+  };
+  const ctx = surface.getContext('2d', settings);
   if (ctx === null) {
-    throw new Error('Failed to acquire a 2D canvas context');
+    throw new CanvasContextUnavailableError();
   }
   return ctx;
 }

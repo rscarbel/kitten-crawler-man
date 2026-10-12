@@ -56,6 +56,7 @@ import {
   type Side,
 } from './dungeonWallGeometry';
 import { drawDressing, type NeighbourFace, type WallDressingSet } from './dungeonWallDressing';
+import { onCanvasRecovery } from '../../core/canvasRecovery';
 
 type Ctx = CanvasRenderingContext2D;
 
@@ -879,6 +880,13 @@ function wallTopCanvas(themeId: DungeonFloorThemeId): CanvasSurface {
 const LIGHT_KEY_STEP = 1 / 16;
 const MAX_SHADOWS = 2048;
 const shadows = new Map<string, CanvasSurface>();
+// Baked once and kept; a purge would leave it blank for good.
+onCanvasRecovery(() => {
+  faceStrips.clear();
+  composites.clear();
+  wallTopCanvases.clear();
+  shadows.clear();
+});
 
 /**
  * The darkness over one tile, as black of varying alpha: distance to lit space

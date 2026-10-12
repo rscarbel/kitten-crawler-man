@@ -65,6 +65,7 @@
     "scripts/render-service-furniture.ts",
     "scripts/verify-region-map.ts",
     "scripts/verify-floor-surface.ts",
+    "scripts/verify-canvas-recovery.ts",
     "scripts/verify-dungeon-placement.ts",
     "scripts/verify-dungeon-lighting.ts",
     "scripts/verify-eye-shine.ts",

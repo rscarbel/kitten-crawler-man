@@ -7,6 +7,7 @@
  */
 
 import { allocCanvas, surfaceContext, type CanvasSurface } from '../core/canvasSurface';
+import { onCanvasRecovery } from '../core/canvasRecovery';
 
 /**
  * Texture resolution. Generously above the orb's on-screen size so the blit
@@ -31,6 +32,10 @@ const EDGE_COLOR = '#6b21a8';
 const MARKER_ALPHA = 0.5;
 
 let texture: CanvasSurface | null = null;
+// Baked once and kept; a purge would leave it blank for good.
+onCanvasRecovery(() => {
+  texture = null;
+});
 
 function getTexture(): CanvasSurface {
   if (texture !== null) return texture;

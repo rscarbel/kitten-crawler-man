@@ -3,6 +3,7 @@ import { progressFrameIndex, timeFrameIndex, walkFrameIndex } from '../core/Spri
 import { MOLD_LION_FIGURE } from './art/moldLionFigure';
 import { figureFrameCount } from './figure/figureDef';
 import { drawFigureCached, prewarmFigureState } from './figure/figureFrameCache';
+import { onCanvasRecovery } from '../core/canvasRecovery';
 
 const IDLE_FPS = 6;
 const MILLISECONDS_PER_SECOND = 1000;
@@ -60,6 +61,10 @@ const PUFF_MID_COLOR = `rgba(120, 190, 62, ${AURA_PUFF_GRADIENT_MID_ALPHA_FRAC})
 const PUFF_EDGE_COLOR = 'rgba(96, 150, 48, 0)';
 
 let puffTexture: CanvasSurface | null = null;
+// Baked once and kept; a purge would leave it blank for good.
+onCanvasRecovery(() => {
+  puffTexture = null;
+});
 
 /**
  * The puff gradient is identical for every puff apart from position, size and

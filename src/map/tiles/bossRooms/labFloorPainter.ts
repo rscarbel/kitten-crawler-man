@@ -3,6 +3,7 @@ import { tileCoordKey } from '../../tileIndex';
 import { LAB_WEB, positionHash, type TileContent } from '../../tileTypes';
 import { drawWallShadow } from '../helpers';
 import { spiderLabFloorPlanFor, type SpiderLabFloorPlan } from './labFloorPlan';
+import { onCanvasRecovery } from '../../../core/canvasRecovery';
 
 /**
  * The spider lab's floor: sealed vinyl squares, scuffed and grimed, with the
@@ -542,6 +543,8 @@ function drawHazardBorders(
 
 /** The roundel, painted once per tile size and blitted into each tile it covers. */
 const roundelCache = new Map<number, CanvasSurface>();
+// Baked once and kept; a purge would leave it blank for good.
+onCanvasRecovery(() => roundelCache.clear());
 
 function roundelSurface(ts: number): CanvasSurface {
   const cached = roundelCache.get(ts);

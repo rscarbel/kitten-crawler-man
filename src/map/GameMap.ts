@@ -2027,8 +2027,7 @@ export class GameMap {
     this._tilesOfTypeCache = new Map();
     // Both caches capture the grid's width when they are built, so a replaced
     // structure must not keep them.
-    this._chunkCache = null;
-    this._overlayCache = null;
+    this.releaseTileArtCaches();
     this.maskHeight = this.structure.length;
     this.maskWidth = this.structure[0]?.length ?? 0;
     const cellCount = this.maskWidth * this.maskHeight;
@@ -2645,6 +2644,12 @@ export class GameMap {
    * "wrong forever".
    */
   invalidateAllTileArt(): void {
+    this.releaseTileArtCaches();
+  }
+
+  private releaseTileArtCaches(): void {
+    this._chunkCache?.dispose();
+    this._overlayCache?.dispose();
     this._chunkCache = null;
     this._overlayCache = null;
   }

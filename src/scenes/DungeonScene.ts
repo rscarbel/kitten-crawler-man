@@ -47,7 +47,11 @@ import {
   recommendedPartyLevelFor,
   resolveAmbientLevel,
 } from '../levels/spawner';
-import { activeDifficultyProfile, applySpawnDifficulty } from '../core/difficultyProfiles';
+import {
+  activeDifficultyProfile,
+  applySpawnDifficulty,
+  type Difficulty,
+} from '../core/difficultyProfiles';
 import { getSpriteMissCounts, prewarmGroups, releaseSpritesExcept } from '../core/SpriteLoader';
 import { flushFigureFrameCache } from '../sprites/figure/figureFrameCache';
 import { requiredSpriteKeysForLevel } from '../core/systemAssetRequirements';
@@ -235,6 +239,10 @@ import { nearGoblinHintSurface } from '../ui/screens/dialogs/nearGoblinHint';
 import { defendTutorialSurface } from '../ui/screens/dialogs/defendTutorial';
 import { stairwellPromptSurface } from '../ui/screens/dialogs/stairwellPrompt';
 import { buildingEntryPromptSurface } from '../ui/screens/dialogs/buildingEntryPrompt';
+import {
+  activityDifficultyPickerSurface,
+  type ActivityDifficultyPick,
+} from '../ui/screens/dialogs/activityDifficultyPicker';
 import { keyboardHeroSurface } from '../ui/screens/dialogs/keyboardHeroSurface';
 import { spiderTutorialSurface } from '../ui/screens/dialogs/spiderTutorial';
 import { hackFailedPromptSurface } from '../ui/screens/dialogs/hackFailedPrompt';
@@ -1370,6 +1378,8 @@ export class DungeonScene extends GameplayScene {
   /** See {@link DungeonSceneOptions.devPrisonLayout}. */
   private readonly devPrisonLayout: PrisonLayout | null;
   private devPrisonEntryPending: boolean;
+  /** The prison door whose entry is waiting on the difficulty to play its stealth at. */
+  private pendingPrisonEntry: BuildingEntry | null = null;
   private readonly mercenarySystem: MercenarySystem;
   private renderPipeline = new RenderPipeline();
   private bus = new EventBus();
@@ -2375,13 +2385,17 @@ export class DungeonScene extends GameplayScene {
     }
 
     if (this.gameMap.buildingEntries.length > 0) {
-      this.building = new BuildingSystem(this.gameMap, (entry) => this.enterBuilding(entry), {
-        blockedMessage: (entry) => this.sealedBuildingMessage(entry),
-        onRefused: (message) => {
-          this.audio?.play('error');
-          this.menus.toasts.post(message);
+      this.building = new BuildingSystem(
+        this.gameMap,
+        (entry) => this.requestBuildingEntry(entry),
+        {
+          blockedMessage: (entry) => this.sealedBuildingMessage(entry),
+          onRefused: (message) => {
+            this.audio?.play('error');
+            this.menus.toasts.post(message);
+          },
         },
-      });
+      );
     }
 
     if (levelDef.isOverworld) {
@@ -3952,9 +3966,13 @@ export class DungeonScene extends GameplayScene {
     camX: number,
     camY: number,
   ): ArrowCandidate | null {
-    if (this.cloggedBathroom.isPipeBoardOpen || this.cloggedBathroom.isPipeBoardExplainerOpen) {
-      return null;
-    }
+    const bathroom = this.cloggedBathroom;
+    const atThePipeWall =
+      bathroom.isPipeBoardOpen ||
+      bathroom.isPipeBoardExplainerOpen ||
+      bathroom.isPipeBoardDifficultyPickerOpen ||
+      bathroom.isPipeBoardDiscardConfirmOpen;
+    if (atThePipeWall) return null;
     const player = this.active();
     let nearest: TrackerTarget | null = null;
     let nearestDistance = Infinity;
@@ -4326,16 +4344,52 @@ export class DungeonScene extends GameplayScene {
     this.enterBuilding(entry);
   }
 
-  /** What only the prison's door adds to {@link interiorFloorContext}. */
-  private prisonVisitContext(): Pick<InteriorFloorContext, 'stealthKeySnatch' | 'variant'> {
-    const layout = this.devPrisonLayout;
-    if (layout === null) return { stealthKeySnatch: this.stealthKeySnatch };
+  /**
+   * The building prompt's Enter. The prison first asks which difficulty to
+   * play its stealth at; every other door opens at once.
+   */
+  private requestBuildingEntry(entry: BuildingEntry): void {
+    if (entry.type !== 'prison') {
+      this.enterBuilding(entry);
+      return;
+    }
+    this.building?.closeMenu();
+    this.pendingPrisonEntry = entry;
+  }
+
+  /** The prison's difficulty question while it is waiting on an answer. */
+  private prisonDifficultyPick(): ActivityDifficultyPick | null {
+    const entry = this.pendingPrisonEntry;
+    if (entry === null) return null;
+    return {
+      activity: entry.name,
+      pick: (difficulty) => {
+        this.pendingPrisonEntry = null;
+        this.enterBuilding(entry, difficulty);
+      },
+      cancel: () => {
+        this.pendingPrisonEntry = null;
+      },
+    };
+  }
+
+  /**
+   * What only the prison's door adds to {@link interiorFloorContext}. The
+   * prison is planned here, at the door, and never again: a reload or a
+   * defeat inside lands back on this floor, so the picked difficulty lives
+   * exactly as long as the visit.
+   */
+  private prisonVisitContext(
+    difficulty: Difficulty,
+  ): Pick<InteriorFloorContext, 'stealthKeySnatch' | 'variant'> {
+    const worldSeed = this.gameMap.worldSeed;
+    const plan =
+      this.devPrisonLayout === null
+        ? planGoblinPrison(worldSeed, difficulty)
+        : planGoblinPrison(worldSeed, difficulty, this.devPrisonLayout);
     return {
       stealthKeySnatch: this.stealthKeySnatch,
-      variant: {
-        kind: 'goblin_prison',
-        plan: planGoblinPrison(this.gameMap.worldSeed, settings.difficulty, layout),
-      },
+      variant: { kind: 'goblin_prison', plan },
     };
   }
 
@@ -4448,9 +4502,13 @@ export class DungeonScene extends GameplayScene {
    *
    * The overworld is rebuilt around the party on the way out, its creatures
    * regenerated. Any other floor is held aside instead ({@link holdFloorForInterior})
-   * and handed back exactly as it was left.
+   * and handed back exactly as it was left. `prisonDifficulty` is what the
+   * prison's stealth is played at; no other building reads it.
    */
-  private enterBuilding(entry: BuildingEntry): void {
+  private enterBuilding(
+    entry: BuildingEntry,
+    prisonDifficulty: Difficulty = settings.difficulty,
+  ): void {
     const levelDef = this.levelDef;
     // Spawn one tile south of the door so the player exits outside and
     // doesn't immediately re-trigger the "Enter building?" prompt.
@@ -4575,7 +4633,9 @@ export class DungeonScene extends GameplayScene {
           ? { entries: () => this.collectTrackerEntries(), progress: this.journalProgress }
           : undefined,
         hudView,
-        heldFloor === null ? TOWN_INTERIOR_FLOOR : this.interiorFloorContext(heldFloor, entry),
+        heldFloor === null
+          ? TOWN_INTERIOR_FLOOR
+          : this.interiorFloorContext(heldFloor, entry, prisonDifficulty),
       ),
     );
   }
@@ -4628,10 +4688,11 @@ export class DungeonScene extends GameplayScene {
   private interiorFloorContext(
     heldFloor: DungeonInteriorReturn,
     entry: BuildingEntry,
+    prisonDifficulty: Difficulty,
   ): InteriorFloorContext {
     const levelDef = this.levelDef;
     return {
-      ...(entry.type === 'prison' ? this.prisonVisitContext() : {}),
+      ...(entry.type === 'prison' ? this.prisonVisitContext(prisonDifficulty) : {}),
       floorNumber: levelDef.floorNumber,
       groundSheets: groundSheetKeysAmong(
         requiredSpriteKeysForLevel(levelDef.id, levelDef.spriteGroups),
@@ -6155,6 +6216,7 @@ export class DungeonScene extends GameplayScene {
       hackFailedPromptSurface('spider-hack-failed', this.spiderQuest),
       stairwellPromptSurface('stairwell', this.stairwell),
       buildingEntryPromptSurface('building-entry', () => this.building ?? null),
+      activityDifficultyPickerSurface('prison-difficulty', () => this.prisonDifficultyPick()),
       this.grateSpikes.surface(camera),
       ...(this.briarHollowKit?.surfaces(camera) ?? []),
       this.followerMenu.surface({

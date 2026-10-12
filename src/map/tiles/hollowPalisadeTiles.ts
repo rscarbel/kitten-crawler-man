@@ -47,6 +47,7 @@ import {
   fillRoundRect,
 } from '../../sprites/art/villageArt';
 import { tileCoordKey } from '../tileIndex';
+import { onCanvasRecovery } from '../../core/canvasRecovery';
 
 // ── Geometry, in tiles ────────────────────────────────────────────────────────
 
@@ -1774,6 +1775,12 @@ interface CachedGateEW {
 }
 
 const gatePostCacheEW = new Map<number, CachedGateEW>();
+// Baked once and kept; a purge would leave it blank for good.
+onCanvasRecovery(() => {
+  pieceCache.clear();
+  gatePostCache.clear();
+  gatePostCacheEW.clear();
+});
 
 /** Paints an east/west gate centred on `centreX`, ground line `centreY`. For the map and the review sheet. */
 export function paintGateEW(

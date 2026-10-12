@@ -15,6 +15,7 @@ import {
   drawTrebuchet,
 } from '../../../sprites/art/trebuchetArt';
 import { drawSnare } from '../../../sprites/art/snareArt';
+import { onCanvasRecovery } from '../../../core/canvasRecovery';
 
 type StructurePainter = (ctx: CanvasRenderingContext2D, box: Rect) => void;
 
@@ -100,6 +101,8 @@ const WASHED_FILTER = 'grayscale(1)';
  */
 const MAX_CACHED_PICTURES = 48;
 const cache = new Map<string, CanvasSurface>();
+// Baked once and kept; a purge would leave it blank for good.
+onCanvasRecovery(() => cache.clear());
 
 /**
  * Draws `option`'s finished structure centred in `box`, from a picture

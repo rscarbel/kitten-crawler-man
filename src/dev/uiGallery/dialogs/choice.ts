@@ -13,6 +13,10 @@ import { RewardGrantedDialog } from '../../../ui/RewardGrantedDialog';
 import { SkillBookPrompt } from '../../../ui/SkillBookPrompt';
 import { drawCraftSkillIcon } from '../../../ui/icons/craftSkillIcons';
 import { drawSkillIcon } from '../../../ui/icons/skillIcons';
+import {
+  activityDifficultyPickerSurface,
+  activityDiscardConfirmSurface,
+} from '../../../ui/screens/dialogs/activityDifficultyPicker';
 import { buildingEntryPromptSurface } from '../../../ui/screens/dialogs/buildingEntryPrompt';
 import {
   ConfirmDialog,
@@ -171,6 +175,41 @@ export const FIXTURES: readonly DialogFixture[] = [
         enterActiveBuilding: noop,
         closeMenu: noop,
       })),
+    ],
+  },
+  {
+    name: 'activity-difficulty',
+    surfaces: (shown) => [
+      activityDifficultyPickerSurface('activity-difficulty', () =>
+        shown() ? { activity: 'Goblin High Security Prison', pick: noop, cancel: noop } : null,
+      ),
+    ],
+  },
+  {
+    name: 'activity-difficulty-in-progress',
+    surfaces: (shown) => [
+      activityDifficultyPickerSurface('activity-difficulty-in-progress', () =>
+        shown()
+          ? { activity: 'The Clogged Bathroom', inProgress: 'easy', pick: noop, cancel: noop }
+          : null,
+      ),
+    ],
+  },
+  {
+    name: 'activity-discard',
+    surfaces: (shown) => [
+      activityDiscardConfirmSurface('activity-discard', () =>
+        shown()
+          ? {
+              activity: 'The Clogged Bathroom',
+              from: 'easy',
+              to: 'normal',
+              keep: noop,
+              discard: noop,
+              back: noop,
+            }
+          : null,
+      ),
     ],
   },
   towerFixture('tower-stairs-ascend', { kind: 'ascend', targetFloorLabel: '2nd Floor' }),

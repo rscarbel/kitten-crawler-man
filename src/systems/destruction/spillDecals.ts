@@ -19,6 +19,7 @@ import type { CellarSpill } from './cellarPropKinds';
 import type { RemainsPropKindDef } from './remainsPropKinds';
 import type { ServiceSpill } from './serviceLevelPropKinds';
 import type { ThemedPropSpill } from './themedPropMaterials';
+import { onCanvasRecovery } from '../../core/canvasRecovery';
 
 /** Every spill a break can leave. */
 export type SpillKind = CellarSpill | ServiceSpill | ThemedPropSpill | RemainsPropKindDef['spill'];
@@ -40,6 +41,8 @@ type Rng = () => number;
 type Ctx = CanvasRenderingContext2D;
 
 const cache = new Map<string, CanvasSurface>();
+// Baked once and kept; a purge would leave it blank for good.
+onCanvasRecovery(() => cache.clear());
 
 /** Which of a spill's looks lies at this tile. */
 export function spillVariant(tileX: number, tileY: number): number {

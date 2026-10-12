@@ -712,6 +712,12 @@ export class LightCookie {
     return { tileX: this.originTileX, tileY: this.originTileY, pxPerTile: LIGHT_PX_PER_TILE };
   }
 
+  /** Forgets the painted masks, so the next use paints them again. */
+  forgetPainted(): void {
+    this.painted = null;
+    this.glowPainted = null;
+  }
+
   /** The cut mask, painted on first use. */
   get surface(): CanvasSurface {
     if (this.painted !== null) return this.painted;
@@ -804,6 +810,12 @@ export class OriginCookieCache {
     private readonly visibility: VisibilityCache,
     private readonly isOpaque: (x: number, y: number) => boolean,
   ) {}
+
+  /** Forgets every painted mask, so each is painted again on its next use. */
+  clear(): void {
+    this.cuts.clear();
+    this.glows.clear();
+  }
 
   /** The soft cut of a light of `reachTiles` centred on tile (`tileX`, `tileY`). */
   cut(tileX: number, tileY: number, reachTiles: number): PlacedSurface {

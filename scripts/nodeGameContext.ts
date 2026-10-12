@@ -5,8 +5,7 @@
  * node-canvas implements every call the game's painters make, but it is a
  * structurally distinct type — it lacks `filter`, `createConicGradient` and a
  * handful of others no painter touches. Bridging it once here, rather than at
- * each harness that draws a runtime painter offline, is the same trade
- * `src/core/canvasSurface` makes for `OffscreenCanvas`.
+ * each harness that draws a runtime painter offline.
  */
 
 import { createCanvas, type Canvas } from 'canvas';
@@ -26,7 +25,7 @@ export function asGameContext(ctx: NodeContext): CanvasRenderingContext2D {
  * The same bridge in the other direction, for a surface a runtime painter
  * allocated for itself.
  *
- * `allocCanvas` falls back to `document.createElement('canvas')`, which the
+ * `allocCanvas` calls `document.createElement('canvas')`, which the
  * shims in `nodeCanvasGlobals` answer with a real node canvas — so the object
  * already is one, and only its static type says otherwise. A harness that has
  * to encode a PNG or blit the result into a node context needs that type back.

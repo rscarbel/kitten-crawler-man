@@ -17,6 +17,7 @@
  */
 
 import { allocCanvas, surfaceContext, type CanvasSurface } from '../../core/canvasSurface';
+import { onCanvasRecovery } from '../../core/canvasRecovery';
 
 /** A colour as raw channels, so alpha can be varied per-particle without string surgery. */
 export type Rgb = readonly [number, number, number];
@@ -140,6 +141,8 @@ const GLOW_MID_STOP = 0.45;
 const GLOW_MID_ALPHA = 0.35;
 
 const glowCache = new Map<string, CanvasSurface>();
+// Baked once and kept; a purge would leave it blank for good.
+onCanvasRecovery(() => glowCache.clear());
 
 /**
  * A soft radial disc of the given colour, baked once and reused. Draw it with

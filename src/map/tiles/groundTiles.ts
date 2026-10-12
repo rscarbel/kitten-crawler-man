@@ -62,6 +62,7 @@ import {
   type TileOffset,
 } from '../../core/SpriteLoader';
 import { allocCanvas, surfaceContext, type CanvasSurface } from '../../core/canvasSurface';
+import { onCanvasRecovery } from '../../core/canvasRecovery';
 import { isFaceMountedSign } from '../dungeon/wallShape';
 import { inferFloorType } from './helpers';
 import { floorSurfaceOf } from '../dungeon/floorSurface';
@@ -368,9 +369,11 @@ const DUAL_CELL_CORNERS = [
  * of pixel data, at roughly 1 KB a quarter). That is why this exists: the caches were fine until the town
  * actually started using its materials.
  *
- * Eviction is safe against a bake in flight because every caller draws the
- * surface it just fetched before asking for another one, so a surface dropped
- * from the map is still referenced by the caller that is using it.
+ * An evicted surface is shrunk to nothing, which is what gives its pixels back
+ * at once rather than at the next collection. That is safe against a bake in
+ * flight because every caller draws the surface it just fetched before asking
+ * for another one, and the one it just fetched is the newest entry, never the
+ * one evicted.
  *
  * LRU rather than FIFO. A chunk bake reuses the same few frames for hundreds of
  * tiles, so FIFO on a full cache would evict exactly the entries about to be
@@ -393,11 +396,23 @@ class SurfaceCache {
   set(key: string, surface: CanvasSurface): void {
     this.entries.set(key, surface);
     while (this.entries.size > this.maxEntries) {
-      const oldest = this.entries.keys().next();
+      const oldest = this.entries.entries().next();
       if (oldest.done === true) break;
-      this.entries.delete(oldest.value);
+      const [oldestKey, oldestSurface] = oldest.value;
+      releaseSurface(oldestSurface);
+      this.entries.delete(oldestKey);
     }
   }
+
+  clear(): void {
+    for (const surface of this.entries.values()) releaseSurface(surface);
+    this.entries.clear();
+  }
+}
+
+function releaseSurface(surface: CanvasSurface): void {
+  surface.width = 0;
+  surface.height = 0;
 }
 
 /**
@@ -453,6 +468,7 @@ function maskAlpha(mask: MaskSheet): Uint8ClampedArray | undefined {
   } catch {
     maskAlphaChannel = undefined;
   }
+  releaseSurface(surface);
   return maskAlphaChannel;
 }
 
@@ -1606,6 +1622,17 @@ function occluderAt(structure: TileContent[][], tx: number, ty: number): boolean
 
 /** Pre-rendered occlusion bands, keyed by side, which ends taper, and tile size. */
 const occlusionBands = new Map<string, CanvasSurface>();
+
+onCanvasRecovery(() => {
+  overlayCache.clear();
+  stencilCache.clear();
+  for (const surface of noiseFields.values()) releaseSurface(surface);
+  noiseFields.clear();
+  for (const surface of occlusionBands.values()) releaseSurface(surface);
+  occlusionBands.clear();
+  if (weighedQuarter !== undefined) releaseSurface(weighedQuarter);
+  weighedQuarter = undefined;
+});
 
 /**
  * One occlusion band: dark against the occluder, fading away from it, and fading

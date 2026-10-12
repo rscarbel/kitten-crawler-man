@@ -17,7 +17,7 @@
  * the console housing first, the lane beds into its well. That order is not
  * cosmetic — the frame's well is opaque, so the other order hides every lane hue —
  * and it is restated here rather than imported because the drawing module reaches
- * for `OffscreenCanvas`, which node does not have.
+ * for a DOM `document`, which node does not have.
  *
  * The gates run first, before the contact sheet is allocated, so a failure is
  * reported against the art rather than after a multi-megapixel canvas.

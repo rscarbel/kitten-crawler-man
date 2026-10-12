@@ -113,6 +113,8 @@ const { MercenarySystem } = await import('../src/systems/MercenarySystem.js');
 const { createMercenaryRoster } = await import('../src/core/MercenaryRoster.js');
 const { getMercenaryTemplate } = await import('../src/core/mercenaryTemplates.js');
 const { PrisonKeySystem } = await import('../src/systems/stealthKeySnatch/PrisonKeySystem.js');
+const { settings } = await import('../src/core/Settings.js');
+const { DIFFICULTY_ORDER } = await import('../src/core/difficultyProfiles.js');
 
 type Scene = InstanceType<typeof DungeonScene>;
 type LiveMap = InstanceType<typeof GameMap>;
@@ -622,6 +624,15 @@ async function verifySeed(worldSeed: number): Promise<void> {
   if (building === null) return;
   const savesBeforeEntry = saves.length;
   building['onEnterBuilding'](entry);
+  check(
+    currentScene(sceneManager) === outside && outside['pendingPrisonEntry'] === entry,
+    `${label}: the prison door asks for a difficulty before it opens`,
+  );
+  const worldDifficulty = settings.difficulty;
+  const pickedDifficulty = DIFFICULTY_ORDER.find((tier) => tier !== worldDifficulty) ?? 'hard';
+  const difficultyPick = outside['prisonDifficultyPick']();
+  check(difficultyPick !== null, `${label}: the prison's difficulty picker is up`);
+  difficultyPick?.pick(pickedDifficulty);
   const doorSave: SavedProgress | undefined =
     saves.length > savesBeforeEntry ? saves[saves.length - 1] : undefined;
   check(doorSave !== undefined, `${label}: walking into the prison writes a save at the door`);
@@ -634,6 +645,17 @@ async function verifySeed(worldSeed: number): Promise<void> {
   const inside = currentScene(sceneManager);
   check(inside instanceof BuildingInteriorScene, `${label}: the prison door leads inside`);
   if (!(inside instanceof BuildingInteriorScene)) return;
+  const prisonVariant = inside['floor'].variant;
+  check(
+    typeof prisonVariant === 'object' &&
+      prisonVariant.kind === 'goblin_prison' &&
+      prisonVariant.plan.difficulty === pickedDifficulty,
+    `${label}: the prison is planned at the picked difficulty`,
+  );
+  check(
+    settings.difficulty === worldDifficulty,
+    `${label}: picking the prison's difficulty leaves the world difficulty alone`,
+  );
   check(await settleArrival(inside, ctx), `${label}: the prison's arrival screen finishes`);
   check(
     inside['mongoSystem'].mongo === null && inside['mercenarySystem'].activeMerc === null,

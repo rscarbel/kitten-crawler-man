@@ -20,6 +20,7 @@ import {
   type WallFixture,
 } from '../../map/dungeon/wallFixtures';
 import { UINT32_SPAN } from '../../core/WorldRandom';
+import { onCanvasRecovery } from '../../core/canvasRecovery';
 
 type Ctx = CanvasRenderingContext2D;
 
@@ -119,6 +120,8 @@ type GlowRgb = string;
 /** Pixels across a cached glow sprite; it is drawn scaled, so this only sets its smoothness. */
 const GLOW_SPRITE_PX = 64;
 const glowSprites = new Map<GlowRgb, CanvasSurface>();
+// Baked once and kept; a purge would leave it blank for good.
+onCanvasRecovery(() => glowSprites.clear());
 
 /**
  * A soft disc of one colour, painted once and reused: a fixture draws every

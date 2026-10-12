@@ -29,6 +29,7 @@ import {
 } from '../dungeon/floorSurface';
 import { drawFeatureTile, drawHallwayMarks } from './floorFeatureArt';
 import { blitAtDevice, fillSnapped, snappedDeviceRect } from './deviceSnap';
+import { onCanvasRecovery } from '../../core/canvasRecovery';
 
 /**
  * Steps per unit of wash a vertex is rounded to before a tile's wash surface is
@@ -67,6 +68,8 @@ const EDGE_LINE_WIDTH = 0.07;
 const EDGE_LINE_COLOR = 'rgba(196, 168, 74, 0.34)';
 
 const washCache = new Map<string, CanvasSurface>();
+// Baked once and kept; a purge would leave it blank for good.
+onCanvasRecovery(() => washCache.clear());
 
 function cachedWash(key: string): CanvasSurface | undefined {
   const surface = washCache.get(key);

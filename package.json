@@ -189,6 +189,7 @@
     "verify:dungeon-walls": "tsx scripts/verify-dungeon-walls.ts",
     "verify:region-map": "tsx scripts/verify-region-map.ts",
     "verify:floor-surface": "tsx scripts/verify-floor-surface.ts",
+    "verify:canvas-recovery": "tsx scripts/verify-canvas-recovery.ts",
     "verify:dungeon-placement": "tsx scripts/verify-dungeon-placement.ts",
     "verify:cellar-props": "tsx scripts/verify-cellar-props.ts",
     "render:cellar-props": "tsx scripts/render-cellar-props.ts",

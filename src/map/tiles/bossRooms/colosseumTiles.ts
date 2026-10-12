@@ -19,6 +19,7 @@ import {
   type ColosseumLayout,
   type ColosseumSpectatorSeat,
 } from './colosseumGeometry';
+import { onCanvasRecovery } from '../../../core/canvasRecovery';
 
 /**
  * The Iron Colosseum, painted tile by tile against its true circles.
@@ -103,6 +104,8 @@ const SAND_PEBBLE_SHADOW_ALPHA = 0.35;
 const SAND_PEBBLE_SHADOW_OFFSET = 1;
 
 const sandTextures = new Map<number, CanvasSurface>();
+// Baked once and kept; a purge would leave it blank for good.
+onCanvasRecovery(() => sandTextures.clear());
 
 function lerpRgb(a: RGB, b: RGB, t: number): RGB {
   const clamped = Math.max(0, Math.min(1, t));
@@ -1121,7 +1124,11 @@ interface MudPatch {
   readonly tiles: ReadonlyArray<readonly [number, number]>;
 }
 
-const mudPatchImages = new WeakMap<TileContent[][], Map<string, CanvasSurface>>();
+let mudPatchImages = new WeakMap<TileContent[][], Map<string, CanvasSurface>>();
+// Baked once and kept; a purge would leave it blank for good.
+onCanvasRecovery(() => {
+  mudPatchImages = new WeakMap<TileContent[][], Map<string, CanvasSurface>>();
+});
 
 function isMudAt(structure: TileContent[][], tileX: number, tileY: number): boolean {
   return structure[tileY]?.[tileX]?.type === ARENA_MUD;

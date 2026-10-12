@@ -190,6 +190,9 @@ function sheetPlanFor(
     readySteps: paint.stages.length + 1,
     variesWithFloorSeed: true,
     ...callbacks,
+    // The steps give back the planes they compose from as they go, so painting
+    // the facade again needs a plan of its own.
+    replan: () => sheetPlanFor(spec, key, weatherSeed, {}),
   };
 }
 

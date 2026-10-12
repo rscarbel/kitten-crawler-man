@@ -256,6 +256,11 @@ export function createPipeBoard(layout: PipeBoardLayout): PipeBoard {
   return { ...layout, rotations: layout.tiles.map((tile) => tile.scramble) };
 }
 
+/** Whether any tile stands off its opening scramble: the player has work on the board. */
+export function isOffScramble(board: PipeBoard): boolean {
+  return board.tiles.some((tile, cell) => board.rotations[cell] !== tile.scramble);
+}
+
 /** Puts every tile back on the opening scramble. */
 export function resetToScramble(board: PipeBoard): void {
   board.tiles.forEach((tile, cell) => (board.rotations[cell] = tile.scramble));

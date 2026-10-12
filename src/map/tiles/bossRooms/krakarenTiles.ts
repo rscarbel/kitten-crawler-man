@@ -18,6 +18,7 @@ import { KRAKAREN_CONSOLE, KRAKAREN_TANK, KRAKAREN_WADE, positionHash } from '..
 import { SPRITE_BUILDING_OVERLAY_FPS } from '../overlayAnimation';
 import { allocCanvas, surfaceContext, type CanvasSurface } from '../../../core/canvasSurface';
 import type { TilePoint } from '../../../systems/bossRooms/bossRoomLayout';
+import { onCanvasRecovery } from '../../../core/canvasRecovery';
 
 type Ctx = CanvasRenderingContext2D;
 
@@ -667,6 +668,12 @@ const LIVE_COLD = { r: 120, g: 190, b: 255, a: 0.16 } as const;
  * variant its fight can produce while the floor loads.
  */
 const waterTiles = new Map<string, CanvasSurface>();
+// Baked once and kept; a purge would leave it blank for good.
+onCanvasRecovery(() => {
+  floorTiles.clear();
+  vatBeds.clear();
+  waterTiles.clear();
+});
 /**
  * Dropped wholesale past this many, which only a floor change reaches: one lab
  * with every flood state it can pass through needs a few hundred.

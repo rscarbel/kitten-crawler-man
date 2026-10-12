@@ -50,6 +50,7 @@ import {
   surfaceContext,
   type CanvasSurface,
 } from '../../core/canvasSurface';
+import { onCanvasRecovery } from '../../core/canvasRecovery';
 import { shouldDownscaleForLowEndDevice } from '../../core/SpriteLoader';
 import type { DrawSpriteOpts } from '../../core/SpriteRenderer';
 import { EMPTY_ALPHA_CUTOFF, type FrameInkBounds } from '../../core/spriteFrames';
@@ -1982,3 +1983,8 @@ export function flushFigureFrameCache(): void {
   releaseScratchSurfaces();
   publishOccupancy();
 }
+
+// Every baked cell may have lost its pixels, and a cell is never re-baked while
+// it is resident; under memory pressure the cells are what can be rebuilt most
+// cheaply, a figure at a time as it is next drawn.
+onCanvasRecovery(() => flushFigureFrameCache());

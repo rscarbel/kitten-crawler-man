@@ -10,6 +10,7 @@ import { allocCanvas, surfaceContext, type CanvasSurface } from '../core/canvasS
 import { RATKIN_BUILDS } from './art/ratkin/outfit';
 import { RATKIN_CAST_OUTFITS, type RatkinCastId } from './art/ratkin/cast';
 import { drawRatkinCastSprite } from './ratkinCastSprite';
+import { onCanvasRecovery } from '../core/canvasRecovery';
 
 /** Side of the portrait, in pixels. Twice the panel's icon, so it stays crisp on a dense screen. */
 const PORTRAIT_PX = 40;
@@ -24,6 +25,8 @@ const STANDARD_HEAD_HEIGHT_TILES = 1.24;
 const HALF = 0.5;
 
 const portraits = new Map<RatkinCastId, CanvasSurface>();
+// Baked once and kept; a purge would leave it blank for good.
+onCanvasRecovery(() => portraits.clear());
 
 /** The portrait for `id`, painted once and kept. */
 export function ratkinPortrait(id: RatkinCastId): CanvasSurface {

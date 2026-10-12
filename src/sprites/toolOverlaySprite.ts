@@ -28,6 +28,7 @@ import {
 } from './art/humanFigure';
 import { paintWorkingTool, workingToolExtent } from './art/toolArt';
 import type { HumanRowSelection } from './humanSprite';
+import { onCanvasRecovery } from '../core/canvasRecovery';
 
 /** Where the tool goes on one drawn cell. */
 export interface ToolOverlayPlacement {
@@ -157,6 +158,8 @@ interface ToolSurface {
 }
 
 const surfaceByLook = new Map<string, ToolSurface>();
+// Baked once and kept; a purge would leave it blank for good.
+onCanvasRecovery(() => surfaceByLook.clear());
 
 /** One tier of one tool, painted once and reused for every frame and every worker. */
 function toolSurface(kind: WorkingToolKind, tier: ToolTier): ToolSurface {

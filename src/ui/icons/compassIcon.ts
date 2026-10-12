@@ -11,6 +11,7 @@
 import { allocCanvas, surfaceContext, type CanvasSurface } from '../../core/canvasSurface';
 import type { Rect } from '../core/geom';
 import { iconSquare } from './iconSquare';
+import { onCanvasRecovery } from '../../core/canvasRecovery';
 
 /**
  * Texture resolution. Comfortably above the ~28px the button draws it at, so
@@ -43,6 +44,10 @@ const QUARTER_TURN = Math.PI / 2;
 const CARDINAL_COUNT = 4;
 
 let texture: CanvasSurface | null = null;
+// Baked once and kept; a purge would leave it blank for good.
+onCanvasRecovery(() => {
+  texture = null;
+});
 
 /**
  * One arm of the rose: a kite from the hub out to the tip, drawn in the

@@ -22,6 +22,7 @@ import {
 import { BRIDGE, CLIFF, FloorTypeValue, isRiverChannel, type TileContent } from '../tileTypes';
 import { CHUNK_TILES } from './chunkTiles';
 import { overworldTerrainFor } from './overworldTerrainRegistry';
+import { onCanvasRecovery } from '../../core/canvasRecovery';
 
 /**
  * Samples a smoothed upscale reads either side of the position it shades: a
@@ -42,7 +43,11 @@ interface BuiltMacro {
   readonly levelTiles: LevelTileMap;
 }
 
-const built = new WeakMap<TileContent[][], BuiltMacro>();
+let built = new WeakMap<TileContent[][], BuiltMacro>();
+// Baked once and kept; a purge would leave it blank for good.
+onCanvasRecovery(() => {
+  built = new WeakMap<TileContent[][], BuiltMacro>();
+});
 
 /** The macro field for an overworld map, built once per map and tone seed and kept for the map's life. */
 function macroFor(

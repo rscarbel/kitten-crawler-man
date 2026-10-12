@@ -61,6 +61,12 @@ export interface ChoiceModalConfig {
   readonly buttons: readonly ChoiceButton[];
   /** Index into `buttons` that Enter presses when nothing is focused. */
   readonly defaultButton?: number;
+  /**
+   * How many buttons the pinned footer row holds before they stack in the
+   * body. Raise it for a row of short, parallel options (difficulty tiers),
+   * which then stay in view however short the screen is.
+   */
+  readonly buttonsPerRow?: number;
   readonly width?: PanelWidth;
   /** Draw ✕ in the corner, calling this. */
   readonly onClose?: () => void;
@@ -100,13 +106,12 @@ interface Layout {
 }
 
 function stacksButtons(ui: Ui, config: ChoiceModalConfig, width: number): boolean {
-  if (config.buttons.length > MAX_BUTTONS_PER_ROW) return true;
+  if (config.buttons.length > (config.buttonsPerRow ?? MAX_BUTTONS_PER_ROW)) return true;
   const gap = ui.theme.space.sm;
-  const natural = config.buttons.reduce(
-    (sum, b) => sum + measureButton(ui, { ...b, size: 'lg' }),
-    0,
-  );
-  return natural + gap * (config.buttons.length - 1) > width;
+  const count = config.buttons.length;
+  // The footer row splits its width evenly, so the widest label decides whether a row fits.
+  const widest = Math.max(...config.buttons.map((b) => measureButton(ui, { ...b, size: 'lg' })));
+  return widest * count + gap * (count - 1) > width;
 }
 
 function stackedButtonHeight(ui: Ui): number {

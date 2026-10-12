@@ -15,6 +15,7 @@ import {
 } from './contractDamageArt';
 import { paintContractBuildSite } from './contractBuildSiteArt';
 import { contractPalette, type ContractSettlement } from './contractPalette';
+import { onCanvasRecovery } from '../../../core/canvasRecovery';
 
 export type { ContractArtMaterial, ContractArtSurface } from './contractDamageArt';
 export type { ContractSettlement } from './contractPalette';
@@ -179,3 +180,5 @@ export function contractSpotArtSeed(spotKey: string): number {
   }
   return hash;
 }
+
+onCanvasRecovery(() => releaseContractArt());

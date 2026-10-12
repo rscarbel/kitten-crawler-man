@@ -23,6 +23,7 @@ import {
   WATER_FEATURES,
   type PlacedFloorFeature,
 } from '../dungeon/floorFeatures';
+import { onCanvasRecovery } from '../../core/canvasRecovery';
 
 /** Light level below which a puddle shows no glint at all. */
 const GLINT_MIN_LIGHT = 0.15;
@@ -65,6 +66,10 @@ const GLINT_CORE_RGBA = 'rgba(236, 244, 255, 1)';
 const GLINT_EDGE_RGBA = 'rgba(236, 244, 255, 0)';
 
 let glintSprite: CanvasSurface | null = null;
+// Baked once and kept; a purge would leave it blank for good.
+onCanvasRecovery(() => {
+  glintSprite = null;
+});
 
 /** A soft white ellipse, painted once and stretched per streak. */
 function sprite(): CanvasSurface {

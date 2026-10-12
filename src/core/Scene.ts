@@ -4,6 +4,7 @@ import type { UiRoot } from '../ui/core/UiRoot';
 import { rebindCaptureArmed } from '../ui/screens/pause/rebindCapture';
 import { beginFigureFrame } from '../sprites/figure/figureFrameCache';
 import { beginEnvironmentArtFrame } from '../map/environmentArtCache';
+import { beginCanvasRecoveryFrame, watchForCanvasLoss } from './canvasRecovery';
 import { closeAboveDarkness } from '../systems/lighting/aboveDarkness';
 import { perfMonitor } from './PerfMonitor';
 import { renderQuality } from './RenderQuality';
@@ -140,6 +141,7 @@ export class SceneManager {
     this.ctx = ctx;
     this.applyViewportSize();
     renderQuality.attach(this);
+    watchForCanvasLoss(this.canvas, () => this.applyViewportSize());
 
     window.addEventListener('resize', () => {
       this.applyViewportSize();
@@ -382,6 +384,9 @@ export class SceneManager {
     }
     if (this.accumulator >= this.FIXED_DT) this.accumulator = 0;
 
+    // Before the figure and environment queues, so a frame that finds its
+    // caches purged rebuilds them before those queues spend this frame's budget.
+    beginCanvasRecoveryFrame(now);
     // Here rather than inside a render pipeline or a scene: the figure frame
     // cache spreads its bakes over frames and reclaims only entries nobody drew,
     // so it needs a frame boundary — and a scene that draws a cached figure

@@ -1748,7 +1748,7 @@ function checkSceneWiring(): void {
 
   section('The overworld door hands Mongo across');
   const dungeon = readFileSync(DUNGEON_SCENE_PATH, 'utf8');
-  const door = methodBody(dungeon, 'private enterBuilding(entry: BuildingEntry): void {');
+  const door = methodBody(dungeon, 'private enterBuilding(');
   check(door !== null, 'the building door’s callback is found');
   const exitOptions = methodBody(dungeon, 'private buildingExitOptions(');
   check(

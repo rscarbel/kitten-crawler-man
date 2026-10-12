@@ -24,6 +24,7 @@ import {
   type BarrierPose,
 } from './art/nurseryArt';
 import { drawRadialGlow, type GlowStop } from './radialGlow';
+import { onCanvasRecovery } from '../core/canvasRecovery';
 
 /** Surface pixels per logical pixel: enough for a zoomed-in or high-DPI view to stay crisp. */
 const ART_SCALE = 3;
@@ -31,6 +32,8 @@ const HALF = 0.5;
 const FULL_TURN = Math.PI * 2;
 
 const surfaces = new Map<string, CanvasSurface>();
+// Baked once and kept; a purge would leave it blank for good.
+onCanvasRecovery(() => surfaces.clear());
 
 function bake(
   key: string,

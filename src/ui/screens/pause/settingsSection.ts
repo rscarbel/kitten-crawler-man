@@ -1,6 +1,10 @@
 /** Settings: volumes, UI size, render quality, difficulty, the companion toggle and the way to the controls. */
 
-import { DIFFICULTY_LABELS, type Difficulty } from '../../../core/difficultyProfiles';
+import {
+  DIFFICULTY_LABELS,
+  DIFFICULTY_ORDER,
+  type Difficulty,
+} from '../../../core/difficultyProfiles';
 import { renderQuality } from '../../../core/RenderQuality';
 import { settings, type QualityPreset, type UiSize } from '../../../core/Settings';
 import { choiceRow, wideButton, type Choice } from './parts';
@@ -28,8 +32,6 @@ const UI_SIZE_CHOICES: readonly Choice<UiSize>[] = [
   { value: 'medium', label: 'Medium' },
   { value: 'large', label: 'Large' },
 ];
-
-const DIFFICULTY_ORDER: readonly Difficulty[] = ['easy', 'normal', 'hard'];
 
 /**
  * One global selector rather than a per-bounty picker: a second control at

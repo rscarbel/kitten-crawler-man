@@ -61,6 +61,7 @@ import {
   scytheSwingBarLayout,
   type ScytheSwingBarView,
 } from './ScytheSwingBar';
+import { onCanvasRecovery } from '../../../core/canvasRecovery';
 
 /** How long one swing of the scythe takes, first press to grain. */
 export const SCYTHE_SWING_SECONDS = 1.5;
@@ -215,6 +216,8 @@ export function grainStageFor(cuts: number, secondsSinceStubble: number): GrainS
 }
 
 const standSurfaces = new Map<string, CanvasSurface>();
+// Baked once and kept; a purge would leave it blank for good.
+onCanvasRecovery(() => standSurfaces.clear());
 
 /** One stage of one stand layout, painted once for every tile that shows it. */
 function standSurface(stage: GrainStage, layout: number): CanvasSurface {

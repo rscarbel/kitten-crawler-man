@@ -36,13 +36,13 @@ export function frameCountOf(def: FigureDef, state: string): number {
 
 /**
  * Gives a painter that composes on scratch surfaces of its own somewhere to
- * allocate them. `allocCanvas` wants `OffscreenCanvas` or a DOM `document`,
- * and node has neither until the shims are installed, so a script painting a
+ * allocate them. `allocCanvas` wants a DOM `document`, and node has none
+ * until the shims are installed, so a script painting a
  * figure would otherwise throw on the first cell. A script that installed its
  * own shims keeps them.
  */
 function ensureScratchSurfaces(): void {
-  if (typeof OffscreenCanvas !== 'undefined' || typeof document !== 'undefined') return;
+  if (typeof document !== 'undefined') return;
   installCanvasGlobals();
 }
 

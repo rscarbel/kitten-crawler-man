@@ -29,6 +29,7 @@
 
 import { TILE_SIZE } from '../core/constants';
 import { allocCanvas, surfaceContext, type CanvasSurface } from '../core/canvasSurface';
+import { canvasGeneration } from '../core/canvasRecovery';
 import type { GameMap } from '../map/GameMap';
 import {
   BOILER,
@@ -421,6 +422,8 @@ export class DungeonLightingSystem implements GameSystem {
 
   private cache: DarknessCache | null = null;
   private cacheDirty = true;
+  /** The canvas generation every surface here was painted in; see `canvasGeneration`. */
+  private generation = canvasGeneration();
   private readonly cacheLights: StaticLight[] = [];
   private readonly flickerLayers = new Map<string, FlickerLayer>();
   private buffer: { surface: CanvasSurface; ctx: CanvasRenderingContext2D } | null = null;
@@ -730,6 +733,27 @@ export class DungeonLightingSystem implements GameSystem {
     return whole && powered;
   }
 
+  /**
+   * Repaints the ambient darkness and forgets every other surface once the
+   * canvases have been rebuilt, since their pixels may be gone. Everything but
+   * the ambient image is painted on demand.
+   */
+  private syncCanvasGeneration(): void {
+    const current = canvasGeneration();
+    if (this.generation === current) return;
+    this.generation = current;
+    this.applyCap();
+    this.cache = null;
+    this.cacheDirty = true;
+    this.flickerLayers.clear();
+    this.buffer = null;
+    this.dynamicLayer = null;
+    this.overlay = null;
+    this.lastBlit.valid = false;
+    this.originCookies.clear();
+    for (const light of this.staticLights) light.cookie.forgetPainted();
+  }
+
   dispose(): void {
     this.sources.length = 0;
     this.flickerLayers.clear();
@@ -749,6 +773,7 @@ export class DungeonLightingSystem implements GameSystem {
     viewH: number,
   ): void {
     if (this.mapWidth === 0) return;
+    this.syncCanvasGeneration();
     const nowMs = this.deps.now();
     this.collectDynamicLights();
     this.ensureCache(camX, camY, viewW, viewH);

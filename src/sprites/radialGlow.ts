@@ -10,6 +10,7 @@
  */
 
 import { allocCanvas, surfaceContext, type CanvasSurface } from '../core/canvasSurface';
+import { onCanvasRecovery } from '../core/canvasRecovery';
 
 /**
  * Texture resolution. Glows are soft by definition, so this is comfortably
@@ -25,6 +26,8 @@ export interface GlowStop {
 }
 
 const texturesByStops = new Map<string, CanvasSurface>();
+// Baked once and kept; a purge would leave it blank for good.
+onCanvasRecovery(() => texturesByStops.clear());
 
 function stopsKey(stops: ReadonlyArray<GlowStop>, coreFraction: number): string {
   return `${coreFraction}#${stops.map((stop) => `${stop.offset}:${stop.color}`).join('|')}`;

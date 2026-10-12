@@ -17,6 +17,7 @@
 
 import { TILE_SIZE } from '../../core/constants';
 import { allocCanvas, surfaceContext, type CanvasSurface } from '../../core/canvasSurface';
+import { canvasGeneration } from '../../core/canvasRecovery';
 import type { InteriorFigure } from '../../core/InteriorFigure';
 import type { SpriteKey } from '../../core/SpriteLoader';
 import {
@@ -218,6 +219,14 @@ class BakedFigure implements InteriorFigure {
     this.surface();
   }
 
+  /** Gives back the baked pixels; the next draw bakes them again. */
+  release(): void {
+    if (this.canvas === null) return;
+    this.canvas.width = 0;
+    this.canvas.height = 0;
+    this.canvas = null;
+  }
+
   render(ctx: CanvasRenderingContext2D, camX: number, camY: number): void {
     ctx.drawImage(this.surface(), Math.round(this.left - camX), Math.round(this.top - camY));
   }
@@ -244,6 +253,8 @@ export class PrisonGround {
   private chunks: TileChunkCache;
   private grime: CanvasSurface | null = null;
   private readonly strawTiles = new Map<number, CanvasSurface>();
+  /** The canvas generation the baked surfaces were painted in; see `canvasGeneration`. */
+  private generation = canvasGeneration();
   private readonly figures: ReadonlyArray<BakedFigure>;
   /** Every wall lamp's flame. The lighting cuts a small pool under each. */
   readonly lamps: ReadonlyArray<PrisonWallLamp>;
@@ -271,7 +282,29 @@ export class PrisonGround {
 
   /** Drops the baked wall and floor chunks, for when a ground sheet finishes painting. */
   invalidateArt(): void {
+    this.chunks.dispose();
     this.chunks = new TileChunkCache(this.paintGrid, TILE_SIZE);
+  }
+
+  /**
+   * Drops every baked surface once the canvases have been rebuilt, since their
+   * pixels may be gone. The chunks see to themselves.
+   */
+  private syncCanvasGeneration(): void {
+    const current = canvasGeneration();
+    if (this.generation === current) return;
+    this.generation = current;
+    if (this.grime !== null) {
+      this.grime.width = 0;
+      this.grime.height = 0;
+      this.grime = null;
+    }
+    for (const tile of this.strawTiles.values()) {
+      tile.width = 0;
+      tile.height = 0;
+    }
+    this.strawTiles.clear();
+    for (const figure of this.figures) figure.release();
   }
 
   private barFigures(): BakedFigure[] {
@@ -333,6 +366,7 @@ export class PrisonGround {
 
   /** Bakes what a view at this camera would show now rather than on its first frame. */
   prewarm(camX: number, camY: number, viewW: number, viewH: number): void {
+    this.syncCanvasGeneration();
     this.grimeSurface();
     for (const figure of this.figures) {
       if (figure.overlaps(camX, camY, camX + viewW, camY + viewH)) figure.prewarm();
@@ -433,6 +467,7 @@ export class PrisonGround {
     viewW: number,
     viewH: number,
   ): void {
+    this.syncCanvasGeneration();
     renderCanvas(ctx, this.paintGrid, TILE_SIZE, camX, camY, viewW, viewH, this.chunks);
     const { grid } = this.parsed;
     ctx.save();

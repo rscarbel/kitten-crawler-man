@@ -22,6 +22,7 @@
  */
 
 import { allocCanvas, surfaceContext, type CanvasSurface } from '../../../core/canvasSurface';
+import { onCanvasRecovery } from '../../../core/canvasRecovery';
 
 type Ctx = CanvasRenderingContext2D;
 
@@ -286,3 +287,5 @@ export function clearBigTopPropCache(): void {
 export function observeBigTopPropBakes(next: BigTopPropBakeObserver | null): void {
   observer = next;
 }
+
+onCanvasRecovery(() => clearBigTopPropCache());

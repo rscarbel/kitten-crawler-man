@@ -15,6 +15,7 @@
 
 import { allocCanvas, surfaceContext, type CanvasSurface } from '../../core/canvasSurface';
 import { HAMBURGER_PALETTE as PALETTE } from '../../ui/icons/foodIcons';
+import { onCanvasRecovery } from '../../core/canvasRecovery';
 
 const FULL_CIRCLE = Math.PI * 2;
 const HALF = 0.5;
@@ -280,6 +281,10 @@ function drawDome(
 export const GROUND_BURGER_BAKE_PX = 64;
 
 let bakedBurger: CanvasSurface | null = null;
+// Baked once and kept; a purge would leave it blank for good.
+onCanvasRecovery(() => {
+  bakedBurger = null;
+});
 
 /** The ground burger, baked once at {@link GROUND_BURGER_BAKE_PX} and reused. */
 export function groundBurgerSprite(): CanvasSurface {

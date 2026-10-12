@@ -13,6 +13,7 @@
 import { allocCanvas, surfaceContext, type CanvasSurface } from '../core/canvasSurface';
 import { rgb } from './art/town/townArt';
 import { getTownRamp } from './art/town/townPalette';
+import { onCanvasRecovery } from '../core/canvasRecovery';
 
 const TAU = Math.PI * 2;
 
@@ -1098,6 +1099,8 @@ export function fountainCompositionSize(ts: number): {
 }
 
 const compositionFrames = new Map<string, CanvasSurface>();
+// Baked once and kept; a purge would leave it blank for good.
+onCanvasRecovery(() => compositionFrames.clear());
 
 function buildCompositionFrame(ts: number, frame: number): CanvasSurface {
   const { width, height, headroom } = fountainCompositionSize(ts);

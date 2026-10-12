@@ -90,6 +90,9 @@ export const DIFFICULTY_LABELS: Record<Difficulty, string> = {
   hard: 'Nightmare',
 };
 
+/** Every tier, gentlest first: the order every difficulty choice lists them in. */
+export const DIFFICULTY_ORDER: readonly Difficulty[] = ['easy', 'normal', 'hard'];
+
 export const DIFFICULTY_PROFILES: Record<Difficulty, DifficultyProfile> = {
   easy: {
     incomingMobDamageScale: 0.7,

@@ -61,6 +61,7 @@ import {
   fillRoundRect,
   type ClothColour,
 } from '../../sprites/art/villageArt';
+import { onCanvasRecovery } from '../../core/canvasRecovery';
 
 // ── Geometry, in tiles ────────────────────────────────────────────────────────
 
@@ -492,6 +493,11 @@ const pieceCache = new Map<string, CachedPiece>();
  * than a serialised key every frame.
  */
 const pieceLookups = new Map<number, WeakMap<WallPiece, CachedPiece>>();
+// Baked once and kept; a purge would leave it blank for good.
+onCanvasRecovery(() => {
+  pieceCache.clear();
+  pieceLookups.clear();
+});
 
 function cachedPiece(piece: WallPiece, ts: number): CachedPiece {
   let lookup = pieceLookups.get(ts);

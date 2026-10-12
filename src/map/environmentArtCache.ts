@@ -19,6 +19,7 @@
  */
 
 import { allocCanvas, surfaceContext, type CanvasSurface } from '../core/canvasSurface';
+import { onCanvasRecovery } from '../core/canvasRecovery';
 import { floorArtSeed } from './ground/floorArtSeed';
 import {
   registerPaintedSprite,
@@ -116,6 +117,13 @@ export interface EnvironmentSheetPlan {
    * signal that cannot be skipped, or one bad sheet stops every sheet behind it.
    */
   onSettled?: () => void;
+  /**
+   * Builds a fresh plan for this sheet, without callbacks, for repainting it
+   * after the browser discards its pixels. Omit it when the steps are pure and
+   * can simply run again; a plan whose steps consume what they paint from must
+   * supply one.
+   */
+  readonly replan?: () => EnvironmentSheetPlan;
 }
 
 interface PendingSheet {
@@ -126,9 +134,33 @@ interface PendingSheet {
   readonly artSeed: number;
   nextStep: number;
   published: boolean;
+  /** Painted again after a purge, so landing bumps {@link repaintedSheetRevision}. */
+  replayed: boolean;
+}
+
+/**
+ * How to paint a sheet again: its own `replan`, or else the same steps, which
+ * are then pure. Never the callbacks — a sheet that outlives its floor would
+ * hold that floor's scene alive through them — so a repainted sheet announces
+ * itself through {@link repaintedSheetRevision} instead.
+ */
+function replanOf(plan: EnvironmentSheetPlan): () => EnvironmentSheetPlan {
+  const ownReplan = plan.replan;
+  if (ownReplan !== undefined) return ownReplan;
+  const bare: EnvironmentSheetPlan = {
+    key: plan.key,
+    widthPx: plan.widthPx,
+    heightPx: plan.heightPx,
+    steps: plan.steps,
+    readySteps: plan.readySteps,
+    variesWithFloorSeed: plan.variesWithFloorSeed,
+  };
+  return () => bare;
 }
 
 interface ResidentSheet {
+  /** Builds the sheet's plan again, if the browser discards its pixels. */
+  readonly replan: () => EnvironmentSheetPlan;
   readonly surface: CanvasSurface;
   readonly bytes: number;
   readonly variesWithFloorSeed: boolean;
@@ -221,6 +253,7 @@ export function requestEnvironmentSheet(plan: EnvironmentSheetPlan): SheetReques
     artSeed: floorArtSeed(),
     nextStep: 0,
     published: false,
+    replayed: false,
   });
   queue.push(plan.key);
   return 'queued';
@@ -293,11 +326,13 @@ function publish(sheet: PendingSheet): void {
   sheet.published = true;
   registerPaintedSprite(sheet.plan.key, sheet.surface, sheet.scale);
   resident.set(sheet.plan.key, {
+    replan: replanOf(sheet.plan),
     surface: sheet.surface,
     bytes: sheet.surface.width * sheet.surface.height * BYTES_PER_PIXEL,
     variesWithFloorSeed: sheet.plan.variesWithFloorSeed,
     artSeed: sheet.artSeed,
   });
+  if (sheet.replayed) repaintedRevision += 1;
   sheet.plan.onReady?.();
 }
 
@@ -404,6 +439,7 @@ function drainQueue(budgetMs: number, mustProgress: boolean): number {
  */
 export function beginEnvironmentArtFrame(): void {
   msPaintedThisFrame = 0;
+  requestNextReplay();
   if (paintDebtMs > 0) {
     paintDebtMs = Math.max(0, paintDebtMs - ENVIRONMENT_PAINT_BUDGET_MS);
     return;
@@ -428,6 +464,7 @@ export function beginEnvironmentArtFrame(): void {
  * Books no debt, since the caller is the one pacing itself.
  */
 export function paintEnvironmentArtFor(budgetMs: number, mustProgress: boolean): void {
+  requestNextReplay();
   drainQueue(budgetMs, mustProgress);
 }
 
@@ -445,6 +482,7 @@ export function environmentPaintedStepCount(): number {
  * one stall.
  */
 export function paintEnvironmentArtNow(): void {
+  requestNextReplay();
   while (queue.length > 0) {
     const key = queue[0];
     const sheet = pending.get(key);
@@ -466,6 +504,7 @@ export function paintEnvironmentArtNow(): void {
     if (!sheet.published) publish(sheet);
     pending.delete(key);
     sheet.plan.onSettled?.();
+    requestNextReplay();
   }
 }
 
@@ -480,6 +519,8 @@ function drop(key: string, surface: CanvasSurface): void {
 }
 
 function release(shouldRelease: (key: string, variesWithFloorSeed: boolean) => boolean): void {
+  // Owed to the floor whose sheets are going; the next floor requests its own.
+  replays.length = 0;
   for (const [key, sheet] of resident) {
     if (!shouldRelease(key, sheet.variesWithFloorSeed)) continue;
     drop(key, sheet.surface);
@@ -544,6 +585,93 @@ export function stagingSurfaceOfAtLeast(width: number, height: number): CanvasSu
   staging = grown;
   return grown;
 }
+
+interface SheetReplay {
+  readonly key: string;
+  readonly replan: () => EnvironmentSheetPlan;
+}
+
+/**
+ * Sheets waiting to be painted again after a purge, requested one at a time.
+ *
+ * Not all at once, because planning a sheet can allocate everything it is
+ * composed from up front — a town facade is megabytes before its first step —
+ * and a purge on a phone is exactly when that memory is scarcest.
+ */
+const replays: SheetReplay[] = [];
+/** Bumped each time a repainted sheet lands; see {@link repaintedSheetRevision}. */
+let repaintedRevision = 0;
+
+/**
+ * Bumped whenever a sheet repainted after a purge becomes drawable. A cache that
+ * baked from the sheets compares it against the revision it baked under and
+ * drops what it baked against the fallback colours, because the plan that would
+ * have told it so through `onReady` was not kept.
+ */
+export function repaintedSheetRevision(): number {
+  return repaintedRevision;
+}
+
+function replayInFlight(): boolean {
+  for (const sheet of pending.values()) if (sheet.replayed) return true;
+  return false;
+}
+
+/** Queues the next owed repaint once the one before it has landed. */
+function requestNextReplay(): void {
+  while (!replayInFlight()) {
+    const next = replays.shift();
+    if (next === undefined) return;
+    if (resident.has(next.key) || pending.has(next.key)) continue;
+    const outcome = requestEnvironmentSheet(next.replan());
+    const replayed = pending.get(next.key);
+    if (outcome === 'queued' && replayed !== undefined) replayed.replayed = true;
+  }
+}
+
+/**
+ * Paints every sheet again after the browser discarded the pixels of every
+ * canvas. A sheet painted under another floor's seed is dropped instead: it is
+ * art of a floor that no longer exists.
+ *
+ * Each sheet is withdrawn from `SpriteLoader` until it lands again, so the
+ * ground falls back to each material's mean colour rather than drawing blank.
+ */
+function repaintAllEnvironmentArt(): void {
+  const current = floorArtSeed();
+  const owed = new Map<string, SheetReplay>();
+  const interruptedChains: Array<() => void> = [];
+  for (const [key, sheet] of resident) {
+    if (sheet.variesWithFloorSeed && sheet.artSeed !== current) continue;
+    owed.set(key, { key, replan: sheet.replan });
+  }
+  for (const key of queue) {
+    const sheet = pending.get(key);
+    if (sheet === undefined) continue;
+    if (sheet.plan.variesWithFloorSeed && sheet.artSeed !== current) continue;
+    if (!owed.has(key)) owed.set(key, { key, replan: replanOf(sheet.plan) });
+    const settled = sheet.plan.onSettled;
+    if (settled !== undefined) interruptedChains.push(settled);
+  }
+  release(() => true);
+  if (staging !== null) {
+    staging.width = 0;
+    staging.height = 0;
+    staging = null;
+  }
+  replays.push(...owed.values());
+  requestNextReplay();
+  // A caller queueing its sheets one at a time waits on `onSettled` to queue the
+  // next, and a released sheet never settles; told now, its chain carries on.
+  // After the first repaint is queued, so the chain's next sheet goes behind it.
+  for (const settled of interruptedChains) settled();
+}
+
+onCanvasRecovery((cause) => {
+  // Under memory pressure the sheets are correct and the costliest art there is
+  // to repaint; only lost pixels justify painting them again.
+  if (cause === 'purged') repaintAllEnvironmentArt();
+});
 
 /** Drops everything, for the `?tiles` reroll and for a harness between runs. */
 export function flushEnvironmentArtCache(): void {

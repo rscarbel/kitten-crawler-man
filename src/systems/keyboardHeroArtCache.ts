@@ -57,6 +57,7 @@ import {
   type LaneIndex,
 } from './keyboardHeroLayout';
 import { LANE_PALETTES } from '../sprites/art/keyboardHeroLanePalettes';
+import { onCanvasRecovery } from '../core/canvasRecovery';
 
 /** Paints one piece into a surface already sized to `w`×`h` supersampled pixels. */
 type PiecePainter = (ctx: CanvasRenderingContext2D, w: number, h: number) => void;
@@ -219,3 +220,5 @@ export function releaseKeyboardHeroArt(): void {
   for (const piece of pieces.values()) discard(piece.surface);
   pieces.clear();
 }
+
+onCanvasRecovery(() => releaseKeyboardHeroArt());

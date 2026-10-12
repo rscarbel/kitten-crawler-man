@@ -21,6 +21,7 @@
 
 import { allocCanvas, surfaceContext, type CanvasSurface } from '../../core/canvasSurface';
 import { isRiverChannel, MAX_WATER_DEPTH, VOID_TYPE, type TileContent } from '../tileTypes';
+import { onCanvasRecovery } from '../../core/canvasRecovery';
 
 /** Samples a smoothed upscale reads either side of a position: a cubic filter reaches two. */
 const FILTER_REACH_SAMPLES = 2;
@@ -82,7 +83,11 @@ interface BuiltColumn {
   readonly samples: CanvasSurface;
 }
 
-const built = new WeakMap<TileContent[][], BuiltColumn | null>();
+let built = new WeakMap<TileContent[][], BuiltColumn | null>();
+// Baked once and kept; a purge would leave it blank for good.
+onCanvasRecovery(() => {
+  built = new WeakMap<TileContent[][], BuiltColumn | null>();
+});
 
 function channelDepth(cell: TileContent): number {
   return Math.min(MAX_WATER_DEPTH, Math.max(0, cell.waterDepth ?? UNRECORDED_DEPTH));

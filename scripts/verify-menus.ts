@@ -989,6 +989,41 @@ function townOpeners(): Opener<Town>[] {
       },
     ),
     menu(
+      'pipe-board-difficulty',
+      (scene) => {
+        scene.cloggedBathroom['difficultyPickerOpen'] = true;
+      },
+      (scene) => scene.cloggedBathroom.cancelPipeBoardDifficulty(),
+    ),
+    menu(
+      'pipe-board-difficulty-discard',
+      (scene) => {
+        const bathroom = scene.cloggedBathroom;
+        const board = bathroom.generateBoardNow('easy');
+        const firstTurnable = board.tiles.findIndex((tile) => !tile.decoy && !tile.bolted);
+        bathroom.turnPipeTile(firstTurnable, 'clockwise');
+        bathroom['difficultyPickerOpen'] = true;
+        bathroom.choosePipeBoardDifficulty('hard');
+      },
+      (scene) => {
+        const bathroom = scene.cloggedBathroom;
+        bathroom.backToPipeBoardDifficulty();
+        bathroom.cancelPipeBoardDifficulty();
+        bathroom.restartPipeBoard();
+      },
+    ),
+    menu(
+      'prison-difficulty',
+      (scene) => {
+        const door = scene['gameMap'].buildingEntries[0];
+        if (door === undefined) throw new Error('the town has no door to stand the picker on');
+        scene['pendingPrisonEntry'] = door;
+      },
+      (scene) => {
+        scene['pendingPrisonEntry'] = null;
+      },
+    ),
+    menu(
       'pipe-board-explainer',
       (scene) => scene.cloggedBathroom.openPipeBoardExplainer(),
       (scene) => scene.cloggedBathroom.dismissPipeBoardExplainer(),

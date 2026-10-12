@@ -19,6 +19,7 @@
  */
 
 import { allocCanvas, surfaceContext, type CanvasSurface } from '../core/canvasSurface';
+import { onCanvasRecovery } from '../core/canvasRecovery';
 
 /** Where and how big one beam is, in screen pixels. */
 export interface LightBeamPlacement {
@@ -275,6 +276,8 @@ interface BeamTextures {
 
 /** Keyed on colour alone; the game uses a handful of marker colours, so this stays tiny. */
 const texturesByColor = new Map<string, BeamTextures>();
+// Baked once and kept; a purge would leave it blank for good.
+onCanvasRecovery(() => texturesByColor.clear());
 
 function texturesFor(color: string): BeamTextures {
   const cached = texturesByColor.get(color);

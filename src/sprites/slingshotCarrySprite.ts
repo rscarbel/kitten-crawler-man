@@ -23,6 +23,7 @@ import {
 import { handGripInTile, type HumanHandSide } from './art/human/probe';
 import { HUMAN_ROW_TABLE, type HumanRowName } from './art/humanFigure';
 import type { HumanRowSelection } from './humanSprite';
+import { onCanvasRecovery } from '../core/canvasRecovery';
 
 /**
  * The way the fork points while carried, in radians in figure space (+X is
@@ -122,6 +123,8 @@ export function carriedSlingshotOf(selection: HumanRowSelection): CarriedSlingsh
 }
 
 const surfaceByLook = new Map<string, CanvasSurface>();
+// Baked once and kept; a purge would leave it blank for good.
+onCanvasRecovery(() => surfaceByLook.clear());
 
 /** The carried sling for one view and light, painted once and reused for every frame it is drawn in. */
 function carrySurface(view: CarlView, shaded: boolean): CanvasSurface {
