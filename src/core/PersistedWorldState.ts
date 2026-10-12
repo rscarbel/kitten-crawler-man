@@ -22,7 +22,9 @@ import type { MurderMysteryQuestCheckpoint } from '../systems/MurderMysteryQuest
 import type { SpiderQuestCheckpoint } from '../systems/SpiderQuestSystem';
 import type { CircusQuestCheckpoint } from '../systems/CircusQuestSystem';
 import type { BountyCheckpoint } from '../systems/BountySystem';
-import type { ClubMembershipCheckpoint } from './ClubMembership';
+import type { ClubMembershipCheckpoint, PokerReads } from './ClubMembership';
+import type { PlayerRead } from '../systems/casino/poker/npc/playerRead';
+import { REGULAR_IDS } from '../systems/casino/poker/npc/regulars';
 import {
   hirelingStartingHp,
   type HiredMercenary,
@@ -1094,13 +1096,88 @@ function parseShoeState(value: unknown): ShoeState | undefined {
   return { cards: parsedCards, cursor };
 }
 
-function parseClubMembershipCheckpoint(value: unknown): ClubMembershipCheckpoint | undefined {
+function isCount(value: unknown): value is number {
+  return isNumber(value) && value >= 0;
+}
+
+function parsePlayerRead(value: unknown): PlayerRead | undefined {
   if (!isRecord(value)) return undefined;
-  const { hasDesperadoPass, casinoShoe, casinoHintsEnabled } = value;
+  const {
+    handsSeen,
+    hands,
+    vpipHands,
+    pfrHands,
+    aggressiveActions,
+    passiveActions,
+    sawFlop,
+    wentToShowdown,
+    showdownsShown,
+    bluffsShown,
+  } = value;
+  if (
+    !isCount(handsSeen) ||
+    !isCount(hands) ||
+    !isCount(vpipHands) ||
+    !isCount(pfrHands) ||
+    !isCount(aggressiveActions) ||
+    !isCount(passiveActions) ||
+    !isCount(sawFlop) ||
+    !isCount(wentToShowdown) ||
+    !isCount(showdownsShown) ||
+    !isCount(bluffsShown)
+  ) {
+    return undefined;
+  }
+  return {
+    handsSeen,
+    hands,
+    vpipHands,
+    pfrHands,
+    aggressiveActions,
+    passiveActions,
+    sawFlop,
+    wentToShowdown,
+    showdownsShown,
+    bluffsShown,
+  };
+}
+
+/**
+ * A regular the game no longer knows, or a read it cannot make sense of, is
+ * forgotten on its own: losing one stranger's memory of the player costs a few
+ * hands of learning, not the whole run.
+ */
+function parsePokerReads(value: unknown): PokerReads {
+  const reads: PokerReads = {};
+  if (!isRecord(value)) return reads;
+  for (const id of REGULAR_IDS) {
+    const read = parsePlayerRead(value[id]);
+    if (read !== undefined) reads[id] = read;
+  }
+  return reads;
+}
+
+export function parseClubMembershipCheckpoint(
+  value: unknown,
+): ClubMembershipCheckpoint | undefined {
+  if (!isRecord(value)) return undefined;
+  const { hasDesperadoPass, casinoShoe, casinoHintsEnabled, pokerFast, pokerShowCards } = value;
   const parsedShoe = casinoShoe === null ? null : parseShoeState(casinoShoe);
   if (!isBoolean(hasDesperadoPass) || parsedShoe === undefined) return undefined;
-  if (casinoHintsEnabled !== null && !isBoolean(casinoHintsEnabled)) return undefined;
-  return { hasDesperadoPass, casinoShoe: parsedShoe, casinoHintsEnabled };
+  // A missing or unreadable hints preference reads as "never asked": rejecting
+  // here would throw away the club pass along with it.
+  const hintsEnabled = isBoolean(casinoHintsEnabled) ? casinoHintsEnabled : null;
+  // The poker fields are absent from a save written before the table opened,
+  // which reads as a player who has never sat down.
+  return {
+    hasDesperadoPass,
+    casinoShoe: parsedShoe,
+    casinoHintsEnabled: hintsEnabled,
+    pokerReads: parsePokerReads(value.pokerReads),
+    pokerNotes: parsePokerReads(value.pokerNotes),
+    pokerFast: isBoolean(pokerFast) ? pokerFast : false,
+    pokerShowCards: isBoolean(pokerShowCards) ? pokerShowCards : false,
+  };
 }
 
 /**

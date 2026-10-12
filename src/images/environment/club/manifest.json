@@ -103,6 +103,19 @@
       }
     }
   },
+  "club_poker_table": {
+    "frameWidth": 128,
+    "frameHeight": 128,
+    "tileX": 0,
+    "tileY": 64,
+    "tileScale": 64,
+    "states": {
+      "idle": {
+        "row": 0,
+        "frameCount": 2
+      }
+    }
+  },
   "club_vip_counter": {
     "frameWidth": 384,
     "frameHeight": 128,

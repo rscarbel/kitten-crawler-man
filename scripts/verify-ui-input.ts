@@ -29,6 +29,7 @@ import {
   type Band,
   type DragPoint,
   type HitHandlers,
+  type HitRegion,
   type HitState,
   type KeyModifiers,
   type ReleaseInfo,
@@ -2124,6 +2125,544 @@ section('an overlay under a scrim is dropped, and paints from its surface’s st
   bag.open = false;
   h.frame();
   check(painted.length === 0, 'a closed surface’s overlay is not painted on the next frame');
+}
+
+section('the poker table: Space on a focused control presses it instead of leaving');
+{
+  // The table paints Deuce and the regulars from offscreen caches, which need a canvas to allocate.
+  const { installCanvasGlobals } = await import('./nodeCanvasGlobals.js');
+  installCanvasGlobals();
+  const { HumanPlayer } = await import('../src/creatures/HumanPlayer.js');
+  const { CatPlayer } = await import('../src/creatures/CatPlayer.js');
+  const { TILE_SIZE } = await import('../src/core/constants.js');
+  const { ClubPokerSystem } = await import('../src/systems/ClubPokerSystem.js');
+  const { POKER_DEV_SEED } = await import('../src/systems/casino/poker/npc/personality.js');
+  const { POKER_STAKES } = await import('../src/systems/casino/poker/pokerStakes.js');
+  const { mulberry32 } = await import('../src/sprites/person/rng.js');
+  const POKER_STEP_MS = 50;
+  const POKER_MAX_STEPS = 2000;
+  const POKER_SHUFFLE_SEED = 7;
+  const attackKey = keybindings.keysFor('attack')[0] ?? ' ';
+
+  /** A seated party at its first decision; folded when asked, so the row holds Skip and Leave. */
+  const seatedTable = (fold: boolean) => {
+    let now = 0;
+    const player = new HumanPlayer(0, 0, TILE_SIZE);
+    const companion = new CatPlayer(1, 0, TILE_SIZE);
+    player.coins = POKER_STAKES.penny.buyIn;
+    const poker = new ClubPokerSystem(
+      null,
+      POKER_DEV_SEED,
+      () => now,
+      mulberry32(POKER_SHUFFLE_SEED),
+    );
+    poker.buyIn('penny', player, companion);
+    poker.dismissRules();
+    const step = (): void => {
+      now += POKER_STEP_MS;
+      poker.update();
+    };
+    for (let i = 0; i < POKER_MAX_STEPS && poker.pokerTable?.awaitingPlayer !== true; i++) step();
+    if (fold) {
+      poker.act({ kind: 'fold' });
+      step();
+    }
+    const surface = poker.tableSurface('poker-table', {
+      active: () => player,
+      companion: () => companion,
+    });
+    return { poker, surface, step };
+  };
+
+  const focused = seatedTable(true);
+  const h = harness([focused.surface]);
+  h.frame();
+  // The ring runs in registration order; Tab walks it from the first control to Skip to Next Hand.
+  const ring = h.root
+    .regions()
+    .filter((region) => region.focusable && !region.disabled && !region.hoverOnly);
+  const tabsToSkip = ring.findIndex((region) => region.id.endsWith('/skip')) + 1;
+  check(tabsToSkip > 0, 'a folded table offers Skip to Next Hand to the keyboard');
+  for (let press = 0; press < tabsToSkip; press++) {
+    h.root.key('Tab');
+    h.frame();
+  }
+  h.root.key(attackKey);
+  h.frame();
+  check(
+    focused.poker.tableOpen,
+    'the attack key on a keyboard-focused table control presses it rather than leaving',
+  );
+  // The press started a skip, which takes Skip out of the focus ring; a
+  // second press must not fall through to the leave the attack key means.
+  h.root.key(attackKey);
+  h.frame();
+  check(
+    focused.poker.tableOpen,
+    'Tab to Skip, then the attack key twice: the player is still seated',
+  );
+
+  const unfocused = seatedTable(true);
+  const bare = harness([unfocused.surface]);
+  bare.frame();
+  bare.root.key(attackKey);
+  bare.frame();
+  check(!unfocused.poker.tableOpen, 'with nothing focused, the attack key leaves a folded table');
+
+  // Skip to Next Hand shows that it took, takes no second press, and clears with the next hand.
+  const skipped = seatedTable(true);
+  const skipView = harness([skipped.surface]);
+  skipView.frame();
+  const skipRegion = (): HitRegion | undefined =>
+    skipView.root.regions().find((region) => region.id.endsWith('/skip'));
+  const before = skipRegion();
+  check(before !== undefined && !before.disabled, 'a folded table offers Skip to Next Hand');
+  if (before !== undefined) {
+    const centre = { x: before.rect.x + before.rect.w / 2, y: before.rect.y + before.rect.h / 2 };
+    skipView.tap(centre);
+    skipView.frame();
+    const during = skipRegion();
+    check(
+      skipped.poker['skipping'] && during !== undefined && !during.focusable,
+      'after Skip is pressed the button shows it is skipping and leaves the focus ring',
+    );
+    const handBefore = skipped.poker.pokerTable?.handNumber ?? 0;
+    const soundsBefore = skipView.rec.sounds.length;
+    skipView.tap(centre);
+    skipView.frame();
+    check(
+      skipped.poker['skipping'] && skipView.rec.sounds.length === soundsBefore,
+      'a second press while skipping changes nothing and makes no sound',
+    );
+    for (
+      let i = 0;
+      i < POKER_MAX_STEPS && (skipped.poker.pokerTable?.handNumber ?? 0) === handBefore;
+      i++
+    ) {
+      skipped.step();
+    }
+    skipView.frame();
+    const after = skipRegion();
+    const handAfter = skipped.poker.pokerTable?.handNumber ?? 0;
+    check(
+      handAfter > handBefore &&
+        !skipped.poker['skipping'] &&
+        (after === undefined || after.focusable),
+      `once the next hand starts the skip state clears (hand ${handBefore} → ${handAfter})`,
+    );
+  }
+
+  // A regular's plate in the focus ring: the attack key opens their card, never leaves.
+  const plated = seatedTable(true);
+  const seats = harness([plated.surface]);
+  seats.frame();
+  const plateRing = seats.root
+    .regions()
+    .filter((region) => region.focusable && !region.disabled && !region.hoverOnly);
+  const tabsToPlate = plateRing.findIndex((region) => /\/seat-\d+$/.test(region.id)) + 1;
+  check(tabsToPlate > 0, 'a seated table offers the regulars’ plates to the keyboard');
+  for (let press = 0; press < tabsToPlate; press++) {
+    seats.root.key('Tab');
+    seats.frame();
+  }
+  seats.root.key(attackKey);
+  seats.frame();
+  check(
+    plated.poker.tableOpen && plated.poker['seatInfo'] !== null,
+    'the attack key on a keyboard-focused seat plate opens its card and keeps the player seated',
+  );
+
+  // A desktop table's raise tray leaves Leave showing beside it; showing means pressable.
+  const sizing = seatedTable(false);
+  const trayOpened = sizing.poker.openRaiseTray();
+  const desk = harness([sizing.surface]);
+  desk.frame();
+  const leave = desk.root.regions().find((region) => region.id.endsWith('/leave'));
+  check(
+    trayOpened && leave !== undefined,
+    'a desktop table shows Leave beside the open raise tray',
+  );
+  if (leave !== undefined) {
+    check(leave.layer > 0, 'Leave sits on the raise tray’s layer, where the keyboard can reach it');
+    desk.tap({ x: leave.rect.x + leave.rect.w / 2, y: leave.rect.y + leave.rect.h / 2 });
+    desk.frame();
+    check(
+      sizing.poker['leaveConfirm'].isOpen,
+      'one click on Leave beside the raise tray asks to fold and leave, not just closes the tray',
+    );
+  }
+}
+
+section('the poker table: a seat opens its card, History opens the history, Escape closes each');
+{
+  const { HumanPlayer } = await import('../src/creatures/HumanPlayer.js');
+  const { CatPlayer } = await import('../src/creatures/CatPlayer.js');
+  const { TILE_SIZE } = await import('../src/core/constants.js');
+  const { ClubPokerSystem } = await import('../src/systems/ClubPokerSystem.js');
+  const { POKER_DEV_SEED } = await import('../src/systems/casino/poker/npc/personality.js');
+  const { POKER_STAKES } = await import('../src/systems/casino/poker/pokerStakes.js');
+  const { mulberry32 } = await import('../src/sprites/person/rng.js');
+  const POKER_SHUFFLE_SEED = 11;
+  /** The first regular clockwise from the player: a fresh table always seats someone there. */
+  const TAPPED_SEAT = 1;
+
+  let now = 0;
+  const player = new HumanPlayer(0, 0, TILE_SIZE);
+  const companion = new CatPlayer(1, 0, TILE_SIZE);
+  player.coins = POKER_STAKES.penny.buyIn;
+  const poker = new ClubPokerSystem(
+    null,
+    POKER_DEV_SEED,
+    () => now,
+    mulberry32(POKER_SHUFFLE_SEED),
+  );
+  poker.buyIn('penny', player, companion);
+  const rulesRaisedThemselves = poker['rules'].isOpen;
+  check(rulesRaisedThemselves, 'the first sit-down of a visit raises the rules sheet unasked');
+  poker.dismissRules();
+  now += 1;
+  poker.update();
+  const seat = { active: () => player, companion: () => companion };
+  const h = harness([
+    poker.tableSurface('poker-table', seat),
+    poker.historySurface('poker-history'),
+    poker.seatInfoSurface('poker-seat-info'),
+  ]);
+  h.frame();
+  const centre = (rect: { x: number; y: number; w: number; h: number }): Point => ({
+    x: rect.x + rect.w / 2,
+    y: rect.y + rect.h / 2,
+  });
+
+  const plate = h.root.regions().find((region) => region.id === `poker-table/seat-${TAPPED_SEAT}`);
+  check(plate !== undefined, 'a regular’s plate registers a tap region');
+  if (plate !== undefined) {
+    h.tap(centre(plate.rect));
+    h.frame();
+    check(h.root.isOpen('poker-seat-info'), 'tapping a regular’s plate opens their seat card');
+    h.root.key('Escape');
+    h.frame();
+    check(!h.root.isOpen('poker-seat-info'), 'Escape closes the seat card');
+    check(poker.tableOpen, 'and leaves the player seated at the table');
+  }
+
+  const history = h.root.regions().find((region) => region.id === 'poker-table/history');
+  check(history !== undefined && !history.disabled, 'the table’s History button is enabled');
+  if (history !== undefined) {
+    h.tap(centre(history.rect));
+    h.frame();
+    check(h.root.isOpen('poker-history'), 'History opens the hand history');
+    h.root.key('Escape');
+    h.frame();
+    check(!h.root.isOpen('poker-history'), 'Escape closes the hand history');
+    check(poker.tableOpen, 'and leaves the player seated at the table');
+  }
+}
+
+section('the poker table: each sound cue once per event, none while skipping or leaving');
+{
+  const { HumanPlayer } = await import('../src/creatures/HumanPlayer.js');
+  const { CatPlayer } = await import('../src/creatures/CatPlayer.js');
+  const { TILE_SIZE } = await import('../src/core/constants.js');
+  const { ClubPokerSystem } = await import('../src/systems/ClubPokerSystem.js');
+  const { POKER_DEV_SEED } = await import('../src/systems/casino/poker/npc/personality.js');
+  const { POKER_STAKES } = await import('../src/systems/casino/poker/pokerStakes.js');
+  const { POKER_CUES, shuffleSound } =
+    await import('../src/systems/casino/poker/pokerSoundCues.js');
+  const { HOLE_CARD_COUNT, POKER_SEAT_COUNT } =
+    await import('../src/systems/casino/poker/PokerTable.js');
+  const { mulberry32 } = await import('../src/sprites/person/rng.js');
+  const POKER_STEP_MS = 50;
+  const POKER_MAX_STEPS = 4000;
+  const POKER_SHUFFLE_SEED = 23;
+
+  let now = 0;
+  const played: SoundId[] = [];
+  const player = new HumanPlayer(0, 0, TILE_SIZE);
+  const companion = new CatPlayer(1, 0, TILE_SIZE);
+  player.coins = POKER_STAKES.penny.buyIn;
+  const poker = new ClubPokerSystem(
+    { play: (id) => void played.push(id) },
+    POKER_DEV_SEED,
+    () => now,
+    mulberry32(POKER_SHUFFLE_SEED),
+  );
+  const step = (): void => {
+    now += POKER_STEP_MS;
+    poker.update();
+  };
+  const count = (id: SoundId): number => played.filter((sound) => sound === id).length;
+
+  poker.buyIn('penny', player, companion);
+  poker.dismissRules();
+  check(count(POKER_CUES.buy_in) === 1, 'buying in plays the purchase cue once');
+  played.length = 0;
+  for (let i = 0; i < POKER_MAX_STEPS && poker.pokerTable?.awaitingPlayer !== true; i++) step();
+  const table = poker.pokerTable;
+  const handNumber = table?.handNumber ?? 0;
+  check(
+    count(shuffleSound(handNumber)) === 1,
+    `the hand's shuffle plays once (played ${count(shuffleSound(handNumber))})`,
+  );
+  // Folds and deals may share a recording, so each fold before the player's
+  // turn adds one to the count rather than passing for a dealt card.
+  const dealId = POKER_CUES.deal_card;
+  const foldsSoFar = table?.history.filter((record) => record.kind === 'fold').length ?? 0;
+  const sameRecording = (a: SoundId | null, b: SoundId | null): boolean => a === b;
+  const foldsSoundingAsDeals = sameRecording(POKER_CUES.fold, dealId) ? foldsSoFar : 0;
+  const expectedDealSounds = POKER_SEAT_COUNT * HOLE_CARD_COUNT + foldsSoundingAsDeals;
+  check(
+    count(dealId) === expectedDealSounds,
+    `one deal cue per hole card (played ${count(dealId)}, expected ${expectedDealSounds})`,
+  );
+
+  played.length = 0;
+  poker.act({ kind: 'fold' });
+  step();
+  const foldSounds = played.length;
+  poker.skip();
+  const firstHand = handNumber;
+  for (let i = 0; i < POKER_MAX_STEPS && (poker.pokerTable?.handNumber ?? 0) === firstHand; i++) {
+    const before = played.length;
+    step();
+    // Skipping ends where the next hand starts. Its first beat is a step of
+    // its own (the table waits between hands far longer than one step), so
+    // that step's sounds are the new hand's, not the skipped one's.
+    if ((poker.pokerTable?.handNumber ?? 0) !== firstHand) played.length = before;
+  }
+  const skippedSounds = played.slice(foldSounds);
+  check(foldSounds === 1, `the fold itself sounds once (played ${foldSounds})`);
+  check(
+    skippedSounds.length === 0,
+    `a hand skipped through after folding stays silent (played ${skippedSounds.join(', ') || 'nothing'})`,
+  );
+
+  for (let i = 0; i < POKER_MAX_STEPS && poker.pokerTable?.awaitingPlayer !== true; i++) step();
+  played.length = 0;
+  poker.forceClose(player);
+  check(
+    played.length === 0,
+    `a teardown mid-hand settles the hand without a sound (played ${played.join(', ') || 'nothing'})`,
+  );
+}
+
+section('the poker table: after the player acts, real-time frames play the hand on');
+{
+  const { HumanPlayer } = await import('../src/creatures/HumanPlayer.js');
+  const { CatPlayer } = await import('../src/creatures/CatPlayer.js');
+  const { TILE_SIZE } = await import('../src/core/constants.js');
+  const { ClubPokerSystem } = await import('../src/systems/ClubPokerSystem.js');
+  const { POKER_STAKES } = await import('../src/systems/casino/poker/pokerStakes.js');
+  const { mulberry32, subSeed } = await import('../src/sprites/person/rng.js');
+  /** A seed whose regulars tank long enough to have looked like a stall in review. */
+  const STALL_REVIEW_SEED = 0x0c4a5d1a;
+  const SHUFFLE_SALT = 0x5e47;
+  const MS_PER_SECOND = 1000;
+  const FRAMES_PER_SECOND = 60;
+  const FRAME_MS = MS_PER_SECOND / FRAMES_PER_SECOND;
+  /** Every regular may think for the longest a decision takes; a street still finishes well inside this. */
+  const PLAY_ON_WITHIN_SECONDS = 60;
+  const PLAY_ON_WITHIN_MS = PLAY_ON_WITHIN_SECONDS * MS_PER_SECOND;
+  const POKER_STEP_MS = 50;
+  const POKER_MAX_STEPS = 4000;
+
+  let now = 0;
+  const player = new HumanPlayer(0, 0, TILE_SIZE);
+  const companion = new CatPlayer(1, 0, TILE_SIZE);
+  player.coins = POKER_STAKES.penny.buyIn;
+  const poker = new ClubPokerSystem(
+    null,
+    STALL_REVIEW_SEED,
+    () => now,
+    mulberry32(subSeed(STALL_REVIEW_SEED, SHUFFLE_SALT)),
+  );
+  poker.buyIn('penny', player, companion);
+  poker.dismissRules();
+  for (let i = 0; i < POKER_MAX_STEPS && poker.pokerTable?.awaitingPlayer !== true; i++) {
+    now += POKER_STEP_MS;
+    poker.update();
+  }
+  const table = poker.pokerTable;
+  const legal = table?.playerLegalActions() ?? null;
+  check(table !== null && legal !== null, 'the review seed reaches the player’s first decision');
+  if (table !== null && legal !== null) {
+    poker.openRaiseTray();
+    poker.act(legal.call !== null ? { kind: 'call' } : { kind: 'check' });
+    const before = { hand: table.handNumber, board: table.board.length };
+    let waited = 0;
+    const movedOn = (): boolean =>
+      table.awaitingPlayer ||
+      table.handNumber !== before.hand ||
+      table.board.length !== before.board;
+    while (waited < PLAY_ON_WITHIN_MS && !movedOn()) {
+      now += FRAME_MS;
+      waited += FRAME_MS;
+      poker.update();
+    }
+    check(
+      movedOn(),
+      `sixty-a-second frames reach the next decision, street or hand after the player calls (waited ${Math.round(waited)} ms)`,
+    );
+  }
+}
+
+section('the poker table: the Game over prompt answers Escape, Space, Enter and New game');
+{
+  const { HumanPlayer } = await import('../src/creatures/HumanPlayer.js');
+  const { CatPlayer } = await import('../src/creatures/CatPlayer.js');
+  const { TILE_SIZE } = await import('../src/core/constants.js');
+  const { ClubPokerSystem, gameOverBody } = await import('../src/systems/ClubPokerSystem.js');
+  const { POKER_DEV_SEED } = await import('../src/systems/casino/poker/npc/personality.js');
+  const { POKER_STAKES } = await import('../src/systems/casino/poker/pokerStakes.js');
+  const { partyCoins } = await import('../src/core/partyCoins.js');
+  const { playUntilBust, playUntilGameOver } =
+    await import('../src/dev/uiGallery/dialogs/poker.js');
+  const { mulberry32 } = await import('../src/sprites/person/rng.js');
+  const POKER_STEP_MS = 50;
+  const POKER_SHUFFLE_SEED = 13;
+  /** Deals tried in search of one that leaves the player's stack short of a buy-in. */
+  const SHORT_STACK_SEEDS = 40;
+  const POKER_MAX_STEPS = 2000;
+  const buyIn = POKER_STAKES.penny.buyIn;
+
+  /** A party whose game has just ended, with `purse` left over after the buy-in. */
+  const finishedGame = (purse: number, shuffleSeed = POKER_SHUFFLE_SEED, skipFirst = false) => {
+    const player = new HumanPlayer(0, 0, TILE_SIZE);
+    const companion = new CatPlayer(1, 0, TILE_SIZE);
+    player.coins = buyIn + purse;
+    companion.coins = 0;
+    let now = 0;
+    const poker = new ClubPokerSystem(null, POKER_DEV_SEED, () => now, mulberry32(shuffleSeed));
+    poker.buyIn('penny', player, companion);
+    poker.dismissRules();
+    const table = poker.pokerTable;
+    if (skipFirst) {
+      for (let i = 0; i < POKER_MAX_STEPS && table?.playerLegalActions()?.canFold !== true; i++) {
+        now += POKER_STEP_MS;
+        poker.update();
+      }
+      poker.act({ kind: 'fold' });
+      poker.skip();
+    }
+    const skippingBeforeEnd = poker['skipping'];
+    const ended = table !== null && playUntilGameOver(table);
+    now += POKER_STEP_MS;
+    poker.update();
+    const surface = poker.gameOverSurface('poker-game-over', {
+      active: () => player,
+      companion: () => companion,
+    });
+    const view = harness([surface]);
+    view.frame();
+    return {
+      poker,
+      table,
+      ended,
+      player,
+      companion,
+      view,
+      skippingBeforeEnd,
+      stack: table?.playerStack ?? 0,
+    };
+  };
+  const newGameRegion = (view: Harness): HitRegion | undefined =>
+    view.root.regions().find((region) => region.id.endsWith('/new-game'));
+
+  for (const key of ['Escape', ' ', 'Enter'] as const) {
+    const over = finishedGame(0);
+    const purse = partyCoins(over.player, over.companion);
+    over.view.root.key(key);
+    over.view.frame();
+    check(
+      over.ended &&
+        !over.poker.tableOpen &&
+        partyCoins(over.player, over.companion) === purse + over.stack,
+      `${key === ' ' ? 'Space' : key} on Game over leaves and cashes out the ${over.stack} stack`,
+    );
+  }
+
+  const brokeLine = gameOverBody(POKER_STAKES.penny.name, 0, buyIn);
+  const flushLine = gameOverBody(POKER_STAKES.penny.name, buyIn, buyIn);
+  check(
+    !brokeLine.includes('Cash out') &&
+      brokeLine.includes('Leave') &&
+      flushLine.includes('Cash out'),
+    `with no chips the Game over line offers Leave, not a cash-out ("${brokeLine}")`,
+  );
+
+  // Leaving with nothing left says nothing; leaving with chips still reports the cash-out.
+  const leaveNotices = (bust: boolean): string[] => {
+    const notices: string[] = [];
+    const player = new HumanPlayer(0, 0, TILE_SIZE);
+    const companion = new CatPlayer(1, 0, TILE_SIZE);
+    player.coins = buyIn;
+    let now = 0;
+    const poker = new ClubPokerSystem(
+      null,
+      POKER_DEV_SEED,
+      () => now,
+      mulberry32(POKER_SHUFFLE_SEED),
+    );
+    poker.onNotice = (message) => notices.push(message);
+    poker.buyIn('penny', player, companion);
+    poker.dismissRules();
+    const table = poker.pokerTable;
+    if (table !== null && bust) playUntilBust(table);
+    now += POKER_STEP_MS;
+    poker.update();
+    const seat = { active: () => player, companion: () => companion };
+    const view = harness([
+      bust ? poker.bustSurface('poker-bust', seat) : poker.tableSurface('poker-table', seat),
+    ]);
+    view.frame();
+    if (bust) view.root.key('Escape');
+    else poker.requestLeave(player);
+    view.frame();
+    return notices;
+  };
+  const afterBust = leaveNotices(true);
+  const withChips = leaveNotices(false);
+  check(
+    afterBust.every((notice) => !notice.startsWith('Cashed out')) &&
+      withChips.some((notice) => notice.startsWith('Cashed out')),
+    `leaving with nothing posts no "Cashed out" toast, leaving with chips still does (${afterBust.length} / ${withChips.length} notices)`,
+  );
+
+  const skippedToEnd = finishedGame(0, POKER_SHUFFLE_SEED, true);
+  check(
+    skippedToEnd.ended && skippedToEnd.skippingBeforeEnd && !skippedToEnd.poker['skipping'],
+    'a skip running when the game ends is cleared, so a New game does not start skipping',
+  );
+
+  // A deal where the player's blind went in and was lost, so the stack is short of a buy-in.
+  let broke = finishedGame(0);
+  for (let seed = 0; seed < SHORT_STACK_SEEDS && broke.stack >= buyIn; seed++) {
+    broke = finishedGame(0, seed);
+  }
+  const brokeShort = broke.stack < buyIn;
+  check(
+    brokeShort && newGameRegion(broke.view)?.disabled === true,
+    `New game is disabled when the purse plus the ${broke.stack} stack is short of ${buyIn}`,
+  );
+
+  const flush = finishedGame(buyIn);
+  const purse = partyCoins(flush.player, flush.companion);
+  const button = newGameRegion(flush.view);
+  check(
+    button !== undefined && !button.disabled,
+    'New game is offered when the party can cover it',
+  );
+  if (button !== undefined) {
+    flush.view.tap({ x: button.rect.x + button.rect.w / 2, y: button.rect.y + button.rect.h / 2 });
+    flush.view.frame();
+    const next = flush.poker.pokerTable;
+    check(
+      next !== null &&
+        next !== flush.table &&
+        partyCoins(flush.player, flush.companion) === purse + flush.stack - buyIn,
+      `New game cashes the ${flush.stack} stack out and charges the ${buyIn} buy-in once`,
+    );
+  }
 }
 
 section('the real dungeon scene, on a desktop and on a phone');

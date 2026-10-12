@@ -24,7 +24,18 @@ export interface PagedOverlayPage {
   /** Paragraphs separated by `\n`. */
   readonly body: string;
   readonly illustration?: {
-    readonly height: number;
+    /**
+     * The height the art asks for. A function sizes it to the screen, for art
+     * that should grow on a tall screen; it is still held to the viewport
+     * share every illustration is.
+     */
+    readonly height: number | ((ui: Ui) => number);
+    /**
+     * The largest share of the viewport's height the art may take above the
+     * text. Defaults to {@link ILLUSTRATION_MAX_VIEWPORT_SHARE}; a sheet whose
+     * text is short and whose art carries the page can let it take more.
+     */
+    readonly maxViewportShare?: number;
     /**
      * Width over height the art reads best at in a column of its own. Given,
      * a landscape screen too short for the art above the text puts it beside
@@ -116,9 +127,18 @@ const ILLUSTRATION_BESIDE_MIN_WIDTH = 440;
 /** The illustration's share of the body's width when it sits beside the text. */
 const ILLUSTRATION_BESIDE_SHARE = 0.5;
 
+/** The height a page's art asks for on this screen, before the viewport share caps it. */
+function requestedIllustrationHeight(ui: Ui, page: PagedOverlayPage): number {
+  const height = page.illustration?.height ?? 0;
+  return typeof height === 'number' ? height : height(ui);
+}
+
 function illustrationHeight(ui: Ui, page: PagedOverlayPage): number {
   if (page.illustration === undefined) return 0;
-  return Math.min(page.illustration.height, ui.viewport.h * ILLUSTRATION_MAX_VIEWPORT_SHARE);
+  return Math.min(
+    requestedIllustrationHeight(ui, page),
+    ui.viewport.h * (page.illustration.maxViewportShare ?? ILLUSTRATION_MAX_VIEWPORT_SHARE),
+  );
 }
 
 /**
@@ -130,7 +150,7 @@ function illustrationHeight(ui: Ui, page: PagedOverlayPage): number {
 function illustrationBeside(ui: Ui, page: PagedOverlayPage, bodyWidth: number): boolean {
   if (page.illustration?.aspect === undefined) return false;
   const landscape = ui.viewport.w > ui.viewport.h;
-  const squeezedAbove = illustrationHeight(ui, page) < page.illustration.height;
+  const squeezedAbove = illustrationHeight(ui, page) < requestedIllustrationHeight(ui, page);
   return landscape && squeezedAbove && bodyWidth >= ILLUSTRATION_BESIDE_MIN_WIDTH;
 }
 
@@ -155,7 +175,10 @@ function pageHeight(ui: Ui, page: PagedOverlayPage, width: number): number {
   if (page.illustration !== undefined && illustrationBeside(ui, page, width)) {
     const [, words] = besideColumns(ui, { x: 0, y: 0, w: width, h: ui.viewport.h }, page);
     const chromeBesideText = pagedOverlayChromeHeight(ui, {});
-    return Math.max(page.illustration.height - chromeBesideText, textHeight(ui, page, words.w));
+    return Math.max(
+      requestedIllustrationHeight(ui, page) - chromeBesideText,
+      textHeight(ui, page, words.w),
+    );
   }
   const art =
     page.illustration === undefined ? 0 : illustrationHeight(ui, page) + ui.theme.space.lg;
@@ -268,7 +291,7 @@ export function pagedOverlay(ui: Ui, config: PagedOverlayConfig, nav: PagedOverl
   };
 
   if (page.illustration !== undefined && artColumn !== null) {
-    const artH = Math.min(page.illustration.height, artColumn.h);
+    const artH = Math.min(requestedIllustrationHeight(ui, page), artColumn.h);
     paintArt({ ...artColumn, h: artH });
     const wordsH = textHeight(ui, page, bodyArea.w);
     const words = wordsH <= bodyArea.h ? { ...bodyArea, h: wordsH } : bodyArea;
@@ -326,23 +349,30 @@ export function pagedOverlay(ui: Ui, config: PagedOverlayConfig, nav: PagedOverl
   if (config.pages.length > 1) drawDots(ui, dotsCell, config, index);
 }
 
+/**
+ * The dots shrink to fit between Back and Next rather than running under
+ * them: a page whose art sits beside its text leaves the nav row only the
+ * text column's width.
+ */
 function drawDots(ui: Ui, cell: Rect, config: PagedOverlayConfig, active: number): void {
   const { palette, space, radius } = ui.theme;
   const count = config.pages.length;
-  const total = DOT_ACTIVE_WIDTH + (count - 1) * DOT_SIZE + (count - 1) * space.xs;
-  const row = centerIn(cell, total, DOT_SIZE);
+  const naturalTotal = DOT_ACTIVE_WIDTH + (count - 1) * DOT_SIZE + (count - 1) * space.xs;
+  const fit = naturalTotal > 0 ? Math.min(1, cell.w / naturalTotal) : 1;
+  const dotSize = DOT_SIZE * fit;
+  const gap = space.xs * fit;
+  const row = centerIn(cell, naturalTotal * fit, dotSize);
   let x = row.x;
   for (let dot = 0; dot < count; dot++) {
-    const w = ui.tween(`${config.id}/dot${dot}`, dot === active ? DOT_ACTIVE_WIDTH : DOT_SIZE, {
-      ms: ui.theme.motion.base,
-    });
+    const target = (dot === active ? DOT_ACTIVE_WIDTH : DOT_SIZE) * fit;
+    const w = ui.tween(`${config.id}/dot${dot}`, target, { ms: ui.theme.motion.base });
     fillRounded(
       ui.ctx,
-      { x, y: row.y, w, h: DOT_SIZE },
+      { x, y: row.y, w, h: dotSize },
       radius.pill,
       dot === active ? palette.accent.base : palette.border.strong,
     );
-    x += w + space.xs;
+    x += w + gap;
   }
 }
 

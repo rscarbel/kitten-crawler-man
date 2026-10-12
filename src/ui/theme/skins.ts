@@ -144,6 +144,18 @@ export interface CasinoChipSkin {
   readonly felt: string;
 }
 
+/** One poker chip value's face colour and the ink its value is printed in. */
+export interface PokerChipFace {
+  readonly face: string;
+  readonly label: string;
+}
+
+/** A poker table's four chip values, smallest first. */
+export type PokerChipSet = readonly [PokerChipFace, PokerChipFace, PokerChipFace, PokerChipFace];
+
+/** The poker tables by stake, each with its own chip colours so a glance tells the stakes apart. */
+export type PokerChipSetId = 'penny' | 'card_room' | 'high_rollers';
+
 /** A dialog choice row. `quest` and `exit` tint the label to match the choice's tone. */
 export interface DialogChoiceSkin {
   readonly rest: ControlColors;
@@ -197,6 +209,7 @@ export interface Skins {
   readonly pressDrop: number;
   readonly scrim: string;
   readonly casinoChip: CasinoChipSkin;
+  readonly pokerChips: Readonly<Record<PokerChipSetId, PokerChipSet>>;
   readonly dialogChoice: DialogChoiceSkin;
   readonly questRewardBrass: BrassSkin;
   readonly mercenaryBrass: BrassSkin;
@@ -579,6 +592,7 @@ function buildSkins(theme: Theme): Skins {
       text: palette.text.primary,
       felt: palette.material.felt,
     },
+    pokerChips: buildPokerChips(theme),
     dialogChoice: buildDialogChoice(theme),
     questRewardBrass: brass.quest,
     mercenaryBrass: brass.mercenary,
@@ -593,6 +607,37 @@ function buildSkins(theme: Theme): Skins {
       minWidth: KEYCAP_SIZE,
       padX: space.xs,
     },
+  };
+}
+
+/**
+ * The penny table plays the classic white, red, green and black; the card room
+ * and the high rollers each get their own run of colours, so a stack of chips
+ * says which table it came from before its value is read.
+ */
+function buildPokerChips(theme: Theme): Record<PokerChipSetId, PokerChipSet> {
+  const { material, text: ink } = theme.palette;
+  const light = (face: string): PokerChipFace => ({ face, label: ink.inverse });
+  const dark = (face: string): PokerChipFace => ({ face, label: material.chipWhite });
+  return {
+    penny: [
+      light(material.chipWhite),
+      dark(material.chipRed),
+      dark(material.chipGreen),
+      dark(material.chipBlack),
+    ],
+    card_room: [
+      dark(material.chipBlue),
+      dark(material.chipOrange),
+      dark(material.chipPurple),
+      light(material.brass),
+    ],
+    high_rollers: [
+      dark(material.chipBlack),
+      dark(material.chipPink),
+      dark(material.chipTeal),
+      light(material.chipSilver),
+    ],
   };
 }
 

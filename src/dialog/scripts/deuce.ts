@@ -1,7 +1,7 @@
 /**
  * Deuce's banter, keyed by the beat that triggers it.
  *
- * Deuce deals the Desperado Club's blackjack table: unfailingly courteous,
+ * Deuce deals the Desperado Club's blackjack and poker tables: unfailingly courteous,
  * entirely unbothered by either outcome, quietly delighted when someone plays
  * well. The house wins eventually and Deuce knows it, so there is nothing to
  * gloat about — a dealer who taunts on a loss turns a losing streak from a story
@@ -23,7 +23,13 @@ export type BanterTrigger =
   | 'big_win'
   | 'reshuffle'
   | 'turned_away'
-  | 'long_session';
+  | 'long_session'
+  | 'poker_first_sit'
+  | 'poker_shuffle'
+  | 'poker_big_pot'
+  | 'poker_player_bust'
+  | 'poker_split_pot'
+  | 'poker_game_over';
 
 export const DEUCE_LINES: Record<BanterTrigger, NonEmpty<BarkLine>> = {
   first_sit: [
@@ -71,6 +77,36 @@ export const DEUCE_LINES: Record<BanterTrigger, NonEmpty<BarkLine>> = {
     say.bark('"Twenty hands in and still sharp. I notice these things."'),
     say.bark('"Long session. Say the word if you want a fresh deck."'),
   ],
+  poker_first_sit: [
+    say.bark('"Hold\'em tonight. Two cards each, five for the table."'),
+    say.bark('"Welcome to the poker side. Rules button\'s right there."'),
+    say.bark('"Evening. Blinds are posted, cards are coming."'),
+  ],
+  poker_shuffle: [
+    say.bark('"Shuffle up. Fresh deck every hand here."'),
+    say.bark('"New hand. Same deck, different order."'),
+    say.bark('"Cards in the air. Good luck, all."'),
+  ],
+  poker_big_pot: [
+    say.bark('"That is a pot. Pushing it now."'),
+    say.bark('"Big one. Take a moment, it\'s earned."'),
+    say.bark('"Plenty of chips in that pile. Well played."'),
+  ],
+  poker_player_bust: [
+    say.bark('"That\'s your stack. Happens to everyone here."'),
+    say.bark('"Out of chips. The seat\'s yours if you want it."'),
+    say.bark('"Bad run. No shame in it — the deck is cruel."'),
+  ],
+  poker_split_pot: [
+    say.bark('"Same hand. We chop it down the middle."'),
+    say.bark('"Split pot. Everybody gets their share."'),
+    say.bark('"A tie. I\'ll cut it fair."'),
+  ],
+  poker_game_over: [
+    say.bark('"That\'s the last of them. Table\'s yours, and so is the game."'),
+    say.bark('"Nobody left to deal to. Game\'s over — want a fresh one?"'),
+    say.bark('"Empty chairs all round. I\'ll set up a new game if you like."'),
+  ],
 };
 
 function poolFor(trigger: BanterTrigger): NonEmpty<BarkLine> {
@@ -93,6 +129,18 @@ function poolFor(trigger: BanterTrigger): NonEmpty<BarkLine> {
       return DEUCE_LINES.turned_away;
     case 'long_session':
       return DEUCE_LINES.long_session;
+    case 'poker_first_sit':
+      return DEUCE_LINES.poker_first_sit;
+    case 'poker_shuffle':
+      return DEUCE_LINES.poker_shuffle;
+    case 'poker_big_pot':
+      return DEUCE_LINES.poker_big_pot;
+    case 'poker_player_bust':
+      return DEUCE_LINES.poker_player_bust;
+    case 'poker_split_pot':
+      return DEUCE_LINES.poker_split_pot;
+    case 'poker_game_over':
+      return DEUCE_LINES.poker_game_over;
   }
 }
 

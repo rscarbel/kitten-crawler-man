@@ -536,6 +536,9 @@ function drawBottle(
 }
 
 const BAR_STOOL_SEED: VariantSeed = { base: 3000, stride: 41 };
+const STOOL_SEAT_COLORS = ['#7a2230', '#2c4a63', '#3f5a2c'] as const;
+const STOOL_CUSHION_HIGHLIGHT = '#c9707c';
+const STOOL_CUSHION_SHADOW = '#1d0d12';
 
 /** A padded bar stool: turned wooden legs, brass ring, leather seat. */
 export function drawBarStool(
@@ -546,7 +549,6 @@ export function drawBarStool(
 ): void {
   const rng = variantRng(BAR_STOOL_SEED, variant, seedTerm);
   const wood = WOODS[variant % WOODS.length];
-  const seatColors = ['#7a2230', '#2c4a63', '#3f5a2c'] as const;
 
   const cx = geo.w / 2;
   const seatY = geo.footTop + CLUB_TILE_SCALE * 0.04;
@@ -598,9 +600,9 @@ export function drawBarStool(
     seatY,
     seatRx,
   );
-  cushionGrad.addColorStop(0, '#c9707c');
-  cushionGrad.addColorStop(0.35, seatColors[variant % seatColors.length]);
-  cushionGrad.addColorStop(1, '#1d0d12');
+  cushionGrad.addColorStop(0, STOOL_CUSHION_HIGHLIGHT);
+  cushionGrad.addColorStop(0.35, STOOL_SEAT_COLORS[variant % STOOL_SEAT_COLORS.length]);
+  cushionGrad.addColorStop(1, STOOL_CUSHION_SHADOW);
   ctx.fillStyle = cushionGrad;
   ctx.beginPath();
   ctx.ellipse(cx, seatY, seatRx, seatRy, 0, 0, TWO_PI);
@@ -1362,6 +1364,14 @@ export function drawMercDesk(
 // ── The Casino — Deuce's blackjack table ────────────────────────────────────
 
 const FELT_TONES = ['#1a6b3e', '#6b1a2c'] as const;
+const FELT_SHADOW = '#08301c';
+const TABLE_SKIRT_TOP = '#4a2c16';
+const TABLE_SKIRT_BOTTOM = '#180d05';
+const TABLE_RAIL_LIGHT = '#7a4a26';
+const TABLE_RAIL_BASE = '#4a2a12';
+const TABLE_RAIL_DARK = '#22120a';
+const CHIP_COLORS = ['#c8323c', '#2f5ec8', '#d8b432', '#2f5ec8', '#c8323c'] as const;
+const CHIP_EDGE = 'rgba(255,255,255,0.45)';
 
 const CASINO_TABLE_SEED: VariantSeed = { base: 8000, stride: 97 };
 
@@ -1398,8 +1408,8 @@ export function drawCasinoTable(
   ctx.lineTo(cx + rx, cy);
   ctx.closePath();
   const skirtGrad = ctx.createLinearGradient(0, cy, 0, skirtBottom);
-  skirtGrad.addColorStop(0, '#4a2c16');
-  skirtGrad.addColorStop(1, '#180d05');
+  skirtGrad.addColorStop(0, TABLE_SKIRT_TOP);
+  skirtGrad.addColorStop(1, TABLE_SKIRT_BOTTOM);
   ctx.fillStyle = skirtGrad;
   ctx.fill();
   ctx.restore();
@@ -1410,15 +1420,14 @@ export function drawCasinoTable(
   ctx.rect(0, dealerEdgeY, geo.w, geo.h - dealerEdgeY);
   ctx.clip();
   const railGrad = ctx.createRadialGradient(cx, cy - ry * 0.4, ry * 0.2, cx, cy, rx);
-  railGrad.addColorStop(0, '#7a4a26');
-  railGrad.addColorStop(0.7, '#4a2a12');
-  railGrad.addColorStop(1, '#22120a');
+  railGrad.addColorStop(0, TABLE_RAIL_LIGHT);
+  railGrad.addColorStop(0.7, TABLE_RAIL_BASE);
+  railGrad.addColorStop(1, TABLE_RAIL_DARK);
   ctx.fillStyle = railGrad;
   ctx.beginPath();
   ctx.ellipse(cx, cy, rx, ry, 0, 0, TWO_PI);
   ctx.fill();
 
-  // Baize inset.
   const feltRx = rx * 0.85;
   const feltRy = ry * 0.74;
   const feltGrad = ctx.createRadialGradient(
@@ -1430,7 +1439,7 @@ export function drawCasinoTable(
     feltRx,
   );
   feltGrad.addColorStop(0, felt);
-  feltGrad.addColorStop(1, '#08301c');
+  feltGrad.addColorStop(1, FELT_SHADOW);
   ctx.fillStyle = feltGrad;
   ctx.beginPath();
   ctx.ellipse(cx, cy, feltRx, feltRy, 0, 0, TWO_PI);
@@ -1515,17 +1524,16 @@ function drawChipTray(
   ctx.lineWidth = 1;
   ctx.stroke();
 
-  const chipColors = ['#c8323c', '#2f5ec8', '#d8b432', '#2f5ec8', '#c8323c'];
   for (let i = 0; i < wells; i++) {
     const wellX = tray.x + ((i + 0.5) / wells) * tray.w;
     const height = 2 + Math.floor(rng() * 3);
     for (let j = 0; j < height; j++) {
       const chipY = tray.y + trayH * 0.7 - j * CLUB_TILE_SCALE * 0.022;
-      ctx.fillStyle = chipColors[i];
+      ctx.fillStyle = CHIP_COLORS[i % CHIP_COLORS.length];
       ctx.beginPath();
       ctx.ellipse(wellX, chipY, CLUB_TILE_SCALE * 0.07, CLUB_TILE_SCALE * 0.03, 0, 0, TWO_PI);
       ctx.fill();
-      ctx.strokeStyle = 'rgba(255,255,255,0.45)';
+      ctx.strokeStyle = CHIP_EDGE;
       ctx.lineWidth = 0.8;
       ctx.beginPath();
       ctx.ellipse(wellX, chipY, CLUB_TILE_SCALE * 0.07, CLUB_TILE_SCALE * 0.03, 0, Math.PI, TWO_PI);
@@ -1577,6 +1585,403 @@ function drawPlayingCard(ctx: Ctx, x: number, y: number, angle: number, pipColor
   ctx.fill();
   ctx.fillRect(-w * 0.36, -h * 0.42, w * 0.14, h * 0.16);
   ctx.restore();
+}
+
+// ── The Casino — the round poker table beside the blackjack pit ─────────────
+
+const POKER_TABLE_SEED: VariantSeed = { base: 10000, stride: 103 };
+
+/** Fraction of a tile the table top's centre sits below the footprint's back line. */
+const POKER_TOP_DROP = 0.3;
+/** Half-width of the table top as a fraction of the frame, leaving room for the side stools. */
+const POKER_TOP_RX_OF_WIDTH = 0.31;
+/** Half-depth of the table top in tiles — a circle seen from the game's shallow angle. */
+const POKER_TOP_RY_TILES = 0.28;
+/** How far the rail's front edge drops to show the table's thickness, in tiles. */
+const POKER_EDGE_DEPTH_TILES = 0.08;
+const POKER_FELT_INSET = 0.8;
+const POKER_PEDESTAL_HALF_WIDTH_TILES = 0.07;
+const POKER_FOOT_RX_TILES = 0.24;
+const POKER_FOOT_RY_TILES = 0.07;
+const POKER_RAIL_TACKS = 20;
+const POKER_TACK_RADIUS_TILES = 0.014;
+
+/** Seat radius of the low stools around the poker table, in tiles. */
+const POKER_STOOL_SEAT_RX_TILES = 0.15;
+const POKER_STOOL_SEAT_RY_TILES = 0.08;
+/** Height of a poker stool's seat above its feet, in tiles. */
+const POKER_STOOL_HEIGHT_TILES = 0.3;
+/** The far stool's seat height above the table's back line, in tiles. */
+const POKER_BACK_STOOL_RISE_TILES = 0.06;
+/** How far behind the table's foot the flank stools stand, in tiles. */
+const POKER_SIDE_STOOL_SETBACK_TILES = 0.1;
+const POKER_SIDE_STOOL_GAP_TILES = 0.15;
+
+/** The table's foot rests a little above the footprint's bottom edge, as the blackjack skirt does. */
+const POKER_FLOOR_INSET_TILES = 0.08;
+const POKER_SHADOW_RX_OF_TOP = 0.9;
+const POKER_SHADOW_RY_TILES = 0.12;
+/** Where the pedestal's turned highlight peaks across its width. */
+const POKER_PEDESTAL_SHINE_STOP = 0.45;
+/** The printed betting line, as a fraction of the baize's radii. */
+const POKER_BETTING_LINE_SCALE = 0.72;
+/** Tacks sit just inside the rail's outer edge. */
+const POKER_TACK_RING_X = 0.92;
+const POKER_TACK_RING_Y = 0.9;
+
+const POKER_POT_CHIPS = 4;
+const POKER_POT_SPACING_TILES = 0.08;
+/** Alternate stacks sit a little nearer the player so the pot reads as a loose pile, not a row. */
+const POKER_POT_STAGGER_TILES = 0.03;
+const POKER_POT_MIN_STACK = 2;
+const POKER_POT_STACK_SPREAD = 3;
+const CHIP_RX_TILES = 0.045;
+const CHIP_RY_TILES = 0.02;
+const CHIP_THICKNESS_TILES = 0.016;
+const CHIP_EDGE_WIDTH = 0.6;
+
+/** The dealer button's place on the felt, as fractions of the baize's radii from its centre. */
+const DEALER_BUTTON_OFFSET_X = 0.55;
+const DEALER_BUTTON_OFFSET_Y = -0.35;
+const DEALER_BUTTON_RX_TILES = 0.04;
+const DEALER_BUTTON_RY_TILES = 0.022;
+const DEALER_BUTTON_RIM_WIDTH = 0.8;
+
+const HOLE_CARD_W_TILES = 0.13;
+const HOLE_CARD_H_TILES = 0.09;
+const HOLE_CARD_BORDER = 1;
+const HOLE_CARD_CORNER = 1.5;
+const HOLE_CARD_BACK_CORNER = 1;
+/** The two hole cards, splayed the way a player leaves them, as fractions of the baize's radii. */
+const HOLE_CARDS: ReadonlyArray<{ x: number; y: number; angle: number }> = [
+  { x: -0.5, y: 0.45, angle: -0.2 },
+  { x: -0.38, y: 0.5, angle: 0.15 },
+];
+
+/** The lit arc runs across the far lip only, from upper-left to upper-right. */
+const POKER_LIP_ARC_START = 1.15 * Math.PI;
+const POKER_LIP_ARC_END = 1.85 * Math.PI;
+const POKER_LIP_RX_SCALE = 0.97;
+const POKER_LIP_RY_SCALE = 0.95;
+const POKER_LIP_WIDTH = 1.5;
+
+const POKER_STOOL_LEG_WIDTH_TILES = 0.05;
+const POKER_STOOL_LEG_TOP_SPREAD = 0.5;
+const POKER_STOOL_LEG_FOOT_SPREAD = 0.8;
+const POKER_STOOL_SEAT_EDGE_WIDTH = 1.2;
+/** The stool's floor shadow, as shares of its seat's radii. */
+const POKER_STOOL_SHADOW_RX_SCALE = 1.1;
+const POKER_STOOL_SHADOW_RY_SCALE = 0.9;
+/** How far under the seat's centre the legs meet it, and the seat's shadowed underside sits, in seat radii. */
+const POKER_STOOL_LEG_TOP_DROP = 0.4;
+const POKER_STOOL_UNDERSIDE_DROP = 0.5;
+/** The cushion's sheen: a highlight up and to the left of centre, in seat radii, fading into the seat colour. */
+const CUSHION_LIGHT_OFFSET_X = 0.3;
+const CUSHION_LIGHT_OFFSET_Y = 0.4;
+const CUSHION_LIGHT_RADIUS = 0.1;
+const CUSHION_BODY_STOP = 0.35;
+/** The rail's sheen: lit from above its centre, in rail radii, the body colour holding most of the way out. */
+const RAIL_LIGHT_OFFSET_Y = 0.4;
+const RAIL_LIGHT_RADIUS = 0.2;
+const RAIL_BASE_STOP = 0.7;
+/** The baize's sheen: lit up and to the left of centre, in baize radii. */
+const FELT_LIGHT_OFFSET_X = 0.2;
+const FELT_LIGHT_OFFSET_Y = 0.4;
+const FELT_LIGHT_RADIUS = 0.2;
+const POKER_FOOT_RIM_WIDTH = 1;
+const POKER_BETTING_LINE_WIDTH = 1;
+
+const CARD_BACK = '#7a1f2c';
+const CARD_BACK_TRIM = '#f6f0e0';
+const CARD_SHADOW = 'rgba(0,0,0,0.35)';
+const DEALER_BUTTON = '#f6f0e0';
+const DEALER_BUTTON_RIM = 'rgba(40,30,20,0.8)';
+const SEAT_UNDERSIDE_SHADOW = 'rgba(0,0,0,0.4)';
+const POKER_BETTING_LINE = 'rgba(224,196,110,0.55)';
+const RAIL_LIP_LIGHT = 'rgba(255,226,170,0.28)';
+
+/** A low, round padded stool seen from the table's height — a lighter cousin of the bar stool. */
+function drawPokerStool(
+  ctx: Ctx,
+  cx: number,
+  seatY: number,
+  wood: WoodTone,
+  seatColor: string,
+): void {
+  const seatRx = CLUB_TILE_SCALE * POKER_STOOL_SEAT_RX_TILES;
+  const seatRy = CLUB_TILE_SCALE * POKER_STOOL_SEAT_RY_TILES;
+  const baseY = seatY + CLUB_TILE_SCALE * POKER_STOOL_HEIGHT_TILES;
+
+  paintContactShadow(
+    ctx,
+    cx,
+    baseY,
+    seatRx * POKER_STOOL_SHADOW_RX_SCALE,
+    seatRy * POKER_STOOL_SHADOW_RY_SCALE,
+  );
+
+  ctx.strokeStyle = wood.base;
+  ctx.lineWidth = CLUB_TILE_SCALE * POKER_STOOL_LEG_WIDTH_TILES;
+  ctx.lineCap = 'round';
+  for (const dir of [-1, 1]) {
+    ctx.beginPath();
+    ctx.moveTo(
+      cx + dir * seatRx * POKER_STOOL_LEG_TOP_SPREAD,
+      seatY + seatRy * POKER_STOOL_LEG_TOP_DROP,
+    );
+    ctx.lineTo(cx + dir * seatRx * POKER_STOOL_LEG_FOOT_SPREAD, baseY);
+    ctx.stroke();
+  }
+
+  ctx.fillStyle = SEAT_UNDERSIDE_SHADOW;
+  ctx.beginPath();
+  ctx.ellipse(cx, seatY + seatRy * POKER_STOOL_UNDERSIDE_DROP, seatRx, seatRy, 0, 0, TWO_PI);
+  ctx.fill();
+  const cushionGrad = ctx.createRadialGradient(
+    cx - seatRx * CUSHION_LIGHT_OFFSET_X,
+    seatY - seatRy * CUSHION_LIGHT_OFFSET_Y,
+    seatRx * CUSHION_LIGHT_RADIUS,
+    cx,
+    seatY,
+    seatRx,
+  );
+  cushionGrad.addColorStop(0, STOOL_CUSHION_HIGHLIGHT);
+  cushionGrad.addColorStop(CUSHION_BODY_STOP, seatColor);
+  cushionGrad.addColorStop(1, STOOL_CUSHION_SHADOW);
+  ctx.fillStyle = cushionGrad;
+  ctx.beginPath();
+  ctx.ellipse(cx, seatY, seatRx, seatRy, 0, 0, TWO_PI);
+  ctx.fill();
+  ctx.strokeStyle = BRASS_DARK;
+  ctx.lineWidth = POKER_STOOL_SEAT_EDGE_WIDTH;
+  ctx.stroke();
+}
+
+/** A face-down hole card lying on the felt. */
+function drawCardBack(ctx: Ctx, x: number, y: number, angle: number): void {
+  const w = CLUB_TILE_SCALE * HOLE_CARD_W_TILES;
+  const h = CLUB_TILE_SCALE * HOLE_CARD_H_TILES;
+  const inset = HOLE_CARD_BORDER;
+  ctx.save();
+  ctx.translate(x, y);
+  ctx.rotate(angle);
+  ctx.fillStyle = CARD_SHADOW;
+  roundRectPath(ctx, { x: -w / 2 + inset, y: -h / 2 + inset, w, h }, HOLE_CARD_CORNER);
+  ctx.fill();
+  ctx.fillStyle = CARD_BACK_TRIM;
+  roundRectPath(ctx, { x: -w / 2, y: -h / 2, w, h }, HOLE_CARD_CORNER);
+  ctx.fill();
+  ctx.fillStyle = CARD_BACK;
+  const backRect: Rect = {
+    x: -w / 2 + inset,
+    y: -h / 2 + inset,
+    w: w - inset * 2,
+    h: h - inset * 2,
+  };
+  roundRectPath(ctx, backRect, HOLE_CARD_BACK_CORNER);
+  ctx.fill();
+  ctx.restore();
+}
+
+function drawChipStack(ctx: Ctx, cx: number, baseY: number, height: number, color: string): void {
+  const rx = CLUB_TILE_SCALE * CHIP_RX_TILES;
+  const ry = CLUB_TILE_SCALE * CHIP_RY_TILES;
+  const chipThickness = CLUB_TILE_SCALE * CHIP_THICKNESS_TILES;
+  for (let j = 0; j < height; j++) {
+    const chipY = baseY - j * chipThickness;
+    ctx.fillStyle = color;
+    ctx.beginPath();
+    ctx.ellipse(cx, chipY, rx, ry, 0, 0, TWO_PI);
+    ctx.fill();
+    ctx.strokeStyle = CHIP_EDGE;
+    ctx.lineWidth = CHIP_EDGE_WIDTH;
+    ctx.beginPath();
+    ctx.ellipse(cx, chipY, rx, ry, 0, Math.PI, TWO_PI);
+    ctx.stroke();
+  }
+}
+
+/**
+ * A small round poker table on a turned pedestal: the same padded rail and
+ * baize as the blackjack table so the two read as one pit, with a pot in the
+ * middle, the dealer button, a dealt pair of hole cards, and a low stool on
+ * the far side and at either flank.
+ */
+export function drawPokerTable(
+  ctx: Ctx,
+  geo: ClubFrameGeometry,
+  variant: number,
+  seedTerm: number,
+): void {
+  const rng = variantRng(POKER_TABLE_SEED, variant, seedTerm);
+  const felt = FELT_TONES[variant % FELT_TONES.length];
+  const wood = WOODS[variant % WOODS.length];
+
+  const cx = geo.w / 2;
+  const cy = geo.footTop + CLUB_TILE_SCALE * POKER_TOP_DROP;
+  const rx = geo.w * POKER_TOP_RX_OF_WIDTH;
+  const ry = CLUB_TILE_SCALE * POKER_TOP_RY_TILES;
+  const edgeDepth = CLUB_TILE_SCALE * POKER_EDGE_DEPTH_TILES;
+  const floorY = geo.footBottom - CLUB_TILE_SCALE * POKER_FLOOR_INSET_TILES;
+
+  // The far stool goes down first so the table top hides its legs.
+  const backSeatY = cy - ry - CLUB_TILE_SCALE * POKER_BACK_STOOL_RISE_TILES;
+  drawPokerStool(ctx, cx, backSeatY, wood, STOOL_SEAT_COLORS[0]);
+
+  paintContactShadow(
+    ctx,
+    cx,
+    floorY,
+    rx * POKER_SHADOW_RX_OF_TOP,
+    CLUB_TILE_SCALE * POKER_SHADOW_RY_TILES,
+  );
+
+  const pedestalHalf = CLUB_TILE_SCALE * POKER_PEDESTAL_HALF_WIDTH_TILES;
+  const pedestalGrad = ctx.createLinearGradient(cx - pedestalHalf, 0, cx + pedestalHalf, 0);
+  pedestalGrad.addColorStop(0, wood.dark);
+  pedestalGrad.addColorStop(POKER_PEDESTAL_SHINE_STOP, wood.light);
+  pedestalGrad.addColorStop(1, wood.dark);
+  ctx.fillStyle = pedestalGrad;
+  ctx.fillRect(cx - pedestalHalf, cy, pedestalHalf * 2, floorY - cy);
+  ctx.fillStyle = wood.base;
+  ctx.beginPath();
+  ctx.ellipse(
+    cx,
+    floorY,
+    CLUB_TILE_SCALE * POKER_FOOT_RX_TILES,
+    CLUB_TILE_SCALE * POKER_FOOT_RY_TILES,
+    0,
+    0,
+    TWO_PI,
+  );
+  ctx.fill();
+  ctx.strokeStyle = BRASS_DARK;
+  ctx.lineWidth = POKER_FOOT_RIM_WIDTH;
+  ctx.stroke();
+
+  // The rail's visible thickness: the front half of the ellipse, dropped.
+  const edgeGrad = ctx.createLinearGradient(0, cy, 0, cy + ry + edgeDepth);
+  edgeGrad.addColorStop(0, TABLE_SKIRT_TOP);
+  edgeGrad.addColorStop(1, TABLE_SKIRT_BOTTOM);
+  ctx.fillStyle = edgeGrad;
+  ctx.beginPath();
+  ctx.ellipse(cx, cy + edgeDepth, rx, ry, 0, 0, Math.PI);
+  ctx.lineTo(cx - rx, cy);
+  ctx.ellipse(cx, cy, rx, ry, 0, Math.PI, 0, true);
+  ctx.closePath();
+  ctx.fill();
+
+  const railGrad = ctx.createRadialGradient(
+    cx,
+    cy - ry * RAIL_LIGHT_OFFSET_Y,
+    ry * RAIL_LIGHT_RADIUS,
+    cx,
+    cy,
+    rx,
+  );
+  railGrad.addColorStop(0, TABLE_RAIL_LIGHT);
+  railGrad.addColorStop(RAIL_BASE_STOP, TABLE_RAIL_BASE);
+  railGrad.addColorStop(1, TABLE_RAIL_DARK);
+  ctx.fillStyle = railGrad;
+  ctx.beginPath();
+  ctx.ellipse(cx, cy, rx, ry, 0, 0, TWO_PI);
+  ctx.fill();
+
+  const feltRx = rx * POKER_FELT_INSET;
+  const feltRy = ry * POKER_FELT_INSET;
+  const feltGrad = ctx.createRadialGradient(
+    cx - feltRx * FELT_LIGHT_OFFSET_X,
+    cy - feltRy * FELT_LIGHT_OFFSET_Y,
+    feltRy * FELT_LIGHT_RADIUS,
+    cx,
+    cy,
+    feltRx,
+  );
+  feltGrad.addColorStop(0, felt);
+  feltGrad.addColorStop(1, FELT_SHADOW);
+  ctx.fillStyle = feltGrad;
+  ctx.beginPath();
+  ctx.ellipse(cx, cy, feltRx, feltRy, 0, 0, TWO_PI);
+  ctx.fill();
+
+  // The betting line every poker layout prints inside the rail.
+  ctx.strokeStyle = POKER_BETTING_LINE;
+  ctx.lineWidth = POKER_BETTING_LINE_WIDTH;
+  ctx.beginPath();
+  ctx.ellipse(
+    cx,
+    cy,
+    feltRx * POKER_BETTING_LINE_SCALE,
+    feltRy * POKER_BETTING_LINE_SCALE,
+    0,
+    0,
+    TWO_PI,
+  );
+  ctx.stroke();
+
+  for (let i = 0; i < POKER_RAIL_TACKS; i++) {
+    const a = (i / POKER_RAIL_TACKS) * TWO_PI;
+    ctx.fillStyle = BRASS_LIGHT;
+    ctx.beginPath();
+    ctx.arc(
+      cx + Math.cos(a) * rx * POKER_TACK_RING_X,
+      cy + Math.sin(a) * ry * POKER_TACK_RING_Y,
+      CLUB_TILE_SCALE * POKER_TACK_RADIUS_TILES,
+      0,
+      TWO_PI,
+    );
+    ctx.fill();
+  }
+
+  // The pot: a loose cluster of short stacks in the middle of the felt.
+  for (let i = 0; i < POKER_POT_CHIPS; i++) {
+    const offsetX = (i - (POKER_POT_CHIPS - 1) / 2) * CLUB_TILE_SCALE * POKER_POT_SPACING_TILES;
+    const offsetY = (i % 2) * CLUB_TILE_SCALE * POKER_POT_STAGGER_TILES;
+    const height = POKER_POT_MIN_STACK + Math.floor(rng() * POKER_POT_STACK_SPREAD);
+    drawChipStack(ctx, cx + offsetX, cy + offsetY, height, CHIP_COLORS[i % CHIP_COLORS.length]);
+  }
+
+  ctx.fillStyle = DEALER_BUTTON;
+  ctx.beginPath();
+  ctx.ellipse(
+    cx + feltRx * DEALER_BUTTON_OFFSET_X,
+    cy + feltRy * DEALER_BUTTON_OFFSET_Y,
+    CLUB_TILE_SCALE * DEALER_BUTTON_RX_TILES,
+    CLUB_TILE_SCALE * DEALER_BUTTON_RY_TILES,
+    0,
+    0,
+    TWO_PI,
+  );
+  ctx.fill();
+  ctx.strokeStyle = DEALER_BUTTON_RIM;
+  ctx.lineWidth = DEALER_BUTTON_RIM_WIDTH;
+  ctx.stroke();
+
+  for (const card of HOLE_CARDS) {
+    drawCardBack(ctx, cx + feltRx * card.x, cy + feltRy * card.y, card.angle);
+  }
+
+  // Light catching the far lip of the rail.
+  ctx.strokeStyle = RAIL_LIP_LIGHT;
+  ctx.lineWidth = POKER_LIP_WIDTH;
+  ctx.beginPath();
+  ctx.ellipse(
+    cx,
+    cy,
+    rx * POKER_LIP_RX_SCALE,
+    ry * POKER_LIP_RY_SCALE,
+    0,
+    POKER_LIP_ARC_START,
+    POKER_LIP_ARC_END,
+  );
+  ctx.stroke();
+
+  // Flank stools stand in front of the table's widest line, so they paint over it.
+  const sideOffset = rx + CLUB_TILE_SCALE * POKER_SIDE_STOOL_GAP_TILES;
+  const sideFloorY = floorY - CLUB_TILE_SCALE * POKER_SIDE_STOOL_SETBACK_TILES;
+  const sideSeatY = sideFloorY - CLUB_TILE_SCALE * POKER_STOOL_HEIGHT_TILES;
+  drawPokerStool(ctx, cx - sideOffset, sideSeatY, wood, STOOL_SEAT_COLORS[1]);
+  drawPokerStool(ctx, cx + sideOffset, sideSeatY, wood, STOOL_SEAT_COLORS[2]);
 }
 
 // ── VIP Lounge — the podium counter and the velvet rope ─────────────────────

@@ -118,6 +118,25 @@ function ratkinVillagerSpeaker<const Name extends string>(
 }
 
 /**
+ * A poker regular at the Desperado Club. Their banter shows as a bubble beside
+ * their seat, but the dialog layer still credits and voices them like any
+ * named cast member.
+ */
+function pokerRegularSpeaker<const Name extends string>(
+  name: Name,
+  voiceSounds: ReadonlyArray<SoundId>,
+): SpeakerDef & { readonly name: Name } {
+  return {
+    name,
+    portrait: null,
+    voice: { kind: 'clips', sounds: voiceSounds },
+    reveal: 'sentence',
+    textCase: 'as-written',
+    revealIntervalMs: SPEECH_REVEAL_INTERVAL_MS,
+  };
+}
+
+/**
  * Every speaker with a fixed, known-in-advance identity. A procedurally named
  * townsperson or a hand-lettered sign is not here — see {@link SpeakerRef}.
  */
@@ -366,6 +385,22 @@ export const SPEAKERS = {
     textCase: 'as-written',
     revealIntervalMs: SPEECH_REVEAL_INTERVAL_MS,
   },
+
+  // The Desperado Club's Texas Hold'em regulars; names match `POKER_REGULARS`.
+  pokerWren: pokerRegularSpeaker('Wren Halloway', SKYFOWL_CITIZEN_VOICE_SOUNDS),
+  pokerGrizzle: pokerRegularSpeaker('Grizzle Pott', HUMAN_MASCULINE_VOICE_SOUNDS),
+  pokerOttoline: pokerRegularSpeaker('Lady Ottoline Fairweather', SKYFOWL_CITIZEN_VOICE_SOUNDS),
+  pokerPell: pokerRegularSpeaker('Sixfinger Pell', SKYFOWL_CITIZEN_VOICE_SOUNDS),
+  pokerDabney: pokerRegularSpeaker('Nervous Dabney', SKYFOWL_ELDER_VOICE_SOUNDS),
+  pokerCorvina: pokerRegularSpeaker('Corvina Lark', SKYFOWL_ELDER_VOICE_SOUNDS),
+  pokerReverend: pokerRegularSpeaker('The Reverend Snake-Eyes', HUMAN_MASCULINE_VOICE_SOUNDS),
+  pokerMalloy: pokerRegularSpeaker('Odds Malloy', HUMAN_MASCULINE_VOICE_SOUNDS),
+  pokerCrumb: pokerRegularSpeaker('Mother Crumb', HUMAN_FEMININE_VOICE_SOUNDS),
+  pokerQuillfeather: pokerRegularSpeaker('Barnaby Quillfeather', SKYFOWL_ELDER_VOICE_SOUNDS),
+  pokerTuppence: pokerRegularSpeaker('Tuppence', SKYFOWL_CITIZEN_VOICE_SOUNDS),
+  pokerVane: pokerRegularSpeaker('Gristle Vane', SKYFOWL_CITIZEN_VOICE_SOUNDS),
+  pokerBrisket: pokerRegularSpeaker('Brisket Mulgrew', HUMAN_MASCULINE_VOICE_SOUNDS),
+  pokerMags: pokerRegularSpeaker('Mags the Molt', SKYFOWL_ELDER_VOICE_SOUNDS),
 
   // The Meat Shields' hired mercenaries.
   sledge: {

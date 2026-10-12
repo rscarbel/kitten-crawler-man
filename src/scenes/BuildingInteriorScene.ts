@@ -143,6 +143,7 @@ import {
 import { createGodModeState, type GodModeState } from '../core/GodMode';
 import { ITEM_DEF, type InventoryItem, type ItemId } from '../core/ItemDefs';
 import { CLUB_STATION_SURFACE_IDS, DesperadoClubSystem } from '../systems/DesperadoClubSystem';
+import { POKER_DEV_SEED } from '../systems/casino/poker/npc/personality';
 import { InteriorOccupantSystem } from '../systems/InteriorOccupantSystem';
 import { InteriorReadableSystem } from '../systems/InteriorReadableSystem';
 import {
@@ -1144,12 +1145,14 @@ export class BuildingInteriorScene extends GameplayScene {
             this.marketStock,
             this.humanAchievements,
             this.catAchievements,
+            this.circus?.worldSeed ?? POKER_DEV_SEED,
           )
         : null;
     if (this.club !== null) {
       this.club.onCasinoWinnings = (coins, screenX, screenY) => {
         this.rewardFly.enqueueCoins(coins, screenX, screenY);
       };
+      this.club.onCasinoNotice = (message, tone) => this.menus.toasts.post(message, { tone });
     }
 
     // Tower stair system
@@ -2377,10 +2380,12 @@ export class BuildingInteriorScene extends GameplayScene {
     }
     const club = this.club;
     if (club !== null) {
+      const casinoSeat = { active: () => this.active(), companion: () => this.inactive() };
       surfaces.push(
         club.clarabelleSurface(CLUB_SURFACE_ID),
         ...club.stationSurfaces(party),
-        ...club.casinoSurfaces({ active: () => this.active(), companion: () => this.inactive() }),
+        ...club.casinoSurfaces(casinoSeat),
+        ...club.pokerSurfaces(casinoSeat),
       );
     }
     for (const surface of surfaces) this.ui.mount(surface);
@@ -2876,11 +2881,7 @@ export class BuildingInteriorScene extends GameplayScene {
     // Club: talk to a station NPC (Clarabelle, bar, casino, …) with Space.
     // Only consume when a station actually answered, so a press beside an
     // ambient occupant still reaches the conversation below.
-    if (
-      this.club !== null &&
-      interactPressed() &&
-      this.club.handleInteract(player, this.inactive())
-    ) {
+    if (this.club !== null && interactPressed() && this.club.handleInteract(player)) {
       keybindings.release(this.input, 'attack');
     }
 
@@ -4609,7 +4610,7 @@ export class BuildingInteriorScene extends GameplayScene {
     if (this.currentFloor === TOWER_CONFRONTATION_FLOOR) {
       this.towerConfrontation?.tryExamine(this.active());
     }
-    this.club?.handleInteract(this.active(), this.inactive());
+    this.club?.handleInteract(this.active());
     // Talk to a nearby occupant only when nothing else claimed the tap: no
     // shop/club panel is up (the store has both a shop and shelf-browsers), and
     // the safe room didn't just open Mordecai (that building has both Mordecai

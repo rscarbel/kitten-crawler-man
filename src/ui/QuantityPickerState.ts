@@ -21,6 +21,8 @@ export interface QuantityPickerStateConfig {
   readonly max: number;
   /** Starting quantity, clamped into range. */
   readonly initial: number;
+  /** Lowest quantity selectable when it is above 1, e.g. the smallest legal raise. Defaults to 1. */
+  readonly min?: number;
   /** Coin cost of one unit. Omit for a picker with no price attached. */
   readonly costPerUnit?: number;
   /**
@@ -40,9 +42,10 @@ function clamp(value: number, min: number, max: number): number {
  * Tracks the selected quantity for a `QuantityPicker`, plus the raw digits of
  * an in-progress typed entry.
  *
- * The minimum is 1 whenever at least one unit is selectable: confirming a
- * quantity of 0 does nothing that Cancel doesn't already do, so 0 is never a
- * reachable value except when `max` itself is 0 (nothing to pick).
+ * The minimum is `config.min` (1 when omitted) whenever at least one unit is
+ * selectable, never above `max`: confirming a quantity of 0 does nothing that
+ * Cancel doesn't already do, so 0 is never a reachable value except when
+ * `max` itself is 0 (nothing to pick).
  */
 export class QuantityPickerState {
   readonly max: number;
@@ -62,7 +65,7 @@ export class QuantityPickerState {
 
   constructor(config: QuantityPickerStateConfig) {
     this.max = Math.max(0, Math.floor(config.max));
-    this.min = this.max > 0 ? 1 : 0;
+    this.min = this.max > 0 ? Math.min(this.max, Math.max(1, Math.floor(config.min ?? 1))) : 0;
     this.costPerUnit = config.costPerUnit;
     this.available = config.available;
     this._value = clamp(Math.floor(config.initial), this.min, this.max);

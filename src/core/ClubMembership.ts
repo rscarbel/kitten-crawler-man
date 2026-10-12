@@ -11,6 +11,11 @@
  */
 
 import type { ShoeState } from '../systems/casino/Deck';
+import type { PlayerRead } from '../systems/casino/poker/npc/playerRead';
+import { REGULAR_IDS, type RegularId } from '../systems/casino/poker/npc/regulars';
+
+/** What each poker regular has learned about the player's play this run. */
+export type PokerReads = Partial<Record<RegularId, PlayerRead>>;
 
 export interface ClubMembership {
   hasDesperadoPass: boolean;
@@ -22,10 +27,32 @@ export interface ClubMembership {
   casinoShoe: ShoeState | null;
   /** Null until the player answers Deuce's offer to stop calling the plays. */
   casinoHintsEnabled: boolean | null;
+  /**
+   * Belongs to the run, like the regulars' rolled personalities: a new run
+   * starts with strangers who have never watched the player bluff.
+   */
+  pokerReads: PokerReads;
+  /**
+   * The player's own side of the same watching: how each regular has played in
+   * front of them, which is all the seat-info card may show.
+   */
+  pokerNotes: PokerReads;
+  /** The poker table's Fast toggle: shorter beats between actions. */
+  pokerFast: boolean;
+  /** The poker table's Show cards toggle: the player's losing hand is shown rather than mucked. */
+  pokerShowCards: boolean;
 }
 
 export function createClubMembership(): ClubMembership {
-  return { hasDesperadoPass: false, casinoShoe: null, casinoHintsEnabled: null };
+  return {
+    hasDesperadoPass: false,
+    casinoShoe: null,
+    casinoHintsEnabled: null,
+    pokerReads: {},
+    pokerNotes: {},
+    pokerFast: false,
+    pokerShowCards: false,
+  };
 }
 
 /** A point-in-time copy of the club's cross-scene state. */
@@ -33,6 +60,10 @@ export interface ClubMembershipCheckpoint {
   hasDesperadoPass: boolean;
   casinoShoe: ShoeState | null;
   casinoHintsEnabled: boolean | null;
+  pokerReads: PokerReads;
+  pokerNotes: PokerReads;
+  pokerFast: boolean;
+  pokerShowCards: boolean;
 }
 
 /**
@@ -46,16 +77,35 @@ function copyShoe(shoe: ShoeState | null): ShoeState | null {
 }
 
 /**
+ * Each read is copied as well as the record holding them, so the live table
+ * replacing or rebuilding one never reaches into a stored snapshot.
+ */
+export function copyPokerReads(reads: PokerReads): PokerReads {
+  const copy: PokerReads = {};
+  for (const id of REGULAR_IDS) {
+    const read = reads[id];
+    if (read !== undefined) copy[id] = { ...read };
+  }
+  return copy;
+}
+
+/**
  * Snapshots the club so a death rewinds it along with the coins that paid for
  * it. The shoe is part of that: gambling losses rewind with the player's purse,
  * so a shoe that survived would let a player learn the deck's order across
  * deaths and then bet against a rewound stack of coins with perfect knowledge.
+ * The poker reads and notes rewind for the same reason: hands the player died
+ * after never happened, so nobody at the table can remember them.
  */
 export function captureClubMembership(membership: ClubMembership): ClubMembershipCheckpoint {
   return {
     hasDesperadoPass: membership.hasDesperadoPass,
     casinoShoe: copyShoe(membership.casinoShoe),
     casinoHintsEnabled: membership.casinoHintsEnabled,
+    pokerReads: copyPokerReads(membership.pokerReads),
+    pokerNotes: copyPokerReads(membership.pokerNotes),
+    pokerFast: membership.pokerFast,
+    pokerShowCards: membership.pokerShowCards,
   };
 }
 
@@ -63,9 +113,9 @@ export function captureClubMembership(membership: ClubMembership): ClubMembershi
  * Mutates in place: the same `ClubMembership` object is threaded by reference
  * through every scene, so rebinding a fresh one would strand every holder.
  *
- * The shoe is copied again here because one snapshot is restored once per death
- * — handing the stored array straight to the live field would let the next
- * shuffle mutate the snapshot itself.
+ * The shoe and the poker reads are copied again here because one snapshot is
+ * restored once per death — handing the stored values straight to the live
+ * fields would let the next shuffle or hand mutate the snapshot itself.
  */
 export function restoreClubMembership(
   membership: ClubMembership,
@@ -74,4 +124,8 @@ export function restoreClubMembership(
   membership.hasDesperadoPass = snapshot.hasDesperadoPass;
   membership.casinoShoe = copyShoe(snapshot.casinoShoe);
   membership.casinoHintsEnabled = snapshot.casinoHintsEnabled;
+  membership.pokerReads = copyPokerReads(snapshot.pokerReads);
+  membership.pokerNotes = copyPokerReads(snapshot.pokerNotes);
+  membership.pokerFast = snapshot.pokerFast;
+  membership.pokerShowCards = snapshot.pokerShowCards;
 }

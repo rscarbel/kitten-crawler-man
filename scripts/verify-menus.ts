@@ -712,6 +712,14 @@ const SAMPLE_QUANTITY = {
   onCancel: noop,
 };
 
+/** Buy-ins' worth of coins the poker openers hand the party: one to sit, one to rebuy. */
+const POKER_AUDIT_BUY_INS = 2;
+const POKER_AUDIT_STEP_MS = 50;
+/** Ceiling on table steps spent waiting for the party's first decision. */
+const POKER_AUDIT_MAX_STEPS = 2000;
+/** The first regular's seat, clockwise from the player: always filled at a fresh table. */
+const POKER_AUDIT_INFO_SEAT = 1;
+
 const SAMPLE_CONFIRM = {
   message: 'Are you sure?',
   yesLabel: 'Yes',
@@ -1015,9 +1023,9 @@ function townOpeners(): Opener<Town>[] {
     menu(
       'prison-difficulty',
       (scene) => {
-        const door = scene['gameMap'].buildingEntries[0];
-        if (door === undefined) throw new Error('the town has no door to stand the picker on');
-        scene['pendingPrisonEntry'] = door;
+        const doors = scene['gameMap'].buildingEntries;
+        if (doors.length === 0) throw new Error('the town has no door to stand the picker on');
+        scene['pendingPrisonEntry'] = doors[0];
       },
       (scene) => {
         scene['pendingPrisonEntry'] = null;
@@ -1137,6 +1145,8 @@ section('the town (DungeonScene)');
 
 const { HumanPlayer } = await import('../src/creatures/HumanPlayer.js');
 const { CatPlayer } = await import('../src/creatures/CatPlayer.js');
+const { POKER_STAKES } = await import('../src/systems/casino/poker/pokerStakes.js');
+const { playUntilBust, playUntilGameOver } = await import('../src/dev/uiGallery/dialogs/poker.js');
 const { snapPlayer } = await import('../src/core/PlayerSnapshot.js');
 const { teachBoth } = await import('../src/core/CraftSkills.js');
 const { createMarketStock } = await import('../src/systems/market/MarketStock.js');
@@ -1266,6 +1276,17 @@ function interiorCases(): InteriorCase[] {
     club(scene).closeAll(scene.pm.active());
     scene['conversation'].close();
   };
+  /** Seats the party at the penny table, with a rebuy's worth left in the purse. */
+  const seatAtPoker = (scene: Interior) => {
+    const poker = club(scene)['poker'];
+    const active = scene.pm.active();
+    active.coins += POKER_STAKES.penny.buyIn * POKER_AUDIT_BUY_INS;
+    poker.buyIn('penny', active, scene.pm.inactive());
+    poker.dismissRules();
+    const table = poker.pokerTable;
+    if (table === null) throw new Error('the poker table did not seat the party');
+    return { poker, table };
+  };
   return [
     {
       label: 'General Store',
@@ -1344,6 +1365,54 @@ function interiorCases(): InteriorCase[] {
             const casino = club(scene)['casino'];
             casino.openTable(scene.pm.active(), scene.pm.inactive());
             casino.dismissRules();
+          },
+          closeClub,
+        ),
+        menu(
+          'casino-game-picker',
+          (scene) => {
+            club(scene)['gamePickerOpen'] = true;
+          },
+          closeClub,
+        ),
+        menu('poker-buy-in', (scene) => club(scene)['poker'].openBuyIn(), closeClub),
+        menu('poker-table', (scene) => void seatAtPoker(scene), closeClub),
+        menu('poker-rules', (scene) => seatAtPoker(scene).poker.openRules(), closeClub),
+        menu('poker-history', (scene) => seatAtPoker(scene).poker.openHistory(), closeClub),
+        menu(
+          'poker-seat-info',
+          (scene) => {
+            const { poker } = seatAtPoker(scene);
+            if (!poker.openSeatInfo(POKER_AUDIT_INFO_SEAT)) {
+              throw new Error('the poker table had nobody to open a seat card on');
+            }
+          },
+          closeClub,
+        ),
+        menu(
+          'poker-leave-confirm',
+          (scene) => {
+            const { poker, table } = seatAtPoker(scene);
+            for (let step = 0; step < POKER_AUDIT_MAX_STEPS && !table.awaitingPlayer; step++) {
+              table.update(POKER_AUDIT_STEP_MS);
+            }
+            poker.requestLeave(scene.pm.active());
+          },
+          closeClub,
+        ),
+        menu(
+          'poker-bust',
+          (scene) => {
+            const { table } = seatAtPoker(scene);
+            if (!playUntilBust(table)) throw new Error('the poker table never busted the party');
+          },
+          closeClub,
+        ),
+        menu(
+          'poker-game-over',
+          (scene) => {
+            const { table } = seatAtPoker(scene);
+            if (!playUntilGameOver(table)) throw new Error('the poker game never ended');
           },
           closeClub,
         ),

@@ -1,7 +1,7 @@
 /**
  * Which pictures the Desperado Club's furniture sheets carry.
  *
- * Ten families, each one sheet whose single `idle` row holds its *variants* as
+ * Eleven families, each one sheet whose single `idle` row holds its *variants* as
  * frames, so a layout picks a counter or a stool by frame index and the club
  * stops reading as five copies of the same prop. Everything is painted by one
  * club engine (`src/sprites/art/clubFurnitureArt.ts`).
@@ -22,6 +22,7 @@ import {
   drawMarketBackdrop,
   drawMarketStall,
   drawMercDesk,
+  drawPokerTable,
   drawVelvetRope,
   drawVipCounter,
   drawWeaponRack,
@@ -123,6 +124,14 @@ const FAMILIES: ReadonlyArray<ClubFamily> = [
     headroomTiles: COUNTER_HEADROOM_TILES,
     variants: 2,
     draw: drawCasinoTable,
+  },
+  {
+    key: 'club_poker_table',
+    file: 'poker_table.png',
+    widthTiles: 2,
+    headroomTiles: COUNTER_HEADROOM_TILES,
+    variants: 2,
+    draw: drawPokerTable,
   },
   {
     key: 'club_vip_counter',

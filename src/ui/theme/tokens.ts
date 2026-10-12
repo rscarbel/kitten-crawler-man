@@ -73,6 +73,14 @@ export const palette = {
     chipBlue: '#2F6FD6',
     chipBlack: '#20232B',
     chipWhite: '#ECEFF4',
+    chipGreen: '#2E9E5B',
+    chipOrange: '#E8822E',
+    chipPurple: '#7C4BC9',
+    chipPink: '#D9508F',
+    chipTeal: '#1FA3A0',
+    chipSilver: '#BCC4D0',
+    /** The poker table's padded rail: dark leather round the felt. */
+    rail: '#3A2416',
   },
 } as const;
 

@@ -25,6 +25,14 @@ export interface StepperOptions {
   readonly large?: boolean;
   /** Show the Max button. Defaults to true. */
   readonly max?: boolean;
+  /** What the − and + buttons step by. Defaults to {@link QUANTITY_STEP_SMALL}. */
+  readonly step?: number;
+  /** What a held − or + repeats by, when holding should move in bigger strides than a tap. */
+  readonly holdStep?: number;
+  /** Height of the buttons and the value field. Defaults to the theme's control height. */
+  readonly height?: number;
+  /** How the value field shows the value, e.g. with thousands separators. */
+  readonly format?: (value: number) => string;
 }
 
 /** Narrowest the value field gets; the ±10 buttons are dropped before it shrinks below this. */
@@ -80,16 +88,17 @@ interface StepButton {
 function stepButtons(
   large: boolean,
   withMax: boolean,
+  small: number,
 ): { before: StepButton[]; after: StepButton[] } {
   return {
     before: [
       ...(large
         ? [{ id: 'minus10', label: `−${QUANTITY_STEP_LARGE}`, delta: -QUANTITY_STEP_LARGE }]
         : []),
-      { id: 'minus1', label: '', icon: 'minus', delta: -QUANTITY_STEP_SMALL },
+      { id: 'minus1', label: '', icon: 'minus', delta: -small },
     ],
     after: [
-      { id: 'plus1', label: '', icon: 'plus', delta: QUANTITY_STEP_SMALL },
+      { id: 'plus1', label: '', icon: 'plus', delta: small },
       ...(large
         ? [{ id: 'plus10', label: `+${QUANTITY_STEP_LARGE}`, delta: QUANTITY_STEP_LARGE }]
         : []),
@@ -102,16 +111,17 @@ export function stepper(ui: Ui, rect: Rect, opts: StepperOptions): void {
   const { theme, ctx } = ui;
   const { palette, radius, space, size } = theme;
   const state = opts.state;
-  const side = size.control;
+  const side = opts.height ?? size.control;
   const withMax = opts.max !== false;
+  const small = opts.step ?? QUANTITY_STEP_SMALL;
   const stepWidth = (b: StepButton): number =>
     b.label === '' ? side : Math.max(side * WIDE_STEP_SCALE, measureButton(ui, { label: b.label }));
   const fixedWidth = (list: readonly StepButton[]): number =>
     list.reduce((sum, b) => sum + stepWidth(b) + space.xs, 0);
-  const largeLayout = stepButtons(true, withMax);
+  const largeLayout = stepButtons(true, withMax, small);
   const roomWithLarge = rect.w - fixedWidth([...largeLayout.before, ...largeLayout.after]);
   const showLarge = opts.large !== false && roomWithLarge >= MIN_VALUE_WIDTH;
-  const { before, after } = showLarge ? largeLayout : stepButtons(false, withMax);
+  const { before, after } = showLarge ? largeLayout : stepButtons(false, withMax, small);
   const tracks: Track[] = [...before.map(stepWidth), 'fill', ...after.map(stepWidth)];
   const row: Rect = { x: rect.x, y: rect.y + (rect.h - side) / 2, w: rect.w, h: side };
   const cells = splitH(row, tracks, space.xs);
@@ -153,8 +163,9 @@ export function stepper(ui: Ui, rect: Rect, opts: StepperOptions): void {
       held < HOLD_REPEAT_DELAY_MS
         ? 0
         : Math.floor((held - HOLD_REPEAT_DELAY_MS) / HOLD_REPEAT_INTERVAL_MS) + 1;
+    const repeatDelta = opts.holdStep === undefined ? b.delta : Math.sign(b.delta) * opts.holdStep;
     while (hold.repeats < due) {
-      state.stepBy(b.delta);
+      state.stepBy(repeatDelta);
       hold.repeats++;
     }
   };
@@ -179,7 +190,7 @@ export function stepper(ui: Ui, rect: Rect, opts: StepperOptions): void {
     state.focused ? FOCUSED_BORDER_WIDTH : BORDER_WIDTH,
   );
   const drawn = tabularNumber(ui, valueRect, {
-    value: state.value,
+    value: opts.format === undefined ? state.value : opts.format(state.value),
     role: 'title',
     align: 'center',
   });

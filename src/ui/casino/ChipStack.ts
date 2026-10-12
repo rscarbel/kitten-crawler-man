@@ -12,13 +12,14 @@
  */
 
 import { CHIP_DENOMINATIONS, type ChipDenomination } from '../../systems/casino/BlackjackTable';
+import { chipDenominations, type PokerTierId } from '../../systems/casino/poker/pokerStakes';
 import { darken, withAlpha } from '../theme/color';
 import { skinsFor } from '../theme/skins';
 import type { Theme } from '../theme/tokens';
 import type { PaintTarget } from '../widgets/paint';
 import { text } from '../widgets/text';
 
-interface ChipPalette {
+export interface ChipPalette {
   readonly face: string;
   readonly edge: string;
   readonly stripe: string;
@@ -91,6 +92,10 @@ export interface ChipDrawOpts {
   showLabel?: boolean;
   /** Lift shadow, for a chip in flight between the tray and the felt. */
   shadow?: boolean;
+  /** Colours to paint instead of the blackjack chip's, for a table with its own chip set. */
+  palette?: ChipPalette;
+  /** Text printed on the face instead of the bare denomination. */
+  label?: string;
 }
 
 /** One chip lying face-up, centred on (cx, cy), `radius` being its half-width. */
@@ -103,7 +108,7 @@ export function drawChip(
   opts: ChipDrawOpts = {},
 ): void {
   const { ctx, theme } = target;
-  const palette = chipPalette(theme, denomination);
+  const palette = opts.palette ?? chipPalette(theme, denomination);
   const ry = radius * CHIP_SQUASH;
 
   ctx.save();
@@ -178,7 +183,7 @@ export function drawChip(
       target,
       { x: cx - radius, y: cy - size * HALF, w: radius * 2, h: size },
       {
-        text: `${denomination}`,
+        text: opts.label ?? `${denomination}`,
         style: { size, weight: CHIP_LABEL_WEIGHT, lineHeight: size },
         color: palette.label,
         align: 'center',
@@ -254,4 +259,90 @@ export function drawEmptyTrayOutline(
   ctx.ellipse(cx, baseY, radius, radius * CHIP_SQUASH, 0, 0, TWO_PI);
   ctx.stroke();
   ctx.restore();
+}
+
+/** One chip of a poker stack: its value and which of the tier's four colours it wears. */
+export interface PokerChip {
+  readonly value: number;
+  readonly colourIndex: number;
+}
+
+const THOUSAND = 1000;
+const THOUSANDS_SUFFIX = 'K';
+
+/** "25", "250", "2.5K", "10K": a chip face has room for three or four characters. */
+export function chipFaceLabel(value: number): string {
+  if (value < THOUSAND) return `${value}`;
+  return `${value / THOUSAND}${THOUSANDS_SUFFIX}`;
+}
+
+const pokerPaletteCache = new WeakMap<Theme, Map<string, ChipPalette>>();
+
+/** The colours of the `colourIndex`th chip value at a poker tier, smallest value first. */
+export function pokerChipPalette(
+  theme: Theme,
+  tier: PokerTierId,
+  colourIndex: number,
+): ChipPalette {
+  let cache = pokerPaletteCache.get(theme);
+  if (cache === undefined) {
+    cache = new Map();
+    pokerPaletteCache.set(theme, cache);
+  }
+  const key = `${tier}/${colourIndex}`;
+  const cached = cache.get(key);
+  if (cached !== undefined) return cached;
+  const set = skinsFor(theme).pokerChips[tier];
+  const face = set[Math.max(0, Math.min(set.length - 1, colourIndex))];
+  const palette: ChipPalette = {
+    face: face.face,
+    edge: darken(face.face, CHIP_EDGE_DARKEN),
+    stripe: skinsFor(theme).casinoChip.stripe,
+    label: face.label,
+  };
+  cache.set(key, palette);
+  return palette;
+}
+
+/**
+ * `amount` broken greedily into a poker tier's chips, largest at the bottom,
+ * capped at `maxChips`; the amount printed beside the stack carries whatever
+ * the cap leaves out. Any remainder smaller than the smallest chip shows as one
+ * smallest chip, so a non-zero bet never draws as an empty spot.
+ */
+export function pokerChips(amount: number, tier: PokerTierId, maxChips: number): PokerChip[] {
+  const values = chipDenominations(tier);
+  const chips: PokerChip[] = [];
+  let left = amount;
+  for (let index = values.length - 1; index >= 0; index--) {
+    while (left >= values[index] && chips.length < maxChips) {
+      chips.push({ value: values[index], colourIndex: index });
+      left -= values[index];
+    }
+  }
+  if (chips.length === 0 && amount > 0) chips.push({ value: values[0], colourIndex: 0 });
+  return chips;
+}
+
+/** A poker stack standing on `baseY`; only the top chip is labelled. */
+export function drawPokerChipStack(
+  target: PaintTarget,
+  cx: number,
+  baseY: number,
+  radius: number,
+  tier: PokerTierId,
+  chips: ReadonlyArray<PokerChip>,
+  opts: { readonly alpha?: number; readonly shadow?: boolean; readonly labelTop?: boolean } = {},
+): void {
+  const step = radius * CHIP_STACK_STEP;
+  chips.forEach((chip, index) => {
+    const top = index === chips.length - 1 && opts.labelTop !== false;
+    drawChip(target, cx, baseY - index * step, radius, chip.value, {
+      alpha: opts.alpha,
+      shadow: opts.shadow === true && index === 0,
+      palette: pokerChipPalette(target.theme, tier, chip.colourIndex),
+      showLabel: top,
+      label: chipFaceLabel(chip.value),
+    });
+  });
 }

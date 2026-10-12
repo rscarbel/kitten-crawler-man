@@ -202,6 +202,8 @@
     "verify:difficulty": "tsx scripts/verify-difficulty.ts",
     "verify:difficulty-guard": "tsx scripts/verify-difficulty-guard.ts",
     "verify:xp-split": "tsx scripts/verify-xp-split.ts",
+    "verify:poker": "tsx scripts/verify-poker.ts",
+    "report:poker-tendencies": "tsx scripts/report-poker-tendencies.ts",
     "verify:doomsday": "tsx scripts/verify-doomsday.ts",
     "verify:fairies": "tsx scripts/verify-fairies.ts",
     "verify:floor-sweep": "tsx scripts/gates-floor-seed-sweep.ts",

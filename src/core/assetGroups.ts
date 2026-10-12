@@ -91,6 +91,7 @@ export const ASSET_GROUPS: Readonly<Record<AssetGroup, readonly SpriteKey[]>> = 
     'club_market_backdrop',
     'club_market_stall',
     'club_merc_desk',
+    'club_poker_table',
     'club_velvet_rope',
     'club_vip_counter',
     'club_weapon_rack',

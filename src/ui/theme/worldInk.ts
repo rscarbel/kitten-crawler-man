@@ -9,7 +9,7 @@
  * entry here, never an inline colour at the call site.
  */
 
-import { WORLD_FONT_STACK } from './fonts';
+import { UI_FONT_STACK, WORLD_FONT_STACK } from './fonts';
 
 export const worldPalette = {
   ink: {
@@ -25,6 +25,8 @@ export const worldPalette = {
     ability: '#c084fc',
     human: '#93c5fd',
     cat: '#fb923c',
+    /** The muted brass the casino rules sheets caption their illustrations in. */
+    rulesCaption: '#9a8c68',
   },
   /** The dark edge every world label is stroked with so it reads on any tile. */
   outline: 'rgba(0,0,0,0.9)',
@@ -350,6 +352,22 @@ export const WORLD_TEXT = {
     bold: true,
     color: worldPalette.prison.suspicion,
     outline: true,
+  }),
+  /**
+   * The line under a casino rules-sheet illustration, blackjack's and poker's
+   * alike: muted brass in the panel's own face.
+   */
+  rulesCaption: style({
+    size: 12,
+    color: worldPalette.ink.rulesCaption,
+    family: UI_FONT_STACK,
+  }),
+  /** A hand's name beside or under its cards on the poker rules sheet. */
+  rulesLabel: style({
+    size: 13,
+    bold: true,
+    color: worldPalette.ink.primary,
+    family: UI_FONT_STACK,
   }),
   /** A sound written into an explainer's illustration: "THUD". */
   soundWord: style({ size: 12, bold: true, color: worldPalette.ink.secondary, outline: true }),

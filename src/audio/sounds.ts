@@ -69,6 +69,10 @@ const SOUND_IDS_TUPLE = [
   'calf_moo_3',
   'candle_stand_topple_1',
   'candle_stand_topple_2',
+  'casino_background_jazz_1',
+  'casino_background_jazz_2',
+  'casino_background_jazz_3',
+  'casino_background_jazz_4',
   'casino_blackjack_check',
   'casino_chips_bet_big',
   'casino_chips_bet_small',
@@ -564,6 +568,10 @@ export const SOUND_MANIFEST: Record<SoundId, string> = {
   calf_moo_3: './src/audio/characters/cow/calf_moo_3.mp3',
   candle_stand_topple_1: './src/audio/effects/interior/candle_stand_topple_1.mp3',
   candle_stand_topple_2: './src/audio/effects/interior/candle_stand_topple_2.mp3',
+  casino_background_jazz_1: './src/audio/background_music/casino_background_jazz_1.mp3',
+  casino_background_jazz_2: './src/audio/background_music/casino_background_jazz_2.mp3',
+  casino_background_jazz_3: './src/audio/background_music/casino_background_jazz_3.mp3',
+  casino_background_jazz_4: './src/audio/background_music/casino_background_jazz_4.mp3',
   casino_blackjack_check: './src/audio/casino/blackjack_check.mp3',
   casino_chips_bet_big: './src/audio/casino/chips_bet_big.mp3',
   casino_chips_bet_small: './src/audio/casino/chips_bet_small.mp3',
@@ -1008,6 +1016,14 @@ export const CLUB_MUSIC_TRACKS: ReadonlyArray<SoundId> = [
   'desperado_club_4',
 ];
 
+/** The casino's jazz set, played as a shuffled, looping playlist while a game table is open. */
+export const CASINO_MUSIC_TRACKS: ReadonlyArray<SoundId> = [
+  'casino_background_jazz_1',
+  'casino_background_jazz_2',
+  'casino_background_jazz_3',
+  'casino_background_jazz_4',
+];
+
 /** The town's rotating soundtrack — reshuffled each time the player walks back into the safe zone. */
 export const TOWN_MUSIC_TRACKS: ReadonlyArray<SoundId> = ['town_music_1', 'town_music_2'];
 
@@ -1044,6 +1060,10 @@ export const STREAMING_SOUND_IDS: ReadonlySet<SoundId> = new Set<SoundId>([
   'briar_hollow_theme',
   'briar_hollow_victory',
   'building_default_music_1',
+  'casino_background_jazz_1',
+  'casino_background_jazz_2',
+  'casino_background_jazz_3',
+  'casino_background_jazz_4',
   'circus_battle',
   'circus_theme',
   'defense_quest_music',

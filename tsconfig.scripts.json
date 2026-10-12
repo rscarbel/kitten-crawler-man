@@ -230,6 +230,8 @@
     "scripts/verify-difficulty.ts",
     "scripts/verify-difficulty-curve.ts",
     "scripts/verify-xp-split.ts",
+    "scripts/verify-poker.ts",
+    "scripts/report-poker-tendencies.ts",
     "scripts/verify-tactics.ts",
     "scripts/tacticsSections/ranged.ts",
     "scripts/tacticsSections/special.ts",

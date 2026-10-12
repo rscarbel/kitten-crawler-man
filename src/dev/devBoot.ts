@@ -27,6 +27,7 @@ import { JuicerPreviewScene } from '../scenes/JuicerPreviewScene';
 import { StatusPreviewScene } from '../scenes/StatusPreviewScene';
 import { FairyPreviewScene } from '../scenes/FairyPreviewScene';
 import { CasinoPreviewScene } from '../scenes/CasinoPreviewScene';
+import { PokerPreviewScene } from '../scenes/PokerPreviewScene';
 import { KeyboardHeroPreviewScene } from '../scenes/KeyboardHeroPreviewScene';
 import { PipeBoardPreviewScene } from '../scenes/PipeBoardPreviewScene';
 import { TownMapScene } from '../scenes/TownMapScene';
@@ -400,6 +401,11 @@ export function devBootScene(
 
   if (params.get('casino') !== null) {
     sceneManager.replace(new CasinoPreviewScene());
+    return true;
+  }
+
+  if (params.get('poker') !== null) {
+    sceneManager.replace(new PokerPreviewScene());
     return true;
   }
 

@@ -96,6 +96,11 @@ export const CLUB_PROPS: ReadonlyArray<ClubProp> = [
   { sprite: 'club_casino_table', variant: 0, tile: { x: 19, y: 5 }, solid: true },
   { sprite: 'club_bar_stool', variant: 1, tile: { x: 18, y: 6 }, solid: false },
   { sprite: 'club_bar_stool', variant: 2, tile: { x: 22, y: 6 }, solid: false },
+  // Tucked into the corner between the divider and the shelf, rising into the
+  // corner tile itself: one row lower would wall that tile off as floor nobody
+  // can reach. The x18 aisle the player walks to the blackjack rail stays open
+  // below it, and the rest of the back row is reached down the x22 aisle.
+  { sprite: 'club_poker_table', variant: 0, tile: { x: 18, y: 2 }, solid: true },
 
   // ── The Market — awninged back stall, the vendor's row, the produce counter ──
   { sprite: 'club_market_backdrop', variant: 0, tile: { x: 2, y: 13 }, solid: true },

@@ -4,6 +4,7 @@
  */
 
 import { worldText } from '../../world/worldText';
+import { WORLD_TEXT } from '../../theme/worldInk';
 import type { Card } from '../../../systems/casino/Deck';
 import { CARD_ASPECT, drawCardBack, drawCardFace } from '../../casino/PlayingCard';
 import { drawChipStack } from '../../casino/ChipStack';
@@ -17,8 +18,8 @@ import { RESHUFFLE_THRESHOLD } from '../../../systems/casino/Deck';
 
 const ILLUSTRATION_CARD_WIDTH_FRACTION = 0.6;
 const ILLUSTRATION_GAP = 12;
-const ILLUSTRATION_CAPTION_SIZE = 10;
-const CAPTION_COLOR = '#9a8c68';
+/** The caption's size, from the rules sheets' shared caption style. */
+const ILLUSTRATION_CAPTION_SIZE = WORLD_TEXT.rulesCaption.size;
 const HALF = 0.5;
 
 export type BlackjackIllustrationKind =
@@ -190,10 +191,9 @@ export function drawBlackjackIllustration(
   }
 
   worldText(ctx, spec.caption, {
+    style: 'rulesCaption',
     x: x + width * HALF,
     y: captionY,
-    size: ILLUSTRATION_CAPTION_SIZE,
-    color: CAPTION_COLOR,
     align: 'center',
   });
 }

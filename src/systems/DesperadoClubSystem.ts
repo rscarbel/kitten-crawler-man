@@ -1,6 +1,7 @@
 import { TILE_SIZE } from '../core/constants';
 import type { Player } from '../Player';
 import type { AudioManager } from '../audio/AudioManager';
+import { CASINO_MUSIC_TRACKS, CLUB_MUSIC_TRACKS } from '../audio/sounds';
 import type { ClubMembership } from '../core/ClubMembership';
 import type { MercenaryRoster } from '../core/MercenaryRoster';
 import type { AchievementManager, AchievementId } from '../core/AchievementManager';
@@ -40,6 +41,12 @@ import { drawClubDecor } from '../sprites/clubDecor';
 import { ShopSystem, type ShopConfig } from './ShopSystem';
 import { CLUB_BAR_PRICING, CLUB_MARKET_PRICING } from './market/shopProfiles';
 import { ClubCasinoSystem, type CasinoSeat } from './ClubCasinoSystem';
+import { ClubPokerSystem, POKER_MIN_BUY_IN } from './ClubPokerSystem';
+import { TABLE_MAXIMUM, TABLE_MINIMUM } from './casino/BlackjackTable';
+import { POKER_DEV_SEED } from './casino/poker/npc/personality';
+import { canAffordCoins } from '../core/partyCoins';
+import { casinoGamePickerSurface } from '../ui/screens/dialogs/casinoGamePicker';
+import type { ToastTone } from '../ui/hud/toasts';
 import type { Surface } from '../ui/core/UiRoot';
 import { keybindings } from '../core/Keybindings';
 import { shopScreenSurface } from '../ui/screens/shop/ShopScreen';
@@ -56,6 +63,9 @@ import { worldPalette } from '../ui/theme/worldInk';
 export const DESPERADO_MARKET_VENDOR_ID = 'desperado_market';
 
 const STATION_INTERACT_RANGE = 2.6;
+/** Stop-then-start with overlapping ramps reads as a crossfade between the club set and the jazz set. */
+const CASINO_MUSIC_FADE_OUT_MS = 600;
+const CASINO_MUSIC_FADE_IN_MS = 800;
 /**
  * `animTime` counts frames, but the dealer sprite times its motion in real
  * milliseconds so the two renderings of Deuce move at the same speed.
@@ -247,6 +257,15 @@ const CLUB_MARKET_SURFACE_ID = 'club-market-shop';
 const CLUB_VIP_SURFACE_ID = 'club-vip';
 const CLUB_GUILD_SURFACE_ID = 'club-guild';
 const CLUB_GUILD_DISMISS_SURFACE_ID = 'club-guild-dismiss';
+const CASINO_GAME_PICKER_SURFACE_ID = 'casino-game-picker';
+const POKER_BUY_IN_SURFACE_ID = 'poker-buy-in';
+const POKER_TABLE_SURFACE_ID = 'poker-table';
+const POKER_RULES_SURFACE_ID = 'poker-rules';
+const POKER_HISTORY_SURFACE_ID = 'poker-history';
+const POKER_SEAT_INFO_SURFACE_ID = 'poker-seat-info';
+const POKER_BUST_SURFACE_ID = 'poker-bust';
+const POKER_GAME_OVER_SURFACE_ID = 'poker-game-over';
+const POKER_LEAVE_CONFIRM_SURFACE_ID = 'poker-leave-confirm';
 /** The full-screen press layer of {@link DesperadoClubSystem.clarabelleSurface}. */
 const CLARABELLE_PRESS_REGION_ID = 'clarabelle-press';
 
@@ -263,7 +282,7 @@ export const CLUB_STATION_SURFACE_IDS: readonly string[] = [
 function promptLabel(station: ClubStation): string {
   if (station.id === 'clarabelle') return 'Talk';
   if (station.id === 'bar' || station.id === 'market') return 'Shop';
-  if (station.id === 'casino') return 'Play Blackjack';
+  if (station.id === 'casino') return 'Play Cards';
   if (station.id === 'mercenary') return 'Hire';
   return 'Enter';
 }
@@ -288,6 +307,9 @@ export class DesperadoClubSystem {
   private readonly barShop: ShopSystem;
   private readonly marketShop: ShopSystem;
   private readonly casino: ClubCasinoSystem;
+  private readonly poker: ClubPokerSystem;
+  /** The casino's "which game?" question is up. */
+  private gamePickerOpen = false;
   private readonly guild: MercenaryGuildSystem;
   private readonly vip: ClubVipLoungeSystem;
 
@@ -311,6 +333,14 @@ export class DesperadoClubSystem {
 
   /** Passed straight through from the casino's own `onWinnings` — see there for the flight's origin and timing. */
   onCasinoWinnings: ((coins: number, screenX: number, screenY: number) => void) | null = null;
+  /** A casino notice for the scene's toasts, such as the poker cash-out. */
+  onCasinoNotice: ((message: string, tone: ToastTone) => void) | null = null;
+
+  /**
+   * Edge-triggered rather than per surface, so moving between casino surfaces
+   * in one sitting never restarts the jazz.
+   */
+  private casinoMusicActive = false;
 
   constructor(
     map: GameMap,
@@ -323,6 +353,7 @@ export class DesperadoClubSystem {
     marketStock: MarketStock,
     private readonly humanAchievements?: AchievementManager,
     private readonly catAchievements?: AchievementManager,
+    worldSeed: number = POKER_DEV_SEED,
   ) {
     this.crowd = new ClubCrowdSystem(map);
     this.barShop = new ShopSystem(CLUB_INTERIOR_W, BAR_SHOP_CONFIG, {
@@ -333,6 +364,16 @@ export class DesperadoClubSystem {
     this.casino = new ClubCasinoSystem(audio, membership);
     this.casino.onWinnings = (coins, screenX, screenY) =>
       this.onCasinoWinnings?.(coins, screenX, screenY);
+    this.poker = new ClubPokerSystem(
+      audio,
+      worldSeed,
+      () => performance.now(),
+      Math.random,
+      membership,
+    );
+    this.poker.onWinnings = (coins, screenX, screenY) =>
+      this.onCasinoWinnings?.(coins, screenX, screenY);
+    this.poker.onNotice = (message, tone) => this.onCasinoNotice?.(message, tone);
     this.guild = new MercenaryGuildSystem(roster, audio);
     this.vip = new ClubVipLoungeSystem(audio, roster);
     prewarmClarabelle();
@@ -354,9 +395,9 @@ export class DesperadoClubSystem {
     this.catAchievements?.tryUnlock(id);
   }
 
-  /** Coins staked at the casino since entering the club — the free-security perk hook. */
+  /** Coins staked at either casino game since entering the club — the free-security perk hook. */
   get coinsWageredThisVisit(): number {
-    return this.casino.coinsWageredThisVisit;
+    return this.casino.coinsWageredThisVisit + this.poker.coinsWageredThisVisit;
   }
 
   /** Whether the shared conversation is currently showing one of Clarabelle's lines, rather than someone else's. */
@@ -421,11 +462,50 @@ export class DesperadoClubSystem {
     ];
   }
 
+  /**
+   * The game picker and every poker surface: the buy-in, the table, the hand
+   * history, a seat's card, the rules sheet, the bust prompt and the leave
+   * confirm. All are modal, and surfaces in one band stack in the order they
+   * open, so whichever opened last sits on top.
+   */
+  pokerSurfaces(seat: CasinoSeat): Surface[] {
+    return [
+      casinoGamePickerSurface({
+        id: CASINO_GAME_PICKER_SURFACE_ID,
+        isOpen: () => this.gamePickerOpen,
+        minPokerBuyIn: POKER_MIN_BUY_IN,
+        blackjackBets: { min: TABLE_MINIMUM, max: TABLE_MAXIMUM },
+        canBuyIntoPoker: () => canAffordCoins(seat.active(), seat.companion(), POKER_MIN_BUY_IN),
+        onBlackjack: () => {
+          this.gamePickerOpen = false;
+          this.casino.openTable(seat.active(), seat.companion());
+        },
+        onPoker: () => {
+          this.gamePickerOpen = false;
+          this.poker.openBuyIn();
+        },
+        onClose: () => {
+          this.gamePickerOpen = false;
+        },
+      }),
+      this.poker.buyInSurface(POKER_BUY_IN_SURFACE_ID, seat),
+      this.poker.tableSurface(POKER_TABLE_SURFACE_ID, seat),
+      this.poker.historySurface(POKER_HISTORY_SURFACE_ID),
+      this.poker.seatInfoSurface(POKER_SEAT_INFO_SURFACE_ID),
+      this.poker.rulesSurface(POKER_RULES_SURFACE_ID),
+      this.poker.bustSurface(POKER_BUST_SURFACE_ID, seat),
+      this.poker.gameOverSurface(POKER_GAME_OVER_SURFACE_ID, seat),
+      this.poker.leaveConfirmSurface(POKER_LEAVE_CONFIRM_SURFACE_ID),
+    ];
+  }
+
   get modalOpen(): boolean {
     return (
       this.conversationOwned ||
       this.activeShop() !== null ||
       this.casino.open ||
+      this.gamePickerOpen ||
+      this.poker.anySurfaceOpen ||
       this.guild.open ||
       this.vip.open
     );
@@ -442,10 +522,12 @@ export class DesperadoClubSystem {
     // while this update runs — an open table routes through `tickOpenModals`
     // instead — so a missing companion here falls back to the active crawler alone.
     this.casino.update(active, companion ?? active);
+    this.poker.update();
     this.drainShopTrades();
     // Sub-panels freeze this update() while open, so pending achievement flags set
     // during a hire/win/hire-escort are consumed here once the panel closes.
     this.consumePendingUnlocks();
+    this.syncCasinoMusic();
   }
 
   /**
@@ -461,10 +543,29 @@ export class DesperadoClubSystem {
     this.marketShop.update();
     this.drainShopTrades();
     this.casino.update(active, companion);
+    this.poker.update();
     // A natural can settle while the panel is still open, and that panel can be
     // the last thing the player touches before leaving — so the flags are
     // drained here too, or the achievement is lost with the system.
     this.consumePendingUnlocks();
+    this.syncCasinoMusic();
+  }
+
+  private anyCasinoSurfaceOpen(): boolean {
+    return this.casino.open || this.gamePickerOpen || this.poker.anySurfaceOpen;
+  }
+
+  /**
+   * Runs from both `update` and `tickOpenModals`, because the interior scene
+   * calls only one of them on any frame depending on whether a modal is open.
+   */
+  private syncCasinoMusic(): void {
+    const casinoOpen = this.anyCasinoSurfaceOpen();
+    if (casinoOpen === this.casinoMusicActive) return;
+    this.casinoMusicActive = casinoOpen;
+    const tracks = casinoOpen ? CASINO_MUSIC_TRACKS : CLUB_MUSIC_TRACKS;
+    this.audio?.stopMusic(CASINO_MUSIC_FADE_OUT_MS);
+    this.audio?.playMusicPlaylist(tracks, { fadeInMs: CASINO_MUSIC_FADE_IN_MS });
   }
 
   /** Sounds whatever went over either counter since the last tick. */
@@ -597,7 +698,7 @@ export class DesperadoClubSystem {
    * stands beside. Returns whether the press was consumed, so a press with no
    * station in range can still fall through to whoever else is standing there.
    */
-  handleInteract(player: Player, companion: Player): boolean {
+  handleInteract(player: Player): boolean {
     if (this.conversationOwned) {
       this.conversation.advance();
       return true;
@@ -621,7 +722,7 @@ export class DesperadoClubSystem {
       return true;
     }
     if (station.id === 'casino') {
-      this.casino.openTable(player, companion);
+      this.gamePickerOpen = true;
       return true;
     }
     if (station.id === 'mercenary') {
@@ -666,8 +767,13 @@ export class DesperadoClubSystem {
     this.barShop.close();
     this.marketShop.close();
     if (this.casino.open) this.casino.close(player);
+    this.gamePickerOpen = false;
+    this.poker.forceClose(player);
     this.guild.close();
     this.vip.close();
+    // The overworld restores its own music on exit; starting the club set here
+    // would leak it onto the street.
+    this.casinoMusicActive = false;
     // No tick runs after a teardown to notice a flag a panel set on its way out
     // — and closing the casino can fast-forward a live hand into a natural.
     this.consumePendingUnlocks();
@@ -825,7 +931,7 @@ export class DesperadoClubSystem {
           tile.y * TILE_SIZE - camY,
           tileSize,
           this.animTime * MS_PER_FRAME,
-          this.casino.open,
+          this.casino.open || this.poker.tableOpen,
         ),
     };
   }
@@ -844,7 +950,7 @@ export class DesperadoClubSystem {
           tile.y * TILE_SIZE - camY,
           tileSize,
           this.animTime * MS_PER_FRAME,
-          this.casino.open,
+          this.casino.open || this.poker.tableOpen,
         ),
     };
   }

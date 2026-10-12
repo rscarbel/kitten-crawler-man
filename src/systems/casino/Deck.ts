@@ -1,6 +1,7 @@
 /**
- * The Desperado Club's blackjack shoe: one 52-card deck that never repeats a
- * card until it reshuffles.
+ * The Desperado Club's 52-card deck, shared by both card games: blackjack keeps
+ * one as a persistent shoe across rounds, while Texas Hold'em builds a fresh one
+ * for every hand. Either way a deck never repeats a card until it reshuffles.
  *
  * The deck holds all 52 cards permanently and tracks a draw *cursor* rather
  * than popping from a shrinking array. Popping and pushing back on reshuffle is
@@ -44,20 +45,20 @@ function orderedDeck(): Card[] {
 
 /**
  * Fisher–Yates in place. Mirrors `shuffleTracks` in `audio/AudioManager.ts` for
- * style consistency; randomness is `Math.random()` deliberately — the repo's
- * seeded generator is for things that must reproduce, and a shuffle must not.
+ * style consistency. Play always shuffles with `Math.random()` — a deal must not
+ * reproduce — and only headless verify scripts pass a seeded `random`.
  */
-function permute(cards: Card[]): void {
+function permute(cards: Card[], random: () => number): void {
   for (let i = cards.length - 1; i > 0; i--) {
-    const j = Math.floor(Math.random() * (i + 1));
+    const j = Math.floor(random() * (i + 1));
     [cards[i], cards[j]] = [cards[j], cards[i]];
   }
 }
 
 /** A fresh, shuffled 52-card shoe. */
-export function createShoe(): ShoeState {
+export function createShoe(random: () => number = Math.random): ShoeState {
   const cards = orderedDeck();
-  permute(cards);
+  permute(cards, random);
   return { cards, cursor: 0 };
 }
 
@@ -70,8 +71,8 @@ export class Deck {
     this.cursor = cursor;
   }
 
-  static fresh(): Deck {
-    return Deck.fromState(createShoe());
+  static fresh(random: () => number = Math.random): Deck {
+    return Deck.fromState(createShoe(random));
   }
 
   static fromState(state: ShoeState): Deck {
@@ -108,7 +109,7 @@ export class Deck {
 
   shuffle(): void {
     this.cursor = 0;
-    permute(this.cards);
+    permute(this.cards, Math.random);
   }
 }
 
