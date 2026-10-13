@@ -17,6 +17,7 @@ import { ResidentRows, type ResidentSpan } from './figure/residentRows';
 import type { FigureDef } from './figure/figureDef';
 import { figureFrameCount } from './figure/figureDef';
 import { CAT_SWIPE_FRAMES } from '../core/crawlerFormulas';
+import type { WorkingToolKind } from '../core/toolTiers';
 import {
   ACTION_FRAMES,
   BREAK_FRAMES,
@@ -28,6 +29,7 @@ import {
   IDLE_FRAMES,
   KO_FRAMES,
   WALK_FRAMES,
+  WORK_IMPACT_FRAME,
 } from './art/catFigure';
 import {
   MAGIC_MISSILE_EXPLOSION_FIGURE,
@@ -112,6 +114,17 @@ export type CatOneShot =
 /** Her work swings: a two-paw chop at wood and a two-paw pick at stone. */
 export type CatWorkSwing = Extract<CatOneShot, 'chop' | 'mine'>;
 
+/**
+ * Her work swing for each tool: a pick at stone and the striker's mallet both
+ * come down from overhead, everything else is chopped.
+ */
+export const CAT_WORK_SWING_OF_TOOL: Readonly<Record<WorkingToolKind, CatWorkSwing>> = {
+  axe: 'chop',
+  scythe: 'chop',
+  pickaxe: 'mine',
+  striker_mallet: 'mine',
+};
+
 const CAT_CAST_FRAMES = 24;
 const CAT_DANCE_FRAMES = 96;
 const CAT_LOOK_AROUND_FRAMES = 90;
@@ -132,6 +145,13 @@ const ONE_SHOT_DURATION: Record<CatOneShot, number> = {
   groom_paw: CAT_GROOM_FRAMES,
   groom_flank: CAT_GROOM_FRAMES,
 };
+
+/** Ticks her work swing plays for, start to finish. */
+export const CAT_WORK_SWING_DURATION_TICKS = ONE_SHOT_DURATION.mine;
+/** Ticks from the start of her work swing to the first tick its bite is on screen. */
+export const CAT_WORK_SWING_IMPACT_TICKS = Math.ceil(
+  (CAT_WORK_SWING_DURATION_TICKS * WORK_IMPACT_FRAME) / ACTION_FRAMES,
+);
 
 /** Idle breaks are cosmetic; anything else interrupts them the moment it fires. */
 const IDLE_BREAKS: readonly CatOneShot[] = ['look_around', 'groom_paw', 'groom_flank'];

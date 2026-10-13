@@ -44,6 +44,7 @@ import {
   type CatHeldDraw,
   type CatSpriteState,
   type CatState,
+  CAT_WORK_SWING_OF_TOOL,
 } from '../sprites/catSprite';
 import { catRowViewOf } from '../sprites/catViews';
 import { garmentOf } from '../sprites/garments/garments';
@@ -474,7 +475,7 @@ export class DonutPreviewScene extends PreviewScene {
       return look === null ? null : { look, phase: 0, hold };
     }
     const chosen = this.toolOption.tool;
-    const chosenSwing = chosen === null ? null : chosen.kind === 'pickaxe' ? 'mine' : 'chop';
+    const chosenSwing = chosen === null ? null : CAT_WORK_SWING_OF_TOOL[chosen.kind];
     const tool = chosen !== null && chosenSwing === hold ? chosen : ROW_PANE_TOOL[hold];
     const look = workingToolHeldVisual(tool);
     return look === null ? null : { look, phase: 0, hold };

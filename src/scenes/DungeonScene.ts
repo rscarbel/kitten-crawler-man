@@ -342,6 +342,7 @@ import {
   type CircusQuestProgress,
 } from '../core/CircusQuestProgress';
 import { CircusGroundsAmbience } from '../systems/circus/CircusGroundsAmbience';
+import { HighStrikerSystem } from '../systems/circus/HighStrikerSystem';
 import {
   captureMurderQuestProgress,
   createMurderQuestProgress,
@@ -1370,6 +1371,8 @@ export class DungeonScene extends GameplayScene {
    * elsewhere.
    */
   private circusAmbience: CircusGroundsAmbience | null = null;
+  /** The circus grounds' high striker, which a crawler can swing at for fun. Null off the grounds. */
+  private highStriker: HighStrikerSystem | null = null;
   /** The gathering kit's own checkpoint, taken and put back beside the village kit's. */
   private gatheringCheckpoint: GatheringCheckpoint | null = null;
   /** When the last world tap resolved, so a second one close behind it reads as the kit's double-tap gesture. */
@@ -2518,6 +2521,8 @@ export class DungeonScene extends GameplayScene {
       }
       this.circusAmbience =
         this.gameMap.circusGrounds === null ? null : new CircusGroundsAmbience();
+      this.highStriker =
+        this.gameMap.circusGrounds === null ? null : new HighStrikerSystem({ audio: this.audio });
       this.gathering = new GatheringKit({
         gameMap: this.gameMap,
         bus: this.bus,
@@ -3548,6 +3553,7 @@ export class DungeonScene extends GameplayScene {
     this.briarHollowKit?.dispose();
     this.gathering?.dispose();
     this.circusAmbience?.dispose();
+    this.highStriker?.dispose();
     this.fairies.dispose();
     this.fairyFireballs.dispose();
     this.dungeonLighting?.dispose();
@@ -4937,6 +4943,7 @@ export class DungeonScene extends GameplayScene {
    */
   private restoreFromCheckpoint(cp: LevelCheckpoint): void {
     this.audio?.stopSound('death_sequence');
+    this.highStriker?.abandonAll();
     this.stopHazardSoundsForRespawn();
     this.combat.deathScreen.reset();
     this.gameOver = false;
@@ -6175,7 +6182,14 @@ export class DungeonScene extends GameplayScene {
 
   /** Floats a SPACE prompt over the nearest interactive town prop, when actionable. */
   private renderPropPrompt(ctx: CanvasRenderingContext2D, camX: number, camY: number): void {
-    if (this.townProps === null && this.market === null && this.crawlerSigns === null) return;
+    if (
+      this.townProps === null &&
+      this.market === null &&
+      this.crawlerSigns === null &&
+      this.highStriker === null
+    ) {
+      return;
+    }
     if (
       this.noticeBoard?.isOpen === true ||
       this.marketPanel?.isOpen === true ||
@@ -6192,6 +6206,7 @@ export class DungeonScene extends GameplayScene {
     if (this.market?.renderPrompt(ctx, camX, camY, active) === true) return;
     if (this.bounty?.renderPrompt(ctx, camX, camY, active) === true) return;
     this.townProps?.renderPrompt(ctx, camX, camY, active);
+    if (this.highStriker?.renderPrompt(ctx, camX, camY, active) === true) return;
     if (this.signDialogTarget === null) this.crawlerSigns?.renderPrompt(ctx, camX, camY, active);
   }
 
@@ -7043,6 +7058,10 @@ export class DungeonScene extends GameplayScene {
       this.trySafeRoomPress(active);
       return;
     }
+    // Ahead of the hostile check: while a crawler's striker meter is up or
+    // their swing at it has yet to land, their press is the lock-in or
+    // nothing, never a punch.
+    if (this.highStriker?.claimPress(active) === true) return;
     if (this.tryInteractWithWorld(active, fromTap)) return;
     if (this.tutorial !== null && !this.tutorial.canAttack) return;
 
@@ -7168,6 +7187,9 @@ export class DungeonScene extends GameplayScene {
       return true;
     }
     if (this.townProps?.tryInteract(active) === true) {
+      return true;
+    }
+    if (this.highStriker?.tryInteract(active) === true) {
       return true;
     }
     if (this.crawlerSigns?.tryInteract(active) === true) {
@@ -7702,6 +7724,7 @@ export class DungeonScene extends GameplayScene {
         1 / FRAMES_PER_SECOND,
         isCircusResolvedStage(this.circusQuestProgress.stage),
       );
+      this.highStriker?.update(this.gameMap, this.gameplayHalted);
       this.townProps?.update();
       this.townDecor?.update();
       this.market?.update();
@@ -8006,6 +8029,7 @@ export class DungeonScene extends GameplayScene {
         this.briarHollowKit !== null ||
         this.gathering !== null ||
         this.circusAmbience !== null ||
+        this.highStriker !== null ||
         frontBeams.length > 0
           ? [
               ...(this.townPropRenderables ?? []),
@@ -8013,6 +8037,7 @@ export class DungeonScene extends GameplayScene {
               ...(this.briarHollowKit?.renderEntities() ?? []),
               ...(this.gathering?.renderEntities() ?? []),
               ...(this.circusAmbience?.renderEntities() ?? []),
+              ...(this.highStriker?.renderEntities() ?? []),
             ]
           : (this.townPropRenderables ?? undefined),
       gameOver: this.gameOver,
@@ -8119,6 +8144,7 @@ export class DungeonScene extends GameplayScene {
     this.briarHollowKit?.renderAbove(ctx, camX, camY);
     this.gathering?.renderAbove(ctx, camX, camY);
     this.circusAmbience?.renderAbove(ctx, camX, camY);
+    this.highStriker?.renderAbove(ctx, camX, camY);
     // Over the entities: a label spawned on a large body (a boss) would
     // otherwise rise out of sight behind its own sprite.
     this.combat.floatingText.render(ctx, camX, camY);
@@ -8240,10 +8266,19 @@ export class DungeonScene extends GameplayScene {
       const safeRoomSpeaker = safeRoomSpeakerFor(this.bopca, this.safeRoom, this.active());
       this.safeRoom.renderUI(ctx, camX, camY, this.active(), safeRoomSpeaker === 'bopca');
       this.bopca.renderUI(ctx, camX, camY, this.active(), safeRoomSpeaker === 'mordecai');
-      const pickupPromptShown = this.renderGroundPickupPrompt(ctx, camX, camY);
-      if (!pickupPromptShown) this.renderCitizenPrompt(ctx, camX, camY);
+      // Once no overlay owns the press, `claimPress` takes it at the striker
+      // ahead of everything else, so its lock-in prompt is drawn ahead of
+      // every check that could hide or replace it, and no other prompt offers
+      // a press it would not reach.
+      const strikerOwnsPress =
+        !this.overlayOpen &&
+        (this.highStriker?.renderLockPrompt(ctx, camX, camY, this.active()) === true ||
+          this.highStriker?.holdsCrawler(this.active()) === true);
+      const laterPromptsOutOfReach =
+        strikerOwnsPress || this.renderGroundPickupPrompt(ctx, camX, camY);
+      if (!laterPromptsOutOfReach) this.renderCitizenPrompt(ctx, camX, camY);
       this.bounty?.renderShadyOverlay(ctx, camX, camY, this.active());
-      if (!pickupPromptShown) {
+      if (!laterPromptsOutOfReach) {
         this.renderPropPrompt(ctx, camX, camY);
         if (!this.earlierSpaceLinkClaims(this.active())) {
           this.briarHollowKit?.renderPrompt(ctx, camX, camY, this.active());
@@ -8518,7 +8553,20 @@ export class DungeonScene extends GameplayScene {
     const humanMoveBlocked =
       this.tutorial !== null && !this.tutorial.canHumanMove && this.human.isActive;
     const inStall = this.cloggedBathroom.isStallVisitActive;
-    if (!this.spiderQuest.playerLocked && !inStall && !catMoveBlocked && !humanMoveBlocked) {
+    // A walk would carry the swinger off the striking spot and turn the blow
+    // off the pad before it lands.
+    const swingingAtStriker = this.highStriker?.holdsCrawler(player) === true;
+    const movementHeld =
+      this.spiderQuest.playerLocked ||
+      inStall ||
+      catMoveBlocked ||
+      humanMoveBlocked ||
+      swingingAtStriker;
+    // Only `applyMovement` writes `isMoving`, so a crawler held here keeps
+    // the last frame's: a direction key held as the hold began would leave
+    // them striding in place, footsteps and all.
+    if (movementHeld) player.isMoving = false;
+    if (!movementHeld) {
       // A dungeon wall is a wall seen from in front, the same as an interior's,
       // so a crawler walking south into one has to stop with their feet on the
       // last floor tile rather than planting their whole lower half on the
@@ -9004,6 +9052,8 @@ export class DungeonScene extends GameplayScene {
       )
     ) {
       this.gameOver = true;
+      // Nothing at the striker may land under the death screen or carry into the respawn.
+      this.highStriker?.abandonAll();
       difficultyStats.recordDeath();
       this.gameStats.recordDeath();
       this.barriers.cancelConstruct();

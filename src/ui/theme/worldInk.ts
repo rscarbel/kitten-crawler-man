@@ -104,6 +104,28 @@ export const worldPalette = {
   },
   /** The destination named over a crawler channelling a recall, in the recall bar's sky blue. */
   recallInk: '#e0f2fe',
+  /** The circus high striker's power meter and the verdict called out after a swing. */
+  highStriker: {
+    /** Below the ring zone: the greasepaint red of the striker's own ticks. */
+    meterFill: '#c0392b',
+    /** In the ring zone: the bell's brass, lit near white so the moment to strike cannot be missed. */
+    meterHotFill: '#ffe680',
+    meterHotGlow: '#ffd23f',
+    meterTrack: 'rgba(20,12,10,0.85)',
+    meterEdge: '#e8dcc0',
+    /** A fill drawn over a track already laid: no track of its own. */
+    clear: 'rgba(0,0,0,0)',
+    /** The ring zone, standing on the track from the ring line to the top at all times. */
+    ringZone: 'rgba(245,197,66,0.65)',
+    ringZoneEdge: '#f5c542',
+    /** The line across the meter where a swing starts ringing the bell. */
+    ringLine: '#fff4c2',
+    /** The lamp capping the meter: dark brass until the fill is in the ring zone, then lit. */
+    capOff: '#5a4a2a',
+    capOn: '#fff2a8',
+    rating: '#f1e3c4',
+    ratingTop: '#ffd54a',
+  },
   safeRoom: {
     /** Warm parchment, the safe rooms' own signage. */
     ink: '#f0e4c8',
@@ -369,6 +391,20 @@ export const WORLD_TEXT = {
     color: worldPalette.ink.primary,
     family: UI_FONT_STACK,
   }),
+  /** The high striker's verdict on a swing that fell short: "Crawler Fodder". */
+  strikerRating: style({
+    size: 11,
+    bold: true,
+    color: worldPalette.highStriker.rating,
+    outline: true,
+  }),
+  /** The verdict on a swing that rang the bell. */
+  strikerRatingTop: style({
+    size: 14,
+    bold: true,
+    color: worldPalette.highStriker.ratingTop,
+    outline: true,
+  }),
   /** A sound written into an explainer's illustration: "THUD". */
   soundWord: style({ size: 12, bold: true, color: worldPalette.ink.secondary, outline: true }),
 } as const satisfies Record<string, WorldTextStyle>;
@@ -427,6 +463,26 @@ export const WORLD_BAR = {
     borderWidth: 1,
     radius: SMALL_BAR_RADIUS,
   },
+  /** The high striker's power meter: its empty track and edge, laid under the ring zone and the fill. */
+  strikerMeterTrack: {
+    fill: worldPalette.highStriker.clear,
+    track: worldPalette.highStriker.meterTrack,
+    border: worldPalette.highStriker.meterEdge,
+    borderWidth: 1,
+    radius: SMALL_BAR_RADIUS,
+  },
+  /** The meter's fill below the ring zone. */
+  strikerMeterFill: {
+    fill: worldPalette.highStriker.meterFill,
+    track: worldPalette.highStriker.clear,
+    radius: SMALL_BAR_RADIUS,
+  },
+  /** The meter's fill inside the ring zone: strike now. */
+  strikerMeterHot: {
+    fill: worldPalette.highStriker.meterHotFill,
+    track: worldPalette.highStriker.clear,
+    radius: SMALL_BAR_RADIUS,
+  },
   structureHp: {
     fill: worldPalette.bar.structureHp,
     track: worldPalette.bar.structureTrack,
@@ -445,6 +501,26 @@ export interface WorldPlateStyle {
 }
 
 const CAPTION_RADIUS = 5;
+/** Half the meter lamp's size, so the lamp is round. */
+const STRIKER_CAP_RADIUS = 5;
+
+/**
+ * The high striker's power meter's measurements, in world pixels: wide enough
+ * to read the ring zone at a glance, its lamp a disc a little wider than the
+ * bar, and the glow and pulse the fill wears inside the zone.
+ */
+export const STRIKER_METER_LOOK = {
+  widthPx: 10,
+  capSizePx: STRIKER_CAP_RADIUS * 2,
+  /** The gap between the bar's top and the lamp's foot. */
+  capGapPx: 1,
+  ringLinePx: 2,
+  ringLineOverhangPx: 2,
+  hotGlowBlurPx: 14,
+  /** The in-zone glow swells and shrinks by this share of itself, this many times a second. */
+  hotPulseDepth: 0.45,
+  hotPulseHz: 6,
+} as const;
 const PLATE_BORDER_WIDTH = 1.5;
 
 export const WORLD_PLATE = {
@@ -461,6 +537,28 @@ export const WORLD_PLATE = {
     border: worldPalette.plate.pendingEdge,
     borderWidth: 1,
     radius: CAPTION_RADIUS,
+  },
+  /** The line across the high striker's meter where a swing starts ringing the bell. */
+  strikerRingLine: { fill: worldPalette.highStriker.ringLine },
+  /** The ring zone on the high striker's meter, from the ring line to the top. */
+  strikerRingZone: {
+    fill: worldPalette.highStriker.ringZone,
+    border: worldPalette.highStriker.ringZoneEdge,
+    borderWidth: 1,
+  },
+  /** The lamp capping the meter, unlit. */
+  strikerCapOff: {
+    fill: worldPalette.highStriker.capOff,
+    border: worldPalette.highStriker.meterEdge,
+    borderWidth: 1,
+    radius: STRIKER_CAP_RADIUS,
+  },
+  /** The lamp capping the meter, lit while the fill is in the ring zone. */
+  strikerCapOn: {
+    fill: worldPalette.highStriker.capOn,
+    border: worldPalette.highStriker.ringZoneEdge,
+    borderWidth: 1,
+    radius: STRIKER_CAP_RADIUS,
   },
   panel: {
     fill: worldPalette.plate.panelFill,

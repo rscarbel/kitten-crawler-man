@@ -65,6 +65,7 @@ const { StiltClown } = await import('../src/creatures/StiltClown');
 const { buildCircusSite, buildQuestRig, approachHeading } =
   await import('./verifyCircusGrounds/site.js');
 const { CircusGroundsAmbience } = await import('../src/systems/circus/CircusGroundsAmbience');
+const { HighStrikerSystem } = await import('../src/systems/circus/HighStrikerSystem');
 const { isCircusResolvedStage } = await import('../src/core/CircusQuestProgress');
 
 type CircusSite = Exclude<ReturnType<typeof buildCircusSite>, string>;
@@ -238,7 +239,9 @@ function renderSite(site: CircusSite, stage: CircusQuestStage): Canvas {
       draw: () => figure.render(ctx, camX, camY, TILE_SIZE),
     });
   }
-  for (const piece of ambience.renderEntities()) {
+  const highStriker = new HighStrikerSystem({ audio: null, clock: () => ambienceSeconds });
+  highStriker.update(site.map, false);
+  for (const piece of [...ambience.renderEntities(), ...highStriker.renderEntities()]) {
     draws.push({
       sortY: piece.y + TILE_SIZE,
       draw: () => piece.render(ctx, camX, camY, TILE_SIZE),

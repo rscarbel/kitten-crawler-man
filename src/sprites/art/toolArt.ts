@@ -17,7 +17,7 @@
 import {
   type ToolKind,
   type ToolTier,
-  type WorkingToolKind,
+  type ItemWorkingToolKind,
   TOOL_TIER_LOOKS,
 } from '../../core/toolTiers';
 import { mix, rgba } from './carlArt';
@@ -380,7 +380,7 @@ export const SCYTHE_DIMENSIONS = {
  * Paints any working tool in rig units into `ctx`'s current frame, the same
  * frame {@link paintTool} uses; the scythe ignores `tier`.
  */
-export function paintWorkingTool(ctx: Ctx, kind: WorkingToolKind, tier: ToolTier): void {
+export function paintWorkingTool(ctx: Ctx, kind: ItemWorkingToolKind, tier: ToolTier): void {
   if (kind === 'scythe') paintScythe(ctx);
   else paintTool(ctx, kind, tier);
 }

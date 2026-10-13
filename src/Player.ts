@@ -1907,6 +1907,19 @@ export abstract class Player implements AboveDarknessDrawer {
     return { stat, amount };
   }
 
+  /**
+   * Sets this character down at a world position with no stride across the
+   * gap: a scripted step to a spot is a placement, not ground walked, so
+   * nothing that paces a stride or a trail from displacement reads it.
+   */
+  placeAt(x: number, y: number): void {
+    this.x = x;
+    this.y = y;
+    this.isMoving = false;
+    this.actualMoveLastX = x;
+    this.actualMoveLastY = y;
+  }
+
   tickTimers() {
     this.advanceActionClock();
     if (this.freezeGraceFrames > 0) this.freezeGraceFrames--;

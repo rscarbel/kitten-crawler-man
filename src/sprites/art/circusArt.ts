@@ -55,6 +55,8 @@ import {
   FLAME_LAMP_MOUTH,
   FLAME_LAMP_MOUTH_HALF_WIDTH_TILES,
   FLAME_LAMP_TIE,
+  HIGH_STRIKER_BELL,
+  HIGH_STRIKER_PUCK,
   PAVILION_PEAK_HEIGHT_TILES,
   PAVILION_POLE_CAP_TILES,
   TICKET_BOOTH_BALLOON_TIE,
@@ -3704,8 +3706,6 @@ const STRIKER_BASE = { west: 0.1, east: 0.9, top: 0.16, lidDepth: 0.22 } as cons
 const STRIKER_MAST = { halfWidth: 0.09, bottom: 0.3, top: 3.42 } as const;
 const STRIKER_PAD = { west: 0.18, east: 0.46, top: 0.24 } as const;
 const STRIKER_TICK_PITCH = 0.22;
-const STRIKER_PUCK_UP = 1.46;
-const STRIKER_BELL = { up: 3.6, radius: 0.17 } as const;
 /** The mallet leans on the east of the base, head up, well inside its column. */
 const STRIKER_MALLET = {
   foot: { u: 0.86, up: 0.05 },
@@ -3715,10 +3715,16 @@ const STRIKER_MALLET = {
   handleWidth: 0.05,
 } as const;
 
+/**
+ * The high striker, less its two moving parts: the puck and the mallet are
+ * painted by {@link paintHighStrikerPuck} and {@link paintHighStrikerMallet}
+ * and drawn live over this frame, because a crawler picks the mallet up and
+ * the puck runs the mast's whole height.
+ */
 const paintHighStriker: CircusPainter = (ctx, frame, _variant, rng) => {
   const stage = stageFor(ctx, frame, RIM_POST);
   const { ts } = stage;
-  const u = RIM_POST.w / 2;
+  const u = HIGH_STRIKER_BELL.x;
   const base = rectAt(stage, STRIKER_BASE.west, STRIKER_BASE.east, 0, STRIKER_BASE.top);
   const baseLid = rectAt(
     stage,
@@ -3734,21 +3740,14 @@ const paintHighStriker: CircusPainter = (ctx, frame, _variant, rng) => {
     STRIKER_MAST.bottom,
     STRIKER_MAST.top,
   );
-  const bell = at(stage, u, STRIKER_BELL.up);
-  const bellRadius = STRIKER_BELL.radius * ts;
-  const mallet = malletGeometry(stage);
+  const bell = at(stage, u, HIGH_STRIKER_BELL.up);
+  const bellRadius = HIGH_STRIKER_BELL.radius * ts;
   paintRimShadow(stage, STRIKER_BASE.west, STRIKER_BASE.east, LAMP_SHADOW_UP);
   inkSilhouette(stage, (path) => {
     traceRect(path, base);
     traceRect(path, baseLid);
     traceRect(path, mast);
     traceBell(path, bell, bellRadius);
-    path.moveTo(mallet.handle[0].x, mallet.handle[0].y);
-    for (const point of mallet.handle) path.lineTo(point.x, point.y);
-    path.closePath();
-    path.moveTo(mallet.head[0].x, mallet.head[0].y);
-    for (const point of mallet.head) path.lineTo(point.x, point.y);
-    path.closePath();
   });
 
   paintFace(ctx, base, ROT_TIMBER, false);
@@ -3794,18 +3793,53 @@ const paintHighStriker: CircusPainter = (ctx, frame, _variant, rng) => {
     mast.h,
   );
   paintRunoff(ctx, mast, STRIKER_RUNS, rng);
-  const puck = rectAt(
-    stage,
-    u - STRIKER_PUCK_HALF,
-    u + STRIKER_PUCK_HALF,
-    STRIKER_PUCK_UP,
-    STRIKER_PUCK_UP + STRIKER_PUCK_HEIGHT,
-  );
-  paintFace(ctx, puck, BRASS, false);
 
   paintBell(ctx, bell, bellRadius);
 
-  // The mallet, its head blooded.
+  // Blood dried on the pad the mallet is brought down on.
+  fillSoftEllipse(
+    ctx,
+    pad.x + pad.w * STRIKER_PAD_STAIN_CENTRE,
+    pad.y + pad.h * STRIKER_PAD_STAIN_CENTRE,
+    pad.w * STRIKER_PAD_STAIN_WIDTH,
+    pad.h * STRIKER_PAD_STAIN_HEIGHT,
+    rgb(BLOOD.shadow),
+    STRIKER_BLOOD_ALPHA,
+  );
+};
+
+/**
+ * The high striker's brass puck at rest at the foot of its track, painted
+ * into a frame laid out as the striker's own sheet frame is.
+ */
+export function paintHighStrikerPuck(ctx: Ctx, frame: CircusFrame): void {
+  const stage = stageFor(ctx, frame, RIM_POST);
+  const puck = rectAt(
+    stage,
+    HIGH_STRIKER_PUCK.x - HIGH_STRIKER_PUCK.halfWidth,
+    HIGH_STRIKER_PUCK.x + HIGH_STRIKER_PUCK.halfWidth,
+    HIGH_STRIKER_PUCK.restUp,
+    HIGH_STRIKER_PUCK.restUp + HIGH_STRIKER_PUCK.height,
+  );
+  paintFace(ctx, puck, BRASS, false);
+}
+
+/**
+ * The high striker's mallet leaning on the east of its base, head up and
+ * blooded, painted into a frame laid out as the striker's own sheet frame is.
+ */
+export function paintHighStrikerMallet(ctx: Ctx, frame: CircusFrame): void {
+  const stage = stageFor(ctx, frame, RIM_POST);
+  const { ts } = stage;
+  const mallet = malletGeometry(stage);
+  inkSilhouette(stage, (path) => {
+    path.moveTo(mallet.handle[0].x, mallet.handle[0].y);
+    for (const point of mallet.handle) path.lineTo(point.x, point.y);
+    path.closePath();
+    path.moveTo(mallet.head[0].x, mallet.head[0].y);
+    for (const point of mallet.head) path.lineTo(point.x, point.y);
+    path.closePath();
+  });
   ctx.fillStyle = rgb(ROT_TIMBER.light);
   ctx.beginPath();
   for (const point of mallet.handle) ctx.lineTo(point.x, point.y);
@@ -3834,17 +3868,7 @@ const paintHighStriker: CircusPainter = (ctx, frame, _variant, rng) => {
     rgb(BLOOD.mid),
     1,
   );
-  // And blood dried on the pad it was brought down on.
-  fillSoftEllipse(
-    ctx,
-    pad.x + pad.w * 0.5,
-    pad.y + pad.h * 0.5,
-    pad.w * STRIKER_PAD_STAIN_WIDTH,
-    pad.h * STRIKER_PAD_STAIN_HEIGHT,
-    rgb(BLOOD.shadow),
-    STRIKER_BLOOD_ALPHA,
-  );
-};
+}
 const STRIKER_LONG_TICK = 0.7;
 const STRIKER_SHORT_TICK = 0.4;
 const STRIKER_TICK_HEIGHT = 0.03;
@@ -3852,8 +3876,6 @@ const STRIKER_CROWN = 0.24;
 const STRIKER_RAIL_AT = 0.72;
 const STRIKER_RAIL_WIDTH = 0.025;
 const STRIKER_RUNS = 3;
-const STRIKER_PUCK_HALF = 0.11;
-const STRIKER_PUCK_HEIGHT = 0.1;
 const STRIKER_BLOOD_ALPHA = 0.85;
 const STRIKER_BLOOD_OFFSET = 0.08;
 const STRIKER_BLOOD_RADIUS = 0.1;
@@ -3865,6 +3887,8 @@ const STRIKER_TICK_TOP_CLEARANCE = 0.1;
 /** The dried stain on the pad, its radii as shares of the pad. */
 const STRIKER_PAD_STAIN_WIDTH = 0.4;
 const STRIKER_PAD_STAIN_HEIGHT = 0.45;
+/** The stain sits in the middle of the pad, as a share of it each way. */
+const STRIKER_PAD_STAIN_CENTRE = 0.5;
 
 function traceBell(path: Ctx, centre: Point, radius: number): void {
   path.moveTo(centre.x - radius, centre.y + radius * BELL_LIP_DROP);
@@ -3878,7 +3902,7 @@ function traceBell(path: Ctx, centre: Point, radius: number): void {
   );
   path.closePath();
 }
-const BELL_LIP_DROP = 0.6;
+const BELL_LIP_DROP = HIGH_STRIKER_BELL.lipDrop;
 /** Where the bell's crown curves pull toward, in radii off its centre line: square-shouldered, not a dome. */
 const BELL_SHOULDER = 0.9;
 

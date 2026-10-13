@@ -51,3 +51,22 @@ export const TICKET_BOOTH_BALLOON_TIE: CircusOverlayAnchor = { x: 1.72, up: 1.62
 export const PAVILION_PEAK_HEIGHT_TILES = 2.5;
 /** How far the pavilion's pole cap stands above its peak. */
 export const PAVILION_POLE_CAP_TILES = 0.3;
+
+/**
+ * The high striker's bell, crowning its mast: the centre of its body and its
+ * radius, in tiles. Its lip hangs `lipDrop` radii below the centre, and that
+ * lip is what the puck strikes.
+ */
+export const HIGH_STRIKER_BELL = { x: 0.5, up: 3.6, radius: 0.17, lipDrop: 0.6 } as const;
+
+/**
+ * The high striker's brass puck, which the live dressing runs up the mast's
+ * track. It rests with its foot at `restUp`, just clear of the base's lid.
+ */
+export const HIGH_STRIKER_PUCK = { x: 0.5, halfWidth: 0.11, height: 0.1, restUp: 0.4 } as const;
+
+/** Where the puck's foot is when its top meets the bell's lip: the top of its run. */
+export const HIGH_STRIKER_PUCK_STRIKE_UP =
+  HIGH_STRIKER_BELL.up -
+  HIGH_STRIKER_BELL.radius * HIGH_STRIKER_BELL.lipDrop -
+  HIGH_STRIKER_PUCK.height;

@@ -121,6 +121,19 @@ export interface PlayOptions {
   startOffset?: number;
   /** Stereo position, -1 (hard left) to 1 (hard right). Default: 0, centred. */
   pan?: number;
+  /**
+   * Cuts the sound partway: a linear fade to silence starting `atS` seconds
+   * into the recording and lasting `durationS`, scheduled on the audio clock
+   * when the sound starts, so the cut lands on the same sample however late
+   * the next frame is.
+   */
+  fadeOut?: ScheduledFadeOut;
+}
+
+/** A fade to silence scheduled from a sound's own start, in seconds of the recording. */
+export interface ScheduledFadeOut {
+  readonly atS: number;
+  readonly durationS: number;
 }
 
 export interface MusicOptions {
@@ -601,6 +614,33 @@ export class AudioManager {
       return;
     }
 
+    this.startSource(id, buffer, opts);
+  }
+
+  /**
+   * Plays a one-shot this instant or not at all, and returns the audio-clock
+   * time it started at (see {@link clockSeconds}), or null when it did not
+   * play: not decoded, the page backgrounded, or the context not running. It
+   * is never queued for later — for a sound something on screen is timed to,
+   * where a cue arriving seconds late would be worse than none.
+   */
+  playNow(id: SoundId, opts: PlayOptions = {}): number | null {
+    const buffer = this.buffers.get(id);
+    if (!buffer || this.backgrounded || this.ctx.state !== 'running') return null;
+    return this.startSource(id, buffer, opts);
+  }
+
+  /**
+   * The audio clock, in seconds. It stops while the context is suspended or
+   * interrupted, as the sounds do, so a picture timed to a sound off this
+   * clock pauses and resumes with it.
+   */
+  get clockSeconds(): number {
+    return this.ctx.currentTime;
+  }
+
+  /** Starts `buffer` now on the SFX bus; returns the audio-clock time it started at. */
+  private startSource(id: SoundId, buffer: AudioBuffer, opts: PlayOptions): number {
     const source = this.ctx.createBufferSource();
     source.buffer = buffer;
     source.playbackRate.value = opts.playbackRate ?? 1;
@@ -613,9 +653,10 @@ export class AudioManager {
     }
     const destination: AudioNode = panner ?? this.sfxGain;
     let perSoundGain: GainNode | null = null;
-    if (volume !== undefined && volume !== 1) {
+    const fadeOut = opts.fadeOut;
+    if ((volume !== undefined && volume !== 1) || fadeOut !== undefined) {
       perSoundGain = this.ctx.createGain();
-      perSoundGain.gain.value = volume;
+      perSoundGain.gain.value = volume ?? 1;
       source.connect(perSoundGain);
       perSoundGain.connect(destination);
     } else {
@@ -632,7 +673,18 @@ export class AudioManager {
       }
     };
 
-    source.start(0, opts.startOffset ?? 0);
+    const startedAt = this.ctx.currentTime;
+    const startOffset = opts.startOffset ?? 0;
+    source.start(startedAt, startOffset);
+    if (fadeOut !== undefined && perSoundGain !== null) {
+      const rate = opts.playbackRate ?? 1;
+      const fadeFrom = startedAt + Math.max(0, fadeOut.atS - startOffset) / rate;
+      const fadeTo = fadeFrom + fadeOut.durationS / rate;
+      perSoundGain.gain.setValueAtTime(volume ?? 1, fadeFrom);
+      perSoundGain.gain.linearRampToValueAtTime(0, fadeTo);
+      source.stop(fadeTo);
+    }
+    return startedAt;
   }
 
   /** Stop a currently-playing one-shot sound immediately. No-op if it already finished. */

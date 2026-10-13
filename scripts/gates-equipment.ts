@@ -80,6 +80,7 @@ import { outfitOf } from '../src/sprites/garments/outfit.js';
 import {
   type HeldVisualId,
   SCRIPTED_PROP_VISUAL_IDS,
+  FIXTURE_TOOL_VISUAL_IDS,
   TOOL_HELD_VISUAL_IDS,
   WEAPON_HELD_VISUAL_IDS,
 } from '../src/sprites/held/heldVisualIds.js';
@@ -178,6 +179,15 @@ function subjects(only: string | null): Subject[] {
     rows: viewRows(CHOP_ROWS),
     bitesGround: true,
   });
+  for (const id of FIXTURE_TOOL_VISUAL_IDS) {
+    list.push({
+      id,
+      look: HELD_VISUALS[id],
+      figure: base,
+      rows: viewRows(MINE_ROWS),
+      bitesGround: true,
+    });
+  }
   for (const id of WEAPON_HELD_VISUAL_IDS) {
     const look = HELD_VISUALS[id];
     const figure = humanFigureFor(BARE_CARL_OUTFIT, carriedGripOf(look));

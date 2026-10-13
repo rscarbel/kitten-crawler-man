@@ -26,6 +26,7 @@ import {
   type CatHeldDraw,
   type CatSpriteState,
   type CatWorkSwing,
+  CAT_WORK_SWING_OF_TOOL,
 } from '../sprites/catSprite';
 import { catGarmentsWearing } from '../sprites/garments/itemLooks';
 import { setOutfit } from '../sprites/outfits';
@@ -446,11 +447,11 @@ export class CatPlayer extends Player {
     if (swing !== null) prewarmCatHold(swing, this.facing.peek(this.facingX, this.facingY));
   }
 
-  /** The swing her working tool is worked with: a pick at stone, a chop at anything else. */
+  /** The swing her working tool is worked with. */
   private get workSwing(): CatWorkSwing | null {
     const tool = this.workingTool;
     if (tool === null) return null;
-    return tool.kind === 'pickaxe' ? 'mine' : 'chop';
+    return CAT_WORK_SWING_OF_TOOL[tool.kind];
   }
 
   /**

@@ -48,6 +48,7 @@ import { HELD_VISUALS } from '../src/sprites/held/heldVisuals.js';
 import {
   type HeldVisualId,
   MOUTH_CARRY_VISUAL_IDS,
+  FIXTURE_TOOL_VISUAL_IDS,
   TOOL_HELD_VISUAL_IDS,
 } from '../src/sprites/held/heldVisualIds.js';
 import type { HeldVisualDef } from '../src/sprites/held/heldVisualDef.js';
@@ -124,6 +125,9 @@ function subjects(only: string | null): Subject[] {
     rows: rowsHolding('chop'),
     bitesGround: true,
   });
+  for (const id of FIXTURE_TOOL_VISUAL_IDS) {
+    list.push({ id, look: HELD_VISUALS[id], rows: rowsHolding('mine'), bitesGround: true });
+  }
   for (const id of MOUTH_CARRY_VISUAL_IDS) {
     list.push({ id, look: HELD_VISUALS[id], rows: rowsHolding('carry'), bitesGround: false });
   }

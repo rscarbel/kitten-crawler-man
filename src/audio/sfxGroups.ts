@@ -699,7 +699,7 @@ export const SFX_GROUPS: Record<SfxGroup, readonly SoundId[]> = {
     'wood_breaking_2',
   ],
 
-  /** `CircusQuestSystem` + `BigTopMazeSystem` (Grimaldi, Heather the Bear, the clown troupe). */
+  /** `CircusQuestSystem` + `BigTopMazeSystem` (Grimaldi, Heather the Bear, the clown troupe), and the grounds' high striker. */
   circusQuest: [
     'bear_big_attack',
     'bear_growl_1',
@@ -714,6 +714,8 @@ export const SFX_GROUPS: Record<SfxGroup, readonly SoundId[]> = {
     'grimaldi_plant_moving_2',
     'grimaldi_plant_moving_3',
     'grimaldi_vine_taking_damage',
+    // The grounds' high striker (`HighStrikerSystem`).
+    'high_striker_bell',
     // The lava llama's spit and burst, for the llamas the Briar Hollow siege
     // sends: floor 3 loads neither the level-1 nor the level-2 group.
     'llama_fireball',

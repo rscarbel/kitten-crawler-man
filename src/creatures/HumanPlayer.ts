@@ -1022,6 +1022,13 @@ export class HumanPlayer extends Player {
     return beat < 0 ? null : beat + 1;
   }
 
+  /** Also settles the stride's own last position, so the step is not paced as ground walked. */
+  override placeAt(x: number, y: number): void {
+    super.placeAt(x, y);
+    this.lastTickX = x;
+    this.lastTickY = y;
+  }
+
   /**
    * Paces his legs from the ground he actually covered since the last tick,
    * whichever system moved him — his own input, the companion follow, a

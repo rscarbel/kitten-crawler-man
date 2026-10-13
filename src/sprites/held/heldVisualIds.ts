@@ -42,12 +42,19 @@ export const WEAPON_HELD_VISUAL_IDS = [
 /** Small things Donut carries across her jaws. */
 export const MOUTH_CARRY_VISUAL_IDS = ['carried_wrench'] as const;
 
+/**
+ * Working tools that belong to a place rather than to an item: handed to a
+ * crawler for one job there and taken back after.
+ */
+export const FIXTURE_TOOL_VISUAL_IDS = ['striker_mallet'] as const;
+
 export const HELD_VISUAL_IDS = [
   ...WEAPON_HELD_VISUAL_IDS,
   'quest_scythe',
   ...TOOL_HELD_VISUAL_IDS,
   ...SCRIPTED_PROP_VISUAL_IDS,
   ...MOUTH_CARRY_VISUAL_IDS,
+  ...FIXTURE_TOOL_VISUAL_IDS,
 ] as const;
 
 /** Names one look a crawler can hold. */
