@@ -1,5 +1,6 @@
 import { TILE_SIZE } from '../core/constants';
 import { NEVER_LUCKY, type LuckCheck } from '../core/GodMode';
+import { playInteriorCue } from './interiorInteractionSoundCues';
 import type { Player } from '../Player';
 import type { AudioManager } from '../audio/AudioManager';
 import { CASINO_MUSIC_TRACKS, CLUB_MUSIC_TRACKS } from '../audio/sounds';
@@ -643,8 +644,9 @@ export class DesperadoClubSystem {
   /** Sounds whatever went over either counter since the last tick. */
   private drainShopTrades(): void {
     if (!this.barShop.purchasePending && !this.marketShop.purchasePending) return;
-    // A round at the bar pours; gear off the market rack does not.
+    // A round at the bar pours; gear off the market rack goes through the till.
     if (this.barShop.purchasePending) this.audio?.play('ambient_pouring_a_drink');
+    if (this.marketShop.purchasePending) playInteriorCue(this.audio, 'tillDrawer');
     this.barShop.purchasePending = false;
     this.marketShop.purchasePending = false;
     this.audio?.play('purchase_success');

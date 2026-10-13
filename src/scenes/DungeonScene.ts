@@ -1,3 +1,4 @@
+import { VILLAGE_CUES } from '../audio/villageSoundCues';
 import { displayHp } from '../core/crawlerFormulas';
 import { forwardQuestItemEvictions } from '../systems/questItemEvictions';
 import { forwardEquipmentChanges } from '../systems/equipmentChangeEvents';
@@ -553,7 +554,7 @@ import type { SoundId } from '../audio/sounds';
 import type { VillageBuildingId } from '../map/overworld/briarHollowLayout';
 import { rectCentre } from '../map/overworld/briarHollowSite';
 import { sfxGroupsForLevelId } from '../audio/sfxGroups';
-import { playDungeonCue, type DungeonCue } from '../systems/dungeon/dungeonSoundCues';
+import { DUNGEON_CUES, playDungeonCue, type DungeonCue } from '../systems/dungeon/dungeonSoundCues';
 import {
   downedCompanionArrowCandidate,
   knockedOutBandEntry,
@@ -1068,8 +1069,8 @@ const HAZARD_SOUNDS_TO_STOP_ON_RESPAWN: readonly SoundId[] = [
   'gas_cloud',
   'grotesque_spider_slam_attack',
   'grotesque_spider_screech_attack',
-  // A broken gas bottle's fuse hiss.
-  'miasma_hiss',
+  ...DUNGEON_CUES.gasCylinderHiss,
+  ...VILLAGE_CUES.miasmaHiss,
 ];
 
 // Spider-lab arrow geometry

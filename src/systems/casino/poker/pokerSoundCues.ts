@@ -4,52 +4,70 @@
  * Play sites raise a cue and never name a `SoundId` directly, so when a
  * recording lands it is registered once and swapped in here, and every place
  * that cue fires picks it up. A cue still waiting on its own file borrows the
- * nearest existing sound or stays silent (`null`); its JSDoc names the files it
- * is waiting for. A `SoundId` is never registered before its file exists.
+ * nearest existing sound or stays silent (an empty list); its JSDoc names the
+ * files it is waiting for. A `SoundId` is never registered before its file
+ * exists. A cue with several takes is rotated through, one take per play.
  */
 
 import type { SoundId } from '../../../audio/sounds';
 
 export const POKER_CUES = {
   /** Waiting for `casino/poker_check_knock_1.mp3` … `_2.mp3`. */
-  check: 'casino_blackjack_check',
+  check: ['casino_blackjack_check'],
   /** Waiting for `casino/poker_fold_muck_1.mp3` … `_3.mp3`. */
-  fold: 'casino_deal_card',
+  fold: ['casino_deal_card'],
   /** Waiting for `casino/poker_board_flop.mp3`. */
-  board_flop: 'casino_deal_four_cards',
+  board_flop: ['casino_deal_four_cards'],
   /** Waiting for `casino/poker_board_card.mp3`; the turn and the river. */
-  board_card: 'casino_deal_card',
+  board_card: ['casino_deal_card'],
   /** Waiting for `casino/poker_all_in_push.mp3`. */
-  all_in: 'casino_chips_bet_big',
+  all_in: ['casino_chips_bet_big'],
   /** Waiting for `casino/poker_pot_sweep.mp3`. */
-  pot_sweep: 'casino_chips_stack',
+  pot_sweep: ['casino_chips_stack'],
   /** Waiting for `casino/poker_dealer_button.mp3`. */
-  dealer_button: null,
+  dealer_button: [],
   /** Waiting for `casino/poker_chip_riffle_1.mp3` … `_3.mp3`; a regular's idle fidget. */
-  chip_riffle: null,
-  /** Waiting for `casino/poker_your_turn.mp3`. */
-  your_turn: null,
+  chip_riffle: [],
+  /** The action reaches the player. */
+  your_turn: ['poker_your_turn'],
   /** Waiting for `casino/poker_table_slam.mp3`; a tilted regular after a bad beat. */
-  table_slam: null,
-  /** Waiting for `casino/poker_rail_ooh.mp3`; a big all-in pot revealed at showdown. */
-  rail_ooh: null,
-  /** Waiting for `casino/poker_reaction_groan_1.mp3` … `_2.mp3`; a human regular loses big. */
-  reaction_groan: null,
-  /** Waiting for `casino/poker_reaction_chuckle_1.mp3` … `_2.mp3`; a human regular wins or shows a bluff. */
-  reaction_chuckle: null,
-  deal_card: 'casino_deal_card',
-  bet_small: 'casino_chips_bet_small',
-  bet_big: 'casino_chips_bet_big',
-  cash_out: 'casino_chips_stack',
-  rebuy: 'casino_chips_stack',
-  buy_in: 'purchase_success',
-} as const satisfies Record<string, SoundId | null>;
+  table_slam: [],
+  /** A big all-in pot turned face up for the run-out. */
+  rail_ooh: ['poker_rail_ooh_1', 'poker_rail_ooh_2', 'poker_rail_ooh_3'],
+  /** A human regular loses a big pot. */
+  reaction_groan: [
+    'poker_reaction_groan_1',
+    'poker_reaction_groan_2',
+    'poker_reaction_groan_3',
+    'poker_reaction_groan_4',
+  ],
+  /** A human regular's bluff is shown and wins after the flop. */
+  reaction_chuckle: [
+    'poker_reaction_chuckle_1',
+    'poker_reaction_chuckle_2',
+    'poker_reaction_chuckle_3',
+    'poker_reaction_chuckle_4',
+  ],
+  /** A skyfowl regular's bluff is shown and wins after the flop: the town's skyfowl laugh. */
+  skyfowl_chuckle: ['skyfowl_laugh_1'],
+  deal_card: ['casino_deal_card'],
+  bet_small: ['casino_chips_bet_small'],
+  bet_big: ['casino_chips_bet_big'],
+  cash_out: ['casino_chips_stack'],
+  rebuy: ['casino_chips_stack'],
+  buy_in: ['purchase_success'],
+} as const satisfies Record<string, readonly SoundId[]>;
 
 export type PokerCue = keyof typeof POKER_CUES;
 
-/** The sound a cue plays today, or null while it stays silent. */
-export function pokerCueSound(cue: PokerCue): SoundId | null {
-  return POKER_CUES[cue];
+/**
+ * The take a cue plays on its `played`th time (counting from zero), or null
+ * while it stays silent.
+ */
+export function pokerCueSound(cue: PokerCue, played = 0): SoundId | null {
+  const takes: readonly SoundId[] = POKER_CUES[cue];
+  if (takes.length === 0) return null;
+  return takes[played % takes.length] ?? null;
 }
 
 const SHUFFLE_SOUNDS = [

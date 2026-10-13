@@ -483,7 +483,7 @@ export class StealthKeySnatchSystem
     guard.gateActivity = this.isDialogOpen ? 'talk' : 'idle';
     if (guard.owCuePending) {
       guard.owCuePending = false;
-      this.cue('guardMutter');
+      this.cue('guardHit');
     }
     if (this.raiseCueIn > 0) {
       this.raiseCueIn--;

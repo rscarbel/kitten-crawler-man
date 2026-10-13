@@ -134,8 +134,8 @@ export const DUNGEON_CUES = {
   metalDent: ['metal_dent_1', 'metal_dent_2', 'metal_dent_3'],
   /** A locker door wrenched open. Waits on `locker_burst`; `massive_metal_hit` stands in. */
   lockerBurst: ['massive_metal_hit'],
-  /** A steel drum split. Waits on `drum_burst`; `massive_metal_hit` stands in. */
-  drumBurst: ['massive_metal_hit'],
+  /** A steel drum split, oil glugging out. */
+  drumBurst: ['drum_burst'],
   /** A filing cabinet broken. Waits on `filing_cabinet_crash`; `massive_metal_hit` stands in. */
   filingCabinetCrash: ['massive_metal_hit'],
   /** A mop bucket or plastic crate smashed. Waits on `plastic_crack`; `wood_breaking_1` stands in. */
@@ -144,18 +144,14 @@ export const DUNGEON_CUES = {
   wetSignSkid: [],
   /** The vending machine's front smashed. Waits on `vending_glass_smash`; `glass_break_1` stands in. */
   vendingGlassSmash: ['glass_break_1'],
-  /** A monitor or the monitor bank smashed. Waits on `monitor_pop`; `glass_break_2` stands in. */
-  monitorPop: ['glass_break_2'],
+  /** A monitor or the monitor bank smashed. */
+  monitorPop: ['monitor_pop'],
   /** The security camera dome smashed. Waits on `camera_break`; `glass_break_3` stands in. */
   cameraBreak: ['glass_break_3'],
-  /** A breaker panel smashed. Waits on `fuse_box_short`; `massive_metal_hit` stands in. */
-  fuseBoxShort: ['massive_metal_hit'],
-  /**
-   * A gas cylinder's fuse, from the break to the blast. Waits on
-   * `gas_cylinder_hiss`; the village's miasma hiss stands in, because the
-   * hiss is the blast's warning and must not fall silent.
-   */
-  gasCylinderHiss: ['miasma_hiss'],
+  /** A breaker panel smashed: the pop, the sparks and the power-down whine. */
+  fuseBoxShort: ['fuse_box_short'],
+  /** A gas cylinder's fuse, from the break to the blast: the blast's warning. */
+  gasCylinderHiss: ['gas_cylinder_hiss'],
   /** An oil spill catching light. */
   oilFireIgnite: [
     'oil_fire_ignite_1',
@@ -163,8 +159,8 @@ export const DUNGEON_CUES = {
     'oil_fire_ignite_3',
     'oil_fire_ignite_4',
   ],
-  /** A steam valve struck: a sharp burst of steam. Waits on `steam_valve_burst`. */
-  steamValveBurst: [],
+  /** A steam valve struck: a sharp burst of steam. */
+  steamValveBurst: ['steam_valve_burst'],
 
   // ── Small moving things ──
   /** Beetles or roaches scattering. Waits on `critter_scuttle_1..3`. */
@@ -416,7 +412,7 @@ export const WALL_FIXTURE_EVENT_CUES = {
   sodium_lamp: { broken: ['glassSmash'] },
   emergency_light: { broken: ['monitorPop'] },
   // The short's own recording carries the power-down whine; the flicker is
-  // the tubes' last gasp, which the stand-in does not have.
+  // the tubes' last gasp, a separate sound in the room's lights.
   fuse_box: { struck: ['metalDent'], broken: ['fuseBoxShort'], power_down: ['fluorescentFlicker'] },
   steam_valve: { hissed: ['steamValveBurst'] },
   camera_dome: { broken: ['cameraBreak'] },

@@ -164,6 +164,7 @@ import {
   type MazeMirror,
   type MazeTile,
   type SpotlightTrack,
+  type VentPhase,
   type VentSchedule,
 } from '../map/bigTopMazeLayout';
 import { boardTileToTent, type MirrorBoard } from '../map/bigTop/mirrorBoard';
@@ -298,9 +299,9 @@ function ventFlamePhase(vent: VentSchedule, frame: number): number {
   return frame + offset;
 }
 
-/** How near a vent has to be for its ignition to be worth hearing. */
+/** How near a vent has to be for its kindling or ignition to be worth hearing. */
 const VENT_CUE_RANGE_TILES = 9;
-/** How long the ignition cue rests before another vent may claim it. */
+/** How long a vent cue rests before another vent may claim it. */
 const VENT_CUE_COOLDOWN_FRAMES = 18;
 
 /**
@@ -565,6 +566,8 @@ export class BigTopMazeSystem implements GameSystem, GroundHazardSource {
 
   /** Frames left before another vent may be heard lighting. */
   private ventCueCooldown = 0;
+  /** Frames left before another vent may be heard kindling. */
+  private ventKindleCueCooldown = 0;
   /** Frames left before another refused blow may be heard. */
   private refusalCueCooldown = 0;
 
@@ -1348,6 +1351,10 @@ export class BigTopMazeSystem implements GameSystem, GroundHazardSource {
 
   private updateBells(): void {
     for (const bell of this.bells.values()) {
+      if (bell.holdEndedThisFrame) {
+        bell.holdEndedThisFrame = false;
+        this.cue(BIG_TOP_CUES.followSpotSwing);
+      }
       if (!bell.rangThisFrame) continue;
       bell.rangThisFrame = false;
       this.cue(BIG_TOP_CUES.bellRing);
@@ -1495,7 +1502,7 @@ export class BigTopMazeSystem implements GameSystem, GroundHazardSource {
       this.beginBurnout(ctx, caught);
       return;
     }
-    this.noteVentIgnition(ctx.active);
+    this.noteVentCues(ctx.active);
   }
 
   /**
@@ -1546,30 +1553,55 @@ export class BigTopMazeSystem implements GameSystem, GroundHazardSource {
   }
 
   /**
-   * The ignition cue, for vents the crawler is actually near.
+   * The kindle and ignition cues, for vents the crawler is actually near.
    *
    * Sixty-six vents on six clocks light about fifteen times a second between
    * them; played unconditionally that is a fireball whoosh every four frames,
    * most of it from the other lane where the player cannot even see the flame it
    * belongs to. Only what is close enough to matter is heard, and never twice
-   * inside one breath.
+   * inside one breath. Each cue keeps its own rest, so a kindle never swallows
+   * the whoosh of a neighbouring vent that lights on the same frame.
    */
-  private noteVentIgnition(active: Player): void {
-    if (this.ventCueCooldown > 0) {
-      this.ventCueCooldown--;
-      return;
-    }
+  private noteVentCues(active: Player): void {
+    this.ventKindleCueCooldown = this.noteNearbyVentEntering(
+      active,
+      'telegraph',
+      this.ventKindleCueCooldown,
+      BIG_TOP_CUES.ventKindle,
+      VENT_KINDLE_VOLUME,
+    );
+    this.ventCueCooldown = this.noteNearbyVentEntering(
+      active,
+      'flame',
+      this.ventCueCooldown,
+      BIG_TOP_CUES.ventIgnition,
+      VENT_IGNITION_VOLUME,
+    );
+  }
+
+  /**
+   * Raises `takes` for the first nearby vent that entered `phase` this frame,
+   * unless the cue is still resting. Returns the rest left after this frame.
+   */
+  private noteNearbyVentEntering(
+    active: Player,
+    phase: Exclude<VentPhase, 'idle'>,
+    cooldown: number,
+    takes: readonly SoundId[],
+    volume: number,
+  ): number {
+    if (cooldown > 0) return cooldown - 1;
     const reach = TILE_SIZE * VENT_CUE_RANGE_TILES;
     for (const vent of this.liveVents) {
-      if (ventPhaseAt(vent, this.frame) !== 'flame') continue;
-      if (ventPhaseAt(vent, this.frame - 1) === 'flame') continue;
+      if (ventPhaseAt(vent, this.frame) !== phase) continue;
+      if (ventPhaseAt(vent, this.frame - 1) === phase) continue;
       const dx = (vent.tileX + TILE_CENTRE) * TILE_SIZE - (active.x + TILE_SIZE * TILE_CENTRE);
       const dy = (vent.tileY + TILE_CENTRE) * TILE_SIZE - (active.y + TILE_SIZE * TILE_CENTRE);
       if (Math.hypot(dx, dy) > reach) continue;
-      this.cue(BIG_TOP_CUES.ventIgnition, VENT_IGNITION_VOLUME);
-      this.ventCueCooldown = VENT_CUE_COOLDOWN_FRAMES;
-      return;
+      this.cue(takes, volume);
+      return VENT_CUE_COOLDOWN_FRAMES;
     }
+    return 0;
   }
 
   private updateCutscene(ctx: SystemContext): void {
@@ -2750,6 +2782,8 @@ const ENCORE_REPEAT_SUBTITLE = 'An encore. The house has nothing left to throw.'
 
 /** How loud a vent's ignition is against the rest of the tent. */
 const VENT_IGNITION_VOLUME = 0.35;
+/** A kindle is a warning, not the event, so it sits under the whoosh. */
+const VENT_KINDLE_VOLUME = 0.25;
 
 /** A refused blow says so once, quietly, however fast the missiles arrive. */
 const REFUSAL_CUE_VOLUME = 0.5;

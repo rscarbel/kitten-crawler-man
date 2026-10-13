@@ -58,7 +58,8 @@ function rowFrameCount(name: GoblinPrisonerState): number {
  * it, not even a blast), never pushed, never detected and never detecting,
  * and it never blocks a crawler — its cell's bars do that. It moves on
  * its own schedule only, so the owning scene just ticks it; a heckle raises
- * {@link heckleCuePending} for the scene to voice.
+ * {@link heckleCuePending} and a rattle {@link rattleCuePending} for the scene
+ * to voice.
  */
 export class PrisonerGoblin extends Mob {
   readonly xpValue = 0;
@@ -73,6 +74,8 @@ export class PrisonerGoblin extends Mob {
   beat: GoblinPrisonerState = 'idle';
   /** Set when it starts a heckle; the owning scene plays the cue and clears it. */
   heckleCuePending = false;
+  /** Set when it starts rattling its bars; the owning scene plays the cue and clears it. */
+  rattleCuePending = false;
 
   private beatIndex: number;
   private beatFramesLeft: number;
@@ -176,6 +179,7 @@ export class PrisonerGoblin extends Mob {
     this.beatIndex = (this.beatIndex + 1) % PRISONER_BEATS.length;
     this.beat = PRISONER_BEATS[this.beatIndex];
     this.beatFramesLeft = this.rollBeatFrames();
+    if (this.beat === 'rattle') this.rattleCuePending = true;
     if (this.beat !== 'heckle') return;
     const line = pickFreshLine(PRISONER_HECKLE_BARKS, this.seed, this.heckles, this.lastHeckle);
     this.lastHeckle = line;

@@ -58,6 +58,7 @@ import {
   shuffleSound,
   type PokerCue,
 } from './casino/poker/pokerSoundCues';
+import { PokerHandReactions, type ReactionVoice } from './casino/poker/pokerReactions';
 import {
   BUY_IN_BIG_BLINDS,
   POKER_STAKES,
@@ -107,8 +108,6 @@ const DEUCE_SHUFFLE_LINE_CHANCE = 0.15;
 const DEUCE_BIG_POT_BIG_BLINDS = 40;
 /** A pot this big, going to a showdown with everyone all in, draws an "ooh" from the rail. */
 const RAIL_OOH_BIG_BLINDS = 60;
-/** A regular winning or losing this many big blinds in one hand reacts out loud. */
-const REACTION_BIG_BLINDS = 30;
 
 /** The player's own setting in the browser, read once: the table shortens its motion for it. */
 function prefersReducedMotion(): boolean {
@@ -154,6 +153,9 @@ export class ClubPokerSystem {
   private readonly leaveConfirm: ConfirmDialog;
   private readonly personalities: PokerPersonalities;
   private readonly banter = new PokerBanter();
+  /** How many times each cue has sounded, so a cue with several takes rotates through them. */
+  private readonly cuePlays = new Map<PokerCue, number>();
+  private readonly reactions = new PokerHandReactions((seat) => this.reactionVoiceAt(seat));
   private history: PokerHandHistory;
   private historyShown = false;
   /** The regular whose seat-info card is open, and the seat they were tapped in. */
@@ -590,6 +592,7 @@ export class ClubPokerSystem {
           this.lastVacated[event.seat] = event.occupantId;
         }
         this.history.observe(event, table);
+        this.reactions.observe(event);
         // A hand the player skipped through plays silently: a cue per card
         // and chip at four times speed is noise, not feedback.
         // Every pot at a showdown is pushed in the same step: one sweep sounds for all of them.
@@ -673,7 +676,14 @@ export class ClubPokerSystem {
   }
 
   private playCue(cue: PokerCue): void {
-    this.play(pokerCueSound(cue));
+    const played = this.cuePlays.get(cue) ?? 0;
+    this.cuePlays.set(cue, played + 1);
+    this.play(pokerCueSound(cue, played));
+  }
+
+  private reactionVoiceAt(seat: number): ReactionVoice | null {
+    const regular = this.regularsValue?.regularAt(seat) ?? null;
+    return regular === null ? null : POKER_REGULARS[regular].look.species;
   }
 
   /** The one cue each table event raises, if any. */
@@ -706,9 +716,11 @@ export class ClubPokerSystem {
       case 'pot_awarded':
         this.playCue('pot_sweep');
         return;
-      case 'hand_complete':
-        this.reactionCue(event.netBySeat, bigBlind);
+      case 'hand_complete': {
+        const reaction = this.reactions.reactionTo(event, bigBlind);
+        if (reaction !== null) this.playCue(reaction);
         return;
+      }
       case 'tell':
         if (event.cue.kind === 'chip_fidget') this.playCue('chip_riffle');
         return;
@@ -731,16 +743,6 @@ export class ClubPokerSystem {
       case 'game_over':
         return;
     }
-  }
-
-  /** One reaction per hand, for its biggest swing at a regular's seat. */
-  private reactionCue(netBySeat: ReadonlyArray<number>, bigBlind: number): void {
-    let biggest = 0;
-    netBySeat.forEach((net, seat) => {
-      if (seat !== PLAYER_SEAT && Math.abs(net) > Math.abs(biggest)) biggest = net;
-    });
-    if (Math.abs(biggest) < REACTION_BIG_BLINDS * bigBlind) return;
-    this.playCue(biggest > 0 ? 'reaction_chuckle' : 'reaction_groan');
   }
 
   /** Milliseconds since the last frame, refusing to jump after a tab-away. */

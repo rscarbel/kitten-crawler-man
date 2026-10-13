@@ -31,6 +31,7 @@ import {
 } from '../PokerTable';
 import type { PokerBanterTrigger, PokerEvent, ShownCardIndices } from '../pokerEvents';
 import { POKER_STAKES, stackForBigBlinds, type PokerTierId } from '../pokerStakes';
+import { BLUFF_STRENGTH_BELOW } from '../pokerReactions';
 import { chance, range, type Rng } from '../../../../sprites/person/rng';
 import { readBoardTexture, readDraws } from './boardRead';
 import { QUIET_TABLE, paceBanter, type BanterPaceState } from './banterPacing';
@@ -143,8 +144,6 @@ export function isRegularId(id: string | null): id is RegularId {
 
 /** Regulars know each other's games roughly: their read of another regular is half truth, half table average. */
 const REGULAR_FAMILIARITY = 0.5;
-/** A winner whose hand rates below this against a random hand was betting with little: a bluff. */
-const BLUFF_STRENGTH_BELOW = 0.35;
 /** A seat must win at least this many big blinds for a hit-and-run to tempt them. */
 const HIT_AND_RUN_WIN_BIG_BLINDS = 20;
 const BIG_POT_WIN_BIG_BLINDS = 20;

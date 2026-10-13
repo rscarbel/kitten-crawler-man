@@ -22,6 +22,7 @@
 import { spawnSync } from 'node:child_process';
 import { gameContext } from './nodeGameContext.js';
 import type { SoundId } from '../src/audio/sounds.js';
+import type { PokerCue } from '../src/systems/casino/poker/pokerSoundCues.js';
 import {
   UiRoot,
   UI_ERROR_SOUND,
@@ -2392,10 +2393,14 @@ section('the poker table: each sound cue once per event, none while skipping or 
     poker.update();
   };
   const count = (id: SoundId): number => played.filter((sound) => sound === id).length;
+  // Every take of a cue counts, so a cue that rotates recordings is never undercounted.
+  const takesOf = (cue: PokerCue): readonly SoundId[] => POKER_CUES[cue];
+  const countCue = (cue: PokerCue): number =>
+    played.filter((sound) => takesOf(cue).includes(sound)).length;
 
   poker.buyIn('penny', player, companion);
   poker.dismissRules();
-  check(count(POKER_CUES.buy_in) === 1, 'buying in plays the purchase cue once');
+  check(countCue('buy_in') === 1, 'buying in plays the purchase cue once');
   played.length = 0;
   for (let i = 0; i < POKER_MAX_STEPS && poker.pokerTable?.awaitingPlayer !== true; i++) step();
   const table = poker.pokerTable;
@@ -2406,14 +2411,14 @@ section('the poker table: each sound cue once per event, none while skipping or 
   );
   // Folds and deals may share a recording, so each fold before the player's
   // turn adds one to the count rather than passing for a dealt card.
-  const dealId = POKER_CUES.deal_card;
   const foldsSoFar = table?.history.filter((record) => record.kind === 'fold').length ?? 0;
-  const sameRecording = (a: SoundId | null, b: SoundId | null): boolean => a === b;
-  const foldsSoundingAsDeals = sameRecording(POKER_CUES.fold, dealId) ? foldsSoFar : 0;
+  const foldSharesADealTake = takesOf('fold').some((take) => takesOf('deal_card').includes(take));
+  const foldsSoundingAsDeals = foldSharesADealTake ? foldsSoFar : 0;
   const expectedDealSounds = POKER_SEAT_COUNT * HOLE_CARD_COUNT + foldsSoundingAsDeals;
+  const dealSounds = countCue('deal_card');
   check(
-    count(dealId) === expectedDealSounds,
-    `one deal cue per hole card (played ${count(dealId)}, expected ${expectedDealSounds})`,
+    dealSounds === expectedDealSounds,
+    `one deal cue per hole card (played ${dealSounds}, expected ${expectedDealSounds})`,
   );
 
   played.length = 0;

@@ -1183,6 +1183,7 @@ const SAMPLE_READABLE = {
   title: 'Audit Notice',
   where: 'Pinned by the door',
   anchor: 'board',
+  medium: 'sheet',
   body: ['Every menu must answer the keyboard.'],
 } as const;
 

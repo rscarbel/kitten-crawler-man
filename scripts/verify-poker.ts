@@ -22,7 +22,11 @@ import {
   type PokerAction,
 } from '../src/systems/casino/poker/bettingRound';
 import { HAND_SIZE, evaluateBest, handRank } from '../src/systems/casino/poker/handEvaluator';
-import type { PokerBanterTrigger, PokerEvent } from '../src/systems/casino/poker/pokerEvents';
+import type {
+  PokerBanterTrigger,
+  PokerEvent,
+  ShownCardIndices,
+} from '../src/systems/casino/poker/pokerEvents';
 import {
   BUY_IN_BIG_BLINDS,
   POKER_STAKES,
@@ -41,6 +45,12 @@ import {
   type PokerSeatManager,
 } from '../src/systems/casino/poker/PokerTable';
 import { awardPots, buildPots } from '../src/systems/casino/poker/pots';
+import {
+  GROAN_LOSS_BIG_BLINDS,
+  PokerHandReactions,
+  isShownWinningBluff,
+  type ReactionVoice,
+} from '../src/systems/casino/poker/pokerReactions';
 import { createCanvas } from 'canvas';
 import { registerUiFontForNode } from './nodeUiFont';
 import { computePokerLayout, PLAYER_CARD_MIN_WIDTH } from '../src/ui/casino/pokerLayout';
@@ -2045,6 +2055,258 @@ function checkPersistence(): void {
   );
 }
 
+// ── Shown-bluff chuckles ───────────────────────────────────────────────────
+
+const BLUFF_BIG_BLIND = 10;
+const BLUFF_BET = 40;
+const BLUFF_RAISE = 120;
+const BLUFFER = 2;
+const SHORT_STACK = 1;
+const RAISER = 3;
+
+const WEAK_HOLE: ReadonlyArray<Card> = [
+  { rank: '2', suit: 'clubs' },
+  { rank: '3', suit: 'diamonds' },
+];
+const STRONG_HOLE: ReadonlyArray<Card> = [
+  { rank: 'K', suit: 'clubs' },
+  { rank: 'K', suit: 'diamonds' },
+];
+const FLOP: ReadonlyArray<Card> = [
+  { rank: 'K', suit: 'spades' },
+  { rank: 'Q', suit: 'hearts' },
+  { rank: 'J', suit: 'diamonds' },
+];
+/** Turn and river that pair the weak hand twice over: trips by the river, air when it bet. */
+const TURN: Card = { rank: '2', suit: 'hearts' };
+const RIVER: Card = { rank: '2', suit: 'spades' };
+
+type HandCompleteEvent = Extract<PokerEvent, { kind: 'hand_complete' }>;
+
+function seatList<T>(fill: T): T[] {
+  return Array.from({ length: POKER_SEAT_COUNT }, () => fill);
+}
+
+function bluffShuffled(): PokerEvent {
+  return {
+    kind: 'shuffled',
+    handNumber: 1,
+    stacks: seatList(BUY_IN_BIG_BLINDS * BLUFF_BIG_BLIND),
+    cardsRemaining: DECK_SIZE,
+    dealt: seatList(true),
+  };
+}
+
+function bluffBet(seat: number, streetTotal: number): PokerEvent {
+  return { kind: 'action', seat, action: 'bet', amount: streetTotal, streetTotal };
+}
+
+function bluffShowdown(seat: number, hole: ReadonlyArray<Card>): PokerEvent {
+  return { kind: 'showdown_reveal', seat, cards: hole, label: 'shown' };
+}
+
+function bluffPot(potIndex: number, seat: number): PokerEvent {
+  return {
+    kind: 'pot_awarded',
+    potIndex,
+    seats: [seat],
+    amounts: [BLUFF_RAISE],
+    uncontested: false,
+    label: 'shown',
+  };
+}
+
+function bluffComplete(
+  hole: ReadonlyArray<Card>,
+  board: ReadonlyArray<Card>,
+  netBySeat: ReadonlyArray<number> = seatList(0),
+): HandCompleteEvent {
+  return {
+    kind: 'hand_complete',
+    handNumber: 1,
+    netBySeat,
+    stacks: seatList(0),
+    contributions: seatList(0),
+    live: seatList(true),
+    holeCards: Array.from({ length: POKER_SEAT_COUNT }, (_, seat) =>
+      seat === BLUFFER ? hole : [],
+    ),
+    board,
+    burned: [],
+  };
+}
+
+/** Plays `events` through a fresh tracker whose regulars all speak in `voice`. */
+function reactionAfter(
+  events: ReadonlyArray<PokerEvent>,
+  complete: HandCompleteEvent,
+  voice: ReactionVoice = 'human',
+): string | null {
+  const reactions = new PokerHandReactions((seat) => (seat === PLAYER_SEAT ? null : voice));
+  for (const event of [bluffShuffled(), ...events]) reactions.observe(event);
+  return reactions.reactionTo(complete, BLUFF_BIG_BLIND);
+}
+
+function checkShownBluffs(): void {
+  section('Shown-bluff chuckles');
+  const flopDealt: PokerEvent = { kind: 'street_dealt', street: 'flop', cards: FLOP };
+  const preflopRaise: PokerEvent = {
+    kind: 'action',
+    seat: BLUFFER,
+    action: 'raise',
+    amount: BLUFF_RAISE,
+    streetTotal: BLUFF_RAISE,
+  };
+
+  check(
+    !isShownWinningBluff({ shownBothCards: true, hole: WEAK_HOLE, boardsAtAggression: [[]] }),
+    'a raise with air before the flop is never a bluff',
+  );
+  check(
+    reactionAfter(
+      [preflopRaise, bluffShowdown(BLUFFER, WEAK_HOLE), bluffPot(0, BLUFFER)],
+      bluffComplete(WEAK_HOLE, []),
+    ) === null,
+    'a hand that ends before the flop never chuckles',
+  );
+  check(
+    reactionAfter(
+      [
+        flopDealt,
+        bluffBet(BLUFFER, BLUFF_BET),
+        bluffShowdown(BLUFFER, WEAK_HOLE),
+        bluffPot(0, BLUFFER),
+      ],
+      bluffComplete(WEAK_HOLE, FLOP),
+    ) === 'reaction_chuckle',
+    'a post-flop bet with air, shown and won, chuckles',
+  );
+  check(
+    reactionAfter(
+      [
+        flopDealt,
+        bluffBet(BLUFFER, BLUFF_BET),
+        bluffShowdown(BLUFFER, WEAK_HOLE),
+        bluffPot(0, BLUFFER),
+      ],
+      bluffComplete(WEAK_HOLE, FLOP),
+      'skyfowl',
+    ) === 'skyfowl_chuckle',
+    "a skyfowl regular's shown bluff laughs in the skyfowl voice",
+  );
+  check(
+    reactionAfter(
+      [flopDealt, bluffBet(BLUFFER, BLUFF_BET), bluffPot(0, BLUFFER)],
+      bluffComplete(WEAK_HOLE, FLOP),
+    ) === null,
+    'a bluff that wins without being shown stays quiet',
+  );
+  check(
+    reactionAfter(
+      [
+        flopDealt,
+        bluffBet(BLUFFER, BLUFF_BET),
+        bluffShowdown(BLUFFER, STRONG_HOLE),
+        bluffPot(0, BLUFFER),
+      ],
+      bluffComplete(STRONG_HOLE, FLOP),
+    ) === null,
+    'a post-flop bet with a strong hand, shown and won, is no bluff',
+  );
+  check(
+    reactionAfter(
+      [
+        flopDealt,
+        bluffBet(BLUFFER, BLUFF_BET),
+        bluffShowdown(BLUFFER, WEAK_HOLE),
+        bluffPot(0, SHORT_STACK),
+        bluffPot(1, BLUFFER),
+      ],
+      bluffComplete(WEAK_HOLE, FLOP),
+    ) === 'reaction_chuckle',
+    'a shown bluff that wins only the side pot chuckles',
+  );
+  const fullBoard = [...FLOP, TURN, RIVER];
+  check(
+    reactionAfter(
+      [
+        flopDealt,
+        bluffBet(BLUFFER, BLUFF_BET),
+        bluffBet(RAISER, BLUFF_RAISE),
+        {
+          kind: 'action',
+          seat: BLUFFER,
+          action: 'call',
+          amount: BLUFF_RAISE - BLUFF_BET,
+          streetTotal: BLUFF_RAISE,
+        },
+        { kind: 'street_dealt', street: 'turn', cards: [TURN] },
+        { kind: 'street_dealt', street: 'river', cards: [RIVER] },
+        bluffShowdown(BLUFFER, WEAK_HOLE),
+        bluffPot(0, BLUFFER),
+      ],
+      bluffComplete(WEAK_HOLE, fullBoard),
+    ) === 'reaction_chuckle',
+    'a bluff that is re-raised, called down and improves to win still chuckles',
+  );
+
+  const showsUncontested = (shown: ShownCardIndices): PokerEvent => ({
+    kind: 'uncontested_show',
+    seat: BLUFFER,
+    shown,
+  });
+  check(
+    reactionAfter(
+      [flopDealt, bluffBet(BLUFFER, BLUFF_BET), bluffPot(0, BLUFFER), showsUncontested([0, 1])],
+      bluffComplete(WEAK_HOLE, FLOP),
+    ) === 'reaction_chuckle',
+    'a post-flop bluff that wins uncontested and shows both cards chuckles',
+  );
+  check(
+    reactionAfter(
+      [flopDealt, bluffBet(BLUFFER, BLUFF_BET), bluffPot(0, BLUFFER), showsUncontested([0])],
+      bluffComplete(WEAK_HOLE, FLOP),
+    ) === null,
+    'a post-flop bluff that wins uncontested and shows one card stays quiet',
+  );
+
+  const acrossHands = new PokerHandReactions((seat) => (seat === PLAYER_SEAT ? null : 'human'));
+  const firstHand = [
+    bluffShuffled(),
+    flopDealt,
+    bluffBet(BLUFFER, BLUFF_BET),
+    bluffPot(0, SHORT_STACK),
+  ];
+  for (const event of firstHand) acrossHands.observe(event);
+  acrossHands.reactionTo(bluffComplete(WEAK_HOLE, FLOP), BLUFF_BIG_BLIND);
+  const checkedDownWin = [
+    bluffShuffled(),
+    flopDealt,
+    bluffShowdown(BLUFFER, WEAK_HOLE),
+    bluffPot(0, BLUFFER),
+  ];
+  for (const event of checkedDownWin) acrossHands.observe(event);
+  check(
+    acrossHands.reactionTo(bluffComplete(WEAK_HOLE, FLOP), BLUFF_BIG_BLIND) === null,
+    "a bluff bet in one hand does not make the next hand's checked-down win a bluff",
+  );
+
+  const bigLoss = -GROAN_LOSS_BIG_BLINDS * BLUFF_BIG_BLIND;
+  const raiserLosesBig = seatList(0).map((net, seat) => (seat === RAISER ? bigLoss : net));
+  check(
+    reactionAfter(
+      [
+        flopDealt,
+        bluffBet(BLUFFER, BLUFF_BET),
+        bluffShowdown(BLUFFER, WEAK_HOLE),
+        bluffPot(0, BLUFFER),
+      ],
+      bluffComplete(WEAK_HOLE, FLOP, raiserLosesBig),
+    ) === 'reaction_chuckle',
+    "a shown bluff's chuckle stands in for the groan of the regular it beat",
+  );
+}
+
 /** A section that throws fails as one check instead of hiding the sections after it. */
 function runSection(name: string, body: () => void): void {
   try {
@@ -2284,6 +2546,7 @@ runSection('visit tells', checkVisitTellCalibration);
 runSection('save fields', checkPersistence);
 runSection('new game', checkNewGameHost);
 runSection('banter pacing', checkBanterPacing);
+runSection('shown bluffs', checkShownBluffs);
 
 console.log(
   failures === 0

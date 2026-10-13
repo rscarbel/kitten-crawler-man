@@ -23,6 +23,8 @@ export class MazeBellTarget extends MazePropTarget<'show_bell'> {
   private cooldownFrames = 0;
   /** Set on the frame a ring lands, so the maze can play the cue once. */
   rangThisFrame = false;
+  /** Set on the frame the hold runs out, so the maze can play the lanterns swinging back. */
+  holdEndedThisFrame = false;
 
   constructor(
     tileX: number,
@@ -66,7 +68,10 @@ export class MazeBellTarget extends MazePropTarget<'show_bell'> {
 
   override updateAI(targets: Player[]): void {
     super.updateAI(targets);
-    if (this.holdFrames > 0) this.holdFrames--;
+    if (this.holdFrames > 0) {
+      this.holdFrames--;
+      if (this.holdFrames === 0) this.holdEndedThisFrame = true;
+    }
     if (this.cooldownFrames > 0) this.cooldownFrames--;
   }
 

@@ -36,14 +36,23 @@ export const PRISON_CUES = {
   spotlightHum: ['spotlight_hum_loop'],
   /** A spotlight reversing on its track. Waits on `spotlight_motor_turn_1` … `_2`. */
   spotlightTurn: [],
-  /** A patrolling guard's positional footsteps. Waits on `guard_footsteps_loop`. */
-  guardFootsteps: [],
+  /** A patrolling guard's positional footsteps. */
+  guardFootsteps: ['guard_footsteps_loop'],
   /** A paused guard slapping its baton. Waits on `guard_baton_tap_1` … `_2`. */
   guardBatonTap: [],
-  /** A guard muttering on patrol. Waits on `goblin_guard_mutter_1` … `_3`; `goblin_2` stands in. */
-  guardMutter: ['goblin_2'],
-  /** A guard's suspicion starting to rise. Waits on `goblin_guard_huh_1` … `_3`; `goblin_1` stands in. */
-  guardSuspicious: ['goblin_1'],
+  /** A guard muttering on patrol. */
+  guardMutter: ['goblin_guard_mutter_1', 'goblin_guard_mutter_2', 'goblin_guard_mutter_3'],
+  /** A guard or the gate guard struck; the same goblin voice as the bathroom queue's. */
+  guardHit: [
+    'goblin_ow_1',
+    'goblin_ow_2',
+    'goblin_ouch_1',
+    'goblin_ouch_2',
+    'goblin_oof_1',
+    'goblin_oof_2',
+  ],
+  /** A guard's suspicion starting to rise. */
+  guardSuspicious: ['goblin_guard_huh_1', 'goblin_guard_huh_2', 'goblin_guard_huh_3'],
   /** A guard spotting the party. */
   guardHey: [
     'goblin_guard_hey_1',
@@ -51,10 +60,14 @@ export const PRISON_CUES = {
     'goblin_guard_hey_3',
     'goblin_guard_hey_4',
   ],
-  /** A guard going to look at a noise. Waits on `goblin_guard_what_was_that_1` … `_2`; `goblin_2` stands in. */
-  guardInvestigate: ['goblin_2'],
-  /** A guard giving up on a noise. Waits on `goblin_guard_all_clear_1` … `_2`. */
-  guardGivesUp: [],
+  /** A guard going to look at a noise. */
+  guardInvestigate: ['goblin_guard_what_was_that_1', 'goblin_guard_what_was_that_2'],
+  /** A guard giving up on a noise. */
+  guardGivesUp: [
+    'goblin_guard_all_clear_1',
+    'goblin_guard_all_clear_2',
+    'goblin_guard_all_clear_3',
+  ],
   /** A light's suspicion climbing. Waits on `stealth_suspicion_heartbeat_loop`; `level_timer_final_minute_heartbeat` stands in. */
   suspicionRising: ['level_timer_final_minute_heartbeat'],
   /** The alarm sting of a capture. */
@@ -67,16 +80,21 @@ export const PRISON_CUES = {
     'flimsy_cell_door_break_2',
     'flimsy_cell_door_break_3',
   ],
-  /** A prisoner rattling its bars. Waits on `prisoner_bar_rattle_1` … `_3`. */
-  prisonerRattle: [],
+  /** A prisoner rattling its bars. */
+  prisonerRattle: ['prisoner_bar_rattle_1', 'prisoner_bar_rattle_2', 'prisoner_bar_rattle_3'],
   /** A prisoner heckling. Waits on `prisoner_goblin_heckle_1` … `_3`; `goblin_1` stands in. */
   prisonerHeckle: ['goblin_1'],
   /** The key's shimmer on its pedestal. Waits on `prison_key_shimmer_loop`. */
   keyShimmer: [],
   /** The key lifted. */
   keyPickup: ['prison_key_pickup_fanfare'],
-  /** The gate guard's proud talk. Waits on `gate_guard_proud_hmph_1` … `_2`; `goblin_2` stands in. */
-  gateGuardTalk: ['goblin_2'],
+  /** The gate guard's proud talk. */
+  gateGuardTalk: [
+    'gate_guard_proud_hmph_1',
+    'gate_guard_proud_hmph_2',
+    'gate_guard_proud_hmph_3',
+    'gate_guard_proud_hmph_4',
+  ],
 } as const satisfies Record<string, readonly SoundId[]>;
 
 /** Which cue a play site raises. */

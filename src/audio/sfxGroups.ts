@@ -4,6 +4,8 @@ import { interiorSellsSomething } from '../systems/townServices';
 import { CONTRACT_CUES } from '../systems/constructionContracts/contractSoundCues';
 import { BATHROOM_CUES } from '../systems/cloggedBathroom/bathroomSoundCues';
 import { PRISON_CUES } from '../systems/stealthKeySnatch/prisonSoundCues';
+import { INTERIOR_CUES } from '../systems/interiorInteractionSoundCues';
+import { POKER_CUES } from '../systems/casino/poker/pokerSoundCues';
 
 /**
  * Where a group of non-streaming sound effects can be heard. The 144
@@ -32,6 +34,7 @@ export type SfxGroup =
   | 'interiorBopca'
   | 'interiorCasino'
   | 'interiorCommerce'
+  | 'interiorInteractions'
   | 'misc';
 
 /**
@@ -110,7 +113,11 @@ const DUNGEON_CUE_SFX_IDS: readonly SoundId[] = [
   'glass_break_2',
   'glass_break_3',
   'tech_machinery_running',
-  'miasma_hiss',
+  'drum_burst',
+  'monitor_pop',
+  'fuse_box_short',
+  'gas_cylinder_hiss',
+  'steam_valve_burst',
   'candle_stand_topple_1',
   'candle_stand_topple_2',
   'banner_rip',
@@ -452,8 +459,6 @@ export const SFX_GROUPS: Record<SfxGroup, readonly SoundId[]> = {
     'tuskling_grunt_4',
     // The colosseum's portcullis landing.
     'massive_metal_hit',
-    // A broken gas bottle's fuse.
-    'miasma_hiss',
     ...DUNGEON_CUE_SFX_IDS,
     ...FAIRY_SFX_IDS,
     ...RAISED_SKELETON_SFX_IDS,
@@ -589,6 +594,29 @@ export const SFX_GROUPS: Record<SfxGroup, readonly SoundId[]> = {
     'wall_hit_stone',
     'wall_hit_wood',
     'wall_upgrade_stone',
+    // The Borrowed Blueprints: Plumbline Farm, the pasture fence, the harvest
+    // and Midge's escort.
+    'blueprint_unroll',
+    'cow_hurt_moo_1',
+    'cow_hurt_moo_2',
+    'cow_hurt_moo_3',
+    'cow_lonely_moo_1',
+    'cow_lonely_moo_2',
+    'cow_lonely_moo_3',
+    'cowbell_clank_1',
+    'cowbell_clank_2',
+    'cowbell_clank_3',
+    'fence_post_set',
+    'merrit_whistle',
+    'rickety_fence_pull_1',
+    'rickety_fence_pull_2',
+    'scythe_swing_1',
+    'scythe_swing_2',
+    'scythe_swing_3',
+    'scythe_timing_good',
+    'scythe_timing_perfect',
+    'scythe_unhook',
+    'station_upgrade_flourish',
   ],
 
   /**
@@ -686,23 +714,42 @@ export const SFX_GROUPS: Record<SfxGroup, readonly SoundId[]> = {
     'grimaldi_plant_moving_2',
     'grimaldi_plant_moving_3',
     'grimaldi_vine_taking_damage',
-    // The Big Top maze's show-bell.
-    'massive_metal_hit',
-    // The Big Top maze's floor vents, and the scorch a failed act ends on. Both
-    // borrowed from the lava llama, which is why they also live in the level-1
-    // and level-2 groups — a floor-3 boot that never loaded those would
-    // otherwise light a tent full of silent fire.
+    // The lava llama's spit and burst, for the llamas the Briar Hollow siege
+    // sends: floor 3 loads neither the level-1 nor the level-2 group.
     'llama_fireball',
     'llama_fireball_explosion',
-    // The rest of `BIG_TOP_CUES`, most of them also universal. Declared here so
-    // the tent's audio does not hang on another group keeping a sound it
-    // borrowed; `verify:bigtop` fails on any cue id missing from this group.
+    // `BIG_TOP_CUES`, some of them also universal. Declared here so the tent's
+    // audio does not hang on another group keeping a sound it borrowed;
+    // `verify:bigtop` fails on any cue id missing from this group.
+    'cage_door_release',
+    'capstan_ratchet',
+    'curtain_rise',
     'error',
+    'feeding_bell_ring',
+    'fire_breather_whoosh_1',
+    'fire_breather_whoosh_2',
+    'fire_breather_whoosh_3',
+    'fire_breather_whoosh_4',
+    'fire_breather_whoosh_5',
+    'fire_grate_kindle_1',
+    'fire_grate_kindle_2',
+    'fire_grate_kindle_3',
+    'followspot_swing',
     'gate_opening',
-    'hammer_strike',
     'healing_potion',
-    'objective_complete',
+    'limelight_ignite',
+    'mirror_pivot_1',
+    'mirror_pivot_2',
+    'mirror_pivot_3',
+    'mirror_pivot_4',
+    'mirror_pivot_5',
+    'phantom_applause_1',
+    'phantom_applause_2',
+    'phantom_applause_3',
     'reviving_tone',
+    'sandbag_drop',
+    'slide_whistle_fall',
+    'star_target_lit',
     'wood_breaking_1',
     // Heather's and Terror's hard-mode healers.
     ...FAIRY_SFX_IDS,
@@ -760,6 +807,7 @@ export const SFX_GROUPS: Record<SfxGroup, readonly SoundId[]> = {
 
   /** The Desperado Club's casino games: blackjack, poker, slots and Tito's wheel. */
   interiorCasino: [
+    ...Object.values(POKER_CUES).flat(),
     'casino_blackjack_check',
     'casino_chips_bet_big',
     'casino_chips_bet_small',
@@ -820,6 +868,13 @@ export const SFX_GROUPS: Record<SfxGroup, readonly SoundId[]> = {
 
   /** Any priced transaction indoors: shops, the tavern, temple, tattoo parlor, mercenary guild, VIP lounge. */
   interiorCommerce: ['purchase_success'],
+
+  /**
+   * Every sound behind a room's interactables (`INTERIOR_CUES`): counter bells
+   * and tills, readables, searched containers and used props. Placed props
+   * stand in every building, so every interior loads this group.
+   */
+  interiorInteractions: Object.values(INTERIOR_CUES).flat(),
 
   /**
    * No id currently lands here — every non-streaming `SoundId` found a home
@@ -883,6 +938,7 @@ export function sfxGroupsForBuildingEntry(entry: BuildingEntry): readonly SoundI
     (entry.type === 'house' && interiorSellsSomething(entry.name));
   const groups: readonly SfxGroup[] = [
     'constructionContracts',
+    'interiorInteractions',
     ...(entry.hasSafeRoom === true ? (['interiorBopca'] as const) : []),
     ...(entry.type === 'club' ? (['interiorCasino'] as const) : []),
     ...(sellsSomething ? (['interiorCommerce'] as const) : []),

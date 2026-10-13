@@ -23,8 +23,8 @@ import type { SoundId } from '../../audio/sounds';
 import type { ContractSpotMaterial } from './contractCatalog';
 
 export const CONTRACT_CUES = {
-  /** Wendell issuing a contract. Waits on `contract_signed`; `picking_up_ground_object` stands in. */
-  contractSigned: ['picking_up_ground_object'],
+  /** Wendell issuing a contract. */
+  contractSigned: ['contract_signed'],
   /** The work channel's loop on a wood or rope spot. Final: `repairing_loop`. */
   woodWorkLoop: ['repairing_loop'],
   /** The work channel's loop on a stone or plaster spot. Waits on `masonry_work_loop`; `repairing_loop` stands in. */
@@ -39,10 +39,10 @@ export const CONTRACT_CUES = {
   stoneSpotDone: ['hammer_strike'],
   /** Layered on every spot's own finish cue. Final: `construction_complete`. */
   spotFinished: ['construction_complete'],
-  /** The last spot of a contract finished. Waits on `contract_job_done`; `construction_complete` stands in. */
-  contractJobDone: ['construction_complete'],
-  /** Wendell's follow-up box opening after a contract is paid. Waits on `message_note_arrive`. */
-  wendellNote: [],
+  /** The last spot of a contract finished. */
+  contractJobDone: ['contract_job_done'],
+  /** Wendell's follow-up box opening after a contract is paid. */
+  wendellNote: ['message_note_arrive'],
   /** The client's coins paid into the purse. Final: `coin_pouch`. */
   payout: ['coin_pouch'],
   /**

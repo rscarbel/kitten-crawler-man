@@ -149,6 +149,14 @@ import { POKER_DEV_SEED } from '../systems/casino/poker/npc/personality';
 import { InteriorOccupantSystem } from '../systems/InteriorOccupantSystem';
 import { InteriorReadableSystem } from '../systems/InteriorReadableSystem';
 import {
+  type InteriorCue,
+  interiorInteractionClosingCue,
+  interiorInteractionCues,
+  playInteriorCue,
+  playInteriorCueWhenReady,
+  readableCue,
+} from '../systems/interiorInteractionSoundCues';
+import {
   InteriorPropInteractionSystem,
   TownMemoryInteriorPayoutRecord,
 } from '../systems/InteriorPropInteractionSystem';
@@ -408,8 +416,6 @@ const MAX_TOWER_FLOOR_INDEX = TOWER_FLOOR_COUNT - 1;
 const DEFAULT_MAP_FALLBACK_WIDTH = 18;
 /** The companion cat's missile is a constant patter in a fight; held under the swings it covers. */
 const CAT_MISSILE_VOLUME = 0.5;
-/** Quieter than the siege cue it's borrowed from — a counter bell, not an alarm. */
-const SHOP_BELL_VOLUME = 0.5;
 const RECENT_EVENTS_LIMIT = 5;
 const TILE_CENTER_RATIO = 0.5;
 const SAFE_ROOM_PULSE_BASE = 0.6;
@@ -2131,10 +2137,14 @@ export class BuildingInteriorScene extends GameplayScene {
     if (this.prisonKey !== null) {
       const prisonKey = this.prisonKey;
       this.arrivalLoading.whenClosed(() => {
-        playPrisonCue(this.audio, 'prisonDoorOpen');
+        const doorOpen = prisonCueSound('prisonDoorOpen');
+        if (doorOpen !== null) this.audio?.playWhenReady(doorOpen);
         this.startPrisonMusic();
         prisonKey.openExplainerIfFirstVisit();
       });
+    }
+    if (this.entry.type === 'store') {
+      this.arrivalLoading.whenClosed(() => playInteriorCueWhenReady(this.audio, 'shopDoorBell'));
     }
     const musicTracks = this.interiorMusicTracks();
     if (musicTracks !== null) {
@@ -3697,7 +3707,10 @@ export class BuildingInteriorScene extends GameplayScene {
       pricing,
       heldStock: this.marketStock.held,
       vendorId,
-      onSold: () => this.audio?.play('purchase_success'),
+      onSold: () => {
+        playInteriorCue(this.audio, 'tillDrawer');
+        this.audio?.play('purchase_success');
+      },
     };
   }
 
@@ -3705,6 +3718,7 @@ export class BuildingInteriorScene extends GameplayScene {
   private playShopTradeSound(shop: ShopSystem): void {
     if (!shop.purchasePending) return;
     shop.purchasePending = false;
+    playInteriorCue(this.audio, 'tillDrawer');
     this.audio?.play('purchase_success');
   }
 
@@ -3734,12 +3748,23 @@ export class BuildingInteriorScene extends GameplayScene {
         return result;
       };
     };
+    // A counter trading in goods rather than a service is heard taking the coin.
+    const overCounter = (handler: ShopPurchaseHandler, cue: InteriorCue): ShopPurchaseHandler => {
+      return (option, buyer) => {
+        const result = handler(option, buyer);
+        if (result.ok) playInteriorCue(this.audio, cue);
+        return result;
+      };
+    };
 
     switch (this.entry.name) {
       case 'Temple of the Sky':
         panel.open(
           () => buildBlessingMenu(party, turn, host),
-          confirmed(() => ({ ok: true, line: grantBlessing(party, turn) }), never),
+          confirmed(
+            overCounter(() => ({ ok: true, line: grantBlessing(party, turn) }), 'offeringCoin'),
+            never,
+          ),
         );
         return;
       case 'The Quiet Needle':
@@ -3758,14 +3783,18 @@ export class BuildingInteriorScene extends GameplayScene {
           );
           return;
         }
-        panel.open(() => buildArmouryMenu(turn, host), confirmed(issueArmour, never), {
-          sell: this.sellConfigFor('armoury', ARMOURY_PRICING),
-        });
+        panel.open(
+          () => buildArmouryMenu(turn, host),
+          confirmed(overCounter(issueArmour, 'tillDrawer'), never),
+          {
+            sell: this.sellConfigFor('armoury', ARMOURY_PRICING),
+          },
+        );
         return;
       case 'Herb & Remedy':
         panel.open(
           () => buildApothecaryMenu(party, this.townMemory, turn, host),
-          confirmed(serveRemedy(party, this.townMemory), never),
+          confirmed(overCounter(serveRemedy(party, this.townMemory), 'tillDrawer'), never),
           { sell: this.sellConfigFor('apothecary', APOTHECARY_PRICING) },
         );
         return;
@@ -3778,14 +3807,14 @@ export class BuildingInteriorScene extends GameplayScene {
       case "Cartwright's Workshop":
         panel.open(
           () => buildCartwrightMenu(turn, host),
-          confirmed(sellCartwrightGoods(turn), never),
+          confirmed(overCounter(sellCartwrightGoods(turn), 'tillDrawer'), never),
           { sell: this.sellConfigFor('cartwright_workshop', MERCHANT_STALL_PRICING) },
         );
         return;
       case "Miller's Farm":
         panel.open(
           () => buildMillerMenu(this.active(), turn, host),
-          confirmed(serveMillerGoods(turn), never),
+          confirmed(overCounter(serveMillerGoods(turn), 'scaleWeigh'), never),
           { sell: this.sellConfigFor('millers_farm', FARMER_PRICING) },
         );
         return;
@@ -3961,7 +3990,7 @@ export class BuildingInteriorScene extends GameplayScene {
     const page = this.readables.findReadTarget(player.x, player.y);
     if (page === null) return false;
     this.readablePanel.openWith(page.readable);
-    this.audio?.play('menu_open');
+    playInteriorCue(this.audio, readableCue(page.readable.medium));
     return true;
   }
 
@@ -3974,19 +4003,20 @@ export class BuildingInteriorScene extends GameplayScene {
     if (this.citizenDialogTarget !== null) return false;
     const target = this.propInteractions.findTarget(player.x, player.y);
     if (target === null) return false;
-    this.propInteractions.perform(
+    let closingCue: InteriorCue | null = null;
+    const outcome = this.propInteractions.perform(
       target,
       this.conversation,
       this.destruction.loot,
       player,
       (this.occupants?.people.length ?? 0) > 0,
+      () => {
+        if (closingCue !== null) playInteriorCue(this.audio, closingCue);
+      },
     );
-    if (target.interaction.kind === 'use' && target.interaction.id === 'shop_bell') {
-      // The nearest existing cue to a small shop counter bell — reused per
-      // the ground rule against registering a cue with no audio file behind it.
-      this.audio?.play('bell_toll_hit', { volume: SHOP_BELL_VOLUME });
-    } else {
-      this.audio?.play('menu_open');
+    closingCue = interiorInteractionClosingCue(target.interaction, outcome);
+    for (const cue of interiorInteractionCues(target.interaction, outcome)) {
+      playInteriorCue(this.audio, cue);
     }
     return true;
   }

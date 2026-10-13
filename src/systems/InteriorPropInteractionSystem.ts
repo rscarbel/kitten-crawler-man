@@ -38,6 +38,12 @@ const INTERACT_RADIUS_TILES = 1.4;
 const INTERACT_RADIUS = TILE_SIZE * INTERACT_RADIUS_TILES;
 const TILE_CENTER_OFFSET = 0.5;
 
+/**
+ * What one interaction with a placed prop came to. A search is the only
+ * interaction whose result changes what is heard.
+ */
+export type InteriorInteractionOutcome = 'shown' | 'found' | 'nothing_found' | 'already_searched';
+
 /** What pressing interact shows for one placed, interactable prop instance. */
 export interface PlacedInteraction {
   readonly placed: PlacedTownInteriorProp;
@@ -167,7 +173,8 @@ export class InteriorPropInteractionSystem {
    * Runs `target`'s interaction: opens the scene's conversation with the
    * right line(s), rolling and dropping loot for a first-time search.
    * `hasKeeperNearby` only matters for the shop bell — it decides whether the
-   * bell's own line is followed by someone answering it.
+   * bell's own line is followed by someone answering it. `onClosed` runs once
+   * the line(s) are put away, however that happens.
    */
   perform(
     target: PlacedInteraction,
@@ -175,12 +182,13 @@ export class InteriorPropInteractionSystem {
     loot: LootSystem,
     activePlayer: HumanPlayer | CatPlayer,
     hasKeeperNearby: boolean,
-  ): void {
+    onClosed: () => void = () => undefined,
+  ): InteriorInteractionOutcome {
     if (target.interaction.kind === 'examine') {
       const examineId = target.interaction.id;
       const line = this.examineOverride?.(examineId) ?? EXAMINE_LINES[examineId];
-      this.openBark(conversation, target, line);
-      return;
+      this.openBarks(conversation, target, onClosed, line);
+      return 'shown';
     }
     if (target.interaction.kind === 'use') {
       const [first, ...rest] = USE_LINES[target.interaction.id];
@@ -188,10 +196,10 @@ export class InteriorPropInteractionSystem {
         target.interaction.id === 'shop_bell' && hasKeeperNearby
           ? [...rest, SHOP_BELL_KEEPER_LINE]
           : rest;
-      this.openBarks(conversation, target, first, ...chained);
-      return;
+      this.openBarks(conversation, target, onClosed, first, ...chained);
+      return 'shown';
     }
-    this.performSearch(target, conversation, loot, activePlayer);
+    return this.performSearch(target, conversation, loot, activePlayer, onClosed);
   }
 
   private performSearch(
@@ -199,11 +207,12 @@ export class InteriorPropInteractionSystem {
     conversation: Conversation,
     loot: LootSystem,
     activePlayer: HumanPlayer | CatPlayer,
-  ): void {
+    onClosed: () => void,
+  ): InteriorInteractionOutcome {
     const id = target.placed.id;
     if (this.payoutRecord.hasPaidOut(id)) {
-      this.openBark(conversation, target, SEARCH_EMPTY_LINE);
-      return;
+      this.openBarks(conversation, target, onClosed, SEARCH_EMPTY_LINE);
+      return 'already_searched';
     }
     this.payoutRecord.markPaidOut(id);
     const table =
@@ -214,19 +223,17 @@ export class InteriorPropInteractionSystem {
       const centerY = target.y + TILE_SIZE * TILE_CENTER_OFFSET;
       // Falls, lands, then auto-collects, like every other loot drop.
       loot.addLoot(centerX, centerY, { coins, items: [] }, activePlayer, false, true, true);
-      this.openBark(conversation, target, SEARCH_FOUND_LINE);
-    } else {
-      this.openBark(conversation, target, SEARCH_NOTHING_FOUND_LINE);
+      this.openBarks(conversation, target, onClosed, SEARCH_FOUND_LINE);
+      return 'found';
     }
-  }
-
-  private openBark(conversation: Conversation, target: PlacedInteraction, line: BarkLine): void {
-    this.openBarks(conversation, target, line);
+    this.openBarks(conversation, target, onClosed, SEARCH_NOTHING_FOUND_LINE);
+    return 'nothing_found';
   }
 
   private openBarks(
     conversation: Conversation,
     target: PlacedInteraction,
+    onClosed: () => void,
     first: BarkLine,
     ...rest: BarkLine[]
   ): void {
@@ -234,8 +241,8 @@ export class InteriorPropInteractionSystem {
       lines: [first, ...rest],
       reward: null,
       questRelated: false,
-      ending: { kind: 'close', onClosed: () => undefined },
-      dismiss: { kind: 'allowed', onDismissed: () => undefined },
+      ending: { kind: 'close', onClosed },
+      dismiss: { kind: 'allowed', onDismissed: onClosed },
       haltsWorld: false,
       // The prop's centre, measured from the player's origin, as `findTarget` measures reach.
       anchor: {

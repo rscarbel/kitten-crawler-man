@@ -703,13 +703,28 @@ export class AudioManager {
    * heard as a stutter rather than as the same sound again.
    */
   playRandomFresh(ids: ReadonlyArray<SoundId>, opts: PlayOptions = {}): void {
-    if (ids.length === 0) return;
+    const take = this.pickFreshTake(ids);
+    if (take !== null) this.play(take, opts);
+  }
+
+  /**
+   * {@link playRandomFresh} through {@link playWhenReady}: the picked take
+   * waits for its buffer instead of being dropped — for a cue raised as a
+   * room opens, before its group has finished decoding.
+   */
+  playRandomFreshWhenReady(ids: ReadonlyArray<SoundId>, opts: PlayOptions = {}): void {
+    const take = this.pickFreshTake(ids);
+    if (take !== null) this.playWhenReady(take, opts);
+  }
+
+  private pickFreshTake(ids: ReadonlyArray<SoundId>): SoundId | null {
+    if (ids.length === 0) return null;
     const setKey = ids[0];
     const last = this.lastTakeOfSet.get(setKey);
     const fresh = ids.length > 1 ? ids.filter((id) => id !== last) : ids;
     const take = fresh[Math.floor(Math.random() * fresh.length)];
     this.lastTakeOfSet.set(setKey, take);
-    this.play(take, opts);
+    return take;
   }
 
   /** The looping track currently playing (or pending), if any. */
@@ -967,6 +982,11 @@ export class AudioManager {
   startAmbientLoop(id: SoundId, volume: number): void {
     if (this.ambientLoops.has(id)) return;
     if (!this.isRunning) return;
+    const isStreaming = STREAMING_SOUND_IDS.has(id);
+    const buffer = this.buffers.get(id);
+    // Callers retry every frame while a buffer decodes, so bail before building
+    // any graph node or each retry would strand a connected gain.
+    if (!isStreaming && !buffer) return;
 
     // Fade in rather than snapping to `volume`: a room-wide bed starts at full
     // gain the instant you walk in, and an instant step would click.
@@ -976,7 +996,7 @@ export class AudioManager {
     gain.gain.linearRampToValueAtTime(volume, now + AMBIENT_RAMP_MS / MS_PER_SECOND);
     gain.connect(this.ambienceGain);
 
-    if (STREAMING_SOUND_IDS.has(id)) {
+    if (isStreaming) {
       const el = new Audio(SOUND_MANIFEST[id]);
       el.loop = true;
       const node = this.ctx.createMediaElementSource(el);
@@ -988,7 +1008,6 @@ export class AudioManager {
       return;
     }
 
-    const buffer = this.buffers.get(id);
     if (!buffer) return;
     const source = this.ctx.createBufferSource();
     source.buffer = buffer;

@@ -44,7 +44,7 @@ export const HOLE_CARD_COUNT = 2;
 /** The fewest seats a hand is dealt to: the player and one regular. */
 export const HEADS_UP_SEATS = 2;
 const NO_SEAT = -1;
-const FLOP_CARD_COUNT = 3;
+export const FLOP_CARD_COUNT = 3;
 
 // Beat timings. Every delay is scaled by the speed factor; the player's own turn
 // has no clock at all.

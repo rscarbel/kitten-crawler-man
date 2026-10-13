@@ -71,6 +71,7 @@ import type { Mob, PlayerDamageType } from '../../creatures/Mob';
 import { PrisonCellDoor } from '../../creatures/PrisonCellDoor';
 import { PrisonerGoblin } from '../../creatures/PrisonerGoblin';
 import { PrisonGoblin } from '../../creatures/PrisonGoblin';
+import { bathroomSeedFraction } from '../../creatures/BathroomGoblin';
 import type { GameMap } from '../../map/GameMap';
 import type { PrisonSectionId } from '../../map/goblinPrisonLayouts';
 import {
@@ -166,6 +167,9 @@ const DOOR_CHIP_COLOR = '#8a6c4c';
 const SUSPICION_HEARTBEAT_FRAMES = 40;
 /** Frames between one guard's "huh?" barks. */
 const SUSPICIOUS_BARK_THROTTLE_FRAMES = 150;
+/** The shortest and the spread of walking frames between one guard's patrol mutters. */
+const PATROL_MUTTER_MIN_FRAMES = 600;
+const PATROL_MUTTER_SPREAD_FRAMES = 720;
 
 /** Positional loops fall to silence this many tiles from the controlled crawler. */
 const POSITIONAL_FALLOFF_TILES = 9;
@@ -261,6 +265,14 @@ interface SuspiciousHold {
   facing: number;
 }
 
+/** Seeded, so a headless run's random stream is untouched and no two guards grumble in step. */
+function patrolMutterGap(seed: number, mutters: number): number {
+  return (
+    PATROL_MUTTER_MIN_FRAMES +
+    Math.floor(bathroomSeedFraction(seed, mutters) * PATROL_MUTTER_SPREAD_FRAMES)
+  );
+}
+
 interface GuardRuntime {
   readonly compiled: CompiledGuard;
   readonly mob: PrisonGoblin;
@@ -274,6 +286,9 @@ interface GuardRuntime {
   seen: PrisonPoint | null;
   seenWeight: number;
   barkThrottle: number;
+  /** Walking frames left before he next grumbles to himself. */
+  mutterIn: number;
+  mutters: number;
 }
 
 interface SpotRuntime {
@@ -369,6 +384,8 @@ export class GoblinPrisonSystem {
         seen: null,
         seenWeight: 0,
         barkThrottle: 0,
+        mutterIn: patrolMutterGap(mob.seed, 0),
+        mutters: 0,
       };
     });
     this.spots = this.compiled.spotlights.map((compiled) => ({
@@ -640,6 +657,7 @@ export class GoblinPrisonSystem {
       const hold = guard.hold;
       if (hold === null) {
         guard.pose = loopPose;
+        this.tickPatrolMutter(guard);
       } else {
         const target =
           guard.seen !== null
@@ -666,6 +684,16 @@ export class GoblinPrisonSystem {
         guard.suspicion > 0,
       );
     }
+  }
+
+  private tickPatrolMutter(guard: GuardRuntime): void {
+    const onPlainPatrol = guard.investigation === null && guard.pose.moving;
+    if (!onPlainPatrol) return;
+    guard.mutterIn--;
+    if (guard.mutterIn > 0) return;
+    guard.mutters++;
+    guard.mutterIn = patrolMutterGap(guard.mob.seed, guard.mutters);
+    this.playCueFrom('guardMutter', guard.pose);
   }
 
   /** The clock a guard's art and lens run on: its own loop's frame, which is the shared clock until a pause or a noise shifts it. */
@@ -1021,12 +1049,17 @@ export class GoblinPrisonSystem {
     for (const guard of this.guards) {
       if (!guard.mob.owCuePending) continue;
       guard.mob.owCuePending = false;
-      this.playCueFrom('guardMutter', bodyCentre(guard.mob));
+      this.playCueFrom('guardHit', bodyCentre(guard.mob));
     }
     for (const prisoner of this.prisoners) {
       if (!prisoner.heckleCuePending) continue;
       prisoner.heckleCuePending = false;
       this.playCueFrom('prisonerHeckle', bodyCentre(prisoner));
+    }
+    for (const prisoner of this.prisoners) {
+      if (!prisoner.rattleCuePending) continue;
+      prisoner.rattleCuePending = false;
+      this.playCueFrom('prisonerRattle', bodyCentre(prisoner));
     }
     this.active = active;
   }
@@ -1067,7 +1100,10 @@ export class GoblinPrisonSystem {
       if (this.loopsRunning.delete(cue)) audio.stopAmbientLoop(sound);
       return;
     }
-    if (!this.loopsRunning.has(cue)) {
+    // Asked of the manager rather than of `loopsRunning`: a start declined
+    // while the buffer is still decoding or the context is locked must be
+    // retried on a later frame.
+    if (!audio.isAmbientLoopRunning(sound)) {
       audio.startAmbientLoop(sound, volume);
       this.loopsRunning.add(cue);
       return;
