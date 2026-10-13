@@ -424,7 +424,12 @@ import {
   restoreClubMembership,
   type ClubMembership,
 } from '../core/ClubMembership';
-import { createWheelLedger, type WheelLedger } from '../core/WheelLedger';
+import {
+  createWheelLedger,
+  createWheelQuestFreeSpins,
+  grantQuestFreeSpin,
+  type WheelLedger,
+} from '../core/WheelLedger';
 import {
   captureAttackCowState,
   createAttackCowState,
@@ -2066,6 +2071,7 @@ export class DungeonScene extends GameplayScene {
         if (mob instanceof GrotesqueSpider) this.grotesqueSpiders.push(mob);
       },
       this.conversation,
+      (questId) => grantQuestFreeSpin(this.wheelLedger, questId),
     );
     this.spiderQuest.labDressing?.setLootSink(this.destruction.loot);
     this.circusQuestProgress = options?.circusQuestProgress ?? createCircusQuestProgress();
@@ -2570,6 +2576,7 @@ export class DungeonScene extends GameplayScene {
                 ),
               midgeEscortCarry: this.midgeEscortCarry,
               travelUnlocks: this.travelUnlocks,
+              grantWheelFreeSpin: (questId) => grantQuestFreeSpin(this.wheelLedger, questId),
               flyCoins: (coins, worldX, worldY) => {
                 const cam = this.camera();
                 this.rewardFly.enqueueCoins(coins, worldX - cam.x, worldY - cam.y);
@@ -5475,6 +5482,7 @@ export class DungeonScene extends GameplayScene {
     | 'pendingWheelOutcome'
     | 'wheelFreeSpinBet'
     | 'wheelOwedFreeze'
+    | 'wheelQuestFreeSpins'
     | 'bloodVomitRemaining'
     | 'attackCowOwned'
     | 'attackCowHp'
@@ -5486,6 +5494,7 @@ export class DungeonScene extends GameplayScene {
         this.wheelLedger.pendingOutcome === null ? null : { ...this.wheelLedger.pendingOutcome },
       wheelFreeSpinBet: this.wheelLedger.freeSpinBet,
       wheelOwedFreeze: this.wheelLedger.owedFreeze,
+      wheelQuestFreeSpins: createWheelQuestFreeSpins(this.wheelLedger.questFreeSpins),
       bloodVomitRemaining: bloodVomitRemainingOf(humanSnap, catSnap),
       attackCowOwned: this.attackCowState.owned,
       attackCowHp: this.attackCowState.hp ?? undefined,

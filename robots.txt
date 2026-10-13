@@ -1,0 +1,6 @@
+# Kitten Crawler Man — https://rscarbel.github.io/kitten-crawler-man/
+# Every crawler, search engines and AI agents alike, is welcome everywhere.
+User-agent: *
+Allow: /
+
+Sitemap: https://rscarbel.github.io/kitten-crawler-man/sitemap.xml

@@ -15,9 +15,9 @@ import { allocCanvas, surfaceContext, type CanvasSurface } from '../../core/canv
 import { onCanvasRecovery } from '../../core/canvasRecovery';
 import type { WheelBoard, WheelWedge } from '../../systems/casino/wheel/wheelBoard';
 import { wedgeEndAngle, wedgeStartAngle } from '../../systems/casino/wheel/wheelGeometry';
-import { UI_FONT_STACK } from '../../ui/theme/fonts';
+import { MARKER_FONT_STACK, UI_FONT_STACK } from '../../ui/theme/fonts';
 import { measureWorldText, worldText } from '../../ui/world/worldText';
-import { WHEEL_GOLD, WHEEL_TONE_INK } from './wheelPalette';
+import { WHEEL_GOLD, WHEEL_TAPE, WHEEL_TONE_INK } from './wheelPalette';
 
 /** Every radius on the face as a share of the rim's outer edge. */
 export const WHEEL_FACE_RADII = {
@@ -32,6 +32,7 @@ export const WHEEL_FACE_RADII = {
 
 const QUARTER_TURN = Math.PI / 2;
 const FULL_TURN = Math.PI * 2;
+const HALF = 0.5;
 
 /** Label type, as shares of the rim's radius unless noted. */
 const WEDGE_LABEL = {
@@ -67,6 +68,55 @@ const HUB = {
   starInner: 0.45,
 } as const;
 
+/**
+ * The tape over a taped wedge: two strips slapped across the old label where
+ * the wedge is wide enough to show them, then one broad strip laid down its
+ * middle for the new label to be written on. Positions, lengths and widths are
+ * shares of the rim's radius, measured along the wedge from the hub; tilts are
+ * radians off the wedge's middle line.
+ */
+const TAPE_STRIPS = {
+  outerCross: { along: 0.72, tilt: 1.05, length: 0.52, width: 0.1 },
+  innerCross: { along: 0.4, tilt: -1.15, length: 0.34, width: 0.085 },
+  /** Tape laid by hand is never quite straight. */
+  label: { along: 0.55, tilt: -0.025, length: 0.6, width: 0.17 },
+} as const;
+
+const TAPE = {
+  alpha: 0.86,
+  /** The darker band along each long edge, as a share of the strip's width. */
+  edgeBand: 0.14,
+  /** How many teeth a torn end has, and how deep they bite, as a share of the strip's width. */
+  tornTeeth: 5,
+  tornDepth: 0.16,
+  sheenAlpha: 0.5,
+} as const;
+
+/** The marker lettering on the tape, as shares of the rim's radius unless noted. */
+const MARKER = {
+  maxSize: 0.12,
+  /** The writing fills this share of the tape's length. */
+  fillAlong: 0.86,
+  /** A hand never writes level: the whole line leans this far, in radians. */
+  lean: -0.05,
+  /** Each letter turns up to this far either way, in radians. */
+  letterTurn: 0.12,
+  /** Each letter rides up to this share of its size off the line. */
+  letterLift: 0.08,
+  /** Letters crowd together a little, as a share of the type size. */
+  squeeze: 0.04,
+} as const;
+
+/** The classic shader hash's two constants: any pair that scatters well would do. */
+const WOBBLE_FREQUENCY = 12.9898;
+const WOBBLE_SCALE = 43758.5453;
+
+/** A repeatable wobble in [-1, 1] for letter `index`, so the cached face never shimmers. */
+function letterWobble(index: number, salt: number): number {
+  const raw = Math.sin((index + 1) * (salt + 1) * WOBBLE_FREQUENCY) * WOBBLE_SCALE;
+  return (raw - Math.floor(raw)) * 2 - 1;
+}
+
 /** The canvas angle on an unturned face of a wheel-frame angle. */
 export function faceCanvasAngle(wheelAngle: number): number {
   return wheelAngle - QUARTER_TURN;
@@ -84,6 +134,12 @@ export function paintWheelWedge(
   a1: number,
   radius: number,
 ): void {
+  const covered = wedge.tapedOver;
+  if (covered !== undefined) {
+    paintWheelWedge(ctx, covered, a0, a1, radius);
+    paintTapedLabel(ctx, wedge.label, a0, a1, radius);
+    return;
+  }
   const ink = WHEEL_TONE_INK[wedge.tone];
   const faceR = radius * WHEEL_FACE_RADII.rimInner;
   ctx.save();
@@ -147,6 +203,151 @@ function paintWedgeLabel(
       align: 'right',
       baseline: 'middle',
     });
+  });
+  ctx.restore();
+}
+
+/**
+ * Strips of masking tape across a wedge's old label and `label` written over
+ * them by hand in marker, clipped to the wedge's face.
+ */
+function paintTapedLabel(
+  ctx: CanvasRenderingContext2D,
+  label: string,
+  a0: number,
+  a1: number,
+  radius: number,
+): void {
+  ctx.save();
+  ctx.beginPath();
+  ctx.moveTo(0, 0);
+  ctx.arc(0, 0, radius * WHEEL_FACE_RADII.rimInner, a0, a1);
+  ctx.closePath();
+  ctx.clip();
+  ctx.rotate((a0 + a1) / 2);
+  for (const strip of [TAPE_STRIPS.outerCross, TAPE_STRIPS.innerCross, TAPE_STRIPS.label]) {
+    paintTapeStrip(
+      ctx,
+      radius * strip.along,
+      strip.tilt,
+      radius * strip.length,
+      radius * strip.width,
+    );
+  }
+  const labelStrip = TAPE_STRIPS.label;
+  ctx.rotate(labelStrip.tilt);
+  paintMarkerLine(
+    ctx,
+    label,
+    radius * labelStrip.along,
+    radius * labelStrip.length * MARKER.fillAlong,
+    radius,
+  );
+  ctx.restore();
+}
+
+/** One strip of tape, centred `along` the wedge's middle line and turned `tilt` off it. */
+function paintTapeStrip(
+  ctx: CanvasRenderingContext2D,
+  along: number,
+  tilt: number,
+  length: number,
+  width: number,
+): void {
+  const halfL = length / 2;
+  const halfW = width / 2;
+  const toothDepth = width * TAPE.tornDepth;
+  ctx.save();
+  ctx.translate(along, 0);
+  ctx.rotate(tilt);
+  ctx.globalAlpha = TAPE.alpha;
+  ctx.beginPath();
+  ctx.moveTo(-halfL, -halfW);
+  ctx.lineTo(halfL, -halfW);
+  tornEnd(ctx, halfL, -halfW, toothDepth, 1);
+  ctx.lineTo(-halfL, halfW);
+  tornEnd(ctx, -halfL, halfW, toothDepth, -1);
+  ctx.closePath();
+  const band = ctx.createLinearGradient(0, -halfW, 0, halfW);
+  band.addColorStop(0, WHEEL_TAPE.edge);
+  band.addColorStop(TAPE.edgeBand, WHEEL_TAPE.face);
+  band.addColorStop(1 - TAPE.edgeBand, WHEEL_TAPE.face);
+  band.addColorStop(1, WHEEL_TAPE.edge);
+  ctx.fillStyle = band;
+  ctx.fill();
+  ctx.globalAlpha = TAPE.alpha * TAPE.sheenAlpha;
+  ctx.fillStyle = WHEEL_TAPE.sheen;
+  ctx.fillRect(
+    -halfL + toothDepth,
+    -halfW * TAPE.edgeBand,
+    length - toothDepth * 2,
+    halfW * TAPE.edgeBand,
+  );
+  ctx.restore();
+}
+
+/**
+ * A torn end from the corner at (`x`, `fromY`) across to the other edge:
+ * teeth of alternating depth, biting inward (`inward` is +1 at the right end, -1 at the left).
+ */
+function tornEnd(
+  ctx: CanvasRenderingContext2D,
+  x: number,
+  fromY: number,
+  depth: number,
+  inward: number,
+): void {
+  const teeth = TAPE.tornTeeth;
+  const step = (-2 * fromY) / teeth;
+  for (let tooth = 1; tooth <= teeth; tooth++) {
+    const bite = tooth % 2 === 0 ? 0 : depth * (1 + letterWobble(tooth, inward) * HALF);
+    ctx.lineTo(x - inward * bite, fromY + step * tooth);
+  }
+}
+
+/** `text` written by hand down the wedge's middle line, centred at `centre`, no longer than `span`. */
+function paintMarkerLine(
+  ctx: CanvasRenderingContext2D,
+  text: string,
+  centre: number,
+  span: number,
+  radius: number,
+): void {
+  const family = MARKER_FONT_STACK;
+  const letters = Array.from(text);
+  const natural = radius * MARKER.maxSize;
+  const widthAt = (size: number): number =>
+    letters.reduce(
+      (sum, letter) =>
+        sum +
+        measureWorldText(ctx, letter, { size, bold: true, family }).width -
+        size * MARKER.squeeze,
+      0,
+    );
+  const fullWidth = widthAt(natural);
+  const size = fullWidth > span ? natural * (span / fullWidth) : natural;
+  const lineWidth = widthAt(size);
+  ctx.save();
+  ctx.translate(centre, 0);
+  ctx.rotate(MARKER.lean);
+  let x = -lineWidth / 2;
+  letters.forEach((letter, index) => {
+    const advance = measureWorldText(ctx, letter, { size, bold: true, family }).width;
+    ctx.save();
+    ctx.translate(x + advance / 2, letterWobble(index, 1) * size * MARKER.letterLift);
+    ctx.rotate(letterWobble(index, 2) * MARKER.letterTurn);
+    worldText(ctx, letter, {
+      x: 0,
+      y: 0,
+      size,
+      bold: true,
+      family,
+      color: WHEEL_TAPE.marker,
+      align: 'center',
+      baseline: 'middle',
+    });
+    ctx.restore();
+    x += advance - size * MARKER.squeeze;
   });
   ctx.restore();
 }

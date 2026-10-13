@@ -4,7 +4,12 @@ import type { SerializedAbilityState } from '../core/AbilityManager';
 import type { SerializedAchievements } from '../core/AchievementManager';
 import type { GameStatsSnapshot } from '../core/GameStats';
 import type { PartyCraftsState } from '../core/partyCrafts';
-import type { OwedWheelItem, PendingWheelOutcome, WheelCrawler } from '../core/WheelLedger';
+import type {
+  OwedWheelItem,
+  PendingWheelOutcome,
+  WheelCrawler,
+  WheelQuestFreeSpins,
+} from '../core/WheelLedger';
 import type { BloodVomitRemaining } from '../core/bloodVomitSave';
 import { parseGameProgress } from '../core/saveFormat';
 import { PAGE_SAVE_LATCH, type ProgressStorage } from '../core/progressPersistence';
@@ -95,6 +100,8 @@ export interface GameProgress {
   wheelOwedFreeze?: WheelCrawler | null;
   /** Prize items held for a crawler outside the bag: read on load, never written. */
   wheelOwedItems?: OwedWheelItem[];
+  /** Quest-earned wheel spins and the taped chain one is playing; older saves have none. */
+  wheelQuestFreeSpins?: WheelQuestFreeSpins;
   /** Frames of blood vomiting each crawler has left. */
   bloodVomitRemaining?: BloodVomitRemaining;
   /** Whether Carl owns the attack cow. */

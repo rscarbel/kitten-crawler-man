@@ -1,10 +1,15 @@
 /**
  * The Desperado Club casino's first question: which game. Slots, blackjack and
  * the wheel are always open; Texas Hold'em is offered only when the party can
- * cover the smallest buy-in, and says so when it can't.
+ * cover the smallest buy-in, and says so when it can't. A free spin a quest
+ * paid for stands over the grid as its own button, apart from the wheel's,
+ * because it skips the warnings the wheel's own button always shows.
  */
 
-import type { Surface } from '../../core/UiRoot';
+import type { WheelFreeSpinOffer } from '../../../systems/casino/CasinoGameHost';
+import type { Rect } from '../../core/geom';
+import type { Surface, Ui } from '../../core/UiRoot';
+import { button, buttonHeight } from '../../widgets/button';
 import { choiceModalSurface } from '../../widgets/choiceModal';
 
 export interface CasinoGamePickerOptions {
@@ -21,6 +26,10 @@ export interface CasinoGamePickerOptions {
   readonly onBlackjack: () => void;
   /** Opens the wheel's warnings, never the wheel itself. */
   readonly onWheel: () => void;
+  /** The free spin waiting at the wheel, or null when there is none. */
+  readonly freeSpins: () => WheelFreeSpinOffer | null;
+  /** Opens the wheel straight onto the free spin, past the warnings. */
+  readonly onFreeSpin: () => void;
   readonly onClose: () => void;
 }
 
@@ -32,6 +41,34 @@ const BLACKJACK_LABEL = 'Blackjack';
 const WHEEL_LABEL = 'Wheel of Fortune';
 /** Four games read as a 2×2 grid wherever the labels fit side by side. */
 const GAME_COLUMNS = 2;
+export const CASINO_FREE_SPIN_BUTTON_ID = 'free-spin';
+const FREE_SPIN_HINT = 'Wheel of Fortune · the Nothing is taped over';
+
+function freeSpinLabel(count: number): string {
+  return count > 1 ? `Free Spin ×${count}` : 'Free Spin';
+}
+
+/** The free spin's button, full width above the games. */
+function freeSpinExtra(
+  ui: Ui,
+  offer: WheelFreeSpinOffer,
+  onFreeSpin: () => void,
+): { readonly height: number; readonly draw: (rect: Rect) => void } {
+  return {
+    height: buttonHeight(ui, 'lg'),
+    draw: (rect) =>
+      button(ui, rect, {
+        id: CASINO_FREE_SPIN_BUTTON_ID,
+        label: freeSpinLabel(offer.count),
+        hint: FREE_SPIN_HINT,
+        icon: 'sparkle',
+        variant: 'success',
+        size: 'lg',
+        disabled: offer.blocked ?? false,
+        onTap: onFreeSpin,
+      }),
+  };
+}
 
 /** The game picker as a modal: Escape and ✕ walk away from the table. */
 export function casinoGamePickerSurface(opts: CasinoGamePickerOptions): Surface {
@@ -56,6 +93,7 @@ export function casinoGamePickerSurface(opts: CasinoGamePickerOptions): Surface 
         wheel: 'One wedge ends your run',
       };
       const hint = (line: string): string | undefined => (short ? line : undefined);
+      const freeSpins = opts.freeSpins();
       return {
         id: 'picker',
         overline: OVERLINE,
@@ -69,6 +107,7 @@ export function casinoGamePickerSurface(opts: CasinoGamePickerOptions): Surface 
               `${WHEEL_LABEL}: Tito's wheel · one wedge ends your run for good`,
             ],
         width: 'md',
+        extra: freeSpins === null ? undefined : freeSpinExtra(ui, freeSpins, opts.onFreeSpin),
         buttonColumns: GAME_COLUMNS,
         buttons: [
           {

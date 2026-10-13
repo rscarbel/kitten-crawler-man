@@ -16,7 +16,12 @@ import type { TrackerEntry } from './questTracker';
 import { clamp, pointInRect } from '../utils';
 import { awardPartyXp, type PartyXpApplied } from '../core/awardXp';
 import { CRAWLER_NAMES } from '../core/SkillManager';
-import { bagItemRewardLine, itemIconPainter, partyXpSections } from '../ui/questReward/rewardLines';
+import {
+  bagItemRewardLine,
+  itemIconPainter,
+  partyXpSections,
+  wheelFreeSpinRewardLine,
+} from '../ui/questReward/rewardLines';
 import type { QuestRewardSpec } from '../ui/questReward/types';
 import { drawInteractionPrompt } from '../ui/InteractionPrompt';
 import type { GameMap } from '../map/GameMap';
@@ -541,6 +546,8 @@ export class SpiderQuestSystem implements GameSystem {
     bus: EventBus,
     addMob: (mob: Mob) => void,
     private readonly conversation: Conversation,
+    /** Grants a quest's free spin at the wheel, once per quest; false when it was already granted. */
+    private readonly grantWheelFreeSpin: (questId: string) => boolean,
   ) {
     this.gameMap = gameMap;
     this.bus = bus;
@@ -1187,12 +1194,13 @@ export class SpiderQuestSystem implements GameSystem {
   private payRewards(human: HumanPlayer, cat: CatPlayer): void {
     const xpApplied = awardPartyXp(human, cat, SPIDER_QUEST_COMPLETION_XP, this.bus);
     cat.inventory.addItem(SPIDER_QUEST_BOOK, 1);
-    this.pendingRewardSpec = this.rewardSpec(xpApplied);
+    const freeSpin = this.grantWheelFreeSpin(SPIDER_QUEST_ID);
+    this.pendingRewardSpec = this.rewardSpec(xpApplied, freeSpin);
     this.rewardScreenDelay = QUEST_REWARD_SCREEN_DELAY_FRAMES;
   }
 
   /** The lab's quest-complete screen, describing what {@link payRewards} actually paid. */
-  private rewardSpec(xpApplied: PartyXpApplied): QuestRewardSpec {
+  private rewardSpec(xpApplied: PartyXpApplied, freeSpin: boolean): QuestRewardSpec {
     return {
       questTitle: SPIDER_QUEST_NAME,
       renderQuestIcon: itemIconPainter(SPIDER_QUEST_BOOK),
@@ -1205,6 +1213,7 @@ export class SpiderQuestSystem implements GameSystem {
               describe: true,
               note: `In ${CRAWLER_NAMES.cat}'s bag.`,
             }),
+            ...(freeSpin ? [wheelFreeSpinRewardLine()] : []),
           ],
         },
       ],

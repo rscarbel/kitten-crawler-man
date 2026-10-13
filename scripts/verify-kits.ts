@@ -897,6 +897,7 @@ console.log('\nBriarHollowKit is inert until gameMap.briarHollow exists');
   const partyCrafts = createPartyCraftsState();
   const kit = new BriarHollowKit(stage.world, {
     travelUnlocks: { anchor: createAnchorQuestProgress() },
+    grantWheelFreeSpin: () => false,
     human: stage.pm.human,
     cat: stage.pm.cat,
     partyTools: new PartyTools(partyCrafts.tools),

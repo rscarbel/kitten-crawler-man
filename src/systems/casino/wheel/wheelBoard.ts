@@ -130,6 +130,11 @@ export interface WheelWedge {
   readonly prize: WheelPrize;
   /** Set on once-only good prizes; null on red and Spin Again, which never retire. */
   readonly prizeId: WheelPrizeId | null;
+  /**
+   * The face still showing under strips of tape: the wedge plays as this one,
+   * but the wheel paints the old face, taped over and relabelled by hand.
+   */
+  readonly tapedOver?: WheelWedge;
 }
 
 export type WheelBoard = readonly WheelWedge[];
@@ -200,6 +205,24 @@ const NOTHING: WheelWedge = {
   prize: { kind: 'nothing' },
   prizeId: null,
 };
+
+/**
+ * The Nothing as a quest's free spin shows it: taped over with "Spin Again"
+ * written on the tape, and paying exactly what Spin Again pays.
+ */
+export const TAPED_NOTHING: WheelWedge = {
+  ...spinAgain('nothing_taped'),
+  units: NOTHING.units,
+  tapedOver: NOTHING,
+};
+
+/**
+ * `board` with every Nothing taped over. No wedge on the result wipes the
+ * save, so a draw from it cannot reach the Nothing whatever the weights.
+ */
+export function tapedBoard(board: WheelBoard): WheelBoard {
+  return board.map((wedge) => (wedge.prize.kind === 'nothing' ? TAPED_NOTHING : wedge));
+}
 
 const STAB_LABEL = 'Get stabbed in the stomach by the croupier';
 const POISON_LABEL = 'Get poisoned';

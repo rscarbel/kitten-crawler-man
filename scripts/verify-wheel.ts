@@ -4,8 +4,10 @@
  * the board's red share and fixed wedges, the bet upgrades flipping one wedge
  * per step in order, once-won prizes never coming up again while staying on the
  * rim, Spin Again never retiring, landings that always sit inside the chosen
- * wedge, spin plans that come to rest exactly on that landing, and the save
- * latch that stops every write once the Nothing's wipe starts.
+ * wedge, spin plans that come to rest exactly on that landing, the save
+ * latch that stops every write once the Nothing's wipe starts, and a quest's
+ * free spin: the Nothing unreachable through its whole Spin Again chain, the
+ * spin spent with its commit, and the wheel back at the picker afterwards.
  *
  * Every random source is a seeded `mulberry32` stream, and the spin sims run
  * across many streams so one extra draw anywhere cannot reshuffle the verdict.
@@ -1202,6 +1204,234 @@ async function checkLegendaryWeaponPaysBoth(): Promise<void> {
   );
 }
 
+/**
+ * A quest's free spin from the picker: the warnings are skipped, every board
+ * the chain draws from has no Nothing (a forced Nothing finds nothing to land
+ * on, and the taped wedge pays Spin Again), the spin is spent in the commit's
+ * own save, the chain ends at the picker, and the next pick of the wheel shows
+ * the warnings again. Then the ledger: one spin per quest, an older save with
+ * no record loads with none, and a reload mid-chain still owes a taped spin.
+ */
+async function checkQuestFreeSpin(): Promise<void> {
+  const { ClubWheelSystem, WHEEL_SPIN_HOLD_MS } = await import('../src/systems/ClubWheelSystem');
+  const {
+    createWheelLedger,
+    grantQuestFreeSpin,
+    parseWheelQuestFreeSpins,
+    questFreeSpinsLeft,
+    tapedChainOwed,
+  } = await import('../src/core/WheelLedger');
+  const { settleWheelLedger } = await import('../src/systems/casino/wheel/wheelPrizes');
+  const { TAPED_NOTHING, WHEEL_BET_STEP, tapedBoard } =
+    await import('../src/systems/casino/wheel/wheelBoard');
+  const STEP_MS = 16;
+  /** Long enough for any spin and its reveal to play out. */
+  const SPIN_BUDGET_MS = 40_000;
+  const PURSE = 10_000;
+  const FINAL_PRIZE = 'gold_50k';
+  const FINAL_PRIZE_GOLD = 50_000;
+  /** The chain lands on the taped wedge this many times before it pays out. */
+  const TAPED_LANDINGS = 2;
+  const UPGRADE_STEPS = 2;
+
+  check(
+    WHEEL_BETS.every((bet) =>
+      tapedBoard(boardForBet(bet)).every((wedge) => wedge.prize.kind !== 'nothing'),
+    ),
+    'no taped board at any bet has a wedge that wipes',
+  );
+  check(
+    TAPED_NOTHING.prize.kind === 'spin_again' && TAPED_NOTHING.tapedOver?.prize.kind === 'nothing',
+    'the taped Nothing pays Spin Again and still shows the Nothing under the tape',
+  );
+
+  const ledger = createWheelLedger();
+  check(grantQuestFreeSpin(ledger, 'quest_a'), 'a quest grants its free spin');
+  check(!grantQuestFreeSpin(ledger, 'quest_a'), 'the same quest never grants a second one');
+  grantQuestFreeSpin(ledger, 'quest_b');
+  check(questFreeSpinsLeft(ledger) === 2, 'two quests leave two free spins');
+
+  let now = 0;
+  let saves = 0;
+  let usedAtFirstSave: number | null = null;
+  let forcedCalls = 0;
+  let boardsWithNothing = 0;
+  let tapedForced = 0;
+  const human = new HumanPlayer(0, 0, TILE_SIZE);
+  const cat = new CatPlayer(1, 0, TILE_SIZE);
+  human.coins = PURSE;
+  const seat = { active: () => human, companion: () => cat };
+  const wheel = new ClubWheelSystem({
+    audio: null,
+    ledger,
+    saveNow: () => {
+      saves++;
+      usedAtFirstSave ??= ledger.questFreeSpins.used;
+      return Promise.resolve('saved');
+    },
+    progressWipe: null,
+    afterNothing: () => undefined,
+    grantAttackCow: () => undefined,
+    clock: () => now,
+    random: mulberry32(1),
+    forcedOutcome: (board) => {
+      forcedCalls++;
+      if (board.some((wedge) => wedge.prize.kind === 'nothing')) boardsWithNothing++;
+      const taped = board.findIndex((wedge) => wedge.tapedOver !== undefined);
+      if (tapedForced < TAPED_LANDINGS && taped >= 0) {
+        tapedForced++;
+        return { wedgeIndex: taped, wedge: board[taped] };
+      }
+      const index = board.findIndex((wedge) => wedge.prizeId === FINAL_PRIZE);
+      return index < 0 ? null : { wedgeIndex: index, wedge: board[index] };
+    },
+  });
+  const spinAndSettle = async (): Promise<void> => {
+    wheel.holdSpinForReview();
+    for (let t = 0; t <= WHEEL_SPIN_HOLD_MS + STEP_MS; t += STEP_MS) {
+      now += STEP_MS;
+      wheel.update();
+    }
+    for (let t = 0; t < SPIN_BUDGET_MS && wheel.busy; t += STEP_MS) {
+      await Promise.resolve();
+      now += STEP_MS;
+      wheel.update();
+    }
+  };
+
+  let backAtPicker = 0;
+  check(wheel.freeSpinOffer?.count === 2, 'the picker offers both free spins');
+  wheel.bindPicker(() => {
+    backAtPicker++;
+  });
+  wheel.openFreeSpin(seat);
+  check(wheel.currentScreen === 'wheel', 'a free spin opens on the wheel, past the warnings');
+  for (let step = 0; step < UPGRADE_STEPS; step++) wheel.betUpForReview();
+  check(
+    wheel.currentBet === WHEEL_MIN_BET + UPGRADE_STEPS * WHEEL_BET_STEP,
+    'the bet can still be raised to buy upgrades on a free spin',
+  );
+  await spinAndSettle();
+  check(
+    human.coins === PURSE - UPGRADE_STEPS * WHEEL_BET_STEP,
+    `a free spin charges only the upgrades (spent ${PURSE - human.coins})`,
+  );
+  check(usedAtFirstSave === 1, 'the free spin is spent in the save that commits it');
+  for (let landing = 1; landing < TAPED_LANDINGS && wheel.currentScreen === 'wheel'; landing++) {
+    check(
+      wheel.currentBoard.every((wedge) => wedge.prize.kind !== 'nothing'),
+      'the Spin Again chained from a free spin is still taped',
+    );
+    await spinAndSettle();
+  }
+  check(wheel.currentScreen === 'wheel', 'landing on the taped Nothing keeps the wheel spinning');
+  await spinAndSettle();
+  check(forcedCalls === TAPED_LANDINGS + 1, `the chain drew three spins (drew ${forcedCalls})`);
+  check(boardsWithNothing === 0, 'no spin in the chain could land on the Nothing');
+  check(
+    human.coins === PURSE - UPGRADE_STEPS * WHEEL_BET_STEP + FINAL_PRIZE_GOLD,
+    'the chain pays its final prize, and no Spin Again in it charged anything',
+  );
+  check(
+    wheel.currentScreen === 'closed' && backAtPicker === 1,
+    'once the chain pays out the wheel closes back to the picker',
+  );
+  check(
+    questFreeSpinsLeft(ledger) === 1 && !ledger.questFreeSpins.tapedChain,
+    'one free spin is used and the taped chain is over',
+  );
+  check(saves > 0, 'the chain was saved');
+  wheel.open(seat);
+  check(
+    wheel.currentScreen === 'warning',
+    'picking the wheel again after a free spin shows the warnings',
+  );
+
+  // A chain left part way and finished from an ordinary, warned visit still ends at the picker.
+  const resumed = createWheelLedger();
+  grantQuestFreeSpin(resumed, 'quest_a');
+  let resumedTaped = 0;
+  let resumedPicker = 0;
+  const resumedHuman = new HumanPlayer(0, 0, TILE_SIZE);
+  resumedHuman.coins = PURSE;
+  const resumedSeat = { active: () => resumedHuman, companion: () => cat };
+  const resumedWheel = new ClubWheelSystem({
+    audio: null,
+    ledger: resumed,
+    saveNow: () => Promise.resolve('saved'),
+    progressWipe: null,
+    afterNothing: () => undefined,
+    grantAttackCow: () => undefined,
+    clock: () => now,
+    random: mulberry32(1),
+    forcedOutcome: (board) => {
+      const taped = board.findIndex((wedge) => wedge.tapedOver !== undefined);
+      if (resumedTaped === 0 && taped >= 0) {
+        resumedTaped++;
+        return { wedgeIndex: taped, wedge: board[taped] };
+      }
+      const index = board.findIndex((wedge) => wedge.prizeId === FINAL_PRIZE);
+      return index < 0 ? null : { wedgeIndex: index, wedge: board[index] };
+    },
+  });
+  const settleResumed = async (): Promise<void> => {
+    resumedWheel.holdSpinForReview();
+    for (let t = 0; t <= WHEEL_SPIN_HOLD_MS + STEP_MS; t += STEP_MS) {
+      now += STEP_MS;
+      resumedWheel.update();
+    }
+    for (let t = 0; t < SPIN_BUDGET_MS && resumedWheel.busy; t += STEP_MS) {
+      await Promise.resolve();
+      now += STEP_MS;
+      resumedWheel.update();
+    }
+  };
+  resumedWheel.bindPicker(() => {
+    resumedPicker++;
+  });
+  resumedWheel.openFreeSpin(resumedSeat);
+  await settleResumed();
+  resumedWheel.leaveForReview();
+  check(
+    resumedPicker === 1,
+    'leaving a free spin part way through its chain returns to the picker',
+  );
+  resumedWheel.openWheelForReview(resumedSeat);
+  check(
+    resumedWheel.currentBoard.every((wedge) => wedge.prize.kind !== 'nothing'),
+    'the owed chain spin is taped on an ordinary visit too',
+  );
+  await settleResumed();
+  check(
+    resumedWheel.currentScreen === 'closed' && resumedPicker === 2,
+    'a taped chain finished from an ordinary visit returns to the picker',
+  );
+
+  const older = createWheelLedger([], null, null, null, [], parseWheelQuestFreeSpins(undefined));
+  check(questFreeSpinsLeft(older) === 0, 'a save from before quest free spins loads with none');
+
+  const midChain = createWheelLedger(
+    [],
+    {
+      wedgeId: TAPED_NOTHING.id,
+      prizeId: null,
+      crawler: 'human',
+      recipient: 'human',
+      bet: 0,
+      boardBet: WHEEL_MIN_BET,
+    },
+    null,
+    null,
+    [],
+    { earnedBy: ['quest_a'], used: 1, tapedChain: true },
+  );
+  settleWheelLedger(midChain, { human, cat, grantAttackCow: () => undefined });
+  check(
+    tapedChainOwed(midChain) && midChain.freeSpinBet === WHEEL_MIN_BET,
+    'a reload mid-chain still owes the taped Spin Again',
+  );
+}
+
 runSection('board', checkBoard);
 runSection('bets', checkBets);
 runSection('picks', checkPicks);
@@ -1217,6 +1447,8 @@ await checkSaveLatchBlocksWritesAfterWipe();
 console.log('\nhost');
 await checkHostCommitsBeforeTurning();
 await checkLegendaryWeaponPaysBoth();
+console.log('\nquest free spin');
+await checkQuestFreeSpin();
 
 console.log(
   failures === 0

@@ -52,6 +52,7 @@ import { casinoGamePickerSurface } from '../ui/screens/dialogs/casinoGamePicker'
 import { ClubSlotsSystem } from './ClubSlotsSystem';
 import {
   idleCasinoGameHost,
+  idleWheelGameHost,
   type CasinoGameHost,
   type CasinoGameHosts,
 } from './casino/CasinoGameHost';
@@ -320,7 +321,7 @@ export class DesperadoClubSystem {
   /** The picker's slots and wheel, each run by its own host system. */
   private readonly games: CasinoGameHosts = {
     slots: idleCasinoGameHost(),
-    wheel: idleCasinoGameHost(),
+    wheel: idleWheelGameHost(),
   };
   /** The casino's "which game?" question is up. */
   private gamePickerOpen = false;
@@ -422,8 +423,14 @@ export class DesperadoClubSystem {
    * Call before the club's surfaces are mounted, which is when the host's own
    * surfaces join them.
    */
-  installCasinoGame(game: keyof CasinoGameHosts, host: CasinoGameHost): void {
+  installCasinoGame<Game extends keyof CasinoGameHosts>(
+    game: Game,
+    host: CasinoGameHosts[Game],
+  ): void {
     this.games[game] = host;
+    this.games.wheel.bindPicker(() => {
+      this.gamePickerOpen = true;
+    });
   }
 
   /** Coins staked at any casino game since entering the club — the free-security perk hook. */
@@ -523,6 +530,10 @@ export class DesperadoClubSystem {
         onWheel: () => {
           this.gamePickerOpen = false;
           this.games.wheel.open(seat);
+        },
+        freeSpins: () => this.games.wheel.freeSpinOffer,
+        onFreeSpin: () => {
+          if (this.games.wheel.openFreeSpin(seat)) this.gamePickerOpen = false;
         },
         onBlackjack: () => {
           this.gamePickerOpen = false;

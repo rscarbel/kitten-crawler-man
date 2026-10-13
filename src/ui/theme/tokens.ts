@@ -227,6 +227,12 @@ export function resolveTheme(density: Density): Theme {
   return theme;
 }
 
+/**
+ * How far an italic run leans: the shear the UI face is drawn with, since the
+ * bundled Inter has no italic of its own. Horizontal shift per unit of height.
+ */
+export const ITALIC_SLANT = 0.2;
+
 /** The CSS `font` shorthand for one type style, e.g. `600 12px "Inter UI", system-ui, sans-serif`. */
 export function fontFor(style: TypeStyle, family: string = UI_FONT_STACK): string {
   return `${style.weight} ${style.size}px ${family}`;

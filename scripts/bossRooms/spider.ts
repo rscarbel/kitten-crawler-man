@@ -149,6 +149,7 @@ export const spiderRoom: BossRoomHarness = {
         env.frame.roster.add(mob);
       },
       new Conversation(null),
+      () => false,
     );
     const lab = quest.labDressing;
     if (lab === null) throw new Error('the spider quest built no lab dressing');

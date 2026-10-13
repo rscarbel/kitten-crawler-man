@@ -1,18 +1,19 @@
 /**
  * Fixtures for Tito's Wheel of Fortune: both danger prompts (arming and
  * armed), the wheel at the minimum and maximum bet, a wedge turning over as
- * the bet rises, SPIN half held, the wheel mid-spin, every outcome's reveal and
- * the Nothing. Each drives a real `ClubWheelSystem` on a fake clock with no
+ * the bet rises, SPIN half held, the wheel mid-spin, every outcome's reveal,
+ * a quest's free spin with the Nothing taped over, and the Nothing. Each drives a real `ClubWheelSystem` on a fake clock with no
  * storage behind it, so the screens show what the game ships.
  */
 
 import { HumanPlayer } from '../../../creatures/HumanPlayer';
 import { CatPlayer } from '../../../creatures/CatPlayer';
 import { TILE_SIZE } from '../../../core/constants';
-import { createWheelLedger } from '../../../core/WheelLedger';
+import { createWheelLedger, grantQuestFreeSpin } from '../../../core/WheelLedger';
 import { mulberry32 } from '../../../sprites/person/rng';
 import { ClubWheelSystem, WHEEL_ARMING_MS } from '../../../systems/ClubWheelSystem';
 import {
+  WHEEL_BET_STEP,
   WHEEL_MAX_BET,
   WHEEL_MIN_BET,
   boardForBet,
@@ -52,8 +53,15 @@ const PRIZE_OPENING_MS = 300;
 const NOTHING_BULBS_FRAME_MS = 2600;
 const NOTHING_TEXT_FRAME_MS = 11_000;
 
+/** Any quest id: the fixture only needs a free spin on the ledger. */
+const FIXTURE_FREE_SPIN_QUEST = 'grotesque_spider';
+/** Two rungs above the minimum, so the free spin's upgrade price shows. */
+const FREE_SPIN_UPGRADED_BET = WHEEL_MIN_BET + 2 * WHEEL_BET_STEP;
+
 type WheelState =
   | { readonly kind: 'prompt'; readonly prompt: WheelWarningKind; readonly armed: boolean }
+  | { readonly kind: 'freeSpin'; readonly bet: number }
+  | { readonly kind: 'freeSpinTapedLanding' }
   | { readonly kind: 'idle'; readonly bet: number }
   | { readonly kind: 'flip' }
   | { readonly kind: 'hold' }
@@ -84,9 +92,11 @@ function wheelFixture(name: string, state: WheelState): DialogFixture {
       const seat = donutSpins
         ? { active: () => cat, companion: () => human }
         : { active: () => human, companion: () => cat };
+      const ledger = createWheelLedger();
+      grantQuestFreeSpin(ledger, FIXTURE_FREE_SPIN_QUEST);
       const wheel = new ClubWheelSystem({
         audio: null,
-        ledger: createWheelLedger(),
+        ledger,
         saveNow: () => Promise.resolve('disabled'),
         progressWipe: null,
         afterNothing: () => undefined,
@@ -107,6 +117,20 @@ function wheelFixture(name: string, state: WheelState): DialogFixture {
           if (state.armed) advance(WHEEL_ARMING_MS + STEP_MS);
           else advance(ARMING_FRAME_MS);
           break;
+        case 'freeSpin':
+          wheel.openFreeSpin(seat);
+          wheel.setBetForReview(state.bet);
+          advance(GREETING_FRAME_MS);
+          break;
+        case 'freeSpinTapedLanding': {
+          wheel.openFreeSpin(seat);
+          const index = wheel.currentBoard.findIndex((wedge) => wedge.tapedOver !== undefined);
+          if (index < 0)
+            throw new Error(`wheel fixture ${name}: the free spin's board is not taped`);
+          wheel.landForReview(seat, index);
+          advance(REVEAL_FRAME_MS);
+          break;
+        }
         case 'idle':
           wheel.openWheelForReview(seat);
           wheel.setBetForReview(state.bet);
@@ -173,6 +197,9 @@ export const FIXTURES: readonly DialogFixture[] = [
   wheelFixture('wheel-confirm', { kind: 'prompt', prompt: 'confirm', armed: false }),
   wheelFixture('wheel-confirm-armed', { kind: 'prompt', prompt: 'confirm', armed: true }),
   wheelFixture('wheel-min-bet', { kind: 'idle', bet: WHEEL_MIN_BET }),
+  wheelFixture('wheel-free-spin', { kind: 'freeSpin', bet: WHEEL_MIN_BET }),
+  wheelFixture('wheel-free-spin-upgraded', { kind: 'freeSpin', bet: FREE_SPIN_UPGRADED_BET }),
+  wheelFixture('wheel-free-spin-taped-landing', { kind: 'freeSpinTapedLanding' }),
   wheelFixture('wheel-max-bet', { kind: 'idle', bet: WHEEL_MAX_BET }),
   wheelFixture('wheel-bet-flip', { kind: 'flip' }),
   wheelFixture('wheel-hold', { kind: 'hold' }),

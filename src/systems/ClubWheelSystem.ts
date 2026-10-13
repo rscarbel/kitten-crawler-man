@@ -10,6 +10,12 @@
  * outcome writes the save with the bet spent, the prize marked won and the
  * outcome pending; the Nothing's round-trip is the wipe itself. A tab closed
  * mid-spin leaves the pending outcome in the save, and the next load pays it.
+ *
+ * A free spin a quest paid for opens straight on the wheel, past both prompts,
+ * with the Nothing taped over: the board it draws from has no wedge that wipes,
+ * for that spin and every Spin Again it chains into. The free spin is counted
+ * as used in the same save that commits it, so a reload mid-spin cannot hand
+ * it back, and the wheel closes back to the picker once the chain resolves.
  */
 
 import type { AudioManager } from '../audio/AudioManager';
@@ -23,7 +29,12 @@ import {
   type SaveWriteOutcome,
   type WipeStatus,
 } from '../core/progressPersistence';
-import type { WheelCrawler, WheelLedger } from '../core/WheelLedger';
+import {
+  questFreeSpinsLeft,
+  tapedChainOwed,
+  type WheelCrawler,
+  type WheelLedger,
+} from '../core/WheelLedger';
 import { CatPlayer } from '../creatures/CatPlayer';
 import { pickTitoLine, type TitoTrigger } from '../dialog/scripts/tito';
 import type { TitoBustPose } from '../sprites/titoSprite';
@@ -38,7 +49,7 @@ import {
   type WheelViewModel,
 } from '../ui/casino/wheel/WheelView';
 import { paintNothing, type NothingModel } from '../ui/casino/wheel/nothingView';
-import type { CasinoGameHost } from './casino/CasinoGameHost';
+import type { WheelFreeSpinOffer, WheelGameHost } from './casino/CasinoGameHost';
 import type { CasinoSeat } from './ClubCasinoSystem';
 import {
   BASE_WHEEL_BOARD,
@@ -48,6 +59,7 @@ import {
   boardForBet,
   isRedWedge,
   isWheelPrizeId,
+  tapedBoard,
   upgradeForStepAbove,
   type WheelBoard,
   type WheelPrizeId,
@@ -137,11 +149,13 @@ interface CommittedSpin {
   /** The crawler the prize goes to; see {@link wheelPrizeRecipient}. */
   readonly recipient: Player;
   readonly recipientKind: WheelCrawler;
-  /** Coins staked: zero for a free spin. */
+  /** Coins staked: zero for a Spin Again, only the upgrades for a quest's free spin. */
   readonly bet: number;
   /** The bet whose board the wheel shows, which a free spin keeps. */
   readonly boardBet: number;
   readonly free: boolean;
+  /** Turns on the taped board: part of a quest free spin's chain. */
+  readonly taped: boolean;
   readonly landing: number;
 }
 
@@ -149,10 +163,21 @@ interface CommittedSpin {
 interface SpinUndo {
   readonly humanCoins: number;
   readonly catCoins: number;
+  readonly wagered: number;
+  readonly freeSpinBet: number | null;
+  readonly questFreeSpinsUsed: number;
+  readonly tapedChain: boolean;
   /** Won-set entries this spin added, taken back out if the save is refused. */
   readonly prizesMarked: readonly string[];
-  readonly freeSpinOwed: boolean;
 }
+
+/** How the next spin is paid for. */
+type SpinPayment =
+  /** A landed Spin Again's spin on the same board. */
+  | { readonly kind: 'owed' }
+  /** A quest's free spin: the minimum bet is covered, upgrades above it are paid. */
+  | { readonly kind: 'quest'; readonly price: number }
+  | { readonly kind: 'paid'; readonly price: number };
 
 type WheelPhase =
   | { readonly kind: 'idle' }
@@ -391,7 +416,7 @@ function wipeAnswered(status: WipeStatus): boolean {
   return status === 'wiped' || status === 'retrying' || status === 'signInRequired';
 }
 
-export class ClubWheelSystem implements CasinoGameHost {
+export class ClubWheelSystem implements WheelGameHost {
   private screen: WheelScreen = 'closed';
   private screenOpenedAt = 0;
   private phase: WheelPhase = { kind: 'idle' };
@@ -416,6 +441,12 @@ export class ClubWheelSystem implements CasinoGameHost {
   private nothingToneSounded = false;
   private nothingFinished = false;
   private nothingEndsInRestart = true;
+  /** The wheel was opened from the picker's free spin rather than through the warnings. */
+  private freeSpinVisit = false;
+  /** Puts the club's game picker back up; null until the club binds it. */
+  private reopenPicker: (() => void) | null = null;
+  /** The scene is tearing the wheel down: nothing it closes may raise the picker again. */
+  private tearingDown = false;
   private readonly view = new WheelView();
   /** The item prize screen: the loot reveal, showing what the wheel already handed over. */
   private readonly prizes = new LootBoxOpener();
@@ -440,12 +471,40 @@ export class ClubWheelSystem implements CasinoGameHost {
     return this.wagered;
   }
 
-  /** Every time the wheel is picked, the warning comes first; there is no way to skip it. */
+  /**
+   * Every time the wheel is picked, the warning comes first; only a quest's
+   * free spin ({@link openFreeSpin}) goes around it.
+   */
   open(seat: CasinoSeat): void {
     if (this.screen !== 'closed') return;
     this.seat = seat;
     this.showScreen('warning');
     this.deps.audio?.pauseMusic('wheel', MUSIC_FADE_MS);
+  }
+
+  get freeSpinOffer(): WheelFreeSpinOffer | null {
+    const ledger = this.deps.ledger;
+    const chainOwed = tapedChainOwed(ledger);
+    const count = questFreeSpinsLeft(ledger) + (chainOwed ? 1 : 0);
+    if (count === 0) return null;
+    // A paid Spin Again turns on the untaped board, so it is played behind the warnings first.
+    const untapedSpinOwed = ledger.freeSpinBet !== null && !chainOwed;
+    return { count, blocked: untapedSpinOwed ? 'Play your owed Spin Again first' : null };
+  }
+
+  bindPicker(reopen: () => void): void {
+    this.reopenPicker = reopen;
+  }
+
+  /** Straight onto the wheel with the Nothing taped over: the warnings guard a wipe it cannot reach. */
+  openFreeSpin(seat: CasinoSeat): boolean {
+    const takeable = this.freeSpinOffer?.blocked === null;
+    if (this.screen !== 'closed' || !takeable) return false;
+    this.seat = seat;
+    this.freeSpinVisit = true;
+    this.showScreen('wheel');
+    this.deps.audio?.pauseMusic('wheel', MUSIC_FADE_MS);
+    return true;
   }
 
   update(): void {
@@ -490,11 +549,14 @@ export class ClubWheelSystem implements CasinoGameHost {
       }
       return;
     }
+    // Skipping the prize screen can finish a reveal that would raise the picker; a teardown never does.
+    this.tearingDown = true;
     if (turning !== null) this.land(turning, this.clock());
     this.dismissPrizes();
     this.phase = { kind: 'idle' };
     this.deps.audio?.stopSound('slots_jackpot_siren');
     this.closeToFloor();
+    this.tearingDown = false;
   }
 
   surfaces(seat: CasinoSeat): Surface[] {
@@ -528,6 +590,11 @@ export class ClubWheelSystem implements CasinoGameHost {
 
   get busy(): boolean {
     return this.phase.kind !== 'idle';
+  }
+
+  /** The board the wheel shows right now, taped or not. */
+  get currentBoard(): WheelBoard {
+    return this.boardOnShow();
   }
 
   /** Puts the wheel straight up on its screen, skipping both prompts: review harnesses only. */
@@ -575,6 +642,7 @@ export class ClubWheelSystem implements CasinoGameHost {
     if (this.screen === 'closed') return;
     this.dismissPrizes();
     this.phase = { kind: 'idle' };
+    this.freeSpinVisit = false;
     this.screen = 'wheel';
     this.closeToFloor();
   }
@@ -611,7 +679,7 @@ export class ClubWheelSystem implements CasinoGameHost {
   }
 
   private reviewSpin(seat: CasinoSeat, wedgeIndex: number): CommittedSpin {
-    const board = boardForBet(this.bet);
+    const board = this.boardOnShow();
     const index = Math.max(0, Math.min(board.length - 1, wedgeIndex));
     const crawler = seat.active();
     const kind: WheelCrawler = crawler instanceof CatPlayer ? 'cat' : 'human';
@@ -627,6 +695,7 @@ export class ClubWheelSystem implements CasinoGameHost {
       bet: 0,
       boardBet: this.bet,
       free: false,
+      taped: this.tapedNow,
       landing: landingAngle(board, index, this.random),
     };
   }
@@ -640,7 +709,7 @@ export class ClubWheelSystem implements CasinoGameHost {
     if (screen === 'wheel') {
       this.phase = { kind: 'idle' };
       this.hold = null;
-      this.say('greet');
+      this.say(this.freeSpinVisit ? 'free_spin_greet' : 'greet');
     }
   }
 
@@ -654,8 +723,13 @@ export class ClubWheelSystem implements CasinoGameHost {
     this.showScreen(kind === 'warning' ? 'confirm' : 'wheel');
   }
 
-  private closeToFloor(): void {
+  /**
+   * Shuts the wheel. `toPicker` puts the club's game picker back up instead
+   * of leaving the player on the floor.
+   */
+  private closeToFloor(toPicker = false): void {
     if (this.screen === 'nothing') return;
+    this.freeSpinVisit = false;
     this.screen = 'closed';
     this.hold = null;
     this.flip = null;
@@ -673,6 +747,7 @@ export class ClubWheelSystem implements CasinoGameHost {
       applyWheelPrize({ kind: 'freeze' }, this.prizeTarget(this.crawlerOf(seat, frozen), frozen));
       void this.deps.saveNow();
     }
+    if (toPicker && !this.tearingDown) this.reopenPicker?.();
   }
 
   private syncLoops(): void {
@@ -757,7 +832,12 @@ export class ClubWheelSystem implements CasinoGameHost {
 
   private leave(): void {
     if (this.busy || this.screen !== 'wheel') return;
-    this.closeToFloor();
+    this.closeToFloor(this.freeSpinVisit);
+  }
+
+  /** Leave, as the wheel's own button would: review harnesses only. */
+  leaveForReview(): void {
+    this.leave();
   }
 
   private get betLocked(): string | null {
@@ -800,12 +880,44 @@ export class ClubWheelSystem implements CasinoGameHost {
   /** Why SPIN cannot be held right now, or null when it can. */
   private spinBlocked(seat: CasinoSeat): string | null {
     if (this.busy) return 'Wait for the wheel';
-    if (this.freeSpinBet !== null) return null;
-    if (!canAffordCoins(seat.active(), seat.companion(), this.bet)) {
-      const short = this.bet - partyCoins(seat.active(), seat.companion());
+    const payment = this.nextPayment;
+    if (payment.kind === 'owed' || payment.price === 0) return null;
+    if (!canAffordCoins(seat.active(), seat.companion(), payment.price)) {
+      const short = payment.price - partyCoins(seat.active(), seat.companion());
       return `Need ${short.toLocaleString()} more coins`;
     }
     return null;
+  }
+
+  /**
+   * What the next spin costs. An owed Spin Again comes first; a quest's free
+   * spin is only ever taken on a wheel opened for it, never by a paying visit.
+   */
+  private get nextPayment(): SpinPayment {
+    if (this.freeSpinBet !== null) return { kind: 'owed' };
+    const questSpinReady = this.freeSpinVisit && questFreeSpinsLeft(this.deps.ledger) > 0;
+    if (questSpinReady) return { kind: 'quest', price: this.bet - WHEEL_MIN_BET };
+    return { kind: 'paid', price: this.bet };
+  }
+
+  /** The next spin, or the one in play, turns on the taped board. */
+  private get tapedNow(): boolean {
+    const phase = this.phase;
+    if (phase.kind === 'committing' || phase.kind === 'spinning' || phase.kind === 'revealing') {
+      return phase.spin.taped;
+    }
+    const payment = this.nextPayment;
+    if (payment.kind === 'owed') return this.deps.ledger.questFreeSpins.tapedChain;
+    return payment.kind === 'quest';
+  }
+
+  private boardOnShow(): WheelBoard {
+    const phase = this.phase;
+    const inPlay =
+      phase.kind === 'committing' || phase.kind === 'spinning' || phase.kind === 'revealing';
+    if (inPlay) return phase.spin.board;
+    const board = boardForBet(this.freeSpinBet ?? this.bet);
+    return this.tapedNow ? tapedBoard(board) : board;
   }
 
   private pressSpin(byKey: boolean): void {
@@ -847,25 +959,35 @@ export class ClubWheelSystem implements CasinoGameHost {
     const companion = seat.companion();
     const human = crawler instanceof CatPlayer ? companion : crawler;
     const cat = crawler instanceof CatPlayer ? crawler : companion;
-    const free = this.freeSpinBet !== null;
+    const ledger = this.deps.ledger;
+    const payment = this.nextPayment;
+    const taped = this.tapedNow;
+    const board = this.boardOnShow();
     const bet = this.freeSpinBet ?? this.bet;
-    const board = boardForBet(bet);
+    const price = payment.kind === 'owed' ? 0 : payment.price;
     const undo: SpinUndo = {
       humanCoins: human.coins,
       catCoins: cat.coins,
+      wagered: this.wagered,
+      freeSpinBet: this.freeSpinBet,
+      questFreeSpinsUsed: ledger.questFreeSpins.used,
+      tapedChain: ledger.questFreeSpins.tapedChain,
       prizesMarked: [],
-      freeSpinOwed: free,
     };
-    if (!free && !spendPartyCoins(human, cat, bet, crawler)) return;
-    if (!free) this.wagered += bet;
+    if (price > 0 && !spendPartyCoins(human, cat, price, crawler)) return;
+    this.wagered += price;
     this.freeSpinBet = null;
+    if (payment.kind === 'quest') {
+      // Spent with the commit's own save, so a reload mid-spin never gives it back.
+      ledger.questFreeSpins.used++;
+      ledger.questFreeSpins.tapedChain = true;
+    }
 
     const lucky = this.deps.isLucky?.() ?? false;
     const drawOutcome = lucky ? pickLuckyOutcome : pickOutcome;
     const outcome =
       this.deps.forcedOutcome?.(board) ?? drawOutcome(board, this.wonPrizes(), this.random);
     const kind: WheelCrawler = crawler instanceof CatPlayer ? 'cat' : 'human';
-    const ledger = this.deps.ledger;
     const recipientKind = wheelPrizeRecipient(outcome.wedge, kind, ledger.prizesWon);
     const spin: CommittedSpin = {
       outcome,
@@ -874,9 +996,10 @@ export class ClubWheelSystem implements CasinoGameHost {
       kind,
       recipient: recipientKind === 'human' ? human : cat,
       recipientKind,
-      bet: free ? 0 : bet,
+      bet: price,
       boardBet: bet,
-      free,
+      free: payment.kind !== 'paid',
+      taped,
       landing: landingAngle(board, outcome.wedgeIndex, this.random),
     };
     const now = this.clock();
@@ -905,7 +1028,7 @@ export class ClubWheelSystem implements CasinoGameHost {
     // The screen may have been torn down while storage answered.
     if (!this.stillCommitting(spin)) return;
     if (!saveOutcomeCommitted(saved)) {
-      this.undoCommit(human, cat, { ...undo, prizesMarked: marked }, bet);
+      this.undoCommit(human, cat, { ...undo, prizesMarked: marked });
       ledger.pendingOutcome = previousPending;
       this.phase = { kind: 'idle' };
       this.deps.onNotice?.(
@@ -936,12 +1059,14 @@ export class ClubWheelSystem implements CasinoGameHost {
     return this.phase.kind === 'committing' && this.phase.spin === spin;
   }
 
-  private undoCommit(human: Player, cat: Player, undo: SpinUndo, bet: number): void {
+  private undoCommit(human: Player, cat: Player, undo: SpinUndo): void {
     human.coins = undo.humanCoins;
     cat.coins = undo.catCoins;
-    if (!undo.freeSpinOwed) this.wagered -= bet;
-    else this.freeSpinBet = bet;
+    this.wagered = undo.wagered;
+    this.freeSpinBet = undo.freeSpinBet;
     const ledger = this.deps.ledger;
+    ledger.questFreeSpins.used = undo.questFreeSpinsUsed;
+    ledger.questFreeSpins.tapedChain = undo.tapedChain;
     for (const entry of undo.prizesMarked) {
       const index = ledger.prizesWon.lastIndexOf(entry);
       if (index >= 0) ledger.prizesWon.splice(index, 1);
@@ -1027,6 +1152,7 @@ export class ClubWheelSystem implements CasinoGameHost {
     // Both outlive a reload: the spin that earned them was paid for.
     if (effectKind === 'freeze') ledger.owedFreeze = spin.kind;
     if (effectKind === 'spin_again') ledger.freeSpinBet = spin.boardBet;
+    if (spin.taped && effectKind !== 'spin_again') ledger.questFreeSpins.tapedChain = false;
     void this.deps.saveNow();
 
     if (effectKind === 'stab') audio?.play('tito_stab');
@@ -1106,8 +1232,14 @@ export class ClubWheelSystem implements CasinoGameHost {
   }
 
   private finishReveal(): void {
+    const phase = this.phase;
+    const chainResolved =
+      phase.kind === 'revealing' && phase.spin.taped && phase.reveal.effect !== 'spin_again';
     this.phase = { kind: 'idle' };
     this.lastActivityAt = this.clock();
+    // The free spin has paid out, however the wheel was entered: back to the picker rather than
+    // sit ready for a paid spin no warning has guarded.
+    if (chainResolved) this.closeToFloor(true);
   }
 
   /** Hurries the prize screen to its end; the items in it are already the crawler's. */
@@ -1293,8 +1425,8 @@ export class ClubWheelSystem implements CasinoGameHost {
 
   private viewModel(seat: CasinoSeat, now: number): WheelViewModel {
     const phase = this.phase;
-    const free = this.freeSpinBet !== null;
-    const board = boardForBet(this.freeSpinBet ?? this.bet);
+    const payment = this.nextPayment;
+    const board = this.boardOnShow();
     const flip = this.flip;
     const blocked = this.spinBlocked(seat);
     const reveal =
@@ -1325,7 +1457,8 @@ export class ClubWheelSystem implements CasinoGameHost {
       betDown: betLocked ?? (this.bet <= WHEEL_MIN_BET ? 'Already at the minimum bet' : null),
       betUp: betLocked ?? (this.bet >= WHEEL_MAX_BET ? 'Already at the maximum bet' : null),
       spin: {
-        free,
+        free: payment.kind !== 'paid',
+        upgradePrice: payment.kind === 'quest' ? payment.price : 0,
         hold: this.holdProgress(now),
         heldByPointer: this.hold !== null && !this.hold.byKey,
         disabled: blocked,

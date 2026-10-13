@@ -570,6 +570,7 @@ function spiderSighting(difficulty: Difficulty, seed: number): BossSighting {
       new EventBus(),
       (mob) => roster.add(mob),
       new Conversation(null),
+      () => false,
     );
     const lab = map.spiderLabRoom;
     const party = partyAt(

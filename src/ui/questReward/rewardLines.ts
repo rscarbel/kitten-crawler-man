@@ -6,6 +6,8 @@
 import type { PartyXpApplied } from '../../core/awardXp';
 import { ITEM_DEF, type ItemId } from '../../core/ItemDefs';
 import { CRAWLER_NAMES } from '../../core/SkillManager';
+import { cachedWheelFace, paintWheelFace } from '../../sprites/art/wheelFaceArt';
+import { BASE_WHEEL_BOARD, tapedBoard } from '../../systems/casino/wheel/wheelBoard';
 import { drawItemIcon } from '../icons/drawItemIcon';
 import type { IconPainter, QuestRewardSection, RewardItemLine } from './types';
 
@@ -47,4 +49,32 @@ export function partyXpSections(applied: PartyXpApplied): QuestRewardSection[] {
     { kind: 'xp', amount: applied.human, recipient: CRAWLER_NAMES.human },
     { kind: 'xp', amount: applied.cat, recipient: CRAWLER_NAMES.cat },
   ];
+}
+
+/** The wheel face is painted at this multiple of the icon's size, so it stays crisp on a dense screen. */
+const WHEEL_ICON_OVERSAMPLE = 2;
+const HALF = 0.5;
+
+/** The Wheel of Fortune with its Nothing taped over, as the free spin's icon. */
+const paintFreeSpinIcon: IconPainter = (ctx, rect) => {
+  const size = Math.min(rect.w, rect.h);
+  const radius = size * HALF;
+  const board = tapedBoard(BASE_WHEEL_BOARD);
+  const face = cachedWheelFace(board, size * WHEEL_ICON_OVERSAMPLE);
+  ctx.save();
+  ctx.translate(rect.x + rect.w * HALF, rect.y + rect.h * HALF);
+  if (face !== null) ctx.drawImage(face, -radius, -radius, size, size);
+  else paintWheelFace(ctx, board, radius);
+  ctx.restore();
+};
+
+/** A quest's free spin at the Wheel of Fortune, for an `items` section. */
+export function wheelFreeSpinRewardLine(): RewardItemLine {
+  return {
+    name: 'Free Spin',
+    count: 1,
+    renderIcon: paintFreeSpinIcon,
+    description: 'One spin on the house at the Wheel of Fortune, with the Nothing taped over.',
+    note: 'Take it from the game picker at the Desperado Club casino.',
+  };
 }

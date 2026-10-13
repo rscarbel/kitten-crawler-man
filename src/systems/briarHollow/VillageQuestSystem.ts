@@ -38,7 +38,11 @@ import type { CatPlayer } from '../../creatures/CatPlayer';
 import type { NPCMarkerType } from '../../creatures/QuestNPC';
 import type { BriarHollowSite } from '../../map/overworld/briarHollowSite';
 import type { TilePoint } from '../../map/town/townPlan';
-import { bagItemRewardLine, partyXpSections } from '../../ui/questReward/rewardLines';
+import {
+  bagItemRewardLine,
+  partyXpSections,
+  wheelFreeSpinRewardLine,
+} from '../../ui/questReward/rewardLines';
 import type { QuestRewardSpec } from '../../ui/questReward/types';
 import { drawCraftSkillIcon } from '../../ui/icons/craftSkillIcons';
 import type { QuestMarkerType } from '../MiniMapSystem';
@@ -204,6 +208,8 @@ export interface VillageQuestSystemDeps {
   readonly recruiter: () => { readonly name: string; readonly tile: TilePoint } | null;
   /** Read when the reward screen is built, to say whether the stone can use its new destination yet. */
   readonly travelUnlocks: Pick<TravelUnlockState, 'anchor'>;
+  /** Grants a quest's free spin at the wheel, once per quest; false when it was already granted. */
+  readonly grantWheelFreeSpin: (questId: string) => boolean;
 }
 
 /** The skill-unlocked card Tikka's plans are announced with. */
@@ -841,12 +847,13 @@ export class VillageQuestSystem implements QuestLineProvider, TopicProvider {
     active.earnCoins(BRIAR_HOLLOW_QUEST_COINS);
     active.inventory.addItem('hamburger', BRIAR_HOLLOW_REWARD_BURGERS);
     active.inventory.addItem('hollow_stew', BRIAR_HOLLOW_REWARD_STEW);
+    const freeSpin = this.deps.grantWheelFreeSpin(BRIAR_HOLLOW_QUEST_ID);
     this.questManager.startQuest(BRIAR_HOLLOW_QUEST_ID);
     this.questManager.completeQuest(BRIAR_HOLLOW_QUEST_ID);
     this.deps.bus.emit('questCompleted', { questId: BRIAR_HOLLOW_QUEST_ID });
     this.deps.bus.emit(
       'questRewardShown',
-      this.rewardSpec({ xpApplied, coins: BRIAR_HOLLOW_QUEST_COINS }),
+      this.rewardSpec({ xpApplied, coins: BRIAR_HOLLOW_QUEST_COINS, freeSpin }),
     );
     return true;
   }
@@ -858,6 +865,7 @@ export class VillageQuestSystem implements QuestLineProvider, TopicProvider {
   private rewardSpec(paid: {
     readonly xpApplied: PartyXpApplied;
     readonly coins: number;
+    readonly freeSpin: boolean;
   }): QuestRewardSpec {
     return {
       questTitle: BRIAR_HOLLOW_QUEST_NAME,
@@ -869,6 +877,7 @@ export class VillageQuestSystem implements QuestLineProvider, TopicProvider {
           items: [
             bagItemRewardLine('hamburger', BRIAR_HOLLOW_REWARD_BURGERS),
             bagItemRewardLine('hollow_stew', BRIAR_HOLLOW_REWARD_STEW),
+            ...(paid.freeSpin ? [wheelFreeSpinRewardLine()] : []),
           ],
         },
         travelUnlocksSection(['briar_hollow'], this.deps.travelUnlocks),

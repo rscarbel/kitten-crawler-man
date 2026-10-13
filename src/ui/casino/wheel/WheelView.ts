@@ -105,6 +105,8 @@ export interface WheelViewModel {
   readonly betUp: string | null;
   readonly spin: {
     readonly free: boolean;
+    /** Coins a free spin still takes for the upgrades bought above the minimum bet. */
+    readonly upgradePrice: number;
     /** 0 to 1 while SPIN is held. */
     readonly hold: number;
     /** The hold is a finger or the mouse rather than the keyboard. */
@@ -697,7 +699,7 @@ export class WheelView {
     const plate = layout.betValue;
     fillRounded(ctx, plate, theme.radius.md, wheelInk.stage.plate);
     strokeRounded(ctx, plate, theme.radius.md, wheelInk.stage.plateEdge, 1);
-    const label = model.spin.free ? 'FREE SPIN' : 'BET';
+    const label = this.betPlateLabel(model.spin);
     const overlineH = measureTextHeight(ui, plate.w, { text: label, role: 'overline' });
     const valueStyle = this.fitStyle(ui, WHEEL_SPIN_TYPE, model.bet.toLocaleString(), plate.w);
     const valueH = valueStyle.lineHeight;
@@ -718,6 +720,12 @@ export class WheelView {
         tabular: true,
       },
     );
+  }
+
+  private betPlateLabel(spin: WheelViewModel['spin']): string {
+    if (!spin.free) return 'BET';
+    if (spin.upgradePrice === 0) return 'FREE SPIN';
+    return `FREE SPIN · +${spin.upgradePrice.toLocaleString()}`;
   }
 
   /** `base` shrunk until `label` fits `width`. */

@@ -29,6 +29,14 @@ export const TERMINAL_FONT_STACK = 'ui-monospace, Menlo, Consolas, monospace';
  */
 export const WORLD_FONT_STACK = 'monospace';
 
+/**
+ * The stack for words written by hand in marker on props (the tape over the
+ * wheel's Nothing). Whatever face resolves, the painter wobbles each letter,
+ * so it reads as handwriting even where only `cursive`'s fallback exists.
+ */
+export const MARKER_FONT_STACK =
+  '"Marker Felt", "Segoe Print", "Bradley Hand", "Chalkboard SE", "Comic Sans MS", cursive';
+
 /** Page-relative URL of the bundled variable font; also what the service worker precaches. */
 export const UI_FONT_URL = 'src/fonts/InterVariable.woff2';
 

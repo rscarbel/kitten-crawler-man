@@ -51,3 +51,13 @@ export const WHEEL_BULB = {
   glow: 'rgba(255,220,120,0.55)',
   glowEdge: 'rgba(255,200,90,0)',
 } as const;
+
+/** Masking tape over the Nothing on a free spin, and the marker written on it. */
+export const WHEEL_TAPE = {
+  face: '#efe2b8',
+  /** The crinkled band along each strip's edges. */
+  edge: '#c9b682',
+  /** The slight sheen across the middle of a strip. */
+  sheen: '#fbf4dc',
+  marker: '#16161e',
+} as const;

@@ -13,6 +13,7 @@ import {
   BASE_WHEEL_BOARD,
   FAIRY_REPELLENT_SIGNET_ITEM_ID,
   LEGENDARY_WEAPON_CLAIM_IDS,
+  TAPED_NOTHING,
   WHEEL_UPGRADES,
   legendaryWeaponItemId,
   legendaryWeaponRecipient,
@@ -34,6 +35,7 @@ import {
 const ALL_WEDGE_FACES: readonly WheelWedge[] = [
   ...BASE_WHEEL_BOARD,
   ...WHEEL_UPGRADES.map((upgrade) => upgrade.to),
+  TAPED_NOTHING,
 ];
 
 /** The wedge face a saved id names, or null for an id no board has (a save from another build). */
@@ -276,10 +278,13 @@ function settleOwedPrizes(ledger: WheelLedger, party: WheelParty): WheelWedge | 
   if (owedFreeze !== null) {
     applyWheelPrize({ kind: 'freeze' }, wheelPrizeTarget(party, owedFreeze));
   }
-  if (pending === null) return null;
-  const wedge = wedgeFaceById(pending.wedgeId);
-  if (wedge === null) return null;
-  if (wedge.prize.kind === 'spin_again') ledger.freeSpinBet = pending.boardBet;
+  const wedge = pending === null ? null : wedgeFaceById(pending.wedgeId);
+  if (pending !== null && wedge?.prize.kind === 'spin_again') {
+    ledger.freeSpinBet = pending.boardBet;
+  }
+  // A taped chain lasts exactly as long as it owes a spin; once nothing is owed it has resolved.
+  if (ledger.freeSpinBet === null) ledger.questFreeSpins.tapedChain = false;
+  if (pending === null || wedge === null) return null;
   applyWheelPrize(wedge.prize, wheelPrizeTarget(party, pending.recipient));
   return wedge;
 }

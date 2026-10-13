@@ -429,6 +429,7 @@
     "scripts/verify-briar-hollow-state.ts",
     "scripts/verify-craft-level-ups.ts",
     "scripts/check-ui-style.ts",
-    "scripts/render-world-text.ts"
+    "scripts/render-world-text.ts",
+    "scripts/generate-website-images.ts"
   ]
 }

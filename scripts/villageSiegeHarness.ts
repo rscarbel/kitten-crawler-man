@@ -155,6 +155,8 @@ export function buildSiegeRig(options: SiegeRigOptions): SiegeRig {
   const anchorQuest = createAnchorQuestProgress();
   const kit = new BriarHollowKit(world, {
     travelUnlocks: { anchor: anchorQuest },
+    // Every Plea paid in a rig grants its free spin, so the reward screen shows it.
+    grantWheelFreeSpin: () => true,
     human: pm.human,
     cat: pm.cat,
     partyTools: new PartyTools(crafts.tools),

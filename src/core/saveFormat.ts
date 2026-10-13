@@ -12,6 +12,7 @@ import {
   parseWheelOwedFreeze,
   parseWheelOwedItems,
   parseWheelPrizesWon,
+  parseWheelQuestFreeSpins,
 } from './WheelLedger';
 import { parseBloodVomitRemaining } from './bloodVomitSave';
 import { parseAttackCowHp } from './AttackCowState';
@@ -142,6 +143,7 @@ export function parseGameProgress(raw: unknown): GameProgress | null {
     wheelFreeSpinBet: parseWheelFreeSpinBet(raw.wheelFreeSpinBet),
     wheelOwedFreeze: parseWheelOwedFreeze(raw.wheelOwedFreeze),
     wheelOwedItems: parseWheelOwedItems(raw.wheelOwedItems),
+    wheelQuestFreeSpins: parseWheelQuestFreeSpins(raw.wheelQuestFreeSpins),
     bloodVomitRemaining: parseBloodVomitRemaining(raw.bloodVomitRemaining),
     attackCowOwned: typeof raw.attackCowOwned === 'boolean' ? raw.attackCowOwned : undefined,
     attackCowHp: parseAttackCowHp(raw.attackCowHp),

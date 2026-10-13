@@ -8,7 +8,7 @@ import type { Rect } from '../core/geom';
 import type { PaintTarget } from './paint';
 import { digitCellWidth, onUiFontLoaded } from '../theme/fonts';
 import { skinsFor, type TextRole } from '../theme/skins';
-import { fontFor, type Theme, type TypeStyle } from '../theme/tokens';
+import { ITALIC_SLANT, fontFor, type Theme, type TypeStyle } from '../theme/tokens';
 
 export type TextAlign = 'left' | 'center' | 'right';
 export type TextVAlign = 'top' | 'middle' | 'bottom';
@@ -289,6 +289,167 @@ export function tabularNumber(
   },
 ): TextResult {
   return text(ui, rect, { ...opts, text: String(opts.value), tabular: true });
+}
+
+/**
+ * A run of a {@link richText} string. `italic` leans it by {@link ITALIC_SLANT}
+ * in the same face, weight and size: the UI face ships no italic, and a slant
+ * drawn here looks the same in every browser and in the review renders.
+ */
+export interface TextSpan {
+  readonly text: string;
+  readonly italic?: boolean;
+}
+
+export interface RichTextOptions extends Pick<
+  TextOptions,
+  'role' | 'style' | 'color' | 'align' | 'valign' | 'halo'
+> {
+  /** The string, run by run; it always wraps to the rect's width. */
+  readonly spans: readonly TextSpan[];
+}
+
+/**
+ * How far a slanted run's top leans past its advance, counted in its width so
+ * the run never crowds its neighbour or runs past the edge of its line.
+ */
+export function italicOverhang(style: TypeStyle): number {
+  return (style.size * ITALIC_SLANT) / 2;
+}
+
+/** One unbroken piece of a word, from one run. */
+interface RichPiece {
+  readonly text: string;
+  readonly italic: boolean;
+  readonly width: number;
+}
+
+interface RichLine {
+  readonly pieces: readonly RichPiece[];
+  readonly width: number;
+}
+
+/**
+ * Lays spans out word by word: a word is everything between two spaces, so
+ * punctuation hugging an italic name stays on its line. Measured with each
+ * run's own font; letter spacing and tabular digits are not supported here.
+ */
+function layoutRich(ui: PaintTarget, width: number, opts: RichTextOptions): RichLine[] {
+  const { ctx } = ui;
+  const resolved = resolveText(ui.theme, opts);
+  ctx.save();
+  ctx.font = resolved.font;
+  const measure = (content: string): number => lineWidth(ctx, content, 0, null);
+  const words: RichPiece[][] = [[]];
+  for (const span of opts.spans) {
+    const italic = span.italic === true;
+    const overhang = italic ? italicOverhang(resolved.style) : 0;
+    const richPieceWidth = (chunk: string): number => measure(chunk) + overhang;
+    shown(span.text, resolved.style)
+      .split(' ')
+      .forEach((chunk, index) => {
+        if (index > 0) words.push([]);
+        if (chunk === '') return;
+        words[words.length - 1].push({ text: chunk, italic, width: richPieceWidth(chunk) });
+      });
+  }
+  const spaceWidth = measure(' ');
+  ctx.restore();
+  const lines: RichLine[] = [];
+  let pieces: RichPiece[] = [];
+  let lineW = 0;
+  for (const word of words) {
+    if (word.length === 0) continue;
+    const wordW = word.reduce((sum, piece) => sum + piece.width, 0);
+    const gap = pieces.length === 0 ? 0 : spaceWidth;
+    if (pieces.length > 0 && lineW + gap + wordW > width + FIT_TOLERANCE) {
+      lines.push({ pieces, width: lineW });
+      pieces = [];
+      lineW = 0;
+    }
+    if (pieces.length > 0) {
+      pieces.push({ text: ' ', italic: false, width: spaceWidth });
+      lineW += spaceWidth;
+    }
+    pieces.push(...word);
+    lineW += wordW;
+  }
+  if (pieces.length > 0 || lines.length === 0) lines.push({ pieces, width: lineW });
+  return lines;
+}
+
+/**
+ * Draws a wrapped string built from runs, some of them italic, into `rect`.
+ * For a name that has to read as a name inside a sentence; every other string
+ * goes through {@link text}.
+ */
+export function richText(ui: PaintTarget, rect: Rect, opts: RichTextOptions): TextResult {
+  const lines = layoutRich(ui, rect.w, opts);
+  const { ctx } = ui;
+  const { style, color, font } = resolveText(ui.theme, opts);
+  const blockHeight = lines.length * style.lineHeight;
+  const valign = opts.valign ?? 'top';
+  const top =
+    valign === 'top'
+      ? rect.y
+      : valign === 'bottom'
+        ? rect.y + rect.h - blockHeight
+        : rect.y + (rect.h - blockHeight) / 2;
+  const align = opts.align ?? 'left';
+  ctx.save();
+  ctx.font = font;
+  ctx.fillStyle = color;
+  ctx.textAlign = 'left';
+  ctx.textBaseline = 'middle';
+  const eachPiece = (draw: (piece: string, x: number, middleY: number) => void): void => {
+    lines.forEach((line, index) => {
+      let x =
+        align === 'left'
+          ? rect.x
+          : align === 'right'
+            ? rect.x + rect.w - line.width
+            : rect.x + (rect.w - line.width) / 2;
+      const middle = top + index * style.lineHeight + style.lineHeight / 2;
+      for (const piece of line.pieces) {
+        if (piece.italic) {
+          // Sheared about the line's middle, so the run leans without leaving its line.
+          ctx.save();
+          ctx.translate(x, middle);
+          ctx.transform(1, 0, -ITALIC_SLANT, 1, 0, 0);
+          draw(piece.text, 0, 0);
+          ctx.restore();
+        } else {
+          draw(piece.text, x, middle);
+        }
+        x += piece.width;
+      }
+    });
+  };
+  // Every halo goes down before any fill, so one run's outline never cuts into its neighbour.
+  if (opts.halo !== undefined) {
+    ctx.strokeStyle = opts.halo;
+    ctx.lineWidth = style.size * HALO_WIDTH_RATIO;
+    ctx.lineJoin = 'round';
+    eachPiece((piece, x, middleY) => ctx.strokeText(piece, x, middleY));
+  }
+  eachPiece((piece, x, middleY) => ctx.fillText(piece, x, middleY));
+  ctx.restore();
+  return {
+    width: Math.max(0, ...lines.map((line) => line.width)),
+    height: blockHeight,
+    lines: lines.length,
+    truncated: false,
+  };
+}
+
+/** Height {@link richText} takes for `opts` wrapped to `width`. */
+export function measureRichTextHeight(
+  ui: PaintTarget,
+  width: number,
+  opts: Pick<RichTextOptions, 'spans' | 'role' | 'style'>,
+): number {
+  const lines = layoutRich(ui, width, opts);
+  return lines.length * resolveText(ui.theme, opts).style.lineHeight;
 }
 
 /** Width of `content` on one line, unwrapped and untruncated. */

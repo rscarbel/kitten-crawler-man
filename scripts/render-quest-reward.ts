@@ -26,7 +26,7 @@ const { UiRoot } = await import('../src/ui/core/UiRoot.js');
 const { NO_INSETS } = await import('../src/ui/core/viewport.js');
 const { questRewardSurface } = await import('../src/ui/screens/dialogs/questRewardScreen.js');
 const { QuestRewardScreen } = await import('../src/ui/questReward/QuestRewardScreen.js');
-const { bagItemRewardLine, itemIconPainter, partyXpSections } =
+const { bagItemRewardLine, itemIconPainter, partyXpSections, wheelFreeSpinRewardLine } =
   await import('../src/ui/questReward/rewardLines.js');
 const { drawLootBoxRewardIcon } = await import('../src/ui/icons/rewardIcons.js');
 const { travelUnlocksSection, unlockedDestinationIds } =
@@ -134,6 +134,7 @@ const CASES: ReadonlyArray<{ readonly name: string; readonly spec: QuestRewardSp
           items: [
             bagItemRewardLine('hamburger', SAMPLE_HAMBURGER_COUNT),
             bagItemRewardLine('hollow_stew', SAMPLE_STEW_COUNT),
+            wheelFreeSpinRewardLine(),
           ],
         },
         travelUnlocksSection(['briar_hollow'], { anchor: createAnchorQuestProgress() }),

@@ -160,6 +160,8 @@ export interface BriarHollowKitDeps {
   readonly onBlueprintsCue?: (cue: BlueprintsCue) => void;
   /** Handed to the questline for its reward screen's travel card. */
   readonly travelUnlocks: Pick<TravelUnlockState, 'anchor'>;
+  /** Grants the Plea's free spin at the wheel, once; false when it was already granted. */
+  readonly grantWheelFreeSpin: (questId: string) => boolean;
   /** Flies paid coins from a world position to the HUD's coin pill. Absent means no flight. */
   readonly flyCoins?: (coins: number, worldX: number, worldY: number) => void;
   /**
@@ -391,6 +393,7 @@ export class BriarHollowKit {
             // Lazy: the recruiter is built after the questline it reads from.
             recruiter: () => this.recruiter?.post ?? null,
             travelUnlocks: deps.travelUnlocks,
+            grantWheelFreeSpin: deps.grantWheelFreeSpin,
           });
     this.blueprints =
       site === null || villagers === null

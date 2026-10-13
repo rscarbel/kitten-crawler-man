@@ -1,20 +1,58 @@
 {
+  "id": "/kitten-crawler-man/",
   "name": "Kitten Crawler Man",
   "short_name": "Kitten Crawler",
-  "description": "A browser-based dungeon crawler where a human and their cat fight through increasingly dangerous floors.",
+  "description": "A free browser dungeon crawler: play as Carl and his cat Donut, fight through procedurally generated floors, beat bosses, and collect loot.",
+  "lang": "en",
+  "dir": "ltr",
   "start_url": "/kitten-crawler-man/",
   "scope": "/kitten-crawler-man/",
   "display": "fullscreen",
+  "display_override": ["fullscreen", "standalone"],
   "background_color": "#000000",
   "theme_color": "#000000",
   "orientation": "portrait",
-  "categories": ["games"],
+  "categories": ["games", "entertainment"],
   "icons": [
     {
-      "src": "src/images/website/icon-512.png",
+      "src": "src/images/website/icon-any-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "src/images/website/icon-any-512.png",
       "sizes": "512x512",
       "type": "image/png",
-      "purpose": "any maskable"
+      "purpose": "any"
+    },
+    {
+      "src": "src/images/website/icon-maskable-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "maskable"
+    },
+    {
+      "src": "src/images/website/icon-maskable-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    }
+  ],
+  "screenshots": [
+    {
+      "src": "src/images/website/screenshot-wide.jpg",
+      "sizes": "1280x720",
+      "type": "image/jpeg",
+      "form_factor": "wide",
+      "label": "Carl squares up to a goblin while Donut watches his back in a torchlit dungeon cell block"
+    },
+    {
+      "src": "src/images/website/screenshot-narrow.jpg",
+      "sizes": "720x1280",
+      "type": "image/jpeg",
+      "form_factor": "narrow",
+      "label": "Carl and Donut in a dungeon room as a goblin closes in"
     }
   ]
 }

@@ -259,7 +259,13 @@ const QUEST_CASES: readonly QuestCase[] = [
     paysXp: true,
     complete: (setup) => {
       const { rig, conversation } = setup;
-      const quest = new SpiderQuestSystem(rig.map, rig.bus, () => undefined, conversation);
+      const quest = new SpiderQuestSystem(
+        rig.map,
+        rig.bus,
+        () => undefined,
+        conversation,
+        () => true,
+      );
       quest.onBossKilled(rig.human, rig.cat);
       // Her screen is held until her death has played; the scene ticks it.
       for (let frame = 0; frame < SPIDER_WAIT_FRAMES && setup.requested.length === 0; frame++) {

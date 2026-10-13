@@ -10,6 +10,7 @@ import {
   WHEEL_BULB,
   WHEEL_GOLD,
   WHEEL_POINTER,
+  WHEEL_TAPE,
   WHEEL_TONE_INK,
 } from '../../sprites/art/wheelPalette';
 import type { TypeStyle } from './tokens';
@@ -19,6 +20,7 @@ export const wheelInk = {
   gold: WHEEL_GOLD,
   pointer: WHEEL_POINTER,
   bulb: WHEEL_BULB,
+  tape: WHEEL_TAPE,
   peg: { head: '#fbf3df', shade: '#8f7a52' },
   hub: { cap: '#2a1a08', star: '#f6d77a' },
   /**

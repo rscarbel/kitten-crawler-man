@@ -1,0 +1,50 @@
+# Kitten Crawler Man
+
+> Kitten Crawler Man is a free, single-player dungeon crawler and action RPG that runs in a web browser on desktop and mobile. The player controls Carl, a human melee brawler, and Donut, his spell-casting cat, through procedurally generated dungeon floors and then an overworld city. It is an unofficial fan game inspired by Matt Dinniman's book series Dungeon Crawler Carl.
+
+- Play: https://rscarbel.github.io/kitten-crawler-man/
+- Offline download page: https://rscarbel.github.io/kitten-crawler-man/download/
+- Source code: https://github.com/rscarbel/kitten-crawler-man
+- Price: free. No account is needed; progress is saved in the browser.
+- Built with: TypeScript and the HTML5 Canvas 2D API, bundled with esbuild, no game framework. Most character and environment art is painted procedurally in code.
+
+## Characters
+
+- Carl: a human melee fighter. Abilities: Smush and Protective Shell.
+- Donut: a cat. Abilities: Magic Missile and summoning her pet, Mongo.
+- The player switches between them at any time (Tab). The crawler not being controlled follows and fights on its own, and can be given follower orders.
+- Mordecai: the guide who waits in safe rooms.
+
+## Floors
+
+- Tutorial: a short hand-built introduction.
+- Floor 1, "The Dungeon": procedurally generated rooms and corridors on a collapse countdown (find a stairwell before the floor collapses), safe rooms with a Bopca shop, the "Defend the Goblin Mother" quest, and the bosses The Hoarder and The Juicer.
+- Floor 2, "The Dungeon, Level 2": bosses Krakaren Clone, Ball of Swine (in a colosseum arena) and Grotesque Spider ("The Arachnid Experiment"); mini quests "The Stealth Key Snatch" (a prison stealth mission) and "The Clogged Bathroom" (a pipe puzzle).
+- Floor 3, "The Overworld": the Over City, with the Sleeping Cat Inn, shops, the Desperado Club and the Town Center Tower. Quests include "The Show Must Go On" (a circus and Big Top maze), "The Krasue Murders" (a murder mystery), "Briar Hollow's Plea" (gather, build and defend a ratkin village against a siege led by the necromancer Vordrick Boneharrow), "The Anchor is Broken", and the finale "Carl's Doomsday Scenario".
+
+## Features
+
+- Three difficulty levels: Kitten (easy), Crawler (normal), Nightmare (hard).
+- Loot, equipment that visibly changes how Carl and Donut look, and health potions.
+- Achievements that award loot boxes in six tiers: Bronze, Silver, Gold, Platinum, Legendary and Celestial.
+- Companions: Mongo, plus hireable mercenaries called the Meat Shields.
+- Crafting skills (Resourcing and Construction) for harvesting, processing and building structures such as walls and trebuchets.
+- A casino in the Desperado Club: blackjack, Texas hold'em poker, slots and a prize wheel.
+- Minigames including a pipe-board puzzle and "Keyboard Hero".
+- Saves at safe rooms; a death returns to the last save.
+- Installable as a progressive web app and playable offline.
+
+## Controls
+
+Keyboard defaults (all rebindable from the pause menu):
+
+- Move: W A S D or arrow keys
+- Attack / interact: Space
+- Switch between Carl and Donut: Tab
+- Drink potion: Q
+- Hotbar: 1-8
+- Inventory: I; Gear: G; Mini-map: M; Quest journal: J; Follower orders: F
+- Build / summon pet: R; Construction: U; Structure menu: E
+- Pause / close menus: Escape
+
+On phones and tablets the game shows on-screen touch controls. There is no gamepad support.

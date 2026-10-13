@@ -632,6 +632,7 @@ function buildLab(options: LabOptions): Lab {
         roster.add(mob);
       },
       new Conversation(null),
+      () => false,
     );
     const base = quest.captureCheckpoint();
     const fightCheckpoint: SpiderQuestCheckpoint = {
@@ -1514,6 +1515,7 @@ function cutsceneSpitPlaysThrough(): void {
       lab.roster.add(mob);
     },
     new Conversation(null),
+    () => false,
   );
   Reflect.set(quest, 'phase', 'cutscene');
   let spider: GrotesqueSpider | null = null;
@@ -4925,7 +4927,13 @@ function generatedLabPair(side: DoorSide): GeneratedLabPair | null {
       prebuiltStructure: cloneGrid(furnishedTemplate),
     });
     probe.spiderLabRoom = room;
-    new SpiderQuestSystem(probe, new EventBus(), () => undefined, new Conversation(null)).dispose();
+    new SpiderQuestSystem(
+      probe,
+      new EventBus(),
+      () => undefined,
+      new Conversation(null),
+      () => false,
+    ).dispose();
     const humanStart = nearestOpenTile(probe, entry, []);
     const catStart = nearestOpenTile(probe, beside, [humanStart]);
     const siteFrom = (template: TileGrid, name: string): LabSite => ({

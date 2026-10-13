@@ -18,7 +18,13 @@ import { WHEEL_HEADLINE_MIN_SIZE, WHEEL_HEADLINE_TYPE, wheelInk } from '../../th
 import type { TypeStyle } from '../../theme/tokens';
 import { button, measureButton } from '../../widgets/button';
 import { scrollView } from '../../widgets/scrollView';
-import { measureText, measureTextHeight, text } from '../../widgets/text';
+import {
+  italicOverhang,
+  measureRichTextHeight,
+  measureText,
+  richText,
+  type TextSpan,
+} from '../../widgets/text';
 import { wheelControlHeight } from './wheelLayout';
 
 export type WheelWarningKind = 'warning' | 'confirm';
@@ -31,18 +37,32 @@ export const WHEEL_WARNING_NO_ID = 'no';
 export const WHEEL_WARNING_YES_ID = 'yes';
 export const WHEEL_WARNING_SCRIM_ID = 'scrim';
 
-const WARNING_HEADLINE = 'WARNING: THE NOTHING IS PERMANENT DEATH';
-const WARNING_BODY: readonly string[] = [
-  'One slot on this wheel sends you to the Nothing.',
-  'If it lands, the game ends forever.',
-  'Every save and all of your progress is erased.',
-  'You start over as if you had never played.',
-  'There is no undo and no reload.',
+/** One line of a prompt, run by run. */
+type PromptLine = readonly TextSpan[];
+
+/** The wedge's name, quoted and set in italics so it reads as a place and not a word. */
+const NOTHING_NAME = '“The Nothing”';
+
+function line(...runs: ReadonlyArray<string | TextSpan>): PromptLine {
+  return runs.map((run) => (typeof run === 'string' ? { text: run } : run));
+}
+
+function nothingName(upper = false): TextSpan {
+  return { text: upper ? NOTHING_NAME.toUpperCase() : NOTHING_NAME, italic: true };
+}
+
+const WARNING_HEADLINE = line('WARNING: ', nothingName(true), ' IS PERMANENT DEATH');
+const WARNING_BODY: readonly PromptLine[] = [
+  line('One slot on this wheel sends you to ', nothingName(), '.'),
+  line('If it lands, the game ends forever.'),
+  line('Every save and all of your progress is erased.'),
+  line('You start over as if you had never played.'),
+  line('There is no undo and no reload.'),
 ];
-const CONFIRM_HEADLINE = 'ARE YOU SURE YOU WANT TO RISK EVERYTHING?';
-const CONFIRM_BODY: readonly string[] = [
-  'The Nothing takes every save, every level, every item and every achievement.',
-  'It cannot be undone.',
+const CONFIRM_HEADLINE = line('ARE YOU SURE YOU WANT TO RISK EVERYTHING?');
+const CONFIRM_BODY: readonly PromptLine[] = [
+  line(nothingName(), ' takes every save, every level, every item and every achievement.'),
+  line('It cannot be undone.'),
 ];
 const ARMING_REASON = 'Read the warning first';
 
@@ -212,21 +232,30 @@ function headlineStyle(size: number): TypeStyle {
 }
 
 /** The largest headline that leaves room for the body, stepping down to the floor. */
-function fitHeadline(ui: Ui, headline: string, body: readonly string[], room: Rect): TypeStyle {
+function fitHeadline(
+  ui: Ui,
+  headline: PromptLine,
+  body: readonly PromptLine[],
+  room: Rect,
+): TypeStyle {
   const gap = ui.theme.space.sm;
   const bodyH =
     body.reduce(
-      (sum, line) => sum + measureTextHeight(ui, room.w, { text: line, role: bodyRole(ui) }),
+      (sum, spans) => sum + measureRichTextHeight(ui, room.w, { spans, role: bodyRole(ui) }),
       0,
     ) +
     gap * body.length;
+  const anyItalic = headline.some((span) => span.italic === true);
+  const words = headline
+    .map((span) => span.text)
+    .join('')
+    .split(' ');
   for (let size = WHEEL_HEADLINE_TYPE.size; size > WHEEL_HEADLINE_MIN_SIZE; size -= HEADLINE_STEP) {
     const style = headlineStyle(size);
-    const headH = measureTextHeight(ui, room.w, { text: headline, style });
-    // A word too wide for the line would be broken mid-word, so every word must fit whole.
-    const widestWord = Math.max(
-      ...headline.split(' ').map((word) => measureText(ui, word, { style })),
-    );
+    const headH = measureRichTextHeight(ui, room.w, { spans: headline, style });
+    // A word too wide for the line would run past the edge, so every word must fit whole.
+    const slant = anyItalic ? italicOverhang(style) : 0;
+    const widestWord = Math.max(...words.map((word) => measureText(ui, word, { style }) + slant));
     const fits = headH <= room.h * HEADLINE_MAX_SHARE && headH + bodyH + gap <= room.h;
     if (fits && widestWord <= room.w) return style;
   }
@@ -258,9 +287,9 @@ export function paintWheelWarning(ui: Ui, spec: WheelWarningSpec): void {
   const headline = spec.kind === 'warning' ? WARNING_HEADLINE : CONFIRM_HEADLINE;
   const body = spec.kind === 'warning' ? WARNING_BODY : CONFIRM_BODY;
   const style = fitHeadline(ui, headline, body, content);
-  const headH = measureTextHeight(ui, content.w, { text: headline, style });
-  const bodyHeights = body.map((line) =>
-    measureTextHeight(ui, content.w, { text: line, role: bodyRole(ui) }),
+  const headH = measureRichTextHeight(ui, content.w, { spans: headline, style });
+  const bodyHeights = body.map((spans) =>
+    measureRichTextHeight(ui, content.w, { spans, role: bodyRole(ui) }),
   );
   const total = headH + space.md + bodyHeights.reduce((sum, h) => sum + h + space.xs, 0);
   scrollView(ui, content, {
@@ -268,30 +297,28 @@ export function paintWheelWarning(ui: Ui, spec: WheelWarningSpec): void {
     contentHeight: total,
     draw: (laid) => {
       let y = laid.y + Math.max(0, (content.h - total) * HALF);
-      text(
+      richText(
         ui,
         { x: content.x, y, w: content.w, h: headH },
         {
-          text: headline,
+          spans: headline,
           style,
           color: ink.headline,
           halo: ink.headlineHalo,
           align: 'center',
-          wrap: true,
         },
       );
       y += headH + space.md;
-      body.forEach((line, index) => {
+      body.forEach((spans, index) => {
         const h = bodyHeights[index];
-        text(
+        richText(
           ui,
           { x: content.x, y, w: content.w, h },
           {
-            text: line,
+            spans,
             role: bodyRole(ui),
             color: index === body.length - 1 ? ink.bodyStrong : ink.body,
             align: 'center',
-            wrap: true,
           },
         );
         y += h + space.xs;

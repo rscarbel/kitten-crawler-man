@@ -20,10 +20,34 @@ export interface CasinoGameHost {
   forceClose?(): void;
 }
 
+/** A free spin the wheel can offer from the picker. */
+export interface WheelFreeSpinOffer {
+  /** Free spins waiting, counting a taped chain still owed as one. */
+  readonly count: number;
+  /** Why none can be taken right now, or null when one can. */
+  readonly blocked: string | null;
+}
+
+/** The wheel's host: a casino game that can also be opened straight onto a free spin. */
+export interface WheelGameHost extends CasinoGameHost {
+  /** The free spin the picker offers, or null when there is none. */
+  readonly freeSpinOffer: WheelFreeSpinOffer | null;
+  /**
+   * Opens the wheel on a free spin, past the warnings. Returns false when it
+   * could not open, so the picker can stay up.
+   */
+  openFreeSpin(seat: CasinoSeat): boolean;
+  /**
+   * How the wheel puts the club's game picker back up: after a free spin's
+   * visit, and whenever a taped chain resolves, however the wheel was entered.
+   */
+  bindPicker(reopen: () => void): void;
+}
+
 /** The picker's games that are not card tables. */
 export interface CasinoGameHosts {
   slots: CasinoGameHost;
-  wheel: CasinoGameHost;
+  wheel: WheelGameHost;
 }
 
 /** Holds a game's place in the picker until its host is built: choosing it opens nothing. */
@@ -34,5 +58,15 @@ export function idleCasinoGameHost(): CasinoGameHost {
     coinsWageredThisVisit: 0,
     update: () => undefined,
     surfaces: () => [],
+  };
+}
+
+/** The wheel's place in the picker until its host is built: no free spins, nothing opens. */
+export function idleWheelGameHost(): WheelGameHost {
+  return {
+    ...idleCasinoGameHost(),
+    freeSpinOffer: null,
+    openFreeSpin: () => false,
+    bindPicker: () => undefined,
   };
 }

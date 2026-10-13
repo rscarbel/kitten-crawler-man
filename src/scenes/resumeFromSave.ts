@@ -90,6 +90,7 @@ export function sceneSetupFromSave(
     progress.wheelFreeSpinBet ?? null,
     progress.wheelOwedFreeze ?? null,
     progress.wheelOwedItems ?? [],
+    progress.wheelQuestFreeSpins ?? {},
   );
   // A cow saved resting has had her rest by the time the game is loaded again:
   // she comes back whole, as she would on the next floor.

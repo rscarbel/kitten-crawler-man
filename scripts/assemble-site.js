@@ -22,6 +22,13 @@ const SITE_DIR = path.join(ROOT, '_site');
 /** Pages served at their own URL in addition to the game itself. */
 const EXTRA_PAGES = ['download/index.html'];
 
+/**
+ * Files written for search engines and AI crawlers rather than for the game,
+ * so they ship with the site but stay out of the offline ZIP and the service
+ * worker's pre-cache.
+ */
+const CRAWLER_FILES = ['robots.txt', 'sitemap.xml', 'llms.txt'];
+
 const BYTES_PER_MB = 1024 * 1024;
 
 function copyInto(relativePath) {
@@ -42,6 +49,7 @@ fs.rmSync(SITE_DIR, { recursive: true, force: true });
 const siteFiles = [
   ...CORE_FILES,
   ...EXTRA_PAGES,
+  ...CRAWLER_FILES,
   ...assets.images,
   ...assets.audio,
   ...assets.fonts,

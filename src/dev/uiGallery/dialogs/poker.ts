@@ -29,6 +29,7 @@ import {
 import { mulberry32 } from '../../../sprites/person/rng';
 import type { Surface } from '../../../ui/core/UiRoot';
 import { casinoGamePickerSurface } from '../../../ui/screens/dialogs/casinoGamePicker';
+import type { WheelFreeSpinOffer } from '../../../systems/casino/CasinoGameHost';
 import type { DialogFixture } from './fixture';
 
 /** Enough for the card room but not the high rollers, so one tier shows "Need N more". */
@@ -337,7 +338,11 @@ function sidePotShowdown(table: PokerTable): boolean {
   return pots.length > 1 && shown >= 2 && table.seats[PLAYER_SEAT].faceUp;
 }
 
-function pickerFixture(name: string, canBuyIntoPoker: boolean): DialogFixture {
+function pickerFixture(
+  name: string,
+  canBuyIntoPoker: boolean,
+  freeSpins: WheelFreeSpinOffer | null = null,
+): DialogFixture {
   return {
     name,
     surfaces: (shown) => [
@@ -351,6 +356,8 @@ function pickerFixture(name: string, canBuyIntoPoker: boolean): DialogFixture {
         onPoker: () => undefined,
         onBlackjack: () => undefined,
         onWheel: () => undefined,
+        freeSpins: () => freeSpins,
+        onFreeSpin: () => undefined,
         onClose: () => undefined,
       }),
     ],
@@ -375,6 +382,7 @@ function rulesFixture(name: string, page: 'first' | 'rankings' | 'last'): Dialog
 export const FIXTURES: readonly DialogFixture[] = [
   pickerFixture('casino-game-picker', true),
   pickerFixture('casino-game-picker-broke', false),
+  pickerFixture('casino-game-picker-free-spins', true, { count: 2, blocked: null }),
   pokerFixture('poker-buy-in', 'buy-in'),
   pokerFixture('poker-preflop', 'preflop'),
   pokerFixture('poker-player-turn', 'player-turn'),

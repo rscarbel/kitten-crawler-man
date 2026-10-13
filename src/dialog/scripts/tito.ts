@@ -16,6 +16,7 @@ const say = speakerLines('tito');
 
 export type TitoTrigger =
   | 'greet'
+  | 'free_spin_greet'
   | 'bet_up'
   | 'bet_down'
   | 'spin'
@@ -36,6 +37,13 @@ export const TITO_LINES = {
     say.bark('"Ah, a crawler with taste! The wheel has been waiting for you specifically."'),
     say.bark('"Welcome, welcome. Ignore the stains. The stains are decorative."'),
     say.bark('"You read the warning? Lawyers. Pay them no mind. Spin the wheel."'),
+  ],
+  free_spin_greet: [
+    say.bark(
+      '"A free spin! Somebody taped over my Nothing. Tito does not know who. Tito is furious."',
+    ),
+    say.bark('"On the house, my friend. The tape? Maintenance. Very temporary maintenance."'),
+    say.bark('"Free spin! Do not touch the tape. Tito will be taking that tape back."'),
   ],
   bet_up: [
     say.bark('"Bigger bet, friendlier wheel. That is just mathematics, my friend."'),

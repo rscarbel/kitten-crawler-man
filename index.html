@@ -1,21 +1,71 @@
 <!doctype html>
-<html lang="en">
+<html lang="en" dir="ltr">
   <head>
     <meta charset="UTF-8" />
     <meta
       name="viewport"
       content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover"
     />
-    <title>Kitten Crawler Man</title>
+    <title>Kitten Crawler Man — Free Browser Dungeon Crawler</title>
     <meta
       name="description"
-      content="A browser-based dungeon crawler where a human and their cat fight through increasingly dangerous floors."
+      content="A free browser dungeon crawler. Play as Carl and his cat Donut, fight goblins and bosses through procedurally generated dungeon floors, then take on the Over City. Desktop and mobile."
     />
+    <meta name="author" content="Ryan Scarbel" />
+    <meta
+      name="robots"
+      content="index, follow, max-image-preview:large, max-snippet:-1, max-video-preview:-1"
+    />
+    <link rel="canonical" href="https://rscarbel.github.io/kitten-crawler-man/" />
+    <meta name="color-scheme" content="dark" />
     <meta name="theme-color" content="#000000" />
+    <meta name="format-detection" content="telephone=no, date=no, email=no, address=no" />
+    <meta name="referrer" content="strict-origin-when-cross-origin" />
 
-    <link rel="icon" type="image/x-icon" href="src/images/website/goblin-icon.ico" />
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="Kitten Crawler Man" />
+    <meta property="og:locale" content="en_US" />
+    <meta property="og:url" content="https://rscarbel.github.io/kitten-crawler-man/" />
+    <meta property="og:title" content="Kitten Crawler Man — Free Browser Dungeon Crawler" />
+    <meta
+      property="og:description"
+      content="Play as Carl and his cat Donut. Fight goblins and bosses through procedurally generated dungeon floors. Free, in your browser, on desktop or mobile."
+    />
+    <meta
+      property="og:image"
+      content="https://rscarbel.github.io/kitten-crawler-man/src/images/website/share-card.jpg"
+    />
+    <meta
+      property="og:image:secure_url"
+      content="https://rscarbel.github.io/kitten-crawler-man/src/images/website/share-card.jpg"
+    />
+    <meta property="og:image:type" content="image/jpeg" />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
+    <meta
+      property="og:image:alt"
+      content="Kitten Crawler Man: Carl in boxers and Donut the calico cat face two sword- and axe-wielding goblins in a torchlit dungeon."
+    />
 
-    <link rel="apple-touch-icon" href="src/images/website/goblin-icon.jpg" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="Kitten Crawler Man — Free Browser Dungeon Crawler" />
+    <meta
+      name="twitter:description"
+      content="Play as Carl and his cat Donut. Fight goblins and bosses through procedurally generated dungeon floors. Free, in your browser."
+    />
+    <meta
+      name="twitter:image"
+      content="https://rscarbel.github.io/kitten-crawler-man/src/images/website/share-card.jpg"
+    />
+    <meta
+      name="twitter:image:alt"
+      content="Kitten Crawler Man: Carl in boxers and Donut the calico cat face two sword- and axe-wielding goblins in a torchlit dungeon."
+    />
+
+    <link rel="icon" href="src/images/website/favicon.ico" sizes="16x16 32x32 48x48" />
+    <link rel="icon" type="image/png" sizes="32x32" href="src/images/website/favicon-32.png" />
+    <link rel="icon" type="image/png" sizes="16x16" href="src/images/website/favicon-16.png" />
+    <link rel="apple-touch-icon" sizes="180x180" href="src/images/website/apple-touch-icon.png" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-title" content="Kitten Crawler Man" />
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
@@ -24,6 +74,75 @@
     <meta name="application-name" content="Kitten Crawler Man" />
 
     <link rel="manifest" href="manifest.json" />
+    <link
+      rel="alternate"
+      type="text/markdown"
+      href="llms.txt"
+      title="Kitten Crawler Man, summarised for language models"
+    />
+
+    <script type="application/ld+json">
+      {
+        "@context": "https://schema.org",
+        "@graph": [
+          {
+            "@type": "WebSite",
+            "@id": "https://rscarbel.github.io/kitten-crawler-man/#website",
+            "url": "https://rscarbel.github.io/kitten-crawler-man/",
+            "name": "Kitten Crawler Man",
+            "description": "A free browser dungeon crawler starring Carl and his cat Donut.",
+            "inLanguage": "en",
+            "publisher": { "@id": "https://rscarbel.github.io/kitten-crawler-man/#author" }
+          },
+          {
+            "@type": "Person",
+            "@id": "https://rscarbel.github.io/kitten-crawler-man/#author",
+            "name": "Ryan Scarbel",
+            "url": "https://github.com/rscarbel"
+          },
+          {
+            "@type": ["VideoGame", "WebApplication"],
+            "@id": "https://rscarbel.github.io/kitten-crawler-man/#game",
+            "name": "Kitten Crawler Man",
+            "url": "https://rscarbel.github.io/kitten-crawler-man/",
+            "description": "A free action RPG dungeon crawler that runs in the browser. Play as Carl, a melee brawler, and Donut, his spell-casting cat, switching between them at any moment. Fight through procedurally generated dungeon floors full of goblins and bosses such as The Hoarder, The Juicer, the Krakaren Clone, the Ball of Swine and the Grotesque Spider, then explore the Over City with its quests, shops, casino, circus and the besieged village of Briar Hollow.",
+            "image": "https://rscarbel.github.io/kitten-crawler-man/src/images/website/share-card.jpg",
+            "screenshot": [
+              "https://rscarbel.github.io/kitten-crawler-man/src/images/website/screenshot-wide.jpg",
+              "https://rscarbel.github.io/kitten-crawler-man/src/images/website/screenshot-narrow.jpg"
+            ],
+            "genre": ["Dungeon crawler", "Action role-playing game"],
+            "gamePlatform": ["Web browser", "Desktop", "Mobile"],
+            "applicationCategory": "GameApplication",
+            "applicationSubCategory": "Dungeon crawler",
+            "operatingSystem": "Any operating system with a modern web browser",
+            "browserRequirements": "Requires JavaScript and HTML5 Canvas.",
+            "playMode": "SinglePlayer",
+            "numberOfPlayers": { "@type": "QuantitativeValue", "value": 1 },
+            "inLanguage": "en",
+            "isAccessibleForFree": true,
+            "offers": {
+              "@type": "Offer",
+              "price": "0",
+              "priceCurrency": "USD",
+              "availability": "https://schema.org/InStock"
+            },
+            "character": [
+              { "@type": "Person", "name": "Carl" },
+              { "@type": "Thing", "name": "Donut" }
+            ],
+            "isBasedOn": {
+              "@type": "Book",
+              "name": "Dungeon Crawler Carl",
+              "author": { "@type": "Person", "name": "Matt Dinniman" }
+            },
+            "author": { "@id": "https://rscarbel.github.io/kitten-crawler-man/#author" },
+            "publisher": { "@id": "https://rscarbel.github.io/kitten-crawler-man/#author" },
+            "sameAs": ["https://github.com/rscarbel/kitten-crawler-man"]
+          }
+        ]
+      }
+    </script>
 
     <script src="dist/bundle.js" defer></script>
     <link rel="stylesheet" href="main.css" />
@@ -52,5 +171,83 @@
   </head>
   <body>
     <div id="game"></div>
+
+    <noscript>
+      <p class="noscript-notice">
+        Kitten Crawler Man is a game drawn on an HTML5 canvas, so it needs JavaScript. Turn
+        JavaScript on and reload to play.
+      </p>
+    </noscript>
+
+    <!--
+      The game itself is a canvas, which tells screen readers and crawlers
+      nothing. This is the page's real text: hidden from sight, but read aloud
+      and indexed. Its links take tabindex="-1" because Tab switches crawlers
+      in game, and a focus jump into this section would steal that key.
+    -->
+    <main class="visually-hidden">
+      <h1>Kitten Crawler Man</h1>
+      <p>
+        Kitten Crawler Man is a free dungeon crawler and action RPG that runs in your web browser,
+        on desktop and on mobile. It is an unofficial fan game inspired by Matt Dinniman's
+        <cite>Dungeon Crawler Carl</cite>.
+      </p>
+
+      <h2>Play as Carl and Donut</h2>
+      <p>
+        You control two crawlers and can switch between them at any moment; the one you are not
+        playing follows and fights alongside you. Carl is a human melee brawler whose abilities are
+        Smush and Protective Shell. Donut is a cat who casts Magic Missile and can summon her pet,
+        Mongo.
+      </p>
+
+      <h2>The floors</h2>
+      <ul>
+        <li>Tutorial: a hand-built first room where Mordecai waits in the safe room.</li>
+        <li>
+          Floor 1, The Dungeon: procedurally generated rooms and halls on a collapse countdown, safe
+          rooms with a Bopca shop, the Defend the Goblin Mother quest, and the bosses The Hoarder
+          and The Juicer.
+        </li>
+        <li>
+          Floor 2, The Dungeon, Level 2: the Krakaren Clone, the Ball of Swine in a colosseum arena,
+          the Grotesque Spider, a prison stealth mission and a pipe puzzle in a clogged bathroom.
+        </li>
+        <li>
+          Floor 3, The Overworld: the Over City, with an inn, shops, the Desperado Club casino, a
+          circus and Big Top maze, a murder mystery, the besieged ratkin village of Briar Hollow,
+          and the Doomsday Scenario finale.
+        </li>
+      </ul>
+
+      <h2>Features</h2>
+      <ul>
+        <li>Three difficulty levels: Kitten, Crawler and Nightmare.</li>
+        <li>Loot, equipment, achievements and loot boxes from Bronze to Celestial.</li>
+        <li>Hireable mercenaries, the Meat Shields.</li>
+        <li>Gathering, crafting and building to defend Briar Hollow from a siege.</li>
+        <li>Casino games: blackjack, Texas hold'em poker, slots and a prize wheel.</li>
+        <li>Saves in your browser at safe rooms; installable as an app and playable offline.</li>
+      </ul>
+
+      <h2>Controls</h2>
+      <ul>
+        <li>Move: WASD or the arrow keys</li>
+        <li>Attack or interact: Space</li>
+        <li>Switch between Carl and Donut: Tab</li>
+        <li>Drink a potion: Q</li>
+        <li>Hotbar: 1 to 8</li>
+        <li>Inventory: I. Gear: G. Mini-map: M. Quest journal: J. Follower orders: F.</li>
+        <li>Pause: Escape. Every key can be rebound from the pause menu.</li>
+        <li>On phones and tablets, on-screen touch controls replace the keyboard.</li>
+      </ul>
+
+      <p>
+        <a href="download/" tabindex="-1">Download Kitten Crawler Man for offline play</a>.
+        <a href="https://github.com/rscarbel/kitten-crawler-man" tabindex="-1"
+          >Source code on GitHub</a
+        >.
+      </p>
+    </main>
   </body>
 </html>

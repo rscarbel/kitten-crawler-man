@@ -78,6 +78,7 @@
     "gen:floor-art-seeds": "tsx scripts/build-floor-art-seeds.ts",
     "gen:keyboard-hero-chart": "tsx scripts/generate-keyboard-hero-chart.ts",
     "gen:over-city": "tsx scripts/generate-over-city-sprites.ts",
+    "gen:website-images": "tsx scripts/generate-website-images.ts",
     "gen:rocks": "tsx scripts/generate-rock-sprites.ts",
     "gen:town-art": "npm run gen:townscape && npm run gen:over-city && npm run gen:buildings",
     "gen:townscape": "tsx scripts/generate-townscape-sprites.ts",

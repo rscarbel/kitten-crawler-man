@@ -1043,6 +1043,7 @@ function routingSection(): void {
   const partyCrafts = createPartyCraftsState();
   const kit = new BriarHollowKit(sceneWorld, {
     travelUnlocks: { anchor: createAnchorQuestProgress() },
+    grantWheelFreeSpin: () => false,
     human: pm.human,
     cat: pm.cat,
     partyTools: new PartyTools(partyCrafts.tools),

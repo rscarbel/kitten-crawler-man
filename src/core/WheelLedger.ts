@@ -38,6 +38,24 @@ export interface OwedWheelItem {
 }
 
 /**
+ * Free spins quests hand out, and the taped chain one of them is playing. A
+ * quest's free spin covers the minimum bet, skips the warnings and tapes over
+ * the Nothing, so the wipe cannot be drawn until the spin and every Spin Again
+ * it chains into have landed.
+ */
+export interface WheelQuestFreeSpins {
+  /** Every quest that has granted its free spin; a quest is never paid twice. */
+  earnedBy: string[];
+  /** How many of them have been spun, counted the moment a spin commits. */
+  used: number;
+  /**
+   * A quest's free spin has committed and its chain has not resolved: the owed
+   * Spin Again (or the pending outcome) still turns on the taped board.
+   */
+  tapedChain: boolean;
+}
+
+/**
  * What the Wheel of Fortune remembers about the run. Party state rather than
  * floor state, so it is threaded by reference through every scene like the
  * club membership, and saved as top-level fields that survive a floor change.
@@ -62,6 +80,17 @@ export interface WheelLedger {
   owedFreeze: WheelCrawler | null;
   /** Prize items read from a save, emptied into the bags when the ledger is settled. */
   owedItems: OwedWheelItem[];
+  questFreeSpins: WheelQuestFreeSpins;
+}
+
+export function createWheelQuestFreeSpins(
+  saved: Partial<WheelQuestFreeSpins> = {},
+): WheelQuestFreeSpins {
+  return {
+    earnedBy: [...(saved.earnedBy ?? [])],
+    used: saved.used ?? 0,
+    tapedChain: saved.tapedChain ?? false,
+  };
 }
 
 export function createWheelLedger(
@@ -70,6 +99,7 @@ export function createWheelLedger(
   freeSpinBet: number | null = null,
   owedFreeze: WheelCrawler | null = null,
   owedItems: ReadonlyArray<OwedWheelItem> = [],
+  questFreeSpins: Partial<WheelQuestFreeSpins> = {},
 ): WheelLedger {
   return {
     prizesWon: [...prizesWon],
@@ -77,7 +107,46 @@ export function createWheelLedger(
     freeSpinBet,
     owedFreeze,
     owedItems: owedItems.map((item) => ({ ...item })),
+    questFreeSpins: createWheelQuestFreeSpins(questFreeSpins),
   };
+}
+
+/** Quest free spins earned and not yet spun. */
+export function questFreeSpinsLeft(ledger: WheelLedger): number {
+  const spins = ledger.questFreeSpins;
+  return Math.max(0, spins.earnedBy.length - spins.used);
+}
+
+/**
+ * Grants `questId`'s free spin, once: a quest replayed after a death rewind
+ * pays everything else again but never a second spin. Returns whether it paid.
+ */
+export function grantQuestFreeSpin(ledger: WheelLedger, questId: string): boolean {
+  const earned = ledger.questFreeSpins.earnedBy;
+  if (earned.includes(questId)) return false;
+  earned.push(questId);
+  return true;
+}
+
+/** A taped chain's owed Spin Again, still to be spun. */
+export function tapedChainOwed(ledger: WheelLedger): boolean {
+  return ledger.questFreeSpins.tapedChain && ledger.freeSpinBet !== null;
+}
+
+/** A saved quest free-spin record, screened; anything untrustworthy reads as none. */
+export function parseWheelQuestFreeSpins(raw: unknown): WheelQuestFreeSpins | undefined {
+  if (raw === undefined) return undefined;
+  if (!isRecord(raw)) return createWheelQuestFreeSpins();
+  const { earnedBy, used, tapedChain } = raw;
+  const quests = Array.isArray(earnedBy)
+    ? [...new Set(earnedBy.filter((entry): entry is string => typeof entry === 'string'))]
+    : [];
+  const spun = typeof used === 'number' && Number.isInteger(used) && used >= 0 ? used : 0;
+  return createWheelQuestFreeSpins({
+    earnedBy: quests,
+    used: Math.min(spun, quests.length),
+    tapedChain: tapedChain === true,
+  });
 }
 
 /** Saved owed items, screened: anything that is not a known item for a known crawler is dropped. */
