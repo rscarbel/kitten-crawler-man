@@ -1,5 +1,5 @@
 /**
- * What every wedge hands the crawler who spun, canvas-free. The wheel screen
+ * What every wedge hands the crawler it pays, canvas-free. The wheel screen
  * plays a reveal around each of these; a load that finds a spin committed but
  * never paid out calls the same functions with no reveal at all, so a reload
  * pays exactly what the screen would have.
@@ -7,14 +7,18 @@
 
 import type { Player } from '../../../Player';
 import { getBoxContents, type BoxTier, type ItemReward } from '../../../core/AchievementManager';
+import type { ItemId } from '../../../core/ItemDefs';
 import type { WheelCrawler, WheelLedger } from '../../../core/WheelLedger';
 import {
   BASE_WHEEL_BOARD,
   FAIRY_REPELLENT_SIGNET_ITEM_ID,
+  LEGENDARY_WEAPON_CLAIM_IDS,
   WHEEL_UPGRADES,
   legendaryWeaponItemId,
+  legendaryWeaponRecipient,
   platinumRingItemId,
   type WheelPrize,
+  type WheelPrizeId,
   type WheelWedge,
 } from './wheelBoard';
 import {
@@ -160,6 +164,50 @@ export function applyWheelPrize(prize: WheelPrize, target: WheelPrizeTarget): Wh
   }
 }
 
+/** The crawler a landing pays: the spinner, unless {@link legendaryWeaponRecipient} says otherwise. */
+export function wheelPrizeRecipient(
+  wedge: WheelWedge,
+  spinner: WheelCrawler,
+  won: ReadonlyArray<string>,
+): WheelCrawler {
+  return wedge.prize.kind === 'legendary_weapon_box'
+    ? legendaryWeaponRecipient(spinner, won)
+    : spinner;
+}
+
+const LEGENDARY_WEAPON_WEDGE_ID: WheelPrizeId = 'legendary_weapon_box';
+const WHEEL_CRAWLERS: readonly WheelCrawler[] = ['human', 'cat'];
+
+/**
+ * Marks the prize a landing pays to `recipient` as won, before the spin is
+ * saved. A Legendary Weapon marks that crawler's claim, and the wedge itself
+ * only once both crawlers' claims are in. Returns the entries added, so a
+ * refused save can take exactly those back out.
+ */
+export function markWheelPrizeWon(
+  ledger: WheelLedger,
+  wedge: WheelWedge,
+  recipient: WheelCrawler,
+): string[] {
+  const won = ledger.prizesWon;
+  const marked: string[] = [];
+  const mark = (entry: string) => {
+    if (won.includes(entry)) return;
+    won.push(entry);
+    marked.push(entry);
+  };
+  if (wedge.prize.kind === 'legendary_weapon_box') {
+    mark(LEGENDARY_WEAPON_CLAIM_IDS[recipient]);
+    const bothClaimed =
+      won.includes(LEGENDARY_WEAPON_CLAIM_IDS.human) &&
+      won.includes(LEGENDARY_WEAPON_CLAIM_IDS.cat);
+    if (bothClaimed) mark(LEGENDARY_WEAPON_WEDGE_ID);
+  } else if (wedge.prizeId !== null) {
+    mark(wedge.prizeId);
+  }
+  return marked;
+}
+
 /** Both crawlers and how to reach each one's side of a prize. */
 export interface WheelParty {
   readonly human: Player;
@@ -202,9 +250,47 @@ export function deliverOwedWheelItems(ledger: WheelLedger, party: WheelParty): I
  * floor change: prize items waiting for bag room, a spin committed but never
  * paid (the bet and the won-prize mark were saved with it, so only the
  * effect is left, and a Spin Again's free spin is owed again), and a freeze
- * landed but not yet spent. Returns the pending wedge paid, or null.
+ * landed but not yet spent. Also splits a legacy whole-party Legendary
+ * Weapon claim into a per-crawler one. Returns the pending wedge paid, or null.
  */
 export function settleWheelLedger(ledger: WheelLedger, party: WheelParty): WheelWedge | null {
+  const paid = settleOwedPrizes(ledger, party);
+  splitLegacyWeaponClaim(ledger, party);
+  return paid;
+}
+
+function partyHoldsItem(ledger: WheelLedger, party: WheelParty, id: ItemId): boolean {
+  const held = (crawler: Player) =>
+    crawler.inventory.countOf(id) > 0 || crawler.inventory.hasEquipped(id);
+  return held(party.human) || held(party.cat) || ledger.owedItems.some((owed) => owed.id === id);
+}
+
+/**
+ * A save from when the Legendary Weapon paid once for the whole party holds
+ * the wedge as won with no per-crawler claim. If the party still holds exactly
+ * one of the two weapons, that crawler's claim replaces it and the wedge can
+ * pay the other weapon; otherwise which one was won is unknowable, so both
+ * count as claimed and the wedge stays retired. Runs after a pending spin is
+ * paid, so a weapon still in flight is in a bag or owed by then.
+ */
+function splitLegacyWeaponClaim(ledger: WheelLedger, party: WheelParty): void {
+  const won = ledger.prizesWon;
+  const claims = Object.values(LEGENDARY_WEAPON_CLAIM_IDS);
+  const isLegacy =
+    won.includes(LEGENDARY_WEAPON_WEDGE_ID) && !claims.some((claim) => won.includes(claim));
+  if (!isLegacy) return;
+  const held = WHEEL_CRAWLERS.filter((kind) =>
+    partyHoldsItem(ledger, party, legendaryWeaponItemId(kind)),
+  );
+  if (held.length === 1) {
+    ledger.prizesWon = won.filter((entry) => entry !== LEGENDARY_WEAPON_WEDGE_ID);
+    ledger.prizesWon.push(LEGENDARY_WEAPON_CLAIM_IDS[held[0]]);
+    return;
+  }
+  won.push(...claims);
+}
+
+function settleOwedPrizes(ledger: WheelLedger, party: WheelParty): WheelWedge | null {
   deliverOwedWheelItems(ledger, party);
   const pending = ledger.pendingOutcome;
   ledger.pendingOutcome = null;
@@ -217,6 +303,6 @@ export function settleWheelLedger(ledger: WheelLedger, party: WheelParty): Wheel
   const wedge = wedgeFaceById(pending.wedgeId);
   if (wedge === null) return null;
   if (wedge.prize.kind === 'spin_again') ledger.freeSpinBet = pending.boardBet;
-  applyWheelPrize(wedge.prize, wheelPrizeTarget(party, pending.crawler, ledger));
+  applyWheelPrize(wedge.prize, wheelPrizeTarget(party, pending.recipient, ledger));
   return wedge;
 }

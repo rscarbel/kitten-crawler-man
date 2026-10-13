@@ -160,7 +160,6 @@ const BANNER_RAY_SHORT_REACH = 0.6;
 const BANNER_RAY_STEPS = [1, BANNER_RAY_SHORT_REACH] as const;
 const BANNER_PULSE_MS = 340;
 const BANNER_PULSE_SCALE = 0.04;
-const BANNER_LETTER_WIDTH = 0.62;
 /** The banner title is measured at this size and scaled to fit. */
 const BANNER_PROBE_SIZE = 100;
 /** The title fills this share of the banner's width, leaving room for its halo. */
@@ -170,6 +169,8 @@ const SPIN_PULSE_MS = 900;
 const SPIN_RING_WIDTH = 3;
 const SPIN_RING_ALPHA = 0.55;
 const SPIN_LABEL_FRACTION = 0.42;
+/** The label fills at most this share of the button's width, clear of its rounded ends. */
+const SPIN_LABEL_WIDTH_SHARE = 0.78;
 
 const LEVER_TAP_MS = 420;
 /** A drag past this share of the lever's travel spins on release. */
@@ -1109,18 +1110,21 @@ export class SlotsView {
       );
       ui.ctx.restore();
     }
+    const label = disabled && typeof model.canSpin === 'string' ? model.canSpin : model.spinLabel;
+    // The width fit measures the label actually painted: a refusal reason is
+    // several times longer than SPIN and would otherwise overflow the face.
+    const probeStyle = scaledStyle(ui.theme.type.display, BANNER_PROBE_SIZE);
+    const probeWidth = Math.max(1, measureText(ui, label, { style: probeStyle }));
+    const widthFitSize = (rect.w * SPIN_LABEL_WIDTH_SHARE * BANNER_PROBE_SIZE) / probeWidth;
     paintSkinnedControl(ui, rect, {
-      label: disabled && typeof model.canSpin === 'string' ? model.canSpin : model.spinLabel,
+      label,
       skin,
       look,
       disabled,
       radius,
       textStyle: scaledStyle(
         ui.theme.type.display,
-        Math.min(
-          rect.h * SPIN_LABEL_FRACTION,
-          rect.w / (model.spinLabel.length + 2) / BANNER_LETTER_WIDTH,
-        ),
+        Math.min(rect.h * SPIN_LABEL_FRACTION, widthFitSize),
       ),
     });
   }

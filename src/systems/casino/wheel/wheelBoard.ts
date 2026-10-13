@@ -25,16 +25,43 @@ export function platinumRingItemId(ring: PlatinumRing) {
     : RING_OF_THE_ASBESTOS_KNUCKLE_ITEM_ID;
 }
 
-/** The Legendary Weapon wedge's weapon, fixed by whichever crawler spun when it was won. */
+/** Each crawler's own Legendary Weapon: Carl's sword, Donut's glasses. */
 export function legendaryWeaponItemId(crawler: CrawlerKind) {
   return crawler === 'human' ? FURY_OF_TARANIS_ITEM_ID : EYES_OF_SPLATTER_ITEM_ID;
 }
 
 /**
+ * The won-set entry recording one crawler's Legendary Weapon as issued. These
+ * sit beside the wedge ids in the save's won set but name no wedge, so the
+ * board never retires on one alone.
+ */
+export const LEGENDARY_WEAPON_CLAIM_IDS = {
+  human: 'legendary_weapon_human',
+  cat: 'legendary_weapon_cat',
+} as const satisfies Record<CrawlerKind, string>;
+
+export function otherCrawler(crawler: CrawlerKind): CrawlerKind {
+  return crawler === 'human' ? 'cat' : 'human';
+}
+
+/**
+ * Whose Legendary Weapon a landing on its wedge issues: the spinner's own,
+ * or once that is claimed, the other crawler's, which goes to the other
+ * crawler since it is theirs to wear.
+ */
+export function legendaryWeaponRecipient(
+  spinner: CrawlerKind,
+  won: ReadonlyArray<string>,
+): CrawlerKind {
+  return won.includes(LEGENDARY_WEAPON_CLAIM_IDS[spinner]) ? otherCrawler(spinner) : spinner;
+}
+
+/**
  * Every once-only prize. A prize id lands in the save's won set when it is won
  * and is never picked again until the Nothing or a reset clears that set. The
- * Legendary Weapon is one id for the whole party, so only one of the two
- * crawler weapons can ever be won.
+ * Legendary Weapon wedge pays twice, one crawler's weapon each time (see
+ * {@link LEGENDARY_WEAPON_CLAIM_IDS}), and its id joins the won set only once
+ * both have been issued.
  */
 export const WHEEL_PRIZE_IDS = [
   'pet',

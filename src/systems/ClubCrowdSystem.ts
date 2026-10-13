@@ -46,8 +46,12 @@ const PATRON_PAUSE_MAX = 240;
 /** Appearance seeds are handed out on this stride; the sprite hashes them apart. */
 const PATRON_SEED_STRIDE = 7;
 const PATRON_SEED_OFFSET = 3;
-/** Minimum horizontal drift toward the target before a patron flips which way it faces. */
-const PATRON_FACING_DEADZONE = 0.4;
+/**
+ * Net travel in a tick, in pixels, below which a patron counts as standing.
+ * Under the slowest walking speed, so every real step registers, but above the
+ * residue a walker pinned against an immovable body nets out to.
+ */
+const PATRON_VISIBLE_STEP_PX = 0.15;
 
 /** Height spread across the crowd, as a multiple of a tile — enough to read, short of cartoonish. */
 const PATRON_HEIGHT_MIN = 0.88;
@@ -99,6 +103,9 @@ interface Patron {
   lastTargetDist: number;
   /** Consecutive walking ticks without closing on the target. */
   stalledTicks: number;
+  /** Where the patron stood when this tick began, so facing and gait follow net travel. */
+  tickStartX: number;
+  tickStartY: number;
 }
 
 /**
@@ -156,40 +163,51 @@ export class ClubCrowdSystem {
     if (patrons === null) return;
 
     for (const p of patrons) {
+      p.tickStartX = p.x;
+      p.tickStartY = p.y;
       this.wanderingPatron = p;
       stepWander(p, this.wanderParams, this.wanderStep);
-      if (this.wanderStep.moving) {
-        if (Math.abs(this.wanderStep.dx) >= Math.abs(this.wanderStep.dy)) {
-          if (Math.abs(this.wanderStep.dx) > PATRON_FACING_DEADZONE) {
-            p.facingX = this.wanderStep.dx < 0 ? -1 : 1;
-            p.facingY = 0;
-          }
-        } else {
-          p.facingY = this.wanderStep.dy < 0 ? -1 : 1;
-          p.facingX = 0;
-        }
-        // Paced by ground covered at the size the patron is drawn, so the
-        // planted foot holds still whatever speed or height the patron has.
-        const cyclePx = clubFigureWalkCyclePx(p.ref, TILE_SIZE * p.heightScale);
-        const turn = gaitCyclesForDistance(
-          this.wanderStep.distance,
-          cyclePx,
-          clubFigureWalkFrames(p.ref),
-        );
-        p.walkCycle = (p.walkCycle + turn) % 1;
-        p.motionTicks = PATRON_MOTION_HOLD_TICKS;
-      } else if (p.motionTicks > 0) {
-        p.motionTicks--;
-      }
     }
     this.wanderingPatron = null;
 
     this.resolveCollisions(patrons, staticBodies);
-    for (const p of patrons) this.abandonStalledTarget(p);
+    for (const p of patrons) {
+      this.animateNetStep(p);
+      this.abandonStalledTarget(p);
+    }
 
     for (let i = 0; i < patrons.length; i++) {
       this.figures[i].y = patrons[i].y;
     }
+  }
+
+  /**
+   * Faces and paces a patron by where it actually went this tick, after the
+   * crowd's shoving, not by where it meant to go. A crawler walking into an
+   * oncoming patron pushes it back faster than it walks, and a patron animated
+   * from its intended step would face and stride forward while sliding backwards.
+   */
+  private animateNetStep(p: Patron): void {
+    const stepX = p.x - p.tickStartX;
+    const stepY = p.y - p.tickStartY;
+    const covered = Math.hypot(stepX, stepY);
+    if (covered < PATRON_VISIBLE_STEP_PX) {
+      if (p.motionTicks > 0) p.motionTicks--;
+      return;
+    }
+    if (Math.abs(stepX) >= Math.abs(stepY)) {
+      p.facingX = stepX < 0 ? -1 : 1;
+      p.facingY = 0;
+    } else {
+      p.facingX = 0;
+      p.facingY = stepY < 0 ? -1 : 1;
+    }
+    // Paced by ground covered at the size the patron is drawn, so the planted
+    // foot holds still whatever speed or height the patron has.
+    const cyclePx = clubFigureWalkCyclePx(p.ref, TILE_SIZE * p.heightScale);
+    const turn = gaitCyclesForDistance(covered, cyclePx, clubFigureWalkFrames(p.ref));
+    p.walkCycle = (p.walkCycle + turn) % 1;
+    p.motionTicks = PATRON_MOTION_HOLD_TICKS;
   }
 
   private abandonStalledTarget(p: Patron): void {
@@ -384,6 +402,8 @@ export class ClubCrowdSystem {
           motionTicks: 0,
           lastTargetDist: Number.POSITIVE_INFINITY,
           stalledTicks: 0,
+          tickStartX: start.x,
+          tickStartY: start.y,
         };
         patrons.push(patron);
         this.figures.push({

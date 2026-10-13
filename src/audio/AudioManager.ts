@@ -117,7 +117,7 @@ export interface MusicOptions {
  * it silent forever if the reason that set the flag never clears it. The bus
  * only comes back once every reason that asked for silence has let go.
  */
-export type MusicPauseReason = 'menu' | 'background' | 'slots_big_win' | 'wheel';
+export type MusicPauseReason = 'menu' | 'background' | 'slots_big_win' | 'wheel' | 'nothing';
 
 /**
  * Why the music bus is held below the player's level without being silenced.

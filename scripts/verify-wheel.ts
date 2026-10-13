@@ -24,6 +24,7 @@ import {
   boardForBet,
   boardUnits,
   isRedWedge,
+  isWheelPrizeId,
   type WheelBoard,
   type WheelPrizeId,
   type WheelWedge,
@@ -774,6 +775,7 @@ async function checkHostCommitsBeforeTurning(): Promise<void> {
       wedgeId: forcedPrize,
       prizeId: forcedPrize,
       crawler: 'human',
+      recipient: 'human',
       bet: WHEEL_MIN_BET,
       boardBet: WHEEL_MIN_BET,
     },
@@ -859,6 +861,7 @@ async function checkHostCommitsBeforeTurning(): Promise<void> {
     wedgeId: 'legendary_box',
     prizeId: 'legendary_box',
     crawler: 'human',
+    recipient: 'human',
     bet: WHEEL_MIN_BET,
     boardBet: WHEEL_MIN_BET,
   });
@@ -878,6 +881,7 @@ async function checkHostCommitsBeforeTurning(): Promise<void> {
     wedgeId: 'spin_again_1',
     prizeId: null,
     crawler: 'human',
+    recipient: 'human',
     bet: WHEEL_MAX_BET,
     boardBet: WHEEL_MAX_BET,
   });
@@ -1073,6 +1077,136 @@ async function checkOwedWipeIdentifiesSessionFirst(): Promise<void> {
   );
 }
 
+/**
+ * The Legendary Weapon wedge pays each crawler's weapon once: the spinner's
+ * own first, then the other crawler's to the other crawler, and it retires
+ * only once both are out. A refused save takes back exactly what it marked,
+ * a pending second weapon found on load goes to its owner, and a save that
+ * holds the wedge as won with no per-crawler claim is split by which weapon
+ * the party still has.
+ */
+async function checkLegendaryWeaponPaysBoth(): Promise<void> {
+  const { ClubWheelSystem, WHEEL_SPIN_HOLD_MS } = await import('../src/systems/ClubWheelSystem');
+  const { createWheelLedger } = await import('../src/core/WheelLedger');
+  const { settleWheelLedger } = await import('../src/systems/casino/wheel/wheelPrizes');
+  const { LEGENDARY_WEAPON_CLAIM_IDS, FURY_OF_TARANIS_ITEM_ID, EYES_OF_SPLATTER_ITEM_ID } =
+    await import('../src/systems/casino/wheel/wheelBoard');
+  const HOST_STEP_MS = 16;
+  const HOST_PURSE = 10_000;
+  const LANDING_SETTLE_MS = 20_000;
+  const weaponWedge = 'legendary_weapon_box';
+  const human = new HumanPlayer(0, 0, TILE_SIZE);
+  const cat = new CatPlayer(1, 0, TILE_SIZE);
+  const ledger = createWheelLedger();
+
+  const spinWeapon = async (spinner: HumanPlayer | CatPlayer, answer: 'saved' | 'failed') => {
+    let now = 0;
+    spinner.coins = HOST_PURSE;
+    const companion = spinner === human ? cat : human;
+    const wheel = new ClubWheelSystem({
+      audio: null,
+      ledger,
+      saveNow: () => Promise.resolve(answer),
+      progressWipe: null,
+      afterNothing: () => undefined,
+      grantAttackCow: () => undefined,
+      clock: () => now,
+      random: mulberry32(1),
+      forcedOutcome: (board) => {
+        const index = board.findIndex((wedge) => wedge.prizeId === weaponWedge);
+        return index < 0 ? null : { wedgeIndex: index, wedge: board[index] };
+      },
+    });
+    wheel.openWheelForReview({ active: () => spinner, companion: () => companion });
+    wheel.holdSpinForReview();
+    for (let t = 0; t <= WHEEL_SPIN_HOLD_MS; t += HOST_STEP_MS) {
+      now += HOST_STEP_MS;
+      wheel.update();
+    }
+    await Promise.resolve();
+    await Promise.resolve();
+    for (let t = 0; t <= LANDING_SETTLE_MS && wheel.phaseKind === 'spinning'; t += HOST_STEP_MS) {
+      now += HOST_STEP_MS;
+      wheel.update();
+    }
+  };
+  const retired = () =>
+    outcomeWeights(boardForBet(WHEEL_MIN_BET), new Set(ledger.prizesWon.filter(isWheelPrizeId)))[
+      BASE_WHEEL_BOARD.findIndex((wedge) => wedge.prizeId === weaponWedge)
+    ] === 0;
+
+  await spinWeapon(human, 'saved');
+  check(
+    human.inventory.countOf(FURY_OF_TARANIS_ITEM_ID) === 1 &&
+      cat.inventory.countOf(EYES_OF_SPLATTER_ITEM_ID) === 0,
+    "Carl's first Legendary Weapon is his own sword",
+  );
+  check(!retired(), 'the wedge stays live after one weapon');
+
+  const wonBefore = [...ledger.prizesWon];
+  await spinWeapon(human, 'failed');
+  check(
+    ledger.prizesWon.join(',') === wonBefore.join(',') &&
+      cat.inventory.countOf(EYES_OF_SPLATTER_ITEM_ID) === 0,
+    'a refused save on the second weapon takes back every mark it made',
+  );
+
+  await spinWeapon(human, 'saved');
+  check(
+    cat.inventory.countOf(EYES_OF_SPLATTER_ITEM_ID) === 1 &&
+      human.inventory.countOf(EYES_OF_SPLATTER_ITEM_ID) === 0 &&
+      human.inventory.countOf(FURY_OF_TARANIS_ITEM_ID) === 1,
+    "Carl landing it again sends Donut's glasses to Donut",
+  );
+  check(retired(), 'the wedge retires once both weapons are out');
+
+  const loadHuman = new HumanPlayer(0, 0, TILE_SIZE);
+  const loadCat = new CatPlayer(1, 0, TILE_SIZE);
+  const loadParty = { human: loadHuman, cat: loadCat, grantAttackCow: () => undefined };
+  const pendingSecond = createWheelLedger(
+    [LEGENDARY_WEAPON_CLAIM_IDS.cat, LEGENDARY_WEAPON_CLAIM_IDS.human, weaponWedge],
+    {
+      wedgeId: weaponWedge,
+      prizeId: weaponWedge,
+      crawler: 'cat',
+      recipient: 'human',
+      bet: WHEEL_MIN_BET,
+      boardBet: WHEEL_MIN_BET,
+    },
+  );
+  settleWheelLedger(pendingSecond, loadParty);
+  check(
+    loadHuman.inventory.countOf(FURY_OF_TARANIS_ITEM_ID) === 1 &&
+      loadCat.inventory.countOf(FURY_OF_TARANIS_ITEM_ID) === 0,
+    'a pending second weapon found on load goes to the crawler it belongs to',
+  );
+
+  const legacyParty = {
+    human: new HumanPlayer(0, 0, TILE_SIZE),
+    cat: new CatPlayer(1, 0, TILE_SIZE),
+    grantAttackCow: () => undefined,
+  };
+  legacyParty.cat.inventory.addItem(EYES_OF_SPLATTER_ITEM_ID, 1);
+  const legacyHeld = createWheelLedger([weaponWedge]);
+  settleWheelLedger(legacyHeld, legacyParty);
+  check(
+    legacyHeld.prizesWon.join(',') === LEGENDARY_WEAPON_CLAIM_IDS.cat,
+    `a legacy claim with Donut's glasses in hand becomes her claim alone (${legacyHeld.prizesWon.join(',')})`,
+  );
+  const legacyLost = createWheelLedger([weaponWedge]);
+  settleWheelLedger(legacyLost, {
+    human: new HumanPlayer(0, 0, TILE_SIZE),
+    cat: new CatPlayer(1, 0, TILE_SIZE),
+    grantAttackCow: () => undefined,
+  });
+  check(
+    legacyLost.prizesWon.includes(weaponWedge) &&
+      legacyLost.prizesWon.includes(LEGENDARY_WEAPON_CLAIM_IDS.human) &&
+      legacyLost.prizesWon.includes(LEGENDARY_WEAPON_CLAIM_IDS.cat),
+    'a legacy claim with no telling which weapon was won stays retired',
+  );
+}
+
 runSection('board', checkBoard);
 runSection('bets', checkBets);
 runSection('picks', checkPicks);
@@ -1087,6 +1221,7 @@ await checkOwedWipeIdentifiesSessionFirst();
 await checkSaveLatchBlocksWritesAfterWipe();
 console.log('\nhost');
 await checkHostCommitsBeforeTurning();
+await checkLegendaryWeaponPaysBoth();
 
 console.log(
   failures === 0

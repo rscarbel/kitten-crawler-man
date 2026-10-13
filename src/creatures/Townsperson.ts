@@ -224,12 +224,35 @@ export class Townsperson implements WanderState {
     const wantsHorizontal = horizontal >= vertical;
     const holdsHorizontal = this.facing === 'left' || this.facing === 'right';
     if (wantsHorizontal !== holdsHorizontal) {
-      if (this.framesSinceTurn < FACING_DWELL_FRAMES) return;
       const challenger = wantsHorizontal ? horizontal : vertical;
       const incumbent = wantsHorizontal ? vertical : horizontal;
-      if (challenger < incumbent * FACING_TURN_MARGIN) return;
+      const dwelt = this.framesSinceTurn >= FACING_DWELL_FRAMES;
+      const clearlyTurned = challenger >= incumbent * FACING_TURN_MARGIN;
+      if (!dwelt || !clearlyTurned) {
+        this.faceAlongHeldAxis(dx, dy, holdsHorizontal);
+        return;
+      }
     }
     this.turnTo(dx, dy);
+  }
+
+  /**
+   * Hysteresis may keep the axis but never the direction along it: a citizen
+   * facing left who sets off up-and-right must turn right, or they walk the
+   * whole leg backwards.
+   */
+  private faceAlongHeldAxis(dx: number, dy: number, holdsHorizontal: boolean): void {
+    const along = holdsHorizontal ? dx : dy;
+    if (Math.abs(along) < FACING_DEADZONE) return;
+    const next: Facing = holdsHorizontal
+      ? along < 0
+        ? 'left'
+        : 'right'
+      : along < 0
+        ? 'up'
+        : 'down';
+    // A flip along the held axis is a reversal, not a turn, so the dwell keeps counting toward the real turn.
+    this.facing = next;
   }
 
   /** Snaps to the dominant axis with no hysteresis — for deliberate turns. */

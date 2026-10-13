@@ -15,6 +15,11 @@ export interface PendingWheelOutcome {
   /** The prize that wedge pays, or null for an outcome that pays no prize. */
   prizeId: string | null;
   crawler: WheelCrawler;
+  /**
+   * The crawler the prize goes to: the spinner, except a Legendary Weapon the
+   * spinner already has, which pays the other crawler's weapon to them.
+   */
+  recipient: WheelCrawler;
   /** Coins staked on the spin, already taken from the crawler in the same save. */
   bet: number;
   /** The bet whose board the spin turned on, which a pending Spin Again's free spin keeps. */
@@ -38,7 +43,10 @@ export interface OwedWheelItem {
  * club membership, and saved as top-level fields that survive a floor change.
  */
 export interface WheelLedger {
-  /** Every good prize the party has won; none of them is ever drawn again. */
+  /**
+   * Every good prize the party has won; none of them is ever drawn again. Also
+   * holds each crawler's Legendary Weapon claim, which retires no wedge alone.
+   */
   prizesWon: string[];
   pendingOutcome: PendingWheelOutcome | null;
   /**
@@ -116,7 +124,7 @@ function isWheelCrawler(value: unknown): value is WheelCrawler {
 export function parsePendingWheelOutcome(raw: unknown): PendingWheelOutcome | null | undefined {
   if (raw === undefined) return undefined;
   if (!isRecord(raw)) return null;
-  const { wedgeId, prizeId, crawler, bet, boardBet } = raw;
+  const { wedgeId, prizeId, crawler, recipient, bet, boardBet } = raw;
   if (typeof wedgeId !== 'string') return null;
   if (prizeId !== null && typeof prizeId !== 'string') return null;
   if (!isWheelCrawler(crawler)) return null;
@@ -124,5 +132,7 @@ export function parsePendingWheelOutcome(raw: unknown): PendingWheelOutcome | nu
   // A free spin stakes nothing, so a save without the board's bet falls back to the stake.
   const board =
     typeof boardBet === 'number' && Number.isFinite(boardBet) && boardBet > 0 ? boardBet : bet;
-  return { wedgeId, prizeId, crawler, bet, boardBet: board };
+  // A save written without a recipient paid every prize to the spinner.
+  const paid = isWheelCrawler(recipient) ? recipient : crawler;
+  return { wedgeId, prizeId, crawler, recipient: paid, bet, boardBet: board };
 }

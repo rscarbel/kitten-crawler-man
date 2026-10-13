@@ -1,7 +1,7 @@
 /**
  * Drives a real {@link ClubSlotsSystem} on a fake clock to a chosen moment:
- * idle, mid-spin, a line win, each win tier's banner, the free-spin feature
- * or the jackpot. The gallery, the `?slots` route and the gates all stage the
+ * idle, mid-spin, a line win, each win tier's banner, the free-spin feature,
+ * the jackpot or a purse too light for the bet. The gallery, the `?slots` route and the gates all stage the
  * machine through here, so each shows exactly what the game ships.
  */
 
@@ -26,6 +26,7 @@ export const SLOTS_STAGES = [
   'epic-win',
   'free-spins',
   'jackpot',
+  'broke',
 ] as const;
 
 export type SlotsStage = (typeof SLOTS_STAGES)[number];
@@ -154,6 +155,11 @@ export function stageSlots(staged: StagedSlots, stage: SlotsStage): void {
         throw new Error('the slots stage never started a free spin');
       }
       staged.advance(FREE_SPIN_HOLD_MS);
+      return;
+    case 'broke':
+      staged.human.coins = 0;
+      staged.cat.coins = 0;
+      staged.advance(SLOTS_STAGE_STEP_MS);
       return;
     case 'jackpot':
       host.betPerLine = MAX_BET_PER_LINE;

@@ -65,6 +65,8 @@ import {
 import {
   applyWheelPrize,
   deliverOwedWheelItems,
+  markWheelPrizeWon,
+  wheelPrizeRecipient,
   type WheelPrizeEffect,
   type WheelPrizeTarget,
 } from './casino/wheel/wheelPrizes';
@@ -130,6 +132,9 @@ interface CommittedSpin {
   readonly board: WheelBoard;
   readonly crawler: Player;
   readonly kind: WheelCrawler;
+  /** The crawler the prize goes to; see {@link wheelPrizeRecipient}. */
+  readonly recipient: Player;
+  readonly recipientKind: WheelCrawler;
   /** Coins staked: zero for a free spin. */
   readonly bet: number;
   /** The bet whose board the wheel shows, which a free spin keeps. */
@@ -142,7 +147,8 @@ interface CommittedSpin {
 interface SpinUndo {
   readonly humanCoins: number;
   readonly catCoins: number;
-  readonly prizeMarked: WheelPrizeId | null;
+  /** Won-set entries this spin added, taken back out if the save is refused. */
+  readonly prizesMarked: readonly string[];
   readonly freeSpinOwed: boolean;
 }
 
@@ -318,8 +324,8 @@ function crawlerName(kind: WheelCrawler): string {
  * The line under the landing banner: what the prize paid and to whom, never
  * the banner's own title over again.
  */
-function prizeLine(wedge: WheelWedge, effect: WheelPrizeEffect, spinner: WheelCrawler): string {
-  const name = crawlerName(spinner);
+function prizeLine(wedge: WheelWedge, effect: WheelPrizeEffect, recipient: WheelCrawler): string {
+  const name = crawlerName(recipient);
   const { prize } = wedge;
   if (prize.kind === 'pet') return `An attack cow of his very own for ${CARL_NAME}`;
   if (prize.kind === 'gold') return `Paid straight into ${name}'s purse`;
@@ -607,11 +613,16 @@ export class ClubWheelSystem implements CasinoGameHost {
     const board = boardForBet(this.bet);
     const index = Math.max(0, Math.min(board.length - 1, wedgeIndex));
     const crawler = seat.active();
+    const kind: WheelCrawler = crawler instanceof CatPlayer ? 'cat' : 'human';
+    const wedge = board[index];
+    const recipientKind = wheelPrizeRecipient(wedge, kind, this.deps.ledger.prizesWon);
     return {
-      outcome: { wedgeIndex: index, wedge: board[index] },
+      outcome: { wedgeIndex: index, wedge },
       board,
       crawler,
-      kind: crawler instanceof CatPlayer ? 'cat' : 'human',
+      kind,
+      recipient: this.crawlerOf(seat, recipientKind),
+      recipientKind,
       bet: 0,
       boardBet: this.bet,
       free: false,
@@ -652,6 +663,7 @@ export class ClubWheelSystem implements CasinoGameHost {
     this.deps.audio?.stopSound('slots_jackpot_siren');
     this.syncLoops();
     this.deps.audio?.resumeMusic('wheel', MUSIC_FADE_MS);
+    this.deps.audio?.resumeAmbience('nothing');
     const ledger = this.deps.ledger;
     const frozen = ledger.owedFreeze;
     const seat = this.seat;
@@ -841,7 +853,7 @@ export class ClubWheelSystem implements CasinoGameHost {
     const undo: SpinUndo = {
       humanCoins: human.coins,
       catCoins: cat.coins,
-      prizeMarked: null,
+      prizesMarked: [],
       freeSpinOwed: free,
     };
     if (!free && !spendPartyCoins(human, cat, bet, crawler)) return;
@@ -851,11 +863,15 @@ export class ClubWheelSystem implements CasinoGameHost {
     const outcome =
       this.deps.forcedOutcome?.(board) ?? pickOutcome(board, this.wonPrizes(), this.random);
     const kind: WheelCrawler = crawler instanceof CatPlayer ? 'cat' : 'human';
+    const ledger = this.deps.ledger;
+    const recipientKind = wheelPrizeRecipient(outcome.wedge, kind, ledger.prizesWon);
     const spin: CommittedSpin = {
       outcome,
       board,
       crawler,
       kind,
+      recipient: recipientKind === 'human' ? human : cat,
+      recipientKind,
       bet: free ? 0 : bet,
       boardBet: bet,
       free,
@@ -872,15 +888,14 @@ export class ClubWheelSystem implements CasinoGameHost {
       return;
     }
 
-    const ledger = this.deps.ledger;
     const prizeId = outcome.wedge.prizeId;
-    const marked = prizeId !== null && !ledger.prizesWon.includes(prizeId) ? prizeId : null;
-    if (marked !== null) ledger.prizesWon.push(marked);
+    const marked = markWheelPrizeWon(ledger, outcome.wedge, recipientKind);
     const previousPending = ledger.pendingOutcome;
     ledger.pendingOutcome = {
       wedgeId: outcome.wedge.id,
       prizeId,
       crawler: kind,
+      recipient: recipientKind,
       bet: spin.bet,
       boardBet: spin.boardBet,
     };
@@ -888,7 +903,7 @@ export class ClubWheelSystem implements CasinoGameHost {
     // The screen may have been torn down while storage answered.
     if (!this.stillCommitting(spin)) return;
     if (!saveOutcomeCommitted(saved)) {
-      this.undoCommit(human, cat, { ...undo, prizeMarked: marked }, bet);
+      this.undoCommit(human, cat, { ...undo, prizesMarked: marked }, bet);
       ledger.pendingOutcome = previousPending;
       this.phase = { kind: 'idle' };
       this.deps.onNotice?.(
@@ -939,9 +954,9 @@ export class ClubWheelSystem implements CasinoGameHost {
     cat.coins = undo.catCoins;
     if (!undo.freeSpinOwed) this.wagered -= bet;
     else this.freeSpinBet = bet;
-    if (undo.prizeMarked !== null) {
-      const ledger = this.deps.ledger;
-      const index = ledger.prizesWon.lastIndexOf(undo.prizeMarked);
+    const ledger = this.deps.ledger;
+    for (const entry of undo.prizesMarked) {
+      const index = ledger.prizesWon.lastIndexOf(entry);
       if (index >= 0) ledger.prizesWon.splice(index, 1);
     }
   }
@@ -1020,7 +1035,7 @@ export class ClubWheelSystem implements CasinoGameHost {
     const applied =
       effectKind === 'freeze'
         ? null
-        : applyWheelPrize(wedge.prize, this.prizeTarget(spin.crawler, spin.kind));
+        : applyWheelPrize(wedge.prize, this.prizeTarget(spin.recipient, spin.recipientKind));
     const ledger = this.deps.ledger;
     ledger.pendingOutcome = null;
     // Both outlive a reload: the spin that earned them was paid for.
@@ -1034,8 +1049,11 @@ export class ClubWheelSystem implements CasinoGameHost {
       this.chuckleAt = now + CHUCKLE_DELAY_MS;
     }
     if (this.deps.ledger.owedItems.length > owedBefore) {
+      const heldFor = spin.recipientKind === spin.kind ? null : crawlerName(spin.recipientKind);
       this.deps.onNotice?.(
-        "Your bag is full, so Tito is holding your prize. Make room and it's yours.",
+        heldFor === null
+          ? "Your bag is full, so Tito is holding your prize. Make room and it's yours."
+          : `${heldFor}'s bag is full, so Tito is holding the prize. Make room and it's theirs.`,
         'warning',
       );
     }
@@ -1065,7 +1083,7 @@ export class ClubWheelSystem implements CasinoGameHost {
         durationMs: REVEAL_MS[effectKind],
         itemTier: effect.tier,
         items: effect.items,
-        prizeLine: prizeLine(wedge, effect, spin.kind),
+        prizeLine: prizeLine(wedge, effect, spin.recipientKind),
         coinsTaken: effect.coinsTaken,
         coinsWon: effect.coinsWon,
         purseBefore: purseAfter + effect.coinsTaken - effect.coinsWon,
@@ -1099,7 +1117,7 @@ export class ClubWheelSystem implements CasinoGameHost {
         {
           tier: reveal.itemTier,
           title: `${reveal.itemTier} prize`,
-          playerName: crawlerName(phase.spin.kind),
+          playerName: crawlerName(phase.spin.recipientKind),
           contents: { coins: reveal.coinsWon, itemRewards: reveal.items },
           detail: prizeDetail(reveal.items),
         },
@@ -1162,6 +1180,10 @@ export class ClubWheelSystem implements CasinoGameHost {
     this.phase = { kind: 'nothing', landedAt: now };
     this.screen = 'nothing';
     this.say('nothing');
+    // The Nothing is a void, not a corner of the club: the crowd and every
+    // other world bed fall silent with the lights. Its own cues are one-shots
+    // on the effects bus, so they still play over the muted ambience.
+    this.deps.audio?.pauseAmbience('nothing');
     const firstDeath = now + NOTHING_LAND_PAUSE_MS;
     this.dyingBulbs = Array.from({ length: WHEEL_BULB_COUNT }, (_, index) => ({
       at: firstDeath + index * NOTHING_BULB_STAGGER_MS + this.random() * NOTHING_BULB_JITTER_MS,
