@@ -19,7 +19,7 @@
  * rules look like on screen.
  */
 
-import { PLAYER_SPEED, TILE_SIZE } from '../core/constants';
+import { FOLLOWER_SPEED, PLAYER_SPEED, TILE_SIZE } from '../core/constants';
 import type { AudioManager } from '../audio/AudioManager';
 import type { GameMap } from '../map/GameMap';
 import { findNearbyWalkableTile } from '../map/findWalkableTile';
@@ -49,6 +49,7 @@ import {
   FIREWALL_TRIGGER_HP_FRACTION,
   FirewallGapPlanner,
   gapCentreColumn,
+  HAZARD_ESCAPE_SEARCH_RADIUS_TILES,
   LichPhaseMachine,
   ORB_IMPACT_RADIUS_TILES,
   ORB_SPAWN_INTERVAL_FRAMES,
@@ -57,11 +58,13 @@ import {
   RECKONING_ORB_SPAWN_INTERVAL_FRAMES,
   stepTowardSafety,
   type LichBattlePhase,
+  type OrbRainBystander,
   type OrbRainRoom,
   type TileDanger,
   type TilePos,
 } from './lichBattleRules';
 import { mulberry32 } from '../sprites/person/rng';
+import { pairContactRadius, SEPARATION_RADIUS } from './mobSeparation';
 
 // ── Scripted beats ───────────────────────────────────────────────────────────
 
@@ -127,6 +130,11 @@ const LICH_STRIKE_RANGE_TILES = 2;
  */
 const HANDS_TILE_DANGER = 120;
 const ORB_TILE_DANGER = 100;
+/**
+ * Frames before an orb lands from which its keep-out is no way through: about
+ * what a fleeing companion needs to cross a couple of tiles of it.
+ */
+const ORB_LANDING_FRAMES = 15;
 /**
  * How far outside an orb's blast the companion is still told to keep.
  *
@@ -1002,12 +1010,36 @@ export class LichBattleSystem implements GroundHazardSource {
       this.orbRoom,
       tileOf(ctx.active),
       this.warnings.map((warning) => warning.tile),
+      this.companionAsBystander(ctx.inactive),
     );
     if (target === null) return;
     this.warnings.push({ tile: target, framesLeft: ORB_WARNING_FRAMES, dealsDamage: true });
     // The warning hovering on the floor is the burst's whole telegraph.
     prewarmSoulBurst();
     this.audio?.play('magic_ball_launch', { volume: ORB_LAUNCH_VOLUME });
+  }
+
+  /**
+   * The companion as the orb planner has to leave her a way out: on the room
+   * she can actually walk, which is the room less every tile the Lich's body
+   * overlaps, at the pace she runs from an orb.
+   */
+  private companionAsBystander(companion: Player): OrbRainBystander | null {
+    if (!companion.isAlive) return null;
+    const lich = this.lich;
+    const lichBlocks = lich.isAlive && !lich.yieldsToParty;
+    const overlapRadius = this.lichBodyRadius + TILE_SIZE * CENTER_OFFSET;
+    const underLich = (col: number, row: number): boolean =>
+      lichBlocks && Math.hypot(col * TILE_SIZE - lich.x, row * TILE_SIZE - lich.y) < overlapRadius;
+    return {
+      tile: tileOf(companion),
+      room: {
+        ...this.orbRoom,
+        isWalkable: (col, row) => this.orbRoom.isWalkable(col, row) && !underLich(col, row),
+      },
+      keepoutRadiusTiles: ORB_KEEPOUT_RADIUS_TILES,
+      stepsBeforeImpact: Math.floor((ORB_WARNING_FRAMES * FOLLOWER_SPEED) / TILE_SIZE),
+    };
   }
 
   /** Lands every expired warning. Returns true when one of them caught the player. */
@@ -1230,16 +1262,168 @@ export class LichBattleSystem implements GroundHazardSource {
 
   // ── Ground hazards, for the companion ──────────────────────────────────────
 
+  /**
+   * The way out of the fight's hazards for a body at `x, y`, routed round the
+   * Lich.
+   *
+   * The companion fights her in melee, so the way out of an orb aimed at the
+   * player beside her often runs past her, and the separation that keeps
+   * bodies apart undoes every step that cuts across hers: pinned against a
+   * wall, the companion is shoved straight back to where she started each
+   * frame and the orb lands on her there. So when the way out would cut
+   * across her, it is searched again with the tiles her body fills taken out,
+   * and of the steps left, the one whose straight line keeps furthest from her
+   * is taken first. Every other way out is left exactly as the search found it.
+   */
   getHazardEscapeVector(x: number, y: number): { dx: number; dy: number } | null {
     const from = tileOf({ x, y });
-    const step = stepTowardSafety(this.orbRoom, this.dangerFieldFrom(from), from);
+    const danger = this.dangerFieldFrom(from);
+    const direct = stepTowardSafety(this.roomClearOfLandingOrbs(from), danger, from);
+    const step =
+      direct !== null && this.stepCutsAcrossLich(x, y, direct)
+        ? (this.stepAroundLich(x, y, from, danger) ?? direct)
+        : direct;
     if (step === null) return null;
-    const dx = step.col * TILE_SIZE - x;
-    const dy = step.row * TILE_SIZE - y;
+    const aim = this.aimClearOfWorseGround(x, y, step, danger(from), danger);
+    const dx = aim.x - x;
+    const dy = aim.y - y;
     const length = Math.hypot(dx, dy);
     // Never zero: `step` is a neighbour of the tile `x, y` rounds to, so it
-    // cannot also be the tile `x, y` is standing in.
+    // cannot also be the tile `x, y` is standing in, and an axis-first aim is
+    // only taken when it has some way to go.
     return { dx: dx / length, dy: dy / length };
+  }
+
+  /**
+   * Where to steer a body at `x, y` so the walk into `step` never rounds onto
+   * ground worse than it stands on now.
+   *
+   * The search moves tile to tile, diagonals included, but a body walking a
+   * diagonal straight passes the shared corner and spends a few frames on one
+   * of the two tiles beside it — whichever its offset in its own tile picks.
+   * Leaving one orb's circle that way can carry it through the edge of another
+   * orb's keep-out, and that orb lands on it there. When the straight walk
+   * would, the body takes the step one axis at a time instead, along whichever
+   * axis keeps it on ground no worse than its own.
+   *
+   * Worse is judged orb by orb as well as in total: stepping out of one orb's
+   * keep-out into another's leaves the total the same, but the second orb may
+   * be the one about to land.
+   */
+  private aimClearOfWorseGround(
+    x: number,
+    y: number,
+    step: TilePos,
+    standingDanger: number,
+    danger: TileDanger,
+  ): { x: number; y: number } {
+    const straight = { x: step.col * TILE_SIZE, y: step.row * TILE_SIZE };
+    const from = tileOf({ x, y });
+    const orbs = this.armedOrbTiles;
+    const insideKeepout = (tile: TilePos, orb: TilePos): boolean =>
+      tileDistance(tile, orb) <= ORB_KEEPOUT_RADIUS_TILES;
+    const entersNewKeepout = (tile: TilePos): boolean =>
+      orbs.some((orb) => insideKeepout(tile, orb) && !insideKeepout(from, orb));
+    // The search may route through ground worse than the body's own on the way
+    // to better, and walking onto the step it chose is never the fault.
+    const ceiling = Math.max(standingDanger, danger(step));
+    // A leg that runs into masonry or into her body goes nowhere: the wall
+    // stops it and the separation hands it back. The axis-first legs, which
+    // stray off the line the search chose, are always held clear of her; the
+    // straight walk is rerouted round her before it gets here, and is held to
+    // it only by a body already pressed against her, which may not close on
+    // her further.
+    const lich = this.lich;
+    const lichBlocks = lich.isAlive && !lich.yieldsToParty;
+    const nearestToLich = Math.min(this.lichBodyRadius, Math.hypot(x - lich.x, y - lich.y));
+    const staysClear = (to: { x: number; y: number }, clearOfLich: boolean): boolean => {
+      const length = Math.hypot(to.x - x, to.y - y);
+      if (length === 0) return false;
+      const samples = Math.ceil(length / WALK_SAMPLE_SPACING_PX);
+      for (let sample = 1; sample <= samples; sample++) {
+        const along = sample / samples;
+        const point = { x: x + (to.x - x) * along, y: y + (to.y - y) * along };
+        const tile = tileOf(point);
+        if (!this.orbRoom.isWalkable(tile.col, tile.row)) return false;
+        const intoLich = Math.hypot(point.x - lich.x, point.y - lich.y) < nearestToLich;
+        if (clearOfLich && lichBlocks && intoLich) {
+          return false;
+        }
+        if (danger(tile) > ceiling || entersNewKeepout(tile)) return false;
+      }
+      return true;
+    };
+    const pressedAgainstLich =
+      lichBlocks && Math.hypot(x - lich.x, y - lich.y) < this.lichBodyRadius;
+    if (staysClear(straight, pressedAgainstLich)) return straight;
+    const axisFirst = [
+      { x: straight.x, y },
+      { x, y: straight.y },
+    ];
+    return axisFirst.find((aim) => staysClear(aim, true)) ?? straight;
+  }
+
+  /**
+   * The room as a walker on `from` can route through: less the keep-out of
+   * every orb about to land that it is not already standing in. The danger
+   * field counts orbs, not time, so a way out that cuts across the edge of one
+   * landing now scores the same as one that keeps clear of it, and that orb
+   * lands on the walker halfway along.
+   */
+  private roomClearOfLandingOrbs(from: TilePos): OrbRainRoom {
+    const landing = this.warnings
+      .filter((warning) => warning.dealsDamage && warning.framesLeft <= ORB_LANDING_FRAMES)
+      .map((warning) => warning.tile)
+      .filter((orb) => tileDistance(from, orb) > ORB_KEEPOUT_RADIUS_TILES);
+    if (landing.length === 0) return this.orbRoom;
+    const underLandingOrb = (col: number, row: number): boolean =>
+      landing.some((orb) => tileDistance({ col, row }, orb) <= ORB_KEEPOUT_RADIUS_TILES);
+    return {
+      ...this.orbRoom,
+      isWalkable: (col, row) => this.orbRoom.isWalkable(col, row) && !underLandingOrb(col, row),
+    };
+  }
+
+  /** How far from the Lich a body's straight walk from `x, y` to `step` passes. */
+  private clearanceFromLich(x: number, y: number, step: TilePos): number {
+    return segmentPointDistance(
+      x,
+      y,
+      step.col * TILE_SIZE,
+      step.row * TILE_SIZE,
+      this.lich.x,
+      this.lich.y,
+    );
+  }
+
+  /** How close a body may come to the Lich before the separation shoves it off her. */
+  private get lichBodyRadius(): number {
+    return pairContactRadius(SEPARATION_RADIUS, this.lich.collisionRadiusPx);
+  }
+
+  private stepCutsAcrossLich(x: number, y: number, step: TilePos): boolean {
+    const lich = this.lich;
+    if (!lich.isAlive || lich.yieldsToParty) return false;
+    return this.clearanceFromLich(x, y, step) < this.lichBodyRadius;
+  }
+
+  private stepAroundLich(x: number, y: number, from: TilePos, danger: TileDanger): TilePos | null {
+    const lich = this.lich;
+    const bodyRadius = this.lichBodyRadius;
+    const insideBody = (col: number, row: number): boolean =>
+      Math.hypot(col * TILE_SIZE - lich.x, row * TILE_SIZE - lich.y) < bodyRadius;
+    const roomAroundLich: OrbRainRoom = {
+      ...this.orbRoom,
+      isWalkable: (col, row) => this.orbRoom.isWalkable(col, row) && !insideBody(col, row),
+    };
+    const clearanceFromLich = (step: TilePos): number => this.clearanceFromLich(x, y, step);
+    return stepTowardSafety(
+      roomAroundLich,
+      danger,
+      from,
+      HAZARD_ESCAPE_SEARCH_RADIUS_TILES,
+      clearanceFromLich,
+    );
   }
 
   /**
@@ -1475,8 +1659,31 @@ function tileOf(body: { x: number; y: number }): TilePos {
   };
 }
 
+/** How finely a walk is sampled for the tiles it rounds onto: well under the narrowest sliver of a tile a corner cut crosses. */
+const WALK_SAMPLES_PER_TILE = 16;
+const WALK_SAMPLE_SPACING_PX = TILE_SIZE / WALK_SAMPLES_PER_TILE;
+
 function tileDistance(a: TilePos, b: TilePos): number {
   return Math.hypot(a.col - b.col, a.row - b.row);
+}
+
+/** How near the segment from `(ax, ay)` to `(bx, by)` comes to the point `(px, py)`. */
+function segmentPointDistance(
+  ax: number,
+  ay: number,
+  bx: number,
+  by: number,
+  px: number,
+  py: number,
+): number {
+  const segmentX = bx - ax;
+  const segmentY = by - ay;
+  const lengthSquared = segmentX * segmentX + segmentY * segmentY;
+  const along =
+    lengthSquared === 0
+      ? 0
+      : clamp(((px - ax) * segmentX + (py - ay) * segmentY) / lengthSquared, 0, 1);
+  return Math.hypot(ax + segmentX * along - px, ay + segmentY * along - py);
 }
 
 /**

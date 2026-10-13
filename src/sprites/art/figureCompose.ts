@@ -210,7 +210,9 @@ export function occludeAround(
 /**
  * Lights the rim of `body`'s silhouette on one side: every pixel whose
  * neighbour `toward` (whole scratch pixels) is empty takes `colour`.
- * `clearRim` may erase parts of the rim before it is laid, in scratch space.
+ * `clearRim` may erase parts of the rim before it is laid, in scratch space;
+ * a neighbour inside `occluder` counts as covered, for an edge that runs
+ * along something laid against the body after it is finished.
  */
 export function lightRim(
   body: Layer,
@@ -218,6 +220,7 @@ export function lightRim(
   toward: Pt,
   colour: string,
   clearRim?: (layer: Layer) => void,
+  occluder?: Layer,
 ): void {
   clear(scratch);
   const { ctx } = scratch;
@@ -225,6 +228,7 @@ export function lightRim(
   ctx.save();
   ctx.globalCompositeOperation = 'destination-out';
   ctx.drawImage(body.surface, -toward.x, -toward.y);
+  if (occluder !== undefined) ctx.drawImage(occluder.surface, -toward.x, -toward.y);
   ctx.restore();
   tint(scratch, colour);
   clearRim?.(scratch);
@@ -288,4 +292,39 @@ export function blitLayer(ctx: Ctx, layer: Layer, bounds: LayerBounds): void {
     bounds.width / bounds.pxPerUnit,
     bounds.height / bounds.pxPerUnit,
   );
+}
+
+/** `out` becomes `source` everywhere `mask` has ink, weighted by the mask's alpha, and empty elsewhere. */
+export function maskedCopy(out: Layer, source: Layer, mask: Layer): void {
+  clear(out);
+  const { ctx } = out;
+  ctx.drawImage(mask.surface, 0, 0);
+  ctx.save();
+  ctx.globalCompositeOperation = 'source-in';
+  ctx.drawImage(source.surface, 0, 0);
+  ctx.restore();
+}
+
+/** `out` becomes `source` dilated by every offset in `dilation`. */
+export function dilateInto(out: Layer, source: Layer, dilation: readonly Pt[]): void {
+  clear(out);
+  for (const offset of dilation) out.ctx.drawImage(source.surface, offset.x, offset.y);
+}
+
+/** Erases from `target` everything `eraser` has ink over. */
+export function eraseWith(target: Layer, eraser: Layer): void {
+  const { ctx } = target;
+  ctx.save();
+  ctx.globalCompositeOperation = 'destination-out';
+  ctx.drawImage(eraser.surface, 0, 0);
+  ctx.restore();
+}
+
+/** Keeps of `target` only what `keep` has ink over. */
+export function keepWithin(target: Layer, keep: Layer): void {
+  const { ctx } = target;
+  ctx.save();
+  ctx.globalCompositeOperation = 'destination-in';
+  ctx.drawImage(keep.surface, 0, 0);
+  ctx.restore();
 }

@@ -584,11 +584,11 @@ export class InventoryScreen {
     const blocked = (r.blockedItems ?? []).includes(drag.item.id);
 
     if (drag.from === 'doll') {
-      this.dropFromDoll(drag, dollTarget, overGrid, inventory, member);
+      this.dropFromDoll(drag, dollTarget, overGrid, inventory);
       return;
     }
     if (dollTarget !== null && drag.from === 'inv') {
-      this.equipInto(drag.slotIdx, drag.item, dollTarget, inventory, member);
+      this.equipInto(drag.slotIdx, drag.item, dollTarget, inventory);
       return;
     }
     if (blocked) {
@@ -639,7 +639,6 @@ export class InventoryScreen {
     dollTarget: string | null,
     overGrid: boolean,
     inventory: Inventory,
-    member: InventoryMember,
   ): void {
     const fromKey = drag.dollKey;
     if (fromKey === null || dollTarget === fromKey) return;
@@ -649,14 +648,11 @@ export class InventoryScreen {
         this.refuse(refusal, drag.item.id);
         return;
       }
-      inventory.unequip(fromKey);
-      inventory.equipment.equip(drag.item, dollTarget);
-      member.owner.onEquipmentChanged();
+      inventory.equipment.move(drag.item, fromKey, dollTarget);
       return;
     }
     if (!overGrid) return;
     inventory.unequip(fromKey);
-    member.owner.onEquipmentChanged();
   }
 
   /** The grid shows the bag's real slots, so dropping on one rearranges it. */
@@ -686,7 +682,6 @@ export class InventoryScreen {
     const inventory = member.owner.inventory;
     if (inventory.getEquippedItem(key) !== null) {
       inventory.unequip(key);
-      member.owner.onEquipmentChanged();
       this.dollKey = null;
       return;
     }
@@ -701,7 +696,7 @@ export class InventoryScreen {
       this.refuse(ALREADY_WORN_REFUSAL, item.id);
       return;
     }
-    this.equipInto(slotIdx, item, this.dollKey, inventory, member);
+    this.equipInto(slotIdx, item, this.dollKey, inventory);
   }
 
   private equipInto(
@@ -709,7 +704,6 @@ export class InventoryScreen {
     item: InventoryItem,
     targetKey: string | null,
     inventory: Inventory,
-    member: InventoryMember,
   ): void {
     const refusal = equipRefusal(item, targetKey, inventory);
     if (refusal !== null) {
@@ -717,7 +711,6 @@ export class InventoryScreen {
       return;
     }
     inventory.equip(slotIdx, targetKey ?? undefined);
-    member.owner.onEquipmentChanged();
     this.dollKey = null;
   }
 

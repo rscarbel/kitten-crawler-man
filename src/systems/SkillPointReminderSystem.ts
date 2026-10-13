@@ -143,7 +143,7 @@ export class SkillPointReminderSystem implements GameSystem {
     // A slingshot volley never sets isSwinging — it swaps the attack key for
     // triggerSlingshot() instead — so a cooling-down sling is its ranged
     // equivalent of a mid-swing melee attack.
-    if (ctx.human.isWieldingSlingshot && ctx.human.slingshotCooldown > 0) return true;
+    if (ctx.human.hasSlingDrawn && ctx.human.slingshotCooldown > 0) return true;
     return ctx.roster.mobs.some(
       (mob: Mob) =>
         mob.isAlive && mob.isHostile && mob.framesSinceStruckPlayer < RECENTLY_STRUCK_FRAMES,

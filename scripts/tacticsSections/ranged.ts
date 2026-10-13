@@ -150,10 +150,11 @@ function rangedLayout(
   shooterWoundShare = 0,
   helperTile: TilePoint = HELPER_TILE,
 ): RangedLayout {
-  // Every probe starts the stream afresh, so one probe's draws — or a change
-  // to another creature's code — cannot shift what the next one measures.
-  Math.random = mulberry32(SECTION_SEED);
   const arena = makeArena(map, HUMAN_TILE, FAR_CORNER);
+  // Every probe starts the stream afresh once the crawlers exist, so one
+  // probe's draws — or a change to another creature's code or to the
+  // crawlers' own — cannot shift what the next one measures.
+  Math.random = mulberry32(SECTION_SEED);
   const shooter = createMob(rangedCase.type, SHOOTER_TILE.x, SHOOTER_TILE.y, map);
   shooter.applyMobLevel(MAX_MOB_LEVEL);
   shooter.rollTactics(DIFFICULTY_PROFILES.normal.tacticsChanceScale, rollOnly(traits));

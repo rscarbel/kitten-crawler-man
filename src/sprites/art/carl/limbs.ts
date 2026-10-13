@@ -10,7 +10,7 @@
  * definition survives the 32 px tile.
  */
 
-import { drawFoot, type FootAccents } from './feet';
+import { drawFoot, type ToesPainter } from './feet';
 import { angleBetween, HALF_PI, lerpAngle, mixPt, pt } from './geometry';
 import { FEATURE_LINE_WIDTH, shadeForm } from './paint';
 import { LIGHT, type Ramp, receded, SKIN } from './palette';
@@ -28,6 +28,7 @@ import {
   UPPER_ARM_WIDTH,
   WRIST_WIDTH,
 } from './proportions';
+import { type GripLayer, type GripWrap, paintGripFingers } from './grip';
 import { type BoneChain, type HandShape, type ViewSpec } from './rig';
 import { clamp01, lerp, type Pt, rgba } from '../carlArt';
 import { fillSoftEllipse, withClip } from '../softShade';
@@ -941,6 +942,9 @@ const THUMB_OVER_FIST_SHADE = 0.25;
 /** A gripped haft runs across the fist through the curled fingers, just behind the knuckles. */
 const GRIP_BORE_AT = 0.62;
 
+/** How far a gripping hand spans along the handle it closes round: the fist's width. */
+export const GRIP_HAND_WIDTH = FIST_WIDTH;
+
 interface HandForm {
   readonly length: number;
   readonly halfWidth: number;
@@ -1169,9 +1173,88 @@ export function drawArm(
   thumbSide: number,
   profile: boolean,
   shape: HandShape = 'relaxed',
+  grip?: GripWrap,
 ): void {
   drawSleevedArm(ctx, chain, armShapeFor(profile), shade, profile, thumbSide);
+  if (shape === 'grip' && grip !== undefined) {
+    drawGripHand(ctx, chain, grip, shade, 'whole');
+    return;
+  }
   drawHand(ctx, chain.end, wristAngle(chain), fist, shape, shade, thumbSide);
+}
+
+/**
+ * An arm without its hand: the sleeve, the bare forearm and their forms, for
+ * a composition that has to put a held thing between the arm and the hand.
+ */
+export function drawArmWithoutHand(
+  ctx: Ctx,
+  chain: BoneChain,
+  shade: number,
+  thumbSide: number,
+  profile: boolean,
+): void {
+  drawSleevedArm(ctx, chain, armShapeFor(profile), shade, profile, thumbSide);
+}
+
+/**
+ * The palm stops at the handle: past it the fingers are the bands wrapped
+ * round it, so a palm drawn the fist's whole length would lie over the
+ * handle as a block whichever way the hand is turned.
+ */
+const GRIP_PALM_PAST_BORE = 0.35;
+
+/** The palm block of a hand closed on a handle: the heel of the hand out to the handle's near side. */
+function drawGripPalm(ctx: Ctx, chain: BoneChain, wrap: GripWrap, flesh: Ramp): void {
+  const angle = wristAngle(chain);
+  const bore = FIST_LENGTH * GRIP_BORE_AT;
+  const length = bore + (FIST_LENGTH - bore) * GRIP_PALM_PAST_BORE;
+  const form: HandForm = { length, halfWidth: FIST_WIDTH / 2, closed: 1, thumb: GRIP_THUMB };
+  ctx.save();
+  ctx.translate(chain.end.x + wrap.palmOffset.x, chain.end.y + wrap.palmOffset.y);
+  ctx.rotate(angle);
+  shadeForm(
+    ctx,
+    () => traceHand(ctx, form),
+    { from: pt(0, 0), to: pt(length, 0) },
+    flesh,
+    { halfWidth: form.halfWidth, frameRotation: angle },
+    () => {
+      fillSoftEllipse(
+        ctx,
+        length * WRIST_TURN_AT,
+        0,
+        length * WRIST_TURN_ALONG_RADIUS,
+        form.halfWidth * WRIST_TURN_ACROSS_RADIUS,
+        flesh.shadow,
+        WRIST_TURN_ALPHA,
+      );
+    },
+  );
+  ctx.restore();
+}
+
+/**
+ * A hand closed round a handle, the part of it `layer` names: what lies
+ * behind the handle, what lies over it, or the whole hand. The held item is
+ * drawn between the two, so a painter that draws `'whole'` is drawing a hand
+ * holding nothing in particular — the composing figure draws the back and
+ * the front itself when something is held.
+ */
+export function drawGripHand(
+  ctx: Ctx,
+  chain: BoneChain,
+  wrap: GripWrap,
+  shade: number,
+  layer: GripLayer,
+): void {
+  const flesh = receded(SKIN, shade);
+  const backShown = layer !== 'front';
+  const frontShown = layer !== 'back';
+  if (!wrap.palmInFront && backShown) drawGripPalm(ctx, chain, wrap, flesh);
+  if (backShown) paintGripFingers(ctx, wrap, 'back', flesh);
+  if (wrap.palmInFront && frontShown) drawGripPalm(ctx, chain, wrap, flesh);
+  if (frontShown) paintGripFingers(ctx, wrap, 'front', flesh);
 }
 
 /**
@@ -1190,7 +1273,7 @@ export function drawLeg(
   nearness: number,
   footScale = 1,
   segments: LegSegments = 'whole',
-  accents?: FootAccents,
+  toes: ToesPainter | null = null,
   point = 0,
 ): void {
   const shape = legShapeFor(nearness);
@@ -1200,7 +1283,7 @@ export function drawLeg(
   ctx.save();
   ctx.translate(chain.end.x, chain.end.y);
   ctx.scale(footScale, footScale);
-  drawFoot(ctx, pt(0, 0), pitch, view, outward, UNSHADED, accents, point);
+  drawFoot(ctx, pt(0, 0), pitch, view, outward, UNSHADED, toes, point);
   ctx.restore();
 }
 

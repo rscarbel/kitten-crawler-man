@@ -32,7 +32,6 @@ import {
 } from '../../../core/blueprintsQuestPhase';
 import type { TilePoint } from '../../../map/town/townPlan';
 import { BUILD_ROWS } from '../../../sprites/art/humanFigure';
-import { viewForFacing } from '../../../sprites/humanSprite';
 import {
   drawAreaHighlightFrame,
   drawAreaHighlightGround,
@@ -374,7 +373,7 @@ export class StationUpgrades {
     const distance = Math.hypot(dx, dy);
     const faceX = distance > 0 ? dx / distance : human.facingX;
     const faceY = distance > 0 ? dy / distance : human.facingY;
-    channel.posing = human.playAction(BUILD_ROWS[viewForFacing(faceX, faceY)], {
+    channel.posing = human.playAction(human.rowFacing(BUILD_ROWS, faceX, faceY), {
       faceX,
       faceY,
       loop: true,

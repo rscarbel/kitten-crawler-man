@@ -18,8 +18,10 @@
 
 import { mixPt, offset, pt, rotate } from './geometry';
 import { pointedAnkleRise } from './feet';
-import type { CarlGear } from './gear';
+import type { CarlPoseOutfit } from './carlParts';
 import type { HeldProp } from './props';
+import type { Vec3 } from '../../held/heldPaint';
+import type { HandleRadius } from '../../held/gripArchetypes';
 import {
   ANKLE_Y,
   ARM_LENGTH,
@@ -39,11 +41,10 @@ import {
   UPPER_ARM_LENGTH,
   WAIST_Y,
 } from './proportions';
+import { type CardinalView } from '../../facingView';
 import { clamp01, easeInOut, type Pt } from '../carlArt';
 
 // ── Views ────────────────────────────────────────────────────────────────────
-
-export type CarlView = 'front' | 'back' | 'side';
 
 export interface ViewSpec {
   /** Multiplier on every lateral (x) body offset — where the limbs root. */
@@ -84,7 +85,7 @@ const PROFILE_HIP_DEPTH = 0.88;
 const PROFILE_ARM_SPREAD = 0.12;
 const PROFILE_CROTCH_NOTCH = 0.18;
 
-export const VIEWS: Record<CarlView, ViewSpec> = {
+export const VIEWS: Record<CardinalView, ViewSpec> = {
   front: {
     lateral: 1,
     girth: 1,
@@ -166,6 +167,16 @@ export interface CarlPose {
    * `HeldProp` in `props.ts`; absent is none held.
    */
   heldProps?: readonly HeldProp[];
+  /**
+   * How a gripping hand is turned in depth, per hand, authored by every row
+   * that holds something. A hand posed `'grip'` with an orientation closes
+   * its fingers round a handle, and the socket it publishes carries this
+   * orientation; one without (a pinch on a sling's pouch) is a plain fist.
+   */
+  leftHandOrientation?: HandOrientation;
+  rightHandOrientation?: HandOrientation;
+  /** Both fists closed on one haft; absent when each hand holds its own thing or nothing. */
+  twoHandGrip?: TwoHandGrip;
   /** Foot pitch in radians; positive points the toes down. */
   leftFootPitch: number;
   rightFootPitch: number;
@@ -370,10 +381,10 @@ export interface CarlPose {
   rightBoxerFlutter?: Pt;
   hairTuftLag?: Pt;
   /**
-   * The canon gear he is wearing on this frame, named by his own left and
-   * right; see `CarlGear` in `gear.ts`. Absent is the trollskin shirt alone.
+   * What he is wearing on this frame. Absent is his default outfit: his
+   * jacket and boxers with the trollskin shirt under them.
    */
-  gear?: CarlGear;
+  outfit?: CarlPoseOutfit;
 }
 
 /** Which hand holds a {@link CarlPose.palmGlow}, and how strongly it shines. */
@@ -396,6 +407,50 @@ export interface PalmGlow {
  *   arm so the fist closes over it.
  */
 export type HandShape = 'relaxed' | 'open' | 'grip';
+
+/** Which way a haft runs out of the picture plane from its butt to its head. */
+export type HaftDepth = -1 | 0 | 1;
+export const HAFT_TOWARD_CAMERA: HaftDepth = 1;
+export const HAFT_IN_PLANE: HaftDepth = 0;
+export const HAFT_AWAY_FROM_CAMERA: HaftDepth = -1;
+
+/**
+ * A gripping hand's turn in depth on one frame, as authored: the pose's
+ * frame, his right toward +X, +Y down, +Z toward the camera.
+ *
+ * - `palmNormal` — the way the palm faces, unit. Toward the camera the palm
+ *   lies behind the handle and the finger tips and thumb close over its
+ *   front; away, the knuckles are over it.
+ * - `haftDepth` — which way the haft runs out of the picture from butt to
+ *   head, for a haft drawn shorter than its length.
+ * - `haftAngle` — the haft's direction on screen, butt to head, radians,
+ *   for a one-handed grip whose item is not a prop the row holds; absent
+ *   is straight across the fist.
+ * - `haftShare` — how much of a one-handed item's length lies in the
+ *   picture, 0 to 1, the rest turned out of it the way `haftDepth` says: a
+ *   blade swung through the camera or thrust at it; absent is all of it.
+ * - `handle` — how thick a handle the fingers close round, for an
+ *   equipment-chosen item this hand holds; absent is the figure's default
+ *   (a tool haft's). A row's own prop is always closed round its own.
+ */
+export interface HandOrientation {
+  readonly palmNormal: Vec3;
+  readonly haftDepth: HaftDepth;
+  readonly haftAngle?: number;
+  readonly haftShare?: number;
+  readonly handle?: HandleRadius;
+}
+
+/**
+ * Both fists on one haft: which holds the butt (the other grips further up,
+ * toward the head), and how far apart the grips sit along it, rig units,
+ * with the haft lying in the picture — drawn closer, the haft is turned out
+ * of the picture by that much.
+ */
+export interface TwoHandGrip {
+  readonly butt: BodySide;
+  readonly flatSpacing: number;
+}
 
 /**
  * Where an arm's two segments point, in radians from hanging straight down.
@@ -514,6 +569,19 @@ function mirroredAngles(angles: ArmAngles | null): ArmAngles | null {
   return angles === null ? null : { ...angles, upper: -angles.upper, fore: -angles.fore };
 }
 
+/** Every direction measured along X negates; the screen angle of a haft reflects. */
+function mirroredOrientation(
+  orientation: HandOrientation | undefined,
+): HandOrientation | undefined {
+  if (orientation === undefined) return undefined;
+  const { palmNormal, haftAngle } = orientation;
+  return {
+    ...orientation,
+    palmNormal: { x: -palmNormal.x, y: palmNormal.y, z: palmNormal.z },
+    ...(haftAngle === undefined ? {} : { haftAngle: Math.PI - haftAngle }),
+  };
+}
+
 function mirroredProp(prop: HeldProp): HeldProp {
   return {
     ...prop,
@@ -564,6 +632,12 @@ const POSE_MIRROR: PoseMirror = {
   leftHandShape: (pose) => pose.rightHandShape,
   rightHandShape: (pose) => pose.leftHandShape,
   heldProps: (pose) => pose.heldProps?.map(mirroredProp),
+  leftHandOrientation: (pose) => mirroredOrientation(pose.rightHandOrientation),
+  rightHandOrientation: (pose) => mirroredOrientation(pose.leftHandOrientation),
+  twoHandGrip: (pose) =>
+    pose.twoHandGrip === undefined
+      ? undefined
+      : { ...pose.twoHandGrip, butt: oppositeSide(pose.twoHandGrip.butt) },
   leftFootPitch: (pose) => pose.rightFootPitch,
   rightFootPitch: (pose) => pose.leftFootPitch,
   leftKneeBreak: (pose) => pose.rightKneeBreak,
@@ -606,7 +680,7 @@ const POSE_MIRROR: PoseMirror = {
   leftBoxerFlutter: (pose) => mirroredOptionalPt(pose.rightBoxerFlutter),
   rightBoxerFlutter: (pose) => mirroredOptionalPt(pose.leftBoxerFlutter),
   hairTuftLag: (pose) => mirroredOptionalPt(pose.hairTuftLag),
-  gear: (pose) => pose.gear,
+  outfit: (pose) => pose.outfit,
 };
 
 function isPoseField(key: string): key is keyof CarlPose {

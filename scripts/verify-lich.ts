@@ -847,10 +847,39 @@ function stepAroundRoom(tile: TilePos, frame: number): TilePos {
 // firewall's two-tile strike range, the tantrum's dodge clock, the daze count —
 // and the run is only green if the fight can actually be finished. A phase
 // nobody can leave is the one failure the isolated rules cannot see.
+//
+// It is played over several streams, because whether the companion is ever
+// caught by the rain turns on where she happens to be standing when an orb
+// comes down, and one fight sees one handful of those moments. The Lich's own
+// generator is fixed by design, and seeding `Math.random` alone barely moves
+// the fight: the harness drives the player, so every stream would replay
+// nearly the same one. What moves it is the player: each stream starts the
+// tantrum's kite at a different point round its ring, so the orbs aimed at the
+// player fall elsewhere and the companion is somewhere else for every one of
+// them after. `Math.random`, which `CompanionSystem` rolls for her wander and
+// the cat for her missiles, is seeded per stream so a failure replays exactly.
 
-{
-  await loadGameSpritesInNode();
+/** Fights played, each from its own point on the tantrum kite and its own `Math.random` seed. */
+const WHOLE_FIGHT_STREAMS = 8;
+/** How many rows ahead of a wave the fire-bite probe stands the player, so the wave reaches them while they are held. */
+const FIRE_PROBE_ROWS_AHEAD = 2;
 
+await loadGameSpritesInNode();
+for (let stream = 0; stream < WHOLE_FIGHT_STREAMS; stream++) {
+  const failuresBefore = failures.length;
+  const unseededRandom = Math.random;
+  Math.random = mulberry32(SEED + stream);
+  try {
+    playWholeFight(stream);
+  } finally {
+    Math.random = unseededRandom;
+  }
+  for (let index = failuresBefore; index < failures.length; index++) {
+    failures[index] = `fight stream ${stream}: ${failures[index]}`;
+  }
+}
+
+function playWholeFight(stream: number): void {
   // Derived, not written down: the confrontation lives on the tower's last
   // storey, and a gate that hardcoded the number would quietly generate and
   // measure a different room the day the tower grew a floor.
@@ -1013,6 +1042,10 @@ function stepAroundRoom(tile: TilePos, frame: number): TilePos {
   let laneOrdersIntoFire = 0;
   let worstHandoffColumns = 0;
   /** The tile the orb-bite probe parked the player on, once one was chosen. */
+  /** The tile the fire-bite probe holds the player on, in the path of a wave, once one was chosen. */
+  let fireBiteProbeTile: TilePos | null = null;
+  let fireBiteProbeSettled = false;
+  let fireBiteProbeBit = false;
   let orbBiteProbeTile: TilePos | null = null;
   let orbBiteProbeSettled = false;
   let orbBiteProbeBit = false;
@@ -1112,12 +1145,24 @@ function stepAroundRoom(tile: TilePos, frame: number): TilePos {
     return true;
   };
 
+  // A player walking somewhere on purpose does not walk into ground the fight
+  // has marked. Stepping blind, the harness walked into the next wave as often
+  // as the waves caught it, and every reset it cost was charged to the fight.
   const stepToward = (targetX: number, targetY: number): void => {
     const dx = targetX - human.x;
     const dy = targetY - human.y;
     const length = Math.hypot(dx, dy);
     if (length < PLAYER_SPEED) return;
+    const battle = confrontation.lichBattle;
+    const fromX = human.x;
+    const fromY = human.y;
+    const wasMarked = (battle?.getHazardEscapeVector(fromX, fromY) ?? null) !== null;
     stepAlong(dx / length, dy / length);
+    const nowMarked = (battle?.getHazardEscapeVector(human.x, human.y) ?? null) !== null;
+    if (!wasMarked && nowMarked) {
+      human.x = fromX;
+      human.y = fromY;
+    }
   };
 
   const stepAlong = (dx: number, dy: number): void => {
@@ -1307,8 +1352,9 @@ function stepAroundRoom(tile: TilePos, frame: number): TilePos {
           // tile the player is on, so a stationary target is hit every second
           // however wide the room is — and the ring keeps the harness near the
           // centre, which is where the daze it is working toward will land the
-          // Lich.
-          const angle = (framesSpent / TANTRUM_KITE_PERIOD_FRAMES) * Math.PI * 2;
+          // Lich. Each stream starts at its own point round the ring.
+          const kiteTurns = framesSpent / TANTRUM_KITE_PERIOD_FRAMES + stream / WHOLE_FIGHT_STREAMS;
+          const angle = kiteTurns * Math.PI * 2;
           stepToward(
             (roomCentreCol + Math.cos(angle) * TANTRUM_KITE_RADIUS_TILES) * TILE_SIZE,
             (roomCentreRow + Math.sin(angle) * TANTRUM_KITE_RADIUS_TILES) * TILE_SIZE,
@@ -1385,6 +1431,46 @@ function stepAroundRoom(tile: TilePos, frame: number): TilePos {
       }
       armedLastFrame = armedNow;
 
+      // Once, on purpose, the same for the fire: stand the player on a burning
+      // column a couple of rows ahead of a wave and hold them there until it
+      // has swept over. Counting burns that happen by themselves measures the
+      // harness's misreads, and a party that reads the fire well would make a
+      // fire that stopped burning look exactly like this one.
+      if (phase === 'firewall' && fireBiteProbeTile === null) {
+        const [wave] = battle.liveWaves;
+        if (wave !== undefined) {
+          const row = Math.round(wave.row) + FIRE_PROBE_ROWS_AHEAD;
+          const standCol = Math.round(human.x / TILE_SIZE);
+          let bestCol: number | null = null;
+          for (let col = 0; col < (map.structure[row]?.length ?? 0); col++) {
+            if (!columnBurns(col, wave.gapStart) || !map.isWalkable(col, row)) continue;
+            if (bestCol === null || Math.abs(col - standCol) < Math.abs(bestCol - standCol)) {
+              bestCol = col;
+            }
+          }
+          if (bestCol !== null) fireBiteProbeTile = { col: bestCol, row };
+        }
+      }
+      const fireTile = fireBiteProbeTile;
+      if (fireTile !== null && !fireBiteProbeSettled) {
+        if (
+          human.hp < human.maxHp &&
+          companionHazardCause(human.lastDamageSource) === 'lichFirewall'
+        ) {
+          fireBiteProbeBit = true;
+        }
+        const waveStillComing = battle.liveWaves.some(
+          (wave) =>
+            columnBurns(fireTile.col, wave.gapStart) && Math.round(wave.row) <= fireTile.row,
+        );
+        if (fireBiteProbeBit || !waveStillComing || phase !== 'firewall') {
+          fireBiteProbeSettled = true;
+        } else {
+          human.x = fireTile.col * TILE_SIZE;
+          human.y = fireTile.row * TILE_SIZE;
+        }
+      }
+
       const probeTile = orbBiteProbeTile;
       if (probeTile !== null && !orbBiteProbeSettled) {
         // Damage the last frame's update dealt is still on the books here: the
@@ -1442,9 +1528,11 @@ function stepAroundRoom(tile: TilePos, frame: number): TilePos {
   }
   mobLoop.dispose();
   console.log(
-    `fight: ${phasesSeen.join(' → ')} in ${framesSpent} frames ` +
+    `fight stream ${stream}: ${phasesSeen.join(' → ')} in ${framesSpent} frames ` +
       `(firewall ${framesInPhase.get('firewall') ?? 0}, tantrum ${framesInPhase.get('tantrum') ?? 0}), ` +
-      `${barksRead} bark pages read, ${Math.max(0, firewallLocks - 1)} firewall reset(s)`,
+      `${barksRead} bark pages read, ${Math.max(0, firewallLocks - 1)} firewall reset(s); ` +
+      `${landedOrbsMeasured} orbs landed, nearest ${closestOrbImpactTiles.toFixed(2)} tiles from the companion, ` +
+      `who ended at (${cat.x.toFixed(1)}, ${cat.y.toFixed(1)}) px`,
   );
 
   check(
@@ -1490,8 +1578,12 @@ function stepAroundRoom(tile: TilePos, frame: number): TilePos {
   // A hazard that stopped hurting anybody is a hazard that stopped existing, and
   // nothing else in this gate would notice.
   check(
-    (damageByPhase.get('firewall') ?? 0) > 0,
-    'the party crossed the whole firewall without a wave ever burning anybody, so the fire does not bite',
+    fireBiteProbeSettled,
+    'the fire-bite probe never resolved, so "the fire still bites" was never tested',
+  );
+  check(
+    fireBiteProbeBit,
+    'a wave swept over the player where they stood and cost them nothing — the fire does not bite',
   );
   check(
     (damageByPhase.get('tantrum') ?? 0) > 0,
@@ -1651,12 +1743,11 @@ function stepAroundRoom(tile: TilePos, frame: number): TilePos {
     'an orb landed on the player where they stood and cost them nothing — the rain does not bite',
   );
 
-  // The shipped run costs exactly this many. The fight's own randomness is
-  // seeded and the room is fixed, but this harness drives a real
-  // `CompanionSystem`, which can reach unseeded randomness of its own — so this
-  // is a bound with one reset of headroom rather than an exact expectation. A
-  // third reset means the gauntlet got harder to survive, which is the one thing
-  // this phase is not allowed to do quietly.
+  // A bound with headroom rather than an exact expectation: each stream replays
+  // exactly, but the companion's own rolls differ between streams, and so does
+  // how often the party is caught. More resets than this means the gauntlet got
+  // harder to survive, which is the one thing this phase is not allowed to do
+  // quietly.
   const MAX_FIREWALL_RESETS = 3;
   const firewallResets = Math.max(0, firewallLocks - 1);
   check(
@@ -1741,5 +1832,5 @@ if (failures.length > 0) {
 }
 
 console.log(
-  `verify:lich — all checks passed (${WAVES_SAMPLED} waves, ${ORB_FRAMES_SAMPLED} orb-rain frames, full phase sweep)`,
+  `verify:lich — all checks passed (${WAVES_SAMPLED} waves, ${ORB_FRAMES_SAMPLED} orb-rain frames, full phase sweep over ${WHOLE_FIGHT_STREAMS} streams)`,
 );

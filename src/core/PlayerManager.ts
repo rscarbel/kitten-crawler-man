@@ -63,7 +63,7 @@ export class PlayerManager {
     // reach, so a follower still holding the sling would walk into melee range
     // and swing a weapon it cannot swing. He puts it away when he stops driving.
     // A sword is swung like a fist, so he keeps it drawn.
-    if (!this.human.isActive && this.human.isWieldingSlingshot) this.human.wield(null);
+    if (!this.human.isActive && this.human.hasSlingDrawn) this.human.stowWeapon();
   }
 
   /** True if both party members are alive. */

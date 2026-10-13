@@ -25,12 +25,12 @@ import {
   type BodySide,
   buildSkeleton,
   type CarlPose,
-  type CarlView,
   FULL_UPPER_ARM,
   HEAD_ON_FLOOR_FORESHORTENING,
   restingPose,
   VIEWS,
 } from '../carl/rig';
+import { type CardinalView } from '../../facingView';
 import { deg, lerp, type Pt } from '../carlArt';
 import {
   ankleOverPivot,
@@ -94,14 +94,18 @@ const HOP_STAMP_ANKLE_AHEAD = 0;
  * Built from the choreography's constants rather than from the painted pose,
  * so `scripts/gates-human.ts` re-measuring the pose against it is a real check.
  */
-export function smushStampPoint(view: CarlView, hop: boolean, stampSide: BodySide = 'right'): Pt {
+export function smushStampPoint(
+  view: CardinalView,
+  hop: boolean,
+  stampSide: BodySide = 'right',
+): Pt {
   const authored = authoredStampPoint(view, hop, stampSide);
   // The choreography is authored with his right side toward +X; a mirrored
   // view paints it reflected, and the blast has to follow the heel it paints.
   return VIEWS[view].mirrored ? pt(-authored.x, authored.y) : authored;
 }
 
-function authoredStampPoint(view: CarlView, hop: boolean, stampSide: BodySide): Pt {
+function authoredStampPoint(view: CardinalView, hop: boolean, stampSide: BodySide): Pt {
   if (!hop) {
     if (view === 'side') return pt(SIDE_STAMP_ANKLE_X, 0);
     // Head-on the standing stamp lands on the hips' own ground line, so the
@@ -117,7 +121,7 @@ function authoredStampPoint(view: CarlView, hop: boolean, stampSide: BodySide): 
 }
 
 /** Which way ahead of him runs down the screen head-on: toward the camera in front, away behind. */
-function aheadSign(view: CarlView): number {
+function aheadSign(view: CardinalView): number {
   return view === 'back' ? -1 : 1;
 }
 
@@ -325,7 +329,7 @@ const STOMP_BEATS: readonly StompBeat[] = [
  * squat. Stamped with the rear leg instead, the foot comes down between the
  * two and the press is a man crouching with his feet together.
  */
-function stampSideOf(view: CarlView): BodySide {
+function stampSideOf(view: CardinalView): BodySide {
   return view === 'side' ? 'left' : 'right';
 }
 
@@ -345,7 +349,7 @@ interface GuardStance {
   readonly rightUpperArmScale: number;
 }
 
-function guardStance(view: CarlView): GuardStance {
+function guardStance(view: CardinalView): GuardStance {
   const pose = view === 'side' ? guardSide(0) : view === 'back' ? guardBack(0) : guardFront(0);
   const skeleton = buildSkeleton(pose, VIEWS[view]);
   const stampSide = stampSideOf(view);
@@ -367,7 +371,7 @@ function guardStance(view: CarlView): GuardStance {
   };
 }
 
-const GUARDS: Readonly<Record<CarlView, GuardStance>> = {
+const GUARDS: Readonly<Record<CardinalView, GuardStance>> = {
   front: guardStance('front'),
   side: guardStance('side'),
   back: guardStance('back'),
@@ -382,7 +386,7 @@ const GUARDS: Readonly<Record<CarlView, GuardStance>> = {
 const SIDE_CHAMBER_BACK = -1.2;
 
 /** Where the stamping ankle is on a beat, sideways from the hips. */
-function standingFootX(beat: StompBeat, view: CarlView, frame: number): number {
+function standingFootX(beat: StompBeat, view: CardinalView, frame: number): number {
   const guard = GUARDS[view].stampFoot.x;
   if (Number.isNaN(beat.footX)) return guard;
   const stamp = view === 'side' ? SIDE_STAMP_ANKLE_X : FACING_STAMP_ANKLE_X;
@@ -445,7 +449,7 @@ const PROFILE_PRESS_CROUCH_SHARE = 0.9;
 const FACING_CHAMBER_CROUCH_SHARE = 0.6;
 
 /** The share of a beat's crouch the hips sink on `step` in `view`. */
-function crouchShare(step: number, view: CarlView): number {
+function crouchShare(step: number, view: CardinalView): number {
   if (step >= SMUSH_IMPACT_FRAME) {
     return view === 'side' ? PROFILE_PRESS_CROUCH_SHARE : PRESS_CROUCH_SHARE;
   }
@@ -545,7 +549,7 @@ function upperArmScaleOf(wrists: Wrists, side: BodySide): number {
 }
 
 /** Where a view's guard holds a fist, from its own shoulder. */
-function guardFistFromShoulder(view: CarlView, side: BodySide): Pt {
+function guardFistFromShoulder(view: CardinalView, side: BodySide): Pt {
   const skeleton = buildSkeleton(GUARDS[view].pose, VIEWS[view]);
   const arm = side === 'left' ? skeleton.leftArm : skeleton.rightArm;
   const shoulder = side === 'left' ? skeleton.leftShoulder : skeleton.rightShoulder;
@@ -559,7 +563,7 @@ function guardFistFromShoulder(view: CarlView, side: BodySide): Pt {
  */
 function pressHands(
   pose: CarlPose,
-  view: CarlView,
+  view: CardinalView,
   stampSide: BodySide,
   drivenSide: BodySide,
   from: Wrists,
@@ -612,7 +616,7 @@ function handAt(guard: Pt, raised: Pt, raise: number, carry: Pt): Pt {
 const REST_SHOULDERS = buildSkeleton(restingPose(), VIEWS.front).shoulderCentre;
 
 /** How far a pose's shoulders stand from where a standing body carries them. */
-function shoulderCarry(pose: CarlPose, view: CarlView): Pt {
+function shoulderCarry(pose: CarlPose, view: CardinalView): Pt {
   const shoulders = buildSkeleton(pose, VIEWS[view]).shoulderCentre;
   return pt(shoulders.x - REST_SHOULDERS.x, shoulders.y - REST_SHOULDERS.y);
 }
@@ -738,7 +742,7 @@ function setFoot(pose: CarlPose, side: BodySide, foot: Pt, pitch: number): void 
  * frame is the view's guard, which the animator hands over to when the row
  * ends.
  */
-export function smushStanding(frame: number, view: CarlView): CarlPose {
+export function smushStanding(frame: number, view: CardinalView): CarlPose {
   const step = Math.min(Math.max(Math.round(frame), 0), LAST_FRAME);
   const guard = GUARDS[view];
   if (step === LAST_FRAME) {
@@ -1004,7 +1008,7 @@ const HOP_RISE: readonly number[] = [0, 0, 0.3, 0, 0, 0, 0, 0, 0];
  */
 const HOP_SIDE_RISE: readonly number[] = [0, 0, 0.04, 0, 0, 0, 0, 0, 0];
 
-function hopRise(view: CarlView, frame: number): number {
+function hopRise(view: CardinalView, frame: number): number {
   return (view === 'side' ? HOP_SIDE_RISE : HOP_RISE)[frame];
 }
 /**
@@ -1052,7 +1056,7 @@ const HOP_MOUTH: readonly number[] = [0, 0.2, 0.35, 0.5, 0.4, 0.2, 0, 0, 0];
 const HOP_CHIN: readonly number[] = [0, 0.1, 0, -0.8, -0.6, -0.2, 0, 0, 0];
 
 /** The stamping foot on a hop frame, side-on. */
-function hopStampFoot(entry: number, leg: BlowLeg, frame: number, view: CarlView): GaitFoot {
+function hopStampFoot(entry: number, leg: BlowLeg, frame: number, view: CardinalView): GaitFoot {
   if (frame > 0 && frame < SMUSH_IMPACT_FRAME) {
     const chamber = HOP_CHAMBER[Math.min(frame - 1, HOP_CHAMBER.length - 1)];
     const ankle = pt(chamber.ankle.x, chamber.ankle.y - hopRise(view, frame));
@@ -1084,7 +1088,7 @@ const HOP_REACH_FACING: Pt = pt(0.16, SHOULDER_Y + 0.1);
  * Arm targets for the hop: reaching along the way he is going in the air,
  * then on the landing the same press as standing, both fists back in guard.
  */
-function hopArms(pose: CarlPose, view: CarlView, arms: number, stampSide: BodySide): void {
+function hopArms(pose: CarlPose, view: CardinalView, arms: number, stampSide: BodySide): void {
   if (arms === 0) return;
   const skeleton = buildSkeleton(pose, VIEWS[view]);
   const from: Wrists = { leftWrist: skeleton.leftArm.end, rightWrist: skeleton.rightArm.end };
@@ -1114,7 +1118,7 @@ function hopArms(pose: CarlPose, view: CarlView, arms: number, stampSide: BodySi
  * {@link smushHopExitPhase}; everything between is the run with the hop laid
  * over it, stamped with whichever foot {@link smushHopStampSide} names.
  */
-export function smushHop(frame: number, view: CarlView, entry: number): CarlPose {
+export function smushHop(frame: number, view: CardinalView, entry: number): CarlPose {
   const step = Math.min(Math.max(Math.round(frame), 0), LAST_FRAME);
   const phase = wrapPhase(hopRunPhase(entry, step));
   const pose = view === 'side' ? runSide(phase) : runFacing(phase, view === 'back');

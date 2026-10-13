@@ -12,6 +12,7 @@ import {
 } from '../../../systems/MongoSystem';
 import { drawActivePlayerMarker } from '../../../sprites/activePlayerMarker';
 import { drawCatSprite, prewarmCatSprite, type CatOneShotState } from '../../../sprites/catSprite';
+import { selectFacing } from '../../../sprites/facingView';
 import { figureFrameCount } from '../../../sprites/figure/figureDef';
 import { prewarmFigureState } from '../../../sprites/figure/figureFrameCache';
 import {
@@ -491,8 +492,7 @@ function drawCat(
 ): void {
   drawShadow(ctx, cx);
   drawCatSprite(ctx, tileLeft(cx), tileTop(), ACTOR_TILE, {
-    facingX: 1,
-    facingY: 0,
+    facing: selectFacing(1, 0),
     oneShot: options.oneShot ?? null,
   });
   if (options.active) {

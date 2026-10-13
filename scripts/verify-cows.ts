@@ -1098,7 +1098,7 @@ function routingSection(): void {
     quantity: 1,
   };
   human.inventory.actionBar.slots[DYNAMITE_HOTBAR_SLOT] = { ...ITEM_DEF.slingshot, quantity: 1 };
-  human.wield('slingshot');
+  human.drawWeapon('slingshot');
 
   // The cat, missile slotted, beside a cow.
   const cow = livestock.herd[0];
@@ -1120,7 +1120,7 @@ function routingSection(): void {
   human.isActive = true;
   human.x = cow.x - TILE_SIZE;
   human.y = cow.y;
-  check(human.isWieldingSlingshot, 'Carl has the slingshot wielded');
+  check(human.hasSlingDrawn, 'Carl has the slingshot wielded');
   pressSpace();
   check(swings === 0, `Carl pets rather than slings (${swings} shots)`);
 

@@ -247,16 +247,12 @@ function makeRig(platform: PlatformSpec, opts: RigOptions = {}): Rig {
   const interaction = new InventoryActions();
   const blocked = { count: 0 };
   const equipmentChanges = { count: 0 };
-  const ownerOf = (inventory: InventoryT): Member['owner'] => ({
-    inventory,
-    strength: 1,
-    intelligence: 1,
-    constitution: 1,
-    dexterity: 1,
-    onEquipmentChanged: () => {
+  const ownerOf = (inventory: InventoryT): Member['owner'] => {
+    inventory.equipment.onChange(() => {
       equipmentChanges.count++;
-    },
-  });
+    });
+    return { inventory, strength: 1, intelligence: 1, constitution: 1, dexterity: 1 };
+  };
   const party: readonly Member[] = opts.companion
     ? [
         { id: 'human', name: 'Carl', owner: ownerOf(inv) },

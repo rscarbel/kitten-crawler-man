@@ -34,6 +34,7 @@ import {
   upperArmShareThrough,
 } from './gaitShared';
 import { lerpAngle, mixPt, pt, TWO_PI } from '../carl/geometry';
+import type { CardinalView } from '../../facingView';
 
 /** 0 outside `[start, end]`, rising to 1 halfway through it and back to 0. */
 function pulse(t: number, start: number, end: number): number {
@@ -564,16 +565,36 @@ function guardDrop(
   return pose;
 }
 
+const DROP_STEPS: Readonly<Record<CardinalView, DropSteps>> = {
+  front: FACING_DROP_STEPS,
+  side: PROFILE_DROP_STEPS,
+  back: BACK_DROP_STEPS,
+};
+
+/**
+ * `t` of the way from `guard` down to `idle` in `view`, the feet stepping as
+ * that view's own guard drop steps them: for a guard and an idle that stand
+ * on the bare-handed ones' feet.
+ */
+export function guardDropBetween(
+  guard: CarlPose,
+  idle: CarlPose,
+  t: number,
+  view: CardinalView,
+): CarlPose {
+  return guardDrop(guard, idle, t, VIEWS[view], DROP_STEPS[view]);
+}
+
 export function guardDropFront(t: number): CarlPose {
-  return guardDrop(guardFront(0), idleFront(0), t, VIEWS.front, FACING_DROP_STEPS);
+  return guardDropBetween(guardFront(0), idleFront(0), t, 'front');
 }
 
 export function guardDropSide(t: number): CarlPose {
-  return guardDrop(guardSide(0), idleSide(0), t, VIEWS.side, PROFILE_DROP_STEPS);
+  return guardDropBetween(guardSide(0), idleSide(0), t, 'side');
 }
 
 export function guardDropBack(t: number): CarlPose {
-  return guardDrop(guardBack(0), idleBack(0), t, VIEWS.back, BACK_DROP_STEPS);
+  return guardDropBetween(guardBack(0), idleBack(0), t, 'back');
 }
 
 // ── Fidgets ──────────────────────────────────────────────────────────────────

@@ -47,16 +47,28 @@
  *    chop, mine (each ×3 views)
  *                — working a resource node: a two-handed axe swing into a
  *                  trunk and an overhead pick swing onto rock, looped; the
- *                  tool is drawn over the cell by `toolOverlaySprite.ts`
+ *                  tool is chosen by tier and drawn between the cell's two
+ *                  layers, in the fists the row closes round its haft
  *
  * The art invariants live in `scripts/gates-human.ts`, which the review harness
  * runs: `npm run render:human`.
  */
 
-import { type FigureDef, figureStates } from '../figure/figureDef';
-import { drawCarlBack, drawCarlFront, drawCarlSide } from './carl/figure';
-import { type Pt } from './carlArt';
-import { type BodySide, type CarlPose, type CarlView } from './carl/rig';
+import { type FigureDef, type FigureHeldLayers, figureStates } from '../figure/figureDef';
+import {
+  type CarlComposeOptions,
+  type CarlHandSockets,
+  carlHandSockets,
+  carlPropDraws,
+  drawCarlBack,
+  drawCarlFront,
+  drawCarlSide,
+} from './carl/figure';
+import { type CarlPose, VIEWS } from './carl/rig';
+import type { HandleRadius } from '../held/gripArchetypes';
+import { compositeHeldItem } from '../held/heldComposite';
+import { type CardinalView, type FacingView } from '../facingView';
+import { type CarlRowView } from '../humanSprite';
 import {
   fidgetCeilingBack,
   fidgetCeilingFront,
@@ -156,7 +168,6 @@ import {
   repairMend,
 } from './human/actionsBuild';
 import {
-  CHOP_FACING_TOOL_BUTTS,
   CHOP_FRAMES,
   CHOP_IMPACT_FRAME,
   CHOP_TICKS_PER_FRAME,
@@ -166,10 +177,12 @@ import {
   MINE_TICKS_PER_FRAME,
   mine,
 } from './human/actionsGather';
-import { HUMAN_SCALE, TILE_CENTRE_FRACTION, TILE_SCALE } from './human/figureScale';
+import { HUMAN_SCALE, TILE_SCALE } from './human/figureScale';
 import { sideOfSign } from './human/gaitShared';
 import { travellingEntryPhase } from './human/travelling';
 import { REACTION_ROW_NAMES, REACTION_ROW_TABLE } from './human/reactions';
+import { ARMED_ROW_NAMES, ARMED_ROW_TABLE } from './human/armedRows';
+import type { ArmedMotionSet, HolsterMotion } from './human/motionSets';
 import {
   SLING_FRAMES,
   SLING_TICKS_PER_FRAME,
@@ -182,8 +195,6 @@ import {
   SMUSH_PRESS_FRAMES,
   smushHop,
   smushHopExitPhase,
-  smushHopStampSide,
-  smushStampPoint,
   smushStanding,
 } from './human/stomps';
 import {
@@ -441,6 +452,7 @@ export const HUMAN_ROW_NAMES = [
   'mine',
   'mine_side',
   'mine_away',
+  ...ARMED_ROW_NAMES,
 ] as const;
 
 export type HumanRowName = (typeof HUMAN_ROW_NAMES)[number];
@@ -485,7 +497,7 @@ export type HumanRowEvent =
 /** What the runtime and the gates know about a row, besides how to pose it. */
 export interface HumanRowMeta {
   readonly frameCount: number;
-  readonly view: CarlView;
+  readonly view: CardinalView;
   readonly kind: RowKind;
   /** Frames on which a blow lands. Empty for a row that strikes nothing. */
   readonly impactFrames: readonly number[];
@@ -507,11 +519,6 @@ export interface HumanRowMeta {
    * row's last frame hands back to.
    */
   readonly exitFootPhase?: number;
-  /**
-   * Where the stamping heel lands on the impact frame, in tile fractions from
-   * the sprite's own tile origin. The runtime spawns a stomp's blast here.
-   */
-  readonly stampAnchor?: Pt;
   /**
    * What the animator plays the row for. A row without one is still drawn if
    * something names it, but the animator never picks it on its own; a
@@ -548,12 +555,13 @@ export interface HumanRowMeta {
    */
   readonly eventFrames?: Readonly<Partial<Record<HumanRowEvent, readonly number[]>>>;
   /**
-   * On a row that swings a working tool, which of his fists holds its butt
-   * on each frame; the other grips further up the haft, toward the head. The
-   * overlay draws the tool from this fist through the other. Absent, or a
-   * frame past the list's end, is his left.
+   * The armed set the row is played in, while a weapon of that set is out
+   * in his hand; absent on a bare-handed row, which is also what an armed
+   * set plays for a moment it has no row of its own for.
    */
-  readonly toolButt?: readonly BodySide[];
+  readonly motionSet?: ArmedMotionSet;
+  /** On a draw or a stow, which: the row a hotbar press plays as the weapon comes out or goes away. */
+  readonly holster?: HolsterMotion;
 }
 
 /** The frame a row's first blow lands on, or undefined for a row that strikes nothing. */
@@ -636,9 +644,13 @@ interface StrikeMeta {
  * - `knee` / `leftKnee`: the right or the left knee, from that same point.
  * - `shoulder`: the lead shoulder, by how far ahead of that point it is
  *   driven; a profile blow only.
+ * - `weapon`: a blow landed with the weapon in his main hand. The part held to
+ *   the impact frame is his main arm — the right fist, from its own shoulder,
+ *   as `hand` measures it — driven out furthest; the hit is shown landing out
+ *   along the weapon (`weaponReach.ts`).
  */
 export type StrikeReachLimb =
-  'hand' | 'leftHand' | 'foot' | 'leftFoot' | 'knee' | 'leftKnee' | 'shoulder';
+  'hand' | 'leftHand' | 'foot' | 'leftFoot' | 'knee' | 'leftKnee' | 'shoulder' | 'weapon';
 
 /**
  * - `out`: the blow lands where the part reaches furthest from him.
@@ -683,21 +695,6 @@ const COMBO_OPENER = 0;
 const COMBO_SECOND = 1;
 const COMBO_THIRD = 2;
 const COMBO_FINISHER = 3;
-
-/**
- * A Smush row's stamp point in tile fractions: the choreography's stamp point,
- * in figure units from the pose's ground origin, painted at `HUMAN_SCALE` of a
- * tile about a ground line `GROUND_OFFSET_IN_TILE` down it.
- * `scripts/gates-human.ts` re-measures it against the painted pose on the
- * impact frame.
- */
-function smushStampAnchor(view: CarlView, hop: boolean, stampSide: BodySide = 'right'): Pt {
-  const point = smushStampPoint(view, hop, stampSide);
-  return {
-    x: TILE_CENTRE_FRACTION + point.x * HUMAN_SCALE,
-    y: GROUND_OFFSET_IN_TILE + point.y * HUMAN_SCALE,
-  };
-}
 
 // ── Blows thrown on the move ─────────────────────────────────────────────────
 //
@@ -787,7 +784,7 @@ function stompRunRow(version: number): HumanRowDef {
   };
 }
 
-function smushHopRow(view: CarlView, version: number): HumanRowDef {
+function smushHopRow(view: CardinalView, version: number): HumanRowDef {
   const entry = travellingEntryPhase(view, version);
   return {
     frameCount: SMUSH_FRAMES,
@@ -798,7 +795,6 @@ function smushHopRow(view: CarlView, version: number): HumanRowDef {
     locomotion: 'travelling',
     entryFootPhase: entry,
     exitFootPhase: smushHopExitPhase(entry),
-    stampAnchor: smushStampAnchor(view, true, smushHopStampSide(entry)),
     role: 'stomp',
     eventFrames: SMUSH_HOP_GRIND_EVENTS,
     pose: (f) => smushHop(f, view, entry),
@@ -830,15 +826,13 @@ const MINE_EVENTS = { impact: [MINE_IMPACT_FRAME] } as const;
 
 /** A looping swing at a resource node, in one view. */
 function gatherRow(
-  view: CarlView,
+  view: CardinalView,
   frames: number,
   ticksPerFrame: number,
   events: HumanRowMeta['eventFrames'],
-  pose: (frame: number, view: CarlView) => CarlPose,
-  toolButt?: readonly BodySide[],
+  pose: (frame: number, view: CardinalView) => CarlPose,
 ): HumanRowDef {
   return {
-    ...(toolButt === undefined ? {} : { toolButt }),
     frameCount: frames,
     kind: 'loop',
     view,
@@ -856,7 +850,7 @@ function gatherRow(
  * A guard drop's frames sit strictly between its two ends — the guard's first
  * frame before it, the idle's after — so neither end is drawn twice.
  */
-function guardDropRow(view: CarlView, pose: (t: number) => CarlPose): HumanRowDef {
+function guardDropRow(view: CardinalView, pose: (t: number) => CarlPose): HumanRowDef {
   const frames = view === 'side' ? GUARD_DROP_PROFILE_FRAMES : GUARD_DROP_FACING_FRAMES;
   return {
     frameCount: frames,
@@ -873,7 +867,7 @@ function guardDropRow(view: CarlView, pose: (t: number) => CarlPose): HumanRowDe
 
 /** A fidget in one view; a level-up plays the ones given a place in its gestures. */
 function fidgetRow(
-  view: CarlView,
+  view: CardinalView,
   frames: number,
   pose: (t: number) => CarlPose,
   levelUpOrder?: number,
@@ -1362,7 +1356,6 @@ export const HUMAN_ROW_TABLE = {
     impactFrames: SMUSH_IMPACT,
     mirrorable: false,
     locomotion: 'planted',
-    stampAnchor: smushStampAnchor('front', false),
     role: 'stomp',
     eventFrames: SMUSH_GRIND_EVENTS,
     pose: (f) => smushStanding(f, 'front'),
@@ -1374,7 +1367,6 @@ export const HUMAN_ROW_TABLE = {
     impactFrames: SMUSH_IMPACT,
     mirrorable: true,
     locomotion: 'planted',
-    stampAnchor: smushStampAnchor('side', false),
     role: 'stomp',
     eventFrames: SMUSH_GRIND_EVENTS,
     pose: (f) => smushStanding(f, 'side'),
@@ -1386,7 +1378,6 @@ export const HUMAN_ROW_TABLE = {
     impactFrames: SMUSH_IMPACT,
     mirrorable: false,
     locomotion: 'planted',
-    stampAnchor: smushStampAnchor('back', false),
     role: 'stomp',
     eventFrames: SMUSH_GRIND_EVENTS,
     pose: (f) => smushStanding(f, 'back'),
@@ -2005,37 +1996,30 @@ export const HUMAN_ROW_TABLE = {
     ticksPerFrame: REPAIR_TICKS_PER_FRAME,
     pose: (f) => repairMend(f, 'back'),
   },
-  // Working a resource node: the tool itself is an overlay, so every tier of
-  // axe or pick shares these cells.
-  chop: gatherRow(
-    'front',
-    CHOP_FRAMES,
-    CHOP_TICKS_PER_FRAME,
-    CHOP_EVENTS,
-    chop,
-    CHOP_FACING_TOOL_BUTTS,
-  ),
+  // Working a resource node: every tier of axe or pick shares these cells, the
+  // tool drawn between their two layers.
+  chop: gatherRow('front', CHOP_FRAMES, CHOP_TICKS_PER_FRAME, CHOP_EVENTS, chop),
   chop_side: gatherRow('side', CHOP_FRAMES, CHOP_TICKS_PER_FRAME, CHOP_EVENTS, chop),
-  chop_away: gatherRow(
-    'back',
-    CHOP_FRAMES,
-    CHOP_TICKS_PER_FRAME,
-    CHOP_EVENTS,
-    chop,
-    CHOP_FACING_TOOL_BUTTS,
-  ),
+  chop_away: gatherRow('back', CHOP_FRAMES, CHOP_TICKS_PER_FRAME, CHOP_EVENTS, chop),
   mine: gatherRow('front', MINE_FRAMES, MINE_TICKS_PER_FRAME, MINE_EVENTS, mine),
   mine_side: gatherRow('side', MINE_FRAMES, MINE_TICKS_PER_FRAME, MINE_EVENTS, mine),
   mine_away: gatherRow('back', MINE_FRAMES, MINE_TICKS_PER_FRAME, MINE_EVENTS, mine),
+  ...ARMED_ROW_TABLE,
 } satisfies Record<HumanRowName, HumanRowDef>;
 
 /**
- * One action drawn in each of the three views. A system playing it picks the
- * row for the way he faces it with `viewForFacing`, so the rows are named
- * here once rather than composed from a view suffix, which would let a
- * misspelt name through to a figure that silently paints nothing.
+ * One action drawn in every view Carl has rows for. A system playing it picks
+ * the row for the way he faces with `viewRow`, so the rows are named here once
+ * rather than composed from a view suffix, which would let a misspelt name
+ * through to a figure that silently paints nothing.
+ *
+ * A view drawn through the animator's fallback table may name its own row
+ * ahead of time; that row is played once the view's fallback entry is gone,
+ * and from then on every table must name one.
  */
-export type ViewRows = Readonly<Record<CarlView, HumanRowName>>;
+export type ViewRows = Readonly<
+  Record<CarlRowView, HumanRowName> & Partial<Record<FacingView, HumanRowName>>
+>;
 
 export const BUILD_KNEEL_ROWS: ViewRows = {
   front: 'build_kneel',
@@ -2061,10 +2045,15 @@ export const HUMAN_ROWS: readonly RowSpec[] = HUMAN_ROW_NAMES.map((name) => ({
 
 // ── Painting ─────────────────────────────────────────────────────────────────
 
-function paintView(ctx: CanvasRenderingContext2D, view: CarlView, pose: CarlPose): void {
-  if (view === 'front') drawCarlFront(ctx, pose);
-  else if (view === 'back') drawCarlBack(ctx, pose);
-  else drawCarlSide(ctx, pose);
+function paintView(
+  ctx: CanvasRenderingContext2D,
+  view: CardinalView,
+  pose: CarlPose,
+  compose: CarlComposeOptions,
+): void {
+  if (view === 'front') drawCarlFront(ctx, pose, compose);
+  else if (view === 'back') drawCarlBack(ctx, pose, compose);
+  else drawCarlSide(ctx, pose, compose);
 }
 
 const HUMAN_ROWS_BY_NAME: ReadonlyMap<string, RowSpec> = new Map(
@@ -2083,14 +2072,18 @@ export function eventFrame(row: HumanRowName, event: HumanRowEvent): number | un
 }
 
 /**
- * Paints one cell of Carl, in the cell's own pixels.
- *
- * The pose is anchored at the ground line under the cell's centre, which is
- * what ties the art to the tile he stands on, and scaled about that same
- * ground line so his feet stay on it whatever `HUMAN_SCALE` is set to.
+ * Lays what he is wearing — and holding, on a figure that holds something —
+ * onto a row's pose. It sees the row and frame the pose was authored for, so
+ * gear that changes with the action — steel that forms round a fist on the
+ * frames a blow lands — is decided per cell.
  */
-function paintHumanFrame(ctx: CanvasRenderingContext2D, state: string, frame: number): void {
-  paintDressedHumanFrame(ctx, state, frame, undressed);
+export type HumanPoseDresser = (pose: CarlPose, row: RowSpec, frame: number) => CarlPose;
+
+/** How one of Carl's figures turns a row's frame into a picture: what it lays on the pose, and how it composes it. */
+export interface HumanFigurePainting {
+  readonly dress: HumanPoseDresser;
+  /** The handle an equipment-chosen item in his grip is assumed to have. */
+  readonly itemHandle: HandleRadius;
 }
 
 function undressed(pose: CarlPose): CarlPose {
@@ -2098,30 +2091,132 @@ function undressed(pose: CarlPose): CarlPose {
 }
 
 /**
- * Lays what he is wearing onto a row's pose. It sees the row and frame the
- * pose was authored for, so gear that changes with the action — steel that
- * forms round a fist on the frames a blow lands — is decided per cell.
+ * Carl's own figure holds nothing of its own choosing; an equipment-chosen
+ * item reaches him only through the rows that grip a working tool, whose
+ * hafts are all one thickness.
  */
-type HumanPoseDresser = (pose: CarlPose, row: RowSpec, frame: number) => CarlPose;
+const UNDRESSED_PAINTING: HumanFigurePainting = { dress: undressed, itemHandle: 'standard' };
+
+/** A row's pose as `painting` paints it on `frame`. */
+export function paintedPose(painting: HumanFigurePainting, row: RowSpec, frame: number): CarlPose {
+  return painting.dress(row.pose(frame), row, frame);
+}
+
+function inCell(ctx: CanvasRenderingContext2D, paint: () => void): void {
+  ctx.save();
+  ctx.translate(ORIGIN_X, ORIGIN_Y);
+  ctx.scale(TILE_SCALE, TILE_SCALE);
+  ctx.scale(HUMAN_SCALE, HUMAN_SCALE);
+  try {
+    paint();
+  } finally {
+    ctx.restore();
+  }
+}
 
 /**
- * {@link paintHumanFrame} for a figure that wears something: every pose
- * passes through `dress` before it is painted.
+ * Paints one cell of Carl as `painting` dresses him, in the cell's own pixels.
+ *
+ * The pose is anchored at the ground line under the cell's centre, which is
+ * what ties the art to the tile he stands on, and scaled about that same
+ * ground line so his feet stay on it whatever `HUMAN_SCALE` is set to.
  */
 export function paintDressedHumanFrame(
   ctx: CanvasRenderingContext2D,
   state: string,
   frame: number,
-  dress: HumanPoseDresser,
+  painting: HumanFigurePainting,
 ): void {
   const row = humanRowOf(state);
   if (row === undefined) return;
-  ctx.save();
-  ctx.translate(ORIGIN_X, ORIGIN_Y);
-  ctx.scale(TILE_SCALE, TILE_SCALE);
-  ctx.scale(HUMAN_SCALE, HUMAN_SCALE);
-  paintView(ctx, row.view, dress(row.pose(frame), row, frame));
-  ctx.restore();
+  const pose = paintedPose(painting, row, frame);
+  inCell(ctx, () => paintView(ctx, row.view, pose, { itemHandle: painting.itemHandle }));
+}
+
+/**
+ * {@link paintDressedHumanFrame} for a frame with an equipment-chosen item in
+ * his grip: the whole figure into `back`, what lies in front of the item
+ * into `front`.
+ */
+export function paintDressedHumanLayers(
+  back: CanvasRenderingContext2D,
+  front: CanvasRenderingContext2D,
+  state: string,
+  frame: number,
+  painting: HumanFigurePainting,
+  compose: Pick<CarlComposeOptions, 'deferProps'> = {},
+): void {
+  const row = humanRowOf(state);
+  if (row === undefined) return;
+  const pose = paintedPose(painting, row, frame);
+  inCell(front, () =>
+    inCell(back, () =>
+      paintView(back, row.view, pose, { ...compose, itemHandle: painting.itemHandle, front }),
+    ),
+  );
+}
+
+/**
+ * Paints a row's own props alone, in the cell's own pixels, through the same
+ * compositor and from the same sockets the bake uses: what a parity check
+ * lays between the layers of a cell painted with its props deferred.
+ */
+export function paintRowProps(
+  ctx: CanvasRenderingContext2D,
+  state: string,
+  frame: number,
+  painting: HumanFigurePainting,
+): void {
+  const row = humanRowOf(state);
+  if (row === undefined) return;
+  const draws = carlPropDraws(paintedPose(painting, row, frame), VIEWS[row.view], {
+    itemHandle: painting.itemHandle,
+  });
+  inCell(ctx, () => {
+    for (const draw of draws) compositeHeldItem(ctx, draw.def, draw.transform, 'cached');
+  });
+}
+
+/**
+ * The hand sockets of one frame as `painting` paints it, solved on the pose
+ * and in the view the painter draws.
+ */
+export function paintedHandSockets(
+  painting: HumanFigurePainting,
+  row: RowSpec,
+  frame: number,
+): CarlHandSockets {
+  return carlHandSockets(paintedPose(painting, row, frame), VIEWS[row.view], {
+    itemHandle: painting.itemHandle,
+  });
+}
+
+/**
+ * The two-layer painting of a Carl figure: a frame is layered when either of
+ * his hands closes on an equipment-chosen item. Answered once per frame and
+ * kept, since the cache asks on every bake and every direct paint.
+ */
+export function humanHeldLayers(painting: HumanFigurePainting): FigureHeldLayers {
+  const layeredByCell = new Map<string, boolean>();
+  return {
+    layered: (state, frame) => {
+      const key = `${state}:${frame}`;
+      const known = layeredByCell.get(key);
+      if (known !== undefined) return known;
+      const row = humanRowOf(state);
+      const sockets = row === undefined ? null : paintedHandSockets(painting, row, frame);
+      const holds =
+        sockets !== null && (sockets.left.occupant === 'item' || sockets.right.occupant === 'item');
+      layeredByCell.set(key, holds);
+      return holds;
+    },
+    paintLayers: (back, front, state, frame) =>
+      paintDressedHumanLayers(back, front, state, frame, painting),
+  };
+}
+
+function paintHumanFrame(ctx: CanvasRenderingContext2D, state: string, frame: number): void {
+  paintDressedHumanFrame(ctx, state, frame, UNDRESSED_PAINTING);
 }
 
 function humanStateFrames(): Record<string, number> {
@@ -2145,12 +2240,19 @@ function humanStateFrames(): Record<string, number> {
  * to about fifty-five megabytes — the blows thrown on the move alone are
  * painted once per phase of the stride they can begin at, five versions a row
  * in profile, which is what takes it past the fleet's 24 MB default twice
- * over. Fifty-six megabytes leaves a handful of cells over that — the slack
- * for a row still warm from the last view — and still leaves the cache's global
- * ceiling, which this does not change, room for the rest of the floor's
- * figures. `scripts/gates-human.ts` measures the working set against it.
+ * over. Carrying a weapon, every one of those cells that closes his right fist
+ * on it also holds a front layer cropped to its ink, about 1.9 MB over the
+ * set: 57.5 MB at the most. With a light one-hander out its own rows
+ * replace the bare-handed ones, and its family of blows — four in each view,
+ * every one with its versions painted on the move — is the largest he has:
+ * that working set measures 64.1 MB, 66.2 MB with its front layers round the
+ * thickest handle. Sixty-seven megabytes covers it with a cell or so of
+ * slack and still leaves the cache's global ceiling, which this does not
+ * change, room for the rest of the floor's figures. `scripts/gates-human.ts`
+ * measures the working set of every set in his hand, bare and carrying,
+ * against it.
  */
-const HUMAN_FIGURE_BUDGET_MEGABYTES = 56;
+const HUMAN_FIGURE_BUDGET_MEGABYTES = 67;
 
 export const HUMAN_FIGURE: FigureDef = {
   id: 'human',
@@ -2163,4 +2265,8 @@ export const HUMAN_FIGURE: FigureDef = {
   paintFrame: paintHumanFrame,
   budgetMegabytes: HUMAN_FIGURE_BUDGET_MEGABYTES,
   skipSupersample: true,
+  heldLayers: humanHeldLayers(UNDRESSED_PAINTING),
 };
+
+/** How {@link HUMAN_FIGURE} paints a frame. */
+export const HUMAN_FIGURE_PAINTING: HumanFigurePainting = UNDRESSED_PAINTING;

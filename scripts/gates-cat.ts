@@ -710,15 +710,25 @@ const FRAME_CONSTANTS: ReadonlyMap<string, number> = new Map([
 ]);
 
 /**
- * The row names `directionalState` builds by template literal.
+ * The row names her per-view actions are drawn in: each action head-on, in
+ * profile facing east and facing west, and from behind.
  *
- * This is the shape that goes wrong silently: `${base}_${view}` is a name no
- * grep for a string literal will ever find, and a draw call handed one the
- * figure does not paint returns without drawing and without a word. Every
- * combination the function can produce is enumerated here and checked.
+ * Checked as built names rather than read out of the source's table, so a
+ * view or a west twin the figure stopped painting fails here even if the
+ * table still names it: a draw call handed a name the figure does not paint
+ * returns without drawing and without a word.
  */
-const DIRECTIONAL_BASES = ['walk', 'idle', 'swipe', 'cast'] as const;
-const DIRECTIONAL_SUFFIXES = ['', '_side', '_away'] as const;
+const DIRECTIONAL_BASES = [
+  'walk',
+  'idle',
+  'swipe',
+  'cast',
+  'chop',
+  'mine',
+  'carry_walk',
+  'carry_idle',
+] as const;
+const DIRECTIONAL_SUFFIXES = ['', '_side', '_side_west', '_away'] as const;
 
 function directionalStateNames(): string[] {
   return DIRECTIONAL_BASES.flatMap((base) =>
@@ -759,9 +769,10 @@ function gateRuntimeStates(): void {
     fail('G8', `${SPRITE_MODULE_PATH} does not declare a CatOneShot union`);
   } else {
     const names = [...oneShots[1].matchAll(/'([^']+)'/g)].map((match) => match[1]);
-    // The two directional one-shots are asked for as `${action}_${view}`, which
-    // the directional check below covers; the rest are drawn by their own name.
-    const headOnOnly = names.filter((name) => name !== 'swipe' && name !== 'cast');
+    // The directional one-shots are asked for as `${action}_${view}`, which the
+    // directional check below covers; the rest are drawn by their own name.
+    const directional: readonly string[] = DIRECTIONAL_BASES;
+    const headOnOnly = names.filter((name) => !directional.includes(name));
     for (const failure of missingStateFailures(
       CAT_FIGURE,
       headOnOnly,
@@ -783,7 +794,21 @@ function gateRuntimeStates(): void {
   if (prewarm === null) {
     fail('G8', `${SPRITE_MODULE_PATH} does not declare a PREWARMED_ROWS list`);
   } else {
-    const warmed = [...prewarm[1].matchAll(/'([^']+)'/g)].map((match) => match[1]);
+    const held = /const HELD_ROWS: [^=]*= \{([^}]*)\};/.exec(source);
+    if (held === null) fail('G8', `${SPRITE_MODULE_PATH} does not declare a HELD_ROWS table`);
+    const warmedWhenHeld = [...(held?.[1] ?? '').matchAll(/'([^']+)'/g)].map((match) => match[1]);
+    for (const failure of missingStateFailures(
+      CAT_FIGURE,
+      warmedWhenHeld,
+      `${SPRITE_MODULE_PATH}'s HELD_ROWS`,
+    )) {
+      fail('G8', failure);
+    }
+    // A row played only while she holds something is warmed when the hold begins.
+    const warmed = [
+      ...[...prewarm[1].matchAll(/'([^']+)'/g)].map((match) => match[1]),
+      ...warmedWhenHeld,
+    ];
     for (const failure of missingStateFailures(
       CAT_FIGURE,
       warmed,

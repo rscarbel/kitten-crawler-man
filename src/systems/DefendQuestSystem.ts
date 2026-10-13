@@ -78,8 +78,7 @@ import {
   BUILD_ROWS,
   humanRowOf,
 } from '../sprites/art/humanFigure';
-import { viewForFacing } from '../sprites/humanSprite';
-import type { CarlView } from '../sprites/art/carl/rig';
+import { type CarlRowView } from '../sprites/humanSprite';
 
 export const DEFEND_QUEST_ID = 'defend_goblin_mother';
 /** The loot box the rescue earns; the scene grants it onto the achievement stack. */
@@ -282,7 +281,7 @@ export type BarrierBuilderId = 'human' | 'cat';
 /** The human at work on a build, and the way he faces it. */
 interface Hammering {
   readonly human: HumanPlayer;
-  readonly view: CarlView;
+  readonly view: CarlRowView;
   readonly faceX: number;
   readonly faceY: number;
 }
@@ -819,7 +818,7 @@ export class DefendQuestSystem implements GameSystem {
     const distance = Math.hypot(toX, toY);
     const faceX = distance > 0 ? toX / distance : human.facingX;
     const faceY = distance > 0 ? toY / distance : human.facingY;
-    const hammering: Hammering = { human, view: viewForFacing(faceX, faceY), faceX, faceY };
+    const hammering: Hammering = { human, view: human.rowViewFacing(faceX, faceY), faceX, faceY };
     const kneeling = human.playAction(BUILD_KNEEL_ROWS[hammering.view], {
       faceX,
       faceY,

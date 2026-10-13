@@ -55,7 +55,6 @@ import { HumanPlayer } from '../../creatures/HumanPlayer';
 import type { CatPlayer } from '../../creatures/CatPlayer';
 import type { GameMap } from '../../map/GameMap';
 import { CHOP_ROWS, humanRowOf, MINE_ROWS } from '../../sprites/art/humanFigure';
-import { viewForFacing } from '../../sprites/humanSprite';
 import { hostileWithinAttackRange } from '../interactionPromptGate';
 import type { SystemContext } from '../GameSystem';
 import type { HarvestEffects } from './HarvestEffects';
@@ -469,7 +468,7 @@ export class HarvestSystem {
 
   private playSwingRow(channel: Channel, human: HumanPlayer): void {
     const rows = channel.kind === 'wood' ? CHOP_ROWS : MINE_ROWS;
-    const row = rows[viewForFacing(human.facingX, human.facingY)];
+    const row = human.rowFacing(rows);
     const impacts = humanRowOf(row)?.eventFrames?.impact ?? [];
     channel.animating = human.playAction(row, {
       loop: true,

@@ -198,9 +198,12 @@ export function progressFrameIndex(progress: number, frameCount: number): number
   return Math.max(0, Math.min(frameCount - 1, Math.floor(progress * frameCount)));
 }
 
+/** Wall-clock milliseconds per second, for turning `performance.now()` into the seconds {@link timeFrameIndex} takes. */
+export const MILLISECONDS_PER_SECOND = 1000;
+
 /**
  * Drive a looping animation from elapsed time.
- * @param elapsedSeconds  Monotonic time in seconds (e.g. performance.now() / 1000)
+ * @param elapsedSeconds  Monotonic time in seconds (e.g. performance.now() / MILLISECONDS_PER_SECOND)
  * @param fps             Desired animation frames-per-second
  * @param frameCount      Number of frames in the animation
  */

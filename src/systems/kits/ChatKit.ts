@@ -29,6 +29,19 @@ const CHEAT_PAYDAY_COINS = 10000;
 /** How soon `!vomit` brings up its first bout, so a test need not wait out the interval. */
 const CHEAT_VOMIT_FIRST_BOUT_FRAMES = 60;
 
+const DEFAULT_GIVE_QUANTITY = 1;
+
+/** `!give` takes an item id and an optional quantity. */
+const MAX_GIVE_WORDS = 2;
+
+/** The `!give` quantity word as a positive whole number, or null when it is not one. */
+function parseGiveQuantity(word: string | undefined): number | null {
+  if (word === undefined) return DEFAULT_GIVE_QUANTITY;
+  if (!/^\d+$/.test(word)) return null;
+  const quantity = Number(word);
+  return Number.isSafeInteger(quantity) && quantity > 0 ? quantity : null;
+}
+
 /**
  * One chat command: the text that triggers it and what it does. `run` receives
  * whatever followed the command word, trimmed — empty for commands that take no
@@ -204,17 +217,42 @@ export class ChatKit {
   }
 
   /**
-   * `!give <item_id>`: one of the item, to the crawler who can wear it when only
-   * one can, otherwise to whoever is in control.
+   * `!give <item_id> [quantity]`: `quantity` (default 1) of the item, to the
+   * crawler who can wear it when only one can, otherwise to whoever is in
+   * control. A non-stackable item takes one bag slot per copy, so as many copies
+   * as fit are given and the shortfall is reported.
    */
   private giveItem(argument: string): string {
-    if (!isItemId(argument)) return `❓ NO ITEM "${argument}"`;
-    const wearer = ITEM_DEF[argument].wearer;
+    const words: ReadonlyArray<string | undefined> = argument.split(/\s+/);
+    if (words.length > MAX_GIVE_WORDS) return `❓ USAGE: !give <item_id> [quantity]`;
+    const [firstWord, quantityArgument] = words;
+    const itemArgument = firstWord ?? '';
+    if (itemArgument === '') return `❓ USAGE: !give <item_id> [quantity]`;
+    if (!isItemId(itemArgument)) return `❓ NO ITEM "${itemArgument}"`;
+    const quantity = parseGiveQuantity(quantityArgument);
+    if (quantity === null) return `❓ BAD QUANTITY "${String(quantityArgument)}"`;
+    const def = ITEM_DEF[itemArgument];
     const { pm } = this.world;
-    const recipient = wearer === undefined ? pm.active() : wearer === 'cat' ? pm.cat : pm.human;
-    if (!recipient.inventory.addItem(argument, 1)) return '🎒 NO ROOM';
+    const goesToActive = def.wearer === undefined || def.wearer === 'both';
+    const recipient = goesToActive ? pm.active() : def.wearer === 'cat' ? pm.cat : pm.human;
+    const { inventory } = recipient;
+    const takesOneSlotPerCopy = !def.stackable && def.isQuestItem !== true;
+    const isSingleQuestItem = !def.stackable && def.isQuestItem === true;
+    const addableAtOnce = isSingleQuestItem ? 1 : quantity;
+    let given = 0;
+    if (takesOneSlotPerCopy) {
+      while (given < quantity && inventory.hasRoomFor(itemArgument)) {
+        inventory.addItem(itemArgument, 1);
+        given++;
+      }
+    } else if (inventory.addItem(itemArgument, addableAtOnce)) {
+      given = addableAtOnce;
+    }
+    if (given === 0) return '🎒 NO ROOM';
     recipient.onInventoryChanged();
-    return `🎁 ${ITEM_DEF[argument].name}`;
+    const label = given > 1 ? `${given}× ${def.name}` : def.name;
+    const shortfall = quantity - given;
+    return shortfall > 0 ? `🎁 ${label} (NO ROOM for ${shortfall})` : `🎁 ${label}`;
   }
 
   /** `!god`: the stat/speed/ability overlay, plus the shared flag that carries it. */

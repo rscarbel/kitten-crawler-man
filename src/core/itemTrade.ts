@@ -1,4 +1,4 @@
-import type { InventoryItem } from './ItemDefs';
+import { wearerAllows, wearerOf, type InventoryItem } from './ItemDefs';
 import { getSkillDef, type CrawlerKind } from './SkillManager';
 
 /**
@@ -13,13 +13,14 @@ import { getSkillDef, type CrawlerKind } from './SkillManager';
  *   by id: handing one to a partner who already holds a *different* quest
  *   item would evict theirs (`Inventory.replaceQuestSlot`), and
  *   the item is tied to whoever is running the quest regardless.
- * - `wearer` restricts armour to one crawler's gear slots.
+ * - `wearer` restricts gear to one crawler's slots.
  * - `skillId` restricts a skill book to whichever crawler `eligibleFor` names.
  */
 export function itemIsTradable(item: InventoryItem, toKind: CrawlerKind): boolean {
   if (item.canDrop === false) return false;
   if (item.isQuestItem === true) return false;
-  if (item.wearer !== undefined && item.wearer !== toKind) return false;
+  const wearer = wearerOf(item.id);
+  if (wearer !== undefined && !wearerAllows(wearer, toKind)) return false;
   if (item.skillId !== undefined) {
     const eligibleFor = getSkillDef(item.skillId).eligibleFor;
     if (eligibleFor !== 'both' && eligibleFor !== toKind) return false;

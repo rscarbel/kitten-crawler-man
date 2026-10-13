@@ -24,6 +24,8 @@
 import { PAINT_BENCH_SUBJECTS } from '../src/dev/paintBenchSubjects.js';
 import { HUMAN_FIGURE } from '../src/sprites/art/humanFigure.js';
 import { humanFigureWearing } from '../src/sprites/art/human/appearance.js';
+import { garmentsOf } from '../src/sprites/garments/garments.js';
+import { outfitOf } from '../src/sprites/garments/outfit.js';
 import type { FigureDef } from '../src/sprites/figure/figureDef.js';
 import { FRAME_BAKE_BUDGET_MS } from '../src/sprites/figure/figureFrameCache.js';
 import { bakeFigureCell, paintFigureCell } from './figureSheet.js';
@@ -223,13 +225,12 @@ const method =
  */
 const HUMAN_OUTFITS_TIMED: readonly FigureDef[] = [
   HUMAN_FIGURE,
-  humanFigureWearing({
-    gauntlet: true,
-    cloak: true,
-    trollskinShirt: true,
-    toeRing: true,
-    pedicure: true,
-  }),
+  humanFigureWearing(
+    outfitOf(
+      'human',
+      garmentsOf('human').filter((garment) => !garment.base),
+    ),
+  ),
 ];
 
 const firstState = HUMAN_FIGURE.states.keys().next().value;

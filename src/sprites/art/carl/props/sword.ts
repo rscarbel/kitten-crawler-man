@@ -4,10 +4,10 @@
  * at the origin, the blade running out along +X, the pommel behind along −X,
  * in figure units.
  *
- * It is drawn over the finished figure rather than inside it (see
- * `taranisSwordSprite.ts`), so unlike a prop composed into the figure it
- * carries its own outline: drawn over the floor without one, a two-pixel blade
- * has no edge to read against the stone.
+ * It is an equipment-chosen item, composited between his cell's two layers
+ * rather than painted inside them, so unlike a row's own prop it carries its
+ * own outline: drawn over the floor without one, a two-pixel blade has no
+ * edge to read against the stone.
  */
 
 import { type Pt, rgba } from '../../carlArt';
@@ -81,13 +81,6 @@ const TIP_SPARK_ALPHA = 0.55;
  * a fixed, cacheable bitmap.
  */
 export const SWORD_CRACKLE_PHASES = 3;
-
-/** The extent of the sword's ink about its grip, in figure units, outline and crackle included. */
-export const SWORD_EXTENT = {
-  behind: POMMEL_BEHIND + POMMEL_RADIUS + SWORD_OUTLINE_WIDTH,
-  ahead: GUARD_AHEAD + BLADE_LENGTH + CRACKLE_STRAY + TIP_SPARK_RADIUS + SWORD_OUTLINE_WIDTH,
-  halfBreadth: GUARD_HALF_SPAN + SWORD_OUTLINE_WIDTH + CRACKLE_STRAY,
-} as const;
 
 const GUARD_X = GUARD_AHEAD;
 const TIP_X = GUARD_AHEAD + BLADE_LENGTH;
@@ -249,6 +242,116 @@ export function drawTaranisSword(ctx: Ctx, shaded: boolean, phase: number): void
   );
   ctx.fillStyle = bronze.rim;
   ctx.fill();
+
+  paintCrackle(ctx, phase, baseAlpha);
+  ctx.restore();
+}
+
+/**
+ * The sword's measurements about its grip, in figure units: what a held-visual
+ * definition of it declares its handle and head from.
+ */
+export const TARANIS_SWORD_DIMENSIONS = {
+  /** Grip centre back to the pommel's centre. */
+  pommelBehind: POMMEL_BEHIND,
+  /** Grip centre forward to the crossguard. */
+  guardAhead: GUARD_AHEAD,
+  /** Guard to point. */
+  bladeLength: BLADE_LENGTH,
+  /** The crossguard's full span, the widest part of the head. */
+  guardSpan: GUARD_HALF_SPAN * 2,
+  guardThickness: GUARD_HALF_THICK * 2,
+} as const;
+
+function swordMaterials(shaded: boolean): {
+  readonly bronze: ReturnType<typeof receded>;
+  readonly silver: ReturnType<typeof recededGloss>;
+} {
+  const shade = shaded ? FAR_LIMB_SHADE : 0;
+  return { bronze: receded(TARANIS_BRONZE, shade), silver: recededGloss(TARANIS_SILVER, shade) };
+}
+
+/**
+ * The hilt alone — the wrapped grip and the pommel, outlined — in the frame
+ * {@link drawTaranisSword} uses, for a painter that draws the blade over it
+ * separately.
+ */
+export function drawTaranisHilt(ctx: Ctx, shaded: boolean): void {
+  const { bronze } = swordMaterials(shaded);
+  ctx.save();
+  ctx.lineJoin = 'round';
+  ctx.beginPath();
+  traceGrip(ctx);
+  tracePommel(ctx);
+  ctx.strokeStyle = TARANIS_OUTLINE;
+  ctx.lineWidth = SWORD_OUTLINE_WIDTH * 2;
+  ctx.stroke();
+
+  ctx.beginPath();
+  traceGrip(ctx);
+  ctx.fillStyle = TARANIS_GRIP_WRAP;
+  ctx.fill();
+
+  ctx.beginPath();
+  tracePommel(ctx);
+  ctx.fillStyle = bronze.base;
+  ctx.fill();
+  const glintOffset = POMMEL_RADIUS * POMMEL_GLINT_TOWARD_LIGHT;
+  ctx.beginPath();
+  ctx.arc(
+    -POMMEL_BEHIND - glintOffset,
+    -glintOffset,
+    POMMEL_RADIUS * POMMEL_GLINT_SIZE,
+    0,
+    Math.PI * 2,
+  );
+  ctx.fillStyle = bronze.rim;
+  ctx.fill();
+  ctx.restore();
+}
+
+/**
+ * The crossguard, the blade and its crackle, outlined, in the frame
+ * {@link drawTaranisSword} uses — everything {@link drawTaranisHilt} leaves out.
+ */
+export function drawTaranisBlade(ctx: Ctx, shaded: boolean, phase: number): void {
+  const { bronze, silver } = swordMaterials(shaded);
+  const baseAlpha = ctx.globalAlpha;
+  ctx.save();
+  ctx.lineJoin = 'round';
+
+  ctx.beginPath();
+  traceBlade(ctx);
+  traceGuard(ctx);
+  ctx.strokeStyle = TARANIS_OUTLINE;
+  ctx.lineWidth = SWORD_OUTLINE_WIDTH * 2;
+  ctx.stroke();
+
+  ctx.beginPath();
+  traceBlade(ctx);
+  ctx.fillStyle = silver.mid;
+  ctx.fill();
+  ctx.save();
+  ctx.beginPath();
+  traceBlade(ctx);
+  ctx.clip();
+  ctx.fillStyle = silver.light;
+  ctx.fillRect(GUARD_X, -BLADE_HALF_AT_GUARD, BLADE_LENGTH, BLADE_HALF_AT_GUARD);
+  ctx.restore();
+  ctx.beginPath();
+  ctx.moveTo(GUARD_X + BLADE_LENGTH * RIDGE_FROM_SHARE, 0);
+  ctx.lineTo(GUARD_X + BLADE_LENGTH * RIDGE_TO_SHARE, 0);
+  ctx.strokeStyle = silver.specular;
+  ctx.lineWidth = RIDGE_WIDTH;
+  ctx.lineCap = 'round';
+  ctx.stroke();
+
+  ctx.beginPath();
+  traceGuard(ctx);
+  ctx.fillStyle = bronze.base;
+  ctx.fill();
+  ctx.fillStyle = bronze.light;
+  ctx.fillRect(GUARD_X - GUARD_HALF_THICK, -GUARD_HALF_SPAN, GUARD_HALF_THICK, GUARD_HALF_SPAN * 2);
 
   paintCrackle(ctx, phase, baseAlpha);
   ctx.restore();

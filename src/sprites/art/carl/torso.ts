@@ -1,7 +1,6 @@
 /**
  * Carl's torso: the fitted brown leather moto jacket — zipped, with a stand
- * collar — and, when he wears it, the dark trollskin shirt showing only as a
- * band at the neckline. The jacket's chest-pocket zips are left out: at the tile they are
+ * collar. Anything worn under it at the neckline is a garment of its own. The jacket's chest-pocket zips are left out: at the tile they are
  * under a pixel and only dirty the chest sheen.
  *
  * The jacket is drawn as the body under it plus an offset, not as a box: the
@@ -16,7 +15,6 @@
  * on the planes that curve toward the key — the upper chest and the yoke.
  */
 
-import { gearOf } from './gear';
 import { HALF_PI, mixPt, pt } from './geometry';
 import { crease, FIGURE_CREASE_LAYERS, shadeForm } from './paint';
 import { LEATHER } from './palette';
@@ -798,15 +796,6 @@ function paintWaistband(ctx: Ctx, frame: TorsoFrame, back: number, front: number
 
 // ── Collar ───────────────────────────────────────────────────────────────────
 
-/**
- * The trollskin shirt: a dark navy, just visible above the zipped collar. At
- * the tile it is a one-pixel dark band that parts the face from the jacket.
- * It is an item he can take off, and then the collar closes on bare neck.
- */
-const TROLLSKIN = '#1d2236';
-const TROLLSKIN_LIT = '#2a3150';
-const TROLLSKIN_BAND = 0.026;
-
 /** The stand collar: a short upright band round the base of the neck. */
 const COLLAR_HEIGHT = 0.042;
 /** Head-on the collar's front edges sit lower than its sides; it rises behind the neck. */
@@ -815,7 +804,8 @@ const COLLAR_BACK_DROP = 0.0;
 /** The collar's top is a touch narrower than its base, hugging the neck. */
 const COLLAR_TOP_HUG = 0.9;
 const COLLAR_RIM_ALPHA = 0.65;
-const COLLAR_RIM_WIDTH = 0.012;
+/** The width of the lit lip along the collar's top edge, and of anything worn just above it. */
+export const COLLAR_RIM_WIDTH = 0.012;
 
 /** Profile collar corners, in the torso frame (facing +x). */
 const PROFILE_COLLAR = {
@@ -825,7 +815,8 @@ const PROFILE_COLLAR = {
   frontTop: pt(0.075, 0.0),
 } as const;
 
-interface CollarShape {
+/** The stand collar's outline, or a band of the same shape raised above it. */
+export interface CollarShape {
   readonly bottomLeft: Pt;
   readonly bottomMid: Pt;
   readonly bottomRight: Pt;
@@ -834,7 +825,8 @@ interface CollarShape {
   readonly topLeft: Pt;
 }
 
-function collarShape(frame: TorsoFrame, view: ViewSpec, raise: number): CollarShape {
+/** The collar's outline, its top raised by `raise`: zero for the collar itself. */
+export function collarShape(frame: TorsoFrame, view: ViewSpec, raise: number): CollarShape {
   const { at } = frame;
   if (view.profile) {
     const c = PROFILE_COLLAR;
@@ -861,7 +853,7 @@ function collarShape(frame: TorsoFrame, view: ViewSpec, raise: number): CollarSh
   };
 }
 
-function traceCollar(ctx: Ctx, c: CollarShape): void {
+export function traceCollar(ctx: Ctx, c: CollarShape): void {
   ctx.beginPath();
   ctx.moveTo(c.bottomLeft.x, c.bottomLeft.y);
   ctx.quadraticCurveTo(c.bottomMid.x, c.bottomMid.y, c.bottomRight.x, c.bottomRight.y);
@@ -870,34 +862,24 @@ function traceCollar(ctx: Ctx, c: CollarShape): void {
   ctx.closePath();
 }
 
-function drawCollar(ctx: Ctx, frame: TorsoFrame, view: ViewSpec, wearsShirt: boolean): void {
-  const shirt = collarShape(frame, view, TROLLSKIN_BAND);
-  if (wearsShirt) {
-    traceCollar(ctx, shirt);
-    ctx.fillStyle = TROLLSKIN;
-    ctx.fill();
-  }
-
-  // The collar shows as a pixel or two at the tile, so it takes one flat tone
-  // rather than a full form shade — the lit one, because a stand collar turns
-  // its outer face up to the key, and a band lighter than the jacket below it
-  // and darker than the neck above it is what says "collar" at this size.
-  const collar = collarShape(frame, view, 0);
-  traceCollar(ctx, collar);
+/**
+ * The stand collar. It shows as a pixel or two at the tile, so it takes one
+ * flat tone rather than a full form shade — the lit one, because a stand
+ * collar turns its outer face up to the key, and a band lighter than the
+ * jacket below it and darker than the neck above it is what says "collar" at
+ * this size.
+ */
+export function paintCollar(ctx: Ctx, frame: TorsoFrame, view: ViewSpec): void {
+  traceCollar(ctx, collarShape(frame, view, 0));
   ctx.fillStyle = LEATHER.light;
   ctx.fill();
+}
 
-  // The collar's upper edge rolls toward the key; a lit lip, with the shirt
-  // just above it lifted a step so the band reads as cloth, not a gap.
+/** The collar's upper edge, rolled toward the key: a lit lip. */
+export function paintCollarRim(ctx: Ctx, frame: TorsoFrame, view: ViewSpec): void {
+  const collar = collarShape(frame, view, 0);
   ctx.lineCap = 'round';
   ctx.lineWidth = COLLAR_RIM_WIDTH;
-  if (wearsShirt) {
-    ctx.strokeStyle = TROLLSKIN_LIT;
-    ctx.beginPath();
-    ctx.moveTo(shirt.topLeft.x, shirt.topLeft.y);
-    ctx.quadraticCurveTo(shirt.topMid.x, shirt.topMid.y, shirt.topRight.x, shirt.topRight.y);
-    ctx.stroke();
-  }
   ctx.strokeStyle = rgba(LEATHER.rim, COLLAR_RIM_ALPHA);
   ctx.beginPath();
   ctx.moveTo(collar.topLeft.x, collar.topLeft.y);
@@ -922,7 +904,11 @@ export function traceGarmentTorso(
   else traceFacing(ctx, frame, skeleton, pose, view);
 }
 
-export function drawJacket(ctx: Ctx, skeleton: Skeleton, pose: CarlPose, view: ViewSpec): void {
+/**
+ * The body of the jacket: its form, panels, seams and hardware, without the
+ * collar, which is painted as pieces of its own so a shirt can show round it.
+ */
+export function paintJacket(ctx: Ctx, skeleton: Skeleton, pose: CarlPose, view: ViewSpec): void {
   const frame = torsoFrame(skeleton, pose);
   const waistHalf = (WAIST_HALF + JACKET_OFFSET) * view.girth;
   const chestHalf = (CHEST_HALF + JACKET_OFFSET) * view.girth;
@@ -952,6 +938,5 @@ export function drawJacket(ctx: Ctx, skeleton: Skeleton, pose: CarlPose, view: V
     if (view.profile) paintWaistband(ctx, frame, PROFILE.hemBack.x, PROFILE.hemFront.x);
     else paintWaistband(ctx, frame, -waistHalf * HEM_FLARE, waistHalf * HEM_FLARE);
   });
-  drawCollar(ctx, frame, view, gearOf(pose).trollskinShirt === true);
   ctx.restore();
 }

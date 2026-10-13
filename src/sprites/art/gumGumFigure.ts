@@ -14,6 +14,7 @@
  *    talk / talk_side / talk_away   — Carl's talk
  */
 
+import { BARE_CARL_OUTFIT, stillOutfit } from '../garments/human/carlDressing';
 import { type FigureDef, figureStates } from '../figure/figureDef';
 import { type CarlComposeOptions, drawCarlBack, drawCarlFront, drawCarlSide } from './carl/figure';
 import { resetCarlExpression, setCarlExpression } from './carl/head';
@@ -23,7 +24,8 @@ import {
   setCarlGarmentRamp,
   setCarlSkinHairRamp,
 } from './carl/palette';
-import type { CarlPose, CarlView } from './carl/rig';
+import type { CarlPose } from './carl/rig';
+import { type CardinalView } from '../facingView';
 import { pt } from './carl/geometry';
 import { resetCarlSleeveCut, setCarlSleeveCut } from './carl/sleeve';
 import { resetCarlTorsoCut, setCarlTorsoCut } from './carl/torso';
@@ -57,7 +59,7 @@ const VIEW_SUFFIX: Readonly<Record<GumGumView, string>> = {
   side: '_side',
   away: '_away',
 };
-const CARL_VIEW: Readonly<Record<GumGumView, CarlView>> = {
+const CARL_VIEW: Readonly<Record<GumGumView, CardinalView>> = {
   front: 'front',
   side: 'side',
   away: 'back',
@@ -183,14 +185,14 @@ const DRAW_BY_VIEW: Readonly<
   away: drawCarlBack,
 };
 
-/** No Carl gear: no cloak, no gauntlet, no trollskin band at the collar. */
-const NO_GEAR = {} as const;
+/** Nothing of Carl's own over the rig's base garments: no cloak, no gauntlet, no trollskin band at the collar. */
+const NOTHING_OVER_HIS_BASE = stillOutfit(BARE_CARL_OUTFIT);
 
 function paintGumGumFrame(ctx: Ctx, state: string, frame: number): void {
   const row = ROWS.get(state);
   if (row === undefined) return;
   const carlView = CARL_VIEW[row.view];
-  const pose = gumGumPosture({ ...row.pose(frame), gear: NO_GEAR }, carlView);
+  const pose = gumGumPosture({ ...row.pose(frame), outfit: NOTHING_OVER_HIS_BASE }, carlView);
   // Reset in `finally`: a painter that throws mid-bake must not leave the next
   // figure baked — Carl or a resident — in her skin, dress, sleeves or face.
   setCarlSkinHairRamp(GUMGUM_SKIN, GUMGUM_HAIR);

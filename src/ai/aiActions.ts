@@ -95,8 +95,7 @@ function resolvePlayer(ctx: AISceneContext, target: unknown): HumanPlayer | CatP
 
 /** Unequip `itemId` if the player is wearing it, so it can be removed cleanly. */
 function unequipIfWorn(player: HumanPlayer | CatPlayer, itemId: ItemId): void {
-  if (player.inventory.unequipById(itemId) === null) return;
-  player.onEquipmentChanged();
+  player.inventory.unequipById(itemId);
 }
 
 function nearestWalkableTile(

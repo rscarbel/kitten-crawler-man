@@ -81,6 +81,8 @@ import {
   TRAVEL_DIRECTION,
   floorDriftPerFrameCellPx,
 } from '../src/sprites/art/human/probe.js';
+import { carlSocketsAt, stampAnchorOf } from '../src/sprites/art/human/sockets.js';
+import { type CarriedGrip, carryStyleOf } from '../src/sprites/art/human/carry.js';
 import { type Pt } from '../src/sprites/art/carlArt.js';
 import { type BareSegment, bareSegmentEdges } from '../src/sprites/art/carl/limbs.js';
 import {
@@ -95,29 +97,58 @@ import { COTTON, LEATHER, SKIN } from '../src/sprites/art/carl/palette.js';
 import {
   buildSkeleton,
   type CarlPose,
-  type CarlView,
   FULL_UPPER_ARM,
   poseAsDrawn,
   VIEWS,
 } from '../src/sprites/art/carl/rig.js';
+import {
+  type CardinalView,
+  FACING_HYSTERESIS_DEGREES,
+  FACING_VIEWS,
+  type FacingSelection,
+  type FacingView,
+  selectFacing,
+} from '../src/sprites/facingView.js';
 import { drawHead, headAngle, profileEyeCentre } from '../src/sprites/art/carl/head.js';
-import { drawJacket } from '../src/sprites/art/carl/torso.js';
+import {
+  BARE_CARL_OUTFIT,
+  DEFAULT_CARL_OUTFIT,
+} from '../src/sprites/garments/human/carlDressing.js';
+import { gauntletFormOn } from '../src/sprites/garments/human/carlGauntlet.js';
+import { garmentOf } from '../src/sprites/garments/garments.js';
+import { outfitOf, type Outfit } from '../src/sprites/garments/outfit.js';
+import {
+  paintCollar,
+  paintCollarRim,
+  paintJacket,
+  torsoFrame,
+} from '../src/sprites/art/carl/torso.js';
 import { FOREARM_LENGTH, HEAD_RY, UPPER_ARM_LENGTH } from '../src/sprites/art/carl/proportions.js';
 import {
-  ALWAYS_DRAWN_ROWS,
+  alwaysDrawnRows,
   HUMAN_ATTACK_ROWS,
+  motionSetOfRow,
   type HumanRowSelection,
-  OPENING_STRIKE_ROWS,
   rowFrameHolds,
   rowLengthInTicks,
-  strikeWindUpFrames,
-  viewForFacing,
+  carlRowView,
+  residentViewSpans,
 } from '../src/sprites/humanSprite.js';
 import {
-  DEFAULT_HUMAN_APPEARANCE,
+  ARMED_MOTION_SETS,
+  ARMED_SET_GRIP,
+  MOTION_SETS,
+  motionSetOf,
+  type MotionSet,
+} from '../src/sprites/art/human/motionSets.js';
+import { GRIP_ARCHETYPES } from '../src/sprites/held/gripArchetypes.js';
+import { HELD_VISUALS } from '../src/sprites/held/heldVisuals.js';
+import { ITEM_DEF, isItemId, type ItemId, weaponStatsOf } from '../src/core/ItemDefs.js';
+import {
   dressedPose,
-  gauntletFormAt,
-  type HumanAppearance,
+  garmentRowOf,
+  type HumanFigure,
+  humanFigureFor,
   humanFigureWearing,
   HUMAN_RIGHT_PUNCH_ROWS,
 } from '../src/sprites/art/human/appearance.js';
@@ -225,7 +256,7 @@ function failUnlessMeasured(gateId: string, measured: number, what: string): voi
  * unless a run names another. Every outfit is a figure of its own, and each
  * one's cells must hold to the same gates.
  */
-let gateAppearance: HumanAppearance = DEFAULT_HUMAN_APPEARANCE;
+let gateOutfit: Outfit<'human'> = DEFAULT_CARL_OUTFIT;
 let gateFigure: FigureDef = HUMAN_FIGURE;
 
 const alphaByCell = new Map<string, Uint8ClampedArray>();
@@ -715,7 +746,7 @@ function hiddenDepthShare(scale: number): number {
  * its forearm ahead of him, into the picture, and on screen alone it would
  * read shorter than its own wind-up.
  */
-function fistReach(pose: CarlPose, side: LegSide, view: CarlView): number {
+function fistReach(pose: CarlPose, side: LegSide, view: CardinalView): number {
   const skeleton = buildSkeleton(pose, VIEWS[view]);
   const arm = side === 'right' ? skeleton.rightArm : skeleton.leftArm;
   const angles = side === 'right' ? pose.rightArmAngles : pose.leftArmAngles;
@@ -735,8 +766,9 @@ function fistReach(pose: CarlPose, side: LegSide, view: CarlView): number {
  * depth, so that distance counts. A knee is measured from the same point; the
  * lead shoulder by how far ahead of it the barge carries it.
  */
-function strikeReach(pose: CarlPose, limb: StrikeReachLimb, view: CarlView): number {
+function strikeReach(pose: CarlPose, limb: StrikeReachLimb, view: CardinalView): number {
   switch (limb) {
+    case 'weapon':
     case 'hand':
       return fistReach(pose, 'right', view);
     case 'leftHand':
@@ -762,9 +794,10 @@ function strikeReach(pose: CarlPose, limb: StrikeReachLimb, view: CarlView): num
  * cell's ground line. G10 holds that flag to the sole — a foot called planted
  * must have its sole on the floor — so trusting it here trusts a gated fact.
  */
-function strikeHeight(pose: CarlPose, limb: StrikeReachLimb, view: CarlView): number {
+function strikeHeight(pose: CarlPose, limb: StrikeReachLimb, view: CardinalView): number {
   const skeleton = buildSkeleton(pose, VIEWS[view]);
   switch (limb) {
+    case 'weapon':
     case 'hand':
       return -skeleton.rightArm.end.y;
     case 'leftHand':
@@ -877,6 +910,7 @@ function gateStrikePeaksOnImpact(): void {
           `${impact} (${reaches[impact].toFixed(REACH_DIGITS)} tiles)`,
       );
     }
+    // A weapon blow is driven by the main arm's reach; the other fist may be on the haft beside it.
     const otherFist = limb === 'hand' ? 'leftHand' : limb === 'leftHand' ? 'hand' : undefined;
     if (otherFist === undefined) continue;
     const otherReach = strikeReach(poses[impact], otherFist, row.view);
@@ -899,7 +933,7 @@ function gateStrikePeaksOnImpact(): void {
  */
 const STOMP_ROWS: ReadonlyArray<{ readonly row: string; readonly impact: number }> = [
   { row: 'stomp_down', impact: STOMP_DOWN_IMPACT },
-  ...HUMAN_ROWS.filter((row) => row.stampAnchor !== undefined).map((row) => ({
+  ...HUMAN_ROWS.filter((row) => stampAnchorOf(row) !== null).map((row) => ({
     row: row.name,
     impact: row.impactFrames[0] ?? SMUSH_IMPACT_FRAME,
   })),
@@ -955,7 +989,7 @@ function gateStompLandsOnImpact(): void {
       );
     }
     const pressFrames =
-      row.stampAnchor === undefined
+      stampAnchorOf(row) === null
         ? row.frameCount - impact
         : hops
           ? SMUSH_HOP_PRESS_FRAMES
@@ -1002,7 +1036,7 @@ const HOP_STAMP_OFF_CENTRE_TILES = 0.1;
  * G7 — every stomp's blast is spawned under the stamping heel, and the heel
  * lands on the damage centre.
  *
- * A row's `stampAnchor` is where the runtime spawns the shockwave for that row
+ * A stamp row's anchor (`stampAnchorOf`) is where the runtime spawns the shockwave for that row
  * (`stampPointOf` in the sprite module, mirrored with the cell), and nothing at
  * runtime can look at the art to check it. It is built from the
  * choreography's stamp constants, so what can still go wrong is the pose
@@ -1014,8 +1048,8 @@ const HOP_STAMP_OFF_CENTRE_TILES = 0.1;
 function gateStampAnchor(): void {
   let impactsMeasured = 0;
   for (const row of HUMAN_ROWS) {
-    const anchor = row.stampAnchor;
-    if (anchor === undefined) continue;
+    const anchor = stampAnchorOf(row);
+    if (anchor === null) continue;
     if (row.impactFrames.length === 0) {
       fail('G7', `${row.name} declares a stamp anchor but no impact frame to land it on`);
       continue;
@@ -1124,7 +1158,9 @@ function gateRuntimeStates(): void {
 
   const runtimeLists: ReadonlyArray<readonly [string, readonly string[]]> = [
     ["humanSprite's HUMAN_ATTACK_ROWS", HUMAN_ATTACK_ROWS],
-    ["humanSprite's ALWAYS_DRAWN_ROWS", ALWAYS_DRAWN_ROWS],
+    ...MOTION_SETS.map(
+      (set) => [`humanSprite's always-drawn rows for ${set}`, alwaysDrawnRows(set)] as const,
+    ),
   ];
   for (const [purpose, names] of runtimeLists) {
     for (const failure of missingStateFailures(gateFigure, names, purpose)) fail('G8', failure);
@@ -1150,13 +1186,15 @@ const ROW_BUDGET_MEGABYTES = 3;
 
 /**
  * The rows that must be warm together, besides the always-drawn set: every
- * strike in the busiest family (the rows one facing can throw) and the stomp.
+ * strike in the busiest family (the rows one facing can throw with `set` in
+ * hand) and the stomp.
  */
-function strikeFamilies(): Map<CarlView, HumanRowName[]> {
-  const families = new Map<CarlView, HumanRowName[]>();
+function strikeFamilies(set: MotionSet): Map<CardinalView, HumanRowName[]> {
+  const families = new Map<CardinalView, HumanRowName[]>();
   for (const name of HUMAN_ATTACK_ROWS) {
-    const view = HUMAN_ROW_TABLE[name].view;
-    families.set(view, [...(families.get(view) ?? []), name]);
+    const meta = HUMAN_ROW_TABLE[name];
+    if (motionSetOfRow(meta) !== set) continue;
+    families.set(meta.view, [...(families.get(meta.view) ?? []), name]);
   }
   return families;
 }
@@ -1177,9 +1215,9 @@ function smushViewsWarmAtOnce(): number {
  * hop of as many views as {@link smushViewsWarmAtOnce}, taking the heaviest.
  */
 function warmStompRows(): HumanRowName[] {
-  const byView = new Map<CarlView, HumanRowName[]>();
+  const byView = new Map<CardinalView, HumanRowName[]>();
   for (const row of HUMAN_ROWS) {
-    if (row.stampAnchor === undefined) continue;
+    if (stampAnchorOf(row) === null) continue;
     byView.set(row.view, [...(byView.get(row.view) ?? []), row.name]);
   }
   const framesOf = (names: readonly HumanRowName[]): number =>
@@ -1192,7 +1230,7 @@ function warmStompRows(): HumanRowName[] {
  * The Protective Shell cast of a view, up to the frame the dome goes up — the
  * span `standByForShellCast` holds warm while the spell is ready.
  */
-function shellCastSpans(view: CarlView): HumanWarmSpan[] {
+function shellCastSpans(view: CardinalView): HumanWarmSpan[] {
   return HUMAN_ROWS.flatMap((row) => {
     const cast = row.eventFrames?.cast?.[0];
     return row.view === view && cast !== undefined ? [{ row: row.name, frames: cast + 1 }] : [];
@@ -1203,10 +1241,10 @@ function shellCastSpans(view: CarlView): HumanWarmSpan[] {
  * G9b — the working set fits Carl's own per-figure budget.
  *
  * Rows are admitted on use and released when stale, so what has to fit is not
- * every row at once but the rows a fight holds warm together: everything he
- * is drawn in continuously (`ALWAYS_DRAWN_ROWS`, warmed at scene start), the
- * wind-up of every blow a fight can open with from standing, in every view
- * (also warmed at scene start, up to each one's impact frame), the whole of
+ * every row at once but the rows a fight holds warm together: what is held
+ * warm in every view for as long as he is on screen (`residentViewSpans`:
+ * everything he is drawn in continuously, and the wind-up of every blow a
+ * fight can open with from standing, up to each one's impact frame), the whole of
  * the largest family of strikes one facing can throw — standing, and every
  * version painted on the move, whose wind-ups are warmed as he sets off in
  * that view — and the Smush rows, standing and every hop version, of as many
@@ -1219,21 +1257,54 @@ function shellCastSpans(view: CarlView): HumanWarmSpan[] {
  * default, since he declares an override.
  */
 function gateWorkingSet(): void {
+  const figureBudget = figureByteBudgetFor(gateFigure);
+  let bareBytes = 0;
+  for (const set of MOTION_SETS) bareBytes = Math.max(bareBytes, gateWorkingSetOf(set));
+  // A comparison that can never see the other side of itself is not a gate —
+  // proves the check above is reachable rather than trivially true, by running
+  // the identical comparison against a figure whose declared budget cannot
+  // possibly cover the same measured bytes.
+  const starvedBudget = figureByteBudgetFor({ ...gateFigure, budgetMegabytes: 0 });
+  if (!(bareBytes > starvedBudget) || figureBudget <= starvedBudget) {
+    fail(
+      'G9b',
+      `the working-set check does not fail against a starved 0 MB budget, so it can never fail ` +
+        'against the real one either',
+    );
+  }
+}
+
+/**
+ * The grips the working set of `set` is measured carrying: bare hands carry
+ * a slingshot in a low fist; an armed set, its archetype's thickest handle —
+ * the fist that crops largest.
+ */
+function measuredGrips(set: MotionSet): readonly CarriedGrip[] {
+  if (set === 'unarmed') return [{ handle: 'standard', style: 'low', motionSet: set }];
+  const radii = GRIP_ARCHETYPES[ARMED_SET_GRIP[set].archetype].radii;
+  const thickest = radii[radii.length - 1];
+  return [{ handle: thickest, style: carryStyleOf(set), motionSet: set }];
+}
+
+/** G9b for one set in his hand; returns the bytes of its cells without front layers. */
+function gateWorkingSetOf(set: MotionSet): number {
   const cellBytes = frameWidth * frameHeight * BYTES_PER_PIXEL;
   const framesOf = (names: readonly HumanRowName[]): number =>
     names.reduce((sum, name) => sum + HUMAN_ROW_TABLE[name].frameCount, 0);
   let busiestFamily: HumanRowName[] = [];
-  for (const family of strikeFamilies().values()) {
+  for (const family of strikeFamilies(set).values()) {
     if (framesOf(family) > framesOf(busiestFamily)) busiestFamily = family;
   }
+  const resident = residentViewSpans(set);
   const stomps = warmStompRows();
-  const rows = [...new Set([...ALWAYS_DRAWN_ROWS, ...busiestFamily, ...stomps])];
-  const windUps = OPENING_STRIKE_ROWS.filter((name) => !rows.includes(name));
-  const windUpFrames = windUps.reduce(
-    (sum, name) => sum + strikeWindUpFrames(HUMAN_ROW_TABLE[name]),
-    0,
-  );
-  const fightView: CarlView | undefined =
+  const residentWhole = resident
+    .filter((span) => span.frames === HUMAN_ROW_TABLE[span.row].frameCount)
+    .map((span) => span.row);
+  const rows = [...new Set([...residentWhole, ...busiestFamily, ...stomps])];
+  const windUpSpans = resident.filter((span) => !rows.includes(span.row));
+  const windUps = windUpSpans.map((span) => span.row);
+  const windUpFrames = windUpSpans.reduce((sum, span) => sum + span.frames, 0);
+  const fightView: CardinalView | undefined =
     busiestFamily.length > 0 ? HUMAN_ROW_TABLE[busiestFamily[0]].view : undefined;
   const fightReactions = fightView === undefined ? [] : fightReactionSpans(fightView);
   const shellCast = fightView === undefined ? [] : shellCastSpans(fightView);
@@ -1241,9 +1312,9 @@ function gateWorkingSet(): void {
     (span) => !rows.includes(span.row),
   );
   const standbyFrames = standby.reduce((sum, span) => sum + span.frames, 0);
-  failUnlessMeasured('G9b', busiestFamily.length, 'strike rows in any family');
+  failUnlessMeasured('G9b', busiestFamily.length, `strike rows in any family (${set})`);
   failUnlessMeasured('G9b', stomps.length, 'stomp rows');
-  failUnlessMeasured('G9b', ALWAYS_DRAWN_ROWS.length, 'always-drawn rows');
+  failUnlessMeasured('G9b', residentWhole.length, `rows held warm in every view (${set})`);
   failUnlessMeasured('G9b', fightReactions.length, 'fight reaction rows');
   failUnlessMeasured('G9b', shellCast.length, 'Protective Shell cast rows');
   failUnlessMeasured('G9b', standbyFrames, 'stand-by frames');
@@ -1253,7 +1324,7 @@ function gateWorkingSet(): void {
   const figureBudget = figureByteBudgetFor(gateFigure);
   const budgetMegabytes = figureBudget / BYTES_PER_MEGABYTE;
   console.log(
-    `  G9b working set: ${rows.length} rows, ${windUps.length} wind-ups and ` +
+    `  G9b working set (${set}): ${rows.length} rows, ${windUps.length} wind-ups and ` +
       `${standby.length} stand-by spans, ${cells} cells, ` +
       `${megabytes.toFixed(2)} MB of the ${budgetMegabytes} MB per-figure budget ` +
       `(strike family: ${busiestFamily.join(', ')})`,
@@ -1261,24 +1332,95 @@ function gateWorkingSet(): void {
   if (bytes > figureBudget) {
     fail(
       'G9b',
-      `the working set (${rows.join(', ')}, the wind-ups of ${windUps.join(', ')}, and the ` +
-        `stand-by spans of ${standby.map((span) => span.row).join(', ')}) warms ` +
-        `to ${megabytes.toFixed(2)} MB against the ` +
-        `cache's ${budgetMegabytes} MB per-figure budget`,
+      `the working set with ${set} in hand (${rows.join(', ')}, the wind-ups of ` +
+        `${windUps.join(', ')}, and the stand-by spans of ` +
+        `${standby.map((span) => span.row).join(', ')}) warms to ${megabytes.toFixed(2)} MB ` +
+        `against the cache's ${budgetMegabytes} MB per-figure budget`,
     );
   }
-  // A comparison that can never see the other side of itself is not a gate —
-  // proves the check above is reachable rather than trivially true, by running
-  // the identical comparison against a figure whose declared budget cannot
-  // possibly cover the same measured bytes.
-  const starvedBudget = figureByteBudgetFor({ ...gateFigure, budgetMegabytes: 0 });
-  if (!(bytes > starvedBudget)) {
-    fail(
-      'G9b',
-      `the working-set check does not fail against a starved 0 MB budget, so it can never fail ` +
-        'against the real one either',
+  const workingSpans = [
+    ...rows.map((row) => ({ row, frames: HUMAN_ROW_TABLE[row].frameCount })),
+    ...windUpSpans,
+    ...standby,
+  ];
+  for (const grip of measuredGrips(set)) {
+    const carrying = humanFigureFor(gateOutfit, grip);
+    const crops = frontLayerBytes(carrying, workingSpans);
+    const armedBytes = bytes + crops.bytes;
+    const armedMegabytes = armedBytes / BYTES_PER_MEGABYTE;
+    console.log(
+      `  G9b carrying (${grip.handle}, ${grip.style}, ${set}): ${crops.layered} layered cells, ` +
+        `front layers ${(crops.bytes / BYTES_PER_MEGABYTE).toFixed(2)} MB (largest ` +
+        `${crops.largest} px), ${armedMegabytes.toFixed(2)} MB of the ${budgetMegabytes} MB ` +
+        'per-figure budget',
     );
+    failUnlessMeasured('G9b', crops.layered, `layered cells carrying (${grip.handle}, ${set})`);
+    if (armedBytes > figureByteBudgetFor(carrying.def)) {
+      fail(
+        'G9b',
+        `carrying (${grip.handle}, ${grip.style}, ${set}) the working set warms to ` +
+          `${armedMegabytes.toFixed(2)} MB with its front layers, against the ${budgetMegabytes} MB budget`,
+      );
+    }
   }
+  return bytes;
+}
+
+/**
+ * What a figure's front layers hold over a set of spans: each layered cell's
+ * front painted at the cell's own density and cropped to its ink, as the
+ * cache crops it.
+ */
+function frontLayerBytes(
+  figure: HumanFigure,
+  spans: readonly HumanWarmSpan[],
+): { layered: number; bytes: number; largest: string } {
+  const layers = figure.def.heldLayers;
+  let layered = 0;
+  let total = 0;
+  let largestArea = 0;
+  let largest = '0×0';
+  if (layers === undefined) return { layered, bytes: total, largest };
+  for (const span of spans) {
+    for (let frame = 0; frame < span.frames; frame++) {
+      if (!layers.layered(span.row, frame)) continue;
+      layered++;
+      const back = createCanvas(frameWidth, frameHeight);
+      const front = createCanvas(frameWidth, frameHeight);
+      layers.paintLayers(
+        asGameContext(back.getContext('2d')),
+        asGameContext(front.getContext('2d')),
+        span.row,
+        frame,
+      );
+      const box = alphaBox(front);
+      if (box === null) continue;
+      total += box.width * box.height * BYTES_PER_PIXEL;
+      if (box.width * box.height > largestArea) {
+        largestArea = box.width * box.height;
+        largest = `${box.width}×${box.height}`;
+      }
+    }
+  }
+  return { layered, bytes: total, largest };
+}
+
+function alphaBox(canvas: Canvas): { width: number; height: number } | null {
+  const data = canvas.getContext('2d').getImageData(0, 0, canvas.width, canvas.height).data;
+  let left = canvas.width;
+  let top = canvas.height;
+  let right = -1;
+  let bottom = -1;
+  for (let y = 0; y < canvas.height; y++) {
+    for (let x = 0; x < canvas.width; x++) {
+      if (data[(y * canvas.width + x) * BYTES_PER_PIXEL + ALPHA_OFFSET] === 0) continue;
+      left = Math.min(left, x);
+      right = Math.max(right, x);
+      top = Math.min(top, y);
+      bottom = Math.max(bottom, y);
+    }
+  }
+  return right < 0 ? null : { width: right - left + 1, height: bottom - top + 1 };
 }
 
 /** G9 — the widest warm row's memory, reported whether or not it passes. */
@@ -1605,7 +1747,11 @@ function gateArmPhase(): void {
     // where the arms hang and nothing lands.
     if (row.view !== 'side' || row.locomotion !== 'travelling' || row.kind !== 'loop') continue;
     const probes = probesOf(row);
+    const gripping = row.pose(0);
     for (const side of LEG_SIDES) {
+      // An arm closed on a weapon carries it rather than swinging free.
+      const shape = side === 'right' ? gripping.rightHandShape : gripping.leftHandShape;
+      if (shape === 'grip') continue;
       const own = armSwingOffsets(probes, side);
       const opposite = armSwingOffsets(probes, otherSide(side));
       const stances = runsWhere(row.frameCount, true, (frame) => footDown(probes[frame], side));
@@ -1633,7 +1779,8 @@ function gateArmPhase(): void {
               'from its hip — it must be swung back, behind the hip',
           );
         }
-        if (opposite[contact] <= 0) {
+        const otherShape = side === 'right' ? gripping.leftHandShape : gripping.rightHandShape;
+        if (otherShape !== 'grip' && opposite[contact] <= 0) {
           fail(
             'G11',
             `${row.name}[${contact}]: the ${otherSide(side)} arm is ` +
@@ -1878,7 +2025,12 @@ const FACING_SWEEP = 64;
  * runs to twice the largest family the table has, whatever that is.
  */
 const SWINGS_PER_CHAIN =
-  2 * Math.max(...[...strikeFamilies().values()].map((family) => family.length));
+  2 *
+  Math.max(
+    ...MOTION_SETS.flatMap((set) =>
+      [...strikeFamilies(set).values()].map((family) => family.length),
+    ),
+  );
 /** Ticks walked before the walking row is read, so the start is behind him. */
 const WALK_IN_TICKS = 20;
 /**
@@ -1894,9 +2046,35 @@ function sweptFacing(index: number): Pt {
   return { x: Math.cos(angle), y: Math.sin(angle) };
 }
 
-/** A player built facing along `facing`, with the animator told so. */
-function playerFacing(facing: Pt): HumanPlayer {
+/**
+ * A weapon item whose grip and weight play `set`, read off the item table so
+ * no gate names a weapon; null for bare hands.
+ */
+function weaponPlaying(set: MotionSet): ItemId | null {
+  if (set === 'unarmed') return null;
+  const found = Object.keys(ITEM_DEF)
+    .filter(isItemId)
+    .find((id) => {
+      const weapon = weaponStatsOf(id);
+      return weapon !== null && motionSetOf(HELD_VISUALS[weapon.heldVisual]) === set;
+    });
+  if (found === undefined) fail('G15', `no weapon item plays the ${set} rows`);
+  return found ?? null;
+}
+
+/**
+ * A player built facing along `facing`, with the animator told so, and with
+ * a weapon of `set` drawn in his hand unless it is bare hands.
+ */
+function playerFacing(facing: Pt, set: MotionSet = 'unarmed'): HumanPlayer {
   const player = new HumanPlayer(0, 0, TILE_SIZE);
+  const weapon = weaponPlaying(set);
+  if (weapon !== null) {
+    player.inventory.addItem(weapon, 1);
+    player.restoreWeaponDrawn(false);
+    player.inventory.equipment.equipById(weapon);
+    player.restoreWeaponDrawn(true);
+  }
   player.facingX = facing.x;
   player.facingY = facing.y;
   player.tickTimers();
@@ -2047,6 +2225,77 @@ function stampSmush(
 }
 
 /**
+ * Throws whole chains with a weapon of `set` drawn, standing and on the move,
+ * at every facing and target kind, recording the cell drawn on each hit's
+ * tick; returns the swings thrown.
+ */
+/** How many places along the seeded order of blows the chains on the run are begun from. */
+const BAG_SHIFTS = 4;
+
+function replaySwings(
+  set: MotionSet,
+  strikeFrames: Map<HumanRowName, Set<number>>,
+  targets: ReadonlyMap<TargetKind, Mob | null>,
+): number {
+  const stander = playerFacing(sweptFacing(0), set);
+  const runner = playerFacing(sweptFacing(0), set);
+  let swingsThrown = 0;
+  for (let index = 0; index < FACING_SWEEP; index++) {
+    const facing = sweptFacing(index);
+    turnTo(stander, facing);
+    runner.facingX = facing.x;
+    runner.facingY = facing.y;
+    walkFor(runner, WALK_IN_TICKS);
+    for (const kind of TARGET_KINDS) {
+      const target = targets.get(kind) ?? null;
+      const reachShare = kind === 'far' ? FAR_TARGET_REACH_SHARE : CLOSE_TARGET_REACH_SHARE;
+      standFor(stander, COMBO_WINDOW_TICKS + 1);
+      for (let swing = 0; swing < SWINGS_PER_CHAIN; swing++) {
+        // Offset by the facing as well: a pair of blows the chain alternates
+        // between would otherwise each meet only every other stride offset.
+        walkFor(runner, (swing + index) % STRIDE_OFFSET_TICKS);
+        for (const [swinger, moving] of [
+          [stander, false],
+          [runner, true],
+        ] as const) {
+          swingsThrown++;
+          const peaks = throwSwing(swinger, moving, strikeFrames, target, reachShare);
+          if (peaks === 1) continue;
+          fail(
+            'G15',
+            `a swing with ${set} in hand ${moving ? 'on the move' : 'standing'} at a ${kind} ` +
+              `target, facing ${index}/${FACING_SWEEP}, peaked on ${peaks} ticks, not 1`,
+          );
+        }
+      }
+    }
+  }
+  // A version of a blow on the move is only drawn from the run frame its legs
+  // begin at, so chains are also thrown from a fresh stride at every tick of
+  // one full cycle, in every view.
+  const runCycleTicks = Math.ceil(RUN_GROUND_PER_CYCLE_PX / PLAYER_SPEED);
+  for (const [, facing] of VIEW_FACINGS) {
+    for (let offset = 0; offset < runCycleTicks * BAG_SHIFTS; offset++) {
+      const fresh = playerFacing(facing, set);
+      // Every player draws its blows from the same seeded order: blows thrown
+      // first, standing and out of the combo window, shift where in that order
+      // the chain on the run begins.
+      for (let shift = 0; shift < Math.floor(offset / runCycleTicks); shift++) {
+        throwSwing(fresh, false, new Map());
+        standFor(fresh, COMBO_WINDOW_TICKS + 1);
+      }
+      walkFor(fresh, WALK_IN_TICKS + (offset % runCycleTicks));
+      for (let swing = 0; swing < SWINGS_PER_CHAIN; swing++) {
+        swingsThrown++;
+        if (throwSwing(fresh, true, strikeFrames) === 1) continue;
+        fail('G15', `a swing with ${set} in hand on the run peaked on more or fewer ticks than 1`);
+      }
+    }
+  }
+  return swingsThrown;
+}
+
+/**
  * G15 — every strike shows its impact frame on the tick the hit is scored,
  * every stomp shows its stamp frame on the tick its blast goes off, and every
  * strike and stomp row in the table is one the runtime actually picks.
@@ -2063,10 +2312,13 @@ function stampSmush(
 function gateImpactTiming(): void {
   const strikeFrames = new Map<HumanRowName, Set<number>>();
   const stampFrames = new Map<HumanRowName, Set<number>>();
-  const stander = playerFacing(sweptFacing(0));
-  const runner = playerFacing(sweptFacing(0));
   const targets = new Map(TARGET_KINDS.map((kind) => [kind, targetMob(kind)] as const));
   let swingsThrown = 0;
+  for (const set of ARMED_MOTION_SETS) {
+    swingsThrown += replaySwings(set, strikeFrames, targets);
+  }
+  const stander = playerFacing(sweptFacing(0));
+  const runner = playerFacing(sweptFacing(0));
   for (let index = 0; index < FACING_SWEEP; index++) {
     const facing = sweptFacing(index);
     turnTo(stander, facing);
@@ -2139,7 +2391,7 @@ function gateImpactTiming(): void {
     ['strike', HUMAN_ATTACK_ROWS, strikeFrames],
     [
       'stomp',
-      HUMAN_ROWS.filter((row) => row.stampAnchor !== undefined).map((row) => row.name),
+      HUMAN_ROWS.filter((row) => stampAnchorOf(row) !== null).map((row) => row.name),
       stampFrames,
     ],
   ];
@@ -2176,61 +2428,78 @@ function gateImpactTiming(): void {
 }
 
 /**
- * G16 — one facing, one view: the strike the runtime draws for a facing,
- * standing or on the run, is in the view `viewForFacing` gives it, and so are
- * the stride, the idle and the Smush. And once a
- * blow is thrown its row and its mirroring hold for the whole swing, however
- * the facing is steered after it.
+ * G16 — one facing, one view. The selector cuts the circle into eight 45°
+ * sectors — east in profile, the south diagonals front-diagonal, south
+ * head-on, the north diagonals back-diagonal, north from behind, the west
+ * half mirrored — and holds a view until the facing is its hysteresis margin
+ * past the sector's edge, so a stick wobbling across an edge never flickers
+ * him between two views. The strike the runtime draws for a facing, standing
+ * or on the run, is in the view his facing selection draws through the
+ * fallback table, and so are the stride, the idle and the Smush, each
+ * mirrored exactly when the selection is and the row is mirrorable. And once
+ * a blow is thrown its row and its mirroring hold for the whole swing,
+ * however the facing is steered after it.
  *
  * Otherwise a diagonal walks in the profile view and strikes head-on, and the
  * figure pops between views on the frame the attack starts — or a punch flips
  * to the other side of him mid-swing because the stick was pulled back.
  */
 function gateViewConsistency(): void {
+  gateSetChangeWhileStopping();
+  gateFacingSectors();
+  gateFacingHysteresis();
+  gateWobbleHoldsTheDrawnRow();
   let mismatches = 0;
   let latchBreaks = 0;
   let latchTicks = 0;
   const examples: string[] = [];
   let facingsMeasured = 0;
-  for (let index = 0; index < FACING_SWEEP; index++) {
-    const facing = sweptFacing(index);
-    const expected = viewForFacing(facing.x, facing.y);
-    const standing = playerFacing(facing).spriteSelection();
-    const walker = playerFacing(facing);
-    walkFor(walker, WALK_IN_TICKS);
-    const walking = walker.spriteSelection();
-    const striker = playerFacing(facing);
-    striker.triggerAttack();
-    const striking = striker.spriteSelection();
-    const standingLatch = swingLatchBreaks(striker, striking);
-    latchBreaks += standingLatch.breaks;
-    latchTicks += standingLatch.ticks;
-    // On the run, at every phase of the stride in turn, so a travelling blow
-    // is thrown as often as a standing one.
-    const runningStriker = playerFacing(facing);
-    walkFor(runningStriker, WALK_IN_TICKS + (index % STRIDE_OFFSET_TICKS));
-    runningStriker.triggerAttack();
-    const runningStrike = runningStriker.spriteSelection();
-    const runningLatch = swingLatchBreaks(runningStriker, runningStrike);
-    latchBreaks += runningLatch.breaks;
-    latchTicks += runningLatch.ticks;
-    const smusher = playerFacing(facing);
-    smusher.triggerSmush();
-    const stamping = smusher.spriteSelection();
-    const hopper = playerFacing(facing);
-    walkFor(hopper, WALK_IN_TICKS);
-    hopper.triggerSmush();
-    const hopping = hopper.spriteSelection();
-    facingsMeasured++;
-    for (const chosen of [striking, runningStrike, walking, standing, stamping, hopping]) {
-      const drawn = HUMAN_ROW_TABLE[chosen.row].view;
-      if (drawn === expected) continue;
-      mismatches++;
-      if (examples.length < VIEW_EXAMPLES) {
-        const degrees = (index / FACING_SWEEP) * DEGREES_PER_TURN;
-        examples.push(
-          `${degrees.toFixed(1)}° draws ${chosen.row} (${drawn}) in a ${expected} facing`,
-        );
+  for (const set of MOTION_SETS) {
+    for (let index = 0; index < FACING_SWEEP; index++) {
+      const facing = sweptFacing(index);
+      const standingPlayer = playerFacing(facing, set);
+      const selection = standingPlayer.facing.current;
+      const expected = carlRowView(selection.view);
+      const standing = standingPlayer.spriteSelection();
+      const walker = playerFacing(facing, set);
+      walkFor(walker, WALK_IN_TICKS);
+      const walking = walker.spriteSelection();
+      const striker = playerFacing(facing, set);
+      striker.triggerAttack();
+      const striking = striker.spriteSelection();
+      const standingLatch = swingLatchBreaks(striker, striking);
+      latchBreaks += standingLatch.breaks;
+      latchTicks += standingLatch.ticks;
+      // On the run, at every phase of the stride in turn, so a travelling blow
+      // is thrown as often as a standing one.
+      const runningStriker = playerFacing(facing, set);
+      walkFor(runningStriker, WALK_IN_TICKS + (index % STRIDE_OFFSET_TICKS));
+      runningStriker.triggerAttack();
+      const runningStrike = runningStriker.spriteSelection();
+      const runningLatch = swingLatchBreaks(runningStriker, runningStrike);
+      latchBreaks += runningLatch.breaks;
+      latchTicks += runningLatch.ticks;
+      const smusher = playerFacing(facing, set);
+      smusher.triggerSmush();
+      const stamping = smusher.spriteSelection();
+      const hopper = playerFacing(facing, set);
+      walkFor(hopper, WALK_IN_TICKS);
+      hopper.triggerSmush();
+      const hopping = hopper.spriteSelection();
+      facingsMeasured++;
+      for (const chosen of [striking, runningStrike, walking, standing, stamping, hopping]) {
+        const row = HUMAN_ROW_TABLE[chosen.row];
+        const expectedFlip = row.mirrorable && selection.flipX;
+        if (row.view === expected && chosen.flipX === expectedFlip) continue;
+        mismatches++;
+        if (examples.length < VIEW_EXAMPLES) {
+          const degrees = (index / FACING_SWEEP) * DEGREES_PER_TURN;
+          examples.push(
+            `${degrees.toFixed(1)}° draws ${chosen.row} (${row.view}, ` +
+              `${chosen.flipX ? 'mirrored' : 'unmirrored'}) in a ${selection.view} facing ` +
+              `that draws ${expected} ${expectedFlip ? 'mirrored' : 'unmirrored'}`,
+          );
+        }
       }
     }
   }
@@ -2247,11 +2516,224 @@ function gateViewConsistency(): void {
     fail(
       'G16',
       `${mismatches} of ${facingsMeasured * VIEW_ROWS_PER_FACING} row choices disagree with ` +
-        `viewForFacing, e.g. ${examples.join('; ')}`,
+        `the facing selection, e.g. ${examples.join('; ')}`,
     );
   }
 }
 
+/** Puts a weapon of `set` out in his hand with no gesture, or empties it for bare hands. */
+function holdSet(player: HumanPlayer, set: MotionSet): void {
+  const weapon = weaponPlaying(set);
+  if (weapon === null) {
+    player.restoreWeaponDrawn(false);
+    return;
+  }
+  player.inventory.addItem(weapon, 1);
+  player.inventory.equipment.equipById(weapon);
+  player.restoreWeaponDrawn(true);
+}
+
+/** Long enough for a stride stopped in any frame to settle, play its stop and stand. */
+const STOP_WATCH_TICKS = 60;
+
+/**
+ * G16, a weapon changed while he pulls up: the stride settling toward one
+ * set's stop, the weapon swapped (dropped, restored, put away under a
+ * reaction) — every row drawn from then on is the new set's own, or a
+ * bare-handed row the new set falls back on, never another armed set's.
+ */
+function gateSetChangeWhileStopping(): void {
+  let changesMeasured = 0;
+  let strays = 0;
+  const examples: string[] = [];
+  for (const from of MOTION_SETS) {
+    for (const to of MOTION_SETS) {
+      if (from === to) continue;
+      for (let offset = 0; offset < RUN_FRAMES; offset++) {
+        const player = playerFacing(sweptFacing(0), from);
+        walkFor(player, WALK_IN_TICKS + offset);
+        standFor(player, 1);
+        holdSet(player, to);
+        changesMeasured++;
+        for (let tick = 0; tick < STOP_WATCH_TICKS; tick++) {
+          const drawn = player.spriteSelection().row;
+          const drawnSet = motionSetOfRow(HUMAN_ROW_TABLE[drawn]);
+          if (drawnSet === 'unarmed' || drawnSet === to) {
+            standFor(player, 1);
+            continue;
+          }
+          strays++;
+          if (examples.length < VIEW_EXAMPLES) {
+            examples.push(`${from} → ${to} at stride offset ${offset} draws ${drawn}`);
+          }
+          break;
+        }
+      }
+    }
+  }
+  failUnlessMeasured('G16', changesMeasured, 'weapon changes while stopping');
+  if (strays > 0) {
+    fail(
+      'G16',
+      `${strays} weapon changes made while he pulls up go on drawing the old set's rows, ` +
+        `e.g. ${examples.join('; ')}`,
+    );
+  }
+}
+
+/** Compass headings in order clockwise from east, 45° apart, and the selection each must give. */
+const COMPASS_SELECTIONS: ReadonlyArray<readonly [string, FacingSelection]> = [
+  ['east', { view: 'side', flipX: false }],
+  ['south-east', { view: 'frontDiagonal', flipX: false }],
+  ['south', { view: 'front', flipX: false }],
+  ['south-west', { view: 'frontDiagonal', flipX: true }],
+  ['west', { view: 'side', flipX: true }],
+  ['north-west', { view: 'backDiagonal', flipX: true }],
+  ['north', { view: 'back', flipX: false }],
+  ['north-east', { view: 'backDiagonal', flipX: false }],
+];
+const COMPASS_STEP_DEGREES = 45;
+const HALF_COMPASS_STEP_DEGREES = COMPASS_STEP_DEGREES / 2;
+/** How far inside a sector, short of its hysteresis band, a heading is said to sit squarely in it. */
+const INSIDE_SECTOR_DEGREES = HALF_COMPASS_STEP_DEGREES - 1;
+/** A wobble across a sector edge kept this share inside the hysteresis margin. */
+const WOBBLE_SHARE_OF_MARGIN = 0.75;
+/** Overshoot past the margin that must turn the view. */
+const PAST_MARGIN_DEGREES = 0.5;
+const WOBBLE_TICKS = 40;
+
+function headingFacing(degrees: number): Pt {
+  const radians = (degrees / DEGREES_PER_TURN) * FULL_TURN;
+  return { x: Math.cos(radians), y: Math.sin(radians) };
+}
+
+function sameSelection(a: FacingSelection, b: FacingSelection): boolean {
+  return a.view === b.view && a.flipX === b.flipX;
+}
+
+function describeSelection(selection: FacingSelection): string {
+  return `${selection.view}${selection.flipX ? ' mirrored' : ''}`;
+}
+
+/** Every compass heading, and either side of its centre, picks its own sector from scratch. */
+function gateFacingSectors(): void {
+  let measured = 0;
+  const viewsSeen = new Set<FacingView>();
+  for (const [step, [name, wanted]] of COMPASS_SELECTIONS.entries()) {
+    const centre = step * COMPASS_STEP_DEGREES;
+    for (const offset of [-INSIDE_SECTOR_DEGREES, 0, INSIDE_SECTOR_DEGREES]) {
+      const facing = headingFacing(centre + offset);
+      const got = selectFacing(facing.x, facing.y);
+      measured++;
+      viewsSeen.add(got.view);
+      if (sameSelection(got, wanted)) continue;
+      fail(
+        'G16',
+        `facing ${name}${offset === 0 ? '' : ` ${offset > 0 ? '+' : ''}${offset}°`} selects ` +
+          `${describeSelection(got)}, not ${describeSelection(wanted)}`,
+      );
+    }
+  }
+  failUnlessMeasured('G16', measured, 'compass headings');
+  if (viewsSeen.size !== FACING_VIEWS.length) {
+    fail(
+      'G16',
+      `the selector reaches ${viewsSeen.size} of the ${FACING_VIEWS.length} facing views round ` +
+        'the circle',
+    );
+  }
+}
+
+/** Each sector edge, as the degrees it sits at and the sectors either side of it. */
+function sectorEdges(): ReadonlyArray<{
+  readonly degrees: number;
+  readonly before: FacingSelection;
+  readonly after: FacingSelection;
+}> {
+  return COMPASS_SELECTIONS.map(([, before], step) => ({
+    degrees: step * COMPASS_STEP_DEGREES + HALF_COMPASS_STEP_DEGREES,
+    before,
+    after: COMPASS_SELECTIONS[(step + 1) % COMPASS_SELECTIONS.length][1],
+  }));
+}
+
+/**
+ * Coming from either side of every edge, a facing inside the margin keeps the
+ * view it came from and one past the margin takes the new one; and a held
+ * facing fed back its own answer gives the same answer.
+ */
+function gateFacingHysteresis(): void {
+  const held = FACING_HYSTERESIS_DEGREES * WOBBLE_SHARE_OF_MARGIN;
+  const past = FACING_HYSTERESIS_DEGREES + PAST_MARGIN_DEGREES;
+  let measured = 0;
+  for (const edge of sectorEdges()) {
+    const cases = [
+      { from: edge.before, offset: held, wanted: edge.before },
+      { from: edge.before, offset: past, wanted: edge.after },
+      { from: edge.after, offset: -held, wanted: edge.after },
+      { from: edge.after, offset: -past, wanted: edge.before },
+    ];
+    for (const { from, offset, wanted } of cases) {
+      const facing = headingFacing(edge.degrees + offset);
+      const got = selectFacing(facing.x, facing.y, from);
+      const again = selectFacing(facing.x, facing.y, got);
+      measured++;
+      if (!sameSelection(got, wanted)) {
+        fail(
+          'G16',
+          `from ${describeSelection(from)}, a facing ${offset.toFixed(1)}° off the edge at ` +
+            `${edge.degrees}° selects ${describeSelection(got)}, not ${describeSelection(wanted)}`,
+        );
+      }
+      if (!sameSelection(again, got)) {
+        fail(
+          'G16',
+          `a facing held at ${(edge.degrees + offset).toFixed(1)}° flips from ` +
+            `${describeSelection(got)} to ${describeSelection(again)} fed its own answer`,
+        );
+      }
+    }
+  }
+  failUnlessMeasured('G16', measured, 'sector edge crossings');
+}
+
+/**
+ * A stick wobbling across every sector edge, inside the margin, standing and
+ * on the move: the view and mirroring he is drawn in never change from the
+ * tick the wobble starts. The walking start may hand over to the stride, so
+ * the row itself is free to change.
+ */
+function gateWobbleHoldsTheDrawnRow(): void {
+  const wobble = FACING_HYSTERESIS_DEGREES * WOBBLE_SHARE_OF_MARGIN;
+  let ticksMeasured = 0;
+  for (const edge of sectorEdges()) {
+    for (const moving of [false, true]) {
+      const player = playerFacing(headingFacing(edge.degrees - wobble));
+      const first = player.spriteSelection();
+      const firstView = HUMAN_ROW_TABLE[first.row].view;
+      let flickers = 0;
+      for (let tick = 0; tick < WOBBLE_TICKS; tick++) {
+        const side = tick % 2 === 0 ? 1 : -1;
+        const facing = headingFacing(edge.degrees + side * wobble);
+        player.facingX = facing.x;
+        player.facingY = facing.y;
+        if (moving) walkFor(player, 1);
+        else turnTo(player, facing);
+        const now = player.spriteSelection();
+        ticksMeasured++;
+        if (HUMAN_ROW_TABLE[now.row].view !== firstView || now.flipX !== first.flipX) flickers++;
+      }
+      if (flickers === 0) continue;
+      fail(
+        'G16',
+        `a facing wobbling ${wobble.toFixed(1)}° either side of the edge at ${edge.degrees}° ` +
+          `${moving ? 'on the move' : 'standing'} changes the view he is drawn in on ` +
+          `${flickers} of ${WOBBLE_TICKS} ticks`,
+      );
+    }
+  }
+  failUnlessMeasured('G16', ticksMeasured, 'wobbling ticks');
+}
 /**
  * Ticks a swing through with the facing reversed, as input steering the other
  * way would, and counts the ticks examined and those on which the drawn row
@@ -2806,7 +3288,7 @@ const HAND_OFF_TOLERANCE_IN_GAME_PX = 1;
 const JUMP_EPSILON_PX = 1e-6;
 
 /** A view, and a facing that draws it unmirrored. */
-const VIEW_FACINGS: ReadonlyArray<readonly [CarlView, Pt]> = [
+const VIEW_FACINGS: ReadonlyArray<readonly [CardinalView, Pt]> = [
   ['side', { x: 1, y: 0 }],
   ['front', { x: 0, y: 1 }],
   ['back', { x: 0, y: -1 }],
@@ -3042,7 +3524,7 @@ const GUARD_OUT_WITHIN_TICKS = GUARD_OUT_WITHIN_SECONDS * TICKS_PER_SECOND;
  * its largest step in a frame, scaled from the ticks a run frame is shown to
  * the ticks the cell cut out of was shown.
  */
-function replayGuardDrop(view: CarlView, facing: Pt): void {
+function replayGuardDrop(view: CardinalView, facing: Pt): void {
   const run = cycleRow('run', view);
   if (run === undefined) {
     fail('G20', `there is no ${view} run to hold a guard drop's hands to`);
@@ -3338,7 +3820,7 @@ function gateStatusFigureBox(): void {
  * and from behind on the viewer's right. Profile has no lateral answer — his
  * right is the near side — so it has no entry.
  */
-const RIGHT_SHOULDER_SCREEN_SIDE: Readonly<Partial<Record<CarlView, number>>> = {
+const RIGHT_SHOULDER_SCREEN_SIDE: Readonly<Partial<Record<CardinalView, number>>> = {
   front: -1,
   back: 1,
 };
@@ -3373,6 +3855,48 @@ function gateHandedness(): void {
     });
   }
   failUnlessMeasured('G22', framesMeasured, 'head-on frames');
+  gateMainHandSide();
+}
+
+/**
+ * G22, its sockets: head-on, the main-hand socket of a frame he carries
+ * something in is his right hand's — nearer his right hand than his left on
+ * the drawn cell — so a carried weapon swaps neither hand nor side as he
+ * turns round. Measured on the carrying figure, whose main hand is closed on
+ * the carried item wherever a row leaves it free.
+ */
+function gateMainHandSide(): void {
+  const carrying = humanFigureFor(BARE_CARL_OUTFIT, {
+    handle: 'standard',
+    style: 'low',
+    motionSet: 'unarmed',
+  });
+  const source = { id: carrying.def.id, painting: carrying.painting };
+  let framesMeasured = 0;
+  for (const row of HUMAN_ROWS) {
+    if (RIGHT_SHOULDER_SCREEN_SIDE[row.view] === undefined) continue;
+    probesOf(row).forEach((probe, frame) => {
+      const main = carlSocketsAt(source, row.name, frame).sockets.mainHand;
+      if (!main.occupied) return;
+      framesMeasured++;
+      const toRight = Math.hypot(
+        main.centre.x - probe.rightArm.wrist.x,
+        main.centre.y - probe.rightArm.wrist.y,
+      );
+      const toLeft = Math.hypot(
+        main.centre.x - probe.leftArm.wrist.x,
+        main.centre.y - probe.leftArm.wrist.y,
+      );
+      if (toRight < toLeft) return;
+      fail(
+        'G22',
+        `${row.name}[${frame}] puts his main hand's socket ${toLeft.toFixed(TILE_DIGITS)} px from ` +
+          `his left wrist and ${toRight.toFixed(TILE_DIGITS)} px from his right in the ${row.view} view`,
+        row.name,
+      );
+    });
+  }
+  failUnlessMeasured('G22', framesMeasured, 'head-on frames carrying an item');
 }
 
 /** Gates in running order, by id. */
@@ -3408,7 +3932,7 @@ function premultipliedDelta(a: Uint8ClampedArray, b: Uint8ClampedArray, index: n
   return delta;
 }
 
-const DRAW_VIEW: Readonly<Record<CarlView, typeof drawCarlFront>> = {
+const DRAW_VIEW: Readonly<Record<CardinalView, typeof drawCarlFront>> = {
   front: drawCarlFront,
   back: drawCarlBack,
   side: drawCarlSide,
@@ -3425,7 +3949,7 @@ function composedCell(row: RowSpec, frame: number, options: CarlComposeOptions):
   ctx.translate(ORIGIN_X, ORIGIN_Y);
   ctx.scale(TILE_SCALE, TILE_SCALE);
   ctx.scale(HUMAN_SCALE, HUMAN_SCALE);
-  const pose = dressedPose(gateAppearance, row.pose(frame), row, frame);
+  const pose = dressedPose(gateOutfit, row.pose(frame), row, frame);
   DRAW_VIEW[row.view](ctx, pose, options);
   return cell;
 }
@@ -3493,7 +4017,10 @@ const GAUNTLET_TIMELINE: ReadonlyMap<number, GauntletForm> = new Map<number, Gau
 /** The blow the gauntlet is best known for; a punch set without it has lost its probe. */
 const SIGNATURE_PUNCH_ROW: HumanRowName = 'cross_side';
 /** Carl in the gauntlet and nothing else he would not wear by default. */
-const GAUNTLET_ONLY: HumanAppearance = { ...DEFAULT_HUMAN_APPEARANCE, gauntlet: true };
+const GAUNTLET_ONLY: Outfit<'human'> = outfitOf('human', [
+  garmentOf('human', 'carl_trollskin_shirt'),
+  garmentOf('human', 'carl_gauntlet'),
+]);
 /**
  * The fewest pixels the spiked steel may change on a punch's impact frame
  * against the bracer on the same pose. Measured on the shipped art, the
@@ -3509,13 +4036,20 @@ function gauntletCell(row: RowSpec, frame: number, form: GauntletForm): Uint8Cla
   ctx.translate(ORIGIN_X, ORIGIN_Y);
   ctx.scale(TILE_SCALE, TILE_SCALE);
   ctx.scale(HUMAN_SCALE, HUMAN_SCALE);
-  const dressed = dressedPose(GAUNTLET_ONLY, row.pose(frame), row, frame);
-  DRAW_VIEW[row.view](ctx, { ...dressed, gear: { ...dressed.gear, gauntlet: form } });
+  // The gauntlet reads its form off when the row's right punch lands, so a row
+  // told it lands on this frame, or never, forces the steel or the bracer.
+  const landsHere = form === 'spiked' ? frame : null;
+  const timed = { ...garmentRowOf(row), rightPunchImpact: landsHere };
+  const pose: CarlPose = {
+    ...row.pose(frame),
+    outfit: { outfit: GAUNTLET_ONLY, row: timed, frame, frameCount: row.frameCount },
+  };
+  DRAW_VIEW[row.view](ctx, pose);
   return cell.getContext('2d').getImageData(0, 0, frameWidth, frameHeight).data;
 }
 
 /**
- * G24's timeline is read off `gauntletFormAt`, which says what the gauntlet
+ * G24's timeline is read off `gauntletFormOn`, which says what the gauntlet
  * *is* on a frame and never that the painter drew it: a painter that paints
  * the bracer whatever the form passes the timeline on every frame. So on each
  * punch's impact frame the cell is painted with the steel and with the bracer,
@@ -3565,7 +4099,7 @@ function gateGauntletTiming(): void {
       const timed =
         punch && fromImpact !== undefined ? GAUNTLET_TIMELINE.get(fromImpact) : undefined;
       const expected: GauntletForm = timed ?? 'bracer';
-      const actual = gauntletFormAt(row, frame);
+      const actual = gauntletFormOn(garmentRowOf(row), frame);
       if (actual === expected) continue;
       fail(
         'G24',
@@ -3761,9 +4295,12 @@ function gateProfileHeadDepth(): void {
         y: skeleton.waist.y - skeleton.shoulderCentre.y,
       };
       const spineTilt = Math.atan2(toWaist.y, toWaist.x) - Math.PI / 2;
-      const jacket = paintPartUpright(skeleton.shoulderCentre, spineTilt, (ctx) =>
-        drawJacket(ctx, skeleton, pose, view),
-      );
+      const jacket = paintPartUpright(skeleton.shoulderCentre, spineTilt, (ctx) => {
+        const torso = torsoFrame(skeleton, pose);
+        paintJacket(ctx, skeleton, pose, view);
+        paintCollar(ctx, torso, view);
+        paintCollarRim(ctx, torso, view);
+      });
       const headInk = solidRowsOf(head);
       const headDepth = widestSpan(headInk, 0, headInk.rows.length - 1);
       const shoulderRow = head.height / 2;
@@ -3914,11 +4451,9 @@ const GATES: ReadonlyArray<readonly [string, () => void]> = [
  * run. Failures from {@link PENDING_GATES} are printed here instead, as is a
  * pending gate that has gone green.
  */
-export function humanGateFailures(
-  appearance: HumanAppearance = DEFAULT_HUMAN_APPEARANCE,
-): string[] {
-  gateAppearance = appearance;
-  gateFigure = humanFigureWearing(appearance);
+export function humanGateFailures(outfit: Outfit<'human'> = DEFAULT_CARL_OUTFIT): string[] {
+  gateOutfit = outfit;
+  gateFigure = humanFigureWearing(outfit);
   alphaByCell.clear();
   failures.length = 0;
   const known = new Set(GATES.map(([id]) => id));

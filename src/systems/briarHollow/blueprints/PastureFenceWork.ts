@@ -28,7 +28,6 @@ import {
   pastureFenceSections,
 } from '../../../map/overworld/briarHollowLayout';
 import { REPAIR_ROWS } from '../../../sprites/art/humanFigure';
-import { viewForFacing } from '../../../sprites/humanSprite';
 import { worldBar } from '../../../ui/world/worldShapes';
 import {
   drawInteractionPrompt,
@@ -309,7 +308,7 @@ export class PastureFenceWork {
   }
 
   private playHammerRow(job: FenceJob, human: HumanPlayer): void {
-    job.posing = human.playAction(REPAIR_ROWS[viewForFacing(job.faceX, job.faceY)], {
+    job.posing = human.playAction(human.rowFacing(REPAIR_ROWS, job.faceX, job.faceY), {
       faceX: job.faceX,
       faceY: job.faceY,
       loop: true,

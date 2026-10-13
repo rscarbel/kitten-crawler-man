@@ -11,6 +11,7 @@ import {
 import type { CitizenSpeechStyle } from '../dialog/speakers';
 import type { DialogLine } from '../dialog/line';
 import { forwardQuestItemEvictions } from '../systems/questItemEvictions';
+import { forwardEquipmentChanges } from '../systems/equipmentChangeEvents';
 import { displayHp } from '../core/crawlerFormulas';
 import type { XpDiminishingTier } from '../levels/xpDiminishing';
 import { type SceneManager } from '../core/Scene';
@@ -622,6 +623,8 @@ export class BuildingInteriorScene extends GameplayScene {
   private readonly bus = new EventBus();
   /** Stops forwarding the crawlers' quest-slot evictions onto this scene's bus; set while the scene is running. */
   private stopForwardingQuestItemEvictions: (() => void) | null = null;
+  /** Stops forwarding the crawlers' equipment changes onto this scene's bus; set while the scene is running. */
+  private stopForwardingEquipmentChanges: (() => void) | null = null;
   private readonly systemNotices: SystemNoticeSystem;
   private readonly tacticsNotices: TacticsNoticeSystem;
   /** Bag, gear, pause menu, award stack, toasts and the hotbar's one routine. */
@@ -2128,6 +2131,11 @@ export class BuildingInteriorScene extends GameplayScene {
       human: this.human,
       cat: this.cat,
     });
+    this.stopForwardingEquipmentChanges?.();
+    this.stopForwardingEquipmentChanges = forwardEquipmentChanges(this.bus, {
+      human: this.human,
+      cat: this.cat,
+    });
     this.stopBagFullToasts?.();
     this.stopBagFullToasts = toastBagFullLosses([this.human, this.cat], this.menus.toasts);
     // Override the overworld's persisted music with the room's own; the
@@ -2287,6 +2295,8 @@ export class BuildingInteriorScene extends GameplayScene {
     this.arrivalLoading.dispose();
     this.stopForwardingQuestItemEvictions?.();
     this.stopForwardingQuestItemEvictions = null;
+    this.stopForwardingEquipmentChanges?.();
+    this.stopForwardingEquipmentChanges = null;
     this.stopBagFullToasts?.();
     this.stopBagFullToasts = null;
     // See the matching note in DungeonScene.onExit: defensive, since a fresh
@@ -4415,7 +4425,7 @@ export class BuildingInteriorScene extends GameplayScene {
             slots: hotbarSlotModels(
               this.menus.itemCooldowns,
               this.inventoryPlayer().inventory,
-              this.menus.inventoryWieldedWeaponId(),
+              this.menus.inventoryDrawnWeaponId(),
             ),
             input: hotbarPressInput(
               () => this.hotbarHost(),

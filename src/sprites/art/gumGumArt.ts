@@ -20,7 +20,8 @@ import type { CarlAttachments } from './carl/figure';
 import { headAngle } from './carl/head';
 import { deriveGlossRamp, type Ramp } from './carl/palette';
 import { HEAD_DEPTH, HEAD_RX, HEAD_RY } from './carl/proportions';
-import type { CarlPose, CarlView, Skeleton, ViewSpec } from './carl/rig';
+import type { CarlPose, Skeleton, ViewSpec } from './carl/rig';
+import { type CardinalView } from '../facingView';
 import { torsoFrame, traceGarmentTorso, type TorsoFrame } from './carl/torso';
 import { mix, rgba, type Pt } from './carlArt';
 import { fillSoftEllipse } from './softShade';
@@ -1197,7 +1198,7 @@ export const GUMGUM_ATTACHMENTS: CarlAttachments = {
 const HEAD_TILT = 0.12;
 
 /** Her bearing on every row: the warm tilt, and never a trace of Carl's scowl. */
-export function gumGumPosture(pose: CarlPose, view: CarlView): CarlPose {
+export function gumGumPosture(pose: CarlPose, view: CardinalView): CarlPose {
   if (view !== 'front') return { ...pose, brow: 0 };
   return { ...pose, headTilt: pose.headTilt + HEAD_TILT, brow: 0 };
 }

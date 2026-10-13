@@ -122,21 +122,32 @@ function headScale(tier: ToolTier): number {
 }
 
 /**
+ * A tier's head measured in the canonical frame: its run along the haft (the
+ * axe's beard to its toe, the pick's swept arms across its bar) and its spread
+ * across it (the axe's poll to its bellied edge, the pick's chisel to its point).
+ */
+export function toolHeadSize(kind: ToolKind, tier: ToolTier): { along: number; across: number } {
+  const s = headScale(tier);
+  if (kind === 'axe') {
+    return {
+      along: (AXE_BEARD_BACK + AXE_TOE_AHEAD) * s,
+      across: (AXE_POLL_REACH + AXE_BLADE_REACH + AXE_EDGE_BELLY) * s,
+    };
+  }
+  return {
+    along: (PICK_SWEEP + PICK_CHISEL_HALF + PICK_BAR_HALF) * s,
+    across: (PICK_CHISEL_REACH + PICK_POINT_REACH) * s,
+  };
+}
+
+/**
  * The farthest any ink of the tool lies from its grip across the haft, in rig
  * units: what a surface it is cached on has to leave room for either side.
  */
-export function toolHalfBreadth(tier: ToolTier): number {
+function toolHalfBreadth(tier: ToolTier): number {
   return (
     (Math.max(AXE_BLADE_REACH + AXE_EDGE_BELLY, PICK_POINT_REACH) + OUTLINE_WIDTH) * headScale(tier)
   );
-}
-
-/** The tool's full extent along the haft, from the knob's end to past the head. */
-export function toolReachAlongHaft(tier: ToolTier): { back: number; ahead: number } {
-  return {
-    back: TOOL_KNOB_LENGTH + KNOB_HALF + OUTLINE_WIDTH,
-    ahead: toolHaftLength(tier) + (AXE_TOE_AHEAD + OUTLINE_WIDTH) * headScale(tier),
-  };
 }
 
 function strokeAndFill(ctx: Ctx, fill: string): void {
@@ -323,13 +334,21 @@ function traceScytheEdge(ctx: Ctx): void {
   );
 }
 
-function paintScythe(ctx: Ctx): void {
+/** The scythe's snath and its nib, in the canonical frame: everything but the blade. */
+export function paintScytheSnath(ctx: Ctx): void {
   const look = TOOL_TIER_LOOKS[SCYTHE_LOOK_TIER];
   ctx.save();
   traceScytheNib(ctx);
   strokeAndFill(ctx, look.hafColor);
   traceScytheSnath(ctx);
   strokeAndFill(ctx, look.hafColor);
+  ctx.restore();
+}
+
+/** The scythe's blade, in the canonical frame, mounted at the snath's end. */
+export function paintScytheBlade(ctx: Ctx): void {
+  const look = TOOL_TIER_LOOKS[SCYTHE_LOOK_TIER];
+  ctx.save();
   traceScytheBlade(ctx);
   strokeAndFill(ctx, look.headColor);
   ctx.save();
@@ -343,22 +362,19 @@ function paintScythe(ctx: Ctx): void {
   ctx.restore();
 }
 
-/** Where a working tool's ink reaches, in rig units from the butt grip: along the haft and across it. */
-export interface WorkingToolExtent {
-  readonly back: number;
-  readonly ahead: number;
-  readonly halfBreadth: number;
+function paintScythe(ctx: Ctx): void {
+  paintScytheSnath(ctx);
+  paintScytheBlade(ctx);
 }
 
-/** {@link toolReachAlongHaft} and {@link toolHalfBreadth} for any working tool, the scythe included. */
-export function workingToolExtent(kind: WorkingToolKind, tier: ToolTier): WorkingToolExtent {
-  if (kind !== 'scythe') return { ...toolReachAlongHaft(tier), halfBreadth: toolHalfBreadth(tier) };
-  return {
-    back: TOOL_KNOB_LENGTH + KNOB_HALF + OUTLINE_WIDTH,
-    ahead: SCYTHE_SNATH_LENGTH + SCYTHE_SPINE_CONTROL.x + OUTLINE_WIDTH,
-    halfBreadth: SCYTHE_TIP.y + OUTLINE_WIDTH,
-  };
-}
+/** The scythe's measurements in the canonical frame, for a held-visual definition of it. */
+export const SCYTHE_DIMENSIONS = {
+  snathLength: SCYTHE_SNATH_LENGTH,
+  /** The blade's run along the snath, from its tip swept back to the spine's belly ahead of the heel. */
+  bladeAlong: SCYTHE_SPINE_CONTROL.x - SCYTHE_TIP.x,
+  /** How far the blade stands off the snath, heel to tip. */
+  bladeAcross: SCYTHE_TIP.y,
+} as const;
 
 /**
  * Paints any working tool in rig units into `ctx`'s current frame, the same
@@ -375,12 +391,22 @@ export function paintWorkingTool(ctx: Ctx, kind: WorkingToolKind, tier: ToolTier
  * every style it uses.
  */
 export function paintTool(ctx: Ctx, kind: ToolKind, tier: ToolTier): void {
+  ctx.save();
+  paintHaft(ctx, toolHaftLength(tier), TOOL_TIER_LOOKS[tier].hafColor);
+  paintToolHead(ctx, kind, tier);
+  ctx.restore();
+}
+
+/**
+ * One tool's head alone, in the canonical frame {@link paintTool} uses, at the
+ * end of its tier's haft: for a painter that draws the haft itself.
+ */
+export function paintToolHead(ctx: Ctx, kind: ToolKind, tier: ToolTier): void {
   const look = TOOL_TIER_LOOKS[tier];
   const length = toolHaftLength(tier);
   const s = headScale(tier);
   const eyeX = length - HEAD_SET_BACK * s;
   ctx.save();
-  paintHaft(ctx, length, look.hafColor);
 
   const traceHead = (): void => {
     if (kind === 'axe') traceAxeHead(ctx, eyeX, s);

@@ -36,12 +36,12 @@ import {
   type ArmAngles,
   buildSkeleton,
   type CarlPose,
-  type CarlView,
   FULL_UPPER_ARM,
   type HandShape,
   setArmAngles,
   VIEWS,
 } from '../carl/rig';
+import { type CardinalView } from '../../facingView';
 import { deg, type Pt } from '../carlArt';
 import {
   anglesThrough,
@@ -53,6 +53,8 @@ import {
   upperArmShareThrough,
 } from './gaitShared';
 import { IDLE_SIDE_FOOT_LEAD, idleBack, idleFront, idleSide } from './idles';
+import { KNUCKLES_TO_CAMERA, PALM_TO_CAMERA, towards, turnHand } from './handTurn';
+import type { Vec3 } from '../../held/heldPaint';
 
 // ── Row lengths and timing ───────────────────────────────────────────────────
 
@@ -158,7 +160,7 @@ interface ThrowKey {
 
 // ── Shared pose building ─────────────────────────────────────────────────────
 
-const IDLE_OF: Record<CarlView, () => CarlPose> = {
+const IDLE_OF: Record<CardinalView, () => CarlPose> = {
   front: () => idleFront(0),
   side: () => idleSide(0),
   back: () => idleBack(0),
@@ -179,7 +181,7 @@ function keyedAngles(key: Exclude<ArmKey, { kind: 'idle' }>, shoulder: Pt): ArmA
   }
 }
 
-function placeArm(pose: CarlPose, view: CarlView, side: 'left' | 'right', key: ArmKey): void {
+function placeArm(pose: CarlPose, view: CardinalView, side: 'left' | 'right', key: ArmKey): void {
   if (key.kind === 'idle') return;
   const skeleton = buildSkeleton(pose, VIEWS[view]);
   const shoulder = side === 'left' ? skeleton.leftArm.root : skeleton.rightArm.root;
@@ -208,7 +210,7 @@ function placeArm(pose: CarlPose, view: CarlView, side: 'left' | 'right', key: A
 /** Under this lift a foot counts as on the floor. */
 const GROUNDED_LIFT = 1e-3;
 
-function placeFoot(pose: CarlPose, view: CarlView, side: 'left' | 'right', key: FootKey): void {
+function placeFoot(pose: CarlPose, view: CardinalView, side: 'left' | 'right', key: FootKey): void {
   const lift = key.lift ?? 0;
   const pitch = deg(key.pitch ?? 0);
   const grounded = lift < GROUNDED_LIFT;
@@ -265,6 +267,28 @@ function heelRaise(pitch: number): { lift: number; depth: number } {
 const HAIR_TRAIL = 0.12;
 const HEM_TRAIL = 0.08;
 
+/**
+ * The lighter is held up with its lid toward the stick, the palm in toward
+ * his centreline: edge-on that is the far hand's palm, toward the camera;
+ * head-on the back of the hand shows, and from behind the palm.
+ */
+const LIGHTER_HAND_PALM: Readonly<Record<CardinalView, Vec3>> = {
+  side: PALM_TO_CAMERA,
+  front: towards(0.6, 0, -0.8),
+  back: towards(0.6, 0, 0.8),
+};
+
+/**
+ * The stick is held in the near fist edge-on, knuckles out; head-on its
+ * knuckles face the way he throws, toward the camera, and from behind away
+ * from it.
+ */
+const STICK_HAND_PALM: Readonly<Record<CardinalView, Vec3>> = {
+  side: KNUCKLES_TO_CAMERA,
+  front: towards(-0.6, 0, -0.8),
+  back: towards(-0.6, 0, 0.8),
+};
+
 function handShapeHolding(holding: boolean): HandShape {
   return holding ? 'grip' : 'open';
 }
@@ -272,7 +296,7 @@ function handShapeHolding(holding: boolean): HandShape {
 /** A hand that has just let go stays open, fingers spread off the release. */
 const OPEN_HAND_FIST = 0;
 
-function poseFromKey(view: CarlView, key: ThrowKey, previous: ThrowKey | null): CarlPose {
+function poseFromKey(view: CardinalView, key: ThrowKey, previous: ThrowKey | null): CarlPose {
   const pose = IDLE_OF[view]();
   pose.crouch = key.crouch;
   pose.sway = key.sway;
@@ -313,6 +337,8 @@ function poseFromKey(view: CarlView, key: ThrowKey, previous: ThrowKey | null): 
   pose.heldProps = props;
   pose.leftHandShape = 'grip';
   pose.rightHandShape = handShapeHolding(key.stick !== null);
+  turnHand(pose, 'left', LIGHTER_HAND_PALM[view]);
+  if (key.stick !== null) turnHand(pose, 'right', STICK_HAND_PALM[view]);
   if (key.stick === null) pose.rightFist = OPEN_HAND_FIST;
   return pose;
 }
@@ -321,7 +347,7 @@ function keyAt(keys: readonly ThrowKey[], frame: number): ThrowKey {
   return keys[Math.min(keys.length - 1, Math.max(0, frame))];
 }
 
-function poseAt(view: CarlView, keys: readonly ThrowKey[], frame: number): CarlPose {
+function poseAt(view: CardinalView, keys: readonly ThrowKey[], frame: number): CarlPose {
   const previous = frame > 0 ? keyAt(keys, frame - 1) : null;
   return poseFromKey(view, keyAt(keys, frame), previous);
 }
@@ -1133,31 +1159,31 @@ export const DYNAMITE_THROWING_HAND = 'right';
 
 // ── Rows ─────────────────────────────────────────────────────────────────────
 
-const LIGHT_KEYS: Record<CarlView, readonly ThrowKey[]> = {
+const LIGHT_KEYS: Record<CardinalView, readonly ThrowKey[]> = {
   side: SIDE_LIGHT,
   front: FRONT_LIGHT,
   back: BACK_LIGHT,
 };
-const THROW_KEYS: Record<CarlView, readonly ThrowKey[]> = {
+const THROW_KEYS: Record<CardinalView, readonly ThrowKey[]> = {
   side: SIDE_THROW,
   front: FRONT_THROW,
   back: BACK_THROW,
 };
-const COCKED: Record<CarlView, ThrowKey> = {
+const COCKED: Record<CardinalView, ThrowKey> = {
   side: SIDE_COCKED,
   front: FRONT_COCKED,
   back: BACK_COCKED,
 };
 
-export function dynamiteLight(view: CarlView, frame: number): CarlPose {
+export function dynamiteLight(view: CardinalView, frame: number): CarlPose {
   return poseAt(view, LIGHT_KEYS[view], frame);
 }
 
-export function dynamiteHold(view: CarlView, frame: number): CarlPose {
+export function dynamiteHold(view: CardinalView, frame: number): CarlPose {
   const previous = holdKey(COCKED[view], frame - 1);
   return poseFromKey(view, holdKey(COCKED[view], frame), previous);
 }
 
-export function dynamiteThrow(view: CarlView, frame: number): CarlPose {
+export function dynamiteThrow(view: CardinalView, frame: number): CarlPose {
   return poseAt(view, THROW_KEYS[view], frame);
 }

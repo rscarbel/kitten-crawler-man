@@ -3,10 +3,10 @@
  * rock with a pick, each a looping two-handed swing in all three views.
  *
  * The tool itself is not in these cells. Its tier changes what it looks like,
- * and a cell is shared by every tier, so it is drawn over the finished figure
- * by `toolOverlaySprite.ts`, along the line his two fists define on each
- * frame. That line is the contract with the overlay: one fist holds the butt
- * — his left unless the row table names his right — and the other sits
+ * and a cell is shared by every tier, so it is drawn between the cell's two
+ * layers, along the line his two fists define on each frame. That line is the
+ * contract with the sockets: one fist holds the butt — his left unless the
+ * swing names his right (`twoHandGrip` on the pose) — and the other sits
  * further up the haft, so the direction from one grip to the other is the
  * way the tool points.
  *
@@ -22,9 +22,21 @@
 
 import { mixPt, pt } from '../carl/geometry';
 import { handGrip } from '../carl/limbs';
-import { type BodySide, buildSkeleton, type CarlPose, type CarlView, VIEWS } from '../carl/rig';
+import {
+  type BodySide,
+  buildSkeleton,
+  type CarlPose,
+  type HaftDepth,
+  HAFT_AWAY_FROM_CAMERA,
+  HAFT_IN_PLANE,
+  HAFT_TOWARD_CAMERA,
+  VIEWS,
+} from '../carl/rig';
+import { type CardinalView } from '../../facingView';
 import { deg, lerp, type Pt } from '../carlArt';
 import { idleBack, idleFront, idleSide } from './idles';
+import { KNUCKLES_TO_CAMERA, PALM_TO_CAMERA, towards, turnHand } from './handTurn';
+import type { Vec3 } from '../../held/heldPaint';
 
 // ── Timing ───────────────────────────────────────────────────────────────────
 
@@ -61,7 +73,7 @@ const DRIVE_FRAMES = 4;
  * How far up the haft the upper (right) fist sits from the butt (left) fist,
  * in rig units, with the haft lying in the picture plane: a hand's width
  * apart, enough for the line between the grips to say which way the tool
- * points on every frame. The overlay reads how much of it shows as how far
+ * points on every frame. The sockets read how much of it shows as how far
  * the haft is turned out of the picture.
  */
 export const TOOL_GRIP_SPACING = 0.13;
@@ -109,7 +121,7 @@ function key(
  * - `liftBulge`: how far the fists' path bows out on the way up, at its
  *   middle, so they travel round the body rather than straight through it.
  * - Each key's `spacing` may run past 1 for a grip wider than a hand's
- *   width: the overlay only reads the haft's direction and caps its length.
+ *   width: the socket only reads the haft's direction and caps its length.
  * - `drive`: the frames between the cock and the blow, when a straight
  *   interpolation cannot show the haft swinging through the camera.
  * - `everyFrame`: a swing authored frame by frame, indexed by frame, where
@@ -191,12 +203,60 @@ const GRIP_SOLVE_PASSES = 3;
  * almost on top of each other. The wrists are nudged until the grips, which
  * are what the tool is drawn through, land where the swing puts them.
  */
-function gripHaft(pose: CarlPose, swing: SwingKey, view: CarlView): void {
-  const buttHand = swing.buttHand ?? DEFAULT_BUTT_HAND;
-  const reach = TOOL_GRIP_SPACING * swing.spacing;
-  const haft = deg(swing.haftDegrees);
-  const buttGrip = swing.butt;
-  const upperGrip = pt(buttGrip.x + Math.cos(haft) * reach, buttGrip.y + Math.sin(haft) * reach);
+function gripHaft(
+  pose: CarlPose,
+  swing: SwingKey,
+  view: CardinalView,
+  coil: number,
+  palms: Readonly<Record<BodySide, Vec3>>,
+): void {
+  closeFistsOnHaft(pose, view, {
+    butt: swing.butt,
+    haftAngle: deg(swing.haftDegrees),
+    spacing: swing.spacing,
+    buttHand: swing.buttHand ?? DEFAULT_BUTT_HAND,
+    depth: haftDepthAt(view, coil),
+    palms,
+  });
+}
+
+/**
+ * Both fists on one haft: where the butt fist grips (figure space as
+ * authored), the haft's direction on screen from it (radians), how many
+ * hands' widths up the haft the other fist grips — under 1 where the haft
+ * turns out of the picture — which fist is at the butt, which way the head
+ * runs out of the picture, and how each palm faces.
+ */
+export interface HaftGrip {
+  readonly butt: Pt;
+  readonly haftAngle: number;
+  readonly spacing: number;
+  readonly buttHand: BodySide;
+  readonly depth: HaftDepth;
+  readonly palms: Readonly<Record<BodySide, Vec3>>;
+}
+
+/**
+ * Closes both of his fists on the haft `grip` describes, the wrists placed so
+ * each grip lands on it, correcting `passes` times: a fist held near the end
+ * of the arm's reach moves its grip less per pass and needs more of them.
+ */
+export function closeFistsOnHaft(
+  pose: CarlPose,
+  view: CardinalView,
+  grip: HaftGrip,
+  passes = GRIP_SOLVE_PASSES,
+): void {
+  const { buttHand } = grip;
+  pose.twoHandGrip = { butt: buttHand, flatSpacing: TOOL_GRIP_SPACING };
+  turnHand(pose, 'left', grip.palms.left, grip.depth);
+  turnHand(pose, 'right', grip.palms.right, grip.depth);
+  const reach = TOOL_GRIP_SPACING * grip.spacing;
+  const buttGrip = grip.butt;
+  const upperGrip = pt(
+    buttGrip.x + Math.cos(grip.haftAngle) * reach,
+    buttGrip.y + Math.sin(grip.haftAngle) * reach,
+  );
   const leftGrip = buttHand === 'left' ? buttGrip : upperGrip;
   const rightGrip = buttHand === 'left' ? upperGrip : buttGrip;
   pose.leftArmAngles = null;
@@ -205,7 +265,7 @@ function gripHaft(pose: CarlPose, swing: SwingKey, view: CarlView): void {
   pose.rightHandShape = 'grip';
   pose.leftHand = leftGrip;
   pose.rightHand = rightGrip;
-  for (let pass = 0; pass < GRIP_SOLVE_PASSES; pass++) {
+  for (let pass = 0; pass < passes; pass++) {
     const skeleton = buildSkeleton(pose, VIEWS[view]);
     const left = handGrip(skeleton.leftArm).centre;
     const right = handGrip(skeleton.rightArm).centre;
@@ -218,6 +278,41 @@ function gripHaft(pose: CarlPose, swing: SwingKey, view: CarlView): void {
       pose.rightHand.y + rightGrip.y - right.y,
     );
   }
+}
+
+/**
+ * How the two fists face on a haft swung two-handed, by swing. Edge-on the
+ * far (left) fist's palm is toward the camera and the near fist's knuckles
+ * are, so each closes over the haft from its own side. Head-on and from
+ * behind the palms face each other across the haft, turned so that the
+ * butt fist's palm, crossed with the haft, points the way the head travels
+ * into the blow: the axe's blade and the pick's point lead the swing, which
+ * comes round anticlockwise for the axe and clockwise for the pick.
+ */
+const CHOP_PALMS: Readonly<Record<CardinalView, Readonly<Record<BodySide, Vec3>>>> = {
+  side: { left: PALM_TO_CAMERA, right: KNUCKLES_TO_CAMERA },
+  front: { left: towards(0.7, 0, -0.7), right: towards(-0.7, 0, -0.7) },
+  back: { left: towards(0.7, 0, -0.7), right: towards(-0.7, 0, -0.7) },
+};
+const MINE_PALMS: Readonly<Record<CardinalView, Readonly<Record<BodySide, Vec3>>>> = {
+  side: { left: PALM_TO_CAMERA, right: KNUCKLES_TO_CAMERA },
+  front: { left: towards(0.7, 0, 0.7), right: towards(-0.7, 0, 0.7) },
+  back: { left: towards(0.7, 0, 0.7), right: towards(-0.7, 0, 0.7) },
+};
+
+/** Coiled past this, the head is back over his shoulder rather than out toward the work. */
+const HEAD_BACK_COIL = 0.5;
+
+/**
+ * Which way the head runs out of the picture: edge-on the swing stays in it;
+ * head-on the head comes at the camera on the blow and goes back over his
+ * shoulder at the cock, and from behind the other way round.
+ */
+function haftDepthAt(view: CardinalView, coil: number): HaftDepth {
+  if (view === 'side') return HAFT_IN_PLANE;
+  const headBack = coil > HEAD_BACK_COIL;
+  const towardCamera = view === 'front' ? !headBack : headBack;
+  return towardCamera ? HAFT_TOWARD_CAMERA : HAFT_AWAY_FROM_CAMERA;
 }
 
 /** A body channel's value at `coil`, between its value on the blow and at full cock. */
@@ -386,10 +481,6 @@ const CHOP_BACK_FRAMES: readonly SwingKey[] = CHOP_FRONT_FRAMES.map((frameKey, f
 });
 const CHOP_BACK: SwingPlan = { ...CHOP_FRONT, everyFrame: CHOP_BACK_FRAMES };
 
-/** Which fist holds the butt on each frame of the head-on and from-behind chop, for the row table. */
-export const CHOP_FACING_TOOL_BUTTS: readonly BodySide[] = CHOP_FRONT_FRAMES.map(
-  (frameKey) => frameKey.buttHand ?? DEFAULT_BUTT_HAND,
-);
 /** Head-on the shoulders turn with the swing: toward his right at the wind-up, his left on the blow. */
 const CHOP_FACING_TWIST: CoilRange = { blow: -0.25, cocked: 0.25 };
 /** Leaning a little into the blow, toward his left, and back over his right on the wind-up. */
@@ -437,6 +528,7 @@ function workingSide(
     readonly headTilt: CoilRange;
     readonly lead: Pt;
     readonly rear: Pt;
+    readonly palms: Readonly<Record<BodySide, Vec3>>;
   },
 ): CarlPose {
   const { key: swing, coil } = swingAt(plan, frame);
@@ -449,7 +541,7 @@ function workingSide(
   pose.lean = coiled(body.lean, coil);
   pose.headTilt = coiled(body.headTilt, coil);
   pose.elbowFlare = SIDE_WORK_ELBOW_FLARE;
-  gripHaft(pose, swing, 'side');
+  gripHaft(pose, swing, 'side', coil, body.palms);
   return pose;
 }
 
@@ -459,6 +551,7 @@ function workingFacing(
   back: boolean,
   footSpread: number,
   crouch: CoilRange,
+  palms: Readonly<Record<BodySide, Vec3>>,
   shape: (pose: CarlPose, coil: number) => void,
 ): CarlPose {
   const { key: swing, coil } = swingAt(plan, frame);
@@ -476,11 +569,11 @@ function workingFacing(
   // Shaped before the grip is solved: the fists are placed from shoulders
   // wherever the body's lean and turn have put them.
   shape(pose, coil);
-  gripHaft(pose, swing, back ? 'back' : 'front');
+  gripHaft(pose, swing, back ? 'back' : 'front', coil, palms);
   return pose;
 }
 
-export function chop(frame: number, view: CarlView): CarlPose {
+export function chop(frame: number, view: CardinalView): CarlPose {
   const f = wrapFrame(frame, CHOP_FRAMES);
   let pose: CarlPose;
   if (view === 'side') {
@@ -490,6 +583,7 @@ export function chop(frame: number, view: CarlView): CarlPose {
       headTilt: { blow: CHOP_SIDE_HEAD_TILT, cocked: CHOP_SIDE_HEAD_TILT },
       lead: CHOP_SIDE_LEAD_FOOT,
       rear: CHOP_SIDE_REAR_FOOT,
+      palms: CHOP_PALMS.side,
     });
   } else {
     const back = view === 'back';
@@ -499,6 +593,7 @@ export function chop(frame: number, view: CarlView): CarlPose {
       back,
       CHOP_FACING_FOOT_SPREAD,
       CHOP_FACING_CROUCH,
+      CHOP_PALMS[view],
       (body, coil) => {
         body.twist = coiled(CHOP_FACING_TWIST, coil);
         body.torsoPitch = CHOP_FACING_BLOW_PITCH * Math.pow(1 - coil, CHOP_FACING_PITCH_RISE);
@@ -512,7 +607,7 @@ export function chop(frame: number, view: CarlView): CarlPose {
   return pose;
 }
 
-export function mine(frame: number, view: CarlView): CarlPose {
+export function mine(frame: number, view: CardinalView): CarlPose {
   const f = wrapFrame(frame, MINE_FRAMES);
   let pose: CarlPose;
   if (view === 'side') {
@@ -522,6 +617,7 @@ export function mine(frame: number, view: CarlView): CarlPose {
       headTilt: MINE_SIDE_HEAD_TILT,
       lead: MINE_SIDE_LEAD_FOOT,
       rear: MINE_SIDE_REAR_FOOT,
+      palms: MINE_PALMS.side,
     });
   } else {
     const back = view === 'back';
@@ -531,6 +627,7 @@ export function mine(frame: number, view: CarlView): CarlPose {
       back,
       MINE_FACING_FOOT_SPREAD,
       MINE_CROUCH,
+      MINE_PALMS[view],
       (body, coil) => {
         body.torsoPitch = coiled(MINE_FACING_PITCH, coil);
         body.chinLift = coiled(MINE_FACING_CHIN, coil);

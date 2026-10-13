@@ -19,12 +19,12 @@ import {
   type ArmAngles,
   buildSkeleton,
   type CarlPose,
-  type CarlView,
   FULL_UPPER_ARM,
   type HandShape,
   setArmAngles,
   VIEWS,
 } from '../carl/rig';
+import { type CardinalView } from '../../facingView';
 import { deg, lerp, type Pt } from '../carlArt';
 import {
   facingArmAngles,
@@ -38,6 +38,8 @@ import {
 } from './gaitShared';
 import { idleBack, idleFront, idleSide } from './idles';
 import { HUMAN_SCALE } from './figureScale';
+import { KNUCKLES_TO_CAMERA, towards, turnHand } from './handTurn';
+import type { Vec3 } from '../../held/heldPaint';
 
 // ── Row lengths and timing ───────────────────────────────────────────────────
 
@@ -108,7 +110,7 @@ function handAt(frame: number, path: HandPath): Pt {
 }
 
 /** The idle frame every row here leaves from and returns to. */
-function seamPose(view: CarlView): CarlPose {
+function seamPose(view: CardinalView): CarlPose {
   if (view === 'front') return idleFront(0);
   if (view === 'back') return idleBack(0);
   return idleSide(0);
@@ -120,12 +122,12 @@ interface SeamWrists {
 }
 
 /** Where the wrists hang on the seam frame, solved from the rig so a path starts exactly there. */
-function seamWrists(view: CarlView): SeamWrists {
+function seamWrists(view: CardinalView): SeamWrists {
   const skeleton = buildSkeleton(seamPose(view), VIEWS[view]);
   return { left: skeleton.leftArm.end, right: skeleton.rightArm.end };
 }
 
-const SEAM_WRISTS: Readonly<Record<CarlView, SeamWrists>> = {
+const SEAM_WRISTS: Readonly<Record<CardinalView, SeamWrists>> = {
   front: seamWrists('front'),
   side: seamWrists('side'),
   back: seamWrists('back'),
@@ -260,7 +262,12 @@ function raiseArm(pose: CarlPose, side: number, frame: number, path: RaisedPath)
  * way the gripping hand holds it in this pose. Measured off the solved chain,
  * because the grip's own haft angle follows the forearm and the wrist.
  */
-function propAngleFor(pose: CarlPose, view: CarlView, hand: 'left' | 'right', aim: number): number {
+function propAngleFor(
+  pose: CarlPose,
+  view: CardinalView,
+  hand: 'left' | 'right',
+  aim: number,
+): number {
   const skeleton = buildSkeleton(pose, VIEWS[view]);
   const chain = hand === 'right' ? skeleton.rightArm : skeleton.leftArm;
   return aim - handGrip(chain).haftAngle;
@@ -565,7 +572,7 @@ const DRINK_MOUTHS: readonly MouthShape[] = [
 ];
 
 /** Where his mouth is on the posed body, in figure space. */
-function mouthOf(pose: CarlPose, view: CarlView): Pt {
+function mouthOf(pose: CarlPose, view: CardinalView): Pt {
   const skeleton = buildSkeleton(pose, VIEWS[view]);
   const head = skeleton.headCentre;
   if (view === 'side') {
@@ -642,7 +649,7 @@ function drinkFace(pose: CarlPose, frame: number): void {
   plantFeet(pose);
 }
 
-function holdBottle(pose: CarlPose, view: CarlView, aim: number): void {
+function holdBottle(pose: CarlPose, view: CardinalView, aim: number): void {
   pose.rightHandShape = 'grip';
   pose.heldProps = [
     {
@@ -652,7 +659,19 @@ function holdBottle(pose: CarlPose, view: CarlView, aim: number): void {
       scale: HELD_BOTTLE_SCALE,
     },
   ];
+  turnHand(pose, 'right', BOTTLE_HAND_PALM[view]);
 }
+
+/**
+ * The bottle is held round its body with the palm toward his mouth: edge-on
+ * the near fist's knuckles are out, head-on the back of the hand shows over
+ * it, and from behind the palm.
+ */
+const BOTTLE_HAND_PALM: Readonly<Record<CardinalView, Vec3>> = {
+  side: KNUCKLES_TO_CAMERA,
+  front: towards(-0.5, 0, -0.85),
+  back: towards(-0.5, 0, 0.85),
+};
 
 /**
  * Held up at his face the bottle is half hidden by the fist and the head, so
@@ -667,7 +686,7 @@ function drinkAim(frame: number, level: number, tipped: number): number {
 }
 
 /** Where the mouth-relative bottle hand sits at `frame`, whether or not that frame is actually in the at-mouth range. */
-function drinkMouthTargetFront(pose: CarlPose, view: CarlView, frame: number): Pt {
+function drinkMouthTargetFront(pose: CarlPose, view: CardinalView, frame: number): Pt {
   const mouth = mouthOf(pose, view);
   const beside = mixPt(
     BOTTLE_FIST_BESIDE_MOUTH_FRONT,
@@ -678,13 +697,13 @@ function drinkMouthTargetFront(pose: CarlPose, view: CarlView, frame: number): P
 }
 
 /** Where the lowered bottle hand sits, just under the chin. */
-function drinkLoweredTargetFront(pose: CarlPose, view: CarlView): Pt {
+function drinkLoweredTargetFront(pose: CarlPose, view: CardinalView): Pt {
   const mouth = mouthOf(pose, view);
   return pt(mouth.x + BOTTLE_LOWERED_FRONT.x, mouth.y + BOTTLE_LOWERED_FRONT.y);
 }
 
 /** Where the wiping hand's knuckles sit against the mouth, at a wipe frame's own offset. */
-function drinkWipeTargetFront(pose: CarlPose, view: CarlView, knuckles: Pt): Pt {
+function drinkWipeTargetFront(pose: CarlPose, view: CardinalView, knuckles: Pt): Pt {
   const mouth = mouthOf(pose, view);
   return pt(mouth.x + knuckles.x, mouth.y + knuckles.y);
 }
@@ -698,7 +717,7 @@ function drinkWipeTargetFront(pose: CarlPose, view: CarlView, knuckles: Pt): Pt 
  */
 function raiseHandPos(
   pose: CarlPose,
-  view: CarlView,
+  view: CardinalView,
   side: number,
   frame: number,
   path: RaisedPath,

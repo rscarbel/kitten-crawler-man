@@ -649,6 +649,19 @@ const SEAT_OUTBOARD = pt(1, 0);
 const LEFT_PRINT_SEED = 3;
 const RIGHT_PRINT_SEED = 5;
 
+/** Traces the shorts' outline as {@link drawShorts} lays it out, without painting it. */
+export function traceShortsOutline(
+  ctx: Ctx,
+  hip: Pt,
+  halfWidth: number,
+  flare: number,
+  view: ViewSpec,
+  legs: LegPair,
+  flutter: ShortsFlutter = {},
+): void {
+  traceShorts(ctx, solveShorts(hip, halfWidth, flare, view, legs, flutter));
+}
+
 /**
  * The boxers. `notch` is how deep the leg openings cut: edge-on you see one hip
  * wrapped in cloth, and cutting the full crotch V there splits the shorts into

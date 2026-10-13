@@ -118,8 +118,8 @@ request is a guess, and may only evict a row idle as long as the sweep's own
 loading screen, after a scene rebuild — reads every row as unused and evicts the party's
 own, which the first frames of play then re-bake on the render path.
 
-**A crowd is pinned, not swept.** The global ceiling, `CACHE_BUDGET_MEGABYTES` (180), is
-sized for a town plaza. The crowd's own working set is about 122 MB, and on top of it sits
+**A crowd is pinned, not swept.** The global ceiling, `CACHE_BUDGET_MEGABYTES` (188), is
+sized for a town plaza and for arriving on level 3. The crowd's own working set is about 122 MB, and on top of it sits
 the player's own per-figure ceiling (56 MB), so a town visit never leaves Carl's new gear
 nowhere to bake. The ten-second idle window is a false signal for a strolling crowd:
 a look worn by one or two citizens can go that long between draws of its rarer facing.

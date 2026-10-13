@@ -745,8 +745,7 @@ function drawHotbarRow(
     const cooldown = item === null ? null : (screen.host.cooldownFor?.(item) ?? null);
     const target: MenuTarget | null =
       item === null || isQuest ? null : { source: 'hotbar', slotIdx: index, item };
-    const worn =
-      item !== null && (inventory.hasEquipped(item.id) || member.wieldedWeaponId === item.id);
+    const worn = item !== null && inventory.showsInUse(item.id, member.drawnWeaponId ?? null);
     const state = itemSlot(ui, cell, {
       id: regionId,
       item: item?.id ?? null,
@@ -928,6 +927,7 @@ function drawCharacterTab(
 
   dollColumn(ui, dollRect, {
     id: 'doll',
+    kind: member.id,
     owner: member.owner,
     tooltips: !screen.touch && drag === null && screen.menu === null,
     cell: (slot, cellRect) => {

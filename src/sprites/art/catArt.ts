@@ -16,23 +16,19 @@
  *
  * Coordinates are tile units — the caller transforms the context so 1.0 unit is
  * one tile — with the origin at the centre of the logical tile and +Y pointing
- * down the screen.  The profile view faces +X; the runtime mirrors it.
+ * down the screen. The profile view faces +X; facing west it is painted
+ * mirrored with her other flank's coat, never flipped at runtime.
  */
 
-import { drawShadesBack, drawShadesFront, drawShadesSide } from './catShadesArt';
+import type {
+  CatDressing,
+  CatHeadLandmarks,
+  CatNeckFrame,
+  CatSide,
+  CatTailFrame,
+} from './catParts';
 
 type Ctx = CanvasRenderingContext2D;
-
-/**
- * What Donut has on that shows on her figure. Each distinct value is its own
- * painted figure, so this stays a short closed set of flags.
- */
-export interface CatWear {
-  /** The Eyes of Splatter, over her eyes. */
-  readonly shades: boolean;
-}
-
-export const BARE_CAT: CatWear = { shades: false };
 
 // ── Small math ───────────────────────────────────────────────────────────────
 
@@ -645,6 +641,45 @@ export interface CatPose {
   readonly sparkle: number;
   /** Phase used to animate sparkles and quivers within a held pose. */
   readonly time: number;
+  /** Present while she holds something: a tool in her forepaws or a small thing in her jaws. */
+  readonly grip?: CatGrip;
+}
+
+/**
+ * Her painted slabs in the order a held thing can sit among them: the floor
+ * shadow, her body and legs, her forepaws closed on a haft, her head. A held
+ * thing under a slab is drawn after everything painted before that slab and
+ * before the slab itself.
+ */
+export const CAT_SLABS = ['shadow', 'body', 'forepaws', 'head'] as const;
+export type CatSlab = (typeof CAT_SLABS)[number];
+
+/** A direction in camera space: x screen right, y screen down, z toward the camera. */
+export interface CatDirection {
+  readonly x: number;
+  readonly y: number;
+  readonly z: number;
+}
+
+/** What she holds on a frame, and how, as her own painter and her sockets both read it. */
+export interface CatGrip {
+  /**
+   * The slab the held thing lies directly under: it and everything painted
+   * after it is in front of the thing. Absent where the thing lies over all of
+   * her, as a toy in her jaws does seen from the front or the side.
+   */
+  readonly under?: CatSlab;
+  /** Both forepaws close on a haft: curled over it, claws hooked, beans showing. */
+  readonly pawsClosed: boolean;
+  /**
+   * The held thing's direction, butt to head, in the pose's own frame facing
+   * east (her lean and roll turn it with her): screen radians, and how far it
+   * turns toward the camera as the sine of its angle out of the screen.
+   */
+  readonly haftAngle: number;
+  readonly haftDepth: number;
+  /** Which way the pads closed on it face, camera space facing east. */
+  readonly padNormal: CatDirection;
 }
 
 const REST_PAW: PawPose = { dx: 0, dy: 0, lift: 0, claw: 0 };
@@ -721,17 +756,6 @@ const EYE_RY = 0.057;
 
 const MUZZLE_DY = 0.095;
 
-/** Where the shades' temple arms meet her skull, face-on: out at the ear roots, a little above the eyes. */
-const SHADES_TEMPLE_X = 0.21;
-const SHADES_TEMPLE_RISE = -0.045;
-/** From behind, how far out on her skull the arms show, as a share of its half-width. */
-const SHADES_BACK_ARM_SPREAD = 0.95;
-/** In profile, where the near arm meets her skull in front of the ear. */
-const SHADES_SIDE_EAR_X = -0.06;
-const SHADES_SIDE_EAR_Y = -0.065;
-/** In profile, the near lens sits just forward of her eye, on the slope of the muzzle. */
-const SHADES_SIDE_LENS_X = 0.07;
-const SHADES_SIDE_LENS_Y = -0.012;
 const NOSE_DY = 0.062;
 const NOSE_W = 0.038;
 const NOSE_H = 0.03;
@@ -844,11 +868,14 @@ const WHISKER_DOTS_PER_SIDE = 3;
 const WHISKER_DOT_COUNT = WHISKER_DOTS_PER_SIDE * 2;
 
 /**
- * @param side -1 for her right ear (screen left), +1 for her left.
+ * @param ear which of her ears this is.
+ * @param side -1 for the ear on screen left, +1 for the one on screen right.
  * @param tilt -1 flattened back against the skull, +1 pricked forward.
  */
 function drawEar(
   ctx: Ctx,
+  dressing: CatDressing,
+  ear: CatSide,
   cx: number,
   cy: number,
   side: number,
@@ -881,7 +908,7 @@ function drawEar(
     { x: 0, y: 0.085 },
   ];
 
-  paintFur(ctx, {
+  const fur: FurPart = {
     outline,
     blobs: back
       ? []
@@ -893,7 +920,8 @@ function drawEar(
     strokeLen: 0.05,
     flowFrom: { x: 0, y: 0.1 },
     shade: back ? 0.12 : 0,
-  });
+  };
+  dressing.part(ctx, 'head', { piece: 'ear', side: ear, fur, envelope: outline });
 
   if (!back) {
     ctx.beginPath();
@@ -1177,6 +1205,8 @@ const PAW_ANKLE_SHADE_ALPHA = 0.42;
 /** How far the toes bulge past the ankle's width. */
 const PAW_TOE_BULGE = 0.3;
 const PAW_OUTLINE_STEPS = 30;
+/** A head-on limb column's half-width, before its fur wobbles it. */
+const LIMB_COLUMN_HALF_WIDTH = 0.052;
 
 /**
  * A paw silhouette: narrow at the ankle, spreading into toes at the bottom.
@@ -1197,47 +1227,34 @@ function pawOutline(seed: number): Pt[] {
   return pts;
 }
 
+/** Which pair a leg belongs to, as the dressing names its part. */
+type LegPart = 'foreleg' | 'hindleg';
+
 /**
  * A fluffy paw seen from the front, with toe tufts and optional claws.
  * @param angle rotation of the paw, used when a leg reaches across the body.
  */
 function drawPaw(
   ctx: Ctx,
+  dressing: CatDressing,
+  leg: LegPart,
+  legSide: CatSide,
   x: number,
   y: number,
   angle: number,
   claw: number,
   scale = 1,
   shade = 0,
+  closed = false,
 ): void {
   ctx.save();
   ctx.translate(x, y);
   ctx.rotate(angle);
   ctx.scale(scale, scale);
 
-  if (claw > 0.02) {
-    ctx.save();
-    ctx.strokeStyle = rgba(FANG_WHITE, 0.95);
-    ctx.lineWidth = 0.011;
-    ctx.lineCap = 'round';
-    for (let i = 0; i < CLAW_COUNT; i++) {
-      const t = (i + 0.5) / CLAW_COUNT;
-      const cx = lerp(-PAW_RX * 0.8, PAW_RX * 0.8, t);
-      const len = CLAW_LEN * claw * (0.75 + 0.4 * Math.sin(t * Math.PI));
-      ctx.beginPath();
-      ctx.moveTo(cx, PAW_RY * 0.3);
-      ctx.quadraticCurveTo(
-        cx + len * 0.25,
-        PAW_RY * 0.3 + len * 0.7,
-        cx + len * 0.15,
-        PAW_RY * 0.3 + len,
-      );
-      ctx.stroke();
-    }
-    ctx.restore();
-  }
+  if (claw > 0.02 && !closed) drawClaws(ctx, claw);
 
-  paintFur(ctx, {
+  const pawFur: FurPart = {
     outline: pawOutline(5.5 + x * 7),
     blobs: PAW_BLOBS,
     base: 'cream',
@@ -1247,6 +1264,15 @@ function drawPaw(
     strokeLen: 0.04,
     flowFrom: { x: 0, y: -PAW_RY * 2 },
     shade,
+  };
+  dressing.part(ctx, leg, {
+    piece: 'paw',
+    side: legSide,
+    radiusX: PAW_RX,
+    radiusY: PAW_RY,
+    shade,
+    fur: pawFur,
+    envelope: pawFur.outline,
   });
 
   // The ankle is in the leg's shadow. Without this the paw reads as a disc
@@ -1272,12 +1298,62 @@ function drawPaw(
     ctx.stroke();
   }
 
+  if (closed) {
+    drawToeBeans(ctx);
+    drawClaws(ctx, claw);
+  }
+
+  ctx.restore();
+}
+
+function drawClaws(ctx: Ctx, claw: number): void {
+  ctx.save();
+  ctx.strokeStyle = rgba(FANG_WHITE, 0.95);
+  ctx.lineWidth = 0.011;
+  ctx.lineCap = 'round';
+  for (let i = 0; i < CLAW_COUNT; i++) {
+    const t = (i + 0.5) / CLAW_COUNT;
+    const cx = lerp(-PAW_RX * 0.8, PAW_RX * 0.8, t);
+    const len = CLAW_LEN * claw * (0.75 + 0.4 * Math.sin(t * Math.PI));
+    ctx.beginPath();
+    ctx.moveTo(cx, PAW_RY * 0.3);
+    ctx.quadraticCurveTo(
+      cx + len * 0.25,
+      PAW_RY * 0.3 + len * 0.7,
+      cx + len * 0.15,
+      PAW_RY * 0.3 + len,
+    );
+    ctx.stroke();
+  }
+  ctx.restore();
+}
+
+/** The pink pads under her toes, showing where the toes curl over whatever the paw has closed on. */
+const TOE_BEAN = '#d98c94';
+const TOE_BEAN_ROW_Y = 0.78;
+const TOE_BEAN_RX = 0.017;
+const TOE_BEAN_RY = 0.012;
+const TOE_BEAN_SPREAD = 0.62;
+
+function drawToeBeans(ctx: Ctx): void {
+  ctx.save();
+  ctx.fillStyle = TOE_BEAN;
+  for (let i = 0; i < TOE_COUNT; i++) {
+    const t = i / (TOE_COUNT - 1);
+    const bx = lerp(-PAW_RX * TOE_BEAN_SPREAD, PAW_RX * TOE_BEAN_SPREAD, t);
+    ctx.beginPath();
+    ctx.ellipse(bx, PAW_RY * TOE_BEAN_ROW_Y, TOE_BEAN_RX, TOE_BEAN_RY, 0, 0, TWO_PI);
+    ctx.fill();
+  }
   ctx.restore();
 }
 
 /** A limb column from shoulder or hip to paw — the fluff that hides the joint. */
 function drawLimbColumn(
   ctx: Ctx,
+  dressing: CatDressing,
+  leg: LegPart,
+  legSide: CatSide,
   hipX: number,
   hipY: number,
   pawX: number,
@@ -1291,8 +1367,17 @@ function drawLimbColumn(
   ctx.save();
   ctx.translate(hipX, hipY);
   ctx.rotate(angle - HALF_PI);
-  paintFur(ctx, {
-    outline: ovalOutline(0, len / 2, 0.052, len / 2 + 0.015, 0, 9.1 + hipX * 5, 0.06, 30),
+  const fur: FurPart = {
+    outline: ovalOutline(
+      0,
+      len / 2,
+      LIMB_COLUMN_HALF_WIDTH,
+      len / 2 + 0.015,
+      0,
+      9.1 + hipX * 5,
+      0.06,
+      30,
+    ),
     blobs: [{ x: 0, y: len * 0.15, rx: 0.05, ry: len * 0.3, tone: 'ginger', seed: 3.4 }],
     base: 'cream',
     seed: 31 + hipX * 11,
@@ -1301,6 +1386,15 @@ function drawLimbColumn(
     strokeLen: 0.045,
     flowFrom: { x: 0, y: -0.2 },
     shade,
+  };
+  dressing.part(ctx, leg, {
+    piece: 'column',
+    side: legSide,
+    length: len,
+    halfWidth: LIMB_COLUMN_HALF_WIDTH,
+    shade,
+    fur,
+    envelope: fur.outline,
   });
   ctx.restore();
 }
@@ -1308,8 +1402,8 @@ function drawLimbColumn(
 // ── Tail ─────────────────────────────────────────────────────────────────────
 
 interface TailSpine {
-  readonly points: Pt[];
-  readonly widths: number[];
+  readonly points: readonly Pt[];
+  readonly widths: readonly number[];
 }
 
 /**
@@ -1374,10 +1468,32 @@ const TAIL_HAIRS_PER_SEGMENT = 9;
 const TAIL_CONTOUR_WIDTH = 0.03;
 const TAIL_CONTOUR_ALPHA = 0.5;
 
-/** Draws the tail behind or in front of the body, depending on the view. */
-export function drawTail(ctx: Ctx, baseX: number, baseY: number, tail: TailPose, shade = 0): void {
+/** Hands her tail to the dressing: called behind or in front of the body, depending on the view. */
+function drawTail(
+  ctx: Ctx,
+  dressing: CatDressing,
+  baseX: number,
+  baseY: number,
+  tail: TailPose,
+  shade = 0,
+): void {
   const spine = buildTailSpine(baseX, baseY, tail);
-  const outline = tailOutline(spine);
+  dressing.part(ctx, 'tail', {
+    piece: 'tail',
+    spine: spine.points,
+    widths: spine.widths,
+    puff: tail.puff,
+    shade,
+    envelope: tailOutline(spine),
+  });
+}
+
+/** Paints her tail's fur: banded tortie rings along the spine, hairs lying along it. */
+export function paintTailCoat(ctx: Ctx, frame: CatTailFrame): void {
+  const spine: TailSpine = { points: frame.spine, widths: frame.widths };
+  const outline = frame.envelope;
+  const { x: baseX, y: baseY } = frame.spine[0];
+  const { puff, shade } = frame;
 
   ctx.save();
   drawFringe(
@@ -1387,7 +1503,7 @@ export function drawTail(ctx: Ctx, baseX: number, baseY: number, tail: TailPose,
       blobs: [],
       base: 'black',
       seed: 41,
-      fringe: 0.05 * (1 + tail.puff),
+      fringe: 0.05 * (1 + puff),
       strokes: 0,
       strokeLen: 0,
       flowFrom: { x: baseX, y: baseY },
@@ -1473,7 +1589,7 @@ export function drawTail(ctx: Ctx, baseX: number, baseY: number, tail: TailPose,
       blobs: [],
       base: 'black',
       seed: 41,
-      fringe: 0.05 * (1 + tail.puff),
+      fringe: 0.05 * (1 + puff),
       strokes: 0,
       strokeLen: 0,
       flowFrom: { x: baseX, y: baseY },
@@ -1595,6 +1711,51 @@ export function drawSparkles(ctx: Ctx, strength: number, time: number): void {
   ctx.restore();
 }
 
+// ── Slabs and the held thing between them ────────────────────────────────────
+
+/**
+ * Lays her down slab by slab into her cell and, when she holds something
+ * between two layers, every slab from the held thing's own onward into the
+ * front layer as well, under the same transform. Painting the front slabs a
+ * second time is what keeps the two layers in register: her fur is seeded
+ * from the shape, so a slab painted twice is the same pixels twice.
+ */
+export class CatLayers {
+  private inFront = false;
+
+  constructor(
+    readonly ctx: Ctx,
+    private readonly front: Ctx | null = null,
+    private readonly under: CatSlab | null = null,
+  ) {}
+
+  /** Paints one slab: into the cell, and into the front layer once the held thing is behind it. */
+  slab(name: CatSlab, paint: (c: Ctx) => void): void {
+    if (name === this.under) this.inFront = true;
+    paint(this.ctx);
+    const front = this.front;
+    if (!this.inFront || front === null) return;
+    const placed = this.ctx.getTransform();
+    front.save();
+    front.setTransform(placed.a, placed.b, placed.c, placed.d, placed.e, placed.f);
+    paint(front);
+    front.restore();
+  }
+}
+
+/** The slab a pose's held thing lies under, if it lies under any. */
+function heldUnder(p: CatPose): CatSlab | null {
+  return p.grip?.under ?? null;
+}
+
+/** Whether a pose's forepaws close on a haft. */
+function pawsClosed(p: CatPose): boolean {
+  return p.grip?.pawsClosed === true;
+}
+
+/** Claws half out, hooked over a haft she has closed her paws on. */
+const CLOSED_PAW_CLAW = 0.55;
+
 // ── Front view (walking toward the camera) ───────────────────────────────────
 
 function bodyMetrics(p: CatPose): { cx: number; cy: number; rx: number; ry: number } {
@@ -1603,6 +1764,38 @@ function bodyMetrics(p: CatPose): { cx: number; cy: number; rx: number; ry: numb
   const rx = lerp(BODY_RX, SIT_BODY_RX, p.sit) * (1 + p.breathe * 0.03);
   const ry = lerp(BODY_RY, SIT_BODY_RY, p.sit) * p.squash * (1 + p.breathe * 0.04);
   return { cx, cy, rx, ry };
+}
+
+/**
+ * Where a collar sits, view by view: head-on just under her chin on the ruff,
+ * from behind across her nape, in profile a band across the neck between her
+ * chest ruff and her jaw, placed from the head so it follows every bob and bow.
+ */
+const FRONT_COLLAR_BELOW_HEAD = 0.24;
+const FRONT_COLLAR_RX = 0.13;
+/** A bowed head carries the collar no lower than this share of the ruff's half-height above its middle. */
+const FRONT_COLLAR_LOWEST_ON_RUFF = 0.5;
+const FRONT_COLLAR_RY = 0.035;
+const BACK_COLLAR_BELOW_HEAD = 0.2;
+const BACK_COLLAR_RX = 0.14;
+const BACK_COLLAR_RY = 0.035;
+const SIDE_COLLAR_OFFSET: Pt = { x: -0.07, y: 0.17 };
+const SIDE_COLLAR_RX = 0.045;
+const SIDE_COLLAR_RY = 0.12;
+const SIDE_COLLAR_TILT = deg(-35);
+const COLLAR_ENVELOPE_STEPS = 24;
+
+function collarFrame(centre: Pt, rx: number, ry: number, tilt: number): CatNeckFrame {
+  const cos = Math.cos(tilt);
+  const sin = Math.sin(tilt);
+  const envelope: Pt[] = [];
+  for (let i = 0; i < COLLAR_ENVELOPE_STEPS; i++) {
+    const angle = (i / COLLAR_ENVELOPE_STEPS) * TWO_PI;
+    const lx = Math.cos(angle) * rx;
+    const ly = Math.sin(angle) * ry;
+    envelope.push({ x: centre.x + lx * cos - ly * sin, y: centre.y + lx * sin + ly * cos });
+  }
+  return { piece: 'collar', band: { cx: centre.x, cy: centre.y, rx, ry }, tilt, envelope };
 }
 
 function headAnchor(p: CatPose): Pt {
@@ -1658,7 +1851,13 @@ export function catMouthFront(p: CatPose): Pt {
   return rotatePoint({ x: head.anchor.x + tilted.x, y: head.anchor.y + tilted.y }, p.roll);
 }
 
-function drawHeadFront(ctx: Ctx, p: CatPose, back: boolean, wear: CatWear): void {
+/** Her own side of the head-on screen half `side` (-1 left, +1 right): mirrored from behind. */
+function headOnSide(side: number, back: boolean): CatSide {
+  const onScreenLeft = side < 0;
+  return onScreenLeft === back ? 'left' : 'right';
+}
+
+function drawHeadFront(ctx: Ctx, p: CatPose, back: boolean, dressing: CatDressing): void {
   const placement = frontHeadPlacement(p, back);
   const anchor = placement.anchor;
   const turn = p.headTurn;
@@ -1669,55 +1868,80 @@ function drawHeadFront(ctx: Ctx, p: CatPose, back: boolean, wear: CatWear): void
   ctx.scale(placement.scaleX, placement.scaleY);
 
   const earShiftL = turn * 0.03;
-  drawEar(ctx, -EAR_DX + earShiftL, EAR_DY, -1, p.earL, back);
-  drawEar(ctx, EAR_DX + earShiftL, EAR_DY, 1, p.earR, back);
+  const leftEarRoot = { x: -EAR_DX + earShiftL, y: EAR_DY };
+  const rightEarRoot = { x: EAR_DX + earShiftL, y: EAR_DY };
+  if (!dressing.hides('ears')) {
+    drawEar(ctx, dressing, headOnSide(-1, back), leftEarRoot.x, leftEarRoot.y, -1, p.earL, back);
+    drawEar(ctx, dressing, headOnSide(1, back), rightEarRoot.x, rightEarRoot.y, 1, p.earR, back);
+  }
 
   const blobs = back ? HEAD_BACK_BLOBS : HEAD_BLOBS;
-  const skull = ovalOutline(turn * 0.02, 0, HEAD_RX, HEAD_RY, 0, 2.6, 0.05);
-  paintFur(ctx, {
-    outline: skull,
-    blobs,
-    base: 'black',
-    seed: 51,
-    fringe: 0.03,
-    strokes: 150,
-    strokeLen: 0.055,
-    flowFrom: { x: 0, y: -0.05 },
-    shade: back ? 0.1 : 0,
+  const skullCentreX = turn * 0.02;
+  const skull = ovalOutline(skullCentreX, 0, HEAD_RX, HEAD_RY, 0, 2.6, 0.05);
+  dressing.part(ctx, 'head', {
+    piece: 'skull',
+    fur: {
+      outline: skull,
+      blobs,
+      base: 'black',
+      seed: 51,
+      fringe: 0.03,
+      strokes: 150,
+      strokeLen: 0.055,
+      flowFrom: { x: 0, y: -0.05 },
+      shade: back ? 0.1 : 0,
+    },
+    envelope: skull,
   });
 
   // Cheek ruffs break the skull outline; a long-haired cat's head is not an oval.
   for (const side of [-1, 1]) {
     const cheekX = side * CHEEK_DX + turn * 0.05 * side;
-    paintFur(ctx, {
-      outline: ovalOutline(
-        cheekX,
-        CHEEK_DY,
-        CHEEK_RX,
-        CHEEK_RY,
-        deg(side * 12),
-        7.4 + side,
-        0.09,
-        34,
-      ),
-      blobs:
-        side < 0
-          ? [{ x: cheekX, y: CHEEK_DY, rx: CHEEK_RX, ry: CHEEK_RY, tone: 'ginger', seed: 4.2 }]
-          : [],
-      base: 'black',
-      seed: 61 + side * 4,
-      fringe: 0.045,
-      strokes: 60,
-      strokeLen: 0.06,
-      flowFrom: { x: 0, y: -0.02 },
-      shade: back ? 0.12 : 0,
+    const cheek = ovalOutline(
+      cheekX,
+      CHEEK_DY,
+      CHEEK_RX,
+      CHEEK_RY,
+      deg(side * 12),
+      7.4 + side,
+      0.09,
+      34,
+    );
+    dressing.part(ctx, 'head', {
+      piece: 'cheek',
+      side: headOnSide(side, back),
+      fur: {
+        outline: cheek,
+        blobs:
+          side < 0
+            ? [{ x: cheekX, y: CHEEK_DY, rx: CHEEK_RX, ry: CHEEK_RY, tone: 'ginger', seed: 4.2 }]
+            : [],
+        base: 'black',
+        seed: 61 + side * 4,
+        fringe: 0.045,
+        strokes: 60,
+        strokeLen: 0.06,
+        flowFrom: { x: 0, y: -0.02 },
+        shade: back ? 0.12 : 0,
+      },
+      envelope: cheek,
     });
   }
 
+  const leftEye = { x: -EYE_DX + turn * 0.05, y: EYE_DY };
+  const rightEye = { x: EYE_DX + turn * 0.05, y: EYE_DY };
+  const landmarks: CatHeadLandmarks = {
+    skull: { cx: skullCentreX, cy: 0, rx: HEAD_RX, ry: HEAD_RY },
+    eyes: back ? [] : [leftEye, rightEye],
+    eyeLine: EYE_DY,
+    ears: [leftEarRoot, rightEarRoot],
+    turn,
+  };
+
   if (!back) {
     const gaze = turn;
-    drawEye(ctx, -EYE_DX + turn * 0.05, EYE_DY, -1, p.eyeOpen, p.pupil, gaze);
-    drawEye(ctx, EYE_DX + turn * 0.05, EYE_DY, 1, p.eyeOpen, p.pupil, gaze);
+    drawEye(ctx, leftEye.x, leftEye.y, -1, p.eyeOpen, p.pupil, gaze);
+    drawEye(ctx, rightEye.x, rightEye.y, 1, p.eyeOpen, p.pupil, gaze);
 
     // A pale mask around the muzzle, the way the cream runs up between the eyes.
     ctx.fillStyle = rgba(COAT.cream.base, 0.5);
@@ -1728,19 +1952,9 @@ function drawHeadFront(ctx: Ctx, p: CatPose, back: boolean, wear: CatWear): void
     drawWhiskers(ctx, -0.03 + turn * 0.05, MUZZLE_DY, -1, p.headBow);
     drawWhiskers(ctx, 0.03 + turn * 0.05, MUZZLE_DY, 1, p.headBow);
     drawMuzzle(ctx, turn * HEAD_TURN_FACE_SLIDE, MUZZLE_DY, p.mouth, p.tongue);
-    if (wear.shades) {
-      drawShadesFront(
-        ctx,
-        -EYE_DX + turn * 0.05,
-        EYE_DX + turn * 0.05,
-        EYE_DY,
-        SHADES_TEMPLE_X,
-        EYE_DY + SHADES_TEMPLE_RISE,
-      );
-    }
-  } else if (wear.shades) {
-    drawShadesBack(ctx, turn * 0.02, HEAD_RX * SHADES_BACK_ARM_SPREAD, EYE_DY);
   }
+  dressing.part(ctx, 'head', { piece: 'features', landmarks, envelope: null });
+  dressing.part(ctx, 'head', { piece: 'top', landmarks, envelope: null });
 
   ctx.restore();
 }
@@ -1759,23 +1973,62 @@ function hindPawRest(p: CatPose, side: number): Pt {
   };
 }
 
-/** Donut seen head-on: the view used for walking toward the camera and for every sit-down animation. */
-export function drawCatFront(ctx: Ctx, p: CatPose, wear: CatWear = BARE_CAT): void {
+/**
+ * The head-on forepaw's centre in the pose's own frame, before her body roll:
+ * where the painter puts it and where a haft she grips runs under it.
+ */
+function frontForepawLocal(p: CatPose, side: number): Pt {
+  const paw = side < 0 ? p.frontL : p.frontR;
+  const rest = frontPawRest(p, side);
+  return { x: rest.x + paw.dx, y: rest.y + paw.dy };
+}
+
+/** Her forepaw on screen half `side` (-1 left, +1 right) head-on, pose space, as the painter places it. */
+export function catForepawFront(p: CatPose, side: number): Pt {
+  return rotatePoint(frontForepawLocal(p, side), p.roll);
+}
+
+/** The middle of her face head-on, pose space, and its half-width: the eyes and muzzle, not the ears. */
+export function catFaceFront(p: CatPose): { centre: Pt; radius: number } {
+  return { centre: rotatePoint(headAnchor(p), p.roll), radius: HEAD_RX };
+}
+
+/**
+ * Donut seen head-on: the view used for walking toward the camera and for
+ * every sit-down animation. `front` receives the slabs in front of anything
+ * she holds.
+ */
+export function drawCatFront(
+  ctx: Ctx,
+  p: CatPose,
+  dressing: CatDressing,
+  front: Ctx | null = null,
+): void {
   const body = bodyMetrics(p);
+  const layers = new CatLayers(ctx, front, heldUnder(p));
+  const closed = pawsClosed(p);
 
   ctx.save();
   ctx.rotate(p.roll);
 
-  drawGroundShadow(ctx, p.sway * 0.5, GROUND_Y + 0.045, 0.34 * p.shadow, 0.09 * p.shadow);
+  layers.slab('shadow', (c) =>
+    drawGroundShadow(c, p.sway * 0.5, GROUND_Y + 0.045, 0.34 * p.shadow, 0.09 * p.shadow),
+  );
 
-  drawTail(ctx, body.cx + 0.12 + p.tail.rootX, body.cy + 0.16 + p.tail.rootY, p.tail);
+  layers.slab('body', (c) =>
+    drawTail(c, dressing, body.cx + 0.12 + p.tail.rootX, body.cy + 0.16 + p.tail.rootY, p.tail),
+  );
 
-  const drawHindPaw = (side: number): void => {
+  const drawHindPaw = (c: Ctx, side: number): void => {
     const paw = side < 0 ? p.hindL : p.hindR;
     const rest = hindPawRest(p, side);
+    const legSide = headOnSide(side, false);
     if (paw.lift > HIND_HOIST_THRESHOLD) {
       drawLimbColumn(
-        ctx,
+        c,
+        dressing,
+        'hindleg',
+        legSide,
         body.cx + side * body.rx * 0.75,
         body.cy + 0.14,
         rest.x + paw.dx,
@@ -1784,7 +2037,10 @@ export function drawCatFront(ctx: Ctx, p: CatPose, wear: CatWear = BARE_CAT): vo
       );
     }
     drawPaw(
-      ctx,
+      c,
+      dressing,
+      'hindleg',
+      legSide,
       rest.x + paw.dx,
       rest.y + paw.dy,
       deg(side * 14) + paw.lift * deg(side * 30),
@@ -1798,179 +2054,371 @@ export function drawCatFront(ctx: Ctx, p: CatPose, wear: CatWear = BARE_CAT): vo
     (side < 0 ? p.hindL : p.hindR).lift > HIND_HOIST_THRESHOLD;
 
   for (const side of [-1, 1]) {
-    const haunchX = body.cx + side * (body.rx * 0.82);
-    paintFur(ctx, {
-      outline: ovalOutline(
-        haunchX,
-        body.cy + 0.12,
-        0.155,
-        0.145,
+    layers.slab('body', (c) => {
+      const haunch = {
+        cx: body.cx + side * (body.rx * 0.82),
+        cy: body.cy + 0.12,
+        rx: 0.155,
+        ry: 0.145,
+      };
+      const outline = ovalOutline(
+        haunch.cx,
+        haunch.cy,
+        haunch.rx,
+        haunch.ry,
         deg(side * -10),
         12.5 + side,
         0.08,
         34,
-      ),
-      blobs: HAUNCH_BLOBS.map((b) => ({ ...b, x: b.x + haunchX, y: b.y + body.cy + 0.12 })),
-      base: 'black',
-      seed: 71 + side * 5,
-      fringe: 0.04,
-      strokes: 70,
-      strokeLen: 0.06,
-      flowFrom: { x: body.cx, y: body.cy },
-      shade: 0.08,
+      );
+      dressing.part(c, 'body', {
+        piece: 'haunch',
+        side: headOnSide(side, false),
+        shape: haunch,
+        fur: {
+          outline,
+          blobs: HAUNCH_BLOBS.map((b) => ({ ...b, x: b.x + haunch.cx, y: b.y + body.cy + 0.12 })),
+          base: 'black',
+          seed: 71 + side * 5,
+          fringe: 0.04,
+          strokes: 70,
+          strokeLen: 0.06,
+          flowFrom: { x: body.cx, y: body.cy },
+          shade: 0.08,
+        },
+        envelope: outline,
+      });
+      if (!hindLegIsHoisted(side)) drawHindPaw(c, side);
     });
-    if (!hindLegIsHoisted(side)) drawHindPaw(side);
   }
 
-  paintFur(ctx, {
-    outline: ovalOutline(body.cx, body.cy, body.rx, body.ry, p.lean, 1.7, 0.06),
-    blobs: BODY_BLOBS.map((b) => ({ ...b, x: b.x + body.cx, y: b.y + body.cy })),
-    base: 'black',
-    seed: 81,
-    fringe: 0.045,
-    strokes: 240,
-    strokeLen: 0.07,
-    flowFrom: { x: body.cx, y: body.cy - body.ry },
-  });
+  layers.slab('body', (c) => {
+    const barrel = ovalOutline(body.cx, body.cy, body.rx, body.ry, p.lean, 1.7, 0.06);
+    dressing.part(c, 'body', {
+      piece: 'barrel',
+      side: null,
+      shape: body,
+      fur: {
+        outline: barrel,
+        blobs: BODY_BLOBS.map((b) => ({ ...b, x: b.x + body.cx, y: b.y + body.cy })),
+        base: 'black',
+        seed: 81,
+        fringe: 0.045,
+        strokes: 240,
+        strokeLen: 0.07,
+        flowFrom: { x: body.cx, y: body.cy - body.ry },
+      },
+      envelope: barrel,
+    });
 
-  paintFur(ctx, {
-    outline: ovalOutline(body.cx, body.cy + RUFF_CY - 0.06, RUFF_RX, RUFF_RY, 0, 4.9, 0.1, 40),
-    blobs: RUFF_BLOBS.map((b) => ({ ...b, x: b.x + body.cx, y: b.y + body.cy - 0.06 })),
-    base: 'black',
-    seed: 91,
-    fringe: 0.055,
-    strokes: 120,
-    strokeLen: 0.075,
-    flowFrom: { x: body.cx, y: body.cy - 0.2 },
-  });
+    const ruff = { cx: body.cx, cy: body.cy + RUFF_CY - 0.06, rx: RUFF_RX, ry: RUFF_RY };
+    const ruffOutline = ovalOutline(ruff.cx, ruff.cy, ruff.rx, ruff.ry, 0, 4.9, 0.1, 40);
+    dressing.part(c, 'body', {
+      piece: 'ruff',
+      side: null,
+      shape: ruff,
+      fur: {
+        outline: ruffOutline,
+        blobs: RUFF_BLOBS.map((b) => ({ ...b, x: b.x + body.cx, y: b.y + body.cy - 0.06 })),
+        base: 'black',
+        seed: 91,
+        fringe: 0.055,
+        strokes: 120,
+        strokeLen: 0.075,
+        flowFrom: { x: body.cx, y: body.cy - 0.2 },
+      },
+      envelope: ruffOutline,
+    });
 
-  for (const side of [-1, 1]) {
-    if (hindLegIsHoisted(side)) drawHindPaw(side);
-  }
+    for (const side of [-1, 1]) {
+      if (hindLegIsHoisted(side)) drawHindPaw(c, side);
+    }
+  });
 
   const frontHead = headAnchor(p);
   /** Below the chin the forelimb passes behind the head; above it, in front. */
   const chinY = frontHead.y + HEAD_RY * 0.6;
-  const drawFrontLimb = (side: number): void => {
-    const paw = side < 0 ? p.frontL : p.frontR;
-    const rest = frontPawRest(p, side);
-    const pawX = rest.x + paw.dx;
-    const pawY = rest.y + paw.dy;
-    drawLimbColumn(ctx, body.cx + side * 0.095, body.cy + 0.175, pawX, pawY, 0.04);
-    drawPaw(
-      ctx,
-      pawX,
-      pawY,
-      deg(side * 6) + paw.lift * deg(side * 20),
-      paw.claw,
-      1 + paw.lift * FRONT_PAW_FORESHORTEN,
+  const drawFrontColumn = (c: Ctx, side: number): void => {
+    const pawAt = frontForepawLocal(p, side);
+    drawLimbColumn(
+      c,
+      dressing,
+      'foreleg',
+      headOnSide(side, false),
+      body.cx + side * 0.095,
+      body.cy + 0.175,
+      pawAt.x,
+      pawAt.y,
+      0.04,
     );
   };
-  const limbReachesFace = (side: number): boolean => {
+  const drawFrontPaw = (c: Ctx, side: number): void => {
     const paw = side < 0 ? p.frontL : p.frontR;
-    return frontPawRest(p, side).y + paw.dy < chinY;
+    const pawAt = frontForepawLocal(p, side);
+    drawPaw(
+      c,
+      dressing,
+      'foreleg',
+      headOnSide(side, false),
+      pawAt.x,
+      pawAt.y,
+      deg(side * 6) + paw.lift * deg(side * 20),
+      closed ? CLOSED_PAW_CLAW : paw.claw,
+      1 + paw.lift * FRONT_PAW_FORESHORTEN,
+      0,
+      closed,
+    );
+  };
+  const limbReachesFace = (side: number): boolean => frontForepawLocal(p, side).y < chinY;
+  /**
+   * Both columns before either paw when her paws close on a haft, so the haft
+   * can pass over her forearms and under both paws.
+   */
+  const drawFrontLimbs = (atFace: boolean): void => {
+    const sides = [-1, 1].filter((side) => limbReachesFace(side) === atFace);
+    if (!closed) {
+      for (const side of sides) {
+        layers.slab('body', (c) => {
+          drawFrontColumn(c, side);
+          drawFrontPaw(c, side);
+        });
+      }
+      return;
+    }
+    for (const side of sides) layers.slab('body', (c) => drawFrontColumn(c, side));
+    for (const side of sides) layers.slab('forepaws', (c) => drawFrontPaw(c, side));
   };
 
-  for (const side of [-1, 1]) {
-    if (!limbReachesFace(side)) drawFrontLimb(side);
-  }
+  drawFrontLimbs(false);
 
-  drawContactShadow(ctx, frontHead.x, frontHead.y + HEAD_RY * 0.95, HEAD_RX * 1.15, 0.07, 0.35);
-  drawHeadFront(ctx, p, false, wear);
+  layers.slab('head', (c) => {
+    dressing.part(
+      c,
+      'neck',
+      collarFrame(
+        {
+          x: frontHead.x,
+          y: Math.min(
+            frontHead.y + FRONT_COLLAR_BELOW_HEAD,
+            body.cy + RUFF_CY - 0.06 - RUFF_RY * FRONT_COLLAR_LOWEST_ON_RUFF,
+          ),
+        },
+        FRONT_COLLAR_RX,
+        FRONT_COLLAR_RY,
+        0,
+      ),
+    );
+    drawContactShadow(c, frontHead.x, frontHead.y + HEAD_RY * 0.95, HEAD_RX * 1.15, 0.07, 0.35);
+    drawHeadFront(c, p, false, dressing);
+  });
 
   // A paw held up to be washed has to sit in front of the muzzle it is being
   // washed against.
-  for (const side of [-1, 1]) {
-    if (limbReachesFace(side)) drawFrontLimb(side);
-  }
+  drawFrontLimbs(true);
 
-  if (p.cast > 0.02) {
-    const orbX = body.cx + (p.frontL.dx + p.frontR.dx) / 2;
-    const orbY = frontPawRest(p, 0).y + (p.frontL.dy + p.frontR.dy) / 2 - 0.05;
-    drawCastOrb(ctx, orbX, orbY, p.cast, p.castRelease, p.time);
-  }
-  if (p.slash !== null) {
-    drawSlashArc(ctx, body.cx, body.cy - 0.06, HALF_PI, p.slash, 0.38);
-  }
-  drawSparkles(ctx, p.sparkle, p.time);
+  layers.slab('head', (c) => {
+    if (p.cast > 0.02) {
+      const orbX = body.cx + (p.frontL.dx + p.frontR.dx) / 2;
+      const orbY = frontPawRest(p, 0).y + (p.frontL.dy + p.frontR.dy) / 2 - 0.05;
+      drawCastOrb(c, orbX, orbY, p.cast, p.castRelease, p.time);
+    }
+    if (p.slash !== null) {
+      drawSlashArc(c, body.cx, body.cy - 0.06, HALF_PI, p.slash, 0.38);
+    }
+    drawSparkles(c, p.sparkle, p.time);
+  });
 
   ctx.restore();
 }
 
 // ── Back view (walking away) ─────────────────────────────────────────────────
 
-export function drawCatBack(ctx: Ctx, p: CatPose, wear: CatWear = BARE_CAT): void {
+/** Her forepaw from behind, in the pose's own frame before her roll, where the painter puts it. */
+function backForepawLocal(p: CatPose, side: number): Pt {
+  const paw = side < 0 ? p.frontL : p.frontR;
+  const rest = frontPawRest(p, side * BACK_FOREPAW_SPREAD);
+  return { x: rest.x + paw.dx, y: rest.y + paw.dy - BACK_FOREPAW_TUCK };
+}
+
+/** Her forepaw on screen half `side` (-1 left, +1 right) from behind, pose space, as the painter places it. */
+export function catForepawBack(p: CatPose, side: number): Pt {
+  return rotatePoint(backForepawLocal(p, side), p.roll);
+}
+
+/** Where a raised forearm leaves her shoulders from behind, as a share of her barrel's half-size. */
+const BACK_SHOULDER_SPREAD = 0.42;
+const BACK_SHOULDER_RISE = 0.55;
+const BACK_FORELEG_SHADE = 0.1;
+
+export function drawCatBack(
+  ctx: Ctx,
+  p: CatPose,
+  dressing: CatDressing,
+  front: Ctx | null = null,
+): void {
   const body = bodyMetrics(p);
+  const layers = new CatLayers(ctx, front, heldUnder(p));
+  const closed = pawsClosed(p);
+  /** Paws closed on a haft above her shoulders show over her back, forearms and all. */
+  const raised = (side: number): boolean =>
+    closed && backForepawLocal(p, side).y < body.cy - body.ry;
 
   ctx.save();
   ctx.rotate(p.roll);
-  drawGroundShadow(ctx, p.sway * 0.5, GROUND_Y + 0.045, 0.34 * p.shadow, 0.09 * p.shadow);
+  layers.slab('shadow', (c) =>
+    drawGroundShadow(c, p.sway * 0.5, GROUND_Y + 0.045, 0.34 * p.shadow, 0.09 * p.shadow),
+  );
 
-  for (const side of [-1, 1]) {
-    const paw = side < 0 ? p.frontL : p.frontR;
-    const rest = frontPawRest(p, side * BACK_FOREPAW_SPREAD);
+  const drawBackPaw = (c: Ctx, side: number): void => {
+    const pawAt = backForepawLocal(p, side);
     drawPaw(
-      ctx,
-      rest.x + paw.dx,
-      rest.y + paw.dy - BACK_FOREPAW_TUCK,
+      c,
+      dressing,
+      'foreleg',
+      headOnSide(side, true),
+      pawAt.x,
+      pawAt.y,
       deg(side * 8),
-      0,
+      closed ? CLOSED_PAW_CLAW : 0,
       BACK_FOREPAW_SCALE,
       BACK_FOREPAW_SHADE,
+      closed,
     );
+  };
+  for (const side of [-1, 1]) {
+    if (!raised(side)) layers.slab(closed ? 'forepaws' : 'body', (c) => drawBackPaw(c, side));
   }
 
-  paintFur(ctx, {
-    outline: ovalOutline(body.cx, body.cy, body.rx * 1.02, body.ry, p.lean, 3.2, 0.06),
-    blobs: BODY_BLOBS.map((b) => ({ ...b, x: -b.x + body.cx, y: b.y + body.cy })),
-    base: 'black',
-    seed: 101,
-    fringe: 0.05,
-    strokes: 240,
-    strokeLen: 0.07,
-    flowFrom: { x: body.cx, y: body.cy - body.ry * 1.4 },
-  });
+  layers.slab('body', (c) => {
+    const barrel = { cx: body.cx, cy: body.cy, rx: body.rx * 1.02, ry: body.ry };
+    const barrelOutline = ovalOutline(
+      barrel.cx,
+      barrel.cy,
+      barrel.rx,
+      barrel.ry,
+      p.lean,
+      3.2,
+      0.06,
+    );
+    dressing.part(c, 'body', {
+      piece: 'barrel',
+      side: null,
+      shape: barrel,
+      fur: {
+        outline: barrelOutline,
+        blobs: BODY_BLOBS.map((b) => ({ ...b, x: -b.x + body.cx, y: b.y + body.cy })),
+        base: 'black',
+        seed: 101,
+        fringe: 0.05,
+        strokes: 240,
+        strokeLen: 0.07,
+        flowFrom: { x: body.cx, y: body.cy - body.ry * 1.4 },
+      },
+      envelope: barrelOutline,
+    });
 
-  // The rump is the widest thing in this view, and she knows it.
-  for (const side of [-1, 1]) {
-    const haunchX = body.cx + side * body.rx * 0.7;
-    paintFur(ctx, {
-      outline: ovalOutline(
-        haunchX,
-        body.cy + 0.14,
-        0.165,
-        0.15,
+    // The rump is the widest thing in this view, and she knows it.
+    for (const side of [-1, 1]) {
+      const haunchX = body.cx + side * body.rx * 0.7;
+      const haunch = { cx: haunchX, cy: body.cy + 0.14, rx: 0.165, ry: 0.15 };
+      const haunchOutline = ovalOutline(
+        haunch.cx,
+        haunch.cy,
+        haunch.rx,
+        haunch.ry,
         deg(side * -8),
         13.5 + side,
         0.08,
         34,
-      ),
-      blobs: HAUNCH_BLOBS.map((b) => ({ ...b, x: b.x * side + haunchX, y: b.y + body.cy + 0.14 })),
-      base: 'black',
-      seed: 111 + side * 3,
-      fringe: 0.045,
-      strokes: 80,
-      strokeLen: 0.06,
-      flowFrom: { x: body.cx, y: body.cy },
-      shade: 0.03,
+      );
+      const legSide = headOnSide(side, true);
+      dressing.part(c, 'body', {
+        piece: 'haunch',
+        side: legSide,
+        shape: haunch,
+        fur: {
+          outline: haunchOutline,
+          blobs: HAUNCH_BLOBS.map((b) => ({
+            ...b,
+            x: b.x * side + haunchX,
+            y: b.y + body.cy + 0.14,
+          })),
+          base: 'black',
+          seed: 111 + side * 3,
+          fringe: 0.045,
+          strokes: 80,
+          strokeLen: 0.06,
+          flowFrom: { x: body.cx, y: body.cy },
+          shade: 0.03,
+        },
+        envelope: haunchOutline,
+      });
+      const paw = side < 0 ? p.hindL : p.hindR;
+      const rest = hindPawRest(p, side * BACK_HIND_PAW_SPREAD);
+      drawPaw(
+        c,
+        dressing,
+        'hindleg',
+        legSide,
+        rest.x + paw.dx,
+        rest.y + paw.dy,
+        deg(side * 10),
+        0,
+        1,
+        BACK_HIND_PAW_SHADE,
+      );
+    }
+
+    drawTail(c, dressing, body.cx + 0.16 + p.tail.rootX, body.cy + 0.12 + p.tail.rootY, p.tail);
+  });
+
+  for (const side of [-1, 1]) {
+    if (!raised(side)) continue;
+    layers.slab('body', (c) => {
+      const pawAt = backForepawLocal(p, side);
+      drawLimbColumn(
+        c,
+        dressing,
+        'foreleg',
+        headOnSide(side, true),
+        body.cx + side * body.rx * BACK_SHOULDER_SPREAD,
+        body.cy - body.ry * BACK_SHOULDER_RISE,
+        pawAt.x,
+        pawAt.y,
+        BACK_FORELEG_SHADE,
+      );
     });
-    const paw = side < 0 ? p.hindL : p.hindR;
-    const rest = hindPawRest(p, side * BACK_HIND_PAW_SPREAD);
-    drawPaw(ctx, rest.x + paw.dx, rest.y + paw.dy, deg(side * 10), 0, 1, BACK_HIND_PAW_SHADE);
   }
 
-  drawTail(ctx, body.cx + 0.16 + p.tail.rootX, body.cy + 0.12 + p.tail.rootY, p.tail);
   const backHead = headAnchor(p);
-  drawContactShadow(ctx, backHead.x, backHead.y + HEAD_RY * 0.9, HEAD_RX * 1.1, 0.07, 0.35);
-  drawHeadFront(ctx, p, true, wear);
+  layers.slab('head', (c) => {
+    dressing.part(
+      c,
+      'neck',
+      collarFrame(
+        { x: backHead.x, y: backHead.y + BACK_COLLAR_BELOW_HEAD },
+        BACK_COLLAR_RX,
+        BACK_COLLAR_RY,
+        0,
+      ),
+    );
+    drawContactShadow(c, backHead.x, backHead.y + HEAD_RY * 0.9, HEAD_RX * 1.1, 0.07, 0.35);
+    drawHeadFront(c, p, true, dressing);
+  });
 
-  if (p.cast > 0.02) {
-    drawCastOrb(ctx, body.cx, body.cy - 0.36, p.cast, p.castRelease, p.time);
+  for (const side of [-1, 1]) {
+    if (raised(side)) layers.slab('forepaws', (c) => drawBackPaw(c, side));
   }
-  if (p.slash !== null) {
-    drawSlashArc(ctx, body.cx, body.cy - 0.1, -HALF_PI, p.slash, 0.4);
-  }
-  drawSparkles(ctx, p.sparkle, p.time);
+
+  layers.slab('head', (c) => {
+    if (p.cast > 0.02) {
+      drawCastOrb(c, body.cx, body.cy - 0.36, p.cast, p.castRelease, p.time);
+    }
+    if (p.slash !== null) {
+      drawSlashArc(c, body.cx, body.cy - 0.1, -HALF_PI, p.slash, 0.4);
+    }
+    drawSparkles(c, p.sparkle, p.time);
+  });
 
   ctx.restore();
 }
@@ -1996,6 +2444,7 @@ const SIDE_FORE_UPPER = 0.16;
 const SIDE_FORE_LOWER = 0.17;
 const SIDE_HIND_UPPER = 0.19;
 const SIDE_HIND_LOWER = 0.2;
+const SIDE_PAW_SCALE = 0.92;
 
 /** Two-bone solve; `bend` picks which side the joint breaks toward. */
 function solveJoint(
@@ -2019,6 +2468,9 @@ function solveJoint(
 
 function drawSideLimb(
   ctx: Ctx,
+  dressing: CatDressing,
+  leg: LegPart,
+  legSide: CatSide,
   hipX: number,
   hipY: number,
   footX: number,
@@ -2028,43 +2480,81 @@ function drawSideLimb(
   bend: number,
   shade: number,
   claw: number,
+  withPaw = true,
 ): void {
   const joint = solveJoint(hipX, hipY, footX, footY, upper, lower, bend);
-  const segments: Array<[Pt, Pt, number]> = [
-    [{ x: hipX, y: hipY }, joint, 0.072],
-    [joint, { x: footX, y: footY }, 0.05],
+  const segments: Array<[Pt, Pt, number, 'upper' | 'lower']> = [
+    [{ x: hipX, y: hipY }, joint, 0.072, 'upper'],
+    [joint, { x: footX, y: footY }, 0.05, 'lower'],
   ];
-  for (const [a, b, halfWidth] of segments) {
+  for (const [a, b, halfWidth, piece] of segments) {
     const angle = Math.atan2(b.y - a.y, b.x - a.x);
     const len = Math.hypot(b.x - a.x, b.y - a.y);
     ctx.save();
     ctx.translate(a.x, a.y);
     ctx.rotate(angle - HALF_PI);
-    paintFur(ctx, {
-      outline: ovalOutline(
-        0,
-        len / 2,
-        halfWidth,
-        len / 2 + 0.02,
-        0,
-        15.5 + hipX * 3 + halfWidth * 40,
-        0.07,
-        28,
-      ),
-      blobs: [{ x: 0, y: len * 0.8, rx: halfWidth, ry: len * 0.3, tone: 'cream', seed: 5.6 }],
-      // Legs carry the flank's ginger down into cream socks; a black column
-      // reads as a hole punched in the coat.
-      base: 'ginger',
-      seed: 121 + hipX * 7 + halfWidth * 100,
-      fringe: 0.02,
-      strokes: 40,
-      strokeLen: 0.05,
-      flowFrom: { x: 0, y: -0.15 },
+    const outline = ovalOutline(
+      0,
+      len / 2,
+      halfWidth,
+      len / 2 + 0.02,
+      0,
+      15.5 + hipX * 3 + halfWidth * 40,
+      0.07,
+      28,
+    );
+    dressing.part(ctx, leg, {
+      piece,
+      side: legSide,
+      length: len,
+      halfWidth,
       shade,
+      fur: {
+        outline,
+        blobs: [{ x: 0, y: len * 0.8, rx: halfWidth, ry: len * 0.3, tone: 'cream', seed: 5.6 }],
+        // Legs carry the flank's ginger down into cream socks; a black column
+        // reads as a hole punched in the coat.
+        base: 'ginger',
+        seed: 121 + hipX * 7 + halfWidth * 100,
+        fringe: 0.02,
+        strokes: 40,
+        strokeLen: 0.05,
+        flowFrom: { x: 0, y: -0.15 },
+        shade,
+      },
+      envelope: outline,
     });
     ctx.restore();
   }
-  drawPaw(ctx, footX, footY, 0, claw, 0.92, shade);
+  if (withPaw) drawSidePaw(ctx, dressing, leg, legSide, footX, footY, claw, shade);
+}
+
+/** A profile paw. Closed on a haft, it turns its toes over the haft rather than down to the floor. */
+function drawSidePaw(
+  ctx: Ctx,
+  dressing: CatDressing,
+  leg: LegPart,
+  legSide: CatSide,
+  footX: number,
+  footY: number,
+  claw: number,
+  shade: number,
+  closedOn: number | null = null,
+): void {
+  const closed = closedOn !== null;
+  drawPaw(
+    ctx,
+    dressing,
+    leg,
+    legSide,
+    footX,
+    footY,
+    closedOn ?? 0,
+    closed ? CLOSED_PAW_CLAW : claw,
+    SIDE_PAW_SCALE,
+    shade,
+    closed,
+  );
 }
 
 /** Share of the body's bob the profile head rides. */
@@ -2096,51 +2586,112 @@ function sideBodyCentre(p: CatPose): Pt {
 export function catMouthSide(p: CatPose): Pt {
   const head = sideHeadPlacement(p);
   const turned = rotatePoint(SIDE_MOUTH, head.angle);
-  const leaned = rotatePoint({ x: head.x + turned.x, y: head.y + turned.y }, p.lean);
+  return sidePainted(p, { x: head.x + turned.x, y: head.y + turned.y });
+}
+
+/** A point of the profile pose's own frame where {@link drawCatSide} paints it: leaned, then rolled about her barrel. */
+function sidePainted(p: CatPose, point: Pt): Pt {
+  const leaned = rotatePoint(point, p.lean);
   const centre = sideBodyCentre(p);
   const rolled = rotatePoint({ x: leaned.x - centre.x, y: leaned.y - centre.y }, p.roll);
   return { x: centre.x + rolled.x, y: centre.y + rolled.y };
 }
 
-function drawHeadSide(ctx: Ctx, p: CatPose, wear: CatWear): void {
+/** How far her far forepaw stands behind her near one in profile. */
+const SIDE_FAR_LIMB_SETBACK = 0.02;
+
+/** A profile forepaw in the pose's own frame, before her lean and roll: where the painter puts it. */
+function sideForepawLocal(p: CatPose, near: boolean): Pt {
+  const paw = near ? p.frontR : p.frontL;
+  const setback = near ? 0 : SIDE_FAR_LIMB_SETBACK;
+  return { x: SIDE_SHOULDER_X + paw.dx - setback, y: GROUND_Y + paw.dy };
+}
+
+/** Her near or far forepaw in profile facing +X, pose space, as {@link drawCatSide} places it. */
+export function catForepawSide(p: CatPose, near: boolean): Pt {
+  return sidePainted(p, sideForepawLocal(p, near));
+}
+
+/** The middle of her face in profile facing +X, pose space, and its half-width. */
+export function catFaceSide(p: CatPose): { centre: Pt; radius: number } {
+  const head = sideHeadPlacement(p);
+  return { centre: sidePainted(p, { x: head.x, y: head.y }), radius: SIDE_HEAD_RX };
+}
+
+/** How a held haft's direction in a profile pose's own frame turns on screen: by her lean and her roll. */
+export function catSideTurn(p: CatPose): number {
+  return p.lean + p.roll;
+}
+
+/** In profile, where each ear roots into the skull: the near one forward of the far one. */
+const SIDE_NEAR_EAR: Pt = { x: -0.035, y: -0.15 };
+const SIDE_FAR_EAR: Pt = { x: -0.105, y: -0.13 };
+/** In profile, her near eye in the head's own frame. */
+const SIDE_EYE: Pt = { x: 0.062, y: -0.012 };
+
+function otherSide(side: CatSide): CatSide {
+  return side === 'left' ? 'right' : 'left';
+}
+
+/** @param near the side of her head facing the camera. */
+function drawHeadSide(
+  ctx: Ctx,
+  p: CatPose,
+  dressing: CatDressing,
+  blobs: readonly CoatBlob[],
+  near: CatSide,
+): void {
   const head = sideHeadPlacement(p);
 
   ctx.save();
   ctx.translate(head.x, head.y);
   ctx.rotate(head.angle);
 
+  const earsShow = !dressing.hides('ears');
   // Far ear first so the near ear overlaps it.
-  drawEar(ctx, -0.105, -0.13, -1, p.earL, true, 0.55);
+  if (earsShow) {
+    drawEar(ctx, dressing, otherSide(near), SIDE_FAR_EAR.x, SIDE_FAR_EAR.y, -1, p.earL, true, 0.55);
+  }
 
-  paintFur(ctx, {
-    outline: ovalOutline(0, 0, SIDE_HEAD_RX, SIDE_HEAD_RY, 0, 6.1, 0.05),
-    blobs: HEAD_BLOBS.map((b) => ({ ...b, x: b.x * 0.7 + 0.02, y: b.y })),
-    base: 'black',
-    seed: 131,
-    fringe: 0.032,
-    strokes: 130,
-    strokeLen: 0.055,
-    flowFrom: { x: -0.05, y: -0.05 },
+  const skull = ovalOutline(0, 0, SIDE_HEAD_RX, SIDE_HEAD_RY, 0, 6.1, 0.05);
+  dressing.part(ctx, 'head', {
+    piece: 'skull',
+    fur: {
+      outline: skull,
+      blobs,
+      base: 'black',
+      seed: 131,
+      fringe: 0.032,
+      strokes: 130,
+      strokeLen: 0.055,
+      flowFrom: { x: -0.05, y: -0.05 },
+    },
+    envelope: skull,
   });
 
   // Muzzle wedge out front — the profile silhouette lives or dies on this shape.
-  paintFur(ctx, {
-    outline: [
-      { x: 0.02, y: -0.02 },
-      { x: 0.12, y: -0.005 },
-      { x: 0.175, y: 0.035 },
-      { x: 0.17, y: 0.085 },
-      { x: 0.1, y: 0.115 },
-      { x: 0.0, y: 0.115 },
-      { x: -0.05, y: 0.06 },
-    ],
-    blobs: [{ x: 0.08, y: 0.06, rx: 0.11, ry: 0.07, tone: 'cream', seed: 8.1 }],
-    base: 'cream',
-    seed: 141,
-    fringe: 0.022,
-    strokes: 60,
-    strokeLen: 0.045,
-    flowFrom: { x: -0.05, y: 0 },
+  const muzzle: Pt[] = [
+    { x: 0.02, y: -0.02 },
+    { x: 0.12, y: -0.005 },
+    { x: 0.175, y: 0.035 },
+    { x: 0.17, y: 0.085 },
+    { x: 0.1, y: 0.115 },
+    { x: 0.0, y: 0.115 },
+    { x: -0.05, y: 0.06 },
+  ];
+  dressing.part(ctx, 'head', {
+    piece: 'muzzle',
+    fur: {
+      outline: muzzle,
+      blobs: [{ x: 0.08, y: 0.06, rx: 0.11, ry: 0.07, tone: 'cream', seed: 8.1 }],
+      base: 'cream',
+      seed: 141,
+      fringe: 0.022,
+      strokes: 60,
+      strokeLen: 0.045,
+      flowFrom: { x: -0.05, y: 0 },
+    },
+    envelope: muzzle,
   });
 
   const noseX = 0.168;
@@ -2186,32 +2737,112 @@ function drawHeadSide(ctx: Ctx, p: CatPose, wear: CatWear): void {
   }
 
   ctx.save();
-  ctx.translate(0.062, -0.012);
+  ctx.translate(SIDE_EYE.x, SIDE_EYE.y);
   ctx.scale(0.78, 0.82);
   drawEye(ctx, 0, 0, 1, p.eyeOpen, p.pupil, 0.4);
   ctx.restore();
   drawWhiskers(ctx, 0.135, 0.05, 1, p.headBow + 0.4, 0.62);
-  if (wear.shades) {
-    drawShadesSide(
-      ctx,
-      SHADES_SIDE_LENS_X,
-      SHADES_SIDE_LENS_Y,
-      SHADES_SIDE_EAR_X,
-      SHADES_SIDE_EAR_Y,
-    );
+  const landmarks: CatHeadLandmarks = {
+    skull: { cx: 0, cy: 0, rx: SIDE_HEAD_RX, ry: SIDE_HEAD_RY },
+    eyes: [SIDE_EYE],
+    eyeLine: SIDE_EYE.y,
+    ears: [SIDE_NEAR_EAR, SIDE_FAR_EAR],
+    turn: 0,
+  };
+  dressing.part(ctx, 'head', { piece: 'features', landmarks, envelope: null });
+  if (earsShow) {
+    drawEar(ctx, dressing, near, SIDE_NEAR_EAR.x, SIDE_NEAR_EAR.y, 1, p.earR, false, 0.5);
   }
-  drawEar(ctx, -0.035, -0.15, 1, p.earR, false, 0.5);
+  dressing.part(ctx, 'head', { piece: 'top', landmarks, envelope: null });
 
   ctx.restore();
 }
 
-export function drawCatSide(ctx: Ctx, p: CatPose, wear: CatWear = BARE_CAT): void {
+/**
+ * The coat one flank shows in profile, in the profile painter's own frame: +X
+ * toward her nose, each patch relative to the part it sits on.
+ */
+interface FlankCoat {
+  readonly body: readonly CoatBlob[];
+  readonly haunch: readonly CoatBlob[];
+  readonly chest: readonly CoatBlob[];
+  readonly head: readonly CoatBlob[];
+}
+
+/** Her right flank, which the east-facing profile shows. */
+const RIGHT_FLANK: FlankCoat = {
+  body: BODY_BLOBS.map((b) => ({ ...b, x: b.x * 1.15, y: b.y * 0.85 })),
+  haunch: HAUNCH_BLOBS,
+  chest: [
+    { x: 0, y: 0.02, rx: 0.1, ry: 0.11, tone: 'cream', seed: 7.8 },
+    { x: -0.06, y: -0.08, rx: 0.07, ry: 0.06, tone: 'ginger', seed: 2.9 },
+  ],
+  head: HEAD_BLOBS.map((b) => ({ ...b, x: b.x * 0.7 + 0.02, y: b.y })),
+};
+
+/**
+ * Her left flank, which the west-facing profile shows: the other half of a
+ * tortie — black, with a ginger saddle over the shoulder, a black face with a
+ * ginger cheek by the muzzle, and the cream bib and chin she has on both sides.
+ * It matches the head-on views, whose screen-right half is her left: a black
+ * cheek ruff and black down that side of her face.
+ */
+const LEFT_FLANK: FlankCoat = {
+  body: [
+    { x: 0.14, y: -0.06, rx: 0.17, ry: 0.14, tone: 'ginger', seed: 7.2 },
+    { x: -0.15, y: -0.12, rx: 0.11, ry: 0.08, tone: 'ginger', seed: 8.6 },
+    { x: -0.05, y: 0.14, rx: 0.08, ry: 0.06, tone: 'ginger', seed: 9.4 },
+  ],
+  haunch: [{ x: -0.02, y: 0.04, rx: 0.09, ry: 0.08, tone: 'ginger', seed: 5.2 }],
+  chest: [{ x: 0, y: 0.02, rx: 0.1, ry: 0.11, tone: 'cream', seed: 7.8 }],
+  head: [
+    { x: 0.1, y: 0.06, rx: 0.05, ry: 0.04, tone: 'ginger', seed: 5.1 },
+    { x: 0.02, y: 0.12, rx: 0.105, ry: 0.075, tone: 'cream', seed: 6.6 },
+  ],
+};
+
+/** Which of her flanks a profile shows: her right facing east, her left facing west. */
+export type Flank = 'right' | 'left';
+
+/**
+ * Donut in profile. Facing east she shows her right flank; facing west the
+ * same anatomy is painted mirrored with her left flank's coat, so her patches
+ * stay on her own sides rather than swapping as a flipped picture would.
+ * `front` receives the slabs in front of anything she holds.
+ */
+export function drawCatSide(
+  ctx: Ctx,
+  p: CatPose,
+  dressing: CatDressing,
+  flank: Flank,
+  front: Ctx | null = null,
+): void {
+  const coat = flank === 'right' ? RIGHT_FLANK : LEFT_FLANK;
+  ctx.save();
+  if (flank === 'left') ctx.scale(-1, 1);
+  paintProfile(new CatLayers(ctx, front, heldUnder(p)), p, dressing, coat, flank);
+  ctx.restore();
+}
+
+/** @param near the flank facing the camera, which is also the side of her near legs. */
+function paintProfile(
+  layers: CatLayers,
+  p: CatPose,
+  dressing: CatDressing,
+  coat: FlankCoat,
+  near: CatSide,
+): void {
+  const ctx = layers.ctx;
+  const far = otherSide(near);
   const { x: cx, y: cy } = sideBodyCentre(p);
   const rx = SIDE_BODY_RX * (1 + p.breathe * 0.02);
   const ry = SIDE_BODY_RY * p.squash * (1 + p.breathe * 0.05);
+  const closedOn = pawsClosed(p) ? (p.grip?.haftAngle ?? 0) : null;
 
   ctx.save();
-  drawGroundShadow(ctx, cx, GROUND_Y + 0.045, 0.4 * p.shadow, 0.09 * p.shadow);
+  layers.slab('shadow', (c) =>
+    drawGroundShadow(c, cx, GROUND_Y + 0.045, 0.4 * p.shadow, 0.09 * p.shadow),
+  );
   // A downed cat rolls about her own barrel, not about the floor, so the pose
   // that drops her onto her side is `bob` plus a roll around the body centre.
   ctx.translate(cx, cy);
@@ -2221,162 +2852,296 @@ export function drawCatSide(ctx: Ctx, p: CatPose, wear: CatWear = BARE_CAT): voi
 
   const shoulderY = cy + SIDE_LIMB_Y - 0.16;
   const hipY = cy + SIDE_LIMB_Y - 0.14;
+  const farPaw = sideForepawLocal(p, false);
+  const nearPaw = sideForepawLocal(p, true);
 
-  // Far legs sit in the body's shadow, which is what separates the pairs.
-  const farShade = 0.3;
-  drawSideLimb(
-    ctx,
-    SIDE_HIP_X + 0.02,
-    hipY,
-    SIDE_HIP_X + p.hindL.dx + 0.02,
-    GROUND_Y + p.hindL.dy,
-    SIDE_HIND_UPPER,
-    SIDE_HIND_LOWER,
-    1,
-    farShade,
-    0,
-  );
-  drawSideLimb(
-    ctx,
-    SIDE_SHOULDER_X - 0.02,
-    shoulderY,
-    SIDE_SHOULDER_X + p.frontL.dx - 0.02,
-    GROUND_Y + p.frontL.dy,
-    SIDE_FORE_UPPER,
-    SIDE_FORE_LOWER,
-    -1,
-    farShade,
-    0,
-  );
+  layers.slab('body', (c) => {
+    // Far legs sit in the body's shadow, which is what separates the pairs.
+    const farShade = 0.3;
+    drawSideLimb(
+      c,
+      dressing,
+      'hindleg',
+      far,
+      SIDE_HIP_X + 0.02,
+      hipY,
+      SIDE_HIP_X + p.hindL.dx + 0.02,
+      GROUND_Y + p.hindL.dy,
+      SIDE_HIND_UPPER,
+      SIDE_HIND_LOWER,
+      1,
+      farShade,
+      0,
+    );
+    drawSideLimb(
+      c,
+      dressing,
+      'foreleg',
+      far,
+      SIDE_SHOULDER_X - SIDE_FAR_LIMB_SETBACK,
+      shoulderY,
+      farPaw.x,
+      farPaw.y,
+      SIDE_FORE_UPPER,
+      SIDE_FORE_LOWER,
+      -1,
+      farShade,
+      0,
+      closedOn === null,
+    );
+    if (closedOn !== null) {
+      drawSidePaw(c, dressing, 'foreleg', far, farPaw.x, farPaw.y, 0, farShade, closedOn);
+    }
 
-  drawTail(ctx, cx - rx * 0.95 + p.tail.rootX, cy + 0.02 + p.tail.rootY, p.tail);
+    drawTail(c, dressing, cx - rx * 0.95 + p.tail.rootX, cy + 0.02 + p.tail.rootY, p.tail);
 
-  paintFur(ctx, {
-    outline: ovalOutline(
-      SIDE_HAUNCH_X + cx,
-      SIDE_HAUNCH_Y + cy,
-      0.2,
-      0.19,
+    const haunch = { cx: SIDE_HAUNCH_X + cx, cy: SIDE_HAUNCH_Y + cy, rx: 0.2, ry: 0.19 };
+    const haunchOutline = ovalOutline(
+      haunch.cx,
+      haunch.cy,
+      haunch.rx,
+      haunch.ry,
       deg(-8),
       16.3,
       0.07,
       40,
-    ),
-    blobs: HAUNCH_BLOBS.map((b) => ({
-      ...b,
-      x: b.x + SIDE_HAUNCH_X + cx,
-      y: b.y + SIDE_HAUNCH_Y + cy,
-    })),
-    base: 'black',
-    seed: 151,
-    fringe: 0.05,
-    strokes: 110,
-    strokeLen: 0.065,
-    flowFrom: { x: cx, y: cy - 0.1 },
-  });
+    );
+    dressing.part(c, 'body', {
+      piece: 'haunch',
+      side: near,
+      shape: haunch,
+      fur: {
+        outline: haunchOutline,
+        blobs: coat.haunch.map((b) => ({
+          ...b,
+          x: b.x + SIDE_HAUNCH_X + cx,
+          y: b.y + SIDE_HAUNCH_Y + cy,
+        })),
+        base: 'black',
+        seed: 151,
+        fringe: 0.05,
+        strokes: 110,
+        strokeLen: 0.065,
+        flowFrom: { x: cx, y: cy - 0.1 },
+      },
+      envelope: haunchOutline,
+    });
 
-  paintFur(ctx, {
-    outline: ovalOutline(cx, cy, rx, ry, deg(-3), 2.1, 0.06),
-    blobs: BODY_BLOBS.map((b) => ({ ...b, x: b.x * 1.15 + cx, y: b.y * 0.85 + cy })),
-    base: 'black',
-    seed: 161,
-    fringe: 0.045,
-    strokes: 230,
-    strokeLen: 0.07,
-    flowFrom: { x: cx - 0.1, y: cy - ry },
-  });
+    const barrel = ovalOutline(cx, cy, rx, ry, deg(-3), 2.1, 0.06);
+    dressing.part(c, 'body', {
+      piece: 'barrel',
+      side: null,
+      shape: { cx, cy, rx, ry },
+      fur: {
+        outline: barrel,
+        blobs: coat.body.map((b) => ({ ...b, x: b.x + cx, y: b.y + cy })),
+        base: 'black',
+        seed: 161,
+        fringe: 0.045,
+        strokes: 230,
+        strokeLen: 0.07,
+        flowFrom: { x: cx - 0.1, y: cy - ry },
+      },
+      envelope: barrel,
+    });
 
-  // The belly pouch: the giveaway that she is not a lean cat.
-  paintFur(ctx, {
-    outline: ovalOutline(cx - 0.02, cy + ry * 0.75, rx * 0.62, 0.1, deg(2), 9.7, 0.08, 32),
-    blobs: [{ x: cx - 0.02, y: cy + ry * 0.75, rx: rx * 0.5, ry: 0.08, tone: 'cream', seed: 6.3 }],
-    base: 'cream',
-    seed: 171,
-    fringe: 0.05,
-    strokes: 70,
-    strokeLen: 0.06,
-    flowFrom: { x: cx, y: cy },
-    shade: 0.12,
-  });
+    // The belly pouch: the giveaway that she is not a lean cat.
+    const belly = { cx: cx - 0.02, cy: cy + ry * 0.75, rx: rx * 0.62, ry: 0.1 };
+    const bellyOutline = ovalOutline(belly.cx, belly.cy, belly.rx, belly.ry, deg(2), 9.7, 0.08, 32);
+    dressing.part(c, 'body', {
+      piece: 'belly',
+      side: null,
+      shape: belly,
+      fur: {
+        outline: bellyOutline,
+        blobs: [
+          { x: cx - 0.02, y: cy + ry * 0.75, rx: rx * 0.5, ry: 0.08, tone: 'cream', seed: 6.3 },
+        ],
+        base: 'cream',
+        seed: 171,
+        fringe: 0.05,
+        strokes: 70,
+        strokeLen: 0.06,
+        flowFrom: { x: cx, y: cy },
+        shade: 0.12,
+      },
+      envelope: bellyOutline,
+    });
 
-  paintFur(ctx, {
-    outline: ovalOutline(
-      SIDE_CHEST_X + cx,
-      SIDE_CHEST_Y + cy,
-      0.165,
-      0.175,
+    const chest = { cx: SIDE_CHEST_X + cx, cy: SIDE_CHEST_Y + cy, rx: 0.165, ry: 0.175 };
+    const chestOutline = ovalOutline(
+      chest.cx,
+      chest.cy,
+      chest.rx,
+      chest.ry,
       deg(6),
       11.2,
       0.09,
       36,
-    ),
-    blobs: [
-      {
-        x: SIDE_CHEST_X + cx,
-        y: SIDE_CHEST_Y + cy + 0.02,
-        rx: 0.1,
-        ry: 0.11,
-        tone: 'cream',
-        seed: 7.8,
+    );
+    dressing.part(c, 'body', {
+      piece: 'chest',
+      side: null,
+      shape: chest,
+      fur: {
+        outline: chestOutline,
+        blobs: coat.chest.map((b) => ({
+          ...b,
+          x: SIDE_CHEST_X + cx + b.x,
+          y: SIDE_CHEST_Y + cy + b.y,
+        })),
+        base: 'black',
+        seed: 181,
+        fringe: 0.055,
+        strokes: 100,
+        strokeLen: 0.07,
+        flowFrom: { x: cx, y: cy - 0.15 },
       },
-      {
-        x: SIDE_CHEST_X + cx - 0.06,
-        y: SIDE_CHEST_Y + cy - 0.08,
-        rx: 0.07,
-        ry: 0.06,
-        tone: 'ginger',
-        seed: 2.9,
-      },
-    ],
-    base: 'black',
-    seed: 181,
-    fringe: 0.055,
-    strokes: 100,
-    strokeLen: 0.07,
-    flowFrom: { x: cx, y: cy - 0.15 },
+      envelope: chestOutline,
+    });
+
+    drawSideLimb(
+      c,
+      dressing,
+      'hindleg',
+      near,
+      SIDE_HIP_X,
+      hipY,
+      SIDE_HIP_X + p.hindR.dx,
+      GROUND_Y + p.hindR.dy,
+      SIDE_HIND_UPPER,
+      SIDE_HIND_LOWER,
+      1,
+      0,
+      p.hindR.claw,
+    );
+    drawSideLimb(
+      c,
+      dressing,
+      'foreleg',
+      near,
+      SIDE_SHOULDER_X,
+      shoulderY,
+      nearPaw.x,
+      nearPaw.y,
+      SIDE_FORE_UPPER,
+      SIDE_FORE_LOWER,
+      -1,
+      0,
+      p.frontR.claw,
+      closedOn === null,
+    );
   });
-
-  drawSideLimb(
-    ctx,
-    SIDE_HIP_X,
-    hipY,
-    SIDE_HIP_X + p.hindR.dx,
-    GROUND_Y + p.hindR.dy,
-    SIDE_HIND_UPPER,
-    SIDE_HIND_LOWER,
-    1,
-    0,
-    p.hindR.claw,
-  );
-  drawSideLimb(
-    ctx,
-    SIDE_SHOULDER_X,
-    shoulderY,
-    SIDE_SHOULDER_X + p.frontR.dx,
-    GROUND_Y + p.frontR.dy,
-    SIDE_FORE_UPPER,
-    SIDE_FORE_LOWER,
-    -1,
-    0,
-    p.frontR.claw,
-  );
-
-  drawHeadSide(ctx, p, wear);
-
-  if (p.cast > 0.02) {
-    drawCastOrb(
-      ctx,
-      SIDE_SHOULDER_X + p.frontR.dx + 0.06,
-      GROUND_Y + p.frontR.dy - 0.05,
-      p.cast,
-      p.castRelease,
-      p.time,
+  if (closedOn !== null) {
+    layers.slab('forepaws', (c) =>
+      drawSidePaw(c, dressing, 'foreleg', near, nearPaw.x, nearPaw.y, 0, 0, closedOn),
     );
   }
-  if (p.slash !== null) {
-    drawSlashArc(ctx, SIDE_SHOULDER_X + 0.16, cy - 0.06, 0, p.slash, 0.3);
-  }
-  drawSparkles(ctx, p.sparkle, p.time);
+
+  const head = sideHeadPlacement(p);
+  layers.slab('head', (c) => {
+    dressing.part(
+      c,
+      'neck',
+      collarFrame(
+        { x: head.x + SIDE_COLLAR_OFFSET.x, y: head.y + SIDE_COLLAR_OFFSET.y },
+        SIDE_COLLAR_RX,
+        SIDE_COLLAR_RY,
+        SIDE_COLLAR_TILT,
+      ),
+    );
+    drawHeadSide(c, p, dressing, coat.head, near);
+
+    if (p.cast > 0.02) {
+      drawCastOrb(
+        c,
+        SIDE_SHOULDER_X + p.frontR.dx + 0.06,
+        GROUND_Y + p.frontR.dy - 0.05,
+        p.cast,
+        p.castRelease,
+        p.time,
+      );
+    }
+    if (p.slash !== null) {
+      drawSlashArc(c, SIDE_SHOULDER_X + 0.16, cy - 0.06, 0, p.slash, 0.3);
+    }
+    drawSparkles(c, p.sparkle, p.time);
+  });
 
   ctx.restore();
 }
+
+// ── Paws on a haft ───────────────────────────────────────────────────────────
+
+/** The painted views a pose is authored for. */
+type PawView = 'front' | 'side' | 'back';
+
+/**
+ * Which forepaw holds a haft's butt in each view, as the pose names it: the
+ * screen-left paw head-on and from behind, the near paw in profile. The other
+ * forepaw closes on the haft further along it.
+ */
+export const BUTT_FOREPAW: Readonly<Record<PawView, 'frontL' | 'frontR'>> = {
+  front: 'frontL',
+  side: 'frontR',
+  back: 'frontL',
+};
+
+function forepawRestFor(p: CatPose, view: PawView, field: 'frontL' | 'frontR'): Pt {
+  const side = field === 'frontL' ? -1 : 1;
+  if (view === 'front') return frontPawRest(p, side);
+  if (view === 'back') {
+    const rest = frontPawRest(p, side * BACK_FOREPAW_SPREAD);
+    return { x: rest.x, y: rest.y - BACK_FOREPAW_TUCK };
+  }
+  const setback = field === 'frontR' ? 0 : SIDE_FAR_LIMB_SETBACK;
+  return { x: SIDE_SHOULDER_X - setback, y: GROUND_Y };
+}
+
+/**
+ * The forepaw offsets that close both her paws on one haft: the butt paw at
+ * `butt`, the other `spacing` along the haft's on-screen direction, both in
+ * the pose's own frame before her lean and roll.
+ */
+export function forepawsOnHaft(
+  p: CatPose,
+  view: PawView,
+  butt: Pt,
+  grip: Pick<CatGrip, 'haftAngle' | 'haftDepth'>,
+  spacing: number,
+  lift: number,
+): Pick<CatPose, 'frontL' | 'frontR'> {
+  const onScreen = Math.sqrt(Math.max(0, 1 - grip.haftDepth * grip.haftDepth)) * spacing;
+  const upper = {
+    x: butt.x + Math.cos(grip.haftAngle) * onScreen,
+    y: butt.y + Math.sin(grip.haftAngle) * onScreen,
+  };
+  const buttField = BUTT_FOREPAW[view];
+  const upperField = buttField === 'frontL' ? 'frontR' : 'frontL';
+  const pawAt = (field: 'frontL' | 'frontR', at: Pt): PawPose => {
+    const rest = forepawRestFor(p, view, field);
+    return { dx: at.x - rest.x, dy: at.y - rest.y, lift, claw: 0 };
+  };
+  const buttPaw = pawAt(buttField, butt);
+  const upperPaw = pawAt(upperField, upper);
+  return buttField === 'frontL'
+    ? { frontL: buttPaw, frontR: upperPaw }
+    : { frontL: upperPaw, frontR: buttPaw };
+}
+
+/**
+ * The middle of her back, pose space, where a pack or saddle would ride:
+ * head-on and from behind over the top of her barrel, in profile over her
+ * spine facing +X.
+ */
+export function catSaddle(p: CatPose, view: PawView): Pt {
+  if (view === 'side') {
+    const { x, y } = sideBodyCentre(p);
+    return sidePainted(p, { x, y: y - SIDE_BODY_RY * SADDLE_RISE });
+  }
+  const body = bodyMetrics(p);
+  return rotatePoint({ x: body.cx, y: body.cy - body.ry * SADDLE_RISE }, p.roll);
+}
+
+/** A saddle rides this share of her barrel's half-height above its middle. */
+const SADDLE_RISE = 0.8;

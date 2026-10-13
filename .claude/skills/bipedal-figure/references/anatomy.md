@@ -275,11 +275,14 @@ against, or cited as "how it's done here".
   including an arm drawn behind the torso. A depth shade on skin does not read as
   depth, it reads as two different colours of skin. Only a true profile shades a
   far limb, where it is genuinely behind the body.
-- **A carried prop is painted over the torso and face but _under_ the gripping
-  fist.** A haft is wider than a fist, so painting it over the hand buries it and
-  the figure appears to swing something nobody holds. Do not fix that by putting
-  the prop behind the body (the haft vanishes) or the head over it (the haft is
-  severed and reads as a hat). Both were tried; only the fist comes back over.
+- **A held thing sits between the body's layers, and the fingers close back over
+  it.** A haft is wider than a fist, so painting it over the hand buries it and
+  the figure appears to swing something nobody holds; putting it behind the
+  whole body makes the haft vanish, and the head over it severs it into a hat.
+  The socket names the slab it sits in front of, and the front grip bands (and
+  the forearm when the back of the hand faces the camera) come back over it —
+  computed per frame by the grip model (`references/carl.md`, "Sockets, the
+  grip and two-layer cells"), never by reordering a row's draw calls.
 - **Detail does not rescue a wrong outline.** Adding a spike to a war hammer to
   make it a "T" cost the archetype its identity outright: at 32 px the spike is
   two pixels and turns a rectangle into a radiating star, and a review then read

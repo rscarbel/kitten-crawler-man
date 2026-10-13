@@ -12,7 +12,7 @@ import { allocCanvas, surfaceContext, type CanvasSurface } from '../../core/canv
 import { onCanvasRecovery } from '../../core/canvasRecovery';
 import { drawCatSprite } from '../../sprites/catSprite';
 import { drawClubCastFigure, type ClubFigureRef } from '../../sprites/clubCastFigure';
-import { activeHumanFigure, drawHumanSprite } from '../../sprites/humanSprite';
+import { drawHumanSprite, emptyHandedHumanFigure } from '../../sprites/humanSprite';
 import { centerIn, inset, splitV, type Rect } from '../core/geom';
 import type { Ui } from '../core/UiRoot';
 import { drawGlyph } from '../theme/glyphs';
@@ -151,7 +151,7 @@ function avatarBust(avatar: SeatAvatar): CanvasSurface | null {
       return bakedBust(avatar.key, CAST_BUST, castPainter(avatar.look));
     case 'crawler':
       return avatar.crawler === 'human'
-        ? bakedBust(`crawler/human/${activeHumanFigure().id}`, CARL_BUST, (ctx, x, y, tile) =>
+        ? bakedBust(`crawler/human/${emptyHandedHumanFigure().id}`, CARL_BUST, (ctx, x, y, tile) =>
             drawHumanSprite(ctx, x, y, tile),
           )
         : bakedBust('crawler/cat', DONUT_BUST, (ctx, x, y, tile) => drawCatSprite(ctx, x, y, tile));

@@ -14,7 +14,7 @@ export type InventoryTab = 'bag' | 'character';
 /** A crawler whose pack the screen shows. `HumanPlayer` and `CatPlayer` both satisfy it. */
 export type InventoryOwner = Pick<
   Player,
-  'inventory' | 'strength' | 'intelligence' | 'constitution' | 'dexterity' | 'onEquipmentChanged'
+  'inventory' | 'strength' | 'intelligence' | 'constitution' | 'dexterity'
 >;
 
 export interface InventoryMember {
@@ -22,8 +22,8 @@ export interface InventoryMember {
   /** What the companion switcher calls them. */
   readonly name: string;
   readonly owner: InventoryOwner;
-  /** The weapon in hand, marked as worn in the hotbar row. */
-  readonly wieldedWeaponId?: ItemId | null;
+  /** The weapon drawn in hand, marked as worn in the hotbar row. */
+  readonly drawnWeaponId?: ItemId | null;
 }
 
 /**

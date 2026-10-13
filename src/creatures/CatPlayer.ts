@@ -21,10 +21,15 @@ import {
   drawMissiles,
   prewarmCatSprite,
   prewarmMagicMissileCast,
+  prewarmCatHold,
   catCellFor,
+  type CatHeldDraw,
   type CatSpriteState,
-  setCatWear,
+  type CatWorkSwing,
 } from '../sprites/catSprite';
+import { catGarmentsWearing } from '../sprites/garments/itemLooks';
+import { setOutfit } from '../sprites/outfits';
+import { FacingState } from '../sprites/facingView';
 import { drawActivePlayerMarker } from '../sprites/activePlayerMarker';
 import { catMouthOf } from '../sprites/crawlerMouths';
 import type { GameMap } from '../map/GameMap';
@@ -32,7 +37,6 @@ import { normalize } from '../utils';
 import type { AbilityManager } from '../core/AbilityManager';
 import { getMagicMissileStats } from '../abilities/magicMissile';
 import {
-  EYES_OF_SPLATTER_ID,
   SplatterCopies,
   steerMissileToward,
   type SplatterSource,
@@ -40,7 +44,11 @@ import {
 import { TILE_SIZE } from '../core/constants';
 import type { CrawlerKind } from '../core/SkillManager';
 import type { WorkingTool } from '../core/toolTiers';
-import { drawToolAt } from '../sprites/toolOverlaySprite';
+import { HELD_VISUALS, workingToolHeldVisual } from '../sprites/held/heldVisuals';
+import type { HeldVisualDef } from '../sprites/held/heldVisualDef';
+import { heldPhaseAt } from '../sprites/held/heldComposite';
+import { catGripOf } from '../sprites/art/catSockets';
+import { MOUTH_HELD_KEY, weaponStatsOf } from '../core/ItemDefs';
 import { CONSTITUTION_LOCK_SNAPSHOT_VERSION } from '../core/PlayerSnapshot';
 
 /** Single source for this class's crawler identity — used by the UI and by skill eligibility. */
@@ -95,6 +103,8 @@ export class CatPlayer extends Player {
   private autoSwipeCooldown = 0;
   /** Drives her pose: the action playing, plus the boredom timer behind idle breaks. */
   private readonly animator = new CatAnimator();
+  /** The view her facing is drawn in, held through the selector's hysteresis. */
+  private readonly facing = new FacingState(this.facingX, this.facingY);
 
   /** Sub-missile spawns queued by CombatSystem this frame; flushed after resolvePlayerAttacks. */
   private pendingSubMissileSpawns: Array<{ x: number; y: number }> = [];
@@ -132,14 +142,15 @@ export class CatPlayer extends Player {
     return catMouthOf(catCellFor(this.spriteState()));
   }
 
-  private spriteState(): CatSpriteState {
+  private spriteState(held: CatHeldDraw | null = this.heldDraw()): CatSpriteState {
     return {
       walkFrame: this.walkFrame,
       isMoving: this.isMoving,
-      facingX: this.facingX,
-      facingY: this.facingY,
+      facing: this.facing.peek(this.facingX, this.facingY),
       isKnockedOut: this.isKnockedOut,
       oneShot: this.animator.current,
+      carrying: held?.hold === 'carry',
+      working: held !== null && held.hold !== 'carry' ? held.hold : null,
     };
   }
   private static readonly SUBMISSILE_COUNT_BASE = 3;
@@ -418,66 +429,78 @@ export class CatPlayer extends Player {
   }
 
   /**
-   * The axe or pickaxe she is drawn working with while she harvests, or null.
-   * She has no tool row of her own: her swipe plays on a work cadence and the
-   * tool is drawn at her paw over it.
+   * The axe, pickaxe or scythe she is drawn working with while she harvests,
+   * or null. With one out, her work swing is the two-paw chop or pick that
+   * kind of tool is swung with, and standing between swings she holds it
+   * ready in that swing's opening pose.
    */
   private workingTool: WorkingTool | null = null;
 
   setWorkingTool(tool: WorkingTool | null): void {
+    // A swing cut short by putting the tool away would finish with her paws
+    // closed on nothing.
+    const putAway = this.workSwing;
+    if (putAway !== null) this.animator.stop(putAway);
     this.workingTool = tool;
+    const swing = this.workSwing;
+    if (swing !== null) prewarmCatHold(swing, this.facing.peek(this.facingX, this.facingY));
+  }
+
+  /** The swing her working tool is worked with: a pick at stone, a chop at anything else. */
+  private get workSwing(): CatWorkSwing | null {
+    const tool = this.workingTool;
+    if (tool === null) return null;
+    return tool.kind === 'pickaxe' ? 'mine' : 'chop';
   }
 
   /**
-   * One swing of work at a tree or rock — the swipe's picture without its
-   * blow, so it never reads as an attack to anything that asks `isSwinging`.
+   * One swing of work at a tree, a rock or a job — never a blow, so it never
+   * reads as an attack to anything that asks `isSwinging`. With a tool out it
+   * is her two-paw chop or pick; bare-pawed, her swipe's picture.
    */
   playWorkSwing(): void {
-    this.animator.play('swipe');
+    this.animator.play(this.workSwing ?? 'swipe');
   }
 
   /**
-   * The tool at her paw, swung with her swipe: raised while the swipe winds
-   * up, brought down onto the work as it lands, and held raised between.
-   * Head-on and from behind the paw is in front of her chest, so the tool is
-   * drawn over the middle of her; in profile it is out past her shoulder.
+   * A small thing a scene puts in her jaws to carry, over whatever her mouth
+   * slot holds; null hands the jaws back to her gear.
    */
-  private drawWorkingTool(ctx: CanvasRenderingContext2D, sx: number, sy: number, s: number): void {
-    const tool = this.workingTool;
-    if (tool === null) return;
-    const swipe = this.animator.current;
-    const progress = swipe?.action === 'swipe' ? swipe.progress : 0;
-    const swing =
-      CatPlayer.WORK_TOOL_RAISED_ANGLE +
-      (CatPlayer.WORK_TOOL_STRUCK_ANGLE - CatPlayer.WORK_TOOL_RAISED_ANGLE) *
-        Math.sin(progress * Math.PI);
-    const profile = Math.abs(this.facingX) >= Math.abs(this.facingY);
-    const facesLeft = this.facingX < 0;
-    const reach = profile ? CatPlayer.WORK_PAW_REACH : 0;
-    const gripX = sx + s * (CatPlayer.TILE_CENTER_OFFSET + (facesLeft ? -reach : reach));
-    const gripY = sy + s * CatPlayer.WORK_PAW_DOWN;
-    const haftAngle = facesLeft ? Math.PI - swing : swing;
-    drawToolAt(
-      ctx,
-      tool.kind,
-      tool.tier,
-      gripX,
-      gripY,
-      haftAngle,
-      s,
-      facesLeft,
-      CatPlayer.WORK_TOOL_LENGTH_SHARE,
-    );
+  private scriptedMouthCarry: HeldVisualDef | null = null;
+  /** Ticks counted for a carried thing's own pictures — a flicker, a glint. */
+  private heldTicks = 0;
+
+  setMouthCarry(look: HeldVisualDef | null): void {
+    this.scriptedMouthCarry = look;
+    this.prewarmMouthCarry();
   }
 
-  /** Where her working paw is, in tiles: out from her centre in profile, and down from her tile's top. */
-  private static readonly WORK_PAW_REACH = 0.26;
-  private static readonly WORK_PAW_DOWN = 0.72;
-  /** The tool's angle, screen radians as if facing +X, held raised and at the bottom of the swing. */
-  private static readonly WORK_TOOL_RAISED_ANGLE = -2.0;
-  private static readonly WORK_TOOL_STRUCK_ANGLE = 0.45;
-  /** She is half Carl's height, so she swings a shortened grip on the same tool. */
-  private static readonly WORK_TOOL_LENGTH_SHARE = 0.7;
+  private prewarmMouthCarry(): void {
+    if (this.mouthCarry() === null) return;
+    prewarmCatHold('carry', this.facing.peek(this.facingX, this.facingY));
+  }
+
+  /** What she carries in her jaws: a scene's scripted thing, or the item in her mouth slot made to be carried. */
+  private mouthCarry(): HeldVisualDef | null {
+    if (this.scriptedMouthCarry !== null) return this.scriptedMouthCarry;
+    const id = this.inventory.equipment.getEquippedId(MOUTH_HELD_KEY);
+    const look = id === undefined ? undefined : weaponStatsOf(id)?.heldVisual;
+    if (look === undefined) return null;
+    const def = HELD_VISUALS[look];
+    return catGripOf(def) === 'mouthCarry' ? def : null;
+  }
+
+  /** What she is drawn holding: her working tool while she works, else what is in her jaws. */
+  private heldDraw(): CatHeldDraw | null {
+    if (!this.isAlive) return null;
+    const tool = this.workingTool;
+    const swing = this.workSwing;
+    const toolLook = tool === null ? null : workingToolHeldVisual(tool);
+    if (toolLook !== null && swing !== null) return { look: toolLook, phase: 0, hold: swing };
+    const carried = this.mouthCarry();
+    if (carried === null) return null;
+    return { look: carried, phase: heldPhaseAt(carried, this.heldTicks), hold: 'carry' };
+  }
 
   /** Primary Space action: claw swipe (melee). */
   triggerAttack() {
@@ -516,6 +539,8 @@ export class CatPlayer extends Player {
   /** Every scene ticks this each frame, which is where her pose timers live. */
   override tickTimers(): void {
     super.tickTimers();
+    this.heldTicks++;
+    this.facing.update(this.facingX, this.facingY);
     this.animator.tick(this.isMoving, this.isKnockedOut);
   }
 
@@ -795,18 +820,25 @@ export class CatPlayer extends Player {
   };
 
   /**
-   * Dresses her sprite in what she has on. Run on every draw as well as on an
-   * equipment change, because a tutorial reset or a dev preset replaces her
-   * gear without announcing it, and she must never be drawn in last session's
-   * glasses. Cheap when nothing changed.
+   * Whether her gear has changed since her sprite was last dressed in it. Starts
+   * set so a build that is never restored is still dressed on its first draw,
+   * rather than in whatever the last crawler drawn had on.
    */
-  syncWear(): void {
-    setCatWear({ shades: this.inventory.hasEquipped(EYES_OF_SPLATTER_ID) });
+  private wearStale = true;
+
+  /** Dresses her sprite in what she has on, if her gear changed since it was last dressed. */
+  private dressInWear(): void {
+    if (!this.wearStale) return;
+    this.wearStale = false;
+    const worn = this.inventory.equippedItems().map((item) => item.id);
+    setOutfit('cat', catGarmentsWearing(worn));
   }
 
-  override onEquipmentChanged(): void {
+  protected override onEquipmentChanged(): void {
     super.onEquipmentChanged();
-    this.syncWear();
+    this.wearStale = true;
+    this.dressInWear();
+    this.prewarmMouthCarry();
   }
 
   protected override drawSelf(
@@ -815,7 +847,7 @@ export class CatPlayer extends Player {
     camY: number,
     tileSize: number,
   ) {
-    this.syncWear();
+    this.dressInWear();
     const sx = this.x - camX;
     const sy = this.y - camY;
     const s = tileSize;
@@ -827,9 +859,10 @@ export class CatPlayer extends Player {
       drawActivePlayerMarker(ctx, sphereCX, sphereCY, r);
     }
 
+    const held = this.heldDraw();
+    const state = this.spriteState(held);
     this.drawRetching(ctx, sx, sy, s, () => {
-      drawCatSprite(ctx, sx, sy, s, this.spriteState());
-      if (this.workingTool !== null) this.drawWorkingTool(ctx, sx, sy, s);
+      drawCatSprite(ctx, sx, sy, s, state, catCellFor(state), held);
     });
     if (!this.paintingBodyOnly) {
       drawMissiles(ctx, this.missiles, camX, camY, s, this.EXPLODE_FRAMES);

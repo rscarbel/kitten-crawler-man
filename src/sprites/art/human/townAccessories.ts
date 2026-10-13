@@ -13,7 +13,8 @@
  */
 
 import { mix, rgba } from '../carlArt';
-import type { CarlPose, CarlView } from '../carl/rig';
+import type { CarlPose } from '../carl/rig';
+import { type CardinalView } from '../../facingView';
 import type { Ramp } from '../carl/palette';
 import {
   HEAD_CENTRE_Y,
@@ -246,7 +247,7 @@ function paintTrouserLeg(
  * an inseam shadow between the legs, so the crotch reads as a gap rather
  * than fused cloth.
  */
-export function drawTrousers(ctx: Ctx, view: CarlView, pose: CarlPose, color: string): void {
+export function drawTrousers(ctx: Ctx, view: CardinalView, pose: CarlPose, color: string): void {
   const profile = view === 'side';
   const leftRootX = profile ? -TROUSER_PROFILE_ROOT_X : -LEG_ROOT_HALF;
   const rightRootX = profile ? TROUSER_PROFILE_ROOT_X : LEG_ROOT_HALF;
@@ -371,7 +372,7 @@ export function drawShoeMud(ctx: Ctx, pose: CarlPose): void {
 }
 
 /** Draws a flat shoe over each of `pose`'s own feet — the far one a shade darker, matching every other worn accessory here. */
-export function drawShoes(ctx: Ctx, _view: CarlView, pose: CarlPose, color: string): void {
+export function drawShoes(ctx: Ctx, _view: CardinalView, pose: CarlPose, color: string): void {
   drawShoe(ctx, pose.leftFoot, shaded(color));
   drawShoe(ctx, pose.rightFoot, color);
 }
@@ -386,7 +387,7 @@ const APRON_HEM_TAPER = 0.85;
 /** The waist tie's knot reaches slightly past the bib's own edge on each side. */
 const APRON_TIE_OVERHANG = 1.1;
 
-function drawApron(ctx: Ctx, view: CarlView, spec: AccessorySpec): void {
+function drawApron(ctx: Ctx, view: CardinalView, spec: AccessorySpec): void {
   if (view === 'back') return;
   const half = view === 'side' ? APRON_PROFILE_HALF_WIDTH : APRON_HALF_WIDTH;
   ctx.fillStyle = spec.color;
@@ -425,7 +426,7 @@ const SATCHEL_FRONT_HIP_FRAC = 0.5;
 /** The pouch reads slightly flattened top-to-bottom, not a perfect circle. */
 const SATCHEL_POUCH_VERTICAL_FRAC = 0.8;
 
-function drawSatchel(ctx: Ctx, view: CarlView, spec: AccessorySpec): void {
+function drawSatchel(ctx: Ctx, view: CardinalView, spec: AccessorySpec): void {
   const shoulderX =
     view === 'side' ? SATCHEL_PROFILE_SHOULDER_X : -SHOULDER_HALF * SATCHEL_FRONT_SHOULDER_FRAC;
   const hipX = view === 'side' ? SATCHEL_PROFILE_HIP_X : SHOULDER_HALF * SATCHEL_FRONT_HIP_FRAC;
@@ -455,7 +456,7 @@ const TABARD_BOTTOM = WAIST_Y + 0.05;
 const TABARD_HALF_WIDTH = 0.1;
 const TABARD_OUTLINE_WIDTH = 0.012;
 
-function drawTabard(ctx: Ctx, view: CarlView, spec: AccessorySpec): void {
+function drawTabard(ctx: Ctx, view: CardinalView, spec: AccessorySpec): void {
   if (view === 'side') return;
   ctx.fillStyle = spec.color;
   ctx.fillRect(-TABARD_HALF_WIDTH, TABARD_TOP, TABARD_HALF_WIDTH * 2, TABARD_BOTTOM - TABARD_TOP);
@@ -474,7 +475,7 @@ const HAT_PROFILE_BRIM_LEAD = HEAD_RX * 1.4;
 /** The profile brim's own centre sits slightly ahead of the lead point, not on top of it. */
 const HAT_PROFILE_BRIM_OFFSET_FRAC = 0.15;
 
-function drawBrimmedHat(ctx: Ctx, view: CarlView, spec: AccessorySpec): void {
+function drawBrimmedHat(ctx: Ctx, view: CardinalView, spec: AccessorySpec): void {
   const crownY = HEAD_CENTRE_Y - HAT_CROWN_RISE;
   const brimY = HEAD_CENTRE_Y - HAT_BRIM_RISE;
   ctx.fillStyle = shaded(spec.color);
@@ -508,7 +509,7 @@ const STOLE_TOP = SHOULDER_Y + 0.06;
 const STOLE_BOTTOM = HIP_Y + 0.2;
 const STOLE_BAND_HEIGHT = 0.02;
 
-function drawStole(ctx: Ctx, view: CarlView, spec: AccessorySpec): void {
+function drawStole(ctx: Ctx, view: CardinalView, spec: AccessorySpec): void {
   if (view === 'side') return;
   ctx.fillStyle = spec.color;
   ctx.fillRect(-STOLE_HALF_WIDTH, STOLE_TOP, STOLE_HALF_WIDTH * 2, STOLE_BOTTOM - STOLE_TOP);
@@ -532,7 +533,7 @@ const HOOD_PATCH_Y_DROP = 0.1;
 const HOOD_PATCH_PROFILE_X = 0.05;
 const HOOD_PATCH_FRONT_FRAC = 0.4;
 
-function drawPatchedHood(ctx: Ctx, view: CarlView, spec: AccessorySpec): void {
+function drawPatchedHood(ctx: Ctx, view: CardinalView, spec: AccessorySpec): void {
   ctx.fillStyle = rgba(spec.color, HOOD_FILL_ALPHA);
   ctx.beginPath();
   ctx.ellipse(0, HEAD_CENTRE_Y - HOOD_RISE, HOOD_RX, HOOD_RY, 0, Math.PI, Math.PI * 2);
@@ -562,7 +563,7 @@ const LEDGER_PENCIL_END_X_FRAC = 0.5;
 const LEDGER_PENCIL_END_Y_FRAC = 0.35;
 
 /** Wick's ledger and pencil, held at the hip. */
-function drawLedgerPencil(ctx: Ctx, view: CarlView, spec: AccessorySpec): void {
+function drawLedgerPencil(ctx: Ctx, view: CardinalView, spec: AccessorySpec): void {
   if (view === 'back') return;
   const x = view === 'side' ? LEDGER_PROFILE_X : SHOULDER_HALF * LEDGER_FRONT_X_FRAC;
   const y = HIP_Y + LEDGER_Y_DROP;
@@ -599,7 +600,7 @@ const SHAWL_CHARM_PROFILE_X = 0.02;
 const SHAWL_CHARM_FRONT_FRAC = 0.4;
 
 /** Old Hilda's shawl, draped over both shoulders, with two hanging charm trinkets. */
-function drawShawlCharms(ctx: Ctx, view: CarlView, spec: AccessorySpec): void {
+function drawShawlCharms(ctx: Ctx, view: CardinalView, spec: AccessorySpec): void {
   const half = view === 'side' ? SHAWL_PROFILE_HALF_WIDTH : SHOULDER_HALF * SHAWL_FRONT_WIDTH_SCALE;
   ctx.fillStyle = spec.color;
   ctx.beginPath();
@@ -634,7 +635,7 @@ const FLOUR_FLECKS: ReadonlyArray<readonly [xFrac: number, yOffset: number]> = [
 ];
 
 /** Marta's apron, dusted white with flour flecks. */
-function drawFlourApron(ctx: Ctx, view: CarlView, spec: AccessorySpec): void {
+function drawFlourApron(ctx: Ctx, view: CardinalView, spec: AccessorySpec): void {
   drawApron(ctx, view, spec);
   if (view === 'back') return;
   const half = view === 'side' ? APRON_PROFILE_HALF_WIDTH : APRON_HALF_WIDTH;
@@ -655,7 +656,7 @@ const VIAL_HEIGHT = 0.03;
 const VIAL_RISE_ABOVE_POUCH = 0.03;
 
 /** Fen's satchel, with a rack of stoppered vials showing over the lip. */
-function drawVialCase(ctx: Ctx, view: CarlView, spec: AccessorySpec): void {
+function drawVialCase(ctx: Ctx, view: CardinalView, spec: AccessorySpec): void {
   drawSatchel(ctx, view, spec);
   if (view === 'side') return;
   const hipX = SHOULDER_HALF * SATCHEL_FRONT_HIP_FRAC;
@@ -679,7 +680,7 @@ const RULE_LINE_WIDTH = 0.014;
 const RULE_FRONT_X_FRAC = 0.6;
 const RULE_PROFILE_X = 0.04;
 /** Wendell's folding rule at the belt — a builder's tool, not a farmer's. */
-function drawBuilderRule(ctx: Ctx, view: CarlView, spec: AccessorySpec): void {
+function drawBuilderRule(ctx: Ctx, view: CardinalView, spec: AccessorySpec): void {
   const x = view === 'side' ? RULE_PROFILE_X : SHOULDER_HALF * RULE_FRONT_X_FRAC;
   const topY = HIP_Y - RULE_TOP_DROP;
   ctx.strokeStyle = spec.color;
@@ -696,7 +697,7 @@ function drawBuilderRule(ctx: Ctx, view: CarlView, spec: AccessorySpec): void {
 type WornAccessoryKind = Exclude<AccessoryKind, 'none'>;
 
 const ACCESSORY_PAINTERS: Readonly<
-  Record<WornAccessoryKind, (ctx: Ctx, view: CarlView, spec: AccessorySpec) => void>
+  Record<WornAccessoryKind, (ctx: Ctx, view: CardinalView, spec: AccessorySpec) => void>
 > = {
   apron: drawApron,
   satchel: drawSatchel,
@@ -712,7 +713,7 @@ const ACCESSORY_PAINTERS: Readonly<
 };
 
 /** Paints `spec`'s accessory, in figure-unit space, over an already-drawn body. */
-export function drawAccessory(ctx: Ctx, view: CarlView, spec: AccessorySpec): void {
+export function drawAccessory(ctx: Ctx, view: CardinalView, spec: AccessorySpec): void {
   if (spec.kind === 'none') return;
   ACCESSORY_PAINTERS[spec.kind](ctx, view, spec);
 }
@@ -849,7 +850,7 @@ function drawLongHairLobes(ctx: Ctx, hair: Ramp): void {
 }
 
 /** A hanging mass behind the head and down the back, reaching the shoulder blades — tied back or loose, read the same at 32px, and never crossing the face. */
-function drawLongHairMass(ctx: Ctx, hair: Ramp, view: CarlView): void {
+function drawLongHairMass(ctx: Ctx, hair: Ramp, view: CardinalView): void {
   withHeadExcluded(ctx, () => {
     if (view === 'side') {
       traceLongHairLobe(ctx, PROFILE_LONG_HAIR_BACK);
@@ -950,7 +951,7 @@ function drawHeadscarf(ctx: Ctx, cloth: Ramp): void {
  */
 export function drawHairStyleOverlay(
   ctx: Ctx,
-  view: CarlView,
+  view: CardinalView,
   style: HairStyleKind,
   hairRamp: Ramp,
   skinRamp: Ramp,

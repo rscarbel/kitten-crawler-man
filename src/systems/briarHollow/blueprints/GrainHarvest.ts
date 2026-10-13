@@ -47,7 +47,6 @@ import { drawGrainStand, type GrainStage } from '../../../map/tiles/cropRowTiles
 import { tileHash } from '../../../map/tiles/hollowTileHash';
 import type { TilePoint } from '../../../map/town/townPlan';
 import { CHOP_ROWS } from '../../../sprites/art/humanFigure';
-import { viewForFacing } from '../../../sprites/humanSprite';
 import { drawInteractionPrompt } from '../../../ui/InteractionPrompt';
 import type { Rect } from '../../../ui/core/geom';
 import { hostileWithinAttackRange } from '../../interactionPromptGate';
@@ -120,7 +119,7 @@ const REGROW_THINNED_FROM_SECONDS = 25;
 const SWING_MOTION_TOLERANCE_PX = 0.5;
 /** How squarely a stand must sit in front of the crawler to be picked over a nearer one. */
 const FACING_PREFERENCE_DOT = 0.5;
-/** Donut has no scythe row: her swipe lands this long before the swing ends, as the grain falls. */
+/** Donut swings the scythe with her two-paw chop, landing this long before the swing ends, as the grain falls. */
 const CAT_SWIPE_LEAD_SECONDS = 0.4;
 const CAT_SWIPE_LEAD_TICKS = Math.round(CAT_SWIPE_LEAD_SECONDS * UPDATES_PER_SECOND);
 const SCYTHE_LOOK_TIER = 0;
@@ -483,7 +482,7 @@ export class GrainHarvest {
    * axe's one-second swing plays out over the scythe's longer one.
    */
   private playSwingRow(swing: Swing, human: HumanPlayer): void {
-    const row = CHOP_ROWS[viewForFacing(human.facingX, human.facingY)];
+    const row = human.rowFacing(CHOP_ROWS);
     swing.animating = human.playAction(row, {
       faceX: human.facingX,
       faceY: human.facingY,

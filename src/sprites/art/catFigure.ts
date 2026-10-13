@@ -8,7 +8,7 @@
  *
  * Rows:
  *    walk          — toward the camera, one full gait cycle
- *    walk_side     — profile, drawn facing +X and mirrored at runtime
+ *    walk_side     — profile, facing +X
  *    walk_away     — away from the camera, tail up
  *    idle          — breathing, tail sway, slow blink
  *    idle_side
@@ -25,15 +25,20 @@
  *    knocked_out   — down and out, waiting on a revive
  *    dance         — level-up celebration, paws pumping
  *
+ * Every profile row has a `_west` twin: the same pose painted facing −X with
+ * her left flank's coat. No row is mirrored at runtime, because her
+ * tortoiseshell coat is not symmetric and a flipped picture would swap it.
+ *
  * The art invariants live in `scripts/gates-cat.ts`, which the review harness
  * runs: `npm run render:cat`.
  */
 
 import {
-  BARE_CAT,
   GROUND_Y,
+  type CatDirection,
+  type CatGrip,
   type CatPose,
-  type CatWear,
+  type CatSlab,
   type PawPose,
   type Pt,
   type TailPose,
@@ -45,13 +50,19 @@ import {
   drawCatFront,
   drawCatSide,
   easeInOut,
+  forepawsOnHaft,
   hump,
   lerp,
   ramp,
   restPose,
   TWO_PI,
 } from './catArt';
+import type { CatDressing } from './catParts';
+import { CARDINAL_VIEWS, type CardinalView } from '../facingView';
 import { type FigureDef, figureStates } from '../figure/figureDef';
+import { BARE_CAT_OUTFIT, dressCat } from '../garments/cat/catDressing';
+import type { GarmentFrameContext } from '../garments/garmentDef';
+import type { Outfit } from '../garments/outfit';
 
 // ── Cell geometry ────────────────────────────────────────────────────────────
 
@@ -664,9 +675,237 @@ function dance(phase: number): CatPose {
   };
 }
 
-// ── Sheet assembly ───────────────────────────────────────────────────────────
+// ── Working a tool: the two-paw chop and pick ────────────────────────────────
 
-type View = 'front' | 'side' | 'back';
+/**
+ * One frame of a two-paw swing, in the pose's own frame facing east: where
+ * the butt paw is, which way the haft runs and how far toward the camera, how
+ * far she leans into it, and which of her slabs the haft passes under.
+ */
+interface SwingKey {
+  readonly butt: Pt;
+  readonly angle: number;
+  readonly depth: number;
+  readonly lean: number;
+  readonly under: CatSlab;
+}
+
+type SwingKeys = readonly [
+  SwingKey,
+  SwingKey,
+  SwingKey,
+  SwingKey,
+  SwingKey,
+  SwingKey,
+  SwingKey,
+  SwingKey,
+];
+
+/**
+ * The frame a work swing bites on. Her swing plays over `CAT_SWIPE_FRAMES`
+ * ticks, sampled across `ACTION_FRAMES`, so frame 4 is on screen from the
+ * swing's ninth tick. The picture only: a harvest sounds and shows its
+ * strike on the tick the swing starts, not on the bite.
+ */
+export const WORK_IMPACT_FRAME = 4;
+
+/** How far along a haft her second paw closes from the butt paw, pose units. */
+const HAFT_PAW_SPACING = 0.12;
+/** Paws closed on a haft are lifted off the floor: turned a little toward the camera. */
+const HAFT_PAW_LIFT = 0.3;
+/** Her pads face the camera on the haft, so the head shows its flat. */
+const PADS_TO_CAMERA: CatDirection = { x: 0, y: 0, z: 1 };
+
+function key(
+  x: number,
+  y: number,
+  angle: number,
+  depth: number,
+  leanDeg: number,
+  under: CatSlab,
+): SwingKey {
+  return { butt: { x, y }, angle, depth, lean: deg(leanDeg), under };
+}
+
+/** Profile chop: up and back over her shoulders, then across into the wood ahead of her chest. */
+const CHOP_SIDE: SwingKeys = [
+  key(0.32, 0.12, -2.2, 0, -2, 'forepaws'),
+  key(0.3, 0.0, -2.5, 0, -7, 'forepaws'),
+  key(0.27, -0.08, -2.75, 0, -12, 'forepaws'),
+  key(0.36, -0.02, -1.4, 0, -3, 'forepaws'),
+  key(0.4, 0.12, 0.1, 0, 10, 'forepaws'),
+  key(0.4, 0.13, 0.16, 0, 9, 'forepaws'),
+  key(0.37, 0.1, -0.9, 0, 3, 'forepaws'),
+  key(0.33, 0.12, -1.9, 0, -1, 'forepaws'),
+];
+
+/** Profile pick: straight up over her head, then down onto the floor ahead of her. */
+const MINE_SIDE: SwingKeys = [
+  key(0.32, 0.12, -2.1, 0, -3, 'forepaws'),
+  key(0.27, 0.04, -2.4, 0, -9, 'forepaws'),
+  key(0.26, -0.13, -2.1, 0, -14, 'forepaws'),
+  key(0.42, 0.02, -0.55, 0, -2, 'forepaws'),
+  key(0.4, 0.1, 0.36, 0, 11, 'forepaws'),
+  key(0.4, 0.11, 0.39, 0, 10, 'forepaws'),
+  key(0.36, 0.08, -0.4, 0, 3, 'forepaws'),
+  key(0.33, 0.1, -1.7, 0, -1, 'forepaws'),
+];
+
+/**
+ * Head-on chop: up over her right shoulder (the screen's left) with the head
+ * behind her ear, then down and across in front of her toward the camera.
+ */
+const CHOP_FRONT: SwingKeys = [
+  key(-0.06, 0.12, -2.3, -0.2, 0, 'forepaws'),
+  key(-0.15, -0.12, -2.3, -0.3, -2, 'head'),
+  key(-0.22, -0.3, -2.4, -0.4, -3, 'head'),
+  key(-0.12, 0.04, -0.3, 0.5, 1, 'forepaws'),
+  key(0.06, 0.18, 0.7, 0.55, 4, 'forepaws'),
+  key(0.07, 0.19, 0.75, 0.55, 4, 'forepaws'),
+  key(0.0, 0.1, -0.2, 0.3, 1, 'forepaws'),
+  key(-0.06, 0.12, -2.2, -0.1, 0, 'forepaws'),
+];
+
+/** Head-on pick: up beside her right ear, then straight down onto the floor in front of her. */
+const MINE_FRONT: SwingKeys = [
+  key(-0.06, 0.12, -2.25, -0.2, 0, 'forepaws'),
+  key(-0.2, -0.12, -2.3, -0.4, -2, 'head'),
+  key(-0.18, -0.38, -1.95, -0.5, -3, 'head'),
+  key(-0.12, 0.0, 0.2, 0.6, 1, 'forepaws'),
+  key(0.0, 0.2, 1.4, 0.6, 4, 'forepaws'),
+  key(0.0, 0.21, 1.45, 0.6, 4, 'forepaws'),
+  key(-0.02, 0.12, -0.15, 0.4, 1, 'forepaws'),
+  key(-0.06, 0.12, -2.2, -0.1, 0, 'forepaws'),
+];
+
+/**
+ * From behind: the tool rises over her head with her paws above her
+ * shoulders, then comes down on the far side of her, its head showing past
+ * her flank.
+ */
+const CHOP_BACK: SwingKeys = [
+  key(0.05, 0.12, -1.6, 0.3, 0, 'body'),
+  key(0.1, -0.25, -1.7, 0.4, 2, 'forepaws'),
+  key(0.12, -0.45, -2.0, 0.5, 3, 'forepaws'),
+  key(0.06, -0.25, -1.2, 0.0, 0, 'forepaws'),
+  key(0.02, 0.05, 0.5, -0.6, -4, 'body'),
+  key(0.02, 0.06, 0.55, -0.6, -4, 'body'),
+  key(0.06, -0.1, -1.0, 0.2, -1, 'body'),
+  key(0.05, 0.08, -1.5, 0.2, 0, 'body'),
+];
+
+const MINE_BACK: SwingKeys = [
+  key(0.05, 0.12, -1.65, 0.3, 0, 'body'),
+  key(0.08, -0.28, -1.65, 0.45, 2, 'forepaws'),
+  key(0.08, -0.5, -1.75, 0.55, 3, 'forepaws'),
+  key(0.04, -0.25, -1.3, 0.0, 0, 'forepaws'),
+  key(0.02, 0.05, 1.0, -0.6, -4, 'body'),
+  key(0.02, 0.06, 1.05, -0.6, -4, 'body'),
+  key(0.05, -0.1, -0.9, 0.2, -1, 'body'),
+  key(0.05, 0.08, -1.5, 0.2, 0, 'body'),
+];
+
+/** Her body's own part of a swing: rear up into the wind-up, drive down into the bite, settle. */
+function swingBody(frame: number, view: CardinalView, tailBase: number): CatPose {
+  const progress = shotProgress(frame, ACTION_FRAMES);
+  const windup = easeInOut(ramp(progress, 0, 0.36));
+  const strike = easeInOut(ramp(progress, 0.36, 0.56));
+  const recover = easeInOut(ramp(progress, 0.7, 1));
+  const coil = windup * (1 - strike);
+  const drive = strike * (1 - recover);
+  const rest = restPose();
+  const sideways = view === 'side';
+  return {
+    ...rest,
+    sit: sideways ? 0.15 * coil : 0.35 * coil + 0.1,
+    bob: -0.012 * coil + 0.014 * drive,
+    squash: 1 - 0.04 * drive,
+    headY: -0.01 * coil + 0.012 * drive,
+    headX: sideways ? 0.02 * drive : 0,
+    headTilt: deg(-4) * coil + deg(5) * drive,
+    earL: lerp(0.6, -0.3, drive),
+    earR: lerp(0.6, -0.3, drive),
+    eyeOpen: lerp(1, 0.6, drive),
+    pupil: lerp(0.5, 0.25, coil),
+    mouth: 0.35 * drive,
+    tail: tail(tailBase, 1.4, 0.5, progress * 6, 0.25 + 0.3 * drive, -0.6 * drive),
+    hindL: paw(-0.02 * coil, 0, 0),
+    hindR: paw(-0.03 * coil, 0, 0),
+    time: progress,
+  };
+}
+
+const TAIL_BASE_FOR: Readonly<Record<CardinalView, number>> = {
+  front: FRONT_TAIL_BASE,
+  side: SIDE_TAIL_BASE,
+  back: BACK_TAIL_BASE,
+};
+
+/** One frame of a two-paw swing in `view`: her body and both paws closed on the haft. */
+function swingPose(keys: SwingKeys, view: CardinalView, frame: number): CatPose {
+  const at = keys[Math.max(0, Math.min(keys.length - 1, frame))];
+  const body = swingBody(frame, view, TAIL_BASE_FOR[view]);
+  const leaned: CatPose = { ...body, lean: body.lean + at.lean };
+  const grip: CatGrip = {
+    under: at.under,
+    pawsClosed: true,
+    haftAngle: at.angle,
+    haftDepth: at.depth,
+    padNormal: PADS_TO_CAMERA,
+  };
+  return {
+    ...leaned,
+    ...forepawsOnHaft(leaned, view, at.butt, grip, HAFT_PAW_SPACING, HAFT_PAW_LIFT),
+    grip,
+  };
+}
+
+// ── Carrying in her jaws ─────────────────────────────────────────────────────
+
+/**
+ * A carried thing lies across her jaws: head-on and from behind cocked a
+ * little off level — dead level across her muzzle it reads as a strap
+ * muzzling her — and toward the camera in profile.
+ */
+const MOUTH_ACROSS = deg(-8);
+const MOUTH_ACROSS_DEPTH = 0;
+/**
+ * In profile the thing across her jaws points at the camera, which this
+ * view draws down the screen; turned short of end-on, so it shows as more
+ * than a dot at her mouth.
+ */
+const MOUTH_END_ON_ANGLE = deg(80);
+const MOUTH_END_ON_DEPTH = 0.45;
+/** Jaws closed on something are held a little open, the head a touch higher and prouder. */
+const CARRY_JAW = 0.22;
+const CARRY_HEAD_RAISE = 0.018;
+const CARRY_EARS = 0.55;
+
+function mouthGrip(view: CardinalView): CatGrip {
+  const sideways = view === 'side';
+  return {
+    ...(view === 'back' ? { under: 'head' as const } : {}),
+    pawsClosed: false,
+    haftAngle: sideways ? MOUTH_END_ON_ANGLE : MOUTH_ACROSS,
+    haftDepth: sideways ? MOUTH_END_ON_DEPTH : MOUTH_ACROSS_DEPTH,
+    padNormal: PADS_TO_CAMERA,
+  };
+}
+
+/** `base` with something carried in her jaws: mouth a little open on it, head up, ears forward. */
+function carrying(base: CatPose, view: CardinalView): CatPose {
+  return {
+    ...base,
+    headY: base.headY - CARRY_HEAD_RAISE,
+    mouth: CARRY_JAW,
+    tongue: 0,
+    earL: CARRY_EARS,
+    earR: CARRY_EARS,
+    grip: mouthGrip(view),
+  };
+}
+
+// ── Sheet assembly ───────────────────────────────────────────────────────────
 
 /**
  * A looping row is sampled evenly around its cycle and has to close back on
@@ -678,10 +917,21 @@ type RowKind = 'loop' | 'oneShot';
 export interface RowSpec {
   readonly name: string;
   readonly frameCount: number;
-  readonly view: View;
+  readonly view: CardinalView;
   readonly kind: RowKind;
+  /** A profile row painted facing screen −X with her left flank's coat; never mirrored at runtime. */
+  readonly facesWest: boolean;
+  /** What the row holds, for a row played only while she holds it. */
+  readonly hold?: CatHold;
   readonly pose: (t: number) => CatPose;
 }
+
+/**
+ * The things she holds that have rows of their own: a tool she chops wood or
+ * mines stone with, both forepaws on its haft, and a small thing carried in
+ * her jaws.
+ */
+export type CatHold = 'chop' | 'mine' | 'carry';
 
 /** Loops sample the cycle evenly; one-shots sample the middle of each frame. */
 function cyclePhase(frame: number, frameCount: number): number {
@@ -692,9 +942,17 @@ function shotProgress(frame: number, frameCount: number): number {
   return (frame + 0.5) / frameCount;
 }
 
-export const CAT_ROWS: readonly RowSpec[] = [
+/** The suffix each view's row carries after its action's name, head-on carrying none. */
+const VIEW_SUFFIX: Readonly<Record<CardinalView, string>> = {
+  front: '',
+  side: '_side',
+  back: '_away',
+};
+
+const EAST_ROWS: readonly RowSpec[] = [
   {
     name: 'walk',
+    facesWest: false,
     frameCount: WALK_FRAMES,
     kind: 'loop',
     view: 'front',
@@ -702,6 +960,7 @@ export const CAT_ROWS: readonly RowSpec[] = [
   },
   {
     name: 'walk_side',
+    facesWest: false,
     frameCount: WALK_FRAMES,
     kind: 'loop',
     view: 'side',
@@ -709,6 +968,7 @@ export const CAT_ROWS: readonly RowSpec[] = [
   },
   {
     name: 'walk_away',
+    facesWest: false,
     frameCount: WALK_FRAMES,
     kind: 'loop',
     view: 'back',
@@ -716,6 +976,7 @@ export const CAT_ROWS: readonly RowSpec[] = [
   },
   {
     name: 'idle',
+    facesWest: false,
     frameCount: IDLE_FRAMES,
     kind: 'loop',
     view: 'front',
@@ -723,6 +984,7 @@ export const CAT_ROWS: readonly RowSpec[] = [
   },
   {
     name: 'idle_side',
+    facesWest: false,
     frameCount: IDLE_FRAMES,
     kind: 'loop',
     view: 'side',
@@ -730,6 +992,7 @@ export const CAT_ROWS: readonly RowSpec[] = [
   },
   {
     name: 'idle_away',
+    facesWest: false,
     frameCount: IDLE_FRAMES,
     kind: 'loop',
     view: 'back',
@@ -737,6 +1000,7 @@ export const CAT_ROWS: readonly RowSpec[] = [
   },
   {
     name: 'look_around',
+    facesWest: false,
     frameCount: BREAK_FRAMES,
     kind: 'oneShot',
     view: 'front',
@@ -744,6 +1008,7 @@ export const CAT_ROWS: readonly RowSpec[] = [
   },
   {
     name: 'groom_paw',
+    facesWest: false,
     frameCount: BREAK_FRAMES,
     kind: 'oneShot',
     view: 'front',
@@ -751,6 +1016,7 @@ export const CAT_ROWS: readonly RowSpec[] = [
   },
   {
     name: 'groom_flank',
+    facesWest: false,
     frameCount: BREAK_FRAMES,
     kind: 'oneShot',
     view: 'front',
@@ -758,6 +1024,7 @@ export const CAT_ROWS: readonly RowSpec[] = [
   },
   {
     name: 'swipe',
+    facesWest: false,
     frameCount: ACTION_FRAMES,
     kind: 'oneShot',
     view: 'front',
@@ -765,6 +1032,7 @@ export const CAT_ROWS: readonly RowSpec[] = [
   },
   {
     name: 'swipe_side',
+    facesWest: false,
     frameCount: ACTION_FRAMES,
     kind: 'oneShot',
     view: 'side',
@@ -772,6 +1040,7 @@ export const CAT_ROWS: readonly RowSpec[] = [
   },
   {
     name: 'swipe_away',
+    facesWest: false,
     frameCount: ACTION_FRAMES,
     kind: 'oneShot',
     view: 'back',
@@ -779,6 +1048,7 @@ export const CAT_ROWS: readonly RowSpec[] = [
   },
   {
     name: 'cast',
+    facesWest: false,
     frameCount: ACTION_FRAMES,
     kind: 'oneShot',
     view: 'front',
@@ -786,6 +1056,7 @@ export const CAT_ROWS: readonly RowSpec[] = [
   },
   {
     name: 'cast_side',
+    facesWest: false,
     frameCount: ACTION_FRAMES,
     kind: 'oneShot',
     view: 'side',
@@ -793,6 +1064,7 @@ export const CAT_ROWS: readonly RowSpec[] = [
   },
   {
     name: 'cast_away',
+    facesWest: false,
     frameCount: ACTION_FRAMES,
     kind: 'oneShot',
     view: 'back',
@@ -800,6 +1072,7 @@ export const CAT_ROWS: readonly RowSpec[] = [
   },
   {
     name: 'knocked_out',
+    facesWest: false,
     frameCount: KO_FRAMES,
     kind: 'loop',
     view: 'side',
@@ -807,51 +1080,190 @@ export const CAT_ROWS: readonly RowSpec[] = [
   },
   {
     name: 'dance',
+    facesWest: false,
     frameCount: DANCE_FRAMES,
     kind: 'loop',
     view: 'front',
     pose: (f) => dance(cyclePhase(f, DANCE_FRAMES)),
   },
+  ...swingRows('chop', { front: CHOP_FRONT, side: CHOP_SIDE, back: CHOP_BACK }),
+  ...swingRows('mine', { front: MINE_FRONT, side: MINE_SIDE, back: MINE_BACK }),
+  ...carryRows(),
 ];
 
-function paintView(ctx: CanvasRenderingContext2D, view: View, pose: CatPose, wear: CatWear): void {
-  if (view === 'front') drawCatFront(ctx, pose, wear);
-  else if (view === 'back') drawCatBack(ctx, pose, wear);
-  else drawCatSide(ctx, pose, wear);
+function swingRows(
+  hold: 'chop' | 'mine',
+  keys: Readonly<Record<CardinalView, SwingKeys>>,
+): RowSpec[] {
+  return CARDINAL_VIEWS.map((view) => ({
+    name: `${hold}${VIEW_SUFFIX[view]}`,
+    facesWest: false,
+    frameCount: ACTION_FRAMES,
+    kind: 'oneShot',
+    view,
+    hold,
+    pose: (f) => swingPose(keys[view], view, f),
+  }));
+}
+
+/** Her walk and idle with something in her jaws. */
+function carryRows(): RowSpec[] {
+  const walks: Readonly<Record<CardinalView, (phase: number) => CatPose>> = {
+    front: walkFront,
+    side: walkSide,
+    back: walkBack,
+  };
+  const idles: Readonly<Record<CardinalView, (phase: number) => CatPose>> = {
+    front: idleFront,
+    side: idleSide,
+    back: idleBack,
+  };
+  return CARDINAL_VIEWS.flatMap((view): RowSpec[] => [
+    {
+      name: `carry_walk${VIEW_SUFFIX[view]}`,
+      facesWest: false,
+      frameCount: WALK_FRAMES,
+      kind: 'loop',
+      view,
+      hold: 'carry',
+      pose: (f) => carrying(walks[view](cyclePhase(f, WALK_FRAMES)), view),
+    },
+    {
+      name: `carry_idle${VIEW_SUFFIX[view]}`,
+      facesWest: false,
+      frameCount: IDLE_FRAMES,
+      kind: 'loop',
+      view,
+      hold: 'carry',
+      pose: (f) => carrying(idles[view](cyclePhase(f, IDLE_FRAMES)), view),
+    },
+  ]);
+}
+
+/** The suffix a west-facing profile row carries after its east-facing row's name. */
+const WEST_SUFFIX = '_west';
+
+/**
+ * Every profile row again, facing west: the same poses, painted mirrored with
+ * her left flank's coat.
+ */
+const WEST_ROWS: readonly RowSpec[] = EAST_ROWS.filter((row) => row.view === 'side').map((row) => ({
+  ...row,
+  name: `${row.name}${WEST_SUFFIX}`,
+  facesWest: true,
+}));
+
+export const CAT_ROWS: readonly RowSpec[] = [...EAST_ROWS, ...WEST_ROWS];
+
+/**
+ * Paints `pose` the way `row` is painted: in the row's view, facing the row's
+ * way. `front` receives the slabs in front of whatever she holds.
+ */
+export function paintCatPose(
+  ctx: CanvasRenderingContext2D,
+  row: RowSpec,
+  pose: CatPose,
+  dressing: CatDressing,
+  front: CanvasRenderingContext2D | null = null,
+): void {
+  if (row.view === 'front') drawCatFront(ctx, pose, dressing, front);
+  else if (row.view === 'back') drawCatBack(ctx, pose, dressing, front);
+  else drawCatSide(ctx, pose, dressing, row.facesWest ? 'left' : 'right', front);
 }
 
 function rowOf(state: string): RowSpec | undefined {
   return CAT_ROWS.find((row) => row.name === state);
 }
 
+/** What a garment painted into one cell of `row` sees of it. */
+export function catGarmentContext(
+  row: RowSpec,
+  frame: number,
+  pose: CatPose,
+): GarmentFrameContext<'cat'> {
+  return {
+    row: row.name,
+    frame,
+    frameCount: row.frameCount,
+    view: row.view,
+    westward: row.facesWest,
+    pose,
+  };
+}
+
 /**
- * Paints one cell of Donut, in the cell's own pixels.
+ * Paints one cell of Donut, in the cell's own pixels, dressed by whatever
+ * `dressingFor` returns for that cell.
  *
  * Every painter draws around the centre of the logical tile, and she is scaled
  * about her own ground line rather than about that centre, which is what keeps
  * her paws on the tile they belong to while the rest of her shrinks.
  */
-function paintCatFrame(
+export function paintCatCell(
   ctx: CanvasRenderingContext2D,
   state: string,
   frame: number,
-  wear: CatWear,
+  dressingFor: (context: GarmentFrameContext<'cat'>) => CatDressing,
+  front: CanvasRenderingContext2D | null = null,
 ): void {
   const row = rowOf(state);
   if (row === undefined) return;
+  const pose = row.pose(frame);
   ctx.save();
   ctx.translate(ORIGIN_X, ORIGIN_Y);
   ctx.scale(TILE_SCALE, TILE_SCALE);
   ctx.translate(0, GROUND_Y);
   ctx.scale(CAT_SCALE, CAT_SCALE);
   ctx.translate(0, -GROUND_Y);
-  paintView(ctx, row.view, row.pose(frame), wear);
+  paintCatPose(ctx, row, pose, dressingFor(catGarmentContext(row, frame, pose)), front);
   ctx.restore();
 }
 
-/** Whether a row is painted side-on. */
-export function catRowIsProfile(state: string): boolean {
-  return rowOf(state)?.view === 'side';
+/** The row named `state`, or undefined for a name that is no row of hers. */
+export function catRowOf(state: string): RowSpec | undefined {
+  return rowOf(state);
+}
+
+/**
+ * Whether a cell of hers bakes a front layer: a frame of a row she plays
+ * holding something, whose held thing lies under one of her slabs.
+ */
+export function catCellIsLayered(state: string, frame: number): boolean {
+  const row = rowOf(state);
+  if (row?.hold === undefined) return false;
+  return row.pose(frame).grip?.under !== undefined;
+}
+
+/**
+ * A point of her pose space where her cell paints it, cell pixels: the same
+ * placement {@link paintCatCell} paints with, scaled about her ground line.
+ */
+export function catPoseToCell(point: Pt): Pt {
+  return {
+    x: ORIGIN_X + point.x * TILE_SCALE * CAT_SCALE,
+    y: ORIGIN_Y + TILE_SCALE * (GROUND_Y + (point.y - GROUND_Y) * CAT_SCALE),
+  };
+}
+
+/** Cell pixels per unit of her pose space. */
+export const CAT_CELL_PX_PER_POSE_UNIT = TILE_SCALE * CAT_SCALE;
+
+/** The view a row is painted in, or undefined for a name that is no row of hers. */
+export function catRowView(state: string): CardinalView | undefined {
+  return rowOf(state)?.view;
+}
+
+function rowMouth(row: RowSpec, frame: number): Pt | null {
+  if (row.view === 'back') return null;
+  const pose = row.pose(frame);
+  if (row.view === 'front') return catMouthFront(pose);
+  const east = catMouthSide(pose);
+  return row.facesWest ? { x: -east.x, y: east.y } : east;
+}
+
+/** Whether a row is painted facing screen −X; false for a name that is no row of hers. */
+export function catRowFacesWest(state: string): boolean {
+  return rowOf(state)?.facesWest ?? false;
 }
 
 /** The tile's centre line, which a mirrored cell flips about. */
@@ -864,9 +1276,9 @@ const TILE_CENTRE_FRACTION = 0.5;
  */
 export function catMouthInTile(state: string, frame: number, flipX: boolean): Pt | null {
   const row = rowOf(state);
-  if (row === undefined || row.view === 'back') return null;
-  const pose = row.pose(frame);
-  const mouth = row.view === 'front' ? catMouthFront(pose) : catMouthSide(pose);
+  if (row === undefined) return null;
+  const mouth = rowMouth(row, frame);
+  if (mouth === null) return null;
   const tileX = (ORIGIN_X - TILE_X) / TILE_SCALE + mouth.x * CAT_SCALE;
   const tileY = (ORIGIN_Y - TILE_Y) / TILE_SCALE + GROUND_Y + (mouth.y - GROUND_Y) * CAT_SCALE;
   return { x: flipX ? 2 * TILE_CENTRE_FRACTION - tileX : tileX, y: tileY };
@@ -878,7 +1290,26 @@ function catStateFrames(): Record<string, number> {
   return frames;
 }
 
-function catFigure(id: string, wear: CatWear): FigureDef {
+/**
+ * Donut's own per-figure cache ceiling, in place of the fleet's 24 MB.
+ *
+ * Measured at full scale (`bench:turn-residency`): her turning rows in every
+ * view are 12.5 MB, 15.75 MB with a tool out. Carrying something in her jaws
+ * she also holds her carrying walk and idle in every view, 18.75 MB, and the
+ * rows she was drawn in before she picked it up — the swings of the view she
+ * faced, the opening swing frames, an idle break — stay until their release
+ * window runs out: that peaked at the 24 MB ceiling, whose evictions then
+ * drew cold cells as she put the thing down and walked off. Twenty-eight
+ * leaves those rows their window; the cache's global ceiling is unchanged.
+ */
+const CAT_FIGURE_BUDGET_MEGABYTES = 28;
+
+/** The figure id of Donut with nothing on; every other outfit's id names its garments. */
+const BARE_CAT_FIGURE_ID = 'cat';
+
+function catFigure(outfit: Outfit<'cat'>): FigureDef {
+  const id =
+    outfit.key === BARE_CAT_OUTFIT.key ? BARE_CAT_FIGURE_ID : `${BARE_CAT_FIGURE_ID}:${outfit.key}`;
   return {
     id,
     frameWidth: FRAME_W,
@@ -887,20 +1318,35 @@ function catFigure(id: string, wear: CatWear): FigureDef {
     tileY: TILE_Y,
     tileScale: TILE_SCALE,
     states: figureStates(catStateFrames()),
-    paintFrame: (ctx, state, frame) => paintCatFrame(ctx, state, frame, wear),
+    budgetMegabytes: CAT_FIGURE_BUDGET_MEGABYTES,
+    paintFrame: (ctx, state, frame) =>
+      paintCatCell(ctx, state, frame, (context) => dressCat(outfit, context)),
+    heldLayers: {
+      layered: catCellIsLayered,
+      paintLayers: (back, front, state, frame) =>
+        paintCatCell(back, state, frame, (context) => dressCat(outfit, context), front),
+    },
   };
 }
 
-export const CAT_FIGURE: FigureDef = catFigure('cat', BARE_CAT);
+/** Donut with nothing on but her coat. */
+export const CAT_FIGURE: FigureDef = catFigure(BARE_CAT_OUTFIT);
 
 /**
- * Donut in the Eyes of Splatter. A figure of its own because a cell is keyed on
- * figure, state and frame alone: the glasses are painted into every cell, so
- * the two looks cannot share one.
+ * Built on first use: a `FigureDef` costs nothing resident, but most outfits
+ * are never worn in a session.
  */
-export const CAT_SHADES_FIGURE: FigureDef = catFigure('cat_shades', { shades: true });
+const figuresByOutfit = new Map<string, FigureDef>([[BARE_CAT_OUTFIT.key, CAT_FIGURE]]);
 
-/** The figure that draws Donut in `wear`. */
-export function catFigureWearing(wear: CatWear): FigureDef {
-  return wear.shades ? CAT_SHADES_FIGURE : CAT_FIGURE;
+/**
+ * The figure that draws Donut in `outfit`. Each look is a figure of its own,
+ * because a cell is keyed on figure, state and frame alone and her garments
+ * are painted into every cell.
+ */
+export function catFigureFor(outfit: Outfit<'cat'>): FigureDef {
+  const known = figuresByOutfit.get(outfit.key);
+  if (known !== undefined) return known;
+  const figure = catFigure(outfit);
+  figuresByOutfit.set(outfit.key, figure);
+  return figure;
 }

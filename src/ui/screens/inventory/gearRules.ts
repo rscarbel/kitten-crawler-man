@@ -7,9 +7,12 @@ import type { Inventory } from '../../../core/Inventory';
 import {
   ALL_FAIRY_ELEMENTS,
   ALL_RESISTANCE_TYPES,
+  EQUIP_SLOT_WEARER,
   EQUIP_SUBSLOTS,
   isWearable,
   itemFitsSubSlot,
+  wearerAllows,
+  wearerOf,
   type EquipSlot,
   type InventoryItem,
   type ResistanceType,
@@ -21,11 +24,24 @@ import { asPercent, fairyImmunityLine } from '../../itemEffectLines';
 /** Head to foot, which is the order the doll's sections stack. */
 export const EQUIP_SLOT_ORDER = [
   'Head',
+  'Mouth',
   'Torso',
   'Legs',
   'Hands',
+  'Hand',
   'Feet',
 ] as const satisfies readonly EquipSlot[];
+
+/** What the doll titles each section. The held sections read as what they hold, not as body parts. */
+export const DOLL_SECTION_LABELS: Readonly<Record<EquipSlot, string>> = {
+  Head: 'Head',
+  Mouth: 'In Mouth',
+  Torso: 'Torso',
+  Legs: 'Legs',
+  Hands: 'Hands',
+  Hand: 'In Hand',
+  Feet: 'Feet',
+};
 
 export interface DollSlot {
   /** The `"Slot:SubSlot"` key the equipment map is keyed on. */
@@ -34,16 +50,27 @@ export interface DollSlot {
   readonly subSlot: string;
 }
 
-/** Every sub-slot, head to foot, in the order the doll lays them out. */
-export const DOLL_SECTIONS: readonly { slot: EquipSlot; cells: readonly DollSlot[] }[] =
-  EQUIP_SLOT_ORDER.map((slot) => ({
-    slot,
-    cells: EQUIP_SUBSLOTS[slot].map((subSlot) => ({ key: `${slot}:${subSlot}`, slot, subSlot })),
-  }));
+export interface DollSection {
+  readonly slot: EquipSlot;
+  readonly cells: readonly DollSlot[];
+}
+
+const ALL_DOLL_SECTIONS: readonly DollSection[] = EQUIP_SLOT_ORDER.map((slot) => ({
+  slot,
+  cells: EQUIP_SUBSLOTS[slot].map((subSlot) => ({ key: `${slot}:${subSlot}`, slot, subSlot })),
+}));
+
+/**
+ * Every sub-slot a crawler of `kind` has, head to foot, in the order the doll
+ * lays them out: Carl's doll has hands to hold with, Donut's a mouth.
+ */
+export function dollSectionsFor(kind: CrawlerKind): readonly DollSection[] {
+  return ALL_DOLL_SECTIONS.filter((section) => wearerAllows(EQUIP_SLOT_WEARER[section.slot], kind));
+}
 
 /** The most cells one doll section holds (hands and feet). */
 export const DOLL_MAX_SECTION_CELLS = Math.max(
-  ...DOLL_SECTIONS.map((section) => section.cells.length),
+  ...ALL_DOLL_SECTIONS.map((section) => section.cells.length),
 );
 
 const TOE_RING = /^Toe Ring (\d+)$/;
@@ -90,13 +117,15 @@ export function equipRefusal(
     if (fitRefusal !== null) return fitRefusal;
   }
   if (inventory.hasEquipped(item.id)) return ALREADY_WORN_REFUSAL;
-  // Read before the guard: `canEquip` is a type predicate, so its false
-  // branch narrows the item, and the wearer with it, to `never`.
-  const wearer = item.wearer;
+  const ownerKind = inventory.equipment.kind;
+  // Read before the guard: `canEquip` is a type predicate, so its false branch
+  // narrows the item to `never`.
+  const wearer = wearerOf(item.id);
   if (!inventory.equipment.canEquip(item)) {
-    return wearer === undefined
-      ? NOT_WEARABLE_REFUSAL
-      : `Only the ${CRAWLER_LABELS[wearer]} can wear that.`;
+    if (wearer === undefined) return NOT_WEARABLE_REFUSAL;
+    if (wearer !== 'both') return `Only the ${CRAWLER_LABELS[wearer]} can wear that.`;
+    if (ownerKind !== null) return `The ${CRAWLER_LABELS[ownerKind]} has nowhere to hold that.`;
+    return NOT_WEARABLE_REFUSAL;
   }
   return null;
 }
@@ -181,5 +210,5 @@ export function fitsDollSlot(item: InventoryItem, key: string): boolean {
 /** The section and sub-slot an item goes in, e.g. `Hands · Ring`. */
 export function equipSlotLabel(item: InventoryItem): string | null {
   if (!isWearable(item)) return null;
-  return `${item.equipSlot} · ${item.equipSubSlot}`;
+  return `${DOLL_SECTION_LABELS[item.equipSlot]} · ${item.equipSubSlot}`;
 }

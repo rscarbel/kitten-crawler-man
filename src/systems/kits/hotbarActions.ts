@@ -9,7 +9,7 @@
 
 import type { AbilityManager } from '../../core/AbilityManager';
 import { castShellWithGesture, isCastingShell } from '../../creatures/humanGestures';
-import type { InventoryItem } from '../../core/ItemDefs';
+import { weaponStatsOf, type InventoryItem } from '../../core/ItemDefs';
 import type { DynamiteSystem } from '../DynamiteSystem';
 import type { SkillBookReadRequest } from '../../ui/screens/inventory/InventoryActions';
 import type { SpellSystem } from '../SpellSystem';
@@ -114,11 +114,16 @@ export function activateHotbarSlot(host: HotbarHost, hotbarIdx: number): void {
     return;
   }
 
-  // A weapon is wielded rather than spent: the slot toggles it in and out of
-  // hand, and the attack key does the shooting.
-  if ((slot.id === 'slingshot' || slot.id === 'fury_of_taranis') && pm.human.isActive) {
-    pm.human.toggleWield(slot.id);
-    audio?.play('menu_click');
+  // A weapon is drawn rather than spent: the slot takes it in and out of hand,
+  // and the attack key does the fighting.
+  if (weaponStatsOf(slot.id) !== null && pm.human.isActive) {
+    const wasDrawn = pm.human.drawnWeaponId === slot.id;
+    const drawn = pm.human.toggleWeaponDrawn(slot.id);
+    if (drawn === wasDrawn) {
+      audio?.play('error_taking_action');
+      return;
+    }
+    bus.emit('weaponHolstered', { weaponId: slot.id, motion: drawn ? 'draw' : 'stow' });
     return;
   }
 

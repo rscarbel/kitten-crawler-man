@@ -35,16 +35,20 @@ import {
   CACHE_BUDGET_MEGABYTES,
   CACHE_BYTE_BUDGET,
   FIGURE_BYTE_BUDGET,
+  FRAME_BAKE_BUDGET_MS,
   IDLE_FRAMES_BEFORE_RELEASE,
   PREWARM_BAKE_BUDGET_MS,
   PREWARM_CAPACITY_RETRIES,
   releaseFigure,
+  setFigureBakeClock,
 } from '../src/sprites/figure/figureFrameCache.js';
-import { DEFAULT_HUMAN_APPEARANCE } from '../src/sprites/art/human/appearance.js';
+import { DEFAULT_CARL_OUTFIT } from '../src/sprites/garments/human/carlDressing.js';
+import { garmentOf } from '../src/sprites/garments/garments.js';
+import { outfitOf } from '../src/sprites/garments/outfit.js';
 import {
   activeHumanFigure,
   drawHumanSelection,
-  setHumanAppearance,
+  setHumanOutfit,
 } from '../src/sprites/humanSprite.js';
 import { HumanPlayer } from '../src/creatures/HumanPlayer.js';
 import { restorePlayer, snapPlayer } from '../src/core/PlayerSnapshot.js';
@@ -52,6 +56,15 @@ import { installCanvasGlobals } from './nodeCanvasGlobals.js';
 import { gameContext } from './nodeGameContext.js';
 
 installCanvasGlobals();
+
+/**
+ * The cache's clock for this gate, advanced only by the synthetic painters'
+ * declared costs. Every pacing claim here is about what the cache does with a
+ * measured cost, so the cost has to be the one the gate declared and not
+ * whatever a busy machine stretched it to.
+ */
+let gateClockMs = 0;
+setFigureBakeClock(() => gateClockMs);
 
 /** Cell size chosen so a megabyte of RGBA is a round number of cells. */
 const CELL_SIZE = 512;
@@ -62,25 +75,14 @@ const FRAMES_PER_STATE = 12;
 /** The scratch surface the gates draw onto; nothing reads its pixels. */
 const TARGET_SIZE_PX = 256;
 
-/** Milliseconds a deliberately slow painter burns, well past the frame budget. */
-const SLOW_PAINT_MS = 4;
+/** Milliseconds a deliberately slow painter costs: the whole frame's bake allowance in one cell. */
+const SLOW_PAINT_MS = FRAME_BAKE_BUDGET_MS;
 
 /**
  * Cells in the row the prewarm-pacing gate drains — enough that the pacing is
  * measured over a run of frames rather than off one bake.
  */
 const PREWARM_BURST_FRAMES = 12;
-
-/**
- * How far over its stated allowance prewarming's mean spend may come out.
- *
- * Not one, because a cell cannot be painted half way: a row of cells each
- * several times the allowance overshoots by whatever the last one costs, and
- * the timing includes the idle sweep and the harness's own clock reads. Well
- * under the ratio the unpaced pump produced, which spent a whole cell's cost on
- * every frame of the drain.
- */
-const PREWARM_MEAN_SLACK = 2;
 
 /** Frames the pacing gate pumps before it calls a queue stalled rather than paced. */
 const PREWARM_BURST_FRAME_LIMIT = 600;
@@ -155,12 +157,9 @@ function makeFigure(
     tileScale: TILE_SCALE,
     states: figureStates({ walk: frames, attack: frames }),
     paintFrame: (ctx, _state, frame) => {
-      const startedAt = performance.now();
       ctx.fillStyle = '#c0392b';
       ctx.fillRect(frame, frame, cellSize / 2, cellSize / 2);
-      while (performance.now() - startedAt < paintMs) {
-        ctx.fillRect(0, 0, 1, 1);
-      }
+      gateClockMs += paintMs;
     },
   };
 }
@@ -699,18 +698,21 @@ console.log('figure frame cache gates');
   let spentMs = 0;
   let framesPumped = 0;
   while (figurePrewarmDepth() > 0 && framesPumped < PREWARM_BURST_FRAME_LIMIT) {
-    const startedAt = performance.now();
+    const startedAt = gateClockMs;
     beginFigureFrame();
-    spentMs += performance.now() - startedAt;
+    spentMs += gateClockMs - startedAt;
     framesPumped++;
   }
   const meanMs = spentMs / framesPumped;
   const cellsBaked = PREWARM_BURST_FRAMES;
   check(
     'a row of over-budget cells is prewarmed across frames, not on every frame',
-    figurePrewarmDepth() === 0 && meanMs <= PREWARM_BAKE_BUDGET_MS * PREWARM_MEAN_SLACK,
+    figurePrewarmDepth() === 0 &&
+      framesPumped > PREWARM_BURST_FRAMES &&
+      meanMs <= PREWARM_BAKE_BUDGET_MS,
     `${cellsBaked} cells of ${SLOW_PAINT_MS}ms drained over ${framesPumped} frame(s) at ` +
-      `${meanMs.toFixed(2)}ms a frame, past the ${PREWARM_BAKE_BUDGET_MS}ms allowance` +
+      `${meanMs.toFixed(2)}ms a frame, against the ${PREWARM_BAKE_BUDGET_MS}ms allowance; ` +
+      'an unpaced drain bakes a whole cell on every frame' +
       (figurePrewarmDepth() === 0 ? '' : ' — and the queue never drained at all'),
   );
 }
@@ -1125,11 +1127,17 @@ const ROWS_DRAWN_PER_OUTFIT = 1;
 // Carl changing outfit: the outfit he took off is released, the new one warmed.
 {
   reset();
-  setHumanAppearance(DEFAULT_HUMAN_APPEARANCE);
+  setHumanOutfit(DEFAULT_CARL_OUTFIT);
   const before = activeHumanFigure();
   drawHumanSelection(ctx, 0, 0, TILE_SIZE, { row: 'idle', frame: 0, flipX: false });
   const warmBytes = figureResidentBytes(before);
-  setHumanAppearance({ ...DEFAULT_HUMAN_APPEARANCE, cloak: true, gauntlet: true });
+  setHumanOutfit(
+    outfitOf('human', [
+      garmentOf('human', 'carl_trollskin_shirt'),
+      garmentOf('human', 'carl_cloak'),
+      garmentOf('human', 'carl_gauntlet'),
+    ]),
+  );
   const after = activeHumanFigure();
   check(
     "Carl's equipment change releases the outfit he took off",
@@ -1146,7 +1154,7 @@ const ROWS_DRAWN_PER_OUTFIT = 1;
     figurePrewarmRequests(after) > 0,
     `${after.id} has no prewarm queued after the change, so his first frames in it paint cold`,
   );
-  setHumanAppearance(DEFAULT_HUMAN_APPEARANCE);
+  setHumanOutfit(DEFAULT_CARL_OUTFIT);
 }
 
 /** Frames the geared player is drawn for, so his outfit is resident before the scene changes. */
@@ -1163,7 +1171,6 @@ const TRANSIT_TILE = 3;
   const carl = new HumanPlayer(TRANSIT_TILE, TRANSIT_TILE, TILE_SIZE);
   carl.inventory.addItem('nightgaunt_cloak', 1);
   carl.inventory.equipByItemId('nightgaunt_cloak');
-  carl.onEquipmentChanged();
   const geared = activeHumanFigure();
   for (let i = 0; i < TRANSIT_WARM_FRAMES; i++) {
     beginFigureFrame();
@@ -1186,7 +1193,7 @@ const TRANSIT_TILE = 3;
     `${geared.id} held ${warmBytes} bytes before the change; it held none after ` +
       `${dropped.join(', ') || 'no step'} and is drawing ${activeHumanFigure().id}`,
   );
-  setHumanAppearance(DEFAULT_HUMAN_APPEARANCE);
+  setHumanOutfit(DEFAULT_CARL_OUTFIT);
 }
 
 // A pinned row is exempt from active eviction under *global* byte pressure —

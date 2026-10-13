@@ -7,7 +7,7 @@
  */
 
 import type { Inventory } from '../../../core/Inventory';
-import type { InventoryItem, ItemId } from '../../../core/ItemDefs';
+import { isWearable, type InventoryItem, type ItemId } from '../../../core/ItemDefs';
 import type { SkillId } from '../../../core/SkillManager';
 
 /** One stack in one of a crawler's two containers, and the item it held when picked. */
@@ -159,7 +159,7 @@ export class InventoryActions {
     // discard them into the world is missing.
     const drop = item.canDrop === false ? [] : ['Drop'];
     const trade = this.canTradeItem?.(item) === true ? ['Trade'] : [];
-    const equip = item.type === 'armor' ? [isEquipped === true ? 'Unequip' : 'Equip'] : [];
+    const equip = isWearable(item) ? [isEquipped === true ? 'Unequip' : 'Equip'] : [];
     const moveToBag = source === 'hotbar' ? ['Move to Bag'] : [];
     return [...lead, ...equip, ...moveToBag, DESCRIPTION_ACTION, ...trade, ...drop];
   }

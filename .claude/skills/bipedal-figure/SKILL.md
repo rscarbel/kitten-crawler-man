@@ -1,6 +1,6 @@
 ---
 name: bipedal-figure
-description: Draw or redraw a believable two-legged character (human, goblin, clown, humanoid boss/NPC) as procedurally painted sprite art in Kitten Crawler Man — the rig/pose/view contract, the painter/figure/gate/harness pipeline, the image-review loop, and the anatomy traps that only show up in a picture. Use whenever a bipedal character needs new art, a new animation row, or a believability fix. The four-file painter pipeline it describes is the same for any creature; only the anatomy half is biped-specific. NOT for choosing or wiring the town's citizen looks (use add-person), for ground and floor materials (use add-ground-tile), or for props and environment art, which are painted from sheet plans in src/sprites/sheets/ (use add-sprite).
+description: Draw or redraw a believable two-legged character (human, goblin, clown, humanoid boss/NPC) as procedurally painted sprite art in Kitten Crawler Man — the rig/pose/view contract, the painter/figure/gate/harness pipeline, the image-review loop, and the anatomy traps that only show up in a picture. Use whenever a bipedal character needs new art, a new animation row, or a believability fix. The four-file painter pipeline it describes is the same for any creature; only the anatomy half is biped-specific. NOT for choosing or wiring the town's citizen looks (use add-person), for ground and floor materials (use add-ground-tile), for props and environment art, which are painted from sheet plans in src/sprites/sheets/ (use add-sprite), or for a weapon, tool, prop or garment Carl or Donut holds or wears within the existing archetypes and body parts (use add-gear).
 ---
 
 # Bipedal Figure Art
@@ -50,9 +50,10 @@ not invent a new one. The Juicer is the worked bipedal example end to end.
 
 A figure that outgrows one painter file splits it by concern rather than
 growing it: Carl's painter is a directory (`carl/` — geometry, palette,
-proportions, rig, paint primitives, one file per body part, gear, props, and
-`figure.ts` for draw order) and his choreography another (`human/`, one file per
-row family, plus timing, scale and the joint probe). The four jobs above are
+proportions, rig, paint primitives, one file per body part, gear, props, the
+grip and hand sockets, and `figure.ts` for draw order) and his choreography
+another (`human/`, one file per row family, plus timing, scale, the joint
+probe, sockets, hand turns and the armed motion sets). The four jobs above are
 unchanged; `references/carl.md` has the layout.
 
 `src/sprites/<x>Sprite.ts` is the runtime wrapper: it keeps its exported
@@ -125,6 +126,37 @@ built **on his rig** rather than on a rig of their own. They pose with his chore
 render:mordecai-incubus` runs its gates and renders him beside Carl and the residents.
   Silhouette carries the read at 32 px: horns as two points over the head, wings as two
   peaks over the shoulders, the tail as the curl beside the legs.
+
+## Views, sockets and held items
+
+What Carl faces, holds and wears runs through one model; `references/carl.md`
+has the detail, and `add-gear` is where a new weapon, tool, prop or garment
+starts.
+
+- **Five facing views, three painted.** `FacingView` (`src/sprites/facingView.ts`)
+  is `front`, `frontDiagonal`, `side`, `backDiagonal`, `back`; `selectFacing`
+  picks one from eight 45° sectors with `FACING_HYSTERESIS_DEGREES` of
+  hysteresis, and each crawler keeps a `FacingState`. The rigs paint the three
+  `CardinalView`s; `CARL_VIEW_FALLBACK` / `CAT_VIEW_FALLBACK` say which one each
+  diagonal draws, and every view-keyed table is `Record<FacingView, …>` or goes
+  through that fallback. Both three-quarter attempts failed blind review; the
+  ceilings are in `references/carl.md` (Carl) and `add-sprite` (Donut).
+- **Sockets.** Every frame publishes where each hand is (`carlSocketsAt`:
+  `mainHand` = his right in every view, `offHand`, and the stowed `back` and
+  `hip`), its axis and palm normal in camera space, and the body slab the held
+  thing sits in front of — solved on the painter's own skeleton, memoised, and
+  mirrored with the cell. Rows state each gripping hand's turn in depth with
+  `turnHand`.
+- **The grip and the two-layer cell.** A closed hand is a palm block, four
+  finger bands and a thumb wrapped round the handle's radius class; segments
+  facing the camera are the front grip layer. A frame with an occupied socket
+  bakes the whole cell plus a front layer cropped to its ink
+  (`FigureDef.heldLayers`), and `drawFigureCached(…, between)` draws the held
+  item between them — never a sticker over the finished figure.
+- **Motion sets.** A weapon in hand picks rows by grip archetype and weight
+  (`motionSetOf`: `unarmed`, `oneHandLight`, `oneHandHeavy`, `twoHand`); the
+  animator's lookups and the resident working set are per set. A new item of an
+  existing set needs no rows; a new set or archetype is figure work done here.
 
 ## The painter contract
 
@@ -408,18 +440,19 @@ Three more that are not about vacuity but bite the same way:
   raise the ceiling. The one exception is a figure on screen almost every frame
   whose rows that must stay warm _together_ outgrow the default: it declares
   `FigureDef.budgetMegabytes`, and a gate measures that working set against it
-  (Carl declares 56 MB; G9b). And the supersampled surface is scratch, not
+  (Carl declares 67 MB, sized by G9b over every motion set). And the supersampled surface is scratch, not
   residency — the resident cell is the declared cell at bake scale.
 
 ## References
 
 - `references/carl.md` — Carl file by file: the painter and choreography
   layout, soft shading, palette and outline conventions, the row table, the
-  distance-driven gait, moving strikes, handedness, pose fields, outfits, the
-  three-quarter-view finding, and the frozen anchors.
+  distance-driven gait, moving strikes, views and facing, handedness, pose
+  fields, sockets, the grip and two-layer cells, motion sets, outfits, the
+  three-quarter-view ceilings, and the frozen anchors.
 - `references/anatomy.md` — the trap catalog: proportions, arms, legs, hands,
   feet, head/hair, clothing, views, depth shading, anchoring.
 - `references/gates.md` — the gate list, what each catches, the ones that are
-  blind to what, and Carl's G1–G27 with G9b.
+  blind to what, Carl's G1–G27 with G9b, and the equipment gates E1–E7.
 - `references/review.md` — the self-examination loop, the blind image-review
   loop, part crops, blind naming tests, and the diagnostic harness modes.

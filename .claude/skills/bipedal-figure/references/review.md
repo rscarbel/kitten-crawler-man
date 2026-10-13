@@ -152,7 +152,10 @@ build-tooling, independent of the goblins' (unconvincing) motion:
 Add a `?<name>` preview scene in `src/dev/devBoot.ts`. Carl's is `?human`
 (`?human=<row>` opens on a row): one row looped at 128, 64 and 32 px at the
 game's real pacing, and a live `HumanPlayer` driven through a fixed script so
-the animator's hand-offs show rather than any one row. Browser automation _can_
+the animator's hand-offs show rather than any one row; its weapon picker plays
+each motion set with the weapon held and stowed. Donut's is `?donut`
+(`?donut=<row>`), with a compass of all eight headings, an outfit, tool and
+carry picker. Browser automation _can_
 drive this game (rAF, keyboard, synthetic canvas mouse events all work), but a
 backgrounded tab freezes rAF entirely, so the loop does not run and every
 frame-cost reading is a fiction — so **anything about timing or feel needs a

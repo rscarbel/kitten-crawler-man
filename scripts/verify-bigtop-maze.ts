@@ -1201,7 +1201,7 @@ console.log('\nCrossing the menagerie with the bell rung at the threshold…');
  * not a tautology over the target's own table.
  *
  * Carl's key is two weapons wearing one button: `HumanPlayer.triggerAttack`
- * fires the sling and returns early whenever `isWieldingSlingshot`, so a stone
+ * fires the sling and returns early whenever `hasSlingDrawn`, so a stone
  * is the *only* thing that button produces while it is out — there is no
  * fallback swing. Donut's is `missile` while Magic Missile is in the action bar
  * (`triggerPlayerAttack` checks the bar, not the tome) and `melee` once it is

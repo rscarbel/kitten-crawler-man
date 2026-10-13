@@ -195,7 +195,6 @@ function screenRig(width: number, height: number, density: Density): ScreenRig {
     intelligence: OWNER_STAT,
     constitution: OWNER_STAT,
     dexterity: OWNER_STAT,
-    onEquipmentChanged: () => undefined,
   };
   const screen = new InventoryScreen({
     actions: new InventoryActions(),

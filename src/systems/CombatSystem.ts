@@ -35,7 +35,8 @@ import {
   POWERFUL_STRIKE_DAMAGE_MULTIPLIER,
 } from '../core/SkillManager';
 import { SLINGSHOT_HIT_RADIUS_FRACTION } from '../sprites/slingshotSprite';
-import type { TaranisStrikeSystem } from './TaranisStrikeSystem';
+import type { ItemId } from '../core/ItemDefs';
+import type { MeleeWeaponStats, WeaponProcId } from '../core/weapons';
 
 /** From an entity's tile origin to the centre of its tile. */
 const HALF_TILE = TILE_SIZE / 2;
@@ -196,8 +197,11 @@ export interface CombatContext {
   meleeFx?: Pick<MeleeImpactEffectSystem, 'spawn'>;
   /** Absent in scenes that draw no world effects (e.g. building interiors). */
   missileFx?: Pick<MagicMissileImpactEffectSystem, 'spawn'>;
-  /** Absent where a scene builds its own context; Carl's sword then cuts like a fist. */
-  taranis?: Pick<TaranisStrikeSystem, 'swing'>;
+  /**
+   * The systems that run each weapon's named proc. Absent where a scene builds
+   * its own context; a weapon then swings without its proc.
+   */
+  weaponProcs?: WeaponProcs;
   /** Set to true by resolvePlayerAttacks when any hit connected this frame. */
   hitLanded: boolean;
 }
@@ -257,6 +261,106 @@ export function landHumanGearProcs(human: HumanPlayer, mob: Mob): void {
   }
 }
 
+/** One swing of a weapon in Carl's hand, as the generic strike hands it to the weapon's proc. */
+export interface WeaponSwing {
+  readonly weaponId: ItemId;
+  readonly weapon: MeleeWeaponStats;
+  /** His centre, which the swing is measured from. */
+  readonly originX: number;
+  readonly originY: number;
+  /** The unit facing the blow was thrown along. */
+  readonly dirX: number;
+  readonly dirY: number;
+  /**
+   * Everything this swing has struck. A proc that strikes more adds to it, so
+   * nothing is struck twice by one swing, whatever reaches it first.
+   */
+  readonly struck: Set<Mob>;
+  /** Every enemy the edge cut. */
+  readonly cut: readonly Mob[];
+  /** The cut enemies whose blows earn something, which are the ones a proc carries on from. */
+  readonly earned: readonly Mob[];
+}
+
+/** A special effect a weapon's swing carries, run once its edge has landed. */
+export interface WeaponProc {
+  onStrike(ctx: CombatContext, swing: WeaponSwing): void;
+}
+
+/** The system that runs each weapon proc, by the name a weapon's definition gives it. */
+export type WeaponProcs = Readonly<Record<WeaponProcId, WeaponProc>>;
+
+/**
+ * A weapon's edge, or anything its proc throws in the edge's name, cutting one
+ * enemy for the weapon's multiple of a blow. Reports whether the cut earns
+ * something: a mob whose blows earn nothing still takes the cut, but no gear
+ * proc rides in on it and nothing carries on from it.
+ */
+export function cutWithWeapon(ctx: CombatContext, mob: Mob, damageMultiplier: number): boolean {
+  const { human } = ctx;
+  mob.takeDamageFrom(damageMultiplier * crawlerMeleeStrikeDamage(human), human, 'melee');
+  if (mob.blowsEarnNothing) return false;
+  ctx.hitLanded = true;
+  landHumanGearProcs(human, mob);
+  return true;
+}
+
+/**
+ * The one strike every melee weapon in Carl's hand swings through: its edge
+ * cuts everything in its reach and facing, exactly as a fist would find it,
+ * then its proc runs, then it lands on whatever props it reaches.
+ *
+ * Every target is claimed before any is cut, so which of them the grid happens
+ * to list first never decides what a proc can still reach.
+ */
+function strikeWithWeapon(ctx: CombatContext, weaponId: ItemId, weapon: MeleeWeaponStats): void {
+  const { human, mobGrid, gameMap } = ctx;
+  const originX = human.x + HALF_TILE;
+  const originY = human.y + HALF_TILE;
+  const facingLength = Math.hypot(human.strikeFacingX, human.strikeFacingY);
+  const dirX = facingLength > 0 ? human.strikeFacingX / facingLength : 1;
+  const dirY = facingLength > 0 ? human.strikeFacingY / facingLength : 0;
+  const range = human.getMeleeRange();
+
+  const inArc: Mob[] = [];
+  // Widened by a tile because the grid keys a mob by its origin while the
+  // test measures its centre.
+  for (const mob of mobGrid.queryCircle(originX, originY, range + TILE_SIZE)) {
+    if (!mob.isAlive || !mob.takesPlayerDamage('melee')) continue;
+    const dx = mob.x + HALF_TILE - originX;
+    const dy = mob.y + HALF_TILE - originY;
+    const dist = Math.hypot(dx, dy);
+    if (dist === 0 || dist > range) continue;
+    const ahead = (dx / dist) * dirX + (dy / dist) * dirY > 0;
+    if (dist > MELEE_POINT_BLANK_RANGE && !ahead) continue;
+    if (!gameMap.hasLineOfSight(originX, originY, mob.x + HALF_TILE, mob.y + HALF_TILE)) continue;
+    inArc.push(mob);
+  }
+
+  const struck = new Set<Mob>(inArc);
+  const cut = human.zeroDamage ? [] : inArc;
+  const earned: Mob[] = [];
+  for (const mob of cut) {
+    if (cutWithWeapon(ctx, mob, weapon.damageMultiplier)) earned.push(mob);
+  }
+  const proc = weapon.onStrike === undefined ? undefined : ctx.weaponProcs?.[weapon.onStrike];
+  proc?.onStrike(ctx, { weaponId, weapon, originX, originY, dirX, dirY, struck, cut, earned });
+
+  let hit = inArc.length > 0;
+  if (!human.zeroDamage) {
+    const propDamage = weapon.damageMultiplier * human.getStrikeDamage();
+    hit = (ctx.destructibles?.tryMeleeHit(human, range, propDamage) ?? false) || hit;
+    hit = (ctx.interiorProps?.tryMeleeHit(human, range, propDamage) ?? false) || hit;
+    hit = (ctx.trees?.tryMeleeHit(human, range, propDamage) ?? false) || hit;
+    hit = (ctx.structures?.tryMeleeHit(human, range) ?? false) || hit;
+  }
+  if (hit) {
+    const contact = human.strikeContactWorldPosition();
+    if (contact !== null) ctx.meleeFx?.spawn(contact.x, contact.y, dirX, dirY);
+  }
+  if (proc === undefined) ctx.bus.emit('weaponSwing', { weaponId, hit });
+}
+
 export function resolvePlayerAttacks(ctx: CombatContext): void {
   const { human, cat, mobGrid, gameMap, safeRoom } = ctx;
   ctx.hitLanded = false;
@@ -268,8 +372,10 @@ export function resolvePlayerAttacks(ctx: CombatContext): void {
     safeRoom?.isEntityInSafeRoom(entity) ?? false;
 
   const humanSwings = human.isAttackPeak() && !inSafeRoom(human);
-  if (humanSwings && human.isWieldingTaranis && ctx.taranis !== undefined) {
-    ctx.taranis.swing(ctx);
+  const swungWeapon = human.drawnMeleeWeapon;
+  const swungWeaponId = human.drawnWeaponId;
+  if (humanSwings && swungWeapon !== null && swungWeaponId !== null) {
+    strikeWithWeapon(ctx, swungWeaponId, swungWeapon);
   } else if (humanSwings) {
     const hc = centerOf(human);
     const range = human.getMeleeRange();

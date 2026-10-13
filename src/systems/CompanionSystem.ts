@@ -113,6 +113,10 @@ const CAT_EVADE_ANGLE_VARIATION = 0.018;
 const CAT_EVADE_ANGLE_STANDARD = 0.022;
 const KITE_DISTANCE_THRESHOLD = 0.75;
 const ROTATION_ANGLE = 0.4;
+/** The human's low-health retreat: straight back from the threat, else a sidestep either way. */
+const RETREAT_SIDESTEP_ANGLES: readonly number[] = [0, ROTATION_ANGLE, -ROTATION_ANGLE];
+/** The kiting cat's back-off: her usual turned retreat, else the same turn the other way. */
+const KITE_BACKOFF_ANGLES: readonly number[] = [ROTATION_ANGLE, -ROTATION_ANGLE];
 const KITE_SPEED_MULTIPLIER = 1.35;
 const RECALL_CHASE_SPEED = 1.5;
 const FOLLOW_TARGET_CLOSE_DISTANCE_MULT = 2.5;
@@ -1174,6 +1178,47 @@ export class CompanionSystem implements GameSystem {
     return true;
   }
 
+  /**
+   * A companion's own step, refused when it would carry her onto ground a
+   * hazard has marked. Returns whether the step was taken.
+   *
+   * Every drive that walks a companion goes through here, not only the follow.
+   * Fleeing is only half the rule: without this the flee and a drive take turns
+   * — the flee steps her clear of a warned circle, the drive walks her straight
+   * back to the edge of it, and the orb lands on whichever of those two frames
+   * the drive happened to win. Both rules were individually correct and she
+   * died to the coin toss between them. The cat's kite is such a drive: its
+   * back-off orbits her round whatever she is fighting at a few pixels a step,
+   * across the rim of anything that happens to be falling there.
+   *
+   * A step is refused rather than clipped, because the ground being refused is
+   * a tile and a partial step lands on the same one. Only a step that *enters*
+   * it: when she is already standing in marked ground the flee owns her, and a
+   * guard here would pin her inside it.
+   *
+   * The flee radius of a mob to be dodged is the same kind of ground. Without
+   * it the flee steps her out past the radius, the follow walks her back in
+   * towards a player fighting inside it, and the two alternate every frame —
+   * a companion visibly shaking on the rim of the Ball of Swine's range.
+   */
+  private stepUnlessIntoMarkedGround(
+    entity: { x: number; y: number },
+    dx: number,
+    dy: number,
+  ): boolean {
+    const wasOnMarkedGround = this.standsOnHazard(entity);
+    const wasInsideAvoidRadius = this.insideAvoidRadius(entity.x, entity.y);
+    const beforeX = entity.x;
+    const beforeY = entity.y;
+    this.entityMoveWithCollision(entity, dx, dy);
+    const enteredMarkedGround = !wasOnMarkedGround && this.standsOnHazard(entity);
+    const enteredAvoidRadius = !wasInsideAvoidRadius && this.insideAvoidRadius(entity.x, entity.y);
+    if (!enteredMarkedGround && !enteredAvoidRadius) return true;
+    entity.x = beforeX;
+    entity.y = beforeY;
+    return false;
+  }
+
   /** The companion's own wall-collided step, in the shape {@link stepAlongEscape} drives. */
   private moverFor(companion: HumanPlayer | CatPlayer): (dx: number, dy: number) => void {
     return (dx, dy) => this.entityMoveWithCollision(companion, dx, dy);
@@ -1198,13 +1243,46 @@ export class CompanionSystem implements GameSystem {
     const dx = human.x - threat.x;
     const dy = human.y - threat.y;
     const n = normalize(dx, dy);
-    this.entityMoveWithCollision(
+    // Hemmed in by marked ground on every way back, he is better off fighting
+    // than standing beside the threat doing neither, so the retreat gives way
+    // to his stance.
+    const retreated = this.stepAwayClearOfMarkedGround(
       human,
-      n.x * FOLLOWER_SPEED * RECALL_CHASE_SPEED,
-      n.y * FOLLOWER_SPEED * RECALL_CHASE_SPEED,
+      n.x,
+      n.y,
+      FOLLOWER_SPEED * RECALL_CHASE_SPEED,
+      RETREAT_SIDESTEP_ANGLES,
     );
-    human.isMoving = true;
-    return true;
+    human.isMoving = retreated;
+    return retreated;
+  }
+
+  /**
+   * Steps a companion away along `awayX, awayY` turned by each of `angles` in
+   * turn, taking the first step that does not carry it onto marked ground and
+   * actually covers ground: backed into a wall, the straight step is allowed
+   * and goes nowhere, and only a sidestep gets it away. Returns whether any
+   * step was taken.
+   */
+  private stepAwayClearOfMarkedGround(
+    entity: { x: number; y: number },
+    awayX: number,
+    awayY: number,
+    speed: number,
+    angles: readonly number[],
+  ): boolean {
+    for (const angle of angles) {
+      const cos = Math.cos(angle);
+      const sin = Math.sin(angle);
+      const stepX = (awayX * cos - awayY * sin) * speed;
+      const stepY = (awayX * sin + awayY * cos) * speed;
+      const beforeX = entity.x;
+      const beforeY = entity.y;
+      const allowed = this.stepUnlessIntoMarkedGround(entity, stepX, stepY);
+      const moved = entity.x !== beforeX || entity.y !== beforeY;
+      if (allowed && moved) return true;
+    }
+    return false;
   }
 
   /** Nearest living hostile within engage range, for a companion with no `autoTarget` to flee from. */
@@ -1521,16 +1599,13 @@ export class CompanionSystem implements GameSystem {
       if (distToEnemy > 0) {
         const nx = (cx - ex) / distToEnemy;
         const ny = (cy - ey) / distToEnemy;
-        const cos = Math.cos(ROTATION_ANGLE),
-          sin = Math.sin(ROTATION_ANGLE);
-        const sx2 = nx * cos - ny * sin;
-        const sy2 = nx * sin + ny * cos;
-        this.entityMoveWithCollision(
+        cat.isMoving = this.stepAwayClearOfMarkedGround(
           cat,
-          sx2 * FOLLOWER_SPEED * KITE_SPEED_MULTIPLIER,
-          sy2 * FOLLOWER_SPEED * KITE_SPEED_MULTIPLIER,
+          nx,
+          ny,
+          FOLLOWER_SPEED * KITE_SPEED_MULTIPLIER,
+          KITE_BACKOFF_ANGLES,
         );
-        cat.isMoving = true;
       }
     } else {
       const targetX = ex + Math.cos(this.catKiteAngle) * standOff - TILE_SIZE * TILE_CENTER_OFFSET;
@@ -1708,32 +1783,7 @@ export class CompanionSystem implements GameSystem {
       }
     }
 
-    // Nothing may walk a companion onto ground a hazard has marked. Fleeing is
-    // only half the rule: without this the flee and the follow take turns — the
-    // flee steps her clear of a warned circle, the follow drive walks her
-    // straight back to the edge of it, and the orb lands on whichever of those
-    // two frames the follow happened to win. Both rules were individually
-    // correct and she died to the coin toss between them.
-    //
-    // A step is refused rather than clipped, because the ground being refused is
-    // a tile and a partial step lands on the same one. Only a step that *enters*
-    // it: when she is already standing in marked ground the flee above owns her,
-    // and a guard here would pin her inside it.
-    //
-    // The flee radius of a mob to be dodged is the same kind of ground. Without
-    // it the flee steps her out past the radius, the follow walks her back in
-    // towards a player fighting inside it, and the two alternate every frame —
-    // a companion visibly shaking on the rim of the Ball of Swine's range.
-    const wasOnMarkedGround = this.standsOnHazard(entity);
-    const wasInsideAvoidRadius = this.insideAvoidRadius(entity.x, entity.y);
-    const beforeX = entity.x;
-    const beforeY = entity.y;
-    this.entityMoveWithCollision(entity, moveNx * step, moveNy * step);
-    const enteredMarkedGround = !wasOnMarkedGround && this.standsOnHazard(entity);
-    const enteredAvoidRadius = !wasInsideAvoidRadius && this.insideAvoidRadius(entity.x, entity.y);
-    if (enteredMarkedGround || enteredAvoidRadius) {
-      entity.x = beforeX;
-      entity.y = beforeY;
+    if (!this.stepUnlessIntoMarkedGround(entity, moveNx * step, moveNy * step)) {
       entity.isMoving = false;
       return;
     }

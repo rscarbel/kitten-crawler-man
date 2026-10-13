@@ -28,6 +28,8 @@ import type { HarvestKind } from './craftPerks';
 import type { VillageQuestPhase } from './villageQuestPhase';
 import type { BlueprintsQuestPhase } from './blueprintsQuestPhase';
 import type { ItemId } from './ItemDefs';
+import type { EquipmentChange } from './EquipmentManager';
+import type { HolsterMotion } from '../sprites/art/human/motionSets';
 import type { ToolKind, ToolTier } from './toolTiers';
 import type { ProcessingStationKind } from '../systems/briarHollow/processingStations';
 
@@ -167,6 +169,22 @@ export interface GameEvents {
 
   /** At least one enemy the sword cut threw chain lightning this frame. */
   taranisChain: Record<string, never>;
+
+  /**
+   * A weapon was swung through the generic weapon strike with no proc run to
+   * sound it — it has none, or the combat context registers none — in place
+   * of `humanMeleeSwing`; `hit` when it met anything.
+   */
+  weaponSwing: { weaponId: ItemId; hit: boolean };
+
+  /** Carl drew the weapon in his main hand, or stowed it. */
+  weaponHolstered: { weaponId: ItemId; motion: HolsterMotion };
+
+  /**
+   * A crawler's equipped set changed. `restore` replaces the whole set at once
+   * (a snapshot, a reset), with no key or item named.
+   */
+  equipmentChanged: { crawler: CrawlerKind } & EquipmentChange;
 
   /** Cat claw-swipe attack's animation peak. */
   catMeleeSwing: { hit: boolean };

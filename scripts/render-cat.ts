@@ -9,10 +9,12 @@
  *
  *   npm run render:cat
  *   npx tsx scripts/render-cat.ts --row=swipe_side --scale=4
+ *   npx tsx scripts/render-cat.ts --row=walk_side,walk_side_west --scale=3
  *   npx tsx scripts/render-cat.ts --part=head --scale=6
  *   npx tsx scripts/render-cat.ts --row=walk_side --mode=onion --scale=3
  *   npx tsx scripts/render-cat.ts --frame=5 --row=cast --scale=8
- *   npx tsx scripts/render-cat.ts --wear=shades --part=head --scale=6
+ *   npx tsx scripts/render-cat.ts --wear=cat_shades --part=head --scale=6
+ *   npx tsx scripts/render-cat.ts --wear=cat_crown,cat_butterfly_talisman --scale=3
  */
 
 import { createCanvas } from 'canvas';
@@ -21,8 +23,10 @@ import { bakeFigureSheet } from './figureSheet.js';
 import { reportFigureGates } from './figureGates.js';
 import { catGateFailures } from './gates-cat.js';
 import { PREVIEW_DIR, writePreviewPng } from './previewOut.js';
-import { CAT_ROWS, TILE_SCALE, catFigureWearing } from '../src/sprites/art/catFigure.js';
-import { BARE_CAT, type CatWear } from '../src/sprites/art/catArt.js';
+import { CAT_ROWS, TILE_SCALE, catFigureFor } from '../src/sprites/art/catFigure.js';
+import type { GarmentDef } from '../src/sprites/garments/garmentDef.js';
+import { garmentsOf } from '../src/sprites/garments/garments.js';
+import { outfitOf } from '../src/sprites/garments/outfit.js';
 
 /** Matches TILE_SIZE in src/core/constants.ts; the art is painted at 2× that. */
 const IN_GAME_TILE = 32;
@@ -86,15 +90,21 @@ function parseMode(): Mode {
   return found;
 }
 
-/** What she is drawn wearing: `--wear=shades` puts the Eyes of Splatter on her. */
-function parseWear(): CatWear {
+/** What she is drawn wearing: `--wear=` a comma list of her garment ids, or `none`. */
+function parseWear(): GarmentDef<'cat'>[] {
   const raw = parseFlag('wear', 'none');
-  if (raw === 'none') return BARE_CAT;
-  if (raw === 'shades') return { shades: true };
-  throw new Error(`--wear=${raw} is not one of none, shades`);
+  if (raw === 'none') return [];
+  const wearable = garmentsOf('cat').filter((garment) => !garment.base);
+  return raw.split(',').map((id) => {
+    const garment = wearable.find((candidate) => candidate.id === id);
+    if (garment === undefined) {
+      throw new Error(`--wear=${id} is not one of none, ${wearable.map((g) => g.id).join(', ')}`);
+    }
+    return garment;
+  });
 }
 
-const CAT_FIGURE = catFigureWearing(parseWear());
+const CAT_FIGURE = catFigureFor(outfitOf('cat', parseWear()));
 
 function frameCountOf(state: string): number {
   const declared = CAT_FIGURE.states.get(state);
@@ -105,7 +115,8 @@ function frameCountOf(state: string): number {
 function labelOf(state: string): string {
   const row = CAT_ROWS.find((candidate) => candidate.name === state);
   if (row === undefined) throw new Error(`no row named "${state}"`);
-  return `${row.name} — ${row.frameCount} frames, ${row.view}, ${row.kind}`;
+  const westward = row.facesWest ? ' facing west' : '';
+  return `${row.name} — ${row.frameCount} frames, ${row.view}${westward}, ${row.kind}`;
 }
 
 function main(): void {
@@ -123,9 +134,12 @@ function main(): void {
   const part = knownPart ? PARTS[partName] : null;
 
   const allStates = CAT_ROWS.map((row) => row.name);
-  const states = rowFilter === '' ? allStates : allStates.filter((state) => state === rowFilter);
-  if (states.length === 0)
-    throw new Error(`--row=${rowFilter} is not one of ${allStates.join(', ')}`);
+  const wanted = rowFilter === '' ? allStates : rowFilter.split(',');
+  const unknown = wanted.filter((state) => !allStates.includes(state));
+  if (unknown.length > 0) {
+    throw new Error(`--row=${unknown.join(',')} is not one of ${allStates.join(', ')}`);
+  }
+  const states = wanted;
 
   // Ahead of the contact sheet rather than after it: the sheet is a
   // tens-of-megapixel allocation, and measuring art on the far side of one is

@@ -1,5 +1,7 @@
 import type { StatName } from '../Player';
 import type { CrawlerKind, SkillId } from './SkillManager';
+import type { WorkingToolHeldVisualId } from '../sprites/held/heldVisualIds';
+import type { LookOnEach, NoLook, WearerLook } from '../sprites/garments/garmentIds';
 import {
   toolTierDef,
   TOOL_TIER_BASIC,
@@ -11,6 +13,12 @@ import {
   type ToolKind,
   type ToolTier,
 } from './toolTiers';
+import {
+  HUMAN_ARM_REACH_TILES,
+  PROVING_WEAPON_DAMAGE_MULTIPLIER,
+  TARANIS_DAMAGE_MULTIPLIER,
+  type WeaponStats,
+} from './weapons';
 
 export type ItemId =
   | 'health_potion'
@@ -57,6 +65,9 @@ export type ItemId =
   | 'grull_war_gauntlet'
   | 'slingshot'
   | 'fury_of_taranis'
+  | 'dev_plain_sword'
+  | 'dev_spiked_club'
+  | 'dev_felling_axe'
   | 'wayfinders_anchor'
   | 'anchor_shard_tinker'
   | 'anchor_shard_hilda'
@@ -84,7 +95,19 @@ export type ItemId =
   | 'trebuchet_kit'
   | 'snare_kit';
 
-export type EquipSlot = 'Head' | 'Torso' | 'Legs' | 'Feet' | 'Hands';
+/**
+ * The equipment sections. `Hand` (Carl's main and off hand) and `Mouth`
+ * (what Donut carries in her teeth) are the held slots; the rest are worn.
+ */
+export type EquipSlot = 'Head' | 'Mouth' | 'Torso' | 'Legs' | 'Hands' | 'Hand' | 'Feet';
+
+/** Who may equip an item: one crawler, or either. */
+export type Wearer = CrawlerKind | 'both';
+
+/** Whether gear restricted to `wearer` can go on a crawler of `kind`. */
+export function wearerAllows(wearer: Wearer, kind: CrawlerKind): boolean {
+  return wearer === 'both' || wearer === kind;
+}
 
 /**
  * Damage channels an item can protect against.
@@ -171,8 +194,6 @@ export interface InventoryItem {
   meleeOnlyStatBonus?: Partial<Record<StatName, number>>;
   /** Chance per successful melee hit to stun the target while equipped. */
   stunOnHitChance?: number;
-  /** Which crawler can equip this item; omitted means either. */
-  wearer?: CrawlerKind;
   /** Set on an axe/pickaxe item, naming which tier ladder it belongs to and where on it. */
   tool?: { kind: ToolKind; tier: ToolTier };
   /** Whether this item is eaten (as opposed to drunk) to trigger its effect. */
@@ -193,18 +214,20 @@ export interface InventoryItem {
 }
 
 /**
- * Armour carrying both halves of an equip address — the only shape of item that
- * can actually be worn.
+ * Armour or a weapon carrying both halves of an equip address — the only shape
+ * of item that can actually be put in an equipment slot.
  */
 export type WearableItem = InventoryItem & {
-  type: 'armor';
+  type: 'armor' | 'weapon';
   equipSlot: EquipSlot;
   equipSubSlot: string;
 };
 
 /** Narrows an item to the wearable shape {@link WearableItem} describes. */
 export function isWearable(item: InventoryItem | null | undefined): item is WearableItem {
-  return item?.type === 'armor' && item.equipSlot !== undefined && item.equipSubSlot !== undefined;
+  if (item === null || item === undefined) return false;
+  const equippableType = item.type === 'armor' || item.type === 'weapon';
+  return equippableType && item.equipSlot !== undefined && item.equipSubSlot !== undefined;
 }
 
 /** Fraction of a melee blow the shade gnoll kneepads throw back at whoever landed it. */
@@ -230,7 +253,73 @@ export type ItemCategory = (typeof ITEM_CATEGORIES)[number];
  * slot: slots hold spread copies of a def, including ones restored from saves
  * written before a field existed.
  */
-export type ItemDef = Omit<InventoryItem, 'quantity'> & { readonly category: ItemCategory };
+export type ItemDef = Omit<InventoryItem, 'quantity' | 'type'> & {
+  readonly category: ItemCategory;
+  /**
+   * The crawler a reward split always hands this item to, whichever of them
+   * could use it — a signature drop that belongs to one of them.
+   */
+  readonly lootRecipient?: CrawlerKind;
+} & (WornItemFields | WeaponItemFields | UnwornItemFields);
+
+/**
+ * How a worn item looks: on the one crawler who can wear it, or on each of
+ * them for an item either can wear. Required, so an invisible piece of gear is
+ * a decision with a reason, never an omission.
+ */
+export type ItemLook<W extends Wearer> = W extends CrawlerKind ? WearerLook<W> : LookOnEach;
+
+interface WornBy<W extends Wearer> {
+  readonly type: 'armor';
+  readonly equipSlot: EquipSlot;
+  readonly equipSubSlot: string;
+  readonly wearer: W;
+  readonly look: ItemLook<W>;
+  readonly weapon?: never;
+  readonly heldVisual?: never;
+}
+
+/** Armour: worn in a slot, by the crawler or crawlers `wearer` names, and looking as `look` says. */
+type WornItemFields = { readonly [W in Wearer]: WornBy<W> }[Wearer];
+
+/** A weapon: held in a slot, with the stat block that decides how it fights. */
+interface WeaponItemFields {
+  readonly type: 'weapon';
+  readonly equipSlot: EquipSlot;
+  readonly equipSubSlot: string;
+  readonly wearer: Wearer;
+  readonly weapon: WeaponStats;
+  readonly heldVisual?: never;
+  /** A weapon's look is its stat block's held visual. */
+  readonly look?: never;
+}
+
+/**
+ * Everything else, which no slot takes and so no wearer restricts. A working
+ * tool — each tier of axe and pick, and Merrit's scythe — names the look it
+ * is drawn with in a worker's hands.
+ */
+interface UnwornItemFields {
+  readonly type?: 'consumable' | 'tool';
+  readonly wearer?: never;
+  readonly weapon?: never;
+  readonly heldVisual?: WorkingToolHeldVisualId;
+  readonly look?: never;
+}
+
+/** Gear nobody has painted on Donut: she is drawn without it. */
+const UNDRAWN_ON_DONUT: NoLook = {
+  kind: 'none',
+  reason: 'No picture of it on Donut exists, so she is drawn without it.',
+};
+
+/** Every ring, on either crawler. */
+const RING_LOOK: NoLook = {
+  kind: 'none',
+  reason:
+    'A ring is a band round one finger or toe, under one pixel at the 32 px tile: it reads as nothing.',
+  heardAs: 'jewelry',
+};
 
 export const ITEM_DEF: Record<ItemId, ItemDef> = {
   scroll_of_confusing_fog: {
@@ -370,6 +459,9 @@ export const ITEM_DEF: Record<ItemId, ItemDef> = {
     stackable: false,
     canHotlist: false,
     type: 'armor',
+    wearer: 'both',
+    look: { human: { kind: 'garment', garment: 'carl_trollskin_shirt' }, cat: UNDRAWN_ON_DONUT },
+    lootRecipient: 'human',
     equipSlot: 'Torso',
     equipSubSlot: 'Shirt',
     statBonus: { constitution: 3 },
@@ -387,6 +479,12 @@ export const ITEM_DEF: Record<ItemId, ItemDef> = {
     stackable: false,
     canHotlist: false,
     type: 'armor',
+    wearer: 'both',
+    look: {
+      human: { kind: 'garment', garment: 'carl_crown' },
+      cat: { kind: 'garment', garment: 'cat_crown' },
+    },
+    lootRecipient: 'cat',
     equipSlot: 'Head',
     equipSubSlot: 'Hat',
     statBonus: { intelligence: 5 },
@@ -408,6 +506,11 @@ export const ITEM_DEF: Record<ItemId, ItemDef> = {
     stackable: false,
     canHotlist: false,
     type: 'armor',
+    wearer: 'both',
+    look: {
+      human: { kind: 'garment', garment: 'carl_kettle_helm' },
+      cat: { kind: 'garment', garment: 'cat_kettle_helm' },
+    },
     equipSlot: 'Head',
     equipSubSlot: 'Hat',
     statBonus: { constitution: 1 },
@@ -424,6 +527,8 @@ export const ITEM_DEF: Record<ItemId, ItemDef> = {
     stackable: false,
     canHotlist: false,
     type: 'armor',
+    wearer: 'both',
+    look: { human: { kind: 'garment', garment: 'carl_gambeson' }, cat: UNDRAWN_ON_DONUT },
     equipSlot: 'Torso',
     equipSubSlot: 'Shirt',
     statBonus: { constitution: 2 },
@@ -439,6 +544,8 @@ export const ITEM_DEF: Record<ItemId, ItemDef> = {
     stackable: false,
     canHotlist: false,
     type: 'armor',
+    wearer: 'both',
+    look: { human: { kind: 'garment', garment: 'carl_bracers' }, cat: UNDRAWN_ON_DONUT },
     equipSlot: 'Hands',
     equipSubSlot: 'Gloves',
     statBonus: { strength: 1 },
@@ -454,6 +561,8 @@ export const ITEM_DEF: Record<ItemId, ItemDef> = {
     stackable: false,
     canHotlist: false,
     type: 'armor',
+    wearer: 'both',
+    look: { human: { kind: 'garment', garment: 'carl_boots' }, cat: UNDRAWN_ON_DONUT },
     equipSlot: 'Feet',
     equipSubSlot: 'Shoes',
     statBonus: { dexterity: 1 },
@@ -678,6 +787,8 @@ export const ITEM_DEF: Record<ItemId, ItemDef> = {
     stackable: false,
     canHotlist: true,
     type: 'armor',
+    wearer: 'both',
+    look: { human: { kind: 'garment', garment: 'carl_boxers' }, cat: UNDRAWN_ON_DONUT },
     equipSlot: 'Legs',
     equipSubSlot: 'Pants',
     statBonus: { constitution: 2 },
@@ -712,6 +823,7 @@ export const ITEM_DEF: Record<ItemId, ItemDef> = {
     canHotlist: false,
     canDrop: false,
     isQuestItem: true,
+    heldVisual: 'quest_scythe',
     description:
       "Merrit's scythe, borrowed off the barn wall. Swing it through the grain field south of " +
       'the scarecrow, and press again as the blade comes through for a bigger sheaf.',
@@ -753,6 +865,7 @@ export const ITEM_DEF: Record<ItemId, ItemDef> = {
     equipSlot: 'Torso',
     equipSubSlot: 'Back',
     wearer: 'human',
+    look: { kind: 'garment', garment: 'carl_cloak' },
     statBonus: { constitution: 4 },
     resistances: ['poison', 'ice', 'piercing'],
     description:
@@ -771,6 +884,7 @@ export const ITEM_DEF: Record<ItemId, ItemDef> = {
     equipSlot: 'Head',
     equipSubSlot: 'Neck',
     wearer: 'cat',
+    look: { kind: 'garment', garment: 'cat_butterfly_talisman' },
     statBonus: { dexterity: 4, intelligence: 1 },
     // The fairy-pacification clause is fiction with no consumer: nothing winged
     // and fae exists to be pacified yet. Any fairy creature added later owes it
@@ -795,6 +909,7 @@ export const ITEM_DEF: Record<ItemId, ItemDef> = {
     equipSlot: 'Torso',
     equipSubSlot: 'Jacket',
     wearer: 'cat',
+    look: { kind: 'garment', garment: 'cat_scale_crupper' },
     statBonus: { dexterity: 2 },
     description:
       'Light and flexible, this scale armor is made from Fae Steel. While not as strong as Elven ' +
@@ -812,6 +927,7 @@ export const ITEM_DEF: Record<ItemId, ItemDef> = {
     equipSlot: 'Hands',
     equipSubSlot: 'Gloves',
     wearer: 'cat',
+    look: { kind: 'garment', garment: 'cat_dex_bracelet' },
     statBonus: { dexterity: 2 },
     description: 'An agility boosting accessory equipped on the front leg.',
   },
@@ -826,6 +942,7 @@ export const ITEM_DEF: Record<ItemId, ItemDef> = {
     equipSlot: 'Head',
     equipSubSlot: 'Face',
     wearer: 'cat',
+    look: { kind: 'garment', garment: 'cat_shades' },
     description:
       'Legendary. Round pink sunglasses with something red dried across one lens. Every Magic ' +
       'Missile that hits an enemy splits into three copies that hunt down anything hostile ' +
@@ -843,6 +960,7 @@ export const ITEM_DEF: Record<ItemId, ItemDef> = {
     equipSlot: 'Feet',
     equipSubSlot: 'Toe Ring',
     wearer: 'human',
+    look: { kind: 'garment', garment: 'carl_toe_ring' },
     statBonus: { strength: 3 },
     skillLevelBonus: { pugilism: 3 },
     description:
@@ -858,6 +976,8 @@ export const ITEM_DEF: Record<ItemId, ItemDef> = {
     stackable: false,
     canHotlist: false,
     type: 'armor',
+    wearer: 'both',
+    look: { human: RING_LOOK, cat: RING_LOOK },
     equipSlot: 'Hands',
     equipSubSlot: 'Ring',
     fairyImmunities: ['ice', 'fire'],
@@ -875,6 +995,8 @@ export const ITEM_DEF: Record<ItemId, ItemDef> = {
     stackable: false,
     canHotlist: false,
     type: 'armor',
+    wearer: 'both',
+    look: { human: RING_LOOK, cat: RING_LOOK },
     equipSlot: 'Hands',
     equipSubSlot: 'Ring',
     fairyImmunities: ['ice'],
@@ -891,6 +1013,8 @@ export const ITEM_DEF: Record<ItemId, ItemDef> = {
     stackable: false,
     canHotlist: false,
     type: 'armor',
+    wearer: 'both',
+    look: { human: RING_LOOK, cat: RING_LOOK },
     equipSlot: 'Hands',
     equipSubSlot: 'Ring',
     fairyImmunities: ['fire'],
@@ -910,6 +1034,7 @@ export const ITEM_DEF: Record<ItemId, ItemDef> = {
     equipSlot: 'Legs',
     equipSubSlot: 'Knee Pads',
     wearer: 'human',
+    look: { kind: 'garment', garment: 'carl_kneepads' },
     damageReflectPct: KNEEPADS_DAMAGE_REFLECT_PCT,
     cancelsMomentum: true,
     description:
@@ -929,6 +1054,7 @@ export const ITEM_DEF: Record<ItemId, ItemDef> = {
     equipSlot: 'Hands',
     equipSubSlot: 'Gloves',
     wearer: 'human',
+    look: { kind: 'garment', garment: 'carl_gauntlet' },
     statBonus: { dexterity: 1 },
     meleeOnlyStatBonus: { strength: 3 },
     skillLevelBonus: { iron_punch: 2, powerful_strike: 1 },
@@ -987,6 +1113,7 @@ export const ITEM_DEF: Record<ItemId, ItemDef> = {
     canDrop: false,
     type: 'tool',
     tool: { kind: 'axe', tier: TOOL_TIER_BASIC },
+    heldVisual: 'basic_axe',
   },
   hardened_axe: {
     id: 'hardened_axe',
@@ -999,6 +1126,7 @@ export const ITEM_DEF: Record<ItemId, ItemDef> = {
     canDrop: false,
     type: 'tool',
     tool: { kind: 'axe', tier: TOOL_TIER_HARDENED },
+    heldVisual: 'hardened_axe',
   },
   lumberjacks_axe: {
     id: 'lumberjacks_axe',
@@ -1011,6 +1139,7 @@ export const ITEM_DEF: Record<ItemId, ItemDef> = {
     canDrop: false,
     type: 'tool',
     tool: { kind: 'axe', tier: TOOL_TIER_LONG_HAFT },
+    heldVisual: 'lumberjacks_axe',
   },
   ratkin_forge_axe: {
     id: 'ratkin_forge_axe',
@@ -1023,6 +1152,7 @@ export const ITEM_DEF: Record<ItemId, ItemDef> = {
     canDrop: false,
     type: 'tool',
     tool: { kind: 'axe', tier: TOOL_TIER_RATKIN_FORGE },
+    heldVisual: 'ratkin_forge_axe',
   },
   deepwood_cleaver: {
     id: 'deepwood_cleaver',
@@ -1035,6 +1165,7 @@ export const ITEM_DEF: Record<ItemId, ItemDef> = {
     canDrop: false,
     type: 'tool',
     tool: { kind: 'axe', tier: TOOL_TIER_DEEPWOOD },
+    heldVisual: 'deepwood_cleaver',
   },
   graveyards_bane: {
     id: 'graveyards_bane',
@@ -1047,6 +1178,7 @@ export const ITEM_DEF: Record<ItemId, ItemDef> = {
     canDrop: false,
     type: 'tool',
     tool: { kind: 'axe', tier: TOOL_TIER_GRAVEYARD },
+    heldVisual: 'graveyards_bane',
   },
   basic_pickaxe: {
     id: 'basic_pickaxe',
@@ -1059,6 +1191,7 @@ export const ITEM_DEF: Record<ItemId, ItemDef> = {
     canDrop: false,
     type: 'tool',
     tool: { kind: 'pickaxe', tier: TOOL_TIER_BASIC },
+    heldVisual: 'basic_pickaxe',
   },
   hardened_pickaxe: {
     id: 'hardened_pickaxe',
@@ -1071,6 +1204,7 @@ export const ITEM_DEF: Record<ItemId, ItemDef> = {
     canDrop: false,
     type: 'tool',
     tool: { kind: 'pickaxe', tier: TOOL_TIER_HARDENED },
+    heldVisual: 'hardened_pickaxe',
   },
   quarrymans_pick: {
     id: 'quarrymans_pick',
@@ -1083,6 +1217,7 @@ export const ITEM_DEF: Record<ItemId, ItemDef> = {
     canDrop: false,
     type: 'tool',
     tool: { kind: 'pickaxe', tier: TOOL_TIER_LONG_HAFT },
+    heldVisual: 'quarrymans_pick',
   },
   ratkin_forge_pick: {
     id: 'ratkin_forge_pick',
@@ -1095,6 +1230,7 @@ export const ITEM_DEF: Record<ItemId, ItemDef> = {
     canDrop: false,
     type: 'tool',
     tool: { kind: 'pickaxe', tier: TOOL_TIER_RATKIN_FORGE },
+    heldVisual: 'ratkin_forge_pick',
   },
   stonebreaker: {
     id: 'stonebreaker',
@@ -1107,6 +1243,7 @@ export const ITEM_DEF: Record<ItemId, ItemDef> = {
     canDrop: false,
     type: 'tool',
     tool: { kind: 'pickaxe', tier: TOOL_TIER_DEEPWOOD },
+    heldVisual: 'stonebreaker',
   },
   worldscar_pick: {
     id: 'worldscar_pick',
@@ -1119,6 +1256,7 @@ export const ITEM_DEF: Record<ItemId, ItemDef> = {
     canDrop: false,
     type: 'tool',
     tool: { kind: 'pickaxe', tier: TOOL_TIER_GRAVEYARD },
+    heldVisual: 'worldscar_pick',
   },
   hamburger: {
     id: 'hamburger',
@@ -1174,7 +1312,10 @@ export const ITEM_DEF: Record<ItemId, ItemDef> = {
     stackable: false,
     canHotlist: true,
     type: 'weapon',
+    equipSlot: 'Hand',
+    equipSubSlot: 'Main',
     wearer: 'human',
+    weapon: { delivery: 'sling', heldVisual: 'slingshot' },
     description:
       'Slingshots are small, handheld, hand-powered projectile weapons typically made with a ' +
       'Y-shaped frame with an elastic strip tied to the ends of each prong. On Earth, slingshots ' +
@@ -1192,12 +1333,87 @@ export const ITEM_DEF: Record<ItemId, ItemDef> = {
     stackable: false,
     canHotlist: true,
     type: 'weapon',
+    equipSlot: 'Hand',
+    equipSubSlot: 'Main',
     wearer: 'human',
+    weapon: {
+      delivery: 'melee',
+      strike: 'blade',
+      damageMultiplier: TARANIS_DAMAGE_MULTIPLIER,
+      reachTiles: HUMAN_ARM_REACH_TILES,
+      onStrike: 'taranisStorm',
+      heldVisual: 'fury_of_taranis',
+    },
     description:
       'Legendary. A bronze-hilted silver sword with a storm trapped in its edge. Every blow lands ' +
       'twice as hard as a fist, every swing throws a slicing wave of lightning three tiles ahead, ' +
       'and anything it cuts throws chain lightning to up to four more enemies nearby. ' +
       'Taranis was the Gaulish god of thunder. He did not ask for it back.',
+  },
+  // The proving weapons are dev-only: no loot table, shop stock, quest reward
+  // or preview route names them, so only a harness equipping them by id reaches them.
+  dev_plain_sword: {
+    id: 'dev_plain_sword',
+    category: 'weapon',
+    baseValue: 0,
+    unsellable: true,
+    name: 'Plain Arming Sword',
+    stackable: false,
+    canHotlist: true,
+    type: 'weapon',
+    equipSlot: 'Hand',
+    equipSubSlot: 'Main',
+    wearer: 'human',
+    weapon: {
+      delivery: 'melee',
+      strike: 'blade',
+      damageMultiplier: PROVING_WEAPON_DAMAGE_MULTIPLIER,
+      reachTiles: HUMAN_ARM_REACH_TILES,
+      heldVisual: 'plain_arming_sword',
+    },
+    description: 'A plain steel sword with an iron crossguard. Development only.',
+  },
+  dev_spiked_club: {
+    id: 'dev_spiked_club',
+    category: 'weapon',
+    baseValue: 0,
+    unsellable: true,
+    name: 'Spiked Club',
+    stackable: false,
+    canHotlist: true,
+    type: 'weapon',
+    equipSlot: 'Hand',
+    equipSubSlot: 'Main',
+    wearer: 'human',
+    weapon: {
+      delivery: 'melee',
+      strike: 'blunt',
+      damageMultiplier: PROVING_WEAPON_DAMAGE_MULTIPLIER,
+      reachTiles: HUMAN_ARM_REACH_TILES,
+      heldVisual: 'spiked_club',
+    },
+    description: 'A heavy wooden club studded with iron spikes. Development only.',
+  },
+  dev_felling_axe: {
+    id: 'dev_felling_axe',
+    category: 'weapon',
+    baseValue: 0,
+    unsellable: true,
+    name: 'Felling Axe',
+    stackable: false,
+    canHotlist: true,
+    type: 'weapon',
+    equipSlot: 'Hand',
+    equipSubSlot: 'Main',
+    wearer: 'human',
+    weapon: {
+      delivery: 'melee',
+      strike: 'blade',
+      damageMultiplier: PROVING_WEAPON_DAMAGE_MULTIPLIER,
+      reachTiles: HUMAN_ARM_REACH_TILES,
+      heldVisual: 'felling_axe',
+    },
+    description: 'A long-hafted two-handed axe with a narrow felling bit. Development only.',
   },
 };
 
@@ -1207,13 +1423,82 @@ export const HOTBAR_COUNT = 8;
 export const QUEST_SLOT_IDX = HOTBAR_COUNT - 1; // slot 7
 
 /** Sub-slots available in each equipment slot. */
-export const EQUIP_SUBSLOTS: Record<EquipSlot, string[]> = {
+export const EQUIP_SUBSLOTS: Readonly<Record<EquipSlot, readonly string[]>> = {
   Head: ['Hat', 'Face', 'Neck'],
+  Mouth: ['Held'],
   Torso: ['Shirt', 'Jacket', 'Back'],
   Legs: ['Pants', 'Knee Pads'],
   Hands: ['Gloves', 'Ring 1', 'Ring 2', 'Ring 3', 'Ring 4'],
+  Hand: ['Main', 'Off'],
   Feet: ['Shoes', 'Toe Ring 1', 'Toe Ring 2', 'Toe Ring 3', 'Toe Ring 4'],
 };
+
+/**
+ * Which crawler has each section at all. Carl's hands hold and Donut's mouth
+ * carries; neither can use the other's.
+ */
+export const EQUIP_SLOT_WEARER: Readonly<Record<EquipSlot, Wearer>> = {
+  Head: 'both',
+  Mouth: 'cat',
+  Torso: 'both',
+  Legs: 'both',
+  Hands: 'both',
+  Hand: 'human',
+  Feet: 'both',
+};
+
+/** The key of Carl's main hand, where the weapon he draws from the hotbar is held. */
+export const MAIN_HAND_KEY = 'Hand:Main';
+/** The equipment key of what Donut carries in her jaws. */
+export const MOUTH_HELD_KEY = 'Mouth:Held';
+
+const EQUIP_SLOT_NAMES: ReadonlySet<string> = new Set(Object.keys(EQUIP_SUBSLOTS));
+
+function isEquipSlot(name: string): name is EquipSlot {
+  return EQUIP_SLOT_NAMES.has(name);
+}
+
+/**
+ * The section a `"Slot:SubSlot"` key names, or null when the key names no
+ * sub-slot that exists — a key written under a since-renamed slot.
+ */
+export function equipSlotOfKey(key: string): EquipSlot | null {
+  const separator = key.indexOf(':');
+  if (separator < 0) return null;
+  const slot = key.slice(0, separator);
+  const subSlot = key.slice(separator + 1);
+  if (!isEquipSlot(slot)) return null;
+  return EQUIP_SUBSLOTS[slot].includes(subSlot) ? slot : null;
+}
+
+/**
+ * Who may equip `id`, read off its definition: bag and hotbar slots hold
+ * copies of a def taken when the item was picked up, so only the def is
+ * current. Undefined for an item no slot takes, and for an id retired since a
+ * save was written.
+ */
+export function wearerOf(id: ItemId): Wearer | undefined {
+  return isItemId(id) ? ITEM_DEF[id].wearer : undefined;
+}
+
+/** How `def` looks on Donut, or null for anything she cannot wear. */
+export function catLookOf(def: ItemDef): WearerLook<'cat'> | null {
+  if (def.type !== 'armor') return null;
+  if (def.wearer === 'both') return def.look.cat;
+  return def.wearer === 'cat' ? def.look : null;
+}
+
+/** How `def` looks on Carl, or null for anything he cannot wear. */
+export function humanLookOf(def: ItemDef): WearerLook<'human'> | null {
+  if (def.type !== 'armor') return null;
+  if (def.wearer === 'both') return def.look.human;
+  return def.wearer === 'human' ? def.look : null;
+}
+
+/** The weapon stat block of `id`, or null for anything that is not a weapon. */
+export function weaponStatsOf(id: ItemId): WeaponStats | null {
+  return isItemId(id) ? (ITEM_DEF[id].weapon ?? null) : null;
+}
 
 const SUBSLOT_INDEX_SUFFIX = / \d+$/;
 

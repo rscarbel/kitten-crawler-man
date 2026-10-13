@@ -41,8 +41,7 @@ import {
   REPAIR_ROWS,
   humanRowOf,
 } from '../../sprites/art/humanFigure';
-import { viewForFacing } from '../../sprites/humanSprite';
-import type { CarlView } from '../../sprites/art/carl/rig';
+import { type CarlRowView } from '../../sprites/humanSprite';
 import {
   type DefenseStructures,
   type StructureRef,
@@ -254,7 +253,7 @@ export interface ConstructionSystemDeps {
 
 interface Hammering {
   readonly human: HumanPlayer;
-  readonly view: CarlView;
+  readonly view: CarlRowView;
   readonly faceX: number;
   readonly faceY: number;
   readonly repair: boolean;
@@ -1329,7 +1328,13 @@ export class ConstructionSystem {
     const distance = Math.hypot(toX, toY);
     const faceX = distance > 0 ? toX / distance : human.facingX;
     const faceY = distance > 0 ? toY / distance : human.facingY;
-    const hammering: Hammering = { human, view: viewForFacing(faceX, faceY), faceX, faceY, repair };
+    const hammering: Hammering = {
+      human,
+      view: human.rowViewFacing(faceX, faceY),
+      faceX,
+      faceY,
+      repair,
+    };
     if (repair) {
       this.hammering = hammering;
       this.loopHammering(hammering);

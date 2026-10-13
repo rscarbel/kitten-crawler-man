@@ -20,7 +20,6 @@ import type { EventBus } from '../../../core/EventBus';
 import { ITEM_DEF } from '../../../core/ItemDefs';
 import type { BriarHollowSite } from '../../../map/overworld/briarHollowSite';
 import { BUILD_ROWS } from '../../../sprites/art/humanFigure';
-import { viewForFacing } from '../../../sprites/humanSprite';
 import { worldBar } from '../../../ui/world/worldShapes';
 import { drawInteractionPrompt, interactionPromptsSuppressed } from '../../../ui/InteractionPrompt';
 import { drawRopeCoilGlyph, drawSawBladeGlyph } from '../../../ui/icons/stationGlyphs';
@@ -348,14 +347,17 @@ export class SawmillService {
     const distance = Math.hypot(dx, dy);
     const faceX = distance > 0 ? dx / distance : worker.facingX;
     const faceY = distance > 0 ? dy / distance : worker.facingY;
-    job.posing = this.deps.party.human.playAction(BUILD_ROWS[viewForFacing(faceX, faceY)], {
-      faceX,
-      faceY,
-      loop: true,
-      onEnd: () => {
-        job.posing = false;
+    job.posing = this.deps.party.human.playAction(
+      this.deps.party.human.rowFacing(BUILD_ROWS, faceX, faceY),
+      {
+        faceX,
+        faceY,
+        loop: true,
+        onEnd: () => {
+          job.posing = false;
+        },
       },
-    });
+    );
   }
 
   /** Stops whatever is under way; nothing is spent. */

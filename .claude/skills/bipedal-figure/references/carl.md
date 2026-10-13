@@ -12,40 +12,48 @@ value quoted beside them.
 **Painter** — `src/sprites/art/carl/`. Knows nothing about animation; paints one
 `CarlPose` in one view.
 
-| File                   | Owns                                                                                                                                                                                                |
-| ---------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `geometry.ts`          | Point arithmetic in figure space (tile units, origin between the feet, +Y down).                                                                                                                    |
-| `palette.ts`           | The material ramps (`SKIN`, `LEATHER`, `COTTON`, `HAIR`), `receded`, the silhouette-outline tone, rim/sheen/crease alphas, and `LIGHT`, the key-light direction.                                    |
-| `proportions.ts`       | Height, heads-tall, every joint height, bone lengths, widths, head radii. `FIGURE_HEIGHT` and `HEADS_TALL` pin everything else.                                                                     |
-| `rig.ts`               | `CarlView`, `ViewSpec`, `VIEWS`, `CarlPose`, `ArmAngles`, `restingPose`, handedness (`mirrorPose`, `poseAsDrawn`, `drawnSide`), the two-bone IK, `buildSkeleton`, and the head-on depth projection. |
-| `paint.ts`             | The primitives every part is built from: capsule traces, `shadeForm` / `shadeClipped`, `castShadow`, `crease`, the contact shadow.                                                                  |
-| `head.ts`              | Skull, face planes, features, ears, hair, and the neck.                                                                                                                                             |
-| `torso.ts`             | The jacket (and the trollskin shirt's band at the neckline), collar, rim light.                                                                                                                     |
-| `sleeve.ts`            | The shoved-up leather sleeve over the upper arm and the deltoid cap under it.                                                                                                                       |
-| `limbs.ts`             | Bare arm and leg silhouettes and their muscle forms, the hand in its three shapes, `handGrip`, `wristAngle`.                                                                                        |
-| `feet.ts`              | The bare foot, one silhouette per view; sole landmarks the probe and gates read.                                                                                                                    |
-| `boxers.ts`            | The heart-print shorts, cuffed round each thigh.                                                                                                                                                    |
-| `gear.ts`              | Visible canon gear laid on the pose (`CarlPose.gear`): gauntlet, cloak, shirt band, toe ring, pedicure shine.                                                                                       |
-| `props.ts` + `props/*` | The held-prop hook (`HeldProp`, `PropPainter`, `PropReach`, `PROP_ART`) and one file per prop. `props/hammer.ts` is the shape to copy; `props/reach.ts` holds shared reach helpers.                 |
-| `figure.ts`            | Draw order and composition: `drawCarlFront` / `drawCarlBack` / `drawCarlSide`, the composing surface, the silhouette outline, cast shadows between parts, the bounce rim.                           |
+| File                   | Owns                                                                                                                                                                                                                                                           |
+| ---------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `geometry.ts`          | Point arithmetic in figure space (tile units, origin between the feet, +Y down).                                                                                                                                                                               |
+| `palette.ts`           | The material ramps (`SKIN`, `LEATHER`, `COTTON`, `HAIR`), `receded`, the silhouette-outline tone, rim/sheen/crease alphas, and `LIGHT`, the key-light direction.                                                                                               |
+| `proportions.ts`       | Height, heads-tall, every joint height, bone lengths, widths, head radii. `FIGURE_HEIGHT` and `HEADS_TALL` pin everything else.                                                                                                                                |
+| `rig.ts`               | `ViewSpec` and `VIEWS` per `CardinalView` (from `src/sprites/facingView.ts`), `CarlPose`, `ArmAngles`, `restingPose`, handedness (`mirrorPose`, `poseAsDrawn`, `drawnSide`), the two-bone IK, `buildSkeleton`, and the head-on depth projection.               |
+| `paint.ts`             | The primitives every part is built from: capsule traces, `shadeForm` / `shadeClipped`, `castShadow`, `crease`, the contact shadow.                                                                                                                             |
+| `head.ts`              | Skull, face planes, features, ears, hair, and the neck.                                                                                                                                                                                                        |
+| `torso.ts`             | The jacket, collar and collar rim, each painted by the base jacket garment through its part frame.                                                                                                                                                             |
+| `sleeve.ts`            | The shoved-up leather sleeve over the upper arm and the deltoid cap under it.                                                                                                                                                                                  |
+| `limbs.ts`             | Bare arm and leg silhouettes and their muscle forms, the hand in its three shapes, `handGrip`, `wristAngle`.                                                                                                                                                   |
+| `feet.ts`              | The bare foot, one silhouette per view; sole landmarks the probe and gates read.                                                                                                                                                                               |
+| `boxers.ts`            | The heart-print shorts, cuffed round each thigh.                                                                                                                                                                                                               |
+| `gear.ts`              | The painters behind the gauntlet and cloak garments: their per-frame forms and reach.                                                                                                                                                                          |
+| `carlParts.ts`         | The part frames handed to garments (head, torso, neck, hips, forearm, leg, back, foot), `CarlDressing` and the features a garment may hide.                                                                                                                    |
+| `props.ts` + `props/*` | The row props' painters (`HeldProp`, `PropPainter`, `PropReach`, `PROP_ART`), one file per prop, run by their held visuals in `src/sprites/held/art/scriptedPropHeld.ts`. `props/hammer.ts` is the shape to copy; `props/reach.ts` holds shared reach helpers. |
+| `grip.ts`              | The hand closed round a handle: palm, four finger bands and a thumb wrapped round a cylinder, each segment sorted to the front or back grip layer by its normal.                                                                                               |
+| `handSockets.ts`       | Each hand of a drawn pose solved on the painter's own skeleton: what it holds (nothing, the row's prop, an equipment-chosen item), the handle's axis, the palm normal, the solved grip.                                                                        |
+| `figure.ts`            | Draw order and composition: `drawCarlFront` / `drawCarlBack` / `drawCarlSide`, the composing surface, the silhouette outline, cast shadows between parts, the bounce rim.                                                                                      |
+
+**Garments** — `src/sprites/garments/human/`, one file per garment (base jacket and boxers, then each wearable) plus `carlDressing.ts`, which turns an outfit into the `CarlDressing` the compositor reads. See "Outfits" below.
 
 **Choreography** — `src/sprites/art/human/`, split by row family. Each file fills
 `CarlPose`s and knows nothing about paint.
 
-| File                                                                         | Owns                                                                                                                                                                                                                                                   |
-| ---------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `timing.ts`                                                                  | Row lengths, impact frames, per-frame holds. A leaf: gameplay derives its hit ticks from these.                                                                                                                                                        |
-| `figureScale.ts`                                                             | `HUMAN_SCALE`, `TILE_SCALE`, `HUMAN_CELL_PX_PER_UNIT`, kept apart from the cell so the gait can import them without a cycle.                                                                                                                           |
-| `gaitShared.ts`                                                              | What several families share: `blink`, the arm hang, arms posed by their joints (`armReaching`, `anglesThrough`), `bisect`, keyed tracks (`trackAt`, `fromRest`, `frameValue`), the rolling foot, leg reach at a knee bend, `springLag`, the arm swing. |
-| `locomotion.ts`                                                              | Walk and run cycles, their starts and stops, in all three views; `RUN_RADIANS_PER_PX` / `WALK_RADIANS_PER_PX`.                                                                                                                                         |
-| `idles.ts`                                                                   | The breathing idle, the guard, the guard drop, the fidgets.                                                                                                                                                                                            |
-| `strikesSide.ts` / `strikesUp.ts` / `strikesDown.ts`                         | The strike family of each view (profile, from behind, head-on).                                                                                                                                                                                        |
-| `stomps.ts`                                                                  | Smush, standing and hopping.                                                                                                                                                                                                                           |
-| `travelling.ts`                                                              | What every blow thrown on the move shares: entry phases, the kicking leg per entry, swing feet drawn back into reach.                                                                                                                                  |
-| `actionsBuild.ts` / `actionsThrow.ts` / `actionsSling.ts` / `actionsMisc.ts` | Rows systems ask for: build/place/repair; dynamite light/hold/throw; the sling shot; shell cast, drink, grab, chest open, talk.                                                                                                                        |
-| `reactions.ts`                                                               | Rows done to him: hurt (front and behind), stagger, struggle, knockdown, knocked out, revive, death.                                                                                                                                                   |
-| `appearance.ts`                                                              | Outfits: `HumanAppearance`, `humanFigureWearing`, `dressedPose`, the gauntlet's per-frame form.                                                                                                                                                        |
-| `probe.ts`                                                                   | `probeHumanJoints(row, frame)`: joints in cell pixels, read off the skeleton the painter solves, for gates and runtime anchors.                                                                                                                        |
+| File                                                                                                                          | Owns                                                                                                                                                                                                                                                                         |
+| ----------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `timing.ts`                                                                                                                   | Row lengths, impact frames, per-frame holds. A leaf: gameplay derives its hit ticks from these.                                                                                                                                                                              |
+| `figureScale.ts`                                                                                                              | `HUMAN_SCALE`, `TILE_SCALE`, `HUMAN_CELL_PX_PER_UNIT`, kept apart from the cell so the gait can import them without a cycle.                                                                                                                                                 |
+| `gaitShared.ts`                                                                                                               | What several families share: `blink`, the arm hang, arms posed by their joints (`armReaching`, `anglesThrough`), `bisect`, keyed tracks (`trackAt`, `fromRest`, `frameValue`), the rolling foot, leg reach at a knee bend, `springLag`, the arm swing.                       |
+| `locomotion.ts`                                                                                                               | Walk and run cycles, their starts and stops, in all three views; `RUN_RADIANS_PER_PX` / `WALK_RADIANS_PER_PX`.                                                                                                                                                               |
+| `idles.ts`                                                                                                                    | The breathing idle, the guard, the guard drop, the fidgets.                                                                                                                                                                                                                  |
+| `strikesSide.ts` / `strikesUp.ts` / `strikesDown.ts`                                                                          | The strike family of each view (profile, from behind, head-on).                                                                                                                                                                                                              |
+| `stomps.ts`                                                                                                                   | Smush, standing and hopping.                                                                                                                                                                                                                                                 |
+| `travelling.ts`                                                                                                               | What every blow thrown on the move shares: entry phases, the kicking leg per entry, swing feet drawn back into reach.                                                                                                                                                        |
+| `actionsBuild.ts` / `actionsThrow.ts` / `actionsSling.ts` / `actionsMisc.ts`                                                  | Rows systems ask for: build/place/repair; dynamite light/hold/throw; the sling shot; shell cast, drink, grab, chest open, talk.                                                                                                                                              |
+| `reactions.ts`                                                                                                                | Rows done to him: hurt (front and behind), stagger, struggle, knockdown, knocked out, revive, death.                                                                                                                                                                         |
+| `appearance.ts`                                                                                                               | Outfits: `humanFigureFor` / `humanFigureWearing` keyed by an `Outfit<'human'>`, `dressedPose`, `garmentRowOf` (what a row tells garments that move with it).                                                                                                                 |
+| `probe.ts`                                                                                                                    | `probeHumanJoints(row, frame)`: joints in cell pixels, read off the skeleton the painter solves, for gates and runtime anchors.                                                                                                                                              |
+| `sockets.ts`                                                                                                                  | `carlSocketsAt(figure, row, frame)`: `mainHand` (his right), `offHand`, `back`, `hip` in cell pixels, memoised per figure, row and frame; `mirroredSocket`; `stampAnchorOf` (where a Smush heel lands).                                                                      |
+| `handTurn.ts` / `carry.ts`                                                                                                    | Authoring a gripping hand's turn in depth (`turnHand`, palm normals); how a carried item is held on rows not authored for it (`carryInMainHand`, `CarriedGrip`).                                                                                                             |
+| `motionSets.ts` / `armedRows.ts` / `armedHold.ts` / `armedStrikes.ts` / `holster.ts` / `stowedGeometry.ts` / `weaponReach.ts` | The rows a weapon out in his hand plays, by grip and weight: the set an item picks, the armed row table, stance and stride holds, keyed blows and their travelling versions, draw and stow, where a stowed weapon rests, where a weapon blow lands. See "Motion sets" below. |
 
 **Row table and figure** — `src/sprites/art/humanFigure.ts`: cell geometry
 (`FRAME_W`, `TILE_X`, `TILE_Y`, `GROUND_OFFSET_IN_TILE`, `ORIGIN_X/Y`),
@@ -59,7 +67,7 @@ is the soft-shading module (below).
 
 **Runtime** — `src/sprites/humanSprite.ts` (view selection, row timing helpers,
 the active outfit, prewarm, drawing), `src/sprites/humanAnimator.ts`,
-`src/sprites/humanReactions.ts`, `src/sprites/slingshotCarrySprite.ts`,
+`src/sprites/humanReactions.ts`,
 `src/creatures/humanGestures.ts`. The `game-architecture` skill describes them.
 
 ## The soft-shading module
@@ -130,7 +138,6 @@ never from names — a new row plugs in by being declared.
 | `locomotion`                       | `planted` (feet hold where they were put), `travelling` (a stance foot holds its ground position while the sprite carries him), `none`.                                                                                                                                                                                                                                                                                                                                                     |
 | `gait` / `bridges`                 | A cycle's gait (`walk` / `run`); on a start or stop, the gait it bridges to or from standing.                                                                                                                                                                                                                                                                                                                                                                                               |
 | `entryFootPhase` / `exitFootPhase` | The cycle phase, **as a fraction of the cycle in [0, 1)**, 0 at right-foot contact, whose leg pose the first / last frame matches.                                                                                                                                                                                                                                                                                                                                                          |
-| `stampAnchor`                      | Where the stamping heel lands on the impact frame, in tile fractions; the runtime spawns the Smush blast there.                                                                                                                                                                                                                                                                                                                                                                             |
 | `eventFrames`                      | Named frames a system synchronises to (`fuseLit`, `release`, `cast`, `lidUp`, `strike`). Pass them to `onFrame`; never copy the numbers.                                                                                                                                                                                                                                                                                                                                                    |
 | `ticksPerFrame` / `frameTicks`     | Holds for a clock-paced row; `frameTicks` is per frame and wins (the idle's blink is one short frame among long breaths).                                                                                                                                                                                                                                                                                                                                                                   |
 | `strike`                           | `tags` (`punch`, `kick`, `low`, `punt`, `stomp`, `high`, `long`, `finisher`, `downed`), `comboSlots` (0 is the opener), `standing` (on a travelling blow, the standing row it replaces), `reachLimb` (required: the part that lands it — a fist, foot, knee or the lead shoulder — and on a punch the fist the gauntlet's steel goes round), `drive` (`down` for a stamp, hammer-fist or knee drop; gate G5 checks the part is driven furthest, or stops coming down, on the impact frame). |
@@ -202,6 +209,37 @@ same in every version. The animator throws the version whose legs begin
 nearest the stride on screen. A Smush on the move is a hop in along the run,
 chosen the same way.
 
+## Views and facing: five views, three painted
+
+`src/sprites/facingView.ts` is the one facing model for both crawlers.
+`FACING_VIEWS` is `front`, `frontDiagonal`, `side`, `backDiagonal`, `back`;
+`CARDINAL_VIEWS` (`CardinalView`) are the three the rig paints (`VIEWS` in
+`carl/rig.ts` is keyed by them).
+
+- **`selectFacing(fx, fy, previous)`** maps a facing to a `FacingSelection`
+  (`view` + `flipX`) from eight 45° sectors. With `previous` it holds that view
+  until the facing passes the sector edge by `FACING_HYSTERESIS_DEGREES`, so a
+  phone stick wobbling on an edge never flickers; asked again with its own
+  answer it returns the same thing. A zero facing keeps `previous`.
+- **`FacingState`** remembers one figure's selection between ticks:
+  `update` moves it on (the animator calls it once a tick), `peek` asks what a
+  facing would draw without moving it (a strike, a Smush or a draw latches its
+  view this way). `HumanPlayer.facing` is shared with his animator;
+  `isTurnedView` is true for the profile and both diagonals.
+- **The fallback.** Carl has no diagonal rows. `CARL_VIEW_FALLBACK`
+  (`src/sprites/carlViews.ts`) draws `frontDiagonal` in profile and
+  `backDiagonal` from behind; it is the only place a missing view is filled
+  in. `CarlRowView` (the views he has rows for), `carlRowView(view)` and
+  `viewRow(rows, view)` in `humanSprite.ts` route every view-keyed lookup
+  through it, and `ViewRows` requires a row for every `CarlRowView`: delete a
+  fallback entry and the compiler lists every table missing that view.
+  Garments borrow the same choice through `carlViews` /
+  `carlEveryView` (`src/sprites/garments/human/views.ts`), since a garment
+  painter must exist for every `FacingView`.
+- **Any test of "which way is he facing" goes through the selection**, never
+  through the sign of `fx` or `fy`: a row's view, its mirroring, a mouth's
+  lean, a tool's side all read the drawn row's view.
+
 ## Handedness: the front view is a mirror
 
 Every pose is authored with **his right side at +X**, which is where it lies seen
@@ -262,50 +300,326 @@ most often needs and gets wrong. Optional fields default to "absent is neutral".
 - **Planted flags.** `leftFootPlanted` / `rightFootPlanted` — set by every
   locomotion row, because head-on a planted foot's screen height cannot tell
   standing from stepping.
-- **Gear.** `gear` is laid on by the outfit's dresser, never by choreography.
+- **Outfit.** `outfit` (what he wears, plus the row and frame garments read) is
+  laid on by `dressedPose` in `human/appearance.ts`, never by choreography.
+
+- **Hand orientation.** `leftHandOrientation` / `rightHandOrientation`
+  (`HandOrientation`: `palmNormal`, `haftDepth`, optional `haftAngle` and
+  `haftShare` — a one-handed item turned out of the picture) on
+  every hand a row closes on something, set with `turnHand` in
+  `human/handTurn.ts`; `twoHandGrip` (which fist is at the butt, the grips'
+  flat spacing) on a two-handed swing. A grip with no orientation is a plain
+  fist round nothing (a sling's pinch).
 
 A prop states its own reach (`PropReach`): the composing surface is sized round
 the skeleton and whatever each prop says it reaches, and ink past it is sheared
 off. G23 repaints every cell on a full-cell surface and fails any difference.
 
+## Sockets, the grip and two-layer cells
+
+What he holds is never a sticker over the finished figure.
+
+- **Sockets** come out of the painter's own solve (`carlHandSockets` in
+  `carl/figure.ts`, published per cell by `human/sockets.ts`): centre, axis
+  (camera space: x right, y down, z toward the camera), palm normal, the slab
+  index the held thing sits in front of, and whether an equipment-chosen
+  item is held there. `mainHand` is his right hand in every view; a mirrored
+  cell mirrors its sockets (`mirroredSocket`) and keeps the hand. A two-handed
+  haft's grip point is at the socket the frame names as its `butt`.
+  `carlSocketsAt(source, row, frame)` memoises per figure id, row and frame.
+  `occupied` means an equipment-chosen item is in that hand; `grips` means the
+  hand is closed on anything, the row's own prop included. `back` and `hip`
+  are where a stowed weapon rests (`stowedGeometry.ts`): never occupied; `back` lies
+  over him seen from behind, `hip` in both head-on views, and otherwise each
+  sits on the rearmost slab.
+- **Orientation is authored per frame** beside the pose by every row that
+  holds something: `turnHand(pose, side, palmNormal, haftDepth, haftAngle?)`
+  (`human/handTurn.ts`, with `KNUCKLES_TO_CAMERA`, `PALM_TO_CAMERA`, `towards`,
+  `rolled`, and `turnPropHands` for every hand holding a row prop) fills that
+  side's `HandOrientation`; `TwoHandGrip` names the butt fist and the grips'
+  flat spacing. The cardinal rows are hand-authored 2D, so
+  depth is stated, not solved. Profile swings keep the palms at ±z; head-on,
+  the butt fist's palm crossed with the haft points the way the head leads
+  the swing (the axe's anticlockwise blow, the pick's clockwise one).
+- **The grip** (`carl/grip.ts`) is computed, never drawn per frame: four
+  finger bands and a thumb wrap a cylinder the handle's radius class thick
+  (`HandOrientation.handle`, per hand: a carried weapon's class on the
+  carrying hand, the tool haft's elsewhere) round the socket's axis, the palm block sits on the palm side, and each
+  segment whose outward normal faces the camera is the front grip layer.
+  Knuckles to the camera, the knuckles and palm lie over the handle; palm to
+  the camera, the thumb and finger tips close over it.
+- **Two layers.** A frame with an occupied socket is baked whole, plus a
+  front layer cropped to its ink (`FigureDef.heldLayers`): every slab after
+  the socket's, the front grip bands, the holding forearm when the back of
+  the hand faces the camera (the handle lies on the palm's side of it), and
+  the outline pixels that ring them. The outline and rim are built on the
+  silhouette with a stand-in for the handle near each fist, so no outline is
+  drawn across a handle where it leaves a fist. At runtime
+  `drawFigureCached(..., between)` draws the cell, the item at its socket,
+  then the front layer. A row's own prop is baked between the same layers by
+  the same compositor (`compositeHeldItem`, `src/sprites/held/heldComposite.ts`)
+  and keeps the outline the figure gives it.
+- **Carrying.** A weapon out in his hand plays its motion set's rows (below);
+  on a bare-handed row its set has none of its own for, it closes his right
+  fist on it wherever the row leaves that hand free (`carryInMainHand`), one figure per carried grip
+  (handle thickness × low or shouldered), so the cells are two-layered. A
+  row with a prop in either hand, a tool in both or the shell's glow in that
+  palm keeps its hands and the item is not drawn. The carry angle is turned
+  off his face and out of the floor by a small search, the item's reach
+  assumed per style.
+- **Gates**: `npm run gates:equipment` (`--item=<id>`) holds E1 registration
+  (each socket on its fist's wrist-to-knuckle line, the handle through the
+  socket, fingers on it), E2 the cell border and the floor (head-on the
+  floor ahead runs below his ground line; a tool head bites on its impact
+  frame and the frame after; the scythe skims on the axe's backswing, see
+  below), E3 not over his face unless a fist is there, E4 wrap, E6 a single
+  row prop's bake against its runtime composite, E7 mirroring and the main
+  hand. `npm run render:equipment` renders every item on its rows at the
+  tile; `--part=hands` renders the grip through a roll at 6×.
+
+Ceiling, the grip at close range: five rounds of fresh blind reviewers saw
+the 6× roll (`render:equipment -- --part=hands --item=spiked_club`). From the
+knuckle side, which is how every carry and blow holds a weapon, the later
+rounds called it "a cartoon fist closed around a handle, acceptable at game
+scale"; from the palm side, and as a whole, most still said "a fist stuck on
+a stick": the bands are parallel capsules with banded tone, so nothing shows
+them turning round the handle, and the turn through edge-on changes the
+hand's construction in one step. Fixes tried: a thumb wound along the handle
+onto the index finger and shortened so it no longer stands up; the palm
+block moved to the palm side of the handle and kept in front until the palm
+clearly faces the camera; finger girth tapered and the wrap carried past
+three quarters of a turn so palm-out tips curl over the handle's front. Each
+moved the read; none reached "fingers wrapped round a handle" twice running.
+What is missing is per-band curl shading (each band darkening as it turns
+away) and a fist outline that narrows edge-on; at the 32 px tile the whole
+hand is three pixels and none of this shows.
+
+Ceiling: Merrit's scythe is swung on the axe's profile chop, whose backswing
+dips the long blade three pixels below the floor's line on two frames
+(declared in `gates-equipment.ts`); a scythe swing of its own removes it.
+
+## Motion sets: the rows a weapon plays
+
+A weapon out in his hand picks the rows he moves and fights in by its grip
+archetype and weight (`human/motionSets.ts`, `motionSetOf`):
+`oneHandLight` (a sword), `oneHandHeavy` (a club), `twoHand` (a felling
+axe, a scythe, a greatsword); a slingshot plays the bare-handed rows with the
+stand-in carry. Every item of a set plays the same rows — a new sword is a
+held visual and an item, nothing else.
+
+- **Rows** live in `human/armedRows.ts`, named `<set>_<row><view>`
+  (`light_slash_side`, `heavy_draw_away`, `twohand_sweep_run_side_3`) and
+  marked `motionSet` in the row table; a draw or stow also carries
+  `holster`. Light and heavy have idle, guard, guard drop, walk, run and their
+  starts and stops; a two-hander has idle, walk and run, its stance being its
+  guard. Strikes: light slash, backhand, chop, thrust; heavy smash, swing;
+  two-handed sweep — each standing and in every travelling version.
+- **Stance and stride** (`armedHold.ts`) are the bare-handed rows' own legs
+  and body with the holding arm re-posed from a `Hold` (the fist placed from
+  its shoulder joint, or both fists on a haft placed from the middle of his
+  shoulders); the held arm keeps a share of the free arm's swing
+  (`SWING_SHARES`), the item turning a little with the forearm. A two-hander
+  rocks toward level with each step, never up across his face.
+- **Blows** (`armedStrikes.ts`) are eight keyed frames per view: the fist's
+  place, the item's screen angle, how much of it lies in the picture
+  (`haftShare`) and which way it runs out, and what the trunk adds to the
+  stance. The travelling versions lay the same keys over the run's legs at
+  each entry phase, blended in from the run's carry (`TRAVELLING_BLEND`), the
+  shoulders turned as far as the standing blow turns them. An overhead blow
+  edge-on winds up behind his back, never with the near arm raised across his
+  face (G25).
+- **Draw and stow** (`holster.ts`): the hand reaches for where the weapon
+  rests (`stowedGeometry.ts`, shared with the `hip` and `back` sockets),
+  closes on it along the stowed axis, pulls it out and settles into the
+  carry; the stow is the draw backwards. Until the fist closes the runtime
+  draws the weapon at rest; `HumanPlayer` keeps a stowing weapon in hand while
+  its stow plays.
+- **Contract**: `strike.reachLimb: 'weapon'` — the main arm is driven
+  furthest on the impact frame (G5), and the hit's contact point is out along
+  the weapon (`weaponReach.ts`). Head-on his shoulders are too far apart for
+  one fist to reach across to the other's side, so a two-hander's grip slides
+  (the left fist takes the butt) while the head is out on his right.
+- **The animator** plays the set's own idle, guard, drop, cycles, starts and
+  stops and strikes; a set with none of a kind falls back as `restRowFor`,
+  `cycleRow` and `strikingSet` say. With a weapon out he never fidgets and a
+  level-up plays no gesture. Smush, reactions and actions stay bare-handed
+  rows, the weapon on the stand-in carry.
+- **Wiring**: `HumanPlayer` reads the set off the drawn weapon's held visual
+  and hands it to `HumanAnimator.setMotionSet`; a draw or stow calls
+  `beginHolster(motion, set, fx, fy, onEnd)`, which plays the set's `holster`
+  rows. The figure he is drawn as is keyed by `CarriedGrip` (handle class,
+  carry style, motion set) through `setHumanHeld` in `humanSprite.ts`.
+- **Residency is per set**: `alwaysDrawnRows(set)`, `openingStrikeRows(set)`
+  and `residentViewSpans(set)` in `humanSprite.ts` name what stays warm with
+  that set in his hand — the set's own rows replace the bare-handed ones, so
+  arming swaps the working set rather than adding to it.
+- **Memory**: the light set's family is the largest he has — 64.1 MB working
+  set, 66.2 MB with its front layers (G9b) — so `HUMAN_FIGURE_BUDGET_MEGABYTES`
+  is 67.
+
+Ceiling, the armed rows head-on and from behind (four rounds of fresh blind
+reviewers on the 32 px strips): every profile row — stance, stride, run and
+each blow — and the draws were named every round with no major left. What
+stayed major is what the camera cannot show of a blow driven at it or away
+from it: head-on, a blade or club laid across his front at the hit sits over
+his shorts and reads as a belt ("a bar across the waistband"); from behind,
+the weapon is hidden by his back through the follow-through ("the sword
+vanishes"); a two-hander head-on is held by fists that cannot leave his
+centre, so the haft reads as turning round folded arms. Fixes tried: the hit
+raised from the waist to the chest and the blade held across the picture
+rather than at the camera; the back view's hidden frames held flat so the
+length past his outline shows; the head-on two-hander's grips moved out to
+the hip with the elbows less flared, the haft rocked with the stride, the
+grip slid between fists on the wind-up. Each moved the read; none passed
+twice running. What is missing is a three-quarter view for blows thrown
+north and south (the arm and weapon would swing across the picture) and,
+head-on, shoulders a two-handed grip can turn — the hand-authored head-on
+pose keeps the shoulders square to the camera.
+
 ## Outfits
 
 A cell is keyed on `(figure, state, frame)` and shared by every draw, so gear
-cannot be a draw parameter. Each combination of visible gear is a figure of its
-own (`humanFigureWearing`), painted from the same rows through a dresser that
-lays `CarlPose.gear` on every pose; the default outfit is `HUMAN_FIGURE` itself.
-Only the outfit he wears is resident: `setHumanAppearance` in `humanSprite.ts`
-releases the old figure outright (`releaseFigure`) and prewarms the new one's
-always-drawn rows. `HumanPlayer.syncAppearance` runs it on equipment change and
-on every draw (cheap when nothing changed), and re-asks the animator's and the
-stand-by warm requests, which went to the figure he took off.
+cannot be a draw parameter. Everything he wears is a garment
+(`src/sprites/garments/human/`): his jacket and heart boxers are base garments,
+then the trollskin shirt, gauntlet, cloak, toe ring and the rest (the
+pedicure is drawn but no item grants it, so it shows only in previews).
+The compositor (`carl/figure.ts`) paints no clothing itself: at each piece —
+jacket, collar, boxers, each forearm, each leg, the toes, the cloak's place
+behind or over him, the top of his head — it hands a part frame
+(`carl/carlParts.ts`) to a `CarlDressing`, and each garment covering that part
+paints there, inside the slab. The pose carries what he wears
+(`CarlPose.outfit`: the outfit plus the row and frame garments that move with
+the row read — the gauntlet's steel round a landing punch, the cloak's drag at
+a run); absent is his default outfit, the trollskin shirt over his base. Each
+outfit is a figure of its own (`humanFigureWearing`), keyed by its sorted
+garment ids; the default outfit is `HUMAN_FIGURE` itself. Only the outfit he
+wears is resident: `setOutfit('human', …)` (`src/sprites/outfits.ts`, through
+`setHumanOutfit` in `humanSprite.ts`) releases the old figure outright
+(`releaseFigure`) and prewarms the new one's always-drawn rows.
+`HumanPlayer.onEquipmentChanged` marks his outfit stale, and the private
+`dressInGear` applies it — at once, or on his next draw for a change made while
+he is being built — and re-asks the animator's and the stand-by warm requests,
+which went to the figure he took off. Figures built on his rig (townsfolk, the
+club cast, Gum Gum, the Incubus, the city elf) carry a fixed outfit on their
+poses. `npm run gates:equipment` (E5) holds every garment inside its part's
+envelope; `scripts/render-garments.ts --wear=<ids>` renders one for review.
+
+### What review found on his garments at the tile
+
+Every garment of his was reviewed at the 32 px tile by fresh blind reviewers
+(two each, renders in `preview/carl-garments/`). All of them were named, and
+placed on the right part. What is left is the tile's own limit:
+
+- **Crown, bracers, kneepad spikes** are five or six pixels across: they read
+  as "a small gold crown", "leather wrist cuffs", "knee pads" but their detail
+  (points, rivets, spikes) is a pixel each. Tried: bigger crown and a ring
+  shape with a far wall; lighter boiled leather and dimpled rivets for the
+  bracers; a lit rim on the kneepads.
+- **The gambeson reads as a quilted vest over the jacket**: his jacket's
+  sleeves stay brown, and its hem stops at the jacket's waist (the torso
+  allowance is the jacket's outline). Tried: wider quilting with stitched
+  rows to read as padding, a bulk band round the outline.
+- **The kettle helm's chin strap** reads as a sideburn or a beard edge at the
+  tile from some views; one continuous U under the chin was tried.
+- **Lying down** (`knocked_out_side`) every hat sits on the top of his head,
+  which points along the floor: a hat there is a few pixels at the end of him.
+- **Boots** are near-black, cooler than the jacket: a brown of the jacket's own
+  value merged into it in a crouch.
 
 ## Diagonals snap to a cardinal view; there is no three-quarter view, on evidence
 
-`viewForFacing` in `humanSprite.ts` picks the view: north of −0.5 is drawn from
-behind (tested first), otherwise sideways past 0.5 is profile, otherwise
-head-on. So a south diagonal draws in profile and a north diagonal from behind.
+`selectFacing` picks one of five facing views from eight 45° sectors, with a
+hysteresis margin (see "Views and facing" above). Carl has rows only for the
+three cardinal views — bare-handed and armed alike — so `CARL_VIEW_FALLBACK`
+(`src/sprites/carlViews.ts`) draws a south diagonal (`frontDiagonal`) in
+profile and a north diagonal (`backDiagonal`) from behind, and his garments
+borrow the same views. Every view-keyed table is five wide, so a later attempt
+only adds rows and art and deletes the fallback entry.
 
-A front-3/4 view was tried with the existing `ViewSpec` knobs: `girth` about
-0.85 and `crotchNotch` about 0.6; the head-on painters with the face and jacket
-front slid across; a near-side ear and lengthwise feet; and a skeleton rebuilt
-from the profile pose's forward and height and the head-on pose's sideways,
-projected at 45°.
+Two attempts have been made, and both were rejected by blind review.
 
-Two blind reviewers each picked the turned figure as the better _direction_
-cue. Both rated it worse than the profile for realism and at 32 px: "the torso
-is square to the camera but the legs stride flat across the screen — the hips
-look dislocated", and a scuttling crouch. A 45° leg is also drawn at about 0.7
-of its length, so a kick shrinks from 5–6 px of foot past the body to 1–2 px.
-The head-on view was the worst of the three for a diagonal.
+**First: head-on painters with features slid across.** `girth` about 0.85 and
+`crotchNotch` about 0.6, the face and jacket front slid across, a near-side
+ear and lengthwise feet, and a skeleton built from the profile pose's forward
+and height and the head-on pose's sideways, projected at 45°. Reviewers: "the
+torso is square to the camera but the legs stride flat across the screen —
+the hips look dislocated", a scuttling crouch, and kicks shrinking to 1–2 px
+(a 45° leg draws at about 0.7 of its length). Never retry this: sliding
+features does not rotate a pelvis or shoulders.
 
-The flaw is structural. Sliding features across head-on painters does not
-rotate a pelvis or shoulders, and rows cannot be derived from the profile and
-head-on poses. A real three-quarter view needs its own trace for every part and
-its own authored row for every family — about a hundred more rows. It also adds
-about 13 MB of always-warm cells (run, start/stop, idle and guard, plus opener
-wind-ups, in two more mirrored views) to a working set already close to Carl's
-56 MB budget. Spend realism effort on the three cardinal views instead.
+**Second: a pose solved in three dimensions and projected, with a real
+three-quarter trace for every part.** Walk, run and idle were authored once in
+body space (hands and feet as 3D targets, pelvis and shoulder-girdle yaw,
+pitch and roll, knee and elbow pole vectors, a 3D two-bone IK), projected
+through a camera yaw of 45° and 135°, and painted by new traces: the jacket
+and the skull as cross-sections (head-on half-width, profile depth in front
+of and behind the spine) turned by the view, the zip off-centre on the front
+centre line, the seam down his right side and the side panel it reveals, the
+near cheek broad and the far eye foreshortened beside the nose, one ear, the
+shorts' waist off the hip toward the seat, profile limb and foot traces with
+the foot's length foreshortened by the sine of the turn, slab order read off
+each limb root's projected depth. Every reviewer named each row as a man
+walking or running toward or away from the camera at three-quarters. It
+failed on one structural flaw, reported by four fresh reviewers in a row:
+
+- **The body reads as turning on a turntable once a stride.** At 45° the
+  fore-and-aft swing of arms and legs is drawn across the screen. Half a
+  stride has the far arm forward and the near arm back, standing out either
+  side of the chest — the figure reads square to the camera; the other half
+  has the near arm over the chest and the far one hidden — it reads in
+  profile. The legs do the same: their lateral spread adds to the stride on
+  one step and subtracts on the next.
+- **The run's rear thigh leaves the shorts at an odd angle** in the frames
+  after push-off ("the hip looks unhinged"): the cuff, built to wrap a thigh
+  swinging in the picture plane, does not follow one swinging at 45°.
+
+Fixes tried, with their results:
+
+1. Shoulder and pelvis counter-rotation cut from 6°/5° to 2° (walk) and from
+   9° to 3° (run): no change in the read; the jacket and shorts are traced at
+   the view's fixed yaw, so the girdle's turn only moved where the arms hang.
+2. The body-space foot track narrowed from the head-on 0.135 to 0.06: the
+   alternating cross-over and splay of the feet went away, the turntable read
+   did not.
+3. Arm swing cut to 0.7 of the profile's (walk) and 0.6 with a bent backswing
+   (run), the arms rooted at the anatomical shoulder (`ARM_ROOT_HALF`) instead
+   of the head-on spread: the arms stopped flaring, and reviewers then called
+   them "barely swinging, stiff tubes" while still reporting the width pulse.
+
+The limit is in the painter, not the pose: every part trace is drawn at the
+view's one yaw while the limbs swing in three dimensions across it. A
+three-quarter view that reads as one view needs the torso, hips and shorts
+traced at the shoulder girdle's and the pelvis's own per-frame yaw, so the
+chest turns with the arms rather than the arms sweeping over a fixed chest,
+and a shorts cuff that wraps a thigh swinging toward or away from the camera.
+
+The same 3D pose projected to the cardinal views lost what the hand-authored
+rows have on purpose: the head-on shoulder spread (`FACING_SHOULDER_SPREAD`),
+the exaggerated head-on arm swing and hip sway, the profile's `lateral` limb
+spread, and the head-on arm draw order. The cardinal rows stay authored in two
+dimensions per view.
+
+Renders, kept locally under `preview/diagonal-spike/` (the preview folder is
+not committed): `diagonal-strip32-final.png` and `diagonal-strip32-round1.png`
+(the reviewed 32 px strips: walk toward, walk away, run toward, run away),
+`diagonal-walk-frames.png` and `diagonal-frames-zoom.png` (frames 0, 4, 8, 12
+of the walks, where the width pulse shows), `diagonal-head-zoom.png` (the
+three-quarter head), `cardinal-parity-zoom.png` and `cardinal-parity-strip32.png`
+(the projected cardinals beside the shipped rows), and `diagonal-spike.patch`,
+which re-applies the whole attempt to the files as they stood when it was
+shelved.
+
+The memory cost is measured: the idle and the run in both diagonals add 48
+always-warm cells, 6.75 MB, which put the bare-handed G9b working set at
+62.3 MB (from 55.55). Every view is held warm (see the residency decision in
+`add-sprite`), so diagonal rows add to every motion set's working set too —
+the light set's (66.2 MB carrying) would land past today's 67 MB budget. Re-measure G9b for
+every set when diagonal rows ship and raise `HUMAN_FIGURE_BUDGET_MEGABYTES` to
+what it reports.
+
+Donut has the same fallback (`CAT_VIEW_FALLBACK`, both diagonals in profile)
+and her own failed three-quarter attempt; her ceiling and the painted
+west-facing profiles are in `add-sprite`.
 
 ## Anchors frozen off the art
 

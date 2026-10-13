@@ -3,7 +3,7 @@ import { ALL_STATS } from '../Player';
 import { INCURABLE_STATUSES, type StatusEffect } from './StatusEffect';
 import type { SkillId, SkillState } from './SkillManager';
 import { HumanPlayer } from '../creatures/HumanPlayer';
-import { ITEM_DEF, isItemId } from './ItemDefs';
+import { ITEM_DEF, isItemId, MAIN_HAND_KEY } from './ItemDefs';
 import { REVIVE_HP_FRACTION } from './reviveRules';
 import type { InventoryItem, ItemId } from './ItemDefs';
 import type { CraftSkillsSnapshot } from './CraftSkills';
@@ -18,8 +18,11 @@ import { parseCraftSkillsSnapshot } from './CraftSkills';
  * reconstructs base stats for v1 saves by subtracting the equipment bonuses back
  * out. v3 is the first version written after the cat's constitution lock, which
  * is what tells a one-time refund apart from a lawful potion or tattoo gain.
+ * v4 keeps the human's weapon as equipment — a `Hand:Main` entry plus
+ * {@link PlayerSnapshot.weaponDrawn} — where v3 and below kept it apart as
+ * `wieldedWeaponId`.
  */
-export const PLAYER_SNAPSHOT_VERSION = 3;
+export const PLAYER_SNAPSHOT_VERSION = 4;
 
 /** Version assumed for a snapshot that predates the field. */
 const LEGACY_SNAPSHOT_VERSION = 1;
@@ -37,6 +40,9 @@ const BASE_STATS_SNAPSHOT_VERSION = 2;
  * confiscated on the next doorway she walked through.
  */
 export const CONSTITUTION_LOCK_SNAPSHOT_VERSION = 3;
+
+/** First version whose weapon in hand is an equipped `Hand:Main` entry rather than `wieldedWeaponId`. */
+const HELD_SLOT_SNAPSHOT_VERSION = 4;
 
 /** Serialisable snapshot of a single player's state, used when transitioning
  *  between scenes (e.g. entering/exiting a building interior). */
@@ -67,8 +73,13 @@ export interface PlayerSnapshot {
   skillTattoo?: SkillId | null;
   /** The Juicer's Desperado Pass ink. Absent on saves predating it. */
   desperadoPassTattoo?: boolean;
-  /** The weapon the human has in hand. Absent on saves predating wielding, and on the cat. */
+  /**
+   * The weapon the human had in hand, written by v3 and below only. A restore
+   * moves it into his main hand, drawn.
+   */
   wieldedWeaponId?: ItemId | null;
+  /** Whether the human's main-hand weapon is drawn rather than stowed. v4+, and never on the cat. */
+  weaponDrawn?: boolean;
   /**
    * Frames left before the slingshot can fire again. Absent on saves predating
    * it, and on the cat. Without this, every scene transition zeroed the human's
@@ -163,7 +174,7 @@ export function snapPlayer(p: Player): PlayerSnapshot {
   };
   if (p instanceof HumanPlayer) {
     snap.explosivesHandling = p.explosivesHandling;
-    snap.wieldedWeaponId = p.wieldedWeaponId;
+    snap.weaponDrawn = p.drawnWeaponId !== null;
     snap.slingshotCooldown = p.slingshotCooldown;
   }
   return snap;
@@ -224,6 +235,45 @@ const UNLEARNED_CRAFT_SKILLS: CraftSkillsSnapshot = {
 /** The snapshot's format version, defaulting to v1 for saves predating the field. */
 function snapshotVersionOf(snap: PlayerSnapshot): number {
   return snap.snapshotVersion ?? LEGACY_SNAPSHOT_VERSION;
+}
+
+/**
+ * The equipped entries to restore. Below v4 the weapon in hand was not
+ * equipment at all; it is moved into the main hand here.
+ */
+function equippedEntriesOf(snap: PlayerSnapshot): ReadonlyArray<readonly [string, ItemId]> {
+  const legacyWeapon = snap.wieldedWeaponId;
+  const legacy = snapshotVersionOf(snap) < HELD_SLOT_SNAPSHOT_VERSION;
+  if (!legacy || legacyWeapon === undefined || legacyWeapon === null) return snap.equippedEntries;
+  const worn = snap.equippedEntries.filter(([key]) => key !== MAIN_HAND_KEY);
+  return [...worn, [MAIN_HAND_KEY, legacyWeapon]];
+}
+
+/** Whether the snapshot's main-hand weapon is drawn: below v4, whenever one was in hand at all. */
+function weaponDrawnIn(snap: PlayerSnapshot): boolean {
+  if (snapshotVersionOf(snap) >= HELD_SLOT_SNAPSHOT_VERSION) return snap.weaponDrawn ?? false;
+  return snap.wieldedWeaponId !== undefined && snap.wieldedWeaponId !== null;
+}
+
+/**
+ * A bag or hotbar slot as it is restored: its stack rebuilt from the item's
+ * current definition, keeping only the quantity from the save.
+ *
+ * A save holds the copy of a def taken when the item was picked up, so any
+ * field the def has gained since — a weapon's equip address and stat block —
+ * would otherwise be missing from that stack for good, and the item could
+ * never be put in a slot. A retired id has no definition and is copied as
+ * saved.
+ *
+ * A fresh object either way rather than the stored one: a checkpoint snapshot
+ * is restored again on every death until the next safe room, and handing the
+ * stored slot objects to the bag would let the first restored run edit the
+ * snapshot it came from.
+ */
+function restoredSlot(slot: InventoryItem | null | undefined): InventoryItem | null {
+  if (slot === null || slot === undefined) return null;
+  if (!isItemId(slot.id)) return { ...slot };
+  return { ...ITEM_DEF[slot.id], quantity: slot.quantity };
 }
 
 /** Total stat bonus the snapshot's equipped items contribute, by stat. */
@@ -308,22 +358,14 @@ export function restorePlayer(p: Player, snap: PlayerSnapshot): void {
     if (snap.explosivesHandling !== undefined) {
       p.explosivesHandling = Math.max(1, finiteOr(snap.explosivesHandling, p.explosivesHandling));
     }
-    p.wield(snap.wieldedWeaponId ?? null);
     p.slingshotCooldown = Math.max(0, finiteOr(snap.slingshotCooldown, 0));
   }
 
-  // Copied rather than aliased: a checkpoint snapshot is restored again on
-  // every death until the next safe room, so handing the stored slot objects
-  // straight to the bag would let the first restored run edit the snapshot it
-  // came from. Today's bag and hotbar happen to be copy-on-write, which is the
-  // only reason aliasing them has not already corrupted a checkpoint.
   for (let i = 0; i < snap.inventorySlots.length; i++) {
-    const slot = snap.inventorySlots[i];
-    p.inventory.bag.slots[i] = slot === null ? null : { ...slot };
+    p.inventory.bag.slots[i] = restoredSlot(snap.inventorySlots[i]);
   }
   for (let i = 0; i < snap.inventoryHotbar.length; i++) {
-    const slot = snap.inventoryHotbar[i];
-    p.inventory.actionBar.slots[i] = slot === null ? null : { ...slot };
+    p.inventory.actionBar.slots[i] = restoredSlot(snap.inventoryHotbar[i]);
   }
   // Snapshots are copied slot-for-slot, so a save written before stacks were
   // kept unified still carries a split one. Folding here catches every restore
@@ -331,10 +373,8 @@ export function restorePlayer(p: Player, snap: PlayerSnapshot): void {
   p.inventory.consolidateStacks();
   p.inventory.restoreUnseenUpgrades(snap.unseenUpgrades ?? []);
   // Equipment first: the stat getters — and therefore max HP — read from it.
-  p.inventory.equipment.replaceAll(snap.equippedEntries);
-  // A scene change builds a fresh player before restoring him, so this is the
-  // first moment his outfit is known; dressing here keeps the warm one resident.
-  if (p instanceof HumanPlayer) p.syncAppearance();
+  p.inventory.equipment.replaceAll(equippedEntriesOf(snap));
+  if (p instanceof HumanPlayer) p.restoreWeaponDrawn(weaponDrawnIn(snap));
 
   const baseStats = baseStatsFrom(p, snap);
   for (const stat of ALL_STATS) p.setBaseStat(stat, baseStats[stat]);

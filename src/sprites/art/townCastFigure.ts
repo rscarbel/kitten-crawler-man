@@ -29,7 +29,9 @@ import {
   drawCarlFront,
   drawCarlSide,
 } from '../art/carl/figure';
-import type { CarlPose, CarlView } from '../art/carl/rig';
+import type { CarlPose } from '../art/carl/rig';
+import { DEFAULT_CARL_OUTFIT, stillOutfit } from '../garments/human/carlDressing';
+import { type CardinalView } from '../facingView';
 import { idleBack, idleFront, idleSide } from '../art/human/idles';
 import { walkFacing, walkSide } from '../art/human/locomotion';
 import { talkBack, talkFront, talkSide } from '../art/human/actionsMisc';
@@ -65,7 +67,7 @@ const VIEW_TO_FACING: Readonly<Record<TownCastView, Facing>> = {
   side: 'right',
   up: 'up',
 };
-const VIEW_TO_CARL_VIEW: Readonly<Record<TownCastView, CarlView>> = {
+const VIEW_TO_CARL_VIEW: Readonly<Record<TownCastView, CardinalView>> = {
   down: 'front',
   side: 'side',
   up: 'back',
@@ -256,7 +258,7 @@ const DANCE_FACING_VIEW: Readonly<Record<DanceFacing, TownCastView>> = {
 };
 const CARL_DRAW_BY_VIEW: Readonly<
   Record<
-    CarlView,
+    CardinalView,
     (ctx: CanvasRenderingContext2D, pose: CarlPose, options: CarlComposeOptions) => void
   >
 > = {
@@ -318,6 +320,13 @@ function carlRows(hasDance: boolean): CarlRowSpec[] {
 /** The base rows shared by every look that doesn't dance — built once. */
 const CARL_ROWS: readonly CarlRowSpec[] = carlRows(false);
 
+/**
+ * What every adult of the cast wears on Carl's rig: his base garments and the
+ * trollskin band at the collar — none of his loot, which on a townsperson
+ * would read as wearing his gear.
+ */
+const CAST_OUTFIT = stillOutfit(DEFAULT_CARL_OUTFIT);
+
 function buildCarlFigure(look: TownCastLook & { painter: 'carl' }): FigureDef {
   const cell = carlCellFor();
   const rows = look.hasDance === true ? carlRows(true) : CARL_ROWS;
@@ -348,7 +357,7 @@ function buildCarlFigure(look: TownCastLook & { painter: 'carl' }): FigureDef {
       const view = facing === undefined ? row.view : DANCE_FACING_VIEW[facing];
       const carlView = VIEW_TO_CARL_VIEW[view];
       const mirror = facing === 'left' ? -1 : 1;
-      const rowPose: CarlPose = { ...row.poseAt(frame), gear: look.gear };
+      const rowPose: CarlPose = { ...row.poseAt(frame), outfit: CAST_OUTFIT };
       const pose = look.details?.posture(rowPose, carlView) ?? rowPose;
       // Reset in `finally`: a painter that throws mid-bake must not leave the
       // next figure baked — Carl or another look — in this look's skin, hair,

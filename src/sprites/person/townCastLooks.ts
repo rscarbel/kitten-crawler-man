@@ -20,7 +20,6 @@
 
 import { mulberry32, pick, subSeed } from './rng';
 import type { PersonAppearance, PersonBody, PersonHead, TownRole } from './PersonAppearance';
-import type { CastGear } from '../art/carl/gear';
 import { deriveGlossRamp, deriveRamp, type GlossRamp, type Ramp } from '../art/carl/palette';
 import {
   FACING_BROW_DEFAULT,
@@ -31,7 +30,8 @@ import {
 } from '../art/carl/head';
 import type { AccessorySpec, HairStyleKind } from '../art/human/townAccessories';
 import type { CarlAttachments } from '../art/carl/figure';
-import type { CarlPose, CarlView } from '../art/carl/rig';
+import type { CarlPose } from '../art/carl/rig';
+import { type CardinalView } from '../facingView';
 import {
   WENDELL_ATTACHMENTS,
   WENDELL_TROUSER_COLOR,
@@ -47,8 +47,8 @@ import {
  */
 export interface TownCastLookDetails {
   readonly attachments: CarlAttachments;
-  readonly posture: (pose: CarlPose, view: CarlView) => CarlPose;
-  readonly overShoes: (ctx: CanvasRenderingContext2D, view: CarlView, pose: CarlPose) => void;
+  readonly posture: (pose: CarlPose, view: CardinalView) => CarlPose;
+  readonly overShoes: (ctx: CanvasRenderingContext2D, view: CardinalView, pose: CarlPose) => void;
 }
 
 export type TownCastBuild = 'child' | 'slight' | 'standard' | 'heavy';
@@ -91,7 +91,6 @@ export interface TownCastLookCarl extends TownCastLookCommon {
    * are careful about, applied the only way Carl's fixed-height rig allows).
    */
   readonly buildWidthScale: number;
-  readonly gear: CastGear;
   readonly skinRamp: Ramp;
   readonly hairRamp: Ramp;
   readonly hairStyle: HairStyleKind;
@@ -519,7 +518,6 @@ const ADULT_SPECS: readonly AdultSpec[] = [
 ];
 
 function adultLook(spec: AdultSpec, index: number): TownCastLookCarl {
-  const gear: CastGear = { trollskinShirt: true };
   const widthScale = BUILD_WIDTH_SCALE[spec.build] * (spec.feminine ? FEMININE_WIDTH_SCALE : 1);
   return {
     id: spec.id,
@@ -531,7 +529,6 @@ function adultLook(spec: AdultSpec, index: number): TownCastLookCarl {
     feminine: spec.feminine,
     dialogSeed: CHILD_SPECS.length + index,
     buildWidthScale: widthScale,
-    gear,
     skinRamp: SKIN_RAMPS[spec.skin],
     hairRamp: HAIR_RAMPS[spec.hair],
     hairStyle: spec.hairStyle,

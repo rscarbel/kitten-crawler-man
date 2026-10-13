@@ -25,12 +25,12 @@ import {
   type BoneChain,
   buildSkeleton,
   type CarlPose,
-  type CarlView,
   CROUCH_DROP,
   restingPose,
   setArmAngles,
   VIEWS,
 } from '../carl/rig';
+import { type CardinalView } from '../../facingView';
 import { clamp01, deg, easeOut, type Pt } from '../carlArt';
 import {
   anglesThrough,
@@ -1734,7 +1734,7 @@ const NO_IMPACT: readonly number[] = [];
  */
 const STAGGER_FALLBACK_TICKS_PER_FRAME = 2;
 
-function hurtRow(view: CarlView, from: HurtFrom): HumanRowDef {
+function hurtRow(view: CardinalView, from: HurtFrom): HumanRowDef {
   return {
     frameCount: HURT_FRAMES,
     kind: 'oneShot',
@@ -1749,7 +1749,7 @@ function hurtRow(view: CarlView, from: HurtFrom): HumanRowDef {
 }
 
 function viewRow(
-  view: CarlView,
+  view: CardinalView,
   frameCount: number,
   kind: 'loop' | 'oneShot',
   ticksPerFrame: number,
@@ -1861,7 +1861,7 @@ export const REACTION_ROW_TABLE = {
 // ── Views ────────────────────────────────────────────────────────────────────
 
 /** The flinch for a view and the side the blow came from. */
-function hurtPose(view: CarlView, from: HurtFrom, frame: number): CarlPose {
+function hurtPose(view: CardinalView, from: HurtFrom, frame: number): CarlPose {
   if (view === 'side') return hurtSide(frame, from);
   return view === 'back' ? hurtBack(frame, from) : hurtFront(frame, from);
 }

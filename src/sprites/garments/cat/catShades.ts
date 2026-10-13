@@ -1,15 +1,19 @@
 /**
  * The Eyes of Splatter as Donut wears them: round pink-lensed sunglasses
- * painted onto her head in each viewpoint.
+ * painted onto her head in each viewpoint, once her face's features are on.
  *
- * Coordinates are her head's own units, as `catArt.ts` paints the head: the
- * caller has already moved the origin to the head and applied its tilt and
- * turn, so the glasses ride every pose the head does.
+ * Coordinates are her head's own units: the frame's origin is already at the
+ * head with its tilt and turn applied, so the glasses ride every pose the head
+ * does.
  *
  * At her in-game size a lens is three or four screen pixels across, so the
  * rim is drawn heavy and the lens colour flat and saturated: anything subtler
  * disappears into her coat.
  */
+
+import type { CatHeadFrame } from '../../art/catParts';
+import { CAT_VIEW_FALLBACK } from '../../catViews';
+import { defineGarment, withViewFallback } from '../garmentDef';
 
 type Ctx = CanvasRenderingContext2D;
 
@@ -40,6 +44,18 @@ const GLINT_WAIST = 0.18;
 const GLINT_ARMS = 4;
 const GLINT_DOT_OFFSET = 0.42;
 const GLINT_DOT_RADIUS = 0.12;
+
+/** Where the temple arms meet her skull, face-on: out at the ear roots, a little above the eyes. */
+const TEMPLE_X = 0.21;
+const TEMPLE_RISE = -0.045;
+/** From behind, how far out on her skull the arms show, as a share of its half-width. */
+const BACK_ARM_SPREAD = 0.95;
+/** In profile, where the near arm meets her skull in front of the ear. */
+const SIDE_EAR_X = -0.06;
+const SIDE_EAR_Y = -0.065;
+/** In profile, the near lens sits just forward of her eye, on the slope of the muzzle. */
+const SIDE_LENS_X = 0.07;
+const SIDE_LENS_Y = -0.012;
 
 /** In profile the near lens is seen edge-on, so it narrows to this share of its width. */
 const PROFILE_LENS_SQUASH = 0.5;
@@ -125,7 +141,7 @@ function paintGlint(ctx: Ctx, cx: number, cy: number): void {
  * @param templeX how far out to either side the arms reach.
  * @param templeY the height they reach it at, above the lens centres.
  */
-export function drawShadesFront(
+function drawShadesFront(
   ctx: Ctx,
   leftEyeX: number,
   rightEyeX: number,
@@ -159,7 +175,7 @@ export function drawShadesFront(
  *
  * @param sideX how far out the arms show on either side of her skull.
  */
-export function drawShadesBack(ctx: Ctx, centreX: number, sideX: number, armY: number): void {
+function drawShadesBack(ctx: Ctx, centreX: number, sideX: number, armY: number): void {
   for (const side of [-1, 1]) {
     const outerX = centreX + side * sideX;
     paintLens(ctx, outerX + side * BACK_LENS_PEEK, armY + BACK_LENS_DROP, BACK_LENS_SQUASH, 0);
@@ -168,14 +184,43 @@ export function drawShadesBack(ctx: Ctx, centreX: number, sideX: number, armY: n
 }
 
 /** In profile: the near lens over her eye, edge-on, and its arm back to her ear. */
-export function drawShadesSide(
-  ctx: Ctx,
-  eyeX: number,
-  eyeY: number,
-  earX: number,
-  earY: number,
-): void {
+function drawShadesSide(ctx: Ctx, eyeX: number, eyeY: number, earX: number, earY: number): void {
   strokeArm(ctx, eyeX, eyeY - LENS_RADIUS * BRIDGE_INSET, earX, earY);
   paintLens(ctx, eyeX, eyeY, PROFILE_LENS_SQUASH, PROFILE_LENS_TILT);
   paintGlint(ctx, eyeX, eyeY);
 }
+
+function paintFront(ctx: Ctx, frame: CatHeadFrame): void {
+  if (frame.piece !== 'features') return;
+  const { eyes } = frame.landmarks;
+  if (eyes.length < 2) return;
+  const [left, right] = eyes;
+  const eyeY = frame.landmarks.eyeLine;
+  drawShadesFront(ctx, left.x, right.x, eyeY, TEMPLE_X, eyeY + TEMPLE_RISE);
+}
+
+function paintBack(ctx: Ctx, frame: CatHeadFrame): void {
+  if (frame.piece !== 'features') return;
+  const { skull, eyeLine } = frame.landmarks;
+  drawShadesBack(ctx, skull.cx, skull.rx * BACK_ARM_SPREAD, eyeLine);
+}
+
+function paintSide(ctx: Ctx, frame: CatHeadFrame): void {
+  if (frame.piece !== 'features') return;
+  drawShadesSide(ctx, SIDE_LENS_X, SIDE_LENS_Y, SIDE_EAR_X, SIDE_EAR_Y);
+}
+
+export const CAT_SHADES = defineGarment({
+  id: 'cat_shades',
+  name: 'Eyes of Splatter',
+  wearer: 'cat',
+  material: 'jewelry',
+  layer: 'outer',
+  region: ['head'],
+  paint: {
+    head: withViewFallback(
+      { front: paintFront, side: paintSide, back: paintBack },
+      CAT_VIEW_FALLBACK,
+    ),
+  },
+});

@@ -6,9 +6,11 @@
 import type { IllustrationRect } from './illustration';
 import { drawSpriteKey } from '../../../core/SpriteRenderer';
 import { MAX_TOOL_TIER, TOOL_TIER_BASIC, TOOL_TIERS } from '../../../core/toolTiers';
-import { HUMAN_FIGURE, CHOP_ROWS, humanRowOf } from '../../../sprites/art/humanFigure';
-import { drawFigureCached } from '../../../sprites/figure/figureFrameCache';
-import { drawToolOverlay, toolOverlayOf } from '../../../sprites/toolOverlaySprite';
+import { CHOP_ROWS, humanRowOf } from '../../../sprites/art/humanFigure';
+import { humanFigureFor } from '../../../sprites/art/human/appearance';
+import { DEFAULT_CARL_OUTFIT } from '../../../sprites/garments/human/carlDressing';
+import { drawHumanFigureSelection } from '../../../sprites/humanSprite';
+import { workingToolHeldVisual } from '../../../sprites/held/heldVisuals';
 import { worldText } from '../../world/worldText';
 import { drawToolIcon, isToolIconId } from '../../../sprites/art/itemIcons/toolIcons';
 
@@ -114,11 +116,16 @@ export function drawGatheringScene(
   const frameCount = humanRowOf(row)?.frameCount ?? 1;
   const chopFrame = Math.floor(frame / CHOP_TICKS_PER_FRAME) % frameCount;
   const carl = standingTile(rect, centreX - STAGE_TILE * CHOPPER_OFFSET_TILES);
-  drawFigureCached(ctx, HUMAN_FIGURE, row, chopFrame, carl.x, carl.y, STAGE_TILE);
-  const placement = toolOverlayOf({ row, frame: chopFrame, flipX: false });
-  if (placement !== null) {
-    drawToolOverlay(ctx, 'axe', TOOL_TIER_BASIC, placement, carl.x, carl.y, STAGE_TILE);
-  }
+  const axe = workingToolHeldVisual({ kind: 'axe', tier: TOOL_TIER_BASIC });
+  drawHumanFigureSelection(
+    ctx,
+    humanFigureFor(DEFAULT_CARL_OUTFIT, null),
+    carl.x,
+    carl.y,
+    STAGE_TILE,
+    { row, frame: chopFrame, flipX: false },
+    axe === null ? null : { look: axe, phase: 0 },
+  );
 
   const loopTicks = frameCount * CHOP_TICKS_PER_FRAME;
   const sincePop = frame % loopTicks;

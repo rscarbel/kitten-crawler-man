@@ -1,5 +1,6 @@
 import { displayHp } from '../core/crawlerFormulas';
 import { forwardQuestItemEvictions } from '../systems/questItemEvictions';
+import { forwardEquipmentChanges } from '../systems/equipmentChangeEvents';
 import { type SceneManager } from '../core/Scene';
 import { type InputManager } from '../core/InputManager';
 import { platform } from '../core/Platform';
@@ -865,34 +866,20 @@ interface ChestReward {
 /** The tutorial shares `floorNumber: 1` with this level, so the id is what tells them apart. */
 const FIRST_DUNGEON_LEVEL_ID = 'level1';
 
-const FORCED_TO_HUMAN = new Set<string>([
-  'trollskin_shirt',
-  'nightgaunt_cloak',
-  'splatter_skunk_toe_ring',
-  'shade_gnoll_kneepads',
-  'grull_war_gauntlet',
-  'slingshot',
-  'explosives_handling_tome',
-]);
-const FORCED_TO_CAT = new Set<string>([
-  'enchanted_crown_sepsis_whore',
-  'fae_scale_crupper',
-  'slate_butterfly_talisman',
-  'bracelet_of_dex',
-  'eyes_of_splatter',
-]);
-
 /**
  * Which crawler must receive this item, or null when either may have it.
  *
- * Beyond the two hand-listed signature items, a skill book written for one
- * crawler is routed to that crawler — the alternative is handing the cat's only
- * guaranteed Cockroach book to the human, who cannot read it.
+ * An item naming a `lootRecipient` goes to that crawler, and gear to the one
+ * its `wearer` names. Beyond gear, a book only one of them can study is routed
+ * to that one — the alternative is handing the cat's only guaranteed Cockroach
+ * book to the human, who cannot read it.
  */
 function forcedRecipientFor(id: ItemId): CrawlerKind | null {
-  if (FORCED_TO_HUMAN.has(id)) return 'human';
-  if (FORCED_TO_CAT.has(id)) return 'cat';
-  const skillId = ITEM_DEF[id].skillId;
+  const def = ITEM_DEF[id];
+  if (def.lootRecipient !== undefined) return def.lootRecipient;
+  if (def.wearer !== undefined && def.wearer !== 'both') return def.wearer;
+  if (def.explosivesHandlingLevels !== undefined) return 'human';
+  const skillId = def.skillId;
   if (skillId === undefined) return null;
   const eligibleFor = getSkillDef(skillId).eligibleFor;
   return eligibleFor === 'both' ? null : eligibleFor;
@@ -1419,6 +1406,8 @@ export class DungeonScene extends GameplayScene {
   private bus = new EventBus();
   /** Stops forwarding the crawlers' quest-slot evictions onto this scene's bus; set while the scene is running. */
   private stopForwardingQuestItemEvictions: (() => void) | null = null;
+  /** Stops forwarding the crawlers' equipment changes onto this scene's bus; set while the scene is running. */
+  private stopForwardingEquipmentChanges: (() => void) | null = null;
   private stopBagFullToasts: (() => void) | null = null;
   private readonly crawlerBarks = new CrawlerBarkSystem();
 
@@ -3435,6 +3424,11 @@ export class DungeonScene extends GameplayScene {
       human: this.human,
       cat: this.cat,
     });
+    this.stopForwardingEquipmentChanges?.();
+    this.stopForwardingEquipmentChanges = forwardEquipmentChanges(this.bus, {
+      human: this.human,
+      cat: this.cat,
+    });
     this.stopBagFullToasts?.();
     this.stopBagFullToasts = toastBagFullLosses([this.human, this.cat], this.menus.toasts);
     // Level entry is the one stretch of real rendering the player cannot act
@@ -3533,6 +3527,8 @@ export class DungeonScene extends GameplayScene {
   onExit(): void {
     this.stopForwardingQuestItemEvictions?.();
     this.stopForwardingQuestItemEvictions = null;
+    this.stopForwardingEquipmentChanges?.();
+    this.stopForwardingEquipmentChanges = null;
     this.stopBagFullToasts?.();
     this.stopBagFullToasts = null;
     // A scene left while still loading must not leave the probe blindfolded,
@@ -7308,7 +7304,7 @@ export class DungeonScene extends GameplayScene {
         slots: hotbarSlotModels(
           this.menus.itemCooldowns,
           invPlayer.inventory,
-          this.menus.inventoryWieldedWeaponId(),
+          this.menus.inventoryDrawnWeaponId(),
         ),
         input: hotbarPressInput(
           () => this.hotbarHost(),

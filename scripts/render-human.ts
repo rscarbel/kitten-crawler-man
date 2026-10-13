@@ -52,15 +52,13 @@ import { bakeFigureSheet } from './figureSheet.js';
 import { reportFigureGates } from './figureGates.js';
 import { humanGateFailures } from './gates-human.js';
 import { PREVIEW_DIR, writePreviewPng } from './previewOut.js';
+import { humanFigureWearing } from '../src/sprites/art/human/appearance.js';
 import {
-  BARE_HUMAN_APPEARANCE,
-  DEFAULT_HUMAN_APPEARANCE,
-  HUMAN_APPEARANCE_FLAGS,
-  type HumanAppearance,
-  humanAppearanceKey,
-  humanFigureWearing,
-  parseHumanAppearance,
-} from '../src/sprites/art/human/appearance.js';
+  BARE_CARL_OUTFIT,
+  DEFAULT_CARL_OUTFIT,
+} from '../src/sprites/garments/human/carlDressing.js';
+import { garmentsOf } from '../src/sprites/garments/garments.js';
+import { outfitOf, type Outfit } from '../src/sprites/garments/outfit.js';
 import {
   HUMAN_ROW_NAMES,
   HUMAN_ROW_TABLE,
@@ -79,6 +77,7 @@ import {
   TRAVEL_DIRECTION,
   floorDriftPerFrameCellPx,
 } from '../src/sprites/art/human/probe.js';
+import { stampAnchorOf } from '../src/sprites/art/human/sockets.js';
 import { type Pt } from '../src/sprites/art/carlArt.js';
 import { HEAD_RY } from '../src/sprites/art/carl/proportions.js';
 import { TILE_SIZE } from '../src/core/constants.js';
@@ -146,31 +145,33 @@ function parseNumberFlag(name: string, fallback: number, min: number, max: numbe
   return value;
 }
 
+/** Everything he can put on: every garment of his but the base ones every outfit starts from. */
+const WEARABLE = garmentsOf('human').filter((garment) => !garment.base);
+
 /**
- * The outfit to paint and gate him in: `--gear=cloak+gauntlet+trollskinShirt`,
- * flags joined by `+` as `humanAppearanceKey` writes them, or `bare`. Absent
- * is his default outfit. Each outfit is a figure of its own, so each is gated
- * on its own.
+ * The outfit to paint and gate him in: `--gear=carl_cloak+carl_gauntlet`,
+ * garment ids joined by `+`, or `bare`. Absent is his default outfit. Each
+ * outfit is a figure of its own, so each is gated on its own.
  */
-function parseAppearance(): HumanAppearance {
+function parseOutfit(): Outfit<'human'> {
   const raw = GEAR_FLAG;
-  if (raw === null) return DEFAULT_HUMAN_APPEARANCE;
-  const appearance = parseHumanAppearance(raw);
-  if (appearance === null) {
-    throw new Error(`--gear=${raw} names a flag outside ${HUMAN_APPEARANCE_FLAGS.join(', ')}`);
-  }
-  return appearance;
+  if (raw === null) return DEFAULT_CARL_OUTFIT;
+  if (raw === 'bare') return BARE_CARL_OUTFIT;
+  const worn = raw.split('+').map((id) => {
+    const garment = WEARABLE.find((candidate) => candidate.id === id);
+    if (garment === undefined) {
+      throw new Error(
+        `--gear=${raw} names ${id}, not one of ${WEARABLE.map((g) => g.id).join(', ')}`,
+      );
+    }
+    return garment;
+  });
+  return outfitOf('human', worn);
 }
 
 const GEAR_FLAG = parseOptionalFlag('gear');
-const APPEARANCE = parseAppearance();
-const FIGURE = humanFigureWearing(APPEARANCE);
-
-function everyPieceOfGear(): HumanAppearance {
-  const appearance = parseHumanAppearance(HUMAN_APPEARANCE_FLAGS.join('+'));
-  if (appearance === null) throw new Error('the full set of gear flags does not parse');
-  return appearance;
-}
+const OUTFIT = parseOutfit();
+const FIGURE = humanFigureWearing(OUTFIT);
 
 /**
  * The outfits a run gates. A named `--gear` is gated alone. Otherwise three
@@ -180,9 +181,9 @@ function everyPieceOfGear(): HumanAppearance {
  * most of the time goes to the pixel gates, which are the ones an outfit can
  * turn red, so a shorter list for the extra outfits would save little.
  */
-function gatedOutfits(): readonly HumanAppearance[] {
-  if (GEAR_FLAG !== null) return [APPEARANCE];
-  return [DEFAULT_HUMAN_APPEARANCE, BARE_HUMAN_APPEARANCE, everyPieceOfGear()];
+function gatedOutfits(): readonly Outfit<'human'>[] {
+  if (GEAR_FLAG !== null) return [OUTFIT];
+  return [DEFAULT_CARL_OUTFIT, BARE_CARL_OUTFIT, outfitOf('human', WEARABLE)];
 }
 
 function parseMode(): Mode {
@@ -483,7 +484,7 @@ function drawLegend(ctx: NodeContext, x: number, y: number, hasStamp: boolean): 
   }
 }
 
-/** Where a row's `stampAnchor` (tile fractions) lands in the cell's own pixels. */
+/** Where a stamp row's anchor (tile fractions) lands in the cell's own pixels. */
 function stampAnchorCellPx(anchor: Pt): Pt {
   return { x: TILE_X + anchor.x * TILE_SCALE, y: TILE_Y + anchor.y * TILE_SCALE };
 }
@@ -522,8 +523,9 @@ function drawTrailsPanel(
   ctx.stroke();
 
   const row = rowOf(state);
-  if (row.stampAnchor !== undefined) {
-    const anchor = stampAnchorCellPx(row.stampAnchor);
+  const stamp = stampAnchorOf(row);
+  if (stamp !== null) {
+    const anchor = stampAnchorCellPx(stamp);
     const ax = anchor.x * scale;
     const ay = anchor.y * scale;
     ctx.strokeStyle = STAMP_ANCHOR_COLOR;
@@ -687,7 +689,7 @@ function renderTrails(states: readonly string[], scale: number): Canvas {
     ctx,
     PADDING,
     PADDING,
-    rows.some((r) => r.row.stampAnchor !== undefined),
+    rows.some((r) => stampAnchorOf(r.row) !== null),
   );
 
   let y = PADDING + legendHeight;
@@ -1044,10 +1046,10 @@ async function main(): Promise<void> {
   // Ahead of the contact sheet rather than after it: the sheet is a
   // tens-of-megapixel allocation, and measuring art on the far side of one is
   // how a gate goes red on art nobody touched.
-  for (const appearance of gatedOutfits()) {
-    const outfit = humanAppearanceKey(appearance);
+  for (const worn of gatedOutfits()) {
+    const outfit = worn.key;
     console.log(`Gating Carl in ${outfit}…`);
-    reportFigureGates(`human (${outfit})`, humanGateFailures(appearance));
+    reportFigureGates(`human (${outfit})`, humanGateFailures(worn));
   }
 
   let canvasPages: Canvas[];

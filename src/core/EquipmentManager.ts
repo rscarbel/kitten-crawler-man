@@ -1,6 +1,16 @@
 import type { StatName } from '../Player';
 import { ALL_STATS } from '../Player';
-import { EQUIP_SUBSLOTS, ITEM_DEF, isItemId, isWearable, itemFitsSubSlot } from './ItemDefs';
+import {
+  EQUIP_SLOT_WEARER,
+  EQUIP_SUBSLOTS,
+  ITEM_DEF,
+  equipSlotOfKey,
+  isItemId,
+  isWearable,
+  itemFitsSubSlot,
+  wearerAllows,
+  wearerOf,
+} from './ItemDefs';
 import type {
   EquipSlot,
   FairyElement,
@@ -13,6 +23,28 @@ import type { CrawlerKind, SkillId } from './SkillManager';
 
 /** Callback to locate an item by ID across all storage (bag + hotbar). */
 export type ItemFinder = (id: ItemId) => InventoryItem | null;
+
+/**
+ * Why the equipped set changed. `restore` is a snapshot or reset replacing the
+ * whole set at once, which a listener that sounds a cue should stay quiet for.
+ */
+export type EquipmentChangeReason = 'equip' | 'unequip' | 'restore';
+
+/** One change to the equipped set, as {@link EquipmentManager.onChange} reports it. */
+export interface EquipmentChange {
+  readonly reason: EquipmentChangeReason;
+  /**
+   * The `"Slot:SubSlot"` key that changed; null for a `restore`, which may touch
+   * every key. A `move` also empties the key the item came from, which is not reported.
+   */
+  readonly key: string | null;
+  /** What now sits in `key`; null when it was emptied, and for a `restore`. */
+  readonly itemId: ItemId | null;
+  /** What `key` held before the change; null when it was bare, and for a `restore`. */
+  readonly removedItemId: ItemId | null;
+}
+
+export type EquipmentListener = (change: EquipmentChange) => void;
 
 /** Summed stat bonuses contributed by everything currently worn. */
 export type StatBonuses = Record<StatName, number>;
@@ -69,10 +101,17 @@ export class EquipmentManager {
    */
   private readonly equipped = new Map<string, ItemId>();
 
+  private readonly listeners = new Set<EquipmentListener>();
+
   constructor(
     private readonly findItem: ItemFinder,
     private readonly ownerKind: CrawlerKind | null = null,
   ) {}
+
+  /** The crawler this equipment belongs to, or null for a wearer of any kind. */
+  get kind(): CrawlerKind | null {
+    return this.ownerKind;
+  }
 
   /**
    * Equip the given item, optionally into a caller-chosen `"Slot:SubSlot"` key.
@@ -83,8 +122,40 @@ export class EquipmentManager {
     if (!this.canEquip(item)) return null;
     const key = this.resolveSubSlotKey(item, item.equipSlot, item.equipSubSlot, targetKey);
     const prev = this.getEquippedItem(key);
+    const removedItemId = this.equipped.get(key) ?? null;
     this.equipped.set(key, item.id);
+    this.notify({ reason: 'equip', key, itemId: item.id, removedItemId });
     return prev;
+  }
+
+  /**
+   * Move `item` from the `fromKey` it is equipped in to `toKey`, reported as
+   * the one equip it is rather than a take-off followed by a put-on. Returns
+   * the item displaced from `toKey` (or null); does nothing when `fromKey` does
+   * not hold `item` or `item` cannot be worn.
+   */
+  move(item: InventoryItem, fromKey: string, toKey: string): InventoryItem | null {
+    if (this.equipped.get(fromKey) !== item.id) return null;
+    this.equipped.delete(fromKey);
+    if (this.canEquip(item)) return this.equip(item, toKey);
+    this.equipped.set(fromKey, item.id);
+    return null;
+  }
+
+  /**
+   * Hears every change to the equipped set, however it was made — the screen,
+   * a hotbar draw, the AI, a snapshot restore, a tutorial reset. Returns the
+   * unsubscribe.
+   */
+  onChange(listener: EquipmentListener): () => void {
+    this.listeners.add(listener);
+    return () => {
+      this.listeners.delete(listener);
+    };
+  }
+
+  private notify(change: EquipmentChange): void {
+    for (const listener of this.listeners) listener(change);
   }
 
   /**
@@ -96,16 +167,24 @@ export class EquipmentManager {
    * has to be told apart from a quiet success.
    */
   canEquip(item: InventoryItem): item is WearableItem {
-    if (item.type !== 'armor' || !item.equipSlot || !item.equipSubSlot) return false;
+    if (!isWearable(item)) return false;
     // Same reason as `replaceAll`: bag and hotbar slots are restored verbatim
     // from unvalidated save JSON, so an item carrying a since-retired id can
     // reach here through the ordinary equip path and would then crash
     // `getStatBonuses` on the next stat read.
     if (!isItemId(item.id)) return false;
-    if (item.wearer && this.ownerKind !== null && item.wearer !== this.ownerKind) return false;
+    if (this.ownerKind !== null && !this.ownerMayWear(item.equipSlot, item.id)) return false;
     // The equipped map is id-keyed, so the same id worn in two ring slots would
     // make every lookup ambiguous and leave one slot un-unequippable.
     return !this.isEquipped(item.id);
+  }
+
+  /** Whether this crawler has the section `slot` and may wear `id` at all. */
+  private ownerMayWear(slot: EquipSlot, id: ItemId): boolean {
+    if (this.ownerKind === null) return true;
+    const wearer = wearerOf(id);
+    if (wearer === undefined || !wearerAllows(wearer, this.ownerKind)) return false;
+    return wearerAllows(EQUIP_SLOT_WEARER[slot], this.ownerKind);
   }
 
   /**
@@ -117,6 +196,8 @@ export class EquipmentManager {
    * one `equip` would actually hand back as displaced.
    */
   isUpgradeOverEquipped(item: InventoryItem): boolean {
+    // A weapon is drawn from the hotbar, so an empty hand is not a slot left bare.
+    if (item.type !== 'armor') return false;
     if (!isWearable(item) || !this.canEquip(item)) return false;
     const candidates = EQUIP_SUBSLOTS[item.equipSlot].filter((subSlot) =>
       itemFitsSubSlot(item, subSlot),
@@ -201,13 +282,17 @@ export class EquipmentManager {
   /** Unequip the item in the given sub-slot key. Returns the unequipped item. */
   unequip(key: string): InventoryItem | null {
     const prev = this.getEquippedItem(key);
-    this.equipped.delete(key);
+    // Read from the map, not the bag: a held weapon is unequipped exactly when the bag holds none of it.
+    const removedItemId = this.equipped.get(key) ?? null;
+    if (!this.equipped.delete(key)) return prev;
+    this.notify({ reason: 'unequip', key, itemId: null, removedItemId });
     return prev;
   }
 
   /** Remove every equipped item, leaving the wearer bare. */
   clear(): void {
     this.equipped.clear();
+    this.notify({ reason: 'restore', key: null, itemId: null, removedItemId: null });
   }
 
   /** Serialisable view of the equipped set, for snapshots. */
@@ -223,12 +308,25 @@ export class EquipmentManager {
    * through. An id retired since the save was written would otherwise sit in the
    * map and crash {@link getStatBonuses} — which runs on every stat read — on
    * the next frame.
+   *
+   * Keys are validated against `EQUIP_SUBSLOTS` for the same reason: a key
+   * written under a since-renamed slot would sit in the map where no doll cell
+   * reaches it, giving its bonus forever with no way to take it off. A section
+   * this crawler does not have is dropped too, as is an item {@link canEquip}
+   * would refuse this crawler, and an id already placed is not placed twice.
    */
   replaceAll(entries: ReadonlyArray<readonly [string, ItemId]>): void {
     this.equipped.clear();
+    const placed = new Set<ItemId>();
     for (const [key, id] of entries) {
-      if (isItemId(id)) this.equipped.set(key, id);
+      if (!isItemId(id) || placed.has(id)) continue;
+      const slot = equipSlotOfKey(key);
+      if (slot === null) continue;
+      if (this.ownerKind !== null && !this.ownerMayWear(slot, id)) continue;
+      this.equipped.set(key, id);
+      placed.add(id);
     }
+    this.notify({ reason: 'restore', key: null, itemId: null, removedItemId: null });
   }
 
   /** The item ID equipped in a sub-slot key, or undefined when the slot is bare. */

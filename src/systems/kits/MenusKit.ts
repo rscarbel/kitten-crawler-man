@@ -248,7 +248,7 @@ export class MenusKit {
             id: 'human',
             name: CRAWLER_NAMES.human,
             owner: pm.human,
-            wieldedWeaponId: pm.human.wieldedWeaponId,
+            drawnWeaponId: pm.human.drawnWeaponId,
           }
         : { id: 'cat', name: CRAWLER_NAMES.cat, owner: pm.cat };
     const restrictions = deps.inventoryRestrictions;
@@ -365,10 +365,10 @@ export class MenusKit {
     return shown.id === 'human' ? pm.human : pm.cat;
   }
 
-  /** The weapon the bag's owner is holding, for the hotbar's in-hand badge. */
-  inventoryWieldedWeaponId(): ItemId | null {
+  /** The weapon the bag's owner has drawn, for the hotbar's in-hand badge. */
+  inventoryDrawnWeaponId(): ItemId | null {
     const holder = this.inventoryPlayer();
-    return holder instanceof HumanPlayer ? holder.wieldedWeaponId : null;
+    return holder instanceof HumanPlayer ? holder.drawnWeaponId : null;
   }
 
   skillBookFlowHost(): SkillBookFlowHost {
@@ -674,11 +674,9 @@ export class MenusKit {
       if (source === 'hotbar') {
         if (holder.inventory.canEquipHotbarSlot(equipSlot)) {
           holder.inventory.equipHotbarSlot(equipSlot);
-          holder.onEquipmentChanged();
         }
       } else if (holder.inventory.canEquipSlot(equipSlot)) {
         holder.inventory.equip(equipSlot);
-        holder.onEquipmentChanged();
       }
     }
 
@@ -688,9 +686,7 @@ export class MenusKit {
       actions.pendingUnequipSlot = null;
       actions.pendingUnequipSource = null;
       const item = slotContentsAt(holder, source, unequipSlot);
-      if (item !== null && holder.inventory.unequipById(item.id) !== null) {
-        holder.onEquipmentChanged();
-      }
+      if (item !== null) holder.inventory.unequipById(item.id);
     }
 
     const dropped = actions.pendingDropItem;
@@ -739,7 +735,7 @@ export class MenusKit {
     // frame than the tap that opened it, and the stack may have shrunk since.
     const drop = Math.min(quantity, holder.inventory.countOf(id));
     if (drop <= 0) return;
-    if (holder.inventory.unequipById(id) !== null) holder.onEquipmentChanged();
+    holder.inventory.unequipById(id);
     holder.inventory.removeItems(id, drop);
     // A weapon thrown on the floor is out of hand, for the same reason worn gear
     // is taken off: it would otherwise keep firing from where it landed.
@@ -787,7 +783,7 @@ export class MenusKit {
       this.world.audio?.play('error_taking_action');
       return;
     }
-    if (holder.inventory.unequipById(id) !== null) holder.onEquipmentChanged();
+    holder.inventory.unequipById(id);
     holder.inventory.removeItems(id, trade);
     holder.onInventoryChanged();
     partner.inventory.addItem(id, trade);

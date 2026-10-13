@@ -35,8 +35,7 @@ import {
   type ViewRows,
 } from '../sprites/art/humanFigure';
 import { DYNAMITE_THROWING_HAND } from '../sprites/art/human/actionsThrow';
-import { prewarmHumanRow, viewForFacing } from '../sprites/humanSprite';
-import type { CarlView } from '../sprites/art/carl/rig';
+import { type CarlRowView, prewarmHumanRow } from '../sprites/humanSprite';
 import { easeOut, type Pt } from '../sprites/art/carlArt';
 
 /** Frames of charge for a full-strength throw. */
@@ -340,7 +339,7 @@ export class DynamiteSystem implements GameSystem {
     /** Whether the fuse has been drawn catching, so a light cut short is not played twice. */
     lit: boolean;
     /** The view whose hold and throw have been warmed, null before the first tick. */
-    warmedView: CarlView | null;
+    warmedView: CarlRowView | null;
   } | null = null;
   private pendingThrow: PendingThrow | null = null;
   private liveDynamites: LiveDynamite[] = [];
@@ -527,8 +526,7 @@ export class DynamiteSystem implements GameSystem {
     // frame; the new throw row replaces the old one, whose own end is then no
     // longer the pending throw's and would drop a stick already paid for.
     this.flushPendingThrow();
-    const view = viewForFacing(human.facingX, human.facingY);
-    const row = THROW_ROWS[view];
+    const row = human.rowFacing(THROW_ROWS);
     const releaseFrame = eventFrame(row, 'release');
     const pending: PendingThrow = {
       stick,
@@ -584,7 +582,7 @@ export class DynamiteSystem implements GameSystem {
   private poseForCharge(human: HumanPlayer): void {
     const charging = this._charging;
     if (charging === null) return;
-    const view = viewForFacing(human.facingX, human.facingY);
+    const view = human.rowViewFacing();
     // The light buys the better part of a second, which is lead enough to
     // bake the hold and the throw before either is drawn. Turning mid-charge
     // warms the new view's pair the same way: its throw can be let go at once.
@@ -596,8 +594,9 @@ export class DynamiteSystem implements GameSystem {
     if (human.isMoving) return;
     const row = charging.lit ? HOLD_ROWS[view] : LIGHT_ROWS[view];
     const drawn = human.spriteSelection();
-    const facesLeft = human.facingX < 0;
-    const flipMatches = view !== 'side' || drawn.flipX === facesLeft;
+    const facesLeft = human.facingSelection.flipX;
+    const mirrored = humanRowOf(row)?.mirrorable === true;
+    const flipMatches = !mirrored || drawn.flipX === facesLeft;
     if (human.isActing && drawn.row === row && flipMatches) return;
     // The fuse catches partway through the light; the rest of it — the draw
     // back into the stance — plays out before the hold takes over.

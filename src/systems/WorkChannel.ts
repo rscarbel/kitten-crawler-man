@@ -11,7 +11,6 @@
 import { HumanPlayer } from '../creatures/HumanPlayer';
 import type { CatPlayer } from '../creatures/CatPlayer';
 import type { ViewRows } from '../sprites/art/humanFigure';
-import { viewForFacing } from '../sprites/humanSprite';
 
 export type WorkChannelBuilder = HumanPlayer | CatPlayer;
 
@@ -22,8 +21,9 @@ export type WorkChannelBuilder = HumanPlayer | CatPlayer;
 export const JOB_MOTION_TOLERANCE_PX = 0.5;
 
 /**
- * Donut has no working row: her swipe lands on this cadence while she works,
- * at a job here and at a harvest alike.
+ * Donut's work swing — her two-paw chop or pick with a tool out, her swipe
+ * bare-pawed — lands on this cadence while she works, at a job here and at a
+ * harvest alike.
  */
 export const CAT_WORK_SWING_TICKS = 30;
 
@@ -114,7 +114,7 @@ export class WorkChannel {
 
   private playRow(human: HumanPlayer): void {
     const { faceX, faceY, humanRows } = this.options;
-    this.posing = human.playAction(humanRows[viewForFacing(faceX, faceY)], {
+    this.posing = human.playAction(human.rowFacing(humanRows, faceX, faceY), {
       faceX,
       faceY,
       loop: true,

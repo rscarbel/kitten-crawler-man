@@ -49,9 +49,32 @@ npm run bench:slots          # times the slots MEGA WIN celebration on a phone-s
 - `verify:bounty`'s map checks are a random sample, not a deterministic gate: overworld generation runs on unseeded `Math.random()` on purpose, because a fixed seed only ever proves the one map it encodes. Run it more than once when something looks marginal.
 - `verify:separation` checks force math, cell-boundary coverage, and that the grid and all-pairs strategies agree to floating-point rounding across 200 random layouts plus degenerate ones. It also pins `SpatialGrid`'s key-packing assumptions: negative coordinates are safe, and a bucket collision can only cost work rather than produce a wrong answer, because every query re-tests its candidates.
 - `bench:separation` is what makes `SEPARATION_GRID_MIN_MOBS` a measured number rather than a guess. It sweeps roster sizes against three crowding levels and carries a max-force-delta column beside the timings, so a faster shape that quietly computed _different_ forces fails loudly. Treat the crossover as the result and the absolute microseconds as scenery — they are wall-clock on whatever machine runs them.
-- `verify:slots` and `verify:wheel` check behaviour only; payout balance is read from `report:slots-rtp` and tuned by playtest. Their review renders are `npm run render:slot-symbols` (`preview/slots/symbols.png`), `npm run render:tito` (Tito's busts and his corner of the club, `preview/tito/`) and `npm run render:human-sword` (the Fury of Taranis in Carl's hand).
+- `verify:slots` and `verify:wheel` check behaviour only; payout balance is read from `report:slots-rtp` and tuned by playtest. Their review renders are `npm run render:slot-symbols` (`preview/slots/symbols.png`), `npm run render:tito` (Tito's busts and his corner of the club, `preview/tito/`) and `npm run render:equipment -- --item=fury_of_taranis` (the Fury of Taranis in Carl's hand).
 - These scripts exist because browser `requestAnimationFrame` throttles to roughly one frame a second when the tab is occluded, so nothing about timing or motion can be honestly claimed from browser automation. Everything that could be made deterministic was moved into them; the rest is left to a human.
 - A new script must be listed by name in `tsconfig.scripts.json`'s `include`. Scripts typecheck is opt-in — an unregistered script is never checked and the gate still passes.
+
+## Crawler figures and equipment
+
+Carl's and Donut's art, what they hold and what they wear have their own gates and review renders. The rules behind them are in `bipedal-figure` (figures), `add-gear` (weapons, tools, props, garments) and `add-sprite` (the figure cache):
+
+```bash
+npm run render:human          # Carl's sheet + G1–G27 (G9b sizes his working set per motion set)
+npm run render:cat            # Donut's sheet + her figure gates
+npm run gates:equipment       # E1–E7 for everything held or worn by either crawler (-- --item=<item or garment id>)
+npm run render:equipment      # Carl's held items on their rows, large and at the 32 px tile; runs the equipment gates first
+                              # (-- --item=<id>; -- --part=hands for the grip roll at 6x; -- --out=<png>)
+npx tsx scripts/render-garments.ts --wear=<garment id>[,<id>] [--compare] [--rows=<row>:<frame>,…] [--out=<png>]
+                              # one garment on either crawler across rows and views at 32 px; no gates
+npm run render:held-visuals   # every held visual beside the art it reproduces (-- --item=<id>, -- --measure)
+npm run verify:held-visuals   # held-visual registry, archetype ranges, weapon looks vs wearer
+npm run verify:player-snapshot # save shape and migrations: held slots, drawn bit, old saves
+npm run bench:turn-residency  # no cold frame on a turn, a menu, a flush, a harvest or a carry (-- --scenario=<name>)
+npm run gates:figure-cache    # the figure cache's own contracts
+npm run bench:figure-paint    # per-cell paint cost
+npm run verify:preview-scene  # the ?human and ?donut preview routes
+```
+
+`?human` (`?human=<row>`) and `?donut` (`?donut=<row>`) are the live preview routes for Carl and Donut: a row at three sizes, live crawlers on a script, and pickers for weapons, outfits and tools.
 
 ## Dev overlays
 
@@ -59,7 +82,7 @@ npm run bench:slots          # times the slots MEGA WIN celebration on a phone-s
 
 ## Chat cheats
 
-Typed into the in-game chat box. The universal table is in `ChatKit` (`src/systems/kits/ChatKit.ts`): `!god`, `!tough`, `!payday`, `!levelup`, `!give <item_id>` (one of any item into the active crawler's bag, or the wearer's for a crawler-specific item) and `!vomit` (blood vomiting, its first bout almost due). `DungeonScene` adds scene cheats, among them `!cow` (grants Carl the attack cow).
+Typed into the in-game chat box. The universal table is in `ChatKit` (`src/systems/kits/ChatKit.ts`): `!god`, `!tough`, `!payday`, `!levelup`, `!give <item_id> [quantity]` (any item, one by default, into the active crawler's bag, or the wearer's for a crawler-specific item; a non-stackable item takes a slot per copy, so only as many as fit are given) and `!vomit` (blood vomiting, its first bout almost due). `DungeonScene` adds scene cheats, among them `!cow` (grants Carl the attack cow).
 
 ## Running the game
 
@@ -93,7 +116,7 @@ saves. Without it, saves still happen in memory, so a death still respawns at th
 last save point.
 
 **All dev-only routes are release-stripped.** `?playtest=`, `?level=`, and the
-art preview routes (`?goblins`, `?tiles`, `?slots` and `?wheel` for the casino's slot machine and Wheel of Fortune harnesses, …) and `?prison=<layout>&difficulty=<d>` (straight into the Goblin High Security Prison) live in `src/dev/devBoot.ts`, which
+art preview routes (`?goblins`, `?tiles`, `?human`, `?donut`, `?slots` and `?wheel` for the casino's slot machine and Wheel of Fortune harnesses, …) and `?prison=<layout>&difficulty=<d>` (straight into the Goblin High Security Prison) live in `src/dev/devBoot.ts`, which
 `scripts/build.js` resolves to an inert stub unless the build passed
 `--dev-boot` (`serve` implies it). Plain `npm run build` — what `build:site`
 deploys — contains none of it. Put nothing a player is meant to reach in that

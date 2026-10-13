@@ -38,6 +38,7 @@ const CARL_BAG: readonly { readonly id: ItemId; readonly quantity: number }[] = 
   { id: 'marching_boots', quantity: 1 },
   { id: 'trollskin_shirt', quantity: 1 },
   { id: 'basic_pickaxe', quantity: 1 },
+  { id: 'fury_of_taranis', quantity: 1 },
   { id: 'wood', quantity: 46 },
   { id: 'stone', quantity: 18 },
   { id: 'wood_board', quantity: 12 },
@@ -59,7 +60,6 @@ function fixtureOwner(
   return {
     inventory: new Inventory(kind),
     ...stats,
-    onEquipmentChanged: () => undefined,
   };
 }
 
@@ -110,6 +110,7 @@ export function buildFixture(spec: FixtureSpec): DialogFixture {
       carl.inventory.placeOnHotbar('speed_fizz', 1);
       carl.inventory.equipByItemId('issue_kettle_helm');
       carl.inventory.equipByItemId('padded_gambeson');
+      carl.inventory.equipByItemId('fury_of_taranis');
       carl.inventory.unseenUpgrades.add('enchanted_crown_sepsis_whore');
       if (spec.fullBag === true) fillBag(carl);
       const party: readonly InventoryMember[] = [
@@ -185,4 +186,5 @@ export const INVENTORY_FIXTURES: readonly DialogFixture[] = [
     },
   }),
   buildFixture({ name: 'companion', tab: 'bag', member: 'cat' }),
+  buildFixture({ name: 'companion-character', tab: 'character', member: 'cat' }),
 ];

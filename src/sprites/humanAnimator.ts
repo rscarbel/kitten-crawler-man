@@ -25,7 +25,7 @@
  */
 
 import { progressFrameIndex, walkFrameIndex } from '../core/SpriteRenderer';
-import { type CarlView } from './art/carl/rig';
+import { FacingState } from './facingView';
 import {
   MAX_GAIT_ADVANCE_PX_PER_TICK,
   RUN_RADIANS_PER_PX,
@@ -46,17 +46,19 @@ import {
 } from './art/humanFigure';
 import { fightReactionSpans } from './humanReactions';
 import {
+  carlRowView,
+  type CarlRowView,
   type HumanRowSelection,
   isGaitCycle,
   rowFrameAtTicks,
   rowLengthInTicks,
   strikeWindUpFrames,
-  viewForFacing,
 } from './humanSprite';
 import { TWO_PI } from './art/carl/geometry';
 import { mulberry32, type Rng } from './person/rng';
 import { wrapPhase } from './art/human/gaitShared';
 import { PHASE_EPSILON } from './art/human/travelling';
+import type { HolsterMotion, MotionSet } from './art/human/motionSets';
 
 // ── Gait pacing ──────────────────────────────────────────────────────────────
 
@@ -156,7 +158,7 @@ function rowsWithRole(role: HumanRowRole): readonly RowSpec[] {
   return HUMAN_ROWS.filter((row) => row.role === role);
 }
 
-function inView(rows: readonly RowSpec[], view: CarlView): readonly RowSpec[] {
+function inView(rows: readonly RowSpec[], view: CarlRowView): readonly RowSpec[] {
   return rows.filter((row) => row.view === view);
 }
 
@@ -179,10 +181,37 @@ const CELEBRATION_ROWS = FIDGET_ROWS.filter((row) => row.levelUpOrder !== undefi
   (a, b) => (a.levelUpOrder ?? 0) - (b.levelUpOrder ?? 0),
 );
 const CYCLE_ROWS = HUMAN_ROWS.filter(isGaitCycle);
+/** The draws and stows: a view with none for a set changes what is in his hand with no gesture. */
+const HOLSTER_ROWS = HUMAN_ROWS.filter((row) => row.holster !== undefined);
 
-/** The rows the melee family of one view can throw, standing. */
-function strikeFamily(view: CarlView): readonly RowSpec[] {
-  return inView(STANDING_STRIKES, view);
+/** The set a row is played in: bare-handed unless the table names an armed set. */
+function setOf(row: RowSpec): MotionSet {
+  return row.motionSet ?? 'unarmed';
+}
+
+function ofSet(rows: readonly RowSpec[], set: MotionSet): readonly RowSpec[] {
+  return rows.filter((row) => setOf(row) === set);
+}
+
+/**
+ * The set whose blows he throws in a view: the set in his hand's own, or —
+ * for a set with none in that view — his bare hands', the weapon carried in
+ * the fist that throws them.
+ */
+function strikingSet(set: MotionSet, view: CarlRowView): MotionSet {
+  return inView(ofSet(STANDING_STRIKES, set), view).length > 0 ? set : 'unarmed';
+}
+
+/** The rows the melee family of one view can throw, standing, with `set` in hand. */
+function strikeFamily(view: CarlRowView, set: MotionSet): readonly RowSpec[] {
+  return inView(ofSet(STANDING_STRIKES, strikingSet(set, view)), view);
+}
+
+/** The draw or stow of `set`'s weapon in a view, if it has one. */
+function holsterRow(motion: HolsterMotion, set: MotionSet, view: CarlRowView): RowSpec | undefined {
+  return HOLSTER_ROWS.find(
+    (row) => row.holster === motion && setOf(row) === set && row.view === view,
+  );
 }
 
 /** The versions of a standing strike painted on the move, one per phase of the stride they begin at. */
@@ -194,22 +223,41 @@ function hasTravellingVersions(row: RowSpec): boolean {
   return travellingVersions(row).length > 0;
 }
 
-function firstInView(rows: readonly RowSpec[], view: CarlView): RowSpec | undefined {
+function firstInView(rows: readonly RowSpec[], view: CarlRowView): RowSpec | undefined {
   return rows.find((row) => row.view === view);
 }
 
-/** The start or stop, of `rows`, that bridges standing and `gait` in a view. */
-function bridgeFor(rows: readonly RowSpec[], gait: HumanGait, view: CarlView): RowSpec | undefined {
-  return rows.find((row) => row.view === view && row.bridges === gait);
+/**
+ * The start or stop, of `rows`, that bridges standing and `gait` in a view,
+ * belonging to the set whose cycle he strides in: a set with a stride of
+ * its own and no bridge of its own sets off and pulls up with none.
+ */
+function bridgeFor(
+  rows: readonly RowSpec[],
+  gait: HumanGait,
+  view: CarlRowView,
+  set: MotionSet,
+): RowSpec | undefined {
+  const cycle = cycleRow(gait, view, set);
+  const strideSet = cycle === undefined ? 'unarmed' : setOf(cycle);
+  return ofSet(rows, strideSet).find((row) => row.view === view && row.bridges === gait);
 }
 
 /**
- * The locomotion cycle for a gait and view. A gait the figure has no row for
- * falls back to whichever cycle the view does have, so the legs keep moving.
+ * The locomotion cycle for a gait and view, with `set` in hand. A gait the
+ * set has no row for falls back to whichever cycle the set does have in the
+ * view, and a set with none to the bare-handed cycles, so the legs keep
+ * moving.
  */
-export function cycleRow(gait: HumanGait, view: CarlView): RowSpec | undefined {
-  const exact = CYCLE_ROWS.find((row) => row.gait === gait && row.view === view);
-  return exact ?? firstInView(CYCLE_ROWS, view);
+export function cycleRow(
+  gait: HumanGait,
+  view: CarlRowView,
+  set: MotionSet = 'unarmed',
+): RowSpec | undefined {
+  const own = ofSet(CYCLE_ROWS, set);
+  const rows = inView(own, view).length > 0 ? own : ofSet(CYCLE_ROWS, 'unarmed');
+  const exact = rows.find((row) => row.gait === gait && row.view === view);
+  return exact ?? firstInView(rows, view);
 }
 
 /** Distance between two phases on the unit cycle. */
@@ -364,6 +412,12 @@ interface HumanAnimatorOptions {
    * it knows it is about to need.
    */
   readonly warmRow?: (row: HumanRowName, frames?: number) => void;
+  /**
+   * The facing his views are chosen through, owned by the player so that
+   * every other choice made by facing reads the same selection. The animator
+   * moves it on once a tick.
+   */
+  readonly facing?: FacingState;
 }
 
 /**
@@ -479,9 +533,14 @@ export class HumanAnimator {
   private readonly random: Rng;
   private readonly warmRow: (row: HumanRowName, frames?: number) => void;
 
+  private readonly facing: FacingState;
+
   private tickCount = 0;
+  private motionSet: MotionSet = 'unarmed';
   private facingX = 1;
-  private view: CarlView = 'side';
+  private facingY = 0;
+  private flipX = false;
+  private view: CarlRowView = 'side';
 
   private mode: BaseMode = 'idle';
   /** The row a one-shot base mode (start, unstart, stop, fidget) is playing. */
@@ -508,11 +567,11 @@ export class HumanAnimator {
   private reaction: Scripted | null = null;
   private knockedOut = false;
   private lastStrike: HumanRowName | null = null;
-  private lastStrikeView: CarlView | null = null;
+  private lastStrikeView: CarlRowView | null = null;
   private lastStrikeEndTick = Number.NEGATIVE_INFINITY;
   private comboStep = 0;
   private comboClosed = false;
-  private readonly strikeBags = new Map<CarlView, HumanRowName[]>();
+  private readonly strikeBags = new Map<CarlRowView, HumanRowName[]>();
 
   private guardTicks = 0;
   private suppressTicks = 0;
@@ -528,6 +587,7 @@ export class HumanAnimator {
   constructor(options: HumanAnimatorOptions = {}) {
     this.random = mulberry32(ANIMATOR_SEED);
     this.warmRow = options.warmRow ?? ((): void => undefined);
+    this.facing = options.facing ?? new FacingState(this.facingX, this.facingY);
     this.fidgetDelay = this.rollFidgetDelay();
   }
 
@@ -664,20 +724,57 @@ export class HumanAnimator {
     if (this.guardTicks > 0) this.warmCombatRows(this.view);
   }
 
+  /** The set of rows he moves and fights in: his bare hands', or the weapon's out in his hand. */
+  get motionSetInHand(): MotionSet {
+    return this.motionSet;
+  }
+
+  /**
+   * Plays the rows of `set` from now on — the weapon out in his hand changed.
+   * A start, stop or guard drop under way is swapped for the new set's own,
+   * or given up where the set has none; a stride settling toward a stop
+   * settles toward the new set's; the rows a fight or a stride had warmed are
+   * asked for again in the new set. A blow already in flight finishes in the
+   * row it was thrown in.
+   */
+  setMotionSet(set: MotionSet): void {
+    if (set === this.motionSet) return;
+    this.motionSet = set;
+    this.celebrationQueue = [];
+    // A stride settling toward the old set's stop settles toward the new
+    // set's instead, from the frame on screen.
+    if (this.mode === 'settle') {
+      this.mode = 'cycle';
+      this.beginStopping();
+    }
+    const playing = this.oneShot;
+    if (playing !== null && playing.role !== 'fidget') {
+      const swapped = ofSet(HUMAN_ROWS, set).find(
+        (row) =>
+          row.role === playing.role && row.bridges === playing.bridges && row.view === playing.view,
+      );
+      if (swapped !== undefined) this.oneShot = swapped;
+      else if (this.mode === 'start') this.enterCycleFromStanding();
+      else this.enterRest();
+    }
+    if (this.mode === 'fidget') this.enterRest();
+    this.forgetWarmRequests();
+  }
+
   /**
    * Chooses the blow for a strike thrown along a facing, latches that facing
    * until the blow is over, and returns the row. Null when the view has no
-   * strikes to throw. `armed` favours the blows his sword hand throws, so a
-   * blade drawn in it swings with the blow rather than riding a kick.
+   * strikes to throw. The blows are the set in his hand's, or his bare
+   * hands' in a view the set has none in.
    */
   beginStrike(
     facingX: number,
     facingY: number,
     target: StrikeTargetContext | null,
-    armed = false,
   ): HumanRowName | null {
-    const view = viewForFacing(facingX, facingY);
-    const family = strikeFamily(view);
+    const facing = this.facing.peek(facingX, facingY);
+    const view = carlRowView(facing.view);
+    const family = strikeFamily(view, this.motionSet);
     if (family.length === 0) return null;
 
     // A chain is thrown at one thing: turned to face another way, he starts over.
@@ -689,14 +786,14 @@ export class HumanAnimator {
     this.comboClosed = false;
 
     const striding = this.isStriding();
-    const chosen = this.chooseStrike(view, family, target, striding, armed);
+    const chosen = this.chooseStrike(view, family, target, striding);
     if (chosen.strike?.tags.includes('finisher') === true) this.comboClosed = true;
     this.lastStrike = chosen.name;
     this.lastStrikeView = view;
     const versions = striding ? travellingVersions(chosen) : [];
     const drawn = nearestVersion(this.baseSelection(), versions) ?? chosen;
     this.interruptScriptedForBlow();
-    this.strike = latchOf(drawn, facingX, facingY);
+    this.strike = latchOf(drawn, facingX, facingY, facing.flipX);
     this.warmCombatRows(view);
     this.noteCombat(true);
     return drawn.name;
@@ -709,7 +806,8 @@ export class HumanAnimator {
    * Smush of its own stamps in whichever view has one.
    */
   beginSmush(facingX: number, facingY: number): HumanRowName | null {
-    const view = viewForFacing(facingX, facingY);
+    const facing = this.facing.peek(facingX, facingY);
+    const view = carlRowView(facing.view);
     const fallback = STANDING_STOMPS.length > 0 ? STANDING_STOMPS[0] : undefined;
     const standing = firstInView(STANDING_STOMPS, view) ?? fallback;
     const hops = this.isStriding() ? inView(TRAVELLING_STOMPS, view) : [];
@@ -717,10 +815,29 @@ export class HumanAnimator {
     const row = hop ?? standing;
     if (row === undefined) return null;
     this.interruptScriptedForBlow();
-    this.smush = latchOf(row, facingX, facingY);
+    this.smush = latchOf(row, facingX, facingY, facing.flipX);
     this.warmCombatRows(view);
     this.noteCombat(true);
     return row.name;
+  }
+
+  /**
+   * Plays a weapon of `set` being taken out or put away, in the view he
+   * faces, as an action. Returns the row played, or null when that set has
+   * no such row in this view or an action could not start. `onEnd` is
+   * called once it stops playing, for whatever reason.
+   */
+  beginHolster(
+    motion: HolsterMotion,
+    set: MotionSet,
+    facingX: number,
+    facingY: number,
+    onEnd?: (reason: HumanActionEndReason) => void,
+  ): HumanRowName | null {
+    const row = holsterRow(motion, set, carlRowView(this.facing.peek(facingX, facingY).view));
+    if (row === undefined) return null;
+    const options: HumanActionOptions = onEnd === undefined ? {} : { onEnd };
+    return this.playAction(row.name, options) ? row.name : null;
   }
 
   /**
@@ -754,7 +871,10 @@ export class HumanAnimator {
     if (this.guardTicks > 0) this.guardTicks--;
     if (this.suppressTicks > 0) this.suppressTicks--;
     this.facingX = input.facingX;
-    const view = viewForFacing(input.facingX, input.facingY);
+    this.facingY = input.facingY;
+    const facing = this.facing.update(input.facingX, input.facingY);
+    this.flipX = facing.flipX;
+    const view = carlRowView(facing.view);
     if (view !== this.view) this.changeView(view);
 
     const groundPx = Math.min(Math.max(0, input.groundPx), MAX_GAIT_ADVANCE_PX_PER_TICK);
@@ -818,7 +938,7 @@ export class HumanAnimator {
 
   /** The row, frame and mirroring of the base mode — the stride, start, stop, fidget or rest. */
   private baseSelection(): HumanRowSelection {
-    const flip = this.facingX < 0;
+    const flip = this.flipX;
     const pick = (row: RowSpec, frame: number): HumanRowSelection => ({
       row: row.name,
       frame,
@@ -834,7 +954,7 @@ export class HumanAnimator {
       return pick(this.oneShot, frame);
     }
     if (this.mode === 'cycle' || this.mode === 'settle') {
-      const row = cycleRow(this.gait, this.view);
+      const row = cycleRow(this.gait, this.view, this.motionSet);
       if (row !== undefined) return pick(row, walkFrameIndex(this.phase, row.frameCount));
     }
     const rest = this.restRow();
@@ -852,10 +972,11 @@ export class HumanAnimator {
   ): Scripted {
     const row = humanRowOf(name) ?? HUMAN_ROWS[0];
     const faceX = options.faceX ?? this.facingX;
+    const faceY = options.faceY ?? this.facingY;
     return {
       row,
       options,
-      flipX: row.mirrorable && faceX < 0,
+      flipX: row.mirrorable && this.facing.peek(faceX, faceY).flipX,
       cancelOnMove: options.cancelOnMove ?? layer === 'action',
       overridesBlows,
       ticks: 0,
@@ -959,16 +1080,14 @@ export class HumanAnimator {
    * still whichever the combo and the shuffle allow.
    */
   private chooseStrike(
-    view: CarlView,
+    view: CarlRowView,
     family: readonly RowSpec[],
     target: StrikeTargetContext | null,
     striding: boolean,
-    armed: boolean,
   ): RowSpec {
     const downed = target?.downed ?? false;
     const travelling = striding ? preferWhere(family, hasTravellingVersions) : family;
-    const throwable = armed ? preferWhere(travelling, thrownWithSwordHand) : travelling;
-    let candidates = downed ? throwable : preferWithoutTags(throwable, DOWNED_TARGET_TAGS);
+    let candidates = downed ? travelling : preferWithoutTags(travelling, DOWNED_TARGET_TAGS);
     if (target !== null) {
       if (target.lowProfile || target.downed) candidates = preferTags(candidates, LOW_TARGET_TAGS);
       else if (target.tall) candidates = preferTags(candidates, TALL_TARGET_TAGS);
@@ -996,7 +1115,7 @@ export class HumanAnimator {
   }
 
   private drawFromBag(
-    view: CarlView,
+    view: CarlRowView,
     family: readonly RowSpec[],
     candidates: readonly RowSpec[],
   ): RowSpec {
@@ -1070,10 +1189,10 @@ export class HumanAnimator {
    * call for on any tick. Asked again on every blow thrown or taken, which is
    * also what keeps them from being released as idle while the fight lasts.
    */
-  private warmCombatRows(view: CarlView): void {
-    const guard = firstInView(GUARD_ROWS, view);
-    if (guard !== undefined) this.warmRow(guard.name);
-    for (const row of inView(STRIKE_ROWS, view)) this.warmRow(row.name);
+  private warmCombatRows(view: CarlRowView): void {
+    this.warmRow(this.restRowFor('guard', view).name);
+    const striking = strikingSet(this.motionSet, view);
+    for (const row of inView(ofSet(STRIKE_ROWS, striking), view)) this.warmRow(row.name);
     for (const span of fightReactionSpans(view)) this.warmRow(span.row, span.frames);
   }
 
@@ -1083,8 +1202,10 @@ export class HumanAnimator {
    * tick it lands. Only the view he is running in, so a floor's worth of
    * running does not hold every view's versions warm at once.
    */
-  private warmTravellingBlows(view: CarlView): void {
-    for (const row of inView(TRAVELLING_BLOWS, view)) {
+  private warmTravellingBlows(view: CarlRowView): void {
+    const striking = strikingSet(this.motionSet, view);
+    const blows = TRAVELLING_BLOWS.filter((row) => row.role === 'stomp' || setOf(row) === striking);
+    for (const row of inView(blows, view)) {
       this.warmRow(row.name, strikeWindUpFrames(row));
     }
   }
@@ -1114,10 +1235,10 @@ export class HumanAnimator {
 
   /** The walk and the start and stop that bridge it, in the view he is in. */
   private warmWalk(): void {
-    const walk = CYCLE_ROWS.find((row) => row.gait === 'walk' && row.view === this.view);
+    const walk = cycleRow('walk', this.view, this.motionSet);
     if (walk !== undefined) this.warmRow(walk.name);
     for (const bridges of [START_ROWS, STOP_ROWS]) {
-      const bridge = bridgeFor(bridges, 'walk', this.view);
+      const bridge = bridgeFor(bridges, 'walk', this.view, this.motionSet);
       if (bridge !== undefined) this.warmRow(bridge.name);
     }
   }
@@ -1128,7 +1249,7 @@ export class HumanAnimator {
    * past that the row is undersampled, skipping poses, and reads as vibration.
    */
   private advancePhase(groundPx: number): void {
-    const cycle = cycleRow(this.gait, this.view);
+    const cycle = cycleRow(this.gait, this.view, this.motionSet);
     const oneFrame = cycle === undefined ? TWO_PI : TWO_PI / cycle.frameCount;
     const advance = Math.min(groundPx * gaitRadiansPerPx(this.gait), oneFrame);
     this.phase = (this.phase + advance) % TWO_PI;
@@ -1183,7 +1304,7 @@ export class HumanAnimator {
       this.mode = 'start';
       return;
     }
-    const start = bridgeFor(START_ROWS, this.gait, this.view);
+    const start = bridgeFor(START_ROWS, this.gait, this.view, this.motionSet);
     if (start !== undefined) {
       this.mode = 'start';
       this.oneShot = start;
@@ -1197,16 +1318,16 @@ export class HumanAnimator {
   private enterCycleFromStanding(): void {
     this.mode = 'cycle';
     this.oneShot = null;
-    const cycle = cycleRow(this.gait, this.view);
-    const standing = firstInView(IDLE_ROWS, this.view);
-    if (cycle === undefined || standing === undefined) return;
+    const cycle = cycleRow(this.gait, this.view, this.motionSet);
+    const standing = this.restRowFor('idle', this.view);
+    if (cycle === undefined) return;
     const [nearest] = framesNearestStanding(cycle, standing);
     this.phase = framePhase(nearest, cycle.frameCount);
   }
 
   /** The phase, in radians, in the middle of the current cycle's frame a cycle fraction falls in. */
   private framePhaseAt(fraction: number): number {
-    const cycle = cycleRow(this.gait, this.view);
+    const cycle = cycleRow(this.gait, this.view, this.motionSet);
     if (cycle === undefined) return fraction * TWO_PI;
     const wrapped = wrapPhase(fraction);
     return framePhase(Math.floor(wrapped * cycle.frameCount), cycle.frameCount);
@@ -1261,12 +1382,12 @@ export class HumanAnimator {
    * the legs already agree, never from wherever the stride happened to be.
    */
   private beginStopping(): void {
-    const cycle = cycleRow(this.gait, this.view);
+    const cycle = cycleRow(this.gait, this.view, this.motionSet);
     if (cycle === undefined) {
       this.enterRest();
       return;
     }
-    const stop = bridgeFor(STOP_ROWS, this.gait, this.view);
+    const stop = bridgeFor(STOP_ROWS, this.gait, this.view, this.motionSet);
     const entry = stop?.entryFootPhase;
     if (stop !== undefined && entry !== undefined) {
       this.settleTo = stop;
@@ -1275,8 +1396,7 @@ export class HumanAnimator {
       );
     } else {
       this.settleTo = null;
-      const standing = firstInView(IDLE_ROWS, this.view);
-      this.settleExits = standing === undefined ? [] : framesNearestStanding(cycle, standing);
+      this.settleExits = framesNearestStanding(cycle, this.restRowFor('idle', this.view));
     }
     if (this.settleExits.length === 0) {
       this.enterRest();
@@ -1295,7 +1415,7 @@ export class HumanAnimator {
    * stopped, so it is spent as quickly as the row allows.
    */
   private tickSettle(): void {
-    const cycle = cycleRow(this.gait, this.view);
+    const cycle = cycleRow(this.gait, this.view, this.motionSet);
     if (cycle === undefined) {
       this.enterRest();
       return;
@@ -1339,7 +1459,7 @@ export class HumanAnimator {
    */
   private tickGuardOut(): boolean {
     const atSeam = this.loopTicks % rowLengthInTicks(this.restRow()) === 0;
-    const drop = firstInView(DROP_ROWS, this.view);
+    const drop = firstInView(ofSet(DROP_ROWS, this.motionSet), this.view);
     if (drop === undefined) {
       this.enterRest();
       return false;
@@ -1369,9 +1489,24 @@ export class HumanAnimator {
   }
 
   private restRow(): RowSpec {
-    const rows = this.mode === 'guard' ? GUARD_ROWS : IDLE_ROWS;
-    const row = firstInView(rows, this.view) ?? firstInView(IDLE_ROWS, this.view) ?? IDLE_ROWS[0];
-    return row;
+    return this.restRowFor(this.mode === 'guard' ? 'guard' : 'idle', this.view);
+  }
+
+  /**
+   * The standing loop of `role` in a view, with the set in his hand: its own,
+   * or — for a set with an idle of its own and no guard, whose stance is its
+   * guard — its idle; for a set with no standing rows at all, his bare
+   * hands'.
+   */
+  private restRowFor(role: 'idle' | 'guard', view: CarlRowView): RowSpec {
+    const set = this.motionSet;
+    const bareIdle = firstInView(ofSet(IDLE_ROWS, 'unarmed'), view) ?? IDLE_ROWS[0];
+    const ownIdle = firstInView(ofSet(IDLE_ROWS, set), view);
+    if (role === 'idle') return ownIdle ?? bareIdle;
+    const ownGuard = firstInView(ofSet(GUARD_ROWS, set), view);
+    if (ownGuard !== undefined) return ownGuard;
+    if (ownIdle !== undefined) return ownIdle;
+    return firstInView(ofSet(GUARD_ROWS, 'unarmed'), view) ?? bareIdle;
   }
 
   /**
@@ -1380,7 +1515,7 @@ export class HumanAnimator {
    * standing, a start to the stride. The fidget warmed for the old view is
    * for a view he is no longer in.
    */
-  private changeView(view: CarlView): void {
+  private changeView(view: CarlRowView): void {
     this.view = view;
     this.warmedFidget = null;
     if (this.nearWalk) this.warmWalk();
@@ -1411,7 +1546,13 @@ export class HumanAnimator {
 
   /** One tick of the relaxed idle; true when it handed over to a fidget. */
   private tickIdle(): boolean {
-    const quiet = this.suppressTicks === 0 && this.action === null && this.reaction === null;
+    // The fidgets are bare-handed gestures from the bare-handed idle's first
+    // frame; with a weapon out he stands at ease and keeps it.
+    const quiet =
+      this.motionSet === 'unarmed' &&
+      this.suppressTicks === 0 &&
+      this.action === null &&
+      this.reaction === null;
     const atSeam = this.loopTicks % rowLengthInTicks(this.restRow()) === 0;
     if (!quiet) {
       this.restartIdleClock();
@@ -1449,6 +1590,7 @@ export class HumanAnimator {
    * in. A view with neither plays nothing; one with only the second plays that.
    */
   private playCelebration(): boolean {
+    if (this.motionSet !== 'unarmed') return false;
     const sequence = CELEBRATION_ROWS.filter((row) => row.view === this.view);
     const [first, ...rest] = sequence;
     if (sequence.length === 0) return false;
@@ -1493,13 +1635,8 @@ function cycleFrames(cycle: RowSpec): number[] {
   return Array.from({ length: cycle.frameCount }, (_unused, frame) => frame);
 }
 
-function latchOf(row: RowSpec, facingX: number, facingY: number): Latch {
-  return { row, facingX, facingY, flipX: row.mirrorable && facingX < 0 };
-}
-
-/** The sword is carried in his right hand, whose blows the row table marks `hand`. */
-function thrownWithSwordHand(row: RowSpec): boolean {
-  return row.strike?.reachLimb === 'hand';
+function latchOf(row: RowSpec, facingX: number, facingY: number, flipX: boolean): Latch {
+  return { row, facingX, facingY, flipX: row.mirrorable && flipX };
 }
 
 /** Keeps only the rows carrying any of `tags`, unless none do. */

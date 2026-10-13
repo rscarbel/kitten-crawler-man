@@ -8,12 +8,12 @@
  * of toes, with the big toe split off on the inside. From behind it is a heel.
  */
 
-import { offset, pt, rotate, TWO_PI } from './geometry';
+import { offset, pt, rotate } from './geometry';
 import { crease, shadeForm } from './paint';
 import { type Ramp, receded, SKIN } from './palette';
 import { ANKLE_WIDTH, FIGURE_HEIGHT } from './proportions';
 import { type ViewSpec } from './rig';
-import { lerp, type Pt, rgba } from '../carlArt';
+import { lerp, type Pt } from '../carlArt';
 import { fillSoftEllipse } from '../softShade';
 
 type Ctx = CanvasRenderingContext2D;
@@ -23,7 +23,7 @@ type Ctx = CanvasRenderingContext2D;
  * and a foot hung off this character's deliberately oversized head is a clown
  * shoe.
  */
-const FOOT_LEN = FIGURE_HEIGHT * 0.15;
+export const FOOT_LEN = FIGURE_HEIGHT * 0.15;
 /** A bare foot is about half as deep as it is long; thinner reads as a blade. */
 const FOOT_DEPTH = FOOT_LEN * 0.5;
 /**
@@ -156,15 +156,23 @@ export function footSoleLandmarks(
 }
 
 /**
- * What a foot wears, beyond being bare: the toe ring on his right second toe,
- * and the shine a pedicure leaves on nails and instep. Absent is neither.
+ * Where on a painted foot what he wears on his toes sits, in the foot's own
+ * frame (origin at the ankle, the foot's pitch applied).
  */
-export interface FootAccents {
-  readonly toeRing?: boolean;
-  readonly pedicure?: boolean;
+export interface ToeLandmarks {
+  /** Each toenail that faces the camera. */
+  readonly nails: readonly Pt[];
+  /** Where the key light catches the top of the foot. */
+  readonly instep: Pt;
+  /** Where a ring on his second toe sits, and the line it crosses the toe along. */
+  readonly secondToe: Pt;
+  readonly ringAcross: Pt;
+  /** Traces the foot's silhouette. */
+  readonly trace: (ctx: Ctx) => void;
 }
 
-const NO_ACCENTS: FootAccents = {};
+/** Paints what he wears on his toes, once the foot under it is painted. */
+export type ToesPainter = (ctx: Ctx, toes: ToeLandmarks) => void;
 
 /**
  * A bare foot drawn from the ankle, in the silhouette its view calls for.
@@ -180,7 +188,7 @@ export function drawFoot(
   view: ViewSpec,
   outward: number,
   shade: number,
-  accents: FootAccents = NO_ACCENTS,
+  toes: ToesPainter | null = null,
   point = 0,
 ): void {
   const flesh = receded(SKIN, shade);
@@ -189,75 +197,12 @@ export function drawFoot(
   if (view.showsBack) drawHeelFromBehind(ctx, flesh);
   else if (view.profile) {
     ctx.rotate(pitch);
-    drawFootInProfile(ctx, flesh, pitch, outward, accents);
+    drawFootInProfile(ctx, flesh, pitch, outward, toes);
   } else {
     ctx.scale(1, pointedFootStretch(point));
-    drawFootHeadOn(ctx, flesh, outward, accents);
+    drawFootHeadOn(ctx, flesh, outward, toes);
   }
   ctx.restore();
-}
-
-// ── Accents ──────────────────────────────────────────────────────────────────
-
-/**
- * The toe ring: a thin gold band. At the tile it is one warm pixel on the
- * toes, which is all a toe ring should ever be.
- */
-const RING_GOLD = '#d4a23a';
-const RING_GLINT = '#fff0b8';
-const RING_BAND_HALF = 0.022;
-const RING_BAND_WIDTH = 0.018;
-const RING_GLINT_RADIUS = 0.008;
-/**
- * The pedicure's glitter: small, near-white specks on the nails and the
- * instep, faintly pink — polish rather than wet skin.
- */
-const GLITTER = '#fff3f8';
-const GLITTER_ALPHA = 0.9;
-const NAIL_GLINT_RADIUS = 0.016;
-const SPARKLE_ARM = 0.03;
-const SPARKLE_WIDTH = 0.01;
-
-/** A four-pointed sparkle: two crossed strokes, the glint a glittery surface throws. */
-function paintSparkle(ctx: Ctx, at: Pt): void {
-  ctx.strokeStyle = rgba(GLITTER, GLITTER_ALPHA);
-  ctx.lineWidth = SPARKLE_WIDTH;
-  ctx.beginPath();
-  ctx.moveTo(at.x - SPARKLE_ARM, at.y);
-  ctx.lineTo(at.x + SPARKLE_ARM, at.y);
-  ctx.moveTo(at.x, at.y - SPARKLE_ARM);
-  ctx.lineTo(at.x, at.y + SPARKLE_ARM);
-  ctx.stroke();
-}
-
-function paintNailGlints(ctx: Ctx, nails: readonly Pt[]): void {
-  ctx.fillStyle = rgba(GLITTER, GLITTER_ALPHA);
-  for (const nail of nails) {
-    ctx.beginPath();
-    ctx.arc(nail.x, nail.y, NAIL_GLINT_RADIUS, 0, TWO_PI);
-    ctx.fill();
-  }
-}
-
-/** A band across a toe running along `across`, with the glint on its lit end. */
-function paintRing(ctx: Ctx, centre: Pt, across: Pt): void {
-  ctx.lineCap = 'round';
-  ctx.strokeStyle = RING_GOLD;
-  ctx.lineWidth = RING_BAND_WIDTH;
-  ctx.beginPath();
-  ctx.moveTo(centre.x - across.x * RING_BAND_HALF, centre.y - across.y * RING_BAND_HALF);
-  ctx.lineTo(centre.x + across.x * RING_BAND_HALF, centre.y + across.y * RING_BAND_HALF);
-  ctx.stroke();
-  ctx.fillStyle = RING_GLINT;
-  ctx.beginPath();
-  ctx.arc(
-    centre.x - across.x * RING_BAND_HALF * HALF_SHARE,
-    centre.y - across.y * RING_BAND_HALF * HALF_SHARE,
-    RING_GLINT_RADIUS,
-    0,
-    TWO_PI,
-  );
-  ctx.fill();
 }
 
 const HALF_SHARE = 0.5;
@@ -329,7 +274,7 @@ function drawFootInProfile(
   flesh: Ramp,
   pitch: number,
   outward: number,
-  accents: FootAccents,
+  toes: ToesPainter | null,
 ): void {
   const { length, toeX, heelX, sole, toeHalf } = footExtent(true, outward);
   // Edge-on the near foot shows its outer edge, flat on the floor; the far one
@@ -337,38 +282,39 @@ function drawFootInProfile(
   const archLift = outward < 0 ? ARCH_LIFT : OUTER_ARCH_LIFT;
   const toeRoot = pt(toeX - toeHalf * TOE_ROOT_BACK, sole - toeHalf * TOE_ROOT_DEPTH);
 
-  const traceFoot = (): void => {
-    ctx.beginPath();
-    ctx.moveTo(-ANKLE_WIDTH * ACHILLES_BACK, -FOOT_DEPTH * ACHILLES_TOP);
-    ctx.quadraticCurveTo(
+  const traceFootOn = (c: Ctx): void => {
+    c.beginPath();
+    c.moveTo(-ANKLE_WIDTH * ACHILLES_BACK, -FOOT_DEPTH * ACHILLES_TOP);
+    c.quadraticCurveTo(
       heelX - FOOT_DEPTH * HEEL_BULB,
       sole * HEEL_BULB_DROP,
       heelX * HEEL_FLOOR,
       sole,
     );
     const ball = toeX - toeHalf * BALL_BACK;
-    ctx.quadraticCurveTo(lerp(heelX, ball, ARCH_AT), sole - FOOT_DEPTH * archLift, ball, sole);
-    ctx.quadraticCurveTo(
+    c.quadraticCurveTo(lerp(heelX, ball, ARCH_AT), sole - FOOT_DEPTH * archLift, ball, sole);
+    c.quadraticCurveTo(
       toeX + toeHalf * BIG_TOE_LEAD,
       sole,
       toeX + toeHalf * BIG_TOE_LEAD,
       sole - toeHalf * BIG_TOE_TIP,
     );
-    ctx.quadraticCurveTo(
+    c.quadraticCurveTo(
       toeX + toeHalf * BIG_TOE_LEAD,
       sole - toeHalf * BIG_TOE_TOP,
       toeX - toeHalf * BIG_TOE_BACK,
       sole - toeHalf * BIG_TOE_TOP,
     );
-    ctx.lineTo(toeRoot.x, toeRoot.y);
-    ctx.quadraticCurveTo(
+    c.lineTo(toeRoot.x, toeRoot.y);
+    c.quadraticCurveTo(
       toeX * INSTEP_CONTROL_AT,
       -FOOT_DEPTH * INSTEP_CONTROL_RISE,
       ANKLE_WIDTH * ANKLE_FRONT,
       -FOOT_DEPTH * ANKLE_FRONT_RISE,
     );
-    ctx.closePath();
+    c.closePath();
   };
+  const traceFoot = (): void => traceFootOn(ctx);
 
   shadeForm(
     ctx,
@@ -428,27 +374,24 @@ function drawFootInProfile(
     },
   );
 
-  if (accents.pedicure === true) {
-    paintNailGlints(ctx, [
-      pt(toeX + toeHalf * PROFILE_NAIL_LEAD, sole - toeHalf * PROFILE_NAIL_RISE),
-    ]);
-    paintSparkle(ctx, pt(toeX * INSTEP_LIGHT_AT, -FOOT_DEPTH * INSTEP_LIGHT_RISE));
-  }
-  if (accents.toeRing === true) {
+  toes?.(ctx, {
+    nails: [pt(toeX + toeHalf * PROFILE_NAIL_LEAD, sole - toeHalf * PROFILE_NAIL_RISE)],
+    instep: pt(toeX * INSTEP_LIGHT_AT, -FOOT_DEPTH * INSTEP_LIGHT_RISE),
     // Edge-on the second toe is hidden behind the big toe on the far side of
-    // the foot; the ring shows as a glint over the top of the toes.
-    const ring = pt(
+    // the foot; a ring on it shows over the top of the toes.
+    secondToe: pt(
       lerp(toeRoot.x, toeX, PROFILE_RING_ALONG),
       lerp(toeRoot.y, sole, PROFILE_RING_DOWN),
-    );
-    paintRing(ctx, ring, pt(0, 1));
-  }
+    ),
+    ringAcross: pt(0, 1),
+    trace: traceFootOn,
+  });
 }
 
 /** The big toe's nail, on its top just behind the tip. */
 const PROFILE_NAIL_LEAD = 0.2;
 const PROFILE_NAIL_RISE = 0.8;
-/** The ring sits on the toes about halfway from their root to the tip, near their top. */
+/** A toe ring sits on the toes about halfway from their root to the tip, near their top. */
 const PROFILE_RING_ALONG = 0.45;
 const PROFILE_RING_DOWN = 0.2;
 
@@ -550,7 +493,12 @@ const TOE_UNDERSIDE_ALPHA = 0.35;
 /** The split between the big toe and the rest runs only part way up the toe row. */
 const TOE_SPLIT_REACH = 0.8;
 
-function drawFootHeadOn(ctx: Ctx, flesh: Ramp, outward: number, accents: FootAccents): void {
+function drawFootHeadOn(
+  ctx: Ctx,
+  flesh: Ramp,
+  outward: number,
+  paintToes: ToesPainter | null,
+): void {
   const sole = FOOT_DEPTH * (SOLE_DROP + TOES_TOWARD_CAMERA);
   const toeRow = FOOT_DEPTH * TOE_ROW;
   const inner = -outward;
@@ -563,57 +511,58 @@ function drawFootHeadOn(ctx: Ctx, flesh: Ramp, outward: number, accents: FootAcc
   const heelY = FOOT_DEPTH * HEEL_SIDE_DROP;
   const littleToe = pt(toes - inner * f * LITTLE_TOE, sole - toeRow * LITTLE_TOE_RISE);
 
-  const traceFoot = (): void => {
-    ctx.beginPath();
-    ctx.moveTo(inner * a * ANKLE_ROOT_SIDE, -FOOT_DEPTH * ANKLE_ROOT_RISE);
-    ctx.quadraticCurveTo(
+  const traceFootOn = (c: Ctx): void => {
+    c.beginPath();
+    c.moveTo(inner * a * ANKLE_ROOT_SIDE, -FOOT_DEPTH * ANKLE_ROOT_RISE);
+    c.quadraticCurveTo(
       inner * a * MALLEOLUS_BULGE,
       innerMalleolus.y - FOOT_DEPTH * ANKLE_ROOT_RISE * HALF_SHARE,
       innerMalleolus.x,
       innerMalleolus.y,
     );
-    ctx.quadraticCurveTo(inner * a, heelY * HALF_SHARE, inner * a * INNER_HEEL_SIDE, heelY);
-    ctx.quadraticCurveTo(
+    c.quadraticCurveTo(inner * a, heelY * HALF_SHARE, inner * a * INNER_HEEL_SIDE, heelY);
+    c.quadraticCurveTo(
       inner * f * BALL_SWELL,
       heelY,
       toes + inner * f * BALL_SWELL,
       sole - toeRow * BALL_RISE,
     );
-    ctx.quadraticCurveTo(
+    c.quadraticCurveTo(
       toes + inner * f * BIG_TOE_CORNER,
       sole,
       toes + inner * f * BIG_TOE_OUTER,
       sole,
     );
-    ctx.quadraticCurveTo(toes + inner * f * TOE_GAP_AT, sole, toeGap.x, toeGap.y);
+    c.quadraticCurveTo(toes + inner * f * TOE_GAP_AT, sole, toeGap.x, toeGap.y);
     let from = toeGap;
     for (const bump of SMALL_TOE_BUMPS) {
       const tip = pt(toes + inner * f * bump.at, sole - toeRow * bump.rise);
-      ctx.quadraticCurveTo(lerp(from.x, tip.x, HALF_SHARE), sole, tip.x, tip.y);
+      c.quadraticCurveTo(lerp(from.x, tip.x, HALF_SHARE), sole, tip.x, tip.y);
       from = pt(tip.x, sole - toeRow * (bump.rise + SMALL_TOE_DIP));
-      ctx.lineTo(from.x, from.y);
+      c.lineTo(from.x, from.y);
     }
-    ctx.quadraticCurveTo(
+    c.quadraticCurveTo(
       lerp(from.x, littleToe.x, HALF_SHARE),
       sole - toeRow * LITTLE_TOE_RISE * HALF_SHARE,
       littleToe.x,
       littleToe.y,
     );
-    ctx.quadraticCurveTo(
+    c.quadraticCurveTo(
       toes - inner * f * OUTER_EDGE,
       sole - toeRow * OUTER_EDGE_RISE,
       outward * a * OUTER_HEEL_SIDE,
       heelY,
     );
-    ctx.quadraticCurveTo(outward * a, heelY * HALF_SHARE, outerMalleolus.x, outerMalleolus.y);
-    ctx.quadraticCurveTo(
+    c.quadraticCurveTo(outward * a, heelY * HALF_SHARE, outerMalleolus.x, outerMalleolus.y);
+    c.quadraticCurveTo(
       outward * a * MALLEOLUS_BULGE,
       outerMalleolus.y - FOOT_DEPTH * ANKLE_ROOT_RISE * HALF_SHARE,
       outward * a * ANKLE_ROOT_SIDE,
       -FOOT_DEPTH * ANKLE_ROOT_RISE,
     );
-    ctx.closePath();
+    c.closePath();
   };
+  const traceFoot = (): void => traceFootOn(ctx);
 
   shadeForm(
     ctx,
@@ -684,17 +633,17 @@ function drawFootHeadOn(ctx: Ctx, flesh: Ramp, outward: number, accents: FootAcc
     },
   );
 
-  if (accents.pedicure === true) {
-    const nailY = sole - toeRow * HEAD_ON_NAIL_RISE;
-    paintNailGlints(ctx, [
+  const nailY = sole - toeRow * HEAD_ON_NAIL_RISE;
+  paintToes?.(ctx, {
+    nails: [
       pt(toes + inner * f * BIG_TOE_NAIL_AT, nailY),
       ...SMALL_TOE_NAILS_AT.map((at) => pt(toes - inner * f * at, nailY)),
-    ]);
-    paintSparkle(ctx, pt(toes * TOP_LIGHT_AT + inner * f * TOP_LIGHT_INBOARD, sole * TOP_LIGHT_AT));
-  }
-  if (accents.toeRing === true) {
-    paintRing(ctx, pt(toes + inner * f * SECOND_TOE_AT, sole - toeRow * RING_ON_TOE), pt(1, 0));
-  }
+    ],
+    instep: pt(toes * TOP_LIGHT_AT + inner * f * TOP_LIGHT_INBOARD, sole * TOP_LIGHT_AT),
+    secondToe: pt(toes + inner * f * SECOND_TOE_AT, sole - toeRow * RING_ON_TOE),
+    ringAcross: pt(1, 0),
+    trace: traceFootOn,
+  });
 }
 
 /** Head-on, the nails sit low on the toe ends that face the camera. */

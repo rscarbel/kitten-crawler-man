@@ -423,6 +423,57 @@ function wouldBoxIn(
   );
 }
 
+/**
+ * A crawler the rain has to leave a way out for besides the player: where it
+ * stands, the room as it can walk it (with whatever bodies stand in its way
+ * taken out), how far from an impact it keeps, and how many steps it gets to
+ * walk there before the orb lands.
+ */
+export interface OrbRainBystander {
+  readonly tile: TilePos;
+  readonly room: OrbRainRoom;
+  readonly keepoutRadiusTiles: number;
+  readonly stepsBeforeImpact: number;
+}
+
+/**
+ * Whether `bystander` can reach ground outside the keep-out of every one of
+ * `liveWarnings` and `candidate` within its steps. Standing where it is
+ * counts: an orb that falls well clear of it asks nothing of it.
+ *
+ * The walk may not cut through the keep-out of an orb already falling unless
+ * it starts inside it: that orb lands before the new one, and a way out that
+ * runs under it is the way she gets caught by it.
+ */
+function bystanderCanGetClear(
+  bystander: OrbRainBystander,
+  liveWarnings: ReadonlyArray<TilePos>,
+  candidate: TilePos,
+): boolean {
+  const keepsOut = (tile: TilePos, impact: TilePos): boolean =>
+    Math.hypot(tile.col - impact.col, tile.row - impact.row) > bystander.keepoutRadiusTiles;
+  const impacts = [...liveWarnings, candidate];
+  const isClear = (tile: TilePos): boolean => impacts.every((impact) => keepsOut(tile, impact));
+  const barring = liveWarnings.filter((warning) => keepsOut(bystander.tile, warning));
+  const passable = (tile: TilePos): boolean => barring.every((warning) => keepsOut(tile, warning));
+  const visited = new Set<string>([tileKey(bystander.tile)]);
+  let frontier: TilePos[] = [bystander.tile];
+  for (let steps = 0; steps <= bystander.stepsBeforeImpact; steps++) {
+    if (frontier.some(isClear)) return true;
+    const next: TilePos[] = [];
+    for (const tile of frontier) {
+      for (const neighbour of walkableNeighbours(bystander.room, tile)) {
+        const key = tileKey(neighbour);
+        if (visited.has(key) || !passable(neighbour)) continue;
+        visited.add(key);
+        next.push(neighbour);
+      }
+    }
+    frontier = next;
+  }
+  return false;
+}
+
 function withinBlast(tile: TilePos, impact: TilePos): boolean {
   return Math.hypot(tile.col - impact.col, tile.row - impact.row) <= ORB_IMPACT_RADIUS_TILES;
 }
@@ -455,6 +506,7 @@ export class OrbRainPlanner {
     room: OrbRainRoom,
     playerTile: TilePos,
     liveWarnings: ReadonlyArray<TilePos>,
+    bystander: OrbRainBystander | null = null,
   ): TilePos | null {
     if (this.framesUntilNextOrb > 0) {
       this.framesUntilNextOrb--;
@@ -464,7 +516,7 @@ export class OrbRainPlanner {
     // moment a warning resolves, not a further interval later.
     if (liveWarnings.length >= MAX_CONCURRENT_ORB_WARNINGS) return null;
 
-    const target = this.chooseTarget(room, playerTile, liveWarnings);
+    const target = this.chooseTarget(room, playerTile, liveWarnings, bystander);
     if (target === null) return null;
     this.framesUntilNextOrb = this.intervalFrames;
     this.orbsPlanned++;
@@ -476,18 +528,32 @@ export class OrbRainPlanner {
     this.orbsPlanned = 0;
   }
 
+  /**
+   * Every target is also refused when it would leave the bystander nowhere to
+   * get clear to. The player's own rule is about the blast, because the player
+   * reads the circle; the companion steers by a keep-out wider than the blast,
+   * and backed into a pocket with the Lich standing in its mouth she has no
+   * way out of one at all — an orb there is a hit nothing she does can avoid.
+   */
   private chooseTarget(
     room: OrbRainRoom,
     playerTile: TilePos,
     liveWarnings: ReadonlyArray<TilePos>,
+    bystander: OrbRainBystander | null,
   ): TilePos | null {
+    const leavesBystanderAWayOut = (candidate: TilePos): boolean =>
+      bystander === null || bystanderCanGetClear(bystander, liveWarnings, candidate);
     // The player's own tile is a legal target, but not an unconditional one:
     // measured at the blast radius, an orb on the tile they are standing on
     // reaches all four of their orthogonal neighbours. In an open room the
     // diagonals are still clear and it is allowed; in a corridor it would leave
     // them nowhere to step, and there the rule refuses it like any other.
     const aimsAtPlayer = (this.orbsPlanned + 1) % PLAYER_TARGETED_ORB_PERIOD === 0;
-    if (aimsAtPlayer && !wouldBoxIn(room, playerTile, liveWarnings, playerTile)) {
+    if (
+      aimsAtPlayer &&
+      !wouldBoxIn(room, playerTile, liveWarnings, playerTile) &&
+      leavesBystanderAWayOut(playerTile)
+    ) {
       return playerTile;
     }
     for (let attempt = 0; attempt < ORB_PLACEMENT_ATTEMPTS; attempt++) {
@@ -497,6 +563,7 @@ export class OrbRainPlanner {
       };
       if (!room.isWalkable(candidate.col, candidate.row)) continue;
       if (wouldBoxIn(room, playerTile, liveWarnings, candidate)) continue;
+      if (!leavesBystanderAWayOut(candidate)) continue;
       return candidate;
     }
     return null;
@@ -554,12 +621,18 @@ interface SearchNode {
  * and it ends the phase wedged in a pocket with three neighbours where the next
  * orb has nowhere to send it. It survives every hazard on the way there and dies
  * to the first one that finds it.
+ *
+ * `firstStepRank` orders the walker's own neighbours, highest first. A tile
+ * further out is usually reachable through more than one of them, and is
+ * credited to whichever reaches it first, so the rank decides which way the
+ * walker sets off when the destination alone does not.
  */
 export function stepTowardSafety(
   room: OrbRainRoom,
   dangerAt: TileDanger,
   from: TilePos,
   searchRadiusTiles: number = HAZARD_ESCAPE_SEARCH_RADIUS_TILES,
+  firstStepRank: (step: TilePos) => number = () => 0,
 ): TilePos | null {
   const startingDanger = dangerAt(from);
   if (startingDanger <= 0) return null;
@@ -568,7 +641,10 @@ export function stepTowardSafety(
   const visited = new Set<string>([tileKey(from)]);
   let frontier: SearchNode[] = [];
 
-  for (const neighbour of walkableNeighbours(room, from)) {
+  const firstSteps = walkableNeighbours(room, from).sort(
+    (a, b) => firstStepRank(b) - firstStepRank(a),
+  );
+  for (const neighbour of firstSteps) {
     visited.add(tileKey(neighbour));
     frontier.push({ tile: neighbour, firstStep: neighbour, depth: 1 });
   }

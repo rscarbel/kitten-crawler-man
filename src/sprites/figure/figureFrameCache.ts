@@ -96,15 +96,30 @@ const FULL_BAKE_SCALE = 1;
  * population this size statistically touches, held resident for as long as
  * the town scene stays open rather than released and re-baked — measures a
  * consistent ~122 MB across world seeds. A pinned row is exempt from active
- * eviction (see `pinFigureState`), so that 122 MB is not headroom the rest of
- * the cache can borrow under pressure: on top of it sits the active player's
- * own per-figure ceiling (56 MB, `HUMAN_FIGURE_BUDGET_MEGABYTES` in
- * `humanFigure.ts`) so a town visit never leaves Carl's own new gear or
- * actions with nowhere to bake. It stays well under what it replaces — the
- * full sheet set decodes to roughly 807 MB and level 3 alone holds about
- * 370 MB resident.
+ * eviction (see `pinFigureState`), so the rest of the cache cannot borrow it
+ * under pressure.
+ *
+ * The per-figure budgets — the active player's 67 MB
+ * (`HUMAN_FIGURE_BUDGET_MEGABYTES` in `humanFigure.ts`) among them — are
+ * ceilings on what one figure may hold, not residency that sits on top of the
+ * crowd's: adding the two would overstate the need, since a town draws fewer
+ * of his rows than a fight. What sizes this ceiling is the two measured
+ * together: in the plaza with the crowd pinned and Carl carrying the weapon
+ * whose rows take the most room, drawing and stowing it, the cache peaked at
+ * 133.0, 139.9 and 142.5 MB across three runs, with no eviction and no
+ * direct paint. While he carries a weapon his empty-handed figure stays
+ * resident beside the carrying one, but none of its rows is drawn while the
+ * other is, so they are the first a full cache gives up.
+ *
+ * Arriving on level 3 is the tightest moment: behind the loading screen the
+ * town's crowd, the fairies, Carl and Donut — her side views in both facings —
+ * are warmed together. Uncapped that asks for 200.6 MB; stale-row eviction
+ * carries it home with no figure baked or painted on the render path from
+ * 184 MB up, and this ceiling keeps a few megabytes over that. It stays well
+ * under what it replaces — the full sheet set decodes to roughly 807 MB and
+ * level 3 alone holds about 370 MB resident.
  */
-export const CACHE_BUDGET_MEGABYTES = 180;
+export const CACHE_BUDGET_MEGABYTES = 188;
 export const CACHE_BYTE_BUDGET = CACHE_BUDGET_MEGABYTES * BYTES_PER_MEGABYTE;
 
 /**
@@ -323,9 +338,22 @@ const ALPHA_CHANNEL_OFFSET = 3;
 /** Half of a pixel, so a bounding box spans whole pixels rather than their corners. */
 const HALF_PIXEL = 0.5;
 
+/**
+ * A layered frame's front layer: the part of the figure in front of whatever
+ * it holds, cropped to its ink, and where the crop sits in the cell, in the
+ * cell's baked pixels.
+ */
+interface FrontLayerCell {
+  readonly surface: CanvasSurface;
+  readonly x: number;
+  readonly y: number;
+}
+
 /** One animation row's baked cells, keyed by frame index. */
 interface FigureRow {
   cells: Map<number, CanvasSurface>;
+  /** The front layers of the row's layered frames, keyed by frame index. */
+  fronts: Map<number, FrontLayerCell>;
   bytes: number;
   /** The frame this row was last drawn on, so idle rows can be reclaimed. */
   lastFrame: number;
@@ -347,7 +375,27 @@ interface PlacedCell {
   readonly surface: CanvasSurface;
   readonly destWidth: number;
   readonly destHeight: number;
+  /** Destination units per baked cell pixel. */
+  readonly densityRatio: number;
+  readonly front: FrontLayerCell | null;
 }
+
+/**
+ * Where a cell landed on the destination: its top-left and how many
+ * destination units one of the figure's declared cell pixels covers.
+ */
+export interface FigureCellPlacement {
+  readonly x: number;
+  readonly y: number;
+  readonly scale: number;
+}
+
+/**
+ * Draws a held item between a layered cell's two layers, in the destination's
+ * space as the cell was placed in it — inside the cell's own mirroring, so an
+ * item placed at an unmirrored socket mirrors with the figure.
+ */
+export type FigureBetween = (ctx: CanvasRenderingContext2D, place: FigureCellPlacement) => void;
 
 /** Insertion-ordered by last use, so the first entry is the coldest figure. */
 const entries = new Map<FigureId, FigureEntry>();
@@ -478,6 +526,24 @@ function pinKey(figureId: FigureId, state: string): string {
 
 function bakeScaleNow(): number {
   return shouldDownscaleForLowEndDevice() ? LOW_END_BAKE_SCALE : FULL_BAKE_SCALE;
+}
+
+const performanceClock = (): number => performance.now();
+
+/** The clock every bake cost and the frame's bake allowance are measured against. */
+let bakeClock: () => number = performanceClock;
+
+/**
+ * Replaces the clock bake costs are measured with, or restores `performance.now`
+ * given null.
+ *
+ * For gates: the allowance is wall-clock, so on a loaded machine a cell's
+ * measured cost is whatever the scheduler made it, and a pacing claim checked
+ * against real time passes or fails with the load rather than with the code. A
+ * gate's synthetic painter advances its own clock by the cost it declares.
+ */
+export function setFigureBakeClock(clock: (() => number) | null): void {
+  bakeClock = clock ?? performanceClock;
 }
 
 /** Everything the cache is holding: baked cells plus the scratch surfaces. */
@@ -662,7 +728,7 @@ function rowFor(entry: FigureEntry, state: string): FigureRow {
     existing.lastFrame = frameCounter;
     return existing;
   }
-  const row: FigureRow = { cells: new Map(), bytes: 0, lastFrame: frameCounter };
+  const row: FigureRow = { cells: new Map(), fronts: new Map(), bytes: 0, lastFrame: frameCounter };
   entry.rows.set(state, row);
   cachedRows += 1;
   // Published here rather than only once a cell lands: a row the budget then
@@ -846,38 +912,21 @@ function bakeCell(
     if (!admitsGlobally(bytes)) return null;
   }
 
-  const startedAt = performance.now();
+  const startedAt = bakeClock();
   const msBakedBefore = msBakedThisFrame;
-  const supersample = figureBakeDensity(entry.def);
-  const superWidth = entry.cellPixelWidth * supersample;
-  const superHeight = entry.cellPixelHeight * supersample;
-  const cell = allocCanvas(entry.cellPixelWidth, entry.cellPixelHeight);
-  const surface = acquireScratch(superWidth, superHeight);
-  try {
-    paintInto(surfaceContext(surface), entry.def, state, frame, entry.bakeScale * supersample);
-    surfaceContext(cell).drawImage(
-      surface,
-      0,
-      0,
-      superWidth,
-      superHeight,
-      0,
-      0,
-      entry.cellPixelWidth,
-      entry.cellPixelHeight,
-    );
-  } catch (error) {
-    discardInnermostScratch();
-    throw error;
-  } finally {
-    releaseScratch();
-  }
-
+  const layers = entry.def.heldLayers;
+  const baked =
+    layers?.layered(state, frame) === true
+      ? bakeLayeredCell(entry, layers, state, frame)
+      : bakeWholeCell(entry, state, frame);
+  const { cell, front } = baked;
+  const frontBytes = front === null ? 0 : surfaceBytes(front.surface);
   row.cells.set(frame, cell);
-  row.bytes += bytes;
-  entry.bytes += bytes;
-  cachedBytes += bytes;
-  const elapsedMs = performance.now() - startedAt;
+  if (front !== null) row.fronts.set(frame, front);
+  row.bytes += bytes + frontBytes;
+  entry.bytes += bytes + frontBytes;
+  cachedBytes += bytes + frontBytes;
+  const elapsedMs = bakeClock() - startedAt;
   recordBakeCost(entry, elapsedMs);
   recordFigureCacheBakeMs(elapsedMs);
   // Assigned rather than accumulated: a painter that composed another figure
@@ -886,6 +935,168 @@ function bakeCell(
   msBakedThisFrame = msBakedBefore + elapsedMs;
   publishOccupancy();
   return cell;
+}
+
+/** A front-layer pixel whose alpha is at or under this holds no ink, and the crop leaves it out. */
+const FRONT_INK_ALPHA_FLOOR = 0;
+
+/** The ink box of a surface's alpha, in its own pixels, or null for no ink at all. */
+function alphaInkBox(
+  surface: CanvasSurface,
+  width: number,
+  height: number,
+): { left: number; top: number; width: number; height: number } | null {
+  const data = surfaceContext(surface).getImageData(0, 0, width, height).data;
+  let left = width;
+  let top = height;
+  let right = -1;
+  let bottom = -1;
+  for (let y = 0; y < height; y++) {
+    for (let x = 0; x < width; x++) {
+      if (data[(y * width + x) * RGBA_STRIDE + ALPHA_CHANNEL_OFFSET] <= FRONT_INK_ALPHA_FLOOR)
+        continue;
+      if (x < left) left = x;
+      if (x > right) right = x;
+      if (y < top) top = y;
+      if (y > bottom) bottom = y;
+    }
+  }
+  if (right < 0) return null;
+  return { left, top, width: right - left + 1, height: bottom - top + 1 };
+}
+
+let frontScratch: CanvasSurface | null = null;
+
+/**
+ * The cell-sized surface a front layer is read back from. Readable, because
+ * its ink box is measured; kept across bakes, because a fight bakes dozens.
+ */
+function frontScratchOf(width: number, height: number): CanvasSurface {
+  if (frontScratch === null || frontScratch.width < width || frontScratch.height < height) {
+    frontScratch = allocReadableCanvas(width, height);
+  }
+  const ctx = surfaceContext(frontScratch);
+  ctx.setTransform(1, 0, 0, 1, 0, 0);
+  ctx.clearRect(0, 0, frontScratch.width, frontScratch.height);
+  return frontScratch;
+}
+
+interface BakedCell {
+  readonly cell: CanvasSurface;
+  readonly front: FrontLayerCell | null;
+}
+
+/** Paints one ordinary frame into a cell of its own: supersampled, then downsampled into place. */
+function bakeWholeCell(entry: FigureEntry, state: string, frame: number): BakedCell {
+  const supersample = figureBakeDensity(entry.def);
+  const superWidth = entry.cellPixelWidth * supersample;
+  const superHeight = entry.cellPixelHeight * supersample;
+  const cell = allocCanvas(entry.cellPixelWidth, entry.cellPixelHeight);
+  const surface = acquireScratch(superWidth, superHeight);
+  try {
+    paintInto(surfaceContext(surface), entry.def, state, frame, entry.bakeScale * supersample);
+    downsampleInto(cell, surface, entry);
+  } catch (error) {
+    discardInnermostScratch();
+    throw error;
+  } finally {
+    releaseScratch();
+  }
+  return { cell, front: null };
+}
+
+function downsampleInto(target: CanvasSurface, source: CanvasSurface, entry: FigureEntry): void {
+  const supersample = figureBakeDensity(entry.def);
+  surfaceContext(target).drawImage(
+    source,
+    0,
+    0,
+    entry.cellPixelWidth * supersample,
+    entry.cellPixelHeight * supersample,
+    0,
+    0,
+    entry.cellPixelWidth,
+    entry.cellPixelHeight,
+  );
+}
+
+/**
+ * Paints a layered frame in its one pass and keeps both halves: the whole
+ * figure as the cell, and the part in front of the held thing cropped to its
+ * ink.
+ */
+function bakeLayeredCell(
+  entry: FigureEntry,
+  layers: NonNullable<FigureDef['heldLayers']>,
+  state: string,
+  frame: number,
+): BakedCell {
+  const supersample = figureBakeDensity(entry.def);
+  const superWidth = entry.cellPixelWidth * supersample;
+  const superHeight = entry.cellPixelHeight * supersample;
+  const cell = allocCanvas(entry.cellPixelWidth, entry.cellPixelHeight);
+  const back = acquireScratch(superWidth, superHeight);
+  try {
+    const front = acquireScratch(superWidth, superHeight);
+    try {
+      const density = entry.bakeScale * supersample;
+      paintLayersInto(surfaceContext(back), surfaceContext(front), layers, state, frame, density);
+      downsampleInto(cell, back, entry);
+      const readable = frontScratchOf(entry.cellPixelWidth, entry.cellPixelHeight);
+      downsampleInto(readable, front, entry);
+      return { cell, front: croppedFront(readable, entry) };
+    } catch (error) {
+      discardInnermostScratch();
+      throw error;
+    } finally {
+      releaseScratch();
+    }
+  } catch (error) {
+    discardInnermostScratch();
+    throw error;
+  } finally {
+    releaseScratch();
+  }
+}
+
+/** Runs a figure's two-layer painter at `density`, popping the density however it ends. */
+function paintLayersInto(
+  back: CanvasRenderingContext2D,
+  front: CanvasRenderingContext2D,
+  layers: NonNullable<FigureDef['heldLayers']>,
+  state: string,
+  frame: number,
+  density: number,
+): void {
+  back.save();
+  front.save();
+  try {
+    back.scale(density, density);
+    front.scale(density, density);
+    layers.paintLayers(back, front, state, frame);
+  } finally {
+    back.restore();
+    front.restore();
+  }
+}
+
+/** The ink of a cell-sized front layer on its own surface, or null when it has none. */
+function croppedFront(readable: CanvasSurface, entry: FigureEntry): FrontLayerCell | null {
+  const box = alphaInkBox(readable, entry.cellPixelWidth, entry.cellPixelHeight);
+  if (box === null) return null;
+  const crop = allocCanvas(box.width, box.height);
+  surfaceContext(crop).drawImage(
+    readable,
+    box.left,
+    box.top,
+    box.width,
+    box.height,
+    0,
+    0,
+    box.width,
+    box.height,
+  );
+  return { surface: crop, x: box.left, y: box.top };
 }
 
 /**
@@ -1354,6 +1565,11 @@ export function figureResidentBytes(def: FigureDef): number {
   return entries.get(def.id)?.bytes ?? 0;
 }
 
+/** Whether a row of one figure is waiting in the prewarm queue. For gates and dev readouts. */
+export function isFigureStateQueued(def: FigureDef, state: string): boolean {
+  return prewarmQueue.some((pending) => pending.def.id === def.id && pending.state === state);
+}
+
 /** Prewarm requests queued for one figure. For gates and dev readouts. */
 export function figurePrewarmRequests(def: FigureDef): number {
   return prewarmQueue.filter((pending) => pending.def.id === def.id).length;
@@ -1375,6 +1591,26 @@ function warnPrewarmAbandoned(pending: PrewarmRequest): void {
     `[figureFrameCache] gave up prewarming "${pending.def.id}" state "${pending.state}" ${reason}, ` +
       `after ${PREWARM_CAPACITY_RETRIES} frames with no room for it`,
   );
+}
+
+/**
+ * Runs `draw` placed exactly as {@link drawFigureCached} places a cell of
+ * `def` — the same mirroring about the tile — for something drawn with the
+ * figure but not in its cell: a thing resting on him outside his outline.
+ */
+export function withFigureCellPlacement(
+  ctx: CanvasRenderingContext2D,
+  def: FigureDef,
+  x: number,
+  y: number,
+  tileSize: number,
+  opts: DrawSpriteOpts,
+  draw: FigureBetween,
+): void {
+  const scale = tileSize / def.tileScale;
+  withFigurePlacement(ctx, def, x, y, tileSize, scale, opts, (destX, destY) => {
+    draw(ctx, { x: destX, y: destY, scale });
+  });
 }
 
 /**
@@ -1436,7 +1672,13 @@ function directPaint(
   destX: number,
   destY: number,
   scale: number,
+  between?: FigureBetween,
 ): void {
+  const layers = def.heldLayers;
+  if (between !== undefined && layers?.layered(state, frame) === true) {
+    directPaintLayered(ctx, def, layers, state, frame, destX, destY, scale, between);
+    return;
+  }
   recordFigureCacheDirectDraw();
   // A direct paint is the one path that pays a painter's full price every
   // frame it recurs, and nothing else asks for a row that is only ever missed
@@ -1452,6 +1694,45 @@ function directPaint(
     // A pooled surface may be larger than this figure needs, so the source rect
     // is stated rather than left to default to the whole surface.
     ctx.drawImage(surface, 0, 0, width, height, destX, destY, width, height);
+  } catch (error) {
+    discardInnermostScratch();
+    throw error;
+  } finally {
+    releaseScratch();
+  }
+  between?.(ctx, { x: destX, y: destY, scale });
+}
+
+/** {@link directPaint} for a layered frame: both layers painted, the held item drawn between. */
+function directPaintLayered(
+  ctx: CanvasRenderingContext2D,
+  def: FigureDef,
+  layers: NonNullable<FigureDef['heldLayers']>,
+  state: string,
+  frame: number,
+  destX: number,
+  destY: number,
+  scale: number,
+  between: FigureBetween,
+): void {
+  recordFigureCacheDirectDraw();
+  prewarmFigureState(def, state, undefined, true);
+  const width = Math.max(1, Math.ceil(def.frameWidth * scale));
+  const height = Math.max(1, Math.ceil(def.frameHeight * scale));
+  const back = acquireScratch(width, height);
+  try {
+    const front = acquireScratch(width, height);
+    try {
+      paintLayersInto(surfaceContext(back), surfaceContext(front), layers, state, frame, scale);
+      ctx.drawImage(back, 0, 0, width, height, destX, destY, width, height);
+      between(ctx, { x: destX, y: destY, scale });
+      ctx.drawImage(front, 0, 0, width, height, destX, destY, width, height);
+    } catch (error) {
+      discardInnermostScratch();
+      throw error;
+    } finally {
+      releaseScratch();
+    }
   } catch (error) {
     discardInnermostScratch();
     throw error;
@@ -1475,7 +1756,7 @@ function cellFor(def: FigureDef, state: string, frame: number, scale: number): P
   const cached = row.cells.get(frame);
   if (cached !== undefined) {
     recordFigureCacheHit();
-    return placed(entry, cached, scale);
+    return placed(entry, cached, scale, row.fronts.get(frame) ?? null);
   }
   recordFigureCacheMiss();
   if (!fitsBakeAllowance(entry, msBakedThisFrame, FRAME_BAKE_BUDGET_MS)) {
@@ -1488,7 +1769,7 @@ function cellFor(def: FigureDef, state: string, frame: number, scale: number): P
     return null;
   }
   recordFigureCacheBake();
-  return placed(entry, baked, scale);
+  return placed(entry, baked, scale, row.fronts.get(frame) ?? null);
 }
 
 /** The already-baked cell of a row closest to the frame actually wanted. */
@@ -1555,7 +1836,7 @@ function approxCellFor(
   const exact = row?.cells.get(frame);
   if (exact !== undefined) {
     recordFigureCacheHit();
-    return placed(entry, exact, scale);
+    return placed(entry, exact, scale, row?.fronts.get(frame) ?? null);
   }
   recordFigureCacheMiss();
   const standIn = (row !== undefined ? nearestBakedCell(row, frame) : null) ?? anyBakedCell(entry);
@@ -1568,7 +1849,7 @@ function approxCellFor(
   // on speculation, so it is asked for as such — a speculative request for it
   // may be waiting behind a full cache that only an urgent one can make room in.
   prewarmFigureState(def, state, undefined, true);
-  return placed(entry, standIn, scale);
+  return placed(entry, standIn, scale, null);
 }
 
 /**
@@ -1581,13 +1862,43 @@ function approxCellFor(
  * was allocated at puts the surplus back outside the figure, where it is the
  * padding it was meant to be.
  */
-function placed(entry: FigureEntry, surface: CanvasSurface, scale: number): PlacedCell {
+function placed(
+  entry: FigureEntry,
+  surface: CanvasSurface,
+  scale: number,
+  front: FrontLayerCell | null,
+): PlacedCell {
   const densityRatio = scale / entry.bakeScale;
   return {
     surface,
     destWidth: entry.cellPixelWidth * densityRatio,
     destHeight: entry.cellPixelHeight * densityRatio,
+    densityRatio,
+    front,
   };
+}
+
+/** Blits a placed cell, and — around `between` — its front layer. */
+function blitPlaced(
+  ctx: CanvasRenderingContext2D,
+  cell: PlacedCell,
+  destX: number,
+  destY: number,
+  scale: number,
+  between: FigureBetween | undefined,
+): void {
+  ctx.drawImage(cell.surface, destX, destY, cell.destWidth, cell.destHeight);
+  if (between === undefined) return;
+  between(ctx, { x: destX, y: destY, scale });
+  const front = cell.front;
+  if (front === null) return;
+  ctx.drawImage(
+    front.surface,
+    destX + front.x * cell.densityRatio,
+    destY + front.y * cell.densityRatio,
+    front.surface.width * cell.densityRatio,
+    front.surface.height * cell.densityRatio,
+  );
 }
 
 /**
@@ -1606,6 +1917,7 @@ export function drawFigureCached(
   y: number,
   tileSize: number,
   opts: DrawSpriteOpts = {},
+  between?: FigureBetween,
 ): void {
   if (figureFrameCount(def, state) === 0) {
     warnMissingState(def, state);
@@ -1617,10 +1929,10 @@ export function drawFigureCached(
   withFigurePlacement(ctx, def, x, y, tileSize, scale, opts, (destX, destY) => {
     recordInkTop(ctx, def, state, destX, destY, scale);
     if (cell === null) {
-      directPaint(ctx, def, state, clamped, destX, destY, scale);
+      directPaint(ctx, def, state, clamped, destX, destY, scale, between);
       return;
     }
-    ctx.drawImage(cell.surface, destX, destY, cell.destWidth, cell.destHeight);
+    blitPlaced(ctx, cell, destX, destY, scale, between);
   });
 }
 
@@ -1847,9 +2159,9 @@ function measureQueuedRowInk(budgetMs: number): void {
   while (rowInkQueue.length > 0 && msBakedThisFrame < budgetMs) {
     const pending = rowInkQueue[0];
     const { def, state } = pending.row;
-    const startedAt = performance.now();
+    const startedAt = bakeClock();
     const bounds = figureInkBounds(def, state, pending.nextFrame);
-    msBakedThisFrame += performance.now() - startedAt;
+    msBakedThisFrame += bakeClock() - startedAt;
     pending.topCellPx = Math.min(pending.topCellPx, bounds.top);
     pending.nextFrame++;
     if (pending.nextFrame < figureFrameCount(def, state)) continue;
@@ -1945,6 +2257,16 @@ function measureFigureInk(def: FigureDef, state: string, frame: number): FrameIn
   return { centerX, centerY, radius: Math.sqrt(radiusSq), top: minY };
 }
 
+let flushCount = 0;
+
+/**
+ * How many times {@link flushFigureFrameCache} has run. A caller pacing its
+ * own re-asks compares it to see that everything it asked for is gone.
+ */
+export function figureCacheFlushCount(): number {
+  return flushCount;
+}
+
 /**
  * Drops every baked cell and every pending prewarm.
  *
@@ -1954,6 +2276,7 @@ function measureFigureInk(def: FigureDef, state: string, frame: number): FrameIn
  * paid for.
  */
 export function flushFigureFrameCache(): void {
+  flushCount++;
   entries.clear();
   prewarmQueue.length = 0;
   abandonedPrewarms.clear();

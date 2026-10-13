@@ -15,6 +15,7 @@
  *                                     bolt's light flaring in it and in the eyes
  */
 
+import { BARE_CARL_OUTFIT, stillOutfit } from '../garments/human/carlDressing';
 import { type FigureDef, figureStates } from '../figure/figureDef';
 import { type CarlComposeOptions, drawCarlBack, drawCarlFront, drawCarlSide } from './carl/figure';
 import { pt, TWO_PI } from './carl/geometry';
@@ -286,13 +287,13 @@ const DRAW_BY_VIEW: Readonly<
   away: drawCarlBack,
 };
 
-/** No Carl gear: no cloak, no gauntlet, no trollskin band at the collar. */
-const NO_GEAR = {} as const;
+/** Nothing of Carl's own over the rig's base garments: no cloak, no gauntlet, no trollskin band at the collar. */
+const NOTHING_OVER_HIS_BASE = stillOutfit(BARE_CARL_OUTFIT);
 
 function paintCultistFrame(ctx: Ctx, state: string, frame: number): void {
   const row = ROWS.get(state);
   if (row === undefined) return;
-  const pose: CarlPose = { ...row.pose(frame), gear: NO_GEAR };
+  const pose: CarlPose = { ...row.pose(frame), outfit: NOTHING_OVER_HIS_BASE };
   const attachments = cultistAttachments(row.motion(frame));
   // Reset in `finally`: a painter that throws mid-bake must not leave the next
   // figure baked — Carl or a resident — in this one's skin, robe or face.

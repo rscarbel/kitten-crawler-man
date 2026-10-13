@@ -39,12 +39,12 @@ import {
   type BodySide,
   buildSkeleton,
   type CarlPose,
-  type CarlView,
   FULL_UPPER_ARM,
   restingPose,
   setArmAngles,
   VIEWS,
 } from '../carl/rig';
+import { type CardinalView } from '../../facingView';
 import { clamp01, deg, easeInOut, lerp, type Pt } from '../carlArt';
 import { HUMAN_SCALE } from './figureScale';
 import {
@@ -638,7 +638,7 @@ interface SecondaryAnchors {
 
 function measureAnchors(
   base: (phase: number) => CarlPose,
-  view: CarlView,
+  view: CardinalView,
   frames: number,
 ): SecondaryAnchors {
   const skeletons = Array.from({ length: ANCHOR_SAMPLES }, (_unused, i) =>
@@ -956,7 +956,7 @@ const KICK_LIFT_CEILING = 0.45;
 const PROFILE_TRACK: FacingTrack = { swingFlare: 0, kickLift: 1, reachLift: 1 };
 
 /** How the run's feet are laid out in `view`. */
-function runFacingTrack(view: CarlView): FacingTrack {
+function runFacingTrack(view: CardinalView): FacingTrack {
   return view === 'side' ? PROFILE_TRACK : RUN_FACING_TRACK;
 }
 
@@ -1011,7 +1011,7 @@ function placeFacingFoot(
   side: number,
   foot: GaitFoot,
   spread: number,
-  view: CarlView,
+  view: CardinalView,
   track: FacingTrack,
 ): void {
   const depth = foot.ankle.x;
@@ -1422,7 +1422,7 @@ const IDLE_FACING_SPREAD = idleFront(0).rightFoot.x;
 /** The hip height, lean and arm swing of a start or stop frame, blended from standing. */
 function transitionBody(
   pose: CarlPose,
-  view: CarlView,
+  view: CardinalView,
   weight: number,
   runPhase: number,
   extraDrop: number,
@@ -1444,7 +1444,7 @@ function blendAngles(a: ArmAngles, b: ArmAngles, t: number): ArmAngles {
 }
 
 /** The run's arms at `runPhase`, swung by `weight` of their full swing. */
-function runArmsAt(pose: CarlPose, view: CarlView, runPhase: number, weight: number): void {
+function runArmsAt(pose: CarlPose, view: CardinalView, runPhase: number, weight: number): void {
   const swing = legSwing(runPhase);
   const running = (side: number): FacingArm => {
     const forward = side === RIGHT_ARM ? -swing : swing;
@@ -1469,7 +1469,7 @@ function runArmsAt(pose: CarlPose, view: CarlView, runPhase: number, weight: num
 /** Both arms `t` of the way from the idle's hang in `view` to `right` / `left`. */
 function blendArmsFromStanding(
   pose: CarlPose,
-  view: CarlView,
+  view: CardinalView,
   right: FacingArm,
   left: FacingArm,
   t: number,
@@ -1490,21 +1490,21 @@ function blendArmsFromStanding(
 }
 
 /** A pose's arm as it stands, for blending: its angles and the drawn share of its upper arm. */
-function facingArmOf(pose: CarlPose, view: CarlView, side: number): FacingArm {
+function facingArmOf(pose: CarlPose, view: CardinalView, side: number): FacingArm {
   const upperScale =
     (side === RIGHT_ARM ? pose.rightUpperArmScale : pose.leftUpperArmScale) ?? FULL_UPPER_ARM;
   return { angles: armAnglesOf(pose, view, side), upperScale, handDepth: 0 };
 }
 
 /** A pose's arm as joint angles, solving an arm it places by the hand. */
-function armAnglesOf(pose: CarlPose, view: CarlView, side: number): ArmAngles {
+function armAnglesOf(pose: CarlPose, view: CardinalView, side: number): ArmAngles {
   return (
     (side === RIGHT_ARM ? pose.rightArmAngles : pose.leftArmAngles) ??
     solvedArmAngles(pose, view, side)
   );
 }
 
-function standingPose(view: CarlView): CarlPose {
+function standingPose(view: CardinalView): CarlPose {
   if (view === 'side') return idleSide(0);
   return view === 'back' ? idleBack(0) : idleFront(0);
 }
@@ -1517,7 +1517,7 @@ function standingPose(view: CarlView): CarlPose {
  */
 export function placeFoot(
   pose: CarlPose,
-  view: CarlView,
+  view: CardinalView,
   side: BodySide,
   foot: GaitFoot,
   spread: number,
@@ -1531,7 +1531,7 @@ export function placeFoot(
 /** Jacket hem drag, eased in over a start or shed over a stop by the spring's own response. */
 const START_SETTLE_LOOPS_PER_FRAME = RUN_FRAME_PHASE;
 
-export function runStart(frame: number, view: CarlView): CarlPose {
+export function runStart(frame: number, view: CardinalView): CarlPose {
   const step = Math.round(frame);
   const weight = startBlend(step);
   const runPhase = RUN_START_EXIT_PHASE - (RUN_START_STEPS - step) * RUN_FRAME_PHASE;
@@ -1571,7 +1571,7 @@ export function runStart(frame: number, view: CarlView): CarlPose {
  */
 const RUN_START_DRIVE_LEAN = deg(8);
 
-export function runStop(frame: number, view: CarlView): CarlPose {
+export function runStop(frame: number, view: CardinalView): CarlPose {
   const step = Math.round(frame);
   const weight = 1 - step / (RUN_STOP_FRAMES - 1);
   const pose = standingPose(view);
@@ -1637,7 +1637,7 @@ function walkStancePhaseWithRightAnkleAt(ahead: number): number {
  * a little forward edge-on, and level with the other head-on, where the idle
  * stands on the hip's own ground line.
  */
-function idleRightAnkleAhead(view: CarlView): number {
+function idleRightAnkleAhead(view: CardinalView): number {
   return view === 'side' ? IDLE_SIDE_ANKLES.right : 0;
 }
 
@@ -1647,7 +1647,7 @@ function idleRightAnkleAhead(view: CarlView): number {
  * From there the right foot need never move again, and stopping is only the
  * left foot coming down beside it.
  */
-export function walkStopEntryPhase(view: CarlView): number {
+export function walkStopEntryPhase(view: CardinalView): number {
   return walkStancePhaseWithRightAnkleAt(idleRightAnkleAhead(view));
 }
 
@@ -1658,7 +1658,7 @@ export function walkStopEntryPhase(view: CarlView): number {
  * the idle's stance as the start has steps — and the walk carries on from the
  * phase that has the foot there.
  */
-export function walkStartExitPhase(view: CarlView): number {
+export function walkStartExitPhase(view: CardinalView): number {
   const travelled = (WALK_START_FRAMES - 1) * WALK_GROUND_PER_FRAME;
   return walkStancePhaseWithRightAnkleAt(idleRightAnkleAhead(view) - travelled);
 }
@@ -1677,13 +1677,13 @@ const WALK_START_PEEL_PITCH = deg(25);
 const WALK_START_FACING_PEEL_PITCH = deg(12);
 
 /** The walk's pose at `phase` in any view. */
-function walkPose(view: CarlView, phase: number): CarlPose {
+function walkPose(view: CardinalView, phase: number): CarlPose {
   if (view === 'side') return walkSide(phase);
   return walkFacing(phase, view === 'back');
 }
 
 /** Joint angles that draw the same arm a pose's solved skeleton has. */
-function solvedArmAngles(pose: CarlPose, view: CarlView, side: number): ArmAngles {
+function solvedArmAngles(pose: CarlPose, view: CardinalView, side: number): ArmAngles {
   const skeleton = buildSkeleton(pose, VIEWS[view]);
   const chain = side === RIGHT_ARM ? skeleton.rightArm : skeleton.leftArm;
   return anglesThrough(chain.root, chain.joint, chain.end);
@@ -1693,7 +1693,7 @@ function solvedArmAngles(pose: CarlPose, view: CarlView, side: number): ArmAngle
  * A pose `stride` of the way from standing to walking — the body, the arms and
  * the loose parts, everything but the feet, which each bridge places itself.
  */
-function bridgeBody(view: CarlView, walking: CarlPose, stride: number): CarlPose {
+function bridgeBody(view: CardinalView, walking: CarlPose, stride: number): CarlPose {
   const standing = standingPose(view);
   const pose = walkPose(view, 0);
   pose.bob = lerp(standing.bob, walking.bob, stride);
@@ -1723,7 +1723,7 @@ function bridgeBody(view: CarlView, walking: CarlPose, stride: number): CarlPose
 }
 
 /** The idle's own left foot, standing, as a side-on gait foot. */
-function idleLeftFoot(view: CarlView): GaitFoot {
+function idleLeftFoot(view: CardinalView): GaitFoot {
   return standingFoot(view === 'side' ? IDLE_SIDE_ANKLES.left : 0);
 }
 
@@ -1767,7 +1767,7 @@ function settlingHeight(stride: number): number {
  * {@link walkStartExitPhase}; like the run's start it is paced by the ground
  * he covers, one walk frame of it per frame.
  */
-export function walkStart(frame: number, view: CarlView): CarlPose {
+export function walkStart(frame: number, view: CardinalView): CarlPose {
   const step = Math.round(frame);
   const exit = walkStartExitPhase(view);
   const stride = (step + 1) / WALK_START_FRAMES;
@@ -1796,7 +1796,7 @@ export function walkStart(frame: number, view: CarlView): CarlPose {
  * the body settles out of the stride. Its first frame is the walk's own pose at
  * {@link walkStopEntryPhase}, and the idle follows its last.
  */
-export function walkStop(frame: number, view: CarlView): CarlPose {
+export function walkStop(frame: number, view: CardinalView): CarlPose {
   const step = Math.round(frame);
   const entry = walkStopEntryPhase(view);
   const settled = step / WALK_STOP_FRAMES;

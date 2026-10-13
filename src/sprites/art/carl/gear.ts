@@ -1,18 +1,13 @@
 /**
- * The canon gear Carl can be seen wearing: the War Gauntlet of the Exalted
- * Grull on his right wrist, the Nightgaunt Cloak off his shoulders, the
- * trollskin shirt's band at his neckline, the Splatter Skunk toe ring and the
- * shine a pedicure leaves on his feet.
- *
- * What he wears arrives on the pose (`CarlPose.gear`) rather than being read
- * from anywhere, so a cell stays a pure function of its row and frame: each
- * combination of gear is a figure of its own, painted from the same rows with
- * a different `gear` laid on every pose.
+ * Painters for the canon gear Carl can be seen wearing: the War Gauntlet of
+ * the Exalted Grull on his right wrist and the Nightgaunt Cloak off his
+ * shoulders. Each is painted by its garment (`src/sprites/garments/human/`),
+ * which decides from the row being painted whether it is worn and in what
+ * form; these painters only draw what they are told.
  */
 
 import { HALF_PI, mixPt, pt, TWO_PI } from './geometry';
 import { handHalfWidth, handLength, wristAngle } from './limbs';
-import { type FootAccents } from './feet';
 import { shadeForm } from './paint';
 import { type Ramp } from './palette';
 import { NECK_WIDTH, WRIST_WIDTH } from './proportions';
@@ -47,41 +42,6 @@ const SHADOW_FALL_Y = 0.03;
  * - `wisp`: the bracer, the puff a frame later — risen, thinning.
  */
 export type GauntletForm = 'bracer' | 'spiked' | 'smoke' | 'wisp';
-
-/** The gear painted on one pose. An absent field is gear he is not wearing. */
-export interface CarlGear {
-  readonly gauntlet?: GauntletForm;
-  readonly cloak?: boolean;
-  /** The trollskin shirt, which shows only as a dark band above the jacket's collar. */
-  readonly trollskinShirt?: boolean;
-  readonly toeRing?: boolean;
-  readonly pedicure?: boolean;
-  /**
-   * How hard the air of his own travel pushes the cloak back, 0 to 1, in
-   * profile: a spring cannot supply this, because it is a steady drag rather
-   * than an oscillation about the body.
-   */
-  readonly cloakStream?: number;
-}
-
-/**
- * The gear a cast member painted on Carl's rig may wear. Every other field of
- * {@link CarlGear} is a piece of loot only the player owns — the Nightgaunt
- * Cloak, the Grull gauntlet, the toe ring — and a townsperson or club dancer
- * seen in one reads as wearing his gear.
- */
-export type CastGear = Pick<CarlGear, 'trollskinShirt'>;
-
-/**
- * The look a pose with no `gear` is painted in: the trollskin shirt and
- * nothing else. It is the figure every row was authored and reviewed against,
- * so an absent `gear` must not strip the shirt's band from the neckline.
- */
-const DEFAULT_CARL_GEAR: CarlGear = { trollskinShirt: true };
-
-export function gearOf(pose: CarlPose): CarlGear {
-  return pose.gear ?? DEFAULT_CARL_GEAR;
-}
 
 // ── Nightgaunt Cloak ─────────────────────────────────────────────────────────
 
@@ -276,12 +236,12 @@ interface CloakShape {
 }
 
 /** How far the hem hangs off where the body would carry it. */
-function hemLag(pose: CarlPose, view: ViewSpec, gear: CarlGear): Pt {
+function hemLag(pose: CarlPose, view: ViewSpec, stream: number): Pt {
   const lag = pose.jacketHemLag ?? pt(0, 0);
-  const stream = view.profile ? clamp01(gear.cloakStream ?? 0) : 0;
+  const drag = view.profile ? clamp01(stream) : 0;
   return pt(
-    lag.x * CLOAK_LAG_GAIN - stream * STREAM_BACK,
-    lag.y * CLOAK_LAG_GAIN - stream * STREAM_LIFT,
+    lag.x * CLOAK_LAG_GAIN - drag * STREAM_BACK,
+    lag.y * CLOAK_LAG_GAIN - drag * STREAM_LIFT,
   );
 }
 
@@ -319,12 +279,12 @@ function facingCloak(
   skeleton: Skeleton,
   pose: CarlPose,
   view: ViewSpec,
-  gear: CarlGear,
+  stream: number,
 ): CloakShape {
   const sc = skeleton.shoulderCentre;
   const hemY = hemLine(skeleton);
   const hemHalf = FACING_HEM_HALF + pooledLength(skeleton) * POOL_SPREAD;
-  const lag = hemLag(pose, view, gear);
+  const lag = hemLag(pose, view, stream);
   const collarRise = view.showsBack ? BACK_COLLAR_RISE : FRONT_COLLAR_RISE;
   const collarHalf = view.showsBack ? BACK_COLLAR_HALF : FRONT_COLLAR_HALF;
   const top = sc.y - collarRise;
@@ -391,11 +351,11 @@ function profileCloak(
   skeleton: Skeleton,
   pose: CarlPose,
   view: ViewSpec,
-  gear: CarlGear,
+  stream: number,
 ): CloakShape {
   const sc = skeleton.shoulderCentre;
   const hemY = hemLine(skeleton);
-  const lag = hemLag(pose, view, gear);
+  const lag = hemLag(pose, view, stream);
   const collar = pt(sc.x + PROFILE_COLLAR.x, sc.y + PROFILE_COLLAR.y);
   const at = (p: Pt): Pt => lagged(p, collar.y, hemY, lag);
   const backAttach = pt(sc.x + PROFILE_BACK_ATTACH.x, sc.y + PROFILE_BACK_ATTACH.y);
@@ -450,11 +410,11 @@ function cloakShape(
   skeleton: Skeleton,
   pose: CarlPose,
   view: ViewSpec,
-  gear: CarlGear,
+  stream: number,
 ): CloakShape {
   return view.profile
-    ? profileCloak(skeleton, pose, view, gear)
-    : facingCloak(skeleton, pose, view, gear);
+    ? profileCloak(skeleton, pose, view, stream)
+    : facingCloak(skeleton, pose, view, stream);
 }
 
 /**
@@ -644,11 +604,19 @@ function paintHoodInProfile(ctx: Ctx, skeleton: Skeleton): void {
  * tips, hanging from the jacket's shoulders with the pointed-eared hood down
  * at his back. Call it where {@link cloakInFront} says it belongs in the
  * figure's draw order.
+ *
+ * @param stream how hard the air of his own travel pushes it back, 0 to 1,
+ *   in profile: a spring cannot supply this, because it is a steady drag
+ *   rather than an oscillation about the body.
  */
-export function drawCloak(ctx: Ctx, skeleton: Skeleton, pose: CarlPose, view: ViewSpec): void {
-  const gear = gearOf(pose);
-  if (gear.cloak !== true) return;
-  const shape = cloakShape(skeleton, pose, view, gear);
+export function drawCloak(
+  ctx: Ctx,
+  skeleton: Skeleton,
+  pose: CarlPose,
+  view: ViewSpec,
+  stream: number,
+): void {
+  const shape = cloakShape(skeleton, pose, view, stream);
   const inside = !view.showsBack && !view.profile;
   const ramp = inside ? LINING : CLOAK;
   const trace = (): void => shape.trace(ctx);
@@ -928,9 +896,9 @@ export function drawGauntlet(
   view: ViewSpec,
   drawn: BodySide,
   chain: BoneChain,
+  form: GauntletForm,
 ): void {
-  const form = gearOf(pose).gauntlet;
-  if (form === undefined || drawnSide('right', view) !== drawn) return;
+  if (drawnSide('right', view) !== drawn) return;
   const fist = drawn === 'left' ? pose.leftFist : pose.rightFist;
   const shape = (drawn === 'left' ? pose.leftHandShape : pose.rightHandShape) ?? 'relaxed';
   const angle = wristAngle(chain);
@@ -942,12 +910,6 @@ export function drawGauntlet(
   ctx.restore();
 }
 
-/** Whether the gauntlet is going up in smoke on this pose, painted by {@link drawGauntletSmoke}. */
-export function gauntletSmokes(pose: CarlPose): boolean {
-  const form = gearOf(pose).gauntlet;
-  return form === 'smoke' || form === 'wisp';
-}
-
 /**
  * The puff of smoke the steel vanishes in, laid over the finished figure:
  * smoke has no outline of its own and drifts past the silhouette.
@@ -957,9 +919,8 @@ export function drawGauntletSmoke(
   pose: CarlPose,
   view: ViewSpec,
   skeleton: Skeleton,
+  form: Extract<GauntletForm, 'smoke' | 'wisp'>,
 ): void {
-  const form = gearOf(pose).gauntlet;
-  if (form !== 'smoke' && form !== 'wisp') return;
   const wisp = form === 'wisp';
   const chain = gauntletArm(skeleton, view);
   const angle = wristAngle(chain);
@@ -1009,40 +970,30 @@ export function drawGauntletSmoke(
   }
 }
 
-// ── Feet ─────────────────────────────────────────────────────────────────────
-
-/**
- * What the foot on the drawn skeleton's `drawn` side wears: the toe ring is on
- * his right foot only; a pedicure is on both.
- */
-export function footAccents(pose: CarlPose, view: ViewSpec, drawn: BodySide): FootAccents {
-  const gear = gearOf(pose);
-  return {
-    toeRing: gear.toeRing === true && drawnSide('right', view) === drawn,
-    pedicure: gear.pedicure === true,
-  };
-}
-
 // ── Reach ────────────────────────────────────────────────────────────────────
 
 /** The farthest a spike or a puff of smoke stands off the wrist. */
 const GAUNTLET_REACH_RADIUS = 0.36;
 
 /**
- * Figure-space points the gear's ink can reach, for the surface the figure is
- * composed on: the cloak flares and streams well past the skeleton, and ink
- * past that surface is cut off along a straight edge.
+ * Figure-space points the cloak's ink can reach, for the surface the figure
+ * is composed on: it flares and streams well past the skeleton, and ink past
+ * that surface is cut off along a straight edge.
  */
-export function gearReach(skeleton: Skeleton, pose: CarlPose, view: ViewSpec): readonly Pt[] {
-  const gear = gearOf(pose);
-  const points: Pt[] = [];
-  if (gear.cloak === true) points.push(...cloakShape(skeleton, pose, view, gear).extent);
-  if (gear.gauntlet !== undefined) {
-    const wrist = gauntletArm(skeleton, view).end;
-    points.push(
-      pt(wrist.x - GAUNTLET_REACH_RADIUS, wrist.y - GAUNTLET_REACH_RADIUS),
-      pt(wrist.x + GAUNTLET_REACH_RADIUS, wrist.y + GAUNTLET_REACH_RADIUS),
-    );
-  }
-  return points;
+export function cloakReach(
+  skeleton: Skeleton,
+  pose: CarlPose,
+  view: ViewSpec,
+  stream: number,
+): readonly Pt[] {
+  return cloakShape(skeleton, pose, view, stream).extent;
+}
+
+/** Figure-space points a spike or a puff of smoke off the gauntlet can reach. */
+export function gauntletReach(skeleton: Skeleton, view: ViewSpec): readonly Pt[] {
+  const wrist = gauntletArm(skeleton, view).end;
+  return [
+    pt(wrist.x - GAUNTLET_REACH_RADIUS, wrist.y - GAUNTLET_REACH_RADIUS),
+    pt(wrist.x + GAUNTLET_REACH_RADIUS, wrist.y + GAUNTLET_REACH_RADIUS),
+  ];
 }

@@ -21,7 +21,6 @@ import { TILE_SIZE } from '../core/constants';
 import type { Player } from '../Player';
 import { type Pt } from '../sprites/art/carlArt';
 import { eventFrame, type HumanRowName, type ViewRows } from '../sprites/art/humanFigure';
-import { viewForFacing } from '../sprites/humanSprite';
 import { HumanPlayer } from './HumanPlayer';
 
 type GestureFamily = 'shell_cast' | 'drink' | 'grab' | 'chest_open' | 'talk';
@@ -65,7 +64,7 @@ function gestureRow(
 ): { readonly row: HumanRowName; readonly faceX: number; readonly faceY: number } {
   const faceX = face?.x ?? human.facingX;
   const faceY = face?.y ?? human.facingY;
-  return { row: GESTURE_ROWS[family][viewForFacing(faceX, faceY)], faceX, faceY };
+  return { row: human.rowFacing(GESTURE_ROWS[family], faceX, faceY), faceX, faceY };
 }
 
 /** A row's first frame, where a gesture's moment falls when its row names none. */

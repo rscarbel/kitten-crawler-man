@@ -15,7 +15,8 @@
 import type { CarlAttachments } from '../carl/figure';
 import { headAngle } from '../carl/head';
 import { CALF_WIDTH, HEAD_DEPTH, HEAD_RX, HEAD_RY, THIGH_WIDTH } from '../carl/proportions';
-import type { CarlPose, CarlView, Skeleton, ViewSpec } from '../carl/rig';
+import type { CarlPose, Skeleton, ViewSpec } from '../carl/rig';
+import { type CardinalView } from '../../facingView';
 import { torsoFrame, traceGarmentTorso, type TorsoFrame } from '../carl/torso';
 import { mix, rgba, type Pt } from '../carlArt';
 import { drawShoeMud } from './townAccessories';
@@ -399,7 +400,7 @@ const STOOP_SPINE_BEND = 0.22;
 const STOOP_TORSO_PITCH = 0.3;
 const STOOP_CHEST_DROP = -0.025;
 
-export function wendellPosture(pose: CarlPose, view: CarlView): CarlPose {
+export function wendellPosture(pose: CarlPose, view: CardinalView): CarlPose {
   if (view === 'side') return { ...pose, spineBend: (pose.spineBend ?? 0) + STOOP_SPINE_BEND };
   return {
     ...pose,
@@ -409,6 +410,6 @@ export function wendellPosture(pose: CarlPose, view: CarlView): CarlPose {
 }
 
 /** Pasture mud, drawn over the boots once they are painted. */
-export function wendellBootMud(ctx: Ctx, _view: CarlView, pose: CarlPose): void {
+export function wendellBootMud(ctx: Ctx, _view: CardinalView, pose: CarlPose): void {
   drawShoeMud(ctx, pose);
 }

@@ -148,7 +148,7 @@ export class CombatKit {
       smushFx: this.smushFx,
       meleeFx: this.meleeFx,
       missileFx: this.missileFx,
-      taranis: this.taranis,
+      weaponProcs: { taranisStorm: this.taranis },
       hitLanded: false,
     };
   }

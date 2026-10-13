@@ -1,37 +1,55 @@
 ---
 name: add-item
-description: Add a new item to Kitten Crawler Man — definition, icon, hotbar use behavior, equipment, loot drops, shop stock. Use when creating consumables, armor, quest items, or changing inventory/loot/shop behavior.
+description: Add a new item to Kitten Crawler Man — definition, icon, hotbar use behavior, equipment, loot drops, shop stock. Use when creating consumables, armor, weapons, tools, quest items, or changing inventory/equipment/loot/shop behavior. How an item looks on Carl or Donut is add-gear.
 ---
 
 # Add an Item
 
-Master registry: `src/core/ItemDefs.ts`. Items are ids in the `ItemId` union with an entry in `ITEM_DEF: Record<ItemId, Omit<InventoryItem, 'quantity'>>`.
+Master registry: `src/core/ItemDefs.ts`. Items are ids in the `ItemId` union with an entry in `ITEM_DEF: Record<ItemId, ItemDef>`. Bag and hotbar slots hold spread copies of a def plus `quantity` (`InventoryItem`); anything that must be current — `category`, `wearer`, `look`, `weapon` — is read off `ITEM_DEF`, never off a slot.
 
-## `InventoryItem` shape
+## `ItemDef` shape
 
-`id, name, stackable, canHotlist`, plus optional: `type: 'consumable' | 'armor'`, `equipSlot` (`Head|Torso|Legs|Feet|Hands`), `equipSubSlot` (see `EQUIP_SUBSLOTS`), `description`, `statBonus: { constitution?, strength?, intelligence? }`, `abilityId` (links item → ability, for tomes), `isQuestItem`, `canDrop`, `regenMultiplier`.
+Always: `id, name, category, baseValue, stackable, canHotlist`. Optional on any item: `description`, `statBonus: Partial<Record<StatName, number>>` (`strength`, `intelligence`, `constitution`, `dexterity` — `ALL_STATS` in `src/Player.ts`), `abilityId` (tomes), `skillId` (skill books), `explosivesHandlingLevels`, `drinkable`, `edible`, `menuUseLabel`, `isQuestItem`, `canDrop`, `unsellable`, `lootRecipient`, and the worn-gear effects (`regenMultiplier`, `resistances`, `fairyImmunities`, `damageReflectPct`, `cancelsMomentum`, `skillLevelBonus`, `meleeOnlyStatBonus`, `stunOnHitChance`).
+
+`ItemDef` is a union over what the item is, and the compiler holds each shape:
+
+- **Armour** — `type: 'armor'`, `equipSlot`, `equipSubSlot`, `wearer: 'human' | 'cat' | 'both'` and `look` (required; see below).
+- **Weapon** — `type: 'weapon'`, `equipSlot` / `equipSubSlot` (every weapon today is `Hand` / `Main`), `wearer`, and a `weapon` stat block. No `look`: a weapon looks like its `weapon.heldVisual`.
+- **Tool** — `type: 'tool'` with `tool: { kind, tier }` and `heldVisual` (the look a worker swings). See tools below.
+- **Everything else** — `type: 'consumable'` or none; may not carry `wearer`, `weapon` or `look`.
+
+How anything looks on a crawler — a garment, a held visual, the `look` field — is the `add-gear` skill. Read it before giving an item a look.
 
 ## End-to-end checklist
 
 1. **Define**: add the id to the `ItemId` union and an entry to `ITEM_DEF` in `src/core/ItemDefs.ts`.
 2. **Icon** and **category**: fill in the item's `category` and add its painter to `ITEM_ICONS` (`src/ui/icons/itemIcons.ts`, the registry); typecheck forces both. New painters go in `src/sprites/art/itemIcons/`, painted in a unit square with the helpers in `iconPaint.ts` (`paintIconArt`, `paintForm`, `litFill`, `offsetShade`, `glint`); `npm run render:equipment-icons` shows them at slot size. Widgets draw it through `itemSlot`; code outside the widget kit (loot, reward fly-ins) uses `drawItemIcon` (`src/ui/icons/drawItemIcon.ts`).
 3. **Use behavior** (if activatable): add a branch in `activateHotbarSlot` (`src/systems/kits/hotbarActions.ts`) — the single dispatch hub keyed on `slot.id` / `slot.abilityId`, shared by every scene with a hotbar. An item only one scene can honour goes in that scene's `trySceneSlot` instead. There is **no generic consume-on-use**: call `inventory.removeOne(id)` explicitly, apply the effect, play a sound, and emit an EventBus event if other systems care. Number keys 1–8 route here via `GameplayInputHandler`.
-4. **Equipment** (if armor): set `type: 'armor'`, `equipSlot`, `equipSubSlot`, `statBonus`. Equip/unequip/drop is handled generically by the inventory screen, `MenusKit.resolvePendingInventoryActions` and `EquipmentManager` — no per-item code. Equipment is tracked by ItemId keyed on `"Slot:SubSlot"`.
+4. **Equipment** (armour or a weapon): set `type`, `equipSlot`, `equipSubSlot`, `wearer`, and `look` (armour) or `weapon` (weapons), plus any `statBonus`. Equip/unequip/drop is handled generically by the inventory screen, `MenusKit.resolvePendingInventoryActions` and `EquipmentManager` — no per-item code. Equipment is tracked by ItemId keyed on `"Slot:SubSlot"` (`EQUIP_SUBSLOTS`). The visual half — the garment or held visual and its gates — is `add-gear`.
 5. **Loot** (if dropped by mobs): add to the base drop table in `Mob.rollLootItems` (`src/creatures/Mob.ts`) or override `rollLootItems` in a specific creature (see `Goblin`'s dynamite). `LootSystem` handles ground TTL and proximity/click pickup automatically. Boss drops flow through the `mobKilled` handler in `DungeonScene`.
 6. **Shop** (if purchasable): add a `{ id, label, price, desc }` entry to `SHOP_ITEMS` in `src/systems/ShopSystem.ts`, with the price as a named constant. Buying already guards on coins and inventory space.
 
 ## Food, tools, resources and ground pickups
 
 - **Food.** `edible: true` gives the bag an "Eat" lead option (`leadOptionFor`) and the hotbar an `edible` branch; both call `MenusKit.eatFood`, the one eating path. The rules per food are pure functions in `src/core/foods.ts` (`eatHamburger`, `eatHollowStew`, add yours to `eatFood`) returning an outcome that `MenusKit` turns into sound, toast and bus events. A food that heals like a potion goes through `Player.usePotion` so it shares the potion cooldown; `firstHealingConsumable` is what the companion's auto-heal asks.
-- **Tools.** `type: 'tool'` with `tool: { kind, tier }`, `canDrop: false`, not hotlistable, never equipped or sold, never consumed. Tiers are party state: `PartyTools.grantStarterTools` / `PartyTools.upgrade` (`src/core/PartyTools.ts`) swap the item **in place, in the same slot**, in both crawlers' inventories. A tool's extra bag actions (Summon Thrall) come through `InventoryActions.extraContextOptions` (`src/ui/screens/inventory/InventoryActions.ts`, on `MenusKit.inventoryActions`), not hard-coded in the inventory screen.
+- **Tools.** `type: 'tool'` with `tool: { kind, tier }`, `canDrop: false`, not hotlistable, never equipped or sold, never consumed. Tiers are party state: `PartyTools.grantStarterTools` / `PartyTools.upgrade` (`src/core/PartyTools.ts`) swap the item **in place, in the same slot**, in both crawlers' inventories. Each tier's item (and Merrit's `quest_scythe`) names the `heldVisual` it is swung with, resolved by `workingToolHeldVisual`; `npm run verify:held-visuals` fails a tool item without one. A tool's extra bag actions (Summon Thrall) come through `InventoryActions.extraContextOptions` (`src/ui/screens/inventory/InventoryActions.ts`, on `MenusKit.inventoryActions`), not hard-coded in the inventory screen.
 - **Resources** (`wood`, `stone`, `wood_board`, `rope`) go into the gathering crawler's own bag; every spend counts both bags through `src/core/partyResources.ts` (`partyCount`, `canAfford`, `spend`, `applyDiscount`), taking from the active crawler first.
 - **Ground pickups.** An item that should lie visibly on the ground and be collected all at once with Space is a `GroundPickupKind` in `src/systems/GroundPickupSystem.ts`, mapped to its `ItemId` in `PICKUP_ITEM` and spawned with `groundPickups.spawn(kind, cx, cy, count)` (on `DestructionKit`). It checks `hasRoomFor` before picking up and leaves what does not fit.
+
+## Equipment: wearers, held slots and weapons
+
+- **Wearer.** `wearer` is required on armour and weapons and says who may equip it; `EQUIP_SLOT_WEARER` says which crawler has each section at all, and `EquipmentManager.canEquip` checks both (`wearerAllows`). It also routes `!give` and reward splits: a reward split hands a one-crawler item to that crawler, and `lootRecipient` names the crawler for a signature drop either could wear (the Sepsis Whore crown, `wearer: 'both'`, goes to Donut).
+- **Look.** Every armour item declares `look`: a garment per crawler it allows (`{ kind: 'garment', garment }`, or `{ human, cat }` for `'both'`), or `{ kind: 'none', reason }` where nothing can read at the tile (`RING_LOOK`, `UNDRAWN_ON_DONUT`). Never leave gear silently invisible. Details in `add-gear`.
+- **Held slots.** `Hand` (`Main`, `Off`) is Carl's and `Mouth` (`Held`) is Donut's (`MAIN_HAND_KEY`, `MOUTH_HELD_KEY`); the other sections are worn. The inventory doll shows "In Hand" for Carl and "In Mouth" for Donut (`dollSectionsFor`).
+- **Weapon stat block** (`src/core/weapons.ts`): `MeleeWeaponStats` — `delivery: 'melee'`, `strike: 'blade' | 'blunt'`, `damageMultiplier` (times his bare-arm blow), `reachTiles` (`HUMAN_ARM_REACH_TILES` for arm's length), `heldVisual`, optional `onStrike` proc — or `SlingWeaponStats` (`delivery: 'sling'`, `heldVisual`). Every melee weapon swings through `strikeWithWeapon` in `CombatSystem.ts`; a special effect is a proc registered in `CombatKit`'s `weaponProcs` (`add-gear` has the steps). `weaponStatsOf(id)` reads the block. Never tune the existing numbers.
+- **Draw and stow.** A weapon in the hotbar is drawn rather than spent: `activateHotbarSlot` sends any item with a stat block to `HumanPlayer.toggleWeaponDrawn` (equipping it in `Hand:Main` first), which plays the weapon's draw or stow rows and emits `weaponHolstered`; a refusal buzzes. Equipping from the doll leaves it stowed. Read what he holds through `mainHandWeaponId`, `drawnWeaponId`, `drawnWeapon`, `drawnMeleeWeapon` and `hasSlingDrawn` — never by checking item ids.
+- **Saves.** `PlayerSnapshot` stores equipped entries as `[key, id]` pairs plus `weaponDrawn`. On load every bag and hotbar slot is rebuilt from the current `ITEM_DEF` keeping only its quantity (`restoredSlot`), and `EquipmentManager.replaceAll` drops a key naming no sub-slot, a section the crawler lacks, an item it may not wear and a duplicate. Changing what a save means — moving an item to another slot family, renaming a sub-slot whose items must survive, storing a new field — bumps `PLAYER_SNAPSHOT_VERSION` and migrates the old shape in `restorePlayer` (v3 `wieldedWeaponId` becomes a `Hand:Main` entry plus drawn); add the case to `npm run verify:player-snapshot`.
 
 ## Box tiers, fairy rings and testing
 
 - **Box tiers** run `Bronze`, `Silver`, `Gold`, `Platinum`, `Legendary`, `Celestial` (`BOX_TIERS` in `src/core/AchievementManager.ts`); Platinum sits between Gold and Legendary and has its own `lootTierColor` in `canvasChrome.ts`. Each tier carries default contents for every `BoxCategory`, so a new tier or category fills in the whole table.
 - **Fairy immunity.** `fairyImmunities: FairyElement[]` (`'ice' | 'fire'`) on an item def makes its wearer immune to that fairy magic while equipped (`EquipmentManager.hasFairyImmunity`). It is checked at each fairy damage site through `isImmuneToFairyElement` (`src/core/fairyImmunity.ts`), usually via `FairyImmunityFeedback.blocks` (`src/systems/fairyImmunityFeedback.ts`), which also shows "IMMUNE" — never in `Player.applyStatus` or `takeDamage`, since a fireball's burn carries no applier and every non-fairy ice or fire must still land. A new fairy element source must ask it too.
-- **Testing.** The `!give <item_id>` chat cheat (`ChatKit.giveItem`) puts one of any item in the active crawler's bag, or the wearer's when the def sets `wearer`.
+- **Testing.** The `!give <item_id> [quantity]` chat cheat (`ChatKit.giveItem`) puts any item (one by default) in the active crawler's bag, or the wearer's when the def sets `wearer`; non-stackable copies each take a slot.
 
 ## Storage mechanics (usually no changes needed)
 

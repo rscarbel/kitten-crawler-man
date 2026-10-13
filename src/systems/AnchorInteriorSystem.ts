@@ -40,7 +40,6 @@ import {
 import { findNearbyWalkableTile } from '../map/findWalkableTile';
 import { HumanPlayer } from '../creatures/HumanPlayer';
 import { REPAIR_ROWS } from '../sprites/art/humanFigure';
-import { viewForFacing } from '../sprites/humanSprite';
 import { distinctSpawnTiles, inPlainViewOnTheWayIn } from './interiorHostiles';
 import { ShrineVermin } from '../creatures/ShrineVermin';
 import { applySpawnDifficulty } from '../core/difficultyProfiles';
@@ -512,7 +511,7 @@ export class AnchorInteriorSystem {
     const distance = Math.hypot(toX, toY);
     const faceX = distance > 0 ? toX / distance : human.facingX;
     const faceY = distance > 0 ? toY / distance : human.facingY;
-    human.playAction(REPAIR_ROWS[viewForFacing(faceX, faceY)], { faceX, faceY });
+    human.playAction(human.rowFacing(REPAIR_ROWS, faceX, faceY), { faceX, faceY });
   }
 
   /** The `R` press. Returns true when a mend actually happened. */

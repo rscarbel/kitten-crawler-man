@@ -1738,6 +1738,23 @@ function hairPitchScale(lift: number): number {
 }
 
 /**
+ * Where a point at head-local height `y` on his hair is painted head-on once
+ * the head is pitched by `lift` (`CarlPose.chinLift`): the crop squashed about
+ * its top, the whole head risen on the neck. For anything worn on the hair.
+ */
+export function pitchedHairY(y: number, lift: number): number {
+  const rise = Math.max(0, lift) * HEAD_PITCH_RISE;
+  return HAIR_PITCH_PIVOT_Y + (y - HAIR_PITCH_PIVOT_Y) * hairPitchScale(lift) - rise;
+}
+
+/** Traces the skull's silhouette as the view paints it, in head-local units. */
+export function traceSkull(ctx: Ctx, view: ViewSpec): void {
+  if (view.showsBack) traceSkullBack(ctx);
+  else if (view.profile) traceSkullProfile(ctx);
+  else traceSkullFacing(ctx);
+}
+
+/**
  * The jaw's underside below the pitched chin, down to the skull's own
  * silhouette. Nothing is painted for a level or tucked head: tucked, the chin
  * sinks toward the neck and the jaw's underside turns away.
@@ -1782,14 +1799,26 @@ const PROFILE_BROW_X = 0.74;
 /** Edge-on the face points +X, so the outer corner of the eye and the brow's outer end point back. */
 const PROFILE_OUTWARD = -1;
 
+/** What of his head a hat may leave unpainted: false hides the hair under it. */
+export interface HeadOptions {
+  readonly hair: boolean;
+}
+
+const WHOLE_HEAD: HeadOptions = { hair: true };
+
 /** Draw the head in head-local space: origin at its centre, the face toward +X edge-on. */
-export function drawHead(ctx: Ctx, pose: CarlPose, view: ViewSpec): void {
+export function drawHead(
+  ctx: Ctx,
+  pose: CarlPose,
+  view: ViewSpec,
+  options: HeadOptions = WHOLE_HEAD,
+): void {
   const profile = view.profile;
   const lift = pose.chinLift ?? 0;
   ctx.save();
   // A head tipped back rides up on the neck as it turns, as well as turning.
   if (!profile && !view.showsBack) ctx.translate(0, -Math.max(0, lift) * HEAD_PITCH_RISE);
-  paintHead(ctx, pose, view, lift);
+  paintHead(ctx, pose, view, lift, options);
   ctx.restore();
 }
 
@@ -1809,7 +1838,13 @@ export function mouthInHeadFrame(pose: CarlPose, view: ViewSpec): Pt | null {
   return pt(0, MOUTH_Y - Math.max(0, pose.chinLift ?? 0) * HEAD_PITCH_RISE);
 }
 
-function paintHead(ctx: Ctx, pose: CarlPose, view: ViewSpec, lift: number): void {
+function paintHead(
+  ctx: Ctx,
+  pose: CarlPose,
+  view: ViewSpec,
+  lift: number,
+  options: HeadOptions,
+): void {
   const profile = view.profile;
   // The lag is given in figure space; the head is painted in its own rotated frame.
   const hairLag = rotate(pose.hairTuftLag ?? NO_LAG, -headAngle(pose));
@@ -1840,7 +1875,7 @@ function paintHead(ctx: Ctx, pose: CarlPose, view: ViewSpec, lift: number): void
           softness: SKULL_SOFTNESS,
         }),
     );
-    drawHair(ctx, false, pose.hairFlow, true, hairLag);
+    if (options.hair) drawHair(ctx, false, pose.hairFlow, true, hairLag);
     return;
   }
 
@@ -1931,7 +1966,7 @@ function paintHead(ctx: Ctx, pose: CarlPose, view: ViewSpec, lift: number): void
     ctx.scale(1, hairPitchScale(lift));
     ctx.translate(0, -HAIR_PITCH_PIVOT_Y);
   }
-  drawHair(ctx, profile, pose.hairFlow, false, hairLag);
+  if (options.hair) drawHair(ctx, profile, pose.hairFlow, false, hairLag);
   ctx.restore();
   if (profile) {
     // After the hair: a short cut is trimmed round the top of the ear, so the

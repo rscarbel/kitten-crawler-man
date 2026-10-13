@@ -1,6 +1,17 @@
 import type { EventBus } from '../core/EventBus';
 import type { Mob } from '../creatures/Mob';
 import { DISH_DEF } from '../systems/bopcaDialog';
+import { weaponStatsOf } from '../core/ItemDefs';
+import {
+  equipCue,
+  gearHandledBy,
+  heldWeightOf,
+  hitCue,
+  holsterCue,
+  holsterKindOf,
+  swingCue,
+} from './gearSoundCues';
+import { garmentMaterialOf } from '../sprites/garments/itemLooks';
 import { settings } from '../core/Settings';
 import type { SoundId } from './sounds';
 import { NON_STREAMING_SOUND_IDS, SOUND_MANIFEST, STREAMING_SOUND_IDS } from './sounds';
@@ -1433,6 +1444,24 @@ export class AudioManager {
 
     bus.on('taranisChain', () => {
       this.playRandomFresh(TARANIS_CHAIN_TAKES);
+    });
+
+    bus.on('weaponSwing', (e) => {
+      this.playRandomFresh(swingCue(heldWeightOf(e.weaponId)));
+      const weapon = weaponStatsOf(e.weaponId);
+      if (e.hit && weapon?.delivery === 'melee') this.playRandomFresh(hitCue(weapon.strike));
+    });
+
+    bus.on('weaponHolstered', (e) => {
+      const weapon = weaponStatsOf(e.weaponId);
+      if (weapon !== null) this.playRandomFresh(holsterCue(e.motion, holsterKindOf(weapon)));
+    });
+
+    bus.on('equipmentChanged', (e) => {
+      const handledItemId = gearHandledBy(e);
+      if (handledItemId !== null) {
+        this.playRandomFresh(equipCue(garmentMaterialOf(handledItemId, e.crawler)));
+      }
     });
 
     bus.on('catMeleeSwing', () => {

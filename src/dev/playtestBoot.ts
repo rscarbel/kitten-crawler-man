@@ -74,7 +74,6 @@ function applyLoadout(player: Player, loadout: PlaytestLoadout): void {
   }
 
   // Equipment first: stat getters — and therefore max HP — read from it.
-  player.onEquipmentChanged();
   for (const stat of ALL_STATS) {
     const value = loadout.baseStats[stat];
     if (value !== undefined) player.setBaseStat(stat, value);

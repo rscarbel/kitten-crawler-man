@@ -42,11 +42,17 @@ import { drawSkillBookIcon } from './skillBookIcon';
 import { drawSoulCrystalIcon } from './soulCrystalIcon';
 import { drawToolIcon, type ToolIconId } from '../../sprites/art/itemIcons/toolIcons';
 import { drawTaranisSwordIcon } from '../../sprites/art/itemIcons/taranisSwordIcon';
+import { drawHeldVisualIcon } from '../../sprites/art/itemIcons/heldVisualIcon';
+import type { HeldVisualId } from '../../sprites/held/heldVisualIds';
 import { drawExplosivesTomeIcon, drawMagicMissileTomeIcon, drawSmushTomeIcon } from './tomeIcons';
 
 /** Paints one item's picture into `rect`. Square art is centred in a non-square rect. */
 export type ItemIconPainter = (ctx: CanvasRenderingContext2D, rect: Rect) => void;
 
+const heldVisual =
+  (id: HeldVisualId): ItemIconPainter =>
+  (ctx, rect) =>
+    drawHeldVisualIcon(ctx, rect, id);
 const skillBook =
   (skillId: SkillId): ItemIconPainter =>
   (ctx, rect) =>
@@ -122,6 +128,9 @@ export const ITEM_ICONS: Record<ItemId, ItemIconPainter> = {
   grull_war_gauntlet: enchantedGear('grull_war_gauntlet'),
   slingshot: enchantedGear('slingshot'),
   fury_of_taranis: drawTaranisSwordIcon,
+  dev_plain_sword: heldVisual('plain_arming_sword'),
+  dev_spiked_club: heldVisual('spiked_club'),
+  dev_felling_axe: heldVisual('felling_axe'),
 
   magic_missile_tome: drawMagicMissileTomeIcon,
   smush_tome: drawSmushTomeIcon,

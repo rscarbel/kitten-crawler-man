@@ -765,6 +765,7 @@ export abstract class Player implements AboveDarknessDrawer {
     this.skills = new SkillManager(config.crawlerKind ?? null);
     this.craftSkills = new CraftSkills(config.crawlerKind ?? null);
     this.inventory = new Inventory(config.crawlerKind ?? null);
+    this.inventory.equipment.onChange(() => this.onEquipmentChanged());
     this._maxHpOverride = config.maxHp ?? null;
     this.hp = this.maxHp;
     this._maxHpAtLastSync = this.maxHp;
@@ -900,16 +901,18 @@ export abstract class Player implements AboveDarknessDrawer {
   }
 
   /**
-   * Called after this player's equipment changed. Stat totals recompute
-   * themselves; only current HP has to be reconciled with the new maximum.
+   * Runs on every change to this player's equipment, through its
+   * `EquipmentManager`'s change listener — never called directly. Stat totals
+   * recompute themselves; only current HP has to be reconciled with the new
+   * maximum.
    */
-  onEquipmentChanged(): void {
+  protected onEquipmentChanged(): void {
     this.syncHpToMaxHp();
   }
 
   /**
    * Called after this player's inventory contents changed by any path other
-   * than the dedicated wield/unwield toggle — a drop, an AI-driven removal, a
+   * than drawing or stowing a weapon — a drop, an AI-driven removal, a
    * tutorial reset. No-op by default; overridden where a player can hold
    * something in hand that a bag/hotbar mutation can silently empty out from
    * under it.

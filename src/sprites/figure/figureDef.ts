@@ -43,6 +43,32 @@ export function figureStates(frameCounts: Readonly<Record<string, number>>): Fig
 type FigurePainter = (ctx: CanvasRenderingContext2D, state: string, frame: number) => void;
 
 /**
+ * A figure whose cells can hold something between two layers of its body: a
+ * weapon or a tool chosen at runtime, drawn after the body behind it and
+ * before the fingers and limbs in front of it.
+ *
+ * A layered frame's main cell is the whole figure — everything behind the
+ * held thing and everything in front of it — and its front layer is the part
+ * of that picture in front of it, cropped to its ink. Drawn in order, back
+ * then held thing then front, the held thing sits inside the figure.
+ */
+export interface FigureHeldLayers {
+  /** Whether a frame bakes a front layer. Deterministic in `(state, frame)`, like the painter. */
+  readonly layered: (state: string, frame: number) => boolean;
+  /**
+   * Paints a layered frame in one pass: the whole figure into `back` and the
+   * part in front of the held thing into `front`, both in the cell's own
+   * pixels, under the same contract as `paintFrame`.
+   */
+  readonly paintLayers: (
+    back: CanvasRenderingContext2D,
+    front: CanvasRenderingContext2D,
+    state: string,
+    frame: number,
+  ) => void;
+}
+
+/**
  * A stable identity for a figure, shared by every instance of it. Appearance is
  * fixed per figure — every goblin swinging an axe is the same pixels — so the
  * cache keys on this rather than on the mob object.
@@ -84,6 +110,8 @@ export interface FigureDef {
    * half-pixel smears.
    */
   readonly skipSupersample?: boolean;
+  /** Present on a figure whose cells can hold an item between two layers. */
+  readonly heldLayers?: FigureHeldLayers;
 }
 
 /**

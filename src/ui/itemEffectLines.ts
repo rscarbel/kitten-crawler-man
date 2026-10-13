@@ -1,5 +1,10 @@
 import { ALL_STATS, POTION_HEAL_FRACTION, type StatName } from '../Player';
-import type { FairyElement, InventoryItem, ResistanceType } from '../core/ItemDefs';
+import {
+  wearerOf,
+  type FairyElement,
+  type InventoryItem,
+  type ResistanceType,
+} from '../core/ItemDefs';
 import { getSkillDef, SKILL_IDS } from '../core/SkillManager';
 import {
   HAMBURGER_FED_DURATION_SECONDS,
@@ -36,7 +41,7 @@ export function fairyImmunityLine(elements: readonly FairyElement[]): string | n
   return `Immune to ${named} fairies`;
 }
 
-const WEARER_LABELS = { cat: 'Cat only', human: 'Human only' } as const;
+const WEARER_LABELS = { cat: 'Cat only', human: 'Human only', both: null } as const;
 
 /** Rounded to whole percent because a tooltip is read, not calculated against. */
 export function asPercent(fraction: number): number {
@@ -102,7 +107,9 @@ export function describeItemEffects(item: InventoryItem): string[] {
     lines.push(`${asPercent(regen - 1) >= 0 ? '+' : ''}${asPercent(regen - 1)}% HP regen`);
   }
 
-  if (item.wearer) lines.push(WEARER_LABELS[item.wearer]);
+  const wearer = wearerOf(item.id);
+  const wearerLabel = wearer === undefined ? null : WEARER_LABELS[wearer];
+  if (wearerLabel !== null) lines.push(wearerLabel);
 
   const tool = item.tool;
   if (tool) {

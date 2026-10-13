@@ -108,14 +108,16 @@ import {
   WAVE_LULL_SECONDS,
 } from '../src/systems/briarHollow/VillageAssaultSystem.js';
 import {
-  ALWAYS_DRAWN_ROWS,
+  alwaysDrawnRows,
   HUMAN_ATTACK_ROWS,
-  OPENING_STRIKE_ROWS,
+  motionSetOfRow,
+  openingStrikeRows,
   activeHumanFigure,
   strikeWindUpFrames,
 } from '../src/sprites/humanSprite.js';
 import { HUMAN_ROW_TABLE } from '../src/sprites/art/humanFigure.js';
 import { CAT_FIGURE } from '../src/sprites/art/catFigure.js';
+import { RESIDENT_VIEW_ROWS } from '../src/sprites/catSprite.js';
 import { castRowsFor, ratkinCastFigure } from '../src/sprites/art/ratkinCastFigure.js';
 import { RATKIN_SOLDIER_IDS } from '../src/sprites/art/ratkin/cast.js';
 
@@ -148,21 +150,6 @@ const RATE_PAUSED = 8;
 const ALL_RATES: readonly number[] = [RATE_60_HZ, RATE_120_HZ, RATE_144_HZ, RATE_PAUSED];
 /** Carl's fight is gated in one view, the one his busiest strike family is painted in. */
 const CARL_FIGHT_VIEW = 'side';
-/** Donut's rows the cat sprite keeps warm continuously: standing, walking, swiping and casting. */
-const DONUT_ROWS: readonly string[] = [
-  'idle',
-  'idle_side',
-  'idle_away',
-  'walk',
-  'walk_side',
-  'walk_away',
-  'swipe',
-  'swipe_side',
-  'swipe_away',
-  'cast',
-  'cast_side',
-  'cast_away',
-];
 /** The militia rows a defence is fought in. */
 const SOLDIER_FIGHT_ROLES: ReadonlySet<string> = new Set(['walk', 'idle', 'strike', 'hurt']);
 /** A display density the cache treats as low-end, and bakes at half density for. */
@@ -513,10 +500,13 @@ function waveRows(wave: AssaultWave): Row[] {
 function carlRows(): Row[] {
   const carl = activeHumanFigure();
   const whole = new Set([
-    ...ALWAYS_DRAWN_ROWS,
-    ...HUMAN_ATTACK_ROWS.filter((name) => HUMAN_ROW_TABLE[name].view === CARL_FIGHT_VIEW),
+    ...alwaysDrawnRows('unarmed'),
+    ...HUMAN_ATTACK_ROWS.filter((name) => {
+      const meta = HUMAN_ROW_TABLE[name];
+      return meta.view === CARL_FIGHT_VIEW && motionSetOfRow(meta) === 'unarmed';
+    }),
   ]);
-  const windUps = OPENING_STRIKE_ROWS.filter((name) => !whole.has(name));
+  const windUps = openingStrikeRows('unarmed').filter((name) => !whole.has(name));
   return [
     ...[...whole].map((name) => row(carl, name)),
     ...windUps.map((name) => row(carl, name, strikeWindUpFrames(HUMAN_ROW_TABLE[name]))),
@@ -524,7 +514,7 @@ function carlRows(): Row[] {
 }
 
 function crawlerRows(): Row[] {
-  const donut = DONUT_ROWS.map((state) => row(CAT_FIGURE, state));
+  const donut = RESIDENT_VIEW_ROWS.map((state) => row(CAT_FIGURE, state));
   const soldiers = RATKIN_SOLDIER_IDS.flatMap((id) =>
     castRowsFor(id)
       .filter((spec) => SOLDIER_FIGHT_ROLES.has(spec.role))

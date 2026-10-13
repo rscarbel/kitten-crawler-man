@@ -1,16 +1,18 @@
 /**
- * The Fury of Taranis's swing: the blade's cut, the slicing wave of lightning
- * it throws along the blow, and the chain lightning every cut enemy throws on.
+ * The Fury of Taranis's storm, the proc its swing carries: the slicing wave of
+ * lightning the blade throws along the blow, and the chain lightning every cut
+ * enemy throws on.
  *
  * One swing strikes an enemy at most once, whether the blade, the wave or a
  * chain reaches it first: each swing carries the set of everything it has
  * struck from the blade's cut to the wave's last tick. Chains do not chain —
  * only an enemy cut by the blade or the wave throws one.
  *
- * Owned by `CombatKit`: `CombatSystem.resolvePlayerAttacks` hands the swing
- * here on the strike's peak tick, and the kit ticks the waves straight after,
- * so a wave's cuts are resolved in the same phase as every other blow and
- * paid out by the same kill resolution.
+ * Owned by `CombatKit`, which registers it as the `taranisStorm` proc: the
+ * generic weapon strike in `CombatSystem` lands the blade's cut and hands the
+ * swing here on the strike's peak tick, and the kit ticks the waves straight
+ * after, so a wave's cuts are resolved in the same phase as every other blow
+ * and paid out by the same kill resolution.
  */
 
 import { TILE_SIZE } from '../core/constants';
@@ -20,15 +22,14 @@ import { TARANIS_LIGHTNING } from '../sprites/art/taranisPalette';
 import {
   type CombatContext,
   crawlerMeleeStrikeDamage,
-  landHumanGearProcs,
-  MELEE_POINT_BLANK_RANGE,
+  cutWithWeapon,
+  type WeaponProc,
+  type WeaponSwing,
 } from './CombatSystem';
 import type { DynamicLightSink } from './lighting/dynamicLights';
 
 const HALF_TILE = TILE_SIZE / 2;
 
-/** Every cut from the sword, blade or wave, lands this many times the blow a fist would. */
-export const TARANIS_DAMAGE_MULTIPLIER = 2;
 /** How far the wave runs from his centre before it spends itself. */
 export const TARANIS_WAVE_REACH_TILES = 3;
 /** How far either side of its line the wave catches a body, measured to the body's centre. */
@@ -73,6 +74,8 @@ interface Wave {
   age: number;
   /** Everything this swing has struck, shared with its blade cut and chains. */
   readonly struck: Set<Mob>;
+  /** The sword's multiple of a blow, which every cut the wave makes lands. */
+  readonly damageMultiplier: number;
 }
 
 interface WorldPoint {
@@ -84,66 +87,33 @@ function centreOf(entity: WorldPoint): WorldPoint {
   return { x: entity.x + HALF_TILE, y: entity.y + HALF_TILE };
 }
 
-export class TaranisStrikeSystem {
+export class TaranisStrikeSystem implements WeaponProc {
   private waves: Wave[] = [];
   private swungThisTick = false;
   private cutThisTick = false;
   private chainedThisTick = false;
 
   /**
-   * Lands the blade's cut on everything in his reach and facing, exactly as a
-   * fist would find it, and sends the wave off along the facing the blow was
-   * thrown with.
+   * The storm the blade's cut throws: the wave sent off along the facing the
+   * blow was thrown with, sharing everything the cut struck, and the chain
+   * lightning each enemy the cut earned on throws.
    */
-  swing(ctx: CombatContext): void {
-    const { human, mobGrid, gameMap } = ctx;
-    const origin = centreOf(human);
-    const facingLength = Math.hypot(human.strikeFacingX, human.strikeFacingY);
-    const dirX = facingLength > 0 ? human.strikeFacingX / facingLength : 1;
-    const dirY = facingLength > 0 ? human.strikeFacingY / facingLength : 0;
-    const range = human.getMeleeRange();
+  onStrike(ctx: CombatContext, swing: WeaponSwing): void {
+    const origin = { x: swing.originX, y: swing.originY };
     const wave: Wave = {
-      originX: origin.x,
-      originY: origin.y,
-      dirX,
-      dirY,
-      reachPx: clearReach(gameMap, origin, dirX, dirY),
+      originX: swing.originX,
+      originY: swing.originY,
+      dirX: swing.dirX,
+      dirY: swing.dirY,
+      reachPx: clearReach(ctx.gameMap, origin, swing.dirX, swing.dirY),
       frontPx: 0,
       age: 0,
-      struck: new Set<Mob>(),
+      struck: swing.struck,
+      damageMultiplier: swing.weapon.damageMultiplier,
     };
     this.waves.push(wave);
-
-    const inArc: Mob[] = [];
-    // Widened by a tile because the grid keys a mob by its origin while the
-    // test measures its centre.
-    for (const mob of mobGrid.queryCircle(origin.x, origin.y, range + TILE_SIZE)) {
-      if (!this.canStrike(mob, wave.struck)) continue;
-      const centre = centreOf(mob);
-      const dx = centre.x - origin.x;
-      const dy = centre.y - origin.y;
-      const dist = Math.hypot(dx, dy);
-      if (dist === 0 || dist > range) continue;
-      const ahead = (dx / dist) * dirX + (dy / dist) * dirY > 0;
-      if (dist > MELEE_POINT_BLANK_RANGE && !ahead) continue;
-      if (!gameMap.hasLineOfSight(origin.x, origin.y, centre.x, centre.y)) continue;
-      inArc.push(mob);
-    }
-    this.landCuts(ctx, wave, inArc);
-    let bladeHit = inArc.length > 0;
-
-    if (!human.zeroDamage) {
-      const propDamage = TARANIS_DAMAGE_MULTIPLIER * human.getBladeDamage();
-      bladeHit = (ctx.destructibles?.tryMeleeHit(human, range, propDamage) ?? false) || bladeHit;
-      bladeHit = (ctx.interiorProps?.tryMeleeHit(human, range, propDamage) ?? false) || bladeHit;
-      bladeHit = (ctx.trees?.tryMeleeHit(human, range, propDamage) ?? false) || bladeHit;
-      bladeHit = (ctx.structures?.tryMeleeHit(human, range) ?? false) || bladeHit;
-    }
-    if (bladeHit) {
-      const contact = human.strikeContactWorldPosition();
-      if (contact !== null) ctx.meleeFx?.spawn(contact.x, contact.y, dirX, dirY);
-    }
-
+    if (swing.cut.length > 0) this.cutThisTick = true;
+    for (const mob of swing.earned) this.throwChains(ctx, mob, wave);
     this.swungThisTick = true;
   }
 
@@ -249,7 +219,7 @@ export class TaranisStrikeSystem {
    */
   private landCuts(ctx: CombatContext, wave: Wave, targets: readonly Mob[]): void {
     for (const mob of targets) wave.struck.add(mob);
-    const chainSources = targets.filter((mob) => this.cut(ctx, mob));
+    const chainSources = targets.filter((mob) => this.cut(ctx, wave, mob));
     for (const mob of chainSources) this.throwChains(ctx, mob, wave);
   }
 
@@ -257,19 +227,11 @@ export class TaranisStrikeSystem {
     return mob.isAlive && !struck.has(mob) && mob.takesPlayerDamage('melee');
   }
 
-  /**
-   * The blade or the wave cutting one enemy, for double a blow. Reports
-   * whether the cut earns chain lightning.
-   */
-  private cut(ctx: CombatContext, mob: Mob): boolean {
-    const { human } = ctx;
-    if (human.zeroDamage) return false;
-    mob.takeDamageFrom(TARANIS_DAMAGE_MULTIPLIER * crawlerMeleeStrikeDamage(human), human, 'melee');
+  /** The wave cutting one enemy. Reports whether the cut earns chain lightning. */
+  private cut(ctx: CombatContext, wave: Wave, mob: Mob): boolean {
+    if (ctx.human.zeroDamage) return false;
     this.cutThisTick = true;
-    if (mob.blowsEarnNothing) return false;
-    ctx.hitLanded = true;
-    landHumanGearProcs(human, mob);
-    return true;
+    return cutWithWeapon(ctx, mob, wave.damageMultiplier);
   }
 
   /**

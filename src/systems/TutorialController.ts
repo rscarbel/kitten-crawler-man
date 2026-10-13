@@ -830,8 +830,6 @@ export class TutorialController {
       player.inventory.actionBar.slots[i] = null;
     }
     player.inventory.equipment.clear();
-    // Stripping the starting boxers shrinks max HP, so current HP has to follow.
-    player.onEquipmentChanged();
     // A slingshot wiped from the slots directly (not via dropItem) would
     // otherwise leave the human still "holding" an item that no longer exists.
     player.onInventoryChanged();

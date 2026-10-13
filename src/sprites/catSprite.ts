@@ -1,13 +1,29 @@
-import { walkFrameIndex, progressFrameIndex, timeFrameIndex } from '../core/SpriteRenderer';
-import { drawFigureCached, prewarmFigureState, releaseFigure } from './figure/figureFrameCache';
+import {
+  MILLISECONDS_PER_SECOND,
+  walkFrameIndex,
+  progressFrameIndex,
+  timeFrameIndex,
+} from '../core/SpriteRenderer';
+import {
+  drawFigureCached,
+  type FigureBetween,
+  prewarmFigureState,
+  releaseFigure,
+} from './figure/figureFrameCache';
+import { catHeldPxPerUnit, catHeldSocketOf, donutSocketsAt } from './art/catSockets';
+import { compositeHeldItem, heldTransformAt } from './held/heldComposite';
+import type { HeldVisualDef } from './held/heldVisualDef';
+import { ResidentRows, type ResidentSpan } from './figure/residentRows';
 import type { FigureDef } from './figure/figureDef';
-import { BARE_CAT, type CatWear } from './art/catArt';
 import { figureFrameCount } from './figure/figureDef';
 import { CAT_SWIPE_FRAMES } from '../core/crawlerFormulas';
 import {
   ACTION_FRAMES,
   BREAK_FRAMES,
-  catFigureWearing,
+  catFigureFor,
+  catRowFacesWest,
+  catRowView,
+  type CatHold,
   DANCE_FRAMES,
   IDLE_FRAMES,
   KO_FRAMES,
@@ -19,6 +35,10 @@ import {
 } from './art/magicMissileFigure';
 import { getMagicMissileVisualTier, type MagicMissileVisualTier } from '../abilities/magicMissile';
 import { missileOpacity, type SplatterCopy } from '../abilities/eyesOfSplatter';
+import { DEFAULT_FACING_SELECTION, type FacingSelection } from './facingView';
+import { catRowViewOf, type CatRowView } from './catViews';
+import { BARE_CAT_OUTFIT } from './garments/cat/catDressing';
+import { sameOutfit, type Outfit } from './garments/outfit';
 
 export interface Missile {
   x: number;
@@ -48,34 +68,63 @@ export interface Missile {
 export type CatState =
   | 'walk'
   | 'walk_side'
+  | 'walk_side_west'
   | 'walk_away'
   | 'idle'
   | 'idle_side'
+  | 'idle_side_west'
   | 'idle_away'
   | 'look_around'
   | 'groom_paw'
   | 'groom_flank'
   | 'swipe'
   | 'swipe_side'
+  | 'swipe_side_west'
   | 'swipe_away'
   | 'cast'
   | 'cast_side'
+  | 'cast_side_west'
   | 'cast_away'
   | 'knocked_out'
-  | 'dance';
-
-/** Which way the sheet's three viewpoints are chosen from a facing vector. */
-export type CatView = 'front' | 'side' | 'away';
+  | 'knocked_out_west'
+  | 'dance'
+  | 'chop'
+  | 'chop_side'
+  | 'chop_side_west'
+  | 'chop_away'
+  | 'mine'
+  | 'mine_side'
+  | 'mine_side_west'
+  | 'mine_away'
+  | 'carry_walk'
+  | 'carry_walk_side'
+  | 'carry_walk_side_west'
+  | 'carry_walk_away'
+  | 'carry_idle'
+  | 'carry_idle_side'
+  | 'carry_idle_side_west'
+  | 'carry_idle_away';
 
 /** Animations that play once and then hand control back to walk/idle. */
-export type CatOneShot = 'swipe' | 'cast' | 'dance' | 'look_around' | 'groom_paw' | 'groom_flank';
+export type CatOneShot =
+  'swipe' | 'cast' | 'dance' | 'look_around' | 'groom_paw' | 'groom_flank' | 'chop' | 'mine';
+
+/** Her work swings: a two-paw chop at wood and a two-paw pick at stone. */
+export type CatWorkSwing = Extract<CatOneShot, 'chop' | 'mine'>;
 
 const CAT_CAST_FRAMES = 24;
 const CAT_DANCE_FRAMES = 96;
 const CAT_LOOK_AROUND_FRAMES = 90;
 const CAT_GROOM_FRAMES = 110;
 
+/**
+ * Her work swings last as long as her swipe, `CAT_SWIPE_FRAMES`: harvests,
+ * jobs and the grain harvest replay a work swing on cadences counted in
+ * ticks and expect each to be over by the next.
+ */
 const ONE_SHOT_DURATION: Record<CatOneShot, number> = {
+  chop: CAT_SWIPE_FRAMES,
+  mine: CAT_SWIPE_FRAMES,
   swipe: CAT_SWIPE_FRAMES,
   cast: CAT_CAST_FRAMES,
   dance: CAT_DANCE_FRAMES,
@@ -105,6 +154,14 @@ const MOVEMENT_INTERRUPT_GRACE: Partial<Record<CatOneShot, number>> = { dance: 3
 /** Frames of standing still before she gets bored enough to preen or look around. */
 const IDLE_BREAK_MIN_DELAY = 240;
 const IDLE_BREAK_RANDOM_DELAY = 420;
+/**
+ * Frames ahead of an idle break that its row is asked for: a break is
+ * held in no view's resident set, so after a long stand it has been swept,
+ * and her fur makes a cold row a run of frames each baked on the render path.
+ * Well inside the cache's release window even on the fastest display, so the
+ * warming is not swept before the break plays.
+ */
+const IDLE_BREAK_PREWARM_LEAD = 120;
 
 /**
  * Frames per row, taken from the choreography that paints them, so the two
@@ -114,25 +171,48 @@ const IDLE_BREAK_RANDOM_DELAY = 420;
 const FRAME_COUNT: Record<CatState, number> = {
   walk: WALK_FRAMES,
   walk_side: WALK_FRAMES,
+  walk_side_west: WALK_FRAMES,
   walk_away: WALK_FRAMES,
   idle: IDLE_FRAMES,
   idle_side: IDLE_FRAMES,
+  idle_side_west: IDLE_FRAMES,
   idle_away: IDLE_FRAMES,
   look_around: BREAK_FRAMES,
   groom_paw: BREAK_FRAMES,
   groom_flank: BREAK_FRAMES,
   swipe: ACTION_FRAMES,
   swipe_side: ACTION_FRAMES,
+  swipe_side_west: ACTION_FRAMES,
   swipe_away: ACTION_FRAMES,
   cast: ACTION_FRAMES,
   cast_side: ACTION_FRAMES,
+  cast_side_west: ACTION_FRAMES,
   cast_away: ACTION_FRAMES,
   knocked_out: KO_FRAMES,
+  knocked_out_west: KO_FRAMES,
   dance: DANCE_FRAMES,
+  chop: ACTION_FRAMES,
+  chop_side: ACTION_FRAMES,
+  chop_side_west: ACTION_FRAMES,
+  chop_away: ACTION_FRAMES,
+  mine: ACTION_FRAMES,
+  mine_side: ACTION_FRAMES,
+  mine_side_west: ACTION_FRAMES,
+  mine_away: ACTION_FRAMES,
+  carry_walk: WALK_FRAMES,
+  carry_walk_side: WALK_FRAMES,
+  carry_walk_side_west: WALK_FRAMES,
+  carry_walk_away: WALK_FRAMES,
+  carry_idle: IDLE_FRAMES,
+  carry_idle_side: IDLE_FRAMES,
+  carry_idle_side_west: IDLE_FRAMES,
+  carry_idle_away: IDLE_FRAMES,
 };
 
 /**
- * Every row she can be drawn in, standing and walking first.
+ * Every row she can be drawn in without holding anything, standing and
+ * walking first. The rows she plays only while holding something are in
+ * {@link HELD_ROWS}, warmed when the hold begins.
  *
  * All of them, not just the ones she spends her life in. Her fur engine lays
  * down several hundred individual hair strokes per frame, which makes her by
@@ -146,43 +226,93 @@ const FRAME_COUNT: Record<CatState, number> = {
 const PREWARMED_ROWS: ReadonlyArray<CatState> = [
   'idle',
   'idle_side',
+  'idle_side_west',
   'idle_away',
   'walk',
   'walk_side',
+  'walk_side_west',
   'walk_away',
   'swipe',
   'swipe_side',
+  'swipe_side_west',
   'swipe_away',
   'cast',
   'cast_side',
+  'cast_side_west',
   'cast_away',
   'knocked_out',
+  'knocked_out_west',
   'dance',
   'look_around',
   'groom_paw',
   'groom_flank',
 ];
 
-let activeWear: CatWear = BARE_CAT;
-let activeFigure: FigureDef = catFigureWearing(BARE_CAT);
-
 /**
- * Puts `wear` on Donut's sprite. On a change the old look's cells are released
- * at once and the new one's rows queued: she is the most expensive painter in
- * the game, so two complete looks resident side by side is budget nothing
- * else gets back. Cheap when nothing changed.
+ * The rows she plays only while holding something, by what she holds: a
+ * tool's swing in every view, or her walk and idle with something in her
+ * jaws. Warmed when the hold begins rather than with the rest: all of them
+ * on top of her other rows would be past her share of the cache, and she
+ * never holds two of these at once.
  */
-export function setCatWear(wear: CatWear): void {
-  if (wear.shades === activeWear.shades) return;
-  releaseFigure(activeFigure);
-  activeWear = wear;
-  activeFigure = catFigureWearing(wear);
-  prewarmCatSprite();
+const HELD_ROWS: Readonly<Record<CatHold, readonly CatState[]>> = {
+  chop: ['chop', 'chop_side', 'chop_side_west', 'chop_away'],
+  mine: ['mine', 'mine_side', 'mine_side_west', 'mine_away'],
+  carry: [
+    'carry_walk',
+    'carry_walk_side',
+    'carry_walk_side_west',
+    'carry_walk_away',
+    'carry_idle',
+    'carry_idle_side',
+    'carry_idle_side_west',
+    'carry_idle_away',
+  ],
+};
+
+let activeOutfit: Outfit<'cat'> = BARE_CAT_OUTFIT;
+let activeFigure: FigureDef = catFigureFor(BARE_CAT_OUTFIT);
+
+/** The figure every draw and prewarm of Donut goes through. */
+export function activeCatFigure(): FigureDef {
+  return activeFigure;
 }
 
-/** Queues every row Donut can be drawn in for baking. Call once per scene. */
+/**
+ * Dresses Donut's sprite in `outfit`. On a change the old look's cells are
+ * released at once and the new one's rows queued: she is the most expensive
+ * painter in the game, so two complete looks resident side by side is budget
+ * nothing else gets back. Cheap when nothing that shows changed.
+ *
+ * Returns whether the look changed.
+ */
+export function setCatOutfit(outfit: Outfit<'cat'>): boolean {
+  if (sameOutfit(outfit, activeOutfit)) return false;
+  releaseFigure(activeFigure);
+  activeOutfit = outfit;
+  activeFigure = catFigureFor(outfit);
+  prewarmCatSprite();
+  return true;
+}
+
+/** Queues every row Donut can be drawn in empty-handed for baking. Call once per scene. */
 export function prewarmCatSprite(): void {
   for (const state of PREWARMED_ROWS) prewarmFigureState(activeFigure, state);
+}
+
+/**
+ * Queues the rows she plays holding `hold`, the ones of the view she faces
+ * first: those are drawn next, and a swing's layered cells bake two layers
+ * each.
+ */
+export function prewarmCatHold(hold: CatHold, facing: FacingSelection): void {
+  const view = catRowViewOf(facing.view);
+  const faced = (state: CatState): boolean =>
+    catRowView(state) === view && catRowFacesWest(state) === (view === 'side' && facing.flipX);
+  const rows = HELD_ROWS[hold];
+  for (const state of [...rows.filter(faced), ...rows.filter((row) => !faced(row))]) {
+    prewarmFigureState(activeFigure, state);
+  }
 }
 
 /** Loop speeds for the animations that are driven by the clock, not by a timer. */
@@ -197,6 +327,17 @@ export interface CatOneShotState {
 }
 
 /**
+ * Her first break is chosen rather than drawn, so building her takes nothing
+ * from `Math.random`: seeded harnesses construct crawlers mid-stream, and one
+ * extra draw there reshuffles every roll after it.
+ */
+const FIRST_IDLE_BREAK: CatOneShot = 'look_around';
+
+function randomBreak(): CatOneShot {
+  return IDLE_BREAKS[Math.floor(Math.random() * IDLE_BREAKS.length)];
+}
+
+/**
  * Owns Donut's animation timers: the one-shot currently playing and how long
  * she has been standing around doing nothing, which is what triggers the idle
  * breaks (a look around, a paw wash, a flank wash).
@@ -207,6 +348,7 @@ export class CatAnimator {
   private duration = 1;
   private idleFrames = 0;
   private nextBreakDelay = IDLE_BREAK_MIN_DELAY;
+  private nextBreak: CatOneShot = FIRST_IDLE_BREAK;
 
   /** Starts an animation, replacing whatever was playing. */
   play(action: CatOneShot): void {
@@ -214,6 +356,11 @@ export class CatAnimator {
     this.duration = ONE_SHOT_DURATION[action];
     this.framesLeft = this.duration;
     this.idleFrames = 0;
+  }
+
+  /** Drops `action` if it is the animation in flight. */
+  stop(action: CatOneShot): void {
+    if (this.oneShot === action) this.oneShot = null;
   }
 
   /** Drops any animation in flight — used when a scene resets combat state. */
@@ -247,10 +394,18 @@ export class CatAnimator {
     }
 
     this.idleFrames++;
+    // Asked on every tick of the lead rather than once: a menu held open
+    // partway through it halts these ticks but not the cache's sweep. Asked
+    // ahead of the queue, since standing still also queues the swings of the
+    // view she faces, and a break behind them would play cold.
+    if (this.idleFrames >= this.nextBreakDelay - IDLE_BREAK_PREWARM_LEAD) {
+      prewarmFigureState(activeFigure, this.nextBreak, undefined, true);
+    }
     if (this.idleFrames < this.nextBreakDelay) return;
     this.nextBreakDelay =
       IDLE_BREAK_MIN_DELAY + Math.floor(Math.random() * IDLE_BREAK_RANDOM_DELAY);
-    this.play(IDLE_BREAKS[Math.floor(Math.random() * IDLE_BREAKS.length)]);
+    this.play(this.nextBreak);
+    this.nextBreak = randomBreak();
   }
 
   get current(): CatOneShotState | null {
@@ -265,23 +420,164 @@ export interface CatSpriteState {
   /** The walk cycle angle from `Player.walkFrame` (radians, 0–2π). */
   readonly walkFrame?: number;
   readonly isMoving?: boolean;
-  readonly facingX?: number;
-  readonly facingY?: number;
+  /** The view her facing is drawn in, from `selectFacing` or her own facing state; head-on if absent. */
+  readonly facing?: FacingSelection;
   readonly isKnockedOut?: boolean;
   readonly oneShot?: CatOneShotState | null;
+  /** Something is carried in her jaws: she walks and stands in her carrying rows. */
+  readonly carrying?: boolean;
+  /** The swing of the tool she has out: standing, she holds it ready in that swing's opening pose. */
+  readonly working?: CatWorkSwing | null;
 }
 
-/** Views split on whichever axis she is facing hardest along. */
-export function catViewForFacing(facingX: number, facingY: number): CatView {
-  if (Math.abs(facingY) <= Math.abs(facingX)) return 'side';
-  return facingY < 0 ? 'away' : 'front';
+/** Her row for one view, facing east and facing west. A head-on row is the same both ways. */
+interface ViewRows {
+  readonly east: CatState;
+  readonly west: CatState;
 }
 
-function directionalState(base: 'walk' | 'idle' | 'swipe' | 'cast', view: CatView): CatState {
-  if (view === 'side') return `${base}_side`;
-  if (view === 'away') return `${base}_away`;
-  return base;
+function bothWays(state: CatState): ViewRows {
+  return { east: state, west: state };
 }
+
+type DirectionalBase =
+  'walk' | 'idle' | 'swipe' | 'cast' | 'chop' | 'mine' | 'carry_walk' | 'carry_idle';
+
+/**
+ * Her rows that have a version per view, by view. No row is ever mirrored at
+ * runtime: her tortoiseshell coat is not symmetric, so every view she faces
+ * west in is a row painted facing west.
+ */
+const OWN_ROWS: Readonly<Record<DirectionalBase, Readonly<Record<CatRowView, ViewRows>>>> = {
+  walk: {
+    front: bothWays('walk'),
+    side: { east: 'walk_side', west: 'walk_side_west' },
+    back: bothWays('walk_away'),
+  },
+  idle: {
+    front: bothWays('idle'),
+    side: { east: 'idle_side', west: 'idle_side_west' },
+    back: bothWays('idle_away'),
+  },
+  swipe: {
+    front: bothWays('swipe'),
+    side: { east: 'swipe_side', west: 'swipe_side_west' },
+    back: bothWays('swipe_away'),
+  },
+  cast: {
+    front: bothWays('cast'),
+    side: { east: 'cast_side', west: 'cast_side_west' },
+    back: bothWays('cast_away'),
+  },
+  chop: {
+    front: bothWays('chop'),
+    side: { east: 'chop_side', west: 'chop_side_west' },
+    back: bothWays('chop_away'),
+  },
+  mine: {
+    front: bothWays('mine'),
+    side: { east: 'mine_side', west: 'mine_side_west' },
+    back: bothWays('mine_away'),
+  },
+  carry_walk: {
+    front: bothWays('carry_walk'),
+    side: { east: 'carry_walk_side', west: 'carry_walk_side_west' },
+    back: bothWays('carry_walk_away'),
+  },
+  carry_idle: {
+    front: bothWays('carry_idle'),
+    side: { east: 'carry_idle_side', west: 'carry_idle_side_west' },
+    back: bothWays('carry_idle_away'),
+  },
+};
+
+/** The rows she turns in empty-handed. */
+const TURNING_BASES: readonly DirectionalBase[] = ['walk', 'idle', 'swipe', 'cast'];
+
+function viewRowsOf(bases: readonly DirectionalBase[]): CatState[] {
+  return [
+    ...new Set(
+      bases.flatMap((base) =>
+        Object.values(OWN_ROWS[base]).flatMap((rows) => [rows.east, rows.west]),
+      ),
+    ),
+  ];
+}
+
+function directionalState(base: DirectionalBase, facing: FacingSelection): CatState {
+  const rows = OWN_ROWS[base][catRowViewOf(facing.view)];
+  return facing.flipX ? rows.west : rows.east;
+}
+
+/**
+ * Her rows a turn changes, in every view she is drawn in, held warm for as
+ * long as she is on screen. Every view rather than the one she faces and its
+ * neighbours: a keyboard turns her a quarter or a half turn in one tick, her
+ * fur makes her the dearest painter in the game, and a row of hers that is
+ * cold when she turns into it is painted directly on the frame she turns.
+ */
+export const RESIDENT_VIEW_ROWS: readonly CatState[] = viewRowsOf(TURNING_BASES);
+
+/**
+ * Her turning rows while she holds something: with a tool out her swing in
+ * every view joins them, since she turns to face each new tree or rock; with
+ * something in her jaws her carrying walk and idle join them, her own kept
+ * so that putting the thing down draws nothing cold.
+ */
+const RESIDENT_VIEW_ROWS_HOLDING: Readonly<Record<CatHold, readonly CatState[]>> = {
+  chop: viewRowsOf([...TURNING_BASES, 'chop']),
+  mine: viewRowsOf([...TURNING_BASES, 'mine']),
+  carry: viewRowsOf([...TURNING_BASES, 'carry_walk', 'carry_idle']),
+};
+
+/** The swing frame she holds her tool ready in between swings. */
+const READY_FRAME = 0;
+const READY_FRAMES = READY_FRAME + 1;
+
+/**
+ * The opening frame of every swing in every view, held warm while her paws
+ * are empty: it is the pose she stands in with a tool out, drawn on the tick
+ * the tool comes out, before the rest of the swing has had time to bake.
+ */
+const READY_SPANS: readonly ResidentSpan[] = viewRowsOf(['chop', 'mine']).map((row) => ({
+  row,
+  frames: READY_FRAMES,
+}));
+
+function spansOf(rows: readonly CatState[]): ResidentSpan[] {
+  return rows.map((row) => ({ row, frames: FRAME_COUNT[row] }));
+}
+
+/** Holds her turning rows warm from every draw of her, menus and flushes included. */
+const RESIDENT_VIEWS = new ResidentRows([...spansOf(RESIDENT_VIEW_ROWS), ...READY_SPANS]);
+
+/**
+ * Both swings whole in the view she faces, held warm while her paws are
+ * empty: she faces a tree or rock as she starts on it, and her first swing
+ * comes a beat after the tool does — sooner than a swing's layered cells,
+ * two layers each, bake from cold on a slow device.
+ */
+const FACED_SWINGS: Readonly<Record<CatRowView, Readonly<Record<'east' | 'west', ResidentRows>>>> =
+  {
+    front: facedSwings('front'),
+    side: facedSwings('side'),
+    back: facedSwings('back'),
+  };
+
+function facedSwings(view: CatRowView): Readonly<Record<'east' | 'west', ResidentRows>> {
+  const swings = (way: 'east' | 'west'): ResidentRows =>
+    new ResidentRows(spansOf([OWN_ROWS.chop[view][way], OWN_ROWS.mine[view][way]]));
+  return { east: swings('east'), west: swings('west') };
+}
+
+function facedSwingsFor(facing: FacingSelection): ResidentRows {
+  return FACED_SWINGS[catRowViewOf(facing.view)][facing.flipX ? 'west' : 'east'];
+}
+const RESIDENT_VIEWS_HOLDING: Readonly<Record<CatHold, ResidentRows>> = {
+  chop: new ResidentRows(spansOf(RESIDENT_VIEW_ROWS_HOLDING.chop)),
+  mine: new ResidentRows(spansOf(RESIDENT_VIEW_ROWS_HOLDING.mine)),
+  carry: new ResidentRows(spansOf(RESIDENT_VIEW_ROWS_HOLDING.carry)),
+};
 
 /** One cell of Donut's figure: which row, which frame, and whether it is mirrored. */
 export interface CatCell {
@@ -300,47 +596,70 @@ export function catCellFor(state: CatSpriteState = {}): CatCell {
   const {
     walkFrame = 0,
     isMoving = false,
-    facingX = 0,
-    facingY = 1,
+    facing = DEFAULT_FACING_SELECTION,
     isKnockedOut = false,
     oneShot = null,
   } = state;
-  const view = catViewForFacing(facingX, facingY);
-  const facesLeft = facingX < 0;
-  // Only the profile art is mirrored: flipping the head-on views would swap the
-  // sides of her tortoiseshell coat every time she turned around.
-  const flipX = view === 'side' && facesLeft;
-  const nowSeconds = performance.now() / 1000;
+  const facesLeft = facing.flipX;
+  const nowSeconds = performance.now() / MILLISECONDS_PER_SECOND;
 
   if (isKnockedOut) {
-    // The downed pose is profile art whichever way she was facing, so it takes
-    // the mirror on its own rather than through the view rule above.
-    const frame = timeFrameIndex(nowSeconds, KNOCKED_OUT_FPS, FRAME_COUNT.knocked_out);
-    return { state: 'knocked_out', frame, flipX: facesLeft };
+    // The downed pose is profile art whichever way she was facing.
+    const key: CatState = facesLeft ? 'knocked_out_west' : 'knocked_out';
+    const frame = timeFrameIndex(nowSeconds, KNOCKED_OUT_FPS, FRAME_COUNT[key]);
+    return { state: key, frame, flipX: false };
   }
 
   if (oneShot !== null) {
     // The idle breaks and the level-up dance are only drawn head-on; the combat
-    // actions have a pose per viewpoint.
-    const directional = oneShot.action === 'swipe' || oneShot.action === 'cast';
-    const key: CatState = directional ? directionalState(oneShot.action, view) : oneShot.action;
+    // actions and the work swings have a pose per viewpoint.
+    const action = oneShot.action;
+    const key: CatState = isDirectional(action) ? directionalState(action, facing) : action;
     return {
       state: key,
       frame: progressFrameIndex(oneShot.progress, FRAME_COUNT[key]),
-      flipX: directional && flipX,
+      flipX: false,
     };
   }
 
   if (isMoving) {
-    const key = directionalState('walk', view);
-    return { state: key, frame: walkFrameIndex(walkFrame, FRAME_COUNT[key]), flipX };
+    const key = directionalState(state.carrying === true ? 'carry_walk' : 'walk', facing);
+    return { state: key, frame: walkFrameIndex(walkFrame, FRAME_COUNT[key]), flipX: false };
   }
 
-  const key = directionalState('idle', view);
-  return { state: key, frame: timeFrameIndex(nowSeconds, IDLE_FPS, FRAME_COUNT[key]), flipX };
+  const working = state.working ?? null;
+  if (working !== null) {
+    return { state: directionalState(working, facing), frame: READY_FRAME, flipX: false };
+  }
+
+  const key = directionalState(state.carrying === true ? 'carry_idle' : 'idle', facing);
+  return {
+    state: key,
+    frame: timeFrameIndex(nowSeconds, IDLE_FPS, FRAME_COUNT[key]),
+    flipX: false,
+  };
 }
 
-/** Draw the cat player body: the cell {@link catCellFor} picks, or `cell` when the caller already has it. */
+const DIRECTIONAL_ONE_SHOTS = ['swipe', 'cast', 'chop', 'mine'] as const satisfies readonly (
+  CatOneShot | DirectionalBase
+)[];
+
+function isDirectional(action: CatOneShot): action is (typeof DIRECTIONAL_ONE_SHOTS)[number] {
+  return DIRECTIONAL_ONE_SHOTS.some((directional) => directional === action);
+}
+
+/** What she holds on one draw: the thing's look, which of its pictures, and what she does with it. */
+export interface CatHeldDraw {
+  readonly look: HeldVisualDef;
+  readonly phase: number;
+  readonly hold: CatHold;
+}
+
+/**
+ * Draw the cat player body: the cell {@link catCellFor} picks, or `cell` when
+ * the caller already has it, with `held` composited at its socket between
+ * the cell's two layers.
+ */
 export function drawCatSprite(
   ctx: CanvasRenderingContext2D,
   sx: number,
@@ -348,8 +667,46 @@ export function drawCatSprite(
   s: number,
   state: CatSpriteState = {},
   cell: CatCell = catCellFor(state),
+  held: CatHeldDraw | null = null,
 ): void {
-  drawFigureCached(ctx, activeFigure, cell.state, cell.frame, sx, sy, s, { flipX: cell.flipX });
+  if (held === null) {
+    RESIDENT_VIEWS.hold(activeFigure);
+    facedSwingsFor(state.facing ?? DEFAULT_FACING_SELECTION).hold(activeFigure);
+  } else {
+    RESIDENT_VIEWS_HOLDING[held.hold].hold(activeFigure);
+  }
+  const between = held === null ? undefined : catHeldBetween(held, cell);
+  drawFigureCached(
+    ctx,
+    activeFigure,
+    cell.state,
+    cell.frame,
+    sx,
+    sy,
+    s,
+    { flipX: cell.flipX },
+    between,
+  );
+}
+
+/** Composites `held` at its socket on the cell being drawn, or nothing where the cell does not hold it. */
+function catHeldBetween(held: CatHeldDraw, cell: CatCell): FigureBetween | undefined {
+  const frames = donutSocketsAt(activeFigure.id, cell.state, cell.frame);
+  if (frames === null) return undefined;
+  const socket = catHeldSocketOf(held.look, frames);
+  if (socket === null) return undefined;
+  return (ctx, place) => {
+    const centre = {
+      x: place.x + socket.centre.x * place.scale,
+      y: place.y + socket.centre.y * place.scale,
+    };
+    const transform = heldTransformAt(
+      { ...socket, centre },
+      place.scale * catHeldPxPerUnit(held.look),
+      held.phase,
+    );
+    compositeHeldItem(ctx, held.look, transform, 'cached');
+  };
 }
 
 /** Both missile figures share one set of row names. */
@@ -402,7 +759,7 @@ export function drawMissiles(
   s: number,
   EXPLODE_FRAMES: number,
 ): void {
-  const now = performance.now() / 1000;
+  const now = performance.now() / MILLISECONDS_PER_SECOND;
 
   for (const m of missiles) {
     const mx = m.x - camX;

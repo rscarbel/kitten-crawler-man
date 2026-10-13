@@ -1,18 +1,19 @@
 /**
- * The shared hook every held-prop painter plugs into.
+ * The painters of the props scripted rows hold.
  *
- * A `HeldProp` sits on a `CarlPose` (`heldProps` in `rig.ts`); `figure.ts`
- * finds the one for each hand, computes that hand's grip with `handGrip` in
- * `limbs.ts`, and calls the matching `PROP_ART` entry — in the same slab
- * as the gripping arm (so it is occluded with it) and before the hand itself
- * is drawn (so the fist's fingers close over the haft rather than the haft
- * being laid over a finished hand).
+ * A `HeldProp` sits on a `CarlPose` (`heldProps` in `rig.ts`). `figure.ts`
+ * draws each one as its scripted-prop held visual
+ * (`held/art/scriptedPropHeld.ts`), which runs the matching `PROP_ART`
+ * painter, baked between the cell's two layers at the hand's socket by the
+ * same compositor that draws equipment at runtime — so the fingers in front
+ * of the haft close over it.
  *
  * To add a prop: create `carl/props/<kind>.ts` exporting one `PropPainter`
- * and the `PropReach` that bounds it, add its name to `CarlPropKind`, and
- * register both in `PROP_ART`. Nothing
- * else needs to change — `figure.ts` and `rig.ts` are already wired for any
- * kind this union carries. Copy `props/hammer.ts` for the shape.
+ * and the `PropReach` that bounds it, add its name to `CarlPropKind` and
+ * register both in `PROP_ART`, then give it a held visual in
+ * `scriptedPropHeld.ts` (`SCRIPTED_PROP_VISUAL_IDS`, `SCRIPTED_PROP_HELD`,
+ * `SCRIPTED_PROP_VISUALS` — the compiler lists each). Copy `props/hammer.ts`
+ * for the shape.
  */
 
 import type { ViewSpec } from './rig';

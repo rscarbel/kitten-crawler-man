@@ -4,6 +4,7 @@
  */
 
 import type { InventoryItem } from '../../../core/ItemDefs';
+import type { CrawlerKind } from '../../../core/SkillManager';
 import { ALL_STATS } from '../../../Player';
 import { intersect, splitH, type Rect } from '../../core/geom';
 import type { DragHandlers, HitHandlers, HitState, Ui } from '../../core/UiRoot';
@@ -13,7 +14,8 @@ import { lineHeightOf, measureTextHeight, tabularNumber, text } from '../../widg
 import { tooltip } from '../../widgets/tooltip';
 import {
   DOLL_MAX_SECTION_CELLS,
-  DOLL_SECTIONS,
+  DOLL_SECTION_LABELS,
+  dollSectionsFor,
   STAT_LABELS,
   shortSubSlotLabel,
   wornGearSummary,
@@ -31,6 +33,8 @@ export interface DollCellInput {
 
 export interface DollColumnOptions {
   readonly id: string;
+  /** Whose doll this is, which decides the sections it has. */
+  readonly kind: CrawlerKind;
   readonly owner: InventoryOwner;
   readonly cell: (slot: DollSlot, rect: Rect) => DollCellInput;
   readonly onTap: (slot: DollSlot) => void;
@@ -70,12 +74,12 @@ function statLines(owner: InventoryOwner): { label: string; value: string; bonus
   }));
 }
 
-function contentHeight(ui: Ui, width: number, owner: InventoryOwner): number {
+function contentHeight(ui: Ui, width: number, kind: CrawlerKind, owner: InventoryOwner): number {
   const { space } = ui.theme;
   const { side, perRow } = dollCellSide(ui, width);
   const overline = lineHeightOf(ui, 'overline');
   let h = 0;
-  for (const section of DOLL_SECTIONS) {
+  for (const section of dollSectionsFor(kind)) {
     const rows = Math.ceil(section.cells.length / perRow);
     h += overline + space.xs + rows * side + (rows - 1) * space.xs + space.md;
   }
@@ -90,7 +94,7 @@ export function dollColumn(ui: Ui, rect: Rect, opts: DollColumnOptions): void {
   const innerW = rect.w - scrollGutterWidth(ui);
   scrollView(ui, rect, {
     id: `${opts.id}/scroll`,
-    contentHeight: contentHeight(ui, innerW, opts.owner),
+    contentHeight: contentHeight(ui, innerW, opts.kind, opts.owner),
     draw: (content) => drawDoll(ui, { ...content, w: innerW }, opts),
   });
 }
@@ -100,12 +104,12 @@ function drawDoll(ui: Ui, content: Rect, opts: DollColumnOptions): void {
   const { side, perRow } = dollCellSide(ui, content.w);
   const overline = lineHeightOf(ui, 'overline');
   let y = content.y;
-  for (const section of DOLL_SECTIONS) {
+  for (const section of dollSectionsFor(opts.kind)) {
     text(
       ui,
       { x: content.x, y, w: content.w, h: overline },
       {
-        text: section.slot,
+        text: DOLL_SECTION_LABELS[section.slot],
         role: 'overline',
       },
     );

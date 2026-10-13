@@ -10,7 +10,7 @@
 
 import { type Pt } from '../carlArt';
 import { footSoleLandmarks, LEFT_FOOT_OUT, RIGHT_FOOT_OUT } from '../carl/feet';
-import { handGrip, handLength, wristAngle } from '../carl/limbs';
+import { handLength, wristAngle } from '../carl/limbs';
 import { pt, rotate } from '../carl/geometry';
 import { headAngle, mouthInHeadFrame } from '../carl/head';
 import {
@@ -18,8 +18,6 @@ import {
   type BodySide,
   type BoneChain,
   buildSkeleton,
-  type CarlView,
-  drawnSide,
   type GroundPoint,
   HEAD_ON_FLOOR_FORESHORTENING,
   LEG_MAX_REACH,
@@ -27,6 +25,7 @@ import {
   projectGroundPoint,
   VIEWS,
 } from '../carl/rig';
+import { type CardinalView } from '../../facingView';
 import {
   HUMAN_ROW_TABLE,
   type HumanGait,
@@ -35,15 +34,15 @@ import {
   ORIGIN_X,
   ORIGIN_Y,
   type StrikeReachLimb,
-  TILE_X,
-  TILE_Y,
 } from '../humanFigure';
 import { PLAYER_SPEED, TILE_SIZE } from '../../../core/constants';
 import { HUMAN_SWING_FRAMES } from '../../../core/crawlerFormulas';
-import { HUMAN_CELL_PX_PER_UNIT, mirroredTileX, TILE_SCALE } from './figureScale';
+import { HUMAN_CELL_PX_PER_UNIT, TILE_SCALE } from './figureScale';
 import { RUN_GROUND_PER_CYCLE_PX, WALK_GROUND_PER_CYCLE_PX } from './locomotion';
 import { SMUSH_GROUND_PX_PER_FRAME } from './stomps';
 import { RUN_FRAMES, WALK_FRAMES } from './timing';
+import { cellPointInTile } from './sockets';
+import { weaponTip } from './weaponReach';
 
 /** One leg, solved. Points are cell pixels; reach figures are rig units. */
 export interface ProbedLeg {
@@ -97,7 +96,7 @@ export interface ProbedArm {
  * facing +X, whether or not the runtime mirrors the row for a −X facing.
  */
 export interface HumanJointProbe {
-  readonly view: CarlView;
+  readonly view: CardinalView;
   /** The ground line — the y his soles stand on — in cell pixels. */
   readonly groundY: number;
   /** Cell pixels per rig unit, for converting a rig-unit length. */
@@ -158,7 +157,7 @@ function headOnSole(
 function probeLeg(
   chain: BoneChain,
   pitch: number,
-  view: CarlView,
+  view: CardinalView,
   outward: number,
   planted: boolean | undefined,
   point: number | undefined,
@@ -263,7 +262,7 @@ export function probeHumanJoints(row: HumanRowName, frame: number): HumanJointPr
  * rows are painted facing +X; toward the camera he travels down the screen,
  * and away from it up.
  */
-export const TRAVEL_DIRECTION: Readonly<Record<CarlView, Pt>> = {
+export const TRAVEL_DIRECTION: Readonly<Record<CardinalView, Pt>> = {
   side: { x: 1, y: 0 },
   front: { x: 0, y: 1 },
   back: { x: 0, y: -1 },
@@ -317,7 +316,7 @@ export function groundPxPerGaitFrame(gait: HumanGait, frameCount: number): numbe
  * planted foot slides that share: the rest is carried by the hips with the
  * sprite, and the leg between them keeps its length.
  */
-const FLOOR_SLIDE_SHARE: Readonly<Record<CarlView, number>> = {
+const FLOOR_SLIDE_SHARE: Readonly<Record<CardinalView, number>> = {
   side: 1,
   front: HEAD_ON_FLOOR_FORESHORTENING,
   back: HEAD_ON_FLOOR_FORESHORTENING,
@@ -349,20 +348,6 @@ export function standingHipAboveSolePx(tileSize: number): number {
 export type HumanHandSide = BodySide;
 
 /**
- * Where a cell pixel lands, in fractions of his tile from the sprite's own
- * tile origin — the frame the runtime draws the cell in, scaled by whatever
- * tile size it is drawn at. A mirrored cell flips about the tile's centre, as
- * `drawFigureCached` flips it.
- */
-function cellPointInTile(point: Pt, flipX: boolean): Pt {
-  const x = (point.x - TILE_X) / TILE_SCALE;
-  return {
-    x: mirroredTileX(x, flipX),
-    y: (point.y - TILE_Y) / TILE_SCALE,
-  };
-}
-
-/**
  * The tip of one of his hands — a fist's knuckles, an open hand's fingertips —
  * on one drawn cell, in tile fractions from the sprite's tile origin: where a
  * thrown thing leaves his hand or a held tool meets what it works on.
@@ -381,7 +366,7 @@ export function handTipInTile(
 /**
  * Where a strike's own `reachLimb` lands on one drawn cell, in tile fractions
  * from the sprite's tile origin — a fist's knuckles, a boot's toe, a driven
- * knee, the lead shoulder of a barge — read off the same solved rig the
+ * knee, the lead shoulder of a barge, a weapon out past the fist — read off the same solved rig the
  * painter draws, so an impact effect starts from the limb the picture
  * actually threw rather than a fixed offset that only matches some strikes.
  */
@@ -392,6 +377,11 @@ export function strikeContactInTile(
   reachLimb: StrikeReachLimb,
 ): Pt {
   const isLeft = reachLimb.startsWith('left');
+  if (reachLimb === 'weapon') {
+    const spec = HUMAN_ROW_TABLE[row];
+    const tip = weaponTip(spec.pose(frame), spec.view);
+    return cellPointInTile(toCell(pt(tip.x, tip.y)), flipX);
+  }
   if (reachLimb === 'hand' || reachLimb === 'leftHand') {
     return handTipInTile(row, frame, flipX, isLeft ? 'left' : 'right');
   }
@@ -420,50 +410,4 @@ export function mouthInTile(row: HumanRowName, frame: number, flipX: boolean): P
   const turned = rotate(mouth, headAngle(pose));
   const inFigure = pt(skeleton.headCentre.x + turned.x, skeleton.headCentre.y + turned.y);
   return cellPointInTile(toCell(inFigure), flipX);
-}
-
-/** Where one of his fists closes round a haft on one drawn cell. */
-interface HandGripInTile {
-  /** The middle of the fist's bore, in tile fractions from the sprite's tile origin, mirrored with the cell. */
-  readonly centre: Pt;
-  /** Whether the row already puts a prop in that hand, painted inside the figure. */
-  readonly holdsProp: boolean;
-  /** Whether that arm is painted behind his torso in this cell. */
-  readonly armBehind: boolean;
-  /**
-   * The way the hand points from the wrist, radians on screen (y down), in
-   * the unmirrored cell: down the fist on a punch, so a blade held in it can
-   * carry the line of the blow on past the knuckles.
-   */
-  readonly handAngle: number;
-}
-
-/**
- * Where one of his hands grips on one drawn cell — the bore a painted prop's
- * haft would run through, read off the same solved arm the painter draws — so
- * something drawn over the figure can sit in his fist wherever the row has
- * put it.
- */
-export function handGripInTile(
-  row: HumanRowName,
-  frame: number,
-  flipX: boolean,
-  side: HumanHandSide,
-): HandGripInTile {
-  const spec = HUMAN_ROW_TABLE[row];
-  const view = VIEWS[spec.view];
-  const pose = poseAsDrawn(spec.pose(frame), view);
-  const skeleton = buildSkeleton(pose, view);
-  const drawn = drawnSide(side, view);
-  const chain = drawn === 'left' ? skeleton.leftArm : skeleton.rightArm;
-  const armFlaggedBehind = drawn === 'left' ? pose.leftArmBehind : pose.rightArmBehind;
-  // In profile the left arm is always the far one: every profile row is
-  // painted facing +X, and a mirrored cell only flips that picture.
-  const farArmInProfile = view.profile && side === 'left';
-  return {
-    centre: cellPointInTile(toCell(handGrip(chain).centre), flipX),
-    holdsProp: pose.heldProps?.some((prop) => prop.hand === drawn) ?? false,
-    armBehind: farArmInProfile || armFlaggedBehind,
-    handAngle: wristAngle(chain),
-  };
 }

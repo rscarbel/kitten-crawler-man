@@ -11,7 +11,6 @@
  * rank, and one that ends hands back to whatever the state then asks for.
  */
 
-import { type CarlView } from './art/carl/rig';
 import { type HumanRowName, type ViewRows } from './art/humanFigure';
 import {
   DEATH_KNEEL_FRAMES,
@@ -22,7 +21,7 @@ import {
   STAGGER_REEL_FRAMES,
 } from './art/human/reactions';
 import { type HumanActionFrameEvent, type HumanReactionOptions } from './humanAnimator';
-import { viewForFacing } from './humanSprite';
+import { type CarlRowView } from './humanSprite';
 
 /** The reaction rows the director plays, by what they are for. */
 type ReactionKind = 'struggle' | 'hurt' | 'stagger' | 'revive' | 'down' | 'death';
@@ -37,10 +36,11 @@ const REACTION_RANK: Readonly<Record<ReactionKind, number>> = {
   death: 5,
 };
 
-/** What the director needs of the player: playing and stopping a row. */
+/** What the director needs of the player: playing and stopping a row, and the row a facing draws. */
 interface HumanReactionHost {
   playReaction(row: HumanRowName, options: HumanReactionOptions): boolean;
   stopReaction(): void;
+  rowFacing(rows: ViewRows, faceX: number, faceY: number): HumanRowName;
 }
 
 /** The player's state, as far as reactions go, for one tick. */
@@ -93,7 +93,7 @@ export interface HumanWarmSpan {
  * carries the news, so the first blow he takes is not painted on the tick it
  * lands.
  */
-export function fightReactionSpans(view: CarlView): readonly HumanWarmSpan[] {
+export function fightReactionSpans(view: CarlRowView): readonly HumanWarmSpan[] {
   return [
     { row: HURT_ROWS.front[view], frames: HURT_RECOIL_FRAMES },
     { row: HURT_ROWS.behind[view], frames: HURT_RECOIL_FRAMES },
@@ -139,7 +139,7 @@ export class HumanReactionDirector {
     const towardBlowX = from === undefined ? facingX : from.x - at.x;
     const towardBlowY = from === undefined ? facingY : from.y - at.y;
     const side: HurtFrom = towardBlowX * facingX + towardBlowY * facingY >= 0 ? 'front' : 'behind';
-    const row = HURT_ROWS[side][viewForFacing(facingX, facingY)];
+    const row = this.host.rowFacing(HURT_ROWS[side], facingX, facingY);
     this.play('hurt', row, { cancelOnMove: true });
   }
 
@@ -154,7 +154,7 @@ export class HumanReactionDirector {
     const faceY = -dirY;
     this.staggerTravelledPx = 0;
     this.staggerDistancePx = distancePx;
-    const row = STAGGER_ROWS[viewForFacing(faceX, faceY)];
+    const row = this.host.rowFacing(STAGGER_ROWS, faceX, faceY);
     this.play('stagger', row, {
       faceX: this.sideOf(faceX),
       progress: () => this.staggerTravelledPx / this.staggerDistancePx,
@@ -197,7 +197,7 @@ export class HumanReactionDirector {
     const struggleWanted = state.stuck && state.alive;
     if (!struggleWanted && this.playing === 'struggle') this.host.stopReaction();
     if (struggleWanted && this.playing === null) {
-      this.play('struggle', STRUGGLE_ROWS[viewForFacing(state.facingX, state.facingY)], {
+      this.play('struggle', this.host.rowFacing(STRUGGLE_ROWS, state.facingX, state.facingY), {
         loop: true,
       });
     }

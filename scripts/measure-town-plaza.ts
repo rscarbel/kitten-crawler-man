@@ -427,7 +427,6 @@ const talkDrawnExactly =
 
 human.inventory.addItem('nightgaunt_cloak', 1);
 human.inventory.equipByItemId('nightgaunt_cloak');
-human.onEquipmentChanged();
 
 /** Frames the competing bake burst runs for. */
 const BURST_FRAMES = 90;

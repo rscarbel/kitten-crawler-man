@@ -15,7 +15,6 @@ import { viewportWidth, viewportHeight } from '../core/Viewport';
 import { HumanPlayer } from '../creatures/HumanPlayer';
 import { PLACE_ROWS } from '../sprites/art/humanFigure';
 import { PLACE_RELEASE_TICKS } from '../sprites/art/human/actionsBuild';
-import { viewForFacing } from '../sprites/humanSprite';
 
 export type BarrierItemId = 'gym_dumbbell' | 'gym_bench_press' | 'gym_treadmill';
 
@@ -129,7 +128,7 @@ export class BarrierSystem implements GameSystem {
     if (player instanceof HumanPlayer) {
       const faceX = player.facingX;
       const faceY = player.facingY;
-      const placing = player.playAction(PLACE_ROWS[viewForFacing(faceX, faceY)], {
+      const placing = player.playAction(player.rowFacing(PLACE_ROWS, faceX, faceY), {
         faceX,
         faceY,
         onEnd: () => {

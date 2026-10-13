@@ -8,6 +8,7 @@ import {
   ITEM_DEF,
   isItemId,
   itemCanHotlist,
+  weaponStatsOf,
 } from './ItemDefs';
 import type { InventoryItem, ItemId } from './ItemDefs';
 import type { CrawlerKind } from './SkillManager';
@@ -442,6 +443,16 @@ export class Inventory {
   /** True if any item with the given id is currently equipped. */
   hasEquipped(itemId: ItemId): boolean {
     return this.equipment.hasEquipped(itemId);
+  }
+
+  /**
+   * Whether a hotbar marks `itemId` as in use: a weapon only while it is the
+   * one drawn, anything else while it is equipped. A stowed weapon still sits
+   * in its hand slot, but on the bar the mark is what shows a press drew it.
+   */
+  showsInUse(itemId: ItemId, drawnWeaponId: ItemId | null): boolean {
+    if (weaponStatsOf(itemId) !== null) return itemId === drawnWeaponId;
+    return this.hasEquipped(itemId);
   }
 
   /** Returns all currently equipped items. */

@@ -174,6 +174,8 @@ export function unwornGear(owner: CrawlerKind, inventory: Inventory): UnwornItem
   for (const item of [...inventory.bag.slots, ...inventory.actionBar.slots]) {
     if (item === null || seen.has(item.id)) continue;
     seen.add(item.id);
+    // A weapon is drawn from the hotbar, so one not in hand is not gear left unworn.
+    if (item.type === 'weapon') continue;
     if (!inventory.equipment.canEquip(item)) continue;
     const hushed = isHushed({ id: item.id, owner });
     if (!hushed && !isWorthWearing(item, inventory)) continue;

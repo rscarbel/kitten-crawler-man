@@ -179,15 +179,19 @@ export const SUBJECTS: readonly SvgSubject[] = [
   {
     name: 'donut',
     views: async (frame) => {
-      const { drawCatFront, drawCatBack, drawCatSide } =
-        await import('../src/sprites/art/catArt.js');
-      const { CAT_ROWS } = await import('../src/sprites/art/catFigure.js');
-      return sheetViews(
-        CAT_ROWS,
-        { front: drawCatFront, back: drawCatBack, side: drawCatSide },
-        frame,
-        domContextOf,
-      );
+      const { CAT_ROWS, catGarmentContext, paintCatPose } =
+        await import('../src/sprites/art/catFigure.js');
+      const { BARE_CAT_OUTFIT, dressCat } =
+        await import('../src/sprites/garments/cat/catDressing.js');
+      return CAT_ROWS.filter((row) => !row.facesWest).map((row) => ({
+        name: row.name,
+        paint: (targets: SvgTargets) =>
+          inUnitSpace(domContextOf(targets), targets.unit, (ctx) => {
+            const pose = row.pose(frame);
+            const dressing = dressCat(BARE_CAT_OUTFIT, catGarmentContext(row, frame, pose));
+            paintCatPose(ctx, row, pose, dressing);
+          }),
+      }));
     },
   },
   {

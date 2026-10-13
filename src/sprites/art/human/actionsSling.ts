@@ -23,14 +23,16 @@ import {
   type BodySide,
   buildSkeleton,
   type CarlPose,
-  type CarlView,
   restingPose,
   setArmAngles,
   VIEWS,
 } from '../carl/rig';
+import { type CardinalView } from '../../facingView';
 import { deg, type Pt } from '../carlArt';
 import { SLINGSHOT_COOLDOWN_FRAMES } from '../../slingshotSprite';
 import { anglesThrough, frameValue, upperArmShareThrough } from './gaitShared';
+import { PALM_TO_CAMERA, towards, turnHand } from './handTurn';
+import type { Vec3 } from '../../held/heldPaint';
 
 /**
  * Release, recoil, reach to the fork, pinch the pouch, a four-frame draw and
@@ -101,7 +103,7 @@ interface ArmPlace {
  * which keeps the fork standing upright whatever angle the wrist takes.
  */
 interface SlingStance {
-  readonly view: CarlView;
+  readonly view: CardinalView;
   /**
    * The fork arm, raised on the line of the shot and lowered to load: a wrist
    * target the arm reaches for (edge-on, where the arm lies in the picture),
@@ -246,7 +248,7 @@ const BACK_STANCE: SlingStance = {
   armsBehind: true,
 };
 
-const STANCES: Readonly<Record<CarlView, SlingStance>> = {
+const STANCES: Readonly<Record<CardinalView, SlingStance>> = {
   side: SIDE_STANCE,
   front: FRONT_STANCE,
   back: BACK_STANCE,
@@ -335,8 +337,20 @@ function slingPose(stance: SlingStance, frame: number): CarlPose {
       ...(pinched ? { variant: SLINGSHOT_LOADED } : {}),
     },
   ];
+  turnHand(pose, 'left', FORK_HAND_PALM[stance.view]);
   return pose;
 }
+
+/**
+ * The fork hand's knuckles face the target: edge-on the far hand's palm is
+ * toward the camera, head-on (shooting at the camera) the back of the hand
+ * shows, and from behind (shooting away) the palm.
+ */
+const FORK_HAND_PALM: Readonly<Record<CardinalView, Vec3>> = {
+  side: PALM_TO_CAMERA,
+  front: towards(0.3, 0, -0.95),
+  back: towards(0.3, 0, 0.95),
+};
 
 /** Where the pouch is while no hand holds it: flying past the fork, whipping back, hanging. */
 function releasedPouch(stance: SlingStance, forkGrip: Pt, frame: number): Pt | undefined {

@@ -18,13 +18,13 @@ const COOLDOWN_OVERFLOW_LABEL = '…';
 /**
  * Each hotbar slot of `inventory`'s bar.
  *
- * @param wieldedWeaponId The weapon the bar's owner holds, which reads on the
- *   bar exactly like worn gear: it is in hand and it is not being spent.
+ * @param drawnWeaponId The weapon the bar's owner has drawn, which reads on
+ *   the bar exactly like worn gear: it is in hand and it is not being spent.
  */
 export function hotbarSlotModels(
   cooldowns: ReadonlyMap<string, ItemCooldown>,
   inventory: Inventory,
-  wieldedWeaponId: ItemId | null,
+  drawnWeaponId: ItemId | null,
 ): HotbarSlotModel[] {
   return inventory.actionBar.slots.map((item) => {
     // Keyed by ability first, item id second, so a plain item with a cooldown
@@ -35,7 +35,7 @@ export function hotbarSlotModels(
     const seconds = cd === undefined ? 0 : Math.ceil(cd.current / FRAMES_PER_SECOND);
     return {
       item,
-      equipped: item !== null && (inventory.hasEquipped(item.id) || item.id === wieldedWeaponId),
+      equipped: item !== null && inventory.showsInUse(item.id, drawnWeaponId),
       cooldown: Math.min(1, remaining),
       cooldownLabel:
         seconds > COOLDOWN_SECONDS_SHOWN_MAX ? COOLDOWN_OVERFLOW_LABEL : String(seconds),

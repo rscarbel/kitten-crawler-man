@@ -37,7 +37,6 @@ export function clubDancerLook(): TownCastLookCarl {
     feminine: true,
     dialogSeed: 0x4c1b,
     buildWidthScale: 0.78,
-    gear: { trollskinShirt: true },
     skinRamp: {
       deep: '#5c2d35',
       shadow: '#8b4a42',

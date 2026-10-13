@@ -103,6 +103,10 @@ export const previewInk = {
     backdrop: '#12111a',
     sublabel: '#93a2c0',
   },
+  donut: {
+    backdrop: '#12111a',
+    sublabel: '#93a2c0',
+  },
   necromancer: {
     backdrop: '#262b22',
     ground: '#3f4d31',

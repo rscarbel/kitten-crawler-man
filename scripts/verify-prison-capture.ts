@@ -369,7 +369,7 @@ const missileSplash = (harness: PrisonHarness): void => {
 const slingshot = (harness: PrisonHarness): void => {
   const { human } = harness;
   human.inventory.addItem('slingshot', 1);
-  human.wield('slingshot');
+  human.drawWeapon('slingshot');
   standAtCellDoor(harness, true);
   human.triggerAttack(null);
 };

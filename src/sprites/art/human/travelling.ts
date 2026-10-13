@@ -12,7 +12,8 @@
  * and which leg a kick or stamp is made with, follow the entry.
  */
 
-import { buildSkeleton, type CarlPose, type CarlView, LEG_MAX_REACH, VIEWS } from '../carl/rig';
+import { buildSkeleton, type CarlPose, LEG_MAX_REACH, VIEWS } from '../carl/rig';
+import { type CardinalView } from '../../facingView';
 import { pt } from '../carl/geometry';
 import { type Pt } from '../carlArt';
 import { HALF_CYCLE, LEFT_ARM, RIGHT_ARM, wrapPhase } from './gaitShared';
@@ -30,18 +31,18 @@ export const PHASE_EPSILON = 1e-9;
  * takes a version more to keep every run frame near one. The row table names
  * exactly this many versions a view.
  */
-const TRAVELLING_VERSIONS: Readonly<Record<CarlView, number>> = {
+const TRAVELLING_VERSIONS: Readonly<Record<CardinalView, number>> = {
   side: 5,
   front: 4,
   back: 4,
 };
 
-function runPose(view: CarlView, phase: number): CarlPose {
+function runPose(view: CardinalView, phase: number): CarlPose {
   return view === 'side' ? runSide(phase) : runFacing(phase, view === 'back');
 }
 
 /** Both ankles of a run pose, solved on the rig. */
-function runAnkles(view: CarlView, phase: number): readonly [Pt, Pt] {
+function runAnkles(view: CardinalView, phase: number): readonly [Pt, Pt] {
   const skeleton = buildSkeleton(runPose(view, phase), VIEWS[view]);
   return [skeleton.leftLeg.end, skeleton.rightLeg.end];
 }
@@ -76,7 +77,10 @@ function subsets(items: readonly number[], count: number): number[][] {
  * so the choice follows the run as it is painted. `allowed` narrows the run
  * frames a blow can begin on at all.
  */
-function entryRunFrames(view: CarlView, allowed: (runFrame: number) => boolean): readonly number[] {
+function entryRunFrames(
+  view: CardinalView,
+  allowed: (runFrame: number) => boolean,
+): readonly number[] {
   const ankles = Array.from({ length: RUN_FRAMES }, (_unused, frame) =>
     runAnkles(view, frame / RUN_FRAMES),
   );
@@ -104,13 +108,13 @@ function entryRunFrames(view: CarlView, allowed: (runFrame: number) => boolean):
  * {@link entryRunFrames} chooses them from the run frames `allowed` passes.
  */
 export function entryPhasesWhere(
-  view: CarlView,
+  view: CardinalView,
   allowed: (runFrame: number) => boolean,
 ): readonly number[] {
   return entryRunFrames(view, allowed).map((frame) => frame / RUN_FRAMES);
 }
 
-function entryPhases(view: CarlView): readonly number[] {
+function entryPhases(view: CardinalView): readonly number[] {
   return entryPhasesWhere(view, () => true);
 }
 
@@ -118,14 +122,14 @@ function entryPhases(view: CarlView): readonly number[] {
  * The run phases, as fractions of the cycle, at which each view's travelling
  * versions begin — one version per phase, in this order.
  */
-const TRAVELLING_ENTRY_PHASES: Readonly<Record<CarlView, readonly number[]>> = {
+const TRAVELLING_ENTRY_PHASES: Readonly<Record<CardinalView, readonly number[]>> = {
   side: entryPhases('side'),
   front: entryPhases('front'),
   back: entryPhases('back'),
 };
 
 /** The run phase one version of a view begins at; out-of-range versions wrap. */
-export function travellingEntryPhase(view: CarlView, version: number): number {
+export function travellingEntryPhase(view: CardinalView, version: number): number {
   const phases = TRAVELLING_ENTRY_PHASES[view];
   return phases[((version % phases.length) + phases.length) % phases.length];
 }
@@ -217,7 +221,7 @@ const REACH_EASE_STEPS = 12;
  * straight out behind. A planted foot is left where it stands; it holds the
  * floor, and moving it would slide it.
  */
-export function keepSwingFeetInReach(pose: CarlPose, view: CarlView): void {
+export function keepSwingFeetInReach(pose: CarlPose, view: CardinalView): void {
   for (const side of [RIGHT_ARM, LEFT_ARM]) {
     const planted = side === RIGHT_ARM ? pose.rightFootPlanted : pose.leftFootPlanted;
     if (planted === true) continue;
