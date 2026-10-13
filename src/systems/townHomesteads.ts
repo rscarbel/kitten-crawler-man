@@ -15,7 +15,7 @@
 import type { Player } from '../Player';
 import type { ShopMenu, ShopRow, ShopPurchaseHandler } from '../ui/screens/shop/shopSession';
 import type { ResidentHost } from './townResidents';
-import { giveInventoryItem, rotateLine } from './townServiceUtil';
+import { rotateLine } from './townServiceUtil';
 
 // -- Cartwright's Workshop --------------------------------------------------
 
@@ -75,9 +75,7 @@ export function sellCartwrightGoods(turn: number): ShopPurchaseHandler {
           ? 1
           : 0;
     if (sticks === 0) return { ok: false, line: 'Brann shrugs at the bench.' };
-    if (!giveInventoryItem(buyer, 'goblin_dynamite', sticks)) {
-      return { ok: false, line: 'No room in that bag of yours.' };
-    }
+    buyer.inventory.addItem('goblin_dynamite', sticks);
     return { ok: true, line: rotateLine(CARTWRIGHT_LINES, turn) };
   };
 }
@@ -143,9 +141,7 @@ export function serveMillerGoods(turn: number): ShopPurchaseHandler {
       return { ok: true, line: rotateLine(MILLER_LINES, turn) };
     }
     if (option.key !== CRISP_KEY) return { ok: false, line: 'Marta wipes her hands and waits.' };
-    if (!giveInventoryItem(buyer, 'cooldown_crisp')) {
-      return { ok: false, line: 'Nowhere to put them. Eat something first.' };
-    }
+    buyer.inventory.addItem('cooldown_crisp', 1);
     return { ok: true, line: 'Straight off the tray. Do not let them go soft.' };
   };
 }

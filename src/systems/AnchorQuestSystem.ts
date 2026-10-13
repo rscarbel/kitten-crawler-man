@@ -393,15 +393,6 @@ export class AnchorQuestSystem implements GameSystem, TrackerSource {
     if (this.shardsHeld < SHARDS_REQUIRED) return;
 
     const crawlers = this.crawlers();
-    // Checked before anything is spent: the stone cannot be dropped or bought
-    // back, so a party that can't actually hold two of them must keep its
-    // shards, its coins and its unfinished quest rather than lose one forever.
-    if (!crawlers.every((crawler) => this.canGrantAnchor(crawler))) {
-      this.audio?.play('error_taking_action');
-      this.toast("No room for the Wayfinder's Anchor — clear a slot on both bags and ask again.");
-      return;
-    }
-
     // Each shard comes out of whichever bag happens to hold it — the party is one
     // party, and which crawler picked a shard up is not the player's problem.
     for (const shardId of ANCHOR_SHARD_IDS) {
@@ -421,15 +412,10 @@ export class AnchorQuestSystem implements GameSystem, TrackerSource {
     const xpApplied = awardPartyXp(human, cat, xp, this.bus);
     // `QuestManager`'s generic `lootBoxItems` field is never read by any payout
     // path in this codebase, so the potions are granted directly here.
-    // `addItem` drops silently when there is no room, same as every other
-    // grant here checks for first.
-    let potionCount = 0;
-    if (payer.inventory.hasRoomFor('health_potion')) {
-      potionCount =
-        ANCHOR_REWARD_POTIONS_MIN +
-        Math.floor(Math.random() * (ANCHOR_REWARD_POTIONS_MAX - ANCHOR_REWARD_POTIONS_MIN + 1));
-      payer.inventory.addItem('health_potion', potionCount);
-    }
+    const potionCount =
+      ANCHOR_REWARD_POTIONS_MIN +
+      Math.floor(Math.random() * (ANCHOR_REWARD_POTIONS_MAX - ANCHOR_REWARD_POTIONS_MIN + 1));
+    payer.inventory.addItem('health_potion', potionCount);
 
     this.bus.emit('questCompleted', { questId: ANCHOR_QUEST_ID });
     // Presented, not merely deposited: a permanent item that appears silently on
@@ -457,22 +443,12 @@ export class AnchorQuestSystem implements GameSystem, TrackerSource {
     };
   }
 
-  /** Whether this crawler has a free hotbar slot or bag room for the stone. */
-  private canGrantAnchor(crawler: Player): boolean {
-    const bar = crawler.inventory.actionBar;
-    for (let slot = 0; slot < QUEST_SLOT_IDX; slot++) {
-      if (bar.slots[slot] === null) return true;
-    }
-    return crawler.inventory.hasRoomFor('wayfinders_anchor');
-  }
-
   /**
    * Puts the stone on a free hotbar slot, falling back to the bag.
    *
    * The reserved quest slot is skipped deliberately: the next quest item picked
    * up would overwrite whatever is sitting in it, and the stone cannot be
-   * dropped or re-acquired. Only called once `canGrantAnchor` has confirmed
-   * there is somewhere for it to go.
+   * dropped or re-acquired.
    */
   private grantAnchor(crawler: Player): void {
     const bar = crawler.inventory.actionBar;

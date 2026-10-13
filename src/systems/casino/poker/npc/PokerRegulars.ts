@@ -15,6 +15,7 @@
  * each regular is comes from the world seed and never from that source.
  */
 
+import type { LuckCheck } from '../../../../core/GodMode';
 import type { Card } from '../../Deck';
 import { passiveAction, type PokerActionKind } from '../bettingRound';
 import {
@@ -745,6 +746,7 @@ export interface RegularsTableOptions {
   readonly onDecision?: (record: RegularDecisionRecord) => void;
   /** Reuse an already rolled roster instead of rolling `worldSeed` again. */
   readonly personalities?: PokerPersonalities;
+  readonly isLucky?: LuckCheck;
 }
 
 /**
@@ -778,6 +780,7 @@ export function createRegularsTable(options: RegularsTableOptions): {
     random: options.tableRandom ?? random,
     playerStack: options.playerStack,
     fast: options.fast,
+    isLucky: options.isLucky,
   });
   return { table, regulars };
 }

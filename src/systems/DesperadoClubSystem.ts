@@ -1,4 +1,5 @@
 import { TILE_SIZE } from '../core/constants';
+import { NEVER_LUCKY, type LuckCheck } from '../core/GodMode';
 import type { Player } from '../Player';
 import type { AudioManager } from '../audio/AudioManager';
 import { CASINO_MUSIC_TRACKS, CLUB_MUSIC_TRACKS } from '../audio/sounds';
@@ -367,6 +368,7 @@ export class DesperadoClubSystem {
     private readonly humanAchievements?: AchievementManager,
     private readonly catAchievements?: AchievementManager,
     worldSeed: number = POKER_DEV_SEED,
+    isLucky: LuckCheck = NEVER_LUCKY,
   ) {
     this.crowd = new ClubCrowdSystem(map);
     this.barShop = new ShopSystem(CLUB_INTERIOR_W, BAR_SHOP_CONFIG, {
@@ -375,6 +377,7 @@ export class DesperadoClubSystem {
     });
     this.marketShop = createClubMarketShop(marketStock);
     this.casino = new ClubCasinoSystem(audio, membership);
+    this.casino.isLucky = isLucky;
     this.casino.onWinnings = (coins, screenX, screenY) =>
       this.onCasinoWinnings?.(coins, screenX, screenY);
     this.poker = new ClubPokerSystem(
@@ -387,7 +390,9 @@ export class DesperadoClubSystem {
     this.poker.onWinnings = (coins, screenX, screenY) =>
       this.onCasinoWinnings?.(coins, screenX, screenY);
     this.poker.onNotice = (message, tone) => this.onCasinoNotice?.(message, tone);
+    this.poker.isLucky = isLucky;
     const slots = new ClubSlotsSystem(audio, membership);
+    slots.isLucky = isLucky;
     slots.onWinnings = (coins, screenX, screenY) =>
       this.onCasinoWinnings?.(coins, screenX, screenY);
     this.games.slots = slots;

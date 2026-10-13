@@ -297,25 +297,18 @@ export class StealthKeySnatchSystem
     active.earnCoins(coins);
     const itemIndex = Math.floor(Math.random() * REWARD_ITEM_POOL.length);
     const item = REWARD_ITEM_POOL[itemIndex] ?? REWARD_ITEM_POOL[0];
-    const itemLanded = active.inventory.addItem(item, 1);
+    active.inventory.addItem(item, 1);
     this.deps.bus.emit('questCompleted', { questId: STEALTH_KEY_SNATCH_QUEST_ID });
-    this.deps.bus.emit(
-      'questRewardShown',
-      this.rewardSpec(xpApplied, coins, itemLanded ? item : null),
-    );
+    this.deps.bus.emit('questRewardShown', this.rewardSpec(xpApplied, coins, item));
   }
 
-  private rewardSpec(
-    xpApplied: PartyXpApplied,
-    coins: number,
-    item: ItemId | null,
-  ): QuestRewardSpec {
+  private rewardSpec(xpApplied: PartyXpApplied, coins: number, item: ItemId): QuestRewardSpec {
     return {
       questTitle: STEALTH_KEY_SNATCH_QUEST_NAME,
       sections: [
         ...partyXpSections(xpApplied),
         { kind: 'coins', amount: coins },
-        ...(item === null ? [] : [{ kind: 'items' as const, items: [bagItemRewardLine(item, 1)] }]),
+        { kind: 'items', items: [bagItemRewardLine(item, 1)] },
       ],
     };
   }

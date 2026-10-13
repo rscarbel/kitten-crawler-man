@@ -1029,25 +1029,16 @@ export class MurderMysteryQuestSystem implements GameSystem {
   }
 
   /**
-   * Hands over the papers off GumGum's body, retrying until the bag has room.
-   *
-   * `addItem` on a full bag returns nothing and drops the item. These two are granted once,
-   * behind a stage advance that never runs again, and the investigation's own
-   * hint talks about the letter being in the player's pack — so losing them
-   * would leave the quest describing evidence that does not exist. Retried every
-   * frame instead, which costs nothing and resolves itself the moment the player
-   * frees a slot. The outstanding list lives on the cross-scene progress record,
-   * so walking through a door mid-retry does not end the attempt.
+   * Hands over the papers off GumGum's body on the next frame after the body
+   * dialog closes, which has no crawler to hand them to. The outstanding list
+   * lives on the cross-scene progress record, so a save or a door walked
+   * through in between still delivers them.
    */
   private grantOwedEvidence(ctx: SystemContext): void {
     const owed = this.progress.evidenceOwed;
     if (owed.length === 0) return;
-    const bag = ctx.human.inventory;
-    this.progress.evidenceOwed = owed.filter((id) => {
-      if (!bag.hasRoomFor(id)) return true;
-      bag.addItem(id, 1);
-      return false;
-    });
+    for (const id of owed) ctx.human.inventory.addItem(id, 1);
+    this.progress.evidenceOwed = [];
   }
 
   private finishClue(id: ClueId): void {

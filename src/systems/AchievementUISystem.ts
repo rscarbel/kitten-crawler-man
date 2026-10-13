@@ -7,7 +7,6 @@
 import type { AchievementManager, BoxContents, LootBox } from '../core/AchievementManager';
 import type { AchievementDef } from '../core/AchievementManager';
 import { ACHIEVEMENT_DEFS, getBoxContents } from '../core/AchievementManager';
-import type { ItemId } from '../core/ItemDefs';
 import { AchievementNotification } from '../ui/AchievementNotification';
 import { LootBoxOpener } from '../ui/LootBoxOpener';
 import type { HumanPlayer } from '../creatures/HumanPlayer';
@@ -40,15 +39,6 @@ export class AchievementUISystem {
    * state immediately after the normal loot box opener finishes.
    */
   onAllBoxesOpened: (() => void) | null = null;
-
-  /**
-   * Called with an achievement item reward the winner's bag has no space for.
-   * The scene drops it at their feet instead; without this the reward would be
-   * swallowed by `Inventory.addItem` and the achievement could never pay out
-   * again.
-   */
-  onRewardOverflow:
-    ((player: HumanPlayer | CatPlayer, id: ItemId, quantity: number) => void) | null = null;
 
   constructor(
     private readonly humanAchievements: AchievementManager,
@@ -243,15 +233,14 @@ export class AchievementUISystem {
           );
         }
         for (const reward of contents.itemRewards ?? []) {
-          if (this.grantItemReward(target, reward.id, reward.quantity)) {
-            this.rewardFly.enqueueItem(
-              reward.id,
-              ITEM_DEF[reward.id].name,
-              origin.x,
-              origin.y,
-              flyHold,
-            );
-          }
+          target.inventory.addItem(reward.id, reward.quantity);
+          this.rewardFly.enqueueItem(
+            reward.id,
+            ITEM_DEF[reward.id].name,
+            origin.x,
+            origin.y,
+            flyHold,
+          );
         }
       },
       () => {
@@ -284,16 +273,6 @@ export class AchievementUISystem {
     const itemRewards = [...achievementRewards, ...(box.itemRewards ?? [])];
     if (itemRewards.length === 0) return base;
     return { ...base, itemRewards: itemRewards.map((reward) => ({ ...reward })) };
-  }
-
-  /** @returns whether the item actually landed in the bag, rather than overflowing to the ground. */
-  private grantItemReward(target: HumanPlayer | CatPlayer, id: ItemId, quantity: number): boolean {
-    if (target.inventory.hasRoomFor(id)) {
-      target.inventory.addItem(id, quantity);
-      return true;
-    }
-    this.onRewardOverflow?.(target, id, quantity);
-    return false;
   }
 
   // ── Rendering ──

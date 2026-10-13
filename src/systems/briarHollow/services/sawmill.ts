@@ -35,14 +35,13 @@ import {
   processingStationsOf,
   stationArtTopTileY,
 } from '../processingStations';
-import { BAG_FULL_LINE, type Crawler, type ServiceParty } from './serviceContext';
+import type { Crawler, ServiceParty } from './serviceContext';
 import {
   MANUAL_PROCESS_SECONDS,
   grantManualProcessingXp,
   outputItem,
   partyWood,
   processWood,
-  processableWood,
 } from './woodProcessing';
 
 /** The saw bench's cutting loop, heard for a cut and for Fenna working the saw. */
@@ -188,7 +187,7 @@ function footprintCentre(station: ProcessingStation): { x: number; y: number } {
   return { x: (x + w / 2) * TILE_SIZE, y: (y + h / 2) * TILE_SIZE };
 }
 
-export type PressOutcome = 'started' | 'busy' | 'no_wood' | 'bag_full';
+export type PressOutcome = 'started' | 'busy' | 'no_wood';
 
 export class SawmillService {
   private readonly stations: ProcessingStation[];
@@ -293,25 +292,20 @@ export class SawmillService {
       return 'busy';
     }
     if (this.deps.rebuilding()) return 'busy';
-    const outcome = this.refusal(worker, station);
+    const outcome = this.refusal(worker);
     if (outcome !== null) return outcome;
     this.keepGoing = keepGoing;
     this.start(worker, station);
     return 'started';
   }
 
-  private refusal(worker: Crawler, station: ProcessingStation): PressOutcome | null {
+  private refusal(worker: Crawler): PressOutcome | null {
     if (partyWood(this.deps.party) < 1) {
       this.deps.announce(NEED_WOOD_LINE);
       this.deps.audio?.play('error');
       const fennaTiles = this.deps.fennaTilesFrom(worker);
       if (fennaTiles !== null && fennaTiles <= FENNA_OVERHEARS_TILES) this.deps.fennaNoWood();
       return 'no_wood';
-    }
-    if (processableWood(this.deps.party, worker, station.kind) < 1) {
-      this.deps.announce(BAG_FULL_LINE);
-      this.deps.audio?.play('error');
-      return 'bag_full';
     }
     return null;
   }
@@ -389,19 +383,18 @@ export class SawmillService {
   }
 
   private finish(job: ManualJob): void {
-    const available = processableWood(this.deps.party, job.worker, job.station.kind);
-    const wood = Math.min(job.woodPerPress, available);
+    const wood = Math.min(job.woodPerPress, partyWood(this.deps.party));
     const result = processWood(this.deps.party, job.worker, job.station.kind, wood);
     this.deps.noteResourceActivity();
     if (result === null) {
       this.job = null;
       this.stopEffects(job);
-      this.deps.announce(BAG_FULL_LINE);
+      this.deps.announce(NEED_WOOD_LINE);
       return;
     }
     grantManualProcessingXp(job.worker, result.woodSpent);
     if (job.station.kind === 'rope') this.deps.audio?.play(this.ropeSound(job.station));
-    result.recipient.queueFloatingText(
+    job.worker.queueFloatingText(
       `+${result.produced} ${ITEM_DEF[outputItem(job.station.kind)].name}`,
       'buff',
     );
@@ -414,7 +407,7 @@ export class SawmillService {
     const carryOn =
       (this.keyHeld || this.keepGoing) &&
       this.stationFor(job.worker) === job.station &&
-      processableWood(this.deps.party, job.worker, job.station.kind) >= 1;
+      partyWood(this.deps.party) >= 1;
     if (carryOn) {
       job.framesLeft = MANUAL_PROCESS_FRAMES;
       job.woodPerPress = this.woodPerPress(job.station);

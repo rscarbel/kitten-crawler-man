@@ -6,8 +6,7 @@
  */
 
 import { consumeStock, remainingFor, type MarketStock } from './MarketStock';
-import type { VendorDef, VendorLineGate, VendorStockLine } from './vendorDefs';
-import type { Player } from '../../Player';
+import type { VendorDef, VendorLineGate } from './vendorDefs';
 import type { AudioManager } from '../../audio/AudioManager';
 import type { ShopMenu, ShopRow, ShopPurchaseHandler } from '../../ui/screens/shop/shopSession';
 
@@ -102,24 +101,11 @@ export function createVendorPurchase(
     if (remainingFor(stock, def.id, line) === 0) {
       return { ok: false, line: `${line.label} is sold out.` };
     }
-    if (!giveItem(buyer, line)) {
-      getAudio()?.play('error_taking_action');
-      return { ok: false, line: 'Inventory is full!' };
-    }
+    buyer.inventory.addItem(line.id, 1);
     consumeStock(stock, def.id, line);
     const audio = getAudio();
     audio?.play('purchase_success');
     audio?.play('coin_pouch', { volume: COIN_POUCH_VOLUME });
     return { ok: true, line: `Bought ${line.label}!` };
   };
-}
-
-/**
- * Hands over one unit, or refuses when the bag has no room. Asked before
- * adding, so a full bag refuses the sale instead of reporting a lost item the
- * player never paid for.
- */
-function giveItem(buyer: Player, line: VendorStockLine): boolean {
-  if (!buyer.inventory.hasRoomFor(line.id)) return false;
-  return buyer.inventory.addItem(line.id, 1);
 }

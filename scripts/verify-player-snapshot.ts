@@ -12,12 +12,20 @@
  * any item the crawler could not equip, so nothing sits in the map where no
  * doll cell reaches it or that the crawler could never have put on.
  *
+ * The bag has no fixed size: a bag several pages deep must round-trip slot for
+ * slot, a thousand-stack bag must serialize well under the server's smallest
+ * plausible body limit, and a save holding a fixed 32 slots of whole item defs,
+ * every one of them full, must load with all of them and a page to spare.
+ *
  *   npx tsx scripts/verify-player-snapshot.ts
  */
 
 import { TILE_SIZE } from '../src/core/constants.js';
 import {
+  BAG_PAGE_SLOTS,
   isWearable,
+  ITEM_DEF,
+  isItemId,
   MAIN_HAND_KEY,
   type InventoryItem,
   type ItemId,
@@ -49,6 +57,12 @@ const RING_KEY = 'Hands:Ring 1';
 const BOXERS_KEY = 'Legs:Pants';
 const RETIRED_KEYS = ['Fingers:Ring 1', 'Hands:Ring 9', 'Hand', 'Hand:'] as const;
 const CAT_ONLY_HELD_KEY = 'Mouth:Held';
+/** Express's default JSON body limit: a save that fits under it fits under any limit the server sets. */
+const EXPRESS_DEFAULT_BODY_LIMIT_BYTES = 100 * 1024;
+/** Stacks in the deep bag whose save size is measured. */
+const DEEP_BAG_STACKS = 1000;
+/** Both crawlers' snapshots ride in one save, so each must leave room for the other and the world. */
+const SNAPSHOT_SHARE_OF_BODY_LIMIT = 0.5;
 
 function carlHolding(...ids: readonly ItemId[]): HumanPlayer {
   const carl = new HumanPlayer(0, 0, TILE_SIZE);
@@ -264,6 +278,63 @@ function restored(snap: PlayerSnapshot): HumanPlayer {
   check(
     !donutInCarlsGear.inventory.hasEquipped(humanOnlyCloak),
     "Donut's restore drops a human-only item canEquip would refuse her",
+  );
+}
+
+{
+  const nonStacking = Object.keys(ITEM_DEF)
+    .filter(isItemId)
+    .filter((id) => !ITEM_DEF[id].stackable && ITEM_DEF[id].isQuestItem !== true);
+  const packedPages = 3;
+  const packed = new HumanPlayer(0, 0, TILE_SIZE);
+  for (let index = 0; index < BAG_PAGE_SLOTS * (packedPages - 1); index++) {
+    packed.inventory.addItem(nonStacking[index % nonStacking.length], 1);
+  }
+  const layout = (carl: HumanPlayer): string =>
+    carl.inventory.bag.slots.map((slot) => slot?.id ?? '-').join(',');
+  const back = restored(structuredClone(snapPlayer(packed)));
+  check(
+    packed.inventory.bag.pageCount === packedPages && layout(back) === layout(packed),
+    'a bag several pages deep round-trips slot for slot',
+  );
+
+  const deep = new HumanPlayer(0, 0, TILE_SIZE);
+  for (let index = 0; index < DEEP_BAG_STACKS; index++) {
+    deep.inventory.addItem(nonStacking[index % nonStacking.length], 1);
+  }
+  const deepSnap = snapPlayer(deep);
+  const deepBytes = Buffer.byteLength(JSON.stringify(deepSnap));
+  check(
+    deepBytes < EXPRESS_DEFAULT_BODY_LIMIT_BYTES * SNAPSHOT_SHARE_OF_BODY_LIMIT,
+    `a ${DEEP_BAG_STACKS}-stack bag saves in ${deepBytes} bytes, well under the body limit`,
+  );
+  check(
+    deepSnap.inventorySlots.every(
+      (slot) => slot === null || Object.keys(slot).sort().join(',') === 'id,quantity',
+    ),
+    'a saved stack stores only its id and quantity',
+  );
+  const deepBack = restored(structuredClone(deepSnap));
+  check(
+    layout(deepBack) === layout(deep) &&
+      deepBack.inventory.bag.slots.every(
+        (slot) => slot === null || slot.name === ITEM_DEF[slot.id].name,
+      ),
+    `a ${DEEP_BAG_STACKS}-stack bag round-trips, every stack rebuilt from its def`,
+  );
+
+  const fixedSize = new Array<InventoryItem | null>(BAG_PAGE_SLOTS)
+    .fill(null)
+    .map((_, index) => ({ ...ITEM_DEF[nonStacking[index % nonStacking.length]], quantity: 1 }));
+  const legacy = restored({
+    ...snapPlayer(new HumanPlayer(0, 0, TILE_SIZE)),
+    inventorySlots: fixedSize,
+  });
+  check(
+    legacy.inventory.bag.slots.filter((slot) => slot !== null).length === BAG_PAGE_SLOTS &&
+      legacy.inventory.bag.pageCount === 2 &&
+      legacy.inventory.bag.slots.includes(null),
+    'a full fixed-size bag from an older save loads whole, with a page to spare',
   );
 }
 

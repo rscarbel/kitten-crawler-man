@@ -93,7 +93,7 @@ export interface GameProgress {
   wheelFreeSpinBet?: number | null;
   /** The crawler a wheel freeze is still owed to, spent on the next load. */
   wheelOwedFreeze?: WheelCrawler | null;
-  /** Prize items still waiting for room in a crawler's bag. */
+  /** Prize items held for a crawler outside the bag: read on load, never written. */
   wheelOwedItems?: OwedWheelItem[];
   /** Frames of blood vomiting each crawler has left. */
   bloodVomitRemaining?: BloodVomitRemaining;

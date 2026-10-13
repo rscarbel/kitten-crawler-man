@@ -15,6 +15,9 @@ export type Suit = (typeof SUITS)[number];
 export const RANKS = ['A', '2', '3', '4', '5', '6', '7', '8', '9', '10', 'J', 'Q', 'K'] as const;
 export type Rank = (typeof RANKS)[number];
 
+/** The card `!lucky` guarantees in the player's own hand at either card game. */
+export const LUCKY_RANK: Rank = 'A';
+
 export interface Card {
   readonly rank: Rank;
   readonly suit: Suit;
@@ -105,6 +108,24 @@ export class Deck {
     const card = this.cards[this.cursor];
     this.cursor++;
     return card;
+  }
+
+  /** True when a card of `rank` is still undealt. */
+  holdsUndealt(rank: Rank): boolean {
+    return this.cards.slice(this.cursor).some((card) => card.rank === rank);
+  }
+
+  /**
+   * Swaps an undealt card of `rank` into the next draw, so the next `draw()`
+   * returns it. The swap only reorders undealt cards, so every card still
+   * appears exactly once. False when every card of that rank is already dealt.
+   */
+  stackNext(rank: Rank): boolean {
+    const offset = this.cards.slice(this.cursor).findIndex((card) => card.rank === rank);
+    if (offset < 0) return false;
+    const found = this.cursor + offset;
+    [this.cards[this.cursor], this.cards[found]] = [this.cards[found], this.cards[this.cursor]];
+    return true;
   }
 
   shuffle(): void {

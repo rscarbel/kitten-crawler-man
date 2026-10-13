@@ -15,7 +15,6 @@
 import { ITEM_DEF, type ItemId } from '../../../core/ItemDefs';
 import type { BriarHollowState } from '../../../core/briarHollowState';
 import type { Player } from '../../../Player';
-import { giveInventoryItem } from '../../townServiceUtil';
 import { HEALTH_POTION_PRICE } from '../../market/vendorDefs';
 import { GOBLIN_DYNAMITE_PRICE } from '../../ShopSystem';
 import { SOLD_OUT_LABEL } from '../../market/vendorMenu';
@@ -32,7 +31,6 @@ import { VETCH } from '../../../dialog/scripts/briarHollow';
 import { LOW_SUPPLIES_THRESHOLD } from '../villagerCircumstances';
 import { HAMBURGER_PRICE } from './cookhouse';
 import {
-  BAG_FULL_LINE,
   type ShopCounter,
   type ShopDefinition,
   sellerLine,
@@ -134,16 +132,12 @@ export function tradingPostPurchase(
   state: BriarHollowState,
   option: ShopRow,
   buyer: Player,
-  announce: (message: string) => void,
 ): ShopPurchaseResult {
   const entry = tradingPostLinesFor(state).find((candidate) => candidate.id === option.key);
   if (entry === undefined) return { ok: false, line: '' };
   const remaining = remainingStock(state, entry);
   if (remaining <= 0) return { ok: false, line: SOLD_OUT_LABEL };
-  if (!giveInventoryItem(buyer, entry.id)) {
-    announce(BAG_FULL_LINE);
-    return { ok: false, line: BAG_FULL_LINE };
-  }
+  buyer.inventory.addItem(entry.id, 1);
   const left = remaining - 1;
   state.merchantStock[entry.id] = left;
   return { ok: true, line: `${ITEM_DEF[entry.id].name} — ${left} left.` };
@@ -153,28 +147,21 @@ function tradingPostSellConfig(state: BriarHollowState): ShopSellConfig {
   return { pricing: TRADING_POST_PRICING, heldStock: state.merchantHeld, vendorId: MERCHANT };
 }
 
-export function tradingPostShop(
-  state: BriarHollowState,
-  announce: (message: string) => void,
-): ShopDefinition {
+export function tradingPostShop(state: BriarHollowState): ShopDefinition {
   return {
     build: () => buildTradingPostMenu(state),
-    purchase: (option, buyer) => tradingPostPurchase(state, option, buyer, announce),
+    purchase: (option, buyer) => tradingPostPurchase(state, option, buyer),
     blockedLine: (option) => option.unavailable ?? null,
     sell: tradingPostSellConfig(state),
   };
 }
 
 /** "Browse" under Vetch's conversation, while the shop is open. */
-export function tradingPostTopics(
-  state: BriarHollowState,
-  counter: ShopCounter,
-  announce: (message: string) => void,
-): TopicProvider {
+export function tradingPostTopics(state: BriarHollowState, counter: ShopCounter): TopicProvider {
   return {
     topics(villager, ctx, flow) {
       if (villager !== MERCHANT || !shopTrades(ctx.quest.phase)) return [];
-      return [shopTopic('browse', 'Browse', counter, () => tradingPostShop(state, announce), flow)];
+      return [shopTopic('browse', 'Browse', counter, () => tradingPostShop(state), flow)];
     },
   };
 }

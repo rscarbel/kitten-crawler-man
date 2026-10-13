@@ -210,7 +210,7 @@ export class InventoryActions {
       this.pendingUnequipSlot = slotIdx;
       this.pendingUnequipSource = source;
     } else if (action === 'Move to Bag') {
-      inventory.moveHotbarToFirstEmptySlot(slotIdx);
+      inventory.moveHotbarToBag(slotIdx);
     } else if (action === 'Drop' || action === 'Trade') {
       const container = source === 'hotbar' ? inventory.actionBar : inventory.bag;
       const live = container.slots[slotIdx] ?? null;

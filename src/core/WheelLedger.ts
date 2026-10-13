@@ -27,9 +27,9 @@ export interface PendingWheelOutcome {
 }
 
 /**
- * A prize item the crawler won but had no bag room for. It stays here, saved,
- * until a bag has room; then it moves into the bag and leaves the ledger, so
- * it exists in exactly one of the two places.
+ * A prize item a save may hold for a crawler outside the bag. The wheel itself
+ * never adds one and saves never write them; one read from a save is put in
+ * the crawler's bag when the ledger is settled on load.
  */
 export interface OwedWheelItem {
   crawler: WheelCrawler;
@@ -60,7 +60,7 @@ export interface WheelLedger {
    * tab closes first.
    */
   owedFreeze: WheelCrawler | null;
-  /** Prize items still waiting for room in their crawler's bag. */
+  /** Prize items read from a save, emptied into the bags when the ledger is settled. */
   owedItems: OwedWheelItem[];
 }
 

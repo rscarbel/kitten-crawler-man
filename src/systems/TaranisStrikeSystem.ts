@@ -3,10 +3,17 @@
  * lightning the blade throws along the blow, and the chain lightning every cut
  * enemy throws on.
  *
+ * The wave cuts every enemy whose body lies in its lane — up to its reach ahead
+ * of him and its half-width either side — for the sword's full cut, however
+ * far along the lane it stands. It passes through walls, props and bodies
+ * alike, so nothing in the lane shields anything behind it. Who it cuts is
+ * settled the moment it is thrown, measured from where he stood; each cut lands
+ * as the drawn front reaches that body, so what is seen is what is hit.
+ *
  * One swing strikes an enemy at most once, whether the blade, the wave or a
  * chain reaches it first: each swing carries the set of everything it has
- * struck from the blade's cut to the wave's last tick. Chains do not chain —
- * only an enemy cut by the blade or the wave throws one.
+ * struck. Chains do not chain — only an enemy cut by the blade or the wave
+ * throws one.
  *
  * Owned by `CombatKit`, which registers it as the `taranisStorm` proc: the
  * generic weapon strike in `CombatSystem` lands the blade's cut and hands the
@@ -17,7 +24,6 @@
 
 import { TILE_SIZE } from '../core/constants';
 import type { Mob } from '../creatures/Mob';
-import type { GameMap } from '../map/GameMap';
 import { TARANIS_LIGHTNING } from '../sprites/art/taranisPalette';
 import {
   type CombatContext,
@@ -30,16 +36,16 @@ import type { DynamicLightSink } from './lighting/dynamicLights';
 
 const HALF_TILE = TILE_SIZE / 2;
 
-/** How far the wave runs from his centre before it spends itself. */
-export const TARANIS_WAVE_REACH_TILES = 3;
-/** How far either side of its line the wave catches a body, measured to the body's centre. */
-const WAVE_HALF_WIDTH_TILES = 0.75;
+/** How far ahead of his centre the wave reaches, to the near edge of a body it cuts. */
+export const TARANIS_WAVE_REACH_TILES = 4;
+const WAVE_REACH_PX = TARANIS_WAVE_REACH_TILES * TILE_SIZE;
+/** How far either side of its line the drawn crescent spans; a body touching it is cut. */
+const WAVE_HALF_WIDTH_TILES = 1;
 const WAVE_HALF_WIDTH_PX = WAVE_HALF_WIDTH_TILES * TILE_SIZE;
 /** Ticks the wave takes to cover its reach, and to fade out once it has. */
 const WAVE_TRAVEL_TICKS = 10;
 const WAVE_FADE_TICKS = 12;
-/** How finely the wave's path is probed for the wall that stops it. */
-const WALL_PROBES_PER_TILE = 4;
+const WAVE_STEP_PX = WAVE_REACH_PX / WAVE_TRAVEL_TICKS;
 /** How far a cut enemy's chain lightning reaches, centre to centre. */
 export const TARANIS_CHAIN_RADIUS_TILES = 3;
 /** How many other enemies one cut enemy's chain lightning can reach. */
@@ -63,15 +69,21 @@ const FADING_FLICKER_FLOOR = 0.25;
 /** The crescent is drawn only once it has cleared his body, so it leaves the blade rather than his chest. */
 const ARC_MIN_FRONT_PX = TILE_SIZE / 2;
 
+/** An enemy the wave was thrown at, cut once the front has run `alongPx` from his centre. */
+interface PendingCut {
+  readonly mob: Mob;
+  readonly alongPx: number;
+}
+
 interface Wave {
   readonly originX: number;
   readonly originY: number;
   readonly dirX: number;
   readonly dirY: number;
-  /** How far it runs before the wall or its own reach stops it, in world pixels. */
-  readonly reachPx: number;
   frontPx: number;
   age: number;
+  /** Everything in the lane when it was thrown and not yet reached, nearest first. */
+  pending: PendingCut[];
   /** Everything this swing has struck, shared with its blade cut and chains. */
   readonly struck: Set<Mob>;
   /** The sword's multiple of a blow, which every cut the wave makes lands. */
@@ -87,6 +99,15 @@ function centreOf(entity: WorldPoint): WorldPoint {
   return { x: entity.x + HALF_TILE, y: entity.y + HALF_TILE };
 }
 
+/**
+ * How far a mob's body reaches from its centre. Its collision radius is the
+ * centre-to-centre distance it keeps a one-tile crawler at, so the crawler's
+ * own half tile is not part of it.
+ */
+function bodyRadiusOf(mob: Mob): number {
+  return Math.max(HALF_TILE, mob.collisionRadiusPx - HALF_TILE);
+}
+
 export class TaranisStrikeSystem implements WeaponProc {
   private waves: Wave[] = [];
   private swungThisTick = false;
@@ -99,18 +120,21 @@ export class TaranisStrikeSystem implements WeaponProc {
    * lightning each enemy the cut earned on throws.
    */
   onStrike(ctx: CombatContext, swing: WeaponSwing): void {
-    const origin = { x: swing.originX, y: swing.originY };
     const wave: Wave = {
       originX: swing.originX,
       originY: swing.originY,
       dirX: swing.dirX,
       dirY: swing.dirY,
-      reachPx: clearReach(ctx.gameMap, origin, swing.dirX, swing.dirY),
       frontPx: 0,
       age: 0,
+      pending: [],
       struck: swing.struck,
       damageMultiplier: swing.weapon.damageMultiplier,
     };
+    // Claimed before the blade's chains are thrown, so a chain never takes a
+    // body the wave is coming for and trades its doubled cut for an ordinary blow.
+    wave.pending = this.lane(ctx, wave);
+    for (const { mob } of wave.pending) wave.struck.add(mob);
     this.waves.push(wave);
     if (swing.cut.length > 0) this.cutThisTick = true;
     for (const mob of swing.earned) this.throwChains(ctx, mob, wave);
@@ -125,7 +149,7 @@ export class TaranisStrikeSystem implements WeaponProc {
   update(ctx: CombatContext): void {
     for (const wave of this.waves) {
       wave.age++;
-      if (wave.frontPx < wave.reachPx) this.advance(ctx, wave);
+      if (wave.frontPx < WAVE_REACH_PX) this.advance(ctx, wave);
     }
     this.waves = this.waves.filter((wave) => wave.age < WAVE_TRAVEL_TICKS + WAVE_FADE_TICKS);
 
@@ -185,40 +209,44 @@ export class TaranisStrikeSystem implements WeaponProc {
     ctx.restore();
   }
 
-  private advance(ctx: CombatContext, wave: Wave): void {
-    const stepPx = (TARANIS_WAVE_REACH_TILES * TILE_SIZE) / WAVE_TRAVEL_TICKS;
-    // The band reaches a step behind the old front as well, so a body that
-    // stepped toward him as the front arrived is still caught; the struck set
-    // keeps it from being cut twice.
-    const behindPx = Math.max(0, wave.frontPx - stepPx);
-    const frontPx = Math.min(wave.reachPx, wave.frontPx + stepPx);
-    wave.frontPx = frontPx;
-    const midAlong = (behindPx + frontPx) / 2;
-    const midX = wave.originX + wave.dirX * midAlong;
-    const midY = wave.originY + wave.dirY * midAlong;
-    const searchRadius = (frontPx - behindPx) / 2 + WAVE_HALF_WIDTH_PX + TILE_SIZE;
-    const inBand: Mob[] = [];
-    for (const mob of ctx.mobGrid.queryCircle(midX, midY, searchRadius)) {
+  /**
+   * Every enemy whose body lies in the wave's lane when it is thrown, nearest
+   * first. Read from the whole mob list rather than the grid, so no body is
+   * missed for being wider than a query's margin allowed for.
+   */
+  private lane(ctx: CombatContext, wave: Wave): PendingCut[] {
+    const inLane: PendingCut[] = [];
+    for (const mob of ctx.mobs) {
       if (!this.canStrike(mob, wave.struck)) continue;
       const centre = centreOf(mob);
       const dx = centre.x - wave.originX;
       const dy = centre.y - wave.originY;
       const along = dx * wave.dirX + dy * wave.dirY;
       const across = Math.abs(dx * wave.dirY - dy * wave.dirX);
-      if (along <= behindPx || along > frontPx || across > WAVE_HALF_WIDTH_PX) continue;
-      if (!ctx.gameMap.hasLineOfSight(wave.originX, wave.originY, centre.x, centre.y)) continue;
-      inBand.push(mob);
+      const bodyRadius = bodyRadiusOf(mob);
+      const nearEdgeAlong = along - bodyRadius;
+      const isAhead = along > 0;
+      const withinReach = nearEdgeAlong <= WAVE_REACH_PX;
+      const withinWidth = across <= WAVE_HALF_WIDTH_PX + bodyRadius;
+      if (!isAhead || !withinReach || !withinWidth) continue;
+      inLane.push({ mob, alongPx: Math.max(0, nearEdgeAlong) });
     }
-    this.landCuts(ctx, wave, inBand);
+    return inLane.sort((a, b) => a.alongPx - b.alongPx);
   }
 
-  /**
-   * Cuts every target one stroke found, then throws each cut's chains. All of
-   * them are claimed before any chain is thrown, so which of them the grid
-   * happens to list first never decides who takes the cut and who a chain.
-   */
+  private advance(ctx: CombatContext, wave: Wave): void {
+    wave.frontPx = Math.min(WAVE_REACH_PX, wave.frontPx + WAVE_STEP_PX);
+    const reached = wave.pending.filter((target) => target.alongPx <= wave.frontPx);
+    if (reached.length === 0) return;
+    wave.pending = wave.pending.filter((target) => target.alongPx > wave.frontPx);
+    const stillStanding = reached
+      .map(({ mob }) => mob)
+      .filter((mob) => mob.isAlive && mob.takesPlayerDamage('melee'));
+    this.landCuts(ctx, wave, stillStanding);
+  }
+
+  /** Cuts every target the front reached this tick, then throws each cut's chains. */
   private landCuts(ctx: CombatContext, wave: Wave, targets: readonly Mob[]): void {
-    for (const mob of targets) wave.struck.add(mob);
     const chainSources = targets.filter((mob) => this.cut(ctx, wave, mob));
     for (const mob of chainSources) this.throwChains(ctx, mob, wave);
   }
@@ -249,9 +277,6 @@ export class TaranisStrikeSystem implements WeaponProc {
       const centre = centreOf(mob);
       const dist = Math.hypot(centre.x - source.x, centre.y - source.y);
       if (dist > radiusPx) continue;
-      // The wave is still coming for these; a chain taking them first would
-      // trade its doubled cut for an ordinary blow.
-      if (inWaveLane(gameMap, wave, centre)) continue;
       if (!gameMap.hasLineOfSight(source.x, source.y, centre.x, centre.y)) continue;
       inReach.push({ mob, centre, dist });
     }
@@ -266,49 +291,10 @@ export class TaranisStrikeSystem implements WeaponProc {
   }
 }
 
-/**
- * Whether a body centred at `centre` lies in the stretch of lane the wave has
- * still to run: past its front, within its reach and half-width, and in sight
- * of where it was thrown from.
- */
-function inWaveLane(map: GameMap, wave: Wave, centre: WorldPoint): boolean {
-  const dx = centre.x - wave.originX;
-  const dy = centre.y - wave.originY;
-  const along = dx * wave.dirX + dy * wave.dirY;
-  const across = Math.abs(dx * wave.dirY - dy * wave.dirX);
-  if (along <= wave.frontPx || along > wave.reachPx || across > WAVE_HALF_WIDTH_PX) return false;
-  return map.hasLineOfSight(wave.originX, wave.originY, centre.x, centre.y);
-}
-
 /** How strongly a wave shows: whole while it travels, falling to nothing as it fades at the end of its reach. */
 function waveAlpha(wave: Wave): number {
   if (wave.age < WAVE_TRAVEL_TICKS) return 1;
   return Math.max(0, 1 - (wave.age - WAVE_TRAVEL_TICKS) / WAVE_FADE_TICKS);
-}
-
-/**
- * How far the wave can run from `origin` along the direction before a wall
- * stops it, by the same sight test the blade's own cut uses. Each probe looks
- * one step past the point it is asking about, because the sight test never
- * tests its endpoint's own tile: a front standing inside a wall would
- * otherwise count as clear.
- */
-function clearReach(map: GameMap, origin: WorldPoint, dirX: number, dirY: number): number {
-  const maxPx = TARANIS_WAVE_REACH_TILES * TILE_SIZE;
-  const stepPx = TILE_SIZE / WALL_PROBES_PER_TILE;
-  let reachPx = 0;
-  for (let along = stepPx; along <= maxPx; along += stepPx) {
-    const probe = along + stepPx;
-    const clear = map.hasLineOfSight(
-      origin.x,
-      origin.y,
-      origin.x + dirX * probe,
-      origin.y + dirY * probe,
-    );
-    if (!clear) break;
-    reachPx = along;
-  }
-  return reachPx;
 }
 
 /** The wave's crescent at its front: bowed back toward him at its tips, jittered per frame. */

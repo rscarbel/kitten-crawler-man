@@ -20,7 +20,7 @@ export const PLENTY_OF_EACH_MATERIAL = 60;
 interface StockHolder {
   readonly inventory: {
     countOf(id: ContractMaterialId): number;
-    addItem(id: ContractMaterialId, quantity: number): boolean;
+    addItem(id: ContractMaterialId, quantity: number): void;
   };
 }
 

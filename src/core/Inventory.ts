@@ -2,7 +2,6 @@ import { ItemBag } from './ItemBag';
 import { Hotbar } from './Hotbar';
 import { EquipmentManager, type StatBonuses } from './EquipmentManager';
 import {
-  SLOT_COUNT,
   HOTBAR_COUNT,
   QUEST_SLOT_IDX,
   ITEM_DEF,
@@ -16,9 +15,6 @@ import { sortStacks, type BagSortMode, type PlacedStack } from './bagSort';
 
 /** Told of the stack {@link Inventory.replaceQuestSlot} evicted from the quest slot. */
 export type QuestItemEvictionListener = (evicted: InventoryItem) => void;
-
-/** Told of an item {@link Inventory.addItem} could not store because the bag was full. */
-export type BagFullListener = (id: ItemId, quantity: number) => void;
 
 export class Inventory {
   readonly bag: ItemBag;
@@ -34,10 +30,9 @@ export class Inventory {
   readonly unseenUpgrades = new Set<ItemId>();
 
   private questItemEvictionListener: QuestItemEvictionListener | null = null;
-  private bagFullListener: BagFullListener | null = null;
 
   constructor(ownerKind: CrawlerKind | null = null) {
-    this.bag = new ItemBag(SLOT_COUNT);
+    this.bag = new ItemBag();
     this.actionBar = new Hotbar(HOTBAR_COUNT);
     this.equipment = new EquipmentManager((id) => this.findItemById(id), ownerKind);
   }
@@ -53,48 +48,31 @@ export class Inventory {
   // ── Item storage (delegates to bag + actionBar) ──
 
   /**
-   * Add `quantity` of the given item, stacking into an existing slot when possible.
-   *
-   * @returns false when the bag was full and the item was lost. The bag-full
-   *   listener hears of it too, so the player is told even by callers that
-   *   ignore the result.
+   * Add `quantity` of the given item, stacking into an existing slot when
+   * possible. The bag is unbounded, so the item is always stored.
    */
-  addItem(id: ItemId, quantity: number): boolean {
+  addItem(id: ItemId, quantity: number): void {
     if (ITEM_DEF[id].isQuestItem) {
       this.addToQuestSlot(id, quantity);
-      return true;
+      return;
     }
-    const isUpgrade = this.equipment.isUpgradeOverEquipped({ ...ITEM_DEF[id], quantity });
-    const stored =
-      this.actionBar.stackInto(id, quantity) ||
-      this.bag.stackInto(id, quantity) ||
-      this.bag.addToEmpty(id, quantity);
-    if (!stored) {
-      this.bagFullListener?.(id, quantity);
-      return false;
+    if (this.equipment.isUpgradeOverEquipped({ ...ITEM_DEF[id], quantity })) {
+      this.unseenUpgrades.add(id);
     }
-    if (isUpgrade) this.unseenUpgrades.add(id);
-    return true;
+    if (this.actionBar.stackInto(id, quantity) || this.bag.stackInto(id, quantity)) return;
+    this.bag.addToEmpty(id, quantity);
   }
 
   /**
-   * Who hears that {@link addItem} lost an item to a full bag. Set by the
-   * running scene on entry and cleared on exit, like the quest-eviction
-   * listener, because inventories outlive scenes.
+   * Adds `copies` separate one-item stacks of a non-stacking item in a single
+   * pass, rather than re-laying the bag's pages once per copy.
    */
-  setBagFullListener(listener: BagFullListener | null): void {
-    this.bagFullListener = listener;
-  }
-
-  /**
-   * Whether {@link addItem} would actually store this item. `addItem` loses
-   * the item when there is nowhere to put it, so any caller that cannot
-   * afford to lose it has to ask first.
-   */
-  hasRoomFor(id: ItemId): boolean {
-    if (ITEM_DEF[id].isQuestItem) return true;
-    if (ITEM_DEF[id].stackable && this.findItemById(id) !== null) return true;
-    return this.bag.slots.includes(null);
+  addCopies(id: ItemId, copies: number): void {
+    if (copies <= 0) return;
+    if (this.equipment.isUpgradeOverEquipped({ ...ITEM_DEF[id], quantity: 1 })) {
+      this.unseenUpgrades.add(id);
+    }
+    this.bag.addCopiesToEmpty(id, copies);
   }
 
   /** Place a quest item directly into the reserved quest slot, evicting whatever else held it. */
@@ -187,6 +165,7 @@ export class Inventory {
         slots[i] = null;
       }
     }
+    this.bag.fitPages();
   }
 
   /**
@@ -209,6 +188,7 @@ export class Inventory {
     if (source.id !== dest.id || !ITEM_DEF[source.id].stackable) return false;
     to[toIdx] = { ...dest, quantity: dest.quantity + source.quantity };
     from[fromIdx] = null;
+    this.bag.fitPages();
     return true;
   }
 
@@ -293,11 +273,7 @@ export class Inventory {
       if (def.stackable) merged.set(item.id, copy);
       stacks.push({ item: copy, slotIdx });
     });
-    const ordered = sortStacks(stacks, mode);
-    this.bag.slots.fill(null);
-    ordered.forEach((stack, index) => {
-      this.bag.slots[index] = stack.item;
-    });
+    this.bag.replaceAll(sortStacks(stacks, mode).map((stack) => stack.item));
   }
 
   /** Total count across all inventory slots and hotbar. */
@@ -319,17 +295,18 @@ export class Inventory {
   }
 
   swapInvToHotbar(slotIdx: number, hotbarIdx: number): void {
-    if (hotbarIdx === QUEST_SLOT_IDX) return;
+    if (hotbarIdx === QUEST_SLOT_IDX || !this.bag.hasSlot(slotIdx)) return;
     const inv = this.bag.slots[slotIdx];
     if (inv && !itemCanHotlist(inv.id)) return;
     if (this.mergeStacks(this.bag.slots, slotIdx, this.actionBar.slots, hotbarIdx)) return;
     const hot = this.actionBar.slots[hotbarIdx];
     this.actionBar.slots[hotbarIdx] = inv;
     this.bag.slots[slotIdx] = hot;
+    this.bag.fitPages();
   }
 
   swapHotbarToInv(hotbarIdx: number, slotIdx: number): void {
-    if (hotbarIdx === QUEST_SLOT_IDX) return;
+    if (hotbarIdx === QUEST_SLOT_IDX || !this.bag.hasSlot(slotIdx)) return;
     // No itemCanHotlist guard here: the player is dragging OUT of the hotbar,
     // and grandfathered gear that predates the hotlist restriction must stay
     // freely movable off the hotbar even when the bag slot it lands on is
@@ -341,21 +318,19 @@ export class Inventory {
     const inv = this.bag.slots[slotIdx];
     this.bag.slots[slotIdx] = hot;
     this.actionBar.slots[hotbarIdx] = inv;
+    this.bag.fitPages();
   }
 
-  moveHotbarToFirstEmptySlot(hotbarIdx: number): boolean {
+  /** Moves the hotbar stack into the bag, joining a stack of the same item if there is one. */
+  moveHotbarToBag(hotbarIdx: number): void {
     const item = this.actionBar.slots[hotbarIdx];
-    if (!item) return false;
+    if (!item) return;
     // A bag stack of the same thing is a better home than an empty slot: two
     // stacks of one id is a state the player cannot undo by hand.
     const sameStackIdx = this.bag.slots.findIndex((s) => s?.id === item.id);
-    if (this.mergeStacks(this.actionBar.slots, hotbarIdx, this.bag.slots, sameStackIdx))
-      return true;
-    const emptyIdx = this.bag.slots.indexOf(null);
-    if (emptyIdx === -1) return false;
-    this.bag.slots[emptyIdx] = item;
+    if (this.mergeStacks(this.actionBar.slots, hotbarIdx, this.bag.slots, sameStackIdx)) return;
     this.actionBar.slots[hotbarIdx] = null;
-    return true;
+    this.bag.placeInFirstEmpty(item);
   }
 
   // ── Equipment (delegates to EquipmentManager) ──

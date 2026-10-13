@@ -55,16 +55,15 @@ function skillStatesFor(levels: Partial<Record<SkillId, number>>): SkillState[] 
 }
 
 function applyLoadout(player: Player, loadout: PlaytestLoadout): void {
-  player.inventory.bag.slots.fill(null);
   player.inventory.actionBar.slots.fill(null);
   player.inventory.equipment.clear();
 
   loadout.hotbar.forEach((stack, slotIdx) => {
     player.inventory.actionBar.slots[slotIdx] = { ...ITEM_DEF[stack.id], quantity: stack.quantity };
   });
-  loadout.bag.forEach((stack, slotIdx) => {
-    player.inventory.bag.slots[slotIdx] = { ...ITEM_DEF[stack.id], quantity: stack.quantity };
-  });
+  player.inventory.bag.replaceAll(
+    loadout.bag.map((stack) => ({ ...ITEM_DEF[stack.id], quantity: stack.quantity })),
+  );
   if (loadout.questSlot !== undefined) {
     const { id, quantity } = loadout.questSlot;
     player.inventory.actionBar.slots[QUEST_SLOT_IDX] = { ...ITEM_DEF[id], quantity };

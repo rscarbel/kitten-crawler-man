@@ -4,8 +4,8 @@
  * through Fenna for a coin a wood.
  *
  * Wood is spent from the party's combined stock, the crawler doing the work
- * first. What comes out goes to that crawler, or to the companion when their
- * pack is full, and counts toward the session tally the resource strip shows.
+ * first. What comes out goes to that crawler and counts toward the session
+ * tally the resource strip shows.
  * Working a machine by hand is a little construction practice, worth
  * Construction XP; paying Fenna to run a batch is a purchase like any other
  * shop's, so `processWood` itself never grants XP — the manual path awards it
@@ -18,7 +18,7 @@ import { partyCount, spend } from '../../../core/partyResources';
 import { addToSessionTally } from '../../../core/resourceSessionTally';
 import { WALL_TIERS } from '../structureRules';
 import type { ProcessingStationKind } from '../processingStations';
-import { type Crawler, type ServiceParty, recipientFor } from './serviceContext';
+import type { Crawler, ServiceParty } from './serviceContext';
 
 export const BOARDS_PER_WOOD = 2;
 export const ROPE_PER_WOOD = 1;
@@ -62,33 +62,17 @@ export function partyWood(party: ServiceParty): number {
   return partyCount(party.human, party.cat, 'wood');
 }
 
-/**
- * The most wood that can go through at once for `worker`: what the party
- * holds, capped at what somebody has room to take delivery of. Stacks never
- * cap, so the cap is all or nothing — somebody already holding the output, or
- * a free slot, takes any amount.
- */
-export function processableWood(
-  party: ServiceParty,
-  worker: Crawler,
-  output: ProcessingStationKind,
-): number {
-  if (recipientFor(party, worker, outputItem(output)) === null) return 0;
-  return partyWood(party);
-}
-
 export interface ProcessResult {
   readonly woodSpent: number;
   readonly produced: number;
-  readonly recipient: Crawler;
 }
 
 /**
  * Spends `wood` from the party (the worker's own first) and hands the output
- * to the worker or the companion, tallying it. Grants no XP: the caller
- * decides whether the work was done by hand (worth Construction XP) or paid
- * for outright (a purchase, worth none). Returns null — and changes nothing —
- * when the party lacks the wood or nobody has room for the output.
+ * to the worker, tallying it. Grants no XP: the caller decides whether the
+ * work was done by hand (worth Construction XP) or paid for outright (a
+ * purchase, worth none). Returns null — and changes nothing — when the party
+ * lacks the wood.
  */
 export function processWood(
   party: ServiceParty,
@@ -98,13 +82,11 @@ export function processWood(
 ): ProcessResult | null {
   if (wood <= 0 || partyWood(party) < wood) return null;
   const item = outputItem(output);
-  const recipient = recipientFor(party, worker, item);
-  if (recipient === null) return null;
   if (!spend(party.human, party.cat, { wood }, worker)) return null;
   const produced = outputFor(output, wood);
-  recipient.inventory.addItem(item, produced);
+  worker.inventory.addItem(item, produced);
   addToSessionTally(item, produced);
-  return { woodSpent: wood, produced, recipient };
+  return { woodSpent: wood, produced };
 }
 
 /** Construction XP for a machine worked by hand: `processWood`'s manual caller alone awards it. */

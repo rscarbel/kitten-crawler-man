@@ -26,7 +26,7 @@
  *   carrying the pickups across a scene rebuild on the same map.
  *
  * Sounds are not played here: the owning kit drains
- * {@link GroundPickupSystem.drainPickupCues} each frame, the way it drains loot.
+ * {@link GroundPickupSystem.drainPickedUp} each frame, the way it drains loot.
  * Pickups are not written to a save — like floor loot, a reload clears them.
  */
 
@@ -132,16 +132,6 @@ const PROMPT_BOX_PX = TILE_SIZE;
 /** How much the prompt's box sits above the pickup's ground point. */
 const PROMPT_LIFT_PX = TILE_SIZE * HALF;
 
-const BAG_FULL_NOTICE = 'Your bag is full.';
-
-/** The sounds a frame's collecting earned, for the owning kit to play. */
-export interface GroundPickupCues {
-  /** Something was lifted off the ground. */
-  readonly pickedUp: boolean;
-  /** A press reached pickups that did not fit in the bag. */
-  readonly refused: boolean;
-}
-
 function clonePickup(pickup: GroundPickup): GroundPickup {
   return { ...pickup };
 }
@@ -169,7 +159,6 @@ export class GroundPickupSystem {
   private readonly spritePool: GroundPickupSprite[] = [];
   private readonly entityScratch: TownPropRenderable[] = [];
   private pickedUpThisFrame = false;
-  private refusedThisFrame = false;
 
   /** Fired once per item id collected in a single press, for a fly-to-bag effect. */
   onCollected: ((itemId: ItemId, quantity: number, worldX: number, worldY: number) => void) | null =
@@ -297,12 +286,8 @@ export class GroundPickupSystem {
    * The interact key's entry: when a pickup is within prompt reach, gathers
    * every pickup within the wider collect radius into `player`'s bag.
    *
-   * Only what fits is taken. The rest stays on the ground and the player is
-   * told the bag is full — `Inventory.addItem` would otherwise swallow it.
-   *
    * @returns whether the press was claimed: true whenever a pickup was in
-   *   prompt reach, even if none fit, so a full bag explains itself rather
-   *   than the press falling through to a swing at the air.
+   *   prompt reach.
    */
   tryPickupNear(player: Player): boolean {
     const nearest = this.nearestInReach(player);
@@ -313,43 +298,30 @@ export class GroundPickupSystem {
       .filter((pickup) => this.distanceTo(player, pickup) <= collectReach)
       .sort((a, b) => this.distanceTo(player, a) - this.distanceTo(player, b));
 
-    const collected = new Set<number>();
+    const collected = new Set(inReach.map((pickup) => pickup.id));
     const countByItem = new Map<ItemId, number>();
-    let leftBehind = false;
     for (const pickup of inReach) {
       const itemId = PICKUP_ITEM[pickup.kind];
-      if (!player.inventory.hasRoomFor(itemId)) {
-        leftBehind = true;
-        continue;
-      }
       player.inventory.addItem(itemId, 1);
-      collected.add(pickup.id);
       countByItem.set(itemId, (countByItem.get(itemId) ?? 0) + 1);
     }
 
-    if (collected.size > 0) {
-      this.pickups = this.pickups.filter((pickup) => !collected.has(pickup.id));
-      player.onInventoryChanged();
-      playPickupGesture(player, nearest);
-      for (const [itemId, count] of countByItem) {
-        player.queueFloatingText(`+${count} ${ITEM_DEF[itemId].name}`, 'buff');
-        this.onCollected?.(itemId, count, player.x, player.y);
-      }
-      this.pickedUpThisFrame = true;
+    this.pickups = this.pickups.filter((pickup) => !collected.has(pickup.id));
+    player.onInventoryChanged();
+    playPickupGesture(player, nearest);
+    for (const [itemId, count] of countByItem) {
+      player.queueFloatingText(`+${count} ${ITEM_DEF[itemId].name}`, 'buff');
+      this.onCollected?.(itemId, count, player.x, player.y);
     }
-    if (leftBehind) {
-      player.queueSystemNotice(BAG_FULL_NOTICE);
-      if (collected.size === 0) this.refusedThisFrame = true;
-    }
+    this.pickedUpThisFrame = true;
     return true;
   }
 
-  /** What collecting earned since the last drain; resets on read. */
-  drainPickupCues(): GroundPickupCues {
-    const cues = { pickedUp: this.pickedUpThisFrame, refused: this.refusedThisFrame };
+  /** Whether anything was lifted off the ground since the last drain; resets on read. */
+  drainPickedUp(): boolean {
+    const pickedUp = this.pickedUpThisFrame;
     this.pickedUpThisFrame = false;
-    this.refusedThisFrame = false;
-    return cues;
+    return pickedUp;
   }
 
   /**

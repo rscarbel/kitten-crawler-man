@@ -10,6 +10,21 @@ import type { CraftSkillsSnapshot } from './CraftSkills';
 import { parseCraftSkillsSnapshot } from './CraftSkills';
 
 /**
+ * One held stack as a snapshot stores it. A stack carries nothing of its own
+ * beyond its item and count, so everything else is rebuilt from `ITEM_DEF` on
+ * restore; storing only these two keeps a save of a deep bag small enough for
+ * the server to accept. Older saves stored the whole def and still read as this.
+ */
+export interface SavedStack {
+  readonly id: string;
+  readonly quantity: number;
+}
+
+function savedStack(slot: InventoryItem | null): SavedStack | null {
+  return slot === null ? null : { id: slot.id, quantity: slot.quantity };
+}
+
+/**
  * Snapshot format version.
  *
  * v1 (unversioned) stored the *summed* stat values — base plus equipment — so a
@@ -64,8 +79,8 @@ export interface PlayerSnapshot {
   coins: number;
   facingX: number;
   facingY: number;
-  inventorySlots: (InventoryItem | null)[];
-  inventoryHotbar: (InventoryItem | null)[];
+  inventorySlots: (SavedStack | null)[];
+  inventoryHotbar: (SavedStack | null)[];
   equippedEntries: [string, ItemId][];
   explosivesHandling?: number;
   tattooStat: StatName | null;
@@ -150,8 +165,8 @@ export function snapPlayer(p: Player): PlayerSnapshot {
     coins: p.coins,
     facingX: p.facingX,
     facingY: p.facingY,
-    inventorySlots: p.inventory.bag.slots.map((s) => (s ? { ...s } : null)),
-    inventoryHotbar: p.inventory.actionBar.slots.map((s) => (s ? { ...s } : null)),
+    inventorySlots: p.inventory.bag.slots.map(savedStack),
+    inventoryHotbar: p.inventory.actionBar.slots.map(savedStack),
     equippedEntries: p.inventory.equipment.entries(),
     tattooStat: p.tattooStat,
     skillTattoo: p.skillTattoo,
@@ -259,20 +274,19 @@ function weaponDrawnIn(snap: PlayerSnapshot): boolean {
  * A bag or hotbar slot as it is restored: its stack rebuilt from the item's
  * current definition, keeping only the quantity from the save.
  *
- * A save holds the copy of a def taken when the item was picked up, so any
+ * Some saves hold the whole def as it stood when the item was picked up; a
  * field the def has gained since — a weapon's equip address and stat block —
- * would otherwise be missing from that stack for good, and the item could
- * never be put in a slot. A retired id has no definition and is copied as
- * saved.
+ * would be missing from that copy, and the item could never be put in a slot.
+ * A retired id has no definition to rebuild it from, so its slot comes back
+ * empty.
  *
- * A fresh object either way rather than the stored one: a checkpoint snapshot
- * is restored again on every death until the next safe room, and handing the
- * stored slot objects to the bag would let the first restored run edit the
- * snapshot it came from.
+ * Always a fresh object: a checkpoint snapshot is restored again on every
+ * death until the next safe room, and the bag must never share an object with
+ * the snapshot it came from.
  */
-function restoredSlot(slot: InventoryItem | null | undefined): InventoryItem | null {
+function restoredSlot(slot: SavedStack | null | undefined): InventoryItem | null {
   if (slot === null || slot === undefined) return null;
-  if (!isItemId(slot.id)) return { ...slot };
+  if (!isItemId(slot.id)) return null;
   return { ...ITEM_DEF[slot.id], quantity: slot.quantity };
 }
 
@@ -361,9 +375,7 @@ export function restorePlayer(p: Player, snap: PlayerSnapshot): void {
     p.slingshotCooldown = Math.max(0, finiteOr(snap.slingshotCooldown, 0));
   }
 
-  for (let i = 0; i < snap.inventorySlots.length; i++) {
-    p.inventory.bag.slots[i] = restoredSlot(snap.inventorySlots[i]);
-  }
+  p.inventory.bag.replaceAll(snap.inventorySlots.map(restoredSlot));
   for (let i = 0; i < snap.inventoryHotbar.length; i++) {
     p.inventory.actionBar.slots[i] = restoredSlot(snap.inventoryHotbar[i]);
   }

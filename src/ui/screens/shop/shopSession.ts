@@ -3,9 +3,8 @@
  * the temple's blessing, a market stall's stock, the Anchor's destinations,
  * the general store. The session owns the coins; the caller's purchase
  * handler owns the effect, whether that is a service performed on the spot or
- * an item pushed into a bag. A handler that cannot deliver (a full bag)
- * answers `ok: false` and the purse is left alone: money moves only when the
- * goods do.
+ * an item pushed into a bag. A handler that cannot deliver answers
+ * `ok: false` and the purse is left alone: money moves only when the goods do.
  *
  * Pure state, no drawing: `shopScreenSurface` renders a session, and headless
  * checks drive one through {@link ShopSession.pressBuy}.

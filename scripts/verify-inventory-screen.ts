@@ -1,6 +1,6 @@
 #!/usr/bin/env tsx
 /**
- * The inventory model's tidy and full-bag report, and the inventory screen
+ * The inventory model's tidy and its unbounded, paged bag, and the inventory screen
  * driven through a real `UiRoot` the way a player drives it: taps, double
  * taps, drags, long presses, right-clicks and keys. Every screen case runs
  * twice: on a desktop with a mouse, and on a small landscape phone with a
@@ -31,7 +31,7 @@ import { asGameContext } from './nodeGameContext.js';
 installCanvasGlobals();
 
 const { Inventory } = await import('../src/core/Inventory.js');
-const { SLOT_COUNT, ITEM_DEF, isItemId } = await import('../src/core/ItemDefs.js');
+const { BAG_PAGE_SLOTS, ITEM_DEF, isItemId } = await import('../src/core/ItemDefs.js');
 const { UiRoot } = await import('../src/ui/core/UiRoot.js');
 const { MOUSE_POINTER_ID, PRIMARY_BUTTON } = await import('../src/ui/core/pointer.js');
 const { NO_INSETS } = await import('../src/ui/core/viewport.js');
@@ -151,30 +151,41 @@ console.log('Inventory.sortBag');
   check(firstCategory === 'armor', 'category puts armor ahead of consumables and materials');
 }
 
-console.log('Inventory.addItem on a full bag');
+console.log('Inventory: the bag grows a page at a time and never fills');
 {
   const inv = new Inventory('human');
-  const spare = Object.keys(ITEM_DEF)
-    .filter(isItemId)
-    .filter((id) => ITEM_DEF[id].isQuestItem !== true && !ITEM_DEF[id].stackable);
-  let index = 0;
-  while (inv.bag.slots.includes(null) && index < spare.length) inv.addItem(spare[index++], 1);
-  const lost: { id: ItemId; quantity: number }[] = [];
-  inv.setBagFullListener((id, quantity) => lost.push({ id, quantity }));
-  const extra = spare[index];
-  const stored = inv.addItem(extra, 1);
-  check(!stored, 'addItem reports the loss');
+  const spare = nonStackingSpares();
+  for (let index = 0; index < BAG_PAGE_SLOTS; index++) inv.addItem(spare[index], 1);
   check(
-    lost.length === 1 && lost[0]?.id === extra,
-    'the bag-full listener hears which item was lost',
+    inv.bag.pageCount === 2 && inv.bag.slots.length === BAG_PAGE_SLOTS * 2,
+    `filling the first page opens a second (${inv.bag.pageCount} pages)`,
   );
+  const extra = spare[BAG_PAGE_SLOTS];
+  inv.addItem(extra, 1);
+  check(inv.countOf(extra) === 1, 'an item past the first page is stored');
+  check(slotOf(inv, extra) >= BAG_PAGE_SLOTS, 'on the second page');
+  check(inv.bag.slots.includes(null), 'the bag always keeps an empty slot');
+  const lengthBeforeStaleSwap = inv.bag.slots.length;
+  const pastTheBag = lengthBeforeStaleSwap * 2;
+  inv.swapSlots(0, pastTheBag);
+  inv.swapHotbarToInv(0, pastTheBag);
   check(
-    inv.bag.slots.filter((slot) => slot !== null).length === SLOT_COUNT,
-    'capacity is unchanged',
+    inv.bag.slots.length === lengthBeforeStaleSwap &&
+      inv.bag.slots.every((slot) => slot !== undefined),
+    'a swap with a slot past the bag changes nothing',
   );
+  inv.removeItems(extra, 1);
+  inv.removeItems(spare[0], 1);
+  check(inv.bag.pageCount === 1, 'emptying the second page drops it');
+  for (let index = 0; index < BAG_PAGE_SLOTS * 2; index++) {
+    inv.addItem(spare[index % spare.length], 1);
+  }
+  const stacks = inv.bag.slots.filter((slot) => slot !== null).length;
+  inv.sortBag('name');
   check(
-    inv.addItem('wood', 1) || inv.countOf('wood') === 0,
-    'a stackable already held still stacks',
+    inv.bag.slots.filter((slot) => slot !== null).length === stacks &&
+      inv.bag.pageCount === Math.ceil((stacks + 1) / BAG_PAGE_SLOTS),
+    'a tidy keeps every stack across the pages',
   );
 }
 
@@ -357,6 +368,13 @@ function makeRig(platform: PlatformSpec, opts: RigOptions = {}): Rig {
 /** How long a finger rests on a slot before it moves, so the move picks the item up. */
 function pickupHold(touch: boolean): number {
   return touch ? TOUCH_PICKUP_HOLD_MS + HOLD_SLACK_MS : 0;
+}
+
+/** Every item that takes a bag slot per copy, for packing a bag. */
+function nonStackingSpares(): ItemId[] {
+  return Object.keys(ITEM_DEF)
+    .filter(isItemId)
+    .filter((id) => ITEM_DEF[id].isQuestItem !== true && !ITEM_DEF[id].stackable);
 }
 
 function slotOf(inv: InventoryT, id: ItemId): number {
@@ -546,6 +564,70 @@ function runScreenCases(platform: PlatformSpec): void {
         .every((slot) => slot !== null),
       'Tidy closes the gaps',
     );
+  }
+
+  console.log(`\nInventoryScreen ${on}: pages`);
+  {
+    const rig = makeRig(platform);
+    check(!rig.has('page/next'), 'a bag that fits one page shows no pager');
+    const spare = nonStackingSpares().filter((id) => rig.inv.countOf(id) === 0);
+    let added = 0;
+    while (rig.inv.bag.slots.slice(BAG_PAGE_SLOTS).every((slot) => slot === null)) {
+      rig.inv.addItem(spare[added++], 1);
+    }
+    const overflow = spare[added - 1];
+    const overflowSlot = slotOf(rig.inv, overflow);
+    rig.frame();
+    check(rig.has('page/next'), 'a second page brings the pager');
+    check(!rig.has(`bag/${overflowSlot}`), 'the first page does not draw the second');
+    const lastOnFirstPage = BAG_PAGE_SLOTS - 1;
+    rig.screen.selection = {
+      source: 'inv',
+      slotIdx: lastOnFirstPage,
+      id: rig.inv.bag.slots[lastOnFirstPage]?.id ?? null,
+    };
+    rig.key('ArrowRight');
+    rig.frame();
+    check(
+      rig.screen.page === 1 && rig.screen.selection.slotIdx === BAG_PAGE_SLOTS,
+      'an arrow off the end of a page turns to the next',
+    );
+    check(rig.has(`bag/${BAG_PAGE_SLOTS}`), 'with the selected cell scrolled into view');
+    rig.key('ArrowLeft');
+    rig.frame();
+    check(
+      rig.screen.page === 0 && rig.has(`bag/${lastOnFirstPage}`),
+      "an arrow back lands on the first page's last cell, scrolled into view",
+    );
+    rig.screen.sort = 'name';
+    rig.frame();
+    check(rig.screen.page === 0, 'a new sort starts again from the first page');
+    rig.screen.sort = 'manual';
+    rig.screen.showPage(1);
+    rig.frame();
+    rig.screen.search.value = 'a';
+    rig.frame();
+    check(rig.screen.page === 0, 'so does a new search');
+    rig.screen.search.value = '';
+    rig.screen.deselect();
+    rig.frame();
+    rig.tap('page/next');
+    check(
+      rig.screen.page === 1 && rig.has(`bag/${overflowSlot}`),
+      'next turns to the page holding the newest item',
+    );
+    // Two gaps, so the first page still has an empty slot once the stack lands
+    // and the bag needs no second page to keep one.
+    rig.inv.removeItems(spare[0], 1);
+    rig.inv.removeItems(spare[1], 1);
+    rig.frame();
+    rig.drag(`bag/${overflowSlot}`, 'page/back');
+    check(
+      slotOf(rig.inv, overflow) < BAG_PAGE_SLOTS && slotOf(rig.inv, overflow) !== -1,
+      'a stack dropped on the back button moves to the first page',
+    );
+    check(rig.screen.page === 0, 'and the grid follows it there');
+    check(!rig.has('page/next'), 'the emptied page goes, and the pager with it');
   }
 
   console.log(`\nInventoryScreen ${on}: search`);

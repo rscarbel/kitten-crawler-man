@@ -1,5 +1,5 @@
 import type { Rng } from '../../../sprites/person/rng';
-import type { WheelBoard, WheelPrizeId, WheelWedge } from './wheelBoard';
+import { isRedWedge, type WheelBoard, type WheelPrizeId, type WheelWedge } from './wheelBoard';
 
 export interface WheelOutcome {
   readonly wedgeIndex: number;
@@ -27,7 +27,37 @@ export function pickOutcome(
   wonPrizes: ReadonlySet<WheelPrizeId>,
   rng: Rng,
 ): WheelOutcome {
-  const weights = outcomeWeights(board, wonPrizes);
+  return pickWeighted(board, outcomeWeights(board, wonPrizes), rng);
+}
+
+/**
+ * The `!lucky` draw: the same weights with every red wedge (the Nothing and
+ * every wound, status or robbery) and Spin Again struck out, so each spin pays
+ * a real prize. Spin Again never retires, so once every prize is claimed it is
+ * the one wedge left that is not a loss, and the draw falls back to it.
+ */
+export function pickLuckyOutcome(
+  board: WheelBoard,
+  wonPrizes: ReadonlySet<WheelPrizeId>,
+  rng: Rng,
+): WheelOutcome {
+  const baseWeights = outcomeWeights(board, wonPrizes);
+  const prizeWeights = baseWeights.map((weight, index) =>
+    isRedWedge(board[index]) || isSpinAgainWedge(board[index]) ? 0 : weight,
+  );
+  const prizeLeft = prizeWeights.some((weight) => weight > 0);
+  if (prizeLeft) return pickWeighted(board, prizeWeights, rng);
+  const spinAgainWeights = baseWeights.map((weight, index) =>
+    isSpinAgainWedge(board[index]) ? weight : 0,
+  );
+  return pickWeighted(board, spinAgainWeights, rng);
+}
+
+function isSpinAgainWedge(wedge: WheelWedge): boolean {
+  return wedge.prize.kind === 'spin_again';
+}
+
+function pickWeighted(board: WheelBoard, weights: ReadonlyArray<number>, rng: Rng): WheelOutcome {
   const total = weights.reduce((sum, weight) => sum + weight, 0);
   const roll = rng() * total;
   let reached = 0;

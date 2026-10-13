@@ -226,15 +226,6 @@ function renderDetail(layout: SectionLayout, ctx: PauseContext, def: AbilityDef)
 
 // ── Hotbar ──────────────────────────────────────────────────────────────────
 
-/** Moves an ability tome from the hotbar back into the first free bag slot. */
-function returnToBag(inventory: Inventory, slotIndex: number): void {
-  const item = inventory.actionBar.slots[slotIndex];
-  const emptyIdx = inventory.bag.slots.indexOf(null);
-  if (item === null || emptyIdx === -1) return;
-  inventory.bag.slots[emptyIdx] = item;
-  inventory.actionBar.slots[slotIndex] = null;
-}
-
 /**
  * Puts a bag tome on the hotbar: the first empty ability slot, else slot 1.
  * Whatever held that slot takes the tome's place in the bag, so nothing is
@@ -249,6 +240,7 @@ function addToHotbar(inventory: Inventory, bagIndex: number): void {
   const target = firstEmpty === -1 ? 0 : firstEmpty;
   inventory.bag.slots[bagIndex] = inventory.actionBar.slots[target];
   inventory.actionBar.slots[target] = bagItem;
+  inventory.bag.fitPages();
 }
 
 function tomeAbility(item: { canDrop?: boolean; abilityId?: string } | null): AbilityId | null {
@@ -270,7 +262,7 @@ function hotbarSlot(
   const def = abilityId === null ? null : ctx.abilities.getDef(abilityId);
   const filled = def !== null;
   const state = filled
-    ? ui.hit(`hotbar/${index}`, cell, { onTap: () => returnToBag(inventory, index) })
+    ? ui.hit(`hotbar/${index}`, cell, { onTap: () => inventory.moveHotbarToBag(index) })
     : { hovered: false, pressed: false, focused: false };
   fillRounded(ui.ctx, cell, radius.md, filled ? palette.accent.soft : palette.surface.sunken);
   strokeRounded(

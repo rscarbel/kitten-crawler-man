@@ -137,6 +137,45 @@ function plantedStops(kind: ForcedOutcome, strips: ReelStrips, random: () => num
   return stops;
 }
 
+/** Share of `!lucky` spins that land the jackpot. */
+const LUCKY_JACKPOT_CHANCE = 0.1;
+
+/**
+ * The paying kinds a `!lucky` spin draws from when it is not the jackpot,
+ * smallest prize first, each weighted twice the next so smaller wins are
+ * steadily more common than bigger ones.
+ */
+const LUCKY_WIN_WEIGHTS = [
+  { kind: 'line_win', weight: 8 },
+  { kind: 'big_win', weight: 4 },
+  { kind: 'mega_win', weight: 2 },
+  { kind: 'epic_win', weight: 1 },
+] as const satisfies ReadonlyArray<{ readonly kind: ForcedOutcome; readonly weight: number }>;
+
+/**
+ * The kind of win a `!lucky` spin at `betPerLine` lands: the jackpot one time
+ * in ten, otherwise a smaller win weighted toward the smaller prizes. The
+ * jackpot only pays at max bet, so below it there is no jackpot roll at all;
+ * folding that share into any one win would make it outrank a smaller prize.
+ */
+export function pickLuckyOutcome(betPerLine: BetPerLine, random: () => number): ForcedOutcome {
+  const jackpotPayable = betPerLine === MAX_BET_PER_LINE;
+  if (jackpotPayable && random() < LUCKY_JACKPOT_CHANCE) return 'jackpot';
+  const totalWeight = LUCKY_WIN_WEIGHTS.reduce((sum, entry) => sum + entry.weight, 0);
+  const roll = random() * totalWeight;
+  let reached = 0;
+  for (const entry of LUCKY_WIN_WEIGHTS) {
+    reached += entry.weight;
+    if (roll < reached) return entry.kind;
+  }
+  return LUCKY_WIN_WEIGHTS[0].kind;
+}
+
+/** Every paying kind, most likely first: where a lucky spin falls back if its own kind turned up no stops. */
+export const LUCKY_FALLBACK_OUTCOMES: ReadonlyArray<ForcedOutcome> = LUCKY_WIN_WEIGHTS.map(
+  (entry) => entry.kind,
+);
+
 /**
  * Stops whose spin at `betPerLine` is a clean `kind`, or null when none turned
  * up — always null for the jackpot below max bet, which cannot win it.

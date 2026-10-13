@@ -130,9 +130,7 @@ export class DestructionKit {
       audio?.playRandom(['pickup_1', 'pickup_2']);
     }
 
-    const groundCues = this.groundPickups.drainPickupCues();
-    if (groundCues.pickedUp) audio?.play('picking_up_ground_object');
-    if (groundCues.refused) audio?.play('error_taking_action');
+    if (this.groundPickups.drainPickedUp()) audio?.play('picking_up_ground_object');
 
     if (this.dynamite.explosionSoundPending) {
       this.dynamite.explosionSoundPending = false;

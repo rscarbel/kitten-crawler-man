@@ -17,7 +17,7 @@
 import type { ItemId } from '../core/ItemDefs';
 import type { ShopMenu, ShopRow, ShopPurchaseHandler } from '../ui/screens/shop/shopSession';
 import type { ResidentHost } from './townResidents';
-import { giveInventoryItem, rotateLine } from './townServiceUtil';
+import { rotateLine } from './townServiceUtil';
 
 const HELM_PRICE = 40;
 const BRACERS_PRICE = 55;
@@ -101,12 +101,10 @@ export function buildArmouryMenu(turn: number, host: ResidentHost | null): ShopM
   };
 }
 
-/** Hands over the chosen piece, or refuses when it will not fit in the buyer's bag. */
+/** Hands over the chosen piece. */
 export const issueArmour: ShopPurchaseHandler = (option, buyer) => {
   const piece = ISSUE_KIT.find((candidate) => candidate.key === option.key);
   if (piece === undefined) return { ok: false, line: 'Dann checks the rack and finds nothing.' };
-  if (!giveInventoryItem(buyer, piece.item)) {
-    return { ok: false, line: 'Your bag is full. Come back when you are carrying less.' };
-  }
+  buyer.inventory.addItem(piece.item, 1);
   return { ok: true, line: piece.issued };
 };

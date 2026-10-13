@@ -13,6 +13,7 @@
 
 import type { Player } from '../Player';
 import { canAffordCoins, partyCoins, spendPartyCoins } from '../core/partyCoins';
+import { NEVER_LUCKY, type LuckCheck } from '../core/GodMode';
 import { copyPokerReads, type ClubMembership, type PokerReads } from '../core/ClubMembership';
 import { viewportHeight, viewportWidth } from '../core/Viewport';
 import { keybindings } from '../core/Keybindings';
@@ -191,6 +192,8 @@ export class ClubPokerSystem {
    * sitting's net winnings and where the player's stack sat on screen.
    */
   onWinnings: ((coins: number, screenX: number, screenY: number) => void) | null = null;
+  /** Read at each deal: while it answers true, the player's hole cards always hold an Ace. */
+  isLucky: LuckCheck = NEVER_LUCKY;
   /** Reports a cash-out to the player; the scene posts it as a toast. */
   onNotice: ((message: string, tone: ToastTone) => void) | null = null;
 
@@ -327,6 +330,7 @@ export class ClubPokerSystem {
       playerStack: amount,
       reads: this.readsForThisVisit(),
       notes: this.toggles.pokerNotes,
+      isLucky: () => this.isLucky(),
     });
     this.table = seated.table;
     this.table.setFast(this.toggles.pokerFast);

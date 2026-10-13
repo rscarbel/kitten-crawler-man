@@ -92,16 +92,14 @@ function inventoryOf(owner: CrawlerKind, ids: ReadonlyArray<ItemId>): Inventory 
 }
 
 /**
- * Puts a synthetic item straight into the first free bag slot.
+ * Puts a synthetic item straight into the first empty bag slot.
  *
  * `addItem` always copies from `ITEM_DEF`, so an item with overridden stats has
  * to be placed by hand; equipment lookups go through the bag, so the object in
  * the slot is exactly what the debrief compares.
  */
 function putInBag(inventory: Inventory, item: InventoryItem): void {
-  const freeSlot = inventory.bag.slots.findIndex((slot) => slot === null);
-  if (freeSlot === -1) throw new Error(`no room in the bag for ${item.name}`);
-  inventory.bag.slots[freeSlot] = item;
+  inventory.bag.placeInFirstEmpty(item);
 }
 
 /**

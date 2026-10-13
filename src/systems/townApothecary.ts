@@ -21,7 +21,7 @@ import type { Player } from '../Player';
 import type { ShopMenu, ShopRow, ShopPurchaseHandler } from '../ui/screens/shop/shopSession';
 import type { TownMemory } from '../core/TownMemory';
 import type { ResidentHost } from './townResidents';
-import { giveInventoryItem, rotateLine } from './townServiceUtil';
+import { rotateLine } from './townServiceUtil';
 
 /** Undercuts the General Store's price, but only while the batch lasts. */
 const POULTICE_PRICE = 4;
@@ -102,14 +102,12 @@ export function serveRemedy(party: ReadonlyArray<Player>, memory: TownMemory): S
     }
     if (option.key === POULTICE_KEY) {
       if (memory.poulticesLeft <= 0) return { ok: false, line: 'That was the last of the batch.' };
-      if (!giveInventoryItem(buyer, POULTICE_ITEM))
-        return { ok: false, line: 'Your bag is full, crawler.' };
+      buyer.inventory.addItem(POULTICE_ITEM, 1);
       memory.poulticesLeft--;
       return { ok: true, line: 'Keep it out of the sun. It sours by the week.' };
     }
     if (option.key === TONIC_KEY) {
-      if (!giveInventoryItem(buyer, TONIC_ITEM))
-        return { ok: false, line: 'Your bag is full, crawler.' };
+      buyer.inventory.addItem(TONIC_ITEM, 1);
       return { ok: true, line: 'Root, honey and something I will not name. Down it fast.' };
     }
     return { ok: false, line: 'Fen frowns at the shelf.' };

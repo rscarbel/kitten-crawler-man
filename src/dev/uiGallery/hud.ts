@@ -269,7 +269,7 @@ function hudFixture(spec: HudFixtureSpec): DialogFixture {
       }
       if (spec.toasts === 'mixed') {
         toasts.post('Health restored', { tone: 'success', icon: 'flask' });
-        toasts.post('Bag full — Goblin Dynamite was left behind', { tone: 'warning', icon: 'bag' });
+        toasts.post('Not enough coins', { tone: 'warning', icon: 'coin' });
         toasts.post('Game Saved', { tone: 'success', icon: 'save' });
         toasts.post('Mongo recovering −3.6s', { tone: 'info', icon: 'hourglass' });
         toasts.post('The boxers are already doing their job — just equip them!', {

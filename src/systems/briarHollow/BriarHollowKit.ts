@@ -69,7 +69,6 @@ import { VillageServices } from './services/VillageServices';
 import { SoldierSystem } from './SoldierSystem';
 import type { Player } from '../../Player';
 import { renderNecromancerTelegraphs } from '../../creatures/Necromancer';
-import type { ItemId } from '../../core/ItemDefs';
 import { activeDifficultyProfile } from '../../core/difficultyProfiles';
 import type { Rect } from '../../ui/core/geom';
 import type { TopBandEntry } from '../../ui/hud/topBand';
@@ -151,12 +150,6 @@ export interface BriarHollowKitDeps {
   readonly music?: () => SiegeMusicClaim | null;
   /** Plays a boss's intro: the necromancer's, as he arrives with the last wave. */
   readonly bossIntro?: (name: string, color: string) => void;
-  /** Drops items on the floor as a loot pile, for a quest reward that does not fit the bag. */
-  readonly dropItems?: (
-    x: number,
-    y: number,
-    items: ReadonlyArray<{ id: ItemId; quantity: number }>,
-  ) => void;
   /**
    * Midge's escort across a door: threaded by reference from the scene
    * rebuilt on the way out of a building. Absent means a fresh scene, where
@@ -394,8 +387,6 @@ export class BriarHollowKit {
             enqueueReward: (reward) => deps.menus.rewardGrantedDialog.enqueue(reward),
             afterRewardsDrain: (run) => deps.menus.rewardGrantedDialog.afterQueueDrains(run),
             announce: (message) => deps.menus.announce(message),
-            groundPickups: deps.groundPickups,
-            dropItems: (x, y, items) => deps.dropItems?.(x, y, items),
             grantOrenTools: () => this.services?.grantOrenTools() ?? null,
             // Lazy: the recruiter is built after the questline it reads from.
             recruiter: () => this.recruiter?.post ?? null,

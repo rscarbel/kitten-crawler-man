@@ -20,7 +20,7 @@ import type { ProcessingStationKind } from '../processingStations';
 import { onceFlagFor } from '../villagerCircumstances';
 import type { ConversationHandle, ConversationTopic } from '../../../dialog/request';
 import type { TopicProvider, VillagerConversationFlow } from '../villagerTopics';
-import { BAG_FULL_LINE, otherCrawler, type ServiceParty, shopTrades } from './serviceContext';
+import { otherCrawler, type ServiceParty, shopTrades } from './serviceContext';
 import { canAffordCoins, spendPartyCoins } from '../../../core/partyCoins';
 import {
   FENNA_FEE_PER_WOOD,
@@ -28,14 +28,11 @@ import {
   outputItem,
   partyWood,
   processWood,
-  processableWood,
 } from './woodProcessing';
 
 const FOREMAN = 'fenna';
 /** A batch starts at this many wood, or everything the party has if that is less. */
 const DEFAULT_BATCH_WOOD = 10;
-/** Why the picker stops short of the party's wood. */
-export const BAG_LIMIT_NOTE = '(limited by bag space)';
 
 /** Fenna's one-shot remark that processing counts as construction practice. */
 export const CONSTRUCTION_EXPERIENCE_ONCE_FLAG = onceFlagFor(FOREMAN, 'construction_experience');
@@ -86,7 +83,6 @@ export interface LumberForemanHost {
   ): boolean;
   /** Brings the villager's own root topics back up, if the conversation the picker opened over is still there to bring them up on. */
   returnToRoot(convo: ConversationHandle, flow: VillagerConversationFlow): void;
-  announce(message: string): void;
   noteResourceActivity(): void;
 }
 
@@ -101,16 +97,6 @@ export interface BatchResult {
    * (the player walked off) leaves the remark to be earned again.
    */
   readonly constructionExperienceEarned: boolean;
-}
-
-/** The biggest batch the picker offers, and whether bag space is what capped it. */
-export function batchLimit(
-  party: ServiceParty,
-  output: ProcessingStationKind,
-): { max: number; limitedByBag: boolean } {
-  const wood = partyWood(party);
-  const max = Math.min(wood, processableWood(party, party.active(), output));
-  return { max, limitedByBag: max < wood };
 }
 
 /** The batch the picker opens on: ten, or less when that is all there is. */
@@ -136,13 +122,10 @@ export function runBatch(
   const companion = otherCrawler(host.party, payer);
   const fee = wood * FENNA_FEE_PER_WOOD;
   if (!canAffordCoins(payer, companion, fee)) return null;
-  // The goods are delivered before the coins move: a batch that cannot be
-  // carried away must never cost anything.
+  // The goods are delivered before the coins move: a batch whose wood was
+  // spent elsewhere while the picker was open must never cost anything.
   const result = processWood(host.party, payer, output, wood);
-  if (result === null) {
-    host.announce(BAG_FULL_LINE);
-    return { lines: [], constructionExperienceEarned: false };
-  }
+  if (result === null) return { lines: [FENNA.noLogs], constructionExperienceEarned: false };
   spendPartyCoins(payer, companion, fee, payer);
   host.audio?.play('purchase_success');
   host.noteResourceActivity();
@@ -172,7 +155,7 @@ function openBatchPicker(
   output: ProcessingStationKind,
   initial: number | null,
 ): void {
-  const { max, limitedByBag } = batchLimit(host.party, output);
+  const max = partyWood(host.party);
   const options: BatchPickerOptions = {
     title: PICKER_TITLE[output],
     max,
@@ -198,7 +181,6 @@ function openBatchPicker(
     },
     onCancel: () => host.returnToRoot(convo, flow),
   };
-  if (limitedByBag) options.note = BAG_LIMIT_NOTE;
   host.openPicker(options);
 }
 
@@ -215,14 +197,8 @@ function outputChoice(
     repeatable: false,
     grouping: 'root',
     run: (convo: ConversationHandle) => {
-      const { max } = batchLimit(host.party, output);
-      if (max < 1) {
-        if (partyWood(host.party) < 1) {
-          convo.play(flow.answer([FENNA.noLogs]));
-        } else {
-          host.announce(BAG_FULL_LINE);
-          convo.play(flow.closeNow());
-        }
+      if (partyWood(host.party) < 1) {
+        convo.play(flow.answer([FENNA.noLogs]));
         return;
       }
       convo.play(flow.sayKeepingMenu([SELECTED_LINE[output]]));

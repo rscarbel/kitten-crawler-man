@@ -83,7 +83,6 @@ function slotContentsAt(
 const ALREADY_FULL_NOTICE = "You're already full.";
 const POTION_TOAST: ToastOptions = { tone: 'success', icon: 'flask' };
 const TOME_TOAST: ToastOptions = { tone: 'accent', icon: 'book' };
-const PACK_FULL_TOAST: ToastOptions = { tone: 'warning', icon: 'bag' };
 const HOTBAR_REFUSED_TOAST: ToastOptions = { tone: 'warning', icon: 'bag' };
 
 /** Every item gated by the potion cooldown, so each wears the same hotbar sweep. */
@@ -763,8 +762,6 @@ export class MenusKit {
    * Hands up to `quantity` of `id` from `holder`'s pack to their partner's.
    * Worn gear comes off first, the same rule {@link dropItem} follows, so a
    * traded piece can't keep paying out its bonus from a slot it just left.
-   * Refused whole — nothing is removed — when the partner's pack has no room
-   * for it, so a full bag never costs the sender the item.
    *
    * Clamped to what `holder` still actually holds: the picker's confirm fires
    * on a later frame than the click that opened it, and something else
@@ -777,12 +774,6 @@ export class MenusKit {
     const trade = Math.min(quantity, heldQuantity);
     if (trade <= 0) return;
     const partner = this.partnerOf(holder);
-    if (!partner.inventory.hasRoomFor(id)) {
-      const partnerName = partner === this.world.pm.human ? CRAWLER_NAMES.human : CRAWLER_NAMES.cat;
-      this.announce(`${partnerName}'s pack is full.`, PACK_FULL_TOAST);
-      this.world.audio?.play('error_taking_action');
-      return;
-    }
     holder.inventory.unequipById(id);
     holder.inventory.removeItems(id, trade);
     holder.onInventoryChanged();

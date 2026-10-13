@@ -10,7 +10,6 @@
 import { ITEM_DEF, type ItemId } from '../../../core/ItemDefs';
 import type { BriarHollowState } from '../../../core/briarHollowState';
 import type { Player } from '../../../Player';
-import { giveInventoryItem } from '../../townServiceUtil';
 import { HEALTH_POTION_PRICE } from '../../market/vendorDefs';
 import { FARMER_PRICING } from '../../market/shopProfiles';
 import type { ShopMenu, ShopRow, ShopPurchaseResult } from '../../../ui/screens/shop/shopSession';
@@ -18,7 +17,6 @@ import type { TopicProvider } from '../villagerTopics';
 import { SPEAKERS } from '../../../dialog/speakers';
 import { PIPKIN } from '../../../dialog/scripts/briarHollow';
 import {
-  BAG_FULL_LINE,
   type ShopCounter,
   type ShopDefinition,
   sellerLine,
@@ -57,21 +55,13 @@ export function buildCookMenu(): ShopMenu {
 }
 
 /**
- * Hands the dish over, or refuses the sale when there is nowhere to put it.
- * Stew bought while the buyer's potion cooldown is still running still sells
+ * Hands the dish over. Stew bought while the buyer's potion cooldown is still running still sells
  * — it keeps — but Pipkin says why it can't be eaten yet.
  */
-export function cookPurchase(
-  option: ShopRow,
-  buyer: Player,
-  announce: (message: string) => void,
-): ShopPurchaseResult {
+export function cookPurchase(option: ShopRow, buyer: Player): ShopPurchaseResult {
   const dish = MENU_ITEMS.find((item) => item.id === option.key);
   if (dish === undefined) return { ok: false, line: '' };
-  if (!giveInventoryItem(buyer, dish.id)) {
-    announce(BAG_FULL_LINE);
-    return { ok: false, line: BAG_FULL_LINE };
-  }
+  buyer.inventory.addItem(dish.id, 1);
   if (dish.id === 'hamburger') return { ok: true, line: sellerLine(PIPKIN.buyBurger) };
   const stewCannotBeEatenYet = buyer.potionCooldownFrames > 0;
   return {
@@ -80,13 +70,10 @@ export function cookPurchase(
   };
 }
 
-export function cookShop(
-  announce: (message: string) => void,
-  state: BriarHollowState,
-): ShopDefinition {
+export function cookShop(state: BriarHollowState): ShopDefinition {
   return {
     build: buildCookMenu,
-    purchase: (option, buyer) => cookPurchase(option, buyer, announce),
+    purchase: (option, buyer) => cookPurchase(option, buyer),
     blockedLine: () => sellerLine(PIPKIN.cannotAfford),
     // Pipkin feeds the whole garrison, so — the farmer's rate — he takes food
     // back at a good price and barely notices a stack of it.
@@ -95,15 +82,11 @@ export function cookShop(
 }
 
 /** "Buy food" under Pipkin's conversation, while the kitchen is open. */
-export function cookhouseTopics(
-  counter: ShopCounter,
-  announce: (message: string) => void,
-  state: BriarHollowState,
-): TopicProvider {
+export function cookhouseTopics(counter: ShopCounter, state: BriarHollowState): TopicProvider {
   return {
     topics(villager, ctx, flow) {
       if (villager !== COOK || !shopTrades(ctx.quest.phase)) return [];
-      return [shopTopic('buy_food', 'Buy food', counter, () => cookShop(announce, state), flow)];
+      return [shopTopic('buy_food', 'Buy food', counter, () => cookShop(state), flow)];
     },
   };
 }

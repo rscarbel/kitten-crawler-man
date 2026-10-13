@@ -1,15 +1,16 @@
 /**
- * Which bag slots the grid shows, in what order. The `All` view with no query
- * and the manual order is the bag itself, empty slots and all, and is the only
- * view that can be rearranged; every other view collects its matches.
+ * Which bag slots the grid shows, in what order, split into pages of
+ * {@link BAG_PAGE_SLOTS}. The `All` view with no query and the manual order is
+ * the bag itself, empty slots and all, page for page, and is the only view that
+ * can be rearranged; every other view collects its matches.
  */
 
 import { sortStacks, type BagSortMode } from '../../../core/bagSort';
 import type { Inventory } from '../../../core/Inventory';
 import {
   ITEM_CATEGORIES,
+  BAG_PAGE_SLOTS,
   ITEM_DEF,
-  SLOT_COUNT,
   type InventoryItem,
   type ItemCategory,
 } from '../../../core/ItemDefs';
@@ -55,10 +56,7 @@ export function buildBagView(inventory: Inventory, opts: BagViewOptions): BagVie
   const unnarrowed =
     opts.filter === 'all' && query.length === 0 && opts.sort === 'manual' && !opts.accept;
   if (unnarrowed) {
-    const cells: BagCell[] = [];
-    for (let slotIdx = 0; slotIdx < Math.max(SLOT_COUNT, slots.length); slotIdx++) {
-      cells.push({ slotIdx, item: slots[slotIdx] ?? null });
-    }
+    const cells = slots.map((item, slotIdx) => ({ slotIdx, item }));
     return { cells, rearrangeable: true };
   }
   const matches = slots.flatMap((item, slotIdx) => {
@@ -106,7 +104,19 @@ export const FILTER_LABELS: Readonly<Record<BagFilter, string>> = {
   kit: 'Kits',
 };
 
-/** Bag slots holding something. */
-export function usedSlots(inventory: Inventory): number {
-  return inventory.bag.slots.reduce((count, item) => count + (item === null ? 0 : 1), 0);
+/** How many pages the view spans; an empty view still shows its one page. */
+export function viewPageCount(view: BagView): number {
+  return Math.max(1, Math.ceil(view.cells.length / BAG_PAGE_SLOTS));
+}
+
+/** The page of the view that shows `slotIdx`, or null when the view does not show it. */
+export function pageShowing(view: BagView, slotIdx: number): number | null {
+  const at = view.cells.findIndex((cell) => cell.slotIdx === slotIdx);
+  return at === -1 ? null : Math.floor(at / BAG_PAGE_SLOTS);
+}
+
+/** The cells on `page` of the view. */
+export function pageCells(view: BagView, page: number): readonly BagCell[] {
+  const start = page * BAG_PAGE_SLOTS;
+  return view.cells.slice(start, start + BAG_PAGE_SLOTS);
 }

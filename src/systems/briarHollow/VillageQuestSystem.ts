@@ -31,7 +31,6 @@ import { teachBoth } from '../../core/CraftSkills';
 import type { PartyCraftsState } from '../../core/partyCrafts';
 import { canAfford, partyCount, type ResourceCost } from '../../core/partyResources';
 import { awardPartyXp, type PartyXpApplied } from '../../core/awardXp';
-import type { ItemId } from '../../core/ItemDefs';
 import type { GrantedReward } from '../../core/GrantedReward';
 import { TILE_SIZE } from '../../core/constants';
 import type { HumanPlayer } from '../../creatures/HumanPlayer';
@@ -40,7 +39,7 @@ import type { NPCMarkerType } from '../../creatures/QuestNPC';
 import type { BriarHollowSite } from '../../map/overworld/briarHollowSite';
 import type { TilePoint } from '../../map/town/townPlan';
 import { bagItemRewardLine, partyXpSections } from '../../ui/questReward/rewardLines';
-import type { QuestRewardSpec, RewardItemLine } from '../../ui/questReward/types';
+import type { QuestRewardSpec } from '../../ui/questReward/types';
 import { drawCraftSkillIcon } from '../../ui/icons/craftSkillIcons';
 import type { QuestMarkerType } from '../MiniMapSystem';
 import {
@@ -49,7 +48,6 @@ import {
   type TrackerEntry,
   type TrackerTarget,
 } from '../questTracker';
-import type { GroundPickupSystem } from '../GroundPickupSystem';
 import type { DefenseStructures } from './DefenseStructures';
 import {
   shortfallGuidance,
@@ -192,14 +190,6 @@ export interface VillageQuestSystemDeps {
   /** Runs once every queued card has been read. */
   readonly afterRewardsDrain: (run: () => void) => void;
   readonly announce: (message: string) => void;
-  /** Where burgers that do not fit the bag land. */
-  readonly groundPickups: GroundPickupSystem;
-  /** Drops items on the floor as a loot pile, for stew that does not fit the bag. */
-  readonly dropItems: (
-    x: number,
-    y: number,
-    items: ReadonlyArray<{ id: ItemId; quantity: number }>,
-  ) => void;
   /**
    * Grants Oren's starter tools and the Resourcing lesson, as the questline's
    * own opening line for him. Returns the follow-up to run once the
@@ -214,15 +204,6 @@ export interface VillageQuestSystemDeps {
   readonly recruiter: () => { readonly name: string; readonly tile: TilePoint } | null;
   /** Read when the reward screen is built, to say whether the stone can use its new destination yet. */
   readonly travelUnlocks: Pick<TravelUnlockState, 'anchor'>;
-}
-
-/** The note on a reward line whose items did not fit the bag and were left on the ground. */
-const LEFT_AT_MAYORS_FEET_NOTE = "Your bag was full — left at the Mayor's feet.";
-
-/** A reward line for food the Plea paid, flown to the bag only if it went in. */
-function foodRewardLine(id: ItemId, quantity: number, bagged: boolean): RewardItemLine {
-  if (bagged) return bagItemRewardLine(id, quantity);
-  return bagItemRewardLine(id, quantity, { note: LEFT_AT_MAYORS_FEET_NOTE, flyToBag: false });
 }
 
 /** The skill-unlocked card Tikka's plans are announced with. */
@@ -858,14 +839,14 @@ export class VillageQuestSystem implements QuestLineProvider, TopicProvider {
       this.deps.bus,
     );
     active.earnCoins(BRIAR_HOLLOW_QUEST_COINS);
-    const burgersBagged = this.giveOrDrop(active, 'hamburger', BRIAR_HOLLOW_REWARD_BURGERS);
-    const stewBagged = this.giveOrDrop(active, 'hollow_stew', BRIAR_HOLLOW_REWARD_STEW);
+    active.inventory.addItem('hamburger', BRIAR_HOLLOW_REWARD_BURGERS);
+    active.inventory.addItem('hollow_stew', BRIAR_HOLLOW_REWARD_STEW);
     this.questManager.startQuest(BRIAR_HOLLOW_QUEST_ID);
     this.questManager.completeQuest(BRIAR_HOLLOW_QUEST_ID);
     this.deps.bus.emit('questCompleted', { questId: BRIAR_HOLLOW_QUEST_ID });
     this.deps.bus.emit(
       'questRewardShown',
-      this.rewardSpec({ xpApplied, coins: BRIAR_HOLLOW_QUEST_COINS, burgersBagged, stewBagged }),
+      this.rewardSpec({ xpApplied, coins: BRIAR_HOLLOW_QUEST_COINS }),
     );
     return true;
   }
@@ -877,8 +858,6 @@ export class VillageQuestSystem implements QuestLineProvider, TopicProvider {
   private rewardSpec(paid: {
     readonly xpApplied: PartyXpApplied;
     readonly coins: number;
-    readonly burgersBagged: boolean;
-    readonly stewBagged: boolean;
   }): QuestRewardSpec {
     return {
       questTitle: BRIAR_HOLLOW_QUEST_NAME,
@@ -888,33 +867,13 @@ export class VillageQuestSystem implements QuestLineProvider, TopicProvider {
         {
           kind: 'items',
           items: [
-            foodRewardLine('hamburger', BRIAR_HOLLOW_REWARD_BURGERS, paid.burgersBagged),
-            foodRewardLine('hollow_stew', BRIAR_HOLLOW_REWARD_STEW, paid.stewBagged),
+            bagItemRewardLine('hamburger', BRIAR_HOLLOW_REWARD_BURGERS),
+            bagItemRewardLine('hollow_stew', BRIAR_HOLLOW_REWARD_STEW),
           ],
         },
         travelUnlocksSection(['briar_hollow'], this.deps.travelUnlocks),
       ],
     };
-  }
-
-  /**
-   * Into the bag if it fits; otherwise onto the ground at the Mayor's feet.
-   * Returns whether it went into the bag.
-   */
-  private giveOrDrop(crawler: HumanPlayer | CatPlayer, id: ItemId, quantity: number): boolean {
-    if (crawler.inventory.hasRoomFor(id)) {
-      crawler.inventory.addItem(id, quantity);
-      return true;
-    }
-    const mayor = this.deps.villagers.villagerFor('bramblewick');
-    const x = (mayor?.x ?? crawler.x) + TILE_SIZE * TILE_CENTRE;
-    const y = (mayor?.y ?? crawler.y) + TILE_SIZE * TILE_CENTRE;
-    if (id === 'hamburger') {
-      this.deps.groundPickups.spawnBurgers(x, y, quantity);
-      return false;
-    }
-    this.deps.dropItems(x, y, [{ id, quantity }]);
-    return false;
   }
 
   // ── Markers and the journal ───────────────────────────────────────────────

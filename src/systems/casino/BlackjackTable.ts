@@ -12,7 +12,8 @@
 
 import type { Player } from '../../Player';
 import { canAffordCoins, partyCoins, spendPartyCoins } from '../../core/partyCoins';
-import { Deck, type Card, type ShoeState } from './Deck';
+import { Deck, LUCKY_RANK, type Card, type ShoeState } from './Deck';
+import { NEVER_LUCKY, type LuckCheck } from '../../core/GodMode';
 import {
   BLACKJACK_TOTAL,
   dealerShouldHit,
@@ -46,6 +47,11 @@ export const HIGH_ROLLER_UNLOCK_WAGERED = 500;
 /** How many cards each side takes on the opening deal (P, D, P, D-face-down). */
 const OPENING_DEAL_CARDS = 4;
 /**
+ * Beats the opening deal can take: the announce held back by a forced
+ * reshuffle, one per card, and the closing natural check.
+ */
+const MAX_OPENING_DEAL_STEPS = OPENING_DEAL_CARDS + 2;
+/**
  * Ceiling on the beats it takes to play the dealer out by hand: the hole-card
  * reveal, every draw a hand can take before busting, and the settle.
  */
@@ -60,6 +66,8 @@ const HOLE_REVEAL_DELAY_MS = 520;
 const DEALER_DRAW_STAGGER_MS = 640;
 /** Breath between the dealer's last card and the outcome banner. */
 const SETTLE_DELAY_MS = 420;
+/** How long the host's shuffle flourish runs after a `reshuffled` event. */
+export const SHUFFLE_FLOURISH_MS = 1000;
 
 /** After this many hands Deuce offers to stop calling the plays. */
 export const HINTS_AUTO_FADE_HANDS = 15;
@@ -116,11 +124,19 @@ export class BlackjackTable {
   private feedback: TableRefusal = null;
   private beatTimer = 0;
   private cardsDealtThisOpening = 0;
+  /**
+   * False while a reshuffle forced at the deal plays out: the four-card cue and
+   * the first card wait for the shuffle so the two never sound over each other.
+   */
+  private openingDealAnnounced = false;
   /** False when the player busted or held a natural — the dealer only reveals and settles. */
   private dealerDrawsThisRound = true;
   private readonly events: TableEvent[] = [];
 
-  constructor(shoe: ShoeState | null) {
+  constructor(
+    shoe: ShoeState | null,
+    private readonly isLucky: LuckCheck = NEVER_LUCKY,
+  ) {
     this.deck = shoe === null ? Deck.fresh() : Deck.fromState(shoe);
   }
 
@@ -215,7 +231,7 @@ export class BlackjackTable {
     // Bounded rather than "loop until the phase changes": a deck fault settles
     // the round from inside these steps, and a guard is a cheaper way to
     // guarantee termination than detecting progress after every call.
-    for (let step = 0; step < OPENING_DEAL_CARDS + 1 && this.phase === 'dealing'; step++) {
+    for (let step = 0; step < MAX_OPENING_DEAL_STEPS && this.phase === 'dealing'; step++) {
       this.beatTimer = 0;
       this.advanceOpeningDeal();
     }
@@ -311,9 +327,22 @@ export class BlackjackTable {
     this.holeCardRevealed = false;
     this.dealerDrawsThisRound = true;
     this.cardsDealtThisOpening = 0;
-    this.beatTimer = DEAL_FIRST_CARD_DELAY_MS;
     this.feedback = null;
     this.phase = 'dealing';
+    const luckNeedsFreshShoe = this.isLucky() && !this.deck.holdsUndealt(LUCKY_RANK);
+    if (luckNeedsFreshShoe) {
+      this.deck.shuffle();
+      this.emit({ kind: 'reshuffled' });
+      this.openingDealAnnounced = false;
+      this.beatTimer = SHUFFLE_FLOURISH_MS;
+      return;
+    }
+    this.announceOpeningDeal();
+  }
+
+  private announceOpeningDeal(): void {
+    this.openingDealAnnounced = true;
+    this.beatTimer = DEAL_FIRST_CARD_DELAY_MS;
     this.emit({ kind: 'opening_deal_started' });
   }
 
@@ -390,8 +419,15 @@ export class BlackjackTable {
   }
 
   private advanceOpeningDeal(): void {
+    if (!this.openingDealAnnounced) {
+      this.announceOpeningDeal();
+      return;
+    }
     if (this.cardsDealtThisOpening < OPENING_DEAL_CARDS) {
       const toPlayer = this.cardsDealtThisOpening % 2 === 0;
+      const playerStillOwedLuck =
+        toPlayer && this.isLucky() && !this.playerHand.some((card) => card.rank === LUCKY_RANK);
+      if (playerStillOwedLuck) this.deck.stackNext(LUCKY_RANK);
       const dealt = toPlayer ? this.dealToPlayer() : this.dealToDealer();
       if (!dealt) return;
       this.cardsDealtThisOpening++;

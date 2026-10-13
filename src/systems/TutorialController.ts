@@ -823,9 +823,7 @@ export class TutorialController {
   }
 
   private clearForTutorial(player: HumanPlayer | CatPlayer): void {
-    for (let i = 0; i < player.inventory.bag.slots.length; i++) {
-      player.inventory.bag.slots[i] = null;
-    }
+    player.inventory.bag.clear();
     for (let i = 0; i < player.inventory.actionBar.slots.length; i++) {
       player.inventory.actionBar.slots[i] = null;
     }

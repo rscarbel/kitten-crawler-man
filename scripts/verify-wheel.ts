@@ -685,9 +685,8 @@ async function checkHostCommitsBeforeTurning(): Promise<void> {
   const { settleWheelLedger } = await import('../src/systems/casino/wheel/wheelPrizes');
   const { parseWheelOwedItems } = await import('../src/core/WheelLedger');
   const { adoptWhenCommitted } = await import('../src/core/adoptWhenCommitted');
-  /** A bag holds far fewer than this; the loop stops as soon as it is full. */
-  const BAG_FILL_LIMIT = 200;
   const FILLER_ITEM = 'trollskin_shirt';
+  const { BAG_PAGE_SLOTS } = await import('../src/core/ItemDefs');
   const { FROZEN_STATUS } = await import('../src/core/StatusEffect');
   const HOST_STEP_MS = 16;
   const HOST_PURSE = 10_000;
@@ -891,11 +890,9 @@ async function checkHostCommitsBeforeTurning(): Promise<void> {
     `a pending Spin Again found on load owes its free spin on the same board (${String(pendingAgain.freeSpinBet)})`,
   );
 
-  // A full bag: the prize is held in the ledger, saved, never dropped where a reload loses it.
+  // A bag packed past its first page still takes the prize the moment the wheel lands.
   const packed = new HumanPlayer(0, 0, TILE_SIZE);
-  for (let slot = 0; slot < BAG_FILL_LIMIT && packed.inventory.hasRoomFor(FILLER_ITEM); slot++) {
-    packed.inventory.addItem(FILLER_ITEM, 1);
-  }
+  for (let slot = 0; slot < BAG_PAGE_SLOTS; slot++) packed.inventory.addItem(FILLER_ITEM, 1);
   const packedLedger = createWheelLedger();
   const packedWheel = new ClubWheelSystem({
     audio: null,
@@ -910,19 +907,17 @@ async function checkHostCommitsBeforeTurning(): Promise<void> {
     { active: () => packed, companion: () => cat },
     boardForBet(WHEEL_MIN_BET).findIndex((wedge) => wedge.prizeId === 'legendary_box'),
   );
-  const heldItem = packedLedger.owedItems[0];
   check(
-    packed.inventory.countOf('fairy_repellent_signet') === 0 &&
-      packedLedger.owedItems.length === 1 &&
-      heldItem.id === 'fairy_repellent_signet',
-    'a prize won with a full bag is held in the ledger, not dropped',
+    packed.inventory.countOf('fairy_repellent_signet') === 1 && packedLedger.owedItems.length === 0,
+    'a prize won with a packed bag goes into the bag',
   );
+  const olderSaveOwed = [{ crawler: 'human', id: 'fairy_repellent_signet', quantity: 1 }];
   const reloaded = createWheelLedger(
     [],
     null,
     null,
     null,
-    parseWheelOwedItems(JSON.parse(JSON.stringify(packedLedger.owedItems))) ?? [],
+    parseWheelOwedItems(JSON.parse(JSON.stringify(olderSaveOwed))) ?? [],
   );
   const roomy = new HumanPlayer(0, 0, TILE_SIZE);
   const roomyParty = { human: roomy, cat, grantAttackCow: () => undefined };
@@ -930,7 +925,7 @@ async function checkHostCommitsBeforeTurning(): Promise<void> {
   settleWheelLedger(reloaded, roomyParty);
   check(
     roomy.inventory.countOf('fairy_repellent_signet') === 1 && reloaded.owedItems.length === 0,
-    'a held prize survives the save and lands in the bag once there is room, exactly once',
+    'a prize an older save still holds lands in the bag on load, exactly once',
   );
 
   // A commit storage refused never becomes the save a death returns to.

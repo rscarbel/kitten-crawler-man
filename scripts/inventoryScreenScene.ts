@@ -380,7 +380,7 @@ section('a dungeon floor');
   human.inventory.addItem('health_potion', DRINK_POTIONS);
   for (let index = 0; index < human.inventory.actionBar.slots.length; index++) {
     if (human.inventory.actionBar.slots[index]?.id === 'health_potion') {
-      human.inventory.moveHotbarToFirstEmptySlot(index);
+      human.inventory.moveHotbarToBag(index);
     }
   }
   human.hp = Math.max(1, human.maxHp - WOUND_HP);

@@ -100,7 +100,7 @@ export interface HarvestSystemDeps {
   readonly effects: HarvestEffects;
   readonly bus: EventBus | null;
   readonly audio: HarvestAudio | null;
-  /** A one-line notice to the player ("Your bag is full."). */
+  /** A one-line notice to the player. */
   readonly announce: (message: string) => void;
   /** The luck stream: seeded, and separate from every other roll, so a luck gate replays exactly. */
   readonly luckRng: () => number;
@@ -132,8 +132,8 @@ interface Channel {
   animating: boolean;
 }
 
-/** Why a channel ended, for the feedback it owes the player. */
-type ChannelEnd = 'moved' | 'interrupted' | 'depleted' | 'bagFull' | 'hostile';
+/** Why a channel was cut short. */
+type ChannelInterruption = 'moved' | 'interrupted' | 'depleted' | 'hostile';
 
 export class HarvestSystem {
   /** One channel per harvester — starting or ending a crawler's own never reaches the other's. */
@@ -258,13 +258,13 @@ export class HarvestSystem {
     for (const channel of [...this.channels.values()]) {
       if (menuOpen) {
         if (harvestKindAt(this.deps.gameMap, channel.tileX, channel.tileY) !== channel.kind) {
-          this.end(channel, 'depleted');
+          this.stop(channel.harvester);
         }
         continue;
       }
       const ended = this.interruption(channel, ctx);
       if (ended !== null) {
-        this.end(channel, ended);
+        this.stop(channel.harvester);
         continue;
       }
       this.deps.noteActivity();
@@ -294,15 +294,7 @@ export class HarvestSystem {
     for (const harvester of [...this.channels.keys()]) this.stop(harvester);
   }
 
-  private end(channel: Channel, reason: ChannelEnd): void {
-    if (reason === 'bagFull') {
-      this.deps.announce('Your bag is full.');
-      this.deps.audio?.play('error');
-    }
-    this.stop(channel.harvester);
-  }
-
-  private interruption(channel: Channel, ctx: SystemContext): ChannelEnd | null {
+  private interruption(channel: Channel, ctx: SystemContext): ChannelInterruption | null {
     const harvester = channel.harvester;
     // Deliberately not gated on `ctx.active === harvester`: a channel started
     // by the controlled crawler must survive a switch to the other one, so
@@ -325,10 +317,6 @@ export class HarvestSystem {
   private award(channel: Channel, level: number): void {
     const harvester = channel.harvester;
     const resource = resourceForHarvestKind(channel.kind);
-    if (!harvester.inventory.hasRoomFor(resource)) {
-      this.end(channel, 'bagFull');
-      return;
-    }
     const toolKind = toolForHarvestKind(channel.kind);
     const yieldMultiplier = this.deps.partyTools.yieldMultiplier(toolKind);
     const carries = this.carryOf(harvester.crawlerKind);
@@ -339,7 +327,7 @@ export class HarvestSystem {
     const work = this.nodeWorkFor(toolKind, level, toolSpeedBonus);
     const spent = this.deps.ledger.spend(channel.tileX, channel.tileY, level, work);
     if (!spent) {
-      this.end(channel, 'depleted');
+      this.stop(channel.harvester);
       return;
     }
     grantResource(harvester, resource, amount);
@@ -355,7 +343,7 @@ export class HarvestSystem {
     this.rollLuck(harvester, channel.kind, level);
 
     if (harvestKindAt(this.deps.gameMap, channel.tileX, channel.tileY) !== channel.kind) {
-      this.end(channel, 'depleted');
+      this.stop(channel.harvester);
     }
   }
 
@@ -372,7 +360,7 @@ export class HarvestSystem {
 
   private rollLuck(harvester: Crawler, kind: HarvestKind, level: number): void {
     const drop = rollHarvestLuck(level, kind, this.deps.luckRng);
-    if (drop === null || !harvester.inventory.hasRoomFor(drop)) return;
+    if (drop === null) return;
     grantResource(harvester, drop, 1);
     harvester.queueFloatingText(`+1 ${ITEM_DEF[drop].name}`, 'trigger');
     const isKit = drop === 'trebuchet_kit' || drop === 'snare_kit';

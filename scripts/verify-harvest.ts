@@ -1101,7 +1101,7 @@ section('XP: the top-tier tool trains four times as fast as the basic one');
   );
 }
 
-section('Channel: moving, a full bag and a hostile each end it');
+section('Channel: moving and a hostile each end it; a packed bag does not');
 {
   const rig = makeRig();
   teach(rig.human, 1);
@@ -1125,12 +1125,10 @@ section('Channel: moving, a full bag and a hostile each end it');
   });
   for (const index of emptied) slots[index] = { ...filler, quantity: 1 };
   rig.harvest.tryStart(rig.human);
-  const full = nextAward(rig, rig.human, 'wood', TICKS_PER_SECOND * AWARD_WAIT_SECONDS);
-  check(
-    full === null && !rig.harvest.isHarvesting(rig.human),
-    'a full bag ends the channel with nothing awarded',
-  );
-  check(rig.announcements.includes('Your bag is full.'), 'and says so');
+  const packed = nextAward(rig, rig.human, 'wood', TICKS_PER_SECOND * AWARD_WAIT_SECONDS);
+  check(packed !== null, 'a packed bag still takes the award');
+  check(rig.human.inventory.bag.pageCount > 1, 'on a page the bag grew for it');
+  rig.harvest.stop(rig.human);
   for (const index of emptied) slots[index] = null;
 
   rig.harvest.tryStart(rig.human);

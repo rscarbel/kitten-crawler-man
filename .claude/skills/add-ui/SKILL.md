@@ -497,7 +497,8 @@ shop, the casino).
 
 - **`src/ui/screens/inventory/`** — `InventoryScreen` (one per scene on
   `MenusKit.inventoryScreen`, band `panel`, no scrim): Bag tab (category rail,
-  filtered/sorted scrolling grid, Tidy, its own hotbar row, detail pane,
+  filtered/sorted grid a page at a time with a pager whose buttons also take a
+  dropped stack, Tidy, its own hotbar row, detail pane,
   context menu, number-key hotbar assignment) and Character tab (paper doll,
   stats). I/G call `MenusKit.toggleInventory`/`toggleGear`; the pause screen
   opens it with a back chevron. Item actions queue `pending*` fields on

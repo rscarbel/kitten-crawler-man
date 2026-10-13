@@ -8,7 +8,6 @@
  * so the script stays the only place any of the words are written.
  */
 
-import type { ItemId } from '../../../core/ItemDefs';
 import type { VillageQuestPhase } from '../../../core/villageQuestPhase';
 import type { HumanPlayer } from '../../../creatures/HumanPlayer';
 import type { CatPlayer } from '../../../creatures/CatPlayer';
@@ -31,9 +30,6 @@ export interface ServiceParty {
   readonly cat: CatPlayer;
   active(): Crawler;
 }
-
-/** The notice for goods that had nowhere to go: the sale is refused and nothing is charged. */
-export const BAG_FULL_LINE = 'Your bag is full.';
 
 /** The phases before the Mayor's request is accepted, when the smith has no work for the party. */
 const BEFORE_THE_QUEST: ReadonlySet<VillageQuestPhase> = new Set(['unmet', 'offered', 'declined']);
@@ -60,17 +56,6 @@ export function sellerLine(line: BarkLine): string {
 /** The companion of `crawler`. */
 export function otherCrawler(party: ServiceParty, crawler: Crawler): Crawler {
   return crawler === party.human ? party.cat : party.human;
-}
-
-/**
- * Who can take delivery of `id`: `preferred` when their pack has room for it,
- * else the companion, else nobody. Stacks never cap, so "room" is a stack
- * already held or a free slot.
- */
-export function recipientFor(party: ServiceParty, preferred: Crawler, id: ItemId): Crawler | null {
-  if (preferred.inventory.hasRoomFor(id)) return preferred;
-  const companion = otherCrawler(party, preferred);
-  return companion.inventory.hasRoomFor(id) ? companion : null;
 }
 
 /** One shop's rows, what a purchase does, and what the seller says to a refused one. */

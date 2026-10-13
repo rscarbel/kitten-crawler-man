@@ -451,6 +451,8 @@ export abstract class Player implements AboveDarknessDrawer {
   private _maxHpAtLastSync: number;
   /** Flat bonus applied to every stat while god mode is on. */
   private _godModeStatBonus = 0;
+  /** Extra dexterity that only the dodge roll sees, while `!lucky` is on. */
+  private _luckyDodgeBonus = 0;
   levelUpStat: string | null = null;
   levelUpFlash = 0;
   /**
@@ -926,6 +928,11 @@ export abstract class Player implements AboveDarknessDrawer {
     this.syncHpToMaxHp();
   }
 
+  /** Raise or clear the `!lucky` dexterity bonus applied to dodge rolls only. Pass 0 to clear. */
+  setLuckyDodgeBonus(bonus: number): void {
+    this._luckyDodgeBonus = bonus;
+  }
+
   /**
    * Whether anything can reach this character's health at all right now.
    *
@@ -1188,7 +1195,7 @@ export abstract class Player implements AboveDarknessDrawer {
   /** The chance this player has of dodging the next mob attack, 0–1. */
   get dodgeChance(): number {
     if (!this.canDodge) return 0;
-    return computeDodgeChance(this.dexterity, this.dodgeFlatBonus);
+    return computeDodgeChance(this.dexterity + this._luckyDodgeBonus, this.dodgeFlatBonus);
   }
 
   private rollDodge(): boolean {

@@ -504,9 +504,9 @@ console.log('\nFloor loot survives the door');
     check(cat.coins === catCoinsBefore, 'an unshared pile pays nobody else');
 
     // A pile the player put down on purpose is the one thing the sweep must not
-    // hand back: dropping to make room is the only way to get rid of an item,
-    // and an interior that returns it at the door is the one place in the game
-    // where that cannot be done.
+    // hand back: dropping is the only way to get rid of an item, and an
+    // interior that returns it at the door is the one place in the game where
+    // that cannot be done.
     const droppedBefore = human.inventory.countOf('health_potion');
     destruction.loot.addPlayerDrop(human.x, human.y, 'health_potion', 1, human);
     destruction.loot.sweepUncollected(stage.pm.players());

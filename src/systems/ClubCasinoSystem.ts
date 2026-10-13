@@ -11,6 +11,7 @@
  * bad deck.
  */
 
+import { NEVER_LUCKY, type LuckCheck } from '../core/GodMode';
 import type { Player } from '../Player';
 import { canAffordCoins, partyCoins } from '../core/partyCoins';
 import type { AudioManager } from '../audio/AudioManager';
@@ -23,6 +24,7 @@ import {
   CHIP_DENOMINATIONS,
   HINTS_AUTO_FADE_HANDS,
   LONG_SESSION_HANDS,
+  SHUFFLE_FLOURISH_MS,
   TABLE_MINIMUM,
   type ChipDenomination,
   type TableEvent,
@@ -103,7 +105,6 @@ const FLIP_REVEAL_POINT = 0.5;
 /** How long a chip takes to arc between the tray and the felt. */
 const CHIP_FLIGHT_MS = 240;
 const PAYOUT_SWEEP_MS = 620;
-const SHUFFLE_FLOURISH_MS = 1000;
 const BANTER_HOLD_MS = 4200;
 const BANTER_FADE_MS = 600;
 /** Frames longer than this are a tab-away, not a slow frame; the clock refuses to jump. */
@@ -321,6 +322,9 @@ export class ClubCasinoSystem {
    */
   onWinnings: ((coins: number, screenX: number, screenY: number) => void) | null = null;
 
+  /** Read at each deal: while it answers true, the player's opening hand always holds an Ace. */
+  isLucky: LuckCheck = NEVER_LUCKY;
+
   /** Summed net winnings across every settled hand since the panel opened, flown as one on close. */
   private pendingSessionWinnings = 0;
 
@@ -329,7 +333,7 @@ export class ClubCasinoSystem {
     private readonly membership: ClubMembership,
     private readonly clock: () => number = () => performance.now(),
   ) {
-    this.table = new BlackjackTable(membership.casinoShoe);
+    this.table = new BlackjackTable(membership.casinoShoe, () => this.isLucky());
     this.table.onWinnings = (winnings) => {
       if (winnings > 0) this.pendingSessionWinnings += winnings;
     };

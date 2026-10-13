@@ -10,8 +10,8 @@
  * - The three routes to eating — the bag's Eat entry, a hotbar key, and the
  *   context menu that a mobile long-press opens — all reach the same meal.
  * - Ground pickups: a scatter lands on walkable tiles, even when dropped
- *   against a wall; one press in prompt reach collects all of them; a full bag
- *   collects nothing and leaves them down; the lifetime removes them; a
+ *   against a wall; one press in prompt reach collects all of them, into a
+ *   bag packed past its first page too; the lifetime removes them; a
  *   checkpoint round trip keeps them, directly and through `DestructionKit`.
  * - Prompt gating: a hostile in attack range withholds the prompt and the
  *   press (the one helper both the prompt and `triggerSpaceAction` consult);
@@ -27,7 +27,7 @@
 import { TILE_SIZE } from '../src/core/constants';
 import { AbilityManager } from '../src/core/AbilityManager';
 import { EventBus } from '../src/core/EventBus';
-import { ITEM_DEF, type ItemId } from '../src/core/ItemDefs';
+import { BAG_PAGE_SLOTS, ITEM_DEF, type ItemId } from '../src/core/ItemDefs';
 import { PlayerManager } from '../src/core/PlayerManager';
 import { HAMBURGER_HEAL_FRACTION, HAMBURGER_STR_BONUS } from '../src/core/foodEffects';
 import { HAMBURGER_FED_STATUS, HAMBURGER_FED_TICKS } from '../src/core/StatusEffect';
@@ -404,7 +404,7 @@ console.log('\nGround pickups');
     human.inventory.countOf('hamburger') === BURGER_SCATTER,
     `all ${BURGER_SCATTER} are in the bag`,
   );
-  check(system.drainPickupCues().pickedUp, 'and the pickup cue is raised');
+  check(system.drainPickedUp(), 'and the pickup cue is raised');
 
   system.restoreCheckpoint(snapshot);
   check(system.all.length === BURGER_SCATTER, 'a checkpoint restore puts them back');
@@ -421,18 +421,17 @@ console.log('\nGround pickups');
   human.x = farAway[0].x - TILE_SIZE * HALF;
   human.y = farAway[0].y - TILE_SIZE * HALF;
 
-  // A full bag.
-  const crammed = pm.cat;
-  crammed.x = human.x;
-  crammed.y = human.y;
-  while (crammed.inventory.bag.slots.includes(null)) crammed.inventory.addItem(FILLER_ITEM, 1);
-  check(!crammed.inventory.hasRoomFor('hamburger'), 'the companion bag is full of axes');
-  crammed.pendingSystemNotices.length = 0;
-  check(system.tryPickupNear(crammed), 'a press with a full bag is still claimed');
-  check(system.all.length === BURGER_SCATTER, 'and leaves every burger on the ground');
-  check(crammed.inventory.countOf('hamburger') === 0, 'and puts none in the bag');
-  check(crammed.pendingSystemNotices.includes('Your bag is full.'), 'and says the bag is full');
-  check(system.drainPickupCues().refused, 'and raises the refusal cue');
+  // A bag packed past its first page still takes everything.
+  const packed = pm.cat;
+  packed.x = human.x;
+  packed.y = human.y;
+  for (let slot = 0; slot < BAG_PAGE_SLOTS; slot++) packed.inventory.addItem(FILLER_ITEM, 1);
+  check(packed.inventory.bag.pageCount > 1, 'the companion bag of axes runs onto a second page');
+  const beforePacked = system.captureCheckpoint();
+  check(system.tryPickupNear(packed), 'a press with a packed bag is claimed');
+  check(system.all.length === 0, 'and gathers every burger');
+  check(packed.inventory.countOf('hamburger') === BURGER_SCATTER, 'into the packed bag');
+  system.restoreCheckpoint(beforePacked);
 
   for (let i = 0; i < GROUND_PICKUP_TTL_FRAMES - GROUND_PICKUP_SETTLE_FRAMES - 1; i++)
     system.update();

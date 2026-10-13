@@ -24,14 +24,23 @@ const BLOOD_VOMIT_TAKES: readonly SoundId[] = [
   'blood_vomit_4',
 ];
 
-/** The Fury of Taranis's variant sets: a swing, a cut landing, a chain-lightning burst. */
-const TARANIS_SWING_TAKES: readonly SoundId[] = [
+/** The swing every magic sword makes, whatever it does once the blow lands. */
+const MAGIC_SWORD_SWING_TAKES: readonly SoundId[] = [
+  'magic_sword_swing_1',
+  'magic_sword_swing_2',
+  'magic_sword_swing_3',
+  'magic_sword_swing_4',
+];
+/**
+ * The Fury of Taranis's own sets: a cut landing and a chain-lightning burst.
+ * Every crackling electric take belongs to the wave landing, so the
+ * electricity is only heard when the wave actually hits something.
+ */
+const TARANIS_WAVE_HIT_TAKES: readonly SoundId[] = [
   'taranis_swing_1',
   'taranis_swing_2',
   'taranis_swing_3',
   'taranis_swing_4',
-];
-const TARANIS_WAVE_HIT_TAKES: readonly SoundId[] = [
   'taranis_wave_hit_1',
   'taranis_wave_hit_2',
   'taranis_wave_hit_3',
@@ -1435,7 +1444,7 @@ export class AudioManager {
     });
 
     bus.on('taranisSwing', () => {
-      this.playRandomFresh(TARANIS_SWING_TAKES);
+      this.playRandomFresh(MAGIC_SWORD_SWING_TAKES);
     });
 
     bus.on('taranisStrike', () => {

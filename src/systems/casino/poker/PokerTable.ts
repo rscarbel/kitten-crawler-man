@@ -13,7 +13,8 @@
  * rules and nothing about how a regular plays.
  */
 
-import { Deck, type Card } from '../Deck';
+import { Deck, LUCKY_RANK, type Card } from '../Deck';
+import { NEVER_LUCKY, type LuckCheck } from '../../../core/GodMode';
 import {
   BettingRound,
   isLegal,
@@ -296,6 +297,8 @@ export interface PokerTableOptions {
   /** Defaults to the tier's buy-in. */
   readonly playerStack?: number;
   readonly fast?: boolean;
+  /** Read as the player's first hole card is dealt: while true, the player's hole cards hold an Ace. */
+  readonly isLucky?: LuckCheck;
 }
 
 interface ShowdownStep {
@@ -310,6 +313,7 @@ export class PokerTable {
   private readonly brain: PokerSeatBrain;
   private readonly seatManager: PokerSeatManager | null;
   private readonly random: () => number;
+  private readonly isLucky: LuckCheck;
   private readonly seatState: PokerSeat[];
   private readonly events: PokerEvent[] = [];
 
@@ -357,6 +361,7 @@ export class PokerTable {
     this.brain = options.brain;
     this.seatManager = options.seatManager ?? null;
     this.random = options.random ?? Math.random;
+    this.isLucky = options.isLucky ?? NEVER_LUCKY;
     this.fastValue = options.fast ?? false;
     const playerStack = options.playerStack ?? this.stakes.buyIn;
     this.seatState = Array.from({ length: POKER_SEAT_COUNT }, (_, index) => {
@@ -837,6 +842,9 @@ export class PokerTable {
     const pass = Math.floor(this.holeCardsDealt / order.length);
     const seatIndex = order[this.holeCardsDealt % order.length];
     const seat = this.seatState[seatIndex];
+    const playerStillOwedLuck =
+      seat.isPlayer && this.isLucky() && !seat.holeCards.some((card) => card.rank === LUCKY_RANK);
+    if (playerStillOwedLuck) this.deck?.stackNext(LUCKY_RANK);
     seat.holeCards.push(this.draw());
     this.holeCardsDealt++;
     this.emit({ kind: 'hole_dealt', seat: seatIndex, index: pass });

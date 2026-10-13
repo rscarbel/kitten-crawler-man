@@ -47,11 +47,6 @@ export interface WheelPrizeTarget {
   readonly kind: WheelCrawler;
   /** Gives Carl the attack cow, whoever spun. */
   readonly grantAttackCow: () => void;
-  /**
-   * The ledger, which holds a won item the crawler's bag has no room for
-   * until it has: an item on the floor would be lost to a reload.
-   */
-  readonly ledger: WheelLedger;
 }
 
 /** What a prize paid, for the reveal to show. */
@@ -62,7 +57,7 @@ export interface WheelPrizeEffect {
   readonly coinsTaken: number;
   /** Coins paid out. */
   readonly coinsWon: number;
-  /** Items handed over, whether into the bag now or held in the ledger until it has room. */
+  /** Items handed over into the bag. */
   readonly items: ReadonlyArray<ItemReward>;
   /** The rarity an item prize is presented at, or null for a prize with no items. */
   readonly tier: BoxTier | null;
@@ -80,18 +75,14 @@ const NO_EFFECT: WheelPrizeEffect = {
 const WHEEL_CONTENTS_CATEGORY = 'Wheel';
 const ONE = 1;
 
-/** Items straight into the crawler's bag, the moment the wheel lands; what does not fit is owed. */
+/** Items straight into the crawler's bag, the moment the wheel lands. */
 function grantItems(
   target: WheelPrizeTarget,
   tier: BoxTier,
   items: ReadonlyArray<ItemReward>,
   coins = 0,
 ): WheelPrizeEffect {
-  for (const { id, quantity } of items) {
-    const fits =
-      target.crawler.inventory.hasRoomFor(id) && target.crawler.inventory.addItem(id, quantity);
-    if (!fits) target.ledger.owedItems.push({ crawler: target.kind, id, quantity });
-  }
+  for (const { id, quantity } of items) target.crawler.inventory.addItem(id, quantity);
   if (coins > 0) target.crawler.earnCoins(coins);
   return { ...NO_EFFECT, items, coinsWon: coins, tier };
 }
@@ -216,38 +207,26 @@ export interface WheelParty {
 }
 
 /** The crawler a spin belongs to, as a prize target. */
-export function wheelPrizeTarget(
-  party: WheelParty,
-  kind: WheelCrawler,
-  ledger: WheelLedger,
-): WheelPrizeTarget {
+export function wheelPrizeTarget(party: WheelParty, kind: WheelCrawler): WheelPrizeTarget {
   return {
     crawler: kind === 'human' ? party.human : party.cat,
     kind,
     grantAttackCow: party.grantAttackCow,
-    ledger,
   };
 }
 
-/**
- * Moves every owed prize item whose crawler now has bag room into that bag.
- * Returns the items delivered, for a notice.
- */
-export function deliverOwedWheelItems(ledger: WheelLedger, party: WheelParty): ItemReward[] {
-  const delivered: ItemReward[] = [];
-  ledger.owedItems = ledger.owedItems.filter((owed) => {
+/** Puts every prize item the ledger holds for a crawler into that crawler's bag. */
+function deliverOwedWheelItems(ledger: WheelLedger, party: WheelParty): void {
+  for (const owed of ledger.owedItems) {
     const crawler = owed.crawler === 'human' ? party.human : party.cat;
-    const landed =
-      crawler.inventory.hasRoomFor(owed.id) && crawler.inventory.addItem(owed.id, owed.quantity);
-    if (landed) delivered.push({ id: owed.id, quantity: owed.quantity });
-    return !landed;
-  });
-  return delivered;
+    crawler.inventory.addItem(owed.id, owed.quantity);
+  }
+  ledger.owedItems = [];
 }
 
 /**
  * Settles what the wheel still owes the party, silently, on every load and
- * floor change: prize items waiting for bag room, a spin committed but never
+ * floor change: prize items held outside the bags, a spin committed but never
  * paid (the bet and the won-prize mark were saved with it, so only the
  * effect is left, and a Spin Again's free spin is owed again), and a freeze
  * landed but not yet spent. Also splits a legacy whole-party Legendary
@@ -259,10 +238,10 @@ export function settleWheelLedger(ledger: WheelLedger, party: WheelParty): Wheel
   return paid;
 }
 
-function partyHoldsItem(ledger: WheelLedger, party: WheelParty, id: ItemId): boolean {
+function partyHoldsItem(party: WheelParty, id: ItemId): boolean {
   const held = (crawler: Player) =>
     crawler.inventory.countOf(id) > 0 || crawler.inventory.hasEquipped(id);
-  return held(party.human) || held(party.cat) || ledger.owedItems.some((owed) => owed.id === id);
+  return held(party.human) || held(party.cat);
 }
 
 /**
@@ -271,7 +250,7 @@ function partyHoldsItem(ledger: WheelLedger, party: WheelParty, id: ItemId): boo
  * one of the two weapons, that crawler's claim replaces it and the wedge can
  * pay the other weapon; otherwise which one was won is unknowable, so both
  * count as claimed and the wedge stays retired. Runs after a pending spin is
- * paid, so a weapon still in flight is in a bag or owed by then.
+ * paid, so a weapon still in flight is in a bag by then.
  */
 function splitLegacyWeaponClaim(ledger: WheelLedger, party: WheelParty): void {
   const won = ledger.prizesWon;
@@ -279,9 +258,7 @@ function splitLegacyWeaponClaim(ledger: WheelLedger, party: WheelParty): void {
   const isLegacy =
     won.includes(LEGENDARY_WEAPON_WEDGE_ID) && !claims.some((claim) => won.includes(claim));
   if (!isLegacy) return;
-  const held = WHEEL_CRAWLERS.filter((kind) =>
-    partyHoldsItem(ledger, party, legendaryWeaponItemId(kind)),
-  );
+  const held = WHEEL_CRAWLERS.filter((kind) => partyHoldsItem(party, legendaryWeaponItemId(kind)));
   if (held.length === 1) {
     ledger.prizesWon = won.filter((entry) => entry !== LEGENDARY_WEAPON_WEDGE_ID);
     ledger.prizesWon.push(LEGENDARY_WEAPON_CLAIM_IDS[held[0]]);
@@ -297,12 +274,12 @@ function settleOwedPrizes(ledger: WheelLedger, party: WheelParty): WheelWedge | 
   const owedFreeze = ledger.owedFreeze;
   ledger.owedFreeze = null;
   if (owedFreeze !== null) {
-    applyWheelPrize({ kind: 'freeze' }, wheelPrizeTarget(party, owedFreeze, ledger));
+    applyWheelPrize({ kind: 'freeze' }, wheelPrizeTarget(party, owedFreeze));
   }
   if (pending === null) return null;
   const wedge = wedgeFaceById(pending.wedgeId);
   if (wedge === null) return null;
   if (wedge.prize.kind === 'spin_again') ledger.freeSpinBet = pending.boardBet;
-  applyWheelPrize(wedge.prize, wheelPrizeTarget(party, pending.recipient, ledger));
+  applyWheelPrize(wedge.prize, wheelPrizeTarget(party, pending.recipient));
   return wedge;
 }

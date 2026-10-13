@@ -9,10 +9,16 @@ import progressRouter from './routes/progress.js';
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.join(__dirname, '..');
 const PORT = 3000;
+/**
+ * The largest request body accepted. A save is one JSON body, and express's
+ * 100 KB default is within reach of a deep bag, after which every save would
+ * be refused.
+ */
+const JSON_BODY_LIMIT = '4mb';
 
 const app = express();
 
-app.use(express.json());
+app.use(express.json({ limit: JSON_BODY_LIMIT }));
 app.use(cookieParser());
 
 // Serve compiled frontend assets

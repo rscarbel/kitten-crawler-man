@@ -63,7 +63,6 @@ import { liveHudLayout } from '../ui/hud/liveHudLayout';
 import { promptSurface } from '../ui/hud/prompt';
 import type { TopBandEntry } from '../ui/hud/topBand';
 import { hotbarPressInput, hotbarSlotModels } from '../systems/kits/hudHotbar';
-import { toastBagFullLosses } from '../systems/bagFullToasts';
 import { paintInteriorMiniMap } from '../systems/interiorMiniMap';
 import { TowerStairSystem } from '../systems/TowerStairSystem';
 import {
@@ -668,7 +667,6 @@ export class BuildingInteriorScene extends GameplayScene {
     toasts: () => this.menus.toasts,
     liftTopBand: () => this.roomStatusLayer === 'overPanel',
   });
-  private stopBagFullToasts: (() => void) | null = null;
 
   /** Coins/items flying to this scene's own HUD. One instance for the whole building — floors change, this doesn't. */
   protected readonly rewardFly = new RewardFlySystem();
@@ -1169,6 +1167,7 @@ export class BuildingInteriorScene extends GameplayScene {
             this.humanAchievements,
             this.catAchievements,
             this.circus?.worldSeed ?? POKER_DEV_SEED,
+            () => this.godModeState.luckyActive,
           )
         : null;
     if (this.club !== null) {
@@ -1188,6 +1187,7 @@ export class BuildingInteriorScene extends GameplayScene {
             this.grantAttackCow();
           },
           onNotice: (message, tone) => this.menus.toasts.post(message, { tone }),
+          isLucky: () => this.godModeState.luckyActive,
         }),
       );
     }
@@ -1290,17 +1290,6 @@ export class BuildingInteriorScene extends GameplayScene {
       this.rewardFly,
       this.audio,
     );
-    // Boss-style so the pile never fades: an achievement pays out once, and a
-    // reward that expired on the floor could not be earned a second time.
-    this.achievementUI.onRewardOverflow = (player, id, quantity) => {
-      this.destruction.loot.addLoot(
-        player.x + TILE_SIZE * TILE_CENTER_RATIO,
-        player.y + TILE_SIZE * TILE_CENTER_RATIO,
-        { coins: 0, items: [{ id, quantity }] },
-        player,
-        true,
-      );
-    };
     this.systemNotices = new SystemNoticeSystem(this.bus, this.menus.toasts);
     this.tacticsNotices = new TacticsNoticeSystem(tacticsNoticesSeen ?? new Set<TacticsTrait>());
     this.chat = new ChatKit({
@@ -2136,8 +2125,6 @@ export class BuildingInteriorScene extends GameplayScene {
       human: this.human,
       cat: this.cat,
     });
-    this.stopBagFullToasts?.();
-    this.stopBagFullToasts = toastBagFullLosses([this.human, this.cat], this.menus.toasts);
     // Override the overworld's persisted music with the room's own; the
     // overworld's zone music (OverworldMusicSystem) restores itself on exit.
     // Started as the room is shown, not under its loading screen.
@@ -2297,8 +2284,6 @@ export class BuildingInteriorScene extends GameplayScene {
     this.stopForwardingQuestItemEvictions = null;
     this.stopForwardingEquipmentChanges?.();
     this.stopForwardingEquipmentChanges = null;
-    this.stopBagFullToasts?.();
-    this.stopBagFullToasts = null;
     // See the matching note in DungeonScene.onExit: defensive, since a fresh
     // scene already starts with a fresh RewardFlySystem.
     this.rewardFly.reset();

@@ -19,7 +19,6 @@ import type { ShopConfig, ShopItem, ShopStockConfig } from '../../../systems/Sho
 import type { ShopMenu, ShopRow, ShopSession } from './shopSession';
 
 const NOT_ENOUGH_COINS_LINE = 'Not enough coins!';
-const BAG_FULL_LINE = 'Inventory is full!';
 const STORE_BARK = 'Have a look around.';
 
 export interface StoreCounter {
@@ -61,9 +60,7 @@ export function openStoreCounter(session: ShopSession, counter: StoreCounter): v
     (option, player) => {
       const item = config.items.find((line) => line.id === option.key);
       if (item === undefined) return { ok: false, line: '' };
-      if (!player.inventory.hasRoomFor(item.id) || !player.inventory.addItem(item.id, 1)) {
-        return { ok: false, line: BAG_FULL_LINE };
-      }
+      player.inventory.addItem(item.id, 1);
       consumeStock(stock.stock, stock.vendorId, item);
       if (heldUnits(counter, item.id) > 0) {
         removeHeldStock(stock.stock.held, stock.vendorId, item.id);

@@ -20,7 +20,6 @@ import { levelTimerCue, type LevelTimerCue } from '../ui/hud/levelTimer';
 import { promptSurface } from '../ui/hud/prompt';
 import type { TopBandEntry } from '../ui/hud/topBand';
 import { hotbarPressInput, hotbarSlotModels } from '../systems/kits/hudHotbar';
-import { toastBagFullLosses } from '../systems/bagFullToasts';
 import { interiorRoomOwnedByStory } from '../systems/interiorStoryOwnership';
 import { GameMap } from '../map/GameMap';
 import { DEFAULT_DUNGEON_FLOOR_THEME, setDungeonFloorTheme } from '../map/dungeon/floorTheme';
@@ -710,7 +709,7 @@ export interface DungeonSceneOptions {
   mercenaryRoster?: MercenaryRoster;
   /** Companion combat stance, threaded by reference so passive/aggressive survives building/floor transitions. */
   companionStance?: CompanionStanceState;
-  /** `!god` / `!tough` cheat state, threaded by reference so it survives scene transitions. */
+  /** `!god` / `!tough` / `!lucky` cheat state, threaded by reference so it survives scene transitions. */
   godModeState?: GodModeState;
   /**
    * The run's kill and potion tallies, threaded by reference: the Stats tab is
@@ -1408,7 +1407,6 @@ export class DungeonScene extends GameplayScene {
   private stopForwardingQuestItemEvictions: (() => void) | null = null;
   /** Stops forwarding the crawlers' equipment changes onto this scene's bus; set while the scene is running. */
   private stopForwardingEquipmentChanges: (() => void) | null = null;
-  private stopBagFullToasts: (() => void) | null = null;
   private readonly crawlerBarks = new CrawlerBarkSystem();
 
   private levelCompleteScreen = new LevelCompleteScreen();
@@ -2564,14 +2562,6 @@ export class DungeonScene extends GameplayScene {
               bossIntro: (name, color) => {
                 this.bossIntro.trigger(NECROMANCER_BOSS_TYPE, name, color);
               },
-              dropItems: (x, y, items) =>
-                this.destruction.loot.addLoot(
-                  x,
-                  y,
-                  { coins: 0, items: [...items] },
-                  this.active(),
-                  true,
-                ),
               assaultLevel: () =>
                 resolveVillageAssaultLevel(
                   levelDef,
@@ -2609,17 +2599,6 @@ export class DungeonScene extends GameplayScene {
       this.rewardFly,
       this.audio,
     );
-    // Boss-style so the pile never fades: an achievement pays out once, and a
-    // reward that expired on the floor could not be earned a second time.
-    this.achievementUI.onRewardOverflow = (player, id, quantity) => {
-      this.destruction.loot.addLoot(
-        player.x + TILE_SIZE * TILE_CENTER_OFFSET,
-        player.y + TILE_SIZE * TILE_CENTER_OFFSET,
-        { coins: 0, items: [{ id, quantity }] },
-        player,
-        true,
-      );
-    };
 
     if (tutorialController !== null) {
       const tut = tutorialController;
@@ -3429,8 +3408,6 @@ export class DungeonScene extends GameplayScene {
       human: this.human,
       cat: this.cat,
     });
-    this.stopBagFullToasts?.();
-    this.stopBagFullToasts = toastBagFullLosses([this.human, this.cat], this.menus.toasts);
     // Level entry is the one stretch of real rendering the player cannot act
     // during, which is what makes it usable cover for the quality probe.
     renderQuality.requestProbe();
@@ -3529,8 +3506,6 @@ export class DungeonScene extends GameplayScene {
     this.stopForwardingQuestItemEvictions = null;
     this.stopForwardingEquipmentChanges?.();
     this.stopForwardingEquipmentChanges = null;
-    this.stopBagFullToasts?.();
-    this.stopBagFullToasts = null;
     // A scene left while still loading must not leave the probe blindfolded,
     // nor the figure cache unable to let anything go.
     this.arrivalLoading.dispose();
@@ -5500,7 +5475,6 @@ export class DungeonScene extends GameplayScene {
     | 'pendingWheelOutcome'
     | 'wheelFreeSpinBet'
     | 'wheelOwedFreeze'
-    | 'wheelOwedItems'
     | 'bloodVomitRemaining'
     | 'attackCowOwned'
     | 'attackCowHp'
@@ -5512,7 +5486,6 @@ export class DungeonScene extends GameplayScene {
         this.wheelLedger.pendingOutcome === null ? null : { ...this.wheelLedger.pendingOutcome },
       wheelFreeSpinBet: this.wheelLedger.freeSpinBet,
       wheelOwedFreeze: this.wheelLedger.owedFreeze,
-      wheelOwedItems: this.wheelLedger.owedItems.map((item) => ({ ...item })),
       bloodVomitRemaining: bloodVomitRemainingOf(humanSnap, catSnap),
       attackCowOwned: this.attackCowState.owned,
       attackCowHp: this.attackCowState.hp ?? undefined,

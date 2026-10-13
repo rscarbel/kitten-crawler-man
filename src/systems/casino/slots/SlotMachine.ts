@@ -24,7 +24,13 @@ import {
   type WinTier,
 } from './slotBets';
 import { evaluateSpin, type NearMiss, type SpinOutcome } from './evaluateSpin';
-import { findForcedStops, type ForcedOutcome } from './forcedOutcomes';
+import {
+  LUCKY_FALLBACK_OUTCOMES,
+  findForcedStops,
+  pickLuckyOutcome,
+  type ForcedOutcome,
+} from './forcedOutcomes';
+import { NEVER_LUCKY, type LuckCheck } from '../../../core/GodMode';
 import {
   REEL_COUNT,
   REEL_STRIPS,
@@ -131,6 +137,8 @@ export interface SlotMachineOptions {
   readonly random?: Rng;
   readonly seed?: number;
   readonly strips?: ReelStrips;
+  /** Read as each spin starts: while true, every spin pays. */
+  readonly isLucky?: LuckCheck;
 }
 
 interface LiveSpin {
@@ -143,6 +151,7 @@ interface LiveSpin {
 export class SlotMachine {
   readonly strips: ReelStrips;
   private readonly random: Rng;
+  private readonly isLucky: LuckCheck;
 
   private currentPhase: SlotPhase = 'idle';
   private live: LiveSpin | null = null;
@@ -162,6 +171,7 @@ export class SlotMachine {
     this.strips = options.strips ?? REEL_STRIPS;
     this.random =
       options.random ?? (options.seed === undefined ? Math.random : mulberry32(options.seed));
+    this.isLucky = options.isLucky ?? NEVER_LUCKY;
   }
 
   get phase(): SlotPhase {
@@ -219,6 +229,20 @@ export class SlotMachine {
     return true;
   }
 
+  /**
+   * Honest stops for a `!lucky` win: the picked kind, or failing that the
+   * likeliest paying kind that turns up, so the reels shown are always the
+   * win paid.
+   */
+  private findLuckyStops(betPerLine: BetPerLine, jackpotPool: number): number[] | null {
+    const candidates = [pickLuckyOutcome(betPerLine, this.random), ...LUCKY_FALLBACK_OUTCOMES];
+    for (const kind of candidates) {
+      const stops = findForcedStops(kind, betPerLine, jackpotPool, this.strips, this.random);
+      if (stops !== null) return stops;
+    }
+    return null;
+  }
+
   /** Makes the next spin land exactly on `stops`; false (and nothing forced) if any is off its strip. */
   forceNextStops(stops: ReelStops): boolean {
     if (!areValidStops(this.strips, stops)) return false;
@@ -261,7 +285,11 @@ export class SlotMachine {
       this.emit({ kind: 'free_spin_started', number: played, remaining });
     }
 
-    const stops = this.forcedStops ?? randomStops(this.strips, this.random);
+    const luckyStops =
+      this.forcedStops === null && this.isLucky()
+        ? this.findLuckyStops(betPerLine, poolInPlay)
+        : null;
+    const stops = this.forcedStops ?? luckyStops ?? randomStops(this.strips, this.random);
     this.forcedStops = null;
     const outcome = evaluateSpin({
       stops,

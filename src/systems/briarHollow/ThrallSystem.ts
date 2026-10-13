@@ -40,7 +40,6 @@ import { drawThrall, type ThrallLook } from '../../sprites/thrallSprite';
 import { THRALL_WORK_FRAMES, thrallFigure } from '../../sprites/art/thrallFigure';
 import { figureFrameCount } from '../../sprites/figure/figureDef';
 import { HAMMER_STRIKE_PHASE } from '../../sprites/art/ratkin/castRows';
-import { worldText } from '../../ui/world/worldText';
 import { HARVEST_BUFF_COLOR, type HarvestEffects } from './HarvestEffects';
 import type { HarvestAudio } from './HarvestSystem';
 import { grantResource } from './HarvestSystem';
@@ -82,10 +81,6 @@ const SWING_IMPACT_TICK =
 const THRALL_STRIKE_VOLUME = 0.45;
 /** How fast the idle and walk rows play while it floats to its work. */
 const DRIFT_TICKS_PER_FRAME = 6;
-/** The "…" over a thrall with nowhere to put what it gathers. */
-const BAG_FULL_BUBBLE = '…';
-const BUBBLE_RAISE_TILES = 1.05;
-const BUBBLE_COLOR = '#e2e8f0';
 
 const TILE_CENTER_OFFSET = 0.5;
 const FULL_TURN = Math.PI * 2;
@@ -111,7 +106,6 @@ interface Thrall {
   fadeTicks: number | null;
   harvestTicks: number;
   carry: number;
-  bagFull: boolean;
   swingTicks: number;
   /** The way it last moved, for the wisp trail and which way it faces. */
   moveX: number;
@@ -127,7 +121,6 @@ export interface ThrallView {
   readonly y: number;
   readonly node: NodeRef | null;
   readonly fading: boolean;
-  readonly bagFull: boolean;
 }
 
 /** How a summon went, for the menu that asked for it. */
@@ -179,7 +172,6 @@ export class ThrallSystem {
       y: thrall.y,
       node: thrall.node,
       fading: thrall.fadeTicks !== null,
-      bagFull: thrall.bagFull,
     }));
   }
 
@@ -230,7 +222,6 @@ export class ThrallSystem {
         fadeTicks: null,
         harvestTicks: 0,
         carry: 0,
-        bagFull: false,
         swingTicks: 0,
         moveX: 0,
         moveY: 0,
@@ -414,9 +405,6 @@ export class ThrallSystem {
     const summoner = thrall.summoner;
     const level = summoner.craftSkills.getLevel('resourcing');
     const resource = resourceForHarvestKind(thrall.kind);
-    thrall.bagFull = !summoner.inventory.hasRoomFor(resource);
-    if (thrall.bagFull) return;
-
     thrall.harvestTicks += 1;
     const toolSpeedBonus = this.deps.partyTools.toolSpeedBonus(thrall.tool);
     const interval = harvestIntervalTicks(thrall.kind, level, toolSpeedBonus);
@@ -526,18 +514,6 @@ export class ThrallSystem {
     const sy = thrall.y - camY - BOB_AMPLITUDE_PX + bob;
     const presence = presenceOf(thrall);
     drawThrall(ctx, thrallLook(thrall, presence), sx, sy, tileSize);
-
-    if (thrall.bagFull && thrall.fadeTicks === null) {
-      worldText(ctx, BAG_FULL_BUBBLE, {
-        x: sx + tileSize / 2,
-        y: sy - (BUBBLE_RAISE_TILES - 1) * tileSize,
-        style: 'label',
-        color: BUBBLE_COLOR,
-        bold: true,
-        align: 'center',
-        alpha: presence,
-      });
-    }
   }
 }
 
@@ -557,7 +533,7 @@ function presenceOf(thrall: Thrall): number {
 /** Whether it stands at its node swinging, rather than floating to one or fading. */
 function isWorking(thrall: Thrall): boolean {
   const moving = thrall.moveX !== 0 || thrall.moveY !== 0;
-  return thrall.node !== null && !moving && thrall.fadeTicks === null && !thrall.bagFull;
+  return thrall.node !== null && !moving && thrall.fadeTicks === null;
 }
 
 function thrallLook(thrall: Thrall, presence: number): ThrallLook {

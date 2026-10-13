@@ -1,7 +1,7 @@
 /**
  * ChatKit — the chat box, its bubble, and the command table behind it.
  *
- * The universal cheats (`!god`, `!tough`, `!payday`, `!levelup`, `!give`, `!vomit`) live here, so
+ * The universal cheats (`!god`, `!tough`, `!lucky`, `!payday`, `!levelup`, `!give`, `!vomit`) live here, so
  * they work wherever the player can open chat rather than only in the dungeon.
  * Commands a scene cannot honour are simply absent from its table — a scene
  * contributes the ones its own systems can answer, and there are no stubs that
@@ -10,8 +10,10 @@
 
 import {
   applyGodModeToPlayer,
+  applyLuckToPlayer,
   GOD_MODE_ABILITY_LEVEL,
   removeGodModeFromPlayer,
+  removeLuckFromPlayer,
   type GodModeState,
 } from '../../core/GodMode';
 import type { AbilityManager } from '../../core/AbilityManager';
@@ -33,6 +35,12 @@ const DEFAULT_GIVE_QUANTITY = 1;
 
 /** `!give` takes an item id and an optional quantity. */
 const MAX_GIVE_WORDS = 2;
+/**
+ * The most copies of a non-stacking item one `!give` hands over. Each copy is
+ * a bag slot, so an unbounded count would build a bag too deep to page
+ * through and too big to save.
+ */
+const MAX_GIVE_COPIES = 300;
 
 /** The `!give` quantity word as a positive whole number, or null when it is not one. */
 function parseGiveQuantity(word: string | undefined): number | null {
@@ -152,6 +160,7 @@ export class ChatKit {
   applyCarriedCheat(): void {
     if (this.godModeState.active) this.enableGodMode();
     else if (this.godModeState.toughActive) this.enableToughMode();
+    if (this.godModeState.luckyActive) this.setLucky(true);
   }
 
   private universalCommands(): ReadonlyArray<ChatCommand> {
@@ -181,6 +190,14 @@ export class ChatKit {
           }
           this.enableToughMode();
           return '🛡️ TOUGH MODE ON';
+        },
+      },
+      {
+        name: '!lucky',
+        run: () => {
+          const lucky = !this.godModeState.luckyActive;
+          this.setLucky(lucky);
+          return lucky ? '🍀 LUCKY ON' : '🍀 LUCKY OFF';
         },
       },
       {
@@ -219,8 +236,8 @@ export class ChatKit {
   /**
    * `!give <item_id> [quantity]`: `quantity` (default 1) of the item, to the
    * crawler who can wear it when only one can, otherwise to whoever is in
-   * control. A non-stackable item takes one bag slot per copy, so as many copies
-   * as fit are given and the shortfall is reported.
+   * control. A non-stackable item takes one bag slot per copy, so at most
+   * {@link MAX_GIVE_COPIES} of them are given and the toast says so.
    */
   private giveItem(argument: string): string {
     const words: ReadonlyArray<string | undefined> = argument.split(/\s+/);
@@ -238,21 +255,17 @@ export class ChatKit {
     const { inventory } = recipient;
     const takesOneSlotPerCopy = !def.stackable && def.isQuestItem !== true;
     const isSingleQuestItem = !def.stackable && def.isQuestItem === true;
-    const addableAtOnce = isSingleQuestItem ? 1 : quantity;
-    let given = 0;
-    if (takesOneSlotPerCopy) {
-      while (given < quantity && inventory.hasRoomFor(itemArgument)) {
-        inventory.addItem(itemArgument, 1);
-        given++;
-      }
-    } else if (inventory.addItem(itemArgument, addableAtOnce)) {
-      given = addableAtOnce;
-    }
-    if (given === 0) return '🎒 NO ROOM';
+    const given = isSingleQuestItem
+      ? 1
+      : takesOneSlotPerCopy
+        ? Math.min(quantity, MAX_GIVE_COPIES)
+        : quantity;
+    if (takesOneSlotPerCopy) inventory.addCopies(itemArgument, given);
+    else inventory.addItem(itemArgument, given);
     recipient.onInventoryChanged();
     const label = given > 1 ? `${given}× ${def.name}` : def.name;
-    const shortfall = quantity - given;
-    return shortfall > 0 ? `🎁 ${label} (NO ROOM for ${shortfall})` : `🎁 ${label}`;
+    const clamped = takesOneSlotPerCopy && quantity > given;
+    return clamped ? `🎁 ${label} (capped at ${MAX_GIVE_COPIES})` : `🎁 ${label}`;
   }
 
   /** `!god`: the stat/speed/ability overlay, plus the shared flag that carries it. */
@@ -276,6 +289,15 @@ export class ChatKit {
     this.abilityManager.setGodModeMinLevel(0);
     this.godModeSnapshot = null;
     this.godModeState.active = false;
+  }
+
+  /** `!lucky`: the hidden dodge boost on both crawlers, plus the flag the casino games read. */
+  private setLucky(lucky: boolean): void {
+    for (const player of this.world.pm.players()) {
+      if (lucky) applyLuckToPlayer(player);
+      else removeLuckFromPlayer(player);
+    }
+    this.godModeState.luckyActive = lucky;
   }
 
   /** `!tough`: damage immunity plus zero outgoing damage. Exclusive with god mode. */

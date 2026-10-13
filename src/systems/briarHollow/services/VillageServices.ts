@@ -138,10 +138,9 @@ export class VillageServices {
       rebuilding: deps.stationsUpgrading,
     });
     const counter = { openShop: (shop: ShopDefinition): void => this.openShop(shop) };
-    const announce = (message: string): void => deps.menus.announce(message);
-    deps.villagers.addTopicProvider(cookhouseTopics(counter, announce, deps.state));
+    deps.villagers.addTopicProvider(cookhouseTopics(counter, deps.state));
     deps.villagers.addTopicProvider(infirmaryTopics(this.party, this.infirmaryHost(counter)));
-    deps.villagers.addTopicProvider(tradingPostTopics(deps.state, counter, announce));
+    deps.villagers.addTopicProvider(tradingPostTopics(deps.state, counter));
     // "Shop" leads Oren's list ahead of the built-in "About the axe" small talk.
     deps.villagers.addTopicProvider(forgeTopics(this.forgeHost(counter)), { first: true });
     // "Process a batch" leads Fenna's list ahead of the built-in "How does the mill work?" small talk.
@@ -203,7 +202,6 @@ export class VillageServices {
       openPicker: (options) => this.picker.open(options),
       respond: (convo, flow, lines) => this.fennaResponds(convo, flow, lines),
       returnToRoot: (convo, flow) => this.fennaReturnToRoot(convo, flow),
-      announce: (message) => deps.menus.announce(message),
       noteResourceActivity: deps.noteResourceActivity,
     };
   }

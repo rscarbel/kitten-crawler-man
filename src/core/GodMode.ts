@@ -1,7 +1,7 @@
 import type { Player } from '../Player';
 
 /**
- * Cross-scene state for the `!god` / `!tough` developer cheats.
+ * Cross-scene state for the `!god` / `!tough` / `!lucky` developer cheats.
  *
  * Like {@link ClubMembership} and the questline progress objects, this is a
  * plain mutable object threaded by reference through the `DungeonScene` ↔
@@ -12,17 +12,43 @@ import type { Player } from '../Player';
  * it. Carrying this reference lets the target scene re-apply the overlay on
  * construction, so the cheat stays on until the player explicitly toggles it off.
  *
- * The two modes are mutually exclusive: enabling one disables the other.
+ * God and tough are mutually exclusive: enabling one disables the other. Lucky
+ * stacks with either.
  */
 export interface GodModeState {
   /** `!god` — stat/speed/ability overlay plus permanent damage immunity. */
   active: boolean;
   /** `!tough` — damage immunity and zero outgoing damage, no stat overlay. */
   toughActive: boolean;
+  /** `!lucky` — rigged casino draws in the party's favour plus a hidden dodge boost. */
+  luckyActive: boolean;
 }
 
 export function createGodModeState(): GodModeState {
-  return { active: false, toughActive: false };
+  return { active: false, toughActive: false, luckyActive: false };
+}
+
+/**
+ * Asked at the moment a casino game decides an outcome, so toggling `!lucky`
+ * mid-visit takes effect on the very next deal or spin.
+ */
+export type LuckCheck = () => boolean;
+
+export const NEVER_LUCKY: LuckCheck = () => false;
+
+/** Dexterity `!lucky` adds to each crawler's dodge roll; the dodge cap still applies. */
+export const LUCKY_DODGE_DEXTERITY_BONUS = 500;
+
+/**
+ * Like the god-mode stat bonus, this rides on top of the stored stats and only
+ * feeds the dodge roll, so it never shows on the stat sheet or reaches a snapshot.
+ */
+export function applyLuckToPlayer(p: Player): void {
+  p.setLuckyDodgeBonus(LUCKY_DODGE_DEXTERITY_BONUS);
+}
+
+export function removeLuckFromPlayer(p: Player): void {
+  p.setLuckyDodgeBonus(0);
 }
 
 export const GOD_MODE_STAT_BOOST = 300;

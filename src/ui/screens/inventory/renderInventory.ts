@@ -6,10 +6,10 @@
 
 import { BAG_SORT_LABELS, BAG_SORT_MODES } from '../../../core/bagSort';
 import {
+  BAG_PAGE_SLOTS,
   HOTBAR_COUNT,
   ITEM_DEF,
   QUEST_SLOT_IDX,
-  SLOT_COUNT,
   isWearable,
   type InventoryItem,
 } from '../../../core/ItemDefs';
@@ -37,18 +37,19 @@ import { iconButton, iconButtonSize } from '../../widgets/iconButton';
 import { fillRounded, strokeRounded } from '../../widgets/paint';
 import { itemSlot } from '../../widgets/itemSlot';
 import { listRow } from '../../widgets/listRow';
-import { meter } from '../../widgets/meter';
 import { panel, panelBodyWidth } from '../../widgets/panel';
 import { scrollGutterWidth, scrollIntoView, scrollView } from '../../widgets/scrollView';
 import { searchField } from '../../widgets/searchField';
 import { measureTabs, tabs, type TabItem } from '../../widgets/tabs';
-import { lineHeightOf, measureText, tabularNumber, text } from '../../widgets/text';
+import { measureText, tabularNumber, text } from '../../widgets/text';
 import { tooltip } from '../../widgets/tooltip';
 import {
   FILTER_LABELS,
   buildBagView,
   categoryCounts,
-  usedSlots,
+  pageCells,
+  pageShowing,
+  viewPageCount,
   visibleFilters,
   type BagCell,
   type BagView,
@@ -62,19 +63,18 @@ import {
 } from './detailPane';
 import { dollColumn, dollColumnWidth } from './dollColumn';
 import { armorDeltas, equipSlotLabel, fitsDollSlot } from './gearRules';
-import {
-  BAG_NEARLY_FULL_FRACTION,
-  hotbarRefusal,
-  type InventoryScreen,
-  type Point,
-} from './InventoryScreen';
+import { hotbarRefusal, type InventoryScreen, type Point } from './InventoryScreen';
 import type { BagFilter, InventoryMember, InventoryTab } from './inventoryTypes';
 
 const RAIL_WIDTH = 168;
 const DETAIL_WIDTH = 272;
 /** Taller screens show this many grid rows before the grid scrolls. */
 const MAX_REGULAR_GRID_ROWS = 5;
-const COMPACT_CAPACITY_WIDTH = 72;
+/**
+ * On a phone the pager sits beside the hotbar only while each hotbar slot keeps
+ * at least this share of its full size; a narrower phone gives it its own row.
+ */
+const MIN_INLINE_HOTBAR_SLOT_SHARE = 0.75;
 /** Whole grid rows a phone keeps visible. */
 const COMPACT_GRID_ROWS = 2;
 /** Keeps float rounding from dropping a column `grid()` should fit. */
@@ -105,6 +105,8 @@ const EMPTY_GEAR_MESSAGE = 'Nothing you carry fits here.';
 const NEW_BADGE = 'New';
 const QUEST_KEYCAP = 'Q';
 const HOTBAR_LABEL = 'Hotbar';
+const PREVIOUS_PAGE_LABEL = 'Previous page';
+const NEXT_PAGE_LABEL = 'Next page';
 
 const TABS_ID = 'tabs';
 const TABS: readonly TabItem[] = [
@@ -179,7 +181,7 @@ function naturalBodyHeight(ui: Ui): number {
   const columns = gridColumns(ui, centerW);
   const gap = gridGap(ui);
   const cell = (centerW - gap * (columns - 1)) / columns;
-  const rows = Math.min(MAX_REGULAR_GRID_ROWS, Math.ceil(SLOT_COUNT / columns));
+  const rows = Math.min(MAX_REGULAR_GRID_ROWS, Math.ceil(BAG_PAGE_SLOTS / columns));
   const gridH = rows * cell + (rows - 1) * gap;
   const bagMain = size.control + space.sm + gridH + space.sm + size.control;
   return bagMain + space.md + hotbarRowHeight(ui);
@@ -295,9 +297,18 @@ function drawBagTab(ui: Ui, rect: Rect, screen: InventoryScreen, member: Invento
   const { space, size } = ui.theme;
   const view = bagView(screen, member);
   if (ui.size === 'compact') {
-    const [toolbar, gridRect, bottom] = splitV(
+    const pages = viewPageCount(view);
+    const tidyW = measureButton(ui, { label: 'Tidy', size: 'sm' });
+    const pagerW = pages > 1 ? pagerWidth(ui, pages, true) : 0;
+    const hotbarBesidePager = rect.w - pagerW - tidyW - space.sm * 2;
+    const pagerInline =
+      hotbarBesidePager / HOTBAR_COUNT >= hotbarRowHeight(ui) * MIN_INLINE_HOTBAR_SLOT_SHARE;
+    const pagerOwnRow = pages > 1 && !pagerInline;
+    const [toolbar, gridRect, ...lower] = splitV(
       rect,
-      [size.control, 'fill', hotbarRowHeight(ui)],
+      pagerOwnRow
+        ? [size.control, 'fill', iconButtonSize(ui, 'sm'), hotbarRowHeight(ui)]
+        : [size.control, 'fill', hotbarRowHeight(ui)],
       space.sm,
     );
     const [chips, search, sort] = splitH(
@@ -320,22 +331,27 @@ function drawBagTab(ui: Ui, rect: Rect, screen: InventoryScreen, member: Invento
       },
     });
     drawGrid(ui, gridRect, screen, member, view);
-    const tidyW = measureButton(ui, { label: 'Tidy', size: 'sm' });
-    const [capacity, tidy, hotbar] = splitH(
-      bottom,
-      [COMPACT_CAPACITY_WIDTH, tidyW, 'fill'],
-      space.sm,
-    );
-    drawCapacity(ui, capacity, screen, member, true);
-    drawTidy(ui, tidy, screen, 'sm');
-    drawHotbarRow(ui, hotbar, screen, member, false);
+    const bottom = lower[lower.length - 1];
+    if (pagerOwnRow) {
+      drawPager(ui, lower[0], screen, pages, true);
+    }
+    if (pages > 1 && pagerInline) {
+      const [pager, tidy, hotbar] = splitH(bottom, [pagerW, tidyW, 'fill'], space.sm);
+      drawPager(ui, pager, screen, pages, true);
+      drawTidy(ui, tidy, screen, 'sm');
+      drawHotbarRow(ui, hotbar, screen, member, false);
+    } else {
+      const [tidy, hotbar] = splitH(bottom, [tidyW, 'fill'], space.sm);
+      drawTidy(ui, tidy, screen, 'sm');
+      drawHotbarRow(ui, hotbar, screen, member, false);
+    }
     return;
   }
 
   const [top, hotbarRow] = splitV(rect, ['fill', hotbarRowHeight(ui)], space.md);
   const [rail, center, detail] = splitH(top, [RAIL_WIDTH, 'fill', DETAIL_WIDTH], space.lg);
   drawRail(ui, rail, screen, member);
-  const [toolbar, gridRect, capacityRow] = splitV(
+  const [toolbar, gridRect, pagerRow] = splitV(
     center,
     [size.control, 'fill', size.control],
     space.sm,
@@ -355,8 +371,8 @@ function drawBagTab(ui: Ui, rect: Rect, screen: InventoryScreen, member: Invento
   });
   drawGrid(ui, gridRect, screen, member, view);
   const tidyW = measureButton(ui, { label: 'Tidy' });
-  const [capacity, tidy] = splitH(capacityRow, ['fill', tidyW], space.sm);
-  drawCapacity(ui, capacity, screen, member, false);
+  const [pager, tidy] = splitH(pagerRow, ['fill', tidyW], space.sm);
+  drawPager(ui, pager, screen, viewPageCount(view), false);
   drawTidy(ui, tidy, screen, 'md');
   drawDetailCard(ui, detail, screen, member);
   drawHotbarRow(ui, hotbarRow, screen, member, true);
@@ -411,53 +427,58 @@ function drawCategoryChips(
   });
 }
 
-function drawCapacity(
+function pagerLabel(page: number, pages: number, short: boolean): string {
+  return short ? `${page + 1}/${pages}` : `Page ${page + 1} of ${pages}`;
+}
+
+/** The width the pager takes: a turn button either side of the widest page label. */
+function pagerWidth(ui: Ui, pages: number, short: boolean): number {
+  const side = iconButtonSize(ui, 'sm');
+  const labelW = measureText(ui, pagerLabel(pages - 1, pages, short), {
+    role: 'label',
+    tabular: true,
+  });
+  return side * 2 + labelW + ui.theme.space.xs * 2;
+}
+
+/**
+ * Back and forward through the grid's pages, with the page shown between. A
+ * stack dragged onto either button goes to the first empty slot of the page
+ * it turns to. Nothing is drawn while the view fits on one page.
+ */
+function drawPager(
   ui: Ui,
   rect: Rect,
   screen: InventoryScreen,
-  member: InventoryMember,
-  stacked: boolean,
+  pages: number,
+  short: boolean,
 ): void {
-  const { space, palette } = ui.theme;
-  const used = usedSlots(member.owner.inventory);
-  const fraction = used / SLOT_COUNT;
-  const full = used >= SLOT_COUNT;
-  const nearlyFull = fraction > BAG_NEARLY_FULL_FRACTION;
-  const kind = full ? 'danger' : nearlyFull ? 'warning' : 'progress';
-  const color = full ? palette.state.danger : nearlyFull ? palette.state.warning : undefined;
-  const label = `${used} / ${SLOT_COUNT}`;
-  const barH = space.sm;
-  if (stacked) {
-    const labelH = lineHeightOf(ui, 'caption');
-    const top = rect.y + (rect.h - labelH - space.xs - barH) / 2;
-    tabularNumber(
-      ui,
-      { x: rect.x, y: top, w: rect.w, h: labelH },
-      { value: label, role: 'caption', color },
-    );
-    meter(
-      ui,
-      { x: rect.x, y: top + labelH + space.xs, w: rect.w, h: barH },
-      {
-        id: 'capacity',
-        value: used,
-        max: SLOT_COUNT,
-        kind,
-        ghost: false,
-      },
-    );
-    return;
-  }
-  const labelW = measureText(ui, label, { role: 'label', tabular: true });
-  const [labelCell, barCell] = splitH(rect, [labelW, 'fill'], space.sm);
-  tabularNumber(ui, labelCell, { value: label, role: 'label', color });
-  meter(ui, centerIn(barCell, barCell.w, barH), {
-    id: 'capacity',
-    value: used,
-    max: SLOT_COUNT,
-    kind,
-    ghost: false,
+  if (pages <= 1) return;
+  const side = iconButtonSize(ui, 'sm');
+  const width = Math.min(rect.w, pagerWidth(ui, pages, short));
+  const row = centerIn(rect, width, Math.min(rect.h, side));
+  const [backCell, labelCell, nextCell] = splitH(row, [side, 'fill', side], ui.theme.space.xs);
+  const page = screen.page;
+  const turn = (cell: Rect, target: number, icon: 'back' | 'chevronRight', label: string): void => {
+    const exists = target >= 0 && target < pages;
+    if (exists) screen.geometry.pageButtons.set(target, cell);
+    iconButton(ui, cell, {
+      id: icon === 'back' ? 'page/back' : 'page/next',
+      icon,
+      label,
+      size: 'sm',
+      selected: exists && screen.drag !== null && pointerOver(screen, cell),
+      disabled: !exists,
+      onTap: () => screen.showPage(target),
+    });
+  };
+  turn(backCell, page - 1, 'back', PREVIOUS_PAGE_LABEL);
+  tabularNumber(ui, labelCell, {
+    value: pagerLabel(page, pages, short),
+    role: 'label',
+    align: 'center',
   });
+  turn(nextCell, page + 1, 'chevronRight', NEXT_PAGE_LABEL);
 }
 
 function drawTidy(ui: Ui, rect: Rect, screen: InventoryScreen, size: 'sm' | 'md'): void {
@@ -490,9 +511,20 @@ function drawGrid(
   member: InventoryMember,
   view: BagView,
 ): void {
+  screen.noteView(
+    [screen.tab, screen.filter, screen.sort, screen.search.value.trim(), screen.dollKey].join('|'),
+  );
+  const reveal = screen.reveal;
+  const revealPage = reveal === null ? null : pageShowing(view, reveal);
+  // Turned without `showPage`'s scroll to the top: the reveal below scrolls
+  // the revealed cell into view, and a reset after it would undo that.
+  if (revealPage !== null) screen.page = revealPage;
+  screen.page = Math.min(screen.page, viewPageCount(view) - 1);
+  const cells = pageCells(view, screen.page);
+
   const gap = gridGap(ui);
   const innerW = Math.max(0, rect.w - scrollGutterWidth(ui));
-  const local = grid({ x: 0, y: 0, w: innerW, h: 0 }, view.cells.length, {
+  const local = grid({ x: 0, y: 0, w: innerW, h: 0 }, cells.length, {
     minCell: gridCellFloor(ui, innerW, rect.h),
     gap,
   });
@@ -505,9 +537,8 @@ function drawGrid(
   geometry.order = view.cells.map((cell) => cell.slotIdx);
   const id = gridId(screen);
 
-  const reveal = screen.reveal;
   if (reveal !== null) {
-    const at = view.cells.findIndex((cell) => cell.slotIdx === reveal);
+    const at = cells.findIndex((cell) => cell.slotIdx === reveal);
     if (at !== -1) {
       const target = local[at];
       scrollIntoView(ui, id, target.y, target.y + target.h, rect.h);
@@ -532,7 +563,7 @@ function drawGrid(
     id,
     contentHeight,
     draw: (content) => {
-      view.cells.forEach((cell, index) => {
+      cells.forEach((cell, index) => {
         const at = local[index];
         drawBagCell(
           ui,
@@ -952,8 +983,19 @@ function drawCharacterTab(
     record: (slot, visible) => screen.geometry.dollCells.set(slot.key, visible),
   });
 
-  const [toolbar, gridRect] = splitV(gridColumn, [size.control, 'fill'], space.sm);
   const dollKey = screen.dollKey;
+  const view = buildBagView(inventory, {
+    filter: 'all',
+    query: screen.search.value,
+    sort: 'manual',
+    accept: (item) => isWearable(item) && (dollKey === null || fitsDollSlot(item, dollKey)),
+  });
+  const pages = viewPageCount(view);
+  const [toolbar, gridRect, ...pagerRow] = splitV(
+    gridColumn,
+    pages > 1 ? [size.control, 'fill', iconButtonSize(ui, 'sm')] : [size.control, 'fill'],
+    space.sm,
+  );
   const filterLabel = dollKey === null ? 'Wearables' : `Fits ${dollKey.replace(':', ' · ')}`;
   const chipW = Math.min(
     toolbar.w / 2,
@@ -979,13 +1021,8 @@ function drawCharacterTab(
     });
   }
   searchField(ui, search, { id: 'search', input: screen.search, placeholder: SEARCH_PLACEHOLDER });
-  const view = buildBagView(inventory, {
-    filter: 'all',
-    query: screen.search.value,
-    sort: 'manual',
-    accept: (item) => isWearable(item) && (dollKey === null || fitsDollSlot(item, dollKey)),
-  });
   drawGrid(ui, gridRect, screen, member, view);
+  for (const row of pagerRow) drawPager(ui, row, screen, pages, ui.size === 'compact');
   if (detail !== null) drawDetailCard(ui, detail, screen, member);
 }
 

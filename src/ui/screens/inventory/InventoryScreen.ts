@@ -1,6 +1,6 @@
 /**
- * The inventory screen: the Bag tab (category rail, filtered and sorted grid,
- * capacity, the in-panel hotbar row, a detail pane) and the Character tab
+ * The inventory screen: the Bag tab (category rail, filtered and sorted grid
+ * a page at a time, the in-panel hotbar row, a detail pane) and the Character tab
  * (paper doll, stats, the gear that fits the chosen slot).
  *
  * This class owns the screen's state and every action it can take; drawing
@@ -39,9 +39,6 @@ import {
 } from './inventoryTypes';
 import { renderInventory } from './renderInventory';
 
-/** Above this share of slots used, the capacity meter warns. */
-export const BAG_NEARLY_FULL_FRACTION = 0.8;
-
 /** Two taps on one slot within this long run its lead action. */
 export const DOUBLE_TAP_MS = 350;
 /** A touch held still this long on a slot opens its context menu. */
@@ -70,6 +67,7 @@ export const WEARABLE_HOTBAR_REASON = 'Gear is worn, not used. Put it on from th
 export const UNUSABLE_HOTBAR_REASON = 'Only items you can use go on the hotbar.';
 const TUTORIAL_HOTBAR_REASON = 'Not right now.';
 const TUTORIAL_LOCK_REASON = 'Finish moving the item first.';
+const PAGE_HAS_NO_EMPTY_SLOT = 'That page has no empty slot.';
 
 /** Why an item may not go on the hotbar, or null when it may. */
 export function hotbarRefusal(item: InventoryItem): string | null {
@@ -123,8 +121,10 @@ export interface FrameGeometry {
   readonly dollCells: Map<string, Rect>;
   grid: Rect | null;
   columns: number;
-  /** The grid's cells, in the order shown, by bag slot. */
+  /** Every cell of the view across all its pages, in the order shown, by bag slot. */
   order: number[];
+  /** The pager's buttons, by the page each turns to; dropping a stack on one moves it to that page. */
+  readonly pageButtons: Map<number, Rect>;
 }
 
 function emptyGeometry(): FrameGeometry {
@@ -136,6 +136,7 @@ function emptyGeometry(): FrameGeometry {
     grid: null,
     columns: 1,
     order: [],
+    pageButtons: new Map(),
   };
 }
 
@@ -147,6 +148,10 @@ export class InventoryScreen {
   tab: InventoryTab = 'bag';
   filter: BagFilter = 'all';
   sort: BagSortMode = 'manual';
+  /** The page of the grid on screen; the renderer clamps it to the pages the view has. */
+  page = 0;
+  /** What the grid's view was narrowed by last frame, or null before the first frame since opening. */
+  private viewKey: string | null = null;
   readonly search = new SearchInput();
   selection: Selection | null = null;
   /** The doll cell whose fitting gear the Character grid is narrowed to. */
@@ -246,6 +251,8 @@ export class InventoryScreen {
   }
 
   private clearTransient(): void {
+    this.page = 0;
+    this.viewKey = null;
     this.selection = null;
     this.dollKey = null;
     this.sheetOpen = false;
@@ -283,6 +290,24 @@ export class InventoryScreen {
   setFilter(filter: BagFilter): void {
     this.filter = filter;
     this.reveal = null;
+    this.showPage(0);
+  }
+
+  /**
+   * @internal Called by the renderer with what narrows the grid this frame: a
+   * new filter, sort, query or doll slot shows a different list, so it starts
+   * again from its first page.
+   */
+  noteView(key: string): void {
+    if (this.viewKey !== null && this.viewKey !== key) this.showPage(0);
+    this.viewKey = key;
+  }
+
+  /** Turns the grid to `page`, scrolled to its top. */
+  showPage(page: number): void {
+    if (this.page === page) return;
+    this.page = page;
+    this.scrollTarget = 0;
   }
 
   // ── Per-frame bookkeeping (called by the renderer) ───────────────────────
@@ -578,6 +603,7 @@ export class InventoryScreen {
     const geometry = this.geometry;
     const hotbarTarget = findCell(geometry.hotbarCells, at);
     const bagTarget = findCell(geometry.bagCells, at);
+    const pageTarget = findCell(geometry.pageButtons, at);
     const dollTarget = findCell(geometry.dollCells, at);
     const overGrid = geometry.grid !== null && contains(geometry.grid, at);
     const r = this.restrictions();
@@ -609,6 +635,10 @@ export class InventoryScreen {
       }
       return;
     }
+    if (pageTarget !== null && this.isRearrangeable()) {
+      this.dropOnPage(drag, pageTarget, inventory);
+      return;
+    }
     if (hotbarTarget !== null && hotbarTarget !== QUEST_SLOT_IDX) {
       if (drag.from === 'hotbar') {
         if (drag.slotIdx !== hotbarTarget) inventory.swapHotbar(drag.slotIdx, hotbarTarget);
@@ -626,12 +656,24 @@ export class InventoryScreen {
     if (drag.from === 'hotbar') {
       if (bagTarget !== null && this.isRearrangeable())
         inventory.swapHotbarToInv(drag.slotIdx, bagTarget);
-      else if (overGrid) inventory.moveHotbarToFirstEmptySlot(drag.slotIdx);
+      else if (overGrid) inventory.moveHotbarToBag(drag.slotIdx);
       return;
     }
     if (bagTarget !== null && bagTarget !== drag.slotIdx && this.isRearrangeable()) {
       inventory.swapSlots(drag.slotIdx, bagTarget);
     }
+  }
+
+  /** A stack dropped on the pager: into the first empty slot of the page it turns to. */
+  private dropOnPage(drag: DragState, page: number, inventory: Inventory): void {
+    const landing = inventory.bag.firstEmptyOnPage(page);
+    if (landing === null) {
+      this.refuse(PAGE_HAS_NO_EMPTY_SLOT, drag.item.id);
+      return;
+    }
+    if (drag.from === 'hotbar') inventory.swapHotbarToInv(drag.slotIdx, landing);
+    else inventory.swapSlots(drag.slotIdx, landing);
+    this.showPage(page);
   }
 
   private dropFromDoll(

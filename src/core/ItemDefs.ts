@@ -1346,7 +1346,8 @@ export const ITEM_DEF: Record<ItemId, ItemDef> = {
     },
     description:
       'Legendary. A bronze-hilted silver sword with a storm trapped in its edge. Every blow lands ' +
-      'twice as hard as a fist, every swing throws a slicing wave of lightning three tiles ahead, ' +
+      'twice as hard as a fist, every swing throws a slicing wave of lightning four tiles ahead ' +
+      'that cuts through everything in its path, ' +
       'and anything it cuts throws chain lightning to up to four more enemies nearby. ' +
       'Taranis was the Gaulish god of thunder. He did not ask for it back.',
   },
@@ -1417,7 +1418,8 @@ export const ITEM_DEF: Record<ItemId, ItemDef> = {
   },
 };
 
-export const SLOT_COUNT = 32;
+/** Bag slots shown on one page of the bag; the bag grows a page at a time and is never full. */
+export const BAG_PAGE_SLOTS = 32;
 export const HOTBAR_COUNT = 8;
 /** Last hotbar slot index, reserved for quest items. */
 export const QUEST_SLOT_IDX = HOTBAR_COUNT - 1; // slot 7

@@ -82,8 +82,8 @@ import {
   forgeTopics,
   type ForgeHost,
 } from '../src/systems/briarHollow/services/forge';
+import { partyWood } from '../src/systems/briarHollow/services/woodProcessing';
 import {
-  batchLimit,
   initialBatch,
   lumberForemanTopics,
   runBatch,
@@ -350,7 +350,7 @@ function openShop(shop: ShopDefinition): ShopSession {
   return panel;
 }
 
-/** Fills every free bag and hotbar slot with a tool, so nothing new has anywhere to go. */
+/** Fills every free bag and hotbar slot with a tool, leaving the bag no empty slot of its own. */
 function fillPack(owner: ToolOwner): void {
   const filler = { ...ITEM_DEF.basic_axe, quantity: 1 };
   const { bag, actionBar } = owner.inventory;
@@ -378,7 +378,7 @@ function setPhase(rig: Rig, phase: VillageQuestPhase): void {
 function checkCook(rig: Rig): void {
   section('Cook');
   const { human, cat } = rig;
-  const menu = cookShop(() => undefined, rig.state).build();
+  const menu = cookShop(rig.state).build();
   const price = (key: string): number | undefined =>
     menu.options.find((option) => option.key === key)?.price;
   check(
@@ -389,13 +389,13 @@ function checkCook(rig: Rig): void {
   check(menu.bark === sellerLine(PIPKIN.shopOpen), 'the menu opens on shop_open');
 
   human.coins = 0;
-  const broke = openShop(cookShop(() => undefined, rig.state));
+  const broke = openShop(cookShop(rig.state));
   broke.pressBuy('hamburger', { active: human, companion: cat });
   check(human.inventory.countOf('hamburger') === 0 && human.coins === 0, 'no coins buys nothing');
   check(broke.currentLine === sellerLine(PIPKIN.cannotAfford), 'no coins hears cannot_afford');
 
   human.coins = PLENTY_OF_COINS;
-  const panel = openShop(cookShop(() => undefined, rig.state));
+  const panel = openShop(cookShop(rig.state));
   panel.pressBuy('hamburger', { active: human, companion: cat });
   check(human.inventory.countOf('hamburger') === 1, 'a burger lands in the pack');
   check(human.coins === PLENTY_OF_COINS - EXPECTED_BURGER_PRICE, 'and costs its price');
@@ -414,19 +414,18 @@ function checkCook(rig: Rig): void {
   human.potionCooldownFrames = 0;
 }
 
-function checkFullBagRefused(): void {
-  section('Full bag');
+function checkPackedBagBuys(): void {
+  section('Packed bag');
   const rig = buildRig();
   if (rig === null) return;
   const { human, cat } = rig;
   fillPack(human);
   human.coins = PLENTY_OF_COINS;
-  const announced: string[] = [];
-  const panel = openShop(cookShop((message) => announced.push(message), rig.state));
+  const panel = openShop(cookShop(rig.state));
   panel.pressBuy('hamburger', { active: human, companion: cat });
-  check(human.inventory.countOf('hamburger') === 0, 'a full bag takes no burger');
-  check(human.coins === PLENTY_OF_COINS, 'and the buyer is not charged for it');
-  check(announced.includes('Your bag is full.'), 'and is told the bag is full');
+  check(human.inventory.countOf('hamburger') === 1, 'a packed bag still takes the burger');
+  check(human.inventory.bag.pageCount > 1, 'on a page the bag grew for it');
+  check(human.coins === PLENTY_OF_COINS - EXPECTED_BURGER_PRICE, 'and the buyer pays for it');
 }
 
 function checkDoctor(rig: Rig): void {
@@ -489,7 +488,7 @@ function checkMerchant(): void {
   const ropeRow = (): { price: number; unavailable?: string } | undefined =>
     buildTradingPostMenu(state).options.find((option) => option.key === 'rope');
   check(ropeRow()?.price === EXPECTED_ROPE_PRICE, 'rope costs 6');
-  const panel = openShop(tradingPostShop(state, () => undefined));
+  const panel = openShop(tradingPostShop(state));
   panel.pressBuy('rope', { active: human, companion: rig.cat });
   check(state.merchantStock.rope === EXPECTED_ROPE_BASE - 1, 'a sale takes one off the shelf');
   check(human.inventory.countOf('rope') === 1, 'and hands it over');
@@ -525,7 +524,7 @@ function checkMerchant(): void {
   state.merchantStock.rope = 0;
   check(ropeRow()?.unavailable === 'Sold out', 'an empty shelf is sold out');
   const before = human.coins;
-  openShop(tradingPostShop(state, () => undefined)).pressBuy('rope', {
+  openShop(tradingPostShop(state)).pressBuy('rope', {
     active: human,
     companion: rig.cat,
   });
@@ -817,7 +816,6 @@ function fennaHost(
     returnToRoot: (convo, flow) => {
       if (conversationOpen()) convo.play(flow.returnToRoot());
     },
-    announce: (message) => rig.announced.push(message),
     noteResourceActivity: () => undefined,
   };
 }
@@ -869,26 +867,8 @@ function checkFenna(): void {
   );
 
   cat.inventory.addItem('wood', 2);
-  check(batchLimit(rig.party, 'boards').max === 7, "the picker's max is the party's wood");
+  check(partyWood(rig.party) === 7, "the picker's max is the party's wood");
   check(initialBatch(7) === 7 && initialBatch(25) === 10, 'it opens on ten, or all there is');
-
-  const packed = buildRig();
-  if (packed !== null) {
-    packed.human.inventory.addItem('wood', 6);
-    fillPack(packed.human);
-    fillPack(packed.cat);
-    const limit = batchLimit(packed.party, 'rope');
-    check(limit.max === 0 && limit.limitedByBag, 'no room anywhere: nothing can be processed');
-    const halfPacked = buildRig();
-    if (halfPacked !== null) {
-      halfPacked.human.inventory.addItem('wood', 6);
-      fillPack(halfPacked.human);
-      check(
-        batchLimit(halfPacked.party, 'rope').max === 6,
-        "room in the companion's pack is enough",
-      );
-    }
-  }
 
   const topics = lumberForemanTopics(host).topics(
     'fenna',
@@ -1180,7 +1160,7 @@ const rig = buildRig();
 check(rig !== null, 'a generated map has a village');
 if (rig !== null) {
   checkCook(rig);
-  checkFullBagRefused();
+  checkPackedBagBuys();
   checkDoctor(rig);
   checkForgeTopicsAreServices(rig);
 }

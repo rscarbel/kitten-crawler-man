@@ -19,6 +19,7 @@ import type { Player } from '../Player';
 import type { AudioManager } from '../audio/AudioManager';
 import { CASINO_MUSIC_TRACKS, SLOTS_FREE_SPINS_MUSIC_TRACKS, type SoundId } from '../audio/sounds';
 import type { ClubMembership } from '../core/ClubMembership';
+import { NEVER_LUCKY, type LuckCheck } from '../core/GodMode';
 import { keybindings } from '../core/Keybindings';
 import { canAffordCoins, partyCoins, spendPartyCoins } from '../core/partyCoins';
 import { ACTIVATE_KEYS, type Surface } from '../ui/core/UiRoot';
@@ -168,13 +169,19 @@ export class ClubSlotsSystem implements CasinoGameHost {
    */
   onWinnings: ((coins: number, screenX: number, screenY: number) => void) | null = null;
 
+  /** Read as each spin starts: while it answers true, every spin pays. */
+  isLucky: LuckCheck = NEVER_LUCKY;
+
   constructor(
     private readonly audio: SlotsAudio | null,
     private readonly settings: SlotsSettings,
     private readonly clock: () => number = () => performance.now(),
     options: ClubSlotsOptions = {},
   ) {
-    this.machine = new SlotMachine(options.seed === undefined ? {} : { seed: options.seed });
+    const isLucky = (): boolean => this.isLucky();
+    this.machine = new SlotMachine(
+      options.seed === undefined ? { isLucky } : { seed: options.seed, isLucky },
+    );
     this.motion = new SlotsMotion(
       REEL_STRIPS.map((strip) => strip.length),
       options.effectsRandom ?? Math.random,

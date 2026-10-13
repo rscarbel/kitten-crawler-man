@@ -64,7 +64,6 @@ const SCANNED_FILES: readonly string[] = [
   'src/systems/worldEffects.ts',
   'src/systems/interiorMiniMap.ts',
   'src/systems/briarHollow/siegeHudEntry.ts',
-  'src/systems/bagFullToasts.ts',
   'src/systems/kits/hudHotbar.ts',
   'src/systems/BossRoomSystem.ts',
   'src/systems/QuillConfrontationSystem.ts',

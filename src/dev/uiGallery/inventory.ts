@@ -4,7 +4,7 @@
  */
 
 import { Inventory } from '../../core/Inventory';
-import { ITEM_DEF, SLOT_COUNT, isItemId, type ItemId } from '../../core/ItemDefs';
+import { BAG_PAGE_SLOTS, ITEM_DEF, isItemId, type ItemId } from '../../core/ItemDefs';
 import type { CrawlerKind } from '../../core/SkillManager';
 import type { Surface } from '../../ui/core/UiRoot';
 import { InventoryActions } from '../../ui/screens/inventory/InventoryActions';
@@ -25,6 +25,8 @@ const POTION_COOLDOWN = { current: 180, max: 480 } as const;
 
 const BASE_STATS = { strength: 12, intelligence: 9, constitution: 11, dexterity: 10 } as const;
 const CAT_STATS = { strength: 6, intelligence: 14, constitution: 8, dexterity: 13 } as const;
+/** A packed fixture bag runs this many pages deep, the last one part-filled. */
+const PACKED_BAG_PAGES = 2.5;
 
 const CARL_BAG: readonly { readonly id: ItemId; readonly quantity: number }[] = [
   { id: 'speed_fizz', quantity: 3 },
@@ -76,7 +78,7 @@ interface FixtureSpec {
   /** Arranges the screen and packs before the first frame. */
   readonly arrange?: (screen: InventoryScreen, carl: InventoryOwner) => void;
   readonly member?: CrawlerKind;
-  readonly fullBag?: boolean;
+  readonly packedBag?: boolean;
 }
 
 function selectBag(screen: InventoryScreen, owner: InventoryOwner, id: ItemId): void {
@@ -84,8 +86,10 @@ function selectBag(screen: InventoryScreen, owner: InventoryOwner, id: ItemId): 
   if (slotIdx !== -1) screen.selection = { source: 'inv', slotIdx, id };
 }
 
-function fillBag(owner: InventoryOwner): void {
+/** Packs the bag with one of each item it lacks until it runs several pages deep. */
+function packBag(owner: InventoryOwner): void {
   const bag = owner.inventory.bag;
+  const stacksWanted = Math.floor(BAG_PAGE_SLOTS * PACKED_BAG_PAGES);
   const spare = Object.keys(ITEM_DEF)
     .filter(isItemId)
     .filter((id) => {
@@ -93,7 +97,7 @@ function fillBag(owner: InventoryOwner): void {
       return def.isQuestItem !== true && owner.inventory.countOf(id) === 0;
     });
   for (const id of spare) {
-    if (bag.slots.filter((item) => item !== null).length >= SLOT_COUNT - 1) return;
+    if (bag.slots.filter((item) => item !== null).length >= stacksWanted) return;
     owner.inventory.addItem(id, 1);
   }
 }
@@ -112,7 +116,7 @@ export function buildFixture(spec: FixtureSpec): DialogFixture {
       carl.inventory.equipByItemId('padded_gambeson');
       carl.inventory.equipByItemId('fury_of_taranis');
       carl.inventory.unseenUpgrades.add('enchanted_crown_sepsis_whore');
-      if (spec.fullBag === true) fillBag(carl);
+      if (spec.packedBag === true) packBag(carl);
       const party: readonly InventoryMember[] = [
         { id: 'human', name: 'Carl', owner: carl },
         { id: 'cat', name: 'Donut', owner: donut },
@@ -177,7 +181,13 @@ export const INVENTORY_FIXTURES: readonly DialogFixture[] = [
       screen.sort = 'value';
     },
   }),
-  buildFixture({ name: 'bag-full', tab: 'bag', fullBag: true }),
+  buildFixture({ name: 'bag-pages', tab: 'bag', packedBag: true }),
+  buildFixture({
+    name: 'bag-last-page',
+    tab: 'bag',
+    packedBag: true,
+    arrange: (screen, carl) => screen.showPage(carl.inventory.bag.pageCount - 1),
+  }),
   buildFixture({
     name: 'character',
     tab: 'character',

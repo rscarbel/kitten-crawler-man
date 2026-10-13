@@ -710,7 +710,8 @@ export class AnchorInteriorSystem {
     }
     if (this.progress.hilda === 'shard_owed') {
       this.openConversation(HILDA_REWARD, () => {
-        if (this.grantShard(talker, 'anchor_shard_hilda')) this.progress.hilda = 'done';
+        this.grantShard(talker, 'anchor_shard_hilda');
+        this.progress.hilda = 'done';
       });
       return true;
     }
@@ -747,33 +748,18 @@ export class AnchorInteriorSystem {
     }
     if (this.progress.temple === 'shard_owed') {
       this.openConversation(AVIEL_REWARD, () => {
-        if (this.grantShard(talker, 'anchor_shard_temple')) this.progress.temple = 'done';
+        this.grantShard(talker, 'anchor_shard_temple');
+        this.progress.temple = 'done';
       });
       return true;
     }
     return false;
   }
 
-  /**
-   * Hands over a shard, or says why not.
-   *
-   * The step stays owed on a full bag rather than the shard evaporating: it is
-   * one of three the questline cannot be finished without, and it cannot be
-   * dropped or bought back.
-   */
-  private grantShard(
-    taker: Player,
-    shardId: 'anchor_shard_hilda' | 'anchor_shard_temple',
-  ): boolean {
-    if (!taker.inventory.hasRoomFor(shardId)) {
-      this.audio?.play('error_taking_action');
-      this.toast('No room for the shard — clear a slot and ask again.');
-      return false;
-    }
+  private grantShard(taker: Player, shardId: 'anchor_shard_hilda' | 'anchor_shard_temple'): void {
     taker.inventory.addItem(shardId, 1);
     this.onItemGranted?.(shardId, 1, taker.x, taker.y);
     this.audio?.play('pickup_1');
-    return true;
   }
 
   // ── Signposting ───────────────────────────────────────────────────────────

@@ -53,7 +53,8 @@ import {
   type WheelPrizeId,
   type WheelWedge,
 } from './casino/wheel/wheelBoard';
-import { pickOutcome, type WheelOutcome } from './casino/wheel/wheelOutcome';
+import { pickLuckyOutcome, pickOutcome, type WheelOutcome } from './casino/wheel/wheelOutcome';
+import type { LuckCheck } from '../core/GodMode';
 import {
   landingAngle,
   rotationForPointerAt,
@@ -64,7 +65,6 @@ import {
 } from './casino/wheel/wheelGeometry';
 import {
   applyWheelPrize,
-  deliverOwedWheelItems,
   markWheelPrizeWon,
   wheelPrizeRecipient,
   type WheelPrizeEffect,
@@ -122,6 +122,8 @@ export interface ClubWheelDeps {
    * passes one; the real wheel always draws.
    */
   readonly forcedOutcome?: (board: WheelBoard) => WheelOutcome | null;
+  /** Read as each spin is decided: while true, the wheel never lands on a red wedge. */
+  readonly isLucky?: LuckCheck;
 }
 
 type WheelScreen = 'closed' | 'warning' | 'confirm' | 'wheel' | 'nothing';
@@ -442,7 +444,6 @@ export class ClubWheelSystem implements CasinoGameHost {
   open(seat: CasinoSeat): void {
     if (this.screen !== 'closed') return;
     this.seat = seat;
-    this.deliverOwedItems(seat);
     this.showScreen('warning');
     this.deps.audio?.pauseMusic('wheel', MUSIC_FADE_MS);
   }
@@ -667,7 +668,6 @@ export class ClubWheelSystem implements CasinoGameHost {
     const ledger = this.deps.ledger;
     const frozen = ledger.owedFreeze;
     const seat = this.seat;
-    if (seat !== null) this.deliverOwedItems(seat);
     if (frozen !== null && seat !== null) {
       ledger.owedFreeze = null;
       applyWheelPrize({ kind: 'freeze' }, this.prizeTarget(this.crawlerOf(seat, frozen), frozen));
@@ -860,8 +860,10 @@ export class ClubWheelSystem implements CasinoGameHost {
     if (!free) this.wagered += bet;
     this.freeSpinBet = null;
 
+    const lucky = this.deps.isLucky?.() ?? false;
+    const drawOutcome = lucky ? pickLuckyOutcome : pickOutcome;
     const outcome =
-      this.deps.forcedOutcome?.(board) ?? pickOutcome(board, this.wonPrizes(), this.random);
+      this.deps.forcedOutcome?.(board) ?? drawOutcome(board, this.wonPrizes(), this.random);
     const kind: WheelCrawler = crawler instanceof CatPlayer ? 'cat' : 'human';
     const ledger = this.deps.ledger;
     const recipientKind = wheelPrizeRecipient(outcome.wedge, kind, ledger.prizesWon);
@@ -922,21 +924,6 @@ export class ClubWheelSystem implements CasinoGameHost {
 
   private set freeSpinBet(bet: number | null) {
     this.deps.ledger.freeSpinBet = bet;
-  }
-
-  /** Hands over any prize items that were waiting for bag room, now that there may be some. */
-  private deliverOwedItems(seat: CasinoSeat): void {
-    const human = this.crawlerOf(seat, 'human');
-    const cat = this.crawlerOf(seat, 'cat');
-    const delivered = deliverOwedWheelItems(this.deps.ledger, {
-      human,
-      cat,
-      grantAttackCow: this.deps.grantAttackCow,
-    });
-    if (delivered.length === 0) return;
-    const names = delivered.map(({ id }) => ITEM_DEF[id].name).join(', ');
-    this.deps.onNotice?.(`Tito hands over what he was holding for you: ${names}.`, 'success');
-    void this.deps.saveNow();
   }
 
   private crawlerOf(seat: CasinoSeat, kind: WheelCrawler): Player {
@@ -1031,7 +1018,6 @@ export class ClubWheelSystem implements CasinoGameHost {
     else audio?.play('wheel_land_good');
 
     const effectKind = revealEffectFor(wedge);
-    const owedBefore = this.deps.ledger.owedItems.length;
     const applied =
       effectKind === 'freeze'
         ? null
@@ -1047,15 +1033,6 @@ export class ClubWheelSystem implements CasinoGameHost {
     if (effectKind === 'robbed') audio?.play('wheel_robbed_coin_drain');
     if (effectKind === 'red' || effectKind === 'freeze' || effectKind === 'robbed') {
       this.chuckleAt = now + CHUCKLE_DELAY_MS;
-    }
-    if (this.deps.ledger.owedItems.length > owedBefore) {
-      const heldFor = spin.recipientKind === spin.kind ? null : crawlerName(spin.recipientKind);
-      this.deps.onNotice?.(
-        heldFor === null
-          ? "Your bag is full, so Tito is holding your prize. Make room and it's yours."
-          : `${heldFor}'s bag is full, so Tito is holding the prize. Make room and it's theirs.`,
-        'warning',
-      );
     }
     if (effectKind === 'handies') {
       this.deps.onNotice?.('Unlimited Free Handies at Bitches or Penis Parade. Enjoy.', 'accent');
@@ -1170,7 +1147,6 @@ export class ClubWheelSystem implements CasinoGameHost {
       crawler,
       kind: crawlerKind,
       grantAttackCow: this.deps.grantAttackCow,
-      ledger: this.deps.ledger,
     };
   }
 

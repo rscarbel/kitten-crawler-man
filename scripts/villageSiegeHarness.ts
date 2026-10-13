@@ -24,7 +24,6 @@ import { PlayerManager } from '../src/core/PlayerManager';
 import { AbilityManager } from '../src/core/AbilityManager';
 import { keybindings } from '../src/core/Keybindings';
 import type { GrantedReward } from '../src/core/GrantedReward';
-import type { ItemId } from '../src/core/ItemDefs';
 import type { SiegeMusicClaim } from '../src/systems/briarHollow/VillageAssaultSystem';
 import type { HumanPlayer } from '../src/creatures/HumanPlayer';
 import type { CatPlayer } from '../src/creatures/CatPlayer';
@@ -96,8 +95,6 @@ export interface SiegeRig {
   readonly rewardCards: string[];
   /** Every announce, in order. */
   readonly announced: string[];
-  /** Items dropped on the floor as a loot pile. */
-  readonly droppedItems: Array<{ id: ItemId; quantity: number }>;
   /** How many times each craft explainer was opened. */
   readonly explainerOpens: Map<string, number>;
   /** Every line a crawler chat-bubble bark said, in order. */
@@ -136,7 +133,6 @@ export function buildSiegeRig(options: SiegeRigOptions): SiegeRig {
   const combat = new CombatKit({ world, abilityManager: new AbilityManager(), safeRoom: null });
   const rewardCards: string[] = [];
   const announced: string[] = [];
-  const droppedItems: Array<{ id: ItemId; quantity: number }> = [];
   const explainerOpens = new Map<string, number>();
   const crawlerBarks: string[] = [];
   // Reward cards halt the world in the scene and wait on a click; here they
@@ -183,9 +179,6 @@ export function buildSiegeRig(options: SiegeRigOptions): SiegeRig {
     bossIntro: () => {
       if (rigRef.rig !== null) rigRef.rig.bossIntros++;
     },
-    dropItems: (_x, _y, items) => {
-      for (const item of items) droppedItems.push({ ...item });
-    },
   });
   const summons = new SkeletonSummonSystem(map, (mob) => roster.add(mob));
   const projectiles = new SkeletonProjectileSystem(map);
@@ -222,7 +215,6 @@ export function buildSiegeRig(options: SiegeRigOptions): SiegeRig {
     projectiles,
     rewardCards,
     announced,
-    droppedItems,
     explainerOpens,
     crawlerBarks,
     bossIntros: 0,
