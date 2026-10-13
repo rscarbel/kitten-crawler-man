@@ -1,10 +1,11 @@
 /**
  * Which pictures the Desperado Club's furniture sheets carry.
  *
- * Eleven families, each one sheet whose single `idle` row holds its *variants* as
+ * Each family is one sheet whose single `idle` row holds its *variants* as
  * frames, so a layout picks a counter or a stool by frame index and the club
- * stops reading as five copies of the same prop. Everything is painted by one
- * club engine (`src/sprites/art/clubFurnitureArt.ts`).
+ * stops reading as five copies of the same prop. The casino's games are painted
+ * by `src/sprites/art/clubCasinoFloorArt.ts` and everything else by
+ * `src/sprites/art/clubFurnitureArt.ts`, on the same conventions.
  *
  * Geometry convention shared by every family: the frame's bottom tile row is the
  * prop's *footprint* (the tiles it stands on and blocks), and everything above
@@ -28,6 +29,15 @@ import {
   drawWeaponRack,
   type ClubFrameGeometry,
 } from '../art/clubFurnitureArt';
+import {
+  CASINO_LIGHT_PHASES,
+  SLOT_CABINET_VARIANTS,
+  drawCroupierCounter,
+  drawFortuneWheel,
+  drawFortuneWheelLights,
+  drawSlotCabinet,
+  drawSlotCabinetLights,
+} from '../art/clubCasinoFloorArt';
 import type { FrameEdge, PropSheetPlan, FramePainter } from './propSheetPlan';
 import type { SpriteKey } from '../../core/SpriteLoader';
 
@@ -35,6 +45,9 @@ import type { SpriteKey } from '../../core/SpriteLoader';
 const COUNTER_HEADROOM_TILES = 1;
 /** A stool is barely taller than its own tile, so it needs only half the usual headroom. */
 const STOOL_HEADROOM_TILES = 0.5;
+/** The upright wheel stands well over a crawler's head, so it rises two tiles. */
+const WHEEL_HEADROOM_TILES = 2;
+const WHEEL_WIDTH_TILES = 3;
 
 /**
  * Paints one variant of a family into a frame whose footprint row is described
@@ -148,6 +161,48 @@ const FAMILIES: ReadonlyArray<ClubFamily> = [
     headroomTiles: COUNTER_HEADROOM_TILES,
     variants: 2,
     draw: drawVelvetRope,
+  },
+  {
+    key: 'club_slot_cabinet',
+    file: 'slot_cabinet.png',
+    widthTiles: 1,
+    headroomTiles: COUNTER_HEADROOM_TILES,
+    variants: SLOT_CABINET_VARIANTS,
+    draw: drawSlotCabinet,
+  },
+  // A light sheet's frames are chase phases rather than variants: the lit
+  // bulbs alone, laid over the cabinet or wheel at the same anchor.
+  {
+    key: 'club_slot_lights',
+    file: 'slot_lights.png',
+    widthTiles: 1,
+    headroomTiles: COUNTER_HEADROOM_TILES,
+    variants: CASINO_LIGHT_PHASES,
+    draw: drawSlotCabinetLights,
+  },
+  {
+    key: 'club_fortune_wheel',
+    file: 'fortune_wheel.png',
+    widthTiles: WHEEL_WIDTH_TILES,
+    headroomTiles: WHEEL_HEADROOM_TILES,
+    variants: 1,
+    draw: drawFortuneWheel,
+  },
+  {
+    key: 'club_fortune_wheel_lights',
+    file: 'fortune_wheel_lights.png',
+    widthTiles: WHEEL_WIDTH_TILES,
+    headroomTiles: WHEEL_HEADROOM_TILES,
+    variants: CASINO_LIGHT_PHASES,
+    draw: drawFortuneWheelLights,
+  },
+  {
+    key: 'club_croupier_counter',
+    file: 'croupier_counter.png',
+    widthTiles: 1,
+    headroomTiles: COUNTER_HEADROOM_TILES,
+    variants: 1,
+    draw: drawCroupierCounter,
   },
 ];
 

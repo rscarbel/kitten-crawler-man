@@ -1796,6 +1796,19 @@ export function drawHead(ctx: Ctx, pose: CarlPose, view: ViewSpec): void {
 /** How far a fully tipped-back head rises on its neck, head-on. */
 const HEAD_PITCH_RISE = HEAD_RY * 0.12;
 
+/**
+ * The front of his mouth in the head's own painted frame — before
+ * {@link headAngle} turns it and the skeleton's head centre places it — or
+ * null in a back view, where no mouth is painted. Built from the same
+ * constants {@link drawHead} paints the mouth with, so anything drawn at his
+ * lips follows them through every bob, lean and nod.
+ */
+export function mouthInHeadFrame(pose: CarlPose, view: ViewSpec): Pt | null {
+  if (view.showsBack) return null;
+  if (view.profile) return pt(HEAD_DEPTH * PROFILE_MOUTH_FRONT, MOUTH_Y);
+  return pt(0, MOUTH_Y - Math.max(0, pose.chinLift ?? 0) * HEAD_PITCH_RISE);
+}
+
 function paintHead(ctx: Ctx, pose: CarlPose, view: ViewSpec, lift: number): void {
   const profile = view.profile;
   // The lag is given in figure space; the head is painted in its own rotated frame.

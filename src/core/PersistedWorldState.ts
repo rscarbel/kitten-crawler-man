@@ -25,6 +25,7 @@ import type { BountyCheckpoint } from '../systems/BountySystem';
 import type { ClubMembershipCheckpoint, PokerReads } from './ClubMembership';
 import type { PlayerRead } from '../systems/casino/poker/npc/playerRead';
 import { REGULAR_IDS } from '../systems/casino/poker/npc/regulars';
+import { JACKPOT_FLOOR, normalizeJackpotPool } from '../systems/casino/slots/slotBets';
 import {
   hirelingStartingHp,
   type HiredMercenary,
@@ -1168,6 +1169,8 @@ export function parseClubMembershipCheckpoint(
     pokerFast,
     pokerShowCards,
     escortLevelId,
+    slotsJackpotPool,
+    slotsTurbo,
   } = value;
   const parsedShoe = casinoShoe === null ? null : parseShoeState(casinoShoe);
   if (!isBoolean(hasDesperadoPass) || parsedShoe === undefined) return undefined;
@@ -1186,6 +1189,11 @@ export function parseClubMembershipCheckpoint(
     pokerShowCards: isBoolean(pokerShowCards) ? pokerShowCards : false,
     // A save without the field holds no booking.
     escortLevelId: isString(escortLevelId) ? escortLevelId : null,
+    // A save from before the slot machine starts its pool at the floor.
+    slotsJackpotPool: normalizeJackpotPool(
+      isNumber(slotsJackpotPool) ? slotsJackpotPool : JACKPOT_FLOOR,
+    ),
+    slotsTurbo: isBoolean(slotsTurbo) ? slotsTurbo : false,
   };
 }
 

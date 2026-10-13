@@ -1,3 +1,4 @@
+import { mulberry32, type Rng } from './person/rng';
 import { progressFrameIndex, timeFrameIndex, walkFrameIndex } from '../core/SpriteRenderer';
 import type { FigureDef } from './figure/figureDef';
 import { drawFigureCached, prewarmFigureState } from './figure/figureFrameCache';
@@ -269,12 +270,24 @@ interface ResolvedFrame<State extends GoblinState = GoblinState> {
   readonly frame: number;
 }
 
+/** Seeds {@link cosmeticRandom}; any value serves, it only staggers the herd. */
+const GOBLIN_COSMETIC_SEED = 0x60b1;
+
 /**
  * The most the walk cycle may advance in one tick, in radians: one frame of
  * the row. Past that a tick skips a frame of the cycle, and skipped frames
  * read as strobing legs rather than as a faster stride.
  */
 const MAX_GAIT_ADVANCE = (Math.PI * 2) / WALK_FRAMES;
+
+/**
+ * The draws that only decide how a goblin looks — when it fidgets, where its
+ * breathing starts. A stream of their own rather than `Math.random`: the
+ * animator ticks on its own schedule, and a cosmetic draw taken from the game's
+ * stream reshuffles every roll after it, so moving when a goblin fidgets would
+ * change how hard a seeded fight is.
+ */
+const cosmeticRandom: Rng = mulberry32(GOBLIN_COSMETIC_SEED);
 
 /**
  * Owns a single goblin's animation timers.
@@ -289,7 +302,7 @@ const MAX_GAIT_ADVANCE = (Math.PI * 2) / WALK_FRAMES;
  */
 export class GoblinPassiveAnimator {
   /** Per-instance phase shift, in seconds, added to the idle time index. */
-  private readonly idlePhaseOffset = Math.random() * (IDLE_FRAMES / GOBLIN_IDLE_FPS);
+  private readonly idlePhaseOffset = cosmeticRandom() * (IDLE_FRAMES / GOBLIN_IDLE_FPS);
   private readonly radiansPerPx: number;
   private gaitPhase = 0;
   private idleSeconds = 0;
@@ -311,7 +324,7 @@ export class GoblinPassiveAnimator {
   }
 
   private static rollBreakDelay(): number {
-    return IDLE_BREAK_MIN_SECONDS + Math.random() * IDLE_BREAK_RANDOM_SECONDS;
+    return IDLE_BREAK_MIN_SECONDS + cosmeticRandom() * IDLE_BREAK_RANDOM_SECONDS;
   }
 
   /** Drops every animation in flight — used when a scene resets combat state. */

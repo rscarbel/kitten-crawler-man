@@ -25,6 +25,7 @@ import {
   drawIceBolt,
   type IceBoltTrailPoint,
 } from '../sprites/art/fairyEffectsArt';
+import { FairyImmunityFeedback } from './fairyImmunityFeedback';
 
 /** Offset from a tile's origin to its centre, as a share of a tile. */
 const TILE_CENTRE = 0.5;
@@ -61,8 +62,11 @@ interface Shatter {
   age: number;
 }
 
-/** Where an ice bolt ended its flight. */
-export type IceBoltImpact = 'body' | 'wall' | 'spent';
+/**
+ * Where an ice bolt ended its flight. `blocked` is a body whose ring turned the
+ * bolt away: it still shatters there, but nothing was chilled.
+ */
+export type IceBoltImpact = 'body' | 'blocked' | 'wall' | 'spent';
 
 export class FairyIceBolts {
   private bolts: IceBolt[] = [];
@@ -70,6 +74,11 @@ export class FairyIceBolts {
   private nextSeed = 0;
   /** Impacts since the last {@link takeImpacts}, for the scene's sound. */
   private impacts: IceBoltImpact[] = [];
+  /**
+   * Shared with the ice fairy's death blast in `FairySystem`, so a bolt and a
+   * blast landing on one ring wearer together show one "IMMUNE", not two.
+   */
+  readonly immunity = new FairyImmunityFeedback();
 
   constructor(private readonly gameMap: GameMap) {}
 
@@ -95,6 +104,7 @@ export class FairyIceBolts {
    * on the frame it fired still fired — then flies every bolt one frame.
    */
   update(mobs: readonly Mob[], party: readonly Player[]): void {
+    this.immunity.tick();
     for (const mob of mobs) {
       if (!(mob instanceof IceFairy)) continue;
       for (const loosed of mob.takePendingIceBolts()) {
@@ -125,9 +135,10 @@ export class FairyIceBolts {
     }
     const struck = firstBodyStruck(party, now.x, now.y);
     if (struck !== null) {
-      this.strike(bolt, struck, now.x, now.y);
+      const blocked = this.immunity.blocks(struck, 'ice');
+      if (!blocked) this.strike(bolt, struck, now.x, now.y);
       this.shatter(now.x, now.y);
-      return 'body';
+      return blocked ? 'blocked' : 'body';
     }
     const travelled = ICE_BOLT_SPEED * bolt.age;
     if (travelled >= TILE_SIZE * ICE_BOLT_MAX_TRAVEL_TILES) return 'spent';
@@ -210,6 +221,7 @@ export class FairyIceBolts {
     this.bolts = [];
     this.shatters = [];
     this.impacts = [];
+    this.immunity.reset();
   }
 }
 

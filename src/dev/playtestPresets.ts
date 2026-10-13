@@ -1074,6 +1074,21 @@ const RESOURCING_THRALLS: PlaytestPreset = {
   },
 };
 
+/**
+ * The second floor's start with the Fury of Taranis in the hotbar beside the
+ * slingshot, for trying its wave and chains on the floor's goblin packs.
+ * Press its slot to draw it; press again, or the slingshot's, to put it away.
+ */
+const TARANIS: PlaytestPreset = {
+  ...LEVEL2,
+  id: 'taranis',
+  description: 'Start of the second floor, the Fury of Taranis in the hotbar',
+  human: {
+    ...LEVEL2.human,
+    hotbar: [...LEVEL2.human.hotbar, { id: 'fury_of_taranis', quantity: 1 }],
+  },
+};
+
 export const PLAYTEST_PRESETS: readonly PlaytestPreset[] = [
   HOARDER,
   JUICER,
@@ -1106,6 +1121,7 @@ export const PLAYTEST_PRESETS: readonly PlaytestPreset[] = [
   CONTRACTS,
   CONTRACTS_LAST_SPOT,
   RESOURCING_THRALLS,
+  TARANIS,
 ];
 
 export function getPlaytestPreset(id: string): PlaytestPreset | null {

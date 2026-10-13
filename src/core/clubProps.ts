@@ -13,7 +13,9 @@
  *
  * Collision covers the footprint *and* the rows the art rises into: those tiles
  * are where the counter physically is, and a crawler allowed to stand in them
- * would be painted over by the very prop they walked behind.
+ * would be painted over by the very prop they walked behind. A free-standing
+ * piece with room behind it — a slot cabinet — opts out with `openBehind`, and
+ * there being painted over is exactly right: the crawler is behind it.
  *
  * Each station is laid out back-to-front along the same axis — backdrop piece,
  * then the staff tile, then the counter the player walks up to — so every room
@@ -21,6 +23,7 @@
  */
 
 import { TILE_SIZE } from './constants';
+import { CLUB_TITO_POST } from './clubLayout';
 import clubSpriteManifest from '../images/environment/club/manifest.json';
 
 /** Furniture sheets available to the club layout, keyed as in the sprite manifest. */
@@ -38,11 +41,54 @@ export interface ClubProp {
    * uses it; see the note on that entry for why the two have to disagree.
    */
   artShiftTilesX?: number;
+  /** A chasing-bulb sheet laid over the prop's art; see {@link ClubPropLights}. */
+  lights?: ClubPropLights;
+  /**
+   * Leaves the rows the art rises into walkable, blocking only the footprint.
+   * A crawler there sorts before the prop, so the prop's front is painted over
+   * them and they read as standing behind it.
+   */
+  openBehind?: boolean;
   /**
    * Whether the prop blocks movement. Stools are deliberately not solid: the
    * player is meant to be able to stand among them at the bar rail.
    */
   solid: boolean;
+}
+
+/**
+ * The lit bulbs of a marquee or a wheel rim, kept on their own sheet so the
+ * prop under them is painted once and only the bulbs step through their chase.
+ */
+export interface ClubPropLights {
+  /** Sheet whose frames are the chase phases, drawn at the prop's own anchor. */
+  sprite: ClubPropSprite;
+  /** Chase phases advanced per second. */
+  stepsPerSecond: number;
+  /**
+   * Phases this prop runs ahead of the clock. Each cabinet in the bank is one
+   * phase on from the last, so the chase runs down the row rather than every
+   * marquee blinking as one sign.
+   */
+  phaseOffset: number;
+}
+
+/** A slot marquee chases briskly, the way a machine begs to be played. */
+const SLOT_CHASE_STEPS_PER_SECOND = 8;
+/** The idle wheel's rim lights walk slowly; it is waiting, not spinning. */
+const WHEEL_CHASE_STEPS_PER_SECOND = 3;
+
+/** Footprint of the westmost cabinet in the slot bank; the rest run east from it. */
+const SLOT_BANK_FIRST_TILE = { x: 20, y: 8 } as const;
+/** Cabinets in the bank, one per livery on the sheet, running to the east wall. */
+const SLOT_BANK_CABINETS = 3;
+
+function slotLights(phaseOffset: number): ClubPropLights {
+  return {
+    sprite: 'club_slot_lights',
+    stepsPerSecond: SLOT_CHASE_STEPS_PER_SECOND,
+    phaseOffset,
+  };
 }
 
 /**
@@ -91,16 +137,44 @@ export const CLUB_PROPS: ReadonlyArray<ClubProp> = [
   { sprite: 'club_bar_stool', variant: 1, tile: { x: 3, y: 5 }, solid: false },
   { sprite: 'club_bar_stool', variant: 2, tile: { x: 4, y: 5 }, solid: false },
 
-  // ── The Casino — a service shelf behind the dealer, the felt table in front ──
-  { sprite: 'club_drink_shelf', variant: 2, tile: { x: 19, y: 1 }, solid: true },
+  // ── The Casino — the wheel on the back wall with Tito's counter at its foot,
+  //    the blackjack table in front, and the slot bank facing the east corridor ──
+  {
+    sprite: 'club_fortune_wheel',
+    variant: 0,
+    tile: { x: 20, y: 2 },
+    solid: true,
+    lights: {
+      sprite: 'club_fortune_wheel_lights',
+      stepsPerSecond: WHEEL_CHASE_STEPS_PER_SECOND,
+      phaseOffset: 0,
+    },
+  },
+  {
+    sprite: 'club_croupier_counter',
+    variant: 0,
+    tile: { x: CLUB_TITO_POST.x, y: CLUB_TITO_POST.y + 1 },
+    solid: true,
+  },
   { sprite: 'club_casino_table', variant: 0, tile: { x: 19, y: 5 }, solid: true },
   { sprite: 'club_bar_stool', variant: 1, tile: { x: 18, y: 6 }, solid: false },
   { sprite: 'club_bar_stool', variant: 2, tile: { x: 22, y: 6 }, solid: false },
-  // Tucked into the corner between the divider and the shelf, rising into the
+  // Tucked into the corner between the divider and the wheel, rising into the
   // corner tile itself: one row lower would wall that tile off as floor nobody
-  // can reach. The x18 aisle the player walks to the blackjack rail stays open
-  // below it, and the rest of the back row is reached down the x22 aisle.
+  // can reach. Tito's counter closes the x22 column, so the x18 aisle below it
+  // is the only way into the back-row pocket behind the blackjack table.
   { sprite: 'club_poker_table', variant: 0, tile: { x: 18, y: 2 }, solid: true },
+  // The bank leaves x18–19 open so the way in from the east corridor reads as
+  // an open doorway rather than a wall of cabinets. The row behind the cabinets
+  // is walkable floor joined to the aisle behind the blackjack stools.
+  ...Array.from({ length: SLOT_BANK_CABINETS }, (_, index): ClubProp => ({
+    sprite: 'club_slot_cabinet',
+    variant: index,
+    tile: { x: SLOT_BANK_FIRST_TILE.x + index, y: SLOT_BANK_FIRST_TILE.y },
+    solid: true,
+    openBehind: true,
+    lights: slotLights(index),
+  })),
 
   // ── The Market — awninged back stall, the vendor's row, the produce counter ──
   { sprite: 'club_market_backdrop', variant: 0, tile: { x: 2, y: 13 }, solid: true },
@@ -135,7 +209,7 @@ function collectSolidTiles(): ReadonlyArray<{ x: number; y: number }> {
   for (const prop of CLUB_PROPS) {
     if (!prop.solid) continue;
     const widthTiles = propWidthTiles(prop.sprite);
-    const heightTiles = propHeightTiles(prop.sprite);
+    const heightTiles = prop.openBehind === true ? 1 : propHeightTiles(prop.sprite);
     for (let row = 0; row < heightTiles; row++) {
       for (let col = 0; col < widthTiles; col++) {
         tiles.push({ x: prop.tile.x + col, y: prop.tile.y - row });

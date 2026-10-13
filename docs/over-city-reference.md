@@ -69,6 +69,36 @@ refers to later events.
   fuzzy mole with blue-heeler markings, rides her shoulder. In the books she throws coins
   at the dancers, aiming for their eyes; her figure has the flick as its own row.
 - **Doctor Bones** stays the DJ; he is not for hire.
+- **Tito** is the croupier who runs the Wheel of Fortune. He stands behind his counter at
+  the foot of the wheel (`CLUB_TITO_POST`), smiling a size too wide, and swears the
+  obviously rigged wheel is on the up-and-up — the harder it bites, the louder he
+  swears. He is dressing on the floor: the wheel is played through the casino's station,
+  not by talking to him.
+
+**The casino.** One "Play" station opens a picker of four games: **Slots**, **Texas
+Hold'em**, **Blackjack** and the **Wheel of Fortune**. The wheel, as the game implements
+it (`src/systems/casino/wheel/`):
+
+- Bets run 1,000–6,000 gold in steps of 1,000 (`WHEEL_BETS`). At the minimum bet red
+  wedges cover more than half the rim; each step up flips one red wedge to a good one
+  (`WHEEL_UPGRADES`), and five reds never flip (`PERMANENT_RED_WEDGE_IDS`).
+- It is rigged: every good prize is once-only. A won prize keeps its wedge on the rim,
+  looking the same, but is never picked again (`outcomeWeights`), so the red share
+  quietly grows. Spin Again and the reds never retire.
+- **Red wedges:** **Nothing!** (a double-width wedge that permanently wipes the whole
+  save and reloads), Vomit Blood (incurable blood vomiting that only a death clears),
+  Stabbed (Tito's knife takes half of max HP, never below 1), Poisoned (a long ordinary
+  poison), set on fire, frozen solid, and robbed of half the gold carried.
+- **Prizes:** a new pet (Carl's attack cow), 500,000 / 50,000 gold (and 25,000 / 10,000
+  at higher bets), a Legendary Weapon (the Fury of Taranis for Carl or the Eyes of
+  Splatter for Donut — one per party), two Platinum Rings (the Ring of the Cold Shoulder
+  and the Ring of the Asbestos Knuckle), a Legendary Ring (the Fairy Repellent Signet),
+  Gold and Silver Prizes (potions and coins), a full heal with 5,000 gold, and Unlimited
+  Free Handies (which grants nothing). The 500,000 wedge is a sliver too narrow to
+  letter, so the wheel screen flies a "500K" flag over it on the rim.
+- Prizes are granted the instant the wheel lands and shown with a reward reveal; nothing
+  goes into the loot-box queue. Each spin is committed to the save before the wheel
+  turns, so a reload can never undo one.
 - **The VIP Private Escort** is two cretin bodyguards per visit, sold separately and free
   after heavy spending at the tables. The pair is **The Sledge and Bomo**; while either
   of them is out on a Meat Shields contract, **Clay-ton and Very Sullen** work the escort

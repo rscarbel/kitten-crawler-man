@@ -24,8 +24,10 @@ All audio is **pre-recorded mp3 files** — no synthesis. WebAudio is only the p
 `AudioManager` (`src/audio/AudioManager.ts`):
 
 - One-shot: `audio.play(id, { volume?, playbackRate?, startOffset? })` — queues until the mobile gesture-unlock if the context is suspended.
-- Variants: `playWhenReady(id)`, `playRandom([ids])`, `stopSound(id)`.
-- Music: `playMusic(id, { fadeInMs })`, `stopMusic(fadeMs)`, `pauseMusic` / `resumeMusic`.
+- Variants: `playWhenReady(id)`, `playRandom([ids])`, `stopSound(id)`. `playRandomFresh([ids])` never repeats the take that set played last — use it for a cue that fires in quick succession. `fadeOutSound(id, fadeMs)` cuts a long one-shot with a fade instead of dead (only a sound played with a `volume` other than 1 has its own gain to ramp; anything else just stops).
+- Music: `playMusic(id, { fadeInMs })`, `stopMusic(fadeMs)`.
+- Silencing music: `pauseMusic(reason)` / `resumeMusic(reason)` take a `MusicPauseReason` (`'menu'`, `'background'`, `'slots_big_win'`, `'wheel'`); the bus stays silent until **every** reason has let go, so a new silencer gets its own reason rather than reusing `'menu'`. `pauseAmbience` / `resumeAmbience` work the same way.
+- Lowering music without silencing it: `duckMusic(reason, level)` / `unduckMusic(reason)` with a `MusicDuckReason` (`'slots'`) hold the bus at a fraction of the player's music volume; the lowest active duck wins, a pause still silences on top, and the player's own volume setting is never touched.
 - Looping SFX (walking, machinery, etc.) have dedicated start/stop methods — follow that pattern for new loops.
 
 ## Where to trigger from

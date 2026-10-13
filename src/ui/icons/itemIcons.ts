@@ -18,6 +18,11 @@ import {
   drawSepsisCrownIcon,
   drawTrollskinShirtIcon,
 } from '../../sprites/art/itemIcons/enchantedApparelIcons';
+import {
+  drawFairyWardRingIcon,
+  type FairyWardRingItemId,
+} from '../../sprites/art/itemIcons/fairyWardRingIcons';
+import { drawEyesOfSplatterIcon } from '../../sprites/art/itemIcons/eyesOfSplatterIcon';
 import { drawFoodIcon, type FoodIconId } from './foodIcons';
 import { drawIssueKitIcon, type IssueKitItemId } from '../../sprites/art/itemIcons/issueKitIcon';
 import { drawPrisonKeyIcon } from '../../sprites/art/itemIcons/prisonKeyIcon';
@@ -36,6 +41,7 @@ import { drawConfusingFogScrollIcon } from '../../sprites/art/itemIcons/scrollIc
 import { drawSkillBookIcon } from './skillBookIcon';
 import { drawSoulCrystalIcon } from './soulCrystalIcon';
 import { drawToolIcon, type ToolIconId } from '../../sprites/art/itemIcons/toolIcons';
+import { drawTaranisSwordIcon } from '../../sprites/art/itemIcons/taranisSwordIcon';
 import { drawExplosivesTomeIcon, drawMagicMissileTomeIcon, drawSmushTomeIcon } from './tomeIcons';
 
 /** Paints one item's picture into `rect`. Square art is centred in a non-square rect. */
@@ -53,6 +59,10 @@ const enchantedGear =
   (id: EnchantedGearItemId): ItemIconPainter =>
   (ctx, rect) =>
     drawEnchantedGearIcon(ctx, rect, id);
+const fairyWardRing =
+  (id: FairyWardRingItemId): ItemIconPainter =>
+  (ctx, rect) =>
+    drawFairyWardRingIcon(ctx, rect, id);
 const resource =
   (id: ResourceIconId): ItemIconPainter =>
   (ctx, rect) =>
@@ -103,10 +113,15 @@ export const ITEM_ICONS: Record<ItemId, ItemIconPainter> = {
   slate_butterfly_talisman: enchantedGear('slate_butterfly_talisman'),
   fae_scale_crupper: enchantedGear('fae_scale_crupper'),
   bracelet_of_dex: enchantedGear('bracelet_of_dex'),
+  eyes_of_splatter: drawEyesOfSplatterIcon,
   splatter_skunk_toe_ring: enchantedGear('splatter_skunk_toe_ring'),
+  fairy_repellent_signet: fairyWardRing('fairy_repellent_signet'),
+  ring_of_the_cold_shoulder: fairyWardRing('ring_of_the_cold_shoulder'),
+  ring_of_the_asbestos_knuckle: fairyWardRing('ring_of_the_asbestos_knuckle'),
   shade_gnoll_kneepads: enchantedGear('shade_gnoll_kneepads'),
   grull_war_gauntlet: enchantedGear('grull_war_gauntlet'),
   slingshot: enchantedGear('slingshot'),
+  fury_of_taranis: drawTaranisSwordIcon,
 
   magic_missile_tome: drawMagicMissileTomeIcon,
   smush_tome: drawSmushTomeIcon,

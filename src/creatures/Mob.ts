@@ -1350,6 +1350,17 @@ export abstract class Mob extends Player {
    */
   retaliateMob: Mob | null = null;
 
+  /**
+   * A party creature drawing this mob's attention onto itself — the attack
+   * cow standing in front of it. While set and among the candidates
+   * {@link acquireTarget} would accept, this mob goes for it ahead of anyone
+   * nearer, with no stepping-in-front exception: drawing the blows away from
+   * the crawlers is the whole point of a taunt. Whoever sets it also puts it
+   * in {@link retaliateMob}, which is what makes it a candidate at all, and
+   * clears it when the taunt lapses.
+   */
+  tauntedBy: Mob | null = null;
+
   /** When true (set by DungeonScene for locked boss rooms), ignores aggro range. */
   forceAggro = false;
 
@@ -1640,6 +1651,7 @@ export abstract class Mob extends Player {
     this.paysNoRewards = true;
     this.currentTarget = null;
     this.retaliateMob = null;
+    this.tauntedBy = null;
     this.forceAggro = false;
     this.isDefendTarget = false;
     this.alertedTo.clear();
@@ -2421,6 +2433,7 @@ export abstract class Mob extends Player {
       nearest = target;
     }
     nearest = this.fixateOver(nearest, nearestDist, targets, accept, aggroRangePx);
+    nearest = this.tauntOver(nearest, targets, accept, aggroRangePx);
     // The frame a fight starts is the only frame worth shouting on: a mob that
     // was already engaged has an `engagedTarget`, so the search below runs a
     // handful of times per fight rather than once per mob per frame.
@@ -2458,6 +2471,22 @@ export abstract class Mob extends Player {
     const reachPx = aggroRangePx * AGGRO_PERSIST_MULTIPLIER;
     const inReach = Math.hypot(preferred.x - this.x, preferred.y - this.y) < reachPx;
     return this.forceAggro || inReach ? preferred : nearest;
+  }
+
+  /** {@link tauntedBy} in place of `nearest`, when it is a candidate this mob could pick at all. */
+  private tauntOver(
+    nearest: Player | null,
+    targets: readonly Player[],
+    accept: ((target: Player) => boolean) | undefined,
+    aggroRangePx: number,
+  ): Player | null {
+    const taunter = this.tauntedBy;
+    if (taunter === null || taunter === nearest || !taunter.isAlive) return nearest;
+    if (!targets.includes(taunter)) return nearest;
+    if (accept !== undefined && !accept(taunter)) return nearest;
+    const reachPx = aggroRangePx * AGGRO_PERSIST_MULTIPLIER;
+    const inReach = Math.hypot(taunter.x - this.x, taunter.y - this.y) < reachPx;
+    return this.forceAggro || inReach ? taunter : nearest;
   }
 
   /**
@@ -3785,6 +3814,7 @@ export abstract class Mob extends Player {
     this.hp = this.maxHp;
     this.currentTarget = null;
     this.retaliateMob = null;
+    this.tauntedBy = null;
     this.killedBy = null;
     this.killedByDealer = null;
     this.killType = null;
@@ -3901,6 +3931,7 @@ export abstract class Mob extends Player {
     this.hp = this.maxHp;
     this.currentTarget = null;
     this.retaliateMob = null;
+    this.tauntedBy = null;
     this.damageTakenBy.clear();
     this._hasStruckPlayer = false;
     this._framesSinceStruckPlayer = Number.MAX_SAFE_INTEGER;

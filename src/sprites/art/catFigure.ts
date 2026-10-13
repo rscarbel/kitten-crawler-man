@@ -30,10 +30,15 @@
  */
 
 import {
+  BARE_CAT,
   GROUND_Y,
   type CatPose,
+  type CatWear,
   type PawPose,
+  type Pt,
   type TailPose,
+  catMouthFront,
+  catMouthSide,
   clamp01,
   deg,
   drawCatBack,
@@ -809,10 +814,10 @@ export const CAT_ROWS: readonly RowSpec[] = [
   },
 ];
 
-function paintView(ctx: CanvasRenderingContext2D, view: View, pose: CatPose): void {
-  if (view === 'front') drawCatFront(ctx, pose);
-  else if (view === 'back') drawCatBack(ctx, pose);
-  else drawCatSide(ctx, pose);
+function paintView(ctx: CanvasRenderingContext2D, view: View, pose: CatPose, wear: CatWear): void {
+  if (view === 'front') drawCatFront(ctx, pose, wear);
+  else if (view === 'back') drawCatBack(ctx, pose, wear);
+  else drawCatSide(ctx, pose, wear);
 }
 
 function rowOf(state: string): RowSpec | undefined {
@@ -826,7 +831,12 @@ function rowOf(state: string): RowSpec | undefined {
  * about her own ground line rather than about that centre, which is what keeps
  * her paws on the tile they belong to while the rest of her shrinks.
  */
-function paintCatFrame(ctx: CanvasRenderingContext2D, state: string, frame: number): void {
+function paintCatFrame(
+  ctx: CanvasRenderingContext2D,
+  state: string,
+  frame: number,
+  wear: CatWear,
+): void {
   const row = rowOf(state);
   if (row === undefined) return;
   ctx.save();
@@ -835,8 +845,31 @@ function paintCatFrame(ctx: CanvasRenderingContext2D, state: string, frame: numb
   ctx.translate(0, GROUND_Y);
   ctx.scale(CAT_SCALE, CAT_SCALE);
   ctx.translate(0, -GROUND_Y);
-  paintView(ctx, row.view, row.pose(frame));
+  paintView(ctx, row.view, row.pose(frame), wear);
   ctx.restore();
+}
+
+/** Whether a row is painted side-on. */
+export function catRowIsProfile(state: string): boolean {
+  return rowOf(state)?.view === 'side';
+}
+
+/** The tile's centre line, which a mirrored cell flips about. */
+const TILE_CENTRE_FRACTION = 0.5;
+
+/**
+ * Where her mouth is painted on one cell, in tile fractions from the sprite's
+ * tile origin, mirrored with the cell; null for a back view or an unknown row.
+ * Mapped through the same placement {@link paintCatFrame} paints with.
+ */
+export function catMouthInTile(state: string, frame: number, flipX: boolean): Pt | null {
+  const row = rowOf(state);
+  if (row === undefined || row.view === 'back') return null;
+  const pose = row.pose(frame);
+  const mouth = row.view === 'front' ? catMouthFront(pose) : catMouthSide(pose);
+  const tileX = (ORIGIN_X - TILE_X) / TILE_SCALE + mouth.x * CAT_SCALE;
+  const tileY = (ORIGIN_Y - TILE_Y) / TILE_SCALE + GROUND_Y + (mouth.y - GROUND_Y) * CAT_SCALE;
+  return { x: flipX ? 2 * TILE_CENTRE_FRACTION - tileX : tileX, y: tileY };
 }
 
 function catStateFrames(): Record<string, number> {
@@ -845,13 +878,29 @@ function catStateFrames(): Record<string, number> {
   return frames;
 }
 
-export const CAT_FIGURE: FigureDef = {
-  id: 'cat',
-  frameWidth: FRAME_W,
-  frameHeight: FRAME_H,
-  tileX: TILE_X,
-  tileY: TILE_Y,
-  tileScale: TILE_SCALE,
-  states: figureStates(catStateFrames()),
-  paintFrame: paintCatFrame,
-};
+function catFigure(id: string, wear: CatWear): FigureDef {
+  return {
+    id,
+    frameWidth: FRAME_W,
+    frameHeight: FRAME_H,
+    tileX: TILE_X,
+    tileY: TILE_Y,
+    tileScale: TILE_SCALE,
+    states: figureStates(catStateFrames()),
+    paintFrame: (ctx, state, frame) => paintCatFrame(ctx, state, frame, wear),
+  };
+}
+
+export const CAT_FIGURE: FigureDef = catFigure('cat', BARE_CAT);
+
+/**
+ * Donut in the Eyes of Splatter. A figure of its own because a cell is keyed on
+ * figure, state and frame alone: the glasses are painted into every cell, so
+ * the two looks cannot share one.
+ */
+export const CAT_SHADES_FIGURE: FigureDef = catFigure('cat_shades', { shades: true });
+
+/** The figure that draws Donut in `wear`. */
+export function catFigureWearing(wear: CatWear): FigureDef {
+  return wear.shades ? CAT_SHADES_FIGURE : CAT_FIGURE;
+}

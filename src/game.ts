@@ -6,28 +6,141 @@ import { PostSignupScene } from './scenes/PostSignupScene';
 import { sceneSetupFromSave } from './scenes/resumeFromSave';
 import { aiAdapter } from './ai/AIAdapter';
 import { devBootScene, installDevLoopFallback } from './dev/devBoot';
-import { AuthClient } from './auth/AuthClient';
+import { AuthClient, isUnauthorizedError, type AuthUser } from './auth/AuthClient';
 import type { GameProgress, GameProgressInput } from './auth/AuthClient';
 import { LoginUI } from './auth/LoginUI';
 import { prewarmGroups } from './core/SpriteLoader';
 import { AudioManager } from './audio/AudioManager';
 import { CORE_SFX_IDS } from './audio/sfxGroups';
 import { showLoadingScreen } from './ui/LoadingScreen';
-import { difficultyStats } from './core/DifficultyStats';
-import { clearLocalProgress, readLocalProgress, writeLocalProgress } from './core/LocalProgress';
-import { stampGameProgress } from './core/saveFormat';
+import { LOCAL_PROGRESS_STORAGE, readLocalProgress } from './core/LocalProgress';
+import {
+  PAGE_SAVE_LATCH,
+  ProgressPersistence,
+  bootProgress,
+  reloadPage,
+} from './core/progressPersistence';
+import type { OwedWipe, ProgressStorage, WipeAccount } from './core/progressPersistence';
+import { LOCAL_WIPE_MARKER } from './core/wipeMarker';
+import { WipeHoldScene } from './scenes/WipeHoldScene';
 import { loadUiFont } from './ui/theme/fonts';
 
 declare const __AI_ENABLED__: boolean;
-
-/** HTTP status code for unauthorized. */
-const HTTP_UNAUTHORIZED = 401;
 
 /** Starts the scene on the floor a save was written on, with its party, abilities and pet restored. */
 function resumeFromProgress(baseOptions: DungeonSceneOptions, progress: GameProgress): void {
   const { levelDef, options } = sceneSetupFromSave(baseOptions, progress);
   sceneManager.replace(new DungeonScene(levelDef, input, sceneManager, options));
 }
+
+/**
+ * Erases the run for good: latches every save write on this page, waits out
+ * any save already sent, then deletes the save slot, retrying until it is
+ * gone. Resolves once the delete has landed. Reset Game and the Nothing both
+ * run it behind a blocking hold and reload the page afterwards, so nothing
+ * held in memory can outlive the wipe.
+ */
+function wipeAllProgress(persistence: ProgressPersistence): Promise<void> {
+  return persistence.wipe();
+}
+
+/** How a save slot behind a sign-in reaches its account. */
+interface SignedInSlot {
+  /** Whoever is signed in on this page right now, or null when unknown. */
+  account: () => WipeAccount | null;
+  /** Asks the server who is signed in, rejecting when it cannot say. */
+  identify: () => Promise<WipeAccount>;
+  reauthenticate: () => Promise<WipeAccount>;
+  signOut: () => Promise<unknown>;
+}
+
+function wipeAccountOf(user: AuthUser): WipeAccount {
+  return { id: String(user.id), label: user.username };
+}
+
+/**
+ * The page's door to one save slot. `owed` is a wipe a previous page left
+ * unfinished, which this one completes for the account it was owed to.
+ */
+function pagePersistence(
+  storage: ProgressStorage,
+  signedIn: SignedInSlot | undefined,
+  owed?: OwedWipe,
+): ProgressPersistence {
+  return new ProgressPersistence(storage, {
+    onWipeRetry: (attempt, err) => {
+      console.error(`Failed to delete saved progress (attempt ${attempt}):`, err);
+    },
+    isAuthFailure: isUnauthorizedError,
+    reauthenticate: signedIn?.reauthenticate,
+    signOut: signedIn?.signOut,
+    account: signedIn?.account,
+    identify: signedIn?.identify,
+    owedAccount: owed?.account,
+    marker: LOCAL_WIPE_MARKER,
+  });
+}
+
+/**
+ * Loads the save through {@link bootProgress}: a wipe a previous page left
+ * owed is finished first, behind a blocking hold, and the page then reloads
+ * clean instead of loading anything.
+ */
+async function loadUnlessWipeOwed<T>(
+  storage: ProgressStorage,
+  signedIn: SignedInSlot | undefined,
+  load: () => Promise<T | null>,
+): Promise<T | null | 'reloading'> {
+  const boot = await bootProgress({
+    marker: LOCAL_WIPE_MARKER,
+    latch: PAGE_SAVE_LATCH,
+    finishWith: (owed) => pagePersistence(storage, signedIn, owed),
+    onOwedWipe: (persistence) => {
+      const hold = new WipeHoldScene(audio);
+      sceneManager.replace(hold);
+      hold.holdOn(persistence);
+    },
+    load,
+  });
+  if (boot.kind === 'wipeFinished') {
+    reloadPage();
+    return 'reloading';
+  }
+  return boot.progress;
+}
+
+/**
+ * Scene options every launch shares: the save and wipe paths for one save slot.
+ * `signedIn` is for a slot behind a sign-in, where a delete refused for an
+ * expired session would otherwise retry forever.
+ */
+function persistenceOptions(
+  storage: ProgressStorage,
+  signedIn?: SignedInSlot,
+): DungeonSceneOptions {
+  const persistence = pagePersistence(storage, signedIn);
+  return {
+    audio,
+    saveProgress: (data: GameProgressInput) => persistence.save(data),
+    progressWipe: {
+      wipe: () => wipeAllProgress(persistence),
+      get wipeStatus() {
+        return persistence.wipeStatus;
+      },
+      get wipeAccountLabel() {
+        return persistence.wipeAccountLabel;
+      },
+      get refusedOtherAccount() {
+        return persistence.refusedOtherAccount;
+      },
+    },
+    onResetGame: reloadPage,
+  };
+}
+
+// Before anything can save: a wipe a previous page left unfinished means no
+// write may land until boot has finished it.
+if (LOCAL_WIPE_MARKER.read() !== null) PAGE_SAVE_LATCH.engage();
 
 const input = new InputManager();
 const audio = new AudioManager();
@@ -59,15 +172,11 @@ const loadingScreen = showLoadingScreen(sceneManager.ctx);
 
   if (!__AI_ENABLED__) {
     // AI/backend disabled at build time — run as a pure static game with no server calls.
-    const options: DungeonSceneOptions = {
-      audio,
-      saveProgress: writeLocalProgress,
-      onResetGame: () => {
-        difficultyStats.beginRun();
-        clearLocalProgress();
-        showStartMenu();
-      },
-    };
+    const staticBoot = await loadUnlessWipeOwed(LOCAL_PROGRESS_STORAGE, undefined, () =>
+      Promise.resolve(null),
+    );
+    if (staticBoot === 'reloading') return;
+    const options = persistenceOptions(LOCAL_PROGRESS_STORAGE);
     const showStartMenu = () => {
       const saved = readLocalProgress();
       const onContinue = saved === null ? undefined : () => resumeFromProgress(options, saved);
@@ -80,45 +189,41 @@ const loadingScreen = showLoadingScreen(sceneManager.ctx);
 
   const authClient = new AuthClient();
 
+  let signedInAs: AuthUser | null = null;
   try {
-    await authClient.getMe();
+    signedInAs = await authClient.getMe();
   } catch (err: unknown) {
-    if (
-      typeof err === 'object' &&
-      err !== null &&
-      'status' in err &&
-      err.status === HTTP_UNAUTHORIZED
-    ) {
+    if (isUnauthorizedError(err)) {
       // Auth server is up but no session — show login/register screen.
       const ui = new LoginUI(authClient);
-      await ui.show();
+      signedInAs = await ui.show();
     }
     // Any other error: server had an issue — proceed without forcing login.
   }
 
-  // Load any previously saved progress for this user.
-  const progress = await authClient.loadProgress().catch(() => null);
-
-  const saveProgress = (data: GameProgressInput) => {
-    authClient.saveProgress(stampGameProgress(data)).catch(() => {
-      void 0;
-    });
+  const serverSlot = authClient.asProgressStorage();
+  const signedIn: SignedInSlot = {
+    account: () => (signedInAs === null ? null : wipeAccountOf(signedInAs)),
+    identify: async () => {
+      signedInAs = await authClient.getMe();
+      return wipeAccountOf(signedInAs);
+    },
+    reauthenticate: async () => {
+      signedInAs = await new LoginUI(authClient).show();
+      return wipeAccountOf(signedInAs);
+    },
+    signOut: async () => {
+      await authClient.logout();
+      signedInAs = null;
+    },
   };
 
-  const onResetGame = () => {
-    // The difficulty counters are run-scoped, and a reset is where one run ends
-    // and the next begins. Without this a second playthrough in the same page
-    // session starts on floor 1 already classified as post-Juicer.
-    difficultyStats.beginRun();
-    authClient.deleteProgress().catch((err: unknown) => {
-      console.error('Failed to delete server progress on reset:', err);
-    });
-    sceneManager.replace(
-      new PostSignupScene(input, sceneManager, { audio, saveProgress, onResetGame }),
-    );
-  };
+  const progress = await loadUnlessWipeOwed(serverSlot, signedIn, () =>
+    authClient.loadProgress().catch(() => null),
+  );
+  if (progress === 'reloading') return;
 
-  const options: DungeonSceneOptions = { saveProgress, audio, onResetGame };
+  const options = persistenceOptions(serverSlot, signedIn);
 
   if (devBootScene(sceneManager, input, options)) return;
 

@@ -667,12 +667,14 @@ export class HumanAnimator {
   /**
    * Chooses the blow for a strike thrown along a facing, latches that facing
    * until the blow is over, and returns the row. Null when the view has no
-   * strikes to throw.
+   * strikes to throw. `armed` favours the blows his sword hand throws, so a
+   * blade drawn in it swings with the blow rather than riding a kick.
    */
   beginStrike(
     facingX: number,
     facingY: number,
     target: StrikeTargetContext | null,
+    armed = false,
   ): HumanRowName | null {
     const view = viewForFacing(facingX, facingY);
     const family = strikeFamily(view);
@@ -687,7 +689,7 @@ export class HumanAnimator {
     this.comboClosed = false;
 
     const striding = this.isStriding();
-    const chosen = this.chooseStrike(view, family, target, striding);
+    const chosen = this.chooseStrike(view, family, target, striding, armed);
     if (chosen.strike?.tags.includes('finisher') === true) this.comboClosed = true;
     this.lastStrike = chosen.name;
     this.lastStrikeView = view;
@@ -961,9 +963,11 @@ export class HumanAnimator {
     family: readonly RowSpec[],
     target: StrikeTargetContext | null,
     striding: boolean,
+    armed: boolean,
   ): RowSpec {
     const downed = target?.downed ?? false;
-    const throwable = striding ? preferWhere(family, hasTravellingVersions) : family;
+    const travelling = striding ? preferWhere(family, hasTravellingVersions) : family;
+    const throwable = armed ? preferWhere(travelling, thrownWithSwordHand) : travelling;
     let candidates = downed ? throwable : preferWithoutTags(throwable, DOWNED_TARGET_TAGS);
     if (target !== null) {
       if (target.lowProfile || target.downed) candidates = preferTags(candidates, LOW_TARGET_TAGS);
@@ -1491,6 +1495,11 @@ function cycleFrames(cycle: RowSpec): number[] {
 
 function latchOf(row: RowSpec, facingX: number, facingY: number): Latch {
   return { row, facingX, facingY, flipX: row.mirrorable && facingX < 0 };
+}
+
+/** The sword is carried in his right hand, whose blows the row table marks `hand`. */
+function thrownWithSwordHand(row: RowSpec): boolean {
+  return row.strike?.reachLimb === 'hand';
 }
 
 /** Keeps only the rows carrying any of `tags`, unless none do. */

@@ -4,7 +4,11 @@ import type { SerializedAbilityState } from '../core/AbilityManager';
 import type { SerializedAchievements } from '../core/AchievementManager';
 import type { GameStatsSnapshot } from '../core/GameStats';
 import type { PartyCraftsState } from '../core/partyCrafts';
+import type { OwedWheelItem, PendingWheelOutcome, WheelCrawler } from '../core/WheelLedger';
+import type { BloodVomitRemaining } from '../core/bloodVomitSave';
 import { parseGameProgress } from '../core/saveFormat';
+import { PAGE_SAVE_LATCH, type ProgressStorage } from '../core/progressPersistence';
+import { wipeOwed } from '../core/wipeMarker';
 
 /** HTTP status code for server error (fallback for API errors). */
 const HTTP_SERVER_ERROR = 500;
@@ -74,11 +78,38 @@ export interface GameProgress {
    * Unknown until parsed, like the achievements.
    */
   gameStats?: GameStatsSnapshot;
+  /**
+   * The wheel's good prizes the party has already won, which it never draws
+   * again. Top level because a floor change carries no `world`; cleared only by
+   * a wipe.
+   */
+  wheelPrizesWon?: string[];
+  /**
+   * A spin committed before its wheel turned and not yet paid out. A load
+   * applies it and clears it, so closing the tab mid-spin cannot undo it.
+   */
+  pendingWheelOutcome?: PendingWheelOutcome | null;
+  /** The bet whose board a landed Spin Again still owes a free spin on. */
+  wheelFreeSpinBet?: number | null;
+  /** The crawler a wheel freeze is still owed to, spent on the next load. */
+  wheelOwedFreeze?: WheelCrawler | null;
+  /** Prize items still waiting for room in a crawler's bag. */
+  wheelOwedItems?: OwedWheelItem[];
+  /** Frames of blood vomiting each crawler has left. */
+  bloodVomitRemaining?: BloodVomitRemaining;
+  /** Whether Carl owns the attack cow. */
+  attackCowOwned?: boolean;
+  /** The cow's HP; absent while she is at a full health not yet measured. */
+  attackCowHp?: number;
+  /** Whether the cow is resting off a knockout, which holds her out until she is full. */
+  attackCowResting?: boolean;
   savedAt: string;
 }
 
 /** A save as the scene hands it over — the version and timestamp are stamped on write. */
 export type GameProgressInput = Omit<GameProgress, 'version' | 'savedAt'>;
+
+const HTTP_UNAUTHORIZED = 401;
 
 class ApiError extends Error {
   constructor(
@@ -87,6 +118,11 @@ class ApiError extends Error {
   ) {
     super(message);
   }
+}
+
+/** Whether a failed request was refused for want of a signed-in session. */
+export function isUnauthorizedError(error: unknown): boolean {
+  return error instanceof ApiError && error.status === HTTP_UNAUTHORIZED;
 }
 
 async function apiFetch(path: string, init?: RequestInit): Promise<unknown> {
@@ -149,6 +185,7 @@ export class AuthClient {
   }
 
   async saveProgress(data: GameProgress): Promise<void> {
+    if (PAGE_SAVE_LATCH.engaged) return;
     await apiFetch('/api/progress', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -157,6 +194,7 @@ export class AuthClient {
   }
 
   async loadProgress(): Promise<GameProgress | null> {
+    if (wipeOwed()) return null;
     const raw = await apiFetch('/api/progress');
     if (typeof raw !== 'object' || raw === null || !('data' in raw)) return null;
     return parseGameProgress(raw.data);
@@ -164,5 +202,13 @@ export class AuthClient {
 
   async deleteProgress(): Promise<void> {
     await apiFetch('/api/progress', { method: 'DELETE' });
+  }
+
+  /** The server row as a save slot for `ProgressPersistence`. */
+  asProgressStorage(): ProgressStorage {
+    return {
+      write: (progress) => this.saveProgress(progress),
+      remove: () => this.deleteProgress(),
+    };
   }
 }

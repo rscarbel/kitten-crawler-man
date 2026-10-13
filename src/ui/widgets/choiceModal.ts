@@ -25,6 +25,8 @@ export interface ChoiceButton {
   readonly label: string;
   readonly variant?: ButtonVariant;
   readonly icon?: GlyphId;
+  /** A short second line under the label; see the button's `hint`. */
+  readonly hint?: string;
   readonly disabled?: boolean | string;
   readonly sound?: SoundId | null;
   /** The choice an active quest is waiting on: it wears the quest compass unless it has its own icon. */
@@ -67,6 +69,13 @@ export interface ChoiceModalConfig {
    * which then stay in view however short the screen is.
    */
   readonly buttonsPerRow?: number;
+  /**
+   * Lay every button out as a grid of this many columns, pinned in the footer
+   * so the whole set stays in view while a long body scrolls. Wherever the
+   * widest label would not fit a column at full size the buttons stack in
+   * the body instead, so a narrow phone sheet keeps full-width touch targets.
+   */
+  readonly buttonColumns?: number;
   readonly width?: PanelWidth;
   /** Draw ✕ in the corner, calling this. */
   readonly onClose?: () => void;
@@ -116,6 +125,16 @@ function stacksButtons(ui: Ui, config: ChoiceModalConfig, width: number): boolea
 
 function stackedButtonHeight(ui: Ui): number {
   return skinsFor(ui.theme).controlSize.lg.height;
+}
+
+/** The footer grid's column count, or null when the buttons should not form one at this width. */
+function footerGridColumns(ui: Ui, config: ChoiceModalConfig, width: number): number | null {
+  const wanted = Math.min(config.buttonColumns ?? 1, config.buttons.length);
+  if (wanted <= 1) return null;
+  const gap = ui.theme.space.sm;
+  const columnWidth = (width - gap * (wanted - 1)) / wanted;
+  const widest = Math.max(...config.buttons.map((b) => measureButton(ui, { ...b, size: 'lg' })));
+  return widest <= columnWidth ? wanted : null;
 }
 
 function layout(
@@ -170,15 +189,18 @@ export function choiceModal(ui: Ui, config: ChoiceModalConfig): void {
     return { contentHeight, stacked: laid.stacked };
   };
   const bodyW = panelBodyWidth(ui, width);
-  const natural = heightAt(bodyW);
+  const gridColumns = footerGridColumns(ui, config, bodyW);
+  const natural = heightAt(bodyW, gridColumns === null ? undefined : false);
   const footer = natural.stacked
     ? undefined
     : config.buttons.map((b, index) => choiceButton(config, b, index));
+  const footerColumns = gridColumns ?? undefined;
   const maxBody = panelBodyMaxHeight(ui, {
     width,
     onClose: config.onClose,
     footer,
     footerSize: 'lg',
+    footerColumns,
   });
   const scrollBody = natural.contentHeight > maxBody;
   const contentHeight = scrollBody
@@ -194,6 +216,7 @@ export function choiceModal(ui: Ui, config: ChoiceModalConfig): void {
     footer,
     footerLayout: 'fill',
     footerSize: 'lg',
+    footerColumns,
     scrollBody,
     content: (body) => {
       const { tracks, stacked } = layout(ui, config, body.w, natural.stacked);

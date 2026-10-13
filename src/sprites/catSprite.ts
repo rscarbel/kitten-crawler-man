@@ -1,11 +1,13 @@
 import { walkFrameIndex, progressFrameIndex, timeFrameIndex } from '../core/SpriteRenderer';
-import { drawFigureCached, prewarmFigureState } from './figure/figureFrameCache';
+import { drawFigureCached, prewarmFigureState, releaseFigure } from './figure/figureFrameCache';
+import type { FigureDef } from './figure/figureDef';
+import { BARE_CAT, type CatWear } from './art/catArt';
 import { figureFrameCount } from './figure/figureDef';
 import { CAT_SWIPE_FRAMES } from '../core/crawlerFormulas';
 import {
   ACTION_FRAMES,
   BREAK_FRAMES,
-  CAT_FIGURE,
+  catFigureWearing,
   DANCE_FRAMES,
   IDLE_FRAMES,
   KO_FRAMES,
@@ -16,6 +18,7 @@ import {
   MAGIC_MISSILE_PROJECTILE_FIGURE,
 } from './art/magicMissileFigure';
 import { getMagicMissileVisualTier, type MagicMissileVisualTier } from '../abilities/magicMissile';
+import { missileOpacity, type SplatterCopy } from '../abilities/eyesOfSplatter';
 
 export interface Missile {
   x: number;
@@ -31,6 +34,8 @@ export interface Missile {
   abilityLevel: number;
   /** Sub-missiles spawned by level-10 never chain-react further. */
   isSubMissile: boolean;
+  /** Present on a copy released by the Eyes of Splatter; copies never release copies. */
+  splatter?: SplatterCopy;
 }
 
 /**
@@ -40,7 +45,7 @@ export interface Missile {
  * or its name would freeze or vanish instead of failing. `scripts/gates-cat.ts`
  * holds this union and the figure's own states equal.
  */
-type CatState =
+export type CatState =
   | 'walk'
   | 'walk_side'
   | 'walk_away'
@@ -60,7 +65,7 @@ type CatState =
   | 'dance';
 
 /** Which way the sheet's three viewpoints are chosen from a facing vector. */
-type CatView = 'front' | 'side' | 'away';
+export type CatView = 'front' | 'side' | 'away';
 
 /** Animations that play once and then hand control back to walk/idle. */
 export type CatOneShot = 'swipe' | 'cast' | 'dance' | 'look_around' | 'groom_paw' | 'groom_flank';
@@ -158,9 +163,26 @@ const PREWARMED_ROWS: ReadonlyArray<CatState> = [
   'groom_flank',
 ];
 
+let activeWear: CatWear = BARE_CAT;
+let activeFigure: FigureDef = catFigureWearing(BARE_CAT);
+
+/**
+ * Puts `wear` on Donut's sprite. On a change the old look's cells are released
+ * at once and the new one's rows queued: she is the most expensive painter in
+ * the game, so two complete looks resident side by side is budget nothing
+ * else gets back. Cheap when nothing changed.
+ */
+export function setCatWear(wear: CatWear): void {
+  if (wear.shades === activeWear.shades) return;
+  releaseFigure(activeFigure);
+  activeWear = wear;
+  activeFigure = catFigureWearing(wear);
+  prewarmCatSprite();
+}
+
 /** Queues every row Donut can be drawn in for baking. Call once per scene. */
 export function prewarmCatSprite(): void {
-  for (const state of PREWARMED_ROWS) prewarmFigureState(CAT_FIGURE, state);
+  for (const state of PREWARMED_ROWS) prewarmFigureState(activeFigure, state);
 }
 
 /** Loop speeds for the animations that are driven by the clock, not by a timer. */
@@ -250,7 +272,7 @@ export interface CatSpriteState {
 }
 
 /** Views split on whichever axis she is facing hardest along. */
-function viewFor(facingX: number, facingY: number): CatView {
+export function catViewForFacing(facingX: number, facingY: number): CatView {
   if (Math.abs(facingY) <= Math.abs(facingX)) return 'side';
   return facingY < 0 ? 'away' : 'front';
 }
@@ -261,19 +283,20 @@ function directionalState(base: 'walk' | 'idle' | 'swipe' | 'cast', view: CatVie
   return base;
 }
 
+/** One cell of Donut's figure: which row, which frame, and whether it is mirrored. */
+export interface CatCell {
+  readonly state: CatState;
+  readonly frame: number;
+  readonly flipX: boolean;
+}
+
 /**
- * Draw the cat player body.
+ * The cell the cat player body shows for `state` right now.
  *
  * Priority runs downed → combat action → idle break → walk → idle, so a swipe
  * or a cast always wins over whatever she was doing to pass the time.
  */
-export function drawCatSprite(
-  ctx: CanvasRenderingContext2D,
-  sx: number,
-  sy: number,
-  s: number,
-  state: CatSpriteState = {},
-): void {
+export function catCellFor(state: CatSpriteState = {}): CatCell {
   const {
     walkFrame = 0,
     isMoving = false,
@@ -282,7 +305,7 @@ export function drawCatSprite(
     isKnockedOut = false,
     oneShot = null,
   } = state;
-  const view = viewFor(facingX, facingY);
+  const view = catViewForFacing(facingX, facingY);
   const facesLeft = facingX < 0;
   // Only the profile art is mirrored: flipping the head-on views would swap the
   // sides of her tortoiseshell coat every time she turned around.
@@ -293,8 +316,7 @@ export function drawCatSprite(
     // The downed pose is profile art whichever way she was facing, so it takes
     // the mirror on its own rather than through the view rule above.
     const frame = timeFrameIndex(nowSeconds, KNOCKED_OUT_FPS, FRAME_COUNT.knocked_out);
-    drawFigureCached(ctx, CAT_FIGURE, 'knocked_out', frame, sx, sy, s, { flipX: facesLeft });
-    return;
+    return { state: 'knocked_out', frame, flipX: facesLeft };
   }
 
   if (oneShot !== null) {
@@ -302,42 +324,32 @@ export function drawCatSprite(
     // actions have a pose per viewpoint.
     const directional = oneShot.action === 'swipe' || oneShot.action === 'cast';
     const key: CatState = directional ? directionalState(oneShot.action, view) : oneShot.action;
-    drawFigureCached(
-      ctx,
-      CAT_FIGURE,
-      key,
-      progressFrameIndex(oneShot.progress, FRAME_COUNT[key]),
-      sx,
-      sy,
-      s,
-      {
-        flipX: directional && flipX,
-      },
-    );
-    return;
+    return {
+      state: key,
+      frame: progressFrameIndex(oneShot.progress, FRAME_COUNT[key]),
+      flipX: directional && flipX,
+    };
   }
 
   if (isMoving) {
     const key = directionalState('walk', view);
-    drawFigureCached(ctx, CAT_FIGURE, key, walkFrameIndex(walkFrame, FRAME_COUNT[key]), sx, sy, s, {
-      flipX,
-    });
-    return;
+    return { state: key, frame: walkFrameIndex(walkFrame, FRAME_COUNT[key]), flipX };
   }
 
   const key = directionalState('idle', view);
-  drawFigureCached(
-    ctx,
-    CAT_FIGURE,
-    key,
-    timeFrameIndex(nowSeconds, IDLE_FPS, FRAME_COUNT[key]),
-    sx,
-    sy,
-    s,
-    {
-      flipX,
-    },
-  );
+  return { state: key, frame: timeFrameIndex(nowSeconds, IDLE_FPS, FRAME_COUNT[key]), flipX };
+}
+
+/** Draw the cat player body: the cell {@link catCellFor} picks, or `cell` when the caller already has it. */
+export function drawCatSprite(
+  ctx: CanvasRenderingContext2D,
+  sx: number,
+  sy: number,
+  s: number,
+  state: CatSpriteState = {},
+  cell: CatCell = catCellFor(state),
+): void {
+  drawFigureCached(ctx, activeFigure, cell.state, cell.frame, sx, sy, s, { flipX: cell.flipX });
 }
 
 /** Both missile figures share one set of row names. */
@@ -411,6 +423,7 @@ export function drawMissiles(
       );
       drawFigureCached(ctx, MAGIC_MISSILE_PROJECTILE_FIGURE, variant, frame, mx, my, s, {
         rotation,
+        alpha: missileOpacity(m),
       });
     } else {
       // Explosion — centered on the missile position.

@@ -14,7 +14,7 @@
  */
 
 import type { SoundId } from '../../audio/sounds';
-import { inset, splitH, type Rect, type Track } from '../core/geom';
+import { inset, splitH, splitV, type Rect, type Track } from '../core/geom';
 import type { Ui } from '../core/UiRoot';
 import type { GlyphId } from '../theme/glyphs';
 import { skinsFor, type ButtonVariant, type ControlSize } from '../theme/skins';
@@ -30,6 +30,8 @@ export interface FooterButton {
   readonly label: string;
   readonly variant?: ButtonVariant;
   readonly icon?: GlyphId;
+  /** A short second line under the label; see the button's `hint`. */
+  readonly hint?: string;
   readonly disabled?: boolean | string;
   /** Enter activates it when nothing else is focused. */
   readonly primary?: boolean;
@@ -63,10 +65,21 @@ export interface PanelOptions {
   /** `end` right-aligns footer buttons at their natural width; `fill` shares the row equally. Phones always fill. */
   readonly footerLayout?: 'end' | 'fill';
   readonly footerSize?: ControlSize;
+  /**
+   * Wrap the footer buttons into rows of this many, each cell an equal share
+   * of its row, so a set of parallel options stays pinned in view as a grid.
+   */
+  readonly footerColumns?: number;
   /** Wrap the body in a scroll view; requires `content` and `contentHeight`. */
   readonly scrollBody?: boolean;
   /** Draws the body. Optional unless `scrollBody`: callers may instead fill the returned `body`. */
   readonly content?: (body: Rect) => void;
+  /**
+   * Fill the frame opaquely instead of with glass, for a panel over bright,
+   * busy art (a slot machine's controls) that would otherwise read through
+   * its text. Defaults to false.
+   */
+  readonly solid?: boolean;
   /** Dim and block everything beneath. Defaults to true. */
   readonly scrim?: boolean;
   /** Tapping the scrim calls this (usually the same as `onClose`). */
@@ -100,7 +113,14 @@ export function panelChromeHeight(
   ui: Ui,
   opts: Pick<
     PanelOptions,
-    'title' | 'subtitle' | 'header' | 'footer' | 'footerSize' | 'onClose' | 'onBack'
+    | 'title'
+    | 'subtitle'
+    | 'header'
+    | 'footer'
+    | 'footerSize'
+    | 'footerColumns'
+    | 'onClose'
+    | 'onBack'
   >,
 ): number {
   const skin = skinsFor(ui.theme).panel.card;
@@ -112,9 +132,21 @@ export function panelChromeHeight(
   );
 }
 
-function footerHeight(ui: Ui, opts: Pick<PanelOptions, 'footer' | 'footerSize'>): number {
-  if (opts.footer === undefined || opts.footer.length === 0) return 0;
-  return skinsFor(ui.theme).controlSize[opts.footerSize ?? 'md'].height;
+function footerRowCount(opts: Pick<PanelOptions, 'footer' | 'footerColumns'>): number {
+  const count = opts.footer?.length ?? 0;
+  if (count === 0) return 0;
+  if (opts.footerColumns === undefined) return 1;
+  return Math.ceil(count / Math.max(1, opts.footerColumns));
+}
+
+function footerHeight(
+  ui: Ui,
+  opts: Pick<PanelOptions, 'footer' | 'footerSize' | 'footerColumns'>,
+): number {
+  const rows = footerRowCount(opts);
+  if (rows === 0) return 0;
+  const rowHeight = skinsFor(ui.theme).controlSize[opts.footerSize ?? 'md'].height;
+  return rows * rowHeight + (rows - 1) * ui.theme.space.sm;
 }
 
 function headerHeight(
@@ -161,7 +193,15 @@ export function panelBodyMaxHeight(
   ui: Ui,
   opts: Pick<
     PanelOptions,
-    'width' | 'title' | 'subtitle' | 'header' | 'footer' | 'footerSize' | 'onClose' | 'onBack'
+    | 'width'
+    | 'title'
+    | 'subtitle'
+    | 'header'
+    | 'footer'
+    | 'footerSize'
+    | 'footerColumns'
+    | 'onClose'
+    | 'onBack'
   >,
 ): number {
   return Math.max(0, frameMaxHeight(ui, opts.width) - panelChromeHeight(ui, opts));
@@ -170,7 +210,7 @@ export function panelBodyMaxHeight(
 export function panel(ui: Ui, opts: PanelOptions): PanelResult {
   const { theme, ctx } = ui;
   const skins = skinsFor(theme);
-  const skin = skins.panel.card;
+  const skin = opts.solid === true ? skins.panel.solid : skins.panel.card;
   const compact = ui.size === 'compact';
   const sheet = isSheet(ui, opts.width);
   const view = ui.viewport;
@@ -262,6 +302,7 @@ export function panel(ui: Ui, opts: PanelOptions): PanelResult {
       {
         fill: compact || opts.footerLayout === 'fill',
         size: opts.footerSize ?? 'md',
+        columns: opts.footerColumns,
       },
     );
   }
@@ -344,9 +385,13 @@ function drawFooter(
   footer: Rect,
   panelId: string,
   buttons: readonly FooterButton[],
-  layout: { readonly fill: boolean; readonly size: ControlSize },
+  layout: { readonly fill: boolean; readonly size: ControlSize; readonly columns?: number },
 ): void {
   const gap = ui.theme.space.sm;
+  if (layout.columns !== undefined) {
+    drawFooterGrid(ui, footer, panelId, buttons, { size: layout.size, columns: layout.columns });
+    return;
+  }
   const natural = buttons.map((b) =>
     Math.max(FOOTER_MIN_BUTTON_WIDTH, measureButton(ui, { ...b, size: layout.size })),
   );
@@ -359,5 +404,28 @@ function drawFooter(
   buttons.forEach((b, index) => {
     const cell = cells[index];
     button(ui, cell, { ...b, size: layout.size, id: `${panelId}/${b.id ?? b.label}` });
+  });
+}
+
+function drawFooterGrid(
+  ui: Ui,
+  footer: Rect,
+  panelId: string,
+  buttons: readonly FooterButton[],
+  layout: { readonly size: ControlSize; readonly columns: number },
+): void {
+  const gap = ui.theme.space.sm;
+  const columns = Math.max(1, layout.columns);
+  const rowCount = Math.ceil(buttons.length / columns);
+  const rowHeight = skinsFor(ui.theme).controlSize[layout.size].height;
+  const rows = splitV(
+    footer,
+    Array.from({ length: rowCount }, () => rowHeight),
+    gap,
+  );
+  const columnTracks = Array.from({ length: columns }, (): Track => 'fill');
+  const cells = rows.flatMap((row) => splitH(row, columnTracks, gap));
+  buttons.forEach((b, index) => {
+    button(ui, cells[index], { ...b, size: layout.size, id: `${panelId}/${b.id ?? b.label}` });
   });
 }

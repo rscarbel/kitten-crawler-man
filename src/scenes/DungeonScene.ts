@@ -258,6 +258,7 @@ import {
   restorePlayer,
   revivedSnapshot,
   checkpointSnapshot,
+  withoutIncurableStatuses,
   type PlayerSnapshot,
 } from '../core/PlayerSnapshot';
 import type { LevelCheckpoint } from '../core/LevelCheckpoint';
@@ -269,7 +270,7 @@ import {
   savePointAfterWrite,
   type SavePoint,
 } from '../core/SavePoint';
-import { sceneSetupFromSave } from './resumeFromSave';
+import { progressForRespawn, sceneSetupFromSave } from './resumeFromSave';
 import type { TilePoint } from '../map/town/townPlan';
 import type { WorldCheckpoint } from '../core/WorldCheckpoint';
 import {
@@ -423,6 +424,18 @@ import {
   restoreClubMembership,
   type ClubMembership,
 } from '../core/ClubMembership';
+import { createWheelLedger, type WheelLedger } from '../core/WheelLedger';
+import {
+  captureAttackCowState,
+  createAttackCowState,
+  restoreAttackCowState,
+  type AttackCowState,
+} from '../core/AttackCowState';
+import { bloodVomitRemainingOf } from '../core/bloodVomitSave';
+import { drainBloodVomitRetches } from '../systems/bloodVomitRetches';
+import { PAGE_SAVE_LATCH, type SaveWriteOutcome } from '../core/progressPersistence';
+import type { InteriorPartyRun, SaveParty } from './interiorPartyRun';
+import { WipeHold, type ProgressWipe } from '../ui/screens/dialogs/wipeHold';
 import {
   captureTownMemory,
   createTownMemory,
@@ -467,6 +480,9 @@ import {
 } from '../core/MercenaryRoster';
 import { createGodModeState, type GodModeState } from '../core/GodMode';
 import { MercenarySystem } from '../systems/MercenarySystem';
+import { AttackCowSystem } from '../systems/AttackCowSystem';
+import { settleWheelLedger } from '../systems/casino/wheel/wheelPrizes';
+import { adoptWhenCommitted } from '../core/adoptWhenCommitted';
 import {
   DOOMSDAY_TRACKER_ID,
   DoomsdayEscapeSystem,
@@ -558,7 +574,7 @@ import { PRIMARY_BUTTON } from '../ui/core/pointer';
  * progress — which belongs to neither `PlayerSnapshot` because it is shared —
  * plus the floor's generation seeds and the safe room to stand back in.
  */
-export type SaveProgressFn = (data: GameProgressInput) => void;
+export type SaveProgressFn = (data: GameProgressInput) => Promise<SaveWriteOutcome>;
 
 export interface DungeonSceneOptions {
   /** Tile coordinates to spawn players at (instead of map start tile). */
@@ -631,8 +647,16 @@ export interface DungeonSceneOptions {
   audio?: AudioManager;
   /** When provided, the scene runs in tutorial mode using a hand-crafted map and guided state machine. */
   tutorialController?: TutorialController;
-  /** Called when the player confirms Reset Game — should wipe progress and return to the start screen. */
+  /**
+   * Reset Game's restart, called once the wipe has landed (or straight away
+   * where nothing is saved). Starts the game afresh.
+   */
   onResetGame?: () => void;
+  /**
+   * The page's wipe: latches every save write and deletes the save. Reset Game
+   * holds the player behind a blocking screen until it lands.
+   */
+  progressWipe?: ProgressWipe;
   /** Circus questline state, threaded by reference across building/scene transitions. */
   circusQuestProgress?: CircusQuestProgress;
   /** Murder-mystery questline state, threaded by reference across building/scene transitions. */
@@ -655,6 +679,10 @@ export interface DungeonSceneOptions {
   doomsdayQuestProgress?: DoomsdayProgress;
   /** Desperado Club membership, threaded by reference across building/scene transitions. */
   clubMembership?: ClubMembership;
+  /** The Wheel of Fortune's won prizes and pending spin, threaded by reference. */
+  wheelLedger?: WheelLedger;
+  /** Carl's attack cow, threaded by reference like `mongoPetState`. */
+  attackCowState?: AttackCowState;
   /** Resident lore progress + the apothecary's batch, threaded by reference across building/scene transitions. */
   townMemory?: TownMemory;
   /**
@@ -851,6 +879,7 @@ const FORCED_TO_CAT = new Set<string>([
   'fae_scale_crupper',
   'slate_butterfly_talisman',
   'bracelet_of_dex',
+  'eyes_of_splatter',
 ]);
 
 /**
@@ -1317,6 +1346,10 @@ export class DungeonScene extends GameplayScene {
   private readonly midgeEscortCarry: MidgeEscortCarry;
   private readonly doomsdayQuestProgress: DoomsdayProgress;
   private readonly clubMembership: ClubMembership;
+  /** Read and written by the wheel host; saved as top-level fields. */
+  readonly wheelLedger: WheelLedger;
+  /** Read and written by the attack cow's system; saved as top-level fields. */
+  readonly attackCowState: AttackCowState;
   private readonly townMemory: TownMemory;
   private readonly partyCrafts: PartyCraftsState;
   /** Wraps `partyCrafts.tools` by reference; one instance for the scene's lifetime. */
@@ -1381,6 +1414,7 @@ export class DungeonScene extends GameplayScene {
   /** The prison door whose entry is waiting on the difficulty to play its stealth at. */
   private pendingPrisonEntry: BuildingEntry | null = null;
   private readonly mercenarySystem: MercenarySystem;
+  private readonly attackCowSystem: AttackCowSystem;
   private renderPipeline = new RenderPipeline();
   private bus = new EventBus();
   /** Stops forwarding the crawlers' quest-slot evictions onto this scene's bus; set while the scene is running. */
@@ -1553,6 +1587,8 @@ export class DungeonScene extends GameplayScene {
   private onSaveProgress: SaveProgressFn | undefined;
 
   private readonly onResetGameCallback: (() => void) | null;
+  private readonly progressWipe: ProgressWipe | null;
+  private readonly wipeHold = new WipeHold();
 
   protected readonly audio: AudioManager | null;
   /**
@@ -2055,6 +2091,20 @@ export class DungeonScene extends GameplayScene {
     this.midgeEscortCarry = options?.midgeEscortCarry ?? createMidgeEscortCarry();
     this.doomsdayQuestProgress = options?.doomsdayQuestProgress ?? createDoomsdayProgress();
     this.clubMembership = options?.clubMembership ?? createClubMembership();
+    this.wheelLedger = options?.wheelLedger ?? createWheelLedger();
+    this.attackCowState = options?.attackCowState ?? createAttackCowState();
+    // Whatever the wheel still owes (a spin a closed tab committed but never
+    // paid, a freeze not yet spent, a prize waiting for bag room) is paid
+    // now, silently, so a reload can never undo a spin.
+    settleWheelLedger(this.wheelLedger, {
+      human: this.human,
+      cat: this.cat,
+      grantAttackCow: () => {
+        this.attackCowState.owned = true;
+        this.attackCowState.hp = null;
+        this.attackCowState.restingUntilFull = false;
+      },
+    });
     this.townMemory = options?.townMemory ?? createTownMemory();
     this.partyCrafts = options?.partyCrafts ?? createPartyCraftsState();
     this.partyTools = new PartyTools(this.partyCrafts.tools);
@@ -2077,6 +2127,10 @@ export class DungeonScene extends GameplayScene {
         sound: (id) => this.audio?.play(id),
       },
     );
+    this.attackCowSystem = new AttackCowSystem(this.attackCowState, levelDef.floorNumber, {
+      toast: (message) => this.menus.toasts.post(message),
+      sound: (id) => this.audio?.play(id),
+    });
     this.arena = new ArenaSystem(
       this.gameMap,
       this.bus,
@@ -2271,9 +2325,12 @@ export class DungeonScene extends GameplayScene {
 
         // Save progress immediately so the floor is recorded as complete even if
         // the player closes the browser during the celebration screen.
-        this.dispatchSaveProgress({
-          humanSnap: revivedSnapshot(snapPlayer(this.human)),
-          catSnap: revivedSnapshot(snapPlayer(this.cat)),
+        const floorCompleteHumanSnap = revivedSnapshot(snapPlayer(this.human));
+        const floorCompleteCatSnap = revivedSnapshot(snapPlayer(this.cat));
+        void this.dispatchSaveProgress({
+          humanSnap: floorCompleteHumanSnap,
+          catSnap: floorCompleteCatSnap,
+          ...this.partyRunSaveFields(floorCompleteHumanSnap, floorCompleteCatSnap),
           levelId: levelDef.nextLevelId,
           abilityStates: this.abilityManager.serializeStates(),
           crafts: this.partyCrafts,
@@ -2301,6 +2358,8 @@ export class DungeonScene extends GameplayScene {
           // Dismiss Mongo and any hired merc before floor transition
           this.mongoSystem.dismiss(this.world.roster.mobs, this.world.roster.grid);
           this.mercenarySystem.dismissForTransition(this.world.roster.mobs, this.world.roster.grid);
+          this.attackCowSystem.dismiss(this.world.roster.mobs, this.world.roster.grid);
+          this.attackCowSystem.prepareForNewFloor();
           // Gives back this floor's own pinned crowd explicitly, rather than
           // leaning only on the cache-wide flush below to clear it.
           this.townLife?.dispose();
@@ -2331,6 +2390,8 @@ export class DungeonScene extends GameplayScene {
               catAchievements: this.catAchievements,
               mongoUnlocked: this.mongoSystem.unlocked,
               mongoPetState: this.mongoPetState,
+              wheelLedger: this.wheelLedger,
+              attackCowState: this.attackCowState,
               abilityManager: this._cleanAbilityManager(),
               // Party progress, not floor state: an axe bought on this floor is
               // still the axe in hand on the next one.
@@ -2338,6 +2399,7 @@ export class DungeonScene extends GameplayScene {
               saveProgress: this.onSaveProgress,
               audio: this.audio ?? undefined,
               onResetGame: this.onResetGameCallback ?? undefined,
+              progressWipe: this.progressWipe ?? undefined,
               godModeState: this.godModeState,
               companionStance: this.companionStance,
               // Unlike the journal or the club, this is run-scoped: a trait
@@ -2668,6 +2730,7 @@ export class DungeonScene extends GameplayScene {
       latch.wasInside = options?.suppressArrivalSave === true;
     }
     this.onResetGameCallback = options?.onResetGame ?? null;
+    this.progressWipe = options?.progressWipe ?? null;
     // Additive and cheap even on a re-entry: `preload` skips any id already in
     // `buffers`, so this just tops up whatever this floor needs without
     // re-decoding what a previous floor already loaded. This is the per-floor
@@ -2776,7 +2839,8 @@ export class DungeonScene extends GameplayScene {
     if (this.audio !== null) {
       aiAdapter.messages.setAudio(this.audio);
     }
-    this.menus.pauseScreen.onResetGame = this.onResetGameCallback;
+    this.menus.pauseScreen.onResetGame =
+      this.onResetGameCallback === null ? null : () => this.resetGame();
     this.menus.pauseScreen.skipAudioPause = () =>
       this.tutorial !== null &&
       (this.tutorial.state === 'HUMAN_OPENED_ACHIEVEMENT' ||
@@ -2988,6 +3052,9 @@ export class DungeonScene extends GameplayScene {
 
     bus.on('spawnGore', (e) => {
       this.combat.spawnGore(e.x, e.y, e.impactDx, e.impactDy);
+    });
+    bus.on('bloodVomitRetch', (e) => {
+      this.combat.spawnGore(e.x, e.y, e.dirX, e.dirY);
     });
 
     // ── stats tracking ──
@@ -4099,15 +4166,19 @@ export class DungeonScene extends GameplayScene {
   }
 
   /**
-   * The cheats only this floor can answer. The universal four (`!god`,
-   * `!tough`, `!payday`, `!levelup`) live in `ChatKit`; these reach systems that
-   * exist nowhere else, so a scene without them simply does not offer them.
+   * The cheats this scene adds to the universal ones in `ChatKit`. They reach
+   * systems a scene may not have, so a scene without those systems simply does
+   * not offer them.
    */
   private dungeonChatCommands(): ReadonlyArray<ChatCommand> {
     return [
       {
         name: '!fairy',
         run: (argument) => this.runFairyCheat(argument),
+      },
+      {
+        name: '!cow',
+        run: () => (this.grantAttackCow() ? '🐄 ATTACK COW' : null),
       },
       {
         name: '!reveal',
@@ -4153,6 +4224,14 @@ export class DungeonScene extends GameplayScene {
         },
       },
     ];
+  }
+
+  /**
+   * Gives the party Carl's attack cow and stands her beside him now — the
+   * wheel's prize, and the `!cow` cheat. Returns false if she is already owned.
+   */
+  grantAttackCow(): boolean {
+    return this.attackCowSystem.grant(this.human, this.gameMap, this.world.roster);
   }
 
   /**
@@ -4270,6 +4349,7 @@ export class DungeonScene extends GameplayScene {
     // standing where the party no longer is.
     this.mongoSystem.dismiss(this.world.roster.mobs, this.world.roster.grid);
     this.mercenarySystem.dismissForTransition(this.world.roster.mobs, this.world.roster.grid);
+    this.attackCowSystem.dismiss(this.world.roster.mobs, this.world.roster.grid);
     this.placePartyAtTile(landing);
     return true;
   }
@@ -4528,6 +4608,9 @@ export class DungeonScene extends GameplayScene {
     // A standing hire's health goes into the roster the interior stands it
     // up from; a hire lying downed at the door is lost with this scene.
     this.mercenarySystem.dismissForTransition(this.world.roster.mobs, this.world.roster.grid);
+    // Her health goes into the shared state the interior stands her up from;
+    // down at the door, she goes to rest instead.
+    this.attackCowSystem.dismiss(this.world.roster.mobs, this.world.roster.grid);
     // The prison admits neither companion: they wait in the gate room, and
     // Mongo walks back out with the party exactly as he stood at the door.
     const companionsWaitOutside = entry.type === 'prison';
@@ -4636,6 +4719,7 @@ export class DungeonScene extends GameplayScene {
         heldFloor === null
           ? TOWN_INTERIOR_FLOOR
           : this.interiorFloorContext(heldFloor, entry, prisonDifficulty),
+        this.interiorPartyRun(),
       ),
     );
   }
@@ -4714,6 +4798,10 @@ export class DungeonScene extends GameplayScene {
     return {
       ...heldFloor,
       world: { ...heldFloor.world, stealthKeySnatch: this.stealthKeySnatch.captureCheckpoint() },
+      // Read now rather than kept from the door: a save committed indoors
+      // replaces the door's, and a death outside has to land on it.
+      lastSave: this.lastSave,
+      lastSavePointTile: this.lastSavePointTile,
     };
   }
 
@@ -4747,12 +4835,15 @@ export class DungeonScene extends GameplayScene {
       catAchievements: this.catAchievements,
       mongoUnlocked: this.mongoSystem.unlocked,
       mongoPetState: this.mongoPetState,
+      wheelLedger: this.wheelLedger,
+      attackCowState: this.attackCowState,
       mongoWasOut: companionDeparture.mongoWasOut,
       abilityManager: this._cleanAbilityManager(),
       partyCrafts: this.partyCrafts,
       saveProgress: this.onSaveProgress,
       audio: this.audio ?? undefined,
       onResetGame: this.onResetGameCallback ?? undefined,
+      progressWipe: this.progressWipe ?? undefined,
       circusQuestProgress: this.circusQuestProgress,
       murderQuestProgress: this.murderQuestProgress,
       anchorQuestProgress: this.anchorQuestProgress,
@@ -4827,6 +4918,7 @@ export class DungeonScene extends GameplayScene {
         audio: this.audio ?? undefined,
         saveProgress: this.onSaveProgress,
         onResetGame: this.onResetGameCallback ?? undefined,
+        progressWipe: this.progressWipe ?? undefined,
         humanAchievements: this.humanAchievements,
         catAchievements: this.catAchievements,
         // A respawn is not a new floor, so a later floor restart still rewinds
@@ -4845,7 +4937,7 @@ export class DungeonScene extends GameplayScene {
         gameStats: this.gameStats,
         skipIntro: true,
       },
-      progress,
+      progressForRespawn(progress),
     );
     // The save's own floor may not be this one, so the crowd this scene
     // pinned (if any) has no guaranteed successor to inherit it.
@@ -4929,6 +5021,8 @@ export class DungeonScene extends GameplayScene {
     // mercenary taken on after the safe room, and nothing reachable from a
     // snapshot can splice the body out of the scene once that reference is gone.
     this.mercenarySystem.dismiss(this.world.roster.mobs, this.world.roster.grid);
+    // Before her state is rewound below: the dismiss writes her health into it.
+    this.attackCowSystem.dismiss(this.world.roster.mobs, this.world.roster.grid);
 
     this.rewindRosterToCheckpoint();
 
@@ -5062,6 +5156,7 @@ export class DungeonScene extends GameplayScene {
       marketStock: captureMarketStock(this.marketStock),
       mercenaryRoster: captureMercenaryRoster(this.mercenaryRoster),
       mongoPetState: captureMongoPetState(this.mongoPetState),
+      attackCowState: captureAttackCowState(this.attackCowState),
       briarHollow: captureBriarHollowState(this.briarHollowState),
 
       krakarenKilled: this.krakarenKilled,
@@ -5167,6 +5262,8 @@ export class DungeonScene extends GameplayScene {
     // and rest latch into this very object on its way out — restoring first
     // would hand the despawn a snapshot to overwrite.
     restoreMongoPetState(this.mongoPetState, world.mongoPetState);
+    // After `attackCowSystem.dismiss()` for the same reason as the pet's.
+    restoreAttackCowState(this.attackCowState, world.attackCowState);
     restoreBriarHollowState(this.briarHollowState, world.briarHollow);
   }
 
@@ -5342,19 +5439,104 @@ export class DungeonScene extends GameplayScene {
    * than rewinding to an older moment than the one just persisted.
    */
   private saveProgress(checkpoint: LevelCheckpoint | null): void {
-    const progress: GameProgressInput = {
-      humanSnap: revivedSnapshot(snapPlayer(this.human)),
-      catSnap: revivedSnapshot(snapPlayer(this.cat)),
-      levelId: this.levelDef.id,
-      abilityStates: this.abilityManager.serializeStates(),
-      crafts: this.partyCrafts,
-      mongoUnlocked: this.mongoSystem.unlocked,
+    const progress = this.buildSaveProgress({
+      human: snapPlayer(this.human),
+      cat: snapPlayer(this.cat),
       // The system's accessor, not the stored value: both of these saves can
       // fire with Mongo still out, and the stored value is only written back
       // when he despawns — so a safe room entered with a 5/130 raptor at the
       // player's heel was recording 130.
       mongoPetHp: this.mongoSystem.hp,
       mongoPetResting: this.mongoSystem.restingUntilFull,
+    });
+    this.lastSave = savePointAfterWrite(progress, checkpoint, this.tutorial !== null);
+    void this.dispatchSaveProgress(progress);
+  }
+
+  /**
+   * Writes a save from inside a building on this floor, with the party as it
+   * stands indoors, and once storage has taken it, makes it the save a death
+   * respawns from. The world
+   * half is this scene's own, still the one the party walks back out into.
+   * Resolves once storage has answered, for a caller that must not run ahead
+   * of the write.
+   */
+  private commitSaveFromInterior(party: SaveParty): Promise<SaveWriteOutcome> {
+    const progress = this.buildSaveProgress(party);
+    const previous = this.lastSave;
+    const point = savePointAfterWrite<LevelCheckpoint>(progress, null, this.tutorial !== null);
+    return adoptWhenCommitted(
+      this.dispatchSaveProgress(progress),
+      () => this.lastSave === previous,
+      () => {
+        this.lastSave = point;
+      },
+    );
+  }
+
+  /** Reset Game: wipes the save behind a blocking hold, then restarts. */
+  private resetGame(): void {
+    const restart = this.onResetGameCallback;
+    if (restart === null) return;
+    if (this.progressWipe === null) {
+      restart();
+      return;
+    }
+    this.wipeHold.begin(this.progressWipe, restart);
+  }
+
+  private interiorPartyRun(): InteriorPartyRun {
+    return {
+      wheelLedger: this.wheelLedger,
+      attackCowState: this.attackCowState,
+      commitSave: (party) => this.commitSaveFromInterior(party),
+      progressWipe: this.progressWipe,
+    };
+  }
+
+  /** The top-level fields the wheel, the cow and the blood vomit keep. */
+  private partyRunSaveFields(
+    humanSnap: PlayerSnapshot,
+    catSnap: PlayerSnapshot,
+  ): Pick<
+    GameProgressInput,
+    | 'wheelPrizesWon'
+    | 'pendingWheelOutcome'
+    | 'wheelFreeSpinBet'
+    | 'wheelOwedFreeze'
+    | 'wheelOwedItems'
+    | 'bloodVomitRemaining'
+    | 'attackCowOwned'
+    | 'attackCowHp'
+    | 'attackCowResting'
+  > {
+    return {
+      wheelPrizesWon: [...this.wheelLedger.prizesWon],
+      pendingWheelOutcome:
+        this.wheelLedger.pendingOutcome === null ? null : { ...this.wheelLedger.pendingOutcome },
+      wheelFreeSpinBet: this.wheelLedger.freeSpinBet,
+      wheelOwedFreeze: this.wheelLedger.owedFreeze,
+      wheelOwedItems: this.wheelLedger.owedItems.map((item) => ({ ...item })),
+      bloodVomitRemaining: bloodVomitRemainingOf(humanSnap, catSnap),
+      attackCowOwned: this.attackCowState.owned,
+      attackCowHp: this.attackCowState.hp ?? undefined,
+      attackCowResting: this.attackCowState.restingUntilFull,
+    };
+  }
+
+  private buildSaveProgress(party: SaveParty): GameProgressInput {
+    const humanSnap = revivedSnapshot(party.human);
+    const catSnap = revivedSnapshot(party.cat);
+    return {
+      humanSnap,
+      catSnap,
+      ...this.partyRunSaveFields(humanSnap, catSnap),
+      levelId: this.levelDef.id,
+      abilityStates: this.abilityManager.serializeStates(),
+      crafts: this.partyCrafts,
+      mongoUnlocked: this.mongoSystem.unlocked,
+      mongoPetHp: party.mongoPetHp,
+      mongoPetResting: party.mongoPetResting,
       humanAchievements: this.humanAchievements.serialize(),
       catAchievements: this.catAchievements.serialize(),
       gameStats: this.gameStats.snapshot(),
@@ -5368,12 +5550,27 @@ export class DungeonScene extends GameplayScene {
               safeRoomTile: this.lastSavePointTile,
               levelTimerFrames:
                 this.levelDef.hasCollapseTimer === true ? this.levelTimerFrames : null,
-              persisted: this.capturePersistedWorldState(),
+              persisted: this.persistedWorldStateFor(party),
             }
           : undefined,
     };
-    this.lastSave = savePointAfterWrite(progress, checkpoint, this.tutorial !== null);
-    this.dispatchSaveProgress(progress);
+  }
+
+  /**
+   * The floor's persisted state with Mongo as the saving party has him. A save
+   * written indoors carries the pet the interior's own system holds, and the
+   * pet state in the persisted world is what a resume applies last.
+   */
+  private persistedWorldStateFor(party: SaveParty): PersistedWorldState {
+    const persisted = this.capturePersistedWorldState();
+    return {
+      ...persisted,
+      mongoPetState: {
+        ...persisted.mongoPetState,
+        hp: party.mongoPetHp,
+        restingUntilFull: party.mongoPetResting,
+      },
+    };
   }
 
   /**
@@ -5383,9 +5580,17 @@ export class DungeonScene extends GameplayScene {
    * cue fire for every checkpoint, safe-room save and floor-complete save
    * without each call site having to remember to announce itself.
    */
-  private dispatchSaveProgress(progress: GameProgressInput): void {
-    this.onSaveProgress?.(progress);
+  private dispatchSaveProgress(progress: GameProgressInput): Promise<SaveWriteOutcome> {
+    // No banner either: a wiped run is on its way to a reload, and announcing
+    // a save that was thrown away would be a lie.
+    if (PAGE_SAVE_LATCH.engaged) return Promise.resolve('latched');
+    if (this.onSaveProgress === undefined) {
+      this.bus.emit('gameSaved', {});
+      return Promise.resolve('disabled');
+    }
+    const outcome = this.onSaveProgress(progress);
     this.bus.emit('gameSaved', {});
+    return outcome;
   }
 
   /** The party is down the escape stairwell: the game is won. */
@@ -5434,6 +5639,7 @@ export class DungeonScene extends GameplayScene {
       audio: this.audio ?? undefined,
       saveProgress: this.onSaveProgress,
       onResetGame: this.onResetGameCallback ?? undefined,
+      progressWipe: this.progressWipe ?? undefined,
     };
     const save = this.lastSave?.progress ?? null;
     const onContinue =
@@ -5736,7 +5942,12 @@ export class DungeonScene extends GameplayScene {
    * A downed hireling is the same case: the roster still names it standing.
    */
   private get isRevivePending(): boolean {
-    return this.human.isKnockedOut || this.cat.isKnockedOut || this.mercenarySystem.revivePending;
+    return (
+      this.human.isKnockedOut ||
+      this.cat.isKnockedOut ||
+      this.mercenarySystem.revivePending ||
+      this.attackCowSystem.revivePending
+    );
   }
 
   /**
@@ -5793,6 +6004,7 @@ export class DungeonScene extends GameplayScene {
     // failed attempt go with it; deaths and time played are the run's and stay.
     this.gameStats.restore(this.floorEntryGameStats);
     this.mercenarySystem.dismiss(this.world.roster.mobs, this.world.roster.grid);
+    this.attackCowSystem.dismiss(this.world.roster.mobs, this.world.roster.grid);
     restoreMercenaryRoster(this.mercenaryRoster, this.floorEntryMercenaryRoster);
     // A fresh-seed restart of the same floor identity — the new scene's own
     // `TownLifeSystem` (if this is a town) pins its own crowd moments from
@@ -5800,8 +6012,9 @@ export class DungeonScene extends GameplayScene {
     this.townLife?.dispose();
     this.sceneManager.replace(
       new DungeonScene(this.levelDef, this.input, this.sceneManager, {
-        humanSnap: this.floorEntryHumanSnap,
-        catSnap: this.floorEntryCatSnap,
+        // Only ever reached from a death, which clears the incurable statuses.
+        humanSnap: withoutIncurableStatuses(this.floorEntryHumanSnap),
+        catSnap: withoutIncurableStatuses(this.floorEntryCatSnap),
         floorEntryHumanSnap: this.floorEntryHumanSnap,
         floorEntryCatSnap: this.floorEntryCatSnap,
         humanAchievements: this.floorEntryHumanAchievements.clone(),
@@ -5815,11 +6028,14 @@ export class DungeonScene extends GameplayScene {
         abilityManager: this.floorEntryAbilityManager.clone(),
         mongoUnlocked: this.mongoSystem.unlocked,
         mongoPetState: this.mongoPetState,
+        wheelLedger: this.wheelLedger,
+        attackCowState: this.attackCowState,
         audio: this.audio ?? undefined,
         tutorialController:
           this.tutorial !== null ? TutorialController.createForTutorial() : undefined,
         saveProgress: this.onSaveProgress,
         onResetGame: this.onResetGameCallback ?? undefined,
+        progressWipe: this.progressWipe ?? undefined,
         // Preserved rather than reset — a death restart shouldn't force-replay an
         // already-completed boss fight (Grimaldi/Quill), and for the doomsday
         // timer specifically, resetting it here would let a player cancel a
@@ -6145,6 +6361,7 @@ export class DungeonScene extends GameplayScene {
     const tutorial = this.tutorial;
     return [
       ...this.arrivalLoading.surfaces(),
+      this.wipeHold.surface('wipe-hold'),
       promptSurface(),
       this.hud,
       this.hud.overlay(),
@@ -7602,6 +7819,7 @@ export class DungeonScene extends GameplayScene {
     lighting.addDynamicLightSource(this.knightMissiles);
     lighting.addDynamicLightSource(this.skeletonShots);
     lighting.addDynamicLightSource(this.combat.spells);
+    lighting.addDynamicLightSource(this.combat.taranis);
     lighting.addDynamicLightSource(this.destruction.destructibles);
     lighting.addDynamicLightSource({
       collectLights: (sink) => {
@@ -7666,6 +7884,8 @@ export class DungeonScene extends GameplayScene {
     if (mongo?.isAlive === true) party.push(mongo);
     const hireling = this.mercenarySystem.activeMerc;
     if (hireling !== null) party.push(hireling);
+    const cow = this.attackCowSystem.standingCow;
+    if (cow !== null) party.push(cow);
     const camera = this.camera();
     const lifeFrame = this._lifeFrame;
     lifeFrame.others = this.world.roster.mobs;
@@ -7709,6 +7929,8 @@ export class DungeonScene extends GameplayScene {
     if (standing !== null) companions.push({ x: standing.x, y: standing.y, downed: false });
     const downed = this.mercenarySystem.downedMerc;
     if (downed !== null) companions.push({ x: downed.x, y: downed.y, downed: true });
+    const cow = this.attackCowSystem.cow;
+    if (cow !== null) companions.push({ x: cow.x, y: cow.y, downed: !cow.isStanding });
     return companions;
   }
 
@@ -7829,6 +8051,7 @@ export class DungeonScene extends GameplayScene {
       dynamite: this.destruction.dynamite,
       smushFx: this.combat.smushFx,
       meleeFx: this.combat.meleeFx,
+      taranisFx: this.combat.taranis,
       missileFx: this.combat.missileFx,
       lavaBalls: this.lavaBalls,
       rockThrows: this.rockThrows,
@@ -7851,6 +8074,7 @@ export class DungeonScene extends GameplayScene {
       miniMap: this.miniMap,
       mongoSystem: this.mongoSystem,
       mercenarySystem: this.mercenarySystem,
+      attackCowSystem: this.attackCowSystem,
       crawlerBarks: this.crawlerBarks,
       speechBubblePulse: this.speechBubblePulse,
       goreUnderDarkness: this.dungeonLighting !== null,
@@ -7983,6 +8207,13 @@ export class DungeonScene extends GameplayScene {
           this.active(),
           visibilityRadiusPx(this.active()),
           framesRect,
+        ),
+        this.attackCowSystem.downedArrowCandidate(
+          ctx,
+          camX,
+          camY,
+          this.active(),
+          visibilityRadiusPx(this.active()),
         ),
         this.stairwellRevealArrowCandidate(ctx, camX, camY),
         this.spiderLabArrowCandidate(ctx, camX, camY),
@@ -8274,6 +8505,8 @@ export class DungeonScene extends GameplayScene {
     const mongo = this.mongoSystem.mongo;
     if (mongo && !mongo.recalling && !mongo.collapsing) targets.push(mongo);
     if (this.mercenarySystem.activeMerc) targets.push(this.mercenarySystem.activeMerc);
+    const attackCow = this.attackCowSystem.standingCow;
+    if (attackCow !== null) targets.push(attackCow);
     this.briarHollowKit?.pushAlliedDefenders(targets);
     this.briarHollowKit?.pushEscortTargets(targets);
     const npc = this.defendQuest.questNPC;
@@ -8632,6 +8865,7 @@ export class DungeonScene extends GameplayScene {
 
     this.mongoSystem.checkHealth();
     this.mercenarySystem.checkHealth((merc) => this.combat.spawnKillGore(merc, null));
+    this.attackCowSystem.checkHealth();
     this.combat.resolveKills();
 
     this.combat.resolveSpellAftermath();
@@ -8640,6 +8874,7 @@ export class DungeonScene extends GameplayScene {
     this.mongoSystem.update(ctx);
     this.autoSummonMongo(ctx);
     this.mercenarySystem.update(ctx);
+    this.attackCowSystem.update(ctx);
     this.seatCompanionsAtPrisonDoor();
     this.enterPrisonForDev();
     this.drainWardExplainerBarks();
@@ -8648,6 +8883,7 @@ export class DungeonScene extends GameplayScene {
       this.mercenarySystem.warnIfLeavingDowned();
     }
     this.pm.tickTimers();
+    drainBloodVomitRetches([this.human, this.cat], this.bus);
 
     if (this.human.effectDamageSoundPending) {
       this.human.effectDamageSoundPending = false;

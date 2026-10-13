@@ -35,7 +35,8 @@
  */
 
 import { PLAYER_SPEED, TILE_SIZE } from '../../src/core/constants';
-import { CHILLED_STATUS, FROZEN_STATUS } from '../../src/core/StatusEffect';
+import { CHILLED_STATUS, FROZEN_STATUS, makeBurn } from '../../src/core/StatusEffect';
+import type { ItemId } from '../../src/core/ItemDefs';
 import { applyIceHit } from '../../src/core/frostStatus';
 import { CatPlayer } from '../../src/creatures/CatPlayer';
 import { HumanPlayer } from '../../src/creatures/HumanPlayer';
@@ -114,6 +115,8 @@ const DURABLE_CONSTITUTION = 100;
 const THROW_LIMIT_FRAMES = 400;
 /** Frames granted for a landed charge to go off. */
 const CHARGE_LIMIT_FRAMES = 600;
+/** A ring that turns fire fairy magic away and nothing else. */
+const FIRE_FAIRY_RING: ItemId = 'ring_of_the_asbestos_knuckle';
 /** Frames a sealed-off or out-of-range fairy is given to (fail to) throw. */
 const REFUSAL_FRAMES = 200;
 /** The frozen crawler's walk: due east, one unit of input. */
@@ -1089,6 +1092,30 @@ function checkFuseAndDeathFlame(report: FairyGateReport): void {
     report.checkCatches(
       !blastBurned,
       "under the same rolls, a charge's blast (which may burn) is caught setting the crawler alight",
+    );
+
+    const warded = fireStage();
+    warded.pm.human.inventory.addItem(FIRE_FAIRY_RING, 1);
+    warded.pm.human.inventory.equipByItemId(FIRE_FAIRY_RING);
+    report.precondition(
+      warded.pm.human.inventory.equipment.isEquipped(FIRE_FAIRY_RING),
+      'the warded crawler is wearing the fire-fairy ring',
+    );
+    const wardedStartHp = warded.pm.human.hp;
+    let wardedBurned = false;
+    for (let n = 1; n <= CHARGE_LIMIT_FRAMES; n++) {
+      warded.step(null);
+      if (warded.pm.human.hasStatus('burn')) wardedBurned = true;
+    }
+    report.check(
+      warded.pm.human.hp === wardedStartHp && !wardedBurned,
+      'under the same rolls, a crawler wearing a fire-fairy ring takes no fireball damage and no burn',
+      `hp ${wardedStartHp} -> ${warded.pm.human.hp}, burned ${wardedBurned}`,
+    );
+    warded.pm.human.applyStatus(makeBurn());
+    report.check(
+      warded.pm.human.hasStatus('burn'),
+      'the fire-fairy ring still lets a burn from any other source land',
     );
   } finally {
     Math.random = random;

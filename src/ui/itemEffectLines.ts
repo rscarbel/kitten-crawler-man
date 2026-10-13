@@ -1,5 +1,5 @@
 import { ALL_STATS, POTION_HEAL_FRACTION, type StatName } from '../Player';
-import type { InventoryItem, ResistanceType } from '../core/ItemDefs';
+import type { FairyElement, InventoryItem, ResistanceType } from '../core/ItemDefs';
 import { getSkillDef, SKILL_IDS } from '../core/SkillManager';
 import {
   HAMBURGER_FED_DURATION_SECONDS,
@@ -24,6 +24,18 @@ const RESISTANCE_LABELS: Record<ResistanceType, string> = {
   piercing: 'Piercing',
 };
 
+const FAIRY_ELEMENT_LABELS: Record<FairyElement, string> = {
+  ice: 'ice',
+  fire: 'fire',
+};
+
+/** The one wording for fairy immunity, shared by item tooltips and the worn-gear summary. */
+export function fairyImmunityLine(elements: readonly FairyElement[]): string | null {
+  if (elements.length === 0) return null;
+  const named = elements.map((element) => FAIRY_ELEMENT_LABELS[element]).join(' and ');
+  return `Immune to ${named} fairies`;
+}
+
 const WEARER_LABELS = { cat: 'Cat only', human: 'Human only' } as const;
 
 /** Rounded to whole percent because a tooltip is read, not calculated against. */
@@ -32,8 +44,8 @@ export function asPercent(fraction: number): number {
 }
 
 /**
- * Human-readable effect lines for an item: stat bonuses, resistances, reflect,
- * skill bonuses, stun chance, regen.
+ * Human-readable effect lines for an item: stat bonuses, resistances, fairy
+ * immunities, reflect, skill bonuses, stun chance, regen.
  *
  * The single source every panel that describes an item draws from, so an item
  * gaining an effect shows up everywhere at once instead of only wherever
@@ -63,6 +75,9 @@ export function describeItemEffects(item: InventoryItem): string[] {
     const named = resistances.map((type) => RESISTANCE_LABELS[type]).join(', ');
     lines.push(`Resists: ${named}`);
   }
+
+  const fairyImmunity = fairyImmunityLine(item.fairyImmunities ?? []);
+  if (fairyImmunity !== null) lines.push(fairyImmunity);
 
   if (item.damageReflectPct) {
     lines.push(`Reflects ${asPercent(item.damageReflectPct)}% of melee damage`);

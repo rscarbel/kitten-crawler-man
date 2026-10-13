@@ -2,7 +2,7 @@ import type { DungeonSceneOptions } from './DungeonScene';
 import type { GameProgressInput } from '../auth/AuthClient';
 import type { LevelDef } from '../levels/types';
 import { getLevelDef, tutorialLevel } from '../levels/index';
-import { revivedSnapshot } from '../core/PlayerSnapshot';
+import { revivedSnapshot, withoutIncurableStatuses } from '../core/PlayerSnapshot';
 import { AbilityManager } from '../core/AbilityManager';
 import { MAGIC_MISSILE_DEF } from '../abilities/magicMissile';
 import { PROTECTIVE_SHELL_DEF } from '../abilities/protectiveShell';
@@ -13,6 +13,9 @@ import { parseSavedWorld } from '../core/SavedWorld';
 import { AchievementManager } from '../core/AchievementManager';
 import { GameStats, parseGameStatsSnapshot } from '../core/GameStats';
 import { createPartyCraftsState } from '../core/partyCrafts';
+import { createWheelLedger } from '../core/WheelLedger';
+import { createAttackCowState } from '../core/AttackCowState';
+import { withBloodVomitFrames } from '../core/bloodVomitSave';
 
 /**
  * An ability manager carrying a save's progress, or a fresh one at level 1.
@@ -30,6 +33,22 @@ function resumedAbilityManager(states: GameProgressInput['abilityStates']): Abil
   manager.register(MONGO_DEF);
   if (states !== undefined) manager.restoreSerializedStates(states);
   return manager;
+}
+
+/**
+ * The save as a party respawning after a death comes back from it: the same
+ * save with the `INCURABLE_STATUSES` a death clears taken off both
+ * crawlers and their saved time zeroed, so the respawn and the next save both
+ * show them gone. A reload or a Continue is not a death and restores the save
+ * as written.
+ */
+export function progressForRespawn(progress: GameProgressInput): GameProgressInput {
+  return {
+    ...progress,
+    humanSnap: withoutIncurableStatuses(progress.humanSnap),
+    catSnap: withoutIncurableStatuses(progress.catSnap),
+    bloodVomitRemaining: { human: 0, cat: 0 },
+  };
 }
 
 /** The floor a save stands on and the scene options that rebuild it there. */
@@ -57,8 +76,30 @@ export function sceneSetupFromSave(
   const options: DungeonSceneOptions = { ...baseOptions };
   // Loading straight into a wipe is never recoverable — the same save would
   // reload into the same wipe — so a resumed party always arrives on its feet.
-  options.humanSnap = revivedSnapshot(progress.humanSnap);
-  options.catSnap = revivedSnapshot(progress.catSnap);
+  options.humanSnap = withBloodVomitFrames(
+    revivedSnapshot(progress.humanSnap),
+    progress.bloodVomitRemaining?.human ?? 0,
+  );
+  options.catSnap = withBloodVomitFrames(
+    revivedSnapshot(progress.catSnap),
+    progress.bloodVomitRemaining?.cat ?? 0,
+  );
+  options.wheelLedger = createWheelLedger(
+    progress.wheelPrizesWon ?? [],
+    progress.pendingWheelOutcome ?? null,
+    progress.wheelFreeSpinBet ?? null,
+    progress.wheelOwedFreeze ?? null,
+    progress.wheelOwedItems ?? [],
+  );
+  // A cow saved resting has had her rest by the time the game is loaded again:
+  // she comes back whole, as she would on the next floor.
+  const savedCowHp = progress.attackCowHp ?? null;
+  const cowRested = progress.attackCowResting === true || (savedCowHp !== null && savedCowHp <= 0);
+  options.attackCowState = createAttackCowState(
+    progress.attackCowOwned ?? false,
+    cowRested ? null : savedCowHp,
+    false,
+  );
   options.abilityManager = resumedAbilityManager(progress.abilityStates);
   options.mongoUnlocked = progress.mongoUnlocked ?? false;
   options.partyCrafts = progress.crafts ?? createPartyCraftsState();

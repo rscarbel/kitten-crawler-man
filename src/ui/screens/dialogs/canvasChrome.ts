@@ -36,6 +36,7 @@ export function lootTierColor(theme: Theme, tier: BoxTier): string {
     Bronze: tiers.bronze,
     Silver: tiers.silver,
     Gold: tiers.gold,
+    Platinum: tiers.platinum,
     Legendary: tiers.legendary,
     Celestial: tiers.celestial,
   };

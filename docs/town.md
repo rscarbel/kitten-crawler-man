@@ -516,6 +516,30 @@ undressed floor bigger than `MAX_EMPTY_SQUARE_TILES` (4×4). A walkable prop cou
 dressed, and a one-tile ring round the entrance is exempt. It bounds a square, so a long
 empty strip still passes.
 
+### The Desperado Club's casino corner
+
+The club is not built from a layout file: its rooms and stations are fixed in
+`src/core/clubLayout.ts` and its furniture in `src/core/clubProps.ts`
+(`CLUB_PROPS`, with `CLUB_FURNITURE_TILES` derived from it). Club props block their
+footprint **and** the rows their art rises into, so a crawler can never stand where a
+counter is painted over them.
+
+- **The casino zone** is the north-east alcove, tiles x18–22, y1–8 (`CLUB_ZONES`), with
+  no painted label because its back wall is dressed corner to corner.
+- **The station** is tile (20, 4) (`CLUB_STATIONS`), behind the blackjack table; its
+  prompt verb is "Play", and every game is reached from it.
+- **The Wheel of Fortune** stands on the back wall, footprint x20–22 on row 2. Tito's
+  counter sits below its east end, and **`CLUB_TITO_POST`** (22, 3) is his mark behind it;
+  the counter's art covers that tile, and `isClubPatronTile` keeps patrons off it. The
+  poker table is tucked into the corner at (18, 2), the blackjack table at (19, 5).
+- **The slot bank** is three cabinets on row 8 from x20 (`SLOT_BANK_FIRST_TILE`,
+  `SLOT_BANK_CABINETS`), leaving x18–19 open as the way in from the east corridor. Each
+  cabinet sets `openBehind`, which blocks only its footprint: the row behind the
+  cabinets stays walkable floor, joined to the aisle behind the blackjack stools, and a
+  crawler there sorts before the cabinet and reads as standing behind it.
+- The wheel and the slot cabinets carry chasing-bulb overlays (`ClubPropLights`) on
+  their own sheets, so the lights animate without repainting the prop.
+
 ### Examine, search, use, break
 
 A prop def may carry an `interaction` (`{ kind: 'examine' | 'search' | 'use', id }`) and a

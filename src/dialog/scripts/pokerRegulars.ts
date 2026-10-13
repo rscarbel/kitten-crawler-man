@@ -22,7 +22,7 @@ import type { RegularId } from '../../systems/casino/poker/npc/regulars';
 type BanterPool = Readonly<Record<PokerBanterTrigger, NonEmpty<string>>>;
 
 /** The cast entry each regular speaks as. */
-export const REGULAR_SPEAKERS: Readonly<Record<RegularId, SpeakerId>> = {
+export const REGULAR_SPEAKERS = {
   wren: 'pokerWren',
   grizzle: 'pokerGrizzle',
   ottoline: 'pokerOttoline',
@@ -37,7 +37,7 @@ export const REGULAR_SPEAKERS: Readonly<Record<RegularId, SpeakerId>> = {
   vane: 'pokerVane',
   brisket: 'pokerBrisket',
   mags: 'pokerMags',
-};
+} as const satisfies Record<RegularId, SpeakerId>;
 
 const GRUMBLER: BanterPool = {
   sit_down: [
@@ -389,14 +389,14 @@ const PHILOSOPHER: BanterPool = {
   ],
 };
 
-export const POKER_REGULAR_LINES: Readonly<Record<BanterSetId, BanterPool>> = {
+export const POKER_REGULAR_LINES = {
   grumbler: GRUMBLER,
   charmer: CHARMER,
   braggart: BRAGGART,
   fretter: FRETTER,
   deadpan: DEADPAN,
   philosopher: PHILOSOPHER,
-};
+} as const satisfies Record<BanterSetId, BanterPool>;
 
 /** `fresh` as a `NonEmpty` pool, or `fallback` when filtering left nothing. */
 function freshOrFallback(fresh: readonly string[], fallback: NonEmpty<string>): NonEmpty<string> {
@@ -433,7 +433,7 @@ export function pickRegularLine(
  * tell raises these: a regular who talks more, or less, depending on what they
  * hold. Like every line here, none hints at how the speaker plays.
  */
-export const POKER_CHATTER_LINES: Readonly<Record<BanterSetId, NonEmpty<string>>> = {
+export const POKER_CHATTER_LINES = {
   grumbler: [
     '"This chair has a wobble. Every chair has a wobble."',
     '"Is it warm in here or is it just the losing?"',
@@ -460,7 +460,7 @@ export const POKER_CHATTER_LINES: Readonly<Record<BanterSetId, NonEmpty<string>>
     '"The felt is green so we forget it is a battlefield."',
     '"To wait is also to play."',
   ],
-};
+} as const satisfies Record<BanterSetId, NonEmpty<string>>;
 
 /** What a regular "says" when the chatter tell has them fall quiet: a pointed silence. */
 export const POKER_QUIET_LINE = '…';

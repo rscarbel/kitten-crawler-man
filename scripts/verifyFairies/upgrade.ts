@@ -224,7 +224,10 @@ function everyRoomUpgradeDef(): LevelDef {
 /**
  * Whether any walkable tile of `room` can walk to the floor's start without
  * setting foot in `blocked`. Walked from the room outward, the opposite
- * direction to the spawner's flood, so the two share no code.
+ * direction to the spawner's flood, so the two share no code. The bathroom
+ * queue and the stealth gate are walked as open: "past" is a fact about the
+ * floor's route, and both still stand at floor load though neither changes
+ * which side of the safe room a room is on.
  */
 function roomReachesStart(map: GameMap, room: TileRect, blocked: TileRect | null): boolean {
   const rows = map.structure.length;
@@ -234,7 +237,7 @@ function roomReachesStart(map: GameMap, room: TileRect, blocked: TileRect | null
     y >= 0 &&
     x < columns &&
     y < rows &&
-    map.isWalkable(x, y) &&
+    map.isWalkableIgnoringPuzzleChokes(x, y) &&
     (blocked === null || !isTileInRect(x, y, blocked));
   const seen = new Uint8Array(rows * columns);
   const frontier: { x: number; y: number }[] = [];

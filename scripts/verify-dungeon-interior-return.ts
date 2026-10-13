@@ -70,6 +70,8 @@ const { seeds, fault } = parseArgs();
 
 const { mulberry32 } = await import('../src/sprites/person/rng.js');
 const { TILE_SIZE } = await import('../src/core/constants.js');
+const { NecroFairy } = await import('../src/creatures/fairies/NecroFairy.js');
+const { RESURRECT_RANGE_TILES } = await import('../src/creatures/fairies/fairyTuning.js');
 const { loadSprites } = await import('../src/core/SpriteLoader.js');
 const { SceneManager } = await import('../src/core/Scene.js');
 const { InputManager } = await import('../src/core/InputManager.js');
@@ -94,6 +96,11 @@ type Tile = { readonly x: number; readonly y: number };
 const TEST_BUILDING_NAME = 'Floor Two Test Lodge';
 /** Creatures killed before the visit, so the way back can be asked about them. */
 const KILLED_MOB_COUNT = 5;
+/**
+ * How far from every Necro Fairy a killed creature must lie: twice its raise
+ * range, because a fairy drifts about its post while the party is indoors.
+ */
+const NECRO_CLEARANCE_TILES = RESURRECT_RANGE_TILES * 2;
 /** Frames ticked outside before the visit, so the floor's arrival save is behind us. */
 const SETTLE_FRAMES = 30;
 /** Frames spent indoors: more than a minute of a running clock. */
@@ -282,7 +289,10 @@ async function verifySeed(worldSeed: number): Promise<void> {
     existingMap: map,
     worldSeed,
     skipIntro: true,
-    saveProgress: (progress) => saves.push(progress),
+    saveProgress: (progress) => {
+      saves.push(progress);
+      return Promise.resolve('saved');
+    },
   });
   sceneManager.replace(outside);
   const ctx = sceneManager.canvas.getContext('2d');
@@ -306,8 +316,16 @@ async function verifySeed(worldSeed: number): Promise<void> {
   tickPinned(outside, SETTLE_FRAMES);
 
   // ── Change one cheap piece of state per owner ──
+  // Never one a Necro Fairy could reach: it raises the dead it can see, which
+  // is the game working rather than a door forgetting a kill, and where the
+  // fairies hover depends on every random roll the floor made before it.
+  const necroFairies = outside['world'].roster.mobs.filter((mob) => mob instanceof NecroFairy);
+  const clearOfNecromancy = (mob: Mob): boolean =>
+    necroFairies.every(
+      (fairy) => Math.hypot(fairy.x - mob.x, fairy.y - mob.y) > NECRO_CLEARANCE_TILES * TILE_SIZE,
+    );
   const killed: Mob[] = outside['world'].roster.mobs
-    .filter((mob) => mob.isHostile && mob.isAlive && !mob.isBoss)
+    .filter((mob) => mob.isHostile && mob.isAlive && !mob.isBoss && clearOfNecromancy(mob))
     .slice(0, KILLED_MOB_COUNT);
   check(
     killed.length === KILLED_MOB_COUNT,

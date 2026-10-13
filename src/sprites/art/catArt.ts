@@ -19,7 +19,20 @@
  * down the screen.  The profile view faces +X; the runtime mirrors it.
  */
 
+import { drawShadesBack, drawShadesFront, drawShadesSide } from './catShadesArt';
+
 type Ctx = CanvasRenderingContext2D;
+
+/**
+ * What Donut has on that shows on her figure. Each distinct value is its own
+ * painted figure, so this stays a short closed set of flags.
+ */
+export interface CatWear {
+  /** The Eyes of Splatter, over her eyes. */
+  readonly shades: boolean;
+}
+
+export const BARE_CAT: CatWear = { shades: false };
 
 // ── Small math ───────────────────────────────────────────────────────────────
 
@@ -707,6 +720,18 @@ const EYE_RX = 0.068;
 const EYE_RY = 0.057;
 
 const MUZZLE_DY = 0.095;
+
+/** Where the shades' temple arms meet her skull, face-on: out at the ear roots, a little above the eyes. */
+const SHADES_TEMPLE_X = 0.21;
+const SHADES_TEMPLE_RISE = -0.045;
+/** From behind, how far out on her skull the arms show, as a share of its half-width. */
+const SHADES_BACK_ARM_SPREAD = 0.95;
+/** In profile, where the near arm meets her skull in front of the ear. */
+const SHADES_SIDE_EAR_X = -0.06;
+const SHADES_SIDE_EAR_Y = -0.065;
+/** In profile, the near lens sits just forward of her eye, on the slope of the muzzle. */
+const SHADES_SIDE_LENS_X = 0.07;
+const SHADES_SIDE_LENS_Y = -0.012;
 const NOSE_DY = 0.062;
 const NOSE_W = 0.038;
 const NOSE_H = 0.03;
@@ -1588,18 +1613,60 @@ function headAnchor(p: CatPose): Pt {
   };
 }
 
-function drawHeadFront(ctx: Ctx, p: CatPose, back: boolean): void {
-  const anchor = headAnchor(p);
+/** A head turned fully narrows by this share, seen head-on. */
+const HEAD_TURN_NARROWING = 0.08;
+/** A head bowed fully lengthens by this share, seen head-on. */
+const HEAD_BOW_STRETCH = 0.04;
+/** A turned head slides its face this far across the skull, head-on. */
+const HEAD_TURN_FACE_SLIDE = 0.05;
+/** The closed mouth line sits this far under the muzzle's centre. */
+const FRONT_MOUTH_BELOW_MUZZLE = 0.012;
+
+/** How the head-on head is placed: where, at what tilt, and how squeezed. */
+function frontHeadPlacement(
+  p: CatPose,
+  back: boolean,
+): { anchor: Pt; tilt: number; scaleX: number; scaleY: number } {
+  const BACK_HEAD_SCALE = 0.9;
+  const backScale = back ? BACK_HEAD_SCALE : 1;
+  return {
+    anchor: headAnchor(p),
+    tilt: p.headTilt,
+    scaleX: (1 - Math.abs(p.headTurn) * HEAD_TURN_NARROWING) * backScale,
+    scaleY: (1 + p.headBow * HEAD_BOW_STRETCH) * backScale,
+  };
+}
+
+function rotatePoint(point: Pt, angle: number): Pt {
+  const cos = Math.cos(angle);
+  const sin = Math.sin(angle);
+  return { x: point.x * cos - point.y * sin, y: point.x * sin + point.y * cos };
+}
+
+/**
+ * Her closed mouth in the head-on view, in pose space — placed by the same
+ * head placement and body roll {@link drawCatFront} paints with, so art drawn
+ * at her mouth follows it through every bob, bow and turn.
+ */
+export function catMouthFront(p: CatPose): Pt {
+  const head = frontHeadPlacement(p, false);
+  const local = {
+    x: p.headTurn * HEAD_TURN_FACE_SLIDE * head.scaleX,
+    y: (MUZZLE_DY + FRONT_MOUTH_BELOW_MUZZLE) * head.scaleY,
+  };
+  const tilted = rotatePoint(local, head.tilt);
+  return rotatePoint({ x: head.anchor.x + tilted.x, y: head.anchor.y + tilted.y }, p.roll);
+}
+
+function drawHeadFront(ctx: Ctx, p: CatPose, back: boolean, wear: CatWear): void {
+  const placement = frontHeadPlacement(p, back);
+  const anchor = placement.anchor;
   const turn = p.headTurn;
 
-  const BACK_HEAD_SCALE = 0.9;
   ctx.save();
   ctx.translate(anchor.x, anchor.y);
-  ctx.rotate(p.headTilt);
-  ctx.scale(
-    (1 - Math.abs(turn) * 0.08) * (back ? BACK_HEAD_SCALE : 1),
-    (1 + p.headBow * 0.04) * (back ? BACK_HEAD_SCALE : 1),
-  );
+  ctx.rotate(placement.tilt);
+  ctx.scale(placement.scaleX, placement.scaleY);
 
   const earShiftL = turn * 0.03;
   drawEar(ctx, -EAR_DX + earShiftL, EAR_DY, -1, p.earL, back);
@@ -1660,7 +1727,19 @@ function drawHeadFront(ctx: Ctx, p: CatPose, back: boolean): void {
 
     drawWhiskers(ctx, -0.03 + turn * 0.05, MUZZLE_DY, -1, p.headBow);
     drawWhiskers(ctx, 0.03 + turn * 0.05, MUZZLE_DY, 1, p.headBow);
-    drawMuzzle(ctx, turn * 0.05, MUZZLE_DY, p.mouth, p.tongue);
+    drawMuzzle(ctx, turn * HEAD_TURN_FACE_SLIDE, MUZZLE_DY, p.mouth, p.tongue);
+    if (wear.shades) {
+      drawShadesFront(
+        ctx,
+        -EYE_DX + turn * 0.05,
+        EYE_DX + turn * 0.05,
+        EYE_DY,
+        SHADES_TEMPLE_X,
+        EYE_DY + SHADES_TEMPLE_RISE,
+      );
+    }
+  } else if (wear.shades) {
+    drawShadesBack(ctx, turn * 0.02, HEAD_RX * SHADES_BACK_ARM_SPREAD, EYE_DY);
   }
 
   ctx.restore();
@@ -1681,7 +1760,7 @@ function hindPawRest(p: CatPose, side: number): Pt {
 }
 
 /** Donut seen head-on: the view used for walking toward the camera and for every sit-down animation. */
-export function drawCatFront(ctx: Ctx, p: CatPose): void {
+export function drawCatFront(ctx: Ctx, p: CatPose, wear: CatWear = BARE_CAT): void {
   const body = bodyMetrics(p);
 
   ctx.save();
@@ -1797,7 +1876,7 @@ export function drawCatFront(ctx: Ctx, p: CatPose): void {
   }
 
   drawContactShadow(ctx, frontHead.x, frontHead.y + HEAD_RY * 0.95, HEAD_RX * 1.15, 0.07, 0.35);
-  drawHeadFront(ctx, p, false);
+  drawHeadFront(ctx, p, false, wear);
 
   // A paw held up to be washed has to sit in front of the muzzle it is being
   // washed against.
@@ -1820,7 +1899,7 @@ export function drawCatFront(ctx: Ctx, p: CatPose): void {
 
 // ── Back view (walking away) ─────────────────────────────────────────────────
 
-export function drawCatBack(ctx: Ctx, p: CatPose): void {
+export function drawCatBack(ctx: Ctx, p: CatPose, wear: CatWear = BARE_CAT): void {
   const body = bodyMetrics(p);
 
   ctx.save();
@@ -1883,7 +1962,7 @@ export function drawCatBack(ctx: Ctx, p: CatPose): void {
   drawTail(ctx, body.cx + 0.16 + p.tail.rootX, body.cy + 0.12 + p.tail.rootY, p.tail);
   const backHead = headAnchor(p);
   drawContactShadow(ctx, backHead.x, backHead.y + HEAD_RY * 0.9, HEAD_RX * 1.1, 0.07, 0.35);
-  drawHeadFront(ctx, p, true);
+  drawHeadFront(ctx, p, true, wear);
 
   if (p.cast > 0.02) {
     drawCastOrb(ctx, body.cx, body.cy - 0.36, p.cast, p.castRelease, p.time);
@@ -1988,13 +2067,47 @@ function drawSideLimb(
   drawPaw(ctx, footX, footY, 0, claw, 0.92, shade);
 }
 
-function drawHeadSide(ctx: Ctx, p: CatPose): void {
-  const hx = SIDE_HEAD_X + p.headX;
-  const hy = SIDE_HEAD_Y + p.headY + p.bob * 0.7 + p.headBow * 0.16;
+/** Share of the body's bob the profile head rides. */
+const SIDE_HEAD_BOB_SHARE = 0.7;
+/** How far the profile head drops at full bow. */
+const SIDE_HEAD_BOW_DROP = 0.16;
+/** How far the profile head pitches nose-down at full bow. */
+const SIDE_HEAD_BOW_PITCH = deg(28);
+/** The front corner of her closed mouth line, in the profile head's own frame. */
+const SIDE_MOUTH: Pt = { x: 0.152, y: 0.068 };
+
+function sideHeadPlacement(p: CatPose): { x: number; y: number; angle: number } {
+  return {
+    x: SIDE_HEAD_X + p.headX,
+    y: SIDE_HEAD_Y + p.headY + p.bob * SIDE_HEAD_BOB_SHARE + p.headBow * SIDE_HEAD_BOW_DROP,
+    angle: p.headTilt + p.headBow * SIDE_HEAD_BOW_PITCH,
+  };
+}
+
+/** Her barrel's centre in profile, which a downed roll turns about. */
+function sideBodyCentre(p: CatPose): Pt {
+  return { x: SIDE_BODY_CX + p.sway, y: SIDE_BODY_CY + p.bob + lerp(0, 0.05, p.sit) };
+}
+
+/**
+ * Her mouth in the profile view, facing +X, in pose space — placed through
+ * the same roll, lean and head placement {@link drawCatSide} paints with.
+ */
+export function catMouthSide(p: CatPose): Pt {
+  const head = sideHeadPlacement(p);
+  const turned = rotatePoint(SIDE_MOUTH, head.angle);
+  const leaned = rotatePoint({ x: head.x + turned.x, y: head.y + turned.y }, p.lean);
+  const centre = sideBodyCentre(p);
+  const rolled = rotatePoint({ x: leaned.x - centre.x, y: leaned.y - centre.y }, p.roll);
+  return { x: centre.x + rolled.x, y: centre.y + rolled.y };
+}
+
+function drawHeadSide(ctx: Ctx, p: CatPose, wear: CatWear): void {
+  const head = sideHeadPlacement(p);
 
   ctx.save();
-  ctx.translate(hx, hy);
-  ctx.rotate(p.headTilt + p.headBow * deg(28));
+  ctx.translate(head.x, head.y);
+  ctx.rotate(head.angle);
 
   // Far ear first so the near ear overlaps it.
   drawEar(ctx, -0.105, -0.13, -1, p.earL, true, 0.55);
@@ -2078,14 +2191,22 @@ function drawHeadSide(ctx: Ctx, p: CatPose): void {
   drawEye(ctx, 0, 0, 1, p.eyeOpen, p.pupil, 0.4);
   ctx.restore();
   drawWhiskers(ctx, 0.135, 0.05, 1, p.headBow + 0.4, 0.62);
+  if (wear.shades) {
+    drawShadesSide(
+      ctx,
+      SHADES_SIDE_LENS_X,
+      SHADES_SIDE_LENS_Y,
+      SHADES_SIDE_EAR_X,
+      SHADES_SIDE_EAR_Y,
+    );
+  }
   drawEar(ctx, -0.035, -0.15, 1, p.earR, false, 0.5);
 
   ctx.restore();
 }
 
-export function drawCatSide(ctx: Ctx, p: CatPose): void {
-  const cx = SIDE_BODY_CX + p.sway;
-  const cy = SIDE_BODY_CY + p.bob + lerp(0, 0.05, p.sit);
+export function drawCatSide(ctx: Ctx, p: CatPose, wear: CatWear = BARE_CAT): void {
+  const { x: cx, y: cy } = sideBodyCentre(p);
   const rx = SIDE_BODY_RX * (1 + p.breathe * 0.02);
   const ry = SIDE_BODY_RY * p.squash * (1 + p.breathe * 0.05);
 
@@ -2240,7 +2361,7 @@ export function drawCatSide(ctx: Ctx, p: CatPose): void {
     p.frontR.claw,
   );
 
-  drawHeadSide(ctx, p);
+  drawHeadSide(ctx, p, wear);
 
   if (p.cast > 0.02) {
     drawCastOrb(

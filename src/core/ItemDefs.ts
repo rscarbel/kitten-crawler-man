@@ -48,10 +48,15 @@ export type ItemId =
   | 'slate_butterfly_talisman'
   | 'fae_scale_crupper'
   | 'bracelet_of_dex'
+  | 'eyes_of_splatter'
   | 'splatter_skunk_toe_ring'
+  | 'fairy_repellent_signet'
+  | 'ring_of_the_cold_shoulder'
+  | 'ring_of_the_asbestos_knuckle'
   | 'shade_gnoll_kneepads'
   | 'grull_war_gauntlet'
   | 'slingshot'
+  | 'fury_of_taranis'
   | 'wayfinders_anchor'
   | 'anchor_shard_tinker'
   | 'anchor_shard_hilda'
@@ -84,9 +89,11 @@ export type EquipSlot = 'Head' | 'Torso' | 'Legs' | 'Feet' | 'Hands';
 /**
  * Damage channels an item can protect against.
  *
- * `'ice'` has no damage source in the game yet: any future ice attack must
- * consult `Player.resists('ice')` at the point it damages a crawler, or the
- * resistance silently does nothing.
+ * A resistance only works where the damage is dealt asks for it: hits go
+ * through `Player.resistedDamage` (ice fairy bolts as `'ice'`, goblin arrows
+ * and skeleton projectiles as `'piercing'`), and poison status ticks check
+ * `'poison'` themselves. A new attack of one of these kinds must ask too, or
+ * the resistance silently does nothing against it.
  */
 export type ResistanceType = 'poison' | 'ice' | 'piercing';
 
@@ -96,6 +103,16 @@ export const ALL_RESISTANCE_TYPES = [
   'ice',
   'piercing',
 ] as const satisfies readonly ResistanceType[];
+
+/**
+ * The fairy magics a ring can make its wearer immune to. Separate from
+ * {@link ResistanceType} because the immunity is to the fairy, not the
+ * element: a fairy ring stops a fire fairy's fireball but not a lava llama's.
+ */
+export type FairyElement = 'ice' | 'fire';
+
+/** Every fairy element, in the order the worn-gear summary lists them. */
+export const ALL_FAIRY_ELEMENTS = ['ice', 'fire'] as const satisfies readonly FairyElement[];
 
 export interface InventoryItem {
   id: ItemId;
@@ -142,6 +159,8 @@ export interface InventoryItem {
   regenMultiplier?: number;
   /** Damage channels this item resists while equipped. */
   resistances?: ResistanceType[];
+  /** Fairy magics that cannot hurt or afflict the wearer while this is equipped. */
+  fairyImmunities?: FairyElement[];
   /** Fraction of incoming mob melee damage reflected back at the attacker while equipped. */
   damageReflectPct?: number;
   /** While equipped, momentum-based attacks (e.g. the Ball of Swine's trample) are cancelled on contact. */
@@ -796,6 +815,23 @@ export const ITEM_DEF: Record<ItemId, ItemDef> = {
     statBonus: { dexterity: 2 },
     description: 'An agility boosting accessory equipped on the front leg.',
   },
+  eyes_of_splatter: {
+    id: 'eyes_of_splatter',
+    category: 'armor',
+    baseValue: 600,
+    name: 'Eyes of Splatter',
+    stackable: false,
+    canHotlist: false,
+    type: 'armor',
+    equipSlot: 'Head',
+    equipSubSlot: 'Face',
+    wearer: 'cat',
+    description:
+      'Legendary. Round pink sunglasses with something red dried across one lens. Every Magic ' +
+      'Missile that hits an enemy splits into three copies that hunt down anything hostile ' +
+      'nearby. With nothing to hunt, the copies circle the wearer until something shows up, or ' +
+      'until they get bored. They look fabulous. The wearer is aware of this.',
+  },
   splatter_skunk_toe_ring: {
     id: 'splatter_skunk_toe_ring',
     category: 'armor',
@@ -813,6 +849,55 @@ export const ITEM_DEF: Record<ItemId, ItemDef> = {
       "Imbues wearer with +3 Strength and gives +3 to the Pugilism Skill. Also, it's a toe ring. " +
       "It's probably uncomfortable and it makes you look like one of those hippie assholes who " +
       'sit around in a field juggling and hula-hooping all day.',
+  },
+  fairy_repellent_signet: {
+    id: 'fairy_repellent_signet',
+    category: 'armor',
+    baseValue: 900,
+    name: 'Fairy Repellent Signet',
+    stackable: false,
+    canHotlist: false,
+    type: 'armor',
+    equipSlot: 'Hands',
+    equipSubSlot: 'Ring',
+    fairyImmunities: ['ice', 'fire'],
+    description:
+      'Legendary. A fat signet with an opal face, half frost and half ember, that fairies find ' +
+      'personally offensive. Ice fairy bolts and death blasts cannot hurt, chill or freeze you, ' +
+      'and fire fairy fireballs, blasts, death flames and death explosions cannot hurt or burn ' +
+      'you. Every other kind of ice and fire still works on you just fine.',
+  },
+  ring_of_the_cold_shoulder: {
+    id: 'ring_of_the_cold_shoulder',
+    category: 'armor',
+    baseValue: 450,
+    name: 'Ring of the Cold Shoulder',
+    stackable: false,
+    canHotlist: false,
+    type: 'armor',
+    equipSlot: 'Hands',
+    equipSubSlot: 'Ring',
+    fairyImmunities: ['ice'],
+    description:
+      'Platinum. A frosted band for people who have been ignored at better parties than this. ' +
+      'Ice fairy bolts and death blasts cannot hurt, chill or freeze you. It does nothing ' +
+      'about fire fairies, or about any ice that does not come from a fairy.',
+  },
+  ring_of_the_asbestos_knuckle: {
+    id: 'ring_of_the_asbestos_knuckle',
+    category: 'armor',
+    baseValue: 450,
+    name: 'Ring of the Asbestos Knuckle',
+    stackable: false,
+    canHotlist: false,
+    type: 'armor',
+    equipSlot: 'Hands',
+    equipSubSlot: 'Ring',
+    fairyImmunities: ['fire'],
+    description:
+      'Platinum. Smoulders pleasantly and is almost certainly a health hazard. Fire fairy ' +
+      'fireballs, blasts, death flames and death explosions cannot hurt or burn you. It does ' +
+      'nothing about ice fairies, or about any fire that does not come from a fairy.',
   },
   shade_gnoll_kneepads: {
     id: 'shade_gnoll_kneepads',
@@ -1096,6 +1181,23 @@ export const ITEM_DEF: Record<ItemId, ItemDef> = {
       'are common toys but have also been used as military weapons by guerilla forces. During the ' +
       "Siege of Marawi in 2017, the Philippine Army's elite Scout Rangers used slingshots to hurl " +
       'grenades at opposing forces.',
+  },
+  fury_of_taranis: {
+    id: 'fury_of_taranis',
+    category: 'weapon',
+    baseValue: 900,
+    // A one-off prize with no other source: sold, it could never be had again.
+    unsellable: true,
+    name: 'The Fury of Taranis',
+    stackable: false,
+    canHotlist: true,
+    type: 'weapon',
+    wearer: 'human',
+    description:
+      'Legendary. A bronze-hilted silver sword with a storm trapped in its edge. Every blow lands ' +
+      'twice as hard as a fist, every swing throws a slicing wave of lightning three tiles ahead, ' +
+      'and anything it cuts throws chain lightning to up to four more enemies nearby. ' +
+      'Taranis was the Gaulish god of thunder. He did not ask for it back.',
   },
 };
 

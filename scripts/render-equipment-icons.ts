@@ -20,7 +20,12 @@ import { ITEM_DEF, type ItemId, type InventoryItem } from '../src/core/ItemDefs.
 import { drawItemIcon } from '../src/ui/icons/drawItemIcon.js';
 
 const FAMILIES: Readonly<Record<string, readonly ItemId[]>> = {
-  head: ['issue_kettle_helm', 'enchanted_crown_sepsis_whore', 'slate_butterfly_talisman'],
+  head: [
+    'issue_kettle_helm',
+    'enchanted_crown_sepsis_whore',
+    'slate_butterfly_talisman',
+    'eyes_of_splatter',
+  ],
   torso: ['padded_gambeson', 'trollskin_shirt', 'nightgaunt_cloak', 'fae_scale_crupper'],
   hands: ['riveted_bracers', 'bracelet_of_dex', 'grull_war_gauntlet'],
   legsFeet: [
@@ -46,6 +51,11 @@ const FAMILIES: Readonly<Record<string, readonly ItemId[]>> = {
     'worldscar_pick',
   ],
   scroll: ['scroll_of_confusing_fog'],
+  fairyRings: [
+    'ring_of_the_cold_shoulder',
+    'ring_of_the_asbestos_knuckle',
+    'fairy_repellent_signet',
+  ],
 };
 
 /** The hotbar slot (52 px) less its 14% art inset on each side. */

@@ -56,10 +56,18 @@ export const CLUB_STATIONS: ReadonlyArray<ClubStation> = [
   { id: 'clarabelle', tile: { x: 12, y: 14 }, label: 'Clarabelle' },
   { id: 'bar', tile: { x: 3, y: 3 }, label: 'Bar' },
   { id: 'market', tile: { x: 3, y: 14 }, label: 'Market' },
-  { id: 'casino', tile: { x: 20, y: 4 }, label: 'Blackjack' },
+  { id: 'casino', tile: { x: 20, y: 4 }, label: 'Casino' },
   { id: 'mercenary', tile: CLUB_MERC_DESK_TILE, label: 'Meat Shields' },
   { id: 'vip', tile: { x: 12, y: 2 }, label: 'VIP Lounge' },
 ];
+
+/**
+ * Where Tito the croupier stands: behind his counter at the foot of the Wheel
+ * of Fortune's east side, facing south onto the casino floor. The counter's art
+ * rises into this tile, so no patron or crawler can path onto it. He is
+ * dressing: the wheel is played through the casino station, not by talking to him.
+ */
+export const CLUB_TITO_POST = { x: 22, y: 3 } as const;
 
 /** Doctor Bones the skeleton DJ — cosmetic, spins records just north of the dance floor. */
 export const CLUB_DJ_TILE = { x: 12, y: 5 } as const;
@@ -83,7 +91,12 @@ export const CLUB_DANCER_TILES: ReadonlyArray<{ x: number; y: number }> = [
  */
 export interface ClubZone {
   id: ClubStationId;
-  label: string;
+  /**
+   * The name painted across the top of the rug, or null for a room whose back
+   * wall is dressed from corner to corner: the name is painted under the
+   * furniture, and a word cut off between two props reads as a glitch.
+   */
+  label: string | null;
   x0: number;
   y0: number;
   x1: number;
@@ -95,7 +108,7 @@ export interface ClubZone {
 export const CLUB_ZONES: ReadonlyArray<ClubZone> = [
   { id: 'bar', label: 'THE BAR', x0: 1, y0: 1, x1: 5, y1: 6, color: '#e0b060' },
   { id: 'market', label: 'THE MARKET', x0: 1, y0: 11, x1: 5, y1: 16, color: '#c07ad8' },
-  { id: 'casino', label: 'CASINO', x0: 18, y0: 1, x1: 22, y1: 6, color: '#40c878' },
+  { id: 'casino', label: null, x0: 18, y0: 1, x1: 22, y1: 8, color: '#40c878' },
   { id: 'mercenary', label: 'MEAT SHIELDS', x0: 18, y0: 11, x1: 22, y1: 16, color: '#e06040' },
   { id: 'vip', label: 'VIP LOUNGE', x0: 7, y0: 1, x1: 16, y1: 3, color: '#d8c050' },
 ];
@@ -110,7 +123,9 @@ export const CLUB_ZONES: ReadonlyArray<ClubZone> = [
  * The border ring is excluded too: its only walkable tiles are the exit
  * doorway, and a patron shoved into it blocks the door. So are the marks of the
  * figures who never move — Clarabelle and the DJ stand on open floor, and a
- * patron sent to stand on one of them would lean into that body forever.
+ * patron sent to stand on one of them would lean into that body forever. Tito's
+ * post is listed with them so his mark stays his even if the furniture around it
+ * is ever rearranged.
  *
  * Walkability is the caller's job: this only answers "is this somewhere a patron
  * belongs", and knows nothing about walls or furniture.
@@ -120,6 +135,7 @@ export function isClubPatronTile(tx: number, ty: number): boolean {
   if (onBorder) return false;
   const onFixedFigureMark =
     (tx === CLUB_DJ_TILE.x && ty === CLUB_DJ_TILE.y) ||
+    (tx === CLUB_TITO_POST.x && ty === CLUB_TITO_POST.y) ||
     CLUB_STATIONS.some((station) => station.tile.x === tx && station.tile.y === ty);
   if (onFixedFigureMark) return false;
   const onDanceFloor =

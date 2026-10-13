@@ -386,6 +386,16 @@ export const SPEAKERS = {
     revealIntervalMs: SPEECH_REVEAL_INTERVAL_MS,
   },
 
+  // The Desperado Club's Wheel of Fortune.
+  tito: {
+    name: 'Tito',
+    portrait: null,
+    voice: { kind: 'typing' },
+    reveal: 'sentence',
+    textCase: 'as-written',
+    revealIntervalMs: SPEECH_REVEAL_INTERVAL_MS,
+  },
+
   // The Desperado Club's Texas Hold'em regulars; names match `POKER_REGULARS`.
   pokerWren: pokerRegularSpeaker('Wren Halloway', SKYFOWL_CITIZEN_VOICE_SOUNDS),
   pokerGrizzle: pokerRegularSpeaker('Grizzle Pott', HUMAN_MASCULINE_VOICE_SOUNDS),

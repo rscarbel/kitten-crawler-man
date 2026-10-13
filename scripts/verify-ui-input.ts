@@ -2665,6 +2665,338 @@ section('the poker table: the Game over prompt answers Escape, Space, Enter and 
   }
 }
 
+section('the Wheel of Fortune warnings and SPIN, on a desktop and on phones');
+{
+  const { installCanvasGlobals } = await import('./nodeCanvasGlobals.js');
+  installCanvasGlobals();
+  const { HumanPlayer } = await import('../src/creatures/HumanPlayer.js');
+  const { CatPlayer } = await import('../src/creatures/CatPlayer.js');
+  const { TILE_SIZE } = await import('../src/core/constants.js');
+  const { createWheelLedger } = await import('../src/core/WheelLedger.js');
+  const { ClubWheelSystem, WHEEL_ARMING_MS, WHEEL_SPIN_HOLD_MS, WHEEL_SPIN_KEY } =
+    await import('../src/systems/ClubWheelSystem.js');
+  const WHEEL_FRAME_MS = 16;
+  const WHEEL_PURSE = 50_000;
+  /** Well inside the hold, so letting go here must cancel. */
+  const SHORT_HOLD_MS = 300;
+  /** Partway through the arming delay. */
+  const EARLY_MS = 400;
+  const layouts = [
+    { label: 'desktop', cssWidth: 1440, cssHeight: 900, density: 'pointer' },
+    { label: 'phone upright', cssWidth: 390, cssHeight: 844, density: 'touch' },
+    { label: 'phone on its side', cssWidth: 844, cssHeight: 390, density: 'touch' },
+  ] as const;
+
+  for (const layout of layouts) {
+    let now = 0;
+    let saves = 0;
+    const human = new HumanPlayer(0, 0, TILE_SIZE);
+    const cat = new CatPlayer(1, 0, TILE_SIZE);
+    human.coins = WHEEL_PURSE;
+    const seat = { active: () => human, companion: () => cat };
+    const wheel = new ClubWheelSystem({
+      audio: null,
+      ledger: createWheelLedger(),
+      saveNow: () => {
+        saves++;
+        return Promise.resolve('disabled');
+      },
+      progressWipe: null,
+      afterNothing: () => undefined,
+      grantAttackCow: () => undefined,
+      clock: () => now,
+      // A drawn Nothing would make its round-trip the wipe, not a save; this checks the save.
+      forcedOutcome: (board) => {
+        const index = board.findIndex((wedge) => wedge.prize.kind === 'spin_again');
+        return index < 0 ? null : { wedgeIndex: index, wedge: board[index] };
+      },
+    });
+    const root = new UiRoot({
+      audio: null,
+      viewport: () => ({
+        cssWidth: layout.cssWidth,
+        cssHeight: layout.cssHeight,
+        density: layout.density,
+        uiSize: 'medium',
+        safeArea: NO_INSETS,
+      }),
+      now: () => now,
+      warn: () => undefined,
+    });
+    for (const surface of wheel.surfaces(seat)) root.mount(surface);
+    const ctx = gameContext(layout.cssWidth, layout.cssHeight);
+    const frame = (ms = WHEEL_FRAME_MS): void => {
+      for (let elapsed = 0; elapsed < ms; elapsed += WHEEL_FRAME_MS) {
+        now += WHEEL_FRAME_MS;
+        wheel.update();
+        root.frame(ctx);
+      }
+    };
+    const gesture = (kind: 'down' | 'move' | 'up', point: Point): void => {
+      const scale = root.uiScale;
+      root.pointer({
+        kind,
+        pointerId: TOUCH_POINTER_ID,
+        source: layout.density === 'touch' ? 'touch' : 'mouse',
+        x: point.x,
+        y: point.y,
+        cssX: point.x * scale,
+        cssY: point.y * scale,
+        button: PRIMARY_BUTTON,
+        deltaY: 0,
+      });
+    };
+    const tap = (point: Point): void => {
+      gesture('down', point);
+      gesture('up', point);
+      frame();
+    };
+    const region = (suffix: string): HitRegion | undefined =>
+      root.regions().find((candidate) => candidate.id.endsWith(suffix));
+    const freshWarning = (): void => {
+      wheel.resetForReview();
+      frame();
+      wheel.open(seat);
+      frame();
+    };
+    const where = `(${layout.label})`;
+
+    for (const key of ['Enter', ' ', 'Escape']) {
+      freshWarning();
+      root.key(key);
+      frame();
+      check(
+        wheel.currentScreen === 'closed',
+        `${where} ${JSON.stringify(key)} on the warning answers No`,
+      );
+      wheel.openPromptForReview(seat, 'confirm');
+      frame();
+      root.key(key);
+      frame();
+      check(
+        wheel.currentScreen === 'closed',
+        `${where} ${JSON.stringify(key)} on the confirm answers No`,
+      );
+    }
+
+    freshWarning();
+    tap(SCREEN_CORNER);
+    check(wheel.currentScreen === 'closed', `${where} a tap on the warning's scrim answers No`);
+    wheel.openPromptForReview(seat, 'confirm');
+    frame();
+    tap(SCREEN_CORNER);
+    check(wheel.currentScreen === 'closed', `${where} a tap on the confirm's scrim answers No`);
+
+    freshWarning();
+    frame(EARLY_MS);
+    const earlyYes = region('/yes');
+    if (earlyYes !== undefined) tap(mid(earlyYes.rect));
+    check(
+      earlyYes !== undefined && wheel.currentScreen === 'warning',
+      `${where} Yes does nothing while the warning arms`,
+    );
+    frame(WHEEL_ARMING_MS);
+    const firstYes = region('/yes');
+    if (firstYes === undefined) {
+      check(false, `${where} the warning shows Yes`);
+    } else {
+      const point = mid(firstYes.rect);
+      tap(point);
+      check(wheel.currentScreen === 'confirm', `${where} an armed Yes opens the confirm`);
+      tap(point);
+      check(
+        wheel.currentScreen !== 'wheel',
+        `${where} a double tap on the warning's Yes never confirms the second prompt`,
+      );
+      if (wheel.currentScreen === 'closed') wheel.openPromptForReview(seat, 'confirm');
+      frame(WHEEL_ARMING_MS + WHEEL_FRAME_MS);
+      const confirmYes = region('/yes');
+      tap(point);
+      check(
+        wheel.currentScreen !== 'wheel',
+        `${where} the confirm's Yes never sits where the warning's Yes sat`,
+      );
+      check(
+        confirmYes !== undefined && intersect(confirmYes.rect, firstYes.rect) === null,
+        `${where} the two Yes buttons do not overlap`,
+      );
+    }
+
+    wheel.resetForReview();
+    wheel.openWheelForReview(seat);
+    frame();
+    const spin = region('/spin');
+    if (spin === undefined) {
+      check(false, `${where} the wheel shows SPIN`);
+      continue;
+    }
+    const spinAt = mid(spin.rect);
+    gesture('down', spinAt);
+    frame(SHORT_HOLD_MS);
+    gesture('up', spinAt);
+    frame();
+    check(wheel.phaseKind === 'idle' && saves === 0, `${where} a short press on SPIN never spins`);
+    root.key(WHEEL_SPIN_KEY);
+    frame(SHORT_HOLD_MS);
+    root.keyUp(WHEEL_SPIN_KEY);
+    frame(WHEEL_SPIN_HOLD_MS);
+    check(wheel.phaseKind === 'idle' && saves === 0, `${where} Space let go early never spins`);
+    root.key(WHEEL_SPIN_KEY);
+    frame(SHORT_HOLD_MS);
+    root.blur();
+    frame(WHEEL_SPIN_HOLD_MS);
+    check(
+      wheel.phaseKind === 'idle' && saves === 0,
+      `${where} the window losing focus during a Space hold never spins`,
+    );
+    const offSpin = { x: spin.rect.x + spin.rect.w / 2, y: spin.rect.y - spin.rect.h };
+    gesture('down', spinAt);
+    frame(SHORT_HOLD_MS);
+    gesture('move', offSpin);
+    frame(WHEEL_SPIN_HOLD_MS);
+    gesture('up', offSpin);
+    frame();
+    check(
+      wheel.phaseKind === 'idle' && saves === 0,
+      `${where} sliding off SPIN before the hold completes never spins`,
+    );
+    gesture('down', spinAt);
+    frame(WHEEL_SPIN_HOLD_MS + WHEEL_FRAME_MS);
+    gesture('up', spinAt);
+    await Promise.resolve();
+    frame();
+    check(
+      saves === 1 && wheel.phaseKind !== 'idle',
+      `${where} a full hold on SPIN spins (phase ${wheel.phaseKind}, saves ${saves})`,
+    );
+    root.key('Escape');
+    frame();
+    check(wheel.currentScreen === 'wheel', `${where} Escape does not leave a turning wheel`);
+    root.dispose();
+  }
+}
+
+section('the slot machine: SPIN spins, a tap mid-celebration skips, Leave and Escape close');
+{
+  const { installCanvasGlobals } = await import('./nodeCanvasGlobals.js');
+  installCanvasGlobals();
+  const { openStagedSlots, stageSlots, SLOTS_STAGE_STEP_MS } =
+    await import('../src/dev/slotsStaging.js');
+  const SLOTS_SETTLE_MS = 6000;
+  const regionCentre = (h: Harness, id: string): Point | null => {
+    const region = h.root.regions().find((r) => r.id.endsWith(`/${id}`));
+    return region === undefined
+      ? null
+      : { x: region.rect.x + region.rect.w / 2, y: region.rect.y + region.rect.h / 2 };
+  };
+  const machine = (stage: 'idle' | 'big-win') => {
+    const staged = openStagedSlots();
+    stageSlots(staged, stage);
+    const h = harness([staged.host.machineSurface('slots', staged.seat)]);
+    h.frame();
+    return { staged, h };
+  };
+
+  const idle = machine('idle');
+  const spinAt = regionCentre(idle.h, 'spin');
+  check(spinAt !== null, 'the machine draws a SPIN control');
+  const wageredBefore = idle.staged.host.coinsWageredThisVisit;
+  if (spinAt !== null) idle.h.tap(spinAt);
+  idle.h.frame();
+  check(
+    idle.staged.host.coinsWageredThisVisit > wageredBefore && idle.staged.host.motion.reelsMoving,
+    'a tap on SPIN takes the bet and starts the reels',
+  );
+  check(
+    idle.h.rec.sounds.includes('slots_spin_button'),
+    'SPIN sounds its own cue from the dispatcher',
+  );
+  idle.staged.advance(SLOTS_SETTLE_MS);
+  idle.h.frame();
+  const spinsBefore = idle.staged.host.machine.paidSpins;
+  idle.h.root.key(' ');
+  idle.h.frame();
+  check(
+    idle.staged.host.machine.paidSpins === spinsBefore + 1,
+    'Space spins a resting machine, even with the attack key on Space',
+  );
+  idle.staged.advance(SLOTS_SETTLE_MS);
+  idle.h.frame();
+  const leaveAt = regionCentre(idle.h, 'leave');
+  if (leaveAt !== null) idle.h.tap(leaveAt);
+  idle.h.frame();
+  check(!idle.staged.host.anySurfaceOpen, 'Leave closes a resting machine');
+  idle.h.root.dispose();
+
+  const big = machine('big-win');
+  check(big.staged.host.motion.celebration !== null, 'the big-win machine is celebrating');
+  const betUpAt = regionCentre(big.h, 'bet-up');
+  const betBefore = big.staged.host.betPerLine;
+  const cabinet = big.staged.host.layout?.glass ?? null;
+  if (cabinet !== null) big.h.tap({ x: cabinet.x + cabinet.w / 2, y: cabinet.y + cabinet.h / 2 });
+  big.staged.advance(SLOTS_STAGE_STEP_MS);
+  big.h.frame();
+  check(
+    big.staged.host.motion.celebration?.skipped === true,
+    'a tap on the glass mid-celebration skips the rollup',
+  );
+  if (betUpAt !== null) big.h.tap(betUpAt);
+  big.h.frame();
+  check(big.staged.host.betPerLine === betBefore, 'the bet is locked while a win is celebrated');
+  const coinsBeforeLeaving = big.staged.human.coins;
+  big.h.root.key('Escape');
+  big.h.frame();
+  check(!big.staged.host.anySurfaceOpen, 'Escape mid-celebration settles the win and closes');
+  check(
+    big.staged.human.coins > coinsBeforeLeaving,
+    'the win on the glass was paid before the machine closed',
+  );
+  big.h.root.dispose();
+}
+
+section('the slot machine: a skip before the banner lands plays no slam, shake, flash or fanfare');
+{
+  const { openStagedSlots, stepUntil, SLOTS_STAGE_STEP_MS } =
+    await import('../src/dev/slotsStaging.js');
+  const { MAX_BET_PER_LINE } = await import('../src/systems/casino/slots/slotBets.js');
+  /** Long past the end of any jackpot celebration and its flash pulses. */
+  const AFTERMATH_MS = 20000;
+  const played: string[] = [];
+  const paused: string[] = [];
+  const audio = {
+    play: (id: string) => void played.push(id),
+    stopSound: () => undefined,
+    fadeOutSound: () => undefined,
+    startAmbientLoop: () => undefined,
+    stopAmbientLoop: () => undefined,
+    isAmbientLoopRunning: () => false,
+    duckMusic: () => undefined,
+    unduckMusic: () => undefined,
+    pauseMusic: (reason?: string) => void paused.push(reason ?? 'menu'),
+    resumeMusic: () => undefined,
+    stopMusic: () => undefined,
+    playMusicPlaylist: () => undefined,
+  };
+  const staged = openStagedSlots(audio);
+  staged.host.betPerLine = MAX_BET_PER_LINE;
+  check(staged.host.forceNext('jackpot') && staged.host.spin(), 'a jackpot spin starts');
+  stepUntil(staged, () => staged.host.motion.celebration !== null);
+  staged.host.skip();
+  const motion = staged.host.motion;
+  let shook = false;
+  let flashed = false;
+  for (let elapsed = 0; elapsed < AFTERMATH_MS; elapsed += SLOTS_STAGE_STEP_MS) {
+    staged.advance(SLOTS_STAGE_STEP_MS);
+    shook ||= motion.shakeOffset().x !== 0 || motion.shakeOffset().y !== 0;
+    flashed ||= motion.flashAlpha() > 0;
+  }
+  check(!shook && !flashed, 'a skip before the banner neither shakes the screen nor flashes it');
+  check(
+    !played.includes('slots_jackpot_siren') && paused.length === 0,
+    'the skipped banner sounds no siren and never silences the music',
+  );
+}
+
 section('the real dungeon scene, on a desktop and on a phone');
 {
   // Each in its own process: the platform is decided once, when the game's modules load.

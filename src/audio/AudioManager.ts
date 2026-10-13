@@ -5,6 +5,33 @@ import { settings } from '../core/Settings';
 import type { SoundId } from './sounds';
 import { NON_STREAMING_SOUND_IDS, SOUND_MANIFEST, STREAMING_SOUND_IDS } from './sounds';
 
+/** One take per bout of blood vomiting; the retch and its splash are in each. */
+const BLOOD_VOMIT_TAKES: readonly SoundId[] = [
+  'blood_vomit_1',
+  'blood_vomit_2',
+  'blood_vomit_3',
+  'blood_vomit_4',
+];
+
+/** The Fury of Taranis's variant sets: a swing, a cut landing, a chain-lightning burst. */
+const TARANIS_SWING_TAKES: readonly SoundId[] = [
+  'taranis_swing_1',
+  'taranis_swing_2',
+  'taranis_swing_3',
+  'taranis_swing_4',
+];
+const TARANIS_WAVE_HIT_TAKES: readonly SoundId[] = [
+  'taranis_wave_hit_1',
+  'taranis_wave_hit_2',
+  'taranis_wave_hit_3',
+  'taranis_wave_hit_4',
+];
+const TARANIS_CHAIN_TAKES: readonly SoundId[] = [
+  'taranis_chain_lightning_1',
+  'taranis_chain_lightning_2',
+  'taranis_chain_lightning_3',
+  'taranis_chain_lightning_4',
+];
 const WALKING_VOLUME = 0.25;
 /**
  * The wading loop has to beat the river bed, not merely the footsteps it
@@ -34,6 +61,8 @@ const MS_PER_SECOND = 1000;
 const DEFAULT_STOP_MUSIC_FADE_MS = 500;
 const GOBLIN_ENCOUNTER_CHANCE = 0.15;
 const MENU_MUSIC_FADE_MS = 200;
+/** How long the music bus takes to settle on a new partial-duck level by default. */
+export const MUSIC_DUCK_RAMP_MS = 500;
 /**
  * Fade applied to the ambience bus when a menu opens or closes. Matched to the
  * music fade so the whole world goes quiet as one gesture rather than the bed
@@ -88,7 +117,14 @@ export interface MusicOptions {
  * it silent forever if the reason that set the flag never clears it. The bus
  * only comes back once every reason that asked for silence has let go.
  */
-type MusicPauseReason = 'menu' | 'background';
+export type MusicPauseReason = 'menu' | 'background' | 'slots_big_win' | 'wheel';
+
+/**
+ * Why the music bus is held below the player's level without being silenced.
+ * Several can be active at once; the bus sits at the lowest level any of them
+ * asks for, and a pause reason still silences it outright on top of that.
+ */
+export type MusicDuckReason = 'slots';
 
 /** A currently-playing music track: either a decoded buffer or a streamed media element. */
 type MusicVoice =
@@ -593,6 +629,33 @@ export class AudioManager {
   }
 
   /**
+   * Stops a playing one-shot over `fadeMs` rather than dead, for a long cue a
+   * skip has to cut (the slot machine's jackpot siren). Only a sound played
+   * with a `volume` other than 1 has its own gain to ramp; any other is
+   * stopped at once, as {@link stopSound} would.
+   */
+  fadeOutSound(id: SoundId, fadeMs: number): void {
+    const entry = this.activeSources.get(id);
+    if (!entry) return;
+    const gain = entry.gain;
+    if (gain === null || fadeMs <= 0) {
+      this.stopSound(id);
+      return;
+    }
+    const now = this.ctx.currentTime;
+    const end = now + fadeMs / MS_PER_SECOND;
+    gain.gain.cancelScheduledValues(now);
+    gain.gain.setValueAtTime(gain.gain.value, now);
+    gain.gain.linearRampToValueAtTime(0, end);
+    try {
+      entry.source.stop(end);
+    } catch {
+      // already stopped
+    }
+    this.activeSources.delete(id);
+  }
+
+  /**
    * Play a one-shot sound as soon as its buffer is ready.
    * If the buffer is already loaded, plays immediately (same as `play`).
    * Otherwise queues it so the preload loop fires it the moment decoding finishes.
@@ -609,6 +672,24 @@ export class AudioManager {
   playRandom(ids: ReadonlyArray<SoundId>, opts: PlayOptions = {}): void {
     if (ids.length === 0) return;
     this.play(ids[Math.floor(Math.random() * ids.length)], opts);
+  }
+
+  /** The take each variant set last played, keyed by the set's first id. */
+  private readonly lastTakeOfSet = new Map<SoundId, SoundId>();
+
+  /**
+   * {@link playRandom}, never playing the take the same set played last — for
+   * a cue that fires in quick succession, where one recording twice running is
+   * heard as a stutter rather than as the same sound again.
+   */
+  playRandomFresh(ids: ReadonlyArray<SoundId>, opts: PlayOptions = {}): void {
+    if (ids.length === 0) return;
+    const setKey = ids[0];
+    const last = this.lastTakeOfSet.get(setKey);
+    const fresh = ids.length > 1 ? ids.filter((id) => id !== last) : ids;
+    const take = fresh[Math.floor(Math.random() * fresh.length)];
+    this.lastTakeOfSet.set(setKey, take);
+    this.play(take, opts);
   }
 
   /** The looping track currently playing (or pending), if any. */
@@ -1054,26 +1135,65 @@ export class AudioManager {
     );
   }
 
+  private readonly musicDuckLevels = new Map<MusicDuckReason, number>();
+
   /** Fade music out quickly (e.g. when a menu opens). Idempotent per reason. */
-  pauseMusic(reason: MusicPauseReason = 'menu'): void {
+  pauseMusic(reason: MusicPauseReason = 'menu', fadeMs = MENU_MUSIC_FADE_MS): void {
     const wasSilenced = this.musicPauseReasons.size > 0;
     this.musicPauseReasons.add(reason);
     if (wasSilenced) return;
-    const now = this.ctx.currentTime;
-    this.musicGain.gain.setValueAtTime(this.musicGain.gain.value, now);
-    this.musicGain.gain.linearRampToValueAtTime(0, now + MENU_MUSIC_FADE_MS / MS_PER_SECOND);
+    this.rampMusicBus(0, fadeMs);
   }
 
-  /** Fade music back in once every reason that silenced it has cleared. Idempotent per reason. */
-  resumeMusic(reason: MusicPauseReason = 'menu'): void {
+  /**
+   * Fade music back in once every reason that silenced it has cleared, to the
+   * ducked level when a duck is still active. Idempotent per reason.
+   */
+  resumeMusic(reason: MusicPauseReason = 'menu', fadeMs = MENU_MUSIC_FADE_MS): void {
     this.musicPauseReasons.delete(reason);
     if (this.musicPauseReasons.size > 0) return;
+    this.rampMusicBus(this.openMusicBusLevel, fadeMs);
+  }
+
+  /**
+   * Hold the music at `level` (0–1) of the player's music volume until
+   * {@link unduckMusic} lets go of `reason`. Calling again for the same reason
+   * moves it to the new level. While any pause reason is active the bus stays
+   * silent, and the duck is what it comes back to.
+   *
+   * Never routed through {@link setMusicVolume}, which would overwrite the
+   * volume the player chose.
+   */
+  duckMusic(reason: MusicDuckReason, level: number, rampMs = MUSIC_DUCK_RAMP_MS): void {
+    const clampedLevel = Number.isFinite(level) ? Math.min(1, Math.max(0, level)) : 1;
+    this.musicDuckLevels.set(reason, clampedLevel);
+    if (this.musicPauseReasons.size > 0) return;
+    this.rampMusicBus(this.openMusicBusLevel, rampMs);
+  }
+
+  /** Release one duck; the bus settles on whatever the remaining ducks allow. */
+  unduckMusic(reason: MusicDuckReason, rampMs = MUSIC_DUCK_RAMP_MS): void {
+    if (!this.musicDuckLevels.delete(reason)) return;
+    if (this.musicPauseReasons.size > 0) return;
+    this.rampMusicBus(this.openMusicBusLevel, rampMs);
+  }
+
+  private get musicDuckLevel(): number {
+    let lowest = 1;
+    for (const level of this.musicDuckLevels.values()) lowest = Math.min(lowest, level);
+    return lowest;
+  }
+
+  /** Where the music bus sits when nothing is silencing it. */
+  private get openMusicBusLevel(): number {
+    return this.trimmedMusicVol * this.musicDuckLevel;
+  }
+
+  private rampMusicBus(target: number, rampMs: number): void {
     const now = this.ctx.currentTime;
+    this.musicGain.gain.cancelScheduledValues(now);
     this.musicGain.gain.setValueAtTime(this.musicGain.gain.value, now);
-    this.musicGain.gain.linearRampToValueAtTime(
-      this.trimmedMusicVol,
-      now + MENU_MUSIC_FADE_MS / MS_PER_SECOND,
-    );
+    this.musicGain.gain.linearRampToValueAtTime(target, now + rampMs / MS_PER_SECOND);
   }
 
   /**
@@ -1166,7 +1286,9 @@ export class AudioManager {
   /** Set the music bus volume (0–1). */
   setMusicVolume(v: number): void {
     this.musicVol = v;
-    this.musicGain.gain.value = this.trimmedMusicVol;
+    // A fade still scheduled would carry on past this and land on the old level.
+    this.musicGain.gain.cancelScheduledValues(this.ctx.currentTime);
+    this.musicGain.gain.value = this.musicPauseReasons.size > 0 ? 0 : this.openMusicBusLevel;
   }
 
   /*
@@ -1295,6 +1417,22 @@ export class AudioManager {
       } else {
         this.play('human_punch_weak');
       }
+    });
+
+    bus.on('bloodVomitRetch', () => {
+      this.playRandomFresh(BLOOD_VOMIT_TAKES);
+    });
+
+    bus.on('taranisSwing', () => {
+      this.playRandomFresh(TARANIS_SWING_TAKES);
+    });
+
+    bus.on('taranisStrike', () => {
+      this.playRandomFresh(TARANIS_WAVE_HIT_TAKES);
+    });
+
+    bus.on('taranisChain', () => {
+      this.playRandomFresh(TARANIS_CHAIN_TAKES);
     });
 
     bus.on('catMeleeSwing', () => {

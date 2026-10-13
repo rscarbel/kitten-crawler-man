@@ -50,6 +50,7 @@ import {
   type FireballTrailPoint,
 } from '../sprites/art/fairyEffectsArt';
 import { collectFairyPartyTargets } from './fairyPartyTargets';
+import { FairyImmunityFeedback } from './fairyImmunityFeedback';
 import type { GameSystem, SystemContext } from './GameSystem';
 import type { DynamicLightSink } from './lighting/dynamicLights';
 import type { GroundHazardSource, HazardEscape } from './GroundHazardSource';
@@ -68,7 +69,12 @@ export const DEATH_EXPLOSION_ATTACK_TYPE = 'death_explosion';
  * else to end it.
  */
 export type FairyFireballCue =
-  'fireballLand' | 'chargeExplode' | 'deathFlame' | 'deathExplosion' | 'deathFlamesOut';
+  | 'fireballLand'
+  | 'chargeExplode'
+  | 'deathFlame'
+  | 'deathExplosion'
+  | 'deathFlamesOut'
+  | 'immuneFizzle';
 
 /** What the system reads from the scene it lives in. */
 export interface FairyFireballSystemDeps {
@@ -191,6 +197,7 @@ export class FairyFireballSystem implements GameSystem, GroundHazardSource {
   private readonly unsubscribers: (() => void)[] = [];
   private readonly partyScratch: Player[] = [];
   private readonly zoneScratch: FireHazardZone[] = [];
+  private readonly immunity = new FairyImmunityFeedback();
   private frame = 0;
   private nextSeed = 0;
 
@@ -250,6 +257,7 @@ export class FairyFireballSystem implements GameSystem, GroundHazardSource {
 
   update(ctx: SystemContext): void {
     this.frame++;
+    this.immunity.tick();
     this.collectThrows(ctx.roster.mobs);
     const deaths = this.pendingDeaths;
     this.pendingDeaths = [];
@@ -263,6 +271,7 @@ export class FairyFireballSystem implements GameSystem, GroundHazardSource {
     this.advanceFlames(party);
     this.advanceFireballs(party);
     this.partyScratch.length = 0;
+    if (this.immunity.takeFizzle()) this.cues.add('immuneFizzle');
     for (const explosion of this.explosions) explosion.age++;
     this.explosions = this.explosions.filter((explosion) => explosion.age < EXPLOSION_FRAMES);
   }
@@ -342,6 +351,7 @@ export class FairyFireballSystem implements GameSystem, GroundHazardSource {
     const source = this.sourceFor(ball.owner, FIREBALL_ATTACK_TYPE, x, y, false);
     for (const target of party) {
       if (!target.isAlive || distanceToCentre(target, x, y) > FIREBALL_HIT_RADIUS_PX) continue;
+      if (this.immunity.blocks(target, 'fire')) continue;
       const connected = target.takeDamage(ball.damage, source);
       if (connected) this.noteBlood(ball.owner, target);
     }
@@ -374,6 +384,7 @@ export class FairyFireballSystem implements GameSystem, GroundHazardSource {
       );
       for (const target of party) {
         if (!target.isAlive || distanceToCentre(target, charge.x, charge.y) > radiusPx) continue;
+        if (this.immunity.blocks(target, 'fire')) continue;
         const connected = target.takeDamage(charge.burstDamage, source);
         if (!connected) continue;
         this.noteBlood(charge.owner, target);
@@ -406,6 +417,7 @@ export class FairyFireballSystem implements GameSystem, GroundHazardSource {
         const source = this.sourceFor(flame.owner, DEATH_FLAME_ATTACK_TYPE, flame.x, flame.y, true);
         for (const target of party) {
           if (!target.isAlive || distanceToCentre(target, flame.x, flame.y) > flamePx) continue;
+          if (this.immunity.blocks(target, 'fire')) continue;
           target.takeDamage(DEATH_FLAME_TICK_DAMAGE, source);
         }
       }
@@ -423,6 +435,7 @@ export class FairyFireballSystem implements GameSystem, GroundHazardSource {
       );
       for (const target of party) {
         if (!target.isAlive || distanceToCentre(target, flame.x, flame.y) > blastPx) continue;
+        if (this.immunity.blocks(target, 'fire')) continue;
         target.takeDamage(DEATH_EXPLOSION_DAMAGE, source);
       }
       this.explosions.push({
@@ -704,6 +717,7 @@ export class FairyFireballSystem implements GameSystem, GroundHazardSource {
     this.flames = [];
     this.explosions = [];
     this.pendingDeaths = [];
+    this.immunity.reset();
     this.cues.clear();
     this.cues.add('deathFlamesOut');
   }

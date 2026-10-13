@@ -10,8 +10,11 @@ import type { HitState, Ui } from '../core/UiRoot';
 import { drawGlyph, type GlyphId } from '../theme/glyphs';
 import { skinsFor, type ButtonVariant, type ControlSize } from '../theme/skins';
 import { disabledReason, isDisabled, paintControl } from './paint';
-import { measureText, text } from './text';
+import { lineHeightOf, measureText, text } from './text';
 import { tooltip } from './tooltip';
+
+/** The hint line reads as a quieter caption under the label. */
+const HINT_ROLE = 'caption';
 
 export interface ButtonOptions {
   /** Unique within the surface. Defaults to the label. */
@@ -20,6 +23,12 @@ export interface ButtonOptions {
   readonly variant?: ButtonVariant;
   readonly size?: ControlSize;
   readonly icon?: GlyphId;
+  /**
+   * A short second line under the label, in caption type: what the choice
+   * is, where there is no room to say it anywhere else. It ellipsizes
+   * rather than widening the button.
+   */
+  readonly hint?: string;
   /** Draw as toggled on (a chosen option), whatever the variant. */
   readonly selected?: boolean;
   /** `true`, or the reason it can't be used, shown as a tooltip. */
@@ -67,10 +76,14 @@ export function button(ui: Ui, rect: Rect, opts: ButtonOptions): HitState {
   const iconBlock = hasIcon ? sizeSkin.icon + (opts.label === '' ? 0 : sizeSkin.gap) : 0;
   const groupW = Math.min(content.w, labelW + iconBlock);
   const left = content.x + (content.w - groupW) / 2;
+  const hint = opts.hint ?? '';
+  const hintH = hint === '' ? 0 : lineHeightOf(ui, HINT_ROLE);
+  const labelH = hint === '' ? painted.rect.h : sizeSkin.text.lineHeight;
+  const labelY = painted.rect.y + (painted.rect.h - labelH - hintH) / 2;
   if (opts.icon !== undefined) {
     const iconRect: Rect = {
       x: left,
-      y: painted.rect.y + (painted.rect.h - sizeSkin.icon) / 2,
+      y: labelY + (labelH - sizeSkin.icon) / 2,
       w: sizeSkin.icon,
       h: sizeSkin.icon,
     };
@@ -79,12 +92,19 @@ export function button(ui: Ui, rect: Rect, opts: ButtonOptions): HitState {
   if (opts.label !== '') {
     text(
       ui,
-      { x: left + iconBlock, y: painted.rect.y, w: groupW - iconBlock, h: painted.rect.h },
+      { x: left + iconBlock, y: labelY, w: groupW - iconBlock, h: labelH },
       {
         text: opts.label,
         style: sizeSkin.text,
         color: painted.text,
       },
+    );
+  }
+  if (hint !== '') {
+    text(
+      ui,
+      { x: content.x, y: labelY + labelH, w: content.w, h: hintH },
+      { text: hint, role: HINT_ROLE, color: painted.text, align: 'center' },
     );
   }
   const reason = disabledReason(opts.disabled);

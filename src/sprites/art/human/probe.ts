@@ -11,7 +11,8 @@
 import { type Pt } from '../carlArt';
 import { footSoleLandmarks, LEFT_FOOT_OUT, RIGHT_FOOT_OUT } from '../carl/feet';
 import { handGrip, handLength, wristAngle } from '../carl/limbs';
-import { pt } from '../carl/geometry';
+import { pt, rotate } from '../carl/geometry';
+import { headAngle, mouthInHeadFrame } from '../carl/head';
 import {
   aheadScreenSign,
   type BodySide,
@@ -404,6 +405,23 @@ export function strikeContactInTile(
   return cellPointInTile(point, flipX);
 }
 
+/**
+ * Where his mouth is painted on one drawn cell, in tile fractions from the
+ * sprite's tile origin, mirrored with the cell; null when the cell shows the
+ * back of his head.
+ */
+export function mouthInTile(row: HumanRowName, frame: number, flipX: boolean): Pt | null {
+  const spec = HUMAN_ROW_TABLE[row];
+  const view = VIEWS[spec.view];
+  const pose = poseAsDrawn(spec.pose(frame), view);
+  const mouth = mouthInHeadFrame(pose, view);
+  if (mouth === null) return null;
+  const skeleton = buildSkeleton(pose, view);
+  const turned = rotate(mouth, headAngle(pose));
+  const inFigure = pt(skeleton.headCentre.x + turned.x, skeleton.headCentre.y + turned.y);
+  return cellPointInTile(toCell(inFigure), flipX);
+}
+
 /** Where one of his fists closes round a haft on one drawn cell. */
 interface HandGripInTile {
   /** The middle of the fist's bore, in tile fractions from the sprite's tile origin, mirrored with the cell. */
@@ -412,6 +430,12 @@ interface HandGripInTile {
   readonly holdsProp: boolean;
   /** Whether that arm is painted behind his torso in this cell. */
   readonly armBehind: boolean;
+  /**
+   * The way the hand points from the wrist, radians on screen (y down), in
+   * the unmirrored cell: down the fist on a punch, so a blade held in it can
+   * carry the line of the blow on past the knuckles.
+   */
+  readonly handAngle: number;
 }
 
 /**
@@ -440,5 +464,6 @@ export function handGripInTile(
     centre: cellPointInTile(toCell(handGrip(chain).centre), flipX),
     holdsProp: pose.heldProps?.some((prop) => prop.hand === drawn) ?? false,
     armBehind: farArmInProfile || armFlaggedBehind,
+    handAngle: wristAngle(chain),
   };
 }

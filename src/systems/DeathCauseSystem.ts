@@ -4,7 +4,7 @@ import { KNIGHT_MISSILE_ATTACK_TYPE } from '../creatures/DarkKnight';
 import { GROUND_PUNCH_ATTACK_TYPE, PLATE_ROLL_ATTACK_TYPE } from '../creatures/Juicer';
 import type { CatPlayer } from '../creatures/CatPlayer';
 import type { DamageSource } from '../Player';
-import { FROZEN_STATUS } from '../core/StatusEffect';
+import { BLOOD_VOMIT_STATUS, FROZEN_STATUS } from '../core/StatusEffect';
 import type { DeathCause } from '../ui/DeathExplanations';
 import { KNOCKOUT_TIMEOUT_FRAMES } from './GameLoopPhases';
 import { MANTID_FLURRY_ATTACK_TYPE } from '../creatures/Mantid';
@@ -102,6 +102,7 @@ export function causeFromDamageSource(source: DamageSource): DeathCause {
     if (effectType === 'sepsis') return 'sepsisStatus';
     if (effectType === 'electrified') return 'electrifiedStatus';
     if (effectType === 'spit_venom') return 'spitVenomStatus';
+    if (effectType === BLOOD_VOMIT_STATUS) return 'bloodVomitStatus';
     return 'unknown';
   }
 

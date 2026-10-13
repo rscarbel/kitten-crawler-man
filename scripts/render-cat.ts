@@ -12,6 +12,7 @@
  *   npx tsx scripts/render-cat.ts --part=head --scale=6
  *   npx tsx scripts/render-cat.ts --row=walk_side --mode=onion --scale=3
  *   npx tsx scripts/render-cat.ts --frame=5 --row=cast --scale=8
+ *   npx tsx scripts/render-cat.ts --wear=shades --part=head --scale=6
  */
 
 import { createCanvas } from 'canvas';
@@ -20,7 +21,8 @@ import { bakeFigureSheet } from './figureSheet.js';
 import { reportFigureGates } from './figureGates.js';
 import { catGateFailures } from './gates-cat.js';
 import { PREVIEW_DIR, writePreviewPng } from './previewOut.js';
-import { CAT_FIGURE, CAT_ROWS, TILE_SCALE } from '../src/sprites/art/catFigure.js';
+import { CAT_ROWS, TILE_SCALE, catFigureWearing } from '../src/sprites/art/catFigure.js';
+import { BARE_CAT, type CatWear } from '../src/sprites/art/catArt.js';
 
 /** Matches TILE_SIZE in src/core/constants.ts; the art is painted at 2× that. */
 const IN_GAME_TILE = 32;
@@ -84,6 +86,16 @@ function parseMode(): Mode {
   return found;
 }
 
+/** What she is drawn wearing: `--wear=shades` puts the Eyes of Splatter on her. */
+function parseWear(): CatWear {
+  const raw = parseFlag('wear', 'none');
+  if (raw === 'none') return BARE_CAT;
+  if (raw === 'shades') return { shades: true };
+  throw new Error(`--wear=${raw} is not one of none, shades`);
+}
+
+const CAT_FIGURE = catFigureWearing(parseWear());
+
 function frameCountOf(state: string): number {
   const declared = CAT_FIGURE.states.get(state);
   if (declared === undefined) throw new Error(`Donut declares no state "${state}"`);
@@ -104,10 +116,11 @@ function main(): void {
   const partName = parseFlag('part', '');
   const frameFilter = Math.round(parseNumberFlag('frame', NO_FRAME, NO_FRAME, MAX_FRAME_FLAG));
 
-  const part = partName === '' ? null : PARTS[partName];
-  if (partName !== '' && part === undefined) {
+  const knownPart = partName in PARTS;
+  if (partName !== '' && !knownPart) {
     throw new Error(`--part=${partName} is not one of ${Object.keys(PARTS).join(', ')}`);
   }
+  const part = knownPart ? PARTS[partName] : null;
 
   const allStates = CAT_ROWS.map((row) => row.name);
   const states = rowFilter === '' ? allStates : allStates.filter((state) => state === rowFilter);
@@ -125,7 +138,7 @@ function main(): void {
   const frameW = baked.frameWidth;
   const frameH = baked.frameHeight;
 
-  const cropped = part !== null && part !== undefined;
+  const cropped = part !== null;
   const srcW = cropped ? Math.round(part.w * frameW) : frameW;
   const srcH = cropped ? Math.round(part.h * frameH) : frameH;
   const srcOffsetX = cropped ? Math.round(part.x * frameW) : 0;

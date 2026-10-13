@@ -1,7 +1,14 @@
 import type { StatName } from '../Player';
 import { ALL_STATS } from '../Player';
 import { EQUIP_SUBSLOTS, ITEM_DEF, isItemId, isWearable, itemFitsSubSlot } from './ItemDefs';
-import type { EquipSlot, InventoryItem, ItemId, ResistanceType, WearableItem } from './ItemDefs';
+import type {
+  EquipSlot,
+  FairyElement,
+  InventoryItem,
+  ItemId,
+  ResistanceType,
+  WearableItem,
+} from './ItemDefs';
 import type { CrawlerKind, SkillId } from './SkillManager';
 
 /** Callback to locate an item by ID across all storage (bag + hotbar). */
@@ -289,6 +296,14 @@ export class EquipmentManager {
   hasResistance(type: ResistanceType): boolean {
     for (const id of this.equipped.values()) {
       if (ITEM_DEF[id].resistances?.includes(type) === true) return true;
+    }
+    return false;
+  }
+
+  /** True when anything worn makes its wearer immune to the given fairy magic. */
+  hasFairyImmunity(element: FairyElement): boolean {
+    for (const id of this.equipped.values()) {
+      if (ITEM_DEF[id].fairyImmunities?.includes(element) === true) return true;
     }
     return false;
   }

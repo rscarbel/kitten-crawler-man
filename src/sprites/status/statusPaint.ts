@@ -68,6 +68,20 @@ export interface StatusVisualFrame {
   /** Unit facing, so trailing art knows which way is "behind". */
   readonly facingX: number;
   readonly facingY: number;
+  /**
+   * The mouth in screen pixels, or null while the figure faces away and its
+   * mouth is hidden behind its own head — art coming out of the mouth would
+   * otherwise be pasted onto the back of the skull.
+   */
+  readonly mouth: StatusMouth | null;
+}
+
+/** Where a figure's mouth is drawn, and which way it bends to bring something up. */
+export interface StatusMouth {
+  readonly x: number;
+  readonly y: number;
+  /** Toward the face when the figure is side-on; 0 when it faces the camera. */
+  readonly lean: -1 | 0 | 1;
 }
 
 /** Top of the drawn figure — its head, not the top of its tile. */

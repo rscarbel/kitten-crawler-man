@@ -91,6 +91,8 @@ export interface PagedOverlayConfig {
   readonly advanceOnTapAnywhere?: boolean;
   /** Dim the screen behind the panel. Defaults to true. */
   readonly scrim?: boolean;
+  /** Fill the panel opaquely rather than with glass; see the panel's `solid`. Defaults to false. */
+  readonly solid?: boolean;
   readonly accessory?: PagedOverlayAccessory;
 }
 
@@ -232,6 +234,7 @@ export function pagedOverlay(ui: Ui, config: PagedOverlayConfig, nav: PagedOverl
     contentHeight: contentHeight + pagedOverlayChromeHeight(ui, config),
     onClose: closable ? close : undefined,
     scrim: config.scrim,
+    solid: config.solid,
     onScrimTap: tapAnywhere,
   });
   if (tapAnywhere !== undefined) {

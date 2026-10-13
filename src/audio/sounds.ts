@@ -1176,7 +1176,6 @@ export const CASINO_MUSIC_TRACKS: ReadonlyArray<SoundId> = [
   'casino_background_jazz_4',
 ];
 
-/** The town's rotating soundtrack — reshuffled each time the player walks back into the safe zone. */
 /** The slot machine's bonus-round set, swapped in for the casino jazz while free spins run. */
 export const SLOTS_FREE_SPINS_MUSIC_TRACKS: ReadonlyArray<SoundId> = [
   'slots_free_spins_loop_1',
@@ -1184,6 +1183,7 @@ export const SLOTS_FREE_SPINS_MUSIC_TRACKS: ReadonlyArray<SoundId> = [
   'slots_free_spins_loop_3',
 ];
 
+/** The town's rotating soundtrack — reshuffled each time the player walks back into the safe zone. */
 export const TOWN_MUSIC_TRACKS: ReadonlyArray<SoundId> = ['town_music_1', 'town_music_2'];
 
 /** The town taverns' rotating soundtrack — shuffled and looping while the player is inside. */

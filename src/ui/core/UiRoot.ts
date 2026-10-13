@@ -93,6 +93,17 @@ export interface Surface {
   /** Raw key hook for surfaces with typed input (search, rebind, stepper digits). Return true to consume. */
   onKey?(key: string, mods: KeyModifiers): boolean;
   /**
+   * A key coming back up, offered to every open surface. For a control that
+   * acts on how long a key is held (a press-and-hold), which a keydown alone
+   * cannot tell.
+   */
+  onKeyUp?(key: string): void;
+  /**
+   * The window lost focus: every held key and press is gone without a
+   * release ever arriving. A press-and-hold must let go here.
+   */
+  onBlur?(): void;
+  /**
    * While open, keys are free text being typed into it (the chat box), so the
    * key hooks are not offered them: a world timing press would eat a letter.
    */
@@ -1141,6 +1152,18 @@ export class UiRoot {
       return this.escape() ? 'consumed' : 'gameplay';
     }
     return this.keyboardLocked() ? 'blocked' : 'gameplay';
+  }
+
+  /** Tells every open surface the window lost focus, so nothing stays held. */
+  blur(): void {
+    this.refreshStack();
+    for (const entry of this.stack) entry.surface.onBlur?.();
+  }
+
+  /** Routes one keyup to every open surface that listens for releases. */
+  keyUp(key: string): void {
+    this.refreshStack();
+    for (const entry of this.stack) entry.surface.onKeyUp?.(key);
   }
 
   /**

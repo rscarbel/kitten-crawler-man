@@ -173,7 +173,7 @@ function renderClubCorner(): void {
 }
 
 /**
- * Deuce on his own stage: the floor, the shelf behind him, then Deuce, then the
+ * Deuce on his own stage: the floor, the wheel behind him, then Deuce, then the
  * table and stools in front — the same stacking the club's Y-sort produces.
  */
 function paintStage(ctx: NodeCtx, phaseMs: number, dealing: boolean): void {
@@ -186,7 +186,7 @@ function paintStage(ctx: NodeCtx, phaseMs: number, dealing: boolean): void {
   club.renderFloor(gameCtx, camX, camY);
   const dealerSortY = casinoStation.tile.y * TILE_SIZE;
   for (const prop of casinoProps) {
-    if (prop.tile.y * TILE_SIZE <= dealerSortY) drawClubProp(gameCtx, prop, camX, camY);
+    if (prop.tile.y * TILE_SIZE <= dealerSortY) drawClubProp(gameCtx, prop, camX, camY, 0);
   }
   drawCasinoDealer(
     gameCtx,
@@ -197,7 +197,7 @@ function paintStage(ctx: NodeCtx, phaseMs: number, dealing: boolean): void {
     dealing,
   );
   const tableProps = casinoProps.filter((prop) => prop.tile.y * TILE_SIZE > dealerSortY);
-  for (const prop of tableProps) drawClubProp(gameCtx, prop, camX, camY);
+  for (const prop of tableProps) drawClubProp(gameCtx, prop, camX, camY, 0);
   drawCasinoDealerHands(
     gameCtx,
     casinoStation.tile.x * TILE_SIZE - camX,

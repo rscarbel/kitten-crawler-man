@@ -59,6 +59,7 @@ const { CircusLemur } = await import('../src/creatures/CircusLemur.js');
 const { CityElfCultist } = await import('../src/creatures/CityElfCultist.js');
 const { Cockroach } = await import('../src/creatures/Cockroach.js');
 const { Cow } = await import('../src/creatures/Cow.js');
+const { AttackCow } = await import('../src/creatures/AttackCow.js');
 const { DarkKnight } = await import('../src/creatures/DarkKnight.js');
 const { EvilClown } = await import('../src/creatures/EvilClown.js');
 const { FatClown } = await import('../src/creatures/FatClown.js');
@@ -229,12 +230,18 @@ function mazeMirror(kind: (typeof MAZE_MIRROR_KINDS)[number]): MobInstance {
   });
 }
 
+/** The floor the attack cow is built for; her look is the same on every floor. */
+const ATTACK_COW_EYE_FLOOR = 3;
+
 /**
  * How to build every concrete creature, keyed by its class name, in each
  * state that draws it differently. A class found under `src/creatures/`
  * without an entry here fails the gate.
  */
 const SUBJECTS: Readonly<Record<string, () => readonly Subject[]>> = {
+  AttackCow: () => [
+    eyed('attack cow', new AttackCow(...at, new CatPlayer(...at), ATTACK_COW_EYE_FLOOR, null)),
+  ],
   BallOfSwine: () => [eyeless('Ball of Swine', new BallOfSwine(...at))],
   BrindleGrub: () => [
     eyeless('brindle grub', grubAt(1)),

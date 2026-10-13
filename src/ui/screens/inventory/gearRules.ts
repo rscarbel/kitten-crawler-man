@@ -5,6 +5,7 @@
 
 import type { Inventory } from '../../../core/Inventory';
 import {
+  ALL_FAIRY_ELEMENTS,
   ALL_RESISTANCE_TYPES,
   EQUIP_SUBSLOTS,
   isWearable,
@@ -15,7 +16,7 @@ import {
 } from '../../../core/ItemDefs';
 import type { CrawlerKind } from '../../../core/SkillManager';
 import { ALL_STATS, type StatName } from '../../../Player';
-import { asPercent } from '../../itemEffectLines';
+import { asPercent, fairyImmunityLine } from '../../itemEffectLines';
 
 /** Head to foot, which is the order the doll's sections stack. */
 export const EQUIP_SLOT_ORDER = [
@@ -160,6 +161,10 @@ export function wornGearSummary(inventory: Inventory): string[] {
     (type) => RESISTANCE_NAMES[type],
   );
   if (resisted.length > 0) lines.push(`Resists ${resisted.join(', ')}`);
+  const fairyImmunity = fairyImmunityLine(
+    ALL_FAIRY_ELEMENTS.filter((element) => equipment.hasFairyImmunity(element)),
+  );
+  if (fairyImmunity !== null) lines.push(fairyImmunity);
   const reflect = equipment.getDamageReflectPct();
   if (reflect > 0) lines.push(`Reflects ${asPercent(reflect)}% of melee damage`);
   const stun = equipment.getStunOnHitChance();

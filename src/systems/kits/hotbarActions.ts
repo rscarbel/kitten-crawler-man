@@ -116,8 +116,8 @@ export function activateHotbarSlot(host: HotbarHost, hotbarIdx: number): void {
 
   // A weapon is wielded rather than spent: the slot toggles it in and out of
   // hand, and the attack key does the shooting.
-  if (slot.id === 'slingshot' && pm.human.isActive) {
-    pm.human.toggleSlingshotWield();
+  if ((slot.id === 'slingshot' || slot.id === 'fury_of_taranis') && pm.human.isActive) {
+    pm.human.toggleWield(slot.id);
     audio?.play('menu_click');
     return;
   }

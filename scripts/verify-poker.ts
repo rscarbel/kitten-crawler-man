@@ -74,6 +74,7 @@ import {
 } from '../src/systems/casino/poker/npc/mood';
 import { EMPTY_PLAYER_READ, type PlayerRead } from '../src/systems/casino/poker/npc/playerRead';
 import { parseClubMembershipCheckpoint } from '../src/core/PersistedWorldState';
+import { JACKPOT_FLOOR } from '../src/systems/casino/slots/slotBets';
 import type { ClubMembershipCheckpoint } from '../src/core/ClubMembership';
 import {
   LOOSE_VPIP_AT,
@@ -1968,6 +1969,9 @@ const SAMPLE_READ: PlayerRead = {
 };
 const SECOND_READ: PlayerRead = { ...SAMPLE_READ, handsSeen: 9, bluffsShown: 0 };
 
+/** A pool grown past its floor, with the fraction of a coin it keeps between spins. */
+const SAVED_JACKPOT_POOL = 12345.678;
+
 function checkPersistence(): void {
   section('Save fields: club membership round trip');
   const [firstRegular, secondRegular] = REGULAR_IDS;
@@ -1980,11 +1984,13 @@ function checkPersistence(): void {
     pokerFast: true,
     pokerShowCards: true,
     escortLevelId: 'level-3',
+    slotsJackpotPool: SAVED_JACKPOT_POOL,
+    slotsTurbo: true,
   };
   const restored = viaSave(full);
   check(
     restored !== undefined && canonical(restored) === canonical(full),
-    'a full membership with reads, notes, Fast and Show cards comes back unchanged',
+    'a full membership with reads, notes, Fast, Show cards, the slots jackpot pool and Turbo comes back unchanged',
   );
 
   const beforePoker = viaSave({
@@ -1999,8 +2005,10 @@ function checkPersistence(): void {
       Object.keys(beforePoker.pokerReads).length === 0 &&
       Object.keys(beforePoker.pokerNotes).length === 0 &&
       !beforePoker.pokerFast &&
-      !beforePoker.pokerShowCards,
-    'a save from before the poker table loads with no reads, no notes, Fast and Show cards off',
+      !beforePoker.pokerShowCards &&
+      beforePoker.slotsJackpotPool === JACKPOT_FLOOR &&
+      !beforePoker.slotsTurbo,
+    'a save from before the poker table and slots loads with no reads, no notes, Fast, Show cards and Turbo off, and the jackpot at its floor',
   );
 
   const beforeHints = viaSave({ hasDesperadoPass: true, casinoShoe: null });

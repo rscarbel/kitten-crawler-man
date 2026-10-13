@@ -316,6 +316,11 @@ export const SFX_GROUPS: Record<SfxGroup, readonly SoundId[]> = {
     'attack_cow_headbutt_1',
     'attack_cow_headbutt_2',
     'attack_cow_headbutt_3',
+    // The attack cow travels with the party everywhere, and charges with the
+    // herd's angry moo and comes round from a revive with its happy one.
+    'cow_angry_moo_1',
+    'cow_angry_moo_2',
+    'cow_happy_moo',
     'blood_vomit_1',
     'blood_vomit_2',
     'blood_vomit_3',

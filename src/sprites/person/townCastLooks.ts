@@ -311,12 +311,12 @@ const GARMENT_LEGWEAR: Readonly<Record<GarmentCut, 'trousers' | 'none'>> = {
 };
 
 /** Four skin tones beyond Carl's own default, so five in total. */
-const SKIN_TONE_BASES = ['#f0c9a0', '#c78a5a', '#8a5a34', '#5a3a22'] as const;
+export const SKIN_TONE_BASES = ['#f0c9a0', '#c78a5a', '#8a5a34', '#5a3a22'] as const;
 /**
  * Carl's own default brown plus these. The last is a salt-and-pepper
  * grey-brown, the one middle-aged head in the set.
  */
-const HAIR_COLOR_BASES = ['#1a1512', '#8a6a3a', '#c9a850', '#6a2a20', '#8c857a'] as const;
+export const HAIR_COLOR_BASES = ['#1a1512', '#8a6a3a', '#c9a850', '#6a2a20', '#8c857a'] as const;
 const GREYING_HAIR = HAIR_COLOR_BASES.length;
 
 const SKIN_RAMPS: readonly Ramp[] = [

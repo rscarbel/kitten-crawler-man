@@ -509,7 +509,10 @@ async function verifySeed(worldSeed: number): Promise<void> {
     existingMap: map,
     worldSeed,
     skipIntro: true,
-    saveProgress: (progress) => saves.push(progress),
+    saveProgress: (progress) => {
+      saves.push(progress);
+      return Promise.resolve('saved');
+    },
     mongoUnlocked: true,
     mongoWasOut: true,
     mercenaryRoster: hireRoster(),

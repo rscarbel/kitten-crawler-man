@@ -487,7 +487,10 @@ async function buildRig(worldSeed: number): Promise<Rig | null> {
     skipIntro: true,
     abilityManager: abilities,
     gameStats: stats,
-    saveProgress: (progress) => saves.push(progress),
+    saveProgress: (progress) => {
+      saves.push(progress);
+      return Promise.resolve('saved');
+    },
   });
   injectSceneFault(scene, fault);
   sceneManager.replace(scene);

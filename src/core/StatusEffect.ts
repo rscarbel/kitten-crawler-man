@@ -1,5 +1,11 @@
 import type { Player, StatName } from '../Player';
-import { CHILLED_FRAMES, FROZEN_FRAMES } from './statusTuning';
+import {
+  BLOOD_VOMIT_FRAMES,
+  BLOOD_VOMIT_INTERVAL_FRAMES,
+  BLOOD_VOMIT_RETCH_FRAMES,
+  CHILLED_FRAMES,
+  FROZEN_FRAMES,
+} from './statusTuning';
 import { HAMBURGER_FED_DURATION_SECONDS, HAMBURGER_STR_BONUS } from './foodEffects';
 
 /**
@@ -55,6 +61,51 @@ export const CHILLED_STATUS = 'chilled';
 
 /** Encased in ice: no walking, attacking, casting or item use; see {@link makeFrozen}. */
 export const FROZEN_STATUS = 'frozen';
+
+/**
+ * The Wheel of Fortune's retching: incurable, cleared only by a death. Its
+ * remaining time is saved per crawler outside the snapshot too
+ * (`bloodVomitSave.ts`), so a reload restores it whatever the snapshot kept.
+ */
+export const BLOOD_VOMIT_STATUS = 'blood_vomit';
+
+/**
+ * Statuses nothing clears but a death: not a cure, not a knockout and revive,
+ * not the level-15 shell's cleanse — `Player.clearStatusEffects` keeps them.
+ * A party death that respawns does clear them (`checkpointSnapshot` for the
+ * in-place rewind, `progressForRespawn` for the rebuild from the save), or a
+ * crawler with no way to heal would die to them again on every respawn.
+ */
+export const INCURABLE_STATUSES: ReadonlyArray<string> = [BLOOD_VOMIT_STATUS];
+
+/** Blood vomiting for `ticks`, the full five minutes unless a save says otherwise. */
+export function makeBloodVomit(ticks: number = BLOOD_VOMIT_FRAMES): StatusEffect {
+  return { type: BLOOD_VOMIT_STATUS, ticksRemaining: ticks, totalTicks: ticks, applier: null };
+}
+
+/** Frames into the effect's life, which every bout is timed from. */
+function bloodVomitElapsed(effect: StatusEffect): number {
+  return effect.totalTicks - effect.ticksRemaining;
+}
+
+/** Whether this frame of the effect is the one a bout of vomiting lands on. */
+export function isBloodVomitBoutFrame(effect: StatusEffect): boolean {
+  const elapsed = bloodVomitElapsed(effect);
+  return elapsed > 0 && elapsed % BLOOD_VOMIT_INTERVAL_FRAMES === 0;
+}
+
+/**
+ * How far through its retch the body is, in 0..1, or null between bouts. Read
+ * straight off the effect's own clock, so the pose and the spray stay in step
+ * with the damage without the body keeping a timer of its own.
+ */
+export function bloodVomitRetchProgress(effect: StatusEffect): number | null {
+  const elapsed = bloodVomitElapsed(effect);
+  if (elapsed < BLOOD_VOMIT_INTERVAL_FRAMES) return null;
+  const sinceBout = elapsed % BLOOD_VOMIT_INTERVAL_FRAMES;
+  if (sinceBout >= BLOOD_VOMIT_RETCH_FRAMES) return null;
+  return sinceBout / BLOOD_VOMIT_RETCH_FRAMES;
+}
 
 /**
  * Every status that carries an absorb pool, in the order a blow drains them.
@@ -194,9 +245,15 @@ export function makeBurn(applier: Player | null = null): StatusEffect {
   return { type: 'burn', ticksRemaining: 480, totalTicks: 480, applier };
 }
 
-/** 30-second poison: 1 damage every 2 seconds for 30 seconds (1800 ticks at 60 fps). */
-export function makePoison(applier: Player | null = null): StatusEffect {
-  return { type: 'poison', ticksRemaining: 1800, totalTicks: 1800, applier };
+/** Thirty seconds at 60 fps. */
+const POISON_TICKS = 1800;
+
+/** Poison: 1 damage every 2 seconds, for 30 seconds unless `ticks` says longer. */
+export function makePoison(
+  applier: Player | null = null,
+  ticks: number = POISON_TICKS,
+): StatusEffect {
+  return { type: 'poison', ticksRemaining: ticks, totalTicks: ticks, applier };
 }
 
 /** Sepsis: permanent DoT (1 damage every 2 seconds) that lasts until the target dies. */

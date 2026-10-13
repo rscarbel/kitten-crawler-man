@@ -27,6 +27,9 @@ const CAST_RELEASE_SOUNDS: Record<FairyCastRow, SoundId> = {
  */
 const ON_SCREEN_ONLY_CAST_ROWS: ReadonlySet<FairyCastRow> = new Set<FairyCastRow>(['cast_heal']);
 
+/** A fairy-immunity ring turning a hit or a status away. */
+const IMMUNE_FIZZLE_SOUND: SoundId = 'fairy_immune_fizzle';
+
 const SYSTEM_CUE_SOUNDS: Record<FairySystemCue, SoundId> = {
   shieldDeath: 'fairy_shield_shatter',
   healWave: 'fairy_heal_wave',
@@ -35,6 +38,7 @@ const SYSTEM_CUE_SOUNDS: Record<FairySystemCue, SoundId> = {
   resurrection: 'fairy_resurrection_moan',
   iceBoltShatter: 'fairy_ice_hits_ground',
   iceBoltHit: 'fairy_ice_chill',
+  immuneFizzle: IMMUNE_FIZZLE_SOUND,
 };
 
 /** The one call the cast and system cue drains make, so a gate can hand in a recorder. */
@@ -49,6 +53,7 @@ const FIREBALL_CUE_SOUNDS: Record<Exclude<FairyFireballCue, 'deathFlamesOut'>, S
   chargeExplode: 'fairy_explosion',
   deathFlame: DEATH_FLAME_SOUND,
   deathExplosion: 'fairy_death_explosion',
+  immuneFizzle: IMMUNE_FIZZLE_SOUND,
 };
 
 /**

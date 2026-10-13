@@ -6,6 +6,15 @@ import type { PlayerSnapshot } from './PlayerSnapshot';
 import { AchievementManager } from './AchievementManager';
 import type { SerializedAchievements } from './AchievementManager';
 import { parsePartyCraftsState } from './partyCrafts';
+import {
+  parsePendingWheelOutcome,
+  parseWheelFreeSpinBet,
+  parseWheelOwedFreeze,
+  parseWheelOwedItems,
+  parseWheelPrizesWon,
+} from './WheelLedger';
+import { parseBloodVomitRemaining } from './bloodVomitSave';
+import { parseAttackCowHp } from './AttackCowState';
 
 /**
  * The version of the save payload's shape, stamped on every save.
@@ -17,7 +26,7 @@ import { parsePartyCraftsState } from './partyCrafts';
  * - MAJOR — a field removed, renamed, or re-meant. Builds of another major
  *   refuse the save rather than resume a run from misread state.
  */
-export const SAVE_FORMAT_VERSION = '1.0.0';
+export const SAVE_FORMAT_VERSION = '1.1.0';
 
 interface SemanticVersion {
   major: number;
@@ -128,6 +137,15 @@ export function parseGameProgress(raw: unknown): GameProgress | null {
     world: parseSavedWorld(raw.world),
     gameStats: parseGameStatsSnapshot(raw.gameStats),
     crafts: parsePartyCraftsState(raw.crafts),
+    wheelPrizesWon: parseWheelPrizesWon(raw.wheelPrizesWon),
+    pendingWheelOutcome: parsePendingWheelOutcome(raw.pendingWheelOutcome),
+    wheelFreeSpinBet: parseWheelFreeSpinBet(raw.wheelFreeSpinBet),
+    wheelOwedFreeze: parseWheelOwedFreeze(raw.wheelOwedFreeze),
+    wheelOwedItems: parseWheelOwedItems(raw.wheelOwedItems),
+    bloodVomitRemaining: parseBloodVomitRemaining(raw.bloodVomitRemaining),
+    attackCowOwned: typeof raw.attackCowOwned === 'boolean' ? raw.attackCowOwned : undefined,
+    attackCowHp: parseAttackCowHp(raw.attackCowHp),
+    attackCowResting: typeof raw.attackCowResting === 'boolean' ? raw.attackCowResting : undefined,
   };
 }
 

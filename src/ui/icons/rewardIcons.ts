@@ -6,6 +6,7 @@
 
 import type { BoxTier } from '../../core/AchievementManager';
 import type { Rect } from '../core/geom';
+import { palette } from '../theme/tokens';
 import { iconSquare } from './iconSquare';
 
 const FULL_TURN = Math.PI * 2;
@@ -92,6 +93,7 @@ const LOOT_BOX_TIER_COLORS: Record<BoxTier, string> = {
   Bronze: '#cd7f32',
   Silver: '#c0c0c0',
   Gold: '#ffd700',
+  Platinum: palette.tier.platinum,
   Legendary: '#a855f7',
   Celestial: '#38bdf8',
 };

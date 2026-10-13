@@ -1792,6 +1792,19 @@ function checkFloorEnd(report: LifecycleGateReporter): void {
 const PARTY_LEVEL = 9;
 const GOBLIN_LEVEL = 6;
 const FIGHT_SEED = 0x3e7c_0de5;
+/**
+ * How many seeded streams a survivability margin is averaged over. One stream
+ * is a lottery: any `Math.random` call added anywhere in game code — a goblin's
+ * cosmetic fidget, say — reshuffles every roll after it and can move a
+ * single stream's margin by more than the margin is held to.
+ */
+const SURVIVABILITY_STREAMS = 12;
+/** Spreads the streams' seeds apart, so neighbouring streams share no rolls. */
+const STREAM_SEED_STRIDE = 0x9e37_79b9;
+
+function streamSeed(stream: number): number {
+  return (FIGHT_SEED + stream * STREAM_SEED_STRIDE) >>> 0;
+}
 const FIGHT_OWNER_TILE_X = 8;
 const FIGHT_TILE_Y = 10;
 /**
@@ -1863,8 +1876,12 @@ type HireStance = 'fighting' | 'inert' | 'healless';
  * so every arm — no hire, an inert hire, a fighting one — starts the fight on
  * the same stream: whatever building the hire drew does not reach the goblins.
  */
-function standardFight(hire: MercenaryTemplateId | null, stance: HireStance): FightOutcome {
-  return seeded(FIGHT_SEED, () => {
+function standardFight(
+  hire: MercenaryTemplateId | null,
+  stance: HireStance,
+  seed = FIGHT_SEED,
+): FightOutcome {
+  return seeded(seed, () => {
     const scene = buildScene(hire, {
       map: makeFightRoom(),
       humanTile: { x: FIGHT_OWNER_TILE_X, y: FIGHT_TILE_Y },
@@ -1876,7 +1893,7 @@ function standardFight(hire: MercenaryTemplateId | null, stance: HireStance): Fi
       Object.defineProperty(merc.kit, 'release', { value: NO_HEAL });
     }
     levelOwner(scene.human);
-    Math.random = mulberry32(FIGHT_SEED);
+    Math.random = mulberry32(seed);
     for (const [tileX, tileY] of FIGHT_GOBLIN_TILES) {
       const goblin = createMob('goblin', tileX, tileY, scene.map);
       placeAtTile(goblin, tileX, tileY);
@@ -1937,6 +1954,36 @@ function keptAliveLonger(
 const HEAL_MARGIN_SECONDS = 1.5;
 const HEAL_MARGIN_FRAMES = HEAL_MARGIN_SECONDS * FRAMES_PER_SECOND;
 
+/** One stance's fight on every survivability stream. */
+function fightOnStreams(hire: MercenaryTemplateId | null, stance: HireStance): FightOutcome[] {
+  return Array.from({ length: SURVIVABILITY_STREAMS }, (_unused, stream) =>
+    standardFight(hire, stance, streamSeed(stream)),
+  );
+}
+
+/** Mean frames `hired` kept her up past `baseline`, stream by stream. */
+function meanMarginFrames(
+  hired: readonly FightOutcome[],
+  baseline: readonly FightOutcome[],
+): number {
+  let total = 0;
+  hired.forEach((outcome, stream) => {
+    const base = baseline[stream];
+    total +=
+      framesStanding(outcome) - (base === undefined ? FIGHT_WINDOW_FRAMES : framesStanding(base));
+  });
+  return total / Math.max(1, hired.length);
+}
+
+/** Whether every baseline stream went down, so a margin over it means something. */
+function allKnockedOut(baseline: readonly FightOutcome[]): boolean {
+  return baseline.every((outcome) => outcome.knockoutFrame !== null);
+}
+
+function describeMargin(frames: number): string {
+  return `${frames >= 0 ? '+' : ''}${(frames / FRAMES_PER_SECOND).toFixed(1)} s`;
+}
+
 function sameFight(a: FightOutcome, b: FightOutcome): boolean {
   return a.knockoutFrame === b.knockoutFrame && a.hpLost === b.hpLost;
 }
@@ -1966,14 +2013,15 @@ function checkSurvivability(report: LifecycleGateReporter): void {
   );
   for (const id of MERCENARY_TEMPLATE_IDS) {
     const inert = standardFight(id, 'inert');
-    const hired = standardFight(id, 'fighting');
     report.check(
       sameFight(inert, alone),
       `${id}: spawned and sent off before the fight, the fight is the one she has alone`,
     );
+    const inertStreams = fightOnStreams(id, 'inert');
+    const margin = meanMarginFrames(fightOnStreams(id, 'fighting'), inertStreams);
     report.check(
-      keptAliveLonger(hired, inert),
-      `${id}: ${describeFight(hired)}, against ${describeFight(inert)} with it inert (${marginSeconds(hired, inert)}, at least +${SURVIVABILITY_MARGIN_SECONDS} s)`,
+      allKnockedOut(inertStreams) && margin >= SURVIVABILITY_MARGIN_FRAMES,
+      `${id}: keeps her up ${describeMargin(margin)} longer than with it inert, averaged over ${SURVIVABILITY_STREAMS} streams (at least +${SURVIVABILITY_MARGIN_SECONDS} s)`,
     );
   }
   report.checkCatches(
@@ -1981,11 +2029,11 @@ function checkSurvivability(report: LifecycleGateReporter): void {
     `an inert hire is not counted as keeping her up`,
   );
 
-  const medic = standardFight('bucket_boy', 'fighting');
-  const medicHealless = standardFight('bucket_boy', 'healless');
+  const medicHealless = fightOnStreams('bucket_boy', 'healless');
+  const healMargin = meanMarginFrames(fightOnStreams('bucket_boy', 'fighting'), medicHealless);
   report.check(
-    keptAliveLonger(medic, medicHealless, HEAL_MARGIN_FRAMES),
-    `Bucket Boy's heals are part of it: with his Triage landing nothing she is ${describeFight(medicHealless)} (his heals are worth ${marginSeconds(medic, medicHealless)}, at least +${HEAL_MARGIN_SECONDS} s)`,
+    allKnockedOut(medicHealless) && healMargin >= HEAL_MARGIN_FRAMES,
+    `Bucket Boy's heals are part of it: emptying his Triage costs her ${describeMargin(healMargin)}, averaged over ${SURVIVABILITY_STREAMS} streams (at least +${HEAL_MARGIN_SECONDS} s)`,
   );
   const brawler = standardFight('gluteus_maxx', 'fighting');
   const brawlerHealless = standardFight('gluteus_maxx', 'healless');

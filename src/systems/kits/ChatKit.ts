@@ -1,7 +1,7 @@
 /**
  * ChatKit — the chat box, its bubble, and the command table behind it.
  *
- * The universal cheats (`!god`, `!tough`, `!payday`, `!levelup`) live here, so
+ * The universal cheats (`!god`, `!tough`, `!payday`, `!levelup`, `!give`, `!vomit`) live here, so
  * they work wherever the player can open chat rather than only in the dungeon.
  * Commands a scene cannot honour are simply absent from its table — a scene
  * contributes the ones its own systems can answer, and there are no stubs that
@@ -16,12 +16,18 @@ import {
 } from '../../core/GodMode';
 import type { AbilityManager } from '../../core/AbilityManager';
 import { aiAdapter } from '../../ai/AIAdapter';
+import { ITEM_DEF, isItemId } from '../../core/ItemDefs';
+import { makeBloodVomit } from '../../core/StatusEffect';
+import { BLOOD_VOMIT_INTERVAL_FRAMES } from '../../core/statusTuning';
 import { PlayerChatSystem } from '../PlayerChatSystem';
 import type { SceneWorld } from './SceneWorld';
 import type { Surface } from '../../ui/core/UiRoot';
 
-/** What `!payday` is worth. Enough to matter, not enough to be the whole economy. */
-const CHEAT_PAYDAY_COINS = 2500;
+/** What `!payday` is worth. */
+const CHEAT_PAYDAY_COINS = 10000;
+
+/** How soon `!vomit` brings up its first bout, so a test need not wait out the interval. */
+const CHEAT_VOMIT_FIRST_BOUT_FRAMES = 60;
 
 /**
  * One chat command: the text that triggers it and what it does. `run` receives
@@ -172,6 +178,19 @@ export class ChatKit {
         },
       },
       {
+        name: '!give',
+        run: (argument) => this.giveItem(argument),
+      },
+      {
+        name: '!vomit',
+        run: () => {
+          const bloodVomit = makeBloodVomit();
+          bloodVomit.ticksRemaining -= BLOOD_VOMIT_INTERVAL_FRAMES - CHEAT_VOMIT_FIRST_BOUT_FRAMES;
+          this.world.pm.active().applyStatus(bloodVomit);
+          return '🩸 BLOOD VOMIT';
+        },
+      },
+      {
         name: '!levelup',
         run: () => {
           for (const player of this.world.pm.players()) {
@@ -182,6 +201,20 @@ export class ChatKit {
         },
       },
     ];
+  }
+
+  /**
+   * `!give <item_id>`: one of the item, to the crawler who can wear it when only
+   * one can, otherwise to whoever is in control.
+   */
+  private giveItem(argument: string): string {
+    if (!isItemId(argument)) return `❓ NO ITEM "${argument}"`;
+    const wearer = ITEM_DEF[argument].wearer;
+    const { pm } = this.world;
+    const recipient = wearer === undefined ? pm.active() : wearer === 'cat' ? pm.cat : pm.human;
+    if (!recipient.inventory.addItem(argument, 1)) return '🎒 NO ROOM';
+    recipient.onInventoryChanged();
+    return `🎁 ${ITEM_DEF[argument].name}`;
   }
 
   /** `!god`: the stat/speed/ability overlay, plus the shared flag that carries it. */

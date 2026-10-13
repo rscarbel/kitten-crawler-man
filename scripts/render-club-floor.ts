@@ -122,3 +122,35 @@ club.renderFloor(cropGameCtx, camX, camY);
 for (const figure of figures) figure.render(cropGameCtx, camX, camY, TILE_SIZE);
 writePreviewPng(`${OUT_DIR}/dance-floor-4x.png`, cropCanvas.toBuffer('image/png'));
 console.log(`wrote ${OUT_DIR}/dance-floor-4x.png`);
+
+// The casino at in-game size and enlarged, so the slot bank, the wheel and the
+// counter are judged both as the player sees them and in detail. Carl and
+// Donut stand in the row behind the slot bank, where the cabinets' fronts must
+// be painted over them.
+const CASINO_TILES = { x0: 17, y0: 0, x1: 24, y1: 10 };
+const BEHIND_SLOTS_ROW = 7;
+const CARL_BEHIND_SLOTS_X = 21;
+const DONUT_BEHIND_SLOTS_X = 22;
+const carlBehindSlots = new HumanPlayer(CARL_BEHIND_SLOTS_X, BEHIND_SLOTS_ROW, TILE_SIZE);
+const donutBehindSlots = new CatPlayer(DONUT_BEHIND_SLOTS_X, BEHIND_SLOTS_ROW, TILE_SIZE);
+const casinoFigures = [...figures, carlBehindSlots, donutBehindSlots].sort((a, b) => a.y - b.y);
+const CASINO_SCALES = [1, CROP_SCALE] as const;
+for (const scale of CASINO_SCALES) {
+  const casinoW = (CASINO_TILES.x1 - CASINO_TILES.x0) * TILE_SIZE;
+  const casinoH = (CASINO_TILES.y1 - CASINO_TILES.y0) * TILE_SIZE;
+  const casinoCanvas: Canvas = createCanvas(casinoW * scale, casinoH * scale);
+  const casinoCtx = casinoCanvas.getContext('2d');
+  casinoCtx.scale(scale, scale);
+  const casinoGameCtx = asGameContext(casinoCtx);
+  const casinoCamX = CASINO_TILES.x0 * TILE_SIZE;
+  const casinoCamY = CASINO_TILES.y0 * TILE_SIZE;
+  map.renderCanvas(casinoGameCtx, casinoCamX, casinoCamY, casinoW, casinoH);
+  map.renderDecorationsOverlay(casinoGameCtx, casinoCamX, casinoCamY, casinoW, casinoH);
+  club.renderFloor(casinoGameCtx, casinoCamX, casinoCamY);
+  for (const figure of casinoFigures) {
+    figure.render(casinoGameCtx, casinoCamX, casinoCamY, TILE_SIZE);
+  }
+  const file = `${OUT_DIR}/casino-${scale}x.png`;
+  writePreviewPng(file, casinoCanvas.toBuffer('image/png'));
+  console.log(`wrote ${file}`);
+}

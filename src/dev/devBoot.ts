@@ -28,6 +28,8 @@ import { StatusPreviewScene } from '../scenes/StatusPreviewScene';
 import { FairyPreviewScene } from '../scenes/FairyPreviewScene';
 import { CasinoPreviewScene } from '../scenes/CasinoPreviewScene';
 import { PokerPreviewScene } from '../scenes/PokerPreviewScene';
+import { SlotsPreviewScene } from '../scenes/SlotsPreviewScene';
+import { WheelPreviewScene } from '../scenes/WheelPreviewScene';
 import { KeyboardHeroPreviewScene } from '../scenes/KeyboardHeroPreviewScene';
 import { PipeBoardPreviewScene } from '../scenes/PipeBoardPreviewScene';
 import { TownMapScene } from '../scenes/TownMapScene';
@@ -181,6 +183,7 @@ function devFloorOptions(
   return {
     ...options,
     saveProgress: persistsSaves ? options.saveProgress : undefined,
+    progressWipe: persistsSaves ? options.progressWipe : undefined,
     murderQuestProgress: seededMurderProgress ?? options.murderQuestProgress,
   };
 }
@@ -406,6 +409,16 @@ export function devBootScene(
 
   if (params.get('poker') !== null) {
     sceneManager.replace(new PokerPreviewScene());
+    return true;
+  }
+
+  if (params.get('slots') !== null) {
+    sceneManager.replace(new SlotsPreviewScene());
+    return true;
+  }
+
+  if (params.get('wheel') !== null) {
+    sceneManager.replace(new WheelPreviewScene());
     return true;
   }
 

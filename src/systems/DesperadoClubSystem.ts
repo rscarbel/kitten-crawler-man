@@ -11,6 +11,7 @@ import {
   CLUB_STATIONS,
   CLUB_DANCE_FLOOR,
   CLUB_DJ_TILE,
+  CLUB_TITO_POST,
   CLUB_DANCER_TILES,
   CLUB_INTERIOR_W,
   type ClubStation,
@@ -32,6 +33,7 @@ import {
   CLUB_VIP_HOST,
 } from '../sprites/clubCastRoster';
 import { drawCasinoDealer, drawCasinoDealerHands } from '../sprites/casinoDealerSprite';
+import { drawTitoFigure } from '../sprites/titoSprite';
 import { drawCrocodilianSprite, prewarmClarabelle } from '../sprites/crocodilianSprite';
 import { drawCretinSprite, prewarmCretin, type CretinVariant } from '../sprites/cretinSprite';
 import { CRETIN_WALK_FRAMES, CRETIN_WALK_TILES_PER_CYCLE } from '../sprites/cretinTiming';
@@ -46,6 +48,12 @@ import { TABLE_MAXIMUM, TABLE_MINIMUM } from './casino/BlackjackTable';
 import { POKER_DEV_SEED } from './casino/poker/npc/personality';
 import { canAffordCoins } from '../core/partyCoins';
 import { casinoGamePickerSurface } from '../ui/screens/dialogs/casinoGamePicker';
+import { ClubSlotsSystem } from './ClubSlotsSystem';
+import {
+  idleCasinoGameHost,
+  type CasinoGameHost,
+  type CasinoGameHosts,
+} from './casino/CasinoGameHost';
 import type { ToastTone } from '../ui/hud/toasts';
 import type { Surface } from '../ui/core/UiRoot';
 import { keybindings } from '../core/Keybindings';
@@ -282,7 +290,7 @@ export const CLUB_STATION_SURFACE_IDS: readonly string[] = [
 function promptLabel(station: ClubStation): string {
   if (station.id === 'clarabelle') return 'Talk';
   if (station.id === 'bar' || station.id === 'market') return 'Shop';
-  if (station.id === 'casino') return 'Play Cards';
+  if (station.id === 'casino') return 'Play';
   if (station.id === 'mercenary') return 'Hire';
   return 'Enter';
 }
@@ -308,6 +316,11 @@ export class DesperadoClubSystem {
   private readonly marketShop: ShopSystem;
   private readonly casino: ClubCasinoSystem;
   private readonly poker: ClubPokerSystem;
+  /** The picker's slots and wheel, each run by its own host system. */
+  private readonly games: CasinoGameHosts = {
+    slots: idleCasinoGameHost(),
+    wheel: idleCasinoGameHost(),
+  };
   /** The casino's "which game?" question is up. */
   private gamePickerOpen = false;
   private readonly guild: MercenaryGuildSystem;
@@ -374,6 +387,10 @@ export class DesperadoClubSystem {
     this.poker.onWinnings = (coins, screenX, screenY) =>
       this.onCasinoWinnings?.(coins, screenX, screenY);
     this.poker.onNotice = (message, tone) => this.onCasinoNotice?.(message, tone);
+    const slots = new ClubSlotsSystem(audio, membership);
+    slots.onWinnings = (coins, screenX, screenY) =>
+      this.onCasinoWinnings?.(coins, screenX, screenY);
+    this.games.slots = slots;
     this.guild = new MercenaryGuildSystem(roster, audio);
     this.vip = new ClubVipLoungeSystem(audio, roster, membership);
     prewarmClarabelle();
@@ -395,9 +412,26 @@ export class DesperadoClubSystem {
     this.catAchievements?.tryUnlock(id);
   }
 
-  /** Coins staked at either casino game since entering the club — the free-security perk hook. */
+  /**
+   * Seats a game whose host the scene builds, in place of its idle stand-in.
+   * Call before the club's surfaces are mounted, which is when the host's own
+   * surfaces join them.
+   */
+  installCasinoGame(game: keyof CasinoGameHosts, host: CasinoGameHost): void {
+    this.games[game] = host;
+  }
+
+  /** Coins staked at any casino game since entering the club — the free-security perk hook. */
   get coinsWageredThisVisit(): number {
-    return this.casino.coinsWageredThisVisit + this.poker.coinsWageredThisVisit;
+    const hostedWagers = this.casinoGameHosts().reduce(
+      (sum, host) => sum + host.coinsWageredThisVisit,
+      0,
+    );
+    return this.casino.coinsWageredThisVisit + this.poker.coinsWageredThisVisit + hostedWagers;
+  }
+
+  private casinoGameHosts(): readonly CasinoGameHost[] {
+    return [this.games.slots, this.games.wheel];
   }
 
   /** Whether the shared conversation is currently showing one of Clarabelle's lines, rather than someone else's. */
@@ -465,8 +499,9 @@ export class DesperadoClubSystem {
   /**
    * The game picker and every poker surface: the buy-in, the table, the hand
    * history, a seat's card, the rules sheet, the bust prompt and the leave
-   * confirm. All are modal, and surfaces in one band stack in the order they
-   * open, so whichever opened last sits on top.
+   * confirm, then every surface of the slots and wheel hosts. All are modal,
+   * and surfaces in one band stack in the order they open, so whichever opened
+   * last sits on top.
    */
   pokerSurfaces(seat: CasinoSeat): Surface[] {
     return [
@@ -476,6 +511,14 @@ export class DesperadoClubSystem {
         minPokerBuyIn: POKER_MIN_BUY_IN,
         blackjackBets: { min: TABLE_MINIMUM, max: TABLE_MAXIMUM },
         canBuyIntoPoker: () => canAffordCoins(seat.active(), seat.companion(), POKER_MIN_BUY_IN),
+        onSlots: () => {
+          this.gamePickerOpen = false;
+          this.games.slots.open(seat);
+        },
+        onWheel: () => {
+          this.gamePickerOpen = false;
+          this.games.wheel.open(seat);
+        },
         onBlackjack: () => {
           this.gamePickerOpen = false;
           this.casino.openTable(seat.active(), seat.companion());
@@ -496,6 +539,7 @@ export class DesperadoClubSystem {
       this.poker.bustSurface(POKER_BUST_SURFACE_ID, seat),
       this.poker.gameOverSurface(POKER_GAME_OVER_SURFACE_ID, seat),
       this.poker.leaveConfirmSurface(POKER_LEAVE_CONFIRM_SURFACE_ID),
+      ...this.casinoGameHosts().flatMap((host) => host.surfaces(seat)),
     ];
   }
 
@@ -506,6 +550,7 @@ export class DesperadoClubSystem {
       this.casino.open ||
       this.gamePickerOpen ||
       this.poker.anySurfaceOpen ||
+      this.casinoGameHosts().some((host) => host.anySurfaceOpen) ||
       this.guild.open ||
       this.vip.open
     );
@@ -523,6 +568,7 @@ export class DesperadoClubSystem {
     // instead — so a missing companion here falls back to the active crawler alone.
     this.casino.update(active, companion ?? active);
     this.poker.update();
+    this.updateCasinoGameHosts();
     this.drainShopTrades();
     // Sub-panels freeze this update() while open, so pending achievement flags set
     // during a hire/win/hire-escort are consumed here once the panel closes.
@@ -544,6 +590,7 @@ export class DesperadoClubSystem {
     this.drainShopTrades();
     this.casino.update(active, companion);
     this.poker.update();
+    this.updateCasinoGameHosts();
     // A natural can settle while the panel is still open, and that panel can be
     // the last thing the player touches before leaving — so the flags are
     // drained here too, or the achievement is lost with the system.
@@ -551,8 +598,17 @@ export class DesperadoClubSystem {
     this.syncCasinoMusic();
   }
 
+  private updateCasinoGameHosts(): void {
+    for (const host of this.casinoGameHosts()) host.update();
+  }
+
   private anyCasinoSurfaceOpen(): boolean {
-    return this.casino.open || this.gamePickerOpen || this.poker.anySurfaceOpen;
+    return (
+      this.casino.open ||
+      this.gamePickerOpen ||
+      this.poker.anySurfaceOpen ||
+      this.casinoGameHosts().some((host) => host.anySurfaceOpen)
+    );
   }
 
   /**
@@ -603,6 +659,7 @@ export class DesperadoClubSystem {
     this.crowdObstacles.length = 0;
     for (const station of CLUB_STATIONS) this.crowdObstacles.push(tileBody(station.tile));
     this.crowdObstacles.push(tileBody(CLUB_DJ_TILE));
+    this.crowdObstacles.push(tileBody(CLUB_TITO_POST));
     for (const dancer of CLUB_DANCER_TILES) this.crowdObstacles.push(tileBody(dancer));
     this.crowdObstacles.push(playerBody(active));
     if (companion !== null) this.crowdObstacles.push(playerBody(companion));
@@ -769,6 +826,7 @@ export class DesperadoClubSystem {
     if (this.casino.open) this.casino.close(player);
     this.gamePickerOpen = false;
     this.poker.forceClose(player);
+    for (const host of this.casinoGameHosts()) host.forceClose?.();
     this.guild.close();
     this.vip.close();
     // The overworld restores its own music on exit; starting the club set here
@@ -815,11 +873,12 @@ export class DesperadoClubSystem {
     const figures: InteriorFigure[] = CLUB_PROPS.map((prop) => ({
       y: propSortY(prop),
       render: (ctx: CanvasRenderingContext2D, camX: number, camY: number) =>
-        drawClubProp(ctx, prop, camX, camY),
+        drawClubProp(ctx, prop, camX, camY, this.animTime / CLUB_ANIM_FRAMES_PER_SECOND),
     }));
 
     CLUB_DANCER_TILES.forEach((tile, i) => figures.push(this.dancerFigure(tile, clubDancerAt(i))));
     figures.push(this.djFigure(CLUB_DJ_TILE));
+    figures.push(this.titoFigure(CLUB_TITO_POST));
     for (const station of CLUB_STATIONS) {
       if (station.id === 'casino') {
         figures.push(this.dealerFigure(station.tile));
@@ -913,6 +972,18 @@ export class DesperadoClubSystem {
           tileSize,
           this.animTime,
         ),
+    };
+  }
+
+  /** Tito behind his counter at the foot of the wheel: dressing, not a station. */
+  private titoFigure(tile: { x: number; y: number }): InteriorFigure {
+    return {
+      y: tile.y * TILE_SIZE,
+      render: (ctx, camX, camY, tileSize) =>
+        drawTitoFigure(ctx, tile.x * TILE_SIZE - camX, tile.y * TILE_SIZE - camY, {
+          size: tileSize,
+          timeMs: this.animTime * MS_PER_FRAME,
+        }),
     };
   }
 

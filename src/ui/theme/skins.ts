@@ -57,6 +57,7 @@ export interface ControlSizeSkin {
 export const PANEL_KINDS = [
   'card',
   'sheet',
+  'solid',
   'raised',
   'inset',
   'hud',
@@ -407,6 +408,14 @@ function buildPanels(theme: Theme): Record<PanelKind, PanelSkin> {
     },
     sheet: {
       fill: palette.surface.base,
+      border: palette.border.subtle,
+      borderWidth: BORDER_WIDTH,
+      radius: radius.lg,
+      shadow: elevation.panel,
+      padding: space.lg,
+    },
+    solid: {
+      fill: palette.surface.solid,
       border: palette.border.subtle,
       borderWidth: BORDER_WIDTH,
       radius: radius.lg,

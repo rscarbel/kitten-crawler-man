@@ -4,6 +4,7 @@ import {
   ACHIEVEMENT_DEFS,
   isAchievementId,
   type AchievementManager,
+  type BoxTier,
 } from '../../../core/AchievementManager';
 import { CRAWLER_NAMES, type CrawlerKind } from '../../../core/SkillManager';
 import { centerIn, inset, splitH } from '../../core/geom';
@@ -17,7 +18,7 @@ import type { PauseContext, PauseSection, SectionLayout } from './section';
 
 const OPEN_BOXES_LABEL = 'Open Boxes';
 
-function tierColor(theme: Theme, tier: string): string {
+function tierColor(theme: Theme, tier: BoxTier): string {
   const { palette } = theme;
   switch (tier) {
     case 'Bronze':
@@ -26,12 +27,12 @@ function tierColor(theme: Theme, tier: string): string {
       return palette.text.secondary;
     case 'Gold':
       return palette.accent.base;
+    case 'Platinum':
+      return palette.tier.platinum;
     case 'Legendary':
       return palette.category.book;
     case 'Celestial':
       return palette.state.info;
-    default:
-      return palette.text.primary;
   }
 }
 

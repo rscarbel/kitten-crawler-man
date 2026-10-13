@@ -16,6 +16,12 @@ import type { SpellSystem } from './SpellSystem';
 import { makeSepsis, makeMagicBurn, makeStun } from '../core/StatusEffect';
 import { getSmushStats } from '../abilities/smush';
 import { getMagicMissileVisualTier } from '../abilities/magicMissile';
+import {
+  EYES_OF_SPLATTER_ID,
+  missileCanStrike,
+  missileMayHitMob,
+  missileStrikesScenery,
+} from '../abilities/eyesOfSplatter';
 import type { ExplosionVariant } from '../sprites/art/magicMissileArt';
 import type { MagicMissileImpactEffectSystem } from './MagicMissileImpactEffectSystem';
 import type { MeleeImpactEffectSystem } from './MeleeImpactEffectSystem';
@@ -29,6 +35,7 @@ import {
   POWERFUL_STRIKE_DAMAGE_MULTIPLIER,
 } from '../core/SkillManager';
 import { SLINGSHOT_HIT_RADIUS_FRACTION } from '../sprites/slingshotSprite';
+import type { TaranisStrikeSystem } from './TaranisStrikeSystem';
 
 /** From an entity's tile origin to the centre of its tile. */
 const HALF_TILE = TILE_SIZE / 2;
@@ -189,6 +196,8 @@ export interface CombatContext {
   meleeFx?: Pick<MeleeImpactEffectSystem, 'spawn'>;
   /** Absent in scenes that draw no world effects (e.g. building interiors). */
   missileFx?: Pick<MagicMissileImpactEffectSystem, 'spawn'>;
+  /** Absent where a scene builds its own context; Carl's sword then cuts like a fist. */
+  taranis?: Pick<TaranisStrikeSystem, 'swing'>;
   /** Set to true by resolvePlayerAttacks when any hit connected this frame. */
   hitLanded: boolean;
 }
@@ -213,13 +222,39 @@ function missileExplosionVariant(missile: Missile): ExplosionVariant {
  * random doubling would make that estimate flap frame to frame.
  */
 export function crawlerMeleeStrikeDamage(crawler: HumanPlayer | CatPlayer): number {
-  const damage = crawler.getMeleeDamage();
-  if (crawler instanceof CatPlayer) return damage;
+  if (crawler instanceof CatPlayer) return crawler.getMeleeDamage();
+  const damage = crawler.getStrikeDamage();
   const powerfulStrikeChance =
     POWERFUL_STRIKE_CHANCE_PER_LEVEL * crawler.effectiveSkillLevel('powerful_strike');
   const strikeMultiplier =
     Math.random() < powerfulStrikeChance ? POWERFUL_STRIKE_DAMAGE_MULTIPLIER : 1;
   return Math.round(damage * strikeMultiplier);
+}
+
+/**
+ * The riders Carl's gear puts on a blow that landed on `mob`: the crown's
+ * sepsis and the gauntlet's stun. Shared by every blow he lands in melee, fist
+ * or blade, so a weapon in hand never quietly drops what the gear promises.
+ */
+export function landHumanGearProcs(human: HumanPlayer, mob: Mob): void {
+  // A guarded blow never touched the mob, so nothing rides in on it.
+  const bladeConnected = !mob.lastBlowWasGuarded;
+  if (
+    bladeConnected &&
+    human.inventory.hasEquipped('enchanted_crown_sepsis_whore') &&
+    Math.random() < SEPSIS_PROC_CHANCE
+  ) {
+    mob.applyStatus(makeSepsis(human));
+  }
+  // Bosses are exempt here even though smush's own boss stun is not: smush's
+  // is capped at a low chance and gated behind a high ability level, while
+  // this is a flat per-swing gear proc that stacks with attack speed — left
+  // unchecked it can hold a boss in a permanent stun loop, which stops being
+  // a fight.
+  const stunChance = human.inventory.equipment.getStunOnHitChance();
+  if (bladeConnected && stunChance > 0 && !mob.isBoss && Math.random() < stunChance) {
+    mob.applyStatus(makeStun(GAUNTLET_STUN_TICKS));
+  }
 }
 
 export function resolvePlayerAttacks(ctx: CombatContext): void {
@@ -232,7 +267,10 @@ export function resolvePlayerAttacks(ctx: CombatContext): void {
   const inSafeRoom = (entity: HumanPlayer | CatPlayer): boolean =>
     safeRoom?.isEntityInSafeRoom(entity) ?? false;
 
-  if (human.isAttackPeak() && !inSafeRoom(human)) {
+  const humanSwings = human.isAttackPeak() && !inSafeRoom(human);
+  if (humanSwings && human.isWieldingTaranis && ctx.taranis !== undefined) {
+    ctx.taranis.swing(ctx);
+  } else if (humanSwings) {
     const hc = centerOf(human);
     const range = human.getMeleeRange();
     const damage = human.getMeleeDamage();
@@ -265,24 +303,7 @@ export function resolvePlayerAttacks(ctx: CombatContext): void {
         mob.takeDamageFrom(crawlerMeleeStrikeDamage(human), human, 'melee');
         ctx.hitLanded = true;
         humanHit = true;
-        // A guarded blow never touched the mob, so nothing rides in on it.
-        const bladeConnected = !mob.lastBlowWasGuarded;
-        if (
-          bladeConnected &&
-          human.inventory.hasEquipped('enchanted_crown_sepsis_whore') &&
-          Math.random() < SEPSIS_PROC_CHANCE
-        ) {
-          mob.applyStatus(makeSepsis(human));
-        }
-        // Bosses are exempt here even though smush's own boss stun is not: smush's
-        // is capped at a low chance and gated behind a high ability level, while
-        // this is a flat per-swing gear proc that stacks with attack speed — left
-        // unchecked it can hold a boss in a permanent stun loop, which stops being
-        // a fight.
-        const stunChance = human.inventory.equipment.getStunOnHitChance();
-        if (bladeConnected && stunChance > 0 && !mob.isBoss && Math.random() < stunChance) {
-          mob.applyStatus(makeStun(GAUNTLET_STUN_TICKS));
-        }
+        landHumanGearProcs(human, mob);
       }
     }
     // OR-ed in so a swing that connects only with a crate still plays the
@@ -469,13 +490,17 @@ export function resolvePlayerAttacks(ctx: CombatContext): void {
     const hitRadius = TILE_SIZE * MISSILE_HIT_RADIUS_FRACTION;
     const splashRadius = TILE_SIZE * MISSILE_SPLASH_RADIUS_TILES;
 
+    const wearsSplatterEyes = cat.inventory.hasEquipped(EYES_OF_SPLATTER_ID);
+
     for (const missile of cat.getMissiles()) {
-      if (missile.state !== 'flying' || missile.hit) continue;
+      if (missile.state !== 'flying' || missile.hit || !missileCanStrike(missile)) continue;
       const damage = cat.getMissileDamage();
+      const strikesScenery = missileStrikesScenery(missile);
 
       // Props are checked before mobs so a missile flying into a crate stack
       // detonates on the wood rather than sailing through it.
       if (
+        strikesScenery &&
         !cat.zeroDamage &&
         (ctx.destructibles?.tryProjectileHit(missile.x, missile.y, hitRadius, damage, cat) ?? false)
       ) {
@@ -490,6 +515,7 @@ export function resolvePlayerAttacks(ctx: CombatContext): void {
       // Interior props take the same detonate-on-impact check as dungeon
       // destructibles; the two never coexist on one map, same as trees below.
       if (
+        strikesScenery &&
         !cat.zeroDamage &&
         (ctx.interiorProps?.tryProjectileHit(missile.x, missile.y, hitRadius, damage) ?? false)
       ) {
@@ -506,6 +532,7 @@ export function resolvePlayerAttacks(ctx: CombatContext): void {
       // dungeon floors and trees only on the overworld, so no map ever has both.
       const trees = ctx.trees;
       if (
+        strikesScenery &&
         trees !== undefined &&
         !cat.zeroDamage &&
         trees.tryProjectileHit(missile.x, missile.y, hitRadius, damage, cat)
@@ -534,6 +561,7 @@ export function resolvePlayerAttacks(ctx: CombatContext): void {
         // detonating on it: an ally who wanders into the line of fire should
         // cost the player nothing at all, not even the shot.
         if (!mob.isAlive || !mob.takesPlayerDamage('missile')) continue;
+        if (!missileMayHitMob(missile, mob)) continue;
         const mc = centerOf(mob);
         const dist = Math.hypot(missile.x - mc.x, missile.y - mc.y);
         if (dist < hitRadius) {
@@ -571,10 +599,15 @@ export function resolvePlayerAttacks(ctx: CombatContext): void {
               }
             }
 
-            // Level 10+: queue sub-missiles from impact point (non-sub missiles only)
-            if (missileLevel >= MISSILE_SUB_MISSILE_LEVEL && !missile.isSubMissile) {
+            const isSplatterCopy = missile.splatter !== undefined;
+            if (
+              missileLevel >= MISSILE_SUB_MISSILE_LEVEL &&
+              !missile.isSubMissile &&
+              !isSplatterCopy
+            ) {
               cat.queueSubMissileSpawn(missile.x, missile.y);
             }
+            if (wearsSplatterEyes && !isSplatterCopy) cat.queueSplatterCopies(missile);
 
             // Level 15: slow bosses and grant kill XP tracked separately in resolveKills
             if (missileLevel >= MISSILE_SLOW_BOSS_LEVEL && mob.isBoss) {

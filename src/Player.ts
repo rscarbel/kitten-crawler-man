@@ -17,8 +17,14 @@ import {
   SPEED_FIZZ_STATUS,
   REFRESHED_STATUS,
   REFRESHED_SPEED_FACTOR,
+  BLOOD_VOMIT_STATUS,
+  INCURABLE_STATUSES,
+  isBloodVomitBoutFrame,
 } from './core/StatusEffect';
+import { applyRetchPose, retchPoseOf } from './sprites/status/statusBloodVomit';
+import type { StatusMouth } from './sprites/status/statusPaint';
 import {
+  BLOOD_VOMIT_MAX_HP_SHARE,
   CHILLED_ACTION_SPEED_FACTOR,
   CHILLED_MOVE_SPEED_FACTOR,
   FREEZE_GRACE_FRAMES,
@@ -380,6 +386,24 @@ export interface StatusFigureBox {
   readonly halfWidth: number;
 }
 
+/**
+ * A character's mouth on its drawn figure, in fractions of its tile from the
+ * tile's top-left, and which way the figure bends toward it: toward the face
+ * when side-on, 0 when facing the camera. Each figure turns side-on at its own
+ * threshold, so the figure says which it is rather than the facing.
+ */
+export interface FigureMouth {
+  readonly x: number;
+  readonly y: number;
+  readonly lean: -1 | 0 | 1;
+}
+
+/** How far down its own figure a character's mouth sits when nothing says otherwise. */
+const DEFAULT_MOUTH_DOWN_SHARE = 0.15;
+
+/** How far past the feet, in tiles, a bout of blood vomiting splashes down. */
+const BLOOD_VOMIT_SPLASH_REACH_TILES = 0.45;
+
 /** The default figure box: exactly the character's tile. */
 const TILE_FIGURE_BOX: StatusFigureBox = {
   centerX: 0.5,
@@ -493,6 +517,12 @@ export abstract class Player implements AboveDarknessDrawer {
   readonly waterlineAboveFootPx: number = DEFAULT_WATERLINE_ABOVE_FOOT_PX;
   /** Set when a status effect deals a damage tick; DungeonScene reads and clears it to play the sound. */
   effectDamageSoundPending = false;
+  /**
+   * Set on the frame a bout of blood vomiting comes up; a scene drains it into
+   * the splatter on the floor and the retch sound, neither of which a body can
+   * reach on its own.
+   */
+  bloodVomitRetchPending = false;
   /** Feedback labels awaiting pickup by `FloatingCombatTextSystem`. */
   readonly pendingFloatingText: FloatingTextRequest[] = [];
   /**
@@ -1463,12 +1493,16 @@ export abstract class Player implements AboveDarknessDrawer {
    * multiplier) still pays it back if a caller ever names one. The unconditional
    * sync at the end covers a cured constitution boon for the same reason, and it
    * runs after the list is replaced because the boon's bonus is read off it.
+   *
+   * The {@link INCURABLE_STATUSES} are never removed, whoever names them: the
+   * AI gamemaster's cure action passes through whatever status the model asks for.
    */
   cureStatuses(types: ReadonlyArray<string>): number {
     const kept: StatusEffect[] = [];
     let cleared = 0;
     for (const effect of this.statusEffects) {
-      if (!types.includes(effect.type)) {
+      const curable = !INCURABLE_STATUSES.includes(effect.type);
+      if (!curable || !types.includes(effect.type)) {
         kept.push(effect);
         continue;
       }
@@ -1564,6 +1598,9 @@ export abstract class Player implements AboveDarknessDrawer {
       if (effect.type === 'spit_venom' && elapsed > 0 && elapsed % SPIT_VENOM_TICK_INTERVAL === 0) {
         this.applyStatusTickDamage(effect);
       }
+      if (effect.type === BLOOD_VOMIT_STATUS && isBloodVomitBoutFrame(effect)) {
+        this.vomitBlood(effect);
+      }
       effect.ticksRemaining--;
       const justExpired = effect.ticksRemaining < 0;
       if (justExpired && effect.type === 'speed_fizz') {
@@ -1601,7 +1638,9 @@ export abstract class Player implements AboveDarknessDrawer {
    * be paid back when it expires.
    */
   restoreStatusEffects(effects: ReadonlyArray<StatusEffect>, juggJuiceHpBoost: number): void {
-    this.clearStatusEffects();
+    // The snapshot is the whole truth, incurable statuses included: one it no
+    // longer carries has run out, and keeping the live one would double it.
+    this.dropStatusEffects(() => false);
     for (const effect of effects) {
       // A ward whose pool did not survive the trip is dropped rather than kept
       // as a badge that absorbs nothing or, with a non-finite pool, everything.
@@ -1618,14 +1657,25 @@ export abstract class Player implements AboveDarknessDrawer {
   }
 
   /**
-   * Clears all active status effects, running any necessary expiry cleanup first.
-   * Use this instead of assigning statusEffects = [] directly so that effects like
-   * Jugg Juice (which mutates maxHp) are properly reversed.
+   * Clears every active status effect except the {@link INCURABLE_STATUSES},
+   * running any necessary expiry cleanup first. Use this instead of assigning
+   * statusEffects = [] directly so that effects like Jugg Juice (which mutates
+   * maxHp) are properly reversed.
    */
   clearStatusEffects(): void {
+    this.dropStatusEffects((effect) => INCURABLE_STATUSES.includes(effect.type));
+  }
+
+  /** Removes every status `keep` turns down, paying back whatever the removed ones lent. */
+  private dropStatusEffects(keep: (effect: StatusEffect) => boolean): void {
     this.freezeGraceFrames = 0;
     let hpMovingEffectCleared = false;
+    const kept: StatusEffect[] = [];
     for (const effect of this.statusEffects) {
+      if (keep(effect)) {
+        kept.push(effect);
+        continue;
+      }
       if (effect.type === 'speed_fizz') {
         this._potionSpeedBoost = 1;
       }
@@ -1635,8 +1685,8 @@ export abstract class Player implements AboveDarknessDrawer {
       }
       if (STAT_BOON_BONUSES.has(effect.type)) hpMovingEffectCleared = true;
     }
-    this.statusEffects = [];
-    // After the list is emptied, never inside the loop: a constitution boon's
+    this.statusEffects = kept;
+    // After the list is replaced, never inside the loop: a constitution boon's
     // bonus is read off `statusEffects`, so an earlier sync would still be
     // measuring the maximum the boon was paying for and the bar would keep the
     // HP the boon lent.
@@ -1747,6 +1797,17 @@ export abstract class Player implements AboveDarknessDrawer {
       applier: effect.applier,
     });
     this.effectDamageSoundPending = true;
+  }
+
+  /**
+   * One bout of blood vomiting. A body already down brings nothing up: the
+   * retch is the cue that the hit is coming, and a downed crawler takes none.
+   */
+  private vomitBlood(effect: StatusEffect): void {
+    if (!this.isAlive || this.isKnockedOut) return;
+    this.bloodVomitRetchPending = true;
+    const damage = Math.max(1, Math.round(this.maxHp * BLOOD_VOMIT_MAX_HP_SHARE));
+    this.takeDamage(damage, { kind: 'status', effectType: effect.type, applier: effect.applier });
   }
 
   /** Returns the combined HP regen rate multiplier from all equipped gear and active modifiers.
@@ -2243,6 +2304,75 @@ export abstract class Player implements AboveDarknessDrawer {
     return TILE_FIGURE_BOX;
   }
 
+  /**
+   * Where this character's mouth is drawn in its current view, or null while
+   * it faces away and the mouth is hidden. Overridden by any figure whose face
+   * is not at the top centre of its box.
+   */
+  protected get statusMouth(): FigureMouth | null {
+    const figure = this.statusFigureBox;
+    return {
+      x: figure.centerX,
+      y: figure.top + (figure.bottom - figure.top) * DEFAULT_MOUTH_DOWN_SHARE,
+      lean: 0,
+    };
+  }
+
+  /**
+   * Draws `paint` bent by the blood-vomiting retch, when one is playing. A
+   * subclass wraps only its figure in this, so the health bar and the active
+   * marker hold still while the body heaves.
+   */
+  protected drawRetching(
+    ctx: CanvasRenderingContext2D,
+    sx: number,
+    sy: number,
+    tileSize: number,
+    paint: () => void,
+  ): void {
+    const effect = this.findStatus(BLOOD_VOMIT_STATUS);
+    const pose = effect === undefined ? null : retchPoseOf(effect);
+    if (pose === null || pose.lean === 0) {
+      paint();
+      return;
+    }
+    const figure = this.statusFigureBox;
+    ctx.save();
+    applyRetchPose(
+      ctx,
+      sx + figure.centerX * tileSize,
+      sy + figure.bottom * tileSize,
+      this.statusMouth?.lean ?? 0,
+      tileSize,
+      pose,
+    );
+    paint();
+    ctx.restore();
+  }
+
+  /**
+   * Where a bout of blood vomiting hits the floor, in world pixels, and the
+   * way it was thrown: ahead of the feet when side-on, just in front of them
+   * when facing the camera, behind the head when facing away.
+   */
+  bloodVomitSplash(): { x: number; y: number; dirX: number; dirY: number } {
+    const figure = this.statusFigureBox;
+    const reach = BLOOD_VOMIT_SPLASH_REACH_TILES * this.tileSize;
+    return {
+      x: this.x + figure.centerX * this.tileSize + this.facingX * reach,
+      y: this.y + figure.bottom * this.tileSize + this.facingY * reach,
+      dirX: this.facingX,
+      dirY: this.facingY,
+    };
+  }
+
+  private findStatus(type: string): StatusEffect | undefined {
+    for (const effect of this.statusEffects) {
+      if (effect.type === type) return effect;
+    }
+    return undefined;
+  }
+
   /** Builds the paint description for one status effect on this character. */
   private statusFrameAt(
     effect: StatusEffect,
@@ -2263,7 +2393,14 @@ export abstract class Player implements AboveDarknessDrawer {
       moving: this.actuallyMoving,
       facingX: this.facingX,
       facingY: this.facingY,
+      mouth: this.statusMouthOnScreen(sx, sy, size),
     };
+  }
+
+  private statusMouthOnScreen(sx: number, sy: number, size: number): StatusMouth | null {
+    const mouth = this.statusMouth;
+    if (mouth === null) return null;
+    return { x: sx + mouth.x * size, y: sy + mouth.y * size, lean: mouth.lean };
   }
 
   /**

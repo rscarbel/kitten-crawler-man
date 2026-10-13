@@ -164,6 +164,7 @@ export class SceneManager {
         this.heldKeys.delete(physicalKey);
         this.keysHeldWhenMenuOpened.delete(physicalKey);
         this.keysSpentByUi.delete(physicalKey);
+        this.current?.ui.keyUp(e.key);
       },
       { capture: true },
     );
@@ -176,6 +177,7 @@ export class SceneManager {
       this.keysSpentByUi.clear();
       // Nor the mouseup: a button held as focus left would stay held.
       this.pointerInput.cancelAll();
+      this.current?.ui.blur();
     });
 
     this.pointerInput = new PointerInput(

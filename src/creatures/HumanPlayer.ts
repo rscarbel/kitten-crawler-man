@@ -1,4 +1,10 @@
-import { Player, type DamageSource, type StatName, type StatusFigureBox } from '../Player';
+import {
+  Player,
+  type DamageSource,
+  type FigureMouth,
+  type StatName,
+  type StatusFigureBox,
+} from '../Player';
 import { TILE_SIZE } from '../core/constants';
 import {
   handTipInTile,
@@ -16,6 +22,7 @@ import {
   setHumanAppearance,
   viewForFacing,
 } from '../sprites/humanSprite';
+import { humanMouthOf } from '../sprites/crawlerMouths';
 import { type HumanAppearance } from '../sprites/art/human/appearance';
 import { FALL_SPANS, HumanReactionDirector, type HumanWarmSpan } from '../sprites/humanReactions';
 import { IDLE_FRAMES_BEFORE_RELEASE } from '../sprites/figure/figureFrameCache';
@@ -57,6 +64,7 @@ import {
   drawCarriedSlingshot,
 } from '../sprites/slingshotCarrySprite';
 import { drawToolOverlay, toolOverlayOf } from '../sprites/toolOverlaySprite';
+import { drawHeldSword, heldSwordOf, swordCracklePhase } from '../sprites/taranisSwordSprite';
 import type { WorkingTool } from '../core/toolTiers';
 import type { CrawlerKind } from '../core/SkillManager';
 import {
@@ -291,6 +299,10 @@ export class HumanPlayer extends Player {
     return HUMAN_STATUS_FIGURE_BOX;
   }
 
+  protected override get statusMouth(): FigureMouth | null {
+    return humanMouthOf(this.spriteSelection());
+  }
+
   constructor(tileX: number, tileY: number, tileSize: number) {
     super(tileX, tileY, tileSize, {
       baseHpOffset: HUMAN_BASE_HP_OFFSET,
@@ -398,6 +410,20 @@ export class HumanPlayer extends Player {
     return flatDamage * ironPunchMultiplier;
   }
 
+  /**
+   * What a cut of the Fury of Taranis is worth before the sword doubles it:
+   * the unarmed formula without what only a fist earns — Pugilism, Iron Punch
+   * and the gauntlet's fist-mode strength — since none of them is in a blade.
+   */
+  getBladeDamage(): number {
+    return bareFistDamage(this.strength) + this.statusMeleeDamageBonus;
+  }
+
+  /** What the blow in his hand is worth: the blade's while the sword is drawn, his fists' otherwise. */
+  getStrikeDamage(): number {
+    return this.isWieldingTaranis ? this.getBladeDamage() : this.getMeleeDamage();
+  }
+
   /** The weapon held in hand, or null for bare fists. */
   get wieldedWeaponId(): ItemId | null {
     return this.heldWeaponId;
@@ -433,12 +459,18 @@ export class HumanPlayer extends Player {
     else this.lowerSlingshot();
   }
 
+  /** True while the Fury of Taranis is drawn, which turns every blow into a cut. */
+  get isWieldingTaranis(): boolean {
+    return this.heldWeaponId === 'fury_of_taranis';
+  }
+
   /**
-   * Takes the slingshot out or puts it away, reporting whether it is now held.
+   * Takes `weaponId` out, putting away whatever else was in hand, or puts it
+   * away if it was the one held. Reports whether it is now held.
    */
-  toggleSlingshotWield(): boolean {
-    this.wield(this.isWieldingSlingshot ? null : 'slingshot');
-    return this.isWieldingSlingshot;
+  toggleWield(weaponId: ItemId): boolean {
+    this.wield(this.heldWeaponId === weaponId ? null : weaponId);
+    return this.heldWeaponId === weaponId;
   }
 
   /** Ends the held draw once the sling is no longer in his hand. */
@@ -640,6 +672,7 @@ export class HumanPlayer extends Player {
       this.facingX,
       this.facingY,
       target === null ? null : this.strikeContextOf(target),
+      this.isWieldingTaranis,
     );
     this.attackTimer = this.ATTACK_FRAMES;
   }
@@ -1046,15 +1079,21 @@ export class HumanPlayer extends Player {
     const carry = this.isWieldingSlingshot && this.isAlive ? carriedSlingshotOf(selection) : null;
     const tool = this.workingTool;
     const toolPlacement = tool !== null && this.isAlive ? toolOverlayOf(selection) : null;
-    if (carry?.behindFigure === true) drawCarriedSlingshot(ctx, carry, sx, sy, s);
-    if (tool !== null && toolPlacement?.behindFigure === true) {
-      drawToolOverlay(ctx, tool.kind, tool.tier, toolPlacement, sx, sy, s);
-    }
-    drawHumanSelection(ctx, sx, sy, s, selection);
-    if (carry?.behindFigure === false) drawCarriedSlingshot(ctx, carry, sx, sy, s);
-    if (tool !== null && toolPlacement?.behindFigure === false) {
-      drawToolOverlay(ctx, tool.kind, tool.tier, toolPlacement, sx, sy, s);
-    }
+    const sword = this.isWieldingTaranis && this.isAlive ? heldSwordOf(selection) : null;
+    const cracklePhase = swordCracklePhase(this.standbyTicks);
+    this.drawRetching(ctx, sx, sy, s, () => {
+      if (carry?.behindFigure === true) drawCarriedSlingshot(ctx, carry, sx, sy, s);
+      if (sword?.behindFigure === true) drawHeldSword(ctx, sword, sx, sy, s, cracklePhase);
+      if (tool !== null && toolPlacement?.behindFigure === true) {
+        drawToolOverlay(ctx, tool.kind, tool.tier, toolPlacement, sx, sy, s);
+      }
+      drawHumanSelection(ctx, sx, sy, s, selection);
+      if (carry?.behindFigure === false) drawCarriedSlingshot(ctx, carry, sx, sy, s);
+      if (sword?.behindFigure === false) drawHeldSword(ctx, sword, sx, sy, s, cracklePhase);
+      if (tool !== null && toolPlacement?.behindFigure === false) {
+        drawToolOverlay(ctx, tool.kind, tool.tier, toolPlacement, sx, sy, s);
+      }
+    });
 
     if (!this.paintingBodyOnly) drawSlingshotRocks(ctx, this.rocks, camX, camY, s);
 

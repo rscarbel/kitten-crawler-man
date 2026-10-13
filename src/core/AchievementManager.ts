@@ -1,5 +1,5 @@
 import { randomInt } from '../utils';
-import type { ItemId } from './ItemDefs';
+import { isItemId, type ItemId } from './ItemDefs';
 import { isRecord } from './guards';
 
 const BRONZE_ADVENTURER_POTION_MIN = 1;
@@ -44,8 +44,8 @@ export type AchievementId =
   | 'little_boom'
   | 'finish_with_a_blow';
 
-const BOX_TIERS = ['Bronze', 'Silver', 'Gold', 'Legendary', 'Celestial'] as const;
-const BOX_CATEGORIES = ['Adventurer', 'Boss', 'Spicy', 'Tutorial'] as const;
+const BOX_TIERS = ['Bronze', 'Silver', 'Gold', 'Platinum', 'Legendary', 'Celestial'] as const;
+const BOX_CATEGORIES = ['Adventurer', 'Boss', 'Spicy', 'Tutorial', 'Wheel'] as const;
 export type BoxTier = (typeof BOX_TIERS)[number];
 export type BoxCategory = (typeof BOX_CATEGORIES)[number];
 
@@ -62,10 +62,13 @@ export interface LootBox {
   id: number;
   tier: BoxTier;
   category: BoxCategory;
-  fromAchievement: AchievementId;
+  /** The achievement that earned the box; null for a box won some other way. */
+  fromAchievement: AchievementId | null;
+  /** Items this particular box carries, on top of its tier/category contents and any achievement rewards. */
+  itemRewards?: ReadonlyArray<ItemReward>;
 }
 
-/** One item an achievement hands over, on top of its box's shared contents. */
+/** One item a box hands over, on top of its shared contents. */
 export interface ItemReward {
   readonly id: ItemId;
   readonly quantity: number;
@@ -275,6 +278,7 @@ const BOX_CONTENTS = {
       bonus: { id: 'goblin_dynamite', quantity: 1 },
     },
     Tutorial: { coins: 0 },
+    Wheel: { potions: 1, coins: 10 },
   },
   Silver: {
     Adventurer: { potions: 3, coins: 20 },
@@ -285,6 +289,7 @@ const BOX_CONTENTS = {
       bonus: { id: 'goblin_dynamite', quantity: 2 },
     },
     Tutorial: { coins: 0 },
+    Wheel: { potions: 2, coins: 20 },
   },
   Gold: {
     Adventurer: { potions: 4, coins: 35 },
@@ -298,6 +303,18 @@ const BOX_CONTENTS = {
       coins: 0,
       displayLines: ['+1 Smush Ability', '+10 Health Potions', '+1 Enchanted BigBoi Boxers'],
     },
+    Wheel: { potions: 3, coins: 35 },
+  },
+  Platinum: {
+    Adventurer: { potions: 5, coins: 45 },
+    Boss: { potions: 5, coins: 80 },
+    Spicy: {
+      potions: 3,
+      coins: 50,
+      bonus: { id: 'goblin_dynamite', quantity: 3 },
+    },
+    Tutorial: { coins: 0 },
+    Wheel: { potions: 4, coins: 50 },
   },
   Legendary: {
     Adventurer: { potions: 5, coins: 60 },
@@ -308,6 +325,7 @@ const BOX_CONTENTS = {
       bonus: { id: 'goblin_dynamite', quantity: 4 },
     },
     Tutorial: { coins: 0 },
+    Wheel: { potions: 5, coins: 75 },
   },
   Celestial: {
     Adventurer: { potions: 6, coins: 100 },
@@ -318,6 +336,7 @@ const BOX_CONTENTS = {
       bonus: { id: 'goblin_dynamite', quantity: 5 },
     },
     Tutorial: { coins: 0 },
+    Wheel: { potions: 6, coins: 100 },
   },
 } as const satisfies Record<BoxTier, Record<BoxCategory, BoxContents>>;
 
@@ -337,12 +356,33 @@ function isFiniteNumber(value: unknown): value is number {
   return typeof value === 'number' && Number.isFinite(value);
 }
 
+function parseItemReward(value: unknown): ItemReward | undefined {
+  if (!isRecord(value)) return undefined;
+  const { id, quantity } = value;
+  if (typeof id !== 'string' || !isItemId(id)) return undefined;
+  if (!isFiniteNumber(quantity) || quantity < 1) return undefined;
+  return { id, quantity: Math.floor(quantity) };
+}
+
 function parseLootBox(value: unknown): LootBox | undefined {
   if (!isRecord(value)) return undefined;
   const { id, tier, category, fromAchievement } = value;
   if (!isFiniteNumber(id) || !isBoxTier(tier) || !isBoxCategory(category)) return undefined;
-  if (!isAchievementIdValue(fromAchievement)) return undefined;
-  return { id, tier, category, fromAchievement };
+  if (fromAchievement !== null && !isAchievementIdValue(fromAchievement)) return undefined;
+  const itemRewards = arrayOrEmpty(value.itemRewards)
+    .map(parseItemReward)
+    .filter((reward) => reward !== undefined);
+  // A box that carried items it can no longer name is dropped whole, rather
+  // than opened as an empty prize the player was promised something in.
+  const lostRewards = itemRewards.length < arrayOrEmpty(value.itemRewards).length;
+  if (lostRewards && itemRewards.length === 0) return undefined;
+  const box: LootBox = { id, tier, category, fromAchievement };
+  return itemRewards.length > 0 ? { ...box, itemRewards } : box;
+}
+
+function copyLootBox(box: LootBox): LootBox {
+  if (box.itemRewards === undefined) return { ...box };
+  return { ...box, itemRewards: box.itemRewards.map((reward) => ({ ...reward })) };
 }
 
 function parseRecentEvent(value: unknown): RecentEvent | undefined {
@@ -495,7 +535,7 @@ export class AchievementManager {
     const copy = new AchievementManager();
     copy.unlocked = new Set(this.unlocked);
     copy.pendingNotifications.push(...this.pendingNotifications);
-    copy.pendingBoxes.push(...this.pendingBoxes.map((b) => ({ ...b })));
+    copy.pendingBoxes.push(...this.pendingBoxes.map(copyLootBox));
     copy.nextBoxId = this.nextBoxId;
     copy.recentEvents = this.recentEvents.map((e) => ({ ...e }));
     copy.menuUnseen = this.menuUnseen;
@@ -506,7 +546,7 @@ export class AchievementManager {
     return {
       unlocked: [...this.unlocked],
       pendingNotifications: this.pendingNotifications.map((def) => def.id),
-      pendingBoxes: this.pendingBoxes.map((box) => ({ ...box })),
+      pendingBoxes: this.pendingBoxes.map(copyLootBox),
       nextBoxId: this.nextBoxId,
       recentEvents: this.recentEvents.map((event) => ({ ...event })),
       menuUnseen: this.menuUnseen,
@@ -552,7 +592,7 @@ export class AchievementManager {
     this.pendingNotifications.length = 0;
     this.pendingNotifications.push(...other.pendingNotifications);
     this.pendingBoxes.length = 0;
-    this.pendingBoxes.push(...other.pendingBoxes.map((b) => ({ ...b })));
+    this.pendingBoxes.push(...other.pendingBoxes.map(copyLootBox));
     this.nextBoxId = other.nextBoxId;
     this.recentEvents = other.recentEvents.map((e) => ({ ...e }));
     this.menuUnseen = other.menuUnseen;

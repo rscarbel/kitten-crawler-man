@@ -15,13 +15,20 @@
  *   npx tsx scripts/render-cow.ts --mode=gore
  *   npx tsx scripts/render-cow.ts --mode=review   the blind-review sheet: one
  *                                              labelled strip per figure at 2×
+ *   npx tsx scripts/render-cow.ts --mode=attack   Carl's attack cow: its full
+ *                                              sheet at 3× and every row at
+ *                                              in-game size
  *   --skip-gates                               iterate on art without the gates
  */
 
 import { type Canvas, createCanvas } from 'canvas';
 
 import { bakeFigureSheet } from './figureSheet.js';
-import { reportFigureGates } from './figureGates.js';
+import {
+  figureStructuralFailures,
+  missingStateFailures,
+  reportFigureGates,
+} from './figureGates.js';
 import { cowGateFailures } from './gates-cow.js';
 import { PREVIEW_DIR, writePreviewPng } from './previewOut.js';
 import {
@@ -30,6 +37,9 @@ import {
   TILE_SCALE,
 } from '../src/sprites/art/cowFigure.js';
 import { COW_GORE_STATES } from '../src/sprites/art/cowGore.js';
+import { ATTACK_COW_FIGURE, ATTACK_COW_ROWS } from '../src/sprites/art/attackCowFigure.js';
+import { ATTACK_COW_DRAWN_STATES } from '../src/sprites/attackCowSprite.js';
+import type { FigureDef } from '../src/sprites/figure/figureDef.js';
 
 /** Matches TILE_SIZE in src/core/constants.ts; the art is painted at 2× that. */
 const IN_GAME_TILE = 32;
@@ -51,8 +61,20 @@ const LABEL_CENTRE_NUDGE = 4;
 /** The close-up scale every figure's full sheet is baked at. */
 const REVIEW_SCALE = 3;
 
-type Mode = 'all' | 'sheet' | 'ingame' | 'gore' | 'review' | 'grid';
-const MODES: ReadonlyArray<Mode> = ['all', 'sheet', 'ingame', 'gore', 'review', 'grid'];
+type Mode = 'all' | 'sheet' | 'ingame' | 'gore' | 'review' | 'grid' | 'attack';
+const MODES: ReadonlyArray<Mode> = ['all', 'sheet', 'ingame', 'gore', 'review', 'grid', 'attack'];
+
+/** What the sheet and in-game renders need of a figure: the cows' entries and the attack cow alike. */
+interface SheetEntry {
+  readonly figure: FigureDef;
+  readonly rows: ReadonlyArray<{
+    readonly name: string;
+    readonly view: string;
+    readonly kind: string;
+  }>;
+}
+
+const ATTACK_COW_ENTRY: SheetEntry = { figure: ATTACK_COW_FIGURE, rows: ATTACK_COW_ROWS };
 
 type SheetContext = ReturnType<Canvas['getContext']>;
 
@@ -104,7 +126,7 @@ function entriesFor(filter: string): readonly CowFigureEntry[] {
   return found;
 }
 
-function rowNamesFor(entry: CowFigureEntry, filter: string): string[] {
+function rowNamesFor(entry: SheetEntry, filter: string): string[] {
   const all = entry.rows.map((row) => row.name);
   if (filter === '') return all;
   const wanted = filter.split(',');
@@ -115,7 +137,7 @@ function rowNamesFor(entry: CowFigureEntry, filter: string): string[] {
 
 /** Every row of one figure, every frame, at `scale`, with the tile guide. */
 function renderFigureSheet(
-  entry: CowFigureEntry,
+  entry: SheetEntry,
   outPath: string,
   scale: number,
   rowFilter: string,
@@ -185,11 +207,7 @@ function renderFigureSheet(
  * grass. The primary realism judgement: review-scale beauty that dies at 32 px
  * counts for nothing.
  */
-function renderInGame(
-  outPath: string,
-  entries: readonly CowFigureEntry[],
-  rowFilter: string,
-): void {
+function renderInGame(outPath: string, entries: readonly SheetEntry[], rowFilter: string): void {
   const first = entries[0];
   const def = first.figure;
   const cellW = def.frameWidth * IN_GAME_SCALE;
@@ -402,7 +420,29 @@ function renderGrid(
   console.log(`Wrote ${outPath} (${canvas.width}×${canvas.height}px, grid)`);
 }
 
+/**
+ * The shared structural gates over the attack cow — every frame painted, none
+ * clipped by the cell — and the names its draw wrapper asks for, then its
+ * sheet and its rows at the size they are played.
+ */
+function renderAttackCow(): void {
+  if (!hasFlag('skip-gates')) {
+    console.log('Gating the attack cow…');
+    reportFigureGates('attack cow', [
+      ...figureStructuralFailures(ATTACK_COW_FIGURE),
+      ...missingStateFailures(ATTACK_COW_FIGURE, ATTACK_COW_DRAWN_STATES, 'attackCowSprite'),
+    ]);
+  }
+  const rowFilter = parseFlag('row', '');
+  renderFigureSheet(ATTACK_COW_ENTRY, `${PREVIEW_DIR}/cow-attack.png`, REVIEW_SCALE, rowFilter);
+  renderInGame(`${PREVIEW_DIR}/cow-attack-ingame.png`, [ATTACK_COW_ENTRY], rowFilter);
+}
+
 function main(): void {
+  if (parseMode() === 'attack') {
+    renderAttackCow();
+    return;
+  }
   if (!hasFlag('skip-gates')) {
     console.log('Gating the cow figures…');
     reportFigureGates('cow', cowGateFailures());

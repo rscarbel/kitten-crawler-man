@@ -25,6 +25,7 @@ import { Juicer } from '../creatures/Juicer';
 import { RockGolemBoss } from '../creatures/RockGolemBoss';
 import { Mantid } from '../creatures/Mantid';
 import { BallOfSwine } from '../creatures/BallOfSwine';
+import { AttackCow } from '../creatures/AttackCow';
 import { Cow, type CowVoice } from '../creatures/Cow';
 import { Mongo } from '../creatures/Mongo';
 import { KrakarenClone } from '../creatures/KrakarenClone';
@@ -633,6 +634,7 @@ function playCuesOf(mob: Mob, audio: AudioManager | null): void {
   playMantidHiss(mob, audio);
   playSwineSpinup(mob, audio);
   playCowVoice(mob, audio);
+  playAttackCowCues(mob, audio);
   playCastWindup(mob, audio);
   playDarkKnightCues(mob, audio);
   playJuicerCues(mob, audio);
@@ -710,6 +712,29 @@ function playCowVoice(mob: Mob, audio: AudioManager | null): void {
   const voice = mob.voicePending;
   mob.voicePending = null;
   audio?.playRandom(COW_VOICE_SOUNDS[voice]);
+}
+
+const ATTACK_COW_HEADBUTT_SOUNDS: readonly SoundId[] = [
+  'attack_cow_headbutt_1',
+  'attack_cow_headbutt_2',
+  'attack_cow_headbutt_3',
+];
+
+/**
+ * The attack cow's charge cry and the thud of each headbutt that lands. Her
+ * moos ride the cow voice above. Headbutts come every second or so in a long
+ * fight, so the same take never plays twice running.
+ */
+function playAttackCowCues(mob: Mob, audio: AudioManager | null): void {
+  if (!(mob instanceof AttackCow)) return;
+  if (mob.chargeSoundPending) {
+    mob.chargeSoundPending = false;
+    audio?.play('attack_cow_charge');
+  }
+  if (mob.headbuttSoundPending) {
+    mob.headbuttSoundPending = false;
+    audio?.playRandomFresh(ATTACK_COW_HEADBUTT_SOUNDS);
+  }
 }
 
 /**

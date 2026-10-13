@@ -79,6 +79,8 @@ interface Surface {
   readonly locksKeyboard?: boolean; // unconsumed keys kept from gameplay, world runs on
   readonly blocksEscape?: boolean; // load-bearing: Escape does nothing at all
   onKey?(key: string, mods: KeyModifiers): boolean; // typed input; true consumes
+  onKeyUp?(key: string): void; // every key release, offered to every open surface
+  onBlur?(): void; // window lost focus: let go of anything held
   readonly takesText?: boolean; // free text (chat): key hooks are not offered keys
 }
 ```
@@ -173,6 +175,13 @@ routing in this order:
 Any other key returns `'gameplay'` unless something open halts the world or
 locks the keyboard (`'blocked'`).
 
+**Press-and-hold.** A keydown alone cannot say how long a key is held, so
+`SceneManager` also calls `ui.keyUp(key)` on every release and `ui.blur()` when
+the window loses focus; both are offered to **every** open surface's
+`onKeyUp` / `onBlur`. A control that acts on a held key (the Wheel of
+Fortune's held Space, `ClubWheelSystem`) starts on `onKey`, stops on `onKeyUp`, and must also stop on
+`onBlur`, because no release arrives for a key held while the tab lost focus.
+
 **Focus scope and repeats.** The ring belongs to the topmost open `panel`,
 `modal` or `system` surface; it resets whenever that surface changes, and only
 its regions on its top layer are in it. Regions join when they have `onTap` and
@@ -236,7 +245,7 @@ surface.
 - `text(ui, rect, { text, role?, style?, color?, align?, valign?, wrap?, maxLines?, tabular?, halo? })` — every string. Without `wrap`, a long line ends in an ellipsis; `maxLines` caps a wrapped block. `tabular: true` (or `tabularNumber`) for numbers that change every frame. `measureText`, `measureTextHeight`, `lineHeightOf`, `wrapToWidth` for layout.
 - `button(ui, rect, { id?, label, variant?, size?, icon?, selected?, disabled?, primary?, sound?, onTap })` — `measureButton`, `buttonHeight`.
 - `iconButton(ui, rect, { id, icon, label, variant?, size?, selected?, disabled?, badge?, tooltip?, primary?, sound?, onTap })` — the label is a tooltip, never drawn; `iconButtonSize`.
-- `panel(ui, { id, title?, subtitle?, header?, width, height?, contentHeight?, onClose?, onBack?, footer?, footerLayout?, footerSize?, scrollBody?, content?, scrim?, onScrimTap?, onCardTap? })` → `{ frame, body, sheet }` — the one container; see below.
+- `panel(ui, { id, title?, subtitle?, header?, width, height?, contentHeight?, onClose?, onBack?, footer?, footerLayout?, footerSize?, footerColumns?, scrollBody?, content?, scrim?, onScrimTap?, onCardTap? })` → `{ frame, body, sheet }` — the one container; see below.
 - `scrollView(ui, rect, { id, contentHeight, draw })` → `{ offset, maxOffset, visible }` — wheel, drag anywhere, draggable thumb; `scrollIntoView`.
 - `tabs(ui, rect, { id, items, selected, onSelect, variant? })` — `segmented` or `underline`; `measureTabs`.
 - `listRow(ui, rect, { id, title, subtitle?, leading?, trailing?, accent?, selected?, disabled?, onTap?, … })` — priced rows, journal rows, roster rows; `listRowHeight`.
@@ -249,7 +258,7 @@ surface.
 - `stepper(ui, rect, { id, state, large?, max? })` over a `QuantityPickerState`; digits via `stepperKey` from `onKey`.
 - `itemSlot(ui, rect, { id, item, quantity?, keycap?, cooldown?, selected?, dragging?, dropTarget?, equipped?, disabled?, tooltip?, onTap?, onPress?, onDrag?, … })` — icon from `ITEM_ICONS`, category accent, quantity, cooldown sweep.
 - `costChips(ui, rect, { costs, align? })` — have/need chips; `costsMet`, `measureCostChips`.
-- `choiceModal(ui, config)` / `choiceModalSurface({ id, band?, isOpen, haltsWorld?, locksKeyboard?, escape, onKey?, content })` — title, optional icon or hero art, body, extra content, 1–N buttons; `escape` is `close`, `block` or `pass`. Every confirm, stair/door prompt, level-up and reward announcement.
+- `choiceModal(ui, config)` / `choiceModalSurface({ id, band?, isOpen, haltsWorld?, locksKeyboard?, escape, onKey?, content })` — title, optional icon or hero art, body, extra content, 1–N buttons; `escape` is `close`, `block` or `pass`. Every confirm, stair/door prompt, level-up and reward announcement. `buttonColumns` lays the buttons out as a pinned footer grid (the panel's `footerColumns`), falling back to stacked full-width buttons wherever the widest label would not fit a column.
 - `pagedOverlay` / `pagedOverlaySurface({ id, pages, onDone, … isOpen })` — multi-page explainers, rules sheets, tutorials, readable notes; arrows turn pages.
 
 `paint.ts` holds the shared primitives (rounded paths, glass, focus ring,
@@ -329,7 +338,10 @@ hover/press treatment). Feature code never calls it; it calls widgets.
   (hex only).
 - **Ink modules** for non-chrome palettes: `worldInk.ts` (world text, bars and
   plates), `minimapColors.ts` (one tile-colour table for every minimap),
-  `previewInk.ts` (review scenes), `townMapInk.ts`, `scytheSwingInk.ts`.
+  `previewInk.ts` (review scenes), `townMapInk.ts`, `scytheSwingInk.ts`,
+  `slotsInk.ts` (the slot machine's cabinet, reels, win banners and symbols)
+  and `wheelInk.ts` (the Wheel of Fortune's warnings, reveals and the Nothing;
+  the wheel itself shares `sprites/art/wheelPalette.ts` with the club prop).
 - Item icons are registered in `src/ui/icons/itemIcons.ts` (`ITEM_ICONS:
 Record<ItemId, ItemIconPainter>`, painters take `(ctx, rect)`); `drawItemIcon`
   serves code outside widgets. The coordinate-heavy item painters live in
@@ -521,6 +533,12 @@ shop, the casino).
   mounted through its `surface(id)` (band `system`); gameplay scenes hold it
   through `ArrivalLoader` (`src/scenes/ArrivalLoader.ts`); `npm run
 render:loading-screen`.
+- **`LootBoxOpener.present(reward, onDone)`** (`src/ui/LootBoxOpener.ts`) — the
+  box reveal for rewards **already granted** elsewhere: a `PresentedReward`
+  (`tier`, `title`, `playerName`, `contents`, `detail?`) opens straight at the
+  lid blowing off and grants nothing. Its prize screen is painted by
+  `src/ui/presentedReward.ts`. The Wheel of Fortune pays its item prizes this
+  way; use it whenever the reward has landed before the reveal runs.
 - **`src/ui/questReward/`** — the quest-complete screen model, drawn by
   `questRewardSurface`; see `add-quest`.
 

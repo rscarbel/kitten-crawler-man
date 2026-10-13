@@ -42,14 +42,14 @@ function makeRng(seed: number): () => number {
 
 const SHADOW_COLOR = 'rgba(0,0,0,0.34)';
 
-interface Rect {
+export interface Rect {
   x: number;
   y: number;
   w: number;
   h: number;
 }
 
-function verticalGradient(
+export function verticalGradient(
   ctx: Ctx,
   rect: Rect,
   stops: ReadonlyArray<readonly [number, string]>,
@@ -61,7 +61,7 @@ function verticalGradient(
 }
 
 /** Streaky grain over a wood panel — the single biggest "this is a real plank" cue. */
-function paintWoodGrain(ctx: Ctx, rect: Rect, rng: () => number, strokeCount: number): void {
+export function paintWoodGrain(ctx: Ctx, rect: Rect, rng: () => number, strokeCount: number): void {
   ctx.save();
   ctx.beginPath();
   ctx.rect(rect.x, rect.y, rect.w, rect.h);
@@ -89,7 +89,13 @@ function paintWoodGrain(ctx: Ctx, rect: Rect, rng: () => number, strokeCount: nu
 }
 
 /** Soft contact shadow pooled under a piece so it sits on the floor instead of floating. */
-function paintContactShadow(ctx: Ctx, cx: number, baseY: number, rx: number, ry: number): void {
+export function paintContactShadow(
+  ctx: Ctx,
+  cx: number,
+  baseY: number,
+  rx: number,
+  ry: number,
+): void {
   const grad = ctx.createRadialGradient(cx, baseY, 0, cx, baseY, rx);
   grad.addColorStop(0, SHADOW_COLOR);
   grad.addColorStop(1, 'rgba(0,0,0,0)');
@@ -101,13 +107,13 @@ function paintContactShadow(ctx: Ctx, cx: number, baseY: number, rx: number, ry:
   ctx.restore();
 }
 
-function paintRimLight(ctx: Ctx, rect: Rect, color: string, thickness: number): void {
+export function paintRimLight(ctx: Ctx, rect: Rect, color: string, thickness: number): void {
   ctx.fillStyle = color;
   ctx.fillRect(rect.x, rect.y, rect.w, thickness);
 }
 
 /** Rounded-rectangle path, used for every panel, drawer and cushion in the set. */
-function roundRectPath(ctx: Ctx, rect: Rect, radius: number): void {
+export function roundRectPath(ctx: Ctx, rect: Rect, radius: number): void {
   const r = Math.min(radius, rect.w / 2, rect.h / 2);
   ctx.beginPath();
   ctx.moveTo(rect.x + r, rect.y);
@@ -124,7 +130,7 @@ function roundRectPath(ctx: Ctx, rect: Rect, radius: number): void {
 
 // ── Palettes ────────────────────────────────────────────────────────────────
 
-interface WoodTone {
+export interface WoodTone {
   dark: string;
   base: string;
   light: string;
@@ -132,15 +138,25 @@ interface WoodTone {
   top: string;
 }
 
-const MAHOGANY: WoodTone = { dark: '#2b1408', base: '#4d2612', light: '#7a4322', top: '#8a5a30' };
+export const MAHOGANY: WoodTone = {
+  dark: '#2b1408',
+  base: '#4d2612',
+  light: '#7a4322',
+  top: '#8a5a30',
+};
 const OAK: WoodTone = { dark: '#33200c', base: '#5b3a18', light: '#8d6030', top: '#9c6b3a' };
-const WALNUT: WoodTone = { dark: '#241608', base: '#3f2a14', light: '#69482a', top: '#7b4d2a' };
+export const WALNUT: WoodTone = {
+  dark: '#241608',
+  base: '#3f2a14',
+  light: '#69482a',
+  top: '#7b4d2a',
+};
 
 const WOODS: ReadonlyArray<WoodTone> = [MAHOGANY, OAK, WALNUT];
 
-const BRASS_DARK = '#8a6a1e';
-const BRASS = '#c9a13a';
-const BRASS_LIGHT = '#f0d98a';
+export const BRASS_DARK = '#8a6a1e';
+export const BRASS = '#c9a13a';
+export const BRASS_LIGHT = '#f0d98a';
 
 const BOTTLE_GLASS = [
   '#3aa8c8',
@@ -160,7 +176,7 @@ const BOTTLE_GLASS = [
  * inserted in the middle would otherwise re-roll every family after it and turn
  * a one-stall change into a ten-sheet diff.
  */
-interface VariantSeed {
+export interface VariantSeed {
   readonly base: number;
   readonly stride: number;
 }
@@ -172,7 +188,7 @@ interface VariantSeed {
  * while each family and each variant keeps its identity within it. Zero is the
  * art every sheet was reviewed against.
  */
-function variantRng(seed: VariantSeed, variant: number, seedTerm: number): () => number {
+export function variantRng(seed: VariantSeed, variant: number, seedTerm: number): () => number {
   return makeRng(seed.base + variant * seed.stride + seedTerm);
 }
 

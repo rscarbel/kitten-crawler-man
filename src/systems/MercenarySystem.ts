@@ -614,7 +614,7 @@ export class MercenarySystem implements GameSystem {
  * and must not be stairwells, which `isWalkable` admits but
  * `Mob.moveWithCollision` refuses to enter.
  */
-function findSpawnTile(active: Player, gameMap: GameMap): { x: number; y: number } | null {
+export function findSpawnTile(active: Player, gameMap: GameMap): { x: number; y: number } | null {
   const ownerCentreX = active.x + TILE_SIZE * TILE_CENTER;
   const ownerCentreY = active.y + TILE_SIZE * TILE_CENTER;
   const behindX = Math.floor(ownerCentreX / TILE_SIZE) - Math.round(active.facingX);

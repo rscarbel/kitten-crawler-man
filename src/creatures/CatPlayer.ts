@@ -1,4 +1,4 @@
-import { Player, type StatName, type StatusFigureBox } from '../Player';
+import { Player, type FigureMouth, type StatName, type StatusFigureBox } from '../Player';
 
 /**
  * Donut's ink, measured off the painted `CAT_FIGURE` cell against its own tile
@@ -11,6 +11,7 @@ const CAT_STATUS_FIGURE_BOX: StatusFigureBox = {
   bottom: 1.03,
   halfWidth: 0.44,
 };
+
 import type { Mob } from './Mob';
 import type { SpatialGrid } from '../core/SpatialGrid';
 import type { Missile } from '../sprites/catSprite';
@@ -20,12 +21,22 @@ import {
   drawMissiles,
   prewarmCatSprite,
   prewarmMagicMissileCast,
+  catCellFor,
+  type CatSpriteState,
+  setCatWear,
 } from '../sprites/catSprite';
 import { drawActivePlayerMarker } from '../sprites/activePlayerMarker';
+import { catMouthOf } from '../sprites/crawlerMouths';
 import type { GameMap } from '../map/GameMap';
 import { normalize } from '../utils';
 import type { AbilityManager } from '../core/AbilityManager';
 import { getMagicMissileStats } from '../abilities/magicMissile';
+import {
+  EYES_OF_SPLATTER_ID,
+  SplatterCopies,
+  steerMissileToward,
+  type SplatterSource,
+} from '../abilities/eyesOfSplatter';
 import { TILE_SIZE } from '../core/constants';
 import type { CrawlerKind } from '../core/SkillManager';
 import type { WorkingTool } from '../core/toolTiers';
@@ -87,6 +98,9 @@ export class CatPlayer extends Player {
 
   /** Sub-missile spawns queued by CombatSystem this frame; flushed after resolvePlayerAttacks. */
   private pendingSubMissileSpawns: Array<{ x: number; y: number }> = [];
+  /** Eyes of Splatter releases queued by CombatSystem this frame, flushed with the sub-missiles. */
+  private pendingSplatterReleases: SplatterSource[] = [];
+  private readonly splatterCopies = new SplatterCopies();
 
   /** The mob the cat will automatically shoot at when not player-controlled. */
   autoTarget: Mob | null = null;
@@ -112,6 +126,21 @@ export class CatPlayer extends Player {
   /** See {@link CAT_STATUS_FIGURE_BOX}. Shared, not rebuilt on every read. */
   protected override get statusFigureBox(): StatusFigureBox {
     return CAT_STATUS_FIGURE_BOX;
+  }
+
+  protected override get statusMouth(): FigureMouth | null {
+    return catMouthOf(catCellFor(this.spriteState()));
+  }
+
+  private spriteState(): CatSpriteState {
+    return {
+      walkFrame: this.walkFrame,
+      isMoving: this.isMoving,
+      facingX: this.facingX,
+      facingY: this.facingY,
+      isKnockedOut: this.isKnockedOut,
+      oneShot: this.animator.current,
+    };
   }
   private static readonly SUBMISSILE_COUNT_BASE = 3;
   private static readonly SUBMISSILE_COUNT_RANDOM_RANGE = 3;
@@ -319,6 +348,8 @@ export class CatPlayer extends Player {
   clearAirborneAttacks(): void {
     this.missiles = [];
     this.pendingSubMissileSpawns = [];
+    this.pendingSplatterReleases = [];
+    this.splatterCopies.reset();
   }
 
   get missileCooldownCurrent(): number {
@@ -513,8 +544,47 @@ export class CatPlayer extends Player {
     this.pendingSubMissileSpawns.push({ x, y });
   }
 
-  /** Spawns any sub-missiles queued this frame. Call after resolvePlayerAttacks. */
+  /**
+   * Queue the Eyes of Splatter's copies of a missile that just landed on an
+   * enemy (called by CombatSystem). Released by {@link flushPendingSubMissiles},
+   * so the list CombatSystem is walking never grows under it.
+   */
+  queueSplatterCopies(missile: Missile): void {
+    this.pendingSplatterReleases.push({
+      x: missile.x,
+      y: missile.y,
+      abilityLevel: missile.abilityLevel,
+      isSubMissile: missile.isSubMissile,
+      speed: Math.hypot(missile.vx, missile.vy),
+    });
+  }
+
+  /** True while any Eyes of Splatter copy is circling her. */
+  get hasOrbitingSplatterCopies(): boolean {
+    return this.splatterCopies.anyOrbiting(this.missiles);
+  }
+
+  /**
+   * The Eyes of Splatter cues raised since the last call, cleared as they are
+   * read: whether copies were released, and whether circling copies broke off
+   * toward an enemy.
+   */
+  drainSplatterCues(): { released: boolean; peeledOff: boolean } {
+    const cues = {
+      released: this.splatterCopies.releaseCuePending,
+      peeledOff: this.splatterCopies.seekCuePending,
+    };
+    this.splatterCopies.releaseCuePending = false;
+    this.splatterCopies.seekCuePending = false;
+    return cues;
+  }
+
+  /** Spawns any sub-missiles and splatter copies queued this frame. Call after resolvePlayerAttacks. */
   flushPendingSubMissiles(): void {
+    for (const source of this.pendingSplatterReleases) {
+      this.splatterCopies.release(this.missiles, source, this.EXPLODE_FRAMES);
+    }
+    this.pendingSplatterReleases = [];
     for (const { x, y } of this.pendingSubMissileSpawns) {
       const count =
         CatPlayer.SUBMISSILE_COUNT_BASE +
@@ -623,6 +693,7 @@ export class CatPlayer extends Player {
     this.missileCooldown = this.tickCooldown(this.missileCooldown);
 
     for (const m of this.missiles) {
+      if (m.state === 'flying' && m.splatter !== undefined) continue;
       if (m.state === 'flying') {
         // Level 14+ homing: curve toward nearest mob in forward cone
         if (hasHoming && !m.isSubMissile && mobGrid) {
@@ -663,16 +734,12 @@ export class CatPlayer extends Player {
             }
 
             if (bestMob) {
-              const ddx = bestMob.x + TILE_SIZE * CatPlayer.TILE_CENTER_OFFSET - m.x;
-              const ddy = bestMob.y + TILE_SIZE * CatPlayer.TILE_CENTER_OFFSET - m.y;
-              const targetAngle = Math.atan2(ddy, ddx);
-              let diff = targetAngle - dirAngle;
-              while (diff > Math.PI) diff -= Math.PI * 2;
-              while (diff < -Math.PI) diff += Math.PI * 2;
-              const turn = Math.min(Math.abs(diff), TURN_RATE) * Math.sign(diff);
-              const newAngle = dirAngle + turn;
-              m.vx = Math.cos(newAngle) * speed;
-              m.vy = Math.sin(newAngle) * speed;
+              steerMissileToward(
+                m,
+                bestMob.x + TILE_SIZE * CatPlayer.TILE_CENTER_OFFSET,
+                bestMob.y + TILE_SIZE * CatPlayer.TILE_CENTER_OFFSET,
+                TURN_RATE,
+              );
             }
           }
         }
@@ -699,7 +766,47 @@ export class CatPlayer extends Player {
         m.explodeTimer--;
       }
     }
+    const centreOffset = this.tileSize * CatPlayer.TILE_CENTER_OFFSET;
+    this.splatterCopies.update(this.missiles, {
+      mobGrid,
+      ownerX: this.x + centreOffset,
+      ownerY: this.y + centreOffset,
+      ownerStanding: this.isAlive && !this.isKnockedOut,
+      isOpen: this.isOpenForMissiles,
+      hasClearPath: this.hasClearMissilePath,
+    });
     this.missiles = this.missiles.filter((m) => !(m.state === 'exploding' && m.explodeTimer <= 0));
+  }
+
+  /** Whether a missile could fly straight between two world points; clear everywhere without a map. */
+  private readonly hasClearMissilePath = (
+    fromX: number,
+    fromY: number,
+    toX: number,
+    toY: number,
+  ): boolean => this.map === null || this.map.hasWalkableLine(fromX, fromY, toX, toY);
+
+  /** Whether a missile at this world point is over floor it can fly across; open everywhere without a map. */
+  private readonly isOpenForMissiles = (worldX: number, worldY: number): boolean => {
+    if (this.map === null) return true;
+    const tx = Math.floor(worldX / this.tileSize);
+    const ty = Math.floor(worldY / this.tileSize);
+    return this.map.isWalkableIgnoringBathroomQueue(tx, ty);
+  };
+
+  /**
+   * Dresses her sprite in what she has on. Run on every draw as well as on an
+   * equipment change, because a tutorial reset or a dev preset replaces her
+   * gear without announcing it, and she must never be drawn in last session's
+   * glasses. Cheap when nothing changed.
+   */
+  syncWear(): void {
+    setCatWear({ shades: this.inventory.hasEquipped(EYES_OF_SPLATTER_ID) });
+  }
+
+  override onEquipmentChanged(): void {
+    super.onEquipmentChanged();
+    this.syncWear();
   }
 
   protected override drawSelf(
@@ -708,6 +815,7 @@ export class CatPlayer extends Player {
     camY: number,
     tileSize: number,
   ) {
+    this.syncWear();
     const sx = this.x - camX;
     const sy = this.y - camY;
     const s = tileSize;
@@ -719,15 +827,10 @@ export class CatPlayer extends Player {
       drawActivePlayerMarker(ctx, sphereCX, sphereCY, r);
     }
 
-    drawCatSprite(ctx, sx, sy, s, {
-      walkFrame: this.walkFrame,
-      isMoving: this.isMoving,
-      facingX: this.facingX,
-      facingY: this.facingY,
-      isKnockedOut: this.isKnockedOut,
-      oneShot: this.animator.current,
+    this.drawRetching(ctx, sx, sy, s, () => {
+      drawCatSprite(ctx, sx, sy, s, this.spriteState());
+      if (this.workingTool !== null) this.drawWorkingTool(ctx, sx, sy, s);
     });
-    if (this.workingTool !== null) this.drawWorkingTool(ctx, sx, sy, s);
     if (!this.paintingBodyOnly) {
       drawMissiles(ctx, this.missiles, camX, camY, s, this.EXPLODE_FRAMES);
     }

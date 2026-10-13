@@ -20,6 +20,7 @@ import type { HumanPlayer } from '../../creatures/HumanPlayer';
 import type { CatPlayer } from '../../creatures/CatPlayer';
 import type { Mob } from '../../creatures/Mob';
 import type { AudioManager } from '../../audio/AudioManager';
+import type { SoundId } from '../../audio/sounds';
 import type { AbilityManager } from '../../core/AbilityManager';
 import { DeathScreen } from '../../ui/DeathScreen';
 import { BodyPartGoreSystem } from '../BodyPartGoreSystem';
@@ -39,6 +40,7 @@ import { MobUpdateLoop } from '../MobUpdateLoop';
 import { PlayerTickSystem } from '../PlayerTickSystem';
 import type { SafeRoomSystem } from '../SafeRoomSystem';
 import { SmushEffectSystem } from '../SmushEffectSystem';
+import { TaranisStrikeSystem } from '../TaranisStrikeSystem';
 import type { SpellSystem } from '../SpellSystem';
 import type { DestructiblePropSystem } from '../DestructiblePropSystem';
 import type { TownInteriorPropDestructionSystem } from '../TownInteriorPropDestructionSystem';
@@ -60,6 +62,10 @@ const SHOCKWAVE_RADIUS_TILE_MARGIN = 2;
 const CHAIN_LIGHTNING_RANGE_TILES = 3;
 const CHAIN_LIGHTNING_MAX_TARGETS = 3;
 const CHAIN_LIGHTNING_DAMAGE = 2;
+
+const SPLATTER_ORBIT_LOOP = 'splatter_orb_orbit_loop' satisfies SoundId;
+/** Under everything else: a hum that can run for half a minute must not wear on the player. */
+const SPLATTER_ORBIT_LOOP_VOLUME = 0.25;
 
 export interface CombatKitDeps {
   readonly world: SceneWorld;
@@ -110,6 +116,8 @@ export class CombatKit {
   readonly smushFx = new SmushEffectSystem();
   readonly meleeFx = new MeleeImpactEffectSystem();
   readonly missileFx = new MagicMissileImpactEffectSystem();
+  /** The Fury of Taranis's waves in flight, with what each swing has struck. */
+  readonly taranis = new TaranisStrikeSystem();
   readonly deathScreen = new DeathScreen();
 
   private readonly world: SceneWorld;
@@ -140,6 +148,7 @@ export class CombatKit {
       smushFx: this.smushFx,
       meleeFx: this.meleeFx,
       missileFx: this.missileFx,
+      taranis: this.taranis,
       hitLanded: false,
     };
   }
@@ -206,6 +215,7 @@ export class CombatKit {
     ctx.trees = extras.trees;
     ctx.structures = extras.structures;
     resolvePlayerAttacks(ctx);
+    this.taranis.update(ctx);
     this.world.pm.cat.flushPendingSubMissiles();
     return { hitLanded: ctx.hitLanded };
   }
@@ -288,6 +298,26 @@ export class CombatKit {
       // the foot lands; this is the boom the landing itself makes.
       audio?.play('dynamite_explosion');
     }
+    this.playSplatterCues(audio);
+  }
+
+  /**
+   * The Eyes of Splatter's cues. The orbit hum follows whether any copy is
+   * circling Donut this frame rather than a started flag, so every way the
+   * copies can vanish — fading, peeling off, a floor change dropping them, her
+   * going down — silences it on the next frame without being told.
+   */
+  private playSplatterCues(audio: AudioManager | null): void {
+    const { cat } = this.world.pm;
+    const cues = cat.drainSplatterCues();
+    if (audio === null) return;
+    if (cues.released) audio.play('splatter_orb_spawn');
+    if (cues.peeledOff) audio.play('splatter_orb_seek');
+    if (cat.hasOrbitingSplatterCopies) {
+      audio.startAmbientLoop(SPLATTER_ORBIT_LOOP, SPLATTER_ORBIT_LOOP_VOLUME);
+    } else {
+      audio.stopAmbientLoop(SPLATTER_ORBIT_LOOP);
+    }
   }
 
   /**
@@ -317,6 +347,7 @@ export class CombatKit {
     this.spells.renderShell(ctx, camX, camY);
     this.spells.renderCatMiniShell(ctx, camX, camY, cat);
     this.spells.renderChainLightning(ctx, camX, camY);
+    this.taranis.render(ctx, camX, camY);
     this.spells.renderShockwaveRipples(ctx, camX, camY);
     this.spells.renderFogs(ctx, camX, camY);
     this.smushFx.render(ctx, camX, camY);
@@ -332,6 +363,7 @@ export class CombatKit {
    */
   leaveFloor(): void {
     this.spells.dropWorldEffects();
+    this.taranis.reset();
     this.smushFx.resetForCheckpoint();
     this.meleeFx.resetForCheckpoint();
     this.missileFx.resetForCheckpoint();
@@ -352,6 +384,7 @@ export class CombatKit {
   /** Drops everything in flight, so a rewound world has no leftovers mid-air. */
   resetForCheckpoint(): void {
     this.spells.resetForCheckpoint();
+    this.taranis.reset();
     this.smushFx.resetForCheckpoint();
     this.meleeFx.resetForCheckpoint();
     this.missileFx.resetForCheckpoint();
@@ -364,6 +397,8 @@ export class CombatKit {
 
   dispose(): void {
     this.floatingText.dispose();
+    // Ambient loops outlive the scene that started them unless someone stops them.
+    this.world.audio?.stopAmbientLoop(SPLATTER_ORBIT_LOOP);
     // Drops the pack-alert grid. It is a module-level handle, so a scene that
     // exited without this leaves its whole roster — and through it its `GameMap`
     // — reachable for the rest of the page's life.

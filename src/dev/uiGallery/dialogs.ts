@@ -15,6 +15,8 @@ import { FIXTURES as EXPLAINERS } from './dialogs/explainers';
 import type { DialogFixture } from './dialogs/fixture';
 import { FIXTURES as PIPE_BOARD } from './dialogs/pipeBoard';
 import { FIXTURES as POKER } from './dialogs/poker';
+import { FIXTURES as SLOTS } from './dialogs/slots';
+import { FIXTURES as WHEEL } from './dialogs/wheel';
 import { fixtureSheetSurfaces } from './fixturePicker';
 import type { GalleryModel } from './model';
 
@@ -26,6 +28,8 @@ export const DIALOG_FIXTURES: readonly DialogFixture[] = [
   ...BESPOKE,
   ...CASINO,
   ...POKER,
+  ...SLOTS,
+  ...WHEEL,
   ...PIPE_BOARD,
 ];
 

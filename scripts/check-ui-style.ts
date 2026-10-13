@@ -38,6 +38,8 @@ const SCANNED_FILES: readonly string[] = [
   'src/systems/BuildingSystem.ts',
   'src/systems/ClubCasinoSystem.ts',
   'src/systems/ClubPokerSystem.ts',
+  'src/systems/ClubSlotsSystem.ts',
+  'src/systems/ClubWheelSystem.ts',
   'src/systems/ClubVipLoungeSystem.ts',
   'src/systems/DungeonIntroSystem.ts',
   'src/systems/GrateSpikesMenu.ts',

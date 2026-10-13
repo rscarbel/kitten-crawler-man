@@ -13,7 +13,9 @@ import {
   AchievementManager,
   isAchievementId,
 } from '../../core/AchievementManager';
+import { awardXp } from '../../core/awardXp';
 import { TILE_SIZE } from '../../core/constants';
+import { EventBus } from '../../core/EventBus';
 import {
   clearDifficultyChangeGuard,
   registerDifficultyChangeGuard,
@@ -90,8 +92,9 @@ function grantAchievements(manager: AchievementManager, crawler: CrawlerKind): v
 export function pauseFixtureData(): PauseFixtureData {
   const human = new HumanPlayer(0, 0, TILE_SIZE);
   const cat = new CatPlayer(0, 0, TILE_SIZE);
-  human.gainXp(FIXTURE_XP);
-  cat.gainXp(FIXTURE_XP);
+  const bus = new EventBus();
+  awardXp(human, FIXTURE_XP, bus);
+  awardXp(cat, FIXTURE_XP, bus);
   human.unspentPoints = HUMAN_UNSPENT;
   cat.unspentPoints = CAT_UNSPENT;
   grantSkills(human, 'human');

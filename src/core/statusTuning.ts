@@ -5,6 +5,24 @@
  * get a number.
  */
 
+const FRAMES_PER_SECOND = 60;
+const SECONDS_PER_MINUTE = 60;
+const BLOOD_VOMIT_MINUTES = 5;
+
+/** How long the wheel's blood vomiting lasts. */
+export const BLOOD_VOMIT_FRAMES = BLOOD_VOMIT_MINUTES * SECONDS_PER_MINUTE * FRAMES_PER_SECOND;
+
+const BLOOD_VOMIT_INTERVAL_SECONDS = 10;
+
+/** Frames between one bout of blood vomiting and the next. */
+export const BLOOD_VOMIT_INTERVAL_FRAMES = BLOOD_VOMIT_INTERVAL_SECONDS * FRAMES_PER_SECOND;
+
+/** Share of max HP each bout costs. Status damage is unscaled, so this holds on every difficulty. */
+export const BLOOD_VOMIT_MAX_HP_SHARE = 0.3;
+
+/** How long a bout's retch plays on the body, from the frame the blood comes up. */
+export const BLOOD_VOMIT_RETCH_FRAMES = 42;
+
 /** Three seconds of chill at 60 fps. */
 export const CHILLED_FRAMES = 180;
 

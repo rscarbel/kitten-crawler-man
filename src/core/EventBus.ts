@@ -80,6 +80,12 @@ export interface GameEvents {
 
   spawnGore: { x: number; y: number; impactDx: number; impactDy: number };
 
+  /**
+   * A crawler brought up a bout of blood: the splatter lands at `x`/`y` (world
+   * pixels), thrown along `dirX`/`dirY`.
+   */
+  bloodVomitRetch: { player: Player; x: number; y: number; dirX: number; dirY: number };
+
   lootDrop: {
     x: number;
     y: number;
@@ -152,6 +158,15 @@ export interface GameEvents {
 
   /** Human melee attack's swing-animation peak. */
   humanMeleeSwing: { hit: boolean };
+
+  /** The Fury of Taranis was swung, in place of `humanMeleeSwing`: its wave has left the blade. */
+  taranisSwing: Record<string, never>;
+
+  /** The sword's blade or its wave cut at least one enemy this frame. */
+  taranisStrike: Record<string, never>;
+
+  /** At least one enemy the sword cut threw chain lightning this frame. */
+  taranisChain: Record<string, never>;
 
   /** Cat claw-swipe attack's animation peak. */
   catMeleeSwing: { hit: boolean };

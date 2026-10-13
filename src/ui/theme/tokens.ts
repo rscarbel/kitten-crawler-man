@@ -11,6 +11,8 @@ import { UI_FONT_STACK } from './fonts';
 export const palette = {
   surface: {
     base: 'rgba(14, 17, 26, 0.92)',
+    /** `base` with nothing showing through, for a sheet laid over bright, busy art. */
+    solid: '#0E111A',
     raised: '#1A1F2C',
     sunken: '#0A0D14',
     scrim: 'rgba(4, 6, 10, 0.62)',
@@ -60,6 +62,10 @@ export const palette = {
     bronze: '#D08A4E',
     silver: '#C9D1DC',
     gold: '#F5C84C',
+    /** White-silver, brighter and whiter than Silver, so the two never read as one tier. */
+    platinum: '#F1F6FF',
+    /** The cool blue sheen that sweeps a Platinum box; Platinum's second colour. */
+    platinumSheen: '#8CC4FF',
     legendary: '#B98CFF',
     celestial: '#5ED3F0',
   },

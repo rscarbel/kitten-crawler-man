@@ -13,6 +13,7 @@
 import type { ShoeState } from '../systems/casino/Deck';
 import type { PlayerRead } from '../systems/casino/poker/npc/playerRead';
 import { REGULAR_IDS, type RegularId } from '../systems/casino/poker/npc/regulars';
+import { JACKPOT_FLOOR, normalizeJackpotPool } from '../systems/casino/slots/slotBets';
 
 /** What each poker regular has learned about the player's play this run. */
 export type PokerReads = Partial<Record<RegularId, PlayerRead>>;
@@ -47,6 +48,13 @@ export interface ClubMembership {
    * walking out of the club and back in finds the pair still on duty.
    */
   escortLevelId: string | null;
+  /**
+   * The slot machine's progressive pool. It may hold a fraction of a coin
+   * (see `normalizeJackpotPool`); only whole coins are ever shown or paid.
+   */
+  slotsJackpotPool: number;
+  /** The slot machine's Turbo toggle: shorter reel stops and celebrations. */
+  slotsTurbo: boolean;
 }
 
 export function createClubMembership(): ClubMembership {
@@ -59,6 +67,8 @@ export function createClubMembership(): ClubMembership {
     pokerFast: false,
     pokerShowCards: false,
     escortLevelId: null,
+    slotsJackpotPool: JACKPOT_FLOOR,
+    slotsTurbo: false,
   };
 }
 
@@ -72,6 +82,8 @@ export interface ClubMembershipCheckpoint {
   pokerFast: boolean;
   pokerShowCards: boolean;
   escortLevelId: string | null;
+  slotsJackpotPool: number;
+  slotsTurbo: boolean;
 }
 
 /**
@@ -115,6 +127,8 @@ export function captureClubMembership(membership: ClubMembership): ClubMembershi
     pokerFast: membership.pokerFast,
     pokerShowCards: membership.pokerShowCards,
     escortLevelId: membership.escortLevelId,
+    slotsJackpotPool: membership.slotsJackpotPool,
+    slotsTurbo: membership.slotsTurbo,
   };
 }
 
@@ -138,4 +152,6 @@ export function restoreClubMembership(
   membership.pokerFast = snapshot.pokerFast;
   membership.pokerShowCards = snapshot.pokerShowCards;
   membership.escortLevelId = snapshot.escortLevelId;
+  membership.slotsJackpotPool = normalizeJackpotPool(snapshot.slotsJackpotPool);
+  membership.slotsTurbo = snapshot.slotsTurbo;
 }

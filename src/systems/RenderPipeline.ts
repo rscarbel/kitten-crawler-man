@@ -30,6 +30,7 @@ import type { SpellSystem } from './SpellSystem';
 import type { DynamiteSystem } from './DynamiteSystem';
 import type { MagicMissileImpactEffectSystem } from './MagicMissileImpactEffectSystem';
 import type { MeleeImpactEffectSystem } from './MeleeImpactEffectSystem';
+import type { TaranisStrikeSystem } from './TaranisStrikeSystem';
 import type { SmushEffectSystem } from './SmushEffectSystem';
 import type { LavaBallSystem } from './LavaBallSystem';
 import type { RockThrowSystem } from './RockThrowSystem';
@@ -48,6 +49,7 @@ import type { LootSystem } from './LootSystem';
 import type { GroundPickupSystem } from './GroundPickupSystem';
 import type { MiniMapSystem } from './MiniMapSystem';
 import type { MongoSystem } from './MongoSystem';
+import type { AttackCowSystem } from './AttackCowSystem';
 import type { MercenarySystem } from './MercenarySystem';
 import type { CrawlerBarkSystem } from './CrawlerBarkSystem';
 import type { PlayerManager } from '../core/PlayerManager';
@@ -222,6 +224,8 @@ export interface RenderContext {
   dynamite: DynamiteSystem;
   smushFx: SmushEffectSystem;
   meleeFx: MeleeImpactEffectSystem;
+  /** The Fury of Taranis's waves; drawn beside the chain lightning they throw. */
+  taranisFx: Pick<TaranisStrikeSystem, 'render'>;
   missileFx: MagicMissileImpactEffectSystem;
   lavaBalls: LavaBallSystem;
   rockThrows: RockThrowSystem;
@@ -264,6 +268,7 @@ export interface RenderContext {
   miniMap: MiniMapSystem;
   mongoSystem: MongoSystem;
   mercenarySystem: MercenarySystem;
+  attackCowSystem: AttackCowSystem;
   crawlerBarks: CrawlerBarkSystem;
 
   // Pulse counters
@@ -706,6 +711,7 @@ export class RenderPipeline {
     spells.renderShell(ctx, camX, camY);
     spells.renderCatMiniShell(ctx, camX, camY, pm.cat);
     spells.renderChainLightning(ctx, camX, camY);
+    rc.taranisFx.render(ctx, camX, camY);
     spells.renderShockwaveRipples(ctx, camX, camY);
     spells.renderFogs(ctx, camX, camY);
     renderLevelUpFlash(ctx, camX, camY);
@@ -739,6 +745,7 @@ export class RenderPipeline {
     mongoSystem.renderSpeechBubble(ctx, pm.cat.x - camX, pm.cat.y - camY);
     mongoSystem.renderPetEmotes(ctx, camX, camY);
     rc.mercenarySystem.renderSpeech(ctx, camX, camY);
+    rc.attackCowSystem.renderOverlay(ctx, camX, camY);
     crawlerBarks.render(ctx, camX, camY, pm.human, pm.cat);
   }
 

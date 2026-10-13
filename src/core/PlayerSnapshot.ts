@@ -1,6 +1,6 @@
 import type { StatName, Player } from '../Player';
 import { ALL_STATS } from '../Player';
-import type { StatusEffect } from './StatusEffect';
+import { INCURABLE_STATUSES, type StatusEffect } from './StatusEffect';
 import type { SkillId, SkillState } from './SkillManager';
 import { HumanPlayer } from '../creatures/HumanPlayer';
 import { ITEM_DEF, isItemId } from './ItemDefs';
@@ -192,6 +192,9 @@ export function revivedSnapshot(snap: PlayerSnapshot): PlayerSnapshot {
  * cannot inherit a potion, a poison, or Jugg Juice's max-HP loan from the run that
  * killed them. HP is left as-is; the caller sets it to max once max HP has been
  * re-derived (status effects — including Jugg Juice's loan — affect max HP).
+ *
+ * The {@link INCURABLE_STATUSES} go too: this is only ever restored after a
+ * death, and a death is the one thing that clears them.
  */
 export function checkpointSnapshot(snap: PlayerSnapshot): PlayerSnapshot {
   return {
@@ -201,6 +204,14 @@ export function checkpointSnapshot(snap: PlayerSnapshot): PlayerSnapshot {
     isKnockedOut: false,
     knockedOutFrames: 0,
     reviveProgress: 0,
+  };
+}
+
+/** The snapshot with the {@link INCURABLE_STATUSES} a death clears taken off it. */
+export function withoutIncurableStatuses(snap: PlayerSnapshot): PlayerSnapshot {
+  return {
+    ...snap,
+    statusEffects: snap.statusEffects.filter((effect) => !INCURABLE_STATUSES.includes(effect.type)),
   };
 }
 

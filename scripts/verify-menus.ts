@@ -822,6 +822,23 @@ function townOpeners(): Opener<Town>[] {
   return [
     ...menusKitOpeners<Town>((scene) => scene['menus']),
     menu(
+      'wipe-hold',
+      (scene) =>
+        scene['wipeHold'].begin(
+          {
+            wipe: () => new Promise<void>(() => undefined),
+            wipeStatus: 'erasing',
+            wipeAccountLabel: null,
+            refusedOtherAccount: false,
+          },
+          () => undefined,
+        ),
+      // A real hold never lets go: the page reloads once the wipe lands.
+      (scene) => {
+        scene['wipeHold']['wipe'] = null;
+      },
+    ),
+    menu(
       'conversation',
       (scene) => void scene['conversation'].open(haltingRequest()),
       (scene) => scene['conversation'].close(),
@@ -1146,6 +1163,10 @@ section('the town (DungeonScene)');
 const { HumanPlayer } = await import('../src/creatures/HumanPlayer.js');
 const { CatPlayer } = await import('../src/creatures/CatPlayer.js');
 const { POKER_STAKES } = await import('../src/systems/casino/poker/pokerStakes.js');
+const { ClubWheelSystem } = await import('../src/systems/ClubWheelSystem.js');
+const { WHEEL_MIN_BET, boardForBet } = await import('../src/systems/casino/wheel/wheelBoard.js');
+const { ClubSlotsSystem, SLOTS_SURFACE_ID, SLOTS_RULES_SURFACE_ID } =
+  await import('../src/systems/ClubSlotsSystem.js');
 const { playUntilBust, playUntilGameOver } = await import('../src/dev/uiGallery/dialogs/poker.js');
 const { snapPlayer } = await import('../src/core/PlayerSnapshot.js');
 const { teachBoth } = await import('../src/core/CraftSkills.js');
@@ -1275,6 +1296,24 @@ function interiorCases(): InteriorCase[] {
   const closeClub = (scene: Interior): void => {
     club(scene).closeAll(scene.pm.active());
     scene['conversation'].close();
+  };
+  const wheelOf = (scene: Interior) => {
+    const wheel = club(scene)['games'].wheel;
+    if (!(wheel instanceof ClubWheelSystem)) throw new Error('the club seated no wheel');
+    return wheel;
+  };
+  const slotsOf = (scene: Interior) => {
+    const slots = club(scene)['games'].slots;
+    if (!(slots instanceof ClubSlotsSystem)) throw new Error('the club seated no slot machine');
+    return slots;
+  };
+  const casinoSeat = (scene: Interior) => ({
+    active: () => scene.pm.active(),
+    companion: () => scene.pm.inactive(),
+  });
+  const closeWheel = (scene: Interior): void => {
+    wheelOf(scene).resetForReview();
+    closeClub(scene);
   };
   /** Seats the party at the penny table, with a rebuy's worth left in the purse. */
   const seatAtPoker = (scene: Interior) => {
@@ -1415,6 +1454,38 @@ function interiorCases(): InteriorCase[] {
             if (!playUntilGameOver(table)) throw new Error('the poker game never ended');
           },
           closeClub,
+        ),
+        menu(SLOTS_SURFACE_ID, (scene) => slotsOf(scene).open(casinoSeat(scene)), closeClub),
+        menu(
+          SLOTS_RULES_SURFACE_ID,
+          (scene) => {
+            const slots = slotsOf(scene);
+            slots.open(casinoSeat(scene));
+            slots.openRules();
+          },
+          closeClub,
+        ),
+        menu('wheel-warning', (scene) => wheelOf(scene).open(casinoSeat(scene)), closeWheel),
+        menu(
+          'wheel-confirm',
+          (scene) => wheelOf(scene).openPromptForReview(casinoSeat(scene), 'confirm'),
+          closeWheel,
+        ),
+        menu('wheel', (scene) => wheelOf(scene).openWheelForReview(casinoSeat(scene)), closeWheel),
+        menu(
+          'wheel-prize',
+          (scene) => {
+            const board = boardForBet(WHEEL_MIN_BET);
+            const index = board.findIndex((wedge) => wedge.prizeId === 'platinum_box_frost');
+            wheelOf(scene).presentPrizeForReview(casinoSeat(scene), index);
+          },
+          closeWheel,
+        ),
+        // Never the real wipe: the review landing plays the Nothing with storage left alone.
+        menu(
+          'wheel-nothing',
+          (scene) => wheelOf(scene).openNothingForReview(casinoSeat(scene)),
+          closeWheel,
         ),
       ],
     },

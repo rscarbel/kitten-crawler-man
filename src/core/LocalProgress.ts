@@ -1,5 +1,7 @@
 import type { GameProgress, GameProgressInput } from '../auth/AuthClient';
 import { parseGameProgress, stampGameProgress } from './saveFormat';
+import { PAGE_SAVE_LATCH, type ProgressStorage } from './progressPersistence';
+import { wipeOwed } from './wipeMarker';
 
 const STORAGE_KEY = 'kcm.progress';
 
@@ -9,6 +11,7 @@ const STORAGE_KEY = 'kcm.progress';
  * every access is guarded and a failure simply means there is nothing to resume.
  */
 export function readLocalProgress(): GameProgress | null {
+  if (wipeOwed()) return null;
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
     if (raw === null) return null;
@@ -19,6 +22,7 @@ export function readLocalProgress(): GameProgress | null {
 }
 
 export function writeLocalProgress(data: GameProgressInput): void {
+  if (PAGE_SAVE_LATCH.engaged) return;
   try {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(stampGameProgress(data)));
   } catch {
@@ -26,10 +30,28 @@ export function writeLocalProgress(data: GameProgressInput): void {
   }
 }
 
-export function clearLocalProgress(): void {
-  try {
-    localStorage.removeItem(STORAGE_KEY);
-  } catch {
-    // Nothing stored that we could reach, so nothing to clear.
-  }
-}
+/**
+ * The device's save slot for {@link ProgressPersistence}. Unlike the helpers
+ * above, both calls reject on failure: a save that could not be written must
+ * say so to a caller waiting on it, and a wipe must keep retrying until the
+ * slot is really empty.
+ */
+export const LOCAL_PROGRESS_STORAGE: ProgressStorage = {
+  write(progress: GameProgress): Promise<void> {
+    if (PAGE_SAVE_LATCH.engaged) return Promise.resolve();
+    try {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(progress));
+      return Promise.resolve();
+    } catch (error: unknown) {
+      return Promise.reject(error instanceof Error ? error : new Error(String(error)));
+    }
+  },
+  remove(): Promise<void> {
+    try {
+      localStorage.removeItem(STORAGE_KEY);
+      return Promise.resolve();
+    } catch (error: unknown) {
+      return Promise.reject(error instanceof Error ? error : new Error(String(error)));
+    }
+  },
+};

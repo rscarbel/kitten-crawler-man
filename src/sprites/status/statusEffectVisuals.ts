@@ -20,6 +20,7 @@
 
 import type { SilhouetteLayer } from '../../core/silhouetteComposite';
 import {
+  BLOOD_VOMIT_STATUS,
   CHILLED_STATUS,
   FAIRY_AEGIS_STATUS,
   FAIRY_WARD_STATUS,
@@ -77,6 +78,7 @@ import {
   overhealBodyLayer,
 } from './statusFairyWards';
 import { SHIELD_AMBER_DEEP } from '../art/cretinArt';
+import { bloodVomitBodyLayers, drawBloodVomit } from './statusBloodVomit';
 
 export type { StatusVisualFrame } from './statusPaint';
 
@@ -166,6 +168,16 @@ const STATUS_VISUALS = new Map<string, StatusVisual>([
       harmful: true,
       bodyLayers: (f) => [venomBodyLayer(f)],
       overlay: drawSpitVenom,
+    },
+  ],
+  [
+    BLOOD_VOMIT_STATUS,
+    {
+      label: 'VOMT',
+      color: '#dc2626',
+      harmful: true,
+      bodyLayers: bloodVomitBodyLayers,
+      overlay: drawBloodVomit,
     },
   ],
   [

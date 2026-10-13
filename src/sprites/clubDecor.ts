@@ -58,6 +58,7 @@ export function drawClubDecor(ctx: CanvasRenderingContext2D, camX: number, camY:
     const s = zoneScreen(zone, camX, camY);
     drawZoneRug(ctx, s, zone.color);
     drawFloorWear(ctx, zone.id, s, zone.color);
+    if (zone.label === null) continue;
     worldText(ctx, zone.label, {
       x: s.x + s.w / 2,
       y: s.y + LABEL_TOP_OFFSET,

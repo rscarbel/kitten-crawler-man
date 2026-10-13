@@ -1,4 +1,4 @@
-import type { LootBox, BoxContents } from '../core/AchievementManager';
+import type { LootBox, BoxContents, BoxTier } from '../core/AchievementManager';
 import { ITEM_DEF, isItemId, type ItemId } from '../core/ItemDefs';
 import { randomFromArray, randomInt } from '../utils';
 import { inset, type Rect } from './core/geom';
@@ -17,6 +17,7 @@ import type { Theme } from './theme/tokens';
 import { drawGlass, fillRounded, strokeRounded, type PaintTarget } from './widgets/paint';
 import { measureText, text } from './widgets/text';
 import type { AudioManager } from '../audio/AudioManager';
+import { paintPresentedReward, presentedCompact, presentedHeroes } from './presentedReward';
 
 type ParticleShape = 'circle' | 'confetti';
 
@@ -58,6 +59,26 @@ interface RewardEntry {
 }
 
 type Phase = 'shaking' | 'opening' | 'revealing' | 'done';
+
+/**
+ * Rewards already handed over somewhere else (a wheel prize paid the moment
+ * it landed), shown with the same reveal a box gets: the burst, the rays and
+ * the lines popping in, but no box to open, no queue and nothing granted.
+ */
+export interface PresentedReward {
+  /** Styles the reveal: colour, rays, burst size and stinger. */
+  readonly tier: BoxTier;
+  /** The heading, in place of "<tier> <category> Box". */
+  readonly title: string;
+  readonly playerName: string;
+  readonly contents: BoxContents;
+  /** A line under the rewards saying what the item does. */
+  readonly detail?: string;
+}
+
+/** The stand-in box a presented reward is shown in; never in any achievement queue. */
+const PRESENTED_BOX_ID = -1;
+const PRESENTED_BOX_CATEGORY = 'Wheel';
 
 const BOX_W = 400;
 const BOX_H = 390;
@@ -155,11 +176,16 @@ const CONFETTI_SPIN_RANGE = 0.3;
 /** Confetti rectangles are taller than they are wide, so a spin reads as a tumbling ribbon. */
 const CONFETTI_ASPECT = 2.2;
 
-/** Ascending rarity order for sorting boxes (lowest first). */
-const TIER_ORDER: Record<string, number> = {
+/**
+ * Ascending rarity order for sorting boxes (lowest first), and the step count
+ * a burst scales by. Platinum takes a half step between Gold and Legendary,
+ * which keeps Celestial's burst at roughly 3x.
+ */
+const TIER_ORDER: Record<BoxTier, number> = {
   Bronze: 0,
   Silver: 1,
   Gold: 2,
+  Platinum: 2.5,
   Legendary: 3,
   Celestial: 4,
 };
@@ -168,10 +194,10 @@ const TIER_ORDER: Record<string, number> = {
  * How much bigger a burst reads for a rarer tier: 1x for Bronze up to
  * roughly 3x for Celestial. Every burst-scaled effect below reads this once.
  */
-function tierIntensity(tier: string): number {
+function tierIntensity(tier: BoxTier): number {
   const TIER_INTENSITY_STEP = 0.5;
   const BASE_INTENSITY = 1;
-  return BASE_INTENSITY + (TIER_ORDER[tier] ?? 0) * TIER_INTENSITY_STEP;
+  return BASE_INTENSITY + TIER_ORDER[tier] * TIER_INTENSITY_STEP;
 }
 
 // Anticipation: the shake crescendos and the lid seams start leaking light.
@@ -188,6 +214,8 @@ const BURST_SHAKE_FRAMES = 14;
 const BURST_SHAKE_MAGNITUDE_PX = 6;
 const GOD_RAY_COUNT = 8;
 const GOD_RAY_SPIN_PER_FRAME = 0.012;
+/** Platinum's sheen turns against the tier rays, so the two sets of shafts cross and glint. */
+const PLATINUM_SHEEN_SPIN_PER_FRAME = -GOD_RAY_SPIN_PER_FRAME;
 const GOD_RAY_LENGTH = 220;
 const GOD_RAY_HALF_ANGLE = 0.09;
 const GOD_RAY_ALPHA = 0.16;
@@ -227,6 +255,10 @@ export class LootBoxOpener {
   private rewardGranted = false;
   private playerName = '';
   private getContents: ((box: LootBox) => BoxContents) | null = null;
+  /** Set while showing rewards granted elsewhere rather than opening boxes. */
+  private presented: PresentedReward | null = null;
+  /** Ticks since a presented reward appeared: its rays, halo and sparkles run on this. */
+  private presentedFrames = 0;
 
   private onBoxOpened: ((box: LootBox, contents: BoxContents) => void) | null = null;
   private onAllDone: (() => void) | null = null;
@@ -267,7 +299,7 @@ export class LootBoxOpener {
     } else {
       this.phase = 'done';
       this.frame = 0;
-      this.nextTimer = NEXT_DELAY;
+      this.nextTimer = this.autoAdvanceFrames();
       this.burstParticles(BURST_COUNT_REVEAL);
       if (!this.rewardGranted && this.onBoxOpened && this.contents) {
         this.rewardGranted = true;
@@ -298,8 +330,9 @@ export class LootBoxOpener {
     onEachBoxOpening?: () => void,
   ): void {
     if (boxes.length === 0) return;
+    this.presented = null;
     this.getContents = getContents;
-    this.queue = [...boxes].sort((a, b) => (TIER_ORDER[a.tier] ?? 0) - (TIER_ORDER[b.tier] ?? 0));
+    this.queue = [...boxes].sort((a, b) => TIER_ORDER[a.tier] - TIER_ORDER[b.tier]);
     this.queueIndex = 0;
     this.playerName = playerName;
     this.onBoxOpened = onBoxOpened;
@@ -309,14 +342,49 @@ export class LootBoxOpener {
     this.loadCurrent();
   }
 
+  /**
+   * Shows rewards that are already the player's, starting at the lid
+   * blowing off. Nothing is granted here; `onDone` runs once the reveal is
+   * dismissed or times out.
+   */
+  present(reward: PresentedReward, onDone: () => void): void {
+    this.presented = reward;
+    this.getContents = () => reward.contents;
+    this.queue = [
+      {
+        id: PRESENTED_BOX_ID,
+        tier: reward.tier,
+        category: PRESENTED_BOX_CATEGORY,
+        fromAchievement: null,
+      },
+    ];
+    this.queueIndex = 0;
+    this.playerName = reward.playerName;
+    this.onBoxOpened = null;
+    this.onAllDone = () => {
+      this.presented = null;
+      onDone();
+    };
+    this.onEachBoxOpening = null;
+    this.active = true;
+    this.presentedFrames = 0;
+    this.loadCurrent();
+    this.frame = SHAKE_FRAMES;
+  }
+
   tick(): void {
     if (!this.active || !this.box) return;
     this.frame++;
+    this.presentedFrames++;
 
     if (this.phase === 'done') {
       if (this.nextTimer > 0) {
         this.nextTimer--;
-        if (this.nextTimer === 0) this.advance();
+        // Advancing past the last box empties the opener, so nothing below may read it.
+        if (this.nextTimer === 0) {
+          this.advance();
+          return;
+        }
       }
       if (this.frame % SPARKLE_INTERVAL === 0) this.spawnParticle();
     }
@@ -343,6 +411,7 @@ export class LootBoxOpener {
         if (this.frame >= OPEN_FRAMES) {
           this.phase = 'revealing';
           this.frame = 0;
+          if (this.box.tier === 'Platinum') this.audio?.play('platinum_box_reveal');
           this.burstParticles(Math.round(BURST_COUNT_REVEAL * intensity));
         }
         break;
@@ -351,7 +420,7 @@ export class LootBoxOpener {
         if (this.frame >= REVEAL_FRAMES) {
           this.phase = 'done';
           this.frame = 0;
-          this.nextTimer = NEXT_DELAY;
+          this.nextTimer = this.autoAdvanceFrames();
         }
         break;
       case 'done':
@@ -396,6 +465,12 @@ export class LootBoxOpener {
 
     ctx.fillStyle = skins.scrim;
     ctx.fillRect(0, 0, cw, ch);
+
+    const presentedReward = this.presented;
+    if (presentedReward !== null) {
+      this.paintPresented(target, cw, ch, presentedReward);
+      return;
+    }
 
     if (this.burstFlashFrames > 0) {
       ctx.save();
@@ -495,7 +570,16 @@ export class LootBoxOpener {
     ctx.save();
     clipToBurstArea();
     if (this.phase === 'opening' || this.phase === 'revealing') {
-      this.renderGodRays(ctx, cx, boxCenterY, tierColor);
+      this.renderGodRays(ctx, cx, boxCenterY, tierColor, GOD_RAY_SPIN_PER_FRAME);
+      if (box.tier === 'Platinum') {
+        this.renderGodRays(
+          ctx,
+          cx,
+          boxCenterY,
+          palette.tier.platinumSheen,
+          PLATINUM_SHEEN_SPIN_PER_FRAME,
+        );
+      }
     }
     if (this.phase === 'opening' && this.frame < SHOCKWAVE_FRAMES) {
       this.renderShockwave(ctx, cx, boxCenterY, tierColor);
@@ -575,16 +659,72 @@ export class LootBoxOpener {
     ctx.restore();
   }
 
+  /** A presented reward's own screen: the item itself as the star, under its tier's rays and halo. */
+  private paintPresented(
+    target: PaintTarget & Pick<Ui, 'density'>,
+    cw: number,
+    ch: number,
+    reward: PresentedReward,
+  ): void {
+    const { ctx, theme } = target;
+    if (this.burstFlashFrames > 0) {
+      ctx.save();
+      ctx.globalCompositeOperation = 'lighter';
+      ctx.globalAlpha *= (this.burstFlashFrames / BURST_FLASH_FRAMES) * BURST_FLASH_ALPHA;
+      ctx.fillStyle = theme.palette.text.primary;
+      ctx.fillRect(0, 0, cw, ch);
+      ctx.restore();
+    }
+    ctx.save();
+    ctx.translate(this.shakeX, this.shakeY);
+    const openProgress =
+      this.phase === 'opening'
+        ? Math.min(1, this.frame / OPEN_FRAMES)
+        : this.phase === 'shaking'
+          ? 0
+          : 1;
+    this.artCenter = paintPresentedReward(target, cw, ch, {
+      tier: reward.tier,
+      title: reward.title,
+      playerName: reward.playerName,
+      heroes: presentedHeroes(reward.contents.itemRewards ?? [], reward.contents.coins),
+      detail: reward.detail,
+      ageFrames: this.presentedFrames,
+      openProgress,
+      hint: footerHint(target.density, this.phase === 'done'),
+      compact: presentedCompact(cw, ch),
+    });
+    for (const p of this.particles) {
+      const ratio = p.life / p.maxLife;
+      ctx.save();
+      ctx.globalAlpha *= ratio;
+      ctx.fillStyle = p.color;
+      if (p.shape === 'confetti') {
+        ctx.translate(p.x, p.y);
+        ctx.rotate(p.spin);
+        const size = p.radius * ratio;
+        ctx.fillRect(-size / 2, -size / 2, size, size * CONFETTI_ASPECT);
+      } else {
+        ctx.beginPath();
+        ctx.arc(p.x, p.y, p.radius * ratio, 0, Math.PI * 2);
+        ctx.fill();
+      }
+      ctx.restore();
+    }
+    ctx.restore();
+  }
+
   /** Additive rotating shafts of light behind the box, brightening the burst and reveal. */
   private renderGodRays(
     ctx: CanvasRenderingContext2D,
     cx: number,
     cy: number,
     color: string,
+    spinPerFrame: number,
   ): void {
     ctx.save();
     ctx.translate(cx, cy);
-    ctx.rotate(this.frame * GOD_RAY_SPIN_PER_FRAME);
+    ctx.rotate(this.frame * spinPerFrame);
     ctx.globalCompositeOperation = 'lighter';
     ctx.globalAlpha = GOD_RAY_ALPHA;
     ctx.fillStyle = color;
@@ -639,7 +779,8 @@ export class LootBoxOpener {
     this.shakeY = 0;
     this.sparkledLineIndices = new Set();
     this.artCenter = null;
-    this.audio?.play('rumble', { volume: SHAKE_HUM_VOLUME });
+    // A presented reward starts with the lid already blowing off, so it never shakes.
+    if (this.presented === null) this.audio?.play('rumble', { volume: SHAKE_HUM_VOLUME });
   }
 
   private advance(): void {
@@ -812,6 +953,15 @@ export class LootBoxOpener {
     ctx.stroke();
   }
 
+  /**
+   * Frames the finished reveal waits before moving on by itself. A presented
+   * reward never moves on alone: it is a prize the player should see, so it
+   * waits for a tap or a key.
+   */
+  private autoAdvanceFrames(): number {
+    return this.presented === null ? NEXT_DELAY : 0;
+  }
+
   /** What the current box paid out, one entry per reward line. */
   private rewardEntries(theme: Theme): RewardEntry[] {
     const contents = this.contents;
@@ -957,6 +1107,8 @@ export class LootBoxOpener {
 
   private playCardStinger(): void {
     if (!this.box) return;
+    // Platinum's own reveal cue already carries the moment; a stinger per line would bury it.
+    if (this.box.tier === 'Platinum') return;
     const intensity = tierIntensity(this.box.tier);
     const volume = Math.min(
       CARD_STINGER_MAX_VOLUME,

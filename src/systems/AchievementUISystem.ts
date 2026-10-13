@@ -274,13 +274,15 @@ export class AchievementUISystem {
 
   /**
    * What a box holds: its shared tier/category contents, plus the granting
-   * achievement's own item rewards (if any) as a separate addition so the
-   * reveal shows both the shared bonus and the achievement-specific items.
+   * achievement's own item rewards and the box's own named items, kept apart
+   * from the shared bonus so the reveal shows both.
    */
   private contentsFor(box: LootBox): BoxContents {
     const base = getBoxContents(box.tier, box.category);
-    const itemRewards = ACHIEVEMENT_DEFS[box.fromAchievement].itemRewards;
-    if (itemRewards === undefined) return base;
+    const achievementRewards =
+      box.fromAchievement === null ? [] : (ACHIEVEMENT_DEFS[box.fromAchievement].itemRewards ?? []);
+    const itemRewards = [...achievementRewards, ...(box.itemRewards ?? [])];
+    if (itemRewards.length === 0) return base;
     return { ...base, itemRewards: itemRewards.map((reward) => ({ ...reward })) };
   }
 

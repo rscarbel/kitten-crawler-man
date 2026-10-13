@@ -4,7 +4,7 @@ import type { CatPlayer } from '../creatures/CatPlayer';
 import type { Mob } from '../creatures/Mob';
 import type { GameMap } from '../map/GameMap';
 import { findPartyArrivalTiles } from '../map/findWalkableTile';
-import { makeBurn, makePoison, makeSepsis } from '../core/StatusEffect';
+import { INCURABLE_STATUSES, makeBurn, makePoison, makeSepsis } from '../core/StatusEffect';
 import { createMob } from '../levels/spawner';
 import { TILE_SIZE } from '../core/constants';
 import { isItemId } from '../core/ItemDefs';
@@ -62,6 +62,7 @@ const VALID_ITEM_IDS = new Set<string>([
   'slate_butterfly_talisman',
   'fae_scale_crupper',
   'bracelet_of_dex',
+  'eyes_of_splatter',
   'splatter_skunk_toe_ring',
   'shade_gnoll_kneepads',
   'grull_war_gauntlet',
@@ -173,7 +174,8 @@ export function executeAIAction(action: AIAction, ctx: AISceneContext): void {
     case 'remove_status': {
       const player = resolvePlayer(ctx, action.target_player);
       const status = String(action.status);
-      player.cureStatuses([status]);
+      // The AI narrates the dungeon; it does not get to lift what only a death does.
+      if (!INCURABLE_STATUSES.includes(status)) player.cureStatuses([status]);
       break;
     }
 

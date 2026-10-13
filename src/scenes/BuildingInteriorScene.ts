@@ -1,4 +1,5 @@
 import { firstResidentMarker, type ResidentQuestHook } from '../systems/residentQuestHooks';
+import { drainBloodVomitRetches } from '../systems/bloodVomitRetches';
 import { WendellBlueprintsHook } from '../systems/briarHollow/blueprints/WendellBlueprintsHook';
 import { WendellContractsHook } from '../systems/constructionContracts/WendellContractsHook';
 import { ContractContactHook } from '../systems/constructionContracts/ContractContactHook';
@@ -143,6 +144,7 @@ import {
 import { createGodModeState, type GodModeState } from '../core/GodMode';
 import { ITEM_DEF, type InventoryItem, type ItemId } from '../core/ItemDefs';
 import { CLUB_STATION_SURFACE_IDS, DesperadoClubSystem } from '../systems/DesperadoClubSystem';
+import { ClubWheelSystem } from '../systems/ClubWheelSystem';
 import { POKER_DEV_SEED } from '../systems/casino/poker/npc/personality';
 import { InteriorOccupantSystem } from '../systems/InteriorOccupantSystem';
 import { InteriorReadableSystem } from '../systems/InteriorReadableSystem';
@@ -236,6 +238,7 @@ import {
   setInteractionPromptsSuppressed,
 } from '../ui/InteractionPrompt';
 import { MercenarySystem } from '../systems/MercenarySystem';
+import { AttackCowSystem } from '../systems/AttackCowSystem';
 import { RockThrowSystem } from '../systems/RockThrowSystem';
 import { HirelingBoltSystem } from '../systems/HirelingBoltSystem';
 import { playHirelingProjectileCues } from '../systems/hirelingProjectileCues';
@@ -314,6 +317,8 @@ import {
 } from './interiorHud';
 import { cameraWorldView, setVisibleWorldView } from '../core/visibleWorldView';
 import { createMongoPetState, type MongoPetState } from '../core/MongoPetState';
+import { detachedPartyRun, type InteriorPartyRun } from './interiorPartyRun';
+import { reloadPage, type SaveWriteOutcome } from '../core/progressPersistence';
 import { settings } from '../core/Settings';
 import { awardFirstHundred, bindAbilityLevelUps } from '../systems/abilityLevelUps';
 import { bindCraftLevelUps } from '../systems/craftLevelUps';
@@ -681,6 +686,7 @@ export class BuildingInteriorScene extends GameplayScene {
    * outdoors. Scene-owned for the same reason Mongo is.
    */
   private readonly mercenarySystem: MercenarySystem;
+  private readonly attackCowSystem: AttackCowSystem;
   private readonly crawlerBarks = new CrawlerBarkSystem();
   /**
    * The contract the standing hire was stood up for. The club's desk can sign
@@ -920,6 +926,11 @@ export class BuildingInteriorScene extends GameplayScene {
     overworldJournal?: InteriorJournalSource,
     hudView?: HudViewState,
     private readonly floor: InteriorFloorContext = TOWN_INTERIOR_FLOOR,
+    /**
+     * The run's party state held by the floor outside, and its save. The club's
+     * wheel reads and writes the ledger and commits a save through it.
+     */
+    readonly partyRun: InteriorPartyRun = detachedPartyRun(),
   ) {
     super(input, sceneManager);
     this.overworldJournal = overworldJournal ?? null;
@@ -982,6 +993,15 @@ export class BuildingInteriorScene extends GameplayScene {
     const prisonPlan =
       variant !== 'default' && variant.kind === 'goblin_prison' ? variant.plan : null;
     this.companionsWaitOutside = prisonPlan !== null;
+    this.attackCowSystem = new AttackCowSystem(
+      partyRun.attackCowState,
+      floor.floorNumber,
+      {
+        toast: (message) => this.menus.toasts.post(message),
+        sound: (id) => this.audio?.play(id),
+      },
+      !this.companionsWaitOutside,
+    );
 
     // prebuiltStructure skips dungeon generation entirely (mapSize 0 would
     // crash the generator); generateInterior() builds the real room next.
@@ -1153,6 +1173,20 @@ export class BuildingInteriorScene extends GameplayScene {
         this.rewardFly.enqueueCoins(coins, screenX, screenY);
       };
       this.club.onCasinoNotice = (message, tone) => this.menus.toasts.post(message, { tone });
+      this.club.installCasinoGame(
+        'wheel',
+        new ClubWheelSystem({
+          audio: this.audio,
+          ledger: partyRun.wheelLedger,
+          saveNow: () => this.saveNow(),
+          progressWipe: partyRun.progressWipe,
+          afterNothing: reloadPage,
+          grantAttackCow: () => {
+            this.grantAttackCow();
+          },
+          onNotice: (message, tone) => this.menus.toasts.post(message, { tone }),
+        }),
+      );
     }
 
     // Tower stair system
@@ -1274,6 +1308,12 @@ export class BuildingInteriorScene extends GameplayScene {
         `Human is level ${this.human.level}, Cat is level ${this.cat.level}. ` +
         `Inside: ${this.entry.name}. ` +
         `Human HP: ${displayHp(this.human.hp)}/${this.human.maxHp}, Cat HP: ${displayHp(this.cat.hp)}/${this.cat.maxHp}.`,
+      sceneCommands: [
+        {
+          name: '!cow',
+          run: () => (this.grantAttackCow() ? '🐄 ATTACK COW' : null),
+        },
+      ],
     });
     this.chat.applyCarriedCheat();
     this.wirePauseScreen();
@@ -1677,6 +1717,9 @@ export class BuildingInteriorScene extends GameplayScene {
     this.bus.on('spawnGore', (e) => {
       this.combat.spawnGore(e.x, e.y, e.impactDx, e.impactDy);
     });
+    this.bus.on('bloodVomitRetch', (e) => {
+      this.combat.spawnGore(e.x, e.y, e.dirX, e.dirY);
+    });
     this.bus.on('crawlerKnockedOut', (e) => {
       e.player.applyCockroachKnockoutRelief();
       if (e.player === this.cat && this.human.isAlive && !this.human.isKnockedOut) {
@@ -2048,6 +2091,7 @@ export class BuildingInteriorScene extends GameplayScene {
     // it follows. The departing storey's roster is not ticked while the party is
     // elsewhere, so a companion left in it would stand frozen until they return.
     this.mercenarySystem.leaveStorey(departing.world.roster.mobs, departing.world.roster.grid);
+    this.attackCowSystem.leaveStorey(departing.world.roster.mobs, departing.world.roster.grid);
     carryCompanions(this.carriedCompanions(), departing.world.roster, this.world.roster, this.map);
 
     // Reset menu states
@@ -2494,6 +2538,7 @@ export class BuildingInteriorScene extends GameplayScene {
     return [
       this.mongoSystem.asCarriedCompanion(this.cat),
       this.mercenarySystem.asCarriedCompanion(),
+      this.attackCowSystem.asCarriedCompanion(),
     ];
   }
 
@@ -2508,6 +2553,8 @@ export class BuildingInteriorScene extends GameplayScene {
     if (mongo !== null && !mongo.recalling && !mongo.collapsing) targets.push(mongo);
     const merc = this.mercenarySystem.activeMerc;
     if (merc !== null) targets.push(merc);
+    const cow = this.attackCowSystem.standingCow;
+    if (cow !== null) targets.push(cow);
     return targets;
   }
 
@@ -2950,6 +2997,7 @@ export class BuildingInteriorScene extends GameplayScene {
     // Update walk animation
     this.human.tickTimers();
     this.cat.tickTimers();
+    drainBloodVomitRetches([this.human, this.cat], this.bus);
     this.safeRoom?.updateWander();
     this.bopca?.tick(this.human, this.cat, player, this.inactive());
     this.shop?.update();
@@ -3113,6 +3161,7 @@ export class BuildingInteriorScene extends GameplayScene {
     // or it runs the whole kill path and pays the party for its own pet.
     this.mongoSystem.checkHealth();
     this.mercenarySystem.checkHealth((merc) => combat.spawnKillGore(merc, null));
+    this.attackCowSystem.checkHealth();
     combat.resolveKills();
     combat.resolveSpellAftermath();
     // Also where his off-duty recovery ticks, and so only while he is not out,
@@ -3124,6 +3173,7 @@ export class BuildingInteriorScene extends GameplayScene {
       this.mercenarySystem.onContractChanged(ctx.roster.mobs, ctx.roster.grid);
     }
     if (!this.companionsWaitOutside) this.mercenarySystem.update(ctx);
+    this.attackCowSystem.update(ctx);
     this.drainWardExplainerBarks();
     this.crawlerBarks.update();
     this.breakReactions.update();
@@ -3316,11 +3366,35 @@ export class BuildingInteriorScene extends GameplayScene {
     // Writes the hire's health into the roster the next scene stands it up
     // from; a hire lying downed at the door is lost with the room.
     this.mercenarySystem.dismissForTransition(this.world.roster.mobs, this.world.roster.grid);
+    this.attackCowSystem.dismiss(this.world.roster.mobs, this.world.roster.grid);
     const humanSnap = snapPlayer(this.human);
     const catSnap = snapPlayer(this.cat);
     if (this.hudView !== null) this.hudView.miniMapExpanded = this.miniMapExpanded;
     if (this.prisonKey !== null) playPrisonCue(this.audio, 'prisonDoorOpen');
     this.onExitCallback(humanSnap, catSnap, defeated, companions);
+  }
+
+  /**
+   * Gives the party Carl's attack cow and stands her beside him in this room
+   * now, with her arrival moo — the wheel's "A new pet" prize, and the `!cow`
+   * cheat. Returns false when she was already owned.
+   */
+  grantAttackCow(): boolean {
+    return this.attackCowSystem.grant(this.human, this.map, this.world.roster);
+  }
+
+  /**
+   * Writes the save now, with the party as it stands in this room, and makes
+   * it the one a death or a reload returns to. Resolves once storage has
+   * answered, so a caller can hold an irreversible moment until it is on disk.
+   */
+  saveNow(): Promise<SaveWriteOutcome> {
+    return this.partyRun.commitSave({
+      human: snapPlayer(this.human),
+      cat: snapPlayer(this.cat),
+      mongoPetHp: this.mongoSystem.hp,
+      mongoPetResting: this.mongoSystem.restingUntilFull,
+    });
   }
 
   /**
@@ -4151,6 +4225,7 @@ export class BuildingInteriorScene extends GameplayScene {
     this.chat.renderBubble(ctx, camX, camY);
     this.mongoSystem.renderSpeechBubble(ctx, this.cat.x - camX, this.cat.y - camY);
     this.mercenarySystem.renderSpeech(ctx, camX, camY);
+    this.attackCowSystem.renderOverlay(ctx, camX, camY);
     this.crawlerBarks.render(ctx, camX, camY, this.human, this.cat);
     this.breakReactions.render(ctx, camX, camY, this.occupants?.people ?? []);
 
@@ -4190,6 +4265,13 @@ export class BuildingInteriorScene extends GameplayScene {
           ? downedCompanionArrowCandidate(ctx, this.active(), this.inactive(), camX, camY)
           : null,
         this.mercenarySystem.downedArrowCandidate(
+          ctx,
+          camX,
+          camY,
+          this.active(),
+          this.floor.sightRadiusPx,
+        ),
+        this.attackCowSystem.downedArrowCandidate(
           ctx,
           camX,
           camY,

@@ -1,5 +1,6 @@
 import { TILE_SIZE } from '../core/constants';
 import type { SpatialGrid } from '../core/SpatialGrid';
+import { AttackCow } from '../creatures/AttackCow';
 import { Mercenary } from '../creatures/Mercenary';
 import type { Mob } from '../creatures/Mob';
 import { Mongo } from '../creatures/Mongo';
@@ -12,16 +13,16 @@ const COMPANION_LANDING_SEARCH_TILES = 4;
 /** Offset from a body's origin to the centre of the tile it stands on, as a fraction of a tile. */
 const TILE_CENTRE_FRACTION = 0.5;
 
-/** A companion the party brings with it: Mongo, or a hired Meat Shield. */
-export type PartyCompanion = Mongo | Mercenary;
+/** A companion the party brings with it: Mongo, a hired Meat Shield, or Carl's attack cow. */
+export type PartyCompanion = Mongo | Mercenary | AttackCow;
 
 /**
  * The companions standing with the party this frame, picked out of the scene's
  * extra targets (which also carry non-party figures such as a quest NPC).
  *
- * A downed hireling is never included, even if a context lists it: its revive
- * window is tied to the spot it fell, so moving the body would move the place
- * the crawler has to reach to save it.
+ * A downed hireling or cow is never included, even if a context lists it: its
+ * revive window is tied to the spot it fell, so moving the body would move the
+ * place the crawler has to reach to save it. Nor is a cow gone off to rest.
  */
 export function standingCompanions(extraTargets: readonly Player[] | undefined): PartyCompanion[] {
   const companions: PartyCompanion[] = [];
@@ -29,6 +30,7 @@ export function standingCompanions(extraTargets: readonly Player[] | undefined):
     if (!target.isAlive) continue;
     if (target instanceof Mongo) companions.push(target);
     else if (target instanceof Mercenary && !target.isDowned) companions.push(target);
+    else if (target instanceof AttackCow && target.isStanding) companions.push(target);
   }
   return companions;
 }

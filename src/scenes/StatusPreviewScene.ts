@@ -24,6 +24,7 @@ import { PreviewScene, type PreviewControl } from './PreviewScene';
 import { drawWithSilhouetteLayers } from '../core/silhouetteComposite';
 import { drawHumanSprite, prewarmHumanSprite } from '../sprites/humanSprite';
 import { HUMAN_STATUS_FIGURE_BOX } from '../creatures/HumanPlayer';
+import { humanMouthOf } from '../sprites/crawlerMouths';
 import { PLAYER_HIT_FLASH_MARGIN_TILES } from '../Player';
 import type { StatusEffect } from '../core/StatusEffect';
 import {
@@ -33,7 +34,15 @@ import {
   statusVisual,
   type StatusVisualFrame,
 } from '../sprites/status/statusEffectVisuals';
+import type { StatusMouth } from '../sprites/status/statusPaint';
 import { previewInk } from '../ui/theme/previewInk';
+
+/** The harness's figure stands in profile facing right, so its mouth is the standing side cell's. */
+function previewMouth(left: number, top: number, size: number): StatusMouth | null {
+  const mouth = humanMouthOf({ row: 'idle_side', frame: 0, flipX: false });
+  if (mouth === null) return null;
+  return { x: left + size * mouth.x, y: top + size * mouth.y, lean: mouth.lean };
+}
 
 /** Every status the registry knows, in the order they are worth comparing. */
 const PREVIEW_STATUSES: readonly string[] = [
@@ -42,6 +51,7 @@ const PREVIEW_STATUSES: readonly string[] = [
   'poison',
   'sepsis',
   'spit_venom',
+  'blood_vomit',
   'stuck',
   'stun',
   'electrified',
@@ -246,6 +256,7 @@ export class StatusPreviewScene extends PreviewScene {
       moving: this.walking,
       facingX: 1,
       facingY: 0,
+      mouth: previewMouth(left, top, size),
     };
 
     const drawFigure = (target: CanvasRenderingContext2D) => {

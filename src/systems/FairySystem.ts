@@ -90,7 +90,8 @@ export type FairySystemCue =
   | 'necroDeath'
   | 'resurrection'
   | 'iceBoltShatter'
-  | 'iceBoltHit';
+  | 'iceBoltHit'
+  | 'immuneFizzle';
 
 /** Offset from a tile's origin to its centre, as a share of a tile. */
 const TILE_CENTRE = 0.5;
@@ -364,6 +365,7 @@ export class FairySystem implements GameSystem {
       if (!target.isAlive) continue;
       const centre = playerCentre(target);
       if (Math.hypot(centre.x - x, centre.y - y) > radiusPx) continue;
+      if (this.iceBolts.immunity.blocks(target, 'ice')) continue;
       applyChillOnly(target);
     }
     this.partyScratch.length = 0;
@@ -440,6 +442,7 @@ export class FairySystem implements GameSystem {
     for (const impact of this.iceBolts.takeImpacts()) {
       this.cues.add(impact === 'body' ? 'iceBoltHit' : 'iceBoltShatter');
     }
+    if (this.iceBolts.immunity.takeFizzle()) this.cues.add('immuneFizzle');
     this.advanceHealWaves();
     this.chains = ageOut(this.chains, AEGIS_CHAIN_FRAMES);
     this.shieldBursts = ageOut(this.shieldBursts, SHIELD_BURST_FRAMES);

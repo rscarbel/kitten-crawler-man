@@ -19,6 +19,7 @@ export type DeathCause =
   | 'sepsisStatus'
   | 'electrifiedStatus'
   | 'spitVenomStatus'
+  | 'bloodVomitStatus'
   | 'grotesqueSpiderSlam'
   | 'grotesqueSpiderScreech'
   | 'grotesqueSpiderSpit'
@@ -293,6 +294,11 @@ export const DEATH_EXPLANATIONS: Record<DeathCause, readonly string[]> = {
     'Spider venom dissolved you from the inside. Should have cleared that debuff.',
     'The spit venom worked its way through you. Disgusting way to go.',
     'You died to venom. Keep the poison off next time.',
+  ],
+  bloodVomitStatus: [
+    'You threw up more blood than you had. Tito did warn you about that wheel.',
+    'Death by retching. The wheel giveth, mostly it taketh.',
+    'Your insides finished leaving. Keep your health topped up between heaves.',
   ],
   grotesqueSpiderSlam: [
     'When the red fills to its outline, it lands. Be outside the line.',

@@ -62,22 +62,40 @@ const GALLERY_BOXES: LootBox[] = [
   { id: 2, tier: 'Gold', category: 'Spicy', fromAchievement: 'boss_slayer' },
 ];
 
+const PLATINUM_GALLERY_BOXES: LootBox[] = [
+  {
+    id: 1,
+    tier: 'Platinum',
+    category: 'Wheel',
+    fromAchievement: null,
+    itemRewards: [{ id: 'splatter_skunk_toe_ring', quantity: 1 }],
+  },
+];
+
 function galleryContents(box: LootBox): BoxContents {
   const shared = getBoxContents(box.tier, box.category);
+  if (box.itemRewards !== undefined) return { ...shared, itemRewards: box.itemRewards };
   if (box.tier !== 'Gold') return shared;
   return { ...shared, itemRewards: [{ id: 'goblin_dynamite', quantity: 2 }] };
 }
 
 /** A loot-box opener on the queue's last box, run `ticks` frames in, or skipped to its reveal. */
-function lootBoxFixture(name: string, ticks: number | 'revealed'): DialogFixture {
+function lootBoxFixture(
+  name: string,
+  ticks: number | 'revealed',
+  boxes: LootBox[] = GALLERY_BOXES,
+): DialogFixture {
   const noop = (): void => undefined;
   let opener: LootBoxOpener | null = null;
   const prepared = (): LootBoxOpener => {
     if (opener !== null) return opener;
     const created = new LootBoxOpener();
-    created.startQueue(GALLERY_BOXES, 'Cat', galleryContents, noop, noop);
-    created.skip();
-    created.skip();
+    created.startQueue(boxes, 'Cat', galleryContents, noop, noop);
+    // One skip finishes a box and a second moves on, so the opener lands on the queue's last box.
+    for (let earlier = 1; earlier < boxes.length; earlier++) {
+      created.skip();
+      created.skip();
+    }
     if (ticks === 'revealed') created.skip();
     else for (let tick = 0; tick < ticks; tick++) created.tick();
     opener = created;
@@ -116,5 +134,7 @@ export const FIXTURES: readonly DialogFixture[] = [
   lootBoxFixture('loot-box-opening', MID_OPEN_TICKS),
   lootBoxFixture('loot-box-revealing', REVEALING_TICKS),
   lootBoxFixture('loot-box-revealed', 'revealed'),
+  lootBoxFixture('loot-box-platinum-opening', MID_OPEN_TICKS, PLATINUM_GALLERY_BOXES),
+  lootBoxFixture('loot-box-platinum-revealed', 'revealed', PLATINUM_GALLERY_BOXES),
   achievementFixture('achievement-notification'),
 ];
