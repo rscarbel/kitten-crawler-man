@@ -3,14 +3,14 @@
  * overworld: a shuffled town playlist inside the town safe zone, a shuffled
  * circus playlist on the circus grounds, Briar Hollow's own zone inside its palisade, a
  * harvest theme out at the village quarry, and
- * forest_path in the wilds between. Quest systems set
+ * shuffled wilds playlist (forest_path, terrifying_woods) between. Quest systems set
  * `battleMusicActive` while they own the track (e.g. circus_battle during
  * circus fights); zone switching pauses until it clears.
  */
 
 import { TILE_SIZE } from '../core/constants';
 import type { AudioManager } from '../audio/AudioManager';
-import { CIRCUS_MUSIC_TRACKS, TOWN_MUSIC_TRACKS } from '../audio/sounds';
+import { CIRCUS_MUSIC_TRACKS, TOWN_MUSIC_TRACKS, WILDS_MUSIC_TRACKS } from '../audio/sounds';
 import type { SoundId } from '../audio/sounds';
 import type { GameMap } from '../map/GameMap';
 import type { GameSystem, SystemContext } from './GameSystem';
@@ -19,7 +19,7 @@ type MusicZone = 'town' | 'wilds' | 'circus' | 'village' | 'quarry';
 
 const ZONE_TRACKS: Record<MusicZone, ReadonlyArray<SoundId>> = {
   town: TOWN_MUSIC_TRACKS,
-  wilds: ['forest_path'],
+  wilds: WILDS_MUSIC_TRACKS,
   circus: CIRCUS_MUSIC_TRACKS,
   village: ['briar_hollow_theme'],
   quarry: ['medieval_harvest_theme'],

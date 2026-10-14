@@ -636,6 +636,7 @@ const SOUND_IDS_TUPLE = [
   'tech_machinery_running',
   'teleport',
   'temple_music',
+  'terrifying_woods',
   'thrall_fade_out',
   'thrall_summoned',
   'till_drawer_open',
@@ -1379,6 +1380,7 @@ export const SOUND_MANIFEST: Record<SoundId, string> = {
   tech_machinery_running: './src/audio/bosses/grotesque_spider/tech_machinery_running.mp3',
   teleport: './src/audio/effects/teleport.mp3',
   temple_music: './src/audio/background_music/temple_music.mp3',
+  terrifying_woods: './src/audio/background_music/terrifying_woods.mp3',
   thrall_fade_out: './src/audio/effects/gathering/thrall_fade_out.mp3',
   thrall_summoned: './src/audio/effects/gathering/thrall_summoned.mp3',
   till_drawer_open: './src/audio/effects/interior/till_drawer_open.mp3',
@@ -1502,6 +1504,9 @@ export const CIRCUS_MUSIC_TRACKS: ReadonlyArray<SoundId> = [
   'circus_theme_3',
 ];
 
+/** The wilds between the Over City's settlements — shuffled and looping. */
+export const WILDS_MUSIC_TRACKS: ReadonlyArray<SoundId> = ['forest_path', 'terrifying_woods'];
+
 /** Fallback interior music for buildings with no soundtrack of their own. */
 export const DEFAULT_BUILDING_MUSIC_TRACKS: ReadonlyArray<SoundId> = ['building_default_music_1'];
 
@@ -1553,6 +1558,7 @@ export const STREAMING_SOUND_IDS: ReadonlySet<SoundId> = new Set<SoundId>([
   'tavern_music_1',
   'tavern_music_2',
   'temple_music',
+  'terrifying_woods',
   'town_music_1',
   'town_music_2',
   'tutorial_island',
