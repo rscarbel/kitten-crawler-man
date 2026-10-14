@@ -8,6 +8,7 @@ import type { Inventory } from '../../core/Inventory';
 import type { ItemId } from '../../core/ItemDefs';
 import type { HotbarInput, HotbarSlotModel } from '../../ui/hud/hudModel';
 import type { ItemCooldown } from '../../ui/screens/inventory/inventoryTypes';
+import { activeInputMode } from '../../ui/core/inputMode';
 import { activateHotbarSlot, releaseChargedDynamite, type HotbarHost } from './hotbarActions';
 
 const FRAMES_PER_SECOND = 60;
@@ -20,11 +21,14 @@ const COOLDOWN_OVERFLOW_LABEL = '…';
  *
  * @param drawnWeaponId The weapon the bar's owner has drawn, which reads on
  *   the bar exactly like worn gear: it is in hand and it is not being spent.
+ * @param heldItemId Something else in hand and not yet spent — a readied
+ *   stick of dynamite — which reads the same way.
  */
 export function hotbarSlotModels(
   cooldowns: ReadonlyMap<string, ItemCooldown>,
   inventory: Inventory,
   drawnWeaponId: ItemId | null,
+  heldItemId: ItemId | null = null,
 ): HotbarSlotModel[] {
   return inventory.actionBar.slots.map((item) => {
     // Keyed by ability first, item id second, so a plain item with a cooldown
@@ -35,7 +39,8 @@ export function hotbarSlotModels(
     const seconds = cd === undefined ? 0 : Math.ceil(cd.current / FRAMES_PER_SECOND);
     return {
       item,
-      equipped: item !== null && inventory.showsInUse(item.id, drawnWeaponId),
+      equipped:
+        item !== null && (item.id === heldItemId || inventory.showsInUse(item.id, drawnWeaponId)),
       cooldown: Math.min(1, remaining),
       cooldownLabel:
         seconds > COOLDOWN_SECONDS_SHOWN_MAX ? COOLDOWN_OVERFLOW_LABEL : String(seconds),
@@ -45,15 +50,18 @@ export function hotbarSlotModels(
 }
 
 /**
- * The HUD hotbar's input: a slot fires as it is pressed, and the press's end
- * throws a stick of dynamite the press began charging, so holding the slot
- * winds the throw up the way holding its key does. A world halted under a
- * menu takes no slot.
+ * The HUD hotbar's input: a slot fires as it is pressed. With a mouse, the
+ * press's end throws a stick of dynamite the press began charging, so holding
+ * the slot winds the throw up the way holding its key does; with a finger the
+ * press takes the stick in hand and a tap on the world throws it. A world
+ * halted under a menu takes no slot.
  */
 export function hotbarPressInput(host: () => HotbarHost, worldHalted: () => boolean): HotbarInput {
   return {
     press: (index) => {
-      if (!worldHalted()) activateHotbarSlot(host(), index);
+      if (worldHalted()) return;
+      const dynamiteGrip = activeInputMode() === 'touch' ? 'ready' : 'charge';
+      activateHotbarSlot(host(), index, dynamiteGrip);
     },
     release: (index) => {
       releaseChargedDynamite(host(), index);

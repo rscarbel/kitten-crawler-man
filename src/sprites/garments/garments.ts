@@ -25,6 +25,7 @@ import { CARL_JACKET } from './human/carlJacket';
 import { CARL_PEDICURE } from './human/carlPedicure';
 import { CARL_TOE_RING } from './human/carlToeRing';
 import { CARL_TROLLSKIN_SHIRT } from './human/carlTrollskinShirt';
+import { TOWNSFOLK_SHOES, TOWNSFOLK_TROUSERS } from './human/townsfolkLegwear';
 
 export const CAT_GARMENTS: Readonly<Record<CatGarmentId, GarmentDef<'cat'>>> = {
   cat_coat: CAT_COAT,
@@ -50,6 +51,8 @@ export const HUMAN_GARMENTS: Readonly<Record<HumanGarmentId, GarmentDef<'human'>
   carl_kneepads: CARL_KNEEPADS,
   carl_bracers: CARL_BRACERS,
   carl_boots: CARL_BOOTS,
+  townsfolk_trousers: TOWNSFOLK_TROUSERS,
+  townsfolk_shoes: TOWNSFOLK_SHOES,
 };
 
 const GARMENTS: {

@@ -805,6 +805,32 @@ export class AudioManager {
     this.startPlaylistTrack(opts.fadeInMs ?? 0);
   }
 
+  /**
+   * Change the song now, to one from `ids` other than the one playing. When
+   * that playlist is already running it steps to its next track, so the
+   * shuffle order carries on; otherwise a fresh shuffle starts that holds the
+   * current track back to last.
+   */
+  advanceMusicPlaylist(ids: ReadonlyArray<SoundId>, opts: MusicOptions = {}): void {
+    if (ids.length === 0) return;
+    const fadeInMs = opts.fadeInMs ?? 0;
+    const running = this.musicPlaylist;
+    const isSamePlaylist =
+      running !== null && running.length === ids.length && ids.every((id) => running.includes(id));
+    if (isSamePlaylist) {
+      this.musicPlaylistPos = (this.musicPlaylistPos + 1) % running.length;
+      this.startPlaylistTrack(fadeInMs);
+      return;
+    }
+    const currentId = this._currentMusicId;
+    const shuffled = shuffleTracks(ids).filter((id) => id !== currentId);
+    const currentIsInPlaylist = currentId !== null && ids.includes(currentId);
+    this.musicPlaylist =
+      currentIsInPlaylist && shuffled.length > 0 ? [...shuffled, currentId] : shuffleTracks(ids);
+    this.musicPlaylistPos = 0;
+    this.startPlaylistTrack(fadeInMs);
+  }
+
   private startPlaylistTrack(fadeInMs: number): void {
     const playlist = this.musicPlaylist;
     if (playlist === null) return;

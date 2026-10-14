@@ -78,12 +78,12 @@ function boneFrame(from: Pt, to: Pt): BoneFrame {
  * stations the outline runs through the midpoints on quadratic curves, so the
  * stations shape it without putting a corner at any of them.
  */
-function traceContour(ctx: Ctx, bone: BoneFrame, contour: Contour): void {
+function traceContour(ctx: Ctx, bone: BoneFrame, contour: Contour, newPath = true): void {
   const plusSide = contour.plus.map(([along, half]) => bone.at(along, half));
   const minusSide = contour.minus.map(([along, half]) => bone.at(along, -half));
   const normal = bone.angle + HALF_PI;
 
-  ctx.beginPath();
+  if (newPath) ctx.beginPath();
   smoothThrough(ctx, plusSide, true);
   capEnd(ctx, bone, 1, lastOf(contour.plus), lastOf(contour.minus), normal);
   smoothThrough(ctx, [...minusSide].reverse(), false);
@@ -575,6 +575,50 @@ function drawBareLeg(
       paintForms(ctx, shinBone, shape.calf, shinSign, forms.shin, flesh);
     },
   );
+}
+
+/** One segment of a leg, as cloth laid over it covers it. */
+export type LegCoverSegment = 'thigh' | 'shin';
+
+/**
+ * Where cloth over one segment of the bare leg lies: the rig's own contour
+ * for that segment, as `drawLeg` shapes it for the view and the leg's
+ * nearness, with every station grown by `grow` and then by `margin` figure
+ * units. Cloth sized off the leg it covers covers it in every view and gait;
+ * sized off fixed widths, the calf's belly and the quad's sweep show past it.
+ */
+export function legCover(
+  ctx: Ctx,
+  chain: BoneChain,
+  view: ViewSpec,
+  outward: number,
+  nearness: number,
+  segment: LegCoverSegment,
+  grow: number,
+  margin: number,
+): {
+  readonly trace: () => void;
+  /** Adds the cover to the current path instead of starting one. */
+  readonly addToPath: () => void;
+  readonly axis: { from: Pt; to: Pt; halfWidth: number };
+} {
+  const near = legShapeFor(nearness);
+  const shape = view.profile ? profileLegShape(near) : near;
+  const bone =
+    segment === 'thigh' ? boneFrame(chain.root, chain.joint) : boneFrame(chain.joint, chain.end);
+  const sign = outerSign(bone, view.profile, outward);
+  const bare =
+    segment === 'thigh'
+      ? thighContour(shape, view.profile, sign)
+      : calfContour(shape, view.profile, sign);
+  const widen = (stations: readonly Station[]): Station[] =>
+    stations.map(([along, half]) => [along, half * grow + margin]);
+  const cover: Contour = { plus: widen(bare.plus), minus: widen(bare.minus) };
+  return {
+    trace: () => traceContour(ctx, bone, cover),
+    addToPath: () => traceContour(ctx, bone, cover, false),
+    axis: contourAxis(bone, cover),
+  };
 }
 
 const KNEECAP_ALONG = 0.06;

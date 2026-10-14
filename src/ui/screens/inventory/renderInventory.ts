@@ -27,6 +27,7 @@ import {
   type Track,
 } from '../../core/geom';
 import type { DragHandlers, HitHandlers, HitRegion, Ui } from '../../core/UiRoot';
+import type { HotbarSlotArrangement } from '../../hud/hudModel';
 import { DESCRIPTION_ACTION, type MenuTarget } from './InventoryActions';
 import { drawGlyph } from '../../theme/glyphs';
 import { badge, badgeSize } from '../../widgets/badge';
@@ -758,10 +759,6 @@ function drawHotbarRow(
     text(ui, { x, y, w: labelW, h: side }, { text: HOTBAR_LABEL, role: 'overline' });
     x += labelW;
   }
-  const drag = screen.drag;
-  const selected = screen.selectedItem(inventory);
-  const picking =
-    screen.hotbarPickerOpen && selected !== null && screen.selection?.source === 'inv';
   for (let index = 0; index < HOTBAR_COUNT; index++) {
     if (index === QUEST_SLOT_IDX) x += questGap - gap;
     const cell: Rect = { x, y, w: side, h: side };
@@ -770,40 +767,76 @@ function drawHotbarRow(
     const item = inventory.actionBar.slots[index] ?? null;
     const isQuest = index === QUEST_SLOT_IDX;
     const regionId = `hotbar/${index}`;
-    const deny =
-      !isQuest && drag !== null && drag.from === 'inv' && hotbarRefusal(drag.item) !== null;
-    const lifted = drag?.from === 'hotbar' && drag.slotIdx === index;
     const cooldown = item === null ? null : (screen.host.cooldownFor?.(item) ?? null);
-    const target: MenuTarget | null =
-      item === null || isQuest ? null : { source: 'hotbar', slotIdx: index, item };
-    const worn = item !== null && inventory.showsInUse(item.id, member.drawnWeaponId ?? null);
+    const { afterDraw, ...arrangement } = hotbarSlotArrangement(
+      screen,
+      member,
+      index,
+      cell,
+      regionId,
+    );
     const state = itemSlot(ui, cell, {
       id: regionId,
       item: item?.id ?? null,
       quantity: item?.quantity,
       keycap: isQuest ? QUEST_KEYCAP : keybindings.labelFor(HOTBAR_ACTIONS[index]),
       cooldown: cooldown === null || cooldown.max <= 0 ? 0 : cooldown.current / cooldown.max,
-      selected: screen.selection?.source === 'hotbar' && screen.selection.slotIdx === index,
-      dragging: lifted,
-      dropTarget: !isQuest && !deny && !lifted && pointerOver(screen, cell),
-      equipped: worn,
-      disabled: deny,
-      onTap: () => {
-        const from = screen.selection;
-        if (picking && !isQuest && from !== null) {
-          screen.assignToHotbar(selected, from, index);
-          return;
-        }
-        if (item !== null) screen.tapStack({ source: 'hotbar', slotIdx: index, id: item.id }, item);
-      },
-      onDrag:
-        item === null || isQuest
-          ? undefined
-          : dragHandlers(screen, 'hotbar', index, null, item, regionId),
-      handlers: pressHandlers(screen, regionId, target),
+      equipped:
+        item !== null &&
+        (item.id === member.heldItemId ||
+          inventory.showsInUse(item.id, member.drawnWeaponId ?? null)),
+      ...arrangement,
     });
-    if (state.pressed && target !== null) screen.checkLongPress(regionId, target);
+    afterDraw(state);
   }
+}
+
+/**
+ * What a hotbar slot does while the inventory is open, wherever that slot is
+ * drawn: the screen's own hotbar row and the HUD's bar beneath it share it, so
+ * picking up, dropping and assigning work the same on both.
+ */
+export function hotbarSlotArrangement(
+  screen: InventoryScreen,
+  member: InventoryMember,
+  index: number,
+  cell: Rect,
+  regionId: string,
+): HotbarSlotArrangement {
+  const inventory = member.owner.inventory;
+  const drag = screen.drag;
+  const selected = screen.selectedItem(inventory);
+  const picking =
+    screen.hotbarPickerOpen && selected !== null && screen.selection?.source === 'inv';
+  const item = inventory.actionBar.slots[index] ?? null;
+  const isQuest = index === QUEST_SLOT_IDX;
+  const deny =
+    !isQuest && drag !== null && drag.from === 'inv' && hotbarRefusal(drag.item) !== null;
+  const lifted = drag?.from === 'hotbar' && drag.slotIdx === index;
+  const target: MenuTarget | null =
+    item === null || isQuest ? null : { source: 'hotbar', slotIdx: index, item };
+  return {
+    selected: screen.selection?.source === 'hotbar' && screen.selection.slotIdx === index,
+    dragging: lifted,
+    dropTarget: !isQuest && !deny && !lifted && pointerOver(screen, cell),
+    disabled: deny,
+    onTap: () => {
+      const from = screen.selection;
+      if (picking && !isQuest && from !== null) {
+        screen.assignToHotbar(selected, from, index);
+        return;
+      }
+      if (item !== null) screen.tapStack({ source: 'hotbar', slotIdx: index, id: item.id }, item);
+    },
+    onDrag:
+      item === null || isQuest
+        ? undefined
+        : dragHandlers(screen, 'hotbar', index, null, item, regionId),
+    handlers: pressHandlers(screen, regionId, target),
+    afterDraw: (state) => {
+      if (state.pressed && target !== null) screen.checkLongPress(regionId, target);
+    },
+  };
 }
 
 // ── Detail ──────────────────────────────────────────────────────────────────

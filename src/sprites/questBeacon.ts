@@ -75,6 +75,10 @@ function nearnessFade(
  *
  * Call this *before* the figure's own body paint, so the beam stands behind
  * them rather than across their face.
+ *
+ * `strengthScale` dims the whole beam for a figure whose own tone is close to
+ * the light's: the beam is added light, and a pale figure stood in it loses
+ * its silhouette against the glow.
  */
 export function drawQuestBeacon(
   ctx: CanvasRenderingContext2D,
@@ -85,6 +89,7 @@ export function drawQuestBeacon(
   camY: number,
   timeMs: number,
   color: string,
+  strengthScale = 1,
 ): void {
   const fade = nearnessFade(sx, sy, tileSize, camX, camY);
   if (fade <= 0) return;
@@ -94,7 +99,7 @@ export function drawQuestBeacon(
     coverWidth: tileSize * BEACON_COVER_WIDTH_FRACTION,
     height: tileSize * BEACON_HEIGHT_TILES,
     color,
-    strength: BEACON_STRENGTH * fade,
+    strength: BEACON_STRENGTH * fade * strengthScale,
     timeMs,
   });
 }

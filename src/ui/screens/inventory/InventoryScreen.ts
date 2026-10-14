@@ -37,7 +37,8 @@ import {
   type OpenOptions,
   type StackRef,
 } from './inventoryTypes';
-import { renderInventory } from './renderInventory';
+import type { HotbarArranger } from '../../hud/hudModel';
+import { hotbarSlotArrangement, renderInventory } from './renderInventory';
 
 /** Two taps on one slot within this long run its lead action. */
 export const DOUBLE_TAP_MS = 350;
@@ -118,6 +119,8 @@ export interface FrameGeometry {
   frame: Rect | null;
   readonly bagCells: Map<number, Rect>;
   readonly hotbarCells: Map<number, Rect>;
+  /** The HUD's bar beneath the panel, which takes drops like the screen's own hotbar row. */
+  readonly hudHotbarCells: ReadonlyMap<number, Rect>;
   readonly dollCells: Map<string, Rect>;
   grid: Rect | null;
   columns: number;
@@ -127,11 +130,12 @@ export interface FrameGeometry {
   readonly pageButtons: Map<number, Rect>;
 }
 
-function emptyGeometry(): FrameGeometry {
+function emptyGeometry(hudHotbarCells: ReadonlyMap<number, Rect>): FrameGeometry {
   return {
     frame: null,
     bagCells: new Map(),
     hotbarCells: new Map(),
+    hudHotbarCells,
     dollCells: new Map(),
     grid: null,
     columns: 1,
@@ -174,7 +178,7 @@ export class InventoryScreen {
   notice: { text: string; until: number; id: ItemId | null } | null = null;
   /** Upgrades not yet looked at in this opening; each keeps its badge until it is. */
   readonly freshUpgrades = new Set<ItemId>();
-  geometry: FrameGeometry = emptyGeometry();
+  geometry: FrameGeometry = emptyGeometry(new Map());
   /** Milliseconds, as of the last frame drawn. */
   now = 0;
   /** The density last frame, so input handlers outside render know touch from mouse. */
@@ -189,6 +193,12 @@ export class InventoryScreen {
   private press: PressState | null = null;
   private swallowTap = false;
   private pendingSound: SoundId | null = null;
+  /**
+   * The HUD's bar as drawn this frame. The HUD band draws before the panel
+   * band, so its cells are held here until this screen's own frame begins and
+   * takes them into `geometry`; a frame without a HUD bar leaves none behind.
+   */
+  private hudHotbarCellsThisFrame = new Map<number, Rect>();
 
   constructor(readonly host: InventoryScreenHost) {
     const search = this.search;
@@ -263,6 +273,7 @@ export class InventoryScreen {
     this.press = null;
     this.notice = null;
     this.keyboardSelection = false;
+    this.hudHotbarCellsThisFrame = new Map();
   }
 
   /** Whose pack is on screen, or null while closed or showing the active crawler. */
@@ -317,7 +328,8 @@ export class InventoryScreen {
     this.now = now;
     this.touch = touch;
     this.compact = compact;
-    this.geometry = emptyGeometry();
+    this.geometry = emptyGeometry(this.hudHotbarCellsThisFrame);
+    this.hudHotbarCellsThisFrame = new Map();
     const member = this.member();
     if (member !== null) {
       if (this.seenOpenedAt !== openedAt || this.seenMember !== member.id) {
@@ -533,6 +545,31 @@ export class InventoryScreen {
 
   // ── Bag and hotbar moves ─────────────────────────────────────────────────
 
+  /**
+   * Lends the screen's hotbar behaviour to the HUD's bar while the screen is
+   * open, so that bar arranges exactly like the hotbar row in the panel; null
+   * while closed, when the HUD's bar fires its slots as usual.
+   */
+  hotbarArranger(): HotbarArranger | null {
+    const member = this.member();
+    if (!this.open_ || member === null) return null;
+    return {
+      slot: (index, rect, regionId) => {
+        this.hudHotbarCellsThisFrame.set(index, rect);
+        return hotbarSlotArrangement(this, member, index, rect, regionId);
+      },
+    };
+  }
+
+  /** The hotbar slot a drop at `at` lands on: the panel's own row, else the HUD's bar where the panel does not cover it. */
+  private hotbarCellAt(at: Point): number | null {
+    const geometry = this.geometry;
+    const inPanelRow = findCell(geometry.hotbarCells, at);
+    if (inPanelRow !== null) return inPanelRow;
+    const overPanel = geometry.frame !== null && contains(geometry.frame, at);
+    return overPanel ? null : findCell(geometry.hudHotbarCells, at);
+  }
+
   /** Puts `item` (from `source`) in hotbar slot `index`, if every rule allows it. */
   assignToHotbar(
     item: InventoryItem,
@@ -601,7 +638,7 @@ export class InventoryScreen {
     if (drag === null || cancelled || member === null) return;
     const inventory = member.owner.inventory;
     const geometry = this.geometry;
-    const hotbarTarget = findCell(geometry.hotbarCells, at);
+    const hotbarTarget = this.hotbarCellAt(at);
     const bagTarget = findCell(geometry.bagCells, at);
     const pageTarget = findCell(geometry.pageButtons, at);
     const dollTarget = findCell(geometry.dollCells, at);

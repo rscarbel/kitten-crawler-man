@@ -24,7 +24,7 @@
 import { PAINT_BENCH_SUBJECTS } from '../src/dev/paintBenchSubjects.js';
 import { HUMAN_FIGURE } from '../src/sprites/art/humanFigure.js';
 import { humanFigureWearing } from '../src/sprites/art/human/appearance.js';
-import { garmentsOf } from '../src/sprites/garments/garments.js';
+import { humanItemGarments } from '../src/sprites/garments/itemLooks.js';
 import { outfitOf } from '../src/sprites/garments/outfit.js';
 import type { FigureDef } from '../src/sprites/figure/figureDef.js';
 import { FRAME_BAKE_BUDGET_MS } from '../src/sprites/figure/figureFrameCache.js';
@@ -228,7 +228,7 @@ const HUMAN_OUTFITS_TIMED: readonly FigureDef[] = [
   humanFigureWearing(
     outfitOf(
       'human',
-      garmentsOf('human').filter((garment) => !garment.base),
+      humanItemGarments().filter((garment) => !garment.base),
     ),
   ),
 ];

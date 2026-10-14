@@ -33,6 +33,8 @@ import {
   GRIP_HAND_WIDTH,
   handGrip,
   handLength,
+  legCover,
+  type LegCoverSegment,
   type LegSegments,
   paintKneeAtCamera,
   UNSHADED,
@@ -633,7 +635,14 @@ function bodySlabs(
       footPitch: left ? pose.leftFootPitch : pose.rightFootPitch,
       footScale,
       footOut: left ? LEFT_FOOT_OUT : RIGHT_FOOT_OUT,
-      envelope: (envelopeCtx) => traceLegAndFoot(envelopeCtx, chain, footScale),
+      envelope: (envelopeCtx) => {
+        traceLegAndFoot(envelopeCtx, chain, footScale);
+        const nearness = left ? pose.leftLegNearness : pose.rightLegNearness;
+        const outward = left ? LEFT_FOOT_OUT : RIGHT_FOOT_OUT;
+        for (const segment of LEG_COVER_SEGMENTS) {
+          legCover(envelopeCtx, chain, view, outward, nearness, segment, 1, 0).addToPath();
+        }
+      },
     });
   };
   const leg =
@@ -816,6 +825,13 @@ function bodySlabs(
     backCovered: cloakOver.length > 0,
   };
 }
+
+/**
+ * The leg's own silhouette, thigh and shin as the rig shapes them: a leg's
+ * envelope holds its flesh as well as its bones, so cloth laid over the whole
+ * leg stays inside it.
+ */
+const LEG_COVER_SEGMENTS: readonly LegCoverSegment[] = ['thigh', 'shin'];
 
 /** A leg's bones, and a disc round the ankle as far as its foot reaches. */
 function traceLegAndFoot(ctx: Ctx, chain: BoneChain, footScale: number): void {

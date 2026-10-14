@@ -1,7 +1,7 @@
 /**
  * OverworldMusicSystem — zone-based background music for the Over City
- * overworld: a shuffled town playlist inside the town safe zone, circus_theme
- * on the circus grounds, Briar Hollow's own zone inside its palisade, a
+ * overworld: a shuffled town playlist inside the town safe zone, a shuffled
+ * circus playlist on the circus grounds, Briar Hollow's own zone inside its palisade, a
  * harvest theme out at the village quarry, and
  * forest_path in the wilds between. Quest systems set
  * `battleMusicActive` while they own the track (e.g. circus_battle during
@@ -10,7 +10,7 @@
 
 import { TILE_SIZE } from '../core/constants';
 import type { AudioManager } from '../audio/AudioManager';
-import { TOWN_MUSIC_TRACKS } from '../audio/sounds';
+import { CIRCUS_MUSIC_TRACKS, TOWN_MUSIC_TRACKS } from '../audio/sounds';
 import type { SoundId } from '../audio/sounds';
 import type { GameMap } from '../map/GameMap';
 import type { GameSystem, SystemContext } from './GameSystem';
@@ -20,13 +20,13 @@ type MusicZone = 'town' | 'wilds' | 'circus' | 'village' | 'quarry';
 const ZONE_TRACKS: Record<MusicZone, ReadonlyArray<SoundId>> = {
   town: TOWN_MUSIC_TRACKS,
   wilds: ['forest_path'],
-  circus: ['circus_theme'],
+  circus: CIRCUS_MUSIC_TRACKS,
   village: ['briar_hollow_theme'],
   quarry: ['medieval_harvest_theme'],
 };
 
 const ZONE_FADE_MS = 1500;
-/** The circus theme starts a little before the player reaches the grounds. */
+/** The circus music starts a little before the player reaches the grounds. */
 const CIRCUS_ZONE_BUFFER_TILES = 4;
 
 export class OverworldMusicSystem implements GameSystem {

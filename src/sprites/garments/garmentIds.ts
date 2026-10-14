@@ -19,7 +19,11 @@ export const CAT_GARMENT_IDS = [
 ] as const;
 export type CatGarmentId = (typeof CAT_GARMENT_IDS)[number];
 
-/** Carl's garments: his jacket and boxers, which every outfit of his is built on, then what he can put on. */
+/**
+ * Garments on Carl's rig: his jacket and boxers, which every outfit of his is
+ * built on, then what he can put on, then what only the people built on his
+ * rig wear.
+ */
 export const HUMAN_GARMENT_IDS = [
   'carl_jacket',
   'carl_boxers',
@@ -34,6 +38,8 @@ export const HUMAN_GARMENT_IDS = [
   'carl_kneepads',
   'carl_bracers',
   'carl_boots',
+  'townsfolk_trousers',
+  'townsfolk_shoes',
 ] as const;
 export type HumanGarmentId = (typeof HUMAN_GARMENT_IDS)[number];
 

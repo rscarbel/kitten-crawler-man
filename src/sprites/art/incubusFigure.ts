@@ -16,6 +16,13 @@
  */
 
 import { BARE_CARL_OUTFIT, stillOutfit } from '../garments/human/carlDressing';
+import {
+  resetTownsfolkLegwear,
+  setTownsfolkLegwear,
+  TOWNSFOLK_SHOES,
+  TOWNSFOLK_TROUSERS,
+} from '../garments/human/townsfolkLegwear';
+import type { Outfit } from '../garments/outfit';
 import { type FigureDef, figureStates } from '../figure/figureDef';
 import { type CarlComposeOptions, drawCarlBack, drawCarlFront, drawCarlSide } from './carl/figure';
 import { type CarlPose } from './carl/rig';
@@ -39,6 +46,7 @@ import { IDLE_FRAMES, idleBlinkLid, idleBreathPhase, WALK_FRAMES } from './human
 import { HUMAN_CELL_PX_PER_UNIT } from './human/figureScale';
 import {
   INCUBUS_HAIR,
+  INCUBUS_LEGWEAR,
   INCUBUS_SHIRT,
   INCUBUS_SKIN,
   type IncubusMotion,
@@ -225,13 +233,28 @@ const DRAW_BY_VIEW: Readonly<
   away: drawCarlBack,
 };
 
-/** Nothing of Carl's own over the rig's base garments: no cloak, no gauntlet, no trollskin band at the collar. */
-const NOTHING_OVER_HIS_BASE = stillOutfit(BARE_CARL_OUTFIT);
+const CARL_ONLY_GARMENT = 'carl_boxers';
+/**
+ * Nothing of Carl's own: no boxers, no cloak, no gauntlet, no trollskin band
+ * at the collar. His jacket is recut as the shirt, and he wears the cast's
+ * trousers and shoes in his own colours.
+ */
+const INCUBUS_OUTFIT: Outfit<'human'> = {
+  wearer: 'human',
+  garments: [
+    ...BARE_CARL_OUTFIT.garments.filter((garment) => garment.id !== CARL_ONLY_GARMENT),
+    TOWNSFOLK_TROUSERS,
+    TOWNSFOLK_SHOES,
+  ],
+  hidden: new Set(),
+  key: 'mordecai-incubus',
+};
+const NOTHING_OF_CARLS = stillOutfit(INCUBUS_OUTFIT);
 
 function paintIncubusFrame(ctx: Ctx, state: string, frame: number): void {
   const row = ROWS.get(state);
   if (row === undefined) return;
-  const pose: CarlPose = { ...row.pose(frame), outfit: NOTHING_OVER_HIS_BASE };
+  const pose: CarlPose = { ...row.pose(frame), outfit: NOTHING_OF_CARLS };
   const attachments = incubusAttachments(row.motion(frame));
   // Reset in `finally`: a painter that throws mid-bake must not leave the next
   // figure baked — Carl or a resident — in this one's skin, shirt or face.
@@ -239,6 +262,7 @@ function paintIncubusFrame(ctx: Ctx, state: string, frame: number): void {
   setCarlGarmentRamp(INCUBUS_SHIRT);
   setCarlTorsoCut(SHIRT_HEM_DROP, false, SHIRT_HEM_FLARE);
   setCarlExpression(INCUBUS_EXPRESSION);
+  setTownsfolkLegwear(INCUBUS_LEGWEAR);
   ctx.save();
   try {
     ctx.translate(ORIGIN_X, GROUND_Y);
@@ -250,6 +274,7 @@ function paintIncubusFrame(ctx: Ctx, state: string, frame: number): void {
     resetCarlGarmentRamp();
     resetCarlTorsoCut();
     resetCarlExpression();
+    resetTownsfolkLegwear();
   }
 }
 

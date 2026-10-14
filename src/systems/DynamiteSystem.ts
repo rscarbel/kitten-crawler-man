@@ -8,7 +8,11 @@ import type { Mob } from '../creatures/Mob';
 import { MAX_MOB_HP_MULTIPLIER } from '../creatures/mobLevelScaling';
 import type { HumanPlayer } from '../creatures/HumanPlayer';
 import type { CatPlayer } from '../creatures/CatPlayer';
-import { drawDynamiteFloorSprite, drawDynamiteThrowPath } from '../sprites/dynamiteSprite';
+import {
+  drawDynamiteFloorSprite,
+  drawDynamiteRangeRing,
+  drawDynamiteThrowPath,
+} from '../sprites/dynamiteSprite';
 import type { Rect } from '../ui/core/geom';
 import type { Surface, Ui } from '../ui/core/UiRoot';
 import { skinsFor } from '../ui/theme/skins';
@@ -58,6 +62,21 @@ const CHARGE_TICK_FRACTIONS = [CHARGE_TICK_QUARTER, CHARGE_TICK_HALF, CHARGE_TIC
 const CHARGE_TICK_THICKNESS = 1;
 const CHARGE_POWER_LABEL = ['Throw', 'Power'] as const;
 const CHARGE_DANGER_LABEL = ['⚠', 'Danger'] as const;
+
+/**
+ * How far a stick launched at `speed` px/frame slides before it stops, on open
+ * floor. Friction takes the same share of its speed every frame, so the
+ * distance is a geometric series; the last sliver below {@link DYN_STOP} is
+ * under a pixel and ignored.
+ */
+function slideDistance(speed: number): number {
+  return speed / (1 - DYN_FRICTION);
+}
+
+/** The launch speed that slides a stick `distance` px on open floor; the inverse of {@link slideDistance}. */
+function launchSpeedFor(distance: number): number {
+  return distance * (1 - DYN_FRICTION);
+}
 
 /** Frames of charge after which the stick goes off in the thrower's hand. */
 const DYN_EXPLODE_HAND = 300;
@@ -341,6 +360,16 @@ export class DynamiteSystem implements GameSystem {
     /** The view whose hold and throw have been warmed, null before the first tick. */
     warmedView: CarlRowView | null;
   } | null = null;
+  /**
+   * A stick in his hand, unlit, waiting for a tap on the world to say where it
+   * goes — the touch screen's way to throw, where holding a hotbar slot down
+   * while aiming with the same thumb is impractical. Nothing burns while it
+   * is held, so it can wait out a menu or a conversation.
+   */
+  private _readied: {
+    /** The view whose stance and throw have been warmed, null before the first tick. */
+    warmedView: CarlRowView | null;
+  } | null = null;
   private pendingThrow: PendingThrow | null = null;
   private liveDynamites: LiveDynamite[] = [];
   private explosions: LiveExplosion[] = [];
@@ -395,6 +424,7 @@ export class DynamiteSystem implements GameSystem {
   /** Drops any thrown/charging dynamite — used on a checkpoint respawn. */
   resetForCheckpoint(): void {
     this._charging = null;
+    this._readied = null;
     this.pendingThrow = null;
     this.liveDynamites = [];
     this.explosions = [];
@@ -456,6 +486,86 @@ export class DynamiteSystem implements GameSystem {
     return this._charging?.hotbarIdx ?? null;
   }
 
+  /** Whether he holds an unlit stick waiting for a tap to throw it. */
+  get isReadied(): boolean {
+    return this._readied !== null;
+  }
+
+  /**
+   * Puts an unlit stick in his hand, to be thrown by {@link throwReadiedAt}.
+   * Refused in the safe room for the same reason as {@link beginCharge}, and
+   * with no stick to hold.
+   *
+   * @returns whether he took one in hand; a refusal is the caller's to explain.
+   */
+  ready(human: HumanPlayer): boolean {
+    if (human.isProtected || human.inventory.countOf('goblin_dynamite') === 0) return false;
+    this._charging = null;
+    this._readied = { warmedView: null };
+    return true;
+  }
+
+  /** Puts a readied stick back in the bag, unspent. */
+  putAway(human: HumanPlayer): void {
+    if (this._readied === null) return;
+    this._readied = null;
+    this.stopDynamiteAction(human);
+  }
+
+  /**
+   * Throws the readied stick at the world point `(targetX, targetY)`, lighting
+   * its fuse as it goes. A target past his reach is thrown as far as he can,
+   * along the same line; one at his feet is dropped there.
+   *
+   * @returns whether a stick was thrown or dropped.
+   */
+  throwReadiedAt(human: HumanPlayer, targetX: number, targetY: number): boolean {
+    if (this._readied === null || !human.canAct) return false;
+    this._readied = null;
+    if (!human.inventory.removeOne('goblin_dynamite')) {
+      this.stopDynamiteAction(human);
+      return false;
+    }
+    const originX = human.x + HALF_TILE;
+    const originY = human.y + HALF_TILE;
+    const toTargetX = targetX - originX;
+    const toTargetY = targetY - originY;
+    const targetDistance = Math.hypot(toTargetX, toTargetY);
+    if (targetDistance > 0) {
+      human.facingX = toTargetX / targetDistance;
+      human.facingY = toTargetY / targetDistance;
+    }
+    const reach = slideDistance(this.maxThrowSpeed(human));
+    const speed = launchSpeedFor(Math.min(targetDistance, reach));
+    const dropsAtFeet = speed < DYN_SPEED_MIN;
+    const expLvl = human.explosivesHandling;
+    const stick: LiveDynamite = {
+      x: originX,
+      y: originY,
+      vx: dropsAtFeet ? 0 : human.facingX * speed,
+      vy: dropsAtFeet ? 0 : human.facingY * speed,
+      fuseFrames: DYN_FUSE,
+      state: dropsAtFeet ? 'stopped' : 'flying',
+      mobDamage: dynamiteMobDamage(human.level, expLvl),
+      crawlerDamage: dynamiteCrawlerDamage(expLvl),
+      lobFrom: null,
+      lobArc: 0,
+      lobFrame: 0,
+    };
+    if (dropsAtFeet) {
+      this.stopDynamiteAction(human);
+      this.liveDynamites.push(stick);
+      return true;
+    }
+    this.throwFromHand(human, stick);
+    return true;
+  }
+
+  /** The fastest he can throw a stick, which his explosives handling raises. */
+  private maxThrowSpeed(human: HumanPlayer): number {
+    return DYN_SPEED_MAX + (human.explosivesHandling - 1) * DYN_SPEED_PER_LEVEL;
+  }
+
   /**
    * Starts lighting a stick. Refused in the safe room, which is a sanctuary
    * for the crawlers and not a bunker to bomb out of.
@@ -464,6 +574,7 @@ export class DynamiteSystem implements GameSystem {
    */
   beginCharge(hotbarIdx: number, human: HumanPlayer): boolean {
     if (human.isProtected) return false;
+    this._readied = null;
     this._charging = { hotbarIdx, chargeFrames: 0, lit: false, warmedView: null };
     return true;
   }
@@ -491,7 +602,7 @@ export class DynamiteSystem implements GameSystem {
     const isTap = chargeFrames < DYN_TAP;
     const chargeRatio = Math.min(1, chargeFrames / DYN_MAX_CHARGE);
     const expLvl = human.explosivesHandling;
-    const speedMax = DYN_SPEED_MAX + (expLvl - 1) * DYN_SPEED_PER_LEVEL;
+    const speedMax = this.maxThrowSpeed(human);
     const speed = isTap ? 0 : DYN_SPEED_MIN + (speedMax - DYN_SPEED_MIN) * chargeRatio;
 
     const stick: LiveDynamite = {
@@ -620,6 +731,37 @@ export class DynamiteSystem implements GameSystem {
     });
   }
 
+  /**
+   * Keeps him standing with the unlit stick hanging from his throwing hand:
+   * the light row's first frame, held there by pacing it at zero. Re-asked
+   * whenever he is drawn in anything else and stands free, as the charge pose is.
+   */
+  private poseForReadied(human: HumanPlayer): void {
+    const readied = this._readied;
+    if (readied === null) return;
+    const view = human.rowViewFacing();
+    // The throw follows a tap with no light to hide a bake behind, so its
+    // rows are warmed while the stick is only held.
+    if (readied.warmedView !== view) {
+      readied.warmedView = view;
+      prewarmHumanRow(LIGHT_ROWS[view]);
+      prewarmHumanRow(THROW_ROWS[view]);
+    }
+    if (human.isMoving) return;
+    const row = LIGHT_ROWS[view];
+    const drawn = human.spriteSelection();
+    const facesLeft = human.facingSelection.flipX;
+    const mirrored = humanRowOf(row)?.mirrorable === true;
+    const flipMatches = !mirrored || drawn.flipX === facesLeft;
+    if (human.isActing && drawn.row === row && flipMatches) return;
+    if (human.isActing && !ALL_DYNAMITE_ROWS.has(drawn.row)) return;
+    human.playAction(row, {
+      progress: () => 0,
+      faceX: human.facingX,
+      faceY: human.facingY,
+    });
+  }
+
   /** Ends a light or a hold he is still drawn in, handing him back to standing. */
   private stopDynamiteAction(human: HumanPlayer): void {
     if (human.isActing && ALL_DYNAMITE_ROWS.has(human.spriteSelection().row)) human.stopAction();
@@ -647,6 +789,18 @@ export class DynamiteSystem implements GameSystem {
       this._charging = null;
       this.stopDynamiteAction(human);
     }
+    // The hotbar slot is the only way to put a readied stick back, so a stick
+    // whose slot was emptied or rearranged away goes back on its own.
+    const stickOnHotbar = human.inventory.actionBar.slots.some(
+      (slot) => slot?.id === 'goblin_dynamite',
+    );
+    const cannotHoldStick =
+      !human.isActive ||
+      human.isProtected ||
+      !stickOnHotbar ||
+      human.inventory.countOf('goblin_dynamite') === 0;
+    if (this._readied !== null && cannotHoldStick) this.putAway(human);
+    this.poseForReadied(human);
     if (this._charging) {
       this._charging.chargeFrames++;
       if (this._charging.chargeFrames >= DYN_EXPLODE_HAND) {
@@ -996,8 +1150,7 @@ export class DynamiteSystem implements GameSystem {
     }
 
     const chargeRatio = Math.min(1, chargeFrames / DYN_MAX_CHARGE);
-    const expLvl = human.explosivesHandling;
-    const speedMax = DYN_SPEED_MAX + (expLvl - 1) * DYN_SPEED_PER_LEVEL;
+    const speedMax = this.maxThrowSpeed(human);
     const speed = DYN_SPEED_MIN + (speedMax - DYN_SPEED_MIN) * chargeRatio;
 
     const points: Array<{ x: number; y: number }> = [];
@@ -1048,6 +1201,15 @@ export class DynamiteSystem implements GameSystem {
     camY: number,
     human: HumanPlayer,
   ): void {
+    if (this._readied !== null) {
+      drawDynamiteRangeRing(
+        ctx,
+        human.x + HALF_TILE - camX,
+        human.y + HALF_TILE - camY,
+        slideDistance(this.maxThrowSpeed(human)),
+      );
+      return;
+    }
     if (!this._charging) return;
 
     const worldPoints = this.simulateTrajectory(human);

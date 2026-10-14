@@ -232,13 +232,14 @@ function gateLookCombinationsDistinct(): void {
       look.skinRamp.base,
       look.hairRamp.base,
       look.hairStyle,
+      look.facialHair,
       look.garmentRamp.base,
     ].join('|');
     const earlier = seen.get(key);
     if (earlier !== undefined) {
       fail(
         'H8',
-        `${look.id} shares its whole (skin, hair colour, hair style, garment colour) combination ` +
+        `${look.id} shares its whole (skin, hair colour, hair style, facial hair, garment colour) combination ` +
           `with ${earlier} — nothing distinguishes them`,
       );
       continue;

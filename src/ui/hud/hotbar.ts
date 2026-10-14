@@ -5,8 +5,9 @@
  * divider with a gold edge.
  *
  * A slot fires the moment it is pressed, mouse or finger: in a fight, waiting
- * for the release feels late. Arranging the bar belongs to the inventory
- * screen's own hotbar row.
+ * for the release feels late. While an inventory showing this bar is open,
+ * the bar arranges instead, exactly like the inventory's own hotbar row, so an
+ * item can be dropped on either.
  */
 
 import { QUEST_SLOT_IDX } from '../../core/ItemDefs';
@@ -43,8 +44,9 @@ export function hotbar(ui: Ui, rects: HotbarRects, model: HotbarModel): void {
       ctx.restore();
     }
     const item = slot.item;
-    itemSlot(ui, rect, {
-      id: `hotbar/${index}`,
+    const regionId = `hotbar/${index}`;
+    const look = {
+      id: regionId,
       item: item?.id ?? null,
       quantity: item?.quantity,
       keycap: keybindings.labelFor(HOTBAR_ACTIONS[index]),
@@ -52,9 +54,18 @@ export function hotbar(ui: Ui, rects: HotbarRects, model: HotbarModel): void {
       cooldownText: slot.cooldown > 0 ? slot.cooldownLabel : undefined,
       equipped: slot.equipped,
       tooltip: true,
-      onPress: () => model.input.press(index),
-      handlers: { onRelease: () => model.input.release(index), sound: null },
-    });
+    };
+    const arranger = model.arrange ?? null;
+    if (arranger === null) {
+      itemSlot(ui, rect, {
+        ...look,
+        onPress: () => model.input.press(index),
+        handlers: { onRelease: () => model.input.release(index), sound: null },
+      });
+    } else {
+      const { afterDraw, ...arrangement } = arranger.slot(index, rect, regionId);
+      afterDraw(itemSlot(ui, rect, { ...look, ...arrangement }));
+    }
     if (isQuest) {
       strokeRounded(ctx, rect, theme.radius.md, palette.accent.base, QUEST_EDGE_WIDTH);
     }

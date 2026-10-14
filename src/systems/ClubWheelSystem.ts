@@ -43,6 +43,7 @@ import type { ToastTone } from '../ui/hud/toasts';
 import type { ProgressWipe } from '../ui/screens/dialogs/wipeHold';
 import { paintWheelWarning, type WheelWarningKind } from '../ui/casino/wheel/wheelWarnings';
 import {
+  STAB_SLASH_AT_MS,
   WheelView,
   type WheelReveal,
   type WheelRevealEffect,
@@ -196,6 +197,7 @@ type WheelPhase =
       readonly reveal: WheelReveal;
       readonly startedAt: number;
       sirenStarted: boolean;
+      stabSounded: boolean;
       /** The item prize screen has been raised over the wheel. */
       prizeShown: boolean;
     }
@@ -239,8 +241,12 @@ const TITO_LINE_MS = 4200;
 const TITO_QUIP_GAP_MS = 2500;
 /** Tito fills a long silence while the wheel sits idle. */
 const TITO_IDLE_LINE_MS = 14000;
-/** How long the lunge, the slash and the shake of a stab take. */
+/** How long Tito's lunge takes, and how far into it the blade lands with the slash. */
 const STAB_POSE_MS = 900;
+const STAB_LUNGE_LEAD_MS = 420;
+const STAB_LUNGE_STARTS_AT_MS = STAB_SLASH_AT_MS - STAB_LUNGE_LEAD_MS;
+/** A stab reveal holds this long after the blade lands. */
+const STAB_HOLD_AFTER_SLASH_MS = 2980;
 /** A chuckle this long after a red landing, once the wedge has registered. */
 const CHUCKLE_DELAY_MS = 450;
 /** The siren after the 500,000 sliver's landing sting. */
@@ -249,7 +255,7 @@ const SIREN_DELAY_MS = 900;
 /** How long each kind of reveal holds the screen before the wheel is idle again. */
 const REVEAL_MS: Readonly<Record<WheelRevealEffect, number>> = {
   red: 3000,
-  stab: 3400,
+  stab: STAB_SLASH_AT_MS + STAB_HOLD_AFTER_SLASH_MS,
   robbed: 3600,
   freeze: 3000,
   pet: 4200,
@@ -1155,7 +1161,6 @@ export class ClubWheelSystem implements WheelGameHost {
     if (spin.taped && effectKind !== 'spin_again') ledger.questFreeSpins.tapedChain = false;
     void this.deps.saveNow();
 
-    if (effectKind === 'stab') audio?.play('tito_stab');
     if (effectKind === 'robbed') audio?.play('wheel_robbed_coin_drain');
     if (effectKind === 'red' || effectKind === 'freeze' || effectKind === 'robbed') {
       this.chuckleAt = now + CHUCKLE_DELAY_MS;
@@ -1179,6 +1184,7 @@ export class ClubWheelSystem implements WheelGameHost {
       spin,
       startedAt: now,
       sirenStarted: false,
+      stabSounded: false,
       prizeShown: false,
       reveal: {
         wedge,
@@ -1204,6 +1210,10 @@ export class ClubWheelSystem implements WheelGameHost {
     ) {
       phase.sirenStarted = true;
       this.deps.audio?.play('slots_jackpot_siren');
+    }
+    if (phase.reveal.effect === 'stab' && !phase.stabSounded && elapsed >= STAB_SLASH_AT_MS) {
+      phase.stabSounded = true;
+      this.deps.audio?.play('tito_stab');
     }
     if (elapsed < phase.reveal.durationMs || phase.prizeShown) return;
     if (this.presentPrize(phase)) return;
@@ -1391,8 +1401,10 @@ export class ClubWheelSystem implements WheelGameHost {
     const phase = this.phase;
     if (phase.kind === 'revealing') {
       const elapsed = now - phase.startedAt;
-      if (phase.reveal.effect === 'stab' && elapsed < STAB_POSE_MS) {
-        return { pose: 'lunge', progress: elapsed / STAB_POSE_MS };
+      const lungeElapsed = elapsed - STAB_LUNGE_STARTS_AT_MS;
+      const lunging = lungeElapsed >= 0 && lungeElapsed < STAB_POSE_MS;
+      if (phase.reveal.effect === 'stab' && lunging) {
+        return { pose: 'lunge', progress: lungeElapsed / STAB_POSE_MS };
       }
       const red = isRedWedge(phase.reveal.wedge);
       return red

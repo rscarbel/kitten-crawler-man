@@ -9,6 +9,8 @@ import {
   SIGNET_OVERLAY_CLEARANCE,
   SIGNET_CHEST_Y_OFFSET,
   SIGNET_HALF_WIDTH,
+  signetStrideTiles,
+  type SignetView,
 } from '../sprites/signetSprite';
 import { InkMarauder, MARAUDER_LIFESPAN_FRAMES } from './InkMarauder';
 import type { InkMarauderForm } from '../sprites/inkMarauderSprite';
@@ -84,30 +86,42 @@ const IDLE_WANDER_TIMER_MAX = 190;
 const FULL_CIRCLE_RADIANS = Math.PI * 2;
 
 /**
- * Gait — her figure is drawn at double scale and she spends most of her time
- * shuffling at a fraction of her top speed, so a fixed per-frame walk cycle
- * reads as frantic limb-flailing. Drive the cycle off ground actually covered.
- *
- * What that ground buys has to be measured against her own size. One cycle is
- * two steps, and a walker covers roughly their own height in it; she stands two
- * tiles tall, so the cycle has to close inside about that. Tuned as a bare
- * radians-per-pixel constant it was closing over nearer four tiles — a stride
- * longer than she is tall, which no pose work can rescue, because the feet are
- * then sliding over the floor between plants no matter how they are drawn.
+ * Gait — the cycle is driven off ground actually covered, at the stride her
+ * painter's planted feet are drawn to for her current speed, so a foot on the
+ * floor holds still on it whether she saunters or runs.
  */
-const STRIDE_TILES_PER_CYCLE = 1.7;
 /** Ceiling so a separation shove or a repositioning jump can't snap the cycle forward. */
 const MAX_GAIT_RADIANS_PER_FRAME = 0.28;
+const UPDATES_PER_SECOND = 60;
+/** Share of the gap to her measured speed closed each update, so stride and cadence change smoothly. */
+const SPEED_SMOOTHING = 0.12;
+/** How quickly she settles into or out of her stride as she starts and stops. */
+const LOCOMOTION_EASE_PER_UPDATE = 0.06;
+/** Below this many pixels an update she is standing, not walking. */
+const STANDING_STILL_PX = 0.05;
+/** Which of her three painted views a facing shows: the same split `Mob.eyeShineAnchor` makes. */
+function viewForFacing(facingX: number, facingY: number): SignetView {
+  if (Math.abs(facingX) >= Math.abs(facingY)) return 'side';
+  return facingY > 0 ? 'front' : 'back';
+}
 
-/** Drawn only face-on, so in profile it still shows that face. */
+/**
+ * Her skin is the palest thing on the map, nearly the beam's own colour, so at
+ * the beacon's full strength the light swallows her outline and she reads as a
+ * glow with a head. Dimmed this far the column still finds her from across the
+ * grounds while her silhouette stays darker than the light around it.
+ */
+const SIGNET_BEACON_STRENGTH_SCALE = 0.3;
+
+/** Measured off her painted head: eye height and spacing head-on, and the near eye's reach past her centre in profile. */
 const SIGNET_EYES: EyePlacement = {
-  sideForward: 0,
-  sideHeight: -0.61,
-  sideSpacing: 0.08,
+  sideForward: 0.09,
+  sideHeight: -0.83,
+  sideSpacing: 0.03,
   frontMirrors: true,
   frontAcross: 0,
-  frontHeight: -0.61,
-  frontSpacing: 0.08,
+  frontHeight: -0.83,
+  frontSpacing: 0.11,
 };
 
 /**
@@ -159,6 +173,10 @@ export class Signet extends Mob {
   private idleAnchorY: number;
   private gaitSampleX: number;
   private gaitSampleY: number;
+  /** Her own gait phase, held through a stop so she settles out of the step she was in. */
+  private gaitPhase = 0;
+  private locomotion = 0;
+  private smoothedSpeedTilesPerSecond = 0;
   private idleWanderTimer = randomInt(0, IDLE_WANDER_TIMER_MAX);
   private idleWanderDx = 0;
   private idleWanderDy = 0;
@@ -277,11 +295,29 @@ export class Signet extends Mob {
    * to collision slides and separation pushes, not just her intended step.
    */
   private syncGaitToDistanceCovered(): void {
-    const coveredPx = Math.hypot(this.x - this.gaitSampleX, this.y - this.gaitSampleY);
+    const dx = this.x - this.gaitSampleX;
+    const dy = this.y - this.gaitSampleY;
+    const coveredPx = Math.hypot(dx, dy);
     this.gaitSampleX = this.x;
     this.gaitSampleY = this.y;
-    const radiansPerPixel = (Math.PI * 2) / (STRIDE_TILES_PER_CYCLE * this.tileSize);
-    this.walkFrameSpeed = Math.min(coveredPx * radiansPerPixel, MAX_GAIT_RADIANS_PER_FRAME);
+    const speedTilesPerSecond = (coveredPx / this.tileSize) * UPDATES_PER_SECOND;
+    this.smoothedSpeedTilesPerSecond +=
+      (speedTilesPerSecond - this.smoothedSpeedTilesPerSecond) * SPEED_SMOOTHING;
+    // In profile a planted foot slides back along the screen's x, so only her
+    // sideways travel may turn the cycle there or that foot skates on a
+    // diagonal heading.
+    const alongView =
+      viewForFacing(this.facingX, this.facingY) === 'side' ? Math.abs(dx) : coveredPx;
+    const strideTiles = signetStrideTiles(this.smoothedSpeedTilesPerSecond);
+    const radiansPerPixel = FULL_CIRCLE_RADIANS / (strideTiles * this.tileSize);
+    const advance = Math.min(alongView * radiansPerPixel, MAX_GAIT_RADIANS_PER_FRAME);
+    this.gaitPhase = (this.gaitPhase + advance) % FULL_CIRCLE_RADIANS;
+    const target = coveredPx > STANDING_STILL_PX ? 1 : 0;
+    const step = Math.sign(target - this.locomotion) * LOCOMOTION_EASE_PER_UPDATE;
+    this.locomotion =
+      Math.abs(target - this.locomotion) <= LOCOMOTION_EASE_PER_UPDATE
+        ? target
+        : this.locomotion + step;
   }
 
   updateAI(_targets: Player[]): void {
@@ -496,18 +532,27 @@ export class Signet extends Mob {
     // near-fade radius.
     const markerColor = questMarkerColorFor(this.markerType);
     if (markerColor !== undefined) {
-      drawQuestBeacon(ctx, sx, sy, tileSize, camX, camY, performance.now(), markerColor);
+      drawQuestBeacon(
+        ctx,
+        sx,
+        sy,
+        tileSize,
+        camX,
+        camY,
+        performance.now(),
+        markerColor,
+        SIGNET_BEACON_STRENGTH_SCALE,
+      );
     }
 
     drawSignetSprite(ctx, sx, sy, tileSize, {
-      walkFrame: this.walkFrame,
-      isMoving: this.isMoving,
+      walkFrame: this.gaitPhase,
+      locomotion: this.locomotion,
+      speedTilesPerSecond: this.smoothedSpeedTilesPerSecond,
       summonProgress,
       castProgress,
       facingX: this.facingX,
-      // Screen y grows downward, so heading up-screen is heading away from the
-      // camera. Only when that dominates her horizontal facing.
-      facingAway: this.facingY < 0 && Math.abs(this.facingY) > Math.abs(this.facingX),
+      view: viewForFacing(this.facingX, this.facingY),
     });
 
     drawEliteMarker(ctx, sx, sy, tileSize);

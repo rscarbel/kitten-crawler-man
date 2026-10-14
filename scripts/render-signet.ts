@@ -11,7 +11,7 @@
  *   npx tsx scripts/render-signet.ts --out=signet.png --scale=2
  */
 
-import { createCanvas } from 'canvas';
+import { createCanvas, type CanvasRenderingContext2D as NodeCanvasContext } from 'canvas';
 
 import { asGameContext } from './nodeGameContext.js';
 import { PREVIEW_DIR, writePreviewPng } from './previewOut.js';
@@ -45,6 +45,8 @@ const DEFAULT_SCALE = 2;
 const DEFAULT_OUT = `${PREVIEW_DIR}/signet.png`;
 
 const WALK_STRIP_FRAMES = 6;
+/** A walking pace, so the walk poses show a walk rather than a run. */
+const BRISK_WALK_TILES_PER_SECOND = 1.7;
 const RADIANS_PER_TURN = Math.PI * 2;
 
 const POSES: ReadonlyArray<{ label: string; pose: SignetPose }> = [
@@ -52,92 +54,127 @@ const POSES: ReadonlyArray<{ label: string; pose: SignetPose }> = [
     label: 'idle',
     pose: {
       walkFrame: 0,
-      isMoving: false,
+      locomotion: 0,
+      speedTilesPerSecond: BRISK_WALK_TILES_PER_SECOND,
       summonProgress: 0,
       castProgress: 0,
       facingX: 1,
-      facingAway: false,
+      view: 'front',
     },
   },
   {
     label: 'walking',
     pose: {
       walkFrame: 1.2,
-      isMoving: true,
+      locomotion: 1,
+      speedTilesPerSecond: BRISK_WALK_TILES_PER_SECOND,
       summonProgress: 0,
       castProgress: 0,
       facingX: 1,
-      facingAway: false,
+      view: 'front',
     },
   },
   {
     label: 'casting',
     pose: {
       walkFrame: 0,
-      isMoving: false,
+      locomotion: 0,
+      speedTilesPerSecond: BRISK_WALK_TILES_PER_SECOND,
       summonProgress: 0,
       castProgress: 0.5,
       facingX: 1,
-      facingAway: false,
+      view: 'front',
     },
   },
   {
     label: 'summoning',
     pose: {
       walkFrame: 0,
-      isMoving: false,
+      locomotion: 0,
+      speedTilesPerSecond: BRISK_WALK_TILES_PER_SECOND,
       summonProgress: 0.5,
       castProgress: 0,
       facingX: 1,
-      facingAway: false,
+      view: 'front',
     },
   },
   {
     label: 'facing left',
     pose: {
       walkFrame: 0,
-      isMoving: false,
+      locomotion: 0,
+      speedTilesPerSecond: BRISK_WALK_TILES_PER_SECOND,
       summonProgress: 0,
       castProgress: 0,
       facingX: -1,
-      facingAway: false,
+      view: 'front',
+    },
+  },
+  {
+    label: 'profile',
+    pose: {
+      walkFrame: 0,
+      locomotion: 0,
+      speedTilesPerSecond: BRISK_WALK_TILES_PER_SECOND,
+      summonProgress: 0,
+      castProgress: 0,
+      facingX: 1,
+      view: 'side',
+    },
+  },
+  {
+    label: 'walking profile',
+    pose: {
+      walkFrame: 1.2,
+      locomotion: 1,
+      speedTilesPerSecond: BRISK_WALK_TILES_PER_SECOND,
+      summonProgress: 0,
+      castProgress: 0,
+      facingX: 1,
+      view: 'side',
     },
   },
   {
     label: 'facing away',
     pose: {
       walkFrame: 0,
-      isMoving: false,
+      locomotion: 0,
+      speedTilesPerSecond: BRISK_WALK_TILES_PER_SECOND,
       summonProgress: 0,
       castProgress: 0,
       facingX: 1,
-      facingAway: true,
+      view: 'back',
     },
   },
   {
     label: 'walking away',
     pose: {
       walkFrame: 1.2,
-      isMoving: true,
+      locomotion: 1,
+      speedTilesPerSecond: BRISK_WALK_TILES_PER_SECOND,
       summonProgress: 0,
       castProgress: 0,
       facingX: 1,
-      facingAway: true,
+      view: 'back',
     },
   },
 ];
 
+function argPrefix(name: string): string {
+  return `--${name}=`;
+}
+
 function intArg(name: string, fallback: number): number {
-  const raw = process.argv.find((a) => a.startsWith(`--${name}=`));
+  const raw = process.argv.find((a) => a.startsWith(argPrefix(name)));
   if (raw === undefined) return fallback;
-  const value = Number.parseInt(raw.slice(name.length + 3), 10);
+  const value = Number.parseInt(raw.slice(argPrefix(name).length), 10);
   if (!Number.isFinite(value)) throw new Error(`--${name} must be an integer`);
   return value;
 }
 
 function stringArg(name: string, fallback: string): string {
-  const raw = process.argv.find((a) => a.startsWith(`--${name}=`));
-  return raw === undefined ? fallback : raw.slice(name.length + 3);
+  const raw = process.argv.find((a) => a.startsWith(argPrefix(name)));
+  return raw === undefined ? fallback : raw.slice(argPrefix(name).length);
 }
 
 const scale = intArg('scale', DEFAULT_SCALE);
@@ -155,7 +192,7 @@ function figureWidth(ts: number): number {
 }
 
 function drawCell(
-  ctx: import('canvas').CanvasRenderingContext2D,
+  ctx: NodeCanvasContext,
   originX: number,
   originY: number,
   cellWidth: number,
@@ -226,11 +263,12 @@ for (let i = 0; i < WALK_STRIP_FRAMES; i++) {
     WALK_TILE_SIZE,
     {
       walkFrame,
-      isMoving: true,
+      locomotion: 1,
+      speedTilesPerSecond: BRISK_WALK_TILES_PER_SECOND,
       summonProgress: 0,
       castProgress: 0,
       facingX: 1,
-      facingAway: false,
+      view: 'front',
     },
     `walk ${i}`,
   );

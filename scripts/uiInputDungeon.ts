@@ -511,8 +511,17 @@ if (onPhone) {
 
 // ── Dynamite on the hotbar ─────────────────────────────────────────────────
 
-section('a press on the dynamite slot lights the stick, and its release throws it');
-{
+/** Open floor sits one part in this many down the screen: clear of both the HUD and the top bar. */
+const OPEN_FLOOR_HEIGHT_DIVISOR = 3;
+const OPEN_FLOOR: Point = { x: VIEWPORT.width / 2, y: VIEWPORT.height / OPEN_FLOOR_HEIGHT_DIVISOR };
+/** A point far past any throw, straight up from him, to test the throw is held to his reach. */
+const FAR_BEYOND_REACH_PX = 10_000;
+const DYNAMITE_STICKS = 3;
+/** Launch speeds are compared to this many pixels a frame: the inverse is floating point. */
+const SPEED_TOLERANCE = 1e-6;
+
+if (!onPhone) {
+  section('a press on the dynamite slot lights the stick, and its release throws it');
   clearAwards(street);
   closeEverything(street);
   const human = street['human'];
@@ -533,6 +542,85 @@ section('a press on the dynamite slot lights the stick, and its release throws i
   check(!dynamite.isCharging && thrown === 1, `the release throws it (throws: ${thrown})`);
   unsubscribe();
   closeEverything(street);
+} else {
+  section('a tap on the dynamite slot takes an unlit stick in hand; a tap on the floor throws it');
+  clearAwards(street);
+  closeEverything(street);
+  const human = street['human'];
+  if (!human.isActive) street['triggerSwitchCharacter'](true);
+  const index = 0;
+  human.inventory.actionBar.slots[index] = {
+    ...ITEM_DEF.goblin_dynamite,
+    quantity: DYNAMITE_STICKS,
+  };
+  frame(street);
+  const dynamite = street['destruction'].dynamite;
+  const slot = hudHotbarPoint(street, index);
+  const sticksLeft = (): number => human.inventory.countOf('goblin_dynamite');
+  let thrown = 0;
+  const unsubscribe = street['bus'].on('dynamiteUsed', () => thrown++);
+
+  tap(street, slot);
+  frame(street);
+  check(
+    dynamite.isReadied && !dynamite.isCharging,
+    'the tap puts the stick in his hand without lighting it',
+  );
+  check(
+    dynamite.pendingBlastPoints(human).length === 0,
+    'nothing is burning while he only holds it',
+  );
+  check(thrown === 0, `the slot's release throws nothing (throws: ${thrown})`);
+
+  tap(street, slot);
+  frame(street);
+  check(
+    !dynamite.isReadied && sticksLeft() === DYNAMITE_STICKS,
+    `a second tap on the slot puts it away unspent (sticks: ${sticksLeft()})`,
+  );
+
+  tap(street, slot);
+  tap(street, OPEN_FLOOR);
+  frame(street);
+  check(
+    thrown === 1 && !dynamite.isReadied && sticksLeft() === DYNAMITE_STICKS - 1,
+    `a tap on the floor throws the stick (throws: ${thrown}, sticks: ${sticksLeft()})`,
+  );
+  check(dynamite.pendingBlastPoints(human).length > 0, 'and its fuse is lit by the throw');
+
+  tap(street, slot);
+  const farAbove = { x: human.x, y: human.y - FAR_BEYOND_REACH_PX };
+  dynamite.throwReadiedAt(human, farAbove.x, farAbove.y);
+  const launched = dynamite['pendingThrow']?.stick;
+  const launchSpeed = launched === undefined ? 0 : Math.hypot(launched.vx, launched.vy);
+  check(
+    launched !== undefined &&
+      Math.abs(launchSpeed - dynamite['maxThrowSpeed'](human)) < SPEED_TOLERANCE,
+    `a tap past his reach throws as far as he can (speed: ${launchSpeed.toFixed(2)})`,
+  );
+
+  const emptyIndex = index + 1;
+  const besideDynamite = human.inventory.actionBar.slots[emptyIndex];
+  human.inventory.actionBar.slots[emptyIndex] = null;
+  tap(street, slot);
+  tap(street, hudHotbarPoint(street, emptyIndex));
+  check(!dynamite.isReadied, 'a tap on an empty slot puts a readied stick away');
+  human.inventory.actionBar.slots[emptyIndex] = besideDynamite;
+
+  if (dynamite.isReadied) dynamite.putAway(human);
+  tap(street, slot);
+  check(dynamite.isReadied, 'the stick is in his hand again');
+  const stack = human.inventory.actionBar.slots[index];
+  human.inventory.actionBar.slots[index] = null;
+  if (stack !== null) human.inventory.addItem(stack.id, stack.quantity);
+  dynamite.update(street['_systemContext']);
+  check(
+    !dynamite.isReadied,
+    'a readied stick whose slot was moved off the hotbar goes back in the bag',
+  );
+  unsubscribe();
+  dynamite.resetForCheckpoint();
+  closeEverything(street);
 }
 
 // ── Review fixes ───────────────────────────────────────────────────────────
@@ -549,9 +637,6 @@ function clearAwards(scene: Scene): void {
   frame(scene);
 }
 
-/** Open floor sits one part in this many down the screen: clear of both the HUD and the top bar. */
-const OPEN_FLOOR_HEIGHT_DIVISOR = 3;
-const OPEN_FLOOR: Point = { x: VIEWPORT.width / 2, y: VIEWPORT.height / OPEN_FLOOR_HEIGHT_DIVISOR };
 const SECOND_FINGER_ID = 2;
 /** How far a second finger slides across the hotbar: past every drag threshold. */
 const SECOND_FINGER_SLIDE_PX = 80;

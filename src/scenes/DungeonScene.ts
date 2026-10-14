@@ -155,6 +155,7 @@ import {
   activateHotbarSlot,
   drinkAnyHealthPotion,
   releaseChargedDynamite,
+  throwReadiedDynamiteAt,
   type HotbarHost,
 } from '../systems/kits/hotbarActions';
 import { MobRoster, type SceneWorld } from '../systems/kits/SceneWorld';
@@ -1920,6 +1921,7 @@ export class DungeonScene extends GameplayScene {
     this.menus = new MenusKit({
       world: this.world,
       abilityManager: this.abilityManager,
+      heldItemId: () => this.readiedDynamiteId(),
       ...(tutorialController === null
         ? {}
         : {
@@ -7234,6 +7236,11 @@ export class DungeonScene extends GameplayScene {
     return false;
   }
 
+  /** The dynamite in his hand waiting to be thrown, which the hotbars mark in use. */
+  private readiedDynamiteId(): ItemId | null {
+    return this.destruction.dynamite.isReadied ? 'goblin_dynamite' : null;
+  }
+
   /**
    * The collaborators a hotbar press reaches. Rebuilt per press rather than held,
    * so it always names the systems this scene currently owns.
@@ -7310,11 +7317,13 @@ export class DungeonScene extends GameplayScene {
           this.menus.itemCooldowns,
           invPlayer.inventory,
           this.menus.inventoryDrawnWeaponId(),
+          invPlayer === this.human ? this.readiedDynamiteId() : null,
         ),
         input: hotbarPressInput(
           () => this.hotbarHost(),
           () => this.ui.worldHalted(),
         ),
+        arrange: this.menus.inventoryScreen.hotbarArranger(),
       },
       topBand: this.topBandEntries(),
       levelTimer:
@@ -7564,7 +7573,7 @@ export class DungeonScene extends GameplayScene {
 
   /**
    * A short tap on the world: the touch form of the interact press. It throws
-   * charged dynamite at the tap, picks up loot or opens a chest under it, is
+   * a readied stick of dynamite at the tap, picks up loot or opens a chest under it, is
    * offered to whoever the crawler walked up to mid-conversation, works the
    * village, boards a grate, and otherwise interacts or swings toward it.
    *
@@ -7572,19 +7581,6 @@ export class DungeonScene extends GameplayScene {
    *   is graded by.
    */
   private tapWorld(x: number, y: number, pressedAt: number): void {
-    if (this.destruction.dynamite.isCharging && this.human.isActive) {
-      const cam = this.camera();
-      const ddx = x + cam.x - (this.human.x + TILE_SIZE / 2);
-      const ddy = y + cam.y - (this.human.y + TILE_SIZE / 2);
-      const dist = Math.hypot(ddx, ddy);
-      if (dist > 0) {
-        this.human.facingX = ddx / dist;
-        this.human.facingY = ddy / dist;
-      }
-      this.destruction.dynamite.release(this.human);
-      this.bus.emit('dynamiteUsed', { player: 'Human' });
-      return;
-    }
     // A phone tap anywhere on the world dismisses these, and does nothing else.
     if (this.tutorial?.showNearGoblinDialog === true) {
       this.tutorial.dismissNearGoblinDialog();
@@ -7593,6 +7589,13 @@ export class DungeonScene extends GameplayScene {
     if (this.defendQuest.isOutcomeOverlayShowing) {
       this.defendQuest.dismissFailedBanner();
       return;
+    }
+    // A readied stick waits out a conversation or a menu rather than flying
+    // at a tap meant for it.
+    const tapIsForTheWorld = !this.overlayOpen && !this.conversation.isOpen;
+    if (tapIsForTheWorld) {
+      const cam = this.camera();
+      if (throwReadiedDynamiteAt(this.hotbarHost(), x + cam.x, y + cam.y)) return;
     }
     if (this.collectWorldPickupAt(x, y)) return;
     if (this.conversation.isOpen && this.handOffConversationPress()) return;

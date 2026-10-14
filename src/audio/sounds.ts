@@ -116,7 +116,9 @@ const SOUND_IDS_TUPLE = [
   'circus_battle',
   'circus_lemur_attack',
   'circus_lemur_sound',
-  'circus_theme',
+  'circus_theme_1',
+  'circus_theme_2',
+  'circus_theme_3',
   'clay_pot_break_1',
   'clay_pot_break_2',
   'clay_pot_break_3',
@@ -839,7 +841,9 @@ export const SOUND_MANIFEST: Record<SoundId, string> = {
   circus_battle: './src/audio/background_music/circus_battle.mp3',
   circus_lemur_attack: './src/audio/enemies/circus_lemur/lemur_attack.mp3',
   circus_lemur_sound: './src/audio/enemies/circus_lemur/lemur_sound.mp3',
-  circus_theme: './src/audio/background_music/circus_theme.mp3',
+  circus_theme_1: './src/audio/background_music/circus_theme_1.mp3',
+  circus_theme_2: './src/audio/background_music/circus_theme_2.mp3',
+  circus_theme_3: './src/audio/background_music/circus_theme_3.mp3',
   clay_pot_break_1: './src/audio/effects/interior/clay_pot_break_1.mp3',
   clay_pot_break_2: './src/audio/effects/interior/clay_pot_break_2.mp3',
   clay_pot_break_3: './src/audio/effects/interior/clay_pot_break_3.mp3',
@@ -1488,6 +1492,16 @@ export const TAVERN_MUSIC_TRACKS: ReadonlyArray<SoundId> = ['tavern_music_1', 't
 /** The Town Center Tower's own theme, playing on every floor until the Quill confrontation takes over. */
 export const TOWER_MUSIC_TRACKS: ReadonlyArray<SoundId> = ['big_tower_music'];
 
+/**
+ * The circus soundtrack — shuffled and looping on the grounds and in the calm
+ * Big Top, which moves it on to a fresh song at the tent flap.
+ */
+export const CIRCUS_MUSIC_TRACKS: ReadonlyArray<SoundId> = [
+  'circus_theme_1',
+  'circus_theme_2',
+  'circus_theme_3',
+];
+
 /** Fallback interior music for buildings with no soundtrack of their own. */
 export const DEFAULT_BUILDING_MUSIC_TRACKS: ReadonlyArray<SoundId> = ['building_default_music_1'];
 
@@ -1520,7 +1534,9 @@ export const STREAMING_SOUND_IDS: ReadonlySet<SoundId> = new Set<SoundId>([
   'casino_background_jazz_3',
   'casino_background_jazz_4',
   'circus_battle',
-  'circus_theme',
+  'circus_theme_1',
+  'circus_theme_2',
+  'circus_theme_3',
   'defense_quest_music',
   'desperado_club_1',
   'desperado_club_2',

@@ -7,6 +7,8 @@
 import type { SoundId } from '../../audio/sounds';
 import type { InventoryItem } from '../../core/ItemDefs';
 import type { Rect } from '../core/geom';
+import type { HitState } from '../core/UiRoot';
+import type { ItemSlotOptions } from '../widgets/itemSlot';
 import type { GlyphId } from '../theme/glyphs';
 import type { TopBandEntry } from './topBand';
 
@@ -128,7 +130,8 @@ export interface HotbarSlotModel {
 
 /**
  * What a press on a hotbar slot does. A slot fires the moment it is pressed;
- * the press's end matters only to a slot that charges while held (dynamite).
+ * the press's end matters only to a slot that charges while held (dynamite,
+ * with a mouse).
  */
 export interface HotbarInput {
   press(index: number): void;
@@ -136,9 +139,29 @@ export interface HotbarInput {
   release(index: number): void;
 }
 
+/** What arranging a slot does in place of firing it: the item-slot input, plus a hook after it is drawn. */
+export type HotbarSlotArrangement = Pick<
+  ItemSlotOptions,
+  'onTap' | 'onDrag' | 'handlers' | 'selected' | 'dragging' | 'dropTarget' | 'disabled'
+> & {
+  readonly afterDraw: (state: HitState) => void;
+};
+
+/**
+ * Turns the HUD's bar into another copy of an open inventory's hotbar row: a
+ * slot is picked up, dropped on and assigned to exactly as the row's are,
+ * instead of firing.
+ */
+export interface HotbarArranger {
+  /** The behaviour of slot `index`, drawn at `rect` under the region `regionId`. */
+  slot(index: number, rect: Rect, regionId: string): HotbarSlotArrangement;
+}
+
 export interface HotbarModel {
   readonly slots: readonly HotbarSlotModel[];
   readonly input: HotbarInput;
+  /** Set while an inventory showing this bar is open; the slots then arrange rather than fire. */
+  readonly arrange?: HotbarArranger | null;
 }
 
 /** A floor's collapse timer. */

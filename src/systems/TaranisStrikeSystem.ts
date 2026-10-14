@@ -46,8 +46,11 @@ const WAVE_HALF_WIDTH_PX = WAVE_HALF_WIDTH_TILES * TILE_SIZE;
 const WAVE_TRAVEL_TICKS = 10;
 const WAVE_FADE_TICKS = 12;
 const WAVE_STEP_PX = WAVE_REACH_PX / WAVE_TRAVEL_TICKS;
-/** How far a cut enemy's chain lightning reaches, centre to centre. */
-export const TARANIS_CHAIN_RADIUS_TILES = 3;
+/**
+ * How far a cut enemy's chain lightning jumps: centre to centre between two
+ * one-tile bodies, and to the near side of anything wider than a tile.
+ */
+export const TARANIS_CHAIN_RADIUS_TILES = 4;
 /** How many other enemies one cut enemy's chain lightning can reach. */
 export const TARANIS_CHAIN_MAX_TARGETS = 4;
 
@@ -272,10 +275,14 @@ export class TaranisStrikeSystem implements WeaponProc {
     const source = centreOf(from);
     const radiusPx = TARANIS_CHAIN_RADIUS_TILES * TILE_SIZE;
     const inReach: { readonly mob: Mob; readonly centre: WorldPoint; readonly dist: number }[] = [];
-    for (const mob of ctx.mobGrid.queryCircle(source.x, source.y, radiusPx + TILE_SIZE)) {
-      if (!this.canStrike(mob, struck)) continue;
+    // Read from the whole mob list rather than the grid, so a body wider than a
+    // query's margin is still found by its near side.
+    for (const mob of ctx.mobs) {
+      if (mob === from || !this.canStrike(mob, struck)) continue;
       const centre = centreOf(mob);
-      const dist = Math.hypot(centre.x - source.x, centre.y - source.y);
+      const centreDist = Math.hypot(centre.x - source.x, centre.y - source.y);
+      const bodyBeyondOneTile = bodyRadiusOf(mob) - HALF_TILE;
+      const dist = centreDist - bodyBeyondOneTile;
       if (dist > radiusPx) continue;
       if (!gameMap.hasLineOfSight(source.x, source.y, centre.x, centre.y)) continue;
       inReach.push({ mob, centre, dist });

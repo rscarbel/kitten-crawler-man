@@ -13,7 +13,7 @@ import type { CarlLegFrame } from '../../art/carl/carlParts';
 import { FOOT_LEN } from '../../art/carl/feet';
 import { offset, pt, TWO_PI } from '../../art/carl/geometry';
 import { crease, shadeForm } from '../../art/carl/paint';
-import { deriveGlossRamp, deriveRamp } from '../../art/carl/palette';
+import { deriveGlossRamp, deriveRamp, type GlossRamp, type Ramp } from '../../art/carl/palette';
 import { ANKLE_WIDTH, CALF_WIDTH } from '../../art/carl/proportions';
 import { lerp, type Pt } from '../../art/carlArt';
 import { fillSoftEllipse } from '../../art/softShade';
@@ -47,6 +47,15 @@ const TOE_ROW = 0.38;
 const HEEL_SIDE_DROP = 0.35;
 const BACK_HEEL_DROP = 0.35;
 const BACK_HEEL_RADIUS = 0.55;
+
+/** What a boot is made of and how high it stands: the Marching Boots, or anyone else's. */
+export interface BootLook {
+  readonly leather: GlossRamp;
+  readonly sole: Ramp;
+  /** The shaft rises from the ankle to this share of the shin, counted from the knee. */
+  readonly shaftTopAt: number;
+  readonly hobnails: boolean;
+}
 
 /** The shaft rises from the ankle to this share of the shin, counted from the knee. */
 const SHAFT_TOP_AT = 0.42;
@@ -123,10 +132,17 @@ const BACK_LIGHT_ALPHA = 0.6;
 const HALF = 0.5;
 
 /** Fills everything below `top` inside the current clip with the sole's dark leather. */
-function fillSoleBand(ctx: Ctx, left: number, right: number, top: number, bottom: number): void {
-  ctx.fillStyle = SOLE.base;
+function fillSoleBand(
+  ctx: Ctx,
+  look: BootLook,
+  left: number,
+  right: number,
+  top: number,
+  bottom: number,
+): void {
+  ctx.fillStyle = look.sole.base;
   ctx.fillRect(left, top, right - left, bottom - top);
-  ctx.fillStyle = SOLE.mid;
+  ctx.fillStyle = look.sole.mid;
   ctx.fillRect(left, top, right - left, (bottom - top) * SOLE_LIP_SHARE);
 }
 /** The sole's top edge catches the key as a thin welt. */
@@ -138,7 +154,7 @@ function legGain(frame: CarlLegFrame): number {
   return lerp(1, NEAR_LEG_GAIN, Math.min(Math.max(nearness, 0), 1));
 }
 
-function paintShaft(ctx: Ctx, frame: CarlLegFrame): void {
+function paintShaft(ctx: Ctx, frame: CarlLegFrame, look: BootLook): void {
   const { joint: knee, end: ankle } = frame.chain;
   const dx = ankle.x - knee.x;
   const dy = ankle.y - knee.y;
@@ -152,7 +168,7 @@ function paintShaft(ctx: Ctx, frame: CarlLegFrame): void {
   const frontShare = profile ? PROFILE_FRONT_SHARE : 1;
   const topHalf = CALF_WIDTH * SHAFT_TOP_FIT * gain;
   const ankleHalf = ANKLE_WIDTH * SHAFT_ANKLE_FLARE * gain;
-  const top = pt(lerp(knee.x, ankle.x, SHAFT_TOP_AT), lerp(knee.y, ankle.y, SHAFT_TOP_AT));
+  const top = pt(lerp(knee.x, ankle.x, look.shaftTopAt), lerp(knee.y, ankle.y, look.shaftTopAt));
   const bottom = offset(ankle, along.x * SHAFT_BELOW_ANKLE, along.y * SHAFT_BELOW_ANKLE);
   const side = (at: Pt, half: number, sign: number): Pt => {
     const share = sign > 0 ? backShare : frontShare;
@@ -175,13 +191,13 @@ function paintShaft(ctx: Ctx, frame: CarlLegFrame): void {
     ctx,
     trace,
     { from: top, to: bottom },
-    LEATHER,
+    look.leather,
     { halfWidth: topHalf, specular: LEATHER_SPECULAR },
     () => {
       const cuffBack = side(top, topHalf, 1);
       const cuffFront = side(top, topHalf, -1);
       const cuffDrop = pt(along.x * CUFF_DEPTH, along.y * CUFF_DEPTH);
-      ctx.fillStyle = LEATHER.light;
+      ctx.fillStyle = look.leather.light;
       ctx.beginPath();
       ctx.moveTo(cuffBack.x, cuffBack.y);
       ctx.lineTo(cuffFront.x, cuffFront.y);
@@ -196,7 +212,7 @@ function paintShaft(ctx: Ctx, frame: CarlLegFrame): void {
           ctx.lineTo(cuffFront.x + cuffDrop.x, cuffFront.y + cuffDrop.y);
         },
         CUFF_SEAM_WIDTH,
-        LEATHER,
+        look.leather,
         CUFF_SEAM_OPACITY,
       );
       const strapAt = offset(ankle, -along.x * STRAP_ABOVE_ANKLE, -along.y * STRAP_ABOVE_ANKLE);
@@ -209,14 +225,14 @@ function paintShaft(ctx: Ctx, frame: CarlLegFrame): void {
           ctx.lineTo(strapFront.x, strapFront.y);
         },
         STRAP_WIDTH,
-        LEATHER,
+        look.leather,
         STRAP_OPACITY,
       );
     },
   );
 }
 
-function paintProfileFoot(ctx: Ctx, pitch: number): void {
+function paintProfileFoot(ctx: Ctx, pitch: number, look: BootLook): void {
   const length = FOOT_LEN;
   const toeX = length * (1 - HEEL_SHARE);
   const heelX = -length * HEEL_SHARE;
@@ -250,7 +266,7 @@ function paintProfileFoot(ctx: Ctx, pitch: number): void {
     ctx,
     trace,
     { from: pt(heelBack, 0), to: pt(toeTip, 0) },
-    LEATHER,
+    look.leather,
     { halfWidth: FOOT_DEPTH * HALF, frameRotation: pitch, specular: LEATHER_SPECULAR },
     () => {
       fillSoftEllipse(
@@ -259,7 +275,7 @@ function paintProfileFoot(ctx: Ctx, pitch: number): void {
         toeTop,
         length * INSTEP_LIGHT_LENGTH,
         FOOT_DEPTH * INSTEP_LIGHT_DEPTH,
-        LEATHER.light,
+        look.leather.light,
         INSTEP_LIGHT_ALPHA,
       );
       crease(
@@ -269,12 +285,13 @@ function paintProfileFoot(ctx: Ctx, pitch: number): void {
           ctx.quadraticCurveTo(capBack, soleTop, capBack + toeHalf * HALF, soleTop);
         },
         CUFF_SEAM_WIDTH,
-        LEATHER,
+        look.leather,
         PROFILE_TOE_CAP_SEAM_OPACITY,
         pitch,
       );
-      fillSoleBand(ctx, heelBack, toeTip, soleTop, sole);
-      fillSoleBand(ctx, heelBack, heelBack + length * HEEL_BLOCK_LENGTH, heelTop, sole);
+      fillSoleBand(ctx, look, heelBack, toeTip, soleTop, sole);
+      fillSoleBand(ctx, look, heelBack, heelBack + length * HEEL_BLOCK_LENGTH, heelTop, sole);
+      if (!look.hobnails) return;
       ctx.fillStyle = HOBNAIL;
       ctx.globalAlpha *= HOBNAIL_ALPHA;
       for (const share of HOBNAIL_SHARES) {
@@ -286,7 +303,7 @@ function paintProfileFoot(ctx: Ctx, pitch: number): void {
   );
 }
 
-function paintHeadOnFoot(ctx: Ctx, outward: number, shaftHalf: number): void {
+function paintHeadOnFoot(ctx: Ctx, outward: number, shaftHalf: number, look: BootLook): void {
   const sole = FOOT_DEPTH * (SOLE_DROP + TOES_TOWARD_CAMERA);
   const toeRow = FOOT_DEPTH * TOE_ROW;
   const inner = -outward;
@@ -317,7 +334,7 @@ function paintHeadOnFoot(ctx: Ctx, outward: number, shaftHalf: number): void {
     ctx,
     trace,
     { from: pt(0, top), to: pt(toes, sole) },
-    LEATHER,
+    look.leather,
     { halfWidth: f, specular: LEATHER_SPECULAR },
     () => {
       fillSoftEllipse(
@@ -326,7 +343,7 @@ function paintHeadOnFoot(ctx: Ctx, outward: number, shaftHalf: number): void {
         sole - toeRow * FRONT_TOE_CAP_RISE,
         f * FRONT_TOE_LIGHT_WIDTH,
         toeRow * FRONT_TOE_LIGHT_HEIGHT,
-        LEATHER.light,
+        look.leather.light,
         FRONT_TOE_LIGHT_ALPHA,
       );
       crease(
@@ -341,15 +358,15 @@ function paintHeadOnFoot(ctx: Ctx, outward: number, shaftHalf: number): void {
           );
         },
         CUFF_SEAM_WIDTH,
-        LEATHER,
+        look.leather,
         PROFILE_TOE_CAP_SEAM_OPACITY,
       );
-      fillSoleBand(ctx, left, right, soleTop, sole);
+      fillSoleBand(ctx, look, left, right, soleTop, sole);
     },
   );
 }
 
-function paintHeelFromBehind(ctx: Ctx, shaftHalf: number): void {
+function paintHeelFromBehind(ctx: Ctx, shaftHalf: number, look: BootLook): void {
   const radius = FOOT_DEPTH * BACK_HEEL_RADIUS;
   const bottom = FOOT_DEPTH * BACK_HEEL_DROP + radius;
   const cup = radius * BACK_CUP_WIDTH;
@@ -372,7 +389,7 @@ function paintHeelFromBehind(ctx: Ctx, shaftHalf: number): void {
     ctx,
     trace,
     { from: pt(0, 0), to: pt(0, bottom) },
-    LEATHER,
+    look.leather,
     { halfWidth: cup, specular: LEATHER_SPECULAR },
     () => {
       fillSoftEllipse(
@@ -381,10 +398,10 @@ function paintHeelFromBehind(ctx: Ctx, shaftHalf: number): void {
         bottom - radius * BACK_LIGHT_RISE,
         cup * BACK_LIGHT_WIDTH,
         radius * BACK_LIGHT_HEIGHT,
-        LEATHER.light,
+        look.leather.light,
         BACK_LIGHT_ALPHA,
       );
-      fillSoleBand(ctx, -cup, cup, bottom - FOOT_DEPTH * HEEL_BLOCK_THICKNESS, bottom);
+      fillSoleBand(ctx, look, -cup, cup, bottom - FOOT_DEPTH * HEEL_BLOCK_THICKNESS, bottom);
     },
   );
 }
@@ -395,27 +412,42 @@ function pointedStretch(frame: CarlLegFrame): number {
   return 1 + Math.min(Math.max(point, 0), 1) * POINTED_STRETCH;
 }
 
-function paintFoot(ctx: Ctx, frame: CarlLegFrame): void {
+function paintFoot(ctx: Ctx, frame: CarlLegFrame, look: BootLook): void {
   const { view } = frame;
   const shaftHalf = ANKLE_WIDTH * SHAFT_ANKLE_FLARE * legGain(frame);
   ctx.save();
   ctx.translate(frame.chain.end.x, frame.chain.end.y);
   ctx.scale(frame.footScale, frame.footScale);
-  if (view.showsBack) paintHeelFromBehind(ctx, shaftHalf);
+  if (view.showsBack) paintHeelFromBehind(ctx, shaftHalf, look);
   else if (view.profile) {
     ctx.rotate(frame.footPitch);
-    paintProfileFoot(ctx, frame.footPitch);
+    paintProfileFoot(ctx, frame.footPitch, look);
   } else {
     ctx.scale(1, pointedStretch(frame));
-    paintHeadOnFoot(ctx, frame.footOut, shaftHalf);
+    paintHeadOnFoot(ctx, frame.footOut, shaftHalf, look);
   }
   ctx.restore();
 }
 
-function paintLeg(ctx: Ctx, frame: CarlLegFrame): void {
+/**
+ * Paints a boot of `look` over one leg frame's foot and shin: the foot boxed
+ * the way the bare foot is drawn in the view, and a shaft up the shin.
+ */
+export function paintBootOnLeg(ctx: Ctx, frame: CarlLegFrame, look: BootLook): void {
   if (frame.segments === 'thigh') return;
-  paintShaft(ctx, frame);
-  paintFoot(ctx, frame);
+  paintShaft(ctx, frame, look);
+  paintFoot(ctx, frame, look);
+}
+
+const MARCHING_BOOTS: BootLook = {
+  leather: LEATHER,
+  sole: SOLE,
+  shaftTopAt: SHAFT_TOP_AT,
+  hobnails: true,
+};
+
+function paintLeg(ctx: Ctx, frame: CarlLegFrame): void {
+  paintBootOnLeg(ctx, frame, MARCHING_BOOTS);
 }
 
 export const CARL_BOOTS = defineGarment({

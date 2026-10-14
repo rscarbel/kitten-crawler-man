@@ -3180,7 +3180,7 @@ console.log('\nChecking every Big Top cue can actually be heard…');
   );
   const missingFromFloor = unpreloadedIds(cueIds, sfxGroupsForLevelId('level3'));
   check(missingFromFloor.length === 0, "and in floor 3's preload bundle");
-  for (const music of [BIG_TOP_MUSIC, BIG_TOP_EXIT_MUSIC]) {
+  for (const music of [BIG_TOP_MUSIC, ...BIG_TOP_EXIT_MUSIC]) {
     check(STREAMING_SOUND_IDS.has(music), `${music} streams as music`);
   }
   check(

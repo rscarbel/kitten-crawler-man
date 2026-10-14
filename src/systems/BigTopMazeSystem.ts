@@ -1692,7 +1692,7 @@ export class BigTopMazeSystem implements GameSystem, GroundHazardSource {
     // would be the tent disagreeing with its own ending.
     this.hazardsArmed = false;
     this.bus.emit('objectiveComplete', { objectiveId: 'grimaldi_redeemed' });
-    this.audio?.playMusic(BIG_TOP_EXIT_MUSIC, { fadeInMs: CIRCUS_THEME_FADE_IN_MS });
+    this.audio?.advanceMusicPlaylist(BIG_TOP_EXIT_MUSIC, { fadeInMs: CIRCUS_THEME_FADE_IN_MS });
   }
 
   // ── Rendering ─────────────────────────────────────────────────────────────

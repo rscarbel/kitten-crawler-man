@@ -66,6 +66,8 @@ const THROW_PATH_IMPACT_ALPHA = 0.4;
 const THROW_PATH_IMPACT_LINE_WIDTH = 1.5;
 const THROW_PATH_IMPACT_CENTER_RADIUS = 3;
 const THROW_PATH_MIN_SEGMENT_LEN = 0.001;
+/** The reach ring's dots are fainter than the path's: it frames the throw rather than predicting it. */
+const RANGE_RING_DOT_ALPHA = 0.22;
 
 // In-world floor/flying sprite
 
@@ -296,5 +298,38 @@ export function drawDynamiteThrowPath(
   ctx.fillStyle = `rgba(220, 40, 40, ${THROW_PATH_IMPACT_ALPHA * 0.8})`;
   ctx.fill();
 
+  ctx.restore();
+}
+
+/**
+ * The furthest a held stick can be thrown, as a faint ring of the throw path's
+ * dots round the thrower drifting slowly the way the path's do. Centre and
+ * radius in screen pixels.
+ */
+export function drawDynamiteRangeRing(
+  ctx: CanvasRenderingContext2D,
+  centreX: number,
+  centreY: number,
+  radius: number,
+): void {
+  const circumference = Math.PI * 2 * radius;
+  const dotCount = Math.floor(circumference / THROW_PATH_DOT_SPACING);
+  if (dotCount === 0) return;
+  const nowSec = performance.now() / 1000;
+  const driftAngle = (nowSec * THROW_PATH_MARCH_SPEED) / radius;
+  ctx.save();
+  ctx.fillStyle = `rgba(220, 40, 40, ${RANGE_RING_DOT_ALPHA})`;
+  for (let dot = 0; dot < dotCount; dot++) {
+    const angle = driftAngle + (dot / dotCount) * Math.PI * 2;
+    ctx.beginPath();
+    ctx.arc(
+      centreX + Math.cos(angle) * radius,
+      centreY + Math.sin(angle) * radius,
+      THROW_PATH_DOT_RADIUS,
+      0,
+      Math.PI * 2,
+    );
+    ctx.fill();
+  }
   ctx.restore();
 }

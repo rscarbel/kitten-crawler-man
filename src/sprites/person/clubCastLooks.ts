@@ -7,7 +7,12 @@
  * pick the ids) — the club dancer is the one figure this floor needs that
  * nothing else in the game already draws.
  */
-import { ADULT_STRIDE_FRACTION, type TownCastLookCarl } from './townCastLooks';
+import {
+  ADULT_STRIDE_FRACTION,
+  DANCER_HAIR_RAMP,
+  DANCER_SKIN_RAMP,
+  type TownCastLookCarl,
+} from './townCastLooks';
 import { deriveGlossRamp } from '../art/carl/palette';
 import { FEMININE_FACING_BROW, FEMININE_PROFILE_BROW, type CarlExpression } from '../art/carl/head';
 
@@ -37,32 +42,18 @@ export function clubDancerLook(): TownCastLookCarl {
     feminine: true,
     dialogSeed: 0x4c1b,
     buildWidthScale: 0.78,
-    skinRamp: {
-      deep: '#5c2d35',
-      shadow: '#8b4a42',
-      dark: '#b0654e',
-      mid: '#c27a5a',
-      base: '#d89c76',
-      light: '#f0cba3',
-      rim: '#fae9c6',
-    },
-    hairRamp: {
-      deep: '#2a1316',
-      shadow: '#421e1a',
-      dark: '#5c2e1f',
-      mid: '#784326',
-      base: '#975b2b',
-      light: '#b97d38',
-      rim: '#d8ae5a',
-    },
-    hairStyle: 'long',
+    skinRamp: DANCER_SKIN_RAMP,
+    hairRamp: DANCER_HAIR_RAMP,
+    hairStyle: 'ponytail',
+    facialHair: 'none',
     garmentRamp: deriveGlossRamp('#c81e78'),
     garmentHemDrop: 0.65,
     garmentHemFlare: 1.6,
     garmentHasHardware: false,
     accessory: { kind: 'none', color: '#000000' },
-    legwear: 'none',
+    legwear: 'stockings',
     pantsColor: '#2a1a2a',
+    shoeColor: '#1c1418',
     expression: DANCER_EXPRESSION,
   };
   return look;

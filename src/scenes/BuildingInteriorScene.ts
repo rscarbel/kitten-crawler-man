@@ -92,6 +92,7 @@ import { AbilityManager } from '../core/AbilityManager';
 import type { AudioManager } from '../audio/AudioManager';
 import { Conversation } from '../dialog/Conversation';
 import {
+  CIRCUS_MUSIC_TRACKS,
   CLUB_MUSIC_TRACKS,
   DEFAULT_BUILDING_MUSIC_TRACKS,
   TAVERN_MUSIC_TRACKS,
@@ -279,6 +280,7 @@ import {
   drinkAnyHealthPotion,
   refuseAnchorIndoors,
   releaseChargedDynamite,
+  throwReadiedDynamiteAt,
   type HotbarHost,
 } from '../systems/kits/hotbarActions';
 import { GameplayInputHandler } from '../systems/GameplayInputHandler';
@@ -1276,6 +1278,7 @@ export class BuildingInteriorScene extends GameplayScene {
       world: this.floors[GROUND_FLOOR_INDEX].world,
       abilityManager: this.abilityManager,
       onPotionDrunk: (id) => this.noteDrinkAchievement(id),
+      heldItemId: () => this.readiedDynamiteId(),
     });
     this.menus.questReward.setOpenConditions({
       conversationOpen: () => this.conversation.isOpen,
@@ -2106,13 +2109,14 @@ export class BuildingInteriorScene extends GameplayScene {
 
   /**
    * The soundtrack this interior owns: a rotating playlist in the club and the
-   * taverns, the tower's own theme, the temple's own theme, and a shared
-   * default in every other room. Null where an entry encounter already
-   * started its own battle music.
+   * taverns, the circus playlist in the calm Big Top, the tower's own theme,
+   * the temple's own theme, and a shared default in every other room. Null
+   * where an entry encounter already started its own battle music.
    */
   private interiorMusicTracks(): ReadonlyArray<SoundId> | null {
     if (this.encounter !== null || !this.floor.ownsMusic) return null;
     if (this.entry.type === 'club') return CLUB_MUSIC_TRACKS;
+    if (this.entry.name === BIG_TOP_BUILDING_NAME) return CIRCUS_MUSIC_TRACKS;
     if (this.entry.type === 'tower') return TOWER_MUSIC_TRACKS;
     if (this.entry.name === SKY_TEMPLE_NAME) return TEMPLE_MUSIC_TRACKS;
     if (TAVERN_BUILDING_NAMES.has(this.entry.name)) return TAVERN_MUSIC_TRACKS;
@@ -2147,10 +2151,15 @@ export class BuildingInteriorScene extends GameplayScene {
       this.arrivalLoading.whenClosed(() => playInteriorCueWhenReady(this.audio, 'shopDoorBell'));
     }
     const musicTracks = this.interiorMusicTracks();
+    // The tent shares the grounds' playlist, so carrying on the song the party
+    // walked in with would make the flap pass unmarked: it skips to another.
+    const changesSongAtTheDoor = this.entry.name === BIG_TOP_BUILDING_NAME;
     if (musicTracks !== null) {
-      this.arrivalLoading.whenClosed(() =>
-        this.audio?.playMusicPlaylist(musicTracks, { fadeInMs: INTERIOR_MUSIC_FADE_IN_MS }),
-      );
+      const musicOptions = { fadeInMs: INTERIOR_MUSIC_FADE_IN_MS };
+      this.arrivalLoading.whenClosed(() => {
+        if (changesSongAtTheDoor) this.audio?.advanceMusicPlaylist(musicTracks, musicOptions);
+        else this.audio?.playMusicPlaylist(musicTracks, musicOptions);
+      });
     }
 
     this.inputHandler.bind({
@@ -2262,6 +2271,11 @@ export class BuildingInteriorScene extends GameplayScene {
     this.pauseScreen.open('journal');
     this.menus.closePanels();
     return true;
+  }
+
+  /** The dynamite in his hand waiting to be thrown, which the hotbars mark in use. */
+  private readiedDynamiteId(): ItemId | null {
+    return this.destruction.dynamite.isReadied ? 'goblin_dynamite' : null;
   }
 
   /** The collaborators a hotbar press reaches, resolved against the live floor. */
@@ -4441,11 +4455,13 @@ export class BuildingInteriorScene extends GameplayScene {
               this.menus.itemCooldowns,
               this.inventoryPlayer().inventory,
               this.menus.inventoryDrawnWeaponId(),
+              this.inventoryPlayer() === this.human ? this.readiedDynamiteId() : null,
             ),
             input: hotbarPressInput(
               () => this.hotbarHost(),
               () => this.ui.worldHalted(),
             ),
+            arrange: this.menus.inventoryScreen.hotbarArranger(),
           }
         : null,
       topBand: this.topBandEntries(),
@@ -4655,6 +4671,20 @@ export class BuildingInteriorScene extends GameplayScene {
     }
   }
 
+  /**
+   * A readied stick thrown at the tap. It waits out a conversation, a counter
+   * or a scripted beat rather than flying at a tap meant for one of them.
+   */
+  private throwReadiedDynamiteAtTap(screenX: number, screenY: number): boolean {
+    const tapIsForTheWorld =
+      surfacesOverHud(this.ui, ROOM_STATUS_ONLY).length === 0 &&
+      !this.conversation.isOpen &&
+      !this.scriptOwnsParty;
+    if (!tapIsForTheWorld) return false;
+    const { x: camX, y: camY } = this.computeCamera(this.map);
+    return throwReadiedDynamiteAt(this.hotbarHost(), screenX + camX, screenY + camY);
+  }
+
   private collectLootAt(screenX: number, screenY: number): void {
     const { x: camX, y: camY } = this.computeCamera(this.map);
     this.destruction.loot.tryCollectLootAt(
@@ -4674,6 +4704,7 @@ export class BuildingInteriorScene extends GameplayScene {
    * press on to the next speaker rather than swallowing it.
    */
   private handleWorldTap(screenX: number, screenY: number): void {
+    if (this.throwReadiedDynamiteAtTap(screenX, screenY)) return;
     this.collectLootAt(screenX, screenY);
     if (this.handOffConversationPress()) return;
     this.triggerTapInteractions(screenX, screenY);

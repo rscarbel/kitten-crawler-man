@@ -57,7 +57,7 @@ import {
   BARE_CARL_OUTFIT,
   DEFAULT_CARL_OUTFIT,
 } from '../src/sprites/garments/human/carlDressing.js';
-import { garmentsOf } from '../src/sprites/garments/garments.js';
+import { humanItemGarments } from '../src/sprites/garments/itemLooks.js';
 import { outfitOf, type Outfit } from '../src/sprites/garments/outfit.js';
 import {
   HUMAN_ROW_NAMES,
@@ -146,7 +146,7 @@ function parseNumberFlag(name: string, fallback: number, min: number, max: numbe
 }
 
 /** Everything he can put on: every garment of his but the base ones every outfit starts from. */
-const WEARABLE = garmentsOf('human').filter((garment) => !garment.base);
+const WEARABLE = humanItemGarments().filter((garment) => !garment.base);
 
 /**
  * The outfit to paint and gate him in: `--gear=carl_cloak+carl_gauntlet`,

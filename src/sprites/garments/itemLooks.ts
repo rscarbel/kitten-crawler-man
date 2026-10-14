@@ -29,6 +29,15 @@ export function humanGarmentsWearing(items: readonly ItemId[]): GarmentDef<'huma
 }
 
 /**
+ * Every garment some item paints on Carl, each once: his gear, as against the
+ * garments only the people built on his rig wear.
+ */
+export function humanItemGarments(): GarmentDef<'human'>[] {
+  const all = humanGarmentsWearing(Object.values(ITEM_DEF).map((item) => item.id));
+  return all.filter((garment, index) => all.indexOf(garment) === index);
+}
+
+/**
  * An item can look like a base garment (Carl's boxers) while still being put on
  * and taken off as an item, so it is heard as cloth rather than going silent.
  */

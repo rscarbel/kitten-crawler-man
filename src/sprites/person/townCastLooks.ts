@@ -7,10 +7,14 @@
  *
  * Two painters share the set. Every adult look paints on Carl's own rig
  * (`carl/figure.ts`, `human/idles.ts`/`locomotion.ts`/`actionsMisc.ts`'s pose
- * functions) — the same anatomy, face, hair and hand painting Carl himself is
- * drawn with, dressed in his own gear plus a worn accessory
- * (`human/townAccessories.ts`) for the role cue. The two child looks stay on
- * the simpler skeleton-based painter from `drawPerson.ts`: Carl's rig is one
+ * functions), because his is the only convincing movement in the game — but
+ * never in his look: his crop is hidden for a hairstyle and facial hair of
+ * the look's own (`human/castHead.ts`), his boxers, bare legs and bare feet
+ * are covered by trousers or stockings and shoes
+ * (`garments/human/townsfolkLegwear.ts`), his jacket is recut and recoloured
+ * as the look's garment, and no look wears his skin or hair colour. A worn accessory (`human/townAccessories.ts`)
+ * gives the role cue. The two child looks stay on the simpler skeleton-based
+ * painter from `drawPerson.ts`: Carl's rig is one
  * fixed adult's proportions, and a child is not that adult scaled down (a
  * uniform shrink reads as a doll, not a child — the head-count-is-how-size-
  * is-read lesson) — it needs its own larger head fraction and shorter limbs,
@@ -28,14 +32,15 @@ import {
   PROFILE_BROW_DEFAULT,
   type CarlExpression,
 } from '../art/carl/head';
-import type { AccessorySpec, HairStyleKind } from '../art/human/townAccessories';
+import type { AccessorySpec } from '../art/human/townAccessories';
+import type { FacialHairKind, HairStyleKind } from '../art/human/castHead';
+import type { LegwearCut } from '../art/human/legwear';
 import type { CarlAttachments } from '../art/carl/figure';
 import type { CarlPose } from '../art/carl/rig';
 import { type CardinalView } from '../facingView';
 import {
   WENDELL_ATTACHMENTS,
   WENDELL_TROUSER_COLOR,
-  wendellBootMud,
   wendellPosture,
 } from '../art/human/wendellAttachments';
 
@@ -48,7 +53,8 @@ import {
 export interface TownCastLookDetails {
   readonly attachments: CarlAttachments;
   readonly posture: (pose: CarlPose, view: CardinalView) => CarlPose;
-  readonly overShoes: (ctx: CanvasRenderingContext2D, view: CardinalView, pose: CarlPose) => void;
+  /** Mud caked on the shoes, painted with them so it stays on them through the stride. */
+  readonly muddyShoes: boolean;
 }
 
 export type TownCastBuild = 'child' | 'slight' | 'standard' | 'heavy';
@@ -93,7 +99,9 @@ export interface TownCastLookCarl extends TownCastLookCommon {
   readonly buildWidthScale: number;
   readonly skinRamp: Ramp;
   readonly hairRamp: Ramp;
+  /** Never Carl's own crop: his hair is hidden and this style is painted in its place. */
   readonly hairStyle: HairStyleKind;
+  readonly facialHair: FacialHairKind;
   /**
    * The garment's own material: Carl's torso and sleeve are repainted in this
    * ramp (`setCarlGarmentRamp`) rather than covered by a shape drawn over his
@@ -107,10 +115,12 @@ export interface TownCastLookCarl extends TownCastLookCommon {
   /** Whether the garment carries the jacket's own hardware (a zip, a sewn waistband) — false for every civilian cut. */
   readonly garmentHasHardware: boolean;
   readonly accessory: AccessorySpec;
-  /** `'none'` for a dress/skirt cut, whose own hem already covers the legs. */
-  readonly legwear: 'trousers' | 'none';
-  /** Covers Carl's own bare legs — his canon look, not the rig's — with a role-appropriate trouser colour. Unused when `legwear` is `'none'`. */
+  /** Trousers under a short cut; slim stockings under a hem that already covers the thigh. */
+  readonly legwear: LegwearCut;
+  /** Covers Carl's own bare legs — his canon look, not the rig's — in the trousers' or stockings' colour. */
   readonly pantsColor: string;
+  /** Covers Carl's own bare feet, the other half of his canon look. */
+  readonly shoeColor: string;
   readonly expression: CarlExpression;
   readonly details?: TownCastLookDetails;
 }
@@ -295,53 +305,56 @@ const GARMENT_HEM_FLARE: Readonly<Record<GarmentCut, number>> = {
   robe: 1.35,
   dress: 1.9,
 };
-/** A dress/skirt hem already covers the legs down to mid-shin; every other cut needs trousers under it. */
 /**
- * `robe`'s own hem already reaches near the ankle — the same length trousers
- * would — so drawing trousers under one hides the robe's own hem under
- * opaque trouser fabric rather than layering under it. `shirt`/`tunic` stop
- * well above the ankle and need trousers to cover the rest of the leg.
+ * What each cut wears on its legs, painted under the hem from the solved
+ * legs: trousers under a short cut, slim stockings under a hem that already
+ * covers the thigh.
  */
-const GARMENT_LEGWEAR: Readonly<Record<GarmentCut, 'trousers' | 'none'>> = {
+const GARMENT_LEGWEAR: Readonly<Record<GarmentCut, LegwearCut>> = {
   shirt: 'trousers',
   tunic: 'trousers',
-  robe: 'none',
-  dress: 'none',
+  robe: 'stockings',
+  dress: 'stockings',
 };
 
-/** Four skin tones beyond Carl's own default, so five in total. */
-export const SKIN_TONE_BASES = ['#f0c9a0', '#c78a5a', '#8a5a34', '#5a3a22'] as const;
+/** Skin tones for the cast. Carl's own skin is none of them. */
+export const SKIN_TONE_BASES = ['#f0c9a0', '#c78a5a', '#8a5a34', '#5a3a22', '#b08a62'] as const;
 /**
- * Carl's own default brown plus these. The last is a salt-and-pepper
- * grey-brown, the one middle-aged head in the set.
+ * Hair colours for the cast. Carl's own red-brown is none of them; the
+ * greying salt-and-pepper and the white are the older heads in the set.
  */
-export const HAIR_COLOR_BASES = ['#1a1512', '#8a6a3a', '#c9a850', '#6a2a20', '#8c857a'] as const;
-const GREYING_HAIR = HAIR_COLOR_BASES.length;
+export const HAIR_COLOR_BASES = [
+  '#1a1512',
+  '#8a6a3a',
+  '#c9a850',
+  '#6a2a20',
+  '#8c857a',
+  '#d8d4cc',
+  '#b0582a',
+] as const;
 
-const SKIN_RAMPS: readonly Ramp[] = [
-  {
-    deep: '#5c2d35',
-    shadow: '#8b4a42',
-    dark: '#b0654e',
-    mid: '#c27a5a',
-    base: '#d89c76',
-    light: '#f0cba3',
-    rim: '#fae9c6',
-  },
-  ...SKIN_TONE_BASES.map(deriveRamp),
-];
-const HAIR_RAMPS: readonly Ramp[] = [
-  {
-    deep: '#2a1316',
-    shadow: '#421e1a',
-    dark: '#5c2e1f',
-    mid: '#784326',
-    base: '#975b2b',
-    light: '#b97d38',
-    rim: '#d8ae5a',
-  },
-  ...HAIR_COLOR_BASES.map(deriveRamp),
-];
+type SkinTone = 'fair' | 'tan' | 'brown' | 'deep' | 'olive';
+type HairColour = 'black' | 'lightBrown' | 'blonde' | 'auburn' | 'greying' | 'white' | 'ginger';
+
+const SKIN_RAMPS: Readonly<Record<SkinTone, Ramp>> = {
+  fair: deriveRamp(SKIN_TONE_BASES[0]),
+  tan: deriveRamp(SKIN_TONE_BASES[1]),
+  brown: deriveRamp(SKIN_TONE_BASES[2]),
+  deep: deriveRamp(SKIN_TONE_BASES[3]),
+  olive: deriveRamp(SKIN_TONE_BASES[4]),
+};
+const HAIR_RAMPS: Readonly<Record<HairColour, Ramp>> = {
+  black: deriveRamp(HAIR_COLOR_BASES[0]),
+  lightBrown: deriveRamp(HAIR_COLOR_BASES[1]),
+  blonde: deriveRamp(HAIR_COLOR_BASES[2]),
+  auburn: deriveRamp(HAIR_COLOR_BASES[3]),
+  greying: deriveRamp(HAIR_COLOR_BASES[4]),
+  white: deriveRamp(HAIR_COLOR_BASES[5]),
+  ginger: deriveRamp(HAIR_COLOR_BASES[6]),
+};
+
+/** Worn leather shoes, dark enough to part from any trouser colour at the tile. */
+const DEFAULT_SHOE_COLOR = '#3a2a1e';
 
 interface AdultSpec {
   readonly id: string;
@@ -349,9 +362,11 @@ interface AdultSpec {
   readonly roles: ReadonlyArray<TownRole>;
   readonly hasWork: boolean;
   readonly pantsColor: string;
-  readonly skin: number;
-  readonly hair: number;
+  readonly shoeColor?: string;
+  readonly skin: SkinTone;
+  readonly hair: HairColour;
   readonly hairStyle: HairStyleKind;
+  readonly facialHair?: FacialHairKind;
   readonly garmentColor: string;
   readonly cut: GarmentCut;
   readonly accessory: AccessorySpec;
@@ -367,9 +382,11 @@ const ADULT_SPECS: readonly AdultSpec[] = [
     roles: ['guard'],
     hasWork: false,
     pantsColor: '#2a2a34',
-    skin: 0,
-    hair: 0,
-    hairStyle: 'short',
+    shoeColor: '#1e1a1c',
+    skin: 'olive',
+    hair: 'black',
+    hairStyle: 'sidePart',
+    facialHair: 'moustache',
     garmentColor: '#3a4a6a',
     cut: 'shirt',
     feminine: false,
@@ -381,9 +398,9 @@ const ADULT_SPECS: readonly AdultSpec[] = [
     roles: ['merchant'],
     hasWork: false,
     pantsColor: '#3a3a4a',
-    skin: 1,
-    hair: 2,
-    hairStyle: 'long',
+    skin: 'fair',
+    hair: 'blonde',
+    hairStyle: 'bun',
     garmentColor: '#8e44ad',
     cut: 'dress',
     feminine: true,
@@ -395,9 +412,9 @@ const ADULT_SPECS: readonly AdultSpec[] = [
     roles: ['commoner'],
     hasWork: false,
     pantsColor: '#2c3e50',
-    skin: 2,
-    hair: 1,
-    hairStyle: 'short',
+    skin: 'tan',
+    hair: 'lightBrown',
+    hairStyle: 'sidePart',
     garmentColor: '#7f8c8d',
     cut: 'shirt',
     feminine: false,
@@ -409,9 +426,10 @@ const ADULT_SPECS: readonly AdultSpec[] = [
     roles: ['laborer'],
     hasWork: false,
     pantsColor: '#4a3a2a',
-    skin: 3,
-    hair: 1,
+    skin: 'brown',
+    hair: 'black',
     hairStyle: 'curly',
+    facialHair: 'goatee',
     garmentColor: '#8a7a5a',
     cut: 'shirt',
     feminine: false,
@@ -423,9 +441,11 @@ const ADULT_SPECS: readonly AdultSpec[] = [
     roles: ['farmer'],
     hasWork: false,
     pantsColor: '#5a4a38',
-    skin: 4,
-    hair: 3,
-    hairStyle: 'short',
+    shoeColor: '#5a3e24',
+    skin: 'deep',
+    hair: 'ginger',
+    hairStyle: 'receding',
+    facialHair: 'fullBeard',
     garmentColor: '#6a7a3a',
     cut: 'tunic',
     feminine: false,
@@ -437,9 +457,9 @@ const ADULT_SPECS: readonly AdultSpec[] = [
     roles: ['innkeeper'],
     hasWork: false,
     pantsColor: '#4a3a2a',
-    skin: 1,
-    hair: 4,
-    hairStyle: 'long',
+    skin: 'fair',
+    hair: 'greying',
+    hairStyle: 'bun',
     garmentColor: '#a0522d',
     cut: 'dress',
     feminine: true,
@@ -451,8 +471,8 @@ const ADULT_SPECS: readonly AdultSpec[] = [
     roles: ['commoner'],
     hasWork: false,
     pantsColor: '#34495e',
-    skin: 2,
-    hair: 3,
+    skin: 'tan',
+    hair: 'auburn',
     hairStyle: 'long',
     garmentColor: '#16a085',
     cut: 'dress',
@@ -465,13 +485,14 @@ const ADULT_SPECS: readonly AdultSpec[] = [
     roles: ['beggar', 'drunk'],
     hasWork: false,
     pantsColor: '#3a3a3a',
-    skin: 3,
-    hair: 0,
-    hairStyle: 'curly',
+    skin: 'brown',
+    hair: 'greying',
+    hairStyle: 'receding',
+    facialHair: 'fullBeard',
     garmentColor: '#5a5a5a',
     cut: 'tunic',
     feminine: false,
-    accessory: { kind: 'patchedHood', color: '#4a4a4a', accentColor: '#6a5a3a' },
+    accessory: { kind: 'patchedHood', color: '#5a4632', accentColor: '#7a6a4a' },
   },
   {
     id: 'adult_smith',
@@ -479,9 +500,10 @@ const ADULT_SPECS: readonly AdultSpec[] = [
     roles: ['smith'],
     hasWork: false,
     pantsColor: '#2a2420',
-    skin: 4,
-    hair: 0,
+    skin: 'deep',
+    hair: 'black',
     hairStyle: 'bald',
+    facialHair: 'fullBeard',
     garmentColor: '#5a4a3a',
     cut: 'shirt',
     feminine: false,
@@ -493,9 +515,9 @@ const ADULT_SPECS: readonly AdultSpec[] = [
     roles: ['priest'],
     hasWork: false,
     pantsColor: '#2a2430',
-    skin: 1,
-    hair: 3,
-    hairStyle: 'bald',
+    skin: 'fair',
+    hair: 'greying',
+    hairStyle: 'receding',
     garmentColor: '#2a2430',
     cut: 'robe',
     feminine: false,
@@ -507,8 +529,9 @@ const ADULT_SPECS: readonly AdultSpec[] = [
     roles: ['noble'],
     hasWork: false,
     pantsColor: '#2a2a34',
-    skin: 0,
-    hair: 2,
+    shoeColor: '#4a2232',
+    skin: 'olive',
+    hair: 'black',
     hairStyle: 'long',
     garmentColor: '#5a2a5a',
     cut: 'dress',
@@ -532,12 +555,14 @@ function adultLook(spec: AdultSpec, index: number): TownCastLookCarl {
     skinRamp: SKIN_RAMPS[spec.skin],
     hairRamp: HAIR_RAMPS[spec.hair],
     hairStyle: spec.hairStyle,
+    facialHair: spec.facialHair ?? 'none',
     garmentRamp: deriveGlossRamp(spec.garmentColor),
     garmentHemDrop: GARMENT_HEM_DROP[spec.cut],
     garmentHemFlare: GARMENT_HEM_FLARE[spec.cut],
     garmentHasHardware: false,
     legwear: GARMENT_LEGWEAR[spec.cut],
     pantsColor: spec.pantsColor,
+    shoeColor: spec.shoeColor ?? DEFAULT_SHOE_COLOR,
     accessory: spec.accessory,
     expression: spec.feminine ? FEMININE_EXPRESSION : MASCULINE_EXPRESSION,
     details: spec.details,
@@ -545,6 +570,10 @@ function adultLook(spec: AdultSpec, index: number): TownCastLookCarl {
 }
 
 const ADULT_LOOKS: readonly TownCastLookCarl[] = ADULT_SPECS.map(adultLook);
+
+/** The club dancer's skin and hair, exported so her look is built from the cast's own swatches. */
+export const DANCER_SKIN_RAMP = SKIN_RAMPS.tan;
+export const DANCER_HAIR_RAMP = HAIR_RAMPS.black;
 
 // ── Named residents ──────────────────────────────────────────────────────────
 //
@@ -564,9 +593,9 @@ const RESIDENT_ADULT_SPECS: readonly AdultSpec[] = [
     roles: [],
     hasWork: false,
     pantsColor: WENDELL_TROUSER_COLOR,
-    skin: 1,
-    hair: GREYING_HAIR,
-    hairStyle: 'short',
+    skin: 'fair',
+    hair: 'greying',
+    hairStyle: 'sidePart',
     garmentColor: '#cfc3a4',
     cut: 'shirt',
     feminine: false,
@@ -574,7 +603,7 @@ const RESIDENT_ADULT_SPECS: readonly AdultSpec[] = [
     details: {
       attachments: WENDELL_ATTACHMENTS,
       posture: wendellPosture,
-      overShoes: wendellBootMud,
+      muddyShoes: true,
     },
   },
   {
@@ -583,8 +612,8 @@ const RESIDENT_ADULT_SPECS: readonly AdultSpec[] = [
     roles: [],
     hasWork: false,
     pantsColor: '#2a2420',
-    skin: 1,
-    hair: 2,
+    skin: 'fair',
+    hair: 'white',
     hairStyle: 'headscarf',
     garmentColor: '#3a2e3c',
     cut: 'robe',
@@ -597,9 +626,9 @@ const RESIDENT_ADULT_SPECS: readonly AdultSpec[] = [
     roles: [],
     hasWork: false,
     pantsColor: '#4a3a2a',
-    skin: 2,
-    hair: 3,
-    hairStyle: 'long',
+    skin: 'tan',
+    hair: 'blonde',
+    hairStyle: 'ponytail',
     garmentColor: '#7a6a4a',
     cut: 'dress',
     feminine: true,
@@ -611,8 +640,8 @@ const RESIDENT_ADULT_SPECS: readonly AdultSpec[] = [
     roles: [],
     hasWork: false,
     pantsColor: '#2c3e50',
-    skin: 0,
-    hair: 4,
+    skin: 'olive',
+    hair: 'auburn',
     hairStyle: 'long',
     garmentColor: '#7a8a7a',
     cut: 'shirt',
@@ -625,10 +654,11 @@ const RESIDENT_ADULT_SPECS: readonly AdultSpec[] = [
     roles: [],
     hasWork: false,
     pantsColor: '#3a2a24',
-    skin: 3,
-    hair: 0,
+    skin: 'brown',
+    hair: 'black',
     hairStyle: 'curly',
-    garmentColor: '#6a3a2a',
+    facialHair: 'fullBeard',
+    garmentColor: '#4a5a6a',
     cut: 'shirt',
     feminine: false,
     accessory: { kind: 'apron', color: '#4a3226', accentColor: '#2a1c14' },
@@ -639,9 +669,10 @@ const RESIDENT_ADULT_SPECS: readonly AdultSpec[] = [
     roles: [],
     hasWork: false,
     pantsColor: '#34495e',
-    skin: 4,
-    hair: 0,
-    hairStyle: 'short',
+    skin: 'deep',
+    hair: 'black',
+    hairStyle: 'sidePart',
+    facialHair: 'moustache',
     garmentColor: '#8a9aa2',
     cut: 'shirt',
     feminine: false,

@@ -185,8 +185,15 @@ const BANNER_OUT_MS = 240;
 const BANNER_FROM_SCALE = 0.6;
 const BANNER_SUBTITLE_GAP = 4;
 
-/** The stab: the slash lands, then the red wash and the shake fade. */
-const STAB_SLASH_AT_MS = 420;
+/**
+ * The red landing sting (`wheel_land_bad`, 1.584 s) plays at the start of every
+ * stab reveal; the slash and Tito's stab sound wait for it to finish so the two
+ * never talk over each other.
+ */
+const LAND_BAD_STING_MS = 1584;
+const STAB_AFTER_STING_GAP_MS = 150;
+/** The stab: the slash lands (and is heard), then the red wash and the shake fade. */
+export const STAB_SLASH_AT_MS = LAND_BAD_STING_MS + STAB_AFTER_STING_GAP_MS;
 const STAB_SLASH_DRAW_MS = 140;
 const STAB_WASH_MS = 900;
 const STAB_WASH_ALPHA = 0.45;

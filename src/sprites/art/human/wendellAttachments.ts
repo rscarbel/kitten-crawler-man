@@ -2,8 +2,9 @@
  * Wendell's own clothes and habits, painted on Carl's rig: an architect's
  * waistcoat worn over builder's rolled shirtsleeves, the spectacles of a man
  * who spent his twenties at a drafting table, a carpenter's pencil behind
- * his ear, mud from the pasture on his boots, and the stoop the drafting
- * table left him with.
+ * his ear, and the stoop the drafting table left him with. The mud from the
+ * pasture on his shoes is painted with the shoes themselves
+ * (`townsfolk_shoes`, `muddyShoes` on his look).
  *
  * The waistcoat, spectacles and pencil are `CarlAttachments`, painted inside
  * the figure's own composition from the solved skeleton: laid on after the
@@ -14,12 +15,11 @@
 
 import type { CarlAttachments } from '../carl/figure';
 import { headAngle } from '../carl/head';
-import { CALF_WIDTH, HEAD_DEPTH, HEAD_RX, HEAD_RY, THIGH_WIDTH } from '../carl/proportions';
+import { HEAD_DEPTH, HEAD_RX, HEAD_RY } from '../carl/proportions';
 import type { CarlPose, Skeleton, ViewSpec } from '../carl/rig';
 import { type CardinalView } from '../../facingView';
 import { torsoFrame, traceGarmentTorso, type TorsoFrame } from '../carl/torso';
 import { mix, rgba, type Pt } from '../carlArt';
-import { drawShoeMud } from './townAccessories';
 
 type Ctx = CanvasRenderingContext2D;
 
@@ -333,51 +333,15 @@ function paintHeadDetails(ctx: Ctx, skeleton: Skeleton, view: ViewSpec, pose: Ca
   ctx.restore();
 }
 
-// ── Trouser seat ─────────────────────────────────────────────────────────────
+// ── Trousers ─────────────────────────────────────────────────────────────────
 
-/** Worn grey-brown drill, a step lighter and cooler than the waistcoat so the two read as two garments; shared with the look's own trouser colour. */
+/** Worn grey-brown drill, a step lighter and cooler than the waistcoat so the two read as two garments. */
 export const WENDELL_TROUSER_COLOR = '#50483c';
-/**
- * The trousers `townAccessories.ts` lays over the finished figure leave a gap
- * between the legs, and a shirt cut stops at the waist, so Carl's boxers show
- * through it. Painting the seat and legs in trouser cloth inside the
- * composition, where the shorts are, closes it.
- */
-const SEAT_OUTER_SHARE = 1.2;
-const SEAT_CROTCH_DROP = 0.14;
-const THIGH_STROKE_SHARE = 2.1;
-const SHIN_STROKE_SHARE = 1.9;
-
-function paintTrouserSeat(ctx: Ctx, skeleton: Skeleton): void {
-  const { leftLeg, rightLeg, hip } = skeleton;
-  const outer = THIGH_WIDTH * SEAT_OUTER_SHARE;
-  const leftSign = Math.sign(leftLeg.root.x - hip.x) || -1;
-  const rightSign = Math.sign(rightLeg.root.x - hip.x) || 1;
-  ctx.fillStyle = WENDELL_TROUSER_COLOR;
-  ctx.strokeStyle = WENDELL_TROUSER_COLOR;
-  ctx.lineCap = 'round';
-  ctx.lineJoin = 'round';
-  ctx.beginPath();
-  ctx.moveTo(leftLeg.root.x + leftSign * outer, leftLeg.root.y);
-  ctx.lineTo(rightLeg.root.x + rightSign * outer, rightLeg.root.y);
-  ctx.lineTo(rightLeg.joint.x, rightLeg.joint.y);
-  ctx.lineTo(hip.x, hip.y + SEAT_CROTCH_DROP);
-  ctx.lineTo(leftLeg.joint.x, leftLeg.joint.y);
-  ctx.closePath();
-  ctx.fill();
-  for (const leg of [leftLeg, rightLeg]) {
-    ctx.lineWidth = THIGH_WIDTH * THIGH_STROKE_SHARE;
-    strokeLine(ctx, leg.root, leg.joint);
-    ctx.lineWidth = CALF_WIDTH * SHIN_STROKE_SHARE;
-    strokeLine(ctx, leg.joint, leg.end);
-  }
-}
 
 /** How far past the head's own outline the pencil reaches, as a share of its half-width. */
 const HEAD_DETAIL_REACH = 1.3;
 
 export const WENDELL_ATTACHMENTS: CarlAttachments = {
-  overLegs: (ctx, skeleton) => paintTrouserSeat(ctx, skeleton),
   over: (ctx, skeleton, view, pose) => {
     paintWaistcoat(ctx, skeleton, view, pose);
     paintHeadDetails(ctx, skeleton, view, pose);
@@ -407,9 +371,4 @@ export function wendellPosture(pose: CarlPose, view: CardinalView): CarlPose {
     torsoPitch: (pose.torsoPitch ?? 0) + STOOP_TORSO_PITCH,
     chestRise: (pose.chestRise ?? 0) + STOOP_CHEST_DROP,
   };
-}
-
-/** Pasture mud, drawn over the boots once they are painted. */
-export function wendellBootMud(ctx: Ctx, _view: CardinalView, pose: CarlPose): void {
-  drawShoeMud(ctx, pose);
 }

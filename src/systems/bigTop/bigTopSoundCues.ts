@@ -15,6 +15,7 @@
  * that was never preloaded, and `verify:bigtop` fails on any id missing there.
  */
 
+import { CIRCUS_MUSIC_TRACKS } from '../../audio/sounds';
 import type { SoundId } from '../../audio/sounds';
 import type { MazeBlockKind } from '../../map/bigTopMazeLayout';
 
@@ -91,8 +92,8 @@ export const BIG_TOP_BLOCK_CLEARED_CUES: Readonly<Record<MazeBlockKind, readonly
 /** The tent's fight music, from the flap to the cure. */
 export const BIG_TOP_MUSIC: SoundId = 'circus_battle';
 
-/** The grounds' music, back once the party walks out cured. */
-export const BIG_TOP_EXIT_MUSIC: SoundId = 'circus_theme';
+/** The grounds' playlist, back once the party walks out cured. */
+export const BIG_TOP_EXIT_MUSIC: ReadonlyArray<SoundId> = CIRCUS_MUSIC_TRACKS;
 
 /**
  * The room-wide ambience bed under the tent, or null while it has none.

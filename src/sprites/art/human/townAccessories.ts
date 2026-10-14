@@ -1,6 +1,7 @@
 /**
  * Small worn accessories layered over the human rig after Carl's own painter
- * has finished, so a townsfolk look reads its role at a glance without a
+ * has finished (a head accessory over the solved head, in the rig's `over`
+ * slab), so a townsfolk look reads its role at a glance without a
  * bespoke garment system of its own: an apron, a satchel, a tabard, a
  * brimmed hat, a stole, a patched hood. Each is drawn in the same figure-unit
  * space Carl's own rig paints in (`carl/proportions.ts`'s constants), so it
@@ -15,13 +16,11 @@
 import { mix, rgba } from '../carlArt';
 import type { CarlPose } from '../carl/rig';
 import { type CardinalView } from '../../facingView';
-import type { Ramp } from '../carl/palette';
 import {
   HEAD_CENTRE_Y,
   HEAD_RX,
   HEAD_RY,
   HIP_Y,
-  LEG_ROOT_HALF,
   SHOULDER_HALF,
   SHOULDER_Y,
   WAIST_Y,
@@ -69,236 +68,12 @@ const FINE_OUTLINE_WIDTH = 0.006;
 /** A slightly heavier stroke weight for a prop's own most visible line. */
 const PROP_STROKE_WIDTH = 0.01;
 
-// ── Trousers ─────────────────────────────────────────────────────────────────
-//
-// Carl's own canon look is bare-legged below his boxers — a trait of his own
-// character, not of the rig every look shares. A town of citizens in his
-// boxers reads as absurd rather than unfinished, so every adult look wears
-// trousers over the bare legs his own painter draws, following the pose's own
-// foot targets rather than a fixed shape, so they track the stride instead of
-// floating free of it.
-
-/**
- * Half-widths, the same convention `THIGH_WIDTH`/`CALF_WIDTH`/`ANKLE_WIDTH`
- * in `carl/proportions.ts` use (thigh 0.14, calf 0.11, ankle 0.04). The
- * `outer` share is comfortably past the bare leg so loose cloth clears it;
- * the `inner` share is deliberately smaller than `outer` (not the bare leg's
- * own half-width) so the two legs' fabric never meets in the middle and
- * fuses into one blob — a real trouser has a visible seam and shadow between
- * the legs even standing with the feet close together.
- */
-const TROUSER_HIP_OUTER = 0.15;
-const TROUSER_HIP_INNER = 0.065;
-const TROUSER_KNEE_OUTER = 0.115;
-const TROUSER_KNEE_INNER = 0.05;
-const TROUSER_ANKLE_OUTER = 0.075;
-const TROUSER_ANKLE_INNER = 0.035;
-/** Edge-on there is no left/right to separate, so both edges use the outer (fuller) width. */
-const TROUSER_PROFILE_HALF = TROUSER_HIP_OUTER;
-const TROUSER_PROFILE_KNEE_HALF = TROUSER_KNEE_OUTER;
-const TROUSER_PROFILE_ANKLE_HALF = TROUSER_ANKLE_OUTER;
-const TROUSER_HIP_Y = WAIST_Y;
-/** In profile both legs root near the centreline rather than at the hip's full width. */
-const TROUSER_PROFILE_ROOT_X = 0.02;
-/** How far the knee bend bows toward the foot's own lean, as a share of the hip-to-foot span. */
-const TROUSER_KNEE_BOW = 0.5;
-const TROUSER_OUTLINE_WIDTH = 0.012;
-const TROUSER_INSEAM_SHADOW_ALPHA = 0.55;
-const TROUSER_CUFF_WIDTH = 0.014;
-const TROUSER_CUFF_ALPHA = 0.6;
-/** A lit stripe down the outer edge, so a leg reads as a round form rather than a flat card. */
-const TROUSER_LIGHT_STRIPE_WIDTH = 0.022;
-const TROUSER_LIGHT_STRIPE_ALPHA = 0.35;
-const TROUSER_LIGHT_STRIPE_INSET = 0.55;
-/** The waistband: a band across both legs' own hip points. */
-const WAISTBAND_STRIP_HEIGHT = 0.03;
-const WAISTBAND_STRIP_ALPHA = 0.7;
-
-interface Vec2 {
-  readonly x: number;
-  readonly y: number;
-}
-
-function unitPerp(from: Vec2, to: Vec2): Vec2 {
-  const dx = to.x - from.x;
-  const dy = to.y - from.y;
-  const len = Math.hypot(dx, dy) || 1;
-  return { x: -dy / len, y: dx / len };
-}
-
-function normalize(v: Vec2): Vec2 {
-  const len = Math.hypot(v.x, v.y) || 1;
-  return { x: v.x / len, y: v.y / len };
-}
-
-/**
- * One trouser leg as a single continuous tapered outline (hip → knee → foot,
- * both edges), rather than two stroked-and-filled capsules meeting at the
- * knee — two capsules leave a visible seam where their rounded caps overlap
- * imperfectly at the joint; one path miters cleanly through the bend instead.
- * `outward` is the leg's own sideways sign (−1 left, +1 right) so the inner
- * (crotch-side) edge can stay narrower than the outer edge.
- */
-function traceTaperedLeg(
-  ctx: Ctx,
-  hip: Vec2,
-  foot: Vec2,
-  outward: number,
-  hipOuter: number,
-  hipInner: number,
-  kneeOuter: number,
-  kneeInner: number,
-  ankleOuter: number,
-  ankleInner: number,
-): void {
-  const knee = {
-    x: hip.x + (foot.x - hip.x) * TROUSER_KNEE_BOW,
-    y: hip.y + (foot.y - hip.y) * TROUSER_KNEE_BOW,
-  };
-  const perpUpper = unitPerp(hip, knee);
-  const perpLower = unitPerp(knee, foot);
-  const perpKnee = normalize({ x: perpUpper.x + perpLower.x, y: perpUpper.y + perpLower.y });
-  // `outward` decides which side of each perpendicular is the fuller, outer edge.
-  const outer = (base: Vec2, perp: Vec2, half: number): Vec2 => ({
-    x: base.x + perp.x * half * outward,
-    y: base.y + perp.y * half * outward,
-  });
-  const inner = (base: Vec2, perp: Vec2, half: number): Vec2 => ({
-    x: base.x - perp.x * half * outward,
-    y: base.y - perp.y * half * outward,
-  });
-  ctx.beginPath();
-  ctx.moveTo(outer(hip, perpUpper, hipOuter).x, outer(hip, perpUpper, hipOuter).y);
-  const kneeOut = outer(knee, perpKnee, kneeOuter);
-  ctx.lineTo(kneeOut.x, kneeOut.y);
-  const footOut = outer(foot, perpLower, ankleOuter);
-  ctx.lineTo(footOut.x, footOut.y);
-  const footIn = inner(foot, perpLower, ankleInner);
-  ctx.lineTo(footIn.x, footIn.y);
-  const kneeIn = inner(knee, perpKnee, kneeInner);
-  ctx.lineTo(kneeIn.x, kneeIn.y);
-  const hipIn = inner(hip, perpUpper, hipInner);
-  ctx.lineTo(hipIn.x, hipIn.y);
-  ctx.closePath();
-}
-
-/** Paints one trouser leg: fill, outline, a lit outer stripe, and a cuff line at the ankle. */
-function paintTrouserLeg(
-  ctx: Ctx,
-  hip: Vec2,
-  foot: Vec2,
-  outward: number,
-  widths: readonly [number, number, number, number, number, number],
-  fill: string,
-  outline: string,
-): void {
-  const [hipOuter, hipInner, kneeOuter, kneeInner, ankleOuter, ankleInner] = widths;
-  traceTaperedLeg(
-    ctx,
-    hip,
-    foot,
-    outward,
-    hipOuter,
-    hipInner,
-    kneeOuter,
-    kneeInner,
-    ankleOuter,
-    ankleInner,
-  );
-  ctx.fillStyle = fill;
-  ctx.fill();
-  ctx.strokeStyle = outline;
-  ctx.lineWidth = TROUSER_OUTLINE_WIDTH;
-  ctx.stroke();
-
-  // A lit stripe along the outer edge reads as a round leg, not a flat card.
-  const knee = {
-    x: hip.x + (foot.x - hip.x) * TROUSER_KNEE_BOW,
-    y: hip.y + (foot.y - hip.y) * TROUSER_KNEE_BOW,
-  };
-  const stripeInset = (a: Vec2, b: Vec2, t: number): Vec2 => ({
-    x: a.x + (b.x - a.x) * t,
-    y: a.y + (b.y - a.y) * t,
-  });
-  ctx.strokeStyle = rgba(lit(outline), TROUSER_LIGHT_STRIPE_ALPHA);
-  ctx.lineWidth = TROUSER_LIGHT_STRIPE_WIDTH;
-  ctx.lineCap = 'round';
-  ctx.beginPath();
-  const stripeTop = stripeInset(hip, knee, 1 - TROUSER_LIGHT_STRIPE_INSET);
-  ctx.moveTo(stripeTop.x, stripeTop.y);
-  ctx.lineTo(knee.x, knee.y);
-  ctx.lineTo(foot.x, foot.y);
-  ctx.stroke();
-
-  // The cuff: a lit hem line just above the ankle.
-  const cuffUp = { x: foot.x, y: foot.y - ankleOuter * 0.6 };
-  ctx.strokeStyle = rgba(lit(outline), TROUSER_CUFF_ALPHA);
-  ctx.lineWidth = TROUSER_CUFF_WIDTH;
-  ctx.beginPath();
-  ctx.moveTo(cuffUp.x - ankleOuter, cuffUp.y);
-  ctx.lineTo(cuffUp.x + ankleOuter, cuffUp.y);
-  ctx.stroke();
-}
-
-/**
- * Draws trousers over both legs, following `pose`'s own foot targets — the
- * far leg a shade darker than the near one, the same lit/shadow-side read
- * every other worn accessory here uses — plus a waistband across the hip and
- * an inseam shadow between the legs, so the crotch reads as a gap rather
- * than fused cloth.
- */
-export function drawTrousers(ctx: Ctx, view: CardinalView, pose: CarlPose, color: string): void {
-  const profile = view === 'side';
-  const leftRootX = profile ? -TROUSER_PROFILE_ROOT_X : -LEG_ROOT_HALF;
-  const rightRootX = profile ? TROUSER_PROFILE_ROOT_X : LEG_ROOT_HALF;
-  const leftHip = { x: leftRootX, y: TROUSER_HIP_Y };
-  const rightHip = { x: rightRootX, y: TROUSER_HIP_Y };
-  const far = shaded(color);
-  const widths: readonly [number, number, number, number, number, number] = profile
-    ? [
-        TROUSER_PROFILE_HALF,
-        TROUSER_PROFILE_HALF,
-        TROUSER_PROFILE_KNEE_HALF,
-        TROUSER_PROFILE_KNEE_HALF,
-        TROUSER_PROFILE_ANKLE_HALF,
-        TROUSER_PROFILE_ANKLE_HALF,
-      ]
-    : [
-        TROUSER_HIP_OUTER,
-        TROUSER_HIP_INNER,
-        TROUSER_KNEE_OUTER,
-        TROUSER_KNEE_INNER,
-        TROUSER_ANKLE_OUTER,
-        TROUSER_ANKLE_INNER,
-      ];
-  // Far leg first, so in profile the near leg's cloth laps over it.
-  paintTrouserLeg(ctx, leftHip, pose.leftFoot, 1, widths, far, shaded(far));
-  paintTrouserLeg(ctx, rightHip, pose.rightFoot, -1, widths, color, shaded(color));
-
-  if (profile) return;
-  // The waistband and the inseam shadow only mean anything front/back on, where both legs show side by side.
-  ctx.strokeStyle = rgba(shaded(color), WAISTBAND_STRIP_ALPHA);
-  ctx.lineWidth = WAISTBAND_STRIP_HEIGHT;
-  ctx.lineCap = 'round';
-  ctx.beginPath();
-  ctx.moveTo(leftHip.x - TROUSER_HIP_OUTER, TROUSER_HIP_Y);
-  ctx.lineTo(rightHip.x + TROUSER_HIP_OUTER, TROUSER_HIP_Y);
-  ctx.stroke();
-  ctx.strokeStyle = rgba('#100c14', TROUSER_INSEAM_SHADOW_ALPHA);
-  ctx.lineWidth = TROUSER_HIP_INNER * 1.3;
-  ctx.lineCap = 'round';
-  ctx.beginPath();
-  ctx.moveTo(0, TROUSER_HIP_Y);
-  ctx.lineTo(0, TROUSER_HIP_Y + WAISTBAND_STRIP_HEIGHT * 2);
-  ctx.stroke();
-}
-
 // ── Shoes ────────────────────────────────────────────────────────────────────
 //
-// Carl's own canon look is barefoot — again a trait of his own character, not
-// of the rig. Every townsfolk look wears a flat shoe over each bare foot,
-// following the pose's own foot target the same way trousers do, so nothing
-// of his bare skin shows past the ankle on anyone.
+// Carl's own canon look is barefoot — a trait of his own character, not of
+// the rig. A flat shoe laid over each foot target of a finished figure, for a
+// figure that dresses after its paint rather than through the cast's
+// `townsfolk_shoes` garment.
 
 const SHOE_HALF_WIDTH = 0.09;
 const SHOE_HALF_LENGTH = 0.065;
@@ -324,51 +99,6 @@ function drawShoe(ctx: Ctx, foot: { x: number; y: number }, color: string): void
   ctx.moveTo(foot.x - SHOE_HALF_WIDTH * 0.6, cy - SHOE_HALF_LENGTH * 0.2);
   ctx.lineTo(foot.x + SHOE_HALF_WIDTH * 0.6, cy - SHOE_HALF_LENGTH * 0.2);
   ctx.stroke();
-}
-
-/** Wet pasture mud: darker and warmer than any trouser colour, so it reads on dark boots too. */
-const MUD_COLOR = '#6a5236';
-const MUD_ALPHA = 0.9;
-/** Mud cakes the lower half of the boot and the toe, never the whole shoe. */
-const MUD_HALF_WIDTH_SHARE = 0.85;
-const MUD_HALF_HEIGHT_SHARE = 0.55;
-const MUD_DROP_SHARE = 0.45;
-/** Splashes flicked up the trouser cuff above each boot. */
-const MUD_SPLASH_RADIUS = 0.014;
-const MUD_SPLASHES: readonly { dx: number; rise: number }[] = [
-  { dx: -0.05, rise: 0.07 },
-  { dx: 0.035, rise: 0.1 },
-  { dx: 0.06, rise: 0.055 },
-];
-
-/** Cakes both of `pose`'s boots in mud, over shoes {@link drawShoes} has already painted. */
-export function drawShoeMud(ctx: Ctx, pose: CarlPose): void {
-  ctx.fillStyle = rgba(MUD_COLOR, MUD_ALPHA);
-  for (const foot of [pose.leftFoot, pose.rightFoot]) {
-    const cy = foot.y - SHOE_RISE + SHOE_HALF_LENGTH * MUD_DROP_SHARE;
-    ctx.beginPath();
-    ctx.ellipse(
-      foot.x,
-      cy,
-      SHOE_HALF_WIDTH * MUD_HALF_WIDTH_SHARE,
-      SHOE_HALF_LENGTH * MUD_HALF_HEIGHT_SHARE,
-      0,
-      0,
-      Math.PI * 2,
-    );
-    ctx.fill();
-    for (const splash of MUD_SPLASHES) {
-      ctx.beginPath();
-      ctx.arc(
-        foot.x + splash.dx,
-        foot.y - SHOE_RISE - splash.rise,
-        MUD_SPLASH_RADIUS,
-        0,
-        Math.PI * 2,
-      );
-      ctx.fill();
-    }
-  }
 }
 
 /** Draws a flat shoe over each of `pose`'s own feet — the far one a shade darker, matching every other worn accessory here. */
@@ -712,263 +442,32 @@ const ACCESSORY_PAINTERS: Readonly<
   builderRule: drawBuilderRule,
 };
 
-/** Paints `spec`'s accessory, in figure-unit space, over an already-drawn body. */
+/** Worn on the head, so painted where the solved head is rather than where it rests. */
+const HEAD_ACCESSORIES: ReadonlySet<AccessoryKind> = new Set<AccessoryKind>([
+  'brimmedHat',
+  'patchedHood',
+]);
+
+/** Paints `spec`'s accessory, in figure-unit space, over an already-drawn body; head accessories are left to {@link drawHeadAccessory}. */
 export function drawAccessory(ctx: Ctx, view: CardinalView, spec: AccessorySpec): void {
-  if (spec.kind === 'none') return;
+  if (spec.kind === 'none' || HEAD_ACCESSORIES.has(spec.kind)) return;
   ACCESSORY_PAINTERS[spec.kind](ctx, view, spec);
 }
 
-// ── Hair style overlays ──────────────────────────────────────────────────────
-//
-// Carl's own hair is one fixed short-tufted style. Colour now varies with
-// `setCarlSkinHairRamp`; style is layered on top as an overlay rather than
-// by touching his own hair painter — cheap, and it cannot desync from his
-// own hair geometry the way patching his painter's internals could.
-
-export type HairStyleKind = 'short' | 'bald' | 'long' | 'curly' | 'headscarf';
-
-const BALD_PATCH_RX = HEAD_RX * 0.92;
-const BALD_PATCH_RY = HEAD_RY * 0.98;
-const BALD_PATCH_RISE = HEAD_RY * 0.55;
-const BALD_PATCH_OUTLINE_WIDTH = 0.01;
-
-/** A skin-toned patch over the crown, painted after Carl's own hair — the cheapest way to erase it without touching his painter. */
-function drawBaldPatch(ctx: Ctx, skin: Ramp): void {
-  ctx.fillStyle = skin.base;
-  ctx.beginPath();
-  ctx.ellipse(0, HEAD_CENTRE_Y - BALD_PATCH_RISE, BALD_PATCH_RX, BALD_PATCH_RY, 0, Math.PI, 0);
-  ctx.fill();
-  ctx.strokeStyle = skin.light;
-  ctx.lineWidth = BALD_PATCH_OUTLINE_WIDTH;
-  ctx.beginPath();
-  ctx.ellipse(0, HEAD_CENTRE_Y - BALD_PATCH_RISE, BALD_PATCH_RX, BALD_PATCH_RY, 0, Math.PI, 0);
-  ctx.stroke();
-}
-
 /**
- * `destination-over` compositing (the previous approach here) only paints
- * into canvas that is still transparent when it runs. By the time a hair
- * style overlay runs, Carl's own body and head painter has already left no
- * transparent pixels anywhere near the head, down the neck or across the
- * shoulders — so a mass meant to hang past his own hair silhouette had
- * nowhere left to paint into and was, in practice, entirely invisible.
- *
- * The fix draws normally (`source-over`, on top of the finished body) but
- * clipped to exclude an ellipse a little bigger than the skull, using the
- * `evenodd` fill rule across a bounding rect and the ellipse together: a
- * point inside the rect only is covered an odd number of times (painted), a
- * point inside both the rect and the ellipse is covered an even number of
- * times (excluded). That protects the already-finished face and head
- * outline while still letting hair paint over the shoulders and torso below
- * it, which is where it actually needs to show.
+ * Paints `spec`'s accessory if it is worn on the head, on a head whose centre
+ * is `headCentre` in figure units: the painters place it on the resting head,
+ * and a walk or a talk moves the head off that rest.
  */
-const HEAD_EXCLUDE_SCALE = 1.1;
-const HEAD_EXCLUDE_BOUNDS = 3;
-
-function withHeadExcluded(ctx: Ctx, draw: () => void): void {
-  ctx.save();
-  ctx.beginPath();
-  ctx.rect(
-    -HEAD_EXCLUDE_BOUNDS,
-    -HEAD_EXCLUDE_BOUNDS,
-    HEAD_EXCLUDE_BOUNDS * 2,
-    HEAD_EXCLUDE_BOUNDS * 2,
-  );
-  ctx.ellipse(
-    0,
-    HEAD_CENTRE_Y,
-    HEAD_RX * HEAD_EXCLUDE_SCALE,
-    HEAD_RY * HEAD_EXCLUDE_SCALE,
-    0,
-    0,
-    Math.PI * 2,
-  );
-  ctx.clip('evenodd');
-  draw();
-  ctx.restore();
-}
-
-const LONG_HAIR_TOP_RISE = HEAD_RY * 0.4;
-const LONG_HAIR_DROP = HEAD_RY * 2.4;
-const LONG_HAIR_HALF_WIDTH = HEAD_RX * 0.85;
-const LONG_HAIR_OUTLINE_WIDTH = 0.012;
-/** The mass's own curve control points bow slightly wider than its start/end width. */
-const LONG_HAIR_BOW_SCALE = 1.1;
-/** The curve's control point sits partway down the drop, not at its midpoint. */
-const LONG_HAIR_BOW_DROP_FRAC = 0.6;
-/**
- * How close to the centreline a lobe's own inner edge and bottom point come
- * — never all the way to 0. Head-on, long hair must frame the face rather
- * than cross it: the first cut traced one continuous mass from the head's
- * left edge to its right edge, which read fine behind the skull but, once
- * `withHeadExcluded`'s clip let hair paint past the chin and down the neck
- * (below the protected head ellipse, where there is no face to guard), it
- * closed back up across the centreline there and painted a beard. Each side
- * is now its own lobe, confined to one sign of x throughout, so nothing ever
- * crosses the front of the face or the chin.
- */
-const LONG_HAIR_INNER_WIDTH = HEAD_RX * 0.22;
-const LONG_HAIR_BOTTOM_INSET = HEAD_RX * 0.4;
-
-/** One side's hanging lobe, head-on or from behind — `side` is −1 (left) or 1 (right), and every x term carries its sign, so the lobe never reaches the centreline. */
-function traceLongHairLobe(ctx: Ctx, side: number): void {
-  const outer = side * LONG_HAIR_HALF_WIDTH;
-  const inner = side * LONG_HAIR_INNER_WIDTH;
-  const bottom = side * LONG_HAIR_BOTTOM_INSET;
-  ctx.beginPath();
-  ctx.moveTo(outer, HEAD_CENTRE_Y - LONG_HAIR_TOP_RISE);
-  ctx.quadraticCurveTo(
-    outer * LONG_HAIR_BOW_SCALE,
-    HEAD_CENTRE_Y + LONG_HAIR_DROP * LONG_HAIR_BOW_DROP_FRAC,
-    bottom,
-    HEAD_CENTRE_Y + LONG_HAIR_DROP,
-  );
-  ctx.quadraticCurveTo(
-    inner,
-    HEAD_CENTRE_Y + LONG_HAIR_DROP * LONG_HAIR_BOW_DROP_FRAC * LONG_HAIR_INNER_RETURN_FRAC,
-    inner,
-    HEAD_CENTRE_Y - LONG_HAIR_TOP_RISE * LONG_HAIR_INNER_TOP_FRAC,
-  );
-  ctx.closePath();
-}
-const LONG_HAIR_INNER_RETURN_FRAC = 0.6;
-const LONG_HAIR_INNER_TOP_FRAC = 0.3;
-
-/** Edge-on there is no left/right to frame — the whole mass hangs behind the head, on the side away from the face (`PROFILE_EAR_X` is negative for the same reason). */
-const PROFILE_LONG_HAIR_BACK = -1;
-
-function drawLongHairLobes(ctx: Ctx, hair: Ramp): void {
-  for (const side of [-1, 1]) {
-    ctx.fillStyle = hair.mid;
-    traceLongHairLobe(ctx, side);
-    ctx.fill();
-    ctx.strokeStyle = hair.shadow;
-    ctx.lineWidth = LONG_HAIR_OUTLINE_WIDTH;
-    traceLongHairLobe(ctx, side);
-    ctx.stroke();
-  }
-}
-
-/** A hanging mass behind the head and down the back, reaching the shoulder blades — tied back or loose, read the same at 32px, and never crossing the face. */
-function drawLongHairMass(ctx: Ctx, hair: Ramp, view: CardinalView): void {
-  withHeadExcluded(ctx, () => {
-    if (view === 'side') {
-      traceLongHairLobe(ctx, PROFILE_LONG_HAIR_BACK);
-      ctx.fillStyle = hair.mid;
-      ctx.fill();
-      ctx.strokeStyle = hair.shadow;
-      ctx.lineWidth = LONG_HAIR_OUTLINE_WIDTH;
-      traceLongHairLobe(ctx, PROFILE_LONG_HAIR_BACK);
-      ctx.stroke();
-      return;
-    }
-    drawLongHairLobes(ctx, hair);
-  });
-}
-
-const CURLY_BUMP_COUNT = 6;
-const CURLY_BUMP_RADIUS = HEAD_RX * 0.32;
-const CURLY_RING_RISE = HEAD_RY * 1.05;
-const CURLY_RING_RX = HEAD_RX * 0.95;
-/** The ring flattens vertically to half its own horizontal radius. */
-const CURLY_RING_VERTICAL_FRAC = 0.5;
-const CURLY_BUMP_OUTLINE_WIDTH = 0.008;
-
-/** A ring of round bumps over the crown, reading as volume/curl without a per-strand painter — see {@link withHeadExcluded} for why this can't use `destination-over`. */
-function drawCurlyMass(ctx: Ctx, hair: Ramp): void {
-  withHeadExcluded(ctx, () => {
-    ctx.fillStyle = hair.mid;
-    for (let i = 0; i < CURLY_BUMP_COUNT; i++) {
-      const t = i / (CURLY_BUMP_COUNT - 1);
-      const angle = Math.PI + t * Math.PI;
-      const x = Math.cos(angle) * CURLY_RING_RX;
-      const y =
-        HEAD_CENTRE_Y -
-        CURLY_RING_RISE +
-        Math.sin(angle) * CURLY_RING_RX * CURLY_RING_VERTICAL_FRAC;
-      ctx.beginPath();
-      ctx.arc(x, y, CURLY_BUMP_RADIUS, 0, Math.PI * 2);
-      ctx.fill();
-    }
-    ctx.strokeStyle = hair.shadow;
-    ctx.lineWidth = CURLY_BUMP_OUTLINE_WIDTH;
-    for (let i = 0; i < CURLY_BUMP_COUNT; i++) {
-      const t = i / (CURLY_BUMP_COUNT - 1);
-      const angle = Math.PI + t * Math.PI;
-      const x = Math.cos(angle) * CURLY_RING_RX;
-      const y =
-        HEAD_CENTRE_Y -
-        CURLY_RING_RISE +
-        Math.sin(angle) * CURLY_RING_RX * CURLY_RING_VERTICAL_FRAC;
-      ctx.beginPath();
-      ctx.arc(x, y, CURLY_BUMP_RADIUS, 0, Math.PI * 2);
-      ctx.stroke();
-    }
-  });
-}
-
-/**
- * A kerchief tied over the crown, covering the hair rather than extending
- * it — painted as an ordinary opaque shape (no head-exclusion clip needed,
- * since covering the head, not draping past it, is the whole point) with a
- * small knot at the back.
- */
-/**
- * Noticeably bigger than the head, not merely a hair-tinted cap — a
- * headscarf has to extend past Carl's own hair silhouette on every side to
- * read as a separate draped item rather than a recolour of his hair.
- */
-const SCARF_RX = HEAD_RX * 1.35;
-const SCARF_RY = HEAD_RY * 1.15;
-const SCARF_RISE = HEAD_RY * 0.25;
-const SCARF_OUTLINE_WIDTH = 0.012;
-/**
- * No knot mark: a first cut placed one at `HEAD_CENTRE_Y + HEAD_RY * 0.55`,
- * meaning to suggest a tie at the back of the head, but every view draws the
- * same geometry and `MOUTH_Y` (`HEAD_RY * 0.62`) sits almost exactly there —
- * head-on it painted a dark filled circle on top of the mouth, reading as an
- * open "o" regardless of the pose's own (correctly closed) mouth. A real
- * back-of-head knot needs the view split `drawHairStyleOverlay` doesn't wire
- * up today; cut rather than risk the same collision again.
- */
-function drawHeadscarf(ctx: Ctx, cloth: Ramp): void {
-  ctx.fillStyle = cloth.mid;
-  ctx.beginPath();
-  ctx.ellipse(0, HEAD_CENTRE_Y - SCARF_RISE, SCARF_RX, SCARF_RY, 0, Math.PI, 0);
-  ctx.fill();
-  ctx.strokeStyle = cloth.shadow;
-  ctx.lineWidth = SCARF_OUTLINE_WIDTH;
-  ctx.beginPath();
-  ctx.ellipse(0, HEAD_CENTRE_Y - SCARF_RISE, SCARF_RX, SCARF_RY, 0, Math.PI, 0);
-  ctx.stroke();
-}
-
-/**
- * Paints a hair-style overlay for `style`; `'short'` is Carl's own native
- * tufted style and paints nothing extra. `clothRamp` is the look's own
- * garment ramp — the headscarf's material, chosen to contrast in value with
- * the hair rather than read as a same-toned cap.
- */
-export function drawHairStyleOverlay(
+export function drawHeadAccessory(
   ctx: Ctx,
   view: CardinalView,
-  style: HairStyleKind,
-  hairRamp: Ramp,
-  skinRamp: Ramp,
-  clothRamp: Ramp,
+  spec: AccessorySpec,
+  headCentre: { readonly x: number; readonly y: number },
 ): void {
-  if (style === 'short') return;
-  if (style === 'bald') {
-    drawBaldPatch(ctx, skinRamp);
-    return;
-  }
-  if (style === 'long') {
-    drawLongHairMass(ctx, hairRamp, view);
-    return;
-  }
-  if (style === 'headscarf') {
-    drawHeadscarf(ctx, clothRamp);
-    return;
-  }
-  drawCurlyMass(ctx, hairRamp);
+  if (spec.kind === 'none' || !HEAD_ACCESSORIES.has(spec.kind)) return;
+  ctx.save();
+  ctx.translate(headCentre.x, headCentre.y - HEAD_CENTRE_Y);
+  ACCESSORY_PAINTERS[spec.kind](ctx, view, spec);
+  ctx.restore();
 }

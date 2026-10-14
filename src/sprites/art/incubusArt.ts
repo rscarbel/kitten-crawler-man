@@ -17,9 +17,8 @@
  */
 
 import { type CarlAttachments } from './carl/figure';
-import { footSoleLandmarks, LEFT_FOOT_OUT, RIGHT_FOOT_OUT } from './carl/feet';
 import { headAngle } from './carl/head';
-import { addCapsule, crease, FIGURE_CREASE_LAYERS, shadeForm } from './carl/paint';
+import { crease, FIGURE_CREASE_LAYERS, shadeForm } from './carl/paint';
 import {
   deriveGlossRamp,
   deriveRamp,
@@ -29,10 +28,12 @@ import {
   recededGloss,
   FAR_LIMB_SHADE,
 } from './carl/palette';
-import { type BoneChain, type CarlPose, type Skeleton, type ViewSpec } from './carl/rig';
+import { type CarlPose, type Skeleton, type ViewSpec } from './carl/rig';
 import { WAIST_HALF } from './carl/proportions';
 import { lerp, type Pt, rgba } from './carlArt';
 import { strokeSoftCrease } from './softShade';
+import { paintTrouserSeat } from './human/legwear';
+import { type TownsfolkLegwear } from '../garments/human/townsfolkLegwear';
 
 type Ctx = CanvasRenderingContext2D;
 
@@ -69,7 +70,14 @@ export const INCUBUS_SHIRT: GlossRamp = deriveGlossRamp('#7a1d36');
 
 const SASH: GlossRamp = deriveGlossRamp('#c99a36');
 const TROUSERS: GlossRamp = deriveGlossRamp('#2e2934');
-const BOOTS: GlossRamp = deriveGlossRamp('#2a1c1e');
+
+/** Dark wool trousers over polished dark shoes, worn as the cast's legwear garments. */
+export const INCUBUS_LEGWEAR: TownsfolkLegwear = {
+  cloth: TROUSERS,
+  cut: 'trousers',
+  footwear: deriveGlossRamp('#2a1c1e'),
+  muddy: false,
+};
 const WING_MEMBRANE: Ramp = deriveRamp('#58314b');
 const WING_BONE: Ramp = deriveRamp('#8e7a84');
 
@@ -744,150 +752,6 @@ function paintSash(ctx: Ctx, skeleton: Skeleton, view: ViewSpec): void {
   );
 }
 
-// ── Trousers and boots ───────────────────────────────────────────────────────
-
-/** Half-widths of a trouser leg, a little fuller than the bare leg they cover. */
-const TROUSER_HIP_HALF = 0.16;
-const TROUSER_KNEE_HALF = 0.095;
-const TROUSER_CUFF_HALF = 0.078;
-const TROUSER_CREASE_WIDTH = 0.012;
-const TROUSER_CREASE_OPACITY = 0.45;
-/** The trousers rise to the waist, well above the hip joint the leg hangs from. */
-const TROUSER_RISE = 0.12;
-/** Fine wool: barely a sheen. Polished boots: a hard one. */
-const WOOL_SPECULAR = 0.25;
-const POLISHED_LEATHER_SPECULAR = 0.8;
-/** The fold behind the knee: its span either side of the joint, and how far it sags. */
-const KNEE_FOLD_SPAN = 0.6;
-const KNEE_FOLD_SAG = 0.5;
-
-function paintTrouserLeg(ctx: Ctx, chain: BoneChain, ramp: GlossRamp): void {
-  const top = offsetPt(chain.root, 0, -TROUSER_RISE);
-  const traceLeg = (): void => {
-    ctx.beginPath();
-    addCapsule(ctx, top, chain.joint, TROUSER_HIP_HALF, TROUSER_KNEE_HALF);
-    addCapsule(ctx, chain.joint, chain.end, TROUSER_KNEE_HALF, TROUSER_CUFF_HALF);
-  };
-  shadeForm(
-    ctx,
-    traceLeg,
-    { from: top, to: chain.end },
-    ramp,
-    { halfWidth: TROUSER_HIP_HALF, specular: WOOL_SPECULAR },
-    () =>
-      crease(
-        ctx,
-        () => {
-          ctx.moveTo(chain.joint.x - TROUSER_KNEE_HALF * KNEE_FOLD_SPAN, chain.joint.y);
-          ctx.quadraticCurveTo(
-            chain.joint.x,
-            chain.joint.y + TROUSER_KNEE_HALF * KNEE_FOLD_SAG,
-            chain.joint.x + TROUSER_KNEE_HALF * KNEE_FOLD_SPAN,
-            chain.joint.y,
-          );
-        },
-        TROUSER_CREASE_WIDTH,
-        ramp,
-        TROUSER_CREASE_OPACITY,
-      ),
-  );
-}
-
-const BOOT_TOE_HALF = 0.062;
-const BOOT_HEEL_HALF = 0.068;
-const BOOT_SHAFT_HALF = 0.07;
-/** How far up the shin the boot's shaft reaches, under the trouser cuff. */
-const BOOT_SHAFT_RISE = 0.08;
-
-function paintBoot(
-  ctx: Ctx,
-  chain: BoneChain,
-  pitch: number,
-  view: ViewSpec,
-  outward: number,
-  point: number,
-  ramp: GlossRamp,
-): void {
-  const { heel, toe } = footSoleLandmarks(chain.end, pitch, view, outward, point);
-  const heelTop = offsetPt(heel, 0, -BOOT_HEEL_HALF);
-  const toeTop = offsetPt(toe, 0, -BOOT_TOE_HALF);
-  const shaftTop = offsetPt(chain.end, 0, -BOOT_SHAFT_RISE);
-  shadeForm(
-    ctx,
-    () => {
-      ctx.beginPath();
-      addCapsule(ctx, heelTop, toeTop, BOOT_HEEL_HALF, BOOT_TOE_HALF);
-      addCapsule(ctx, shaftTop, chain.end, BOOT_SHAFT_HALF, BOOT_SHAFT_HALF);
-    },
-    { from: heelTop, to: toeTop },
-    ramp,
-    { halfWidth: BOOT_HEEL_HALF, specular: POLISHED_LEATHER_SPECULAR },
-  );
-}
-
-/**
- * The seat of the trousers, waist to crotch, wide enough to swallow the rig's
- * flared boxer shorts: a leg tube alone leaves their hem showing either side
- * of the thigh.
- */
-const SEAT_HALF = 0.24;
-/** Edge-on the shorts' seat runs well behind the hip, over the buttocks. */
-const SEAT_PROFILE_HALF = 0.25;
-const SEAT_DROP_BELOW_HIP = 0.2;
-const SEAT_HEM_TAPER = 0.85;
-
-function paintSeat(ctx: Ctx, skeleton: Skeleton, view: ViewSpec, ramp: GlossRamp): void {
-  const half = view.profile ? SEAT_PROFILE_HALF : SEAT_HALF * view.girth;
-  const top = skeleton.waist.y;
-  const bottom = skeleton.hip.y + SEAT_DROP_BELOW_HIP;
-  const centreX = skeleton.hip.x;
-  const trace = (): void => {
-    ctx.beginPath();
-    ctx.moveTo(centreX - half, top);
-    ctx.lineTo(centreX + half, top);
-    ctx.lineTo(centreX + half * SEAT_HEM_TAPER, bottom);
-    ctx.lineTo(centreX - half * SEAT_HEM_TAPER, bottom);
-    ctx.closePath();
-  };
-  shadeForm(ctx, trace, { from: { x: centreX, y: top }, to: { x: centreX, y: bottom } }, ramp, {
-    halfWidth: half,
-  });
-}
-
-function paintLegwear(ctx: Ctx, skeleton: Skeleton, view: ViewSpec, pose: CarlPose): void {
-  paintSeat(ctx, skeleton, view, TROUSERS);
-  // Edge-on his left leg is the far one and recedes; head-on neither does.
-  const farShade = view.profile ? FAR_LIMB_SHADE : 0;
-  const legs = [
-    {
-      chain: skeleton.leftLeg,
-      shade: farShade,
-      pitch: pose.leftFootPitch,
-      outward: LEFT_FOOT_OUT,
-      point: pose.leftFootPoint ?? 0,
-    },
-    {
-      chain: skeleton.rightLeg,
-      shade: 0,
-      pitch: pose.rightFootPitch,
-      outward: RIGHT_FOOT_OUT,
-      point: pose.rightFootPoint ?? 0,
-    },
-  ];
-  for (const leg of legs) {
-    paintBoot(
-      ctx,
-      leg.chain,
-      leg.pitch,
-      view,
-      leg.outward,
-      leg.point,
-      recededGloss(BOOTS, leg.shade),
-    );
-    paintTrouserLeg(ctx, leg.chain, recededGloss(TROUSERS, leg.shade));
-  }
-}
-
 // ── Assembly ─────────────────────────────────────────────────────────────────
 
 /**
@@ -939,7 +803,7 @@ export function incubusAttachments(motion: IncubusMotion): CarlAttachments {
       paintTail(ctx, tailFor(skeleton, view, motion.tailSway), receded(skin, FAR_LIMB_SHADE));
       wingsBehind(ctx, skeleton, view);
     },
-    overLegs: (ctx, skeleton, view, pose) => paintLegwear(ctx, skeleton, view, pose),
+    overLegs: (ctx, skeleton, view) => paintTrouserSeat(ctx, skeleton, view, TROUSERS),
     over: (ctx, skeleton, view, pose) => {
       paintChestOpening(ctx, skeleton, view, skin);
       paintSash(ctx, skeleton, view);

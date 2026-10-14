@@ -10,7 +10,8 @@
  *    boxers refusing the hotbar with the tutorial's hint, then put on from
  *    their context menu until the tutorial moves on.
  *  - A plain dungeon floor: I and G, the HUD's Bag button, a potion drunk from
- *    the bag, and a stack dropped through "how many?".
+ *    the bag, a stack dropped through "how many?", and the HUD's own hotbar
+ *    taking drags beside the bag exactly as the bag's hotbar row does.
  *
  * Run by `verify-inventory-screen.ts` once per platform, in a child process:
  * the platform is decided once, when the game's modules load.
@@ -47,6 +48,7 @@ const { SceneManager } = await import('../src/core/Scene.js');
 const { InputManager } = await import('../src/core/InputManager.js');
 const { getLevelDef } = await import('../src/levels/index.js');
 const { DungeonScene } = await import('../src/scenes/DungeonScene.js');
+const { QUEST_SLOT_IDX } = await import('../src/core/ItemDefs.js');
 const { TutorialController } = await import('../src/systems/TutorialController.js');
 const { MOUSE_POINTER_ID, PRIMARY_BUTTON } = await import('../src/ui/core/pointer.js');
 const { toCssRect } = await import('../src/ui/hud/HudSurface.js');
@@ -93,6 +95,10 @@ function check(ok: boolean, message: string): void {
 
 function section(title: string): void {
   console.log(`\n── ${onPhone ? 'phone' : 'desktop'} scene: ${title}`);
+}
+
+function contains(r: Rect, p: Point): boolean {
+  return p.x >= r.x && p.x < r.x + r.w && p.y >= r.y && p.y < r.y + r.h;
 }
 
 function centre(r: Rect): Point {
@@ -238,6 +244,19 @@ function bagCell(scene: Scene, id: ItemId): Point {
   const rect = menus.inventoryScreen.geometry.bagCells.get(slot);
   if (rect === undefined) throw new Error(`${id} is not on screen in the bag`);
   return centre(toCssRect(rect, scene.ui.uiScale));
+}
+
+/** Slot `index` of the HUD's own bar, as drawn last frame, or null when the HUD drew no bar. */
+function hudHotbarRect(scene: Scene, index: number): Rect | null {
+  const hudFrame = scene['hud'].frame;
+  const rect = hudFrame?.geometry.hotbar.slots[index];
+  return hudFrame === null || rect === undefined ? null : toCssRect(rect, hudFrame.uiScale);
+}
+
+function hudHotbarCell(scene: Scene, index: number): Point {
+  const rect = hudHotbarRect(scene, index);
+  if (rect === null) throw new Error(`the HUD drew no hotbar slot ${index}`);
+  return centre(rect);
 }
 
 function hotbarCell(scene: Scene, index: number): Point {
@@ -445,6 +464,74 @@ section('a dungeon floor');
       );
     });
   check(dropped, 'onto the floor');
+
+  section('the HUD’s hotbar beside the bag opened from the pause menu');
+  tick(scene, 1);
+  human.inventory.addItem('speed_fizz', 1);
+  human.inventory.addItem('marching_boots', 1);
+  const bar = human.inventory.actionBar.slots;
+  const freeSlots = bar.flatMap((item, index) =>
+    item === null && index !== QUEST_SLOT_IDX ? [index] : [],
+  );
+  const freeSlotsNeeded = 3;
+  const enoughFreeSlots = freeSlots.length >= freeSlotsNeeded;
+  const [first, second, third] = freeSlots;
+  scene['togglePause']();
+  tick(scene, 1);
+  const inventoryEntry = regionPoint(
+    scene,
+    (id, surfaceId) => surfaceId === PAUSE_SURFACE_ID && id.endsWith('/inventory'),
+  );
+  if (inventoryEntry !== null) tap(scene, inventoryEntry);
+  tick(scene, 1);
+  check(screen.isOpen && screen.tab === 'bag', 'the pause menu’s Inventory entry opens the bag');
+  const panelFrame = screen.geometry.frame;
+  const hudSlot = hudHotbarRect(scene, first);
+  const hudBarShows =
+    panelFrame !== null &&
+    hudSlot !== null &&
+    !contains(toCssRect(panelFrame, scene.ui.uiScale), centre(hudSlot));
+  if (!onPhone) check(hudBarShows, 'the HUD’s hotbar shows beside the bag on a desktop');
+  check(enoughFreeSlots, 'the hotbar has room for the HUD hotbar drags');
+  if (hudBarShows && enoughFreeSlots) {
+    const fizzInBag = (): boolean =>
+      human.inventory.bag.slots.some((item) => item?.id === 'speed_fizz');
+    await drag(scene, bagCell(scene, 'speed_fizz'), hudHotbarCell(scene, first));
+    check(bar[first]?.id === 'speed_fizz', 'a drag from the bag onto the HUD’s hotbar lands');
+    await drag(scene, hudHotbarCell(scene, first), hudHotbarCell(scene, second));
+    check(
+      bar[second]?.id === 'speed_fizz' && bar[first] === null,
+      'a drag along the HUD’s hotbar rearranges it',
+    );
+    await drag(scene, hudHotbarCell(scene, second), hotbarCell(scene, third));
+    check(
+      bar[third]?.id === 'speed_fizz' && bar[second] === null,
+      'a drag from the HUD’s hotbar onto the bag’s hotbar row moves it there',
+    );
+    await drag(scene, hotbarCell(scene, third), hudHotbarCell(scene, first));
+    check(
+      bar[first]?.id === 'speed_fizz' && bar[third] === null,
+      'and back from the row onto the HUD’s hotbar',
+    );
+    tap(scene, hudHotbarCell(scene, first));
+    check(
+      screen.selection?.source === 'hotbar' && screen.selection.slotIdx === first,
+      'a tap on the HUD’s hotbar selects the stack as the row does',
+    );
+    check(bar[first]?.id === 'speed_fizz', 'rather than using it');
+    await drag(scene, bagCell(scene, 'marching_boots'), hudHotbarCell(scene, second));
+    check(
+      bar[second] === null && screen.notice?.id === 'marching_boots',
+      'gear refuses the HUD’s hotbar and says why, as it refuses the row',
+    );
+    const grid = screen.geometry.grid;
+    if (grid !== null) {
+      await drag(scene, hudHotbarCell(scene, first), centre(toCssRect(grid, scene.ui.uiScale)));
+    }
+    check(bar[first] === null && fizzInBag(), 'a drag from the HUD’s hotbar onto the grid bags it');
+  }
+  screen.close();
+  tick(scene, 1);
 }
 
 console.log(

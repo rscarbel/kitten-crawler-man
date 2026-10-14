@@ -35,16 +35,40 @@ export interface HotbarHost {
 }
 
 /**
+ * How a press on the dynamite slot throws:
+ * - `charge` — the press lights the stick and its release throws it, as hard
+ *   as the press was long, the way he faces. A key or a mouse button.
+ * - `ready` — the press takes an unlit stick in hand and the next tap on the
+ *   world throws it there; a second press puts it away. A finger, which
+ *   cannot hold a slot down and point at the target at once.
+ */
+export type DynamiteGrip = 'charge' | 'ready';
+
+/** Shown the first time a stick is readied each session, then left to the player. */
+const DYNAMITE_READY_HINT = 'Tap where to throw it. Tap the dynamite again to put it away.';
+let dynamiteReadyHintShown = false;
+
+/**
  * Runs whatever the slot holds.
  *
  * Order is deliberate: the scene gets first refusal, then the universal item
  * kinds. A slot that means nothing here simply does nothing, rather than
  * buzzing — an empty slot is not a mistake.
  */
-export function activateHotbarSlot(host: HotbarHost, hotbarIdx: number): void {
+export function activateHotbarSlot(
+  host: HotbarHost,
+  hotbarIdx: number,
+  dynamiteGrip: DynamiteGrip = 'charge',
+): void {
   const { pm, bus, audio } = host.world;
   const active = pm.active();
   const slot = active.inventory.actionBar.slots[hotbarIdx];
+  // Any other slot, even an empty one, takes his hand back, and the
+  // dynamite's own slot pressed again is the way to put the stick away.
+  if (host.dynamite?.isReadied === true) {
+    host.dynamite.putAway(pm.human);
+    if (slot === null || slot.id === 'goblin_dynamite') return;
+  }
   if (slot === null) return;
   if (!active.canAct) {
     audio?.play('error_taking_action');
@@ -108,6 +132,8 @@ export function activateHotbarSlot(host: HotbarHost, hotbarIdx: number): void {
     if (host.dynamite.isCharging) {
       releaseDynamite(host);
       bus.emit('dynamiteUsed', { player: 'Human' });
+    } else if (dynamiteGrip === 'ready') {
+      readyDynamite(host, host.dynamite);
     } else if (!host.dynamite.beginCharge(hotbarIdx, pm.human)) {
       refuseDynamiteInSafeRoom(host);
     }
@@ -142,6 +168,34 @@ export const DYNAMITE_SAFE_ROOM_REFUSAL = 'No explosives in the safe room.';
 export function refuseDynamiteInSafeRoom(host: Pick<HotbarHost, 'world' | 'menus'>): void {
   host.world.audio?.play('error_taking_action');
   host.menus.announce(DYNAMITE_SAFE_ROOM_REFUSAL);
+}
+
+function readyDynamite(host: HotbarHost, dynamite: DynamiteSystem): void {
+  if (!dynamite.ready(host.world.pm.human)) {
+    refuseDynamiteInSafeRoom(host);
+    return;
+  }
+  if (dynamiteReadyHintShown) return;
+  dynamiteReadyHintShown = true;
+  host.menus.announce(DYNAMITE_READY_HINT);
+}
+
+/**
+ * Throws a readied stick at the world point `(worldX, worldY)`, or as far as
+ * he can toward it. Returns whether the tap was spent on the throw, in which
+ * case it must do nothing else — no walk, no swing, no pickup.
+ */
+export function throwReadiedDynamiteAt(
+  host: Pick<HotbarHost, 'world' | 'dynamite'>,
+  worldX: number,
+  worldY: number,
+): boolean {
+  const { pm, bus } = host.world;
+  const dynamite = host.dynamite;
+  if (dynamite?.isReadied !== true || !pm.human.isActive) return false;
+  if (!dynamite.throwReadiedAt(pm.human, worldX, worldY)) return true;
+  bus.emit('dynamiteUsed', { player: 'Human' });
+  return true;
 }
 
 /** What the Wayfinder's Anchor says when it is used under a roof. */

@@ -79,14 +79,23 @@ and why the crowd is rolled from the world seed.
 - **Humans:** the looks are `TOWN_CAST_LOOKS` in `src/sprites/person/townCastLooks.ts`,
   picked by `pickTownCastLook(seed, role)`, and each is painted as one `FigureDef` by
   `src/sprites/art/townCastFigure.ts`.
-  - Adults paint on **Carl's rig** in his gear plus a role accessory
-    (`src/sprites/art/human/townAccessories.ts`).
+  - Adults paint on **Carl's rig** for his movement, never in his look. The
+    outfit drops his boxers and hides his crop; `castAttachments` in
+    `townCastFigure.ts` paints the trouser seat (`human/legwear.ts`), the look's
+    own hairstyle and facial hair (`human/castHead.ts`) and any hat or hood on
+    the solved skeleton. The legs and feet are the cast-only `townsfolk_trousers`
+    and `townsfolk_shoes` garments (`garments/human/townsfolkLegwear.ts`), sized
+    off the rig's own leg contour and coloured per look with
+    `setTownsfolkLegwear` (reset in `finally`). Carl's item garments are
+    `humanItemGarments()`, not every human garment. A role accessory
+    comes from `src/sprites/art/human/townAccessories.ts`. No look uses Carl's
+    skin or hair ramp, and no hairstyle is his crop.
   - Children paint on the person skeleton below, because Carl's rig is one adult's
     proportions and a shrunken adult reads as a doll.
   - Build width scales x only (`buildWidthScale`). Scaling height breaks the
     adult-versus-child height gate.
-  - A cut's legwear comes from `GARMENT_LEGWEAR`. A new long cut must map to `'none'`,
-    or the trousers paint over the hem.
+  - A cut's legwear comes from `GARMENT_LEGWEAR`: trousers under a short cut,
+    stockings under a long hem. Both paint under the hem, inside the figure.
   - Carl's palette, torso cut and expression are live module state
     (`setCarlSkinHairRamp`, `setCarlTorsoCut`, `setCarlExpression`). A look must set them
     and reset them in `finally`. A constant computed at import time from Carl's palette

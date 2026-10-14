@@ -111,6 +111,12 @@ export interface MenusKitDeps {
    * to drinking one *where it was poured*.
    */
   readonly onPotionDrunk?: (id: ItemId, drinker: HumanPlayer | CatPlayer) => void;
+  /**
+   * The item the human holds ready but has not spent — a readied stick of
+   * dynamite — which the bag's hotbar row marks in use as the HUD's bar does.
+   * Absent where nothing can be readied.
+   */
+  readonly heldItemId?: () => ItemId | null;
 }
 
 /** What the kit's surfaces need from the scene that mounts them. */
@@ -248,6 +254,7 @@ export class MenusKit {
             name: CRAWLER_NAMES.human,
             owner: pm.human,
             drawnWeaponId: pm.human.drawnWeaponId,
+            heldItemId: deps.heldItemId?.() ?? null,
           }
         : { id: 'cat', name: CRAWLER_NAMES.cat, owner: pm.cat };
     const restrictions = deps.inventoryRestrictions;

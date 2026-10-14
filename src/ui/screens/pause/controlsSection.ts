@@ -40,7 +40,10 @@ const TOUCH_CONTROL_ROWS: ReadonlyArray<{ readonly gesture: string; readonly eff
   { gesture: 'Tap Bag', effect: 'Open the pack.' },
   { gesture: 'Tap Summon', effect: 'Call Mongo to your side — the cat only.' },
   { gesture: 'Tap a hotbar slot', effect: 'Use that item.' },
-  { gesture: 'Hold a dynamite slot', effect: 'Charge the throw; let go to send it.' },
+  {
+    gesture: 'Tap a dynamite slot',
+    effect: 'Take a stick in hand, then tap where to throw it. Tap the slot again to put it away.',
+  },
   { gesture: 'Long-press an item', effect: 'Open its menu — use, equip, drop.' },
   { gesture: 'Tap the mini-map', effect: 'Expand it. Drag to scroll, tap again to shrink.' },
   { gesture: 'Tap Pause', effect: 'Open this menu.' },

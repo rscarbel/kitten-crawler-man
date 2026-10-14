@@ -24,6 +24,8 @@ const WALK_FRAME = 1.2;
 /** Mid-swing of a telegraphed attack, where the pose is most legible. */
 const ATTACK_MIDPOINT = 0.5;
 const FACING_RIGHT = 1;
+/** A walking pace, so a walk pose shows a walk rather than a run. */
+const BRISK_WALK_TILES_PER_SECOND = 1.7;
 const FACING_TOWARD_CAMERA = 1;
 const FACING_AWAY = -1;
 /** An arbitrary but fixed seed, so a re-export of a seeded character is identical. */
@@ -110,7 +112,8 @@ export const SUBJECTS: readonly SvgSubject[] = [
       const { drawSignetSprite } = await import('../src/sprites/signetSprite.js');
       const pose = {
         walkFrame: STILL_FRAME,
-        isMoving: false,
+        locomotion: 0,
+        speedTilesPerSecond: BRISK_WALK_TILES_PER_SECOND,
         summonProgress: 0,
         castProgress: 0,
         facingX: FACING_RIGHT,
@@ -118,22 +121,24 @@ export const SUBJECTS: readonly SvgSubject[] = [
       return [
         {
           name: 'front',
-          paint: ({ dom, unit }) =>
-            drawSignetSprite(dom, 0, 0, unit, { ...pose, facingAway: false }),
+          paint: ({ dom, unit }) => drawSignetSprite(dom, 0, 0, unit, { ...pose, view: 'front' }),
         },
         {
           name: 'back',
-          paint: ({ dom, unit }) =>
-            drawSignetSprite(dom, 0, 0, unit, { ...pose, facingAway: true }),
+          paint: ({ dom, unit }) => drawSignetSprite(dom, 0, 0, unit, { ...pose, view: 'back' }),
+        },
+        {
+          name: 'side',
+          paint: ({ dom, unit }) => drawSignetSprite(dom, 0, 0, unit, { ...pose, view: 'side' }),
         },
         {
           name: 'walk',
           paint: ({ dom, unit }) =>
             drawSignetSprite(dom, 0, 0, unit, {
               ...pose,
-              facingAway: false,
+              view: 'front',
               walkFrame: WALK_FRAME,
-              isMoving: true,
+              locomotion: 1,
             }),
         },
         {
@@ -141,7 +146,7 @@ export const SUBJECTS: readonly SvgSubject[] = [
           paint: ({ dom, unit }) =>
             drawSignetSprite(dom, 0, 0, unit, {
               ...pose,
-              facingAway: false,
+              view: 'front',
               castProgress: ATTACK_MIDPOINT,
             }),
         },
@@ -150,7 +155,7 @@ export const SUBJECTS: readonly SvgSubject[] = [
           paint: ({ dom, unit }) =>
             drawSignetSprite(dom, 0, 0, unit, {
               ...pose,
-              facingAway: false,
+              view: 'front',
               summonProgress: ATTACK_MIDPOINT,
             }),
         },

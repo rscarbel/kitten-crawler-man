@@ -1,8 +1,9 @@
 /**
  * The human cast (`townCastLooks.ts`) as painted `FigureDef`s: one figure per
  * look. An adult look paints through Carl's own rig (`carl/figure.ts`) posed
- * by his own walk/idle/talk pose functions and dressed in his gear plus a
- * worn accessory (`human/townAccessories.ts`); a child look paints through
+ * by his own walk/idle/talk pose functions, but dressed and groomed as itself
+ * (`castAttachments` below) plus a worn accessory
+ * (`human/townAccessories.ts`); a child look paints through
  * the simpler person skeleton (`townCastPaint.ts`'s outline-and-glaze
  * wrapper over `drawPerson.ts`), since Carl's rig is one fixed adult build.
  *
@@ -24,13 +25,22 @@ import { TOWN_CAST_LOOKS, type TownCastLook } from '../person/townCastLooks';
 import { HUMANOID_NPC_SCALE } from '../humanoidScale';
 import { type FigureDef, figureStates } from '../figure/figureDef';
 import {
+  type CarlAttachments,
   type CarlComposeOptions,
   drawCarlBack,
   drawCarlFront,
   drawCarlSide,
 } from '../art/carl/figure';
-import type { CarlPose } from '../art/carl/rig';
-import { DEFAULT_CARL_OUTFIT, stillOutfit } from '../garments/human/carlDressing';
+import type { CarlPose, ViewSpec } from '../art/carl/rig';
+import { BARE_CARL_OUTFIT, stillOutfit } from '../garments/human/carlDressing';
+import type { HideableFeature } from '../garments/garmentDef';
+import {
+  resetTownsfolkLegwear,
+  setTownsfolkLegwear,
+  TOWNSFOLK_SHOES,
+  TOWNSFOLK_TROUSERS,
+} from '../garments/human/townsfolkLegwear';
+import type { Outfit } from '../garments/outfit';
 import { type CardinalView } from '../facingView';
 import { idleBack, idleFront, idleSide } from '../art/human/idles';
 import { walkFacing, walkSide } from '../art/human/locomotion';
@@ -44,13 +54,12 @@ import {
   type DanceFacing,
 } from '../art/danceStyles';
 import { HUMAN_CELL_PX_PER_UNIT } from '../art/human/figureScale';
+import { drawAccessory, drawHeadAccessory } from '../art/human/townAccessories';
+import { castHeadReach, paintCastHead } from '../art/human/castHead';
+import { paintTrouserSeat } from '../art/human/legwear';
 import {
-  drawAccessory,
-  drawHairStyleOverlay,
-  drawShoes,
-  drawTrousers,
-} from '../art/human/townAccessories';
-import {
+  deriveGlossRamp,
+  deriveRamp,
   resetCarlGarmentRamp,
   resetCarlSkinHairRamp,
   setCarlGarmentRamp,
@@ -320,12 +329,71 @@ function carlRows(hasDance: boolean): CarlRowSpec[] {
 /** The base rows shared by every look that doesn't dance — built once. */
 const CARL_ROWS: readonly CarlRowSpec[] = carlRows(false);
 
+/** His heart-print boxers are his alone; under a cast look's trousers they would only show at the hem. */
+const CARL_ONLY_GARMENT = 'carl_boxers';
+const HIDDEN_ON_THE_CAST: ReadonlySet<HideableFeature<'human'>> = new Set<HideableFeature<'human'>>(
+  ['hair'],
+);
+
 /**
- * What every adult of the cast wears on Carl's rig: his base garments and the
- * trollskin band at the collar — none of his loot, which on a townsperson
- * would read as wearing his gear.
+ * What every adult of the cast wears on Carl's rig: his jacket, recut and
+ * recoloured as the look's garment by `setCarlTorsoCut`/`setCarlGarmentRamp`,
+ * and nothing else of his — not his boxers, not his trollskin collar, none of
+ * his loot — with his crop hidden for the look's own hairstyle, and the cast's
+ * own trousers or stockings and shoes over his bare legs and feet, in the
+ * colours `setTownsfolkLegwear` sets for the look.
  */
-const CAST_OUTFIT = stillOutfit(DEFAULT_CARL_OUTFIT);
+const TOWNSFOLK_OUTFIT: Outfit<'human'> = {
+  wearer: 'human',
+  garments: [
+    ...BARE_CARL_OUTFIT.garments.filter((garment) => garment.id !== CARL_ONLY_GARMENT),
+    TOWNSFOLK_TROUSERS,
+    TOWNSFOLK_SHOES,
+  ],
+  hidden: HIDDEN_ON_THE_CAST,
+  key: 'townsfolk',
+};
+const CAST_OUTFIT = stillOutfit(TOWNSFOLK_OUTFIT);
+
+function cardinalOf(view: ViewSpec): CardinalView {
+  if (view.profile) return 'side';
+  return view.showsBack ? 'back' : 'front';
+}
+
+/**
+ * Everything a look wears past Carl's recoloured jacket, painted inside the
+ * figure's composition from the solved skeleton: the seat of a pair of
+ * trousers over his hips, the look's own hair and facial hair in
+ * place of his crop, a hat or hood on the head, and whatever a named
+ * resident's own details add.
+ */
+function castAttachments(look: TownCastLook & { painter: 'carl' }): CarlAttachments {
+  const cloth = deriveGlossRamp(look.pantsColor);
+  const head = {
+    hairStyle: look.hairStyle,
+    facialHair: look.facialHair,
+    hair: look.hairRamp,
+    // Cut from the accessory's cloth, so a kerchief matches the shawl worn with it.
+    scarf: deriveRamp(look.accessory.color),
+  };
+  const own = look.details?.attachments;
+  return {
+    behind: own?.behind,
+    overLegs: (ctx, skeleton, view, pose) => {
+      if (look.legwear === 'trousers') paintTrouserSeat(ctx, skeleton, view, cloth);
+      own?.overLegs?.(ctx, skeleton, view, pose);
+    },
+    over: (ctx, skeleton, view, pose) => {
+      paintCastHead(ctx, skeleton, view, pose, head);
+      own?.over?.(ctx, skeleton, view, pose);
+      drawHeadAccessory(ctx, cardinalOf(view), look.accessory, skeleton.headCentre);
+    },
+    reach: (skeleton, view, pose) => [
+      ...castHeadReach(skeleton),
+      ...(own?.reach(skeleton, view, pose) ?? []),
+    ],
+  };
+}
 
 function buildCarlFigure(look: TownCastLook & { painter: 'carl' }): FigureDef {
   const cell = carlCellFor();
@@ -334,6 +402,13 @@ function buildCarlFigure(look: TownCastLook & { painter: 'carl' }): FigureDef {
   const frames: Record<string, number> = {};
   for (const row of rows) frames[row.name] = row.frameCount;
   const unitScaleX = HUMAN_CELL_PX_PER_UNIT * look.buildWidthScale;
+  const attachments = castAttachments(look);
+  const legwear = {
+    cloth: deriveGlossRamp(look.pantsColor),
+    cut: look.legwear,
+    footwear: deriveGlossRamp(look.shoeColor),
+    muddy: look.details?.muddyShoes ?? false,
+  };
   const unitScaleY = HUMAN_CELL_PX_PER_UNIT;
 
   return {
@@ -361,28 +436,18 @@ function buildCarlFigure(look: TownCastLook & { painter: 'carl' }): FigureDef {
       const pose = look.details?.posture(rowPose, carlView) ?? rowPose;
       // Reset in `finally`: a painter that throws mid-bake must not leave the
       // next figure baked — Carl or another look — in this look's skin, hair,
-      // garment, torso cut or expression (the "a throwing painter poisons
+      // garment, torso cut, expression or legwear (the "a throwing painter poisons
       // every later frame" trap).
       setCarlSkinHairRamp(look.skinRamp, look.hairRamp);
       setCarlGarmentRamp(look.garmentRamp);
       setCarlTorsoCut(look.garmentHemDrop, look.garmentHasHardware, look.garmentHemFlare);
       setCarlExpression(look.expression);
+      setTownsfolkLegwear(legwear);
       try {
         ctx.save();
         ctx.translate(cell.originX, cell.originY);
         ctx.scale(unitScaleX * mirror, unitScaleY);
-        CARL_DRAW_BY_VIEW[carlView](ctx, pose, { attachments: look.details?.attachments });
-        if (look.legwear === 'trousers') drawTrousers(ctx, carlView, pose, look.pantsColor);
-        drawShoes(ctx, carlView, pose, look.pantsColor);
-        look.details?.overShoes(ctx, carlView, pose);
-        drawHairStyleOverlay(
-          ctx,
-          carlView,
-          look.hairStyle,
-          look.hairRamp,
-          look.skinRamp,
-          look.garmentRamp,
-        );
+        CARL_DRAW_BY_VIEW[carlView](ctx, pose, { attachments });
         drawAccessory(ctx, carlView, look.accessory);
         ctx.restore();
       } finally {
@@ -390,6 +455,7 @@ function buildCarlFigure(look: TownCastLook & { painter: 'carl' }): FigureDef {
         resetCarlGarmentRamp();
         resetCarlTorsoCut();
         resetCarlExpression();
+        resetTownsfolkLegwear();
       }
     },
   };

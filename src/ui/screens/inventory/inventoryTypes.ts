@@ -24,6 +24,8 @@ export interface InventoryMember {
   readonly owner: InventoryOwner;
   /** The weapon drawn in hand, marked as worn in the hotbar row. */
   readonly drawnWeaponId?: ItemId | null;
+  /** Something else in hand and not yet spent — a readied stick of dynamite — marked the same way. */
+  readonly heldItemId?: ItemId | null;
 }
 
 /**
