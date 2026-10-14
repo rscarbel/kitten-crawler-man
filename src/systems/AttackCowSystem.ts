@@ -25,8 +25,8 @@ import { hasAiAttention } from './MobUpdateLoop';
 export const ATTACK_COW_TAUNT_RADIUS_TILES = 4.5;
 const TILE_CENTRE = 0.5;
 
-const ARRIVAL_SOUND: SoundId = 'attack_cow_arrival';
-const REVIVE_STARTED_SOUND: SoundId = 'reviving_tone';
+const ARRIVAL_SOUND = 'attack_cow_arrival' as const satisfies SoundId;
+const REVIVE_STARTED_SOUND = 'reviving_tone' as const satisfies SoundId;
 const DOWNED_TOAST = 'The attack cow is down! Stand beside her to revive.';
 const RESTING_TOAST = 'The attack cow limps off to rest. She will be back on the next floor.';
 

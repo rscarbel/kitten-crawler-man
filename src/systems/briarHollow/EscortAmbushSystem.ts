@@ -827,7 +827,10 @@ export class EscortAmbushSystem {
       this.musicClaimed = true;
       music.battleMusicActive = true;
       if (this.deps.audio?.currentMusicId !== BLUEPRINTS_ESCORT_MUSIC) {
-        this.deps.audio?.playMusic(BLUEPRINTS_ESCORT_MUSIC, { fadeInMs: ESCORT_MUSIC_FADE_MS });
+        this.deps.audio?.playMusic(BLUEPRINTS_ESCORT_MUSIC, {
+          fadeInMs: ESCORT_MUSIC_FADE_MS,
+          skipIntro: true,
+        });
       }
     } else if (!fighting && this.musicClaimed) {
       this.releaseMusic();

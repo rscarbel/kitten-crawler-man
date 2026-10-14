@@ -28,7 +28,7 @@ const CAST_RELEASE_SOUNDS: Record<FairyCastRow, SoundId> = {
 const ON_SCREEN_ONLY_CAST_ROWS: ReadonlySet<FairyCastRow> = new Set<FairyCastRow>(['cast_heal']);
 
 /** A fairy-immunity ring turning a hit or a status away. */
-const IMMUNE_FIZZLE_SOUND: SoundId = 'fairy_immune_fizzle';
+const IMMUNE_FIZZLE_SOUND = 'fairy_immune_fizzle' as const satisfies SoundId;
 
 const SYSTEM_CUE_SOUNDS: Record<FairySystemCue, SoundId> = {
   shieldDeath: 'fairy_shield_shatter',
@@ -44,8 +44,8 @@ const SYSTEM_CUE_SOUNDS: Record<FairySystemCue, SoundId> = {
 /** The one call the cast and system cue drains make, so a gate can hand in a recorder. */
 export type FairyCuePlayer = Pick<AudioManager, 'play'>;
 
-const DEATH_FLAME_SOUND: SoundId = 'fairy_death_flame';
-const FROZEN_SOLID_SOUND: SoundId = 'fairy_ice_freeze';
+const DEATH_FLAME_SOUND = 'fairy_death_flame' as const satisfies SoundId;
+const FROZEN_SOLID_SOUND = 'fairy_ice_freeze' as const satisfies SoundId;
 
 /** Every fireball cue but the one that only ends a sound. */
 const FIREBALL_CUE_SOUNDS: Record<Exclude<FairyFireballCue, 'deathFlamesOut'>, SoundId> = {

@@ -90,7 +90,7 @@ export const BIG_TOP_BLOCK_CLEARED_CUES: Readonly<Record<MazeBlockKind, readonly
 };
 
 /** The tent's fight music, from the flap to the cure. */
-export const BIG_TOP_MUSIC: SoundId = 'circus_battle';
+export const BIG_TOP_MUSIC = 'circus_battle' as const satisfies SoundId;
 
 /** The grounds' playlist, back once the party walks out cured. */
 export const BIG_TOP_EXIT_MUSIC: ReadonlyArray<SoundId> = CIRCUS_MUSIC_TRACKS;

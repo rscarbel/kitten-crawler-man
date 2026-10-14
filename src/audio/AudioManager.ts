@@ -14,7 +14,12 @@ import {
 import { garmentMaterialOf } from '../sprites/garments/itemLooks';
 import { settings } from '../core/Settings';
 import type { SoundId } from './sounds';
-import { NON_STREAMING_SOUND_IDS, SOUND_MANIFEST, STREAMING_SOUND_IDS } from './sounds';
+import {
+  NON_STREAMING_SOUND_IDS,
+  musicLoopStartS,
+  SOUND_MANIFEST,
+  STREAMING_SOUND_IDS,
+} from './sounds';
 
 /** One take per bout of blood vomiting; the retch and its splash are in each. */
 const BLOOD_VOMIT_TAKES: readonly SoundId[] = [
@@ -139,6 +144,12 @@ export interface ScheduledFadeOut {
 export interface MusicOptions {
   /** Fade-in duration in milliseconds. Default: 0. */
   fadeInMs?: number;
+  /**
+   * Start at the track's `MUSIC_LOOP_START_S` point instead of the top, for a
+   * play site that wants the looping body without the intro. No effect on a
+   * track with no loop point.
+   */
+  skipIntro?: boolean;
 }
 
 /**
@@ -187,6 +198,12 @@ type AmbientVoice =
       readonly node: MediaElementAudioSourceNode;
       readonly gain: GainNode;
     };
+
+/** Where in the recording a music track begins playing, in seconds. */
+function musicStartOffsetS(id: SoundId, opts: MusicOptions): number {
+  if (opts.skipIntro !== true) return 0;
+  return musicLoopStartS(id) ?? 0;
+}
 
 /** Fisher–Yates shuffle into a fresh array (leaves the source untouched). */
 function shuffleTracks(ids: ReadonlyArray<SoundId>): SoundId[] {
@@ -878,9 +895,14 @@ export class AudioManager {
     const source = this.ctx.createBufferSource();
     source.buffer = buffer;
     source.loop = loop;
+    const loopStartS = musicLoopStartS(id);
+    if (loop && loopStartS !== undefined) {
+      source.loopStart = loopStartS;
+      source.loopEnd = buffer.duration;
+    }
     source.connect(perTrackGain);
     if (onEnded !== null) source.onended = onEnded;
-    source.start();
+    source.start(0, musicStartOffsetS(id, opts));
 
     this.currentMusicVoice = { kind: 'buffer', source, gain: perTrackGain };
   }
@@ -903,10 +925,23 @@ export class AudioManager {
     const gain = useSlotA ? this.musicStreamGainA : this.musicStreamGainB;
     const gen = ++this.slotGeneration[slot];
 
-    el.loop = loop;
-    el.onended = onEnded;
+    const loopStartS = musicLoopStartS(id);
+    const loopsFromLoopStart = loop && loopStartS !== undefined;
+    // A media element's own `loop` always restarts at zero, so a track with a
+    // later loop point plays through once and seeks back on `ended` instead.
+    el.loop = loop && !loopsFromLoopStart;
+    el.onended = loopsFromLoopStart
+      ? () => {
+          const stillThisVoice = this.slotGeneration[slot] === gen;
+          if (!stillThisVoice) return;
+          el.currentTime = loopStartS;
+          void el.play().catch((err: unknown) => {
+            console.warn(`[AudioManager] Failed to loop streaming music "${id}":`, err);
+          });
+        }
+      : onEnded;
     el.src = SOUND_MANIFEST[id];
-    el.currentTime = 0;
+    el.currentTime = musicStartOffsetS(id, opts);
 
     const now = this.ctx.currentTime;
     const fadeInMs = opts.fadeInMs ?? 0;
@@ -1616,7 +1651,7 @@ export class AudioManager {
 
     bus.on('questStarted', (e) => {
       if (e.questId === 'defend_goblin_mother') {
-        this.playMusic('defense_quest_music', { fadeInMs: 1000 });
+        this.playMusic('prepare_to_defend', { fadeInMs: 1000 });
       }
       if (e.questId === 'the_show_must_go_on' || e.questId === 'krasue_murders') {
         this.play('menu_open');

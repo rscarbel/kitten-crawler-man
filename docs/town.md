@@ -1157,8 +1157,8 @@ party and is snapped beside them if that takes longer than `MIDGE_CALL_TIMEOUT_S
   `ignoresTownSafeZone`, and the moment any of them is through it they keep the safe zone
   again and break off. One out of the fight, or left on the road after the delivery, is
   let go once nobody can see it. Each wave plays the ambush sting, and
-  `defense_quest_music` takes over from the zone music while any ambusher lives on the
-  escort, handed back the moment she is delivered. `verify:midge-escort` walks the road
+  `prepare_to_defend` takes over from the zone music, from its loop point past the
+  intro (`skipIntro`), while any ambusher lives on the escort, handed back the moment she is delivered. `verify:midge-escort` walks the road
   with a party that leads her on at a wide window without stopping for what it cannot
   see, and holds that every wave comes up near her on ground that walks to her, comes on
   screen, and reaches her or the party within `WAVE_ARRIVAL_SECONDS_MAX`.

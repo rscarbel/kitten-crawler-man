@@ -67,8 +67,8 @@ const SILENT_FEEDBACK: HirelingFeedback = {
   },
 };
 
-const REVIVE_STARTED_SOUND: SoundId = 'reviving_tone';
-const POTION_SOUND: SoundId = 'healing_potion';
+const REVIVE_STARTED_SOUND = 'reviving_tone' as const satisfies SoundId;
+const POTION_SOUND = 'healing_potion' as const satisfies SoundId;
 
 function downedToast(name: string): string {
   return `${name} is down! Stand beside them to revive.`;

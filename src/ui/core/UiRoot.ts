@@ -43,10 +43,10 @@ const SCRIM_BANDS: ReadonlySet<Band> = new Set<Band>(['modal', 'system']);
 const FOCUS_BANDS: ReadonlySet<Band> = new Set<Band>(['panel', 'modal', 'system']);
 
 /** The sound a tap plays unless its region names another (or `null`). */
-export const UI_TAP_SOUND: SoundId = 'menu_click';
+export const UI_TAP_SOUND = 'menu_click' as const satisfies SoundId;
 
 /** The sound a tap on a disabled control plays. */
-export const UI_ERROR_SOUND: SoundId = 'error';
+export const UI_ERROR_SOUND = 'error' as const satisfies SoundId;
 
 /** The widget id of the full-screen block a modal or system surface gets before it renders. */
 export const SCRIM_WIDGET_ID = '__scrim';

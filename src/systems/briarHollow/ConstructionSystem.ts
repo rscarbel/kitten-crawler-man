@@ -155,7 +155,7 @@ const TILE_CENTRE = 0.5;
 const WALL_FACE_SAMPLES = [TILE_CENTRE, 1, WALL_REACH_TILES] as const;
 
 const HAMMER_SOUND = 'hammer_strike';
-const REPAIR_LOOP_SOUND: SoundId = 'repairing_loop';
+const REPAIR_LOOP_SOUND = 'repairing_loop' as const satisfies SoundId;
 const REPAIR_LOOP_VOLUME = 0.7;
 const COMPLETE_SOUND = 'construction_complete';
 const STONE_UPGRADE_SOUND = 'wall_upgrade_stone';

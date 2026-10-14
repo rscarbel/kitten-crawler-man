@@ -110,10 +110,10 @@ const FIRST_ARC_DELAYS_FRAMES: readonly number[] = [
 export const JUNCTION_BOX_HITS = 4;
 
 /** The buzz of current crawling down a cable before it arcs. */
-const SPARK_SOUND: SoundId = 'krakaren_spark_buzz';
-const BURST_SOUND: SoundId = 'krakaren_junction_burst';
+const SPARK_SOUND = 'krakaren_spark_buzz' as const satisfies SoundId;
+const BURST_SOUND = 'krakaren_junction_burst' as const satisfies SoundId;
 /** A smashed junction box: the cable's hum dying. */
-const JUNCTION_DEAD_SOUND: SoundId = 'krakaren_junction_dead';
+const JUNCTION_DEAD_SOUND = 'krakaren_junction_dead' as const satisfies SoundId;
 /** Cues left undrained past this are dropped, so a scene with no audio cannot grow the list. */
 const MAX_PENDING_SOUNDS = 8;
 

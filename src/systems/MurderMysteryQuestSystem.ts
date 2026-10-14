@@ -653,8 +653,8 @@ export class MurderMysteryQuestSystem implements GameSystem {
 
   private startNightAttackMusic(): void {
     if (this.overworldMusic) this.overworldMusic.battleMusicActive = true;
-    if (this.audio && this.audio.currentMusicId !== 'defense_quest_music') {
-      this.audio.playMusic('defense_quest_music', { fadeInMs: BATTLE_MUSIC_FADE_IN_MS });
+    if (this.audio && this.audio.currentMusicId !== 'prepare_to_defend') {
+      this.audio.playMusic('prepare_to_defend', { fadeInMs: BATTLE_MUSIC_FADE_IN_MS });
     }
   }
 

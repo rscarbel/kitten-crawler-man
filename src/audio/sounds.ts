@@ -291,7 +291,6 @@ const SOUND_IDS_TUPLE = [
   'dead_hand_wave',
   'death_sequence',
   'deep_rumbling',
-  'defense_quest_music',
   'desperado_club_1',
   'desperado_club_2',
   'desperado_club_3',
@@ -469,6 +468,7 @@ const SOUND_IDS_TUPLE = [
   'player_walking',
   'potion_drink',
   'prepare_for_magic_strike',
+  'prepare_to_defend',
   'prison_ambience_loop',
   'prison_door_heavy_open',
   'prison_key_pickup_fanfare',
@@ -1016,7 +1016,6 @@ export const SOUND_MANIFEST: Record<SoundId, string> = {
   dead_hand_wave: './src/audio/bosses/skeleton_lord/dead_hand_wave_attack.mp3',
   death_sequence: './src/audio/events/death_sequence.mp3',
   deep_rumbling: './src/audio/effects/deep_rumbling.mp3',
-  defense_quest_music: './src/audio/background_music/defense_quest_music.mp3',
   desperado_club_1: './src/audio/background_music/desperado_club_1.mp3',
   desperado_club_2: './src/audio/background_music/desperado_club_2.mp3',
   desperado_club_3: './src/audio/background_music/desperado_club_3.mp3',
@@ -1210,6 +1209,7 @@ export const SOUND_MANIFEST: Record<SoundId, string> = {
   player_walking: './src/audio/characters/player_walking_loop_segment.mp3',
   potion_drink: './src/audio/effects/potion_drink.mp3',
   prepare_for_magic_strike: './src/audio/effects/prepare_for_magic_strike.mp3',
+  prepare_to_defend: './src/audio/background_music/prepare_to_defend.mp3',
   prison_ambience_loop: './src/audio/ambient/prison_ambience_loop.mp3',
   prison_door_heavy_open: './src/audio/effects/prison/prison_door_heavy_open.mp3',
   prison_key_pickup_fanfare: './src/audio/effects/prison/prison_key_pickup_fanfare.mp3',
@@ -1537,7 +1537,6 @@ export const STREAMING_SOUND_IDS: ReadonlySet<SoundId> = new Set<SoundId>([
   'circus_theme_1',
   'circus_theme_2',
   'circus_theme_3',
-  'defense_quest_music',
   'desperado_club_1',
   'desperado_club_2',
   'desperado_club_3',
@@ -1545,6 +1544,7 @@ export const STREAMING_SOUND_IDS: ReadonlySet<SoundId> = new Set<SoundId>([
   'fix_the_plumbing_music',
   'forest_path',
   'medieval_harvest_theme',
+  'prepare_to_defend',
   'siege_theme',
   'slots_free_spins_loop_1',
   'slots_free_spins_loop_2',
@@ -1572,6 +1572,21 @@ export const STREAMING_SOUND_IDS: ReadonlySet<SoundId> = new Set<SoundId>([
   'ambient_village',
   'prison_ambience_loop',
 ]);
+
+/**
+ * Where a looping music track jumps back to each time it reaches its end, in
+ * seconds of the recording. The part before this point is an intro heard once
+ * per `playMusic`; a track absent here loops from the top.
+ */
+export const MUSIC_LOOP_START_S = {
+  prepare_to_defend: 30,
+} as const satisfies Partial<Record<SoundId, number>>;
+
+/** `MUSIC_LOOP_START_S` for any track; undefined when it loops from the top. */
+export function musicLoopStartS(id: SoundId): number | undefined {
+  const loopStarts: Partial<Record<SoundId, number>> = MUSIC_LOOP_START_S;
+  return loopStarts[id];
+}
 
 /** Every sound id not covered by `STREAMING_SOUND_IDS` — the default `preload()` set. */
 export const NON_STREAMING_SOUND_IDS: ReadonlyArray<SoundId> = ALL_SOUND_IDS.filter(
