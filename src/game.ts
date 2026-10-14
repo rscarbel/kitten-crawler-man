@@ -155,6 +155,10 @@ void audio.preload(CORE_SFX_IDS);
 // Before the manager, because its constructor arms the first frame.
 installDevLoopFallback();
 const sceneManager = new SceneManager();
+sceneManager.setTransitionHooks({
+  begin: () => audio.music.beginHandover(),
+  end: () => audio.music.endHandover(),
+});
 const loadingScreen = showLoadingScreen(sceneManager.ctx);
 
 (async () => {

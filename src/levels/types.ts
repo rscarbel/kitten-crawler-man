@@ -1,7 +1,7 @@
 import type { CampKind } from '../map/overworld/camps';
 import type { BathroomRequest } from '../map/gauntletLayout';
 import type { StealthGateRequest } from '../map/spineLayout';
-import type { SoundId } from '../audio/sounds';
+import type { MusicTrackId } from '../audio/sounds';
 import type { DungeonFloorThemeId } from '../map/dungeon/floorTheme';
 import type { XpDiminishingTier } from './xpDiminishing';
 import type { AssetGroup } from '../core/assetGroups';
@@ -375,7 +375,7 @@ export interface LevelDef {
   /** Dungeon depth, 1-based. Drives depth-scaled rewards such as smashed-prop coins. */
   floorNumber: number;
   /** Default background music for this level, and what music resumes after boss fights/quests. */
-  music: SoundId;
+  music: MusicTrackId;
   /** Side length of the square tile grid this floor is generated on. */
   mapSize: number;
   /**

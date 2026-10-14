@@ -36,6 +36,7 @@ npm run verify:floor-sweep   # every shippable floor art seed, in every domain t
 npm run bench:separation     # measures the separation strategy crossover
 npm run verify:slots         # slot engine: paylines, wilds, scatters, jackpot pool, free spins, money invariants
 npm run verify:wheel         # Wheel of Fortune: board red share, bet upgrades, retired prizes, landings, the wipe's save latch
+npm run verify:audio         # music director, library and credits, voices, ramped stops, scopes, captions, mute/mono/background
 npm run report:slots-rtp     # slot RTP / hit-rate / win-tier report for tuning; never fails (-- --spins=N --seed=S --bet=B)
 npm run bench:slots          # times the slots MEGA WIN celebration on a phone-sized canvas (-- idle for the resting machine)
 ```
@@ -50,6 +51,7 @@ npm run bench:slots          # times the slots MEGA WIN celebration on a phone-s
 - `verify:separation` checks force math, cell-boundary coverage, and that the grid and all-pairs strategies agree to floating-point rounding across 200 random layouts plus degenerate ones. It also pins `SpatialGrid`'s key-packing assumptions: negative coordinates are safe, and a bucket collision can only cost work rather than produce a wrong answer, because every query re-tests its candidates.
 - `bench:separation` is what makes `SEPARATION_GRID_MIN_MOBS` a measured number rather than a guess. It sweeps roster sizes against three crowding levels and carries a max-force-delta column beside the timings, so a faster shape that quietly computed _different_ forces fails loudly. Treat the crossover as the result and the absolute microseconds as scenery — they are wall-clock on whatever machine runs them.
 - `verify:slots` and `verify:wheel` check behaviour only; payout balance is read from `report:slots-rtp` and tuned by playtest. Their review renders are `npm run render:slot-symbols` (`preview/slots/symbols.png`), `npm run render:tito` (Tito's busts and his corner of the club, `preview/tito/`) and `npm run render:equipment -- --item=fury_of_taranis` (the Fury of Taranis in Carl's hand).
+- `npm run lint` also runs `check:audio`, which fails on a file added or swapped without a re-measure: run `npm run measure:audio` (needs ffmpeg and ffprobe) after any audio file change. See `add-sound`.
 - These scripts exist because browser `requestAnimationFrame` throttles to roughly one frame a second when the tab is occluded, so nothing about timing or motion can be honestly claimed from browser automation. Everything that could be made deterministic was moved into them; the rest is left to a human.
 - A new script must be listed by name in `tsconfig.scripts.json`'s `include`. Scripts typecheck is opt-in — an unregistered script is never checked and the gate still passes.
 

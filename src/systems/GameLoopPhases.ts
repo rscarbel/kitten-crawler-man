@@ -14,7 +14,7 @@ import type { HumanPlayer } from '../creatures/HumanPlayer';
 import type { CatPlayer } from '../creatures/CatPlayer';
 import type { Mob } from '../creatures/Mob';
 import type { SpatialGrid } from '../core/SpatialGrid';
-import type { AudioManager } from '../audio/AudioManager';
+import type { AudioManager, PlacedCuePlayer, PlacedReach } from '../audio/AudioManager';
 import type { SoundId } from '../audio/sounds';
 import { applyDrunkWalkWobble } from '../core/DrunkEffect';
 import { frameTime } from '../utils';
@@ -393,24 +393,41 @@ export function triggerPlayerAttack(
  * group, so it is loaded on every floor a guarding mob can spawn on.
  */
 const GUARD_SOUND = 'hammer_strike' satisfies SoundId;
+/** A mob's cues come from the middle of its tile. */
+const MOB_CENTRE_FRACTION = 0.5;
+/**
+ * A boss's cues carry the fight: its telegraphs must be heard from anywhere in
+ * its arena, which is wider than ordinary hearing, so they keep their side but
+ * not their distance. Whether a mob is a boss to the player is the kill tally's
+ * rule, which also covers the bosses that have no boss room.
+ */
+const BOSS_CUE_REACH = 'panOnly' as const satisfies PlacedReach;
 
 /**
  * Play queued per-mob combat audio cues (attack + projectile), keyed by each
- * mob's audioTag. Shared by DungeonScene and interior combat scenes; clears
+ * mob's audioTag, each from where the mob stands. Shared by DungeonScene
+ * and interior combat scenes; clears
  * the pending flags even when audio is unavailable, or the creature is not
  * one the audio manager hears right now, so cues never backlog.
  */
 export function playMobAudioCues(mobs: Mob[], audio: AudioManager | null): void {
   for (const mob of mobs) {
     const heard = audio?.hearsCreature(mob) === true;
-    playCuesOf(mob, heard ? audio : null);
+    const voice = heard
+      ? audio.placedAt(
+          mob.x + TILE_SIZE * MOB_CENTRE_FRACTION,
+          mob.y + TILE_SIZE * MOB_CENTRE_FRACTION,
+          mob.countsAsBossKill ? BOSS_CUE_REACH : 'hearing',
+        )
+      : null;
+    playCuesOf(mob, voice);
     // The damage switch only takes the flag for the tags it voices; a
     // creature silenced now must not bring an old cue with it once heard.
     if (!heard) mob.damageSoundPending = false;
   }
 }
 
-function playCuesOf(mob: Mob, audio: AudioManager | null): void {
+function playCuesOf(mob: Mob, audio: PlacedCuePlayer | null): void {
   // Outside the `audioTag` switch: a guard is the same metal-on-metal beat on
   // every creature that can raise one, and a tag lookup would leave any
   // creature without a tag silent.
@@ -649,7 +666,7 @@ function playCuesOf(mob: Mob, audio: AudioManager | null): void {
  * start of the 90-frame warning, ahead of the impact `krakaren_ground_slam`
  * already covers.
  */
-function playKrakarenCloneCues(mob: Mob, audio: AudioManager | null): void {
+function playKrakarenCloneCues(mob: Mob, audio: PlacedCuePlayer | null): void {
   if (!(mob instanceof KrakarenClone) || !mob.slamRiseSoundPending) return;
   mob.slamRiseSoundPending = false;
   audio?.play('krakaren_slam_rise');
@@ -663,7 +680,7 @@ function playKrakarenCloneCues(mob: Mob, audio: AudioManager | null): void {
  * compacted the spent tentacle out of the mob array `justDied` no longer
  * protects.
  */
-function playKrakarenTentacleCues(mob: Mob, audio: AudioManager | null): void {
+function playKrakarenTentacleCues(mob: Mob, audio: PlacedCuePlayer | null): void {
   if (!(mob instanceof KrakarenTentacle)) return;
   if (mob.emergeSoundPending) {
     mob.emergeSoundPending = false;
@@ -680,7 +697,7 @@ function playKrakarenTentacleCues(mob: Mob, audio: AudioManager | null): void {
  * boolean is already the dumbbell throw, and a punch landing on the frame he
  * winds up a throw would drop whichever cue came second.
  */
-function playJuicerCues(mob: Mob, audio: AudioManager | null): void {
+function playJuicerCues(mob: Mob, audio: PlacedCuePlayer | null): void {
   if (!(mob instanceof Juicer)) return;
   if (mob.punchWindupSoundPending) {
     mob.punchWindupSoundPending = false;
@@ -707,7 +724,7 @@ const COW_VOICE_SOUNDS: Readonly<Record<CowVoice, readonly SoundId[]>> = {
  * flags, because a cow has four different things to say and none of them is
  * an attack.
  */
-function playCowVoice(mob: Mob, audio: AudioManager | null): void {
+function playCowVoice(mob: Mob, audio: PlacedCuePlayer | null): void {
   if (!(mob instanceof Cow) || mob.voicePending === null) return;
   const voice = mob.voicePending;
   mob.voicePending = null;
@@ -725,7 +742,7 @@ const ATTACK_COW_HEADBUTT_SOUNDS: readonly SoundId[] = [
  * moos ride the cow voice above. Headbutts come every second or so in a long
  * fight, so the same take never plays twice running.
  */
-function playAttackCowCues(mob: Mob, audio: AudioManager | null): void {
+function playAttackCowCues(mob: Mob, audio: PlacedCuePlayer | null): void {
   if (!(mob instanceof AttackCow)) return;
   if (mob.chargeSoundPending) {
     mob.chargeSoundPending = false;
@@ -733,7 +750,7 @@ function playAttackCowCues(mob: Mob, audio: AudioManager | null): void {
   }
   if (mob.headbuttSoundPending) {
     mob.headbuttSoundPending = false;
-    audio?.playRandomFresh(ATTACK_COW_HEADBUTT_SOUNDS);
+    audio?.playRandom(ATTACK_COW_HEADBUTT_SOUNDS);
   }
 }
 
@@ -744,7 +761,7 @@ function playAttackCowCues(mob: Mob, audio: AudioManager | null): void {
  * fires while he walks, and the rage pause can raise that flag on the very same
  * frame — one shared boolean would drop whichever came second.
  */
-function playMantidHiss(mob: Mob, audio: AudioManager | null): void {
+function playMantidHiss(mob: Mob, audio: PlacedCuePlayer | null): void {
   if (!(mob instanceof Mantid) || !mob.hissSoundPending) return;
   mob.hissSoundPending = false;
   audio?.playRandom([
@@ -761,7 +778,7 @@ function playMantidHiss(mob: Mob, audio: AudioManager | null): void {
  * split out of `specialSoundPending` because that flag already carries the
  * lunge, the carom, the wall slam and the collapse.
  */
-function playSwineSpinup(mob: Mob, audio: AudioManager | null): void {
+function playSwineSpinup(mob: Mob, audio: PlacedCuePlayer | null): void {
   if (!(mob instanceof BallOfSwine) || !mob.spinupSoundPending) return;
   mob.spinupSoundPending = false;
   audio?.play('deep_rumbling');
@@ -771,7 +788,7 @@ function playSwineSpinup(mob: Mob, audio: AudioManager | null): void {
  * A soul-bolt caster's cast wind-up — a full second of gathering before the
  * bolts leave, which `projectileSoundPending` covers separately.
  */
-function playCastWindup(mob: Mob, audio: AudioManager | null): void {
+function playCastWindup(mob: Mob, audio: PlacedCuePlayer | null): void {
   if (!(mob instanceof SkeletonLord) && !(mob instanceof TheLich)) return;
   if (!mob.castWindupSoundPending) return;
   mob.castWindupSoundPending = false;
@@ -788,7 +805,7 @@ function playCastWindup(mob: Mob, audio: AudioManager | null): void {
  * fire have to announce themselves differently or the player cannot tell from
  * the sound alone whether to close or to break the line.
  */
-function playDarkKnightCues(mob: Mob, audio: AudioManager | null): void {
+function playDarkKnightCues(mob: Mob, audio: PlacedCuePlayer | null): void {
   if (!(mob instanceof DarkKnight)) return;
   if (mob.whirlSoundPending) {
     mob.whirlSoundPending = false;

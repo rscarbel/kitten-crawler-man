@@ -41,6 +41,7 @@ npm run server   # Express + SQLite on localhost
 | G                 | Open gear (equipment) panel     |
 | I                 | Open inventory (bag) panel      |
 | M                 | Expand / collapse minimap       |
+| N                 | Mute / unmute all audio         |
 | Esc               | Pause / menu                    |
 
 Mobile: touch controls with on-screen buttons for all actions.
@@ -126,6 +127,10 @@ Six achievements that award loot boxes. Boxes can only be opened in safe rooms a
 ### Minimap
 
 Fog of war that reveals as you explore. Shows corpse markers, NPC positions, boss rooms, and stairwells. Expandable with M key or tap on mobile.
+
+### Music & Sound
+
+Every song unlocks when its place or activity first plays it, and its title and credit show the first time it is heard. The pause menu's Music page lists the library by area (locked songs hint where they are found) and plays area music, shuffles unlocked songs, repeats one or plays one once; it also holds the credits for all music. Settings has Master, Music, Effects and Ambience volume, mute all, mono audio, keep playing in the background, and sound captions for audio-only cues.
 
 ---
 
@@ -216,8 +221,12 @@ src/
 │                                arms name its streets, its named seer)
 ├── audio/
 │   ├── AudioManager.ts        ← centralized audio playback
-│   ├── sounds.ts              ← sound effect registry
-│   └── background_music/, bosses/, characters/, enemies/, effects/, events/, menu/
+│   ├── sounds.ts              ← sound registry: music, jingle and effect ids
+│   ├── music/                 ← every credited song, file named by its id;
+│   │                            catalog.ts holds titles and attributions
+│   ├── jingles/               ← uncredited musical clips and loops
+│   ├── music/MusicDirector.ts ← plays the winning music claim; scenes claim, never play
+│   └── ambient/, bosses/, casino/, characters/, combat/, enemies/, effects/, events/, menu/
 ├── auth/
 │   ├── AuthClient.ts          ← backend communication
 │   └── LoginUI.ts             ← login/register screen
@@ -312,6 +321,10 @@ Player (base: position, HP, stats, walk animation)
 - **Express + SQLite** — optional backend for auth and progress saving
 - **Prettier / ESLint** — formatting and linting
 - **GitHub Pages** — auto-deploy on push to main
+
+### Audio
+
+Songs live in `src/audio/music/` (file named by its id, with a title and credit in `catalog.ts`), uncredited musical clips in `src/audio/jingles/`, sound effects in the category folders beside them. `npm run lint` includes `npm run check:audio`, which checks the registry, folders, catalogue and loudness table agree. After adding or replacing any audio file run `npm run measure:audio` (needs `ffmpeg` and `ffprobe`) to regenerate the loudness table. `npm run verify:audio` is the headless behaviour gate for music and mixing. See the `add-sound` skill.
 
 ### Build output
 

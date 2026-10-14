@@ -16,6 +16,7 @@ import type { EventBus } from '../../core/EventBus';
 import type { GameMap } from '../../map/GameMap';
 import type { Mob } from '../../creatures/Mob';
 import type { AudioManager } from '../../audio/AudioManager';
+import type { AudioScope } from '../../audio/AudioScope';
 import type { PlayerManager } from '../../core/PlayerManager';
 import type { SpellSystem } from '../SpellSystem';
 
@@ -87,7 +88,7 @@ export class MobRoster {
 
 /**
  * What every kit is handed: the map it acts on, the scene's single event bus,
- * its audio manager, and its population.
+ * its audio manager and audio scope, and its population.
  *
  * **One bus per scene.** Systems subscribe in their constructors and several
  * declare no `dispose`, so the only thing that keeps their listeners from
@@ -98,6 +99,8 @@ export interface SceneWorld {
   readonly gameMap: GameMap;
   readonly bus: EventBus;
   readonly audio: AudioManager | null;
+  /** The scene's loops and ambient beds, faded out with the scene. */
+  readonly audioScope: AudioScope | null;
   /** The two crawlers, and which of them the player is currently steering. */
   readonly pm: PlayerManager;
   readonly roster: MobRoster;

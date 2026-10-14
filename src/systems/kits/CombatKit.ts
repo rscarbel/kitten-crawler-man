@@ -183,9 +183,10 @@ export class CombatKit {
     const { human, cat } = this.world.pm;
     human.updateAttack();
     human.updateRocks(this.world.gameMap);
-    if (human.pendingSlingshotWallImpactSound) {
-      human.pendingSlingshotWallImpactSound = false;
-      this.world.bus.emit('slingshotImpact', {});
+    const wallImpact = human.pendingSlingshotWallImpact;
+    if (wallImpact !== null) {
+      human.pendingSlingshotWallImpact = null;
+      this.world.bus.emit('slingshotImpact', wallImpact);
     }
     cat.updateAttack();
     cat.updateMissiles(this.world.roster.grid);
@@ -193,9 +194,12 @@ export class CombatKit {
 
   /**
    * Spells, then mob AI — in that order, because a shell raised this frame has
-   * to exist before the mobs that would walk into it choose a step.
+   * to exist before the mobs that would walk into it choose a step. The
+   * active crawler is placed as the listener first, so every sound the frame
+   * places in the world is heard from where the player now stands.
    */
   updateMobs(ctx: SystemContext): void {
+    this.world.audio?.setListenerToCrawler(ctx.active);
     this.spells.update(ctx);
     this.mobLoop.update(ctx);
   }
@@ -310,13 +314,13 @@ export class CombatKit {
   private playSplatterCues(audio: AudioManager | null): void {
     const { cat } = this.world.pm;
     const cues = cat.drainSplatterCues();
-    if (audio === null) return;
-    if (cues.released) audio.play('splatter_orb_spawn');
-    if (cues.peeledOff) audio.play('splatter_orb_seek');
+    if (cues.released) audio?.play('splatter_orb_spawn');
+    if (cues.peeledOff) audio?.play('splatter_orb_seek');
+    const loops = this.world.audioScope;
     if (cat.hasOrbitingSplatterCopies) {
-      audio.startAmbientLoop(SPLATTER_ORBIT_LOOP, SPLATTER_ORBIT_LOOP_VOLUME);
+      loops?.startAmbientLoop(SPLATTER_ORBIT_LOOP, SPLATTER_ORBIT_LOOP_VOLUME);
     } else {
-      audio.stopAmbientLoop(SPLATTER_ORBIT_LOOP);
+      loops?.stopAmbientLoop(SPLATTER_ORBIT_LOOP);
     }
   }
 
@@ -397,8 +401,7 @@ export class CombatKit {
 
   dispose(): void {
     this.floatingText.dispose();
-    // Ambient loops outlive the scene that started them unless someone stops them.
-    this.world.audio?.stopAmbientLoop(SPLATTER_ORBIT_LOOP);
+    this.world.audioScope?.stopAmbientLoop(SPLATTER_ORBIT_LOOP);
     // Drops the pack-alert grid. It is a module-level handle, so a scene that
     // exited without this leaves its whole roster — and through it its `GameMap`
     // — reachable for the rest of the page's life.

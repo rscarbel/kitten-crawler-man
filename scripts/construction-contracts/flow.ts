@@ -237,6 +237,7 @@ function verifySkyfowlSite(check: Check, site: SkyfowlContractSiteDef): void {
     human,
     cat,
     audio: null,
+    audioScope: null,
     toast: (message) => toasts.push(message),
     worldHalted: () => false,
   });

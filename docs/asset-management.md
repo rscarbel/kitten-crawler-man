@@ -68,6 +68,9 @@ decoded into `buffers`. Everything else is a sound effect, preloaded per context
 `DungeonScene`'s constructor, an interior's from `BuildingInteriorScene`'s. Ids repeat
 across groups on purpose — several bounty cues are stand-ins borrowed from a floor boss's
 sample, so both owners preload them, and `preload` de-dupes against `buffers`.
+Scenes preload through their `AudioScope` (`scope.preload(ids)`), which declares the ids;
+when a scope is disposed, decoded buffers that no live scope declared are released, except
+the `universal` group.
 
 ## Creatures are painted, not loaded
 

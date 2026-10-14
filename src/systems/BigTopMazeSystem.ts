@@ -25,14 +25,9 @@
 import { TILE_SIZE } from '../core/constants';
 import type { GameMap } from '../map/GameMap';
 import type { EventBus } from '../core/EventBus';
-import type { AudioManager } from '../audio/AudioManager';
+import type { MusicClaims } from '../audio/AudioScope';
 import type { SoundId } from '../audio/sounds';
-import {
-  BIG_TOP_BLOCK_CLEARED_CUES,
-  BIG_TOP_CUES,
-  BIG_TOP_EXIT_MUSIC,
-  BIG_TOP_MUSIC,
-} from './bigTop/bigTopSoundCues';
+import { BIG_TOP_BLOCK_CLEARED_CUES, BIG_TOP_CUES, BIG_TOP_MUSIC } from './bigTop/bigTopSoundCues';
 import type { GameSystem, SystemContext } from './GameSystem';
 import type { GroundHazardSource } from './GroundHazardSource';
 import type { Mob } from '../creatures/Mob';
@@ -206,10 +201,6 @@ import { questBannerEntry } from '../ui/QuestBanners';
 import type { TopBandEntry } from '../ui/hud/topBand';
 
 const FRAMES_PER_SECOND = 60;
-
-/** Music fades, matched to the ones the overworld half of the questline uses. */
-const CIRCUS_BATTLE_FADE_IN_MS = 1000;
-const CIRCUS_THEME_FADE_IN_MS = 2000;
 
 /** How close a crawler must be to the vine to pour the potion on him. */
 const POUR_RANGE_TILES = 2.4;
@@ -630,7 +621,8 @@ export class BigTopMazeSystem implements GameSystem, GroundHazardSource {
     private readonly bus: EventBus,
     private readonly addMob: (mob: Mob) => void,
     private readonly progress: CircusQuestProgress,
-    private readonly audio: AudioManager | null,
+    /** The tent's scene claims; null in a harness with no audio. */
+    private readonly music: MusicClaims | null,
     private readonly conversation: Conversation,
     /**
      * The tent as dealt to floor 3's world on the difficulty it was built
@@ -681,7 +673,11 @@ export class BigTopMazeSystem implements GameSystem, GroundHazardSource {
     this.spawnFurniture();
     // Deliberately no `bossFightInitiated`: the tent is not scored as a boss
     // room, and the event is what hands the soundtrack to the boss-music table.
-    this.audio?.playMusic(BIG_TOP_MUSIC, { fadeInMs: CIRCUS_BATTLE_FADE_IN_MS });
+    this.music?.claimMusic({
+      owner: 'big_top_maze',
+      layer: 'battle',
+      selection: { kind: 'loop', id: BIG_TOP_MUSIC },
+    });
     // Last, so a restart the guard asks for never meets a tent half built.
     this.holdDifficulty();
   }
@@ -1692,7 +1688,8 @@ export class BigTopMazeSystem implements GameSystem, GroundHazardSource {
     // would be the tent disagreeing with its own ending.
     this.hazardsArmed = false;
     this.bus.emit('objectiveComplete', { objectiveId: 'grimaldi_redeemed' });
-    this.audio?.advanceMusicPlaylist(BIG_TOP_EXIT_MUSIC, { fadeInMs: CIRCUS_THEME_FADE_IN_MS });
+    // The tent's own circus playlist takes back over, on another song.
+    this.music?.releaseMusic('big_top_maze');
   }
 
   // ── Rendering ─────────────────────────────────────────────────────────────

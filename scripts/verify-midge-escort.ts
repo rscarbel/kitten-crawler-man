@@ -50,7 +50,8 @@ import { KNOCKOUT_TIMEOUT_FRAMES } from '../src/systems/GameLoopPhases';
 import { MIDGE_ESCORT_NARRATION } from '../src/dialog/scripts/scenes/midgeEscort';
 import { markMobsAtCheckpoint, rewindMobsToCheckpoint } from '../src/systems/mobCheckpoint';
 import { resolveVillageAssaultLevel } from '../src/systems/briarHollow/villageAssaultLevel';
-import type { SiegeMusicClaim } from '../src/systems/briarHollow/VillageAssaultSystem';
+import type { MusicClaims } from '../src/audio/AudioScope';
+import type { MusicClaim, MusicClaimOwner } from '../src/audio/music/MusicDirector';
 import { BRAMBLEWICK_COW_NAME, MIDGE_COW_NAME } from '../src/systems/briarHollow/LivestockSystem';
 import { RESPAWN_SECONDS } from '../src/systems/briarHollow/livestockRespawn';
 import {
@@ -246,13 +247,20 @@ const streamsPerMap = Number(process.env.MIDGE_SIM_STREAMS ?? DEFAULT_STREAMS_PE
 
 // ── Rig helpers ──────────────────────────────────────────────────────────
 
-/** A zone music that records being taken over and handed back. */
-class RecordingMusic implements SiegeMusicClaim {
-  battleMusicActive = false;
-  claims = 0;
-  resets = 0;
-  reset(): void {
-    this.resets++;
+/** A scene's music claims that records which owners hold one. */
+class RecordingMusic implements MusicClaims {
+  private readonly held = new Set<MusicClaimOwner>();
+  claimMusic(claim: MusicClaim): void {
+    this.held.add(claim.owner);
+  }
+  releaseMusic(owner: MusicClaimOwner): void {
+    this.held.delete(owner);
+  }
+  isMusicClaimed(owner: MusicClaimOwner): boolean {
+    return this.held.has(owner);
+  }
+  get escortClaimed(): boolean {
+    return this.held.has('escort');
   }
 }
 
@@ -888,7 +896,7 @@ function runEscort(
     const following = after?.isFollowingLeader === true;
     if (following !== wasFollowing) followFlips++;
     wasFollowing = following;
-    if (setup.music.battleMusicActive) musicClaimed = true;
+    if (setup.music.escortClaimed) musicClaimed = true;
     wavesSeen = Math.max(wavesSeen, escort.ambush.wavesSprung);
     if (escort.ambush.wavesSprung > lastWaves) {
       springs += escort.ambush.wavesSprung - lastWaves;
@@ -1507,7 +1515,7 @@ function verifyTurnedAmbusher(mapSeed: number): void {
     turned.every((mob) => mob.fixatedTarget === null),
     'and goes after no cow',
   );
-  check(!setup.music.battleMusicActive, 'the fight music is handed back');
+  check(!setup.music.escortClaimed, 'the fight music is handed back');
   check(escort.ambush.isRoadClear, 'and the road reads as clear for the next wave');
   rig.dispose();
 }
@@ -1541,10 +1549,7 @@ function verifyDeliveryLetsTheRoadGo(mapSeed: number): void {
     );
   }
   step(setup);
-  check(
-    !setup.music.battleMusicActive,
-    'the fight music is handed back the moment she is delivered',
-  );
+  check(!setup.music.escortClaimed, 'the fight music is handed back the moment she is delivered');
   if (town !== null) place(rig.human, town);
   rig.cat.x = rig.human.x;
   rig.cat.y = rig.human.y;

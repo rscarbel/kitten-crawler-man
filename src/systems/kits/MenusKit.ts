@@ -21,6 +21,10 @@ import { eatFood, isFoodId } from '../../core/foods';
 import type { CatPlayer } from '../../creatures/CatPlayer';
 import { HumanPlayer } from '../../creatures/HumanPlayer';
 import { partyCoins } from '../../core/partyCoins';
+import { NowPlayingCard } from '../../ui/hud/nowPlaying';
+import { listenForCaptions, SoundCaptions } from '../../ui/hud/captions';
+import { settings } from '../../core/Settings';
+import { visibleWorldView } from '../../core/visibleWorldView';
 import { HudToasts, type ToastOptions } from '../../ui/hud/toasts';
 import {
   InventoryActions,
@@ -84,6 +88,10 @@ const ALREADY_FULL_NOTICE = "You're already full.";
 const POTION_TOAST: ToastOptions = { tone: 'success', icon: 'flask' };
 const TOME_TOAST: ToastOptions = { tone: 'accent', icon: 'book' };
 const HOTBAR_REFUSED_TOAST: ToastOptions = { tone: 'warning', icon: 'bag' };
+const MUTED_NOTICE = 'Sound muted';
+const UNMUTED_NOTICE = 'Sound on';
+/** One toast for the mute key, so pressing it twice reads as a change, not two notices. */
+const MUTE_TOAST_KEY = 'mute';
 
 /** Every item gated by the potion cooldown, so each wears the same hotbar sweep. */
 const POTION_COOLDOWN_ITEMS: readonly ItemId[] = ['health_potion', 'hollow_stew'];
@@ -160,6 +168,11 @@ export class MenusKit {
   readonly questReward: QuestRewardScreen;
   readonly skillBookPrompt = new SkillBookPrompt();
   readonly toasts = new HudToasts();
+  /** The song credit card the HUD draws beside the toasts, ticked with them. */
+  readonly nowPlaying = new NowPlayingCard();
+  /** The sound captions the HUD draws beside the toasts, ticked with them. */
+  readonly captions = new SoundCaptions();
+  private readonly stopCaptions: (() => void) | null;
   /**
    * The "how it works" explainers: the craft skills' and processing's, opened
    * from the Crafts tab and by the teachers, and Mongo's, opened when he joins
@@ -242,6 +255,10 @@ export class MenusKit {
     deps.world.bus.on('questRewardShown', (spec) => this.questReward.enqueue(spec));
 
     this.itemQuantityDialog = new QuantityDialog(audio);
+    this.stopCaptions =
+      audio === null
+        ? null
+        : listenForCaptions(audio, this.captions, visibleWorldView, () => settings.soundCaptions);
     this.inventoryActions.canTradeItem = (item) => this.itemIsTradableNow(item);
   }
 
@@ -292,6 +309,8 @@ export class MenusKit {
 
   update(): void {
     this.toasts.update();
+    this.nowPlaying.update();
+    this.captions.update();
     this.levelUpDialog.update();
     this.rewardGrantedDialog.update();
     this.updateQuestReward();
@@ -334,8 +353,22 @@ export class MenusKit {
 
   dispose(): void {
     this.toasts.clear();
+    this.nowPlaying.clear();
+    this.captions.clear();
+    this.stopCaptions?.();
     // An armed key chip would otherwise eat the first key of the next scene.
     this.pauseScreen.rebind.reset();
+  }
+
+  /** Mutes or unmutes everything, and says which in a toast. */
+  toggleMute(): void {
+    const audio = this.world.audio;
+    if (audio === null) return;
+    audio.toggleMuted();
+    this.announce(audio.muted ? MUTED_NOTICE : UNMUTED_NOTICE, {
+      icon: audio.muted ? 'volumeOff' : 'volume',
+      key: MUTE_TOAST_KEY,
+    });
   }
 
   /** Announces something in the toast strip above the hotbar. */

@@ -273,7 +273,7 @@ import {
   type SavePoint,
 } from '../core/SavePoint';
 import { progressForRespawn, sceneSetupFromSave } from './resumeFromSave';
-import type { TilePoint } from '../map/town/townPlan';
+import { DESPERADO_CLUB_NAME, type TilePoint } from '../map/town/townPlan';
 import type { WorldCheckpoint } from '../core/WorldCheckpoint';
 import {
   toPersistedArenaCheckpoint,
@@ -443,6 +443,7 @@ import { bloodVomitRemainingOf } from '../core/bloodVomitSave';
 import { drainBloodVomitRetches } from '../systems/bloodVomitRetches';
 import { PAGE_SAVE_LATCH, type SaveWriteOutcome } from '../core/progressPersistence';
 import type { InteriorPartyRun, SaveParty } from './interiorPartyRun';
+import type { RunSaveFields } from '../core/saveFormat';
 import { WipeHold, type ProgressWipe } from '../ui/screens/dialogs/wipeHold';
 import {
   captureTownMemory,
@@ -548,9 +549,21 @@ import type { ConversationHandle } from '../dialog/request';
 import type { QuestMarkerState } from '../sprites/questNPCSprite';
 import type { AISceneContext } from '../ai/aiActions';
 import { GameStats, bindRunStats, type GameStatsSnapshot } from '../core/GameStats';
+import { MusicLibrary, bindMusicLibrary } from '../core/MusicLibrary';
+import { musicUnlocksFromProgress } from '../core/musicBackfill';
+import { restoreMusicPlayback } from '../audio/music/playerPreference';
 import { difficultyStats } from '../core/DifficultyStats';
 import { settings } from '../core/Settings';
 import type { AudioManager } from '../audio/AudioManager';
+import { KEYBOARD_HERO_SONG, type AudioScope } from '../audio/AudioScope';
+import { bossTrack, wireBossMusic } from '../audio/music/bossTracks';
+import type { MusicSelection } from '../audio/music/MusicDirector';
+import {
+  MACHINERY_LOOP,
+  SPIDER_WALKING_LOOP,
+  WADING_LOOP,
+  WALKING_LOOP,
+} from '../audio/loopLevels';
 import { Conversation } from '../dialog/Conversation';
 import type { SoundId } from '../audio/sounds';
 import type { VillageBuildingId } from '../map/overworld/briarHollowLayout';
@@ -566,6 +579,7 @@ import { viewportWidth, viewportHeight } from '../core/Viewport';
 import { renderQuality } from '../core/RenderQuality';
 import { floorArrivalLoadTasks } from './floorArrivalLoad';
 import { ArrivalLoader } from './ArrivalLoader';
+import { postMusicLibraryNotices, returnUnreadMusicNotices } from '../ui/hud/nowPlaying';
 import { createSceneUi, sceneMouse } from '../ui/core/sceneUi';
 import { byInputMode } from '../ui/core/inputMode';
 import { worldText } from '../ui/world/worldText';
@@ -576,13 +590,16 @@ import { dynamiteChargeSurface } from '../systems/DynamiteSystem';
 import type { Surface, UiRoot, WorldGesture } from '../ui/core/UiRoot';
 import { PRIMARY_BUTTON } from '../ui/core/pointer';
 
+/** A save as a scene writes it: every run-level field present, the floor's `world` optional. */
+export type SaveProgressInput = GameProgressInput & RunSaveFields;
+
 /**
  * Persists a run. Everything a resumed game needs that the scene cannot
  * re-derive: both crawlers, the floor they are on, and the party's ability
  * progress — which belongs to neither `PlayerSnapshot` because it is shared —
  * plus the floor's generation seeds and the safe room to stand back in.
  */
-export type SaveProgressFn = (data: GameProgressInput) => Promise<SaveWriteOutcome>;
+export type SaveProgressFn = (data: SaveProgressInput) => Promise<SaveWriteOutcome>;
 
 export interface DungeonSceneOptions {
   /** Tile coordinates to spawn players at (instead of map start tile). */
@@ -614,6 +631,17 @@ export interface DungeonSceneOptions {
    * spots they lie on are only still open ground on the same map instance.
    */
   existingGroundPickups?: GroundPickupCheckpoint;
+  /**
+   * The run's music library, threaded by reference like `gameStats`. Absent
+   * on a new game, which starts it empty.
+   */
+  musicLibrary?: MusicLibrary;
+  /**
+   * Unlocks, as a save's backfill would, every song the floor's starting state
+   * proves the party already passed through, for a dev boot that drops the
+   * party onto a later floor without walking there.
+   */
+  backfillMusicLibrary?: boolean;
   /** Carry achievement managers across floor transitions. */
   humanAchievements?: AchievementManager;
   catAchievements?: AchievementManager;
@@ -808,8 +836,6 @@ export interface DungeonSceneOptions {
 // Items with a designated owner — kept in sync with non-boss floor loot routing below
 /** Building whose forge fires supply the town's fire-crackle ambience. */
 const RUSTY_ANVIL_BUILDING_NAME = 'The Rusty Anvil';
-/** Building whose muffled beat leaks out of its front door into the street. */
-const DESPERADO_CLUB_BUILDING_NAME = 'The Desperado Club';
 /** The key the necromancer's boss intro is played under: his spawn key. */
 const NECROMANCER_BOSS_TYPE = 'necromancer';
 /** How far outside the mark `!bounty go` lands the party — inside its aggro range. */
@@ -991,15 +1017,8 @@ const BIG_BRAWLER_GUARD_RADIUS = BIG_BRAWLER_GUARD_RADIUS_TILES * TILE_SIZE;
 /** Spawn-table key of the mobs that guard the Juicer's gateway. */
 const TROGLODYTE_SPAWN_KEY = 'troglodyte';
 
-// Music and animation timing
-const MUSIC_FADE_IN_MS = 2000;
-
-/**
- * How fast the floor's track ducks out when a hack begins. Short: the count-in
- * starts almost immediately, and a long crossfade would have the player counting
- * themselves in over the tail of the previous song.
- */
-const KEYBOARD_HERO_MUSIC_HANDOVER_FADE_MS = 400;
+/** How far under the player's music level the tutorial's track sits, as gain. */
+const TUTORIAL_MUSIC_DUCK_LEVEL = 0.25;
 
 /** The keyboard-hero per-hit tick sits under the track rather than over it. */
 const KEYBOARD_HERO_HIT_TICK_VOLUME = 0.45;
@@ -1431,8 +1450,6 @@ export class DungeonScene extends GameplayScene {
   // Becomes true once the AudioContext is running so intro ticks in sync with sound.
   private introStarted = false;
   private readonly skipIntro: boolean;
-  /** Set just before swapping into a building so onExit leaves the music running. */
-  private musicPersistsAcrossExit = false;
 
   private readonly abilityManager: AbilityManager;
 
@@ -1566,12 +1583,16 @@ export class DungeonScene extends GameplayScene {
   private catHealthLow = false;
   private playerIdleFrames = 0;
   private readonly gameStats: GameStats;
+  private readonly musicLibrary: MusicLibrary;
+  private musicBackfillPending: boolean;
 
   /** The HUD, drawn from {@link hudModel} each frame. */
   protected readonly hud = new HudSurface({
     visible: () => this.hudTakesInput,
     model: () => this.hudModel(),
     toasts: () => this.menus.toasts,
+    nowPlaying: () => this.menus.nowPlaying,
+    captions: () => this.menus.captions,
   });
   /** Takes the scythe's timed key off the stack; set while a village floor is entered. */
   private removeHarvestKeyHook: (() => void) | null = null;
@@ -1588,6 +1609,8 @@ export class DungeonScene extends GameplayScene {
   private readonly wipeHold = new WipeHold();
 
   protected readonly audio: AudioManager | null;
+  /** Every loop and ambient bed this floor starts; disposed as the scene exits. */
+  private readonly audioScope: AudioScope | null;
   /**
    * The one conversation panel every speaking system on this floor shares,
    * so two conversation boxes can never be open at once. This scene is the
@@ -1627,6 +1650,7 @@ export class DungeonScene extends GameplayScene {
     // Both are needed before the roster below, which hands every mob it accepts
     // the spell context, and by the level spawners' audio-carrying siblings.
     this.audio = options?.audio ?? null;
+    this.audioScope = this.audio?.createScope() ?? null;
     this.ui = createSceneUi({
       audio: this.audio,
       handleWorldPointer: (gesture) => this.handleWorldPointer(gesture),
@@ -1639,6 +1663,8 @@ export class DungeonScene extends GameplayScene {
     this.floorEntryGameStats = options?.floorEntryGameStats ?? this.gameStats.snapshot();
     this.humanAchievements = options?.humanAchievements ?? new AchievementManager();
     this.catAchievements = options?.catAchievements ?? new AchievementManager();
+    this.musicLibrary = options?.musicLibrary ?? new MusicLibrary();
+    this.musicBackfillPending = options?.backfillMusicLibrary === true;
     // Ahead of the kits: `CombatKit` levels abilities off kills and `MenusKit`
     // draws the ability screen, so both want this before they exist.
     this.abilityManager = options?.abilityManager ?? new AbilityManager();
@@ -1872,6 +1898,7 @@ export class DungeonScene extends GameplayScene {
       gameMap: this.gameMap,
       bus: this.bus,
       audio: this.audio,
+      audioScope: this.audioScope,
       pm: this.pm,
       roster: new MobRoster(this.gameMap, new SpellSystem()),
     };
@@ -1978,7 +2005,7 @@ export class DungeonScene extends GameplayScene {
       stampSafeRoomCounters(this.gameMap),
       this.bus,
       this.conversation,
-      this.audio,
+      this.audioScope,
       false,
     );
     // After the counter, because the furnishings keep clear of every tile it
@@ -2032,6 +2059,7 @@ export class DungeonScene extends GameplayScene {
       },
       levelDef.levelledCurve,
       levelDef.defendQuestIntensity,
+      this.audioScope,
     );
     this.cloggedBathroom = new CloggedBathroomSystem({
       gameMap: this.gameMap,
@@ -2039,6 +2067,7 @@ export class DungeonScene extends GameplayScene {
       roster: this.world.roster,
       conversation: this.conversation,
       audio: this.audio,
+      audioScope: this.audioScope,
       announce: (message, opts) => this.menus.announce(message, opts),
       startSolved: options?.bathroomSolvedAtStart?.(this.gameMap) ?? false,
     });
@@ -2329,18 +2358,12 @@ export class DungeonScene extends GameplayScene {
         void this.dispatchSaveProgress({
           humanSnap: floorCompleteHumanSnap,
           catSnap: floorCompleteCatSnap,
-          ...this.partyRunSaveFields(floorCompleteHumanSnap, floorCompleteCatSnap),
+          ...this.partyRunSaveFields({
+            human: floorCompleteHumanSnap,
+            cat: floorCompleteCatSnap,
+            ...this.mongoPetSaveState(),
+          }),
           levelId: levelDef.nextLevelId,
-          abilityStates: this.abilityManager.serializeStates(),
-          crafts: this.partyCrafts,
-          mongoUnlocked: this.mongoSystem.unlocked,
-          // The system's accessor, not the stored value: both of these saves can
-          // fire with Mongo still out, and the stored value is only written back
-          // when he despawns — so a safe room entered with a 5/130 raptor at the
-          // player's heel was recording 130.
-          mongoPetHp: this.mongoSystem.hp,
-          mongoPetResting: this.mongoSystem.restingUntilFull,
-          gameStats: this.gameStats.snapshot(),
           // No `world`: everything in it describes the floor being left, and a
           // reload has to build the next floor fresh, exactly as the stairs do.
         });
@@ -2387,6 +2410,7 @@ export class DungeonScene extends GameplayScene {
               catSnap: revivedSnapshot(snapPlayer(this.cat)),
               humanAchievements: this.humanAchievements,
               catAchievements: this.catAchievements,
+              musicLibrary: this.musicLibrary,
               mongoUnlocked: this.mongoSystem.unlocked,
               mongoPetState: this.mongoPetState,
               wheelLedger: this.wheelLedger,
@@ -2572,7 +2596,7 @@ export class DungeonScene extends GameplayScene {
               onTileChanged: (tileX, tileY) => this.miniMap.markTileChanged(tileX, tileY),
               worldHalted: () => this.gameplayHalted,
               isInSafeRoom: (point) => this.safeRoom.isEntityInSafeRoom(point),
-              music: () => this.overworldMusic,
+              music: () => this.audioScope,
               bossIntro: (name, color) => {
                 this.bossIntro.trigger(NECROMANCER_BOSS_TYPE, name, color);
               },
@@ -2718,7 +2742,7 @@ export class DungeonScene extends GameplayScene {
     // `buffers`, so this just tops up whatever this floor needs without
     // re-decoding what a previous floor already loaded. This is the per-floor
     // SFX unload/reload cycle: only the current floor's sounds stay resident.
-    void this.audio?.preload(sfxGroupsForLevelId(levelDef.id));
+    void this.audioScope?.preload(sfxGroupsForLevelId(levelDef.id));
     // Same "additive, cheap on re-entry" reasoning as the SFX preload above,
     // for this floor's declared sprite groups.
     // `prewarmGroups` also forces each sheet's GPU texture upload during this
@@ -2739,7 +2763,7 @@ export class DungeonScene extends GameplayScene {
     const spriteGroupsReady = prewarmGroups(levelDef.spriteGroups).then(() =>
       this.gameMap.invalidateAllTileArt(),
     );
-    this.spiderQuest.setSongClock(() => this.audio?.getKeyboardHeroMusicTimeMs() ?? null);
+    this.spiderQuest.setSongClock(() => this.audioScope?.keyboardHeroMusicTimeMs() ?? null);
     {
       const signs = new CrawlerSignSystem(
         CrawlerSignSystem.placementsFromMap(this.gameMap),
@@ -2750,12 +2774,12 @@ export class DungeonScene extends GameplayScene {
     this.skipIntro = options?.skipIntro ?? false;
     if (this.skipIntro) this.dungeonIntro.skip();
     this.overworldMusic =
-      levelDef.isOverworld && this.audio !== null
-        ? new OverworldMusicSystem(this.gameMap, this.audio)
+      levelDef.isOverworld && this.audioScope !== null
+        ? new OverworldMusicSystem(this.gameMap, this.audioScope)
         : null;
     this.ambientSound =
-      levelDef.isOverworld && this.audio !== null
-        ? new AmbientSoundSystem(this.audio, this.buildTownAmbientEmitters())
+      levelDef.isOverworld && this.audioScope !== null
+        ? new AmbientSoundSystem(this.audioScope, this.buildTownAmbientEmitters())
         : null;
     // Constructed after audio/music so the quest can drive battle tracks;
     // stage re-entry may spawn mobs immediately.
@@ -2765,8 +2789,7 @@ export class DungeonScene extends GameplayScene {
       (mob) => this.world.roster.add(mob),
       this.mongoSystem,
       this.circusQuestProgress,
-      this.overworldMusic,
-      this.audio,
+      this.audioScope,
       this.active(),
       this.conversation,
       this.travelUnlocks,
@@ -2782,7 +2805,7 @@ export class DungeonScene extends GameplayScene {
       this.bus,
       (mob) => this.world.roster.add(mob),
       this.murderQuestProgress,
-      this.overworldMusic,
+      this.audioScope,
       this.audio,
       this.conversation,
     );
@@ -3407,12 +3430,20 @@ export class DungeonScene extends GameplayScene {
       }
     });
 
-    this.audio?.wireEvents(bus, this.levelDef.music);
+    this.audio?.wireEvents(bus);
+    if (this.audioScope !== null) wireBossMusic(bus, this.audioScope);
     this.wireSaveIndicator(bus, this.menus.toasts);
   }
 
   onEnter(): void {
     bindRunStats(this.gameStats);
+    // Ahead of any claim, so the floor's own music is part of the silent backfill.
+    if (this.musicBackfillPending) {
+      this.musicBackfillPending = false;
+      this.backfillMusicFromStartingState();
+    }
+    bindMusicLibrary(this.musicLibrary);
+    if (this.audio !== null) restoreMusicPlayback(this.audio.music, this.musicLibrary);
     this.stopForwardingQuestItemEvictions?.();
     this.stopForwardingQuestItemEvictions = forwardQuestItemEvictions(this.bus, {
       human: this.human,
@@ -3430,23 +3461,29 @@ export class DungeonScene extends GameplayScene {
     // Delay intro ticking until the AudioContext is running so the intro sound
     // plays in sync with the visual. On desktop this is nearly instant; on mobile
     // it waits for the first user gesture and shows a "Tap to begin" prompt.
-    const TUTORIAL_MUSIC_VOLUME = 0.25;
+    // A floor's own track already playing (back out of a building) is claimed
+    // at once, so it carries on through the scene change; a new one starts
+    // with the intro, not under the loading screen.
+    const music = this.audio?.music ?? null;
+    const floorMusic = this.floorMusic;
+    if (music !== null && floorMusic !== null && music.isPlaying(floorMusic)) {
+      this.claimFloorMusic();
+    }
+    const arrival = this.active();
+    const zoneMusic = this.overworldMusic?.zoneSelectionAt(arrival.x, arrival.y) ?? null;
+    if (music !== null && zoneMusic !== null && music.isPlaying(zoneMusic)) {
+      this.overworldMusic?.claimZoneAt(arrival.x, arrival.y);
+    }
     const startIntro = (): void => {
       this.introStarted = true;
       if (this.tutorial !== null) {
-        this.audio?.setMusicVolume(TUTORIAL_MUSIC_VOLUME);
-        this.audio?.playMusic('tutorial_island', { fadeInMs: MUSIC_FADE_IN_MS });
+        this.audio?.duckMusic('tutorial', TUTORIAL_MUSIC_DUCK_LEVEL);
       } else {
-        // The tutorial floor ducks the music bus to TUTORIAL_MUSIC_VOLUME via the
-        // non-remembered setMusicVolume(); nothing else undoes that duck, so every
-        // later level must restore the player's actual preference before playing.
-        this.audio?.setMusicVolume(settings.musicVolume);
+        // The duck outlives the tutorial's scene, so every later floor lets go of it.
+        this.audio?.unduckMusic('tutorial');
         if (!this.skipIntro) this.audio?.playWhenReady('level_begins');
-        // Overworld music is zone-driven (town/wilds/circus) by OverworldMusicSystem.
-        if (this.overworldMusic === null && this.audio?.currentMusicId !== this.levelDef.music) {
-          this.audio?.playMusic(this.levelDef.music, { fadeInMs: MUSIC_FADE_IN_MS });
-        }
       }
+      this.claimFloorMusic();
     };
     // Behind the loading screen too: the sting announces the floor, so it is
     // heard with the banner it belongs to, not over the loading bar.
@@ -3496,6 +3533,7 @@ export class DungeonScene extends GameplayScene {
         this.miniMap.toggle();
         this.audio?.play('menu_expand_map');
       },
+      toggleMute: () => this.menus.toggleMute(),
       toggleQuestTracker: () => {
         // Same gate as its button: a menu tab that opens onto a floor with no
         // quests to list is worse than a key that does nothing.
@@ -3530,20 +3568,16 @@ export class DungeonScene extends GameplayScene {
     // permanently-low coin counter on whatever replaces this scene.
     this.rewardFly.reset();
     this.humanTalk.stop(this.human);
-    this.audio?.stopWalkingLoop();
-    // Walking into a building mid-river must not leave the wading loop running
-    // under the interior: nothing in `BuildingInteriorScene` would ever stop it.
-    this.audio?.stopWadingLoop();
-    this.audio?.stopMachineryLoop();
-    // Ambient loops are positional, so they always die with the scene — unlike
-    // music, which may deliberately survive a building round-trip.
+    // Every loop and bed the floor started dies with the scene — unlike music,
+    // which may deliberately survive a building round-trip.
+    this.audioScope?.dispose();
     this.ambientSound?.dispose();
     this.dungeonAmbience?.dispose();
     this.bopca.dispose();
     this.cloggedBathroom.dispose();
     this.stealthKeySnatch.dispose();
+    returnUnreadMusicNotices(this.menus, this.musicLibrary);
     this.menus.dispose();
-    if (!this.musicPersistsAcrossExit) this.audio?.stopMusic();
     this.inputHandler.unbind();
     this.removeHarvestKeyHook?.();
     this.removeHarvestKeyHook = null;
@@ -3657,7 +3691,7 @@ export class DungeonScene extends GameplayScene {
         maxVolume: FORGE_AMBIENT_VOLUME,
       });
     }
-    const club = this.gameMap.buildingEntries.find((e) => e.name === DESPERADO_CLUB_BUILDING_NAME);
+    const club = this.gameMap.buildingEntries.find((e) => e.name === DESPERADO_CLUB_NAME);
     if (club !== undefined) {
       emitters.push({
         soundId: 'ambient_desperado_club_exterior',
@@ -4603,7 +4637,6 @@ export class DungeonScene extends GameplayScene {
     const companionsWaitOutside = entry.type === 'prison';
     const departureFor = (indoors: InteriorCompanionDeparture): InteriorCompanionDeparture =>
       companionsWaitOutside ? { mongoWasOut: companionArrival.mongoWasOut } : indoors;
-    this.musicPersistsAcrossExit = true;
     const heldFloor = this.floorRegeneratesAroundBuildings
       ? null
       : this.holdFloorForInterior(returnTile);
@@ -4820,6 +4853,7 @@ export class DungeonScene extends GameplayScene {
       existingMiniMap: this.miniMap,
       humanAchievements: this.humanAchievements,
       catAchievements: this.catAchievements,
+      musicLibrary: this.musicLibrary,
       mongoUnlocked: this.mongoSystem.unlocked,
       mongoPetState: this.mongoPetState,
       wheelLedger: this.wheelLedger,
@@ -4908,6 +4942,7 @@ export class DungeonScene extends GameplayScene {
         progressWipe: this.progressWipe ?? undefined,
         humanAchievements: this.humanAchievements,
         catAchievements: this.catAchievements,
+        musicLibrary: this.musicLibrary,
         // A respawn is not a new floor, so a later floor restart still rewinds
         // to where this one began.
         floorEntryHumanSnap: sameFloor ? this.floorEntryHumanSnap : undefined,
@@ -5043,23 +5078,16 @@ export class DungeonScene extends GameplayScene {
     this.bossIntro.cancel();
     this.combatCooldownFrames = 0;
 
-    // A boss encounter switches to its boss track via `bossFightInitiated`, but
-    // dying mid-fight and restoring here never emits `bossDefeated` — nothing
-    // else tells the audio system the encounter is over, so the boss track
-    // would otherwise keep playing at the safe room.
-    if (this.overworldMusic === null && this.audio?.currentMusicId !== this.levelDef.music) {
-      this.audio?.playMusic(this.levelDef.music, { fadeInMs: MUSIC_FADE_IN_MS });
-    }
+    // Dying mid-fight and restoring here never emits `bossDefeated`, so
+    // nothing else lets go of the boss's track or the hack's song.
+    this.audioScope?.releaseMusic('boss');
+    this.releaseKeyboardHeroMusic();
 
     // A town save can predate a quest fight that was still being fought when
-    // the party fell. Rewound to before it, the quest no longer owns the track,
-    // and nothing else on this path hands it back to the zone music.
-    const questFightOwnsTrack =
-      this.circusQuest.isWaveFightInProgress || this.murderQuest.isTownFightInProgress;
-    if (this.overworldMusic !== null && !questFightOwnsTrack) {
-      this.overworldMusic.battleMusicActive = false;
-      this.overworldMusic.reset();
-    }
+    // the party fell. Rewound to before it, the quest no longer holds its
+    // track; one rewound into it has just claimed it again.
+    if (!this.circusQuest.isWaveFightInProgress) this.audioScope?.releaseMusic('circus_waves');
+    if (!this.murderQuest.isTownFightInProgress) this.audioScope?.releaseMusic('night_attack');
 
     // The party is standing on the save point right now — the latches have to
     // agree, or the respawn frame would read as a fresh entry and save the
@@ -5430,12 +5458,7 @@ export class DungeonScene extends GameplayScene {
     const progress = this.buildSaveProgress({
       human: snapPlayer(this.human),
       cat: snapPlayer(this.cat),
-      // The system's accessor, not the stored value: both of these saves can
-      // fire with Mongo still out, and the stored value is only written back
-      // when he despawns — so a safe room entered with a 5/130 raptor at the
-      // player's heel was recording 130.
-      mongoPetHp: this.mongoSystem.hp,
-      mongoPetResting: this.mongoSystem.restingUntilFull,
+      ...this.mongoPetSaveState(),
     });
     this.lastSave = savePointAfterWrite(progress, checkpoint, this.tutorial !== null);
     void this.dispatchSaveProgress(progress);
@@ -5482,52 +5505,63 @@ export class DungeonScene extends GameplayScene {
     };
   }
 
-  /** The top-level fields the wheel, the cow and the blood vomit keep. */
-  private partyRunSaveFields(
-    humanSnap: PlayerSnapshot,
-    catSnap: PlayerSnapshot,
-  ): Pick<
-    GameProgressInput,
-    | 'wheelPrizesWon'
-    | 'pendingWheelOutcome'
-    | 'wheelFreeSpinBet'
-    | 'wheelOwedFreeze'
-    | 'wheelQuestFreeSpins'
-    | 'bloodVomitRemaining'
-    | 'attackCowOwned'
-    | 'attackCowHp'
-    | 'attackCowResting'
-  > {
+  /**
+   * Mongo's pet state as the system holds it right now. The accessor, not the
+   * stored value: a save can fire with Mongo still out, and the stored value is
+   * only written back when he despawns, so it would record a hurt raptor as full.
+   */
+  private mongoPetSaveState(): Pick<SaveParty, 'mongoPetHp' | 'mongoPetResting'> {
     return {
+      mongoPetHp: this.mongoSystem.hp,
+      mongoPetResting: this.mongoSystem.restingUntilFull,
+    };
+  }
+
+  /**
+   * Every run-level field of a save, from the party as it stands. Each save path
+   * builds them here, so none of them can drop one a floor change must carry.
+   */
+  private partyRunSaveFields(party: SaveParty): RunSaveFields {
+    return {
+      abilityStates: this.abilityManager.serializeStates(),
+      crafts: this.partyCrafts,
+      gameStats: this.gameStats.snapshot(),
+      humanAchievements: this.humanAchievements.serialize(),
+      catAchievements: this.catAchievements.serialize(),
+      mongoUnlocked: this.mongoSystem.unlocked,
+      mongoPetHp: party.mongoPetHp,
+      mongoPetResting: party.mongoPetResting,
       wheelPrizesWon: [...this.wheelLedger.prizesWon],
       pendingWheelOutcome:
         this.wheelLedger.pendingOutcome === null ? null : { ...this.wheelLedger.pendingOutcome },
       wheelFreeSpinBet: this.wheelLedger.freeSpinBet,
       wheelOwedFreeze: this.wheelLedger.owedFreeze,
       wheelQuestFreeSpins: createWheelQuestFreeSpins(this.wheelLedger.questFreeSpins),
-      bloodVomitRemaining: bloodVomitRemainingOf(humanSnap, catSnap),
+      bloodVomitRemaining: bloodVomitRemainingOf(party.human, party.cat),
       attackCowOwned: this.attackCowState.owned,
       attackCowHp: this.attackCowState.hp ?? undefined,
       attackCowResting: this.attackCowState.restingUntilFull,
+      musicLibrary: this.musicLibrary.serialize(),
     };
   }
 
-  private buildSaveProgress(party: SaveParty): GameProgressInput {
+  private backfillMusicFromStartingState(): void {
+    const progress = this.buildSaveProgress({
+      human: snapPlayer(this.human),
+      cat: snapPlayer(this.cat),
+      ...this.mongoPetSaveState(),
+    });
+    this.musicLibrary.absorbBackfill(musicUnlocksFromProgress(progress, progress.world?.persisted));
+  }
+
+  private buildSaveProgress(party: SaveParty): SaveProgressInput {
     const humanSnap = revivedSnapshot(party.human);
     const catSnap = revivedSnapshot(party.cat);
     return {
       humanSnap,
       catSnap,
-      ...this.partyRunSaveFields(humanSnap, catSnap),
+      ...this.partyRunSaveFields({ ...party, human: humanSnap, cat: catSnap }),
       levelId: this.levelDef.id,
-      abilityStates: this.abilityManager.serializeStates(),
-      crafts: this.partyCrafts,
-      mongoUnlocked: this.mongoSystem.unlocked,
-      mongoPetHp: party.mongoPetHp,
-      mongoPetResting: party.mongoPetResting,
-      humanAchievements: this.humanAchievements.serialize(),
-      catAchievements: this.catAchievements.serialize(),
-      gameStats: this.gameStats.snapshot(),
       // The tutorial's hand-built map has no layout to regenerate.
       world:
         this.tutorial === null
@@ -5568,7 +5602,7 @@ export class DungeonScene extends GameplayScene {
    * cue fire for every checkpoint, safe-room save and floor-complete save
    * without each call site having to remember to announce itself.
    */
-  private dispatchSaveProgress(progress: GameProgressInput): Promise<SaveWriteOutcome> {
+  private dispatchSaveProgress(progress: SaveProgressInput): Promise<SaveWriteOutcome> {
     // No banner either: a wiped run is on its way to a reload, and announcing
     // a save that was thrown away would be a lie.
     if (PAGE_SAVE_LATCH.engaged) return Promise.resolve('latched');
@@ -5755,27 +5789,39 @@ export class DungeonScene extends GameplayScene {
     return this.gameMap.townSquareCentre ?? this.gameMap.startTile;
   }
 
-  /**
-   * Swaps the floor's music for the pipe puzzle's own track while its board is
-   * on screen, and back once it closes. Only ever trades with the floor's
-   * music, so a boss or quest track that took over is never cut short.
-   */
+  /** The pipe puzzle's own track plays over the floor's while its board is on screen. */
   private updatePipeBoardMusic(): void {
-    const audio = this.audio;
-    if (audio === null || this.overworldMusic !== null) return;
-    const playing = audio.currentMusicId;
+    const scope = this.audioScope;
+    if (scope === null) return;
     const boardTrack = this.cloggedBathroom.pipeBoardMusic;
-    if (boardTrack !== null) {
-      if (playing === this.levelDef.music) {
-        audio.playMusic(boardTrack, { fadeInMs: MUSIC_FADE_IN_MS });
-      }
+    if (boardTrack === null) {
+      scope.releaseMusic('pipe_board');
       return;
     }
-    const boardTrackStillPlaying =
-      playing !== null && playing === this.cloggedBathroom.pipeBoardMusicTrack;
-    if (boardTrackStillPlaying) {
-      audio.playMusic(this.levelDef.music, { fadeInMs: MUSIC_FADE_IN_MS });
-    }
+    scope.claimMusic({
+      owner: 'pipe_board',
+      layer: 'activity',
+      selection: { kind: 'loop', id: boardTrack },
+    });
+  }
+
+  /** What this floor plays when nothing outranks it; null on the overworld, whose zones claim their own. */
+  private get floorMusic(): MusicSelection | null {
+    if (this.overworldMusic !== null) return null;
+    const id = this.tutorial !== null ? 'tutorial_island' : this.levelDef.music;
+    return { kind: 'loop', id };
+  }
+
+  private claimFloorMusic(): void {
+    const selection = this.floorMusic;
+    if (selection === null) return;
+    this.audioScope?.claimMusic({ owner: 'floor', layer: 'area', selection });
+  }
+
+  /** The hack's song stops and lets go of the music, so the floor's comes back. */
+  private releaseKeyboardHeroMusic(): void {
+    this.audioScope?.stopKeyboardHeroMusic();
+    this.audioScope?.releaseMusic('keyboard_hero');
   }
 
   /**
@@ -6007,6 +6053,7 @@ export class DungeonScene extends GameplayScene {
         floorEntryCatSnap: this.floorEntryCatSnap,
         humanAchievements: this.floorEntryHumanAchievements.clone(),
         catAchievements: this.floorEntryCatAchievements.clone(),
+        musicLibrary: this.musicLibrary,
         floorEntryHumanAchievements: this.floorEntryHumanAchievements,
         floorEntryAbilityManager: this.floorEntryAbilityManager,
         floorEntryGameStats: this.floorEntryGameStats,
@@ -6603,8 +6650,8 @@ export class DungeonScene extends GameplayScene {
    * in which the crawler is walking anywhere.
    */
   private silenceMovementLoops(): void {
-    this.audio?.stopWalkingLoop();
-    this.audio?.stopWadingLoop();
+    this.audioScope?.stopLoop(WALKING_LOOP);
+    this.audioScope?.stopLoop(WADING_LOOP);
   }
 
   /**
@@ -7674,6 +7721,10 @@ export class DungeonScene extends GameplayScene {
     // boss room locks would otherwise sit frozen at its first frame for the
     // length of the intro, and a potion's effect cue would be held with it.
     this.menus.update();
+    // The floor's song starts with the intro banner, which is drawn over the
+    // HUD for most of a credit's display time; its notices wait in the library.
+    const introBannerShowing = this.tutorial === null && this.dungeonIntro.isActive;
+    if (!introBannerShowing) postMusicLibraryNotices(this.musicLibrary.drainNotices(), this.menus);
     this.tickSaveIndicator();
     this.chestRewardDialog.tick();
     if (this.chestRewardDialog.rewardSoundPending) {
@@ -7870,6 +7921,7 @@ export class DungeonScene extends GameplayScene {
     return new DungeonAmbienceSystem({
       gameMap: this.gameMap,
       audio: this.audio,
+      audioScope: this.audioScope,
       floor: dungeonFloorTheme().id,
       lights: lighting === null ? null : () => lighting.staticLightTiles(),
       puddles: { tiles: life.puddles },
@@ -8598,14 +8650,13 @@ export class DungeonScene extends GameplayScene {
     // muddies both. The river bed keeps playing under either.
     const isWading = player.isMoving && isStandingInWater(player, this.gameMap);
     if (isWading) {
-      this.audio?.stopWalkingLoop();
-      this.audio?.startWadingLoop();
+      this.audioScope?.stopLoop(WALKING_LOOP);
+      this.audioScope?.startLoop(WADING_LOOP);
     } else if (player.isMoving) {
-      this.audio?.stopWadingLoop();
-      this.audio?.startWalkingLoop();
+      this.audioScope?.stopLoop(WADING_LOOP);
+      this.audioScope?.startLoop(WALKING_LOOP);
     } else {
-      this.audio?.stopWalkingLoop();
-      this.audio?.stopWadingLoop();
+      this.silenceMovementLoops();
     }
 
     this.pm.updateProtection(this.safeRoom);
@@ -8668,6 +8719,21 @@ export class DungeonScene extends GameplayScene {
     this.spiderQuest.applyRoomLock(this.human, this.cat);
     this.arena.update(ctx);
 
+    if (this.bossRoom.fightAbortedPending) {
+      this.bossRoom.fightAbortedPending = false;
+      this.audioScope?.releaseMusic('boss');
+    }
+    if (this.bossRoom.sealedBossType !== null) {
+      const track = bossTrack(this.bossRoom.sealedBossType);
+      this.bossRoom.sealedBossType = null;
+      if (track !== null) {
+        this.audioScope?.claimMusic({
+          owner: 'boss',
+          layer: 'boss',
+          selection: { kind: 'loop', id: track },
+        });
+      }
+    }
     if (this.bossRoom.newlyLockedBossType !== null) {
       const bt = this.bossRoom.newlyLockedBossType;
       this.bossRoom.newlyLockedBossType = null;
@@ -8840,9 +8906,9 @@ export class DungeonScene extends GameplayScene {
       }
     }
     if (anySpiderWalkingNear) {
-      this.audio?.startSpiderWalkingLoop();
+      this.audioScope?.startLoop(SPIDER_WALKING_LOOP);
     } else {
-      this.audio?.stopSpiderWalkingLoop();
+      this.audioScope?.stopLoop(SPIDER_WALKING_LOOP);
     }
 
     const outcome = this.combat.resolvePlayerAttacks({
@@ -8965,9 +9031,10 @@ export class DungeonScene extends GameplayScene {
     // The llama's own impact cue. It is drained here rather than from
     // `playMobAudioCues` because the ball outlives its llama, and a shot that
     // lands after the animal died has no mob left to carry the flag.
-    if (this.lavaBalls.burstSoundPending) {
-      this.lavaBalls.burstSoundPending = false;
-      this.audio?.play('llama_fireball_explosion');
+    const lavaBurst = this.lavaBalls.burstSoundAt;
+    if (lavaBurst !== null) {
+      this.lavaBalls.burstSoundAt = null;
+      this.audio?.playAt('llama_fireball_explosion', lavaBurst.x, lavaBurst.y);
     }
 
     playHirelingProjectileCues(this.rockThrows, this.hirelingShots, this.audio);
@@ -8975,21 +9042,24 @@ export class DungeonScene extends GameplayScene {
     // Drained here rather than from `playMobAudioCues` for the same reason the
     // llama's is: a soul bolt outlives its caster, and one that lands after the
     // lord died has no mob left to carry the flag.
-    if (this.skeletonShots.burstSoundPending) {
-      this.skeletonShots.burstSoundPending = false;
-      this.audio?.play('magic_ball_impact');
+    const soulBurst = this.skeletonShots.burstSoundAt;
+    if (soulBurst !== null) {
+      this.skeletonShots.burstSoundAt = null;
+      this.audio?.playAt('magic_ball_impact', soulBurst.x, soulBurst.y);
     }
 
     // A bone shaft does not go off, so it is drained separately from the bolt
     // burst above — the same frame can end one of each.
-    if (this.skeletonShots.arrowImpactSoundPending) {
-      this.skeletonShots.arrowImpactSoundPending = false;
-      this.audio?.play('arrow_impact');
+    const boneShaft = this.skeletonShots.arrowImpactSoundAt;
+    if (boneShaft !== null) {
+      this.skeletonShots.arrowImpactSoundAt = null;
+      this.audio?.playAt('arrow_impact', boneShaft.x, boneShaft.y);
     }
 
-    if (this.goblinArrows.impactSoundPending) {
-      this.goblinArrows.impactSoundPending = false;
-      this.audio?.play('arrow_impact');
+    const goblinArrow = this.goblinArrows.impactSoundAt;
+    if (goblinArrow !== null) {
+      this.goblinArrows.impactSoundAt = null;
+      this.audio?.playAt('arrow_impact', goblinArrow.x, goblinArrow.y);
     }
 
     // Likewise the rise: the mob that made it happen is the lord, but the sound
@@ -8998,21 +9068,24 @@ export class DungeonScene extends GameplayScene {
       this.skeletonSummons.riseSoundPending = false;
       this.audio?.play('bones_rattling');
     }
-    if (this.clownGas.shatterSoundPending) {
-      this.clownGas.shatterSoundPending = false;
+    const gasShatter = this.clownGas.shatterSoundAt;
+    if (gasShatter !== null) {
+      this.clownGas.shatterSoundAt = null;
       // Two cues on one beat by design: the bottle breaking, and the cloud it
       // lets out. They are simultaneous in the fiction and in `ClownGasSystem`,
       // which spawns the shatter and the cloud on the same frame.
-      this.audio?.playRandom(['glass_break_1', 'glass_break_2', 'glass_break_3', 'glass_break_4']);
-      this.audio?.play('gas_cloud');
+      const shatter = this.audio?.placedAt(gasShatter.x, gasShatter.y);
+      shatter?.playRandom(['glass_break_1', 'glass_break_2', 'glass_break_3', 'glass_break_4']);
+      shatter?.play('gas_cloud');
     }
-    if (this.knightMissiles.impactSoundPending) {
-      this.knightMissiles.impactSoundPending = false;
-      this.audio?.playRandom([
-        'small_magic_impact_1',
-        'small_magic_impact_2',
-        'small_magic_impact_3',
-      ]);
+    const knightBurst = this.knightMissiles.impactSoundAt;
+    if (knightBurst !== null) {
+      this.knightMissiles.impactSoundAt = null;
+      this.audio?.playRandomAt(
+        ['small_magic_impact_1', 'small_magic_impact_2', 'small_magic_impact_3'],
+        knightBurst.x,
+        knightBurst.y,
+      );
     }
 
     if (
@@ -9109,11 +9182,11 @@ export class DungeonScene extends GameplayScene {
   private _processSpiderQuestSounds(): void {
     if (this.spiderQuest.machineryStartPending) {
       this.spiderQuest.machineryStartPending = false;
-      this.audio?.startMachineryLoop();
+      this.audioScope?.startLoop(MACHINERY_LOOP);
     }
     if (this.spiderQuest.machineryStopPending) {
       this.spiderQuest.machineryStopPending = false;
-      this.audio?.stopMachineryLoop();
+      this.audioScope?.stopLoop(MACHINERY_LOOP);
     }
     if (this.spiderQuest.poweringOffSoundPending) {
       this.spiderQuest.poweringOffSoundPending = false;
@@ -9144,21 +9217,24 @@ export class DungeonScene extends GameplayScene {
       // Boosted volume: this audio was recorded significantly quieter than other SFX
       this.audio?.play('scientist_explaining_request', { volume: 3.5 });
     }
-    if (this.spiderQuest.levelMusicStopPending) {
-      this.spiderQuest.levelMusicStopPending = false;
-      this.audio?.stopMusic(KEYBOARD_HERO_MUSIC_HANDOVER_FADE_MS);
-    }
-    if (this.spiderQuest.levelMusicRestorePending) {
-      this.spiderQuest.levelMusicRestorePending = false;
-      this.audio?.playMusic(this.levelDef.music, { fadeInMs: MUSIC_FADE_IN_MS });
+    if (this.spiderQuest.keyboardHeroMusicReleasePending) {
+      this.spiderQuest.keyboardHeroMusicReleasePending = false;
+      this.releaseKeyboardHeroMusic();
     }
     if (this.spiderQuest.keyboardHeroMusicStartPending) {
       this.spiderQuest.keyboardHeroMusicStartPending = false;
-      this.audio?.startKeyboardHeroMusic();
+      // Outranks everything, the player's own choice included: the song is
+      // what the note chart is timed to.
+      this.audioScope?.claimMusic({
+        owner: 'keyboard_hero',
+        layer: 'exclusive',
+        selection: { kind: 'held', id: KEYBOARD_HERO_SONG },
+      });
+      this.audioScope?.startKeyboardHeroMusic();
     }
     if (this.spiderQuest.keyboardHeroMusicStopPending) {
       this.spiderQuest.keyboardHeroMusicStopPending = false;
-      this.audio?.stopKeyboardHeroMusic();
+      this.audioScope?.stopKeyboardHeroMusic();
     }
     if (this.spiderQuest.hackFailErrorSoundPending) {
       this.spiderQuest.hackFailErrorSoundPending = false;
@@ -9225,11 +9301,12 @@ export class DungeonScene extends GameplayScene {
     }
     if (this.spiderQuest.bossMusicStartPending) {
       this.spiderQuest.bossMusicStartPending = false;
+      this.releaseKeyboardHeroMusic();
       this.bus.emit('bossFightInitiated', { bossType: 'grotesque_spider' });
     }
     if (this.spiderQuest.bossMusicStopPending) {
       this.spiderQuest.bossMusicStopPending = false;
-      this.audio?.playMusic(this.levelDef.music, { fadeInMs: MUSIC_FADE_IN_MS });
+      this.audioScope?.releaseMusic('boss');
     }
   }
 

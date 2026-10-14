@@ -62,6 +62,7 @@
  */
 
 import type { AudioManager } from '../../audio/AudioManager';
+import type { AudioScope } from '../../audio/AudioScope';
 import { TILE_SIZE } from '../../core/constants';
 import type { EventBus } from '../../core/EventBus';
 import type { InteriorFigure } from '../../core/InteriorFigure';
@@ -245,6 +246,8 @@ export interface GoblinPrisonDeps {
   readonly plan: PrisonPlan;
   readonly bus: EventBus;
   readonly audio: AudioManager | null;
+  /** Where the positional loops run, faded out with the scene. */
+  readonly audioScope: AudioScope | null;
   readonly addMob: (mob: Mob) => void;
   readonly toast: (text: string, tone: 'danger') => void;
   /** Starts the controlled crawler's attack, the same as pressing the attack key. */
@@ -1070,7 +1073,7 @@ export class GoblinPrisonSystem {
    * hear a guard coming before its light shows.
    */
   private updatePositionalLoops(active: Player): void {
-    const audio = this.deps.audio;
+    const audio = this.deps.audioScope;
     if (audio === null) return;
     const centre = bodyCentre(active);
     let nearestWalker = Infinity;
@@ -1090,7 +1093,7 @@ export class GoblinPrisonSystem {
     this.setPositionalLoop(audio, 'spotlightHum', nearestSpot);
   }
 
-  private setPositionalLoop(audio: AudioManager, cue: PrisonCue, distancePx: number): void {
+  private setPositionalLoop(audio: AudioScope, cue: PrisonCue, distancePx: number): void {
     const takes: ReadonlyArray<string> = PRISON_CUES[cue];
     const sound = PRISON_CUES[cue][0];
     if (takes.length === 0 || sound === undefined) return;
@@ -1100,7 +1103,7 @@ export class GoblinPrisonSystem {
       if (this.loopsRunning.delete(cue)) audio.stopAmbientLoop(sound);
       return;
     }
-    // Asked of the manager rather than of `loopsRunning`: a start declined
+    // Asked of the scope rather than of `loopsRunning`: a start declined
     // while the buffer is still decoding or the context is locked must be
     // retried on a later frame.
     if (!audio.isAmbientLoopRunning(sound)) {
@@ -1260,7 +1263,7 @@ export class GoblinPrisonSystem {
   dispose(): void {
     for (const off of this.unsubscribe) off();
     this.unsubscribe.length = 0;
-    const audio = this.deps.audio;
+    const audio = this.deps.audioScope;
     if (audio !== null) {
       for (const cue of this.loopsRunning) {
         const sound = PRISON_CUES[cue][0];

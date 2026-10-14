@@ -16,6 +16,50 @@ import {
 } from './WheelLedger';
 import { parseBloodVomitRemaining } from './bloodVomitSave';
 import { parseAttackCowHp } from './AttackCowState';
+import { MusicLibrary, backfilledMusicLibrary } from './MusicLibrary';
+import type { SerializedMusicLibrary } from './MusicLibrary';
+import { parsePersistedWorldState, type PersistedWorldState } from './PersistedWorldState';
+
+/**
+ * The fields of a save that belong to the whole run rather than to the floor it
+ * was written on. Every save carries all of them — a save that leaves one out
+ * wipes it, because a save replaces the stored one whole.
+ */
+type RunSaveFieldKey =
+  | 'abilityStates'
+  | 'crafts'
+  | 'gameStats'
+  | 'humanAchievements'
+  | 'catAchievements'
+  | 'mongoUnlocked'
+  | 'mongoPetHp'
+  | 'mongoPetResting'
+  | 'wheelPrizesWon'
+  | 'pendingWheelOutcome'
+  | 'wheelFreeSpinBet'
+  | 'wheelOwedFreeze'
+  | 'wheelQuestFreeSpins'
+  | 'bloodVomitRemaining'
+  | 'attackCowOwned'
+  | 'attackCowHp'
+  | 'attackCowResting'
+  | 'musicLibrary';
+
+/**
+ * The cow's HP is the one run field whose absence means something (full, not
+ * yet measured), so its key must be written but its value may be `undefined`.
+ */
+type RunSaveFieldAbsentWhenUnmeasured = 'attackCowHp';
+
+/**
+ * The run-level fields every save path must write, built in one place so that a
+ * save forgetting one is a type error rather than a silently dropped record.
+ */
+export type RunSaveFields = Required<
+  Pick<GameProgressInput, Exclude<RunSaveFieldKey, RunSaveFieldAbsentWhenUnmeasured>>
+> & {
+  [K in RunSaveFieldAbsentWhenUnmeasured]: GameProgressInput[K];
+};
 
 /**
  * The version of the save payload's shape, stamped on every save.
@@ -27,7 +71,7 @@ import { parseAttackCowHp } from './AttackCowState';
  * - MAJOR — a field removed, renamed, or re-meant. Builds of another major
  *   refuse the save rather than resume a run from misread state.
  */
-export const SAVE_FORMAT_VERSION = '1.1.0';
+export const SAVE_FORMAT_VERSION = '1.2.0';
 
 interface SemanticVersion {
   major: number;
@@ -112,6 +156,26 @@ function parseAchievements(value: unknown): SerializedAchievements | undefined {
 }
 
 /**
+ * The floor's persisted state as the save holds it, read past the generator
+ * check `parseSavedWorld` applies: a floor about to be regenerated still
+ * records what the party did on it.
+ */
+function persistedStateWhateverTheGenerator(world: unknown): PersistedWorldState | undefined {
+  return isRecord(world) ? parsePersistedWorldState(world.persisted) : undefined;
+}
+
+/** The save's music library, or one backfilled from its progress when it predates the library. */
+function parseMusicLibrary(
+  raw: Record<string, unknown>,
+  progress: GameProgressInput,
+): SerializedMusicLibrary {
+  if (raw.musicLibrary !== undefined) {
+    return MusicLibrary.fromSerialized(raw.musicLibrary).serialize();
+  }
+  return backfilledMusicLibrary(progress, persistedStateWhateverTheGenerator(raw.world));
+}
+
+/**
  * A stored save screened into a `GameProgress`, or `null` when it is not one or
  * was written in a format this build cannot load. Used for both the device's
  * own save and the one the server hands back, which arrives as it was stored.
@@ -123,12 +187,10 @@ export function parseGameProgress(raw: unknown): GameProgress | null {
   const { levelId, humanSnap, catSnap, savedAt, abilityStates } = raw;
   if (typeof levelId !== 'string' || typeof savedAt !== 'string') return null;
   if (!isPlayerSnapshot(humanSnap) || !isPlayerSnapshot(catSnap)) return null;
-  return {
-    version,
+  const progress: GameProgressInput = {
     levelId,
     humanSnap,
     catSnap,
-    savedAt,
     abilityStates: Array.isArray(abilityStates) ? abilityStates : undefined,
     mongoUnlocked: typeof raw.mongoUnlocked === 'boolean' ? raw.mongoUnlocked : undefined,
     mongoPetHp: typeof raw.mongoPetHp === 'number' ? raw.mongoPetHp : undefined,
@@ -149,6 +211,7 @@ export function parseGameProgress(raw: unknown): GameProgress | null {
     attackCowHp: parseAttackCowHp(raw.attackCowHp),
     attackCowResting: typeof raw.attackCowResting === 'boolean' ? raw.attackCowResting : undefined,
   };
+  return { ...progress, version, savedAt, musicLibrary: parseMusicLibrary(raw, progress) };
 }
 
 /** A save as it is written: this build's format version and the time of writing. */

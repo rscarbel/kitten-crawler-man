@@ -10,7 +10,7 @@
  * only thing held here, and a rewind drops it.
  */
 
-import type { AudioManager } from '../../../audio/AudioManager';
+import type { AudioScope } from '../../../audio/AudioScope';
 import { HumanPlayer } from '../../../creatures/HumanPlayer';
 import type { TilePoint } from '../../../map/town/townPlan';
 import type { FenceStyle } from '../../../map/tileTypes';
@@ -118,8 +118,8 @@ interface FenceJob {
 
 /**
  * What the fence reads: the slice of the quest's shared context it uses,
- * with the audio narrowed to the ambient-loop calls its hammering bed makes —
- * narrow enough for a headless gate to stand in for it.
+ * with the audio scope narrowed to the ambient-loop calls its hammering bed
+ * makes — narrow enough for a headless gate to stand in for it.
  */
 export type PastureFenceContext = Pick<
   BlueprintsQuestContext,
@@ -135,8 +135,8 @@ export type PastureFenceContext = Pick<
   | 'worldHalted'
   | 'cue'
 > & {
-  readonly audio: Pick<
-    AudioManager,
+  readonly audioScope: Pick<
+    AudioScope,
     'startAmbientLoop' | 'stopAmbientLoop' | 'isAmbientLoopRunning'
   > | null;
 };
@@ -396,7 +396,7 @@ export class PastureFenceWork {
    * loop this part started.
    */
   private syncWorkLoop(): void {
-    const audio = this.ctx.audio;
+    const audio = this.ctx.audioScope;
     if (audio === null) return;
     const [loop] = BLUEPRINTS_CUES.fenceWorkLoop;
     if (this.job !== null) {

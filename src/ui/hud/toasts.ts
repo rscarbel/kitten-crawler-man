@@ -68,7 +68,17 @@ export interface ToastOptions {
   readonly key?: string;
   /** Ticks the toast stays up, fade included. Defaults to {@link TOAST_DISPLAY_TICKS}. */
   readonly durationTicks?: number;
+  /**
+   * What happens when the stack is already full. `evict` (the default) drops
+   * the oldest toast, right for a status that supersedes what came before.
+   * `queue` waits for a free row instead, for a burst where every line must be
+   * read, such as a room unlocking four songs at once; a queued toast starts
+   * its clock only once it is on screen.
+   */
+  readonly overflow?: ToastOverflow;
 }
+
+export type ToastOverflow = 'evict' | 'queue';
 
 /** A toast as the renderer sees it. */
 export interface ShownToast {
@@ -105,10 +115,14 @@ const DEFAULT_TONE_ICONS: Readonly<Record<ToastTone, GlyphId | null>> = {
 export class HudToasts {
   /** Oldest first. */
   private readonly toasts: Toast[] = [];
+  /** Toasts posted with `overflow: 'queue'` while the stack was full, oldest first. */
+  private readonly waiting: Toast[] = [];
+  /** How many of the oldest toasts the last frame had no room to draw. */
+  private unseen = 0;
   private nextId = 0;
 
   get isEmpty(): boolean {
-    return this.toasts.length === 0;
+    return this.toasts.length === 0 && this.waiting.length === 0;
   }
 
   /** Oldest first; the renderer puts the newest nearest the anchor. */
@@ -127,7 +141,9 @@ export class HudToasts {
     };
     const key = opts.key ?? null;
     if (key !== null) {
-      const keyed = this.toasts.find((toast) => toast.key === key);
+      const keyed =
+        this.toasts.find((toast) => toast.key === key) ??
+        this.waiting.find((toast) => toast.key === key);
       if (keyed !== undefined) {
         Object.assign(keyed, fields);
         return;
@@ -143,28 +159,64 @@ export class HudToasts {
         this.toasts.splice(showingIndex, 1);
       }
     }
-    this.toasts.push({ id: this.nextId++, key, age, ...fields });
+    const toast: Toast = { id: this.nextId++, key, age, ...fields };
+    const stackFull = this.toasts.length >= MAX_VISIBLE_TOASTS;
+    const mustWait = opts.overflow === 'queue' && (stackFull || this.waiting.length > 0);
+    if (mustWait) {
+      this.waiting.push(toast);
+      return;
+    }
+    this.toasts.push(toast);
     while (this.toasts.length > MAX_VISIBLE_TOASTS) this.toasts.shift();
   }
 
-  /** Whether a toast posted with `key` is still up. */
+  /** Whether a toast posted with `key` is still up or waiting for a row. */
   isShowing(key: string): boolean {
-    return this.toasts.some((toast) => toast.key === key);
+    return (
+      this.toasts.some((toast) => toast.key === key) ||
+      this.waiting.some((toast) => toast.key === key)
+    );
+  }
+
+  /**
+   * The oldest `count` toasts found no room on screen this frame. They keep
+   * their time until they are drawn, so a notice is never spent unread.
+   */
+  holdUnseen(count: number): void {
+    this.unseen = count;
+  }
+
+  /**
+   * The keys of toasts not yet read: waiting for a row, held off screen, or
+   * up for fewer than `readTicks` ticks. Oldest first.
+   */
+  unreadKeys(readTicks: number): string[] {
+    const onScreen = this.toasts.filter(
+      (toast, index) => index < this.unseen || toast.age < readTicks,
+    );
+    return [...onScreen, ...this.waiting].map((toast) => toast.key).filter((key) => key !== null);
   }
 
   /** Call once per game tick. */
   update(): void {
-    for (let index = this.toasts.length - 1; index >= 0; index--) {
+    for (let index = this.toasts.length - 1; index >= this.unseen; index--) {
       const toast = this.toasts[index];
       toast.age++;
       toast.ticksLeft--;
       if (toast.ticksLeft <= 0) this.toasts.splice(index, 1);
     }
+    while (this.toasts.length < MAX_VISIBLE_TOASTS) {
+      const next = this.waiting.shift();
+      if (next === undefined) break;
+      this.toasts.push(next);
+    }
   }
 
-  /** Drops everything on screen, for scene teardown. */
+  /** Drops everything on screen and waiting, for scene teardown. */
   clear(): void {
     this.toasts.length = 0;
+    this.waiting.length = 0;
+    this.unseen = 0;
   }
 }
 
@@ -207,13 +259,16 @@ function easeOut(linear: number): number {
   return 1 - Math.pow(1 - linear, EASE_OUT_POWER);
 }
 
-function drawToast(ui: Ui, toast: ShownToast, anchor: ToastAnchor, bottom: number): number {
-  const { theme, ctx } = ui;
+interface ToastBox {
+  readonly metrics: ToastMetrics;
+  readonly iconSpan: number;
+  readonly textWidth: number;
+  readonly textHeight: number;
+  readonly height: number;
+}
+
+function layoutToast(ui: Ui, toast: ShownToast, anchor: ToastAnchor): ToastBox {
   const metrics = metricsFor(ui, toast.urgent);
-  const color = toneColor(theme, toast.tone);
-  const enter = easeOut(Math.min(1, toast.age / TOAST_ENTER_TICKS));
-  const fade = toast.ticksLeft < TOAST_FADE_TICKS ? toast.ticksLeft / TOAST_FADE_TICKS : 1;
-  const alpha = Math.max(0, enter * fade);
   const iconSpan = toast.icon === null ? 0 : metrics.iconSize + metrics.gap;
   const available = Math.min(MAX_TOAST_WIDTH, anchor.maxWidth);
   const textRoom = Math.max(0, available - metrics.padX * 2 - iconSpan);
@@ -227,6 +282,22 @@ function drawToast(ui: Ui, toast: ShownToast, anchor: ToastAnchor, bottom: numbe
     maxLines: MAX_TOAST_LINES,
   });
   const height = Math.max(metrics.iconSize, textHeight) + metrics.padY * 2;
+  return { metrics, iconSpan, textWidth, textHeight, height };
+}
+
+function drawToast(
+  ui: Ui,
+  toast: ShownToast,
+  anchor: ToastAnchor,
+  bottom: number,
+  box: ToastBox,
+): void {
+  const { theme, ctx } = ui;
+  const { metrics, iconSpan, textWidth, textHeight, height } = box;
+  const color = toneColor(theme, toast.tone);
+  const enter = easeOut(Math.min(1, toast.age / TOAST_ENTER_TICKS));
+  const fade = toast.ticksLeft < TOAST_FADE_TICKS ? toast.ticksLeft / TOAST_FADE_TICKS : 1;
+  const alpha = Math.max(0, enter * fade);
   const isSingleLine = textHeight <= lineHeightOf(ui, metrics.role);
   const cornerRadius = isSingleLine ? theme.radius.pill : theme.radius.lg;
   const width = metrics.padX * 2 + iconSpan + textWidth;
@@ -237,7 +308,7 @@ function drawToast(ui: Ui, toast: ShownToast, anchor: ToastAnchor, bottom: numbe
     w: width,
     h: height,
   };
-  if (alpha <= 0) return height;
+  if (alpha <= 0) return;
 
   const hudSkin = skinsFor(theme).panel.hud;
   const borderAlpha = toast.urgent ? URGENT_BORDER_TINT_ALPHA : BORDER_TINT_ALPHA;
@@ -273,7 +344,6 @@ function drawToast(ui: Ui, toast: ShownToast, anchor: ToastAnchor, bottom: numbe
     },
   );
   ctx.restore();
-  return height;
 }
 
 /** Where the stack sits: centred on `x`, growing up from `bottom`, no toast wider than `maxWidth`. */
@@ -287,12 +357,33 @@ export interface ToastAnchor {
  * Draws the stack centred on `anchor.x`, growing upward from `anchor.bottom`
  * with the newest toast nearest it. A message wider than `anchor.maxWidth`
  * wraps to a second line. Toasts take no input.
+ *
+ * No toast rises above `ceiling`: on a short screen whatever stands above the
+ * stack (a song's credit card) stays readable. The oldest toasts that do not
+ * fit are held, unaged, until there is room.
+ *
+ * Returns the top of the stack as drawn, `anchor.bottom` when nothing is.
  */
-export function renderToasts(ui: Ui, toasts: HudToasts, anchor: ToastAnchor): void {
+export function renderToasts(
+  ui: Ui,
+  toasts: HudToasts,
+  anchor: ToastAnchor,
+  ceiling = -Infinity,
+): number {
   const shown = toasts.shown;
   let bottom = anchor.bottom;
+  let top = anchor.bottom;
   for (let index = shown.length - 1; index >= 0; index--) {
-    const height = drawToast(ui, shown[index], anchor, bottom);
-    bottom -= height + ui.theme.space.xs;
+    const toast = shown[index];
+    const box = layoutToast(ui, toast, anchor);
+    if (bottom - box.height < ceiling) {
+      toasts.holdUnseen(index + 1);
+      return top;
+    }
+    drawToast(ui, toast, anchor, bottom, box);
+    top = bottom - box.height;
+    bottom = top - ui.theme.space.xs;
   }
+  toasts.holdUnseen(0);
+  return top;
 }

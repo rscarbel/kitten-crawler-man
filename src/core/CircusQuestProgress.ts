@@ -20,6 +20,17 @@ export type CircusQuestStage =
   | 'grimaldi_redeemed'
   | 'complete';
 
+/** Every stage, in the order the questline reaches them. */
+export const CIRCUS_QUEST_STAGE_ORDER = [
+  'not_started',
+  'ritual_defense',
+  'heather_hunt',
+  'assault',
+  'bigtop_ready',
+  'grimaldi_redeemed',
+  'complete',
+] as const satisfies readonly CircusQuestStage[];
+
 /** The one building the circus questline holds shut. */
 export const BIG_TOP_BUILDING_NAME = 'Big Top';
 

@@ -4,12 +4,14 @@
  */
 
 import type { AudioManager } from '../../../audio/AudioManager';
+import type { MusicPlayerControls } from '../../../audio/music/MusicDirector';
 import type { AbilityManager } from '../../../core/AbilityManager';
 import type { AchievementManager } from '../../../core/AchievementManager';
 import type { CraftSkillId } from '../../../core/CraftSkills';
 import type { Difficulty } from '../../../core/difficultyProfiles';
 import type { GameStats } from '../../../core/GameStats';
 import type { JournalProgress } from '../../../core/JournalProgress';
+import type { MusicLibrary } from '../../../core/MusicLibrary';
 import type { CrawlerKind } from '../../../core/SkillManager';
 import type { CatPlayer } from '../../../creatures/CatPlayer';
 import type { HumanPlayer } from '../../../creatures/HumanPlayer';
@@ -26,6 +28,7 @@ export const PAUSE_SECTION_IDS = [
   'abilities',
   'crafts',
   'achievements',
+  'music',
   'settings',
   'controls',
 ] as const;
@@ -40,8 +43,8 @@ export interface JournalContext {
   readonly progress: JournalProgress;
 }
 
-/** The slice of the audio manager the pause screen uses. */
-export type PauseAudio = Pick<
+/** The slice of the audio manager the pause screen uses; the music page drives only the player's choice. */
+export type PauseAudio = { readonly music: MusicPlayerControls } & Pick<
   AudioManager,
   | 'play'
   | 'pauseMusic'
@@ -51,9 +54,17 @@ export type PauseAudio = Pick<
   | 'masterVolume'
   | 'musicVolume'
   | 'sfxVolume'
+  | 'ambienceVolume'
   | 'setMasterVolumePreference'
   | 'setMusicVolumePreference'
   | 'setSfxVolumePreference'
+  | 'setAmbienceVolumePreference'
+  | 'muted'
+  | 'setMuted'
+  | 'monoAudio'
+  | 'setMonoAudio'
+  | 'playsInBackground'
+  | 'setPlaysInBackground'
 >;
 
 /** The explainers a section can open. Absent ones are offered disabled or not at all. */
@@ -81,6 +92,8 @@ export interface PauseContext {
   /** Null on floors without a Journal, which hides it. */
   readonly journal: JournalContext | null;
   readonly audio: PauseAudio | null;
+  /** The run's music library, or null where no run is bound (which hides the music page). */
+  readonly musicLibrary: MusicLibrary | null;
   /** Opens a crawler's loot boxes, or null where they can't be opened here. */
   readonly openBoxes: Readonly<Record<CrawlerKind, (() => void) | null>>;
   readonly guides: PauseGuides;
@@ -115,6 +128,11 @@ export interface PauseSection {
   };
   /** Typed input while the page is showing (a key being rebound). True when consumed. */
   readonly onKey?: (key: string, mods: KeyModifiers) => boolean;
+  /**
+   * Lets the music play through the menu while this page shows, so a song
+   * picked on it is heard. Ambience stays paused.
+   */
+  readonly releasesMusic?: boolean;
   /** Drops transient state: called when the page is left and when the menu closes. */
   readonly reset?: () => void;
 }

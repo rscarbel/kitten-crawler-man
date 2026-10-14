@@ -72,7 +72,8 @@ import { renderNecromancerTelegraphs } from '../../creatures/Necromancer';
 import { activeDifficultyProfile } from '../../core/difficultyProfiles';
 import type { Rect } from '../../ui/core/geom';
 import type { TopBandEntry } from '../../ui/hud/topBand';
-import { VillageAssaultSystem, type SiegeMusicClaim } from './VillageAssaultSystem';
+import { VillageAssaultSystem } from './VillageAssaultSystem';
+import type { MusicClaims } from '../../audio/AudioScope';
 import { VillageQuestSystem } from './VillageQuestSystem';
 import { VillageQuestGuide } from './VillageQuestGuide';
 import { BlueprintsQuestSystem } from './BlueprintsQuestSystem';
@@ -146,8 +147,8 @@ export interface BriarHollowKitDeps {
    * defences throw may land. Absent means nowhere is.
    */
   readonly isInSafeRoom?: (point: { readonly x: number; readonly y: number }) => boolean;
-  /** The overworld's zone music, which the siege's track takes over from while it runs. */
-  readonly music?: () => SiegeMusicClaim | null;
+  /** The scene's music claims, which the siege's and the escort's fight music are claimed through. */
+  readonly music?: () => MusicClaims | null;
   /** Plays a boss's intro: the necromancer's, as he arrives with the last wave. */
   readonly bossIntro?: (name: string, color: string) => void;
   /**
@@ -325,6 +326,7 @@ export class BriarHollowKit {
             villagers,
             bus: sceneWorld.bus,
             audio: deps.audio,
+            audioScope: sceneWorld.audioScope,
             sawmill: this.ambience.sawmill,
             menus: {
               enqueueReward: (reward) => deps.menus.rewardGrantedDialog.enqueue(reward),
@@ -404,6 +406,7 @@ export class BriarHollowKit {
             site,
             bus: sceneWorld.bus,
             audio: deps.audio,
+            audioScope: sceneWorld.audioScope,
             roster: sceneWorld.roster,
             human: deps.human,
             cat: deps.cat,
@@ -438,6 +441,7 @@ export class BriarHollowKit {
             human: deps.human,
             cat: deps.cat,
             audio: deps.audio,
+            audioScope: sceneWorld.audioScope,
             bus: sceneWorld.bus,
             conversation: deps.conversation,
             villagers,

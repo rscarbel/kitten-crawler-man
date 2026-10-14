@@ -58,6 +58,7 @@ export interface GameplayInputActions {
   toggleGear(): void;
   companionFollow(): void;
   toggleMiniMap(): void;
+  toggleMute(): void;
   hotbarActivation(idx: number): void;
 
   // Chat
@@ -103,6 +104,7 @@ const SIMPLE_ACTION_HANDLERS: Partial<Record<GameAction, (actions: GameplayInput
     toggleInventory: (actions) => actions.toggleInventory(),
     toggleGear: (actions) => actions.toggleGear(),
     toggleMiniMap: (actions) => actions.toggleMiniMap(),
+    toggleMute: (actions) => actions.toggleMute(),
     companionFollow: (actions) => actions.companionFollow(),
     toggleQuestTracker: (actions) => actions.toggleQuestTracker?.(),
     buildSummon: (actions) => {

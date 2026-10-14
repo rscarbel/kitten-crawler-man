@@ -22,7 +22,7 @@ import type { SafeRoomCounterLayout } from '../map/safeRoomCounterLayout';
 import { CatPlayer } from '../creatures/CatPlayer';
 import type { HumanPlayer } from '../creatures/HumanPlayer';
 import type { Player } from '../Player';
-import type { AudioManager } from '../audio/AudioManager';
+import type { AudioScope } from '../audio/AudioScope';
 import type { Conversation } from '../dialog/Conversation';
 import type { Choice, ConversationHandle, ConversationRequest } from '../dialog/request';
 import type { DialogLine, NonEmpty } from '../dialog/line';
@@ -264,7 +264,7 @@ export class BopcaSystem implements GameSystem {
     layouts: ReadonlyArray<SafeRoomCounterLayout>,
     private readonly bus: EventBus,
     private readonly conversation: Conversation,
-    private readonly audio: AudioManager | null,
+    private readonly audio: AudioScope | null,
     /**
      * Whether the rest of the floor keeps ticking while this Bopca's
      * conversation is open. The dungeon floor lets it run behind the

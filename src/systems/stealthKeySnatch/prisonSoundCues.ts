@@ -13,7 +13,7 @@
  */
 
 import type { AudioManager } from '../../audio/AudioManager';
-import type { SoundId } from '../../audio/sounds';
+import type { MusicTrackId, SoundId } from '../../audio/sounds';
 
 export const PRISON_CUES = {
   /** The locked gate bumped or tried. */
@@ -30,8 +30,6 @@ export const PRISON_CUES = {
   prisonDoorOpen: ['prison_door_heavy_open'],
   /** Room tone inside the prison. */
   prisonAmbience: ['prison_ambience_loop'],
-  /** The sneaking music. */
-  stealthMusic: ['stealth_music'],
   /** A spotlight's positional hum. */
   spotlightHum: ['spotlight_hum_loop'],
   /** A spotlight reversing on its track. Waits on `spotlight_motor_turn_1` … `_2`. */
@@ -96,6 +94,9 @@ export const PRISON_CUES = {
     'gate_guard_proud_hmph_4',
   ],
 } as const satisfies Record<string, readonly SoundId[]>;
+
+/** The prison's sneaking music. */
+export const PRISON_MUSIC = 'stealth_music' as const satisfies MusicTrackId;
 
 /** Which cue a play site raises. */
 export type PrisonCue = keyof typeof PRISON_CUES;

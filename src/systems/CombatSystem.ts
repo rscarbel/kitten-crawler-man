@@ -611,7 +611,7 @@ export function resolvePlayerAttacks(ctx: CombatContext): void {
         (ctx.destructibles?.tryProjectileHit(missile.x, missile.y, hitRadius, damage, cat) ?? false)
       ) {
         ctx.hitLanded = true;
-        ctx.bus.emit('missileImpact', {});
+        ctx.bus.emit('missileImpact', { x: missile.x, y: missile.y });
         missile.hit = true;
         missile.state = 'exploding';
         ctx.missileFx?.spawn(missile.x, missile.y, missileExplosionVariant(missile));
@@ -626,7 +626,7 @@ export function resolvePlayerAttacks(ctx: CombatContext): void {
         (ctx.interiorProps?.tryProjectileHit(missile.x, missile.y, hitRadius, damage) ?? false)
       ) {
         ctx.hitLanded = true;
-        ctx.bus.emit('missileImpact', {});
+        ctx.bus.emit('missileImpact', { x: missile.x, y: missile.y });
         missile.hit = true;
         missile.state = 'exploding';
         ctx.missileFx?.spawn(missile.x, missile.y, missileExplosionVariant(missile));
@@ -644,7 +644,7 @@ export function resolvePlayerAttacks(ctx: CombatContext): void {
         trees.tryProjectileHit(missile.x, missile.y, hitRadius, damage, cat)
       ) {
         ctx.hitLanded = true;
-        ctx.bus.emit('missileImpact', {});
+        ctx.bus.emit('missileImpact', { x: missile.x, y: missile.y });
         missile.hit = true;
         missile.state = 'exploding';
         ctx.missileFx?.spawn(missile.x, missile.y, missileExplosionVariant(missile));
@@ -673,11 +673,11 @@ export function resolvePlayerAttacks(ctx: CombatContext): void {
         if (dist < hitRadius) {
           if (!cat.zeroDamage && mob.blowsEarnNothing) {
             mob.takeDamageFrom(damage, cat, 'missile');
-            ctx.bus.emit('missileImpact', {});
+            ctx.bus.emit('missileImpact', { x: missile.x, y: missile.y });
           } else if (!cat.zeroDamage) {
             mob.takeDamageFrom(damage, cat, 'missile');
             ctx.hitLanded = true;
-            ctx.bus.emit('missileImpact', {});
+            ctx.bus.emit('missileImpact', { x: missile.x, y: missile.y });
 
             if (
               cat.inventory.hasEquipped('enchanted_crown_sepsis_whore') &&
@@ -746,7 +746,7 @@ export function resolvePlayerAttacks(ctx: CombatContext): void {
         (ctx.destructibles?.tryProjectileHit(rock.x, rock.y, rockHitRadius, damage, human) ?? false)
       ) {
         ctx.hitLanded = true;
-        ctx.bus.emit('slingshotImpact', {});
+        ctx.bus.emit('slingshotImpact', { x: rock.x, y: rock.y });
         rock.hit = true;
         rock.state = 'done';
         continue;
@@ -757,7 +757,7 @@ export function resolvePlayerAttacks(ctx: CombatContext): void {
         (ctx.interiorProps?.tryProjectileHit(rock.x, rock.y, rockHitRadius, damage) ?? false)
       ) {
         ctx.hitLanded = true;
-        ctx.bus.emit('slingshotImpact', {});
+        ctx.bus.emit('slingshotImpact', { x: rock.x, y: rock.y });
         rock.hit = true;
         rock.state = 'done';
         continue;
@@ -770,7 +770,7 @@ export function resolvePlayerAttacks(ctx: CombatContext): void {
         rockTrees.tryProjectileHit(rock.x, rock.y, rockHitRadius, damage, human)
       ) {
         ctx.hitLanded = true;
-        ctx.bus.emit('slingshotImpact', {});
+        ctx.bus.emit('slingshotImpact', { x: rock.x, y: rock.y });
         rock.hit = true;
         rock.state = 'done';
         continue;
@@ -787,7 +787,7 @@ export function resolvePlayerAttacks(ctx: CombatContext): void {
         if (!human.zeroDamage) {
           mob.takeDamageFrom(damage, human, 'slingshot');
           if (!mob.blowsEarnNothing) ctx.hitLanded = true;
-          ctx.bus.emit('slingshotImpact', {});
+          ctx.bus.emit('slingshotImpact', { x: rock.x, y: rock.y });
         }
         rock.hit = true;
         rock.state = 'done';

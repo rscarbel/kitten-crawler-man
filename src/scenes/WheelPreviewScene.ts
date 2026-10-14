@@ -146,6 +146,7 @@ export class WheelPreviewScene extends PreviewScene {
     const clock = (): number => performance.now();
     return new ClubWheelSystem({
       audio: null,
+      audioScope: null,
       ledger: createWheelLedger(),
       saveNow: () =>
         new Promise((resolve) => {

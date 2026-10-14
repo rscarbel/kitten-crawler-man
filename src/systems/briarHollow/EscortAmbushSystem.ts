@@ -52,7 +52,8 @@ import type { TilePoint } from '../../map/town/townPlan';
 import type { MobRoster } from '../kits/SceneWorld';
 import { BLUEPRINTS_ESCORT_MUSIC } from './blueprints/blueprintsSoundCues';
 import { isUnseenSpawn, placeAmong, spawnDue, type OffscreenSpawnRules } from './offscreenSpawns';
-import { createUndead, type SiegeMusicClaim } from './VillageAssaultSystem';
+import { createUndead } from './VillageAssaultSystem';
+import type { MusicClaims } from '../../audio/AudioScope';
 
 const UPDATES_PER_SECOND = 60;
 const TILE_CENTRE = 0.5;
@@ -304,8 +305,8 @@ export interface EscortAmbushDeps {
   readonly site: BriarHollowSite;
   readonly roster: MobRoster;
   readonly audio: AudioManager | null;
-  /** The overworld's zone music, which the fight music takes over from while ambushers live. */
-  readonly music: () => SiegeMusicClaim | null;
+  /** The scene's music claims, which the fight music is claimed through while ambushers live. */
+  readonly music: () => MusicClaims | null;
   /** Both crawlers, wherever they stand. */
   readonly crawlers: () => readonly Body[];
   /** The level each ambusher comes at, rolled per body. */
@@ -825,13 +826,12 @@ export class EscortAmbushSystem {
     const fighting = escorting && this.ambushers.some((mob) => mob.isAlive);
     if (fighting && !this.musicClaimed) {
       this.musicClaimed = true;
-      music.battleMusicActive = true;
-      if (this.deps.audio?.currentMusicId !== BLUEPRINTS_ESCORT_MUSIC) {
-        this.deps.audio?.playMusic(BLUEPRINTS_ESCORT_MUSIC, {
-          fadeInMs: ESCORT_MUSIC_FADE_MS,
-          skipIntro: true,
-        });
-      }
+      music.claimMusic({
+        owner: 'escort',
+        layer: 'battle',
+        selection: { kind: 'loop', id: BLUEPRINTS_ESCORT_MUSIC, skipIntro: true },
+        fadeInMs: ESCORT_MUSIC_FADE_MS,
+      });
     } else if (!fighting && this.musicClaimed) {
       this.releaseMusic();
     }
@@ -839,10 +839,7 @@ export class EscortAmbushSystem {
 
   private releaseMusic(): void {
     this.musicClaimed = false;
-    const music = this.deps.music();
-    if (music === null) return;
-    music.battleMusicActive = false;
-    music.reset();
+    this.deps.music()?.releaseMusic('escort');
   }
 
   /** The road as walked, worked out once. Null with no town on the map. */

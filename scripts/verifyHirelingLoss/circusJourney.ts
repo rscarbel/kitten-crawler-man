@@ -312,7 +312,6 @@ function rebuildQuest(
     null,
     progress,
     null,
-    null,
     party.human,
     new Conversation(null),
     { anchor: createAnchorQuestProgress() },

@@ -259,8 +259,8 @@ export class HumanPlayer extends Player {
   /** Set when a stone actually leaves the sling, so the scene can sound it. */
   pendingSlingshotFireSound = false;
 
-  /** Set when a stone expires against a wall, so the scene can sound that impact too. */
-  pendingSlingshotWallImpactSound = false;
+  /** Where a stone just expired against a wall, so the scene can sound that impact too. */
+  pendingSlingshotWallImpact: { readonly x: number; readonly y: number } | null = null;
 
   /**
    * Public rather than private like the rest of the slingshot's internals: a
@@ -777,7 +777,7 @@ export class HumanPlayer extends Player {
       // stone meets them as bodies rather than as a wall.
       if (!map.isWalkableIgnoringBathroomQueue(tx, ty)) {
         rock.state = 'done';
-        this.pendingSlingshotWallImpactSound = true;
+        this.pendingSlingshotWallImpact = { x: rock.x, y: rock.y };
         continue;
       }
       rock.x = nextX;
@@ -1191,7 +1191,7 @@ export class HumanPlayer extends Player {
     this.clearAirborneAttacks();
     this.slingshotCooldown = 0;
     this.pendingSlingshotFireSound = false;
-    this.pendingSlingshotWallImpactSound = false;
+    this.pendingSlingshotWallImpact = null;
   }
 
   /**

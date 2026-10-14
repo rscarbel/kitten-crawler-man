@@ -19,6 +19,7 @@
  */
 
 import type { AudioManager } from '../audio/AudioManager';
+import type { AudioScope } from '../audio/AudioScope';
 import type { SoundId } from '../audio/sounds';
 import type { Player } from '../Player';
 import { ITEM_DEF, type ItemId } from '../core/ItemDefs';
@@ -112,6 +113,8 @@ export const WHEEL_SPIN_KEY = ' ';
 
 export interface ClubWheelDeps {
   readonly audio: AudioManager | null;
+  /** Where the klaxon and heartbeat loops run, faded out with the scene. */
+  readonly audioScope: AudioScope | null;
   readonly ledger: WheelLedger;
   /** Writes the save as the party stands now; resolves once storage has answered. */
   readonly saveNow: () => Promise<SaveWriteOutcome>;
@@ -525,7 +528,7 @@ export class ClubWheelSystem implements WheelGameHost {
     this.advanceBulbs(dt);
     if (this.chuckleAt !== null && now >= this.chuckleAt) {
       this.chuckleAt = null;
-      this.deps.audio?.playRandomFresh(CHUCKLES);
+      this.deps.audio?.playRandom(CHUCKLES);
     }
     if (this.phase.kind === 'idle' && now - this.lastActivityAt >= TITO_IDLE_LINE_MS) {
       this.say('idle');
@@ -757,7 +760,7 @@ export class ClubWheelSystem implements WheelGameHost {
   }
 
   private syncLoops(): void {
-    const audio = this.deps.audio;
+    const audio = this.deps.audioScope;
     if (audio === null) return;
     if (this.screen === 'warning')
       audio.startAmbientLoop('wheel_warning_klaxon_loop', KLAXON_VOLUME);
@@ -1125,7 +1128,7 @@ export class ClubWheelSystem implements WheelGameHost {
     if (crossed > 0) {
       this.lastPegAt = now;
       for (let tick = 0; tick < Math.min(crossed, MAX_TICKS_PER_UPDATE); tick++) {
-        this.deps.audio?.playRandomFresh(TICKS, { volume: PEG_TICK_VOLUME });
+        this.deps.audio?.playRandom(TICKS, { volume: PEG_TICK_VOLUME });
       }
     }
     if (!phase.creaked && phase.plan.velocityAt(elapsed) < CREAK_BELOW_VELOCITY) {

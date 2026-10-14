@@ -126,7 +126,7 @@ function makeStage(): Stage {
   const bus = new EventBus();
   const pm = new PlayerManager(ROOM_CENTRE_TILE, ROOM_CENTRE_TILE, undefined);
   const roster = new MobRoster(map, new SpellSystem());
-  const world: SceneWorld = { gameMap: map, bus, audio: null, pm, roster };
+  const world: SceneWorld = { gameMap: map, bus, audio: null, audioScope: null, pm, roster };
   const menus = new MenusKit({ world, abilityManager: new AbilityManager() });
   return { map, bus, pm, world, menus };
 }

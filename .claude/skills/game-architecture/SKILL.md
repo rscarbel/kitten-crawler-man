@@ -21,6 +21,7 @@ Browser dungeon crawler: TypeScript + one HTML5 Canvas, no framework, bundled by
 - `DungeonScene.updateGameplay()` calls each system's `update(ctx)` in an explicit order; `src/systems/GameLoopPhases.ts` documents the 9 named phases.
 - Rendering is layered by `src/systems/RenderPipeline.ts`: world → entities (Y-sorted by `entity.y`) → effects → visibility fog. Being in the roster's spatial grid is what gets a mob rendered (`RenderPipeline` draws from `roster.grid.queryRect`), and `roster.add` puts it there — no extra registration. A dead mob leaves the grid unless it declares `rendersWhenDead`.
 - Systems don't play audio directly; they set pending flags (e.g. `explosionSoundPending`) that the scene reads and clears.
+- Music is never played, only claimed: systems and scenes call `claimMusic` / `releaseMusic` on the scene's `AudioScope`, and the `MusicDirector` (`src/audio/music/MusicDirector.ts`, `audio.music`, outlives scenes) plays the highest layer's newest claim and falls back on release. Loops and ambient beds also start only through the scope. See `add-sound`.
 
 See the `add-system` skill for the recipe.
 

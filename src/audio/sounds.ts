@@ -1,4 +1,60 @@
-const SOUND_IDS_TUPLE = [
+/** Every catalogued, attributed song; each one's file is `music/<id>.mp3`. */
+export const MUSIC_TRACK_IDS = [
+  'tutorial_island',
+  'bg_level_1',
+  'bg_level_2',
+  'town_music_1',
+  'town_music_2',
+  'forest_path',
+  'terrifying_woods',
+  'briar_hollow_theme',
+  'medieval_harvest_theme',
+  'siege_theme',
+  'circus_theme_1',
+  'circus_theme_2',
+  'circus_theme_3',
+  'circus_battle',
+  'desperado_club_1',
+  'desperado_club_2',
+  'desperado_club_3',
+  'desperado_club_4',
+  'casino_background_jazz_1',
+  'casino_background_jazz_2',
+  'casino_background_jazz_3',
+  'casino_background_jazz_4',
+  'tavern_music_1',
+  'tavern_music_2',
+  'building_default_music_1',
+  'big_tower_music',
+  'temple_music',
+  'boss_music_1',
+  'boss_music_2',
+  'boss_music_3',
+  'prepare_to_defend',
+  'fix_the_plumbing_music',
+  'stealth_music',
+  'keyboard_hero_music_track_1',
+] as const;
+
+export type MusicTrackId = (typeof MUSIC_TRACK_IDS)[number];
+
+/**
+ * Unattributed musical clips and loops in `jingles/`. They play on the music
+ * bus or as one-shots but are sound effects: never catalogued or credited.
+ */
+export const JINGLE_IDS = [
+  'briar_hollow_victory',
+  'slots_free_spins_loop_1',
+  'slots_free_spins_loop_2',
+  'slots_free_spins_loop_3',
+] as const;
+
+export type JingleId = (typeof JINGLE_IDS)[number];
+
+/** What the music bus may play: a catalogued song or a jingle, never a sound effect. */
+export type MusicBusId = MusicTrackId | JingleId;
+
+const SFX_IDS = [
   'ability_level_up',
   'accepted_bounty',
   'achievement_awarded',
@@ -40,9 +96,6 @@ const SOUND_IDS_TUPLE = [
   'bite_1',
   'bite_2',
   'bite_3',
-  'bg_level_1',
-  'bg_level_2',
-  'big_tower_music',
   'blood_vomit_1',
   'blood_vomit_2',
   'blood_vomit_3',
@@ -57,9 +110,6 @@ const SOUND_IDS_TUPLE = [
   'bones_clatter_4',
   'bones_rattling',
   'boss_defeated',
-  'boss_music_1',
-  'boss_music_2',
-  'boss_music_3',
   'bopca_cooking',
   'bopca_dish_set_down',
   'bopca_eating',
@@ -75,9 +125,6 @@ const SOUND_IDS_TUPLE = [
   'boulder_impact_3',
   'boulder_impact_4',
   'bounty_fight_engaged',
-  'briar_hollow_theme',
-  'briar_hollow_victory',
-  'building_default_music_1',
   'cage_door_release',
   'calf_moo_1',
   'calf_moo_2',
@@ -85,10 +132,6 @@ const SOUND_IDS_TUPLE = [
   'candle_stand_topple_1',
   'candle_stand_topple_2',
   'capstan_ratchet',
-  'casino_background_jazz_1',
-  'casino_background_jazz_2',
-  'casino_background_jazz_3',
-  'casino_background_jazz_4',
   'casino_blackjack_check',
   'casino_chips_bet_big',
   'casino_chips_bet_small',
@@ -113,12 +156,8 @@ const SOUND_IDS_TUPLE = [
   'chain_rattle_3',
   'chest_locked',
   'chest_unlocked_in_treasure_room',
-  'circus_battle',
   'circus_lemur_attack',
   'circus_lemur_sound',
-  'circus_theme_1',
-  'circus_theme_2',
-  'circus_theme_3',
   'clay_pot_break_1',
   'clay_pot_break_2',
   'clay_pot_break_3',
@@ -291,10 +330,6 @@ const SOUND_IDS_TUPLE = [
   'dead_hand_wave',
   'death_sequence',
   'deep_rumbling',
-  'desperado_club_1',
-  'desperado_club_2',
-  'desperado_club_3',
-  'desperado_club_4',
   'doctor_treatment',
   'dynamite_explosion',
   'entered_safe_room',
@@ -322,12 +357,10 @@ const SOUND_IDS_TUPLE = [
   'fairy_telekinetic_thrum',
   'fairy_ward_crush_implode',
   'fence_break',
-  'fix_the_plumbing_music',
   'flesh_being_sliced',
   'flimsy_cell_door_break_1',
   'flimsy_cell_door_break_2',
   'flimsy_cell_door_break_3',
-  'forest_path',
   'found_trap_woodchopping',
   'game_saving',
   'garbage_bag_burst_1',
@@ -387,7 +420,6 @@ const SOUND_IDS_TUPLE = [
   'jugg_juice',
   'juicer_grunt',
   'juicer_throw',
-  'keyboard_hero_music_track_1',
   'krakaren_ground_slam',
   'krakaren_junction_burst',
   'krakaren_junction_dead',
@@ -428,7 +460,6 @@ const SOUND_IDS_TUPLE = [
   'massive_metal_hit',
   'massive_strike_with_dirt_impact',
   'massive_weapon_strike',
-  'medieval_harvest_theme',
   'menu_change_follower',
   'menu_click',
   'menu_drop_item',
@@ -468,7 +499,6 @@ const SOUND_IDS_TUPLE = [
   'player_walking',
   'potion_drink',
   'prepare_for_magic_strike',
-  'prepare_to_defend',
   'prison_ambience_loop',
   'prison_door_heavy_open',
   'prison_key_pickup_fanfare',
@@ -533,7 +563,6 @@ const SOUND_IDS_TUPLE = [
   'shop_counter_bell',
   'shop_door_bell_1',
   'shop_door_bell_2',
-  'siege_theme',
   'skeleton_lord_chant',
   'skeleton_lord_death',
   'skillpoint_reminder',
@@ -565,9 +594,6 @@ const SOUND_IDS_TUPLE = [
   'slots_crowd_cheer_2',
   'slots_crowd_cheer_3',
   'slots_epic_win',
-  'slots_free_spins_loop_1',
-  'slots_free_spins_loop_2',
-  'slots_free_spins_loop_3',
   'slots_free_spins_trigger',
   'slots_jackpot_siren',
   'slots_lever_pull',
@@ -608,7 +634,6 @@ const SOUND_IDS_TUPLE = [
   'star_target_lit',
   'stat_boost',
   'station_upgrade_flourish',
-  'stealth_music',
   'steam_valve_burst',
   'structure_dismantle',
   'swing_heavy_1',
@@ -631,12 +656,8 @@ const SOUND_IDS_TUPLE = [
   'taranis_wave_hit_2',
   'taranis_wave_hit_3',
   'taranis_wave_hit_4',
-  'tavern_music_1',
-  'tavern_music_2',
   'tech_machinery_running',
   'teleport',
-  'temple_music',
-  'terrifying_woods',
   'thrall_fade_out',
   'thrall_summoned',
   'till_drawer_open',
@@ -649,8 +670,6 @@ const SOUND_IDS_TUPLE = [
   'toilet_flush_3',
   'tool_upgrade',
   'torch_extinguish',
-  'town_music_1',
-  'town_music_2',
   'townsfolk_hm_female_1',
   'townsfolk_hm_female_2',
   'townsfolk_hm_female_3',
@@ -677,7 +696,6 @@ const SOUND_IDS_TUPLE = [
   'tuskling_grunt_2',
   'tuskling_grunt_3',
   'tuskling_grunt_4',
-  'tutorial_island',
   'typing_click',
   'velociraptor_chitter',
   'village_gate_close',
@@ -717,6 +735,8 @@ const SOUND_IDS_TUPLE = [
   'wood_smashing_1',
   'wood_smashing_2',
 ] as const;
+
+const SOUND_IDS_TUPLE = [...MUSIC_TRACK_IDS, ...JINGLE_IDS, ...SFX_IDS] as const;
 
 export type SoundId = (typeof SOUND_IDS_TUPLE)[number];
 
@@ -766,9 +786,9 @@ export const SOUND_MANIFEST: Record<SoundId, string> = {
   bite_1: './src/audio/effects/bite_1.mp3',
   bite_2: './src/audio/effects/bite_2.mp3',
   bite_3: './src/audio/effects/bite_3.mp3',
-  bg_level_1: './src/audio/background_music/background_music_level_1.mp3',
-  bg_level_2: './src/audio/background_music/level_background_music_2.mp3',
-  big_tower_music: './src/audio/background_music/big_tower_music.mp3',
+  bg_level_1: './src/audio/music/bg_level_1.mp3',
+  bg_level_2: './src/audio/music/bg_level_2.mp3',
+  big_tower_music: './src/audio/music/big_tower_music.mp3',
   blood_vomit_1: './src/audio/effects/status/blood_vomit_1.mp3',
   blood_vomit_2: './src/audio/effects/status/blood_vomit_2.mp3',
   blood_vomit_3: './src/audio/effects/status/blood_vomit_3.mp3',
@@ -782,9 +802,9 @@ export const SOUND_MANIFEST: Record<SoundId, string> = {
   bones_clatter_3: './src/audio/effects/dungeon/bones_clatter_3.mp3',
   bones_clatter_4: './src/audio/effects/dungeon/bones_clatter_4.mp3',
   boss_defeated: './src/audio/bosses/boss_defeated.mp3',
-  boss_music_1: './src/audio/background_music/boss_music_1.mp3',
-  boss_music_2: './src/audio/background_music/boss_music_2.mp3',
-  boss_music_3: './src/audio/background_music/boss_music_3.mp3',
+  boss_music_1: './src/audio/music/boss_music_1.mp3',
+  boss_music_2: './src/audio/music/boss_music_2.mp3',
+  boss_music_3: './src/audio/music/boss_music_3.mp3',
   bopca_cooking: './src/audio/characters/bopca/cooking.mp3',
   bopca_dish_set_down: './src/audio/characters/bopca/plate_setting_down.mp3',
   bopca_eating: './src/audio/characters/bopca/eating.mp3',
@@ -801,9 +821,9 @@ export const SOUND_MANIFEST: Record<SoundId, string> = {
   boulder_impact_3: './src/audio/effects/siege/boulder_impact_3.mp3',
   boulder_impact_4: './src/audio/effects/siege/boulder_impact_4.mp3',
   bounty_fight_engaged: './src/audio/events/bounty_fight_engaged.mp3',
-  briar_hollow_theme: './src/audio/background_music/briar_hollow.mp3',
-  briar_hollow_victory: './src/audio/background_music/briar_hollow_victory.mp3',
-  building_default_music_1: './src/audio/background_music/building_default_music_1.mp3',
+  briar_hollow_theme: './src/audio/music/briar_hollow_theme.mp3',
+  briar_hollow_victory: './src/audio/jingles/briar_hollow_victory.mp3',
+  building_default_music_1: './src/audio/music/building_default_music_1.mp3',
   cage_door_release: './src/audio/effects/circus/cage_door_release.mp3',
   calf_moo_1: './src/audio/characters/cow/calf_moo_1.mp3',
   calf_moo_2: './src/audio/characters/cow/calf_moo_2.mp3',
@@ -811,10 +831,10 @@ export const SOUND_MANIFEST: Record<SoundId, string> = {
   candle_stand_topple_1: './src/audio/effects/interior/candle_stand_topple_1.mp3',
   candle_stand_topple_2: './src/audio/effects/interior/candle_stand_topple_2.mp3',
   capstan_ratchet: './src/audio/effects/circus/capstan_ratchet.mp3',
-  casino_background_jazz_1: './src/audio/background_music/casino_background_jazz_1.mp3',
-  casino_background_jazz_2: './src/audio/background_music/casino_background_jazz_2.mp3',
-  casino_background_jazz_3: './src/audio/background_music/casino_background_jazz_3.mp3',
-  casino_background_jazz_4: './src/audio/background_music/casino_background_jazz_4.mp3',
+  casino_background_jazz_1: './src/audio/music/casino_background_jazz_1.mp3',
+  casino_background_jazz_2: './src/audio/music/casino_background_jazz_2.mp3',
+  casino_background_jazz_3: './src/audio/music/casino_background_jazz_3.mp3',
+  casino_background_jazz_4: './src/audio/music/casino_background_jazz_4.mp3',
   casino_blackjack_check: './src/audio/casino/blackjack_check.mp3',
   casino_chips_bet_big: './src/audio/casino/chips_bet_big.mp3',
   casino_chips_bet_small: './src/audio/casino/chips_bet_small.mp3',
@@ -839,12 +859,12 @@ export const SOUND_MANIFEST: Record<SoundId, string> = {
   chain_rattle_3: './src/audio/effects/dungeon/chain_rattle_3.mp3',
   chest_locked: './src/audio/events/chest_locked.mp3',
   chest_unlocked_in_treasure_room: './src/audio/events/chest_unlocked_in_treasure_room.mp3',
-  circus_battle: './src/audio/background_music/circus_battle.mp3',
+  circus_battle: './src/audio/music/circus_battle.mp3',
   circus_lemur_attack: './src/audio/enemies/circus_lemur/lemur_attack.mp3',
   circus_lemur_sound: './src/audio/enemies/circus_lemur/lemur_sound.mp3',
-  circus_theme_1: './src/audio/background_music/circus_theme_1.mp3',
-  circus_theme_2: './src/audio/background_music/circus_theme_2.mp3',
-  circus_theme_3: './src/audio/background_music/circus_theme_3.mp3',
+  circus_theme_1: './src/audio/music/circus_theme_1.mp3',
+  circus_theme_2: './src/audio/music/circus_theme_2.mp3',
+  circus_theme_3: './src/audio/music/circus_theme_3.mp3',
   clay_pot_break_1: './src/audio/effects/interior/clay_pot_break_1.mp3',
   clay_pot_break_2: './src/audio/effects/interior/clay_pot_break_2.mp3',
   clay_pot_break_3: './src/audio/effects/interior/clay_pot_break_3.mp3',
@@ -1017,10 +1037,10 @@ export const SOUND_MANIFEST: Record<SoundId, string> = {
   dead_hand_wave: './src/audio/bosses/skeleton_lord/dead_hand_wave_attack.mp3',
   death_sequence: './src/audio/events/death_sequence.mp3',
   deep_rumbling: './src/audio/effects/deep_rumbling.mp3',
-  desperado_club_1: './src/audio/background_music/desperado_club_1.mp3',
-  desperado_club_2: './src/audio/background_music/desperado_club_2.mp3',
-  desperado_club_3: './src/audio/background_music/desperado_club_3.mp3',
-  desperado_club_4: './src/audio/background_music/desperado_club_4.mp3',
+  desperado_club_1: './src/audio/music/desperado_club_1.mp3',
+  desperado_club_2: './src/audio/music/desperado_club_2.mp3',
+  desperado_club_3: './src/audio/music/desperado_club_3.mp3',
+  desperado_club_4: './src/audio/music/desperado_club_4.mp3',
   doctor_treatment: './src/audio/effects/village/doctor_treatment.mp3',
   dynamite_explosion: './src/audio/effects/dynamite_explosion.mp3',
   entered_safe_room: './src/audio/events/entered_safe_room.mp3',
@@ -1053,12 +1073,12 @@ export const SOUND_MANIFEST: Record<SoundId, string> = {
   fairy_telekinetic_thrum: './src/audio/enemies/fairy/telekinesis.mp3',
   fairy_ward_crush_implode: './src/audio/enemies/fairy/fairy_ward_crush_implode.mp3',
   fence_break: './src/audio/effects/construction/fence_break.mp3',
-  fix_the_plumbing_music: './src/audio/background_music/fix_the_plumbing_music.mp3',
-  flesh_being_sliced: './src/audio/flesh_being_sliced.mp3',
+  fix_the_plumbing_music: './src/audio/music/fix_the_plumbing_music.mp3',
+  flesh_being_sliced: './src/audio/combat/flesh_being_sliced.mp3',
   flimsy_cell_door_break_1: './src/audio/effects/prison/flimsy_cell_door_break_1.mp3',
   flimsy_cell_door_break_2: './src/audio/effects/prison/flimsy_cell_door_break_2.mp3',
   flimsy_cell_door_break_3: './src/audio/effects/prison/flimsy_cell_door_break_3.mp3',
-  forest_path: './src/audio/background_music/forest_path.mp3',
+  forest_path: './src/audio/music/forest_path.mp3',
   found_trap_woodchopping: './src/audio/effects/gathering/found_trap_woodchopping.mp3',
   game_saving: './src/audio/events/game_saving.mp3',
   garbage_bag_burst_1: './src/audio/effects/garbage_bag_burst_1.mp3',
@@ -1122,8 +1142,7 @@ export const SOUND_MANIFEST: Record<SoundId, string> = {
   jugg_juice: './src/audio/effects/jugg_juice_effect.mp3',
   juicer_grunt: './src/audio/bosses/juicer/juicer_grunt.mp3',
   juicer_throw: './src/audio/bosses/juicer/juicer_throwing.mp3',
-  keyboard_hero_music_track_1:
-    './src/audio/bosses/grotesque_spider/keyboard_hero_music_track_1.mp3',
+  keyboard_hero_music_track_1: './src/audio/music/keyboard_hero_music_track_1.mp3',
   krakaren_ground_slam: './src/audio/bosses/krakaren/krakaren_ground_slam.mp3',
   krakaren_junction_burst: './src/audio/bosses/krakaren/junction_burst.mp3',
   krakaren_junction_dead: './src/audio/bosses/krakaren/junction_dead.mp3',
@@ -1170,7 +1189,7 @@ export const SOUND_MANIFEST: Record<SoundId, string> = {
   massive_metal_hit: './src/audio/effects/massive_metal_hit.mp3',
   massive_strike_with_dirt_impact: './src/audio/effects/massive_strike_with_dirt_impact.mp3',
   massive_weapon_strike: './src/audio/effects/massive_weapon_strike.mp3',
-  medieval_harvest_theme: './src/audio/background_music/medieval_harvest_theme.mp3',
+  medieval_harvest_theme: './src/audio/music/medieval_harvest_theme.mp3',
   menu_change_follower: './src/audio/menu/change_follower_behavior.mp3',
   menu_click: './src/audio/menu/menu_click.mp3',
   menu_drop_item: './src/audio/menu/drop_item_from_inventory.mp3',
@@ -1210,7 +1229,7 @@ export const SOUND_MANIFEST: Record<SoundId, string> = {
   player_walking: './src/audio/characters/player_walking_loop_segment.mp3',
   potion_drink: './src/audio/effects/potion_drink.mp3',
   prepare_for_magic_strike: './src/audio/effects/prepare_for_magic_strike.mp3',
-  prepare_to_defend: './src/audio/background_music/prepare_to_defend.mp3',
+  prepare_to_defend: './src/audio/music/prepare_to_defend.mp3',
   prison_ambience_loop: './src/audio/ambient/prison_ambience_loop.mp3',
   prison_door_heavy_open: './src/audio/effects/prison/prison_door_heavy_open.mp3',
   prison_key_pickup_fanfare: './src/audio/effects/prison/prison_key_pickup_fanfare.mp3',
@@ -1277,7 +1296,7 @@ export const SOUND_MANIFEST: Record<SoundId, string> = {
   shop_counter_bell: './src/audio/effects/interior/shop_counter_bell.mp3',
   shop_door_bell_1: './src/audio/effects/interior/shop_door_bell_1.mp3',
   shop_door_bell_2: './src/audio/effects/interior/shop_door_bell_2.mp3',
-  siege_theme: './src/audio/background_music/siege_theme.mp3',
+  siege_theme: './src/audio/music/siege_theme.mp3',
   skeleton_lord_chant: './src/audio/bosses/skeleton_lord/skeleton_lord_latin_chant.mp3',
   skeleton_lord_death: './src/audio/bosses/skeleton_lord/skeleton_lord_death.mp3',
   skillpoint_reminder: './src/audio/events/skillpoint_reminder.mp3',
@@ -1309,9 +1328,9 @@ export const SOUND_MANIFEST: Record<SoundId, string> = {
   slots_crowd_cheer_2: './src/audio/casino/slots/crowd_cheer_2.mp3',
   slots_crowd_cheer_3: './src/audio/casino/slots/crowd_cheer_3.mp3',
   slots_epic_win: './src/audio/casino/slots/epic_win.mp3',
-  slots_free_spins_loop_1: './src/audio/background_music/slots_free_spins_loop_1.mp3',
-  slots_free_spins_loop_2: './src/audio/background_music/slots_free_spins_loop_2.mp3',
-  slots_free_spins_loop_3: './src/audio/background_music/slots_free_spins_loop_3.mp3',
+  slots_free_spins_loop_1: './src/audio/jingles/slots_free_spins_loop_1.mp3',
+  slots_free_spins_loop_2: './src/audio/jingles/slots_free_spins_loop_2.mp3',
+  slots_free_spins_loop_3: './src/audio/jingles/slots_free_spins_loop_3.mp3',
   slots_free_spins_trigger: './src/audio/casino/slots/free_spins_trigger.mp3',
   slots_jackpot_siren: './src/audio/casino/slots/jackpot_siren.mp3',
   slots_lever_pull: './src/audio/casino/slots/lever_pull.mp3',
@@ -1352,7 +1371,7 @@ export const SOUND_MANIFEST: Record<SoundId, string> = {
   star_target_lit: './src/audio/effects/circus/star_target_lit.mp3',
   stat_boost: './src/audio/effects/stat_boost_effect.mp3',
   station_upgrade_flourish: './src/audio/effects/construction/station_upgrade_flourish.mp3',
-  stealth_music: './src/audio/background_music/stealth_music.mp3',
+  stealth_music: './src/audio/music/stealth_music.mp3',
   steam_valve_burst: './src/audio/effects/dungeon/steam_valve_burst.mp3',
   structure_dismantle: './src/audio/effects/construction/structure_dismantle.mp3',
   swing_heavy_1: './src/audio/combat/weapons/swing_heavy_1.mp3',
@@ -1362,7 +1381,7 @@ export const SOUND_MANIFEST: Record<SoundId, string> = {
   swing_two_handed_1: './src/audio/combat/weapons/swing_two_handed_1.mp3',
   swing_two_handed_2: './src/audio/combat/weapons/swing_two_handed_2.mp3',
   swing_two_handed_3: './src/audio/combat/weapons/swing_two_handed_3.mp3',
-  sword_attack_1: './src/audio/sword_attack_1.mp3',
+  sword_attack_1: './src/audio/combat/sword_attack_1.mp3',
   taranis_chain_lightning_1: './src/audio/effects/taranis/chain_lightning_1.mp3',
   taranis_chain_lightning_2: './src/audio/effects/taranis/chain_lightning_2.mp3',
   taranis_chain_lightning_3: './src/audio/effects/taranis/chain_lightning_3.mp3',
@@ -1375,12 +1394,12 @@ export const SOUND_MANIFEST: Record<SoundId, string> = {
   taranis_wave_hit_2: './src/audio/effects/taranis/wave_hit_2.mp3',
   taranis_wave_hit_3: './src/audio/effects/taranis/wave_hit_3.mp3',
   taranis_wave_hit_4: './src/audio/effects/taranis/wave_hit_4.mp3',
-  tavern_music_1: './src/audio/background_music/tavern_music_1.mp3',
-  tavern_music_2: './src/audio/background_music/tavern_music_2.mp3',
+  tavern_music_1: './src/audio/music/tavern_music_1.mp3',
+  tavern_music_2: './src/audio/music/tavern_music_2.mp3',
   tech_machinery_running: './src/audio/bosses/grotesque_spider/tech_machinery_running.mp3',
   teleport: './src/audio/effects/teleport.mp3',
-  temple_music: './src/audio/background_music/temple_music.mp3',
-  terrifying_woods: './src/audio/background_music/terrifying_woods.mp3',
+  temple_music: './src/audio/music/temple_music.mp3',
+  terrifying_woods: './src/audio/music/terrifying_woods.mp3',
   thrall_fade_out: './src/audio/effects/gathering/thrall_fade_out.mp3',
   thrall_summoned: './src/audio/effects/gathering/thrall_summoned.mp3',
   till_drawer_open: './src/audio/effects/interior/till_drawer_open.mp3',
@@ -1393,8 +1412,8 @@ export const SOUND_MANIFEST: Record<SoundId, string> = {
   toilet_flush_3: './src/audio/effects/bathroom/toilet_flush_3.mp3',
   tool_upgrade: './src/audio/effects/village/tool_upgrade.mp3',
   torch_extinguish: './src/audio/effects/dungeon/torch_extinguish.mp3',
-  town_music_1: './src/audio/background_music/town_music_1.mp3',
-  town_music_2: './src/audio/background_music/town_music_2.mp3',
+  town_music_1: './src/audio/music/town_music_1.mp3',
+  town_music_2: './src/audio/music/town_music_2.mp3',
   townsfolk_hm_female_1: './src/audio/characters/town/townsfolk_hm_female_1.mp3',
   townsfolk_hm_female_2: './src/audio/characters/town/townsfolk_hm_female_2.mp3',
   townsfolk_hm_female_3: './src/audio/characters/town/townsfolk_hm_female_3.mp3',
@@ -1421,7 +1440,7 @@ export const SOUND_MANIFEST: Record<SoundId, string> = {
   tuskling_grunt_2: './src/audio/enemies/tuskling/tuskling_grunt_2.mp3',
   tuskling_grunt_3: './src/audio/enemies/tuskling/tuskling_grunt_3.mp3',
   tuskling_grunt_4: './src/audio/enemies/tuskling/tuskling_grunt_4.mp3',
-  tutorial_island: './src/audio/background_music/tutorial_island.mp3',
+  tutorial_island: './src/audio/music/tutorial_island.mp3',
   typing_click: './src/audio/effects/typing_click.mp3',
   velociraptor_chitter: './src/audio/characters/mongo/velociraptor_chitter.mp3',
   village_gate_close: './src/audio/effects/construction/village_gate_close.mp3',
@@ -1463,7 +1482,7 @@ export const SOUND_MANIFEST: Record<SoundId, string> = {
 };
 
 /** The Desperado Club's rotating soundtrack — a shuffled, looping playlist entered on club arrival. */
-export const CLUB_MUSIC_TRACKS: ReadonlyArray<SoundId> = [
+export const CLUB_MUSIC_TRACKS: ReadonlyArray<MusicTrackId> = [
   'desperado_club_1',
   'desperado_club_2',
   'desperado_club_3',
@@ -1471,7 +1490,7 @@ export const CLUB_MUSIC_TRACKS: ReadonlyArray<SoundId> = [
 ];
 
 /** The casino's jazz set, played as a shuffled, looping playlist while a game table is open. */
-export const CASINO_MUSIC_TRACKS: ReadonlyArray<SoundId> = [
+export const CASINO_MUSIC_TRACKS: ReadonlyArray<MusicTrackId> = [
   'casino_background_jazz_1',
   'casino_background_jazz_2',
   'casino_background_jazz_3',
@@ -1479,43 +1498,48 @@ export const CASINO_MUSIC_TRACKS: ReadonlyArray<SoundId> = [
 ];
 
 /** The slot machine's bonus-round set, swapped in for the casino jazz while free spins run. */
-export const SLOTS_FREE_SPINS_MUSIC_TRACKS: ReadonlyArray<SoundId> = [
+export const SLOTS_FREE_SPINS_MUSIC_TRACKS: ReadonlyArray<JingleId> = [
   'slots_free_spins_loop_1',
   'slots_free_spins_loop_2',
   'slots_free_spins_loop_3',
 ];
 
 /** The town's rotating soundtrack — reshuffled each time the player walks back into the safe zone. */
-export const TOWN_MUSIC_TRACKS: ReadonlyArray<SoundId> = ['town_music_1', 'town_music_2'];
+export const TOWN_MUSIC_TRACKS: ReadonlyArray<MusicTrackId> = ['town_music_1', 'town_music_2'];
 
 /** The town taverns' rotating soundtrack — shuffled and looping while the player is inside. */
-export const TAVERN_MUSIC_TRACKS: ReadonlyArray<SoundId> = ['tavern_music_1', 'tavern_music_2'];
+export const TAVERN_MUSIC_TRACKS: ReadonlyArray<MusicTrackId> = [
+  'tavern_music_1',
+  'tavern_music_2',
+];
 
 /** The Town Center Tower's own theme, playing on every floor until the Quill confrontation takes over. */
-export const TOWER_MUSIC_TRACKS: ReadonlyArray<SoundId> = ['big_tower_music'];
+export const TOWER_MUSIC_TRACKS: ReadonlyArray<MusicTrackId> = ['big_tower_music'];
 
 /**
  * The circus soundtrack — shuffled and looping on the grounds and in the calm
  * Big Top, which moves it on to a fresh song at the tent flap.
  */
-export const CIRCUS_MUSIC_TRACKS: ReadonlyArray<SoundId> = [
+export const CIRCUS_MUSIC_TRACKS: ReadonlyArray<MusicTrackId> = [
   'circus_theme_1',
   'circus_theme_2',
   'circus_theme_3',
 ];
 
 /** The wilds between the Over City's settlements — shuffled and looping. */
-export const WILDS_MUSIC_TRACKS: ReadonlyArray<SoundId> = ['forest_path', 'terrifying_woods'];
+export const WILDS_MUSIC_TRACKS: ReadonlyArray<MusicTrackId> = ['forest_path', 'terrifying_woods'];
 
 /** Fallback interior music for buildings with no soundtrack of their own. */
-export const DEFAULT_BUILDING_MUSIC_TRACKS: ReadonlyArray<SoundId> = ['building_default_music_1'];
+export const DEFAULT_BUILDING_MUSIC_TRACKS: ReadonlyArray<MusicTrackId> = [
+  'building_default_music_1',
+];
 
 /** The Temple of the Sky's own theme, playing while the party is inside. */
-export const TEMPLE_MUSIC_TRACKS: ReadonlyArray<SoundId> = ['temple_music'];
+export const TEMPLE_MUSIC_TRACKS: ReadonlyArray<MusicTrackId> = ['temple_music'];
 
 /**
- * Every `background_music/` and `ambient/` id. These are long, streamed via
- * `MediaElementAudioSourceNode` rather than decoded into a resident
+ * Every looping `music/` and `jingles/` id, and every `ambient/` id. These are
+ * long, streamed via `MediaElementAudioSourceNode` rather than decoded into a resident
  * `AudioBuffer` — decoding them all as Float32 PCM is ~828 MB for audio that
  * is played one or two at a time.
  *
@@ -1524,7 +1548,7 @@ export const TEMPLE_MUSIC_TRACKS: ReadonlyArray<SoundId> = ['temple_music'];
  * `buffers`.
  */
 export const STREAMING_SOUND_IDS: ReadonlySet<SoundId> = new Set<SoundId>([
-  // background_music/
+  // music/ and jingles/
   'bg_level_1',
   'bg_level_2',
   'big_tower_music',
@@ -1532,7 +1556,6 @@ export const STREAMING_SOUND_IDS: ReadonlySet<SoundId> = new Set<SoundId>([
   'boss_music_2',
   'boss_music_3',
   'briar_hollow_theme',
-  'briar_hollow_victory',
   'building_default_music_1',
   'casino_background_jazz_1',
   'casino_background_jazz_2',
@@ -1582,7 +1605,7 @@ export const STREAMING_SOUND_IDS: ReadonlySet<SoundId> = new Set<SoundId>([
 /**
  * Where a looping music track jumps back to each time it reaches its end, in
  * seconds of the recording. The part before this point is an intro heard once
- * per `playMusic`; a track absent here loops from the top.
+ * each time its claim starts it afresh; a track absent here loops from the top.
  */
 export const MUSIC_LOOP_START_S = {
   prepare_to_defend: 30,
@@ -1598,3 +1621,16 @@ export function musicLoopStartS(id: SoundId): number | undefined {
 export const NON_STREAMING_SOUND_IDS: ReadonlyArray<SoundId> = ALL_SOUND_IDS.filter(
   (id) => !STREAMING_SOUND_IDS.has(id),
 );
+
+/**
+ * Recorded, awaiting a play site: registered sound effects that nothing plays
+ * yet and so belong to no SFX group. `check:audio` exempts only these from
+ * its every-effect-is-in-a-group rule; wiring one up means removing it here.
+ */
+export const UNWIRED_SOUND_IDS = [
+  'door_creak_1',
+  'door_creak_2',
+  'door_creak_3',
+  'door_creak_4',
+  'trapdoor_creak_open',
+] as const satisfies ReadonlyArray<SoundId>;

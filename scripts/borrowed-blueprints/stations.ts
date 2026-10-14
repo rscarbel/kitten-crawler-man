@@ -189,6 +189,7 @@ export function stationsRig(
     villagers,
     bus,
     audio: null,
+    audioScope: null,
     sawmill: { working: false },
     menus: {
       enqueueReward: () => undefined,
@@ -207,6 +208,7 @@ export function stationsRig(
     site,
     bus,
     audio: null,
+    audioScope: null,
     roster: new MobRoster(map, new SpellSystem()),
     human,
     cat,

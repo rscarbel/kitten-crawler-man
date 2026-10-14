@@ -9,7 +9,7 @@
  * `briarHollow` group, or `universal`), or the cue is silently never heard.
  */
 
-import type { SoundId } from './sounds';
+import type { JingleId, MusicTrackId, SoundId } from './sounds';
 
 export const VILLAGE_CUES = {
   /** The bell rung in alarm as the countdown starts. */
@@ -45,7 +45,7 @@ export const VILLAGE_CUES = {
 export type VillageCue = keyof typeof VILLAGE_CUES;
 
 /** The siege's music, while the countdown runs and the waves come in. */
-export const VILLAGE_SIEGE_MUSIC = 'siege_theme' as const satisfies SoundId;
+export const VILLAGE_SIEGE_MUSIC = 'siege_theme' as const satisfies MusicTrackId;
 
-/** The music that plays once the siege is won. */
-export const VILLAGE_VICTORY_MUSIC = 'briar_hollow_victory' as const satisfies SoundId;
+/** The one-shot sting that plays once the siege is won. */
+export const VILLAGE_VICTORY_STING = 'briar_hollow_victory' as const satisfies JingleId;

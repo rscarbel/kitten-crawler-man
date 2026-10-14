@@ -433,6 +433,7 @@ export function journalRig(map: GameMap = fennaMap()): JournalRig | null {
       site,
       bus,
       audio: null,
+      audioScope: null,
       roster: new MobRoster(map, new SpellSystem()),
       human,
       cat,

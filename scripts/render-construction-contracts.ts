@@ -583,6 +583,7 @@ function hollowRoom(): void {
     human: builder,
     cat,
     audio: null,
+    audioScope: null,
     bus: new EventBus(),
     conversation: new Conversation(null),
     villagers: {

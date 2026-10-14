@@ -162,7 +162,9 @@ export interface ContractSiteWorkDeps {
   readonly state: Pick<BriarHollowState, 'contracts'>;
   readonly human: HumanPlayer;
   readonly cat: CatPlayer;
-  readonly audio: (ContractLoopAudio & Pick<AudioManager, 'play'>) | null;
+  readonly audio: Pick<AudioManager, 'play'> | null;
+  /** Where the work-channel loops run. */
+  readonly audioScope: ContractLoopAudio | null;
   /** Whether a contract at `site` is worked in this scene. */
   readonly siteHere: (site: ContractSiteDef) => boolean;
   /** Where a spot lies on this scene's map, or null when the map has lost its target. */
@@ -620,7 +622,7 @@ export class ContractSiteWork {
     this.job = {
       spot,
       channel,
-      loop: startContractWorkLoop(this.deps.audio, spot.def.material),
+      loop: startContractWorkLoop(this.deps.audioScope, spot.def.material),
       framesWorked: 0,
     };
     if (cues.start !== null) this.cue(cues.start);

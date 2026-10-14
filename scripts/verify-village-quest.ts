@@ -43,12 +43,13 @@ import {
   type VillagerId,
 } from '../src/dialog/scripts/briarHollow';
 import type { DialogLine } from '../src/dialog/line';
+import type { MusicClaims } from '../src/audio/AudioScope';
+import type { MusicClaimOwner } from '../src/audio/music/MusicDirector';
 import { HOLLOW_BELL_MAX_HP } from '../src/systems/briarHollow/hollowBell';
 import { ASK_QUESTION_LABEL } from '../src/systems/briarHollow/villagerTopics';
 import {
   ASSAULT_WAVE_COUNT,
   IMMINENT_FRAMES,
-  type SiegeMusicClaim,
 } from '../src/systems/briarHollow/VillageAssaultSystem';
 import {
   BRIAR_HOLLOW_QUEST_COINS,
@@ -890,7 +891,7 @@ section('10. A scene rebuilt in the middle of the siege');
   for (let i = 0; i < UPDATES_PER_SECOND * REBUILD_INTO_COUNTDOWN_SECONDS; i++) first.step();
   const framesLeft = first.state.quest.imminentCountdownFrames;
   first.dispose();
-  const music: { current: SiegeMusicClaim | null } = { current: null };
+  const music: { current: MusicClaims | null } = { current: null };
   const rebuilt = buildSiegeRig({
     seed: SEED,
     assaultLevel: ASSAULT_LEVEL,
@@ -902,10 +903,14 @@ section('10. A scene rebuilt in the middle of the siege');
     phaseNow() === 'imminent' && rebuilt.state.quest.imminentCountdownFrames === framesLeft,
     `a scene rebuilt mid-countdown keeps it: "${phaseNow()}", ${rebuilt.state.quest.imminentCountdownFrames} of ${framesLeft} frames left`,
   );
-  const stub: SiegeMusicClaim = { battleMusicActive: false, reset: () => undefined };
-  music.current = stub;
+  const held = new Set<MusicClaimOwner>();
+  music.current = {
+    claimMusic: (claim) => void held.add(claim.owner),
+    releaseMusic: (owner) => void held.delete(owner),
+    isMusicClaimed: (owner) => held.has(owner),
+  };
   rebuilt.step();
-  check(stub.battleMusicActive, 'the siege track is held by a music system built after it');
+  check(held.has('siege'), 'the siege track is claimed again by a scene rebuilt after it');
   for (let i = 1; i < framesLeft - 1; i++) rebuilt.step();
   const stillCounting = phaseNow() === 'imminent';
   rebuilt.step();

@@ -37,7 +37,7 @@ import type { AudioManager } from '../../audio/AudioManager';
 import {
   VILLAGE_CUES,
   VILLAGE_SIEGE_MUSIC,
-  VILLAGE_VICTORY_MUSIC,
+  VILLAGE_VICTORY_STING,
   type VillageCue,
 } from '../../audio/villageSoundCues';
 import type { BriarHollowState } from '../../core/briarHollowState';
@@ -97,10 +97,7 @@ import { worldPalette } from '../../ui/theme/worldInk';
 import { worldText } from '../../ui/world/worldText';
 import { viewportHeight, viewportWidth } from '../../core/Viewport';
 import type { MobRoster } from '../kits/SceneWorld';
-import type { OverworldMusicSystem } from '../OverworldMusicSystem';
-
-/** What the siege needs of the zone music: to take the track over, and to hand it back. */
-export type SiegeMusicClaim = Pick<OverworldMusicSystem, 'battleMusicActive' | 'reset'>;
+import type { MusicClaims } from '../../audio/AudioScope';
 import type { DefenseStructures } from './DefenseStructures';
 import type { VillageAmbience } from './VillageAmbience';
 import { SiegeFlowField } from './SiegeFlowField';
@@ -820,8 +817,8 @@ export interface VillageAssaultSystemDeps {
   readonly bossIntro: (name: string, color: string) => void;
   /** Both crawlers, whose sight a spawn keeps out of. */
   readonly crawlers: () => ReadonlyArray<{ readonly x: number; readonly y: number }>;
-  /** The overworld's zone music, which the siege track takes over from. Null in a gate. */
-  readonly music: () => SiegeMusicClaim | null;
+  /** The scene's music claims, which the siege track is claimed through. Null in a gate. */
+  readonly music: () => MusicClaims | null;
   /** Keeps each wave's arrival rows warm; injectable so a gate can count its calls. */
   readonly prewarm?: AssaultWavePrewarm;
   /** Uniform [0, 1); a gate passes a seeded stream. */
@@ -891,8 +888,6 @@ export class VillageAssaultSystem {
   private segmentsBreached = 0;
   private structuresDestroyed = 0;
   private readonly crumbles: ScheduledCrumble[] = [];
-  /** Frames the victory track still owns the music; the track loops, so the village music must cut in as it ends. */
-  private victoryMusicFrames = 0;
   private readonly effects: CrumbleEffect[] = [];
   /** The one attacker whose sounds play; every other attacker is silent. */
   private voice: Mob | null = null;
@@ -1120,10 +1115,7 @@ export class VillageAssaultSystem {
     ambience.noticeBoard.callToArms = true;
     ambience.bell.cracked = false;
     this.ensureFlow();
-    this.victoryMusicFrames = 0;
-    const music = this.deps.music();
-    if (music !== null) music.battleMusicActive = true;
-    this.deps.audio?.playMusic(VILLAGE_SIEGE_MUSIC, { fadeInMs: SIEGE_MUSIC_FADE_MS });
+    this.holdSiegeMusic();
   }
 
   private ensureFlow(): SiegeWorld {
@@ -1154,7 +1146,6 @@ export class VillageAssaultSystem {
     }
     this.tickWithdrawals();
     this.tickCrumbles();
-    this.tickVictoryMusic();
 
     if (this.phase === 'imminent') this.updateImminent(frame);
     else if (this.phase === 'assault') this.updateAssault(frame);
@@ -1700,21 +1691,7 @@ export class VillageAssaultSystem {
     this.deps.setPhase('victory');
     this.endSiege();
     this.playCue('bellVictoryPeal');
-    this.startVictoryMusic();
-  }
-
-  private startVictoryMusic(): void {
-    const music = this.deps.music();
-    if (music === null) return;
-    music.battleMusicActive = true;
-    this.victoryMusicFrames = VICTORY_MUSIC_FRAMES;
-    this.deps.audio?.playMusic(VILLAGE_VICTORY_MUSIC, { fadeInMs: SIEGE_MUSIC_FADE_MS });
-  }
-
-  private tickVictoryMusic(): void {
-    if (this.victoryMusicFrames <= 0) return;
-    this.victoryMusicFrames--;
-    if (this.victoryMusicFrames === 0) this.releaseMusic();
+    this.deps.audio?.play(VILLAGE_VICTORY_STING);
   }
 
   /** The bell fell, or the party left: the dead walk back out, and the walls stay as they are. */
@@ -1782,25 +1759,20 @@ export class VillageAssaultSystem {
   }
 
   /**
-   * Keeps the siege track through the whole siege. A music system built after
-   * the siege's dressing went up — the scene rebuilt round a door visit
-   * mid-countdown — starts with no claim on it and would put the zone's
-   * playlist on at its first update, so the claim is made again every update.
+   * Keeps the siege track through the whole siege. A scene rebuilt round a
+   * door visit mid-countdown starts with no claim on it, so the claim is made
+   * again every update; a claim already held changes nothing.
    */
   private holdSiegeMusic(): void {
-    const music = this.deps.music();
-    if (music === null || music.battleMusicActive) return;
-    music.battleMusicActive = true;
-    if (this.deps.audio?.currentMusicId !== VILLAGE_SIEGE_MUSIC) {
-      this.deps.audio?.playMusic(VILLAGE_SIEGE_MUSIC, { fadeInMs: SIEGE_MUSIC_FADE_MS });
-    }
+    this.deps.music()?.claimMusic({
+      owner: 'siege',
+      layer: 'battle',
+      selection: { kind: 'loop', id: VILLAGE_SIEGE_MUSIC },
+    });
   }
 
   private releaseMusic(): void {
-    const music = this.deps.music();
-    if (music === null) return;
-    music.battleMusicActive = false;
-    music.reset();
+    this.deps.music()?.releaseMusic('siege');
   }
 
   /**
@@ -2075,10 +2047,6 @@ export class VillageAssaultSystem {
     }
     this.resetSiegeCounters();
     this.crumbles.length = 0;
-    if (this.victoryMusicFrames > 0) {
-      this.victoryMusicFrames = 0;
-      this.releaseMusic();
-    }
     this.effects.length = 0;
     this.withdraw.walks.clear();
     this.outcomeBanner = null;
@@ -2116,10 +2084,6 @@ const TILE_CENTRE = 0.5;
 /** How long the "Attack coming from…" banner stays up at the start of a countdown or a lull. */
 const SIDE_BANNER_SECONDS = 6;
 const SIDE_BANNER_FRAMES = SIDE_BANNER_SECONDS * UPDATES_PER_SECOND;
-const SIEGE_MUSIC_FADE_MS = 1000;
-/** The victory track is 12 s long and plays once through before the village's own music returns. */
-const VICTORY_MUSIC_SECONDS = 12;
-const VICTORY_MUSIC_FRAMES = VICTORY_MUSIC_SECONDS * UPDATES_PER_SECOND;
 const VORDRICK_FLEES_BANNER = 'Vordrick steals the life stone and retreats.';
 const ABANDONED_BANNER = 'You left Briar Hollow to the dead. They withdraw…';
 

@@ -7,14 +7,14 @@
  * none of them depends on which other floor-3 groups happen to be loaded.
  */
 
-import type { AudioManager } from '../audio/AudioManager';
+import type { PlacedCuePlayer } from '../audio/AudioManager';
 import type { Mob } from '../creatures/Mob';
 import { RaisedRatkin } from '../creatures/RaisedRatkin';
 import { GraveBull } from '../creatures/GraveBull';
 import { Necromancer } from '../creatures/Necromancer';
 
 /** Drains and plays one mob's queued undead cues, if it is one of the assault's undead. */
-export function playUndeadCues(mob: Mob, audio: AudioManager | null): void {
+export function playUndeadCues(mob: Mob, audio: Pick<PlacedCuePlayer, 'play'> | null): void {
   if (!(mob instanceof RaisedRatkin || mob instanceof GraveBull || mob instanceof Necromancer)) {
     return;
   }

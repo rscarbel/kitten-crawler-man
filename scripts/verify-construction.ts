@@ -228,6 +228,7 @@ function makeRig(state: BriarHollowState = createBriarHollowState(), map: GameMa
     cat,
     roster,
     audio: null,
+    audioScope: null,
     announce: (message) => messages.push(message),
     noteResourceActivity: () => undefined,
     bodies: () => {
@@ -1308,6 +1309,7 @@ section('Long-press');
     gameMap,
     bus: new EventBus(),
     audio: null,
+    audioScope: null,
     pm,
     roster: new MobRoster(gameMap, new SpellSystem()),
   };
@@ -1442,6 +1444,7 @@ section('The build key over a faced wall');
     gameMap,
     bus: new EventBus(),
     audio: null,
+    audioScope: null,
     pm,
     roster: new MobRoster(gameMap, new SpellSystem()),
   };

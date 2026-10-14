@@ -742,6 +742,46 @@ console.log('\nA boss killed without its room ever locking still counts as defea
   }
 }
 
+console.log('\nA boss room tells the music every seal and every abort, not only the first entry');
+{
+  const map = makeBossRoomMap();
+  const room = map?.bossRooms[0];
+  if (map === null || room === undefined) {
+    check(false, 'a generated dungeon offered a boss room to test with');
+  } else {
+    const party = makeParty(map);
+    const bossRoom = new BossRoomSystem(map, new MiniMapSystem(map), new EventBus(), [
+      'krakaren_clone',
+    ]);
+    addMob(party, 'krakaren_clone', room.centre.x, room.centre.y);
+    party.human.x = (room.bounds.x + 1) * TILE_SIZE;
+    party.human.y = room.centre.y * TILE_SIZE;
+    party.cat.x = party.human.x;
+    party.cat.y = party.human.y;
+    bossRoom.update(makeContext(party, bossRoom));
+    check(bossRoom.sealedBossType === 'krakaren_clone', 'walking in reports the seal');
+    bossRoom.sealedBossType = null;
+
+    party.human.isKnockedOut = true;
+    party.cat.isKnockedOut = true;
+    for (let frame = 0; frame < SETTLE_FRAMES && !bossRoom.fightAbortedPending; frame++) {
+      bossRoom.update(makeContext(party, bossRoom));
+    }
+    check(bossRoom.fightAbortedPending, 'both crawlers down inside reports the abort');
+    bossRoom.fightAbortedPending = false;
+
+    party.human.isKnockedOut = false;
+    party.cat.isKnockedOut = false;
+    for (let frame = 0; frame < SETTLE_FRAMES && bossRoom.sealedBossType === null; frame++) {
+      bossRoom.update(makeContext(party, bossRoom));
+    }
+    check(
+      bossRoom.sealedBossType === 'krakaren_clone',
+      'and coming back into the aborted room reports the seal again',
+    );
+  }
+}
+
 console.log('\nThe leash does not cut the companion loose inside a locked boss room');
 {
   const map = makeBossRoomMap();

@@ -364,17 +364,8 @@ export class SpiderQuestSystem implements GameSystem {
   explanationSoundPending = false;
   keyboardHeroMusicStartPending = false;
   keyboardHeroMusicStopPending = false;
-  /**
-   * The floor's own track has to get out of the way of the mini-game's.
-   *
-   * The two play on different buses — the hack track goes to the ambience bus so
-   * its clock can be read for note timing, the floor's music to the music bus —
-   * so starting one does nothing to the other and a player hears both songs at
-   * once over the whole run.
-   */
-  levelMusicStopPending = false;
-  /** Hand the floor its track back after an abandoned hack. */
-  levelMusicRestorePending = false;
+  /** The hack is over for good: its song lets go of the music, so the floor's comes back. */
+  keyboardHeroMusicReleasePending = false;
   hackFailErrorSoundPending = false;
   /** A note was struck cleanly — the board's per-press tick. */
   keyboardHeroHitTickPending = false;
@@ -658,8 +649,8 @@ export class SpiderQuestSystem implements GameSystem {
     if (this.phase !== 'hacking_failed') return;
     // Retreating is the only way out of the hack that puts the player back
     // on the floor under their own steam; success hands off to the boss
-    // fight, which claims the music itself.
-    this.levelMusicRestorePending = true;
+    // fight, which takes the music over itself.
+    this.keyboardHeroMusicReleasePending = true;
     this.phase = 'awaiting_hacking';
     this.hackStarting = false;
     this.hackStartTimer = 0;
@@ -1176,10 +1167,10 @@ export class SpiderQuestSystem implements GameSystem {
     this._screenShakeIntensity = 0;
     this._screenShakeX = 0;
     this._screenShakeY = 0;
-    // `questCompleted` restores the level track itself, so any queued hand-off
-    // would only fight it.
+    // The kill lets go of the boss's track at once rather than after the
+    // grace an abort waits out.
     this.bossMusicStartPending = false;
-    this.bossMusicStopPending = false;
+    this.bossMusicStopPending = true;
     this._bossMusicStopGraceTimer = 0;
     this._bossMusicPlaying = false;
     this.bus.emit('questCompleted', { questId: SPIDER_QUEST_ID, difficulty: 'medium' });
@@ -1692,7 +1683,6 @@ export class SpiderQuestSystem implements GameSystem {
       this.machineryStopPending = true;
     }
     this._machineryForcedOff = true;
-    this.levelMusicStopPending = true;
     this.keyboardHeroMusicStartPending = true;
     this.keyboardHero.start(
       () => this._onHackComplete(),

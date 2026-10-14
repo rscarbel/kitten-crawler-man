@@ -16,6 +16,7 @@ import { inset, overlaps, type Rect } from '../core/geom';
 import type { SizeClass } from '../core/viewport';
 import { resolveTheme, type Density, type Theme } from '../theme/tokens';
 import { hudButtonLayout, type HudButtonRects } from './hudButtonLayout';
+import type { CaptionAnchor } from './captions';
 import type { PackSize } from './hudPacking';
 
 /** The minimap's side, by screen size and whether the player has expanded it. */
@@ -551,4 +552,83 @@ function topBandArea(
     },
     under: true,
   };
+}
+
+/** The widest the now-playing card is drawn on a roomy screen, so the credit stays a glance. */
+const NOW_PLAYING_MAX_W = 420;
+
+/** How wide the now-playing card may be on this screen. */
+export function nowPlayingMaxWidth(geometry: HudGeometry): number {
+  const lane = geometry.topBand.w;
+  return geometry.size === 'compact' ? lane : Math.min(NOW_PLAYING_MAX_W, lane);
+}
+
+/**
+ * Where a song's credit card of `card` size sits: at the top band's right
+ * end, beside the minimap, on a roomy screen; centred in the band on a
+ * compact one. It moves down past every bar the band drew this frame that it
+ * would cover — a quest banner, the call to open loot — since those carry
+ * something to do and the credit only reports. It never sinks below the
+ * band's floor, the hotbar's top.
+ */
+export function nowPlayingAnchor(
+  geometry: HudGeometry,
+  card: { readonly w: number; readonly h: number },
+  bandSlots: readonly Rect[],
+): Rect {
+  const band = geometry.topBand;
+  const gap = geometry.theme.space.sm;
+  const w = Math.min(card.w, band.w);
+  const x = geometry.size === 'compact' ? band.x + (band.w - w) / 2 : band.x + band.w - w;
+  let rect: Rect = { x, y: band.y, w, h: card.h };
+  const byTop = [...bandSlots].sort((a, b) => a.y - b.y);
+  for (const slot of byTop) {
+    if (overlaps(rect, slot)) rect = { ...rect, y: slot.y + slot.h + gap };
+  }
+  const lowestTop = geometry.topBandFloor - card.h;
+  return { ...rect, y: Math.max(band.y, Math.min(rect.y, lowestTop)) };
+}
+
+/** The widest the caption lane is drawn on a roomy screen, so a caption stays a glance. */
+const CAPTION_MAX_W = 360;
+/**
+ * The narrowest lane the captions settle for beside the hotbar before they
+ * move above the toasts instead: room for a short caption and its chevron.
+ */
+const CAPTION_MIN_LANE_W = 200;
+/** How far above its bottom the lane looks for buttons standing in its way. */
+const CAPTION_ZONE_H = 120;
+
+/**
+ * Where the caption lane stacks from. On a roomy screen it sits bottom left,
+ * level with the toasts but left of their lane and the hotbar, raised above
+ * any button standing in that corner. Where that leaves too little room — a
+ * phone — it is centred on the toasts' lane above the stack, whose drawn top
+ * is `toastTop`. The credit card stands at the top band, so the lane's
+ * ceiling, not its anchor, keeps clear of it.
+ */
+export function captionAnchor(geometry: HudGeometry, toastTop: number): CaptionAnchor {
+  const { space } = geometry.theme;
+  const toasts = geometry.toastAnchor;
+  const strip = geometry.hotbar.strip;
+  const above: CaptionAnchor = {
+    x: toasts.x,
+    bottom: toastTop - space.xs,
+    maxWidth: toasts.maxWidth,
+    align: 'center',
+  };
+  if (geometry.size === 'compact') return above;
+  const left = geometry.framesBlock.x;
+  const toastLaneLeft = toasts.x - toasts.maxWidth / 2;
+  const right = Math.min(toastLaneLeft, strip.x) - space.md;
+  const maxWidth = Math.min(CAPTION_MAX_W, right - left);
+  if (maxWidth < CAPTION_MIN_LANE_W) return above;
+  const lane: Rect = { x: left, y: 0, w: maxWidth, h: 0 };
+  let bottom = strip.y - space.md;
+  const lowestFirst = [...geometry.topBandObstacles].sort((a, b) => b.y - a.y);
+  for (const obstacle of lowestFirst) {
+    const zone = { ...lane, y: bottom - CAPTION_ZONE_H, h: CAPTION_ZONE_H };
+    if (overlaps(zone, obstacle)) bottom = Math.min(bottom, obstacle.y - space.sm);
+  }
+  return { x: left, bottom, maxWidth, align: 'left' };
 }

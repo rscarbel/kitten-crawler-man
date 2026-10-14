@@ -20,6 +20,7 @@ import {
   clearDifficultyChangeGuard,
   registerDifficultyChangeGuard,
 } from '../../core/difficultyChangeGuard';
+import { MusicLibrary } from '../../core/MusicLibrary';
 import { settings } from '../../core/Settings';
 import { GameStats } from '../../core/GameStats';
 import { createJournalProgress } from '../../core/JournalProgress';
@@ -33,6 +34,8 @@ import {
   type PauseRestriction,
 } from '../../ui/screens/pause/PauseScreen';
 import type { PauseAudio, PauseSectionId } from '../../ui/screens/pause/section';
+import type { MusicPlayerControls, MusicPlayerMode } from '../../audio/music/MusicDirector';
+import type { MusicBusId, MusicTrackId } from '../../audio/sounds';
 import type { DialogFixture, FixtureRig } from './dialogs/fixture';
 
 const PLAYER_TILE = 10;
@@ -50,6 +53,8 @@ const PLAYED_FRAMES = FRAMES_PER_SECOND * PLAYED_SECONDS;
 const FOCUS_TARGET = 30;
 /** Most PageDown presses a fixture needs to bring a control on a phone page into view. */
 const MAX_PAGES = 6;
+/** PageDown presses that reach the foot of the whole track list on the shortest phone. */
+const MUSIC_LIST_MAX_PAGES = 30;
 /** A cap on its Tab presses, past the sidebar and the header. */
 const KEYBOARD_FOCUS_MAX_PRESSES = 80;
 /** A tier other than the one in play, so the guarded pick needs confirming. */
@@ -138,6 +143,55 @@ export function pauseFixtureData(): PauseFixtureData {
 const FIXTURE_MASTER_VOLUME = 0.8;
 const FIXTURE_MUSIC_VOLUME = 0.45;
 const FIXTURE_SFX_VOLUME = 0.7;
+const FIXTURE_AMBIENCE_VOLUME = 0.6;
+
+/** Songs a mid-run save has found: some in every state the music page draws. */
+const FIXTURE_UNLOCKED_SONGS: readonly MusicTrackId[] = [
+  'tutorial_island',
+  'bg_level_1',
+  'town_music_1',
+  'town_music_2',
+  'forest_path',
+  'circus_theme_1',
+  'desperado_club_1',
+  'casino_background_jazz_1',
+];
+/** Found since the music page was last opened, so the menu and the rows show them as new. */
+const FIXTURE_NEW_SONGS: readonly MusicTrackId[] = ['forest_path', 'circus_theme_1'];
+const FIXTURE_AUDIBLE_SONG: MusicTrackId = 'bg_level_1';
+
+function fixtureMusicLibrary(): MusicLibrary {
+  const library = new MusicLibrary();
+  library.markRequested(FIXTURE_UNLOCKED_SONGS.filter((id) => !FIXTURE_NEW_SONGS.includes(id)));
+  library.clearMenuUnseen();
+  library.markRequested(FIXTURE_NEW_SONGS);
+  library.markAudible(FIXTURE_AUDIBLE_SONG);
+  library.drainNotices();
+  return library;
+}
+
+/** A player that remembers its mode and claims the chosen song is the one sounding. */
+function fixtureMusicPlayer(): MusicPlayerControls {
+  let mode: MusicPlayerMode = { kind: 'area' };
+  let audible: MusicBusId = FIXTURE_AUDIBLE_SONG;
+  const choose = (next: MusicPlayerMode): void => {
+    mode = next;
+    if (next.kind === 'repeat' || next.kind === 'once') audible = next.id;
+  };
+  return {
+    get playerMode() {
+      return mode;
+    },
+    get audibleTrack() {
+      return audible;
+    },
+    playOnce: (id) => choose({ kind: 'once', id }),
+    repeat: (id) => choose({ kind: 'repeat', id }),
+    shuffleUnlocked: () => choose({ kind: 'shuffle' }),
+    areaMusic: () => choose({ kind: 'area' }),
+    onTrackAudible: () => () => undefined,
+  };
+}
 
 /** Volumes the sliders can move, with every playback call a no-op. */
 function fixtureAudio(): PauseAudio {
@@ -145,8 +199,11 @@ function fixtureAudio(): PauseAudio {
     master: FIXTURE_MASTER_VOLUME,
     music: FIXTURE_MUSIC_VOLUME,
     sfx: FIXTURE_SFX_VOLUME,
+    ambience: FIXTURE_AMBIENCE_VOLUME,
   };
+  const toggles = { muted: false, mono: false, background: false };
   return {
+    music: fixtureMusicPlayer(),
     play: () => undefined,
     pauseMusic: () => undefined,
     pauseAmbience: () => undefined,
@@ -161,6 +218,9 @@ function fixtureAudio(): PauseAudio {
     get sfxVolume() {
       return volumes.sfx;
     },
+    get ambienceVolume() {
+      return volumes.ambience;
+    },
     setMasterVolumePreference: (v: number) => {
       volumes.master = v;
     },
@@ -170,16 +230,39 @@ function fixtureAudio(): PauseAudio {
     setSfxVolumePreference: (v: number) => {
       volumes.sfx = v;
     },
+    setAmbienceVolumePreference: (v: number) => {
+      volumes.ambience = v;
+    },
+    get muted() {
+      return toggles.muted;
+    },
+    setMuted: (muted: boolean) => {
+      toggles.muted = muted;
+    },
+    get monoAudio() {
+      return toggles.mono;
+    },
+    setMonoAudio: (mono: boolean) => {
+      toggles.mono = mono;
+    },
+    get playsInBackground() {
+      return toggles.background;
+    },
+    setPlaysInBackground: (enabled: boolean) => {
+      toggles.background = enabled;
+    },
   };
 }
 
 /** A pause screen over `data`, with a journal and every optional hook filled. */
 export function pauseFixtureScreen(data: PauseFixtureData): PauseScreen {
+  const library = fixtureMusicLibrary();
   const screen = new PauseScreen({
     party: () => ({ human: data.human, cat: data.cat }),
     abilities: data.abilities,
     audio: fixtureAudio(),
     guides: { mongo: () => undefined, craft: () => undefined, processing: () => undefined },
+    musicLibrary: () => library,
   });
   screen.onResetGame = () => undefined;
   screen.journalContext = {
@@ -227,6 +310,17 @@ export function pauseFixtureScreen(data: PauseFixtureData): PauseScreen {
     ],
   };
   return screen;
+}
+
+/** Taps the audible song's row, paging down to it where the now-playing header pushes it off a short screen. */
+function tapSong(rig: FixtureRig, surfaceId: string): void {
+  const row = `${surfaceId}/song/${FIXTURE_AUDIBLE_SONG}`;
+  for (let page = 0; page < MAX_PAGES && rig.region(row) === null; page++) {
+    rig.key('PageDown');
+    rig.frame();
+    rig.frame();
+  }
+  rig.tap(rig.need(row));
 }
 
 interface PauseFixtureSpec {
@@ -301,6 +395,36 @@ export const PAUSE_FIXTURES: readonly DialogFixture[] = [
   }),
   pauseFixture({ name: 'crafts', section: 'crafts' }),
   pauseFixture({ name: 'achievements', section: 'achievements' }),
+  pauseFixture({ name: 'music', section: 'music' }),
+  pauseFixture({
+    name: 'music-row',
+    section: 'music',
+    interact: (rig, id) => tapSong(rig, id),
+  }),
+  pauseFixture({
+    name: 'music-detail',
+    section: 'music',
+    interact: (rig, id) => {
+      tapSong(rig, id);
+      rig.frame();
+      // A phone drills straight into the song; a card shows its actions on the row.
+      const credits = rig.region(`${id}/song/${FIXTURE_AUDIBLE_SONG}/credits`);
+      if (credits !== null) rig.tap(credits);
+    },
+  }),
+  pauseFixture({
+    name: 'music-credits',
+    section: 'music',
+    interact: (rig, id) => {
+      const footer = `${id}/all-credits`;
+      for (let page = 0; page < MUSIC_LIST_MAX_PAGES && rig.region(footer) === null; page++) {
+        rig.key('PageDown');
+        rig.frame();
+        rig.frame();
+      }
+      rig.tap(rig.need(footer));
+    },
+  }),
   pauseFixture({ name: 'settings', section: 'settings' }),
   pauseFixture({ name: 'controls', section: 'controls' }),
   pauseFixture({

@@ -8,6 +8,7 @@
 
 import { awardPartyXp, type CrawlerPair, type PartyXpApplied } from '../core/awardXp';
 import { TILE_SIZE } from '../core/constants';
+import type { MusicClaims } from '../audio/AudioScope';
 import { randomInt, pixelToTile } from '../utils';
 import { drawInteractionPrompt } from '../ui/InteractionPrompt';
 import { activeInputMode, byInputMode, keyLabel } from '../ui/core/inputMode';
@@ -438,6 +439,8 @@ export class DefendQuestSystem implements GameSystem {
     /** The floor's `levelledCurve`, which the wave is levelled on. */
     waveCurve: LevelledCurve | undefined,
     private readonly intensity: DefendQuestIntensity = BASE_DEFEND_QUEST_INTENSITY,
+    /** The floor's music claims; the defence claims its battle track through it. */
+    private readonly music: MusicClaims | null = null,
   ) {
     this.gameMap = gameMap;
     this.bus = bus;
@@ -1004,6 +1007,7 @@ export class DefendQuestSystem implements GameSystem {
     this.party = { human: ctx.human, cat: ctx.cat };
     this.roster = ctx.roster;
     this.syncQuestExitDoor();
+    this.syncMusic();
     this.ambientFrame++;
     this.effects.update();
     if (this.noWoodFlash !== null) {
@@ -1466,6 +1470,24 @@ export class DefendQuestSystem implements GameSystem {
         },
       ],
     };
+  }
+
+  /**
+   * The defence's track plays from the countdown until the child is home or
+   * the mother falls. Read off the phase, so a checkpoint rewound into or out
+   * of the defence takes the track or lets it go with no hand-off of its own.
+   */
+  private syncMusic(): void {
+    const defending = this.phase === 'countdown' || this.phase === 'defending';
+    if (!defending) {
+      this.music?.releaseMusic('defend_quest');
+      return;
+    }
+    this.music?.claimMusic({
+      owner: 'defend_quest',
+      layer: 'battle',
+      selection: { kind: 'loop', id: 'prepare_to_defend' },
+    });
   }
 
   private triggerQuestFailed(): void {

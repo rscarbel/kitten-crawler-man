@@ -26,6 +26,7 @@ import type { HumanPlayer } from '../../creatures/HumanPlayer';
 import type { CatPlayer } from '../../creatures/CatPlayer';
 import type { CrawlerKind } from '../../core/SkillManager';
 import type { AudioManager } from '../../audio/AudioManager';
+import type { AudioScope } from '../../audio/AudioScope';
 import type { SoundId } from '../../audio/sounds';
 import type { MobRoster } from '../kits/SceneWorld';
 import type { ResourceCost } from '../../core/partyResources';
@@ -240,6 +241,8 @@ export interface ConstructionSystemDeps {
   readonly cat: CatPlayer;
   readonly roster: MobRoster;
   readonly audio: AudioManager | null;
+  /** Where the repair loop runs, faded out with the scene. */
+  readonly audioScope: AudioScope | null;
   readonly announce: (message: string, opts?: ToastOptions) => void;
   /** Keeps the resource strip up while a job runs. */
   readonly noteResourceActivity: () => void;
@@ -1068,7 +1071,7 @@ export class ConstructionSystem {
    * dispose) and every one of them must silence the loop.
    */
   private syncRepairLoop(): void {
-    const audio = this.deps.audio;
+    const audio = this.deps.audioScope;
     if (audio === null) return;
     const repairing = this._job?.action === 'repair';
     if (repairing) {

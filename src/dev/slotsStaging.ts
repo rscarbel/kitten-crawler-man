@@ -10,7 +10,7 @@ import { HumanPlayer } from '../creatures/HumanPlayer';
 import { TILE_SIZE } from '../core/constants';
 import { createClubMembership } from '../core/ClubMembership';
 import type { CasinoSeat } from '../systems/ClubCasinoSystem';
-import { ClubSlotsSystem, type SlotsAudio } from '../systems/ClubSlotsSystem';
+import { ClubSlotsSystem, type SlotsAudio, type SlotsLoops } from '../systems/ClubSlotsSystem';
 import { MAX_BET_PER_LINE, stepBet } from '../systems/casino/slots/slotBets';
 import type { ForcedOutcome } from '../systems/casino/slots/forcedOutcomes';
 import { mulberry32 } from '../sprites/person/rng';
@@ -63,7 +63,10 @@ export interface StagedSlots {
 }
 
 /** A fresh machine with a seated party, opened on its fake clock. */
-export function openStagedSlots(audio: SlotsAudio | null = null): StagedSlots {
+export function openStagedSlots(
+  audio: SlotsAudio | null = null,
+  loops: SlotsLoops | null = null,
+): StagedSlots {
   let now = 0;
   const membership = createClubMembership();
   membership.slotsJackpotPool = STAGE_JACKPOT_POOL;
@@ -71,7 +74,7 @@ export function openStagedSlots(audio: SlotsAudio | null = null): StagedSlots {
   const cat = new CatPlayer(1, 0, TILE_SIZE);
   human.coins = STAGE_BANKROLL;
   const seat: CasinoSeat = { active: () => human, companion: () => cat };
-  const host = new ClubSlotsSystem(audio, membership, () => now, {
+  const host = new ClubSlotsSystem(audio, loops, membership, () => now, {
     seed: SLOTS_STAGE_SEED,
     effectsRandom: mulberry32(EFFECTS_SEED),
   });

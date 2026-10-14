@@ -100,6 +100,7 @@ export interface ConstructionContractSystemDeps {
   readonly human: HumanPlayer;
   readonly cat: CatPlayer;
   readonly audio: ContractSiteWorkDeps['audio'];
+  readonly audioScope: ContractSiteWorkDeps['audioScope'];
   /** The scene's bus, which the payout's `questCompleted` goes out on. */
   readonly bus: EventBus;
   /** The scene's one conversation, which Wendell's note after a payout opens on. */
@@ -150,6 +151,7 @@ export class ConstructionContractSystem implements GameSystem, QuestLineProvider
       human: deps.human,
       cat: deps.cat,
       audio: deps.audio,
+      audioScope: deps.audioScope,
       siteHere: (candidate) => candidate.town === 'briar_hollow',
       resolveFootprint: (candidate, spot) =>
         candidate.town === 'briar_hollow' ? briarHollowSpotFootprint(candidate, spot, site) : null,

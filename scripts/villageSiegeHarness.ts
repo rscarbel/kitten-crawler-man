@@ -24,7 +24,7 @@ import { PlayerManager } from '../src/core/PlayerManager';
 import { AbilityManager } from '../src/core/AbilityManager';
 import { keybindings } from '../src/core/Keybindings';
 import type { GrantedReward } from '../src/core/GrantedReward';
-import type { SiegeMusicClaim } from '../src/systems/briarHollow/VillageAssaultSystem';
+import type { MusicClaims } from '../src/audio/AudioScope';
 import type { HumanPlayer } from '../src/creatures/HumanPlayer';
 import type { CatPlayer } from '../src/creatures/CatPlayer';
 import type { Player } from '../src/Player';
@@ -113,8 +113,8 @@ export interface SiegeRigOptions {
   readonly crafts?: PartyCraftsState;
   /** The level the siege's undead and the militia come at: a number, or a roll per spawn. */
   readonly assaultLevel: number | (() => number);
-  /** The zone music the siege takes the track over from; none by default. */
-  readonly music?: () => SiegeMusicClaim | null;
+  /** The scene's music claims the siege claims its track through; none by default. */
+  readonly music?: () => MusicClaims | null;
   /** Midge's escort as a door carried it; a fresh record by default. */
   readonly midgeEscortCarry?: MidgeEscortCarry;
   /** Told of every cue "The Borrowed Blueprints" raises. */
@@ -128,7 +128,7 @@ export function buildSiegeRig(options: SiegeRigOptions): SiegeRig {
   const bus = new EventBus();
   const pm = new PlayerManager(site.gate.inside.x, site.gate.inside.y, undefined);
   const roster = new MobRoster(map, new SpellSystem());
-  const world: SceneWorld = { gameMap: map, bus, audio: null, pm, roster };
+  const world: SceneWorld = { gameMap: map, bus, audio: null, audioScope: null, pm, roster };
   const menus = new MenusKit({ world, abilityManager: new AbilityManager() });
   const combat = new CombatKit({ world, abilityManager: new AbilityManager(), safeRoom: null });
   const rewardCards: string[] = [];

@@ -79,9 +79,6 @@ const FACING_PREFERENCE_DOT = 0.5;
  */
 const CHANNEL_MOTION_TOLERANCE_PX = 0.5;
 
-/** A strike's pitch and loudness drift this far either side of the sample, so a long channel doesn't sound mechanical. */
-const STRIKE_PITCH_JITTER = 0.05;
-const STRIKE_VOLUME_JITTER = 0.1;
 const STRIKE_BASE_VOLUME = 0.85;
 
 const TILE_CENTER_OFFSET = 0.5;
@@ -476,10 +473,10 @@ export class HarvestSystem {
 
   private strikeFeedback(channel: Channel): void {
     this.deps.effects.strike(channel.kind, channel.tileX, channel.tileY);
-    const jitter = (spread: number): number => 1 + (Math.random() * 2 - 1) * spread;
+    // Both strikes vary take to take by their sound traits, so a long channel
+    // doesn't sound mechanical.
     this.deps.audio?.play(channel.kind === 'wood' ? 'axe_striking_wood' : 'pickaxe_strike_stone', {
-      playbackRate: jitter(STRIKE_PITCH_JITTER),
-      volume: STRIKE_BASE_VOLUME * jitter(STRIKE_VOLUME_JITTER),
+      volume: STRIKE_BASE_VOLUME,
     });
     if (channel.kind === 'wood') this.deps.onTreeStruck(channel.tileX, channel.tileY);
   }

@@ -33,17 +33,6 @@ import type { HolsterMotion } from '../sprites/art/human/motionSets';
 import type { ToolKind, ToolTier } from './toolTiers';
 import type { ProcessingStationKind } from '../systems/briarHollow/processingStations';
 
-/**
- * Who decides what plays when a boss fight starts or ends.
- *
- * `shared` is the ordinary case: the audio wiring picks the track from the boss
- * type. `caller` says the emitter has already chosen — the interior encounters
- * each have a track of their own (the circus battle, the town playlist after
- * Quill) that no boss-type table could name — so the audio wiring plays the
- * sting and leaves the music alone.
- */
-export type BossMusicOwnership = 'shared' | 'caller';
-
 export interface GameEvents {
   mobKilled: {
     mob: Mob;
@@ -76,7 +65,7 @@ export interface GameEvents {
   /** A boss room was locked (player entered). */
   bossRoomLocked: { bossType: string };
 
-  bossDefeated: { bossType: string; mob: Mob; music?: BossMusicOwnership };
+  bossDefeated: { bossType: string; mob: Mob };
 
   playerLevelUp: { player: Player; newLevel: number };
 
@@ -122,7 +111,7 @@ export interface GameEvents {
   combatStarted: { attacker: 'Human' | 'Cat'; mobType: string };
 
   /** Players entered a boss room and the fight has begun. */
-  bossFightInitiated: { bossType: string; music?: BossMusicOwnership };
+  bossFightInitiated: { bossType: string };
 
   healingPotionUsed: { player: 'Human' | 'Cat'; hpRestored: number };
 
@@ -189,9 +178,11 @@ export interface GameEvents {
   /** Cat claw-swipe attack's animation peak. */
   catMeleeSwing: { hit: boolean };
 
-  missileImpact: Record<string, never>;
+  /** A missile struck something, at this world point. */
+  missileImpact: { x: number; y: number };
 
-  slingshotImpact: Record<string, never>;
+  /** A slingshot stone struck something, at this world point. */
+  slingshotImpact: { x: number; y: number };
 
   /** Player descended to the next floor via a stairwell. */
   levelComplete: Record<string, never>;

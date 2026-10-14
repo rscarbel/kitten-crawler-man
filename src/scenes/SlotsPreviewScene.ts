@@ -296,6 +296,7 @@ export class SlotsPreviewScene extends PreviewScene {
   };
   private readonly host = new ClubSlotsSystem(
     null,
+    null,
     createClubMembership(),
     () => performance.now(),
     {

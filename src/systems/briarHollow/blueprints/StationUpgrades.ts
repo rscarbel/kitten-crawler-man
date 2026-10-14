@@ -158,6 +158,7 @@ export type StationUpgradesContext = Pick<
   | 'gameMap'
   | 'site'
   | 'audio'
+  | 'audioScope'
   | 'human'
   | 'cat'
   | 'announce'
@@ -461,7 +462,7 @@ export class StationUpgrades {
    * blueprints lost, a rewind, dispose) and every one must silence the loop.
    */
   private syncLoop(): void {
-    const audio = this.ctx.audio;
+    const audio = this.ctx.audioScope;
     const loop = upgradeLoopSound();
     if (audio === null || loop === null) return;
     if (this.channel !== null) {

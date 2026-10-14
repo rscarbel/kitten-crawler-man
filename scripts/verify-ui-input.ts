@@ -2701,6 +2701,7 @@ section('the Wheel of Fortune warnings and SPIN, on a desktop and on phones');
     const seat = { active: () => human, companion: () => cat };
     const wheel = new ClubWheelSystem({
       audio: null,
+      audioScope: null,
       ledger: createWheelLedger(),
       saveNow: () => {
         saves++;
@@ -2972,15 +2973,10 @@ section('the slot machine: a skip before the banner lands plays no slam, shake, 
     play: (id: string) => void played.push(id),
     stopSound: () => undefined,
     fadeOutSound: () => undefined,
-    startAmbientLoop: () => undefined,
-    stopAmbientLoop: () => undefined,
-    isAmbientLoopRunning: () => false,
     duckMusic: () => undefined,
     unduckMusic: () => undefined,
     pauseMusic: (reason?: string) => void paused.push(reason ?? 'menu'),
     resumeMusic: () => undefined,
-    stopMusic: () => undefined,
-    playMusicPlaylist: () => undefined,
   };
   const staged = openStagedSlots(audio);
   staged.host.betPerLine = MAX_BET_PER_LINE;

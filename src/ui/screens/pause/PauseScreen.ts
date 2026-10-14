@@ -13,6 +13,7 @@ import { activeDifficultyChangeGuard } from '../../../core/difficultyChangeGuard
 import type { Difficulty } from '../../../core/difficultyProfiles';
 import type { GameStats } from '../../../core/GameStats';
 import { keybindings } from '../../../core/Keybindings';
+import { activeMusicLibrary, type MusicLibrary } from '../../../core/MusicLibrary';
 import { settings } from '../../../core/Settings';
 import { CRAWLER_NAMES, type CrawlerKind } from '../../../core/SkillManager';
 import type { CatPlayer } from '../../../creatures/CatPlayer';
@@ -35,6 +36,7 @@ import { characterSection } from './characterSection';
 import { controlsSection } from './controlsSection';
 import { craftsSection } from './craftsSection';
 import { journalSection } from './journalSection';
+import { musicSection } from './musicSection';
 import { RebindCapture } from './rebindCapture';
 import {
   SectionLayout,
@@ -81,6 +83,8 @@ export interface PauseScreenDeps {
   readonly abilities: AbilityManager;
   readonly audio: PauseAudio | null;
   readonly guides: PauseGuides;
+  /** The library the music page lists. Defaults to the run's bound library. */
+  readonly musicLibrary?: () => MusicLibrary | null;
 }
 
 type ConfirmKind = 'reset' | 'difficulty' | 'bindings';
@@ -180,6 +184,8 @@ export class PauseScreen {
   private confirm: ConfirmKind | null = null;
   private pendingDifficulty: Difficulty | null = null;
   private didPauseAudio = false;
+  /** The menu's music pause is let go while a page that plays music is showing. */
+  private musicReleased = false;
   private readonly contentHeights = new Map<string, number>();
   private areas: ScrollArea[] = [];
   private frameAreas: ScrollArea[] = [];
@@ -197,6 +203,7 @@ export class PauseScreen {
       abilitiesSection(),
       craftsSection(),
       achievementsSection(),
+      musicSection(),
       settingsSection(),
       controlsSection(this.rebind),
     ];
@@ -279,8 +286,18 @@ export class PauseScreen {
   private applyAudioResume(): void {
     if (!this.didPauseAudio) return;
     this.didPauseAudio = false;
-    this.deps.audio?.resumeMusic();
+    if (!this.musicReleased) this.deps.audio?.resumeMusic();
+    this.musicReleased = false;
     this.deps.audio?.resumeAmbience();
+  }
+
+  /** Lets the music back in while the page showing wants it heard, and silences it again after. */
+  private syncMusicRelease(section: PauseSection | null): void {
+    const wantReleased = this.didPauseAudio && section?.releasesMusic === true;
+    if (wantReleased === this.musicReleased) return;
+    this.musicReleased = wantReleased;
+    if (wantReleased) this.deps.audio?.resumeMusic();
+    else this.deps.audio?.pauseMusic();
   }
 
   /**
@@ -325,6 +342,7 @@ export class PauseScreen {
       gameStats: frame.gameStats,
       journal: this.journalContext,
       audio: this.deps.audio,
+      musicLibrary: (this.deps.musicLibrary ?? activeMusicLibrary)(),
       openBoxes: {
         human: frame.onOpenHumanBoxes ?? null,
         cat: frame.onOpenCatBoxes ?? null,
@@ -594,6 +612,7 @@ export class PauseScreen {
     const visible = this.visibleSections(ctx);
     const section = restriction === null ? this.sectionToShow(ui, visible) : null;
     this.shown = section;
+    this.syncMusicRelease(section);
     this.frameAreas = [];
     const entries = this.menuEntries(ui, ctx, hooks, visible, section, restriction);
     const onClose = restriction === null ? () => hooks.onEscape() : undefined;

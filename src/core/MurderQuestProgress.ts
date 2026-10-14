@@ -24,6 +24,19 @@ export type MurderQuestStage =
   | 'lich_slain'
   | 'complete';
 
+/** Every stage, in the order the questline reaches them. */
+export const MURDER_QUEST_STAGE_ORDER = [
+  'not_started',
+  'body_waiting',
+  'investigation',
+  'night_attack',
+  'cult_hideout',
+  'confrontation',
+  'quill_slain',
+  'lich_slain',
+  'complete',
+] as const satisfies readonly MurderQuestStage[];
+
 export interface MurderQuestProgress {
   stage: MurderQuestStage;
   wellClueFound: boolean;

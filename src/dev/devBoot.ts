@@ -173,7 +173,8 @@ export function installDevLoopFallback(): void {
  * quest state must not pick up a dev seed; without the persist step unless the
  * URL opts in with `save`; and with any `murder` stage seeded, so
  * `?playtest=<id>&murder=<stage>` drops a kitted party straight into a
- * questline beat.
+ * questline beat; and with the music of everything the party skipped past
+ * already unlocked, as a save made there would have it.
  */
 function devFloorOptions(
   options: DungeonSceneOptions,
@@ -186,6 +187,7 @@ function devFloorOptions(
     saveProgress: persistsSaves ? options.saveProgress : undefined,
     progressWipe: persistsSaves ? options.progressWipe : undefined,
     murderQuestProgress: seededMurderProgress ?? options.murderQuestProgress,
+    backfillMusicLibrary: true,
   };
 }
 

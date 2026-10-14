@@ -66,7 +66,16 @@ export function cameraWorldView(
  * sound from off screen.
  */
 export function isWorldPointInView(x: number, y: number, insetPx: number): boolean {
-  const view = published;
+  return isPointInWorldView(published, x, y, insetPx);
+}
+
+/** {@link isWorldPointInView} against `view` rather than the published one. */
+export function isPointInWorldView(
+  view: VisibleWorldView | null,
+  x: number,
+  y: number,
+  insetPx: number,
+): boolean {
   if (view === null) return false;
   const insideX = x >= view.left + insetPx && x <= view.left + view.width - insetPx;
   const insideY = y >= view.top + insetPx && y <= view.top + view.height - insetPx;

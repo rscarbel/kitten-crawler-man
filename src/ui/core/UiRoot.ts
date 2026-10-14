@@ -251,8 +251,11 @@ export interface WorldGesture extends PointerGesture {
 
 /** The audio a `UiRoot` plays through; `AudioManager` satisfies it. */
 export interface UiAudio {
-  play(id: SoundId): void;
+  play(id: SoundId, opts?: { readonly bus?: 'ui' }): void;
 }
+
+/** Taps and control cues play on the UI bus, which follows the Effects slider. */
+const UI_CUE_OPTIONS = { bus: 'ui' } as const;
 
 /**
  * The context a surface renders with. Widgets are free functions over it:
@@ -759,7 +762,7 @@ export class UiRoot {
   /** @internal */
   play(id: SoundId | null): void {
     if (id === null) return;
-    this.options.audio?.play(id);
+    this.options.audio?.play(id, UI_CUE_OPTIONS);
   }
 
   // ── Hit testing ─────────────────────────────────────────────────────────

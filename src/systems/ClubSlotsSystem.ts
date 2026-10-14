@@ -17,7 +17,8 @@
 
 import type { Player } from '../Player';
 import type { AudioManager } from '../audio/AudioManager';
-import { CASINO_MUSIC_TRACKS, SLOTS_FREE_SPINS_MUSIC_TRACKS, type SoundId } from '../audio/sounds';
+import type { AudioScope } from '../audio/AudioScope';
+import { SLOTS_FREE_SPINS_MUSIC_TRACKS, type SoundId } from '../audio/sounds';
 import type { ClubMembership } from '../core/ClubMembership';
 import { NEVER_LUCKY, type LuckCheck } from '../core/GodMode';
 import { keybindings } from '../core/Keybindings';
@@ -63,18 +64,13 @@ export const SLOTS_RULES_SURFACE_ID = 'slots-rules';
 /** The audio the machine reaches for; a fake records cues in a harness. */
 export type SlotsAudio = Pick<
   AudioManager,
-  | 'play'
-  | 'stopSound'
-  | 'fadeOutSound'
-  | 'startAmbientLoop'
-  | 'stopAmbientLoop'
-  | 'isAmbientLoopRunning'
-  | 'duckMusic'
-  | 'unduckMusic'
-  | 'pauseMusic'
-  | 'resumeMusic'
-  | 'stopMusic'
-  | 'playMusicPlaylist'
+  'play' | 'stopSound' | 'fadeOutSound' | 'duckMusic' | 'unduckMusic' | 'pauseMusic' | 'resumeMusic'
+>;
+
+/** The scene scope the machine's reel, roll-up and hopper loops run in, and its bonus music is claimed through. */
+export type SlotsLoops = Pick<
+  AudioScope,
+  'startAmbientLoop' | 'stopAmbientLoop' | 'isAmbientLoopRunning' | 'claimMusic' | 'releaseMusic'
 >;
 
 /** What the machine keeps on the club membership between visits. */
@@ -174,6 +170,7 @@ export class ClubSlotsSystem implements CasinoGameHost {
 
   constructor(
     private readonly audio: SlotsAudio | null,
+    private readonly loops: SlotsLoops | null,
     private readonly settings: SlotsSettings,
     private readonly clock: () => number = () => performance.now(),
     options: ClubSlotsOptions = {},
@@ -570,8 +567,14 @@ export class ClubSlotsSystem implements CasinoGameHost {
   private swapMusic(freeSpins: boolean): void {
     if (this.freeSpinsMusic === freeSpins) return;
     this.freeSpinsMusic = freeSpins;
-    this.audio?.stopMusic(FREE_SPINS_MUSIC_SWAP_MS);
-    this.audio?.playMusicPlaylist(freeSpins ? SLOTS_FREE_SPINS_MUSIC_TRACKS : CASINO_MUSIC_TRACKS, {
+    if (!freeSpins) {
+      this.loops?.releaseMusic('free_spins', { fadeOutMs: FREE_SPINS_MUSIC_SWAP_MS });
+      return;
+    }
+    this.loops?.claimMusic({
+      owner: 'free_spins',
+      layer: 'activity',
+      selection: { kind: 'playlist', ids: SLOTS_FREE_SPINS_MUSIC_TRACKS },
       fadeInMs: FREE_SPINS_MUSIC_SWAP_MS,
     });
   }
@@ -600,14 +603,16 @@ export class ClubSlotsSystem implements CasinoGameHost {
   }
 
   private reconcileLoops(): void {
-    const audio = this.audio;
+    const audio = this.loops;
     if (audio === null) return;
     for (const loop of LOOP_NAMES) {
       const id = SLOTS_LOOPS[loop];
       const wanted = this.isOpen && this.wantedLoops.has(loop);
       const running = audio.isAmbientLoopRunning(id);
       if (wanted && !running) audio.startAmbientLoop(id, LOOP_VOLUME[loop]);
-      else if (!wanted && running) audio.stopAmbientLoop(id);
+      // Unconditional: a start declined while audio was locked or the page
+      // backgrounded is still remembered by the scope, and would come in later.
+      else if (!wanted) audio.stopAmbientLoop(id);
     }
   }
 

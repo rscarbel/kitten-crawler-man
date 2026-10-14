@@ -376,8 +376,9 @@ draws the queue above the darkness and fog with the HUD's keycap and glass.
 
 One `HudSurface` (band `hud`) serves every gameplay scene, drawn from a
 `HudModel` the scene builds each frame through its `HudHost`
-(`{ id?, visible(), model(), toasts(), liftTopBand?() }`). Its `overlay()`
-companion (band `toast`) carries the toast stack, and the top band whenever the
+(`{ id?, visible(), model(), toasts(), nowPlaying(), captions(), liftTopBand?() }`).
+Its `overlay()` companion (band `toast`) carries the toast stack, the
+now-playing card and the caption lane, and the top band whenever the
 host lifts it over its own panels. Mount both.
 
 - **Layout** is `hudLayout` (`hudLayout.ts`), pure in its inputs and shared by
@@ -421,9 +422,20 @@ host lifts it over its own panels. Mount both.
   readouts: they register no region, so a tap on one reaches the world; an
   entry with its own control registers it with `ui.hit`. Boss and encounter
   bars, countdowns, banners and village counters all live here.
-- **Toasts** (`toasts.ts`): `menus.toasts.post(text, { icon?, tone?, urgent?, merge?, key?, durationTicks? })`
+- **Toasts** (`toasts.ts`): `menus.toasts.post(text, { icon?, tone?, urgent?, merge?, key?, durationTicks?, overflow? })`
   on the scene's `MenusKit`. At most `MAX_VISIBLE_TOASTS`; they age by update
-  tick, slide in and fade on their own. `key` updates one toast in place.
+  tick, slide in and fade on their own. `key` updates one toast in place. A
+  full stack evicts the oldest; `overflow: 'queue'` waits for a free row
+  instead, for a burst where every line must be read (music unlocks).
+- **Now-playing card** (`nowPlaying.ts`): the song credit, its own card in the
+  `toast` band beside the toasts (`nowPlayingAnchor`), on
+  `MenusKit.nowPlaying`: `show(musicCredit(id))`. Toasts never rise over it.
+  `postMusicLibraryNotices` drains the library into toasts and the card;
+  `returnUnreadMusicNotices` hands unread ones back before the menus dispose.
+- **Caption lane** (`captions.ts`): `MenusKit.captions` listens to
+  `audio.onCuePlayed` and shows a line for each captioned sound
+  (`SOUND_CAPTIONS`, see `add-sound`), placed by `captionAnchor` clear of the
+  toasts and the card.
 - **Hotbar** (`hotbar.ts`): slots fire on **press** through
   `HotbarInput.press(index)`; `release` matters only to a slot that charges
   while held.

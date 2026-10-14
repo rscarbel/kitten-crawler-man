@@ -144,7 +144,19 @@ export const elevation = {
 } as const satisfies Record<string, Elevation>;
 
 /** Durations in milliseconds. */
-export const motion = { fast: 90, base: 140, slow: 220 } as const;
+export const motion = {
+  fast: 90,
+  base: 140,
+  slow: 220,
+  /** One full bob-and-tilt of the now-playing card's note. */
+  noteSway: 2400,
+  /** How long each small note takes to drift up off the now-playing card and fade. */
+  noteDrift: 1800,
+  /** How long a song's credit card stays up, fade included. */
+  nowPlayingDisplay: 5000,
+  /** How long a sound caption stays up after the sound it reports, fade included. */
+  captionDisplay: 2500,
+} as const;
 
 /** A surface opening scales up from this fraction of its size. */
 export const OPEN_SCALE_FROM = 0.96;

@@ -16,6 +16,7 @@ import { createPartyCraftsState } from '../core/partyCrafts';
 import { createWheelLedger } from '../core/WheelLedger';
 import { createAttackCowState } from '../core/AttackCowState';
 import { withBloodVomitFrames } from '../core/bloodVomitSave';
+import { MusicLibrary } from '../core/MusicLibrary';
 
 /**
  * An ability manager carrying a save's progress, or a fresh one at level 1.
@@ -110,6 +111,10 @@ export function sceneSetupFromSave(
   if (progress.catAchievements !== undefined) {
     options.catAchievements = AchievementManager.fromSerialized(progress.catAchievements);
   }
+  // A death that respawns here hands over the run's live library: a song is
+  // no less heard for the death, and rewinding it would announce its unlock
+  // and its credit a second time.
+  options.musicLibrary ??= MusicLibrary.forSave(progress);
   if (progress.mongoPetHp !== undefined && Number.isFinite(progress.mongoPetHp)) {
     // Clamped against the maximum the *restored* level implies: this arrives
     // as unvalidated JSON, and a value above the maximum renders as a

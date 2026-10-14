@@ -8,6 +8,7 @@
  * all — while these settings must work in every boot path.
  */
 
+import { MUSIC_TRACK_IDS, type MusicTrackId } from '../audio/sounds';
 import type { Difficulty } from './difficultyProfiles';
 
 const STORAGE_KEY = 'kittenCrawler.settings.v1';
@@ -21,6 +22,7 @@ const MAX_VOLUME = 1;
 const DEFAULT_MASTER_VOLUME = 1;
 const DEFAULT_SFX_VOLUME = 1;
 const DEFAULT_MUSIC_VOLUME = 1;
+const DEFAULT_AMBIENCE_VOLUME = 1;
 
 /**
  * Render-quality choice.
@@ -74,12 +76,24 @@ export const PERFORMANCE_RENDER_SCALE = 1;
  */
 type StoredBindings = Record<string, readonly string[]>;
 
+/**
+ * The music page's choice that outlives a reload. Play-once is a one-song
+ * whim and is never stored; area music is the absence of a preference.
+ */
+export type MusicPlaybackPreference =
+  { readonly mode: 'shuffle' } | { readonly mode: 'repeat'; readonly track: MusicTrackId };
+
 interface SettingsData {
   quality: QualityPreset;
   difficulty: Difficulty;
   masterVolume: number;
   sfxVolume: number;
   musicVolume: number;
+  /**
+   * The continuous world sounds' own level. Saves from before it existed
+   * have none and start it at their Effects level, which governed it then.
+   */
+  ambienceVolume: number;
   bindings: StoredBindings;
   /**
    * Whether the companion cat sends Mongo in on her own when a fight is on her.
@@ -89,6 +103,19 @@ interface SettingsData {
    */
   catAutoSummonsMongo: boolean;
   uiSize: UiSize;
+  /** Optional so payloads from before the music page load without a version bump. */
+  musicPlayback?: MusicPlaybackPreference;
+  /** Silences everything without moving a volume slider, so unmuting restores the same mix. */
+  muted: boolean;
+  /** Both speakers carry the same downmixed signal, for one-eared listening and single speakers. */
+  monoAudio: boolean;
+  /**
+   * Keeps the game audible while its tab or window is in the background.
+   * Off by default: a game left in another window falls silent.
+   */
+  audioInBackground: boolean;
+  /** Short on-screen lines for sounds that carry information the screen does not show. */
+  soundCaptions: boolean;
 }
 
 const DEFAULTS: SettingsData = {
@@ -97,9 +124,14 @@ const DEFAULTS: SettingsData = {
   masterVolume: DEFAULT_MASTER_VOLUME,
   sfxVolume: DEFAULT_SFX_VOLUME,
   musicVolume: DEFAULT_MUSIC_VOLUME,
+  ambienceVolume: DEFAULT_AMBIENCE_VOLUME,
   bindings: {},
   catAutoSummonsMongo: true,
   uiSize: 'medium',
+  muted: false,
+  monoAudio: false,
+  audioInBackground: false,
+  soundCaptions: false,
 };
 
 function isQualityPreset(value: unknown): value is QualityPreset {
@@ -126,6 +158,19 @@ function readVolume(source: Record<string, unknown>, key: string, fallback: numb
 function readBoolean(source: Record<string, unknown>, key: string, fallback: boolean): boolean {
   const raw = source[key];
   return typeof raw === 'boolean' ? raw : fallback;
+}
+
+function readMusicPlayback(
+  source: Record<string, unknown>,
+  key: string,
+): MusicPlaybackPreference | undefined {
+  const raw = source[key];
+  if (typeof raw !== 'object' || raw === null) return undefined;
+  const record: Record<string, unknown> = { ...raw };
+  if (record.mode === 'shuffle') return { mode: 'shuffle' };
+  if (record.mode !== 'repeat') return undefined;
+  const track = MUSIC_TRACK_IDS.find((id) => id === record.track);
+  return track === undefined ? undefined : { mode: 'repeat', track };
 }
 
 /**
@@ -170,15 +215,22 @@ function load(): SettingsData {
   const quality = stored.quality;
   const difficulty = stored.difficulty;
   const uiSize = stored.uiSize;
+  const sfxVolume = readVolume(stored, 'sfxVolume', DEFAULTS.sfxVolume);
   return {
     quality: isQualityPreset(quality) ? quality : DEFAULTS.quality,
     difficulty: isDifficulty(difficulty) ? difficulty : DEFAULTS.difficulty,
     masterVolume: readVolume(stored, 'masterVolume', DEFAULTS.masterVolume),
-    sfxVolume: readVolume(stored, 'sfxVolume', DEFAULTS.sfxVolume),
+    sfxVolume,
     musicVolume: readVolume(stored, 'musicVolume', DEFAULTS.musicVolume),
+    ambienceVolume: readVolume(stored, 'ambienceVolume', sfxVolume),
     bindings: readBindings(stored, 'bindings'),
     catAutoSummonsMongo: readBoolean(stored, 'catAutoSummonsMongo', DEFAULTS.catAutoSummonsMongo),
     uiSize: isUiSize(uiSize) ? uiSize : DEFAULTS.uiSize,
+    musicPlayback: readMusicPlayback(stored, 'musicPlayback'),
+    muted: readBoolean(stored, 'muted', DEFAULTS.muted),
+    monoAudio: readBoolean(stored, 'monoAudio', DEFAULTS.monoAudio),
+    audioInBackground: readBoolean(stored, 'audioInBackground', DEFAULTS.audioInBackground),
+    soundCaptions: readBoolean(stored, 'soundCaptions', DEFAULTS.soundCaptions),
   };
 }
 
@@ -210,6 +262,10 @@ class Settings {
 
   get musicVolume(): number {
     return this.data.musicVolume;
+  }
+
+  get ambienceVolume(): number {
+    return this.data.ambienceVolume;
   }
 
   setQuality(preset: QualityPreset): void {
@@ -247,6 +303,11 @@ class Settings {
     this.persist();
   }
 
+  setAmbienceVolume(volume: number): void {
+    this.data.ambienceVolume = clampVolume(volume);
+    this.persist();
+  }
+
   get catAutoSummonsMongo(): boolean {
     return this.data.catAutoSummonsMongo;
   }
@@ -262,6 +323,52 @@ class Settings {
 
   setUiSize(size: UiSize): void {
     this.data.uiSize = size;
+    this.persist();
+  }
+
+  get musicPlayback(): MusicPlaybackPreference | undefined {
+    return this.data.musicPlayback;
+  }
+
+  /** Undefined forgets the choice, so the next load starts on area music. */
+  setMusicPlayback(preference: MusicPlaybackPreference | undefined): void {
+    this.data.musicPlayback = preference;
+    this.persist();
+  }
+
+  get muted(): boolean {
+    return this.data.muted;
+  }
+
+  setMuted(muted: boolean): void {
+    this.data.muted = muted;
+    this.persist();
+  }
+
+  get monoAudio(): boolean {
+    return this.data.monoAudio;
+  }
+
+  setMonoAudio(mono: boolean): void {
+    this.data.monoAudio = mono;
+    this.persist();
+  }
+
+  get audioInBackground(): boolean {
+    return this.data.audioInBackground;
+  }
+
+  setAudioInBackground(enabled: boolean): void {
+    this.data.audioInBackground = enabled;
+    this.persist();
+  }
+
+  get soundCaptions(): boolean {
+    return this.data.soundCaptions;
+  }
+
+  setSoundCaptions(enabled: boolean): void {
+    this.data.soundCaptions = enabled;
     this.persist();
   }
 

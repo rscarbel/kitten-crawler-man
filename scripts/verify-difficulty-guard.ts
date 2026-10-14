@@ -9,6 +9,7 @@
 
 import { createCanvas } from 'canvas';
 
+import { installFakeAudio } from './audioHarness.js';
 import { installCanvasGlobals } from './nodeCanvasGlobals.js';
 
 const FAULT_FLAG = '--fault=';
@@ -26,37 +27,9 @@ function installSilentAudioGlobals(): void {
   const ignore = (): void => {
     return;
   };
-  const silentNode = { connect: ignore, disconnect: ignore };
-  class SilentAudioContext {
-    readonly state = 'suspended';
-    readonly currentTime = 0;
-    readonly destination = silentNode;
-    createGain() {
-      return { ...silentNode, gain: { value: 0 } };
-    }
-    createMediaElementSource() {
-      return silentNode;
-    }
-    resume(): Promise<void> {
-      return Promise.resolve();
-    }
-    suspend(): Promise<void> {
-      return Promise.resolve();
-    }
-  }
-  class SilentAudio {
-    src = '';
-    loop = false;
-    volume = 1;
-    pause = ignore;
-    play(): Promise<void> {
-      return Promise.resolve();
-    }
-  }
+  installFakeAudio({ initialState: 'suspended' });
   const eventTarget = { addEventListener: ignore, removeEventListener: ignore };
   const globals: AudioShimGlobals = globalThis;
-  globals.AudioContext = SilentAudioContext;
-  globals.Audio = SilentAudio;
   globals.document = {
     ...eventTarget,
     hidden: false,
@@ -69,8 +42,6 @@ function installSilentAudioGlobals(): void {
 }
 
 interface AudioShimGlobals {
-  AudioContext?: unknown;
-  Audio?: unknown;
   document?: unknown;
   window?: unknown;
 }

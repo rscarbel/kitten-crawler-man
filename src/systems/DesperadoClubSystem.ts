@@ -3,7 +3,8 @@ import { NEVER_LUCKY, type LuckCheck } from '../core/GodMode';
 import { playInteriorCue } from './interiorInteractionSoundCues';
 import type { Player } from '../Player';
 import type { AudioManager } from '../audio/AudioManager';
-import { CASINO_MUSIC_TRACKS, CLUB_MUSIC_TRACKS } from '../audio/sounds';
+import type { AudioScope, MusicClaims } from '../audio/AudioScope';
+import { CASINO_MUSIC_TRACKS } from '../audio/sounds';
 import type { ClubMembership } from '../core/ClubMembership';
 import type { MercenaryRoster } from '../core/MercenaryRoster';
 import type { AchievementManager, AchievementId } from '../core/AchievementManager';
@@ -74,9 +75,8 @@ import { worldPalette } from '../ui/theme/worldInk';
 export const DESPERADO_MARKET_VENDOR_ID = 'desperado_market';
 
 const STATION_INTERACT_RANGE = 2.6;
-/** Stop-then-start with overlapping ramps reads as a crossfade between the club set and the jazz set. */
-const CASINO_MUSIC_FADE_OUT_MS = 600;
-const CASINO_MUSIC_FADE_IN_MS = 800;
+/** How long the club set and the jazz set take to crossfade, either way. */
+const CASINO_MUSIC_CROSSFADE_MS = 800;
 /**
  * `animTime` counts frames, but the dealer sprite times its motion in real
  * milliseconds so the two renderings of Deuce move at the same speed.
@@ -357,6 +357,7 @@ export class DesperadoClubSystem {
    * in one sitting never restarts the jazz.
    */
   private casinoMusicActive = false;
+  private readonly music: MusicClaims | null;
 
   constructor(
     map: GameMap,
@@ -364,6 +365,7 @@ export class DesperadoClubSystem {
     roster: MercenaryRoster,
     private readonly conversation: Conversation,
     private readonly audio: AudioManager | null,
+    audioScope: AudioScope | null,
     hasPassTattoo: boolean,
     arrivingCrawler: Player,
     marketStock: MarketStock,
@@ -372,6 +374,7 @@ export class DesperadoClubSystem {
     worldSeed: number = POKER_DEV_SEED,
     isLucky: LuckCheck = NEVER_LUCKY,
   ) {
+    this.music = audioScope;
     this.crowd = new ClubCrowdSystem(map);
     this.barShop = new ShopSystem(CLUB_INTERIOR_W, BAR_SHOP_CONFIG, {
       stock: marketStock,
@@ -393,7 +396,7 @@ export class DesperadoClubSystem {
       this.onCasinoWinnings?.(coins, screenX, screenY);
     this.poker.onNotice = (message, tone) => this.onCasinoNotice?.(message, tone);
     this.poker.isLucky = isLucky;
-    const slots = new ClubSlotsSystem(audio, membership);
+    const slots = new ClubSlotsSystem(audio, audioScope, membership);
     slots.isLucky = isLucky;
     slots.onWinnings = (coins, screenX, screenY) =>
       this.onCasinoWinnings?.(coins, screenX, screenY);
@@ -636,9 +639,16 @@ export class DesperadoClubSystem {
     const casinoOpen = this.anyCasinoSurfaceOpen();
     if (casinoOpen === this.casinoMusicActive) return;
     this.casinoMusicActive = casinoOpen;
-    const tracks = casinoOpen ? CASINO_MUSIC_TRACKS : CLUB_MUSIC_TRACKS;
-    this.audio?.stopMusic(CASINO_MUSIC_FADE_OUT_MS);
-    this.audio?.playMusicPlaylist(tracks, { fadeInMs: CASINO_MUSIC_FADE_IN_MS });
+    if (!casinoOpen) {
+      this.music?.releaseMusic('casino_tables', { fadeOutMs: CASINO_MUSIC_CROSSFADE_MS });
+      return;
+    }
+    this.music?.claimMusic({
+      owner: 'casino_tables',
+      layer: 'activity',
+      selection: { kind: 'playlist', ids: CASINO_MUSIC_TRACKS },
+      fadeInMs: CASINO_MUSIC_CROSSFADE_MS,
+    });
   }
 
   /** Sounds whatever went over either counter since the last tick. */
@@ -847,9 +857,8 @@ export class DesperadoClubSystem {
     for (const host of this.casinoGameHosts()) host.forceClose?.();
     this.guild.close();
     this.vip.close();
-    // The overworld restores its own music on exit; starting the club set here
-    // would leak it onto the street.
     this.casinoMusicActive = false;
+    this.music?.releaseMusic('casino_tables');
     // No tick runs after a teardown to notice a flag a panel set on its way out
     // — and closing the casino can fast-forward a live hand into a natural.
     this.consumePendingUnlocks();

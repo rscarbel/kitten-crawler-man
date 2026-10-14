@@ -429,6 +429,11 @@
     "scripts/verify-briar-hollow-state.ts",
     "scripts/verify-craft-level-ups.ts",
     "scripts/check-ui-style.ts",
+    "scripts/check-audio.ts",
+    "scripts/audioHarness.ts",
+    "scripts/verify-audio.ts",
+    "scripts/measure-audio.ts",
+    "scripts/audioHash.ts",
     "scripts/render-world-text.ts",
     "scripts/generate-website-images.ts"
   ]

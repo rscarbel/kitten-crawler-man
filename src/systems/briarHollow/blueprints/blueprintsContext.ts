@@ -15,6 +15,7 @@
  */
 
 import type { AudioManager } from '../../../audio/AudioManager';
+import type { AudioScope } from '../../../audio/AudioScope';
 import type { EventBus } from '../../../core/EventBus';
 import type { BriarHollowState } from '../../../core/briarHollowState';
 import type { BlueprintsQuestPhase } from '../../../core/blueprintsQuestPhase';
@@ -27,7 +28,7 @@ import type { BriarHollowSite } from '../../../map/overworld/briarHollowSite';
 import type { MobRoster } from '../../kits/SceneWorld';
 import type { VillagerSystem } from '../VillagerSystem';
 import type { LivestockSystem } from '../LivestockSystem';
-import type { SiegeMusicClaim } from '../VillageAssaultSystem';
+import type { MusicClaims } from '../../../audio/AudioScope';
 import type { MidgeEscortCarry } from '../../../core/midgeEscortCarry';
 import type { BlueprintsCue } from './blueprintsSoundCues';
 
@@ -40,6 +41,8 @@ export interface BlueprintsQuestContext {
   readonly site: BriarHollowSite;
   readonly bus: EventBus;
   readonly audio: AudioManager | null;
+  /** Where the quest's work beds loop, faded out with the scene. */
+  readonly audioScope: AudioScope | null;
   readonly roster: MobRoster;
   readonly human: HumanPlayer;
   readonly cat: CatPlayer;
@@ -66,8 +69,8 @@ export interface BlueprintsQuestContext {
   readonly cue: (cue: BlueprintsCue) => void;
   /** Merrit's herd, which Midge is walked out of when Merrit calls her. */
   readonly livestock: LivestockSystem | null;
-  /** The overworld's zone music, which the escort's fight music takes over from while ambushers live. */
-  readonly music: () => SiegeMusicClaim | null;
+  /** The scene's music claims, which the escort's fight music is claimed through while ambushers live. */
+  readonly music: () => MusicClaims | null;
   /** The level the road's ambushers come at, rolled per body. */
   readonly escortLevel: () => number;
   /** Midge's escort across a door visit: the scene-option record the scenes carry by reference. */

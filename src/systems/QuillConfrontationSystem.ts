@@ -25,6 +25,9 @@ import { TOWN_MUSIC_TRACKS } from '../audio/sounds';
 import type { GameMap } from '../map/GameMap';
 import type { EventBus } from '../core/EventBus';
 import type { AudioManager } from '../audio/AudioManager';
+import type { MusicClaims } from '../audio/AudioScope';
+import { LICH_TRACK, QUILL_TRACK } from '../audio/music/bossTracks';
+import { MUSIC_SILENCE_FADE_MS, type MusicSelection } from '../audio/music/MusicDirector';
 import type { GameSystem, SystemContext } from './GameSystem';
 import type { Mob } from '../creatures/Mob';
 import type { Player } from '../Player';
@@ -129,8 +132,6 @@ const EXAMINE_RANGE_TILES = 2.5;
 const FRAMES_PER_SECOND = 60;
 const VICTORY_BANNER_SECONDS = 8;
 const VICTORY_BANNER_FRAMES = VICTORY_BANNER_SECONDS * FRAMES_PER_SECOND;
-const BOSS_MUSIC_FADE_IN_MS = 1500;
-const VICTORY_MUSIC_FADE_IN_MS = 2000;
 
 /**
  * The beat between the last culprit falling and the reveal's first line.
@@ -245,6 +246,8 @@ export class QuillConfrontationSystem implements GameSystem {
      */
     private readonly companion: CompanionDirector | null = null,
     private readonly conversation: Conversation,
+    /** The tower's scene claims; null in a harness with no audio. */
+    private readonly music: MusicClaims | null = null,
   ) {
     const centreY = Math.floor(this.map.structure.length / 2);
     const centreX = Math.floor((this.map.structure[0]?.length ?? 0) / 2);
@@ -295,8 +298,8 @@ export class QuillConfrontationSystem implements GameSystem {
   private openQuillFight(): void {
     this.showBanner(QUILL_BANNER);
     this.holdRoomForBanner();
-    this.bus.emit('bossFightInitiated', { bossType: 'miss_quill', music: 'caller' });
-    this.audio?.playMusic('boss_music_3', { fadeInMs: BOSS_MUSIC_FADE_IN_MS });
+    this.bus.emit('bossFightInitiated', { bossType: 'miss_quill' });
+    this.claimFinaleMusic({ kind: 'loop', id: QUILL_TRACK });
   }
 
   private beginQuillFight(): void {
@@ -593,9 +596,7 @@ export class QuillConfrontationSystem implements GameSystem {
 
     const quill = this.quill;
     if (quill !== null) {
-      // `music: 'caller'` because what follows this fight is not the town's
-      // playlist yet — the room's second boss is about to claim the speakers.
-      this.bus.emit('bossDefeated', { bossType: 'miss_quill', mob: quill, music: 'caller' });
+      this.bus.emit('bossDefeated', { bossType: 'miss_quill', mob: quill });
       // Where the crystal is, recorded the moment she drops. It goes on the
       // cross-scene record rather than on this system because the party can die
       // to what comes next and climb the tower again, and this system is rebuilt
@@ -603,7 +604,15 @@ export class QuillConfrontationSystem implements GameSystem {
       // where she fell.
       this.doomsdayProgress.crystalTile = { x: quill.x, y: quill.y };
     }
-    this.audio?.stopMusic();
+    this.claimFinaleMusic({ kind: 'silence' }, MUSIC_SILENCE_FADE_MS);
+  }
+
+  /**
+   * The finale is one claim, over the tower's own music: Quill's track, a
+   * silence for the reveal, then the Lich's.
+   */
+  private claimFinaleMusic(selection: MusicSelection, fadeInMs?: number): void {
+    this.music?.claimMusic({ owner: 'tower_finale', layer: 'boss', selection, fadeInMs });
   }
 
   private openReveal(): void {
@@ -641,8 +650,8 @@ export class QuillConfrontationSystem implements GameSystem {
     });
     this.showBanner(LICH_BANNER);
     this.holdRoomForBanner();
-    this.bus.emit('bossFightInitiated', { bossType: 'the_lich', music: 'caller' });
-    this.audio?.playMusic('boss_music_2', { fadeInMs: BOSS_MUSIC_FADE_IN_MS });
+    this.bus.emit('bossFightInitiated', { bossType: 'the_lich' });
+    this.claimFinaleMusic({ kind: 'loop', id: LICH_TRACK });
   }
 
   /**
@@ -681,9 +690,15 @@ export class QuillConfrontationSystem implements GameSystem {
     this.audio?.stopSound('deep_rumbling');
     this.audio?.stopSound('powering_off');
     this.audio?.stopSound('charging_up_1');
-    this.bus.emit('bossDefeated', { bossType: 'the_lich', mob: lich, music: 'caller' });
+    this.bus.emit('bossDefeated', { bossType: 'the_lich', mob: lich });
     this.bus.emit('objectiveComplete', { objectiveId: 'krasue_lich_destroyed' });
-    this.audio?.playMusicPlaylist(TOWN_MUSIC_TRACKS, { fadeInMs: VICTORY_MUSIC_FADE_IN_MS });
+    // With the city saved, the tower plays the town's music from here on.
+    this.music?.claimMusic({
+      owner: 'interior',
+      layer: 'area',
+      selection: { kind: 'playlist', ids: TOWN_MUSIC_TRACKS },
+    });
+    this.music?.releaseMusic('tower_finale');
 
     // The crystal is Miss Quill's and it destabilized when she died, but the
     // countdown it starts is wall-clock and the Lich stood between the party and

@@ -2,8 +2,8 @@
  * The gallery's HUD sheet: the real `HudSurface` drawn from fixture models —
  * a quiet moment with skill points to spend and toasts up, a boss fight with
  * the top band full and statuses ticking, the safe room's call to collect,
- * a building with its room-name banner, and a hotbar slot's tooltip read
- * over the open bag.
+ * a building with its room-name banner, the sound captions beside a toast and
+ * a credit card, and a hotbar slot's tooltip read over the open bag.
  */
 
 import { HOTBAR_COUNT, ITEM_DEF, type InventoryItem, type ItemId } from '../../core/ItemDefs';
@@ -19,7 +19,15 @@ import type {
   StatusPillModel,
   UnitFrameModel,
 } from '../../ui/hud/hudModel';
+import {
+  musicCredit,
+  NowPlayingCard,
+  postMusicBackfillToast,
+  postMusicUnlockToast,
+} from '../../ui/hud/nowPlaying';
 import { HudToasts } from '../../ui/hud/toasts';
+import { SoundCaptions } from '../../ui/hud/captions';
+import type { MusicTrackId } from '../../audio/sounds';
 import { LOOT_SEAL_NOTICE } from '../../systems/BossRoomSystem';
 import type { TopBandEntry } from '../../ui/hud/topBand';
 import { stackedBandEntry } from '../../ui/hud/topBandStack';
@@ -29,6 +37,10 @@ import type { DialogFixture } from './dialogs/fixture';
 import { buildFixture as inventoryFixture } from './inventory';
 
 const FIXTURE_TOAST_TICKS = 20;
+/** A cry heard three times while its caption was up. */
+const MERGED_CAPTION_REPEATS = 3;
+/** Up and to the left of the screen's middle, in radians. */
+const OFFSCREEN_CRY_DIRECTION = -2.4;
 const BOSS_HP = 420;
 const BOSS_MAX_HP = 900;
 const BOSS_ACCENT = palette.meter.boss;
@@ -238,9 +250,30 @@ function encounterEntry(): TopBandEntry {
 /**
  * `saving` is the lone save toast, the notice most often seen on a phone held
  * upright. `lootSeal` is the warning at a won boss room's sealed doorway,
- * which has to read in full on a phone rather than be ellipsized.
+ * which has to read in full on a phone rather than be ellipsized. The music
+ * notices: one unlock; the club's arrival, four unlocks and the first song's
+ * credit; the longest credit in the catalogue, which must wrap on a phone;
+ * and an old save's one backfill summary.
  */
-type FixtureToasts = 'none' | 'mixed' | 'saving' | 'lootSeal';
+type FixtureToasts =
+  | 'none'
+  | 'mixed'
+  | 'saving'
+  | 'lootSeal'
+  | 'musicUnlock'
+  | 'clubArrival'
+  | 'longCredit'
+  | 'musicBackfill'
+  | 'captions';
+
+const CLUB_SONGS = [
+  'desperado_club_1',
+  'desperado_club_2',
+  'desperado_club_3',
+  'desperado_club_4',
+] as const satisfies readonly MusicTrackId[];
+/** A plausible count for an old save part-way through the Over City. */
+const BACKFILLED_SONG_COUNT = 21;
 
 interface HudFixtureSpec {
   readonly name: string;
@@ -261,6 +294,24 @@ function hudFixture(spec: HudFixtureSpec): DialogFixture {
     name: spec.name,
     surfaces: (shown) => {
       const toasts = new HudToasts();
+      const nowPlaying = new NowPlayingCard();
+      const captions = new SoundCaptions();
+      if (spec.toasts === 'captions') {
+        captions.post({ text: 'Alarm bell rings', direction: null });
+        for (let repeat = 0; repeat < MERGED_CAPTION_REPEATS; repeat++) {
+          captions.post({ text: 'Guard shouts', direction: null });
+        }
+        captions.post({ text: 'Mantid hisses', direction: OFFSCREEN_CRY_DIRECTION });
+        toasts.post('Game Saved', { tone: 'success', icon: 'save' });
+        nowPlaying.show(musicCredit('desperado_club_1'));
+      }
+      if (spec.toasts === 'musicUnlock') postMusicUnlockToast(toasts, 'terrifying_woods');
+      if (spec.toasts === 'clubArrival') {
+        for (const song of CLUB_SONGS) postMusicUnlockToast(toasts, song);
+        nowPlaying.show(musicCredit('desperado_club_1'));
+      }
+      if (spec.toasts === 'longCredit') nowPlaying.show(musicCredit('desperado_club_3'));
+      if (spec.toasts === 'musicBackfill') postMusicBackfillToast(toasts, BACKFILLED_SONG_COUNT);
       if (spec.toasts === 'saving') {
         toasts.post('Saving...', { tone: 'neutral', icon: 'save' });
       }
@@ -276,7 +327,11 @@ function hudFixture(spec: HudFixtureSpec): DialogFixture {
           tone: 'warning',
         });
       }
-      for (let tick = 0; tick < FIXTURE_TOAST_TICKS; tick++) toasts.update();
+      for (let tick = 0; tick < FIXTURE_TOAST_TICKS; tick++) {
+        toasts.update();
+        nowPlaying.update();
+        captions.update();
+      }
       const model = (): HudModel => ({
         crawlers: crawlers(spec.status, spec.skillPoints, spec.companionStatus ?? []),
         activeCrawler: 'human',
@@ -331,6 +386,8 @@ function hudFixture(spec: HudFixtureSpec): DialogFixture {
         visible: shown,
         model,
         toasts: () => toasts,
+        nowPlaying: () => nowPlaying,
+        captions: () => captions,
       });
       const surfaces: Surface[] = [hud, hud.overlay()];
       return surfaces;
@@ -488,6 +545,47 @@ export const HUD_FIXTURES: readonly DialogFixture[] = [
     topBand: () => [],
     lootBanner: false,
     toasts: 'lootSeal',
+    expanded: false,
+  }),
+  ...(['musicUnlock', 'clubArrival', 'longCredit', 'musicBackfill'] as const).map((toasts) =>
+    hudFixture({
+      name: `music-${toasts}`,
+      status: [],
+      skillPoints: 0,
+      dockExtras: [],
+      topBand: () => [],
+      lootBanner: false,
+      toasts,
+      expanded: false,
+    }),
+  ),
+  hudFixture({
+    name: 'music-credit-under-banner',
+    status: [],
+    skillPoints: 0,
+    dockExtras: [],
+    topBand: () => {
+      const banner = questBannerEntry({
+        id: 'quest-banner',
+        title: 'THE BIG TOP AWAITS',
+        subtitle: 'Find the ringmaster',
+        framesLeft: QUEST_BANNER_FRAMES,
+        tone: 'success',
+      });
+      return banner === null ? [] : [banner];
+    },
+    lootBanner: true,
+    toasts: 'clubArrival',
+    expanded: false,
+  }),
+  hudFixture({
+    name: 'sound-captions',
+    status: [],
+    skillPoints: 0,
+    dockExtras: [],
+    topBand: () => [],
+    lootBanner: false,
+    toasts: 'captions',
     expanded: false,
   }),
   hotbarTooltipOverMenu(),

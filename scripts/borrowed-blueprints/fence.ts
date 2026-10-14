@@ -458,7 +458,7 @@ export function verifyFenceWorkLoop(check: Check): void {
     noteResourceActivity: () => undefined,
     worldHalted: () => false,
     cue: () => undefined,
-    audio: {
+    audioScope: {
       startAmbientLoop: (id) => void running.add(id),
       stopAmbientLoop: (id) => void running.delete(id),
       isAmbientLoopRunning: (id) => running.has(id),

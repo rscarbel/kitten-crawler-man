@@ -705,6 +705,7 @@ async function checkHostCommitsBeforeTurning(): Promise<void> {
     const ledger = createWheelLedger();
     const wheel = new ClubWheelSystem({
       audio: null,
+      audioScope: null,
       ledger,
       saveNow: () => {
         saves++;
@@ -807,6 +808,7 @@ async function checkHostCommitsBeforeTurning(): Promise<void> {
     const build = () =>
       new ClubWheelSystem({
         audio: null,
+        audioScope: null,
         ledger,
         saveNow: () => Promise.resolve('saved'),
         progressWipe: null,
@@ -839,6 +841,7 @@ async function checkHostCommitsBeforeTurning(): Promise<void> {
     const seat = { active: () => winner, companion: () => cat };
     const wheel = new ClubWheelSystem({
       audio: null,
+      audioScope: null,
       ledger: createWheelLedger(),
       saveNow: () => Promise.resolve('saved'),
       progressWipe: null,
@@ -898,6 +901,7 @@ async function checkHostCommitsBeforeTurning(): Promise<void> {
   const packedLedger = createWheelLedger();
   const packedWheel = new ClubWheelSystem({
     audio: null,
+    audioScope: null,
     ledger: packedLedger,
     saveNow: () => Promise.resolve('saved'),
     progressWipe: null,
@@ -1102,6 +1106,7 @@ async function checkLegendaryWeaponPaysBoth(): Promise<void> {
     const companion = spinner === human ? cat : human;
     const wheel = new ClubWheelSystem({
       audio: null,
+      audioScope: null,
       ledger,
       saveNow: () => Promise.resolve(answer),
       progressWipe: null,
@@ -1263,6 +1268,7 @@ async function checkQuestFreeSpin(): Promise<void> {
   const seat = { active: () => human, companion: () => cat };
   const wheel = new ClubWheelSystem({
     audio: null,
+    audioScope: null,
     ledger,
     saveNow: () => {
       saves++;
@@ -1357,6 +1363,7 @@ async function checkQuestFreeSpin(): Promise<void> {
   const resumedSeat = { active: () => resumedHuman, companion: () => cat };
   const resumedWheel = new ClubWheelSystem({
     audio: null,
+    audioScope: null,
     ledger: resumed,
     saveNow: () => Promise.resolve('saved'),
     progressWipe: null,

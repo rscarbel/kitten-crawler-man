@@ -161,7 +161,14 @@ function makeStage(): Stage {
   const map = makeRoom();
   const pm = new PlayerManager(PARTY_TILE_X, ROOM_MIDDLE_ROW, undefined);
   const roster = new MobRoster(map, new SpellSystem());
-  const world: SceneWorld = { gameMap: map, bus: new EventBus(), audio: null, pm, roster };
+  const world: SceneWorld = {
+    gameMap: map,
+    bus: new EventBus(),
+    audio: null,
+    audioScope: null,
+    pm,
+    roster,
+  };
   const ctx: SystemContext = {
     human: pm.human,
     cat: pm.cat,

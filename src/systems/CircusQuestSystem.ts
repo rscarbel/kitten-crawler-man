@@ -22,7 +22,6 @@ import type { ItemId } from '../core/ItemDefs';
 import type { GameMap } from '../map/GameMap';
 import { findNearbyWalkableTile } from '../map/findWalkableTile';
 import type { EventBus } from '../core/EventBus';
-import type { AudioManager } from '../audio/AudioManager';
 import type { GameSystem, SystemContext } from './GameSystem';
 import { despawnMob, type Mob } from '../creatures/Mob';
 import type { SpatialGrid } from '../core/SpatialGrid';
@@ -32,7 +31,7 @@ import { partyLevelOf } from '../levels/spawner';
 import { questMobLevel } from './questMobLevel';
 import { characterTarget, type TrackerEntry } from './questTracker';
 import { CIRCUS_QUEST_NAME, type CircusQuestProgress } from '../core/CircusQuestProgress';
-import type { OverworldMusicSystem } from './OverworldMusicSystem';
+import type { MusicClaims } from '../audio/AudioScope';
 import { Signet } from '../creatures/Signet';
 import { SIGNET_OVERLAY_CLEARANCE } from '../sprites/signetSprite';
 import { CircusLemur } from '../creatures/CircusLemur';
@@ -95,7 +94,6 @@ const HEATHER_SPAWN_OFFSET_TILES = 6;
 const SIGNET_DOOR_OFFSET_TILES = 2;
 /** Blood-fueled summon cadence during the assault (~5 s at 60 fps). */
 const BLOOD_FUELED_SUMMON_FRAMES = 300;
-const BATTLE_MUSIC_FADE_IN_MS = 1000;
 /** The bottle Signet hands over before the Big Top, which its last act is performed with. */
 const BIGTOP_POTION_ITEM_ID = 'health_potion';
 const BIGTOP_POTION_QUANTITY = 1;
@@ -295,8 +293,8 @@ export class CircusQuestSystem implements GameSystem {
     private readonly addMob: (mob: Mob) => void,
     private readonly mongoSystem: MongoSystem | null = null,
     private readonly progress: CircusQuestProgress,
-    private readonly overworldMusic: OverworldMusicSystem | null = null,
-    private readonly audio: AudioManager | null = null,
+    /** The scene's music claims; the fights claim their battle track through it. */
+    private readonly music: MusicClaims | null = null,
     initialActivePlayer: Player,
     private readonly conversation: Conversation,
     /** Read when the reward screen is built, to say whether the stone can use its new destination yet. */
@@ -751,17 +749,15 @@ export class CircusQuestSystem implements GameSystem {
   // ── Music ─────────────────────────────────────────────────────────────────
 
   private startBattleMusic(): void {
-    if (this.overworldMusic) this.overworldMusic.battleMusicActive = true;
-    // Already mid-track after a building round-trip — don't restart it.
-    if (this.audio?.currentMusicId === 'circus_battle') return;
-    this.audio?.playMusic('circus_battle', { fadeInMs: BATTLE_MUSIC_FADE_IN_MS });
+    this.music?.claimMusic({
+      owner: 'circus_waves',
+      layer: 'battle',
+      selection: { kind: 'loop', id: 'circus_battle' },
+    });
   }
 
   private stopBattleMusic(): void {
-    if (this.overworldMusic) {
-      this.overworldMusic.battleMusicActive = false;
-      this.overworldMusic.reset();
-    }
+    this.music?.releaseMusic('circus_waves');
   }
 
   // ── Public surface consumed by DungeonScene ───────────────────────────────

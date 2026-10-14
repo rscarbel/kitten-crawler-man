@@ -31,6 +31,11 @@ export type RowLeading =
 export interface ListRowOptions {
   readonly id: string;
   readonly title: string;
+  /**
+   * A token colour for the title that holds even when the row is disabled,
+   * for a row whose colour is its state (a locked song's red).
+   */
+  readonly titleColor?: string;
   readonly subtitle?: string;
   readonly leading?: RowLeading;
   /** A value on the right: a price, a count, a state. */
@@ -60,6 +65,21 @@ export function listRowHeight(ui: Ui, withSubtitle: boolean): number {
   if (!withSubtitle) return ui.theme.size.row;
   const lines = lineHeightOf(ui, 'label') + lineHeightOf(ui, 'caption');
   return Math.max(ui.theme.size.row, lines + ui.theme.space.md * 2);
+}
+
+function leadingSide(ui: Ui, rect: Rect): number {
+  return Math.min(rect.h - ui.theme.space.sm * 2, ui.theme.size.slot);
+}
+
+/**
+ * The widest `trailingContent` a row this size can hold with nothing else
+ * trailing: content past it is cut to fit, so a caller with controls too wide
+ * for it should lay them out somewhere else.
+ */
+export function listRowTrailingMax(ui: Ui, rect: Rect, withLeading: boolean): number {
+  const { space } = ui.theme;
+  const leading = withLeading ? leadingSide(ui, rect) + space.md : 0;
+  return (rect.w - space.md * 2 - leading) / 2;
 }
 
 export function listRow(ui: Ui, rect: Rect, opts: ListRowOptions): HitState {
@@ -113,10 +133,10 @@ export function listRow(ui: Ui, rect: Rect, opts: ListRowOptions): HitState {
   }
 
   let content = inset(rect, { l: space.md, r: space.md });
-  const titleColor = disabled ? palette.text.disabled : undefined;
+  const titleColor = opts.titleColor ?? (disabled ? palette.text.disabled : undefined);
 
   if (opts.leading !== undefined) {
-    const side = Math.min(rect.h - space.sm * 2, theme.size.slot);
+    const side = leadingSide(ui, rect);
     const box: Rect = { x: content.x, y: rect.y + (rect.h - side) / 2, w: side, h: side };
     drawLeading(ui, box, opts.leading, disabled);
     content = inset(content, { l: side + space.md });

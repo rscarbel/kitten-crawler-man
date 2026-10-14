@@ -138,7 +138,7 @@ export function buildStage(innerWalls: readonly TileSpec[] = []) {
   const roster = new MobRoster(map, new SpellSystem());
   setPackAlertGrid(roster.grid);
   setVisibleWorldView(WHOLE_ARENA_VIEW);
-  const world: SceneWorld = { gameMap: map, bus, audio: null, pm, roster };
+  const world: SceneWorld = { gameMap: map, bus, audio: null, audioScope: null, pm, roster };
   const combat = new CombatKit({ world, abilityManager: new AbilityManager(), safeRoom: null });
   const summons = new SkeletonSummonSystem(map, (mob) => roster.add(mob));
   const fairies = new FairySystem({

@@ -148,7 +148,6 @@ function stageAssault(worldSeed: number): CircusStage | null {
     null,
     progress,
     null,
-    null,
     human,
     new Conversation(null),
     { anchor: createAnchorQuestProgress() },

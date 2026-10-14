@@ -95,7 +95,14 @@ function smushStage(): { s: Stage; combat: CombatKit } {
   const abilities = new AbilityManager();
   abilities.setGodModeMinLevel(SMUSH_STUN_LEVEL);
   const combat = new CombatKit({
-    world: { gameMap: s.map, bus: s.bus, audio: null, pm: s.pm, roster: s.roster },
+    world: {
+      gameMap: s.map,
+      bus: s.bus,
+      audio: null,
+      audioScope: null,
+      pm: s.pm,
+      roster: s.roster,
+    },
     abilityManager: abilities,
     safeRoom: null,
   });

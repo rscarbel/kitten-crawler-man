@@ -40,9 +40,15 @@ import {
 import type { JournalProgressCheckpoint } from './JournalProgress';
 import { TACTICS_TRAITS, type TacticsTrait } from '../creatures/tactics/tacticsTraits';
 import type { MarketStockCheckpoint } from '../systems/market/MarketStock';
-import type { CircusQuestProgressCheckpoint } from './CircusQuestProgress';
+import {
+  CIRCUS_QUEST_STAGE_ORDER,
+  type CircusQuestProgressCheckpoint,
+} from './CircusQuestProgress';
 import type { AnchorQuestProgressCheckpoint } from './AnchorQuestProgress';
-import type { MurderQuestProgressCheckpoint } from './MurderQuestProgress';
+import {
+  MURDER_QUEST_STAGE_ORDER,
+  type MurderQuestProgressCheckpoint,
+} from './MurderQuestProgress';
 import type { BountyProgressCheckpoint } from './BountyProgress';
 import type { LootDrop } from '../creatures/Mob';
 import { ITEM_DEF, type ItemId } from './ItemDefs';
@@ -661,20 +667,23 @@ function parseNPCMarkerType(
   return stringUnion(value, ['exclamation', 'question', 'none'] as const);
 }
 
+/** Every defense-quest phase, in the order the encounter reaches them; `failed` ends it. */
+export const DEFEND_QUEST_PHASE_ORDER = [
+  'inactive',
+  'npc_waiting',
+  'dialog',
+  'tutorial',
+  'countdown',
+  'defending',
+  'complete_pending',
+  'complete',
+  'failed',
+] as const satisfies readonly PersistedDefendQuestCheckpoint['phase'][];
+
 function parseDefendQuestPhase(
   value: unknown,
 ): PersistedDefendQuestCheckpoint['phase'] | undefined {
-  return stringUnion(value, [
-    'inactive',
-    'npc_waiting',
-    'dialog',
-    'tutorial',
-    'countdown',
-    'defending',
-    'complete_pending',
-    'complete',
-    'failed',
-  ] as const);
+  return stringUnion(value, DEFEND_QUEST_PHASE_ORDER);
 }
 
 function parsePersistedDefendQuestCheckpoint(
@@ -795,21 +804,24 @@ function parsePersistedMurderMysteryQuestCheckpoint(
   };
 }
 
+/** Every spider-lab phase, in the order the quest reaches them. */
+export const SPIDER_QUEST_PHASE_ORDER = [
+  'inactive',
+  'scientist_waiting',
+  'scientist_dialog',
+  'awaiting_hacking',
+  'keyboard_hero_tutorial',
+  'hacking',
+  'hacking_failed',
+  'cutscene',
+  'boss_fight',
+  'complete',
+] as const satisfies readonly PersistedSpiderQuestCheckpoint['phase'][];
+
 function parseSpiderQuestPhase(
   value: unknown,
 ): PersistedSpiderQuestCheckpoint['phase'] | undefined {
-  return stringUnion(value, [
-    'inactive',
-    'scientist_waiting',
-    'scientist_dialog',
-    'awaiting_hacking',
-    'hacking',
-    'keyboard_hero_tutorial',
-    'hacking_failed',
-    'cutscene',
-    'boss_fight',
-    'complete',
-  ] as const);
+  return stringUnion(value, SPIDER_QUEST_PHASE_ORDER);
 }
 
 function parseLifeMachine(value: unknown): LifeMachine | undefined {
@@ -1246,15 +1258,7 @@ function parseCircusQuestProgressCheckpoint(
   const { stage, heatherSlain, mongoKidnapped, bigTopPotionGiven } = value;
   // Absent from saves written before the encore existed; those runs never paid it.
   const bigTopEncorePaid = value.bigTopEncorePaid ?? false;
-  const parsedStage = stringUnion(stage, [
-    'not_started',
-    'ritual_defense',
-    'heather_hunt',
-    'assault',
-    'bigtop_ready',
-    'grimaldi_redeemed',
-    'complete',
-  ] as const);
+  const parsedStage = stringUnion(stage, CIRCUS_QUEST_STAGE_ORDER);
   if (
     parsedStage === undefined ||
     !isBoolean(heatherSlain) ||
@@ -1320,17 +1324,7 @@ function parseMurderQuestProgressCheckpoint(
     evidenceOwed,
     swarmKrasueDefeated,
   } = value;
-  const parsedStage = stringUnion(stage, [
-    'not_started',
-    'body_waiting',
-    'investigation',
-    'night_attack',
-    'cult_hideout',
-    'confrontation',
-    'quill_slain',
-    'lich_slain',
-    'complete',
-  ] as const);
+  const parsedStage = stringUnion(stage, MURDER_QUEST_STAGE_ORDER);
   const parsedEvidence = parseArray(evidenceOwed, (item) => (isItemId(item) ? item : undefined));
   if (
     parsedStage === undefined ||

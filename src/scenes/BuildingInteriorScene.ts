@@ -27,7 +27,11 @@ import {
 } from '../systems/stealthKeySnatch/GoblinPrisonSystem';
 import { partyHoldsPrisonKey } from '../systems/stealthKeySnatch/stealthKeySnatchVisit';
 import { detachedPrisonVisit } from '../systems/stealthKeySnatch/prisonVisit';
-import { playPrisonCue, prisonCueSound } from '../systems/stealthKeySnatch/prisonSoundCues';
+import {
+  playPrisonCue,
+  PRISON_MUSIC,
+  prisonCueSound,
+} from '../systems/stealthKeySnatch/prisonSoundCues';
 import { PRISON_TRAIL_SPACING_TILES } from '../systems/stealthKeySnatch/prisonTuning';
 import { setFloorArtSeed } from '../map/ground/floorArtSeed';
 import { requestGroundSheets } from '../map/ground/runtimeGroundSheets';
@@ -90,6 +94,7 @@ import { HumanTalkDriver } from '../creatures/humanGestures';
 import type { CatPlayer } from '../creatures/CatPlayer';
 import { AbilityManager } from '../core/AbilityManager';
 import type { AudioManager } from '../audio/AudioManager';
+import type { AudioScope } from '../audio/AudioScope';
 import { Conversation } from '../dialog/Conversation';
 import {
   CIRCUS_MUSIC_TRACKS,
@@ -98,11 +103,14 @@ import {
   TAVERN_MUSIC_TRACKS,
   TEMPLE_MUSIC_TRACKS,
   TOWER_MUSIC_TRACKS,
+  type MusicTrackId,
   type SoundId,
 } from '../audio/sounds';
-import { sfxGroupsForBuildingEntry } from '../audio/sfxGroups';
+import { sfxGroupsForBuildingEntry, sfxGroupsForFloorNumber } from '../audio/sfxGroups';
 import { prewarmGroups } from '../core/SpriteLoader';
 import { ArrivalLoader } from './ArrivalLoader';
+import { activeMusicLibrary } from '../core/MusicLibrary';
+import { postMusicLibraryNotices, returnUnreadMusicNotices } from '../ui/hud/nowPlaying';
 import { floorArrivalLoadTasks } from './floorArrivalLoad';
 import type { ArrivalLoadingScreen } from '../levels/types';
 import { aiAdapter } from '../ai/AIAdapter';
@@ -266,6 +274,7 @@ import { CombatKit } from '../systems/kits/CombatKit';
 import { SkillPointReminderSystem } from '../systems/SkillPointReminderSystem';
 import { interiorHostilesFor, noteRoomCleared } from '../systems/interiorHostiles';
 import { partyLevelOf } from '../levels/spawner';
+import { TAVERN_BUILDING_NAMES } from '../map/town/townPlan';
 import { AnchorInteriorSystem } from '../systems/AnchorInteriorSystem';
 import {
   SKY_TEMPLE_NAME,
@@ -405,13 +414,6 @@ const INTERIOR_AMBIENT_BEDS = new Map<string, { soundId: SoundId; volume: number
   // No entry for The Rusty Anvil on purpose: its braziers already emit the
   // forge crackle through `buildAmbientEmitters`, and a room-wide bed on top of
   // them would only double the same loop against itself.
-]);
-
-/** The town's drinking houses, which share the rotating tavern soundtrack. */
-const TAVERN_BUILDING_NAMES: ReadonlySet<string> = new Set([
-  'The Sunken Stump Pub',
-  'The Horned Flagon',
-  'The Sleeping Cat Inn',
 ]);
 
 const MAX_TOWER_FLOOR_INDEX = TOWER_FLOOR_COUNT - 1;
@@ -673,6 +675,8 @@ export class BuildingInteriorScene extends GameplayScene {
     visible: () => this.hudShows,
     model: () => this.hudModel(),
     toasts: () => this.menus.toasts,
+    nowPlaying: () => this.menus.nowPlaying,
+    captions: () => this.menus.captions,
     liftTopBand: () => this.roomStatusLayer === 'overPanel',
   });
 
@@ -719,6 +723,8 @@ export class BuildingInteriorScene extends GameplayScene {
   private towerStairs: TowerStairSystem | null = null;
 
   protected readonly audio: AudioManager | null;
+  /** Every loop and ambient bed this room starts; disposed as the scene exits. */
+  private readonly audioScope: AudioScope | null;
 
   /**
    * One per map: the ground floor of a shop, or all four storeys of the tower.
@@ -944,6 +950,7 @@ export class BuildingInteriorScene extends GameplayScene {
     super(input, sceneManager);
     this.overworldJournal = overworldJournal ?? null;
     this.audio = audio ?? null;
+    this.audioScope = this.audio?.createScope() ?? null;
     this.ui = createSceneUi({
       audio: this.audio,
       handleWorldPointer: (gesture) => this.handleWorldPointer(gesture),
@@ -952,7 +959,12 @@ export class BuildingInteriorScene extends GameplayScene {
     // Additive and cheap on repeat entry: preloading the same interior's SFX
     // group twice is a no-op, so re-entering a shop never re-pays the decode
     // cost (see the DungeonScene equivalent for the matching per-floor case).
-    void this.audio?.preload(sfxGroupsForBuildingEntry(entry));
+    // The floor outside's groups are declared too, though already decoded:
+    // what no live scope declares is released as the floor's scene exits.
+    void this.audioScope?.preload([
+      ...sfxGroupsForFloorNumber(floor.floorNumber),
+      ...sfxGroupsForBuildingEntry(entry),
+    ]);
     this.abilityManager = abilityManager ?? new AbilityManager();
     this.townMemory = townMemory ?? createTownMemory();
     this.partyCrafts = partyCrafts ?? createPartyCraftsState();
@@ -1117,7 +1129,7 @@ export class BuildingInteriorScene extends GameplayScene {
         stampSafeRoomCounters(this.map),
         this.bus,
         this.conversation,
-        this.audio,
+        this.audioScope,
         true,
       );
       // After the counter, because the furnishings keep clear of every tile it
@@ -1169,6 +1181,7 @@ export class BuildingInteriorScene extends GameplayScene {
             this.mercenaryRoster,
             this.conversation,
             this.audio,
+            this.audioScope,
             this.human.hasDesperadoPassTattoo || this.cat.hasDesperadoPassTattoo,
             this.active(),
             this.marketStock,
@@ -1187,6 +1200,7 @@ export class BuildingInteriorScene extends GameplayScene {
         'wheel',
         new ClubWheelSystem({
           audio: this.audio,
+          audioScope: this.audioScope,
           ledger: partyRun.wheelLedger,
           saveNow: () => this.saveNow(),
           progressWipe: partyRun.progressWipe,
@@ -1224,6 +1238,7 @@ export class BuildingInteriorScene extends GameplayScene {
         gameMap: floorMap,
         bus: this.bus,
         audio: this.audio,
+        audioScope: this.audioScope,
         pm: this.pm,
         roster: new MobRoster(floorMap, spells),
       };
@@ -1484,6 +1499,7 @@ export class BuildingInteriorScene extends GameplayScene {
             human: this.human,
             cat: this.cat,
             audio: this.audio,
+            audioScope: this.audioScope,
             toast: (message) => this.menus.toasts.post(message),
             worldHalted: () => this.ui.worldHalted(),
           })
@@ -1494,7 +1510,9 @@ export class BuildingInteriorScene extends GameplayScene {
     }
 
     this.ambientSound =
-      this.audio !== null ? new AmbientSoundSystem(this.audio, this.buildAmbientEmitters()) : null;
+      this.audioScope !== null
+        ? new AmbientSoundSystem(this.audioScope, this.buildAmbientEmitters())
+        : null;
 
     // One panel of each kind however many counters this building has: only one
     // surface is ever open at a time, because the player can only be standing at
@@ -1573,17 +1591,14 @@ export class BuildingInteriorScene extends GameplayScene {
     return soundId === null ? null : { soundId, volume: PRISON_AMBIENT_VOLUME };
   }
 
-  /**
-   * The prison plays its sneaking music, or silence while that recording is
-   * still missing: the floor's own soundtrack stops at the door either way.
-   */
+  /** The prison plays its sneaking music in place of the floor's own soundtrack. */
   private startPrisonMusic(): void {
-    const track = prisonCueSound('stealthMusic');
-    if (track === null) {
-      this.audio?.stopMusic();
-      return;
-    }
-    this.audio?.playMusic(track, { fadeInMs: INTERIOR_MUSIC_FADE_IN_MS });
+    this.audioScope?.claimMusic({
+      owner: 'prison',
+      layer: 'area',
+      selection: { kind: 'loop', id: PRISON_MUSIC },
+      fadeInMs: INTERIOR_MUSIC_FADE_IN_MS,
+    });
   }
 
   /** The floor the player is standing on, with its map, bus, audio and roster. */
@@ -1864,6 +1879,7 @@ export class BuildingInteriorScene extends GameplayScene {
       plan,
       bus: this.bus,
       audio: this.audio,
+      audioScope: this.audioScope,
       addMob: (mob) => world.roster.add(mob),
       toast: (text, tone) => this.menus.toasts.post(text, { tone }),
       triggerAttack: () =>
@@ -1904,7 +1920,7 @@ export class BuildingInteriorScene extends GameplayScene {
       this.bus,
       (mob) => world.roster.add(mob),
       progress,
-      this.audio,
+      this.audioScope,
       this.conversation,
       plan,
       (next) => this.restartBigTopMaze(progress, next),
@@ -2040,6 +2056,7 @@ export class BuildingInteriorScene extends GameplayScene {
         this.partyLevel,
         this.companion,
         this.conversation,
+        this.audioScope,
       );
       this.towerConfrontation = confrontation;
       return confrontation;
@@ -2111,10 +2128,11 @@ export class BuildingInteriorScene extends GameplayScene {
    * The soundtrack this interior owns: a rotating playlist in the club and the
    * taverns, the circus playlist in the calm Big Top, the tower's own theme,
    * the temple's own theme, and a shared default in every other room. Null
-   * where an entry encounter already started its own battle music.
+   * in a building with no soundtrack of its own. An encounter's music is
+   * claimed over it, and falls back to it when the encounter lets go.
    */
-  private interiorMusicTracks(): ReadonlyArray<SoundId> | null {
-    if (this.encounter !== null || !this.floor.ownsMusic) return null;
+  private interiorMusicTracks(): ReadonlyArray<MusicTrackId> | null {
+    if (!this.floor.ownsMusic) return null;
     if (this.entry.type === 'club') return CLUB_MUSIC_TRACKS;
     if (this.entry.name === BIG_TOP_BUILDING_NAME) return CIRCUS_MUSIC_TRACKS;
     if (this.entry.type === 'tower') return TOWER_MUSIC_TRACKS;
@@ -2135,9 +2153,13 @@ export class BuildingInteriorScene extends GameplayScene {
       human: this.human,
       cat: this.cat,
     });
-    // Override the overworld's persisted music with the room's own; the
-    // overworld's zone music (OverworldMusicSystem) restores itself on exit.
-    // Started as the room is shown, not under its loading screen.
+    // The music the party walked in with carries on under the loading screen,
+    // and through the whole visit in a room with no soundtrack of its own.
+    // The room's own music is started as the room is shown, not under the screen.
+    const carriedMusic = this.audio?.music.areaSelection ?? null;
+    if (carriedMusic !== null) {
+      this.audioScope?.claimMusic({ owner: 'interior', layer: 'area', selection: carriedMusic });
+    }
     if (this.prisonKey !== null) {
       const prisonKey = this.prisonKey;
       this.arrivalLoading.whenClosed(() => {
@@ -2155,10 +2177,13 @@ export class BuildingInteriorScene extends GameplayScene {
     // walked in with would make the flap pass unmarked: it skips to another.
     const changesSongAtTheDoor = this.entry.name === BIG_TOP_BUILDING_NAME;
     if (musicTracks !== null) {
-      const musicOptions = { fadeInMs: INTERIOR_MUSIC_FADE_IN_MS };
       this.arrivalLoading.whenClosed(() => {
-        if (changesSongAtTheDoor) this.audio?.advanceMusicPlaylist(musicTracks, musicOptions);
-        else this.audio?.playMusicPlaylist(musicTracks, musicOptions);
+        this.audioScope?.claimMusic({
+          owner: 'interior',
+          layer: 'area',
+          selection: { kind: 'playlist', ids: musicTracks, advance: changesSongAtTheDoor },
+          fadeInMs: INTERIOR_MUSIC_FADE_IN_MS,
+        });
       });
     }
 
@@ -2184,6 +2209,7 @@ export class BuildingInteriorScene extends GameplayScene {
         if (this.canOpenFollowerMenu()) this.followerMenu.open();
       },
       toggleMiniMap: () => this.toggleMiniMap(),
+      toggleMute: () => this.menus.toggleMute(),
       // Indoors this is Old Hilda's hammer rather than the dungeon's barricades,
       // but it is the same key doing the same thing: spending boards on a
       // broken thing you are standing at.
@@ -2321,7 +2347,10 @@ export class BuildingInteriorScene extends GameplayScene {
     // Same contract as DungeonScene's bus: subscribers are re-wired per scene, so
     // the listeners this scene added must not outlive it.
     this.bus.clear();
+    const library = activeMusicLibrary();
+    if (library !== null) returnUnreadMusicNotices(this.menus, library);
     this.menus.dispose();
+    this.audioScope?.dispose();
     this.ambientSound?.dispose();
     this.contractSite?.dispose();
     this.bopca?.dispose();
@@ -2723,6 +2752,7 @@ export class BuildingInteriorScene extends GameplayScene {
     // party is still drawn on top of the screen announcing it, and a dialog that
     // is not ticked sits frozen at its first frame with its accept button inert.
     this.menus.update();
+    postMusicLibraryNotices(activeMusicLibrary()?.drainNotices() ?? [], this.menus);
     this.tickSaveIndicator();
     this.achievementUI.tick();
     playRewardLandingCues(this.audio, this.rewardFly.update());
@@ -3257,15 +3287,17 @@ export class BuildingInteriorScene extends GameplayScene {
    */
   private drainCasterAudioCues(): void {
     playHirelingProjectileCues(this.rockThrows, this.hirelingShots, this.audio);
-    if (this.skeletonShots.burstSoundPending) {
-      this.skeletonShots.burstSoundPending = false;
-      this.audio?.play('magic_ball_impact');
+    const soulBurst = this.skeletonShots.burstSoundAt;
+    if (soulBurst !== null) {
+      this.skeletonShots.burstSoundAt = null;
+      this.audio?.playAt('magic_ball_impact', soulBurst.x, soulBurst.y);
     }
     // A bone shaft does not go off, so it is a separate cue from the burst above
     // — the same frame can end one of each.
-    if (this.skeletonShots.arrowImpactSoundPending) {
-      this.skeletonShots.arrowImpactSoundPending = false;
-      this.audio?.play('arrow_impact');
+    const boneShaft = this.skeletonShots.arrowImpactSoundAt;
+    if (boneShaft !== null) {
+      this.skeletonShots.arrowImpactSoundAt = null;
+      this.audio?.playAt('arrow_impact', boneShaft.x, boneShaft.y);
     }
     if (this.skeletonSummons.riseSoundPending) {
       this.skeletonSummons.riseSoundPending = false;

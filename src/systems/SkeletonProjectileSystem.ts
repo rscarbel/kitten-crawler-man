@@ -15,6 +15,7 @@
  * when they arrive.
  */
 
+import type { WorldPoint } from '../audio/AudioManager';
 import type { Player, DamageSource } from '../Player';
 import type { GameMap } from '../map/GameMap';
 import type { Mob } from '../creatures/Mob';
@@ -142,15 +143,15 @@ export class SkeletonProjectileSystem implements GameSystem {
     for (const bolt of this.projectiles) sink.add(bolt.x, bolt.y, 'bolt');
   }
 
-  /** Set when a bolt lands; `DungeonScene` reads and clears it to play the cue. */
-  burstSoundPending = false;
+  /** Where a bolt just landed; `DungeonScene` reads and clears it to play the cue there. */
+  burstSoundAt: WorldPoint | null = null;
 
   /**
-   * Set when a bone arrow stops. Separate from {@link burstSoundPending}
+   * Where a bone arrow just stopped. Separate from {@link burstSoundAt}
    * because the two kinds end differently — a bolt goes off, a shaft just
    * stops — and the same frame can end one of each.
    */
-  arrowImpactSoundPending = false;
+  arrowImpactSoundAt: WorldPoint | null = null;
 
   constructor(private readonly gameMap: GameMap) {}
 
@@ -271,12 +272,12 @@ export class SkeletonProjectileSystem implements GameSystem {
    */
   private land(projectile: Projectile, targets: readonly Player[], directHit?: Player): void {
     if (!isSoulBolt(projectile.kind)) {
-      this.arrowImpactSoundPending = true;
+      this.arrowImpactSoundAt = { x: projectile.x, y: projectile.y };
       return;
     }
     const { x, y } = projectile;
     this.bursts.push({ x, y, hollow: projectile.kind === 'hollow_soul_bolt', tick: BURST_FRAMES });
-    this.burstSoundPending = true;
+    this.burstSoundAt = { x, y };
 
     const radius = TILE_SIZE * BURST_RADIUS_TILES;
     for (const target of targets) {
@@ -342,7 +343,7 @@ export class SkeletonProjectileSystem implements GameSystem {
   resetForCheckpoint(): void {
     this.projectiles = [];
     this.bursts = [];
-    this.burstSoundPending = false;
-    this.arrowImpactSoundPending = false;
+    this.burstSoundAt = null;
+    this.arrowImpactSoundAt = null;
   }
 }

@@ -18,6 +18,7 @@
  */
 
 import type { AudioManager } from '../../audio/AudioManager';
+import type { AudioScope } from '../../audio/AudioScope';
 import { awardPartyXp, type CrawlerPair } from '../../core/awardXp';
 import { TILE_SIZE } from '../../core/constants';
 import type { EventBus } from '../../core/EventBus';
@@ -97,8 +98,13 @@ import type { QuestMarkerType } from '../MiniMapSystem';
 import type { ObjectiveBeaconSource, TrackerEntry, TrackerTarget } from '../questTracker';
 import { DUNGEON_BEACON_BRIGHTNESS } from '../../ui/ObjectiveBeacon';
 import type { TownPropRenderable } from '../townPropRenderable';
-import { bathroomCueSound, playBathroomCue, type BathroomCue } from './bathroomSoundCues';
-import type { SoundId } from '../../audio/sounds';
+import {
+  bathroomCueSound,
+  PIPE_BOARD_MUSIC,
+  playBathroomCue,
+  type BathroomCue,
+} from './bathroomSoundCues';
+import type { MusicTrackId } from '../../audio/sounds';
 import {
   createPipeBoard,
   isOffScramble,
@@ -269,6 +275,8 @@ export interface CloggedBathroomDeps {
   readonly roster: MobRoster;
   readonly conversation: Conversation;
   readonly audio: AudioManager | null;
+  /** Where the broken plumbing's bed loops, faded out with the scene. */
+  readonly audioScope: AudioScope | null;
   /** Posts a toast; the refreshed boon announces itself through it. */
   readonly announce: (message: string, opts?: ToastOptions) => void;
   /** A run dropped past the bathroom (a playtest preset) starts with the plumbing already fixed. */
@@ -361,9 +369,9 @@ export class CloggedBathroomSystem
       for (const archetype of BATHROOM_GOBLIN_ARCHETYPES) prewarmGoblinBystander(archetype);
     }
     this.ambience =
-      deps.audio === null || this.copies.length === 0
+      deps.audioScope === null || this.copies.length === 0
         ? null
-        : new AmbientSoundSystem(deps.audio, []);
+        : new AmbientSoundSystem(deps.audioScope, []);
     const alreadyFixed = deps.startSolved || deps.gameMap.bathroomPlumbingState === 'fixed';
     this.applyPhase(alreadyFixed ? 'thanked' : 'unmet');
   }
@@ -1510,13 +1518,13 @@ export class CloggedBathroomSystem
    * is on screen, null otherwise so the floor's music plays everywhere else in
    * the room, explainer included.
    */
-  get pipeBoardMusic(): SoundId | null {
+  get pipeBoardMusic(): MusicTrackId | null {
     return this.boardOpen ? this.pipeBoardMusicTrack : null;
   }
 
   /** The puzzle's track, whether or not the board is up to hear it. */
-  get pipeBoardMusicTrack(): SoundId | null {
-    return bathroomCueSound('plumbingMusic');
+  get pipeBoardMusicTrack(): MusicTrackId {
+    return PIPE_BOARD_MUSIC;
   }
 
   /**

@@ -102,6 +102,12 @@ export const RENAMED_BUILDINGS: ReadonlyMap<string, string> = new Map([
   ["Shepherd's Cabin", 'Plumbline Farm'],
 ]);
 
+/** The building a room or prop-payout key was recorded in. */
+export function buildingNameOfRoomKey(key: string): string {
+  const separatorAt = key.indexOf(ROOM_KEY_SEPARATOR);
+  return separatorAt < 0 ? key : key.slice(0, separatorAt);
+}
+
 /**
  * `key` (a {@link roomKey} or {@link interiorPropPayoutKey}) with its building
  * name brought up to date. A building name never contains the separator, so

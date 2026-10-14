@@ -471,6 +471,16 @@ export class BossRoomSystem implements GameSystem, GroundHazardSource {
   newlyLockedBossType: string | null = null;
 
   /**
+   * Set each time a room seals, the first time or again after its fight was
+   * aborted or rewound; cleared by DungeonScene, which claims the boss's track.
+   * The intro and `bossFightInitiated` belong to the first entry only.
+   */
+  sealedBossType: string | null = null;
+
+  /** Set when a sealed fight is aborted with its boss alive; cleared by DungeonScene, which lets go of the boss's track. */
+  fightAbortedPending = false;
+
+  /**
    * Rooms that flipped to `defeated` this frame, with the body that did it.
    * Drained by `DungeonScene`, which uses it as the last line of defence on the
    * boss chest: the kill pipeline is what normally fills the chest, and this
@@ -696,6 +706,8 @@ export class BossRoomSystem implements GameSystem, GroundHazardSource {
    * back in re-triggers the normal lock sequence via `update()`.
    */
   resetForCheckpoint(): void {
+    this.sealedBossType = null;
+    this.fightAbortedPending = false;
     for (let i = 0; i < this.states.length; i++) {
       const state = this.states[i];
       this.releaseLootHold(i);
@@ -1015,6 +1027,7 @@ export class BossRoomSystem implements GameSystem, GroundHazardSource {
       // Start a new fight when a player enters a room with a living boss.
       if (!state.locked && bossAlive && (humanInRoom || catInRoom)) {
         state.locked = true;
+        this.sealedBossType = this.bossTypes[i] ?? 'the_hoarder';
         this.fightListener?.onSeal(i);
         // They walked in, so the lesson landed. A later retreat and a second
         // poke earns it again.
@@ -1207,6 +1220,7 @@ export class BossRoomSystem implements GameSystem, GroundHazardSource {
         // stand the fight back up around a corpse.
         if (bossAlive) {
           boss.healAndForgetFight();
+          this.fightAbortedPending = true;
           this.fightListener?.onFightAborted(i);
         }
         continue;

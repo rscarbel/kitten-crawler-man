@@ -11,6 +11,7 @@ import type {
   WheelQuestFreeSpins,
 } from '../core/WheelLedger';
 import type { BloodVomitRemaining } from '../core/bloodVomitSave';
+import type { SerializedMusicLibrary } from '../core/MusicLibrary';
 import { parseGameProgress } from '../core/saveFormat';
 import { PAGE_SAVE_LATCH, type ProgressStorage } from '../core/progressPersistence';
 import { wipeOwed } from '../core/wipeMarker';
@@ -110,6 +111,12 @@ export interface GameProgress {
   attackCowHp?: number;
   /** Whether the cow is resting off a knockout, which holds her out until she is full. */
   attackCowResting?: boolean;
+  /**
+   * The songs the run has unlocked and heard. Top level because a floor change
+   * carries no `world`. A save written before the library existed loads with
+   * one backfilled from its progress.
+   */
+  musicLibrary?: SerializedMusicLibrary;
   savedAt: string;
 }
 

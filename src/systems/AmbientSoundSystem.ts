@@ -13,11 +13,13 @@
  * than remembered here: `startAmbientLoop` declines while the AudioContext is
  * still locked or the buffer is still decoding, and a backgrounded tab stops every
  * loop behind our back. A local "I started it" flag would go stale in all three
- * cases and the loop would never be heard again.
+ * cases and the loop would never be heard again. The loops belong to the
+ * scene's `AudioScope`, so they fade out with the scene even if this system is
+ * never disposed.
  */
 
 import { TILE_SIZE } from '../core/constants';
-import type { AudioManager } from '../audio/AudioManager';
+import type { AudioScope } from '../audio/AudioScope';
 import type { SoundId } from '../audio/sounds';
 import type { GameSystem, SystemContext } from './GameSystem';
 
@@ -58,7 +60,7 @@ export class AmbientSoundSystem implements GameSystem {
   private gainScale = 1;
 
   constructor(
-    private readonly audio: AudioManager,
+    private readonly audio: AudioScope,
     emitters: ReadonlyArray<AmbientEmitter>,
   ) {
     this.setEmitters(emitters);
@@ -111,7 +113,13 @@ export class AmbientSoundSystem implements GameSystem {
         continue;
       }
 
-      if (!isRunning) continue;
+      if (!isRunning) {
+        // Even a loop that never got a voice is let go of: the scope remembers
+        // a declined start and would bring it in later at its old level.
+        this.audio.stopAmbientLoop(soundId);
+        this.silentFrames.delete(soundId);
+        continue;
+      }
       this.audio.setAmbientLoopVolume(soundId, 0);
       const silent = (this.silentFrames.get(soundId) ?? 0) + 1;
       this.silentFrames.set(soundId, silent);

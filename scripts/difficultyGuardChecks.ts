@@ -49,6 +49,12 @@ const CONFIRM_SURFACE_ID = PAUSE_CONFIRM_SURFACE_IDS.difficulty;
 const KEEP_PLAYING_ID = 'keep';
 const CHANGE_AND_RESTART_ID = 'restart';
 const CONFIRM_BUTTON_COUNT = 2;
+/** The Settings page's scroll view: controls below its fold are reached by wheeling it. */
+const SETTINGS_PAGE_VIEW_ID = 'page/settings/view';
+/** One mouse-wheel notch, in CSS pixels of scroll. */
+const WHEEL_NOTCH = 120;
+/** More notches than the Settings page could ever need; a control still unseen is not drawn. */
+const MAX_WHEEL_NOTCHES = 40;
 
 const STARTING_DIFFICULTY: Difficulty = 'normal';
 const CHOSEN_DIFFICULTY: Difficulty = 'hard';
@@ -109,25 +115,44 @@ function findRegion(surfaceId: string, suffix: string): HitRegion | null {
   );
 }
 
-/** Taps the region of `surfaceId` named `suffix` with the mouse; false when it is not drawn. */
-function press(surfaceId: string, suffix: string): boolean {
-  const region = findRegion(surfaceId, suffix);
-  if (region === null) return false;
+function mouseGesture(kind: 'down' | 'up' | 'wheel', region: HitRegion, deltaY = 0): void {
   const x = region.rect.x + region.rect.w * HALF;
   const y = region.rect.y + region.rect.h * HALF;
-  for (const kind of ['down', 'up'] as const) {
-    root.pointer({
-      kind,
-      pointerId: MOUSE_POINTER_ID,
-      source: 'mouse',
-      x,
-      y,
-      cssX: x * root.uiScale,
-      cssY: y * root.uiScale,
-      button: PRIMARY_BUTTON,
-      deltaY: 0,
-    });
+  root.pointer({
+    kind,
+    pointerId: MOUSE_POINTER_ID,
+    source: 'mouse',
+    x,
+    y,
+    cssX: x * root.uiScale,
+    cssY: y * root.uiScale,
+    button: PRIMARY_BUTTON,
+    deltaY,
+  });
+}
+
+/**
+ * The region of `surfaceId` named `suffix`, wheeling the Settings page down a
+ * notch at a time as a player would when it sits below the fold; null when it
+ * is not drawn anywhere on the page.
+ */
+function scrollToRegion(surfaceId: string, suffix: string): HitRegion | null {
+  for (let notch = 0; notch <= MAX_WHEEL_NOTCHES; notch++) {
+    const region = findRegion(surfaceId, suffix);
+    if (region !== null) return region;
+    const page = findRegion(PAUSE_SURFACE_ID, SETTINGS_PAGE_VIEW_ID);
+    if (page === null) return null;
+    mouseGesture('wheel', page, WHEEL_NOTCH);
   }
+  return null;
+}
+
+/** Taps the region of `surfaceId` named `suffix` with the mouse; false when it is not drawn. */
+function press(surfaceId: string, suffix: string): boolean {
+  const region = scrollToRegion(surfaceId, suffix);
+  if (region === null) return false;
+  mouseGesture('down', region);
+  mouseGesture('up', region);
   frame();
   return true;
 }

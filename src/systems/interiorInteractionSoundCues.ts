@@ -72,10 +72,10 @@ export type InteriorCue = keyof typeof INTERIOR_CUES;
 
 /** Plays a fresh take of `cue` through `audio`. Silent for a missing audio manager. */
 export function playInteriorCue(
-  audio: Pick<AudioManager, 'playRandomFresh'> | null,
+  audio: Pick<AudioManager, 'playRandom'> | null,
   cue: InteriorCue,
 ): void {
-  audio?.playRandomFresh(INTERIOR_CUES[cue]);
+  audio?.playRandom(INTERIOR_CUES[cue]);
 }
 
 /**
@@ -83,10 +83,10 @@ export function playInteriorCue(
  * group's decode: the take waits for its buffer rather than being dropped.
  */
 export function playInteriorCueWhenReady(
-  audio: Pick<AudioManager, 'playRandomFreshWhenReady'> | null,
+  audio: Pick<AudioManager, 'playRandomWhenReady'> | null,
   cue: InteriorCue,
 ): void {
-  audio?.playRandomFreshWhenReady(INTERIOR_CUES[cue]);
+  audio?.playRandomWhenReady(INTERIOR_CUES[cue]);
 }
 
 /** Examines that read paper or weigh goods; every other examine is {@link INTERIOR_CUES.propNoticed}. */

@@ -15,6 +15,7 @@
  */
 
 import type { AudioManager } from '../../../audio/AudioManager';
+import type { AudioScope } from '../../../audio/AudioScope';
 import type { SoundId } from '../../../audio/sounds';
 import { VILLAGE_CUES } from '../../../audio/villageSoundCues';
 import { TILE_SIZE } from '../../../core/constants';
@@ -79,6 +80,8 @@ export interface VillageServicesDeps {
   readonly villagers: VillagerSystem;
   readonly bus: EventBus | null;
   readonly audio: AudioManager | null;
+  /** Where the saw's loops run, faded out with the scene. */
+  readonly audioScope: AudioScope | null;
   /** The sawmill's working switch: its blade spins while set. */
   readonly sawmill: { working: boolean };
   readonly menus: ServiceMenus;
@@ -307,7 +310,7 @@ export class VillageServices {
    * cancelled never leaves its loop running.
    */
   private updateSawSound(halted: boolean): void {
-    const audio = this.deps.audio;
+    const audio = this.deps.audioScope;
     if (audio === null) return;
     const volume = halted ? 0 : this.sawVolume();
     const wanted = this.sawmill.sawingLoop ?? PLAIN_SAWING_LOOP;
@@ -327,7 +330,7 @@ export class VillageServices {
   }
 
   private stopSawLoops(): void {
-    for (const loop of this.sawLoops()) this.deps.audio?.stopAmbientLoop(loop);
+    for (const loop of this.sawLoops()) this.deps.audioScope?.stopAmbientLoop(loop);
   }
 
   private sawVolume(): number {

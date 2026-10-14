@@ -233,7 +233,7 @@ function makeStage(map: GameMap, humanTileX: number, humanTileY: number): Stage 
   pm.cat.x = pm.human.x;
   pm.cat.y = pm.human.y;
   const roster = new MobRoster(map, new SpellSystem());
-  const world: SceneWorld = { gameMap: map, bus, audio: null, pm, roster };
+  const world: SceneWorld = { gameMap: map, bus, audio: null, audioScope: null, pm, roster };
   return { map, bus, pm, roster, world };
 }
 

@@ -1,0 +1,274 @@
+/**
+ * The music library's save behaviour, for `verify-audio.ts`: what a save
+ * keeps of it, and what a save written before it existed backfills. Imported
+ * after the browser shim is installed, since the descent check plays a real
+ * floor.
+ */
+
+import type { MusicTrackId } from '../../src/audio/sounds.js';
+import {
+  MusicLibrary,
+  activeMusicLibrary,
+  type MusicLibraryNotice,
+} from '../../src/core/MusicLibrary.js';
+import { parseGameProgress, stampGameProgress } from '../../src/core/saveFormat.js';
+import { WORLD_GENERATOR_VERSION } from '../../src/core/SavedWorld.js';
+import { parsePersistedWorldState } from '../../src/core/PersistedWorldState.js';
+import { isRecord } from '../../src/core/guards.js';
+import { snapPlayer } from '../../src/core/PlayerSnapshot.js';
+import { HumanPlayer } from '../../src/creatures/HumanPlayer.js';
+import { CatPlayer } from '../../src/creatures/CatPlayer.js';
+import { TILE_SIZE } from '../../src/core/constants.js';
+import { backfillFixtures, type FixtureParty } from './musicLibraryFixtures.js';
+import { settleArrival } from '../settleArrival.js';
+
+type Check = (ok: boolean, message: string) => void;
+
+/** The world seed the walk-away and inventory scene harnesses play on. */
+const HARNESS_WORLD_SEED = 7;
+const PARTY_TILE = 4;
+
+/** Songs the run has unlocked; the first two of them heard, the last still new to the music page. */
+const UNLOCKED_ON_THE_RUN = [
+  'bg_level_1',
+  'boss_music_1',
+  'keyboard_hero_music_track_1',
+] as const satisfies readonly MusicTrackId[];
+const HEARD_ON_THE_RUN = ['bg_level_1', 'boss_music_1'] as const satisfies readonly MusicTrackId[];
+
+function freshParty(): FixtureParty {
+  return {
+    humanSnap: snapPlayer(new HumanPlayer(PARTY_TILE, PARTY_TILE, TILE_SIZE)),
+    catSnap: snapPlayer(new CatPlayer(PARTY_TILE, PARTY_TILE, TILE_SIZE)),
+  };
+}
+
+function sameIds(actual: readonly MusicTrackId[], expected: readonly MusicTrackId[]): boolean {
+  const expectedIds = new Set(expected);
+  return actual.length === expectedIds.size && actual.every((id) => expectedIds.has(id));
+}
+
+function describe(ids: readonly MusicTrackId[]): string {
+  return ids.length === 0 ? 'none' : ids.join(', ');
+}
+
+/** A library the run has played: unlocked songs, some heard, one still unseen on the music page. */
+function playedLibrary(): MusicLibrary {
+  const library = new MusicLibrary();
+  library.markRequested(UNLOCKED_ON_THE_RUN.slice(0, -1));
+  library.clearMenuUnseen();
+  library.markRequested(UNLOCKED_ON_THE_RUN.slice(-1));
+  for (const id of HEARD_ON_THE_RUN) library.markAudible(id);
+  library.drainNotices();
+  return library;
+}
+
+function expectLibraryKept(check: Check, label: string, kept: MusicLibrary): void {
+  check(
+    sameIds(kept.unlocked, UNLOCKED_ON_THE_RUN),
+    `${label}: unlocked ${describe(kept.unlocked)}, expected ${describe(UNLOCKED_ON_THE_RUN)}`,
+  );
+  const heard = kept.unlocked.filter((id) => kept.isHeard(id));
+  check(
+    sameIds(heard, HEARD_ON_THE_RUN),
+    `${label}: heard ${describe(heard)}, expected ${describe(HEARD_ON_THE_RUN)}`,
+  );
+  check(kept.menuUnseenCount === 1, `${label}: ${kept.menuUnseenCount} songs unseen, expected 1`);
+  const notices = kept.drainNotices();
+  check(notices.length === 0, `${label}: loading it raised ${notices.length} notices, expected 0`);
+}
+
+/**
+ * Check 11: a save keeps the library through storage, and the save the stairs
+ * write — which carries no `world` — keeps it too.
+ */
+export async function checkSaveRoundTrip(check: Check): Promise<void> {
+  const library = playedLibrary();
+  const stored = JSON.stringify(
+    stampGameProgress({ levelId: 'level2', ...freshParty(), musicLibrary: library.serialize() }),
+  );
+  const loaded = parseGameProgress(JSON.parse(stored));
+  if (loaded === null) {
+    check(false, 'a save carrying a music library no longer parses');
+    return;
+  }
+  expectLibraryKept(check, 'a stored save', MusicLibrary.forSave(loaded));
+
+  const { SceneManager } = await import('../../src/core/Scene.js');
+  const { InputManager } = await import('../../src/core/InputManager.js');
+  const { DungeonScene } = await import('../../src/scenes/DungeonScene.js');
+  const { level2 } = await import('../../src/levels/level2.js');
+  const { readLocalProgress, writeLocalProgress } = await import('../../src/core/LocalProgress.js');
+
+  const sceneManager = new SceneManager();
+  const scene = new DungeonScene(level2, new InputManager(), sceneManager, {
+    worldSeed: HARNESS_WORLD_SEED,
+    skipIntro: true,
+    musicLibrary: playedLibrary(),
+    saveProgress: (progress) => {
+      writeLocalProgress(progress);
+      return Promise.resolve('saved');
+    },
+  });
+  sceneManager.replace(scene);
+  const ctx = sceneManager.canvas.getContext('2d');
+  if (ctx === null) throw new Error('the shim canvas has no 2d context');
+  check(await settleArrival(scene, ctx), "the descent floor's arrival screen finishes");
+  scene['stairwell'].descend();
+  const descended = readLocalProgress();
+  if (descended === null) {
+    check(false, 'the descent wrote no save the device can read back');
+    return;
+  }
+  check(descended.world === undefined, 'the descent save carries no world, as the stairs write it');
+  expectLibraryKept(check, 'the descent save', MusicLibrary.forSave(descended));
+}
+
+function backfillSummaryCount(notices: readonly MusicLibraryNotice[]): number | null {
+  const summaries = notices.filter((notice) => notice.kind === 'backfilled');
+  const others = notices.length - summaries.length;
+  const [summary] = summaries;
+  if (summaries.length !== 1 || others !== 0) return null;
+  return summary.count;
+}
+
+/**
+ * Check 12: saves written before the library backfill exactly the songs their
+ * progress proves, unlocked but unheard, announced by one summary notice.
+ */
+export async function checkBackfill(check: Check): Promise<void> {
+  const staleGeneratorVersion = WORLD_GENERATOR_VERSION - 1;
+  for (const fixture of backfillFixtures(
+    freshParty(),
+    WORLD_GENERATOR_VERSION,
+    staleGeneratorVersion,
+  )) {
+    const { world } = fixture.save;
+    if (world !== undefined) {
+      const persisted = isRecord(world) ? world.persisted : undefined;
+      check(
+        parsePersistedWorldState(persisted) !== undefined,
+        `${fixture.name}: the fixture's floor state parses, so its evidence is read at all`,
+      );
+    }
+    const loaded = parseGameProgress(JSON.parse(JSON.stringify(fixture.save)));
+    if (loaded === null) {
+      check(false, `${fixture.name}: the save no longer parses`);
+      continue;
+    }
+    const library = MusicLibrary.forSave(loaded);
+    check(
+      sameIds(library.unlocked, fixture.expected),
+      `${fixture.name}: backfilled ${describe(library.unlocked)}; expected ${describe(fixture.expected)}`,
+    );
+    const heard = library.unlocked.filter((id) => library.isHeard(id));
+    check(
+      heard.length === 0,
+      `${fixture.name}: backfilled songs count as heard: ${describe(heard)}`,
+    );
+    check(
+      library.menuUnseenCount === 0,
+      `${fixture.name}: ${library.menuUnseenCount} backfilled songs badge the music page`,
+    );
+    const summaryCount = backfillSummaryCount(library.drainNotices());
+    check(
+      summaryCount === fixture.expected.length,
+      `${fixture.name}: one summary notice of ${fixture.expected.length} songs, got ${String(summaryCount)}`,
+    );
+    const resaved = parseGameProgress(
+      JSON.parse(
+        JSON.stringify(stampGameProgress({ ...loaded, musicLibrary: library.serialize() })),
+      ),
+    );
+    const reloadNotices =
+      resaved === null ? null : MusicLibrary.forSave(resaved).drainNotices().length;
+    check(
+      reloadNotices === 0,
+      `${fixture.name}: the next save announces the backfill again (${String(reloadNotices)} notices)`,
+    );
+  }
+  await checkSkipToLevel1(check);
+  await checkPlaytestDropIn(check);
+}
+
+/**
+ * A new game that skips the tutorial can never go back to it, so its library
+ * starts with Tutorial Island unlocked and announced like any other unlock.
+ */
+async function checkSkipToLevel1(check: Check): Promise<void> {
+  const { SceneManager } = await import('../../src/core/Scene.js');
+  const { InputManager } = await import('../../src/core/InputManager.js');
+  const { PostSignupScene } = await import('../../src/scenes/PostSignupScene.js');
+
+  const sceneManager = new SceneManager();
+  const menu = new PostSignupScene(new InputManager(), sceneManager, {
+    worldSeed: HARNESS_WORLD_SEED,
+    skipIntro: true,
+  });
+  sceneManager.replace(menu);
+  const skipChoice = menu['choices']().find((choice) => choice.id === 'level1');
+  if (skipChoice === undefined) {
+    check(false, 'the title menu offers no "Skip to Level 1"');
+    return;
+  }
+  skipChoice.onTap();
+  const library = activeMusicLibrary();
+  check(
+    library?.isUnlocked('tutorial_island') === true,
+    'a new game skipping to level 1 starts with Tutorial Island unlocked',
+  );
+  const announced = (library?.drainNotices() ?? []).some(
+    (notice) => notice.kind === 'unlocked' && notice.id === 'tutorial_island',
+  );
+  check(announced, "the skip's Tutorial Island unlock waits for the HUD to announce it");
+}
+
+/** What a floor-3 drop-in skipped past: the tutorial, floors 1 and 2 and their forced bosses. */
+const SKIPPED_ON_THE_WAY_TO_FLOOR_3 = [
+  'tutorial_island',
+  'bg_level_1',
+  'bg_level_2',
+  'boss_music_1',
+  'boss_music_2',
+  'boss_music_3',
+] as const satisfies readonly MusicTrackId[];
+const FLOOR_3_PLAYTEST_PRESET_ID = 'level3';
+
+/**
+ * A playtest preset dropped onto floor 3 starts with the music of the floors
+ * it skipped already unlocked, silently, as a save made there backfills.
+ */
+async function checkPlaytestDropIn(check: Check): Promise<void> {
+  const { SceneManager } = await import('../../src/core/Scene.js');
+  const { InputManager } = await import('../../src/core/InputManager.js');
+  const { DungeonScene } = await import('../../src/scenes/DungeonScene.js');
+  const { getPlaytestPreset } = await import('../../src/dev/playtestPresets.js');
+  const { buildPlaytestBoot } = await import('../../src/dev/playtestBoot.js');
+
+  const preset = getPlaytestPreset(FLOOR_3_PLAYTEST_PRESET_ID);
+  if (preset === null) {
+    check(false, `no "${FLOOR_3_PLAYTEST_PRESET_ID}" playtest preset`);
+    return;
+  }
+  const boot = buildPlaytestBoot(preset);
+  const library = new MusicLibrary();
+  const sceneManager = new SceneManager();
+  sceneManager.replace(
+    new DungeonScene(boot.levelDef, new InputManager(), sceneManager, {
+      worldSeed: HARNESS_WORLD_SEED,
+      skipIntro: true,
+      humanSnap: boot.humanSnap,
+      catSnap: boot.catSnap,
+      abilityManager: boot.abilityManager,
+      musicLibrary: library,
+      backfillMusicLibrary: true,
+    }),
+  );
+  const missing = SKIPPED_ON_THE_WAY_TO_FLOOR_3.filter((id) => !library.isUnlocked(id));
+  check(missing.length === 0, `the floor-3 drop-in starts with ${describe(missing)} still locked`);
+  const heard = library.unlocked.filter((id) => library.isHeard(id));
+  check(heard.length === 0, `the drop-in's backfilled songs count as heard: ${describe(heard)}`);
+  const notices = library.drainNotices();
+  const unlockToasts = notices.filter((notice) => notice.kind === 'unlocked').length;
+  check(unlockToasts === 0, `the drop-in toasts ${unlockToasts} unlocks, expected one summary`);
+}

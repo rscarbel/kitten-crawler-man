@@ -96,6 +96,7 @@ function wheelFixture(name: string, state: WheelState): DialogFixture {
       grantQuestFreeSpin(ledger, FIXTURE_FREE_SPIN_QUEST);
       const wheel = new ClubWheelSystem({
         audio: null,
+        audioScope: null,
         ledger,
         saveNow: () => Promise.resolve('disabled'),
         progressWipe: null,

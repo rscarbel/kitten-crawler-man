@@ -11,6 +11,7 @@
  * injected into a mob at spawn time.
  */
 
+import type { WorldPoint } from '../audio/AudioManager';
 import type { Player, DamageSource } from '../Player';
 import type { GameMap } from '../map/GameMap';
 import type { Mob } from '../creatures/Mob';
@@ -84,8 +85,8 @@ export class KnightMissileSystem implements GameSystem {
     for (const missile of this.missiles) sink.add(missile.x, missile.y, 'bolt');
   }
 
-  /** Set when a bolt lands; `DungeonScene` reads and clears it to play the hit. */
-  impactSoundPending = false;
+  /** Where a bolt just landed; `DungeonScene` reads and clears it to play the hit there. */
+  impactSoundAt: WorldPoint | null = null;
 
   constructor(private readonly gameMap: GameMap) {}
 
@@ -183,7 +184,7 @@ export class KnightMissileSystem implements GameSystem {
 
   private burstAt(missile: Missile): void {
     this.bursts.push({ x: missile.x, y: missile.y, tick: KNIGHT_MISSILE_BURST_FRAMES });
-    this.impactSoundPending = true;
+    this.impactSoundAt = { x: missile.x, y: missile.y };
   }
 
   /**
@@ -232,6 +233,6 @@ export class KnightMissileSystem implements GameSystem {
   resetForCheckpoint(): void {
     this.missiles = [];
     this.bursts = [];
-    this.impactSoundPending = false;
+    this.impactSoundAt = null;
   }
 }

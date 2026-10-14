@@ -75,60 +75,12 @@ const shim = installBrowserShim({
 });
 
 /**
- * Just enough Web Audio for a real `AudioManager`, already running as a
+ * A real `AudioManager` over the fake Web Audio graph, already running as a
  * browser's is after the first gesture, so the scene starts its sounds when it
  * means to rather than waiting on an unlock. Nothing loads, so nothing sounds.
  */
-function installRunningSilentAudio(): void {
-  const ignore = (): void => undefined;
-  const silentParam = {
-    value: 0,
-    setValueAtTime: ignore,
-    linearRampToValueAtTime: ignore,
-    exponentialRampToValueAtTime: ignore,
-    setTargetAtTime: ignore,
-    cancelScheduledValues: ignore,
-  };
-  const silentNode = { connect: ignore, disconnect: ignore, gain: silentParam, pan: silentParam };
-  class RunningSilentAudioContext {
-    readonly state = 'running';
-    readonly currentTime = 0;
-    readonly destination = silentNode;
-    addEventListener = ignore;
-    removeEventListener = ignore;
-    createGain() {
-      return silentNode;
-    }
-    createStereoPanner() {
-      return silentNode;
-    }
-    createMediaElementSource() {
-      return silentNode;
-    }
-    resume(): Promise<void> {
-      return Promise.resolve();
-    }
-    suspend(): Promise<void> {
-      return Promise.resolve();
-    }
-  }
-  class SilentAudio {
-    src = '';
-    loop = false;
-    volume = 1;
-    currentTime = 0;
-    paused = true;
-    pause = ignore;
-    addEventListener = ignore;
-    removeEventListener = ignore;
-    play(): Promise<void> {
-      return Promise.resolve();
-    }
-  }
-  Reflect.set(globalThis, 'AudioContext', RunningSilentAudioContext);
-  Reflect.set(globalThis, 'Audio', SilentAudio);
-}
-installRunningSilentAudio();
+const { installFakeAudio } = await import('./audioHarness.js');
+installFakeAudio({ initialState: 'running' });
 /** Every sound fails to fetch headless, by design; one warning per sound would bury the report. */
 const SILENT_AUDIO_WARNING = '[AudioManager] Failed to load';
 const warn = console.warn.bind(console);
@@ -193,15 +145,12 @@ audio.playWhenReady = (id, opts) => {
   if (id === ANNOUNCING_SOUND) announcements.push({ what: id, underScreen: screenUp() });
   playWhenReady(id, opts);
 };
-const playMusic = audio.playMusic.bind(audio);
-audio.playMusic = (id, opts) => {
-  announcements.push({ what: `music ${id}`, underScreen: screenUp() });
-  playMusic(id, opts);
-};
-const playMusicPlaylist = audio.playMusicPlaylist.bind(audio);
-audio.playMusicPlaylist = (ids, opts) => {
-  announcements.push({ what: `music ${ids.join(', ')}`, underScreen: screenUp() });
-  playMusicPlaylist(ids, opts);
+const claimMusic = audio.music.claim.bind(audio.music);
+audio.music.claim = (claim, holder) => {
+  if (claim.selection.kind !== 'silence') {
+    announcements.push({ what: `music claim ${claim.owner}`, underScreen: screenUp() });
+  }
+  claimMusic(claim, holder);
 };
 
 type Scene = InstanceType<typeof DungeonScene> | InstanceType<typeof BuildingInteriorScene>;

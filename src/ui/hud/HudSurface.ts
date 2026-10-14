@@ -5,20 +5,29 @@
  * the dungeon and inside a building.
  *
  * A second surface in the `toast` band carries what must stay readable over
- * the scene's own panels: the toast stack, and the top band while a scene
- * lifts it over a counter or a conversation it raised.
+ * the scene's own panels: the toast stack, a song's credit card, the sound
+ * captions, and the top band while a scene lifts it over a counter or a
+ * conversation it raised.
  */
 
 import { contains, type Rect } from '../core/geom';
 import type { Surface, Ui, UiRoot } from '../core/UiRoot';
+import { renderCaptions, type SoundCaptions } from './captions';
 import { coinPill } from './coinPill';
 import { dock, summonCard } from './dock';
 import { levelTimerChip, levelTimerEntry } from './levelTimer';
 import { lootBannerEntry } from './lootBanner';
 import { hotbar } from './hotbar';
-import { hudLayout, type HudGeometry } from './hudLayout';
+import {
+  captionAnchor,
+  hudLayout,
+  nowPlayingAnchor,
+  nowPlayingMaxWidth,
+  type HudGeometry,
+} from './hudLayout';
 import type { CrawlerId, DockButtonId, HudModel } from './hudModel';
 import { minimapFrame } from './minimapFrame';
+import { renderNowPlaying, type NowPlayingCard } from './nowPlaying';
 import { renderToasts, type HudToasts } from './toasts';
 import { renderTopBand, type TopBandEntry } from './topBand';
 import { unitFrame } from './unitFrame';
@@ -30,6 +39,10 @@ export interface HudHost {
   visible(): boolean;
   model(): HudModel;
   toasts(): HudToasts;
+  /** The scene's song credit card, ticked alongside its toasts. */
+  nowPlaying(): NowPlayingCard;
+  /** The scene's sound captions, ticked alongside its toasts. */
+  captions(): SoundCaptions;
   /**
    * The top band is drawn over the scene's own panels this frame (a fight's
    * bars stay readable over the shop counter the room raised).
@@ -86,6 +99,8 @@ export class HudSurface implements Surface {
   private drawn: HudFrame | null = null;
   /** The top band's entries last frame, for the overlay that lifts the band. */
   private lastBand: readonly TopBandEntry[] = [];
+  /** Where the top band's entries landed last frame, for the credit card to keep clear of. */
+  private lastBandSlots: readonly Rect[] = [];
 
   constructor(private readonly host: HudHost) {
     this.id = host.id ?? HUD_SURFACE_ID;
@@ -93,6 +108,11 @@ export class HudSurface implements Surface {
 
   isOpen(): boolean {
     return this.host.visible();
+  }
+
+  /** The credit card: `hud.nowPlaying.show(musicCredit(id))` the first time a song is heard. */
+  get nowPlaying(): NowPlayingCard {
+    return this.host.nowPlaying();
   }
 
   /** The last frame the HUD drew. */
@@ -162,14 +182,14 @@ export class HudSurface implements Surface {
     if (model.summon !== null) summonCard(ui, geometry.buttons.summon, model.summon);
     const bandEntries = topBandEntries(model, geometry.levelTimerChip === null);
     if (this.host.liftTopBand?.() !== true) {
-      renderTopBand(
+      this.lastBandSlots = renderTopBand(
         ui,
         geometry.topBand,
         bandEntries,
         geometry.topBandObstacles,
         geometry.topBandFloor,
         geometry.topBandKeepClear,
-      );
+      ).map((slot) => slot.rect);
     }
     if (model.hotbar !== null) hotbar(ui, geometry.hotbar, model.hotbar);
     this.drawn = { geometry, uiScale: ui.uiScale, coins, dock: docked, skillBadges };
@@ -177,29 +197,43 @@ export class HudSurface implements Surface {
   }
 
   /**
-   * The `toast`-band companion: the toast stack, and the top band whenever
-   * the host lifts it over its own panels.
+   * The `toast`-band companion: the toast stack, the credit card, the sound
+   * captions, and the top band whenever the host lifts it over its own
+   * panels. Being in the `toast` band, they read over the pause screen too.
    */
   overlay(): Surface {
     return {
       id: this.id === HUD_SURFACE_ID ? HUD_OVERLAY_SURFACE_ID : `${this.id}-overlay`,
       band: 'toast',
       haltsWorld: false,
-      isOpen: () => !this.host.toasts().isEmpty || this.liftedTopBand(),
+      isOpen: () =>
+        !this.host.toasts().isEmpty ||
+        this.host.nowPlaying().isShowing ||
+        this.host.captions().isShowing ||
+        this.liftedTopBand(),
       render: (ui) => {
         const frame = this.drawn;
         if (frame === null) return;
+        const { geometry } = frame;
         if (this.liftedTopBand()) {
-          renderTopBand(
+          this.lastBandSlots = renderTopBand(
             ui,
-            frame.geometry.topBand,
+            geometry.topBand,
             this.lastBand,
-            frame.geometry.topBandObstacles,
-            frame.geometry.topBandFloor,
-            frame.geometry.topBandKeepClear,
-          );
+            geometry.topBandObstacles,
+            geometry.topBandFloor,
+            geometry.topBandKeepClear,
+          ).map((slot) => slot.rect);
         }
-        renderToasts(ui, this.host.toasts(), frame.geometry.toastAnchor);
+        const card = renderNowPlaying(
+          ui,
+          this.host.nowPlaying(),
+          nowPlayingMaxWidth(geometry),
+          (size) => nowPlayingAnchor(geometry, size, this.lastBandSlots),
+        );
+        const toastCeiling = card === null ? -Infinity : card.y + card.h + ui.theme.space.xs;
+        const toastTop = renderToasts(ui, this.host.toasts(), geometry.toastAnchor, toastCeiling);
+        renderCaptions(ui, this.host.captions(), captionAnchor(geometry, toastTop), toastCeiling);
       },
     };
   }

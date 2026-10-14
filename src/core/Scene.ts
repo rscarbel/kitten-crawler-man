@@ -82,6 +82,12 @@ export abstract class Scene {
   assertReadyToEnter?(): void;
 }
 
+/** What runs around a scene change; see {@link SceneManager.setTransitionHooks}. */
+export interface SceneTransitionHooks {
+  begin(): void;
+  end(): void;
+}
+
 /**
  * Owns the <canvas>, runs the rAF loop, and manages scene transitions.
  * SceneManager is generic — it knows nothing about gameplay, levels, or mobs.
@@ -100,6 +106,13 @@ export class SceneManager {
    * build has no import edge to the overlay at all.
    */
   private frameOverlay: ((ctx: CanvasRenderingContext2D) => void) | null = null;
+  /**
+   * Run around every scene change: `begin` before the outgoing scene exits,
+   * `end` once the incoming one has entered. A hook for the same reason as
+   * {@link frameOverlay}: the music director carries a track across a change
+   * of scene through these, and `core` never reaches into `audio`.
+   */
+  private transitionHooks: SceneTransitionHooks | null = null;
 
   /**
    * Every key physically down right now, tracked here rather than read off
@@ -313,11 +326,21 @@ export class SceneManager {
     // Released into the outgoing scene, so no surface or world gesture there is
     // left waiting for an `up` that will now arrive somewhere else.
     this.pointerInput.cancelAll();
-    this.current?.onExit?.();
-    this.current?.ui.dispose();
-    scene.assertReadyToEnter?.();
-    this.current = scene;
-    scene.onEnter?.();
+    const hooks = this.transitionHooks;
+    hooks?.begin();
+    try {
+      this.current?.onExit?.();
+      this.current?.ui.dispose();
+      scene.assertReadyToEnter?.();
+      this.current = scene;
+      scene.onEnter?.();
+    } finally {
+      hooks?.end();
+    }
+  }
+
+  setTransitionHooks(hooks: SceneTransitionHooks): void {
+    this.transitionHooks = hooks;
   }
 
   setFrameOverlay(overlay: (ctx: CanvasRenderingContext2D) => void): void {

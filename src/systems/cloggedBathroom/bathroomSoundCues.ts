@@ -10,12 +10,12 @@
  * The bathroom only appears on floor 2, so every id here is preloaded through
  * the `cloggedBathroom` group in `src/audio/sfxGroups.ts`, which floor 2
  * loads. `AudioManager.play` returns silently on a buffer that was never
- * preloaded. Streamed ambience ids are listed too: preloading skips them, and
- * they play through a media element instead.
+ * preloaded. Streamed ambience ids are listed too; the group leaves them out,
+ * and they play through a media element instead.
  */
 
 import type { AudioManager } from '../../audio/AudioManager';
-import type { SoundId } from '../../audio/sounds';
+import type { MusicTrackId, SoundId } from '../../audio/sounds';
 
 export const BATHROOM_CUES = {
   /** A board tile turned a quarter. */
@@ -57,11 +57,12 @@ export const BATHROOM_CUES = {
   stallDoorLatch: ['stall_door_latch'],
   /** The crawler stepping out with the buff. */
   refreshed: ['refreshed_sting'],
-  /** The music while the pipe board is on screen. */
-  plumbingMusic: ['fix_the_plumbing_music'],
   /** A sink tap running. Waits on `sink_tap_running_loop`; `ambient_fountain` stands in. */
   sinkRunning: ['ambient_fountain'],
 } as const satisfies Record<string, readonly SoundId[]>;
+
+/** The music while the pipe board is on screen. */
+export const PIPE_BOARD_MUSIC = 'fix_the_plumbing_music' as const satisfies MusicTrackId;
 
 /** Which cue a play site raises. */
 export type BathroomCue = keyof typeof BATHROOM_CUES;

@@ -21,6 +21,11 @@
  * it was taken, must route a death to the floor restart. A dungeon's start tile, where a floor-arrival
  * save stands the party, must have room to move.
  *
+ * Last, the real floor-2 scene, headless, takes its stairs: the save the descent
+ * writes, read back from the device's storage, must still hold both crawlers'
+ * achievements, since closing the tab on the floor-complete screen resumes
+ * from exactly that save.
+ *
  *   npx tsx scripts/verify-town-save.ts
  */
 
@@ -55,6 +60,9 @@ import {
   restoreTownMemory,
   roomKey,
 } from '../src/core/TownMemory.js';
+import { AchievementManager, type AchievementId } from '../src/core/AchievementManager.js';
+import { installBrowserShim } from './browserShim.js';
+import { settleArrival } from './settleArrival.js';
 
 const MINIMAL_SEED = 1;
 const ASCENDING_DIGITS_SEED = 123456789;
@@ -531,6 +539,66 @@ function checkRenamedInteriorPropMemory(): void {
   );
 }
 
+const DESCENT_VIEWPORT = { width: 1280, height: 720, devicePixelRatio: 1 } as const;
+/** One achievement per crawler, neither of which arriving on a floor unlocks. */
+const DESCENT_HUMAN_ACHIEVEMENT = 'boss_slayer' as const satisfies AchievementId;
+const DESCENT_CAT_ACHIEVEMENT = 'smush' as const satisfies AchievementId;
+
+/**
+ * Takes the stairs on a real floor and reloads the save that wrote from the
+ * device's storage: both crawlers' achievements must cross the floor change.
+ */
+async function checkDescentSaveKeepsAchievements(): Promise<void> {
+  installBrowserShim(DESCENT_VIEWPORT);
+  const { SceneManager } = await import('../src/core/Scene.js');
+  const { InputManager } = await import('../src/core/InputManager.js');
+  const { DungeonScene } = await import('../src/scenes/DungeonScene.js');
+  const { level2 } = await import('../src/levels/level2.js');
+  const { readLocalProgress, writeLocalProgress } = await import('../src/core/LocalProgress.js');
+
+  const humanAchievements = new AchievementManager();
+  const catAchievements = new AchievementManager();
+  humanAchievements.tryUnlock(DESCENT_HUMAN_ACHIEVEMENT);
+  catAchievements.tryUnlock(DESCENT_CAT_ACHIEVEMENT);
+
+  const sceneManager = new SceneManager();
+  const scene = new DungeonScene(level2, new InputManager(), sceneManager, {
+    worldSeed: HARNESS_WORLD_SEED,
+    skipIntro: true,
+    humanAchievements,
+    catAchievements,
+    saveProgress: (progress) => {
+      writeLocalProgress(progress);
+      return Promise.resolve('saved');
+    },
+  });
+  sceneManager.replace(scene);
+  const ctx = sceneManager.canvas.getContext('2d');
+  if (ctx === null) throw new Error('the shim canvas has no 2d context');
+  check(await settleArrival(scene, ctx), "the descent floor's arrival screen finishes");
+
+  scene['stairwell'].descend();
+  const reloaded = readLocalProgress();
+  if (reloaded === null) {
+    check(false, 'the descent wrote no save the device can read back');
+    return;
+  }
+  check(
+    reloaded.levelId === level2.nextLevelId,
+    `the descent save resumes on ${reloaded.levelId}, not ${String(level2.nextLevelId)}`,
+  );
+  const reloadedHuman = AchievementManager.fromSerialized(reloaded.humanAchievements);
+  const reloadedCat = AchievementManager.fromSerialized(reloaded.catAchievements);
+  check(
+    reloaded.humanAchievements !== undefined && reloadedHuman.isUnlocked(DESCENT_HUMAN_ACHIEVEMENT),
+    "the descent save drops the human's achievements",
+  );
+  check(
+    reloaded.catAchievements !== undefined && reloadedCat.isUnlocked(DESCENT_CAT_ACHIEVEMENT),
+    "the descent save drops the cat's achievements",
+  );
+}
+
 for (const seed of SEEDS) {
   checkOverworld(seed);
   checkDungeon(seed);
@@ -539,6 +607,7 @@ checkRespawnRoutes();
 checkArrivalSaves();
 checkRenamedBuildingMemory();
 checkRenamedInteriorPropMemory();
+await checkDescentSaveKeepsAchievements();
 
 console.log(`${checks - failures}/${checks} checks passed`);
 if (failures > 0) process.exit(1);

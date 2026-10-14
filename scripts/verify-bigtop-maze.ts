@@ -57,7 +57,6 @@ import { SFX_GROUPS, sfxGroupsForLevelId } from '../src/audio/sfxGroups';
 import { ALL_SOUND_IDS, STREAMING_SOUND_IDS, type SoundId } from '../src/audio/sounds';
 import {
   BIG_TOP_AMBIENT_BED,
-  BIG_TOP_EXIT_MUSIC,
   BIG_TOP_MUSIC,
   bigTopCueSoundIds,
 } from '../src/systems/bigTop/bigTopSoundCues';
@@ -3166,7 +3165,7 @@ function unpreloadedIds(ids: ReadonlyArray<SoundId>, group: ReadonlyArray<SoundI
 
 /** Raw sound ids handed straight to the tent's cue queue or its music, bypassing the cue table. */
 function rawCueSites(source: string): number {
-  return (source.match(/this\.cue\(\s*['"`]|playMusic\(\s*['"`]/g) ?? []).length;
+  return (source.match(/this\.cue\(\s*['"`]|kind:\s*'loop',\s*id:\s*['"`]/g) ?? []).length;
 }
 
 console.log('\nChecking every Big Top cue can actually be heard…');
@@ -3180,7 +3179,7 @@ console.log('\nChecking every Big Top cue can actually be heard…');
   );
   const missingFromFloor = unpreloadedIds(cueIds, sfxGroupsForLevelId('level3'));
   check(missingFromFloor.length === 0, "and in floor 3's preload bundle");
-  for (const music of [BIG_TOP_MUSIC, ...BIG_TOP_EXIT_MUSIC]) {
+  for (const music of [BIG_TOP_MUSIC]) {
     check(STREAMING_SOUND_IDS.has(music), `${music} streams as music`);
   }
   check(
@@ -3205,7 +3204,9 @@ console.log('\nChecking every Big Top cue can actually be heard…');
     `no cue site names a raw sound id (${rawCueSites(systemSource)})`,
   );
   check(
-    rawCueSites("this.cue('hammer_strike'); this.audio?.playMusic('circus_battle');") === 2,
+    rawCueSites(
+      "this.cue('hammer_strike'); this.music?.claimMusic({ selection: { kind: 'loop', id: 'circus_battle' } });",
+    ) === 2,
     'a raw id at a cue site would be caught',
   );
 }

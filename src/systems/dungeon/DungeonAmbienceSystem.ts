@@ -19,6 +19,7 @@
 
 import { TILE_SIZE } from '../../core/constants';
 import type { AudioManager } from '../../audio/AudioManager';
+import type { AudioScope } from '../../audio/AudioScope';
 import type { GameMap } from '../../map/GameMap';
 import type { DungeonFloorThemeId } from '../../map/dungeon/floorTheme';
 import type { AmbientOneShotId } from '../../map/dungeon/roomCharacters';
@@ -51,12 +52,6 @@ const ONE_SHOT_VOLUME_SPREAD = 0.15;
 const ONE_SHOT_MAX_PAN = 0.8;
 /** A drip plays from a puddle this close to the listener, when one is near. */
 const DRIP_SYNC_RADIUS_TILES = 9;
-/** A sound placed in the world is heard out to this many tiles. */
-const PLACED_HEARING_TILES = 14;
-/** A sound this many tiles to the side is panned as far as it goes. */
-const PAN_SPREAD_TILES = 8;
-/** Below this a placed one-shot is not worth a voice. */
-const PLACED_AUDIBLE_GAIN = 0.02;
 /** How much of the soundscape is left in a safe room. */
 const SAFE_ROOM_DUCK = 0.3;
 /** How much is left while a boss fight is on. */
@@ -86,6 +81,8 @@ export interface DungeonAmbienceDeps {
   readonly gameMap: GameMap;
   /** Null when the scene runs without audio; the scheduler still places drips. */
   readonly audio: AudioManager | null;
+  /** Where the floor's beds loop, faded out with the scene. */
+  readonly audioScope: AudioScope | null;
   readonly floor: DungeonFloorThemeId;
   /** The lighting pass's static lights, or null on a floor it does not light. */
   readonly lights: (() => ReadonlyArray<StaticLightTile>) | null;
@@ -142,7 +139,7 @@ export class DungeonAmbienceSystem {
 
   constructor(private readonly deps: DungeonAmbienceDeps) {
     this.random = deps.random ?? Math.random;
-    this.loops = deps.audio === null ? null : new AmbientSoundSystem(deps.audio, []);
+    this.loops = deps.audioScope === null ? null : new AmbientSoundSystem(deps.audioScope, []);
     this.framesToOneShot = this.nextOneShotGap();
     this.flyCandidates = flySiteCandidates(deps.gameMap.structure);
   }
@@ -186,18 +183,15 @@ export class DungeonAmbienceSystem {
   }
 
   /**
-   * Plays a cue from a point in the world: quieter with distance from the
-   * listener and panned toward its side. Silent past
-   * {@link PLACED_HEARING_TILES} and for a cue with no sound yet.
+   * Plays a cue from a point in the world through `AudioManager.playAt`,
+   * which sets its distance and side from the active crawler, under the
+   * soundscape's own duck. Silent for a cue with no sound yet.
    */
   playAt(cue: DungeonCue, worldX: number, worldY: number, volume = 1): void {
-    const dxTiles = (worldX - this.listenerX) / TILE_SIZE;
-    const dyTiles = (worldY - this.listenerY) / TILE_SIZE;
-    const falloff = 1 - Math.hypot(dxTiles, dyTiles) / PLACED_HEARING_TILES;
-    const gain = volume * falloff * this.duck;
-    if (gain < PLACED_AUDIBLE_GAIN) return;
-    const pan = Math.max(-1, Math.min(1, dxTiles / PAN_SPREAD_TILES)) * ONE_SHOT_MAX_PAN;
-    playDungeonCue(this.deps.audio, cue, this.cueTakes, { volume: gain, pan });
+    playDungeonCue(this.deps.audio, cue, this.cueTakes, {
+      volume: volume * this.duck,
+      at: { x: worldX, y: worldY },
+    });
   }
 
   /** An end screen: every loop down to nothing at once, without waiting for an update. */

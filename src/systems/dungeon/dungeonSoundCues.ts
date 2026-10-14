@@ -200,15 +200,18 @@ export function dungeonLoopSound(cue: DungeonCue): SoundId | null {
   return takes[0] ?? null;
 }
 
-/** How a one-shot cue is voiced; both optional, as on `AudioManager.play`. */
+/** How a one-shot cue is voiced; all optional. */
 export interface DungeonCueVoicing {
   readonly volume?: number;
   readonly pan?: number;
+  /** Plays the cue from this world point, as `AudioManager.playAt` places it. */
+  readonly at?: { readonly x: number; readonly y: number };
 }
 
 /** What {@link playDungeonCue} needs of the audio manager. */
 export interface DungeonCueAudio {
   play(id: SoundId, opts?: { volume?: number; pan?: number }): void;
+  playAt(id: SoundId, worldX: number, worldY: number, opts?: { volume?: number }): void;
 }
 
 /**
@@ -226,7 +229,13 @@ export function playDungeonCue(
   if (audio === null || takes.length === 0) return;
   const taken = played.get(cue) ?? 0;
   played.set(cue, taken + 1);
-  audio.play(takes[taken % takes.length], voicing);
+  const take = takes[taken % takes.length];
+  const { at, volume, pan } = voicing;
+  if (at === undefined) {
+    audio.play(take, { volume, pan });
+    return;
+  }
+  audio.playAt(take, at.x, at.y, { volume });
 }
 
 // ── Beds and one-shots, by the ids the room characters name ──────────────────

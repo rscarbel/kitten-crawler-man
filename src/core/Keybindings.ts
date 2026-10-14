@@ -30,6 +30,7 @@ export type GameAction =
   | 'structureMenu'
   | 'quickLoad'
   | 'openChat'
+  | 'toggleMute'
   | 'hotbar1'
   | 'hotbar2'
   | 'hotbar3'
@@ -75,6 +76,8 @@ const DEFAULT_BINDINGS: Record<GameAction, readonly string[]> = {
   structureMenu: ['e'],
   quickLoad: ['x'],
   openChat: ['Enter'],
+  // M, the usual mute key, opens the minimap; N sits beside it.
+  toggleMute: ['n'],
   hotbar1: ['1'],
   hotbar2: ['2'],
   hotbar3: ['3'],
@@ -107,6 +110,7 @@ export const ACTION_ORDER: readonly GameAction[] = [
   'structureMenu',
   'quickLoad',
   'openChat',
+  'toggleMute',
   ...HOTBAR_ACTIONS,
 ];
 
@@ -129,6 +133,7 @@ export const ACTION_LABELS: Record<GameAction, string> = {
   structureMenu: 'Structure Menu',
   quickLoad: 'Repair / Quick Load Trebuchet',
   openChat: 'Open Chat',
+  toggleMute: 'Mute All',
   hotbar1: 'Hotbar Slot 1',
   hotbar2: 'Hotbar Slot 2',
   hotbar3: 'Hotbar Slot 3',

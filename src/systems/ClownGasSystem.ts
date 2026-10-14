@@ -15,6 +15,7 @@
  * injected into a mob at spawn time.
  */
 
+import type { WorldPoint } from '../audio/AudioManager';
 import type { Player, DamageSource } from '../Player';
 import type { GameMap } from '../map/GameMap';
 import type { Mob } from '../creatures/Mob';
@@ -136,8 +137,8 @@ export class ClownGasSystem implements GameSystem, GroundHazardSource {
   /** Incremented per cloud so each gets a distinct animation offset. */
   private nextCloudSeed = 0;
 
-  /** Set when a bottle lands; `DungeonScene` reads and clears it to play the smash. */
-  shatterSoundPending = false;
+  /** Where a bottle just landed; `DungeonScene` reads and clears it to play the smash there. */
+  shatterSoundAt: WorldPoint | null = null;
 
   constructor(private readonly gameMap: GameMap) {}
 
@@ -216,7 +217,7 @@ export class ClownGasSystem implements GameSystem, GroundHazardSource {
       tick: CLOUD_FRAMES,
       owner: vial.owner,
     });
-    this.shatterSoundPending = true;
+    this.shatterSoundAt = { x: landing.x, y: landing.y };
 
     const radius = TILE_SIZE * IMPACT_RADIUS_TILES;
     for (const target of targets) {
@@ -387,6 +388,6 @@ export class ClownGasSystem implements GameSystem, GroundHazardSource {
     // A WeakMap has no `clear`; dropping the reference is the reset.
     this.contactFrames = new WeakMap();
     this.nextCloudSeed = 0;
-    this.shatterSoundPending = false;
+    this.shatterSoundAt = null;
   }
 }

@@ -81,6 +81,7 @@ const club = new DesperadoClubSystem(
   createMercenaryRoster(),
   new Conversation(null),
   null,
+  null,
   false,
   human,
   createMarketStock(),

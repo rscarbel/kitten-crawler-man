@@ -10,8 +10,16 @@ import { UiStateSlot } from '../core/uiState';
 import { drawGlyph, type GlyphId } from '../theme/glyphs';
 import { skinsFor } from '../theme/skins';
 import { badge, badgeSize } from './badge';
-import { drawFocusRing, fillRounded, hoverAmount, isDisabled, strokeRounded } from './paint';
+import {
+  disabledReason,
+  drawFocusRing,
+  fillRounded,
+  hoverAmount,
+  isDisabled,
+  strokeRounded,
+} from './paint';
 import { measureText, text } from './text';
+import { tooltip } from './tooltip';
 
 export interface TabItem {
   /** Unique within the tab row. */
@@ -145,6 +153,15 @@ export function tabs(ui: Ui, rect: Rect, opts: TabsOptions): HitState[] {
             : palette.text.secondary;
       tabLabel(ui, cell, item, color);
       if (state.focused) drawFocusRing(ui, cell, radius.md - space.xxs);
+      const reason = disabledReason(item.disabled);
+      if (reason !== null) {
+        tooltip(ui, cell, {
+          id: `${opts.id}/${item.id}/reason`,
+          text: reason,
+          show: state.hovered || state.pressed,
+          immediate: state.pressed,
+        });
+      }
       states.push(state);
     });
     return states;

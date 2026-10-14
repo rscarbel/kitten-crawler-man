@@ -41,6 +41,7 @@ export interface ContractInteriorSiteDeps {
   readonly human: HumanPlayer;
   readonly cat: CatPlayer;
   readonly audio: ContractSiteWorkDeps['audio'];
+  readonly audioScope: ContractSiteWorkDeps['audioScope'];
   /** A one-line toast over the hotbar. */
   readonly toast: (message: string) => void;
   /** Whether the world is stopped under a menu. */
@@ -67,6 +68,7 @@ export class ContractInteriorSite {
       human: deps.human,
       cat: deps.cat,
       audio: deps.audio,
+      audioScope: deps.audioScope,
       siteHere: (site) => site.town === 'skyfowl' && site.buildingName === buildingName,
       resolveFootprint: (site, spot) =>
         site.town === 'skyfowl' ? skyfowlSpotFootprint(site, spot, gameMap) : null,

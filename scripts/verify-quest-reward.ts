@@ -208,7 +208,6 @@ const QUEST_CASES: readonly QuestCase[] = [
         null,
         createCircusQuestProgress(),
         null,
-        null,
         rig.human,
         conversation,
         { anchor: createAnchorQuestProgress() },
@@ -290,6 +289,7 @@ const QUEST_CASES: readonly QuestCase[] = [
         roster: rig.world.roster,
         conversation,
         audio: null,
+        audioScope: null,
         announce: () => undefined,
         startSolved: false,
       });
@@ -502,7 +502,6 @@ function circusScreen(anchorStatus: QuestStatus): QuestRewardSpec | undefined {
     () => undefined,
     null,
     createCircusQuestProgress(),
-    null,
     null,
     setup.rig.human,
     setup.conversation,

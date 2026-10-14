@@ -22,7 +22,7 @@
  * ambience once it lands; until then the room keeps what it has.
  */
 
-import type { SoundId } from '../../../audio/sounds';
+import type { MusicTrackId, SoundId } from '../../../audio/sounds';
 
 export const BLUEPRINTS_CUES = {
   // ── The fence ──
@@ -85,7 +85,7 @@ export const BLUEPRINTS_CUES = {
 export type BlueprintsCue = keyof typeof BLUEPRINTS_CUES;
 
 /** The music that plays while any escort ambusher is alive. */
-export const BLUEPRINTS_ESCORT_MUSIC = 'prepare_to_defend' as const satisfies SoundId;
+export const BLUEPRINTS_ESCORT_MUSIC = 'prepare_to_defend' as const satisfies MusicTrackId;
 
 /**
  * Plays `cue`'s next take through `audio`, rotating through its takes.

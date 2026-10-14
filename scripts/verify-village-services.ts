@@ -232,6 +232,7 @@ function buildRig(
     villagers,
     bus,
     audio: null,
+    audioScope: null,
     sawmill: { working: false },
     menus: {
       enqueueReward: (reward) => rewards.push(reward.name),

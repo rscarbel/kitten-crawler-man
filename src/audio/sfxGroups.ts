@@ -1,4 +1,4 @@
-import type { SoundId } from './sounds';
+import { STREAMING_SOUND_IDS, type SoundId } from './sounds';
 import type { BuildingEntry } from '../systems/BuildingSystem';
 import { interiorSellsSomething } from '../systems/townServices';
 import { CONTRACT_CUES } from '../systems/constructionContracts/contractSoundCues';
@@ -6,6 +6,17 @@ import { BATHROOM_CUES } from '../systems/cloggedBathroom/bathroomSoundCues';
 import { PRISON_CUES } from '../systems/stealthKeySnatch/prisonSoundCues';
 import { INTERIOR_CUES } from '../systems/interiorInteractionSoundCues';
 import { POKER_CUES } from '../systems/casino/poker/pokerSoundCues';
+
+/**
+ * Every take in a cue table that is decoded into a buffer. A cue table also
+ * names its streamed beds, which play through a media element and have no
+ * place in a preload group.
+ */
+function decodedCueIds(cues: Readonly<Record<string, readonly SoundId[]>>): SoundId[] {
+  return Object.values(cues)
+    .flat()
+    .filter((id) => !STREAMING_SOUND_IDS.has(id));
+}
 
 /**
  * Where a group of non-streaming sound effects can be heard. The 144
@@ -550,6 +561,7 @@ export const SFX_GROUPS: Record<SfxGroup, readonly SoundId[]> = {
     'bell_alarm',
     'bell_crack',
     'bell_victory_peal',
+    'briar_hollow_victory',
     'boulder_impact_1',
     'boulder_impact_2',
     'boulder_impact_3',
@@ -625,19 +637,19 @@ export const SFX_GROUPS: Record<SfxGroup, readonly SoundId[]> = {
    * bundle and every interior load this group rather than trusting the
    * overworld's bundle to still be resident behind a door.
    */
-  constructionContracts: Object.values(CONTRACT_CUES).flat(),
+  constructionContracts: decodedCueIds(CONTRACT_CUES),
 
   /**
    * Every sound behind the Clogged Bathroom (`BATHROOM_CUES`). The bathroom
    * only stands on floor 2's gauntlet branches, so floor 2 loads this group.
    */
-  cloggedBathroom: Object.values(BATHROOM_CUES).flat(),
+  cloggedBathroom: decodedCueIds(BATHROOM_CUES),
 
   /**
    * Every sound behind the Stealth Key Snatch (`PRISON_CUES`): the gate room
    * on floor 2's spine and the prison behind its door.
    */
-  stealthKeySnatch: Object.values(PRISON_CUES).flat(),
+  stealthKeySnatch: decodedCueIds(PRISON_CUES),
 
   /**
    * Shady's five bounty bosses (`bountyDefs.ts`/`BountySystem`, floor-3
@@ -876,7 +888,7 @@ export const SFX_GROUPS: Record<SfxGroup, readonly SoundId[]> = {
    * and tills, readables, searched containers and used props. Placed props
    * stand in every building, so every interior loads this group.
    */
-  interiorInteractions: Object.values(INTERIOR_CUES).flat(),
+  interiorInteractions: decodedCueIds(INTERIOR_CUES),
 
   /**
    * No id currently lands here — every non-streaming `SoundId` found a home
@@ -924,6 +936,11 @@ export function sfxGroupsForLevelId(levelId: string): readonly SoundId[] {
             // to add — falling through to `misc` is deliberate, not a gap.
             ['misc'];
   return groups.flatMap((group) => SFX_GROUPS[group]);
+}
+
+/** {@link sfxGroupsForLevelId} for the floor a building stands on, by its number. */
+export function sfxGroupsForFloorNumber(floorNumber: number): readonly SoundId[] {
+  return sfxGroupsForLevelId(`level${floorNumber}`);
 }
 
 /**

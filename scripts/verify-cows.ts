@@ -1039,7 +1039,14 @@ function routingSection(): void {
   }
   const pm = new PlayerManager(site.pasture.rect.x, site.pasture.rect.y, undefined);
   const roster = new MobRoster(map, new SpellSystem());
-  const sceneWorld: SceneWorld = { gameMap: map, bus: new EventBus(), audio: null, pm, roster };
+  const sceneWorld: SceneWorld = {
+    gameMap: map,
+    bus: new EventBus(),
+    audio: null,
+    audioScope: null,
+    pm,
+    roster,
+  };
   const partyCrafts = createPartyCraftsState();
   const kit = new BriarHollowKit(sceneWorld, {
     travelUnlocks: { anchor: createAnchorQuestProgress() },

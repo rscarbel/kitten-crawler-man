@@ -19,6 +19,7 @@
  */
 
 import type { AudioManager } from '../../audio/AudioManager';
+import type { AudioScope } from '../../audio/AudioScope';
 import type { SoundId } from '../../audio/sounds';
 import type { ContractSpotMaterial } from './contractCatalog';
 
@@ -93,9 +94,9 @@ export function playContractCue(audio: Pick<AudioManager, 'play'> | null, cue: C
 
 const CONTRACT_WORK_LOOP_VOLUME = 0.7;
 
-/** The slice of `AudioManager` a work loop drives. */
+/** The slice of the scene's `AudioScope` a work loop drives. */
 export type ContractLoopAudio = Pick<
-  AudioManager,
+  AudioScope,
   'startAmbientLoop' | 'stopAmbientLoop' | 'isAmbientLoopRunning'
 >;
 

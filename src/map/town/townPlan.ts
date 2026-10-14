@@ -83,6 +83,16 @@ export type PlannedBuildingName = (typeof PLANNED_BUILDING_NAMES)[number];
 
 export const TOWN_TOWER_NAME = 'Town Center Tower';
 
+/** The members' club: its casino, and the beat that leaks out of its front door into the street. */
+export const DESPERADO_CLUB_NAME = 'The Desperado Club' satisfies PlannedBuildingName;
+
+/** The town's drinking houses, which share the rotating tavern soundtrack. */
+export const TAVERN_BUILDING_NAMES: ReadonlySet<string> = new Set([
+  'The Sunken Stump Pub',
+  'The Horned Flagon',
+  'The Sleeping Cat Inn',
+] satisfies PlannedBuildingName[]);
+
 /** Every enterable building inside the town wall: the sprite buildings and the tower. */
 export type TownBuildingName = PlannedBuildingName | typeof TOWN_TOWER_NAME;
 

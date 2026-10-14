@@ -11,6 +11,8 @@ import type { SectionLayout } from './section';
 export interface Choice<T extends string> {
   readonly value: T;
   readonly label: string;
+  /** `true`, or the reason it can't be picked yet, shown as a tooltip. */
+  readonly disabled?: boolean | string;
 }
 
 /** A segmented row of mutually exclusive choices; each segment joins the page's focus walk. */
@@ -32,14 +34,21 @@ export function choiceRow<T extends string>(
   );
   const states = tabs(ui, rect, {
     id: opts.id,
-    items: opts.choices.map((choice) => ({ id: choice.value, label: choice.label })),
+    items: opts.choices.map((choice) => ({
+      id: choice.value,
+      label: choice.label,
+      disabled: choice.disabled,
+    })),
     selected: opts.selected,
     onSelect: (id) => {
       const picked = opts.choices.find((choice) => choice.value === id);
       if (picked !== undefined) opts.onPick(picked.value);
     },
   });
-  states.forEach((state, index) => layout.track(cells[index], state));
+  states.forEach((state, index) => {
+    const disabled = opts.choices[index]?.disabled;
+    layout.track(cells[index], state, { focusable: disabled === undefined || disabled === false });
+  });
   return rect;
 }
 

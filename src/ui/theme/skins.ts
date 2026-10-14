@@ -63,6 +63,7 @@ export const PANEL_KINDS = [
   'hud',
   'tooltip',
   'popover',
+  'caption',
 ] as const;
 
 export type PanelKind = (typeof PANEL_KINDS)[number];
@@ -461,6 +462,15 @@ function buildPanels(theme: Theme): Record<PanelKind, PanelSkin> {
       radius: radius.md,
       shadow: elevation.panel,
       padding: space.md,
+    },
+    // Opaque, so a caption reads at full contrast over any floor, fog or flash.
+    caption: {
+      fill: palette.surface.solid,
+      border: palette.border.strong,
+      borderWidth: BORDER_WIDTH,
+      radius: radius.sm,
+      shadow: elevation.hud,
+      padding: space.sm,
     },
   };
 }

@@ -33,7 +33,7 @@ import { withAlpha } from '../ui/theme/color';
 import { questMobLevel } from './questMobLevel';
 import { characterTarget, type TrackerEntry, type TrackerTarget } from './questTracker';
 import type { MurderQuestProgress } from '../core/MurderQuestProgress';
-import type { OverworldMusicSystem } from './OverworldMusicSystem';
+import type { MusicClaims } from '../audio/AudioScope';
 import type { QuestMarkerType } from './MiniMapSystem';
 import { GumGum } from '../creatures/GumGum';
 import { Krasue, AGGRO_RANGE_TILES as KRASUE_AGGRO_RANGE_TILES } from '../creatures/Krasue';
@@ -148,8 +148,6 @@ const NIGHT_SWARM_CONCURRENT_CAP = 4;
  * greeted by an instantly-attacking ring on top of the new spawn point.
  */
 const NIGHT_SWARM_SPAWN_GRACE_FRAMES = 90;
-
-const BATTLE_MUSIC_FADE_IN_MS = 1000;
 
 const CLUE_GLOW_RADIUS_TILES = 1.5;
 const CLUE_GLOW_ALPHA_BASE = 0.35;
@@ -282,7 +280,8 @@ export class MurderMysteryQuestSystem implements GameSystem {
     private readonly bus: EventBus,
     private readonly addMob: (mob: Mob) => void,
     private readonly progress: MurderQuestProgress,
-    private readonly overworldMusic: OverworldMusicSystem | null = null,
+    /** The scene's music claims; the fights claim their battle track through it. */
+    private readonly music: MusicClaims | null = null,
     private readonly audio: AudioManager | null = null,
     private readonly conversation: Conversation,
   ) {
@@ -652,10 +651,11 @@ export class MurderMysteryQuestSystem implements GameSystem {
   }
 
   private startNightAttackMusic(): void {
-    if (this.overworldMusic) this.overworldMusic.battleMusicActive = true;
-    if (this.audio && this.audio.currentMusicId !== 'prepare_to_defend') {
-      this.audio.playMusic('prepare_to_defend', { fadeInMs: BATTLE_MUSIC_FADE_IN_MS });
-    }
+    this.music?.claimMusic({
+      owner: 'night_attack',
+      layer: 'battle',
+      selection: { kind: 'loop', id: 'prepare_to_defend' },
+    });
   }
 
   /**
@@ -1136,10 +1136,7 @@ export class MurderMysteryQuestSystem implements GameSystem {
   private handleSwarmCleared(): void {
     if (this.swarmCleared) return;
     this.swarmCleared = true;
-    if (this.overworldMusic) {
-      this.overworldMusic.battleMusicActive = false;
-      this.overworldMusic.reset();
-    }
+    this.music?.releaseMusic('night_attack');
     this.bus.emit('objectiveComplete', { objectiveId: 'krasue_night_attack_survived' });
   }
 

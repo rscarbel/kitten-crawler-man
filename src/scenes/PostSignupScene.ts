@@ -7,6 +7,7 @@ import { TutorialController } from '../systems/TutorialController';
 import { getLevelDef } from '../levels';
 import { difficultyStats } from '../core/DifficultyStats';
 import { bindRunStats } from '../core/GameStats';
+import { MusicLibrary, bindMusicLibrary } from '../core/MusicLibrary';
 import { splitV, type Rect } from '../ui/core/geom';
 import { createSceneUi } from '../ui/core/sceneUi';
 import type { Surface, Ui, UiRoot } from '../ui/core/UiRoot';
@@ -29,6 +30,16 @@ const MENU_DENSITIES: readonly {
   { titleRole: 'heading', buttonSize: 'md' },
 ];
 const FULLY_OPAQUE = 1;
+
+/**
+ * The library of a new run that skips the tutorial. Nothing ever leads back to
+ * the tutorial, so its song would otherwise stay locked for the whole run.
+ */
+function musicLibrarySkippingTutorial(): MusicLibrary {
+  const library = new MusicLibrary();
+  library.markRequested(['tutorial_island']);
+  return library;
+}
 
 interface MenuChoice {
   readonly id: string;
@@ -191,6 +202,7 @@ export class PostSignupScene extends Scene {
   private beginNewRun(): void {
     difficultyStats.beginRun();
     bindRunStats(null);
+    bindMusicLibrary(null);
   }
 
   private launchTutorial(): void {
@@ -209,7 +221,10 @@ export class PostSignupScene extends Scene {
     this.beginNewRun();
     const level1Def = getLevelDef('level1');
     this.sceneManager.replace(
-      new DungeonScene(level1Def, this.input, this.sceneManager, this.baseOptions),
+      new DungeonScene(level1Def, this.input, this.sceneManager, {
+        ...this.baseOptions,
+        musicLibrary: musicLibrarySkippingTutorial(),
+      }),
     );
   }
 }

@@ -15,6 +15,7 @@
  * injected into a mob at spawn time.
  */
 
+import type { WorldPoint } from '../audio/AudioManager';
 import type { Player } from '../Player';
 import type { DamageSource } from '../Player';
 import type { GameMap } from '../map/GameMap';
@@ -186,8 +187,8 @@ export class LavaBallSystem implements GameSystem, GroundHazardSource {
   /** Incremented per patch so each gets a distinct animation offset. */
   private nextFlameSeed = 0;
 
-  /** Set when a bolt lands; `DungeonScene` reads and clears it to play the boom. */
-  burstSoundPending = false;
+  /** Where a bolt just landed; `DungeonScene` reads and clears it to play the boom there. */
+  burstSoundAt: WorldPoint | null = null;
 
   constructor(private readonly gameMap: GameMap) {}
 
@@ -304,7 +305,7 @@ export class LavaBallSystem implements GameSystem, GroundHazardSource {
     this.bursts.push({ x, y, tick: BURST_FRAMES });
     if (this.flames.length >= MAX_FLAME_PATCHES) this.flames.shift();
     this.flames.push({ x, y, seed: this.nextFlameSeed++, tick: FLAME_FRAMES, owner: bolt.owner });
-    this.burstSoundPending = true;
+    this.burstSoundAt = { x, y };
 
     const radius = TILE_SIZE * BURST_RADIUS_TILES;
     for (const target of targets) {
@@ -469,6 +470,6 @@ export class LavaBallSystem implements GameSystem, GroundHazardSource {
     this.humanContactFrames = 0;
     this.catContactFrames = 0;
     this.nextFlameSeed = 0;
-    this.burstSoundPending = false;
+    this.burstSoundAt = null;
   }
 }

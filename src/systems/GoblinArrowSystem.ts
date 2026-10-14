@@ -15,6 +15,7 @@
  * that you have to *move*, not that the hit itself is complicated.
  */
 
+import type { WorldPoint } from '../audio/AudioManager';
 import type { Player, DamageSource } from '../Player';
 import type { GameMap } from '../map/GameMap';
 import type { Mob } from '../creatures/Mob';
@@ -114,7 +115,7 @@ export class GoblinArrowSystem implements GameSystem {
    * the goblin that loosed it, and one landing after its owner died would have
    * no mob left to carry the flag.
    */
-  impactSoundPending = false;
+  impactSoundAt: WorldPoint | null = null;
 
   constructor(private readonly gameMap: GameMap) {}
 
@@ -189,7 +190,7 @@ export class GoblinArrowSystem implements GameSystem {
         struck = true;
         // A body hit leaves no shaft, so `land` never runs for it — the cue has
         // to be raised here as well or every arrow that connects is silent.
-        this.impactSoundPending = true;
+        this.impactSoundAt = { x: arrow.x, y: arrow.y };
         break;
       }
       if (struck) continue;
@@ -201,7 +202,7 @@ export class GoblinArrowSystem implements GameSystem {
 
   /** Leaves a spent shaft where an arrow stopped. */
   private land(arrow: Arrow): void {
-    this.impactSoundPending = true;
+    this.impactSoundAt = { x: arrow.x, y: arrow.y };
     if (this.spent.length >= MAX_SPENT_ARROWS) this.spent.shift();
     this.spent.push({
       x: arrow.x,
@@ -255,6 +256,6 @@ export class GoblinArrowSystem implements GameSystem {
   resetForCheckpoint(): void {
     this.arrows = [];
     this.spent = [];
-    this.impactSoundPending = false;
+    this.impactSoundAt = null;
   }
 }

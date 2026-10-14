@@ -220,7 +220,6 @@ export function buildQuestRig(
     null,
     progress,
     null,
-    null,
     human,
     new Conversation(null),
     { anchor: createAnchorQuestProgress() },

@@ -231,6 +231,7 @@ export class ConstructionKit {
       cat: deps.cat,
       roster: world.roster,
       audio,
+      audioScope: world.audioScope,
       announce: (message, opts) => deps.menus.announce(message, opts),
       noteResourceActivity: deps.noteResourceActivity,
       bodies: () => this.pushableBodies(),

@@ -1,4 +1,4 @@
-/** Settings: volumes, UI size, render quality, difficulty, the companion toggle and the way to the controls. */
+/** Settings: volumes, mute, mono, background audio, captions and the way to the music player, UI size, render quality, difficulty, the companion toggle and the way to the controls. */
 
 import {
   DIFFICULTY_LABELS,
@@ -8,7 +8,8 @@ import {
 import { renderQuality } from '../../../core/RenderQuality';
 import { settings, type QualityPreset, type UiSize } from '../../../core/Settings';
 import { choiceRow, wideButton, type Choice } from './parts';
-import type { PauseContext, PauseSection, SectionLayout } from './section';
+import { keybindings } from '../../../core/Keybindings';
+import type { PauseAudio, PauseContext, PauseSection, SectionLayout } from './section';
 import { slider, sliderHeight, stepSlider } from './slider';
 
 /**
@@ -49,6 +50,9 @@ const DIFFICULTY_HINTS: Readonly<Record<Difficulty, string>> = {
   hard: 'Take more damage now; tougher spawns and bigger rewards from the next floor or bounty.',
 };
 
+const SOUND_CAPTIONS_HINT =
+  'Captions name alarms, warnings and cries from off screen, even with the sound muted.';
+
 const MONGO_AUTO_SUMMON_HINT =
   'While you play the human, the cat sends Mongo in when enemies are near. Also in the follower menu.';
 
@@ -64,6 +68,48 @@ function volumeSlider(
   layout.track(rect, state, { adjust: (direction) => set(stepSlider(value, direction)) });
 }
 
+function onOff(enabled: boolean): string {
+  return enabled ? 'On' : 'Off';
+}
+
+/** Mute, mono, background audio and captions: toggles beside the volumes they qualify. */
+function renderAudioAccessibility(layout: SectionLayout, audio: PauseAudio): void {
+  const { ui } = layout;
+  const muted = audio.muted;
+  wideButton(layout, {
+    id: 'audio-mute',
+    label:
+      ui.density === 'pointer'
+        ? `Mute all: ${onOff(muted)} (${keybindings.labelFor('toggleMute')})`
+        : `Mute all: ${onOff(muted)}`,
+    icon: muted ? 'volumeOff' : 'volume',
+    selected: muted,
+    onTap: () => audio.setMuted(!muted),
+  });
+  const mono = audio.monoAudio;
+  wideButton(layout, {
+    id: 'audio-mono',
+    label: `Mono audio: ${onOff(mono)}`,
+    selected: mono,
+    onTap: () => audio.setMonoAudio(!mono),
+  });
+  const background = audio.playsInBackground;
+  wideButton(layout, {
+    id: 'audio-background',
+    label: `Keep playing in background: ${onOff(background)}`,
+    selected: background,
+    onTap: () => audio.setPlaysInBackground(!background),
+  });
+  const captions = settings.soundCaptions;
+  wideButton(layout, {
+    id: 'audio-captions',
+    label: `Sound captions: ${onOff(captions)}`,
+    selected: captions,
+    onTap: () => settings.setSoundCaptions(!captions),
+  });
+  layout.paragraph(SOUND_CAPTIONS_HINT, 'muted', ui.theme.space.md);
+}
+
 function renderSettings(layout: SectionLayout, ctx: PauseContext): void {
   const { ui } = layout;
   const audio = ctx.audio;
@@ -75,9 +121,22 @@ function renderSettings(layout: SectionLayout, ctx: PauseContext): void {
     volumeSlider(layout, 'volume-music', 'Music Volume', audio.musicVolume, (v) =>
       audio.setMusicVolumePreference(v),
     );
-    volumeSlider(layout, 'volume-sfx', 'SFX Volume', audio.sfxVolume, (v) =>
+    volumeSlider(layout, 'volume-sfx', 'Effects Volume', audio.sfxVolume, (v) =>
       audio.setSfxVolumePreference(v),
     );
+    volumeSlider(layout, 'volume-ambience', 'Ambience Volume', audio.ambienceVolume, (v) =>
+      audio.setAmbienceVolumePreference(v),
+    );
+    renderAudioAccessibility(layout, audio);
+    if (ctx.musicLibrary !== null) {
+      wideButton(layout, {
+        id: 'open-music',
+        label: 'Music player…',
+        icon: 'music',
+        onTap: () => ctx.actions.show('music'),
+      });
+      layout.space(ui.theme.space.md);
+    }
   }
 
   layout.heading('UI size');

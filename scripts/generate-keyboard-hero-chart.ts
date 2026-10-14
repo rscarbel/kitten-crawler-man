@@ -21,7 +21,7 @@ import { resolve } from 'node:path';
 import { analyseOnsets, decodeMonoPcm } from './audioOnsets.js';
 import { CHART_EARLIEST_HIT_MS, HIT_WINDOW_MS } from '../src/systems/keyboardHeroGeometry.js';
 
-const TRACK_PATH = resolve('src/audio/bosses/grotesque_spider/keyboard_hero_music_track_1.mp3');
+const TRACK_PATH = resolve('src/audio/music/keyboard_hero_music_track_1.mp3');
 const OUT_PATH = resolve('src/systems/keyboardHeroChart.ts');
 
 const MS_PER_SECOND = 1_000;

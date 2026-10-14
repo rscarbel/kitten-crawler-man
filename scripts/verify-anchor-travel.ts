@@ -142,7 +142,7 @@ function buildRig(map: GameMap, levelDef: LevelDef = level3): Rig {
   const { human, cat } = pm;
   const bus = new EventBus();
   const roster = new MobRoster(map, new SpellSystem());
-  const sceneWorld: SceneWorld = { gameMap: map, bus, audio: null, pm, roster };
+  const sceneWorld: SceneWorld = { gameMap: map, bus, audio: null, audioScope: null, pm, roster };
   const menus = new MenusKit({ world: sceneWorld, abilityManager: new AbilityManager() });
   const toasts: string[] = [];
   // Every toast the stone raises goes through the toast stack, as in the scene.
