@@ -5859,6 +5859,14 @@ export const LOUDNESS = {
     hash: '46e32a79d4592edb',
     trimDb: -2.9,
   },
+  welcome_to_the_dungeon: {
+    bus: 'music',
+    basis: 'integrated',
+    lufs: -15.8,
+    truePeakDbtp: -0.4,
+    hash: '5b8d3af16e288996',
+    trimDb: -2.2,
+  },
   wet_sign_skid: {
     bus: 'sfx',
     basis: 'integrated',

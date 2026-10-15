@@ -2,6 +2,7 @@ import type { MusicTrackId } from '../sounds';
 
 /** Where a song is heard, in the order the music page lists them. */
 export const MUSIC_AREA_IDS = [
+  'title_screen',
   'dungeon',
   'over_city',
   'wilds',
@@ -16,6 +17,7 @@ export const MUSIC_AREA_IDS = [
 export type MusicAreaId = (typeof MUSIC_AREA_IDS)[number];
 
 export const MUSIC_AREA_LABELS = {
+  title_screen: 'Title Screen',
   dungeon: 'Dungeon',
   over_city: 'Over City',
   wilds: 'Wilds',
@@ -46,6 +48,11 @@ export interface MusicTrackDef {
 }
 
 export const MUSIC_CATALOG = {
+  welcome_to_the_dungeon: {
+    title: 'Welcome to the Dungeon',
+    area: 'title_screen',
+    attribution: { authorName: 'Ryan Scarbel', originalTitle: 'Welcome to the Dungeon' },
+  },
   tutorial_island: {
     title: 'Tutorial Island',
     area: 'dungeon',

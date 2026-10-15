@@ -1,6 +1,6 @@
 ---
 name: add-sound
-description: Add a sound effect, jingle or song to Kitten Crawler Man, or change how audio plays — the music/ and jingles/ folders, SoundId tuples and SOUND_MANIFEST, MUSIC_CATALOG, music claims through the MusicDirector, sound traits, positional playAt, AudioScope loops, buses, loudness measurement and the check:audio / verify:audio gates. Use when adding, playing or routing any audio.
+description: Add a sound effect, jingle or song to Kitten Crawler Man (a song is one `npm run add:music` command), or change how audio plays — the music/ and jingles/ folders, SoundId tuples and SOUND_MANIFEST, MUSIC_CATALOG, music claims through the MusicDirector, sound traits, positional playAt, AudioScope loops, buses, loudness measurement and the check:audio / verify:audio gates. Use when adding, playing or routing any audio.
 ---
 
 # Add a Sound
@@ -36,12 +36,27 @@ Sliders (Master, Music, Effects, Ambience; UI follows Effects) map through a squ
 
 ## Adding a song
 
-1. Export it **44.1 kHz stereo MP3 at a modest bitrate**. Cut size with the bitrate, never the sample rate: a low sample rate removes the top end and sounds muffled. There is no encode script; the user owns the exports.
-2. Put it in `src/audio/music/<id>.mp3`; add the id to `MUSIC_TRACK_IDS` and `SOUND_MANIFEST`.
-3. Add its `MUSIC_CATALOG` entry (`src/audio/music/catalog.ts`): `title` (distinct, non-blank), `area` (a `MusicAreaId` — groups the music page and gives the locked row's "Found in" hint) and `attribution` (`originalTitle`, `authorName` and/or `authorUsername`, `source: 'Pixabay'` or absent for an original composition). `formatAttribution` builds the credit line.
-4. An intro heard once before the loop body goes in `MUSIC_LOOP_START_S` (seconds into the file); a re-export must keep that intro the same length.
-5. Make something claim it (below). A claim unlocks every song it names; the credit card shows the first time the song is actually heard.
-6. `npm run measure:audio`, then `npm run check:audio`.
+**Use the script — one command, a few seconds. Do not hand-edit the registry, and do not read `sounds.ts` or `catalog.ts` first.**
+
+```
+npm run add:music -- <file.mp3> --title "Shown Title" --area <area> \
+  (--author-name "Real Name" | --author-username handle)   # either or both
+  [--original-title "Recording's own title"]   # default: --title
+  [--pixabay]                                  # licensed from Pixabay; omit for the user's own compositions
+  [--id snake_case_id]                         # default: the file name
+  [--area-label "Label"]                       # creates --area as a new music area
+  [--loop-start <seconds>]                     # intro heard once before the loop body
+```
+
+The file may already sit in `src/audio/music/` (an uncommitted drop) or anywhere else (it is copied in). The script adds the id to `MUSIC_TRACK_IDS`, `SOUND_MANIFEST` and `STREAMING_SOUND_IDS`, writes the `MUSIC_CATALOG` entry (plus `MUSIC_AREA_IDS` / `MUSIC_AREA_LABELS` with `--area-label`) and `MUSIC_LOOP_START_S`, warns if the export is not 44.1 kHz stereo, then runs `measure:audio`, prettier on the two files and `check:audio`. An unknown `--area` without `--area-label` fails and prints the known areas. When the user wrote the song, attribution is `--author-name "Ryan Scarbel"` with no `--pixabay`; ask only for what the request leaves out (title, area). Afterwards run `npm run typecheck` — no other gate is needed for registration alone.
+
+What remains by hand is step 5. Background for reading the script's output:
+
+1. Songs are exported **44.1 kHz stereo MP3 at a modest bitrate**. Cut size with the bitrate, never the sample rate: a low sample rate removes the top end and sounds muffled. There is no encode script; the user owns the exports.
+2. The file is `src/audio/music/<id>.mp3`; songs stream, so they are in `STREAMING_SOUND_IDS` and no SFX group.
+3. `MUSIC_CATALOG` (`src/audio/music/catalog.ts`): `title` (distinct, non-blank), `area` (a `MusicAreaId` — groups the music page and gives the locked row's "Found in" hint) and `attribution` (`originalTitle`, `authorName` and/or `authorUsername`, `source: 'Pixabay'` or absent for an original composition). `formatAttribution` builds the credit line.
+4. `MUSIC_LOOP_START_S` holds an intro's length in seconds; a re-export must keep that intro the same length.
+5. **Make something claim it** (below). A claim unlocks every song it names; the credit card shows the first time the song is actually heard. A song nobody claims yet is fine: it shows locked on the music page.
 
 ## Music: claim, never play
 
@@ -94,7 +109,7 @@ One scope per scene (`audio.createScope()`, disposed in `onExit`; also on `Scene
 ## Gates
 
 - `npm run lint` runs `npm run check:audio` (`scripts/check-audio.ts`): folders vs registry vs manifest for `music/` and `jingles/`, every manifest path on disk, the catalogue holding exactly the music tracks with distinct titles, every decoded effect in a group (or unwired), no streamed id in a group, no file at the `src/audio/` root, and every id's loudness entry present with a hash matching its file.
-- **After adding or swapping any audio file run `npm run measure:audio`** (`scripts/measure-audio.ts`, needs `ffmpeg` and `ffprobe` on PATH or at `$FFMPEG` / `$FFPROBE`). It rewrites `src/audio/loudness.generated.ts` — per-id LUFS, true peak, hash and trim, served by `loudnessTrimDb` in `src/audio/loudness.ts` — and lists files to re-export. Never edit that table by hand or re-encode a file to fix a level; a stale hash fails `check:audio`.
+- **After adding or swapping any audio file run `npm run measure:audio`** (`scripts/measure-audio.ts`, needs `ffmpeg` and `ffprobe` on PATH or at `$FFMPEG` / `$FFPROBE`). It rewrites `src/audio/loudness.generated.ts` — per-id LUFS, true peak, hash and trim, served by `loudnessTrimDb` in `src/audio/loudness.ts` — and lists newly measured files to re-export. It only runs ffmpeg on files whose hash changed (under a second for one file); `-- --all` re-measures and lists everything, needed only after changing the targets in `loudnessTargets.ts`. Never edit that table by hand or re-encode a file to fix a level; a stale hash fails `check:audio`.
 - `npm run verify:audio` (`scripts/verify-audio.ts`, checks in `scripts/verifyAudio/`) is the behaviour gate for the director, library, credits, voices, ramped stops, scopes, captions and accessibility options. Run it after touching anything under `src/audio/` or `src/core/MusicLibrary.ts`.
 
 Finish with the `dev-workflow` gates (typecheck, lint, format).

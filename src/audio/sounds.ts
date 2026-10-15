@@ -1,5 +1,6 @@
 /** Every catalogued, attributed song; each one's file is `music/<id>.mp3`. */
 export const MUSIC_TRACK_IDS = [
+  'welcome_to_the_dungeon',
   'tutorial_island',
   'bg_level_1',
   'bg_level_2',
@@ -844,6 +845,7 @@ export const SOUND_MANIFEST: Record<SoundId, string> = {
   boss_music_1: './src/audio/music/boss_music_1.mp3',
   boss_music_2: './src/audio/music/boss_music_2.mp3',
   boss_music_3: './src/audio/music/boss_music_3.mp3',
+  welcome_to_the_dungeon: './src/audio/music/welcome_to_the_dungeon.mp3',
   bopca_cooking: './src/audio/characters/bopca/cooking.mp3',
   bopca_dish_set_down: './src/audio/characters/bopca/plate_setting_down.mp3',
   bopca_eating: './src/audio/characters/bopca/eating.mp3',
@@ -1674,6 +1676,7 @@ export const STREAMING_SOUND_IDS: ReadonlySet<SoundId> = new Set<SoundId>([
   'town_music_2',
   'tutorial_island',
   'under_the_willows',
+  'welcome_to_the_dungeon',
   // ambient/
   'ambient_bar_crowd',
   'ambient_broken_plumbing',

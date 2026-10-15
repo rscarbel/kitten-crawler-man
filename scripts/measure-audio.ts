@@ -7,8 +7,12 @@
  * stale hash until it has been run. It never modifies the audio itself — files
  * whose trim had to be clamped are listed for re-export instead.
  *
+ * A file whose hash matches its existing entry keeps its measurement, so only
+ * new or swapped files go through ffmpeg; `--all` re-measures everything.
+ *
  * Usage:
  *   npm run measure:audio
+ *   npm run measure:audio -- --all
  *
  * Needs ffmpeg and ffprobe: on PATH, at `$FFMPEG` / `$FFPROBE`, or at the
  * Homebrew location.
@@ -18,7 +22,7 @@ import { writeFileSync } from 'node:fs';
 import { availableParallelism } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { promisify } from 'node:util';
+import { parseArgs, promisify } from 'node:util';
 import { format, resolveConfig } from 'prettier';
 import {
   ALL_SOUND_IDS,
@@ -41,6 +45,7 @@ import {
   type SfxFamily,
 } from '../src/audio/loudnessTargets';
 import { hashAudioFile } from './audioHash';
+import { LOUDNESS } from '../src/audio/loudness.generated';
 
 const execFileAsync = promisify(execFile);
 
@@ -85,7 +90,7 @@ interface Tools {
 interface Measurement {
   readonly lufs: number;
   readonly truePeakDbtp: number;
-  readonly durationS: number;
+  readonly basis: LoudnessBasis;
 }
 
 interface MeasuredEntry extends LoudnessEntry {
@@ -182,11 +187,31 @@ async function measure(tools: Tools, path: string): Promise<Measurement> {
     { maxBuffer: FFMPEG_OUTPUT_BUFFER_BYTES },
   );
   const summary = stderr.slice(stderr.lastIndexOf('Summary:'));
+  const lufs = matchNumber(summary, /I:\s*(-?[\d.]+|-inf)\s*LUFS/, 'integrated loudness', path);
+  const durationS = parseDurationS(stderr, path);
+  const tooShortToGate = durationS < SHORT_ONE_SHOT_MAX_S || lufs <= UNGATED_LUFS;
   return {
-    lufs: matchNumber(summary, /I:\s*(-?[\d.]+|-inf)\s*LUFS/, 'integrated loudness', path),
+    lufs,
     truePeakDbtp: matchNumber(summary, /Peak:\s*(-?[\d.]+|-inf)\s*dBFS/, 'true peak', path),
-    durationS: parseDurationS(stderr, path),
+    basis: tooShortToGate ? 'peak' : 'integrated',
   };
+}
+
+/** Measurements already in the table whose file is byte-for-byte unchanged, by path. */
+function unchangedMeasurements(paths: readonly string[]): Map<string, Measurement> {
+  const table: Partial<Record<SoundId, LoudnessEntry>> = LOUDNESS;
+  const recorded = new Map<string, LoudnessEntry>();
+  for (const id of ALL_SOUND_IDS) {
+    const entry = table[id];
+    if (entry !== undefined) recorded.set(SOUND_MANIFEST[id], entry);
+  }
+  const reusable = new Map<string, Measurement>();
+  for (const path of paths) {
+    const entry = recorded.get(path);
+    if (entry === undefined || entry.hash !== hashAudioFile(join(REPO_ROOT, path))) continue;
+    reusable.set(path, { lufs: entry.lufs, truePeakDbtp: entry.truePeakDbtp, basis: entry.basis });
+  }
+  return reusable;
 }
 
 async function measureAll(
@@ -212,9 +237,7 @@ function roundDb(value: number): number {
 
 function entryFor(id: SoundId, path: string, measurement: Measurement): MeasuredEntry {
   const bus = busOf(id, path);
-  const tooShortToGate =
-    measurement.durationS < SHORT_ONE_SHOT_MAX_S || measurement.lufs <= UNGATED_LUFS;
-  const basis: LoudnessBasis = tooShortToGate ? 'peak' : 'integrated';
+  const { basis } = measurement;
   const desiredTrim =
     basis === 'peak'
       ? SHORT_ONE_SHOT_PEAK_TARGET_DBTP - measurement.truePeakDbtp
@@ -288,8 +311,14 @@ async function main(): Promise<void> {
     ffmpeg: findTool('ffmpeg', 'FFMPEG'),
     ffprobe: findTool('ffprobe', 'FFPROBE'),
   };
+  const { values: flags } = parseArgs({ options: { all: { type: 'boolean', default: false } } });
   const uniquePaths = [...new Set(ALL_SOUND_IDS.map((id) => SOUND_MANIFEST[id]))].sort();
-  const measurements = await measureAll(tools, uniquePaths);
+  const reused = flags.all ? new Map<string, Measurement>() : unchangedMeasurements(uniquePaths);
+  const pathsToMeasure = uniquePaths.filter((path) => !reused.has(path));
+  const measurements = new Map([...reused, ...(await measureAll(tools, pathsToMeasure))]);
+  console.log(
+    `measure:audio: measured ${pathsToMeasure.length} file(s), reused ${reused.size} unchanged`,
+  );
 
   const entries = [...ALL_SOUND_IDS].sort().map((id) => {
     const path = SOUND_MANIFEST[id];
@@ -314,12 +343,18 @@ async function main(): Promise<void> {
     `${minorClampCount} more file(s) were held to ${TRIMMED_TRUE_PEAK_CEILING_DBTP} dBTP ` +
       `by less than ${REEXPORT_CLAMP_SHORTFALL_DB} dB.`,
   );
-  const reexports = entries.filter((entry) => entry.reexportReasons.length > 0);
+  const freshlyMeasured: ReadonlySet<string> = new Set(pathsToMeasure);
+  const allReexports = entries.filter((entry) => entry.reexportReasons.length > 0);
+  const reexports = allReexports.filter((entry) => freshlyMeasured.has(entry.path));
+  const unlistedCount = allReexports.length - reexports.length;
+  if (unlistedCount > 0) {
+    console.log(`${unlistedCount} unchanged file(s) need re-export; \`--all\` lists them.`);
+  }
   if (reexports.length === 0) {
-    console.log('No file needs re-export.');
+    console.log('No newly measured file needs re-export.');
     return;
   }
-  console.log(`\n${reexports.length} file(s) need re-export:`);
+  console.log(`\n${reexports.length} newly measured file(s) need re-export:`);
   for (const entry of reexports) {
     console.log(`  ${entry.path.slice(AUDIO_PREFIX.length)}: ${entry.reexportReasons.join('; ')}`);
   }

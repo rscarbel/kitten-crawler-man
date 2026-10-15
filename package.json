@@ -16,6 +16,7 @@
     "check:ui-style": "tsx scripts/check-ui-style.ts --strict",
     "check:audio": "tsx scripts/check-audio.ts",
     "measure:audio": "tsx scripts/measure-audio.ts",
+    "add:music": "tsx scripts/add-music.ts",
     "lint:figure-scripts": "eslint scripts/figureSheet.ts scripts/figureGates.ts scripts/parity-figure-sheet.ts scripts/gates-figure-cache.ts scripts/nodeGameContext.ts scripts/previewOut.ts scripts/report-asset-residency.ts scripts/bench-figure-paint.ts scripts/bench-turn-residency.ts scripts/build-review-index.ts scripts/wave-test-figure.ts scripts/gates-equipment.ts scripts/gates-equipment-garments.ts scripts/gates-equipment-donut.ts scripts/render-garments.ts",
     "server": "tsx server/index.ts",
     "dev": "node scripts/build.js --dev-boot && npm run server",
