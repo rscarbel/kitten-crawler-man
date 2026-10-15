@@ -123,6 +123,7 @@ import {
   type CompiledGuard,
   type CompiledPrison,
   type CompiledSpotlight,
+  type GuardActivity,
   type GuardPose,
 } from './prisonPatrols';
 import { playPrisonCue, PRISON_CUES, type PrisonCue } from './prisonSoundCues';
@@ -171,6 +172,13 @@ const SUSPICIOUS_BARK_THROTTLE_FRAMES = 150;
 /** The shortest and the spread of walking frames between one guard's patrol mutters. */
 const PATROL_MUTTER_MIN_FRAMES = 600;
 const PATROL_MUTTER_SPREAD_FRAMES = 720;
+
+/**
+ * A spotlight's disc moving less than this in a frame is standing still, so a
+ * dwell between two sweeps carries no heading and the turn is heard where the
+ * disc sets off the other way.
+ */
+const SPOT_STILL_PX_PER_FRAME = 0.05;
 
 /** Positional loops fall to silence this many tiles from the controlled crawler. */
 const POSITIONAL_FALLOFF_TILES = 9;
@@ -292,6 +300,8 @@ interface GuardRuntime {
   /** Walking frames left before he next grumbles to himself. */
   mutterIn: number;
   mutters: number;
+  /** The patrol activity of the previous frame, so a scripted hold is heard as it begins. */
+  lastActivity: GuardActivity;
 }
 
 interface SpotRuntime {
@@ -299,6 +309,9 @@ interface SpotRuntime {
   suspicion: number;
   shape: LightShape;
   seenWeight: number;
+  centre: PrisonPoint;
+  /** The disc's last frame of real movement; null until it has moved. */
+  heading: PrisonPoint | null;
 }
 
 interface CellRuntime {
@@ -389,6 +402,7 @@ export class GoblinPrisonSystem {
         barkThrottle: 0,
         mutterIn: patrolMutterGap(mob.seed, 0),
         mutters: 0,
+        lastActivity: pose.activity,
       };
     });
     this.spots = this.compiled.spotlights.map((compiled) => ({
@@ -396,6 +410,8 @@ export class GoblinPrisonSystem {
       suspicion: 0,
       shape: this.castSpot(compiled, 0),
       seenWeight: 0,
+      centre: compiled.centreAt(0),
+      heading: null,
     }));
     this.cells = parsed.holdingCells.map((cell) => {
       const run = cell.door.y === cell.hall.y ? 'along' : 'across';
@@ -661,6 +677,7 @@ export class GoblinPrisonSystem {
       if (hold === null) {
         guard.pose = loopPose;
         this.tickPatrolMutter(guard);
+        this.tickBatonTap(guard);
       } else {
         const target =
           guard.seen !== null
@@ -699,13 +716,36 @@ export class GoblinPrisonSystem {
     this.playCueFrom('guardMutter', guard.pose);
   }
 
+  private tickBatonTap(guard: GuardRuntime): void {
+    const activity = guard.pose.activity;
+    const startedHold =
+      activity === 'hold' && guard.lastActivity !== 'hold' && guard.investigation === null;
+    guard.lastActivity = activity;
+    if (startedHold) this.playCueFrom('guardBatonTap', guard.pose);
+  }
+
   /** The clock a guard's art and lens run on: its own loop's frame, which is the shared clock until a pause or a noise shifts it. */
   private animationClockOf(guard: GuardRuntime): number {
     return this.clock - guard.shift;
   }
 
   private stepSpots(): void {
-    for (const spot of this.spots) spot.shape = this.castSpot(spot.compiled, this.clock);
+    for (const spot of this.spots) {
+      const centre = spot.compiled.centreAt(this.clock);
+      spot.shape = this.castDiscAt(centre);
+      this.tickSpotTurn(spot, centre);
+    }
+  }
+
+  private tickSpotTurn(spot: SpotRuntime, centre: PrisonPoint): void {
+    const step = { x: centre.x - spot.centre.x, y: centre.y - spot.centre.y };
+    spot.centre = centre;
+    if (Math.hypot(step.x, step.y) < SPOT_STILL_PX_PER_FRAME) return;
+    const previous = spot.heading;
+    spot.heading = step;
+    if (previous === null) return;
+    const reversed = previous.x * step.x + previous.y * step.y < 0;
+    if (reversed) this.playCueFrom('spotlightTurn', spot.compiled.anchor);
   }
 
   private crawlerCentres(): PrisonPoint[] {
@@ -990,6 +1030,7 @@ export class GoblinPrisonSystem {
       guard.seen = null;
       guard.seenWeight = 0;
       guard.pose = guardPoseAt(guard.compiled, 0);
+      guard.lastActivity = guard.pose.activity;
       guard.cone = guardCone(this.compiled, guard.pose, 0);
       guard.mob.takeStrikes();
       guard.mob.lastStrike = null;
@@ -998,6 +1039,8 @@ export class GoblinPrisonSystem {
       spot.suspicion = 0;
       spot.seenWeight = 0;
       spot.shape = this.castSpot(spot.compiled, 0);
+      spot.centre = spot.compiled.centreAt(0);
+      spot.heading = null;
     }
     this.applyGuardPoses();
     this.refreshLights();

@@ -24,20 +24,20 @@ export const PRISON_CUES = {
   ],
   /** The gate guard turning the key. */
   gateUnlock: ['gate_key_unlock'],
-  /** The gate raised. Waits on `heavy_metal_gate_raise`; `gate_opening` stands in. */
-  gateOpen: ['gate_opening'],
+  /** The gate raised. */
+  gateOpen: ['heavy_metal_gate_raise'],
   /** The prison's double door. */
   prisonDoorOpen: ['prison_door_heavy_open'],
   /** Room tone inside the prison. */
   prisonAmbience: ['prison_ambience_loop'],
   /** A spotlight's positional hum. */
   spotlightHum: ['spotlight_hum_loop'],
-  /** A spotlight reversing on its track. Waits on `spotlight_motor_turn_1` … `_2`. */
-  spotlightTurn: [],
+  /** A spotlight reversing on its track. */
+  spotlightTurn: ['spotlight_motor_turn_1', 'spotlight_motor_turn_2', 'spotlight_motor_turn_3'],
   /** A patrolling guard's positional footsteps. */
   guardFootsteps: ['guard_footsteps_loop'],
-  /** A paused guard slapping its baton. Waits on `guard_baton_tap_1` … `_2`. */
-  guardBatonTap: [],
+  /** A guard slapping its baton as it stops on patrol. */
+  guardBatonTap: ['guard_baton_tap_1', 'guard_baton_tap_2'],
   /** A guard muttering on patrol. */
   guardMutter: ['goblin_guard_mutter_1', 'goblin_guard_mutter_2', 'goblin_guard_mutter_3'],
   /** A guard or the gate guard struck; the same goblin voice as the bathroom queue's. */

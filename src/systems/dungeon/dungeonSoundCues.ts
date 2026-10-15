@@ -101,8 +101,8 @@ export const DUNGEON_CUES = {
   urnCoinsSpill: ['coin_pouch'],
   /** A grain sack split. Final: `sack_tear_1..2`. */
   sackTear: ['sack_tear_1', 'sack_tear_2'],
-  /** Layered on {@link DUNGEON_CUES.sackTear}: grain pouring out. Waits on `grain_spill`. */
-  grainSpill: [],
+  /** Layered on {@link DUNGEON_CUES.sackTear}: grain pouring out. */
+  grainSpill: ['grain_spill_1', 'grain_spill_2', 'grain_spill_3'],
   /** A wine cask staved in. */
   wineCaskBurst: ['wine_cask_burst'],
   /** A bottle rack coming down. Final: `bottle_shelf_crash_1..4`. */
@@ -132,22 +132,27 @@ export const DUNGEON_CUES = {
   // ── Breaking: floor 2 ──
   /** A locker, steel drum or filing cabinet hit and dented, not broken. */
   metalDent: ['metal_dent_1', 'metal_dent_2', 'metal_dent_3'],
-  /** A locker door wrenched open. Waits on `locker_burst`; `massive_metal_hit` stands in. */
-  lockerBurst: ['massive_metal_hit'],
+  /** A locker door wrenched open. */
+  lockerBurst: ['locker_burst_1', 'locker_burst_2'],
   /** A steel drum split, oil glugging out. */
   drumBurst: ['drum_burst'],
-  /** A filing cabinet broken. Waits on `filing_cabinet_crash`; `massive_metal_hit` stands in. */
-  filingCabinetCrash: ['massive_metal_hit'],
-  /** A mop bucket or plastic crate smashed. Waits on `plastic_crack`; `wood_breaking_1` stands in. */
-  plasticCrack: ['wood_breaking_1'],
-  /** The wet-floor sign knocked flat and skidding. Waits on `wet_sign_skid`. */
-  wetSignSkid: [],
-  /** The vending machine's front smashed. Waits on `vending_glass_smash`; `glass_break_1` stands in. */
-  vendingGlassSmash: ['glass_break_1'],
+  /** A filing cabinet broken. */
+  filingCabinetCrash: ['filing_cabinet_crash_1', 'filing_cabinet_crash_2'],
+  /** A mop bucket or plastic crate smashed. */
+  plasticCrack: ['plastic_crack_1', 'plastic_crack_2'],
+  /** The wet-floor sign knocked flat and skidding. */
+  wetSignSkid: ['wet_sign_skid'],
+  /** The vending machine's front smashed. */
+  vendingGlassSmash: [
+    'vending_glass_smash_1',
+    'vending_glass_smash_2',
+    'vending_glass_smash_3',
+    'vending_glass_smash_4',
+  ],
   /** A monitor or the monitor bank smashed. */
   monitorPop: ['monitor_pop'],
-  /** The security camera dome smashed. Waits on `camera_break`; `glass_break_3` stands in. */
-  cameraBreak: ['glass_break_3'],
+  /** The security camera dome smashed. */
+  cameraBreak: ['camera_break'],
   /** A breaker panel smashed: the pop, the sparks and the power-down whine. */
   fuseBoxShort: ['fuse_box_short'],
   /** A gas cylinder's fuse, from the break to the blast: the blast's warning. */
@@ -165,10 +170,10 @@ export const DUNGEON_CUES = {
   // ── Small moving things ──
   /** Beetles or roaches scattering. Waits on `critter_scuttle_1..3`. */
   critterScuttle: [],
-  /** A footstep in a puddle. Waits on `puddle_step_1..4`. */
-  puddleStep: [],
-  /** Paper drifts lifting underfoot. Waits on `paper_rustle_1..2`. */
-  paperRustle: [],
+  /** A footstep in a puddle. */
+  puddleStep: ['puddle_step_1', 'puddle_step_2', 'puddle_step_3', 'puddle_step_4'],
+  /** Paper drifts lifting underfoot. */
+  paperRustle: ['paper_rustle_1', 'paper_rustle_2', 'paper_rustle_3', 'paper_rustle_4'],
 } as const satisfies Record<string, readonly SoundId[]>;
 
 /** Which cue a play site raises. */

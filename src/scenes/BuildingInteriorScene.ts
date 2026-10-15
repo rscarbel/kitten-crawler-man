@@ -275,7 +275,8 @@ import { CombatKit } from '../systems/kits/CombatKit';
 import { SkillPointReminderSystem } from '../systems/SkillPointReminderSystem';
 import { interiorHostilesFor, noteRoomCleared } from '../systems/interiorHostiles';
 import { partyLevelOf } from '../levels/spawner';
-import { TAVERN_BUILDING_NAMES } from '../map/town/townPlan';
+import { DESPERADO_CLUB_NAME, TAVERN_BUILDING_NAMES } from '../map/town/townPlan';
+import { CLUB_PROPS } from '../core/clubProps';
 import { AnchorInteriorSystem } from '../systems/AnchorInteriorSystem';
 import {
   SKY_TEMPLE_NAME,
@@ -400,6 +401,10 @@ const HEARTH_AMBIENT_VOLUME = 0.4;
 /** Volume of a room-wide crowd/shop bed, quiet enough to sit under dialog and music. */
 const BAR_CROWD_AMBIENT_VOLUME = 0.35;
 const MAGIC_SHOP_AMBIENT_VOLUME = 0.3;
+const GENERAL_STORE_AMBIENT_VOLUME = 0.3;
+/** The slot bank's chimes carry across the club floor and fade before the far stations. */
+const SLOT_BANK_AMBIENT_RADIUS_TILES = 8;
+const SLOT_BANK_AMBIENT_VOLUME = 0.35;
 /** Prompt shown over an occupant who has nothing special to offer. */
 const TALK_PROMPT_LABEL = 'Talk';
 /** Prompt shown over a ledger, letter or board sitting on the furniture. */
@@ -412,10 +417,22 @@ const INTERIOR_AMBIENT_BEDS = new Map<string, { soundId: SoundId; volume: number
   ['The Sleeping Cat Inn', { soundId: 'ambient_bar_crowd', volume: BAR_CROWD_AMBIENT_VOLUME }],
   ['The Desperado Club', { soundId: 'ambient_bar_crowd', volume: BAR_CROWD_AMBIENT_VOLUME }],
   ['Herb & Remedy', { soundId: 'ambient_magic_shop', volume: MAGIC_SHOP_AMBIENT_VOLUME }],
+  ['General Store', { soundId: 'ambient_general_store', volume: GENERAL_STORE_AMBIENT_VOLUME }],
   // No entry for The Rusty Anvil on purpose: its braziers already emit the
   // forge crackle through `buildAmbientEmitters`, and a room-wide bed on top of
   // them would only double the same loop against itself.
 ]);
+
+/** Every slot cabinet in the club plays the slot floor from where it stands. */
+function slotBankEmitters(): AmbientEmitter[] {
+  return CLUB_PROPS.filter((prop) => prop.sprite === 'club_slot_cabinet').map((prop) => ({
+    soundId: 'ambient_slots_floor_bank',
+    x: prop.tile.x,
+    y: prop.tile.y,
+    radiusTiles: SLOT_BANK_AMBIENT_RADIUS_TILES,
+    maxVolume: SLOT_BANK_AMBIENT_VOLUME,
+  }));
+}
 
 const MAX_TOWER_FLOOR_INDEX = TOWER_FLOOR_COUNT - 1;
 const DEFAULT_MAP_FALLBACK_WIDTH = 18;
@@ -1568,6 +1585,7 @@ export class BuildingInteriorScene extends GameplayScene {
         });
       }
     }
+    if (this.entry.name === DESPERADO_CLUB_NAME) emitters.push(...slotBankEmitters());
     const roomBed =
       INTERIOR_AMBIENT_BEDS.get(this.entry.name) ??
       (this.entry.name === BIG_TOP_BUILDING_NAME ? BIG_TOP_AMBIENT_BED : null) ??

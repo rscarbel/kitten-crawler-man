@@ -248,6 +248,7 @@ const SOUND_CAPTIONS: Readonly<Partial<Record<SoundId, SoundCaption>>> = {
   snare_trigger: always('Snare snaps shut'),
   necro_war_horn: always('War horn sounds'),
   gate_opening: always('Gate opens'),
+  heavy_metal_gate_raise: always('Gate opens'),
   ...takes(
     ['goblin_guard_hey_1', 'goblin_guard_hey_2', 'goblin_guard_hey_3', 'goblin_guard_hey_4'],
     always('Guard shouts'),
