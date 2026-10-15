@@ -119,7 +119,7 @@ function setDurations(harness: AudioHarness, ids: readonly MusicBusId[], seconds
 export async function checkHighestClaimWins(harness: AudioHarness, check: Check): Promise<void> {
   setDurations(
     harness,
-    ['bg_level_1', 'prepare_to_defend', 'fix_the_plumbing_music'],
+    ['bg_level_1', 'brace_for_the_horde', 'fix_the_plumbing_music'],
     LONG_RECORDING_S,
   );
   const r = await rig(harness);
@@ -127,11 +127,11 @@ export async function checkHighestClaimWins(harness: AudioHarness, check: Check)
   claimOn(r.audio, scene, 'floor', 'area', loopOf('bg_level_1'));
   await r.settle();
   check(r.audio.music.audibleTrack === 'bg_level_1', 'an area claim plays');
-  claimOn(r.audio, scene, 'defend_quest', 'battle', loopOf('prepare_to_defend'));
+  claimOn(r.audio, scene, 'defend_quest', 'battle', loopOf('brace_for_the_horde'));
   claimOn(r.audio, scene, 'pipe_board', 'activity', loopOf('fix_the_plumbing_music'));
   await r.settle();
   check(
-    r.audio.music.audibleTrack === 'prepare_to_defend',
+    r.audio.music.audibleTrack === 'brace_for_the_horde',
     `a battle claim outranks a newer activity claim (${r.audio.music.audibleTrack ?? 'none'})`,
   );
   r.audio.music.release('defend_quest', scene);

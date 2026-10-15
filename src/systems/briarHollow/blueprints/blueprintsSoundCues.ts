@@ -85,7 +85,7 @@ export const BLUEPRINTS_CUES = {
 export type BlueprintsCue = keyof typeof BLUEPRINTS_CUES;
 
 /** The music that plays while any escort ambusher is alive. */
-export const BLUEPRINTS_ESCORT_MUSIC = 'prepare_to_defend' as const satisfies MusicTrackId;
+export const BLUEPRINTS_ESCORT_MUSIC = 'brace_for_the_horde' as const satisfies MusicTrackId;
 
 /**
  * Plays `cue`'s next take through `audio`, rotating through its takes.

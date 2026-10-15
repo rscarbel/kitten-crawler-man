@@ -39,6 +39,16 @@ const TARGET_NOTES_PER_SECOND = 1.73;
  */
 const MIN_NOTE_SPACING_SEC = 0.345;
 
+/**
+ * Where the melody comes in, found by ear. Before it the track plays a low
+ * two-note ostinato whose onsets are as strong as the melody's, so the analysis
+ * alone would chart the accompaniment.
+ */
+const MELODY_ENTRY_MS = 2_758;
+
+/** How far ahead of the ear-found entry the analysed onset of that note may land. */
+const MELODY_ENTRY_TOLERANCE_MS = 20;
+
 /** Number of columns the notes are dealt into. */
 const COLUMN_COUNT = 4;
 
@@ -177,9 +187,13 @@ function main(): void {
   const pcm = decodeMonoPcm(TRACK_PATH);
   const analysis = analyseOnsets(pcm);
 
+  const firstChartableMs = Math.max(
+    CHART_EARLIEST_HIT_MS,
+    MELODY_ENTRY_MS - MELODY_ENTRY_TOLERANCE_MS,
+  );
   const candidateIndices = analysis.timesSec
     .map((_, i) => i)
-    .filter((i) => analysis.timesSec[i] * MS_PER_SECOND >= CHART_EARLIEST_HIT_MS);
+    .filter((i) => analysis.timesSec[i] * MS_PER_SECOND >= firstChartableMs);
   if (candidateIndices.length === 0) throw new Error('no playable onsets found in the track');
 
   const candidateTimes = candidateIndices.map((i) => analysis.timesSec[i]);

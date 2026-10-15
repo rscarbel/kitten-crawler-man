@@ -5,8 +5,10 @@ export const MUSIC_TRACK_IDS = [
   'bg_level_2',
   'town_music_1',
   'town_music_2',
+  'riverside_welcome',
   'forest_path',
   'terrifying_woods',
+  'old_quarter_evening_ending',
   'briar_hollow_theme',
   'medieval_harvest_theme',
   'siege_theme',
@@ -25,12 +27,13 @@ export const MUSIC_TRACK_IDS = [
   'tavern_music_1',
   'tavern_music_2',
   'building_default_music_1',
-  'big_tower_music',
+  'guildhall_waltz',
+  'big_tower_1',
   'temple_music',
   'boss_music_1',
   'boss_music_2',
   'boss_music_3',
-  'prepare_to_defend',
+  'brace_for_the_horde',
   'fix_the_plumbing_music',
   'stealth_music',
   'keyboard_hero_music_track_1',
@@ -788,7 +791,7 @@ export const SOUND_MANIFEST: Record<SoundId, string> = {
   bite_3: './src/audio/effects/bite_3.mp3',
   bg_level_1: './src/audio/music/bg_level_1.mp3',
   bg_level_2: './src/audio/music/bg_level_2.mp3',
-  big_tower_music: './src/audio/music/big_tower_music.mp3',
+  big_tower_1: './src/audio/music/big_tower_1.mp3',
   blood_vomit_1: './src/audio/effects/status/blood_vomit_1.mp3',
   blood_vomit_2: './src/audio/effects/status/blood_vomit_2.mp3',
   blood_vomit_3: './src/audio/effects/status/blood_vomit_3.mp3',
@@ -959,6 +962,7 @@ export const SOUND_MANIFEST: Record<SoundId, string> = {
   goblin_ow_2: './src/audio/enemies/goblin/goblin_ow_2.mp3',
   goblin_relieved_sigh_1: './src/audio/enemies/goblin/goblin_relieved_sigh_1.mp3',
   guard_footsteps_loop: './src/audio/effects/prison/guard_footsteps_loop.mp3',
+  guildhall_waltz: './src/audio/music/guildhall_waltz.mp3',
   high_striker_bell: './src/audio/effects/circus/high_striker_bell.mp3',
   lamp_break_1: './src/audio/effects/interior/lamp_break_1.mp3',
   lamp_break_2: './src/audio/effects/interior/lamp_break_2.mp3',
@@ -986,6 +990,7 @@ export const SOUND_MANIFEST: Record<SoundId, string> = {
   oil_fire_ignite_2: './src/audio/effects/dungeon/oil_fire_ignite_2.mp3',
   oil_fire_ignite_3: './src/audio/effects/dungeon/oil_fire_ignite_3.mp3',
   oil_fire_ignite_4: './src/audio/effects/dungeon/oil_fire_ignite_4.mp3',
+  old_quarter_evening_ending: './src/audio/music/old_quarter_evening_ending.mp3',
   pans_clatter_1: './src/audio/effects/interior/pans_clatter_1.mp3',
   pans_clatter_2: './src/audio/effects/interior/pans_clatter_2.mp3',
   pans_clatter_3: './src/audio/effects/interior/pans_clatter_3.mp3',
@@ -1229,7 +1234,7 @@ export const SOUND_MANIFEST: Record<SoundId, string> = {
   player_walking: './src/audio/characters/player_walking_loop_segment.mp3',
   potion_drink: './src/audio/effects/potion_drink.mp3',
   prepare_for_magic_strike: './src/audio/effects/prepare_for_magic_strike.mp3',
-  prepare_to_defend: './src/audio/music/prepare_to_defend.mp3',
+  brace_for_the_horde: './src/audio/music/brace_for_the_horde.mp3',
   prison_ambience_loop: './src/audio/ambient/prison_ambience_loop.mp3',
   prison_door_heavy_open: './src/audio/effects/prison/prison_door_heavy_open.mp3',
   prison_key_pickup_fanfare: './src/audio/effects/prison/prison_key_pickup_fanfare.mp3',
@@ -1259,6 +1264,7 @@ export const SOUND_MANIFEST: Record<SoundId, string> = {
   reviving_tone: './src/audio/characters/reviving_tone.mp3',
   rickety_fence_pull_1: './src/audio/effects/construction/rickety_fence_pull_1.mp3',
   rickety_fence_pull_2: './src/audio/effects/construction/rickety_fence_pull_2.mp3',
+  riverside_welcome: './src/audio/music/riverside_welcome.mp3',
   rock_breaking_1: './src/audio/effects/gathering/rock_breaking_1.mp3',
   rock_breaking_2: './src/audio/effects/gathering/rock_breaking_2.mp3',
   rock_golem_death: './src/audio/bosses/rock_golem/rock_golem_death.mp3',
@@ -1505,7 +1511,11 @@ export const SLOTS_FREE_SPINS_MUSIC_TRACKS: ReadonlyArray<JingleId> = [
 ];
 
 /** The town's rotating soundtrack — reshuffled each time the player walks back into the safe zone. */
-export const TOWN_MUSIC_TRACKS: ReadonlyArray<MusicTrackId> = ['town_music_1', 'town_music_2'];
+export const TOWN_MUSIC_TRACKS: ReadonlyArray<MusicTrackId> = [
+  'town_music_1',
+  'town_music_2',
+  'riverside_welcome',
+];
 
 /** The town taverns' rotating soundtrack — shuffled and looping while the player is inside. */
 export const TAVERN_MUSIC_TRACKS: ReadonlyArray<MusicTrackId> = [
@@ -1514,7 +1524,7 @@ export const TAVERN_MUSIC_TRACKS: ReadonlyArray<MusicTrackId> = [
 ];
 
 /** The Town Center Tower's own theme, playing on every floor until the Quill confrontation takes over. */
-export const TOWER_MUSIC_TRACKS: ReadonlyArray<MusicTrackId> = ['big_tower_music'];
+export const TOWER_MUSIC_TRACKS: ReadonlyArray<MusicTrackId> = ['big_tower_1'];
 
 /**
  * The circus soundtrack — shuffled and looping on the grounds and in the calm
@@ -1527,11 +1537,16 @@ export const CIRCUS_MUSIC_TRACKS: ReadonlyArray<MusicTrackId> = [
 ];
 
 /** The wilds between the Over City's settlements — shuffled and looping. */
-export const WILDS_MUSIC_TRACKS: ReadonlyArray<MusicTrackId> = ['forest_path', 'terrifying_woods'];
+export const WILDS_MUSIC_TRACKS: ReadonlyArray<MusicTrackId> = [
+  'forest_path',
+  'terrifying_woods',
+  'old_quarter_evening_ending',
+];
 
 /** Fallback interior music for buildings with no soundtrack of their own. */
 export const DEFAULT_BUILDING_MUSIC_TRACKS: ReadonlyArray<MusicTrackId> = [
   'building_default_music_1',
+  'guildhall_waltz',
 ];
 
 /** The Temple of the Sky's own theme, playing while the party is inside. */
@@ -1551,7 +1566,7 @@ export const STREAMING_SOUND_IDS: ReadonlySet<SoundId> = new Set<SoundId>([
   // music/ and jingles/
   'bg_level_1',
   'bg_level_2',
-  'big_tower_music',
+  'big_tower_1',
   'boss_music_1',
   'boss_music_2',
   'boss_music_3',
@@ -1571,8 +1586,11 @@ export const STREAMING_SOUND_IDS: ReadonlySet<SoundId> = new Set<SoundId>([
   'desperado_club_4',
   'fix_the_plumbing_music',
   'forest_path',
+  'guildhall_waltz',
   'medieval_harvest_theme',
-  'prepare_to_defend',
+  'old_quarter_evening_ending',
+  'brace_for_the_horde',
+  'riverside_welcome',
   'siege_theme',
   'slots_free_spins_loop_1',
   'slots_free_spins_loop_2',
@@ -1608,7 +1626,7 @@ export const STREAMING_SOUND_IDS: ReadonlySet<SoundId> = new Set<SoundId>([
  * each time its claim starts it afresh; a track absent here loops from the top.
  */
 export const MUSIC_LOOP_START_S = {
-  prepare_to_defend: 30,
+  brace_for_the_horde: 30,
 } as const satisfies Partial<Record<SoundId, number>>;
 
 /** `MUSIC_LOOP_START_S` for any track; undefined when it loops from the top. */

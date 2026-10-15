@@ -348,6 +348,7 @@ export function backfillFixtures(
         ...DUNGEON_SONGS_TO_FLOOR_3,
         'town_music_1',
         'town_music_2',
+        'riverside_welcome',
         ...CLUB_SONGS,
         ...CASINO_SONGS,
       ],
@@ -355,7 +356,7 @@ export function backfillFixtures(
     {
       name: 'a floor-3 save from the town square, with nothing done off the forced route',
       save: townSave(juicerSlainParty, currentGeneratorVersion, townArrivalState(), {}),
-      expected: [...DUNGEON_SONGS_TO_FLOOR_3, 'town_music_1', 'town_music_2'],
+      expected: [...DUNGEON_SONGS_TO_FLOOR_3, 'town_music_1', 'town_music_2', 'riverside_welcome'],
     },
   ];
 }

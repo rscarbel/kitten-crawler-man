@@ -89,6 +89,11 @@ export const MUSIC_CATALOG = {
       source: 'Pixabay',
     },
   },
+  riverside_welcome: {
+    title: 'Riverside Welcome',
+    area: 'over_city',
+    attribution: { authorName: 'Ryan Scarbel', originalTitle: 'Riverside Welcome' },
+  },
   forest_path: {
     title: 'Where the Path Forgets You',
     area: 'wilds',
@@ -103,6 +108,11 @@ export const MUSIC_CATALOG = {
     title: 'Terrifying Woods',
     area: 'wilds',
     attribution: { authorName: 'Ryan Scarbel', originalTitle: 'Terrifying Woods' },
+  },
+  old_quarter_evening_ending: {
+    title: 'Old Quarter Evening',
+    area: 'wilds',
+    attribution: { authorName: 'Ryan Scarbel', originalTitle: 'Old Quarter Evening (Ending)' },
   },
   briar_hollow_theme: {
     title: 'Hearthsmoke Over Briar Hollow',
@@ -197,7 +207,7 @@ export const MUSIC_CATALOG = {
     attribution: {
       authorName: 'Daniil Kharlamov',
       authorUsername: 'Watermello',
-      originalTitle: 'Sport Techno Short_44s',
+      originalTitle: 'Aggressive Electro Chase',
       source: 'Pixabay',
     },
   },
@@ -266,7 +276,12 @@ export const MUSIC_CATALOG = {
       source: 'Pixabay',
     },
   },
-  big_tower_music: {
+  guildhall_waltz: {
+    title: 'Guildhall Waltz',
+    area: 'interiors',
+    attribution: { authorName: 'Ryan Scarbel', originalTitle: 'Guildhall Waltz' },
+  },
+  big_tower_1: {
     title: 'The Tower Keeps Climbing',
     area: 'interiors',
     attribution: {
@@ -314,7 +329,7 @@ export const MUSIC_CATALOG = {
       source: 'Pixabay',
     },
   },
-  prepare_to_defend: {
+  brace_for_the_horde: {
     title: 'Brace for the Horde',
     area: 'battles',
     attribution: { authorName: 'Ryan Scarbel', originalTitle: 'Prepare to Defend' },

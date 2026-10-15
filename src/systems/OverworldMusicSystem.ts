@@ -2,8 +2,8 @@
  * OverworldMusicSystem — zone-based background music for the Over City
  * overworld: a shuffled town playlist inside the town safe zone, a shuffled
  * circus playlist on the circus grounds, Briar Hollow's own zone inside its palisade, a
- * harvest theme out at the village quarry, and
- * shuffled wilds playlist (forest_path, terrifying_woods) between. Each zone
+ * harvest theme out at the village quarry, and a
+ * shuffled wilds playlist between. Each zone
  * is an area claim; a fight's battle or boss claim outranks it, so crossing a
  * zone edge mid-fight changes nothing that is heard.
  */

@@ -236,7 +236,7 @@ export function musicUnlocksFromProgress(
     murderStageAtLeast(murderStage, 'cult_hideout') ||
     blueprintsPhaseAtLeast(blueprintsPhase, 'midge_delivered')
   ) {
-    unlock(['prepare_to_defend']);
+    unlock(['brace_for_the_horde']);
   }
 
   if (onLevel3) unlock(TOWN_MUSIC_TRACKS);

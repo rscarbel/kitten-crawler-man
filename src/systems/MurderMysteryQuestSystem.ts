@@ -654,7 +654,7 @@ export class MurderMysteryQuestSystem implements GameSystem {
     this.music?.claimMusic({
       owner: 'night_attack',
       layer: 'battle',
-      selection: { kind: 'loop', id: 'prepare_to_defend' },
+      selection: { kind: 'loop', id: 'brace_for_the_horde' },
     });
   }
 

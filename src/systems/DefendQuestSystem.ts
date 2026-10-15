@@ -1486,7 +1486,7 @@ export class DefendQuestSystem implements GameSystem {
     this.music?.claimMusic({
       owner: 'defend_quest',
       layer: 'battle',
-      selection: { kind: 'loop', id: 'prepare_to_defend' },
+      selection: { kind: 'loop', id: 'brace_for_the_horde' },
     });
   }
 
