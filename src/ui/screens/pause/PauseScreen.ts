@@ -63,11 +63,11 @@ export interface PauseFrame {
 
 /**
  * A tutorial step that allows exactly one thing in the menu: opening this
- * crawler's inventory.
+ * crawler's inventory, or the one page it needs (shown straight away).
  */
-export interface PauseRestriction {
-  readonly crawler: CrawlerKind;
-}
+export type PauseRestriction =
+  | { readonly kind: 'inventory'; readonly crawler: CrawlerKind }
+  | { readonly kind: 'section'; readonly section: PauseSectionId };
 
 export interface PauseSurfaceHooks {
   readonly frame: () => PauseFrame;
@@ -132,6 +132,8 @@ interface MenuEntry {
   readonly trailing?: string;
   readonly selected: boolean;
   readonly disabled: string | false;
+  /** The one row a tutorial step sends the player to: it pulses. */
+  readonly guided?: boolean;
   readonly onTap: () => void;
 }
 
@@ -153,8 +155,13 @@ interface Reveal {
   attemptsLeft: number;
 }
 
-function restrictionHint(restriction: PauseRestriction): string {
+function restrictionHint(restriction: Extract<PauseRestriction, { kind: 'inventory' }>): string {
   return `Open ${CRAWLER_NAMES[restriction.crawler]}'s Inventory to continue.`;
+}
+
+/** The menu row a restriction leaves enabled. */
+function allowedEntryId(restriction: PauseRestriction): string {
+  return restriction.kind === 'inventory' ? 'inventory' : restriction.section;
 }
 
 /** Scroll identity for a page: its id, plus its sub-view's key so each view keeps its own offset. */
@@ -192,6 +199,7 @@ export class PauseScreen {
   private pendingReveal: Reveal | null = null;
   private lastFocus: string | null = null;
   private guidedEntry: Rect | null = null;
+  private drawnFrame: Rect | null = null;
   /** The page on screen last frame, for routing keys. */
   private shown: PauseSection | null = null;
   private readonly actions: PauseActions;
@@ -231,6 +239,16 @@ export class PauseScreen {
    */
   get guidedEntryRect(): Rect | null {
     return this.openFlag ? this.guidedEntry : null;
+  }
+
+  /** The page on screen last frame, pinned by a restriction or chosen; null while closed. */
+  get shownSectionId(): PauseSectionId | null {
+    return this.openFlag ? (this.shown?.id ?? null) : null;
+  }
+
+  /** The menu's frame as drawn last frame, in UI units; null while it is closed. */
+  get frameRect(): Rect | null {
+    return this.openFlag ? this.drawnFrame : null;
   }
 
   /** Opens the menu, on `section` when named (straight into it on a phone). */
@@ -355,6 +373,17 @@ export class PauseScreen {
 
   private visibleSections(ctx: PauseContext): PauseSection[] {
     return this.sections.filter((section) => section.available?.(ctx) ?? true);
+  }
+
+  /** The page a restriction pins open, the inventory step's none, or else the usual choice. */
+  private restrictedSectionToShow(
+    ui: Ui,
+    visible: readonly PauseSection[],
+    restriction: PauseRestriction | null,
+  ): PauseSection | null {
+    if (restriction === null) return this.sectionToShow(ui, visible);
+    if (restriction.kind === 'inventory') return null;
+    return visible.find((section) => section.id === restriction.section) ?? null;
   }
 
   /** The page to draw: the chosen one if it is offered, else (off a phone) the first. */
@@ -610,12 +639,14 @@ export class PauseScreen {
     this.guidedEntry = null;
     const restriction = hooks.restriction?.() ?? null;
     const visible = this.visibleSections(ctx);
-    const section = restriction === null ? this.sectionToShow(ui, visible) : null;
+    const section = this.restrictedSectionToShow(ui, visible, restriction);
     this.shown = section;
     this.syncMusicRelease(section);
     this.frameAreas = [];
     const entries = this.menuEntries(ui, ctx, hooks, visible, section, restriction);
-    const onClose = restriction === null ? () => hooks.onEscape() : undefined;
+    // Shown under a tutorial restriction too: a player told to act inside the
+    // menu still needs a visible way back out of it.
+    const onClose = (): void => hooks.onEscape();
 
     if (ui.size === 'compact') {
       this.renderCompact(ui, ctx, entries, section, onClose, restriction);
@@ -630,7 +661,7 @@ export class PauseScreen {
     ctx: PauseContext,
     entries: readonly MenuEntry[],
     section: PauseSection | null,
-    onClose: (() => void) | undefined,
+    onClose: () => void,
     restriction: PauseRestriction | null,
   ): void {
     const { space } = ui.theme;
@@ -642,10 +673,11 @@ export class PauseScreen {
       contentHeight: CARD_BODY_HEIGHT,
       onClose,
     });
+    this.drawnFrame = p.frame;
     const [sidebar, page] = splitH(p.body, [SIDEBAR_WIDTH, 'fill'], space.xl);
     this.scrollArea(ui, 'pause/menu', sidebar, (layout) => this.drawMenu(layout, entries));
 
-    if (restriction !== null) {
+    if (restriction?.kind === 'inventory') {
       this.drawRestrictedPage(ui, page, restriction);
       return;
     }
@@ -709,7 +741,11 @@ export class PauseScreen {
     }
   }
 
-  private drawRestrictedPage(ui: Ui, page: Rect, restriction: PauseRestriction): void {
+  private drawRestrictedPage(
+    ui: Ui,
+    page: Rect,
+    restriction: Extract<PauseRestriction, { kind: 'inventory' }>,
+  ): void {
     const { space } = ui.theme;
     const cardH = lineHeightOf(ui, 'title') + lineHeightOf(ui, 'body') * 2 + space.xl * 2;
     card(
@@ -733,14 +769,14 @@ export class PauseScreen {
     ctx: PauseContext,
     entries: readonly MenuEntry[],
     section: PauseSection | null,
-    onClose: (() => void) | undefined,
+    onClose: () => void,
     restriction: PauseRestriction | null,
   ): void {
     const panelId = `pause-${section === null ? 'menu' : pageKey(section)}`;
     const scrollId = `${panelId}/body`;
     const subView = section?.subView;
     const onBack =
-      section === null
+      section === null || restriction !== null
         ? undefined
         : (): void => {
             if (subView?.active() === true) subView.exit();
@@ -751,7 +787,10 @@ export class PauseScreen {
     const p = panel(ui, {
       id: panelId,
       title: section === null ? 'Paused' : (section.title?.(ctx) ?? section.label),
-      subtitle: restriction === null ? section?.subtitle?.(ctx, ui) : restrictionHint(restriction),
+      subtitle:
+        restriction?.kind === 'inventory'
+          ? restrictionHint(restriction)
+          : section?.subtitle?.(ctx, ui),
       width: 'lg',
       height: 'fill',
       onClose,
@@ -768,6 +807,7 @@ export class PauseScreen {
         holder.layout = drawn;
       },
     });
+    this.drawnFrame = p.frame;
     if (holder.layout !== null) this.recordArea(scrollId, p.body, holder.layout);
   }
 
@@ -846,6 +886,8 @@ export class PauseScreen {
     restriction: PauseRestriction | null,
   ): MenuEntry[] {
     const blocked: string | false = restriction === null ? false : RESTRICTED_REASON;
+    const allowed = restriction === null ? null : allowedEntryId(restriction);
+    const blockedUnless = (id: string): string | false => (id === allowed ? false : blocked);
     const entries: MenuEntry[] = [
       {
         id: 'resume',
@@ -855,7 +897,8 @@ export class PauseScreen {
         badgeTone: 'accent',
         trailing: ui.density === 'pointer' ? 'Esc' : undefined,
         selected: false,
-        disabled: blocked,
+        // Never blocked: a tutorial step that sends the player in leaves the way out open.
+        disabled: false,
         onTap: () => this.close(),
       },
       {
@@ -865,8 +908,10 @@ export class PauseScreen {
         badge: null,
         badgeTone: 'accent',
         selected: false,
-        disabled: false,
-        onTap: () => hooks.openInventory(restriction?.crawler ?? null),
+        disabled: blockedUnless('inventory'),
+        guided: allowed === 'inventory',
+        onTap: () =>
+          hooks.openInventory(restriction?.kind === 'inventory' ? restriction.crawler : null),
       },
     ];
     for (const section of visible) {
@@ -877,7 +922,8 @@ export class PauseScreen {
         badge: section.badge?.(ctx) ?? null,
         badgeTone: section.id === 'achievements' ? 'success' : 'accent',
         selected: ui.size !== 'compact' && shown?.id === section.id,
-        disabled: blocked,
+        disabled: blockedUnless(section.id),
+        guided: allowed === section.id && shown?.id !== section.id,
         onTap: () => this.select(section.id),
       });
     }
@@ -917,11 +963,7 @@ export class PauseScreen {
         onTap: entry.onTap,
       });
       layout.track(rect, state, { focusable: entry.disabled === false });
-      const guided =
-        entry.disabled === false &&
-        entry.id === 'inventory' &&
-        entries.some((other) => other.disabled !== false);
-      if (guided) {
+      if (entry.guided === true) {
         this.guidedEntry = rect;
         const pulse = (Math.sin(ui.now / GUIDE_PULSE_MS) + 1) / 2;
         ui.ctx.save();

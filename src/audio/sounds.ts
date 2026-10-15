@@ -1719,7 +1719,6 @@ export const NON_STREAMING_SOUND_IDS: ReadonlyArray<SoundId> = ALL_SOUND_IDS.fil
  * its every-effect-is-in-a-group rule; wiring one up means removing it here.
  */
 export const UNWIRED_SOUND_IDS = [
-  'door_creak_1',
   'door_creak_2',
   'door_creak_3',
   'door_creak_4',

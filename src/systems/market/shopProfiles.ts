@@ -134,9 +134,9 @@ const FARMER_CATEGORY_MULTIPLIERS: Partial<Record<ItemCategory, number>> = { foo
 
 /**
  * The farmer's rate: Miller's Farm and Pipkin's kitchen both feed a lot of
- * mouths on purpose, so — the brief's own example — food sold here is worth
- * more per unit than at a street vendor's cart, and a big stack barely moves
- * the price at all before it's absorbed.
+ * mouths on purpose, so food sold here is worth more per unit than at a
+ * street vendor's cart, and a big stack barely moves the price at all before
+ * it's absorbed.
  */
 export const FARMER_PRICING: ShopPricingProfile = {
   generalMultiplier: 1,

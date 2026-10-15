@@ -12,6 +12,10 @@
  *
  * Map:
  * - `--level=N` picks the floor and so the ground theme.
+ * - `--tutorial` renders the hand-built tutorial map instead, dressed, in the
+ *   art the game always gives it and with its safe-room counter stamped in;
+ *   frame its rooms with `--x`/`--y`/`--w`/`--h`. It refuses `--seed`,
+ *   `--level` and `--art-seed`, which it has no use for.
  * - `--seed=N` replays one layout: the same seed and level give the same map,
  *   exactly as a save rebuilds the floor it was written on. Without it every run
  *   is a fresh map.
@@ -67,6 +71,7 @@ import { createCanvas } from 'canvas';
 import { loadGameSpritesInNode } from './nodeCanvasGlobals.js';
 import { asGameContext } from './nodeGameContext.js';
 import { FLOOR_ART_SEEDS } from '../src/map/ground/artSeedAlphabet.js';
+import { DEFAULT_FLOOR_ART_SEED } from '../src/map/ground/floorArtSeed.js';
 import { PREVIEW_DIR, writePreviewPng } from './previewOut.js';
 import { TILE_SIZE } from '../src/core/constants.js';
 import { GameMap, type QuestExitDoorState } from '../src/map/GameMap.js';
@@ -78,6 +83,8 @@ import { type Point, type Rect } from '../src/map/roomDoorways.js';
 import { type RoomRegion } from '../src/map/regionMap.js';
 import { ALL_REGION_CHARACTERS, regionCharacterById } from '../src/map/dungeon/roomCharacters.js';
 import { getLevelDef } from '../src/levels/index.js';
+import { tutorialLevel } from '../src/levels/tutorial.js';
+import { TutorialMap } from '../src/map/TutorialMap.js';
 import { dungeonOptionsForLevel } from '../src/levels/dungeonOptions.js';
 import {
   DEFAULT_DUNGEON_FLOOR_THEME,
@@ -190,11 +197,22 @@ function flag(name: string): boolean {
  * art; any other index picks a different member of the alphabet the game itself
  * draws from, which is how the same floor is compared at several seeds.
  */
+const tutorialRequested = flag('tutorial');
+// The tutorial is one hand-built map in one fixed look, so a seed or a level
+// asked for alongside it could only be silently ignored.
+for (const fixedByTutorial of ['seed', 'level', 'art-seed']) {
+  if (tutorialRequested && rawArg(fixedByTutorial) !== undefined) {
+    throw new Error(`--${fixedByTutorial} cannot be combined with --tutorial`);
+  }
+}
+
 const artSeedIndex = intArg('art-seed', 0);
-const artSeed = FLOOR_ART_SEEDS[Math.abs(artSeedIndex) % FLOOR_ART_SEEDS.length];
+const artSeed = tutorialRequested
+  ? DEFAULT_FLOOR_ART_SEED
+  : FLOOR_ART_SEEDS[Math.abs(artSeedIndex) % FLOOR_ART_SEEDS.length];
 
 const floorNumber = intArg('level', DEFAULT_LEVEL);
-const levelDef = getLevelDef(`level${floorNumber}`);
+const levelDef = tutorialRequested ? tutorialLevel : getLevelDef(`level${floorNumber}`);
 if (levelDef.isOverworld) throw new Error(`level${floorNumber} is an overworld — use render-town`);
 
 const worldSeed = optionalIntArg('seed');
@@ -228,14 +246,16 @@ await loadGameSpritesInNode(artSeed);
 // one, so a harness that resolved it differently would not be showing the game.
 setDungeonFloorTheme(levelDef.groundTheme ?? DEFAULT_DUNGEON_FLOOR_THEME);
 
-const gameMap = new GameMap({
-  mapSize: levelDef.mapSize,
-  tileHeight: TILE_SIZE,
-  mapType: 'dungeon',
-  dungeon: dungeonOptionsForLevel(levelDef),
-  artSeed,
-  worldSeed,
-});
+const gameMap = tutorialRequested
+  ? new TutorialMap()
+  : new GameMap({
+      mapSize: levelDef.mapSize,
+      tileHeight: TILE_SIZE,
+      mapType: 'dungeon',
+      dungeon: dungeonOptionsForLevel(levelDef),
+      artSeed,
+      worldSeed,
+    });
 
 // The other framings are the rooms whose contents are decided by the generator
 // rather than by a tile painter — a station's counter run, the nursery's
@@ -286,7 +306,7 @@ if (signKind !== '' && framedSign === undefined) {
 // The generator lays the room; `DungeonScene` stamps the counter run and the
 // furnishings on entering the floor. A harness that skipped them framed an empty
 // station, which is the one thing a station screenshot is not for.
-if (safeRoom !== undefined) {
+if (safeRoom !== undefined || tutorialRequested) {
   stampSafeRoomCounters(gameMap);
   stampSafeRoomDecor(gameMap);
 }

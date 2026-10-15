@@ -18,7 +18,14 @@ import { level1 } from '../src/levels/level1.js';
 import { level2 } from '../src/levels/level2.js';
 import type { LevelDef } from '../src/levels/types.js';
 import { GameMap } from '../src/map/GameMap.js';
-import { TutorialMap } from '../src/map/TutorialMap.js';
+import {
+  TUTORIAL_CAT_ROOM_BOUNDS,
+  TUTORIAL_HUMAN_ROOM_BOUNDS,
+  TUTORIAL_SAFE_ROOM_BOUNDS,
+  TUTORIAL_STAIR_ROOM_BOUNDS,
+  TUTORIAL_TREASURE_ROOM_BOUNDS,
+  TutorialMap,
+} from '../src/map/TutorialMap.js';
 import { DRESSING_TILE_TYPES } from '../src/map/dungeon/roomDressing.js';
 import { HALLWAY_REGION_BASE, NO_REGION } from '../src/map/regionMap.js';
 import type { Rect } from '../src/map/roomDoorways.js';
@@ -30,7 +37,7 @@ const DEFAULT_SEEDS_PER_FLOOR = 8;
 const SEED_STRIDE_PER_FLOOR = 100_000;
 /** Offsets past each grid edge that must read as "no region". */
 const OFF_GRID_PROBES: ReadonlyArray<number> = [-1, 0, 1];
-/** Seeds for the non-progression maps, which must carry an empty region map. */
+/** Seeds for the free-roam maps, which must carry an empty region map. */
 const FREE_ROAM_SEEDS: ReadonlyArray<number> = [3, 5];
 const FREE_ROAM_MAP_SIZE = 100;
 
@@ -79,26 +86,14 @@ interface SweepTotals {
   unregionedBlockers: Map<number, number>;
 }
 
-function checkFloorMap(map: GameMap, totals: SweepTotals): void {
+/**
+ * Every tile's region against the first-match search over `roomBounds`:
+ * room tiles name their room, walkable tiles outside every room a hallway,
+ * rock nothing. Returns how many tiles each hallway region holds.
+ */
+function checkTileRegions(map: GameMap, totals: SweepTotals | null): Map<number, number> {
   const regions = map.regionMap;
-  const layout = map.progressionLayout;
-  check(layout !== undefined, 'a progression floor generated no progression layout');
-  if (layout === undefined) return;
-
   const bounds = map.roomBounds;
-  check(
-    bounds.length === layout.roomBounds.length &&
-      bounds.every((rect, index) => sameRect(rect, layout.roomBounds[index])),
-    'roomBounds does not match the generator’s own room list',
-  );
-  check(bounds.length < HALLWAY_REGION_BASE, 'room ids reach into the hallway id range');
-
-  for (let a = 0; a < bounds.length; a++) {
-    for (let b = a + 1; b < bounds.length; b++) {
-      check(!rectsOverlap(bounds[a], bounds[b]), `rooms ${a} and ${b} overlap`);
-    }
-  }
-
   const height = map.structure.length;
   const width = map.structure[0]?.length ?? 0;
   check(regions.width === width && regions.height === height, 'region grid is not map-sized');
@@ -136,7 +131,7 @@ function checkFloorMap(map: GameMap, totals: SweepTotals): void {
       }
       check(id === NO_REGION, `blocking tile (${x}, ${y}) outside every room has region ${id}`);
       const isRock = tile.type === FloorTypeValue.wall || tile.type === VOID_TYPE;
-      if (id === NO_REGION && !isRock) {
+      if (id === NO_REGION && !isRock && totals !== null) {
         totals.unregionedBlockers.set(
           tile.type,
           (totals.unregionedBlockers.get(tile.type) ?? 0) + 1,
@@ -145,6 +140,33 @@ function checkFloorMap(map: GameMap, totals: SweepTotals): void {
     }
   }
 
+  return hallwayTileCounts;
+}
+
+function checkFloorMap(map: GameMap, totals: SweepTotals): void {
+  const regions = map.regionMap;
+  const layout = map.progressionLayout;
+  check(layout !== undefined, 'a progression floor generated no progression layout');
+  if (layout === undefined) return;
+
+  const bounds = map.roomBounds;
+  check(
+    bounds.length === layout.roomBounds.length &&
+      bounds.every((rect, index) => sameRect(rect, layout.roomBounds[index])),
+    'roomBounds does not match the generator’s own room list',
+  );
+  check(bounds.length < HALLWAY_REGION_BASE, 'room ids reach into the hallway id range');
+
+  for (let a = 0; a < bounds.length; a++) {
+    for (let b = a + 1; b < bounds.length; b++) {
+      check(!rectsOverlap(bounds[a], bounds[b]), `rooms ${a} and ${b} overlap`);
+    }
+  }
+
+  const hallwayTileCounts = checkTileRegions(map, totals);
+
+  const height = map.structure.length;
+  const width = map.structure[0]?.length ?? 0;
   for (const probe of OFF_GRID_PROBES) {
     for (const [x, y] of [
       [-1 - probe, 0],
@@ -249,6 +271,40 @@ function checkEmptyRegionMap(map: GameMap): void {
   }
 }
 
+/**
+ * The tutorial is hand-built but dressed by the generator's passes, so it
+ * carries a region map of its own rooms, in the order its dressing lists them.
+ */
+function checkTutorialRegionMap(map: GameMap): void {
+  const expectedRooms: ReadonlyArray<Rect> = [
+    TUTORIAL_CAT_ROOM_BOUNDS,
+    TUTORIAL_HUMAN_ROOM_BOUNDS,
+    TUTORIAL_TREASURE_ROOM_BOUNDS,
+    TUTORIAL_SAFE_ROOM_BOUNDS,
+    TUTORIAL_STAIR_ROOM_BOUNDS,
+  ];
+  check(
+    map.roomBounds.length === expectedRooms.length &&
+      expectedRooms.every((rect, index) => sameRect(rect, map.roomBounds[index])),
+    'the tutorial region map does not list the tutorial rooms',
+  );
+  checkTileRegions(map, null);
+  check(
+    map.regionMap.hallways.length > 0,
+    'the tutorial halls carry no hallway region to be dressed by',
+  );
+  check(
+    map.safeRooms.length === 1 &&
+      map.regionMap.rooms.find((room) => sameRect(room.bounds, map.safeRooms[0].bounds))?.role ===
+        'safe',
+    'the tutorial safe room does not carry the safe role',
+  );
+  check(
+    map.regionCharacters.roomAssignments().length === expectedRooms.length,
+    'a tutorial room has no assignment, so lighting would skip the tutorial',
+  );
+}
+
 function sweepFloor(name: string, levelDef: LevelDef, floorIndex: number, seeds: number): void {
   const totals: SweepTotals = {
     maps: 0,
@@ -303,7 +359,7 @@ for (const worldSeed of FREE_ROAM_SEEDS) {
   );
 }
 currentLabel = 'tutorial';
-checkEmptyRegionMap(new TutorialMap());
+checkTutorialRegionMap(new TutorialMap());
 
 console.log(`\n${checks - failures}/${checks} checks passed`);
 process.exit(failures === 0 ? 0 : 1);

@@ -4,6 +4,8 @@ import { interiorSellsSomething } from '../systems/townServices';
 import { CONTRACT_CUES } from '../systems/constructionContracts/contractSoundCues';
 import { BATHROOM_CUES } from '../systems/cloggedBathroom/bathroomSoundCues';
 import { PRISON_CUES } from '../systems/stealthKeySnatch/prisonSoundCues';
+import { TUTORIAL_CUES } from '../systems/tutorialSoundCues';
+import { TUTORIAL_LEVEL_ID } from '../levels/tutorial';
 import { INTERIOR_CUES } from '../systems/interiorInteractionSoundCues';
 import { POKER_CUES } from '../systems/casino/poker/pokerSoundCues';
 
@@ -46,6 +48,7 @@ export type SfxGroup =
   | 'interiorCasino'
   | 'interiorCommerce'
   | 'interiorInteractions'
+  | 'tutorial'
   | 'misc';
 
 /**
@@ -912,6 +915,9 @@ export const SFX_GROUPS: Record<SfxGroup, readonly SoundId[]> = {
    */
   interiorInteractions: decodedCueIds(INTERIOR_CUES),
 
+  /** The tutorial's gates (`TUTORIAL_CUES`): only its hand-built cellar raises them. */
+  tutorial: decodedCueIds(TUTORIAL_CUES),
+
   /**
    * No id currently lands here — every non-streaming `SoundId` found a home
    * in one of the groups above. Kept as a documented catch-all so a future id
@@ -953,10 +959,12 @@ export function sfxGroupsForLevelId(levelId: string): readonly SoundId[] {
         ? LEVEL2_SFX_GROUPS
         : levelId === 'level3'
           ? LEVEL3_SFX_GROUPS
-          : // Tutorial and any future level with no dedicated group: universal
-            // already covers menu/combat cues, so there is nothing floor-specific
-            // to add — falling through to `misc` is deliberate, not a gap.
-            ['misc'];
+          : levelId === TUTORIAL_LEVEL_ID
+            ? ['tutorial']
+            : // Any future level with no dedicated group: universal already
+              // covers menu/combat cues, so there is nothing floor-specific to
+              // add — falling through to `misc` is deliberate, not a gap.
+              ['misc'];
   return groups.flatMap((group) => SFX_GROUPS[group]);
 }
 

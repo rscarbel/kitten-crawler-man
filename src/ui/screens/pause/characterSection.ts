@@ -54,6 +54,9 @@ interface StatDef {
   readonly spend: (p: Player) => void;
 }
 
+/** The health stat's card name, on both crawlers' pages. */
+export const CONSTITUTION_STAT_NAME = 'Constitution';
+
 const strengthAccent = (theme: Theme): string => theme.palette.category.weapon;
 const constitutionAccent = (theme: Theme): string => theme.palette.state.success;
 const dexterityAccent = (theme: Theme): string => theme.palette.state.info;
@@ -79,7 +82,7 @@ const HUMAN_STATS: readonly StatDef[] = [
   },
   {
     statName: 'constitution',
-    name: 'Constitution',
+    name: CONSTITUTION_STAT_NAME,
     description: `Toughen up. Each point grants +${CON_HP_BONUS_PER_POINT} maximum HP.`,
     accent: constitutionAccent,
     value: (p) => p.constitution,
@@ -114,7 +117,7 @@ const CAT_STATS: readonly StatDef[] = [
   },
   {
     statName: 'constitution',
-    name: 'Constitution',
+    name: CONSTITUTION_STAT_NAME,
     description: `Nine lives. Each point grants +${CON_HP_BONUS_PER_POINT} maximum HP.`,
     lockedNote:
       'Attribute locked by the System. Pet biscuit enhancement is permanent and non-negotiable.',
@@ -137,6 +140,18 @@ const STATS_BY_CRAWLER: Readonly<Record<CrawlerKind, readonly StatDef[]>> = {
   human: HUMAN_STATS,
   cat: CAT_STATS,
 };
+
+const SPEND_BUTTON_ID_SUFFIX = '/spend';
+
+/** The widget id of a stat card's "+" spend button, for code that points at it. */
+export function statSpendButtonId(crawler: CrawlerKind, statName: string): string {
+  return `${crawler}/${statName}${SPEND_BUTTON_ID_SUFFIX}`;
+}
+
+/** Whether a widget id is one of `crawler`'s stat "+" spend buttons. */
+export function isStatSpendButtonOf(crawler: CrawlerKind, widgetId: string): boolean {
+  return widgetId.startsWith(`${crawler}/`) && widgetId.endsWith(SPEND_BUTTON_ID_SUFFIX);
+}
 
 function crawlerOf(ctx: PauseContext, crawler: CrawlerKind): Player {
   return crawler === 'human' ? ctx.human : ctx.cat;
@@ -255,7 +270,7 @@ function statCard(
       column.track(
         plus,
         iconButton(ui, plus, {
-          id: `${crawler}/${stat.name}/spend`,
+          id: statSpendButtonId(crawler, stat.name),
           icon: 'plus',
           label: `Spend a point on ${stat.name}`,
           variant: 'primary',

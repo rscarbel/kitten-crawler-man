@@ -145,8 +145,9 @@ const HALLWAY_KIND_ORDER: ReadonlyArray<HallwayKind> = ['narrow', 'standard', 'n
  *   hallway with after this map is built: it keeps the id of the segment it
  *   stands in, as a prop in a room keeps the room's.
  *
- * Maps that are not forced-progression dungeon floors get {@link RegionMap.empty},
- * where every tile is {@link NO_REGION}.
+ * The tutorial builds one from its hand-built rooms (`tutorialDressing.ts`);
+ * every other map that is not a forced-progression dungeon floor gets
+ * {@link RegionMap.empty}, where every tile is {@link NO_REGION}.
  */
 export class RegionMap {
   readonly width: number;
@@ -176,7 +177,7 @@ export class RegionMap {
     this.roomBounds = parts.rooms.map((room) => ({ ...room.bounds }));
   }
 
-  /** A map with no regions at all, for overworld, interior, tutorial and free-roam maps. */
+  /** A map with no regions at all, for overworld, interior and free-roam maps. */
   static empty(): RegionMap {
     return new RegionMap({
       width: 0,

@@ -252,7 +252,7 @@ export const worldPalette = {
     structureHp: '#65a30d',
     structureTrack: 'rgba(0,0,0,0.55)',
   },
-  /** The tutorial's pointing arrows, hint box and the barriers that hold a crawler in place. */
+  /** The tutorial's pointing arrows and hint box. */
   guide: {
     accent: '#f59e0b',
     accentEdge: '#78350f',
@@ -262,9 +262,6 @@ export const worldPalette = {
     noticeEdge: '#38bdf8',
     noticeInk: '#e0f2fe',
     labelInk: '#ffffff',
-    barrierFill: 'rgba(220, 60, 30, 0.42)',
-    barrierEdge: 'rgba(255, 140, 80, 0.85)',
-    barrierGlow: 'rgba(255, 100, 40, 0.25)',
   },
   plate: {
     readyFill: 'rgba(12,10,4,0.78)',

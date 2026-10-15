@@ -33,16 +33,19 @@ export const MORDECAI_TUTORIAL_FAREWELL: DialogLine = say.line(
 );
 
 export const MORDECAI_TUTORIAL_REMINDER_OPEN_ACHIEVEMENT: DialogLine = say.line(
-  'Open your achievement notification first — tap the 🏆 banner on the left!',
+  'Claim your achievement first. Tap the gold Achievement banner at the top of the screen.',
 );
 export const MORDECAI_TUTORIAL_REMINDER_SET_UP_ITEMS: DialogLine = say.line(
   'Set up your items from the inventory menu, then come find me.',
 );
 export const MORDECAI_TUTORIAL_REMINDER_SMUSH_GUARDS: DialogLine = say.line(
-  'Head east and use Smush (slot 1) to clear the guards.',
+  'Head west to the iron gate and use Smush (slot 1) on the guards behind it.',
 );
-export const MORDECAI_TUTORIAL_REMINDER_THROUGH_OPENING: DialogLine = say.line(
-  'Head through the opening. Your partner is waiting!',
+export const MORDECAI_TUTORIAL_REMINDER_SPEND_POINT: DialogLine = say.line(
+  'You leveled up! Tap the +1 on your level badge and spend the point on any stat.',
+);
+export const MORDECAI_TUTORIAL_REMINDER_THROUGH_GATE: DialogLine = say.line(
+  'The gate is up. Head through it. Your partner is waiting!',
 );
 export const MORDECAI_TUTORIAL_REMINDER_TREASURE_ROOM: DialogLine = say.line(
   'Head to the treasure room.',
@@ -52,7 +55,10 @@ export const MORDECAI_TUTORIAL_REMINDER_EQUIP_ABILITIES: DialogLine = say.line(
   'Equip your new abilities from the inventory first.',
 );
 export const MORDECAI_TUTORIAL_REMINDER_FIRE_MISSILE: DialogLine = say.line(
-  'Fire your magic missile at the goblin through the gate!',
+  'Fire your magic missile over the fence at the goblin!',
+);
+export const MORDECAI_TUTORIAL_REMINDER_SWITCH_BACK: DialogLine = say.line(
+  'Switch back to Carl. Use the Switch button, or the switch key on a keyboard.',
 );
 export const MORDECAI_TUTORIAL_REMINDER_CALL_CAT: DialogLine = say.line(
   'Use the Follower button to call the cat to you first.',

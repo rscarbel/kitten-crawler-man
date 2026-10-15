@@ -22,6 +22,7 @@ import { figureRowInkTop } from '../sprites/figure/figureFrameCache';
 import { drawSafeRoomBed, restedPulse } from '../sprites/safeRoomBed';
 import { drawStoveSteam } from '../sprites/safeRoomDecor';
 import { drawSpeechBubble } from '../sprites/speechBubble';
+import { drawQuestBeacon } from '../sprites/questBeacon';
 import {
   drawQuestMarker,
   questMarkerColorFor,
@@ -231,6 +232,14 @@ export class SafeRoomSystem implements GameSystem {
       x: e.mordecaiHomeTileX,
       y: e.mordecaiHomeTileY,
     }));
+  }
+
+  /** Where each Mordecai is standing this frame, as world-pixel top-left, in `map.safeRooms` order. */
+  get mordecaiStandingPositions(): Array<{ x: number; y: number }> {
+    return this.entries.map((e) => {
+      const { x, y } = e.wanderer.state;
+      return { x, y };
+    });
   }
 
   get mordecaiMarkers(): MordecaiMinimapMarker[] {
@@ -611,6 +620,11 @@ export class SafeRoomSystem implements GameSystem {
         render: (ctx, camX, camY, ts) => {
           const msx = wander.x - camX;
           const msy = wander.y - camY;
+          // Before the body so the column stands behind him, and from the
+          // glyph's own colour so the beam and the glyph never disagree.
+          if (markerColor !== undefined) {
+            drawQuestBeacon(ctx, msx, msy, ts, camX, camY, performance.now(), markerColor);
+          }
           const drawnRow = drawMordecaiForLevel(
             ctx,
             msx,

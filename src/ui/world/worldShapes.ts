@@ -37,8 +37,6 @@ export interface WorldPlateOptions extends WorldPlateStyle {
   /** A soft glow in the border colour, or in this one. */
   readonly glow?: boolean | string;
   readonly glowBlur?: number;
-  /** The glow haloes the border stroke as well as the fill, so the edge reads as lit. */
-  readonly glowEdge?: boolean;
   /** A drop shadow in the default shadow colour, or in this one. Wins over `glow`. */
   readonly shadow?: boolean | string;
   readonly shadowBlur?: number;
@@ -177,13 +175,7 @@ export function worldPlate(
     ctx.restore();
   }
   if (border !== undefined) {
-    ctx.save();
-    if (opts.glowEdge === true && shadow === false && glow !== false) {
-      ctx.shadowColor = typeof glow === 'string' ? glow : border;
-      ctx.shadowBlur = opts.glowBlur ?? DEFAULT_PLATE_GLOW_BLUR;
-    }
     strokeShape(ctx, rect, radius, border, borderWidth);
-    ctx.restore();
   }
   ctx.restore();
 }

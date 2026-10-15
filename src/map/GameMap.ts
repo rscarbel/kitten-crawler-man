@@ -692,6 +692,12 @@ export interface GameMapOptions {
    */
   prebuiltStructure?: TileContent[][];
   /**
+   * The rooms, characters and wall fixtures a `prebuiltStructure` was dressed
+   * with, so its lighting, floor surfaces and wall art read it exactly as they
+   * read a generated floor. Ignored without `prebuiltStructure`.
+   */
+  prebuiltDressing?: PrebuiltDressing;
+  /**
    * The seed every runtime-painted piece of this map's environment art derives
    * from. Omitted for a map generating its own layout, which draws its own; a
    * building interior passes the town's so that stepping through a door does not
@@ -707,6 +713,13 @@ export interface GameMapOptions {
 }
 
 export type { SpiderLabRoomData };
+
+/** What a hand-built map carries in place of the dungeon generator's dressing output. */
+export interface PrebuiltDressing {
+  readonly regionMap: RegionMap;
+  readonly regionCharacters: RegionCharacters;
+  readonly wallFixtures: ReadonlyArray<WallFixture>;
+}
 
 export class GameMap {
   structure: TileContent[][];
@@ -881,7 +894,9 @@ export class GameMap {
    * Which room or hallway segment each tile was generated as, with each room's
    * role, zone, treasure flag and doorways. Generation data: it rebuilds with
    * the map and is never checkpointed. Empty (every tile `NO_REGION`) on any map
-   * that isn't a forced-progression dungeon floor. See {@link RegionMap}.
+   * that isn't a forced-progression dungeon floor or the tutorial, whose
+   * hand-built rooms are recorded so the same passes dress and light them.
+   * See {@link RegionMap}.
    */
   regionMap: RegionMap = RegionMap.empty();
   /**
@@ -909,9 +924,9 @@ export class GameMap {
 
   /**
    * Every room this map's dungeon generator placed, in placement order — the
-   * same list the generator used to seat encounters. Empty on any map that
-   * isn't a forced-progression dungeon floor (overworld, tutorial, building
-   * interiors, and a free-roam dungeon floor, which doesn't record one).
+   * same list the generator used to seat encounters — or the tutorial's
+   * hand-built rooms. Empty on every other map (overworld, building interiors,
+   * and a free-roam dungeon floor, which doesn't record one).
    * Room membership checks (`roomIndexAt`, `roomBoundsContaining`,
    * `hostilesInRoom`) all read the region map these bounds come from, so they
    * degrade to "no room found" wherever it is empty.
@@ -1087,6 +1102,7 @@ export class GameMap {
       mapType,
       dungeon = { numBossRooms: DEFAULT_BOSS_ROOM_COUNT },
       prebuiltStructure,
+      prebuiltDressing,
       artSeed = drawFloorArtSeed(),
       worldSeed = drawWorldSeed(),
     } = opts;
@@ -1095,6 +1111,9 @@ export class GameMap {
     this.worldSeed = worldSeed;
     if (prebuiltStructure) {
       this.structure = prebuiltStructure;
+      if (prebuiltDressing !== undefined) {
+        this.installDressing(prebuiltStructure, prebuiltDressing, []);
+      }
     } else if (mapType === 'overworld') {
       this.structure = withWorldSeed(worldSeed, () => this.generateOverworldMap(mapSize));
     } else {
@@ -1149,6 +1168,18 @@ export class GameMap {
     return data.grid;
   }
 
+  private installDressing(
+    grid: TileContent[][],
+    dressing: PrebuiltDressing,
+    otherWallArtFeet: ReadonlyArray<{ x: number; y: number }>,
+  ): void {
+    this.regionMap = dressing.regionMap;
+    this.regionCharacters = dressing.regionCharacters;
+    registerWallCharacters(grid, dressing.regionCharacters);
+    this.wallFixtures = dressing.wallFixtures;
+    registerWallFixtureFeet(grid, [...dressing.wallFixtures.map(fixtureFoot), ...otherWallArtFeet]);
+  }
+
   private generateDungeonMap(options: GenerateDungeonOptions): TileContent[][] {
     const data = generateDungeon(options);
     this.startTile = data.startTile;
@@ -1156,14 +1187,7 @@ export class GameMap {
     this.bossRooms = data.bossRooms;
     this.questRooms = data.questRooms;
     this.progressionLayout = data.progressionLayout;
-    this.regionMap = data.regionMap;
-    this.regionCharacters = data.regionCharacters;
-    registerWallCharacters(data.grid, data.regionCharacters);
-    this.wallFixtures = data.wallFixtures;
-    registerWallFixtureFeet(data.grid, [
-      ...data.wallFixtures.map(fixtureFoot),
-      ...prisonWallArtFeet(data.stealthGateRoom),
-    ]);
+    this.installDressing(data.grid, data, prisonWallArtFeet(data.stealthGateRoom));
     registerPrisonWallArt(data.grid, data.stealthGateRoom);
     // The flag goes on now and stays on; what changes is whether it is being
     // honoured. Every floor starts `clear`: the nursery is a room on the way,

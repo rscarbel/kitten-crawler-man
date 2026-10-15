@@ -1,235 +1,490 @@
-import { GameMap } from './GameMap';
+import { GameMap, type GameMapOptions } from './GameMap';
+import { dressTutorial, type TutorialDressingLayout } from './tutorialDressing';
+import { STAIRWELL_FOOTPRINT_SPAN } from './DungeonGenerator';
+import { DEFAULT_FLOOR_ART_SEED } from './ground/floorArtSeed';
 import { TILE_SIZE } from '../core/constants';
+import { mordecaiAndBedTiles } from './safeRoomFixtures';
 import { FloorTypeValue, SAFE_ROOM_FLOOR, STAIRS_DOWN, type TileContent } from './tileTypes';
 
-// Map dimensions
-const MAP_W = 110;
-const MAP_H = 110;
+/** A tile rectangle: `x`/`y` is the top-left tile, `w`/`h` count tiles. */
+export interface TutorialRect {
+  readonly x: number;
+  readonly y: number;
+  readonly w: number;
+  readonly h: number;
+}
 
-// Spawn positions (tile coords)
-const HUMAN_SPAWN_X = 89;
-const HUMAN_SPAWN_Y = 8;
-const CAT_SPAWN_X = 40;
-const CAT_SPAWN_Y = 8;
+export interface TutorialTile {
+  readonly x: number;
+  readonly y: number;
+}
 
-// Room bounds (inclusive, interior floor tiles)
-const CAT_ROOM_X1 = 33;
-const CAT_ROOM_X2 = 47;
-const CAT_ROOM_Y1 = 3;
-const CAT_ROOM_Y2 = 14;
+/**
+ * The camera clamps to the map's edges, so solid wall has to extend at least
+ * half a wide desktop viewport past every room or the crawler stops being
+ * centred near the edge of the layout.
+ */
+const CAMERA_WALL_MARGIN_TILES = 40;
 
-const HUMAN_ROOM_X1 = 82;
-const HUMAN_ROOM_X2 = 96;
-const HUMAN_ROOM_Y1 = 3;
-const HUMAN_ROOM_Y2 = 14;
+const HALL_WIDTH_TILES = 3;
 
-const TREASURE_ROOM_X1 = 33;
-const TREASURE_ROOM_X2 = 50;
-const TREASURE_ROOM_Y1 = 23;
-const TREASURE_ROOM_Y2 = 37;
+const SPAWN_ROOM_W = 9;
+const SPAWN_ROOM_H = 7;
+const TREASURE_ROOM_W = 11;
+const TREASURE_ROOM_H = 9;
+const SAFE_ROOM_W = 14;
+const SAFE_ROOM_H = 10;
+const STAIR_ROOM_W = 9;
+const STAIR_ROOM_H = 7;
 
-const SAFE_ROOM_X1 = 58;
-const SAFE_ROOM_X2 = 97;
-const SAFE_ROOM_Y1 = 37;
-const SAFE_ROOM_Y2 = 57;
+/** Corridor rows between Donut's spawn room and the treasure room. */
+const CAT_HALL_LENGTH_TILES = 3;
+/** Corridor rows between Carl's spawn room and the safe room. */
+const HUMAN_HALL_LENGTH_TILES = 12;
+/** Corridor rows between the safe room and the stair room. */
+const STAIR_HALL_LENGTH_TILES = 4;
 
-const STAIR_ROOM_X1 = 67;
-const STAIR_ROOM_X2 = 86;
-const STAIR_ROOM_Y1 = 67;
-const STAIR_ROOM_Y2 = 78;
+/** Rows into Carl's hallway goblin A waits, so he is on screen soon after Carl sets off. */
+const GOBLIN_A_ROWS_INTO_HALL = 4;
+/** Rows into Donut's hallway gate G1 sits, so she can see it from her room. */
+const GATE_G1_ROWS_INTO_HALL = 1;
+/**
+ * Rows below the treasure room gate G2 sits: none, so it stands in the
+ * room's doorway and goblin B, just past it, is as far north as he can be.
+ * He has to be: Carl, held south of goblin B's door, must stand beyond a
+ * level-1 Smush's outer blast from him, with room to spare.
+ */
+const GATE_G2_ROWS_INTO_HALL = 0;
+/** Rows past G2 goblin B stands: close enough that Donut, stopped at G2, has him on screen. */
+const GOBLIN_B_ROWS_PAST_G2 = 1;
+const GATE_G3_ROWS_INTO_HALL = 1;
+/** Columns east of the west hallway the smush guards stand. */
+const SMUSH_GUARD_COLUMNS_PAST_WEST_HALL = 3;
+/**
+ * Columns between the smush gate and the safe room's west wall. Carl is
+ * held one column east of the gate, two from the guards, which keeps both
+ * guards inside a level-1 Smush's outer blast.
+ */
+const SMUSH_GATE_COLUMNS_FROM_SAFE_ROOM = 4;
+/**
+ * Columns from the safe room's west wall to the centre of Carl's doorway. Far
+ * enough east that the Bopca counter, which avoids north-wall doorway columns,
+ * still gets a full-length run west of the door.
+ */
+const HUMAN_DOOR_COLUMNS_INTO_SAFE_ROOM = 10;
 
-// Hallway bounds
-const CAT_HALL_X1 = 38;
-const CAT_HALL_X2 = 42;
-const CAT_HALL_Y1 = 14;
-const CAT_HALL_Y2 = 23;
+function centredStart(centre: number, span: number): number {
+  return centre - Math.floor(span / 2);
+}
 
-const HUMAN_HALL_X1 = 86;
-const HUMAN_HALL_X2 = 90;
-const HUMAN_HALL_Y1 = 14;
-const HUMAN_HALL_Y2 = 37;
+function rectFromInclusive(x1: number, y1: number, x2: number, y2: number): TutorialRect {
+  return { x: x1, y: y1, w: x2 - x1 + 1, h: y2 - y1 + 1 };
+}
 
-const L_VERT_X1 = 38;
-const L_VERT_X2 = 42;
-const L_VERT_Y1 = 37;
-const L_VERT_Y2 = 52;
+function lastX(rect: TutorialRect): number {
+  return rect.x + rect.w - 1;
+}
 
-const L_HORIZ_X1 = 41;
-const L_HORIZ_X2 = 58;
-const L_HORIZ_Y1 = 47;
-const L_HORIZ_Y2 = 52;
+function lastY(rect: TutorialRect): number {
+  return rect.y + rect.h - 1;
+}
 
-const BELOW_SAFE_X1 = 73;
-const BELOW_SAFE_X2 = 77;
-const BELOW_SAFE_Y1 = 57;
-const BELOW_SAFE_Y2 = 67;
+function centreTile(rect: TutorialRect): TutorialTile {
+  return { x: rect.x + Math.floor(rect.w / 2), y: rect.y + Math.floor(rect.h / 2) };
+}
 
-// Stairwell tile
-const STAIR_X = 76;
-const STAIR_Y = 72;
+/** Whether a (possibly fractional) tile position lies inside the rect. */
+export function isInTutorialRect(rect: TutorialRect, tileX: number, tileY: number): boolean {
+  return tileX >= rect.x && tileX < rect.x + rect.w && tileY >= rect.y && tileY < rect.y + rect.h;
+}
 
-// Safe room geometry
-const SAFE_W = SAFE_ROOM_X2 - SAFE_ROOM_X1 + 1; // 40 tiles
-const SAFE_H = SAFE_ROOM_Y2 - SAFE_ROOM_Y1 + 1; // 21 tiles
-const SAFE_CENTRE_X = Math.floor(SAFE_ROOM_X1 + SAFE_W / 2); // 48
-const SAFE_CENTRE_Y = Math.floor(SAFE_ROOM_Y1 + SAFE_H / 2); // 47
+// Donut's column: her room, her hallway, the treasure room and the west
+// hallway all centre on it. The treasure room is the widest, so it sets how far
+// the column sits from the west margin.
+const CAT_COLUMN_X = CAMERA_WALL_MARGIN_TILES + Math.floor(TREASURE_ROOM_W / 2);
+const SPAWN_ROOM_Y1 = CAMERA_WALL_MARGIN_TILES;
 
-// Gate / ledge blocking rows and columns
-const GATE_G1_ROW = 16;
-const GATE_G2_ROW = 42;
-const GATE_G3_ROW = 59;
-const LEDGE_COL = 52;
+export const TUTORIAL_CAT_ROOM_BOUNDS: TutorialRect = {
+  x: centredStart(CAT_COLUMN_X, SPAWN_ROOM_W),
+  y: SPAWN_ROOM_Y1,
+  w: SPAWN_ROOM_W,
+  h: SPAWN_ROOM_H,
+};
 
-// Virtual gate / ledge positions (managed by TutorialController)
-/** Gate G1: blocks cat from exiting spawn room. Row y=16 in the cat hallway. */
+export const TUTORIAL_CAT_HALL_BOUNDS: TutorialRect = {
+  x: centredStart(CAT_COLUMN_X, HALL_WIDTH_TILES),
+  y: lastY(TUTORIAL_CAT_ROOM_BOUNDS) + 1,
+  w: HALL_WIDTH_TILES,
+  h: CAT_HALL_LENGTH_TILES,
+};
+
+/** Treasure room bounds — used when placing the tutorial chest and to tell when Donut has arrived. */
+export const TUTORIAL_TREASURE_ROOM_BOUNDS: TutorialRect = {
+  x: centredStart(CAT_COLUMN_X, TREASURE_ROOM_W),
+  y: lastY(TUTORIAL_CAT_HALL_BOUNDS) + 1,
+  w: TREASURE_ROOM_W,
+  h: TREASURE_ROOM_H,
+};
+
+const GATE_G2_ROW = lastY(TUTORIAL_TREASURE_ROOM_BOUNDS) + 1 + GATE_G2_ROWS_INTO_HALL;
+const GOBLIN_B_Y = GATE_G2_ROW + GOBLIN_B_ROWS_PAST_G2;
+
+const WEST_HALL_X1 = centredStart(CAT_COLUMN_X, HALL_WIDTH_TILES);
+const WEST_HALL_X2 = WEST_HALL_X1 + HALL_WIDTH_TILES - 1;
+const SMUSH_GUARD_X = WEST_HALL_X2 + SMUSH_GUARD_COLUMNS_PAST_WEST_HALL;
+const SMUSH_GATE_COL = SMUSH_GUARD_X + 1;
+const SAFE_ROOM_X1 = SMUSH_GATE_COL + SMUSH_GATE_COLUMNS_FROM_SAFE_ROOM;
+const HUMAN_COLUMN_X = SAFE_ROOM_X1 + HUMAN_DOOR_COLUMNS_INTO_SAFE_ROOM;
+
+export const TUTORIAL_HUMAN_ROOM_BOUNDS: TutorialRect = {
+  x: centredStart(HUMAN_COLUMN_X, SPAWN_ROOM_W),
+  y: SPAWN_ROOM_Y1,
+  w: SPAWN_ROOM_W,
+  h: SPAWN_ROOM_H,
+};
+
+export const TUTORIAL_HUMAN_HALL_BOUNDS: TutorialRect = {
+  x: centredStart(HUMAN_COLUMN_X, HALL_WIDTH_TILES),
+  y: lastY(TUTORIAL_HUMAN_ROOM_BOUNDS) + 1,
+  w: HALL_WIDTH_TILES,
+  h: HUMAN_HALL_LENGTH_TILES,
+};
+
+export const TUTORIAL_SAFE_ROOM_BOUNDS: TutorialRect = {
+  x: SAFE_ROOM_X1,
+  y: lastY(TUTORIAL_HUMAN_HALL_BOUNDS) + 1,
+  w: SAFE_ROOM_W,
+  h: SAFE_ROOM_H,
+};
+
+/**
+ * The connector into the safe room's west wall. It hugs the room's bottom
+ * interior row, leaving the rows above it to Mordecai's patch and the counter.
+ */
+export const TUTORIAL_L_HORIZONTAL_HALL_BOUNDS: TutorialRect = rectFromInclusive(
+  WEST_HALL_X2 + 1,
+  lastY(TUTORIAL_SAFE_ROOM_BOUNDS) - HALL_WIDTH_TILES,
+  TUTORIAL_SAFE_ROOM_BOUNDS.x - 1,
+  lastY(TUTORIAL_SAFE_ROOM_BOUNDS) - 1,
+);
+
+/** South out of the treasure room, past G2 and goblin B, down to the connector. */
+export const TUTORIAL_L_VERTICAL_HALL_BOUNDS: TutorialRect = rectFromInclusive(
+  WEST_HALL_X1,
+  lastY(TUTORIAL_TREASURE_ROOM_BOUNDS) + 1,
+  WEST_HALL_X2,
+  lastY(TUTORIAL_L_HORIZONTAL_HALL_BOUNDS),
+);
+
+const SAFE_ROOM_CENTRE = centreTile(TUTORIAL_SAFE_ROOM_BOUNDS);
+
+export const TUTORIAL_STAIR_HALL_BOUNDS: TutorialRect = {
+  x: centredStart(SAFE_ROOM_CENTRE.x, HALL_WIDTH_TILES),
+  y: lastY(TUTORIAL_SAFE_ROOM_BOUNDS) + 1,
+  w: HALL_WIDTH_TILES,
+  h: STAIR_HALL_LENGTH_TILES,
+};
+
+export const TUTORIAL_STAIR_ROOM_BOUNDS: TutorialRect = {
+  x: centredStart(SAFE_ROOM_CENTRE.x, STAIR_ROOM_W),
+  y: lastY(TUTORIAL_STAIR_HALL_BOUNDS) + 1,
+  w: STAIR_ROOM_W,
+  h: STAIR_ROOM_H,
+};
+
+const TUTORIAL_ROOMS: ReadonlyArray<TutorialRect> = [
+  TUTORIAL_CAT_ROOM_BOUNDS,
+  TUTORIAL_HUMAN_ROOM_BOUNDS,
+  TUTORIAL_TREASURE_ROOM_BOUNDS,
+  TUTORIAL_STAIR_ROOM_BOUNDS,
+];
+
+const TUTORIAL_HALLS: ReadonlyArray<TutorialRect> = [
+  TUTORIAL_CAT_HALL_BOUNDS,
+  TUTORIAL_HUMAN_HALL_BOUNDS,
+  TUTORIAL_L_VERTICAL_HALL_BOUNDS,
+  TUTORIAL_L_HORIZONTAL_HALL_BOUNDS,
+  TUTORIAL_STAIR_HALL_BOUNDS,
+];
+
+const ALL_CARVED: ReadonlyArray<TutorialRect> = [
+  ...TUTORIAL_ROOMS,
+  TUTORIAL_SAFE_ROOM_BOUNDS,
+  ...TUTORIAL_HALLS,
+];
+
+const MAP_W = Math.max(...ALL_CARVED.map((rect) => lastX(rect))) + 1 + CAMERA_WALL_MARGIN_TILES;
+const MAP_H = Math.max(...ALL_CARVED.map((rect) => lastY(rect))) + 1 + CAMERA_WALL_MARGIN_TILES;
+
+/** The safe room as `SafeRoomSystem` and the counter/decor stampers read it. */
+export const TUTORIAL_SAFE_ROOM = {
+  bounds: TUTORIAL_SAFE_ROOM_BOUNDS,
+  centre: SAFE_ROOM_CENTRE,
+} as const;
+
+/**
+ * Mordecai's home tile, from the same fixture geometry `SafeRoomSystem` places
+ * him with. He wanders around it, so prefer his live position where one is to hand.
+ */
+export const TUTORIAL_MORDECAI_HOME_TILE: TutorialTile = mordecaiAndBedTiles(TUTORIAL_SAFE_ROOM)[0];
+
+export const TUTORIAL_CAT_SPAWN_TILE: TutorialTile = centreTile(TUTORIAL_CAT_ROOM_BOUNDS);
+export const TUTORIAL_HUMAN_SPAWN_TILE: TutorialTile = centreTile(TUTORIAL_HUMAN_ROOM_BOUNDS);
+
+/** The doorway tile where Carl's hallway opens into the safe room. */
+export const TUTORIAL_SAFE_ENTRANCE_TILE: TutorialTile = {
+  x: HUMAN_COLUMN_X,
+  y: TUTORIAL_SAFE_ROOM_BOUNDS.y,
+};
+
+// Virtual gates: `TutorialGates` (src/systems/tutorialGates.ts) clamps crawler positions against them.
+
+const GATE_G1_ROW = TUTORIAL_CAT_HALL_BOUNDS.y + GATE_G1_ROWS_INTO_HALL;
+const GATE_G3_ROW = TUTORIAL_STAIR_HALL_BOUNDS.y + GATE_G3_ROWS_INTO_HALL;
+const SAFE_ENTRANCE_GATE_ROW = lastY(TUTORIAL_HUMAN_HALL_BOUNDS);
+
+/** Gate G1: keeps Donut in her spawn room until the camera pans to her. */
 export const TUTORIAL_GATE_G1 = {
-  x1: CAT_HALL_X1,
-  x2: CAT_HALL_X2,
+  x1: TUTORIAL_CAT_HALL_BOUNDS.x,
+  x2: lastX(TUTORIAL_CAT_HALL_BOUNDS),
   y: GATE_G1_ROW,
-  /** Max pixel-Y the cat may reach while this gate is closed. */
+  /** Max pixel-Y a crawler north of the gate may reach while it is closed. */
   clampPxY: (GATE_G1_ROW - 1) * TILE_SIZE,
 } as const;
 
-/** Gate G2: blocks cat from exiting below-treasure hallway. Row y=42. */
+/**
+ * Gate G2: the knee-high fence south of the treasure room that Donut fires
+ * Magic Missile over. Its double gate swings open when she is called to Carl.
+ */
 export const TUTORIAL_GATE_G2 = {
-  x1: L_VERT_X1,
-  x2: L_VERT_X2,
+  x1: WEST_HALL_X1,
+  x2: WEST_HALL_X2,
   y: GATE_G2_ROW,
+  /** Max pixel-Y a crawler north of the gate (Donut) may reach while it is closed. */
   clampPxY: (GATE_G2_ROW - 1) * TILE_SIZE,
+  /** Min pixel-Y a crawler south of the gate (Carl, from the connector) may reach while it is closed. */
+  southClampPxY: (GATE_G2_ROW + 1) * TILE_SIZE,
 } as const;
 
-/** Gate G3: blocks access to below-safe hallway. Row y=59. */
+/** Gate G3: holds both crawlers in the safe room until Mordecai's farewell has been heard. */
 export const TUTORIAL_GATE_G3 = {
-  x1: BELOW_SAFE_X1,
-  x2: BELOW_SAFE_X2,
+  x1: TUTORIAL_STAIR_HALL_BOUNDS.x,
+  x2: lastX(TUTORIAL_STAIR_HALL_BOUNDS),
   y: GATE_G3_ROW,
   clampPxY: (GATE_G3_ROW - 1) * TILE_SIZE,
 } as const;
 
-/**
- * Safe-entrance gate: blocks human from entering the safe room until goblin A is defeated.
- * Sits at the bottom of the human hallway where it meets the safe room top (y=37).
- */
+/** Safe-entrance gate: in the doorway of Carl's hallway, shut until goblin A is defeated. */
 export const TUTORIAL_GATE_SAFE_ENTRANCE = {
-  x1: HUMAN_HALL_X1,
-  x2: HUMAN_HALL_X2,
-  y: SAFE_ROOM_Y1,
-  clampPxY: (SAFE_ROOM_Y1 - 1) * TILE_SIZE,
+  x1: TUTORIAL_HUMAN_HALL_BOUNDS.x,
+  x2: lastX(TUTORIAL_HUMAN_HALL_BOUNDS),
+  y: SAFE_ENTRANCE_GATE_ROW,
+  clampPxY: (SAFE_ENTRANCE_GATE_ROW - 1) * TILE_SIZE,
 } as const;
 
 /**
- * Ledge: blocks human from going west past x=22 in the L-shaped hallway.
- * Guards are at x=21 (just beyond the ledge).
+ * The row of goblin B's door: the last row of the west hallway before the
+ * connector joins it, as far south of him as the hall allows, so Carl,
+ * coming round from the smush guards, can never reach goblin B and take the
+ * cat's Magic Missile lesson from her.
  */
-export const TUTORIAL_LEDGE = {
-  x: LEDGE_COL,
-  y1: L_HORIZ_Y1,
-  y2: L_HORIZ_Y2,
-  /** Min pixel-X human may reach while ledge is active. */
-  clampPxX: (LEDGE_COL + 1) * TILE_SIZE,
+const GOBLIN_B_DOOR_ROW = TUTORIAL_L_HORIZONTAL_HALL_BOUNDS.y - 1;
+
+/**
+ * Goblin B's door: a solid cellar door, not a portcullis, so it never looks
+ * like the gate Carl was taught to Smush through. It shuts goblin B in
+ * between the fence and the connector until the cat's missile kills him.
+ */
+export const TUTORIAL_GOBLIN_B_DOOR = {
+  x1: WEST_HALL_X1,
+  x2: WEST_HALL_X2,
+  y: GOBLIN_B_DOOR_ROW,
+  /** Max pixel-Y a crawler north of the door may reach while it is closed. */
+  clampPxY: (GOBLIN_B_DOOR_ROW - 1) * TILE_SIZE,
+  /** Min pixel-Y a crawler south of the door (Carl, from the connector) may reach while it is closed. */
+  southClampPxY: (GOBLIN_B_DOOR_ROW + 1) * TILE_SIZE,
 } as const;
 
-//  Tutorial mob and object positions
-/** First combat goblin — in human hallway, aggros normally but deals 0 damage. */
-export const GOBLIN_A_POS = { x: 88, y: 22 } as const;
+/** The portcullis across the connector, running north–south, that keeps Carl east of the smush guards. */
+export const TUTORIAL_GATE_SMUSH = {
+  x: SMUSH_GATE_COL,
+  y1: TUTORIAL_L_HORIZONTAL_HALL_BOUNDS.y,
+  y2: lastY(TUTORIAL_L_HORIZONTAL_HALL_BOUNDS),
+  /** Min pixel-X Carl may reach while the gate is shut. */
+  clampPxX: (SMUSH_GATE_COL + 1) * TILE_SIZE,
+} as const;
+
+/** First combat goblin — in Carl's hallway, aggros normally but deals 0 damage. */
+export const GOBLIN_A_POS: TutorialTile = {
+  x: HUMAN_COLUMN_X,
+  y: TUTORIAL_HUMAN_HALL_BOUNDS.y + GOBLIN_A_ROWS_INTO_HALL,
+};
 /** Magic-missile demo target behind G2. */
-export const GOBLIN_B_POS = { x: 40, y: 44 } as const;
-/** Two stationary smush-demo guards beyond the ledge. */
-export const SMUSH_GUARD_1_POS = { x: 51, y: 49 } as const;
-export const SMUSH_GUARD_2_POS = { x: 51, y: 50 } as const;
-/** Treasure chest in the treasure room. */
-export const TUTORIAL_CHEST_POS = { x: 41, y: 30 } as const;
-/** Stairwell tile. */
-export const TUTORIAL_STAIR_POS = { x: STAIR_X, y: STAIR_Y } as const;
-
-/** Treasure room bounding box — used when placing the tutorial chest. */
-export const TUTORIAL_TREASURE_ROOM_BOUNDS = {
-  x: TREASURE_ROOM_X1,
-  y: TREASURE_ROOM_Y1,
-  w: TREASURE_ROOM_X2 - TREASURE_ROOM_X1 + 1,
-  h: TREASURE_ROOM_Y2 - TREASURE_ROOM_Y1 + 1,
-} as const;
+export const GOBLIN_B_POS: TutorialTile = { x: CAT_COLUMN_X, y: GOBLIN_B_Y };
+/** Two stationary smush-demo guards just west of the smush gate, on the connector's outer rows. */
+export const SMUSH_GUARD_1_POS: TutorialTile = {
+  x: SMUSH_GUARD_X,
+  y: TUTORIAL_L_HORIZONTAL_HALL_BOUNDS.y,
+};
+export const SMUSH_GUARD_2_POS: TutorialTile = {
+  x: SMUSH_GUARD_X,
+  y: lastY(TUTORIAL_L_HORIZONTAL_HALL_BOUNDS),
+};
+/** Treasure chest, in the middle of the treasure room and in line with Donut's hallway. */
+export const TUTORIAL_CHEST_POS: TutorialTile = centreTile(TUTORIAL_TREASURE_ROOM_BOUNDS);
+export const TUTORIAL_STAIR_POS: TutorialTile = centreTile(TUTORIAL_STAIR_ROOM_BOUNDS);
+/** Every tile the stairwell covers: it is drawn from {@link TUTORIAL_STAIR_POS} as its top-left. */
+export const TUTORIAL_STAIR_FOOTPRINT: TutorialRect = {
+  ...TUTORIAL_STAIR_POS,
+  w: STAIRWELL_FOOTPRINT_SPAN,
+  h: STAIRWELL_FOOTPRINT_SPAN,
+};
 
 function makeTile(x: number, y: number, type: number): TileContent {
   return { tileId: `${x}#${y}`, type };
 }
 
-function fillRect(
-  grid: TileContent[][],
-  x1: number,
-  y1: number,
-  x2: number,
-  y2: number,
-  type: number,
-): void {
-  for (let y = y1; y <= y2; y++) {
-    for (let x = x1; x <= x2; x++) {
+function fillRect(grid: TileContent[][], rect: TutorialRect, type: number): void {
+  for (let y = rect.y; y <= lastY(rect); y++) {
+    for (let x = rect.x; x <= lastX(rect); x++) {
       grid[y][x] = makeTile(x, y, type);
     }
   }
 }
 
 function buildStructure(): TileContent[][] {
-  const WALL = FloorTypeValue.wall;
-  const FLOOR = FloorTypeValue.tile_floor;
-  const SAFE = SAFE_ROOM_FLOOR;
-
-  // Start fully walled.
   const grid: TileContent[][] = Array.from({ length: MAP_H }, (_, y) =>
-    Array.from({ length: MAP_W }, (_, x) => makeTile(x, y, WALL)),
+    Array.from({ length: MAP_W }, (_, x) => makeTile(x, y, FloorTypeValue.wall)),
   );
 
-  // Carve rooms.
-  fillRect(grid, CAT_ROOM_X1, CAT_ROOM_Y1, CAT_ROOM_X2, CAT_ROOM_Y2, FLOOR);
-  fillRect(grid, HUMAN_ROOM_X1, HUMAN_ROOM_Y1, HUMAN_ROOM_X2, HUMAN_ROOM_Y2, FLOOR);
-  fillRect(grid, TREASURE_ROOM_X1, TREASURE_ROOM_Y1, TREASURE_ROOM_X2, TREASURE_ROOM_Y2, FLOOR);
-  fillRect(grid, SAFE_ROOM_X1, SAFE_ROOM_Y1, SAFE_ROOM_X2, SAFE_ROOM_Y2, SAFE);
-  fillRect(grid, STAIR_ROOM_X1, STAIR_ROOM_Y1, STAIR_ROOM_X2, STAIR_ROOM_Y2, FLOOR);
+  for (const rect of [...TUTORIAL_ROOMS, ...TUTORIAL_HALLS]) {
+    fillRect(grid, rect, FloorTypeValue.tile_floor);
+  }
+  fillRect(grid, TUTORIAL_SAFE_ROOM_BOUNDS, SAFE_ROOM_FLOOR);
 
-  // Carve hallways.
-  fillRect(grid, CAT_HALL_X1, CAT_HALL_Y1, CAT_HALL_X2, CAT_HALL_Y2, FLOOR);
-  fillRect(grid, HUMAN_HALL_X1, HUMAN_HALL_Y1, HUMAN_HALL_X2, HUMAN_HALL_Y2, FLOOR);
-  fillRect(grid, L_VERT_X1, L_VERT_Y1, L_VERT_X2, L_VERT_Y2, FLOOR);
-  fillRect(grid, L_HORIZ_X1, L_HORIZ_Y1, L_HORIZ_X2, L_HORIZ_Y2, FLOOR);
-  fillRect(grid, BELOW_SAFE_X1, BELOW_SAFE_Y1, BELOW_SAFE_X2, BELOW_SAFE_Y2, FLOOR);
-
-  // Place the stairwell tile.
-  grid[STAIR_Y][STAIR_X] = makeTile(STAIR_X, STAIR_Y, STAIRS_DOWN);
+  grid[TUTORIAL_STAIR_POS.y][TUTORIAL_STAIR_POS.x] = makeTile(
+    TUTORIAL_STAIR_POS.x,
+    TUTORIAL_STAIR_POS.y,
+    STAIRS_DOWN,
+  );
 
   return grid;
+}
+
+/** Tiles across a gate's line kept clear: the line itself and one either side. */
+const GATE_KEEP_CLEAR_SPAN_TILES = 3;
+const GATE_KEEP_CLEAR_MARGIN_TILES = 1;
+
+/** A gate's row across its hall, with the row either side kept clear too. */
+function gateRowKeepClear(hall: TutorialRect, row: number): TutorialRect {
+  return {
+    x: hall.x,
+    y: row - GATE_KEEP_CLEAR_MARGIN_TILES,
+    w: hall.w,
+    h: GATE_KEEP_CLEAR_SPAN_TILES,
+  };
+}
+
+/** The column from a tile straight down to the last row of its room. */
+function columnToRoomBottom(room: TutorialRect, from: TutorialTile): TutorialRect {
+  return { x: from.x, y: from.y, w: 1, h: lastY(room) - from.y + 1 };
+}
+
+function singleTile(tile: TutorialTile): TutorialRect {
+  return { x: tile.x, y: tile.y, w: 1, h: 1 };
+}
+
+function tutorialDressingLayout(grid: TileContent[][]): TutorialDressingLayout {
+  const smushGateKeepClear: TutorialRect = {
+    x: SMUSH_GATE_COL - GATE_KEEP_CLEAR_MARGIN_TILES,
+    y: TUTORIAL_L_HORIZONTAL_HALL_BOUNDS.y,
+    w: GATE_KEEP_CLEAR_SPAN_TILES,
+    h: TUTORIAL_L_HORIZONTAL_HALL_BOUNDS.h,
+  };
+  const stairApproach: TutorialRect = {
+    x: TUTORIAL_STAIR_POS.x,
+    y: TUTORIAL_STAIR_ROOM_BOUNDS.y,
+    w: 1,
+    h: TUTORIAL_STAIR_POS.y - TUTORIAL_STAIR_ROOM_BOUNDS.y,
+  };
+  return {
+    grid,
+    rooms: [
+      { bounds: TUTORIAL_CAT_ROOM_BOUNDS, kind: 'start', floor: FloorTypeValue.tile_floor },
+      { bounds: TUTORIAL_HUMAN_ROOM_BOUNDS, kind: 'start', floor: FloorTypeValue.tile_floor },
+      { bounds: TUTORIAL_TREASURE_ROOM_BOUNDS, kind: 'treasure', floor: FloorTypeValue.tile_floor },
+      { bounds: TUTORIAL_SAFE_ROOM_BOUNDS, kind: 'safe', floor: SAFE_ROOM_FLOOR },
+      { bounds: TUTORIAL_STAIR_ROOM_BOUNDS, kind: 'exit', floor: FloorTypeValue.tile_floor },
+    ],
+    halls: TUTORIAL_HALLS,
+    keepClear: [
+      gateRowKeepClear(TUTORIAL_CAT_HALL_BOUNDS, GATE_G1_ROW),
+      gateRowKeepClear(TUTORIAL_L_VERTICAL_HALL_BOUNDS, GATE_G2_ROW),
+      gateRowKeepClear(TUTORIAL_L_VERTICAL_HALL_BOUNDS, GOBLIN_B_DOOR_ROW),
+      gateRowKeepClear(TUTORIAL_STAIR_HALL_BOUNDS, GATE_G3_ROW),
+      gateRowKeepClear(TUTORIAL_HUMAN_HALL_BOUNDS, SAFE_ENTRANCE_GATE_ROW),
+      smushGateKeepClear,
+      columnToRoomBottom(TUTORIAL_CAT_ROOM_BOUNDS, TUTORIAL_CAT_SPAWN_TILE),
+      columnToRoomBottom(TUTORIAL_HUMAN_ROOM_BOUNDS, TUTORIAL_HUMAN_SPAWN_TILE),
+      columnToRoomBottom(TUTORIAL_TREASURE_ROOM_BOUNDS, {
+        x: TUTORIAL_CHEST_POS.x,
+        y: TUTORIAL_TREASURE_ROOM_BOUNDS.y,
+      }),
+      // Mordecai wanders the safe room and its counter and decor are stamped
+      // in at runtime, so nothing else is set down in it.
+      TUTORIAL_SAFE_ROOM_BOUNDS,
+      stairApproach,
+      TUTORIAL_STAIR_FOOTPRINT,
+      singleTile(GOBLIN_A_POS),
+      singleTile(GOBLIN_B_POS),
+      singleTile(SMUSH_GUARD_1_POS),
+      singleTile(SMUSH_GUARD_2_POS),
+    ],
+    chestTile: TUTORIAL_CHEST_POS,
+    stairTile: TUTORIAL_STAIR_POS,
+  };
+}
+
+function tutorialMapOptions(): GameMapOptions {
+  const grid = buildStructure();
+  return {
+    prebuiltStructure: grid,
+    prebuiltDressing: dressTutorial(tutorialDressingLayout(grid)),
+    // A new player's first look at the game is the reviewed art, every time.
+    artSeed: DEFAULT_FLOOR_ART_SEED,
+    tileHeight: TILE_SIZE,
+  };
 }
 
 /**
  * The hand-crafted tutorial map.
  * Layout: separate cat/human spawn rooms → hallways → treasure room (cat side) →
- * L-shaped connector → safe room → stairwell.
+ * L-shaped connector → safe room → stair room.
  *
- * Virtual gates and the ledge are enforced by TutorialController by clamping
- * player positions, so ALL tiles are walkable from a type perspective. This lets
- * magic missiles pass through closed gates.
+ * Its gates are virtual: `TutorialGates` (src/systems/tutorialGates.ts)
+ * clamps crawler positions against them, so every tile is walkable from a type perspective. That lets a Magic
+ * Missile fly across a shut gate.
  */
 export class TutorialMap extends GameMap {
-  /** Tile where the cat spawns (top-left room). */
-  readonly catStartTile = { x: CAT_SPAWN_X, y: CAT_SPAWN_Y };
-  /** Tile where the human spawns (top-right room). */
-  readonly humanStartTile = { x: HUMAN_SPAWN_X, y: HUMAN_SPAWN_Y };
+  readonly catStartTile = TUTORIAL_CAT_SPAWN_TILE;
+  readonly humanStartTile = TUTORIAL_HUMAN_SPAWN_TILE;
 
   constructor() {
-    super({ prebuiltStructure: buildStructure(), tileHeight: TILE_SIZE });
+    super(tutorialMapOptions());
 
-    this.startTile = { x: HUMAN_SPAWN_X, y: HUMAN_SPAWN_Y };
+    this.startTile = { ...TUTORIAL_HUMAN_SPAWN_TILE };
 
     this.safeRooms = [
       {
-        bounds: { x: SAFE_ROOM_X1, y: SAFE_ROOM_Y1, w: SAFE_W, h: SAFE_H },
-        centre: { x: SAFE_CENTRE_X, y: SAFE_CENTRE_Y },
+        bounds: { ...TUTORIAL_SAFE_ROOM.bounds },
+        centre: { ...TUTORIAL_SAFE_ROOM.centre },
         showBed: false,
       },
     ];
 
-    this.setStairwellTiles([{ x: STAIR_X, y: STAIR_Y }]);
+    this.setStairwellTiles([{ ...TUTORIAL_STAIR_POS }]);
 
-    // No mob spawn points — tutorial goblins are placed manually.
+    // Tutorial goblins are placed by TutorialController, never spawned.
     this.mobSpawnPoints = [];
     this.hallwaySpawnPoints = [];
     this.bossRooms = [];

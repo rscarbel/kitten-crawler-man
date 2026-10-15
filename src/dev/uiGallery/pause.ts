@@ -475,7 +475,12 @@ export const PAUSE_FIXTURES: readonly DialogFixture[] = [
   pauseFixture({
     name: 'tutorial',
     section: null,
-    restriction: { crawler: 'human' },
+    restriction: { kind: 'inventory', crawler: 'human' },
+  }),
+  pauseFixture({
+    name: 'tutorial-character',
+    section: null,
+    restriction: { kind: 'section', section: 'character' },
   }),
   pauseFixture({
     name: 'keyboard-focus',

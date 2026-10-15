@@ -19,9 +19,12 @@ const GLOW_MIN = 0.4;
 const FULL_TURN = Math.PI * 2;
 const GLOW_EDGE_WIDTH = 1.5;
 
+/** The banner's top-band entry id, for code that points at it. */
+export const LOOT_BANNER_ENTRY_ID = 'loot-banner';
+
 export function lootBannerEntry(model: LootBannerModel): TopBandEntry {
   return {
-    id: 'loot-banner',
+    id: LOOT_BANNER_ENTRY_ID,
     priority: 'banner',
     maxWidth: TOP_BAND_WIDTH.regular,
     height: (ui) => topBandCardPadding(ui) + ui.theme.size.control,

@@ -102,7 +102,8 @@ const SPARKLE_CYCLE = 408;
 
 // Chest interaction and rendering constants
 const INTERACTION_RANGE_TILE_MULTIPLIER = 2.5;
-const CHEST_INTERACTION_RANGE = TILE_SIZE * INTERACTION_RANGE_TILE_MULTIPLIER;
+/** How near a chest, top-left to top-left in world pixels, its "Open Chest" prompt shows. */
+export const CHEST_INTERACTION_RANGE = TILE_SIZE * INTERACTION_RANGE_TILE_MULTIPLIER;
 const TRY_LOCKED_TIMER_FRAMES = 60;
 const UNLOCK_ANIMATION_COMPLETE_FRAME = 172;
 const CHEST_SPRITE_SIZE = 80;

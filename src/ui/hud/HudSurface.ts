@@ -86,6 +86,9 @@ export function surfacesOverHud(ui: UiRoot, alsoIgnore: ReadonlySet<string> = NO
 
 const NO_IDS: ReadonlySet<string> = new Set();
 
+/** One top-band entry where it landed. */
+type BandSlot = ReturnType<typeof renderTopBand>[number];
+
 /** A rect in UI units, in canvas CSS pixels. */
 export function toCssRect(rect: Rect, uiScale: number): Rect {
   return { x: rect.x * uiScale, y: rect.y * uiScale, w: rect.w * uiScale, h: rect.h * uiScale };
@@ -99,8 +102,8 @@ export class HudSurface implements Surface {
   private drawn: HudFrame | null = null;
   /** The top band's entries last frame, for the overlay that lifts the band. */
   private lastBand: readonly TopBandEntry[] = [];
-  /** Where the top band's entries landed last frame, for the credit card to keep clear of. */
-  private lastBandSlots: readonly Rect[] = [];
+  /** Where the top band's entries landed last frame, by entry id. */
+  private lastBandSlots: readonly BandSlot[] = [];
 
   constructor(private readonly host: HudHost) {
     this.id = host.id ?? HUD_SURFACE_ID;
@@ -133,6 +136,23 @@ export class HudSurface implements Surface {
     const pause = frame.dock.get('pause');
     if (pause !== undefined && hits(pause)) return 'pause';
     return frame.skillBadges.some(hits) ? 'skill-points' : null;
+  }
+
+  /**
+   * A top-band entry's rect as last drawn, in CSS pixels, or null while it is
+   * not shown (the safe room's loot banner is `'loot-banner'`).
+   */
+  cssBandEntryRect(id: string): Rect | null {
+    const frame = this.drawn;
+    const slot = this.lastBandSlots.find((candidate) => candidate.id === id);
+    return frame === null || slot === undefined ? null : toCssRect(slot.rect, frame.uiScale);
+  }
+
+  /** The active crawler's skill-point badge as last drawn, in CSS pixels, or null while hidden. */
+  cssSkillBadgeRect(): Rect | null {
+    const frame = this.drawn;
+    if (frame === null || frame.skillBadges.length === 0) return null;
+    return toCssRect(frame.skillBadges[0], frame.uiScale);
   }
 
   /** A dock button's rect as last drawn, in CSS pixels, or null while it is not shown. */
@@ -189,7 +209,7 @@ export class HudSurface implements Surface {
         geometry.topBandObstacles,
         geometry.topBandFloor,
         geometry.topBandKeepClear,
-      ).map((slot) => slot.rect);
+      );
     }
     if (model.hotbar !== null) hotbar(ui, geometry.hotbar, model.hotbar);
     this.drawn = { geometry, uiScale: ui.uiScale, coins, dock: docked, skillBadges };
@@ -223,13 +243,14 @@ export class HudSurface implements Surface {
             geometry.topBandObstacles,
             geometry.topBandFloor,
             geometry.topBandKeepClear,
-          ).map((slot) => slot.rect);
+          );
         }
+        const bandRects = this.lastBandSlots.map((slot) => slot.rect);
         const card = renderNowPlaying(
           ui,
           this.host.nowPlaying(),
           nowPlayingMaxWidth(geometry),
-          (size) => nowPlayingAnchor(geometry, size, this.lastBandSlots),
+          (size) => nowPlayingAnchor(geometry, size, bandRects),
         );
         const toastCeiling = card === null ? -Infinity : card.y + card.h + ui.theme.space.xs;
         const toastTop = renderToasts(ui, this.host.toasts(), geometry.toastAnchor, toastCeiling);

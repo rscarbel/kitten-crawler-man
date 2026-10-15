@@ -1,3 +1,4 @@
+import { keybindings } from '../core/Keybindings';
 import type { LevelDef } from './types';
 
 /**
@@ -14,12 +15,15 @@ export const tutorialLevel: LevelDef = {
   floorNumber: 1,
   arrivalLoadingScreen: {
     kicker: 'Before the dungeon',
-    tips: [
-      'Carl and Donut crawl together. Switch between them whenever a fight calls for it.',
-      'Follow the hints on screen. The tutorial teaches one thing at a time.',
-      'Safe rooms keep the monsters out. Use them to catch your breath.',
-      'A health potion on your hotbar can turn a losing fight around.',
-    ],
+    // Read when the loading screen opens, so a rebound switch key is the one named.
+    get tips(): readonly [string, ...string[]] {
+      return [
+        `Carl and Donut crawl together. Switch between them with the Switch button, or press ${keybindings.labelFor('switchCharacter')}.`,
+        'Follow the hints on screen. The tutorial teaches one thing at a time.',
+        'Safe rooms keep the monsters out. Use them to catch your breath.',
+        'A health potion on your hotbar can turn a losing fight around.',
+      ];
+    },
   },
   music: 'bg_level_1',
   // The same rung as floor 1, so the same cellars. Stated rather than left to

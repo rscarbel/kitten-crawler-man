@@ -4,18 +4,24 @@ import { TutorialGoblin } from '../creatures/TutorialGoblin';
 import type { HumanPlayer } from '../creatures/HumanPlayer';
 import type { CatPlayer } from '../creatures/CatPlayer';
 import {
-  TUTORIAL_GATE_G1,
   TUTORIAL_GATE_G2,
-  TUTORIAL_GATE_G3,
-  TUTORIAL_GATE_SAFE_ENTRANCE,
-  TUTORIAL_LEDGE,
+  TUTORIAL_GATE_SMUSH,
   GOBLIN_A_POS,
   GOBLIN_B_POS,
   SMUSH_GUARD_1_POS,
   SMUSH_GUARD_2_POS,
   TUTORIAL_CHEST_POS,
-  TUTORIAL_STAIR_POS,
+  TUTORIAL_STAIR_FOOTPRINT,
+  TUTORIAL_MORDECAI_HOME_TILE,
+  TUTORIAL_SAFE_ENTRANCE_TILE,
+  TUTORIAL_TREASURE_ROOM_BOUNDS,
+  TUTORIAL_HUMAN_HALL_BOUNDS,
+  isInTutorialRect,
 } from '../map/TutorialMap';
+import type { QuestMarkerState } from '../sprites/questNPCSprite';
+import type { ObjectiveBeaconSource, TrackerTarget } from './questTracker';
+import { DUNGEON_BEACON_BRIGHTNESS } from '../ui/ObjectiveBeacon';
+import type { ChestLootSplit } from '../ui/ChestRewardDialog';
 import { measureWorldText, worldText } from '../ui/world/worldText';
 import { worldPlate } from '../ui/world/worldShapes';
 import { worldPalette } from '../ui/theme/worldInk';
@@ -41,7 +47,9 @@ import {
   MORDECAI_TUTORIAL_REMINDER_OPEN_CHEST,
   MORDECAI_TUTORIAL_REMINDER_SET_UP_ITEMS,
   MORDECAI_TUTORIAL_REMINDER_SMUSH_GUARDS,
-  MORDECAI_TUTORIAL_REMINDER_THROUGH_OPENING,
+  MORDECAI_TUTORIAL_REMINDER_SPEND_POINT,
+  MORDECAI_TUTORIAL_REMINDER_SWITCH_BACK,
+  MORDECAI_TUTORIAL_REMINDER_THROUGH_GATE,
   MORDECAI_TUTORIAL_REMINDER_TREASURE_ROOM,
   MORDECAI_TUTORIAL_WELCOME,
 } from '../dialog/scripts/mordecai';
@@ -52,6 +60,11 @@ import { menuItemId } from '../ui/screens/inventory/renderInventory';
 import { clamp } from '../utils';
 import type { PauseRestriction } from '../ui/screens/pause/PauseScreen';
 import { viewportWidth, viewportHeight } from '../core/Viewport';
+import { TutorialGates, type TutorialGateId, type TutorialGateView } from './tutorialGates';
+import type { TownPropRenderable } from './townPropRenderable';
+import type { TutorialCueAt } from './tutorialSoundCues';
+import { SafeRoomSystem } from './SafeRoomSystem';
+import { CHEST_INTERACTION_RANGE } from './TreasureChestSystem';
 
 // ── State machine
 
@@ -65,14 +78,15 @@ export type TutorialState =
   | 'HUMAN_OPENED_ACHIEVEMENT'
   | 'HUMAN_EQUIPPED_SMUSH'
   | 'HUMAN_SMUSHED_GUARDS'
+  | 'HUMAN_LEVELED_UP'
   | 'CAMERA_PAN_TO_CAT'
   | 'SWITCHED_TO_CAT'
-  | 'CAT_MOVED'
   | 'USED_HEALTH_POTION'
   | 'CAT_INSIDE_TREASURE_ROOM'
   | 'CAT_OPENED_TREASURE_BOX'
   | 'CAT_EQUIPPED_MAGIC_MISSILE'
   | 'CAT_SHOT_GUARD'
+  | 'AWAITING_SWITCH_TO_HUMAN'
   | 'SWITCHED_TO_HUMAN'
   | 'CAT_ARRIVED'
   | 'TALKED_TO_MORDECAI_AGAIN'
@@ -88,14 +102,15 @@ const STATE_ORDER: ReadonlyArray<TutorialState> = [
   'HUMAN_OPENED_ACHIEVEMENT',
   'HUMAN_EQUIPPED_SMUSH',
   'HUMAN_SMUSHED_GUARDS',
+  'HUMAN_LEVELED_UP',
   'CAMERA_PAN_TO_CAT',
   'SWITCHED_TO_CAT',
-  'CAT_MOVED',
   'USED_HEALTH_POTION',
   'CAT_INSIDE_TREASURE_ROOM',
   'CAT_OPENED_TREASURE_BOX',
   'CAT_EQUIPPED_MAGIC_MISSILE',
   'CAT_SHOT_GUARD',
+  'AWAITING_SWITCH_TO_HUMAN',
   'SWITCHED_TO_HUMAN',
   'CAT_ARRIVED',
   'TALKED_TO_MORDECAI_AGAIN',
@@ -108,6 +123,10 @@ const TUTORIAL_SMUSH_LEVEL = 1;
 /** Just enough to teach the drink, on a cat who starts the tutorial at 1 HP. */
 const TUTORIAL_STARTING_POTIONS = 2;
 const TUTORIAL_POTION_HOTBAR_SLOT = 0;
+/** The hotbar slot each crawler's drag step puts their new ability in: Smush, then Magic Missile. */
+const TUTORIAL_ABILITY_HOTBAR_SLOT = 0;
+/** The slot each drag step puts the health potions in, after the ability. */
+const TUTORIAL_POTION_DRAG_HOTBAR_SLOT = 1;
 /** The stock each crawler leaves the tutorial with. */
 const TUTORIAL_REWARD_POTIONS = 10;
 const CAMERA_PAN_DURATION_FRAMES = 180;
@@ -117,16 +136,6 @@ const GOBLIN_NEAR_TILES = 5;
 const GOBLIN_NEAR_PX = GOBLIN_NEAR_TILES * TILE_SIZE;
 const GUARDS_DEFEATED_PAUSE_FRAMES = 90;
 const SWITCH_DISPLAY_FRAMES = 90;
-
-// ── Gate visual constants
-
-const GATE_LINE_WIDTH = 2;
-const GATE_GLOW_BLUR = 10;
-
-// ── Constraint buffer (pixels) — expands the gate check region ───────────────
-
-const GATE_X_BUFFER_TILES = 1;
-const GATE_Y_BUFFER_TILES = 1;
 
 // ── Overlay constants
 
@@ -175,24 +184,21 @@ const MORDECAI_REMINDERS: Record<TutorialState, DialogLine | null> = {
   HUMAN_TALKED_TO_MORDECAI: MORDECAI_TUTORIAL_REMINDER_OPEN_ACHIEVEMENT,
   HUMAN_OPENED_ACHIEVEMENT: MORDECAI_TUTORIAL_REMINDER_SET_UP_ITEMS,
   HUMAN_EQUIPPED_SMUSH: MORDECAI_TUTORIAL_REMINDER_SMUSH_GUARDS,
-  HUMAN_SMUSHED_GUARDS: MORDECAI_TUTORIAL_REMINDER_THROUGH_OPENING,
+  HUMAN_SMUSHED_GUARDS: MORDECAI_TUTORIAL_REMINDER_THROUGH_GATE,
+  HUMAN_LEVELED_UP: MORDECAI_TUTORIAL_REMINDER_SPEND_POINT,
   CAMERA_PAN_TO_CAT: null,
   SWITCHED_TO_CAT: null,
-  CAT_MOVED: null,
   USED_HEALTH_POTION: MORDECAI_TUTORIAL_REMINDER_TREASURE_ROOM,
   CAT_INSIDE_TREASURE_ROOM: MORDECAI_TUTORIAL_REMINDER_OPEN_CHEST,
   CAT_OPENED_TREASURE_BOX: MORDECAI_TUTORIAL_REMINDER_EQUIP_ABILITIES,
   CAT_EQUIPPED_MAGIC_MISSILE: MORDECAI_TUTORIAL_REMINDER_FIRE_MISSILE,
   CAT_SHOT_GUARD: null,
+  AWAITING_SWITCH_TO_HUMAN: MORDECAI_TUTORIAL_REMINDER_SWITCH_BACK,
   SWITCHED_TO_HUMAN: MORDECAI_TUTORIAL_REMINDER_CALL_CAT,
   CAT_ARRIVED: null,
   TALKED_TO_MORDECAI_AGAIN: MORDECAI_TUTORIAL_REMINDER_FIND_STAIRWELL,
   COMPLETE: null,
 };
-
-// How far to raise the hint box on touch when pointing at the health potion hotbar slot,
-// so the arrow drawn above the slot does not overlap the text.
-const SWITCHED_TO_CAT_TOUCH_HINT_RAISE_PX = 52;
 
 //  Smoothstep animation
 
@@ -212,7 +218,13 @@ const DRAG_HINT_TEXT_MIN_ALPHA = 0.35;
 const DRAG_HINT_TEXT_MAX_ALPHA = 0.9;
 
 /** The bindings the pointer copy names; a rebind changes the copy. */
-const HINT_TEXT_ACTIONS = ['attack', 'hotbar1', 'usePotion', 'companionFollow'] as const;
+const HINT_TEXT_ACTIONS = [
+  'attack',
+  'hotbar1',
+  'usePotion',
+  'companionFollow',
+  'switchCharacter',
+] as const;
 
 let cachedHintTexts: {
   readonly key: string;
@@ -236,18 +248,19 @@ const TOUCH_HINT_TEXTS: Record<TutorialState, string> = {
   HUMAN_KILLED_GOBLIN: 'Enemy defeated! Head south to the Safe Room.',
   HUMAN_GETS_TO_SAFE_ROOM: 'Tap Mordecai to talk to him. He is on the left side of the saferoom.',
   HUMAN_TALKED_TO_MORDECAI:
-    'You have an achievement! Tap the 🏆 banner on the left to claim your reward.',
+    'You have an achievement! Tap the gold Achievement banner to claim your reward.',
   HUMAN_OPENED_ACHIEVEMENT: '',
   HUMAN_EQUIPPED_SMUSH: 'Stand near the guards and tap Smush (slot 1)!',
   HUMAN_SMUSHED_GUARDS: 'Excellent! The path is clear.',
+  HUMAN_LEVELED_UP: 'You leveled up! You have a point to spend. Tap the +1 on your level badge.',
   CAMERA_PAN_TO_CAT: 'Your partner has been waiting...',
   SWITCHED_TO_CAT: "Oh no! The cat's health is low. Tap the health potion (slot 1) to use it.",
-  CAT_MOVED: '',
   USED_HEALTH_POTION: 'Now head south to the treasure room.',
   CAT_INSIDE_TREASURE_ROOM: 'Tap the chest to open it!',
   CAT_OPENED_TREASURE_BOX: '',
-  CAT_EQUIPPED_MAGIC_MISSILE: 'Tap Magic Missile (slot 1) to fire at the goblin!',
-  CAT_SHOT_GUARD: 'The missile passed through the gate!',
+  CAT_EQUIPPED_MAGIC_MISSILE: 'Tap Magic Missile (slot 1). It flies over the fence at the goblin!',
+  CAT_SHOT_GUARD: 'The missile flew right over the fence!',
+  AWAITING_SWITCH_TO_HUMAN: 'Tap the Switch button to go back to Carl.',
   SWITCHED_TO_HUMAN: 'Tap the Follower button and call the cat to you.',
   CAT_ARRIVED: 'Speak with Mordecai once more.',
   TALKED_TO_MORDECAI_AGAIN: 'Tutorial complete! Find the stairs to continue.',
@@ -265,18 +278,20 @@ function pointerHintTexts(): Record<TutorialState, string> {
     HUMAN_KILLED_GOBLIN: 'Enemy defeated! Head south through the corridor to the Safe Room.',
     HUMAN_GETS_TO_SAFE_ROOM: `You are safe here. Talk to Mordecai — press ${talkKey} near him.`,
     HUMAN_TALKED_TO_MORDECAI:
-      'You have an achievement! Click the 🏆 banner on the left to claim your reward.',
+      'You have an achievement! Click the gold Achievement banner to claim your reward.',
     HUMAN_OPENED_ACHIEVEMENT: '',
     HUMAN_EQUIPPED_SMUSH: `Two guards block the path. Stand near them and press ${firstSlotKey} to Smush!`,
     HUMAN_SMUSHED_GUARDS: 'Excellent smushery! The path is clear.',
+    HUMAN_LEVELED_UP:
+      'You leveled up! You have a point to spend. Click the +1 on your level badge, or press Esc.',
     CAMERA_PAN_TO_CAT: 'Your partner has been waiting patiently...',
     SWITCHED_TO_CAT: `Oh no! The cat's health is low. Press ${keyLabel('usePotion')} or ${firstSlotKey} to use the health potion.`,
-    CAT_MOVED: '',
     USED_HEALTH_POTION: 'Good! Now head south to the treasure room.',
     CAT_INSIDE_TREASURE_ROOM: `A treasure chest! Press ${talkKey} to open it.`,
     CAT_OPENED_TREASURE_BOX: '',
-    CAT_EQUIPPED_MAGIC_MISSILE: `A goblin guard lurks behind the gate. Press ${firstSlotKey} — magic passes through!`,
-    CAT_SHOT_GUARD: 'The missile passed right through the gate!',
+    CAT_EQUIPPED_MAGIC_MISSILE: `A goblin guard lurks behind the fence. Press ${firstSlotKey}. Magic flies right over it!`,
+    CAT_SHOT_GUARD: 'The missile flew right over the fence!',
+    AWAITING_SWITCH_TO_HUMAN: `Switch back to Carl. Press ${keyLabel('switchCharacter')}.`,
     SWITCHED_TO_HUMAN: `Press "${keyLabel('companionFollow')}" to bring up the follower menu and call the cat to you.`,
     CAT_ARRIVED: 'Speak with Mordecai once more.',
     TALKED_TO_MORDECAI_AGAIN: 'Tutorial complete! Find the stairwell and descend to begin.',
@@ -303,6 +318,18 @@ function bagTabHint(mode: InputMode): string {
   return `${tapVerb(mode)} the Bag tab.`;
 }
 
+/** The stat step's copy once the Character page is open: what a point does, then the one ask. */
+function statSpendHint(mode: InputMode): string {
+  return `A point makes Carl stronger in one stat for good. ${tapVerb(mode)} the + on any stat to spend it. Constitution (more health) is a safe first pick.`;
+}
+
+function leaveMenuHint(mode: InputMode): string {
+  return byInputMode(mode, {
+    touch: 'Tap the X button to close the menu.',
+    pointer: 'Press Esc or click the X button to close the menu.',
+  });
+}
+
 function openPauseHint(mode: InputMode): string {
   return byInputMode(mode, {
     touch: 'Tap the Pause button to open the menu.',
@@ -312,46 +339,155 @@ function openPauseHint(mode: InputMode): string {
 
 // ── World-space arrow targets per state
 
-type WorldTarget = { tileX: number; tileY: number } | null;
+/** A fixed tile, or Mordecai wherever he has wandered to. */
+type WorldTarget = { tileX: number; tileY: number } | 'mordecai' | null;
 
-// mordecaiHomeTileX = safeRoom.centre.x - floor(safeRoom.bounds.w / 4) = 78 - 10 = 68
-const MORDECAI_TILE_X = 68;
-const MORDECAI_TILE_Y = 47;
+/**
+ * World-pixel centre of an arrow target. Mordecai wanders, so the arrow follows
+ * where `SafeRoomSystem` has him standing; his home tile is only the fallback.
+ */
+function worldTargetCentrePx(
+  target: NonNullable<WorldTarget>,
+  mordecaiPosition: { x: number; y: number } | null,
+): { x: number; y: number } {
+  if (target !== 'mordecai') {
+    return {
+      x: (target.tileX + TILE_FRACTION_CENTER) * TILE_SIZE,
+      y: (target.tileY + TILE_FRACTION_CENTER) * TILE_SIZE,
+    };
+  }
+  const halfTile = TILE_SIZE * TILE_FRACTION_CENTER;
+  if (mordecaiPosition !== null) {
+    return { x: mordecaiPosition.x + halfTile, y: mordecaiPosition.y + halfTile };
+  }
+  return {
+    x: TUTORIAL_MORDECAI_HOME_TILE.x * TILE_SIZE + halfTile,
+    y: TUTORIAL_MORDECAI_HOME_TILE.y * TILE_SIZE + halfTile,
+  };
+}
 
-/** Tile at the top edge of the safe room where the human hallway enters. */
-const SAFE_ENTRANCE_TILE_X = 88;
-const SAFE_ENTRANCE_TILE_Y = 37;
+/** The middle of the stairwell's hole, which spans more than one tile. */
+const STAIRWELL_ARROW_TARGET = {
+  tileX: TUTORIAL_STAIR_FOOTPRINT.x + (TUTORIAL_STAIR_FOOTPRINT.w - 1) / 2,
+  tileY: TUTORIAL_STAIR_FOOTPRINT.y + (TUTORIAL_STAIR_FOOTPRINT.h - 1) / 2,
+};
 
 const STATE_ARROW_TARGETS: Record<TutorialState, WorldTarget> = {
   SEPARATE_ROOMS: null,
   HUMAN_MOVED: { tileX: GOBLIN_A_POS.x, tileY: GOBLIN_A_POS.y },
   HUMAN_NEAR_GOBLIN: { tileX: GOBLIN_A_POS.x, tileY: GOBLIN_A_POS.y },
-  HUMAN_KILLED_GOBLIN: { tileX: SAFE_ENTRANCE_TILE_X, tileY: SAFE_ENTRANCE_TILE_Y },
-  HUMAN_GETS_TO_SAFE_ROOM: { tileX: MORDECAI_TILE_X, tileY: MORDECAI_TILE_Y },
+  HUMAN_KILLED_GOBLIN: {
+    tileX: TUTORIAL_SAFE_ENTRANCE_TILE.x,
+    tileY: TUTORIAL_SAFE_ENTRANCE_TILE.y,
+  },
+  HUMAN_GETS_TO_SAFE_ROOM: 'mordecai',
   HUMAN_TALKED_TO_MORDECAI: null,
   HUMAN_OPENED_ACHIEVEMENT: null,
   HUMAN_EQUIPPED_SMUSH: { tileX: SMUSH_GUARD_1_POS.x, tileY: SMUSH_GUARD_1_POS.y },
   HUMAN_SMUSHED_GUARDS: null,
+  HUMAN_LEVELED_UP: null,
   CAMERA_PAN_TO_CAT: null,
   SWITCHED_TO_CAT: null,
-  CAT_MOVED: null,
   USED_HEALTH_POTION: { tileX: TUTORIAL_CHEST_POS.x, tileY: TUTORIAL_CHEST_POS.y },
   CAT_INSIDE_TREASURE_ROOM: { tileX: TUTORIAL_CHEST_POS.x, tileY: TUTORIAL_CHEST_POS.y },
   CAT_OPENED_TREASURE_BOX: null,
   CAT_EQUIPPED_MAGIC_MISSILE: null,
   CAT_SHOT_GUARD: null,
+  AWAITING_SWITCH_TO_HUMAN: null,
   SWITCHED_TO_HUMAN: null,
-  CAT_ARRIVED: { tileX: MORDECAI_TILE_X, tileY: MORDECAI_TILE_Y },
-  TALKED_TO_MORDECAI_AGAIN: { tileX: TUTORIAL_STAIR_POS.x, tileY: TUTORIAL_STAIR_POS.y },
+  CAT_ARRIVED: 'mordecai',
+  TALKED_TO_MORDECAI_AGAIN: STAIRWELL_ARROW_TARGET,
   COMPLETE: null,
 };
 
-// ── Treasure room tile bounds for cat detection ───────────────────────────────
+// ── Objective highlights per state
 
-const TREASURE_ROOM_TILE_X1 = 33;
-const TREASURE_ROOM_TILE_X2 = 50;
-const TREASURE_ROOM_TILE_Y1 = 23;
-const TREASURE_ROOM_TILE_Y2 = 37;
+/** Which tutorial goblins stand in the quest beam while a state waits on them. */
+type ObjectiveMobs = 'goblinA' | 'smushGuards' | 'goblinB' | null;
+
+const STATE_OBJECTIVE_MOBS: Record<TutorialState, ObjectiveMobs> = {
+  SEPARATE_ROOMS: 'goblinA',
+  HUMAN_MOVED: 'goblinA',
+  HUMAN_NEAR_GOBLIN: 'goblinA',
+  HUMAN_KILLED_GOBLIN: null,
+  HUMAN_GETS_TO_SAFE_ROOM: null,
+  HUMAN_TALKED_TO_MORDECAI: null,
+  HUMAN_OPENED_ACHIEVEMENT: null,
+  HUMAN_EQUIPPED_SMUSH: 'smushGuards',
+  HUMAN_SMUSHED_GUARDS: null,
+  HUMAN_LEVELED_UP: null,
+  CAMERA_PAN_TO_CAT: null,
+  SWITCHED_TO_CAT: null,
+  USED_HEALTH_POTION: null,
+  CAT_INSIDE_TREASURE_ROOM: null,
+  CAT_OPENED_TREASURE_BOX: null,
+  CAT_EQUIPPED_MAGIC_MISSILE: 'goblinB',
+  CAT_SHOT_GUARD: null,
+  AWAITING_SWITCH_TO_HUMAN: null,
+  SWITCHED_TO_HUMAN: null,
+  CAT_ARRIVED: null,
+  TALKED_TO_MORDECAI_AGAIN: null,
+  COMPLETE: null,
+};
+
+const SAFE_ENTRANCE_BEACON: TrackerTarget = {
+  x: TUTORIAL_HUMAN_HALL_BOUNDS.x,
+  y: TUTORIAL_SAFE_ENTRANCE_TILE.y,
+  widthTiles: TUTORIAL_HUMAN_HALL_BOUNDS.w,
+  brightness: DUNGEON_BEACON_BRIGHTNESS,
+};
+const CHEST_BEACON: TrackerTarget = {
+  x: TUTORIAL_CHEST_POS.x,
+  y: TUTORIAL_CHEST_POS.y,
+  brightness: DUNGEON_BEACON_BRIGHTNESS,
+};
+/**
+ * The stairwell is a hole two tiles across, anchored at its top-left: the
+ * beam stands on its south row, spans its width, and rises from the middle
+ * of its depth so the light pools over the whole hole.
+ */
+const STAIRWELL_BEACON: TrackerTarget = {
+  x: TUTORIAL_STAIR_FOOTPRINT.x,
+  y: TUTORIAL_STAIR_FOOTPRINT.y + TUTORIAL_STAIR_FOOTPRINT.h - 1,
+  widthTiles: TUTORIAL_STAIR_FOOTPRINT.w,
+  backsetTiles: TUTORIAL_STAIR_FOOTPRINT.h / 2,
+  brightness: DUNGEON_BEACON_BRIGHTNESS,
+};
+const NO_PLACE_BEACONS: ReadonlyArray<TrackerTarget> = [];
+
+/** Which place stands in the objective beam while a state sends the player to it. */
+type ObjectivePlace = 'safeEntrance' | 'chest' | 'stairwell' | null;
+
+const STATE_OBJECTIVE_PLACES: Record<TutorialState, ObjectivePlace> = {
+  SEPARATE_ROOMS: null,
+  HUMAN_MOVED: null,
+  HUMAN_NEAR_GOBLIN: null,
+  HUMAN_KILLED_GOBLIN: 'safeEntrance',
+  HUMAN_GETS_TO_SAFE_ROOM: null,
+  HUMAN_TALKED_TO_MORDECAI: null,
+  HUMAN_OPENED_ACHIEVEMENT: null,
+  HUMAN_EQUIPPED_SMUSH: null,
+  HUMAN_SMUSHED_GUARDS: null,
+  HUMAN_LEVELED_UP: null,
+  CAMERA_PAN_TO_CAT: null,
+  SWITCHED_TO_CAT: null,
+  USED_HEALTH_POTION: 'chest',
+  CAT_INSIDE_TREASURE_ROOM: 'chest',
+  CAT_OPENED_TREASURE_BOX: null,
+  CAT_EQUIPPED_MAGIC_MISSILE: null,
+  CAT_SHOT_GUARD: null,
+  AWAITING_SWITCH_TO_HUMAN: null,
+  SWITCHED_TO_HUMAN: null,
+  CAT_ARRIVED: null,
+  TALKED_TO_MORDECAI_AGAIN: 'stairwell',
+  COMPLETE: null,
+};
+
+const PLACE_BEACONS: Record<NonNullable<ObjectivePlace>, ReadonlyArray<TrackerTarget>> = {
+  safeEntrance: [SAFE_ENTRANCE_BEACON],
+  chest: [CHEST_BEACON],
+  stairwell: [STAIRWELL_BEACON],
+};
 
 // ── Menu-guide step labels ────────────────────────────────────────────────────
 
@@ -359,19 +495,32 @@ type MenuGuideStep = 'drag_smush' | 'drag_potions' | 'equip_boxers' | 'done';
 
 type CatMenuGuideStep = 'drag_missile' | 'drag_potions' | 'done';
 
-// Distance from the ledge at which the navigation arrow disappears
-const NEAR_LEDGE_THRESHOLD_TILES = 3;
-const NEAR_LEDGE_THRESHOLD_PX = NEAR_LEDGE_THRESHOLD_TILES * TILE_SIZE;
+/** How near a step's gate the crawler must be for the navigation arrow to stand down. */
+const NEAR_GATE_THRESHOLD_TILES = 3;
+const NEAR_GATE_THRESHOLD_PX = NEAR_GATE_THRESHOLD_TILES * TILE_SIZE;
 
 // Distance from any navigation target at which the arrow disappears
 const NEAR_OBJECTIVE_THRESHOLD_TILES = 3;
 const NEAR_OBJECTIVE_THRESHOLD_PX = NEAR_OBJECTIVE_THRESHOLD_TILES * TILE_SIZE;
+/** How far off screen the crawler may stand and still have the navigation arrow drawn over them. */
+const ARROW_OFFSCREEN_MARGIN_TILES = 2;
+const ARROW_OFFSCREEN_MARGIN_PX = ARROW_OFFSCREEN_MARGIN_TILES * TILE_SIZE;
+/**
+ * Where the step arrow to Mordecai stands down: exactly where his "Talk"
+ * prompt takes over, so one of the two is always showing.
+ */
+const MORDECAI_PROMPT_RANGE_PX = SafeRoomSystem.MORDECAI_NEAR_DISTANCE * TILE_SIZE;
+
+/**
+ * A HUD control in the lower half of the screen sits in the hint box's band
+ * above the hotbar, so the box lifts clear of the arrow pointing at it.
+ */
+const LOWER_SCREEN_FRACTION = 0.5;
 
 // ── Mob factory types ─────────────────────────────────────────────────────────
 
 /** Context passed from DungeonScene to renderOverlay each frame. */
 export interface TutorialRenderContext {
-  isPlayerInSafeRoom: boolean;
   pauseMenuOpen: boolean;
   inventoryPanelOpen: boolean;
   /** Screen-space frame of the open inventory, which the hint box keeps clear of; null while closed. */
@@ -420,6 +569,26 @@ export interface TutorialRenderContext {
   isRewardGrantedDialogShowing: boolean;
   /** Screen-space rect of the "Follow me" button inside the open follower menu, or null. */
   followerMenuFollowMeRect: Rect | null;
+  /** World-pixel top-left of the tutorial's Mordecai where he stands now, or null when there is none. */
+  mordecaiPosition: { x: number; y: number } | null;
+  /** Screen-space rect of the safe room's gold Achievement banner, or null while it is not shown. */
+  achievementBannerRect: Rect | null;
+  /** True while the loot-box reveal is playing; it carries its own "tap to continue". */
+  isLootBoxOpen: boolean;
+  /** True while the treasure chest's reward card is up; it carries its own "tap to continue". */
+  isChestRewardOpen: boolean;
+  /** Screen-space rect of the HUD's Switch button, or null while it is not shown. */
+  switchButtonRect: Rect | null;
+  /** Screen-space rect of Carl's "+N" skill-point badge on his level disc, or null while hidden. */
+  levelBadgeRect: Rect | null;
+  /** Screen-space frame of the open pause menu, which the hint box keeps clear of; null while closed. */
+  pauseFrame: Rect | null;
+  /** True while the pause menu shows its Character page, where level-up points are spent. */
+  characterSectionOpen: boolean;
+  /** Screen-space rect of the one stat "+" the guide suggests on the Character page, or null. */
+  statSpendButtonRect: Rect | null;
+  /** Screen-space rect of the open menu's close button (the pause menu's, else the inventory's), or null. */
+  menuCloseRect: Rect | null;
 }
 
 export interface TutorialMobs {
@@ -470,7 +639,7 @@ function hintBoxTop(placement: HintPlacement, boxHeight: number, raise: number):
   return fitsAboveHeader ? gap : header.y + header.h + gap;
 }
 
-export class TutorialController {
+export class TutorialController implements ObjectiveBeaconSource {
   private _state: TutorialState = 'SEPARATE_ROOMS';
 
   private readonly _mobs: TutorialMobs;
@@ -528,17 +697,18 @@ export class TutorialController {
   // True when the farewell Mordecai dialog is showing (CAT_ARRIVED → TALKED_TO_MORDECAI_AGAIN)
   private _inFarewellDialog = false;
 
-  private _pendingGateSound = false;
+  private readonly gates = new TutorialGates();
+
+  private chestOpened = false;
 
   // Cat reference for full-heal on potion use and item grant
   private catRef: CatPlayer | null = null;
 
   /**
-   * One-frame flags that DungeonScene reads and clears.
+   * One-frame flag that DungeonScene reads and clears.
    * After reading, set the flag back to false and call pm.switchActive().
    */
   needsSwitchToCat = false;
-  needsSwitchToHuman = false;
 
   /**
    * Set when the menu guide finishes — DungeonScene should auto-close the pause
@@ -547,8 +717,8 @@ export class TutorialController {
   needsAutoCloseMenus = false;
 
   /**
-   * Set on frame 1 of HUMAN_SMUSHED_GUARDS — DungeonScene should compute the
-   * correct camera offsets and call startCameraPan().
+   * Set as CAMERA_PAN_TO_CAT begins — DungeonScene should compute the correct
+   * camera offsets and call startCameraPan().
    */
   needsCameraPanStart = false;
 
@@ -558,6 +728,7 @@ export class TutorialController {
     this.goblinB = mobs.goblinB;
     this.smushGuard1 = mobs.smushGuard1;
     this.smushGuard2 = mobs.smushGuard2;
+    this.syncObjectiveMobs();
   }
 
   /** Convenience factory: creates mobs and controller in one call. */
@@ -581,9 +752,17 @@ export class TutorialController {
     return this.atOrPast('HUMAN_NEAR_GOBLIN');
   }
 
-  /** True only in SWITCHED_TO_HUMAN so Tab doesn't work at other times. */
+  /**
+   * False until the step that teaches the switch, so the player cannot wander
+   * off mid-lesson; true from then on, so it keeps working once learned.
+   */
   get canSwitchCharacter(): boolean {
-    return this._state === 'SWITCHED_TO_HUMAN';
+    return this.atOrPast('AWAITING_SWITCH_TO_HUMAN');
+  }
+
+  /** While true the skill-point badge shows whatever else would hide it: the step points at it. */
+  get forcesSkillPointBadge(): boolean {
+    return this._state === 'HUMAN_LEVELED_UP';
   }
 
   /** Controls whether the follower-mode button is rendered. */
@@ -689,12 +868,12 @@ export class TutorialController {
    */
   get tutorialDragTargetSlot(): number | null {
     if (this._state === 'HUMAN_OPENED_ACHIEVEMENT') {
-      if (this._menuGuideStep === 'drag_smush') return 0;
-      if (this._menuGuideStep === 'drag_potions') return 1;
+      if (this._menuGuideStep === 'drag_smush') return TUTORIAL_ABILITY_HOTBAR_SLOT;
+      if (this._menuGuideStep === 'drag_potions') return TUTORIAL_POTION_DRAG_HOTBAR_SLOT;
     }
     if (this._state === 'CAT_OPENED_TREASURE_BOX') {
-      if (this._catMenuGuideStep === 'drag_missile') return 0;
-      if (this._catMenuGuideStep === 'drag_potions') return 1;
+      if (this._catMenuGuideStep === 'drag_missile') return TUTORIAL_ABILITY_HOTBAR_SLOT;
+      if (this._catMenuGuideStep === 'drag_potions') return TUTORIAL_POTION_DRAG_HOTBAR_SLOT;
     }
     return null;
   }
@@ -726,25 +905,26 @@ export class TutorialController {
     this._boxersDragHintTimer = BOXERS_DRAG_HINT_DURATION_FRAMES;
   }
 
-  get isG1Open(): boolean {
-    return this.atOrPast('CAMERA_PAN_TO_CAT');
-  }
-
-  get isG2Open(): boolean {
-    return this.atOrPast('SWITCHED_TO_HUMAN');
-  }
-
-  get isG3Open(): boolean {
-    return this.atOrPast('SWITCHED_TO_HUMAN');
-  }
-
-  /** Safe room entrance gate opens once goblin A is defeated. */
-  get isSafeEntranceGateOpen(): boolean {
-    return this.atOrPast('HUMAN_KILLED_GOBLIN');
-  }
-
-  get isLedgeActive(): boolean {
-    return !this.atOrPast('HUMAN_SMUSHED_GUARDS');
+  /**
+   * Whether the step that frees a gate is done. Each unlocked gate then opens
+   * by its own rule in `tutorialGates.ts`: at once, once no dialog box is
+   * open, once it is wholly in view, or once its crawler walks up to it.
+   */
+  private isGateUnlocked(id: TutorialGateId): boolean {
+    switch (id) {
+      case 'safeEntrance':
+        return this.atOrPast('HUMAN_KILLED_GOBLIN');
+      case 'smush':
+        return this.atOrPast('HUMAN_SMUSHED_GUARDS');
+      case 'g1':
+        return this.atOrPast('SWITCHED_TO_CAT');
+      case 'fence':
+        return this.atOrPast('CAT_ARRIVED');
+      case 'goblinB':
+        return this.atOrPast('CAT_SHOT_GUARD');
+      case 'g3':
+        return this.atOrPast('TALKED_TO_MORDECAI_AGAIN');
+    }
   }
 
   /**
@@ -880,12 +1060,13 @@ export class TutorialController {
         break;
 
       case 'HUMAN_SMUSHED_GUARDS':
-        if (this.stateFrames === 1) {
-          this.needsCameraPanStart = true;
-        }
         if (this.stateFrames >= GUARDS_DEFEATED_PAUSE_FRAMES) {
-          this.advance('CAMERA_PAN_TO_CAT');
+          this.advance(human.unspentPoints > 0 ? 'HUMAN_LEVELED_UP' : 'CAMERA_PAN_TO_CAT');
         }
+        break;
+
+      case 'HUMAN_LEVELED_UP':
+        this.checkPointSpent(human);
         break;
 
       case 'CAMERA_PAN_TO_CAT':
@@ -897,12 +1078,9 @@ export class TutorialController {
         break;
 
       case 'SWITCHED_TO_CAT':
-        // Cat can't move and can't switch back yet — wait for potion use (onPotionUsed)
-        break;
-
-      case 'CAT_MOVED':
-        // Transitional — this state is skipped in the new flow, advance immediately
-        this.advance('USED_HEALTH_POTION');
+        // God mode's heal cannot be undone, so the step must not wait on a
+        // missing hit point: a cat already at full health skips the drink.
+        if (cat.hp >= cat.maxHp) this.advance('USED_HEALTH_POTION');
         break;
 
       case 'USED_HEALTH_POTION':
@@ -911,7 +1089,7 @@ export class TutorialController {
         break;
 
       case 'CAT_INSIDE_TREASURE_ROOM':
-        // Advances via onChestOpened()
+        // Advances via onCatRewardDialogDismissed()
         break;
 
       case 'CAT_OPENED_TREASURE_BOX':
@@ -924,9 +1102,12 @@ export class TutorialController {
 
       case 'CAT_SHOT_GUARD':
         if (this.stateFrames >= SWITCH_DISPLAY_FRAMES) {
-          this.needsSwitchToHuman = true;
-          this.advance('SWITCHED_TO_HUMAN');
+          this.advance('AWAITING_SWITCH_TO_HUMAN');
         }
+        break;
+
+      case 'AWAITING_SWITCH_TO_HUMAN':
+        if (human.isActive) this.advance('SWITCHED_TO_HUMAN');
         break;
 
       case 'SWITCHED_TO_HUMAN':
@@ -945,6 +1126,18 @@ export class TutorialController {
       case 'COMPLETE':
         break;
     }
+  }
+
+  /**
+   * The steps that are finished inside a menu, checked while the menu halts
+   * the world and the per-frame {@link update} is not running: the pause
+   * menu's Character page halts it, so the point spent there would otherwise
+   * never be noticed and the menu would never close.
+   */
+  updateUnderMenus(human: HumanPlayer, cat: CatPlayer): void {
+    if (this._state === 'HUMAN_OPENED_ACHIEVEMENT') this.checkMenuGuideCompletion(human);
+    else if (this._state === 'CAT_OPENED_TREASURE_BOX') this.checkCatMenuGuideCompletion(cat);
+    else if (this._state === 'HUMAN_LEVELED_UP') this.checkPointSpent(human);
   }
 
   // ── Event notifications (called by DungeonScene) ──────────────────────────
@@ -986,12 +1179,23 @@ export class TutorialController {
     }
   }
 
-  consumeGateSound(): boolean {
-    if (this._pendingGateSound) {
-      this._pendingGateSound = false;
-      return true;
-    }
-    return false;
+  /** Every gate sound raised since the last call, each at the gate it came from. */
+  drainGateCues(): TutorialCueAt[] {
+    return this.gates.drainCues();
+  }
+
+  /**
+   * Advances the gates one frame: unlocks any whose step is done and opens
+   * each unlocked gate once its own condition holds, which can depend on what
+   * the view shows and whether a dialog box is open.
+   */
+  updateGates(human: HumanPlayer, cat: CatPlayer, view: TutorialGateView): void {
+    this.gates.update((id) => this.isGateUnlocked(id), human, cat, view);
+  }
+
+  /** The gates' art, depth-sorted with the bodies. */
+  gateRenderables(): readonly TownPropRenderable[] {
+    return this.gates.renderables();
   }
 
   /** Called by DungeonScene after the human's tutorial reward dialog is dismissed. */
@@ -1011,17 +1215,63 @@ export class TutorialController {
 
   /**
    * The pause screen's one allowed action during a menu-guide step: opening
-   * that crawler's inventory. Null when the tutorial leaves the menu alone.
+   * that crawler's inventory, or the Character page where a level-up point is
+   * spent. Null when the tutorial leaves the menu alone.
    */
   pauseRestriction(): PauseRestriction | null {
-    if (this._state === 'HUMAN_OPENED_ACHIEVEMENT') return { crawler: 'human' };
-    if (this._state === 'CAT_OPENED_TREASURE_BOX') return { crawler: 'cat' };
+    if (this._state === 'HUMAN_OPENED_ACHIEVEMENT') return { kind: 'inventory', crawler: 'human' };
+    if (this._state === 'CAT_OPENED_TREASURE_BOX') return { kind: 'inventory', crawler: 'cat' };
+    if (this._state === 'HUMAN_LEVELED_UP') return { kind: 'section', section: 'character' };
     return null;
   }
 
-  onChestOpened(): void {
-    // Cat chest reward is handled by DungeonScene (shows ChestRewardDialog with custom
-    // magic_missile + potion split, then calls onCatRewardDialogDismissed after close).
+  /**
+   * Opens the tutorial's treasure chest: the cat's reward for its dialog to
+   * list, or null when the chest is not this step's to open. The items
+   * themselves arrive with {@link onCatRewardDialogDismissed}. Opening it
+   * stands the chest's beam down at once, ahead of the dialog closing.
+   */
+  openTreasureChest(): ChestLootSplit | null {
+    if (this._state !== 'CAT_INSIDE_TREASURE_ROOM') return null;
+    this.chestOpened = true;
+    return {
+      humanLoot: { coins: 0, items: [] },
+      catLoot: {
+        coins: 0,
+        items: [
+          { id: 'magic_missile_tome', quantity: 1 },
+          { id: 'health_potion', quantity: TUTORIAL_REWARD_POTIONS },
+        ],
+      },
+      displayLabels: { magic_missile_tome: 'Magic Missile Ability' },
+    };
+  }
+
+  /**
+   * Mordecai's overhead marker: the gold "!" while the player must speak to
+   * him for the first time and the green "?" when they must come back. His
+   * reminder lines at the other steps are help on request, not an errand.
+   */
+  mordecaiMarker(): QuestMarkerState {
+    if (this._state === 'HUMAN_GETS_TO_SAFE_ROOM') return 'exclamation';
+    if (this._state === 'CAT_ARRIVED') return 'question';
+    return 'none';
+  }
+
+  /** The place the current step sends the player to, as a beam target; characters mark themselves. */
+  objectiveBeacons(): ReadonlyArray<TrackerTarget> {
+    const place = STATE_OBJECTIVE_PLACES[this._state];
+    if (place === null) return NO_PLACE_BEACONS;
+    if (place === 'chest' && this.chestOpened) return NO_PLACE_BEACONS;
+    return PLACE_BEACONS[place];
+  }
+
+  private syncObjectiveMobs(): void {
+    const objective = STATE_OBJECTIVE_MOBS[this._state];
+    this.goblinA.isCurrentObjective = objective === 'goblinA';
+    this.smushGuard1.isCurrentObjective = objective === 'smushGuards';
+    this.smushGuard2.isCurrentObjective = objective === 'smushGuards';
+    this.goblinB.isCurrentObjective = objective === 'goblinB';
   }
 
   /**
@@ -1074,15 +1324,14 @@ export class TutorialController {
     }
   }
 
+  private checkPointSpent(human: HumanPlayer): void {
+    if (human.unspentPoints > 0) return;
+    this.needsAutoCloseMenus = true;
+    this.advance('CAMERA_PAN_TO_CAT');
+  }
+
   private checkCatInTreasureRoom(cat: CatPlayer): void {
-    const cx = cat.x / TILE_SIZE;
-    const cy = cat.y / TILE_SIZE;
-    const inRoom =
-      cx >= TREASURE_ROOM_TILE_X1 &&
-      cx <= TREASURE_ROOM_TILE_X2 &&
-      cy >= TREASURE_ROOM_TILE_Y1 &&
-      cy <= TREASURE_ROOM_TILE_Y2;
-    if (inRoom) {
+    if (isInTutorialRect(TUTORIAL_TREASURE_ROOM_BOUNDS, cat.x / TILE_SIZE, cat.y / TILE_SIZE)) {
       this.advance('CAT_INSIDE_TREASURE_ROOM');
     }
   }
@@ -1150,71 +1399,11 @@ export class TutorialController {
     }
   }
 
-  // ── Gate / ledge constraint enforcement ──────────────────────────────────
+  // ── Gate constraint enforcement ──────────────────────────────────────────
 
-  /**
-   * Clamp player positions based on which virtual gates are closed.
-   * Call this once per frame after movement is applied.
-   * Uses a 1-tile buffer around each gate's x/y range to prevent bypassing by
-   * walking at the edge of the hallway.
-   */
+  /** Holds each crawler back from every gate still in its way. Call once a frame after movement. */
   applyGateConstraints(human: HumanPlayer, cat: CatPlayer): void {
-    if (!this.isSafeEntranceGateOpen) {
-      if (
-        human.x >= (TUTORIAL_GATE_SAFE_ENTRANCE.x1 - GATE_X_BUFFER_TILES) * TILE_SIZE &&
-        human.x <= (TUTORIAL_GATE_SAFE_ENTRANCE.x2 + GATE_X_BUFFER_TILES) * TILE_SIZE
-      ) {
-        human.y = Math.min(human.y, TUTORIAL_GATE_SAFE_ENTRANCE.clampPxY);
-      }
-    }
-
-    if (!this.isG1Open) {
-      if (
-        cat.x >= (TUTORIAL_GATE_G1.x1 - GATE_X_BUFFER_TILES) * TILE_SIZE &&
-        cat.x <= (TUTORIAL_GATE_G1.x2 + GATE_X_BUFFER_TILES) * TILE_SIZE
-      ) {
-        cat.y = Math.min(cat.y, TUTORIAL_GATE_G1.clampPxY);
-      }
-    }
-
-    if (!this.isG2Open) {
-      if (
-        cat.x >= (TUTORIAL_GATE_G2.x1 - GATE_X_BUFFER_TILES) * TILE_SIZE &&
-        cat.x <= (TUTORIAL_GATE_G2.x2 + GATE_X_BUFFER_TILES) * TILE_SIZE
-      ) {
-        cat.y = Math.min(cat.y, TUTORIAL_GATE_G2.clampPxY);
-      }
-      if (
-        human.x >= (TUTORIAL_GATE_G2.x1 - GATE_X_BUFFER_TILES) * TILE_SIZE &&
-        human.x <= (TUTORIAL_GATE_G2.x2 + GATE_X_BUFFER_TILES) * TILE_SIZE
-      ) {
-        human.y = Math.min(human.y, TUTORIAL_GATE_G2.clampPxY);
-      }
-    }
-
-    if (!this.isG3Open) {
-      if (
-        cat.x >= (TUTORIAL_GATE_G3.x1 - GATE_X_BUFFER_TILES) * TILE_SIZE &&
-        cat.x <= (TUTORIAL_GATE_G3.x2 + GATE_X_BUFFER_TILES) * TILE_SIZE
-      ) {
-        cat.y = Math.min(cat.y, TUTORIAL_GATE_G3.clampPxY);
-      }
-      if (
-        human.x >= (TUTORIAL_GATE_G3.x1 - GATE_X_BUFFER_TILES) * TILE_SIZE &&
-        human.x <= (TUTORIAL_GATE_G3.x2 + GATE_X_BUFFER_TILES) * TILE_SIZE
-      ) {
-        human.y = Math.min(human.y, TUTORIAL_GATE_G3.clampPxY);
-      }
-    }
-
-    if (this.isLedgeActive) {
-      if (
-        human.y >= (TUTORIAL_LEDGE.y1 - GATE_Y_BUFFER_TILES) * TILE_SIZE &&
-        human.y <= (TUTORIAL_LEDGE.y2 + GATE_Y_BUFFER_TILES) * TILE_SIZE
-      ) {
-        human.x = Math.max(human.x, TUTORIAL_LEDGE.clampPxX);
-      }
-    }
+    this.gates.applyConstraints(human, cat);
   }
 
   // ── Item grants ───────────────────────────────────────────────────────────
@@ -1252,13 +1441,8 @@ export class TutorialController {
     if (this._state === next) return;
     this._state = next;
     this.stateFrames = 0;
-    if (
-      next === 'HUMAN_KILLED_GOBLIN' ||
-      next === 'CAMERA_PAN_TO_CAT' ||
-      next === 'SWITCHED_TO_HUMAN'
-    ) {
-      this._pendingGateSound = true;
-    }
+    if (next === 'CAMERA_PAN_TO_CAT') this.needsCameraPanStart = true;
+    this.syncObjectiveMobs();
   }
 
   private stateOrdinal(s: TutorialState): number {
@@ -1267,96 +1451,6 @@ export class TutorialController {
 
   private atOrPast(s: TutorialState): boolean {
     return this.stateOrdinal(this._state) >= this.stateOrdinal(s);
-  }
-
-  // ── Gate and ledge visual markers ─────────────────────────────────────────
-
-  /**
-   * Draws world-space barrier markers at each closed gate and the active ledge.
-   * Call this after renderWorld but before renderEntities so players stand in front.
-   */
-  renderGatesAndLedge(ctx: CanvasRenderingContext2D, camX: number, camY: number): void {
-    if (!this.isSafeEntranceGateOpen) {
-      this.drawGateBar(
-        ctx,
-        TUTORIAL_GATE_SAFE_ENTRANCE.x1,
-        TUTORIAL_GATE_SAFE_ENTRANCE.y,
-        TUTORIAL_GATE_SAFE_ENTRANCE.x2 - TUTORIAL_GATE_SAFE_ENTRANCE.x1 + 1,
-        1,
-        camX,
-        camY,
-      );
-    }
-
-    if (!this.isG1Open) {
-      this.drawGateBar(
-        ctx,
-        TUTORIAL_GATE_G1.x1,
-        TUTORIAL_GATE_G1.y,
-        TUTORIAL_GATE_G1.x2 - TUTORIAL_GATE_G1.x1 + 1,
-        1,
-        camX,
-        camY,
-      );
-    }
-    if (!this.isG2Open) {
-      this.drawGateBar(
-        ctx,
-        TUTORIAL_GATE_G2.x1,
-        TUTORIAL_GATE_G2.y,
-        TUTORIAL_GATE_G2.x2 - TUTORIAL_GATE_G2.x1 + 1,
-        1,
-        camX,
-        camY,
-      );
-    }
-    if (!this.isG3Open) {
-      this.drawGateBar(
-        ctx,
-        TUTORIAL_GATE_G3.x1,
-        TUTORIAL_GATE_G3.y,
-        TUTORIAL_GATE_G3.x2 - TUTORIAL_GATE_G3.x1 + 1,
-        1,
-        camX,
-        camY,
-      );
-    }
-    if (this.isLedgeActive) {
-      this.drawGateBar(
-        ctx,
-        TUTORIAL_LEDGE.x,
-        TUTORIAL_LEDGE.y1,
-        1,
-        TUTORIAL_LEDGE.y2 - TUTORIAL_LEDGE.y1 + 1,
-        camX,
-        camY,
-      );
-    }
-  }
-
-  private drawGateBar(
-    ctx: CanvasRenderingContext2D,
-    tileX: number,
-    tileY: number,
-    widthTiles: number,
-    heightTiles: number,
-    camX: number,
-    camY: number,
-  ): void {
-    const barrier: Rect = {
-      x: tileX * TILE_SIZE - camX,
-      y: tileY * TILE_SIZE - camY,
-      w: widthTiles * TILE_SIZE,
-      h: heightTiles * TILE_SIZE,
-    };
-    worldPlate(ctx, barrier, {
-      fill: worldPalette.guide.barrierFill,
-      border: worldPalette.guide.barrierEdge,
-      borderWidth: GATE_LINE_WIDTH,
-      glow: worldPalette.guide.barrierGlow,
-      glowBlur: GATE_GLOW_BLUR,
-      glowEdge: true,
-    });
   }
 
   // ── Overlay rendering ─────────────────────────────────────────────────────
@@ -1382,6 +1476,11 @@ export class TutorialController {
       return;
     }
 
+    const pulse = (Math.sin(this.animFrame * PULSE_SPEED) + 1) * PULSE_NORMALIZE;
+    const alpha = GUIDE_ALPHA_BASE + GUIDE_ALPHA_PULSE * pulse;
+
+    if (this.isAwardScreenUp(renderCtx)) return;
+
     if (this._state === 'HUMAN_OPENED_ACHIEVEMENT') {
       this.renderMenuGuide(ctx, renderCtx);
       return;
@@ -1392,57 +1491,22 @@ export class TutorialController {
       return;
     }
 
-    if (renderCtx.pauseMenuOpen) return;
-
     const mode = activeInputMode();
-    const isTouch = mode === 'touch';
-    const hint = hintTexts(mode)[this._state];
-    if (hint) {
-      const extraYOffset =
-        this._state === 'SWITCHED_TO_HUMAN' && isTouch
-          ? this.followerButtonClearance(renderCtx.followerButtonRect)
-          : this._state === 'SWITCHED_TO_CAT' && isTouch
-            ? SWITCHED_TO_CAT_TOUCH_HINT_RAISE_PX
-            : 0;
-      this.renderHintBox(ctx, hint, extraYOffset);
-    }
 
-    // Suppress all guide arrows while an achievement notification, ability level-up dialog,
-    // or reward granted dialog is covering the screen — those overlays take full priority.
-    if (
-      renderCtx.isAchievementNotifActive ||
-      renderCtx.isAbilityDialogShowing ||
-      renderCtx.isRewardGrantedDialogShowing
-    )
+    if (this._state === 'HUMAN_LEVELED_UP') {
+      this.renderStatPointGuide(ctx, renderCtx, mode, alpha);
       return;
-
-    const pulse = (Math.sin(this.animFrame * PULSE_SPEED) + 1) * PULSE_NORMALIZE;
-    const alpha = GUIDE_ALPHA_BASE + GUIDE_ALPHA_PULSE * pulse;
-
-    if (this._state === 'SWITCHED_TO_HUMAN') {
-      if (!renderCtx.followerMenuOpen && renderCtx.followerButtonRect !== null) {
-        this.renderGuideArrowAt(ctx, renderCtx.followerButtonRect, alpha);
-      } else if (renderCtx.followerMenuOpen && renderCtx.followerMenuFollowMeRect !== null) {
-        this.renderGuideArrowAt(ctx, renderCtx.followerMenuFollowMeRect, alpha);
-      }
     }
 
-    // On touch, show an arrow over the Smush hotbar slot during the Smush step,
-    // but only once the player is close enough that casting would actually hit both guards.
-    const slots = renderCtx.hotbarSlotRects;
-    const firstHotbarSlot = slots.length > 0 ? slots[0] : null;
-    if (
-      firstHotbarSlot !== null &&
-      this._state === 'HUMAN_EQUIPPED_SMUSH' &&
-      isTouch &&
-      this.isWithinSmushRangeOfBothGuards(activePlayerX, activePlayerY)
-    ) {
-      this.renderGuideArrowAt(ctx, firstHotbarSlot, alpha);
+    if (renderCtx.pauseMenuOpen || renderCtx.inventoryFrame !== null) {
+      this.renderLeaveMenuGuide(ctx, renderCtx, mode, alpha);
+      return;
     }
 
-    if (firstHotbarSlot !== null && this._state === 'SWITCHED_TO_CAT' && isTouch) {
-      this.renderGuideArrowAt(ctx, firstHotbarSlot, alpha);
-    }
+    const hudPointer = this.hudPointerFor(renderCtx, activePlayerX, activePlayerY);
+    const hint = hintTexts(mode)[this._state];
+    if (hint) this.renderHintBox(ctx, hint, this.hintLiftClearOf(hudPointer));
+    if (hudPointer !== null) this.renderGuideArrowAt(ctx, hudPointer, alpha);
 
     // Fixed arrow above goblin B during the magic missile step.
     // Also shows a navigation arrow above the cat pointing toward goblin B when the cat is
@@ -1457,7 +1521,7 @@ export class TutorialController {
         worldPalette.guide.accent,
       );
 
-      const catNearGate = activePlayerY >= TUTORIAL_GATE_G2.clampPxY - NEAR_LEDGE_THRESHOLD_PX;
+      const catNearGate = activePlayerY >= TUTORIAL_GATE_G2.clampPxY - NEAR_GATE_THRESHOLD_PX;
       if (!catNearGate) {
         drawArrowAbovePlayer(
           ctx,
@@ -1475,32 +1539,163 @@ export class TutorialController {
     const target = STATE_ARROW_TARGETS[this._state];
     if (target !== null) {
       // Suppress the navigation arrow when the player is already as close as they can
-      // get to the barrier during the Smush step — they just need to cast now.
-      const nearLedge =
+      // get to the smush gate during the Smush step — they just need to cast now.
+      const nearSmushGate =
         this._state === 'HUMAN_EQUIPPED_SMUSH' &&
-        activePlayerX <= TUTORIAL_LEDGE.clampPxX + NEAR_LEDGE_THRESHOLD_PX;
-      if (!nearLedge) {
+        activePlayerX <= TUTORIAL_GATE_SMUSH.clampPxX + NEAR_GATE_THRESHOLD_PX;
+      if (!nearSmushGate) {
         this.renderArrowToTarget(
           ctx,
           camX,
           camY,
           activePlayerX,
           activePlayerY,
-          target,
-          renderCtx.isPlayerInSafeRoom,
+          worldTargetCentrePx(target, renderCtx.mordecaiPosition),
+          this.interactPromptRangePx(target),
         );
       }
     }
   }
 
   /**
-   * How far to lift the hint box over the hotbar so it clears the Follower
-   * button and the arrow bouncing above it.
+   * The HUD control the current step is about, for the guide arrow: the
+   * achievement banner, the hotbar slot to press, the Switch button, the
+   * Follower button (then its "Follow me"). Null when the step's place is in
+   * the world instead.
    */
-  private followerButtonClearance(followerButton: Rect | null): number {
-    if (followerButton === null || this.hintPlacement.kind !== 'hotbar') return 0;
-    const clearTop = followerButton.y - GUIDE_ARROW_REACH;
+  private hudPointerFor(
+    renderCtx: TutorialRenderContext,
+    activePlayerX: number,
+    activePlayerY: number,
+  ): Rect | null {
+    const slots = renderCtx.hotbarSlotRects;
+    const slot = (index: number): Rect | null => (index < slots.length ? slots[index] : null);
+    switch (this._state) {
+      case 'HUMAN_TALKED_TO_MORDECAI':
+        return renderCtx.achievementBannerRect;
+      case 'HUMAN_EQUIPPED_SMUSH':
+        // Only once a cast from here would actually catch both guards.
+        return this.isWithinSmushRangeOfBothGuards(activePlayerX, activePlayerY)
+          ? slot(TUTORIAL_ABILITY_HOTBAR_SLOT)
+          : null;
+      case 'SWITCHED_TO_CAT':
+        return slot(TUTORIAL_POTION_HOTBAR_SLOT);
+      case 'CAT_EQUIPPED_MAGIC_MISSILE':
+        return this.goblinB.hp > 0 ? slot(TUTORIAL_ABILITY_HOTBAR_SLOT) : null;
+      case 'AWAITING_SWITCH_TO_HUMAN':
+        return renderCtx.switchButtonRect;
+      case 'SWITCHED_TO_HUMAN':
+        return renderCtx.followerMenuOpen
+          ? renderCtx.followerMenuFollowMeRect
+          : renderCtx.followerButtonRect;
+      case 'SEPARATE_ROOMS':
+      case 'HUMAN_MOVED':
+      case 'HUMAN_NEAR_GOBLIN':
+      case 'HUMAN_KILLED_GOBLIN':
+      case 'HUMAN_GETS_TO_SAFE_ROOM':
+      case 'HUMAN_OPENED_ACHIEVEMENT':
+      case 'HUMAN_SMUSHED_GUARDS':
+      case 'HUMAN_LEVELED_UP':
+      case 'CAMERA_PAN_TO_CAT':
+      case 'USED_HEALTH_POTION':
+      case 'CAT_INSIDE_TREASURE_ROOM':
+      case 'CAT_OPENED_TREASURE_BOX':
+      case 'CAT_SHOT_GUARD':
+      case 'CAT_ARRIVED':
+      case 'TALKED_TO_MORDECAI_AGAIN':
+      case 'COMPLETE':
+        return null;
+    }
+  }
+
+  /**
+   * Whether a screen handing out a step's reward is up: the achievement card,
+   * the loot-box reveal, the chest's reward card, the "New Ability!" card.
+   * Each has a lone OK or its own "tap to continue", which a new player reads
+   * unaided, so the guide draws nothing over it: no arrow, and no step hint
+   * naming a control the card is covering.
+   */
+  private isAwardScreenUp(renderCtx: TutorialRenderContext): boolean {
+    return (
+      renderCtx.isAchievementNotifActive ||
+      renderCtx.isRewardGrantedDialogShowing ||
+      renderCtx.isLootBoxOpen ||
+      renderCtx.isChestRewardOpen ||
+      renderCtx.isAbilityDialogShowing
+    );
+  }
+
+  /**
+   * Carl's first level-up: to the "+N" badge on his level disc (or, from the
+   * keyboard, Esc), then on the Character page to a stat's "+".
+   */
+  private renderStatPointGuide(
+    ctx: CanvasRenderingContext2D,
+    renderCtx: TutorialRenderContext,
+    mode: InputMode,
+    alpha: number,
+  ): void {
+    if (renderCtx.pauseMenuOpen && renderCtx.characterSectionOpen) {
+      this.placeHintClearOfPauseMenu(renderCtx);
+      this.renderHintBox(ctx, statSpendHint(mode));
+      if (renderCtx.statSpendButtonRect !== null) {
+        this.renderGuideArrowAt(ctx, renderCtx.statSpendButtonRect, alpha);
+      }
+      return;
+    }
+    if (renderCtx.pauseMenuOpen || renderCtx.inventoryFrame !== null) {
+      this.renderLeaveMenuGuide(ctx, renderCtx, mode, alpha);
+      return;
+    }
+    const pointer = renderCtx.levelBadgeRect ?? renderCtx.pauseButtonRect;
+    this.renderHintBox(ctx, hintTexts(mode)[this._state], this.hintLiftClearOf(pointer));
+    if (pointer !== null) this.renderGuideArrowAt(ctx, pointer, alpha);
+  }
+
+  /**
+   * A menu open at a step with nothing to do in it: how to leave, pointed at
+   * the menu's close button, so a player who wandered in is never stuck there.
+   */
+  private renderLeaveMenuGuide(
+    ctx: CanvasRenderingContext2D,
+    renderCtx: TutorialRenderContext,
+    mode: InputMode,
+    alpha: number,
+  ): void {
+    if (renderCtx.pauseMenuOpen) this.placeHintClearOfPauseMenu(renderCtx);
+    this.renderHintBox(ctx, leaveMenuHint(mode));
+    if (renderCtx.menuCloseRect !== null) {
+      this.renderGuideArrowAt(ctx, renderCtx.menuCloseRect, alpha);
+    }
+  }
+
+  private placeHintClearOfPauseMenu(renderCtx: TutorialRenderContext): void {
+    if (renderCtx.pauseFrame === null) return;
+    this.hintPlacement = { kind: 'inventory', frame: renderCtx.pauseFrame, guidedHeader: null };
+  }
+
+  /**
+   * How far to lift the hint box over the hotbar so it clears the arrow
+   * pointing at `pointer`. Only a control in the lower half of the screen
+   * shares the box's band; one up top is pointed at from below, well clear.
+   */
+  private hintLiftClearOf(pointer: Rect | null): number {
+    if (pointer === null || this.hintPlacement.kind !== 'hotbar') return 0;
+    const pointerCentreY = pointer.y + pointer.h / 2;
+    if (pointerCentreY < viewportHeight() * LOWER_SCREEN_FRACTION) return 0;
+    const clearTop = pointer.y - GUIDE_ARROW_REACH;
     return Math.max(0, this.hintPlacement.floor - clearTop);
+  }
+
+  /**
+   * Where the arrow to a world target stands down because that target's own
+   * interact prompt has taken over, measured top-left to top-left as the
+   * prompt measures it; null for a target with no prompt.
+   */
+  private interactPromptRangePx(target: NonNullable<WorldTarget>): number | null {
+    if (target === 'mordecai') return MORDECAI_PROMPT_RANGE_PX;
+    const isChest = target.tileX === TUTORIAL_CHEST_POS.x && target.tileY === TUTORIAL_CHEST_POS.y;
+    return isChest ? CHEST_INTERACTION_RANGE : null;
   }
 
   private renderHintBox(
@@ -1580,8 +1775,6 @@ export class TutorialController {
 
   /** Renders step-by-step inventory guidance when human needs to set up their items. */
   private renderMenuGuide(ctx: CanvasRenderingContext2D, renderCtx: TutorialRenderContext): void {
-    if (renderCtx.isRewardGrantedDialogShowing) return;
-
     const step = this._menuGuideStep;
     const mode = activeInputMode();
     const pulse = (Math.sin(this.animFrame * PULSE_SPEED) + 1) * PULSE_NORMALIZE;
@@ -1590,7 +1783,8 @@ export class TutorialController {
     if (step === 'drag_smush' || step === 'drag_potions') {
       if (this.renderBagTabGuide(ctx, renderCtx, mode, alpha)) return;
       if (renderCtx.inventoryPanelOpen) {
-        const targetSlot = step === 'drag_smush' ? 0 : 1;
+        const targetSlot =
+          step === 'drag_smush' ? TUTORIAL_ABILITY_HOTBAR_SLOT : TUTORIAL_POTION_DRAG_HOTBAR_SLOT;
         const targetSlotRect = renderCtx.bagHotbarSlotRects[targetSlot] ?? null;
 
         if (step === 'drag_smush') {
@@ -1684,8 +1878,6 @@ export class TutorialController {
     ctx: CanvasRenderingContext2D,
     renderCtx: TutorialRenderContext,
   ): void {
-    if (renderCtx.isRewardGrantedDialogShowing) return;
-
     const step = this._catMenuGuideStep;
     const mode = activeInputMode();
     const pulse = (Math.sin(this.animFrame * PULSE_SPEED) + 1) * PULSE_NORMALIZE;
@@ -1693,7 +1885,8 @@ export class TutorialController {
 
     if (this.renderBagTabGuide(ctx, renderCtx, mode, alpha)) return;
     if (renderCtx.inventoryPanelOpen) {
-      const targetSlot = step === 'drag_missile' ? 0 : 1;
+      const targetSlot =
+        step === 'drag_missile' ? TUTORIAL_ABILITY_HOTBAR_SLOT : TUTORIAL_POTION_DRAG_HOTBAR_SLOT;
       const targetSlotRect = renderCtx.bagHotbarSlotRects[targetSlot] ?? null;
 
       if (step === 'drag_missile') {
@@ -1741,18 +1934,25 @@ export class TutorialController {
     return dist1Sq <= outerRadiusPxSq && dist2Sq <= outerRadiusPxSq;
   }
 
-  /** Draws a downward pointing arrow above the given rect (for pointing at UI buttons). */
+  /**
+   * Draws a bouncing arrow at a UI control: pointing down onto its top edge,
+   * or, for a control too near the top of the screen to fit the arrow above
+   * it (the achievement banner, the level badge), pointing up at its bottom.
+   */
   private renderGuideArrowAt(ctx: CanvasRenderingContext2D, rect: Rect, alpha: number): void {
     const bounce = Math.sin(this.animFrame * GUIDE_ARROW_SPEED) * GUIDE_ARROW_BOUNCE;
     const cx = rect.x + rect.w / 2;
-    const ty = rect.y - GUIDE_ARROW_SIZE * 2 - bounce;
     const size = GUIDE_ARROW_SIZE;
+    const pointsUp = rect.y < GUIDE_ARROW_REACH;
+    const tipY = pointsUp ? rect.y + rect.h : rect.y;
+    const towardTip = pointsUp ? -1 : 1;
+    const baseY = tipY - towardTip * (size * 2 + bounce);
 
     ctx.save();
     ctx.beginPath();
-    ctx.moveTo(cx, ty + size * 2);
-    ctx.lineTo(cx - size, ty);
-    ctx.lineTo(cx + size, ty);
+    ctx.moveTo(cx, tipY - towardTip * bounce);
+    ctx.lineTo(cx - size, baseY);
+    ctx.lineTo(cx + size, baseY);
     ctx.closePath();
     ctx.globalAlpha = alpha;
     ctx.fillStyle = worldPalette.guide.accent;
@@ -1785,35 +1985,46 @@ export class TutorialController {
     });
   }
 
-  /** Renders the directional arrow above the active player pointing toward the target. */
+  /**
+   * Renders the directional arrow above the active player pointing toward the
+   * target. It stands down once the target's interact prompt shows
+   * (`promptRangePx`), or near a target without one.
+   */
   private renderArrowToTarget(
     ctx: CanvasRenderingContext2D,
     camX: number,
     camY: number,
     activePlayerX: number,
     activePlayerY: number,
-    target: { tileX: number; tileY: number },
-    _isPlayerInSafeRoom: boolean,
+    targetCentre: { x: number; y: number },
+    promptRangePx: number | null,
   ): void {
-    const targetWorldX = (target.tileX + TILE_FRACTION_CENTER) * TILE_SIZE;
-    const targetWorldY = (target.tileY + TILE_FRACTION_CENTER) * TILE_SIZE;
+    const targetWorldX = targetCentre.x;
+    const targetWorldY = targetCentre.y;
 
-    const dxToTarget = activePlayerX - targetWorldX;
-    const dyToTarget = activePlayerY - targetWorldY;
-    if (
-      Math.sqrt(dxToTarget * dxToTarget + dyToTarget * dyToTarget) <= NEAR_OBJECTIVE_THRESHOLD_PX
-    ) {
-      return;
+    if (promptRangePx !== null) {
+      const halfTile = TILE_SIZE * TILE_FRACTION_CENTER;
+      const fromTargetTopLeft = Math.hypot(
+        activePlayerX - (targetWorldX - halfTile),
+        activePlayerY - (targetWorldY - halfTile),
+      );
+      if (fromTargetTopLeft < promptRangePx) return;
+    } else {
+      const fromTargetCentre = Math.hypot(
+        activePlayerX - targetWorldX,
+        activePlayerY - targetWorldY,
+      );
+      if (fromTargetCentre <= NEAR_OBJECTIVE_THRESHOLD_PX) return;
     }
 
-    // Only draw when player is visible on screen (arrow makes no sense in camera override mode)
+    // The arrow hangs off the crawler, so it means nothing while a camera pan has them off screen.
     const playerScreenX = activePlayerX - camX;
     const playerScreenY = activePlayerY - camY;
     if (
-      playerScreenX < -TILE_SIZE * 2 ||
-      playerScreenX > viewportWidth() + TILE_SIZE * 2 ||
-      playerScreenY < -TILE_SIZE * 2 ||
-      playerScreenY > viewportHeight() + TILE_SIZE * 2
+      playerScreenX < -ARROW_OFFSCREEN_MARGIN_PX ||
+      playerScreenX > viewportWidth() + ARROW_OFFSCREEN_MARGIN_PX ||
+      playerScreenY < -ARROW_OFFSCREEN_MARGIN_PX ||
+      playerScreenY > viewportHeight() + ARROW_OFFSCREEN_MARGIN_PX
     ) {
       return;
     }
@@ -1832,13 +2043,21 @@ export class TutorialController {
 
   // ── Mob factory ───────────────────────────────────────────────────────────
 
-  /** Create all five tutorial goblins with appropriate AI flags. */
+  /** Create all four tutorial goblins with appropriate AI flags. */
   static createMobs(tileSize: number): TutorialMobs {
     return {
       // Three archetypes across the four, so the tutorial shows a player more
       // than one kind of goblin before they meet one that fights back.
       goblinA: new TutorialGoblin(GOBLIN_A_POS.x, GOBLIN_A_POS.y, tileSize, 'mace', false, true),
-      goblinB: new TutorialGoblin(GOBLIN_B_POS.x, GOBLIN_B_POS.y, tileSize, 'sword', true),
+      goblinB: new TutorialGoblin(
+        GOBLIN_B_POS.x,
+        GOBLIN_B_POS.y,
+        tileSize,
+        'sword',
+        true,
+        false,
+        true,
+      ),
       smushGuard1: new TutorialGoblin(
         SMUSH_GUARD_1_POS.x,
         SMUSH_GUARD_1_POS.y,

@@ -13,7 +13,13 @@ import {
   renderLevelUpFlash,
   renderStatBoostFlash,
 } from '../systems/worldEffects';
-import type { DockButtonModel, HudModel, HudViewState, MinimapModel } from '../ui/hud/hudModel';
+import type {
+  DockButtonModel,
+  HudModel,
+  HudViewState,
+  MinimapModel,
+  SkillPointsModel,
+} from '../ui/hud/hudModel';
 import { HudSurface, surfacesOverHud, toCssRect } from '../ui/hud/HudSurface';
 import { inventoryTabRect, itemMenuEntryRects } from '../ui/screens/inventory/renderInventory';
 import type { Rect } from '../ui/core/geom';
@@ -68,7 +74,17 @@ import {
 } from '../ui/screens/dialogs/RunCompleteScreen';
 import { PostSignupScene } from './PostSignupScene';
 import { MENU_TAP_MAX_DISTANCE } from '../ui/core/pointer';
-import type { PauseFrame, PauseScreen } from '../ui/screens/pause/PauseScreen';
+import {
+  PAUSE_SURFACE_ID,
+  type PauseFrame,
+  type PauseScreen,
+} from '../ui/screens/pause/PauseScreen';
+import {
+  CONSTITUTION_STAT_NAME,
+  isStatSpendButtonOf,
+  statSpendButtonId,
+} from '../ui/screens/pause/characterSection';
+import { LOOT_BANNER_ENTRY_ID } from '../ui/hud/lootBanner';
 import { SpellSystem } from '../systems/SpellSystem';
 import type { InventoryItem } from '../core/ItemDefs';
 import { AchievementManager } from '../core/AchievementManager';
@@ -509,6 +525,7 @@ import type { SystemContext } from '../systems/GameSystem';
 import { GameplayInputHandler } from '../systems/GameplayInputHandler';
 import { GameplayScene } from './GameplayScene';
 import { TutorialController, type TutorialRenderContext } from '../systems/TutorialController';
+import { TUTORIAL_CUES, tutorialCueSource } from '../systems/tutorialSoundCues';
 import { TutorialMap, TUTORIAL_CHEST_POS, TUTORIAL_TREASURE_ROOM_BOUNDS } from '../map/TutorialMap';
 import { HOTBAR_COUNT, ITEM_DEF, type ItemId } from '../core/ItemDefs';
 import { BrindleGrub } from '../creatures/BrindleGrub';
@@ -588,7 +605,7 @@ import { worldPalette } from '../ui/theme/worldInk';
 import { drawUnknownAbilityIcon } from '../ui/icons/rewardIcons';
 import { iconSquare } from '../ui/icons/iconSquare';
 import { dynamiteChargeSurface } from '../systems/DynamiteSystem';
-import type { Surface, UiRoot, WorldGesture } from '../ui/core/UiRoot';
+import type { HitRegion, Surface, UiRoot, WorldGesture } from '../ui/core/UiRoot';
 import { PRIMARY_BUTTON } from '../ui/core/pointer';
 
 /** A save as a scene writes it: every run-level field present, the floor's `world` optional. */
@@ -885,8 +902,6 @@ const VILLAGE_WORKSHOP_AMBIENT_VOLUME = 0.5;
 const DESPERADO_TATTOO_NOTICE = 'New tattoo: the Desperado Pass. The Club will know you.';
 /** Its line in the Juicer chest's reward columns — an award, not an inventory item. */
 const DESPERADO_TATTOO_REWARD_LABEL = 'Desperado Pass Tattoo (both crawlers)';
-/** Healing potions the tutorial's treasure chest hands the cat with her Magic Missile tome. */
-const TUTORIAL_CHEST_CAT_POTIONS = 10;
 
 /**
  * What an opened chest's reward dialog shows, and what dismissing it grants
@@ -1020,6 +1035,9 @@ const TROGLODYTE_SPAWN_KEY = 'troglodyte';
 
 /** How far under the player's music level the tutorial's track sits, as gain. */
 const TUTORIAL_MUSIC_DUCK_LEVEL = 0.25;
+
+/** How a panel's ✕ button's region id ends, whatever the panel is called. */
+const CLOSE_BUTTON_ID_SUFFIX = '/close';
 
 /** The keyboard-hero per-hit tick sits under the track rather than over it. */
 const KEYBOARD_HERO_HIT_TICK_VOLUME = 0.45;
@@ -1956,10 +1974,13 @@ export class DungeonScene extends GameplayScene {
         : {
             inventoryRestrictions: () => tutorialController.inventoryRestrictions(),
             onBlockedInventoryDrag: () => tutorialController.triggerBoxersDragHint(),
-            inventoryCrawlerLock: () => tutorialController.pauseRestriction()?.crawler ?? null,
+            inventoryCrawlerLock: () => {
+              const restriction = tutorialController.pauseRestriction();
+              return restriction?.kind === 'inventory' ? restriction.crawler : null;
+            },
           }),
       // The tutorial waits on this one: `SWITCHED_TO_CAT` locks the cat in place
-      // and drinking is the only thing that unlocks her.
+      // until she drinks, or until she is at full health without drinking.
       onPotionDrunk: (id) => {
         if (id === 'health_potion') this.tutorial?.onPotionUsed();
       },
@@ -2084,6 +2105,7 @@ export class DungeonScene extends GameplayScene {
       startOpened: options?.stealthGateOpenAtStart?.(this.gameMap) ?? false,
     });
     this.objectiveBeaconSources.push(this.stealthKeySnatch);
+    if (this.tutorial !== null) this.objectiveBeaconSources.push(this.tutorial);
     this.roomSaves = [this.cloggedBathroom, this.stealthKeySnatch].map((source) => ({
       source,
       latch: { wasInside: false, owed: false },
@@ -2850,9 +2872,7 @@ export class DungeonScene extends GameplayScene {
     this.menus.pauseScreen.onResetGame =
       this.onResetGameCallback === null ? null : () => this.resetGame();
     this.menus.pauseScreen.skipAudioPause = () =>
-      this.tutorial !== null &&
-      (this.tutorial.state === 'HUMAN_OPENED_ACHIEVEMENT' ||
-        this.tutorial.state === 'CAT_OPENED_TREASURE_BOX');
+      (this.tutorial?.pauseRestriction() ?? null) !== null;
     this.menus.pauseScreen.onOpenChat = () => {
       this.menus.pauseScreen.close();
       this.triggerOpenChat();
@@ -4056,6 +4076,9 @@ export class DungeonScene extends GameplayScene {
     camX: number,
     camY: number,
   ): ArrowCandidate | null {
+    // The tutorial's step arrow already points at every place it lights, and a
+    // second arrow toward the same beam would only fight it.
+    if (this.tutorial !== null) return null;
     const bathroom = this.cloggedBathroom;
     const atThePipeWall =
       bathroom.isPipeBoardOpen ||
@@ -5943,6 +5966,9 @@ export class DungeonScene extends GameplayScene {
    */
   private attemptStairwellSave(roomIndex: number): void {
     if (roomIndex < 0) return;
+    // The tutorial's rooms are recorded only so its cellars are dressed and lit;
+    // its exit room is the end of a lesson, not a room to bank a save in.
+    if (this.tutorial !== null) return;
     if (this.stairwellRoomsSaved.has(roomIndex)) {
       if (this.pendingStairwellSaveRoomIndex === roomIndex)
         this.pendingStairwellSaveRoomIndex = null;
@@ -6882,6 +6908,7 @@ export class DungeonScene extends GameplayScene {
   }
 
   private mordecaiMarkerFor(room: SafeRoomInfo): QuestMarkerState {
+    if (this.tutorial !== null) return this.tutorial.mordecaiMarker();
     const bossType = this.exitRoomBoss(room);
     if (bossType === null) return 'none';
     const state = this.debriefState();
@@ -7387,7 +7414,7 @@ export class DungeonScene extends GameplayScene {
       crawlers: this.hudCrawlerFrames(),
       activeCrawler: this.human.isActive ? 'human' : 'cat',
       coins: this.hudCoins(),
-      skillPoints: this.hudSkillPoints(() => void this.menus.openSpendScreen()),
+      skillPoints: this.dungeonSkillPoints(),
       minimap: this.hudMinimap(),
       dock: this.hudDock(),
       summon: this.hudSummon(),
@@ -7413,6 +7440,22 @@ export class DungeonScene extends GameplayScene {
           ? { frames: this.levelTimerFrames, paused: this.isLevelTimerPaused() }
           : null,
     };
+  }
+
+  /** Puts away the pause menu and panels once a tutorial step finished inside them asks to. */
+  private closeMenusForTutorial(tutorial: TutorialController): void {
+    if (!tutorial.needsAutoCloseMenus) return;
+    tutorial.needsAutoCloseMenus = false;
+    this.menus.pauseScreen.close();
+    this.menus.closePanels();
+  }
+
+  /** The skill-point badge, which the tutorial's stat step keeps on screen while it points at it. */
+  private dungeonSkillPoints(): SkillPointsModel {
+    const skillPoints = this.hudSkillPoints(() => void this.menus.openSpendScreen());
+    return this.tutorial?.forcesSkillPointBadge === true
+      ? { ...skillPoints, hidden: false }
+      : skillPoints;
   }
 
   private hudMinimap(): MinimapModel {
@@ -7519,6 +7562,7 @@ export class DungeonScene extends GameplayScene {
         id: 'switch',
         icon: other === 'cat' ? 'cat' : 'user',
         label: `Switch to ${CRAWLER_NAMES[other]}`,
+        key: keybindings.labelFor('switchCharacter'),
         onTap: () => this.triggerSwitchCharacter(),
       });
     }
@@ -7756,6 +7800,10 @@ export class DungeonScene extends GameplayScene {
     // boss room locks would otherwise sit frozen at its first frame for the
     // length of the intro, and a potion's effect cue would be held with it.
     this.menus.update();
+    if (this.tutorial !== null) {
+      this.tutorial.updateUnderMenus(this.human, this.cat);
+      this.closeMenusForTutorial(this.tutorial);
+    }
     // The floor's song starts with the intro banner, which is drawn over the
     // HUD for most of a credit's display time; its notices wait in the library.
     const introBannerShowing = this.tutorial === null && this.dungeonIntro.isActive;
@@ -8175,7 +8223,10 @@ export class DungeonScene extends GameplayScene {
       goreUnderDarkness: this.dungeonLighting !== null,
       lightShining: this.lightShining,
       isCrawlerHidden: (crawler) => this.cloggedBathroom.isCrawlerHidden(crawler),
-      sortedFixtures: this.cloggedBathroom.sortedFixtures(),
+      sortedFixtures:
+        this.tutorial === null
+          ? this.cloggedBathroom.sortedFixtures()
+          : [...this.cloggedBathroom.sortedFixtures(), ...this.tutorial.gateRenderables()],
     };
 
     this.renderPipeline.renderWorld(ctx, rc);
@@ -8186,7 +8237,6 @@ export class DungeonScene extends GameplayScene {
     this.briarHollowKit?.renderGround(ctx, camX, camY);
     this.gathering?.renderGround(ctx, camX, camY);
     this.bopca.renderObjects(ctx, camX, camY, this.active(), this.inactive());
-    this.tutorial?.renderGatesAndLedge(ctx, camX, camY);
     const activeCrawler = this.active();
     this.defendQuest.renderObjects(ctx, camX, camY, activeCrawler, activeCrawler);
     this.cloggedBathroom.renderGround(
@@ -8457,8 +8507,32 @@ export class DungeonScene extends GameplayScene {
         ? inventoryTabRect(screen.surface.id, this.ui.regions(), 'bag')
         : null;
       const pauseInventoryEntry = this.menus.pauseScreen.guidedEntryRect;
+      const pauseFrame = this.menus.pauseScreen.frameRect;
+      const regions = this.ui.regions();
+      const regionCssRect = (matches: (region: HitRegion) => boolean): Rect | null => {
+        const region = regions.find(matches);
+        return region === undefined ? null : toCssRect(region.rect, uiScale);
+      };
+      const closeButtonOf = (surfaceId: string): Rect | null =>
+        regionCssRect(
+          (region) => region.surfaceId === surfaceId && region.id.endsWith(CLOSE_BUTTON_ID_SUFFIX),
+        );
+      const menuCloseRect = this.menus.pauseScreen.isOpen
+        ? closeButtonOf(PAUSE_SURFACE_ID)
+        : screen.isOpen
+          ? closeButtonOf(screen.surface.id)
+          : null;
+      const pausePrefix = `${PAUSE_SURFACE_ID}/`;
+      const suggestedSpendId = `${pausePrefix}${statSpendButtonId('human', CONSTITUTION_STAT_NAME)}`;
+      // Constitution first; any other of Carl's "+" when it has scrolled out of view.
+      const statSpendButtonRect =
+        regionCssRect((region) => region.id === suggestedSpendId) ??
+        regionCssRect(
+          (region) =>
+            region.surfaceId === PAUSE_SURFACE_ID &&
+            isStatSpendButtonOf('human', region.id.slice(pausePrefix.length)),
+        );
       const tutRenderCtx: TutorialRenderContext = {
-        isPlayerInSafeRoom: this.safeRoom.isEntityInSafeRoom(activePlayer),
         pauseMenuOpen: this.menus.pauseScreen.isOpen,
         inventoryPanelOpen: screen.isOpen && screen.tab === 'bag',
         inventoryFrame: inventoryFrame === null ? null : toCssRect(inventoryFrame, uiScale),
@@ -8493,6 +8567,16 @@ export class DungeonScene extends GameplayScene {
         followerMenuFollowMeRect: this.followerMenu.isOpen
           ? this.followerMenu.followMeButtonRect
           : null,
+        mordecaiPosition: this.safeRoom.mordecaiStandingPositions[0] ?? null,
+        achievementBannerRect: this.hud.cssBandEntryRect(LOOT_BANNER_ENTRY_ID),
+        isLootBoxOpen: this.achievementUI.lootBoxOpener.isOpen,
+        isChestRewardOpen: this.chestRewardDialog.isOpen,
+        switchButtonRect: this.hud.cssDockRect('switch'),
+        levelBadgeRect: this.hud.cssSkillBadgeRect(),
+        pauseFrame: pauseFrame === null ? null : toCssRect(pauseFrame, uiScale),
+        characterSectionOpen: this.menus.pauseScreen.shownSectionId === 'character',
+        statSpendButtonRect,
+        menuCloseRect,
       };
       this.tutorial.renderOverlay(
         ctx,
@@ -8673,7 +8757,6 @@ export class DungeonScene extends GameplayScene {
     applyKnockbackMotion(this.human, this.gameMap);
     applyKnockbackMotion(this.cat, this.gameMap);
 
-    // Tutorial gate and ledge constraints — applied after movement
     this.tutorial?.applyGateConstraints(this.human, this.cat);
 
     // After every constraint that can still move a crawler this frame, so the
@@ -8857,14 +8940,12 @@ export class DungeonScene extends GameplayScene {
     // Advance tutorial state machine; anchor companion when tutorial requires it
     if (this.tutorial !== null) {
       this.tutorial.update(this.human, this.cat);
-      if (this.tutorial.consumeGateSound()) {
-        this.audio?.play('gate_opening');
-      }
+      this.tutorial.updateGates(this.human, this.cat, {
+        camera: this.camera(),
+        dialogOpen: this.conversation.isOpen || this.overlayOpen,
+      });
       if (this.tutorial.needsSwitchToCat) {
         this.tutorial.needsSwitchToCat = false;
-        this.triggerSwitchCharacter(true);
-      } else if (this.tutorial.needsSwitchToHuman) {
-        this.tutorial.needsSwitchToHuman = false;
         this.triggerSwitchCharacter(true);
       }
       if (this.tutorial.shouldAnchorCurrentCompanion) {
@@ -8883,11 +8964,8 @@ export class DungeonScene extends GameplayScene {
         this.tutorial.startCameraPan(humanCamX, humanCamY, catCamX, catCamY);
       }
 
-      if (this.tutorial.needsAutoCloseMenus) {
-        this.tutorial.needsAutoCloseMenus = false;
-        this.menus.pauseScreen.close();
-        this.menus.closePanels();
-      }
+      this.closeMenusForTutorial(this.tutorial);
+      this.playTutorialGateCues(this.tutorial);
     }
     this.companion.update(ctx);
     this.bossRoom.clampJoinedPlayers(this.human, this.cat);
@@ -9432,6 +9510,21 @@ export class DungeonScene extends GameplayScene {
     };
   }
 
+  /**
+   * After any switch of crawler this frame, and heard from whoever is active
+   * now: CombatKit only moves the listener later in the frame, and a gate
+   * unlocked by the switch itself would otherwise be heard from the crawler
+   * the player just left.
+   */
+  private playTutorialGateCues(tutorial: TutorialController): void {
+    const listener = this.active();
+    this.audio?.setListenerToCrawler(listener);
+    for (const raised of tutorial.drainGateCues()) {
+      const source = tutorialCueSource(raised, listener);
+      this.audio?.playRandomAt(TUTORIAL_CUES[raised.cue], source.x, source.y);
+    }
+  }
+
   private camera(): { x: number; y: number } {
     const tutorialCam = this.tutorial?.cameraOverride;
     if (tutorialCam !== null && tutorialCam !== undefined) return tutorialCam;
@@ -9506,19 +9599,10 @@ export class DungeonScene extends GameplayScene {
    */
   private grantChestContents(chest: TreasureChest): ChestReward {
     const tutorial = this.tutorial;
-    if (tutorial !== null && tutorial.state === 'CAT_INSIDE_TREASURE_ROOM') {
+    const tutorialSplit = tutorial?.openTreasureChest() ?? null;
+    if (tutorial !== null && tutorialSplit !== null) {
       return {
-        split: {
-          humanLoot: { coins: 0, items: [] },
-          catLoot: {
-            coins: 0,
-            items: [
-              { id: 'magic_missile_tome', quantity: 1 },
-              { id: 'health_potion', quantity: TUTORIAL_CHEST_CAT_POTIONS },
-            ],
-          },
-          displayLabels: { magic_missile_tome: 'Magic Missile Ability' },
-        },
+        split: tutorialSplit,
         onDismissed: () => {
           tutorial.onCatRewardDialogDismissed(this.cat);
           this.bus.emit('rewardGranted', {
@@ -9530,7 +9614,6 @@ export class DungeonScene extends GameplayScene {
 
     const baseSplit = chest.loot !== null ? splitChestLoot(chest.loot) : null;
     this._grantChestLootSplit(baseSplit);
-    this.tutorial?.onChestOpened();
 
     if (chest.bossRoomIndex !== null && chest.bossRoomIndex === this.krakarenBossRoomIdx) {
       return {

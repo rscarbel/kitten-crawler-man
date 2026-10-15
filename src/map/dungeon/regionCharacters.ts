@@ -66,7 +66,7 @@ export class RegionCharacters {
     private readonly hallways: ReadonlyArray<RegionAssignment | null>,
   ) {}
 
-  /** No assignments, for any map that is not a forced-progression dungeon floor. */
+  /** No assignments, for any map without a region map. */
   static empty(): RegionCharacters {
     return new RegionCharacters(RegionMap.empty(), [], []);
   }

@@ -4628,6 +4628,7 @@ export class BuildingInteriorScene extends GameplayScene {
       id: 'switch',
       icon: other === 'cat' ? 'cat' : 'user',
       label: `Switch to ${CRAWLER_NAMES[other]}`,
+      key: keybindings.labelFor('switchCharacter'),
       onTap: () => this.trySwitchActive(),
     });
     return dock;
