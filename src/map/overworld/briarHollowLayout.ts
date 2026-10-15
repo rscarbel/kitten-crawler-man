@@ -438,12 +438,15 @@ export interface BuildingTemplate {
 }
 
 /** The village's buildings, in site coordinates. Occupants are noted where they have one. */
+const HALL_RECT: TileRect = { x: 40, y: 21, w: 12, h: 8 };
+const BARN_RECT: TileRect = { x: 38, y: 9, w: 9, h: 7 };
+
 export const BUILDINGS: ReadonlyArray<BuildingTemplate> = [
   {
     // Bramblewick.
     id: 'hall',
     name: "Mayor's Hall",
-    rect: { x: 40, y: 21, w: 12, h: 8 },
+    rect: HALL_RECT,
     doorways: [{ side: 'south', offset: 5, width: 2 }],
     floor: 'planks',
     occupantAnchors: [{ x: 8, y: 2 }],
@@ -660,7 +663,7 @@ export const BUILDINGS: ReadonlyArray<BuildingTemplate> = [
     // walk from the paddock straight in under cover.
     id: 'barn',
     name: 'Barn',
-    rect: { x: 38, y: 9, w: 9, h: 7 },
+    rect: BARN_RECT,
     doorways: [{ side: 'east', offset: 2, width: 3 }],
     floor: 'working',
     occupantAnchors: [{ x: 4, y: 3 }],
@@ -1009,6 +1012,27 @@ export const SCARECROW_FIELD: TileRect = { x: 53, y: 21, w: 8, h: 3 };
  * cut, because Merrit's hundred grain is harvested from it.
  */
 export const GRAIN_FIELD: TileRect = { x: 53, y: 26, w: 8, h: 3 };
+/**
+ * Merrit's farm as its music hears it: the barn, the pasture with the lane
+ * below it, and the fields with the grass between the hall and them. Not a
+ * district, because it overlaps the pasture and farm districts that other
+ * systems key on.
+ */
+export const FARM_MUSIC_AREA: ReadonlyArray<TileRect> = [
+  BARN_RECT,
+  {
+    x: BARN_RECT.x + BARN_RECT.w,
+    y: PASTURE.y,
+    w: PASTURE.x + PASTURE.w - (BARN_RECT.x + BARN_RECT.w),
+    h: CROSS_LANE.y + CROSS_LANE.h - PASTURE.y,
+  },
+  {
+    x: HALL_RECT.x + HALL_RECT.w,
+    y: CROSS_LANE.y + CROSS_LANE.h,
+    w: GRAIN_FIELD.x + GRAIN_FIELD.w - (HALL_RECT.x + HALL_RECT.w),
+    h: GRAIN_FIELD.y + GRAIN_FIELD.h - (CROSS_LANE.y + CROSS_LANE.h),
+  },
+];
 /** Every field, for the passes that paint or dress all of them alike. */
 export const CROP_FIELDS: ReadonlyArray<TileRect> = [SCARECROW_FIELD, GRAIN_FIELD];
 /** The farmhouse's kitchen garden; the column in line with its door stays a path. */

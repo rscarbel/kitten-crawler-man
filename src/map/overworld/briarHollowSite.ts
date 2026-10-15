@@ -21,6 +21,7 @@ import {
   CROP_FIELDS,
   GRAIN_FIELD,
   DISTRICTS,
+  FARM_MUSIC_AREA,
   doorwayTiles,
   EAST_GATE_Y0,
   EAST_LANE_APPROACH,
@@ -200,6 +201,8 @@ export interface BriarHollowSite {
   /** Every gate, one per wall: south (the main entrance), east, north, west. */
   readonly gates: readonly BriarHollowGate[];
   readonly districts: readonly VillageDistrict[];
+  /** Where Merrit's farm song plays; see `FARM_MUSIC_AREA`. */
+  readonly farmMusicArea: readonly TileRect[];
   readonly buildings: readonly VillageBuildingDef[];
   readonly square: {
     readonly rect: TileRect;
@@ -958,6 +961,7 @@ export function buildBriarHollowSite(centre: TilePoint): BriarHollowSite {
       const rect = shiftRect(origin, district.rect);
       return { id: district.id, label: district.label, rect, labelTile: rectCentre(rect) };
     }),
+    farmMusicArea: FARM_MUSIC_AREA.map((rect) => shiftRect(origin, rect)),
     buildings,
     square: {
       rect: shiftRect(origin, SQUARE),

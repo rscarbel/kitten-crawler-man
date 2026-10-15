@@ -124,6 +124,16 @@ export const MUSIC_CATALOG = {
     area: 'briar_hollow',
     attribution: { authorUsername: 'dominic251', originalTitle: 'Woods', source: 'Pixabay' },
   },
+  under_the_willows: {
+    title: 'Under the Willows',
+    area: 'briar_hollow',
+    attribution: { authorName: 'Ryan Scarbel', originalTitle: 'Under the Willows' },
+  },
+  hayfield_afternoon: {
+    title: 'Hayfield Afternoon',
+    area: 'briar_hollow',
+    attribution: { authorName: 'Ryan Scarbel', originalTitle: 'Hayfield Afternoon' },
+  },
   siege_theme: {
     title: 'Hold the Palisade',
     area: 'briar_hollow',

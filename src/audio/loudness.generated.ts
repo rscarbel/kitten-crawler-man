@@ -2419,6 +2419,14 @@ export const LOUDNESS = {
     hash: '5d88af48bdeef650',
     trimDb: -1.1,
   },
+  hayfield_afternoon: {
+    bus: 'music',
+    basis: 'integrated',
+    lufs: -12.6,
+    truePeakDbtp: -0.2,
+    hash: '02efc56673965c54',
+    trimDb: -5.4,
+  },
   healing_potion: {
     bus: 'sfx',
     basis: 'integrated',
@@ -5482,6 +5490,14 @@ export const LOUDNESS = {
     truePeakDbtp: 0.3,
     hash: '3b64ac99618a5f97',
     trimDb: -3.3,
+  },
+  under_the_willows: {
+    bus: 'music',
+    basis: 'integrated',
+    lufs: -14,
+    truePeakDbtp: -1.5,
+    hash: 'ca6363a973ed4bc4',
+    trimDb: -4,
   },
   velociraptor_chitter: {
     bus: 'sfx',

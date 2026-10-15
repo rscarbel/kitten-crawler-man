@@ -138,6 +138,7 @@ import {
 import { generateOverworld, type BuildingEntry } from './OverworldGenerator';
 import type { CampSite } from './overworld/camps';
 import type { BriarHollowSite, VillageDistrictId } from './overworld/briarHollowSite';
+import { rectContains } from './overworld/briarHollowSite';
 import type { CircusGroundsSite } from './overworld/circusGroundsLayout';
 import { registerBriarHollowSite } from './tiles/hollowSiteRegistry';
 import { registerCircusGroundsSite } from './tiles/circusSiteRegistry';
@@ -2308,6 +2309,15 @@ export class GameMap {
     const dxTiles = worldX / this.tileHeight - centre.x;
     const dyTiles = worldY / this.tileHeight - centre.y;
     return dxTiles * dxTiles + dyTiles * dyTiles <= reachTiles * reachTiles;
+  }
+
+  /** True when the given world-pixel position is on Merrit's farm, as its music hears it. Always false off the overworld. */
+  isOnMerritsFarm(worldX: number, worldY: number): boolean {
+    const area = this.briarHollow?.farmMusicArea;
+    if (area === undefined) return false;
+    const tileX = Math.floor(worldX / this.tileHeight);
+    const tileY = Math.floor(worldY / this.tileHeight);
+    return area.some((rect) => rectContains(rect, tileX, tileY));
   }
 
   /**

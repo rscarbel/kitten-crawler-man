@@ -257,6 +257,8 @@ export function musicUnlocksFromProgress(
     Object.values(persisted?.briarHollow?.talkCounts ?? {}).some((count) => count > 0) ||
     briarHollowPleaPaid;
   if (briarHollowVisited) unlock(['briar_hollow_theme']);
+  if (phaseAtLeast(villagePhase, 'gather_stone')) unlock(['under_the_willows']);
+  if (blueprintsPhaseAtLeast(blueprintsPhase, 'build_fence')) unlock(['hayfield_afternoon']);
   if (phaseAtLeast(villagePhase, 'report_tikka')) unlock(['medieval_harvest_theme']);
   const siegeFought =
     (persisted?.briarHollow?.quest.lastSiege ?? null) !== null ||

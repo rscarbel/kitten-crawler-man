@@ -1,8 +1,8 @@
 /**
  * OverworldMusicSystem — zone-based background music for the Over City
  * overworld: a shuffled town playlist inside the town safe zone, a shuffled
- * circus playlist on the circus grounds, Briar Hollow's own zone inside its palisade, a
- * harvest theme out at the village quarry, and a
+ * circus playlist on the circus grounds, Briar Hollow's own zone inside its palisade
+ * with the lumber yard's and Merrit's farm's own songs, a harvest theme out at the village quarry, and a
  * shuffled wilds playlist between. Each zone
  * is an area claim; a fight's battle or boss claim outranks it, so crossing a
  * zone edge mid-fight changes nothing that is heard.
@@ -16,13 +16,15 @@ import type { MusicTrackId } from '../audio/sounds';
 import type { GameMap } from '../map/GameMap';
 import type { GameSystem, SystemContext } from './GameSystem';
 
-type MusicZone = 'town' | 'wilds' | 'circus' | 'village' | 'quarry';
+type MusicZone = 'town' | 'wilds' | 'circus' | 'village' | 'lumber_yard' | 'farm' | 'quarry';
 
 const ZONE_TRACKS: Record<MusicZone, ReadonlyArray<MusicTrackId>> = {
   town: TOWN_MUSIC_TRACKS,
   wilds: WILDS_MUSIC_TRACKS,
   circus: CIRCUS_MUSIC_TRACKS,
   village: ['briar_hollow_theme'],
+  lumber_yard: ['under_the_willows'],
+  farm: ['hayfield_afternoon'],
   quarry: ['medieval_harvest_theme'],
 };
 
@@ -102,8 +104,11 @@ export class OverworldMusicSystem implements GameSystem {
       if (Math.hypot(dx, dy) <= circusRadius + CIRCUS_ZONE_BUFFER_TILES) return 'circus';
     }
     if (this.map.isInTownSafeZone(worldX, worldY)) return 'town';
+    const district = this.map.briarHollowDistrictAt(worldX, worldY);
+    if (district === 'lumber_yard') return 'lumber_yard';
+    if (this.map.isOnMerritsFarm(worldX, worldY)) return 'farm';
     if (this.map.isInBriarHollow(worldX, worldY)) return 'village';
-    if (this.map.briarHollowDistrictAt(worldX, worldY) === 'quarry') return 'quarry';
+    if (district === 'quarry') return 'quarry';
     return 'wilds';
   }
 }
