@@ -363,6 +363,8 @@ export class AudioManager {
   private readonly failedDecodes = new Set<SoundId>();
   /** Streamed music's elements, made as overlapping tracks need them. */
   private readonly musicStreamSlots: MusicStreamSlot[] = [];
+  /** Every music track started for the director and not yet stopped. */
+  private readonly unstoppedMusicTracks = new Set<MusicTrackHandle>();
   /** Decides what music plays. Systems claim through their scene's scope; the music page through this. */
   readonly music: MusicDirector;
   /** Every scope not yet disposed. */
@@ -647,11 +649,13 @@ export class AudioManager {
    * though `ctx.state` is back to 'running' and nothing else ever calls
    * `.play()` on them again — so every element still logically "playing" is
    * nudged back into motion here, the one place that knows the context is
-   * genuinely alive again.
+   * genuinely alive again. An element that played to its end is never
+   * nudged: play() would start its song over on top of whatever followed it.
    */
   private restartStalledStreams(): void {
     for (const slot of this.musicStreamSlots) {
       if (slot.state !== 'playing' || slot.awaitingStart || !slot.el.paused) continue;
+      if (slot.el.ended) continue;
       void slot.el.play().catch(() => {
         // A subsequent gesture/focus event will retry via this same path.
       });
@@ -1152,8 +1156,28 @@ export class AudioManager {
   /**
    * Starts a track for the director on the music bus at its measured trim,
    * fading in on the equal-power curve the outgoing track fades out on.
+   *
+   * The music bus carries one track at a time, crossfades aside: any earlier
+   * track the director has not stopped is faded out under this one first, so
+   * a voice the director lost hold of can never play alongside its successor.
    */
   private startMusicTrack(request: MusicTrackRequest): MusicTrackHandle {
+    for (const stray of [...this.unstoppedMusicTracks]) {
+      stray.stop(request.fadeInMs, 'equalPowerOut');
+    }
+    const handle = this.startMusicVoice(request);
+    const tracked: MusicTrackHandle = {
+      positionS: () => handle.positionS(),
+      stop: (fadeMs, shape) => {
+        this.unstoppedMusicTracks.delete(tracked);
+        handle.stop(fadeMs, shape);
+      },
+    };
+    this.unstoppedMusicTracks.add(tracked);
+    return tracked;
+  }
+
+  private startMusicVoice(request: MusicTrackRequest): MusicTrackHandle {
     const trimGain = dbToGain(loudnessTrimDb(request.id));
     if (STREAMING_SOUND_IDS.has(request.id)) {
       return this.startStreamingMusicTrack(request, trimGain);
@@ -1316,7 +1340,13 @@ export class AudioManager {
             }
           : request.loop === 'once'
             ? () => {
-                if (ownsSlot() && !stopped) request.onEnded();
+                if (!ownsSlot() || stopped) return;
+                // An ended element is paused at its end, and play() on it starts
+                // the song over, so the slot must not stay `playing` for
+                // restartStalledStreams to wake.
+                stopped = true;
+                slot.state = 'idle';
+                request.onEnded();
               }
             : null;
       el.src = SOUND_MANIFEST[request.id];
@@ -1851,6 +1881,7 @@ export class AudioManager {
     this.removeUnlockListeners();
     for (const scope of this.scopes) scope.suspend();
     this.music.stopAll(0);
+    for (const stray of [...this.unstoppedMusicTracks]) stray.stop(0, 'db');
     this.ctx.onstatechange = null;
     void this.ctx.close();
   }

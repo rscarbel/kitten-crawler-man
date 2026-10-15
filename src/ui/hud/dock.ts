@@ -141,6 +141,8 @@ export function summonCard(ui: Ui, rect: Rect, model: SummonModel): void {
   const icon: Rect = { x: body.x, y: body.y, w: body.h, h: body.h };
   ctx.save();
   if (!model.usable) ctx.globalAlpha *= COOLDOWN_SHADE_ALPHA;
+  roundRectPath(ctx, icon, theme.radius.sm);
+  ctx.clip();
   model.paintIcon(ctx, icon);
   ctx.restore();
   const column: Rect = {

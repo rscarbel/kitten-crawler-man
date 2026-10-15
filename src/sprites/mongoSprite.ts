@@ -1,5 +1,5 @@
 import { walkFrameIndex, progressFrameIndex, timeFrameIndex } from '../core/SpriteRenderer';
-import { drawFigureCached, prewarmFigureState } from './figure/figureFrameCache';
+import { drawFigureCached, drawFigureFitted, prewarmFigureState } from './figure/figureFrameCache';
 import { MONGO_FIGURES } from './art/mongoFigure';
 import {
   MONGO_BITE_FRAMES,
@@ -56,27 +56,12 @@ type MongoState =
 export const MONGO_WALK_FRAMES = 8;
 
 /**
- * Sprite frames of the walk row advanced per game tick when Mongo runs at his
- * own stage's listed speed. Everything faster or slower scales from here.
- *
- * A half holds every frame for two ticks, giving a 30 fps gait inside a 60 fps
- * loop — the same "hold each frame" cadence `MONGO_FRAME_HOLD` gives the attack
- * rows. Past 1.0 the row is undersampled rather than played: frames are skipped,
- * the legs jump between non-adjacent poses, and he reads as vibrating.
- *
- * Lives here rather than on `Mongo` so the preview harness plays the gait that
- * ships — a duplicated number can drift out of sync and hide the strobe from
- * review.
- */
-export const MONGO_WALK_FRAMES_PER_TICK_AT_BASE_SPEED = 0.5;
-
-/**
  * The rate above which the walk row stops being played and starts being
  * undersampled — one whole sprite frame per game tick.
  *
- * Exported so the cadence ceiling can be derived against it rather than against
- * a number someone has to remember. Every cadence in the runtime must stay under
- * this; past it, frames are skipped and the legs jump between non-adjacent poses.
+ * Past it, frames are skipped and the legs jump between non-adjacent poses,
+ * which reads as vibrating. The runtime's cadence ceiling is derived against
+ * this rather than against a number someone has to remember.
  */
 export const MONGO_UNDERSAMPLING_FRAME_LIMIT = 1;
 const MONGO_IDLE_FRAMES = 8;
@@ -113,22 +98,33 @@ const MILLISECONDS_PER_SECOND = 1000;
 /**
  * How much ground one walk cycle covers, per stage, in tiles.
  *
- * *Measured* off the baked choreography by the `G13` bake gate, which reads
- * these back out of this file — they are a record of the art, and hand-tuning
- * one makes the gate lie about the sheet it is guarding.
+ * *Measured* off the choreography by the `G13` gate, which reads these back out
+ * of this file — they are a record of the art, and hand-tuning one makes the
+ * gate lie about the figure it is guarding.
  *
- * Deliberately not consumed by the runtime, which sets its cadence from speed
- * instead. Advancing the phase by ground covered is the correct way to keep feet
- * planted, and it is unreachable here: these strides are bounded by leg length,
- * his speed is not, and the honest cadence they imply is roughly twelve cycles a
- * second — an eight-frame row asked to play at ninety frames a second on a
- * sixty-frame display, which undersamples into a strobe. See `Mongo.walkAt`.
+ * The runtime paces his legs by these: one cycle per this much ground actually
+ * covered, so a planted foot stays planted at any speed. The stride is long
+ * enough that his listed speeds land well under the undersampling limit; the
+ * one exception is the recall sprint on the juvenile, where the ceiling binds
+ * and his feet slide a little rather than strobe.
  */
 export const MONGO_TILES_PER_WALK_CYCLE: Record<MongoStage, number> = {
-  juvenile: 0.31,
-  adolescent: 0.455,
-  adult: 0.533,
+  juvenile: 0.6602,
+  adolescent: 0.969,
+  adult: 1.1351,
 };
+
+/** Walk-cycle radians advanced per pixel of ground covered, at a given tile size. */
+export function mongoWalkRadiansPerPixel(stage: MongoStage, tileSize: number): number {
+  return (Math.PI * 2) / (MONGO_TILES_PER_WALK_CYCLE[stage] * tileSize);
+}
+
+/**
+ * The fastest the walk cycle may advance in one game tick, in radians — one
+ * sprite frame per tick, past which the row is undersampled into a strobe.
+ */
+export const MONGO_MAX_WALK_RADIANS_PER_TICK =
+  (Math.PI * 2 * MONGO_UNDERSAMPLING_FRAME_LIMIT) / MONGO_WALK_FRAMES;
 
 /**
  * How far above his tile's top edge each stage's standing art reaches, in tiles.
@@ -396,7 +392,8 @@ export function drawMongoSprite(
 
 /**
  * Small centred icon for the summon button, the Abilities tab and the reward
- * dialog. Uses the profile idle, which is the pose he is most recognisable in.
+ * dialog, fitted inside the `size` square at every growth stage. Uses the
+ * profile idle, which is the pose he is most recognisable in.
  */
 export function drawMongoIcon(
   ctx: CanvasRenderingContext2D,
@@ -405,5 +402,6 @@ export function drawMongoIcon(
   cy: number,
   size: number,
 ): void {
-  drawFigureCached(ctx, MONGO_FIGURES[stage], 'idle_side', 0, cx - size / 2, cy - size / 2, size);
+  const box = { x: cx - size / 2, y: cy - size / 2, w: size, h: size };
+  drawFigureFitted(ctx, MONGO_FIGURES[stage], 'idle_side', 0, box);
 }

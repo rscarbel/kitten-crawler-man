@@ -791,7 +791,7 @@ export class VillageQuestSystem implements QuestLineProvider, TopicProvider {
     if (hasAcceptedMayorRequest(this.phase)) return flow.closeNow();
     this.setPhase('need_tools');
     this.deps.bus.emit('questStarted', { questId: BRIAR_HOLLOW_QUEST_ID });
-    return flow.answerAndReturnToRoot([BRAMBLEWICK.questAccepted]);
+    return flow.answer([BRAMBLEWICK.questAccepted]);
   }
 
   private tikkaTopics(

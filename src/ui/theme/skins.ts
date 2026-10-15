@@ -184,6 +184,27 @@ export interface BrassSkin {
   readonly radius: number;
 }
 
+/**
+ * The celebration card for a prize the party has just taken (the prison key):
+ * a gold-edged glass card with a burst of light behind the prize, big enough
+ * to read across the room in the middle of a sneak.
+ */
+export interface PrizeBannerSkin {
+  readonly panel: PanelSkin;
+  /** The halo round the card and the burst behind the prize. */
+  readonly glow: string;
+  readonly glowBlur: number;
+  /** The light rays turning behind the prize. */
+  readonly rays: string;
+  readonly overline: TextSkin;
+  readonly title: TextSkin;
+  /** The title one step down, for a compact screen. */
+  readonly titleCompact: TextSkin;
+  readonly subtitle: TextSkin;
+  /** The prize's icon on the card, in UI units. */
+  readonly iconSize: number;
+}
+
 /** A keyboard key drawn as a little cap with a darker bottom edge. */
 export interface KeycapSkin {
   readonly fill: string;
@@ -215,6 +236,7 @@ export interface Skins {
   readonly dialogChoice: DialogChoiceSkin;
   readonly questRewardBrass: BrassSkin;
   readonly mercenaryBrass: BrassSkin;
+  readonly prizeBanner: PrizeBannerSkin;
   readonly keycap: KeycapSkin;
 }
 
@@ -239,6 +261,18 @@ const LARGE_ICON = 20;
 const BOSS_METER_HEIGHT_STEP = 4;
 const MERCENARY_FACE_DARKEN = 0.35;
 const KEYCAP_DEPTH = 2;
+/** The prize banner's title: past the ramp's display step, so it reads as the moment it is. */
+const PRIZE_TITLE_STYLE = {
+  size: 40,
+  weight: 900,
+  lineHeight: 46,
+  letterSpacing: 1.5,
+  upper: true,
+} as const satisfies TypeStyle;
+const PRIZE_BORDER_WIDTH = 2;
+const PRIZE_GLOW_BLUR = 28;
+const PRIZE_RAYS_ALPHA = 0.22;
+const PRIZE_ICON_SIZE = 64;
 const KEYCAP_SIZE = 20;
 const TRANSPARENT = 'rgba(0, 0, 0, 0)';
 
@@ -581,7 +615,7 @@ function buildBrass(theme: Theme): { quest: BrassSkin; mercenary: BrassSkin } {
 }
 
 function buildSkins(theme: Theme): Skins {
-  const { palette, space, radius, type } = theme;
+  const { palette, space, radius, type, elevation } = theme;
   const brass = buildBrass(theme);
   return {
     button: buildButtons(theme),
@@ -615,6 +649,24 @@ function buildSkins(theme: Theme): Skins {
     dialogChoice: buildDialogChoice(theme),
     questRewardBrass: brass.quest,
     mercenaryBrass: brass.mercenary,
+    prizeBanner: {
+      panel: {
+        fill: palette.surface.base,
+        border: palette.accent.base,
+        borderWidth: PRIZE_BORDER_WIDTH,
+        radius: radius.lg,
+        shadow: elevation.panel,
+        padding: space.lg,
+      },
+      glow: palette.accent.base,
+      glowBlur: PRIZE_GLOW_BLUR,
+      rays: withAlpha(palette.accent.hover, PRIZE_RAYS_ALPHA),
+      overline: { style: type.overline, color: palette.state.success },
+      title: { style: PRIZE_TITLE_STYLE, color: palette.accent.base },
+      titleCompact: { style: { ...type.display, upper: true }, color: palette.accent.base },
+      subtitle: { style: type.title, color: palette.text.primary },
+      iconSize: PRIZE_ICON_SIZE,
+    },
     keycap: {
       fill: palette.surface.raised,
       border: palette.border.strong,

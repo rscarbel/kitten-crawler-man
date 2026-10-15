@@ -2015,7 +2015,14 @@ export function drawFigureCachedRotatedCenter(
   ctx.restore();
 }
 
-const inkBoundsByFrame = new Map<string, FrameInkBounds>();
+/** {@link FrameInkBounds} plus the ink's full bounding box, in declared cell pixels. */
+interface FigureInkBounds extends FrameInkBounds {
+  readonly left: number;
+  readonly right: number;
+  readonly bottom: number;
+}
+
+const inkBoundsByFrame = new Map<string, FigureInkBounds>();
 
 /**
  * Where a frame's ink actually sits inside its cell, in declared cell pixels.
@@ -2024,13 +2031,47 @@ const inkBoundsByFrame = new Map<string, FrameInkBounds>();
  * the answer has to exist whether or not the cache admitted that frame, and a
  * bounding box is not a thing supersampling moves.
  */
-function figureInkBounds(def: FigureDef, state: string, frame: number): FrameInkBounds {
+function figureInkBounds(def: FigureDef, state: string, frame: number): FigureInkBounds {
   const key = `${def.id}|${state}|${frame}`;
   const cached = inkBoundsByFrame.get(key);
   if (cached !== undefined) return cached;
   const measured = measureFigureInk(def, state, frame);
   inkBoundsByFrame.set(key, measured);
   return measured;
+}
+
+/**
+ * Draws one frame as an icon: scaled so its painted pixels fill as much of
+ * the box as they can without leaving it, and centred on them.
+ *
+ * Sizing by tile would not do: a cell is sized for the figure's widest pose
+ * and a large creature's art reaches well past its tile, so a tile-sized draw
+ * spills out of whatever button holds it.
+ */
+export function drawFigureFitted(
+  ctx: CanvasRenderingContext2D,
+  def: FigureDef,
+  state: string,
+  frame: number,
+  box: { readonly x: number; readonly y: number; readonly w: number; readonly h: number },
+): void {
+  if (figureFrameCount(def, state) === 0) {
+    warnMissingState(def, state);
+    return;
+  }
+  const clamped = clampFrame(def, state, frame);
+  const ink = figureInkBounds(def, state, clamped);
+  const inkWidth = ink.right - ink.left;
+  const inkHeight = ink.bottom - ink.top;
+  if (inkWidth <= 0 || inkHeight <= 0) return;
+  const scale = Math.min(box.w / inkWidth, box.h / inkHeight);
+  const inkMidX = ink.left + inkWidth / 2;
+  const inkMidY = ink.top + inkHeight / 2;
+  const destX = box.x + box.w / 2 - inkMidX * scale;
+  const destY = box.y + box.h / 2 - inkMidY * scale;
+  const cell = cellFor(def, state, clamped, scale);
+  if (cell === null) directPaint(ctx, def, state, clamped, destX, destY, scale);
+  else blitPlaced(ctx, cell, destX, destY, scale, undefined);
 }
 
 /**
@@ -2188,12 +2229,15 @@ function inkScratchFitting(width: number, height: number): CanvasSurface {
   return inkScratch;
 }
 
-function measureFigureInk(def: FigureDef, state: string, frame: number): FrameInkBounds {
-  const wholeCell: FrameInkBounds = {
+function measureFigureInk(def: FigureDef, state: string, frame: number): FigureInkBounds {
+  const wholeCell: FigureInkBounds = {
     centerX: def.frameWidth / 2,
     centerY: def.frameHeight / 2,
     radius: Math.hypot(def.frameWidth, def.frameHeight) / 2,
     top: 0,
+    left: 0,
+    right: def.frameWidth,
+    bottom: def.frameHeight,
   };
 
   const width = Math.ceil(def.frameWidth);
@@ -2254,7 +2298,15 @@ function measureFigureInk(def: FigureDef, state: string, frame: number): FrameIn
       if (distSq > radiusSq) radiusSq = distSq;
     }
   }
-  return { centerX, centerY, radius: Math.sqrt(radiusSq), top: minY };
+  return {
+    centerX,
+    centerY,
+    radius: Math.sqrt(radiusSq),
+    top: minY,
+    left: minX,
+    right: maxX + 1,
+    bottom: maxY + 1,
+  };
 }
 
 let flushCount = 0;

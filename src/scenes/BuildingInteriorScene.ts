@@ -118,6 +118,7 @@ import { EventBus } from '../core/EventBus';
 import { CrawlerBarkSystem } from '../systems/CrawlerBarkSystem';
 import { barkWhenBlueprintsItemEvicted } from '../systems/briarHollow/blueprints/blueprintsEvictionBark';
 import { CRAWLER_BARKS, barkTexts } from '../dialog/scripts/crawlerBarks';
+import { isWardExplainerDue } from '../creatures/fairies/ShieldFairy';
 import { SystemNoticeSystem } from '../systems/SystemNoticeSystem';
 import { TacticsNoticeSystem } from '../systems/TacticsNoticeSystem';
 import type { TacticsTrait } from '../creatures/tactics/tacticsTraits';
@@ -1155,9 +1156,9 @@ export class BuildingInteriorScene extends GameplayScene {
         link: floor.stealthKeySnatch ?? detachedPrisonVisit(),
         audio: this.audio,
         toast: (text, opts) => this.menus.toasts.post(text, opts),
-        flyItem: (id, worldX, worldY) => {
+        worldToScreen: (worldX, worldY) => {
           const cam = this.computeCamera(this.map);
-          this.rewardFly.enqueueItem(id, ITEM_DEF[id].name, worldX - cam.x, worldY - cam.y);
+          return { x: worldX - cam.x, y: worldY - cam.y };
         },
       });
     }
@@ -1800,12 +1801,16 @@ export class BuildingInteriorScene extends GameplayScene {
    * drained into the actual bark.
    */
   private drainWardExplainerBarks(): void {
-    if (this.human.pendingWardExplainerBark) {
-      this.human.pendingWardExplainerBark = false;
+    const humanPending = this.human.pendingWardExplainerBark;
+    const catPending = this.cat.pendingWardExplainerBark;
+    this.human.pendingWardExplainerBark = false;
+    this.cat.pendingWardExplainerBark = false;
+    if (!humanPending && !catPending) return;
+    if (!isWardExplainerDue(this.gameStats)) return;
+    this.gameStats.recordWardExplainerHeard();
+    if (humanPending) {
       this.crawlerBarks.say(this.human, barkTexts(CRAWLER_BARKS.wardExplainer.carl));
-    }
-    if (this.cat.pendingWardExplainerBark) {
-      this.cat.pendingWardExplainerBark = false;
+    } else {
       this.crawlerBarks.say(this.cat, barkTexts(CRAWLER_BARKS.wardExplainer.donut));
     }
   }
@@ -2985,10 +2990,6 @@ export class BuildingInteriorScene extends GameplayScene {
     // below, because the whole point of the room is that a swing is the wrong
     // answer here.
     if (interactPressed() && this.bigTopMaze?.tryInteract(this.buildSystemContext()) === true) {
-      keybindings.release(this.input, 'attack');
-    }
-
-    if (interactPressed() && this.prisonKey?.tryInteract(player) === true) {
       keybindings.release(this.input, 'attack');
     }
 

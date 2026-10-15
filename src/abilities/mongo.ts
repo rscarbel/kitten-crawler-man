@@ -274,6 +274,16 @@ export function getMongoStats(level: number): MongoStats {
 }
 
 /**
+ * His movement speed on the first level of a growth stage, in pixels per frame.
+ *
+ * For the harnesses that play his gait without a live Mongo behind them: they
+ * pace the walk from the speed that ships, so a cadence bug shows there too.
+ */
+export function mongoStageSpeed(stage: MongoStage): number {
+  return (MONGO_LEVELS.find((row) => row.stage === stage) ?? MONGO_LEVELS[0]).speed;
+}
+
+/**
  * Icon for the Abilities tab, the summon button and the reward dialog.
  *
  * Drawn from the sheet his *current* level uses, so the button shows the animal

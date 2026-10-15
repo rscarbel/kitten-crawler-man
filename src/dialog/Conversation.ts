@@ -40,6 +40,7 @@ import {
   type Ui,
 } from '../ui/core/UiRoot';
 import type { Rect } from '../ui/core/geom';
+import { byInputMode, TOUCH_GESTURES } from '../ui/core/inputMode';
 import type { DialogLine, NonEmpty } from './line';
 import {
   drawChoiceButton,
@@ -839,19 +840,25 @@ export class Conversation {
           ? 'Close'
           : 'Continue'
         : 'Continue';
-    drawFooterHint(ui, row, `[Space / Click] ${label}`, 'right');
+    const hint = byInputMode(ui.density, {
+      touch: `${TOUCH_GESTURES.tap} to ${label.toLowerCase()}`,
+      pointer: `[Space / Click] ${label}`,
+    });
+    drawFooterHint(ui, row, hint, 'right');
   }
 
   /**
    * Names what Space will pick on a row with no focus ring to show it — a
    * street conversation, whose arrow keys still walk. A world-halting row
-   * draws its default as the focused button instead.
+   * draws its default as the focused button instead. A touch screen has no
+   * Space to name, and every row is a button the player taps directly.
    */
-  private renderRowFooterHint(target: PaintTarget, request: ConversationRequest, row: Rect): void {
+  private renderRowFooterHint(ui: Ui, request: ConversationRequest, row: Rect): void {
     if (request.haltsWorld) return;
+    if (ui.density === 'touch') return;
     const label = this.keyboardDefaultLabel;
     if (label === null) return;
-    drawFooterHint(target, row, `[Space] ${label}`, 'right');
+    drawFooterHint(ui, row, `[Space] ${label}`, 'right');
   }
 
   /** Lays the choice or confirm row out above the box, wrapping onto as many rows as the screen above it allows. */

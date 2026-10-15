@@ -534,7 +534,7 @@ function phaseOf(harness: PrisonHarness): string {
   return prisonKeyOf(harness)['deps'].link.phase;
 }
 
-/** Steps the driven crawler onto the pedestal's front tile from the tile below it. */
+/** Walks the driven crawler up to the pedestal's front tile from out of reach below it. */
 function stepOntoPedestalFront(harness: PrisonHarness): void {
   const prisonKey = prisonKeyOf(harness);
   const front = prisonKey.pedestalFront;
@@ -554,7 +554,7 @@ function checkCaptureKeepsKey(harness: PrisonHarness): void {
     });
   }
   stepOntoPedestalFront(harness);
-  check(keysHeld(harness) === 1, 'stepping onto the pedestal’s front tile lifts the key');
+  check(keysHeld(harness) === 1, 'walking up within a tile of the pedestal lifts the key');
   check(phaseOf(harness) === 'keyHeld', `and the phase follows to keyHeld (${phaseOf(harness)})`);
   check(!prisonKeyOf(harness).keyOnPedestal, 'and the pedestal stands empty');
   check(!prisonKeyOf(harness).guidesToExit, 'lifting the key alone does not frame the exit');

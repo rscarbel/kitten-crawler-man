@@ -33,6 +33,7 @@ import type { TopBandEntry } from '../../ui/hud/topBand';
 import { stackedBandEntry } from '../../ui/hud/topBandStack';
 import { QUEST_BANNER_FRAMES, questBannerEntry } from '../../ui/QuestBanners';
 import { palette } from '../../ui/theme/tokens';
+import { drawMongoIcon, type MongoStage } from '../../sprites/mongoSprite';
 import type { DialogFixture } from './dialogs/fixture';
 import { buildFixture as inventoryFixture } from './inventory';
 
@@ -59,8 +60,8 @@ const DYNAMITE_STACK = 3;
 /** The stand-in map's floor strips are this many tiles apart. */
 const MINIMAP_ROW_STEP = 3;
 const PARTY_DOT = 4;
-/** The stand-in Mongo portrait's radius as a fraction of its square. */
-const PORTRAIT_RADIUS_RATIO = 0.33;
+/** The largest growth stage, whose art reaches furthest past its tile. */
+const SUMMON_PORTRAIT_STAGE = 'adult' as const satisfies MongoStage;
 const ENCOUNTER_WAVE_FRACTION = 0.6;
 const STATUS_HALF = 0.5;
 const STATUS_MOST = 0.85;
@@ -354,18 +355,14 @@ function hudFixture(spec: HudFixtureSpec): DialogFixture {
           xpFraction: STATUS_HALF,
           cooldown: 0,
           cooldownSeconds: 0,
-          paintIcon: (ctx, rect) => {
-            ctx.fillStyle = palette.category.tool;
-            ctx.beginPath();
-            ctx.arc(
+          paintIcon: (ctx, rect) =>
+            drawMongoIcon(
+              ctx,
+              SUMMON_PORTRAIT_STAGE,
               rect.x + rect.w / 2,
               rect.y + rect.h / 2,
-              rect.w * PORTRAIT_RADIUS_RATIO,
-              0,
-              Math.PI * 2,
-            );
-            ctx.fill();
-          },
+              Math.min(rect.w, rect.h),
+            ),
           onTap: record,
         },
         lootBanner: spec.lootBanner

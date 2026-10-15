@@ -9,7 +9,7 @@
  *
  * Rows:
  *    idle    — breathing, weight shift, head scan, tail-tip flick
- *    walk    — digitigrade toe-off, level head, counter-swaying tail
+ *    walk    — grounded run: long alternating strides, level head, rod tail
  *    bite    — neck coils into a deep S, strikes, recovers
  *    slash   — wings flare, a one-two rake with both hands
  *    pounce  — crouch, leap, two-footed sickle strike, recovery hop
@@ -49,14 +49,19 @@ import {
   easeInOut,
   hump,
   lerp,
+  measureEyeSide,
+  measureEyesFront,
   measureHead,
+  measureHeadTopSide,
   ramp,
   restArm,
   restLeg,
+  restHipX,
   restPose,
   TWO_PI,
 } from './mongoArt';
 import { type FigureDef, figureStates } from '../figure/figureDef';
+import type { ViewedEyePlacement } from '../eyePlacement';
 import {
   MONGO_BITE_FRAMES,
   MONGO_BITE_IMPACT_PROGRESS,
@@ -99,7 +104,7 @@ interface StageGeometry {
 const STAGE_GEOMETRY: Record<MongoStage, StageGeometry> = {
   juvenile: { frameWidth: 80, frameHeight: 64, tileX: 8, tileY: -7 },
   adolescent: { frameWidth: 120, frameHeight: 88, tileX: 28, tileY: 16 },
-  adult: { frameWidth: 160, frameHeight: 104, tileX: 48, tileY: 35 },
+  adult: { frameWidth: 160, frameHeight: 112, tileX: 48, tileY: 43 },
 };
 
 // ── Gait ─────────────────────────────────────────────────────────────────────
@@ -107,24 +112,72 @@ const STAGE_GEOMETRY: Record<MongoStage, StageGeometry> = {
 /**
  * The share of one stride a foot spends on the ground.
  *
- * Over a half — with the two feet a half-cycle apart, that overlap is what
- * guarantees at least one foot is always down. Under it he would have a flight
- * phase, which at this gait reads as a stumble rather than as a run.
+ * Just over a half: this is a bird's *grounded* run, where the feet overlap
+ * briefly at each hand-over and the body never leaves the floor. Under a half
+ * he would have a flight phase, and at his cadence a flight phase twice a
+ * stride is a hop, which reads as a wind-up toy rather than a running animal.
  */
-export const STANCE_FRACTION = 0.62;
+export const STANCE_FRACTION = 0.54;
 export const CONTRALATERAL_PHASE = 0.5;
 
-/** Stride length as a share of the leg's total reach. */
-const STRIDE_SHARE = 0.62;
+/**
+ * How far a planted foot travels under the hip, as a share of thigh plus shank.
+ *
+ * Long on purpose. Ground per cycle is this sweep divided by the stance share,
+ * and that is what the runtime paces his legs by: a short sweep means many
+ * strides a second, which is a scurry, and his speed is not negotiable. Bounded
+ * above by reach — the `G6` gate fails a frame that asks the leg to span more
+ * than it has.
+ */
+const STRIDE_SHARE = 1.15;
 
 export function strideOf(prop: MongoProportions): number {
   return (prop.femur + prop.tibia) * STRIDE_SHARE;
 }
 
-const WALK_BOB = 0.085;
-const WALK_ARCH = 0.5;
-const WALK_PITCH = deg(3.2);
-const WALK_FOOT_LIFT_SHARE = 0.42;
+/**
+ * Where the middle of a foot's sweep sits relative to its hip.
+ *
+ * The toe tip is what a `LegPose` places, and it sits well ahead of the ankle;
+ * centring the *toe* under the hip would leave the ankle — the end of the
+ * two-bone chain — swinging far further behind the hip than in front of it.
+ */
+function strideCentreX(prop: MongoProportions, side: 'near' | 'far'): number {
+  const toeAheadOfAnkle = prop.toe + prop.metatarsus * Math.cos(STRIKE_META);
+  return restHipX(side) + toeAheadOfAnkle * STRIDE_CENTRE_SHARE;
+}
+
+/** Under 1 because the toe roll at push-off already carries the ankle forward. */
+const STRIDE_CENTRE_SHARE = 0.85;
+
+/**
+ * Vertical travel of the pelvis over one footfall, in tiles.
+ *
+ * Small, and it has to be: the body is lowest as it rolls over each planted
+ * foot and highest at the hand-over, twice a stride, and anything big enough to
+ * read as a separate motion at his cadence reads as a hop.
+ */
+const RUN_BOB = 0.012;
+const RUN_PITCH_BOB = deg(0.8);
+/**
+ * The run carries the spine tipped slightly forward and the neck reaching out
+ * ahead of it — a raptor at speed is a horizontal arrow, not a standing bird
+ * walking quickly.
+ */
+const RUN_PITCH = deg(-3);
+const RUN_NECK_REACH = 0.32;
+const RUN_HEAD_TILT = deg(-4);
+/**
+ * The tail rides straight back at speed and rocks against the bob as a rod.
+ *
+ * Only a few degrees off the standing carriage, on purpose: the walk and idle
+ * rows are separate cached rows with no blend between them, so whatever differs
+ * between their postures jumps in a single frame each time he starts or stops,
+ * and the tail tip — the furthest point from the hips — jumps furthest.
+ */
+const RUN_TAIL_LIFT = deg(1);
+const RUN_TAIL_ROCK = deg(2.2);
+const RUN_FOOT_LIFT_SHARE = 0.62;
 /**
  * How much of the stance the toes spend rolling up onto their tips.
  *
@@ -132,7 +185,17 @@ const WALK_FOOT_LIFT_SHARE = 0.42;
  * shortens the leg through the back half of stance, and without it the stride
  * asks the hip to reach further than the thigh and shank can span.
  */
-const ROLL_START = 0.35;
+const ROLL_START = 0.4;
+const STRIKE_META = deg(62);
+const TOE_OFF_META = deg(50);
+/** The metatarsus folds up toward the shin through the swing, tucking the foot. */
+const SWING_FOLD_META = deg(80);
+/** Where in the swing the foot is tucked highest — early, as it is snatched off the floor. */
+const SWING_PEAK = 0.4;
+const SWING_UNROLL = 0.75;
+const SWING_ROLL_CARRY = 0.9;
+const WALK_NEARNESS_FLOOR = 0.25;
+const STANCE_NEARNESS = 0.35;
 
 function cyclePhase(frame: number, frameCount: number): number {
   return frame / frameCount;
@@ -146,46 +209,52 @@ function wrap01(value: number): number {
   return ((value % 1) + 1) % 1;
 }
 
+/** A hump whose peak sits at `peak` rather than in the middle. */
+function skewedHump(t: number, peak: number): number {
+  const c = clamp01(t);
+  return c < peak ? hump((c / peak) * HALF) : hump(HALF + ((c - peak) / (1 - peak)) * HALF);
+}
+
+const HALF = 0.5;
+
 /**
  * One foot through one stride, edge-on.
  *
  * Stance is a straight line at a constant rate — that is what "the body travels
- * over a planted foot" means, and any easing on it is a skate. The swing is
- * eased, lifted, and brings the toes back down flat.
+ * over a planted foot" means, and any easing on it is a skate. The swing
+ * snatches the foot up and folds it, toes curled, carries it forward high under
+ * the belly, and opens it again just before it strikes.
  */
-function gaitFoot(phase: number, prop: MongoProportions): LegPose {
+function gaitFoot(phase: number, prop: MongoProportions, side: 'near' | 'far'): LegPose {
   const cycle = wrap01(phase);
-  const stride = strideOf(prop);
-  const lift = prop.metatarsus * WALK_FOOT_LIFT_SHARE;
+  const sweep = strideOf(prop);
+  const centre = strideCentreX(prop, side);
+  const lift = prop.metatarsus * RUN_FOOT_LIFT_SHARE;
   if (cycle < STANCE_FRACTION) {
     const t = cycle / STANCE_FRACTION;
+    const roll = easeInOut(ramp(t, ROLL_START, 1));
     return {
-      toeX: stride * (0.5 - t),
+      toeX: centre + sweep * (HALF - t),
       lift: 0,
-      meta: lerp(REST_META_WALK, TOE_OFF_META, easeInOut(ramp(t, ROLL_START, 1))),
-      roll: easeInOut(ramp(t, ROLL_START, 1)),
+      meta: lerp(STRIKE_META, TOE_OFF_META, roll),
+      roll,
       sickle: 0,
       lateral: 0,
-      nearness: 0.35,
+      nearness: STANCE_NEARNESS,
     };
   }
   const t = (cycle - STANCE_FRACTION) / (1 - STANCE_FRACTION);
+  const tuck = skewedHump(t, SWING_PEAK);
   return {
-    toeX: lerp(-stride * 0.5, stride * 0.5, easeInOut(t)),
-    lift: hump(t) * lift,
-    meta: lerp(TOE_OFF_META, REST_META_WALK, easeInOut(t)),
+    toeX: centre + lerp(-sweep * HALF, sweep * HALF, easeInOut(t)),
+    lift: tuck * lift,
+    meta: lerp(lerp(TOE_OFF_META, STRIKE_META, easeInOut(t)), SWING_FOLD_META, tuck),
     roll: (1 - easeInOut(ramp(t, 0, SWING_UNROLL))) * SWING_ROLL_CARRY,
     sickle: 0,
     lateral: 0,
-    nearness: clamp01(hump(t) + WALK_NEARNESS_FLOOR),
+    nearness: clamp01(tuck + WALK_NEARNESS_FLOOR),
   };
 }
-
-const REST_META_WALK = deg(66);
-const TOE_OFF_META = deg(52);
-const SWING_UNROLL = 0.4;
-const SWING_ROLL_CARRY = 0.85;
-const WALK_NEARNESS_FLOOR = 0.25;
 
 /**
  * The same foot head-on, where a step is almost pure lift: the stride is
@@ -194,25 +263,29 @@ const WALK_NEARNESS_FLOOR = 0.25;
  */
 function axialStep(phase: number, side: number, prop: MongoProportions): LegPose {
   const cycle = wrap01(phase);
-  const lift = prop.metatarsus * WALK_FOOT_LIFT_SHARE;
+  const sweep = strideOf(prop);
+  const lift = prop.metatarsus * RUN_FOOT_LIFT_SHARE;
   if (cycle < STANCE_FRACTION) {
     const t = cycle / STANCE_FRACTION;
+    const roll = easeInOut(ramp(t, ROLL_START, 1));
     return {
-      toeX: 0,
+      toeX: sweep * (HALF - t),
       lift: 0,
-      meta: lerp(REST_META_WALK, TOE_OFF_META, easeInOut(ramp(t, ROLL_START, 1))),
-      roll: easeInOut(ramp(t, ROLL_START, 1)),
+      meta: lerp(STRIKE_META, TOE_OFF_META, roll),
+      roll,
       sickle: 0,
       lateral: side * AXIAL_STANCE_SPLAY * prop.girth,
-      nearness: 0.3,
+      nearness: AXIAL_STANCE_NEARNESS,
     };
   }
   const t = (cycle - STANCE_FRACTION) / (1 - STANCE_FRACTION);
+  // Symmetric rather than snatched early: head-on the whole step is lift, and
+  // an early peak spends most of it in one frame.
   const swing = hump(t);
   return {
-    toeX: 0,
+    toeX: lerp(-sweep * HALF, sweep * HALF, easeInOut(t)),
     lift: swing * lift * AXIAL_LIFT_SHARE,
-    meta: lerp(TOE_OFF_META, REST_META_WALK, easeInOut(t)),
+    meta: lerp(lerp(TOE_OFF_META, STRIKE_META, easeInOut(t)), SWING_FOLD_META, swing),
     roll: (1 - easeInOut(ramp(t, 0, SWING_UNROLL))) * SWING_ROLL_CARRY,
     sickle: 0,
     lateral: side * lerp(AXIAL_STANCE_SPLAY, AXIAL_SWING_TRACK_IN, swing) * prop.girth,
@@ -220,9 +293,12 @@ function axialStep(phase: number, side: number, prop: MongoProportions): LegPose
   };
 }
 
-const AXIAL_STANCE_SPLAY = 0.34;
-const AXIAL_SWING_TRACK_IN = 0.08;
-const AXIAL_LIFT_SHARE = 1.25;
+/** Head-on the feet land almost under the hips — a raptor's track is narrow. */
+const AXIAL_STANCE_SPLAY = 0.04;
+/** And the swinging foot passes in toward the midline, under the body. */
+const AXIAL_SWING_TRACK_IN = -0.1;
+const AXIAL_LIFT_SHARE = 0.8;
+const AXIAL_STANCE_NEARNESS = 0.3;
 
 // ── Head stabilisation ───────────────────────────────────────────────────────
 
@@ -253,7 +329,7 @@ function levelHead(pose: MongoPose, prop: MongoProportions): MongoPose {
  * travelling at all. The residual quarter is the pigeon's own hold-and-thrust,
  * and it is what makes the walk look alive.
  */
-const HEAD_STABILISE_SHARE = 0.74;
+const HEAD_STABILISE_SHARE = 0.86;
 
 /**
  * Head-on the neck top is placed straight off the shoulders, so cancelling the
@@ -283,9 +359,17 @@ function blink(phase: number, at: number): number {
 
 // ── Idle ─────────────────────────────────────────────────────────────────────
 
-const IDLE_BOB = 0.07;
+/** The metatarsus angle the standing rows hold — the high, backward-leaning heel. */
+const STAND_META = deg(66);
+
+/**
+ * The breath's own vertical travel, in tiles. A breath, not a bounce: big enough
+ * to keep eight frames from collapsing into one picture, small enough that a
+ * standing raptor does not appear to be bobbing on springs.
+ */
+const IDLE_BOB = 0.022;
 const IDLE_ARCH = 0.16;
-const IDLE_ARCH_SWING = 0.34;
+const IDLE_ARCH_SWING = 0.12;
 /**
  * How far the tail rod swings above and below its rest angle while he stands.
  *
@@ -294,7 +378,7 @@ const IDLE_ARCH_SWING = 0.34;
  * an agitated swish rather than as a counterweight.
  */
 const IDLE_TAIL_SWING = deg(4.5);
-const IDLE_TAIL_FLICK = 0.1;
+const IDLE_TAIL_FLICK = 0.035;
 const IDLE_HEAD_SCAN = deg(9);
 /**
  * The tail's lateral swing, away-facing.
@@ -312,7 +396,7 @@ const IDLE_TAIL_SWAY = deg(7);
  * body that is standing perfectly still.
  */
 const IDLE_HEAD_TURN = 0.09;
-const REST_TAIL_LIFT = deg(-6);
+const REST_TAIL_LIFT = deg(-2);
 
 /**
  * How far the balance shift runs ahead of the breath, in radians.
@@ -412,54 +496,62 @@ function idleBack(frame: number, prop: MongoProportions): MongoPose {
 const IDLE_SWAY = 0.009;
 
 // ── Walk ─────────────────────────────────────────────────────────────────────
+//
+// One row serves every pace. It is a grounded run — the gait a running bird
+// uses — paced by ground covered, so at a stroll it simply plays slower.
 
-const WALK_ARM_SWING = deg(9);
-const WALK_ARM_SPREAD = 0.08;
-const WALK_TAIL_SWING = deg(9);
-const WALK_TAIL_SWAY = deg(11);
-const WALK_SWAY = 0.014;
-const WALK_HEAD_TURN = 0.12;
+const WALK_ARM_SWING = deg(4);
+const WALK_ARM_SPREAD = 0.05;
+/** The forelimbs ride tucked against the chest at speed rather than hanging. */
+const RUN_ARM_TUCK = deg(-8);
+const WALK_TAIL_SWAY = deg(7);
+const WALK_SWAY = 0.012;
+const WALK_HEAD_TURN = 0.06;
+const WALK_BLINK_AT = 0.4;
+
+/**
+ * The footfall clock: 0 when a foot is at mid-stance, the moment the body rolls
+ * over it and sits lowest. Two footfalls per stride.
+ */
+function footfallAngle(phase: number): number {
+  return (phase - STANCE_FRACTION * HALF) * TWO_PI * FOOTFALLS_PER_STRIDE;
+}
+
+const FOOTFALLS_PER_STRIDE = 2;
 
 function walkBase(phase: number, prop: MongoProportions): MongoPose {
   const angle = phase * TWO_PI;
+  const footfall = Math.cos(footfallAngle(phase));
   const rest = restPose();
   return {
     ...rest,
-    // Two bobs per stride, and the pelvis drops *at contact* rather than rising
-    // there. That is what a real pelvis does, and it is also load-bearing: the
-    // legs are at their widest spread the moment both feet are down, and a hip
-    // that rises then asks for more reach than the leg has.
-    rise: WALK_BOB * Math.cos(angle * 2),
-    arch: WALK_ARCH * Math.sin(angle * 2),
-    pitch: WALK_PITCH * Math.sin(angle * 2),
-    breathe: Math.sin(angle * 2),
+    rise: RUN_BOB * footfall,
+    pitch: RUN_PITCH + RUN_PITCH_BOB * footfall,
+    neckReach: RUN_NECK_REACH,
+    headTilt: RUN_HEAD_TILT,
+    breathe: footfall,
     eyeOpen: blink(phase, WALK_BLINK_AT),
-    // The tail swings as one rod, in counterphase to the hips. It does not whip:
-    // a dromaeosaur tail is rod-straightened by ossified tendons.
-    tailLift: REST_TAIL_LIFT + WALK_TAIL_SWING * Math.sin(angle + Math.PI),
-    tailCurve: WALK_TAIL_CURVE * Math.sin(angle),
+    // The tail is rod-straightened by ossified tendons, so it neither whips nor
+    // wags: it rocks as one piece against each footfall, which is what a
+    // counterweight does.
+    tailLift: RUN_TAIL_LIFT - RUN_TAIL_ROCK * footfall,
     nearArm: walkArm(angle, 1),
     farArm: walkArm(angle, -1),
-    nearLeg: gaitFoot(phase, prop),
-    farLeg: gaitFoot(phase + CONTRALATERAL_PHASE, prop),
+    nearLeg: gaitFoot(phase, prop, 'near'),
+    farLeg: gaitFoot(phase + CONTRALATERAL_PHASE, prop, 'far'),
     time: phase,
   };
 }
 
-const WALK_BLINK_AT = 0.4;
-const WALK_TAIL_CURVE = 0.03;
-
 function walkArm(angle: number, side: number): ArmPose {
   const rest = restArm();
   return {
-    upper: rest.upper + side * WALK_ARM_SWING * Math.sin(angle),
-    fore: rest.fore - side * WALK_ARM_SWING * Math.sin(angle) * WALK_FOREARM_SHARE,
+    upper: rest.upper + RUN_ARM_TUCK + side * WALK_ARM_SWING * Math.sin(angle),
+    fore: rest.fore,
     spread: WALK_ARM_SPREAD,
     lateral: 0,
   };
 }
-
-const WALK_FOREARM_SHARE = 0.5;
 
 function walkSide(frame: number, prop: MongoProportions): MongoPose {
   return levelHead(walkBase(cyclePhase(frame, WALK_FRAMES), prop), prop);
@@ -767,7 +859,7 @@ function pounceLeg(progress: number, prop: MongoProportions, toeBase: number): L
     // Tucked for the whole flight, not just the crouch: released at take-off the
     // legs hang straight down and the leap reads as the standing pose slid
     // upward rather than as an animal in the air.
-    meta: lerp(REST_META_WALK, POUNCE_TUCK_META, Math.max(crouch * (1 - reach), air * (1 - reach))),
+    meta: lerp(STAND_META, POUNCE_TUCK_META, Math.max(crouch * (1 - reach), air * (1 - reach))),
     roll: 0,
     // The killing claw swings down out of its retraction as he commits, and
     // stays out until he has settled back onto his feet.
@@ -896,7 +988,7 @@ function collapseSide(frame: number, prop: MongoProportions): MongoPose {
   const buckle = (toeBase: number, side: number): LegPose => ({
     toeX: toeBase * prop.femur + side * COLLAPSE_FOOT_SPREAD * prop.femur * splay,
     lift: 0,
-    meta: lerp(REST_META_WALK, COLLAPSE_META, sink),
+    meta: lerp(STAND_META, COLLAPSE_META, sink),
     roll: 0,
     sickle: 0,
     lateral: 0,
@@ -979,7 +1071,7 @@ const HAPPY_ARM_UPPER = deg(150);
 const HAPPY_PITCH = deg(6);
 const HAPPY_ARCH = 0.35;
 const HAPPY_TAIL_LIFT = deg(18);
-const HAPPY_TAIL_WAG = deg(18);
+const HAPPY_TAIL_WAG = deg(5);
 /** Whole cycles of tail wag over the jump — see `IDLE_SCAN_CYCLES` for why an integer. */
 const HAPPY_TAIL_WAG_CYCLES = 2;
 const HAPPY_GAPE = 0.35;
@@ -997,7 +1089,7 @@ function happyLeg(prop: MongoProportions, toeBase: number, air: number, nearness
   return {
     toeX: toeBase * prop.femur,
     lift: air * prop.hipHeight * HAPPY_LEAP_SHARE,
-    meta: lerp(REST_META_WALK, POUNCE_TUCK_META, air),
+    meta: lerp(STAND_META, POUNCE_TUCK_META, air),
     roll: 0,
     sickle: 0,
     lateral: 0,
@@ -1082,7 +1174,7 @@ const FLAP_ARM_SPREAD = 1.0;
 const FLAP_ARM_OSCILLATION = deg(20);
 const FLAP_ARCH_SWING = 0.2;
 const FLAP_TAIL_LIFT = deg(10);
-const FLAP_TAIL_WAG = deg(12);
+const FLAP_TAIL_WAG = deg(4);
 const FLAP_GAPE = 0.25;
 const FLAP_BOB = 0.02;
 const FLAP_BREATHE = 0.4;
@@ -1370,3 +1462,47 @@ export const MONGO_FIGURES: Record<MongoStage, FigureDef> = {
 export const MONGO_FIGURE_ORDER: readonly FigureDef[] = MONGO_STAGE_ORDER.map(
   (stage) => MONGO_FIGURES[stage],
 );
+
+/** Where a pose's point lands once the stage's own scale is applied about the ground line. */
+function onTile(prop: MongoProportions, x: number, y: number): { x: number; y: number } {
+  return { x: x * prop.scale, y: GROUND_Y + (y - GROUND_Y) * prop.scale + TILE_CENTRE };
+}
+
+/** The tile's centre, measured from its top edge, in tiles. */
+const TILE_CENTRE = 0.5;
+/** The far eye in profile is mostly hidden behind the skull, so the pair sits close. */
+const SIDE_EYE_SPACING = 0.04;
+
+/**
+ * Where a stage's eyes sit, for the dungeon's eye-shine — measured off the
+ * standing rows' first frame, so a redraw of the head moves the shine with it.
+ */
+export function mongoEyePlacement(stage: MongoStage): ViewedEyePlacement {
+  const prop = MONGO_STAGES[stage];
+  const side = measureEyeSide(idleSide(0, prop), prop);
+  const front = measureEyesFront(idleFront(0, prop), prop);
+  const sideOnTile = onTile(prop, side.x, side.y);
+  const frontOnTile = onTile(prop, front.centre.x, front.centre.y);
+  return {
+    sideForward: sideOnTile.x,
+    sideHeight: sideOnTile.y,
+    sideSpacing: SIDE_EYE_SPACING,
+    frontMirrors: false,
+    frontAcross: frontOnTile.x,
+    frontHeight: frontOnTile.y,
+    frontSpacing: front.spacing * prop.scale,
+  };
+}
+
+/**
+ * How far above the ground line a stage's standing profile reaches, in tiles —
+ * the crest's tallest feather. For anything placed over his head in a picture
+ * of him (a health bar, a bark) rather than over his tile.
+ */
+export function mongoHeadTopTiles(stage: MongoStage): number {
+  const prop = MONGO_STAGES[stage];
+  return (GROUND_Y - measureHeadTopSide(idleSide(0, prop), prop)) * prop.scale;
+}
+
+/** Where his ground line sits below his tile's top edge, in tiles. */
+export const MONGO_GROUND_FROM_TILE_TOP = TILE_CENTRE + GROUND_Y;

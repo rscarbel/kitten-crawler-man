@@ -200,6 +200,7 @@ export const STINGER_IDS = [
   'objective_complete',
   'player_level_up',
   'achievement_unlocked',
+  'new_unlock',
   'briar_hollow_victory',
 ] as const satisfies readonly SoundId[];
 

@@ -1,17 +1,17 @@
 import { ASTAR_FAILURE_BACKOFF_FRAMES, ASTAR_MAX_DENIED_FRAMES, Mob } from './Mob';
 import type { EyePlacement } from '../sprites/eyePlacement';
+import { mongoEyePlacement } from '../sprites/art/mongoFigure';
 import type { DamageSource, Player } from '../Player';
 import { TILE_SIZE } from '../core/constants';
 import {
   MONGO_HEAD_CLEARANCE_TILES,
-  MONGO_WALK_FRAMES,
-  MONGO_UNDERSAMPLING_FRAME_LIMIT,
-  MONGO_WALK_FRAMES_PER_TICK_AT_BASE_SPEED,
+  MONGO_MAX_WALK_RADIANS_PER_TICK,
   MongoAnimator,
   drawMongoSprite,
   mongoActionDuration,
   prewarmMongoCombat,
   prewarmMongoWalk,
+  mongoWalkRadiansPerPixel,
   type MongoAction,
   type MongoStage,
 } from '../sprites/mongoSprite';
@@ -92,20 +92,6 @@ const RETURN_THRESHOLD_TILES = 3.0;
 const RETURN_STOP_TILES = 1.6;
 
 const RECALL_SPEED_MULTIPLIER = 1.5;
-/**
- * The fastest leg cadence any real locomotion of his produces — the recall
- * sprint. Anything the gait measures above this came from a shove, not a stride.
- *
- * Derived rather than written down, so raising the sprint speeds his legs up
- * with it instead of quietly clamping them to a stale number. Held under the
- * undersampling limit by the same expression: a sprint multiplier large enough
- * to cross it degrades to "the sprint stops looking faster", which is visible,
- * rather than to a strobe, which is what this whole method exists to prevent.
- */
-const MAX_WALK_FRAMES_PER_TICK = Math.min(
-  MONGO_WALK_FRAMES_PER_TICK_AT_BASE_SPEED * RECALL_SPEED_MULTIPLIER,
-  MONGO_UNDERSAMPLING_FRAME_LIMIT,
-);
 /** How close he has to get to the cat before the recall counts as finished. */
 const RECALL_ARRIVE_TILES = 1.2;
 const RECALL_STOP_TILES = 0.4;
@@ -243,8 +229,6 @@ const GROWTH_FLASH_FRAMES = 10;
 /** Frames the despawn fade runs for once the recall has landed. */
 export const MONGO_FADE_FRAMES = 18;
 
-const TWO_PI = Math.PI * 2;
-
 /**
  * A mob Mongo may not pick, and the two ways the ban ends.
  *
@@ -291,35 +275,11 @@ interface PendingBlow {
   framesLeft: number;
 }
 
-/** He grows from a hunched hatchling into a tall-necked adult, so each stage carries its head somewhere else. */
+/** Each stage carries its head somewhere else, so each measures its own eyes off its art. */
 const MONGO_EYES: Readonly<Record<MongoStage, EyePlacement>> = {
-  juvenile: {
-    sideForward: 0.28,
-    sideHeight: 0.44,
-    sideSpacing: 0.04,
-    frontMirrors: false,
-    frontAcross: 0,
-    frontHeight: 0.4,
-    frontSpacing: 0.16,
-  },
-  adolescent: {
-    sideForward: 0.52,
-    sideHeight: 0.14,
-    sideSpacing: 0.04,
-    frontMirrors: false,
-    frontAcross: 0,
-    frontHeight: 0.07,
-    frontSpacing: 0.17,
-  },
-  adult: {
-    sideForward: 0.65,
-    sideHeight: 0.04,
-    sideSpacing: 0.04,
-    frontMirrors: false,
-    frontAcross: 0,
-    frontHeight: -0.17,
-    frontSpacing: 0.17,
-  },
+  juvenile: mongoEyePlacement('juvenile'),
+  adolescent: mongoEyePlacement('adolescent'),
+  adult: mongoEyePlacement('adult'),
 };
 
 export class Mongo extends Mob {
@@ -1342,42 +1302,26 @@ export class Mongo extends Mob {
   /**
    * Sets the leg cadence from the ground he actually covered last frame.
    *
-   * Measured rather than intended, so it picks up everything that scales his
-   * movement after `speed` is chosen — wading a river at 36%, a slow effect at
-   * 35%, collision slides — none of which reading `this.speed` could see. A
-   * raptor creeping through water with his legs going at full tilt is the same
-   * class of error as the strobe, just pointed the other way.
-   *
-   * Still not true *stride* sync, and cannot be: the ratio is taken against his
-   * listed speed rather than against the stride the art bakes, because that
-   * stride is unreachable. A juvenile's leg is half a tile long, so his stride
-   * is 0.31 tiles, and covering the 3.75 tiles a second his speed asks for
-   * means twelve strides a
-   * second — ninety-odd sprite frames out of an eight-frame row, on a display
-   * that samples sixty times. The row is then undersampled rather than played:
-   * frames skipped, legs jumping between non-adjacent poses, which is exactly
-   * what made him look like he was vibrating. Nor can the art be redrawn around
-   * it — a stride long enough to sync would step further than the leg extends,
-   * and the reach gate rejects that. The mismatch is between his size and his
-   * speed, and neither is negotiable. He skates; every character in this game
-   * skates, and feet that slide read far better than a raptor that strobes.
+   * One walk cycle per stride of ground, so a planted foot stays planted
+   * whatever his speed — at a stroll the legs turn over slowly, at a sprint
+   * quickly, and he never patters in place or skates. Measured rather than
+   * intended, so it picks up everything that scales his movement after `speed`
+   * is chosen — wading, slows, collision slides — none of which reading
+   * `this.speed` could see.
    */
   private syncGaitToDistanceCovered(): void {
     const coveredPx = Math.hypot(this.x - this.gaitSampleX, this.y - this.gaitSampleY);
     this.gaitSampleX = this.x;
     this.gaitSampleY = this.y;
-    const baseSpeed = this.stats.speed;
-    const speedRatio = baseSpeed > 0 ? coveredPx / baseSpeed : 1;
-    // Ceiling, because not everything that moves him is a stride. A separation
-    // shove from a crowding mob can be several times his own step in one frame,
-    // and unbounded that reads back as a multiple of his speed, which skips
-    // frames of the cycle and is the strobe again. Nothing he does under his own
-    // power exceeds the recall sprint, so that is the bound.
-    const framesPerTick = Math.min(
-      MONGO_WALK_FRAMES_PER_TICK_AT_BASE_SPEED * speedRatio,
-      MAX_WALK_FRAMES_PER_TICK,
-    );
-    this.walkFrameSpeed = (TWO_PI * framesPerTick) / MONGO_WALK_FRAMES;
+    const radiansPerPixel = mongoWalkRadiansPerPixel(this.stats.stage, this.tileSize);
+    // Capped twice, because not everything that moves him is a stride. A
+    // separation shove from a crowding mob can be several times his own step in
+    // one frame, and nothing he does under his own power outruns the recall
+    // sprint, so that is one bound; the other is the rate past which the row is
+    // undersampled into a strobe.
+    const sprintPx = this.stats.speed * RECALL_SPEED_MULTIPLIER;
+    const strideRadians = Math.min(coveredPx, sprintPx) * radiansPerPixel;
+    this.walkFrameSpeed = Math.min(strideRadians, MONGO_MAX_WALK_RADIANS_PER_TICK);
   }
 
   protected override drawSelf(

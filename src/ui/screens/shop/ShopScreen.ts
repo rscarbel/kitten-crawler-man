@@ -17,7 +17,7 @@ import { centerIn, inset, splitH, splitV, type Rect } from '../../core/geom';
 import { UI_ERROR_SOUND, type Surface, type Ui } from '../../core/UiRoot';
 import { QuantityPickerState } from '../../QuantityPickerState';
 import { button, buttonHeight, measureButton } from '../../widgets/button';
-import { listRow, listRowHeight, type RowLeading } from '../../widgets/listRow';
+import { listRow, listRowHeight, listRowTrailingMax, type RowLeading } from '../../widgets/listRow';
 import { drawGlass } from '../../widgets/paint';
 import { panel } from '../../widgets/panel';
 import { scrollView } from '../../widgets/scrollView';
@@ -277,26 +277,43 @@ function renderShop(ui: Ui, args: RenderShopArgs): void {
   }
 }
 
-/** The width a row's trailing chip and button need, shared by every row so the columns line up. */
+interface TrailingLayout {
+  readonly chipW: number;
+  readonly buttonW: number;
+  readonly total: number;
+  /** Whether a row's status fits in the chip column; one that does not reads as its subtitle. */
+  readonly statusFits: (status: string) => boolean;
+}
+
+/**
+ * The width a row's trailing chip and button need, shared by every row so the
+ * columns line up. The chip column widens for a status only as far as the row
+ * can spare, so the button is never pushed past the row's edge on a phone.
+ */
 function trailingLayout(
   ui: Ui,
+  rowRect: Rect,
   withChip: boolean,
   actionLabel: string,
   statuses: readonly string[] = [],
-): { chipW: number; buttonW: number; total: number } {
+): TrailingLayout {
   const { space } = ui.theme;
-  const chipW = withChip
-    ? Math.max(
-        measurePriceChip(ui, PRICE_LAYOUT_SAMPLE, true),
-        ...statuses.map((status) => measurePriceChip(ui, status, false)),
-      )
-    : 0;
+  const maxTotal = listRowTrailingMax(ui, rowRect, true);
   const buttonW = Math.max(
     ...[...ACTION_LABEL_SAMPLES, actionLabel].map((label) =>
       measureButton(ui, { label, size: 'sm' }),
     ),
   );
-  return { chipW, buttonW, total: chipW + (withChip ? space.sm : 0) + buttonW };
+  if (!withChip) {
+    return { chipW: 0, buttonW, total: buttonW, statusFits: () => false };
+  }
+  const gap = space.sm;
+  const maxChipW = maxTotal - gap - buttonW;
+  const priceW = measurePriceChip(ui, PRICE_LAYOUT_SAMPLE, true);
+  const statusWidth = (status: string): number => measurePriceChip(ui, status, false);
+  const statusFits = (status: string): boolean => statusWidth(status) <= maxChipW;
+  const chipW = Math.max(priceW, ...statuses.filter(statusFits).map(statusWidth));
+  return { chipW, buttonW, total: chipW + gap + buttonW, statusFits };
 }
 
 function renderBuyList(
@@ -310,11 +327,17 @@ function renderBuyList(
   const actionLabel = menu.unpriced?.actionLabel ?? BUY_LABEL;
   const rows = menu.options;
   const statuses = rows.flatMap((row) => (row.unavailable === undefined ? [] : [row.unavailable]));
-  const layout = trailingLayout(ui, !opts.unpriced, actionLabel, statuses);
   scrollView(ui, rect, {
     id: `${args.id}/rows-buy`,
     contentHeight: rows.length * opts.rowH,
     draw: (content) => {
+      const layout = trailingLayout(
+        ui,
+        { ...content, h: opts.rowH },
+        !opts.unpriced,
+        actionLabel,
+        statuses,
+      );
       const cells = splitV(
         { ...content, h: rows.length * opts.rowH },
         rows.map(() => opts.rowH),
@@ -324,8 +347,9 @@ function renderBuyList(
         const cell = cells[index];
         const refusal = buyRefusal(row, opts.unpriced, party);
         const isQuestDefault = opts.questRow?.key === row.key;
-        const subtitle =
-          opts.unpriced && row.unavailable !== undefined ? row.unavailable : row.desc;
+        const status = row.unavailable;
+        const statusInChip = status !== undefined && layout.statusFits(status);
+        const subtitle = status !== undefined && !statusInChip ? status : row.desc;
         listRow(ui, cell, {
           id: `${args.id}/row-${row.key}`,
           title: row.label,
@@ -340,7 +364,8 @@ function renderBuyList(
               opts.unpriced ? 0 : ui.theme.space.sm,
             );
             const price = priceFor(row, opts.unpriced, refusal === null);
-            if (price !== null) priceChip(ui, chipCell, price);
+            const chipShowsPrice = status === undefined || statusInChip;
+            if (price !== null && chipShowsPrice) priceChip(ui, chipCell, price);
             refusableButton(ui, buttonCell, {
               id: `${args.id}/buy-${row.key}`,
               label: actionLabel,
@@ -368,11 +393,11 @@ function renderSellList(
     text(ui, { ...rect, h: rowH }, { text: NOTHING_TO_SELL, role: 'muted', align: 'center' });
     return;
   }
-  const layout = trailingLayout(ui, true, SELL_LABEL);
   scrollView(ui, rect, {
     id: `${args.id}/rows-sell`,
     contentHeight: rows.length * rowH,
     draw: (content) => {
+      const layout = trailingLayout(ui, { ...content, h: rowH }, true, SELL_LABEL);
       const cells = splitV(
         { ...content, h: rows.length * rowH },
         rows.map(() => rowH),

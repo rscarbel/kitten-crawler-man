@@ -1,7 +1,8 @@
 /**
  * The prison's prize and the visit around it: the key floating over its
- * pedestal in the vault, lifting it, the guidance that points the way to it
- * and back out, and the first-visit explainer.
+ * pedestal in the vault, lifting it the moment a crawler walks up to it, the
+ * celebration that says it is now the party's, the guidance that points the
+ * way to it and back out, and the first-visit explainer.
  *
  * Whether the key is on the pedestal is never stored. It is there exactly
  * when neither crawler carries it and the gate outside is still shut, so a
@@ -20,7 +21,6 @@
 
 import type { AudioManager } from '../../audio/AudioManager';
 import { TILE_SIZE } from '../../core/constants';
-import type { ItemId } from '../../core/ItemDefs';
 import { drawAreaHighlight } from '../../ui/AreaHighlight';
 import type { Rect } from '../../ui/core/geom';
 import type { Surface } from '../../ui/core/UiRoot';
@@ -29,7 +29,6 @@ import { prisonSectionAt } from '../../map/goblinPrisonPlan';
 import type { PrisonSectionId } from '../../map/goblinPrisonLayouts';
 import type { Player } from '../../Player';
 import {
-  KEY_PEDESTAL_WIDTH_TILES,
   PRISON_KEY_CENTRE_ABOVE_BASE_TILES,
   drawKeyPedestal,
   drawPrisonKey,
@@ -37,9 +36,15 @@ import {
 } from '../../sprites/art/prisonKeyArt';
 import { drawQuestBeacon, setQuestBeaconViewer } from '../../sprites/questBeacon';
 import type { TopBandEntry } from '../../ui/hud/topBand';
+import { heldPrizeBandEntry } from '../../ui/hud/heldPrizeEntry';
 import { objectiveBandEntry } from '../../ui/hud/objectiveLine';
+import {
+  PRIZE_CELEBRATION_FRAMES,
+  prizeCelebrationSurface,
+  type PrizeCelebration,
+  type PrizeCelebrationModel,
+} from '../../ui/hud/prizeCelebration';
 import type { ToastOptions } from '../../ui/hud/toasts';
-import { drawInteractionPrompt } from '../../ui/InteractionPrompt';
 import {
   prisonExplainerSurface,
   type PrisonExplainerModel,
@@ -62,8 +67,10 @@ const TILE_CENTRE = 0.5;
 const PEDESTAL_BASE_IN_TILE = 0.85;
 /** How far above the key's centre the "THE KEY" caption sits, in tiles. */
 const LABEL_ABOVE_KEY_TILES = 1.35;
-/** Chebyshev tiles from the pedestal within which Space lifts the key. */
+/** Chebyshev tiles from the pedestal within which a crawler walking up lifts the key. */
 const REACH_TILES = 1;
+/** How long the held-key card glows after the key lands in it. */
+const LANDING_GLOW_FRAMES = FRAMES_PER_SECOND;
 /** The key's pool of light while it is on the pedestal, in tiles, at the low and high of its pulse. */
 const KEY_LIGHT_RADIUS_TILES = { min: 3.2, max: 4 } as const;
 /** The empty pedestal's dim lamp, in tiles. */
@@ -75,9 +82,13 @@ const ARROW_SUPPRESS_TILES = 5;
 /** How far the pedestal figure's art reaches above its tile, for culling. */
 const PEDESTAL_CULL_MARGIN_TILES = 4;
 
-const PROMPT_LABEL = 'Take the key';
 const OBJECTIVE_FIND = 'Find the key';
-const OBJECTIVE_RETURN = 'Bring the key to the gate guard';
+const HELD_TITLE = 'Key in hand';
+const HELD_DETAIL = 'Bring it to the gate guard';
+const CELEBRATION_OVERLINE = 'Prison key';
+const CELEBRATION_TITLE = 'Key snatched!';
+const CELEBRATION_SUBTITLE = 'It is yours. Now sneak it out to the gate guard.';
+const CELEBRATION_SURFACE_ID = 'prison-key-celebration';
 const TOAST_TAKE_OUT = 'Take the key to the gate guard.';
 const TOAST_KEY_RETURNED = 'The key went back to its pedestal in the prison vault.';
 const LABEL_TEXT = 'THE KEY';
@@ -99,8 +110,20 @@ export interface PrisonKeyDeps {
   readonly link: StealthKeySnatchVisit;
   readonly audio: Pick<AudioManager, 'play'> | null;
   readonly toast: (text: string, opts?: ToastOptions) => void;
-  /** Flies one item from a world position to the HUD. */
-  readonly flyItem: (id: ItemId, worldX: number, worldY: number) => void;
+  /** A world position on screen this frame, in canvas CSS pixels. */
+  readonly worldToScreen: (worldX: number, worldY: number) => { x: number; y: number };
+}
+
+/** The key's lift, kept while it is celebrated. */
+interface KeyLift {
+  readonly tick: number;
+  readonly fromCss: { readonly x: number; readonly y: number };
+}
+
+/** Where the held-key card drew its icon slot, and on which UI frame. */
+interface IconSlot {
+  readonly rect: Rect;
+  readonly now: number;
 }
 
 function tileOf(body: { readonly x: number; readonly y: number }): PrisonTile {
@@ -110,17 +133,19 @@ function tileOf(body: { readonly x: number; readonly y: number }): PrisonTile {
   };
 }
 
-export class PrisonKeySystem implements PrisonExplainerModel {
+export class PrisonKeySystem implements PrisonExplainerModel, PrizeCelebrationModel {
   private ticks = 0;
   private explainerOpen = false;
   private lastLeaderSection: PrisonSectionId | null = null;
   private toldToTakeItOut = false;
   /**
-   * Whether a crawler stood on the pedestal's front tile last tick. The key is
-   * lifted by stepping on, not by standing there: a key that went back to the
-   * pedestal under a crawler's feet stays put until they step off and on again.
+   * The crawlers within reach of the pedestal last tick. The key is lifted by
+   * walking up, not by standing there: a key that went back to the pedestal
+   * beside a crawler stays put until they step away and back again.
    */
-  private frontOccupied = false;
+  private inReachLastTick = new Set<Player>();
+  private lastLift: KeyLift | null = null;
+  private iconSlot: IconSlot | null = null;
   /**
    * Whether the party held the key last tick. A quest item cannot be dropped
    * or sold, so the key leaving both inventories in here can only be another
@@ -180,7 +205,7 @@ export class PrisonKeySystem implements PrisonExplainerModel {
   }
 
   /**
-   * One tick of the visit: a crawler walking onto the pedestal's front tile
+   * One tick of the visit: a crawler walking within reach of the pedestal
    * lifts the key, and the leader carrying it out of the vault is told where
    * it goes. `active` is the crawler the player drives.
    */
@@ -189,14 +214,10 @@ export class PrisonKeySystem implements PrisonExplainerModel {
     const held = this.partyHoldsKey;
     if (this.heldLastTick && !held && !this.gateOpened) this.keyReturned();
     this.heldLastTick = held;
-    const front = this.pedestalFront;
-    const onFront = [active, this.otherOf(active)].find((crawler) => {
-      const tile = tileOf(crawler);
-      return tile.x === front.x && tile.y === front.y;
-    });
-    const steppedOn = onFront !== undefined && !this.frontOccupied;
-    this.frontOccupied = onFront !== undefined;
-    if (steppedOn && this.keyOnPedestal) this.lift(onFront);
+    const inReach = [active, this.otherOf(active)].filter((crawler) => this.withinReach(crawler));
+    const walkedUp = inReach.find((crawler) => !this.inReachLastTick.has(crawler));
+    this.inReachLastTick = new Set(inReach);
+    if (walkedUp !== undefined && this.keyOnPedestal) this.lift(walkedUp);
     const section = this.sectionOf(active);
     if (section === null) return;
     const leftVault = this.lastLeaderSection === 'vault' && section !== 'vault';
@@ -240,21 +261,12 @@ export class PrisonKeySystem implements PrisonExplainerModel {
     return crawler === this.deps.human ? this.deps.cat : this.deps.human;
   }
 
-  /** Whether a Space press from `crawler` would lift the key. */
-  wouldInteract(crawler: Player): boolean {
-    if (!this.keyOnPedestal) return false;
+  private withinReach(crawler: Player): boolean {
     const tile = tileOf(crawler);
     return (
       Math.abs(tile.x - this.pedestal.x) <= REACH_TILES &&
       Math.abs(tile.y - this.pedestal.y) <= REACH_TILES
     );
-  }
-
-  /** Lifts the key for a Space press beside the pedestal. Returns whether the press was taken. */
-  tryInteract(crawler: Player): boolean {
-    if (!this.wouldInteract(crawler)) return false;
-    this.lift(crawler);
-    return true;
   }
 
   private keyReturned(): void {
@@ -269,7 +281,37 @@ export class PrisonKeySystem implements PrisonExplainerModel {
     this.heldLastTick = true;
     playPrisonCue(this.deps.audio, 'keyPickup');
     const centre = this.keyCentre();
-    this.deps.flyItem(PRISON_KEY_ITEM, centre.x, centre.y);
+    this.lastLift = { tick: this.ticks, fromCss: this.deps.worldToScreen(centre.x, centre.y) };
+  }
+
+  /** Frames since the key was lifted, while it is still being celebrated and held. */
+  private celebrationAge(): number | null {
+    if (this.lastLift === null || !this.partyHoldsKey) return null;
+    const age = this.ticks - this.lastLift.tick;
+    return age < PRIZE_CELEBRATION_FRAMES ? age : null;
+  }
+
+  prizeCelebration(): PrizeCelebration | null {
+    const lift = this.lastLift;
+    const ageFrames = this.celebrationAge();
+    if (lift === null || ageFrames === null) return null;
+    return {
+      item: PRISON_KEY_ITEM,
+      overline: CELEBRATION_OVERLINE,
+      title: CELEBRATION_TITLE,
+      subtitle: CELEBRATION_SUBTITLE,
+      ageFrames,
+      fromCss: lift.fromCss,
+      landing: (now) => (this.iconSlot?.now === now ? this.iconSlot.rect : null),
+    };
+  }
+
+  /** 0–1: the held-key card's glow, full as the key lands and fading over a second. */
+  private landingGlow(): number {
+    if (this.lastLift === null) return 0;
+    const sinceLanding = this.ticks - this.lastLift.tick - PRIZE_CELEBRATION_FRAMES;
+    if (sinceLanding < 0 || sinceLanding >= LANDING_GLOW_FRAMES) return 0;
+    return 1 - sinceLanding / LANDING_GLOW_FRAMES;
   }
 
   /** The pedestal and the key over it, for the room's Y-sorted pass. */
@@ -309,8 +351,8 @@ export class PrisonKeySystem implements PrisonExplainerModel {
   }
 
   /**
-   * What draws over the prison's darkness: the "THE KEY" caption and the
-   * prompt beside the pedestal. `active` sets the beacon's nearness fade.
+   * What draws over the prison's darkness: the "THE KEY" caption over the
+   * pedestal and the exit's frame. `active` sets the beacon's nearness fade.
    */
   renderOverDarkness(
     ctx: CanvasRenderingContext2D,
@@ -336,15 +378,6 @@ export class PrisonKeySystem implements PrisonExplainerModel {
       align: 'center',
       baseline: 'middle',
     });
-    if (this.wouldInteract(active)) {
-      drawInteractionPrompt(
-        ctx,
-        this.pedestal.x * TILE_SIZE - camX,
-        centre.y - camY - LABEL_ABOVE_KEY_TILES * TILE_SIZE,
-        KEY_PEDESTAL_WIDTH_TILES * TILE_SIZE,
-        PROMPT_LABEL,
-      );
-    }
   }
 
   /** The pool the key's glow cuts out of the darkness: strong and pulsing with the key there, a dim lamp without. */
@@ -423,12 +456,27 @@ export class PrisonKeySystem implements PrisonExplainerModel {
     };
   }
 
-  /** The objective line in the top band for the whole visit. */
+  /**
+   * The objective in the top band for the whole visit: what to look for, then
+   * the held-key card the lifted key flies into and that stays up until the
+   * key leaves the party's hands.
+   */
   topBandEntry(): TopBandEntry | null {
     if (this.gateOpened) return null;
-    return this.partyHoldsKey
-      ? objectiveBandEntry(OBJECTIVE_BAND_ID, { text: OBJECTIVE_RETURN, tone: 'success' })
-      : objectiveBandEntry(OBJECTIVE_BAND_ID, { text: OBJECTIVE_FIND, tone: 'warning' });
+    if (!this.partyHoldsKey) {
+      return objectiveBandEntry(OBJECTIVE_BAND_ID, { text: OBJECTIVE_FIND, tone: 'warning' });
+    }
+    return heldPrizeBandEntry({
+      id: OBJECTIVE_BAND_ID,
+      item: PRISON_KEY_ITEM,
+      title: HELD_TITLE,
+      detail: HELD_DETAIL,
+      showIcon: this.celebrationAge() === null,
+      glow: this.landingGlow(),
+      onIconSlot: (rect, now) => {
+        this.iconSlot = { rect, now };
+      },
+    });
   }
 
   /** The key's tile for the minimap, while it is on the pedestal. */
@@ -460,6 +508,6 @@ export class PrisonKeySystem implements PrisonExplainerModel {
 
   /** The explainer, for the scene to mount once. */
   surfaces(): readonly Surface[] {
-    return [prisonExplainerSurface(this)];
+    return [prisonExplainerSurface(this), prizeCelebrationSurface(CELEBRATION_SURFACE_ID, this)];
   }
 }

@@ -1,5 +1,6 @@
 import type { Mob } from '../Mob';
 import type { Player } from '../../Player';
+import type { GameStats } from '../../core/GameStats';
 import { isInPublishedRoster } from '../packAlert';
 import { BrindleGrub } from '../BrindleGrub';
 import { drawWardCrushBubble, drawWardGlyph } from '../../sprites/art/fairyEffectsArt';
@@ -59,6 +60,25 @@ export const CRUSH_CAST: FairyCast = {
 
 const SHIELD_CASTS: readonly FairyCast[] = [WARD_CAST, CRUSH_CAST];
 
+const SHIELD_FAIRY_DISPLAY_NAME = 'Shield Fairy';
+
+/**
+ * Shield fairies a party has killed by the time it has plainly worked out
+ * that killing them is what drops a ward, so explaining it aloud would only
+ * talk down to the player.
+ */
+const SHIELD_FAIRY_KILLS_THAT_TEACH_WARDS = 5;
+
+/**
+ * Whether a crawler should still explain a shield fairy's ward aloud: once a
+ * run at most, and never to a party that has already killed enough of them.
+ */
+export function isWardExplainerDue(stats: GameStats): boolean {
+  if (stats.wardExplainerHeard) return false;
+  const shieldFairiesKilled = stats.killsByType.get(SHIELD_FAIRY_DISPLAY_NAME) ?? 0;
+  return shieldFairiesKilled < SHIELD_FAIRY_KILLS_THAT_TEACH_WARDS;
+}
+
 /** Height above the warded ally's ground point at which its glyph forms, in tiles. */
 const GLYPH_LIFT_TILES = 0.25;
 
@@ -99,7 +119,7 @@ export class ShieldFairy extends Fairy {
   readonly xpValue = 6;
   protected coinDropMin = 0;
   protected coinDropMax = 2;
-  displayName = 'Shield Fairy';
+  displayName = SHIELD_FAIRY_DISPLAY_NAME;
   description =
     'A cobalt fairy whose ward makes its allies untouchable. Kill it and every ward falls.';
 

@@ -684,7 +684,7 @@ async function verifySeed(worldSeed: number): Promise<void> {
   const [insideHuman, insideCat] = inside.pm.players();
   const keysInside =
     insideHuman.inventory.countOf(PRISON_KEY_ITEM) + insideCat.inventory.countOf(PRISON_KEY_ITEM);
-  check(keysInside === 1, `${label}: stepping onto the pedestal's front tile lifts the key`);
+  check(keysInside === 1, `${label}: walking up within a tile of the pedestal lifts the key`);
   check(
     visit.phase === 'keyHeld',
     `${label}: lifting the key inside reads keyHeld (${visit.phase})`,

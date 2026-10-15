@@ -318,6 +318,7 @@ import { EventBus } from '../core/EventBus';
 import { CrawlerBarkSystem } from '../systems/CrawlerBarkSystem';
 import { barkWhenBlueprintsItemEvicted } from '../systems/briarHollow/blueprints/blueprintsEvictionBark';
 import { CRAWLER_BARKS, barkTexts } from '../dialog/scripts/crawlerBarks';
+import { isWardExplainerDue } from '../creatures/fairies/ShieldFairy';
 import { DifficultyTelemetrySystem } from '../systems/DifficultyTelemetrySystem';
 import {
   readMovement,
@@ -4521,12 +4522,16 @@ export class DungeonScene extends GameplayScene {
    * drained into the actual bark.
    */
   private drainWardExplainerBarks(): void {
-    if (this.human.pendingWardExplainerBark) {
-      this.human.pendingWardExplainerBark = false;
+    const humanPending = this.human.pendingWardExplainerBark;
+    const catPending = this.cat.pendingWardExplainerBark;
+    this.human.pendingWardExplainerBark = false;
+    this.cat.pendingWardExplainerBark = false;
+    if (!humanPending && !catPending) return;
+    if (!isWardExplainerDue(this.gameStats)) return;
+    this.gameStats.recordWardExplainerHeard();
+    if (humanPending) {
       this.crawlerBarks.say(this.human, barkTexts(CRAWLER_BARKS.wardExplainer.carl));
-    }
-    if (this.cat.pendingWardExplainerBark) {
-      this.cat.pendingWardExplainerBark = false;
+    } else {
       this.crawlerBarks.say(this.cat, barkTexts(CRAWLER_BARKS.wardExplainer.donut));
     }
   }

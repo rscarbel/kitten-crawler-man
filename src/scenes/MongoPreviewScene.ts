@@ -23,9 +23,9 @@ import { PreviewScene, type PreviewControl } from './PreviewScene';
 import {
   MONGO_TILES_PER_WALK_CYCLE,
   MONGO_WALK_FRAMES,
-  MONGO_WALK_FRAMES_PER_TICK_AT_BASE_SPEED,
   drawMongoSprite,
   mongoActionDuration,
+  mongoWalkRadiansPerPixel,
   type MongoAction,
   type MongoStage,
 } from '../sprites/mongoSprite';
@@ -39,6 +39,8 @@ import {
   mongoImpactFrame,
 } from '../sprites/mongoAttackTiming';
 import { previewInk } from '../ui/theme/previewInk';
+import { mongoStageSpeed } from '../abilities/mongo';
+import { TILE_SIZE } from '../core/constants';
 
 /** A facing vector per column, chosen so `drawMongoSprite` picks each viewpoint. */
 interface ViewSpec {
@@ -112,13 +114,16 @@ const GROUND_FRACTION = 0.88;
 const CELL_TEXT_INSET = 4;
 const FRAMES_PER_SECOND = 60;
 /**
- * How fast the walk loop plays, in sprite frames per second.
+ * How fast the walk loop plays for a stage, in sprite frames per second.
  *
- * Derived from what the game actually runs him at rather than picked to look
- * nice here: a harness playing a slower gait than the one that ships is a
- * harness that cannot show a cadence bug, and it hid one.
+ * Derived from what the game actually runs him at — the stage's listed speed
+ * paced by its stride — rather than picked to look nice here: a harness playing
+ * a different gait from the one that ships cannot show a cadence bug.
  */
-const WALK_FPS = MONGO_WALK_FRAMES_PER_TICK_AT_BASE_SPEED * FRAMES_PER_SECOND;
+function walkFps(stage: MongoStage): number {
+  const radiansPerTick = mongoStageSpeed(stage) * mongoWalkRadiansPerPixel(stage, TILE_SIZE);
+  return (radiansPerTick / (Math.PI * 2)) * MONGO_WALK_FRAMES * FRAMES_PER_SECOND;
+}
 const IDLE_FPS = 7;
 const IDLE_FRAME_COUNT = 8;
 const TWO_PI = Math.PI * 2;
@@ -220,7 +225,7 @@ export class MongoPreviewScene extends PreviewScene {
     const action = isLoop ? null : row.kind;
     const elapsed = action === null ? 0 : this.actionElapsed(action);
     const progress = action === null ? 0 : elapsed / mongoActionDuration(action);
-    const loopFps = row.kind === 'walk' ? WALK_FPS : IDLE_FPS;
+    const loopFps = row.kind === 'walk' ? walkFps(this.stage) : IDLE_FPS;
     const loopCount = row.kind === 'walk' ? MONGO_WALK_FRAMES : IDLE_FRAME_COUNT;
     const loopFrame = Math.floor((this.clock / FRAMES_PER_SECOND) * loopFps) % loopCount;
     const onImpact = row.impactFrame !== null && elapsed === row.impactFrame;

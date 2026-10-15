@@ -11,6 +11,7 @@ import { CatPlayer } from '../../creatures/CatPlayer';
 import { HumanPlayer } from '../../creatures/HumanPlayer';
 import { createMarketStock } from '../../systems/market/MarketStock';
 import { GENERAL_STORE_PRICING } from '../../systems/market/shopProfiles';
+import { GATE_LOCKED_LABEL } from '../../systems/market/vendorMenu';
 import { ClubVipLoungeSystem } from '../../systems/ClubVipLoungeSystem';
 import { MercenaryGuildSystem } from '../../systems/MercenaryGuildSystem';
 import { GENERAL_STORE_CONFIG } from '../../systems/ShopSystem';
@@ -54,7 +55,7 @@ function makeParty(coins: number): ShopParty {
   return { active, companion };
 }
 
-/** A market stall: everyday stock, an errand in quest gold, a sold-out line and one too dear. */
+/** A market stall: everyday stock, an errand in quest gold, a sold-out line, a gated line and one too dear. */
 function stallMenu(): ShopMenu {
   return {
     title: 'Tinker’s Stall',
@@ -69,7 +70,13 @@ function stallMenu(): ShopMenu {
         isQuestItem: true,
       },
       { key: 'health_potion', label: 'Health Potion', price: 12, desc: 'Restores 50% max HP' },
-      { key: 'goblin_dynamite', label: 'Goblin Dynamite', price: 18, desc: 'Throw for AoE damage' },
+      {
+        key: 'goblin_dynamite',
+        label: 'Goblin Dynamite',
+        price: 18,
+        desc: 'Throw for AoE damage',
+        unavailable: GATE_LOCKED_LABEL,
+      },
       {
         key: 'speed_fizz',
         label: 'Speed Fizz',

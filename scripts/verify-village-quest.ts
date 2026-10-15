@@ -339,11 +339,13 @@ section('1. The Mayor');
     'questStarted is emitted',
   );
   check(quest.status === 'active', 'the quest is active');
+  check(!conversation.isOpen, 'reading the acceptance through ends the conversation');
+  checkpointStep('need_tools');
+  talk('bramblewick');
   check(
     conversation.choiceLabels.length <= MAYOR_CHOICE_LIMIT,
     'the Mayor offers nine choices or fewer',
   );
-  checkpointStep('need_tools');
   choose('Goodbye');
 }
 

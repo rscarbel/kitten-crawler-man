@@ -780,6 +780,7 @@ export class MusicDirector implements MusicPlayerControls {
 
   private trackEnded(track: PlayingTrack): void {
     if (this.current !== track) return;
+    track.handle?.stop(0, 'db');
     track.handle = null;
     if (track.owner === 'player' && this.mode.kind === 'once') {
       this.current = null;

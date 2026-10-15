@@ -1,6 +1,6 @@
 /**
  * OverworldMusicSystem — zone-based background music for the Over City
- * overworld: a shuffled town playlist inside the town safe zone, a shuffled
+ * overworld: a shuffled town playlist inside the town wall, a shuffled
  * circus playlist on the circus grounds, Briar Hollow's own zone inside its palisade
  * with the lumber yard's and Merrit's farm's own songs, a harvest theme out at the village quarry, and a
  * shuffled wilds playlist between. Each zone
@@ -15,6 +15,7 @@ import { CIRCUS_MUSIC_TRACKS, TOWN_MUSIC_TRACKS, WILDS_MUSIC_TRACKS } from '../a
 import type { MusicTrackId } from '../audio/sounds';
 import type { GameMap } from '../map/GameMap';
 import type { GameSystem, SystemContext } from './GameSystem';
+import { isAtLumberYard } from './briarHollow/resourceZones';
 
 type MusicZone = 'town' | 'wilds' | 'circus' | 'village' | 'lumber_yard' | 'farm' | 'quarry';
 
@@ -38,6 +39,8 @@ const CIRCUS_ZONE_BUFFER_TILES = 4;
  * the same rule.
  */
 const ZONE_DWELL_FRAMES = 90;
+/** A body's position is its top-left corner; its centre is half a tile in. */
+const BODY_CENTRE_OFFSET_PX = TILE_SIZE / 2;
 
 export class OverworldMusicSystem implements GameSystem {
   private currentZone: MusicZone | null = null;
@@ -68,19 +71,19 @@ export class OverworldMusicSystem implements GameSystem {
     if (this.pendingZoneFrames >= ZONE_DWELL_FRAMES) this.claimZone(zone);
   }
 
-  /** The playlist of the zone at a point. */
-  zoneSelectionAt(worldX: number, worldY: number): MusicSelection {
-    return { kind: 'playlist', ids: ZONE_TRACKS[this.zoneAt(worldX, worldY)] };
+  /** The playlist of the zone a body standing at this top-left position is in. */
+  zoneSelectionAt(bodyX: number, bodyY: number): MusicSelection {
+    return { kind: 'playlist', ids: ZONE_TRACKS[this.zoneAt(bodyX, bodyY)] };
   }
 
   /**
-   * Claims the zone's playlist at a point. Also called as the scene is
-   * entered when that playlist carried on through a building visit, so it is
-   * claimed again before the scene change could fade it out. Takes over at
-   * once, with no dwell.
+   * Claims the playlist of the zone a body standing at this top-left position
+   * is in. Also called as the scene is entered when that playlist carried on
+   * through a building visit, so it is claimed again before the scene change
+   * could fade it out. Takes over at once, with no dwell.
    */
-  claimZoneAt(worldX: number, worldY: number): void {
-    this.claimZone(this.zoneAt(worldX, worldY));
+  claimZoneAt(bodyX: number, bodyY: number): void {
+    this.claimZone(this.zoneAt(bodyX, bodyY));
   }
 
   private claimZone(zone: MusicZone): void {
@@ -95,7 +98,14 @@ export class OverworldMusicSystem implements GameSystem {
     });
   }
 
-  private zoneAt(worldX: number, worldY: number): MusicZone {
+  /**
+   * The zone of a body standing at this top-left position, judged at its
+   * centre: the same point the town wall and the harvest reach are measured
+   * from, so the music agrees with where the crawler is working.
+   */
+  private zoneAt(bodyX: number, bodyY: number): MusicZone {
+    const worldX = bodyX + BODY_CENTRE_OFFSET_PX;
+    const worldY = bodyY + BODY_CENTRE_OFFSET_PX;
     const circusCentre = this.map.circusCentre;
     const circusRadius = this.map.circusRadiusTiles;
     if (circusCentre && circusRadius !== undefined) {
@@ -103,12 +113,11 @@ export class OverworldMusicSystem implements GameSystem {
       const dy = worldY / TILE_SIZE - circusCentre.y;
       if (Math.hypot(dx, dy) <= circusRadius + CIRCUS_ZONE_BUFFER_TILES) return 'circus';
     }
-    if (this.map.isInTownSafeZone(worldX, worldY)) return 'town';
-    const district = this.map.briarHollowDistrictAt(worldX, worldY);
-    if (district === 'lumber_yard') return 'lumber_yard';
+    if (this.map.isInsideTownWall(worldX, worldY)) return 'town';
+    if (isAtLumberYard(this.map, worldX, worldY)) return 'lumber_yard';
     if (this.map.isOnMerritsFarm(worldX, worldY)) return 'farm';
     if (this.map.isInBriarHollow(worldX, worldY)) return 'village';
-    if (district === 'quarry') return 'quarry';
+    if (this.map.briarHollowDistrictAt(worldX, worldY) === 'quarry') return 'quarry';
     return 'wilds';
   }
 }

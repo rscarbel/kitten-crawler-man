@@ -298,7 +298,7 @@ export interface MongoProportions {
 
 const JUVENILE: MongoProportions = {
   scale: 0.62,
-  hipHeight: 0.5,
+  hipHeight: 0.56,
   femur: 0.24,
   tibia: 0.26,
   metatarsus: 0.19,
@@ -322,7 +322,7 @@ const JUVENILE: MongoProportions = {
   tailDepth: 0.1,
   crestLength: 0.16,
   wingFeather: 0.17,
-  tailFan: 0.16,
+  tailFan: 0.19,
   down: 1,
   girth: 0.26,
   stripes: 3,
@@ -332,7 +332,7 @@ const JUVENILE: MongoProportions = {
 
 const ADOLESCENT: MongoProportions = {
   scale: 0.7,
-  hipHeight: 0.7,
+  hipHeight: 0.76,
   femur: 0.31,
   tibia: 0.34,
   metatarsus: 0.28,
@@ -344,7 +344,7 @@ const ADOLESCENT: MongoProportions = {
   chestDepth: 0.21,
   bellyDepth: 0.19,
   neckLength: 0.3,
-  neckThickness: 0.066,
+  neckThickness: 0.072,
   skullLength: 0.29,
   skullDepth: 0.175,
   jawDepth: 0.4,
@@ -353,10 +353,10 @@ const ADOLESCENT: MongoProportions = {
   forearm: 0.16,
   hand: 0.085,
   tail: [0.28, 0.24, 0.2, 0.16],
-  tailDepth: 0.098,
-  crestLength: 0.13,
-  wingFeather: 0.22,
-  tailFan: 0.19,
+  tailDepth: 0.106,
+  crestLength: 0.16,
+  wingFeather: 0.24,
+  tailFan: 0.23,
   down: 0.35,
   girth: 0.25,
   stripes: 5,
@@ -366,7 +366,7 @@ const ADOLESCENT: MongoProportions = {
 
 const ADULT: MongoProportions = {
   scale: 0.82,
-  hipHeight: 0.66,
+  hipHeight: 0.74,
   femur: 0.31,
   tibia: 0.34,
   metatarsus: 0.28,
@@ -378,7 +378,7 @@ const ADULT: MongoProportions = {
   chestDepth: 0.24,
   bellyDepth: 0.19,
   neckLength: 0.37,
-  neckThickness: 0.062,
+  neckThickness: 0.07,
   skullLength: 0.34,
   skullDepth: 0.155,
   jawDepth: 0.4,
@@ -387,10 +387,10 @@ const ADULT: MongoProportions = {
   forearm: 0.18,
   hand: 0.095,
   tail: [0.34, 0.3, 0.27, 0.24],
-  tailDepth: 0.095,
-  crestLength: 0.22,
-  wingFeather: 0.26,
-  tailFan: 0.21,
+  tailDepth: 0.112,
+  crestLength: 0.25,
+  wingFeather: 0.29,
+  tailFan: 0.26,
   down: 0.05,
   girth: 0.245,
   stripes: 5,
@@ -595,13 +595,13 @@ const TAIL_ROOT_BACK = 0.1;
 const SHOULDER_FORWARD = -0.02;
 const SHOULDER_DROP = 0.02;
 /** The skull's rest pitch below the neck's line — a raptor carries its head level. */
-const SKULL_REST_PITCH = deg(14);
+const SKULL_REST_PITCH = deg(8);
 
 /** Neck node placement as fractions of `neckLength`, in the chest's frame. */
-const NECK_MID_BACK = -0.28;
-const NECK_MID_RISE = -0.55;
-const NECK_TOP_FORWARD = 0.7;
-const NECK_TOP_RISE = -0.86;
+const NECK_MID_BACK = -0.12;
+const NECK_MID_RISE = -0.62;
+const NECK_TOP_FORWARD = 0.92;
+const NECK_TOP_RISE = -0.6;
 /** Where the extended neck puts the head on a full strike. */
 const NECK_REACH_FORWARD = 1.12;
 const NECK_REACH_RISE = -0.34;
@@ -753,6 +753,16 @@ const HIP_DROP = 0.03;
  * one-legged whenever the stride passes through zero.
  */
 const FAR_HIP_BACK = 0.12;
+
+/**
+ * Where a leg's hip joint sits along the facing axis with the spine level, in
+ * the same world units a `LegPose.toeX` is measured in. The choreography centres
+ * each foot's stride under its own hip, or the far leg — set back for depth —
+ * over-reaches at the back of every step.
+ */
+export function restHipX(side: 'near' | 'far'): number {
+  return side === 'near' ? HIP_FORWARD : HIP_FORWARD - FAR_HIP_BACK;
+}
 
 // ── Painting primitives ──────────────────────────────────────────────────────
 
@@ -1214,7 +1224,7 @@ function drawTailSide(ctx: Ctx, sk: MongoSkeleton, prop: MongoProportions, shade
 }
 
 const TAIL_TIP_DEPTH = 0.015;
-const TAIL_TAPER_BIAS = 1.9;
+const TAIL_TAPER_BIAS = 1.5;
 const TAIL_SPECKLE_SEED = 61;
 const TAIL_STRIPE_SEED = 77;
 const TAIL_BASE_BARS = 2;
@@ -1300,9 +1310,9 @@ const THIGH_HALF_SHARE = 0.34;
 const THIGH_BULGE_ALONG = 0.42;
 const THIGH_BULGE = 1.18;
 const THIGH_BACK_BULGE = 1.34;
-const KNEE_HALF_SHARE = 0.15;
-const SHANK_HALF_SHARE = 0.115;
-const ANKLE_HALF_SHARE = 0.088;
+const KNEE_HALF_SHARE = 0.16;
+const SHANK_HALF_SHARE = 0.13;
+const ANKLE_HALF_SHARE = 0.095;
 const TOE_TIP_HALF_SHARE = 0.036;
 const TRAILING_TOE_SHARE = 0.34;
 const TRAILING_TOE_GIRTH = 0.7;
@@ -1919,45 +1929,84 @@ interface AxialLayout {
 }
 
 /**
- * How the body stacks in the axial views, as shares of the parts involved.
+ * How the body stacks in the axial views.
  *
- * The head goes on *top*, with the body below it and the tail swept out to one
- * side — which is the convention every other horizontal animal in this game is
- * already drawn to (see the rat's `walk` row). A projection-correct layout, with
- * the head hanging below a receding body, fails in every way that matters: the
- * head cannot be located at 32 px, the two axial views come out a third shorter
- * than the profile, and the muzzle punches through the floor on the bite.
- * Consistency with the rest of the bestiary beats a correct projection nobody
- * can read.
+ * The camera looks down on the floor, so whatever is further from it sits
+ * higher on screen. Head-on that puts the hips *above* the chest and the tail
+ * rising behind the back; from behind it puts the chest above the hips and the
+ * tail running down toward the camera between the legs. That depth ordering is
+ * what makes the body read as a horizontal animal pointed at the viewer rather
+ * than as an upright torso.
+ *
+ * The head is the one exception: it stays on top of the chest whichever way he
+ * faces. Hung below a receding body, as a strict projection would have it, it
+ * cannot be found at 32 px and the muzzle punches through the floor on the bite.
  */
-const AXIAL_CHEST_RISE = 0.34;
-const AXIAL_HEAD_ABOVE = 0.9;
-/** How much of the tail's true length survives the foreshortening. */
-const AXIAL_TAIL_FORESHORTEN = 0.56;
-/** And how far it rises above the hips as it sweeps out to the side. */
-const AXIAL_TAIL_RISE = 0.42;
-const AXIAL_TAIL_ROOT_BACK = -0.05;
+const AXIAL_CHEST_DEPTH_DROP = 0.16;
+/**
+ * How far above the chest the head sits, as a share of the neck. Low: the neck
+ * runs toward the camera, so nearly all of it is foreshortened away, and a head
+ * held high on a visible column is what turns him into a small blue humanoid.
+ */
+const AXIAL_HEAD_ABOVE = 0.78;
+/**
+ * From behind the head is the far end of the neck and sits down among the
+ * shoulders; held as high as head-on it stands on a visible column.
+ */
+const AXIAL_HEAD_ABOVE_AWAY = 0.85;
+/**
+ * How much of the hip height the axial views show. The camera looks down on
+ * the floor, so a leg seen end-on loses some length; drawn at full height the
+ * two legs read as a pair of stilts under a box.
+ */
+const AXIAL_LEG_FORESHORTEN = 0.86;
+/** How far the foreshortened tail runs across the screen, as a share of its length. */
+const AXIAL_TAIL_ACROSS = 0.34;
+/** From behind the tail leaves the centre of the hips and swings only a little off it. */
+const AXIAL_TAIL_ACROSS_AWAY = 0.1;
+const AXIAL_TAIL_ROOT_DROP = 0.6;
+/**
+ * And how far it runs up the screen (receding, head-on) or down it (toward the
+ * camera, from behind).
+ */
+const AXIAL_TAIL_ALONG = 0.26;
+/**
+ * How far a foot's place along the stride moves it up or down the screen. A
+ * foot reaching toward the camera lands lower, one pushing off behind lands
+ * higher, which is the only way a stride can show end-on.
+ */
+const AXIAL_STRIDE_DEPTH = 0.15;
 
 function axialLayout(pose: MongoPose, prop: MongoProportions, view: AxialView): AxialLayout {
-  const pelvis = { x: pose.sway, y: GROUND_Y - prop.hipHeight + pose.rise };
+  const pelvis = {
+    x: pose.sway,
+    y: GROUND_Y - prop.hipHeight * AXIAL_LEG_FORESHORTEN + pose.rise,
+  };
   const chest = {
     x: pelvis.x + pose.sway * AXIAL_SWAY_LEAN,
-    y: pelvis.y + prop.chestRise - AXIAL_CHEST_RISE * prop.spineLength,
+    y: pelvis.y + prop.chestRise + view.depth * AXIAL_CHEST_DEPTH_DROP * prop.spineLength,
   };
   const headCentre = {
     x: chest.x + pose.headTurn * prop.girth * AXIAL_HEAD_TURN,
-    y: chest.y - AXIAL_HEAD_ABOVE * prop.neckLength + pose.headLift,
+    y:
+      chest.y -
+      (view.showsFace ? AXIAL_HEAD_ABOVE : AXIAL_HEAD_ABOVE_AWAY) * prop.neckLength +
+      pose.headLift,
   };
   const tailLength = prop.tail.reduce((total, segment) => total + segment, 0);
+  // From behind the root sits low on the rump, so the tail grows out of the
+  // body's lower edge instead of being pasted across the middle of the back.
   const tailRoot = {
     x: pelvis.x,
-    y: pelvis.y + AXIAL_TAIL_ROOT_BACK * prop.spineLength,
+    y: pelvis.y + (view.depth < 0 ? prop.hipDepth * AXIAL_TAIL_ROOT_DROP : 0),
   };
-  // Swept out to one side, and always to the same side: run down the centreline
-  // it bisects the rump and reads as a crack in the sprite, and from behind —
-  // where it points at the camera — as something considerably worse.
+  // Biased to one side and swung through the stride. Run dead down the
+  // centreline it bisects the rump and reads as a crack in the sprite.
   const swung = rot(
-    { x: tailLength * AXIAL_TAIL_FORESHORTEN, y: -view.depth * tailLength * AXIAL_TAIL_RISE },
+    {
+      x: tailLength * (view.depth > 0 ? AXIAL_TAIL_ACROSS : AXIAL_TAIL_ACROSS_AWAY),
+      y: -view.depth * tailLength * AXIAL_TAIL_ALONG,
+    },
     pose.tailSway,
   );
   return {
@@ -1974,100 +2023,128 @@ const AXIAL_SWAY_LEAN = 0.4;
 const AXIAL_HEAD_TURN = 0.55;
 
 /**
- * Head-on, a leg is a column: the knee hinges away from the camera and has no
- * angle in the image plane at all. What changes is *width* — a leg nearer the
- * camera reads wider, never bent. What must still read is the digitigrade
- * stack, so the ankle is placed high and the foot is a short toe fan under it
- * rather than a slipper on the floor.
+ * Head-on, a leg hangs almost under the midline — a raptor's track is narrow,
+ * one foot nearly in front of the other — and its thigh is wrapped inside the
+ * body. What shows is the shin and the long metatarsus angling in to the foot.
+ * The knee hinges away from the camera, so the stride shows as depth instead:
+ * a foot reaching toward the camera lands lower and reads larger.
  */
+/** Which pass of an axial leg to paint: the limb itself, or only its sickle claw. */
+type AxialLegPart = 'leg' | 'sickle';
+
 function drawLegAxial(
   ctx: Ctx,
   pose: LegPose,
   hip: Pt,
+  side: number,
   prop: MongoProportions,
   shade: number,
+  view: AxialView,
+  part: AxialLegPart,
 ): void {
   const hide = mix(HIDE.base, HIDE.shadow, shade);
   const dark = innerEdge(prop, shade);
-  const kneeHalf = prop.femur * KNEE_HALF_SHARE;
-  const shankHalf = prop.femur * SHANK_HALF_SHARE;
-  const ankleHalf = prop.femur * ANKLE_HALF_SHARE;
-  const toeTipHalf = prop.femur * TOE_TIP_HALF_SHARE;
-  const near = lerp(AXIAL_FAR_WIDTH, 1, pose.nearness);
+  // Clamped, because a pounce reaches its feet out far past any stride and the
+  // depth it would buy pushes them through the bottom of the cell.
+  const nearer = Math.max(-AXIAL_NEARER_CAP, Math.min(AXIAL_NEARER_CAP, view.depth * pose.toeX));
+  const width = lerp(AXIAL_FAR_WIDTH, 1, pose.nearness) * (1 + nearer * AXIAL_STRIDE_SCALE);
+  const kneeHalf = prop.femur * KNEE_HALF_SHARE * width;
+  const shankHalf = prop.femur * SHANK_HALF_SHARE * width;
+  const ankleHalf = prop.femur * ANKLE_HALF_SHARE * width;
+  const toeTipHalf = prop.femur * TOE_TIP_HALF_SHARE * width;
 
-  const toe = { x: hip.x + pose.lateral, y: GROUND_Y - pose.lift };
+  const toe = {
+    x: hip.x + pose.lateral,
+    y: GROUND_Y - pose.lift + nearer * AXIAL_STRIDE_DEPTH,
+  };
   const ankle = {
     x: lerp(hip.x, toe.x, ANKLE_LATERAL_SHARE),
     y: toe.y - prop.metatarsus * Math.sin(pose.meta),
   };
+  // The knee sits a little outboard of the ankle, so the shank angles in toward
+  // the midline the way a bird's does rather than standing as a vertical post.
   const knee = {
-    x: lerp(hip.x, ankle.x, KNEE_LATERAL_SHARE),
+    x: ankle.x + side * prop.femur * AXIAL_KNEE_OUTBOARD,
     y: lerp(hip.y, ankle.y, AXIAL_KNEE_ALONG),
   };
 
-  drawLimb(
-    ctx,
-    hip,
-    knee,
-    prop.femur * THIGH_HALF_SHARE * prop.thighBulk * near,
-    kneeHalf * near * AXIAL_KNEE_WIDTH,
-    hide,
-    dark,
-  );
-  drawLimb(ctx, knee, ankle, kneeHalf * near * AXIAL_KNEE_WIDTH, shankHalf * near, hide, dark);
-  // The metatarsus is drawn narrower than the shank on purpose: head-on the only
-  // thing that says "there is a third segment here" is the step in width.
-  drawLimb(ctx, ankle, toe, shankHalf * near * AXIAL_META_PINCH, ankleHalf * near, dark, dark);
+  if (part === 'leg') {
+    drawLimb(ctx, hip, knee, kneeHalf * AXIAL_KNEE_WIDTH, kneeHalf, hide, dark);
+    drawLimb(ctx, knee, ankle, kneeHalf, shankHalf, hide, dark);
+    // The metatarsus is drawn narrower than the shank on purpose: head-on the
+    // only thing that says "there is a third segment here" is the step in width.
+    drawLimb(ctx, ankle, toe, shankHalf * AXIAL_META_PINCH, ankleHalf, dark, dark);
 
-  for (const side of [-1, 0, 1]) {
-    const tip = {
-      x: toe.x + side * prop.toe * AXIAL_TOE_SPREAD,
-      y: toe.y + prop.toe * AXIAL_TOE_DROP,
-    };
-    drawLimb(ctx, toe, tip, ankleHalf * near * TRAILING_TOE_GIRTH, toeTipHalf, hide, dark);
-    const along = dir(toe, tip);
-    drawClaw(ctx, tip, along, perp(along), prop.sickle * GROUND_CLAW_SHARE, shade);
+    // The toes point along the facing, which is toward the camera head-on (down
+    // the screen) and away from it from behind (up, and mostly hidden).
+    const toeReach = prop.toe * width * (view.depth > 0 ? AXIAL_TOE_DROP : -AXIAL_TOE_HIDE);
+    for (const spread of [-1, 0, 1]) {
+      const tip = {
+        x: toe.x + spread * prop.toe * AXIAL_TOE_SPREAD * width,
+        y: toe.y + toeReach,
+      };
+      drawLimb(ctx, toe, tip, ankleHalf * TRAILING_TOE_GIRTH, toeTipHalf, hide, dark);
+      if (view.depth < 0) continue;
+      const along = dir(toe, tip);
+      drawClaw(ctx, tip, along, perp(along), prop.sickle * GROUND_CLAW_SHARE * width, shade);
+    }
   }
+  const paintsSickle = view.depth > 0 ? part === 'leg' : part === 'sickle';
+  if (!paintsSickle) return;
   // The killing claw has to survive the turn: hooked up off the floor on the
   // inner toe, where a player who has learned to read it in profile can still
   // find it head-on.
   const sickleRoot = {
-    x: toe.x - AXIAL_SICKLE_INSET,
+    x: toe.x - side * AXIAL_SICKLE_INSET,
     y: toe.y - prop.metatarsus * AXIAL_SICKLE_RISE,
   };
-  // Head-on the claw is foreshortened and stands up the screen. Passed the same
-  // toe direction the profile uses it swings out sideways instead, which reads
-  // as a pale shoe rather than as a claw.
-  //
-  // The deployment swing is cancelled rather than applied: axially that swing is
-  // almost entirely depth — it rotates toward the camera, not across it — so
-  // letting it turn the drawn shape only foreshortens the claw into nothing on
-  // exactly the frames where it is being driven into something.
+  // Head-on the claw is foreshortened and stands up the screen. The deployment
+  // swing is cancelled rather than applied: axially that swing is almost
+  // entirely depth, so letting it turn the drawn shape only foreshortens the
+  // claw into nothing on exactly the frames where it is being driven home.
   const axialToeAngle =
     AXIAL_SICKLE_STAND - lerp(RETRACTED_SICKLE_ANGLE, DEPLOYED_SICKLE_ANGLE, clamp01(pose.sickle));
-  drawSickle(ctx, sickleRoot, axialToeAngle, prop.sickle * AXIAL_SICKLE_SHARE, pose.sickle, shade);
+  drawSickle(
+    ctx,
+    sickleRoot,
+    axialToeAngle,
+    prop.sickle * AXIAL_SICKLE_SHARE * width,
+    pose.sickle,
+    shade,
+  );
 }
 
 const ANKLE_LATERAL_SHARE = 0.88;
-const KNEE_LATERAL_SHARE = 0.55;
-const AXIAL_KNEE_ALONG = 0.52;
-const AXIAL_FAR_WIDTH = 0.76;
-const AXIAL_KNEE_WIDTH = 1.1;
+const AXIAL_KNEE_OUTBOARD = 0.14;
+const AXIAL_KNEE_ALONG = 0.45;
+const AXIAL_FAR_WIDTH = 0.8;
+const AXIAL_KNEE_WIDTH = 1.25;
 const AXIAL_META_PINCH = 0.72;
-const AXIAL_TOE_SPREAD = 0.8;
-const AXIAL_TOE_DROP = 0.1;
-const AXIAL_SICKLE_INSET = 0.024;
+const AXIAL_TOE_SPREAD = 0.55;
+const AXIAL_TOE_DROP = 0.3;
+const AXIAL_TOE_HIDE = 0.12;
+const AXIAL_SICKLE_INSET = 0.02;
 const AXIAL_SICKLE_RISE = 0.03;
 const AXIAL_SICKLE_STAND = deg(-72);
 /**
- * The killing claw's size head-on, against its profile length.
- *
- * Slightly *over* one: pointed at the camera it is foreshortened to almost
- * nothing, and drawn to that it disappears — which loses the one silhouette
- * element that identifies him, in half of his facings.
+ * Head-on the claw is mostly foreshortened, so it is drawn a little longer than
+ * in profile to keep the same on-screen reading.
  */
 const AXIAL_SICKLE_SHARE = 1.2;
+/** How much bigger a foot reads per tile it reaches toward the camera. */
+const AXIAL_STRIDE_SCALE = 0.55;
+const AXIAL_NEARER_CAP = 0.3;
 
+/**
+ * A wing-arm, folded against the flank.
+ *
+ * Head-on the arm is nearly end-on, so the bones are drawn short and the
+ * feathers carry the read. Folded, the primaries lie flat along the side of the
+ * body with their tips back — up the screen — and slightly out; fanned sideways or
+ * hanging below the arm instead they read
+ * as hands or pom-poms. Spread on a strike or a flap they sweep
+ * up and out — a symmetric horizontal pair reads as a T-pose.
+ */
 function drawArmAxial(
   ctx: Ctx,
   shoulder: Pt,
@@ -2079,8 +2156,6 @@ function drawArmAxial(
   const hide = mix(HIDE.base, HIDE.shadow, shade);
   const dark = innerEdge(prop, shade);
   const spread = arm.spread;
-  // Head-on the arm is nearly end-on: almost all of its travel is depth, so the
-  // bones are drawn short and the feathers carry the read.
   const elbow = {
     x:
       shoulder.x +
@@ -2093,17 +2168,17 @@ function drawArmAxial(
     y: elbow.y + prop.forearm * lerp(AXIAL_FORE_DROP, AXIAL_FORE_RAISE, spread),
   };
   // Authored as an absolute screen angle rather than off the forearm: head-on
-  // that bone is almost end-on, so its own direction carries no information and
-  // a fan hung off it points wherever the foreshortening happens to leave it.
-  // Folded, the primaries lie back along the flank — which head-on is *up* the
-  // screen, because back is away from the camera.
-  const fanAngle = -Math.PI / 2 + side * lerp(AXIAL_FAN_TUCK, AXIAL_FAN_FLARE, spread);
+  // that bone is almost end-on, so its own direction carries no information.
+  const foldedAngle = -Math.PI / 2 + side * AXIAL_FAN_FOLD_OUT;
+  const spreadAngle = -Math.PI / 2 + side * AXIAL_FAN_FLARE;
+  const fanAngle = lerp(foldedAngle, spreadAngle, spread);
+  const fanSpread = lerp(AXIAL_FAN_FOLDED_SPREAD, AXIAL_FAN_SPREAD, spread);
   drawFeatherFan(
     ctx,
     elbow,
     wrist,
-    fanAngle - AXIAL_FAN_SPREAD * side,
-    fanAngle + AXIAL_FAN_SPREAD * side,
+    fanAngle - fanSpread * side,
+    fanAngle + fanSpread * side,
     prop.wingFeather * lerp(AXIAL_FAN_FOLDED, 1, spread),
     PRIMARY_COUNT,
     PRIMARY_FALLOFF,
@@ -2112,70 +2187,81 @@ function drawArmAxial(
   drawLimb(ctx, elbow, wrist, ELBOW_HALF, WRIST_HALF, hide, dark);
 }
 
-const AXIAL_ARM_TUCK = 0.45;
+const AXIAL_ARM_TUCK = 0.12;
 const AXIAL_ARM_FLARE = 1;
-const AXIAL_ARM_DROP = 0.8;
+const AXIAL_ARM_DROP = 0.45;
 const AXIAL_ARM_RAISE = -0.1;
-const AXIAL_FORE_TUCK = 0.3;
+const AXIAL_FORE_TUCK = 0.05;
 const AXIAL_FORE_FLARE = 0.85;
-const AXIAL_FORE_DROP = 0.7;
+const AXIAL_FORE_DROP = 0.3;
 const AXIAL_FORE_RAISE = -0.4;
 const AXIAL_FAN_SPREAD = deg(32);
-const AXIAL_FAN_TUCK = deg(26);
-/** Spread wings sweep up and out, not straight out: a symmetric horizontal pair
- * reads as a T-pose however well the rest of the frame moves. */
+const AXIAL_FAN_FOLDED_SPREAD = deg(9);
+/**
+ * How far off straight up the folded primaries lean, outward. They lie back
+ * along the flank, and back is away from the camera, which is up the screen.
+ */
+const AXIAL_FAN_FOLD_OUT = deg(16);
 const AXIAL_FAN_FLARE = deg(56);
-const AXIAL_FAN_FOLDED = 0.62;
+const AXIAL_FAN_FOLDED = 0.6;
 
 /**
- * The tail, foreshortened. It leaves the hips along the centreline and swings to
- * one side: run dead straight down the middle of the rump it bisects the animal
- * and reads as a crack in the sprite.
+ * The tail, foreshortened. Head-on it rises behind the hips to one side, so the
+ * pink fan shows past the body; from behind it leaves the centre of the hips,
+ * thick at the root, and tapers down the screen toward the camera.
  */
+function tailAxialOutline(layout: AxialLayout, prop: MongoProportions, view: AxialView): Pt[] {
+  const rootHalf = prop.tailDepth * (view.depth > 0 ? AXIAL_TAIL_GIRTH : AXIAL_TAIL_NEAR_GIRTH);
+  const nodes = [layout.tailRoot, mid(layout.tailRoot, layout.tailTip), layout.tailTip];
+  return ribbonOutline(nodes, [rootHalf, rootHalf * AXIAL_TAIL_MID_SHARE, TAIL_TIP_DEPTH]);
+}
+
 function drawTailAxial(
   ctx: Ctx,
   layout: AxialLayout,
   prop: MongoProportions,
   view: AxialView,
 ): void {
-  const depthScale = view.depth > 0 ? AXIAL_TAIL_FAR_SCALE : AXIAL_TAIL_NEAR_SCALE;
-  drawLimb(
-    ctx,
-    layout.tailRoot,
-    layout.tailTip,
-    prop.tailDepth * AXIAL_TAIL_GIRTH * depthScale,
-    TAIL_TIP_DEPTH * depthScale * 2,
-    HIDE.base,
-    HIDE.dorsal,
-  );
+  const outline = tailAxialOutline(layout, prop, view);
+  traceOutline(ctx, outline);
+  fillAndOutline(ctx, HIDE.base, HIDE.dorsal);
+  ctx.save();
+  traceOutline(ctx, outline);
+  ctx.clip();
+  paintPebbling(ctx, boundsOf(outline), TAIL_SPECKLE_SEED, prop.detail);
+  ctx.restore();
+  drawTailFanAxial(ctx, layout, prop);
+}
+
+function drawTailFanAxial(ctx: Ctx, layout: AxialLayout, prop: MongoProportions): void {
   const angle = Math.atan2(
     layout.tailTip.y - layout.tailRoot.y,
     layout.tailTip.x - layout.tailRoot.x,
   );
   drawFeatherFan(
     ctx,
-    mid(layout.tailRoot, layout.tailTip, FAN_ROOT_ALONG + 0.3),
+    mid(layout.tailRoot, layout.tailTip, AXIAL_TAIL_FAN_ROOT),
     layout.tailTip,
     angle - TAIL_FAN_SPREAD,
     angle + TAIL_FAN_SPREAD,
-    prop.tailFan * AXIAL_TAIL_FAN_SHARE * depthScale,
+    prop.tailFan * AXIAL_TAIL_FAN_SHARE,
     TAIL_FAN_FEATHERS,
     TAIL_FAN_FALLOFF,
   );
 }
 
 const AXIAL_TAIL_GIRTH = 1.1;
-const AXIAL_TAIL_FAN_SHARE = 0.72;
-/** The tail is further away head-on and nearer from behind, so it changes size. */
-const AXIAL_TAIL_FAR_SCALE = 0.95;
-const AXIAL_TAIL_NEAR_SCALE = 1.0;
+/** From behind the root faces the camera, so it is the widest the tail ever reads. */
+const AXIAL_TAIL_NEAR_GIRTH = 1.25;
+const AXIAL_TAIL_MID_SHARE = 0.6;
+const AXIAL_TAIL_FAN_ROOT = 0.65;
+const AXIAL_TAIL_FAN_SHARE = 0.8;
 
-/** An oval body mass, foreshortened: wide across, shallow up and down. */
+/** A smooth oval: enough points that the midpoint-quadratic walk rounds it fully. */
 function axialMass(centre: Pt, halfWidth: number, halfHeight: number): Pt[] {
   const points: Pt[] = [];
-  const STEPS = 10;
-  for (let i = 0; i < STEPS; i++) {
-    const angle = (i / STEPS) * TWO_PI;
+  for (let i = 0; i < AXIAL_MASS_STEPS; i++) {
+    const angle = (i / AXIAL_MASS_STEPS) * TWO_PI;
     points.push({
       x: centre.x + Math.cos(angle) * halfWidth,
       y: centre.y + Math.sin(angle) * halfHeight,
@@ -2184,6 +2270,63 @@ function axialMass(centre: Pt, halfWidth: number, halfHeight: number): Pt[] {
   return points;
 }
 
+const AXIAL_MASS_STEPS = 16;
+
+/**
+ * Fills several overlapping shapes as one silhouette with one outline.
+ *
+ * Every shape is stroked at double width first and only then are all of them
+ * filled, so the fills cover each other's inner strokes and the only line left
+ * is the outside edge of the union. Outlined one at a time they read as
+ * separate plates bolted together — a mech, not an animal.
+ */
+function paintUnion(
+  ctx: Ctx,
+  shapes: readonly (readonly Pt[])[],
+  fill: string,
+  outline: string,
+): void {
+  ctx.lineJoin = 'round';
+  ctx.strokeStyle = outline;
+  ctx.lineWidth = OUTLINE_WIDTH * 2;
+  for (const shape of shapes) {
+    traceOutline(ctx, shape);
+    ctx.stroke();
+  }
+  ctx.fillStyle = fill;
+  for (const shape of shapes) {
+    traceOutline(ctx, shape);
+    ctx.fill();
+  }
+}
+
+/** Clips to the union of several shapes and runs `paint` inside it. */
+function insideUnion(ctx: Ctx, shapes: readonly (readonly Pt[])[], paint: () => void): void {
+  ctx.save();
+  ctx.beginPath();
+  for (const shape of shapes) {
+    if (shape.length === 0) continue;
+    ctx.moveTo(shape[0].x, shape[0].y);
+    for (const point of shape) ctx.lineTo(point.x, point.y);
+    ctx.closePath();
+  }
+  ctx.clip();
+  paint();
+  ctx.restore();
+}
+
+/**
+ * The head, seen along the skull.
+ *
+ * Head-on the long snout is foreshortened toward the camera: a narrow muzzle
+ * tapering down out of a skull that is wider behind it, the eyes set on the
+ * sides of that skull so only their outer edges show at the silhouette, two
+ * nostrils at the tip and the mouth line running back along each side. Drawn
+ * as a block with the eyes on its front face, the same head reads as a robot's.
+ *
+ * From behind, the snout is hidden by the skull, and what shows is the rounded
+ * back of the cranium with the crest on top.
+ */
 function drawAxialHead(
   ctx: Ctx,
   centre: Pt,
@@ -2192,46 +2335,24 @@ function drawAxialHead(
   view: AxialView,
 ): void {
   const scale = view.showsFace ? AXIAL_HEAD_NEAR_SCALE : AXIAL_HEAD_FAR_SCALE;
-  // Sized off the skull's *length* rather than its depth. Depth is what the
-  // profile shows and it is deliberately shallow on a dromaeosaur, so a head-on
-  // skull derived from it comes out a fifth of the torso's width — a pea on a
-  // barrel. Head-on the head is the nearest thing on the animal and has to read
-  // as roughly three quarters of the body's width.
-  const halfW = prop.skullLength * AXIAL_SKULL_WIDTH * scale;
-  const halfH = prop.skullLength * AXIAL_SKULL_HEIGHT * scale;
-  const snoutDrop = prop.skullLength * AXIAL_SNOUT_DROP * scale;
+  const length = prop.skullLength * scale;
+  const craniumHalfW = length * AXIAL_CRANIUM_WIDTH;
+  const craniumHalfH = length * AXIAL_CRANIUM_HEIGHT;
+  const cranium = axialMass(centre, craniumHalfW, craniumHalfH);
 
-  const skull = [
-    { x: centre.x - halfW, y: centre.y - halfH * SKULL_TEMPLE },
-    { x: centre.x, y: centre.y - halfH },
-    { x: centre.x + halfW, y: centre.y - halfH * SKULL_TEMPLE },
-    { x: centre.x + halfW * AXIAL_CHEEK, y: centre.y + halfH * AXIAL_CHEEK_DROP },
-    // The keel: a narrow muzzle dropping well clear of the cheeks. Without it
-    // the head-on skull is a dome with two eyes on it, which is an owl.
-    { x: centre.x + halfW * AXIAL_MUZZLE_WIDTH, y: centre.y + snoutDrop * AXIAL_MUZZLE_SHOULDER },
-    { x: centre.x + halfW * AXIAL_SNOUT_WIDTH, y: centre.y + snoutDrop },
-    { x: centre.x - halfW * AXIAL_SNOUT_WIDTH, y: centre.y + snoutDrop },
-    { x: centre.x - halfW * AXIAL_MUZZLE_WIDTH, y: centre.y + snoutDrop * AXIAL_MUZZLE_SHOULDER },
-    { x: centre.x - halfW * AXIAL_CHEEK, y: centre.y + halfH * AXIAL_CHEEK_DROP },
-  ];
-  traceOutline(ctx, skull);
-  fillAndOutline(ctx, HIDE.base, HIDE.dorsal);
-
-  ctx.save();
-  traceOutline(ctx, skull);
-  ctx.clip();
-  paintPebbling(ctx, boundsOf(skull), HEAD_SPECKLE_SEED, prop.detail);
-  ctx.restore();
-
-  // The crest, painted *after* the skull rather than before it. Axially the
-  // crest sweeps away from the camera, so rooted under the head it is entirely
-  // hidden behind it — and the pink head zone is an invariant of this design,
-  // gated in every frame of every row. A short fringe standing off the top of
-  // the skull is what survives the turn.
+  // The crest first, so the skull covers its roots. It sweeps away from the
+  // camera head-on, which is up the screen; a short fringe standing off the
+  // crown is what survives the turn, and the pink head zone is an invariant.
   drawFeatherFan(
     ctx,
-    { x: centre.x - halfW * CREST_AXIAL_SPAN, y: centre.y - halfH * CREST_AXIAL_ROOT },
-    { x: centre.x + halfW * CREST_AXIAL_SPAN, y: centre.y - halfH * CREST_AXIAL_ROOT },
+    {
+      x: centre.x - craniumHalfW * CREST_AXIAL_SPAN,
+      y: centre.y - craniumHalfH * CREST_AXIAL_ROOT,
+    },
+    {
+      x: centre.x + craniumHalfW * CREST_AXIAL_SPAN,
+      y: centre.y - craniumHalfH * CREST_AXIAL_ROOT,
+    },
     -Math.PI / 2 - CREST_AXIAL_SWEEP,
     -Math.PI / 2 + CREST_AXIAL_SWEEP,
     prop.crestLength * CREST_AXIAL_SHARE * scale,
@@ -2240,43 +2361,58 @@ function drawAxialHead(
   );
 
   if (!view.showsFace) {
-    // From behind, two navy bars run down the back of the skull and the eyes are
-    // hidden. Drawing eyes here is the classic away-view mistake.
+    traceOutline(ctx, cranium);
+    fillAndOutline(ctx, HIDE.base, HIDE.dorsal);
+    ctx.save();
+    traceOutline(ctx, cranium);
+    ctx.clip();
+    paintPebbling(ctx, boundsOf(cranium), HEAD_SPECKLE_SEED, prop.detail);
+    // Two navy bars down the back of the skull. Drawing eyes here is the
+    // classic away-view mistake.
     ctx.strokeStyle = rgba(HIDE.dorsal, STRIPE_ALPHA);
     ctx.lineWidth = STRIPE_HALF_WIDTH * 2;
     ctx.lineCap = 'round';
-    for (const offset of [-halfW * BACK_SKULL_BAR_SPAN, halfW * BACK_SKULL_BAR_SPAN]) {
+    for (const offset of [
+      -craniumHalfW * BACK_SKULL_BAR_SPAN,
+      craniumHalfW * BACK_SKULL_BAR_SPAN,
+    ]) {
       ctx.beginPath();
-      ctx.moveTo(centre.x + offset, centre.y - halfH * SKULL_TEMPLE);
-      ctx.lineTo(
-        centre.x + offset * BACK_SKULL_BAR_TAPER,
-        centre.y + snoutDrop * BACK_SKULL_BAR_DROP,
-      );
+      ctx.moveTo(centre.x + offset, centre.y - craniumHalfH * BACK_SKULL_BAR_TOP);
+      ctx.lineTo(centre.x + offset * BACK_SKULL_BAR_TAPER, centre.y + craniumHalfH);
       ctx.stroke();
     }
+    ctx.restore();
     return;
   }
 
-  for (const side of [-1, 1]) {
-    drawEyeSide(
-      ctx,
-      { x: centre.x + side * halfW * AXIAL_EYE_SPAN, y: centre.y - halfH * AXIAL_EYE_RISE },
-      0,
-      prop.eyeRadius * AXIAL_EYE_SHARE * scale,
-      pose.eyeOpen,
-    );
-  }
+  const snoutTop = centre.y - craniumHalfH * AXIAL_SNOUT_ROOT;
+  const snoutTip = centre.y + length * AXIAL_SNOUT_LENGTH;
+  const rootHalf = length * AXIAL_SNOUT_ROOT_WIDTH;
+  const tipHalf = length * AXIAL_SNOUT_TIP_WIDTH;
+  const muzzle = [
+    { x: centre.x - rootHalf, y: snoutTop },
+    { x: centre.x + rootHalf, y: snoutTop },
+    { x: centre.x + tipHalf, y: snoutTip - tipHalf },
+    { x: centre.x + tipHalf * AXIAL_SNOUT_ROUND, y: snoutTip },
+    { x: centre.x - tipHalf * AXIAL_SNOUT_ROUND, y: snoutTip },
+    { x: centre.x - tipHalf, y: snoutTip - tipHalf },
+  ];
 
-  const jawY = centre.y + snoutDrop;
+  // The lower jaw drops below the muzzle as he gapes, with the gullet between.
+  const jawDrop = length * AXIAL_JAW_DROP * pose.gape;
   if (pose.gape > GAPE_MOUTH_VISIBLE) {
+    const jaw = muzzle.map((point) => ({
+      x: lerp(centre.x, point.x, AXIAL_JAW_NARROW),
+      y: point.y + jawDrop,
+    }));
+    traceOutline(ctx, jaw);
+    fillAndOutline(ctx, mix(HIDE.base, HIDE.belly, JAW_PALE), HIDE.dorsal);
     ctx.beginPath();
-    // Bounded by the skull. Scaled off the snout drop alone it would grow wider
-    // than the head is tall and hang down over the chest like a necktie.
     ctx.ellipse(
       centre.x,
-      jawY - halfH * AXIAL_GAPE_RISE,
-      halfW * AXIAL_MUZZLE_WIDTH,
-      Math.min(halfH * AXIAL_GAPE_MAX, snoutDrop * pose.gape * AXIAL_GAPE_SHARE),
+      snoutTip - tipHalf + jawDrop * HALF_SPAN,
+      tipHalf * AXIAL_GULLET_WIDTH,
+      jawDrop * HALF_SPAN,
       0,
       0,
       TWO_PI,
@@ -2286,48 +2422,163 @@ function drawAxialHead(
     if (pose.gape > GAPE_TEETH_VISIBLE) {
       drawTeeth(
         ctx,
-        { x: centre.x - halfW * AXIAL_MUZZLE_WIDTH * AXIAL_TOOTH_SPAN, y: jawY },
-        { x: centre.x + halfW * AXIAL_MUZZLE_WIDTH * AXIAL_TOOTH_SPAN, y: jawY },
+        { x: centre.x - tipHalf * AXIAL_TOOTH_SPAN, y: snoutTip - tipHalf },
+        { x: centre.x + tipHalf * AXIAL_TOOTH_SPAN, y: snoutTip - tipHalf },
         { x: 0, y: 1 },
         TOOTH_LENGTH * AXIAL_TOOTH_SHARE * scale,
       );
     }
   }
+
+  // The muzzle casts a soft shadow on the chest under it; without one it sinks
+  // into the body behind it, which is the same blue.
   ctx.beginPath();
-  ctx.moveTo(centre.x - halfW * AXIAL_SNOUT_WIDTH, jawY);
-  ctx.lineTo(centre.x + halfW * AXIAL_SNOUT_WIDTH, jawY);
+  ctx.ellipse(
+    centre.x,
+    snoutTip + tipHalf * AXIAL_CHIN_SHADOW_DROP,
+    rootHalf,
+    tipHalf * AXIAL_CHIN_SHADOW_HEIGHT,
+    0,
+    0,
+    TWO_PI,
+  );
+  ctx.fillStyle = rgba(HIDE.shadow, AXIAL_CHIN_SHADOW_ALPHA);
+  ctx.fill();
+  paintUnion(ctx, [cranium, muzzle], HIDE.base, HIDE.dorsal);
+  insideUnion(ctx, [cranium, muzzle], () => {
+    paintPebbling(ctx, boundsOf([...cranium, ...muzzle]), HEAD_SPECKLE_SEED, prop.detail);
+    // The top of the muzzle catches the light; it is what makes the snout read
+    // as a form coming toward the camera rather than a flat stripe.
+    ctx.beginPath();
+    ctx.ellipse(
+      centre.x,
+      lerp(snoutTop, snoutTip, AXIAL_SNOUT_LIGHT_ALONG),
+      rootHalf * AXIAL_SNOUT_LIGHT_WIDTH,
+      (snoutTip - snoutTop) * AXIAL_SNOUT_LIGHT_LENGTH,
+      0,
+      0,
+      TWO_PI,
+    );
+    ctx.fillStyle = rgba(HIDE.light, AXIAL_SNOUT_LIGHT_ALPHA);
+    ctx.fill();
+  });
+
+  // The mouth line runs back from the tip along each side of the muzzle.
   ctx.strokeStyle = rgba(HIDE.dorsal, BROW_ALPHA);
-  ctx.lineWidth = BROW_WIDTH * 0.8;
-  ctx.stroke();
+  ctx.lineWidth = BROW_WIDTH * AXIAL_MOUTH_LINE_SHARE;
+  ctx.lineCap = 'round';
+  for (const side of [-1, 1]) {
+    ctx.beginPath();
+    ctx.moveTo(centre.x + side * tipHalf * AXIAL_SNOUT_ROUND, snoutTip - tipHalf * HALF_SPAN);
+    ctx.lineTo(centre.x + side * rootHalf * AXIAL_MOUTH_BACK, centre.y + craniumHalfH * HALF_SPAN);
+    ctx.stroke();
+  }
+
+  for (const side of [-1, 1]) {
+    ctx.beginPath();
+    ctx.arc(
+      centre.x + side * tipHalf * AXIAL_NOSTRIL_SPAN,
+      snoutTip - tipHalf * AXIAL_NOSTRIL_RISE,
+      NOSTRIL_RX * scale,
+      0,
+      TWO_PI,
+    );
+    ctx.fillStyle = rgba(HIDE.dorsal, NOSTRIL_ALPHA);
+    ctx.fill();
+  }
+
+  // The eyes are on the sides of the skull, so head-on only their outer halves
+  // show, sitting on the silhouette under a heavy brow.
+  const eyeRadius = prop.eyeRadius * AXIAL_EYE_SHARE * scale;
+  for (const side of [-1, 1]) {
+    const eye = {
+      x: centre.x + side * craniumHalfW * AXIAL_EYE_SPAN,
+      y: centre.y - craniumHalfH * AXIAL_EYE_RISE,
+    };
+    drawEyeAxial(ctx, eye, eyeRadius, pose.eyeOpen);
+    ctx.beginPath();
+    ctx.moveTo(eye.x - side * eyeRadius * AXIAL_BROW_INNER, eye.y - eyeRadius * AXIAL_BROW_LIFT);
+    ctx.lineTo(eye.x + side * eyeRadius, eye.y - eyeRadius * AXIAL_BROW_OUTER_LIFT);
+    ctx.strokeStyle = rgba(HIDE.dorsal, BROW_ALPHA);
+    ctx.lineWidth = BROW_WIDTH;
+    ctx.stroke();
+  }
 }
 
-const AXIAL_SKULL_WIDTH = 0.52;
-const AXIAL_SKULL_HEIGHT = 0.56;
-const AXIAL_SNOUT_DROP = 0.52;
-const SKULL_TEMPLE = 0.78;
-const AXIAL_CHEEK = 0.92;
-const AXIAL_CHEEK_DROP = 0.44;
-const AXIAL_SNOUT_WIDTH = 0.26;
-const AXIAL_MUZZLE_WIDTH = 0.6;
-const AXIAL_MUZZLE_SHOULDER = 0.34;
-const AXIAL_EYE_SPAN = 0.82;
-const AXIAL_EYE_RISE = 0.2;
-const AXIAL_EYE_SHARE = 0.95;
-const AXIAL_GAPE_SHARE = 0.55;
-const AXIAL_GAPE_MAX = 0.34;
-const AXIAL_GAPE_RISE = 0.18;
+/** A side-set eye seen from in front: narrower than it is tall, with the slit pupil. */
+function drawEyeAxial(ctx: Ctx, centre: Pt, radius: number, open: number): void {
+  ctx.beginPath();
+  ctx.ellipse(
+    centre.x,
+    centre.y,
+    radius * AXIAL_EYE_FORESHORTEN,
+    radius * lerp(BLINK_FLOOR, 1, open),
+    0,
+    0,
+    TWO_PI,
+  );
+  ctx.fillStyle = EYE_IRIS;
+  ctx.fill();
+  ctx.strokeStyle = EYE_RING;
+  ctx.lineWidth = EYE_RING_WIDTH;
+  ctx.stroke();
+  if (open < EYE_PUPIL_VISIBLE) return;
+  ctx.beginPath();
+  ctx.ellipse(
+    centre.x,
+    centre.y,
+    MIN_PUPIL_HALF_WIDTH,
+    Math.max(MIN_PUPIL_HALF_WIDTH, radius * PUPIL_HEIGHT_SHARE) * open,
+    0,
+    0,
+    TWO_PI,
+  );
+  ctx.fillStyle = EYE_PUPIL;
+  ctx.fill();
+}
+
+const BLINK_FLOOR = 0.08;
+const AXIAL_CRANIUM_WIDTH = 0.36;
+const AXIAL_CRANIUM_HEIGHT = 0.3;
+/** Where the muzzle leaves the cranium, as a share of its half-height above centre. */
+const AXIAL_SNOUT_ROOT = 0.15;
+const AXIAL_SNOUT_LENGTH = 0.46;
+const AXIAL_SNOUT_ROOT_WIDTH = 0.21;
+const AXIAL_SNOUT_TIP_WIDTH = 0.1;
+const AXIAL_SNOUT_ROUND = 0.6;
+const AXIAL_SNOUT_LIGHT_ALONG = 0.45;
+const AXIAL_SNOUT_LIGHT_WIDTH = 0.45;
+const AXIAL_SNOUT_LIGHT_LENGTH = 0.35;
+const AXIAL_SNOUT_LIGHT_ALPHA = 0.45;
+const AXIAL_CHIN_SHADOW_DROP = 0.6;
+const AXIAL_CHIN_SHADOW_HEIGHT = 1.2;
+const AXIAL_CHIN_SHADOW_ALPHA = 0.35;
+const AXIAL_MOUTH_LINE_SHARE = 0.8;
+const AXIAL_MOUTH_BACK = 1.25;
+const AXIAL_NOSTRIL_SPAN = 0.5;
+const AXIAL_NOSTRIL_RISE = 0.9;
+const AXIAL_JAW_DROP = 0.3;
+const AXIAL_JAW_NARROW = 0.85;
+const AXIAL_GULLET_WIDTH = 0.9;
 const AXIAL_TOOTH_SHARE = 0.7;
-const AXIAL_TOOTH_SPAN = 1.0;
+const AXIAL_TOOTH_SPAN = 0.9;
+const AXIAL_EYE_SPAN = 0.88;
+const AXIAL_EYE_RISE = 0.15;
+const AXIAL_EYE_SHARE = 1.05;
+const AXIAL_EYE_FORESHORTEN = 0.6;
+const AXIAL_BROW_INNER = 0.6;
+const AXIAL_BROW_LIFT = 1.0;
+const AXIAL_BROW_OUTER_LIFT = 1.4;
 const CREST_AXIAL_SPAN = 0.42;
-const CREST_AXIAL_ROOT = 1.0;
+const CREST_AXIAL_ROOT = 0.85;
 const CREST_AXIAL_SWEEP = deg(40);
 const CREST_AXIAL_SHARE = 0.72;
 const BACK_SKULL_BAR_SPAN = 0.42;
 const BACK_SKULL_BAR_TAPER = 0.7;
-const BACK_SKULL_BAR_DROP = 0.9;
+const BACK_SKULL_BAR_TOP = 0.85;
 /** The head is nearest the camera head-on and furthest from behind. */
 const AXIAL_HEAD_NEAR_SCALE = 1.0;
-const AXIAL_HEAD_FAR_SCALE = 0.78;
+const AXIAL_HEAD_FAR_SCALE = 0.95;
 
 function drawMongoAxial(ctx: Ctx, pose: MongoPose, prop: MongoProportions, view: AxialView): void {
   const layout = axialLayout(pose, prop, view);
@@ -2335,52 +2586,118 @@ function drawMongoAxial(ctx: Ctx, pose: MongoPose, prop: MongoProportions, view:
 
   drawGroundShadow(ctx, pelvis.x, girth * AXIAL_SHADOW_RX * pose.shadow, SHADOW_RY * pose.shadow);
 
-  // One elongated mass running from the hips down to the shoulders, not two
-  // ovals stacked on top of each other. Seen end-on a horizontal-spined animal
-  // is still *long* — the length is simply pointing at the camera — and two
-  // separate circles with a gap between them read as a head on a body, i.e. as
-  // a small upright humanoid.
-  const spine = [
-    { x: chest.x, y: chest.y - prop.spineLength * AXIAL_BRISKET_OVERHANG },
-    chest,
-    pelvis,
-    { x: pelvis.x, y: pelvis.y + prop.spineLength * AXIAL_RUMP_OVERHANG },
-  ];
-  const spineHalf = [
-    girth * AXIAL_BRISKET_WIDTH,
-    girth,
-    girth * AXIAL_HIP_WIDTH,
-    girth * AXIAL_RUMP_WIDTH,
-  ];
-  const body = ribbonOutline(spine, spineHalf);
-  const hipMass = axialMass(pelvis, girth * AXIAL_HIP_WIDTH, prop.hipDepth * AXIAL_HIP_SQUASH);
-  const nearLeg = pose.nearLeg.nearness >= pose.farLeg.nearness ? pose.nearLeg : pose.farLeg;
-  const farLeg = nearLeg === pose.nearLeg ? pose.farLeg : pose.nearLeg;
-  const legRootY = pelvis.y;
-
-  // The haunches, painted over the body mass at the hips so the drumsticks read
-  // as muscle standing proud of the flank rather than as part of the outline.
-  const paintHips = (): void => {
-    traceOutline(ctx, hipMass);
-    fillAndOutline(ctx, mix(HIDE.base, HIDE.shadow, AXIAL_HIP_SHADE), HIDE.dorsal);
-  };
-
-  const paintLegs = (): void => {
-    drawLegAxial(
-      ctx,
-      farLeg,
-      { x: pelvis.x - girth * AXIAL_HIP_SPAN, y: legRootY },
-      prop,
-      AXIAL_FAR_SHADE,
+  // One rounded mass from hips to chest, with the haunches swelling out of it
+  // at the hips and the neck running on out of the shoulders — filled as a
+  // single silhouette so no seam between them is drawn.
+  const bodyCentre = mid(pelvis, chest);
+  const bodyHalfH = Math.abs(pelvis.y - chest.y) * HALF_SPAN + prop.hipDepth * AXIAL_BODY_DEPTH;
+  const body = axialMass(bodyCentre, girth * AXIAL_BODY_WIDTH, bodyHalfH);
+  const haunch = (side: number): Pt[] =>
+    axialMass(
+      {
+        x: pelvis.x + side * girth * AXIAL_HAUNCH_SPAN,
+        y: pelvis.y + prop.hipDepth * AXIAL_HAUNCH_DROP,
+      },
+      girth * AXIAL_HAUNCH_WIDTH,
+      prop.hipDepth * AXIAL_HAUNCH_HEIGHT,
     );
-    drawLegAxial(ctx, nearLeg, { x: pelvis.x + girth * AXIAL_HIP_SPAN, y: legRootY }, prop, 0);
+  const neckRoot = {
+    x: chest.x,
+    y: chest.y - view.depth * prop.chestDepth * AXIAL_NECK_ROOT_RISE,
+  };
+  const neck = limbPath(
+    neckRoot,
+    layout.headCentre,
+    prop.neckThickness * AXIAL_NECK_ROOT_HALF,
+    prop.neckThickness * AXIAL_NECK_TOP_HALF,
+  );
+  // From behind the tail grows out of the rump toward the camera, so it joins
+  // the silhouette rather than being outlined across it as a separate flap.
+  const silhouette =
+    view.depth > 0
+      ? [body, haunch(-1), haunch(1), neck]
+      : [body, haunch(-1), haunch(1), neck, tailAxialOutline(layout, prop, view)];
+
+  const hipY = pelvis.y + prop.hipDepth * AXIAL_LEG_ROOT_DROP;
+  const leftHip = { x: pelvis.x - girth * AXIAL_HIP_SPAN, y: hipY };
+  const rightHip = { x: pelvis.x + girth * AXIAL_HIP_SPAN, y: hipY };
+
+  // Each leg stays on its own hip and only the paint order follows which one is
+  // nearer the camera. Handing the nearer *pose* to one fixed hip instead swaps
+  // the legs from side to side every time a foot leaves the floor.
+  const paintLegs = (part: AxialLegPart): void => {
+    const near = (): void => {
+      drawLegAxial(ctx, pose.nearLeg, rightHip, 1, prop, 0, view, part);
+    };
+    const far = (): void => {
+      drawLegAxial(ctx, pose.farLeg, leftHip, -1, prop, AXIAL_FAR_SHADE, view, part);
+    };
+    if (pose.nearLeg.nearness >= pose.farLeg.nearness) {
+      far();
+      near();
+    } else {
+      near();
+      far();
+    }
   };
 
-  const paintTorsoAndArms = (): void => {
+  const paintBody = (): void => {
     paintDown(ctx, body, prop.down, DOWN_SEED);
+    paintUnion(ctx, silhouette, HIDE.base, HIDE.dorsal);
+    insideUnion(ctx, silhouette, () => {
+      paintPebbling(ctx, boundsOf(silhouette.flat()), BODY_SPECKLE_SEED, prop.detail);
+      // Soft form shading rather than drawn seams: the flanks turn away into
+      // shadow, and the part nearest the camera — the chest head-on, the rump
+      // from behind — catches the light.
+      for (const side of [-1, 1]) {
+        ctx.beginPath();
+        ctx.ellipse(
+          bodyCentre.x + side * girth * AXIAL_FLANK_SHADE_SPAN,
+          bodyCentre.y,
+          girth * AXIAL_FLANK_SHADE_WIDTH,
+          bodyHalfH * AXIAL_FLANK_SHADE_HEIGHT,
+          0,
+          0,
+          TWO_PI,
+        );
+        ctx.fillStyle = rgba(HIDE.shadow, AXIAL_FLANK_SHADE_ALPHA);
+        ctx.fill();
+      }
+      if (view.showsFace) {
+        ctx.beginPath();
+        ctx.ellipse(
+          chest.x,
+          chest.y + prop.chestDepth * AXIAL_BELLY_DROP,
+          girth * AXIAL_BELLY_RX,
+          prop.chestDepth * AXIAL_BELLY_RY,
+          0,
+          0,
+          TWO_PI,
+        );
+        ctx.fillStyle = rgba(HIDE.belly, BELLY_ALPHA * prop.detail);
+        ctx.fill();
+        return;
+      }
+      const box = boundsOf(body);
+      paintDorsalBars(
+        ctx,
+        [
+          { x: bodyCentre.x, y: box.minY },
+          { x: bodyCentre.x, y: box.maxY },
+        ],
+        () => girth * AXIAL_BAR_SPAN,
+        prop.stripes,
+        STRIPE_SEED,
+        prop.detail,
+      );
+    });
+  };
+
+  const paintArms = (): void => {
+    const shoulderY = chest.y + prop.chestDepth * AXIAL_SHOULDER_DROP;
     drawArmAxial(
       ctx,
-      { x: chest.x - girth * AXIAL_SHOULDER_SPAN, y: chest.y },
+      { x: chest.x - girth * AXIAL_SHOULDER_SPAN, y: shoulderY },
       pose.farArm,
       prop,
       -1,
@@ -2388,93 +2705,59 @@ function drawMongoAxial(ctx: Ctx, pose: MongoPose, prop: MongoProportions, view:
     );
     drawArmAxial(
       ctx,
-      { x: chest.x + girth * AXIAL_SHOULDER_SPAN, y: chest.y },
+      { x: chest.x + girth * AXIAL_SHOULDER_SPAN, y: shoulderY },
       pose.nearArm,
       prop,
       1,
       0,
     );
-    traceOutline(ctx, body);
-    fillAndOutline(ctx, HIDE.base, HIDE.dorsal);
-    ctx.save();
-    traceOutline(ctx, body);
-    ctx.clip();
-    const box = boundsOf(body);
-    paintPebbling(ctx, box, BODY_SPECKLE_SEED, prop.detail);
-    if (view.showsFace) {
-      // Toward the camera it is the pale throat and chest that face us.
-      ctx.beginPath();
-      ctx.ellipse(
-        chest.x,
-        chest.y + prop.chestDepth * AXIAL_BELLY_DROP,
-        girth * AXIAL_BELLY_RX,
-        prop.chestDepth * AXIAL_BELLY_RY,
-        0,
-        0,
-        TWO_PI,
-      );
-      ctx.fillStyle = rgba(HIDE.belly, BELLY_ALPHA * prop.detail);
-      ctx.fill();
-    } else {
-      // Away it is the striped back, so the bars run down the spine line.
-      const spine = [
-        { x: chest.x, y: box.minY },
-        { x: chest.x, y: box.maxY },
-      ];
-      paintDorsalBars(
-        ctx,
-        spine,
-        () => girth * AXIAL_BAR_SPAN,
-        prop.stripes,
-        STRIPE_SEED,
-        prop.detail,
-      );
-    }
-    ctx.restore();
   };
 
-  const paintNeckAndHead = (): void => {
-    // The neck runs from the chest toward the head, which head-on means toward
-    // the camera and therefore down the screen.
-    drawLimb(
-      ctx,
-      chest,
-      layout.headCentre,
-      prop.neckThickness * NECK_ROOT_SHARE,
-      prop.neckThickness * NECK_TOP_SHARE,
-      HIDE.base,
-      HIDE.dorsal,
-    );
+  // Far to near, and which end is near reverses between the views. Head-on the
+  // tail is behind everything and the head in front; from behind the head is
+  // furthest away, sitting down among the shoulders, and the tail is nearest.
+  if (view.depth > 0) {
+    drawTailAxial(ctx, layout, prop, view);
+    paintLegs('leg');
+    paintBody();
+    paintArms();
     drawAxialHead(ctx, layout.headCentre, prop, pose, view);
-  };
-
-  // Far-to-near, and which end is near reverses between the two views: head-on
-  // the tail is behind everything and the head in front of it; from behind it is
-  // the other way round. The only thing depth actually reorders is the tail: it
-  // is behind everything when he faces the camera and in front of everything
-  // when he faces away.
-  if (view.depth > 0) drawTailAxial(ctx, layout, prop, view);
-  paintTorsoAndArms();
-  paintHips();
-  paintLegs();
-  paintNeckAndHead();
-  if (view.depth < 0) drawTailAxial(ctx, layout, prop, view);
+    return;
+  }
+  paintLegs('leg');
+  drawAxialHead(ctx, layout.headCentre, prop, pose, view);
+  paintBody();
+  paintArms();
+  drawTailFanAxial(ctx, layout, prop);
+  // The sickle claws go on last from behind. The tail hangs toward the camera
+  // over the feet, and the one claw that names the animal is the thing it
+  // would otherwise cover whenever a foot is tucked up under it.
+  paintLegs('sickle');
 }
 
-const AXIAL_SHADOW_RX = 1.8;
-const AXIAL_HIP_SPAN = 0.78;
-const AXIAL_HIP_WIDTH = 1.12;
-const AXIAL_HIP_SQUASH = 0.52;
-const AXIAL_HIP_SHADE = 0.07;
-const AXIAL_RUMP_OVERHANG = 0.26;
-const AXIAL_BRISKET_OVERHANG = 0.2;
-const AXIAL_RUMP_WIDTH = 0.68;
-const AXIAL_BRISKET_WIDTH = 0.72;
-const AXIAL_SHOULDER_SPAN = 0.9;
+const AXIAL_SHADOW_RX = 1.5;
+/** Hip joints sit close in under the body: a raptor's track is nearly a single line. */
+const AXIAL_HIP_SPAN = 0.36;
+const AXIAL_LEG_ROOT_DROP = 0.2;
+const AXIAL_BODY_WIDTH = 1.05;
+const AXIAL_BODY_DEPTH = 0.55;
+const AXIAL_HAUNCH_SPAN = 0.55;
+const AXIAL_HAUNCH_DROP = 0.25;
+const AXIAL_HAUNCH_WIDTH = 0.5;
+const AXIAL_HAUNCH_HEIGHT = 0.75;
+const AXIAL_NECK_ROOT_RISE = 0.2;
+const AXIAL_NECK_ROOT_HALF = 2.2;
+const AXIAL_NECK_TOP_HALF = 1.3;
+const AXIAL_SHOULDER_SPAN = 0.82;
+const AXIAL_SHOULDER_DROP = 0.1;
 const AXIAL_FAR_SHADE = 0.26;
-const AXIAL_BELLY_DROP = 0.34;
-const AXIAL_BELLY_RX = 0.5;
-const AXIAL_BELLY_RY = 0.46;
+const AXIAL_FLANK_SHADE_SPAN = 1.05;
+const AXIAL_FLANK_SHADE_WIDTH = 0.45;
+const AXIAL_FLANK_SHADE_HEIGHT = 1.1;
+const AXIAL_FLANK_SHADE_ALPHA = 0.18;
+const AXIAL_BELLY_DROP = 0.3;
+const AXIAL_BELLY_RX = 0.55;
+const AXIAL_BELLY_RY = 0.5;
 const AXIAL_BAR_SPAN = 1.05;
 
 export function drawMongoFront(ctx: Ctx, pose: MongoPose, prop: MongoProportions): void {
@@ -2550,3 +2833,58 @@ export function measureFootSickle(pose: MongoPose, prop: MongoProportions): Pt {
     lerp(RETRACTED_SICKLE_ANGLE, DEPLOYED_SICKLE_ANGLE, clamp01(pose.nearLeg.sickle));
   return add(root, rot({ x: prop.sickle, y: 0 }, angle));
 }
+
+/** The profile eye's centre, in the same frame the painter draws it in. */
+export function measureEyeSide(pose: MongoPose, prop: MongoProportions): Pt {
+  const sk = buildSkeleton(pose, prop);
+  const angle = sk.headAngle - pose.gape * UPPER_JAW_LIFT;
+  const along = { x: Math.cos(angle), y: Math.sin(angle) };
+  const down = perp(along);
+  return {
+    x: sk.headBase.x + along.x * EYE_ALONG * prop.skullLength - down.x * EYE_DROP * prop.skullDepth,
+    y: sk.headBase.y + along.y * EYE_ALONG * prop.skullLength - down.y * EYE_DROP * prop.skullDepth,
+  };
+}
+
+/** The head-on eyes: their midpoint and the gap between them. */
+export function measureEyesFront(
+  pose: MongoPose,
+  prop: MongoProportions,
+): { readonly centre: Pt; readonly spacing: number } {
+  const centre = axialLayout(pose, prop, FRONT_VIEW).headCentre;
+  const halfW = prop.skullLength * AXIAL_CRANIUM_WIDTH * AXIAL_HEAD_NEAR_SCALE;
+  const halfH = prop.skullLength * AXIAL_CRANIUM_HEIGHT * AXIAL_HEAD_NEAR_SCALE;
+  return {
+    centre: { x: centre.x, y: centre.y - halfH * AXIAL_EYE_RISE },
+    spacing: halfW * AXIAL_EYE_SPAN * 2,
+  };
+}
+
+/**
+ * The highest point of the profile head — the tip of the tallest crest feather
+ * or the crown, whichever is higher — traced through the same geometry
+ * `drawCrestSide` paints, so a redraw of the crest moves it too.
+ */
+export function measureHeadTopSide(pose: MongoPose, prop: MongoProportions): number {
+  const sk = buildSkeleton(pose, prop);
+  const angle = sk.headAngle - pose.gape * UPPER_JAW_LIFT;
+  const along = { x: Math.cos(angle), y: Math.sin(angle) };
+  const down = perp(along);
+  const at = (forward: number, drop: number): Pt => ({
+    x: sk.headBase.x + along.x * forward * prop.skullLength + down.x * drop * prop.skullDepth,
+    y: sk.headBase.y + along.y * forward * prop.skullLength + down.y * drop * prop.skullDepth,
+  });
+  const rootBack = at(CREST_BACK_ALONG, -SKULL_CROWN);
+  const rootFront = at(CREST_FRONT_ALONG, -SKULL_BROW);
+  let top = Math.min(rootBack.y, rootFront.y);
+  for (let i = 0; i < CREST_FEATHERS; i++) {
+    const t = i / (CREST_FEATHERS - 1);
+    const root = mid(rootBack, rootFront, t);
+    const featherAngle = lerp(angle + CREST_BACK_SWEEP, angle + CREST_FRONT_SWEEP, t);
+    const length = prop.crestLength * lerp(1, CREST_FALLOFF, Math.abs(t - HALF_SPAN) * 2);
+    top = Math.min(top, root.y + Math.sin(featherAngle) * length);
+  }
+  return top;
+}
+
+const HALF_SPAN = 0.5;

@@ -15,7 +15,9 @@ const CLOCK_FIELD_WIDTH = 2;
  * kills, the gold, the damage — and a checkpoint rewind takes them back with
  * the world, because the mobs they were scored on are standing again. Deaths
  * and time played describe the player's run instead, and nothing rewinds them:
- * a death that undid its own tally would make every death free.
+ * a death that undid its own tally would make every death free. Whether the
+ * party has heard the shield-fairy ward explainer is run history too: a
+ * one-time hint that a death replayed would no longer be one-time.
  */
 export class GameStats {
   private _killsByType = new Map<string, number>();
@@ -28,6 +30,7 @@ export class GameStats {
   private _hirelingsLost = 0;
   private _deaths = 0;
   private _framesPlayed = 0;
+  private _wardExplainerHeard = false;
 
   recordKill(displayName: string, isBoss = false): void {
     this._killsByType.set(displayName, (this._killsByType.get(displayName) ?? 0) + 1);
@@ -87,6 +90,10 @@ export class GameStats {
     this._deaths++;
   }
 
+  recordWardExplainerHeard(): void {
+    this._wardExplainerHeard = true;
+  }
+
   /** One fixed update of play the world was not halted for. */
   recordPlayedFrame(): void {
     this._framesPlayed++;
@@ -143,6 +150,10 @@ export class GameStats {
     return this._framesPlayed;
   }
 
+  get wardExplainerHeard(): boolean {
+    return this._wardExplainerHeard;
+  }
+
   /** Point-in-time copy of every tally, for a checkpoint capture or a save. */
   snapshot(): GameStatsSnapshot {
     return {
@@ -156,6 +167,7 @@ export class GameStats {
       hirelingsLost: this._hirelingsLost,
       deaths: this._deaths,
       framesPlayed: this._framesPlayed,
+      wardExplainerHeard: this._wardExplainerHeard,
     };
   }
 
@@ -181,17 +193,19 @@ export class GameStats {
     stats.restore(snapshot);
     stats._deaths = snapshot.deaths;
     stats._framesPlayed = snapshot.framesPlayed;
+    stats._wardExplainerHeard = snapshot.wardExplainerHeard;
     return stats;
   }
 
   /**
-   * Takes the deaths and time played from the run still in progress — for a
+   * Takes the deaths, time played and heard hints from the run still in progress — for a
    * death that respawns from a save, whose tallies are older than the death
    * that sent the party back to it.
    */
   carryRunHistoryFrom(live: GameStats): void {
     this._deaths = Math.max(this._deaths, live._deaths);
     this._framesPlayed = Math.max(this._framesPlayed, live._framesPlayed);
+    this._wardExplainerHeard ||= live._wardExplainerHeard;
   }
 }
 
@@ -207,6 +221,7 @@ export interface GameStatsSnapshot {
   hirelingsLost: number;
   deaths: number;
   framesPlayed: number;
+  wardExplainerHeard: boolean;
 }
 
 function countOrZero(value: unknown): number {
@@ -252,6 +267,7 @@ export function parseGameStatsSnapshot(value: unknown): GameStatsSnapshot | unde
     hirelingsLost: countOrZero(value.hirelingsLost),
     deaths: countOrZero(value.deaths),
     framesPlayed: countOrZero(value.framesPlayed),
+    wardExplainerHeard: value.wardExplainerHeard === true,
   };
 }
 

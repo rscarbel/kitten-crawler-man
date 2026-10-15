@@ -5,6 +5,9 @@
 
 import type { IllustrationRect } from './illustration';
 import { MONGO_KILL_RECOVERY_FRAMES } from '../../../core/MongoPetState';
+import { mongoStageSpeed } from '../../../abilities/mongo';
+import { MONGO_GROUND_FROM_TILE_TOP, mongoHeadTopTiles } from '../../../sprites/art/mongoFigure';
+import { TILE_SIZE } from '../../../core/constants';
 import {
   MONGO_BUTTON_LABELS,
   SUMMON_BUTTON_HEIGHT,
@@ -26,8 +29,7 @@ import {
   drawMongoIcon,
   drawMongoSprite,
   mongoActionDuration,
-  MONGO_WALK_FRAMES,
-  MONGO_WALK_FRAMES_PER_TICK_AT_BASE_SPEED,
+  mongoWalkRadiansPerPixel,
   prewarmMongoCombat,
   prewarmMongoWalk,
   type MongoAction,
@@ -73,12 +75,14 @@ const SPRITE_CENTRE_TILES = 0.5;
 const CAT_HEAD_TILES = 0.72;
 /** Where the sword goblin's head tops out above its feet, in tiles — measured off its idle. */
 const GOBLIN_HEAD_TILES = 1.0;
-/** Mongo's head height above his feet, per growth stage, in tiles. */
-const MONGO_HEAD_TILES: Record<MongoStage, number> = {
-  juvenile: 0.66,
-  adolescent: 0.92,
-  adult: 1.14,
-};
+/**
+ * Mongo's head height above the feet line every figure here stands on, per
+ * growth stage, in tiles. Measured off his own art — his ground line sits a
+ * little above that shared feet line, so the gap between the two is added.
+ */
+function mongoHeadTiles(stage: MongoStage): number {
+  return mongoHeadTopTiles(stage) + SPRITE_FOOT_TILES - MONGO_GROUND_FROM_TILE_TOP;
+}
 /**
  * How much smaller than true scale each stage is drawn. A grown raptor at the
  * cat's scale spans a third of the band and tramples the controls beside him;
@@ -108,9 +112,13 @@ const BARK_FILL = '#f8fafc';
 const BARK_BORDER = '#60a5fa';
 const BARK_TEXT = '#0f172a';
 
-/** How far one game frame advances his walk cycle at his listed speed — the same rate `Mongo.walkAt` uses. */
-const MONGO_WALK_PHASE_PER_FRAME =
-  (Math.PI * 2 * MONGO_WALK_FRAMES_PER_TICK_AT_BASE_SPEED) / MONGO_WALK_FRAMES;
+/**
+ * How far one game frame advances his walk cycle at his stage's listed speed —
+ * the same stride pacing `Mongo` runs on.
+ */
+function mongoWalkPhasePerFrame(stage: MongoStage): number {
+  return mongoStageSpeed(stage) * mongoWalkRadiansPerPixel(stage, TILE_SIZE);
+}
 
 const POOF_PUFFS = 7;
 const POOF_RADIUS = 26;
@@ -475,7 +483,7 @@ function drawMongo(ctx: CanvasRenderingContext2D, stage: MongoStage, pose: Mongo
   const tile = mongoTile(stage);
   drawMongoSprite(ctx, tileLeft(pose.x, tile), tileTop(tile), tile, {
     stage,
-    walkFrame: pose.frame * MONGO_WALK_PHASE_PER_FRAME,
+    walkFrame: pose.frame * mongoWalkPhasePerFrame(stage),
     isMoving: pose.moving,
     facingX: pose.facingX,
     facingY: 0,
@@ -1304,7 +1312,7 @@ function drawMongoHealthBar(
 ): void {
   const alpha = pose.alpha ?? 1;
   const barX = pose.x - HEALTH_BAR_W * HALF;
-  const barY = FOOT_Y - mongoTile(stage) * MONGO_HEAD_TILES[stage] - HEALTH_BAR_ABOVE_HEAD;
+  const barY = FOOT_Y - mongoTile(stage) * mongoHeadTiles(stage) - HEALTH_BAR_ABOVE_HEAD;
   ctx.save();
   ctx.globalAlpha *= alpha;
   worldBar(
