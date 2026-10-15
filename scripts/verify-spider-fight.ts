@@ -592,6 +592,7 @@ const SYNTHETIC_SITE: LabSite = {
       shelfTiles: [],
       webTiles: [],
       cocoonTiles: [],
+      hallwayTiles: [],
     };
     return map;
   },

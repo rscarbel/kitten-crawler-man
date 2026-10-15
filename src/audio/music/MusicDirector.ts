@@ -35,6 +35,7 @@ export type MusicClaimOwner =
   | 'overworld_zone'
   | 'interior'
   | 'pipe_board'
+  | 'spider_lab'
   | 'prison'
   | 'casino_tables'
   | 'free_spins'

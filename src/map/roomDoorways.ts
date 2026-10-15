@@ -231,3 +231,36 @@ export function blockingWouldSplitRoom(
   }
   return unreached > 0;
 }
+
+/**
+ * The corridor leading out of a room through one of its doorways: every open
+ * tile reachable from just outside the opening without stepping inside any of
+ * `rooms`, so the walk stops at the next room's walls. Meant for a dead-end
+ * room whose only corridor joins nothing else on its way to its host.
+ */
+export function corridorBeyondDoorway(
+  grid: TileContent[][],
+  doorway: Pick<RoomDoorway, 'tiles'>,
+  rooms: ReadonlyArray<Rect>,
+): Point[] {
+  const isInsideAnyRoom = (x: number, y: number): boolean =>
+    rooms.some((room) => x >= room.x && x < room.x + room.w && y >= room.y && y < room.y + room.h);
+  const keyOf = (x: number, y: number): string => `${x},${y}`;
+  const seen = new Set<string>();
+  const corridor: Point[] = [];
+  const frontier: Point[] = [];
+  const visit = (x: number, y: number): void => {
+    if (seen.has(keyOf(x, y))) return;
+    if (!isOpenFloor(grid, x, y) || isInsideAnyRoom(x, y)) return;
+    seen.add(keyOf(x, y));
+    corridor.push({ x, y });
+    frontier.push({ x, y });
+  };
+  for (const tile of doorway.tiles) {
+    for (const side of ROOM_WALL_OUTWARD) visit(tile.x + side.dx, tile.y + side.dy);
+  }
+  for (let next = frontier.pop(); next !== undefined; next = frontier.pop()) {
+    for (const side of ROOM_WALL_OUTWARD) visit(next.x + side.dx, next.y + side.dy);
+  }
+  return corridor;
+}

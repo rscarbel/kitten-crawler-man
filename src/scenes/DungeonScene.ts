@@ -566,7 +566,7 @@ import {
   WALKING_LOOP,
 } from '../audio/loopLevels';
 import { Conversation } from '../dialog/Conversation';
-import type { SoundId } from '../audio/sounds';
+import type { MusicTrackId, SoundId } from '../audio/sounds';
 import type { VillageBuildingId } from '../map/overworld/briarHollowLayout';
 import { rectCentre } from '../map/overworld/briarHollowSite';
 import { sfxGroupsForLevelId } from '../audio/sfxGroups';
@@ -1107,6 +1107,7 @@ const ARROW_VERTICAL_OFFSET_TILES = 1.5;
 
 /** Offset from a tile's origin to its centre, as a fraction of a tile. */
 const TILE_CENTRE_FRACTION = 0.5;
+const SPIDER_LAB_MUSIC = 'spider_lab' as const satisfies MusicTrackId;
 
 /** A per-frame record the scene owns and rewrites in place rather than rebuilding. */
 type Mutable<T> = { -readonly [K in keyof T]: T[K] };
@@ -5810,6 +5811,35 @@ export class DungeonScene extends GameplayScene {
     });
   }
 
+  /**
+   * The lab's own track plays over the floor's from the moment the active
+   * crawler turns into the lab's hallway until they walk back out of it. Held a
+   * layer above the floor's claim, so the floor re-claiming its track after the
+   * intro or a respawn cannot bury it.
+   */
+  private updateSpiderLabMusic(): void {
+    const scope = this.audioScope;
+    if (scope === null) return;
+    if (!this.isInSpiderLabOrHallway(this.active())) {
+      scope.releaseMusic('spider_lab');
+      return;
+    }
+    scope.claimMusic({
+      owner: 'spider_lab',
+      layer: 'activity',
+      selection: { kind: 'loop', id: SPIDER_LAB_MUSIC },
+    });
+  }
+
+  private isInSpiderLabOrHallway(body: Pick<Mob, 'x' | 'y'>): boolean {
+    const lab = this.gameMap.spiderLabRoom;
+    if (lab === null) return false;
+    const tileX = Math.floor((body.x + TILE_SIZE * TILE_CENTRE_FRACTION) / TILE_SIZE);
+    const tileY = Math.floor((body.y + TILE_SIZE * TILE_CENTRE_FRACTION) / TILE_SIZE);
+    if (pointInRect(tileX, tileY, lab.bounds)) return true;
+    return lab.hallwayTiles.some((tile) => tile.x === tileX && tile.y === tileY);
+  }
+
   /** What this floor plays when nothing outranks it; null on the overworld, whose zones claim their own. */
   private get floorMusic(): MusicSelection | null {
     if (this.overworldMusic !== null) return null;
@@ -7807,6 +7837,7 @@ export class DungeonScene extends GameplayScene {
     // Ahead of the halt: the pipe board halts the world, and it is the only
     // time the puzzle's music plays.
     this.updatePipeBoardMusic();
+    this.updateSpiderLabMusic();
 
     // Also drained ahead of the early returns: the request is raised by a
     // right-click or a hotbar key, neither of which routes through the panel's

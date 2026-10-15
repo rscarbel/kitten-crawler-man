@@ -38,6 +38,7 @@ export const MUSIC_TRACK_IDS = [
   'brace_for_the_horde',
   'fix_the_plumbing_music',
   'stealth_music',
+  'spider_lab',
   'keyboard_hero_music_track_1',
 ] as const;
 
@@ -1427,6 +1428,7 @@ export const SOUND_MANIFEST: Record<SoundId, string> = {
   splatter_orb_orbit_loop: './src/audio/effects/splatter_orb/orbit_loop.mp3',
   splatter_orb_seek: './src/audio/effects/splatter_orb/seek.mp3',
   splatter_orb_spawn: './src/audio/effects/splatter_orb/spawn.mp3',
+  spider_lab: './src/audio/music/spider_lab.mp3',
   spotlight_hum_loop: './src/audio/effects/prison/spotlight_hum_loop.mp3',
   spotlight_motor_turn_1: './src/audio/effects/prison/spotlight_motor_turn_1.mp3',
   spotlight_motor_turn_2: './src/audio/effects/prison/spotlight_motor_turn_2.mp3',
@@ -1662,6 +1664,7 @@ export const STREAMING_SOUND_IDS: ReadonlySet<SoundId> = new Set<SoundId>([
   'slots_free_spins_loop_1',
   'slots_free_spins_loop_2',
   'slots_free_spins_loop_3',
+  'spider_lab',
   'stealth_music',
   'tavern_music_1',
   'tavern_music_2',

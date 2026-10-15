@@ -93,6 +93,7 @@ import { layOutSpiderLab } from './spiderLabLayout';
 import { registerSpiderLabFloorPlan } from './tiles/bossRooms/labFloorPlan';
 import {
   blockingWouldSplitRoom,
+  corridorBeyondDoorway,
   roomDoorways,
   detectRoomEntrance,
   ROOM_WALL_OUTWARD,
@@ -218,6 +219,8 @@ export interface SpiderLabRoomData {
   webTiles: Point[];
   /** Where the cocooned lab staff hang. Walkable: they hang over the floor, not on it. */
   cocoonTiles: Point[];
+  /** The corridor from the lab's doorway back to the room it hangs off, which shares the lab's music. */
+  hallwayTiles: Point[];
 }
 
 export interface SafeRoomData {
@@ -2905,6 +2908,11 @@ function buildDungeon(
       lifeMachineTiles,
       entranceWall,
       ...furniture,
+      hallwayTiles: corridorBeyondDoorway(
+        grid,
+        { tiles: entranceDoorway?.tiles ?? [entranceTile] },
+        rooms,
+      ),
     };
     registerSpiderLabFloorPlan(grid, spiderLabRoom);
   }

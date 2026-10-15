@@ -4979,6 +4979,14 @@ export const LOUDNESS = {
     hash: '61168a76718aee1b',
     trimDb: -2.9,
   },
+  spider_lab: {
+    bus: 'music',
+    basis: 'integrated',
+    lufs: -13.2,
+    truePeakDbtp: -1.3,
+    hash: '20fea4592048da9c',
+    trimDb: -4.8,
+  },
   spider_walking: {
     bus: 'sfx',
     basis: 'integrated',

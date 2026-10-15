@@ -70,6 +70,11 @@ export const MUSIC_CATALOG = {
       source: 'Pixabay',
     },
   },
+  spider_lab: {
+    title: 'The Spider Lab',
+    area: 'dungeon',
+    attribution: { authorName: 'Ryan Scarbel', originalTitle: 'Spider Lab' },
+  },
   town_music_1: {
     title: 'Cobblestones and Coin Purses',
     area: 'over_city',
