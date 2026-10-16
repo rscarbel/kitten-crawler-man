@@ -323,16 +323,22 @@ export function prewarmCatSprite(): void {
 /**
  * Queues the rows she plays holding `hold`, the ones of the view she faces
  * first: those are drawn next, and a swing's layered cells bake two layers
- * each.
+ * each. With something in her jaws, the faced row she is drawn in on the very
+ * next frame — her carrying walk if `moving`, else her carrying idle — goes
+ * ahead of the other: the idle loop's frame is picked by the clock, so while
+ * it waits behind a whole walk row every frame the clock reaches is cold.
  */
-export function prewarmCatHold(hold: CatHold, facing: FacingSelection): void {
+export function prewarmCatHold(hold: CatHold, facing: FacingSelection, moving: boolean): void {
   const view = catRowViewOf(facing.view);
   const faced = (state: CatState): boolean =>
     catRowView(state) === view && catRowFacesWest(state) === (view === 'side' && facing.flipX);
+  const drawnNext =
+    hold === 'carry' ? directionalState(moving ? 'carry_walk' : 'carry_idle', facing) : null;
   const rows = HELD_ROWS[hold];
-  for (const state of [...rows.filter(faced), ...rows.filter((row) => !faced(row))]) {
-    prewarmFigureState(activeFigure, state);
-  }
+  const facedFirst = [...rows.filter(faced), ...rows.filter((row) => !faced(row))];
+  const ordered =
+    drawnNext === null ? facedFirst : [drawnNext, ...facedFirst.filter((row) => row !== drawnNext)];
+  for (const state of ordered) prewarmFigureState(activeFigure, state);
 }
 
 /** Loop speeds for the animations that are driven by the clock, not by a timer. */

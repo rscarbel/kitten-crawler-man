@@ -8,6 +8,7 @@
  */
 
 import type { AssetGroup } from '../../core/assetGroups';
+import type { SpriteKey } from '../../core/SpriteLoader';
 import type { TilePoint, TownPlan } from '../../map/town/townPlan';
 import {
   BOSS_ROOM_SALT,
@@ -55,6 +56,12 @@ const UNSEEDED_CORE_PROPS = 0;
 export interface EnvironmentSheetRequest {
   /** Re-bake the tile chunks that took a fallback colour before a sheet landed. */
   readonly onSheetPainted?: () => void;
+  /**
+   * Told which building facade landed. A facade is drawn only by its own
+   * building, so a caller can redraw just that one; without this, a facade
+   * landing calls `onSheetPainted` like any other sheet.
+   */
+  readonly onFacadePainted?: (spriteKey: SpriteKey) => void;
   /**
    * The town plan and where the party arrives, so the facades — the only family
    * slow enough for the order to matter — are painted outward from the street
@@ -148,7 +155,7 @@ export function requestEnvironmentSheetsForGroups(
     requestBuildingSheets(floorArtSubSeed(BUILDING_SALT), {
       plan: request.town?.plan,
       nearestTo: request.town?.spawnTile,
-      onSheetPainted,
+      onFacadePainted: request.onFacadePainted ?? (() => onSheetPainted?.()),
     });
   }
   if (wanted.has('overworld')) {

@@ -207,6 +207,55 @@ export interface PrizeBannerSkin {
   readonly iconSize: number;
 }
 
+/**
+ * The siege's clocktower alert: a danger-edged card shouted across the upper
+ * screen, the red pulse round the screen's edges while the bell is out of
+ * sight, and the badge pinned to the edge pointing the way back to it.
+ */
+export interface SiegeAlertSkin {
+  readonly panel: PanelSkin;
+  /** The card's padding on a compact screen, where every unit of height counts. */
+  readonly paddingCompact: number;
+  /** The halo round the card. */
+  readonly glow: string;
+  readonly glowBlur: number;
+  readonly headline: TextSkin;
+  readonly detail: TextSkin;
+  /** The alarm glyphs either side of the headline. */
+  readonly glyph: string;
+  readonly glyphSize: number;
+  /** The colour the screen's edges pulse in, and how strongly at the pulse's peak. */
+  readonly edgePulse: string;
+  readonly edgePulsePeakAlpha: number;
+  /** How far in from each edge the pulse reaches, in UI units. */
+  readonly edgePulseDepth: number;
+  /** The edge badge's disc, its glyph and chevron, and the outline round both. */
+  readonly markerFill: string;
+  readonly markerInk: string;
+  readonly markerOutline: string;
+  readonly markerSize: number;
+  readonly markerCaption: TextSkin;
+}
+
+/**
+ * The siege's victory: the screen dimmed under gold rays, a headline in the
+ * wordmark's proportions, and fireworks over all of it.
+ */
+export interface SiegeVictorySkin {
+  /** The darkening under the celebration, and how dark at its fullest. */
+  readonly dim: string;
+  readonly dimAlpha: number;
+  readonly rays: string;
+  readonly headline: TextSkin;
+  readonly headlineGlow: string;
+  readonly headlineGlowBlur: number;
+  readonly subtitle: TextSkin;
+  /** The hand-off line pointing the party to the Mayor. */
+  readonly handOff: TextSkin;
+  /** The fading streak a rocket leaves as it climbs. */
+  readonly rocketTrail: string;
+}
+
 /** One colour of a {@link TextFillSkin}, `at` 0 (the em box's top) to 1 (its bottom). */
 export interface GradientStop {
   readonly at: number;
@@ -277,6 +326,8 @@ export interface Skins {
   readonly questRewardBrass: BrassSkin;
   readonly mercenaryBrass: BrassSkin;
   readonly prizeBanner: PrizeBannerSkin;
+  readonly siegeAlert: SiegeAlertSkin;
+  readonly siegeVictory: SiegeVictorySkin;
   readonly keycap: KeycapSkin;
   readonly titleLogo: TitleLogoSkin;
   readonly controlFlash: ControlFlashSkin;
@@ -317,6 +368,17 @@ const PRIZE_BORDER_WIDTH = 2;
 const PRIZE_GLOW_BLUR = 28;
 const PRIZE_RAYS_ALPHA = 0.22;
 const PRIZE_ICON_SIZE = 64;
+const SIEGE_ALERT_BORDER_WIDTH = 2;
+const SIEGE_ALERT_GLOW_ALPHA = 0.6;
+const SIEGE_ALERT_GLOW_BLUR = 32;
+const SIEGE_ALERT_GLYPH_SIZE = 36;
+const SIEGE_EDGE_PULSE_PEAK_ALPHA = 0.55;
+const SIEGE_EDGE_PULSE_DEPTH = 72;
+const SIEGE_MARKER_SIZE = 34;
+/** The victory dims the world enough for the headline to own the screen, not hide the village. */
+const SIEGE_VICTORY_DIM_ALPHA = 0.35;
+const SIEGE_VICTORY_GLOW_BLUR = 36;
+const SIEGE_ROCKET_TRAIL_ALPHA = 0.85;
 const KEYCAP_SIZE = 20;
 /**
  * Where the wordmark's gold changes along the em box. Capitals fill roughly
@@ -798,6 +860,42 @@ function buildSkins(theme: Theme): Skins {
       titleCompact: { style: { ...type.display, upper: true }, color: palette.accent.base },
       subtitle: { style: type.title, color: palette.text.primary },
       iconSize: PRIZE_ICON_SIZE,
+    },
+    siegeAlert: {
+      panel: {
+        fill: palette.surface.solid,
+        border: palette.state.danger,
+        borderWidth: SIEGE_ALERT_BORDER_WIDTH,
+        radius: radius.lg,
+        shadow: elevation.panel,
+        padding: space.lg,
+      },
+      paddingCompact: space.sm,
+      glow: withAlpha(palette.state.danger, SIEGE_ALERT_GLOW_ALPHA),
+      glowBlur: SIEGE_ALERT_GLOW_BLUR,
+      headline: { style: type.alarm, color: palette.state.danger },
+      detail: { style: type.heading, color: palette.text.primary },
+      glyph: palette.state.danger,
+      glyphSize: SIEGE_ALERT_GLYPH_SIZE,
+      edgePulse: palette.state.danger,
+      edgePulsePeakAlpha: SIEGE_EDGE_PULSE_PEAK_ALPHA,
+      edgePulseDepth: SIEGE_EDGE_PULSE_DEPTH,
+      markerFill: palette.surface.solid,
+      markerInk: palette.state.danger,
+      markerOutline: palette.surface.sunken,
+      markerSize: SIEGE_MARKER_SIZE,
+      markerCaption: { style: type.caption, color: palette.text.primary },
+    },
+    siegeVictory: {
+      dim: palette.surface.sunken,
+      dimAlpha: SIEGE_VICTORY_DIM_ALPHA,
+      rays: palette.accent.base,
+      headline: { style: type.fanfare, color: palette.material.brassLight },
+      headlineGlow: palette.accent.base,
+      headlineGlowBlur: SIEGE_VICTORY_GLOW_BLUR,
+      subtitle: { style: type.display, color: palette.text.primary },
+      handOff: { style: type.title, color: palette.accent.base },
+      rocketTrail: withAlpha(palette.material.brassLight, SIEGE_ROCKET_TRAIL_ALPHA),
     },
     keycap: {
       fill: palette.surface.raised,

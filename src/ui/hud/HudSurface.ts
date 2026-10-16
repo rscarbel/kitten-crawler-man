@@ -138,6 +138,11 @@ export class HudSurface implements Surface {
     return frame.skillBadges.some(hits) ? 'skill-points' : null;
   }
 
+  /** Every top-band entry as last drawn, in UI units: what a card floated over play keeps clear of. */
+  get bandRects(): readonly Rect[] {
+    return this.lastBandSlots.map((slot) => slot.rect);
+  }
+
   /**
    * A top-band entry's rect as last drawn, in CSS pixels, or null while it is
    * not shown (the safe room's loot banner is `'loot-banner'`).

@@ -14,7 +14,12 @@
  * shadow and stay the same shadow when it is tuned.
  */
 
-import { allocReadableCanvas, surfaceContext, type CanvasSurface } from '../../core/canvasSurface';
+import {
+  allocReadableCanvas,
+  freshSurfaceContext,
+  releaseSurface,
+  type CanvasSurface,
+} from '../../core/canvasSurface';
 import { NoiseField } from '../../map/tilegen/noise';
 import {
   drawPlane,
@@ -160,6 +165,11 @@ export interface BuildingPaintPlan {
   readonly canvas: CanvasSurface;
   readonly projection: Projection;
   readonly stages: ReadonlyArray<BuildingPaintStage>;
+  /**
+   * Gives back the canvas and the planes, for a plan dropped before its stages
+   * have used them up. Safe at any point: a surface already given back stays so.
+   */
+  readonly release: () => void;
 }
 
 /**
@@ -179,18 +189,39 @@ export function planBuildingPaint(spec: BuildingSpec, weatherSeed = 0): Building
   // reason this one asks: a GPU-backed surface pays a full synchronisation for
   // every one of those reads.
   const canvas = allocReadableCanvas(frameWidthPx(spec), frameHeightPx(spec));
-  const ctx = surfaceContext(canvas);
+  const ctx = freshSurfaceContext(canvas);
 
   // Allocated now and painted by the stages below, so the composite stage after
-  // them can close over the same four surfaces.
-  const side = sidePlanePaint(spec, projection, weatherSeed);
-  const facade = facadePlanePaint(spec, projection, weatherSeed);
-  const roofReturn = roofPlanePaint(spec, projection, true, weatherSeed);
-  const roofFront = roofPlanePaint(spec, projection, false, weatherSeed);
+  // them can close over the same four surfaces. A plane refused a context gives
+  // back every surface allocated before it, or a refusal under memory pressure
+  // would hold megabytes until a collection.
+  const allocated: CanvasSurface[] = [canvas];
+  const kept = <T extends { readonly plane: { readonly canvas: CanvasSurface } }>(
+    planned: T,
+  ): T => {
+    allocated.push(planned.plane.canvas);
+    return planned;
+  };
+  let side: ReturnType<typeof sidePlanePaint>;
+  let facade: ReturnType<typeof facadePlanePaint>;
+  let roofReturn: ReturnType<typeof roofPlanePaint>;
+  let roofFront: ReturnType<typeof roofPlanePaint>;
+  try {
+    side = kept(sidePlanePaint(spec, projection, weatherSeed));
+    facade = kept(facadePlanePaint(spec, projection, weatherSeed));
+    roofReturn = kept(roofPlanePaint(spec, projection, true, weatherSeed));
+    roofFront = kept(roofPlanePaint(spec, projection, false, weatherSeed));
+  } catch (error) {
+    for (const surface of allocated) releaseSurface(surface);
+    throw error;
+  }
 
   return {
     canvas,
     projection,
+    release: () => {
+      for (const surface of allocated) releaseSurface(surface);
+    },
     stages: [
       ...side.stages,
       ...facade.stages,

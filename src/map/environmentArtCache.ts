@@ -18,8 +18,13 @@
  * an over-budget step is repaid out of the frames after it.
  */
 
-import { allocCanvas, surfaceContext, type CanvasSurface } from '../core/canvasSurface';
-import { onCanvasRecovery } from '../core/canvasRecovery';
+import {
+  allocCanvas,
+  CanvasContextUnavailableError,
+  surfaceContext,
+  type CanvasSurface,
+} from '../core/canvasSurface';
+import { onCanvasRecovery, reportCanvasAllocationFailure } from '../core/canvasRecovery';
 import { floorArtSeed } from './ground/floorArtSeed';
 import {
   registerPaintedSprite,
@@ -62,6 +67,14 @@ export const ENVIRONMENT_PAINT_BUDGET_MS = 8;
 const PAINT_COST_SMOOTHING = 0.25;
 
 const BYTES_PER_PIXEL = 4;
+
+/**
+ * How long a sheet the browser refused a surface for waits before it is asked
+ * for again. Canvas memory comes back only as other caches give theirs up, so
+ * asking on every frame would fail on every frame; a few seconds lets the
+ * memory-pressure recovery the refusal sets off run first.
+ */
+const DEFERRED_SHEET_RETRY_MS = 5000;
 
 /** One piece of a sheet: a material's patch, a prop's frame row, a facade. */
 export interface PaintStep {
@@ -124,6 +137,12 @@ export interface EnvironmentSheetPlan {
    * supply one.
    */
   readonly replan?: () => EnvironmentSheetPlan;
+  /**
+   * Gives back whatever the plan allocated up front to paint from, for a sheet
+   * dropped before its steps used it up. Omit it when the steps allocate
+   * nothing ahead of themselves.
+   */
+  readonly release?: () => void;
 }
 
 interface PendingSheet {
@@ -136,6 +155,12 @@ interface PendingSheet {
   published: boolean;
   /** Painted again after a purge, so landing bumps {@link repaintedSheetRevision}. */
   replayed: boolean;
+  /**
+   * No step is painted before this wall-clock time: set when a step of a
+   * published sheet was refused a surface, so the rows it still owes are
+   * painted later rather than retried on every frame.
+   */
+  retryAtMs: number;
 }
 
 /**
@@ -217,6 +242,7 @@ function dropIfStale(key: string): void {
     pendingSheet.plan.variesWithFloorSeed &&
     pendingSheet.artSeed !== current
   ) {
+    if (!pendingSheet.published) pendingSheet.plan.release?.();
     drop(key, pendingSheet.surface);
     pending.delete(key);
     const queued = queue.indexOf(key);
@@ -230,8 +256,64 @@ function dropIfStale(key: string): void {
  * `alreadyPainted` is not a failure — re-entering a floor from a building asks
  * for everything again — but it is the one outcome that fires no `onSettled`,
  * because there is nothing left to settle.
+ *
+ * `deferred` means the browser refused the sheet a surface. It is settled at
+ * once, so a caller queueing one sheet at a time carries on with the next, and
+ * the cache asks for it again itself once memory may have come back.
  */
-export type SheetRequestOutcome = 'queued' | 'alreadyQueued' | 'alreadyPainted';
+export type SheetRequestOutcome = 'queued' | 'alreadyQueued' | 'alreadyPainted' | 'deferred';
+
+/** A sheet the browser refused a surface for, waiting to be asked for again. */
+interface DeferredSheet {
+  readonly replan: () => EnvironmentSheetPlan;
+  readonly variesWithFloorSeed: boolean;
+  /** The floor art seed it was asked for under; one for another floor is let go. */
+  readonly artSeed: number;
+}
+
+const deferred = new Map<string, DeferredSheet>();
+let deferredRetryAtMs = 0;
+
+/**
+ * Holds a sheet that could not be given a surface, to be asked for again after
+ * {@link DEFERRED_SHEET_RETRY_MS} or the next canvas recovery, whichever is
+ * first. For a caller whose own planning was refused a surface, as well as for
+ * a refused request: either way the sheet must not be silently lost.
+ */
+export function deferEnvironmentSheet(
+  key: string,
+  variesWithFloorSeed: boolean,
+  replan: () => EnvironmentSheetPlan,
+): void {
+  deferred.set(key, { replan, variesWithFloorSeed, artSeed: floorArtSeed() });
+  deferredRetryAtMs = performance.now() + DEFERRED_SHEET_RETRY_MS;
+  reportCanvasAllocationFailure();
+}
+
+/** Moves the deferred sheets onto the repaint queue once their wait is over. */
+function retryDeferredSheets(): void {
+  if (deferred.size === 0 || performance.now() < deferredRetryAtMs) return;
+  const current = floorArtSeed();
+  for (const [key, sheet] of deferred) {
+    if (sheet.variesWithFloorSeed && sheet.artSeed !== current) continue;
+    replays.push({ key, replan: sheet.replan, variesWithFloorSeed: sheet.variesWithFloorSeed });
+  }
+  deferred.clear();
+}
+
+/**
+ * Sheets owed but not yet queued: repaints waiting their turn after a purge,
+ * and sheets the browser refused a surface for. For the `?perf` readout, which
+ * would otherwise show nothing owed while they are missing from the world.
+ */
+export function environmentSheetsAwaiting(): number {
+  return replays.length + deferred.size;
+}
+
+/** Sheets queued for painting now. For the `?perf` readout. */
+export function environmentSheetsQueued(): number {
+  return pending.size;
+}
 
 /**
  * Queues a sheet to be painted, unless it is already resident or already
@@ -243,7 +325,20 @@ export function requestEnvironmentSheet(plan: EnvironmentSheetPlan): SheetReques
   if (pending.has(plan.key)) return 'alreadyQueued';
   const scale = paintScaleNow();
   const surface = allocCanvas(Math.round(plan.widthPx * scale), Math.round(plan.heightPx * scale));
-  const ctx = surfaceContext(surface);
+  let ctx: CanvasRenderingContext2D;
+  try {
+    ctx = surfaceContext(surface);
+  } catch (error) {
+    surface.width = 0;
+    surface.height = 0;
+    if (!(error instanceof CanvasContextUnavailableError)) throw error;
+    deferEnvironmentSheet(plan.key, plan.variesWithFloorSeed, replanOf(plan));
+    // A bare replan reuses these steps and the surfaces they paint into.
+    if (plan.replan !== undefined) plan.release?.();
+    plan.onSettled?.();
+    return 'deferred';
+  }
+  deferred.delete(plan.key);
   ctx.scale(scale, scale);
   pending.set(plan.key, {
     plan,
@@ -254,6 +349,7 @@ export function requestEnvironmentSheet(plan: EnvironmentSheetPlan): SheetReques
     nextStep: 0,
     published: false,
     replayed: false,
+    retryAtMs: 0,
   });
   queue.push(plan.key);
   return 'queued';
@@ -358,12 +454,53 @@ function abandon(key: string, sheet: PendingSheet, error: unknown): void {
   if (!sheet.published) {
     drop(key, sheet.surface);
     resident.delete(key);
+    sheet.plan.release?.();
   }
   pending.delete(key);
   dequeue(key);
   // Told last, and told at all: a caller sequencing its sheets one at a time
   // would otherwise stop here and leave every sheet behind this one unqueued.
   sheet.plan.onSettled?.();
+}
+
+/**
+ * Stops painting a sheet a step of which the browser refused a surface. Unlike
+ * a painter's own failure this is no fault of the sheet: memory may be back in
+ * a moment. An unpublished sheet is held to be painted again from the start
+ * rather than lost for the floor; one already published stays queued with the
+ * rows it still owes, held off until the wait is over or the next recovery.
+ */
+function deferMidPaint(key: string, sheet: PendingSheet): void {
+  if (sheet.published) {
+    // Kept painting where it stopped, on the surface already drawn from: its
+    // remaining rows are owed, and `onSettled` waits until they are painted.
+    sheet.retryAtMs = performance.now() + DEFERRED_SHEET_RETRY_MS;
+    reportCanvasAllocationFailure();
+    return;
+  }
+  drop(key, sheet.surface);
+  resident.delete(key);
+  sheet.plan.release?.();
+  deferEnvironmentSheet(key, sheet.plan.variesWithFloorSeed, replanOf(sheet.plan));
+  pending.delete(key);
+  dequeue(key);
+  sheet.plan.onSettled?.();
+}
+
+/** The first queued sheet not held off by {@link PendingSheet.retryAtMs}, or null. */
+function nextPaintableKey(): string | null {
+  const now = performance.now();
+  for (let index = 0; index < queue.length;) {
+    const key = queue[index];
+    const sheet = pending.get(key);
+    if (sheet === undefined) {
+      queue.splice(index, 1);
+      continue;
+    }
+    if (sheet.retryAtMs <= now) return key;
+    index++;
+  }
+  return null;
 }
 
 function dequeue(key: string): void {
@@ -379,13 +516,9 @@ function dequeue(key: string): void {
 function drainQueue(budgetMs: number, mustProgress: boolean): number {
   let spentMs = 0;
   let startedAny = false;
-  while (queue.length > 0) {
-    const key = queue[0];
+  for (let key = nextPaintableKey(); key !== null; key = nextPaintableKey()) {
     const sheet = pending.get(key);
-    if (sheet === undefined) {
-      queue.shift();
-      continue;
-    }
+    if (sheet === undefined) continue;
     const step = sheet.plan.steps[sheet.nextStep];
     const owedFirstStep = mustProgress && !startedAny;
     if (!owedFirstStep && !fitsPaintAllowance(step.costClass, spentMs, budgetMs)) return spentMs;
@@ -408,8 +541,10 @@ function drainQueue(budgetMs: number, mustProgress: boolean): number {
       // unpaintable sheet. The sheet is abandoned instead of published with a
       // hole in it — an abandoned sheet draws as the fallback colour every
       // material already declares, which is a floor that looks flat rather than
-      // a floor with a gap in it.
-      abandon(key, sheet, error);
+      // a floor with a gap in it. A refused surface is the browser's doing,
+      // not the painter's, and is waited out instead.
+      if (error instanceof CanvasContextUnavailableError) deferMidPaint(key, sheet);
+      else abandon(key, sheet, error);
     } finally {
       const elapsed = performance.now() - startedAt;
       spentMs += elapsed;
@@ -439,6 +574,7 @@ function drainQueue(budgetMs: number, mustProgress: boolean): number {
  */
 export function beginEnvironmentArtFrame(): void {
   msPaintedThisFrame = 0;
+  retryDeferredSheets();
   requestNextReplay();
   if (paintDebtMs > 0) {
     paintDebtMs = Math.max(0, paintDebtMs - ENVIRONMENT_PAINT_BUDGET_MS);
@@ -464,6 +600,7 @@ export function beginEnvironmentArtFrame(): void {
  * Books no debt, since the caller is the one pacing itself.
  */
 export function paintEnvironmentArtFor(budgetMs: number, mustProgress: boolean): void {
+  retryDeferredSheets();
   requestNextReplay();
   drainQueue(budgetMs, mustProgress);
 }
@@ -529,10 +666,14 @@ function release(shouldRelease: (key: string, variesWithFloorSeed: boolean) => b
   for (const [key, sheet] of pending) {
     if (!shouldRelease(key, sheet.plan.variesWithFloorSeed)) continue;
     drop(key, sheet.surface);
+    if (!sheet.published) sheet.plan.release?.();
     pending.delete(key);
   }
   for (let index = queue.length - 1; index >= 0; index--) {
     if (!pending.has(queue[index])) queue.splice(index, 1);
+  }
+  for (const [key, sheet] of deferred) {
+    if (shouldRelease(key, sheet.variesWithFloorSeed)) deferred.delete(key);
   }
   // The queue the debt was owed against is gone, so the next floor's first frame
   // must not open paused. The cost estimates stay: they are a property of the
@@ -589,6 +730,7 @@ export function stagingSurfaceOfAtLeast(width: number, height: number): CanvasSu
 interface SheetReplay {
   readonly key: string;
   readonly replan: () => EnvironmentSheetPlan;
+  readonly variesWithFloorSeed: boolean;
 }
 
 /**
@@ -623,7 +765,21 @@ function requestNextReplay(): void {
     const next = replays.shift();
     if (next === undefined) return;
     if (resident.has(next.key) || pending.has(next.key)) continue;
-    const outcome = requestEnvironmentSheet(next.replan());
+    let plan: EnvironmentSheetPlan;
+    try {
+      plan = next.replan();
+    } catch (error) {
+      // Planning can allocate everything a sheet is composed from up front.
+      // Refused memory waits its turn again; any other failure is the
+      // painter's, which no retry would mend.
+      if (error instanceof CanvasContextUnavailableError) {
+        deferEnvironmentSheet(next.key, next.variesWithFloorSeed, next.replan);
+      } else {
+        console.warn(`[environmentArtCache] "${next.key}" could not be planned again`, error);
+      }
+      continue;
+    }
+    const outcome = requestEnvironmentSheet(plan);
     const replayed = pending.get(next.key);
     if (outcome === 'queued' && replayed !== undefined) replayed.replayed = true;
   }
@@ -643,15 +799,35 @@ function repaintAllEnvironmentArt(): void {
   const interruptedChains: Array<() => void> = [];
   for (const [key, sheet] of resident) {
     if (sheet.variesWithFloorSeed && sheet.artSeed !== current) continue;
-    owed.set(key, { key, replan: sheet.replan });
+    owed.set(key, {
+      key,
+      replan: sheet.replan,
+      variesWithFloorSeed: sheet.variesWithFloorSeed,
+    });
   }
   for (const key of queue) {
     const sheet = pending.get(key);
     if (sheet === undefined) continue;
     if (sheet.plan.variesWithFloorSeed && sheet.artSeed !== current) continue;
-    if (!owed.has(key)) owed.set(key, { key, replan: replanOf(sheet.plan) });
+    if (!owed.has(key)) {
+      owed.set(key, {
+        key,
+        replan: replanOf(sheet.plan),
+        variesWithFloorSeed: sheet.plan.variesWithFloorSeed,
+      });
+    }
     const settled = sheet.plan.onSettled;
     if (settled !== undefined) interruptedChains.push(settled);
+  }
+  for (const [key, sheet] of deferred) {
+    if (sheet.variesWithFloorSeed && sheet.artSeed !== current) continue;
+    if (!owed.has(key)) {
+      owed.set(key, {
+        key,
+        replan: sheet.replan,
+        variesWithFloorSeed: sheet.variesWithFloorSeed,
+      });
+    }
   }
   release(() => true);
   if (staging !== null) {
@@ -671,6 +847,9 @@ onCanvasRecovery((cause) => {
   // Under memory pressure the sheets are correct and the costliest art there is
   // to repaint; only lost pixels justify painting them again.
   if (cause === 'purged') repaintAllEnvironmentArt();
+  // A recovery gives memory back, so a refused sheet is worth asking for now.
+  deferredRetryAtMs = 0;
+  for (const sheet of pending.values()) sheet.retryAtMs = 0;
 });
 
 /** Drops everything, for the `?tiles` reroll and for a harness between runs. */

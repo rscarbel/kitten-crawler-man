@@ -71,3 +71,23 @@ export function surfaceContext(surface: CanvasSurface): CanvasRenderingContext2D
   }
   return ctx;
 }
+
+/** Gives a surface's pixels back at once rather than at the next collection. */
+export function releaseSurface(surface: CanvasSurface): void {
+  surface.width = 0;
+  surface.height = 0;
+}
+
+/**
+ * {@link surfaceContext} for a surface just allocated, which is given back if
+ * the browser refuses it a context: a caller that throws on would otherwise
+ * leave it holding its size until a collection.
+ */
+export function freshSurfaceContext(surface: CanvasSurface): CanvasRenderingContext2D {
+  try {
+    return surfaceContext(surface);
+  } catch (error) {
+    releaseSurface(surface);
+    throw error;
+  }
+}

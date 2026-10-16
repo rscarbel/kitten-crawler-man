@@ -17,11 +17,12 @@ function midSentence(siteName: string): string {
 }
 
 /** A spot label read as part of a list: "re-rope the bellows". */
-function asListItem(label: string): string {
+export function asListItem(label: string): string {
   return label.charAt(0).toLowerCase() + label.slice(1);
 }
 
-function listed(items: readonly string[]): string {
+/** Items read as one English list: "a, b and c". */
+export function listed(items: readonly string[]): string {
   if (items.length <= 1) return items.join('');
   return `${items.slice(0, -1).join(', ')} and ${items[items.length - 1]}`;
 }
@@ -88,11 +89,11 @@ const FOLLOW_UPS: NonEmpty<(siteName: string) => string> = [
   (siteName) =>
     `I understand you have made an end of things at ${midSentence(siteName)}. You are welcome at the farm whenever you find yourself in need of another occupation.`,
   (siteName) =>
-    `Word has reached me from ${midSentence(siteName)} that the work is sound. Such praise is not given lightly, I assure you. Come by the farm when you are ready for another.`,
+    `Word has reached me from ${midSentence(siteName)} that the work is sound. Such praise is not given lightly, I assure you. Come by the farm, or take one of my orders off a notice board, when you are ready for another.`,
   (siteName) =>
     `${siteName} informs me that the work is finished and the account settled. I shall endeavour to have something else prepared for you the next time you pass the farm.`,
   (siteName) =>
-    `I am told ${midSentence(siteName)} is standing more proudly than it has in years. One cannot ask much more of a building. There is, however, more work waiting for you at the farm.`,
+    `I am told ${midSentence(siteName)} is standing more proudly than it has in years. One cannot ask much more of a building. There is, however, more work waiting for you at the farm, and pinned to the notice boards besides.`,
 ];
 
 /**

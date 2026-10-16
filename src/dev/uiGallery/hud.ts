@@ -35,6 +35,26 @@ import { QUEST_BANNER_FRAMES, questBannerEntry } from '../../ui/QuestBanners';
 import { palette } from '../../ui/theme/tokens';
 import { drawMongoIcon, type MongoStage } from '../../sprites/mongoSprite';
 import type { DialogFixture } from './dialogs/fixture';
+import { siegeHudEntry } from '../../systems/briarHollow/siegeHudEntry';
+import { UPDATES_PER_SECOND } from '../../systems/briarHollow/structureRules';
+import type {
+  BellAlertView,
+  SiegeOutcomeView,
+} from '../../systems/briarHollow/VillageAssaultSystem';
+import {
+  BELL_ALERT_DETAIL,
+  BELL_ALERT_HEADLINE,
+  SIEGE_LOSS_COPY,
+  bellThresholdDetail,
+} from '../../systems/briarHollow/siegeAlertCopy';
+import {
+  siegeBellAlertSurface,
+  siegeHudKeepouts,
+  siegeLossExplainerSurface,
+  siegeOutcomeSurface,
+  type SiegeHudKeepouts,
+} from '../../ui/hud/siegeBellAlert';
+import { siegeVictorySurface } from '../../ui/hud/siegeVictoryCelebration';
 import { buildFixture as inventoryFixture } from './inventory';
 
 const FIXTURE_TOAST_TICKS = 20;
@@ -70,6 +90,26 @@ const COOLDOWN_FRACTION = 0.4;
 const MINIMAP_TILE = 8;
 /** The dynamite stack: its tooltip carries a description long enough to wrap. */
 const HOVERED_HOTBAR_SLOT = 2;
+/** The siege fixtures show the third of the four waves. */
+const SIEGE_FIXTURE_WAVE = 3;
+const SIEGE_FIXTURE_WAVE_COUNT = 4;
+/** Past the card's slam and shake, well before its fade. */
+const SIEGE_ALERT_AGE_FRAMES = 90;
+const SIEGE_ALERT_FRAMES_LEFT = 180;
+const SIEGE_ALERT_BELL_FRACTION = 0.62;
+const SIEGE_THRESHOLD_SHARE = 0.5;
+/** The camera's corner, and the bell up and to the left of everything it shows. */
+const SIEGE_FIXTURE_CAMERA = { x: 2400, y: 2000 } as const;
+const SIEGE_BELL_WORLD = { x: 1700, y: 1500 } as const;
+const VICTORY_SLAMMING_SECONDS = 0.3;
+const VICTORY_FIREWORKS_SECONDS = 3;
+const VICTORY_HAND_OFF_SECONDS = 7;
+/** The victory as it slams in, with the fireworks going, and once the hand-off line is up. */
+const SIEGE_VICTORY_SECONDS = [
+  VICTORY_SLAMMING_SECONDS,
+  VICTORY_FIREWORKS_SECONDS,
+  VICTORY_HAND_OFF_SECONDS,
+] as const;
 
 function item(id: ItemId, quantity: number): InventoryItem {
   return { ...ITEM_DEF[id], quantity };
@@ -242,7 +282,7 @@ function encounterEntry(): TopBandEntry {
         value: ENCOUNTER_WAVE_FRACTION,
         max: 1,
         meterKind: 'hp',
-        label: 'Hollow Bell',
+        label: 'Clocktower',
       },
     ],
   });
@@ -438,6 +478,141 @@ function bugabooEntry(): TopBandEntry {
   });
 }
 
+/** A quiet HUD under the siege's card, for the siege's alert and celebration to float over. */
+function siegeHud(name: string, bellFraction: number): DialogFixture {
+  return hudFixture({
+    name,
+    status: [],
+    skillPoints: 0,
+    dockExtras: ['build'],
+    topBand: () => [
+      siegeHudEntry({
+        headline: `Defend Briar Hollow — Wave ${SIEGE_FIXTURE_WAVE}/${SIEGE_FIXTURE_WAVE_COUNT} (west)`,
+        bars: [{ id: 'bell', label: 'Clocktower', fraction: bellFraction, kind: 'hp', flash: 0 }],
+      }),
+    ],
+    lootBanner: false,
+    toasts: 'none',
+    expanded: false,
+  });
+}
+
+/**
+ * The clocktower alert mid-hold, with the bell off screen to the north-west
+ * of the camera, so the edge pulse, the edge badge and the card all show; a
+ * null `detail` is the stretch after the card has gone, the bell still under
+ * attack.
+ */
+function siegeAlertFixture(
+  name: string,
+  detail: string | null,
+  bellFraction: number,
+): DialogFixture {
+  const hud = siegeHud(name, bellFraction);
+  const view: BellAlertView = {
+    underAttack: true,
+    bellInView: false,
+    banner:
+      detail === null
+        ? null
+        : {
+            headline: BELL_ALERT_HEADLINE,
+            detail,
+            age: SIEGE_ALERT_AGE_FRAMES,
+            framesLeft: SIEGE_ALERT_FRAMES_LEFT,
+          },
+    bellFraction,
+    bellWorld: SIEGE_BELL_WORLD,
+  };
+  return {
+    name,
+    surfaces: (shown) => {
+      const hudSurfaces = hud.surfaces(shown);
+      const keepouts = drawnHudKeepouts(hudSurfaces);
+      return [
+        ...hudSurfaces,
+        siegeBellAlertSurface(`siege-alert-${name}`, () => ({
+          view: shown() ? view : null,
+          camera: SIEGE_FIXTURE_CAMERA,
+          hud: keepouts,
+        })),
+      ];
+    },
+  };
+}
+
+/** The keep-outs of the HUD among `surfaces` as it last drew, as the scene hands them to the siege. */
+function drawnHudKeepouts(surfaces: readonly Surface[]): () => SiegeHudKeepouts | null {
+  const hud = surfaces.find((surface) => surface instanceof HudSurface);
+  return () => (hud instanceof HudSurface ? siegeHudKeepouts(hud) : null);
+}
+
+/** The bell-fall banner a lost siege ends on, mid-hold. */
+function siegeOutcomeFixture(name: string): DialogFixture {
+  const hud = siegeHud(name, 0);
+  const copy = SIEGE_LOSS_COPY.bell_fell;
+  const outcome: SiegeOutcomeView = {
+    headline: copy.headline,
+    detail: copy.detail,
+    age: SIEGE_ALERT_AGE_FRAMES,
+    framesLeft: SIEGE_ALERT_FRAMES_LEFT,
+  };
+  return {
+    name,
+    surfaces: (shown) => {
+      const hudSurfaces = hud.surfaces(shown);
+      const keepouts = drawnHudKeepouts(hudSurfaces);
+      return [
+        ...hudSurfaces,
+        siegeOutcomeSurface(`siege-outcome-${name}`, () => ({
+          outcome: shown() ? outcome : null,
+          hud: keepouts,
+        })),
+      ];
+    },
+  };
+}
+
+/** The explainer that halts the game once the bell-fall banner has had its moment. */
+function siegeLossExplainerFixture(name: string): DialogFixture {
+  const hud = siegeHud(name, 0);
+  return {
+    name,
+    surfaces: (shown) => [
+      ...hud.surfaces(shown),
+      siegeLossExplainerSurface(`siege-loss-${name}`, { isOpen: shown, dismiss: record }),
+    ],
+  };
+}
+
+/** The victory celebration `seconds` into its fanfare. */
+function siegeVictoryFixture(name: string, secondsIn: number): DialogFixture {
+  const hud = siegeHud(name, 1);
+  const ageFrames = Math.round(secondsIn * UPDATES_PER_SECOND);
+  return {
+    name,
+    surfaces: (shown) => [
+      ...hud.surfaces(shown),
+      siegeVictorySurface(`siege-victory-${name}`, () => (shown() ? { ageFrames } : null)),
+    ],
+  };
+}
+
+const SIEGE_FIXTURES: readonly DialogFixture[] = [
+  siegeAlertFixture('siege-bell-alert', BELL_ALERT_DETAIL, SIEGE_ALERT_BELL_FRACTION),
+  siegeAlertFixture(
+    'siege-bell-alert-threshold',
+    bellThresholdDetail(SIEGE_THRESHOLD_SHARE),
+    SIEGE_THRESHOLD_SHARE,
+  ),
+  siegeAlertFixture('siege-bell-pointer', null, SIEGE_ALERT_BELL_FRACTION),
+  siegeOutcomeFixture('siege-bell-fell'),
+  siegeLossExplainerFixture('siege-loss-explainer'),
+  ...SIEGE_VICTORY_SECONDS.map((secondsIn) =>
+    siegeVictoryFixture(`siege-victory-${secondsIn}s`, secondsIn),
+  ),
+];
+
 /**
  * The HUD with the bag open over it and a hotbar slot hovered: the slot's
  * tooltip must draw above the bag, not beneath it.
@@ -586,4 +761,5 @@ export const HUD_FIXTURES: readonly DialogFixture[] = [
     expanded: false,
   }),
   hotbarTooltipOverMenu(),
+  ...SIEGE_FIXTURES,
 ];

@@ -502,10 +502,12 @@ export const SFX_GROUPS: Record<SfxGroup, readonly SoundId[]> = {
 
   /**
    * The floor-3 overworld/town itself: sky fowl and Krasue in the wilderness,
-   * Mongo/mercenary escorts, and the Dark Knight's rumble (shared with
-   * `murderMysteryQuest`'s tower confrontation).
+   * Mongo/mercenary escorts, the Dark Knight's rumble (shared with
+   * `murderMysteryQuest`'s tower confrontation), and the paper of the notice
+   * boards in the square and in Briar Hollow.
    */
   level3: [
+    ...INTERIOR_CUES.noticeUnfold,
     'skyfowl_1',
     'skyfowl_2',
     ...TOWN_VOICE_SFX_IDS,

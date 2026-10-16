@@ -55,7 +55,11 @@ import { TILE_SIZE } from '../../core/constants';
 import type { VillagerPartyState } from './villagerCircumstances';
 import { partyCount } from '../../core/partyResources';
 import { hostileWithinAttackRange } from '../interactionPromptGate';
-import { interactionPromptsDrawnThisFrame } from '../../ui/InteractionPrompt';
+import {
+  drawInteractionPrompt,
+  interactionPromptsDrawnThisFrame,
+} from '../../ui/InteractionPrompt';
+import type { TilePoint } from '../../map/town/townPlan';
 import type { GroundPickupSystem } from '../GroundPickupSystem';
 import {
   type BlastThreat,
@@ -73,6 +77,15 @@ import { activeDifficultyProfile } from '../../core/difficultyProfiles';
 import type { Rect } from '../../ui/core/geom';
 import type { TopBandEntry } from '../../ui/hud/topBand';
 import { VillageAssaultSystem } from './VillageAssaultSystem';
+import {
+  siegeBellAlertSurface,
+  siegeLossExplainerSurface,
+  siegeOutcomeSurface,
+  type SiegeHudKeepouts,
+} from '../../ui/hud/siegeBellAlert';
+import { siegeVictorySurface } from '../../ui/hud/siegeVictoryCelebration';
+import { ARROW_PRIORITY, drawArrowAbovePlayer, type ArrowCandidate } from '../../ui/WorldArrow';
+import { palette } from '../../ui/theme/tokens';
 import type { MusicClaims } from '../../audio/AudioScope';
 import { VillageQuestSystem } from './VillageQuestSystem';
 import { VillageQuestGuide } from './VillageQuestGuide';
@@ -170,7 +183,19 @@ export interface BriarHollowKitDeps {
    * construction contract held there. Absent means none ever does.
    */
   readonly skyfowlRoomOwnedByStory?: (buildingName: string) => boolean;
+  /** Opens the village notice board's panel. Absent means the board cannot be read. */
+  readonly openNoticeBoard?: () => void;
+  /** Whether optional scenery (chimney smoke, lamp glows) is drawn this frame. Absent means always. */
+  readonly fullDetail?: () => boolean;
 }
+
+function alwaysFullDetail(): boolean {
+  return true;
+}
+
+/** How near the village notice board a crawler must stand to read it: the plaza board's reach. */
+const VILLAGE_BOARD_REACH_TILES = 1.6;
+const NOTICE_BOARD_PROMPT_LABEL = 'Read';
 
 /** The HUD chrome `BriarHollowKit.renderHud` draws around, in CSS pixels. */
 export interface BriarHollowHudChrome {
@@ -190,7 +215,7 @@ export class BriarHollowKit {
    * smoke, lamp glow, laundry. `ambience.sawmill.working` and
    * `ambience.bell.ringing` are the switches the sawmill and the siege flip.
    */
-  readonly ambience = new VillageAmbience();
+  readonly ambience: VillageAmbience;
   /** Reused every frame so the merged entity list costs no allocation. */
   private readonly entityBuffer: TownPropRenderable[] = [];
   /**
@@ -253,6 +278,8 @@ export class BriarHollowKit {
   readonly questGuide: VillageQuestGuide | null;
   /** The recruiter posted in the Over City's own square; null on a map with no village. */
   readonly recruiter: RecruiterSystem | null;
+  /** The village notice board's tile; null on a map with no village or no board. */
+  private readonly noticeBoardTile: TilePoint | null;
 
   /** The village's durable state, for a dev preset that jumps the questline ahead of where it opens unlocks. */
   get state(): BriarHollowState {
@@ -262,7 +289,11 @@ export class BriarHollowKit {
   constructor(sceneWorld: SceneWorld, deps: BriarHollowKitDeps) {
     this.world = sceneWorld;
     this.deps = deps;
+    this.ambience = new VillageAmbience(deps.fullDetail ?? alwaysFullDetail);
     const site = sceneWorld.gameMap.briarHollow;
+    const boardPlacement = site?.props.find((placement) => placement.prop === 'notice_board');
+    this.noticeBoardTile =
+      boardPlacement === undefined ? null : { x: boardPlacement.x, y: boardPlacement.y };
     this.villagers =
       site === null
         ? null
@@ -310,6 +341,7 @@ export class BriarHollowKit {
             villagers: () => this.villagers?.villagers ?? [],
             clockSeconds: () => deps.state.villagers.clockSeconds,
             isInSafeRoom: (point) => deps.isInSafeRoom?.(point) === true,
+            fullDetail: deps.fullDetail,
             worldHalted: () => deps.worldHalted?.() === true,
           });
     const villagers = this.villagers;
@@ -514,6 +546,8 @@ export class BriarHollowKit {
             bossIntro: (name, color) => deps.bossIntro?.(name, color),
             music: () => deps.music?.() ?? null,
             crawlers: () => [deps.human, deps.cat],
+            onVictoryFanfareEnded: () =>
+              deps.menus.toasts.post(VICTORY_REWARD_NOTICE, { tone: 'success' }),
           });
     // The tower's art is baked once per map build; a repair mid-visit has to
     // force the live scene to redraw it without waiting for a door to do that
@@ -804,6 +838,17 @@ export class BriarHollowKit {
     // Same order as `tryInteract`, so the prompt names what the press reaches.
     if (this.livestock?.renderPrompt(ctx, camX, camY, active) === true) return true;
     if (this.services?.renderPrompt(ctx, camX, camY, active) === true) return true;
+    const board = this.boardInReach(active);
+    if (board !== null) {
+      drawInteractionPrompt(
+        ctx,
+        board.x * TILE_SIZE - camX,
+        board.y * TILE_SIZE - camY,
+        TILE_SIZE,
+        NOTICE_BOARD_PROMPT_LABEL,
+      );
+      return true;
+    }
     const owedContact = this.owedContactInReach(active);
     if (owedContact?.kind === 'villager') {
       return this.villagers?.renderPrompt(ctx, camX, camY, active) === true;
@@ -846,6 +891,7 @@ export class BriarHollowKit {
     // A machine at the sawmill before whoever works beside it, unless that
     // villager stands nearer than the machine does.
     if (this.services?.tryInteract(active) === true) return true;
+    if (this.tryReadNoticeBoard(active)) return true;
     if (this.tryTalkToOwedContact(active)) return true;
     if (this.recruiter?.tryInteract(active) === true) return true;
     const soldier = this.soldierIsNearer(active) ? this.soldiers?.talkTarget(active) : null;
@@ -878,6 +924,33 @@ export class BriarHollowKit {
     if (this.villagers?.talkTarget(active)?.id === contact) return { kind: 'villager' };
     const soldier = this.soldiers?.talkTarget(active)?.soldier ?? null;
     return soldier?.soldierId === contact ? { kind: 'soldier', soldier } : null;
+  }
+
+  /**
+   * The notice board's tile when a press from `active` would read it: in
+   * reach, with no hostile in attack range, and no villager nearer. Villagers
+   * loiter on the tile in front of the board, and one standing nearer is
+   * spoken to first.
+   */
+  private boardInReach(active: HumanPlayer | CatPlayer): TilePoint | null {
+    const board = this.noticeBoardTile;
+    if (board === null || this.deps.openNoticeBoard === undefined) return null;
+    if (hostileWithinAttackRange(active, this.world.roster.grid)) return null;
+    const boardTiles =
+      Math.hypot(board.x * TILE_SIZE - active.x, board.y * TILE_SIZE - active.y) / TILE_SIZE;
+    if (boardTiles > VILLAGE_BOARD_REACH_TILES) return null;
+    const villager = this.villagers?.talkTarget(active) ?? null;
+    if (villager !== null) {
+      const villagerTiles = Math.hypot(villager.x - active.x, villager.y - active.y) / TILE_SIZE;
+      if (villagerTiles < boardTiles) return null;
+    }
+    return board;
+  }
+
+  private tryReadNoticeBoard(active: HumanPlayer | CatPlayer): boolean {
+    if (this.boardInReach(active) === null) return false;
+    this.deps.openNoticeBoard?.();
+    return true;
   }
 
   private tryTalkToOwedContact(active: HumanPlayer | CatPlayer): boolean {
@@ -982,6 +1055,7 @@ export class BriarHollowKit {
     if (this.contracts?.wouldInteract(active, this.competingTiles(active)) === true) return true;
     if (this.livestock?.wouldPet(active) === true) return true;
     if (this.services?.wouldInteract(active) === true) return true;
+    if (this.boardInReach(active) !== null) return true;
     if (this.recruiter?.wouldInteract(active) === true) return true;
     const villagers = this.villagers;
     return (
@@ -1252,9 +1326,77 @@ export class BriarHollowKit {
    * `Conversation`, whose own surface the scene mounts.
    *
    * @param camera Where the camera is, for anchoring the structure menu.
+   * @param hud The HUD as last drawn, which the siege's alert cards keep clear of.
    */
-  surfaces(camera: () => { readonly x: number; readonly y: number }): Surface[] {
-    return [...(this.defences?.surfaces(camera) ?? []), ...(this.services?.surfaces() ?? [])];
+  surfaces(
+    camera: () => { readonly x: number; readonly y: number },
+    hud: () => SiegeHudKeepouts | null = () => null,
+  ): Surface[] {
+    return [
+      ...(this.defences?.surfaces(camera) ?? []),
+      ...(this.services?.surfaces() ?? []),
+      ...this.siegeSurfaces(camera, hud),
+    ];
+  }
+
+  /**
+   * The siege's alarm, ending banner, loss explainer and victory celebration.
+   * The floating ones stand down while a menu halts the world: they sit in
+   * the toast band, above every menu, and would otherwise draw over it.
+   */
+  private siegeSurfaces(
+    camera: () => { readonly x: number; readonly y: number },
+    hud: () => SiegeHudKeepouts | null,
+  ): Surface[] {
+    const assault = this.assault;
+    if (assault === null) return [];
+    const floats = (): boolean => this.deps.worldHalted?.() !== true;
+    return [
+      siegeBellAlertSurface('siege-bell-alert', () => ({
+        view: floats() ? assault.bellAlertView() : null,
+        camera: camera(),
+        hud,
+      })),
+      siegeOutcomeSurface('siege-outcome', () => ({
+        outcome: floats() ? assault.outcomeView() : null,
+        hud,
+      })),
+      siegeLossExplainerSurface('siege-loss-explainer', {
+        isOpen: () => assault.lossExplainerOpen,
+        dismiss: () => assault.dismissLossExplainer(),
+      }),
+      siegeVictorySurface('siege-victory', () => (floats() ? assault.victoryCelebration : null)),
+    ];
+  }
+
+  /**
+   * The arrow toward the clocktower while the dead are striking it and it is
+   * out of sight. It outranks every arrow but a downed companion's.
+   */
+  siegeBellArrowCandidate(
+    ctx: CanvasRenderingContext2D,
+    active: { readonly x: number; readonly y: number },
+    camX: number,
+    camY: number,
+    avoidRect?: Rect,
+  ): ArrowCandidate | null {
+    const view = this.assault?.bellAlertView() ?? null;
+    if (view === null || !view.underAttack || view.bellInView) return null;
+    return {
+      priority: ARROW_PRIORITY.SIEGE_BELL,
+      draw: () =>
+        drawArrowAbovePlayer(
+          ctx,
+          active.x,
+          active.y,
+          view.bellWorld.x,
+          view.bellWorld.y,
+          camX,
+          camY,
+          palette.state.danger,
+          { avoidRect },
+        ),
+    };
   }
 
   /**
@@ -1361,6 +1503,8 @@ export class BriarHollowKit {
 }
 
 const NO_CAMERA_OFFSET = { x: 0, y: 0 } as const;
+/** Posted as the victory fanfare ends, pointing the party at the Mayor, who gives the reward. */
+const VICTORY_REWARD_NOTICE = 'Speak with Mayor Bramblewick to claim your reward';
 
 /** How far a stick still in Carl's hand could end up blasting: a full throw plus the blast. */
 const STICK_IN_HAND_REACH_TILES = 12;

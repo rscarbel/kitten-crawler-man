@@ -240,6 +240,7 @@ function takes(
  */
 const SOUND_CAPTIONS: Readonly<Partial<Record<SoundId, SoundCaption>>> = {
   bell_alarm: always('Alarm bell rings'),
+  bell_toll_hit: always('Clocktower struck'),
   caught_alarm_sting: always('Alarm blares'),
   wheel_warning_klaxon_loop: always('Warning klaxon blares'),
   level_timer_warning: always('Collapse warning sounds'),

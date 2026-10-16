@@ -192,6 +192,13 @@ export function footprintTiles(footprint: TileFootprint): Array<{ x: number; y: 
   return tiles;
 }
 
+/** Adds the `tileCoordKey` of every tile in a footprint to `into`. */
+function addFootprintTiles(into: Set<number>, x: number, y: number, w: number, h: number): void {
+  for (let dy = 0; dy < h; dy++) {
+    for (let dx = 0; dx < w; dx++) into.add(tileCoordKey(x + dx, y + dy));
+  }
+}
+
 /** Distance from a point to the nearest point of a tile rectangle, in pixels. */
 function distanceToFootprintPx(px: number, py: number, footprint: TileFootprint): number {
   const left = footprint.x * TILE_SIZE;
@@ -212,6 +219,43 @@ function contentAt(structure: TileContent[][], x: number, y: number): TileConten
   return x >= 0 && x < row.length ? row[x] : undefined;
 }
 
+/** A trebuchet's record beside the ref that names it. */
+export interface TrebuchetRef {
+  readonly record: TrebuchetStructureRecord;
+  readonly ref: StructureRef;
+}
+
+/** What a segment's tiles show; a change to any of it rewrites them on the map. */
+interface SegmentLook {
+  readonly type: number;
+  readonly wallTier: PalisadeTier | undefined;
+  readonly damageStage: number;
+  readonly spiked: boolean;
+}
+
+function sameSegmentLook(a: SegmentLook, b: SegmentLook): boolean {
+  return (
+    a.type === b.type &&
+    a.wallTier === b.wallTier &&
+    a.damageStage === b.damageStage &&
+    a.spiked === b.spiked
+  );
+}
+
+/** Which layer of a tile's art a change reaches: the baked ground, or only the decoration over it. */
+type DirtyLayer = 'base' | 'decoration';
+
+/**
+ * Whether a segment tile's change reaches the ground baked under it. A
+ * standing palisade's base pass is only the ground it stands on, so its
+ * damage stage, tier and spikes are decoration; a fallen segment is painted
+ * whole into the ground, rubble coloured by the tier it fell from.
+ */
+function baseArtChanges(content: TileContent, look: SegmentLook): boolean {
+  if (content.type !== look.type) return true;
+  return look.type === HOLLOW_PALISADE_GAP && content.wallTier !== look.wallTier;
+}
+
 export class DefenseStructures {
   private readonly deps: DefenseStructuresDeps;
   private readonly segmentById = new Map<string, PalisadeSegmentDef>();
@@ -227,6 +271,15 @@ export class DefenseStructures {
   private readonly reservations = new Map<string, TileFootprint>();
   /** The `state.structures` array the map was last synced against; a restore swaps it. */
   private syncedStructures: readonly StructureRecord[] | null = null;
+  private trebuchetList: readonly TrebuchetStructureRecord[] = [];
+  private snareList: readonly SnareStructureRecord[] = [];
+  private trebuchetRefList: readonly TrebuchetRef[] = [];
+  /** The structure list, and its length, the two lists above were filtered from. */
+  private engineListsSource: readonly StructureRecord[] | null = null;
+  private engineListsLength = 0;
+  /** Reused by `syncStructureBlocks`, which runs on every structure change. */
+  private readonly wantedStructureTiles = new Set<number>();
+  private readonly releasedStructureTiles: number[] = [];
   private gateShakeSecondsLeft = 0;
   private _gateStruckAtSeconds: number | null = null;
 
@@ -408,16 +461,47 @@ export class DefenseStructures {
     return null;
   }
 
-  get trebuchets(): TrebuchetStructureRecord[] {
-    return this.deps.state.structures.filter(
-      (record): record is TrebuchetStructureRecord => record.kind === 'trebuchet',
-    );
+  /**
+   * Read by every attacker every frame, so filtered once per change to the
+   * structure list rather than per access. A restore swaps the array and a
+   * build or dismantle changes its length, and either refilters.
+   */
+  get trebuchets(): readonly TrebuchetStructureRecord[] {
+    this.refreshEngineLists();
+    return this.trebuchetList;
   }
 
-  get snares(): SnareStructureRecord[] {
-    return this.deps.state.structures.filter(
+  get snares(): readonly SnareStructureRecord[] {
+    this.refreshEngineLists();
+    return this.snareList;
+  }
+
+  /**
+   * Every trebuchet with its ref built once, for a caller that names each one
+   * every frame per attacker. Includes broken ones; check `record.broken`.
+   */
+  get trebuchetRefs(): readonly TrebuchetRef[] {
+    this.refreshEngineLists();
+    return this.trebuchetRefList;
+  }
+
+  private refreshEngineLists(): void {
+    const structures = this.deps.state.structures;
+    if (this.engineListsSource === structures && this.engineListsLength === structures.length) {
+      return;
+    }
+    this.engineListsSource = structures;
+    this.engineListsLength = structures.length;
+    this.trebuchetList = structures.filter(
+      (record): record is TrebuchetStructureRecord => record.kind === 'trebuchet',
+    );
+    this.snareList = structures.filter(
       (record): record is SnareStructureRecord => record.kind === 'snare',
     );
+    this.trebuchetRefList = this.trebuchetList.map((record) => ({
+      record,
+      ref: { kind: 'trebuchet', key: structureKey(record.x, record.y) },
+    }));
   }
 
   /** The record behind a ref, or null for the gate, an untouched fence, or a ref that no longer exists. */
@@ -676,10 +760,14 @@ export class DefenseStructures {
     // party's to open.
     if (source === 'player') return;
     const record = this.segmentRecord(id);
+    const lookBefore = this.segmentLook(id);
+    const syncIfLookChanged = (): void => {
+      if (!sameSegmentLook(lookBefore, this.segmentLook(id))) this.syncMap();
+    };
     const overflow = this.absorbWithSpikes(record, amount, attacker, source);
     if (overflow <= 0) {
       // Spikes worn through change the wall's look even when the wall itself is untouched.
-      this.syncMap();
+      syncIfLookChanged();
       return;
     }
     record.hp = Math.max(0, record.hp - overflow);
@@ -688,7 +776,7 @@ export class DefenseStructures {
     if (anchor !== undefined) this.emitDamaged('segment', anchor.x, anchor.y);
     if (record.hp > 0) {
       this.playBlowSound(tier === 'wood' ? WOOD_WALL_HIT_SOUND : STONE_WALL_HIT_SOUND, attacker);
-      this.syncMap();
+      syncIfLookChanged();
       return;
     }
     record.formerTier = tier;
@@ -1148,12 +1236,13 @@ export class DefenseStructures {
           (content.damageStage ?? DAMAGE_STAGE_INTACT) === look.damageStage &&
           (content.wallSpiked === true) === look.spiked;
         if (unchanged) continue;
+        const baseChanged = baseArtChanges(content, look);
         content.type = look.type;
         content.wallTier = look.wallTier;
         content.damageStage =
           look.damageStage === DAMAGE_STAGE_INTACT ? undefined : look.damageStage;
         content.wallSpiked = look.spiked ? true : undefined;
-        this.markTileAndNeighboursDirty(tile.x, tile.y);
+        this.markTileAndNeighboursDirty(tile.x, tile.y, baseChanged ? 'base' : 'decoration');
         this.deps.onTileChanged(tile.x, tile.y);
       }
     }
@@ -1162,7 +1251,7 @@ export class DefenseStructures {
         const content = contentAt(structure, tile.x, tile.y);
         if (content !== undefined && content.type !== HOLLOW_GATE) {
           content.type = HOLLOW_GATE;
-          this.markTileAndNeighboursDirty(tile.x, tile.y);
+          this.markTileAndNeighboursDirty(tile.x, tile.y, 'base');
         }
       }
     }
@@ -1185,16 +1274,12 @@ export class DefenseStructures {
     const broken = this.deps.state.quest.bellTowerBroken;
     if ((content.bellTowerBroken === true) === broken) return;
     content.bellTowerBroken = broken ? true : undefined;
-    this.markTileAndNeighboursDirty(bellTile.x, bellTile.y);
+    // The tower is a prop standing on ground that does not change with it.
+    this.markTileAndNeighboursDirty(bellTile.x, bellTile.y, 'decoration');
     this.deps.onTileChanged(bellTile.x, bellTile.y);
   }
 
-  private segmentLook(id: string): {
-    type: number;
-    wallTier: PalisadeTier | undefined;
-    damageStage: number;
-    spiked: boolean;
-  } {
+  private segmentLook(id: string): SegmentLook {
     const record = this.findSegmentRecord(id);
     if (record === null) {
       return {
@@ -1229,23 +1314,33 @@ export class DefenseStructures {
   }
 
   /** A painter that reads its neighbours needs them re-baked too, or a chunk border keeps a stale seam. */
-  private markTileAndNeighboursDirty(tileX: number, tileY: number): void {
+  private markTileAndNeighboursDirty(tileX: number, tileY: number, layer: DirtyLayer): void {
+    const gameMap = this.deps.gameMap;
     for (let dy = -1; dy <= 1; dy++) {
-      for (let dx = -1; dx <= 1; dx++) this.deps.gameMap.markTileDirty(tileX + dx, tileY + dy);
+      for (let dx = -1; dx <= 1; dx++) {
+        if (layer === 'base') gameMap.markTileDirty(tileX + dx, tileY + dy);
+        else gameMap.markDecorationDirty(tileX + dx, tileY + dy);
+      }
     }
   }
 
   private syncStructureBlocks(): void {
     const gameMap = this.deps.gameMap;
-    const wanted = new Set<number>();
-    const addFootprint = (footprint: TileFootprint): void => {
-      for (const tile of footprintTiles(footprint)) wanted.add(tileCoordKey(tile.x, tile.y));
-    };
-    for (const record of this.trebuchets) addFootprint(trebuchetFootprint(record.x, record.y));
-    for (const footprint of this.reservations.values()) addFootprint(footprint);
-    for (const key of [...gameMap.structureTileKeys()]) {
-      if (!wanted.has(key)) gameMap.unblockStructureTile(tileKeyX(key), tileKeyY(key));
+    const wanted = this.wantedStructureTiles;
+    wanted.clear();
+    for (const record of this.trebuchets) {
+      addFootprintTiles(wanted, record.x, record.y, TREBUCHET_WIDTH_TILES, TREBUCHET_HEIGHT_TILES);
     }
+    for (const footprint of this.reservations.values()) {
+      addFootprintTiles(wanted, footprint.x, footprint.y, footprint.w, footprint.h);
+    }
+    // Collected before unblocking, since unblocking edits the set being walked.
+    const released = this.releasedStructureTiles;
+    released.length = 0;
+    for (const key of gameMap.structureTileKeys()) {
+      if (!wanted.has(key)) released.push(key);
+    }
+    for (const key of released) gameMap.unblockStructureTile(tileKeyX(key), tileKeyY(key));
     for (const key of wanted) {
       if (!gameMap.isStructureTile(tileKeyX(key), tileKeyY(key))) {
         gameMap.blockStructureTile(tileKeyX(key), tileKeyY(key));

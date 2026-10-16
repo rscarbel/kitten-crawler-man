@@ -35,8 +35,8 @@ const UI_SIZE_CHOICES: readonly Choice<UiSize>[] = [
 ];
 
 /**
- * One global selector rather than a per-bounty picker: a second control at
- * Shady's board would invite toggling for the reward right before a kill.
+ * One global selector rather than a per-bounty picker: a second control in
+ * Shady's bounty offer would invite toggling for the reward right before a kill.
  */
 const DIFFICULTY_CHOICES: readonly Choice<Difficulty>[] = DIFFICULTY_ORDER.map((value) => ({
   value,
@@ -55,6 +55,8 @@ const SOUND_CAPTIONS_HINT =
 
 const MONGO_AUTO_SUMMON_HINT =
   'While you play the human, the cat sends Mongo in when enemies are near. Also in the follower menu.';
+const QUEST_ROUTE_TRAIL_HINT =
+  'Dots on the ground lead the way to the quest pinned in your Journal. The arrow points the way either way.';
 
 function volumeSlider(
   layout: SectionLayout,
@@ -174,6 +176,16 @@ function renderSettings(layout: SectionLayout, ctx: PauseContext): void {
     onTap: () => settings.setCatAutoSummonsMongo(!autoSummon),
   });
   layout.paragraph(MONGO_AUTO_SUMMON_HINT, 'muted', ui.theme.space.md);
+
+  layout.heading('Quests');
+  const routeTrail = settings.questRouteTrail;
+  wideButton(layout, {
+    id: 'quest-route-trail',
+    label: `Quest route trail: ${onOff(routeTrail)}`,
+    selected: routeTrail,
+    onTap: () => settings.setQuestRouteTrail(!routeTrail),
+  });
+  layout.paragraph(QUEST_ROUTE_TRAIL_HINT, 'muted', ui.theme.space.md);
 
   layout.heading('Controls');
   wideButton(layout, {

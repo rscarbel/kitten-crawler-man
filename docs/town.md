@@ -31,16 +31,16 @@ tile's world-pixel column so the battlement runs continuous across tile boundari
 
 ### Districts
 
-| District          | Where          | Buildings                                                                                                                                |
-| ----------------- | -------------- | ---------------------------------------------------------------------------------------------------------------------------------------- |
-| **Civic Terrace** | north edge     | Town Center Tower (set into the north wall, so its spire overhangs the fields)                                                           |
-| **Garrison Row**  | north band     | The Barracks (the garrison), Cartwright's Workshop, Plumbline Farm (Wendell's home), Blackwood Lodge (dead-end alley — the cult hideout) |
-| **Market Plaza**  | centre         | — fountain, stalls, notice board, fortune teller, benches, well                                                                          |
-| **Plaza Ring**    | flanking plaza | Temple of the Sky, Herb & Remedy, General Store, The Sleeping Cat Inn (the town's safe room)                                             |
-| **Market Row**    | south of plaza | Old Hilda's Cottage, The Horned Flagon, The Rusty Anvil                                                                                  |
-| **Low Quarter**   | south band     | The Desperado Club, The Quiet Needle, The Sunken Stump Pub — plus the service alley the murder mystery needs                             |
-| **South Green**   | inside SE wall | Miller's Farm                                                                                                                            |
-| **The Ruins**     | outside walls  | ruin shells, rubble, ghouls; the circus 70–90 tiles out                                                                                  |
+| District          | Where          | Buildings                                                                                                                                             |
+| ----------------- | -------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Civic Terrace** | north edge     | Town Center Tower (set into the north wall, so its spire overhangs the fields)                                                                        |
+| **Garrison Row**  | north band     | The Barracks (the garrison), Cartwright's Workshop, Plumbline Farm (Wendell's home), Blackwood Lodge (dead-end alley — the cult hideout)              |
+| **Market Plaza**  | centre         | — fountain, stalls, notice board, fortune teller, benches, well                                                                                       |
+| **Plaza Ring**    | flanking plaza | Temple of the Sky, Herb & Remedy, General Store, The Sleeping Cat Inn (the town's safe room)                                                          |
+| **Market Row**    | south of plaza | Old Hilda's Cottage, The Horned Flagon, The Rusty Anvil                                                                                               |
+| **Low Quarter**   | south band     | The Desperado Club, The Quiet Needle (Shady loiters on Low Street outside it), The Sunken Stump Pub — plus the service alley the murder mystery needs |
+| **South Green**   | inside SE wall | Miller's Farm                                                                                                                                         |
+| **The Ruins**     | outside walls  | ruin shells, rubble, ghouls; the circus 70–90 tiles out                                                                                               |
 
 ---
 
@@ -392,8 +392,24 @@ that, and each answers a different half of "I don't know what to do":
 - **Quest beacons** (`src/sprites/questBeacon.ts`) — a column of light over anyone
   wearing a `!`/`?`, drawn by the creature before its own body paint so it Y-sorts with
   the figure. Gated on the exact state that drives the glyph, so the two cannot disagree.
+- **The quest route** (`src/systems/questRoute/`) — the pinned arrow's bearing and a
+  dotted ground trail. `QuestRouteGuide` keeps one Dijkstra field (`routeField.ts`) out
+  from the pinned target's goal tiles, built `QUEST_ROUTE_EXPANSIONS_PER_FRAME` tiles a
+  tick into a spare buffer and rebuilt on a new target, a new map, a blocked route and
+  every `QUEST_ROUTE_REFRESH_FRAMES`. Each tile the player steps onto, it walks downhill:
+  the first town or palisade gate on the way (`routePortals.ts`) is where the arrow
+  points, otherwise the target itself; with no route yet it points straight. Roads are
+  cheap, open ground twice as dear, wading dearer still; stairwells and other buildings'
+  doorways are never stepped on. Whether the arrow shows is still decided by the
+  target (`OBJECTIVE_ARROW_SUPPRESS_TILES`, `hidesArrowOnScreen`). The trail is the first
+  `QUEST_TRAIL_MAX_TILES` of the route cut into straight runs and painted by `worldTrail`,
+  and the `questRouteTrail` setting turns it off. A target flagged `drawsOwnRoute` (the
+  Midge escort's waypoints) gets neither. Indoors the same guide routes to the exit, or to
+  a tower storey's stairs down, while the pin is somewhere else (`PINNED_EXIT`, behind the
+  soul crystal's climb); a pin on the building the party is in shows nothing.
 
-`npm run verify:town` is the gate for the door and gate geometry these rely on.
+`npm run verify:town` is the gate for the door and gate geometry these rely on, and for
+the route guide's first aim from the plaza and from outside Briar Hollow.
 
 ---
 
@@ -1119,7 +1135,7 @@ party and is snapped beside them if that takes longer than `MIDGE_CALL_TIMEOUT_S
   `escort_waypoint` — the tracker arrow and minimap pip point at the waypoint, and
   `VillageQuestGuide` draws its highlight, a bouncing arrow and "Lead Midge along the
   road", a dotted trail along the road on through the next waypoint
-  (`escortRouteMarkers.ts`), the next two waypoints and the pasture in the quieter
+  (`worldTrail` in `src/ui/world/worldTrail.ts`), the next two waypoints and the pasture in the quieter
   pending voice. Past the gate it is `pasture`, as it is on a map with no route; left
   behind, Midge is pointed at (`lead_midge`) as before.
 - **The ambushes.** `EscortAmbushSystem` springs `ESCORT_WAVE_COUNT` (3) waves at
@@ -1417,12 +1433,12 @@ are unlocked it takes every talk with him; lines are in
 `src/dialog/scripts/wendellContracts.ts` (`WENDELL_CONTRACTS`). His `!` shows while
 contracts are unlocked and none is held. Branches, first match wins:
 
-| State           | Opens with                             | Ending                                                                                                   |
-| --------------- | -------------------------------------- | -------------------------------------------------------------------------------------------------------- |
-| `!introSeen`    | the intro                              | confirm: "I'll take a contract" (keyboard default) issues one; "Not right now" closes; both set the flag |
-| none held       | `reOffer` (none issued yet) or `idle`  | Take another contract (Space default) · Rest in the hayloft · Chat · Leave                               |
-| held, not ready | the site and its remaining spot labels | Take another contract · Drop this contract · Rest in the hayloft · Chat · Leave                          |
-| held, ready     | go and see the contact                 | the same, without Drop                                                                                   |
+| State           | Opens with                             | Ending                                                                                                                          |
+| --------------- | -------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------- |
+| `!introSeen`    | the intro                              | confirm: "I'll take a contract" (keyboard default) issues one, or names the held one; "Not right now" closes; both set the flag |
+| none held       | `reOffer` (none issued yet) or `idle`  | Take another contract (Space default) · Rest in the hayloft · Chat · Leave                                                      |
+| held, not ready | the site and its remaining spot labels | Take another contract · Drop this contract · Rest in the hayloft · Chat · Leave                                                 |
+| held, ready     | go and see the contact                 | the same, without Drop                                                                                                          |
 
 "Take another contract" issues on one press with none held and plays the issue line (site,
 contact and `formatCost` of the bill) in the same box, then emits `questStarted` (the
@@ -1431,6 +1447,21 @@ drop it first (or to collect, when ready). Drop is never the keyboard default an
 confirm; spent materials stay spent. When no site is eligible he says so and issues
 nothing. The hayloft row opens his rest service (`openWendellHayloft`); Chat plays his
 ordinary resident line.
+
+**Work orders on the notice boards.** Both notice boards, the Market Plaza's and Briar
+Hollow's (beside the village square, read through `BriarHollowKit`'s Space chain after the
+village services and yielding to a nearer villager), post Wendell's work order. Its text
+comes from `workOrderStateFor` (`contractIssue.ts`): `locked` before the unlock (tone
+`upcoming`, shown as SOON), `open` with none held, `held` with the remaining spots, `ready`
+when the contact owes the pay. While it is `open`, `DungeonScene.workOrderAction` puts a
+"Tear off a work order" button on the board's footer beside Close; Close stays the
+keyboard default, so taking a job is a deliberate press. Taking one issues through
+`issueNextContract`, the same call Wendell makes, from the same `gameMap.worldSeed` stream
+the interior receives as `circus.worldSeed`, so the two sources never diverge. It reads the
+strip aloud (`WORK_ORDERS`, `src/dialog/scripts/workOrders.ts`), emits `questStarted`,
+plays `contractSigned` and sets `introSeen`, so Wendell skips a pitch he could no longer
+honour. A held contract can still only be dropped at Wendell's. Briar Hollow's board adds a
+"TO ARMS" posting during the siege (`buildVillageNotices`).
 
 **Working a spot** (`ContractSiteWork`, shared by both scenes, on the `WorkChannel`).
 Reach is `CONTRACT_REACH_TILES` (1.5) to the nearest tile of the spot's whole footprint.
@@ -1517,12 +1548,12 @@ the active crawler stands inside the building's rect, so the pinned beam goes an
 spots' highlights take over; the minimap pip stays. `objectiveBeamTargets`
 (`questTracker.ts`) is the one beam selection the scene and the gate both call.
 
-| State   | Status      | Objective                               | Hint                                                     | Target                                                    |
-| ------- | ----------- | --------------------------------------- | -------------------------------------------------------- | --------------------------------------------------------- |
-| locked  | (no row)    |                                         |                                                          |                                                           |
-| idle    | `available` | Ask Wendell for a construction contract | —                                                        | Plumbline Farm's door                                     |
-| working | `active`    | Repairs at <site>: N/M done             | unfinished spots with their costs, then "Still short: …" | the town door, or the tile outside a village doorway      |
-| ready   | `active`    | Collect payment from <contact>          | —                                                        | the town door, or the village contact (`characterTarget`) |
+| State   | Status      | Objective                                                   | Hint                                                     | Target                                                    |
+| ------- | ----------- | ----------------------------------------------------------- | -------------------------------------------------------- | --------------------------------------------------------- |
+| locked  | (no row)    |                                                             |                                                          |                                                           |
+| idle    | `available` | Take a construction contract from Wendell or a notice board | notice boards in both towns carry his work orders        | Plumbline Farm's door                                     |
+| working | `active`    | Repairs at <site>: N/M done                                 | unfinished spots with their costs, then "Still short: …" | the town door, or the tile outside a village doorway      |
+| ready   | `active`    | Collect payment from <contact>                              | —                                                        | the town door, or the village contact (`characterTarget`) |
 
 For the forge, sawmill and barn the village target is the middle of the open side. The
 village guide falls back to `ConstructionContractSystem.guidance()` after the Plea and the

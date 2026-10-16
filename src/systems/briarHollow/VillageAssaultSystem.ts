@@ -33,7 +33,7 @@
 
 import { TILE_SIZE } from '../../core/constants';
 import type { EventBus } from '../../core/EventBus';
-import type { AudioManager } from '../../audio/AudioManager';
+import type { AudioManager, PlayOptions } from '../../audio/AudioManager';
 import {
   VILLAGE_CUES,
   VILLAGE_SIEGE_MUSIC,
@@ -90,6 +90,10 @@ import { engageTrebuchet, nearestLiveTrebuchetTo } from '../../creatures/siege/t
 import {
   ASSAULT_WAVE_NUMBERS,
   AssaultWavePrewarm,
+  assaultRosterRows,
+  isAssaultRosterKind,
+  type AssaultApproachView,
+  type AssaultRosterEntry,
   type AssaultWave,
 } from '../../sprites/assaultPrewarm';
 import { drawCrumble } from '../../sprites/art/siegeEffectsArt';
@@ -103,7 +107,16 @@ import type { VillageAmbience } from './VillageAmbience';
 import { SiegeFlowField } from './SiegeFlowField';
 import { siegeHudEntry, type SiegeHudBar, type SiegeHudView } from './siegeHudEntry';
 import type { TopBandEntry } from '../../ui/hud/topBand';
-import { HOLLOW_BELL_MAX_HP } from './hollowBell';
+import { HOLLOW_BELL_MAX_HP, hollowBellCentre } from './hollowBell';
+import { isWorldPointInView } from '../../core/visibleWorldView';
+import { VICTORY_FANFARE_FRAMES, fireworkSchedule } from './victoryFireworks';
+import {
+  BELL_ALERT_DETAIL,
+  BELL_ALERT_HEADLINE,
+  SIEGE_LOSS_COPY,
+  bellThresholdDetail,
+  type SiegeLoss,
+} from './siegeAlertCopy';
 import { UPDATES_PER_SECOND } from './structureRules';
 import { ASSAULT_BOUNTY_KINDS, createBountyMark, type AssaultBountyKind } from './siegeBountyMarks';
 import { placeAmong, spawnDue, type OffscreenSpawnRules } from './offscreenSpawns';
@@ -196,6 +209,34 @@ const BELL_CRACK_SHOWN_FRAMES = BELL_CRACK_SHOWN_SECONDS * UPDATES_PER_SECOND;
 /** How long the "bell has fallen" banner stays up. */
 const OUTCOME_BANNER_SECONDS = 6;
 const OUTCOME_BANNER_FRAMES = OUTCOME_BANNER_SECONDS * UPDATES_PER_SECOND;
+/** The bell counts as under attack until this long after its last blow. */
+const BELL_UNDER_ATTACK_HOLD_SECONDS = 4;
+const BELL_UNDER_ATTACK_HOLD_FRAMES = BELL_UNDER_ATTACK_HOLD_SECONDS * UPDATES_PER_SECOND;
+/** How long the clocktower alert's banner holds. */
+const BELL_ALERT_BANNER_SECONDS = 4.5;
+const BELL_ALERT_BANNER_FRAMES = BELL_ALERT_BANNER_SECONDS * UPDATES_PER_SECOND;
+/**
+ * The soonest the banner and its alarm come back during one stretch of
+ * attacks, so a crowd beating on the bell raises it once rather than on
+ * every pause between blows.
+ */
+const BELL_ALERT_COOLDOWN_SECONDS = 20;
+const BELL_ALERT_COOLDOWN_FRAMES = BELL_ALERT_COOLDOWN_SECONDS * UPDATES_PER_SECOND;
+const BELL_THREE_QUARTERS = 0.75;
+const BELL_HALF = 0.5;
+const BELL_QUARTER = 0.25;
+/** Health shares whose crossing always raises the alert again, cooldown or not. */
+const BELL_ALERT_THRESHOLDS = [BELL_THREE_QUARTERS, BELL_HALF, BELL_QUARTER] as const;
+/** How long a lost siege's banner shows before the explainer halts the game. */
+const LOSS_EXPLAINER_DELAY_SECONDS = 2;
+const LOSS_EXPLAINER_DELAY_FRAMES = LOSS_EXPLAINER_DELAY_SECONDS * UPDATES_PER_SECOND;
+/** How fast the music and the world's effects drop away for the victory. */
+const VICTORY_MUSIC_FADE_MS = 300;
+const VICTORY_SFX_FADE_MS = 300;
+/** How long the village's music takes to come back once the fanfare is over. */
+const VICTORY_MUSIC_RETURN_MS = 1500;
+/** The fireworks sit under the sting rather than over it. */
+const FIREWORK_VOLUME = 0.45;
 /** How far round a lane's spawn tile a body may appear: room for a whole wave raised at once. */
 const SPAWN_SCATTER_TILES = 5;
 /** How far a crowded spawn may be nudged to open ground. */
@@ -431,6 +472,33 @@ const HOSTILE_ORDER: readonly AssaultHostileKind[] = [
   'bugaboo',
   'rock_golem',
 ];
+
+/** A body coming up the north lane walks south, toward the viewer, and so on round. */
+const APPROACH_VIEW_BY_SIDE: Readonly<Record<AssaultLaneId, AssaultApproachView>> = {
+  north: 'front',
+  south: 'away',
+  east: 'side',
+  west: 'side',
+};
+
+/**
+ * The figure-drawn kinds of wave `wave`'s roster other than the undead its
+ * arrival rows already cover, in the order `planWave` sends them up the lane.
+ */
+export function assaultWaveRoster(wave: AssaultWave): AssaultRosterEntry[] {
+  const spec = waveSpec(wave - 1);
+  if (spec === null) return [];
+  const entries: AssaultRosterEntry[] = [];
+  for (const kind of UNDEAD_ORDER) {
+    const count = spec.undead[kind] ?? 0;
+    if (isAssaultRosterKind(kind)) entries.push({ kind, count });
+  }
+  for (const kind of HOSTILE_ORDER) {
+    const count = spec.hostiles[kind] ?? 0;
+    if (isAssaultRosterKind(kind)) entries.push({ kind, count });
+  }
+  return entries;
+}
 
 /** The four sides, in the order the HUD names them. */
 export const ASSAULT_SIDES: readonly AssaultLaneId[] = ['north', 'south', 'east', 'west'];
@@ -790,6 +858,36 @@ interface ScheduledCrumble {
   framesLeft: number;
 }
 
+/** The clocktower alert's big banner while it holds. */
+export interface BellAlertBanner {
+  readonly headline: string;
+  readonly detail: string;
+  /** Frames since it was raised. */
+  readonly age: number;
+  readonly framesLeft: number;
+}
+
+/** What the clocktower alert shows this frame. */
+export interface BellAlertView {
+  /** Whether the bell was struck within the last few seconds. */
+  readonly underAttack: boolean;
+  /** Whether the bell is on screen and clear of the fog. */
+  readonly bellInView: boolean;
+  readonly banner: BellAlertBanner | null;
+  readonly bellFraction: number;
+  /** The middle of the bell tower, in world pixels. */
+  readonly bellWorld: { readonly x: number; readonly y: number };
+}
+
+/** The big banner a siege's ending shows while it holds. */
+export interface SiegeOutcomeView {
+  readonly headline: string;
+  readonly detail: string;
+  /** Frames since the siege ended. */
+  readonly age: number;
+  readonly framesLeft: number;
+}
+
 export interface VillageAssaultFrame {
   readonly active: { readonly x: number; readonly y: number };
 }
@@ -823,6 +921,8 @@ export interface VillageAssaultSystemDeps {
   readonly prewarm?: AssaultWavePrewarm;
   /** Uniform [0, 1); a gate passes a seeded stream. */
   readonly random?: () => number;
+  /** Told once the victory fanfare has played out and the village's music is back. */
+  readonly onVictoryFanfareEnded?: () => void;
 }
 
 /** The necromancer's boss-intro colour: his lantern's soul-blue. */
@@ -882,7 +982,15 @@ export class VillageAssaultSystem {
   private bellTollGap = 0;
   private bellFlashFrames = 0;
   private bellCrackFrames = 0;
-  private outcomeBanner: { text: string; framesLeft: number } | null = null;
+  private framesSinceBellStruck = BELL_UNDER_ATTACK_HOLD_FRAMES;
+  private bellAlertCooldownFrames = 0;
+  private readonly announcedBellThresholds = new Set<number>();
+  private bellAlert: { detail: string; age: number; framesLeft: number } | null = null;
+  private readonly bellWorld: { readonly x: number; readonly y: number };
+  private outcome: { loss: SiegeLoss; age: number; framesLeft: number } | null = null;
+  private lossExplainerDelayFrames = 0;
+  private lossExplainer: SiegeLoss | null = null;
+  private victoryFanfareFrames = 0;
   private breachCalled = false;
   private readonly downedSeen = new Set<object>();
   private segmentsBreached = 0;
@@ -922,7 +1030,12 @@ export class VillageAssaultSystem {
       accepts: (x, y) => this.hasWayIn(x, y),
     };
     this.campaign = campaignFor(deps.state, this.random);
-    this.prewarm = deps.prewarm ?? new AssaultWavePrewarm();
+    this.bellWorld = hollowBellCentre(deps.site.square.bellTile);
+    this.prewarm =
+      deps.prewarm ??
+      new AssaultWavePrewarm({
+        rosterRows: (wave, view) => assaultRosterRows(assaultWaveRoster(wave), view),
+      });
     this.march = new MarchDirective(deps.site);
     this.withdraw = new WithdrawDirective(deps.gameMap, deps.site);
     this.unsubscribers.push(
@@ -1060,7 +1173,7 @@ export class VillageAssaultSystem {
     }
     if (this.phase === 'assault') {
       this.enterSiegeDressing();
-      this.lose(ABANDONED_BANNER);
+      this.lose('abandoned');
     }
   }
 
@@ -1107,6 +1220,7 @@ export class VillageAssaultSystem {
     this.peakLiving = 0;
     this.lullFrames = 0;
     this.waveFrames = 0;
+    this.clearBellAlert();
   }
 
   /** The poster, the bell, the siege track and the navigation. */
@@ -1136,10 +1250,8 @@ export class VillageAssaultSystem {
     this.flow?.update(1 / UPDATES_PER_SECOND);
     this.tickBell();
     this.tickEffects();
-    if (this.outcomeBanner !== null) {
-      this.outcomeBanner.framesLeft--;
-      if (this.outcomeBanner.framesLeft <= 0) this.outcomeBanner = null;
-    }
+    this.tickOutcome();
+    this.tickVictoryFanfare();
     if (this.sideBanner !== null) {
       this.sideBanner.framesLeft--;
       if (this.sideBanner.framesLeft <= 0) this.sideBanner = null;
@@ -1180,7 +1292,8 @@ export class VillageAssaultSystem {
   private isSiegeAttacker(mob: Mob): boolean {
     if (!mob.isHostile) return false;
     if (mob.siegeCapable !== null || this.waveOf.has(mob)) return true;
-    return [...this.fairies.values()].some((fairy) => fairy === mob);
+    for (const fairy of this.fairies.values()) if (fairy === mob) return true;
+    return false;
   }
 
   private nearestAttackerTo(point: { readonly x: number; readonly y: number }): Mob | null {
@@ -1197,7 +1310,7 @@ export class VillageAssaultSystem {
   }
 
   private updateImminent(frame: VillageAssaultFrame): void {
-    this.prewarm.update(1);
+    this.prewarm.update(1, this.approachView());
     const quest = this.deps.state.quest;
     quest.imminentCountdownFrames = Math.max(0, quest.imminentCountdownFrames - 1);
     if (this.checkAbandon(frame)) return;
@@ -1330,7 +1443,7 @@ export class VillageAssaultSystem {
       return;
     }
     if (this.deps.defense.bellCracked) {
-      this.lose(VORDRICK_FLEES_BANNER);
+      this.lose('bell_fell');
       return;
     }
     if (this.checkAbandon(frame)) return;
@@ -1338,7 +1451,7 @@ export class VillageAssaultSystem {
 
     if (this.lullFrames > 0) {
       // The next real wave always opens on its first mini-wave, the first wave's own roster.
-      this.prewarm.update(this.prewarmWaveFor(0));
+      this.prewarm.update(this.prewarmWaveFor(0), this.approachView());
       this.lullFrames--;
       if (this.lullFrames === 0) this.startWave(index + 1);
       return;
@@ -1346,9 +1459,12 @@ export class VillageAssaultSystem {
 
     this.waveFrames++;
     this.spawnArrivals();
-    this.spawnDue();
-    this.peakLiving = Math.max(this.peakLiving, livingAssaultSpawns(this.deps.roster.mobs));
-    this.prewarm.update(this.waveStillArriving() ? this.prewarmWaveFor(this.miniWaveRoster) : null);
+    const living = this.spawnDue();
+    this.peakLiving = Math.max(this.peakLiving, living);
+    this.prewarm.update(
+      this.waveStillArriving() ? this.prewarmWaveFor(this.miniWaveRoster) : null,
+      this.approachView(),
+    );
 
     // Every mini-wave through this real wave shares one WAVE_MAX_FRAMES clock:
     // a wave with nowhere to spawn still reaches its own roster and advances
@@ -1405,6 +1521,12 @@ export class VillageAssaultSystem {
     this.necromancerOut = false;
   }
 
+  /** Which way the coming or current wave's bodies face as they walk up their lane. */
+  private approachView(): AssaultApproachView {
+    const side = this.attackSide;
+    return side === null ? 'side' : APPROACH_VIEW_BY_SIDE[side];
+  }
+
   private prewarmWaveFor(index: number): AssaultWave | null {
     const wave = index + 1;
     return ASSAULT_WAVE_NUMBERS.find((number) => number === wave) ?? null;
@@ -1424,7 +1546,8 @@ export class VillageAssaultSystem {
    * enemy's side. Vordrick is not one of them: he fades when the lull begins.
    */
   private remainingInWave(index: number): number {
-    let remaining = this.pending.filter((spawn) => spawn.wave === index).length;
+    let remaining = 0;
+    for (const spawn of this.pending) if (spawn.wave === index) remaining++;
     for (const [mob, wave] of this.waveOf) {
       if (mob instanceof Necromancer) continue;
       // A converted ally no longer counts: it fights for the village now.
@@ -1435,35 +1558,49 @@ export class VillageAssaultSystem {
 
   /** The current mini-wave's own bodies not yet beaten: still to come, or alive and hostile. */
   private remainingInMiniWave(rosterIndex: number): number {
-    let remaining = this.pending.filter((spawn) => spawn.rosterIndex === rosterIndex).length;
+    let remaining = 0;
+    for (const spawn of this.pending) if (spawn.rosterIndex === rosterIndex) remaining++;
     for (const [mob, roster] of this.miniWaveOf) {
       if (roster === rosterIndex && mob.isAlive && mob.isHostile) remaining++;
     }
     return remaining;
   }
 
-  private spawnDue(): void {
+  /**
+   * Puts out every body that is due and has room under the live cap, and
+   * returns how many of the wave's spawns are alive afterwards. Counted once
+   * and carried through the spawns, each of which adds exactly one, rather
+   * than recounted over the whole roster before every one.
+   */
+  private spawnDue(): number {
+    let living = livingAssaultSpawns(this.deps.roster.mobs);
     spawnDue(this.pending, this.headSpawnWait, {
       isDue: (next) => next.dueFrame <= this.waveFrames,
-      isHeldBack: () => livingAssaultSpawns(this.deps.roster.mobs) >= ASSAULT_LIVE_CAP,
+      isHeldBack: () => living >= ASSAULT_LIVE_CAP,
       place: (next, waitedFrames) => this.placeFor(this.lanesFor(next.lane), waitedFrames),
-      spawn: (next, place) =>
-        this.spawn(next.kind, place.lane, place.tile, next.wave, next.rosterIndex),
+      spawn: (next, place) => {
+        this.spawn(next.kind, place.lane, place.tile, next.wave, next.rosterIndex);
+        living++;
+      },
     });
+    return living;
   }
 
   /** Puts out every leader of the wave that has somewhere to appear; the rest wait. */
   private spawnArrivals(): void {
     const wave = this.deps.state.quest.assaultWaveIndex ?? 0;
-    this.arrivals = this.arrivals.filter((pending) => {
+    const arrivals = this.arrivals;
+    let kept = 0;
+    for (const pending of arrivals) {
       const place = this.placeFor([pending.lane], pending.waitedFrames);
       if (place === null) {
         pending.waitedFrames++;
-        return true;
+        arrivals[kept++] = pending;
+        continue;
       }
       this.bringOut(pending.arrival, place.lane, place.tile, wave);
-      return false;
-    });
+    }
+    arrivals.length = kept;
   }
 
   private bringOut(
@@ -1636,7 +1773,7 @@ export class VillageAssaultSystem {
     }
     this.abandonFrames++;
     if (this.abandonFrames < ASSAULT_ABANDON_FRAMES) return false;
-    this.lose(ABANDONED_BANNER);
+    this.lose('abandoned');
     return true;
   }
 
@@ -1690,12 +1827,68 @@ export class VillageAssaultSystem {
     }
     this.deps.setPhase('victory');
     this.endSiege();
-    this.playCue('bellVictoryPeal');
-    this.deps.audio?.play(VILLAGE_VICTORY_STING);
+    this.beginVictoryFanfare();
+  }
+
+  /**
+   * The victory gets the stage to itself: the siege's music claim becomes
+   * silence, so the village's song starts fresh after the fanfare instead of
+   * fading in under it, and the music, the ambience and the world's effects
+   * all drop away. The sting and the peal play on the `ui` bus, the one the
+   * hush leaves open.
+   */
+  private beginVictoryFanfare(): void {
+    this.deps.music()?.claimMusic({
+      owner: 'siege',
+      layer: 'battle',
+      selection: { kind: 'silence' },
+    });
+    const audio = this.deps.audio;
+    audio?.pauseMusic('siege_victory', VICTORY_MUSIC_FADE_MS);
+    audio?.pauseAmbience('siege_victory');
+    audio?.hushEffects('siege_victory', VICTORY_SFX_FADE_MS);
+    this.playCue('bellVictoryPeal', { bus: 'ui' });
+    audio?.play(VILLAGE_VICTORY_STING, { bus: 'ui' });
+    this.victoryFanfareFrames = VICTORY_FANFARE_FRAMES;
+  }
+
+  /** Counts the fanfare down with gameplay, so a pause holds the silence until it is over. */
+  private tickVictoryFanfare(): void {
+    if (this.victoryFanfareFrames <= 0) return;
+    const ageFrames = VICTORY_FANFARE_FRAMES - this.victoryFanfareFrames;
+    const { launches, bursts } = fireworkSchedule(ageFrames);
+    const fireworkOptions: PlayOptions = { bus: 'ui', volume: FIREWORK_VOLUME };
+    for (const _rocket of launches) this.playCue('fireworkLaunch', fireworkOptions);
+    for (const _rocket of bursts) this.playCue('fireworkBurst', fireworkOptions);
+    this.victoryFanfareFrames--;
+    if (this.victoryFanfareFrames > 0) return;
+    this.endVictoryFanfare();
+    this.deps.onVictoryFanfareEnded?.();
+  }
+
+  /**
+   * Lets go of everything the fanfare silenced. The audio manager outlives
+   * the scene, so a reason left held here would mute the music or the
+   * effects for the rest of the session; every way out of the fanfare comes
+   * through this.
+   */
+  private endVictoryFanfare(): void {
+    this.victoryFanfareFrames = 0;
+    const audio = this.deps.audio;
+    audio?.unhushEffects('siege_victory', VICTORY_SFX_FADE_MS);
+    audio?.resumeAmbience('siege_victory');
+    audio?.resumeMusic('siege_victory', VICTORY_MUSIC_RETURN_MS);
+    this.releaseMusic();
+  }
+
+  /** The celebration's clock while the victory fanfare plays, or null outside it. */
+  get victoryCelebration(): { readonly ageFrames: number } | null {
+    if (this.victoryFanfareFrames <= 0) return null;
+    return { ageFrames: VICTORY_FANFARE_FRAMES - this.victoryFanfareFrames };
   }
 
   /** The bell fell, or the party left: the dead walk back out, and the walls stay as they are. */
-  private lose(banner: string): void {
+  private lose(loss: SiegeLoss): void {
     this.recordSummary();
     this.deps.state.quest.assaultWaveIndex = null;
     this.pending = [];
@@ -1719,7 +1912,9 @@ export class VillageAssaultSystem {
       mob.siegeDirective = this.withdraw;
       mob.currentTarget = null;
     }
-    this.outcomeBanner = { text: banner, framesLeft: OUTCOME_BANNER_FRAMES };
+    this.outcome = { loss, age: 0, framesLeft: OUTCOME_BANNER_FRAMES };
+    this.lossExplainer = null;
+    this.lossExplainerDelayFrames = LOSS_EXPLAINER_DELAY_FRAMES;
     if (fell) {
       this.deps.ambience.bell.cracked = true;
       this.bellCrackFrames = BELL_CRACK_SHOWN_FRAMES;
@@ -1729,6 +1924,7 @@ export class VillageAssaultSystem {
     }
     this.deps.setPhase('repelled_failed');
     this.endSiege();
+    this.releaseMusic();
   }
 
   private nearestLane(mob: Mob): AssaultLane | null {
@@ -1745,7 +1941,11 @@ export class VillageAssaultSystem {
     return best;
   }
 
-  /** Whatever the ending: the bell is mended, the poster comes down, the village's music returns. */
+  /**
+   * Whatever the ending: the bell is mended and the poster comes down. The
+   * siege's music claim is the ending's own to let go of: a loss releases it
+   * at once, a victory only once its fanfare is over.
+   */
   private endSiege(): void {
     this.deps.defense.restoreBell();
     this.deps.state.quest.imminentCountdownFrames = 0;
@@ -1755,7 +1955,7 @@ export class VillageAssaultSystem {
     ambience.noticeBoard.callToArms = false;
     ambience.bell.ringing = false;
     this.bellRingFrames = 0;
-    this.releaseMusic();
+    this.clearBellAlert();
   }
 
   /**
@@ -1825,7 +2025,8 @@ export class VillageAssaultSystem {
   }
 
   private tickWithdrawals(): void {
-    for (const mob of [...this.withdraw.walks.keys()]) {
+    // Walked directly: a Map tolerates deleting the entry being visited.
+    for (const mob of this.withdraw.walks.keys()) {
       if (!mob.isAlive) {
         this.withdraw.walks.delete(mob);
         continue;
@@ -1860,9 +2061,129 @@ export class VillageAssaultSystem {
       this.playCue('bellTollHit');
       this.bellTollGap = BELL_TOLL_GAP_FRAMES;
     }
+    if (this.phase === 'assault') this.noteBellUnderAttack();
+  }
+
+  /**
+   * Raises the clocktower alert when an attack on the bell starts after a
+   * quiet stretch, or whenever its health crosses a threshold not yet called
+   * out this siege. The blow that cracks it raises nothing: the siege is
+   * lost on the next update, and the loss says so itself.
+   */
+  private noteBellUnderAttack(): void {
+    const wasUnderAttack = this.bellUnderAttack;
+    this.framesSinceBellStruck = 0;
+    const fraction = this.bellFraction;
+    if (fraction <= 0) return;
+    const crossed = BELL_ALERT_THRESHOLDS.filter(
+      (threshold) => fraction <= threshold && !this.announcedBellThresholds.has(threshold),
+    );
+    for (const threshold of crossed) this.announcedBellThresholds.add(threshold);
+    if (crossed.length > 0) {
+      this.raiseBellAlert(bellThresholdDetail(Math.min(...crossed)));
+      return;
+    }
+    if (!wasUnderAttack && this.bellAlertCooldownFrames === 0) {
+      this.raiseBellAlert(BELL_ALERT_DETAIL);
+    }
+  }
+
+  private raiseBellAlert(detail: string): void {
+    this.bellAlert = { detail, age: 0, framesLeft: BELL_ALERT_BANNER_FRAMES };
+    this.bellAlertCooldownFrames = BELL_ALERT_COOLDOWN_FRAMES;
+    this.playCue('bellUnderAttack');
+  }
+
+  private clearBellAlert(): void {
+    this.framesSinceBellStruck = BELL_UNDER_ATTACK_HOLD_FRAMES;
+    this.bellAlertCooldownFrames = 0;
+    this.announcedBellThresholds.clear();
+    this.bellAlert = null;
+  }
+
+  private tickBellAlert(): void {
+    if (this.framesSinceBellStruck < BELL_UNDER_ATTACK_HOLD_FRAMES) this.framesSinceBellStruck++;
+    if (this.bellAlertCooldownFrames > 0) this.bellAlertCooldownFrames--;
+    const alert = this.bellAlert;
+    if (alert === null) return;
+    alert.age++;
+    alert.framesLeft--;
+    if (alert.framesLeft <= 0) this.bellAlert = null;
+  }
+
+  /** Whether the dead have struck the bell within the last few seconds of the waves. */
+  get bellUnderAttack(): boolean {
+    return this.phase === 'assault' && this.framesSinceBellStruck < BELL_UNDER_ATTACK_HOLD_FRAMES;
+  }
+
+  /** What the clocktower alert shows, or null outside the waves. */
+  bellAlertView(): BellAlertView | null {
+    if (this.phase !== 'assault') return null;
+    const alert = this.bellAlert;
+    const { bellWorld } = this;
+    return {
+      underAttack: this.bellUnderAttack,
+      bellInView: isWorldPointInView(bellWorld.x, bellWorld.y, TILE_SIZE),
+      banner:
+        alert === null
+          ? null
+          : {
+              headline: BELL_ALERT_HEADLINE,
+              detail: alert.detail,
+              age: alert.age,
+              framesLeft: alert.framesLeft,
+            },
+      bellFraction: this.bellFraction,
+      bellWorld,
+    };
+  }
+
+  // ── The ending's banner and explainer ─────────────────────────────────────
+
+  private tickOutcome(): void {
+    const outcome = this.outcome;
+    if (outcome !== null) {
+      outcome.age++;
+      outcome.framesLeft--;
+      if (outcome.framesLeft <= 0) this.outcome = null;
+    }
+    if (this.lossExplainerDelayFrames <= 0) return;
+    this.lossExplainerDelayFrames--;
+    // Only the bell's fall needs telling why: walking away is its own answer.
+    if (this.lossExplainerDelayFrames === 0 && outcome?.loss === 'bell_fell') {
+      this.lossExplainer = 'bell_fell';
+    }
+  }
+
+  /**
+   * The big banner a lost siege shows while it holds, or null. It stands down
+   * under the explainer, which it would otherwise draw over.
+   */
+  outcomeView(): SiegeOutcomeView | null {
+    const outcome = this.outcome;
+    if (outcome === null || this.lossExplainer !== null) return null;
+    const copy = SIEGE_LOSS_COPY[outcome.loss];
+    return {
+      headline: copy.headline,
+      detail: copy.detail,
+      age: outcome.age,
+      framesLeft: outcome.framesLeft,
+    };
+  }
+
+  /** Whether the halting explainer for a lost siege is up. */
+  get lossExplainerOpen(): boolean {
+    return this.lossExplainer !== null;
+  }
+
+  /** The player read the explainer, which said everything the banner under it did. */
+  dismissLossExplainer(): void {
+    this.lossExplainer = null;
+    this.outcome = null;
   }
 
   private tickBell(): void {
+    this.tickBellAlert();
     if (this.bellRingFrames > 0) this.bellRingFrames--;
     if (this.bellTollGap > 0) this.bellTollGap--;
     if (this.bellFlashFrames > 0) this.bellFlashFrames--;
@@ -1904,10 +2225,10 @@ export class VillageAssaultSystem {
     for (const soldier of this.deps.downedSoldiers()) this.downedSeen.add(soldier);
   }
 
-  private playCue(cue: VillageCue): void {
+  private playCue(cue: VillageCue, opts?: PlayOptions): void {
     const audio = this.deps.audio;
     if (audio === null) return;
-    audio.playRandom(VILLAGE_CUES[cue]);
+    audio.playRandom(VILLAGE_CUES[cue], opts);
   }
 
   // ── Drawing ───────────────────────────────────────────────────────────────
@@ -1941,7 +2262,7 @@ export class VillageAssaultSystem {
     if (this.phase === 'assault') {
       bars.push({
         id: 'bell',
-        label: 'Hollow Bell',
+        label: 'Clocktower',
         fraction: this.bellFraction,
         kind: 'hp',
         flash: this.bellFlashFrames / BELL_FLASH_FRAMES,
@@ -1977,11 +2298,10 @@ export class VillageAssaultSystem {
   }
 
   /**
-   * The banners across the middle of the screen: the outcome, and through the
-   * siege the abandon warning or the side the next attack comes from.
+   * The banners across the middle of the screen through the siege: the
+   * abandon warning or the side the next attack comes from.
    */
   renderCentreBanners(ctx: CanvasRenderingContext2D): void {
-    this.renderOutcomeBanner(ctx);
     if (!this.inSiege) return;
     this.renderAbandonWarning(ctx);
     this.renderSideBanner(ctx);
@@ -2014,19 +2334,6 @@ export class VillageAssaultSystem {
     });
   }
 
-  private renderOutcomeBanner(ctx: CanvasRenderingContext2D): void {
-    const banner = this.outcomeBanner;
-    if (banner === null) return;
-    worldText(ctx, banner.text, {
-      style: 'title',
-      color: worldPalette.ink.danger,
-      ...centreBannerColumn(),
-      y: viewportHeight() * CENTRE_BANNER_HEIGHT_SHARE,
-      align: 'center',
-      alpha: Math.min(1, banner.framesLeft / BANNER_FADE_FRAMES),
-    });
-  }
-
   // ── Rewind and teardown ───────────────────────────────────────────────────
 
   /**
@@ -2049,7 +2356,10 @@ export class VillageAssaultSystem {
     this.crumbles.length = 0;
     this.effects.length = 0;
     this.withdraw.walks.clear();
-    this.outcomeBanner = null;
+    this.outcome = null;
+    this.lossExplainer = null;
+    this.lossExplainerDelayFrames = 0;
+    if (this.victoryFanfareFrames > 0) this.endVictoryFanfare();
     this.sideBanner = null;
     this.bellRingFrames = 0;
     this.bellFlashFrames = 0;
@@ -2071,6 +2381,7 @@ export class VillageAssaultSystem {
   }
 
   dispose(): void {
+    if (this.victoryFanfareFrames > 0) this.endVictoryFanfare();
     this.deps.audio?.setCreatureHearing(null);
     for (const unsubscribe of this.unsubscribers) unsubscribe();
     this.unsubscribers.length = 0;
@@ -2084,10 +2395,8 @@ const TILE_CENTRE = 0.5;
 /** How long the "Attack coming from…" banner stays up at the start of a countdown or a lull. */
 const SIDE_BANNER_SECONDS = 6;
 const SIDE_BANNER_FRAMES = SIDE_BANNER_SECONDS * UPDATES_PER_SECOND;
-const VORDRICK_FLEES_BANNER = 'Vordrick steals the life stone and retreats.';
-const ABANDONED_BANNER = 'You left Briar Hollow to the dead. They withdraw…';
 
-/** The abandon warning and the outcome banner sit this far down the screen. */
+/** The abandon warning and the side banner sit this far down the screen. */
 const CENTRE_BANNER_HEIGHT_SHARE = 0.45;
 const OUTCOME_BANNER_MAX_WIDTH = 520;
 const BANNER_SIDE_MARGIN = 16;
@@ -2098,5 +2407,5 @@ function centreBannerColumn(): { x: number; width: number } {
   return { x: (viewportWidth() - width) / 2, width };
 }
 
-/** The outcome banner fades out over its last this-many frames. */
+/** A centre banner fades out over its last this-many frames. */
 const BANNER_FADE_FRAMES = 60;

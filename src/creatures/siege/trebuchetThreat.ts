@@ -21,11 +21,7 @@
 import { TILE_SIZE } from '../../core/constants';
 import type { Player } from '../../Player';
 import type { Mob } from '../Mob';
-import {
-  type DefenseStructures,
-  type StructureRef,
-  structureKey,
-} from '../../systems/briarHollow/DefenseStructures';
+import type { DefenseStructures, StructureRef } from '../../systems/briarHollow/DefenseStructures';
 import { isStandingStructure, nearestStructurePoint } from './siegeCapability';
 
 let defense: DefenseStructures | null = null;
@@ -67,9 +63,8 @@ export function nearestLiveTrebuchetTo(
   const mobCentreY = mob.y + HALF_TILE;
   let best: TrebuchetThreat | null = null;
   let bestDistance = Infinity;
-  for (const record of activeDefense.trebuchets) {
+  for (const { record, ref } of activeDefense.trebuchetRefs) {
     if (record.broken) continue;
-    const ref: StructureRef = { kind: 'trebuchet', key: structureKey(record.x, record.y) };
     const point = nearestStructurePoint(activeDefense, ref, mob);
     if (point === null) continue;
     const distance = Math.hypot(point.x - mobCentreX, point.y - mobCentreY);

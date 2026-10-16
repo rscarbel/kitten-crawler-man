@@ -275,7 +275,7 @@ export function pauseFixtureScreen(data: PauseFixtureData): PauseScreen {
         name: 'Shady’s Bounty',
         status: 'active',
         objective: 'Kill the goblin chieftain (2 of 3 marks)',
-        hint: 'Shady lurks by the notice board',
+        hint: 'He loiters outside the Quiet Needle, in the Low Quarter.',
         target: { x: 34, y: 2 },
       },
       {

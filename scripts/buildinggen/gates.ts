@@ -19,7 +19,7 @@
  */
 
 import type { Canvas } from 'canvas';
-import { OVERLAY_FRAME_KEY_STRIDE } from '../../src/map/tiles/overlayAnimation.js';
+import { MAX_LIFE_FRAMES } from '../../src/map/tiles/overlayAnimation.js';
 import {
   readCanvas,
   isOpaque,
@@ -744,14 +744,11 @@ export function gateLifeFrameCount(
   const GATE = 'life-frame-count';
   const MIN_FRAMES = 6;
   /**
-   * One below the radix `decorationAnimationFrame` folds overlay frame indices
-   * with. That fold is the actual hazard: at 16 two distinct combinations of
-   * frame indices collide on one cache key and a tile draws a frame belonging
-   * to another animation. A shorter cap would trade correctness for taste —
-   * the pub's walkers need the full length, because the pause between two
-   * passes cannot last longer than the loop that repeats them.
+   * The runtime's own cap, read from where the runtime reads it. A shorter cap
+   * would trade the pub's walkers for taste: the pause between two passes
+   * cannot last longer than the loop that repeats them.
    */
-  const MAX_FRAMES = OVERLAY_FRAME_KEY_STRIDE - 1;
+  const MAX_FRAMES = MAX_LIFE_FRAMES;
   // No check that `lifeFrames.length === spec.life.frames`: the only caller
   // builds that array with `Array.from({ length: spec.life.frames })`, so the
   // comparison was against the expression it came from and could not fail —

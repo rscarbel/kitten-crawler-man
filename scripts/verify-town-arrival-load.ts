@@ -119,7 +119,7 @@ const gameMap = new GameMap({
 setFloorArtSeed(gameMap.artSeed);
 const plazaCentre = gameMap.townSquareCentre ?? { x: MAP_SIZE / 2, y: MAP_SIZE / 2 };
 
-const invalidateTileArt = (): void => gameMap.invalidateAllTileArt();
+const invalidateTileArt = (): void => gameMap.markTileArtStale({ includeFacades: false });
 const queueFloorArt = (): void => {
   requestGroundSheets(
     groundSheetKeysAmong(requiredSpriteKeysForLevel(level3.id, level3.spriteGroups)),
@@ -127,6 +127,7 @@ const queueFloorArt = (): void => {
   );
   requestEnvironmentSheetsForGroups(level3.spriteGroups, {
     onSheetPainted: invalidateTileArt,
+    onFacadePainted: (spriteKey) => gameMap.invalidateFacadeArt(spriteKey),
     town:
       gameMap.townPlan === undefined
         ? undefined
@@ -155,7 +156,7 @@ const townDecor = new TownDecorSystem(
   new Set([...market.reservedTiles, ...townProps.reservedTiles]),
 );
 const props = [...market.props, ...townProps.props, ...townDecor.props];
-let townLife = new TownLifeSystem(gameMap);
+let townLife = new TownLifeSystem(gameMap, () => true);
 const human = new HumanPlayer(plazaCentre.x, plazaCentre.y, TILE_SIZE);
 const cat = new CatPlayer(plazaCentre.x + 1, plazaCentre.y, TILE_SIZE);
 human.isActive = true;
@@ -340,7 +341,7 @@ check(
 
 townLife.dispose();
 queueFloorArt();
-townLife = new TownLifeSystem(gameMap);
+townLife = new TownLifeSystem(gameMap, () => true);
 const exitOwesWork = floorArrivalOwesWork(true);
 check(
   !exitOwesWork,

@@ -50,5 +50,6 @@ export function hitFlashLayer(progress: number): SilhouetteLayer | null {
     alpha: flash * FLASH_PEAK_ALPHA,
     rimColor: tintColor,
     rimAlpha: Math.min(1, flash * (FLASH_PEAK_ALPHA + RIM_ALPHA_BOOST)),
+    isHitFlash: true,
   };
 }

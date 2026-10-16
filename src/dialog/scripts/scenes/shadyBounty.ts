@@ -1,6 +1,6 @@
 /**
  * Shady's bounty pitch, the reminder while a mark is out, and the payout —
- * the three conversations `BountySystem` opens off the notice board.
+ * the three conversations `BountySystem` opens.
  */
 
 import { speakerLines } from '../../line';
@@ -22,7 +22,7 @@ const DIFFICULTY_PAYOUT_LINES: Partial<Record<Difficulty, string>> = {
 export const SHADY_BOUNTY = {
   offerIntro: say.button(
     'Go on',
-    '...Psst. Down here. Don’t look at me, look at the board. Good. You’re a quick one. I have work. The kind nobody signs their name to.',
+    '...Psst. Over here. Don’t look at me, look at the needlework in the window. Good. You’re a quick one. I have work. The kind nobody signs their name to.',
   ),
 
   offerMark: say.fnButton(

@@ -252,7 +252,7 @@ export class BountySystem implements GameSystem {
   private readonly unsubscribeMobKilled: () => void;
   private readonly _markers: Array<{ x: number; y: number; type: QuestMarkerType }> = [];
 
-  /** The quest-giver himself, once the scene has found him a tile beside the board. */
+  /** The quest-giver himself, once the scene has found him a tile beside the Quiet Needle. */
   private shady: Shady | null = null;
 
   /**
@@ -345,7 +345,7 @@ export class BountySystem implements GameSystem {
 
   /**
    * Stands the quest-giver on `tile` and takes ownership of him. Called once by
-   * the scene, which is what knows where the notice board ended up. Idempotent
+   * the scene, which is what knows where the parlour door is. Idempotent
    * across scene rebuilds because the tile it is handed is.
    */
   placeShady(tile: { x: number; y: number }): void {
@@ -792,9 +792,8 @@ export class BountySystem implements GameSystem {
         {
           ...base,
           status: 'available',
-          objective:
-            next === null ? 'Take a contract from Shady' : `Shady has ${next} on the board`,
-          hint: 'He loiters by the notice board on the plaza.',
+          objective: next === null ? 'Take a contract from Shady' : `Shady has ${next} lined up`,
+          hint: 'He loiters outside the Quiet Needle, in the Low Quarter.',
           target: this.shadyTile() ?? undefined,
         },
       ];

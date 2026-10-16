@@ -34,6 +34,7 @@ import { drawInteractionPrompt } from '../ui/InteractionPrompt';
 import { tileKey } from './tileKey';
 import { doorwayKeepClearTiles } from './doorwayKeepClear';
 import type { GameMap } from '../map/GameMap';
+import type { PlannedBuildingName } from '../map/town/townPlan';
 import type { Player } from '../Player';
 import type { AudioManager } from '../audio/AudioManager';
 import type { GameSystem } from './GameSystem';
@@ -71,17 +72,18 @@ const BENCH_COLUMN_GAP = 2;
 // the centre row) and the fountain (south-east).
 const FORTUNE_OFFSET: TileOffset = { dx: 4, dy: -4 };
 
-/** Tiles either side of the board the bounty giver may stand on, nearest first. */
-const BOUNTY_GIVER_MAX_OFFSET = 2;
+/** The building the bounty giver loiters outside. */
+const BOUNTY_GIVER_BUILDING = 'The Quiet Needle' as const satisfies PlannedBuildingName;
 /**
- * Where the bounty giver stands relative to the notice board, in order of
- * preference: immediately beside it, then a tile further out either way.
+ * Where the bounty giver stands relative to the parlour's door, in order of
+ * preference: on Low Street just past the facade's east corner, in front of
+ * the back-garden fence and clear of its cart gate, then stepping west along
+ * the facade.
  */
-const BOUNTY_GIVER_OFFSETS: readonly number[] = [
-  -1,
-  1,
-  -BOUNTY_GIVER_MAX_OFFSET,
-  BOUNTY_GIVER_MAX_OFFSET,
+const BOUNTY_GIVER_DOOR_OFFSETS: readonly TileOffset[] = [
+  { dx: 6, dy: 1 },
+  { dx: 5, dy: 1 },
+  { dx: 4, dy: 1 },
 ];
 
 const CENTER_OFFSET = TILE_SIZE / 2;
@@ -155,33 +157,34 @@ export class TownPropSystem implements GameSystem {
   }
 
   /**
-   * The notice board's tile, or null if placement failed. Read by the bounty
-   * system, whose quest-giver stands beside the board and whose postings are
-   * what the board shows.
+   * The Quiet Needle's door, where the bounty collect point goes when no tile
+   * beside the parlour was free for the bounty giver. Null on a map without it.
    */
-  get boardTile(): { x: number; y: number } | null {
-    return this.board?.tile ?? null;
+  get bountyGiverFallbackTile(): TileXY | null {
+    return this.bountyGiverDoor()?.doorTile ?? null;
+  }
+
+  private bountyGiverDoor(): { readonly doorTile: TileXY } | undefined {
+    return this.gameMap.buildingEntries.find((entry) => entry.name === BOUNTY_GIVER_BUILDING);
   }
 
   /**
-   * Claims the tile the bounty giver stands on, beside the notice board, and
-   * returns it. Null when the board itself could not be placed.
+   * Claims the tile the bounty giver stands on, on the street outside the
+   * Quiet Needle, and returns it. Null when the parlour is missing or every
+   * candidate tile is taken.
    *
    * Reserved but deliberately **not** permanently blocked: he is a mob and does
    * his own collision, but the market stalls and street decor built after this
    * read `reservedTiles` and must steer clear of the tile he occupies.
-   *
-   * Only the board's own row is considered, never the tiles above or below it.
-   * A figure standing on the board's face covers the art the player came to
-   * read, and puts a second Space target inside the board's own reach radius.
    */
   claimBountyGiverTile(): TileXY | null {
-    const board = this.board;
-    if (board === null) return null;
-    for (const dx of BOUNTY_GIVER_OFFSETS) {
-      const tile = { x: board.tile.x + dx, y: board.tile.y };
+    const door = this.bountyGiverDoor()?.doorTile;
+    if (door === undefined) return null;
+    for (const offset of BOUNTY_GIVER_DOOR_OFFSETS) {
+      const tile = { x: door.x + offset.dx, y: door.y + offset.dy };
       const key = tileKey(tile.x, tile.y);
       if (this.occupied.has(key) || this.claimedElsewhere.has(key)) continue;
+      if (this.doorwayKeepClear.has(key)) continue;
       if (!this.gameMap.isWalkableIgnoringPermanent(tile.x, tile.y)) continue;
       this.occupied.add(key);
       return tile;

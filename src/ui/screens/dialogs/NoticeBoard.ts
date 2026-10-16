@@ -1,10 +1,13 @@
 /**
- * The town square's notice board: the current postings as a scannable list,
- * each with a tone tag (DANGER / ACTIVE / OPEN / DONE), a title and a short
- * body. It is passive. A tap on the list pages down while postings remain
- * below the fold and puts the board away once the bottom is showing, so a
- * phone can read every posting without a drag; Space (its Close button) and
- * Escape put it away at once.
+ * A notice board (the town square's or Briar Hollow's): the current postings
+ * as a scannable list, each with a tone tag (DANGER / ACTIVE / OPEN / SOON /
+ * DONE), a title and a short
+ * body. A tap on the list pages down while postings remain below the fold
+ * and puts the board away once the bottom is showing, so a phone can read
+ * every posting without a drag; Space (its Close button) and Escape put it
+ * away at once. A board may also offer one action, such as tearing off a
+ * work order. It is never what Space picks: taking a job is a deliberate
+ * press, since a held contract can only be dropped at Wendell's.
  */
 
 import type { Notice, NoticeTone } from '../../../systems/townNotices';
@@ -12,11 +15,12 @@ import type { Rect } from '../../core/geom';
 import type { Surface, Ui } from '../../core/UiRoot';
 import type { Theme } from '../../theme/tokens';
 import { badge, badgeSize, type BadgeTone } from '../../widgets/badge';
-import { panel, panelBodyWidth } from '../../widgets/panel';
+import { panel, panelBodyWidth, type FooterButton } from '../../widgets/panel';
 import { scrollIntoView, scrollGutterWidth, scrollView } from '../../widgets/scrollView';
 import { lineHeightOf, measureTextHeight, text } from '../../widgets/text';
 
 const TITLE = 'Town notice board';
+export const VILLAGE_TITLE = 'Village notice board';
 const CLOSE_LABEL = 'Close';
 /** Share of the visible list a tap scrolls, so the last line of the old page stays as a landmark. */
 const TAP_SCROLL_FRACTION = 0.85;
@@ -32,8 +36,21 @@ const TONE_STYLES: Record<NoticeTone, ToneStyle> = {
   danger: { label: 'DANGER', badge: 'danger' },
   active: { label: 'ACTIVE', badge: 'warning' },
   available: { label: 'OPEN', badge: 'success' },
+  upcoming: { label: 'SOON', badge: 'neutral' },
   done: { label: 'DONE', badge: 'neutral' },
 };
+
+/** The one thing a board can be asked to do besides being read. */
+export interface NoticeBoardAction {
+  readonly label: string;
+  readonly onTap: () => void;
+}
+
+export interface NoticeBoardOptions {
+  /** Defaults to the town square's board. */
+  readonly title?: string;
+  readonly action?: NoticeBoardAction | null;
+}
 
 function toneColor(theme: Theme, tone: NoticeTone): string {
   const { palette } = theme;
@@ -44,6 +61,7 @@ function toneColor(theme: Theme, tone: NoticeTone): string {
       return palette.state.warning;
     case 'available':
       return palette.state.success;
+    case 'upcoming':
     case 'done':
       return palette.text.muted;
   }
@@ -87,6 +105,8 @@ function drawNotice(ui: Ui, notice: Notice, row: Rect): void {
 
 export class NoticeBoard {
   private notices: readonly Notice[] = [];
+  private title = TITLE;
+  private action: NoticeBoardAction | null = null;
   private open = false;
   private pageDownPending = false;
   /** Whether the last frame showed the bottom of the list. */
@@ -96,8 +116,10 @@ export class NoticeBoard {
     return this.open;
   }
 
-  openWith(notices: readonly Notice[]): void {
+  openWith(notices: readonly Notice[], options: NoticeBoardOptions = {}): void {
     this.notices = [...notices];
+    this.title = options.title ?? TITLE;
+    this.action = options.action ?? null;
     this.open = true;
     this.pageDownPending = false;
     this.atBottom = true;
@@ -113,6 +135,16 @@ export class NoticeBoard {
     if (this.atBottom) this.close();
     else this.pageDownPending = true;
     return true;
+  }
+
+  private footer(): FooterButton[] {
+    const closeButton = { label: CLOSE_LABEL, primary: true, onTap: () => this.close() };
+    const action = this.action;
+    if (action === null) return [{ ...closeButton, variant: 'primary' }];
+    return [
+      { label: action.label, variant: 'primary', onTap: action.onTap },
+      { ...closeButton, variant: 'secondary' },
+    ];
   }
 
   /** Modal and halting; Escape, ✕, Space and Close put it away. */
@@ -134,15 +166,13 @@ export class NoticeBoard {
           heights.reduce((sum, h) => sum + h, 0) + space.lg * Math.max(0, heights.length - 1);
         const p = panel(ui, {
           id,
-          title: TITLE,
+          title: this.title,
           width,
           height: 'content',
           contentHeight,
           onClose: () => this.close(),
           onScrimTap: () => void this.handleClick(),
-          footer: [
-            { label: CLOSE_LABEL, variant: 'primary', primary: true, onTap: () => this.close() },
-          ],
+          footer: this.footer(),
         });
         const result = scrollView(ui, p.body, {
           id: listId,

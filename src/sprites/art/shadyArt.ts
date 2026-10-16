@@ -1,5 +1,5 @@
 /**
- * Shady — the hooded man who sells bounties beside the town notice board.
+ * Shady — the hooded man who sells bounties outside the Quiet Needle.
  *
  * The painter only. Proportions, palette and one `drawShady` over a single pose
  * type; the choreography lives in `shadyFigure.ts`.

@@ -18,7 +18,9 @@
  * `colOffset` the loader already understands.
  */
 
+import { CanvasContextUnavailableError } from '../../core/canvasSurface';
 import {
+  deferEnvironmentSheet,
   hasEnvironmentSheet,
   requestEnvironmentSheet,
   type EnvironmentSheetPlan,
@@ -190,6 +192,7 @@ function sheetPlanFor(
     readySteps: paint.stages.length + 1,
     variesWithFloorSeed: true,
     ...callbacks,
+    release: paint.release,
     // The steps give back the planes they compose from as they go, so painting
     // the facade again needs a plan of its own.
     replan: () => sheetPlanFor(spec, key, weatherSeed, {}),
@@ -222,7 +225,8 @@ export interface BuildingPaintOrder {
   readonly plan?: TownPlan;
   /** Where the party arrives, in map tiles. */
   readonly nearestTo?: TilePoint;
-  readonly onSheetPainted?: () => void;
+  /** Told which facade landed, so only that building's cached art is redrawn. */
+  readonly onFacadePainted?: (spriteKey: SpriteKey) => void;
 }
 
 /**
@@ -260,16 +264,27 @@ export function requestBuildingSheets(seedTerm: number, options: BuildingPaintOr
       queueFrom(position + 1);
       return;
     }
-    requestEnvironmentSheet(
-      sheetPlanFor(spec, key, buildingWeatherSeed(index, seedTerm), {
-        onReady: options.onSheetPainted,
+    const weatherSeed = buildingWeatherSeed(index, seedTerm);
+    let plan: EnvironmentSheetPlan;
+    try {
+      plan = sheetPlanFor(spec, key, weatherSeed, {
+        onReady: () => options.onFacadePainted?.(key),
         // The chain advances on `onSettled` rather than on `onReady`, because a
         // facade whose painter throws is never published — and a chain hung on
         // publication would leave every building behind it unqueued for the life
         // of the floor.
         onSettled: () => queueFrom(position + 1),
-      }),
-    );
+      });
+    } catch (error) {
+      // Planning allocates the facade's planes up front. Refused memory leaves
+      // this facade to be asked for again and the chain carries on, rather
+      // than every building behind it going unpainted.
+      if (!(error instanceof CanvasContextUnavailableError)) throw error;
+      deferEnvironmentSheet(key, true, () => sheetPlanFor(spec, key, weatherSeed, {}));
+      queueFrom(position + 1);
+      return;
+    }
+    requestEnvironmentSheet(plan);
   };
   queueFrom(0);
 }

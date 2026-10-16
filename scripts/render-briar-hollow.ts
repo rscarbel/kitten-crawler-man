@@ -154,7 +154,7 @@ function renderView(
 
   renderCanvas(ctx, gameMap.structure, TILE_SIZE, camX, camY, viewW, viewH);
 
-  const ambience = new VillageAmbience();
+  const ambience = new VillageAmbience(() => true);
   ambience.update(gameMap, REVIEW_TIME_SECONDS);
   const draws: SortedDraw[] = [];
   for (const { tx, ty, sortYAnchorPx } of gameMap.getVisibleDecorationTiles(

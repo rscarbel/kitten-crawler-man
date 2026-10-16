@@ -64,6 +64,12 @@ const FRAME_MS = 16;
 const TOUCH_POINTER_ID = 1;
 /** Wheel steps to land on a scroll target; one is normally enough, the rest absorb clamping. */
 const MAX_SCROLL_STEPS = 4;
+/** The widget sheet's own scroll region, the one wheel target that moves the whole sheet. */
+const SHEET_VIEW_REGION_ID = 'widgets/sheet/view';
+/** Rows of candidate wheel points tried down the sheet when its centre is on an inner scroller. */
+const WHEEL_PROBE_ROWS = 8;
+/** The fallback wheel column's distance inside the sheet's left edge, in UI units. */
+const WHEEL_PROBE_EDGE_INSET = 4;
 /** A scroll this close to its target counts as there, in UI units. */
 const SCROLL_TOLERANCE = 0.5;
 /** Keeps a captured cell clear of the scroll window's edge, in UI units. */
@@ -225,14 +231,51 @@ function renderSample(viewport: ReviewViewport, uiSize: UiSize, variant: Variant
   return rig.canvas;
 }
 
-/** Scrolls the widget sheet to `target` (UI units, clamped by the sheet) and renders. */
-function scrollSheetTo(rig: Rig, target: number): void {
+/**
+ * A point on the widget sheet where the wheel scrolls the sheet itself. On a
+ * narrow viewport the tab rows overflow and take the wheel for their own
+ * strip, so the sheet's centre can sit on one of them.
+ */
+function sheetWheelPoint(rig: Rig): { x: number; y: number } {
   const view = rig.model.sheetView;
+  const innerScrollers = rig.root
+    .regions()
+    .filter((region) => region.onWheel !== undefined && region.id !== SHEET_VIEW_REGION_ID);
+  const columns = [view.x + view.w / 2, view.x + WHEEL_PROBE_EDGE_INSET];
+  for (let row = 0; row < WHEEL_PROBE_ROWS; row++) {
+    const y = view.y + (view.h * (2 * row + 1)) / (2 * WHEEL_PROBE_ROWS);
+    for (const x of columns) {
+      const onInnerScroller = innerScrollers.some(
+        (region) =>
+          x >= region.rect.x &&
+          x < region.rect.x + region.rect.w &&
+          y >= region.rect.y &&
+          y < region.rect.y + region.rect.h,
+      );
+      if (!onInnerScroller) return { x, y };
+    }
+  }
+  throw new Error('render:ui-gallery: every probed point on the widget sheet is an inner scroller');
+}
+
+/**
+ * Scrolls the widget sheet to `target` and renders. Every caller passes a
+ * target inside the sheet's scroll range, so landing anywhere else means the
+ * wheel went somewhere it should not have, and every capture after it would
+ * be taken at the wrong offset.
+ */
+function scrollSheetTo(rig: Rig, target: number): void {
   for (let step = 0; step < MAX_SCROLL_STEPS; step++) {
     const delta = target - rig.model.sheetOffset;
     if (Math.abs(delta) < SCROLL_TOLERANCE) return;
-    rig.wheel(view.x + view.w / 2, view.y + view.h / 2, delta);
+    const point = sheetWheelPoint(rig);
+    rig.wheel(point.x, point.y, delta);
     rig.frame();
+  }
+  if (Math.abs(target - rig.model.sheetOffset) >= SCROLL_TOLERANCE) {
+    throw new Error(
+      `render:ui-gallery: the widget sheet stopped at ${rig.model.sheetOffset.toFixed(1)} scrolling to ${target.toFixed(1)}`,
+    );
   }
 }
 

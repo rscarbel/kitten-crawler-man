@@ -17,6 +17,14 @@
  */
 
 import { allocCanvas, surfaceContext, type CanvasSurface } from './canvasSurface';
+import { renderQuality } from './RenderQuality';
+import { cachedCellRim, type PlacedRim } from './cellRimCache';
+import {
+  recordFigureCellBlits,
+  takeRecordedFigureCell,
+  type FigureCellBlit,
+} from '../sprites/figure/figureFrameCache';
+import { frameTime } from '../utils';
 
 /** Screen-space box, in CSS pixels, that a composited entity draws inside. */
 export interface ScreenBounds {
@@ -49,6 +57,8 @@ export interface SilhouetteLayer {
   readonly rimColor?: string;
   /** Opacity of that halo. Ignored without a `rimColor`. */
   readonly rimAlpha?: number;
+  /** A hit flash: the one coat reduced detail may trade for a cheaper cue. */
+  readonly isHitFlash?: boolean;
 }
 
 /** Rim thickness in CSS pixels — one outline weight at any render scale. */
@@ -61,6 +71,27 @@ const RIM_OFFSETS = [
   [0, -1],
   [0, 1],
 ] as const;
+
+/**
+ * At reduced detail, how many bodies a frame composites a hit flash onto. A
+ * wave struck by one boulder flashes all at once, and each composite is
+ * several full-box passes; the rest show the hit as a brief fade instead.
+ * Status coats and rims last far longer than a flash and are always kept.
+ */
+const REDUCED_DETAIL_FLASH_COMPOSITES_PER_FRAME = 6;
+/** How far a body over that count fades at the peak of its flash, as a share of the flash's own alpha. */
+const REDUCED_DETAIL_FLASH_FADE = 0.5;
+/**
+ * At reduced detail a rim is one tinted copy of the silhouette, scaled out from
+ * the box's middle by this many rim widths a side and laid under the body,
+ * rather than four offset copies punched out by the body.
+ */
+const UNDERLAY_RIM_WIDTHS = 1;
+
+let flashCompositesFrameTime = Number.NaN;
+let flashCompositesThisFrame = 0;
+/** The layers left once a hit flash is dropped; reused, since a composite never nests. */
+const layersWithoutFlash: SilhouetteLayer[] = [];
 
 let bodySurface: CanvasSurface | null = null;
 let bodyContext: CanvasRenderingContext2D | null = null;
@@ -195,6 +226,22 @@ export function drawWithSilhouetteLayers(
     return;
   }
 
+  const fullDetail = renderQuality.fullDetail;
+  let activeLayers = layers;
+  let bodyOpacity = 1;
+  const flashAlpha = fullDetail ? null : hitFlashAlpha(layers);
+  if (flashAlpha !== null && !claimFlashComposite()) {
+    activeLayers = withoutHitFlash(layers);
+    bodyOpacity = 1 - flashAlpha * REDUCED_DETAIL_FLASH_FADE;
+    if (activeLayers.length === 0) {
+      ctx.save();
+      ctx.globalAlpha *= bodyOpacity;
+      draw(ctx);
+      ctx.restore();
+      return;
+    }
+  }
+
   // Snapping the origin to the device grid is what keeps the blit 1:1.
   const deviceX = Math.floor(bounds.x * scaleX + transform.e);
   const deviceY = Math.floor(bounds.y * scaleY + transform.f);
@@ -226,25 +273,32 @@ export function drawWithSilhouetteLayers(
     const surfaces = acquireSurfaces(deviceWidth, deviceHeight);
     const { body, bodyCtx, overlay, overlayCtx } = surfaces;
 
+    // Snapshotted before the layer loop; see `Surfaces.pristine`. Skipped
+    // entirely when nothing asks for a rim, which is the common case.
+    const wantsRim = activeLayers.some((layer) => layer.rimColor !== undefined);
+    // With no coat to change it, the body is still the silhouette as drawn.
+    const pristineIsBody = activeLayers.every((layer) => layer.paint === undefined);
+    // A rim and nothing else, as a converted ally wears for its whole life, can
+    // come from a rim built once for the figure cell the body is drawn as —
+    // when the body is exactly that one cell and nothing besides.
+    const rimFromCell = fullDetail && wantsRim && pristineIsBody;
+
     resetSurface(bodyCtx, deviceWidth, deviceHeight);
     bodyCtx.setTransform(scaleX, 0, 0, scaleY, scratchOffsetX, scratchOffsetY);
     bodyCtx.save();
     bodyCtx.beginPath();
     bodyCtx.rect(originX, originY, cssWidth, cssHeight);
     bodyCtx.clip();
-    draw(bodyCtx);
+    const loneCell = rimFromCell ? drawRecordingLoneCell(bodyCtx, draw) : null;
+    if (!rimFromCell) draw(bodyCtx);
     bodyCtx.restore();
-
-    // Snapshotted before the layer loop; see `Surfaces.pristine`. Skipped
-    // entirely when nothing asks for a rim, which is the common case.
-    const wantsRim = layers.some((layer) => layer.rimColor !== undefined);
-    if (wantsRim) {
+    if (wantsRim && !pristineIsBody) {
       const target = surfaces.pristineCtx;
       resetSurface(target, deviceWidth, deviceHeight);
       target.drawImage(body, 0, 0, deviceWidth, deviceHeight, 0, 0, deviceWidth, deviceHeight);
     }
 
-    for (const layer of layers) {
+    for (const layer of activeLayers) {
       const paint = layer.paint;
       if (paint === undefined) continue;
 
@@ -280,14 +334,58 @@ export function drawWithSilhouetteLayers(
 
     ctx.save();
     ctx.globalAlpha = 1;
+    const pristine = pristineIsBody ? body : surfaces.pristine;
+    if (wantsRim && !fullDetail) {
+      const underlay = {
+        x: originX - RIM_WIDTH_PX * UNDERLAY_RIM_WIDTHS,
+        y: originY - RIM_WIDTH_PX * UNDERLAY_RIM_WIDTHS,
+        width: cssWidth + RIM_WIDTH_PX * UNDERLAY_RIM_WIDTHS * 2,
+        height: cssHeight + RIM_WIDTH_PX * UNDERLAY_RIM_WIDTHS * 2,
+      };
+      for (const layer of activeLayers) {
+        const rimColor = layer.rimColor;
+        if (rimColor === undefined) continue;
+        const tinted = tintSilhouette(surfaces, pristine, deviceWidth, deviceHeight, rimColor);
+        ctx.globalAlpha = Math.min(1, layer.rimAlpha ?? 1);
+        ctx.drawImage(
+          tinted,
+          0,
+          0,
+          deviceWidth,
+          deviceHeight,
+          underlay.x,
+          underlay.y,
+          underlay.width,
+          underlay.height,
+        );
+      }
+      ctx.globalAlpha = 1;
+    }
+    ctx.globalAlpha = bodyOpacity;
     ctx.drawImage(body, 0, 0, deviceWidth, deviceHeight, originX, originY, cssWidth, cssHeight);
 
-    if (wantsRim) {
+    const rimDevicePx = RIM_WIDTH_PX * scaleX;
+    const cellRims =
+      loneCell === null
+        ? null
+        : cellRimsFor(loneCell, activeLayers, deviceWidth, deviceHeight, rimDevicePx);
+    if (cellRims !== null) {
+      for (const { rim, alpha } of cellRims) {
+        ctx.globalAlpha = alpha;
+        ctx.drawImage(
+          rim.surface,
+          originX + rim.deviceX / scaleX,
+          originY + rim.deviceY / scaleY,
+          rim.surface.width / scaleX,
+          rim.surface.height / scaleY,
+        );
+      }
+    } else if (wantsRim && fullDetail) {
       // The halo's *shape* is the same for every layer that asks for one, since
       // it is smeared from the pristine snapshot rather than from the body the
       // layers have been mutating. Built once; each layer only re-colours it.
-      buildRimShape(surfaces, deviceWidth, deviceHeight, scaleX);
-      for (const layer of layers) {
+      buildRimShape(surfaces, pristine, deviceWidth, deviceHeight, scaleX);
+      for (const layer of activeLayers) {
         const rimColor = layer.rimColor;
         if (rimColor === undefined) continue;
         const tinted = tintRim(surfaces, deviceWidth, deviceHeight, rimColor);
@@ -318,11 +416,12 @@ export function drawWithSilhouetteLayers(
  */
 function buildRimShape(
   surfaces: Surfaces,
+  pristine: CanvasSurface,
   deviceWidth: number,
   deviceHeight: number,
   deviceScale: number,
 ): void {
-  const { pristine, rimCtx: target } = surfaces;
+  const { rimCtx: target } = surfaces;
   const rimDevicePx = RIM_WIDTH_PX * deviceScale;
 
   resetSurface(target, deviceWidth, deviceHeight);
@@ -365,4 +464,142 @@ function tintRim(
   target.globalCompositeOperation = 'source-over';
 
   return overlay;
+}
+
+/**
+ * The silhouette in one flat colour, on the rim surface, for the reduced-detail
+ * underlay rim: the halo is whatever of it the body, drawn over it, leaves.
+ */
+function tintSilhouette(
+  surfaces: Surfaces,
+  silhouette: CanvasSurface,
+  deviceWidth: number,
+  deviceHeight: number,
+  color: string,
+): CanvasSurface {
+  const { rim, rimCtx: target } = surfaces;
+  resetSurface(target, deviceWidth, deviceHeight);
+  target.drawImage(silhouette, 0, 0, deviceWidth, deviceHeight, 0, 0, deviceWidth, deviceHeight);
+  target.globalCompositeOperation = 'source-in';
+  target.fillStyle = color;
+  target.fillRect(0, 0, deviceWidth, deviceHeight);
+  target.globalCompositeOperation = 'source-over';
+  return rim;
+}
+
+/** The hit flash's alpha, or null when no layer is one. */
+function hitFlashAlpha(layers: readonly SilhouetteLayer[]): number | null {
+  for (const layer of layers) {
+    if (layer.isHitFlash === true) return layer.alpha ?? 1;
+  }
+  return null;
+}
+
+function withoutHitFlash(layers: readonly SilhouetteLayer[]): readonly SilhouetteLayer[] {
+  layersWithoutFlash.length = 0;
+  for (const layer of layers) {
+    if (layer.isHitFlash !== true) layersWithoutFlash.push(layer);
+  }
+  return layersWithoutFlash;
+}
+
+/** Counts one flash composite against this frame's reduced-detail allowance; false once it is spent. */
+function claimFlashComposite(): boolean {
+  if (flashCompositesFrameTime !== frameTime) {
+    flashCompositesFrameTime = frameTime;
+    flashCompositesThisFrame = 0;
+  }
+  if (flashCompositesThisFrame >= REDUCED_DETAIL_FLASH_COMPOSITES_PER_FRAME) return false;
+  flashCompositesThisFrame++;
+  return true;
+}
+
+/** Ink-laying calls on a context: every way a draw can change its pixels. */
+const INK_METHODS: ReadonlySet<string | symbol> = new Set([
+  'drawImage',
+  'fill',
+  'stroke',
+  'fillRect',
+  'strokeRect',
+  'fillText',
+  'strokeText',
+  'putImageData',
+  'clearRect',
+]);
+
+/** Ink calls made through {@link countingContext} since it was last zeroed. */
+let inkCalls = 0;
+const countingContexts = new WeakMap<CanvasRenderingContext2D, CanvasRenderingContext2D>();
+
+/**
+ * `target` behind a proxy that counts its ink calls, so a body's draw can be
+ * told apart from "one cell blit and nothing else" without the body saying
+ * what it draws. One proxy per context, its method wrappers made once each.
+ */
+function countingContext(target: CanvasRenderingContext2D): CanvasRenderingContext2D {
+  const held = countingContexts.get(target);
+  if (held !== undefined) return held;
+  const wrappers = new Map<string | symbol, (...args: unknown[]) => unknown>();
+  const proxy = new Proxy(target, {
+    get(context, property) {
+      const value: unknown = Reflect.get(context, property, context);
+      if (typeof value !== 'function') return value;
+      const known = wrappers.get(property);
+      if (known !== undefined) return known;
+      const counts = INK_METHODS.has(property);
+      const wrapper = (...args: unknown[]): unknown => {
+        if (counts) inkCalls++;
+        return Reflect.apply(value, context, args);
+      };
+      wrappers.set(property, wrapper);
+      return wrapper;
+    },
+    set(context, property, newValue) {
+      return Reflect.set(context, property, newValue, context);
+    },
+  });
+  countingContexts.set(target, proxy);
+  return proxy;
+}
+
+/**
+ * Draws the body into `target` and returns the figure cell it was, when it
+ * was exactly one plain cell blit and laid no other ink; null otherwise.
+ */
+function drawRecordingLoneCell(
+  target: CanvasRenderingContext2D,
+  draw: (target: CanvasRenderingContext2D) => void,
+): FigureCellBlit | null {
+  inkCalls = 0;
+  recordFigureCellBlits();
+  let cell: FigureCellBlit | null = null;
+  try {
+    draw(countingContext(target));
+  } finally {
+    cell = takeRecordedFigureCell();
+  }
+  if (cell === null || !cell.plain || inkCalls !== 1) return null;
+  return cell;
+}
+
+/**
+ * Each rim layer's cached rim of `cell`, or null when any one cannot be
+ * cached, so the live trace draws them all and they never disagree.
+ */
+function cellRimsFor(
+  cell: FigureCellBlit,
+  layers: readonly SilhouetteLayer[],
+  deviceWidth: number,
+  deviceHeight: number,
+  rimDevicePx: number,
+): Array<{ rim: PlacedRim; alpha: number }> | null {
+  const rims: Array<{ rim: PlacedRim; alpha: number }> = [];
+  for (const layer of layers) {
+    const rimColor = layer.rimColor;
+    if (rimColor === undefined) continue;
+    const rim = cachedCellRim(cell, 0, 0, deviceWidth, deviceHeight, rimDevicePx, rimColor);
+    if (rim === null) return null;
+    rims.push({ rim, alpha: Math.min(1, layer.rimAlpha ?? 1) });
+  }
+  return rims;
 }

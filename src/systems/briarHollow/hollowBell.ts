@@ -8,6 +8,7 @@
  * the walls have gone.
  */
 
+import { TILE_SIZE } from '../../core/constants';
 import type { ResourceCost } from '../../core/partyResources';
 
 /**
@@ -41,8 +42,24 @@ export const HOLLOW_BELL_REPAIR_CHUNK_COST: ResourceCost = { wood_board: 2 };
 /** Seconds a bell repair takes at Construction level 1, however many chunks it restores. */
 export const HOLLOW_BELL_REPAIR_SECONDS = 2;
 
-/** What the menus call it. */
+/**
+ * What the repair and construction menus call it. The villagers, the Mayor
+ * among them, call the tower the clocktower, and every siege alert, HUD bar
+ * and journal line uses their name.
+ */
 export const HOLLOW_BELL_LABEL = 'The Hollow Bell';
 
 /** The bell tower is two tiles square; the bell is its whole footprint. */
 export const HOLLOW_BELL_FOOTPRINT_TILES = 2;
+
+/** The middle of the bell tower in world pixels: the shared corner of its four tiles. */
+export function hollowBellCentre(bellTile: { readonly x: number; readonly y: number }): {
+  x: number;
+  y: number;
+} {
+  const halfFootprintPx = (HOLLOW_BELL_FOOTPRINT_TILES / 2) * TILE_SIZE;
+  return {
+    x: bellTile.x * TILE_SIZE + halfFootprintPx,
+    y: bellTile.y * TILE_SIZE + halfFootprintPx,
+  };
+}

@@ -9,6 +9,7 @@
  *   npm run verify:affected -- --base=<ref>       files changed since <ref>
  *   npm run verify:affected -- --list             print the selection, run nothing
  *   npm run verify:affected -- --slow             include the multi-minute sweeps
+ *   npm run verify:affected -- --all              every gate, whatever changed
  *
  * Gates are run longest-first (by their last recorded time on this machine)
  * across half the CPU cores, each printing its one-line `gate.ts` summary.
@@ -148,7 +149,7 @@ for (const [name, files] of entries) {
     const graph = graphs.get(file);
     return graph !== undefined && [...graph].some((input) => changedSet.has(input));
   });
-  if (touched) selected.add(name);
+  if (touched || flag('all')) selected.add(name);
 }
 for (const { prefix, gates } of RUNTIME_ASSET_GATES) {
   if (changed.some((file) => file.startsWith(prefix))) for (const gate of gates) selected.add(gate);

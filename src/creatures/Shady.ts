@@ -39,7 +39,7 @@ const SHADY_EYES: EyePlacement = {
 };
 
 /**
- * Shady — the hooded man beside the town notice board who issues and pays out
+ * Shady — the hooded man outside the Quiet Needle who issues and pays out
  * bounties.
  *
  * A stationary, non-combatant hook NPC in the GumGum mould: non-hostile, so

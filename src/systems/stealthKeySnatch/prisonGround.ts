@@ -250,7 +250,7 @@ export interface PrisonWallLamp {
 /** Everything about the prison's look that does not move. */
 export class PrisonGround {
   private readonly paintGrid: TileContent[][];
-  private chunks: TileChunkCache;
+  private readonly chunks: TileChunkCache;
   private grime: CanvasSurface | null = null;
   private readonly strawTiles = new Map<number, CanvasSurface>();
   /** The canvas generation the baked surfaces were painted in; see `canvasGeneration`. */
@@ -280,10 +280,9 @@ export class PrisonGround {
     }));
   }
 
-  /** Drops the baked wall and floor chunks, for when a ground sheet finishes painting. */
+  /** Marks the baked wall and floor chunks for re-baking, for when a ground sheet finishes painting. */
   invalidateArt(): void {
-    this.chunks.dispose();
-    this.chunks = new TileChunkCache(this.paintGrid, TILE_SIZE);
+    this.chunks.markAllStale();
   }
 
   /**

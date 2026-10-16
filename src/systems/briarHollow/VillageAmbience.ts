@@ -53,6 +53,7 @@ import {
   type OverlayAnchor,
 } from '../../sprites/art/villageArt';
 import { worldText } from '../../ui/world/worldText';
+import { drawGlowSprite } from './glowSprites';
 import type { TownPropRenderable } from '../townPropRenderable';
 
 /** A point in world pixels. */
@@ -287,6 +288,13 @@ export class VillageAmbience {
   private anchors: Anchors | null = null;
   private readonly renderables: TownPropRenderable[] = [];
 
+  /**
+   * @param fullDetail read every frame: when false the chimney smoke, the
+   *   lamps' glow and the rings round a ringing bell are skipped. The hearth
+   *   fires keep theirs, since a fire with no light reads as unlit.
+   */
+  constructor(private readonly fullDetail: () => boolean) {}
+
   /** Advances the clock and picks up the village on `gameMap`. */
   update(gameMap: GameMap, dtSeconds: number): void {
     this.seconds += dtSeconds;
@@ -478,21 +486,23 @@ export class VillageAmbience {
       point.y > camY - margin &&
       point.y < camY + viewH + margin;
 
-    for (const hearth of anchors.hearths) {
-      if (onScreen(hearth.chimney)) this.drawSmoke(ctx, hearth, camX, camY);
-    }
-    ctx.save();
-    try {
-      ctx.globalCompositeOperation = 'lighter';
-      anchors.lamps.forEach((lamp, index) => {
-        if (!onScreen(lamp)) return;
-        const isDoorLantern = index >= anchors.lamps.length - this.doorLanternCount;
-        const radius =
-          (isDoorLantern ? DOOR_LANTERN_GLOW_RADIUS_TILES : LAMP_GLOW_RADIUS_TILES) * TILE_SIZE;
-        this.drawGlow(ctx, lamp.x - camX, lamp.y - camY, radius, LAMP_GLOW_ALPHA, index);
-      });
-    } finally {
-      ctx.restore();
+    if (this.fullDetail()) {
+      for (const hearth of anchors.hearths) {
+        if (onScreen(hearth.chimney)) this.drawSmoke(ctx, hearth, camX, camY);
+      }
+      ctx.save();
+      try {
+        ctx.globalCompositeOperation = 'lighter';
+        anchors.lamps.forEach((lamp, index) => {
+          if (!onScreen(lamp)) return;
+          const isDoorLantern = index >= anchors.lamps.length - this.doorLanternCount;
+          const radius =
+            (isDoorLantern ? DOOR_LANTERN_GLOW_RADIUS_TILES : LAMP_GLOW_RADIUS_TILES) * TILE_SIZE;
+          this.drawGlow(ctx, lamp.x - camX, lamp.y - camY, radius, LAMP_GLOW_ALPHA, index);
+        });
+      } finally {
+        ctx.restore();
+      }
     }
     const laundry = anchors.laundry;
     // The line spans several tiles, so it is culled by its whole extent: a
@@ -507,7 +517,7 @@ export class VillageAmbience {
       if (lineVisible) this.drawLaundry(ctx, laundry, camX, camY);
     }
     const bell = anchors.bell;
-    if (bell !== null && this.bell.ringing && onScreen(bell.pivot)) {
+    if (bell !== null && this.bell.ringing && this.fullDetail() && onScreen(bell.pivot)) {
       this.drawBongRings(ctx, bell.pivot, camX, camY);
     }
   }
@@ -532,14 +542,7 @@ export class VillageAmbience {
     alpha: number,
     phase: number,
   ): void {
-    const glow = ctx.createRadialGradient(x, y, 0, x, y, radius);
-    const strength = alpha * this.flicker(phase);
-    glow.addColorStop(0, `rgba(255,190,110,${strength})`);
-    glow.addColorStop(1, 'rgba(255,150,60,0)');
-    ctx.fillStyle = glow;
-    ctx.beginPath();
-    ctx.arc(x, y, radius, 0, Math.PI * 2);
-    ctx.fill();
+    drawGlowSprite(ctx, x, y, radius, alpha * this.flicker(phase));
   }
 
   private drawBell(

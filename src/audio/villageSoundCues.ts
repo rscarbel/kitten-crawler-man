@@ -16,6 +16,11 @@ export const VILLAGE_CUES = {
   bellAlarm: ['bell_alarm'],
   /** An undead's blow landing on the bell. */
   bellTollHit: ['bell_toll_hit'],
+  /**
+   * The alarm calling the party back to the square: the dead have started on
+   * the clocktower, or have beaten it past another quarter of its health.
+   */
+  bellUnderAttack: ['bell_alarm'],
   /** An infernal boulder's roar as the trebuchet lets it go. */
   infernalBoulderWhoosh: ['boulder_fire_whoosh'],
   /** The cursed cloud left where an infernal boulder lands. */
@@ -34,6 +39,10 @@ export const VILLAGE_CUES = {
   bellCrack: ['bell_crack'],
   /** The bell pealing for the victory. */
   bellVictoryPeal: ['bell_victory_peal'],
+  /** A victory firework shooting up. Silent until its recordings exist. */
+  fireworkLaunch: [],
+  /** A victory firework bursting at the top of its flight. Silent until its recordings exist. */
+  fireworkBurst: [],
   /** The dead's horn at the start of each wave. */
   necroWarHorn: ['necro_war_horn'],
   /** The necromancer's arrival, under his boss intro. */

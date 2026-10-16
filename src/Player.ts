@@ -70,6 +70,8 @@ import {
   type ChromePart,
 } from './systems/lighting/aboveDarkness';
 
+const NO_SILHOUETTE_LAYERS: readonly SilhouetteLayer[] = [];
+
 /**
  * Every stat a crawler carries — the single vocabulary the whole stat system
  * speaks, and the iteration order for anything that walks all stats. A permanent
@@ -470,6 +472,8 @@ export abstract class Player implements AboveDarknessDrawer {
   xpCurve: readonly XpDiminishingTier[] | undefined = undefined;
   damageFlash = 0;
   isMoving = false;
+  /** The array {@link silhouetteLayers} fills, reused frame to frame. */
+  private readonly silhouetteLayerScratch: SilhouetteLayer[] = [];
   /**
    * Where this character stood as of the last {@link tickTimers}, so
    * motion-dependent status art (Speed Fizz's trail) can tell ground actually
@@ -2019,7 +2023,7 @@ export abstract class Player implements AboveDarknessDrawer {
       (this.wearsStatusPaint && this.statusEffects.length > 0) ||
       this.hitFlashProgress() > 0 ||
       this.allegianceRim !== null;
-    const layers = needsComposite ? this.silhouetteLayers(sx, sy, tileSize) : [];
+    const layers = needsComposite ? this.silhouetteLayers(sx, sy, tileSize) : NO_SILHOUETTE_LAYERS;
 
     if (layers.length === 0) {
       this.drawSelf(ctx, camX, camY, tileSize);
@@ -2199,13 +2203,18 @@ export abstract class Player implements AboveDarknessDrawer {
 
   /** Every coat of paint this character's shape is wearing this frame. */
   private silhouetteLayers(sx: number, sy: number, tileSize: number): SilhouetteLayer[] {
+    // Reused, not allocated: a converted ally wears its rim on every frame of its life.
+    const layers = this.silhouetteLayerScratch;
+    layers.length = 0;
     // Status coats go on first so a fresh hit still reads red over the top of
     // them, which is the one piece of feedback the player cannot afford to miss.
-    const layers = this.wearsStatusPaint
-      ? statusBodyLayers(this.statusEffects, (effect) =>
-          this.statusFrameAt(effect, sx, sy, tileSize),
-        )
-      : [];
+    if (this.wearsStatusPaint) {
+      statusBodyLayers(
+        this.statusEffects,
+        (effect) => this.statusFrameAt(effect, sx, sy, tileSize),
+        layers,
+      );
+    }
     const flash = hitFlashLayer(this.hitFlashProgress());
     if (flash !== null) layers.push(flash);
     const rim = this.allegianceRim;

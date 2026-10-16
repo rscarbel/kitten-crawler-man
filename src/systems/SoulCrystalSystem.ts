@@ -149,6 +149,11 @@ export class SoulCrystalSystem {
     }
   }
 
+  /** Whether the crystal is still loose, so the tower's guidance is the climb to it. */
+  get isGuidingToCrystal(): boolean {
+    return this.progress.stage === 'containment';
+  }
+
   /**
    * The way to the crystal while it is still loose: on its own floor, an arrow
    * to it; on any other storey of the tower, an arrow to the stairs up. Outdoors

@@ -9,6 +9,8 @@
  * is what holds the silhouette together at tile size once they do.
  */
 
+import { PaintedCellCache } from './paintedCellCache';
+
 const RIM = '#221b21';
 const RIM_WIDTH = 0.022;
 
@@ -422,12 +424,68 @@ export function ruinsGhoulArtTopY(sy: number, s: number): number {
   return sy + s / 2 + crownY * s;
 }
 
+/** Poses a walk cycle is cut into for the cell cache. */
+const WALK_CELLS_PER_CYCLE = 16;
+/** Poses the claw rake is cut into, rest excluded. */
+const ATTACK_CELLS = 12;
+const WALK_CYCLE_RADIANS = Math.PI * 2;
 /**
- * Draw a ruins ghoul.
+ * A few dozen poses a size: a walk cycle, a rake, and a rake taken mid-stride.
+ * A siege has several ghouls on screen at once, all sharing these.
+ */
+const GHOUL_CELL_LIMIT = 96;
+
+/**
+ * What a cell covers round the tile centre, in tiles: the hump and trailing
+ * arm behind, the raking claws ahead, the skull's crown above and the contact
+ * shadow below, with room for the rim and the eye glow.
+ */
+const CELL_LEFT_TILES = 0.45;
+const CELL_RIGHT_TILES = 0.8;
+const CELL_TOP_TILES = 0.72;
+const CELL_BOTTOM_TILES = 0.68;
+
+const ghoulCells = new PaintedCellCache(GHOUL_CELL_LIMIT);
+
+/**
+ * Draw a ruins ghoul, from a cached cell of its nearest pose. Its painter is
+ * dozens of paths and a blurred eye glow, and a siege wave brings several.
  *
  * @param attackAnim 0–1 progress through the claw rake (0 = idle/walk).
  */
 export function drawRuinsGhoulSprite(
+  ctx: CanvasRenderingContext2D,
+  sx: number,
+  sy: number,
+  s: number,
+  walkFrame = 0,
+  isMoving = false,
+  attackAnim = 0,
+  facingX = 1,
+): void {
+  const cycle = ((walkFrame % WALK_CYCLE_RADIANS) + WALK_CYCLE_RADIANS) % WALK_CYCLE_RADIANS;
+  const walkCell = isMoving
+    ? Math.round((cycle / WALK_CYCLE_RADIANS) * WALK_CELLS_PER_CYCLE) % WALK_CELLS_PER_CYCLE
+    : 0;
+  const attackCell = attackAnim > 0 ? Math.round(Math.min(1, attackAnim) * ATTACK_CELLS) : 0;
+  const cellWalkFrame = (walkCell / WALK_CELLS_PER_CYCLE) * WALK_CYCLE_RADIANS;
+  const cellAttackAnim = attackCell / ATTACK_CELLS;
+  const box = {
+    left: -CELL_LEFT_TILES * s,
+    top: -CELL_TOP_TILES * s,
+    width: (CELL_LEFT_TILES + CELL_RIGHT_TILES) * s,
+    height: (CELL_TOP_TILES + CELL_BOTTOM_TILES) * s,
+  };
+  const key = `${s}|${isMoving ? walkCell : 'still'}|${attackCell}`;
+  const half = s / 2;
+  const drawn = ghoulCells.draw(ctx, key, sx + half, sy + half, box, facingX < 0, (cellCtx) =>
+    paintRuinsGhoulSprite(cellCtx, -half, -half, s, cellWalkFrame, isMoving, cellAttackAnim),
+  );
+  if (!drawn) paintRuinsGhoulSprite(ctx, sx, sy, s, walkFrame, isMoving, attackAnim, facingX);
+}
+
+/** Paints a ruins ghoul live: the cells' source, and the fallback when no cell can be made. */
+export function paintRuinsGhoulSprite(
   ctx: CanvasRenderingContext2D,
   sx: number,
   sy: number,

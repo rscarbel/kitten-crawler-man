@@ -10,6 +10,7 @@ import { MAX_MOB_CULL_MARGIN_TILES, TILE_SIZE } from '../core/constants';
 import { nightVisionBonusTiles } from '../core/SkillManager';
 import { drawSpriteKey } from '../core/SpriteRenderer';
 import { allocCanvas, surfaceContext, type CanvasSurface } from '../core/canvasSurface';
+import { noteDrawFailure, recoverDrawState } from '../core/drawFailure';
 import type { WorldSight } from '../core/visibleWorldView';
 import { setQuestBeaconViewer } from '../sprites/questBeacon';
 import type { GameMap } from '../map/GameMap';
@@ -645,33 +646,47 @@ export class RenderPipeline {
     items.length = count;
     items.sort((a, b) => a.sortY - b.sortY);
 
+    const baseline = ctx.getTransform();
     for (let i = 0; i < count; i++) {
-      const item = items[i];
-      if (item.kind === DRAW_KIND_DECO) {
-        // A struck prop shudders for a few frames, so it feels heavy before it breaks.
-        const wobble = rc.destructibles.wobbleAt(item.tx, item.ty);
-        gameMap.drawDecorationAt(ctx, item.tx, item.ty, camX - wobble.x, camY - wobble.y);
-      } else if (item.kind === DRAW_KIND_WALL_FIXTURE) {
-        this._drawWallFixture(ctx, gameMap, item.tx, camX, camY, active, rc.lightShining);
-      } else if (item.kind === DRAW_KIND_CHEST) {
-        const chest = item.chestRef;
-        if (chest !== null) {
-          treasureChests.renderSingle(ctx, camX, camY, active, chest);
-        }
-      } else if (item.waterlineScreenY !== null) {
-        // Wading: clip the body off at the surface and cap the cut with a
-        // meniscus, so the crawler is *in* the river rather than standing on it.
-        const waterlineScreenY = item.waterlineScreenY;
-        ctx.save();
+      try {
+        this._drawSortedItem(ctx, rc, items[i]);
+      } catch (error) {
+        noteDrawFailure('RenderPipeline', error);
+        recoverDrawState(ctx, baseline);
+      }
+    }
+  }
+
+  /** Draws one entry of the Y-sorted pass. */
+  private _drawSortedItem(ctx: CanvasRenderingContext2D, rc: RenderContext, item: DrawEntry): void {
+    const { camX, camY, gameMap, active, treasureChests } = rc;
+    if (item.kind === DRAW_KIND_DECO) {
+      // A struck prop shudders for a few frames, so it feels heavy before it breaks.
+      const wobble = rc.destructibles.wobbleAt(item.tx, item.ty);
+      gameMap.drawDecorationAt(ctx, item.tx, item.ty, camX - wobble.x, camY - wobble.y);
+    } else if (item.kind === DRAW_KIND_WALL_FIXTURE) {
+      this._drawWallFixture(ctx, gameMap, item.tx, camX, camY, active, rc.lightShining);
+    } else if (item.kind === DRAW_KIND_CHEST) {
+      const chest = item.chestRef;
+      if (chest !== null) {
+        treasureChests.renderSingle(ctx, camX, camY, active, chest);
+      }
+    } else if (item.waterlineScreenY !== null) {
+      // Wading: clip the body off at the surface and cap the cut with a
+      // meniscus, so the crawler is *in* the river rather than standing on it.
+      const waterlineScreenY = item.waterlineScreenY;
+      ctx.save();
+      try {
         ctx.beginPath();
         ctx.rect(0, 0, viewportWidth(), waterlineScreenY);
         ctx.clip();
         item.entity?.render(ctx, camX, camY, TILE_SIZE);
+      } finally {
         ctx.restore();
-        rc.water?.renderWaterline(ctx, item.waterlineScreenX, waterlineScreenY);
-      } else {
-        item.entity?.render(ctx, camX, camY, TILE_SIZE);
       }
+      rc.water?.renderWaterline(ctx, item.waterlineScreenX, waterlineScreenY);
+    } else {
+      item.entity?.render(ctx, camX, camY, TILE_SIZE);
     }
   }
 

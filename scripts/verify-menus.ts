@@ -1334,6 +1334,15 @@ function townOpeners(): Opener<Town>[] {
       (scene) => scene['marketPanel']?.close(),
     ),
     menu(
+      'siege-loss-explainer',
+      (scene) => {
+        const assault = briar(scene).assault;
+        if (assault === null) throw new Error('the town has no siege');
+        assault['lossExplainer'] = 'bell_fell';
+      },
+      (scene) => briar(scene).assault?.dismissLossExplainer(),
+    ),
+    menu(
       'travel-menu',
       (scene) => scene['travelMenu'].open(scene['active']()),
       (scene) => scene['travelMenu'].close(),

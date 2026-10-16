@@ -38,6 +38,8 @@ export interface TrebuchetDrawState {
   readonly ammoFraction: number;
   /** The counterweight smoulders with embers. */
   readonly infernal: boolean;
+  /** Whether an infernal counterweight casts its gradient glow. On when absent. */
+  readonly glow?: boolean;
   /** Scaffold state while it is being built, 0–1; 1 (or absent) is finished. */
   readonly progress?: number;
   /** Seconds, for the ember flicker. */
@@ -399,18 +401,20 @@ function drawCounterweight(
   if (state.infernal) {
     const t = state.timeSeconds ?? 0;
     const flicker = 0.75 + 0.25 * Math.sin(t * Math.PI * 2 * EMBER_FLICKER_HZ);
-    const glow = ctx.createRadialGradient(
-      shortEnd.x,
-      hangTop + h / 2,
-      ts * 0.05,
-      shortEnd.x,
-      hangTop + h / 2,
-      w * 0.7,
-    );
-    glow.addColorStop(0, `rgba(255,170,70,${0.85 * flicker})`);
-    glow.addColorStop(1, 'rgba(255,90,20,0)');
-    ctx.fillStyle = glow;
-    ctx.fillRect(left - w * 0.2, hangTop - h * 0.3, w * 1.4, h * 1.6);
+    if (state.glow !== false) {
+      const glow = ctx.createRadialGradient(
+        shortEnd.x,
+        hangTop + h / 2,
+        ts * 0.05,
+        shortEnd.x,
+        hangTop + h / 2,
+        w * 0.7,
+      );
+      glow.addColorStop(0, `rgba(255,170,70,${0.85 * flicker})`);
+      glow.addColorStop(1, 'rgba(255,90,20,0)');
+      ctx.fillStyle = glow;
+      ctx.fillRect(left - w * 0.2, hangTop - h * 0.3, w * 1.4, h * 1.6);
+    }
     // Coals glowing through the slats.
     ctx.fillStyle = `rgba(255,120,40,${0.7 * flicker})`;
     ctx.fillRect(left + ts * 0.05, hangTop + h * 0.2, w - ts * 0.1, h * 0.6);

@@ -120,6 +120,7 @@ import { mirrorPuzzlePropCatalogue } from '../src/sprites/art/bigTop/mirrorPuzzl
 import { finalePropCatalogue } from '../src/sprites/art/bigTop/finaleProps.js';
 import { curtainPropCatalogue } from '../src/sprites/art/bigTop/curtainProps.js';
 import { MAX_REFLECTING_PANES } from '../src/systems/BigTopMazeSystem.js';
+import { BIG_TOP_CUES } from '../src/systems/bigTop/bigTopSoundCues.js';
 
 const ARG_PREFIX_LENGTH = '--='.length;
 
@@ -438,7 +439,10 @@ console.log('\nChecking the lights follow the show…');
   placeAt(tent.cat, { x: curtain.catRoom.x0, y: curtain.catRoom.y0 });
   tick(tent);
   const cues = tent.maze.drainSounds().map((cue) => cue.id);
-  check(cues.includes('gate_opening'), `the curtain's rise is heard (${cues.join(', ')})`);
+  check(
+    BIG_TOP_CUES.curtainRise.some((soundId) => cues.includes(soundId)),
+    `the curtain's rise is heard (${cues.join(', ')})`,
+  );
   // One more frame so the board has read the new act.
   tick(tent);
   check(

@@ -3,7 +3,8 @@
  * the `auto` preset — measures whether the machine can actually sustain it.
  *
  * Shape: static floor → one short probe under existing cover → latch for the
- * session. Deliberately not continuous adaptation, which oscillates and is more
+ * session. The ladder has two rungs below `sharp`: the render scale, then
+ * optional scenery detail (`fullDetail`). Deliberately not continuous adaptation, which oscillates and is more
  * annoying than a slightly-low setting. The one exception is a single late
  * downgrade, which is what catches thermal throttling on laptops and phones —
  * something no boot-time probe can see. Because it is one-way and capped it
@@ -107,6 +108,13 @@ class RenderQualityController {
   /** Set once a probe or the safety net has lowered the scale, latching it. */
   private downgraded = false;
 
+  /**
+   * Set once a probe or the safety net has given up optional scenery detail,
+   * latching it. The rung below the scale: on a 1× display, or once the scale
+   * is already down, it is the only thing left to give.
+   */
+  private detailDowngraded = false;
+
   /** The late downgrade is single-shot; this records that it has been spent. */
   private safetyNetSpent = false;
   private safetyNetWindowStartedAt: number | null = null;
@@ -151,6 +159,7 @@ class RenderQualityController {
     this.probeState = preset === 'auto' ? 'idle' : 'done';
     this.safetyNetSpent = preset !== 'auto';
     this.downgraded = false;
+    this.detailDowngraded = false;
     this.resetSafetyNetWindow();
     this.applyScale(this.resolveScale(preset));
     // Handing control back mid-level would otherwise leave `auto` unmeasured
@@ -170,7 +179,7 @@ class RenderQualityController {
    * about its display.
    */
   handleDisplayChange(): void {
-    if (this.downgraded) return;
+    if (this.downgraded || this.detailDowngraded) return;
     this.applyScale(this.resolveScale(settings.quality));
   }
 
@@ -179,17 +188,14 @@ class RenderQualityController {
    * from the intro banner itself, so levels entered without a banner are still
    * covered — the player cannot act during either.
    *
-   * A display with no extra pixels to render has nothing to measure, and a
+   * A display with no extra pixels to render is measured all the same: the
+   * cost is painting, not pixel fill, so detail is still there to give up. A
    * probe that has already run is never re-run: the choice is latched for the
    * session.
    */
   requestProbe(): void {
     if (settings.quality !== 'auto') return;
     if (this.probeState !== 'idle') return;
-    if (sharpRenderScale() <= PERFORMANCE_RENDER_SCALE) {
-      this.probeState = 'done';
-      return;
-    }
     this.probeState = 'warmup';
     this.warmupFramesLeft = PROBE_WARMUP_FRAMES;
     this.probeIntervals = [];
@@ -234,7 +240,7 @@ class RenderQualityController {
       case 'sharp':
         return true;
       case 'auto':
-        return !this.downgraded;
+        return !this.detailDowngraded;
     }
   }
 
@@ -299,7 +305,7 @@ class RenderQualityController {
     // Nothing left to give up at the bottom of the ladder — but do not spend the
     // net here, because a move to a 1× display also lands in this branch and the
     // player may well move back to the sharper screen.
-    if (this.currentScale() <= PERFORMANCE_RENDER_SCALE) {
+    if (!this.hasRungLeft()) {
       this.resetSafetyNetWindow();
       return;
     }
@@ -336,10 +342,24 @@ class RenderQualityController {
     return this.sceneManager?.renderScale ?? PERFORMANCE_RENDER_SCALE;
   }
 
-  /** Steps down one rung of the ladder. There is only one rung below sharp. */
+  /** Whether the ladder has a rung below where it stands. */
+  private hasRungLeft(): boolean {
+    return this.currentScale() > PERFORMANCE_RENDER_SCALE || !this.detailDowngraded;
+  }
+
+  /**
+   * Steps down one rung of the ladder: the render scale first, while there is
+   * any to give, then optional scenery detail. Scale goes first because it is
+   * the change a player notices least on a fast phone's dense screen; detail is
+   * what is left on a 1× display, where the frame's cost is painting alone.
+   */
   private downgradeOnce(): void {
-    this.downgraded = true;
-    this.applyScale(PERFORMANCE_RENDER_SCALE);
+    if (this.currentScale() > PERFORMANCE_RENDER_SCALE) {
+      this.downgraded = true;
+      this.applyScale(PERFORMANCE_RENDER_SCALE);
+      return;
+    }
+    this.detailDowngraded = true;
   }
 
   private applyScale(scale: number): void {

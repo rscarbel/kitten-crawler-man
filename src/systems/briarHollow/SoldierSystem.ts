@@ -234,7 +234,9 @@ export class SoldierSystem {
   private readonly framesSinceWound = new Map<RatkinSoldier, number>();
   private readonly regenCarry = new Map<RatkinSoldier, number>();
   private readonly hurtSoundGap = new Map<RatkinSoldier, number>();
-  private breachedSegments: ReadonlySet<string>;
+  private breachedSegments = new Set<string>();
+  /** The other half of a double buffer with `breachedSegments`, so a frame's check allocates nothing. */
+  private breachScratch = new Set<string>();
   /** Whether the militia has fallen back from the wall to guard the bell. */
   private fallenBack = false;
   private readonly bellStations: Record<RatkinSoldierId, SoldierPosts['post'][RatkinSoldierId]>;
@@ -246,7 +248,7 @@ export class SoldierSystem {
     this.posts = computeSoldierPosts(deps.gameMap, deps.site);
     this.bellStations = this.computeBellStations();
     this.lastPhase = deps.state.quest.phase;
-    this.breachedSegments = this.currentBreaches();
+    this.collectBreaches(this.breachedSegments);
     this.lastGateStruck = deps.defense()?.gateStruckAtSeconds ?? null;
     this.soldiers = RATKIN_SOLDIER_IDS.map((id) => this.spawn(id));
     const provider: TopicProvider = {
@@ -763,12 +765,11 @@ export class SoldierSystem {
     }
   }
 
-  private currentBreaches(): ReadonlySet<string> {
-    const breached = new Set<string>();
+  private collectBreaches(into: Set<string>): void {
+    into.clear();
     for (const structure of this.deps.state.structures) {
-      if (structure.kind === 'segment' && structure.tier === 'breach') breached.add(structure.id);
+      if (structure.kind === 'segment' && structure.tier === 'breach') into.add(structure.id);
     }
-    return breached;
   }
 
   /** Hobb calls out a struck gate; Hobb and Marta call out a breach or a hostile inside. */
@@ -780,8 +781,13 @@ export class SoldierSystem {
     }
     this.lastGateStruck = struck;
 
-    const breaches = this.currentBreaches();
-    const freshBreach = [...breaches].some((id) => !this.breachedSegments.has(id));
+    const breaches = this.breachScratch;
+    this.collectBreaches(breaches);
+    let freshBreach = false;
+    for (const id of breaches) {
+      if (!this.breachedSegments.has(id)) freshBreach = true;
+    }
+    this.breachScratch = this.breachedSegments;
     this.breachedSegments = breaches;
     if (phase !== 'assault') return;
     const hostileInside =
@@ -1004,7 +1010,7 @@ export class SoldierSystem {
   /** A death rewind on the same scene: everyone on their feet, on the orders the rewound state holds. */
   onRewind(): void {
     this.lastPhase = this.deps.state.quest.phase;
-    this.breachedSegments = this.currentBreaches();
+    this.collectBreaches(this.breachedSegments);
     this.helpUpFrames.clear();
     for (const soldier of this.soldiers) {
       soldier.reviveProgress = 0;

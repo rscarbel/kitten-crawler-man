@@ -12,7 +12,6 @@
 import type { AudioManager } from '../../audio/AudioManager';
 import type { ActiveContract, BriarHollowState } from '../../core/briarHollowState';
 import type { EventBus } from '../../core/EventBus';
-import { formatCost } from '../../core/partyResources';
 import type { NPCMarkerType } from '../../creatures/QuestNPC';
 import type { Conversation } from '../../dialog/Conversation';
 import type { DialogLine, NonEmpty } from '../../dialog/line';
@@ -22,10 +21,11 @@ import type { Player } from '../../Player';
 import { PLUMBLINE_FARM_NAME } from '../briarHollow/blueprints/blueprintsProgress';
 import type { ResidentQuestHook } from '../residentQuestHooks';
 import type { ResidentId } from '../townResidents';
-import { contractSiteFor, contractSpot, type ContractSiteDef } from './contractCatalog';
+import { contractSiteFor, type ContractSiteDef } from './contractCatalog';
 import { contractContactName } from './contractContacts';
-import { contractSiteEligible, type ContractWorld } from './contractEligibility';
-import { contractCost, dropContract, isContractReady, issueContract } from './contractGenerator';
+import type { ContractWorld } from './contractEligibility';
+import { dropContract, isContractReady } from './contractGenerator';
+import { issueNextContract, remainingSpotLabels } from './contractIssue';
 import { CONSTRUCTION_CONTRACT_QUEST_ID, contractsUnlocked } from './contractQuest';
 import { playContractCue } from './contractSoundCues';
 
@@ -134,7 +134,10 @@ export class WendellContractsHook implements ResidentQuestHook {
           tone: 'quest',
           run: (convo) => {
             this.contracts.introSeen = true;
-            this.issueAndAnnounce(convo);
+            const held = this.heldContract();
+            // A notice board can hand over a contract before the intro is ever heard.
+            if (held === null) this.issueAndAnnounce(convo);
+            else convo.play(this.closingRequest(this.openingLine(held)));
           },
         },
         decline: {
@@ -163,7 +166,7 @@ export class WendellContractsHook implements ResidentQuestHook {
     }
     return WENDELL_CONTRACTS.activeNotReady({
       siteName: held.site.name,
-      remaining: remainingSpotLabels(held),
+      remaining: remainingSpotLabels(held.active, held.site),
     });
   }
 
@@ -266,23 +269,17 @@ export class WendellContractsHook implements ResidentQuestHook {
   }
 
   private issueAndAnnounce(convo: ConversationHandle): void {
-    const world = this.deps.world();
-    const active = issueContract(
-      this.contracts,
-      (site) => contractSiteEligible(site, world),
-      this.deps.worldSeed,
-    );
-    const site = active === null ? undefined : contractSiteFor(active.site);
-    if (active === null || site === undefined) {
+    const issued = issueNextContract(this.contracts, this.deps.world(), this.deps.worldSeed);
+    if (issued === null) {
       convo.play(this.closingRequest(WENDELL_CONTRACTS.nothingDoing));
       return;
     }
     convo.play(
       this.closingRequest(
         WENDELL_CONTRACTS.issued({
-          siteName: site.name,
-          contactName: contractContactName(site),
-          costText: formatCost(contractCost(active)),
+          siteName: issued.site.name,
+          contactName: contractContactName(issued.site),
+          costText: issued.costText,
         }),
       ),
     );
@@ -306,13 +303,4 @@ export class WendellContractsHook implements ResidentQuestHook {
       locksKeyboard: true,
     };
   }
-}
-
-/** The labels of a held contract's unfinished spots, in the order they were issued. */
-function remainingSpotLabels(held: HeldContract): string[] {
-  return held.active.spotIds.flatMap((id, index) => {
-    if (held.active.spotsDone[index]) return [];
-    const spot = contractSpot(held.site, id);
-    return spot === undefined ? [] : [spot.label];
-  });
 }

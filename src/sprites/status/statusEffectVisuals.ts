@@ -407,13 +407,14 @@ export function statusFade(effect: StatusEffect): number {
 /**
  * Every silhouette layer the character's active statuses ask for, in
  * registry-independent order — the order the effects were applied in, so the
- * most recent one paints last and wins any argument about the rim.
+ * most recent one paints last and wins any argument about the rim. Appended
+ * to `layers` when given, so a caller drawing every frame can reuse one array.
  */
 export function statusBodyLayers(
   effects: readonly StatusEffect[],
   frameFor: (effect: StatusEffect) => StatusVisualFrame,
+  layers: SilhouetteLayer[] = [],
 ): SilhouetteLayer[] {
-  const layers: SilhouetteLayer[] = [];
   for (const effect of effects) {
     const bodyLayers = STATUS_VISUALS.get(effect.type)?.bodyLayers;
     if (bodyLayers === undefined) continue;

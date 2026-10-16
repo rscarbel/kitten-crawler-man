@@ -104,7 +104,7 @@ states.forEach((state, index) => {
   const camX = minX * TILE_SIZE;
   const camY = minY * TILE_SIZE;
   renderCanvas(squareCtx, map.structure, TILE_SIZE, camX, camY, viewW, viewH);
-  const ambience = new VillageAmbience();
+  const ambience = new VillageAmbience(() => true);
   ambience.update(map, state === 'ringing' ? RINGING_SECONDS : REST_SECONDS);
   ambience.bell.ringing = state === 'ringing';
   ambience.bell.cracked = state === 'cracked';

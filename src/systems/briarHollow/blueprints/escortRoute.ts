@@ -16,7 +16,6 @@
  * walk is planned afresh from where she stands ({@link EscortReplanner}).
  */
 
-import { TILE_SIZE } from '../../../core/constants';
 import { MinHeap } from '../../../core/MinHeap';
 import type { GameMap } from '../../../map/GameMap';
 import type { BriarHollowSite } from '../../../map/overworld/briarHollowSite';
@@ -24,11 +23,10 @@ import { HOLLOW_GATE } from '../../../map/tileTypes';
 import { isPavedTileType } from '../../../map/town/tileGrid';
 import { findNearbyWalkableTile } from '../../../map/findWalkableTile';
 import type { TilePoint, TileRect } from '../../../map/town/townPlan';
-import { doorwaySpan } from '../../BuildingSystem';
+import { doorwayKeys } from '../../doorwayTiles';
+import { straightSegments, type StraightSegmentLimits } from '../../questRoute/straightSegments';
 import { tileCoordKey } from '../../../map/tileIndex';
 import { garrisonGreen } from './garrisonGreen';
-
-const TILE_CENTRE = 0.5;
 
 /** A step along a road, lane or bridge. */
 const ROAD_STEP_COST = 1;
@@ -71,6 +69,10 @@ export const ESCORT_WAYPOINT_MAX_SPACING_TILES = 10;
  * waypoints before a bend needs a waypoint of its own, in tiles.
  */
 const WAYPOINT_MAX_DEVIATION_TILES = 1.5;
+const ESCORT_WAYPOINT_LIMITS: StraightSegmentLimits = {
+  maxSpacingTiles: ESCORT_WAYPOINT_MAX_SPACING_TILES,
+  maxDeviationTiles: WAYPOINT_MAX_DEVIATION_TILES,
+};
 
 /** One point on the escort's road the guidance hands the party in turn. */
 export interface EscortWaypoint {
@@ -108,16 +110,6 @@ export function isEscortRoadTile(gameMap: GameMap, x: number, y: number): boolea
   if (x < 0 || y < 0 || x >= size || y >= size) return false;
   const type = gameMap.structure[y][x].type;
   return isPavedTileType(type) || type === HOLLOW_GATE;
-}
-
-/** Every tile of every building's doorway: stepping on one takes the party indoors. */
-function doorwayKeys(gameMap: GameMap): ReadonlySet<number> {
-  const keys = new Set<number>();
-  for (const entry of gameMap.buildingEntries) {
-    const { x0, width } = doorwaySpan(entry);
-    for (let x = x0; x < x0 + width; x++) keys.add(tileCoordKey(x, entry.doorTile.y));
-  }
-  return keys;
 }
 
 /**
@@ -221,49 +213,6 @@ export function planEscortWalk(
   return walk.reverse();
 }
 
-function tileCentrePx(tile: TilePoint): { readonly x: number; readonly y: number } {
-  return { x: (tile.x + TILE_CENTRE) * TILE_SIZE, y: (tile.y + TILE_CENTRE) * TILE_SIZE };
-}
-
-/** Whether Midge could walk straight from `from` to `to`: `hasWalkableLine`, centre to centre. */
-export function isStraightWalk(gameMap: GameMap, from: TilePoint, to: TilePoint): boolean {
-  const a = tileCentrePx(from);
-  const b = tileCentrePx(to);
-  return gameMap.hasWalkableLine(a.x, a.y, b.x, b.y);
-}
-
-/** Distance in tiles from `point` to the segment `a`–`b`. */
-function distanceToSegment(point: TilePoint, a: TilePoint, b: TilePoint): number {
-  const abX = b.x - a.x;
-  const abY = b.y - a.y;
-  const lengthSq = abX * abX + abY * abY;
-  const along =
-    lengthSq === 0
-      ? 0
-      : Math.max(0, Math.min(1, ((point.x - a.x) * abX + (point.y - a.y) * abY) / lengthSq));
-  return Math.hypot(point.x - (a.x + abX * along), point.y - (a.y + abY * along));
-}
-
-/**
- * Whether the straight line from `walk[from]` to `walk[to]` stands for the
- * walk between them: short enough, walkable end to end, and never more than
- * {@link WAYPOINT_MAX_DEVIATION_TILES} off the road it replaces.
- */
-function lineFollowsWalk(
-  gameMap: GameMap,
-  walk: readonly TilePoint[],
-  from: number,
-  to: number,
-): boolean {
-  const a = walk[from];
-  const b = walk[to];
-  if (Math.hypot(b.x - a.x, b.y - a.y) > ESCORT_WAYPOINT_MAX_SPACING_TILES) return false;
-  for (let index = from + 1; index < to; index++) {
-    if (distanceToSegment(walk[index], a, b) > WAYPOINT_MAX_DEVIATION_TILES) return false;
-  }
-  return isStraightWalk(gameMap, a, b);
-}
-
 /**
  * Cuts `walk` into waypoints: from each one, the furthest tile further along
  * that the straight line still stands for the road; the walk's last tile is
@@ -273,16 +222,10 @@ export function escortWaypoints(
   gameMap: GameMap,
   walk: readonly TilePoint[],
 ): readonly EscortWaypoint[] {
-  const waypoints: EscortWaypoint[] = [];
-  const last = walk.length - 1;
-  let anchor = 0;
-  while (anchor < last) {
-    let reach = anchor + 1;
-    while (reach < last && lineFollowsWalk(gameMap, walk, anchor, reach + 1)) reach++;
-    waypoints.push({ tile: walk[reach], routeIndex: reach });
-    anchor = reach;
-  }
-  return waypoints;
+  return straightSegments(gameMap, walk, ESCORT_WAYPOINT_LIMITS).map((routeIndex) => ({
+    tile: walk[routeIndex],
+    routeIndex,
+  }));
 }
 
 const routesByMap = new WeakMap<GameMap, EscortRoute | null>();

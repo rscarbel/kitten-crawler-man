@@ -75,6 +75,7 @@ import {
   trebuchetFootprint,
 } from './DefenseStructures';
 import { StructureCallouts } from './structureCallouts';
+import { hollowBellCentre } from './hollowBell';
 import { TREBUCHET_MAX_AMMO, TREBUCHET_RANGE_TILES, UPDATES_PER_SECOND } from './structureRules';
 
 // ── Firing ──────────────────────────────────────────────────────────────────
@@ -175,6 +176,13 @@ const MIASMA_SLOW_FRAMES = 2;
 const MIASMA_RISE_FRAMES = 20;
 const MIASMA_FADE_FRAMES = 70;
 const MAX_MIASMA_CLOUDS = 10;
+/**
+ * At reduced detail, the most impact bursts and boulder-trail embers kept in
+ * the air at once. Both are only paint: a volley of infernal boulders leaves
+ * dozens, and every one is drawn every frame.
+ */
+const REDUCED_DETAIL_MAX_BURSTS = 4;
+const REDUCED_DETAIL_MAX_EMBERS = 16;
 
 // ── Feedback ────────────────────────────────────────────────────────────────
 
@@ -294,6 +302,8 @@ export interface TrebuchetSystemDeps {
   readonly isInSafeRoom: (point: { readonly x: number; readonly y: number }) => boolean;
   /** Uniform [0, 1) for the break roll; injectable so a gate can seed it. */
   readonly random?: () => number;
+  /** Read live: false caps the bursts and embers in the air. Full detail when absent. */
+  readonly fullDetail?: () => boolean;
 }
 
 // ── Damage ──────────────────────────────────────────────────────────────────
@@ -390,6 +400,9 @@ interface PositionTrack {
 export class TrebuchetSystem {
   private readonly deps: TrebuchetSystemDeps;
   private readonly engines = new Map<string, EngineState>();
+  /** Reused by `hostilesNear`, which runs per engine on most frames of a siege. */
+  private readonly hostileQuery = new Set<Mob>();
+  private readonly hostilesFound: Mob[] = [];
   private readonly boulders: Boulder[] = [];
   private readonly clouds: SiegeMiasmaCloud[] = [];
   private readonly bursts: ImpactBurst[] = [];
@@ -414,9 +427,7 @@ export class TrebuchetSystem {
       x: tile.x * TILE_SIZE + HALF_TILE,
       y: tile.y * TILE_SIZE + HALF_TILE,
     }));
-    const bell = deps.site.square.bellTile;
-    // The bell tower is two tiles square; its centre is the shared corner.
-    this.bellCentre = { x: (bell.x + 1) * TILE_SIZE, y: (bell.y + 1) * TILE_SIZE };
+    this.bellCentre = hollowBellCentre(deps.site.square.bellTile);
   }
 
   private crawler(kind: CrawlerKind): HumanPlayer | CatPlayer {
@@ -571,7 +582,7 @@ export class TrebuchetSystem {
   }
 
   /** Every hostile a trebuchet could consider, before the range and priority rules. */
-  private hostilesNear(record: TrebuchetStructureRecord): Mob[] {
+  private hostilesNear(record: TrebuchetStructureRecord): readonly Mob[] {
     const footprint = trebuchetFootprint(record.x, record.y);
     const centreX = (footprint.x + footprint.w / 2) * TILE_SIZE;
     const centreY = (footprint.y + footprint.h / 2) * TILE_SIZE;
@@ -580,14 +591,14 @@ export class TrebuchetSystem {
         Math.hypot(footprint.w, footprint.h) / 2 +
         HOSTILE_SEARCH_SLACK_TILES) *
       TILE_SIZE;
-    const found: Mob[] = [];
+    const found = this.hostilesFound;
+    found.length = 0;
+    const query = this.hostileQuery;
+    query.clear();
     // The grid holds top-left corners; searching from half a tile up and left
     // of the centre finds every body whose centre is within reach.
-    for (const mob of this.deps.roster.grid.queryCircle(
-      centreX - HALF_TILE,
-      centreY - HALF_TILE,
-      reach,
-    )) {
+    this.deps.roster.grid.queryCircle(centreX - HALF_TILE, centreY - HALF_TILE, reach, query);
+    for (const mob of query) {
       if (this.isFairGame(mob)) found.push(mob);
     }
     return found;
@@ -877,11 +888,19 @@ export class TrebuchetSystem {
 
   // ── Effects ─────────────────────────────────────────────────────────────
 
+  private get reducedDetail(): boolean {
+    return this.deps.fullDetail?.() === false;
+  }
+
   private addBurst(x: number, y: number, infernal: boolean): void {
+    if (this.reducedDetail && this.bursts.length >= REDUCED_DETAIL_MAX_BURSTS) {
+      this.bursts.shift();
+    }
     this.bursts.push({ x, y, infernal, seed: this.frame, age: 0 });
   }
 
   private trailEmbers(boulder: Boulder): void {
+    if (this.reducedDetail && this.embers.length >= REDUCED_DETAIL_MAX_EMBERS) return;
     const view = TrebuchetSystem.viewOf(boulder);
     const { vx, vy } = emberDrift(boulder.age);
     this.embers.push({ x: view.groundX, y: view.groundY - view.heightPx, vx, vy, age: 0 });

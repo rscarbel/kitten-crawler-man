@@ -580,10 +580,13 @@ render:loading-screen`.
 - **`npm run render:ui-gallery`** renders every widget in every state (rest,
   hover, pressed, focused, disabled, selected — produced by feeding real
   gestures and Tab presses into a `UiRoot`) and every screen with fixture data,
-  at 1440×900, 1024×640, 844×390 and 568×320 and at each UI size, into
-  `preview/ui-gallery/` (`--only=568x320`, `--match=dialogs/`,
-  `--size=medium`). Fixtures live in `src/dev/uiGallery/`; a new widget state
-  or screen gets one. **Open the PNGs**: a layout you haven't seen isn't done.
+  at every `VIEWPORTS` entry in the script (desktop, landscape and portrait
+  phones, tablet) and at each UI size, into `preview/ui-gallery/`. Unfiltered,
+  that is about 6,300 PNGs and close to twenty minutes, so narrow it to what
+  you changed: `--only=<w>x<h>`, `--size=<small|medium|large>`,
+  `--match=<variant name substring>` (with `--match` the widget sheet is
+  skipped). Fixtures live in `src/dev/uiGallery/`; a new widget state or screen
+  gets one. **Open the PNGs**: a layout you haven't seen isn't done.
 - **`?ui`** (`UiGalleryScene`, localhost only via `devBoot`) shows the same
   fixtures live, with sheet switching, UI-size cycling and a pointer/touch
   density toggle.
@@ -621,7 +624,10 @@ render:loading-screen`.
   each ✕ or `leave` button must sit inside the safe area, uncut and uncovered,
   and a surface that shows one on desktop must show one on a phone. The scene
   surfaces are replayed the same way on a notched phone each way up, in child
-  processes (`--phone-scenes=`), since density is decided once per load.
+  processes, since density is decided once per load. `--only=<substring>`
+  narrows it to matching cases or sections (accepted values are in the
+  script's header); a value that matches nothing fails rather than passing
+  empty. `--verbose` prints every case.
 - **`npm run render:ui-gallery`** — above. Also the HUD gates, kept on the
   current API, never deleted: `verify:hud-parity`, `gates:hud-column`,
   `gates:phone-hud`, `verify:interior-camera`, `verify:interior-hud-clicks`,

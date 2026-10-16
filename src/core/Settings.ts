@@ -116,6 +116,8 @@ interface SettingsData {
   audioInBackground: boolean;
   /** Short on-screen lines for sounds that carry information the screen does not show. */
   soundCaptions: boolean;
+  /** The dotted route painted on the ground toward the pinned objective. */
+  questRouteTrail: boolean;
 }
 
 const DEFAULTS: SettingsData = {
@@ -132,6 +134,7 @@ const DEFAULTS: SettingsData = {
   monoAudio: false,
   audioInBackground: false,
   soundCaptions: false,
+  questRouteTrail: true,
 };
 
 function isQualityPreset(value: unknown): value is QualityPreset {
@@ -231,6 +234,7 @@ function load(): SettingsData {
     monoAudio: readBoolean(stored, 'monoAudio', DEFAULTS.monoAudio),
     audioInBackground: readBoolean(stored, 'audioInBackground', DEFAULTS.audioInBackground),
     soundCaptions: readBoolean(stored, 'soundCaptions', DEFAULTS.soundCaptions),
+    questRouteTrail: readBoolean(stored, 'questRouteTrail', DEFAULTS.questRouteTrail),
   };
 }
 
@@ -369,6 +373,15 @@ class Settings {
 
   setSoundCaptions(enabled: boolean): void {
     this.data.soundCaptions = enabled;
+    this.persist();
+  }
+
+  get questRouteTrail(): boolean {
+    return this.data.questRouteTrail;
+  }
+
+  setQuestRouteTrail(enabled: boolean): void {
+    this.data.questRouteTrail = enabled;
     this.persist();
   }
 

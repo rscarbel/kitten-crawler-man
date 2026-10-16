@@ -223,20 +223,66 @@ interface LaidOut {
   readonly digitCell: number | null;
 }
 
+/** The part of a layout that depends only on the string and how it is set, not its colour. */
+type LaidLines = Pick<LaidOut, 'lines' | 'widths' | 'truncated'>;
+
+/**
+ * Layouts already worked out, by everything that shapes the lines; the oldest
+ * go first past the cap. A HUD card re-measures the same text on every frame,
+ * and a layout costs a font change plus a measure per word.
+ */
+const laidLinesCache = new Map<string, LaidLines>();
+/** Enough for every block a HUD and an open menu lay out at once. */
+const LAYOUT_CACHE_SIZE = 512;
+onUiFontLoaded(() => laidLinesCache.clear());
+
 function layout(ui: PaintTarget, width: number, opts: TextOptions): LaidOut {
   const { ctx } = ui;
   const resolved = resolveText(ui.theme, opts);
   const spacing = spacingOf(resolved.style);
   const digitCell = opts.tabular === true ? digitCellWidth(ctx, resolved.font) : null;
-  ctx.save();
-  ctx.font = resolved.font;
-  const measure = (s: string): number => lineWidth(ctx, s, spacing, digitCell);
   const content = shown(opts.text, resolved.style);
+  const wrap = opts.wrap === true;
+  const cacheKey = [
+    resolved.font,
+    spacing,
+    digitCell ?? '',
+    wrap ? 'wrap' : 'line',
+    opts.maxLines ?? '',
+    width,
+    content,
+  ].join('|');
+  const cached = laidLinesCache.get(cacheKey);
+  const laid =
+    cached ??
+    measureLayout(ctx, width, content, resolved.font, spacing, digitCell, wrap, opts.maxLines);
+  if (cached === undefined) {
+    laidLinesCache.set(cacheKey, laid);
+    if (laidLinesCache.size > LAYOUT_CACHE_SIZE) {
+      const oldest = laidLinesCache.keys().next();
+      if (oldest.done !== true) laidLinesCache.delete(oldest.value);
+    }
+  }
+  return { ...laid, resolved, spacing, digitCell };
+}
+
+function measureLayout(
+  ctx: CanvasRenderingContext2D,
+  width: number,
+  content: string,
+  font: string,
+  spacing: number,
+  digitCell: number | null,
+  wrap: boolean,
+  maxLines: number | undefined,
+): LaidLines {
+  ctx.save();
+  ctx.font = font;
+  const measure = (s: string): number => lineWidth(ctx, s, spacing, digitCell);
   let lines: string[];
   let truncated = false;
-  if (opts.wrap === true) {
+  if (wrap) {
     lines = wrapToWidth(content, width, measure);
-    const maxLines = opts.maxLines;
     if (maxLines !== undefined && lines.length > maxLines) {
       const kept = lines.slice(0, maxLines);
       const lastIndex = kept.length - 1;
@@ -251,7 +297,7 @@ function layout(ui: PaintTarget, width: number, opts: TextOptions): LaidOut {
   }
   const widths = lines.map(measure);
   ctx.restore();
-  return { lines, widths, truncated, resolved, spacing, digitCell };
+  return { lines, widths, truncated };
 }
 
 /** Draws text into `rect`. */

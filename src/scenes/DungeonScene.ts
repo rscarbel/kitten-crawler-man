@@ -102,9 +102,12 @@ import {
   drawArrowAbovePlayer,
   drawTopArrowCandidate,
   isWorldPointOnScreen,
+  OBJECTIVE_ARROW_SUPPRESS_TILES,
   type ArrowCandidate,
 } from '../ui/WorldArrow';
 import { drawObjectiveBeacon } from '../ui/ObjectiveBeacon';
+import { worldTrail } from '../ui/world/worldTrail';
+import { QuestRouteGuide } from '../systems/questRoute/QuestRouteGuide';
 import {
   objectiveBeamTargets,
   characterTarget,
@@ -116,7 +119,20 @@ import {
   type TrackerEntry,
   type TrackerTarget,
 } from '../systems/questTracker';
-import { releaseContractAutoPinOnEnd } from '../systems/constructionContracts/contractQuest';
+import {
+  buildContractWorld,
+  CONSTRUCTION_CONTRACT_QUEST_ID,
+  releaseContractAutoPinOnEnd,
+} from '../systems/constructionContracts/contractQuest';
+import {
+  issueNextContract,
+  workOrderStateFor,
+} from '../systems/constructionContracts/contractIssue';
+import { contractContactName } from '../systems/constructionContracts/contractContacts';
+import { playContractCue } from '../systems/constructionContracts/contractSoundCues';
+import { WORK_ORDERS } from '../dialog/scripts/workOrders';
+import { isVillageUnderSiege } from '../core/villageQuestPhase';
+import { playInteriorCue } from '../systems/interiorInteractionSoundCues';
 import { SafeRoomSystem, type SafeRoomInfo } from '../systems/SafeRoomSystem';
 import { SkillPointReminderSystem } from '../systems/SkillPointReminderSystem';
 import { BopcaSystem } from '../systems/BopcaSystem';
@@ -222,8 +238,16 @@ import {
   citizenSpecies,
   type TownDialogContext,
 } from '../systems/townDialog';
-import { buildTownNotices, type TownNoticeContext } from '../systems/townNotices';
-import { NoticeBoard } from '../ui/screens/dialogs/NoticeBoard';
+import {
+  buildTownNotices,
+  buildVillageNotices,
+  type TownNoticeContext,
+} from '../systems/townNotices';
+import {
+  NoticeBoard,
+  VILLAGE_TITLE,
+  type NoticeBoardAction,
+} from '../ui/screens/dialogs/NoticeBoard';
 import { ShopSession } from '../ui/screens/shop/shopSession';
 import { shopScreenSurface } from '../ui/screens/shop/ShopScreen';
 import { FortuneTable, fortuneScreenSurface } from '../ui/screens/shop/FortuneScreen';
@@ -332,6 +356,7 @@ import type { GrantedReward } from '../core/GrantedReward';
 import { drawMongoIcon } from '../sprites/mongoSprite';
 import { EventBus } from '../core/EventBus';
 import { CrawlerBarkSystem } from '../systems/CrawlerBarkSystem';
+import { siegeHudKeepouts } from '../ui/hud/siegeBellAlert';
 import { barkWhenBlueprintsItemEvicted } from '../systems/briarHollow/blueprints/blueprintsEvictionBark';
 import { CRAWLER_BARKS, barkTexts } from '../dialog/scripts/crawlerBarks';
 import { isWardExplainerDue } from '../creatures/fairies/ShieldFairy';
@@ -1129,10 +1154,8 @@ const SPIDER_LAB_MUSIC = 'spider_lab' as const satisfies MusicTrackId;
 
 /** A per-frame record the scene owns and rewrites in place rather than rebuilding. */
 type Mutable<T> = { -readonly [K in keyof T]: T[K] };
-/** Inside this many tiles the pinned-objective arrow is suppressed — it is on screen. */
-const PINNED_ARROW_SUPPRESS_TILES = 4;
 /** Gold, matching the pinned Journal row it belongs to. */
-const PINNED_ARROW_COLOR = worldPalette.ink.gold;
+const PINNED_ARROW_COLOR = worldPalette.objective.ready;
 /** The span of an objective target that does not say how wide it is. */
 const SINGLE_TILE_TARGET_WIDTH = 1;
 const STAIRWELL_ARROW_COLOR = worldPalette.ink.gold;
@@ -1250,6 +1273,8 @@ export class DungeonScene extends GameplayScene {
   private readonly _vendorMinimapPositions: Array<{ x: number; y: number }> = [];
   /** Reused per-frame array of the Journal's entries, for the same reason. */
   private readonly _trackerEntries: TrackerEntry[] = [];
+  /** The way to the pinned objective: the arrow's next gate and the ground trail. */
+  private readonly questRoute = new QuestRouteGuide();
   /** Systems that beam over their own objective places whether or not the Journal tracks them. */
   private readonly objectiveBeaconSources: ObjectiveBeaconSource[] = [];
   private readonly _systemContext: SystemContext;
@@ -1319,6 +1344,8 @@ export class DungeonScene extends GameplayScene {
    * fill their prop arrays in their constructors and never add to them.
    */
   private townPropRenderables: ReadonlyArray<TownPropRenderable> | null = null;
+  /** Reused every frame so the merged prop list costs no allocation. */
+  private readonly propRenderableScratch: TownPropRenderable[] = [];
   private crawlerSigns: CrawlerSignSystem | null = null;
   /** The sign currently open on the shared conversation; unfrozen once it closes. */
   private signDialogTarget: CrawlerSignPlacement | null = null;
@@ -1892,7 +1919,8 @@ export class DungeonScene extends GameplayScene {
     // so the floor fades in while its ground arrives, and re-bakes the tile
     // chunks each time a sheet lands — chunks near the player bake against each
     // material's fallback colour first and would otherwise keep it forever.
-    const repaintTileArt = (): void => this.gameMap.invalidateAllTileArt();
+    const repaintTileArt = (): void => this.gameMap.markTileArtStale({ includeFacades: false });
+    this.gameMap.setTileArtDetail(() => renderQuality.fullDetail);
     requestGroundSheets(
       groundSheetKeysAmong(requiredSpriteKeysForLevel(levelDef.id, levelDef.spriteGroups)),
       repaintTileArt,
@@ -1903,6 +1931,7 @@ export class DungeonScene extends GameplayScene {
     // chunk, and a chunk baked before its sheet landed would keep the gap.
     requestEnvironmentSheetsForGroups(levelDef.spriteGroups, {
       onSheetPainted: repaintTileArt,
+      onFacadePainted: (spriteKey) => this.gameMap.invalidateFacadeArt(spriteKey),
       // The facades are seconds of painting and the rest of the town is not, so
       // they are painted outward from where the party actually arrives.
       town:
@@ -2214,7 +2243,9 @@ export class DungeonScene extends GameplayScene {
     // Overworld-only, mirroring `TreeSystem` above: no other map is ever
     // generated with a water tile on it, so elsewhere this would scan the
     // viewport every frame to find nothing.
-    this.water = levelDef.isOverworld ? new WaterAnimationSystem(this.gameMap) : null;
+    this.water = levelDef.isOverworld
+      ? new WaterAnimationSystem(this.gameMap, () => renderQuality.fullDetail)
+      : null;
     this.lavaBalls = new LavaBallSystem(this.gameMap);
     this.rockThrows = new RockThrowSystem(this.gameMap);
     this.hirelingShots = new HirelingBoltSystem(this.gameMap, (point) =>
@@ -2543,7 +2574,7 @@ export class DungeonScene extends GameplayScene {
         ...this.townProps.props,
         ...this.townDecor.props,
       ];
-      this.townLife = new TownLifeSystem(this.gameMap);
+      this.townLife = new TownLifeSystem(this.gameMap, () => renderQuality.fullDetail);
       this.bounty = new BountySystem(
         this.gameMap,
         this.bus,
@@ -2559,13 +2590,13 @@ export class DungeonScene extends GameplayScene {
       if (bountyGiverTile !== null) {
         this.bounty.placeShady(bountyGiverTile);
       } else {
-        // No room beside the board — he cannot be talked to, so send the collect
-        // arrow to the board itself rather than nowhere.
-        const boardTile = this.townProps.boardTile;
-        if (boardTile !== null) {
+        // No room beside the parlour — he cannot be talked to, so send the
+        // collect arrow to its door rather than nowhere.
+        const fallbackTile = this.townProps.bountyGiverFallbackTile;
+        if (fallbackTile !== null) {
           this.bounty.setCollectPoint(
-            (boardTile.x + TILE_CENTER_OFFSET) * TILE_SIZE,
-            (boardTile.y + TILE_CENTER_OFFSET) * TILE_SIZE,
+            (fallbackTile.x + TILE_CENTER_OFFSET) * TILE_SIZE,
+            (fallbackTile.y + TILE_CENTER_OFFSET) * TILE_SIZE,
           );
         }
       }
@@ -2642,6 +2673,8 @@ export class DungeonScene extends GameplayScene {
                   murderStage: this.murderQuestProgress.stage,
                   anchor: this.anchorQuestProgress,
                 }),
+              openNoticeBoard: () => this.openVillageNoticeBoard(),
+              fullDetail: () => renderQuality.fullDetail,
             })
           : null;
       // Regrowth must never stand a rock or a tree back up under a trebuchet or a snare.
@@ -2785,7 +2818,7 @@ export class DungeonScene extends GameplayScene {
     // colors/art forever. Re-baking once the whole group is confirmed loaded
     // turns that into the intended "wrong for a frame or two", not permanent.
     const spriteGroupsReady = prewarmGroups(levelDef.spriteGroups).then(() =>
-      this.gameMap.invalidateAllTileArt(),
+      this.gameMap.markTileArtStale({ includeFacades: true }),
     );
     this.spiderQuest.setSongClock(() => this.audioScope?.keyboardHeroMusicTimeMs() ?? null);
     {
@@ -3608,6 +3641,7 @@ export class DungeonScene extends GameplayScene {
     this.chat.dispose();
     this.spiderQuest.dispose();
     this.bounty?.dispose();
+    this.questRoute.dispose();
     this.briarHollowKit?.dispose();
     this.gathering?.dispose();
     this.circusAmbience?.dispose();
@@ -4061,7 +4095,76 @@ export class DungeonScene extends GameplayScene {
     if (pinned !== null && pinMatchesEntry(BOUNTY_TRACKER_ID, pinned)) return null;
     const target = pinned?.target ?? null;
     if (target === null) return null;
-    return this.objectiveArrowCandidate(ctx, camX, camY, target, ARROW_PRIORITY.PINNED_OBJECTIVE);
+    const aim = target.drawsOwnRoute === true ? null : this.questRoute.aim();
+    return this.objectiveArrowCandidate(
+      ctx,
+      camX,
+      camY,
+      target,
+      ARROW_PRIORITY.PINNED_OBJECTIVE,
+      aim,
+    );
+  }
+
+  /**
+   * The pinned target the route guide routes toward, or null when there is
+   * none for it: nothing pinned, the bounty (which draws its own arrow), or a
+   * target whose source paints its own route.
+   */
+  private routedPinnedTarget(): TrackerTarget | null {
+    const pinned = this.pinnedObjectiveEntry;
+    if (pinned === null || pinMatchesEntry(BOUNTY_TRACKER_ID, pinned)) return null;
+    const target = pinned.target ?? null;
+    if (target === null || target.drawsOwnRoute === true) return null;
+    return target;
+  }
+
+  /**
+   * The dotted route on the ground toward the pinned objective, under every
+   * body. Stands down with the arrow near the destination, where the place is
+   * plainly in front of the player.
+   */
+  private renderQuestRouteTrail(ctx: CanvasRenderingContext2D, camX: number, camY: number): void {
+    if (!settings.questRouteTrail || this.gameOver || this.menus.pauseScreen.isOpen) return;
+    const target = this.routedPinnedTarget();
+    if (target === null || this.isObjectiveArrowSuppressed(target, camX, camY)) return;
+    worldTrail(ctx, this.questRoute.trail(), camX, camY, performance.now(), {
+      view: { width: viewportWidth(), height: viewportHeight() },
+    });
+  }
+
+  /** The world-pixel middle of an objective target's footprint. */
+  private objectiveTargetCentre(target: TrackerTarget): { x: number; y: number } {
+    const footprintCentreTiles =
+      (target.widthTiles ?? SINGLE_TILE_TARGET_WIDTH) * TILE_CENTRE_FRACTION;
+    return {
+      x: (target.x + footprintCentreTiles) * TILE_SIZE,
+      y: (target.y + TILE_CENTRE_FRACTION) * TILE_SIZE,
+    };
+  }
+
+  /**
+   * Whether the player is close enough to `target` that an arrow toward it
+   * would say nothing: within a few tiles, or for a target flagged
+   * `hidesArrowOnScreen`, anywhere on screen.
+   */
+  private isObjectiveArrowSuppressed(target: TrackerTarget, camX: number, camY: number): boolean {
+    const player = this.active();
+    const centre = this.objectiveTargetCentre(target);
+    if (target.hidesArrowOnScreen === true) {
+      return isWorldPointOnScreen(
+        centre.x,
+        centre.y,
+        camX,
+        camY,
+        viewportWidth(),
+        viewportHeight(),
+      );
+    }
+    const distanceTiles =
+      Math.hypot(centre.x - (player.x + TILE_SIZE / 2), centre.y - (player.y + TILE_SIZE / 2)) /
+      TILE_SIZE;
+    return distanceTiles < OBJECTIVE_ARROW_SUPPRESS_TILES;
   }
 
   /**
@@ -4108,6 +4211,8 @@ export class DungeonScene extends GameplayScene {
   /**
    * The arrow above the player toward an objective target, aimed at the middle
    * of its footprint so a three-tile doorway is pointed at, not its west tile.
+   * Given an `aim`, the bearing comes from it instead (the next gate on the
+   * way); whether the arrow shows is still decided by the target itself.
    */
   private objectiveArrowCandidate(
     ctx: CanvasRenderingContext2D,
@@ -4115,20 +4220,11 @@ export class DungeonScene extends GameplayScene {
     camY: number,
     target: TrackerTarget,
     priority: number,
+    aim: { readonly x: number; readonly y: number } | null = null,
   ): ArrowCandidate | null {
+    if (this.isObjectiveArrowSuppressed(target, camX, camY)) return null;
     const player = this.active();
-    const footprintCentreTiles =
-      (target.widthTiles ?? SINGLE_TILE_TARGET_WIDTH) * TILE_CENTRE_FRACTION;
-    const targetX = (target.x + footprintCentreTiles) * TILE_SIZE;
-    const targetY = (target.y + TILE_CENTRE_FRACTION) * TILE_SIZE;
-    const viewport = { width: viewportWidth(), height: viewportHeight() };
-    const suppressed =
-      target.hidesArrowOnScreen === true
-        ? isWorldPointOnScreen(targetX, targetY, camX, camY, viewport.width, viewport.height)
-        : Math.hypot(targetX - (player.x + TILE_SIZE / 2), targetY - (player.y + TILE_SIZE / 2)) /
-            TILE_SIZE <
-          PINNED_ARROW_SUPPRESS_TILES;
-    if (suppressed) return null;
+    const facing = aim ?? this.objectiveTargetCentre(target);
 
     return {
       priority,
@@ -4137,8 +4233,8 @@ export class DungeonScene extends GameplayScene {
           ctx,
           player.x,
           player.y,
-          targetX,
-          targetY,
+          facing.x,
+          facing.y,
           camX,
           camY,
           PINNED_ARROW_COLOR,
@@ -6259,14 +6355,81 @@ export class DungeonScene extends GameplayScene {
       murderCluesFound: cluesFound,
       doomsday: this.doomsdayQuestProgress.stage,
       bounty: this.bounty?.noticeState ?? null,
+      workOrder: workOrderStateFor(this.briarHollowState),
     };
   }
 
   /** Opens the town notice board panel, populated with the current postings. */
   private openNoticeBoard(): void {
     if (this.noticeBoard === null) return;
-    this.noticeBoard.openWith(buildTownNotices(this.townNoticeContext()));
+    this.noticeBoard.openWith(buildTownNotices(this.townNoticeContext()), {
+      action: this.workOrderAction(),
+    });
+    this.playNoticeBoardOpened();
+  }
+
+  /** Opens Briar Hollow's notice board: the siege call while it lasts, and Wendell's work order. */
+  private openVillageNoticeBoard(): void {
+    if (this.noticeBoard === null) return;
+    const notices = buildVillageNotices({
+      workOrder: workOrderStateFor(this.briarHollowState),
+      underSiege: isVillageUnderSiege(this.briarHollowState.quest.phase),
+    });
+    this.noticeBoard.openWith(notices, {
+      title: VILLAGE_TITLE,
+      action: this.workOrderAction(),
+    });
+    this.playNoticeBoardOpened();
+  }
+
+  private playNoticeBoardOpened(): void {
     this.audio?.play('menu_open');
+    playInteriorCue(this.audio, 'noticeUnfold');
+  }
+
+  /** The board's "tear off a work order" button, offered only while a contract is there to take. */
+  private workOrderAction(): NoticeBoardAction | null {
+    if (workOrderStateFor(this.briarHollowState).kind !== 'open') return null;
+    return { label: WORK_ORDERS.takeLabel, onTap: () => this.takeWorkOrder() };
+  }
+
+  private takeWorkOrder(): void {
+    this.noticeBoard?.close();
+    const contracts = this.briarHollowState.contracts;
+    // The posting has already explained the arrangement, so Wendell skips his pitch.
+    contracts.introSeen = true;
+    const world = buildContractWorld({
+      murderQuest: this.murderQuestProgress,
+      anchorQuest: this.anchorQuestProgress,
+      briarHollow: this.briarHollowState,
+    });
+    const issued = issueNextContract(contracts, world, this.gameMap.worldSeed);
+    if (issued === null) {
+      this.openWorkOrderLine(WORK_ORDERS.nothingDoing);
+      return;
+    }
+    this.openWorkOrderLine(
+      WORK_ORDERS.issued({
+        siteName: issued.site.name,
+        contactName: contractContactName(issued.site),
+        costText: issued.costText,
+      }),
+    );
+    this.bus.emit('questStarted', { questId: CONSTRUCTION_CONTRACT_QUEST_ID });
+    playContractCue(this.audio, 'contractSigned');
+  }
+
+  private openWorkOrderLine(line: DialogLine): void {
+    this.conversation.open({
+      lines: [line],
+      reward: null,
+      questRelated: true,
+      ending: { kind: 'close', onClosed: () => undefined },
+      dismiss: { kind: 'allowed', onDismissed: () => undefined },
+      haltsWorld: true,
+      anchor: null,
+      locksKeyboard: true,
+    });
   }
 
   /** Opens a market stall's buy panel on the rows the market system built. */
@@ -6539,7 +6702,7 @@ export class DungeonScene extends GameplayScene {
       buildingEntryPromptSurface('building-entry', () => this.building ?? null),
       activityDifficultyPickerSurface('prison-difficulty', () => this.prisonDifficultyPick()),
       this.grateSpikes.surface(camera),
-      ...(this.briarHollowKit?.surfaces(camera) ?? []),
+      ...(this.briarHollowKit?.surfaces(camera, () => siegeHudKeepouts(this.hud)) ?? []),
       this.followerMenu.surface({
         haltsWorld: false,
         state: () => ({
@@ -7886,6 +8049,7 @@ export class DungeonScene extends GameplayScene {
     // time the puzzle's music plays.
     this.updatePipeBoardMusic();
     this.updateSpiderLabMusic();
+    this.questRoute.update(this.gameMap, this.activeTile, this.routedPinnedTarget());
 
     // Also drained ahead of the early returns: the request is raised by a
     // right-click or a hotbar key, neither of which routes through the panel's
@@ -8145,6 +8309,20 @@ export class DungeonScene extends GameplayScene {
     flushAboveDarkness(ctx);
   }
 
+  private mergedPropRenderables(
+    frontBeams: ReadonlyArray<TownPropRenderable>,
+  ): ReadonlyArray<TownPropRenderable> {
+    const merged = this.propRenderableScratch;
+    merged.length = 0;
+    for (const prop of this.townPropRenderables ?? []) merged.push(prop);
+    for (const beam of frontBeams) merged.push(beam);
+    for (const piece of this.briarHollowKit?.renderEntities() ?? []) merged.push(piece);
+    for (const piece of this.gathering?.renderEntities() ?? []) merged.push(piece);
+    for (const piece of this.circusAmbience?.renderEntities() ?? []) merged.push(piece);
+    for (const piece of this.highStriker?.renderEntities() ?? []) merged.push(piece);
+    return merged;
+  }
+
   render(ctx: CanvasRenderingContext2D): void {
     if (this.arrivalLoading.renderLoading(this.ui, ctx)) return;
     // Any overlay at all, not only the world-halting ones: a street conversation
@@ -8163,21 +8341,14 @@ export class DungeonScene extends GameplayScene {
       inactive: this.inactive(),
       mobs: this.world.roster.mobs,
       mobGrid: this.world.roster.grid,
-      townsfolk: this.townLife?.people,
+      townsfolk: this.townLife?.renderablePeople(camX, camY),
       townProps:
         this.briarHollowKit !== null ||
         this.gathering !== null ||
         this.circusAmbience !== null ||
         this.highStriker !== null ||
         frontBeams.length > 0
-          ? [
-              ...(this.townPropRenderables ?? []),
-              ...frontBeams,
-              ...(this.briarHollowKit?.renderEntities() ?? []),
-              ...(this.gathering?.renderEntities() ?? []),
-              ...(this.circusAmbience?.renderEntities() ?? []),
-              ...(this.highStriker?.renderEntities() ?? []),
-            ]
+          ? this.mergedPropRenderables(frontBeams)
           : (this.townPropRenderables ?? undefined),
       gameOver: this.gameOver,
       pauseMenuOpen: this.menus.pauseScreen.isOpen,
@@ -8234,6 +8405,7 @@ export class DungeonScene extends GameplayScene {
     // Straight after the floor, ahead of every quest system's own props, so a
     // clue scene or a grate stands in front of the light marking it.
     this.renderObjectiveBeacons(ctx, camX, camY);
+    this.renderQuestRouteTrail(ctx, camX, camY);
     this.briarHollowKit?.renderGround(ctx, camX, camY);
     this.gathering?.renderGround(ctx, camX, camY);
     this.bopca.renderObjects(ctx, camX, camY, this.active(), this.inactive());
@@ -8346,6 +8518,8 @@ export class DungeonScene extends GameplayScene {
       // wins the slot, and every other kind has a fixed place behind it.
       drawTopArrowCandidate([
         downedCompanionArrowCandidate(ctx, this.active(), this.inactive(), camX, camY),
+        this.briarHollowKit?.siegeBellArrowCandidate(ctx, this.active(), camX, camY, framesRect) ??
+          null,
         this.mercenarySystem.downedArrowCandidate(
           ctx,
           camX,

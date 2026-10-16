@@ -9,14 +9,15 @@ import { CONSTRUCTION_EXPLAINER } from '../../../ui/screens/dialogs/construction
 import { mongoExplainerEntry } from '../../../ui/screens/dialogs/mongoExplainer';
 import { PROCESSING_EXPLAINER } from '../../../ui/screens/dialogs/processingExplainer';
 import { RESOURCING_EXPLAINER } from '../../../ui/screens/dialogs/resourcingExplainer';
-import type { Notice } from '../../../systems/townNotices';
+import { buildVillageNotices, workOrderNotice, type Notice } from '../../../systems/townNotices';
+import { WORK_ORDERS } from '../../../dialog/scripts/workOrders';
 import { readableBuildings, readablesFor, type Readable } from '../../../systems/townReadables';
 import { BlackjackRules } from '../../../ui/screens/dialogs/BlackjackRules';
 import { defendTutorialSurface } from '../../../ui/screens/dialogs/defendTutorial';
 import { pipeBoardExplainerSurface } from '../../../ui/screens/dialogs/pipeBoardExplainer';
 import { prisonExplainerSurface } from '../../../ui/screens/dialogs/prisonExplainer';
 import { nearGoblinHintSurface } from '../../../ui/screens/dialogs/nearGoblinHint';
-import { NoticeBoard } from '../../../ui/screens/dialogs/NoticeBoard';
+import { NoticeBoard, VILLAGE_TITLE } from '../../../ui/screens/dialogs/NoticeBoard';
 import { ReadableOverlay } from '../../../ui/screens/dialogs/ReadableOverlay';
 import { spiderTutorialSurface } from '../../../ui/screens/dialogs/spiderTutorial';
 import type { Surface } from '../../../ui/core/UiRoot';
@@ -188,14 +189,36 @@ const NOTICES: readonly Notice[] = [
     title: 'Doomsday preppers',
     body: 'Strange noises from the old cellars. The council asks that nobody go poking.',
   },
+  workOrderNotice({ kind: 'open' }),
 ];
+
+const WORK_ORDER_ACTION = { label: WORK_ORDERS.takeLabel, onTap: () => undefined };
+
+function villageNoticeFixture(name: string): DialogFixture {
+  return {
+    name,
+    surfaces: (shown) => {
+      const board = new NoticeBoard();
+      const notices = buildVillageNotices({ workOrder: { kind: 'open' }, underSiege: true });
+      return [
+        gated(board.surface(name), shown, () =>
+          board.openWith(notices, { title: VILLAGE_TITLE, action: WORK_ORDER_ACTION }),
+        ),
+      ];
+    },
+  };
+}
 
 function noticeFixture(name: string, taps: number): DialogFixture {
   return {
     name,
     surfaces: (shown) => {
       const board = new NoticeBoard();
-      return [gated(board.surface(name), shown, () => board.openWith(NOTICES))];
+      return [
+        gated(board.surface(name), shown, () =>
+          board.openWith(NOTICES, { action: WORK_ORDER_ACTION }),
+        ),
+      ];
     },
     interact:
       taps === 0
@@ -345,4 +368,5 @@ export const FIXTURES: readonly DialogFixture[] = [
   readableFixture('readable-page2', 1),
   noticeFixture('notice-board', 0),
   noticeFixture('notice-board-scrolled', 1),
+  villageNoticeFixture('notice-board-village'),
 ];

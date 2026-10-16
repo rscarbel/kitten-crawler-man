@@ -1,3 +1,4 @@
+import { errorIdentity, takeSaveStackDrainRequest } from './drawFailure';
 import { updateFrameTime } from '../utils';
 import { bindPointerEvents, PointerInput } from '../ui/core/pointer';
 import type { UiRoot } from '../ui/core/UiRoot';
@@ -27,6 +28,23 @@ const FIXED_DT_MS = MS_PER_SECOND / FRAME_RATE;
 
 /** Maximum accumulated time to process in one frame to prevent death spiral. */
 const MAX_ACCUMULATOR_MULTIPLIER = 5;
+
+/** Share of a game tick a display frame must span to be rendered when no tick ran. */
+const MIN_RENDER_INTERVAL_SHARE = 0.9;
+/**
+ * The shortest gap between two renders when no game tick ran in between. A
+ * little under one tick, so a 60 Hz display whose frames jitter around the tick
+ * never drops a frame, while a 120 Hz display renders once per tick instead of
+ * drawing the same world twice.
+ */
+const MIN_RENDER_INTERVAL_MS = FIXED_DT_MS * MIN_RENDER_INTERVAL_SHARE;
+
+/**
+ * Distinct update failures logged before the rest go quiet, so an error whose
+ * message changes every frame (it names a position or a frame count) cannot
+ * flood the console or grow the set of seen messages without bound.
+ */
+const MAX_REPORTED_UPDATE_FAILURES = 16;
 
 /**
  * Maximum catch-up update() calls per animation frame. Running more updates when
@@ -97,6 +115,10 @@ export class SceneManager {
   readonly ctx: CanvasRenderingContext2D;
   private current: Scene | null = null;
   private lastTime = performance.now();
+  /** When the last render ran, or null before the first. */
+  private lastRenderAt: number | null = null;
+  /** Identities of the update failures already logged; see `reportUpdateFailure`. */
+  private readonly reportedUpdateFailures = new Set<string>();
   private accumulator = 0;
   private readonly FIXED_DT = FIXED_DT_MS;
   /**
@@ -387,7 +409,6 @@ export class SceneManager {
   private step(now: number): void {
     // Keep frameTime current for smooth visual animations in render().
     updateFrameTime();
-    renderQuality.recordFrame(now);
 
     // Fixed-timestep accumulator: run update() at exactly 60 ticks/s regardless
     // of the display refresh rate. Cap the elapsed time to prevent a "spiral of
@@ -397,6 +418,11 @@ export class SceneManager {
     this.accumulator += Math.min(elapsed, this.FIXED_DT * MAX_ACCUMULATOR_MULTIPLIER);
 
     let steps = 0;
+    // Held until after the render: an update that throws on every frame would
+    // otherwise skip every render, and a world that stops drawing reads as a
+    // freeze with no clue why. Drawn first, it shows the stalled world beside
+    // the error.
+    let updateFailure: { readonly error: unknown; readonly firstSeen: boolean } | null = null;
     const updateStartedAt = perfMonitor.begin();
     try {
       while (this.accumulator >= this.FIXED_DT && steps < MAX_CATCHUP_UPDATES) {
@@ -404,10 +430,27 @@ export class SceneManager {
         this.accumulator -= this.FIXED_DT;
         steps++;
       }
+    } catch (error) {
+      updateFailure = { error, firstSeen: this.reportUpdateFailure(error) };
     } finally {
       perfMonitor.end('update', updateStartedAt);
     }
     if (this.accumulator >= this.FIXED_DT) this.accumulator = 0;
+
+    // A frame with no new tick would draw the same world again. Every
+    // per-render clock below — the quality probe, canvas recovery, the figure
+    // and environment caches' frame counters — is skipped with it, so their
+    // windows keep meaning a 60 Hz frame's worth whatever the display rate.
+    const sinceLastRender =
+      this.lastRenderAt === null ? Number.POSITIVE_INFINITY : now - this.lastRenderAt;
+    // A failed update counts as no tick: an update that throws before its
+    // first tick completes would otherwise draw on every display frame.
+    if (steps === 0 && sinceLastRender < MIN_RENDER_INTERVAL_MS) {
+      this.rethrowFirstUpdateFailure(updateFailure);
+      return;
+    }
+    this.lastRenderAt = now;
+    renderQuality.recordFrame(now);
 
     // Before the figure and environment queues, so a frame that finds its
     // caches purged rebuilds them before those queues spend this frame's budget.
@@ -424,7 +467,9 @@ export class SceneManager {
     const renderStartedAt = perfMonitor.begin();
     try {
       this.current?.render(this.ctx);
+      if (takeSaveStackDrainRequest()) this.drainSaveStack();
     } catch (error) {
+      takeSaveStackDrainRequest();
       this.drainSaveStack();
       throw error;
     } finally {
@@ -441,5 +486,35 @@ export class SceneManager {
       this.frameOverlay(this.ctx);
       this.ctx.restore();
     }
+
+    this.rethrowFirstUpdateFailure(updateFailure);
+  }
+
+  /**
+   * Rethrows an update failure the first time it is seen, so it
+   * reaches the browser as an uncaught error with its stack; `loop` keeps the
+   * chain. Later identical failures are swallowed, or the console would carry
+   * one uncaught exception per frame.
+   */
+  private rethrowFirstUpdateFailure(
+    failure: { readonly error: unknown; readonly firstSeen: boolean } | null,
+  ): void {
+    if (failure?.firstSeen === true) throw failure.error;
+  }
+
+  /**
+   * Logs an update failure the first time it is seen, by its kind and where it
+   * was thrown rather than its message, which may name a position or a frame. A broken
+   * update usually throws the same error on every frame, and sixty identical
+   * stack traces a second bury the first one. Returns whether this was the
+   * first time.
+   */
+  private reportUpdateFailure(error: unknown): boolean {
+    const identity = errorIdentity(error);
+    if (this.reportedUpdateFailures.has(identity)) return false;
+    if (this.reportedUpdateFailures.size >= MAX_REPORTED_UPDATE_FAILURES) return false;
+    this.reportedUpdateFailures.add(identity);
+    console.error('[SceneManager] update threw; the frame is still drawn', error);
+    return true;
   }
 }

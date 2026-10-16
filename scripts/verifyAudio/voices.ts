@@ -1,9 +1,9 @@
 /**
  * How one-shots share the mixer, for `verify-audio.ts`: per-id voice caps
  * and the oldest copy stolen, the global cap and its priorities, same-frame
- * dedupe, stings ducking the music, and sounds placed in the world. A real
- * `AudioManager` over the fake graph; imported after the fake audio and the
- * browser shim are installed.
+ * dedupe, stings ducking the music, the effects hush, and sounds placed in
+ * the world. A real `AudioManager` over the fake graph; imported after the
+ * fake audio and the browser shim are installed.
  */
 
 import {
@@ -252,6 +252,76 @@ export async function checkStingerDuck(harness: AudioHarness, check: Check): Pro
   check(
     Math.abs(musicBus.gain.value - open) < GAIN_TOLERANCE,
     `once the sting ends the music comes back (${musicBus.gain.value.toFixed(3)})`,
+  );
+  audio.dispose();
+}
+
+/** The bus a one-shot's own gain feeds, or null when it plays through a panner. */
+function busOf(source: SourceRecord | undefined): FakeGainNode | null {
+  const ownGain = source?.firstOutput ?? null;
+  if (ownGain === null) return null;
+  const bus = firstOf(ownGain.outputs);
+  return bus instanceof FakeGainNode ? bus : null;
+}
+
+/** An Effects slider position other than the player's, to see a move during the hush. */
+const MOVED_SFX_SLIDER = 0.4;
+
+/**
+ * 21. A hush silences the effects bus while the `ui` bus plays on, holds
+ * through a slider move, and gives the slider's level back when it lets go.
+ */
+export async function checkEffectsHush(harness: AudioHarness, check: Check): Promise<void> {
+  const audio = await freshManager(harness, [PLAIN_ID, HIGH_PRIORITY_ID]);
+  const playedBefore = harness.sources.length;
+  audio.play(PLAIN_ID);
+  audio.play(HIGH_PRIORITY_ID, { bus: 'ui' });
+  const [effect, interfaceCue] = startedSince(harness, playedBefore);
+  const sfxBus = busOf(effect);
+  const uiBus = busOf(interfaceCue);
+  if (sfxBus === null || uiBus === null || sfxBus === uiBus) {
+    check(false, 'an effect and an interface cue play through two different buses');
+    audio.dispose();
+    return;
+  }
+  const openLevel = sfxBus.gain.value;
+  const uiLevel = uiBus.gain.value;
+  harness.advance(SETTLE_MS);
+
+  audio.hushEffects('siege_victory', 0);
+  harness.advance(SETTLE_MS);
+  check(
+    sfxBus.gain.value < SILENT_GAIN,
+    `a hush silences the effects bus (${sfxBus.gain.value.toFixed(3)})`,
+  );
+  check(
+    Math.abs(uiBus.gain.value - uiLevel) < GAIN_TOLERANCE,
+    `a hush leaves the ui bus at the player's level (${uiBus.gain.value.toFixed(3)})`,
+  );
+  harness.advance(PAST_INTERVAL_MS);
+  const hushedBefore = harness.sources.length;
+  audio.play(HIGH_PRIORITY_ID, { bus: 'ui' });
+  const hushedCue = startedSince(harness, hushedBefore)[0];
+  check(
+    hushedCue !== undefined && busOf(hushedCue) === uiBus && uiBus.gain.value > SILENT_GAIN,
+    'a ui one-shot plays, and is heard, through a hush',
+  );
+
+  const playerLevel = audio.sfxVolume;
+  audio.setSfxVolumePreference(MOVED_SFX_SLIDER);
+  harness.advance(SETTLE_MS);
+  check(
+    sfxBus.gain.value < SILENT_GAIN,
+    `moving the Effects slider during a hush keeps the effects bus silent (${sfxBus.gain.value.toFixed(3)})`,
+  );
+  audio.setSfxVolumePreference(playerLevel);
+  harness.advance(SETTLE_MS);
+
+  audio.unhushEffects('siege_victory', 0);
+  harness.advance(SETTLE_MS);
+  check(
+    Math.abs(sfxBus.gain.value - openLevel) < GAIN_TOLERANCE,
+    `letting go of the hush brings the effects bus back to the slider's level (${sfxBus.gain.value.toFixed(3)} of ${openLevel.toFixed(3)})`,
   );
   audio.dispose();
 }

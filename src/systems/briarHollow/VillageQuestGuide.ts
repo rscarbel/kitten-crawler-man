@@ -59,7 +59,7 @@ import {
   type TileRect as GuidanceZone,
 } from './questGuidance';
 import { TREBUCHET_HEIGHT_TILES, TREBUCHET_WIDTH_TILES } from './structureRules';
-import { drawEscortTrail } from './blueprints/escortRouteMarkers';
+import { worldTrail } from '../../ui/world/worldTrail';
 
 type Crawler = HumanPlayer | CatPlayer;
 
@@ -620,7 +620,7 @@ export class VillageQuestGuide {
     camY: number,
     guidance: Extract<PointedGuidance, { readonly kind: 'escort_waypoint' }>,
   ): void {
-    drawEscortTrail(ctx, guidance.trail, camX, camY, performance.now());
+    worldTrail(ctx, guidance.trail, camX, camY, performance.now());
     for (const tile of guidance.ahead) {
       this.renderGroundHighlight(ctx, camX, camY, tileArea(tile), ESCORT_AHEAD_HIGHLIGHT_STYLE);
     }

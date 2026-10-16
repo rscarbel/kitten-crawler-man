@@ -6,6 +6,7 @@
  * world state as concrete, actionable notices — an available quest reads as an
  * OPEN posting, an in-progress one as ACTIVE with the current objective, a
  * finished one as DONE, and a live doomsday countdown as a DANGER alert.
+ * Briar Hollow's board shares Wendell's work order and adds the siege call.
  *
  * Pure data + selection: no rendering, no audio, no scene coupling. The owning
  * `TownPropSystem` / `NoticeBoard` supply the context and draw the result.
@@ -15,9 +16,10 @@ import type { CircusQuestStage } from '../core/CircusQuestProgress';
 import type { MurderQuestStage } from '../core/MurderQuestProgress';
 import type { DoomsdayStage } from '../core/DoomsdayProgress';
 import type { BountyPhase } from '../core/BountyProgress';
+import { asListItem, listed } from '../dialog/scripts/wendellContracts';
 
-/** Visual/priority category for a posting. Sorted DANGER → ACTIVE → OPEN → DONE. */
-export type NoticeTone = 'danger' | 'active' | 'available' | 'done';
+/** Visual/priority category for a posting. Sorted DANGER → ACTIVE → OPEN → SOON → DONE. */
+export type NoticeTone = 'danger' | 'active' | 'available' | 'upcoming' | 'done';
 
 export interface Notice {
   title: string;
@@ -36,7 +38,15 @@ export interface TownNoticeContext {
   doomsday: DoomsdayStage;
   /** Live bounty state, or null on maps with no notice board bounty (non-overworld). */
   bounty: BountyNoticeState | null;
+  workOrder: WorkOrderNoticeState;
 }
+
+/** Where Wendell's construction contracts stand, for the work-order posting on both boards. */
+export type WorkOrderNoticeState =
+  | { readonly kind: 'locked' }
+  | { readonly kind: 'open' }
+  | { readonly kind: 'held'; readonly siteName: string; readonly remaining: readonly string[] }
+  | { readonly kind: 'ready'; readonly contactName: string };
 
 /** What the board knows about Shady's current job. */
 export interface BountyNoticeState {
@@ -54,8 +64,13 @@ const TONE_PRIORITY: Record<NoticeTone, number> = {
   danger: 0,
   active: 1,
   available: 2,
-  done: 3,
+  upcoming: 3,
+  done: 4,
 };
+
+function byTonePriority(a: Notice, b: Notice): number {
+  return TONE_PRIORITY[a.tone] - TONE_PRIORITY[b.tone];
+}
 
 function circusNotice(ctx: TownNoticeContext): Notice | null {
   const title = 'The Show Must Go On';
@@ -183,7 +198,7 @@ function doomsdayNotice(ctx: TownNoticeContext): Notice | null {
  * out who they are hunting.
  */
 function bountyNotice(state: BountyNoticeState | null): Notice {
-  const hooded = 'Speak to the hooded man beside this board.';
+  const hooded = 'Speak to the hooded man loitering outside the Quiet Needle, in the Low Quarter.';
   if (state === null || state.phase === 'available') {
     return {
       title: 'Ruins Bounty',
@@ -222,6 +237,57 @@ const PLUMBLINE_FARM_NOTICE: Notice = {
   tone: 'available',
 };
 
+/** Wendell's work order: a posting on both notice boards that also hands out his contracts. */
+export function workOrderNotice(state: WorkOrderNoticeState): Notice {
+  switch (state.kind) {
+    case 'locked':
+      return {
+        title: 'Builder Wanted, Plumbline Farm',
+        body: 'Wendell of Plumbline Farm expects more repair work than one man and a ladder can manage, once a certain set of borrowed drawings is back where it belongs. Paid work orders will be pinned here.',
+        tone: 'upcoming',
+      };
+    case 'open':
+      return {
+        title: 'WORK ORDER: Plumbline Farm',
+        body: "Repairs wanted. Bring your own boards, rope and stone; the client pays on completion. A tear-off strip at the foot of the order carries Wendell's plumb-bob stamp.",
+        tone: 'available',
+      };
+    case 'held':
+      return {
+        title: `WORK ORDER: ${state.siteName}`,
+        body: `Your strip is in your pocket. Still to do: ${listed(state.remaining.map(asListItem))}.`,
+        tone: 'active',
+      };
+    case 'ready':
+      return {
+        title: 'WORK ORDER: Done',
+        body: `The work is finished. Collect your pay from ${state.contactName}.`,
+        tone: 'active',
+      };
+  }
+}
+
+const VILLAGE_SIEGE_NOTICE: Notice = {
+  title: 'TO ARMS',
+  body: 'The dead are at the palisade. Every pair of hands to the walls, and every pair of feet away from them.',
+  tone: 'danger',
+};
+
+/** What Briar Hollow's board needs to know. */
+export interface VillageNoticeContext {
+  readonly workOrder: WorkOrderNoticeState;
+  readonly underSiege: boolean;
+}
+
+/** Briar Hollow's board postings, most urgent first. Never empty: the work order is always up. */
+export function buildVillageNotices(ctx: VillageNoticeContext): Notice[] {
+  const notices: Notice[] = [];
+  if (ctx.underSiege) notices.push(VILLAGE_SIEGE_NOTICE);
+  notices.push(workOrderNotice(ctx.workOrder));
+  notices.sort(byTonePriority);
+  return notices;
+}
+
 /**
  * Assemble the current board postings, most urgent first. Always returns at
  * least the standing ruins bounty so the board is never blank.
@@ -233,6 +299,7 @@ export function buildTownNotices(ctx: TownNoticeContext): Notice[] {
   }
   notices.push(bountyNotice(ctx.bounty));
   notices.push(PLUMBLINE_FARM_NOTICE);
-  notices.sort((a, b) => TONE_PRIORITY[a.tone] - TONE_PRIORITY[b.tone]);
+  notices.push(workOrderNotice(ctx.workOrder));
+  notices.sort(byTonePriority);
   return notices;
 }

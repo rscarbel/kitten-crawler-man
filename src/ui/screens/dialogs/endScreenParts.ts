@@ -1,5 +1,5 @@
 /**
- * Pieces the end screens share: the celebration effects (fireworks, confetti,
+ * Pieces the end screens share: the celebration effects (fireworks, rockets, confetti,
  * light rays, pulsing corner runes), the oversized headline, a backdrop that
  * fades in on the screen's own timeline, and the body sizing that decides
  * whether a panel's content must scroll.
@@ -138,7 +138,11 @@ export class Sparkles {
     this.items = this.items.filter((s) => s.life > 0);
   }
 
-  draw(ctx: CanvasRenderingContext2D, alpha: number, nowSeconds: number): void {
+  /**
+   * `glow: false` skips each spark's shadow blur, the expensive part of a
+   * burst, for screens where a hundred blurred sparks would cost frames.
+   */
+  draw(ctx: CanvasRenderingContext2D, alpha: number, nowSeconds: number, glow = true): void {
     ctx.save();
     const base = ctx.globalAlpha;
     for (const s of this.items) {
@@ -147,11 +151,86 @@ export class Sparkles {
       const twinkle =
         TWINKLE_BASE + TWINKLE_RANGE * Math.sin(nowSeconds * TWINKLE_FREQ + s.twinkleOffset);
       ctx.globalAlpha = base * clamp01(lifeRatio * twinkle * alpha);
-      ctx.shadowColor = s.color;
-      ctx.shadowBlur = s.size * SPARKLE_GLOW_MULTIPLIER;
+      if (glow) {
+        ctx.shadowColor = s.color;
+        ctx.shadowBlur = s.size * SPARKLE_GLOW_MULTIPLIER;
+      }
       ctx.fillStyle = s.color;
       ctx.beginPath();
       ctx.arc(s.x, s.y, s.size * lifeRatio, 0, FULL_TURN);
+      ctx.fill();
+    }
+    ctx.restore();
+  }
+}
+
+/** Positions a rocket's trail remembers, newest last. */
+const ROCKET_TRAIL_POINTS = 8;
+const ROCKET_TRAIL_WIDTH = 2;
+const ROCKET_HEAD_RADIUS = 2.5;
+const QUADRATIC = 2;
+
+interface Rocket {
+  readonly x: number;
+  readonly fromY: number;
+  readonly apexY: number;
+  readonly riseFrames: number;
+  readonly sparks: number;
+  age: number;
+  readonly trail: Array<{ readonly x: number; readonly y: number }>;
+}
+
+/**
+ * Firework rockets climbing from below the screen, each trailing a short
+ * fading streak, that burst into {@link Sparkles} at the top of their flight.
+ */
+export class FireworkRockets {
+  private rockets: Rocket[] = [];
+
+  clear(): void {
+    this.rockets = [];
+  }
+
+  /** Sends one up from (`x`, `fromY`) to burst at `apexY` after `riseFrames` steps into `sparks` sparks. */
+  launch(x: number, fromY: number, apexY: number, riseFrames: number, sparks: number): void {
+    this.rockets.push({ x, fromY, apexY, riseFrames, sparks, age: 0, trail: [] });
+  }
+
+  /** Climbs every rocket one step; one that reaches its apex bursts into `sparkles` and is gone. */
+  tick(sparkles: Sparkles, colors: readonly string[]): void {
+    for (const rocket of this.rockets) {
+      rocket.age++;
+      const t = clamp01(rocket.age / rocket.riseFrames);
+      const eased = 1 - (1 - t) ** QUADRATIC;
+      rocket.trail.push({ x: rocket.x, y: rocket.fromY + (rocket.apexY - rocket.fromY) * eased });
+      if (rocket.trail.length > ROCKET_TRAIL_POINTS) rocket.trail.shift();
+      if (rocket.age >= rocket.riseFrames)
+        sparkles.burst(rocket.x, rocket.apexY, rocket.sparks, colors);
+    }
+    this.rockets = this.rockets.filter((rocket) => rocket.age < rocket.riseFrames);
+  }
+
+  draw(ctx: CanvasRenderingContext2D, trailColor: string, alpha: number): void {
+    ctx.save();
+    ctx.strokeStyle = trailColor;
+    ctx.fillStyle = trailColor;
+    ctx.lineWidth = ROCKET_TRAIL_WIDTH;
+    ctx.lineCap = 'round';
+    const base = ctx.globalAlpha * alpha;
+    for (const rocket of this.rockets) {
+      const { trail } = rocket;
+      for (let i = 1; i < trail.length; i++) {
+        ctx.globalAlpha = base * (i / trail.length);
+        ctx.beginPath();
+        ctx.moveTo(trail[i - 1].x, trail[i - 1].y);
+        ctx.lineTo(trail[i].x, trail[i].y);
+        ctx.stroke();
+      }
+      if (trail.length === 0) continue;
+      const head = trail[trail.length - 1];
+      ctx.globalAlpha = base;
+      ctx.beginPath();
+      ctx.arc(head.x, head.y, ROCKET_HEAD_RADIUS, 0, FULL_TURN);
       ctx.fill();
     }
     ctx.restore();
@@ -363,6 +442,43 @@ export function headlineStyle(ui: Ui, content: string, maxWidth: number): TypeSt
     lineHeight: Math.ceil(big.lineHeight * shrink),
   };
 }
+
+/**
+ * `style` shrunk, spacing and all, until `content` fits `maxWidth` on one
+ * line, but never below `floor`'s size: there it stops shrinking and may
+ * still overflow `maxWidth`, leaving the caller to wrap or cut it. Line height and spacing are always scaled from
+ * `style` itself by the final size, so any two fits that land on one size
+ * are the same style.
+ */
+export function fitStyleToWidth(
+  ui: Ui,
+  content: string,
+  style: TypeStyle,
+  floor: TypeStyle,
+  maxWidth: number,
+): TypeStyle {
+  let fitted = style;
+  let natural = measureText(ui, content, { style: fitted });
+  while (natural > maxWidth && fitted.size > floor.size) {
+    const shrink = Math.max(floor.size / fitted.size, Math.min(maxWidth / natural, FIT_STEP_MAX));
+    const size = Math.max(floor.size, Math.floor(fitted.size * shrink));
+    const scale = size / style.size;
+    fitted = {
+      ...style,
+      size,
+      lineHeight: Math.ceil(style.lineHeight * scale),
+      letterSpacing: style.letterSpacing === undefined ? undefined : style.letterSpacing * scale,
+    };
+    natural = measureText(ui, content, { style: fitted });
+  }
+  return fitted;
+}
+
+/**
+ * The largest single shrink step: a font's width does not scale exactly with
+ * its size, so the fit is re-measured after each step rather than trusted.
+ */
+const FIT_STEP_MAX = 0.98;
 
 export interface GlowTextOptions {
   readonly text: string;

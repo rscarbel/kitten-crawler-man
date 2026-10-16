@@ -398,7 +398,15 @@ export class WaterAnimationSystem implements GameSystem {
   private readonly ripples: Ripple[] = [];
   private readonly droplets: Droplet[] = [];
 
-  constructor(private readonly gameMap: GameMap) {}
+  /**
+   * @param fullDetail read every frame: when false the drifting streaks, foam
+   *   flecks, glints and rock wakes are skipped and only what a wader does to
+   *   the water is drawn, since that is what says a body is in the river.
+   */
+  constructor(
+    private readonly gameMap: GameMap,
+    private readonly fullDetail: () => boolean,
+  ) {}
 
   /**
    * Tell the system where a wader is this frame, keyed by the entity itself.
@@ -535,9 +543,11 @@ export class WaterAnimationSystem implements GameSystem {
     const previousAlpha = ctx.globalAlpha;
     ctx.save();
     this.clipToWater(ctx);
-    this.drawStreakPass(ctx, time);
-    this.drawFleckPass(ctx, time);
-    this.drawWakePass(ctx, camX, camY, time);
+    if (this.fullDetail()) {
+      this.drawStreakPass(ctx, time);
+      this.drawFleckPass(ctx, time);
+      this.drawWakePass(ctx, camX, camY, time);
+    }
     this.drawWaderPass(ctx, camX, camY, time);
     ctx.restore();
     // The stones go back on top of everything the water just drew. A rock stands
@@ -568,19 +578,12 @@ export class WaterAnimationSystem implements GameSystem {
     for (let ty = firstTileY; ty <= lastTileY; ty++) {
       const row = structure[ty];
       let runStartTx = -1;
-      const closeRun = (endTxExclusive: number): void => {
-        if (runStartTx < 0) return;
-        const run = this.claimClipRun();
-        run.sx = runStartTx * TILE_SIZE - camX;
-        run.sy = ty * TILE_SIZE - camY;
-        run.width = (endTxExclusive - runStartTx) * TILE_SIZE;
-        runStartTx = -1;
-      };
       for (let tx = firstTileX; tx <= lastTileX; tx++) {
         const type = row[tx].type;
         const isRock = type === RIVER_ROCK;
         if (!isRock && type !== FloorTypeValue.water) {
-          closeRun(tx);
+          if (runStartTx >= 0) this.pushClipRun(runStartTx, tx, ty, camX, camY);
+          runStartTx = -1;
           continue;
         }
         if (runStartTx < 0) runStartTx = tx;
@@ -602,8 +605,21 @@ export class WaterAnimationSystem implements GameSystem {
           writeTileFlow(cell, entry);
         }
       }
-      closeRun(lastTileX + 1);
+      if (runStartTx >= 0) this.pushClipRun(runStartTx, lastTileX + 1, ty, camX, camY);
     }
+  }
+
+  private pushClipRun(
+    startTx: number,
+    endTxExclusive: number,
+    ty: number,
+    camX: number,
+    camY: number,
+  ): void {
+    const run = this.claimClipRun();
+    run.sx = startTx * TILE_SIZE - camX;
+    run.sy = ty * TILE_SIZE - camY;
+    run.width = (endTxExclusive - startTx) * TILE_SIZE;
   }
 
   /**

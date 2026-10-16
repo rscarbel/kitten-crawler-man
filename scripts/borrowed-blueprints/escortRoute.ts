@@ -26,6 +26,7 @@ import { ESCORT_WAVE_COUNT } from '../../src/systems/briarHollow/EscortAmbushSys
 import type { SiegeRig } from '../villageSiegeHarness';
 import { GameMap } from '../../src/map/GameMap';
 import { findNearbyWalkableTile } from '../../src/map/findWalkableTile';
+import { isStraightWalk } from '../../src/systems/questRoute/straightSegments';
 import type { TilePoint } from '../../src/map/town/townPlan';
 import {
   ESCORT_WAYPOINT_ARRIVAL_TILES,
@@ -35,7 +36,6 @@ import {
   isEscortRoadTile,
   isEscortStep,
   isInsidePalisade,
-  isStraightWalk,
   merritGateTile,
   type EscortRoute,
 } from '../../src/systems/briarHollow/blueprints/escortRoute';

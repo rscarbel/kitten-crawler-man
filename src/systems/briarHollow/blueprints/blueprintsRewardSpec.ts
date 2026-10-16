@@ -90,8 +90,9 @@ export function constructionContractsCard(): RewardUnlockCard {
     body: [
       { text: 'Paid repair jobs', emphasis: true },
       { text: 'In Skyfowl Town and Briar Hollow' },
+      { text: 'Work orders on both notice boards' },
     ],
-    condition: 'Ask Wendell at Plumbline Farm',
+    condition: 'Ask Wendell, or check a notice board',
   };
 }
 

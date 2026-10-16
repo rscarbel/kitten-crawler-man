@@ -52,6 +52,8 @@ import {
 } from '../src/sprites/humanSprite.js';
 import { HumanPlayer } from '../src/creatures/HumanPlayer.js';
 import { restorePlayer, snapPlayer } from '../src/core/PlayerSnapshot.js';
+import { createCanvas } from 'canvas';
+
 import { installCanvasGlobals } from './nodeCanvasGlobals.js';
 import { gameContext } from './nodeGameContext.js';
 
@@ -822,6 +824,39 @@ const STARVE_BYSTANDER_REQUEST_FRAME = 3;
   );
 }
 
+/** Figures whose rows make up a speculative backlog ahead of a refused urgent row. */
+const BACKLOG_FIGURES = 6;
+/** Under the prewarm allowance alone and over it in pairs: one backlog cell a frame. */
+const BACKLOG_PAINT_MS = 2;
+/** Frames after its refusal by which a refused urgent row must have baked. */
+const REFUSED_URGENT_SETTLE_FRAMES = 3;
+
+// An urgent row refused for want of room keeps its place ahead of every
+// speculative row: it is on screen, and behind the backlog it would be painted
+// directly on every frame until the whole backlog drained.
+{
+  reset();
+  const oneCellBytes = BYSTANDER_CELL_SIZE * BYSTANDER_CELL_SIZE * BYTES_PER_PIXEL;
+  const cramped: FigureDef = {
+    ...makeFigure('refused_urgent', 0, BYSTANDER_CELL_SIZE, 1),
+    budgetMegabytes: oneCellBytes / BYTES_PER_MEGABYTE,
+  };
+  drawFigureCached(ctx, cramped, 'walk', 0, 0, 0, TILE_SIZE);
+  for (let index = 0; index < BACKLOG_FIGURES; index++) {
+    const backlog = makeFigure(`urgent_backlog_${index}`, BACKLOG_PAINT_MS, BYSTANDER_CELL_SIZE, 1);
+    prewarmFigureState(backlog, 'walk');
+    prewarmFigureState(backlog, 'attack');
+  }
+  prewarmFigureState(cramped, 'attack', undefined, true);
+  for (let frame = 0; frame < REFUSED_URGENT_SETTLE_FRAMES; frame++) beginFigureFrame();
+  check(
+    'an urgent row refused for room stays ahead of the speculative backlog',
+    figurePrewarmRequests(cramped) === 0 && figureResidentBytes(cramped) > 0,
+    `${REFUSED_URGENT_SETTLE_FRAMES} frames after its refusal the row still has ` +
+      `${figurePrewarmRequests(cramped)} request(s) queued behind ${figurePrewarmDepth()} in all`,
+  );
+}
+
 // A speculative request that finds the whole cache in use yields quietly: that
 // is the eviction policy keeping speculation off rows something is drawing,
 // and a town arrival does it for every wild mob on the map. The give-up must
@@ -1364,6 +1399,53 @@ const BOOST_TEST_BUDGET_CELL_MULTIPLE = 3;
     afterBoost.prewarmBakes < boosted.prewarmBakes,
     `the frame after the boost expired baked ${afterBoost.prewarmBakes} cell(s), the boosted ` +
       `frame baked ${boosted.prewarmBakes}`,
+  );
+}
+
+// Canvas memory spent: a bake the browser refuses a surface must not throw out
+// of the draw, and must not be tried again for every cell on every frame.
+// Last, because the hold it sets lasts past the probes that would follow.
+{
+  reset();
+  const figure = makeFigure('refused_memory', 0);
+  drawFigureCached(ctx, figure, 'walk', 0, 0, 0, TILE_SIZE);
+  const canvasGlobals: { document?: unknown } = globalThis;
+  const contextGivingDocument = canvasGlobals.document;
+  let surfacesAskedFor = 0;
+  canvasGlobals.document = {
+    createElement(tag: string) {
+      if (tag !== 'canvas') throw new Error(`harness cannot create <${tag}>`);
+      surfacesAskedFor++;
+      const refused = createCanvas(1, 1);
+      Object.defineProperty(refused, 'getContext', { value: () => null });
+      return refused;
+    },
+  };
+  const REFUSED_FRAMES = 5;
+  let threw = false;
+  let surfacesOnFirstFrame = 0;
+  try {
+    for (let frame = 0; frame < REFUSED_FRAMES; frame++) {
+      beginFigureFrame();
+      drawFigureCached(ctx, figure, 'walk', 1, 0, 0, TILE_SIZE);
+      drawFigureCached(ctx, figure, 'attack', 1, 0, 0, TILE_SIZE);
+      if (frame === 0) surfacesOnFirstFrame = surfacesAskedFor;
+    }
+  } catch {
+    threw = true;
+  } finally {
+    canvasGlobals.document = contextGivingDocument;
+  }
+  check(
+    'a bake refused a surface draws the body directly instead of throwing',
+    !threw,
+    'the refusal escaped the draw, which aborts every body drawn after it',
+  );
+  check(
+    'a refused bake holds off further bakes rather than retrying every frame',
+    surfacesAskedFor === surfacesOnFirstFrame,
+    `${surfacesAskedFor - surfacesOnFirstFrame} more surface(s) were asked for after the first ` +
+      'refusal',
   );
 }
 

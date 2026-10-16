@@ -247,7 +247,7 @@ const townDecor = new TownDecorSystem(
 );
 const props = [...market.props, ...townProps.props, ...townDecor.props];
 
-const townLife = new TownLifeSystem(gameMap);
+const townLife = new TownLifeSystem(gameMap, () => true);
 
 const plazaCentre = gameMap.townSquareCentre ?? { x: MAP_SIZE / 2, y: MAP_SIZE / 2 };
 const human = new HumanPlayer(plazaCentre.x, plazaCentre.y, TILE_SIZE);
@@ -508,8 +508,9 @@ const figureHitRate =
 
 const warmupBoundary = Math.min(warmupFrames, perFrameFigure.length);
 // The town's own arrival window, not the whole run: the active player's own
-// figure (`HumanPlayer.prewarmHumanSprite`) keeps warming in the background
-// for as long as the scene is open, on its own combat-rig rows that can cost
+// figure (`HumanPlayer.prewarmHumanSprite`) goes on warming in the background
+// past arrival until its queue bakes or lapses — this harness never draws him,
+// so nothing renews it — on his own combat-rig rows that can cost
 // far more than a citizen's idle/walk cell — a real cost, but not one the
 // citizen crowd causes or this gate is scoped to bound. Bounding it to
 // arrival is what the per-frame bake-ms gate below actually means to hold.

@@ -68,6 +68,18 @@ export interface TrackerTarget extends ObjectiveBeaconFootprint {
    * in the street in front of a building rather than on the building itself.
    */
   readonly standsInFront?: boolean;
+  /**
+   * The name of the building whose door this target is. Indoors, where the
+   * target cannot be routed to, it says whether the party is already inside
+   * the place the quest sends them, and so needs no way out pointed at.
+   */
+  readonly building?: string;
+  /**
+   * The source paints its own route to this target, made of straight walkable
+   * hops, so the generic route guide neither re-aims the arrow nor paints a
+   * second trail over it.
+   */
+  readonly drawsOwnRoute?: boolean;
 }
 
 /** A tile target for a character, which the scene will not stand the overlay beacon on. */
@@ -82,7 +94,7 @@ export interface TrackerEntry {
   readonly status: TrackerStatus;
   /** What to do next, in one line: "Survive the assault (18s left)". */
   readonly objective: string;
-  /** Where to find it, when that is not obvious: "Shady lurks by the notice board". */
+  /** Where to find it, when that is not obvious: "He loiters outside the Quiet Needle". */
   readonly hint?: string;
   /** Tile to point a chevron and the world arrow at. */
   readonly target?: TrackerTarget;

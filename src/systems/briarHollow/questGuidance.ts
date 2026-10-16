@@ -169,8 +169,9 @@ export function pointedGuidanceTarget(guidance: PointedGuidance): TrackerTarget 
     case 'grain_field':
       return selfMarkedRectTarget(guidance.field);
     case 'lead_midge':
-    case 'escort_waypoint':
       return { x: guidance.at.x, y: guidance.at.y, wearsOwnMarker: true };
+    case 'escort_waypoint':
+      return { x: guidance.at.x, y: guidance.at.y, wearsOwnMarker: true, drawsOwnRoute: true };
     case 'pasture':
       return selfMarkedRectTarget(guidance.yard);
     case 'station_upgrade':

@@ -1,8 +1,9 @@
 #!/usr/bin/env tsx
 /**
  * Headless checks on the town's wayfinding: that every building entrance can be
- * walked into across the whole of its own opening, and that the north gate is a
- * gate rather than a hole in a wall.
+ * walked into across the whole of its own opening, that the north gate is a
+ * gate rather than a hole in a wall, and that the quest route guide aims the
+ * objective arrow at the gate a route leaves or enters a walled area by.
  *
  * Both guard failures that are invisible without walking the map. A doorway the
  * entry menu keys off one column of is a building the player stands squarely in
@@ -24,6 +25,28 @@ import { createTownPlan, type TileRect, type TownPlan } from '../src/map/town/to
 import { PLANNED_SIGNPOSTS } from '../src/systems/townDecorPlan';
 import { TILE_SIZE } from '../src/core/constants';
 import buildingManifest from '../src/images/environment/buildings/manifest.json';
+import { findNearbyWalkableTile } from '../src/map/findWalkableTile';
+import { tileCoordKey } from '../src/map/tileIndex';
+import type { TilePoint } from '../src/map/town/townPlan';
+import { doorwayKeys } from '../src/systems/doorwayTiles';
+import { isInsidePalisade } from '../src/systems/briarHollow/blueprints/escortRoute';
+import { doorwayBeaconTarget } from '../src/systems/objectiveBeaconTargets';
+import {
+  QUEST_ROUTE_CHAIN_MAX_TILES,
+  QUEST_ROUTE_PORTAL_UNDERFOOT_STEPS,
+  QuestRouteGuide,
+} from '../src/systems/questRoute/QuestRouteGuide';
+import {
+  buildRouteField,
+  downhillChain,
+  goalTilesForTarget,
+  type RouteField,
+} from '../src/systems/questRoute/routeField';
+import {
+  firstPortalOnChain,
+  routePortals,
+  type RoutePortal,
+} from '../src/systems/questRoute/routePortals';
 
 /** Read straight rather than through `SpriteLoader`, so the gate measures the source. */
 const BUILDING_MANIFEST: Readonly<Record<string, SpriteManifestEntry | undefined>> =
@@ -296,6 +319,232 @@ for (let mapIndex = 0; mapIndex < MAPS_TO_GENERATE; mapIndex++) {
   );
 }
 check(reportedOnce.size === 0, `all ${MAPS_TO_GENERATE} generated maps passed`);
+
+/**
+ * How many maps the quest route checks run over. Each one builds a route field
+ * per gate and per building door, so a handful of maps keeps the gate near a
+ * minute while still varying the wilderness the routes cross.
+ */
+const QUEST_ROUTE_CHECK_MAPS = 10;
+/** How far past a town gate's apron the outside target stands, in tiles. */
+const BEYOND_APRON_TILES = 4;
+/** How far round a wanted tile a check looks for one the party can stand on, in tiles. */
+const STAND_SEARCH_TILES = 4;
+/** How far outward of a palisade gate's outside tile the route check starts, in tiles. */
+const OUTSIDE_PALISADE_START_TILES = 8;
+
+/** The tile the arrow would face: the first gate on the route from `from`, or the destination. */
+function firstAimTile(
+  field: RouteField,
+  map: GameMap,
+  from: TilePoint,
+  destination: TilePoint,
+  portals: readonly RoutePortal[],
+): { aim: TilePoint; chain: TilePoint[] } {
+  const chain = downhillChain(field, map, from, QUEST_ROUTE_CHAIN_MAX_TILES);
+  const portal = firstPortalOnChain(chain, portals, QUEST_ROUTE_PORTAL_UNDERFOOT_STEPS);
+  return { aim: portal?.centre ?? destination, chain };
+}
+
+function isTileIn(tiles: readonly TilePoint[], tile: TilePoint): boolean {
+  return tiles.some((candidate) => candidate.x === tile.x && candidate.y === tile.y);
+}
+
+function townGateTiles(plan: TownPlan): TilePoint[] {
+  const tiles: TilePoint[] = [];
+  for (const { bounds } of plan.gates) {
+    for (let y = bounds.y; y < bounds.y + bounds.h; y++) {
+      for (let x = bounds.x; x < bounds.x + bounds.w; x++) tiles.push({ x, y });
+    }
+  }
+  return tiles;
+}
+
+/** The first tile walking `outward` from `start` that is clear of `rect`, plus `extra` more. */
+function beyondRect(
+  start: TilePoint,
+  outward: { dx: number; dy: number },
+  rect: TileRect,
+  extra: number,
+): TilePoint {
+  let x = start.x;
+  let y = start.y;
+  while (contains(rect, x, y)) {
+    x += outward.dx;
+    y += outward.dy;
+  }
+  return { x: x + outward.dx * extra, y: y + outward.dy * extra };
+}
+
+console.log(`\nQuest route guide over ${QUEST_ROUTE_CHECK_MAPS} overworlds`);
+const routeBuildMs: number[] = [];
+let routeField: RouteField | null = null;
+for (let mapIndex = 0; mapIndex < QUEST_ROUTE_CHECK_MAPS; mapIndex++) {
+  const map = new GameMap({ mapSize: MAP_SIZE, mapType: 'overworld', tileHeight: TILE_SIZE });
+  const plaza = map.townSquareCentre;
+  const plan = map.townPlan;
+  if (plaza === undefined || plan === undefined) {
+    checkOnce(false, 'a generated overworld reports its town square centre and plan');
+    continue;
+  }
+  const portals = routePortals(map);
+  const gateTiles = townGateTiles(plan);
+  const doorways = doorwayKeys(map);
+
+  for (const gate of plan.gates) {
+    const wanted = beyondRect(gate.exit, gate.outward, gate.apron, BEYOND_APRON_TILES);
+    const outside = findNearbyWalkableTile(map, wanted.x, wanted.y, STAND_SEARCH_TILES);
+    if (outside === null) {
+      checkOnce(false, `'${gate.name}': open ground stands beyond its apron`);
+      continue;
+    }
+    const goals = goalTilesForTarget(map, { x: outside.x, y: outside.y });
+    const started = performance.now();
+    routeField = buildRouteField(map, goals, routeField);
+    routeBuildMs.push(performance.now() - started);
+    const { aim } = firstAimTile(routeField, map, plaza, outside, portals);
+    checkOnce(
+      isTileIn(gateTiles, aim),
+      'from the plaza to open ground beyond a gate, the arrow first aims at a town gate',
+    );
+
+    const guide = new QuestRouteGuide();
+    guide.updateToTiles(map, plaza, goals);
+    const guideAim = guide.aim();
+    const guideAimTile =
+      guideAim === null
+        ? null
+        : { x: Math.floor(guideAim.x / TILE_SIZE), y: Math.floor(guideAim.y / TILE_SIZE) };
+    checkOnce(
+      guideAimTile !== null && isTileIn(gateTiles, guideAimTile),
+      'the route guide itself aims from the plaza at a town gate for a target outside the wall',
+    );
+    guide.dispose();
+  }
+
+  for (const entry of map.buildingEntries) {
+    const target = doorwayBeaconTarget(entry);
+    if (target === null) continue;
+    const goals = goalTilesForTarget(map, target);
+    if (goals.length === 0) {
+      checkOnce(false, `'${entry.name}': its door target has a tile a route can end on`);
+      continue;
+    }
+    routeField = buildRouteField(map, goals, routeField);
+    const { aim, chain } = firstAimTile(routeField, map, plaza, entry.doorTile, portals);
+    const last = chain[chain.length - 1];
+    checkOnce(
+      last !== undefined && isTileIn(goals, last),
+      `'${entry.name}': the route from the plaza reaches its door`,
+    );
+    const insideTown = map.isTileInsideTownWall(entry.doorTile.x, entry.doorTile.y);
+    checkOnce(
+      insideTown ? aim === entry.doorTile : isTileIn(gateTiles, aim),
+      insideTown
+        ? 'from the plaza to a door inside the town, the arrow aims at the door itself'
+        : 'from the plaza to a door outside the town, the arrow first aims at a town gate',
+    );
+    const goalKeys = new Set(goals.map((goal) => tileCoordKey(goal.x, goal.y)));
+    checkOnce(
+      chain.every((tile) => {
+        const key = tileCoordKey(tile.x, tile.y);
+        return goalKeys.has(key) || !doorways.has(key);
+      }),
+      'no route to a door crosses any other doorway',
+    );
+  }
+
+  const site = map.briarHollow;
+  if (site === null) {
+    checkOnce(false, 'a generated overworld carries Briar Hollow');
+    continue;
+  }
+  const palisadeGateTiles = site.gates.flatMap((gate) => gate.tiles);
+  const inside = findNearbyWalkableTile(
+    map,
+    site.centre.x,
+    site.centre.y,
+    STAND_SEARCH_TILES,
+    (x, y) => isInsidePalisade(site, x, y),
+  );
+  if (inside === null) {
+    checkOnce(false, 'Briar Hollow has open ground inside its palisade');
+    continue;
+  }
+  const palisadeField = buildRouteField(map, [inside], routeField);
+  routeField = palisadeField;
+  // The wilderness is unseeded, and the ring search can settle on a pocket
+  // walled in by trees or cliffs; the arrow's aim only means something from
+  // ground that can walk to the village at all.
+  const reachesTheVillage = (x: number, y: number): boolean =>
+    palisadeField.cost[y * palisadeField.columns + x] < Infinity;
+  for (const gate of site.gates) {
+    const outward = {
+      dx: Math.sign(gate.outside.x - gate.inside.x),
+      dy: Math.sign(gate.outside.y - gate.inside.y),
+    };
+    const start = findNearbyWalkableTile(
+      map,
+      gate.outside.x + outward.dx * OUTSIDE_PALISADE_START_TILES,
+      gate.outside.y + outward.dy * OUTSIDE_PALISADE_START_TILES,
+      STAND_SEARCH_TILES,
+      (x, y) =>
+        !isInsidePalisade(site, x, y) && !map.isTileInsideTownWall(x, y) && reachesTheVillage(x, y),
+    );
+    if (start === null) continue;
+    const { aim } = firstAimTile(routeField, map, start, inside, portals);
+    checkOnce(
+      isTileIn(palisadeGateTiles, aim),
+      'from outside Briar Hollow to a tile inside, the arrow first aims at a palisade gate',
+    );
+  }
+}
+/** Ticks the guide is given to land its first sliced field before the route is blocked. */
+const FIRST_BUILD_TICKS = 120;
+/** Ticks the player keeps changing tile after the route is blocked: several whole builds' worth. */
+const BLOCKED_ROUTE_TICKS = 180;
+/** Which tile of the route ahead is walled off, far enough out to lie inside the painted trail. */
+const BLOCKED_ROUTE_INDEX = 10;
+
+console.log('\nQuest route guide re-routes round a newly blocked tile while the player walks');
+{
+  const map = new GameMap({ mapSize: MAP_SIZE, mapType: 'overworld', tileHeight: TILE_SIZE });
+  const plaza = map.townSquareCentre;
+  const gate = map.townPlan?.gates[0];
+  if (plaza === undefined || gate === undefined) {
+    check(false, 'a generated overworld reports its plaza and a town gate');
+  } else {
+    const wanted = beyondRect(gate.exit, gate.outward, gate.apron, BEYOND_APRON_TILES);
+    const outside = findNearbyWalkableTile(map, wanted.x, wanted.y, STAND_SEARCH_TILES);
+    if (outside === null) {
+      check(false, 'open ground stands beyond the first gate');
+    } else {
+      const target = { x: outside.x, y: outside.y };
+      const field = buildRouteField(map, goalTilesForTarget(map, target));
+      const chain = downhillChain(field, map, plaza, QUEST_ROUTE_CHAIN_MAX_TILES);
+      const guide = new QuestRouteGuide();
+      for (let tick = 0; tick < FIRST_BUILD_TICKS; tick++) guide.update(map, plaza, target);
+      const blocked = chain[BLOCKED_ROUTE_INDEX];
+      map.blockTilePermanently(blocked.x, blocked.y);
+      const pacing = [chain[0], chain[1]];
+      for (let tick = 0; tick < BLOCKED_ROUTE_TICKS; tick++) {
+        guide.update(map, pacing[tick % pacing.length], target);
+      }
+      check(
+        guide.trail().every((tile) => map.isWalkable(tile.x, tile.y)),
+        'a walking player gets a trail round a newly blocked route tile',
+      );
+      guide.dispose();
+    }
+  }
+}
+
+const meanBuildMs =
+  routeBuildMs.reduce((sum, ms) => sum + ms, 0) / Math.max(1, routeBuildMs.length);
+console.log(
+  `  info full overworld route field build: ${meanBuildMs.toFixed(1)} ms mean over ${routeBuildMs.length} builds`,
+);
+check(reportedOnce.size === 0, `all ${QUEST_ROUTE_CHECK_MAPS} quest route maps passed`);
 
 console.log(
   failures === 0 ? '\nAll town guidance checks passed.\n' : `\n${failures} failure(s).\n`,

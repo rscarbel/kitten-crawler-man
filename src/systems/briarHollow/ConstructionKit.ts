@@ -180,6 +180,8 @@ export interface ConstructionKitDeps {
    * those, and a trebuchet or a snare must not keep fighting a paused world.
    */
   readonly worldHalted: () => boolean;
+  /** Read live: false drops the costliest siege paint. Full detail when absent. */
+  readonly fullDetail?: () => boolean;
 }
 
 export class ConstructionKit {
@@ -256,6 +258,7 @@ export class ConstructionKit {
         ),
       questPhase: () => state.quest.phase,
       isInSafeRoom: deps.isInSafeRoom,
+      fullDetail: deps.fullDetail,
     });
     this.snares = new SnareSystem({
       defense: this.defense,
@@ -939,6 +942,7 @@ export class ConstructionKit {
                 ? 1
                 : record.ammo / TREBUCHET_MAX_AMMO,
               infernal: infernalTrebuchets(builderLevel),
+              glow: this.deps.fullDetail?.() !== false,
               timeSeconds: time,
             },
           ),

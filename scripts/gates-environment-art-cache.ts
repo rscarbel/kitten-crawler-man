@@ -26,6 +26,7 @@ const {
   environmentArtBytes,
   environmentArtSheetCount,
   environmentPaintDepth,
+  environmentSheetsAwaiting,
   flushEnvironmentArtCache,
   hasEnvironmentSheet,
   releaseEnvironmentArt,
@@ -59,6 +60,8 @@ const { clubFurnitureSheetPlans } = await import('../src/sprites/sheets/clubFurn
 const { allBossRoomSheetPlans } = await import('../src/sprites/sheets/bossRoomSheets.js');
 const { bathroomSheetPlans } = await import('../src/sprites/sheets/bathroomSheets.js');
 const { getLevelDef } = await import('../src/levels/index.js');
+const { runCanvasRecovery } = await import('../src/core/canvasRecovery.js');
+const { CanvasContextUnavailableError } = await import('../src/core/canvasSurface.js');
 
 const MASK_SHEET_KEY = 'ground_masks';
 /**
@@ -318,8 +321,15 @@ function spendPastTheBudget(): void {
  */
 function blockPlan(
   key: SpriteKey,
-  options: { readySteps?: number; throwOnStep?: number; onSettled?: () => void },
+  options: {
+    readySteps?: number;
+    throwOnStep?: number;
+    /** A step refused a surface the first time it runs, as a browser out of canvas memory does. */
+    refuseOnceOnStep?: number;
+    onSettled?: () => void;
+  },
 ): EnvironmentSheetPlan {
+  let refused = false;
   const entry = getManifestEntry(key);
   const states = Object.values(entry.states);
   const columns = Math.max(...states.map((state) => (state.colOffset ?? 0) + state.frameCount));
@@ -337,6 +347,10 @@ function blockPlan(
       costClass: `gate:block:${step}`,
       paint: (ctx) => {
         if (step === options.throwOnStep) throw new Error('deliberate painter failure');
+        if (step === options.refuseOnceOnStep && !refused) {
+          refused = true;
+          throw new CanvasContextUnavailableError();
+        }
         ctx.fillStyle = '#ffffff';
         ctx.fillRect(0, step * stripeHeight, columns * entry.frameWidth, stripeHeight);
         // The first step deliberately spends the whole frame's allowance, so the
@@ -446,6 +460,36 @@ check(
 check(settledAfterPublishing, 'a published sheet that then failed never told its caller');
 check(environmentPaintDepth() === 0, 'a published sheet that then failed left work on the queue');
 
+// A published sheet one of whose later steps the browser refuses a surface
+// must paint the rows it still owes once memory is back — a facade's lit
+// windows, a tree's felling row — rather than keep them blank for the floor.
+flushEnvironmentArtCache();
+const REFUSED_PUBLISHED_STEP = 2;
+let refusedPublishedSettles = 0;
+requestEnvironmentSheet(
+  blockPlan(PROBE_KEY, {
+    readySteps: PROBE_READY_STEPS,
+    refuseOnceOnStep: REFUSED_PUBLISHED_STEP,
+    onSettled: () => refusedPublishedSettles++,
+  }),
+);
+for (let frame = 0; frame < THROWING_PLAN_FRAMES; frame++) beginEnvironmentArtFrame();
+check(hasEnvironmentSheet(PROBE_KEY), 'a published sheet refused a later surface was dropped');
+check(
+  refusedPublishedSettles === 0,
+  'a published sheet refused a later surface told its caller it was finished while rows were owed',
+);
+runCanvasRecovery('memoryPressure');
+for (let frame = 0; frame < THROWING_PLAN_FRAMES; frame++) beginEnvironmentArtFrame();
+check(
+  bandIsInked(PROBE_KEY, REFUSED_PUBLISHED_STEP, PROBE_BANDS),
+  'a published sheet refused a surface for a later row never painted that row',
+);
+check(
+  refusedPublishedSettles === 1,
+  `a published sheet refused a later surface told its caller ${refusedPublishedSettles} times, not once`,
+);
+
 // Released while still painting. A floor can be left at any moment, including
 // mid-paint, and a sheet dropped then must be dropped completely: its work
 // forgotten, its surface given back, and — the part that would be silent — it
@@ -496,9 +540,86 @@ check(
     "ground still carries the previous floor's grain",
 );
 
+// Canvas memory spent, as a browser refuses it: every sheet asked for must be
+// held to be asked for again, none may stop the requests behind it, and once
+// memory is back every one of them must land.
+flushEnvironmentArtCache();
+setFloorArtSeed(freshArtSeed());
+const canvasGlobals: { document?: unknown } = globalThis;
+const contextGivingDocument = canvasGlobals.document;
+canvasGlobals.document = {
+  createElement(tag: string) {
+    if (tag !== 'canvas') throw new Error(`harness cannot create <${tag}>`);
+    const refused = createCanvas(1, 1);
+    Object.defineProperty(refused, 'getContext', { value: () => null });
+    return refused;
+  },
+};
+let refusedRequestThrew = false;
+try {
+  requestGroundSheets(GROUND_SHEET_KEYS);
+} catch {
+  refusedRequestThrew = true;
+}
+canvasGlobals.document = contextGivingDocument;
+const MASK_SHEETS = 1;
+const sheetsAskedFor = GROUND_SHEET_KEYS.length + MASK_SHEETS;
+check(!refusedRequestThrew, 'a sheet refused a surface threw out of the floor’s requests');
+check(
+  environmentSheetsAwaiting() === sheetsAskedFor,
+  `${environmentSheetsAwaiting()} of ${sheetsAskedFor} sheets refused a surface are held to be ` +
+    'asked for again; the rest are lost until the floor is entered again',
+);
+runCanvasRecovery('memoryPressure');
+const FRAMES_TO_LAND_DEFERRED = 4000;
+for (
+  let frame = 0;
+  frame < FRAMES_TO_LAND_DEFERRED &&
+  (environmentPaintDepth() > 0 || environmentSheetsAwaiting() > 0);
+  frame++
+) {
+  beginEnvironmentArtFrame();
+}
+for (const key of GROUND_SHEET_KEYS) {
+  check(hasEnvironmentSheet(key), `"${key}" was refused a surface and never painted afterwards`);
+}
+
+// A step refused a surface part way through is the browser's doing, not the
+// painter's: the sheet must be held and painted again, not abandoned for the
+// floor, and its caller told exactly once.
+flushEnvironmentArtCache();
+setFloorArtSeed(freshArtSeed());
+let refusedMidPaintSettles = 0;
+requestEnvironmentSheet(
+  blockPlan(PROBE_KEY, { refuseOnceOnStep: 1, onSettled: () => refusedMidPaintSettles++ }),
+);
+for (let frame = 0; frame < THROWING_PLAN_FRAMES; frame++) beginEnvironmentArtFrame();
+check(
+  environmentSheetsAwaiting() === 1,
+  'a sheet refused a surface mid-paint was abandoned for the floor instead of held',
+);
+check(
+  refusedMidPaintSettles === 1,
+  `a sheet refused a surface mid-paint told its caller ${refusedMidPaintSettles} times, not once`,
+);
+runCanvasRecovery('memoryPressure');
+for (
+  let frame = 0;
+  frame < FRAMES_TO_LAND_DEFERRED &&
+  (environmentPaintDepth() > 0 || environmentSheetsAwaiting() > 0);
+  frame++
+) {
+  beginEnvironmentArtFrame();
+}
+check(
+  hasEnvironmentSheet(PROBE_KEY),
+  'a sheet refused a surface mid-paint never painted once memory was back',
+);
+
 flushEnvironmentArtCache();
 check(environmentPaintDepth() === 0, 'a flush left work on the queue');
 check(environmentArtSheetCount() === 0, 'a flush left sheets resident');
+check(environmentSheetsAwaiting() === 0, 'a flush left sheets waiting to be asked for again');
 
 // A gate that measured nothing passes vacuously.
 check(

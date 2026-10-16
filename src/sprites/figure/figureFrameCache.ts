@@ -47,10 +47,13 @@
 import {
   allocCanvas,
   allocReadableCanvas,
+  CanvasContextUnavailableError,
+  freshSurfaceContext,
+  releaseSurface,
   surfaceContext,
   type CanvasSurface,
 } from '../../core/canvasSurface';
-import { onCanvasRecovery } from '../../core/canvasRecovery';
+import { onCanvasRecovery, reportCanvasAllocationFailure } from '../../core/canvasRecovery';
 import { shouldDownscaleForLowEndDevice } from '../../core/SpriteLoader';
 import type { DrawSpriteOpts } from '../../core/SpriteRenderer';
 import { EMPTY_ALPHA_CUTOFF, type FrameInkBounds } from '../../core/spriteFrames';
@@ -62,6 +65,7 @@ import {
   type DrawnFigureRow,
   drawnFigureRow,
 } from './figureDef';
+import { perfMonitor } from '../../core/PerfMonitor';
 import {
   BYTES_PER_MEGABYTE,
   beginFigureCacheStatsFrame,
@@ -195,6 +199,15 @@ export const FRAME_BAKE_BUDGET_MS = 4;
  * against the number itself rather than against a copy of it.
  */
 export const PREWARM_BAKE_BUDGET_MS = 3;
+
+/**
+ * How long bakes stay off after the browser refuses one a surface. Canvas
+ * memory comes back only as caches give theirs up, so a bake tried on every
+ * frame would fail on every frame, each attempt paying for an allocation and a
+ * paint first; bodies draw directly in the meantime, as they do for any bake
+ * the frame's allowance refuses.
+ */
+const BAKE_ALLOCATION_RETRY_MS = 2000;
 
 /**
  * Weight the newest measurement carries in a figure's per-cell bake estimate.
@@ -400,10 +413,117 @@ export type FigureBetween = (ctx: CanvasRenderingContext2D, place: FigureCellPla
 /** Insertion-ordered by last use, so the first entry is the coldest figure. */
 const entries = new Map<FigureId, FigureEntry>();
 
+// ── Cell identity, for caches built from a blitted cell ─────────────────────
+
+/** One cell as {@link drawFigureCached} blitted it. */
+export interface FigureCellBlit {
+  /** The baked cell itself: the same object for as long as the cell is held. */
+  readonly surface: CanvasSurface;
+  readonly destX: number;
+  readonly destY: number;
+  readonly destWidth: number;
+  readonly destHeight: number;
+  /** The destination's transform at the blit, mirroring included. */
+  readonly transform: DOMMatrix;
+  /**
+   * Blitted alone and unaltered: nothing drawn between its layers, at full
+   * opacity, plain source-over and no filter. Only then is the cell's own
+   * alpha exactly what landed.
+   */
+  readonly plain: boolean;
+}
+
+/** What one recording has seen: how many figure draws, and the last cell blitted. */
+interface CellBlitRecord {
+  draws: number;
+  blit: FigureCellBlit | null;
+}
+
+let cellBlitRecord: CellBlitRecord | null = null;
+const cellDropListeners: Array<(cell: CanvasSurface) => void> = [];
+
+/**
+ * Starts recording the figure draws made until {@link takeRecordedFigureCell}:
+ * a caller that wants to know whether something it drew was exactly one
+ * cached cell, and which.
+ */
+export function recordFigureCellBlits(): void {
+  cellBlitRecord = { draws: 0, blit: null };
+}
+
+/**
+ * Stops recording, and returns the cell when exactly one figure draw was made
+ * since {@link recordFigureCellBlits} and it was a blit of a cached cell;
+ * null for none, several, or a frame painted directly rather than blitted.
+ */
+export function takeRecordedFigureCell(): FigureCellBlit | null {
+  const record = cellBlitRecord;
+  cellBlitRecord = null;
+  if (record?.draws !== 1) return null;
+  return record.blit;
+}
+
+/**
+ * Calls `listener` with every cell surface the cache lets go of — a row swept,
+ * evicted or released, or the whole cache flushed — so a cache keyed by cell
+ * can drop what it built from one. A cell is never repainted in place, so a
+ * surface still held is still the picture it was.
+ */
+export function onFigureCellDropped(listener: (cell: CanvasSurface) => void): void {
+  cellDropListeners.push(listener);
+}
+
+function notifyCellsDropped(row: FigureRow): void {
+  if (cellDropListeners.length === 0) return;
+  for (const cell of row.cells.values()) {
+    for (const listener of cellDropListeners) listener(cell);
+  }
+}
+
+function noteFigureDraw(): void {
+  if (cellBlitRecord !== null) cellBlitRecord.draws++;
+}
+
+function noteCellBlit(
+  ctx: CanvasRenderingContext2D,
+  cell: PlacedCell,
+  destX: number,
+  destY: number,
+  alone: boolean,
+): void {
+  const record = cellBlitRecord;
+  if (record === null) return;
+  record.blit = {
+    surface: cell.surface,
+    destX,
+    destY,
+    destWidth: cell.destWidth,
+    destHeight: cell.destHeight,
+    transform: ctx.getTransform(),
+    plain:
+      alone &&
+      ctx.globalAlpha === 1 &&
+      ctx.globalCompositeOperation === 'source-over' &&
+      ctx.filter === 'none',
+  };
+}
+
 let cachedBytes = 0;
 let cachedRows = 0;
 let frameCounter = 0;
 let msBakedThisFrame = 0;
+/** No cell is baked before this wall-clock time; set when a bake was refused memory. */
+let bakesRefusedUntilMs = 0;
+
+/** Whether bakes are held off after the browser refused one a surface. */
+function bakesHeldForMemory(): boolean {
+  return performance.now() < bakesRefusedUntilMs;
+}
+
+function noteBakeRefusedMemory(): void {
+  bakesRefusedUntilMs = performance.now() + BAKE_ALLOCATION_RETRY_MS;
+  reportCanvasAllocationFailure();
+}
 
 interface PrewarmRequest {
   readonly def: FigureDef;
@@ -417,10 +537,22 @@ interface PrewarmRequest {
    * a use that may never come — see {@link SPECULATIVE_EVICTION_MIN_IDLE_FRAMES}.
    */
   urgent: boolean;
+  /** The cache frame it was last asked for — see {@link dropLapsedPrewarms}. */
+  askedAtFrame: number;
+  /**
+   * The frame its bakes start from, wrapping round to the rest. A row drawn
+   * cold is being played as it bakes, and a looping row's playhead is picked
+   * by the clock rather than by what is warm: baked from its first frame, its
+   * cells land behind the playhead and every frame it reaches is drawn cold.
+   */
+  bakeFrom: number;
 }
 
 /** Figure/state pairs asked for ahead of their first draw, in request order. */
 const prewarmQueue: PrewarmRequest[] = [];
+
+/** The cache frame each figure was last drawn on — see {@link dropLapsedPrewarms}. */
+const lastDrawnFrameByFigure = new Map<FigureId, number>();
 
 /**
  * What one cell of a figure has been costing to bake.
@@ -595,6 +727,7 @@ export function releaseFigureIdleSweep(): void {
   for (const entry of entries.values()) {
     for (const row of entry.rows.values()) row.lastFrame = frameCounter;
   }
+  for (const pending of prewarmQueue) pending.askedAtFrame = frameCounter;
 }
 
 /**
@@ -626,6 +759,7 @@ function releaseIdleRows(): void {
 }
 
 function dropRow(entry: FigureEntry, state: string, row: FigureRow): void {
+  notifyCellsDropped(row);
   entry.rows.delete(state);
   entry.bytes -= row.bytes;
   cachedBytes -= row.bytes;
@@ -855,7 +989,16 @@ function acquireScratch(width: number, height: number): CanvasSurface {
     scratchStack[level] = surface;
     publishOccupancy();
   }
-  const ctx = surfaceContext(surface);
+  let ctx: CanvasRenderingContext2D;
+  try {
+    ctx = surfaceContext(surface);
+  } catch (error) {
+    // Unwound here because no caller's `finally` is reached yet: the level
+    // would otherwise stay claimed, and the surface that has no context with it.
+    discardInnermostScratch();
+    releaseScratch();
+    throw error;
+  }
   ctx.setTransform(1, 0, 0, 1, 0, 0);
   ctx.clearRect(0, 0, width, height);
   return surface;
@@ -903,6 +1046,7 @@ function bakeCell(
   // No eviction can free room for a cell that does not fit an empty cache, and
   // sweeping for one only destroys rows that were serving somebody.
   if (!cellCanEverFit(entry)) return null;
+  if (bakesHeldForMemory()) return null;
   if (!admitsForFigure(entry, bytes)) {
     evictStaleForFigureBytes(entry, bytes, eviction.figureCeilingMinIdleFrames);
     if (!admitsForFigure(entry, bytes)) return null;
@@ -912,13 +1056,22 @@ function bakeCell(
     if (!admitsGlobally(bytes)) return null;
   }
 
+  const perfStartedAt = perfMonitor.begin();
   const startedAt = bakeClock();
   const msBakedBefore = msBakedThisFrame;
   const layers = entry.def.heldLayers;
-  const baked =
-    layers?.layered(state, frame) === true
-      ? bakeLayeredCell(entry, layers, state, frame)
-      : bakeWholeCell(entry, state, frame);
+  let baked: BakedCell;
+  try {
+    baked =
+      layers?.layered(state, frame) === true
+        ? bakeLayeredCell(entry, layers, state, frame)
+        : bakeWholeCell(entry, state, frame);
+  } catch (error) {
+    if (!(error instanceof CanvasContextUnavailableError)) throw error;
+    noteBakeRefusedMemory();
+    perfMonitor.end('figureBake', perfStartedAt);
+    return null;
+  }
   const { cell, front } = baked;
   const frontBytes = front === null ? 0 : surfaceBytes(front.surface);
   row.cells.set(frame, cell);
@@ -933,6 +1086,8 @@ function bakeCell(
   // has already charged its nested bakes to this frame, and the elapsed time
   // measured here contains them.
   msBakedThisFrame = msBakedBefore + elapsedMs;
+  perfMonitor.end('figureBake', perfStartedAt);
+  perfMonitor.count('figureBakes', 1);
   publishOccupancy();
   return cell;
 }
@@ -991,13 +1146,20 @@ function bakeWholeCell(entry: FigureEntry, state: string, frame: number): BakedC
   const supersample = figureBakeDensity(entry.def);
   const superWidth = entry.cellPixelWidth * supersample;
   const superHeight = entry.cellPixelHeight * supersample;
-  const cell = allocCanvas(entry.cellPixelWidth, entry.cellPixelHeight);
-  const surface = acquireScratch(superWidth, superHeight);
+  const cell = cellSurface(entry);
+  let surface: CanvasSurface;
+  try {
+    surface = acquireScratch(superWidth, superHeight);
+  } catch (error) {
+    releaseSurface(cell);
+    throw error;
+  }
   try {
     paintInto(surfaceContext(surface), entry.def, state, frame, entry.bakeScale * supersample);
     downsampleInto(cell, surface, entry);
   } catch (error) {
     discardInnermostScratch();
+    releaseSurface(cell);
     throw error;
   } finally {
     releaseScratch();
@@ -1034,8 +1196,14 @@ function bakeLayeredCell(
   const supersample = figureBakeDensity(entry.def);
   const superWidth = entry.cellPixelWidth * supersample;
   const superHeight = entry.cellPixelHeight * supersample;
-  const cell = allocCanvas(entry.cellPixelWidth, entry.cellPixelHeight);
-  const back = acquireScratch(superWidth, superHeight);
+  const cell = cellSurface(entry);
+  let back: CanvasSurface;
+  try {
+    back = acquireScratch(superWidth, superHeight);
+  } catch (error) {
+    releaseSurface(cell);
+    throw error;
+  }
   try {
     const front = acquireScratch(superWidth, superHeight);
     try {
@@ -1053,10 +1221,23 @@ function bakeLayeredCell(
     }
   } catch (error) {
     discardInnermostScratch();
+    releaseSurface(cell);
     throw error;
   } finally {
     releaseScratch();
   }
+}
+
+/**
+ * A surface for a new cell, its context taken before anything is painted: a
+ * browser out of canvas memory refuses here, before the pooled scratch is
+ * touched, so a refusal costs no paint and leaves the scratch for the body
+ * drawn directly in the cell's place.
+ */
+function cellSurface(entry: FigureEntry): CanvasSurface {
+  const cell = allocCanvas(entry.cellPixelWidth, entry.cellPixelHeight);
+  freshSurfaceContext(cell);
+  return cell;
 }
 
 /** Runs a figure's two-layer painter at `density`, popping the density however it ends. */
@@ -1111,10 +1292,10 @@ function croppedFront(readable: CanvasSurface, entry: FigureEntry): FrontLayerCe
  * `frameLimit` warms only the row's first frames — a blow's wind-up up to the
  * frame it lands on, say, where the rest can bake while the first frames play.
  *
- * `urgent` puts the request at the front of the queue instead of the back —
- * for a row about to be drawn this frame or the next, not merely warmed
- * ahead of an eventual use, where waiting behind whatever speculative
- * backlog already queued (a player's own figure warming rows for a fight
+ * `urgent` puts the request ahead of every speculative one, behind the
+ * urgent ones asked for before it — for a row about to be drawn this frame or
+ * the next, not merely warmed ahead of an eventual use, where waiting behind
+ * whatever speculative backlog already queued (a player's own figure warming rows for a fight
  * that has not started, say) would mean the thing on screen right now stays
  * an approximation for however long that backlog takes to drain.
  */
@@ -1123,6 +1304,24 @@ export function prewarmFigureState(
   state: string,
   frameLimit?: number,
   urgent = false,
+): void {
+  queuePrewarm(def, state, frameLimit, urgent, FIRST_FRAME);
+}
+
+/** The first frame of every row, where a bake starts unless it is chasing a playhead. */
+const FIRST_FRAME = 0;
+
+/** Asks for a row a draw has just found cold, its bakes starting at the frame drawn. */
+function prewarmDrawnRow(def: FigureDef, state: string, drawnFrame: number): void {
+  queuePrewarm(def, state, undefined, true, drawnFrame);
+}
+
+function queuePrewarm(
+  def: FigureDef,
+  state: string,
+  frameLimit: number | undefined,
+  urgent: boolean,
+  bakeFrom: number,
 ): void {
   const declared = figureFrameCount(def, state);
   if (declared === 0) {
@@ -1137,19 +1336,46 @@ export function prewarmFigureState(
   if (queuedIndex !== -1) {
     const queued = prewarmQueue[queuedIndex];
     queued.frames = Math.max(queued.frames, frames);
-    // Already-queued work moves to the front the same way newly-queued work
-    // does — a row already waiting behind a large speculative backlog is
-    // exactly the row `urgent` exists to rescue.
-    if (urgent) queued.urgent = true;
-    if (urgent && queuedIndex > 0) {
+    queued.askedAtFrame = frameCounter;
+    if (bakeFrom !== FIRST_FRAME) queued.bakeFrom = bakeFrom;
+    // Already-queued work moves ahead the same way newly-queued work does — a
+    // row already waiting behind a large speculative backlog is exactly the
+    // row `urgent` exists to rescue. A row already among the urgent ones
+    // keeps its place, so a caller re-asking every tick cannot push a row
+    // drawn cold since then back behind it.
+    if (urgent && queuedIndex > urgentQueueLength()) {
       prewarmQueue.splice(queuedIndex, 1);
-      prewarmQueue.unshift(queued);
+      prewarmQueue.splice(urgentQueueLength(), 0, queued);
     }
+    if (urgent) queued.urgent = true;
     return;
   }
-  const request: PrewarmRequest = { def, state, frames, capacityRefusals: 0, urgent };
-  if (urgent) prewarmQueue.unshift(request);
+  const request: PrewarmRequest = {
+    def,
+    state,
+    frames,
+    capacityRefusals: 0,
+    urgent,
+    askedAtFrame: frameCounter,
+    bakeFrom,
+  };
+  if (urgent) prewarmQueue.splice(urgentQueueLength(), 0, request);
   else prewarmQueue.push(request);
+}
+
+function removeQueued(pending: PrewarmRequest): void {
+  const index = prewarmQueue.indexOf(pending);
+  if (index !== -1) prewarmQueue.splice(index, 1);
+}
+
+/**
+ * How many requests at the front of the queue are urgent: where the next
+ * urgent one goes, behind those asked for before it and ahead of every
+ * speculative one.
+ */
+function urgentQueueLength(): number {
+  const firstSpeculative = prewarmQueue.findIndex((pending) => !pending.urgent);
+  return firstSpeculative === -1 ? prewarmQueue.length : firstSpeculative;
 }
 
 /**
@@ -1209,6 +1435,7 @@ export function markFigureStateDrawn(def: FigureDef, state: string): void {
   const entry = entries.get(def.id);
   const heldAtCurrentScale = entry?.bakeScale === bakeScaleNow() && entry.rows.has(state);
   if (!heldAtCurrentScale) return;
+  lastDrawnFrameByFigure.set(def.id, frameCounter);
   rowFor(entryFor(def), state);
 }
 
@@ -1340,7 +1567,37 @@ export function boostPrewarmBudget(ms: number, frames: number): void {
   boostedPrewarmFramesRemaining = Math.max(boostedPrewarmFramesRemaining, frames);
 }
 
+/**
+ * Lets go of speculative requests for a figure nothing has drawn, and nothing
+ * has asked for the row again, within {@link IDLE_FRAMES_BEFORE_RELEASE}.
+ *
+ * A row baked for a figure that is off screen is swept unused once the idle
+ * window passes, so a figure that queued its whole working set and was then
+ * never drawn — a crawler built for a scene that does not show him — would
+ * otherwise bake that set cell by cell, each cell a frame's overspend repaid
+ * out of the frames after it, only for the sweep to throw each away. A figure
+ * that is being drawn keeps every request however long its backlog takes,
+ * because its speculation is about a use that can come at any moment; and
+ * whatever still wants a row of an undrawn figure re-asks it well inside the
+ * window, as every stand-by refresh does.
+ */
+function dropLapsedPrewarms(): void {
+  for (let i = prewarmQueue.length - 1; i >= 0; i--) {
+    const pending = prewarmQueue[i];
+    if (pending.urgent) continue;
+    const unaskedTooLong = frameCounter - pending.askedAtFrame > IDLE_FRAMES_BEFORE_RELEASE;
+    const drawnAt = lastDrawnFrameByFigure.get(pending.def.id);
+    const undrawnTooLong =
+      drawnAt === undefined || frameCounter - drawnAt > IDLE_FRAMES_BEFORE_RELEASE;
+    if (unaskedTooLong && undrawnTooLong) prewarmQueue.splice(i, 1);
+  }
+}
+
 function runPrewarmQueue(): void {
+  if (!idleSweepHeld) dropLapsedPrewarms();
+  // Not drained into refusals: each would count against its request's retries
+  // and give up on rows for want of memory that may be back in a moment.
+  if (bakesHeldForMemory()) return;
   const budgetMs = effectivePrewarmBudgetMs();
   if (boostedPrewarmFramesRemaining > 0) boostedPrewarmFramesRemaining--;
   if (prewarmDebtMs > 0) {
@@ -1362,26 +1619,29 @@ function runPrewarmQueue(): void {
 /**
  * Bakes from the front of the queue until the allowance is spent.
  *
- * A row refused for want of room goes to the back and the drain carries on
- * with the next one: whatever refused that row says nothing about a smaller
- * figure behind it. The drain stops once it comes back round to a row it has
- * already had refused this frame, since everything still queued then has been.
+ * A row refused for want of room is passed over for the rest of the frame
+ * and the drain carries on with the next one: whatever refused that row says
+ * nothing about a smaller figure behind it. The drain stops once every row
+ * still queued has been refused this frame.
  */
 function drainPrewarmQueue(budgetMs: number): void {
   const refusedThisFrame = new Set<PrewarmRequest>();
   while (prewarmQueue.length > 0 && msBakedThisFrame < budgetMs) {
-    const pending = prewarmQueue[0];
-    if (refusedThisFrame.has(pending)) return;
+    const pending = prewarmQueue.find((queued) => !refusedThisFrame.has(queued));
+    if (pending === undefined) return;
     const entry = entryFor(pending.def);
-    if (!fitsBakeAllowance(entry, msBakedThisFrame, budgetMs)) return;
+    if (!fitsPrewarmAllowance(entry, pending, budgetMs)) return;
     const row = rowFor(entry, pending.state);
     let baked = false;
     let refused = false;
-    for (let frame = 0; frame < pending.frames; frame++) {
+    for (const frame of bakeOrder(pending)) {
       if (row.cells.has(frame)) continue;
-      if (!fitsBakeAllowance(entry, msBakedThisFrame, budgetMs)) return;
+      if (!fitsPrewarmAllowance(entry, pending, budgetMs)) return;
       if (bakeCell(entry, row, pending.state, frame, prewarmEviction(pending)) === null) {
         dropRowIfEmpty(entry, pending.state, row);
+        // Refused for memory rather than for room: no request is at fault, and
+        // charging each would give up on rows on screen within a few frames.
+        if (bakesHeldForMemory()) return;
         deferRefusedPrewarm(pending);
         refusedThisFrame.add(pending);
         refused = true;
@@ -1391,8 +1651,32 @@ function drainPrewarmQueue(budgetMs: number): void {
       baked = true;
       if (msBakedThisFrame >= budgetMs) return;
     }
-    if (!baked && !refused) prewarmQueue.shift();
+    if (!baked && !refused) removeQueued(pending);
   }
+}
+
+/** The frames a request covers, in the order they are baked — see {@link PrewarmRequest.bakeFrom}. */
+function bakeOrder(pending: PrewarmRequest): number[] {
+  const start = pending.bakeFrom < pending.frames ? pending.bakeFrom : FIRST_FRAME;
+  return Array.from({ length: pending.frames }, (_, offset) => (start + offset) % pending.frames);
+}
+
+/**
+ * {@link fitsBakeAllowance} for the paced queue, except that a speculative
+ * cell of a figure with no cost estimate yet may only open a frame, never
+ * follow other baking in it. Its cost is unknown and may be many times the
+ * allowance, and a speculative row has no draw waiting on it that would
+ * justify stacking that unknown on top of what the frame has already spent.
+ */
+function fitsPrewarmAllowance(
+  entry: FigureEntry,
+  pending: PrewarmRequest,
+  budgetMs: number,
+): boolean {
+  const unmeasuredFollower =
+    !pending.urgent && msBakedThisFrame > 0 && estimatedBakeMs(entry) === null;
+  if (unmeasuredFollower) return false;
+  return fitsBakeAllowance(entry, msBakedThisFrame, budgetMs);
 }
 
 /**
@@ -1407,6 +1691,7 @@ function drainPrewarmQueue(budgetMs: number): void {
  * frame. Books no debt, since the caller is the one pacing itself.
  */
 export function bakeFigurePrewarmFor(budgetMs: number, mustProgress: boolean): void {
+  if (bakesHeldForMemory()) return;
   const spentBefore = msBakedThisFrame;
   const spentMs = (): number => msBakedThisFrame - spentBefore;
   // Stricter than `fitsBakeAllowance`: a figure with no estimate yet is let
@@ -1417,16 +1702,16 @@ export function bakeFigurePrewarmFor(budgetMs: number, mustProgress: boolean): v
     return estimate !== null && spentMs() + estimate <= budgetMs;
   };
   let startedAny = false;
-  // A refused row goes to the back of the queue; meeting it again at the front
-  // means every row still queued has been refused this call.
+  // A refused row is passed over for the rest of the call, which ends once
+  // every row still queued has been refused.
   const refusedThisCall = new Set<PrewarmRequest>();
   while (prewarmQueue.length > 0) {
-    const pending = prewarmQueue[0];
-    if (refusedThisCall.has(pending)) return;
+    const pending = prewarmQueue.find((queued) => !refusedThisCall.has(queued));
+    if (pending === undefined) return;
     const entry = entryFor(pending.def);
     const row = rowFor(entry, pending.state);
     let refused = false;
-    for (let frame = 0; frame < pending.frames; frame++) {
+    for (const frame of bakeOrder(pending)) {
       if (row.cells.has(frame)) continue;
       const owedFirstCell = mustProgress && !startedAny;
       if (!owedFirstCell && !fitsCeiling(entry)) {
@@ -1436,6 +1721,9 @@ export function bakeFigurePrewarmFor(budgetMs: number, mustProgress: boolean): v
       startedAny = true;
       if (bakeCell(entry, row, pending.state, frame, prewarmEviction(pending)) === null) {
         dropRowIfEmpty(entry, pending.state, row);
+        // Refused for memory rather than for room: no request is at fault, and
+        // charging each would give up on rows on screen within a few frames.
+        if (bakesHeldForMemory()) return;
         deferRefusedPrewarm(pending);
         refusedThisCall.add(pending);
         refused = true;
@@ -1443,7 +1731,7 @@ export function bakeFigurePrewarmFor(budgetMs: number, mustProgress: boolean): v
       }
       recordFigureCachePrewarmBake();
     }
-    if (!refused) prewarmQueue.shift();
+    if (!refused) removeQueued(pending);
   }
 }
 
@@ -1481,15 +1769,18 @@ function prewarmEviction(pending: PrewarmRequest): EvictionPolicy {
 
 /**
  * Puts a request the cache had no room for back at the end of the queue, so the
- * frames it went unwarmed cost it its place rather than its existence. Past
+ * frames it went unwarmed cost it its place rather than its existence — the
+ * end of the urgent ones for an urgent request, which is on screen and must
+ * not wait behind speculation. Past
  * {@link PREWARM_CAPACITY_RETRIES} it is abandoned instead — see
  * {@link abandonedPrewarms}.
  */
 function deferRefusedPrewarm(pending: PrewarmRequest): void {
-  prewarmQueue.shift();
+  removeQueued(pending);
   pending.capacityRefusals += 1;
   if (pending.capacityRefusals < PREWARM_CAPACITY_RETRIES) {
-    prewarmQueue.push(pending);
+    if (pending.urgent) prewarmQueue.splice(urgentQueueLength(), 0, pending);
+    else prewarmQueue.push(pending);
     return;
   }
   abandonedPrewarms.set(pinKey(pending.def.id, pending.state), {
@@ -1633,24 +1924,28 @@ function withFigurePlacement(
   const needsSave =
     flipX || rotation !== undefined || (alpha !== undefined && alpha !== DEFAULT_ALPHA);
   if (needsSave) ctx.save();
-  if (alpha !== undefined && alpha !== DEFAULT_ALPHA) ctx.globalAlpha = alpha;
+  // Restored however `place` ends: a draw that throws must not leave every
+  // later draw on this context mirrored or faded.
+  try {
+    if (alpha !== undefined && alpha !== DEFAULT_ALPHA) ctx.globalAlpha = alpha;
 
-  if (rotation !== undefined) {
-    ctx.translate(x, y);
-    ctx.rotate(rotation);
-    if (flipX) ctx.scale(-1, 1);
-    place(-def.tileX * scale, -def.tileY * scale);
-  } else {
-    if (flipX) {
-      const mirrorAxis = x + tileSize * TILE_CENTER_OFFSET;
-      ctx.translate(mirrorAxis, 0);
-      ctx.scale(-1, 1);
-      ctx.translate(-mirrorAxis, 0);
+    if (rotation !== undefined) {
+      ctx.translate(x, y);
+      ctx.rotate(rotation);
+      if (flipX) ctx.scale(-1, 1);
+      place(-def.tileX * scale, -def.tileY * scale);
+    } else {
+      if (flipX) {
+        const mirrorAxis = x + tileSize * TILE_CENTER_OFFSET;
+        ctx.translate(mirrorAxis, 0);
+        ctx.scale(-1, 1);
+        ctx.translate(-mirrorAxis, 0);
+      }
+      place(x - def.tileX * scale, y - def.tileY * scale);
     }
-    place(x - def.tileX * scale, y - def.tileY * scale);
+  } finally {
+    if (needsSave) ctx.restore();
   }
-
-  if (needsSave) ctx.restore();
 }
 
 /**
@@ -1680,12 +1975,13 @@ function directPaint(
     return;
   }
   recordFigureCacheDirectDraw();
+  perfMonitor.count('figureDirectPaints', 1);
   // A direct paint is the one path that pays a painter's full price every
   // frame it recurs, and nothing else asks for a row that is only ever missed
   // here: the frame's bake budget went to the prewarm queue, say, before the
   // render reached it. Asked for urgently, it is baked at the front of the
   // next frame's queue instead of being painted again, and again.
-  prewarmFigureState(def, state, undefined, true);
+  prewarmDrawnRow(def, state, frame);
   const width = Math.max(1, Math.ceil(def.frameWidth * scale));
   const height = Math.max(1, Math.ceil(def.frameHeight * scale));
   const surface = acquireScratch(width, height);
@@ -1716,7 +2012,8 @@ function directPaintLayered(
   between: FigureBetween,
 ): void {
   recordFigureCacheDirectDraw();
-  prewarmFigureState(def, state, undefined, true);
+  perfMonitor.count('figureDirectPaints', 1);
+  prewarmDrawnRow(def, state, frame);
   const width = Math.max(1, Math.ceil(def.frameWidth * scale));
   const height = Math.max(1, Math.ceil(def.frameHeight * scale));
   const back = acquireScratch(width, height);
@@ -1751,6 +2048,7 @@ function clampFrame(def: FigureDef, state: string, frame: number): number {
  * allowance refused it. A refusal is the caller's cue to paint directly.
  */
 function cellFor(def: FigureDef, state: string, frame: number, scale: number): PlacedCell | null {
+  lastDrawnFrameByFigure.set(def.id, frameCounter);
   const entry = entryFor(def);
   const row = rowFor(entry, state);
   const cached = row.cells.get(frame);
@@ -1826,6 +2124,7 @@ function approxCellFor(
   frame: number,
   scale: number,
 ): PlacedCell | null {
+  lastDrawnFrameByFigure.set(def.id, frameCounter);
   const entry = entries.get(def.id);
   if (entry?.bakeScale !== bakeScaleNow()) {
     recordFigureCacheMiss();
@@ -1848,7 +2147,7 @@ function approxCellFor(
   // The stand-in covers this frame; the exact row is now wanted on screen, not
   // on speculation, so it is asked for as such — a speculative request for it
   // may be waiting behind a full cache that only an urgent one can make room in.
-  prewarmFigureState(def, state, undefined, true);
+  prewarmDrawnRow(def, state, frame);
   return placed(entry, standIn, scale, null);
 }
 
@@ -1887,6 +2186,7 @@ function blitPlaced(
   scale: number,
   between: FigureBetween | undefined,
 ): void {
+  noteCellBlit(ctx, cell, destX, destY, between === undefined);
   ctx.drawImage(cell.surface, destX, destY, cell.destWidth, cell.destHeight);
   if (between === undefined) return;
   between(ctx, { x: destX, y: destY, scale });
@@ -1919,6 +2219,7 @@ export function drawFigureCached(
   opts: DrawSpriteOpts = {},
   between?: FigureBetween,
 ): void {
+  noteFigureDraw();
   if (figureFrameCount(def, state) === 0) {
     warnMissingState(def, state);
     return;
@@ -1959,6 +2260,7 @@ export function drawFigureCachedApprox(
   tileSize: number,
   opts: DrawSpriteOpts = {},
 ): void {
+  noteFigureDraw();
   if (figureFrameCount(def, state) === 0) {
     warnMissingState(def, state);
     return;
@@ -1995,6 +2297,7 @@ export function drawFigureCachedRotatedCenter(
   tileSize: number,
   alpha: number,
 ): void {
+  noteFigureDraw();
   if (figureFrameCount(def, state) === 0) {
     warnMissingState(def, state);
     return;
@@ -2005,14 +2308,17 @@ export function drawFigureCachedRotatedCenter(
   const cell = cellFor(def, state, clamped, scale);
 
   ctx.save();
-  if (alpha !== DEFAULT_ALPHA) ctx.globalAlpha = alpha;
-  ctx.translate(sx, sy);
-  ctx.rotate(angle);
-  const destX = -ink.centerX * scale;
-  const destY = -ink.centerY * scale;
-  if (cell === null) directPaint(ctx, def, state, clamped, destX, destY, scale);
-  else ctx.drawImage(cell.surface, destX, destY, cell.destWidth, cell.destHeight);
-  ctx.restore();
+  try {
+    if (alpha !== DEFAULT_ALPHA) ctx.globalAlpha = alpha;
+    ctx.translate(sx, sy);
+    ctx.rotate(angle);
+    const destX = -ink.centerX * scale;
+    const destY = -ink.centerY * scale;
+    if (cell === null) directPaint(ctx, def, state, clamped, destX, destY, scale);
+    else ctx.drawImage(cell.surface, destX, destY, cell.destWidth, cell.destHeight);
+  } finally {
+    ctx.restore();
+  }
 }
 
 /** {@link FrameInkBounds} plus the ink's full bounding box, in declared cell pixels. */
@@ -2055,6 +2361,7 @@ export function drawFigureFitted(
   frame: number,
   box: { readonly x: number; readonly y: number; readonly w: number; readonly h: number },
 ): void {
+  noteFigureDraw();
   if (figureFrameCount(def, state) === 0) {
     warnMissingState(def, state);
     return;
@@ -2329,8 +2636,12 @@ export function figureCacheFlushCount(): number {
  */
 export function flushFigureFrameCache(): void {
   flushCount++;
+  for (const entry of entries.values()) {
+    for (const row of entry.rows.values()) notifyCellsDropped(row);
+  }
   entries.clear();
   prewarmQueue.length = 0;
+  lastDrawnFrameByFigure.clear();
   abandonedPrewarms.clear();
   // A pin naming a row that no longer exists is dead weight, not a leak on
   // its own, but nothing keeps it meaningful once every cell it could have
@@ -2362,4 +2673,8 @@ export function flushFigureFrameCache(): void {
 // Every baked cell may have lost its pixels, and a cell is never re-baked while
 // it is resident; under memory pressure the cells are what can be rebuilt most
 // cheaply, a figure at a time as it is next drawn.
-onCanvasRecovery(() => flushFigureFrameCache());
+onCanvasRecovery(() => {
+  flushFigureFrameCache();
+  // The flush has just given back every cell, so a refused bake may fit now.
+  bakesRefusedUntilMs = 0;
+});

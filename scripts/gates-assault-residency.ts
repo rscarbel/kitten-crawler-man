@@ -21,9 +21,12 @@
  *       cache frames per update: each wave's countdown; wave 3's fight after
  *       he arrives, his standing set drawn with his drift; and the lull before
  *       waves 2 and 3, with a survivor on screen and the prewarm queue never
- *       empty. Each must end with no misses among the undead rows about to be
- *       played or drawn along the way, none among the crawlers, and the whole
- *       cache inside its global ceiling;
+ *       empty. The ticker carries the rest of each wave's roster too — the
+ *       skeletons and every other figure-drawn hostile, walking up a lane side
+ *       on — after the undead. Each must end with no misses among the rows
+ *       about to be played or drawn along the way, none among the crawlers,
+ *       and the whole cache inside its global ceiling; and every roster row
+ *       the ticker names, in every lane's view, must be a row its figure has;
  *   A3  `touchFigureState`: a touched row outlives the idle window that
  *       sweeps an untouched one, and a row that is not held, or was baked
  *       before a bake-scale change, reports so.
@@ -102,10 +105,18 @@ import {
   RAISED_ARRIVAL_ROWS,
   prewarmRaisedRatkinFight,
 } from '../src/sprites/raisedRatkinSprite.js';
-import { AssaultWavePrewarm, type AssaultWave } from '../src/sprites/assaultPrewarm.js';
+import {
+  ASSAULT_WAVE_NUMBERS,
+  AssaultWavePrewarm,
+  assaultKindRows,
+  assaultRosterRows,
+  type AssaultApproachView,
+  type AssaultWave,
+} from '../src/sprites/assaultPrewarm.js';
 import {
   IMMINENT_SECONDS,
   WAVE_LULL_SECONDS,
+  assaultWaveRoster,
 } from '../src/systems/briarHollow/VillageAssaultSystem.js';
 import {
   alwaysDrawnRows,
@@ -530,6 +541,67 @@ function residentOf(rows: readonly Row[]): number {
   return bytes;
 }
 
+/** The view a roster is warmed in here: a lane approached side-on, as the crawlers are fought. */
+const ROSTER_GATE_VIEW: AssaultApproachView = 'side';
+const APPROACH_VIEWS: readonly AssaultApproachView[] = ['front', 'side', 'away'];
+
+/** A ticker wired to the roster the way `VillageAssaultSystem` wires its own. */
+function rosterTicker(): AssaultWavePrewarm {
+  return new AssaultWavePrewarm({
+    rosterRows: (wave, view) => assaultRosterRows(assaultWaveRoster(wave), view),
+  });
+}
+
+/** The rest of a wave's roster, as the ticker warms it after the undead. */
+function rosterRowsOf(wave: AssaultWave): Row[] {
+  return assaultRosterRows(assaultWaveRoster(wave), ROSTER_GATE_VIEW).map((r) =>
+    row(r.def, r.state),
+  );
+}
+
+/** Every row a wave arrives playing, its roster included. */
+function arrivalRows(wave: AssaultWave): Row[] {
+  return [...waveRows(wave), ...rosterRowsOf(wave)];
+}
+
+/**
+ * Every figure any wave's roster may be drawn as, released before each case
+ * along with the undead.
+ */
+function rosterFigures(): FigureDef[] {
+  const figures = new Set<FigureDef>();
+  for (const wave of ASSAULT_WAVE_NUMBERS) {
+    for (const r of assaultRosterRows(assaultWaveRoster(wave), ROSTER_GATE_VIEW)) {
+      figures.add(r.def);
+    }
+  }
+  return [...figures];
+}
+
+/**
+ * The roster rows are named by convention, a suffix per view, and the ticker
+ * skips a name its figure lacks rather than throw in play — so a renamed row
+ * would quietly stop being warmed. Every name, in every view, must exist.
+ */
+function rosterNamesGate(): void {
+  let named = 0;
+  for (const wave of ASSAULT_WAVE_NUMBERS) {
+    for (const entry of assaultWaveRoster(wave)) {
+      for (const view of APPROACH_VIEWS) {
+        const { walk, attack } = assaultKindRows(entry.kind, view);
+        for (const r of [...walk, ...attack]) {
+          named++;
+          if (!r.def.states.has(r.state)) {
+            fail('A2 roster', `${entry.kind} has no row "${r.state}" for the ${view} view`);
+          }
+        }
+      }
+    }
+  }
+  console.log(`  A2 roster names: ${named} rows named across every wave and view`);
+  for (const failure of nothingMeasuredFailures(named, 'roster rows')) fail('A2 roster', failure);
+}
+
 const COUNTDOWN_WAVES: readonly AssaultWave[] = [1, FIRST_BULL_WAVE, NECROMANCER_WAVE];
 /** The waves that follow a lull rather than a countdown. */
 const LULL_WAVES: readonly AssaultWave[] = [FIRST_BULL_WAVE, NECROMANCER_WAVE];
@@ -595,13 +667,14 @@ const UNDEAD_FIGURES: readonly FigureDef[] = [
   GRAVE_BULL_FIGURE,
   ...RAISED_RATKIN_LOOKS.map(raisedRatkinFigure),
 ];
+const WAVE_FIGURES: readonly FigureDef[] = [...UNDEAD_FIGURES, ...rosterFigures()];
 
 /**
  * Starts a case from the undead figures released, as they are before a wave,
  * and every crawler cell warm, so one case's losses are not the next one's.
  */
 function startCase(crawlers: readonly Row[]): void {
-  for (const def of UNDEAD_FIGURES) releaseFigure(def);
+  for (const def of WAVE_FIGURES) releaseFigure(def);
   warmDirectly(crawlers);
 }
 
@@ -673,14 +746,14 @@ function fightAfterArrival(
 function lullBefore(wave: AssaultWave, rate: number, crawlers: readonly Row[]): void {
   const before: AssaultWave = wave === NECROMANCER_WAVE ? FIRST_BULL_WAVE : 1;
   startCase(crawlers);
-  const leadIn = new AssaultWavePrewarm();
+  const leadIn = rosterTicker();
   play(leadIn, { updates: COUNTDOWN_UPDATES, tickerWave: before, drawn: [] }, rate, crawlers);
   const [survivorLook] = RAISED_RATKIN_LOOKS;
   const survivors = [row(raisedRatkinFigure(survivorLook), raisedStateName('shamble', 'side'))];
   if (before >= FIRST_BULL_WAVE) {
     survivors.push(row(GRAVE_BULL_FIGURE, graveBullStateName('walk', 'side')));
   }
-  const ticker = new AssaultWavePrewarm();
+  const ticker = rosterTicker();
   const missesOnScreen = play(
     ticker,
     {
@@ -692,7 +765,7 @@ function lullBefore(wave: AssaultWave, rate: number, crawlers: readonly Row[]): 
     rate,
     crawlers,
   );
-  checkArrival(`wave ${wave} after a lull at ${rate}`, waveRows(wave), crawlers, missesOnScreen);
+  checkArrival(`wave ${wave} after a lull at ${rate}`, arrivalRows(wave), crawlers, missesOnScreen);
 }
 
 function countdownGate(): void {
@@ -726,9 +799,9 @@ function countdownGate(): void {
   for (const wave of COUNTDOWN_WAVES) {
     for (const rate of ALL_RATES) {
       startCase(crawlers);
-      const ticker = new AssaultWavePrewarm();
+      const ticker = rosterTicker();
       play(ticker, { updates: COUNTDOWN_UPDATES, tickerWave: wave, drawn: [] }, rate, crawlers);
-      checkArrival(`wave ${wave} at ${rate} cache frames/update`, waveRows(wave), crawlers, 0);
+      checkArrival(`wave ${wave} at ${rate} cache frames/update`, arrivalRows(wave), crawlers, 0);
       if (wave === NECROMANCER_WAVE) {
         const tickerWave = rate === RATE_60_HZ ? NECROMANCER_WAVE : null;
         fightAfterArrival(ticker, tickerWave, rate, crawlers);
@@ -803,7 +876,7 @@ function touchGate(): void {
  */
 function oneRowInFlightGate(): void {
   flushFigureFrameCache();
-  const ticker = new AssaultWavePrewarm();
+  const ticker = rosterTicker();
   let frames = 0;
   while (frames < COUNTDOWN_UPDATES) {
     ticker.update(NECROMANCER_WAVE);
@@ -849,6 +922,7 @@ function main(): void {
       warmDirectly([...bullArrival, walkingThisWay]),
     );
   }
+  rosterNamesGate();
   countdownGate();
   touchGate();
   oneRowInFlightGate();

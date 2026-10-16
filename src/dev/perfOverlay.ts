@@ -15,7 +15,10 @@ import {
   environmentArtBytes,
   environmentArtSheetCount,
   environmentPaintDepth,
+  environmentSheetsAwaiting,
+  environmentSheetsQueued,
 } from '../map/environmentArtCache';
+import { buildingSheetsNotYetQueued } from '../sprites/buildinggen/runtimeBuildingSheets';
 import { inset, type Rect } from '../ui/core/geom';
 import { WORLD_TEXT } from '../ui/theme/worldInk';
 import { worldPlate } from '../ui/world/worldShapes';
@@ -30,6 +33,9 @@ const VALUE_COLUMN_OFFSET = 96;
 
 /** Tenths of a millisecond is too coarse for a pass that costs well under one. */
 const MS_DECIMALS = 2;
+const WORST_MS_DECIMALS = 1;
+/** Gauges are per-frame averages, so a burst of one bake in a window shows as a fraction. */
+const GAUGE_DECIMALS = 2;
 const FPS_DECIMALS = 1;
 const MEGABYTE_DECIMALS = 1;
 const PERCENT = 100;
@@ -49,8 +55,13 @@ interface PerfRow {
   color: string;
 }
 
-function formatMs(ms: number): string {
-  return `${ms.toFixed(MS_DECIMALS)} ms`;
+/** Mean and worst frame side by side: the lag worth chasing is bursts, which a mean hides. */
+function formatMeanAndWorst(meanMs: number, worstMs: number): string {
+  return `${meanMs.toFixed(MS_DECIMALS)}/${worstMs.toFixed(WORST_MS_DECIMALS)}`;
+}
+
+function formatGaugePair(first: number, second: number): string {
+  return `${first.toFixed(GAUGE_DECIMALS)}/${second.toFixed(GAUGE_DECIMALS)}`;
 }
 
 /**
@@ -74,7 +85,7 @@ function figureCacheRows(neutral: string): PerfRow[] {
       color: neutral,
     },
     {
-      label: 'fig bake/dir',
+      label: 'fig total b/d',
       value: `${stats.bakes + stats.prewarmBakes}/${stats.directDraws}`,
       color: stats.directDraws > 0 ? WORLD_TEXT.danger.color : neutral,
     },
@@ -87,8 +98,13 @@ function figureCacheRows(neutral: string): PerfRow[] {
  */
 function environmentArtRows(neutral: string): PerfRow[] {
   const sheets = environmentArtSheetCount();
-  const pending = environmentPaintDepth();
-  if (sheets === 0 && pending === 0) return [];
+  const steps = environmentPaintDepth();
+  // Every sheet still to land, not only the ones being painted: a sheet waiting
+  // to be repainted after a purge, refused memory, or not yet reached by the
+  // facade chain is just as missing from the world.
+  const owedSheets =
+    environmentSheetsQueued() + environmentSheetsAwaiting() + buildingSheetsNotYetQueued();
+  if (sheets === 0 && owedSheets === 0) return [];
   return [
     {
       label: 'env MB/sheets',
@@ -96,9 +112,9 @@ function environmentArtRows(neutral: string): PerfRow[] {
       color: neutral,
     },
     {
-      label: 'env owed',
-      value: pending.toString(),
-      color: pending > 0 ? WORLD_TEXT.value.color : neutral,
+      label: 'env owed sh/st',
+      value: `${owedSheets}/${steps}`,
+      color: owedSheets > 0 ? WORLD_TEXT.value.color : neutral,
     },
   ];
 }
@@ -108,7 +124,7 @@ function buildRows(): PerfRow[] {
   const neutral = WORLD_TEXT.label.color;
   const timerRows: PerfRow[] = PERF_TIMERS.map((timer) => ({
     label: timer,
-    value: formatMs(perfMonitor.msPerFrame(timer)),
+    value: formatMeanAndWorst(perfMonitor.msPerFrame(timer), perfMonitor.worstMsPerFrame(timer)),
     color: neutral,
   }));
   const activeMobs = Math.round(perfMonitor.perFrame('activeMobs'));
@@ -119,12 +135,44 @@ function buildRows(): PerfRow[] {
       value: fps.toFixed(FPS_DECIMALS),
       color: fps < FPS_WARNING_THRESHOLD ? WORLD_TEXT.danger.color : WORLD_TEXT.value.color,
     },
+    { label: 'ms avg/max', value: '', color: neutral },
     ...timerRows,
     { label: 'mobs act/sep', value: `${activeMobs}/${separatedMobs}`, color: neutral },
     {
       label: 'sep checks',
       value: Math.round(perfMonitor.perFrame('separationChecks')).toString(),
       color: neutral,
+    },
+    {
+      label: 'chunk bake/dir',
+      value: formatGaugePair(
+        perfMonitor.perFrame('chunkBakes'),
+        perfMonitor.perFrame('chunkDirectDraws'),
+      ),
+      color: perfMonitor.perFrame('chunkDirectDraws') > 0 ? WORLD_TEXT.danger.color : neutral,
+    },
+    {
+      label: 'chunk patch',
+      value: perfMonitor.perFrame('chunkRepaints').toFixed(GAUGE_DECIMALS),
+      color: neutral,
+    },
+    {
+      label: 'chunk stale',
+      value: perfMonitor.perFrame('staleChunks').toFixed(GAUGE_DECIMALS),
+      color: neutral,
+    },
+    {
+      label: 'overlay redraw',
+      value: perfMonitor.perFrame('overlayRedraws').toFixed(GAUGE_DECIMALS),
+      color: neutral,
+    },
+    {
+      label: 'fig bake/paint',
+      value: formatGaugePair(
+        perfMonitor.perFrame('figureBakes'),
+        perfMonitor.perFrame('figureDirectPaints'),
+      ),
+      color: perfMonitor.perFrame('figureDirectPaints') > 0 ? WORLD_TEXT.danger.color : neutral,
     },
     ...figureCacheRows(neutral),
     ...environmentArtRows(neutral),

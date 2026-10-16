@@ -444,7 +444,9 @@ export class CatPlayer extends Player {
     if (putAway !== null) this.animator.stop(putAway);
     this.workingTool = tool;
     const swing = this.workSwing;
-    if (swing !== null) prewarmCatHold(swing, this.facing.peek(this.facingX, this.facingY));
+    if (swing !== null) {
+      prewarmCatHold(swing, this.facing.peek(this.facingX, this.facingY), this.isMoving);
+    }
   }
 
   /** The swing her working tool is worked with. */
@@ -478,7 +480,7 @@ export class CatPlayer extends Player {
 
   private prewarmMouthCarry(): void {
     if (this.mouthCarry() === null) return;
-    prewarmCatHold('carry', this.facing.peek(this.facingX, this.facingY));
+    prewarmCatHold('carry', this.facing.peek(this.facingX, this.facingY), this.isMoving);
   }
 
   /** What she carries in her jaws: a scene's scripted thing, or the item in her mouth slot made to be carried. */

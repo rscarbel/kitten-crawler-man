@@ -3,7 +3,7 @@ import { drawStealthGateBase, drawStealthGatePortcullis } from './stealthGateTil
 import { themedPropLookFrame, themedPropSpriteKey } from '../../sprites/breakablePropSprites';
 import { BRAZIER_FLAME_FRAMES, FLAME_FRAMES } from '../../sprites/art/destructiblePropArt';
 import type { FenceStyle, TileContent } from '../tileTypes';
-import { OVERLAY_FRAME_KEY_STRIDE, SPRITE_BUILDING_OVERLAY_FPS } from './overlayAnimation';
+import { SPRITE_BUILDING_OVERLAY_FPS } from './overlayAnimation';
 import {
   BONE_PILE,
   SLUMPED_SKELETON,
@@ -81,7 +81,7 @@ import { drawTentPoleTile } from './tentPoleTiles';
 import { drawTentPoleBaseTile } from './interiorTiles';
 import { drawRockDepositTile } from './rockDepositTiles';
 import { rockDamageState } from '../rockDamage';
-import { tileHash01 } from './hollowTileHash';
+import { tileHash, tileHash01 } from './hollowTileHash';
 import {
   BOARD_BOTTOM,
   BOARD_CENTRE_X,
@@ -121,36 +121,60 @@ const TORCH_FLAME_FPS = 8;
 /** Playback rate of a brazier's flame loop; the frame count is the sheet's own. */
 const BRAZIER_FLAME_FPS = 10;
 
+/** Salt for the hash that offsets each building's life loop from its neighbours'. */
+const LIFE_PHASE_SALT = 0x11fe;
+
 /**
- * Which animation frame a decoration tile is currently drawing, as a single
- * number. The overlay cache keys entries on it so an animated building is
- * re-rendered once per distinct frame rather than once per display frame.
- * Tiles with no animation report 0.
+ * The frame a building's looping layer shows now, offset per building so that
+ * window flicker and chimney smoke do not tick across the whole town in
+ * lockstep on the one shared clock.
  */
-export function decorationAnimationFrame(
+function lifeFrameIndex(tx: number, ty: number, fps: number, frameCount: number): number {
+  const phase = tileHash(tx, ty, LIFE_PHASE_SALT) % frameCount;
+  return (timeFrameIndex(frameTime, fps, frameCount) + phase) % frameCount;
+}
+
+/**
+ * Draws the animated layer of a decoration tile — a sprite building's life
+ * states (lit windows, smoke, forge glow) and the main tower's glow — over art
+ * already drawn at the same anchor. Kept apart from the tile's own drawing so
+ * the overlay cache can hold each building's still facade once and replay only
+ * this layer per frame, as one blit straight from the sheet, rather than
+ * clearing and resampling the whole facade every time a frame of it changes.
+ * Every other tile type has no such layer and draws nothing here.
+ */
+export function drawDecorationLifeLayer(
+  ctx: CanvasRenderingContext2D,
   structure: TileContent[][],
   type: number,
+  sx: number,
+  sy: number,
+  ts: number,
   tx: number,
   ty: number,
-): number {
+): void {
   if (type === MAIN_TOWER) {
-    return timeFrameIndex(frameTime, MAIN_TOWER_GLOW_FPS, MAIN_TOWER_GLOW_FRAMES);
+    const glowFrame = lifeFrameIndex(tx, ty, MAIN_TOWER_GLOW_FPS, MAIN_TOWER_GLOW_FRAMES);
+    // Frame 0 is the complete tower, which the still layer already drew.
+    if (glowFrame > 0) {
+      drawSpriteKey(ctx, 'overworld_main_tower', 'normal', glowFrame, sx, sy, ts);
+    }
+    return;
   }
-  if (type !== SPRITE_BUILDING) return 0;
-
+  if (type !== SPRITE_BUILDING) return;
   const spriteKey = structure[ty][tx].spriteKey;
-  if (spriteKey === undefined) return 0;
+  if (spriteKey === undefined) return;
   const def = getSpriteDefByKey(spriteKey);
-  if (def === undefined) return 0;
-
-  let key = 0;
+  if (def === undefined) return;
+  // Any extra state is an animated overlay authored in the same frame-local
+  // space as `idle` (e.g. the blacksmith's forge flames), so it composites on
+  // top of the facade at the same anchor rather than replacing it.
   for (const overlayState of getSpriteOverlayStatesByKey(spriteKey)) {
     const overlayDef = def.states.get(overlayState);
     if (overlayDef === undefined) continue;
-    const frame = timeFrameIndex(frameTime, SPRITE_BUILDING_OVERLAY_FPS, overlayDef.frameCount);
-    key = key * OVERLAY_FRAME_KEY_STRIDE + frame;
+    const frame = lifeFrameIndex(tx, ty, SPRITE_BUILDING_OVERLAY_FPS, overlayDef.frameCount);
+    drawSprite(ctx, def, overlayDef, frame, sx, sy, ts);
   }
-  return key;
 }
 
 /**
@@ -2623,19 +2647,15 @@ export function drawDecorationTile(
       return true;
     }
 
-    // Main overworld tower — large animated sprite, anchor at door-threshold level.
-    // Frame 0 is the complete base tower; frames 1-3 are glow-only overlays composited on top.
+    // Main overworld tower, anchored at door-threshold level. Frame 0 is the
+    // complete still tower; its glow frames are `drawDecorationLifeLayer`'s.
     case MAIN_TOWER: {
       drawSpriteKey(ctx, 'overworld_main_tower', 'normal', 0, sx, sy, ts);
-      const glowFrame = timeFrameIndex(frameTime, MAIN_TOWER_GLOW_FPS, MAIN_TOWER_GLOW_FRAMES);
-      if (glowFrame > 0) {
-        drawSpriteKey(ctx, 'overworld_main_tower', 'normal', glowFrame, sx, sy, ts);
-      }
       return true;
     }
 
-    // Sprite building — PNG-based building anchor tile.
-    // The spriteKey on this tile selects which house image to render.
+    // Sprite building anchor tile: the still facade its spriteKey names. Its
+    // life states are `drawDecorationLifeLayer`'s.
     case SPRITE_BUILDING: {
       const spriteKey = structure[ty][tx].spriteKey;
       if (spriteKey === undefined) return true;
@@ -2644,15 +2664,6 @@ export function drawDecorationTile(
       const stateDef = def.states.get('idle');
       if (stateDef === undefined) return true;
       drawSprite(ctx, def, stateDef, 0, sx, sy, ts);
-      // Any extra state is an animated overlay authored in the same frame-local
-      // space as `idle` (e.g. the blacksmith's forge flames), so it composites on
-      // top of the facade at the same anchor rather than replacing it.
-      for (const overlayState of getSpriteOverlayStatesByKey(spriteKey)) {
-        const overlayDef = def.states.get(overlayState);
-        if (overlayDef === undefined) continue;
-        const frame = timeFrameIndex(frameTime, SPRITE_BUILDING_OVERLAY_FPS, overlayDef.frameCount);
-        drawSprite(ctx, def, overlayDef, frame, sx, sy, ts);
-      }
       return true;
     }
 

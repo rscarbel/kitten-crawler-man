@@ -45,12 +45,22 @@ export interface ArrowCandidate {
  */
 export const ARROW_PRIORITY = {
   DOWNED_COMPANION: 0,
-  CHEAT_REVEAL: 1,
-  PINNED_OBJECTIVE: 2,
-  ROOM_OBJECTIVE: 3,
-  BOUNTY: 4,
-  SOUL_CRYSTAL: 5,
+  /** The clocktower under attack and out of sight: the siege is lost if it falls. */
+  SIEGE_BELL: 1,
+  CHEAT_REVEAL: 2,
+  PINNED_OBJECTIVE: 3,
+  ROOM_OBJECTIVE: 4,
+  BOUNTY: 5,
+  SOUL_CRYSTAL: 6,
+  /** Indoors, the way out toward a pinned objective elsewhere: behind the soul crystal's climb. */
+  PINNED_EXIT: 7,
 } as const;
+
+/**
+ * Inside this many tiles of its destination an objective arrow stands down:
+ * the place is plainly in front of the player.
+ */
+export const OBJECTIVE_ARROW_SUPPRESS_TILES = 4;
 
 /**
  * Draws only the highest-priority arrow among this frame's candidates —

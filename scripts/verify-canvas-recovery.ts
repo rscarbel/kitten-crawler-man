@@ -16,7 +16,10 @@
  *   and the chunks bake again once memory comes back;
  * - a probe that cannot get a context recovers for memory pressure rather than
  *   repainting everything;
- * - a floor that has been left does not keep setting off recoveries.
+ * - a floor that has been left does not keep setting off recoveries;
+ * - a decoration whose blit throws, as Chrome's `drawImage` does for a canvas
+ *   whose pixels were given back, is left out without taking every
+ *   decoration sorted after it down with it.
  *
  *   npx tsx scripts/verify-canvas-recovery.ts
  */
@@ -34,13 +37,19 @@ import { DEFAULT_FLOOR_ART_SEED, setFloorArtSeed } from '../src/map/ground/floor
 import { GROUND_SHEET_KEYS, requestGroundSheets } from '../src/map/ground/runtimeGroundSheets.js';
 import { GameMap } from '../src/map/GameMap.js';
 import { CHUNK_TILES } from '../src/map/tiles/chunkTiles.js';
-import { FloorTypeValue, type TileContent } from '../src/map/tileTypes.js';
+import { CLIFF, FloorTypeValue, type TileContent } from '../src/map/tileTypes.js';
 import { installCanvasGlobals } from './nodeCanvasGlobals.js';
 import { asGameContext } from './nodeGameContext.js';
 
 /** Two chunks a side, so more than one chunk is baked, wiped and rebuilt. */
 const MAP_TILES = CHUNK_TILES * 2;
 const MAP_PX = MAP_TILES * TILE_SIZE;
+const MAP_CHUNKS_PER_SIDE = MAP_TILES / CHUNK_TILES;
+/**
+ * Frames that re-bake every stale chunk on the map: a frame of play always
+ * re-bakes at least one visible stale chunk, so one frame per chunk is enough.
+ */
+const FRAMES_TO_DRAIN_STALE_CHUNKS = MAP_CHUNKS_PER_SIDE * MAP_CHUNKS_PER_SIDE;
 const ALPHA_OFFSET = 3;
 const CHANNELS = 4;
 /** Well past `CHUNK_BAKE_RETRY_FRAMES`, so a held-off bake has had its retry. */
@@ -50,6 +59,11 @@ const MAX_CHECK_INTERVAL_MS = 64001;
 /** Checks run after leaving a floor, each of which a stale probe would turn into a recovery. */
 const CHECKS_AFTER_LEAVING = 3;
 const PROBED_SHEET = GROUND_SHEET_KEYS[0];
+/** Cliff tiles laid along one row: each is drawn from its own overlay cache entry. */
+const DECORATION_ROW_TILES = 4;
+const DECORATION_ROW_Y = 1;
+/** The decoration whose blit is made to throw: the first one the pass draws. */
+const FAILING_BLIT_INDEX = 0;
 
 const failures: string[] = [];
 
@@ -89,6 +103,68 @@ function wipeEveryCanvas(): void {
     ctx.clearRect(0, 0, canvas.width, canvas.height);
     ctx.restore();
   }
+}
+
+/** A floor with a row of cached decorations on it, for the decoration-pass check. */
+function decoratedMap(): GameMap {
+  const grid: TileContent[][] = [];
+  for (let y = 0; y < MAP_TILES; y++) {
+    const row: TileContent[] = [];
+    for (let x = 0; x < MAP_TILES; x++) {
+      const isDecoration = y === DECORATION_ROW_Y && x > 0 && x <= DECORATION_ROW_TILES;
+      row.push({ tileId: `${x},${y}`, type: isDecoration ? CLIFF : FloorTypeValue.concrete });
+    }
+    grid.push(row);
+  }
+  return new GameMap({ tileHeight: TILE_SIZE, prebuiltStructure: grid });
+}
+
+/** Alpha a failing blit leaves the context at, as a painter fading its subject would. */
+const LEAKED_ALPHA = 0.25;
+/** Offset a failing blit leaves the context translated by, as a mirroring painter would. */
+const LEAKED_SHIFT_PX = 1000;
+
+/**
+ * Runs the decoration pass on a context whose `drawImage` fades and shifts the
+ * context and then throws on its first call, and returns whether the pass
+ * threw, how many blits it made after the failing one, and how many of those
+ * were drawn under the state the failing one left behind.
+ */
+function decorationPassAfterFailingBlit(gameMap: GameMap): {
+  threw: boolean;
+  laterBlits: number;
+  laterBlitsUnderLeakedState: number;
+} {
+  const canvas = createCanvas(MAP_PX, MAP_PX);
+  const nodeCtx = canvas.getContext('2d');
+  const drawImage = nodeCtx.drawImage.bind(nodeCtx);
+  let blits = 0;
+  let laterBlitsUnderLeakedState = 0;
+  const baselineShift = nodeCtx.getTransform().e;
+  Object.defineProperty(nodeCtx, 'drawImage', {
+    value: (...args: Parameters<typeof drawImage>) => {
+      const index = blits++;
+      if (index === FAILING_BLIT_INDEX) {
+        nodeCtx.globalAlpha = LEAKED_ALPHA;
+        nodeCtx.translate(LEAKED_SHIFT_PX, 0);
+        throw new Error('drawImage: the image argument is a canvas with a width or height of 0');
+      }
+      const leaked = nodeCtx.globalAlpha !== 1 || nodeCtx.getTransform().e !== baselineShift;
+      if (leaked) laterBlitsUnderLeakedState++;
+      drawImage(...args);
+    },
+  });
+  let threw = false;
+  try {
+    gameMap.renderDecorationsOverlay(asGameContext(nodeCtx), 0, 0, MAP_PX, MAP_PX);
+  } catch {
+    threw = true;
+  }
+  return {
+    threw,
+    laterBlits: Math.max(0, blits - FAILING_BLIT_INDEX - 1),
+    laterBlitsUnderLeakedState,
+  };
 }
 
 function floorMap(): GameMap {
@@ -172,10 +248,12 @@ beginCanvasRecoveryFrame(nowMs);
 check(canvasRecoveryCount() === recoveriesBefore + 1, 'the purge check notices the wipe');
 
 // A frame before the sheets land bakes against each material's fallback
-// colour, as play does while they repaint; landing must throw those chunks away.
+// colour, as play does while they repaint; landing must re-bake those chunks,
+// a frame's budget at a time.
 check(opaqueShare(render(gameMap)) === 1, 'the floor draws in fallback colour while it repaints');
 paintEnvironmentArtNow();
-const after = render(gameMap);
+let after: Uint8ClampedArray = new Uint8ClampedArray(0);
+for (let frame = 0; frame < FRAMES_TO_DRAIN_STALE_CHUNKS; frame++) after = render(gameMap);
 check(samePixels(before, after), 'the recovered floor matches the floor before the wipe');
 
 checkCanvasesSoon();
@@ -216,6 +294,27 @@ for (let round = 0; round < CHECKS_AFTER_LEAVING; round++) runDueCheck();
 check(
   canvasRecoveryCount() === recoveriesBeforeLeaving + 1,
   "a left floor's chunk sets off no further recoveries",
+);
+
+const decorated = decoratedMap();
+// Warmed first, so every cliff draws as one blit of its cached entry.
+decorated.renderDecorationsOverlay(
+  asGameContext(createCanvas(MAP_PX, MAP_PX).getContext('2d')),
+  0,
+  0,
+  MAP_PX,
+  MAP_PX,
+);
+const failingPass = decorationPassAfterFailingBlit(decorated);
+check(!failingPass.threw, 'a decoration whose blit throws does not abort the decoration pass');
+check(
+  failingPass.laterBlits >= DECORATION_ROW_TILES - 1,
+  'every decoration after one whose blit threw is still drawn',
+);
+check(
+  failingPass.laterBlitsUnderLeakedState === 0,
+  `${failingPass.laterBlitsUnderLeakedState} decoration(s) after a failed one were drawn faded ` +
+    'or shifted by the state it left behind',
 );
 
 if (failures.length > 0) {

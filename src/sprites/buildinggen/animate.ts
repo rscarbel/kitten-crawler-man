@@ -35,7 +35,7 @@
  * turns one blink into two.
  */
 
-import { allocCanvas, surfaceContext, type CanvasSurface } from '../../core/canvasSurface';
+import { allocCanvas, freshSurfaceContext, type CanvasSurface } from '../../core/canvasSurface';
 import { hashLattice } from '../../map/tilegen/noise';
 import { chimneyPotMouth } from './materials/roofFurniture';
 import { groundHeightToFrameY, project, type Projection } from './projection';
@@ -111,7 +111,7 @@ function effectPhase(effect: LifeEffectSpec, step: number, frames: number): numb
 export function paintLifeFrame(spec: BuildingSpec, step: number): CanvasSurface {
   const projection = project(spec);
   const canvas = allocCanvas(frameWidthPx(spec), frameHeightPx(spec));
-  const ctx = surfaceContext(canvas);
+  const ctx = freshSurfaceContext(canvas);
 
   for (const [index, effect] of spec.life.effects.entries()) {
     const phase = effectPhase(effect, step, spec.life.frames);

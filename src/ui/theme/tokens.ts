@@ -131,6 +131,13 @@ export const type = {
   terminal: { size: 14, weight: 600, lineHeight: 19, letterSpacing: 0.6, upper: true },
   /** A quiet line that still has to read across a big screen: the title's sound hint. */
   hint: { size: 15, weight: 500, lineHeight: 20, letterSpacing: 0.4 },
+  /** An alarm that must be read mid-fight from across the screen: the siege's clocktower alert. */
+  alarm: { size: 40, weight: 900, lineHeight: 46, letterSpacing: 1.5, upper: true },
+  /**
+   * A win shouted across the whole screen: the siege's victory. The wordmark's
+   * proportions, so it reads as the moment it is.
+   */
+  fanfare: { size: 96, weight: 900, lineHeight: 96, letterSpacing: -2.4, upper: true },
 } as const satisfies Record<string, TypeStyle>;
 
 export type TypeRole = keyof typeof type;
@@ -150,6 +157,8 @@ export const condensedType: Readonly<Record<TypeRole, TypeRole>> = {
   logo: 'display',
   terminal: 'caption',
   hint: 'body',
+  alarm: 'display',
+  fanfare: 'display',
 };
 
 /** A soft drop shadow. */

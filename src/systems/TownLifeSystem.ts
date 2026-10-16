@@ -109,6 +109,15 @@ const TRAVELER_POPULATION = 12;
 const ARRIVAL_BOOST_BUDGET_MS = 10;
 /** Frames the boosted budget above stays in effect — five seconds at 60 Hz. */
 const ARRIVAL_BOOST_FRAMES = 300;
+/**
+ * Doorstep loiterers drawn at most while render quality is reduced, nearest the
+ * view's centre first. They stand still on the far edges of the frame, so they
+ * are the cheapest figures to lose; the moving cohorts are what make the street
+ * read as alive.
+ */
+const REDUCED_DETAIL_LOITERER_CAP = 4;
+/** Slack round the view, at reduced quality, so a figure overlapping the edge is still drawn. */
+const REDUCED_DETAIL_VIEW_MARGIN_PX = TILE_SIZE;
 const LOITERERS_PER_BUILDING_MIN = 1;
 const LOITERERS_PER_BUILDING_MAX = 2;
 
@@ -284,6 +293,11 @@ interface TileXY {
 
 export class TownLifeSystem implements GameSystem {
   private readonly townsfolk: Townsperson[] = [];
+  private readonly frontageLoiterers = new Set<Townsperson>();
+  /** Reused by `renderablePeople` so a reduced-detail frame allocates nothing. */
+  private readonly renderScratch: Townsperson[] = [];
+  private readonly nearestLoiterers: Townsperson[] = [];
+  private readonly nearestLoitererDistancesSq: number[] = [];
   private readonly doorTiles: Set<number>;
   private readonly plazaTiles: TileXY[];
   private readonly streetTiles: TileXY[];
@@ -319,7 +333,14 @@ export class TownLifeSystem implements GameSystem {
   private readonly neighborQuery = new Set<Townsperson>();
   private frameCounter = 0;
 
-  constructor(private readonly gameMap: GameMap) {
+  /**
+   * @param fullDetail read every frame by `renderablePeople`: when false the
+   *   drawn crowd is thinned to the view and a few doorstep loiterers.
+   */
+  constructor(
+    private readonly gameMap: GameMap,
+    private readonly fullDetail: () => boolean,
+  ) {
     this.castRng = mulberry32(subSeed(gameMap.worldSeed, CAST_SEED_SALT));
     // Read from the map, not recomputed as `gridSize / 2`, which is only ever
     // right because the plaza happens to be centred on the map — and kept as a
@@ -389,6 +410,39 @@ export class TownLifeSystem implements GameSystem {
   /** The current crowd, for the scene's Y-sorted entity render pass. */
   get people(): ReadonlyArray<Townsperson> {
     return this.townsfolk;
+  }
+
+  /**
+   * The citizens to draw this frame. Thinning never touches the pin set: the
+   * crowd's rows stay pinned until `dispose`, so a loiterer hidden at reduced
+   * quality is still warm the frame it is drawn again.
+   */
+  renderablePeople(camX: number, camY: number): ReadonlyArray<Townsperson> {
+    if (this.fullDetail()) return this.townsfolk;
+    const minX = camX - REDUCED_DETAIL_VIEW_MARGIN_PX;
+    const minY = camY - REDUCED_DETAIL_VIEW_MARGIN_PX;
+    const maxX = camX + viewportWidth() + REDUCED_DETAIL_VIEW_MARGIN_PX;
+    const maxY = camY + viewportHeight() + REDUCED_DETAIL_VIEW_MARGIN_PX;
+    const viewCentreX = camX + viewportWidth() / 2;
+    const viewCentreY = camY + viewportHeight() / 2;
+    const drawn = this.renderScratch;
+    const nearest = this.nearestLoiterers;
+    const nearestDistancesSq = this.nearestLoitererDistancesSq;
+    drawn.length = 0;
+    nearest.length = 0;
+    nearestDistancesSq.length = 0;
+    for (const person of this.townsfolk) {
+      const inView = person.x >= minX && person.x <= maxX && person.y >= minY && person.y <= maxY;
+      if (!inView) continue;
+      if (!this.frontageLoiterers.has(person)) {
+        drawn.push(person);
+        continue;
+      }
+      const distanceSq = (person.x - viewCentreX) ** 2 + (person.y - viewCentreY) ** 2;
+      insertNearest(nearest, nearestDistancesSq, person, distanceSq, REDUCED_DETAIL_LOITERER_CAP);
+    }
+    for (const loiterer of nearest) drawn.push(loiterer);
+    return drawn;
   }
 
   /** The nearest citizen the player (at world origin `x`,`y`) can talk to, or `null`. */
@@ -555,7 +609,7 @@ export class TownLifeSystem implements GameSystem {
       };
       const count = rangeInt(this.castRng, LOITERERS_PER_BUILDING_MIN, LOITERERS_PER_BUILDING_MAX);
       for (let i = 0; i < count; i++) {
-        this.addCitizen(
+        const loiterer = this.addCitizen(
           randomTile(frontage),
           FRONTAGE_ROLES,
           FRONTAGE_SPEED_MIN,
@@ -563,6 +617,7 @@ export class TownLifeSystem implements GameSystem {
           wander,
           rollSpecies(skyfowlShare, this.castRng),
         );
+        this.frontageLoiterers.add(loiterer);
       }
     }
   }
@@ -710,7 +765,7 @@ export class TownLifeSystem implements GameSystem {
     speedMax: number,
     wander: WanderParams,
     species: TownSpecies,
-  ): void {
+  ): Townsperson {
     const person = new Townsperson({
       x: tile.x * TILE_SIZE,
       y: tile.y * TILE_SIZE,
@@ -724,6 +779,7 @@ export class TownLifeSystem implements GameSystem {
     this.townsfolk.push(person);
     this.grid.insert(person);
     this.seedCount++;
+    return person;
   }
 
   /** Standable tiles on a building's doorstep — where its loiterers live. */
@@ -863,4 +919,29 @@ function pickRole(table: RoleTable, rng: Rng): TownRole {
 /** Species is a job-independent roll, at the given probability of skyfowl. */
 function rollSpecies(skyfowlShare: number, rng: Rng): TownSpecies {
   return rng() < skyfowlShare ? 'skyfowl' : 'human';
+}
+
+/**
+ * Keeps `people` as the `cap` nearest seen so far, ascending by distance, with
+ * `distancesSq` in step; a bounded insertion rather than a sort, so a frame
+ * allocates nothing.
+ */
+function insertNearest(
+  people: Townsperson[],
+  distancesSq: number[],
+  person: Townsperson,
+  distanceSq: number,
+  cap: number,
+): void {
+  const full = people.length >= cap;
+  const fartherThanAll = full && distanceSq >= distancesSq[cap - 1];
+  if (fartherThanAll) return;
+  let index = full ? cap - 1 : people.length;
+  while (index > 0 && distancesSq[index - 1] > distanceSq) {
+    people[index] = people[index - 1];
+    distancesSq[index] = distancesSq[index - 1];
+    index--;
+  }
+  people[index] = person;
+  distancesSq[index] = distanceSq;
 }

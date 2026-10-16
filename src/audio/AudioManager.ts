@@ -267,7 +267,14 @@ export interface AudioManagerOptions {
  * it silent forever if the reason that set the flag never clears it. The bus
  * only comes back once every reason that asked for silence has let go.
  */
-export type MusicPauseReason = 'menu' | 'background' | 'slots_big_win' | 'wheel' | 'nothing';
+export type MusicPauseReason =
+  'menu' | 'background' | 'slots_big_win' | 'wheel' | 'nothing' | 'siege_victory';
+
+/**
+ * Why the sound-effects bus is held silent. A set, like the pause reasons, so
+ * one moment letting go cannot bring back effects another still wants quiet.
+ */
+export type EffectsHushReason = 'siege_victory';
 
 /**
  * Why the music bus is held below the player's level without being silenced.
@@ -1606,6 +1613,32 @@ export class AudioManager {
     this.rampBus(this.ambienceGain, this.openAmbienceBusLevel, MENU_AMBIENCE_FADE_MS);
   }
 
+  private readonly effectsHushReasons = new Set<EffectsHushReason>();
+
+  /**
+   * Fade the sound-effects bus to silence until every reason has let go.
+   * The `ui` bus is left alone on purpose: it is the one bus a celebration
+   * can still speak on while the world's own effects are hushed under it.
+   */
+  hushEffects(reason: EffectsHushReason, fadeMs: number): void {
+    const wasHushed = this.effectsHushReasons.size > 0;
+    this.effectsHushReasons.add(reason);
+    if (wasHushed) return;
+    this.rampBus(this.sfxGain, 0, fadeMs);
+  }
+
+  /** Fade the sound-effects bus back to the player's level once every reason has cleared. */
+  unhushEffects(reason: EffectsHushReason, fadeMs: number): void {
+    if (!this.effectsHushReasons.delete(reason)) return;
+    if (this.effectsHushReasons.size > 0) return;
+    this.rampBus(this.sfxGain, this.openSfxBusLevel, fadeMs);
+  }
+
+  /** Where the sound-effects bus sits: silent while hushed, else the Effects slider's level. */
+  private get openSfxBusLevel(): number {
+    return this.effectsHushReasons.size > 0 ? 0 : sliderGain(this.sfxVol);
+  }
+
   private readonly musicDuckLevels = new Map<MusicDuckReason, number>();
 
   /** Fade music out quickly (e.g. when a menu opens). Idempotent per reason. */
@@ -1714,7 +1747,7 @@ export class AudioManager {
   setSfxVolumePreference(v: number): void {
     this.sfxVol = v;
     settings.setSfxVolume(v);
-    this.rampBus(this.sfxGain, sliderGain(v), VOLUME_RAMP_MS);
+    this.rampBus(this.sfxGain, this.openSfxBusLevel, VOLUME_RAMP_MS);
     this.rampBus(this.uiGain, sliderGain(v), VOLUME_RAMP_MS);
   }
 

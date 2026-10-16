@@ -63,7 +63,7 @@ export const BRAMBLEWICK = {
     'Very well. We have been granted a little additional time, which is more than I had expected. Return to me when you are ready.',
   ),
   repelledFailed: say.line([
-    'It appears we were not nearly so well prepared as we had imagined. How dreadfully inconvenient.',
+    'They brought down our clocktower… It appears we were not nearly so well prepared as we had imagined. How dreadfully inconvenient.',
     'Fortunately, I was able to replace the true life stone with a facsimile. The enchantment upon the false stone will fade before long, at which point Vordrick will return. We must repair the clocktower and restore our defenses before he does.',
   ]),
   repairBellReminder: say.line(

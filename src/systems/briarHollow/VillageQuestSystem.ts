@@ -1119,27 +1119,38 @@ export class VillageQuestSystem implements QuestLineProvider, TopicProvider {
     const assault = this.deps.assault();
     const wave = assault?.waveNumber ?? 1;
     const bellPercent = Math.round((assault?.bellFraction ?? 1) * PERCENT);
-    const necro = assault?.activeNecromancer ?? null;
     const lastWave = wave >= ASSAULT_WAVE_COUNT;
+    const clocktower = `Clocktower ${bellPercent}%`;
     const objective = lastWave
       ? 'Defeat Vordrick Boneharrow'
-      : `Defend Briar Hollow — Wave ${wave}/${ASSAULT_WAVE_COUNT} · Bell ${bellPercent}%`;
-    // Only Vordrick is worth an arrow. Between his appearances the bell would
-    // be the fallback, but standing by it defends nothing.
-    const target: TrackerTarget | undefined =
-      necro === null
-        ? undefined
-        : {
-            x: Math.floor(necro.x / TILE_SIZE + TILE_CENTRE),
-            y: Math.floor(necro.y / TILE_SIZE + TILE_CENTRE),
-            hidesArrowOnScreen: true,
-          };
+      : `Defend Briar Hollow — Wave ${wave}/${ASSAULT_WAVE_COUNT} · ${clocktower}`;
     return {
       ...base,
       status: 'active',
       objective,
-      hint: lastWave ? `Bell ${bellPercent}%` : undefined,
-      target,
+      hint: lastWave ? clocktower : undefined,
+      target: this.assaultTarget(),
+    };
+  }
+
+  /**
+   * The bell while the dead are striking it, so a pinned arrow agrees with
+   * the alert calling the party back; otherwise Vordrick. Between his
+   * appearances the bell would be the fallback, but standing by it while
+   * nothing is at it defends nothing.
+   */
+  private assaultTarget(): TrackerTarget | undefined {
+    const assault = this.deps.assault();
+    if (assault?.bellUnderAttack === true) {
+      const bell = this.deps.site.square.bellTile;
+      return { x: bell.x, y: bell.y };
+    }
+    const necro = assault?.activeNecromancer ?? null;
+    if (necro === null) return undefined;
+    return {
+      x: Math.floor(necro.x / TILE_SIZE + TILE_CENTRE),
+      y: Math.floor(necro.y / TILE_SIZE + TILE_CENTRE),
+      hidesArrowOnScreen: true,
     };
   }
 

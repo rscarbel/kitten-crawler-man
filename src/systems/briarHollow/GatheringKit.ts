@@ -107,6 +107,8 @@ export class GatheringKit {
   private readonly effects = new HarvestEffects();
   private readonly ledger: NodeLedger;
   private readonly regrowth: NodeRegrowth;
+  /** Reused every frame so the merged entity list costs no allocation. */
+  private readonly entityBuffer: TownPropRenderable[] = [];
   private structureClaims: StructureClaims | null = null;
 
   constructor(private readonly deps: GatheringKitDeps) {
@@ -251,7 +253,11 @@ export class GatheringKit {
 
   /** The thralls and the grove's saplings, merged into the scene's Y-sorted pass. */
   renderEntities(): ReadonlyArray<TownPropRenderable> {
-    return [...this.thralls.renderables(), ...this.regrowth.renderables()];
+    const buffer = this.entityBuffer;
+    buffer.length = 0;
+    for (const thrall of this.thralls.renderables()) buffer.push(thrall);
+    for (const sapling of this.regrowth.renderables()) buffer.push(sapling);
+    return buffer;
   }
 
   /** The resource strip's card for the HUD's top band, while it is showing. */

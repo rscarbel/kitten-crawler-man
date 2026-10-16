@@ -294,10 +294,7 @@ export interface LifeEffectSpec {
 export interface LifeSpec {
   /**
    * 6–31. Varied across the town so the buildings do not pulse in lockstep on
-   * the single shared 8 fps clock, and capped one below
-   * `OVERLAY_FRAME_KEY_STRIDE`, the radix `decorationAnimationFrame` folds
-   * overlay indices with — at the radix two distinct frame combinations fold
-   * to the same cache key and one building would draw another's frame.
+   * the single shared 8 fps clock, and capped at `MAX_LIFE_FRAMES`.
    *
    * Every frame is a whole frame of decoded sheet, so this is the most
    * expensive number in a spec. Spend it only where the loop's *length* is

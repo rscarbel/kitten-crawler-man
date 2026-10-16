@@ -81,7 +81,8 @@ import { briarHollowSpotFootprint } from './contractTargets';
 /** What a spot in reach says, and what a press on it is told, while the siege is on. */
 export const CONTRACT_SIEGE_LINE = 'Not while the village is under siege.';
 
-const IDLE_OBJECTIVE = 'Ask Wendell for a construction contract';
+const IDLE_OBJECTIVE = 'Take a construction contract from Wendell or a notice board';
+const IDLE_HINT = 'Notice boards in Skyfowl Town and Briar Hollow carry his work orders.';
 const SIEGE_HINT = 'Wait out the siege.';
 const STORY_OWNED_HINT = 'Come back once things settle down.';
 
@@ -402,6 +403,7 @@ export class ConstructionContractSystem implements GameSystem, QuestLineProvider
         ...base,
         status: 'available',
         objective: IDLE_OBJECTIVE,
+        hint: IDLE_HINT,
         target: this.wendellsDoor(),
       };
     }

@@ -5,22 +5,60 @@ const MS_PER_SECOND = 1000;
 const SAMPLE_WINDOW_FRAMES = 30;
 
 /** Sections of a frame that get their own timer. */
-export const PERF_TIMERS = ['update', 'render', 'separation', 'lighting'] as const;
+export const PERF_TIMERS = [
+  'update',
+  'render',
+  'separation',
+  'lighting',
+  'chunkBake',
+  'overlayBake',
+  'figureBake',
+] as const;
 export type PerfTimer = (typeof PERF_TIMERS)[number];
 
 /** Per-frame counts reported alongside the timers, so the ms figures can be read. */
-const PERF_GAUGES = ['activeMobs', 'separationMobs', 'separationChecks'] as const;
+export const PERF_GAUGES = [
+  'activeMobs',
+  'separationMobs',
+  'separationChecks',
+  'chunkBakes',
+  'chunkDirectDraws',
+  'chunkRepaints',
+  'staleChunks',
+  'overlayRedraws',
+  'figureDirectPaints',
+  'figureBakes',
+] as const;
 export type PerfGauge = (typeof PERF_GAUGES)[number];
 
 type TimerTotals = Record<PerfTimer, number>;
 type GaugeTotals = Record<PerfGauge, number>;
 
 function zeroTimers(): TimerTotals {
-  return { update: 0, render: 0, separation: 0, lighting: 0 };
+  return {
+    update: 0,
+    render: 0,
+    separation: 0,
+    lighting: 0,
+    chunkBake: 0,
+    overlayBake: 0,
+    figureBake: 0,
+  };
 }
 
 function zeroGauges(): GaugeTotals {
-  return { activeMobs: 0, separationMobs: 0, separationChecks: 0 };
+  return {
+    activeMobs: 0,
+    separationMobs: 0,
+    separationChecks: 0,
+    chunkBakes: 0,
+    chunkDirectDraws: 0,
+    chunkRepaints: 0,
+    staleChunks: 0,
+    overlayRedraws: 0,
+    figureDirectPaints: 0,
+    figureBakes: 0,
+  };
 }
 
 /**
@@ -37,8 +75,11 @@ class PerfMonitor {
   private readonly frameTimers = zeroTimers();
   private readonly frameGauges = zeroGauges();
   private readonly windowTimers = zeroTimers();
+  /** The slowest single frame of each timer in the current window. */
+  private readonly windowWorstTimers = zeroTimers();
   private readonly windowGauges = zeroGauges();
   private readonly reportedTimers = zeroTimers();
+  private readonly reportedWorstTimers = zeroTimers();
   private readonly reportedGauges = zeroGauges();
   private windowFrames = 0;
   private windowStartedAt = 0;
@@ -79,7 +120,9 @@ class PerfMonitor {
   endFrame(): void {
     if (!this.on) return;
     for (const timer of PERF_TIMERS) {
-      this.windowTimers[timer] += this.frameTimers[timer];
+      const frameMs = this.frameTimers[timer];
+      this.windowTimers[timer] += frameMs;
+      this.windowWorstTimers[timer] = Math.max(this.windowWorstTimers[timer], frameMs);
       this.frameTimers[timer] = 0;
     }
     for (const gauge of PERF_GAUGES) {
@@ -95,7 +138,9 @@ class PerfMonitor {
       windowElapsedMs > 0 ? (this.windowFrames * MS_PER_SECOND) / windowElapsedMs : 0;
     for (const timer of PERF_TIMERS) {
       this.reportedTimers[timer] = this.windowTimers[timer] / this.windowFrames;
+      this.reportedWorstTimers[timer] = this.windowWorstTimers[timer];
       this.windowTimers[timer] = 0;
+      this.windowWorstTimers[timer] = 0;
     }
     for (const gauge of PERF_GAUGES) {
       this.reportedGauges[gauge] = this.windowGauges[gauge] / this.windowFrames;
@@ -112,6 +157,14 @@ class PerfMonitor {
   /** Average milliseconds per frame spent in `timer`, over the last full window. */
   msPerFrame(timer: PerfTimer): number {
     return this.reportedTimers[timer];
+  }
+
+  /**
+   * The slowest single frame's milliseconds in `timer`, over the last full
+   * window. The lag worth chasing is bursts, and a window's mean hides a burst.
+   */
+  worstMsPerFrame(timer: PerfTimer): number {
+    return this.reportedWorstTimers[timer];
   }
 
   /** Average per-frame total of `gauge`, over the last full window. */

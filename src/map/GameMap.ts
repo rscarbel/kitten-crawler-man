@@ -1093,7 +1093,18 @@ export class GameMap {
    * first render, so a tile can change before there is a cache to tell.
    */
   private readonly _dirtyTiles: Array<{ x: number; y: number }> = [];
+  /** Tiles whose decoration changed but whose baked base did not; see {@link markDecorationDirty}. */
+  private readonly _dirtyDecorations: Array<{ x: number; y: number }> = [];
   private _overlayCache: OverlayTileCache | null = null;
+  /**
+   * Whether this map has drawn its ground once. Only that first frame bakes
+   * every visible chunk at once — the arrival is covered, and throttling there
+   * only smears the wait — and a cache created any later is held to the
+   * per-frame budget like any other frame of play.
+   */
+  private tileArtRenderedOnce = false;
+  /** Whether decorations draw their animated layer; read live, so a quality change applies next frame. */
+  private tileArtFullDetail: () => boolean = () => true;
 
   constructor(opts: GameMapOptions = {}) {
     const {
@@ -2423,6 +2434,17 @@ export class GameMap {
     this._dirtyTiles.push({ x: tileX, y: tileY });
   }
 
+  /**
+   * Tell the renderer only a tile's decoration changed: a field its overlay
+   * painter reads, such as a wall's `damageStage`, while the ground the chunk
+   * bake draws under it stays the same. Cheaper than {@link markTileDirty},
+   * which repaints the tile's patch of the baked ground too, so use it only
+   * where the tile's base pass is known not to read what changed.
+   */
+  markDecorationDirty(tileX: number, tileY: number): void {
+    this._dirtyDecorations.push({ x: tileX, y: tileY });
+  }
+
   isWalkable(tileX: number, tileY: number): boolean {
     if (!this.isWalkableIgnoringBathroomQueue(tileX, tileY)) return false;
     if ((this.blockedMask[tileIndex(tileX, tileY, this.maskWidth)] & BLOCK_BODY) !== 0)
@@ -2663,22 +2685,41 @@ export class GameMap {
 
   /**
    * Drops every pre-rendered chunk/overlay block so the next `renderCanvas`
-   * re-bakes everything from scratch.
-   *
-   * A chunk is baked once and reused forever (see `invalidateTile`'s own
-   * comment), which is fine for a runtime tile change but breaks against
-   * lazy sprite-group loading: a ground-tileset or decoration sheet that is
-   * still loading when a chunk near the player first bakes gets that chunk
-   * permanently stuck on its fallback color/art, even after the sheet
-   * finishes loading a moment later — nothing else ever tells the chunk
-   * cache to look again. Call this once a floor's declared sprite groups
-   * finish loading (see `DungeonScene`'s
-   * `prewarmGroups(levelDef.spriteGroups).then(...)`) so that one-time race
-   * turns back into the "wrong for a frame or two" lazy loading intends, not
-   * "wrong forever".
+   * re-bakes everything from scratch. For a review render that must show only
+   * fresh art on its next frame; a live scene marks the art stale instead with
+   * {@link markTileArtStale}, which never costs a screenful of baking at once.
    */
   invalidateAllTileArt(): void {
     this.releaseTileArtCaches();
+  }
+
+  /**
+   * Marks every baked chunk and overlay entry for re-baking, for when a ground,
+   * tree or prop sheet lands. A chunk is baked once and reused forever, so one
+   * baked near the player while a sheet was still painting would otherwise keep
+   * that sheet's fallback colour for good. The old pictures keep being drawn
+   * until each re-bake fits a frame's budget, so a landing is "wrong for a
+   * frame or two", never a hitch. Sprite buildings are left alone unless
+   * `includeFacades` says their sheets may have changed too: each one's entry
+   * draws only its own facade sheet, which {@link invalidateFacadeArt} covers.
+   */
+  markTileArtStale(options: { readonly includeFacades: boolean }): void {
+    this._chunkCache?.markAllStale();
+    this._overlayCache?.markAllStale(options.includeFacades);
+  }
+
+  /**
+   * Drops the overlay entries drawn from one building facade sheet, for when
+   * that sheet lands. The chunks are left alone: the ground under a building is
+   * baked from the ground sheets, never from its facade.
+   */
+  invalidateFacadeArt(spriteKey: string): void {
+    this._overlayCache?.invalidateSpriteKey(spriteKey);
+  }
+
+  /** Sets what decides whether decorations draw their animated layer, read on every frame. */
+  setTileArtDetail(fullDetail: () => boolean): void {
+    this.tileArtFullDetail = fullDetail;
   }
 
   private releaseTileArtCaches(): void {
@@ -2743,20 +2784,51 @@ export class GameMap {
     viewW: number,
     viewH: number,
   ): void {
-    const chunkCache = this.applyDirtyTiles();
-    renderCanvas(ctx, this.structure, this.tileHeight, cameraX, cameraY, viewW, viewH, chunkCache);
+    const chunkCache = this.beginTileArtFrame();
+    const firstFrame = !this.tileArtRenderedOnce;
+    this.tileArtRenderedOnce = true;
+    renderCanvas(
+      ctx,
+      this.structure,
+      this.tileHeight,
+      cameraX,
+      cameraY,
+      viewW,
+      viewH,
+      chunkCache,
+      firstFrame,
+    );
   }
 
-  /** Invalidates the cached art of every tile announced by {@link markTileDirty} since the last call. */
+  /**
+   * Marks a frame boundary for the tile art caches: applies the tiles changed
+   * since the last frame and resets the overlay cache's per-frame allowance and
+   * eviction clock. `renderCanvas` calls it; a scene that paints its own ground
+   * instead must call it once per render itself, or stale decorations stop
+   * being redrawn and nothing is ever evicted.
+   */
+  beginTileArtFrame(): TileChunkCache {
+    const chunkCache = this.applyDirtyTiles();
+    this._overlayCache?.beginFrame();
+    return chunkCache;
+  }
+  /**
+   * Refreshes the cached art of every tile announced by {@link markTileDirty}
+   * or {@link markDecorationDirty} since the last call.
+   */
   private applyDirtyTiles(): TileChunkCache {
     const chunkCache = (this._chunkCache ??= new TileChunkCache(this.structure, this.tileHeight));
-    for (const t of this._dirtyTiles) {
-      chunkCache.invalidateTile(t.x, t.y);
-      this._overlayCache?.invalidateTile(t.x, t.y);
-      this.refreshDecorationTile(t.x, t.y);
-    }
+    if (this._dirtyTiles.length > 0) chunkCache.repaintTiles(this._dirtyTiles);
+    for (const t of this._dirtyTiles) this.refreshTileOverlay(t.x, t.y);
+    for (const t of this._dirtyDecorations) this.refreshTileOverlay(t.x, t.y);
     this._dirtyTiles.length = 0;
+    this._dirtyDecorations.length = 0;
     return chunkCache;
+  }
+
+  private refreshTileOverlay(tileX: number, tileY: number): void {
+    this._overlayCache?.invalidateTile(tileX, tileY);
+    this.refreshDecorationTile(tileX, tileY);
   }
 
   renderDecorationsOverlay(
@@ -2776,6 +2848,7 @@ export class GameMap {
       viewW,
       viewH,
       this._overlayCache,
+      this.tileArtFullDetail(),
     );
   }
 
@@ -2954,6 +3027,7 @@ export class GameMap {
       ty * ts - camY,
       ts,
       this._overlayCache,
+      this.tileArtFullDetail(),
     );
   }
 }

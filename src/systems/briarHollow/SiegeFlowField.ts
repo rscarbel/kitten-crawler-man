@@ -162,6 +162,9 @@ export interface SiegeFlowFieldDeps {
   readonly nowMs?: () => number;
 }
 
+/** How many recompute timings {@link SiegeFlowField.recomputeMs} keeps. */
+const RECOMPUTE_HISTORY_LENGTH = 64;
+
 export class SiegeFlowField implements SiegeFlowQuery {
   private readonly originX: number;
   private readonly originY: number;
@@ -184,7 +187,11 @@ export class SiegeFlowField implements SiegeFlowQuery {
    */
   private terrain: Float64Array | null = null;
   private terrainEngines = '';
-  /** How long each recompute took, in milliseconds, for the gate to judge. */
+  /**
+   * How long the latest recomputes took, in milliseconds, for a gate to judge:
+   * a ring of the last {@link RECOMPUTE_HISTORY_LENGTH}, so a siege that runs
+   * for an hour holds no more than one that ran a minute.
+   */
   readonly recomputeMs: number[] = [];
   /** How many times the field has been rebuilt. */
   recomputes = 0;
@@ -385,8 +392,8 @@ export class SiegeFlowField implements SiegeFlowQuery {
       if (lx > 0) this.relax(i - 1, through, steps, cost, heap);
       if (lx < width - 1) this.relax(i + 1, through, steps, cost, heap);
     }
+    this.recomputeMs[this.recomputes % RECOMPUTE_HISTORY_LENGTH] = now() - startedAt;
     this.recomputes++;
-    this.recomputeMs.push(now() - startedAt);
   }
 
   private relax(
@@ -396,7 +403,10 @@ export class SiegeFlowField implements SiegeFlowQuery {
     cost: Float64Array,
     heap: IndexHeap,
   ): void {
-    if (through >= cost[n] || steps[n] === UNREACHABLE) return;
+    // Written as "cheaper", not "not dearer", so a NaN price never wins a tile
+    // and spreads through every route behind it.
+    const cheaper = through < cost[n];
+    if (!cheaper || steps[n] === UNREACHABLE) return;
     cost[n] = through;
     heap.push(n, through);
   }

@@ -1,3 +1,4 @@
+import { noteDrawFailure, recoverDrawState } from '../core/drawFailure';
 import { firstResidentMarker, type ResidentQuestHook } from '../systems/residentQuestHooks';
 import { drainBloodVomitRetches } from '../systems/bloodVomitRetches';
 import { WendellBlueprintsHook } from '../systems/briarHollow/blueprints/WendellBlueprintsHook';
@@ -80,7 +81,16 @@ import {
   knockedOutBandEntry,
   updateKnockoutState,
 } from '../systems/KnockoutRevive';
-import { drawTopArrowCandidate, type ArrowCandidate } from '../ui/WorldArrow';
+import {
+  ARROW_PRIORITY,
+  drawArrowAbovePlayer,
+  drawTopArrowCandidate,
+  OBJECTIVE_ARROW_SUPPRESS_TILES,
+  type ArrowCandidate,
+} from '../ui/WorldArrow';
+import { worldTrail } from '../ui/world/worldTrail';
+import { QuestRouteGuide } from '../systems/questRoute/QuestRouteGuide';
+import type { TilePoint } from '../map/town/townPlan';
 import { GameplayScene } from './GameplayScene';
 import { AchievementManager } from '../core/AchievementManager';
 import { AchievementUISystem } from '../systems/AchievementUISystem';
@@ -660,6 +670,13 @@ export class BuildingInteriorScene extends GameplayScene {
   private readonly achievementUI: AchievementUISystem;
   /** The overworld's Quest Journal, read through the door; null on a floor with none. */
   private readonly overworldJournal: InteriorJournalSource | null;
+  /** The way out toward a pinned objective outside this building. */
+  private readonly exitRoute = new QuestRouteGuide();
+  /**
+   * The tiles the way out ends on this tick (the exit, or a tower storey's
+   * stairs down), or null while no exit is to be pointed at.
+   */
+  private exitRouteGoals: readonly TilePoint[] | null = null;
   /** The HUD toggles the party walked in with, written back on the way out. */
   private readonly hudView: HudViewState | null;
   /** Whether the room's minimap is expanded; carried through the door both ways. */
@@ -1075,7 +1092,9 @@ export class BuildingInteriorScene extends GameplayScene {
     // composited through. Queued rather than painted outright, so the fade into
     // the shop is not the frame that pays for its floorboards.
     const repaintTileArt = (): void => {
-      for (const floor of isTower ? this.towerFloors : [this.map]) floor.invalidateAllTileArt();
+      for (const floor of isTower ? this.towerFloors : [this.map]) {
+        floor.markTileArtStale({ includeFacades: true });
+      }
     };
     requestGroundSheets(floor.groundSheets, repaintTileArt);
     // The town's furniture stands indoors too — a shop counter and a notice
@@ -1094,12 +1113,12 @@ export class BuildingInteriorScene extends GameplayScene {
     // still fire-and-forget, must not block construction. Ground
     // tiles/decorations bake into cached chunk canvases on first draw and
     // never re-look at a sheet that finishes loading after that bake (see
-    // `GameMap.invalidateAllTileArt`'s doc comment) — every tower floor was
+    // `GameMap.markTileArtStale`'s doc comment) — every tower floor was
     // built above from the same 'town' group, so one resolution covers all
     // of them; `changeFloor` never re-triggers this load.
     const interiorMaps = isTower ? this.towerFloors : [this.map];
     const spriteGroupsReady = prewarmGroups(floor.spriteGroups).then(() => {
-      for (const m of interiorMaps) m.invalidateAllTileArt();
+      for (const m of interiorMaps) m.markTileArtStale({ includeFacades: true });
     });
 
     const { x: sx, y: sy } = this.map.startTile;
@@ -2373,6 +2392,7 @@ export class BuildingInteriorScene extends GameplayScene {
     const library = activeMusicLibrary();
     if (library !== null) returnUnreadMusicNotices(this.menus, library);
     this.menus.dispose();
+    this.exitRoute.dispose();
     this.audioScope?.dispose();
     this.ambientSound?.dispose();
     this.contractSite?.dispose();
@@ -2792,6 +2812,7 @@ export class BuildingInteriorScene extends GameplayScene {
     const isOnCrystalFloor =
       this.entry.type === 'tower' && this.currentFloor === TOWER_CONFRONTATION_FLOOR;
     this.soulCrystal.update(this.human, this.cat, this.active(), isOnCrystalFloor);
+    this.updateExitRoute();
     if (this.soulCrystal.crystalContainedPending) {
       this.soulCrystal.crystalContainedPending = false;
       this.humanAchievements.tryUnlock('doomsday_contained');
@@ -3323,6 +3344,98 @@ export class BuildingInteriorScene extends GameplayScene {
       this.audio?.play('bones_rattling');
     }
     playFairySystemCues(this.fairies.takeCues(), this.audio);
+  }
+
+  /**
+   * The tiles the way out toward the pinned objective ends on: a tower
+   * storey's stairs down above the ground floor, the exit otherwise. Null when
+   * there is nothing to lead out to: no Journal, no live pin, a pin on this
+   * very building (whoever the party came to see is already in the room), or
+   * the tower's crystal still loose, whose climb outranks the way out.
+   */
+  private pinnedExitGoals(): readonly TilePoint[] | null {
+    const journal = this.overworldJournal;
+    if (journal === null || this.gameOver) return null;
+    const pinned = resolvePinnedEntry(
+      journal.progress.pinnedTrackerId,
+      journal.entries(),
+      this.entry.doorTile,
+    );
+    const target = pinned?.target;
+    if (target === undefined || target.building === this.entry.name) return null;
+    const isTower = this.towerFloors.length > 0;
+    if (isTower && this.soulCrystal.isGuidingToCrystal) return null;
+    const goals =
+      isTower && this.currentFloor > 0
+        ? this.map._interiorStairDownTiles
+        : this.map._interiorExitTiles;
+    return goals.length === 0 ? null : goals;
+  }
+
+  private activeTile(): TilePoint {
+    const active = this.active();
+    return { x: Math.floor(active.x / TILE_SIZE), y: Math.floor(active.y / TILE_SIZE) };
+  }
+
+  private updateExitRoute(): void {
+    this.exitRouteGoals = this.pinnedExitGoals();
+    if (this.exitRouteGoals === null) {
+      this.exitRoute.update(this.map, this.activeTile(), null);
+      return;
+    }
+    this.exitRoute.updateToTiles(this.map, this.activeTile(), this.exitRouteGoals);
+  }
+
+  /**
+   * Whether the way out toward the pinned objective is shown this frame:
+   * there is one, and the party is not already standing at it, where the ▼
+   * exit hint marks it. Measured tile origin to tile origin, the player's
+   * position being the top-left of their tile.
+   */
+  private showsExitRoute(): boolean {
+    const goals = this.exitRouteGoals;
+    if (goals === null || this.gameOver || this.pauseScreen.isOpen) return false;
+    const middle = goals[Math.floor(goals.length / 2)];
+    const active = this.active();
+    const distanceTiles = Math.hypot(
+      middle.x - active.x / TILE_SIZE,
+      middle.y - active.y / TILE_SIZE,
+    );
+    return distanceTiles >= OBJECTIVE_ARROW_SUPPRESS_TILES;
+  }
+
+  /** The arrow toward the way out, for a pinned objective outside this building. */
+  private pinnedExitArrowCandidate(
+    ctx: CanvasRenderingContext2D,
+    camX: number,
+    camY: number,
+  ): ArrowCandidate | null {
+    if (!this.showsExitRoute()) return null;
+    const aim = this.exitRoute.aim();
+    if (aim === null) return null;
+    const active = this.active();
+    return {
+      priority: ARROW_PRIORITY.PINNED_EXIT,
+      draw: () =>
+        drawArrowAbovePlayer(
+          ctx,
+          active.x,
+          active.y,
+          aim.x,
+          aim.y,
+          camX,
+          camY,
+          worldPalette.objective.ready,
+        ),
+    };
+  }
+
+  /** The dotted way out on the floor, under every body, alongside the arrow. */
+  private renderExitRouteTrail(ctx: CanvasRenderingContext2D, camX: number, camY: number): void {
+    if (!settings.questRouteTrail || !this.showsExitRoute()) return;
+    worldTrail(ctx, this.exitRoute.trail(), camX, camY, performance.now(), {
+      view: { width: viewportWidth(), height: viewportHeight() },
+    });
   }
 
   /**
@@ -4138,7 +4251,15 @@ export class BuildingInteriorScene extends GameplayScene {
       });
     }
     drawables.sort((a, b) => a.sortY - b.sortY);
-    for (const drawable of drawables) drawable.draw();
+    const baseline = ctx.getTransform();
+    for (const drawable of drawables) {
+      try {
+        drawable.draw();
+      } catch (error) {
+        noteDrawFailure('BuildingInteriorScene', error);
+        recoverDrawState(ctx, baseline);
+      }
+    }
   }
 
   /**
@@ -4218,6 +4339,7 @@ export class BuildingInteriorScene extends GameplayScene {
     if (this.prison === null) {
       this.map.renderCanvas(ctx, camX, camY, viewportWidth(), viewportHeight());
     } else {
+      this.map.beginTileArtFrame();
       this.prison.renderGround(ctx, camX, camY);
     }
     const hiddenProps =
@@ -4266,6 +4388,7 @@ export class BuildingInteriorScene extends GameplayScene {
     const isOnCrystalFloor =
       this.entry.type === 'tower' && this.currentFloor === TOWER_CONFRONTATION_FLOOR;
     this.soulCrystal.renderGround(ctx, camX, camY, isOnCrystalFloor);
+    this.renderExitRouteTrail(ctx, camX, camY);
     this.renderSortedEntities(ctx, camX, camY, [
       // The same test the dungeon's render pass uses: a corpse that still draws
       // keeps its place in the sort until it expires.
@@ -4370,6 +4493,7 @@ export class BuildingInteriorScene extends GameplayScene {
         ),
         this.soulCrystalArrowCandidate(ctx, camX, camY),
         this.prisonKey?.arrowCandidate(ctx, camX, camY, this.active()) ?? null,
+        this.pinnedExitArrowCandidate(ctx, camX, camY),
       ]);
     }
 

@@ -163,6 +163,7 @@ export function doorwayBeaconTarget(entry: BuildingEntry | null): TrackerTarget 
       widthTiles: span.width,
       backsetTiles: DOORWAY_BACKSET_TILES,
       heightTiles: DOORWAY_BEAM_HEIGHT_TILES,
+      building: entry.name,
     };
   }
   const ridgeRise = facade.roofRise + FACADE_DOOR_ROW_TILES;
@@ -176,6 +177,7 @@ export function doorwayBeaconTarget(entry: BuildingEntry | null): TrackerTarget 
     widthTiles: facade.widthTiles,
     backsetTiles: DOORWAY_BACKSET_TILES,
     heightTiles: ridgeRise + roofClearance,
+    building: entry.name,
   };
 }
 
@@ -197,5 +199,6 @@ export function towerApproachBeaconTarget(entry: BuildingEntry | null): TrackerT
     widthTiles: span.width,
     backsetTiles: DOORWAY_BACKSET_TILES,
     standsInFront: true,
+    building: entry.name,
   };
 }

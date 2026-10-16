@@ -32,7 +32,11 @@
  * front slope and the hip end without knowing either is skewed.
  */
 
-import { allocReadableCanvas, surfaceContext, type CanvasSurface } from '../../core/canvasSurface';
+import {
+  allocReadableCanvas,
+  freshSurfaceContext,
+  type CanvasSurface,
+} from '../../core/canvasSurface';
 import { BUILDING_TILE_SCALE, type BuildingSpec } from './spec';
 
 /** The game's own 2D context — the offline bakers bridge node-canvas to it. */
@@ -240,7 +244,7 @@ export function makePlane(quad: Quad, widthOverride?: number, heightOverride?: n
     Math.round(heightOverride ?? Math.max(distance(quad.tl, quad.bl), distance(quad.tr, quad.br))),
   );
   const canvas = allocReadableCanvas(width, height);
-  return { canvas, ctx: surfaceContext(canvas), width, height, quad };
+  return { canvas, ctx: freshSurfaceContext(canvas), width, height, quad };
 }
 
 function distance(a: Point, b: Point): number {

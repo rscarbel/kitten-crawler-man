@@ -253,7 +253,7 @@ export const MORDECAI_ADVICE = {
 
   shady_bounties: adviceLine(
     [
-      "There's a man by the notice board offering money for killing things out in the ruins. He doesn't give his name. That's probably for the best.",
+      "There's a man outside the tattoo parlour in the Low Quarter offering money for killing things out in the ruins. He doesn't give his name. That's probably for the best.",
       "The money is real, at least. The targets are out where nobody cares how much noise you make. By the standards of this place, it's practically honest work.",
     ],
     'He usually loiters {direction} of here.',

@@ -45,6 +45,7 @@ import {
   flushFigureFrameCache,
   IDLE_FRAMES_BEFORE_RELEASE,
   isFigureStateQueued,
+  setFigureBakeClock,
   touchFigureState,
 } from '../src/sprites/figure/figureFrameCache.js';
 import {
@@ -289,6 +290,26 @@ interface Measured {
 
 const ctx = gameContext(TILE_SIZE, TILE_SIZE);
 
+const MS_PER_SECOND = 1000;
+/**
+ * The clock her looping rows pick their frame by, run at the display rate
+ * being simulated rather than at however fast node gets through a frame: a
+ * headless frame that bakes takes many times a display frame, and one that
+ * does not takes a sliver of one, so on the real clock which idle frame she is
+ * drawn in depends on the machine's load. Bake costs stay on the real clock,
+ * since the cache paces itself by what a bake actually cost.
+ */
+const realNow = performance.now.bind(performance);
+let simulatedMs = 0;
+performance.now = () => simulatedMs;
+setFigureBakeClock(realNow);
+
+/** One rendered frame of the display being simulated. */
+function renderFrame(framesPerUpdate: number): void {
+  simulatedMs += MS_PER_SECOND / (UPDATES_PER_SECOND * framesPerUpdate);
+  beginFigureFrame();
+}
+
 function megabytes(def: FigureDef): number {
   return figureResidentBytes(def) / BYTES_PER_MEGABYTE;
 }
@@ -304,7 +325,7 @@ function measure(crawler: Crawler, scenario: Scenario, framesPerUpdate: number):
   for (let frame = 0; frame < WARM_UP_FRAME_LIMIT && figurePrewarmDepth() > 0; frame++) {
     player.isMoving = false;
     player.tickTimers();
-    beginFigureFrame();
+    renderFrame(framesPerUpdate);
     player.render(ctx, player.x, player.y, TILE_SIZE);
   }
   if (figurePrewarmDepth() > 0) {
@@ -331,7 +352,7 @@ function measure(crawler: Crawler, scenario: Scenario, framesPerUpdate: number):
       player.tickTimers();
     }
     for (let frame = 0; frame < framesPerUpdate; frame++) {
-      beginFigureFrame();
+      renderFrame(framesPerUpdate);
       player.render(ctx, player.x, player.y, TILE_SIZE);
       const stats = getFigureCacheStats();
       const firstFrameAfterFlush = tick === scenario.flushAt && frame === 0;
