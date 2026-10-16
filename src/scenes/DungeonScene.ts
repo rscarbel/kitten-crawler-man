@@ -106,8 +106,9 @@ import {
   type ArrowCandidate,
 } from '../ui/WorldArrow';
 import { drawObjectiveBeacon } from '../ui/ObjectiveBeacon';
-import { worldTrail } from '../ui/world/worldTrail';
+import { WorldTrail } from '../ui/world/worldTrail';
 import { QuestRouteGuide } from '../systems/questRoute/QuestRouteGuide';
+import { crawlerGroundPoint, crawlerSpriteBox } from '../systems/questRoute/routeOrigin';
 import {
   objectiveBeamTargets,
   characterTarget,
@@ -1275,6 +1276,7 @@ export class DungeonScene extends GameplayScene {
   private readonly _trackerEntries: TrackerEntry[] = [];
   /** The way to the pinned objective: the arrow's next gate and the ground trail. */
   private readonly questRoute = new QuestRouteGuide();
+  private readonly questRouteTrail = new WorldTrail();
   /** Systems that beam over their own objective places whether or not the Journal tracks them. */
   private readonly objectiveBeaconSources: ObjectiveBeaconSource[] = [];
   private readonly _systemContext: SystemContext;
@@ -4120,16 +4122,19 @@ export class DungeonScene extends GameplayScene {
   }
 
   /**
-   * The dotted route on the ground toward the pinned objective, under every
-   * body. Stands down with the arrow near the destination, where the place is
-   * plainly in front of the player.
+   * The route on the ground toward the pinned objective, under every body,
+   * led from the active crawler's feet. Stands down with the arrow near the
+   * destination, where the place is plainly in front of the player.
    */
   private renderQuestRouteTrail(ctx: CanvasRenderingContext2D, camX: number, camY: number): void {
     if (!settings.questRouteTrail || this.gameOver || this.menus.pauseScreen.isOpen) return;
     const target = this.routedPinnedTarget();
     if (target === null || this.isObjectiveArrowSuppressed(target, camX, camY)) return;
-    worldTrail(ctx, this.questRoute.trail(), camX, camY, performance.now(), {
+    const active = this.active();
+    const shape = this.questRoute.trailShape(crawlerGroundPoint(active));
+    this.questRouteTrail.paint(ctx, shape, camX, camY, performance.now(), {
       view: { width: viewportWidth(), height: viewportHeight() },
+      body: crawlerSpriteBox(active),
     });
   }
 
@@ -8049,7 +8054,11 @@ export class DungeonScene extends GameplayScene {
     // time the puzzle's music plays.
     this.updatePipeBoardMusic();
     this.updateSpiderLabMusic();
-    this.questRoute.update(this.gameMap, this.activeTile, this.routedPinnedTarget());
+    this.questRoute.update(
+      this.gameMap,
+      crawlerGroundPoint(this.active()),
+      this.routedPinnedTarget(),
+    );
 
     // Also drained ahead of the early returns: the request is raised by a
     // right-click or a hotbar key, neither of which routes through the panel's

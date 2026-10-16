@@ -47,6 +47,8 @@ import {
   routePortals,
   type RoutePortal,
 } from '../src/systems/questRoute/routePortals';
+import { crawlerGroundPoint, groundPointOnTile } from '../src/systems/questRoute/routeOrigin';
+import { trailPointAt, TrailShaper, type TrailGround } from '../src/systems/questRoute/trailShape';
 
 /** Read straight rather than through `SpriteLoader`, so the gate measures the source. */
 const BUILDING_MANIFEST: Readonly<Record<string, SpriteManifestEntry | undefined>> =
@@ -409,7 +411,7 @@ for (let mapIndex = 0; mapIndex < QUEST_ROUTE_CHECK_MAPS; mapIndex++) {
     );
 
     const guide = new QuestRouteGuide();
-    guide.updateToTiles(map, plaza, goals);
+    guide.updateToTiles(map, groundPointOnTile(plaza), goals);
     const guideAim = guide.aim();
     const guideAimTile =
       guideAim === null
@@ -523,12 +525,14 @@ console.log('\nQuest route guide re-routes round a newly blocked tile while the 
       const field = buildRouteField(map, goalTilesForTarget(map, target));
       const chain = downhillChain(field, map, plaza, QUEST_ROUTE_CHAIN_MAX_TILES);
       const guide = new QuestRouteGuide();
-      for (let tick = 0; tick < FIRST_BUILD_TICKS; tick++) guide.update(map, plaza, target);
+      for (let tick = 0; tick < FIRST_BUILD_TICKS; tick++) {
+        guide.update(map, groundPointOnTile(plaza), target);
+      }
       const blocked = chain[BLOCKED_ROUTE_INDEX];
       map.blockTilePermanently(blocked.x, blocked.y);
       const pacing = [chain[0], chain[1]];
       for (let tick = 0; tick < BLOCKED_ROUTE_TICKS; tick++) {
-        guide.update(map, pacing[tick % pacing.length], target);
+        guide.update(map, groundPointOnTile(pacing[tick % pacing.length]), target);
       }
       check(
         guide.trail().every((tile) => map.isWalkable(tile.x, tile.y)),
@@ -537,6 +541,172 @@ console.log('\nQuest route guide re-routes round a newly blocked tile while the 
       guide.dispose();
     }
   }
+}
+
+/** Overworlds the standing-below-a-building check is run over. */
+const BELOW_BUILDING_MAPS = 3;
+/**
+ * How far into the tile below a building the sprite's centre sits, in pixels:
+ * just past its top edge, the furthest north a wall test lets a body stand,
+ * where the top of the sprite hangs over the building's bottom row.
+ */
+const BELOW_BUILDING_CENTRE_INSET_PX = 1;
+/** How far along the shaped trail its heading is read, in pixels: about where its first mark is painted. */
+const TRAIL_HEADING_PROBE_PX = TILE_SIZE;
+
+console.log('\nQuest route starts from the feet of a crawler standing just below a building');
+{
+  let standsChecked = 0;
+  let originMisses = 0;
+  let leavesBuilding = 0;
+  let headsBackward = 0;
+  const probe = { x: 0, y: 0 };
+  for (let mapIndex = 0; mapIndex < BELOW_BUILDING_MAPS; mapIndex++) {
+    const map = new GameMap({ mapSize: MAP_SIZE, mapType: 'overworld', tileHeight: TILE_SIZE });
+    const site = map.briarHollow;
+    const plaza = map.townSquareCentre;
+    if (site === null || plaza === undefined) {
+      check(false, 'a generated overworld carries Briar Hollow and a plaza');
+      continue;
+    }
+    const target = { x: plaza.x, y: plaza.y };
+    const field = buildRouteField(map, goalTilesForTarget(map, target));
+    const costAt = (x: number, y: number): number => field.cost[y * field.columns + x];
+    for (const building of site.buildings) {
+      const rect = building.rect;
+      const bottomRow = rect.y + rect.h - 1;
+      const standRow = bottomRow + 1;
+      for (let x = rect.x; x < rect.x + rect.w; x++) {
+        if (map.isWalkable(x, bottomRow)) continue;
+        if (costAt(x, standRow) === Infinity) continue;
+        const body = {
+          x: x * TILE_SIZE,
+          y: standRow * TILE_SIZE - TILE_SIZE / 2 + BELOW_BUILDING_CENTRE_INSET_PX,
+        };
+        const ground = crawlerGroundPoint(body);
+        const guide = new QuestRouteGuide();
+        for (let tick = 0; tick < FIRST_BUILD_TICKS; tick++) guide.update(map, ground, target);
+        standsChecked++;
+        const trail = guide.trail();
+        const origin = trail.length > 0 ? trail[0] : null;
+        if (origin?.x !== x || origin.y !== standRow) originMisses++;
+        if (trail.some((tile) => contains(rect, tile.x, tile.y))) leavesBuilding++;
+        const shape = guide.trailShape(ground);
+        if (shape !== null) {
+          trailPointAt(shape, TRAIL_HEADING_PROBE_PX, probe);
+          const probeTileX = Math.floor(probe.x / TILE_SIZE);
+          const probeTileY = Math.floor(probe.y / TILE_SIZE);
+          if (
+            contains(rect, probeTileX, probeTileY) ||
+            costAt(probeTileX, probeTileY) > costAt(x, standRow)
+          ) {
+            headsBackward++;
+          }
+        }
+        guide.dispose();
+      }
+    }
+  }
+  check(
+    standsChecked > 0,
+    `found tiles to stand on just below Briar Hollow's buildings (${standsChecked})`,
+  );
+  check(
+    originMisses === 0,
+    `the route starts on the tile under the feet, not the sprite's top (${originMisses} of ${standsChecked} missed)`,
+  );
+  check(
+    leavesBuilding === 0,
+    `the route never begins inside the building the sprite overlaps (${leavesBuilding} of ${standsChecked} did)`,
+  );
+  check(
+    headsBackward === 0,
+    `the trail's first stretch leads downhill toward the goal, never back (${headsBackward} of ${standsChecked} did)`,
+  );
+}
+
+/** The side of the open square the trail-shape cases are laid out on, in tiles. */
+const STUB_GROUND_TILES = 40;
+/** How far any painted point of a trail may stand from the walk it follows, in tiles. */
+const TRAIL_MAX_OFF_WALK_TILES = 1.5;
+/** Where the trail-shape cases' walks start and turn, in tiles. */
+const STUB_WALK_START = { x: 3, y: 2 };
+const STUB_WALK_BEND_ROW = 12;
+const STUB_RIVER_COLUMN = 5;
+const STUB_FAR_BANK_COLUMN = 7;
+const STUB_ROAD_END_COLUMN = 12;
+/** How far into the walk's first tile the feet stand, as a share of a tile: just south of its middle. */
+const STUB_FEET_DEPTH = 0.7;
+
+/** An open square of dry ground, with river water down `riverColumn` save where `bridgeRow` crosses it. */
+function stubGround(
+  river: { readonly column: number; readonly bridgeRow: number } | null,
+): TrailGround {
+  const inside = (x: number, y: number): boolean =>
+    x >= 0 && y >= 0 && x < STUB_GROUND_TILES && y < STUB_GROUND_TILES;
+  return {
+    isWalkable: inside,
+    isWadeable: (x, y) =>
+      river !== null && inside(x, y) && x === river.column && y !== river.bridgeRow,
+    isStairwellTile: () => false,
+    buildingEntries: [],
+  };
+}
+
+/** The furthest any painted point of `walk`'s trail, led from just inside its first tile, strays from the walk, in tiles. */
+const TILE_CENTRE_OFFSET = 0.5;
+const TRAIL_POINT_STRIDE = 2;
+
+function trailStrayTiles(ground: TrailGround, walk: readonly TilePoint[]): number {
+  const shaper = new TrailShaper();
+  shaper.setWalk(ground, walk);
+  const shape = shaper.shape({
+    unit: 'px',
+    x: (walk[0].x + TILE_CENTRE_OFFSET) * TILE_SIZE,
+    y: (walk[0].y + STUB_FEET_DEPTH) * TILE_SIZE,
+  });
+  if (shape === null) return Infinity;
+  let worst = 0;
+  for (let index = 0; index < shape.count; index++) {
+    const x = shape.points[index * TRAIL_POINT_STRIDE] / TILE_SIZE - TILE_CENTRE_OFFSET;
+    const y = shape.points[index * TRAIL_POINT_STRIDE + 1] / TILE_SIZE - TILE_CENTRE_OFFSET;
+    const nearest = Math.min(...walk.map((tile) => Math.hypot(tile.x - x, tile.y - y)));
+    worst = Math.max(worst, nearest);
+  }
+  return worst;
+}
+
+console.log(
+  '\nThe trail follows the walk round a bend, never cutting across what the route went round',
+);
+{
+  const down: TilePoint[] = [];
+  for (let y = STUB_WALK_START.y; y <= STUB_WALK_BEND_ROW; y++)
+    down.push({ x: STUB_WALK_START.x, y });
+  const toBridge = [...down];
+  for (let x = STUB_WALK_START.x + 1; x <= STUB_FAR_BANK_COLUMN; x++) {
+    toBridge.push({ x, y: STUB_WALK_BEND_ROW });
+  }
+  for (let y = STUB_WALK_BEND_ROW - 1; y >= STUB_WALK_START.y; y--) {
+    toBridge.push({ x: STUB_FAR_BANK_COLUMN, y });
+  }
+  const riverStray = trailStrayTiles(
+    stubGround({ column: STUB_RIVER_COLUMN, bridgeRow: STUB_WALK_BEND_ROW }),
+    toBridge,
+  );
+  check(
+    riverStray <= TRAIL_MAX_OFF_WALK_TILES,
+    `a walk down a bank to a bridge and back is not cut across the river (strays ${riverStray.toFixed(1)} tiles)`,
+  );
+  const lRoad = [...down];
+  for (let x = STUB_WALK_START.x + 1; x <= STUB_ROAD_END_COLUMN; x++) {
+    lRoad.push({ x, y: STUB_WALK_BEND_ROW });
+  }
+  const bendStray = trailStrayTiles(stubGround(null), lRoad);
+  check(
+    bendStray <= TRAIL_MAX_OFF_WALK_TILES,
+    `an L-shaped road is not cut across the grass inside its bend (strays ${bendStray.toFixed(1)} tiles)`,
+  );
 }
 
 const meanBuildMs =

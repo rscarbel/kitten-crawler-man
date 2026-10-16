@@ -1,8 +1,7 @@
 /**
  * Cutting a tile-by-tile walk into a few straight runs, each one walkable end
  * to end and never far off the walk it stands for: the way a guide hands out
- * waypoints a party can walk straight at, and the way a trail painted along a
- * route reads as a path rather than as a staircase of tile steps.
+ * waypoints a party can walk straight at.
  */
 
 import { TILE_SIZE } from '../../core/constants';

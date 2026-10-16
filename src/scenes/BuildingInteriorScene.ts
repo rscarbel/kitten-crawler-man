@@ -88,8 +88,9 @@ import {
   OBJECTIVE_ARROW_SUPPRESS_TILES,
   type ArrowCandidate,
 } from '../ui/WorldArrow';
-import { worldTrail } from '../ui/world/worldTrail';
+import { WorldTrail } from '../ui/world/worldTrail';
 import { QuestRouteGuide } from '../systems/questRoute/QuestRouteGuide';
+import { crawlerGroundPoint, crawlerSpriteBox } from '../systems/questRoute/routeOrigin';
 import type { TilePoint } from '../map/town/townPlan';
 import { GameplayScene } from './GameplayScene';
 import { AchievementManager } from '../core/AchievementManager';
@@ -672,6 +673,7 @@ export class BuildingInteriorScene extends GameplayScene {
   private readonly overworldJournal: InteriorJournalSource | null;
   /** The way out toward a pinned objective outside this building. */
   private readonly exitRoute = new QuestRouteGuide();
+  private readonly exitRouteTrail = new WorldTrail();
   /**
    * The tiles the way out ends on this tick (the exit, or a tower storey's
    * stairs down), or null while no exit is to be pointed at.
@@ -3372,18 +3374,14 @@ export class BuildingInteriorScene extends GameplayScene {
     return goals.length === 0 ? null : goals;
   }
 
-  private activeTile(): TilePoint {
-    const active = this.active();
-    return { x: Math.floor(active.x / TILE_SIZE), y: Math.floor(active.y / TILE_SIZE) };
-  }
-
   private updateExitRoute(): void {
     this.exitRouteGoals = this.pinnedExitGoals();
+    const ground = crawlerGroundPoint(this.active());
     if (this.exitRouteGoals === null) {
-      this.exitRoute.update(this.map, this.activeTile(), null);
+      this.exitRoute.update(this.map, ground, null);
       return;
     }
-    this.exitRoute.updateToTiles(this.map, this.activeTile(), this.exitRouteGoals);
+    this.exitRoute.updateToTiles(this.map, ground, this.exitRouteGoals);
   }
 
   /**
@@ -3430,11 +3428,14 @@ export class BuildingInteriorScene extends GameplayScene {
     };
   }
 
-  /** The dotted way out on the floor, under every body, alongside the arrow. */
+  /** The way out on the floor, led from the active crawler's feet, under every body, alongside the arrow. */
   private renderExitRouteTrail(ctx: CanvasRenderingContext2D, camX: number, camY: number): void {
     if (!settings.questRouteTrail || !this.showsExitRoute()) return;
-    worldTrail(ctx, this.exitRoute.trail(), camX, camY, performance.now(), {
+    const active = this.active();
+    const shape = this.exitRoute.trailShape(crawlerGroundPoint(active));
+    this.exitRouteTrail.paint(ctx, shape, camX, camY, performance.now(), {
       view: { width: viewportWidth(), height: viewportHeight() },
+      body: crawlerSpriteBox(active),
     });
   }
 

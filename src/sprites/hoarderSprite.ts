@@ -143,7 +143,8 @@ export function drawHoarderSprite(
   // Clock-driven rather than tied to her own walk phase, so two of her — the
   // preview harness draws several — do not breathe in lockstep.
   const idleFrame =
-    state.idleFrame ?? timeFrameIndex(Date.now() / MILLISECONDS_PER_SECOND, IDLE_FPS, frames);
+    state.idleFrame ??
+    timeFrameIndex(performance.now() / MILLISECONDS_PER_SECOND, IDLE_FPS, frames);
   drawFigureCached(ctx, HOARDER_FIGURE, key, idleFrame % frames, sx, sy, tileSize, { flipX });
 }
 

@@ -59,7 +59,8 @@ import {
   type TileRect as GuidanceZone,
 } from './questGuidance';
 import { TREBUCHET_HEIGHT_TILES, TREBUCHET_WIDTH_TILES } from './structureRules';
-import { worldTrail } from '../../ui/world/worldTrail';
+import { WorldTrail } from '../../ui/world/worldTrail';
+import { TrailShaper } from '../questRoute/trailShape';
 
 type Crawler = HumanPlayer | CatPlayer;
 
@@ -229,6 +230,8 @@ export class VillageQuestGuide {
   private harvestGraceTicksLeft = 0;
   private fenceRepickTicksLeft = 0;
   private chosenFenceTile: TilePoint | null = null;
+  private readonly escortTrailShaper = new TrailShaper();
+  private readonly escortTrail = new WorldTrail();
 
   constructor(private readonly deps: VillageQuestGuideDeps) {
     const yard = deps.site.lumberYard;
@@ -610,7 +613,7 @@ export class VillageQuestGuide {
   }
 
   /**
-   * Under the waypoint in hand: the dotted road leading to it and on past it,
+   * Under the waypoint in hand: the trail along the road leading to it and on past it,
    * the next waypoints in the quieter pending voice, and the pasture itself,
    * so the destination is framed as soon as it comes into view.
    */
@@ -620,7 +623,9 @@ export class VillageQuestGuide {
     camY: number,
     guidance: Extract<PointedGuidance, { readonly kind: 'escort_waypoint' }>,
   ): void {
-    worldTrail(ctx, guidance.trail, camX, camY, performance.now());
+    this.escortTrailShaper.setWalk(this.deps.gameMap, guidance.trail);
+    const shape = this.escortTrailShaper.shape(null);
+    this.escortTrail.paint(ctx, shape, camX, camY, performance.now());
     for (const tile of guidance.ahead) {
       this.renderGroundHighlight(ctx, camX, camY, tileArea(tile), ESCORT_AHEAD_HIGHLIGHT_STYLE);
     }

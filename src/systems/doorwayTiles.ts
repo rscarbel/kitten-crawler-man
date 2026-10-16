@@ -7,7 +7,7 @@ import { doorwaySpan } from './BuildingSystem';
  * stepping on one takes the party indoors, so a walk planned across the map
  * must never pass over one it is not headed for.
  */
-export function doorwayKeys(gameMap: GameMap): ReadonlySet<number> {
+export function doorwayKeys(gameMap: Pick<GameMap, 'buildingEntries'>): ReadonlySet<number> {
   const keys = new Set<number>();
   for (const entry of gameMap.buildingEntries) {
     const { x0, width } = doorwaySpan(entry);

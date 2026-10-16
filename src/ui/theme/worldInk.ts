@@ -39,10 +39,12 @@ export const worldPalette = {
     ready: '#facc15',
     /** Orange rather than gold, so an objective still short of materials never reads as ready. */
     pending: '#fb923c',
-    /** The dotted route painted on the ground toward an objective, in the ready gold. */
+    /** The chevrons of the route painted on the ground toward an objective, in the ready gold. */
     trail: '#facc15',
-    /** The dark ring round each trail dot, so it reads on pale paving as well as grass. */
-    trailOutline: 'rgba(0,0,0,0.7)',
+    /** The dark edge round each trail chevron, so it reads on pale paving as well as grass. */
+    trailOutline: 'rgba(0,0,0,0.4)',
+    /** The soft glow under each trail chevron, so the route reads as light on the ground rather than paint. */
+    trailHalo: 'rgba(250,204,21,0.16)',
   },
   /** Floating combat text, one colour per kind of hit. */
   combat: {

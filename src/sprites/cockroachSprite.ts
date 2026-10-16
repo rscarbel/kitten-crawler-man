@@ -122,7 +122,8 @@ export function drawCockroachSprite(
   // Clock-driven rather than tied to the roach's own walk phase, so five of
   // them standing still do not twitch their antennae in lockstep.
   const idleFrame =
-    state.idleFrame ?? timeFrameIndex(Date.now() / MILLISECONDS_PER_SECOND, IDLE_FPS, frames);
+    state.idleFrame ??
+    timeFrameIndex(performance.now() / MILLISECONDS_PER_SECOND, IDLE_FPS, frames);
   drawFigureCached(ctx, COCKROACH_FIGURE, key, idleFrame % frames, sx, sy, tileSize, { flipX });
 }
 

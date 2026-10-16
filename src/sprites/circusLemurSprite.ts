@@ -56,7 +56,7 @@ export function drawCircusLemurSprite(
     return;
   }
   const idleFrame = timeFrameIndex(
-    Date.now() / MILLISECONDS_PER_SECOND,
+    performance.now() / MILLISECONDS_PER_SECOND,
     IDLE_FPS,
     frameCountOf('idle'),
   );

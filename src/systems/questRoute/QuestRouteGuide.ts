@@ -6,8 +6,10 @@
  * there on the map it is handed. It keeps one {@link RouteField} toward the
  * destination, built a slice at a time into a spare buffer while the last one
  * stays in use, so a rebuild never drops the arrow back to a straight line.
- * Each tick it walks downhill from the player only when the player's tile, the
- * field or the destination has changed, so a quiet frame costs a cache read.
+ * Each tick it walks downhill from the player only when the tile the player
+ * stands on, the field or the destination has changed, so a quiet frame
+ * costs a cache read. The player is placed by their feet
+ * ({@link crawlerGroundPoint}), never by the top of their sprite.
  *
  * It knows nothing of interiors or the overworld: whatever map it is handed is
  * the space it routes in, and a new map starts it afresh.
@@ -15,7 +17,7 @@
 
 import { TILE_SIZE } from '../../core/constants';
 import type { GameMap } from '../../map/GameMap';
-import { tileCoordKey } from '../../map/tileIndex';
+import { tileCoordKey, tileIndex } from '../../map/tileIndex';
 import type { TilePoint } from '../../map/town/townPlan';
 import type { TrackerTarget } from '../questTracker';
 import {
@@ -26,7 +28,8 @@ import {
   type RouteField,
 } from './routeField';
 import { firstPortalOnChain, routePortals } from './routePortals';
-import { straightSegments, type StraightSegmentLimits } from './straightSegments';
+import { standingTileCandidates, type GroundPoint } from './routeOrigin';
+import { TrailShaper, type TrailShape } from './trailShape';
 
 /**
  * Tiles priced per update tick while a field builds. Measured headless on a
@@ -59,15 +62,6 @@ export const QUEST_ROUTE_REFRESH_FRAMES = 300;
  * field is dropped at once rather than chased.
  */
 const QUEST_ROUTE_TARGET_JUMP_TILES = 24;
-
-/** The longest straight run the trail is drawn as, in tiles. */
-const QUEST_TRAIL_SEGMENT_MAX_TILES = 10;
-/** How far the route may bend off one of the trail's straight runs before the bend gets a run of its own, in tiles. */
-const QUEST_TRAIL_MAX_DEVIATION_TILES = 1.5;
-const TRAIL_SEGMENT_LIMITS: StraightSegmentLimits = {
-  maxSpacingTiles: QUEST_TRAIL_SEGMENT_MAX_TILES,
-  maxDeviationTiles: QUEST_TRAIL_MAX_DEVIATION_TILES,
-};
 
 const TILE_CENTRE = 0.5;
 
@@ -142,19 +136,20 @@ export class QuestRouteGuide {
   private cachedFor: { player: number; stamp: number; key: string } | null = null;
   private cachedAim: PixelPoint | null = null;
   private cachedTrail: readonly TilePoint[] = [];
+  private readonly shaper = new TrailShaper();
 
   /**
    * Once per update tick on the overworld or a dungeon floor: routes toward
    * `target` on `gameMap`, or lets everything go when `target` is null.
    */
-  update(gameMap: GameMap, playerTile: TilePoint, target: TrackerTarget | null): void {
+  update(gameMap: GameMap, ground: GroundPoint, target: TrackerTarget | null): void {
     if (target === null) {
       this.release();
       return;
     }
     this.advance(
       gameMap,
-      playerTile,
+      ground,
       targetDestination(gameMap, target),
       QUEST_ROUTE_EXPANSIONS_PER_FRAME,
     );
@@ -165,13 +160,13 @@ export class QuestRouteGuide {
    * built whole on the tick it is needed: for a room small enough that a
    * field costs nothing, where the way out is the destination.
    */
-  updateToTiles(gameMap: GameMap, playerTile: TilePoint, goals: readonly TilePoint[]): void {
+  updateToTiles(gameMap: GameMap, ground: GroundPoint, goals: readonly TilePoint[]): void {
     const destination = tilesDestination(goals);
     if (destination === null) {
       this.release();
       return;
     }
-    this.advance(gameMap, playerTile, destination, Infinity);
+    this.advance(gameMap, ground, destination, Infinity);
   }
 
   /**
@@ -185,11 +180,23 @@ export class QuestRouteGuide {
   }
 
   /**
-   * The route's first stretch from the player as straight runs, player's own
-   * tile first; empty when no route is known.
+   * The route's first {@link QUEST_TRAIL_MAX_TILES} tiles from the player,
+   * the tile they stand on first; empty when no route is known.
    */
   trail(): readonly TilePoint[] {
     return this.cachedTrail;
+  }
+
+  /**
+   * The trail to paint this frame, its head at `ground` (the feet the route
+   * was last updated from, or wherever they have moved to since); null when
+   * there is none.
+   */
+  trailShape(ground: GroundPoint): TrailShape | null {
+    const gameMap = this.map;
+    if (gameMap === null || this.cachedTrail.length < 2) return null;
+    this.shaper.setWalk(gameMap, this.cachedTrail);
+    return this.shaper.shape(ground);
   }
 
   dispose(): void {
@@ -204,12 +211,13 @@ export class QuestRouteGuide {
     this.cachedFor = null;
     this.cachedAim = null;
     this.cachedTrail = [];
+    this.shaper.clear();
     this.chainBlocked = false;
   }
 
   private advance(
     gameMap: GameMap,
-    playerTile: TilePoint,
+    ground: GroundPoint,
     destination: Destination,
     budget: number,
   ): void {
@@ -222,7 +230,7 @@ export class QuestRouteGuide {
     this.ticksSinceBuildStarted++;
     if (this.needsBuild(destination)) this.startBuild(gameMap, destination);
     this.stepBuild(budget);
-    this.refreshRoute(gameMap, playerTile, destination);
+    this.refreshRoute(gameMap, this.standingTile(ground), destination);
   }
 
   private needsBuild(destination: Destination): boolean {
@@ -285,6 +293,19 @@ export class QuestRouteGuide {
     this.fieldStamp++;
   }
 
+  /**
+   * The tile the route starts from: the first of the feet's
+   * {@link standingTileCandidates} the field reaches, else the tile under
+   * the soles, which {@link downhillChain} searches round.
+   */
+  private standingTile(ground: GroundPoint): TilePoint {
+    const candidates = standingTileCandidates(ground);
+    const field = this.inUse?.field ?? null;
+    if (field === null) return candidates[0];
+    const reached = candidates.find((tile) => routeCost(field, tile) < Infinity);
+    return reached ?? candidates[0];
+  }
+
   private refreshRoute(gameMap: GameMap, playerTile: TilePoint, destination: Destination): void {
     const player = tileCoordKey(playerTile.x, playerTile.y);
     const cached = this.cachedFor;
@@ -320,7 +341,7 @@ export class QuestRouteGuide {
       QUEST_ROUTE_PORTAL_UNDERFOOT_STEPS,
     );
     this.cachedAim = portal === null ? destination.centrePx : tileCentrePx(portal.centre);
-    this.cachedTrail = trailAlong(gameMap, chain);
+    this.cachedTrail = trailAlong(chain);
   }
 
   private hasStraightWalkTo(
@@ -333,10 +354,14 @@ export class QuestRouteGuide {
   }
 }
 
-/** The first {@link QUEST_TRAIL_MAX_TILES} of `chain`, cut into straight runs. */
-function trailAlong(gameMap: GameMap, chain: readonly TilePoint[]): readonly TilePoint[] {
+/** The first {@link QUEST_TRAIL_MAX_TILES} of `chain`. */
+function trailAlong(chain: readonly TilePoint[]): readonly TilePoint[] {
   if (chain.length < 2) return [];
-  const painted = chain.slice(0, QUEST_TRAIL_MAX_TILES + 1);
-  const ends = straightSegments(gameMap, painted, TRAIL_SEGMENT_LIMITS);
-  return [painted[0], ...ends.map((index) => painted[index])];
+  return chain.slice(0, QUEST_TRAIL_MAX_TILES + 1);
+}
+
+/** The field's price of walking on from `tile`; `Infinity` off the map or where the field never reached. */
+function routeCost(field: RouteField, tile: TilePoint): number {
+  const inside = tile.x >= 0 && tile.y >= 0 && tile.x < field.columns && tile.y < field.rows;
+  return inside ? field.cost[tileIndex(tile.x, tile.y, field.columns)] : Infinity;
 }
