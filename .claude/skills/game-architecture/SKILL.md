@@ -11,7 +11,7 @@ Browser dungeon crawler: TypeScript + one HTML5 Canvas, no framework, bundled by
 
 - Entry: `src/game.ts` → creates `InputManager` + `SceneManager`.
 - `SceneManager` (`src/core/Scene.ts`) owns the canvas, attaches all DOM listeners once, and runs a fixed-timestep loop: 60 Hz `update()` via accumulator, `render()` once per rAF. `replace(scene)` calls `onExit`/`onEnter`.
-- Scenes: `DungeonScene` (main orchestrator, ~3k lines), `BuildingInteriorScene`, `GameplayScene` (shared camera/HUD/companion logic), `PostSignupScene`. A `Scene` implements `update()` + `render(ctx)` and takes input through its `ui: UiRoot` (see Input). Localhost review scenes extend `PreviewScene`.
+- Scenes: `DungeonScene` (main orchestrator, ~3k lines), `BuildingInteriorScene`, `GameplayScene` (shared camera/HUD/companion logic), `TitleScene` (`src/scenes/title/`: the title screen and its menu, a layer stack listed in `TITLE_LAYERS`). A `Scene` implements `update()` + `render(ctx)` and takes input through its `ui: UiRoot` (see Input). Localhost review scenes extend `PreviewScene`.
 
 ## Systems
 

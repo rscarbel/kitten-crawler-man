@@ -15,6 +15,7 @@ export const BUTTON_VARIANTS = [
   'danger',
   'success',
   'quiet',
+  'glass',
 ] as const;
 
 export type ButtonVariant = (typeof BUTTON_VARIANTS)[number];
@@ -64,6 +65,7 @@ export const PANEL_KINDS = [
   'tooltip',
   'popover',
   'caption',
+  'glass',
 ] as const;
 
 export type PanelKind = (typeof PANEL_KINDS)[number];
@@ -205,6 +207,44 @@ export interface PrizeBannerSkin {
   readonly iconSize: number;
 }
 
+/** One colour of a {@link TextFillSkin}, `at` 0 (the em box's top) to 1 (its bottom). */
+export interface GradientStop {
+  readonly at: number;
+  readonly color: string;
+}
+
+/** A vertical gradient a line of text is filled with, laid across each line's em box. */
+export interface TextFillSkin {
+  readonly stops: readonly GradientStop[];
+}
+
+/** The game's wordmark on the title screen. */
+export interface TitleLogoSkin {
+  readonly style: TypeStyle;
+  /** Polished gold: bright crowns, a dark horizon across the middle, a lit lower lip. */
+  readonly face: TextFillSkin;
+}
+
+/** A one-shot burst of light over a control: the title menu catching the logo's slam. */
+export interface ControlFlashSkin {
+  readonly fill: string;
+  readonly border: string;
+  readonly glow: string;
+  readonly glowBlur: number;
+}
+
+/** The System AI's line on the title screen: terminal type with a dark halo over the art. */
+export interface SystemAiSkin {
+  readonly text: TextSkin;
+  readonly halo: string;
+}
+
+/** The title's sound hint: quiet, but readable over the dark hall. */
+export interface SoundHintSkin {
+  readonly text: TextSkin;
+  readonly halo: string;
+}
+
 /** A keyboard key drawn as a little cap with a darker bottom edge. */
 export interface KeycapSkin {
   readonly fill: string;
@@ -238,6 +278,10 @@ export interface Skins {
   readonly mercenaryBrass: BrassSkin;
   readonly prizeBanner: PrizeBannerSkin;
   readonly keycap: KeycapSkin;
+  readonly titleLogo: TitleLogoSkin;
+  readonly controlFlash: ControlFlashSkin;
+  readonly systemAi: SystemAiSkin;
+  readonly soundHint: SoundHintSkin;
 }
 
 const HOVER_LIGHTEN = 0.08;
@@ -274,7 +318,32 @@ const PRIZE_GLOW_BLUR = 28;
 const PRIZE_RAYS_ALPHA = 0.22;
 const PRIZE_ICON_SIZE = 64;
 const KEYCAP_SIZE = 20;
+/**
+ * Where the wordmark's gold changes along the em box. Capitals fill roughly
+ * its middle three quarters, so the crown and the lip sit just inside that.
+ */
+const LOGO_FACE_STOPS = {
+  crown: 0.14,
+  upper: 0.38,
+  horizon: 0.5,
+  horizonShadow: 0.54,
+  lower: 0.7,
+  lip: 0.86,
+} as const;
+const LOGO_CROWN_LIGHTEN = 0.55;
+const LOGO_HORIZON_DARKEN = 0.25;
+const LOGO_LIP_LIGHTEN = 0.2;
 const TRANSPARENT = 'rgba(0, 0, 0, 0)';
+/**
+ * Glass that lets the picture behind it through: a menu laid over a scene
+ * meant to be seen (the title), never over gameplay that needs a solid card.
+ */
+const GLASS_PANEL_ALPHA = 0.34;
+const GLASS_BUTTON_ALPHA = 0.5;
+const GLASS_BUTTON_HOVER_ALPHA = 0.66;
+const GLASS_BUTTON_PRESS_ALPHA = 0.74;
+const FLASH_FILL_ALPHA = 0.55;
+const FLASH_GLOW_ALPHA = 0.8;
 
 function toneButton(theme: Theme, tone: string): ButtonSkin {
   return {
@@ -376,6 +445,26 @@ function buildButtons(theme: Theme): Record<ButtonVariant, ButtonSkin> {
       },
       disabled: { fill: TRANSPARENT, border: TRANSPARENT, text: palette.text.disabled },
       borderWidth: 0,
+      glow: null,
+    },
+    glass: {
+      rest: {
+        fill: withAlpha(palette.surface.solid, GLASS_BUTTON_ALPHA),
+        border: palette.border.strong,
+        text: palette.text.primary,
+      },
+      hover: {
+        fill: withAlpha(palette.surface.raised, GLASS_BUTTON_HOVER_ALPHA),
+        border: withAlpha(palette.accent.base, TONE_BORDER_ALPHA),
+        text: palette.text.primary,
+      },
+      press: {
+        fill: withAlpha(palette.surface.sunken, GLASS_BUTTON_PRESS_ALPHA),
+        border: palette.border.strong,
+        text: palette.text.primary,
+      },
+      disabled,
+      borderWidth: BORDER_WIDTH,
       glow: null,
     },
   };
@@ -497,6 +586,14 @@ function buildPanels(theme: Theme): Record<PanelKind, PanelSkin> {
       shadow: elevation.panel,
       padding: space.md,
     },
+    glass: {
+      fill: withAlpha(palette.surface.solid, GLASS_PANEL_ALPHA),
+      border: palette.border.subtle,
+      borderWidth: BORDER_WIDTH,
+      radius: radius.lg,
+      shadow: null,
+      padding: space.sm,
+    },
     // Opaque, so a caption reads at full contrast over any floor, fog or flash.
     caption: {
       fill: palette.surface.solid,
@@ -614,6 +711,26 @@ function buildBrass(theme: Theme): { quest: BrassSkin; mercenary: BrassSkin } {
   };
 }
 
+function buildTitleLogo(theme: Theme): TitleLogoSkin {
+  const { material, tier } = theme.palette;
+  return {
+    style: theme.type.logo,
+    face: {
+      stops: [
+        { at: LOGO_FACE_STOPS.crown, color: lighten(material.brassLight, LOGO_CROWN_LIGHTEN) },
+        { at: LOGO_FACE_STOPS.upper, color: tier.gold },
+        { at: LOGO_FACE_STOPS.horizon, color: material.brass },
+        {
+          at: LOGO_FACE_STOPS.horizonShadow,
+          color: darken(material.brass, LOGO_HORIZON_DARKEN),
+        },
+        { at: LOGO_FACE_STOPS.lower, color: tier.gold },
+        { at: LOGO_FACE_STOPS.lip, color: lighten(material.brassLight, LOGO_LIP_LIGHTEN) },
+      ],
+    },
+  };
+}
+
 function buildSkins(theme: Theme): Skins {
   const { palette, space, radius, type, elevation } = theme;
   const brass = buildBrass(theme);
@@ -646,6 +763,21 @@ function buildSkins(theme: Theme): Skins {
       felt: palette.material.felt,
     },
     pokerChips: buildPokerChips(theme),
+    titleLogo: buildTitleLogo(theme),
+    controlFlash: {
+      fill: withAlpha(palette.accent.hover, FLASH_FILL_ALPHA),
+      border: palette.accent.hover,
+      glow: withAlpha(palette.accent.hover, FLASH_GLOW_ALPHA),
+      glowBlur: space.xl,
+    },
+    systemAi: {
+      text: { style: type.terminal, color: palette.tier.celestial },
+      halo: palette.surface.sunken,
+    },
+    soundHint: {
+      text: { style: type.hint, color: palette.text.secondary },
+      halo: palette.surface.sunken,
+    },
     dialogChoice: buildDialogChoice(theme),
     questRewardBrass: brass.quest,
     mercenaryBrass: brass.mercenary,

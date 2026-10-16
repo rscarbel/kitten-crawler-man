@@ -37,6 +37,8 @@ export interface ButtonOptions {
   readonly primary?: boolean;
   /** Played when it fires; defaults to the menu click. */
   readonly sound?: SoundId | null;
+  /** 0 to 1: a burst of light over the button, for a beat it flashes in time with. */
+  readonly flash?: number;
   readonly onTap: () => void;
 }
 
@@ -69,7 +71,12 @@ export function button(ui: Ui, rect: Rect, opts: ButtonOptions): HitState {
     sound: opts.sound,
   });
   const skin = opts.selected === true ? skins.selected : skins.button[opts.variant ?? 'secondary'];
-  const painted = paintControl(ui, rect, skin, state, { id, radius: sizeSkin.radius, disabled });
+  const painted = paintControl(ui, rect, skin, state, {
+    id,
+    radius: sizeSkin.radius,
+    disabled,
+    flash: opts.flash,
+  });
   const content = inset(painted.rect, { l: sizeSkin.padX, r: sizeSkin.padX });
   const labelW = Math.min(content.w, measureText(ui, opts.label, { style: sizeSkin.text }));
   const hasIcon = opts.icon !== undefined;

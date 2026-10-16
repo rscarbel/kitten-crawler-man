@@ -7,7 +7,7 @@
 import type { Rect } from '../core/geom';
 import type { PaintTarget } from './paint';
 import { digitCellWidth, onUiFontLoaded } from '../theme/fonts';
-import { skinsFor, type TextRole } from '../theme/skins';
+import { skinsFor, type TextFillSkin, type TextRole } from '../theme/skins';
 import { ITALIC_SLANT, fontFor, type Theme, type TypeStyle } from '../theme/tokens';
 
 export type TextAlign = 'left' | 'center' | 'right';
@@ -31,6 +31,8 @@ export interface TextOptions {
   readonly tabular?: boolean;
   /** A dark outline for text drawn over art (item quantities). */
   readonly halo?: string;
+  /** A gradient fill from a skin, laid across each line; takes the place of `color`. */
+  readonly fill?: TextFillSkin;
 }
 
 export interface TextResult {
@@ -47,10 +49,27 @@ const ELLIPSIS = '…';
  * back a hair wider from float rounding; it still fits.
  */
 const FIT_TOLERANCE = 0.5;
-/** Below this, letter spacing is invisible at UI sizes and the string is drawn whole, keeping kerning. */
+/**
+ * Below this either way, letter spacing is invisible at UI sizes and the string
+ * is drawn whole, keeping kerning. Negative spacing tracks a display line in.
+ */
 const MIN_VISIBLE_LETTER_SPACING = 0.5;
 /** Halo stroke width as a fraction of the font size. */
 const HALO_WIDTH_RATIO = 0.22;
+/** A fill gradient spans the line's em box, half the font size either side of its middle. */
+const EM_HALF = 0.5;
+
+function lineFill(
+  ctx: CanvasRenderingContext2D,
+  fill: TextFillSkin,
+  middleY: number,
+  size: number,
+): CanvasGradient {
+  const top = middleY - size * EM_HALF;
+  const gradient = ctx.createLinearGradient(0, top, 0, top + size);
+  for (const stop of fill.stops) gradient.addColorStop(stop.at, stop.color);
+  return gradient;
+}
 
 /** The style and colour a set of options resolves to. */
 export interface ResolvedText {
@@ -74,7 +93,7 @@ function shown(text: string, style: TypeStyle): string {
 
 function spacingOf(style: TypeStyle): number {
   const spacing = style.letterSpacing ?? 0;
-  return spacing >= MIN_VISIBLE_LETTER_SPACING ? spacing : 0;
+  return Math.abs(spacing) >= MIN_VISIBLE_LETTER_SPACING ? spacing : 0;
 }
 
 const DIGIT = /[0-9]/;
@@ -269,6 +288,7 @@ export function text(ui: PaintTarget, rect: Rect, opts: TextOptions): TextResult
           ? rect.x + rect.w - width
           : rect.x + (rect.w - width) / 2;
     const middle = top + index * style.lineHeight + style.lineHeight / 2;
+    if (opts.fill !== undefined) ctx.fillStyle = lineFill(ctx, opts.fill, middle, style.size);
     paintLine(ctx, line, left, middle, laid.spacing, laid.digitCell, halo);
   });
   ctx.restore();
@@ -477,7 +497,7 @@ export function measureText(
 export function measureTextHeight(
   ui: PaintTarget,
   width: number,
-  opts: Omit<TextOptions, 'wrap' | 'align' | 'valign' | 'color' | 'halo'>,
+  opts: Omit<TextOptions, 'wrap' | 'align' | 'valign' | 'color' | 'halo' | 'fill'>,
 ): number {
   const laid = layout(ui, width, { ...opts, wrap: true });
   return laid.lines.length * laid.resolved.style.lineHeight;

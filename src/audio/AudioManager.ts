@@ -111,6 +111,13 @@ const RIGHT_CHANNEL = 1;
  * has to be cut short.
  */
 const MUSIC_STREAM_SLOT_LIMIT = 4;
+/**
+ * The input events that may unlock audio. `touchend` is the one a phone
+ * counts as a gesture, not `touchstart`, and the canvas cancels touches, which
+ * also suppresses the `click` a tap would otherwise end in.
+ */
+const UNLOCK_GESTURE_EVENTS = ['touchstart', 'touchend', 'click', 'keydown'] as const;
+const UNLOCK_LISTENER_OPTIONS: AddEventListenerOptions = { capture: true, passive: true };
 /** A dodge borrows the whiffed-punch cue, quieter and quicker so it reads as air. */
 const DODGE_WHIFF_VOLUME = 0.5;
 const DODGE_WHIFF_RATE = 1.35;
@@ -290,6 +297,8 @@ interface MusicStreamSlot {
   awaitingStart: boolean;
   /** The current track's `playing` report; the element's listener calls it. */
   onPlaying: (() => void) | null;
+  /** Whether the browser's autoplay policy refused the element's last play(). */
+  refusedPlay: boolean;
 }
 
 /**
@@ -301,6 +310,21 @@ interface PooledStream {
   readonly voice: StreamVoice;
   /** `idle` once its last bed has faded out and the element is paused. */
   state: 'idle' | 'playing' | 'stopping';
+  /** Whether the browser's autoplay policy refused the element's last play(). */
+  refusedPlay: boolean;
+}
+
+/**
+ * Whether a rejected play() was the autoplay policy turning it down, rather
+ * than a failed load or a play() cut short by a pause.
+ */
+function isAutoplayRefusal(err: unknown): boolean {
+  return err instanceof DOMException && err.name === 'NotAllowedError';
+}
+
+/** A retried play() that fails again is retried by the next gesture or unlock. */
+function ignoreRetryFailure(): void {
+  return;
 }
 
 /** Where a looping buffer stands after `elapsedS`, wrapping at its loop point. */
@@ -471,12 +495,9 @@ export class AudioManager {
     // context back into 'interrupted' on its own (an incoming call, another app
     // claiming audio, the screen locking) and resuming out of that also needs a
     // fresh gesture, so every future touch/click/key has to be able to retry it.
-    window.addEventListener('touchstart', this.handleUnlockGesture, {
-      capture: true,
-      passive: true,
-    });
-    window.addEventListener('click', this.handleUnlockGesture, { capture: true });
-    window.addEventListener('keydown', this.handleUnlockGesture, { capture: true });
+    for (const type of UNLOCK_GESTURE_EVENTS) {
+      window.addEventListener(type, this.handleUnlockGesture, UNLOCK_LISTENER_OPTIONS);
+    }
     // iOS drops a running context to 'interrupted' (a call, another app taking
     // audio) and brings it back on its own; without this the music and beds
     // stay stalled until the next gesture.
@@ -595,12 +616,46 @@ export class AudioManager {
       });
   }
 
-  // Capture-phase touchstart/click/keydown handler, kept attached for the life
-  // of the manager: resumes the AudioContext from inside a genuine user
-  // gesture, then flushes any sounds that were queued while it was suspended.
+  /**
+   * Kept attached for the life of the manager. Besides resuming the context,
+   * it starts music inside the gesture itself: Safari lets an `<audio>`
+   * element start only there, and `resume()` settles after the gesture has
+   * ended, so a stream started from `onContextUnlocked` alone can be refused.
+   * A refused stream leaves the context running, so no later unlock would
+   * ever retry it; every gesture retries the refused ones. An element paused
+   * any other way (a lock screen, a hardware media key) is left alone.
+   */
   private readonly handleUnlockGesture = (): void => {
     this.attemptResume();
+    if (this.backgrounded || this.ctx.state === 'closed') return;
+    this.music.engineReady();
+    this.retryRefusedStreams();
   };
+
+  /** play() on a streamed element, remembering on `stream` whether autoplay refused it. */
+  private playStream(
+    el: HTMLAudioElement,
+    stream: { refusedPlay: boolean },
+    onFailed: (err: unknown) => void,
+  ): void {
+    stream.refusedPlay = false;
+    void el.play().catch((err: unknown) => {
+      if (isAutoplayRefusal(err)) stream.refusedPlay = true;
+      onFailed(err);
+    });
+  }
+
+  private retryRefusedStreams(): void {
+    for (const slot of this.musicStreamSlots) {
+      if (!slot.refusedPlay || slot.state !== 'playing' || slot.awaitingStart) continue;
+      if (!slot.el.paused || slot.el.ended) continue;
+      this.playStream(slot.el, slot, ignoreRetryFailure);
+    }
+    for (const pooled of this.ambientStreamPool) {
+      if (!pooled.refusedPlay || pooled.state !== 'playing' || !pooled.voice.el.paused) continue;
+      this.playStream(pooled.voice.el, pooled, ignoreRetryFailure);
+    }
+  }
 
   /** True when the AudioContext is actively processing audio. */
   get isRunning(): boolean {
@@ -621,9 +676,9 @@ export class AudioManager {
   }
 
   private removeUnlockListeners(): void {
-    window.removeEventListener('touchstart', this.handleUnlockGesture, { capture: true });
-    window.removeEventListener('click', this.handleUnlockGesture, { capture: true });
-    window.removeEventListener('keydown', this.handleUnlockGesture, { capture: true });
+    for (const type of UNLOCK_GESTURE_EVENTS) {
+      window.removeEventListener(type, this.handleUnlockGesture, UNLOCK_LISTENER_OPTIONS);
+    }
   }
 
   private onContextUnlocked(): void {
@@ -656,15 +711,11 @@ export class AudioManager {
     for (const slot of this.musicStreamSlots) {
       if (slot.state !== 'playing' || slot.awaitingStart || !slot.el.paused) continue;
       if (slot.el.ended) continue;
-      void slot.el.play().catch(() => {
-        // A subsequent gesture/focus event will retry via this same path.
-      });
+      this.playStream(slot.el, slot, ignoreRetryFailure);
     }
     for (const pooled of this.ambientStreamPool) {
       if (pooled.state === 'playing' && pooled.voice.el.paused) {
-        void pooled.voice.el.play().catch(() => {
-          // A subsequent gesture/focus event will retry via this same path.
-        });
+        this.playStream(pooled.voice.el, pooled, ignoreRetryFailure);
       }
     }
   }
@@ -1243,7 +1294,12 @@ export class AudioManager {
     };
     const startedAtS = this.ctx.currentTime;
     source.start(0, request.offsetS);
-    request.onPlaying();
+    // A gesture starts a waiting track before its resume() settles, and that
+    // resume can be refused, so the track counts as sounding only once the
+    // context really renders.
+    this.onRunning(() => {
+      if (!stopped) request.onPlaying();
+    });
     const voice: BufferVoice = { kind: 'buffer', source, gain };
     return {
       positionS: () => {
@@ -1289,6 +1345,7 @@ export class AudioManager {
         gen: 0,
         state: 'idle',
         awaitingStart: false,
+        refusedPlay: false,
         onPlaying: null,
       };
       el.addEventListener('playing', () => slot.onPlaying?.());
@@ -1334,7 +1391,7 @@ export class AudioManager {
           ? () => {
               if (!ownsSlot()) return;
               el.currentTime = loopStartS;
-              void el.play().catch((err: unknown) => {
+              this.playStream(el, slot, (err) => {
                 console.warn(`[AudioManager] Failed to loop streaming music "${request.id}":`, err);
               });
             }
@@ -1352,7 +1409,7 @@ export class AudioManager {
       el.src = SOUND_MANIFEST[request.id];
       el.currentTime = request.offsetS;
       this.fadeInMusicGain(gain, request.fadeInMs, trimGain);
-      void el.play().catch((err: unknown) => {
+      this.playStream(el, slot, (err) => {
         console.warn(`[AudioManager] Failed to play streaming music "${request.id}":`, err);
       });
     };
@@ -1431,7 +1488,7 @@ export class AudioManager {
       gain.gain.cancelScheduledValues(this.ctx.currentTime);
       gain.gain.value = 0;
       glideParam(gain.gain, this.ctx.currentTime, level, rampS, 'db');
-      void el.play().catch((err: unknown) => {
+      this.playStream(el, pooled, (err) => {
         console.warn(`[AudioManager] Failed to play streaming ambient loop "${id}":`, err);
       });
       pooled.state = 'playing';
@@ -1460,7 +1517,11 @@ export class AudioManager {
     const gain = this.ctx.createGain();
     this.ctx.createMediaElementSource(el).connect(gain);
     gain.connect(this.ambienceGain);
-    const pooled: PooledStream = { voice: { kind: 'stream', el, gain }, state: 'idle' };
+    const pooled: PooledStream = {
+      voice: { kind: 'stream', el, gain },
+      state: 'idle',
+      refusedPlay: false,
+    };
     this.ambientStreamPool.push(pooled);
     return pooled;
   }

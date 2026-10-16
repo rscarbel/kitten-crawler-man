@@ -326,6 +326,16 @@ function masonryFor(themeId: DungeonFloorThemeId): Surface {
 }
 
 /**
+ * A floor's bare face masonry — the coursed blocks every face strip is cut
+ * from, before the cap, the shading and the floor's finish — as one square
+ * patch that wraps both ways, so a wall taller than a face can be built from
+ * the same stone. Row `y` of band 0's strip is row `y` of this patch.
+ */
+export function dungeonWallMasonry(themeId: DungeonFloorThemeId): Surface {
+  return masonryFor(themeId);
+}
+
+/**
  * Paints one band of a floor's face strip. Pure maths, no canvas: the floor sweep
  * measures faces against floors from exactly these pixels.
  */

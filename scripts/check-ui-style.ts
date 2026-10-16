@@ -152,6 +152,7 @@ const TEXT_PRIMITIVE_RULES: ReadonlySet<string> = new Set(['fontString', 'direct
  * repo-relative paths without an extension (e.g. `src/ui/InventoryPanel`).
  */
 const DELETED_LEGACY_MODULES: readonly string[] = [
+  'src/scenes/PostSignupScene',
   'src/ui/InventoryPanel',
   'src/ui/GearPanel',
   'src/ui/InventoryInteraction',

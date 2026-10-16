@@ -7,6 +7,7 @@
 
 import type { MusicTrackId } from '../../src/audio/sounds.js';
 import {
+  ALWAYS_UNLOCKED_TRACK_IDS,
   MusicLibrary,
   activeMusicLibrary,
   type MusicLibraryNotice,
@@ -43,6 +44,15 @@ function freshParty(): FixtureParty {
   };
 }
 
+/** `ids` plus the songs every library starts with. */
+function withAlwaysUnlocked(ids: readonly MusicTrackId[]): MusicTrackId[] {
+  return [...new Set<MusicTrackId>([...ids, ...ALWAYS_UNLOCKED_TRACK_IDS])];
+}
+
+function isAlwaysUnlocked(id: MusicTrackId): boolean {
+  return ALWAYS_UNLOCKED_TRACK_IDS.some((alwaysId) => alwaysId === id);
+}
+
 function sameIds(actual: readonly MusicTrackId[], expected: readonly MusicTrackId[]): boolean {
   const expectedIds = new Set(expected);
   return actual.length === expectedIds.size && actual.every((id) => expectedIds.has(id));
@@ -64,14 +74,16 @@ function playedLibrary(): MusicLibrary {
 }
 
 function expectLibraryKept(check: Check, label: string, kept: MusicLibrary): void {
+  const expectedUnlocked = withAlwaysUnlocked(UNLOCKED_ON_THE_RUN);
   check(
-    sameIds(kept.unlocked, UNLOCKED_ON_THE_RUN),
-    `${label}: unlocked ${describe(kept.unlocked)}, expected ${describe(UNLOCKED_ON_THE_RUN)}`,
+    sameIds(kept.unlocked, expectedUnlocked),
+    `${label}: unlocked ${describe(kept.unlocked)}, expected ${describe(expectedUnlocked)}`,
   );
   const heard = kept.unlocked.filter((id) => kept.isHeard(id));
+  const expectedHeard = withAlwaysUnlocked(HEARD_ON_THE_RUN);
   check(
-    sameIds(heard, HEARD_ON_THE_RUN),
-    `${label}: heard ${describe(heard)}, expected ${describe(HEARD_ON_THE_RUN)}`,
+    sameIds(heard, expectedHeard),
+    `${label}: heard ${describe(heard)}, expected ${describe(expectedHeard)}`,
   );
   check(kept.menuUnseenCount === 1, `${label}: ${kept.menuUnseenCount} songs unseen, expected 1`);
   const notices = kept.drainNotices();
@@ -135,6 +147,8 @@ function backfillSummaryCount(notices: readonly MusicLibraryNotice[]): number | 
 /**
  * Check 12: saves written before the library backfill exactly the songs their
  * progress proves, unlocked but unheard, announced by one summary notice.
+ * The songs every library starts with are unlocked and heard in any library,
+ * new or loaded, without a notice.
  */
 export async function checkBackfill(check: Check): Promise<void> {
   const staleGeneratorVersion = WORLD_GENERATOR_VERSION - 1;
@@ -157,11 +171,12 @@ export async function checkBackfill(check: Check): Promise<void> {
       continue;
     }
     const library = MusicLibrary.forSave(loaded);
+    const expectedUnlocked = withAlwaysUnlocked(fixture.expected);
     check(
-      sameIds(library.unlocked, fixture.expected),
-      `${fixture.name}: backfilled ${describe(library.unlocked)}; expected ${describe(fixture.expected)}`,
+      sameIds(library.unlocked, expectedUnlocked),
+      `${fixture.name}: backfilled ${describe(library.unlocked)}; expected ${describe(expectedUnlocked)}`,
     );
-    const heard = library.unlocked.filter((id) => library.isHeard(id));
+    const heard = library.unlocked.filter((id) => library.isHeard(id) && !isAlwaysUnlocked(id));
     check(
       heard.length === 0,
       `${fixture.name}: backfilled songs count as heard: ${describe(heard)}`,
@@ -187,8 +202,33 @@ export async function checkBackfill(check: Check): Promise<void> {
       `${fixture.name}: the next save announces the backfill again (${String(reloadNotices)} notices)`,
     );
   }
+  checkAlwaysUnlocked(check);
   await checkSkipToLevel1(check);
   await checkPlaytestDropIn(check);
+}
+
+/**
+ * The title music is every player's from the start: a new game and a loaded
+ * save both have it unlocked and heard, without a notice or a badge.
+ */
+function checkAlwaysUnlocked(check: Check): void {
+  const fresh = new MusicLibrary();
+  const loaded = MusicLibrary.fromSerialized({ unlocked: [], heard: [], menuUnseen: [] });
+  for (const [label, library] of [
+    ['a new game', fresh],
+    ['a save that never had it', loaded],
+  ] as const) {
+    const missing = ALWAYS_UNLOCKED_TRACK_IDS.filter(
+      (id) => !library.isUnlocked(id) || !library.isHeard(id),
+    );
+    check(missing.length === 0, `${label}: ${describe(missing)} not unlocked and heard`);
+    check(
+      library.menuUnseenCount === 0,
+      `${label}: the always-unlocked songs badge the music page`,
+    );
+    const notices = library.drainNotices().length;
+    check(notices === 0, `${label}: the always-unlocked songs raised ${notices} notices`);
+  }
 }
 
 /**
@@ -198,20 +238,43 @@ export async function checkBackfill(check: Check): Promise<void> {
 async function checkSkipToLevel1(check: Check): Promise<void> {
   const { SceneManager } = await import('../../src/core/Scene.js');
   const { InputManager } = await import('../../src/core/InputManager.js');
-  const { PostSignupScene } = await import('../../src/scenes/PostSignupScene.js');
+  const { TitleScene } = await import('../../src/scenes/title/TitleScene.js');
+  const { TITLE_MENU_SURFACE_ID } = await import('../../src/scenes/title/titleMenu.js');
+  const { DIVE_DURATION_MS } = await import('../../src/scenes/title/titleTimeline.js');
+  const { TITLE_STEP_MS } = await import('../../src/scenes/title/titleClock.js');
+  const { MOUSE_POINTER_ID, PRIMARY_BUTTON } = await import('../../src/ui/core/pointer.js');
 
   const sceneManager = new SceneManager();
-  const menu = new PostSignupScene(new InputManager(), sceneManager, {
+  const menu = new TitleScene(new InputManager(), sceneManager, {
     worldSeed: HARNESS_WORLD_SEED,
     skipIntro: true,
   });
   sceneManager.replace(menu);
-  const skipChoice = menu['choices']().find((choice) => choice.id === 'level1');
-  if (skipChoice === undefined) {
+  menu.render(sceneManager.ctx);
+  const skipRegionId = `${TITLE_MENU_SURFACE_ID}/level1`;
+  const skipButton = menu.ui.regions().find((region) => region.id === skipRegionId);
+  if (skipButton === undefined) {
     check(false, 'the title menu offers no "Skip to Level 1"');
     return;
   }
-  skipChoice.onTap();
+  const { rect } = skipButton;
+  const centre = { x: rect.x + rect.w / 2, y: rect.y + rect.h / 2 };
+  const scale = menu.ui.uiScale;
+  for (const kind of ['down', 'up'] as const) {
+    menu.ui.pointer({
+      kind,
+      pointerId: MOUSE_POINTER_ID,
+      source: 'mouse',
+      x: centre.x,
+      y: centre.y,
+      cssX: centre.x * scale,
+      cssY: centre.y * scale,
+      button: PRIMARY_BUTTON,
+      deltaY: 0,
+    });
+  }
+  const stepsThroughTheDive = Math.ceil(DIVE_DURATION_MS / TITLE_STEP_MS) + 1;
+  for (let step = 0; step < stepsThroughTheDive; step++) menu.update();
   const library = activeMusicLibrary();
   check(
     library?.isUnlocked('tutorial_island') === true,
@@ -266,7 +329,7 @@ async function checkPlaytestDropIn(check: Check): Promise<void> {
   );
   const missing = SKIPPED_ON_THE_WAY_TO_FLOOR_3.filter((id) => !library.isUnlocked(id));
   check(missing.length === 0, `the floor-3 drop-in starts with ${describe(missing)} still locked`);
-  const heard = library.unlocked.filter((id) => library.isHeard(id));
+  const heard = library.unlocked.filter((id) => library.isHeard(id) && !isAlwaysUnlocked(id));
   check(heard.length === 0, `the drop-in's backfilled songs count as heard: ${describe(heard)}`);
   const notices = library.drainNotices();
   const unlockToasts = notices.filter((notice) => notice.kind === 'unlocked').length;

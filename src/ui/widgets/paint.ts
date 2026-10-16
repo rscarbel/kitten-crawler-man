@@ -170,6 +170,8 @@ export interface PaintControlOptions {
   readonly id: string;
   readonly radius: number;
   readonly disabled: boolean;
+  /** 0 to 1: a burst of light laid over the control, for a beat it is flashed in time with. */
+  readonly flash?: number;
 }
 
 /**
@@ -214,6 +216,20 @@ export function paintControl(
       paint(skin.hover);
       ctx.restore();
     }
+  }
+  const flash = Math.min(1, opts.flash ?? 0);
+  if (flash > 0) {
+    const flashSkin = skins.controlFlash;
+    ctx.save();
+    ctx.globalAlpha *= flash;
+    ctx.shadowColor = flashSkin.glow;
+    ctx.shadowBlur = flashSkin.glowBlur;
+    fillRounded(ctx, drawn, opts.radius, flashSkin.fill);
+    ctx.restore();
+    ctx.save();
+    ctx.globalAlpha *= flash;
+    strokeRounded(ctx, drawn, opts.radius, flashSkin.border, skin.borderWidth);
+    ctx.restore();
   }
   if (state.focused) drawFocusRing(ui, drawn, opts.radius);
   const text = pressed

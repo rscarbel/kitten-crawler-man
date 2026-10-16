@@ -31,6 +31,7 @@ export type MusicSelection =
 
 /** Every system that may claim music. A closed set, so a misspelt owner is a type error. */
 export type MusicClaimOwner =
+  | 'title'
   | 'floor'
   | 'overworld_zone'
   | 'interior'

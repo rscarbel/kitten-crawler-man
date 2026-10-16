@@ -26,6 +26,8 @@
     "scripts/strictCanvas.ts",
     "scripts/verify-town-arrival-load.ts",
     "scripts/render-loading-screen.ts",
+    "scripts/render-title.ts",
+    "scripts/generate-title-pulse.ts",
     "scripts/render-quest-reward.ts",
     "scripts/render-equipment-icons.ts",
     "scripts/verify-quest-reward.ts",

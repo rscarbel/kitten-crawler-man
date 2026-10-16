@@ -14,6 +14,11 @@ export const palette = {
     /** `base` with nothing showing through, for a sheet laid over bright, busy art. */
     solid: '#0E111A',
     raised: '#1A1F2C',
+    /**
+     * Also the loading screen's backdrop. The boot splash in `index.html`
+     * repeats this colour, and its ember the `accent.base` amber, so the
+     * handoff from the splash to the canvas shows no seam.
+     */
     sunken: '#0A0D14',
     scrim: 'rgba(4, 6, 10, 0.62)',
   },
@@ -113,6 +118,19 @@ export const type = {
   heading: { size: 20, weight: 700, lineHeight: 26 },
   display: { size: 28, weight: 800, lineHeight: 34 },
   overline: { size: 10, weight: 700, lineHeight: 12, letterSpacing: 1.2, upper: true },
+  /**
+   * The game's wordmark: the face's heaviest weight, tracked in tight. Drawn far
+   * larger than any UI step, so a painter scales its size, line height and
+   * spacing together from these proportions.
+   */
+  logo: { size: 96, weight: 900, lineHeight: 96, letterSpacing: -2.4, upper: true },
+  /**
+   * A machine voice typed out a character at a time, set in the terminal face
+   * (`TERMINAL_FONT_STACK`) by whoever draws it: the System AI's lines.
+   */
+  terminal: { size: 14, weight: 600, lineHeight: 19, letterSpacing: 0.6, upper: true },
+  /** A quiet line that still has to read across a big screen: the title's sound hint. */
+  hint: { size: 15, weight: 500, lineHeight: 20, letterSpacing: 0.4 },
 } as const satisfies Record<string, TypeStyle>;
 
 export type TypeRole = keyof typeof type;
@@ -129,6 +147,9 @@ export const condensedType: Readonly<Record<TypeRole, TypeRole>> = {
   body: 'caption',
   caption: 'caption',
   overline: 'overline',
+  logo: 'display',
+  terminal: 'caption',
+  hint: 'body',
 };
 
 /** A soft drop shadow. */

@@ -33,6 +33,17 @@ export type MusicLibraryNotice =
 
 type UnlockListener = (id: MusicTrackId) => void;
 
+/**
+ * Songs every library starts with, new game or loaded save. Every player has
+ * heard them before any library exists (the title screen plays with none
+ * bound), so they start unlocked and heard but never announced: no unlock
+ * notice, no credit and no music-page badge. A standing rule rather than
+ * converted save data, so older saves pick them up on load.
+ */
+export const ALWAYS_UNLOCKED_TRACK_IDS = [
+  'welcome_to_the_dungeon',
+] as const satisfies readonly MusicTrackId[];
+
 function musicTrackIdOf(value: unknown): MusicTrackId | undefined {
   return MUSIC_TRACK_IDS.find((id) => id === value);
 }
@@ -44,8 +55,9 @@ function trackIdsIn(value: unknown): MusicTrackId[] {
 
 /**
  * Which songs the player has unlocked and heard, for one run. Per save: a
- * load builds it from the save, a new game starts it empty, and Reset Game
- * reloads the page, which takes it with everything else.
+ * load builds it from the save, a new game starts it with only
+ * {@link ALWAYS_UNLOCKED_TRACK_IDS}, and Reset Game reloads the page, which
+ * takes it with everything else.
  *
  * A song unlocks when something asks for it ({@link markRequested}), audible
  * or not, and is heard when it actually starts playing ({@link markAudible}).
@@ -59,6 +71,13 @@ export class MusicLibrary {
   private readonly menuUnseenIds = new Set<MusicTrackId>();
   private readonly notices: MusicLibraryNotice[] = [];
   private readonly unlockListeners = new Set<UnlockListener>();
+
+  constructor() {
+    for (const id of ALWAYS_UNLOCKED_TRACK_IDS) {
+      this.unlockedIds.add(id);
+      this.heardIds.add(id);
+    }
+  }
 
   /**
    * Unlocks every catalogued song among `ids`. Takes anything the music bus
@@ -164,6 +183,7 @@ export class MusicLibrary {
   static fromSerialized(value: unknown): MusicLibrary {
     const library = new MusicLibrary();
     if (!isRecord(value)) return library;
+    const unlockedBeforeSave = library.unlockedIds.size;
     for (const id of trackIdsIn(value.unlocked)) library.unlockedIds.add(id);
     for (const id of trackIdsIn(value.heard)) {
       if (library.unlockedIds.has(id)) library.heardIds.add(id);
@@ -171,7 +191,8 @@ export class MusicLibrary {
     for (const id of trackIdsIn(value.menuUnseen)) {
       if (library.unlockedIds.has(id)) library.menuUnseenIds.add(id);
     }
-    const backfilledCount = value.backfilled === true ? library.unlockedIds.size : 0;
+    const unlockedBySave = library.unlockedIds.size - unlockedBeforeSave;
+    const backfilledCount = value.backfilled === true ? unlockedBySave : 0;
     if (backfilledCount > 0) library.notices.push({ kind: 'backfilled', count: backfilledCount });
     return library;
   }

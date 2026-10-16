@@ -2,7 +2,7 @@ import { InputManager } from './core/InputManager';
 import { SceneManager } from './core/Scene';
 import { DungeonScene } from './scenes/DungeonScene';
 import type { DungeonSceneOptions } from './scenes/DungeonScene';
-import { PostSignupScene } from './scenes/PostSignupScene';
+import { TitleScene } from './scenes/title/TitleScene';
 import { sceneSetupFromSave } from './scenes/resumeFromSave';
 import { aiAdapter } from './ai/AIAdapter';
 import { devBootScene, installDevLoopFallback } from './dev/devBoot';
@@ -13,6 +13,7 @@ import { prewarmGroups } from './core/SpriteLoader';
 import { AudioManager } from './audio/AudioManager';
 import { CORE_SFX_IDS } from './audio/sfxGroups';
 import { showLoadingScreen } from './ui/LoadingScreen';
+import { dismissBootSplash } from './ui/bootSplash';
 import { LOCAL_PROGRESS_STORAGE, readLocalProgress } from './core/LocalProgress';
 import {
   PAGE_SAVE_LATCH,
@@ -24,6 +25,8 @@ import type { OwedWipe, ProgressStorage, WipeAccount } from './core/progressPers
 import { LOCAL_WIPE_MARKER } from './core/wipeMarker';
 import { WipeHoldScene } from './scenes/WipeHoldScene';
 import { loadUiFont } from './ui/theme/fonts';
+import { prewarmTitleCast } from './scenes/title/titleCast';
+import { prewarmTitleHall } from './scenes/title/layers/dungeonHallLayer';
 
 declare const __AI_ENABLED__: boolean;
 
@@ -160,8 +163,14 @@ sceneManager.setTransitionHooks({
   end: () => audio.music.endHandover(),
 });
 const loadingScreen = showLoadingScreen(sceneManager.ctx);
+// Queued after the loading screen's own first frame, so in that same frame the
+// canvas is already painted underneath when the splash starts to fade.
+requestAnimationFrame(() => dismissBootSplash());
 
 (async () => {
+  // Queued now so the figure cache bakes the title's cast behind this loading
+  // screen, and the first title frame finds every row it draws already warm.
+  prewarmTitleCast();
   // Only the group every scene needs decodes before the first frame; the rest
   // loads lazily on demand (SpriteLoader.getSpriteDef schedules a load on a
   // miss). This is what turns the ~2.3s blank-page boot into a loading screen.
@@ -172,6 +181,8 @@ const loadingScreen = showLoadingScreen(sceneManager.ctx);
     prewarmGroups(['core'], (loaded, total) => loadingScreen.setProgress(loaded, total)),
     loadUiFont(),
   ]);
+  // The hall's stone is painted pixel by pixel; doing it under the loading screen keeps that cost off the title's first frame.
+  prewarmTitleHall();
   loadingScreen.stop();
 
   if (!__AI_ENABLED__) {
@@ -184,7 +195,7 @@ const loadingScreen = showLoadingScreen(sceneManager.ctx);
     const showStartMenu = () => {
       const saved = readLocalProgress();
       const onContinue = saved === null ? undefined : () => resumeFromProgress(options, saved);
-      sceneManager.replace(new PostSignupScene(input, sceneManager, options, onContinue));
+      sceneManager.replace(new TitleScene(input, sceneManager, options, onContinue));
     };
     if (devBootScene(sceneManager, input, options)) return;
     showStartMenu();
@@ -234,7 +245,7 @@ const loadingScreen = showLoadingScreen(sceneManager.ctx);
   if (progress) {
     resumeFromProgress(options, progress);
   } else {
-    sceneManager.replace(new PostSignupScene(input, sceneManager, options));
+    sceneManager.replace(new TitleScene(input, sceneManager, options));
   }
 
   // Fire-and-forget: if the AI server isn't running the adapter stays silent.

@@ -40,6 +40,18 @@ const OPENING_LEFT = 0.13;
 const OPENING_RIGHT = 0.87;
 const OPENING_TOP = 0.16;
 const OPENING_BOTTOM = 0.89;
+
+/**
+ * Where the opening sits in the square {@link paintStairwell} fills, as
+ * fractions of its side, for a caller that frames the flight in something of
+ * its own (a doorway) and has to line its edges up with the shaft's.
+ */
+export const STAIRWELL_OPENING = {
+  left: OPENING_LEFT,
+  right: OPENING_RIGHT,
+  top: OPENING_TOP,
+  bottom: OPENING_BOTTOM,
+} as const;
 /** Width of the lip framing the opening on its west, north and east sides. */
 const RIM_WIDTH = 0.08;
 /** Depth of the threshold slab the flight starts from, south of the opening. */

@@ -72,7 +72,7 @@ import {
   finishRun,
   RunCompleteScreen,
 } from '../ui/screens/dialogs/RunCompleteScreen';
-import { PostSignupScene } from './PostSignupScene';
+import { TitleScene } from './title/TitleScene';
 import { MENU_TAP_MAX_DISTANCE } from '../ui/core/pointer';
 import {
   PAUSE_SURFACE_ID,
@@ -5703,7 +5703,7 @@ export class DungeonScene extends GameplayScene {
             );
           };
     this.sceneManager.replace(
-      new PostSignupScene(this.input, this.sceneManager, baseOptions, onContinue),
+      new TitleScene(this.input, this.sceneManager, baseOptions, onContinue),
     );
   }
 

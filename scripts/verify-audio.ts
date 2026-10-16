@@ -20,13 +20,16 @@
  *       area music plays the latest area claim.
  *    6. Play once: on `ended` the claim releases and the music below resumes.
  *    7. Autoplay lock: a claim behind the lock is credited only once audio plays.
+ *       Where an element may start only inside a gesture, a tap's `touchend`
+ *       starts the waiting song, and the next gesture retries a refused one.
  *    8. Exclusive: the keyboard-hero claim outranks the player's choice.
  *    9. Shuffle: no song plays twice in a row, across reshuffles.
  *   10. Jingles: never unlock or credit.
  *   11. Save round-trip: a save keeps the music library through storage,
  *       and the save the stairs write, which carries no world, keeps it too.
  *   12. Backfill: saves written before the library unlock exactly the songs
- *       their progress proves, none heard, under one summary notice.
+ *       their progress proves, none heard, under one summary notice; the
+ *       songs every library starts with are unlocked and heard, unannounced.
  *   13. Voices and rate limits: a copy past an id's cap steals its oldest,
  *       ramped; past the global cap a sound steals the oldest voice it
  *       outranks or is dropped; a frame of repeats makes one voice per take,
@@ -568,8 +571,8 @@ interface AudioCheck {
   readonly run: () => Promise<void>;
 }
 
-const unlockGesture = (): void => {
-  shim.window.dispatch(new ShimEvent('keydown', '', 0));
+const unlockGesture = (type: string): void => {
+  harness.gesture(() => shim.window.dispatch(new ShimEvent(type, '', 0)));
 };
 
 const CHECKS: readonly AudioCheck[] = [

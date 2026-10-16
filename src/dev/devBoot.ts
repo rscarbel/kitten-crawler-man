@@ -35,6 +35,7 @@ import { KeyboardHeroPreviewScene } from '../scenes/KeyboardHeroPreviewScene';
 import { PipeBoardPreviewScene } from '../scenes/PipeBoardPreviewScene';
 import { TownMapScene } from '../scenes/TownMapScene';
 import { UiGalleryScene } from '../scenes/UiGalleryScene';
+import { TitleScene, type TitleStartState } from '../scenes/title/TitleScene';
 import { getLevelDef } from '../levels/index';
 import { createCircusQuestProgress, type CircusQuestStage } from '../core/CircusQuestProgress';
 import { createPartyCraftsState } from '../core/partyCrafts';
@@ -215,6 +216,40 @@ function withPlaytestBoot(options: DungeonSceneOptions, boot: PlaytestBoot): Dun
 
 const DIFFICULTIES: ReadonlyArray<Difficulty> = ['easy', 'normal', 'hard'];
 
+const TITLE_START_STATES: ReadonlyArray<TitleStartState> = ['dormant', 'ignition', 'alive'];
+
+/** The state a `?title=` value names; a bare `?title` follows the audio context as the game does. */
+function titleStartStateNamed(value: string): TitleStartState | undefined {
+  return TITLE_START_STATES.find((state) => state === value);
+}
+
+/**
+ * `?title` opens the title screen; `?title=dormant|ignition|alive` jumps to a
+ * state, and `&save` adds the Continue choice, whose fake continue opens the
+ * title again (the in-run Main Menu's way back). It never writes the real
+ * save: a run started from it is a dev run.
+ */
+function openDevTitle(
+  sceneManager: SceneManager,
+  input: InputManager,
+  options: DungeonSceneOptions,
+  params: URLSearchParams,
+): void {
+  const unsavedOptions: DungeonSceneOptions = {
+    ...options,
+    saveProgress: undefined,
+    progressWipe: undefined,
+  };
+  const startState = titleStartStateNamed(params.get('title') ?? '');
+  const open = (): void => {
+    const onContinue = params.get('save') === null ? undefined : open;
+    sceneManager.replace(
+      new TitleScene(input, sceneManager, unsavedOptions, onContinue, { startState }),
+    );
+  };
+  open();
+}
+
 /** The preset `?prison` boots, whose spawn is the gate room the prison door opens from. */
 const PRISON_ROUTE_PRESET_ID = 'prison';
 
@@ -278,6 +313,11 @@ export function devBootScene(
     sceneManager.setFrameOverlay((ctx) => {
       for (const overlay of overlays) overlay(ctx);
     });
+  }
+
+  if (params.get('title') !== null) {
+    openDevTitle(sceneManager, input, options, params);
+    return true;
   }
 
   if (params.get('paintbench') !== null) {

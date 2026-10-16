@@ -403,6 +403,9 @@ export class FakeAudioElement {
   }
 
   play(): Promise<void> {
+    if (FakeAudioElement.harness?.refusesMediaPlay() === true) {
+      return Promise.reject(new DOMException('play() outside a user gesture', 'NotAllowedError'));
+    }
     this.paused = false;
     // A browser reports `playing` once playback has really begun, after play() returns.
     queueMicrotask(() => {
@@ -546,9 +549,11 @@ export class FakeAudioContext {
     return Promise.resolve(new FakeAudioBuffer(label, this.harness.durationOf(label)));
   }
 
+  /** Settles after the call returns, as a browser's does, so a gesture that resumes has ended by then. */
   resume(): Promise<void> {
-    if (this.state !== 'closed') this.setState('running');
-    return Promise.resolve();
+    return Promise.resolve().then(() => {
+      if (this.state !== 'closed') this.setState('running');
+    });
   }
 
   suspend(): Promise<void> {
@@ -600,6 +605,15 @@ export interface AudioHarness {
   elements(): readonly FakeAudioElement[];
   /** Lets every pending promise settle. */
   flush(): Promise<void>;
+  /**
+   * Whether an `<audio>` element may start only inside a user gesture, as
+   * Safari's media policy has it. Off by default: every play() succeeds.
+   */
+  mediaNeedsGesture: boolean;
+  /** Runs `dispatch` as a user gesture: inside it, play() is always allowed. */
+  gesture(dispatch: () => void): void;
+  /** Whether play() is refused right now. */
+  refusesMediaPlay(): boolean;
 }
 
 /** The longest single step {@link AudioHarness.advance} takes, so ends and timers interleave in order. */
@@ -617,6 +631,7 @@ export function installFakeAudio(options: AudioHarnessOptions): AudioHarness {
   let nextTimerId = 1;
   let timers: PendingTimer[] = [];
   const durations = new Map<string, number>();
+  let inGesture = false;
 
   const newestContext = (): FakeAudioContext | null =>
     FakeAudioContext.created[FakeAudioContext.created.length - 1] ?? null;
@@ -672,6 +687,16 @@ export function installFakeAudio(options: AudioHarnessOptions): AudioHarness {
     async flush() {
       for (let round = 0; round < FLUSH_ROUNDS; round++) await Promise.resolve();
     },
+    mediaNeedsGesture: false,
+    gesture(dispatch) {
+      inGesture = true;
+      try {
+        dispatch();
+      } finally {
+        inGesture = false;
+      }
+    },
+    refusesMediaPlay: () => harness.mediaNeedsGesture && !inGesture,
   };
 
   FakeAudioContext.harness = harness;

@@ -22,7 +22,11 @@ import {
   type MusicBusId,
   type MusicTrackId,
 } from '../../src/audio/sounds.js';
-import { bindMusicLibrary, MusicLibrary } from '../../src/core/MusicLibrary.js';
+import {
+  ALWAYS_UNLOCKED_TRACK_IDS,
+  bindMusicLibrary,
+  MusicLibrary,
+} from '../../src/core/MusicLibrary.js';
 import { seededStreams, type AudioHarness, type FakeAudioElement } from '../audioHarness.js';
 
 type Check = (ok: boolean, message: string) => void;
@@ -53,6 +57,9 @@ const SHUFFLE_SET = [
   'terrifying_woods',
   'briar_hollow_theme',
 ] as const satisfies readonly MusicTrackId[];
+
+/** The streamed song the title screen claims before any gesture. */
+const GESTURE_GATED_TRACK = 'welcome_to_the_dungeon' as const satisfies MusicTrackId;
 
 /** Holds claims the way a scene's scope does: one object per scene. */
 type Holder = object;
@@ -325,6 +332,9 @@ export async function checkPlayerModesFollowTheLibrary(
   check: Check,
 ): Promise<void> {
   setDurations(harness, [...TOWN_MUSIC_TRACKS, 'temple_music'], LONG_RECORDING_S);
+  // Every library holds these, so they sit in both shuffles; kept short so
+  // they never stand between a check and the songs it is about.
+  setDurations(harness, ALWAYS_UNLOCKED_TRACK_IDS, SHORT_RECORDING_S);
   const r = await rig(harness);
   r.library.markRequested(['temple_music', 'town_music_1']);
   r.audio.music.shuffleUnlocked();
@@ -332,7 +342,9 @@ export async function checkPlayerModesFollowTheLibrary(
   const reloaded = new MusicLibrary();
   reloaded.markRequested(['town_music_2']);
   bindMusicLibrary(reloaded);
+  const audibleBeforeReload = r.audible.length;
   await r.settle();
+  await r.settle(SHORT_RECORDING_S * MS_PER_SECOND);
   check(
     r.audio.music.audibleTrack === 'town_music_2',
     `a shuffle after a reload plays the reloaded save's songs (${r.audio.music.audibleTrack ?? 'none'})`,
@@ -340,7 +352,7 @@ export async function checkPlayerModesFollowTheLibrary(
   r.library.markRequested(['town_music_1', 'tavern_music_1']);
   reloaded.markRequested(['temple_music']);
   await r.settle(LONG_RECORDING_S * MS_PER_SECOND);
-  const heardAfterReload = new Set(r.audible.slice(r.audible.indexOf('town_music_2')));
+  const heardAfterReload = new Set(r.audible.slice(audibleBeforeReload));
   check(
     !heardAfterReload.has('tavern_music_1') && heardAfterReload.has('temple_music'),
     "and grows with the reloaded save's unlocks, not the old save's",
@@ -429,22 +441,42 @@ export async function checkPlayOnceOfAnUndecodedSong(
   await failing.dispose();
 
   const fetchesOfTheSong = { count: 0 };
-  const countingFetch: unknown = Reflect.get(globalThis, 'fetch');
+  const failingFetch: unknown = Reflect.get(globalThis, 'fetch');
   Reflect.set(globalThis, 'fetch', (url: string) => {
     if (url === SOUND_MANIFEST[KEYBOARD_HERO_SONG]) fetchesOfTheSong.count++;
-    return typeof countingFetch === 'function'
-      ? Reflect.apply(countingFetch, globalThis, [url])
+    return typeof failingFetch === 'function'
+      ? Reflect.apply(failingFetch, globalThis, [url])
       : Promise.reject(new Error('no fetch'));
   });
+  setDurations(harness, ALWAYS_UNLOCKED_TRACK_IDS, LONG_RECORDING_S);
+
+  // The always-unlocked songs stream, and a stream never fails to load, so no
+  // library leaves a shuffle with nothing playable any more. The shuffle's set
+  // is narrowed to the failing song by hand, which is the set a library of
+  // only decoded songs would give it.
   const lonely = await rig(harness);
   claimOn(lonely.audio, {}, 'floor', 'area', loopOf('bg_level_1'));
   await lonely.settle();
-  const onlyTheSong = new MusicLibrary();
-  onlyTheSong.markRequested([KEYBOARD_HERO_SONG]);
-  bindMusicLibrary(onlyTheSong);
   lonely.audio.music.shuffleUnlocked();
   await lonely.settle();
-  Reflect.set(globalThis, 'fetch', decodingFetch);
+  // Unlocked while the shuffle plays, so the narrowed claim below unlocks
+  // nothing new and the shuffle does not rebuild itself over it.
+  lonely.library.markRequested([KEYBOARD_HERO_SONG]);
+  await lonely.settle();
+  check(
+    lonely.audio.music.playerMode.kind === 'shuffle',
+    'the shuffle is playing before its set is narrowed',
+  );
+  lonely.audio.music.claim(
+    {
+      owner: 'player',
+      layer: 'player',
+      selection: { kind: 'playlist', ids: [KEYBOARD_HERO_SONG] },
+    },
+    null,
+  );
+  await lonely.settle();
+  await lonely.settle();
   check(
     fetchesOfTheSong.count <= 1 &&
       lonely.audio.music.playerMode.kind === 'area' &&
@@ -452,13 +484,33 @@ export async function checkPlayOnceOfAnUndecodedSong(
     `a shuffle whose only song cannot load fetches it once and goes back to area music (${fetchesOfTheSong.count} fetches, ${lonely.audio.music.playerMode.kind})`,
   );
   await lonely.dispose();
+
+  fetchesOfTheSong.count = 0;
+  const mixed = await rig(harness);
+  claimOn(mixed.audio, {}, 'floor', 'area', loopOf('bg_level_1'));
+  await mixed.settle();
+  const withTheFailingSong = new MusicLibrary();
+  withTheFailingSong.markRequested([KEYBOARD_HERO_SONG]);
+  bindMusicLibrary(withTheFailingSong);
+  mixed.audio.music.shuffleUnlocked();
+  await mixed.settle();
+  await mixed.settle();
+  Reflect.set(globalThis, 'fetch', decodingFetch);
+  const playingInstead = mixed.audio.music.audibleTrack;
+  check(
+    fetchesOfTheSong.count <= 1 &&
+      mixed.audio.music.playerMode.kind === 'shuffle' &&
+      ALWAYS_UNLOCKED_TRACK_IDS.some((id) => id === playingInstead),
+    `a shuffle holding a song that cannot load fetches it once and plays the rest (${fetchesOfTheSong.count} fetches, ${playingInstead ?? 'nothing'})`,
+  );
+  await mixed.dispose();
 }
 
 /** 7. A claim made behind the autoplay lock is credited only once audio really plays. */
 export async function checkAutoplayLock(
   harness: AudioHarness,
   check: Check,
-  unlockGesture: () => void,
+  unlockGesture: (type: string) => void,
 ): Promise<void> {
   setDurations(harness, ['bg_level_2'], LONG_RECORDING_S);
   const r = await rig(harness);
@@ -472,13 +524,72 @@ export async function checkAutoplayLock(
       r.sounding('bg_level_2') === null,
     'a claim behind the lock unlocks its song but neither plays nor credits it',
   );
-  unlockGesture();
+  unlockGesture('keydown');
   await r.settle();
   check(
     r.library.isHeard('bg_level_2') && r.audio.music.audibleTrack === 'bg_level_2',
     'once audio unlocks the director starts it, and only then credits it',
   );
   await r.dispose();
+
+  setDurations(harness, [GESTURE_GATED_TRACK], LONG_RECORDING_S);
+  harness.mediaNeedsGesture = true;
+  try {
+    const tapped = await rig(harness);
+    void harness.context().suspend();
+    claimOn(tapped.audio, {}, 'title', 'area', loopOf(GESTURE_GATED_TRACK));
+    await tapped.settle();
+    unlockGesture('touchend');
+    await tapped.settle();
+    check(
+      tapped.sounding(GESTURE_GATED_TRACK) !== null,
+      "a tap's touchend unlocks audio and starts the waiting stream inside the gesture",
+    );
+    await tapped.dispose();
+
+    const refused = await rig(harness);
+    claimOn(refused.audio, {}, 'title', 'area', loopOf(GESTURE_GATED_TRACK));
+    await refused.settle();
+    const refusedOutsideGesture = refused.sounding(GESTURE_GATED_TRACK) === null;
+    unlockGesture('keydown');
+    await refused.settle();
+    check(
+      refusedOutsideGesture && refused.sounding(GESTURE_GATED_TRACK) !== null,
+      'a stream refused outside a gesture, with the context already running, starts on the next gesture',
+    );
+    await refused.dispose();
+  } finally {
+    harness.mediaNeedsGesture = false;
+  }
+
+  const osPaused = await rig(harness);
+  claimOn(osPaused.audio, {}, 'title', 'area', loopOf(GESTURE_GATED_TRACK));
+  await osPaused.settle();
+  const element = osPaused.sounding(GESTURE_GATED_TRACK);
+  element?.pause();
+  unlockGesture('keydown');
+  await osPaused.settle();
+  check(
+    element !== null && element.paused,
+    'a stream the system paused itself is not restarted by a later key press',
+  );
+  await osPaused.dispose();
+
+  const decoded = await rig(harness);
+  const scope = decoded.audio.createScope();
+  await scope.preload([KEYBOARD_HERO_SONG]);
+  void harness.context().suspend();
+  decoded.audio.music.repeat(KEYBOARD_HERO_SONG);
+  await decoded.settle();
+  unlockGesture('keydown');
+  const creditedInsideGesture = decoded.audible.includes(KEYBOARD_HERO_SONG);
+  await decoded.settle();
+  check(
+    !creditedInsideGesture && decoded.audible.includes(KEYBOARD_HERO_SONG),
+    'a decoded song a gesture starts counts as heard only once the context renders',
+  );
+  scope.dispose();
+  await decoded.dispose();
 }
 
 /** 8. The keyboard-hero claim outranks the player's choice. */
@@ -546,8 +657,11 @@ export async function checkJingles(harness: AudioHarness, check: Check): Promise
     playing !== null && SLOTS_FREE_SPINS_MUSIC_TRACKS.some((id) => id === playing),
     'a jingle playlist plays',
   );
+  const unlockedBeyondTheStandingSet = r.library.unlocked.filter(
+    (id) => !ALWAYS_UNLOCKED_TRACK_IDS.some((alwaysId) => alwaysId === id),
+  );
   check(
-    r.library.unlocked.length === 0 && r.library.drainNotices().length === 0,
+    unlockedBeyondTheStandingSet.length === 0 && r.library.drainNotices().length === 0,
     'and unlocks and credits nothing',
   );
   await r.dispose();

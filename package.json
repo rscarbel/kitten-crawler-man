@@ -69,6 +69,8 @@
     "render:equipment-icons": "tsx scripts/render-equipment-icons.ts",
     "render:world-text": "tsx scripts/render-world-text.ts",
     "render:loading-screen": "tsx scripts/render-loading-screen.ts",
+    "render:title": "tsx scripts/render-title.ts",
+    "generate:title-pulse": "tsx scripts/generate-title-pulse.ts",
     "render:quest-reward": "tsx scripts/render-quest-reward.ts",
     "render:interior-hud": "tsx scripts/render-interior-hud.ts",
     "render:travel-menu": "tsx scripts/render-travel-menu.ts",

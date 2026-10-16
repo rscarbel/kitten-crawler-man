@@ -1513,6 +1513,47 @@ for (const { label, entry, openers } of cases) {
   auditScene(label, room, openers, elsewhere);
 }
 
+// ── The title screen ───────────────────────────────────────────────────────
+
+const { TitleScene } = await import('../src/scenes/title/TitleScene.js');
+const { TITLE_MENU_SURFACE_ID } = await import('../src/scenes/title/titleMenu.js');
+
+section('the title screen');
+for (const withSave of [true, false]) {
+  const label = `title ${withSave ? 'with a save' : 'without a save'}`;
+  const resumed = { continued: false };
+  const onContinue = withSave
+    ? (): void => {
+        resumed.continued = true;
+      }
+    : undefined;
+  const sceneManager = new SceneManager();
+  // Held dormant: with no audio context there is no gesture to wait for, and the audit wants the menu as a first-time player meets it.
+  const title = new TitleScene(new InputManager(), sceneManager, {}, onContinue, {
+    startState: 'dormant',
+  });
+  sceneManager.replace(title);
+  step(title);
+  check(
+    title.ui.isOpen(TITLE_MENU_SURFACE_ID),
+    `${label}: the menu is not open on the first frame`,
+  );
+  if (phonePass === null) {
+    const outcome = auditFocus(title.ui, label);
+    failures.push(...outcome.failures);
+    console.log(`  ${label}: ${describeClaimants(outcome.claimants)}`);
+  }
+  settleEntrance(title, TITLE_MENU_SURFACE_ID);
+  recordCloseButtons(title.ui, label);
+  check(title.ui.key('Enter') === 'consumed', `${label}: Enter does not reach the menu`);
+  check(title.state === 'dive', `${label}: Enter does not take the focused primary choice`);
+  if (withSave) {
+    for (let frame = 0; frame < MAX_SETTLE_FRAMES && !resumed.continued; frame++) step(title);
+    check(resumed.continued, `${label}: the primary choice never continued the save`);
+  }
+  title.onExit();
+}
+
 // ── Report ─────────────────────────────────────────────────────────────────
 
 if (phonePass !== null) {
