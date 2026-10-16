@@ -24,7 +24,7 @@ import { rotateLine } from './townServiceUtil';
 
 export const QUIET_NEEDLE_NAME = 'The Quiet Needle' as const satisfies PlannedBuildingName;
 
-const TATTOO_PRICE = 100;
+const TATTOO_PRICE = 1500;
 /** Each mark's description is the whole of its rules, so a row wraps rather than cutting it off. */
 const TATTOO_DESC_LINES = 6;
 
@@ -35,7 +35,7 @@ const TATTOO_DESC_LINES = 6;
  * two of either.
  */
 const SKILL_TATTOO_KEY = 'brass_gullet';
-const SKILL_TATTOO_PRICE = 250;
+const SKILL_TATTOO_PRICE = 3500;
 
 function brassGulletOnSale(player: Player): boolean {
   return (
