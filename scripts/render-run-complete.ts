@@ -50,6 +50,9 @@ const FULL_RUN: RunSummary = {
   bossesDefeated: 11,
   hirelingsHired: 3,
   hirelingsLost: 1,
+  mongoPets: 48,
+  cowPets: 37,
+  midgePets: 12,
   topKills: [
     ['Goblin', 402],
     ['Rat-kin Skirmisher', 211],
@@ -66,6 +69,9 @@ const LEAN_RUN: RunSummary = {
   topKills: [],
   hirelingsHired: 0,
   hirelingsLost: 0,
+  mongoPets: 0,
+  cowPets: 0,
+  midgePets: 0,
 };
 
 const outFlag = process.argv.find((arg) => arg.startsWith('--out-dir='));

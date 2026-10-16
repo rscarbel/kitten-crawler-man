@@ -1,7 +1,7 @@
 /**
  * Turning wood into boards and rope — the one core both ways of doing it
  * share: by hand at the sawmill's two machines, one wood a press, and in bulk
- * through Fenna for a coin a wood.
+ * through Fenna for her fee per wood.
  *
  * Wood is spent from the party's combined stock, the crawler doing the work
  * first. What comes out goes to that crawler and counts toward the session
@@ -22,7 +22,7 @@ import type { Crawler, ServiceParty } from './serviceContext';
 
 export const BOARDS_PER_WOOD = 2;
 export const ROPE_PER_WOOD = 1;
-export const FENNA_FEE_PER_WOOD = 1;
+export const FENNA_FEE_PER_WOOD = 8;
 
 /** Seconds one wood takes at a machine by hand. */
 export const MANUAL_PROCESS_SECONDS = 1.2;

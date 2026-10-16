@@ -65,6 +65,25 @@ function unlockText(skills: CraftSkills, id: CraftSkillId): string {
   return `${progress}${thrallStatus(skills, id)}`;
 }
 
+interface ExtraGuide {
+  readonly id: string;
+  readonly label: string;
+  readonly open: () => void;
+}
+
+/** The guides offered under the Resourcing card beside its own "How it works". */
+function resourcingGuides(ctx: PauseContext): readonly ExtraGuide[] {
+  const guides: ExtraGuide[] = [];
+  const { processing, dualHarvest } = ctx.guides;
+  if (processing !== undefined) {
+    guides.push({ id: 'processing', label: 'How Processing Works', open: processing });
+  }
+  if (dualHarvest !== undefined) {
+    guides.push({ id: 'dual-harvest', label: 'Harvesting with Both Crawlers', open: dualHarvest });
+  }
+  return guides;
+}
+
 function craftCard(
   column: SectionLayout,
   ctx: PauseContext,
@@ -83,9 +102,9 @@ function craftCard(
   const unlockH = measureTextHeight(ui, textW, { text: unlock, role: 'info' });
   const headerH = lineHeightOf(ui, 'title') * ICON_TITLE_LINES;
   const meterH = lineHeightOf(ui, 'caption') + space.xs;
-  const processing = id === 'resourcing' ? ctx.guides.processing : undefined;
+  const extraGuides = id === 'resourcing' ? resourcingGuides(ctx) : [];
   const buttonH = buttonHeight(ui, 'sm');
-  const buttonsH = buttonH + (processing === undefined ? 0 : buttonH + space.xs);
+  const buttonsH = buttonH + extraGuides.length * (buttonH + space.xs);
   const h =
     padding * 2 +
     headerH +
@@ -147,19 +166,20 @@ function craftCard(
         }),
         { focusable: guide !== undefined },
       );
-      if (processing !== undefined) {
-        const processingRect = take(buttonH, 0);
+      extraGuides.forEach((guide, index) => {
+        const isLast = index === extraGuides.length - 1;
+        const guideRect = take(buttonH, isLast ? 0 : space.xs);
         column.track(
-          processingRect,
-          button(ui, processingRect, {
-            id: `${crawler}/craft/processing`,
-            label: 'How Processing Works',
+          guideRect,
+          button(ui, guideRect, {
+            id: `${crawler}/craft/${guide.id}`,
+            label: guide.label,
             size: 'sm',
             variant: 'ghost',
-            onTap: processing,
+            onTap: guide.open,
           }),
         );
-      }
+      });
     },
   });
 }

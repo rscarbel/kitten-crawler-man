@@ -47,6 +47,9 @@ import { BOSS_BLAST_DAMAGE_SCALE } from '../src/creatures/Mob';
 import {
   NECRO_BOLT_TELEGRAPH_FRAMES,
   NECRO_ESCORT_CAP,
+  NECRO_INNER_RAISE_MAX_WALL_DEPTH_TILES,
+  NECRO_INNER_RAISE_MIN_TOWER_TILES,
+  NECRO_INNER_RAISE_MIN_WALL_DEPTH_TILES,
   NECRO_MIN_WALL_DISTANCE_TILES,
   NECRO_PULSE_CHANNEL_FRAMES,
   NECRO_PULSE_RANGE_TILES,
@@ -74,6 +77,7 @@ import {
   tileUnder,
 } from '../src/creatures/siege/siegeCapability';
 import { palisadeDistanceFor, INSIDE_PALISADE } from '../src/creatures/siege/palisadeDistance';
+import { INNER_RAISE_DIRECTIVE } from '../src/creatures/siege/innerRaiseDirective';
 import {
   isNecromancerRaise,
   livingAssaultSpawns,
@@ -647,6 +651,16 @@ let badBlinks = 0;
 let closestApproach = Infinity;
 let raiseCapExceeded = false;
 let raiseCapReached = false;
+const seenRaises = new WeakSet<Mob>();
+let innerRaisesSeen = 0;
+let innerRaisesOutOfBand = 0;
+let innerRaisesNearTower = 0;
+let innerRaisesUndirected = 0;
+let outerRaisesDirected = 0;
+/** The bell tower is two tiles square, so its centre is one tile in from its north-west tile. */
+const BELL_TOWER_CENTRE_OFFSET_TILES = 1;
+const towerCentreX = site.square.bellTile.x + BELL_TOWER_CENTRE_OFFSET_TILES;
+const towerCentreY = site.square.bellTile.y + BELL_TOWER_CENTRE_OFFSET_TILES;
 
 for (let stream = 0; stream < HOME_STREAMS; stream++) {
   const random = mulberry32(stream + 1);
@@ -721,6 +735,27 @@ for (let stream = 0; stream < HOME_STREAMS; stream++) {
     const raises = livingNecromancerRaises(rig.roster.mobs);
     if (raises > NECRO_ESCORT_CAP) raiseCapExceeded = true;
     if (raises === NECRO_ESCORT_CAP) raiseCapReached = true;
+    for (const mob of rig.roster.mobs) {
+      if (!mob.raisedByNecromancer || seenRaises.has(mob)) continue;
+      seenRaises.add(mob);
+      const risenAt = tileUnder(mob);
+      const directed = mob.siegeDirective === INNER_RAISE_DIRECTIVE;
+      if (!isInsidePalisadeTile(site, risenAt.x, risenAt.y)) {
+        if (directed) outerRaisesDirected++;
+        continue;
+      }
+      innerRaisesSeen++;
+      if (!directed) innerRaisesUndirected++;
+      const depth = field.insideDepthAt(risenAt.x, risenAt.y) ?? 0;
+      if (
+        depth < NECRO_INNER_RAISE_MIN_WALL_DEPTH_TILES ||
+        depth > NECRO_INNER_RAISE_MAX_WALL_DEPTH_TILES
+      ) {
+        innerRaisesOutOfBand++;
+      }
+      const towerDistance = Math.hypot(risenAt.x - towerCentreX, risenAt.y - towerCentreY);
+      if (towerDistance < NECRO_INNER_RAISE_MIN_TOWER_TILES) innerRaisesNearTower++;
+    }
   }
   console.log(
     `    stream ${stream + 1} (${lane.id}): closest ${field.distanceAt(tileUnder(necro).x, tileUnder(necro).y)} at the end, ${necro.blinks} blinks, ${livingNecromancerRaises(rig.roster.mobs)} raises standing`,
@@ -743,6 +778,21 @@ check(badBlinks === 0, `every blink landed walkable and outside the wall (${badB
 section('Raise: never past his escort cap');
 check(raiseCapReached, `his raises reached the cap of ${NECRO_ESCORT_CAP} at some point`);
 check(!raiseCapExceeded, `his living raises never exceeded ${NECRO_ESCORT_CAP}`);
+
+section('Raise: the inner dead rise just inside the wall and hunt defenders');
+check(innerRaisesSeen > 0, `the streams raised bodies inside the palisade (${innerRaisesSeen})`);
+check(
+  innerRaisesOutOfBand === 0,
+  `every inner raise rose ${NECRO_INNER_RAISE_MIN_WALL_DEPTH_TILES}-${NECRO_INNER_RAISE_MAX_WALL_DEPTH_TILES} tiles inside the ring (${innerRaisesOutOfBand} outside the band)`,
+);
+check(
+  innerRaisesNearTower === 0,
+  `no inner raise rose within ${NECRO_INNER_RAISE_MIN_TOWER_TILES} tiles of the bell tower (${innerRaisesNearTower})`,
+);
+check(
+  innerRaisesUndirected === 0 && outerRaisesDirected === 0,
+  `inner raises, and only they, carry the inner-raise directive (${innerRaisesUndirected} inner without, ${outerRaisesDirected} outer with)`,
+);
 
 // ── 3. Separate caps ──────────────────────────────────────────────────────
 

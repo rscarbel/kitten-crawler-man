@@ -1,6 +1,6 @@
 /**
- * Fenna Splintertail's bulk processing: hand her the wood, pay a coin a
- * piece, and the whole batch comes back as boards or rope at once — a paid
+ * Fenna Splintertail's bulk processing: hand her the wood, pay Fenna's fee
+ * for each piece, and the whole batch comes back as boards or rope at once — a paid
  * service, so there is no waiting at the machine.
  *
  * The conversation follows her own lines: she offers the service, the player
@@ -109,7 +109,7 @@ function outputPhrase(output: ProcessingStationKind, wood: number): string {
 }
 
 /**
- * Runs a confirmed batch of `wood`: charges the steered crawler a coin a wood,
+ * Runs a confirmed batch of `wood`: charges the steered crawler Fenna's fee per wood,
  * spends the wood, and hands the output over. `null` means nothing happened
  * because the party could not pay.
  */

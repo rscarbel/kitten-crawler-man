@@ -60,9 +60,16 @@ export const KNOCKOUT_TIMEOUT_FRAMES = 5400;
 const MOBILE_TOUCH_MIN_HOLD_TIME = 150; // ms
 const MOBILE_DISTANCE_THRESHOLD = 8; // px
 
-// Wall collision offsets
 const LEADING_EDGE_FRONT = 0.72;
 const LEADING_EDGE_BACK = 0.28;
+/**
+ * How close to a structure frame's corner a refused step may be and still be
+ * eased around it, in tiles. The bare strips beside a trebuchet's frame are
+ * narrower than a tile, so lining up with one exactly would be fiddly.
+ */
+const STRUCTURE_CORNER_SLIDE_TILES = 0.35;
+/** Carries a corner slide one pixel past a frame's top or left edge, which count as inside it. */
+const CORNER_SLIDE_CLEARANCE_PX = 1;
 /**
  * Which part of the player is tested against walls when walking south.
  * `waist` is the long-standing behaviour; `sole` keeps feet off wall tiles and
@@ -198,23 +205,81 @@ export function applyMovement(
   dx *= speed;
   dy *= speed;
 
-  const nextX = clamp(player.x + dx, 0, mapPxW - TILE_SIZE);
-  const tileXnext =
-    dx >= 0
-      ? Math.floor((nextX + TILE_SIZE * LEADING_EDGE_FRONT) / TILE_SIZE)
-      : Math.floor((nextX + TILE_SIZE * LEADING_EDGE_BACK) / TILE_SIZE);
-  const tileYcur = Math.floor((player.y + TILE_SIZE / 2) / TILE_SIZE);
-  if (gameMap.isWalkable(tileXnext, tileYcur)) player.x = nextX;
+  const clampX = (x: number): number => clamp(x, 0, mapPxW - TILE_SIZE);
+  const clampY = (y: number): number => clamp(y, 0, mapPxH - TILE_SIZE);
 
-  const nextY = clamp(player.y + dy, 0, mapPxH - TILE_SIZE);
-  const tileXcur = Math.floor((player.x + TILE_SIZE / 2) / TILE_SIZE);
+  const nextX = clampX(player.x + dx);
+  if (!tryStepX(player, gameMap, nextX, dx)) {
+    const probeX = leadingEdgeX(nextX, dx);
+    const rowY = player.y + TILE_SIZE * CENTER_COLLISION_OFFSET;
+    const frame = gameMap.structureRectAt(probeX, rowY);
+    const slideY = frame === null ? 0 : cornerSlide(rowY, frame.top, frame.bottom, dy, speed);
+    if (slideY !== 0) tryStepY(player, gameMap, clampY(player.y + slideY), slideY, southAnchor);
+  }
+
+  const nextY = clampY(player.y + dy);
+  if (!tryStepY(player, gameMap, nextY, dy, southAnchor)) {
+    const columnX = player.x + TILE_SIZE * CENTER_COLLISION_OFFSET;
+    const probeY = nextY + TILE_SIZE * verticalAnchor(dy, southAnchor);
+    const frame = gameMap.structureRectAt(columnX, probeY);
+    const slideX = frame === null ? 0 : cornerSlide(columnX, frame.left, frame.right, dx, speed);
+    if (slideX !== 0) tryStepX(player, gameMap, clampX(player.x + slideX), slideX);
+  }
+}
+
+function leadingEdgeX(x: number, dx: number): number {
+  return x + TILE_SIZE * (dx >= 0 ? LEADING_EDGE_FRONT : LEADING_EDGE_BACK);
+}
+
+function verticalAnchor(dy: number, southAnchor: SouthCollisionAnchor): number {
   // Only the southward step moves its test point down the sprite: walking north
   // has the player's head, not their feet, leading into the wall, and testing
   // the soles there would let them back into tiles they can't stand on.
-  const yAnchor =
-    southAnchor === 'sole' && dy > 0 ? SOLE_COLLISION_OFFSET : CENTER_COLLISION_OFFSET;
-  const tileYnext = Math.floor((nextY + TILE_SIZE * yAnchor) / TILE_SIZE);
-  if (gameMap.isWalkable(tileXcur, tileYnext)) player.y = nextY;
+  return southAnchor === 'sole' && dy > 0 ? SOLE_COLLISION_OFFSET : CENTER_COLLISION_OFFSET;
+}
+
+function tryStepX(player: Player, gameMap: GameMap, nextX: number, dx: number): boolean {
+  const rowY = player.y + TILE_SIZE * CENTER_COLLISION_OFFSET;
+  if (!gameMap.isCrawlerWalkableAt(leadingEdgeX(nextX, dx), rowY)) return false;
+  player.x = nextX;
+  return true;
+}
+
+function tryStepY(
+  player: Player,
+  gameMap: GameMap,
+  nextY: number,
+  dy: number,
+  southAnchor: SouthCollisionAnchor,
+): boolean {
+  const columnX = player.x + TILE_SIZE * CENTER_COLLISION_OFFSET;
+  const probeY = nextY + TILE_SIZE * verticalAnchor(dy, southAnchor);
+  if (!gameMap.isCrawlerWalkableAt(columnX, probeY)) return false;
+  player.y = nextY;
+  return true;
+}
+
+/**
+ * How far to ease a crawler along the axis perpendicular to a step a structure
+ * frame refused, so it rounds the frame's nearer corner: zero when the probe is
+ * not near a corner, or when the crawler is pushing the other way.
+ */
+function cornerSlide(
+  probe: number,
+  frameStart: number,
+  frameEnd: number,
+  perpendicularInput: number,
+  speed: number,
+): number {
+  const toStart = probe - frameStart + CORNER_SLIDE_CLEARANCE_PX;
+  const toEnd = frameEnd - probe;
+  const slideReachPx = STRUCTURE_CORNER_SLIDE_TILES * TILE_SIZE;
+  const towardStart = toStart <= toEnd;
+  const distance = towardStart ? toStart : toEnd;
+  if (distance > slideReachPx) return 0;
+  const direction = towardStart ? -1 : 1;
+  if (perpendicularInput * direction < 0) return 0;
+  return direction * Math.min(Math.abs(speed), distance);
 }
 
 /**

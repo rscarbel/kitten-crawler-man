@@ -81,6 +81,14 @@ export function fennaInProgressPages(): NonEmpty<DialogLine> {
   return [FENNA.blueprintsInProgress];
 }
 
+/** Fenna's briefing when the party first brings her the blueprints; each cost is a `formatCost` string. */
+export function fennaShowBlueprintsPages(
+  sawCost: string,
+  ropeWalkCost: string,
+): NonEmpty<DialogLine> {
+  return [FENNA.blueprintsShown({ sawCost, ropeWalkCost })];
+}
+
 /** Fenna's shout once the second station stands upgraded. */
 export const FENNA_COMPLETION_BARK = FENNA.blueprintsComplete;
 

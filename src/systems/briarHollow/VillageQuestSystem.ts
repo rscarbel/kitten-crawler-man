@@ -43,7 +43,9 @@ import {
   partyXpSections,
   wheelFreeSpinRewardLine,
 } from '../../ui/questReward/rewardLines';
-import type { QuestRewardSpec } from '../../ui/questReward/types';
+import type { QuestRewardSection, QuestRewardSpec } from '../../ui/questReward/types';
+import { drawGlyph } from '../../ui/theme/glyphs';
+import { palette } from '../../ui/theme/tokens';
 import { drawCraftSkillIcon } from '../../ui/icons/craftSkillIcons';
 import type { QuestMarkerType } from '../MiniMapSystem';
 import {
@@ -94,6 +96,28 @@ export const BRIAR_HOLLOW_QUEST_COINS = 500;
 /** Pipkin's "something special": burgers and stew from the cookhouse. */
 export const BRIAR_HOLLOW_REWARD_BURGERS = 5;
 export const BRIAR_HOLLOW_REWARD_STEW = 3;
+/** The heading over the card saying the whole village now saves on entry. */
+export const VILLAGE_SAVE_REWARD_HEADING = 'NEW SAVE POINT';
+const VILLAGE_SAVE_REWARD_TITLE = 'Briar Hollow is a save point';
+const VILLAGE_SAVE_REWARD_HEADLINE = 'Walking into the village saves your game.';
+const VILLAGE_SAVE_REWARD_DETAIL =
+  'Any gate or doorway inside the palisade counts, unless a fight is on.';
+
+/** The quest-complete section saying that walking into the village now saves the game. */
+export const VILLAGE_SAVE_REWARD_SECTION: QuestRewardSection = {
+  kind: 'unlocks',
+  heading: VILLAGE_SAVE_REWARD_HEADING,
+  cards: [
+    {
+      renderIcon: (ctx, rect) => drawGlyph(ctx, 'save', rect, { color: palette.accent.base }),
+      title: VILLAGE_SAVE_REWARD_TITLE,
+      body: [
+        { text: VILLAGE_SAVE_REWARD_HEADLINE, emphasis: true },
+        { text: VILLAGE_SAVE_REWARD_DETAIL },
+      ],
+    },
+  ],
+};
 
 /** Wood held before the lumber yard sends the party on to the quarry. */
 export const WOOD_TARGET = 15;
@@ -881,6 +905,7 @@ export class VillageQuestSystem implements QuestLineProvider, TopicProvider {
           ],
         },
         travelUnlocksSection(['briar_hollow'], this.deps.travelUnlocks),
+        VILLAGE_SAVE_REWARD_SECTION,
       ],
     };
   }

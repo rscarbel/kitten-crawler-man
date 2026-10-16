@@ -113,6 +113,20 @@ export interface PlannedFootprint extends TileFootprint {
 
 export type ConstructionAction = 'build' | 'upgrade' | 'repair' | 'spikes';
 
+export type TrebuchetRef = Extract<StructureRef, { readonly kind: 'trebuchet' }>;
+
+/** What the faced wall's build key would do, for its world prompt. */
+export interface WallBuildPrompt {
+  readonly tier: PalisadeTier;
+  readonly cost: ResourceCost;
+  readonly repair: boolean;
+}
+
+/** What the repair key would do: mend a hurt structure, or failing that load a trebuchet. */
+export type RepairOrLoadTarget =
+  | { readonly action: 'repair'; readonly ref: StructureRef }
+  | { readonly action: 'load'; readonly ref: TrebuchetRef };
+
 export interface ConstructionJob {
   readonly action: ConstructionAction;
   readonly target: StructureRef | PlannedFootprint;
@@ -467,17 +481,35 @@ export class ConstructionSystem {
    */
   facedSegment(crawler: Crawler): string | null {
     const defense = this.deps.defense;
+    const faced = this.firstAlongFacing(
+      crawler,
+      (tileX, tileY) => defense.segmentAtTile(tileX, tileY)?.id ?? null,
+    );
+    if (faced !== null) return faced;
+    const nearest = defense.nearestInReach(crawler, WALL_REACH_TILES);
+    return nearest?.kind === 'segment' ? nearest.id : null;
+  }
+
+  /** The workable structure of any kind straight ahead of the crawler within wall reach, or null. */
+  facedStructure(crawler: Crawler): StructureRef | null {
+    const defense = this.deps.defense;
+    return this.firstAlongFacing(crawler, (tileX, tileY) => defense.workableAt(tileX, tileY));
+  }
+
+  private firstAlongFacing<T>(
+    crawler: Crawler,
+    probe: (tileX: number, tileY: number) => T | null,
+  ): T | null {
     const facing = FACING_STEP[snapFacing(crawler.facingX, crawler.facingY)];
     const centreX = crawler.x + TILE_SIZE / 2;
     const centreY = crawler.y + TILE_SIZE / 2;
     for (const reach of WALL_FACE_SAMPLES) {
       const tileX = Math.floor((centreX + facing.dx * reach * TILE_SIZE) / TILE_SIZE);
       const tileY = Math.floor((centreY + facing.dy * reach * TILE_SIZE) / TILE_SIZE);
-      const segment = defense.segmentAtTile(tileX, tileY);
-      if (segment !== null) return segment.id;
+      const hit = probe(tileX, tileY);
+      if (hit !== null) return hit;
     }
-    const nearest = defense.nearestInReach(crawler, WALL_REACH_TILES);
-    return nearest?.kind === 'segment' ? nearest.id : null;
+    return null;
   }
 
   /** Whether the crawler stands where a wall build/upgrade prompt applies at all. */
@@ -491,13 +523,14 @@ export class ConstructionSystem {
    * (a breach stands back up at the tier it fell from), otherwise raise it a
    * tier. Null when there is no segment in reach, or a whole fortified one.
    */
-  wallBuildPrompt(crawler: Crawler = this.active()): {
-    readonly tier: PalisadeTier;
-    readonly cost: ResourceCost;
-    readonly repair: boolean;
-  } | null {
+  wallBuildPrompt(crawler: Crawler = this.active()): WallBuildPrompt | null {
     const segment = this.facedSegment(crawler);
     if (segment === null) return null;
+    return this.wallBuildPromptFor(segment, crawler);
+  }
+
+  /** {@link wallBuildPrompt} for a segment the caller has already resolved. */
+  wallBuildPromptFor(segment: string, crawler: Crawler = this.active()): WallBuildPrompt | null {
     const ref: StructureRef = { kind: 'segment', id: segment };
     const repairCost = this.repairCostFor(ref, crawler);
     const current = this.deps.defense.segmentTier(segment);
@@ -518,6 +551,14 @@ export class ConstructionSystem {
   wallPromptTile(crawler: Crawler = this.active()): { x: number; y: number } | null {
     const segment = this.facedSegment(crawler);
     if (segment === null) return null;
+    return this.wallPromptTileFor(segment, crawler);
+  }
+
+  /** {@link wallPromptTile} for a segment the caller has already resolved. */
+  wallPromptTileFor(
+    segment: string,
+    crawler: Crawler = this.active(),
+  ): { x: number; y: number } | null {
     const tiles = this.deps.defense.footprintOf({ kind: 'segment', id: segment });
     return nearestTile(crawler.x + TILE_SIZE / 2, crawler.y + TILE_SIZE / 2, tiles);
   }
@@ -922,12 +963,21 @@ export class ConstructionSystem {
    * and with nothing in reach to mend, Quick Loads the nearest trebuchet.
    */
   repairOrLoad(reachTiles: number): void {
-    const hurt = this.nearestNeedingRepair(reachTiles);
-    if (hurt !== null) {
-      this.startRepair(hurt);
-      return;
-    }
-    this.quickLoad(reachTiles);
+    const target = this.repairOrLoadTarget(reachTiles);
+    if (target === null) return;
+    if (target.action === 'repair') this.startRepair(target.ref);
+    else this.loadTrebuchet(target.ref);
+  }
+
+  /** What {@link repairOrLoad} would act on for `crawler`, and which of the two it would do. */
+  repairOrLoadTarget(
+    reachTiles: number,
+    crawler: Crawler = this.active(),
+  ): RepairOrLoadTarget | null {
+    const hurt = this.nearestNeedingRepair(reachTiles, crawler);
+    if (hurt !== null) return { action: 'repair', ref: hurt };
+    const trebuchet = this.quickLoadTarget(reachTiles, crawler);
+    return trebuchet === null ? null : { action: 'load', ref: trebuchet };
   }
 
   /** The nearest structure in reach with something to repair, or null. */
@@ -938,9 +988,11 @@ export class ConstructionSystem {
 
   /** Quick Load: as much stone as fits into the nearest trebuchet in reach. */
   quickLoad(reachTiles: number): void {
-    const nearest = this.deps.defense.nearestInReach(this.active(), reachTiles);
-    const ref = nearest?.kind === 'trebuchet' ? nearest : this.nearestTrebuchet(reachTiles);
-    if (ref === null) return;
+    const ref = this.quickLoadTarget(reachTiles);
+    if (ref !== null) this.loadTrebuchet(ref);
+  }
+
+  private loadTrebuchet(ref: TrebuchetRef): void {
     if (this.hasUnlimitedAmmo(ref.key)) {
       this.deps.announce('It never runs dry.');
       return;
@@ -957,9 +1009,14 @@ export class ConstructionSystem {
     if (moved > 0) this.deps.announce(`Loaded ${moved} stone.`);
   }
 
-  private nearestTrebuchet(reachTiles: number): { kind: 'trebuchet'; key: string } | null {
-    const crawler = this.active();
-    let best: { kind: 'trebuchet'; key: string } | null = null;
+  /** The trebuchet {@link quickLoad} would load for `crawler`, or null. */
+  quickLoadTarget(reachTiles: number, crawler: Crawler = this.active()): TrebuchetRef | null {
+    const nearest = this.deps.defense.nearestInReach(crawler, reachTiles);
+    return nearest?.kind === 'trebuchet' ? nearest : this.nearestTrebuchet(reachTiles, crawler);
+  }
+
+  private nearestTrebuchet(reachTiles: number, crawler: Crawler): TrebuchetRef | null {
+    let best: TrebuchetRef | null = null;
     let bestDistance = reachTiles * TILE_SIZE;
     for (const record of this.deps.defense.trebuchets) {
       for (const tile of footprintTiles(trebuchetFootprint(record.x, record.y))) {

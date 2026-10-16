@@ -26,17 +26,14 @@ export function pushPlayerWithCollision(
   const ts = TILE_SIZE;
   if (dx !== 0) {
     const nextX = player.x + dx;
-    const tileXnext =
-      dx >= 0
-        ? Math.floor((nextX + ts * LEADING_EDGE_FRONT) / ts)
-        : Math.floor((nextX + ts * LEADING_EDGE_BACK) / ts);
-    const tileYcur = Math.floor((player.y + ts * CENTER_COLLISION_OFFSET) / ts);
-    if (map.isWalkable(tileXnext, tileYcur)) player.x = nextX;
+    const probeX = nextX + ts * (dx >= 0 ? LEADING_EDGE_FRONT : LEADING_EDGE_BACK);
+    const rowY = player.y + ts * CENTER_COLLISION_OFFSET;
+    if (map.isCrawlerWalkableAt(probeX, rowY)) player.x = nextX;
   }
   if (dy !== 0) {
     const nextY = player.y + dy;
-    const tileXcur = Math.floor((player.x + ts * CENTER_COLLISION_OFFSET) / ts);
-    const tileYnext = Math.floor((nextY + ts * verticalCollisionOffset(dy)) / ts);
-    if (map.isWalkable(tileXcur, tileYnext)) player.y = nextY;
+    const columnX = player.x + ts * CENTER_COLLISION_OFFSET;
+    const probeY = nextY + ts * verticalCollisionOffset(dy);
+    if (map.isCrawlerWalkableAt(columnX, probeY)) player.y = nextY;
   }
 }

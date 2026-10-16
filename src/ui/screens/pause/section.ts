@@ -72,6 +72,7 @@ export interface PauseGuides {
   readonly mongo?: () => void;
   readonly craft?: (id: CraftSkillId) => void;
   readonly processing?: () => void;
+  readonly dualHarvest?: () => void;
 }
 
 /** What the screen offers its sections beyond the game state. */

@@ -44,6 +44,7 @@ import { RESOURCING_EXPLAINER } from '../../ui/screens/dialogs/resourcingExplain
 import { CONSTRUCTION_EXPLAINER } from '../../ui/screens/dialogs/constructionExplainer';
 import { PROCESSING_EXPLAINER } from '../../ui/screens/dialogs/processingExplainer';
 import { mongoExplainerEntry } from '../../ui/screens/dialogs/mongoExplainer';
+import { DUAL_HARVEST_EXPLAINER } from '../../ui/screens/dialogs/dualHarvestExplainer';
 import { levelUpSurface } from '../../ui/screens/dialogs/levelUpDialog';
 import { rewardGrantedSurface } from '../../ui/screens/dialogs/rewardGrantedDialog';
 import { skillBookDialogSurface } from '../../ui/screens/dialogs/skillBookDialog';
@@ -231,6 +232,7 @@ export class MenusKit {
     this.craftExplainers.register('resourcing', RESOURCING_EXPLAINER);
     this.craftExplainers.register('construction', CONSTRUCTION_EXPLAINER);
     this.craftExplainers.register('processing', PROCESSING_EXPLAINER);
+    this.craftExplainers.register('dual_harvest', DUAL_HARVEST_EXPLAINER);
     this.craftExplainers.register(
       'mongo',
       mongoExplainerEntry(() => this.abilityManager.getLevel('mongo')),
@@ -246,6 +248,7 @@ export class MenusKit {
         mongo: () => void this.craftExplainers.open('mongo'),
         craft: (id) => void this.craftExplainers.open(id),
         processing: () => void this.craftExplainers.open('processing'),
+        dualHarvest: () => void this.craftExplainers.open('dual_harvest'),
       },
     });
     this.levelUpDialog.audio = audio;

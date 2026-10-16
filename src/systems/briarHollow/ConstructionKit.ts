@@ -38,6 +38,7 @@ import {
   byInputMode,
   keycapLabel,
   keyLabel,
+  type InputMode,
 } from '../../ui/core/inputMode';
 import { worldText } from '../../ui/world/worldText';
 import { interactionPromptsSuppressed } from '../../ui/InteractionPrompt';
@@ -79,6 +80,7 @@ import {
   type BuildOption,
   type PlannedFootprint,
   type PushableBody,
+  type TrebuchetRef,
 } from './ConstructionSystem';
 import {
   BELL_TOWER_REPAIR_COINS,
@@ -106,6 +108,13 @@ const NOTHING_NOTE_COOLDOWN_SECONDS = 3;
 const TREBUCHET_HINT_LIFT_TILES = 3.3;
 /** Vertical gap between the hint's two lines. */
 const TREBUCHET_HINT_LINE_GAP_PX = 13;
+/**
+ * Extra room the cheap "any trebuchet nearby" check allows past the reach.
+ * Quick Load's fallback measures from the crawler's corner to each tile's
+ * corner, which can sit up to a tile's diagonal half further than the
+ * footprint distance from the crawler's centre that this check measures.
+ */
+const TREBUCHET_NEARBY_SLACK_TILES = 1;
 const SECONDS_PER_UPDATE = 1 / UPDATES_PER_SECOND;
 /** A tile's centre, as a fraction of the tile from its corner. */
 const TILE_CENTRE = 0.5;
@@ -182,6 +191,12 @@ export interface ConstructionKitDeps {
   readonly worldHalted: () => boolean;
   /** Read live: false drops the costliest siege paint. Full detail when absent. */
   readonly fullDetail?: () => boolean;
+}
+
+/** Which trebuchet each of the trebuchet hint's two lines floats over, if any. */
+interface TrebuchetHint {
+  readonly menu: TrebuchetRef | null;
+  readonly keyLine: { readonly ref: TrebuchetRef; readonly action: 'repair' | 'load' } | null;
 }
 
 export class ConstructionKit {
@@ -451,8 +466,20 @@ export class ConstructionKit {
       return true;
     }
     if (!this.learned || !this.hasAnyConstructionUnlock) return false;
-    const target = this.defense.nearestInReach(this.active(), STRUCTURE_REACH_TILES);
-    return this.openStructureMenuOn(target);
+    return this.openStructureMenuOn(this.structureMenuTarget(this.active()));
+  }
+
+  /**
+   * What the Structure menu key opens for `crawler`: the structure straight
+   * ahead of it, or failing that the nearest structure in reach. Every prompt
+   * that names the key reads its target from here, so the prompt and the
+   * menu agree.
+   */
+  private structureMenuTarget(crawler: Crawler): StructureRef | null {
+    return (
+      this.construction.facedStructure(crawler) ??
+      this.defense.nearestInReach(crawler, STRUCTURE_REACH_TILES)
+    );
   }
 
   private openStructureMenuOn(target: StructureRef | null): boolean {
@@ -527,9 +554,12 @@ export class ConstructionKit {
     camY: number,
     active: Crawler,
   ): boolean {
-    if (!this.isWallPromptShowing(active)) return false;
-    const prompt = this.construction.wallBuildPrompt(active);
-    const tile = this.construction.wallPromptTile(active);
+    if (!this.learned || this.isMenuOpen || this.construction.job !== null) return false;
+    if (interactionPromptsSuppressed()) return false;
+    const segment = this.construction.facedSegment(active);
+    if (segment === null) return false;
+    const prompt = this.construction.wallBuildPromptFor(segment, active);
+    const tile = this.construction.wallPromptTileFor(segment, active);
     if (prompt === null || tile === null) return false;
     const sx = (tile.x + TILE_CENTRE) * TILE_SIZE - camX;
     const topY = tile.y * TILE_SIZE - camY - WALL_PROMPT_LIFT_TILES * TILE_SIZE;
@@ -545,18 +575,76 @@ export class ConstructionKit {
       style: 'hint',
       outline: true,
     });
-    const menuLine = byInputMode(mode, {
-      touch: 'Long-tap for menu',
-      pointer: `Press ${keyLabel('structureMenu')} for menu`,
-    });
-    worldText(ctx, menuLine, {
+    const menuTarget = this.hasAnyConstructionUnlock
+      ? wallMenuSegment(this.structureMenuTarget(active), segment)
+      : null;
+    if (menuTarget !== null && this.inputReaches(mode, menuTarget, active)) {
+      worldText(ctx, this.wallMenuLine(mode, menuTarget), {
+        x: sx,
+        y: topY + 2 * WALL_PROMPT_LINE_GAP_PX,
+        align: 'center',
+        style: 'hint',
+        outline: true,
+      });
+    }
+    return true;
+  }
+
+  /** Whether the Structure menu for `ref` would offer to add or repair spikes. */
+  private spikesOfferFor(ref: StructureRef): boolean {
+    const construction = this.construction;
+    const spikesWouldBeNew = construction.spikesAreNew(ref);
+    return (
+      construction.spikesAvailable() &&
+      this.defense.spikesNeedWork(ref) &&
+      (!spikesWouldBeNew || construction.isActionUnlocked('spikes'))
+    );
+  }
+
+  /**
+   * How to open the faced wall's Structure menu, naming spikes when that is
+   * what the menu would offer, since spikes are reachable only through it.
+   */
+  private wallMenuLine(mode: InputMode, ref: StructureRef): string {
+    const deed = !this.spikesOfferFor(ref)
+      ? 'open wall menu'
+      : this.construction.spikesAreNew(ref)
+        ? 'add spikes'
+        : 'repair spikes';
+    return actionPrompt(mode, { deed, action: 'structureMenu', gesture: 'longPress' });
+  }
+
+  /**
+   * One line over a wall that has nothing left to build or mend at a
+   * buildable tier, so the Structure menu (and the spikes inside it) stays
+   * discoverable once the full build prompt has nothing to say.
+   */
+  private renderWallMenuHint(
+    ctx: CanvasRenderingContext2D,
+    camX: number,
+    camY: number,
+    active: Crawler,
+    menuTarget: StructureRef | null,
+  ): void {
+    if (!this.learned || !this.hasAnyConstructionUnlock) return;
+    if (this.construction.job !== null) return;
+    const segment = this.construction.facedSegment(active);
+    const wallTarget = wallMenuSegment(menuTarget, segment);
+    if (segment === null || wallTarget === null) return;
+    const mode = activeInputMode();
+    if (!this.inputReaches(mode, wallTarget, active)) return;
+    if (this.construction.wallBuildPromptFor(segment, active) !== null) return;
+    const tile = this.construction.wallPromptTileFor(segment, active);
+    if (tile === null) return;
+    const sx = (tile.x + TILE_CENTRE) * TILE_SIZE - camX;
+    const topY = tile.y * TILE_SIZE - camY - WALL_PROMPT_LIFT_TILES * TILE_SIZE;
+    worldText(ctx, this.wallMenuLine(mode, wallTarget), {
       x: sx,
-      y: topY + 2 * WALL_PROMPT_LINE_GAP_PX,
+      y: topY,
       align: 'center',
       style: 'hint',
       outline: true,
     });
-    return true;
   }
 
   /** Long-press on a construction: its Structure menu. Only a structure under the finger claims the press. */
@@ -620,8 +708,7 @@ export class ConstructionKit {
     return null;
   }
 
-  private inReach(target: StructureRef): boolean {
-    const active = this.active();
+  private inReach(target: StructureRef, active: Crawler = this.active()): boolean {
     const centreX = active.x + TILE_SIZE / 2;
     const centreY = active.y + TILE_SIZE / 2;
     const reach = (STRUCTURE_REACH_TILES + REACH_TO_TILE_CENTRE_SLACK) * TILE_SIZE;
@@ -720,11 +807,7 @@ export class ConstructionKit {
       });
     }
     const spikesWouldBeNew = construction.spikesAreNew(target);
-    if (
-      construction.spikesAvailable() &&
-      defense.spikesNeedWork(target) &&
-      (!spikesWouldBeNew || construction.isActionUnlocked('spikes'))
-    ) {
+    if (this.spikesOfferFor(target)) {
       const cost = construction.spikesCostFor();
       options.push({
         label: spikesWouldBeNew ? 'Add Spikes' : 'Repair Spikes',
@@ -1000,57 +1083,142 @@ export class ConstructionKit {
     this.allies.renderAbove(ctx, camX, camY);
     this.trebuchets.renderAbove(ctx, camX, camY);
     this.construction.renderJob(ctx, camX, camY);
-    this.renderTrebuchetHint(ctx, camX, camY);
+    this.renderStructureHints(ctx, camX, camY);
     this.renderBellTowerRepairPrompt(ctx, camX, camY);
   }
 
   /**
-   * Whether {@link renderTrebuchetHint} would draw its own prompt for the
-   * trebuchet at `at` right now — the rule `VillageQuestGuide`'s load-with-
+   * Whether {@link renderTrebuchetHint} would draw either of its lines over
+   * the trebuchet at `at` right now — the rule `VillageQuestGuide`'s load-with-
    * stone caption yields to, so the two never stack over the same trebuchet.
    */
   isTrebuchetPromptShowing(at: { readonly x: number; readonly y: number }): boolean {
-    if (this.structureMenu.isOpen || this.deps.menus.constructionMenu.isOpen) return false;
-    if (interactionPromptsSuppressed()) return false;
-    const target = this.defense.nearestInReach(this.active(), STRUCTURE_REACH_TILES);
-    return target?.kind === 'trebuchet' && target.key === structureKey(at.x, at.y);
+    if (!this.structureHintsAllowed()) return false;
+    const active = this.active();
+    const hint = this.trebuchetHintTargets(active, this.structureMenuTarget(active));
+    const key = structureKey(at.x, at.y);
+    return hint.menu?.key === key || hint.keyLine?.ref.key === key;
   }
 
   /**
-   * Two lines above a trebuchet in reach, spelling out its own Structure menu
-   * and Quick Load, in the player's own bound keys or their device's gesture.
-   * Silent whenever a menu already has the screen, or the frame's prompts are
-   * suppressed outright — the same one answer every other floating prompt
-   * honors.
+   * Whether floating structure hints may draw at all: the active crawler
+   * knows Construction, no menu has the screen and prompts are not suppressed.
    */
-  private renderTrebuchetHint(ctx: CanvasRenderingContext2D, camX: number, camY: number): void {
-    if (this.structureMenu.isOpen || this.deps.menus.constructionMenu.isOpen) return;
-    if (interactionPromptsSuppressed()) return;
-    const target = this.defense.nearestInReach(this.active(), STRUCTURE_REACH_TILES);
-    if (target?.kind !== 'trebuchet') return;
-    const record = this.defense.trebuchet(target.key);
-    if (record === null) return;
-    const footprint = trebuchetFootprint(record.x, record.y);
-    const x = (footprint.x + footprint.w / 2) * TILE_SIZE - camX;
-    const y = footprint.y * TILE_SIZE - camY - TREBUCHET_HINT_LIFT_TILES * TILE_SIZE;
+  private structureHintsAllowed(): boolean {
+    return this.learned && !this.isMenuOpen && !interactionPromptsSuppressed();
+  }
+
+  /**
+   * The trebuchet hint and the wall menu hint, sharing one resolution of the
+   * Structure menu target, which can walk the whole palisade.
+   */
+  private renderStructureHints(ctx: CanvasRenderingContext2D, camX: number, camY: number): void {
+    if (!this.structureHintsAllowed()) return;
+    const active = this.active();
+    const menuTarget = this.structureMenuTarget(active);
+    this.renderTrebuchetHint(ctx, camX, camY, this.trebuchetHintTargets(active, menuTarget));
+    this.renderWallMenuHint(ctx, camX, camY, active, menuTarget);
+  }
+
+  /**
+   * The trebuchet the Structure menu key would open, and the trebuchet the
+   * repair key (or on touch, the double tap) would act on with what it would
+   * do, each null when that input would act on something else.
+   */
+  private trebuchetHintTargets(active: Crawler, menuTarget: StructureRef | null): TrebuchetHint {
     const mode = activeInputMode();
-    const menuLine = actionPrompt(mode, {
-      deed: 'open menu',
-      action: 'structureMenu',
-      gesture: 'longPress',
-    });
-    const needsRepair = this.construction.repairCostFor(target) !== null;
-    const reloadLine = byInputMode(mode, {
-      touch: 'Double tap to reload',
-      pointer: `Press ${keyLabel('quickLoad')} to ${needsRepair ? 'repair' : 'reload'}`,
-    });
-    worldText(ctx, menuLine, { x, y, align: 'center', style: 'label' });
-    worldText(ctx, reloadLine, {
-      x,
-      y: y + TREBUCHET_HINT_LINE_GAP_PX,
-      align: 'center',
-      style: 'label',
-    });
+    const menu =
+      this.hasAnyConstructionUnlock &&
+      menuTarget?.kind === 'trebuchet' &&
+      this.inputReaches(mode, menuTarget, active)
+        ? menuTarget
+        : null;
+    if (!this.anyTrebuchetNearby(active)) return { menu, keyLine: null };
+    if (mode === 'touch') {
+      const loaded = this.construction.quickLoadTarget(STRUCTURE_REACH_TILES, active);
+      if (loaded === null || !this.inReach(loaded, active)) return { menu, keyLine: null };
+      return { menu, keyLine: { ref: loaded, action: 'load' } };
+    }
+    const target = this.construction.repairOrLoadTarget(STRUCTURE_REACH_TILES, active);
+    if (target?.ref.kind !== 'trebuchet') return { menu, keyLine: null };
+    return { menu, keyLine: { ref: target.ref, action: target.action } };
+  }
+
+  /**
+   * Whether the input a hint names would act on `target`. A key acts on
+   * whatever the reach rules resolve, but a gesture lands on the structure
+   * under the finger and is refused unless {@link inReach} accepts it, which
+   * measures to tile centres and so can reject a corner the reach rules took.
+   */
+  private inputReaches(mode: InputMode, target: StructureRef, active: Crawler): boolean {
+    return mode !== 'touch' || this.inReach(target, active);
+  }
+
+  /** A cheap bound, checked before any perimeter walk: whether any trebuchet could be in reach at all. */
+  private anyTrebuchetNearby(active: Crawler): boolean {
+    const centreX = active.x + TILE_SIZE / 2;
+    const centreY = active.y + TILE_SIZE / 2;
+    const limit = (STRUCTURE_REACH_TILES + TREBUCHET_NEARBY_SLACK_TILES) * TILE_SIZE;
+    return this.defense.trebuchets.some(
+      (record) =>
+        distanceToFootprintPx(centreX, centreY, trebuchetFootprint(record.x, record.y)) <= limit,
+    );
+  }
+
+  /**
+   * Above a trebuchet in reach, its own Structure menu and its repair-key
+   * line, in the player's own bound keys or their device's gesture. Each line
+   * shows only over the trebuchet its input would act on, so the two can part
+   * when a key would reach a neighbouring wall or snare instead.
+   */
+  private renderTrebuchetHint(
+    ctx: CanvasRenderingContext2D,
+    camX: number,
+    camY: number,
+    hint: TrebuchetHint,
+  ): void {
+    const mode = activeInputMode();
+    if (hint.menu !== null) {
+      const anchor = this.trebuchetHintAnchor(hint.menu.key, camX, camY);
+      if (anchor !== null) {
+        const menuLine = actionPrompt(mode, {
+          deed: 'open menu',
+          action: 'structureMenu',
+          gesture: 'longPress',
+        });
+        worldText(ctx, menuLine, { x: anchor.x, y: anchor.y, align: 'center', style: 'label' });
+      }
+    }
+    if (hint.keyLine !== null) {
+      const anchor = this.trebuchetHintAnchor(hint.keyLine.ref.key, camX, camY);
+      if (anchor !== null) {
+        const verb = hint.keyLine.action === 'repair' ? 'repair' : 'reload';
+        const keyLine = byInputMode(mode, {
+          touch: 'Double tap to reload',
+          pointer: `Press ${keyLabel('quickLoad')} to ${verb}`,
+        });
+        worldText(ctx, keyLine, {
+          x: anchor.x,
+          y: anchor.y + TREBUCHET_HINT_LINE_GAP_PX,
+          align: 'center',
+          style: 'label',
+        });
+      }
+    }
+  }
+
+  private trebuchetHintAnchor(
+    key: string,
+    camX: number,
+    camY: number,
+  ): { x: number; y: number } | null {
+    const record = this.defense.trebuchet(key);
+    if (record === null) return null;
+    const footprint = trebuchetFootprint(record.x, record.y);
+    return {
+      x: (footprint.x + footprint.w / 2) * TILE_SIZE - camX,
+      y: footprint.y * TILE_SIZE - camY - TREBUCHET_HINT_LIFT_TILES * TILE_SIZE,
+    };
   }
 
   /**
@@ -1290,4 +1458,17 @@ export function mobPushBody(mob: Mob, roster: MobRoster): PushableBody {
       roster.grid.move(mob, oldX, oldY);
     },
   };
+}
+
+/**
+ * The Structure menu key's target when it is the wall segment the wall
+ * prompts float over; null when the key would open something else, so a
+ * wall line never promises another structure's menu.
+ */
+function wallMenuSegment(
+  menuTarget: StructureRef | null,
+  facedSegment: string | null,
+): StructureRef | null {
+  if (menuTarget?.kind !== 'segment' || menuTarget.id !== facedSegment) return null;
+  return menuTarget;
 }

@@ -40,6 +40,20 @@ export interface SoundCaption {
   readonly when: 'always' | 'offscreen';
 }
 
+/**
+ * How a placed sound is heard when its source is off the screen: from
+ * further away than its on-screen hearing range, but quieter and with its
+ * top end rolled off, so a thing out of sight sounds out of sight.
+ */
+export interface DistantTreatment {
+  /** How far away it is still heard while off screen, in tiles. */
+  readonly hearingTiles: number;
+  /** The off-screen level, as a share of what distance alone would give. */
+  readonly gainScale: number;
+  /** The low-pass cut-off it plays through while off screen. */
+  readonly lowpassHz: number;
+}
+
 export interface SoundTraits {
   /** At most this many copies of the id sound at once; a new one stops the oldest. */
   readonly maxVoices: number;
@@ -54,6 +68,12 @@ export interface SoundTraits {
   readonly duckMusic: MusicDuckTrait | null;
   /** How far away a sound placed in the world with `playAt` is heard, in tiles. */
   readonly hearingTiles: number;
+  /**
+   * How a `playAt` sound whose source is outside the drawn view is heard
+   * instead, or null to hear it the same on screen and off. With no view
+   * published every source counts as off screen.
+   */
+  readonly distantWhenOffscreen: DistantTreatment | null;
   /** What the caption lane says when the sound plays, or null for nothing. */
   readonly caption: SoundCaption | null;
 }
@@ -66,6 +86,7 @@ export const DEFAULT_SOUND_TRAITS = {
   volumeJitter: 0,
   duckMusic: null,
   hearingTiles: 14,
+  distantWhenOffscreen: null,
   caption: null,
 } as const satisfies SoundTraits;
 
@@ -125,6 +146,22 @@ const FOOTSTEPS = {
   maxVoices: 2,
   priority: 'low',
   ...VARIED,
+} as const satisfies Partial<SoundTraits>;
+
+/** Siege engines are loud enough to carry across the village, but muffled by it. */
+const SIEGE_ENGINE_DISTANT = {
+  hearingTiles: 40,
+  gainScale: 0.35,
+  lowpassHz: 900,
+} as const satisfies DistantTreatment;
+
+/**
+ * Heard across a whole desktop view while on screen, so a trebuchet at the
+ * far edge still sounds.
+ */
+const SIEGE_ENGINE = {
+  hearingTiles: 24,
+  distantWhenOffscreen: SIEGE_ENGINE_DISTANT,
 } as const satisfies Partial<SoundTraits>;
 
 const COINS = {
@@ -189,6 +226,22 @@ const FOOTSTEP_IDS = [
 
 const COIN_IDS = ['coin_land_tick', 'coin_pouch'] as const satisfies readonly SoundId[];
 
+/** A trebuchet's throw, its boulder's flight and landing, and the cloud an infernal one leaves. */
+const SIEGE_ENGINE_IDS = [
+  'trebuchet_fire_1',
+  'trebuchet_fire_2',
+  'boulder_fire_whoosh',
+  'boulder_impact_1',
+  'boulder_impact_2',
+  'boulder_impact_3',
+  'boulder_impact_4',
+  'miasma_hiss',
+] as const satisfies readonly SoundId[];
+
+function isImpactId(id: SoundId): boolean {
+  return IMPACT_IDS.some((impact) => impact === id);
+}
+
 /**
  * Fanfares that announce a moment. Each ducks the music under it, and none
  * varies: a sting is recognised by being the same every time.
@@ -210,6 +263,9 @@ const ID_TRAITS: Readonly<Partial<Record<SoundId, Partial<SoundTraits>>>> = {
   ...Object.fromEntries(FOOTSTEP_IDS.map((id) => [id, FOOTSTEPS])),
   ...Object.fromEntries(COIN_IDS.map((id) => [id, COINS])),
   ...Object.fromEntries(STINGER_IDS.map((id) => [id, STINGER])),
+  ...Object.fromEntries(
+    SIEGE_ENGINE_IDS.map((id) => [id, { ...(isImpactId(id) ? VARIED : {}), ...SIEGE_ENGINE }]),
+  ),
 };
 
 function always(text: string): SoundCaption {

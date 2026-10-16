@@ -38,6 +38,8 @@ import { NodeRegrowth, type StandingBody } from './NodeRegrowth';
 import { ResourceHud } from './ResourceHud';
 import type { TopBandEntry } from '../../ui/hud/topBand';
 import { ThrallSystem } from './ThrallSystem';
+import { DualHarvestHint } from './dualHarvestHint';
+import type { PartyCraftsState } from '../../core/partyCrafts';
 import { thrallCooldownSecondsLeft } from '../../core/thrallCooldowns';
 import { worldPalette } from '../../ui/theme/worldInk';
 
@@ -90,6 +92,10 @@ export interface GatheringKitDeps {
   /** Whether `crawler`'s tools currently auto-summon thralls when a harvest starts. */
   readonly isAutoSummonEnabled: (crawler: CrawlerKind) => boolean;
   readonly setAutoSummonEnabled: (crawler: CrawlerKind, enabled: boolean) => void;
+  /** Where the dual-harvest hint records that it is spent. */
+  readonly crafts: Pick<PartyCraftsState, 'dualHarvestHintDone'>;
+  /** Shows the explainer about harvesting with both crawlers at once. */
+  readonly openDualHarvestHint: () => void;
 }
 
 /** What regrowth asks of the village's constructions: is a tile built on, or claimed for a build. */
@@ -110,6 +116,7 @@ export class GatheringKit {
   /** Reused every frame so the merged entity list costs no allocation. */
   private readonly entityBuffer: TownPropRenderable[] = [];
   private structureClaims: StructureClaims | null = null;
+  private readonly dualHarvestHint: DualHarvestHint;
 
   constructor(private readonly deps: GatheringKitDeps) {
     const noteActivity = (): void => this.hud.noteActivity();
@@ -164,6 +171,13 @@ export class GatheringKit {
       noteActivity,
       onTreeStruck,
       harvestedNodeFor: (crawler) => this.harvest.nodeFor(crawler),
+    });
+    this.dualHarvestHint = new DualHarvestHint({
+      harvest: this.harvest,
+      human: deps.human,
+      cat: deps.cat,
+      crafts: deps.crafts,
+      open: deps.openDualHarvestHint,
     });
   }
 
@@ -238,6 +252,7 @@ export class GatheringKit {
     this.regrowth.update();
     this.effects.update();
     this.hud.update(this.hudFrame(ctx.active));
+    this.dualHarvestHint.update(ctx.active, menuOpen);
   }
 
   /** Grove stumps waiting on their saplings, under every body. */

@@ -54,6 +54,7 @@ import {
 import { forwardQuestItemEvictions } from '../src/systems/questItemEvictions';
 import {
   verifyFennaDecline,
+  verifyFennaShowBlueprints,
   verifyFennaJournal,
   verifyFennaMarker,
   verifyFennaOffer,
@@ -103,6 +104,14 @@ function verifyPhaseOrder(): void {
   check(blueprintsPhaseAtLeast('build_fence', 'ask_merrit'), 'build_fence is at least ask_merrit');
   check(!blueprintsPhaseAtLeast('ask_merrit', 'build_fence'), 'ask_merrit is not yet build_fence');
   check(blueprintsPhaseAtLeast('complete', 'complete'), 'a phase is at least itself');
+  check(
+    blueprintsPhaseAtLeast('build_stations', 'show_fenna'),
+    'build_stations is at least show_fenna',
+  );
+  check(
+    !blueprintsPhaseAtLeast('midge_delivered', 'show_fenna'),
+    'midge_delivered is not yet show_fenna',
+  );
   check(!hasAcceptedBlueprintsQuest('unoffered'), 'unoffered is not accepted');
   check(!hasAcceptedBlueprintsQuest('declined'), 'declined is not accepted');
   check(hasAcceptedBlueprintsQuest('ask_wendell'), 'ask_wendell is accepted');
@@ -457,6 +466,7 @@ const SECTIONS: ReadonlyArray<{ readonly name: string; readonly run: () => void 
   { name: "Fenna's marker", run: () => verifyFennaMarker(check) },
   { name: "Fenna's offer", run: () => verifyFennaOffer(check) },
   { name: "Fenna's decline and re-offer", run: () => verifyFennaDecline(check) },
+  { name: "Fenna's blueprints briefing", run: () => verifyFennaShowBlueprints(check) },
   { name: "Fenna's journal row and minimap pip", run: () => verifyFennaJournal(check) },
   { name: "Wendell's marker", run: () => verifyWendellMarker(check) },
   { name: 'Fence sections', run: () => verifyFenceSections(check) },

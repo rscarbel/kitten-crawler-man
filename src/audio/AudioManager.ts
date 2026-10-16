@@ -22,6 +22,7 @@ import {
 } from './sounds';
 import { CORE_SFX_IDS } from './sfxGroups';
 import { TILE_SIZE } from '../core/constants';
+import { isWorldPointInView } from '../core/visibleWorldView';
 import { SOUND_PRIORITY_RANK, soundTraits, type SoundTraits } from './soundTraits';
 import { AudioScope, KEYBOARD_HERO_SONG, type ScopeEngine, type ScopeHooks } from './AudioScope';
 import { LIMITER, sliderGain, VOLUME_RAMP_MS, type OneShotBus } from './buses';
@@ -149,6 +150,8 @@ const PLACED_PAN_SPREAD_TILES = 8;
 export const PLACED_MAX_PAN = 0.7;
 /** Below this a placed sound is not worth a voice. */
 const PLACED_AUDIBLE_GAIN = 0.02;
+/** A gentle, resonance-free roll-off for a sound heard from out of sight. */
+const DISTANT_LOWPASS_Q = 0.7;
 const TILE_CENTRE_FRACTION = 0.5;
 
 /**
@@ -245,6 +248,8 @@ export interface PlayOptions {
   fadeOut?: ScheduledFadeOut;
   /** Which bus it plays on. Default `sfx`; menu taps use `ui`. */
   bus?: OneShotBus;
+  /** Plays through a low-pass filter at this cut-off. Default: unfiltered. */
+  lowpassHz?: number;
 }
 
 /** A fade to silence scheduled from a sound's own start, in seconds of the recording. */
@@ -269,6 +274,14 @@ export interface AudioManagerOptions {
  */
 export type MusicPauseReason =
   'menu' | 'background' | 'slots_big_win' | 'wheel' | 'nothing' | 'siege_victory';
+
+/**
+ * The pause reasons that also freeze the music where it is, once the bus has
+ * faded. These are the moments nothing in the game happens, so a playlist
+ * must not reach the end of its song unheard and move on. The other reasons
+ * are short, timed effects that systems schedule against, and only mute.
+ */
+const MUSIC_HOLD_REASONS: ReadonlySet<MusicPauseReason> = new Set(['menu', 'background']);
 
 /**
  * Why the sound-effects bus is held silent. A set, like the pause reasons, so
@@ -306,6 +319,8 @@ interface MusicStreamSlot {
   onPlaying: (() => void) | null;
   /** Whether the browser's autoplay policy refused the element's last play(). */
   refusedPlay: boolean;
+  /** Paused on purpose by a music hold; nothing but the hold's release may play it. */
+  held: boolean;
 }
 
 /**
@@ -655,6 +670,7 @@ export class AudioManager {
   private retryRefusedStreams(): void {
     for (const slot of this.musicStreamSlots) {
       if (!slot.refusedPlay || slot.state !== 'playing' || slot.awaitingStart) continue;
+      if (slot.held) continue;
       if (!slot.el.paused || slot.el.ended) continue;
       this.playStream(slot.el, slot, ignoreRetryFailure);
     }
@@ -717,7 +733,7 @@ export class AudioManager {
   private restartStalledStreams(): void {
     for (const slot of this.musicStreamSlots) {
       if (slot.state !== 'playing' || slot.awaitingStart || !slot.el.paused) continue;
-      if (slot.el.ended) continue;
+      if (slot.el.ended || slot.held) continue;
       this.playStream(slot.el, slot, ignoreRetryFailure);
     }
     for (const pooled of this.ambientStreamPool) {
@@ -951,9 +967,16 @@ export class AudioManager {
     if (reach === 'panOnly') return { ...opts, pan: placedPan(dxTiles) };
     const dyTiles = (worldY - listener.y) / TILE_SIZE;
     const distanceTiles = Math.hypot(dxTiles, dyTiles);
-    const volume = (opts.volume ?? 1) * placedGain(distanceTiles, soundTraits(id).hearingTiles);
+    const traits = soundTraits(id);
+    const distant = traits.distantWhenOffscreen;
+    const heardAsDistant = distant !== null && !isWorldPointInView(worldX, worldY, 0);
+    const level = heardAsDistant
+      ? placedGain(distanceTiles, distant.hearingTiles) * distant.gainScale
+      : placedGain(distanceTiles, traits.hearingTiles);
+    const volume = (opts.volume ?? 1) * level;
     if (volume < PLACED_AUDIBLE_GAIN) return null;
-    return { ...opts, volume, pan: placedPan(dxTiles) };
+    const placed = { ...opts, volume, pan: placedPan(dxTiles) };
+    return heardAsDistant ? { ...placed, lowpassHz: distant.lowpassHz } : placed;
   }
 
   private request(id: SoundId, opts: PlayOptions, source: WorldPoint | null): void {
@@ -1054,6 +1077,15 @@ export class AudioManager {
     stopVoice(this.ctx, live.voice, VOICE_STEAL_FADE_MS, { onStopped: live.release });
   }
 
+  private lowpassInto(destination: AudioNode, cutoffHz: number): BiquadFilterNode {
+    const filter = this.ctx.createBiquadFilter();
+    filter.type = 'lowpass';
+    filter.frequency.value = cutoffHz;
+    filter.Q.value = DISTANT_LOWPASS_Q;
+    filter.connect(destination);
+    return filter;
+  }
+
   /**
    * Starts `buffer` now on its bus, varied and limited by the id's traits;
    * returns the audio-clock time it started at, or null when it was refused a voice.
@@ -1085,7 +1117,9 @@ export class AudioManager {
     const gain = this.ctx.createGain();
     gain.gain.value = level;
     source.connect(gain);
-    gain.connect(panner ?? bus);
+    const { lowpassHz } = opts;
+    const filter = lowpassHz === undefined ? null : this.lowpassInto(panner ?? bus, lowpassHz);
+    gain.connect(filter ?? panner ?? bus);
 
     const voice: BufferVoice = { kind: 'buffer', source, gain };
     const live: LiveVoice = {
@@ -1096,6 +1130,7 @@ export class AudioManager {
       stopping: false,
       release: () => {
         gain.disconnect();
+        filter?.disconnect();
         panner?.disconnect();
         const index = this.liveVoices.indexOf(live);
         if (index !== -1) this.liveVoices.splice(index, 1);
@@ -1230,6 +1265,8 @@ export class AudioManager {
         this.unstoppedMusicTracks.delete(tracked);
         handle.stop(fadeMs, shape);
       },
+      hold: () => handle.hold(),
+      release: () => handle.release(),
     };
     this.unstoppedMusicTracks.add(tracked);
     return tracked;
@@ -1257,6 +1294,7 @@ export class AudioManager {
   ): MusicTrackHandle {
     let started: MusicTrackHandle | null = null;
     let stopped = false;
+    let heldBeforeStart = false;
     void this.preload([request.id]).then(() => {
       if (stopped) return;
       const decoded = this.buffers.get(request.id);
@@ -1264,13 +1302,23 @@ export class AudioManager {
         request.onUnavailable();
         return;
       }
-      started = this.startDecodedMusicTrack(request, decoded, trimGain);
+      const handle = this.startDecodedMusicTrack(request, decoded, trimGain);
+      if (heldBeforeStart) handle.hold();
+      started = handle;
     });
     return {
       positionS: () => started?.positionS() ?? request.offsetS,
       stop: (fadeMs, shape) => {
         stopped = true;
         started?.stop(fadeMs, shape);
+      },
+      hold: () => {
+        heldBeforeStart = true;
+        started?.hold();
+      },
+      release: () => {
+        heldBeforeStart = false;
+        started?.release();
       },
     };
   }
@@ -1280,6 +1328,65 @@ export class AudioManager {
     buffer: AudioBuffer,
     trimGain: number,
   ): MusicTrackHandle {
+    const loops = request.loop !== 'once';
+    const loopStartS = request.loop === 'loopPoint' ? (musicLoopStartS(request.id) ?? 0) : 0;
+    let stopped = false;
+    let heldAtS: number | null = null;
+    const startSegment = (offsetS: number): { voice: BufferVoice; startedAtS: number } => {
+      const voice = this.startDecodedMusicSegment(request, buffer, trimGain, offsetS, () => {
+        if (!stopped) request.onEnded();
+      });
+      return { voice, startedAtS: this.ctx.currentTime };
+    };
+    let segment = startSegment(request.offsetS);
+    let segmentOffsetS = request.offsetS;
+    // A gesture starts a waiting track before its resume() settles, and that
+    // resume can be refused, so the track counts as sounding only once the
+    // context really renders.
+    this.onRunning(() => {
+      if (!stopped) request.onPlaying();
+    });
+    const positionS = (): number => {
+      if (heldAtS !== null) return heldAtS;
+      const elapsedS = segmentOffsetS + this.ctx.currentTime - segment.startedAtS;
+      return loops ? loopedPositionS(elapsedS, buffer.duration, loopStartS) : elapsedS;
+    };
+    return {
+      positionS,
+      stop: (fadeMs, shape) => {
+        if (stopped) return;
+        stopped = true;
+        if (heldAtS !== null) return;
+        stopVoice(this.ctx, segment.voice, fadeMs, { shape });
+      },
+      hold: () => {
+        if (stopped || heldAtS !== null) return;
+        heldAtS = positionS();
+        stopVoice(this.ctx, segment.voice, MIN_STOP_FADE_MS);
+      },
+      release: () => {
+        if (heldAtS === null) return;
+        const resumeAtS = heldAtS;
+        heldAtS = null;
+        if (stopped) return;
+        segmentOffsetS = resumeAtS;
+        segment = startSegment(resumeAtS);
+      },
+    };
+  }
+
+  /**
+   * One run of a decoded song from `offsetS`, on a gain of its own fading in
+   * to `trimGain`. A held song is restarted as a fresh run, since a buffer
+   * source cannot be paused.
+   */
+  private startDecodedMusicSegment(
+    request: MusicTrackRequest,
+    buffer: AudioBuffer,
+    trimGain: number,
+    offsetS: number,
+    onEnded: () => void,
+  ): BufferVoice {
     const gain = this.ctx.createGain();
     gain.gain.value = 0;
     this.fadeInMusicGain(gain, request.fadeInMs, trimGain);
@@ -1288,37 +1395,17 @@ export class AudioManager {
     const source = this.ctx.createBufferSource();
     source.buffer = buffer;
     source.loop = request.loop !== 'once';
-    const loopStartS = request.loop === 'loopPoint' ? (musicLoopStartS(request.id) ?? 0) : 0;
     if (request.loop === 'loopPoint') {
-      source.loopStart = loopStartS;
+      source.loopStart = musicLoopStartS(request.id) ?? 0;
       source.loopEnd = buffer.duration;
     }
     source.connect(gain);
-    let stopped = false;
     source.onended = () => {
       gain.disconnect();
-      if (!stopped) request.onEnded();
+      onEnded();
     };
-    const startedAtS = this.ctx.currentTime;
-    source.start(0, request.offsetS);
-    // A gesture starts a waiting track before its resume() settles, and that
-    // resume can be refused, so the track counts as sounding only once the
-    // context really renders.
-    this.onRunning(() => {
-      if (!stopped) request.onPlaying();
-    });
-    const voice: BufferVoice = { kind: 'buffer', source, gain };
-    return {
-      positionS: () => {
-        const elapsedS = request.offsetS + this.ctx.currentTime - startedAtS;
-        return source.loop ? loopedPositionS(elapsedS, buffer.duration, loopStartS) : elapsedS;
-      },
-      stop: (fadeMs, shape) => {
-        if (stopped) return;
-        stopped = true;
-        stopVoice(this.ctx, voice, fadeMs, { shape });
-      },
-    };
+    source.start(0, offsetS);
+    return { kind: 'buffer', source, gain };
   }
 
   /**
@@ -1353,6 +1440,7 @@ export class AudioManager {
         state: 'idle',
         awaitingStart: false,
         refusedPlay: false,
+        held: false,
         onPlaying: null,
       };
       el.addEventListener('playing', () => slot.onPlaying?.());
@@ -1378,8 +1466,10 @@ export class AudioManager {
     const { slot, stolen } = this.acquireMusicSlot();
     const gen = ++slot.gen;
     slot.state = 'playing';
+    slot.held = false;
     const { el, gain } = slot;
     let stopped = false;
+    let begun = false;
     const ownsSlot = (): boolean => slot.gen === gen;
     slot.onPlaying = () => {
       if (ownsSlot() && !stopped) request.onPlaying();
@@ -1415,7 +1505,9 @@ export class AudioManager {
             : null;
       el.src = SOUND_MANIFEST[request.id];
       el.currentTime = request.offsetS;
+      begun = true;
       this.fadeInMusicGain(gain, request.fadeInMs, trimGain);
+      if (slot.held) return;
       this.playStream(el, slot, (err) => {
         console.warn(`[AudioManager] Failed to play streaming music "${request.id}":`, err);
       });
@@ -1444,10 +1536,27 @@ export class AudioManager {
 
     return {
       positionS: () => (ownsSlot() && !slot.awaitingStart ? el.currentTime : request.offsetS),
+      hold: () => {
+        if (!ownsSlot() || stopped) return;
+        slot.held = true;
+        if (begun) el.pause();
+      },
+      release: () => {
+        if (!ownsSlot() || !slot.held) return;
+        slot.held = false;
+        if (stopped || !begun || el.ended) return;
+        // A suspended graph would let the element run on unheard, maybe to its
+        // end; restartStalledStreams wakes it once the context really runs.
+        if (this.ctx.state !== 'running') return;
+        this.playStream(el, slot, (err) => {
+          console.warn(`[AudioManager] Failed to resume streaming music "${request.id}":`, err);
+        });
+      },
       stop: (fadeMs, shape) => {
         if (stopped) return;
         stopped = true;
         if (!ownsSlot()) return;
+        slot.held = false;
         slot.state = 'fading';
         if (slot.awaitingStart) return;
         stopVoice(this.ctx, { kind: 'stream', el, gain }, fadeMs, {
@@ -1644,7 +1753,9 @@ export class AudioManager {
   /** Fade music out quickly (e.g. when a menu opens). Idempotent per reason. */
   pauseMusic(reason: MusicPauseReason = 'menu', fadeMs = MENU_MUSIC_FADE_MS): void {
     const wasSilenced = this.musicPauseReasons.size > 0;
+    const wasHolding = this.anyMusicHoldReason();
     this.musicPauseReasons.add(reason);
+    if (!wasHolding && MUSIC_HOLD_REASONS.has(reason)) this.scheduleMusicHold(fadeMs);
     if (wasSilenced) return;
     this.rampBus(this.musicGain, 0, fadeMs);
   }
@@ -1655,8 +1766,38 @@ export class AudioManager {
    */
   resumeMusic(reason: MusicPauseReason = 'menu', fadeMs = MENU_MUSIC_FADE_MS): void {
     this.musicPauseReasons.delete(reason);
+    if (!this.anyMusicHoldReason()) this.releaseMusicHold();
     if (this.musicPauseReasons.size > 0) return;
     this.rampBus(this.musicGain, this.openMusicBusLevel, fadeMs);
+  }
+
+  private anyMusicHoldReason(): boolean {
+    for (const reason of this.musicPauseReasons) {
+      if (MUSIC_HOLD_REASONS.has(reason)) return true;
+    }
+    return false;
+  }
+
+  /** Bumped whenever a hold is scheduled or let go, so a hold timer outrun by a resume does nothing. */
+  private musicHoldGen = 0;
+  private musicHoldApplied = false;
+
+  /** Holds the music once the bus has faded to silence, so the hold itself is never heard. */
+  private scheduleMusicHold(fadeMs: number): void {
+    const gen = ++this.musicHoldGen;
+    window.setTimeout(() => {
+      if (gen !== this.musicHoldGen) return;
+      this.musicHoldApplied = true;
+      this.music.hold();
+    }, fadeMs);
+  }
+
+  /** Lets the held music carry on before the bus comes back up, so it restarts under the fade-in. */
+  private releaseMusicHold(): void {
+    this.musicHoldGen++;
+    if (!this.musicHoldApplied) return;
+    this.musicHoldApplied = false;
+    this.music.releaseHold();
   }
 
   /**

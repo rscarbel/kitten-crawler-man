@@ -9,7 +9,7 @@ import {
   buildContractWorld,
   releaseContractAutoPinOnEnd,
 } from '../systems/constructionContracts/contractQuest';
-import type { CitizenSpeechStyle } from '../dialog/speakers';
+import { citizenVoiceSounds, type CitizenSpeechStyle } from '../dialog/speakers';
 import type { DialogLine } from '../dialog/line';
 import { forwardQuestItemEvictions } from '../systems/questItemEvictions';
 import { forwardEquipmentChanges } from '../systems/equipmentChangeEvents';
@@ -39,6 +39,7 @@ import { requestGroundSheets } from '../map/ground/runtimeGroundSheets';
 import { requestEnvironmentSheetsForGroups } from '../sprites/sheets/environmentSheets';
 import { BRAZIER, FIREPLACE } from '../map/tileTypes';
 import { PlayerManager } from '../core/PlayerManager';
+import { setSkillBookReaders } from '../creatures/skillBookDrop';
 import type { BuildingEntry } from '../systems/BuildingSystem';
 import { snapPlayer, restorePlayer, type PlayerSnapshot } from '../core/PlayerSnapshot';
 import { SafeRoomSystem } from '../systems/SafeRoomSystem';
@@ -215,7 +216,12 @@ import {
 } from '../systems/townHomesteads';
 import { buildTavernMenu, serveDrinkAt } from '../systems/townPub';
 import { buildBlessingMenu, grantBlessing } from '../systems/townTemple';
-import { buildTattooMenu, inkTattoo } from '../systems/townTattooParlor';
+import {
+  QUIET_NEEDLE_NAME,
+  buildTattooMenu,
+  hasTattooForSale,
+  inkTattoo,
+} from '../systems/townTattooParlor';
 import { buildArmouryMenu, issueArmour } from '../systems/townArmoury';
 import { buildDrillYardMenu, runDrill } from '../systems/townDrillYard';
 import {
@@ -1125,6 +1131,7 @@ export class BuildingInteriorScene extends GameplayScene {
 
     const { x: sx, y: sy } = this.map.startTile;
     this.pm = new PlayerManager(sx, sy, this.xpCurve);
+    setSkillBookReaders([this.pm.human, this.pm.cat]);
     this.cat.setMap(this.map);
 
     restorePlayer(this.human, humanSnap);
@@ -3756,7 +3763,19 @@ export class BuildingInteriorScene extends GameplayScene {
       return true;
     }
 
-    if (sellsHere && !this.hasUntoldLore(target)) {
+    // The tattooist skips straight to the needle while there is a mark left to
+    // buy, and leaves the talk uncounted so her lore is still there afterwards.
+    // Once nothing is left, her menu would be all spent rows, so she only talks.
+    const isQuietNeedle = this.entry.name === QUIET_NEEDLE_NAME;
+    const tattooForSale = isQuietNeedle && hasTattooForSale(player);
+    if (sellsHere && tattooForSale) {
+      this.audio?.playRandom(citizenVoiceSounds(target.speechStyle));
+      this.openService(turn, resident, target.role);
+      return true;
+    }
+    const offersMenu = sellsHere && (!isQuietNeedle || tattooForSale);
+
+    if (offersMenu && !this.hasUntoldLore(target)) {
       this.openService(turn, resident, target.role);
       this.noteTalk(target, inDanger);
       return true;
@@ -3787,7 +3806,7 @@ export class BuildingInteriorScene extends GameplayScene {
         kind: 'close',
         onClosed: () => {
           this.releaseCitizenDialogTarget();
-          if (sellsHere) this.openService(turn, resident, target.role);
+          if (offersMenu) this.openService(turn, resident, target.role);
         },
       },
       dismiss: { kind: 'allowed', onDismissed: () => this.releaseCitizenDialogTarget() },

@@ -238,6 +238,15 @@ export const AILMENT_STATUSES: ReadonlyArray<string> = [
   FROZEN_STATUS,
 ];
 
+/**
+ * The ailments the apothecary's antidote and the Brass Gullet draw out: every
+ * one except `drunk`. Sobering up is the inn's service, and leaving it to the
+ * inn keeps an antidote and a room from being the same purchase.
+ */
+export const CURABLE_AILMENT_STATUSES: ReadonlyArray<string> = AILMENT_STATUSES.filter(
+  (type) => type !== 'drunk',
+);
+
 // Preset constructors
 
 /** 8-second burn: 1 damage / second for 8 seconds (480 ticks at 60 fps). */

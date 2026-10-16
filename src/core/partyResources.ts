@@ -19,6 +19,18 @@ export function canAfford(human: ToolOwner, cat: ToolOwner, cost: ResourceCost):
   });
 }
 
+/** How much more of each line of `cost` the party needs; lines its combined stock already covers are left out. */
+export function costShortfall(human: ToolOwner, cat: ToolOwner, cost: ResourceCost): ResourceCost {
+  const shortfall: ResourceCost = {};
+  for (const id of RESOURCE_IDS) {
+    const amount = cost[id];
+    if (amount === undefined) continue;
+    const missing = amount - partyCount(human, cat, id);
+    if (missing > 0) shortfall[id] = missing;
+  }
+  return shortfall;
+}
+
 /**
  * Spends `cost` across the party's combined stock, taking from `active`
  * first and the companion only for what `active` cannot cover. Checks

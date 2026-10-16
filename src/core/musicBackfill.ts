@@ -110,7 +110,7 @@ function buildingMusic(name: string): ReadonlyArray<MusicTrackId> {
 
 /** A tattoo from the parlour; the Desperado Pass tattoo is the Juicer's reward, not the parlour's. */
 function hasParlourTattoo(snap: PlayerSnapshot): boolean {
-  return snap.tattooStat !== null || (snap.skillTattoo ?? null) !== null;
+  return (snap.tattoo ?? null) !== null || (snap.skillTattoo ?? null) !== null;
 }
 
 function hasLearnedResourcing(snap: PlayerSnapshot): boolean {

@@ -1071,7 +1071,10 @@ export class BriarHollowKit {
     return this.defences?.trebuchets.cameraOffset ?? NO_CAMERA_OFFSET;
   }
 
-  /** Opens the Structure menu (`E`) on the nearest construction in reach. Returns whether it opened. */
+  /**
+   * Opens the Structure menu (`E`) on the construction the active crawler
+   * faces, or else the nearest in reach. Returns whether it opened.
+   */
   tryStructureMenu(): boolean {
     return this.defences?.tryStructureMenu() === true;
   }

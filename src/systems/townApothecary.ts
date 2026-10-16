@@ -15,7 +15,7 @@
  * `BuildingInteriorScene` owns the sounds and the interaction gating.
  */
 
-import { AILMENT_STATUSES } from '../core/StatusEffect';
+import { CURABLE_AILMENT_STATUSES } from '../core/StatusEffect';
 import type { ItemId } from '../core/ItemDefs';
 import type { Player } from '../Player';
 import type { ShopMenu, ShopRow, ShopPurchaseHandler } from '../ui/screens/shop/shopSession';
@@ -36,13 +36,6 @@ const TONIC_KEY = 'tonic';
 const POULTICE_ITEM: ItemId = 'health_potion';
 const TONIC_ITEM: ItemId = 'jugg_juice';
 
-/**
- * What the antidote lifts: the ailments, minus the hangover. Fen is a healer,
- * not a sobering-up service — the inn upstairs handles that one, and leaving it
- * to them keeps the two purchases from being the same purchase.
- */
-const CURED_STATUSES: ReadonlyArray<string> = AILMENT_STATUSES.filter((type) => type !== 'drunk');
-
 const APOTHECARY_BARKS: ReadonlyArray<string> = [
   'Coin on the counter, ailment out loud. I have heard worse than yours.',
   'What is made up is made up. When it is gone you wait for the next batch.',
@@ -50,7 +43,7 @@ const APOTHECARY_BARKS: ReadonlyArray<string> = [
 ];
 
 function afflicted(party: ReadonlyArray<Player>): boolean {
-  return party.some((member) => CURED_STATUSES.some((type) => member.hasStatus(type)));
+  return party.some((member) => CURABLE_AILMENT_STATUSES.some((type) => member.hasStatus(type)));
 }
 
 /** The apothecary's board for this visit. */
@@ -96,7 +89,7 @@ export function serveRemedy(party: ReadonlyArray<Player>, memory: TownMemory): S
   return (option, buyer) => {
     if (option.key === CURE_KEY) {
       let cleared = 0;
-      for (const member of party) cleared += member.cureStatuses(CURED_STATUSES);
+      for (const member of party) cleared += member.cureStatuses(CURABLE_AILMENT_STATUSES);
       if (cleared === 0) return { ok: false, line: 'There is nothing on you worth my stock.' };
       return { ok: true, line: 'Drawn out and burnt. Do not go and collect more of it.' };
     }

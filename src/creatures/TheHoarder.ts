@@ -1,4 +1,5 @@
 import type { Player } from '../Player';
+import { usefulSkillBook } from './skillBookDrop';
 import type { EyePlacement } from '../sprites/eyePlacement';
 import { Mob } from './Mob';
 import type { LootDrop, PlayerDamageType } from './Mob';
@@ -674,7 +675,8 @@ export class TheHoarder extends Mob {
     items.push({ id: 'trollskin_shirt', quantity: 1 });
     // Guaranteed, not rolled: Cockroach is the safety net for the cat's locked
     // constitution, and a 0.5% vermin drop is no way to hand out a safety net.
-    items.push({ id: 'skill_book_cockroach', quantity: 1 });
+    const book = usefulSkillBook('skill_book_cockroach');
+    if (book !== null) items.push({ id: book, quantity: 1 });
     return items;
   }
 

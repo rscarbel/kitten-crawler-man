@@ -43,6 +43,8 @@ export interface DetailModel {
   readonly deltas: readonly StatDelta[];
   /** Why the last attempt on this item was refused, shown until it fades. */
   readonly notice: string | null;
+  /** Standing advice on how the item is used, for items whose use isn't a button here. */
+  readonly hint: string | null;
   readonly actions: readonly DetailAction[];
   /** The hotbar's slot buttons, when the player opened them. */
   readonly hotbarPicker: readonly HotbarPickerSlot[] | null;
@@ -91,6 +93,7 @@ interface DetailLayout {
   readonly effectHeights: readonly number[];
   readonly deltaH: number;
   readonly noticeH: number;
+  readonly hintH: number;
   readonly actionRows: number;
   readonly actionColumns: number;
   readonly pickerRows: number;
@@ -123,6 +126,8 @@ function layoutDetail(ui: Ui, width: number, model: DetailModel): DetailLayout {
     model.notice === null
       ? 0
       : measureTextHeight(ui, width, { text: model.notice, role: 'danger' });
+  const hintH =
+    model.hint === null ? 0 : measureTextHeight(ui, width, { text: model.hint, role: 'muted' });
   const controlH = size.control;
   const columns = actionColumns(width, space.sm, model.actions.length);
   const actionRows = Math.ceil(model.actions.length / columns);
@@ -138,6 +143,7 @@ function layoutDetail(ui: Ui, width: number, model: DetailModel): DetailLayout {
     ...effectHeights,
     deltaH,
     noticeH,
+    hintH,
     rowsHeight(actionRows, controlH, space.sm),
     rowsHeight(pickerRows, controlH, space.xs),
   ].filter((h) => h > 0);
@@ -149,6 +155,7 @@ function layoutDetail(ui: Ui, width: number, model: DetailModel): DetailLayout {
     effectHeights,
     deltaH,
     noticeH,
+    hintH,
     actionRows,
     actionColumns: columns,
     pickerRows,
@@ -345,6 +352,19 @@ function drawInfo(ui: Ui, rect: Rect, id: string, model: DetailModel, layout: De
       },
     );
     y += layout.noticeH + space.md;
+  }
+
+  if (model.hint !== null) {
+    text(
+      ui,
+      { x: rect.x, y, w: rect.w, h: layout.hintH },
+      {
+        text: model.hint,
+        role: 'muted',
+        wrap: true,
+      },
+    );
+    y += layout.hintH + space.md;
   }
 }
 

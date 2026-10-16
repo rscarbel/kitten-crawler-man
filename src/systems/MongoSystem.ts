@@ -1,4 +1,5 @@
 import { displayHp } from '../core/crawlerFormulas';
+import { activeRunStats } from '../core/GameStats';
 import { TILE_SIZE } from '../core/constants';
 import { Mongo } from '../creatures/Mongo';
 import type { CatPlayer } from '../creatures/CatPlayer';
@@ -741,6 +742,7 @@ export class MongoSystem implements GameSystem {
     // for the type system to carry it past the call it cannot see through.
     if (mongo === null) return false;
     mongo.celebratePet();
+    activeRunStats()?.recordMongoPetted();
     const head = mongo.headAnchor();
     this.emotes.spawnHearts(head.x, head.y);
     if (active instanceof HumanPlayer) playPetGesture(active, head);

@@ -632,6 +632,11 @@ const CHECKS: readonly AudioCheck[] = [
       accessibility.checkMuteAndMono(harness, check, { blur: blurWindow, focus: focusWindow }),
   },
   { id: 21, name: 'effects hush', run: () => voices.checkEffectsHush(harness, check) },
+  {
+    id: 22,
+    name: 'the pause menu holds the music',
+    run: () => director.checkPauseMenuHoldsMusic(harness, check),
+  },
 ];
 
 const onlyArg = process.argv.find((arg) => arg.startsWith('--only='));

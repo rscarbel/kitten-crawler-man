@@ -31,7 +31,7 @@ import {
 import { PartyTools, type ToolOwner } from '../src/core/PartyTools';
 import { createPartyCraftsState, type PartyCraftsState } from '../src/core/partyCrafts';
 import { teachBoth } from '../src/core/CraftSkills';
-import type { ToolKind } from '../src/core/toolTiers';
+import { TOOL_TIER_LONG_HAFT, toolTierDef, type ToolKind } from '../src/core/toolTiers';
 import type { VillageQuestPhase } from '../src/core/villageQuestPhase';
 import { resetSessionTally, sessionTallyOf } from '../src/core/resourceSessionTally';
 import { referenceStats } from '../src/core/referenceCrawler';
@@ -132,7 +132,10 @@ const EXPECTED_ROPE_LOW_PRICE = 9;
 const LOW_STOCK = 3;
 const EXPECTED_BOARDS_PER_WOOD = 2;
 const EXPECTED_ROPE_PER_WOOD = 1;
-const EXPECTED_FEE_PER_WOOD = 1;
+const EXPECTED_FEE_PER_WOOD = 8;
+const FULL_BATCH_WOOD = 10;
+const ROPE_BATCH_WOOD = 4;
+const REFUSED_BATCH_WOOD = 5;
 const HARDENED_AXE_PRICE = 250;
 const MANUAL_FRAMES = 72;
 const PLENTY_OF_COINS = 100_000;
@@ -667,6 +670,8 @@ function checkForge(): void {
   panel.pressBuy('pickaxe', { active: human, companion: cat });
   check(panel.currentLine === sellerLine(OREN.upgradePurchased), 'the explanation is a one-shot');
 
+  checkForgeMaterials(rig, panel);
+
   rig.crafts.tools.axeTier = 5;
   rig.partyTools.reconcile(human, cat);
   const top = forgeShop(host)
@@ -684,6 +689,38 @@ function checkForge(): void {
     'buying past the top tier is refused',
   );
   check(topPanel.currentLine === sellerLine(OREN.alreadyMaxAxe), 'with already_max_axe');
+}
+
+/** The axe's next tier asks for wood and stone too: refused uncharged without them, charged exactly with them. */
+function checkForgeMaterials(rig: Rig, panel: ShopSession): void {
+  const { human, cat } = rig;
+  const party = { active: human, companion: cat };
+  const { wood = 0, stone = 0 } = toolTierDef('axe', TOOL_TIER_LONG_HAFT).costMaterials;
+  check(wood > 0 && stone > 0, 'the long-haft axe asks for wood and stone');
+  const surplus = 1;
+  human.coins = PLENTY_OF_COINS;
+  human.inventory.addItem('stone', stone + surplus);
+  for (let frame = 0; frame < UPGRADE_REBUY_GUARD_TICKS; frame++) panel.update();
+  const tierBefore = rig.crafts.tools.axeTier;
+  panel.pressBuy('axe', party);
+  check(
+    rig.crafts.tools.axeTier === tierBefore &&
+      human.coins === PLENTY_OF_COINS &&
+      human.inventory.countOf('stone') === stone + surplus,
+    'coins but no wood: the upgrade is refused and nothing is taken',
+  );
+  check(panel.currentLine === sellerLine(OREN.needsMaterials), 'with needs_materials');
+
+  human.inventory.addItem('wood', wood + surplus);
+  panel.pressBuy('axe', party);
+  check(
+    rig.crafts.tools.axeTier === TOOL_TIER_LONG_HAFT,
+    'with the materials the upgrade goes through',
+  );
+  check(
+    human.inventory.countOf('wood') === surplus && human.inventory.countOf('stone') === surplus,
+    'and takes exactly the declared wood and stone',
+  );
 }
 
 /** Stands `crawler` where it can work the machine making `kind`. */
@@ -843,27 +880,34 @@ function checkFenna(): void {
   const fennaKeys = topicKeys(rig, 'fenna');
   check(fennaKeys[0] === 'process_batch', '"Process a batch" leads Fenna\'s list');
 
-  human.inventory.addItem('wood', 10);
-  human.coins = 10;
-  check(runBatch(host, 'boards', 10) !== null, '10 wood, 10 coins: the batch runs');
+  const fullBatchFee = FULL_BATCH_WOOD * EXPECTED_FEE_PER_WOOD;
+  human.inventory.addItem('wood', FULL_BATCH_WOOD);
+  human.coins = fullBatchFee;
+  check(runBatch(host, 'boards', FULL_BATCH_WOOD) !== null, 'N wood, exact fee: the batch runs');
+  const fullBatchBoards = FULL_BATCH_WOOD * EXPECTED_BOARDS_PER_WOOD;
   check(
-    human.coins === 10 - 10 * EXPECTED_FEE_PER_WOOD &&
+    human.coins === 0 &&
       human.inventory.countOf('wood') === 0 &&
-      human.inventory.countOf('wood_board') === 10 * EXPECTED_BOARDS_PER_WOOD,
-    'N wood → N coins and 2N boards',
+      human.inventory.countOf('wood_board') === fullBatchBoards,
+    'N wood → N fees and 2N boards',
   );
-  human.inventory.addItem('wood', 4);
-  human.coins = 4;
-  runBatch(host, 'rope', 4);
-  check(human.inventory.countOf('rope') === 4 && human.coins === 0, 'N wood → N rope');
-
-  human.inventory.addItem('wood', 5);
-  human.coins = 3;
-  check(runBatch(host, 'boards', 5) === null, 'short of the fee: refused');
+  human.inventory.addItem('wood', ROPE_BATCH_WOOD);
+  human.coins = ROPE_BATCH_WOOD * EXPECTED_FEE_PER_WOOD;
+  runBatch(host, 'rope', ROPE_BATCH_WOOD);
   check(
-    human.coins === 3 &&
-      human.inventory.countOf('wood') === 5 &&
-      human.inventory.countOf('wood_board') === 20,
+    human.inventory.countOf('rope') === ROPE_BATCH_WOOD * EXPECTED_ROPE_PER_WOOD &&
+      human.coins === 0,
+    'N wood → N rope',
+  );
+
+  const oneCoinShort = REFUSED_BATCH_WOOD * EXPECTED_FEE_PER_WOOD - 1;
+  human.inventory.addItem('wood', REFUSED_BATCH_WOOD);
+  human.coins = oneCoinShort;
+  check(runBatch(host, 'boards', REFUSED_BATCH_WOOD) === null, 'short of the fee: refused');
+  check(
+    human.coins === oneCoinShort &&
+      human.inventory.countOf('wood') === REFUSED_BATCH_WOOD &&
+      human.inventory.countOf('wood_board') === fullBatchBoards,
     'and nothing changes',
   );
 
@@ -1019,6 +1063,9 @@ function checkDoublePress(): void {
   rig.partyTools.grantStarterTools(human, cat);
   const startingCoins = 3000;
   human.coins = startingCoins;
+  const { wood = 0, stone = 0 } = toolTierDef('axe', TOOL_TIER_LONG_HAFT).costMaterials;
+  human.inventory.addItem('wood', wood);
+  human.inventory.addItem('stone', stone);
   const panel = openShop(forgeShop(forgeHostFor(rig, rig.partyTools)));
   panel.pressBuy('axe', { active: human, companion: cat });
   panel.pressBuy('axe', { active: human, companion: cat });

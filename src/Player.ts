@@ -19,8 +19,22 @@ import {
   REFRESHED_SPEED_FACTOR,
   BLOOD_VOMIT_STATUS,
   INCURABLE_STATUSES,
+  CURABLE_AILMENT_STATUSES,
   isBloodVomitBoutFrame,
 } from './core/StatusEffect';
+import {
+  BRASS_BELCH_TEXT,
+  BRASS_GULLET_SKILL,
+  BRACED_TEXT,
+  COILED_FIST_BLOWS_TO_UNCOIL,
+  COILED_FIST_STREAK_RESET_FRAMES,
+  FORESEEN_TEXT,
+  IRON_RIBS_BRACE_THRESHOLD_SHARE,
+  IRON_RIBS_EXCESS_KEPT_SHARE,
+  QUICK_SERPENT_PRIMED_FRAMES,
+  THIRD_EYE_FORESIGHT_COOLDOWN_MS,
+  type StatTattooId,
+} from './core/tattoos';
 import { applyRetchPose, retchPoseOf } from './sprites/status/statusBloodVomit';
 import type { StatusMouth } from './sprites/status/statusPaint';
 import {
@@ -586,17 +600,29 @@ export abstract class Player implements AboveDarknessDrawer {
   /** Gold coins collected — displayed in the inventory panel. */
   coins = 0;
   /**
-   * Which stat the Quiet Needle's ink raised, or null if this crawler is still unmarked.
-   * One tattoo per character, permanent — carried through building round-trips by
+   * The Quiet Needle mark this crawler wears, or null if still unmarked.
+   * One per character, permanent — carried through building round-trips by
    * PlayerSnapshot so it can't be re-bought by stepping outside and back in.
    */
-  tattooStat: StatName | null = null;
+  tattoo: StatTattooId | null = null;
   /**
    * The skill the Quiet Needle's brass mark taught this crawler, or null if unmarked.
-   * Tracked separately from {@link tattooStat} so one stat tattoo and one skill
-   * tattoo can coexist — but never two of either.
+   * Tracked separately from {@link tattoo} so one stat mark and one skill
+   * mark can coexist — but never two of either.
    */
   skillTattoo: SkillId | null = null;
+  /** Landed melee blows in a row toward the Coiled Fist's uncoil. */
+  private coiledFistStreak = 0;
+  private framesSinceLandedBlow = 0;
+  /** Frames left in which the Quick Serpent's counter-bite is ready. */
+  private serpentPrimedFrames = 0;
+  /**
+   * Wall-clock time (ms since epoch) when the Third Eye can next foresee a
+   * blow, or null when it has never fired. Wall-clock and carried by
+   * PlayerSnapshot for the same reason as {@link cockroachReadyAt}: this object
+   * is rebuilt on every floor and door, so a frame counter would reset each time.
+   */
+  thirdEyeReadyAt: number | null = null;
   /**
    * Earned by defeating the Juicer; the Desperado Club recognizes it at the
    * door. Permanent, one per crawler.
@@ -981,14 +1007,21 @@ export abstract class Player implements AboveDarknessDrawer {
   takeDamage(amount: number, source?: DamageSource): boolean {
     if (amount <= 0 || !this.canBeHarmed) return false;
     const scaledAmount = this.incomingDamage(amount, source);
-    if (isDodgeableSource(source) && this.rollDodge()) {
-      this.onDodged();
-      return false;
+    if (isDodgeableSource(source)) {
+      if (this.rollDodge()) {
+        this.onDodged();
+        return false;
+      }
+      if (this.tryThirdEyeForesight()) {
+        this.onDodged(true);
+        return false;
+      }
     }
-    const unabsorbed = this.soakWithWards(scaledAmount);
+    const soaked = this.soakWithWards(scaledAmount);
     // A blow the ward swallowed whole never reached her: no flash, no wound, and
     // no poison or other rider coming in behind it.
-    if (unabsorbed <= 0) return false;
+    if (soaked <= 0) return false;
+    const unabsorbed = source?.kind === 'mob' ? this.braceWithIronRibs(soaked) : soaked;
     const hpBeforeBlow = this.hp;
     const remainingHp = Math.max(0, this.hp - unabsorbed);
     this.damageFlash = DAMAGE_FLASH_FRAMES;
@@ -1207,10 +1240,66 @@ export abstract class Player implements AboveDarknessDrawer {
     return Math.random() < this.dodgeChance;
   }
 
-  /** Feedback (and, for the cat, skill progress) for a dodge that just landed. */
-  protected onDodged(): void {
+  /**
+   * Feedback (and, for the cat, skill progress) for a dodge that just landed.
+   *
+   * @param foreseen whether the Third Eye saw the blow coming rather than the
+   *   dodge roll, which earns its own label instead of the plain miss.
+   */
+  protected onDodged(foreseen = false): void {
     this.pendingDodges++;
-    this.queueFloatingText('MISS!', 'miss');
+    if (foreseen) {
+      this.queueFloatingText(FORESEEN_TEXT, 'trigger');
+    } else {
+      this.queueFloatingText('MISS!', 'miss');
+    }
+    if (this.tattoo === 'quick_serpent') this.serpentPrimedFrames = QUICK_SERPENT_PRIMED_FRAMES;
+  }
+
+  /** Spends the Third Eye's foresight on this blow when it is worn and recharged. */
+  private tryThirdEyeForesight(): boolean {
+    if (this.tattoo !== 'third_eye' || !this.canDodge) return false;
+    const now = Date.now();
+    if (this.thirdEyeReadyAt !== null && now < this.thirdEyeReadyAt) return false;
+    this.thirdEyeReadyAt = now + THIRD_EYE_FORESIGHT_COOLDOWN_MS;
+    return true;
+  }
+
+  /** What of a mob's blow of `damage` lands once the Iron Ribs, if worn, brace against it. */
+  private braceWithIronRibs(damage: number): number {
+    if (this.tattoo !== 'iron_ribs') return damage;
+    const braceThreshold = this.maxHp * IRON_RIBS_BRACE_THRESHOLD_SHARE;
+    const excess = damage - braceThreshold;
+    if (excess <= 0) return damage;
+    const braced = Math.round(braceThreshold + excess * IRON_RIBS_EXCESS_KEPT_SHARE);
+    if (braced >= damage) return damage;
+    this.queueFloatingText(BRACED_TEXT, 'block');
+    return braced;
+  }
+
+  /**
+   * Counts a landed melee blow toward the Coiled Fist.
+   *
+   * @returns whether this blow completes the streak and uncoils.
+   */
+  noteLandedBlowForCoiledFist(): boolean {
+    if (this.tattoo !== 'coiled_fist') return false;
+    this.framesSinceLandedBlow = 0;
+    this.coiledFistStreak++;
+    if (this.coiledFistStreak < COILED_FIST_BLOWS_TO_UNCOIL) return false;
+    this.coiledFistStreak = 0;
+    return true;
+  }
+
+  /**
+   * Spends the Quick Serpent's counter-bite on a landed melee blow.
+   *
+   * @returns whether a dodge had primed it.
+   */
+  consumeSerpentBite(): boolean {
+    if (this.serpentPrimedFrames <= 0) return false;
+    this.serpentPrimedFrames = 0;
+    return true;
   }
 
   /**
@@ -1281,6 +1370,12 @@ export abstract class Player implements AboveDarknessDrawer {
     if (!this.canAct) return false;
     if (!consume()) return false;
     this.healByFraction(POTION_HEAL_FRACTION);
+    if (
+      this.skillTattoo === BRASS_GULLET_SKILL &&
+      this.cureStatuses(CURABLE_AILMENT_STATUSES) > 0
+    ) {
+      this.queueFloatingText(BRASS_BELCH_TEXT, 'trigger');
+    }
     this.potionCooldownFrames = this.computePotionCooldown();
     this.recordSwallowed();
     return true;
@@ -1934,6 +2029,7 @@ export abstract class Player implements AboveDarknessDrawer {
     if (this.levelUpFlash > 0) this.levelUpFlash--;
     if (this.statBoostFlashFrame > 0) this.statBoostFlashFrame--;
     if (this.damageFlash > 0) this.damageFlash--;
+    this.tickTattooTimers();
     this.potionCooldownFrames = this.tickCooldown(this.potionCooldownFrames);
     this.updateActualMovementLatch();
     if (this.isMoving) {
@@ -1943,6 +2039,13 @@ export abstract class Player implements AboveDarknessDrawer {
     }
     this.tickStatusEffects();
     this.tickTempStatMods();
+  }
+
+  private tickTattooTimers(): void {
+    if (this.serpentPrimedFrames > 0) this.serpentPrimedFrames--;
+    if (this.coiledFistStreak === 0) return;
+    this.framesSinceLandedBlow++;
+    if (this.framesSinceLandedBlow >= COILED_FIST_STREAK_RESET_FRAMES) this.coiledFistStreak = 0;
   }
 
   /**

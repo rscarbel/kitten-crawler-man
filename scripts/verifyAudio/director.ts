@@ -27,7 +27,12 @@ import {
   bindMusicLibrary,
   MusicLibrary,
 } from '../../src/core/MusicLibrary.js';
-import { seededStreams, type AudioHarness, type FakeAudioElement } from '../audioHarness.js';
+import {
+  seededStreams,
+  type AudioHarness,
+  type FakeAudioElement,
+  type SourceRecord,
+} from '../audioHarness.js';
 
 type Check = (ok: boolean, message: string) => void;
 type Manager = InstanceType<typeof AudioManager>;
@@ -695,4 +700,113 @@ export async function checkJingles(harness: AudioHarness, check: Check): Promise
     'and unlocks and credits nothing',
   );
   await r.dispose();
+}
+
+/** Longer than the pause menu's fade, so a hold has had time to land. */
+const MENU_FADE_SETTLE_MS = 500;
+/** A song short enough that waiting in the menu outlasts it. */
+const HELD_SONG_RECORDING_S = 30;
+/** How long the menu stays open: well past the end of the held song. */
+const MENU_OPEN_S = 60;
+/** Slack on a held position: the menu's fades either side of the hold. */
+const HOLD_TOLERANCE_S = 1;
+
+/**
+ * 22. The pause menu holds the music where it is: a playlist song does not
+ * play on unheard and hand over to the next song behind the menu, and it
+ * carries on from the same place when the menu closes. A casino silencer
+ * only mutes the bus.
+ */
+export async function checkPauseMenuHoldsMusic(harness: AudioHarness, check: Check): Promise<void> {
+  setDurations(harness, TOWN_MUSIC_TRACKS, HELD_SONG_RECORDING_S);
+  const r = await rig(harness);
+  claimOn(r.audio, {}, 'overworld_zone', 'area', { kind: 'playlist', ids: TOWN_MUSIC_TRACKS });
+  await r.settle();
+  const song = r.audio.music.audibleTrack;
+  const element = song === null ? null : r.sounding(song);
+  check(song !== null && element !== null, 'a playlist song plays');
+  if (song === null || element === null) {
+    await r.dispose();
+    return;
+  }
+
+  r.audio.pauseMusic('menu');
+  await r.settle(MENU_FADE_SETTLE_MS);
+  const heldAtS = element.currentTime;
+  await r.settle(MENU_OPEN_S * MS_PER_SECOND);
+  check(
+    r.audio.music.currentTrack === song && element.paused,
+    `the pause menu holds the song rather than playing it on unheard (${r.audio.music.currentTrack ?? 'none'})`,
+  );
+  r.audio.resumeMusic('menu');
+  await r.settle(MENU_FADE_SETTLE_MS);
+  const resumedAtS = r.sounding(song)?.currentTime ?? Number.NaN;
+  check(
+    r.audio.music.audibleTrack === song &&
+      Math.abs(resumedAtS - heldAtS) <= HOLD_TOLERANCE_S + MENU_FADE_SETTLE_MS / MS_PER_SECOND,
+    `closing the menu carries the same song on from where it stopped (${resumedAtS.toFixed(1)} s, about ${heldAtS.toFixed(1)} s)`,
+  );
+
+  r.audio.pauseMusic('wheel');
+  await r.settle(MENU_FADE_SETTLE_MS);
+  check(r.sounding(song) !== null, 'a casino silencer mutes the bus but holds nothing');
+  r.audio.resumeMusic('wheel');
+  await r.settle(MENU_FADE_SETTLE_MS);
+
+  r.audio.pauseMusic('background');
+  await r.settle(MENU_FADE_SETTLE_MS);
+  void harness.context().suspend();
+  await harness.flush();
+  const heldInBackgroundAtS = element.currentTime;
+  r.audio.resumeMusic('background');
+  await r.settle(MENU_FADE_SETTLE_MS);
+  check(
+    element.paused && r.audio.music.currentTrack === song,
+    'back from the background with audio still suspended, the held song waits rather than playing into silence',
+  );
+  void harness.context().resume();
+  await r.settle(MENU_FADE_SETTLE_MS);
+  const afterUnlockS = r.sounding(song)?.currentTime ?? Number.NaN;
+  check(
+    Math.abs(afterUnlockS - heldInBackgroundAtS) <=
+      HOLD_TOLERANCE_S + MENU_FADE_SETTLE_MS / MS_PER_SECOND,
+    `once audio unlocks it carries on from where it was held (${afterUnlockS.toFixed(1)} s, about ${heldInBackgroundAtS.toFixed(1)} s)`,
+  );
+  await r.dispose();
+
+  const previousFetch: unknown = Reflect.get(globalThis, 'fetch');
+  Reflect.set(globalThis, 'fetch', (url: string) => {
+    const body = new ArrayBuffer(0);
+    harness.fetchedLabels.set(body, url);
+    return Promise.resolve({ ok: true, status: 200, arrayBuffer: () => Promise.resolve(body) });
+  });
+  harness.setDuration(SOUND_MANIFEST[KEYBOARD_HERO_SONG], LONG_RECORDING_S);
+  const sourcesOfTheSong = (): SourceRecord[] =>
+    harness.sources.filter((source) => source.label === SOUND_MANIFEST[KEYBOARD_HERO_SONG]);
+  const runsBeforeClaim = sourcesOfTheSong().length;
+  const decoded = await rig(harness);
+  claimOn(decoded.audio, {}, 'floor', 'area', loopOf(KEYBOARD_HERO_SONG));
+  await decoded.settle();
+  await decoded.settle();
+  const decodedPlays = decoded.audio.music.audibleTrack === KEYBOARD_HERO_SONG;
+  decoded.audio.pauseMusic('menu');
+  await decoded.settle(MENU_FADE_SETTLE_MS);
+  const heldDecodedAtS =
+    harness.audioTimeS() - (sourcesOfTheSong()[runsBeforeClaim]?.startedAtS ?? 0);
+  const soundingWhileHeld = sourcesOfTheSong().filter((source) => !source.isSilenced()).length;
+  const runsBeforeRelease = sourcesOfTheSong().length;
+  await decoded.settle(MENU_OPEN_S * MS_PER_SECOND);
+  decoded.audio.resumeMusic('menu');
+  await decoded.settle(MENU_FADE_SETTLE_MS);
+  const restarted = sourcesOfTheSong().slice(runsBeforeRelease);
+  check(
+    decodedPlays &&
+      soundingWhileHeld === 0 &&
+      decoded.audio.music.audibleTrack === KEYBOARD_HERO_SONG &&
+      restarted.length === 1 &&
+      Math.abs(restarted[0].offsetS - heldDecodedAtS) <= HOLD_TOLERANCE_S,
+    `a decoded song is stopped while held and restarted from its place (${restarted.map((run) => run.offsetS.toFixed(1)).join(', ') || 'no restart'}, about ${heldDecodedAtS.toFixed(1)} s)`,
+  );
+  await decoded.dispose();
+  Reflect.set(globalThis, 'fetch', previousFetch);
 }

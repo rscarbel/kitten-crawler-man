@@ -14,6 +14,12 @@ import {
   type CrawlerKind,
   type SkillState,
 } from '../../../core/SkillManager';
+import {
+  BRASS_GULLET_LABEL,
+  BRASS_GULLET_SKILL,
+  STAT_TATTOO_DESIGNS,
+  brassGulletDesc,
+} from '../../../core/tattoos';
 import { HumanPlayer } from '../../../creatures/HumanPlayer';
 import type { Player, StatName } from '../../../Player';
 import { DYN_MOB_DAMAGE_FRACTION_PER_HANDLING_LEVEL } from '../../../systems/DynamiteSystem';
@@ -282,10 +288,25 @@ function statCard(
   });
 }
 
+/** One line per Quiet Needle mark `player` wears, since nothing else shows what a mark does once bought. */
+function tattooLines(player: Player): string[] {
+  const lines: string[] = [];
+  if (player.tattoo !== null) {
+    const design = STAT_TATTOO_DESIGNS[player.tattoo];
+    lines.push(`Tattoo: ${design.label}. ${design.desc}`);
+  }
+  if (player.skillTattoo === BRASS_GULLET_SKILL) {
+    const desc = brassGulletDesc(getSkillDef(BRASS_GULLET_SKILL).name);
+    lines.push(`Tattoo: ${BRASS_GULLET_LABEL}. ${desc}`);
+  }
+  return lines;
+}
+
 function renderAttributes(layout: SectionLayout, ctx: PauseContext): void {
   perCrawler(layout, (column, crawler) => {
     crawlerHeader(column, ctx, crawler);
     for (const stat of STATS_BY_CRAWLER[crawler]) statCard(column, ctx, crawler, stat);
+    for (const line of tattooLines(crawlerOf(ctx, crawler))) column.paragraph(line, 'muted');
     column.space(column.ui.theme.space.md);
   });
 }
@@ -409,6 +430,9 @@ function statRows(
     { label: 'Gold Earned', value: `${stats.goldEarned}`, role: 'accent' },
     { label: 'Hirelings Hired', value: `${stats.hirelingsHired}`, role: 'value' },
     { label: 'Hirelings Lost', value: `${stats.hirelingsLost}`, role: 'muted' },
+    { label: 'Mongo Petted', value: `${stats.mongoPets}`, role: 'success' },
+    { label: 'Cows Petted', value: `${stats.cowPets}`, role: 'success' },
+    { label: 'Midge Petted', value: `${stats.midgePets}`, role: 'success' },
   ];
 }
 

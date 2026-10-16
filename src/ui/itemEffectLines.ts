@@ -11,7 +11,7 @@ import {
   HAMBURGER_HEAL_FRACTION,
   HAMBURGER_STR_BONUS,
 } from '../core/foodEffects';
-import { toolTierDef } from '../core/toolTiers';
+import { MAX_TOOL_TIER, toolTierDef, type ToolKind } from '../core/toolTiers';
 
 /** Multiplier→percentage conversion for the lines that read as percentages. */
 const PERCENT = 100;
@@ -21,6 +21,11 @@ const STAT_LABELS: Record<StatName, string> = {
   intelligence: 'Intelligence',
   constitution: 'Constitution',
   dexterity: 'Dexterity',
+};
+
+const TOOL_PLURAL: Record<ToolKind, string> = {
+  axe: 'axes',
+  pickaxe: 'picks',
 };
 
 const RESISTANCE_LABELS: Record<ResistanceType, string> = {
@@ -116,6 +121,7 @@ export function describeItemEffects(item: InventoryItem): string[] {
     const def = toolTierDef(tool.kind, tool.tier);
     if (def.speedBonus > 0) lines.push(`+${asPercent(def.speedBonus)}% gathering speed`);
     if (def.yieldMultiplier > 1) lines.push(`${def.yieldMultiplier}× yield per swing`);
+    if (tool.tier < MAX_TOOL_TIER) lines.push(`Better ${TOOL_PLURAL[tool.kind]} at Oren's forge`);
   }
 
   // Kept to short lines: effect lines are not wrapped the way the prose is.

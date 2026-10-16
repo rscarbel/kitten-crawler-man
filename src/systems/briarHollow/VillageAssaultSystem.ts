@@ -80,7 +80,7 @@ import {
   isInsidePalisade,
   isInsidePalisadeTile,
   siegeAdvance,
-  siegeCanEngage,
+  nearestEngageableDefender,
   tileUnder,
 } from '../../creatures/siege/siegeCapability';
 import { livingAssaultSpawns } from '../../creatures/siege/assaultCaps';
@@ -649,11 +649,9 @@ class MarchDirective implements SiegeDirective {
     if (siege === null || !mob.isHostile || mob.ownsSiegeMovement) return false;
     // Still climbing out of the ground: its own AI plays the rise and holds it there.
     if (mob instanceof RisingSkeleton && mob.isRising) return false;
-    const defenderDistance = this.nearestDefenderDistance(
-      mob,
-      targets,
-      SIEGE_DEFENDER_NOTICE_TILES,
-    );
+    const defenderDistance =
+      nearestEngageableDefender(mob, targets, SIEGE_DEFENDER_NOTICE_TILES * TILE_SIZE)?.distance ??
+      Infinity;
     // A trebuchet is weighed as a peer of the defenders above, at the same
     // notice range, so a mob does not detour to one across the yard while a
     // defender stands right beside it — and never for an archer, which never
@@ -694,20 +692,6 @@ class MarchDirective implements SiegeDirective {
     return isInsidePalisade(this.site, mob) === pointInside;
   }
 
-  /** The nearest defender within `tiles` this mob may fight, or Infinity when none qualify. */
-  private nearestDefenderDistance(mob: Mob, targets: readonly Player[], tiles: number): number {
-    const reach = tiles * TILE_SIZE;
-    let best = Infinity;
-    for (const target of targets) {
-      if (!target.isAlive) continue;
-      const distance = Math.hypot(target.x - mob.x, target.y - mob.y);
-      if (distance > reach || distance >= best) continue;
-      if (!siegeCanEngage(mob, target)) continue;
-      best = distance;
-    }
-    return best;
-  }
-
   /** An archer's frame: march until in bow range of the wall, then shoot defenders it can see. */
   private holdOffTheWall(mob: Mob, targets: readonly Player[]): boolean {
     if (isInsidePalisade(this.site, mob)) return false;
@@ -731,9 +715,9 @@ class MarchDirective implements SiegeDirective {
   }
 }
 
-/** An undead whose master has fallen: it stands where it is, and does nothing more. */
 /** A body that stands where it is and takes no part: the withdrawn dead waiting to be released. */
 export const HOLD_STILL: SiegeDirective = {
+  leavingTheField: true,
   steer(mob) {
     mob.currentTarget = null;
     mob.isMoving = false;
@@ -759,6 +743,7 @@ type WithdrawalStatus = 'walking' | 'left' | 'stuck';
  * up the lane they came by, released once they are out of sight.
  */
 class WithdrawDirective implements SiegeDirective {
+  readonly leavingTheField = true;
   readonly walks = new Map<Mob, Withdrawal>();
   private pathsThisUpdate = 0;
 

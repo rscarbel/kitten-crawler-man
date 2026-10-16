@@ -109,6 +109,14 @@ export interface MusicTrackHandle {
   /** Where in the recording playback stands, in seconds. */
   positionS(): number;
   stop(fadeMs: number, shape: TrackStopShape): void;
+  /**
+   * Stops the recording advancing, keeping its place, so a song that does
+   * not loop cannot reach its end while nobody can hear it. The bus is
+   * already silent when this runs, so it need not fade.
+   */
+  hold(): void;
+  /** Carries a held recording on from where {@link hold} left it. */
+  release(): void;
 }
 
 /** What the director needs of the `AudioManager` that plays its tracks. */
@@ -273,6 +281,8 @@ export class MusicDirector implements MusicPlayerControls {
   private mode: MusicPlayerMode = { kind: 'area' };
   private stopShuffleRebuild: (() => void) | null = null;
   private readonly stopFollowingLibrary: () => void;
+  /** While true nothing sounds or starts: choices are recorded and wait for {@link releaseHold}. */
+  private playbackHeld = false;
 
   constructor(
     private readonly engine: MusicEngine,
@@ -387,6 +397,41 @@ export class MusicDirector implements MusicPlayerControls {
    */
   engineReady(): void {
     this.resolve();
+    this.startWaitingTrack();
+  }
+
+  /**
+   * Freezes the music where it is, for a moment when nothing in the game is
+   * happening (the pause menu, a backgrounded tab). Claims still resolve, so
+   * a choice made meanwhile is what {@link releaseHold} plays.
+   */
+  hold(): void {
+    if (this.playbackHeld) return;
+    this.playbackHeld = true;
+    this.current?.handle?.hold();
+  }
+
+  /** Lets the music carry on from where {@link hold} froze it. */
+  releaseHold(): void {
+    if (!this.playbackHeld) return;
+    this.playbackHeld = false;
+    this.current?.handle?.release();
+    // Released with audio still suspended, the next unlock's engineReady starts it.
+    if (this.engine.canPlay()) this.startWaitingTrack();
+  }
+
+  /** Whether a chosen track may start sounding now. */
+  private canStart(): boolean {
+    return !this.playbackHeld && this.engine.canPlay();
+  }
+
+  /**
+   * Starts the chosen track if it was chosen while it could not start. The
+   * engine is not asked whether it can play: a gesture calls this before its
+   * resume() settles, and Safari lets a stream start only inside the gesture.
+   */
+  private startWaitingTrack(): void {
+    if (this.playbackHeld) return;
     const current = this.current;
     if (current?.handle !== null || current.kind === 'held') return;
     if (this.unavailable.has(current.id)) return;
@@ -743,7 +788,7 @@ export class MusicDirector implements MusicPlayerControls {
       audible: false,
     };
     this.current = track;
-    if (this.engine.canPlay()) this.startHandle(track);
+    if (this.canStart()) this.startHandle(track);
   }
 
   private startHandle(track: PlayingTrack): void {

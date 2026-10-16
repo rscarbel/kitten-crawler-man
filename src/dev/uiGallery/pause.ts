@@ -25,6 +25,7 @@ import { settings } from '../../core/Settings';
 import { GameStats } from '../../core/GameStats';
 import { createJournalProgress } from '../../core/JournalProgress';
 import { getSkillDef, isEligible, SKILL_IDS, type CrawlerKind } from '../../core/SkillManager';
+import { BRASS_GULLET_SKILL } from '../../core/tattoos';
 import { CatPlayer } from '../../creatures/CatPlayer';
 import { HumanPlayer } from '../../creatures/HumanPlayer';
 import type { Surface } from '../../ui/core/UiRoot';
@@ -49,6 +50,9 @@ const CRAFT_XP = 700;
 const FRAMES_PER_SECOND = 60;
 const PLAYED_SECONDS = 1380;
 const PLAYED_FRAMES = FRAMES_PER_SECOND * PLAYED_SECONDS;
+const MONGO_PETS = 48;
+const OTHER_COW_PETS = 25;
+const MIDGE_PETS = 12;
 /** The key chip the keyboard-focus fixture walks to: well below the first screenful of rows. */
 const FOCUS_TARGET = 30;
 /** Most PageDown presses a fixture needs to bring a control on a phone page into view. */
@@ -109,6 +113,9 @@ export function pauseFixtureData(): PauseFixtureData {
   human.craftSkills.addXp('construction', CRAFT_XP);
   cat.craftSkills.learn('resourcing');
   cat.inventory.addItem('magic_missile_tome', 1);
+  human.tattoo = 'third_eye';
+  cat.tattoo = 'quick_serpent';
+  cat.skillTattoo = BRASS_GULLET_SKILL;
 
   const abilities = new AbilityManager();
   for (const def of [MAGIC_MISSILE_DEF, PROTECTIVE_SHELL_DEF, SMUSH_DEF, MONGO_DEF]) {
@@ -126,6 +133,9 @@ export function pauseFixtureData(): PauseFixtureData {
     for (let kill = 0; kill < count; kill++) gameStats.recordKill(name);
   }
   for (let frame = 0; frame < PLAYED_FRAMES; frame++) gameStats.recordPlayedFrame();
+  for (let pet = 0; pet < MONGO_PETS; pet++) gameStats.recordMongoPetted();
+  for (let pet = 0; pet < OTHER_COW_PETS; pet++) gameStats.recordCowPetted(false);
+  for (let pet = 0; pet < MIDGE_PETS; pet++) gameStats.recordCowPetted(true);
 
   return {
     human,
@@ -261,7 +271,12 @@ export function pauseFixtureScreen(data: PauseFixtureData): PauseScreen {
     party: () => ({ human: data.human, cat: data.cat }),
     abilities: data.abilities,
     audio: fixtureAudio(),
-    guides: { mongo: () => undefined, craft: () => undefined, processing: () => undefined },
+    guides: {
+      mongo: () => undefined,
+      craft: () => undefined,
+      processing: () => undefined,
+      dualHarvest: () => undefined,
+    },
     musicLibrary: () => library,
   });
   screen.onResetGame = () => undefined;

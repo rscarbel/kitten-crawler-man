@@ -9,10 +9,14 @@ import { createMercenaryRoster } from '../../core/MercenaryRoster';
 import { MERCENARY_TEMPLATES } from '../../core/mercenaryTemplates';
 import { CatPlayer } from '../../creatures/CatPlayer';
 import { HumanPlayer } from '../../creatures/HumanPlayer';
+import { TOOL_TIER_HARDENED, TOOL_TIER_LONG_HAFT, toolTierDef } from '../../core/toolTiers';
+import { buildForgeMenu } from '../../systems/briarHollow/services/forge';
+import type { ServiceParty } from '../../systems/briarHollow/services/serviceContext';
 import { createMarketStock } from '../../systems/market/MarketStock';
 import { GENERAL_STORE_PRICING } from '../../systems/market/shopProfiles';
 import { GATE_LOCKED_LABEL } from '../../systems/market/vendorMenu';
 import { ClubVipLoungeSystem } from '../../systems/ClubVipLoungeSystem';
+import { buildTattooMenu, inkTattoo } from '../../systems/townTattooParlor';
 import { MercenaryGuildSystem } from '../../systems/MercenaryGuildSystem';
 import { GENERAL_STORE_CONFIG } from '../../systems/ShopSystem';
 import { TRAVEL_DESTINATIONS } from '../../systems/travel/travelDestinations';
@@ -46,6 +50,8 @@ const QUIET_CONTEXT: TownDialogContext = {
   quillNamed: false,
 };
 const CONTRACT_FLOOR = 'level3';
+/** The forge party holds this share of the long-haft tier's materials, so its Buy shows a material shortfall. */
+const FORGE_MATERIAL_SHARE = 0.5;
 
 function makeParty(coins: number): ShopParty {
   const active = new HumanPlayer(0, 0, TILE_SIZE);
@@ -153,6 +159,28 @@ function travelMenu(): ShopMenu {
   };
 }
 
+/**
+ * Oren's forge with an axe and a pickaxe whose next tiers take wood and stone:
+ * coins enough for the axe, but only part of its materials.
+ */
+function forgeSession(): { session: ShopSession; party: ShopParty } {
+  const human = new HumanPlayer(0, 0, TILE_SIZE);
+  const cat = new CatPlayer(0, 0, TILE_SIZE);
+  const axeNext = toolTierDef('axe', TOOL_TIER_LONG_HAFT);
+  human.coins = axeNext.costCoins;
+  const { wood = 0, stone = 0 } = axeNext.costMaterials;
+  human.inventory.addItem('wood', Math.floor(wood * FORGE_MATERIAL_SHARE));
+  human.inventory.addItem('stone', stone);
+  const party: ServiceParty = { human, cat, active: () => human };
+  const tools = { axeTier: TOOL_TIER_HARDENED, pickaxeTier: TOOL_TIER_LONG_HAFT };
+  const session = new ShopSession();
+  session.open(
+    () => buildForgeMenu(tools, party),
+    () => ({ ok: true, line: '' }),
+  );
+  return { session, party: { active: human, companion: cat } };
+}
+
 /** One fixture holding a shop session and the screen over it. */
 function shopFixture(
   name: string,
@@ -219,6 +247,17 @@ export const SHOP_FIXTURES: readonly DialogFixture[] = [
     const session = new ShopSession();
     session.open(serviceMenu, () => ({ ok: true, line: 'The bell rings.' }));
     return { session, party: makeParty(FIXTURE_COINS) };
+  }),
+  shopFixture('tattoo-parlour', () => {
+    const party = makeParty(FIXTURE_COINS);
+    const session = new ShopSession();
+    session.open(() => buildTattooMenu(party.active, 0, null), inkTattoo);
+    return { session, party };
+  }),
+  shopFixture('forge', forgeSession),
+  shopFixture('forge-refused', forgeSession, (rig) => {
+    rig.hover(rig.need('forge-refused-shop/forge-refused-shop/buy-axe/refused'));
+    rig.settle();
   }),
   shopFixture('travel', () => {
     const session = new ShopSession();

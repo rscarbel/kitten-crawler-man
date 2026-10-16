@@ -7,6 +7,7 @@
 import { CraftExplainers, type ExplainerId } from '../../../ui/screens/dialogs/CraftExplainers';
 import { CONSTRUCTION_EXPLAINER } from '../../../ui/screens/dialogs/constructionExplainer';
 import { mongoExplainerEntry } from '../../../ui/screens/dialogs/mongoExplainer';
+import { DUAL_HARVEST_EXPLAINER } from '../../../ui/screens/dialogs/dualHarvestExplainer';
 import { PROCESSING_EXPLAINER } from '../../../ui/screens/dialogs/processingExplainer';
 import { RESOURCING_EXPLAINER } from '../../../ui/screens/dialogs/resourcingExplainer';
 import { buildVillageNotices, workOrderNotice, type Notice } from '../../../systems/townNotices';
@@ -54,6 +55,7 @@ function explainerFixtures(id: ExplainerId, pageCount: number): readonly DialogF
     host.register('construction', CONSTRUCTION_EXPLAINER);
     host.register('resourcing', RESOURCING_EXPLAINER);
     host.register('processing', PROCESSING_EXPLAINER);
+    host.register('dual_harvest', DUAL_HARVEST_EXPLAINER);
     host.register(
       'mongo',
       mongoExplainerEntry(() => MONGO_FIXTURE_LEVEL),
@@ -308,6 +310,7 @@ export const FIXTURES: readonly DialogFixture[] = [
   ...explainerFixtures('resourcing', THREE_PAGES),
   ...explainerFixtures('processing', THREE_PAGES),
   ...explainerFixtures('mongo', THREE_PAGES),
+  ...explainerFixtures('dual_harvest', 1),
   blackjackFixture('blackjack-rules', true, 0),
   blackjackFixture('blackjack-rules-page5', false, BLACKJACK_LATER_PAGE),
   ...tutorialFixtures('defend-tutorial', DEFEND_PAGES, (model, id) =>

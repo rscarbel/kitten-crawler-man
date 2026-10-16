@@ -61,4 +61,10 @@ export interface SiegeCapable {
  */
 export interface SiegeDirective {
   steer(mob: Mob, targets: readonly Player[]): boolean;
+  /**
+   * True for a directive that walks its mob off the field or parks it there
+   * to be released: the fight with it is over, so nothing should spend
+   * shots on it.
+   */
+  readonly leavingTheField?: boolean;
 }

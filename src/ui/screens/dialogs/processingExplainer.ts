@@ -41,7 +41,7 @@ export function processingExplainerPages(touch: boolean): ExplainerPageContent[]
       subtitle: 'Let Fenna do it',
       drawIllustration: drawFennaPage,
       lines: [
-        `Rather not stand at a machine yourself? Fenna will run a whole batch for ${FENNA_FEE_PER_WOOD} coin per wood.`,
+        `Rather not stand at a machine yourself? Fenna will run a whole batch for ${FENNA_FEE_PER_WOOD} coins per wood.`,
         "It's a purchase like any other from her — quick, but it earns no Construction XP.",
       ],
     },

@@ -60,7 +60,11 @@ import { MobRoster } from '../src/systems/kits/SceneWorld';
 import { MobUpdateLoop } from '../src/systems/MobUpdateLoop';
 import type { SystemContext } from '../src/systems/GameSystem';
 import { applyMovement } from '../src/systems/GameLoopPhases';
-import { DefenseStructures, structureKey } from '../src/systems/briarHollow/DefenseStructures';
+import {
+  DefenseStructures,
+  structureKey,
+  trebuchetSolidRect,
+} from '../src/systems/briarHollow/DefenseStructures';
 import {
   ConstructionSystem,
   type PushableBody,
@@ -80,6 +84,8 @@ import {
 } from '../src/systems/briarHollow/constructionPlacement';
 import {
   STRUCTURE_BLAST_DAMAGE,
+  TREBUCHET_HEIGHT_TILES,
+  TREBUCHET_WIDTH_TILES,
   WALL_TIERS,
   discountedCost,
   jobFrames,
@@ -1008,6 +1014,69 @@ function openPatch(): { x: number; y: number } {
     threshold !== null && tileRefusal(world, doors, threshold.x, threshold.y + 2, false) !== null,
     'nothing is built within two tiles of a doorway',
   );
+}
+
+section('Squeezing past a trebuchet');
+/** Where a walk south starts, in tiles above the trebuchets' footprints. */
+const SQUEEZE_START_TILES_NORTH = 2;
+/** How far into a trebuchet's frame the off-line walk starts, in tiles: inside the corner slide. */
+const SQUEEZE_MISALIGN_TILES = 0.2;
+const SQUEEZE_MAX_FRAMES = UPDATES_PER_SECOND * 6;
+/** Rows of footprint between the seam's middle row and open ground. */
+const SQUEEZE_CHASE_RING_TILES = 2;
+
+/** Walks the active crawler south from above the footprints; true once its centre is past them. */
+function walkSouthPast(rig: Rig, centreColumnPx: number, footprintTop: number): boolean {
+  const crawler = rig.human;
+  crawler.x = centreColumnPx - TILE_SIZE / 2;
+  crawler.y = (footprintTop - SQUEEZE_START_TILES_NORTH) * TILE_SIZE;
+  const pastY = (footprintTop + TREBUCHET_HEIGHT_TILES) * TILE_SIZE;
+  for (let frame = 0; frame < SQUEEZE_MAX_FRAMES; frame++) {
+    applyMovement(crawler, { dx: 0, dy: 1, isMobile: false }, gameMap);
+    if (crawler.y >= pastY) return true;
+  }
+  return false;
+}
+
+{
+  const patch = openPatch();
+  const rig = makeRig();
+  const top = patch.y - TREBUCHET_HEIGHT_TILES;
+  const westX = patch.x - TREBUCHET_WIDTH_TILES;
+  const west = rig.defense.placeTrebuchet(westX, top, 'human');
+  const east = rig.defense.placeTrebuchet(patch.x, top, 'human');
+  const seamPx = patch.x * TILE_SIZE;
+  check(
+    !gameMap.isWalkable(patch.x - 1, top + 1) && !gameMap.isWalkable(patch.x, top + 1),
+    'every footprint tile stays solid for mobs and A*',
+  );
+  check(
+    walkSouthPast(rig, seamPx, top),
+    'a crawler walks between two trebuchets built flush, along their bare edges',
+  );
+  const westFrame = trebuchetSolidRect(westX, top);
+  check(
+    walkSouthPast(rig, westFrame.right - SQUEEZE_MISALIGN_TILES * TILE_SIZE, top),
+    'a crawler slightly inside a frame is eased around its corner and through',
+  );
+  check(
+    !walkSouthPast(rig, (westFrame.left + westFrame.right) / 2, top),
+    "a crawler walking into a frame's middle is still stopped",
+  );
+  // The seam's middle row: every tile around it is footprint, so a chase must
+  // close from the nearest ring that has open ground.
+  const stripTile = { x: patch.x - 1, y: top + 1 };
+  const route = gameMap.findPath(westX - 2, stripTile.y, stripTile.x, stripTile.y);
+  const routeEnd = route[route.length - 1];
+  check(
+    routeEnd !== undefined &&
+      gameMap.isWalkable(routeEnd.x, routeEnd.y) &&
+      Math.max(Math.abs(routeEnd.x - stripTile.x), Math.abs(routeEnd.y - stripTile.y)) <=
+        SQUEEZE_CHASE_RING_TILES,
+    'a chase aimed at a crawler on the edge strip ends just beside the frames',
+  );
+  rig.defense.destroy(west);
+  rig.defense.destroy(east);
 }
 
 // ── Jobs ──────────────────────────────────────────────────────────────────

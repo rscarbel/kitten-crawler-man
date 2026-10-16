@@ -449,6 +449,14 @@ function emptyTalkCounts(): Record<VillagerId, number> {
   };
 }
 
+/**
+ * Whether the whole village, not only its square, saves the game on entry: true
+ * once the Plea's rewards have been handed over.
+ */
+export function isVillageSavePoint(state: BriarHollowState): boolean {
+  return state.quest.rewardsGranted;
+}
+
 export function createBriarHollowState(): BriarHollowState {
   return {
     quest: createVillageQuestState(),

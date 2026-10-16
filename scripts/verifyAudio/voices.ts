@@ -21,6 +21,12 @@ import { BallOfSwine } from '../../src/creatures/BallOfSwine.js';
 import { ARENA_INTERIOR_RADIUS_TILES } from '../../src/map/arenaGeometry.js';
 import { playMobAudioCues } from '../../src/systems/GameLoopPhases.js';
 import {
+  setVisibleWorldView,
+  visibleWorldView,
+  type VisibleWorldView,
+} from '../../src/core/visibleWorldView.js';
+import {
+  FakeBiquadFilterNode,
   FakeGainNode,
   FakeStereoPannerNode,
   firstOf,
@@ -78,6 +84,27 @@ const OUT_OF_RANGE_TILES = 30;
 const ACROSS_ARENA_TILES = ARENA_INTERIOR_RADIUS_TILES * 2;
 const LISTENER_X = 1000;
 const LISTENER_Y = 1000;
+/** A siege engine's throw, which carries further muffled when out of sight. */
+const SIEGE_ENGINE_ID = 'trebuchet_fire_1' as const satisfies SoundId;
+/** To the right of the listener: inside on-screen hearing, off a narrow view. */
+const SIEGE_ENGINE_NEAR_TILES = 20;
+/** Past even the off-screen hearing range of a siege engine. */
+const SIEGE_ENGINE_BEYOND_TILES = 45;
+/** A view wide enough to show the near siege engine, centred on the listener. */
+const WIDE_VIEW_TILES = 48;
+/** A view too narrow to show it. */
+const NARROW_VIEW_TILES = 10;
+
+function viewAroundListener(widthTiles: number): VisibleWorldView {
+  const widthPx = widthTiles * TILE_SIZE;
+  return {
+    left: LISTENER_X - widthPx / 2,
+    top: LISTENER_Y - widthPx / 2,
+    width: widthPx,
+    height: widthPx,
+    sight: null,
+  };
+}
 
 function labelOf(id: SoundId): string {
   return SOUND_MANIFEST[id];
@@ -98,11 +125,20 @@ function soundingOf(sources: readonly SourceRecord[], id: SoundId): SourceRecord
   return sources.filter((source) => source.label === labelOf(id) && !source.isSilenced());
 }
 
+/** The low-pass a source plays through after its own gain, or null when it is unfiltered. */
+function filterOf(source: SourceRecord): FakeBiquadFilterNode | null {
+  const ownGain = source.firstOutput;
+  if (ownGain === null) return null;
+  const next = firstOf(ownGain.outputs);
+  return next instanceof FakeBiquadFilterNode ? next : null;
+}
+
 /** The pan of the panner a source plays through, or 0 when it plays centred. */
 function panOf(source: SourceRecord): number {
   const ownGain = source.firstOutput;
   if (ownGain === null) return 0;
-  const panner = firstOf(ownGain.outputs);
+  const afterGain = filterOf(source) ?? ownGain;
+  const panner = firstOf(afterGain.outputs);
   return panner instanceof FakeStereoPannerNode ? panner.pan.value : 0;
 }
 
@@ -402,5 +438,48 @@ export async function checkPlacedSounds(harness: AudioHarness, check: Check): Pr
     `the party's own shots landing far off still play, panned toward where they land (${shots.length} of 2)`,
   );
   unsubscribe();
+  audio.dispose();
+  await checkOffscreenSoundsDistant(harness, check);
+}
+
+/** Part of 18: a siege engine out of sight is heard further, but quieter and muffled. */
+async function checkOffscreenSoundsDistant(harness: AudioHarness, check: Check): Promise<void> {
+  const audio = await freshManager(harness, [SIEGE_ENGINE_ID]);
+  audio.setListener(LISTENER_X, LISTENER_Y);
+  const publishedView = visibleWorldView();
+  const nearX = LISTENER_X + SIEGE_ENGINE_NEAR_TILES * TILE_SIZE;
+
+  setVisibleWorldView(viewAroundListener(WIDE_VIEW_TILES));
+  const inViewBefore = harness.sources.length;
+  audio.playAt(SIEGE_ENGINE_ID, nearX, LISTENER_Y);
+  const [inView] = startedSince(harness, inViewBefore);
+  harness.advance(PAST_INTERVAL_MS);
+
+  setVisibleWorldView(viewAroundListener(NARROW_VIEW_TILES));
+  const offViewBefore = harness.sources.length;
+  audio.playAt(SIEGE_ENGINE_ID, nearX, LISTENER_Y);
+  const [offView] = startedSince(harness, offViewBefore);
+  harness.advance(PAST_INTERVAL_MS);
+
+  const beyondBefore = harness.sources.length;
+  audio.playAt(SIEGE_ENGINE_ID, LISTENER_X + SIEGE_ENGINE_BEYOND_TILES * TILE_SIZE, LISTENER_Y);
+  const beyondStarted = harness.sources.length - beyondBefore;
+  setVisibleWorldView(publishedView);
+
+  check(
+    inView !== undefined && filterOf(inView) === null && panOf(inView) > 0,
+    'a siege engine in view plays unfiltered, panned toward it',
+  );
+  check(
+    inView !== undefined &&
+      offView !== undefined &&
+      filterOf(offView) !== null &&
+      levelOf(offView) < levelOf(inView) &&
+      panOf(offView) > 0,
+    `the same throw off the view plays quieter through a low-pass (${
+      offView === undefined ? 'dropped' : `level ${levelOf(offView).toFixed(3)}`
+    }${inView === undefined ? '' : ` vs ${levelOf(inView).toFixed(3)}`})`,
+  );
+  check(beyondStarted === 0, 'past its off-screen hearing range it takes no voice');
   audio.dispose();
 }

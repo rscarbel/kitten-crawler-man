@@ -2,6 +2,7 @@ import type { StatName, Player } from '../Player';
 import { ALL_STATS } from '../Player';
 import { INCURABLE_STATUSES, type StatusEffect } from './StatusEffect';
 import type { SkillId, SkillState } from './SkillManager';
+import { isStatTattooId, type StatTattooId } from './tattoos';
 import { HumanPlayer } from '../creatures/HumanPlayer';
 import { ITEM_DEF, isItemId, MAIN_HAND_KEY } from './ItemDefs';
 import { REVIVE_HP_FRACTION } from './reviveRules';
@@ -83,7 +84,8 @@ export interface PlayerSnapshot {
   inventoryHotbar: (SavedStack | null)[];
   equippedEntries: [string, ItemId][];
   explosivesHandling?: number;
-  tattooStat: StatName | null;
+  /** The Quiet Needle's stat mark. Validated on restore, so anything unrecognised reads as unmarked. */
+  tattoo?: StatTattooId | null;
   /** Skill taught by the Quiet Needle's brass mark. Absent on saves predating it. */
   skillTattoo?: SkillId | null;
   /** The Juicer's Desperado Pass ink. Absent on saves predating it. */
@@ -132,6 +134,8 @@ export interface PlayerSnapshot {
    * a save opened tomorrow should find the skill ready, not still counting down.
    */
   cockroachReadyAt?: number | null;
+  /** Wall-clock deadline for the Third Eye's foresight, kept for the same reason as Cockroach's. */
+  thirdEyeReadyAt?: number | null;
   /** Unseen "new upgrade" item ids, so the bag badge survives a scene round-trip. Absent on saves predating it. */
   unseenUpgrades?: ItemId[];
 }
@@ -168,7 +172,7 @@ export function snapPlayer(p: Player): PlayerSnapshot {
     inventorySlots: p.inventory.bag.slots.map(savedStack),
     inventoryHotbar: p.inventory.actionBar.slots.map(savedStack),
     equippedEntries: p.inventory.equipment.entries(),
-    tattooStat: p.tattooStat,
+    tattoo: p.tattoo,
     skillTattoo: p.skillTattoo,
     desperadoPassTattoo: p.hasDesperadoPassTattoo,
     drillTraining: p.drillTraining,
@@ -185,6 +189,7 @@ export function snapPlayer(p: Player): PlayerSnapshot {
     skillStates: p.skills.snapshotStates(),
     craftSkillStates: p.craftSkills.snapshot(),
     cockroachReadyAt: p.cockroachReadyAt,
+    thirdEyeReadyAt: p.thirdEyeReadyAt,
     unseenUpgrades: [...p.inventory.unseenUpgrades],
   };
   if (p instanceof HumanPlayer) {
@@ -348,6 +353,10 @@ function baseStatsFrom(p: Player, snap: PlayerSnapshot): Record<StatName, number
   };
 }
 
+function validDeadline(readyAt: number | null | undefined): number | null {
+  return readyAt !== null && readyAt !== undefined && Number.isFinite(readyAt) ? readyAt : null;
+}
+
 export function restorePlayer(p: Player, snap: PlayerSnapshot): void {
   p.level = Math.max(1, finiteOr(snap.level, p.level));
   p.xp = Math.max(0, finiteOr(snap.xp, 0));
@@ -355,7 +364,7 @@ export function restorePlayer(p: Player, snap: PlayerSnapshot): void {
   p.coins = Math.max(0, finiteOr(snap.coins, 0));
   p.facingX = finiteOr(snap.facingX, p.facingX);
   p.facingY = finiteOr(snap.facingY, p.facingY);
-  p.tattooStat = snap.tattooStat;
+  p.tattoo = isStatTattooId(snap.tattoo) ? snap.tattoo : null;
   p.skillTattoo = snap.skillTattoo ?? null;
   p.hasDesperadoPassTattoo = snap.desperadoPassTattoo ?? false;
   p.drillTraining = Math.max(0, finiteOr(snap.drillTraining, 0));
@@ -365,9 +374,8 @@ export function restorePlayer(p: Player, snap: PlayerSnapshot): void {
   p.reviveProgress = snap.reviveProgress ?? 0;
   p.skills.restoreStates(snap.skillStates ?? []);
   p.craftSkills.restore(parseCraftSkillsSnapshot(snap.craftSkillStates) ?? UNLEARNED_CRAFT_SKILLS);
-  const readyAt = snap.cockroachReadyAt;
-  p.cockroachReadyAt =
-    readyAt !== null && readyAt !== undefined && Number.isFinite(readyAt) ? readyAt : null;
+  p.cockroachReadyAt = validDeadline(snap.cockroachReadyAt);
+  p.thirdEyeReadyAt = validDeadline(snap.thirdEyeReadyAt);
   if (p instanceof HumanPlayer) {
     if (snap.explosivesHandling !== undefined) {
       p.explosivesHandling = Math.max(1, finiteOr(snap.explosivesHandling, p.explosivesHandling));

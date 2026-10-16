@@ -529,8 +529,8 @@ export class TrebuchetSystem {
     if (!unlimitedAmmo(builderLevel)) record.ammo = Math.max(0, record.ammo - 1);
     state.sinceRelease = 0;
     state.returnLeft = ARM_RETURN_FRAMES;
-    this.deps.audio?.playRandom(TREBUCHET_FIRE_SOUNDS);
-    if (infernal) this.deps.audio?.playRandom(VILLAGE_CUES.infernalBoulderWhoosh);
+    this.deps.audio?.playRandomAt(TREBUCHET_FIRE_SOUNDS, fromX, fromY);
+    if (infernal) this.deps.audio?.playRandomAt(VILLAGE_CUES.infernalBoulderWhoosh, fromX, fromY);
     const random = this.deps.random ?? Math.random;
     if (random() < TREBUCHET_BREAK_CHANCE && this.deps.defense.breakTrebuchet(key)) {
       this.callouts.add(
@@ -604,10 +604,20 @@ export class TrebuchetSystem {
     return found;
   }
 
-  /** A hostile the party's engines may shoot at. Filtered explicitly: the roster holds allies too. */
+  /**
+   * A hostile the party's engines may shoot at. Filtered explicitly: the
+   * roster holds allies too. A body that cannot be hurt, or that the siege is
+   * walking off the field, would soak boulders forever.
+   */
   private isFairGame(mob: Mob): boolean {
     return (
-      mob.isAlive && mob.isHostile && mob.isDefendTarget !== true && !this.deps.isInSafeRoom(mob)
+      mob.isAlive &&
+      mob.isHostile &&
+      mob.isDefendTarget !== true &&
+      !mob.refusesDamage &&
+      !mob.offLimitsToAllies &&
+      mob.siegeDirective?.leavingTheField !== true &&
+      !this.deps.isInSafeRoom(mob)
     );
   }
 
@@ -823,7 +833,7 @@ export class TrebuchetSystem {
       }
     }
     this.deps.bus.emit('blastLanded', { x: toX, y: toY, radiusPx: shatterPx });
-    this.deps.audio?.playRandom(BOULDER_IMPACT_SOUNDS);
+    this.deps.audio?.playRandomAt(BOULDER_IMPACT_SOUNDS, toX, toY);
     this.addBurst(toX, toY, boulder.infernal);
     if (boulder.infernal) this.addCloud(toX, toY, boulder.builtBy);
     const active = centreOf(this.deps.active());
@@ -851,7 +861,7 @@ export class TrebuchetSystem {
 
   private addCloud(x: number, y: number, builtBy: CrawlerKind): void {
     if (this.clouds.length >= MAX_MIASMA_CLOUDS) this.clouds.shift();
-    this.deps.audio?.playRandom(VILLAGE_CUES.miasmaHiss);
+    this.deps.audio?.playRandomAt(VILLAGE_CUES.miasmaHiss, x, y);
     this.clouds.push({ x, y, builtBy, seed: this.frame, age: 0 });
   }
 

@@ -38,16 +38,16 @@ export function buildAnchorReward(xp: number): DialogReward {
 
 export const VOSS_OFFER_INTRO = voss.button(
   'Go on',
-  "Come dear children; sit and listen to this old woman. Don't be shy, I'm not here to take your money, I'm here to tell you a story. A story about a stone imbued with great power, who's lost pieces have been turning up in this very town the past few weeks.",
+  "Come, dear children; sit and listen to this old woman. Don't be shy. I'm not here to take your money; I'm here to tell you a story. A story about a stone imbued with great power, whose lost pieces have been turning up in this very town the past few weeks.",
 );
 
 export const VOSS_OFFER_HISTORY = voss.line(
-  "Long before this to town was settled, before a brick had been laid or a drop of ale spilled, there was a sorceress who made her home in the woods right here. She lived peacefully, and would guide lost travelers through the forest, warding against the dangers that lurk within. However, in this world, no kindness or good deed goes unpunished. Word of her powers and deeds spread to neighboring towns and villages, and the words found quarter with the greed of one man who sought to have some of her power for himself. He pretended to be a weary traveler who could take not one step further without rest. He begged the sorceress for a place to lay and regain his strength and she offered him protection through the night. When she was preparing him a meal that evening, he stepped away to relieve himself, taking a sick from the fire for light. Not two minutes later, he raced back to their camp and in a frenzy relayed that he lost his footing and set ablaze to the forest floor and could not put it out. The sorceress, not interested in moving their camp rushed in the dark, departed to put out the flame before it could rage out of control. She sealed the flame with a spell until it was quenched. When she returned to camp, she found the traveler had gone missing. Fled in the night, robing her of any possession he could find. Most was useless to him, but he had taken a stone which she had laid years of work imbuing her good will towards travelers and her kindness into. It remembers any location for which its wielder has shown kindness and for which they have great significance in. It allowed near instant travel to such locations. It was named Wayfinder's Anchor, because it can bring you to the places that are most dear no matter how far you are. The sorceress was hurt deeply by the betrayal. She was not naive to believe that no one would ever take advantage of her kindness, but she weighed the cost of betrayal worth the purchase of the joy, safety, and freedom it bought for many. Instead of abandoning her commitment to help travelers thorough these woods, she laid down a spell of sabotage against the stone. When her casting was complete, the stone shattered, so that it would be of no use to anyone without magically repairing it. She did not see that stone again, but she made sure a thief in the night would not benefit from his betrayal.",
+  "Long before this town was settled, before a brick had been laid or a drop of ale spilled, there was a sorceress who made her home in the woods right here. She lived peacefully, and would guide lost travelers through the forest, warding against the dangers that lurk within. However, in this world, no kindness or good deed goes unpunished. Word of her powers and deeds spread to neighboring towns and villages, and that word found quarter with the greed of one man who sought to have some of her power for himself. He pretended to be a weary traveler who could take not one step further without rest. He begged the sorceress for a place to lie and regain his strength, and she offered him protection through the night. When she was preparing him a meal that evening, he stepped away to relieve himself, taking a stick from the fire for light. Not two minutes later, he raced back to their camp and in a frenzy relayed that he had lost his footing and set the forest floor ablaze and could not put it out. The sorceress, not interested in moving their camp hastily in the dark, departed to put out the flame before it could rage out of control. She sealed the flame with a spell until it was quenched. When she returned to camp, she found the traveler had gone missing. Fled in the night, robbing her of any possession he could find. Most was useless to him, but he had taken a stone into which she had poured years of work, imbuing it with her goodwill towards travelers and her kindness. It remembers any location to which its wielder has shown kindness and which holds great significance for them. It allows near-instant travel to such locations. It was named Wayfinder's Anchor, because it can bring you to the places that are most dear no matter how far you are. The sorceress was hurt deeply by the betrayal. She was not so naive as to believe that no one would ever take advantage of her kindness, but she judged the cost of betrayal worth the joy, safety, and freedom it bought for many. Instead of abandoning her commitment to help travelers through these woods, she laid down a spell of sabotage against the stone. When her casting was complete, the stone shattered, so that it would be of no use to anyone until it was magically repaired. She did not see that stone again, but she made sure a thief in the night would not benefit from his betrayal.",
 );
 
 /** The last beat: `Ending.confirm` carries the accept/decline labels, so this line's own advance is never shown. */
 export const VOSS_OFFER_PITCH = voss.line(
-  "My cards tell me that the all pieces of this stone have returned home. They are here, in these city walls. Funny how that works; the magic is so powerful that the pieces of the broken stone all still found themselves in the very place they were so deeply attached to. I suppose the name Wayfinder's Anchor came about. It has come to be that one piece was dropped at Old Hilda's by a visitor. The temple recieved another as an offering. The third I saw changing hands at the market stall just here next to me. Bring me all three parts and I am one of few remaining people left who know how to invoke the magic to restore it.",
+  "My cards tell me that all the pieces of this stone have returned home. They are here, within these city walls. Funny how that works; the magic is so powerful that the pieces of the broken stone all still found themselves in the very place they were so deeply attached to. I suppose that is how the name Wayfinder's Anchor came about. It has come to be that one piece was dropped at Old Hilda's by a visitor. The temple received another as an offering. The third I saw changing hands at the market stall just here next to me. Bring me all three parts. I am one of the few people left who know how to invoke the magic to restore it.",
 );
 
 /** Shown when she is asked again with the errand still unfinished. */
@@ -62,7 +62,7 @@ export const VOSS_PROGRESS = voss.fn(
     if (a.outstanding.length === 0) {
       return `${intro} ${tally} You have all of them. Put them on the table.`;
     }
-    return `${intro} ${tally} Still remaining: ${a.outstanding.join(', ')}.`;
+    return `${intro} ${tally} Still remaining: ${a.outstanding.join(' ')}`;
   },
 );
 
@@ -74,25 +74,25 @@ export const VOSS_ASSEMBLY_OFFER = voss.fn(
 
 export const VOSS_ASSEMBLY_DONE = voss.button(
   'Take the stone',
-  'There. Incredible! Feel that? That warmth is the stone at home; this very town square lays on top of the same clearing in the woods that the sorceress once lived. If you use this when you are out in the wild, it will bring you back here, where it is anchored, and to any other place you come to hold dear once you have done right by it. It cannot be used in rapid succession, and there are spells that can block it, but it should help you travel around much faster.',
+  'There. Incredible! Feel that? That warmth is the stone at home; this very town square lies on top of the same clearing in the woods where the sorceress once lived. If you use this when you are out in the wild, it will bring you back here, where it is anchored, and to any other place you come to hold dear once you have done right by it. It cannot be used in rapid succession, and there are spells that can block it, but it should help you travel around much faster.',
 );
 
 export const VOSS_CANNOT_AFFORD = voss.fn(
   (a: { readonly feeCoins: number }): LineText =>
-    `${a.feeCoins} coins. You don't seem to have enough my dear. Come back to me once you have the coin for this..`,
+    `${a.feeCoins} coins. You don't seem to have enough, my dear. Come back to me once you have the coin for this.`,
 );
 
 // Old Hilda
 
 export const HILDA_REQUEST_INTRO = hilda.button(
   'Can I help?',
-  "Oh, hi there! I sure am glad to have visitors like you right now; I've been meaning to replace some of the furnature in here, and wouldn't you know it, some kids came in here to play hide and seek and broke everything.",
+  "Oh, hi there! I sure am glad to have visitors like you right now; I've been meaning to replace some of the furniture in here, and wouldn't you know it, some kids came in here to play hide and seek and broke everything.",
 );
 
 /** The last beat: `Ending.confirm` carries the accept/decline labels, so this line's own advance is never shown. */
 export const HILDA_REQUEST_TERMS = hilda.fn(
   (a: { readonly boardsPerRepair: number; readonly repairsRequired: number }): LineText =>
-    `Oh that would be just lovely if you could help! The kids broke the worktable, the chair, and that shelf over on the side. I don't blame them for breaking any of it; they're just kids and the furnature was falling apart anyhow. I don't have very much money, but I did find this funny looking rock a few months ago. I got the sense that it was magic, but even though I've had it for a few months, it's done nothing. Probably because it's just a broken piece of whatever it used to be a part of. If you rebuild all the furnature that's broken in here, the stone is all yours! I won’t even charge you for the wood. There's a pile of boards by the door, help yourself. It takes ${a.boardsPerRepair} to bield each piece and there's ${a.repairsRequired} pieces.`,
+    `Oh that would be just lovely if you could help! The kids broke the worktable, the chair, and that shelf over on the side. I don't blame them for breaking any of it; they're just kids and the furniture was falling apart anyhow. I don't have very much money, but I did find this funny looking rock a few months ago. I got the sense that it was magic, but even though I've had it for a few months, it's done nothing. Probably because it's just a broken piece of whatever it used to be a part of. If you rebuild all the furniture that's broken in here, the stone is all yours! I won’t even charge you for the wood. There's a pile of boards by the door, help yourself. It takes ${a.boardsPerRepair} to build each piece and there are ${a.repairsRequired} pieces.`,
 );
 
 /** Asked again with work outstanding. */
@@ -102,11 +102,11 @@ export const HILDA_PROGRESS = hilda.fn(
     readonly repairsRequired: number;
     readonly holdsEnoughBoards: boolean;
   }): LineText => {
-    const tally = `${a.repairsDone} of ${a.repairsRequired} mended.`;
+    const tally = `${a.repairsDone} of ${a.repairsRequired} mended`;
     const nudge = a.holdsEnoughBoards
-      ? "You've got the wood on you, good! Go and stand right in front of the areas where the furnature broke, and you will be able to build the furnature anew."
+      ? "You've got the wood on you, good! Go and stand right in front of the areas where the furniture broke, and you will be able to build the furniture anew."
       : 'It looks like you need to get a bit more wood to finish the rest of the repairs..';
-    return `${tally}, dearie.  ${nudge}`;
+    return `${tally}, dearie. ${nudge}`;
   },
 );
 
@@ -114,14 +114,14 @@ export const HILDA_PROGRESS = hilda.fn(
 export const HILDA_REWARD: NonEmpty<DialogLine> = [
   hilda.button(
     'Take the shard',
-    "Well, look at that. This furnature looks better than the originals! You've really got some talent. Here, take it before I get used to the quiet and change my mind.  Whatever that thing is, dearie, it isn't a normal rock.",
+    "Well, look at that. This furniture looks better than the originals! You've really got some talent. Here, take it before I get used to the quiet and change my mind.  Whatever that thing is, dearie, it isn't a normal rock.",
   ),
 ];
 
 // Deacon Aviel
 
 export const AVIEL_REQUEST_INTRO = aviel.button(
-  'Is there anything you would to to part with it?',
+  'Is there anything you would take to part with it?',
   'Thou dost mean the stone set within the face of the altar? It is neither gold nor precious metal, but a tithe given unto this temple by a devout soul. It is our duty to give faithfully unto the gods, and when a man hath no coin to offer, he may give of the treasures he possesseth.',
 );
 

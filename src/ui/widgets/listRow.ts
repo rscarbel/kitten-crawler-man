@@ -19,7 +19,7 @@ import {
   isDisabled,
   strokeRounded,
 } from './paint';
-import { lineHeightOf, measureText, text } from './text';
+import { lineHeightOf, measureText, measureTextHeight, text } from './text';
 import { tooltip } from './tooltip';
 
 /** What sits at the start of a row. */
@@ -37,6 +37,8 @@ export interface ListRowOptions {
    */
   readonly titleColor?: string;
   readonly subtitle?: string;
+  /** The most lines the subtitle wraps to before it ends in an ellipsis. One when omitted. */
+  readonly subtitleLines?: number;
   readonly leading?: RowLeading;
   /** A value on the right: a price, a count, a state. */
   readonly trailing?: string;
@@ -60,10 +62,10 @@ const SELECTED_BORDER_ALPHA = 0.25;
 const ACCENT_BAR_WIDTH = 3;
 const BORDER_WIDTH = 1;
 
-/** A row tall enough for a title and a subtitle. */
-export function listRowHeight(ui: Ui, withSubtitle: boolean): number {
+/** A row tall enough for a title and a subtitle of up to `subtitleLines` lines. */
+export function listRowHeight(ui: Ui, withSubtitle: boolean, subtitleLines = 1): number {
   if (!withSubtitle) return ui.theme.size.row;
-  const lines = lineHeightOf(ui, 'label') + lineHeightOf(ui, 'caption');
+  const lines = lineHeightOf(ui, 'label') + lineHeightOf(ui, 'caption') * subtitleLines;
   return Math.max(ui.theme.size.row, lines + ui.theme.space.md * 2);
 }
 
@@ -80,6 +82,23 @@ export function listRowTrailingMax(ui: Ui, rect: Rect, withLeading: boolean): nu
   const { space } = ui.theme;
   const leading = withLeading ? leadingSide(ui, rect) + space.md : 0;
   return (rect.w - space.md * 2 - leading) / 2;
+}
+
+/**
+ * The width a row's title and subtitle get, laid out as {@link listRow} lays
+ * them out beside a leading picture and `trailingContent` of `trailingWidth`,
+ * so a caller can size a row round a wrapped subtitle before drawing it.
+ */
+export function listRowTextWidth(
+  ui: Ui,
+  rect: Rect,
+  opts: Pick<ListRowOptions, 'leading' | 'trailingWidth'>,
+): number {
+  const { space } = ui.theme;
+  let width = rect.w - space.md * 2;
+  if (opts.leading !== undefined) width -= leadingSide(ui, rect) + space.md;
+  if (opts.trailingWidth !== undefined) width -= Math.min(width / 2, opts.trailingWidth) + space.md;
+  return width;
 }
 
 export function listRow(ui: Ui, rect: Rect, opts: ListRowOptions): HitState {
@@ -172,7 +191,14 @@ export function listRow(ui: Ui, rect: Rect, opts: ListRowOptions): HitState {
       { text: opts.title, role: 'label', color: titleColor },
     );
   } else {
-    const subH = lineHeightOf(ui, 'caption');
+    const subtitleLines = opts.subtitleLines ?? 1;
+    const wraps = subtitleLines > 1;
+    const subH = wraps
+      ? Math.min(
+          measureTextHeight(ui, content.w, { text: opts.subtitle, role: 'caption' }),
+          lineHeightOf(ui, 'caption') * subtitleLines,
+        )
+      : lineHeightOf(ui, 'caption');
     const top = rect.y + (rect.h - titleH - subH) / 2;
     text(
       ui,
@@ -190,6 +216,8 @@ export function listRow(ui: Ui, rect: Rect, opts: ListRowOptions): HitState {
         text: opts.subtitle,
         role: 'caption',
         color: disabled ? palette.text.disabled : undefined,
+        wrap: wraps,
+        maxLines: wraps ? subtitleLines : undefined,
       },
     );
   }

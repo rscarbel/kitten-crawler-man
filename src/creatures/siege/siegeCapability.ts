@@ -280,6 +280,33 @@ export function siegeCanEngage(mob: Mob, target: Player): boolean {
   return isInsidePalisade(siege.world.site, mob) === isInsidePalisade(siege.world.site, target);
 }
 
+/** A defender an enlisted mob may fight, and how far it stands from the mob, in pixels. */
+export interface EngageableDefender {
+  readonly target: Player;
+  readonly distance: number;
+}
+
+/**
+ * The nearest live defender within `reachPx` of `mob` that it may take as its
+ * fight ({@link siegeCanEngage}), measured mob position to target position;
+ * null when none qualify.
+ */
+export function nearestEngageableDefender(
+  mob: Mob,
+  targets: readonly Player[],
+  reachPx: number,
+): EngageableDefender | null {
+  let best: EngageableDefender | null = null;
+  for (const target of targets) {
+    if (!target.isAlive) continue;
+    const distance = Math.hypot(target.x - mob.x, target.y - mob.y);
+    if (distance > reachPx || (best !== null && distance >= best.distance)) continue;
+    if (!siegeCanEngage(mob, target)) continue;
+    best = { target, distance };
+  }
+  return best;
+}
+
 /** Whether a body's centre stands on one of any gate's tiles. */
 function isOnGateTile(
   site: BriarHollowSite,

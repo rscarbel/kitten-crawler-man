@@ -970,6 +970,19 @@ const BLUEPRINTS_ESCORT: PlaytestPreset = {
   },
 };
 
+/** The blueprints just handed over, with Fenna waiting at the sawmill to set the upgrade job. */
+const BLUEPRINTS_SHOW_FENNA: PlaytestPreset = {
+  ...BLUEPRINTS_OFFER,
+  id: 'blueprints-show-fenna',
+  description: 'Borrowed Blueprints: show Fenna the blueprints, fresh from Wendell',
+  human: { ...BLUEPRINTS_OFFER.human, questSlot: { id: 'quest_blueprints', quantity: 1 } },
+  briarHollowBlueprints: {
+    phase: 'show_fenna',
+    fence: 'built',
+    grain: 0,
+  },
+};
+
 /** The blueprints in Carl's hands and the materials for both upgrades. */
 const BLUEPRINTS_STATIONS: PlaytestPreset = {
   ...BLUEPRINTS_OFFER,
@@ -1117,6 +1130,7 @@ export const PLAYTEST_PRESETS: readonly PlaytestPreset[] = [
   BLUEPRINTS_FENCE,
   BLUEPRINTS_HARVEST,
   BLUEPRINTS_ESCORT,
+  BLUEPRINTS_SHOW_FENNA,
   BLUEPRINTS_STATIONS,
   CONTRACTS,
   CONTRACTS_LAST_SPOT,

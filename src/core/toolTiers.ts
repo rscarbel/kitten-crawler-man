@@ -1,4 +1,5 @@
 import type { ItemId } from './ItemDefs';
+import type { ResourceCost } from './partyResources';
 
 /** What a tool gathers. Also the two harvest node families (`07`). */
 export type ToolKind = 'axe' | 'pickaxe';
@@ -56,6 +57,13 @@ export function toolNodeSpareChance(kind: ToolKind, tier: ToolTier): number {
   return AXE_SPARE_CHANCE_PER_TIER * tiersAboveStarter;
 }
 
+/** The starter and Hardened tiers are bought with coins alone. */
+const NO_TOOL_MATERIALS = {} satisfies ResourceCost;
+const LONG_HAFT_MATERIALS = { wood: 60, stone: 40 } satisfies ResourceCost;
+const RATKIN_FORGE_MATERIALS = { wood: 200, stone: 150 } satisfies ResourceCost;
+const DEEPWOOD_MATERIALS = { wood: 500, stone: 400 } satisfies ResourceCost;
+const GRAVEYARD_MATERIALS = { wood: 1000, stone: 800 } satisfies ResourceCost;
+
 /** One rung of a tool kind's upgrade ladder. */
 export interface ToolTierDef {
   readonly id: ItemId;
@@ -63,6 +71,8 @@ export interface ToolTierDef {
   readonly description: string;
   /** Coin price at the forge. The starter tier (0) costs nothing. */
   readonly costCoins: number;
+  /** Raw materials the forge takes from the party's combined packs on top of the coins. */
+  readonly costMaterials: ResourceCost;
   /** Fraction shaved off harvest time, additive with the Resourcing skill's own speed steps. */
   readonly speedBonus: number;
   /** Multiplier applied to a harvest tick's yield. */
@@ -81,6 +91,7 @@ export const TOOL_TIERS: Record<ToolKind, readonly ToolTierDef[]> = {
       description:
         'A simple iron-headed axe made for everyday woodcutting. Nothing fancy, but sturdy enough to bring down the trees around Briar Hollow.',
       costCoins: 0,
+      costMaterials: NO_TOOL_MATERIALS,
       speedBonus: 0,
       yieldMultiplier: 1,
     },
@@ -90,6 +101,7 @@ export const TOOL_TIERS: Record<ToolKind, readonly ToolTierDef[]> = {
       description:
         'A professionally sharpened axe with a hardened steel edge. It bites deeper into timber and stays sharp considerably longer than a basic tool.',
       costCoins: 250,
+      costMaterials: NO_TOOL_MATERIALS,
       speedBonus: HARDENED_SPEED_BONUS,
       yieldMultiplier: 1,
     },
@@ -99,6 +111,7 @@ export const TOOL_TIERS: Record<ToolKind, readonly ToolTierDef[]> = {
       description:
         'A long-handled felling axe designed to make every swing count. The broad, razor-sharp head cuts through thick trunks with surprising speed.',
       costCoins: 750,
+      costMaterials: LONG_HAFT_MATERIALS,
       speedBonus: LONG_HAFT_SPEED_BONUS,
       yieldMultiplier: 1,
     },
@@ -108,6 +121,7 @@ export const TOOL_TIERS: Record<ToolKind, readonly ToolTierDef[]> = {
       description:
         'A masterwork axe forged by a Ratkin smith who understands exactly how to turn a small frame into a powerful swing. Its strange balance makes it exceptionally efficient in practiced hands.',
       costCoins: 2000,
+      costMaterials: RATKIN_FORGE_MATERIALS,
       speedBonus: TOOL_TIER_MAX_SPEED_BONUS,
       yieldMultiplier: 1,
     },
@@ -117,6 +131,7 @@ export const TOOL_TIERS: Record<ToolKind, readonly ToolTierDef[]> = {
       description:
         'A formidable felling axe made from exceptional steel and fitted with a reinforced haft. Each swing tears through timber with far less wasted effort than an ordinary axe.',
       costCoins: 5000,
+      costMaterials: DEEPWOOD_MATERIALS,
       speedBonus: TOOL_TIER_MAX_SPEED_BONUS,
       yieldMultiplier: TOOL_TIER_4_YIELD_MULTIPLIER,
     },
@@ -126,6 +141,7 @@ export const TOOL_TIERS: Record<ToolKind, readonly ToolTierDef[]> = {
       description:
         "A legendary-looking blacksmith's axe whose edge has been honed to an almost absurd sharpness. Oren refuses to explain the name and insists that it is still, technically, a woodcutting tool.",
       costCoins: 12000,
+      costMaterials: GRAVEYARD_MATERIALS,
       speedBonus: TOOL_TIER_MAX_SPEED_BONUS,
       yieldMultiplier: TOOL_TIER_5_YIELD_MULTIPLIER,
     },
@@ -137,6 +153,7 @@ export const TOOL_TIERS: Record<ToolKind, readonly ToolTierDef[]> = {
       description:
         'A plain iron pickaxe with a solid wooden handle. It can break the exposed rock around the village, though your arms will be doing most of the work.',
       costCoins: 0,
+      costMaterials: NO_TOOL_MATERIALS,
       speedBonus: 0,
       yieldMultiplier: 1,
     },
@@ -146,6 +163,7 @@ export const TOOL_TIERS: Record<ToolKind, readonly ToolTierDef[]> = {
       description:
         'A reinforced pickaxe forged with a hardened steel head. Its weight and shape are balanced to crack stubborn stone with fewer strikes.',
       costCoins: 250,
+      costMaterials: NO_TOOL_MATERIALS,
       speedBonus: HARDENED_SPEED_BONUS,
       yieldMultiplier: 1,
     },
@@ -155,6 +173,7 @@ export const TOOL_TIERS: Record<ToolKind, readonly ToolTierDef[]> = {
       description:
         'A heavy quarry pick built for breaking stone rather than merely chipping it. Its reinforced head and weight make short work of large deposits.',
       costCoins: 750,
+      costMaterials: LONG_HAFT_MATERIALS,
       speedBonus: LONG_HAFT_SPEED_BONUS,
       yieldMultiplier: 1,
     },
@@ -164,6 +183,7 @@ export const TOOL_TIERS: Record<ToolKind, readonly ToolTierDef[]> = {
       description:
         'A masterwork mining pick built for speed and precision. The unusually shaped head concentrates force into a narrow point, splitting stone with remarkable efficiency.',
       costCoins: 2000,
+      costMaterials: RATKIN_FORGE_MATERIALS,
       speedBonus: TOOL_TIER_MAX_SPEED_BONUS,
       yieldMultiplier: 1,
     },
@@ -173,6 +193,7 @@ export const TOOL_TIERS: Record<ToolKind, readonly ToolTierDef[]> = {
       description:
         'A brutal, beautifully balanced mining pick intended for the hardest rock. The head is dense enough to shatter stone rather than simply dent it.',
       costCoins: 5000,
+      costMaterials: DEEPWOOD_MATERIALS,
       speedBonus: TOOL_TIER_MAX_SPEED_BONUS,
       yieldMultiplier: TOOL_TIER_4_YIELD_MULTIPLIER,
     },
@@ -182,6 +203,7 @@ export const TOOL_TIERS: Record<ToolKind, readonly ToolTierDef[]> = {
       description:
         'An extraordinary pick forged for extracting material from dungeon-hardened stone. It feels almost too heavy at first, until you realize the tool is doing most of the work for you.',
       costCoins: 12000,
+      costMaterials: GRAVEYARD_MATERIALS,
       speedBonus: TOOL_TIER_MAX_SPEED_BONUS,
       yieldMultiplier: TOOL_TIER_5_YIELD_MULTIPLIER,
     },

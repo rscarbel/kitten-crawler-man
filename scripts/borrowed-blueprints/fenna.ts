@@ -15,9 +15,11 @@ import {
   type BlueprintsQuestPhase,
 } from '../../src/core/blueprintsQuestPhase';
 import { createBriarHollowState, type BriarHollowState } from '../../src/core/briarHollowState';
+import { formatCost } from '../../src/core/partyResources';
 import { TILE_SIZE } from '../../src/core/constants';
 import { teachBoth } from '../../src/core/CraftSkills';
 import { EventBus } from '../../src/core/EventBus';
+import { Inventory } from '../../src/core/Inventory';
 import { TIKKA_PLANS_UNLOCKS } from '../../src/core/villageUnlocks';
 import type { VillageQuestPhase } from '../../src/core/villageQuestPhase';
 import type { NPCMarkerType } from '../../src/creatures/QuestNPC';
@@ -40,6 +42,7 @@ import {
   PLUMBLINE_FARM_NAME,
 } from '../../src/systems/briarHollow/blueprints/blueprintsProgress';
 import { WendellBlueprintsHook } from '../../src/systems/briarHollow/blueprints/WendellBlueprintsHook';
+import { stationUpgradeCost } from '../../src/systems/briarHollow/blueprints/StationUpgrades';
 import {
   FENNA_OFFER_ACCEPT_LABEL,
   FENNA_OFFER_DECLINE_LABEL,
@@ -69,6 +72,7 @@ interface FennaRig {
   readonly state: BriarHollowState;
   readonly lines: FennaBlueprintsLines;
   readonly started: string[];
+  readonly humanInventory: Inventory;
   pleaPhase: VillageQuestPhase;
   humanLearned: boolean;
 }
@@ -91,9 +95,11 @@ function fennaRig(): FennaRig {
   const bus = new EventBus();
   const started: string[] = [];
   bus.on('questStarted', (event) => started.push(event.questId));
+  const humanInventory = new Inventory('human');
   const rig: FennaRig = {
     state,
     started,
+    humanInventory,
     pleaPhase: PLEA_AT_PEACE,
     humanLearned: false,
     lines: new FennaBlueprintsLines({
@@ -103,8 +109,8 @@ function fennaRig(): FennaRig {
       setPhase: (phase) => {
         moveBlueprintsPhase(state.blueprints, phase, bus);
       },
-      human: { craftSkills: { isLearned: () => rig.humanLearned } },
-      cat: { craftSkills: { isLearned: () => false } },
+      human: { craftSkills: { isLearned: () => rig.humanLearned }, inventory: humanInventory },
+      cat: { craftSkills: { isLearned: () => false }, inventory: new Inventory('cat') },
     }),
   };
   return rig;
@@ -195,14 +201,16 @@ export function verifyFennaMarker(check: Check): void {
     'with the Plea silent, the offer marks Fenna',
   );
 
+  rig.humanInventory.addItem('quest_blueprints', 1);
   const answered = BLUEPRINTS_QUEST_PHASE_ORDER.filter((phase) => phase !== 'unoffered');
   const markedAfterAnswer = answered.filter((phase) => {
     rig.state.blueprints.phase = phase;
-    return markerOf(rig) !== 'none';
+    const expected: NPCMarkerType = phase === 'show_fenna' ? 'question' : 'none';
+    return markerOf(rig) !== expected;
   });
   check(
     markedAfterAnswer.length === 0,
-    `no "!" once the offer is answered (${markedAfterAnswer.join(', ')})`,
+    `no "!" once the offer is answered, and a "?" only in show_fenna (wrong: ${markedAfterAnswer.join(', ') || 'none'})`,
   );
 }
 
@@ -283,6 +291,53 @@ export function verifyFennaOffer(check: Check): void {
   );
 }
 
+/**
+ * With the blueprints just handed over, Fenna wears a "?" and briefs the party
+ * on both upgrade costs; closing the briefing opens the building step.
+ */
+export function verifyFennaShowBlueprints(check: Check): void {
+  const rig = unlockedRig();
+  rig.state.blueprints.phase = 'show_fenna';
+  check(
+    markerOf(rig) === 'none' &&
+      rig.lines.lineFor(villagerContext(rig.state))?.pages[0] === FENNA.blueprintsInProgress,
+    'with the blueprints back in Wendell\'s chest, no "?" and no briefing: she asks after them',
+  );
+  rig.humanInventory.addItem('quest_blueprints', 1);
+  check(markerOf(rig) === 'question', 'a "?" over Fenna while she waits to see the blueprints');
+  const briefing = FENNA.blueprintsShown({
+    sawCost: formatCost(stationUpgradeCost('saw')),
+    ropeWalkCost: formatCost(stationUpgradeCost('ropeWalk')),
+  });
+  const opening = rig.lines.lineFor(villagerContext(rig.state));
+  const openedParagraphs = opening?.pages[0].paragraphs ?? [];
+  check(
+    openedParagraphs.join('\n') === briefing.paragraphs.join('\n'),
+    'her opening is the briefing that names both upgrade costs',
+  );
+  check(opening?.questRelated === true, 'the briefing wears the quest icon');
+
+  rig.pleaPhase = 'assault';
+  check(
+    markerOf(rig) === 'none' && rig.lines.lineFor(villagerContext(rig.state)) === null,
+    'the briefing and its "?" stand down under siege',
+  );
+  rig.pleaPhase = PLEA_AT_PEACE;
+
+  const after = opening?.after;
+  check(after?.kind === 'close', 'the briefing closes the conversation');
+  if (after?.kind !== 'close') return;
+  const phaseNow = (): BlueprintsQuestPhase => rig.state.blueprints.phase;
+  check(phaseNow() === 'show_fenna', 'the step waits until the briefing closes');
+  after.onClosed();
+  check(phaseNow() === 'build_stations', 'closing the briefing moves to build_stations');
+  check(markerOf(rig) === 'none', 'no "?" over Fenna once the job is set');
+  check(
+    rig.lines.lineFor(villagerContext(rig.state))?.pages[0] === FENNA.blueprintsInProgress,
+    'after the briefing she asks after the blueprints as usual',
+  );
+}
+
 /** Declining, and the topic that replays the offer. */
 export function verifyFennaDecline(check: Check): void {
   const rig = unlockedRig();
@@ -354,6 +409,7 @@ const WENDELL_FLOOR = 0;
 const WENDELL_QUESTION_PHASES: readonly BlueprintsQuestPhase[] = [
   'ask_wendell',
   'midge_delivered',
+  'show_fenna',
   'build_stations',
 ];
 
@@ -386,7 +442,7 @@ export function verifyWendellMarker(check: Check): void {
   });
   check(
     wrong.length === 0,
-    `Wendell shows "?" in ask_wendell, midge_delivered and build_stations only, and leaves his glyph alone once complete (${wrong.join(', ')})`,
+    `Wendell shows "?" in ask_wendell, midge_delivered, show_fenna and build_stations only, and leaves his glyph alone once complete (${wrong.join(', ')})`,
   );
   state.blueprints.phase = 'build_stations';
   human.inventory.addItem('quest_blueprints', 1);

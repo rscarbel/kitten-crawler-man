@@ -287,10 +287,18 @@ function centre(body: { x: number; y: number }): { x: number; y: number } {
   return { x: body.x + TILE_SIZE / 2, y: body.y + TILE_SIZE / 2 };
 }
 
-/** A target that cannot be hurt, so it stands through any number of shots. */
+/**
+ * Health no test runs long enough to boulder away, so a dummy stands through
+ * any number of shots. It must still take damage: an engine never wastes a
+ * shot on a body that refuses it.
+ */
+const DUMMY_HP = 1_000_000_000;
+
+/** A target that stands through any number of shots. */
 class TargetDummy extends RuinsGhoul {
-  override get refusesDamage(): boolean {
-    return true;
+  constructor() {
+    super(0, 0, TILE_SIZE);
+    this.hp = DUMMY_HP;
   }
 }
 
@@ -298,8 +306,15 @@ function ghoul(): RuinsGhoul {
   return new RuinsGhoul(0, 0, TILE_SIZE);
 }
 
+/** A body that refuses every blow. */
+class ImmuneDummy extends TargetDummy {
+  override get refusesDamage(): boolean {
+    return true;
+  }
+}
+
 function dummy(): TargetDummy {
-  return new TargetDummy(0, 0, TILE_SIZE);
+  return new TargetDummy();
 }
 
 /** A trebuchet out in empty ground (no map test is needed for aiming). */
@@ -503,6 +518,25 @@ section('Trebuchet priority');
     rig.trebuchets.chooseTarget(record) === striker,
     'an inside mob striking a structure ranks first, ahead of a nearer idle one',
   );
+}
+
+section('Trebuchet wasted shots');
+{
+  const rig = makeRig({ seed: 1600, trebuchetRandom: () => 1 });
+  const { record, footprint } = placeTrebuchet(rig, FIELD.x, FIELD.y, 'human', 25);
+  const mid = footprintCentre(footprint);
+  const immune = spawn(rig, new ImmuneDummy(), mid.x + 4 * TILE_SIZE, mid.y);
+  const crumbling = spawn(rig, dummy(), mid.x - 4 * TILE_SIZE, mid.y);
+  crumbling.offLimitsToAllies = true;
+  const leaving = spawn(rig, dummy(), mid.x, mid.y + 4 * TILE_SIZE);
+  leaving.siegeDirective = { leavingTheField: true, steer: () => true };
+  for (let f = 0; f < EXPECTED_INTERVAL_FRAMES * 3; f++) rig.trebuchets.update();
+  check(
+    rig.trebuchets.shotLog.length === 0 && immune.isAlive,
+    `no shot at a body that refuses damage, is off limits or is leaving the field (${rig.trebuchets.shotLog.length} shots)`,
+  );
+  const fair = spawn(rig, dummy(), mid.x, mid.y - 4 * TILE_SIZE);
+  check(rig.trebuchets.chooseTarget(record) === fair, 'a hurtable hostile beside them is chosen');
 }
 
 // ══ Break rate ═════════════════════════════════════════════════════════════

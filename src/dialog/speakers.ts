@@ -610,6 +610,11 @@ export type CitizenSpeechStyle = Extract<
   | 'townsfolkSkyfowlFledgling'
 >;
 
+/** The clips a citizen speaking in `style` is voiced with. Every citizen style speaks in clips. */
+export function citizenVoiceSounds(style: CitizenSpeechStyle): ReadonlyArray<SoundId> {
+  return TRANSIENT_STYLES[style].voice.sounds;
+}
+
 /**
  * Who a `DialogLine` is attributed to: a fixed cast member, resolved by id
  * from {@link SPEAKERS}, or a transient speaker named at runtime and styled

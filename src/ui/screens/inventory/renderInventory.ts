@@ -64,7 +64,12 @@ import {
 } from './detailPane';
 import { dollColumn, dollColumnWidth } from './dollColumn';
 import { armorDeltas, equipSlotLabel, fitsDollSlot } from './gearRules';
-import { hotbarRefusal, type InventoryScreen, type Point } from './InventoryScreen';
+import {
+  harvestToolHint,
+  hotbarRefusal,
+  type InventoryScreen,
+  type Point,
+} from './InventoryScreen';
 import type { BagFilter, InventoryMember, InventoryTab } from './inventoryTypes';
 
 const RAIL_WIDTH = 168;
@@ -811,7 +816,10 @@ export function hotbarSlotArrangement(
   const item = inventory.actionBar.slots[index] ?? null;
   const isQuest = index === QUEST_SLOT_IDX;
   const deny =
-    !isQuest && drag !== null && drag.from === 'inv' && hotbarRefusal(drag.item) !== null;
+    !isQuest &&
+    drag !== null &&
+    drag.from === 'inv' &&
+    hotbarRefusal(drag.item, screen.inputMode()) !== null;
   const lifted = drag?.from === 'hotbar' && drag.slotIdx === index;
   const target: MenuTarget | null =
     item === null || isQuest ? null : { source: 'hotbar', slotIdx: index, item };
@@ -843,7 +851,7 @@ export function hotbarSlotArrangement(
 
 const GENERIC_DANGER_ACTION = 'Drop';
 
-function detailModel(screen: InventoryScreen, member: InventoryMember): DetailModel | null {
+function detailModel(ui: Ui, screen: InventoryScreen, member: InventoryMember): DetailModel | null {
   const inventory = member.owner.inventory;
   const item = screen.selectedItem(inventory);
   const selection = screen.selection;
@@ -866,13 +874,15 @@ function detailModel(screen: InventoryScreen, member: InventoryMember): DetailMo
       disabled: entry.disabledReason ?? locked ?? false,
       onTap: () => screen.choose(entry.action, target),
     }));
-  if (selection.source === 'inv' && screen.tab === 'bag') {
+  const tool = item.tool;
+  const hint = tool === undefined ? null : harvestToolHint(tool.kind, ui.density);
+  if (selection.source === 'inv' && screen.tab === 'bag' && tool === undefined) {
     actions.push({
       id: 'hotbar',
       label: HOTBAR_LABEL,
       icon: screen.hotbarPickerOpen ? 'chevronUp' : 'chevronDown',
       variant: 'secondary',
-      disabled: hotbarRefusal(item) ?? false,
+      disabled: hotbarRefusal(item, ui.density) ?? false,
       onTap: () => {
         screen.hotbarPickerOpen = !screen.hotbarPickerOpen;
       },
@@ -892,7 +902,8 @@ function detailModel(screen: InventoryScreen, member: InventoryMember): DetailMo
     slotLabel: equipSlotLabel(item),
     effectLines: describeItemEffects(item),
     deltas: armorDeltas(item, inventory, screen.dollKey),
-    notice: notice !== null && notice.id === item.id ? notice.text : null,
+    notice: notice !== null && notice.id === item.id && notice.text !== hint ? notice.text : null,
+    hint,
     actions,
     hotbarPicker: picker,
     onAssignHotbar: (index) => screen.assignToHotbar(item, selection, index),
@@ -906,7 +917,7 @@ function drawDetailCard(
   member: InventoryMember,
 ): void {
   const shown = card(ui, rect, { id: 'detail', kind: 'inset' });
-  const model = detailModel(screen, member);
+  const model = detailModel(ui, screen, member);
   if (model === null) {
     emptyDetail(ui, shown.body, EMPTY_DETAIL_MESSAGE);
     return;
@@ -925,7 +936,7 @@ function drawDetailSheet(
   screen: InventoryScreen,
   member: InventoryMember,
 ): void {
-  const model = detailModel(screen, member);
+  const model = detailModel(ui, screen, member);
   if (model === null) return;
   ui.defer(() => {
     const { space, palette, radius } = ui.theme;
@@ -1116,11 +1127,12 @@ function drawMenu(ui: Ui, screen: InventoryScreen, member: InventoryMember): voi
     disabled: entry.disabledReason ?? screen.actionsLockedReason() ?? false,
     onTap: () => screen.choose(entry.action, target),
   }));
-  if (target.source === 'inv') {
+  const tool = target.item.tool;
+  if (target.source === 'inv' && tool === undefined) {
     items.push({
       id: 'assign-hotbar',
       label: 'Assign to hotbar',
-      disabled: hotbarRefusal(target.item) ?? false,
+      disabled: hotbarRefusal(target.item, ui.density) ?? false,
       onTap: () => screen.openHotbarPicker(target),
     });
   }
@@ -1129,6 +1141,7 @@ function drawMenu(ui: Ui, screen: InventoryScreen, member: InventoryMember): voi
     at: menu.at,
     title: target.item.name,
     items,
+    note: tool === undefined ? undefined : harvestToolHint(tool.kind, ui.density),
     onDismiss: dismiss,
   });
 }

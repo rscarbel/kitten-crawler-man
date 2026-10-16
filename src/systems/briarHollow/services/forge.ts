@@ -34,7 +34,8 @@ import {
 import { drawItemIcon } from '../../../ui/icons/drawItemIcon';
 import { asPercent } from '../../../ui/itemEffectLines';
 import type { ShopMenu, ShopRow, ShopPurchaseResult } from '../../../ui/screens/shop/shopSession';
-import { partyCoins } from '../../../core/partyCoins';
+import { canAffordCoins } from '../../../core/partyCoins';
+import { canAfford, formatCost, type ResourceCost } from '../../../core/partyResources';
 import { SPEAKERS } from '../../../dialog/speakers';
 import { OREN } from '../../../dialog/scripts/briarHollow';
 import type { ConversationRequest, ConversationTopic } from '../../../dialog/request';
@@ -192,6 +193,10 @@ function describeToolTierGain(def: ToolTierDef): string {
   return parts.length > 0 ? parts.join(', ') : 'no bonus';
 }
 
+function hasMaterials(cost: ResourceCost): boolean {
+  return Object.values(cost).some((amount) => amount > 0);
+}
+
 function upgradeOption(tools: PartyToolsState, kind: ToolKind): ShopRow {
   const current = toolTierDef(kind, tierOf(tools, kind) ?? TOOL_TIER_BASIC);
   const nextTier = nextToolTier(tools, kind);
@@ -206,29 +211,50 @@ function upgradeOption(tools: PartyToolsState, kind: ToolKind): ShopRow {
   }
   const next = toolTierDef(kind, nextTier);
   const gain = `${describeToolTierGain(next)} (now ${describeToolTierGain(current)}). Applies to Carl and Donut.`;
+  const pitch = `Replaces your ${current.name}. ${next.description} ${gain}`;
+  if (!hasMaterials(next.costMaterials)) {
+    return { key: kind, label: next.name, price: next.costCoins, desc: pitch };
+  }
   return {
     key: kind,
     label: next.name,
     price: next.costCoins,
-    desc: `Replaces your ${current.name}. ${next.description} ${gain}`,
+    materials: next.costMaterials,
+    // The subtitle is one line cut to fit, so the material cost leads it.
+    desc: `Also takes ${formatCost(next.costMaterials)}. ${pitch}`,
   };
 }
 
-/** Oren's line as the menu opens: an upgrade the buyer can afford right now, the axe first. */
-function forgeBark(tools: PartyToolsState, buyerCoins: number): string {
-  const affordable = (kind: ToolKind): boolean => {
-    const next = nextToolTier(tools, kind);
-    return next !== null && buyerCoins >= toolTierDef(kind, next).costCoins;
-  };
-  if (affordable('axe')) return sellerLine(OREN.axeUpgradeAvailable);
-  if (affordable('pickaxe')) return sellerLine(OREN.pickaxeUpgradeAvailable);
+/** Whether the party's shared purse and combined packs cover a tier's coins and materials. */
+function partyCanAffordTier(party: ServiceParty, def: ToolTierDef): boolean {
+  const { human, cat } = party;
+  return canAffordCoins(human, cat, def.costCoins) && canAfford(human, cat, def.costMaterials);
+}
+
+/** The next tier of `kind` when the party can pay for all of it right now, else null. */
+function affordableNextTier(
+  tools: PartyToolsState,
+  party: ServiceParty,
+  kind: ToolKind,
+): ToolTier | null {
+  const next = nextToolTier(tools, kind);
+  if (next === null) return null;
+  return partyCanAffordTier(party, toolTierDef(kind, next)) ? next : null;
+}
+
+/** Oren's line as the menu opens: an upgrade the party can afford right now, the axe first. */
+function forgeBark(tools: PartyToolsState, party: ServiceParty): string {
+  if (affordableNextTier(tools, party, 'axe') !== null) return sellerLine(OREN.axeUpgradeAvailable);
+  if (affordableNextTier(tools, party, 'pickaxe') !== null) {
+    return sellerLine(OREN.pickaxeUpgradeAvailable);
+  }
   return sellerLine(OREN.shopOpen);
 }
 
-export function buildForgeMenu(tools: PartyToolsState, buyerCoins: number): ShopMenu {
+export function buildForgeMenu(tools: PartyToolsState, party: ServiceParty): ShopMenu {
   return {
     title: FORGE_TITLE,
-    bark: forgeBark(tools, buyerCoins),
+    bark: forgeBark(tools, party),
     byline: SPEAKERS.oren.name,
     options: TOOL_KINDS.map((kind) => upgradeOption(tools, kind)),
   };
@@ -259,15 +285,41 @@ export function forgePurchase(host: ForgeHost, option: ShopRow): ShopPurchaseRes
 
 export function forgeShop(host: ForgeHost): ShopDefinition {
   return {
-    build: () => buildForgeMenu(host.tools, partyCoins(host.party.human, host.party.cat)),
+    build: () => buildForgeMenu(host.tools, host.party),
     purchase: (option) => forgePurchase(host, option),
     rebuyGuardTicks: UPGRADE_REBUY_GUARD_TICKS,
     blockedLine: (option) => {
       const kind = kindOfOption(option);
       if (kind !== null && option.unavailable !== undefined) return alreadyMaxLine(kind);
+      const { human, cat } = host.party;
+      const coinsCovered = canAffordCoins(human, cat, option.price);
+      if (coinsCovered && option.materials !== undefined) return sellerLine(OREN.needsMaterials);
       return sellerLine(OREN.cannotAffordUpgrade);
     },
   };
+}
+
+/**
+ * A notice for the first moment the party can pay for a tool's next tier,
+ * coins and materials both, so a crawler out gathering learns the forge has
+ * something for them. Each tier of each kind is announced once; the flag is
+ * recorded as the notice is returned. Null when there is nothing new to say.
+ */
+export function forgeUpgradeNudge(host: ForgeHost): string | null {
+  const phase = host.state.quest.phase;
+  if (!questAccepted(phase) || !shopTrades(phase)) return null;
+  if (!partyOwnsTools(host.tools)) return null;
+  const onceFlags = host.state.onceFlags;
+  for (const kind of TOOL_KINDS) {
+    const tier = affordableNextTier(host.tools, host.party, kind);
+    if (tier === null) continue;
+    const flag = onceFlagFor(SMITH, `upgrade_nudge_${kind}_${tier}`);
+    if (onceFlags.includes(flag)) continue;
+    onceFlags.push(flag);
+    const next = toolTierDef(kind, tier);
+    return `You can afford a ${next.name}. Oren sells it at the ${FORGE_TITLE} in Briar Hollow.`;
+  }
+  return null;
 }
 
 /**

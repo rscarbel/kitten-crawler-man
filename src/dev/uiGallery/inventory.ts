@@ -40,6 +40,7 @@ const CARL_BAG: readonly { readonly id: ItemId; readonly quantity: number }[] = 
   { id: 'marching_boots', quantity: 1 },
   { id: 'trollskin_shirt', quantity: 1 },
   { id: 'basic_pickaxe', quantity: 1 },
+  { id: 'basic_axe', quantity: 1 },
   { id: 'fury_of_taranis', quantity: 1 },
   { id: 'wood', quantity: 46 },
   { id: 'stone', quantity: 18 },
@@ -171,6 +172,23 @@ export const INVENTORY_FIXTURES: readonly DialogFixture[] = [
       const slotIdx = carl.inventory.bag.slots.findIndex((item) => item?.id === 'dirty_shirley');
       const item = carl.inventory.bag.slots[slotIdx];
       if (item !== null) screen.openItemMenu({ source: 'inv', slotIdx, item }, MENU_AT);
+    },
+  }),
+  buildFixture({
+    name: 'bag-tool-menu',
+    tab: 'bag',
+    arrange: (screen, carl) => {
+      const slotIdx = carl.inventory.bag.slots.findIndex((item) => item?.id === 'basic_axe');
+      const item = carl.inventory.bag.slots[slotIdx];
+      if (item !== null) screen.openItemMenu({ source: 'inv', slotIdx, item }, MENU_AT);
+    },
+  }),
+  buildFixture({
+    name: 'bag-tool-detail',
+    tab: 'bag',
+    arrange: (screen, carl) => {
+      selectBag(screen, carl, 'basic_axe');
+      screen.sheetOpen = true;
     },
   }),
   buildFixture({

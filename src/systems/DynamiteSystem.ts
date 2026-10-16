@@ -945,7 +945,7 @@ export class DynamiteSystem implements GameSystem {
     this.destructibles?.destroyInRadius(cx, cy, radius, human);
     this.interiorProps?.destroyInRadius(cx, cy, radius);
     const trees = this.trees();
-    trees?.destroyInRadius(cx, cy, radius, human);
+    trees?.destroyInRadius(cx, cy, radius);
     // Ignition second, and deliberately: the ring reaches back over the blast
     // radius, and setting fire to the trees first would leave the ones inside it
     // burning as they came down.

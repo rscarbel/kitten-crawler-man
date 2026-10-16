@@ -3,11 +3,15 @@
  * creature that must keep its distance from the wall — the necromancer, who
  * commands from outside and never comes in.
  *
- * Built once per site by a breadth-first walk outward from the ring's own
- * tiles (the palisade and every gate), eight-connected, so a distance is the
- * number of king's moves to the nearest ring tile. It measures the ring as
- * generated: a breach is still ring for this purpose, because stepping into a
- * breach is stepping into the village.
+ * Built once per site by two breadth-first walks from the ring's own tiles
+ * (the palisade and every gate), both eight-connected, so every measure is
+ * the number of king's moves to the nearest ring tile. One walks outward over
+ * the ground beyond the ring ({@link PalisadeDistanceField.distanceAt}); the
+ * other walks inward over the village ({@link PalisadeDistanceField.insideDepthAt}),
+ * for the necromancer's inner raises, which climb out near the wall rather
+ * than in the middle of the village. Both measure the ring as generated: a
+ * breach is still ring for this purpose, because stepping into a breach is
+ * stepping into the village.
  */
 
 import { isInsideRing, type BriarHollowSite } from '../../map/overworld/briarHollowSite';
@@ -37,6 +41,7 @@ export class PalisadeDistanceField {
   private readonly width: number;
   private readonly height: number;
   private readonly distances: Int16Array;
+  private readonly insideDepths: Int16Array;
 
   constructor(site: BriarHollowSite) {
     const bounds = site.palisadeBounds;
@@ -45,13 +50,14 @@ export class PalisadeDistanceField {
     this.width = bounds.w + PALISADE_DISTANCE_MARGIN_TILES * 2;
     this.height = bounds.h + PALISADE_DISTANCE_MARGIN_TILES * 2;
     this.distances = new Int16Array(this.width * this.height).fill(UNREACHED);
+    this.insideDepths = new Int16Array(this.width * this.height).fill(UNREACHED);
 
-    const queue: number[] = [];
+    const seeds: number[] = [];
     const seed = (tileX: number, tileY: number): void => {
       const index = this.indexOf(tileX, tileY);
       if (index === null || this.distances[index] === 0) return;
       this.distances[index] = 0;
-      queue.push(index);
+      seeds.push(index);
     };
     for (const tile of site.palisadePath) seed(tile.x, tile.y);
     for (const gate of site.gates) for (const tile of gate.tiles) seed(tile.x, tile.y);
@@ -66,18 +72,38 @@ export class PalisadeDistanceField {
       }
     }
 
+    this.walkFromRing(this.distances, [...seeds], (index) => this.distances[index] === UNREACHED);
+    for (const index of seeds) this.insideDepths[index] = 0;
+    this.walkFromRing(
+      this.insideDepths,
+      [...seeds],
+      (index) =>
+        this.distances[index] === INSIDE_PALISADE && this.insideDepths[index] === UNREACHED,
+    );
+  }
+
+  /**
+   * Breadth-first from `queue` (already marked in `field`), writing each
+   * newly reached tile's king's-move count into `field`. Only tiles `canEnter`
+   * accepts are walked into.
+   */
+  private walkFromRing(
+    field: Int16Array,
+    queue: number[],
+    canEnter: (index: number) => boolean,
+  ): void {
     // The queue grows while it is walked; a for-of over an array visits what is pushed during it.
     for (const index of queue) {
       const x = index % this.width;
       const y = Math.floor(index / this.width);
-      const next = this.distances[index] + 1;
+      const next = field[index] + 1;
       for (const [dx, dy] of NEIGHBOUR_OFFSETS) {
         const nx = x + dx;
         const ny = y + dy;
         if (nx < 0 || ny < 0 || nx >= this.width || ny >= this.height) continue;
         const neighbour = ny * this.width + nx;
-        if (this.distances[neighbour] !== UNREACHED) continue;
-        this.distances[neighbour] = next;
+        if (!canEnter(neighbour)) continue;
+        field[neighbour] = next;
         queue.push(neighbour);
       }
     }
@@ -99,6 +125,18 @@ export class PalisadeDistanceField {
     if (index === null) return Infinity;
     const distance = this.distances[index];
     return distance === UNREACHED ? Infinity : distance;
+  }
+
+  /**
+   * King's moves from a tile strictly inside the ring to the nearest ring
+   * tile, walking only through the village; null for any tile that is not
+   * strictly inside.
+   */
+  insideDepthAt(tileX: number, tileY: number): number | null {
+    const index = this.indexOf(tileX, tileY);
+    if (index === null) return null;
+    const depth = this.insideDepths[index];
+    return depth > 0 ? depth : null;
   }
 
   /** Whether a tile is outside the ring by at least `minTiles`. */

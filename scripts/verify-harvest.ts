@@ -35,7 +35,6 @@ import { dungeonOptionsForLevel } from '../src/levels/dungeonOptions';
 import { level3 } from '../src/levels/level3';
 import { BOULDER_LARGE, BOULDER_SMALL, TREE } from '../src/map/tileTypes';
 import { mulberry32 } from '../src/sprites/person/rng';
-import { LootSystem } from '../src/systems/LootSystem';
 import { SpellSystem } from '../src/systems/SpellSystem';
 import { TreeSystem } from '../src/systems/TreeSystem';
 import type { SystemContext } from '../src/systems/GameSystem';
@@ -399,7 +398,7 @@ function makeRig(luckSeed = 1): Rig {
   const tools: PartyToolsState = { axeTier: 0, pickaxeTier: 0 };
   const partyTools = new PartyTools(tools);
   const nodes = createBriarHollowState().nodes;
-  const trees = new TreeSystem(gameMap, new LootSystem(gameMap), level3.floorNumber);
+  const trees = new TreeSystem(gameMap);
   const effects = new HarvestEffects();
   const announcements: string[] = [];
   const ledger = new NodeLedger({
@@ -663,7 +662,7 @@ section('Grove trees: immune to combat damage, fire and blasts; the axe still fe
     const worldX = (standingGrove.x + TILE_CENTRE) * TILE_SIZE;
     const worldY = (standingGrove.y + TILE_CENTRE) * TILE_SIZE;
 
-    rig.trees.tryProjectileHit(worldX, worldY, BLAST_TEST_RADIUS, OVERWHELMING_DAMAGE, rig.cat);
+    rig.trees.tryProjectileHit(worldX, worldY, BLAST_TEST_RADIUS, OVERWHELMING_DAMAGE);
     rig.trees.igniteRadius(worldX, worldY, BLAST_TEST_RADIUS);
     check(
       gameMap.structure[standingGrove.y][standingGrove.x].type === TREE &&
@@ -671,7 +670,7 @@ section('Grove trees: immune to combat damage, fire and blasts; the axe still fe
       "a magic missile's hit and its ignite ring never damage or burn the grove tree",
     );
 
-    rig.trees.destroyInRadius(worldX, worldY, BLAST_TEST_RADIUS, rig.human);
+    rig.trees.destroyInRadius(worldX, worldY, BLAST_TEST_RADIUS);
     check(
       gameMap.structure[standingGrove.y][standingGrove.x].type === TREE,
       'a dynamite blast never flattens the grove tree',
@@ -703,7 +702,7 @@ section('Grove trees: immune to combat damage, fire and blasts; the axe still fe
   if (control !== null) {
     const worldX = (control.tileX + TILE_CENTRE) * TILE_SIZE;
     const worldY = (control.tileY + TILE_CENTRE) * TILE_SIZE;
-    rig.trees.destroyInRadius(worldX, worldY, BLAST_TEST_RADIUS, rig.human);
+    rig.trees.destroyInRadius(worldX, worldY, BLAST_TEST_RADIUS);
     for (let i = 0; i < FELLING_SETTLE_TICKS; i++) rig.trees.update(ctx);
     check(
       gameMap.structure[control.tileY][control.tileX].type !== TREE,

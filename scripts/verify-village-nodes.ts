@@ -28,7 +28,6 @@ import { rectCentre } from '../src/map/overworld/briarHollowSite';
 import { BOULDER_LARGE, BOULDER_SMALL, ROCK_DEPOSIT, RUBBLE, TREE } from '../src/map/tileTypes';
 import { DRESSED_STONE_SPRITE_KEYS, rockDepositSpriteKey } from '../src/map/tiles/rockDepositTiles';
 import { mulberry32 } from '../src/sprites/person/rng';
-import { LootSystem } from '../src/systems/LootSystem';
 import { SpellSystem } from '../src/systems/SpellSystem';
 import { TreeSystem } from '../src/systems/TreeSystem';
 import type { SystemContext } from '../src/systems/GameSystem';
@@ -221,7 +220,7 @@ function makeRig(): Rig {
   const cat = new CatPlayer(0, 0, TILE_SIZE);
   human.isActive = true;
   const nodes = createBriarHollowState().nodes;
-  const trees = new TreeSystem(gameMap, new LootSystem(gameMap), level3.floorNumber);
+  const trees = new TreeSystem(gameMap);
   const ledger = new NodeLedger({
     gameMap,
     nodes,

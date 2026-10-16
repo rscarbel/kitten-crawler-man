@@ -56,10 +56,12 @@ export const TREBUCHET_FOOTPRINT_H = 3;
 /** How far above its footprint a trebuchet's art can rise: a loosed arm standing tall. */
 export const TREBUCHET_REACH_UP_TILES = 2.2;
 
-// Geometry, in tiles from the footprint's top-left.
-const SILL_INSET = 0.3;
-const SILL_TOP = 0.45;
-const SILL_BOTTOM = 2.85;
+// Geometry, in tiles from the footprint's top-left. The three sill values are
+// also the solid frame crawlers collide with, so the bare ground inside the
+// footprint around the sill stays walkable for them.
+export const TREBUCHET_SILL_INSET = 0.3;
+export const TREBUCHET_SILL_TOP = 0.45;
+export const TREBUCHET_SILL_BOTTOM = 2.85;
 const BEAM_WIDTH = 0.16;
 /** The two A-frames stand across the frame, front and back, with the axle running between their apexes. */
 const BACK_FRAME_Y = 1.2;
@@ -185,21 +187,36 @@ function drawBaseFrame(
   damageStage: number,
 ): void {
   const width = BEAM_WIDTH * ts;
-  const left = SILL_INSET;
-  const right = TREBUCHET_FOOTPRINT_W - SILL_INSET;
-  beam(ctx, tp(left, SILL_TOP), tp(right, SILL_TOP), width, WOOD.mid, ts);
-  beam(ctx, tp(left, SILL_TOP), tp(left, SILL_BOTTOM), width, WOOD.body, ts);
-  beam(ctx, tp(right, SILL_TOP), tp(right, SILL_BOTTOM), width, WOOD.body, ts);
+  const left = TREBUCHET_SILL_INSET;
+  const right = TREBUCHET_FOOTPRINT_W - TREBUCHET_SILL_INSET;
+  beam(ctx, tp(left, TREBUCHET_SILL_TOP), tp(right, TREBUCHET_SILL_TOP), width, WOOD.mid, ts);
+  beam(ctx, tp(left, TREBUCHET_SILL_TOP), tp(left, TREBUCHET_SILL_BOTTOM), width, WOOD.body, ts);
+  beam(ctx, tp(right, TREBUCHET_SILL_TOP), tp(right, TREBUCHET_SILL_BOTTOM), width, WOOD.body, ts);
   if (damageStage < 2) {
-    beam(ctx, tp(left, SILL_BOTTOM), tp(right, SILL_BOTTOM), width, WOOD.mid, ts);
+    beam(
+      ctx,
+      tp(left, TREBUCHET_SILL_BOTTOM),
+      tp(right, TREBUCHET_SILL_BOTTOM),
+      width,
+      WOOD.mid,
+      ts,
+    );
   } else {
     // The front cross-beam has sprung off one side.
-    beam(ctx, tp(left, SILL_BOTTOM), tp(right - 0.35, SILL_BOTTOM - 0.18), width, WOOD.dark, ts);
+    beam(
+      ctx,
+      tp(left, TREBUCHET_SILL_BOTTOM),
+      tp(right - 0.35, TREBUCHET_SILL_BOTTOM - 0.18),
+      width,
+      WOOD.dark,
+      ts,
+    );
   }
   for (const frameY of [BACK_FRAME_Y, FRONT_FRAME_Y]) {
     beam(ctx, tp(left, frameY), tp(right, frameY), width * 0.8, WOOD.dark, ts);
   }
-  if (damageStage >= 1) crackAlong(ctx, tp(left, SILL_TOP + 0.4), tp(left, SILL_TOP + 1.1), ts);
+  if (damageStage >= 1)
+    crackAlong(ctx, tp(left, TREBUCHET_SILL_TOP + 0.4), tp(left, TREBUCHET_SILL_TOP + 1.1), ts);
 }
 
 function crackAlong(ctx: CanvasRenderingContext2D, a: Point, b: Point, ts: number): void {
@@ -225,8 +242,8 @@ function drawUpperWorks(
   state: TrebuchetDrawState,
 ): void {
   const width = BEAM_WIDTH * ts;
-  const left = SILL_INSET;
-  const right = TREBUCHET_FOOTPRINT_W - SILL_INSET;
+  const left = TREBUCHET_SILL_INSET;
+  const right = TREBUCHET_FOOTPRINT_W - TREBUCHET_SILL_INSET;
   const cx = TREBUCHET_FOOTPRINT_W / 2;
   const backApex = lift(tp, cx, BACK_FRAME_Y, AXLE_HEIGHT);
   const frontApex = lift(tp, cx, FRONT_FRAME_Y, AXLE_HEIGHT);
@@ -325,11 +342,11 @@ function drawArm(
     // Snapped a third of the way out: the stub, and the rest lying on the ground.
     const snap = { x: pivot.x + (long.x - pivot.x) * 0.35, y: pivot.y + (long.y - pivot.y) * 0.35 };
     beam(ctx, pivot, snap, width, WOOD.mid, ts);
-    const fallen = tp(TREBUCHET_FOOTPRINT_W / 2 - 0.55, SILL_BOTTOM - 0.15);
+    const fallen = tp(TREBUCHET_FOOTPRINT_W / 2 - 0.55, TREBUCHET_SILL_BOTTOM - 0.15);
     beam(ctx, { x: snap.x - ts * 0.04, y: snap.y + ts * 0.1 }, fallen, width, WOOD.body, ts);
     drawSplinters(ctx, snap, ts);
     // A loose rope trailing from the stub to the dirt.
-    const ropeEnd = tp(1.45, SILL_BOTTOM - 0.3);
+    const ropeEnd = tp(1.45, TREBUCHET_SILL_BOTTOM - 0.3);
     ctx.strokeStyle = LOG.cut;
     ctx.lineWidth = Math.max(1, ts * 0.025);
     ctx.beginPath();
@@ -550,12 +567,15 @@ function drawSpikes(
   pass: 'back' | 'front',
 ): void {
   const stakes: Array<{ root: Point; tip: Point }> = [];
-  const left = SILL_INSET;
-  const right = TREBUCHET_FOOTPRINT_W - SILL_INSET;
+  const left = TREBUCHET_SILL_INSET;
+  const right = TREBUCHET_FOOTPRINT_W - TREBUCHET_SILL_INSET;
   const outward = SPIKE_LENGTH;
   if (pass === 'back') {
     for (const tx of [0.45, 0.85, 1.15, 1.55]) {
-      stakes.push({ root: tp(tx, SILL_TOP), tip: tp(tx, SILL_TOP - outward * 0.8) });
+      stakes.push({
+        root: tp(tx, TREBUCHET_SILL_TOP),
+        tip: tp(tx, TREBUCHET_SILL_TOP - outward * 0.8),
+      });
     }
     for (const ty of [0.8, 1.3, 1.8, 2.3]) {
       stakes.push({ root: tp(left, ty), tip: tp(left - outward * 0.9, ty - outward * 0.5) });
@@ -563,7 +583,10 @@ function drawSpikes(
     }
   } else {
     for (const tx of [0.4, 0.75, 1.25, 1.6]) {
-      stakes.push({ root: tp(tx, SILL_BOTTOM - 0.05), tip: tp(tx, SILL_BOTTOM + outward * 0.55) });
+      stakes.push({
+        root: tp(tx, TREBUCHET_SILL_BOTTOM - 0.05),
+        tip: tp(tx, TREBUCHET_SILL_BOTTOM + outward * 0.55),
+      });
     }
   }
   for (const { root, tip } of stakes) {

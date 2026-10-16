@@ -12,19 +12,27 @@
  */
 
 import { partyCoins } from '../../../core/partyCoins';
+import { costShortfall, formatCost } from '../../../core/partyResources';
 import { ITEM_DEF, isItemId, type ItemId } from '../../../core/ItemDefs';
 import { centerIn, inset, splitH, splitV, type Rect } from '../../core/geom';
 import { UI_ERROR_SOUND, type Surface, type Ui } from '../../core/UiRoot';
 import { QuantityPickerState } from '../../QuantityPickerState';
 import { button, buttonHeight, measureButton } from '../../widgets/button';
-import { listRow, listRowHeight, listRowTrailingMax, type RowLeading } from '../../widgets/listRow';
+import {
+  listRow,
+  listRowHeight,
+  listRowTextWidth,
+  listRowTrailingMax,
+  type RowLeading,
+} from '../../widgets/listRow';
 import { drawGlass } from '../../widgets/paint';
-import { panel } from '../../widgets/panel';
+import { panel, panelBodyWidth } from '../../widgets/panel';
 import { scrollView } from '../../widgets/scrollView';
 import { stepper, stepperKey } from '../../widgets/stepper';
 import { tabs, type TabItem } from '../../widgets/tabs';
-import { lineHeightOf, text, tabularNumber } from '../../widgets/text';
+import { lineHeightOf, measureTextHeight, text, tabularNumber } from '../../widgets/text';
 import { skinsFor } from '../../theme/skins';
+import type { PanelWidth } from '../../theme/tokens';
 import {
   coinPurse,
   measureCoinPurse,
@@ -59,6 +67,7 @@ const SHOP_TABS: readonly TabItem[] = [
   { id: 'sell', label: 'Sell' },
 ];
 
+const SHOP_PANEL_WIDTH = 'md' as const satisfies PanelWidth;
 const BUY_LABEL = 'Buy';
 const SELL_LABEL = 'Sell';
 const CLOSE_LABEL = 'Close';
@@ -105,8 +114,12 @@ function leadingFor(menu: ShopMenu, row: ShopRow): RowLeading | undefined {
 function buyRefusal(row: ShopRow, unpriced: boolean, party: ShopParty): string | null {
   if (row.unavailable !== undefined) return row.unavailable;
   if (shopRowEnabled(row, unpriced, party)) return null;
-  const short = row.price - partyCoins(party.active, party.companion);
-  return `${short.toLocaleString('en-US')} more coins needed`;
+  const coinsShort = row.price - partyCoins(party.active, party.companion);
+  if (coinsShort > 0 || row.materials === undefined) {
+    return `${coinsShort.toLocaleString('en-US')} more coins needed`;
+  }
+  const materialsShort = costShortfall(party.active, party.companion, row.materials);
+  return `${formatCost(materialsShort)} more needed`;
 }
 
 /**
@@ -201,7 +214,7 @@ function renderShop(ui: Ui, args: RenderShopArgs): void {
   const mode: ShopMode = sellable ? session.mode : 'buy';
   const unpriced = menu.unpriced !== undefined && mode === 'buy';
   const questRow = session.questDefaultRow(party);
-  const rowH = listRowHeight(ui, true);
+  const rowH = mode === 'buy' ? buyRowHeight(ui, menu, unpriced) : listRowHeight(ui, true);
   const sellRows = mode === 'sell' ? session.sellRows(party.active) : [];
   const rowCount =
     mode === 'sell' ? Math.max(1, sellRows.length) : Math.max(1, menu.options.length);
@@ -218,7 +231,7 @@ function renderShop(ui: Ui, args: RenderShopArgs): void {
     id: args.id,
     title: menu.title,
     subtitle: menu.byline,
-    width: 'md',
+    width: SHOP_PANEL_WIDTH,
     height: 'content',
     contentHeight,
     onClose: args.close,
@@ -316,6 +329,36 @@ function trailingLayout(
   return { chipW, buttonW, total: chipW + gap + buttonW, statusFits };
 }
 
+/**
+ * One height for every buy row: a single line of description, or, for a menu
+ * that lets its descriptions wrap, as many lines as the longest one needs at
+ * this panel's width, up to {@link ShopMenu.descLines}.
+ */
+function buyRowHeight(ui: Ui, menu: ShopMenu, unpriced: boolean): number {
+  const maxLines = menu.descLines ?? 1;
+  if (maxLines <= 1) return listRowHeight(ui, true);
+  const singleLineRow: Rect = {
+    x: 0,
+    y: 0,
+    w: panelBodyWidth(ui, SHOP_PANEL_WIDTH),
+    h: listRowHeight(ui, true),
+  };
+  const actionLabel = menu.unpriced?.actionLabel ?? BUY_LABEL;
+  const statuses = menu.options.flatMap((row) =>
+    row.unavailable === undefined ? [] : [row.unavailable],
+  );
+  const trailingWidth = trailingLayout(ui, singleLineRow, !unpriced, actionLabel, statuses).total;
+  const captionH = lineHeightOf(ui, 'caption');
+  const linesNeeded = menu.options.map((row) => {
+    const width = listRowTextWidth(ui, singleLineRow, {
+      leading: leadingFor(menu, row),
+      trailingWidth,
+    });
+    return Math.ceil(measureTextHeight(ui, width, { text: row.desc, role: 'caption' }) / captionH);
+  });
+  return listRowHeight(ui, true, Math.min(maxLines, Math.max(1, ...linesNeeded)));
+}
+
 function renderBuyList(
   ui: Ui,
   rect: Rect,
@@ -354,6 +397,7 @@ function renderBuyList(
           id: `${args.id}/row-${row.key}`,
           title: row.label,
           subtitle,
+          subtitleLines: menu.descLines,
           leading: leadingFor(menu, row),
           accent: row.isQuestItem === true ? palette.category.quest : undefined,
           trailingWidth: layout.total,
@@ -363,7 +407,8 @@ function renderBuyList(
               opts.unpriced ? [0, layout.buttonW] : [layout.chipW, layout.buttonW],
               opts.unpriced ? 0 : ui.theme.space.sm,
             );
-            const price = priceFor(row, opts.unpriced, refusal === null);
+            const coinsCovered = partyCoins(party.active, party.companion) >= row.price;
+            const price = priceFor(row, opts.unpriced, coinsCovered);
             const chipShowsPrice = status === undefined || statusInChip;
             if (price !== null && chipShowsPrice) priceChip(ui, chipCell, price);
             refusableButton(ui, buttonCell, {

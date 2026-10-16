@@ -37,7 +37,12 @@
  *   own blow back as thorns, credited to whoever added them.
  */
 
-import type { GameMap } from '../../map/GameMap';
+import type { GameMap, PixelRect } from '../../map/GameMap';
+import {
+  TREBUCHET_SILL_BOTTOM,
+  TREBUCHET_SILL_INSET,
+  TREBUCHET_SILL_TOP,
+} from '../../sprites/art/trebuchetArt';
 import {
   HOLLOW_GATE,
   HOLLOW_PALISADE,
@@ -181,6 +186,22 @@ export function trebuchetFootprint(x: number, y: number): TileFootprint {
   return { x, y, w: TREBUCHET_WIDTH_TILES, h: TREBUCHET_HEIGHT_TILES };
 }
 
+/**
+ * The part of a trebuchet's footprint a crawler collides with, in world
+ * pixels: its painted base frame. The ground between the frame and the
+ * footprint's edge is bare, so a crawler can squeeze along it.
+ */
+export function trebuchetSolidRect(x: number, y: number): PixelRect {
+  const left = x * TILE_SIZE;
+  const top = y * TILE_SIZE;
+  return {
+    left: left + TREBUCHET_SILL_INSET * TILE_SIZE,
+    top: top + TREBUCHET_SILL_TOP * TILE_SIZE,
+    right: left + (TREBUCHET_WIDTH_TILES - TREBUCHET_SILL_INSET) * TILE_SIZE,
+    bottom: top + TREBUCHET_SILL_BOTTOM * TILE_SIZE,
+  };
+}
+
 /** Every tile in a footprint, row by row. */
 export function footprintTiles(footprint: TileFootprint): Array<{ x: number; y: number }> {
   const tiles: Array<{ x: number; y: number }> = [];
@@ -193,9 +214,11 @@ export function footprintTiles(footprint: TileFootprint): Array<{ x: number; y: 
 }
 
 /** Adds the `tileCoordKey` of every tile in a footprint to `into`. */
-function addFootprintTiles(into: Set<number>, x: number, y: number, w: number, h: number): void {
-  for (let dy = 0; dy < h; dy++) {
-    for (let dx = 0; dx < w; dx++) into.add(tileCoordKey(x + dx, y + dy));
+function addTrebuchetTiles(into: Map<number, PixelRect>, x: number, y: number): void {
+  const solid = trebuchetSolidRect(x, y);
+  for (let dy = 0; dy < TREBUCHET_HEIGHT_TILES; dy++) {
+    for (let dx = 0; dx < TREBUCHET_WIDTH_TILES; dx++)
+      into.set(tileCoordKey(x + dx, y + dy), solid);
   }
 }
 
@@ -278,7 +301,7 @@ export class DefenseStructures {
   private engineListsSource: readonly StructureRecord[] | null = null;
   private engineListsLength = 0;
   /** Reused by `syncStructureBlocks`, which runs on every structure change. */
-  private readonly wantedStructureTiles = new Set<number>();
+  private readonly wantedStructureTiles = new Map<number, PixelRect>();
   private readonly releasedStructureTiles: number[] = [];
   private gateShakeSecondsLeft = 0;
   private _gateStruckAtSeconds: number | null = null;
@@ -1200,11 +1223,27 @@ export class DefenseStructures {
         { x: record.x, y: record.y, w: 1, h: 1 },
       );
     }
-    // Only a hurt bell is something to work on; a whole one would stand in
-    // front of whatever else the crawler meant at the square.
-    if (this.bellTowerRepairable) consider(BELL_TOWER_REF, this.bellFootprint);
-    else if (this.bellHp < HOLLOW_BELL_MAX_HP) consider(BELL_REF, this.bellFootprint);
+    const bell = this.workableBellRef();
+    if (bell !== null) consider(bell, this.bellFootprint);
     return best;
+  }
+
+  /**
+   * The structure on a tile if it is something to work on, or null. The gate
+   * never is, and the bell and its tower count only while there is work to do
+   * on them, so neither stands in front of whatever else the crawler meant.
+   */
+  workableAt(tileX: number, tileY: number): StructureRef | null {
+    const ref = this.at(tileX, tileY);
+    if (ref?.kind === 'gate') return null;
+    if (ref?.kind === 'bell' || ref?.kind === 'bellTower') return this.workableBellRef();
+    return ref;
+  }
+
+  private workableBellRef(): StructureRef | null {
+    if (this.bellTowerRepairable) return BELL_TOWER_REF;
+    if (this.bellHp < HOLLOW_BELL_MAX_HP) return BELL_REF;
+    return null;
   }
 
   // ── Per-frame ─────────────────────────────────────────────────────────────
@@ -1328,11 +1367,10 @@ export class DefenseStructures {
     const gameMap = this.deps.gameMap;
     const wanted = this.wantedStructureTiles;
     wanted.clear();
-    for (const record of this.trebuchets) {
-      addFootprintTiles(wanted, record.x, record.y, TREBUCHET_WIDTH_TILES, TREBUCHET_HEIGHT_TILES);
-    }
+    for (const record of this.trebuchets) addTrebuchetTiles(wanted, record.x, record.y);
+    // Only trebuchets reserve ground, and their scaffold stands on the same frame.
     for (const footprint of this.reservations.values()) {
-      addFootprintTiles(wanted, footprint.x, footprint.y, footprint.w, footprint.h);
+      addTrebuchetTiles(wanted, footprint.x, footprint.y);
     }
     // Collected before unblocking, since unblocking edits the set being walked.
     const released = this.releasedStructureTiles;
@@ -1341,10 +1379,8 @@ export class DefenseStructures {
       if (!wanted.has(key)) released.push(key);
     }
     for (const key of released) gameMap.unblockStructureTile(tileKeyX(key), tileKeyY(key));
-    for (const key of wanted) {
-      if (!gameMap.isStructureTile(tileKeyX(key), tileKeyY(key))) {
-        gameMap.blockStructureTile(tileKeyX(key), tileKeyY(key));
-      }
+    for (const [key, solid] of wanted) {
+      gameMap.blockStructureTile(tileKeyX(key), tileKeyY(key), solid);
     }
   }
 

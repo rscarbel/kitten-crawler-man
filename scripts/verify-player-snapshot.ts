@@ -17,6 +17,9 @@
  * plausible body limit, and a save holding a fixed 32 slots of whole item defs,
  * every one of them full, must load with all of them and a page to spare.
  *
+ * The Third Eye's wall-clock recharge must round-trip, since a crawler is
+ * rebuilt from its snapshot at every door.
+ *
  *   npx tsx scripts/verify-player-snapshot.ts
  */
 
@@ -37,6 +40,7 @@ import {
   snapPlayer,
   type PlayerSnapshot,
 } from '../src/core/PlayerSnapshot.js';
+import { THIRD_EYE_FORESIGHT_COOLDOWN_MS } from '../src/core/tattoos.js';
 import { CatPlayer } from '../src/creatures/CatPlayer.js';
 import { HumanPlayer } from '../src/creatures/HumanPlayer.js';
 
@@ -335,6 +339,19 @@ function restored(snap: PlayerSnapshot): HumanPlayer {
       legacy.inventory.bag.pageCount === 2 &&
       legacy.inventory.bag.slots.includes(null),
     'a full fixed-size bag from an older save loads whole, with a page to spare',
+  );
+}
+
+// ── The Third Eye's recharge survives a rebuild ─────────────────────────────
+{
+  const seer = new HumanPlayer(0, 0, TILE_SIZE);
+  seer.tattoo = 'third_eye';
+  const readyAt = Date.now() + THIRD_EYE_FORESIGHT_COOLDOWN_MS;
+  seer.thirdEyeReadyAt = readyAt;
+  const back = restored(snapPlayer(seer));
+  check(
+    back.tattoo === 'third_eye' && back.thirdEyeReadyAt === readyAt,
+    "the Third Eye's recharge deadline round-trips, so a door cannot reset it",
   );
 }
 

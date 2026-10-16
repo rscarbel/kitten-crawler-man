@@ -29,7 +29,6 @@ import { makeBurn } from '../core/StatusEffect';
 import { randomInt } from '../utils';
 import type { GameSystem, SystemContext } from './GameSystem';
 import type { GroundHazardSource } from './GroundHazardSource';
-import type { LootSystem } from './LootSystem';
 import { MELEE_POINT_BLANK_RANGE } from './CombatSystem';
 import { tileKey } from './tileKey';
 
@@ -106,9 +105,6 @@ const TREE_ANIM_FRAME_COUNT = 6;
 /** How long a collapse takes, start to bare ground. */
 const FELLING_TOTAL_FRAMES = TREE_ANIM_FRAME_COUNT * FRAMES_PER_ANIM_STEP;
 
-/** Coins a felled tree drops: floor 3 → 3–5. */
-const TREE_COIN_SPREAD = 2;
-
 /** Frames a struck tree flashes. */
 const HIT_FLASH_FRAMES = 6;
 const HIT_FLASH_MAX_ALPHA = 0.45;
@@ -177,11 +173,6 @@ export interface TreeHealth {
   stageFrames: number;
   /** Frames spent in any animated stage, driving the sprite's frame cursor. */
   animFrames: number;
-  /**
-   * Who struck the felling blow, so the coins go to them when the collapse
-   * finishes. Null for a tree that is not coming down.
-   */
-  feller: HumanPlayer | CatPlayer | null;
 }
 
 export interface Stump {
@@ -307,8 +298,6 @@ export class TreeSystem implements GameSystem, GroundHazardSource {
 
   constructor(
     private readonly gameMap: GameMap,
-    private readonly loot: LootSystem,
-    private readonly floorNumber: number,
     /**
      * Told whenever a tree tile's appearance changes, so the minimap can
      * repaint it. The minimap caches a tile the first time fog lifts off it and
@@ -375,14 +364,10 @@ export class TreeSystem implements GameSystem, GroundHazardSource {
    * still play the solid hit cue.
    */
   tryMeleeHit(attacker: HumanPlayer | CatPlayer, range: number, damage: number): boolean {
-    return this.damageTreesInRange(
-      attacker.x + HALF_TILE,
-      attacker.y + HALF_TILE,
-      range,
-      damage,
-      attacker,
-      { x: attacker.facingX, y: attacker.facingY },
-    );
+    return this.damageTreesInRange(attacker.x + HALF_TILE, attacker.y + HALF_TILE, range, damage, {
+      x: attacker.facingX,
+      y: attacker.facingY,
+    });
   }
 
   /**
@@ -395,7 +380,6 @@ export class TreeSystem implements GameSystem, GroundHazardSource {
       attacker.y + HALF_TILE,
       radius,
       damage,
-      attacker,
       null,
     );
   }
@@ -405,14 +389,8 @@ export class TreeSystem implements GameSystem, GroundHazardSource {
    * tree, which the caller uses both to detonate the projectile and to roll for
    * ignition.
    */
-  tryProjectileHit(
-    x: number,
-    y: number,
-    radius: number,
-    damage: number,
-    owner: HumanPlayer | CatPlayer,
-  ): boolean {
-    return this.damageTreesInRange(x, y, radius, damage, owner, null);
+  tryProjectileHit(x: number, y: number, radius: number, damage: number): boolean {
+    return this.damageTreesInRange(x, y, radius, damage, null);
   }
 
   /**
@@ -426,8 +404,8 @@ export class TreeSystem implements GameSystem, GroundHazardSource {
    * that follows. Dynamite *always* destroys every tree in its radius, and a
    * blast has no line of sight to respect anyway.
    */
-  destroyInRadius(x: number, y: number, radius: number, owner: HumanPlayer | CatPlayer): boolean {
-    return this.damageTreesInRange(x, y, radius, INSTANT_DESTROY_DAMAGE, owner, null, 'none');
+  destroyInRadius(x: number, y: number, radius: number): boolean {
+    return this.damageTreesInRange(x, y, radius, INSTANT_DESTROY_DAMAGE, null, 'none');
   }
 
   /**
@@ -443,7 +421,6 @@ export class TreeSystem implements GameSystem, GroundHazardSource {
       attacker.y + HALF_TILE,
       radius,
       INSTANT_DESTROY_DAMAGE,
-      attacker,
       null,
       'ignoreBreakables',
     );
@@ -646,7 +623,6 @@ export class TreeSystem implements GameSystem, GroundHazardSource {
       stage,
       stageFrames: 0,
       animFrames: 0,
-      feller: null,
     };
     this.health.set(key, created);
     return created;
@@ -657,7 +633,6 @@ export class TreeSystem implements GameSystem, GroundHazardSource {
     originY: number,
     range: number,
     damage: number,
-    owner: HumanPlayer | CatPlayer,
     facing: { x: number; y: number } | null,
     /**
      * `'blocked'` (default): a normal sight test, walls and trees alike.
@@ -709,8 +684,7 @@ export class TreeSystem implements GameSystem, GroundHazardSource {
 
       const health = this.healthFor(tx, ty);
       // A tree already coming down cannot be hit again: it is no longer an
-      // obstacle so much as an animation, and a second felling would pay the
-      // loot out twice.
+      // obstacle so much as an animation.
       if (isFellingStage(health.stage)) return;
 
       hitAnything = true;
@@ -719,7 +693,7 @@ export class TreeSystem implements GameSystem, GroundHazardSource {
       this.flashing.add(tileKey(tx, ty));
 
       if (health.hp <= 0) {
-        this.beginFelling(health, owner);
+        this.beginFelling(health);
         return;
       }
       // Only a healthy tree visibly cracks. A burning or charred one already has
@@ -739,15 +713,14 @@ export class TreeSystem implements GameSystem, GroundHazardSource {
 
   /**
    * Brings a tree down because it was chopped out for its wood rather than
-   * beaten down: the same collapse and stump as a melee felling, but no coins,
-   * because the wood was the pay. Returns false for a tile that is not a tree
-   * or is already coming down.
+   * beaten down: the same collapse and stump as a melee felling. Returns false
+   * for a tile that is not a tree or is already coming down.
    */
   fellByHarvest(tileX: number, tileY: number): boolean {
     if (!this.isTreeTile(tileX, tileY)) return false;
     const health = this.healthFor(tileX, tileY);
     if (isFellingStage(health.stage)) return false;
-    this.beginFelling(health, null);
+    this.beginFelling(health);
     return true;
   }
 
@@ -770,14 +743,13 @@ export class TreeSystem implements GameSystem, GroundHazardSource {
     return row[tileX].type === TREE;
   }
 
-  private beginFelling(health: TreeHealth, feller: HumanPlayer | CatPlayer | null): void {
+  private beginFelling(health: TreeHealth): void {
     // A tree with nothing green left comes down as a husk. `burning_late` counts
     // as burnt out for this: its crown is already consumed, so dropping it as a
     // leafy tree would be the same inversion.
     const wasBurntOut =
       health.stage === TREE_STAGE_CHARRED || health.stage === TREE_STAGE_BURNING_LATE;
     health.stage = wasBurntOut ? TREE_STAGE_FELLING_CHARRED : TREE_STAGE_FELLING;
-    health.feller = feller;
     health.stageFrames = 0;
     health.animFrames = 0;
     const key = tileKey(health.tileX, health.tileY);
@@ -792,7 +764,7 @@ export class TreeSystem implements GameSystem, GroundHazardSource {
   }
 
   private finishFelling(health: TreeHealth): void {
-    const { tileX, tileY, feller } = health;
+    const { tileX, tileY } = health;
     const tile = this.gameMap.structure[tileY][tileX];
     tile.type = tile.groundType ?? inferFloorType(this.gameMap.structure, tileX, tileY);
     delete tile.treeStage;
@@ -807,20 +779,6 @@ export class TreeSystem implements GameSystem, GroundHazardSource {
     while (this.stumps.length > MAX_STUMPS) this.dropOldestStump();
 
     this.felledSinceDrain++;
-
-    if (feller === null) return;
-    this.loot.addLoot(
-      (tileX + TILE_CENTER_OFFSET) * TILE_SIZE,
-      (tileY + TILE_CENTER_OFFSET) * TILE_SIZE,
-      { coins: randomInt(this.floorNumber, this.floorNumber + TREE_COIN_SPREAD), items: [] },
-      feller,
-      false,
-      // Both crawlers are paid in full rather than splitting the drop, matching
-      // how a smashed prop pays out.
-      true,
-      // Falls and bounces the same as a kill's or a prop's coins.
-      true,
-    );
   }
 
   /**

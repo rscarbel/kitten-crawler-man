@@ -17,6 +17,7 @@
  */
 
 import type { GameMap } from '../map/GameMap';
+import type { BriarHollowSite } from '../map/overworld/briarHollowSite';
 import type { Mob } from '../creatures/Mob';
 import { SkeletonLord } from '../creatures/SkeletonLord';
 import { TheLich } from '../creatures/TheLich';
@@ -40,7 +41,8 @@ import {
   Necromancer,
   type NecromancerRaiseRequest,
 } from '../creatures/Necromancer';
-import { enlistInSiege } from '../creatures/siege/siegeCapability';
+import { enlistInSiege, isInsidePalisadeTile } from '../creatures/siege/siegeCapability';
+import { INNER_RAISE_DIRECTIVE } from '../creatures/siege/innerRaiseDirective';
 import { TILE_SIZE } from '../core/constants';
 import { hasRoomToMove } from '../map/findWalkableTile';
 import { applySpawnDifficulty } from '../core/difficultyProfiles';
@@ -262,7 +264,8 @@ export class SkeletonSummonSystem implements GameSystem {
    * holding him to {@link NECRO_ESCORT_CAP} living raises — counted by who
    * raised them, so the wave's own raised ratkin never forbid his — and tells
    * him what he fields. A sigil that has become unfit ground since he chose it
-   * is moved to the nearest open ground rather than dropped. A dead
+   * is moved to the nearest open ground on the same side of the palisade
+   * rather than dropped. A dead
    * necromancer's last requests are dropped: nobody is left to raise them.
    */
   private raiseForNecromancers(mobs: readonly Mob[]): void {
@@ -280,7 +283,7 @@ export class SkeletonSummonSystem implements GameSystem {
         const taken = new Set<string>();
         for (const request of pending) {
           if (living >= NECRO_ESCORT_CAP) break;
-          const tile = this.raiseTileFor(request, taken);
+          const tile = this.raiseTileFor(necromancer, request, taken);
           if (tile === null) continue;
           this.raiseForNecromancer(necromancer, tile.x, tile.y, request);
           living++;
@@ -291,6 +294,7 @@ export class SkeletonSummonSystem implements GameSystem {
   }
 
   private raiseTileFor(
+    necromancer: Necromancer,
     request: NecromancerRaiseRequest,
     taken: Set<string>,
   ): { x: number; y: number } | null {
@@ -302,10 +306,14 @@ export class SkeletonSummonSystem implements GameSystem {
       taken.add(key);
       return { x: request.tileX, y: request.tileY };
     }
+    const site = necromancer.siegeCapable?.world.site;
+    const sameSideOfWall =
+      site === undefined ? acceptAnyTile : sameSideOfPalisadeAs(site, request.tileX, request.tileY);
     return this.findSpawnTile(
       request.tileX * TILE_SIZE + TILE_SIZE / 2,
       request.tileY * TILE_SIZE + TILE_SIZE / 2,
       taken,
+      sameSideOfWall,
     );
   }
 
@@ -335,8 +343,12 @@ export class SkeletonSummonSystem implements GameSystem {
     const siege = necromancer.siegeCapable;
     // Seeded by where it rose, so a batch of raises fans out rather than
     // queueing behind one another on the same line to the wall.
-    if (siege !== null) enlistInSiege(risen, siege.world, tileX * RAISE_SPREAD_ROW_STRIDE + tileY);
-    else risen.forceAggro = true;
+    if (siege !== null) {
+      enlistInSiege(risen, siege.world, tileX * RAISE_SPREAD_ROW_STRIDE + tileY);
+      if (request.inner) risen.siegeDirective = INNER_RAISE_DIRECTIVE;
+    } else {
+      risen.forceAggro = true;
+    }
     this.necromancerRaises.set(risen, necromancer);
     this.addMob(risen);
     this.riseSoundPending = true;
@@ -415,11 +427,14 @@ export class SkeletonSummonSystem implements GameSystem {
    * wave of several shares no tile while the search still has a free one. Once
    * every walkable tile in reach is taken, skeletons double up on them and the
    * separation pass spreads them out, rather than the wave losing bodies.
+   *
+   * Only tiles `accept` allows are considered at all.
    */
   private findSpawnTile(
     originX: number,
     originY: number,
     taken: Set<string>,
+    accept: TileFilter = acceptAnyTile,
   ): { x: number; y: number } | null {
     const centreTileX = Math.floor(originX / TILE_SIZE);
     const centreTileY = Math.floor(originY / TILE_SIZE);
@@ -436,7 +451,7 @@ export class SkeletonSummonSystem implements GameSystem {
           if (Math.max(Math.abs(dx), Math.abs(dy)) !== radius) continue;
           const tileX = centreTileX + dx;
           const tileY = centreTileY + dy;
-          if (!this.gameMap.isMobSpawnTile(tileX, tileY)) continue;
+          if (!this.gameMap.isMobSpawnTile(tileX, tileY) || !accept(tileX, tileY)) continue;
           const tile = { x: tileX, y: tileY };
           if (taken.has(tileKey(tileX, tileY))) doubledUp.push(tile);
           else if (hasRoomToMove(this.gameMap, tileX, tileY)) roomy.push(tile);
@@ -454,6 +469,16 @@ export class SkeletonSummonSystem implements GameSystem {
     if (doubledUp.length > 0) return pickAtRandom(doubledUp);
     return null;
   }
+}
+
+type TileFilter = (tileX: number, tileY: number) => boolean;
+
+const acceptAnyTile: TileFilter = () => true;
+
+/** Accepts only tiles on the same side of `site`'s palisade as the given tile. */
+function sameSideOfPalisadeAs(site: BriarHollowSite, tileX: number, tileY: number): TileFilter {
+  const originInside = isInsidePalisadeTile(site, tileX, tileY);
+  return (x, y) => isInsidePalisadeTile(site, x, y) === originInside;
 }
 
 function tileKey(tileX: number, tileY: number): string {

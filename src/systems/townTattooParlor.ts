@@ -1,77 +1,65 @@
 /**
  * The Quiet Needle. The tattooist will put one living mark on a crawler — expensive,
- * permanent, and strictly one per character (`Player.tattooStat`), so the choice
- * of which stat it raises is the whole decision.
+ * permanent, and strictly one per character (`Player.tattoo`), so the choice
+ * of which mark to wear is the whole decision.
  *
  * Pure data + line selection; the shop screen owns the UI and
  * `BuildingInteriorScene` owns the sounds and the interaction gating.
  */
 
-import type { StatName, Player } from '../Player';
-import type { SkillId } from '../core/SkillManager';
+import type { Player } from '../Player';
 import { getSkillDef } from '../core/SkillManager';
+import {
+  BRASS_GULLET_LABEL,
+  BRASS_GULLET_SKILL,
+  STAT_TATTOO_DESIGNS,
+  STAT_TATTOO_IDS,
+  brassGulletDesc,
+  isStatTattooId,
+} from '../core/tattoos';
 import type { ShopMenu, ShopRow, ShopPurchaseHandler } from '../ui/screens/shop/shopSession';
+import type { PlannedBuildingName } from '../map/town/townPlan';
 import type { ResidentHost } from './townResidents';
 import { rotateLine } from './townServiceUtil';
 
+export const QUIET_NEEDLE_NAME = 'The Quiet Needle' as const satisfies PlannedBuildingName;
+
 const TATTOO_PRICE = 100;
-/** Stat points a tattoo grants. Small, but it never goes away. */
-const TATTOO_STAT_POINTS = 1;
+/** Each mark's description is the whole of its rules, so a row wraps rather than cutting it off. */
+const TATTOO_DESC_LINES = 6;
 
 /**
- * The parlour's one skill mark. Priced well above a stat tattoo because a skill
- * is worth more than a point, and gated on its own marker rather than
- * `tattooStat`: a crawler may carry one stat tattoo *and* one skill tattoo, but
- * never two of either.
+ * The parlour's one skill mark. Priced well above a stat mark because it
+ * teaches a skill on top of its effect, and gated on its own marker rather than
+ * `tattoo`: a crawler may carry one stat mark *and* one skill mark, but never
+ * two of either.
  */
 const SKILL_TATTOO_KEY = 'brass_gullet';
 const SKILL_TATTOO_PRICE = 250;
-const SKILL_TATTOO_SKILL: SkillId = 'iron_stomach';
 
-const TATTOO_DESIGNS: ReadonlyArray<{
-  key: string;
-  label: string;
-  desc: string;
-  stat: StatName;
-}> = [
-  {
-    key: 'coiled_fist',
-    label: 'The Coiled Fist',
-    desc: `It flexes when you do. +${TATTOO_STAT_POINTS} Strength`,
-    stat: 'strength',
-  },
-  {
-    key: 'iron_ribs',
-    label: 'The Iron Ribs',
-    desc: `Bands that tighten. +${TATTOO_STAT_POINTS} Constitution`,
-    stat: 'constitution',
-  },
-  {
-    key: 'third_eye',
-    label: 'The Third Eye',
-    desc: `It blinks. Don't watch it. +${TATTOO_STAT_POINTS} Intelligence`,
-    stat: 'intelligence',
-  },
-  {
-    key: 'quick_serpent',
-    label: 'The Quick Serpent',
-    desc: `It strikes before you flinch. +${TATTOO_STAT_POINTS} Dexterity`,
-    stat: 'dexterity',
-  },
-];
+function brassGulletOnSale(player: Player): boolean {
+  return (
+    player.skillTattoo === null && player.skills.previewUnlock(BRASS_GULLET_SKILL) !== 'already_max'
+  );
+}
+
+/** Whether the parlour still has a mark `player` could buy. */
+export function hasTattooForSale(player: Player): boolean {
+  return player.tattoo === null || brassGulletOnSale(player);
+}
 
 /** The skill-tattoo row, with its availability resolved for `player`. */
 function buildSkillTattooOption(player: Player): ShopRow {
-  const def = getSkillDef(SKILL_TATTOO_SKILL);
+  const def = getSkillDef(BRASS_GULLET_SKILL);
   const option: ShopRow = {
     key: SKILL_TATTOO_KEY,
-    label: 'The Brass Gullet',
+    label: BRASS_GULLET_LABEL,
     price: SKILL_TATTOO_PRICE,
-    desc: `A throat inked in beaten brass. Teaches ${def.name}.`,
+    desc: brassGulletDesc(def.name),
   };
   if (player.skillTattoo !== null) {
     option.unavailable = 'Already marked';
-  } else if (player.skills.previewUnlock(SKILL_TATTOO_SKILL) === 'already_max') {
+  } else if (player.skills.previewUnlock(BRASS_GULLET_SKILL) === 'already_max') {
     option.unavailable = 'Mastered';
   }
   return option;
@@ -99,20 +87,22 @@ function tattooistBark(turn: number): string {
  * greeting is theirs rather than the generic tattooist's.
  */
 export function buildTattooMenu(player: Player, turn: number, host: ResidentHost | null): ShopMenu {
-  const existing = player.tattooStat;
+  const existing = player.tattoo;
   return {
-    title: 'The Quiet Needle',
+    title: QUIET_NEEDLE_NAME,
     bark: host?.line ?? tattooistBark(turn),
     byline: host?.name,
-    options: TATTOO_DESIGNS.map((design) => {
+    descLines: TATTOO_DESC_LINES,
+    options: STAT_TATTOO_IDS.map((id) => {
+      const design = STAT_TATTOO_DESIGNS[id];
       const option: ShopRow = {
-        key: design.key,
+        key: id,
         label: design.label,
         price: TATTOO_PRICE,
         desc: design.desc,
       };
       if (existing !== null) {
-        option.unavailable = existing === design.stat ? 'Yours' : 'Already inked';
+        option.unavailable = existing === id ? 'Yours' : 'Already inked';
       }
       return option;
     }).concat(buildSkillTattooOption(player)),
@@ -125,16 +115,15 @@ export const inkTattoo: ShopPurchaseHandler = (option, buyer) => {
     if (buyer.skillTattoo !== null) {
       return { ok: false, line: 'One mark of that kind per skin. You have yours.' };
     }
-    buyer.skills.unlockSkill(SKILL_TATTOO_SKILL);
-    buyer.skillTattoo = SKILL_TATTOO_SKILL;
+    buyer.skills.unlockSkill(BRASS_GULLET_SKILL);
+    buyer.skillTattoo = BRASS_GULLET_SKILL;
     return {
       ok: true,
       line: 'Swallow. There — it settles in the gullet. Try not to test it today.',
     };
   }
-  const design = TATTOO_DESIGNS.find((d) => d.key === option.key);
-  if (design === undefined) return { ok: false, line: 'The tattooist frowns at the design.' };
-  buyer.applyPermanentStat(design.stat, TATTOO_STAT_POINTS);
-  buyer.tattooStat = design.stat;
+  const { key } = option;
+  if (!isStatTattooId(key)) return { ok: false, line: 'The tattooist frowns at the design.' };
+  buyer.tattoo = key;
   return { ok: true, line: `${option.label} is yours. It’s already moving.` };
 };

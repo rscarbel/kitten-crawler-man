@@ -605,6 +605,8 @@ function questExitDoorTileType(state: QuestExitDoorState, generatedType: number)
 const BLOCK_UNCONDITIONAL = BLOCK_EXTRA | BLOCK_PERMANENT | BLOCK_STRUCTURE;
 
 // ── A* pathfinding constants ──────────────────────────────────────────────────
+/** How many rings of tiles around a crawler on a structure's edge A* searches for a tile to close on. */
+const STRUCTURE_STAND_IN_MAX_RING = 2;
 /** Movement cost for a diagonal step (√2 approximated to 3 decimal places). */
 const DIAGONAL_MOVE_COST = 1.414;
 /** Movement cost for a cardinal step. */
@@ -677,6 +679,18 @@ function manhattanDistance(x1: number, y1: number, x2: number, y2: number): numb
  * its target tile rather than on the iteration guard.
  */
 const LOS_CROSSING_SLACK = 2;
+
+/** An axis-aligned rectangle in world pixels; a point on its right or bottom edge is outside. */
+export interface PixelRect {
+  readonly left: number;
+  readonly top: number;
+  readonly right: number;
+  readonly bottom: number;
+}
+
+function pixelRectContains(rect: PixelRect, worldX: number, worldY: number): boolean {
+  return worldX >= rect.left && worldX < rect.right && worldY >= rect.top && worldY < rect.bottom;
+}
 
 /** Options for GameMap construction. */
 export interface GameMapOptions {
@@ -1023,6 +1037,12 @@ export class GameMap {
   private readonly permanentBlockedTiles = new Set<number>();
   private readonly stairwellBlockedSet = new Set<number>();
   private readonly structureBlockedSet = new Set<number>();
+  /**
+   * The part of a structure-blocked tile a crawler actually collides with, in
+   * world pixels. Mobs, A* and placement still treat the whole tile as solid.
+   * Not saved: a restored tile stays fully solid until its owner syncs again.
+   */
+  private readonly structureSolidRects = new Map<number, PixelRect>();
   private readonly hostileOnlyBlockedSet = new Set<number>();
 
   /**
@@ -1906,6 +1926,40 @@ export class GameMap {
     return this.searchPath(startX, startY, goalX, goalY, maxDistanceTiles, forHostile, true);
   }
 
+  /**
+   * For a goal tile blocked only by a structure with a crawler-passable edge,
+   * the walkable tile in the nearest ring around it that is closest to the
+   * start; null for any other goal. Two structures built flush can wall in an
+   * edge tile's whole first ring, so the search reaches one ring further.
+   */
+  private structureEdgeStandIn(
+    goalX: number,
+    goalY: number,
+    startX: number,
+    startY: number,
+    forHostile: boolean,
+  ): { x: number; y: number } | null {
+    if (this.passableStructureRect(goalX, goalY) === null) return null;
+    for (let ring = 1; ring <= STRUCTURE_STAND_IN_MAX_RING; ring++) {
+      let best: { x: number; y: number } | null = null;
+      let bestDistanceSq = Infinity;
+      for (let dy = -ring; dy <= ring; dy++) {
+        for (let dx = -ring; dx <= ring; dx++) {
+          if (Math.max(Math.abs(dx), Math.abs(dy)) !== ring) continue;
+          const x = goalX + dx;
+          const y = goalY + dy;
+          if (!this.isWalkableFor(x, y, forHostile)) continue;
+          const distanceSq = (x - startX) ** 2 + (y - startY) ** 2;
+          if (distanceSq >= bestDistanceSq) continue;
+          best = { x, y };
+          bestDistanceSq = distanceSq;
+        }
+      }
+      if (best !== null) return best;
+    }
+    return null;
+  }
+
   private searchPath(
     startX: number,
     startY: number,
@@ -1915,7 +1969,21 @@ export class GameMap {
     forHostile: boolean,
     avoidStairwells: boolean,
   ): Array<{ x: number; y: number }> {
-    if (!this.isWalkableFor(goalX, goalY, forHostile)) return [];
+    if (!this.isWalkableFor(goalX, goalY, forHostile)) {
+      // A crawler may stand on a structure's bare edge, a tile nothing else can
+      // enter; closing on the tile beside it keeps the edge from being a refuge.
+      const standIn = this.structureEdgeStandIn(goalX, goalY, startX, startY, forHostile);
+      if (standIn === null) return [];
+      return this.searchPath(
+        startX,
+        startY,
+        standIn.x,
+        standIn.y,
+        maxDistanceTiles,
+        forHostile,
+        avoidStairwells,
+      );
+    }
     const isStep = (tileX: number, tileY: number): boolean => {
       if (!this.isWalkableFor(tileX, tileY, forHostile)) return false;
       if (!avoidStairwells) return true;
@@ -2124,15 +2192,63 @@ export class GameMap {
     return tileX >= 0 && tileY >= 0 && tileX < this.maskWidth && tileY < this.maskHeight;
   }
 
-  /** Reserves a tile under a player-built structure. Undone by {@link unblockStructureTile}. */
-  blockStructureTile(tileX: number, tileY: number): void {
-    this.structureBlockedSet.add(tileCoordKey(tileX, tileY));
+  /**
+   * Reserves a tile under a player-built structure. Undone by
+   * {@link unblockStructureTile}. With `solid`, a crawler collides only with
+   * that rectangle of the tile (see {@link isCrawlerWalkableAt}); without it
+   * the whole tile is solid for everyone.
+   */
+  blockStructureTile(tileX: number, tileY: number, solid?: PixelRect): void {
+    const key = tileCoordKey(tileX, tileY);
+    this.structureBlockedSet.add(key);
+    if (solid === undefined) this.structureSolidRects.delete(key);
+    else this.structureSolidRects.set(key, solid);
     this.addBlockFlag(tileX, tileY, BLOCK_STRUCTURE);
   }
 
   unblockStructureTile(tileX: number, tileY: number): void {
-    this.structureBlockedSet.delete(tileCoordKey(tileX, tileY));
+    const key = tileCoordKey(tileX, tileY);
+    this.structureBlockedSet.delete(key);
+    this.structureSolidRects.delete(key);
     this.removeBlockFlag(tileX, tileY, BLOCK_STRUCTURE);
+  }
+
+  /**
+   * The structure rectangle a crawler at this world point is standing inside,
+   * or null when the point is not refused by one: open ground, a wall, a house,
+   * or a structure tile with no rectangle all answer null.
+   */
+  structureRectAt(worldX: number, worldY: number): PixelRect | null {
+    const tileX = Math.floor(worldX / TILE_SIZE);
+    const tileY = Math.floor(worldY / TILE_SIZE);
+    const rect = this.passableStructureRect(tileX, tileY);
+    if (rect === null || !pixelRectContains(rect, worldX, worldY)) return null;
+    return rect;
+  }
+
+  /**
+   * {@link isWalkable} at a world point for the driven crawler, who may stand
+   * on the bare ground inside a structure's footprint around its solid frame.
+   * Identical to `isWalkable` everywhere no structure rectangle is recorded.
+   */
+  isCrawlerWalkableAt(worldX: number, worldY: number): boolean {
+    const tileX = Math.floor(worldX / TILE_SIZE);
+    const tileY = Math.floor(worldY / TILE_SIZE);
+    if (this.isWalkable(tileX, tileY)) return true;
+    const rect = this.passableStructureRect(tileX, tileY);
+    return rect !== null && !pixelRectContains(rect, worldX, worldY);
+  }
+
+  /**
+   * A tile's recorded structure rectangle, when the structure is the only
+   * thing blocking the tile; null otherwise.
+   */
+  private passableStructureRect(tileX: number, tileY: number): PixelRect | null {
+    if (!this.isInsideGrid(tileX, tileY)) return null;
+    const rect = this.structureSolidRects.get(tileCoordKey(tileX, tileY));
+    if (rect === undefined) return null;
+    const flags = this.blockedMask[tileIndex(tileX, tileY, this.maskWidth)];
+    return this.passableUnderFlags(tileX, tileY, flags & ~BLOCK_STRUCTURE) ? rect : null;
   }
 
   /** Whether a structure's footprint reserves this tile. */
@@ -2446,11 +2562,23 @@ export class GameMap {
   }
 
   isWalkable(tileX: number, tileY: number): boolean {
-    if (!this.isWalkableIgnoringBathroomQueue(tileX, tileY)) return false;
-    if ((this.blockedMask[tileIndex(tileX, tileY, this.maskWidth)] & BLOCK_BODY) !== 0)
-      return false;
-    if (this.bathroomPlumbing === 'fixed') return true;
-    return (this.blockedMask[tileIndex(tileX, tileY, this.maskWidth)] & BLOCK_BATHROOM) === 0;
+    if (!this.isInsideGrid(tileX, tileY)) return false;
+    return this.passableUnderFlags(
+      tileX,
+      tileY,
+      this.blockedMask[tileIndex(tileX, tileY, this.maskWidth)],
+    );
+  }
+
+  /** {@link isWalkable} for an in-grid tile, given the block flags to judge it by. */
+  private passableUnderFlags(tileX: number, tileY: number, flags: number): boolean {
+    if ((flags & BLOCK_UNCONDITIONAL) !== 0) return false;
+    if (this.arenaDoorLocked && (flags & BLOCK_ARENA_DOOR) !== 0) return false;
+    if (this.questExitDoorState === 'barred' && (flags & BLOCK_QUEST_EXIT) !== 0) return false;
+    if (this.stealthGate !== 'open' && (flags & BLOCK_STEALTH_GATE) !== 0) return false;
+    if ((flags & BLOCK_BODY) !== 0) return false;
+    if (this.bathroomPlumbing !== 'fixed' && (flags & BLOCK_BATHROOM) !== 0) return false;
+    return isWalkableTileType(this.structure[tileY][tileX]);
   }
 
   /**

@@ -397,7 +397,7 @@ export function drawFennaPage(
 
   drawArrow(ctx, (woodX + coinX) / 2, centreY);
   drawCoin(ctx, coinX, centreY, frame);
-  drawLabel(ctx, `${FENNA_FEE_PER_WOOD} coin`, coinX, centreY + COIN_RADIUS + LABEL_GAP);
+  drawLabel(ctx, `${FENNA_FEE_PER_WOOD} coins`, coinX, centreY + COIN_RADIUS + LABEL_GAP);
 
   drawArrow(ctx, (coinX + outX) / 2, centreY);
   const boardsY = centreY - FENNA_ICON_SIZE * FENNA_OUTPUT_ROW_GAP_ICONS;

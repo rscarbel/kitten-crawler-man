@@ -17,14 +17,14 @@ import { drawToolIcon, isToolIconId } from '../../../sprites/art/itemIcons/toolI
 // ── Illustration stage ─────────────────────────────────────────────────────
 
 /** Tile size the world art is drawn at in the illustrations. */
-const STAGE_TILE = 64;
+export const STAGE_TILE = 64;
 /** The ground line, as a fraction of the band's height. */
 const GROUND_FRACTION = 0.78;
 const GROUND_FILL = '#2b3a22';
 const GROUND_EDGE = '#3c5230';
-const TREE_KEY = 'tree_oak_a';
+export const TREE_KEY = 'tree_oak_a';
 const STUMP_KEY = 'tree_remains';
-const BOULDER_KEY = 'boulder_large_a';
+export const BOULDER_KEY = 'boulder_large_a';
 const RUBBLE_FILL = '#8d8d88';
 const RUBBLE_SHADOW = '#5f5f5b';
 /**
@@ -66,11 +66,11 @@ const RUBBLE_SHADOW_DROP_PX = 1;
 const WHERE_COLUMN_COUNT = 4;
 const COLUMN_CENTRE = 0.5;
 
-function groundY(rect: IllustrationRect): number {
+export function groundY(rect: IllustrationRect): number {
   return rect.y + rect.height * GROUND_FRACTION;
 }
 
-function drawGround(ctx: CanvasRenderingContext2D, rect: IllustrationRect): void {
+export function drawGround(ctx: CanvasRenderingContext2D, rect: IllustrationRect): void {
   const top = groundY(rect);
   ctx.fillStyle = GROUND_FILL;
   ctx.fillRect(rect.x, top, rect.width, rect.y + rect.height - top);
@@ -79,7 +79,7 @@ function drawGround(ctx: CanvasRenderingContext2D, rect: IllustrationRect): void
 }
 
 /** A world tile's top-left for something standing at `centreX` on the ground line. */
-function standingTile(rect: IllustrationRect, centreX: number): { x: number; y: number } {
+export function standingTile(rect: IllustrationRect, centreX: number): { x: number; y: number } {
   return { x: centreX - STAGE_TILE / 2, y: groundY(rect) - STAGE_TILE };
 }
 
@@ -112,36 +112,57 @@ export function drawGatheringScene(
   const tree = standingTile(rect, centreX + STAGE_TILE * CHOPPED_TREE_OFFSET_TILES);
   drawSpriteKey(ctx, TREE_KEY, 'idle', 0, tree.x, tree.y, STAGE_TILE);
 
+  const carl = standingTile(rect, centreX - STAGE_TILE * CHOPPER_OFFSET_TILES);
+  drawChoppingCarl(ctx, carl, frame);
+  drawResourcePop(ctx, '+1 Wood', tree, frame % chopLoopFrames());
+}
+
+/** Frames one of Carl's chops takes, impact to impact. */
+export function chopLoopFrames(): number {
+  const frameCount = humanRowOf(CHOP_ROWS.side)?.frameCount ?? 1;
+  return frameCount * CHOP_TICKS_PER_FRAME;
+}
+
+/** Carl facing east mid-chop with the basic axe, standing in the tile at `tile`. */
+export function drawChoppingCarl(
+  ctx: CanvasRenderingContext2D,
+  tile: { readonly x: number; readonly y: number },
+  frame: number,
+): void {
   const row = CHOP_ROWS.side;
   const frameCount = humanRowOf(row)?.frameCount ?? 1;
   const chopFrame = Math.floor(frame / CHOP_TICKS_PER_FRAME) % frameCount;
-  const carl = standingTile(rect, centreX - STAGE_TILE * CHOPPER_OFFSET_TILES);
   const axe = workingToolHeldVisual({ kind: 'axe', tier: TOOL_TIER_BASIC });
   drawHumanFigureSelection(
     ctx,
     humanFigureFor(DEFAULT_CARL_OUTFIT, null),
-    carl.x,
-    carl.y,
+    tile.x,
+    tile.y,
     STAGE_TILE,
     { row, frame: chopFrame, flipX: false },
     axe === null ? null : { look: axe, phase: 0 },
   );
+}
 
-  const loopTicks = frameCount * CHOP_TICKS_PER_FRAME;
-  const sincePop = frame % loopTicks;
-  if (sincePop < POP_FRAMES) {
-    const rise = (sincePop / POP_FRAMES) * POP_RISE_PX;
-    worldText(ctx, '+1 Wood', {
-      x: tree.x + STAGE_TILE / 2,
-      y: tree.y - rise,
-      size: POP_TEXT_SIZE,
-      bold: true,
-      color: POP_COLOR,
-      outline: true,
-      align: 'center',
-      alpha: 1 - sincePop / POP_FRAMES,
-    });
-  }
+/** A resource gain such as "+1 Wood" rising off the node in the tile at `tile`, `sincePop` frames after the blow. */
+export function drawResourcePop(
+  ctx: CanvasRenderingContext2D,
+  label: string,
+  tile: { readonly x: number; readonly y: number },
+  sincePop: number,
+): void {
+  if (sincePop < 0 || sincePop >= POP_FRAMES) return;
+  const rise = (sincePop / POP_FRAMES) * POP_RISE_PX;
+  worldText(ctx, label, {
+    x: tile.x + STAGE_TILE / 2,
+    y: tile.y - rise,
+    size: POP_TEXT_SIZE,
+    bold: true,
+    color: POP_COLOR,
+    outline: true,
+    align: 'center',
+    alpha: 1 - sincePop / POP_FRAMES,
+  });
 }
 
 /** A tree and its stump, a rock and its rubble. */

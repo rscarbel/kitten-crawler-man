@@ -228,6 +228,7 @@ const BLUEPRINTS_PRESET_IDS = [
   'blueprints-fence',
   'blueprints-harvest',
   'blueprints-escort',
+  'blueprints-show-fenna',
   'blueprints-stations',
 ] as const;
 /** A blow that would take her whole bar several times over. */

@@ -20,6 +20,8 @@
 /** How long a decoded fake buffer lasts unless the harness says otherwise, in seconds. */
 const DEFAULT_BUFFER_DURATION_S = 30;
 const MS_PER_SECOND = 1000;
+/** A browser's default cut-off for a new filter node. */
+const DEFAULT_BIQUAD_FREQUENCY_HZ = 350;
 
 type AutomationEvent =
   | { readonly kind: 'set'; readonly time: number; readonly value: number }
@@ -224,6 +226,17 @@ export class FakeStereoPannerNode extends FakeAudioNode {
   constructor(clock: () => number) {
     super('panner');
     this.pan = new FakeAudioParam(clock, 0);
+  }
+}
+
+export class FakeBiquadFilterNode extends FakeAudioNode {
+  type: BiquadFilterType = 'lowpass';
+  readonly frequency: FakeAudioParam;
+  readonly Q: FakeAudioParam;
+  constructor(clock: () => number) {
+    super('biquadFilter');
+    this.frequency = new FakeAudioParam(clock, DEFAULT_BIQUAD_FREQUENCY_HZ);
+    this.Q = new FakeAudioParam(clock, 1);
   }
 }
 
@@ -521,6 +534,10 @@ export class FakeAudioContext {
 
   createStereoPanner(): FakeStereoPannerNode {
     return new FakeStereoPannerNode(this.clock);
+  }
+
+  createBiquadFilter(): FakeBiquadFilterNode {
+    return new FakeBiquadFilterNode(this.clock);
   }
 
   createChannelMerger(inputs = 2): FakeChannelMergerNode {

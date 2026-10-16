@@ -19,6 +19,7 @@
 
 import { TILE_SIZE } from '../../core/constants';
 import type { EventBus } from '../../core/EventBus';
+import { activeRunStats } from '../../core/GameStats';
 import type { VillageQuestPhase } from '../../core/villageQuestPhase';
 import { applySpawnDifficulty } from '../../core/difficultyProfiles';
 import { Cow, type CowRowWarmer, LIVESTOCK_LEVEL } from '../../creatures/Cow';
@@ -511,6 +512,7 @@ export class LivestockSystem {
   /** Pets one cow in particular — the one a tap landed on. */
   petCow(cow: Cow, active: HumanPlayer | CatPlayer): void {
     if (!cow.pet(active)) return;
+    activeRunStats()?.recordCowPetted(cow.name === MIDGE_COW_NAME);
     const head = cow.headAnchor();
     this.emotes.spawnHearts(head.x, head.y);
     // Merrit hears of her own herd being petted, not of a cow she has parted with.

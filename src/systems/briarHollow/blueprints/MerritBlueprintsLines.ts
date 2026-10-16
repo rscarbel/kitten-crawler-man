@@ -98,6 +98,7 @@ export class MerritBlueprintsLines {
       case 'ask_wendell':
       case 'escort_midge':
       case 'midge_delivered':
+      case 'show_fenna':
       case 'build_stations':
       case 'complete':
         return null;
@@ -119,6 +120,7 @@ export class MerritBlueprintsLines {
       case 'harvest_grain':
       case 'escort_midge':
       case 'midge_delivered':
+      case 'show_fenna':
       case 'build_stations':
       case 'complete':
         return 'none';

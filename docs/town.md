@@ -741,9 +741,19 @@ instantly.
 ## Briar Hollow
 
 A small, wooden ratkin farming village in the eastern wilderness of every floor-3
-world. It is **not** a safe zone and has **no autosave**: nothing in the village calls
-`captureSavePoint`, adds a safe room or extends `isInTownSafeZone`, and
-`isInsideTownWall` is false on every village tile (it tests `townPlan.interior` only).
+world. It is **not** a safe zone: nothing in the village adds a safe room or extends
+`isInTownSafeZone`, and `isInsideTownWall` is false on every village tile (it tests
+`townPlan.interior` only).
+
+**Saving is entry-based**, like the walled town's gate. `DungeonScene.isInBriarHollowSaveZone`
+is the village square district always and, once the Plea's rewards have been granted
+(`isVillageSavePoint`, which reads `quest.rewardsGranted`), the whole palisade interior
+(`GameMap.isInBriarHollow`). The frame the active crawler crosses into that zone,
+`onBriarHollowSaveZoneEntered` calls `captureSavePoint`; stepping out of a building door
+inside the zone counts as crossing in. `canSaveInBriarHollow` refuses the save while a
+revive is pending, a hostile inside the palisade is fighting the party, a boss fight is
+on, or the bell tower is broken. A refused entry is not retried; the next save is the next
+real entry. The Plea's quest-complete screen carries a "NEW SAVE POINT" card saying so.
 Ambient hostiles may wander in; they only never **spawn** inside the palisade bounds
 plus `SPAWN_EXCLUSION_MARGIN_TILES` (6).
 
@@ -925,8 +935,15 @@ fourth wave wins the siege.
 
 In a siege, each of his raises calls up `NECRO_SIEGE_RAISE_BATCH` bodies: raised ratkin,
 skeleton warriors and skeleton archers (`SIEGE_RAISE_KIND_WEIGHTS`). Up to
-`NECRO_INNER_RAISES` of their sigils open **inside the palisade**, near the bell and clear
-of every defender, so the walls do not keep the whole fight outside. His raises of every
+`NECRO_INNER_RAISES` of their sigils open **inside the palisade**, so the walls do not keep
+the whole fight outside. They open in a band just inside the wall, between
+`NECRO_INNER_RAISE_MIN_WALL_DEPTH_TILES` and `NECRO_INNER_RAISE_MAX_WALL_DEPTH_TILES`
+deep (`PalisadeDistanceField.insideDepthAt`), at least `NECRO_INNER_RAISE_MIN_TOWER_TILES`
+from the bell tower, clear of every defender and construction, and preferably within
+`NECRO_INNER_RAISE_SIDE_TILES` of Vordrick, on the side he is attacking. The inner dead
+carry `INNER_RAISE_DIRECTIVE`: they hunt the nearest defender within
+`INNER_RAISE_DEFENDER_LEASH_TILES` (or a strictly nearer trebuchet inside the wall) and only
+march on the bell once nobody is left to fight. His raises of every
 kind count against his escort cap (`RisingSkeleton.raisedByNecromancer`). His home zone
 only takes tiles with room to move, and the assault only spawns bodies on such tiles
 (`hasRoomToMove`), because a gap between trunks is walkable but inescapable. A walk to his
@@ -996,7 +1013,8 @@ indoors, where the kit does not run, so his side is `WendellBlueprintsHook`, one
 | `deliver_grain`   | grain reaches 100                                 | Merrit (`?`), after a "Harvest complete!" banner; Midge (`!`) once Merrit calls her                                         |
 | `escort_midge`    | Merrit's "There she is" conversation read through | the next waypoint on Midge's road, then Garrison Green; Midge (`!`) at the start and while out of lead range or at the gate |
 | `midge_delivered` | Midge is led into Garrison Green                  | Plumbline Farm and Wendell (`?`)                                                                                            |
-| `build_stations`  | Wendell's hand-over read through                  | the nearest station still to upgrade, or the shortfall; Wendell if nobody holds them                                        |
+| `show_fenna`      | Wendell's hand-over read through                  | Fenna (`?`), whose briefing names both upgrade costs; Wendell if nobody holds the blueprints                                |
+| `build_stations`  | Fenna's briefing closed                           | the nearest station still to upgrade, or the shortfall; Wendell if nobody holds them                                        |
 | `complete`        | the second station upgraded                       | —                                                                                                                           |
 
 The steps the world finishes (last fence section, hundredth grain, second station) are
@@ -1023,13 +1041,15 @@ you". While she answers the call the journal points at her instead of Merrit.
   can never disagree. The Plea registers its quest-line provider first, so wherever the
   Plea still needs Fenna its opening and marker win. Her line naming where Wendell lives
   computes the town's bearing from the village (`skyfowlTownWhereabouts`, falling back to
-  "the skyfowl town past the road"). While the quest is under way she opens with "Any
-  luck with those blueprints?", and at the end she barks the completion line.
+  "the skyfowl town past the road"). In `show_fenna`, while a crawler holds the
+  blueprints, she wears a `?` and opens with a briefing that names both upgrade costs
+  (`stationUpgradeCost`); closing it moves the phase to `build_stations`. At every other step while the quest is under way she opens
+  with "Any luck with those blueprints?", and at the end she barks the completion line.
 - **Wendell** (`WendellBlueprintsHook`) plays the first visit at `ask_wendell` and the
   hand-over at `midge_delivered`, ahead of his usual resident flow. Between them he says
   his waiting line once per visit and is then his usual self, because his bed must stay
-  reachable. In `build_stations` with neither crawler holding the blueprints, talking to
-  him hands them back. Both hand-overs go into the steered crawler's quest slot. Every
+  reachable. In `show_fenna` or `build_stations` with neither crawler holding the
+  blueprints, talking to him hands them back. Both hand-overs go into the steered crawler's quest slot. Every
   beat waits while the other crawler lies knocked out in the room: he falls back to his
   usual lines and the step stays put.
 - **Merrit** (`MerritBlueprintsLines`) has an opening for each of her steps and a `?` in
@@ -1602,8 +1622,8 @@ the save and the checkpoint go through, records a siege under way as `fortifying
 the bell at full health (and `parse` reads a stray siege phase the same way). A death or
 a reload during the siege therefore rewinds to before it, and no half-fought wave can be
 resumed — a death always returns to the last save, and the last save cannot have been
-taken mid-wave. The village has no autosave, so a death also loses anything built or
-damaged since the party last saved in town.
+taken mid-wave. Nothing in the village saves during a siege, so a death also loses
+anything built or damaged since the party last saved.
 
 ### Harnesses
 
@@ -1620,10 +1640,11 @@ damaged since the party last saved in town.
   `npm run playtest -- briar-hollow-assault --walls=fence|wood|stone|fortified
 --trebuchets=N` (walls also take 1–4).
 - `?playtest=blueprints-offer`, `blueprints-fence`, `blueprints-harvest`,
-  `blueprints-escort` and `blueprints-stations` place the party at each step of The
-  Borrowed Blueprints with what that step needs: the Plea won and Construction learned;
-  the boards for the fence; the scythe in hand; Midge waiting at Merrit's gate; the
-  blueprints in hand with the materials for both upgrades. The village state is seeded
+  `blueprints-escort`, `blueprints-show-fenna` and `blueprints-stations` place the party
+  at each step of The Borrowed Blueprints with what that step needs: the Plea won and
+  Construction learned; the boards for the fence; the scythe in hand; Midge waiting at
+  Merrit's gate; the blueprints fresh from Wendell, for Fenna's briefing; the blueprints
+  in hand with the materials for both upgrades. The village state is seeded
   before the scene is built (`blueprintsPlaytestState`), so the herd is raised knowing
   whether Midge has left it.
 - `?playtest=contracts` stands the party outside Plumbline Farm with The Borrowed

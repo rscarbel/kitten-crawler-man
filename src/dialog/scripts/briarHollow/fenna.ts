@@ -35,7 +35,7 @@ export const FENNA = {
   ]),
 
   bulkProcessingService: say.line(
-    "Or hand me the wood, pay one coin apiece, and I'll run through as much of it as you tell me to. Long as you've got it in your pack, I'll get it done.",
+    "Or hand me the wood, pay eight coins apiece, and I'll run through as much of it as you tell me to. Long as you've got it in your pack, I'll get it done.",
   ),
 
   bulkProcessingBoardsSelected: say.bark(
@@ -47,7 +47,7 @@ export const FENNA = {
   ),
 
   bulkProcessingFeeExplanation: say.line(
-    "It's one coin for every piece of wood I process. Ten pieces'll run you ten coins. Fair enough, I'd say.",
+    "It's eight coins for every piece of wood I process. Ten pieces'll run you eighty coins. Steep, I know, but that saw don't feed itself, and neither do I.",
   ),
 
   bulkProcessingComplete: say.bark('There we are. All finished. Your materials are ready to go.'),
@@ -92,7 +92,14 @@ export const FENNA = {
     "No harm done. The saw isn't going anywhere. Come find me if you change your mind.",
   ),
 
-  /** Her opening at every step while the quest is under way. */
+  /** Her opening once Wendell's blueprints are in hand: the costs of both station upgrades and what to do next. */
+  blueprintsShown: say.fn((a: { readonly sawCost: string; readonly ropeWalkCost: string }) => [
+    "Well, I'll be. Tikka's blueprints, and not a coffee ring on 'em. Wendell always did keep things tidy.",
+    `Here's the job, then. The saw wants ${a.sawCost}. The rope walk wants ${a.ropeWalkCost}.`,
+    "Mine the stone, run your wood through my machines for the boards and rope, then bring the plans up to each one and get buildin'.",
+  ]),
+
+  /** Her opening at every other step while the quest is under way. */
   blueprintsInProgress: say.line('Any luck with those blueprints?'),
 
   /** Shouted the moment the second station is upgraded. */

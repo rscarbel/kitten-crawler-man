@@ -99,6 +99,9 @@ const SAMPLE_SUMMARY: RunSummary = {
   bossesDefeated: 9,
   hirelingsHired: 5,
   hirelingsLost: 2,
+  mongoPets: 48,
+  cowPets: 37,
+  midgePets: 12,
   topKills: Object.entries(SAMPLE_KILLS),
 };
 

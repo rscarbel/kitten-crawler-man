@@ -6,7 +6,7 @@ import type { SkeletonShot } from '../systems/SkeletonProjectileSystem';
 import type { StructureRef } from '../systems/briarHollow/DefenseStructures';
 import { WALL_TIERS } from '../systems/briarHollow/structureRules';
 import { trebuchetDirectDamage } from '../systems/briarHollow/TrebuchetSystem';
-import type { AssaultLane } from '../map/overworld/briarHollowSite';
+import type { AssaultLane, BriarHollowSite } from '../map/overworld/briarHollowSite';
 import { hasRoomToMove } from '../map/findWalkableTile';
 import {
   isInsidePalisade,
@@ -127,10 +127,11 @@ export const NECRO_SIEGE_TROOPS_PER_RAISE = 10;
 /** Every siege raise also calls up one Grave Bull, never drawn from the weights below. */
 export const NECRO_SIEGE_BULLS_PER_RAISE = 1;
 /**
- * Of a siege raise's troops, how many sigils open inside the palisade. The
- * village's own dead are buried within it: a wall keeps out what comes up the
- * lanes, not what climbs out of the ground behind it. The bull never opens
- * inside — there is nothing for it to charge there.
+ * Of a siege raise's troops, how many sigils open inside the palisade, in a
+ * band just inside the wall. The village's own dead are buried within it: a
+ * wall keeps out what comes up the lanes, not what climbs out of the ground
+ * behind the defenders holding it. The bull never opens inside — there is
+ * nothing for it to charge there.
  */
 const NECRO_INNER_RAISE_SHARE = 0.75;
 export const NECRO_INNER_RAISES = Math.round(
@@ -138,8 +139,26 @@ export const NECRO_INNER_RAISES = Math.round(
 );
 /** An inner sigil opens no nearer a defender than this, so it is seen and met rather than rising underfoot. */
 const NECRO_INNER_RAISE_MIN_DEFENDER_TILES = 3;
-/** Inner sigils open within this many tiles of the bell, where the dead inside have their business. */
-const NECRO_INNER_RAISE_BELL_TILES = 12;
+/**
+ * Inner sigils open at least this many king's moves inside the ring, never in
+ * the wall's own shadow or on the walk right beside it.
+ */
+export const NECRO_INNER_RAISE_MIN_WALL_DEPTH_TILES = 2;
+/** Inner sigils open at most this many king's moves inside the ring: close behind the wall. */
+export const NECRO_INNER_RAISE_MAX_WALL_DEPTH_TILES = 5;
+/**
+ * Inner sigils open no nearer the bell tower's centre than this. The depth
+ * band keeps them farther than this in Briar Hollow as laid out; this keeps
+ * the tower out of reach under any layout.
+ */
+export const NECRO_INNER_RAISE_MIN_TOWER_TILES = 15;
+/**
+ * Inner sigils prefer band tiles within this many tiles of him, so the dead
+ * rise on the side he is attacking; the rest of the band only tops the batch up.
+ */
+const NECRO_INNER_RAISE_SIDE_TILES = 30;
+/** The bell tower is two tiles square; its centre is this far from its north-west tile on each axis. */
+const BELL_TOWER_CENTRE_OFFSET_TILES = 1;
 /** The kinds his weighted draw can pick; the Grave Bull is guaranteed separately, never drawn. */
 type NecromancerTroopKind = Exclude<NecromancerRaiseKind, 'grave_bull'>;
 /**
@@ -305,6 +324,8 @@ export interface NecromancerRaiseRequest {
   readonly kind: NecromancerRaiseKind;
   /** The ratkin's look; unused for anything else. */
   readonly look: RaisedRatkinLook;
+  /** Whether the sigil opened inside the palisade; see {@link NECRO_INNER_RAISES}. */
+  readonly inner: boolean;
 }
 
 /** The ground mark of the attack he is telegraphing, with 0→1 progress to its payload. */
@@ -357,6 +378,38 @@ function pickSiegeRaiseKind(): NecromancerTroopKind {
     if (roll < 0) return kind;
   }
   return 'ratkin';
+}
+
+const innerRaiseBandBySite = new WeakMap<BriarHollowSite, readonly SiegeTile[]>();
+
+/**
+ * The tiles of `site` an inner sigil may ever open on, by the ring alone:
+ * strictly inside it, within the wall-depth band, and far enough from the
+ * bell tower. Fixed for a site, so built once; a raise re-checks only what
+ * changes during a siege.
+ */
+function innerRaiseBandFor(site: BriarHollowSite): readonly SiegeTile[] {
+  const cached = innerRaiseBandBySite.get(site);
+  if (cached !== undefined) return cached;
+  const field = palisadeDistanceFor(site);
+  const towerCentreX = site.square.bellTile.x + BELL_TOWER_CENTRE_OFFSET_TILES;
+  const towerCentreY = site.square.bellTile.y + BELL_TOWER_CENTRE_OFFSET_TILES;
+  const bounds = site.palisadeBounds;
+  const band: SiegeTile[] = [];
+  for (let tileY = bounds.y; tileY < bounds.y + bounds.h; tileY++) {
+    for (let tileX = bounds.x; tileX < bounds.x + bounds.w; tileX++) {
+      if (!isInsidePalisadeTile(site, tileX, tileY)) continue;
+      const depth = field.insideDepthAt(tileX, tileY);
+      if (depth === null) continue;
+      if (depth < NECRO_INNER_RAISE_MIN_WALL_DEPTH_TILES) continue;
+      if (depth > NECRO_INNER_RAISE_MAX_WALL_DEPTH_TILES) continue;
+      const towerDistance = Math.hypot(tileX - towerCentreX, tileY - towerCentreY);
+      if (towerDistance < NECRO_INNER_RAISE_MIN_TOWER_TILES) continue;
+      band.push({ x: tileX, y: tileY });
+    }
+  }
+  innerRaiseBandBySite.set(site, band);
+  return band;
 }
 
 const NECROMANCER_EYES: EyePlacement = {
@@ -444,6 +497,7 @@ export class Necromancer extends Mob {
 
   private raiseSites: SiegeTile[] = [];
   private raiseKinds: NecromancerRaiseKind[] = [];
+  private raiseInner: boolean[] = [];
   private raiseLooks: RaisedRatkinLook[] = [];
   private boltAngle = 0;
   private boltTarget: Player | null = null;
@@ -680,6 +734,7 @@ export class Necromancer extends Mob {
     this.walkStalledFrames = 0;
     this.raiseSites = [];
     this.raiseKinds = [];
+    this.raiseInner = [];
     this.raiseLooks = [];
     this.pulseTarget = null;
     this.pulsePoint = null;
@@ -1212,6 +1267,7 @@ export class Necromancer extends Mob {
     this.channelDamage = 0;
     this.raiseSites = [];
     this.raiseKinds = [];
+    this.raiseInner = [];
     this.raiseLooks = [];
     this.boltTarget = null;
   }
@@ -1241,6 +1297,7 @@ export class Necromancer extends Mob {
     this.raiseKinds = sites.map((_, index) =>
       index < troopSites.length ? (inSiege ? pickSiegeRaiseKind() : 'ratkin') : 'grave_bull',
     );
+    this.raiseInner = sites.map((_, index) => index < inner.length);
     this.raiseLooks = sites.map(() => pickLook());
     this.raiseKinds.forEach((kind, index) => {
       if (kind === 'ratkin') prewarmRaisedRatkin(this.raiseLooks[index] ?? pickLook());
@@ -1265,6 +1322,7 @@ export class Necromancer extends Mob {
           tileY: site.y,
           kind: this.raiseKinds[index] ?? 'ratkin',
           look: this.raiseLooks[index] ?? pickLook(),
+          inner: this.raiseInner[index] ?? false,
         });
       });
       // The next raise is armed only once every body from this one is dead;
@@ -1348,41 +1406,49 @@ export class Necromancer extends Mob {
   }
 
   /**
-   * Up to `count` sigils inside the palisade, in a siege: open ground near
-   * the bell, clear of every defender by
-   * {@link NECRO_INNER_RAISE_MIN_DEFENDER_TILES}. Drawn at random, so the
-   * dead come up somewhere new each time.
+   * Up to `count` sigils inside the palisade, in a siege: open spawn ground
+   * in the band between {@link NECRO_INNER_RAISE_MIN_WALL_DEPTH_TILES} and
+   * {@link NECRO_INNER_RAISE_MAX_WALL_DEPTH_TILES} inside the ring, at least
+   * {@link NECRO_INNER_RAISE_MIN_TOWER_TILES} from the bell tower, with no
+   * construction on it, and clear of every defender by
+   * {@link NECRO_INNER_RAISE_MIN_DEFENDER_TILES}. Tiles within
+   * {@link NECRO_INNER_RAISE_SIDE_TILES} of him are drawn first, the rest of
+   * the band only after. Drawn at random, so the dead come up somewhere new
+   * each time.
    */
   private chooseInnerRaiseSites(count: number): SiegeTile[] {
     const siege = this.siegeCapable;
     const map = this.map;
     if (siege === null || map === null || count <= 0) return [];
-    const { site } = siege.world;
-    const bell = site.square.bellTile;
+    const { site, defense } = siege.world;
     const defenders = this.latestTargets.filter((target) => target.isAlive);
     const clearOfDefenders = (tileX: number, tileY: number): boolean =>
       defenders.every((defender) => {
         const tile = tileUnder(defender);
         return Math.hypot(tile.x - tileX, tile.y - tileY) >= NECRO_INNER_RAISE_MIN_DEFENDER_TILES;
       });
-    const reach = NECRO_INNER_RAISE_BELL_TILES;
-    const candidates: SiegeTile[] = [];
-    for (let dy = -reach; dy <= reach; dy++) {
-      for (let dx = -reach; dx <= reach; dx++) {
-        if (Math.hypot(dx, dy) > reach) continue;
-        const tileX = bell.x + dx;
-        const tileY = bell.y + dy;
-        if (!isInsidePalisadeTile(site, tileX, tileY)) continue;
-        if (!map.isWalkableForHostile(tileX, tileY) || !hasRoomToMove(map, tileX, tileY)) continue;
-        if (!clearOfDefenders(tileX, tileY)) continue;
-        candidates.push({ x: tileX, y: tileY });
+    const here = tileUnder(this);
+    const near: SiegeTile[] = [];
+    const far: SiegeTile[] = [];
+    for (const tile of innerRaiseBandFor(site)) {
+      if (!map.isWalkableForHostile(tile.x, tile.y) || !map.isMobSpawnTile(tile.x, tile.y)) {
+        continue;
       }
+      if (!hasRoomToMove(map, tile.x, tile.y)) continue;
+      if (defense.at(tile.x, tile.y) !== null) continue;
+      if (!clearOfDefenders(tile.x, tile.y)) continue;
+      const onHisSide =
+        Math.hypot(tile.x - here.x, tile.y - here.y) <= NECRO_INNER_RAISE_SIDE_TILES;
+      if (onHisSide) near.push(tile);
+      else far.push(tile);
     }
     const sites: SiegeTile[] = [];
-    while (candidates.length > 0 && sites.length < count) {
-      const index = Math.floor(Math.random() * candidates.length);
-      const [tile] = candidates.splice(index, 1);
-      sites.push(tile);
+    for (const pool of [near, far]) {
+      while (pool.length > 0 && sites.length < count) {
+        const index = Math.floor(Math.random() * pool.length);
+        const [tile] = pool.splice(index, 1);
+        sites.push(tile);
+      }
     }
     return sites;
   }

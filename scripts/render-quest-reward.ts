@@ -35,6 +35,8 @@ const { ANCHOR_QUEST_NAME, createAnchorQuestProgress } =
   await import('../src/core/AnchorQuestProgress.js');
 const { createCircusQuestProgress } = await import('../src/core/CircusQuestProgress.js');
 const { createBriarHollowState } = await import('../src/core/briarHollowState.js');
+const { VILLAGE_SAVE_REWARD_SECTION } =
+  await import('../src/systems/briarHollow/VillageQuestSystem.js');
 const { blueprintsRewardSpec } =
   await import('../src/systems/briarHollow/blueprints/blueprintsRewardSpec.js');
 
@@ -138,6 +140,7 @@ const CASES: ReadonlyArray<{ readonly name: string; readonly spec: QuestRewardSp
           ],
         },
         travelUnlocksSection(['briar_hollow'], { anchor: createAnchorQuestProgress() }),
+        VILLAGE_SAVE_REWARD_SECTION,
       ],
     },
   },

@@ -15,6 +15,7 @@
  * - `deliver_grain` — hand the grain in; Merrit calls Midge.
  * - `escort_midge` — lead Midge across the wilds to Wendell's pasture.
  * - `midge_delivered` — Midge is settled; Wendell hands over the blueprints.
+ * - `show_fenna` — the blueprints are in hand; show them to Fenna, who sets the upgrade job.
  * - `build_stations` — upgrade the saw and the rope walk from the blueprints.
  * - `complete` — both stations stand upgraded.
  */
@@ -29,6 +30,7 @@ export type BlueprintsQuestPhase =
   | 'deliver_grain'
   | 'escort_midge'
   | 'midge_delivered'
+  | 'show_fenna'
   | 'build_stations'
   | 'complete';
 
@@ -44,6 +46,7 @@ export const BLUEPRINTS_QUEST_PHASE_ORDER: readonly BlueprintsQuestPhase[] = [
   'deliver_grain',
   'escort_midge',
   'midge_delivered',
+  'show_fenna',
   'build_stations',
   'complete',
 ];

@@ -17,7 +17,8 @@ const CLOCK_FIELD_WIDTH = 2;
  * and time played describe the player's run instead, and nothing rewinds them:
  * a death that undid its own tally would make every death free. Whether the
  * party has heard the shield-fairy ward explainer is run history too: a
- * one-time hint that a death replayed would no longer be one-time.
+ * one-time hint that a death replayed would no longer be one-time. So is every
+ * pet given to Mongo or a cow: the player did it, and no rewind takes it back.
  */
 export class GameStats {
   private _killsByType = new Map<string, number>();
@@ -31,6 +32,9 @@ export class GameStats {
   private _deaths = 0;
   private _framesPlayed = 0;
   private _wardExplainerHeard = false;
+  private _mongoPets = 0;
+  private _cowPets = 0;
+  private _midgePets = 0;
 
   recordKill(displayName: string, isBoss = false): void {
     this._killsByType.set(displayName, (this._killsByType.get(displayName) ?? 0) + 1);
@@ -88,6 +92,16 @@ export class GameStats {
 
   recordDeath(): void {
     this._deaths++;
+  }
+
+  recordMongoPetted(): void {
+    this._mongoPets++;
+  }
+
+  /** Midge is a cow too, so a pet for her counts toward both tallies. */
+  recordCowPetted(isMidge: boolean): void {
+    this._cowPets++;
+    if (isMidge) this._midgePets++;
   }
 
   recordWardExplainerHeard(): void {
@@ -154,6 +168,18 @@ export class GameStats {
     return this._wardExplainerHeard;
   }
 
+  get mongoPets(): number {
+    return this._mongoPets;
+  }
+
+  get cowPets(): number {
+    return this._cowPets;
+  }
+
+  get midgePets(): number {
+    return this._midgePets;
+  }
+
   /** Point-in-time copy of every tally, for a checkpoint capture or a save. */
   snapshot(): GameStatsSnapshot {
     return {
@@ -168,12 +194,15 @@ export class GameStats {
       deaths: this._deaths,
       framesPlayed: this._framesPlayed,
       wardExplainerHeard: this._wardExplainerHeard,
+      mongoPets: this._mongoPets,
+      cowPets: this._cowPets,
+      midgePets: this._midgePets,
     };
   }
 
   /**
    * Rewinds the tallies that describe the world to a checkpoint, so kills scored
-   * after it stop counting. Deaths and time played are left alone: see the
+   * after it stop counting. Deaths, time played and pets are left alone: see the
    * class comment.
    */
   restore(snapshot: GameStatsSnapshot): void {
@@ -194,11 +223,14 @@ export class GameStats {
     stats._deaths = snapshot.deaths;
     stats._framesPlayed = snapshot.framesPlayed;
     stats._wardExplainerHeard = snapshot.wardExplainerHeard;
+    stats._mongoPets = snapshot.mongoPets;
+    stats._cowPets = snapshot.cowPets;
+    stats._midgePets = snapshot.midgePets;
     return stats;
   }
 
   /**
-   * Takes the deaths, time played and heard hints from the run still in progress — for a
+   * Takes the deaths, time played, pets and heard hints from the run still in progress — for a
    * death that respawns from a save, whose tallies are older than the death
    * that sent the party back to it.
    */
@@ -206,6 +238,9 @@ export class GameStats {
     this._deaths = Math.max(this._deaths, live._deaths);
     this._framesPlayed = Math.max(this._framesPlayed, live._framesPlayed);
     this._wardExplainerHeard ||= live._wardExplainerHeard;
+    this._mongoPets = Math.max(this._mongoPets, live._mongoPets);
+    this._cowPets = Math.max(this._cowPets, live._cowPets);
+    this._midgePets = Math.max(this._midgePets, live._midgePets);
   }
 }
 
@@ -222,6 +257,9 @@ export interface GameStatsSnapshot {
   deaths: number;
   framesPlayed: number;
   wardExplainerHeard: boolean;
+  mongoPets: number;
+  cowPets: number;
+  midgePets: number;
 }
 
 function countOrZero(value: unknown): number {
@@ -268,6 +306,9 @@ export function parseGameStatsSnapshot(value: unknown): GameStatsSnapshot | unde
     deaths: countOrZero(value.deaths),
     framesPlayed: countOrZero(value.framesPlayed),
     wardExplainerHeard: value.wardExplainerHeard === true,
+    mongoPets: countOrZero(value.mongoPets),
+    cowPets: countOrZero(value.cowPets),
+    midgePets: countOrZero(value.midgePets),
   };
 }
 

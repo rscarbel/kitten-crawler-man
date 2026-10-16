@@ -15,6 +15,8 @@ const EXPLAIN_RESOURCE_GATHERING_TEXT =
   "Here's the important part. Chop trees for wood. Mine rocks for stone. Bring the wood to the lumber yard and the stone to the quarry.";
 const RESOURCING_SKILL_GRANTED_TEXT =
   "There. Now you know what you're doing. You've learned Resourcing.";
+const UPGRADES_LATER_TEXT =
+  "When you've saved some coin and hauled some timber and stone, come back. I forge better axes and picks, and the good ones gather a lot more per swing.";
 const DIRECTIONS_TO_LUMBER_YARD_TEXT =
   'Take that axe to the lumber yard. Or find any trees out on the map. Any tree will give you wood.';
 const DIRECTIONS_TO_QUARRY_TEXT =
@@ -52,6 +54,7 @@ export const OREN = {
     GRANT_BASIC_TOOLS_TEXT,
     EXPLAIN_RESOURCE_GATHERING_TEXT,
     RESOURCING_SKILL_GRANTED_TEXT,
+    UPGRADES_LATER_TEXT,
     DIRECTIONS_TO_LUMBER_YARD_TEXT,
     DIRECTIONS_TO_QUARRY_TEXT,
   ]),
@@ -68,6 +71,9 @@ export const OREN = {
     "That's the finest pick I can make. I don't have anything better to sell you.",
   ),
   cannotAffordUpgrade: say.bark("Come back with more coin. The forge doesn't run on promises."),
+  needsMaterials: say.bark(
+    "Coin's only half of it. A tool like that eats timber for the haft and stone for the furnace. Bring me what's on the ticket.",
+  ),
   upgradePurchased: say.bark(
     "There you are. The upgrade replaces your old tool. You'll both benefit from it.",
   ),

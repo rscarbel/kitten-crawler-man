@@ -247,8 +247,8 @@ export class CatPlayer extends Player {
   }
 
   /** Every clean miss is a rep. The skill trains itself out of surviving. */
-  protected override onDodged(): void {
-    super.onDodged();
+  protected override onDodged(foreseen = false): void {
+    super.onDodged(foreseen);
     this.skills.recordUse('cat_reflexes');
   }
 

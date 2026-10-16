@@ -19,7 +19,7 @@ import {
 import type { ExplainerEntry } from './explainerPages';
 
 /** A craft skill's own id, or another process explained the same way. */
-export type ExplainerId = CraftSkillId | 'processing' | 'mongo';
+export type ExplainerId = CraftSkillId | 'processing' | 'mongo' | 'dual_harvest';
 
 export interface CraftExplainersSurfaceOptions {
   /** Defaults to `craft-explainers`. */

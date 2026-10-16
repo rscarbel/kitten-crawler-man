@@ -108,9 +108,11 @@ export class WendellBlueprintsHook implements ResidentQuestHook {
     return isHeld([this.deps.human, this.deps.cat], 'quest_blueprints');
   }
 
-  /** In `build_stations` with neither crawler holding the blueprints: they are back in his plan chest. */
+  /** Handed over but not yet built, with neither crawler holding the blueprints: they are back in his plan chest. */
   private get blueprintsOwedBack(): boolean {
-    return this.quest.phase === 'build_stations' && !this.blueprintsCarried;
+    const phase = this.quest.phase;
+    const handedOverUnbuilt = phase === 'show_fenna' || phase === 'build_stations';
+    return handedOverUnbuilt && !this.blueprintsCarried;
   }
 
   /**
@@ -138,7 +140,7 @@ export class WendellBlueprintsHook implements ResidentQuestHook {
     if (phase === 'midge_delivered') {
       this.openBeat(wendellMidgeDeliveredPages(), () => {
         this.handOverBlueprints();
-        moveBlueprintsPhase(this.quest, 'build_stations', this.deps.bus);
+        moveBlueprintsPhase(this.quest, 'show_fenna', this.deps.bus);
       });
       return true;
     }

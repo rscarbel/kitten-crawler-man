@@ -18,7 +18,8 @@ import {
   isDisabled,
 } from './paint';
 import { scrollView } from './scrollView';
-import { lineHeightOf, measureText, text } from './text';
+import { lineHeightOf, measureText, measureTextHeight, text } from './text';
+import { TOOLTIP_MAX_WIDTH } from './tooltip';
 
 export interface ContextMenuItem {
   readonly id: string;
@@ -36,6 +37,8 @@ export interface ContextMenuOptions {
   readonly at: { readonly x: number; readonly y: number };
   readonly title?: string;
   readonly items: readonly ContextMenuItem[];
+  /** Advice drawn under the rows, wrapped no wider than a tooltip. Takes no input. */
+  readonly note?: string;
   readonly onDismiss: () => void;
 }
 
@@ -61,10 +64,20 @@ export function contextMenu(ui: Ui, opts: ContextMenuOptions): Rect {
   const rowHeights = opts.items.map((item) =>
     disabledReason(item.disabled) === null ? rowH : rowH + lineHeightOf(ui, 'caption'),
   );
-  const w = Math.max(MIN_MENU_WIDTH, labelW + size.icon + space.sm * 2 + space.sm + pad * 2);
-  const rowsHeight = rowHeights.reduce((sum, rh) => sum + rh, 0);
+  const rowsWidth = Math.max(
+    MIN_MENU_WIDTH,
+    labelW + size.icon + space.sm * 2 + space.sm + pad * 2,
+  );
   const bounds = inset(ui.viewport, space.sm);
-  const h = Math.min(pad * 2 + titleH + rowsHeight, bounds.h);
+  const note = opts.note ?? null;
+  const noteMenuWidth = Math.min(TOOLTIP_MAX_WIDTH, bounds.w);
+  const w = note === null ? rowsWidth : Math.max(rowsWidth, noteMenuWidth);
+  const noteTextW = Math.max(0, w - (pad + space.sm) * 2);
+  const noteTextH =
+    note === null ? 0 : measureTextHeight(ui, noteTextW, { text: note, role: 'muted' });
+  const noteH = note === null ? 0 : space.sm + noteTextH;
+  const rowsHeight = rowHeights.reduce((sum, rh) => sum + rh, 0);
+  const h = Math.min(pad * 2 + titleH + rowsHeight + noteH, bounds.h);
   const opensLeft = opts.at.x + w > bounds.x + bounds.w;
   const left = opensLeft ? opts.at.x - w : opts.at.x;
   const top = Math.min(opts.at.y, bounds.y + bounds.h - h);
@@ -92,7 +105,15 @@ export function contextMenu(ui: Ui, opts: ContextMenuOptions): Rect {
         valign: 'top',
       });
     }
-    const rowArea = inset(inner, { t: titleH });
+    const rowArea = inset(inner, { t: titleH, b: noteH });
+    if (note !== null) {
+      const noteArea = { ...inner, y: rowArea.y + rowArea.h, h: noteH };
+      text(ui, inset(noteArea, { l: space.sm, r: space.sm, t: space.sm }), {
+        text: note,
+        role: 'muted',
+        wrap: true,
+      });
+    }
     const drawRows = (area: Rect): void => {
       const rows = splitV(area, rowHeights, 0);
       opts.items.forEach((item, index) => {

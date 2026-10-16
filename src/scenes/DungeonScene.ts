@@ -42,6 +42,7 @@ import { type CatPlayer } from '../creatures/CatPlayer';
 import { despawnMob, type Mob, type LootDrop } from '../creatures/Mob';
 import type { Player } from '../Player';
 import { PlayerManager } from '../core/PlayerManager';
+import { setSkillBookReaders } from '../creatures/skillBookDrop';
 import { TouchMoveState } from '../core/TouchMoveState';
 import type { LevelDef, MobLevelRange, MobSpawnRule } from '../levels/types';
 import {
@@ -505,6 +506,7 @@ import {
 import {
   captureBriarHollowState,
   createBriarHollowState,
+  isVillageSavePoint,
   restoreBriarHollowState,
   type BriarHollowState,
 } from '../core/briarHollowState';
@@ -1548,7 +1550,7 @@ export class DungeonScene extends GameplayScene {
    * with the party already standing there (a building exit, a loaded save)
    * counts as entering it and takes a save.
    */
-  private wasInBriarHollowSquare = false;
+  private wasInBriarHollowSaveZone = false;
   /** A fixed bathroom and the stealth gate room once its gate is open. */
   private readonly roomSaves: readonly RoomSaveEntry[];
   /**
@@ -1743,6 +1745,7 @@ export class DungeonScene extends GameplayScene {
       spawnTileX = tutMap.humanStartTile.x;
       spawnTileY = tutMap.humanStartTile.y;
       this.pm = new PlayerManager(spawnTileX, spawnTileY, levelDef.xpDiminishingTiers);
+      setSkillBookReaders([this.pm.human, this.pm.cat]);
       // Place cat at its own spawn room, separated from the human
       this.pm.cat.x = tutMap.catStartTile.x * TILE_SIZE;
       this.pm.cat.y = tutMap.catStartTile.y * TILE_SIZE;
@@ -1808,6 +1811,7 @@ export class DungeonScene extends GameplayScene {
         levelDef.xpDiminishingTiers,
         interiorReturn ?? undefined,
       );
+      setSkillBookReaders([this.pm.human, this.pm.cat]);
       if (interiorReturn !== null) {
         // Built fresh, a crawler carries nothing a snapshot does not; a held one
         // must match, or the swing it was frozen in at the door resumes outside.
@@ -2238,9 +2242,7 @@ export class DungeonScene extends GameplayScene {
     // Trees are generated only by `OverworldGenerator`, so every other floor
     // would build a system with nothing on the map to talk to.
     this.trees = levelDef.isOverworld
-      ? new TreeSystem(this.gameMap, this.destruction.loot, levelDef.floorNumber, (tileX, tileY) =>
-          this.miniMap.markTileChanged(tileX, tileY),
-        )
+      ? new TreeSystem(this.gameMap, (tileX, tileY) => this.miniMap.markTileChanged(tileX, tileY))
       : null;
     // Overworld-only, mirroring `TreeSystem` above: no other map is ever
     // generated with a water tile on it, so elsewhere this would scan the
@@ -2631,6 +2633,8 @@ export class DungeonScene extends GameplayScene {
         setAutoSummonEnabled: (crawler, enabled) => {
           this.partyCrafts.autoSummonThralls[crawler] = enabled;
         },
+        crafts: this.partyCrafts,
+        openDualHarvestHint: () => void this.menus.craftExplainers.open('dual_harvest'),
       });
       const gathering = this.gathering;
       this.companion.registerHarvestSource(gathering);
@@ -2791,7 +2795,7 @@ export class DungeonScene extends GameplayScene {
       this.mordecaiDebrief = { ...interiorReturn.mordecaiDebrief };
     }
     this.wasInTown = options?.suppressArrivalSave === true;
-    this.wasInBriarHollowSquare = options?.suppressArrivalSave === true;
+    this.wasInBriarHollowSaveZone = options?.suppressArrivalSave === true;
     for (const { latch } of this.roomSaves) {
       latch.wasInside = options?.suppressArrivalSave === true;
     }
@@ -5224,7 +5228,7 @@ export class DungeonScene extends GameplayScene {
     // rewound world over itself.
     this.wasInSafeRoom = true;
     this.wasInTown = this.isInsideTownWall(this.active());
-    this.wasInBriarHollowSquare = this.isInBriarHollowSquare(this.active());
+    this.wasInBriarHollowSaveZone = this.isInBriarHollowSaveZone(this.active());
     for (const { source, latch } of this.roomSaves) {
       latch.wasInside = source.saveTileAt(this.active()) !== null;
       latch.owed = false;
@@ -5863,25 +5867,31 @@ export class DungeonScene extends GameplayScene {
     this.captureSavePoint(this.saveTileUnder(active));
   }
 
-  /** Whether a body's centre stands inside Briar Hollow's square district. */
-  private isInBriarHollowSquare(body: Pick<Mob, 'x' | 'y'>): boolean {
+  /**
+   * Whether a body's centre stands where entering Briar Hollow saves: the
+   * square always, and anywhere inside the palisade once the village is a
+   * save point.
+   */
+  private isInBriarHollowSaveZone(body: Pick<Mob, 'x' | 'y'>): boolean {
+    const centreX = body.x + TILE_SIZE * TILE_CENTRE_FRACTION;
+    const centreY = body.y + TILE_SIZE * TILE_CENTRE_FRACTION;
+    if (this.gameMap.briarHollowDistrictAt(centreX, centreY) === 'square') return true;
     return (
-      this.gameMap.briarHollowDistrictAt(
-        body.x + TILE_SIZE * TILE_CENTRE_FRACTION,
-        body.y + TILE_SIZE * TILE_CENTRE_FRACTION,
-      ) === 'square'
+      isVillageSavePoint(this.briarHollowState) && this.gameMap.isInBriarHollow(centreX, centreY)
     );
   }
 
   /**
-   * Briar Hollow's square, with its bell tower, is a save point the same way
-   * the walled town's gate is: walking in is what saves. Guarded the same way
-   * — never mid-siege, never with a hostile still fighting in the village, so
-   * a reload can't skip either. A broken bell tower doesn't ring for a save
-   * either: the village needs its bell whole to call the crawlers back to it.
+   * Briar Hollow saves on entry the same way the walled town's gate does:
+   * walking in is what saves. Its square, with the bell tower, always counts;
+   * once the Plea is won, so does the whole palisade interior, which makes any
+   * gate or village doorway a save. Guarded the same way everywhere — never
+   * mid-siege, never with a hostile still fighting in the village, so a reload
+   * can't skip either. A broken bell tower doesn't ring for a save either: the
+   * village needs its bell whole to call the crawlers back to it.
    */
-  private onBriarHollowSquareEntered(active: Pick<Mob, 'x' | 'y'>): void {
-    if (!this.canSaveInBriarHollowSquare) return;
+  private onBriarHollowSaveZoneEntered(active: Pick<Mob, 'x' | 'y'>): void {
+    if (!this.canSaveInBriarHollow) return;
     this.captureSavePoint(this.saveTileUnder(active));
   }
 
@@ -5896,7 +5906,7 @@ export class DungeonScene extends GameplayScene {
     );
   }
 
-  private get canSaveInBriarHollowSquare(): boolean {
+  private get canSaveInBriarHollow(): boolean {
     return (
       !this.isRevivePending &&
       !this.isBriarHollowUnderAttack &&
@@ -8976,11 +8986,11 @@ export class DungeonScene extends GameplayScene {
     if (nowInTown && !this.wasInTown) this.onTownEntered(player);
     this.wasInTown = nowInTown;
 
-    const nowInBriarHollowSquare = this.isInBriarHollowSquare(player);
-    if (nowInBriarHollowSquare && !this.wasInBriarHollowSquare) {
-      this.onBriarHollowSquareEntered(player);
+    const nowInBriarHollowSaveZone = this.isInBriarHollowSaveZone(player);
+    if (nowInBriarHollowSaveZone && !this.wasInBriarHollowSaveZone) {
+      this.onBriarHollowSaveZoneEntered(player);
     }
-    this.wasInBriarHollowSquare = nowInBriarHollowSquare;
+    this.wasInBriarHollowSaveZone = nowInBriarHollowSaveZone;
 
     this.updateRoomSaves(player);
 

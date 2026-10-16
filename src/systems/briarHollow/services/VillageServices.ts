@@ -38,7 +38,7 @@ import type { ConversationHandle } from '../../../dialog/request';
 import type { VillagerConversationFlow } from '../villagerTopics';
 import type { VillagerSystem } from '../VillagerSystem';
 import { COOK, cookhouseTopics } from './cookhouse';
-import { SMITH, forgeTopics, runOrenAutoGrant, type ForgeHost } from './forge';
+import { SMITH, forgeTopics, forgeUpgradeNudge, runOrenAutoGrant, type ForgeHost } from './forge';
 import { DOCTOR, infirmaryTopics, type InfirmaryHost } from './infirmary';
 import { lumberForemanTopics, type LumberForemanHost } from './lumberForeman';
 import { PLAIN_SAWING_LOOP, SawmillService } from './sawmill';
@@ -117,6 +117,7 @@ export class VillageServices {
   private disposed = false;
   private readonly party: ServiceParty;
   private readonly removeKeyListeners: () => void;
+  private readonly stopUpgradeNudges: (() => void) | null;
 
   constructor(private readonly deps: VillageServicesDeps) {
     this.picker = new QuantityDialog(deps.audio);
@@ -149,6 +150,20 @@ export class VillageServices {
     // "Process a batch" leads Fenna's list ahead of the built-in "How does the mill work?" small talk.
     deps.villagers.addTopicProvider(lumberForemanTopics(this.lumberForemanHost()), { first: true });
     this.removeKeyListeners = this.listenForInteractKey();
+    this.stopUpgradeNudges = this.listenForAffordableUpgrades(counter);
+  }
+
+  private listenForAffordableUpgrades(counter: {
+    openShop(shop: ShopDefinition): void;
+  }): (() => void) | null {
+    const bus = this.deps.bus;
+    if (bus === null) return null;
+    const host = this.forgeHost(counter);
+    return bus.on('resourceHarvested', () => {
+      if (this.disposed) return;
+      const nudge = forgeUpgradeNudge(host);
+      if (nudge !== null) this.deps.menus.announce(nudge);
+    });
   }
 
   /**
@@ -527,6 +542,7 @@ export class VillageServices {
   dispose(): void {
     this.disposed = true;
     this.removeKeyListeners();
+    this.stopUpgradeNudges?.();
     this.onRewind();
     this.stopSawLoops();
   }

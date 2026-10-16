@@ -65,6 +65,9 @@ export interface RunSummary {
   readonly bossesDefeated: number;
   readonly hirelingsHired: number;
   readonly hirelingsLost: number;
+  readonly mongoPets: number;
+  readonly cowPets: number;
+  readonly midgePets: number;
   readonly topKills: ReadonlyArray<readonly [string, number]>;
 }
 
@@ -109,6 +112,9 @@ export function buildRunSummary(input: {
     bossesDefeated: stats.bossesDefeated,
     hirelingsHired: stats.hirelingsHired,
     hirelingsLost: stats.hirelingsLost,
+    mongoPets: stats.mongoPets,
+    cowPets: stats.cowPets,
+    midgePets: stats.midgePets,
     topKills: stats.topKills(RUN_SUMMARY_TOP_KILLS),
   };
 }
@@ -284,6 +290,12 @@ function partyRows(summary: RunSummary): StatRow[] {
     { label: 'Hirelings hired', value: summary.hirelingsHired, format: 'count', tone: 'plain' },
     { label: 'Hirelings lost', value: summary.hirelingsLost, format: 'count', tone: 'muted' },
   );
+  const petRows: StatRow[] = [
+    { label: 'Mongo petted', value: summary.mongoPets, format: 'count', tone: 'success' },
+    { label: 'Cows petted', value: summary.cowPets, format: 'count', tone: 'success' },
+    { label: 'Midge petted', value: summary.midgePets, format: 'count', tone: 'success' },
+  ];
+  rows.push(...petRows.filter((row) => row.value > 0));
   return rows;
 }
 

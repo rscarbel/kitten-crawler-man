@@ -21,6 +21,8 @@ import {
   type ItemId,
 } from '../../../core/ItemDefs';
 import { HOTBAR_ACTIONS, keybindings } from '../../../core/Keybindings';
+import type { ToolKind } from '../../../core/toolTiers';
+import { byInputMode, keyLabel, type InputMode } from '../../core/inputMode';
 import type { Rect } from '../../core/geom';
 import type { KeyModifiers, Surface } from '../../core/UiRoot';
 import { UI_ERROR_SOUND } from '../../core/UiRoot';
@@ -70,8 +72,24 @@ const TUTORIAL_HOTBAR_REASON = 'Not right now.';
 const TUTORIAL_LOCK_REASON = 'Finish moving the item first.';
 const PAGE_HAS_NO_EMPTY_SLOT = 'That page has no empty slot.';
 
+const HARVEST_TARGET_NOUN: Record<ToolKind, string> = {
+  axe: 'tree',
+  pickaxe: 'rock',
+};
+
+/** How a gathering tool is used: it works from the bag, so it never needs the hotbar or equipping. */
+export function harvestToolHint(kind: ToolKind, mode: InputMode): string {
+  const target = HARVEST_TARGET_NOUN[kind];
+  const gesture = byInputMode(mode, {
+    touch: 'tap',
+    pointer: `press ${keyLabel('attack')}`,
+  });
+  return `No need to assign these to your hotbar or equip, simply ${gesture} when facing a ${target} to start gathering.`;
+}
+
 /** Why an item may not go on the hotbar, or null when it may. */
-export function hotbarRefusal(item: InventoryItem): string | null {
+export function hotbarRefusal(item: InventoryItem, mode: InputMode): string | null {
+  if (item.tool !== undefined) return harvestToolHint(item.tool.kind, mode);
   if (itemCanHotlist(item.id)) return null;
   return isWearable(item) ? WEARABLE_HOTBAR_REASON : UNUSABLE_HOTBAR_REASON;
 }
@@ -402,6 +420,11 @@ export class InventoryScreen {
     this.pendingSound = UI_ERROR_SOUND;
   }
 
+  /** How the player pointed last frame, for copy built outside a render. */
+  inputMode(): InputMode {
+    return this.touch ? 'touch' : 'pointer';
+  }
+
   private buzz(): void {
     this.pendingSound = UI_ERROR_SOUND;
   }
@@ -595,7 +618,7 @@ export class InventoryScreen {
       return;
     }
     if (source === 'inv') {
-      const reason = hotbarRefusal(item);
+      const reason = hotbarRefusal(item, this.inputMode());
       if (reason !== null) {
         this.host.onHotbarRefused?.(item, reason);
         this.refuse(reason, item.id);
@@ -681,7 +704,7 @@ export class InventoryScreen {
         if (drag.slotIdx !== hotbarTarget) inventory.swapHotbar(drag.slotIdx, hotbarTarget);
         return;
       }
-      const reason = hotbarRefusal(drag.item);
+      const reason = hotbarRefusal(drag.item, this.inputMode());
       if (reason !== null) {
         this.host.onHotbarRefused?.(drag.item, reason);
         this.refuse(reason, drag.item.id);

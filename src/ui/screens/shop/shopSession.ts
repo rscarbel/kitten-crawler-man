@@ -12,6 +12,7 @@
 
 import { canAffordCoins, spendPartyCoins } from '../../../core/partyCoins';
 import { ITEM_DEF, isItemId, type ItemId } from '../../../core/ItemDefs';
+import { canAfford, spend, type ResourceCost } from '../../../core/partyResources';
 import type { Player } from '../../../Player';
 import {
   addHeldStock,
@@ -35,6 +36,11 @@ export interface ShopRow {
   readonly label: string;
   readonly price: number;
   readonly desc: string;
+  /**
+   * Raw materials the row also costs. The session checks and charges them
+   * from both crawlers' combined packs, the steered crawler's first, alongside the coins.
+   */
+  readonly materials?: ResourceCost;
   /** When set, the row cannot be bought and shows this instead (e.g. "Already inked", "Sold out"). */
   unavailable?: string;
   /**
@@ -66,6 +72,8 @@ export interface ShopMenu {
   readonly titleIcon?: ShopTitleIcon;
   /** The leading glyph of a row whose key is not an item and which names no icon of its own. */
   readonly rowGlyph?: GlyphId;
+  /** The most lines a row's description wraps to, for a menu whose descriptions are its rules. One when omitted. */
+  readonly descLines?: number;
 }
 
 /** What a handler did: whether the purchase went through, and the line to echo. */
@@ -147,7 +155,10 @@ const NOT_HELD_LINE = "You don't have one of those!";
 export function shopRowEnabled(option: ShopRow, unpriced: boolean, party: ShopParty): boolean {
   if (option.unavailable !== undefined) return false;
   if (unpriced) return true;
-  return canAffordCoins(party.active, party.companion, option.price);
+  if (!canAffordCoins(party.active, party.companion, option.price)) return false;
+  return (
+    option.materials === undefined || canAfford(party.active, party.companion, option.materials)
+  );
 }
 
 export class ShopSession {
@@ -274,6 +285,9 @@ export class ShopSession {
     const result = purchase(option, party.active);
     if (result.ok) {
       if (!unpriced) spendPartyCoins(party.active, party.companion, option.price, party.active);
+      if (!unpriced && option.materials !== undefined) {
+        spend(party.active, party.companion, option.materials, party.active);
+      }
       this.rebuyGuardLeft = this.options.rebuyGuardTicks ?? 0;
     }
     if (this.purchase === null) return;

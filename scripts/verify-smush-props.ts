@@ -133,8 +133,7 @@ const TREE_SMASH_RADIUS = TILE_SIZE * SMASH_RADIUS_TILES;
  */
 function verifyTreeWallBlocking(): boolean {
   const gameMap = buildFlatMap();
-  const loot = new LootSystem(gameMap);
-  const trees = new TreeSystem(gameMap, loot, FLOOR_NUMBER);
+  const trees = new TreeSystem(gameMap);
 
   const openTileX = TREE_TEST_CRAWLER_TILE_X;
   const openTileY = TREE_TEST_CRAWLER_TILE_Y - OPEN_SAPLING_TILES_NORTH;

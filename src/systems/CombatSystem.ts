@@ -13,7 +13,14 @@ import type { SafeRoomSystem } from './SafeRoomSystem';
 import type { EventBus } from '../core/EventBus';
 import type { AbilityManager } from '../core/AbilityManager';
 import type { SpellSystem } from './SpellSystem';
-import { makeSepsis, makeMagicBurn, makeStun } from '../core/StatusEffect';
+import { makeSepsis, makeMagicBurn, makeStun, makePoison } from '../core/StatusEffect';
+import {
+  COILED_FIST_UNCOIL_DAMAGE_SHARE,
+  QUICK_SERPENT_BITE_DAMAGE_SHARE,
+  QUICK_SERPENT_POISON_TICKS,
+  UNCOIL_TEXT,
+  VENOM_TEXT,
+} from '../core/tattoos';
 import { getSmushStats } from '../abilities/smush';
 import { getMagicMissileVisualTier } from '../abilities/magicMissile';
 import {
@@ -261,6 +268,35 @@ export function landHumanGearProcs(human: HumanPlayer, mob: Mob): void {
   }
 }
 
+/**
+ * A free extra strike a tattoo throws in on top of a landed blow. Dealt straight
+ * to the mob in the crawler's name, so kill credit and XP are unchanged, and it
+ * runs no procs of its own: a bonus hit that could trigger another would chain.
+ */
+function tattooBonusStrike(crawler: HumanPlayer | CatPlayer, mob: Mob, damageShare: number): void {
+  const damage = Math.round(damageShare * crawlerMeleeStrikeDamage(crawler));
+  mob.takeDamageFrom(damage, crawler, 'melee');
+}
+
+/**
+ * The riders a crawler's Quiet Needle mark puts on a melee blow that landed on
+ * `mob`: the Coiled Fist's uncoil and the Quick Serpent's counter-bite. A
+ * guarded blow never touched the mob, so it neither builds the streak nor
+ * spends the bite.
+ */
+export function landTattooStrikeProcs(crawler: HumanPlayer | CatPlayer, mob: Mob): void {
+  if (mob.lastBlowWasGuarded) return;
+  if (crawler.noteLandedBlowForCoiledFist() && mob.isAlive) {
+    tattooBonusStrike(crawler, mob, COILED_FIST_UNCOIL_DAMAGE_SHARE);
+    crawler.queueFloatingText(UNCOIL_TEXT, 'trigger');
+  }
+  if (mob.isAlive && crawler.consumeSerpentBite()) {
+    tattooBonusStrike(crawler, mob, QUICK_SERPENT_BITE_DAMAGE_SHARE);
+    mob.applyStatus(makePoison(crawler, QUICK_SERPENT_POISON_TICKS));
+    crawler.queueFloatingText(VENOM_TEXT, 'trigger');
+  }
+}
+
 /** One swing of a weapon in Carl's hand, as the generic strike hands it to the weapon's proc. */
 export interface WeaponSwing {
   readonly weaponId: ItemId;
@@ -302,6 +338,7 @@ export function cutWithWeapon(ctx: CombatContext, mob: Mob, damageMultiplier: nu
   if (mob.blowsEarnNothing) return false;
   ctx.hitLanded = true;
   landHumanGearProcs(human, mob);
+  landTattooStrikeProcs(human, mob);
   return true;
 }
 
@@ -410,6 +447,7 @@ export function resolvePlayerAttacks(ctx: CombatContext): void {
         ctx.hitLanded = true;
         humanHit = true;
         landHumanGearProcs(human, mob);
+        landTattooStrikeProcs(human, mob);
       }
     }
     // OR-ed in so a swing that connects only with a crate still plays the
@@ -468,6 +506,7 @@ export function resolvePlayerAttacks(ctx: CombatContext): void {
         ) {
           mob.applyStatus(makeSepsis(cat));
         }
+        landTattooStrikeProcs(cat, mob);
       }
     }
     if (!cat.zeroDamage) {
@@ -641,7 +680,7 @@ export function resolvePlayerAttacks(ctx: CombatContext): void {
         strikesScenery &&
         trees !== undefined &&
         !cat.zeroDamage &&
-        trees.tryProjectileHit(missile.x, missile.y, hitRadius, damage, cat)
+        trees.tryProjectileHit(missile.x, missile.y, hitRadius, damage)
       ) {
         ctx.hitLanded = true;
         ctx.bus.emit('missileImpact', { x: missile.x, y: missile.y });
@@ -767,7 +806,7 @@ export function resolvePlayerAttacks(ctx: CombatContext): void {
       if (
         rockTrees !== undefined &&
         !human.zeroDamage &&
-        rockTrees.tryProjectileHit(rock.x, rock.y, rockHitRadius, damage, human)
+        rockTrees.tryProjectileHit(rock.x, rock.y, rockHitRadius, damage)
       ) {
         ctx.hitLanded = true;
         ctx.bus.emit('slingshotImpact', { x: rock.x, y: rock.y });

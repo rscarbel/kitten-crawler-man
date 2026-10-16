@@ -304,6 +304,7 @@ export class BlueprintsQuestSystem implements QuestLineProvider, TopicProvider, 
       case 'deliver_grain':
       case 'escort_midge':
       case 'midge_delivered':
+      case 'show_fenna':
       case 'complete':
         return;
     }
@@ -328,6 +329,8 @@ export class BlueprintsQuestSystem implements QuestLineProvider, TopicProvider, 
         return this.harvestGuidance();
       case 'escort_midge':
         return this.escortGuidance();
+      case 'show_fenna':
+        return this.blueprintsHeld ? null : this.wendellGuidance();
       case 'build_stations':
         return this.blueprintsHeld ? this.stationGuidance() : this.wendellGuidance();
       case 'unoffered':
@@ -609,6 +612,7 @@ export class BlueprintsQuestSystem implements QuestLineProvider, TopicProvider, 
       case 'deliver_grain':
       case 'escort_midge':
       case 'midge_delivered':
+      case 'show_fenna':
       case 'build_stations':
       case 'complete':
         return null;
@@ -736,6 +740,15 @@ export class BlueprintsQuestSystem implements QuestLineProvider, TopicProvider, 
           status: 'active',
           objective: 'Speak with Wendell at Plumbline Farm',
           target: this.guidedTarget(undefined),
+        };
+      case 'show_fenna':
+        return {
+          ...base,
+          status: 'active',
+          objective: this.blueprintsHeld
+            ? 'Show Fenna the blueprints at the sawmill'
+            : 'Fetch the blueprints from Wendell at Plumbline Farm',
+          target: this.guidedTarget(fenna()),
         };
       case 'build_stations':
         return {

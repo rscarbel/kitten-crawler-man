@@ -212,7 +212,7 @@ export function verifyWendellHandOver(check: Check): void {
   );
   check(evicted.join() === 'quest_wood_board', 'evicting what the slot held before');
   check(rig.granted.join() === 'quest_blueprints', 'and fly to the bag');
-  check(rig.state.blueprints.phase === 'build_stations', 'the step moves to build_stations');
+  check(rig.state.blueprints.phase === 'show_fenna', 'the step moves to show_fenna');
   check(hook.markerFor('wendell') === 'none', 'no "?" once they are carried');
   check(
     !hook.tryOpenDialog('wendell', rig.cat),

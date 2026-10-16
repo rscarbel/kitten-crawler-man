@@ -37,7 +37,7 @@ export function plumblineFarmStateFor(
   phase: BlueprintsQuestPhase,
   holders: readonly BlueprintsItemHolder[],
 ): PlumblineFarmState {
-  const handedOver = blueprintsPhaseAtLeast(phase, 'build_stations');
+  const handedOver = blueprintsPhaseAtLeast(phase, 'show_fenna');
   const retired = phase === 'complete';
   const carried = isHeld(holders, 'quest_blueprints');
   return {
