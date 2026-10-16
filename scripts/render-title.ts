@@ -70,6 +70,7 @@ const VIEWPORTS: readonly Viewport[] = [
   { name: '390x844', width: 390, height: 844, density: 'touch', safeArea: NO_INSETS },
   { name: '844x390-notch', width: 844, height: 390, density: 'touch', safeArea: NOTCH_LANDSCAPE },
   { name: '390x844-notch', width: 390, height: 844, density: 'touch', safeArea: NOTCH_PORTRAIT },
+  { name: '740x360-notch', width: 740, height: 360, density: 'touch', safeArea: NOTCH_LANDSCAPE },
 ];
 
 interface NamedMoment {

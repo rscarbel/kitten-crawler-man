@@ -8,16 +8,32 @@ description: Build, run, and verify Kitten Crawler Man — npm scripts, dev serv
 ## Validation gates (required before any change is "done")
 
 ```bash
-npm run typecheck   # tsc --noEmit — must exit 0
-npm run lint        # eslint src — must exit 0
-npm run format      # prettier --write "src/**/*.ts"
+npm run check        # iterate: format + typecheck + lint + ui-style + audio, cached, in parallel
+npm run check:full   # sign-off: stable tsc, uncached lint — must exit 0 before work is done
+npm run verify:affected -- <changed files>   # every verify/gates script whose imports reach them
 ```
+
+`check` lints with ESLint's content cache (`node_modules/.cache/eslint/`) and typechecks with `tsgo` (the `@typescript/native-preview` package) when it is installed, falling back to incremental `tsc`. The cache can't see that a type change in one file broke a type-aware rule in an untouched one, so `check:full` deletes it and lints everything with stable `tsc`. `check:ci` is `check:full` with `prettier --check` instead of `--write`; `.github/workflows/checks.yml` runs it and `verify:affected --base=<previous push>` on every push. The single commands (`typecheck`, `lint`, `format`) still exist, but `check` replaces chaining them.
 
 CLAUDE.md rules that gate on these: strict types everywhere, **no `as` casts, no `!` assertions, no `any`**, no magic numbers, comments explain _why_ only.
 
+### How gate output works
+
+Every `verify:*` and `gates:*` npm script runs through `scripts/gate.ts`:
+
+- **Pass:** one line, `✓ name (time)`.
+- **Failure:** the lines carrying a failure marker, then the last 25 lines.
+- **Always:** the whole output is written to `.gate-logs/<name>.log`. Read that rather than re-running.
+- `GATE_VERBOSE=1 npm run verify:x` streams everything live.
+- A pass that still printed `FAIL`, `✗` or `MISSED` is flagged, because a script that reports a failure without exiting non-zero would otherwise vanish.
+
+A new gate must exit non-zero on any failed check, must be invoked as `tsx scripts/<file>.ts` (several entry guards compare `process.argv[1]` with the module's own path), and is wired as `"verify:x": "tsx scripts/gate.ts tsx scripts/verify-x.ts"`.
+
+`verify:affected` traces each gate's imports with esbuild, so it needs no mapping table. Files read from disk rather than imported are not in any graph; `RUNTIME_ASSET_GATES` in `scripts/verify-affected.ts` maps those path prefixes to gates. Sweeps that take minutes (`SLOW_GATES`) run only with `--slow`. Gates run longest-first across half the cores, using the timings each run records in `node_modules/.cache/gates/`.
+
 ## Headless verification harnesses
 
-Typecheck and lint don't prove behavior. Several invariants have their own scripts, each running against the game's own exported functions and constants rather than a copy, so a retuned formula either still satisfies the rule or fails the script. Run the one that covers what you touched:
+Typecheck and lint don't prove behavior. Several invariants have their own scripts, each running against the game's own exported functions and constants rather than a copy, so a retuned formula either still satisfies the rule or fails the script. Run the one that covers what you touched, or let `verify:affected` pick:
 
 ```bash
 npm run verify:difficulty    # the P2 and P5 fairness rules (docs/difficulty-fairness-rules.md)

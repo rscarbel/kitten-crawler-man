@@ -19,6 +19,7 @@
  */
 
 import { allocCanvas, surfaceContext, type CanvasSurface } from '../../core/canvasSurface';
+import { canvasGeneration } from '../../core/canvasRecovery';
 import type { FigureDef } from '../../sprites/figure/figureDef';
 import { figureFrameCount } from '../../sprites/figure/figureDef';
 import { BYTES_PER_MEGABYTE } from '../../sprites/figure/figureCacheStats';
@@ -82,6 +83,7 @@ export class TitleHeroCells {
   private bakedThisFrame = false;
   private restFrames = 0;
   private lastBakeMs = 0;
+  private bakedInGeneration = canvasGeneration();
   private readonly bakeMsByFigure = new Map<string, number>();
   private idleHandle: number | null = null;
   private density: (def: FigureDef) => number = () => 1;
@@ -94,10 +96,37 @@ export class TitleHeroCells {
     return Math.min(MAX_DENSITY, Math.ceil(exact / DENSITY_STEP) * DENSITY_STEP);
   }
 
-  /** Call once at the top of each render, before any draw. */
-  beginFrame(): void {
+  /**
+   * Call once at the top of each render, before any draw. Returns true when a
+   * canvas recovery dropped every cell and every queued row since the last
+   * frame.
+   */
+  beginFrame(): boolean {
     this.frame++;
     this.bakedThisFrame = false;
+    return this.dropIfRecovered();
+  }
+
+  /**
+   * After a canvas recovery (a purged background tab, a lost GPU context, memory
+   * pressure) every cell may be blank yet still blit as if it were whole, which
+   * would hide the heroes rather than fall back. Lets everything go; returns
+   * whether it did, so the caller can ask for its rows again.
+   */
+  private dropIfRecovered(): boolean {
+    const generation = canvasGeneration();
+    if (generation === this.bakedInGeneration) return false;
+    this.clear();
+    this.bakedInGeneration = generation;
+    return true;
+  }
+
+  private clear(): void {
+    if (this.idleHandle !== null) globalThis.cancelIdleCallback(this.idleHandle);
+    this.idleHandle = null;
+    this.rows.clear();
+    this.queue.length = 0;
+    this.bytes = 0;
   }
 
   /** Asks for a whole row ahead of its showing, baked a cell at a time by {@link bakeQueued}. */
@@ -133,6 +162,8 @@ export class TitleHeroCells {
     this.idleHandle = globalThis.requestIdleCallback(
       (deadline) => {
         this.idleHandle = null;
+        // The next frame's `beginFrame` clears and asks for the rows again.
+        if (canvasGeneration() !== this.bakedInGeneration) return;
         const next = this.nextQueuedCell();
         if (next === null) return;
         const expectedMs = this.bakeMsByFigure.get(next.row.def.id) ?? UNMEASURED_BAKE_MS;
@@ -199,11 +230,7 @@ export class TitleHeroCells {
   }
 
   dispose(): void {
-    if (this.idleHandle !== null) globalThis.cancelIdleCallback(this.idleHandle);
-    this.idleHandle = null;
-    this.rows.clear();
-    this.queue.length = 0;
-    this.bytes = 0;
+    this.clear();
   }
 
   private rowFor(def: FigureDef, state: string, density: number): HeroRow {

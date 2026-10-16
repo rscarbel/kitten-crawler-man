@@ -1,0 +1,62 @@
+name: Checks
+
+# The backstop behind the agents' fast local loop. Locally `npm run check` uses
+# a cached lint and the native TypeScript preview, and `verify:affected` picks
+# gates from the files an agent says it touched; both can miss something. This
+# runs the uncached sign-off and every gate whose import graph the pushed
+# commits reach. It does not block the deploy workflow.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: checks-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  checks:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # verify:affected diffs against the previous push, so it needs history.
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Typecheck, lint, format, UI style, audio (uncached)
+        run: npm run check:ci
+
+      - name: Gates reached by this push
+        env:
+          PUSH_BEFORE: ${{ github.event.before }}
+          PR_BASE: ${{ github.base_ref }}
+        run: |
+          # A new branch or a force push reports an all-zero "before" commit.
+          if [ -n "$PR_BASE" ]; then
+            base="origin/$PR_BASE"
+          elif [ -n "$PUSH_BEFORE" ] && ! echo "$PUSH_BEFORE" | grep -qE '^0+$' && git cat-file -e "$PUSH_BEFORE" 2>/dev/null; then
+            base="$PUSH_BEFORE"
+          else
+            base="HEAD~1"
+          fi
+          npm run verify:affected -- --base="$base"
+
+      - name: Upload gate logs
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: gate-logs
+          path: .gate-logs/
+          retention-days: 7

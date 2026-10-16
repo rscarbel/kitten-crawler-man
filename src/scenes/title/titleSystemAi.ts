@@ -138,7 +138,10 @@ export function titleSystemAiSurface(deps: TitleSystemAiDeps): Surface {
     const maxLines = Math.floor(rect.h / lineHeight);
     if (maxLines >= MIN_LINES_UNDER_HEROES) return { rect, maxLines, centred: false };
     const found = aboveMenu(ui, lineHeight, acrossScreen);
-    if (found !== null && found.maxLines > maxLines) return { ...found, centred: true };
+    const capacity = (option: { rect: Rect; maxLines: number }): number =>
+      option.maxLines * option.rect.w;
+    if (found !== null && capacity(found) >= capacity({ rect, maxLines }))
+      return { ...found, centred: true };
     return maxLines < 1 ? null : { rect, maxLines, centred: false };
   };
 

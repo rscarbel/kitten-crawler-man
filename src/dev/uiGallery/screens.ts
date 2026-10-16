@@ -16,9 +16,15 @@ import { pagedOverlaySurface, type PagedOverlayPage } from '../../ui/widgets/pag
 import { scrollView } from '../../ui/widgets/scrollView';
 import { stepperKey } from '../../ui/widgets/stepper';
 import { tabs, type TabItem } from '../../ui/widgets/tabs';
-import { GALLERY_SHEET_LABELS, GALLERY_SHEETS, type GalleryModel } from './model';
+import {
+  GALLERY_SHEET_LABELS,
+  GALLERY_SHEETS,
+  type GallerySheet,
+  type GalleryModel,
+} from './model';
 import { renderWidgetSheet } from './widgetSheet';
-import { dialogGallerySurfaces } from './dialogs';
+import { DIALOG_FIXTURES } from './dialogs';
+import type { DialogFixture } from './dialogs/fixture';
 import { fixtureSheetSurfaces } from './fixturePicker';
 import { INVENTORY_FIXTURES } from './inventory';
 import { SHOP_FIXTURES } from './shop';
@@ -269,37 +275,70 @@ export interface UiGallery {
 }
 
 /**
+ * One sheet of the gallery, and on a fixture sheet one fixture: a harness
+ * that stands up a gallery per case builds only what that case shows, since
+ * every other sheet's and fixture's surfaces stay closed while it is shown.
+ */
+export interface GalleryFocus {
+  readonly sheet: GallerySheet;
+  /** The one fixture to build, or every fixture of the sheet when null. */
+  readonly fixture: string | null;
+}
+
+/**
  * Every gallery surface, in mount order. With a `chrome` host the live
  * route's top bar is included and the widget sheet scrolls; without one the
- * sheet lays out at full height for a tall capture.
+ * sheet lays out at full height for a tall capture. With a `focus`, only the
+ * surfaces that case can show are built.
  */
-export function createUiGallery(model: GalleryModel, chrome: GalleryChromeHost | null): UiGallery {
+export function createUiGallery(
+  model: GalleryModel,
+  chrome: GalleryChromeHost | null,
+  focus: GalleryFocus | null = null,
+): UiGallery {
   const top = (ui: Ui): number => (chrome === null ? 0 : chromeHeight(ui));
-  const surfaces: Surface[] = [
-    backdropSurface(),
-    widgetSheetSurface(model, { top }),
-    choiceModalSurface({
-      id: 'choice',
-      isOpen: () => model.sheet === 'choice' && model.choiceOpen,
-      escape: { kind: 'close', onEscape: () => model.record('Escape picks Stay') },
-      content: (ui) => choiceConfig(ui, model),
-    }),
-    pagedOverlaySurface({
-      id: 'paged',
-      title: 'How to crawl',
-      pages: PAGES,
-      isOpen: () => model.sheet === 'paged' && model.pagedOpen,
-      onDone: () => model.record('Explainer done'),
-    }),
+  const builds = (sheet: GallerySheet): boolean => focus === null || focus.sheet === sheet;
+  const focused = (fixtures: readonly DialogFixture[]): readonly DialogFixture[] => {
+    const only = focus?.fixture ?? null;
+    return only === null ? fixtures : fixtures.filter((fixture) => fixture.name === only);
+  };
+  const withPicker = chrome !== null;
+  const surfaces: Surface[] = [backdropSurface()];
+  if (builds('widgets')) surfaces.push(widgetSheetSurface(model, { top }));
+  if (builds('choice')) {
+    surfaces.push(
+      choiceModalSurface({
+        id: 'choice',
+        isOpen: () => model.sheet === 'choice' && model.choiceOpen,
+        escape: { kind: 'close', onEscape: () => model.record('Escape picks Stay') },
+        content: (ui) => choiceConfig(ui, model),
+      }),
+    );
+  }
+  if (builds('paged')) {
+    surfaces.push(
+      pagedOverlaySurface({
+        id: 'paged',
+        title: 'How to crawl',
+        pages: PAGES,
+        isOpen: () => model.sheet === 'paged' && model.pagedOpen,
+        onDone: () => model.record('Explainer done'),
+      }),
+    );
+  }
+  const fixtureSheets: readonly (readonly [GallerySheet, readonly DialogFixture[]])[] = [
+    ['dialogs', DIALOG_FIXTURES],
+    ['inventory', INVENTORY_FIXTURES],
+    ['shop', SHOP_FIXTURES],
+    ['construction', CONSTRUCTION_FIXTURES],
+    ['pause', PAUSE_FIXTURES],
+    ['hud', HUD_FIXTURES],
   ];
-  surfaces.push(...dialogGallerySurfaces(model, chrome !== null));
-  surfaces.push(...fixtureSheetSurfaces(model, 'inventory', INVENTORY_FIXTURES, chrome !== null));
-  surfaces.push(...fixtureSheetSurfaces(model, 'shop', SHOP_FIXTURES, chrome !== null));
-  surfaces.push(
-    ...fixtureSheetSurfaces(model, 'construction', CONSTRUCTION_FIXTURES, chrome !== null),
-  );
-  surfaces.push(...fixtureSheetSurfaces(model, 'pause', PAUSE_FIXTURES, chrome !== null));
-  surfaces.push(...fixtureSheetSurfaces(model, 'hud', HUD_FIXTURES, chrome !== null));
+  for (const [sheet, fixtures] of fixtureSheets) {
+    if (builds(sheet)) {
+      surfaces.push(...fixtureSheetSurfaces(model, sheet, focused(fixtures), withPicker));
+    }
+  }
   if (chrome !== null) surfaces.push(chromeSurface(model, chrome));
   return { model, surfaces };
 }

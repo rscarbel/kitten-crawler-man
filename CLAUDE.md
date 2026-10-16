@@ -47,11 +47,15 @@ Exactly four docs are durable references describing the shipped system, and thos
 
 ## Validation Gates
 
-Before considering work complete, **both checks must pass**:
+One command runs format, typecheck (game and scripts), lint, `check:ui-style` and `check:audio` in parallel and prints one line per gate:
 
-1. **Typecheck:** `npm run typecheck` — must exit 0 with no errors.
-2. **Lint:** `npm run lint` — must exit 0 with no errors.
+- **While iterating:** `npm run check`. Cached lint and format, plus the native TypeScript compiler when it is installed; seconds when little changed. Don't chain `typecheck`, `lint` and `format` yourself.
+- **Before calling work complete:** `npm run check:full` must exit 0. It runs stable `tsc` and an uncached lint, which catches what the cached lint can miss: a type change in one file breaking a type-aware rule in an untouched file.
 
-Run these after making changes. If any gate fails, fix the issue before proceeding. Do not skip or ignore failures.
+For behaviour, run the gates that cover what you changed: `npm run verify:affected -- <files you changed>`. It picks every `verify:*`/`gates:*` script whose import graph reaches those files. With no files it uses everything changed since HEAD, which in a tree with lots of uncommitted work selects far more than you touched. Use `-- --list` to see the selection without running it.
 
-In addition to the checks, make sure the code has been formatted: `npm run format`
+Every `verify:*`/`gates:*` script prints one line when it passes. When it fails, it prints the failing lines and the end of its output, and the full log is in `.gate-logs/<name>.log`. Read that file instead of re-running a slow suite to see more; `GATE_VERBOSE=1` streams the full output live. Never pipe a gate through `tail`/`grep` to shorten it; it is already short.
+
+**Subagents** run `npm run check` and the specific gates for their change, never `check:full` or broad sweeps. The orchestrating agent runs `check:full` and `verify:affected` once, after every subagent has finished. Several agents running full type-aware lints at once contend for the CPU and turn a two-minute check into fifteen.
+
+If any gate fails, fix the issue before proceeding. Do not skip or ignore failures.

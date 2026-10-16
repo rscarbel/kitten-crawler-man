@@ -14,9 +14,13 @@
  *  - the real `DungeonScene` (the town) and `BuildingInteriorScene`, headless,
  *    with each surface they mount opened in turn through the game's own
  *    openers and settled until its entrance has played; and the same scenes
- *    replayed on a notched phone each way up, in child processes run beside
- *    the desktop pass, whose close buttons must be tappable and must be
- *    there wherever the desktop shows one.
+ *    replayed on a notched phone each way up, whose close buttons must be
+ *    tappable and must be there wherever the desktop shows one.
+ *
+ * The parent process audits the desktop gallery itself; every scene, split
+ * into the town, the club and the other rooms on each platform, and the
+ * gallery's phone matrix, split in parts, run in child processes beside it
+ * and report back, and the parent prints every section and decides the run.
  *
  * Every panel, modal and system surface a scene mounts must be opened by this
  * script unless both of its keyboard claims are fixed `false` or another case
@@ -24,7 +28,29 @@
  * menu added to a scene without an opener here fails the gate instead of
  * escaping it.
  *
- * Run: npm run verify:menus
+ * Run: npm run verify:menus [-- [--only=<substring>] [--verbose]]
+ *
+ * `--only=<substring>` runs just the cases whose label or section title
+ * contains the substring, and fails if nothing matches. Labels are:
+ *
+ *  - `gallery <sheet>` and `gallery <sheet>/<fixture>`, in the sections
+ *    `UI gallery` and `close buttons on phones` (sheets: widgets, shop,
+ *    inventory, choice, paged, dialogs, construction, pause, hud; fixtures by
+ *    their gallery names, e.g. `gallery dialogs/poker-bust`);
+ *  - `town <surface id>` in `the town (DungeonScene)`, e.g. `town pause`;
+ *  - `<room> <surface id>` in `<room> (BuildingInteriorScene)`, the rooms
+ *    being General Store, Herb & Remedy, Old Hilda's Cottage, tower and
+ *    Desperado Club, e.g. `Desperado Club poker-table`;
+ *  - `title with a save` and `title without a save` in `the title screen`.
+ *
+ * So `--only=shop` takes every shop fixture and every scene's shop surfaces,
+ * `--only=gallery` the whole gallery, `--only=Desperado` the club. A selected
+ * scene case is replayed on the phones too (`close buttons on phones, in the
+ * scenes`). A filtered run skips the whole-run coverage checks (every surface
+ * opened, every phone-only surface reached), which only a full run can make.
+ *
+ * Passing output is one line per section; `--verbose` prints every case, and
+ * a section with a failure prints its cases whatever the flag.
  */
 
 import { spawn } from 'node:child_process';
@@ -49,6 +75,21 @@ const NOTCH_PORTRAIT_INSETS: SafeAreaInsets = { t: 47, r: 0, b: 34, l: 0 };
  * tightest room each way up.
  */
 const PHONE_PASS_IDS = ['portrait-notched', 'landscape-notched'] as const;
+const SCENE_PLATFORMS = ['desktop', ...PHONE_PASS_IDS] as const;
+type ScenePlatform = (typeof SCENE_PLATFORMS)[number];
+/**
+ * The scenes split three ways, the town, the club and every other room with
+ * the title screen, so each part on each platform runs in a child process of
+ * its own beside the gallery, which the parent process audits meanwhile. The
+ * town and the club each hold surfaces with no ring that wait out the whole
+ * entrance budget, which makes them the longest parts.
+ */
+const SCENE_SHARDS = ['town', 'club', 'rooms'] as const;
+type SceneShard = (typeof SCENE_SHARDS)[number];
+interface ScenePass {
+  readonly platform: ScenePlatform;
+  readonly shard: SceneShard;
+}
 type PhonePassId = (typeof PHONE_PASS_IDS)[number];
 const PHONE_SCENE_PASSES: Record<
   PhonePassId,
@@ -58,22 +99,72 @@ const PHONE_SCENE_PASSES: Record<
   'landscape-notched': { width: 844, height: 390, safeArea: NOTCH_LANDSCAPE_INSETS },
 };
 const PHONE_SCENE_UI_SIZE: UiSize = 'large';
-const PHONE_PASS_FLAG = '--phone-scenes=';
+const SCENE_PASS_FLAG = '--scene-pass=';
+const GALLERY_PASS_FLAG = '--phone-gallery-part=';
+/**
+ * The gallery's phone matrix, every settled fixture on every phone, is split
+ * into this many parts, each audited in a child process of its own.
+ */
+const PHONE_GALLERY_PARTS = 3;
+const SCENE_PASS_SEPARATOR = ':';
+const ONLY_FLAG = '--only=';
+const VERBOSE_FLAG = '--verbose';
 
-function isPhonePassId(value: string): value is PhonePassId {
-  return PHONE_PASS_IDS.some((id) => id === value);
+function scenePassName(pass: ScenePass): string {
+  return `${pass.platform}${SCENE_PASS_SEPARATOR}${pass.shard}`;
 }
 
-function phonePassFromArgs(): PhonePassId | null {
-  const arg = process.argv.find((candidate) => candidate.startsWith(PHONE_PASS_FLAG));
+function scenePassFromArgs(): ScenePass | null {
+  const arg = process.argv.find((candidate) => candidate.startsWith(SCENE_PASS_FLAG));
   if (arg === undefined) return null;
-  const id = arg.slice(PHONE_PASS_FLAG.length);
-  if (!isPhonePassId(id)) throw new Error(`verify:menus: no phone pass "${id}"`);
-  return id;
+  const name = arg.slice(SCENE_PASS_FLAG.length);
+  const [platformName, shardName] = name.split(SCENE_PASS_SEPARATOR);
+  const platform = SCENE_PLATFORMS.find((candidate) => candidate === platformName);
+  const shard = SCENE_SHARDS.find((candidate) => candidate === shardName);
+  if (platform === undefined || shard === undefined) {
+    throw new Error(`verify:menus: no scene pass "${name}"`);
+  }
+  return { platform, shard };
 }
 
-/** Set in a child process that replays the scenes on one phone and reports back. */
-const phonePass = phonePassFromArgs();
+/** Set in a child process that audits one part of the scenes on one platform and reports back. */
+const scenePass = scenePassFromArgs();
+
+function galleryPartFromArgs(): number | null {
+  const arg = process.argv.find((candidate) => candidate.startsWith(GALLERY_PASS_FLAG));
+  if (arg === undefined) return null;
+  const part = Number(arg.slice(GALLERY_PASS_FLAG.length));
+  if (!Number.isInteger(part) || part < 0 || part >= PHONE_GALLERY_PARTS) {
+    throw new Error(`verify:menus: no phone gallery part "${arg}"`);
+  }
+  return part;
+}
+
+/** Set in a child process that audits one part of the gallery's phone matrix and reports back. */
+const galleryPart = galleryPartFromArgs();
+/** The process that starts the others, prints every section and decides the run. */
+const isParent = scenePass === null && galleryPart === null;
+/** The phone this process replays the scenes on, or null on a desktop. */
+const phonePass =
+  scenePass === null || scenePass.platform === 'desktop' ? null : scenePass.platform;
+
+function onlyFromArgs(): string | null {
+  const arg = process.argv.find((candidate) => candidate.startsWith(ONLY_FLAG));
+  if (arg === undefined) return null;
+  const only = arg.slice(ONLY_FLAG.length);
+  if (only === '') throw new Error(`verify:menus: ${ONLY_FLAG} needs a substring`);
+  return only;
+}
+
+/** The `--only` substring, or null for the full run. */
+const only = onlyFromArgs();
+const verbose = process.argv.includes(VERBOSE_FLAG);
+
+/** Whether a case runs: its label or one of its section titles holds the `--only` substring. */
+function selects(label: string, ...sectionTitles: readonly string[]): boolean {
+  if (only === null) return true;
+  return label.includes(only) || sectionTitles.some((title) => title.includes(only));
+}
 
 // Before any game module loads: the platform is decided once, at import.
 Object.defineProperty(globalThis, 'navigator', {
@@ -122,10 +213,13 @@ type FixtureRig = Parameters<NonNullable<FixtureList[number]['interact']>>[0];
 type HitRegion = ReturnType<Root['regions']>[number];
 
 const FRAME_MS = 16;
+const MS_PER_SECOND = 1000;
 /** Long enough for every open, hover and tab tween to settle. */
 const SETTLE_MS = 1000;
 
 const failures: string[] = [];
+/** Whether `--only` matched any case; a filter that matches nothing is a typo, not a pass. */
+let anySelected = false;
 function check(ok: boolean, message: string): void {
   if (!ok) failures.push(message);
 }
@@ -139,8 +233,62 @@ function describeClaimants(claimants: readonly FocusClaimant[]): string {
     .join(', ');
 }
 
+interface SectionLog {
+  readonly title: string;
+  readonly startedAt: number;
+  readonly failuresBefore: number;
+  readonly lines: string[];
+  cases: number;
+}
+
+let openSection: SectionLog | null = null;
+
+/** Sections a scene pass ran, handed to the parent to print. */
+const finishedSections: SectionReport[] = [];
+
+/** One line per section, and its cases when asked or when one of them failed. */
+function printSection(report: SectionReport): void {
+  const skippedByFilter = report.cases === 0 && report.failed === 0;
+  if (skippedByFilter) return;
+  const outcome = report.failed === 0 ? 'ok' : `${report.failed} failure(s)`;
+  const seconds = report.seconds.toFixed(1);
+  console.log(`── ${report.title}: ${report.cases} case(s), ${outcome} (${seconds}s)`);
+  if (verbose || report.failed > 0) for (const line of report.lines) console.log(line);
+}
+
+function endSection(): void {
+  const done = openSection;
+  if (done === null) return;
+  openSection = null;
+  const report: SectionReport = {
+    title: done.title,
+    cases: done.cases,
+    failed: failures.length - done.failuresBefore,
+    seconds: (performance.now() - done.startedAt) / MS_PER_SECOND,
+    lines: done.lines,
+  };
+  if (isParent) printSection(report);
+  else finishedSections.push(report);
+}
+
 function section(title: string): void {
-  console.log(`\n── ${title}`);
+  endSection();
+  openSection = {
+    title,
+    startedAt: performance.now(),
+    failuresBefore: failures.length,
+    lines: [],
+    cases: 0,
+  };
+}
+
+/** One case's line, printed with its section's when verbose or failing. */
+function detail(line: string): void {
+  openSection?.lines.push(`  ${line}`);
+}
+
+function countCase(): void {
+  if (openSection !== null) openSection.cases++;
 }
 
 // ── Phone passes ───────────────────────────────────────────────────────────
@@ -152,21 +300,33 @@ interface CloseButtonState {
   readonly withClose: readonly string[];
 }
 
-/** What a phone pass hands back to the desktop run. */
-interface PhoneReport {
-  readonly states: readonly CloseButtonState[];
-  readonly failures: readonly string[];
+/** One section's outcome, printed by the parent process whichever process ran it. */
+interface SectionReport {
+  readonly title: string;
+  readonly cases: number;
+  readonly failed: number;
+  readonly seconds: number;
+  readonly lines: readonly string[];
 }
 
-interface PhonePassResult {
-  readonly id: PhonePassId;
+/** What a scene pass hands back to the parent run. */
+interface ScenePassReport {
+  readonly states: readonly CloseButtonState[];
+  readonly failures: readonly string[];
+  readonly sections: readonly SectionReport[];
+  /** Whether `--only` selected any of the pass's cases. */
+  readonly selected: boolean;
+}
+
+interface ChildPassResult {
+  readonly name: string;
   readonly status: number | null;
   readonly output: string;
 }
 
-const PHONE_REPORT_MARKER = 'verify:menus phone report ';
-/** Lines of a phone pass's own output shown when it fails to report. */
-const PHONE_OUTPUT_TAIL_LINES = 40;
+const SCENE_REPORT_MARKER = 'verify:menus scene report ';
+/** Lines of a scene pass's own output shown when it fails to report. */
+const SCENE_OUTPUT_TAIL_LINES = 40;
 
 /**
  * Surfaces only the scenes open, with no gallery fixture of their own; each
@@ -207,7 +367,24 @@ function isCloseButtonState(value: unknown): value is CloseButtonState {
   );
 }
 
-function isPhoneReport(value: unknown): value is PhoneReport {
+function isSectionReport(value: unknown): value is SectionReport {
+  return (
+    typeof value === 'object' &&
+    value !== null &&
+    'title' in value &&
+    typeof value.title === 'string' &&
+    'cases' in value &&
+    typeof value.cases === 'number' &&
+    'failed' in value &&
+    typeof value.failed === 'number' &&
+    'seconds' in value &&
+    typeof value.seconds === 'number' &&
+    'lines' in value &&
+    isStringArray(value.lines)
+  );
+}
+
+function isScenePassReport(value: unknown): value is ScenePassReport {
   return (
     typeof value === 'object' &&
     value !== null &&
@@ -215,23 +392,29 @@ function isPhoneReport(value: unknown): value is PhoneReport {
     Array.isArray(value.states) &&
     value.states.every(isCloseButtonState) &&
     'failures' in value &&
-    isStringArray(value.failures)
+    isStringArray(value.failures) &&
+    'sections' in value &&
+    Array.isArray(value.sections) &&
+    value.sections.every(isSectionReport) &&
+    'selected' in value &&
+    typeof value.selected === 'boolean'
   );
 }
 
-function parsePhoneReport(output: string): PhoneReport | null {
-  const line = output.split('\n').find((candidate) => candidate.startsWith(PHONE_REPORT_MARKER));
+function parseScenePassReport(output: string): ScenePassReport | null {
+  const line = output.split('\n').find((candidate) => candidate.startsWith(SCENE_REPORT_MARKER));
   if (line === undefined) return null;
-  const parsed: unknown = JSON.parse(line.slice(PHONE_REPORT_MARKER.length));
-  return isPhoneReport(parsed) ? parsed : null;
+  const parsed: unknown = JSON.parse(line.slice(SCENE_REPORT_MARKER.length));
+  return isScenePassReport(parsed) ? parsed : null;
 }
 
-/** Replays the scenes on one phone in a child process, alongside the desktop run. */
-function runPhoneScenePass(id: PhonePassId): Promise<PhonePassResult> {
+/** Runs this script again in a child process with `flag`, alongside the parent's own work. */
+function runChildPass(name: string, flag: string): Promise<ChildPassResult> {
+  const forwarded = only === null ? [] : [`${ONLY_FLAG}${only}`];
   return new Promise((resolve) => {
     const child = spawn(
       process.execPath,
-      [...process.execArgv, fileURLToPath(import.meta.url), `${PHONE_PASS_FLAG}${id}`],
+      [...process.execArgv, fileURLToPath(import.meta.url), flag, ...forwarded],
       { stdio: ['ignore', 'pipe', 'pipe'] },
     );
     let output = '';
@@ -240,7 +423,7 @@ function runPhoneScenePass(id: PhonePassId): Promise<PhonePassResult> {
     };
     child.stdout.on('data', collect);
     child.stderr.on('data', collect);
-    child.on('close', (status) => resolve({ id, status, output }));
+    child.on('close', (status) => resolve({ name, status, output }));
   });
 }
 
@@ -263,6 +446,31 @@ function recordCloseButtons(ui: Root, label: string): void {
 await loadSprites('src/images/');
 setViewportSize(SCREEN.width, SCREEN.height);
 const ctx = gameContext(SCREEN.width, SCREEN.height);
+/**
+ * The audits read hit regions, focus and layout, never a pixel of the frame,
+ * so everything paints into a context whose raster calls do nothing: paths,
+ * transforms, clips and text measurement still run, and the canvas keeps the
+ * size layout reads from it, but no pixel is filled. Rasterising, above all
+ * node-canvas's software shadow blur and the scenes' sprites, costs more
+ * than everything else a frame does.
+ */
+const RASTER_METHODS = [
+  'fill',
+  'stroke',
+  'fillRect',
+  'strokeRect',
+  'clearRect',
+  'fillText',
+  'strokeText',
+  'drawImage',
+  'putImageData',
+] as const satisfies readonly (keyof CanvasRenderingContext2D)[];
+function withoutRaster(target: CanvasRenderingContext2D): void {
+  for (const method of RASTER_METHODS) {
+    Object.defineProperty(target, method, { value: () => undefined });
+  }
+}
+withoutRaster(ctx);
 if (phonePass !== null) settings.setUiSize(PHONE_SCENE_UI_SIZE);
 
 const DESKTOP_VIEWPORT: ViewportInput = {
@@ -301,13 +509,53 @@ function bareRoot(viewport: ViewportInput = DESKTOP_VIEWPORT): {
   };
 }
 
-const phoneScenePasses = phonePass === null ? PHONE_PASS_IDS.map(runPhoneScenePass) : [];
+const PHONE_SCENES_SECTION = 'close buttons on phones, in the scenes';
 
-if (phonePass === null) {
+const scenePasses = isParent
+  ? SCENE_PLATFORMS.flatMap((platform) =>
+      SCENE_SHARDS.map((shard) => {
+        const name = scenePassName({ platform, shard });
+        return runChildPass(name, `${SCENE_PASS_FLAG}${name}`);
+      }),
+    )
+  : [];
+const galleryParts = isParent
+  ? Array.from({ length: PHONE_GALLERY_PARTS }, (_, part) =>
+      runChildPass(`phone gallery part ${part + 1}`, `${GALLERY_PASS_FLAG}${part}`),
+    )
+  : [];
+
+/** Prints a child's report, or fails the run when it has none; returns the report. */
+function collectChildReport(result: ChildPassResult): ScenePassReport | null {
+  const passReport = parseScenePassReport(result.output);
+  if (passReport === null) {
+    const tail = result.output.trimEnd().split('\n').slice(-SCENE_OUTPUT_TAIL_LINES).join('\n');
+    console.error(tail);
+    failures.push(`${result.name}: the child pass exited ${result.status} without a report`);
+    return null;
+  }
+  if (passReport.selected) anySelected = true;
+  return passReport;
+}
+
+/** A child's last words: its sections, failures and close-button states, as one line for the parent. */
+function reportToParent(): never {
+  endSection();
+  const report: ScenePassReport = {
+    states: closeButtonStates,
+    failures,
+    sections: finishedSections,
+    selected: anySelected,
+  };
+  console.log(`${SCENE_REPORT_MARKER}${JSON.stringify(report)}`);
+  process.exit(0);
+}
+
+if (scenePass === null) {
   // ── Self test ──────────────────────────────────────────────────────────────
 
-  section('self test: the audit flags a menu a keyboard cannot reach');
-  {
+  if (isParent) section('self test: the audit flags a menu a keyboard cannot reach');
+  if (isParent) {
     const panelRect = { x: 100, y: 100, w: 300, h: 200 };
     const buttonRect = { x: 120, y: 240, w: 120, h: 40 };
     const ringless: Surface = {
@@ -331,7 +579,8 @@ if (phonePass === null) {
     rig.root.mount(ringless);
     rig.frame();
     const caught = auditFocus(rig.root, 'self test').failures;
-    console.log(caught.map((failure) => `  caught: ${failure}`).join('\n'));
+    for (const failure of caught) detail(`caught: ${failure}`);
+    countCase();
     check(
       caught.some((failure) => failure.includes('"ringless-fake"')),
       'self test: a halting modal with only an unfocusable button is not flagged',
@@ -339,7 +588,8 @@ if (phonePass === null) {
     rig.root.mount(floating);
     rig.frame();
     const stolen = auditFocus(rig.root, 'self test').failures;
-    console.log(stolen.map((failure) => `  caught: ${failure}`).join('\n'));
+    for (const failure of stolen) detail(`caught: ${failure}`);
+    countCase();
     check(
       stolen.some((failure) => failure.includes('focus belongs to "floating-fake"')),
       'self test: a non-halting surface that steals focus from a halting one is not flagged',
@@ -365,13 +615,16 @@ if (phonePass === null) {
     sheet: GallerySheet,
     fixture: string | null,
     viewport: ViewportInput = DESKTOP_VIEWPORT,
+    walksFixtures = false,
   ) {
     const bare = bareRoot(viewport);
     const { root } = bare;
     const model = new GalleryModel();
     model.sheet = sheet;
     model.screenFixture = fixture;
-    for (const surface of createUiGallery(model, null).surfaces) root.mount(surface);
+    // A walk switches fixtures on one rig, so it needs every fixture of its sheet.
+    const focus = { sheet, fixture: walksFixtures ? null : fixture };
+    for (const surface of createUiGallery(model, null, focus).surfaces) root.mount(surface);
     const gesture = (kind: 'down' | 'move' | 'up', region: HitRegion): void => {
       const point = centre(region);
       root.pointer({
@@ -407,20 +660,48 @@ if (phonePass === null) {
     return { root, rig, model };
   }
 
-  section('UI gallery');
-  {
+  const GALLERY_SECTION = 'UI gallery';
+  const PHONE_GALLERY_SECTION = 'close buttons on phones';
+  /** Every gallery state, as `[sheet, fixture]`; a sheet with no fixtures is one state of its own. */
+  interface GalleryState {
+    readonly sheet: GallerySheet;
+    readonly fixture: string | null;
+    readonly label: string;
+  }
+  const galleryStates = GALLERY_SHEETS.flatMap((sheet): GalleryState[] => {
+    const fixtures = SHEET_FIXTURES[sheet] ?? [];
+    if (fixtures.length === 0) return [{ sheet, fixture: null, label: `gallery ${sheet}` }];
+    return fixtures.map((fixture) => ({
+      sheet,
+      fixture: fixture.name,
+      label: `gallery ${sheet}/${fixture.name}`,
+    }));
+  });
+  for (const state of galleryStates) {
+    if (selects(state.label, GALLERY_SECTION, PHONE_GALLERY_SECTION)) anySelected = true;
+  }
+
+  if (isParent) section(GALLERY_SECTION);
+  if (isParent) {
     let galleryClaimants = 0;
     const audit = (root: Root, label: string): void => {
       const outcome = auditFocus(root, label);
       failures.push(...outcome.failures);
       galleryClaimants += outcome.claimants.length;
-      console.log(`  ${label}: ${describeClaimants(outcome.claimants)}`);
+      detail(`${label}: ${describeClaimants(outcome.claimants)}`);
+      countCase();
     };
+    const selected = (label: string): boolean => selects(label, GALLERY_SECTION);
     for (const sheet of GALLERY_SHEETS) {
-      const fixtures = SHEET_FIXTURES[sheet] ?? [];
+      const fixtures = (SHEET_FIXTURES[sheet] ?? []).filter((fixture) =>
+        selected(`gallery ${sheet}/${fixture.name}`),
+      );
+      const bare = (SHEET_FIXTURES[sheet] ?? []).length === 0;
+      if (bare && !selected(`gallery ${sheet}`)) continue;
+      if (!bare && fixtures.length === 0) continue;
       // One rig walks the sheet's fixtures: only the shown fixture's surfaces are open.
-      const walk = galleryRig(sheet, null);
-      if (fixtures.length === 0) {
+      const walk = galleryRig(sheet, null, DESKTOP_VIEWPORT, true);
+      if (bare) {
         walk.rig.frame();
         walk.rig.settle();
         audit(walk.root, `gallery ${sheet}`);
@@ -441,7 +722,9 @@ if (phonePass === null) {
         audit(fresh.root, `gallery ${sheet}/${fixture.name} (after its input)`);
       }
     }
-    check(galleryClaimants > 0, 'the gallery audit saw no surface that claims the keyboard');
+    if (only === null) {
+      check(galleryClaimants > 0, 'the gallery audit saw no surface that claims the keyboard');
+    }
   }
 
   // ── Close buttons on phones ────────────────────────────────────────────────
@@ -475,8 +758,9 @@ if (phonePass === null) {
     return viewports;
   }
 
-  section('self test: the close audit flags a close button pushed off a phone screen');
-  {
+  if (isParent)
+    section('self test: the close audit flags a close button pushed off a phone screen');
+  if (isParent) {
     /** A panel whose ✕ starts `overhang` of its own width past the right edge of the safe area. */
     const overhangingClose = (id: string, overhang: number): Surface => ({
       id,
@@ -501,12 +785,13 @@ if (phonePass === null) {
       bare.root.mount(surface);
       bare.frame();
       const found = auditCloseButtons(bare.root, 'self test', new Set([surface.id]));
+      countCase();
       check(found.length > 0, `self test: a close button ${what} on a phone is not flagged`);
     }
   }
 
-  section('close buttons on phones');
-  {
+  if (galleryPart !== null) {
+    section(`${PHONE_GALLERY_SECTION}, part ${galleryPart + 1} of ${PHONE_GALLERY_PARTS}`);
     const phones = phoneViewports();
     const failuresByPhone = new Map<string, number>();
     let audited = 0;
@@ -524,19 +809,99 @@ if (phonePass === null) {
         failures.push(...found);
         failuresByPhone.set(phone.label, (failuresByPhone.get(phone.label) ?? 0) + found.length);
         audited++;
+        countCase();
       }
     };
-    for (const sheet of GALLERY_SHEETS) {
-      const fixtures = SHEET_FIXTURES[sheet] ?? [];
-      if (fixtures.length === 0) auditState(sheet, null, `gallery ${sheet}`);
-      for (const fixture of fixtures)
-        auditState(sheet, fixture.name, `gallery ${sheet}/${fixture.name}`);
-    }
+    galleryStates.forEach((state, index) => {
+      const inThisPart = index % PHONE_GALLERY_PARTS === galleryPart;
+      if (inThisPart && selects(state.label, PHONE_GALLERY_SECTION)) {
+        auditState(state.sheet, state.fixture, state.label);
+      }
+    });
     for (const [phone, count] of failuresByPhone) {
-      console.log(`  ${phone}: ${count === 0 ? 'ok' : `${count} failure(s)`}`);
+      detail(`${phone}: ${count === 0 ? 'ok' : `${count} failure(s)`}`);
     }
-    check(audited > 0, 'the close-button audit saw no gallery state');
+    if (only === null) check(audited > 0, 'the close-button audit saw no gallery state');
+    reportToParent();
   }
+  // ── The scene passes ───────────────────────────────────────────────────────
+
+  endSection();
+  for (const result of await Promise.all(galleryParts)) {
+    const partReport = collectChildReport(result);
+    if (partReport === null) continue;
+    failures.push(...partReport.failures);
+    for (const partSection of partReport.sections) printSection(partSection);
+  }
+  const reports = new Map<string, ScenePassReport>();
+  for (const result of await Promise.all(scenePasses)) {
+    const passReport = collectChildReport(result);
+    if (passReport !== null) reports.set(result.name, passReport);
+  }
+  const reportsOn = (platform: ScenePlatform): ScenePassReport[] =>
+    SCENE_SHARDS.flatMap((shard) => reports.get(scenePassName({ platform, shard })) ?? []);
+
+  const desktopReports = reportsOn('desktop');
+  for (const desktopReport of desktopReports) {
+    failures.push(...desktopReport.failures);
+    for (const sceneSection of desktopReport.sections) printSection(sceneSection);
+  }
+  const desktopStates = desktopReports.flatMap((desktopReport) => desktopReport.states);
+  const desktopComplete = desktopReports.length === SCENE_SHARDS.length;
+
+  if (desktopStates.length > 0) {
+    section(PHONE_SCENES_SECTION);
+    for (const id of PHONE_PASS_IDS) {
+      const phoneReports = reportsOn(id);
+      if (phoneReports.length < SCENE_SHARDS.length) continue;
+      const passFailures = phoneReports.flatMap((phoneReport) => phoneReport.failures);
+      const phoneStateList = phoneReports.flatMap((phoneReport) => phoneReport.states);
+      const phoneStates = new Map(phoneStateList.map((state) => [state.label, state]));
+      for (const desktop of desktopStates) {
+        const phone = phoneStates.get(desktop.label);
+        if (phone === undefined) {
+          passFailures.push(`${id} ${desktop.label}: never reached on the phone`);
+          continue;
+        }
+        passFailures.push(
+          ...missingCloseButtons(
+            `${id} ${desktop.label}`,
+            new Set(desktop.withClose),
+            phone.open,
+            new Set(phone.withClose),
+          ),
+        );
+      }
+      const openedOnPhone = new Set(phoneStateList.flatMap((state) => state.open));
+      const required = only === null && desktopComplete ? PHONE_REQUIRED_SURFACES : [];
+      for (const surfaceId of required) {
+        if (!openedOnPhone.has(surfaceId))
+          passFailures.push(`${id}: "${surfaceId}" was never open on the phone`);
+      }
+      failures.push(...passFailures);
+      const outcome = passFailures.length === 0 ? 'ok' : `${passFailures.length} failure(s)`;
+      detail(`${id}: ${phoneStateList.length} states, ${outcome}`);
+      countCase();
+    }
+    endSection();
+  }
+
+  if (!anySelected) {
+    throw new Error(
+      `verify:menus: --only=${only ?? ''} matches no case; see the labels in this script's header`,
+    );
+  }
+  const seconds = (performance.now() / MS_PER_SECOND).toFixed(1);
+  if (failures.length > 0) {
+    console.error(`\nverify:menus — ${failures.length} failure(s) in ${seconds}s\n`);
+    for (const failure of failures) console.error(`  ✗ ${failure}`);
+    process.exit(1);
+  }
+  const scope = only === null ? '' : ` (only cases matching "${only}")`;
+  console.log(
+    `\nverify:menus — every menu that takes the keyboard can be answered by it${scope}, in ${seconds}s`,
+  );
+  process.exit(0);
 }
 
 // ── Scenes ─────────────────────────────────────────────────────────────────
@@ -555,13 +920,36 @@ interface SceneUnderAudit {
   render(ctx: CanvasRenderingContext2D): void;
 }
 
+/** The openers `--only` selects in a scene whose cases are labelled `<label> <surface id>`. */
+function selectedOpeners<S>(
+  label: string,
+  sectionTitle: string,
+  openers: readonly Opener<S>[],
+): Opener<S>[] {
+  return openers.filter((candidate) =>
+    selects(`${label} ${candidate.surfaceId}`, sectionTitle, PHONE_SCENES_SECTION),
+  );
+}
+
 /** Frames an entrance may take before the surface's controls are up: the longest count-up or reveal. */
 const MAX_SETTLE_FRAMES = 600;
 /** Frames run after a close, so a surface that eases out has gone before the next opens. */
 const CLOSE_FRAMES = 4;
 
+const { beginFigureFrame } = await import('../src/sprites/figure/figureFrameCache.js');
+const { beginEnvironmentArtFrame } = await import('../src/map/environmentArtCache.js');
+const { closeAboveDarkness } = await import('../src/systems/lighting/aboveDarkness.js');
+
+/**
+ * One game frame, with the frame boundaries `SceneManager` opens before each
+ * render: without them the figure cache's bake budget is never refreshed, so
+ * every figure in a crowded room is painted from scratch on every frame.
+ */
 function step(scene: SceneUnderAudit): void {
   scene.update();
+  beginFigureFrame();
+  beginEnvironmentArtFrame();
+  closeAboveDarkness();
   scene.render(ctx);
 }
 
@@ -599,6 +987,8 @@ function auditScene<S extends SceneUnderAudit>(
 ): void {
   const opened = new Set<string>();
   for (const opener of openers) {
+    countCase();
+    const startedAt = performance.now();
     opener.open(scene);
     scene.render(ctx);
     const stateLabel = `${label} ${opener.surfaceId}`;
@@ -610,10 +1000,11 @@ function auditScene<S extends SceneUnderAudit>(
     settle(scene, opener.surfaceId);
     for (const id of scene.ui.openSurfaceIds()) opened.add(id);
     const settledNote = scene.ui.isOpen(opener.surfaceId) ? '' : ' [closed itself while settling]';
+    let caseLine = '';
     if (phonePass === null) {
       const outcome = auditFocus(scene.ui, stateLabel);
       failures.push(...outcome.failures);
-      console.log(`  ${stateLabel}: ${describeClaimants(outcome.claimants)}${settledNote}`);
+      caseLine = `${stateLabel}: ${describeClaimants(outcome.claimants)}${settledNote}`;
     }
     settleEntrance(scene, opener.surfaceId);
     recordCloseButtons(scene.ui, stateLabel);
@@ -621,7 +1012,7 @@ function auditScene<S extends SceneUnderAudit>(
       const open = openMenuSurfaceIds(scene.ui).join(', ') || 'no menu';
       const closers = [...surfacesWithCloseButtons(scene.ui)].join(', ') || 'nothing';
       const closedNote = scene.ui.isOpen(opener.surfaceId) ? '' : ' [closed itself]';
-      console.log(`  ${stateLabel}: ${open} open, close buttons on ${closers}${closedNote}`);
+      caseLine = `${stateLabel}: ${open} open, close buttons on ${closers}${closedNote}`;
     }
     opener.close(scene);
     for (let frame = 0; frame < CLOSE_FRAMES; frame++) step(scene);
@@ -631,7 +1022,11 @@ function auditScene<S extends SceneUnderAudit>(
       return surface !== undefined && claimsKeyboard(surface);
     });
     check(leftOpen.length === 0, `${stateLabel}: closing it left ${leftOpen.join(', ')} open`);
+    const seconds = ((performance.now() - startedAt) / MS_PER_SECOND).toFixed(1);
+    detail(`${caseLine} (${seconds}s)`);
   }
+  // Only the full run opens every opener, so only it can say a surface was never opened.
+  if (only !== null) return;
   const notedElsewhere: string[] = [];
   for (const [id, surface] of mountedSurfaces(scene.ui)) {
     if (opened.has(id) || neverClaimsKeyboard(surface)) continue;
@@ -645,7 +1040,7 @@ function auditScene<S extends SceneUnderAudit>(
     );
   }
   if (notedElsewhere.length > 0) {
-    console.log(`  not opened in the ${label}: ${notedElsewhere.join(', ')}`);
+    detail(`not opened in the ${label}: ${notedElsewhere.join(', ')}`);
   }
 }
 
@@ -1131,8 +1526,13 @@ const town = new GameMap({
   worldSeed: WORLD_SEED,
 });
 
-section('the town (DungeonScene)');
-{
+const TOWN_SECTION = 'the town (DungeonScene)';
+// Only a scene pass gets this far: the parent and the gallery parts have exited above.
+const townSelected =
+  scenePass.shard === 'town' ? selectedOpeners('town', TOWN_SECTION, townOpeners()) : [];
+if (townSelected.length > 0) {
+  anySelected = true;
+  section(TOWN_SECTION);
   const sceneManager = new SceneManager();
   const street = new DungeonScene(level3, new InputManager(), sceneManager, {
     existingMap: town,
@@ -1144,14 +1544,14 @@ section('the town (DungeonScene)');
   check(street.ui.isOpen(arrival), 'the town raises no arrival screen to audit');
   const arrivalOutcome = auditFocus(street.ui, `town ${arrival}`);
   failures.push(...arrivalOutcome.failures);
-  console.log(`  town ${arrival}: ${describeClaimants(arrivalOutcome.claimants)}`);
+  detail(`town ${arrival}: ${describeClaimants(arrivalOutcome.claimants)}`);
   for (let frame = 0; frame < MAX_ARRIVAL_FRAMES && street.ui.isOpen(arrival); frame++) {
     street.render(ctx);
     await new Promise((resolve) => setImmediate(resolve));
   }
   check(!street.ui.isOpen(arrival), "the town's arrival screen never finished");
   step(street);
-  auditScene('town', street, townOpeners(), {
+  auditScene('town', street, townSelected, {
     [arrival]: 'audited above, while the town loads',
     'grate-spikes': STRUCTURE_POPOVER_IN_GALLERY,
     'structure-menu': STRUCTURE_POPOVER_IN_GALLERY,
@@ -1210,9 +1610,7 @@ async function enter(entry: Entry): Promise<Interior> {
   if (room.ui.isOpen(ARRIVAL_SURFACE)) {
     const arrivalOutcome = auditFocus(room.ui, `${entry.name} ${ARRIVAL_SURFACE}`);
     failures.push(...arrivalOutcome.failures);
-    console.log(
-      `  ${entry.name} ${ARRIVAL_SURFACE}: ${describeClaimants(arrivalOutcome.claimants)}`,
-    );
+    detail(`${entry.name} ${ARRIVAL_SURFACE}: ${describeClaimants(arrivalOutcome.claimants)}`);
   }
   if (!(await settleArrival(room, ctx))) {
     throw new Error(`${entry.name}'s arrival screen never finished`);
@@ -1377,8 +1775,8 @@ function interiorCases(): InteriorCase[] {
       ],
     },
     {
-      label: 'Desperado Club',
-      entry: building('Desperado Club', (entry) => entry.type === 'club'),
+      label: CLUB_LABEL,
+      entry: building(CLUB_LABEL, (entry) => entry.type === 'club'),
       openers: [
         menu('club', (scene) => club(scene)['openGreeting'](scene.pm.active()), closeClub),
         menu('club-bar-shop', (scene) => club(scene)['barShop'].open(), closeClub),
@@ -1493,9 +1891,17 @@ function interiorCases(): InteriorCase[] {
   ];
 }
 
+const CLUB_LABEL = 'Desperado Club';
+const auditsRooms = scenePass.shard === 'rooms';
 const cases = interiorCases();
 for (const { label, entry, openers } of cases) {
-  section(`${label} (BuildingInteriorScene)`);
+  const roomShard: SceneShard = label === CLUB_LABEL ? 'club' : 'rooms';
+  if (roomShard !== scenePass.shard) continue;
+  const roomSection = `${label} (BuildingInteriorScene)`;
+  const roomSelected = selectedOpeners(label, roomSection, openers);
+  if (roomSelected.length === 0) continue;
+  anySelected = true;
+  section(roomSection);
   const room = await enter(entry);
   step(room);
   const auditedHere = new Set(openers.map((candidate) => candidate.surfaceId));
@@ -1510,7 +1916,7 @@ for (const { label, entry, openers } of cases) {
       }
     }
   }
-  auditScene(label, room, openers, elsewhere);
+  auditScene(label, room, roomSelected, elsewhere);
 }
 
 // ── The title screen ───────────────────────────────────────────────────────
@@ -1518,9 +1924,16 @@ for (const { label, entry, openers } of cases) {
 const { TitleScene } = await import('../src/scenes/title/TitleScene.js');
 const { TITLE_MENU_SURFACE_ID } = await import('../src/scenes/title/titleMenu.js');
 
-section('the title screen');
-for (const withSave of [true, false]) {
-  const label = `title ${withSave ? 'with a save' : 'without a save'}`;
+const TITLE_SECTION = 'the title screen';
+const titleCases = [true, false]
+  .map((withSave) => ({ withSave, label: `title ${withSave ? 'with a save' : 'without a save'}` }))
+  .filter(({ label }) => auditsRooms && selects(label, TITLE_SECTION, PHONE_SCENES_SECTION));
+if (titleCases.length > 0) {
+  anySelected = true;
+  section(TITLE_SECTION);
+}
+for (const { withSave, label } of titleCases) {
+  countCase();
   const resumed = { continued: false };
   const onContinue = withSave
     ? (): void => {
@@ -1541,7 +1954,7 @@ for (const withSave of [true, false]) {
   if (phonePass === null) {
     const outcome = auditFocus(title.ui, label);
     failures.push(...outcome.failures);
-    console.log(`  ${label}: ${describeClaimants(outcome.claimants)}`);
+    detail(`${label}: ${describeClaimants(outcome.claimants)}`);
   }
   settleEntrance(title, TITLE_MENU_SURFACE_ID);
   recordCloseButtons(title.ui, label);
@@ -1556,51 +1969,4 @@ for (const withSave of [true, false]) {
 
 // ── Report ─────────────────────────────────────────────────────────────────
 
-if (phonePass !== null) {
-  const report: PhoneReport = { states: closeButtonStates, failures };
-  console.log(`${PHONE_REPORT_MARKER}${JSON.stringify(report)}`);
-  process.exit(0);
-}
-
-section('close buttons on phones, in the scenes');
-for (const pass of await Promise.all(phoneScenePasses)) {
-  const report = parsePhoneReport(pass.output);
-  if (report === null) {
-    const tail = pass.output.trimEnd().split('\n').slice(-PHONE_OUTPUT_TAIL_LINES).join('\n');
-    console.error(tail);
-    failures.push(`${pass.id}: the phone pass exited ${pass.status} without a report`);
-    continue;
-  }
-  const passFailures = [...report.failures];
-  const phoneStates = new Map(report.states.map((state) => [state.label, state]));
-  for (const desktop of closeButtonStates) {
-    const phone = phoneStates.get(desktop.label);
-    if (phone === undefined) {
-      passFailures.push(`${pass.id} ${desktop.label}: never reached on the phone`);
-      continue;
-    }
-    passFailures.push(
-      ...missingCloseButtons(
-        `${pass.id} ${desktop.label}`,
-        new Set(desktop.withClose),
-        phone.open,
-        new Set(phone.withClose),
-      ),
-    );
-  }
-  const openedOnPhone = new Set(report.states.flatMap((state) => state.open));
-  for (const id of PHONE_REQUIRED_SURFACES) {
-    if (!openedOnPhone.has(id))
-      passFailures.push(`${pass.id}: "${id}" was never open on the phone`);
-  }
-  failures.push(...passFailures);
-  const outcome = passFailures.length === 0 ? 'ok' : `${passFailures.length} failure(s)`;
-  console.log(`  ${pass.id}: ${report.states.length} states, ${outcome}`);
-}
-
-if (failures.length > 0) {
-  console.error(`\nverify:menus — ${failures.length} failure(s)\n`);
-  for (const failure of failures) console.error(`  ✗ ${failure}`);
-  process.exit(1);
-}
-console.log('\nverify:menus — every menu that takes the keyboard can be answered by it');
+reportToParent();

@@ -18,6 +18,8 @@
  * Run by `npm run render:skyfowl-cast`, or alone: `npx tsx scripts/gates-skyfowl-cast.ts`.
  */
 
+import { pathToFileURL } from 'node:url';
+
 import { createCanvas } from 'canvas';
 
 import { asGameContext } from './nodeGameContext.js';
@@ -375,7 +377,7 @@ export function skyfowlCastGateFailures(): string[] {
   return failures;
 }
 
-if (import.meta.url === `file://${process.argv[1]}`) {
+if (import.meta.url === pathToFileURL(process.argv[1]).href) {
   const result = skyfowlCastGateFailures();
   if (result.length === 0) {
     console.log('  ok   skyfowl-cast (8 gates)');

@@ -295,13 +295,14 @@ Two lint rules bite modules that live under `src/`:
     (`references/anatomy.md#anchor`). The creature's eye placement keys off it
     too: derive it from the rig's head constants (see `skeletonEyePlacement`)
     and run `npm run verify:eye-shine`.
-13. **Validation gates:** `npm run typecheck`, `npm run lint`, `npm run format`,
+13. **Validation gates:** `npm run check:full`,
     `npm run gates:figure-cache`, `npm run render:<x>` must all exit 0 (for
     Carl, `render:human` gates three outfits and `bench:figure-paint` gates his
     slowest cell).
-    `npm run format` is prettier over the whole repo — while other agents are
-    mid-edit, format your own paths only and finish with
-    `npx prettier --check --ignore-unknown .`.
+    `check` and `check:full` run prettier `--write` over the whole repo, which
+    reformats other agents' mid-edit files too. A subagent working beside
+    others formats its own paths with `npx prettier --write <paths>` and
+    leaves the whole-repo run to the orchestrator.
 
 ## Writing a gate that can actually fail
 

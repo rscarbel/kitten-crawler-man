@@ -5,7 +5,6 @@
  * with the fixture picker.
  */
 
-import type { Surface } from '../../ui/core/UiRoot';
 import { FIXTURES as BESPOKE } from './dialogs/bespoke';
 import { FIXTURES as CASINO } from './dialogs/casino';
 import { FIXTURES as CHOICE } from './dialogs/choice';
@@ -17,8 +16,6 @@ import { FIXTURES as PIPE_BOARD } from './dialogs/pipeBoard';
 import { FIXTURES as POKER } from './dialogs/poker';
 import { FIXTURES as SLOTS } from './dialogs/slots';
 import { FIXTURES as WHEEL } from './dialogs/wheel';
-import { fixtureSheetSurfaces } from './fixturePicker';
-import type { GalleryModel } from './model';
 
 export const DIALOG_FIXTURES: readonly DialogFixture[] = [
   ...CHOICE,
@@ -32,8 +29,3 @@ export const DIALOG_FIXTURES: readonly DialogFixture[] = [
   ...WHEEL,
   ...PIPE_BOARD,
 ];
-
-/** Every dialog fixture's surfaces; with `picker`, the live route's fixture strip too. */
-export function dialogGallerySurfaces(model: GalleryModel, picker: boolean): Surface[] {
-  return fixtureSheetSurfaces(model, 'dialogs', DIALOG_FIXTURES, picker);
-}

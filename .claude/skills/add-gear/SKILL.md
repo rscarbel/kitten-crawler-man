@@ -365,5 +365,5 @@ Go to `bipedal-figure` (and `references/carl.md`) when the item needs:
 - **diagonal rows of its own** — both attempts at three-quarter views failed
   review; read the ceilings before trying a third.
 
-Finish with the `dev-workflow` gates: `npm run typecheck`, `npm run lint`,
-`npm run format`.
+Finish with the `dev-workflow` gates: `npm run check` while iterating,
+`npm run check:full` to sign off.

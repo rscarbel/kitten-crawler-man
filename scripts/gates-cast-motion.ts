@@ -22,6 +22,8 @@
  * Run by `npm run render:cast-motion`, or alone: `npm run gates:cast-motion`.
  */
 
+import { pathToFileURL } from 'node:url';
+
 import { TILE_SIZE } from '../src/core/constants.js';
 import { gaitCyclesForDistance } from '../src/sprites/gaitCadence.js';
 import {
@@ -516,7 +518,7 @@ export function castMotionGateFailures(): string[] {
   return failures;
 }
 
-if (import.meta.url === `file://${process.argv[1]}`) {
+if (import.meta.url === pathToFileURL(process.argv[1]).href) {
   const result = castMotionGateFailures();
   if (result.length === 0) {
     console.log('  ok   cast-motion (4 gates)');

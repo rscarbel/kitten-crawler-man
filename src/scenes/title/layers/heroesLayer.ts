@@ -389,7 +389,7 @@ export function heroesLayer(): TitleLayer {
       const tile = heroTile(stage);
       const pixelRatio = pixelRatioOf(ctx);
       drawnAt = { tile, pixelRatio };
-      heroCells.beginFrame();
+      if (heroCells.beginFrame()) requestIdleRows();
       applyTitleCamera(ctx, camera, HEROES_DEPTH);
       const carlX = stage.heroSpot.x + CARL_FOOT_OFFSET_TILES.x * tile;
       const carlY = stage.heroSpot.y + CARL_FOOT_OFFSET_TILES.y * tile;

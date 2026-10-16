@@ -380,13 +380,17 @@ export class MusicDirector implements MusicPlayerControls {
     if (this.handoverDepth === 0) this.resolve();
   }
 
-  /** Audio can play again: start whatever was chosen while it could not. */
+  /**
+   * Audio can play again: start whatever was chosen while it could not. Every
+   * gesture calls this, so a song that already failed to load is left alone
+   * rather than fetched again on each key press.
+   */
   engineReady(): void {
     this.resolve();
     const current = this.current;
-    if (current !== null && current.handle === null && current.kind !== 'held') {
-      this.startHandle(current);
-    }
+    if (current?.handle !== null || current.kind === 'held') return;
+    if (this.unavailable.has(current.id)) return;
+    this.startHandle(current);
   }
 
   /**

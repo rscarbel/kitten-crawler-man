@@ -9,3 +9,4 @@ game.db*
 _site
 preview
 sw.js
+.gate-logs

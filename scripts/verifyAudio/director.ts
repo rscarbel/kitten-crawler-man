@@ -58,6 +58,8 @@ const SHUFFLE_SET = [
   'briar_hollow_theme',
 ] as const satisfies readonly MusicTrackId[];
 
+/** Key presses made after a song fails to load, each a chance to fetch it again. */
+const KEY_PRESSES_AFTER_A_FAILED_LOAD = 3;
 /** The streamed song the title screen claims before any gesture. */
 const GESTURE_GATED_TRACK = 'welcome_to_the_dungeon' as const satisfies MusicTrackId;
 
@@ -590,6 +592,34 @@ export async function checkAutoplayLock(
   );
   scope.dispose();
   await decoded.dispose();
+
+  const failedFetches = { count: 0 };
+  const decodingFetch: unknown = Reflect.get(globalThis, 'fetch');
+  Reflect.set(globalThis, 'fetch', (url: string) => {
+    if (url !== SOUND_MANIFEST[KEYBOARD_HERO_SONG]) {
+      return typeof decodingFetch === 'function'
+        ? Reflect.apply(decodingFetch, globalThis, [url])
+        : Promise.reject(new Error('no fetch'));
+    }
+    failedFetches.count++;
+    return Promise.resolve({ ok: false, status: 404 });
+  });
+  try {
+    const unloadable = await rig(harness);
+    claimOn(unloadable.audio, {}, 'floor', 'area', loopOf(KEYBOARD_HERO_SONG));
+    await unloadable.settle();
+    for (let press = 0; press < KEY_PRESSES_AFTER_A_FAILED_LOAD; press++) {
+      unlockGesture('keydown');
+      await unloadable.settle();
+    }
+    check(
+      failedFetches.count <= 1,
+      `a looped song that cannot load is not fetched again by each key press (${failedFetches.count} fetches)`,
+    );
+    await unloadable.dispose();
+  } finally {
+    Reflect.set(globalThis, 'fetch', decodingFetch);
+  }
 }
 
 /** 8. The keyboard-hero claim outranks the player's choice. */

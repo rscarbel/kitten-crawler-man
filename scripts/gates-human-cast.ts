@@ -19,6 +19,8 @@
  * Run by `npm run render:human-cast`, or alone: `npx tsx scripts/gates-human-cast.ts`.
  */
 
+import { pathToFileURL } from 'node:url';
+
 import { paintFigureCell } from './figureSheet.js';
 import {
   distinctFrameFailures,
@@ -299,7 +301,7 @@ export function humanCastGateFailures(): string[] {
   return failures;
 }
 
-if (import.meta.url === `file://${process.argv[1]}`) {
+if (import.meta.url === pathToFileURL(process.argv[1]).href) {
   const ok = reportFigureGates('human-cast', humanCastGateFailures());
   if (!ok) process.exitCode = 1;
 }
