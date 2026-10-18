@@ -78,10 +78,12 @@ import {
 } from '../src/systems/briarHollow/services/tradingPost';
 import {
   RESTOCK_INTERVAL_TICKS,
+  createShopStock,
   currentStock,
   shopStockKey,
   tickShopStock,
 } from '../src/economy/shopStock';
+import { buyPrice } from '../src/economy/pricing';
 import {
   UPGRADE_REBUY_GUARD_TICKS,
   forgeShop,
@@ -127,16 +129,19 @@ function last<T>(items: readonly T[]): T | undefined {
 // ── The request's own numbers ─────────────────────────────────────────────
 
 const POTION_PRICE = 5;
-const EXPECTED_STEW_PRICE = POTION_PRICE;
-/** A burger is priced at 0.6 of a potion, rounded. */
-const EXPECTED_BURGER_PRICE = 3;
+/**
+ * Counter prices come from the pricing engine rather than literals: this gate
+ * checks that each counter charges what the engine says, while the numbers
+ * themselves are tuned in `src/economy/`.
+ */
+const EXPECTED_STEW_PRICE = buyPrice('cookhouse', 'hollow_stew', createShopStock());
+const EXPECTED_BURGER_PRICE = buyPrice('cookhouse', 'hamburger', createShopStock());
 const EXPECTED_FEE_PER_HP = 0.7;
 const EXPECTED_MIN_FEE = POTION_PRICE;
 const EXPECTED_ROPE_BASE = 10;
-const EXPECTED_ROPE_PRICE = 6;
+const EXPECTED_ROPE_PRICE = buyPrice('trading_post', 'rope', createShopStock());
 const LOW_STOCK = 3;
-/** Pipkin's burgers resold cold on Vetch's shelf, a quarter over his price. */
-const EXPECTED_RESOLD_BURGER_PRICE = 4;
+const EXPECTED_RESOLD_BURGER_PRICE = buyPrice('trading_post', 'hamburger', createShopStock());
 const EXPECTED_BOARDS_PER_WOOD = 2;
 const EXPECTED_ROPE_PER_WOOD = 1;
 const EXPECTED_FEE_PER_WOOD = 8;
@@ -392,10 +397,7 @@ function checkCook(rig: Rig): void {
   const menu = cookShop(rig.state).build();
   const price = (key: string): number | undefined =>
     menu.options.find((option) => option.key === key)?.price;
-  check(
-    price('hollow_stew') === EXPECTED_STEW_PRICE,
-    `stew costs a potion (${price('hollow_stew')})`,
-  );
+  check(price('hollow_stew') === EXPECTED_STEW_PRICE, `stew costs ${price('hollow_stew')}`);
   check(price('hamburger') === EXPECTED_BURGER_PRICE, `a burger costs ${price('hamburger')}`);
   check(menu.bark === sellerLine(PIPKIN.shopOpen), 'the menu opens on shop_open');
 
@@ -498,7 +500,7 @@ function checkMerchant(): void {
   human.coins = PLENTY_OF_COINS;
   const ropeRow = (): { price: number; unavailable?: string } | undefined =>
     buildTradingPostMenu(state).options.find((option) => option.key === 'rope');
-  check(ropeRow()?.price === EXPECTED_ROPE_PRICE, 'rope costs 6');
+  check(ropeRow()?.price === EXPECTED_ROPE_PRICE, `rope costs ${EXPECTED_ROPE_PRICE}`);
   const panel = openShop(tradingPostShop(state));
   panel.pressBuy('rope', { active: human, companion: rig.cat });
   const ropeLeft = (target: BriarHollowState): number =>

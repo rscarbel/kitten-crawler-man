@@ -179,7 +179,7 @@ function forgeSession(): { session: ShopSession; party: ShopParty } {
   const human = new HumanPlayer(0, 0, TILE_SIZE);
   const cat = new CatPlayer(0, 0, TILE_SIZE);
   const axeNext = toolTierDef('axe', TOOL_TIER_LONG_HAFT);
-  human.coins = forgeCoinPrice(TOOL_TIER_LONG_HAFT);
+  human.coins = forgeCoinPrice('axe', TOOL_TIER_LONG_HAFT);
   const { wood = 0, stone = 0 } = axeNext.costMaterials;
   human.inventory.addItem('wood', Math.floor(wood * FORGE_MATERIAL_SHARE));
   human.inventory.addItem('stone', stone);

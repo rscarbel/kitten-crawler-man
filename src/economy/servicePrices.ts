@@ -1,7 +1,8 @@
 /**
  * Every coin fee charged at a counter for an effect rather than an item: rooms,
  * blessings, drills, sharpening, tattoos, readings, hires, on-the-spot food and
- * drink, the forge's tool upgrades.
+ * drink. The forge's tool upgrades are not here: they cost the tool's own base
+ * in `itemPrices.ts`.
  *
  * These live together, beside the item prices, so a rebalancing pass sees every
  * coin sink in one file. Unlike items they carry no stock and nothing buys them
@@ -56,12 +57,6 @@ export const SERVICE_PRICES = {
     bomo: 300,
     sledge: 350,
   },
-  /**
-   * Coins per tool upgrade rung, shared by axes and pickaxes. The free starter
-   * tier has no entry; the materials each rung also takes stay with the tool
-   * tiers.
-   */
-  forge: { hardened: 250, long_haft: 750, ratkin_forge: 2000, deepwood: 5000, graveyard: 12000 },
   /**
    * Sella's treatment scales with the party's missing health; the per-point rate
    * is a fraction of a coin because a hurt party is only missing a few dozen

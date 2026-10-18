@@ -1,6 +1,6 @@
 import type { ItemId } from './ItemDefs';
 import type { ResourceCost } from './partyResources';
-import { SERVICE_PRICES } from '../economy/servicePrices';
+import { ITEM_PRICES } from '../economy/itemPrices';
 
 /** What a tool gathers. Also the two harvest node families (`07`). */
 export type ToolKind = 'axe' | 'pickaxe';
@@ -58,22 +58,13 @@ export function toolNodeSpareChance(kind: ToolKind, tier: ToolTier): number {
   return AXE_SPARE_CHANCE_PER_TIER * tiersAboveStarter;
 }
 
-/** The starter tool is handed out, never bought. */
-const STARTER_TOOL_COINS = 0;
-
-/** Coins the forge charges for each tier, indexed by {@link ToolTier}. */
-const FORGE_COINS_BY_TIER = [
-  STARTER_TOOL_COINS,
-  SERVICE_PRICES.forge.hardened,
-  SERVICE_PRICES.forge.long_haft,
-  SERVICE_PRICES.forge.ratkin_forge,
-  SERVICE_PRICES.forge.deepwood,
-  SERVICE_PRICES.forge.graveyard,
-] as const;
-
-/** Coin price at the forge for a tool `tier`, the same for axes and pickaxes. */
-export function forgeCoinPrice(tier: ToolTier): number {
-  return FORGE_COINS_BY_TIER[tier];
+/**
+ * Coins the forge charges for a tool: the tool item's base price, with no
+ * markup, so `ITEM_PRICES` is the one place a tool's worth is set. The
+ * starter tier is handed out rather than bought, so its base is never charged.
+ */
+export function forgeCoinPrice(kind: ToolKind, tier: ToolTier): number {
+  return ITEM_PRICES[toolTierDef(kind, tier).id].base;
 }
 
 /** The starter and Hardened tiers are bought with coins alone. */

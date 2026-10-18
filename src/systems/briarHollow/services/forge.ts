@@ -211,7 +211,7 @@ function upgradeOption(tools: PartyToolsState, kind: ToolKind): ShopRow {
     };
   }
   const next = toolTierDef(kind, nextTier);
-  const nextPrice = forgeCoinPrice(nextTier);
+  const nextPrice = forgeCoinPrice(kind, nextTier);
   const gain = `${describeToolTierGain(next)} (now ${describeToolTierGain(current)}). Applies to Carl and Donut.`;
   const pitch = `Replaces your ${current.name}. ${next.description} ${gain}`;
   if (!hasMaterials(next.costMaterials)) {
@@ -231,7 +231,7 @@ function upgradeOption(tools: PartyToolsState, kind: ToolKind): ShopRow {
 function partyCanAffordTier(party: ServiceParty, kind: ToolKind, tier: ToolTier): boolean {
   const { human, cat } = party;
   const materials = toolTierDef(kind, tier).costMaterials;
-  return canAffordCoins(human, cat, forgeCoinPrice(tier)) && canAfford(human, cat, materials);
+  return canAffordCoins(human, cat, forgeCoinPrice(kind, tier)) && canAfford(human, cat, materials);
 }
 
 /** The next tier of `kind` when the party can pay for all of it right now, else null. */
