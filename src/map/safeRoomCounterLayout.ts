@@ -33,7 +33,7 @@
  */
 
 import type { GameMap } from './GameMap';
-import { mordecaiAndBedTiles } from './safeRoomFixtures';
+import { isFieldStation, mordecaiAndBedTiles } from './safeRoomFixtures';
 import {
   SAFE_ROOM_COUNTER,
   SAFE_ROOM_COUNTER_BACK,
@@ -214,6 +214,7 @@ export function planSafeRoomCounters(map: GameMap): ReadonlyArray<SafeRoomCounte
   const layouts: SafeRoomCounterLayout[] = [];
   for (let safeRoomIndex = 0; safeRoomIndex < map.safeRooms.length; safeRoomIndex++) {
     const safeRoom = map.safeRooms[safeRoomIndex];
+    if (isFieldStation(safeRoom)) continue;
     const bounds = safeRoom.bounds;
     if (bounds.h < MIN_ROOM_HEIGHT_FOR_COUNTER || bounds.w < MIN_ROOM_WIDTH_FOR_COUNTER) continue;
 

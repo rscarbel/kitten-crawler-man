@@ -41,6 +41,11 @@ import {
   SAFE_ROOM_TABLE,
   SAFE_ROOM_STOOL,
   SAFE_ROOM_LARDER,
+  LAB_STATION_PROP_TILE_TYPES,
+  LAB_STATION_COT,
+  LAB_STATION_BARRICADE,
+  LAB_STATION_JERRY_CAN,
+  LAB_STATION_LANTERN,
   TILE_TYPE_COUNT,
   INTERIOR_COUNTER,
   INTERIOR_WALL,
@@ -218,6 +223,7 @@ const NON_WALKABLE_TILE_TYPES: readonly number[] = [
   BONE_PILE,
   SLUMPED_SKELETON,
   PRISON_COVER,
+  ...LAB_STATION_PROP_TILE_TYPES,
 ];
 
 /**
@@ -245,6 +251,11 @@ const SIGHT_TRANSPARENT_TILE_TYPES: readonly number[] = [
   // A knee-high heap of bones and a skeleton sitting on the floor.
   BONE_PILE,
   SLUMPED_SKELETON,
+  // The field station's cot, barricade, jerry can and lantern are knee to waist high.
+  LAB_STATION_COT,
+  LAB_STATION_BARRICADE,
+  LAB_STATION_JERRY_CAN,
+  LAB_STATION_LANTERN,
 ];
 
 /**

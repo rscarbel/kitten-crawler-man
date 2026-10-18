@@ -111,6 +111,8 @@ export type AdviceObjectiveId =
   | 'krakaren_clone'
   | 'stealth_gate'
   | 'spider_lab'
+  | 'spider_lab_started'
+  | 'spider_lab_station'
   | 'ball_of_swine'
   | 'ball_of_swine_distant'
   | 'the_circus'

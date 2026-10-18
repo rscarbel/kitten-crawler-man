@@ -604,9 +604,9 @@ export interface BuildingInteriorCircusContext {
  */
 const DETACHED_ROOM_WORLD_SEED = 0;
 
-/** Wendell's voice for his small talk on the rare frame he is not found standing in his room. */
 /** A human occupant's reaction to a break. */
 const HUMAN_TUT_SOUNDS: ReadonlyArray<SoundId> = ['townsfolk_tut_1', 'townsfolk_tut_2'];
+/** Wendell's voice for his small talk on the rare frame he is not found standing in his room. */
 const WENDELL_FALLBACK_SPEECH_STYLE: CitizenSpeechStyle = 'townsfolkMasculine';
 
 /**

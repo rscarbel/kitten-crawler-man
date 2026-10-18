@@ -14,6 +14,7 @@ import { SkillBookPrompt } from '../../../ui/SkillBookPrompt';
 import { drawCraftSkillIcon } from '../../../ui/icons/craftSkillIcons';
 import { drawSkillIcon } from '../../../ui/icons/skillIcons';
 import {
+  ActivityDifficultyGate,
   activityDifficultyPickerSurface,
   activityDiscardConfirmSurface,
 } from '../../../ui/screens/dialogs/activityDifficultyPicker';
@@ -30,6 +31,7 @@ import { skillBookDialogSurface } from '../../../ui/screens/dialogs/skillBookDia
 import { stairwellPromptSurface } from '../../../ui/screens/dialogs/stairwellPrompt';
 import { towerStairsPromptSurface } from '../../../ui/screens/dialogs/towerStairsPrompt';
 import type { DialogFixture } from './fixture';
+import { SPIDER_QUEST_NAME } from '../../../systems/SpiderQuestSystem';
 
 /** Frames of `update()` that carry an award card through its whole reveal. */
 const FRAMES_TO_SETTLE = 120;
@@ -211,6 +213,16 @@ export const FIXTURES: readonly DialogFixture[] = [
           : null,
       ),
     ],
+  },
+  {
+    name: 'spider-terminal-difficulty',
+    surfaces: (shown) => {
+      const gate = new ActivityDifficultyGate();
+      gate.open({ activity: SPIDER_QUEST_NAME, onPick: noop });
+      return gate
+        .surfaces('spider-terminal-difficulty')
+        .map((surface) => ({ ...surface, isOpen: () => shown() && surface.isOpen() }));
+    },
   },
   towerFixture('tower-stairs-ascend', { kind: 'ascend', targetFloorLabel: '2nd Floor' }),
   towerFixture('tower-stairs-finale', { kind: 'finale' }),

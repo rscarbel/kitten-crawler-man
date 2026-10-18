@@ -107,16 +107,26 @@ const LANE_OFFSET_MAX = 28;
 const POCKET_OFFSET_MIN = 22;
 const POCKET_OFFSET_MAX = 30;
 /**
- * How far off the chain the spider lab is seated. Far larger than a pocket's
- * because the lab is 40×32: its own half-width plus the chain room's plus the
- * room gap is already most of this.
+ * How much further off the chain than its approach strictly needs the spider
+ * lab may be seated, so the hallways are not always exactly their shortest.
  */
-const LAB_OFFSET_MIN = 34;
-const LAB_OFFSET_MAX = 44;
+const LAB_OFFSET_SLACK_TILES = 6;
+/**
+ * Shortest the hallway from the chain room to the station may be: room for the
+ * scientist's post at its mouth, the point he stops a crawler at, and dressing.
+ */
+export const LAB_OUTER_HALLWAY_MIN_TILES = 10;
+/** Shortest the hallway from the station to the lab may be: room for the worst of its decay. */
+export const LAB_INNER_HALLWAY_MIN_TILES = 8;
+/** Station seatings tried between one host and its lab before the lab is re-seated. */
+const LAB_STATION_SEAT_ATTEMPTS = 3;
+const LAB_HALLWAY_KIND = 'standard' as const satisfies CorridorKind;
+/** A standard corridor is its centre line plus one tile either side. */
+const STANDARD_CORRIDOR_WIDTH_TILES = 3;
 /** Widest room-index departure from a safe-access pocket's nominal host tried before giving up. */
 const SAFE_ACCESS_HOST_SEARCH_STEPS = 2;
 /** Offsets tried per candidate host before the lab moves on to the next room. */
-const LAB_OFFSETS_PER_HOST = 3;
+const LAB_OFFSETS_PER_HOST = 4;
 /** The lab hangs off the earlier part of the spine, so the option is seen early. */
 const LAB_CHAIN_NUMERATOR = 2;
 const LAB_CHAIN_DENOMINATOR = 3;
@@ -211,6 +221,26 @@ export interface SpineLane {
   rooms: Rect[];
 }
 
+/**
+ * The spider lab and its approach: the chain room it hangs off, a hallway to a
+ * small station, and a second hallway on from the station to the lab.
+ */
+export interface SpineLab {
+  room: Rect;
+  station: Rect;
+  /** Host chain room to the station. */
+  outerCorridor: PlannedCorridor;
+  /** Station to the lab. */
+  innerCorridor: PlannedCorridor;
+}
+
+/** The lab's size, and the station's seated on its approach. */
+export interface SpineLabRequest {
+  w: number;
+  h: number;
+  station: { w: number; h: number };
+}
+
 export interface SpinePlan {
   /** The forced chain, in walking order, endpoints exclusive. */
   chain: SpineChainRoom[];
@@ -233,7 +263,7 @@ export interface SpinePlan {
   stealthGateEntryCorridor: PlannedCorridor | null;
   stealthGateExitCorridor: PlannedCorridor | null;
   lanes: SpineLane[];
-  labRoom: Rect | null;
+  lab: SpineLab | null;
   pockets: SpinePocket[];
   corridors: PlannedCorridor[];
 }
@@ -255,7 +285,7 @@ export interface SpineRequest {
   /** Null on a floor with no stealth gate room. */
   stealthGate: StealthGateRequest | null;
   /** Null on a floor with no spider lab. */
-  labRoom: { w: number; h: number } | null;
+  labRoom: SpineLabRequest | null;
   /**
    * Dead-end treasure pockets to hang off chain rooms. Best-effort: a pocket
    * that will not seat is dropped rather than failing the spine, because it
@@ -510,8 +540,10 @@ export function planSpine(segments: SegmentMap, request: SpineRequest): SpinePla
 
   // ── Spider lab ──────────────────────────────────────────────────────────
   let labRoom: Rect | null = null;
+  let labStation: Rect | null = null;
   let labHostIndex = 0;
   if (request.labRoom !== null) {
+    const labRequest = request.labRoom;
     const labHosts =
       gateFault === 'lab-on-gate' && gateIndex !== null
         ? [gateIndex]
@@ -526,18 +558,39 @@ export function planSpine(segments: SegmentMap, request: SpineRequest): SpinePla
               ),
           );
     for (const hostIndex of labHosts) {
-      // Two offsets per host, because the lab is 40×32 and the difference between
-      // fitting and not is often a handful of tiles further out.
+      // Several offsets per host, because the lab is 40×32 and the difference
+      // between fitting and not is often a handful of tiles further out.
+      const heading = chainHeadingAt(centres, hostIndex);
+      const approachSpan = labApproachSpan(
+        { x: -heading.y, y: heading.x },
+        chain[hostIndex].rect,
+        labRequest,
+      );
       for (let attempt = 0; attempt < LAB_OFFSETS_PER_HOST && labRoom === null; attempt++) {
-        labRoom = seatBesideChain(
+        const snapshot = segments.snapshot();
+        const seatedLab = seatBesideChain(
           segments,
           claimSegment(),
           centres[hostIndex],
-          chainHeadingAt(centres, hostIndex),
-          randomInt(LAB_OFFSET_MIN, LAB_OFFSET_MAX),
-          request.labRoom.w,
-          request.labRoom.h,
+          heading,
+          approachSpan + randomInt(0, LAB_OFFSET_SLACK_TILES),
+          labRequest.w,
+          labRequest.h,
         );
+        if (seatedLab === null) continue;
+        const station = seatLabStation(
+          segments,
+          claimSegment(),
+          chain[hostIndex].rect,
+          seatedLab,
+          labRequest.station,
+        );
+        if (station === null) {
+          segments.rollback(snapshot);
+          continue;
+        }
+        labRoom = seatedLab;
+        labStation = station;
       }
       if (labRoom !== null) {
         labHostIndex = hostIndex;
@@ -553,19 +606,20 @@ export function planSpine(segments: SegmentMap, request: SpineRequest): SpinePla
   // tile of any room but its own two endpoints, so threading them last is what
   // lets the rooms take the positions the curve asked for.
   const corridors: PlannedCorridor[] = [];
-  const link = (fromRect: Rect, toRect: Rect, isSpecial: boolean): boolean => {
-    const segment = claimSegment();
-    const corridor = planSpineCorridor(
-      segments,
-      segment,
-      fromRect,
-      toRect,
-      request.pickCorridorKind(isSpecial, rectCentre(toRect)),
-    );
+  const commitCorridor = (corridor: PlannedCorridor | null, segment: number): boolean => {
     if (corridor === null) return false;
     segments.claimCorridor(corridor.tiles, segment);
     corridors.push(corridor);
     return true;
+  };
+  const link = (fromRect: Rect, toRect: Rect, isSpecial: boolean): boolean => {
+    const segment = claimSegment();
+    const kind = request.pickCorridorKind(isSpecial, rectCentre(toRect));
+    return commitCorridor(planSpineCorridor(segments, segment, fromRect, toRect, kind), segment);
+  };
+  const linkLabHallway = (fromRect: Rect, toRect: Rect): boolean => {
+    const segment = claimSegment();
+    return commitCorridor(planLabHallway(segments, segment, fromRect, toRect), segment);
   };
 
   // The quest room is never chain[0] — it is drawn from the chain's interior —
@@ -593,13 +647,28 @@ export function planSpine(segments: SegmentMap, request: SpineRequest): SpinePla
     }
   }
 
-  if (labRoom !== null) {
+  let lab: SpineLab | null = null;
+  if (labRoom !== null && labStation !== null) {
     // The host the lab was seated beside, never merely the nearest chain centre:
     // the quest room is excluded from hosting on purpose — its onward doorways
     // go behind boards for the length of a wave — and a corridor drawn to
     // whichever room happened to be closest could strand the lab behind them for
     // a party that accepted the nursery on the way past.
-    if (!link(chain[labHostIndex].rect, labRoom, true)) return null;
+    //
+    // Both hallways are always the wide kind: they carry the approach's dressing,
+    // and a one-tile passage would leave it no room beside the walk.
+    const host = chain[labHostIndex].rect;
+    if (!linkLabHallway(host, labStation)) return null;
+    const outerCorridor = corridors[corridors.length - 1];
+    if (!linkLabHallway(labStation, labRoom)) return null;
+    const innerCorridor = corridors[corridors.length - 1];
+    if (hallwayLengthTiles(outerCorridor, host, labStation) < LAB_OUTER_HALLWAY_MIN_TILES) {
+      return null;
+    }
+    if (hallwayLengthTiles(innerCorridor, labStation, labRoom) < LAB_INNER_HALLWAY_MIN_TILES) {
+      return null;
+    }
+    lab = { room: labRoom, station: labStation, outerCorridor, innerCorridor };
   }
 
   // ── Safe-room access along the chain ─────────────────────────────────────
@@ -703,10 +772,83 @@ export function planSpine(segments: SegmentMap, request: SpineRequest): SpinePla
     stealthGateEntryCorridor,
     stealthGateExitCorridor,
     lanes,
-    labRoom,
+    lab,
     pockets,
     corridors,
   };
+}
+
+/**
+ * Seats the lab's station on the line between its host and the lab, far
+ * enough from each that both hallways keep their minimum length.
+ *
+ * Measured along the line between the two centres, using each rectangle's
+ * half-extent in that direction. The hallways are L-shaped, so the walk is
+ * never shorter than this; `planSpine` still measures them once they are cut.
+ */
+function seatLabStation(
+  segments: SegmentMap,
+  segment: number,
+  host: Rect,
+  lab: Rect,
+  size: { w: number; h: number },
+): Rect | null {
+  const from = rectCentre(host);
+  const to = rectCentre(lab);
+  const span = Math.hypot(to.x - from.x, to.y - from.y);
+  if (span === 0) return null;
+  const unit = normalize(to.x - from.x, to.y - from.y);
+  const nearest = reachAlong(unit, host) + LAB_OUTER_HALLWAY_MIN_TILES + reachAlong(unit, size);
+  const farthest =
+    span - reachAlong(unit, lab) - LAB_INNER_HALLWAY_MIN_TILES - reachAlong(unit, size);
+  if (nearest > farthest) return null;
+  for (let attempt = 0; attempt < LAB_STATION_SEAT_ATTEMPTS; attempt++) {
+    const along = nearest + worldRandom() * (farthest - nearest);
+    const rect = rectCentredOn(
+      { x: Math.round(from.x + unit.x * along), y: Math.round(from.y + unit.y * along) },
+      size.w,
+      size.h,
+    );
+    if (segments.canPlaceRoom(rect, segment)) {
+      segments.addRoom(rect, segment);
+      return rect;
+    }
+  }
+  return null;
+}
+
+/** How far a rectangle reaches from its centre in direction `unit`. */
+function reachAlong(unit: Point, rect: { w: number; h: number }): number {
+  return (Math.abs(unit.x) * rect.w + Math.abs(unit.y) * rect.h) / 2;
+}
+
+/**
+ * The shortest centre-to-centre distance at which a lab seated off `host` in
+ * direction `unit` leaves room for both hallways and the station between them.
+ */
+function labApproachSpan(unit: Point, host: Rect, lab: SpineLabRequest): number {
+  return Math.ceil(
+    reachAlong(unit, host) +
+      LAB_OUTER_HALLWAY_MIN_TILES +
+      reachAlong(unit, lab.station) * 2 +
+      LAB_INNER_HALLWAY_MIN_TILES +
+      reachAlong(unit, lab),
+  );
+}
+
+/**
+ * How long a planned corridor runs between its two rooms, in tiles walked:
+ * its tiles outside both rooms, over its width.
+ */
+function hallwayLengthTiles(corridor: PlannedCorridor, from: Rect, to: Rect): number {
+  const inside = (rect: Rect, tile: Point): boolean =>
+    tile.x >= rect.x && tile.x < rect.x + rect.w && tile.y >= rect.y && tile.y < rect.y + rect.h;
+  const outside = corridor.tiles.filter((tile) => !inside(from, tile) && !inside(to, tile));
+  return outside.length / corridorWidthTiles(corridor.kind);
+}
+
+function corridorWidthTiles(kind: CorridorKind): number {
+  return kind === 'standard' ? STANDARD_CORRIDOR_WIDTH_TILES : 1;
 }
 
 /** Seats a lane's one or two rooms alongside the chain link it bridges. */
@@ -778,7 +920,63 @@ function planSpineCorridor(
 ): PlannedCorridor | null {
   const direct = planCorridorBetween(segments, segment, fromRect, toRect, kind);
   if (direct !== null) return direct;
+  return planDogLegCorridor(segments, segment, fromRect, toRect, kind, () => true);
+}
 
+/**
+ * One of the lab's two hallways: always the wide kind, and meeting both its
+ * rooms square on.
+ *
+ * Square on, because an L whose leg runs along a room's wall opens the whole
+ * run of that wall onto the corridor: the station would become a bulge in the
+ * hallway rather than a room with a door, and the hallway's mouth a whole side
+ * of the chain room rather than an opening the scientist can stand beside.
+ */
+function planLabHallway(
+  segments: SegmentMap,
+  segment: number,
+  fromRect: Rect,
+  toRect: Rect,
+): PlannedCorridor | null {
+  const kind = LAB_HALLWAY_KIND;
+  const meetsSquarely = (tiles: ReadonlyArray<Point>): boolean =>
+    wallTilesOpened(tiles, fromRect) <= STANDARD_CORRIDOR_WIDTH_TILES &&
+    wallTilesOpened(tiles, toRect) <= STANDARD_CORRIDOR_WIDTH_TILES;
+  const from = rectCentre(fromRect);
+  const to = rectCentre(toRect);
+  for (const horizontalFirst of CORRIDOR_LEG_ORDERS) {
+    const tiles = segments.corridorTiles(from, to, kind, horizontalFirst);
+    if (!meetsSquarely(tiles)) continue;
+    if (segments.canCarveCorridor(tiles, segment, [fromRect, toRect])) {
+      return { tiles, kind, target: to };
+    }
+  }
+  return planDogLegCorridor(segments, segment, fromRect, toRect, kind, meetsSquarely);
+}
+
+/** How many of a room's wall tiles a corridor's tiles would open, as tiles just outside it. */
+function wallTilesOpened(tiles: ReadonlyArray<Point>, rect: Rect): number {
+  const inside = (x: number, y: number): boolean =>
+    x >= rect.x && x < rect.x + rect.w && y >= rect.y && y < rect.y + rect.h;
+  return tiles.filter(
+    (tile) =>
+      !inside(tile.x, tile.y) &&
+      (inside(tile.x + 1, tile.y) ||
+        inside(tile.x - 1, tile.y) ||
+        inside(tile.x, tile.y + 1) ||
+        inside(tile.x, tile.y - 1)),
+  ).length;
+}
+
+/** A corridor through an offset pivot, for when a plain L will not fit. */
+function planDogLegCorridor(
+  segments: SegmentMap,
+  segment: number,
+  fromRect: Rect,
+  toRect: Rect,
+  kind: CorridorKind,
+  accept: (tiles: ReadonlyArray<Point>) => boolean,
+): PlannedCorridor | null {
   const from = rectCentre(fromRect);
   const to = rectCentre(toRect);
   const spanX = to.x - from.x;
@@ -803,6 +1001,7 @@ function planSpineCorridor(
             ...segments.corridorTiles(from, pivot, kind, firstLegHorizontal),
             ...segments.corridorTiles(pivot, to, kind, secondLegHorizontal),
           ];
+          if (!accept(tiles)) continue;
           if (!segments.canCarveCorridor(tiles, segment, [fromRect, toRect])) continue;
           return { tiles, kind, target: to };
         }

@@ -161,6 +161,7 @@
     "render:casino-dealer": "tsx scripts/render-casino-dealer.ts",
     "render:tito": "tsx scripts/render-tito.ts",
     "render:cast-motion": "tsx scripts/render-cast-motion.ts",
+    "render:scientist": "tsx scripts/render-scientist.ts",
     "render:shady": "tsx scripts/render-shady.ts",
     "render:gumgum": "tsx scripts/render-gumgum.ts",
     "render:necromancer": "tsx scripts/render-necromancer.ts",

@@ -38,6 +38,7 @@
 import { allocCanvas, surfaceContext, type CanvasSurface } from '../core/canvasSurface';
 import {
   paintBoardFrame,
+  paintChordLink,
   paintLaneBed,
   paintLaneHighlight,
   paintNoteKeycap,
@@ -51,6 +52,7 @@ import {
   BOARD_BAKE_SCALE,
   BOARD_IMG_W,
   LANE_BED_IMG_W,
+  LANE_GAP_IMG,
   NOTE_IMG_SIZE,
   RECEPTOR_IMG_SIZE,
   TOUCH_IMG_SIZE,
@@ -198,6 +200,29 @@ export function touchButtonArt(
 ): CanvasSurface | null {
   return pieceSurface(touchKey(lane, state), size, size, TOUCH_IMG_SIZE, (ctx, w) =>
     paintTouchButton(ctx, w, LANE_PALETTES[lane], state),
+  );
+}
+
+/**
+ * The rung joining a double note's keycaps, `width` across and `height` deep.
+ * Keyed on how many lanes it spans as well as its colours, so a board showing
+ * an adjacent pair and a wide pair at once keeps one surface for each instead
+ * of repainting between them every frame.
+ */
+export function chordLinkArt(
+  laneSpan: number,
+  width: number,
+  height: number,
+  core: string,
+  glow: string,
+): CanvasSurface | null {
+  const designWidth = laneSpan * (LANE_BED_IMG_W + LANE_GAP_IMG);
+  return pieceSurface(
+    `chord_${laneSpan}_${core}_${glow}`,
+    width,
+    height,
+    designWidth,
+    (ctx, w, h) => paintChordLink(ctx, w, h, core, glow),
   );
 }
 

@@ -51,6 +51,8 @@ import {
   BOPCA_TILE_RAMP,
   BOPCA_HEARTH_RAMP,
   BOPCA_SCUFF_RAMP,
+  STATION_PLATE_RAMP,
+  DECON_PAINT_RAMP,
   CELLAR_STONE_RAMP,
   CELLAR_DRESSED_STONE_RAMP,
   CELLAR_MORTAR_RAMP,
@@ -3230,6 +3232,127 @@ const bopcaScuff: Material = {
   },
 };
 
+// ── The spider lab's field station ─────────────────────────────────────────
+
+const STATION_PLATE_GROUND: GroundOptions = { patchPeriod: 8, patchWeight: 0.25, contrast: 0.4 };
+/** Matches floor 2's checker plate pitch, so the station reads as the same kind of steel. */
+const STATION_PLATE_CELLS_PER_TILE = 2;
+const STATION_PLATE_LOZENGE_HALF_LENGTH_PX = 13;
+const STATION_PLATE_LOZENGE_HALF_WIDTH_PX = 4;
+const STATION_PLATE_BEVEL_BAND = 0.4;
+/**
+ * Far softer relief than floor 2's plate: a whole room stands on this, and the
+ * floor is backdrop. The studs only need to say "steel decking".
+ */
+const STATION_PLATE_TOP_LIGHT = 1.06;
+const STATION_PLATE_BEVEL_STRENGTH = 0.8;
+const STATION_PLATE_SHEEN_COUNT = 3;
+const STATION_PLATE_SHEEN_MIN_RADIUS = 8;
+const STATION_PLATE_SHEEN_MAX_RADIUS = 16;
+const STATION_PLATE_SHEEN_ALPHA = 0.06;
+const STATION_PLATE_SHEEN_SOFTNESS = 1;
+const STATION_PLATE_SHEEN_SALT = 97;
+
+function paintStationPlate(ctx: PaintContext): void {
+  paintNoiseGround(ctx, STATION_PLATE_RAMP, STATION_PLATE_GROUND);
+  paintMineralGrain(ctx, STATION_PLATE_RAMP, ctx.detail + 91);
+  paintDiamondPlate(ctx, {
+    cellsPerTile: STATION_PLATE_CELLS_PER_TILE,
+    lozengeHalfLengthPx: STATION_PLATE_LOZENGE_HALF_LENGTH_PX,
+    lozengeHalfWidthPx: STATION_PLATE_LOZENGE_HALF_WIDTH_PX,
+    bevelBand: STATION_PLATE_BEVEL_BAND,
+    topLight: STATION_PLATE_TOP_LIGHT,
+    bevelStrength: STATION_PLATE_BEVEL_STRENGTH,
+  });
+}
+
+/**
+ * Galvanised steel decking, calm enough for a whole room: the station's floor.
+ * Clean on purpose — the hallways either side of it are wrecked, and the
+ * station is the ground the team still holds.
+ */
+const stationPlate: Material = {
+  id: 'station_plate',
+  label: 'Field station galvanised decking',
+  patchTiles: 4,
+  variants: 2,
+  paint: (ctx) => {
+    paintStationPlate(ctx);
+    paintSpeckles(ctx, ctx.detail + STATION_PLATE_SHEEN_SALT, {
+      count: STATION_PLATE_SHEEN_COUNT,
+      minRadius: STATION_PLATE_SHEEN_MIN_RADIUS,
+      maxRadius: STATION_PLATE_SHEEN_MAX_RADIUS,
+      ramp: { ...STATION_PLATE_RAMP, mid: STATION_PLATE_RAMP.light },
+      alpha: STATION_PLATE_SHEEN_ALPHA,
+      softness: STATION_PLATE_SHEEN_SOFTNESS,
+    });
+  },
+};
+
+/** Diagonal bands across the stripe, one per half tile; must divide the patch so it wraps. */
+const DECON_STRIPE_PERIOD_PX = TILE_PX / 2;
+/** Share of each band painted yellow; the rest is the plate showing through. */
+const DECON_STRIPE_PAINT_SHARE = 0.55;
+/** How much of the yellow survives where boots have worn it, at the most worn. */
+const DECON_PAINT_WORN_FLOOR = 0.25;
+/** The paint never covers the steel completely: it is a thin coat, scuffed from new. */
+const DECON_PAINT_MAX_COVERAGE = 0.75;
+const DECON_WEAR_PERIOD_PER_TILE = 1;
+const DECON_WEAR_OCTAVES = 3;
+/** Softens the paint's edge across a pixel, so the stripe does not shimmer when scaled. */
+const DECON_EDGE_SOFTEN_PX = 1;
+const DECON_WEAR_SALT = 101;
+const DECON_GRIME_COUNT = 5;
+const DECON_GRIME_MIN_RADIUS = 4;
+const DECON_GRIME_MAX_RADIUS = 10;
+const DECON_GRIME_ALPHA = 0.12;
+const DECON_GRIME_SOFTNESS = 1;
+const DECON_GRIME_SALT = 103;
+
+/**
+ * The station's decking with a painted decontamination stripe: worn safety
+ * yellow in diagonal bands, laid in each doorway as the line the team decided
+ * nothing from the hallway crosses. Stronger than the deck around it, but the
+ * paint is worn through to the steel in patches, so it is an accent at the
+ * door rather than a hazard sign.
+ */
+const stationStripe: Material = {
+  id: 'station_stripe',
+  label: 'Field station decontamination stripe',
+  patchTiles: 2,
+  variants: 2,
+  paint: (ctx) => {
+    paintStationPlate(ctx);
+    const tiles = ctx.size / TILE_PX;
+    ctx.surface.fill((x, y) => {
+      const steel = ctx.surface.get(x, y);
+      const along = positiveMod(x + y, DECON_STRIPE_PERIOD_PX);
+      const paintWidth = DECON_STRIPE_PERIOD_PX * DECON_STRIPE_PAINT_SHARE;
+      const edge = Math.min(along, paintWidth - along);
+      if (edge < 0) return steel;
+      const coverage = Math.min(1, (edge + DECON_EDGE_SOFTEN_PX) / (DECON_EDGE_SOFTEN_PX * 2));
+      const wear = ctx.noise.fbm(
+        x,
+        y,
+        ctx.detail + DECON_WEAR_SALT,
+        DECON_WEAR_OCTAVES,
+        DECON_WEAR_PERIOD_PER_TILE * tiles,
+      );
+      const surviving = DECON_PAINT_WORN_FLOOR + (1 - DECON_PAINT_WORN_FLOOR) * wear;
+      const paint = sampleRamp(DECON_PAINT_RAMP, wear);
+      return mix(steel, paint, coverage * surviving * DECON_PAINT_MAX_COVERAGE);
+    });
+    paintSpeckles(ctx, ctx.detail + DECON_GRIME_SALT, {
+      count: DECON_GRIME_COUNT,
+      minRadius: DECON_GRIME_MIN_RADIUS,
+      maxRadius: DECON_GRIME_MAX_RADIUS,
+      ramp: { ...STATION_PLATE_RAMP, mid: STATION_PLATE_RAMP.shadow },
+      alpha: DECON_GRIME_ALPHA,
+      softness: DECON_GRIME_SOFTNESS,
+    });
+  },
+};
+
 // ── Briar Hollow: the ratkin village ───────────────────────────────────────
 
 const HOLLOW_BOARDS_PER_TILE = 2;
@@ -3794,6 +3917,8 @@ export const MATERIALS: ReadonlyArray<Material> = [
   serviceGrating,
   serviceRubber,
   serviceWashroom,
+  stationPlate,
+  stationStripe,
 ];
 
 export function getMaterial(id: string): Material {

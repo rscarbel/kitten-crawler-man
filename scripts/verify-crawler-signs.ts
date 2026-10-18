@@ -576,7 +576,7 @@ function claimLists(map: GameMap): Array<{ name: string; points: Point[] }> {
           ? []
           : [
               spiderLab.entranceTile,
-              spiderLab.scientistTile,
+              spiderLab.labPostTile,
               spiderLab.computerTile,
               spiderLab.spiderEggTile,
               ...spiderLab.lifeMachineTiles,

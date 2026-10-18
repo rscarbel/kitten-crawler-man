@@ -425,7 +425,7 @@ function checkMap(data: DungeonData, levelDef: LevelDef, totals: SweepTotals | n
   const hallwayAssignments = regionCharacters.hallwayAssignments();
   for (const hallway of regionMap.hallways) {
     const assignment = hallwayAssignments[hallway.id - HALLWAY_REGION_BASE] ?? null;
-    const expected = hallway.arena ? 'special' : 'hallway';
+    const expected = hallway.arena || hallway.labApproach ? 'special' : 'hallway';
     if (assignment?.type !== expected) {
       fail('character', `hallway ${hallway.id} has no ${expected} assignment`);
     }

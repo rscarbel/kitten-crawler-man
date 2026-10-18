@@ -1,10 +1,11 @@
 /**
  * Illustrations for the Keyboard Hero tutorial in the spider's lab: the real
  * board, laid out in the illustration band, with notes falling to the
- * receptors on the first page and a hit beside a miss on the second.
+ * receptors on the first page, a hit beside a miss on the second, and on
+ * Nightmare a double note falling to two receptors at once.
  */
 
-import { HIT_ZONE_IMG_CENTER } from '../../../systems/keyboardHeroGeometry';
+import { HIT_ZONE_IMG_CENTER, KEYBOARD_HERO_GEOMETRY } from '../../../systems/keyboardHeroGeometry';
 import {
   computeKeyboardHeroLayout,
   LANE_BED_IMG_H,
@@ -167,7 +168,13 @@ function onBoard(
   ctx.beginPath();
   ctx.rect(0, 0, rect.width, boardH);
   ctx.clip();
-  drawBoardBase(ctx, layout, () => BOARD_BED_ALPHA, BOARD_HIT_LINE_SCALE);
+  drawBoardBase(
+    ctx,
+    layout,
+    KEYBOARD_HERO_GEOMETRY.normal,
+    () => BOARD_BED_ALPHA,
+    BOARD_HIT_LINE_SCALE,
+  );
   paint(layout, boardH);
   ctx.restore();
 }

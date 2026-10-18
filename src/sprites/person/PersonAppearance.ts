@@ -36,12 +36,7 @@ export type HairStyle =
 
 export type FacialHair = 'none' | 'stubble' | 'mustache' | 'goatee' | 'beard';
 
-/**
- * `labcoat` is never rolled for a crowd: it is a uniform, set on purpose on a
- * genome that needs one (the spider lab's scientist), and its tails reach
- * below the hips where no other top goes.
- */
-export type TopStyle = 'tshirt' | 'longsleeve' | 'jacket' | 'vest' | 'hoodie' | 'labcoat';
+export type TopStyle = 'tshirt' | 'longsleeve' | 'jacket' | 'vest' | 'hoodie';
 export type BottomStyle = 'pants' | 'shorts' | 'skirt';
 export type HatStyle = 'none' | 'cap' | 'beanie' | 'brimmed';
 

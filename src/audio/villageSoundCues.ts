@@ -39,10 +39,15 @@ export const VILLAGE_CUES = {
   bellCrack: ['bell_crack'],
   /** The bell pealing for the victory. */
   bellVictoryPeal: ['bell_victory_peal'],
-  /** A victory firework shooting up. Silent until its recordings exist. */
-  fireworkLaunch: [],
-  /** A victory firework bursting at the top of its flight. Silent until its recordings exist. */
-  fireworkBurst: [],
+  /** A victory firework shooting up. */
+  fireworkLaunch: [
+    'firework_launch_1',
+    'firework_launch_2',
+    'firework_launch_3',
+    'firework_launch_4',
+  ],
+  /** A victory firework bursting at the top of its flight. */
+  fireworkBurst: ['firework_burst_1', 'firework_burst_2', 'firework_burst_3', 'firework_burst_4'],
   /** The dead's horn at the start of each wave. */
   necroWarHorn: ['necro_war_horn'],
   /** The necromancer's arrival, under his boss intro. */

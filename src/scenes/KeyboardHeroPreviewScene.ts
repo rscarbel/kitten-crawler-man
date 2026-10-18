@@ -19,6 +19,9 @@
  *  - **Failure** — the same run with notes deliberately dropped, so the firewall
  *    pip shatter, the red lane flash, the board shake, the glitch bars and the
  *    two-strike fail sequence can be reviewed without having to play badly.
+ *
+ * Both run tabs carry a tier switch, so each tier's chart and fall speed —
+ * Nightmare's double notes included — can be watched in motion.
  */
 
 import { keybindings, type GameAction } from '../core/Keybindings';
@@ -26,8 +29,9 @@ import { setViewportSize, viewportWidth, viewportHeight } from '../core/Viewport
 import { worldText } from '../ui/world/worldText';
 import { PreviewScene, type PreviewControl } from './PreviewScene';
 import { KeyboardHeroSystem } from '../systems/KeyboardHeroSystem';
-import { KEYBOARD_HERO_CHART } from '../systems/keyboardHeroChart';
-import { HIT_ZONE_IMG_CENTER } from '../systems/keyboardHeroGeometry';
+import { KEYBOARD_HERO_CHARTS } from '../systems/keyboardHeroChart';
+import { HIT_ZONE_IMG_CENTER, KEYBOARD_HERO_GEOMETRY } from '../systems/keyboardHeroGeometry';
+import { DIFFICULTY_LABELS, DIFFICULTY_ORDER, type Difficulty } from '../core/difficultyProfiles';
 import {
   LANE_BED_IMG_H,
   LANE_INDICES,
@@ -169,6 +173,7 @@ export class KeyboardHeroPreviewScene extends PreviewScene {
   private tab: PreviewTab = 'Board';
   private viewportIndex = 0;
   private playPerfectly = false;
+  private difficulty: Difficulty = 'normal';
 
   private readonly board = new KeyboardHeroSystem();
   private songTimeMs = 0;
@@ -208,10 +213,19 @@ export class KeyboardHeroPreviewScene extends PreviewScene {
         this.startRun();
       },
     };
-    if (this.tab === 'Failure') return [...tabs, ...viewports, restart];
+    const tiers: PreviewControl[] = DIFFICULTY_ORDER.map((difficulty) => ({
+      label: DIFFICULTY_LABELS[difficulty],
+      selected: difficulty === this.difficulty,
+      onTap: () => {
+        this.difficulty = difficulty;
+        this.startRun();
+      },
+    }));
+    if (this.tab === 'Failure') return [...tabs, ...viewports, ...tiers, restart];
     return [
       ...tabs,
       ...viewports,
+      ...tiers,
       restart,
       {
         id: 'timing',
@@ -237,6 +251,7 @@ export class KeyboardHeroPreviewScene extends PreviewScene {
     // the session would keep accusing a keymap that has since been fixed.
     this.missingBinding = false;
     this.board.start(
+      this.difficulty,
       () => {
         this.outcome = 'completed';
       },
@@ -266,8 +281,9 @@ export class KeyboardHeroPreviewScene extends PreviewScene {
    * rebound keymap is exercised rather than bypassed.
    */
   private playDueNotes(): void {
-    while (this.nextChartIndex < KEYBOARD_HERO_CHART.length) {
-      const entry = KEYBOARD_HERO_CHART[this.nextChartIndex];
+    const notes = KEYBOARD_HERO_CHARTS[this.difficulty].notes;
+    while (this.nextChartIndex < notes.length) {
+      const entry = notes[this.nextChartIndex];
       const offsetMs = this.playPerfectly ? 0 : autoplayOffsetMs(this.nextChartIndex);
       const pressAtMs = entry.timeMs + offsetMs;
       if (pressAtMs > this.songTimeMs) break;
@@ -363,7 +379,13 @@ export class KeyboardHeroPreviewScene extends PreviewScene {
 
   /** The board at rest: beds, hit window, one lit lane, notes, receptors, touch row. */
   private drawStaticBoard(ctx: CanvasRenderingContext2D, layout: KeyboardHeroLayout): void {
-    drawBoardBase(ctx, layout, () => STATIC_BED_ALPHA, HIT_WINDOW_LINE_SCALE);
+    drawBoardBase(
+      ctx,
+      layout,
+      KEYBOARD_HERO_GEOMETRY.normal,
+      () => STATIC_BED_ALPHA,
+      HIT_WINDOW_LINE_SCALE,
+    );
     drawLaneHighlight(
       ctx,
       layout,
@@ -527,7 +549,8 @@ export class KeyboardHeroPreviewScene extends PreviewScene {
     const status = this.missingBinding
       ? 'a movement action has no key bound, so its lane cannot be auto-played'
       : `${this.outcome} · ${detail}`;
-    worldText(ctx, `${viewport.label} at ${(scale * PERCENT).toFixed(0)}% — ${status}`, {
+    const tier = DIFFICULTY_LABELS[this.difficulty];
+    worldText(ctx, `${viewport.label} at ${(scale * PERCENT).toFixed(0)}% · ${tier} — ${status}`, {
       x: MARGIN,
       y: height - MARGIN,
       size: LABEL_SIZE,

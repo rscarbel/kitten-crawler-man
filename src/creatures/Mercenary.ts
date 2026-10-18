@@ -33,6 +33,7 @@ import {
 } from './mercenaries/hirelingSurvival';
 import { drawTriageSparkleSprite } from '../sprites/crocodilianSprite';
 import { HIRELING_STUCK_MIN_STEP_PX } from './mercenaries/hirelingCatchUp';
+import { TargetHoldOffs, type HoldOffQuery } from './targetHoldOffs';
 
 /**
  * A mercenary hired at the Desperado Club's "Meat Shields" desk — a friendly
@@ -201,6 +202,21 @@ export class Mercenary extends Mob {
   private lastStepPx = 0;
   /** Whether last tick's think asked the path to carry it home to its owner. */
   private walkingHome = false;
+  /**
+   * Hostiles it found no way to, and how long its current chase has gone
+   * nowhere. The aggro scan measures from the owner in a straight line,
+   * through walls and shut gates, so without the hold-off a sealed-off mob is
+   * picked again the next frame and the hire stands at the wall for good.
+   */
+  private readonly holdOffs = new TargetHoldOffs();
+  /**
+   * Whether this chase has already been re-aimed at where its target actually
+   * stands. A stall on a route that searched fine is usually a stale last-known
+   * spot, not a missing route, so it earns one fresh aim before a write-off.
+   */
+  private chaseReaimed = false;
+  /** Walks asked of the path, so an approach can tell whether it moved the hire itself. */
+  private walksAsked = 0;
   /**
    * Frames spent walking home to the owner without covering ground, which
    * `MercenarySystem` reads to decide it is stuck and put it back beside them.
@@ -416,6 +432,7 @@ export class Mercenary extends Mob {
 
   /** Paths toward a point, stopping `stopPx` short of it. */
   walkTo(x: number, y: number, stopPx: number): void {
+    this.walksAsked++;
     this.followTargetAStar(x, y, this.speed, stopPx);
   }
 
@@ -541,6 +558,7 @@ export class Mercenary extends Mob {
     const walkedNowhere = this.lastStepPx < HIRELING_STUCK_MIN_STEP_PX;
     this.followStallFrames = this.walkingHome && walkedNowhere ? this.followStallFrames + 1 : 0;
     this.walkingHome = false;
+    this.holdOffs.tick();
 
     this.think();
     this.collectProjectiles();
@@ -612,15 +630,24 @@ export class Mercenary extends Mob {
       return;
     }
 
-    const nearest = this.nearestHostileInRange();
-    this.updateIdle(nearest !== null);
-    const target = this.kit.chooseTarget ? this.kit.chooseTarget(ctx, nearest) : nearest;
+    const { nearest, heldOffInRange } = this.scanHostilesInRange();
+    const hostileInRange = nearest !== null || heldOffInRange;
+    this.updateIdle(hostileInRange);
+    // One it cannot get to is still a hostile beside the party: no time to rest up.
+    if (heldOffInRange) this.survival.noteCombat();
+    const chosen = this.kit.chooseTarget ? this.kit.chooseTarget(ctx, nearest) : nearest;
+    // A kit's own pick — a guard's grudge — answers to the same hold-off as the
+    // scan's, or a held-off grudge is re-chased and re-searched every frame.
+    const chosenHeldOff = chosen !== null && !this.mayPick(chosen);
+    const target = chosenHeldOff ? nearest : chosen;
+    if (chosenHeldOff) this.survival.noteCombat();
     // A fight interrupts the walk home; afterwards the band decides afresh.
     if (target !== null) this.followingOwner = false;
     if (target !== null && this.engaged === null) {
       this.bark('engage');
       this.art.prewarmForFight?.();
     }
+    if (target !== null && target !== this.engaged) this.beginChase(target);
     this.engaged = target;
     if (target !== null) this.survival.noteCombat();
 
@@ -632,12 +659,12 @@ export class Mercenary extends Mob {
 
     const targetDist = Math.hypot(target.x - this.x, target.y - this.y);
     this.updateLastKnown(target);
-    const approached = this.kit.approach?.(ctx, target, targetDist) ?? false;
-    if (!approached) this.closeOn(target, targetDist);
+    if (this.approachOrClose(target, targetDist) === 'abandoned') return;
 
     if (this.attackCooldown > 0) return;
     if (!this.kit.canStartAttack(ctx, target, targetDist)) return;
     this.kit.startAttack(ctx, target, targetDist);
+    this.holdOffs.noteChaseConnected();
     this.survival.noteCombat();
   }
 
@@ -667,22 +694,139 @@ export class Mercenary extends Mob {
     }
   }
 
-  private closeOn(target: Mob, targetDist: number): void {
-    if (targetDist > this.strikeRangePx) {
-      this.followTargetAStar(
-        this.lastKnownTargetX,
-        this.lastKnownTargetY,
-        this.speed,
-        this.strikeRangePx * FOLLOW_STOP_RANGE_RATIO,
-      );
-      return;
-    }
-    this.isMoving = false;
-    this.faceToward(target);
+  /**
+   * The aggro scan finds a hostile through walls, so a fresh fight heads for
+   * where it actually stands rather than wherever the last one was seen, and
+   * searches its route afresh: a failure latched on the way home is not a
+   * verdict on this target.
+   */
+  private beginChase(target: Mob): void {
+    this.chaseReaimed = false;
+    this.holdOffs.beginChase(target);
+    this.aimChaseAt(target);
   }
 
-  /** The nearest living hostile within engage range of the owner, measured from the hireling. */
-  private nearestHostileInRange(): Mob | null {
+  private aimChaseAt(target: Mob): void {
+    this.lastKnownTargetX = target.x;
+    this.lastKnownTargetY = target.y;
+    this.holdOffs.resetStall();
+    this.clearAStarPath();
+  }
+
+  /** Whether the hold-offs let it pick `mob`; the query is only built for a mob actually held. */
+  private mayPick(mob: Mob): boolean {
+    return !this.holdOffs.isHeld(mob) || this.holdOffs.admits(mob, this.holdOffQuery(mob));
+  }
+
+  /** What `mob` is to this hire, for asking whether a hold-off on it still stands. */
+  private holdOffQuery(mob: Mob): HoldOffQuery {
+    const ownerDistancePx = Math.hypot(mob.x - this.owner.x, mob.y - this.owner.y);
+    const distancePx = Math.hypot(mob.x - this.x, mob.y - this.y);
+    const victim = mob.currentTarget;
+    const fightingParty =
+      victim !== null && (victim === this.owner || victim === this || this.allies.includes(victim));
+    return {
+      ownerDistancePx,
+      partyThreat: fightingParty || mob.retaliateMob === this,
+      inReach: this.canStrikeFromHere(mob, distancePx) || this.canHitFromHere(mob, distancePx),
+    };
+  }
+
+  /**
+   * Within strike range and in sight. Range alone is a straight line through
+   * walls, and a lift on it would free a mob across a wall the moment the hire
+   * walked home past it, only for the chase to be written off again.
+   */
+  private canStrikeFromHere(target: Mob, distancePx: number): boolean {
+    return distancePx <= this.strikeRangePx && this.canSee(target);
+  }
+
+  private canHitFromHere(target: Mob, distancePx: number): boolean {
+    return this.kit.hitsWithoutClosing?.(this.kitContext, target, distancePx) ?? false;
+  }
+
+  /**
+   * The kit's own approach if it has one, else the shell's close to strike
+   * range — either way judged as a chase, so a target sealed off from a kit
+   * that walks itself is written off like any other.
+   */
+  private approachOrClose(target: Mob, targetDist: number): 'closing' | 'abandoned' {
+    const startX = this.x;
+    const startY = this.y;
+    const walksBefore = this.walksAsked;
+    const approached = this.kit.approach?.(this.kitContext, target, targetDist) ?? false;
+    if (!approached) return this.closeOn(target, targetDist);
+    if (this.walksAsked !== walksBefore) return this.judgeChase(target, targetDist, startX, startY);
+    this.holdOffs.resetStall();
+    return 'closing';
+  }
+
+  private closeOn(target: Mob, targetDist: number): 'closing' | 'abandoned' {
+    if (targetDist <= this.strikeRangePx) {
+      this.holdOffs.resetStall();
+      if (this.canSee(target)) this.holdOffs.noteChaseConnected();
+      this.isMoving = false;
+      this.faceToward(target);
+      return 'closing';
+    }
+    // With no way round, a kit that can hit from range holds its ground: the
+    // straight-line walk a failed search falls back to would carry it into the
+    // wall and under its own minimum range, where it can do neither.
+    if (this.astarSearchFailed && this.canHitFromHere(target, targetDist)) {
+      this.holdOffs.resetStall();
+      this.isMoving = false;
+      this.faceToward(target);
+      return 'closing';
+    }
+    const startX = this.x;
+    const startY = this.y;
+    this.followTargetAStar(
+      this.lastKnownTargetX,
+      this.lastKnownTargetY,
+      this.speed,
+      this.strikeRangePx * FOLLOW_STOP_RANGE_RATIO,
+    );
+    return this.judgeChase(target, targetDist, startX, startY);
+  }
+
+  /** Decides, after a frame of walking at `target`, whether the chase goes on. */
+  private judgeChase(
+    target: Mob,
+    targetDist: number,
+    startX: number,
+    startY: number,
+  ): 'closing' | 'abandoned' {
+    // Measured in ground covered, not `isMoving`, which stays set for a body
+    // pressing into the wall a failed search falls back to walking at, and
+    // for one parked on a last-known spot the target was never at.
+    const coveredPx = Math.hypot(this.x - startX, this.y - startY);
+    this.holdOffs.noteChaseFrame(coveredPx < HIRELING_STUCK_MIN_STEP_PX);
+    // A rock lobbed over the wall is still a fight: one it can hit from here
+    // is never written off for want of a route.
+    if (this.canHitFromHere(target, targetDist)) return 'closing';
+    if (this.astarSearchFailed) return this.abandonUnreachable(target);
+    if (!this.holdOffs.chaseStalled) return 'closing';
+    if (this.chaseReaimed) return this.abandonUnreachable(target);
+    this.chaseReaimed = true;
+    this.aimChaseAt(target);
+    return 'closing';
+  }
+
+  /** Gives up on a hostile it cannot get to, so the next frame walks home or picks another. */
+  private abandonUnreachable(target: Mob): 'abandoned' {
+    this.holdOffs.holdOffUnreachable(target);
+    this.engaged = null;
+    this.clearAStarPath();
+    this.isMoving = false;
+    return 'abandoned';
+  }
+
+  /**
+   * The nearest living hostile within engage range of the owner, measured from
+   * the hireling, and whether any it is holding off as unreachable is in that
+   * range too.
+   */
+  private scanHostilesInRange(): { nearest: Mob | null; heldOffInRange: boolean } {
     const ownerCx = this.owner.x + TILE_SIZE * CENTER_OFFSET;
     const ownerCy = this.owner.y + TILE_SIZE * CENTER_OFFSET;
     // The aggro circle reaches past the wall, so once the party is behind it a
@@ -692,6 +836,8 @@ export class Mercenary extends Mob {
     const ownerInsideWalls = this.map?.isInsideTownWall(this.owner.x, this.owner.y) ?? false;
     let nearest: Mob | null = null;
     let nearestDist = Infinity;
+    let heldOffInRange = false;
+    this.holdOffs.beginScan();
     for (const mob of this.allMobs) {
       if (mob === this || !mob.isAlive || !mob.isHostile) continue;
       // Held out of its fight by a script, it cannot answer a blow; going for it is a free kill.
@@ -702,13 +848,17 @@ export class Mercenary extends Mob {
         mob.y + TILE_SIZE * CENTER_OFFSET - ownerCy,
       );
       if (dOwner > this.aggroRangePx) continue;
+      if (!this.mayPick(mob)) {
+        heldOffInRange = true;
+        continue;
+      }
       const d = Math.hypot(mob.x - this.x, mob.y - this.y);
       if (d < nearestDist) {
         nearestDist = d;
         nearest = mob;
       }
     }
-    return nearest;
+    return { nearest, heldOffInRange };
   }
 
   private updateIdle(hostileInRange: boolean): void {

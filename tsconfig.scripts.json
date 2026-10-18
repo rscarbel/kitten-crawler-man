@@ -10,6 +10,8 @@
     "scripts/add-music.ts",
     "scripts/render-construction-contracts.ts",
     "scripts/render-tito.ts",
+    "scripts/render-scientist.ts",
+    "scripts/gates-scientist.ts",
     "scripts/render-slot-symbols.ts",
     "scripts/bench-slots-celebration.ts",
     "scripts/verify-loading-screen.ts",

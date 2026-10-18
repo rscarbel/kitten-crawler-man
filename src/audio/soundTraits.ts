@@ -226,6 +226,48 @@ const FOOTSTEP_IDS = [
 
 const COIN_IDS = ['coin_land_tick', 'coin_pouch'] as const satisfies readonly SoundId[];
 
+/** Brittle shards under a crawler's step: heard as footfalls, so they share the footstep cap. */
+const EGGSHELL_CRUNCH_IDS = [
+  'eggshell_crunch_1',
+  'eggshell_crunch_2',
+  'eggshell_crunch_3',
+  'eggshell_crunch_4',
+] as const satisfies readonly SoundId[];
+
+/**
+ * One old man's voice. The cap is per take, so replaying a take cuts its own
+ * earlier copy; two different takes can still overlap.
+ */
+const ONE_SPEAKER = { maxVoices: 1 } as const satisfies Partial<SoundTraits>;
+
+const DR_MOULT_VOICE_IDS = [
+  'scientist_call_out_1',
+  'scientist_call_out_2',
+  'scientist_wait_stop',
+  'scientist_hey_come_here_1',
+  'scientist_hey_come_here_2',
+] as const satisfies readonly SoundId[];
+
+/**
+ * The spider hallway's small unsettling sounds. They are set dressing behind
+ * the player, so any fight noise takes their voice, and each take plays at
+ * most one copy: replaying it cuts its earlier copy, though different takes
+ * can still overlap.
+ */
+const HALLWAY_UNEASE = {
+  maxVoices: 1,
+  priority: 'low',
+  ...VARIED,
+} as const satisfies Partial<SoundTraits>;
+
+const HALLWAY_UNEASE_IDS = [
+  'web_strand_creak_1',
+  'web_strand_creak_2',
+  'web_strand_creak_3',
+  'fluorescent_tube_flicker_1',
+  'fluorescent_tube_flicker_2',
+] as const satisfies readonly SoundId[];
+
 /** A trebuchet's throw, its boulder's flight and landing, and the cloud an infernal one leaves. */
 const SIEGE_ENGINE_IDS = [
   'trebuchet_fire_1',
@@ -236,6 +278,28 @@ const SIEGE_ENGINE_IDS = [
   'boulder_impact_3',
   'boulder_impact_4',
   'miasma_hiss',
+] as const satisfies readonly SoundId[];
+
+/**
+ * The victory volley sends a rocket up every few frames and its finale six at
+ * once, so each take keeps a small cap: a long volley thins to a handful of
+ * whistles and booms instead of stacking a voice per rocket.
+ */
+const FIREWORK_LAUNCH = { maxVoices: 1, ...VARIED } as const satisfies Partial<SoundTraits>;
+const FIREWORK_BURST = { maxVoices: 2, ...VARIED } as const satisfies Partial<SoundTraits>;
+
+const FIREWORK_LAUNCH_IDS = [
+  'firework_launch_1',
+  'firework_launch_2',
+  'firework_launch_3',
+  'firework_launch_4',
+] as const satisfies readonly SoundId[];
+
+const FIREWORK_BURST_IDS = [
+  'firework_burst_1',
+  'firework_burst_2',
+  'firework_burst_3',
+  'firework_burst_4',
 ] as const satisfies readonly SoundId[];
 
 function isImpactId(id: SoundId): boolean {
@@ -262,7 +326,12 @@ const ID_TRAITS: Readonly<Partial<Record<SoundId, Partial<SoundTraits>>>> = {
   ...Object.fromEntries(IMPACT_IDS.map((id) => [id, VARIED])),
   ...Object.fromEntries(FOOTSTEP_IDS.map((id) => [id, FOOTSTEPS])),
   ...Object.fromEntries(COIN_IDS.map((id) => [id, COINS])),
+  ...Object.fromEntries(EGGSHELL_CRUNCH_IDS.map((id) => [id, FOOTSTEPS])),
+  ...Object.fromEntries(DR_MOULT_VOICE_IDS.map((id) => [id, ONE_SPEAKER])),
+  ...Object.fromEntries(HALLWAY_UNEASE_IDS.map((id) => [id, HALLWAY_UNEASE])),
   ...Object.fromEntries(STINGER_IDS.map((id) => [id, STINGER])),
+  ...Object.fromEntries(FIREWORK_LAUNCH_IDS.map((id) => [id, FIREWORK_LAUNCH])),
+  ...Object.fromEntries(FIREWORK_BURST_IDS.map((id) => [id, FIREWORK_BURST])),
   ...Object.fromEntries(
     SIEGE_ENGINE_IDS.map((id) => [id, { ...(isImpactId(id) ? VARIED : {}), ...SIEGE_ENGINE }]),
   ),
@@ -369,6 +438,7 @@ const SOUND_CAPTIONS: Readonly<Partial<Record<SoundId, SoundCaption>>> = {
   fairy_ice_cast: offscreen('Ice spell crackles'),
   fairy_shield_cast: offscreen('Fairy casts a ward'),
   fairy_telekinetic_thrum: offscreen('Force spell hums'),
+  ...takes(['scientist_call_out_1', 'scientist_call_out_2'], offscreen('Someone whispers "Psst!"')),
 };
 
 const AUDIO_PATH_PREFIX = './src/audio/';

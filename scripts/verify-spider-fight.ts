@@ -577,7 +577,6 @@ const SYNTHETIC_SITE: LabSite = {
       bounds: { ...LAB_BOUNDS },
       centre: { ...LAB_CENTRE_TILE },
       entranceTile: { x: LAB_CENTRE_TILE.x, y: LAB_BOUNDS.y + LAB_BOUNDS.h - 1 },
-      scientistTile: { x: LAB_CENTRE_TILE.x - 2, y: LAB_BOUNDS.y + LAB_BOUNDS.h - 2 },
       computerTile: { x: LAB_CENTRE_TILE.x + 2, y: LAB_BOUNDS.y + LAB_BOUNDS.h - 2 },
       spiderEggTile: { x: LAB_CENTRE_TILE.x, y: LAB_BOUNDS.y + 2 },
       lifeMachineTiles: [],
@@ -588,11 +587,20 @@ const SYNTHETIC_SITE: LabSite = {
           y: LAB_BOUNDS.y + LAB_BOUNDS.h - 2 + dy,
         })),
       ),
+      labPostTile: { x: LAB_CENTRE_TILE.x - 2, y: LAB_BOUNDS.y + LAB_BOUNDS.h - 2 },
       benchTiles: [],
       shelfTiles: [],
       webTiles: [],
       cocoonTiles: [],
-      hallwayTiles: [],
+      // The fight never leaves the lab, so the synthetic one has no approach.
+      outerHallwayTiles: [],
+      innerHallwayTiles: [],
+      hallwayMouthTile: { x: LAB_CENTRE_TILE.x, y: LAB_BOUNDS.y + LAB_BOUNDS.h },
+      hallwayPostTile: { x: LAB_CENTRE_TILE.x - 2, y: LAB_BOUNDS.y + LAB_BOUNDS.h - 2 },
+      hallwayPostFacing: { x: 0, y: -1 },
+      hostBounds: { x: LAB_CENTRE_TILE.x, y: LAB_BOUNDS.y + LAB_BOUNDS.h, w: 0, h: 0 },
+      stationBounds: { x: LAB_CENTRE_TILE.x, y: LAB_BOUNDS.y + LAB_BOUNDS.h, w: 0, h: 0 },
+      labDoorwayDistance: 0,
     };
     return map;
   },
@@ -3912,7 +3920,13 @@ function broodCapAndCooldown(): void {
 
 const CLEANUP_SETTLE_FRAMES = 400;
 /** Each exit gets its own seed, so they do not all test the same moment of the same fight. */
-const CLEANUP_SEED_OFFSETS = { abort: 2, bossDeath: 3, dispose: 4, checkpoint: 5 } as const;
+const CLEANUP_SEED_OFFSETS = {
+  abort: 2,
+  bossDeath: 3,
+  dispose: 4,
+  checkpoint: 5,
+  musicRetry: 6,
+} as const;
 
 /** A fight with eggs and hatchlings both out, a puddle down and a glob in flight if one can be caught. */
 function labWithBrood(seed: number): Lab {
@@ -4272,6 +4286,37 @@ function gateCleanup(): void {
       `had ${hadBrood}; ${broodLeft(lab)}`,
     );
   }
+  bossMusicSurvivesADeathRetry();
+}
+
+/**
+ * A death in the fight rewinds to the station's checkpoint, and the retry has
+ * to claim the boss track again: the scene let go of it on the rewind. Then
+ * her death lets go of it for good. The harness drains the pending flags the
+ * way the scene does, so a flag left over from the first attempt cannot pass
+ * for the retry's.
+ */
+function bossMusicSurvivesADeathRetry(): void {
+  const lab = broodLab(RUN_SEED + CLEANUP_SEED_OFFSETS.musicRetry);
+  const quest = questOf(lab);
+  const checkpoint = quest.captureCheckpoint();
+  step(lab);
+  const firstClaim = quest.bossMusicStartPending;
+  quest.bossMusicStartPending = false;
+  quest.restoreCheckpoint(checkpoint);
+  step(lab);
+  const retryClaim = quest.bossMusicStartPending;
+  quest.bossMusicStartPending = false;
+  quest.bossMusicStopPending = false;
+  lab.spider.takeDamageFrom(lab.spider.hp, lab.human, 'melee');
+  settle(lab);
+  const released = quest.bossMusicStopPending;
+  record(
+    '10',
+    'death retry: the boss track is claimed again on re-lock and let go at her death',
+    firstClaim && retryClaim && released,
+    `first claim ${String(firstClaim)}, retry claim ${String(retryClaim)}, released ${String(released)}`,
+  );
 }
 
 // ─────────────────────────────────────────────────────────────── gate 11: the perfect run

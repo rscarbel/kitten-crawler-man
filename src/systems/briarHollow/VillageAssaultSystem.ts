@@ -33,7 +33,7 @@
 
 import { TILE_SIZE } from '../../core/constants';
 import type { EventBus } from '../../core/EventBus';
-import type { AudioManager, PlayOptions } from '../../audio/AudioManager';
+import { PLACED_MAX_PAN, type AudioManager, type PlayOptions } from '../../audio/AudioManager';
 import {
   VILLAGE_CUES,
   VILLAGE_SIEGE_MUSIC,
@@ -109,7 +109,7 @@ import { siegeHudEntry, type SiegeHudBar, type SiegeHudView } from './siegeHudEn
 import type { TopBandEntry } from '../../ui/hud/topBand';
 import { HOLLOW_BELL_MAX_HP, hollowBellCentre } from './hollowBell';
 import { isWorldPointInView } from '../../core/visibleWorldView';
-import { VICTORY_FANFARE_FRAMES, fireworkSchedule } from './victoryFireworks';
+import { VICTORY_FANFARE_FRAMES, fireworkSchedule, type FireworkRocket } from './victoryFireworks';
 import {
   BELL_ALERT_DETAIL,
   BELL_ALERT_HEADLINE,
@@ -237,6 +237,16 @@ const VICTORY_SFX_FADE_MS = 300;
 const VICTORY_MUSIC_RETURN_MS = 1500;
 /** The fireworks sit under the sting rather than over it. */
 const FIREWORK_VOLUME = 0.45;
+
+/**
+ * The rockets are drawn across the screen rather than placed in the world, so
+ * each one is panned by where it goes up instead of through `playAt`; it plays
+ * on the `ui` bus, the one the victory hush leaves open.
+ */
+function fireworkOptions(rocket: FireworkRocket): PlayOptions {
+  const screenSide = rocket.xShare * 2 - 1;
+  return { bus: 'ui', volume: FIREWORK_VOLUME, pan: screenSide * PLACED_MAX_PAN };
+}
 /** How far round a lane's spawn tile a body may appear: room for a whole wave raised at once. */
 const SPAWN_SCATTER_TILES = 5;
 /** How far a crowded spawn may be nudged to open ground. */
@@ -1842,9 +1852,8 @@ export class VillageAssaultSystem {
     if (this.victoryFanfareFrames <= 0) return;
     const ageFrames = VICTORY_FANFARE_FRAMES - this.victoryFanfareFrames;
     const { launches, bursts } = fireworkSchedule(ageFrames);
-    const fireworkOptions: PlayOptions = { bus: 'ui', volume: FIREWORK_VOLUME };
-    for (const _rocket of launches) this.playCue('fireworkLaunch', fireworkOptions);
-    for (const _rocket of bursts) this.playCue('fireworkBurst', fireworkOptions);
+    for (const rocket of launches) this.playCue('fireworkLaunch', fireworkOptions(rocket));
+    for (const rocket of bursts) this.playCue('fireworkBurst', fireworkOptions(rocket));
     this.victoryFanfareFrames--;
     if (this.victoryFanfareFrames > 0) return;
     this.endVictoryFanfare();

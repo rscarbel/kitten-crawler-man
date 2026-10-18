@@ -270,7 +270,10 @@ function verifyRoomShape(gameMap: GameMap, room: StealthGateRoomData, label: str
   const laneRooms = spine.lanes.flatMap((lane) => lane.rooms);
   for (const neighbour of roomsJoinedTo(gameMap, bounds)) {
     if (chainNeighbours.some((rect) => rect !== undefined && sameRect(rect, neighbour))) continue;
-    if (lab !== null && sameRect(lab.bounds, neighbour)) {
+    if (
+      lab !== null &&
+      (sameRect(lab.bounds, neighbour) || sameRect(lab.stationBounds, neighbour))
+    ) {
       check(false, `${label}: the spider lab hangs off the gate room`);
     } else if (laneRooms.some((rect) => sameRect(rect, neighbour))) {
       check(false, `${label}: a lane room opens off the gate room`);

@@ -319,6 +319,7 @@ function fixtureBench(kind: WallFixtureKind): { b: Bench; fixture: WallFixture }
     seed: 0,
     region: 0,
     circuit: null,
+    dying: false,
     state: freshFixtureState(kind),
   };
   gameMap.wallFixtures = [fixture];

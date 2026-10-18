@@ -214,11 +214,25 @@ export const MORDECAI_ADVICE = {
 
   spider_lab: adviceLine(
     [
-      'Something has gone wrong with the Arachnid Experiments. You should probably deal with it before whatever is happening in that room finds a way to become your problem somewhere else.',
-      "It's one of the more difficult encounters on this floor. Watch the ground. When you see red, don't stand in it.",
+      "There's a scientist hovering at the mouth of a taped-off hallway. Lab coat, big glasses, nerves like a wet cat. He's been waiting for a crawler to wander past.",
+      'Whatever he wants is optional. Nothing on the way to the stairwell needs it done. Hear him out before you decide anything.',
+    ],
+    'Another crawler spotted him {direction} of here.',
+  ),
+
+  spider_lab_started: adviceLine(
+    [
+      "I see you ignored my advice and are pursuing Dr. Moult's Pest Control job anyway. The machines in his lab have been printing something, and it doesn't look fun.",
+      'I think this may be one of the more difficult encounters on this floor, and nothing on the way to the stairwell needs it done. All I can say is that if the ground looks red, then get off of it.',
     ],
     'Another crawler spotted the lab {direction} of here.',
   ),
+
+  spider_lab_station: adviceLine([
+    "Oh, it's you. Have a seat, the cot is less comfortable than it looks. A research team set this place up before they ran out of researchers.",
+    "There's a scientist who keeps running past my door screaming. Back and forth, back and forth. I've stopped getting up.",
+    "Whatever he wants, it's at the end of that hallway. You don't have to go. I'd think about it, if I were you.",
+  ]),
 
   ball_of_swine: adviceLine([
     "There's a borough boss ahead, {direction} of here. It's considerably tougher than the fights you've dealt with so far. You can avoid it, if you're willing to look for another way around.",

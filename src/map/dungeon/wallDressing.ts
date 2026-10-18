@@ -16,6 +16,7 @@ import { FACE_CLIMBING_PROP_TILE_TYPES } from '../cellarProps';
 import type { DungeonFloorThemeId } from './floorTheme';
 import type { RegionCharacter } from './roomCharacters';
 import type { WallShape } from './wallShape';
+import { labHallwayDecorOf } from './labHallwayDecor';
 import {
   defaultWallDressing,
   wallDressingFor,
@@ -85,10 +86,20 @@ export function wallDressingAt(
   if (source === undefined || shape.face === 'none') return defaultWallDressing(theme);
   const footY = ty + rowsToFoot(shape);
   const character = source.characterAt(tx, footY);
+  const labDecor = labHallwayDecorOf(structure);
+  const labDressing = labDecor?.wallDressingAt(tx, footY) ?? null;
   const dressing =
-    character === null ? defaultWallDressing(theme) : wallDressingFor(character.wallDressing);
+    labDressing !== null
+      ? wallDressingFor(labDressing)
+      : character === null
+        ? defaultWallDressing(theme)
+        : wallDressingFor(character.wallDressing);
   const fixture = fixtureNear(structure, tx, footY);
   if (fixture === 'on') return bare(dressing);
+  // Read after the fixtures, and past the region: the warning sign hangs on
+  // whichever face beside the mouth the host room can see.
+  const piece = labDecor?.wallPieceAt(tx, footY) ?? null;
+  if (piece !== null) return { ...withoutSpots(dressing), piece };
   return standsInFrontOfFace(structure, tx, footY) || fixture === 'beside'
     ? withoutSpots(dressing)
     : dressing;

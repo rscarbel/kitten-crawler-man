@@ -1,7 +1,8 @@
 /**
  * Fixtures for the two mini-games that keep their own layouts: the Desperado
  * Club's blackjack table (betting, mid-hand, a won hand, turned away) and the
- * keyboard-hero board (mid-song, a breached firewall, access granted). Each is
+ * keyboard-hero board (mid-song, a breached firewall, access granted, and a
+ * Nightmare double note on its way down). Each is
  * the real system driven to that state on a fake clock. The table is the
  * club's own `tableSurface`, so the phone close-button audit tests the layout
  * the game ships; the board is painted through its `PaintTarget` entry point
@@ -16,7 +17,12 @@ import { ClubCasinoSystem, type CasinoAction } from '../../../systems/ClubCasino
 import { CHIP_DENOMINATIONS } from '../../../systems/casino/BlackjackTable';
 import { RANKS, SUITS, type Card, type Rank, type Suit } from '../../../systems/casino/Deck';
 import { KeyboardHeroSystem } from '../../../systems/KeyboardHeroSystem';
-import { KEYBOARD_HERO_CHART } from '../../../systems/keyboardHeroChart';
+import type { Difficulty } from '../../../core/difficultyProfiles';
+import {
+  KEYBOARD_HERO_CHARTS,
+  type KeyboardHeroChartNote,
+} from '../../../systems/keyboardHeroChart';
+import { KEYBOARD_HERO_GEOMETRY } from '../../../systems/keyboardHeroGeometry';
 import { computeKeyboardHeroLayout } from '../../../systems/keyboardHeroLayout';
 import type { Surface } from '../../../ui/core/UiRoot';
 import type { DialogFixture } from './fixture';
@@ -106,7 +112,7 @@ function casinoFixture(name: string, state: TableState): DialogFixture {
   };
 }
 
-type BoardState = 'mid-song' | 'breached' | 'granted';
+type BoardState = 'mid-song' | 'breached' | 'granted' | 'double-note';
 
 /** One fake frame of song and wall clock. */
 const BOARD_FRAME_MS = 16;
@@ -127,6 +133,11 @@ const BREACH_MISS_STRETCH_MS = 1500;
 /** Spread a few presses off the beat so both PERFECT and HIT grades turn up. */
 const PRESS_SPREAD_MS = 30;
 const PRESS_SPREAD_STEPS = 3;
+/**
+ * How long before the first double note lands the capture sits: far enough up
+ * the lanes that the rung joining the pair is clear of the receptors.
+ */
+const DOUBLE_NOTE_CAPTURE_LEAD_MS = 520;
 /** How far into the ACCESS GRANTED flourish the capture sits. */
 const FLOURISH_CAPTURE_MS = 350;
 const LANE_KEYS = ['ArrowLeft', 'ArrowUp', 'ArrowDown', 'ArrowRight'] as const;
@@ -136,19 +147,57 @@ function laneKey(lane: number): string {
   return LANE_KEYS[lane % LANE_COUNT] ?? LANE_KEYS[0];
 }
 
+/**
+ * A lane with no note anywhere near `pressMs`, so pressing it is a miss
+ * whatever the chart holds — the neighbouring lane is not safe, because on
+ * Nightmare a double note's partner can be sitting in it.
+ */
+function emptyLaneAt(
+  notes: readonly KeyboardHeroChartNote[],
+  pressMs: number,
+  difficulty: Difficulty,
+): number {
+  const windowMs = KEYBOARD_HERO_GEOMETRY[difficulty].hitWindowMs;
+  const busy = new Set<number>(
+    notes.filter((note) => Math.abs(note.timeMs - pressMs) <= windowMs).map((note) => note.column),
+  );
+  for (let lane = 0; lane < LANE_COUNT; lane++) {
+    if (!busy.has(lane)) return lane;
+  }
+  throw new Error(`every lane holds a note at ${pressMs} ms`);
+}
+
+function endMsFor(state: BoardState, notes: readonly KeyboardHeroChartNote[]): number {
+  switch (state) {
+    case 'mid-song':
+      return MID_SONG_MS;
+    case 'breached':
+      return BREACH_MS;
+    case 'granted':
+      return SONG_OVERRUN_MS;
+    case 'double-note': {
+      const firstChord = notes.find((note) => note.chordId !== undefined);
+      if (firstChord === undefined) throw new Error('this chart has no double note to capture');
+      return firstChord.timeMs - DOUBLE_NOTE_CAPTURE_LEAD_MS;
+    }
+  }
+}
+
 function playBoard(
   board: KeyboardHeroSystem,
   state: BoardState,
+  difficulty: Difficulty,
   advance: (ms: number) => void,
 ): void {
-  const endMs =
-    state === 'mid-song' ? MID_SONG_MS : state === 'breached' ? BREACH_MS : SONG_OVERRUN_MS;
+  const notes = KEYBOARD_HERO_CHARTS[difficulty].notes;
+  const endMs = endMsFor(state, notes);
   let missesLeft =
     state === 'mid-song' ? MID_SONG_MISSES : state === 'breached' ? BREACH_MISSES : 0;
   let songMs = 0;
   let next = 0;
   let succeeded = false;
   board.start(
+    difficulty,
     () => undefined,
     () => undefined,
   );
@@ -156,13 +205,13 @@ function playBoard(
     songMs += BOARD_FRAME_MS;
     advance(BOARD_FRAME_MS);
     board.update(songMs);
-    while (next < KEYBOARD_HERO_CHART.length && KEYBOARD_HERO_CHART[next].timeMs <= songMs) {
-      const note = KEYBOARD_HERO_CHART[next];
+    while (next < notes.length && notes[next].timeMs <= songMs) {
+      const note = notes[next];
       const stretchMs = state === 'breached' ? BREACH_MISS_STRETCH_MS : MISS_STRETCH_MS;
       const inMissStretch = songMs > endMs - stretchMs && missesLeft > 0;
       if (inMissStretch) {
         missesLeft--;
-        board.handleKeyDown(laneKey(note.column + 1), note.timeMs);
+        board.handleKeyDown(laneKey(emptyLaneAt(notes, note.timeMs, difficulty)), note.timeMs);
       } else {
         const offset = (next % PRESS_SPREAD_STEPS) * PRESS_SPREAD_MS;
         board.handleKeyDown(laneKey(note.column), note.timeMs + offset);
@@ -174,13 +223,13 @@ function playBoard(
   if (succeeded) advance(FLOURISH_CAPTURE_MS);
 }
 
-function boardFixture(name: string, state: BoardState): DialogFixture {
+function boardFixture(name: string, state: BoardState, difficulty: Difficulty): DialogFixture {
   return {
     name,
     surfaces: (shown) => {
       let now = 0;
       const board = new KeyboardHeroSystem(() => now);
-      playBoard(board, state, (ms) => {
+      playBoard(board, state, difficulty, (ms) => {
         now += ms;
       });
       const surface: Surface = {
@@ -208,7 +257,8 @@ export const FIXTURES: readonly DialogFixture[] = [
   casinoFixture('casino-mid-hand', 'mid-hand'),
   casinoFixture('casino-won', 'won'),
   casinoFixture('casino-turned-away', 'turned-away'),
-  boardFixture('keyboard-hero-mid-song', 'mid-song'),
-  boardFixture('keyboard-hero-breached', 'breached'),
-  boardFixture('keyboard-hero-granted', 'granted'),
+  boardFixture('keyboard-hero-mid-song', 'mid-song', 'normal'),
+  boardFixture('keyboard-hero-breached', 'breached', 'normal'),
+  boardFixture('keyboard-hero-granted', 'granted', 'normal'),
+  boardFixture('keyboard-hero-double-note', 'double-note', 'hard'),
 ];

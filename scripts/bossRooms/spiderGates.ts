@@ -127,8 +127,8 @@ function gateHackPath(context: RoomGateContext): void {
   const inside = (x: number, y: number): boolean =>
     x >= bounds.x && y >= bounds.y && x < bounds.x + bounds.w && y < bounds.y + bounds.h;
   const table = fault === 'hack-path' ? [] : lab.computerTableTiles;
-  const fromScientist = reachableFrom(gameMap, lab.scientistTile, inside);
-  const workable = [...fromScientist].some((key) => {
+  const fromLabPost = reachableFrom(gameMap, lab.labPostTile, inside);
+  const workable = [...fromLabPost].some((key) => {
     const [x, y] = key.split(',').map(Number);
     return table.some((t) => chebyshev(t, { x, y }) <= TERMINAL_REACH_TILES);
   });
@@ -136,7 +136,7 @@ function gateHackPath(context: RoomGateContext): void {
   const door = room.doorways[0]?.tile;
   if (
     door !== undefined &&
-    !reachableFrom(gameMap, door, inside).has(tileKey(lab.scientistTile.x, lab.scientistTile.y))
+    !reachableFrom(gameMap, door, inside).has(tileKey(lab.labPostTile.x, lab.labPostTile.y))
   ) {
     context.report.fail('the doorway cannot reach the scientist');
   }

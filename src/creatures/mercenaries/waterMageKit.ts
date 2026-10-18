@@ -286,6 +286,11 @@ export class WaterMageKit implements MercenaryKit {
 
   canStartAttack(ctx: MercenaryKitContext, target: Mob, distancePx: number): boolean {
     if (this.retreating) return false;
+    return this.hitsWithoutClosing(ctx, target, distancePx);
+  }
+
+  /** A bolt reaches anything in range and in sight, with or without a way round. */
+  hitsWithoutClosing(ctx: MercenaryKitContext, target: Mob, distancePx: number): boolean {
     if (distancePx > TILE_SIZE * BOLT_RANGE_TILES) return false;
     if (ctx.isInSafeRoom(ctx.merc) || ctx.isInSafeRoom(target)) return false;
     return ctx.merc.canSee(target);

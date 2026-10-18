@@ -196,6 +196,15 @@ export const SPEAKERS = {
     revealIntervalMs: SPEECH_REVEAL_INTERVAL_MS,
   },
 
+  mordecaiMessage: {
+    name: 'Message from Mordecai',
+    portrait: null,
+    voice: { kind: 'typing' },
+    reveal: 'sentence',
+    textCase: 'as-written',
+    revealIntervalMs: SPEECH_REVEAL_INTERVAL_MS,
+  },
+
   recruiter: {
     name: 'Corporal Bristle',
     portrait: null,
@@ -368,7 +377,7 @@ export const SPEAKERS = {
     revealIntervalMs: SPEECH_REVEAL_INTERVAL_MS,
   },
   scientist: {
-    name: 'Scientist',
+    name: 'Dr. Ignatius Moult',
     portrait: null,
     voice: { kind: 'typing' },
     reveal: 'sentence',

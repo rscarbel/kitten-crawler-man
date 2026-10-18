@@ -68,6 +68,13 @@ export interface MercenaryKit {
    */
   approach?(ctx: MercenaryKitContext, target: Mob, distancePx: number): boolean;
 
+  /**
+   * Whether the kit can hit `target` from where the hireling stands, cooldowns
+   * aside, without walking to it — a throw over a wall it has no way round. A
+   * target it can is never written off as unreachable.
+   */
+  hitsWithoutClosing?(ctx: MercenaryKitContext, target: Mob, distancePx: number): boolean;
+
   /** Whether an attack could start this frame, with the shared cooldown already clear. */
   canStartAttack(ctx: MercenaryKitContext, target: Mob, distancePx: number): boolean;
 

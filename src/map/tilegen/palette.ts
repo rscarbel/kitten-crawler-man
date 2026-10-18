@@ -556,3 +556,23 @@ export const BOPCA_SCUFF_RAMP: Ramp = {
   light: [152, 146, 136],
   accent: [174, 168, 158],
 };
+
+/**
+ * The spider lab's field station decking: galvanised plate, lighter and cooler
+ * than floor 2's own checker plate so the station reads as fresh kit the team
+ * carried in rather than as more of the floor.
+ */
+export const STATION_PLATE_RAMP: Ramp = {
+  shadow: [104, 114, 120],
+  mid: [146, 155, 160],
+  light: [176, 185, 189],
+  accent: [198, 206, 209],
+};
+
+/** The decontamination stripe's paint: a dulled safety yellow, worn by boots. */
+export const DECON_PAINT_RAMP: Ramp = {
+  shadow: [150, 122, 52],
+  mid: [196, 164, 74],
+  light: [218, 190, 104],
+  accent: [232, 208, 132],
+};

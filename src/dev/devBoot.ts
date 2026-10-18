@@ -19,6 +19,7 @@ import { MantidPreviewScene } from '../scenes/MantidPreviewScene';
 import { DarkKnightPreviewScene } from '../scenes/DarkKnightPreviewScene';
 import { RatKinPreviewScene } from '../scenes/RatKinPreviewScene';
 import { ShadyPreviewScene } from '../scenes/ShadyPreviewScene';
+import { ScientistPreviewScene } from '../scenes/ScientistPreviewScene';
 import { NecromancerPreviewScene } from '../scenes/NecromancerPreviewScene';
 import { BugabooPreviewScene } from '../scenes/BugabooPreviewScene';
 import { TroglodytePreviewScene } from '../scenes/TroglodytePreviewScene';
@@ -212,6 +213,7 @@ function withPlaytestBoot(options: DungeonSceneOptions, boot: PlaytestBoot): Dun
     bathroomSolvedAtStart: (gameMap) => playtestStartsPastBathroom(boot.spawn, gameMap),
     stealthGateOpenAtStart: (gameMap) => playtestStartsPastStealthGate(boot.spawn, gameMap),
     preDefeatedBossTypes: boot.preDefeatedBossTypes,
+    spiderQuestAwaitingHackingAtStart: boot.spiderQuestAwaitingHacking,
   };
 }
 
@@ -446,6 +448,12 @@ export function devBootScene(
 
   if (params.get('shady') !== null) {
     sceneManager.replace(new ShadyPreviewScene());
+    return true;
+  }
+
+  const scientist = params.get('scientist');
+  if (scientist !== null) {
+    sceneManager.replace(new ScientistPreviewScene(scientist));
     return true;
   }
 

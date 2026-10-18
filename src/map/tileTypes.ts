@@ -805,11 +805,50 @@ export const RIVER_REEDS = 177;
  */
 export const BARE_EARTH = 178;
 
+// ── The spider lab's field station ───────────────────────────────────────────
+//
+// The safe room halfway down the lab's approach is a research team's emergency
+// station, not a Bopca's mess hall: steel decking, a cot, a barricade and the
+// team's kit. Its own floor and furnishings rather than the safe room's, so it
+// reads as held ground the team fell back to. `labStationLayout` places the
+// furnishings; `src/sprites/labStationDecor.ts` draws them. The two wall-hung
+// ones go on the room's north row only, for the reason the safe room's do.
+
+/** Steel diamond-plate decking: the station's floor, walkable. */
+export const LAB_STATION_FLOOR = 179;
+/** The painted decontamination stripe inside each of the station's doorways, walkable. */
+export const LAB_STATION_THRESHOLD = 180;
+/** A folding camp cot with a rolled blanket, where Mordecai rests — not walkable, seen over. */
+export const LAB_STATION_COT = 181;
+/** Lab benches tipped on their sides and a few sandbags, pushed to the wall — not walkable, seen over. */
+export const LAB_STATION_BARRICADE = 182;
+/** A white first-aid cabinet hung on the north wall — not walkable. */
+export const LAB_STATION_FIRST_AID = 183;
+/** A steel hazmat locker, door ajar, a yellow suit hanging out — not walkable. */
+export const LAB_STATION_HAZMAT_LOCKER = 184;
+/** A red jerry can — not walkable, seen over. */
+export const LAB_STATION_JERRY_CAN = 185;
+/** A whiteboard of frantic notes on the north wall — not walkable. */
+export const LAB_STATION_WHITEBOARD = 186;
+/** A battery camping lantern on a supply crate: the station's warm pool of light — not walkable, seen over. */
+export const LAB_STATION_LANTERN = 187;
+
+/** Every furnishing of the field station: all solid, all stamped with `placeProp`. */
+export const LAB_STATION_PROP_TILE_TYPES: ReadonlyArray<number> = [
+  LAB_STATION_COT,
+  LAB_STATION_BARRICADE,
+  LAB_STATION_FIRST_AID,
+  LAB_STATION_HAZMAT_LOCKER,
+  LAB_STATION_JERRY_CAN,
+  LAB_STATION_WHITEBOARD,
+  LAB_STATION_LANTERN,
+];
+
 /**
  * One past the highest tile type value above — the length of any array indexed
  * by tile type. Bump this when a new tile type exceeds it.
  */
-export const TILE_TYPE_COUNT = 179;
+export const TILE_TYPE_COUNT = 188;
 
 /**
  * Variant indices (row * 10 + col) from the modern_decorations sprite sheet

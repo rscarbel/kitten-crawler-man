@@ -18,6 +18,7 @@ import type { CanvasSurface } from '../core/canvasSurface';
 import type { NoteState, ReceptorState, TouchState } from '../sprites/art/keyboardHeroArt';
 import {
   boardFrameArt,
+  chordLinkArt,
   laneBedArt,
   laneHighlightArt,
   noteKeycapArt,
@@ -26,6 +27,7 @@ import {
 } from './keyboardHeroArtCache';
 import {
   BOARD_BAKE_SCALE,
+  CHORD_LINK_IMG_H,
   LANE_BED_IMG_H,
   LANE_BED_IMG_W,
   LANE_INDICES,
@@ -34,6 +36,8 @@ import {
 } from './keyboardHeroLayout';
 import type { Rect } from '../ui/core/geom';
 import { LANE_PALETTES } from '../sprites/art/keyboardHeroLanePalettes';
+import type { KeyboardHeroGeometry } from './keyboardHeroGeometry';
+import type { Theme } from '../ui/theme/tokens';
 
 export type NoteArtState = NoteState;
 export type ReceptorArtState = ReceptorState;
@@ -136,25 +140,24 @@ export function drawAllLaneBeds(
 /**
  * The band is what makes the frozen hit window visible: it is exactly as deep,
  * either side of the line, as a press is still counted. Guitar hero's receptors
- * say "press here"; this says "and here is the slack you have".
+ * say "press here"; this says "and here is the slack you have". The window is
+ * the same length of time on every tier, so a tier that falls slower draws a
+ * shallower band.
  */
 export function drawHitWindow(
   ctx: CanvasRenderingContext2D,
   layout: KeyboardHeroLayout,
+  geometry: KeyboardHeroGeometry,
   lineAlphaScale: number,
 ): void {
+  const halfHeight = geometry.hitWindowImgHalfHeight * layout.scale;
   ctx.save();
   clipToLanes(ctx, layout);
   ctx.globalCompositeOperation = 'lighter';
 
   ctx.globalAlpha = HIT_WINDOW_BAND_ALPHA;
   ctx.fillStyle = '#ffffff';
-  ctx.fillRect(
-    layout.laneArea.x,
-    layout.hitLineY - layout.hitWindowHalfHeight,
-    layout.laneArea.w,
-    layout.hitWindowHalfHeight * 2,
-  );
+  ctx.fillRect(layout.laneArea.x, layout.hitLineY - halfHeight, layout.laneArea.w, halfHeight * 2);
 
   ctx.globalAlpha = clamp01(HIT_LINE_ALPHA * lineAlphaScale);
   const lineH = Math.max(1, HIT_LINE_IMG_H * layout.scale);
@@ -199,18 +202,20 @@ export function drawLaneHighlight(
  * Every surface that shows the board — the live game, the tutorial, the preview
  * scene — composites through here, so there is only one order to get right.
  *
+ * @param geometry - the tier being played, which sets how deep the hit-window band runs.
  * @param laneAlphaFor - per-lane bed alpha, carrying the beat pulse.
  * @param hitLineAlphaScale - multiplier on the hit line's own alpha, for the same pulse.
  */
 export function drawBoardBase(
   ctx: CanvasRenderingContext2D,
   layout: KeyboardHeroLayout,
+  geometry: KeyboardHeroGeometry,
   laneAlphaFor: (lane: LaneIndex) => number,
   hitLineAlphaScale: number,
 ): void {
   drawBoardFrame(ctx, layout);
   drawAllLaneBeds(ctx, layout, laneAlphaFor);
-  drawHitWindow(ctx, layout, hitLineAlphaScale);
+  drawHitWindow(ctx, layout, geometry, hitLineAlphaScale);
 }
 
 /** A receptor in an arbitrary square rect, for reviewing one away from the board. */
@@ -246,6 +251,44 @@ export function drawNoteKeycap(
     ctx,
     noteKeycapArt(lane, state),
     { x: centerX - size / 2, y: centerY - size / 2, w: size, h: size },
+    alpha,
+  );
+}
+
+/** The two colours a double note's rung is painted in. */
+export interface ChordLinkInk {
+  readonly core: string;
+  readonly glow: string;
+}
+
+/** A rung belongs to neither lane it joins, so its ink comes from the theme. */
+export function chordLinkInk(palette: Theme['palette']): ChordLinkInk {
+  return { core: palette.text.primary, glow: palette.accent.base };
+}
+
+/**
+ * The rung joining the two keycaps of a double note, drawn centre to centre at
+ * the notes' shared height. Draw it before the keycaps: they cover its ends, so
+ * what shows is the bar bolting one cap to the other.
+ */
+export function drawChordLink(
+  ctx: CanvasRenderingContext2D,
+  layout: KeyboardHeroLayout,
+  lanes: readonly [LaneIndex, LaneIndex],
+  centerY: number,
+  ink: ChordLinkInk,
+  alpha: number,
+): void {
+  const [first, second] = lanes;
+  const left = layout.lanes[Math.min(first, second)];
+  const right = layout.lanes[Math.max(first, second)];
+  const fromX = left.x + left.w / 2;
+  const toX = right.x + right.w / 2;
+  const height = CHORD_LINK_IMG_H * layout.scale;
+  drawPiece(
+    ctx,
+    chordLinkArt(Math.abs(second - first), toX - fromX, height, ink.core, ink.glow),
+    { x: fromX, y: centerY - height / 2, w: toX - fromX, h: height },
     alpha,
   );
 }

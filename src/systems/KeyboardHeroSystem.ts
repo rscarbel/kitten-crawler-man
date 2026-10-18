@@ -7,8 +7,8 @@
  * receptor to score. One mistake is forgiven (a firewall pip shatters); a second
  * mistake ends the game after a short delay.
  *
- * Notes come from a baked chart (`keyboardHeroChart.ts`) rather than a random
- * spawner: each entry is an attack in the music, and a note reaches the hit line
+ * Notes come from a baked chart (`keyboardHeroChart.ts`), one per difficulty
+ * tier, rather than a random spawner: each entry is an attack in the music, and a note reaches the hit line
  * exactly when that attack sounds. Positions are derived from the track's own
  * playback clock, not from a frame counter, so a dropped frame slides the note
  * rather than desyncing it from the melody. The game ends once the last charted
@@ -28,16 +28,17 @@
  */
 
 import { keybindings } from '../core/Keybindings';
-import { KEYBOARD_HERO_CHART, KEYBOARD_HERO_CHART_END_MS } from './keyboardHeroChart';
-import type { KeyboardHeroColumn } from './keyboardHeroChart';
+import type { Difficulty } from '../core/difficultyProfiles';
 import {
-  FADE_IN_END_IMG_Y,
-  FALL_SPEED_IMG_PX_PER_MS,
-  HIT_WINDOW_MS,
+  KEYBOARD_HERO_CHARTS,
+  type KeyboardHeroChart,
+  type KeyboardHeroColumn,
+} from './keyboardHeroChart';
+import {
   HIT_ZONE_IMG_CENTER,
-  MAX_PLAYABLE_GAP_MS,
+  KEYBOARD_HERO_GEOMETRY,
   NOTE_SPAWN_IMG_Y,
-  NOTE_TRAVEL_MS,
+  type KeyboardHeroGeometry,
 } from './keyboardHeroGeometry';
 import {
   noteImgYToScreenY,
@@ -59,8 +60,11 @@ import { skinsFor } from '../ui/theme/skins';
 import type { Theme, TypeStyle } from '../ui/theme/tokens';
 import type { PaintTarget } from '../ui/widgets/paint';
 import {
+  type ChordLinkInk,
+  chordLinkInk,
   clipToLanes,
   drawBoardBase,
+  drawChordLink,
   drawFirewallPip,
   drawLaneHighlight,
   drawNoteKeycap,
@@ -80,18 +84,6 @@ const FPS = 60;
 
 /** MS added per frame when no audio clock is available to drive the chart. */
 const MS_PER_FRAME = MS_PER_SECOND / FPS;
-
-/**
- * A song-clock jump larger than this means the mini-game stopped updating while the
- * track kept rolling — the pause menu skips this system entirely, and a backgrounded
- * tab stops rAF, while `pauseAmbience` deliberately leaves the track playing behind a
- * muted bus. The run cannot be picked back up in time with the music, and carrying on
- * regardless would let a player win by simply waiting the song out, so the attempt is
- * abandoned and the existing retry dialog is offered.
- *
- * The line is the widest gap a run can still be judged fairly across.
- */
-const SUSPENSION_ABANDON_MS = MAX_PLAYABLE_GAP_MS;
 
 /** How long a lane stays lit red after a forgiven mistake. */
 const ERROR_FLASH_MS = 1_000;
@@ -258,6 +250,8 @@ type ColumnIndex = KeyboardHeroColumn;
 
 interface Note {
   column: ColumnIndex;
+  /** Shared with the other note of a double note; null on a single note. */
+  chordId: number | null;
   /** Song time at which this note is perfectly centred on the hit line. */
   hitTimeMs: number;
   state: 'falling' | 'hit' | 'missed';
@@ -343,6 +337,19 @@ export class KeyboardHeroSystem {
   /** Index of the next chart entry that has yet to enter the field. */
   private _nextChartIndex = 0;
 
+  /** The tier this attempt was started on: its chart and the field it falls through. */
+  private _chart: KeyboardHeroChart = KEYBOARD_HERO_CHARTS.normal;
+  private _geometry: KeyboardHeroGeometry = KEYBOARD_HERO_GEOMETRY.normal;
+  /**
+   * Double notes that have already cost a strike. Both notes of one fall past
+   * their window on the same frame, and that is one mistake, not two — two
+   * would end the run on a single fumble.
+   */
+  private _strickenChordIds = new Set<number>();
+  private _chartHasChords = false;
+  private readonly _firstFallingNoteOfChord = new Map<number, Note>();
+  private _chordInk: { palette: Theme['palette']; ink: ChordLinkInk } | null = null;
+
   // Feedback state — cosmetic, wall-clocked, and reset with every attempt.
   private _lanes: readonly [LaneFeedback, LaneFeedback, LaneFeedback, LaneFeedback] =
     createLaneFeedback();
@@ -358,7 +365,17 @@ export class KeyboardHeroSystem {
   /** @param clock - the wall clock feedback runs on; a review harness passes a fake one. */
   constructor(private readonly clock: () => number = () => performance.now()) {}
 
-  start(onComplete: () => void, onFail: () => void, onFailImmediate?: () => void): void {
+  /** @param difficulty - the tier to play, which picks the chart and how fast it falls. */
+  start(
+    difficulty: Difficulty,
+    onComplete: () => void,
+    onFail: () => void,
+    onFailImmediate?: () => void,
+  ): void {
+    this._chart = KEYBOARD_HERO_CHARTS[difficulty];
+    this._geometry = KEYBOARD_HERO_GEOMETRY[difficulty];
+    this._strickenChordIds = new Set<number>();
+    this._chartHasChords = this._chart.notes.some((entry) => entry.chordId !== undefined);
     this._onComplete = onComplete;
     this._onFail = onFail;
     this._onFailImmediate = onFailImmediate ?? null;
@@ -477,7 +494,13 @@ export class KeyboardHeroSystem {
     this._songTimeMs = songTimeMs ?? previousSongTimeMs + MS_PER_FRAME;
     const frameGapMs = this._songTimeMs - previousSongTimeMs;
 
-    if (frameGapMs > SUSPENSION_ABANDON_MS) {
+    // A jump this large means the system stopped updating while the track kept
+    // rolling — the pause menu skips it, a backgrounded tab stops rAF, and
+    // `pauseAmbience` leaves the track playing behind a muted bus. The run cannot
+    // be picked back up in time with the music, and carrying on would let a player
+    // win by waiting the song out, so the attempt is abandoned and the retry
+    // dialog is offered.
+    if (frameGapMs > this._geometry.suspensionAbandonMs) {
       this._abandonRun();
       return;
     }
@@ -497,8 +520,8 @@ export class KeyboardHeroSystem {
 
     // Reaching the end of the track is not enough on its own — every charted note
     // must actually have been played, so a run that skipped ahead cannot pass.
-    const chartExhausted = this._nextChartIndex >= KEYBOARD_HERO_CHART.length;
-    if (this._songTimeMs >= KEYBOARD_HERO_CHART_END_MS && chartExhausted) {
+    const chartExhausted = this._nextChartIndex >= this._chart.notes.length;
+    if (this._songTimeMs >= this._chart.endMs && chartExhausted) {
       this._completed = true;
       this.accessGrantedPending = true;
       // The firewall held. A red lane still burning down from the forgiven
@@ -520,11 +543,13 @@ export class KeyboardHeroSystem {
 
   /** Put every chart note whose fall has begun onto the field. */
   private _admitDueChartNotes(): void {
-    while (this._nextChartIndex < KEYBOARD_HERO_CHART.length) {
-      const entry = KEYBOARD_HERO_CHART[this._nextChartIndex];
-      if (entry.timeMs - NOTE_TRAVEL_MS > this._songTimeMs) break;
+    const notes = this._chart.notes;
+    while (this._nextChartIndex < notes.length) {
+      const entry = notes[this._nextChartIndex];
+      if (entry.timeMs - this._geometry.noteTravelMs > this._songTimeMs) break;
       this._notes.push({
         column: entry.column,
+        chordId: entry.chordId ?? null,
         hitTimeMs: entry.timeMs,
         state: 'falling',
         hitAtMs: 0,
@@ -535,19 +560,27 @@ export class KeyboardHeroSystem {
   }
 
   /**
-   * Drop notes that have fallen past their hit window, counting each as a miss.
+   * Drop notes that have fallen past their hit window, counting each as a miss —
+   * except that a double note costs one strike however many of its notes went.
    * Returns true if that triggered a hard fail (the caller must stop updating).
    */
   private _resolveExpiredNotes(nowMs: number): boolean {
     let hardFailed = false;
 
     for (const note of this._notes) {
-      const windowClosesAtMs = note.hitTimeMs + HIT_WINDOW_MS;
+      const windowClosesAtMs = note.hitTimeMs + this._geometry.hitWindowMs;
       if (hardFailed || note.state !== 'falling' || this._songTimeMs <= windowClosesAtMs) continue;
 
       note.state = 'missed';
       note.hitAtMs = windowClosesAtMs;
       note.resolvedAtMs = nowMs;
+
+      const chordAlreadyStruck = note.chordId !== null && this._strickenChordIds.has(note.chordId);
+      if (chordAlreadyStruck) {
+        this._registerForgivenMissFeedback(note.column, nowMs);
+        continue;
+      }
+      if (note.chordId !== null) this._strickenChordIds.add(note.chordId);
       hardFailed = this._recordMiss(note.column, nowMs);
     }
 
@@ -563,7 +596,9 @@ export class KeyboardHeroSystem {
   /** Note-space Y of a note's centre at the current song time. */
   private _noteImgY(note: Note): number {
     const referenceMs = note.state === 'falling' ? this._songTimeMs : note.hitAtMs;
-    return HIT_ZONE_IMG_CENTER + (referenceMs - note.hitTimeMs) * FALL_SPEED_IMG_PX_PER_MS;
+    return (
+      HIT_ZONE_IMG_CENTER + (referenceMs - note.hitTimeMs) * this._geometry.fallSpeedImgPxPerMs
+    );
   }
 
   /** @param songTimeMs - the song clock *at the moment of the press*; see `_processColumnInput`. */
@@ -613,7 +648,7 @@ export class KeyboardHeroSystem {
     const pressTimeMs = songTimeMs ?? this._songTimeMs;
     // The press landed inside a suspension: keys still reach this system while the pause
     // menu is up. Swallow it — the next update() abandons the run rather than judging it.
-    if (pressTimeMs - this._songTimeMs > SUSPENSION_ABANDON_MS) return;
+    if (pressTimeMs - this._songTimeMs > this._geometry.suspensionAbandonMs) return;
 
     const nowMs = this._nowMs();
     this._lanes[column].pressEndsAtMs = nowMs + PRESS_HIGHLIGHT_MS;
@@ -624,7 +659,7 @@ export class KeyboardHeroSystem {
     let hitNote: Note | undefined;
     for (const note of this._notes) {
       if (note.state !== 'falling' || note.column !== column) continue;
-      if (Math.abs(pressTimeMs - note.hitTimeMs) > HIT_WINDOW_MS) continue;
+      if (Math.abs(pressTimeMs - note.hitTimeMs) > this._geometry.hitWindowMs) continue;
       if (hitNote === undefined || note.hitTimeMs < hitNote.hitTimeMs) hitNote = note;
     }
 
@@ -702,6 +737,20 @@ export class KeyboardHeroSystem {
     }
   }
 
+  /**
+   * The second note of a double note that was missed outright: it reads as a
+   * miss in its own lane, but the strike was already charged to its partner.
+   */
+  private _registerForgivenMissFeedback(lane: ColumnIndex, nowMs: number): void {
+    this._judgements.push({
+      lane,
+      text: 'MISS',
+      color: (theme) => theme.palette.state.danger,
+      startedAtMs: nowMs,
+    });
+    if (!this._failed) this._lanes[lane].errorEndsAtMs = nowMs + ERROR_FLASH_MS;
+  }
+
   private _spawnSparks(
     lane: LaneIndex,
     count: number,
@@ -767,9 +816,15 @@ export class KeyboardHeroSystem {
     ctx.save();
     ctx.translate(shake.x, shake.y);
 
-    drawBoardBase(ctx, layout, () => this._laneBedAlpha(nowMs), this._hitLineAlphaScale(nowMs));
+    drawBoardBase(
+      ctx,
+      layout,
+      this._geometry,
+      () => this._laneBedAlpha(nowMs),
+      this._hitLineAlphaScale(nowMs),
+    );
     this._drawLaneHighlights(target, layout, nowMs);
-    this._drawNotes(ctx, layout, nowMs);
+    this._drawNotes(target, layout, nowMs);
     this._drawReceptors(ctx, layout, nowMs);
     this._drawSparks(ctx, layout, nowMs);
     this._drawGlitchBars(target, layout, nowMs);
@@ -810,7 +865,7 @@ export class KeyboardHeroSystem {
    * visibly breathes off the beat it is asking the player to play on.
    */
   private _beatPulse(): number {
-    const beatsSinceFirstNote = (this._songTimeMs - KEYBOARD_HERO_CHART[0].timeMs) / BEAT_PERIOD_MS;
+    const beatsSinceFirstNote = (this._songTimeMs - this._firstNoteMs()) / BEAT_PERIOD_MS;
     const phase = beatsSinceFirstNote - Math.floor(beatsSinceFirstNote);
     // A cosine that peaks at the top of the beat and eases away from it.
     return (Math.cos(phase * Math.PI * 2) + 1) / 2;
@@ -863,17 +918,59 @@ export class KeyboardHeroSystem {
     }
   }
 
-  private _drawNotes(
-    ctx: CanvasRenderingContext2D,
-    layout: KeyboardHeroLayout,
-    nowMs: number,
-  ): void {
+  private _firstNoteMs(): number {
+    return this._chart.notes[0]?.timeMs ?? 0;
+  }
+
+  private _drawNotes(target: PaintTarget, layout: KeyboardHeroLayout, nowMs: number): void {
+    const { ctx } = target;
     ctx.save();
     clipToLanes(ctx, layout);
+    this._drawChordLinks(target, layout);
     for (const note of this._notes) {
       this._drawNote(ctx, layout, note, nowMs);
     }
     ctx.restore();
+  }
+
+  /**
+   * A rung joins a double note's two keycaps for as long as both are still
+   * falling: once either is struck the pair is no longer a thing to aim for.
+   */
+  private _drawChordLinks(target: PaintTarget, layout: KeyboardHeroLayout): void {
+    if (!this._chartHasChords) return;
+    const ink = this._chordLinkInkFor(target.theme.palette);
+    const firstOfChord = this._firstFallingNoteOfChord;
+    firstOfChord.clear();
+    for (const note of this._notes) {
+      if (note.chordId === null || note.state !== 'falling') continue;
+      const partner = firstOfChord.get(note.chordId);
+      if (partner === undefined) {
+        firstOfChord.set(note.chordId, note);
+        continue;
+      }
+      const imgY = this._noteImgY(note);
+      drawChordLink(
+        target.ctx,
+        layout,
+        [partner.column, note.column],
+        noteImgYToScreenY(layout, imgY),
+        ink,
+        this._fadeInAlpha(imgY),
+      );
+    }
+  }
+
+  private _chordLinkInkFor(palette: Theme['palette']): ChordLinkInk {
+    if (this._chordInk?.palette === palette) return this._chordInk.ink;
+    const ink = chordLinkInk(palette);
+    this._chordInk = { palette, ink };
+    return ink;
+  }
+
+  private _fadeInAlpha(imgY: number): number {
+    const fadeSpan = this._geometry.fadeInEndImgY - NOTE_SPAWN_IMG_Y;
+    return clamp01((imgY - NOTE_SPAWN_IMG_Y) / fadeSpan);
   }
 
   private _drawNote(
@@ -904,8 +1001,7 @@ export class KeyboardHeroSystem {
       scale = 1 - NOTE_MISS_SHRINK * progress;
       artState = 'missed';
     } else {
-      const fadeSpan = FADE_IN_END_IMG_Y - NOTE_SPAWN_IMG_Y;
-      alpha = clamp01((imgY - NOTE_SPAWN_IMG_Y) / fadeSpan);
+      alpha = this._fadeInAlpha(imgY);
     }
 
     const size = layout.noteSize * scale;
@@ -1117,7 +1213,7 @@ export class KeyboardHeroSystem {
     paintTrackBar(
       target,
       bar,
-      this._songTimeMs / KEYBOARD_HERO_CHART_END_MS,
+      this._songTimeMs / this._chart.endMs,
       skinsFor(target.theme).meter.progress,
     );
 
@@ -1134,7 +1230,7 @@ export class KeyboardHeroSystem {
       },
     );
 
-    const remainingMs = Math.max(0, KEYBOARD_HERO_CHART_END_MS - this._songTimeMs);
+    const remainingMs = Math.max(0, this._chart.endMs - this._songTimeMs);
     const remainingSec = Math.ceil(remainingMs / MS_PER_SECOND);
     const mm = Math.floor(remainingSec / SECONDS_PER_MINUTE);
     const ss = remainingSec % SECONDS_PER_MINUTE;
@@ -1211,10 +1307,10 @@ export class KeyboardHeroSystem {
   private _drawCountdown(target: PaintTarget, layout: KeyboardHeroLayout): void {
     if (this._failed || this._completed) return;
     const { palette } = target.theme;
-    const firstNote = KEYBOARD_HERO_CHART[0];
-    const stepMs = firstNote.timeMs / COUNTDOWN_LABELS.length;
+    const firstNoteMs = this._firstNoteMs();
+    const stepMs = firstNoteMs / COUNTDOWN_LABELS.length;
     const finalSlot = COUNTDOWN_LABELS.length - 1;
-    if (this._songTimeMs >= firstNote.timeMs + COUNTDOWN_LINGER_MS) return;
+    if (this._songTimeMs >= firstNoteMs + COUNTDOWN_LINGER_MS) return;
 
     // Clamped at both ends, and the lower end is the one that matters: the song
     // clock is latency-corrected, so it reads negative for the first tens of

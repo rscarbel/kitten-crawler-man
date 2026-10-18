@@ -17,6 +17,7 @@ import { hashLattice } from '../../map/tilegen/noise';
 import type { DungeonFloorThemeId } from '../../map/dungeon/floorTheme';
 import type { WallDressingId } from '../../map/dungeon/roomCharacters';
 import type { WallFacePart, WallShape } from '../../map/dungeon/wallShape';
+import type { LabHallwayWallPiece } from '../../map/dungeon/labHallwayDecor';
 import {
   BODY_TOP_TILES,
   FACE_STRIP_ROWS,
@@ -46,7 +47,11 @@ export type WallSpotKind =
   | 'breaker_panel'
   | 'binder_shelf'
   | 'notice_board'
-  | 'monitor';
+  | 'monitor'
+  | 'claw_gouge'
+  | 'torn_cable'
+  | 'egg_cluster'
+  | 'funnel';
 
 /** A dressing that runs along every face tile it is given to, as one continuous fitting. */
 export type WallRunKind = 'cage_bars' | 'lockers';
@@ -68,6 +73,10 @@ export interface WallDressingSet {
   readonly run: WallRunKind | null;
   /** Webs strung in the top corners where a face ends. */
   readonly cornerCobwebs: boolean;
+  /** A large piece this one face carries over everything else, or null. */
+  readonly piece: LabHallwayWallPiece | null;
+  /** How much of the face is plastered in matted silk, 0 (none) to 1 (wrapped). */
+  readonly silkCover: number;
 }
 
 /** Tiles a pipe run is decided over, so a run is a length of pipe rather than a stub. */
@@ -77,6 +86,8 @@ const PLAIN: Omit<WallDressingSet, 'spots' | 'spotChance'> = {
   pipeRunChance: 0,
   run: null,
   cornerCobwebs: false,
+  piece: null,
+  silkCover: 0,
 };
 
 /** Each character's wall dressing, by the id its table names. */
@@ -222,6 +233,42 @@ const WALL_DRESSINGS: Readonly<Record<WallDressingId, WallDressingSet>> = {
     ],
     spotChance: 0.3,
     pipeRunChance: 0.3,
+  },
+  // The spider lab's approach: raked by claws and stripped of its cabling,
+  // worse the nearer the lab, with silk in every corner.
+  lab_hallway_scarred: {
+    ...PLAIN,
+    spots: [
+      { kind: 'claw_gouge', weight: 3 },
+      { kind: 'crack', weight: 2 },
+      { kind: 'torn_cable', weight: 1 },
+    ],
+    spotChance: 0.4,
+    cornerCobwebs: true,
+    silkCover: 0.3,
+  },
+  lab_hallway_wrecked: {
+    ...PLAIN,
+    spots: [
+      { kind: 'claw_gouge', weight: 3 },
+      { kind: 'torn_cable', weight: 2 },
+      { kind: 'egg_cluster', weight: 2 },
+      { kind: 'funnel', weight: 1 },
+    ],
+    spotChance: 0.55,
+    cornerCobwebs: true,
+    silkCover: 0.65,
+  },
+  lab_hallway_nest: {
+    ...PLAIN,
+    spots: [
+      { kind: 'egg_cluster', weight: 3 },
+      { kind: 'funnel', weight: 3 },
+      { kind: 'claw_gouge', weight: 1 },
+    ],
+    spotChance: 0.7,
+    cornerCobwebs: true,
+    silkCover: 1,
   },
 };
 
@@ -1048,6 +1095,547 @@ function drawCornerCobweb(ctx: Ctx, side: Side): void {
   ctx.stroke();
 }
 
+// ── the spider lab's approach ──────────────────────────────────────────────
+
+const HALF = 0.5;
+const HALF_CHANCE = 0.5;
+
+const GOUGE_DARK = 'rgba(10,8,6,0.78)';
+const GOUGE_LIP = 'rgba(226,220,204,0.3)';
+const GOUGE_MIN_RAKES = 3;
+const GOUGE_RAKE_SPREAD = 2;
+const GOUGE_SPACING = 0.1;
+const GOUGE_LENGTH = 0.85;
+const GOUGE_MIN_TOP = 0.1;
+const GOUGE_TOP_SPREAD = 0.25;
+/** How far a rake drops across the face for every unit it runs down it. */
+const GOUGE_SLANT = 0.45;
+const GOUGE_MAX_WIDTH = 3.2 * FACE_PX;
+/** A rake is widest this far along it and tapers to a point at both ends. */
+const GOUGE_WIDEST_AT = 0.35;
+const GOUGE_EDGE_MARGIN = 0.12;
+
+/** Three to five parallel rakes torn into the face by something with claws. */
+function drawClawGouge(ctx: Ctx, rand: Rand): void {
+  const rakes = GOUGE_MIN_RAKES + Math.floor(rand() * (GOUGE_RAKE_SPREAD + 1));
+  const leaning = rand() < HALF_CHANCE ? 1 : -1;
+  const spread = (rakes - 1) * GOUGE_SPACING;
+  const drift = GOUGE_LENGTH * GOUGE_SLANT;
+  const room = 1 - GOUGE_EDGE_MARGIN * 2 - spread - drift;
+  const startX = GOUGE_EDGE_MARGIN + rand() * Math.max(0, room) + (leaning < 0 ? drift : 0);
+  const top = BODY_TOP_TILES + GOUGE_MIN_TOP + rand() * GOUGE_TOP_SPREAD;
+  for (let rake = 0; rake < rakes; rake++) {
+    const x0 = startX + rake * GOUGE_SPACING;
+    const y0 = top + signedRand(rand) * GOUGE_SPACING;
+    const x1 = x0 + leaning * drift;
+    const y1 = Math.min(FACE_FLOOR, y0 + GOUGE_LENGTH);
+    const midX = x0 + (x1 - x0) * GOUGE_WIDEST_AT;
+    const midY = y0 + (y1 - y0) * GOUGE_WIDEST_AT;
+    const width = GOUGE_MAX_WIDTH * (HALF + rand() * HALF);
+    for (const [color, shift] of [
+      [GOUGE_LIP, FACE_PX],
+      [GOUGE_DARK, 0],
+    ] as const) {
+      ctx.fillStyle = color;
+      ctx.beginPath();
+      ctx.moveTo(x0, y0 + shift);
+      ctx.lineTo(midX + width, midY + shift);
+      ctx.lineTo(x1, y1 + shift);
+      ctx.lineTo(midX - width, midY + shift);
+      ctx.closePath();
+      ctx.fill();
+    }
+  }
+}
+
+const CABLE_COLOURS: ReadonlyArray<string> = [
+  'rgba(24,24,26,1)',
+  'rgba(120,36,30,1)',
+  'rgba(54,70,96,1)',
+];
+const CABLE_COPPER = 'rgba(196,122,58,0.9)';
+const CABLE_WIDTH = 1.6 * FACE_PX;
+const CABLE_MIN = 2;
+const CABLE_SPREAD = 2;
+const CABLE_MIN_DROP = 0.45;
+const CABLE_DROP_SPREAD = 0.75;
+const CABLE_SWAY = 0.12;
+const CABLE_GAP = 0.07;
+const CABLE_FRAY_STRANDS = 3;
+const CABLE_FRAY_LENGTH = 0.05;
+const CONDUIT_STUB_LENGTH = 0.16;
+
+/** A conduit torn open at the ceiling line, its cables hanging loose down the face. */
+function drawTornCable(ctx: Ctx, rand: Rand): void {
+  const cables = CABLE_MIN + Math.floor(rand() * (CABLE_SPREAD + 1));
+  const x = acrossFace(rand, cables * CABLE_GAP);
+  const top = BODY_TOP_TILES;
+  ctx.fillStyle = CONDUIT_SHADOW;
+  ctx.fillRect(x - FACE_PX, top, cables * CABLE_GAP + 2 * FACE_PX, CONDUIT_STUB_LENGTH + FACE_PX);
+  ctx.fillStyle = CONDUIT_METAL;
+  ctx.fillRect(x - FACE_PX, top, cables * CABLE_GAP + FACE_PX, CONDUIT_STUB_LENGTH);
+  ctx.lineWidth = CABLE_WIDTH;
+  ctx.lineCap = 'round';
+  for (let cable = 0; cable < cables; cable++) {
+    const startX = x + cable * CABLE_GAP;
+    const startY = top + CONDUIT_STUB_LENGTH;
+    const drop = Math.min(FACE_FLOOR - startY, CABLE_MIN_DROP + rand() * CABLE_DROP_SPREAD);
+    const endX = startX + signedRand(rand) * CABLE_SWAY;
+    const endY = startY + drop;
+    ctx.strokeStyle = CABLE_COLOURS[cable % CABLE_COLOURS.length];
+    ctx.beginPath();
+    ctx.moveTo(startX, startY);
+    ctx.quadraticCurveTo(startX + signedRand(rand) * CABLE_SWAY, startY + drop * HALF, endX, endY);
+    ctx.stroke();
+    ctx.strokeStyle = CABLE_COPPER;
+    ctx.lineWidth = FACE_PX;
+    ctx.beginPath();
+    for (let strand = 0; strand < CABLE_FRAY_STRANDS; strand++) {
+      ctx.moveTo(endX, endY);
+      ctx.lineTo(endX + signedRand(rand) * CABLE_FRAY_LENGTH, endY + CABLE_FRAY_LENGTH);
+    }
+    ctx.stroke();
+    ctx.lineWidth = CABLE_WIDTH;
+  }
+  ctx.lineCap = 'butt';
+}
+
+const HOLE_DEEP = 'rgba(5,5,4,1)';
+const HOLE_MID = 'rgba(26,24,21,1)';
+const HOLE_RIM_LIGHT = 'rgba(176,170,156,0.7)';
+const HOLE_RIM_DARK = 'rgba(14,12,10,0.8)';
+const REBAR = 'rgba(78,62,50,0.9)';
+/** The breach spans two face columns, in face units across both. */
+const HOLE_LEFT = 0.12;
+const HOLE_RIGHT = 1.88;
+const HOLE_MIDDLE = 1;
+/** The breach reaches up to about Carl's chest: low and wide, a wall staved in, not a doorway. */
+const HOLE_TOP = BODY_TOP_TILES + 0.55;
+/** How much of the hole's height its top edge keeps away from the middle, so it is flat-topped. */
+const HOLE_SHOULDER = 0.35;
+const HOLE_EDGE_POINTS = 14;
+const HOLE_EDGE_JITTER = 0.08;
+const HOLE_REBARS = 2;
+const HOLE_CRACKS = 3;
+const HOLE_CRACK_REACH = 0.3;
+const REBAR_WIDTH = 1.5 * FACE_PX;
+
+/**
+ * A section of face broken right through, floor to near the cap: a ragged
+ * hole into the dark rock behind, rebar bent across it and cracks running
+ * out from its edge. The rubble it dropped is painted on the floor in front.
+ */
+function drawCollapsedSection(ctx: Ctx, rand: Rand, column: 'west' | 'east'): void {
+  // Both columns trace the same breach from the west column's seed; the east
+  // one sees it shifted a tile left, so the two halves meet.
+  if (column === 'east') ctx.translate(-1, 0);
+  const edge: Array<[number, number]> = [[HOLE_LEFT, FACE_FLOOR]];
+  for (let i = 0; i <= HOLE_EDGE_POINTS; i++) {
+    const t = i / HOLE_EDGE_POINTS;
+    const x = HOLE_LEFT + (HOLE_RIGHT - HOLE_LEFT) * t;
+    // Flat across the top and dropping steeply at the sides, so the hole
+    // reads as a stretch of wall staved in rather than an arch.
+    const rise = Math.min(1, Math.sin(t * Math.PI) / HOLE_SHOULDER);
+    const y = FACE_FLOOR - (FACE_FLOOR - HOLE_TOP) * rise + signedRand(rand) * HOLE_EDGE_JITTER;
+    edge.push([x + signedRand(rand) * HOLE_EDGE_JITTER * HALF, Math.min(FACE_FLOOR, y)]);
+  }
+  edge.push([HOLE_RIGHT, FACE_FLOOR]);
+  const trace = (dx: number, dy: number): void => {
+    ctx.beginPath();
+    edge.forEach(([x, y], index) => {
+      if (index === 0) ctx.moveTo(x + dx, y + dy);
+      else ctx.lineTo(x + dx, y + dy);
+    });
+    ctx.closePath();
+  };
+  ctx.fillStyle = HOLE_RIM_LIGHT;
+  trace(0, -FACE_PX);
+  ctx.fill();
+  const depth = ctx.createLinearGradient(0, HOLE_TOP, 0, FACE_FLOOR);
+  depth.addColorStop(0, HOLE_DEEP);
+  depth.addColorStop(1, HOLE_MID);
+  ctx.fillStyle = depth;
+  trace(0, FACE_PX);
+  ctx.fill();
+  drawBreachInterior(ctx, rand);
+  ctx.strokeStyle = HOLE_RIM_DARK;
+  ctx.lineWidth = FACE_PX;
+  trace(0, FACE_PX);
+  ctx.stroke();
+  drawBrokenLips(ctx, edge, rand);
+  ctx.strokeStyle = REBAR;
+  ctx.lineWidth = REBAR_WIDTH;
+  for (let bar = 0; bar < HOLE_REBARS; bar++) {
+    const y = HOLE_TOP + ((FACE_FLOOR - HOLE_TOP) * (bar + 1)) / (HOLE_REBARS + 2);
+    ctx.beginPath();
+    ctx.moveTo(HOLE_LEFT, y);
+    ctx.quadraticCurveTo(
+      HOLE_MIDDLE,
+      y + signedRand(rand) * HOLE_CRACK_REACH,
+      HOLE_RIGHT,
+      y + signedRand(rand) * HOLE_EDGE_JITTER,
+    );
+    ctx.stroke();
+  }
+  ctx.strokeStyle = CRACK_DARK;
+  ctx.lineWidth = CRACK_WIDTH;
+  for (let crack = 0; crack < HOLE_CRACKS; crack++) {
+    const [x, y] = edge[1 + Math.floor(rand() * HOLE_EDGE_POINTS)] ?? [HALF, HOLE_TOP];
+    const outward = x < HOLE_MIDDLE ? -1 : 1;
+    ctx.beginPath();
+    ctx.moveTo(x, y);
+    ctx.lineTo(x + outward * HOLE_CRACK_REACH * rand(), y - HOLE_CRACK_REACH * rand());
+    ctx.stroke();
+  }
+}
+
+const SILK_RGB: RGB = [226, 224, 214];
+const SILK_SHADE_RGB: RGB = [150, 150, 140];
+/** Drapes of matted silk per face column at full cover, each hung from the cap. */
+const SILK_DRAPES = 4;
+const SILK_DRAPE_MIN_WIDTH = 0.3;
+const SILK_DRAPE_WIDTH_SPREAD = 0.35;
+/** How far down the face a drape reaches at full cover, and how short it may fall of that. */
+const SILK_DRAPE_REACH = FACE_STRIP_ROWS - BODY_TOP_TILES;
+const SILK_DRAPE_SHORTFALL = 0.45;
+const SILK_DRAPE_ALPHA = 0.55;
+const SILK_HEM_POINTS = 5;
+const SILK_HEM_JITTER = 0.12;
+const SILK_STREAKS = 2;
+const SILK_STREAK_ALPHA = 0.35;
+const SILK_FOOT_HEIGHT = 0.3;
+const SILK_FOOT_ALPHA = 0.7;
+/** Seeds the plaster from the face column alone, so neighbouring columns run on into each other. */
+const SILK_SALT = 0x3d5;
+const SILK_DRAPE_OVERHANG = 0.15;
+
+/**
+ * Matted silk plastered over the face: drapes hung from the cap that run on
+ * across the columns, streaked where they fold, and banked thick at the foot
+ * where the face meets the floor. `cover` thins it toward nothing.
+ */
+function drawSilkPlaster(ctx: Ctx, tx: number, faceRow: number, cover: number): void {
+  const rand = seededRand(Math.floor(tileHash(tx, faceRow, SILK_SALT) * DRESSING_SEED_RANGE));
+  const drapes = Math.max(1, Math.round(SILK_DRAPES * cover));
+  for (let drape = 0; drape < drapes; drape++) {
+    const width = SILK_DRAPE_MIN_WIDTH + rand() * SILK_DRAPE_WIDTH_SPREAD;
+    const left = -SILK_DRAPE_OVERHANG + rand() * (1 + SILK_DRAPE_OVERHANG * 2 - width);
+    const reach = SILK_DRAPE_REACH * cover * (1 - rand() * SILK_DRAPE_SHORTFALL);
+    const top = BODY_TOP_TILES;
+    const hem = top + reach;
+    const gradient = ctx.createLinearGradient(0, top, 0, hem);
+    gradient.addColorStop(0, rgba(SILK_RGB, SILK_DRAPE_ALPHA));
+    gradient.addColorStop(1, rgba(SILK_SHADE_RGB, SILK_DRAPE_ALPHA * HALF));
+    ctx.fillStyle = gradient;
+    ctx.beginPath();
+    ctx.moveTo(left, top);
+    ctx.lineTo(left + width, top);
+    for (let point = SILK_HEM_POINTS; point >= 0; point--) {
+      const x = left + (width * point) / SILK_HEM_POINTS;
+      const sag = Math.sin((point / SILK_HEM_POINTS) * Math.PI) * SILK_HEM_JITTER;
+      ctx.lineTo(x, hem + sag + signedRand(rand) * SILK_HEM_JITTER * HALF);
+    }
+    ctx.closePath();
+    ctx.fill();
+  }
+  ctx.strokeStyle = rgba(SILK_RGB, SILK_STREAK_ALPHA * cover);
+  ctx.lineWidth = FACE_PX;
+  ctx.beginPath();
+  for (let streak = 0; streak < SILK_STREAKS; streak++) {
+    const x = rand();
+    ctx.moveTo(x, BODY_TOP_TILES);
+    ctx.quadraticCurveTo(
+      x + signedRand(rand) * SILK_HEM_JITTER,
+      BODY_TOP_TILES + SILK_DRAPE_REACH * cover * HALF,
+      x + signedRand(rand) * SILK_HEM_JITTER,
+      BODY_TOP_TILES + SILK_DRAPE_REACH * cover,
+    );
+  }
+  ctx.stroke();
+  const foot = ctx.createLinearGradient(0, FACE_FLOOR - SILK_FOOT_HEIGHT, 0, FACE_FLOOR);
+  foot.addColorStop(0, rgba(SILK_RGB, 0));
+  foot.addColorStop(1, rgba(SILK_RGB, SILK_FOOT_ALPHA * cover));
+  ctx.fillStyle = foot;
+  ctx.fillRect(0, FACE_FLOOR - SILK_FOOT_HEIGHT, 1, SILK_FOOT_HEIGHT);
+}
+
+const EGG_RGB: RGB = [222, 210, 186];
+const EGG_SHADE_RGB: RGB = [150, 126, 112];
+const EGG_VEIN = 'rgba(120,70,80,0.45)';
+const EGG_MIN = 4;
+const EGG_SPREAD = 4;
+const EGG_MIN_RADIUS = 0.07;
+const EGG_RADIUS_SPREAD = 0.05;
+const EGG_CLUSTER_SPREAD = 0.22;
+const EGG_CLUSTER_MIN_Y = BODY_TOP_TILES + 0.35;
+const EGG_CLUSTER_Y_SPREAD = 0.6;
+const EGG_TALL = 1.25;
+
+/** A clutch of egg sacs glued to the face in a bed of silk. */
+function drawWallEggCluster(ctx: Ctx, rand: Rand): void {
+  const centreX = acrossFace(rand);
+  const centreY = EGG_CLUSTER_MIN_Y + rand() * EGG_CLUSTER_Y_SPREAD;
+  ctx.fillStyle = rgba(SILK_RGB, SILK_DRAPE_ALPHA);
+  ctx.beginPath();
+  ctx.ellipse(
+    centreX,
+    centreY,
+    EGG_CLUSTER_SPREAD * EGG_TALL,
+    EGG_CLUSTER_SPREAD,
+    0,
+    0,
+    Math.PI * 2,
+  );
+  ctx.fill();
+  const eggs = EGG_MIN + Math.floor(rand() * EGG_SPREAD);
+  for (let egg = 0; egg < eggs; egg++) {
+    const x = centreX + signedRand(rand) * EGG_CLUSTER_SPREAD;
+    const y = centreY + signedRand(rand) * EGG_CLUSTER_SPREAD * HALF;
+    const radius = EGG_MIN_RADIUS + rand() * EGG_RADIUS_SPREAD;
+    const body = ctx.createRadialGradient(
+      x - radius * HALF,
+      y - radius * HALF,
+      0,
+      x,
+      y,
+      radius * EGG_TALL,
+    );
+    body.addColorStop(0, rgba(EGG_RGB, 1));
+    body.addColorStop(1, rgba(EGG_SHADE_RGB, 1));
+    ctx.fillStyle = body;
+    ctx.beginPath();
+    ctx.ellipse(x, y, radius, radius * EGG_TALL, 0, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.strokeStyle = EGG_VEIN;
+    ctx.lineWidth = FACE_PX;
+    ctx.beginPath();
+    ctx.moveTo(x - radius * HALF, y - radius * HALF);
+    ctx.quadraticCurveTo(x, y, x + radius * HALF, y + radius);
+    ctx.stroke();
+  }
+}
+
+const FUNNEL_DARK = 'rgba(6,6,5,0.95)';
+const FUNNEL_SHEET_ALPHA = 0.6;
+const FUNNEL_SHEET_RX = 0.42;
+const FUNNEL_SHEET_RY = 0.42;
+const FUNNEL_THROAT_RX = 0.17;
+const FUNNEL_THROAT_RY = 0.09;
+/** The throat sits low in its sheet, near the floor, where a funnel's mouth opens. */
+const FUNNEL_THROAT_DROP = 0.12;
+const FUNNEL_FOLDS = 6;
+const FUNNEL_FOLD_ALPHA = 0.5;
+
+/**
+ * A funnel web's mouth at the foot of the face: a sheet of silk spread over
+ * the wall and narrowing into a dark throat near the floor, its folds all
+ * running down into the hole.
+ */
+function drawFunnel(ctx: Ctx, rand: Rand): void {
+  const x = clampAcross(acrossFace(rand), FUNNEL_SHEET_RX * HALF + JAMB_CLEARANCE_TILES);
+  const throatY = FACE_FLOOR - FUNNEL_THROAT_RY - FUNNEL_THROAT_DROP;
+  const sheetY = throatY - FUNNEL_SHEET_RY * HALF;
+  const sheet = ctx.createRadialGradient(x, throatY, FUNNEL_THROAT_RX, x, sheetY, FUNNEL_SHEET_RX);
+  sheet.addColorStop(0, rgba(SILK_RGB, FUNNEL_SHEET_ALPHA));
+  sheet.addColorStop(1, rgba(SILK_RGB, 0));
+  ctx.fillStyle = sheet;
+  ctx.beginPath();
+  ctx.ellipse(x, sheetY, FUNNEL_SHEET_RX, FUNNEL_SHEET_RY, 0, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.strokeStyle = rgba(SILK_SHADE_RGB, FUNNEL_FOLD_ALPHA);
+  ctx.lineWidth = FACE_PX;
+  ctx.beginPath();
+  for (let fold = 0; fold < FUNNEL_FOLDS; fold++) {
+    const spread = (fold / (FUNNEL_FOLDS - 1) - HALF) * 2;
+    ctx.moveTo(x + spread * FUNNEL_SHEET_RX, sheetY - FUNNEL_SHEET_RY * HALF * rand());
+    ctx.lineTo(x + spread * FUNNEL_THROAT_RX * HALF, throatY);
+  }
+  ctx.stroke();
+  ctx.fillStyle = FUNNEL_DARK;
+  ctx.beginPath();
+  ctx.ellipse(x, throatY, FUNNEL_THROAT_RX, FUNNEL_THROAT_RY, 0, 0, Math.PI * 2);
+  ctx.fill();
+}
+
+const BREACH_BACK_WALL = 'rgba(40,36,32,1)';
+const BREACH_BACK_TOP = BODY_TOP_TILES + 0.75;
+const BREACH_BACK_LEFT = 0.35;
+const BREACH_BACK_RIGHT = 1.65;
+const BREACH_SILK_ALPHA = 0.6;
+const BREACH_SILK_STRANDS = 7;
+const BREACH_SACS = 4;
+const BREACH_SAC_RADIUS = 0.08;
+const BREACH_SAC_TALL = 1.25;
+const BREACH_SAC_RGB: RGB = [206, 194, 170];
+const BREACH_SAC_FLOOR = FACE_FLOOR - 0.12;
+const BREACH_SAC_SPREAD = 0.9;
+const BREACH_EYE = 'rgba(232,52,36,0.95)';
+const BREACH_EYE_PAIRS = 2;
+const BREACH_EYE_RADIUS = 0.022;
+const BREACH_EYE_GAP = 0.06;
+const BREACH_EYE_MIN_Y = BODY_TOP_TILES + 0.85;
+const BREACH_EYE_Y_SPREAD = 0.3;
+const BREACH_EYE_MIN_X = 0.6;
+const BREACH_EYE_X_SPREAD = 0.8;
+
+/**
+ * What the breach opens onto: rock and the back of a chamber faintly lit
+ * from the hall, silk strung across the opening, a clutch of egg sacs on
+ * its floor and two pairs of eyes in the dark — a hole something lives in,
+ * not a void.
+ */
+function drawBreachInterior(ctx: Ctx, rand: Rand): void {
+  const back = ctx.createLinearGradient(0, BREACH_BACK_TOP, 0, FACE_FLOOR);
+  back.addColorStop(0, rgba([0, 0, 0], 0));
+  back.addColorStop(1, BREACH_BACK_WALL);
+  ctx.fillStyle = back;
+  ctx.beginPath();
+  ctx.ellipse(
+    (BREACH_BACK_LEFT + BREACH_BACK_RIGHT) * HALF,
+    FACE_FLOOR,
+    (BREACH_BACK_RIGHT - BREACH_BACK_LEFT) * HALF,
+    FACE_FLOOR - BREACH_BACK_TOP,
+    0,
+    Math.PI,
+    Math.PI * 2,
+  );
+  ctx.fill();
+  for (let sac = 0; sac < BREACH_SACS; sac++) {
+    const x = HOLE_MIDDLE + signedRand(rand) * BREACH_SAC_SPREAD * HALF;
+    const radius = BREACH_SAC_RADIUS * (HALF + rand() * HALF);
+    const y = BREACH_SAC_FLOOR - radius;
+    ctx.fillStyle = rgba(BREACH_SAC_RGB, HALF + rand() * HALF);
+    ctx.beginPath();
+    ctx.ellipse(x, y, radius, radius * BREACH_SAC_TALL, 0, 0, Math.PI * 2);
+    ctx.fill();
+  }
+  ctx.fillStyle = BREACH_EYE;
+  for (let pair = 0; pair < BREACH_EYE_PAIRS; pair++) {
+    const x = BREACH_EYE_MIN_X + rand() * BREACH_EYE_X_SPREAD;
+    const y = BREACH_EYE_MIN_Y + rand() * BREACH_EYE_Y_SPREAD;
+    for (const side of [-1, 1]) {
+      ctx.beginPath();
+      ctx.arc(x + side * BREACH_EYE_GAP * HALF, y, BREACH_EYE_RADIUS, 0, Math.PI * 2);
+      ctx.fill();
+    }
+  }
+  ctx.strokeStyle = rgba(SILK_RGB, BREACH_SILK_ALPHA);
+  ctx.lineWidth = FACE_PX;
+  ctx.beginPath();
+  for (let strand = 0; strand < BREACH_SILK_STRANDS; strand++) {
+    const fromX = HOLE_LEFT + rand() * (HOLE_MIDDLE - HOLE_LEFT);
+    const toX = HOLE_MIDDLE + rand() * (HOLE_RIGHT - HOLE_MIDDLE);
+    const fromY = HOLE_TOP + rand() * (FACE_FLOOR - HOLE_TOP);
+    const toY = HOLE_TOP + rand() * (FACE_FLOOR - HOLE_TOP);
+    ctx.moveTo(fromX, fromY);
+    ctx.quadraticCurveTo(HOLE_MIDDLE, Math.max(fromY, toY) + HOLE_EDGE_JITTER, toX, toY);
+  }
+  ctx.stroke();
+}
+
+const LIP_TONES: ReadonlyArray<RGB> = [
+  [118, 116, 110],
+  [96, 94, 90],
+  [136, 132, 124],
+];
+const LIP_LIGHT: RGB = [196, 190, 176];
+const LIP_SHADOW: RGB = [8, 7, 6];
+const LIP_MIN_W = 0.1;
+const LIP_W_SPREAD = 0.1;
+const LIP_MIN_H = 0.06;
+const LIP_H_SPREAD = 0.06;
+const LIP_TILT = 0.5;
+const LIP_SHADOW_ALPHA = 0.6;
+const LIP_LIGHT_ALPHA = 0.8;
+
+/** Broken bricks round the breach's edge, each lit on top and shadowed under. */
+function drawBrokenLips(
+  ctx: Ctx,
+  edge: ReadonlyArray<readonly [number, number]>,
+  rand: Rand,
+): void {
+  for (let index = 1; index < edge.length - 1; index++) {
+    const [x, y] = edge[index];
+    const w = LIP_MIN_W + rand() * LIP_W_SPREAD;
+    const h = LIP_MIN_H + rand() * LIP_H_SPREAD;
+    ctx.save();
+    ctx.translate(x, y);
+    ctx.rotate(signedRand(rand) * LIP_TILT);
+    ctx.fillStyle = rgba(LIP_SHADOW, LIP_SHADOW_ALPHA);
+    ctx.fillRect(-w * HALF, FACE_PX, w, h);
+    ctx.fillStyle = rgba(LIP_TONES[index % LIP_TONES.length], 1);
+    ctx.fillRect(-w * HALF, -h, w, h);
+    ctx.fillStyle = rgba(LIP_LIGHT, LIP_LIGHT_ALPHA);
+    ctx.fillRect(-w * HALF, -h, w, FACE_PX);
+    ctx.restore();
+  }
+}
+
+const SIGN_PLATE = 'rgba(232,228,214,1)';
+const SIGN_BAND = 'rgba(196,36,30,1)';
+const SIGN_INK = 'rgba(28,24,22,1)';
+const SIGN_EDGE = 'rgba(60,56,50,1)';
+const SIGN_SHADOW = 'rgba(0,0,0,0.42)';
+const SIGN_SCREW = 'rgba(150,150,140,1)';
+const SIGN_W = 0.74;
+const SIGN_H = 0.42;
+const SIGN_BAND_SHARE = 0.32;
+const SIGN_SCREW_X = 0.24;
+const SIGN_SCREW_Y = BODY_TOP_TILES + 0.3;
+const SIGN_MIN_TILT = 0.4;
+const SIGN_TILT_SPREAD = 0.25;
+const SIGN_SHADOW_OFFSET = 2.5 * FACE_PX;
+const SIGN_SCREW_RADIUS = 1.4 * FACE_PX;
+const SIGN_INSET = 0.07;
+const SIGN_TEXT_LINES = 2;
+const SIGN_TEXT_HEIGHT = 1.6 * FACE_PX;
+const SIGN_TEXT_GAP = 0.08;
+/** Each line of lettering runs this much shorter than the one above it. */
+const SIGN_TEXT_STEP = 0.25;
+
+/**
+ * The "authorised personnel only" plate, hanging from its last screw and
+ * swung down at a slant: red band, dark lettering, pale enamel. Too small to
+ * read as words; read as a warning at any distance.
+ */
+function drawWarningSign(ctx: Ctx, rand: Rand): void {
+  const tilt = SIGN_MIN_TILT + rand() * SIGN_TILT_SPREAD;
+  const plate = (dx: number, dy: number): void => {
+    ctx.save();
+    ctx.translate(SIGN_SCREW_X + dx, SIGN_SCREW_Y + dy);
+    ctx.rotate(tilt);
+    ctx.fillRect(-SIGN_INSET, -SIGN_INSET, SIGN_W, SIGN_H);
+    ctx.restore();
+  };
+  ctx.fillStyle = SIGN_SHADOW;
+  plate(SIGN_SHADOW_OFFSET, SIGN_SHADOW_OFFSET);
+  ctx.save();
+  ctx.translate(SIGN_SCREW_X, SIGN_SCREW_Y);
+  ctx.rotate(tilt);
+  ctx.fillStyle = SIGN_EDGE;
+  ctx.fillRect(
+    -SIGN_INSET - FACE_PX,
+    -SIGN_INSET - FACE_PX,
+    SIGN_W + 2 * FACE_PX,
+    SIGN_H + 2 * FACE_PX,
+  );
+  ctx.fillStyle = SIGN_PLATE;
+  ctx.fillRect(-SIGN_INSET, -SIGN_INSET, SIGN_W, SIGN_H);
+  ctx.fillStyle = SIGN_BAND;
+  ctx.fillRect(-SIGN_INSET, -SIGN_INSET, SIGN_W, SIGN_H * SIGN_BAND_SHARE);
+  ctx.fillStyle = SIGN_INK;
+  for (let line = 0; line < SIGN_TEXT_LINES; line++) {
+    const y = -SIGN_INSET + SIGN_H * SIGN_BAND_SHARE + SIGN_TEXT_GAP * (line + 1) - FACE_PX;
+    const length = (SIGN_W - SIGN_INSET * 3) * (1 - line * SIGN_TEXT_STEP);
+    ctx.fillRect(0, y, length, SIGN_TEXT_HEIGHT);
+  }
+  ctx.restore();
+  ctx.fillStyle = SIGN_SCREW;
+  ctx.beginPath();
+  ctx.arc(SIGN_SCREW_X, SIGN_SCREW_Y, SIGN_SCREW_RADIUS, 0, Math.PI * 2);
+  ctx.fill();
+}
+
 // ── the dressing pass ──────────────────────────────────────────────────────
 
 /** How much of the tile a run fitting covers: clear of a jamb on either open side. */
@@ -1082,7 +1670,10 @@ export function drawDressing(
   const westEnds = !continuesInto(shape, west);
   const eastEnds = !continuesInto(shape, east);
   const hasWeb = dressing.cornerCobwebs && (westEnds || eastEnds);
-  if (spot === null && !hasPipe && dressing.run === null && !hasWeb) return;
+  const piece = dressing.piece;
+  const silk = dressing.silkCover > 0;
+  const bare = spot === null && !hasPipe && dressing.run === null && !hasWeb && piece === null;
+  if (bare && !silk) return;
 
   ctx.save();
   ctx.beginPath();
@@ -1102,7 +1693,21 @@ export function drawDressing(
   const rand = seededRand(
     Math.floor(tileHash(tx, faceRow, DRESSING_SHAPE_SALT) * DRESSING_SEED_RANGE),
   );
-  switch (spot) {
+  if (silk) drawSilkPlaster(ctx, tx, faceRow, dressing.silkCover);
+  // A large piece takes the face whole: nothing small is hung through it.
+  switch (piece === null ? spot : null) {
+    case 'egg_cluster':
+      drawWallEggCluster(ctx, rand);
+      break;
+    case 'funnel':
+      drawFunnel(ctx, rand);
+      break;
+    case 'claw_gouge':
+      drawClawGouge(ctx, rand);
+      break;
+    case 'torn_cable':
+      drawTornCable(ctx, rand);
+      break;
     case 'crack':
       drawCrack(ctx, rand);
       break;
@@ -1151,6 +1756,14 @@ export function drawDressing(
     case null:
       break;
   }
+  if (piece === 'collapsed_west' || piece === 'collapsed_east') {
+    const westColumn = piece === 'collapsed_west' ? tx : tx - 1;
+    const breachRand = seededRand(
+      Math.floor(tileHash(westColumn, faceRow, DRESSING_SHAPE_SALT) * DRESSING_SEED_RANGE),
+    );
+    drawCollapsedSection(ctx, breachRand, piece === 'collapsed_west' ? 'west' : 'east');
+  }
+  if (piece === 'warning_sign') drawWarningSign(ctx, rand);
   if (hasWeb && westEnds) drawCornerCobweb(ctx, 'west');
   if (hasWeb && eastEnds) drawCornerCobweb(ctx, 'east');
   ctx.restore();

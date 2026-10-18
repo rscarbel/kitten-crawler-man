@@ -1,6 +1,7 @@
 import type { TileContent } from './tileTypes';
 import { corridorComponents } from './progressionValidation';
 import { roomDoorways, type Point, type Rect, type RoomDoorway } from './roomDoorways';
+import { tileCoordKey } from './tileIndex';
 
 /**
  * What a generated room is *for*. Carried on the room itself rather than
@@ -100,6 +101,12 @@ export interface HallwayRegion {
    * "hallway" and needs telling apart from one.
    */
   readonly arena: boolean;
+  /**
+   * Set on the two hallways of the spider lab's approach — host room to its
+   * station, station to the lab — which are dressed as the lab's own wreckage
+   * rather than as any of the floor's hallway characters.
+   */
+  readonly labApproach: boolean;
 }
 
 export type Region = RoomRegion | HallwayRegion;
@@ -122,6 +129,8 @@ export interface RegionMapInput {
   readonly corridorKindAt: (x: number, y: number) => HallwayKind | undefined;
   readonly zoneOf: (point: Point) => Zone;
   readonly arenas: ReadonlyArray<{ readonly centre: Point; readonly radius: number }>;
+  /** Tile keys (`tileCoordKey`) of the spider lab's approach hallways; absent on a floor without a lab. */
+  readonly labApproachTiles?: ReadonlySet<number>;
 }
 
 const HALLWAY_KIND_ORDER: ReadonlyArray<HallwayKind> = ['narrow', 'standard', 'nook'];
@@ -315,6 +324,9 @@ export function buildRegionMap(input: RegionMapInput): RegionMap {
       hallwayKind: dominantHallwayKind(hallwayKinds),
       zone: zoneOf(centroidOf(component.tiles)),
       arena: insideAnyArena(component.tiles, arenas),
+      labApproach: component.tiles.some(
+        (tile) => input.labApproachTiles?.has(tileCoordKey(tile.x, tile.y)) === true,
+      ),
     };
   });
 

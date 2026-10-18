@@ -77,7 +77,10 @@ export type WallDressingId =
   | 'service_filing'
   | 'service_notice_board'
   | 'service_monitors'
-  | 'service_conduit';
+  | 'service_conduit'
+  | 'lab_hallway_scarred'
+  | 'lab_hallway_wrecked'
+  | 'lab_hallway_nest';
 
 // ── Props ───────────────────────────────────────────────────────────────────
 
@@ -262,7 +265,15 @@ export type LightPlacement = 'north-face' | 'wall' | 'corner' | 'cluster' | 'cei
 
 /** The tint a region's lights share. */
 export type LightColour =
-  'warm' | 'tallow' | 'cool_warm' | 'cool_white' | 'sodium' | 'cold' | 'monitor' | 'emergency_red';
+  | 'warm'
+  | 'tallow'
+  | 'cool_warm'
+  | 'cool_white'
+  | 'sodium'
+  | 'cold'
+  | 'monitor'
+  | 'emergency_red'
+  | 'sickly';
 
 /** How many of a source a region gets: a fixed count, or one every so many tiles of run. */
 export type LightAmount = { readonly count: CountRange } | { readonly everyTiles: CountRange };
@@ -291,7 +302,8 @@ export type SpecialRegionTag =
   | 'spider_lab'
   | 'clogged_bathroom'
   | 'stealth_gate'
-  | 'arena';
+  | 'arena'
+  | 'lab_hallway';
 
 const FIXED_ONE: CountRange = { min: 1, max: 1 };
 const FIXED_TWO: CountRange = { min: 2, max: 2 };
@@ -322,6 +334,10 @@ export const SPECIAL_REGION_LIGHTING = {
   // the party walks in.
   stealth_gate: { ambient: 'lit', colour: 'sodium', sources: [] },
   arena: { ambient: 'lit', colour: 'cool_white', sources: [] },
+  // Darker than any other hallway on the floor, and darkening further toward
+  // the lab (`DungeonLightingSystem` grades it along the walk); its one dying
+  // tube and its smashed one are hung by `wallFixtures.ts`, not counted here.
+  lab_hallway: { ambient: 'dark', colour: 'sickly', sources: [] },
 } as const satisfies Record<SpecialRegionTag, LightingProfile | null>;
 
 // ── Sound ───────────────────────────────────────────────────────────────────
@@ -1080,6 +1096,7 @@ export const SPECIAL_REGION_FLOOR_MATERIALS: Partial<
 > = {
   clogged_bathroom: 'f2_washroom',
   stealth_gate: 'f2_plate',
+  lab_hallway: 'f2_concrete',
 };
 
 /** Every character on every floor, for lookups by id. */

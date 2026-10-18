@@ -12,6 +12,8 @@ import {
   ARENA_FLOOR,
   FLOOR_GRATE,
   SPIDER_LAB_FLOOR,
+  LAB_STATION_FLOOR,
+  LAB_STATION_THRESHOLD,
   LAB_BENCH,
   LAB_SHELF,
   LAB_WEB,
@@ -23,7 +25,9 @@ import { randomFromArray, randomInt, clamp } from '../utils';
 import { tileCoordKey } from './tileIndex';
 import { planCrawlerSigns, crawlerSignFootprint, type PlannedCrawlerSign } from './crawlerSigns';
 import { isWalkableTileType } from './walkability';
-import { mordecaiAndBedTiles } from './safeRoomFixtures';
+import { mordecaiAndBedTiles, SAFE_ROOM_THRESHOLD_DEPTH_TILES } from './safeRoomFixtures';
+import { planLabStation } from './labStationLayout';
+import { labHallwayDecayAt, layOutLabApproach, type LabHallwayTile } from './labApproach';
 import type { ProgressionDef } from '../levels/types';
 import {
   ARENA_ANTECHAMBER_MIN_DEPTH,
@@ -93,7 +97,6 @@ import { layOutSpiderLab } from './spiderLabLayout';
 import { registerSpiderLabFloorPlan } from './tiles/bossRooms/labFloorPlan';
 import {
   blockingWouldSplitRoom,
-  corridorBeyondDoorway,
   roomDoorways,
   detectRoomEntrance,
   ROOM_WALL_OUTWARD,
@@ -126,6 +129,7 @@ import {
 import {
   BLOCKING_CLEARANCE_TILES,
   dressHallway,
+  dressLabHallway,
   dressRoom,
   dressSpecialRoom,
   isBlockingDressingTile,
@@ -151,7 +155,15 @@ type Room = {
    * of `undefined` and would be indistinguishable by any other field.
    */
   isSafeAccessPocket?: boolean;
+  /** See {@link SafeRoomData.servesSpecialRoom}. */
+  servesSpecialRoom?: SafeRoomService;
 };
+
+/** What a room may set on itself beyond its rectangle, floor and role. */
+type RoomTags = Pick<
+  Room,
+  'guardsBossType' | 'followsBossType' | 'isSafeAccessPocket' | 'servesSpecialRoom'
+>;
 type Point = { x: number; y: number };
 type Rect = { x: number; y: number; w: number; h: number };
 
@@ -199,8 +211,6 @@ export interface SpiderLabRoomData {
   centre: Point;
   /** South-wall entrance tile (where hallways connect). */
   entranceTile: Point;
-  /** Tile where the scientist NPC stands (near entrance). */
-  scientistTile: Point;
   /** The terminal the hack is run from: the back-middle tile of its bench. */
   computerTile: Point;
   /** Tile where the spider egg starts (centre of room). */
@@ -211,6 +221,8 @@ export interface SpiderLabRoomData {
   entranceWall: RoomWall;
   /** The terminal's whole bench, three wide and two deep, stamped `LAB_BENCH`. */
   computerTableTiles: Point[];
+  /** Dr. Moult's post in his lab once he has asked for help: beside the terminal bench, on the doorway side. */
+  labPostTile: Point;
   /** The waist-high lab benches in the entrance half, stamped `LAB_BENCH`. */
   benchTiles: Point[];
   /** The specimen shelving against the side walls, stamped `LAB_SHELF`. */
@@ -219,9 +231,42 @@ export interface SpiderLabRoomData {
   webTiles: Point[];
   /** Where the cocooned lab staff hang. Walkable: they hang over the floor, not on it. */
   cocoonTiles: Point[];
-  /** The corridor from the lab's doorway back to the room it hangs off, which shares the lab's music. */
-  hallwayTiles: Point[];
+  /**
+   * The hallway from the chain room the lab hangs off to its station: every
+   * floor tile of that corridor. The lab's approach runs host room → this
+   * hallway → the station (a safe room) → {@link innerHallwayTiles} → the lab.
+   */
+  outerHallwayTiles: LabHallwayTile[];
+  /** The hallway from the station to the lab's doorway: every floor tile of that corridor. */
+  innerHallwayTiles: LabHallwayTile[];
+  /**
+   * The outer hallway's middle tile where it leaves the host chain room — the
+   * first corridor tile a crawler steps on when turning in.
+   */
+  hallwayMouthTile: Point;
+  /**
+   * Where Dr. Moult waits before he has asked for help: inside the host room
+   * beside the mouth, never in a doorway.
+   */
+  hallwayPostTile: Point;
+  /** The way into the host room from the mouth, one tile long: the way he faces at his post. */
+  hallwayPostFacing: Point;
+  /** The chain room the approach leaves from. */
+  hostBounds: Rect;
+  /**
+   * The station's floor. Its entry in `safeRooms` is the one whose
+   * `servesSpecialRoom` is `'spider_lab'`.
+   */
+  stationBounds: Rect;
+  /**
+   * Fewest steps from the mouth to the lab's doorway tile, along the same walk
+   * as {@link LabHallwayTile.distanceFromMouth}: the far end of the approach.
+   */
+  labDoorwayDistance: number;
 }
+
+/** A special room a safe room exists to serve, rather than one of the floor's own stops. */
+export type SafeRoomService = 'spider_lab';
 
 export interface SafeRoomData {
   bounds: Rect;
@@ -248,6 +293,16 @@ export interface SafeRoomData {
    * spacing along its own mandatory route by the free region's rule.
    */
   isSafeAccessPocket?: boolean;
+  /**
+   * Set on a safe room that belongs to a special room's approach rather than to
+   * the floor's own run of stops — the spider lab's field station, on the
+   * lab's dead-end branch. It is not a scatter room, not a gateway and not a
+   * safe-access pocket, so the rules for those leave it out; it furnishes
+   * itself as a field station rather than a Bopca station, and it is always
+   * the last entry in `safeRooms`, so no earlier room's index (which keys its
+   * Bopca's name) depends on whether the floor has one.
+   */
+  servesSpecialRoom?: SafeRoomService;
 }
 
 /**
@@ -532,6 +587,13 @@ const QUEST_ROOM_W = 14;
 const QUEST_ROOM_H = 12;
 const SPIDER_LAB_W = 40;
 const SPIDER_LAB_H = 32;
+/**
+ * The lab's field station: room for Mordecai to wander a little (his walk needs
+ * a 3×3 interior) beside the team's kit, with the walk between its two
+ * doorways left open.
+ */
+const LAB_STATION_W = 7;
+const LAB_STATION_H = 6;
 
 const BOSS_MIN_SEPARATION = 60;
 const FALLBACK_START_POS = 15;
@@ -576,8 +638,6 @@ const DEADEND_SHORTCUT_MAX = 65;
 
 // Spider lab furniture layout (room is SPIDER_LAB_W × SPIDER_LAB_H tiles)
 const LAB_WALL_OFFSET = 3; // items placed 3 tiles inside walls
-/** How far inside his own doorway the scientist waits. */
-const LAB_SCIENTIST_DOORWAY_DEPTH = 2;
 const LAB_EGG_NEAR_WALL = 4; // egg offset from the wall opposite the entrance
 const LAB_EGG_FAR_WALL = 5; // egg offset from the far wall
 const LAB_MACHINE_SPREAD = 10; // life machine lateral spread from center
@@ -623,6 +683,7 @@ const PLACEMENT_STREAM_SALT = 0x5bd1e995;
 const HALLWAY_STREAM_SALT = 0x27d4eb2f;
 const FIXTURE_STREAM_SALT = 0x165667b1;
 const SPECIAL_ROOM_STREAM_SALT = 0x2f6b1c53;
+const LAB_HALLWAY_STREAM_SALT = 0x4c8f2a91;
 
 /**
  * The lighting tag each room role that takes no character is given; null for
@@ -801,8 +862,11 @@ function bossFloorForType(type: string): number {
 
 // ── Safe-room thresholds ──────────────────────────────────────────────────────
 
-/** How far into the room the scuffed band reaches: the doorway tile, plus one. */
-const SAFE_ROOM_THRESHOLD_DEPTH_TILES = 2;
+/** The band each safe-room floor is worn or painted into at its doorways. */
+const THRESHOLD_FOR_FLOOR: ReadonlyMap<number, number> = new Map([
+  [SAFE_ROOM_FLOOR, SAFE_ROOM_THRESHOLD],
+  [LAB_STATION_FLOOR, LAB_STATION_THRESHOLD],
+]);
 
 /**
  * The four sides of a room, as the direction *into* the room from each one.
@@ -866,8 +930,9 @@ function stampSafeRoomThresholds(
         const y = edgeY + side.inwardY * depth;
         if (x < bounds.x || x > lastX || y < bounds.y || y > lastY) break;
         if (isFixture(x, y)) continue;
-        if (grid[y][x].type !== SAFE_ROOM_FLOOR) continue;
-        grid[y][x].type = SAFE_ROOM_THRESHOLD;
+        const threshold = THRESHOLD_FOR_FLOOR.get(grid[y][x].type);
+        if (threshold === undefined) continue;
+        grid[y][x].type = threshold;
       }
     }
   }
@@ -876,33 +941,6 @@ function stampSafeRoomThresholds(
 /** A corridor's tiles as a lookup, keyed the way every other tile set in the game is. */
 function corridorTileKeys(tiles: ReadonlyArray<Point>): Set<number> {
   return new Set(tiles.map((tile) => tileCoordKey(tile.x, tile.y)));
-}
-
-/**
- * Where the spider lab's scientist stands: a couple of tiles inside his own
- * doorway, clamped to the room's interior.
- *
- * Derived from the doorway rather than from the entrance wall's midpoint,
- * because a 40-tile-wide wall can have its corridor break through anywhere
- * along it — and a scientist standing at the far end of the same wall is not
- * visible from the corridor at all.
- */
-function labScientistTile(entrance: { wall: RoomWall; tile: Point }, bounds: Rect): Point {
-  const side = ROOM_WALL_OUTWARD.find((candidate) => candidate.wall === entrance.wall);
-  const inwardX = side === undefined ? 0 : -side.dx;
-  const inwardY = side === undefined ? 0 : -side.dy;
-  return {
-    x: clamp(
-      entrance.tile.x + inwardX * LAB_SCIENTIST_DOORWAY_DEPTH,
-      bounds.x + 1,
-      bounds.x + bounds.w - 2,
-    ),
-    y: clamp(
-      entrance.tile.y + inwardY * LAB_SCIENTIST_DOORWAY_DEPTH,
-      bounds.y + 1,
-      bounds.y + bounds.h - 2,
-    ),
-  };
 }
 
 /**
@@ -1304,6 +1342,12 @@ function buildDungeon(
   } = options;
   const BORDER = 5;
 
+  // The lab's approach — the station and both hallways — is seated by the spine,
+  // so a floor asking for a lab without one is a level-definition bug.
+  if (hasSpiderLab && progression?.spine === undefined) {
+    throw new Error('a spider lab is seated off a spine; this floor has none');
+  }
+
   // 1. Fill everything with wall tiles
   const grid: TileContent[][] = Array.from({ length: size }, (_, y) =>
     Array.from({ length: size }, (_, x) => ({
@@ -1436,8 +1480,6 @@ function buildDungeon(
   const maxAttempts = Math.max(maxRooms * ATTEMPT_MULTIPLIER, MIN_PLACEMENT_ATTEMPTS);
 
   const QUEST_MAX_DIST = 60;
-  const SPIDER_LAB_MIN_DIST = 30;
-  const SPIDER_LAB_MAX_DIST = 90;
 
   type Edge = { from: number; to: number };
   const mstEdges: Edge[] = [];
@@ -1500,25 +1542,8 @@ function buildDungeon(
     }
   };
 
-  const addRoom = (
-    rect: Rect,
-    floor: number,
-    role: RoomRole,
-    guardsBossType?: string,
-    followsBossType?: string,
-    isSafeAccessPocket?: boolean,
-  ): number => {
-    rooms.push({
-      x: rect.x,
-      y: rect.y,
-      w: rect.w,
-      h: rect.h,
-      floor,
-      role,
-      guardsBossType,
-      followsBossType,
-      isSafeAccessPocket,
-    });
+  const addRoom = (rect: Rect, floor: number, role: RoomRole, tags: RoomTags = {}): number => {
+    rooms.push({ x: rect.x, y: rect.y, w: rect.w, h: rect.h, floor, role, ...tags });
     carveRoomFloor(rect, floor);
     return rooms.length - 1;
   };
@@ -1630,14 +1655,14 @@ function buildDungeon(
         }
       }
 
-      addRoom(plan.safeRoom, SAFE_ROOM_FLOOR, 'safe', gauntlet.bossType);
+      addRoom(plan.safeRoom, SAFE_ROOM_FLOOR, 'safe', { guardsBossType: gauntlet.bossType });
       addRoom(plan.bossRoom, bossFloorForType(gauntlet.bossType), 'boss');
-      addRoom(plan.exitSafeRoom, SAFE_ROOM_FLOOR, 'safe', undefined, gauntlet.bossType);
+      addRoom(plan.exitSafeRoom, SAFE_ROOM_FLOOR, 'safe', { followsBossType: gauntlet.bossType });
       for (const rect of plan.chainRooms) {
         addRoom(rect, randomFromArray(ZONE_FLOORS[zoneOf(rectCentre(rect))]), 'chain');
       }
       for (const rect of plan.pockets) {
-        addRoom(rect, SAFE_ROOM_FLOOR, 'safe', undefined, undefined, true);
+        addRoom(rect, SAFE_ROOM_FLOOR, 'safe', { isSafeAccessPocket: true });
       }
       if (gauntlet.bathroomChoke !== undefined) {
         if (plan.bathroomRooms.length !== plan.branchChains.length) {
@@ -1856,7 +1881,13 @@ function buildDungeon(
             splits: spineDef.splits,
             questRoom: { w: QUEST_ROOM_W, h: QUEST_ROOM_H },
             stealthGate: spineDef.stealthGate ?? null,
-            labRoom: hasSpiderLab ? { w: SPIDER_LAB_W, h: SPIDER_LAB_H } : null,
+            labRoom: hasSpiderLab
+              ? {
+                  w: SPIDER_LAB_W,
+                  h: SPIDER_LAB_H,
+                  station: { w: LAB_STATION_W, h: LAB_STATION_H },
+                }
+              : null,
             pockets: spinePockets,
             safeRoomSize: () => ({ w: randomInt(MIN_W, MAX_W), h: randomInt(MIN_H, MAX_H) }),
             safeRoomKeepAway: [
@@ -1891,12 +1922,9 @@ function buildDungeon(
       if (arenaReservation === null) {
         return reject(beyondPocketFailed ? 'beyond region' : 'arena reservation');
       }
-      const antechamberIndex = addRoom(
-        arenaReservation.antechamber,
-        SAFE_ROOM_FLOOR,
-        'safe',
-        ARENA_BOSS_TYPE,
-      );
+      const antechamberIndex = addRoom(arenaReservation.antechamber, SAFE_ROOM_FLOOR, 'safe', {
+        guardsBossType: ARENA_BOSS_TYPE,
+      });
       antechamberRoomIndex = antechamberIndex;
       if (beyondPlan !== null) {
         for (const rect of beyondPlan.rects) {
@@ -1988,7 +2016,7 @@ function buildDungeon(
           segments.rollback(snapshot);
           continue;
         }
-        const index = addRoom(rect, floorFor(centre), role, guardsBossType);
+        const index = addRoom(rect, floorFor(centre), role, { guardsBossType });
         carvePlannedCorridor(corridor);
         connectableIndices.push(index);
         return index;
@@ -2037,13 +2065,16 @@ function buildDungeon(
           addRoom(rect, randomFromArray(ZONE_FLOORS[zoneOf(rectCentre(rect))]), 'chain');
         }
       }
-      if (spinePlan.labRoom !== null) {
-        addRoom(spinePlan.labRoom, SPIDER_LAB_FLOOR, 'spider_lab');
+      if (spinePlan.lab !== null) {
+        addRoom(spinePlan.lab.room, SPIDER_LAB_FLOOR, 'spider_lab');
+        addRoom(spinePlan.lab.station, LAB_STATION_FLOOR, 'safe', {
+          servesSpecialRoom: 'spider_lab',
+        });
       }
       for (const pocket of spinePlan.pockets) {
         const centre = rectCentre(pocket.rect);
         if (pocket.role === 'safe') {
-          addRoom(pocket.rect, SAFE_ROOM_FLOOR, 'safe', undefined, undefined, true);
+          addRoom(pocket.rect, SAFE_ROOM_FLOOR, 'safe', { isSafeAccessPocket: true });
         } else {
           addRoom(pocket.rect, randomFromArray(ZONE_FLOORS[zoneOf(centre)]), 'regular');
         }
@@ -2067,8 +2098,8 @@ function buildDungeon(
     };
 
     // A handful of ordinary rooms first, so the big landmarks have somewhere to
-    // attach; then the landmarks, while there is still open ground for a
-    // 40×32 spider lab; then everything else fills the gaps.
+    // attach; then the quest room, while there is still open ground for it;
+    // then everything else fills the gaps.
     //
     // None of it happens on a spine floor. Free seed rooms, the minimum fill, the
     // loop edges, the dead-end rescue shortcuts and the antechamber's extra exits
@@ -2094,23 +2125,6 @@ function buildDungeon(
         ) === null
       ) {
         return reject('quest room');
-      }
-
-      if (hasSpiderLab) {
-        const placedLab = placeFreeRoom(
-          SPIDER_LAB_W,
-          SPIDER_LAB_H,
-          'spider_lab',
-          () => SPIDER_LAB_FLOOR,
-          (centre) => {
-            const d = Math.hypot(
-              centre.x - lastGauntletExitCentre.x,
-              centre.y - lastGauntletExitCentre.y,
-            );
-            return d >= SPIDER_LAB_MIN_DIST && d <= SPIDER_LAB_MAX_DIST;
-          },
-        );
-        if (placedLab === null) return reject('spider lab');
       }
 
       // The outskirts' own safe rooms (floor 1 only) are promoted out of this
@@ -2289,7 +2303,6 @@ function buildDungeon(
     const bossRoomStart = safeRoomEnd;
     const bossRoomEnd = safeRoomEnd + numBossRooms;
     const questRoomIdx = bossRoomEnd;
-    const spiderLabRoomIdx = hasSpiderLab ? questRoomIdx + 1 : -1;
 
     const SAFE_MAX_DIST = 50;
     const BOSS_MAX_DIST = 80;
@@ -2299,21 +2312,8 @@ function buildDungeon(
       const isSafeRoom = rooms.length >= safeRoomStart && rooms.length < safeRoomEnd;
       const isBossRoom = rooms.length >= bossRoomStart && rooms.length < bossRoomEnd;
       const isQuestRoom = rooms.length === questRoomIdx;
-      const isSpiderLabRoom = spiderLabRoomIdx >= 0 && rooms.length === spiderLabRoomIdx;
-      const w = isBossRoom
-        ? BOSS_ROOM_W
-        : isQuestRoom
-          ? QUEST_ROOM_W
-          : isSpiderLabRoom
-            ? SPIDER_LAB_W
-            : randomInt(MIN_W, MAX_W);
-      const h = isBossRoom
-        ? BOSS_ROOM_H
-        : isQuestRoom
-          ? QUEST_ROOM_H
-          : isSpiderLabRoom
-            ? SPIDER_LAB_H
-            : randomInt(MIN_H, MAX_H);
+      const w = isBossRoom ? BOSS_ROOM_W : isQuestRoom ? QUEST_ROOM_W : randomInt(MIN_W, MAX_W);
+      const h = isBossRoom ? BOSS_ROOM_H : isQuestRoom ? QUEST_ROOM_H : randomInt(MIN_H, MAX_H);
       const x = randomInt(BORDER + 1, size - BORDER - w - 2);
       const y = randomInt(BORDER + 1, size - BORDER - h - 2);
 
@@ -2344,19 +2344,14 @@ function buildDungeon(
           x: Math.floor(rooms[0].x + rooms[0].w / 2),
           y: Math.floor(rooms[0].y + rooms[0].h / 2),
         };
-        if (isSpiderLabRoom) {
-          const d = Math.hypot(cx - sc0.x, cy - sc0.y);
-          if (d < SPIDER_LAB_MIN_DIST || d > SPIDER_LAB_MAX_DIST) tooFarFromStart = true;
-        } else {
-          const maxDist = isSafeRoom
-            ? SAFE_MAX_DIST
-            : isBossRoom
-              ? BOSS_MAX_DIST
-              : isQuestRoom
-                ? QUEST_MAX_DIST
-                : Infinity;
-          if (Math.hypot(cx - sc0.x, cy - sc0.y) > maxDist) tooFarFromStart = true;
-        }
+        const maxDist = isSafeRoom
+          ? SAFE_MAX_DIST
+          : isBossRoom
+            ? BOSS_MAX_DIST
+            : isQuestRoom
+              ? QUEST_MAX_DIST
+              : Infinity;
+        if (Math.hypot(cx - sc0.x, cy - sc0.y) > maxDist) tooFarFromStart = true;
       }
 
       if (!overlaps && !tooCloseToBoss && !tooCloseToSafeRoom && !tooFarFromStart) {
@@ -2370,9 +2365,7 @@ function buildDungeon(
             ? bossFloorForType(bossTypes[bossIdx] ?? '')
             : isQuestRoom
               ? FloorTypeValue.tile_floor
-              : isSpiderLabRoom
-                ? SPIDER_LAB_FLOOR
-                : randomFromArray(ZONE_FLOORS[zone]);
+              : randomFromArray(ZONE_FLOORS[zone]);
 
         const role: RoomRole =
           rooms.length === 0
@@ -2383,9 +2376,7 @@ function buildDungeon(
                 ? 'boss'
                 : isQuestRoom
                   ? 'quest'
-                  : isSpiderLabRoom
-                    ? 'spider_lab'
-                    : 'regular';
+                  : 'regular';
 
         addRoom({ x, y, w, h }, floor, role);
         if (rooms.length === 1) startCenter = { x: cx, y: cy };
@@ -2568,18 +2559,33 @@ function buildDungeon(
     startTile = { x: Math.floor(r.x + r.w / 2), y: Math.floor(r.y + r.h / 2) };
   }
 
-  const safeRooms: SafeRoomData[] = rooms
-    .filter((r) => r.role === 'safe')
-    .map((sr) => ({
-      bounds: { x: sr.x, y: sr.y, w: sr.w, h: sr.h },
-      centre: { x: Math.floor(sr.x + sr.w / 2), y: Math.floor(sr.y + sr.h / 2) },
-      guardsBossType: sr.guardsBossType,
-      followsBossType: sr.followsBossType,
-      isSafeAccessPocket: sr.isSafeAccessPocket,
-    }));
+  // A safe room serving a special room goes last; see `SafeRoomData.servesSpecialRoom`.
+  const floorSafeRooms = rooms.filter(
+    (r) => r.role === 'safe' && r.servesSpecialRoom === undefined,
+  );
+  const servingSafeRooms = rooms.filter(
+    (r) => r.role === 'safe' && r.servesSpecialRoom !== undefined,
+  );
+  const safeRooms: SafeRoomData[] = [...floorSafeRooms, ...servingSafeRooms].map((sr) => ({
+    bounds: { x: sr.x, y: sr.y, w: sr.w, h: sr.h },
+    centre: { x: Math.floor(sr.x + sr.w / 2), y: Math.floor(sr.y + sr.h / 2) },
+    guardsBossType: sr.guardsBossType,
+    followsBossType: sr.followsBossType,
+    isSafeAccessPocket: sr.isSafeAccessPocket,
+    servesSpecialRoom: sr.servesSpecialRoom,
+  }));
   antechamberSafeRoom = safeRooms.find((r) => r.guardsBossType === ARENA_BOSS_TYPE) ?? null;
 
   for (const safeRoom of safeRooms) stampSafeRoomThresholds(grid, safeRoom);
+  for (const safeRoom of safeRooms) {
+    if (safeRoom.servesSpecialRoom === undefined) continue;
+    const kit = planLabStation({
+      bounds: safeRoom.bounds,
+      centre: safeRoom.centre,
+      isOpenOutside: (x, y) => isCarvedFloor(grid, x, y),
+    });
+    for (const prop of kit) placeProp(grid[prop.y][prop.x], prop.type);
+  }
 
   const bossRooms: Array<{ bounds: Rect; centre: Point }> = rooms
     .filter((r) => r.role === 'boss')
@@ -2818,23 +2824,13 @@ function buildDungeon(
     const slcx = Math.floor(slr.x + slr.w / 2);
     const slcy = Math.floor(slr.y + slr.h / 2);
 
-    // The scientist and computer go near the way in, and the egg and life
+    // The computer and Dr. Moult's post go near the way in, and the egg and life
     // machines as far from it as the room allows, so the layout has to know
     // which wall the corridor actually broke through.
     const entrance = detectRoomEntrance(grid, { x: slr.x, y: slr.y, w: slr.w, h: slr.h });
     const entranceWall = entrance.wall;
 
     const entranceTile = entrance.tile;
-    // The scientist stands just inside his own doorway rather than somewhere
-    // along the entrance wall, so a crawler walking the corridor past the lab
-    // sees him waiting in the gap and knows the room is a choice on offer. The
-    // lab hangs off the route as a dead end; nothing else advertises it.
-    const scientistTile = labScientistTile(entrance, {
-      x: slr.x,
-      y: slr.y,
-      w: slr.w,
-      h: slr.h,
-    });
     let spiderEggTile: Point;
     let lifeMachineTiles: Point[];
 
@@ -2885,11 +2881,21 @@ function buildDungeon(
     const entranceDoorway = roomDoorways(grid, labBounds).find((doorway) =>
       doorway.tiles.some((tile) => tile.x === entranceTile.x && tile.y === entranceTile.y),
     );
+    // Only the spine seats a lab, and it always seats the lab's station with it.
+    const station = safeRooms.find((room) => room.servesSpecialRoom === 'spider_lab');
+    if (station === undefined) return reject('spider lab station');
+    const approach = layOutLabApproach(
+      grid,
+      { tiles: entranceDoorway?.tiles ?? [entranceTile] },
+      labBounds,
+      station.bounds,
+      rooms.map(rectOfRoom),
+    );
+    if (approach === null) return reject('spider lab approach');
     const furniture = layOutSpiderLab({
       bounds: labBounds,
       entranceWall,
       doorwayTiles: entranceDoorway?.tiles ?? [entranceTile],
-      scientistTile,
       spiderEggTile,
       lifeMachineTiles,
     });
@@ -2903,16 +2909,12 @@ function buildDungeon(
       bounds: labBounds,
       centre: { x: slcx, y: slcy },
       entranceTile,
-      scientistTile,
       spiderEggTile,
       lifeMachineTiles,
       entranceWall,
       ...furniture,
-      hallwayTiles: corridorBeyondDoorway(
-        grid,
-        { tiles: entranceDoorway?.tiles ?? [entranceTile] },
-        rooms,
-      ),
+      ...approach,
+      stationBounds: station.bounds,
     };
     registerSpiderLabFloorPlan(grid, spiderLabRoom);
   }
@@ -3373,7 +3375,8 @@ function buildDungeon(
         ? []
         : [
             spiderLabRoom.entranceTile,
-            spiderLabRoom.scientistTile,
+            spiderLabRoom.labPostTile,
+            spiderLabRoom.hallwayPostTile,
             spiderLabRoom.computerTile,
             spiderLabRoom.spiderEggTile,
             ...spiderLabRoom.lifeMachineTiles,
@@ -3505,13 +3508,38 @@ function buildDungeon(
           corridorKindAt: (x, y) => corridorKindByTile.get(tileCoordKey(x, y)),
           zoneOf: (point) => getZone(point, sc),
           arenas: arenaExteriors,
+          labApproachTiles:
+            spiderLabRoom === null
+              ? undefined
+              : new Set(
+                  [...spiderLabRoom.outerHallwayTiles, ...spiderLabRoom.innerHallwayTiles].map(
+                    (tile) => tileCoordKey(tile.x, tile.y),
+                  ),
+                ),
         });
 
   // Dressed after the region map is built, because a hallway segment only
   // exists as one once corridors are split into segments. A prop placed here
   // keeps its segment's id, as a prop in a room keeps the room's.
+  // A stream of its own, so the approach's scatter never moves a prop in any
+  // other hallway.
+  const labHallwayRng = mulberry32(dressingSeed ^ LAB_HALLWAY_STREAM_SALT);
   const hallwayAssignments = regionMap.hallways.map((hallway) => {
     const assignment = rollHallwayCharacter(floorTheme, hallway, characterRng);
+    if (assignment?.type === 'special' && assignment.tag === 'lab_hallway' && placeProps) {
+      const lab = spiderLabRoom;
+      if (lab !== null) {
+        dressLabHallway(
+          grid,
+          {
+            hallway,
+            isReserved: (x, y) => isDressingReserved(x, y) || claimedTiles.has(tileCoordKey(x, y)),
+            decayAt: (x, y) => labHallwayDecayAt(lab, x, y),
+          },
+          labHallwayRng,
+        );
+      }
+    }
     if (assignment?.type === 'hallway' && placeProps) {
       dressHallway(
         grid,
@@ -3617,6 +3645,7 @@ function buildDungeon(
           regionMap,
           characters: regionCharacters,
           rng: mulberry32(dressingSeed ^ FIXTURE_STREAM_SALT),
+          labApproach: spiderLabRoom ?? undefined,
         });
 
   return {

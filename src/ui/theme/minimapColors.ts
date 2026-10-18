@@ -56,6 +56,15 @@ import {
   SAFE_ROOM_STOVE,
   SAFE_ROOM_TABLE,
   SAFE_ROOM_THRESHOLD,
+  LAB_STATION_FLOOR,
+  LAB_STATION_THRESHOLD,
+  LAB_STATION_COT,
+  LAB_STATION_BARRICADE,
+  LAB_STATION_FIRST_AID,
+  LAB_STATION_HAZMAT_LOCKER,
+  LAB_STATION_JERRY_CAN,
+  LAB_STATION_WHITEBOARD,
+  LAB_STATION_LANTERN,
   SCREE,
   BARE_EARTH,
   TOWN_WALL,
@@ -123,6 +132,20 @@ export function minimapTileColor(type: number): string {
     case SAFE_ROOM_STOOL:
     case SAFE_ROOM_LARDER:
       return '#5c4a2c';
+    // The spider lab's field station: steel, cooler than a Bopca station's tile,
+    // so the two kinds of safe room never read as the same place on the map.
+    case LAB_STATION_FLOOR:
+      return '#7a868c';
+    case LAB_STATION_THRESHOLD:
+      return '#8c8050'; // the painted stripe inside its doorways
+    case LAB_STATION_COT:
+    case LAB_STATION_BARRICADE:
+    case LAB_STATION_FIRST_AID:
+    case LAB_STATION_HAZMAT_LOCKER:
+    case LAB_STATION_JERRY_CAN:
+    case LAB_STATION_WHITEBOARD:
+    case LAB_STATION_LANTERN:
+      return '#4a5256';
     case HOARDER_FLOOR:
       return '#2a1808';
     case TOWN_WALL:

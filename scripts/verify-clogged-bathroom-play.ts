@@ -523,15 +523,15 @@ function verifyClock(rig: Rig, copy: BathroomCopy, label: string): void {
   );
 
   bathroom.usePipeWall(copy);
-  check(bathroom.isPipeBoardDifficultyPickerOpen, `${label}: the wall asks for a difficulty first`);
+  check(bathroom.difficultyGate.isPickerOpen, `${label}: the wall asks for a difficulty first`);
   const lostToPicker = framesLost(scene, HELD_OPEN_FRAMES);
   check(
     lostToPicker === 0,
     `${label}: the clock holds under the difficulty picker (lost ${lostToPicker}/${HELD_OPEN_FRAMES})`,
   );
-  bathroom.choosePipeBoardDifficulty(settings.difficulty);
+  bathroom.difficultyGate.choose(settings.difficulty);
   check(
-    !bathroom.isPipeBoardDifficultyPickerOpen && bathroom.isPipeBoardExplainerOpen,
+    !bathroom.difficultyGate.isPickerOpen && bathroom.isPipeBoardExplainerOpen,
     `${label}: the first pick at the wall opens the explainer`,
   );
   const lostToExplainer = framesLost(scene, HELD_OPEN_FRAMES);
@@ -807,26 +807,26 @@ function verifyDifficultyPick(rig: Rig, copy: BathroomCopy, label: string): void
   const dealt = bathroom.generateBoardNow(worldDifficulty);
 
   bathroom.usePipeWall(copy);
-  bathroom.cancelPipeBoardDifficulty();
+  bathroom.difficultyGate.cancel();
   check(
     !bathroom.isPipeBoardOpen && !bathroom.isPipeBoardExplainerOpen,
     `${label}: backing out of the picker opens nothing`,
   );
 
   bathroom.usePipeWall(copy);
-  bathroom.choosePipeBoardDifficulty(worldDifficulty);
+  bathroom.difficultyGate.choose(worldDifficulty);
   check(bathroom.pipeBoard === dealt, `${label}: picking the board's own difficulty keeps it`);
   bathroom.closePipeBoard();
 
   bathroom.usePipeWall(copy);
-  bathroom.choosePipeBoardDifficulty(otherDifficulty);
+  bathroom.difficultyGate.choose(otherDifficulty);
   check(bathroom.pipeBoard !== dealt, `${label}: picking another difficulty deals a fresh board`);
   check(
     settings.difficulty === worldDifficulty,
     `${label}: a pick at the wall leaves the world difficulty alone`,
   );
   check(
-    !bathroom.isPipeBoardDiscardConfirmOpen,
+    !bathroom.difficultyGate.isConfirmOpen,
     `${label}: switching away from an untouched board asks nothing`,
   );
   bathroom.closePipeBoard();
@@ -856,14 +856,14 @@ function verifyDiscardConfirm(
   );
 
   bathroom.usePipeWall(copy);
-  bathroom.choosePipeBoardDifficulty(worldDifficulty);
+  bathroom.difficultyGate.choose(worldDifficulty);
   check(
-    bathroom.isPipeBoardDiscardConfirmOpen && !bathroom.isPipeBoardOpen,
+    bathroom.difficultyGate.isConfirmOpen && !bathroom.isPipeBoardOpen,
     `${label}: picking another tier over a turned board asks before starting over`,
   );
   check(bathroom.pipeBoard === played, `${label}: the board survives the question`);
 
-  bathroom.keepPipeBoardInProgress();
+  bathroom.difficultyGate.keep();
   check(
     bathroom.isPipeBoardOpen &&
       bathroom.pipeBoard === played &&
@@ -873,15 +873,15 @@ function verifyDiscardConfirm(
   bathroom.closePipeBoard();
 
   bathroom.usePipeWall(copy);
-  bathroom.choosePipeBoardDifficulty(worldDifficulty);
-  bathroom.backToPipeBoardDifficulty();
+  bathroom.difficultyGate.choose(worldDifficulty);
+  bathroom.difficultyGate.back();
   check(
-    bathroom.isPipeBoardDifficultyPickerOpen && bathroom.pipeBoard === played,
+    bathroom.difficultyGate.isPickerOpen && bathroom.pipeBoard === played,
     `${label}: Escape on the question goes back to the picker with the board kept`,
   );
 
-  bathroom.choosePipeBoardDifficulty(worldDifficulty);
-  bathroom.confirmPipeBoardDiscard();
+  bathroom.difficultyGate.choose(worldDifficulty);
+  bathroom.difficultyGate.discard();
   check(
     bathroom.pipeBoard !== played && bathroom.boardInProgressDifficulty === null,
     `${label}: starting over deals a fresh board at the picked tier`,
@@ -893,7 +893,7 @@ function verifyDiscardConfirm(
 function solveBoard(bathroom: Bathroom, copy: BathroomCopy, label: string): void {
   const board = bathroom.generateBoardNow(settings.difficulty);
   bathroom.usePipeWall(copy);
-  bathroom.choosePipeBoardDifficulty(settings.difficulty);
+  bathroom.difficultyGate.choose(settings.difficulty);
   check(bathroom.isPipeBoardOpen, `${label}: the wall opens the board once the explainer is seen`);
   const answer = answerMasks(board);
   board.tiles.forEach((tile, cell) => {

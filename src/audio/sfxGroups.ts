@@ -4,6 +4,7 @@ import { interiorSellsSomething } from '../systems/townServices';
 import { CONTRACT_CUES } from '../systems/constructionContracts/contractSoundCues';
 import { BATHROOM_CUES } from '../systems/cloggedBathroom/bathroomSoundCues';
 import { PRISON_CUES } from '../systems/stealthKeySnatch/prisonSoundCues';
+import { SPIDER_QUEST_CUES } from '../systems/spiderQuest/spiderQuestSoundCues';
 import { TUTORIAL_CUES } from '../systems/tutorialSoundCues';
 import { TUTORIAL_LEVEL_ID } from '../levels/tutorial';
 import { INTERIOR_CUES } from '../systems/interiorInteractionSoundCues';
@@ -40,6 +41,7 @@ export type SfxGroup =
   | 'constructionContracts'
   | 'cloggedBathroom'
   | 'stealthKeySnatch'
+  | 'spiderQuest'
   | 'bounty'
   | 'circusQuest'
   | 'murderMysteryQuest'
@@ -589,6 +591,14 @@ export const SFX_GROUPS: Record<SfxGroup, readonly SoundId[]> = {
     'bell_crack',
     'bell_victory_peal',
     'briar_hollow_victory',
+    'firework_burst_1',
+    'firework_burst_2',
+    'firework_burst_3',
+    'firework_burst_4',
+    'firework_launch_1',
+    'firework_launch_2',
+    'firework_launch_3',
+    'firework_launch_4',
     'boulder_impact_1',
     'boulder_impact_2',
     'boulder_impact_3',
@@ -677,6 +687,12 @@ export const SFX_GROUPS: Record<SfxGroup, readonly SoundId[]> = {
    * on floor 2's spine and the prison behind its door.
    */
   stealthKeySnatch: decodedCueIds(PRISON_CUES),
+
+  /**
+   * Every sound behind Pest Control (`SPIDER_QUEST_CUES`): Dr. Moult's calls,
+   * Mordecai's message and the lab hallway's small sounds, all on floor 2.
+   */
+  spiderQuest: decodedCueIds(SPIDER_QUEST_CUES),
 
   /**
    * Shady's five bounty bosses (`bountyDefs.ts`/`BountySystem`, floor-3
@@ -949,8 +965,13 @@ const LEVEL3_SFX_GROUPS: readonly SfxGroup[] = [
   'mongoMercenary',
 ];
 
-/** Floor 2's own cues plus the Clogged Bathroom and the Stealth Key Snatch, which only appear there. */
-const LEVEL2_SFX_GROUPS: readonly SfxGroup[] = ['level2', 'cloggedBathroom', 'stealthKeySnatch'];
+/** Floor 2's own cues plus the quests that only appear there. */
+const LEVEL2_SFX_GROUPS: readonly SfxGroup[] = [
+  'level2',
+  'cloggedBathroom',
+  'stealthKeySnatch',
+  'spiderQuest',
+];
 
 /** Which `SfxGroup`s a `DungeonScene` should preload for the level it just entered. */
 export function sfxGroupsForLevelId(levelId: string): readonly SoundId[] {

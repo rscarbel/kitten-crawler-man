@@ -19,11 +19,7 @@
  * disappearing off the bottom edge the moment it is late.
  */
 
-import {
-  HIT_ZONE_IMG_CENTER,
-  HIT_WINDOW_MS,
-  FALL_SPEED_IMG_PX_PER_MS,
-} from './keyboardHeroGeometry';
+import { HIT_ZONE_IMG_CENTER } from './keyboardHeroGeometry';
 import type { Rect } from '../ui/core/geom';
 
 export interface Point {
@@ -89,8 +85,8 @@ export const TOUCH_IMG_SIZE = 96;
 /** Every baked sheet is painted at this multiple of board space, like the rest of the art. */
 export const BOARD_BAKE_SCALE = 2;
 
-/** Half the hit window expressed as note-space pixels — the band around the hit line. */
-export const HIT_WINDOW_IMG_HALF_HEIGHT = HIT_WINDOW_MS * FALL_SPEED_IMG_PX_PER_MS;
+/** Board-space height of the rung joining a double note's two keycaps, glow included. */
+export const CHORD_LINK_IMG_H = 26;
 
 // ── Fit ─────────────────────────────────────────────────────────────────────
 
@@ -135,8 +131,6 @@ export interface KeyboardHeroLayout {
   readonly lanes: LaneRects;
   /** Screen Y at which a note is perfectly struck. */
   readonly hitLineY: number;
-  /** Screen height of half the hit window, for drawing the window band. */
-  readonly hitWindowHalfHeight: number;
   readonly receptors: LaneRects;
   /** Side of a note keycap on screen. */
   readonly noteSize: number;
@@ -273,7 +267,6 @@ export function computeKeyboardHeroLayout(
     laneArea: { x: laneAreaX, y: laneAreaY, w: laneAreaW, h: laneAreaH },
     lanes,
     hitLineY,
-    hitWindowHalfHeight: HIT_WINDOW_IMG_HALF_HEIGHT * scale,
     receptors,
     noteSize: NOTE_IMG_SIZE * scale,
     header,

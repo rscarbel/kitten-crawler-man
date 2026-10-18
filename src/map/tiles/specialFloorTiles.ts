@@ -4,6 +4,8 @@ import { drawHoarderFloor } from './bossRooms/hoarderTiles';
 import {
   SAFE_ROOM_FLOOR,
   SAFE_ROOM_THRESHOLD,
+  LAB_STATION_FLOOR,
+  LAB_STATION_THRESHOLD,
   HOARDER_FLOOR,
   JUICER_BOSS_ROOM_FLOOR,
   KRAKAREN_BOSS_ROOM_FLOOR,
@@ -609,7 +611,9 @@ export function drawSpecialFloorTile(
     // here: the ground renderer's own occlusion pass shades the wall contact, and
     // running both stacked two bands of shade against every north wall.
     case SAFE_ROOM_FLOOR:
-    case SAFE_ROOM_THRESHOLD: {
+    case SAFE_ROOM_THRESHOLD:
+    case LAB_STATION_FLOOR:
+    case LAB_STATION_THRESHOLD: {
       drawGroundTile(ctx, DUNGEON_GROUND, structure, sx, sy, ts, tx, ty);
       break;
     }

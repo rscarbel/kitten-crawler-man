@@ -28,7 +28,6 @@ export interface SpiderLabLayoutInput {
   entranceWall: RoomWall;
   /** Every tile of the entrance doorway, on the room's own perimeter. */
   doorwayTiles: readonly Point[];
-  scientistTile: Point;
   spiderEggTile: Point;
   lifeMachineTiles: readonly Point[];
 }
@@ -38,6 +37,12 @@ export interface SpiderLabLayout {
   computerTile: Point;
   /** The terminal's whole bench, three wide and two deep. */
   computerTableTiles: Point[];
+  /**
+   * Where Dr. Moult waits in his lab: the free tile at the end of the terminal's
+   * bench nearest the doorway, so a crawler walking in finds him at the table
+   * by the entrance.
+   */
+  labPostTile: Point;
   benchTiles: Point[];
   shelfTiles: Point[];
   webTiles: Point[];
@@ -100,7 +105,7 @@ const COCOON_SPOTS: ReadonlyArray<{ side: 'min' | 'max' | 'mid'; inset: number; 
 
 /** Furniture keeps this many tiles (Chebyshev) off anything the quest stands in the room. */
 const FIXTURE_CLEARANCE_TILES = 2;
-/** Furniture keeps this many tiles off the scientist, who wanders a little. */
+/** Furniture keeps this many tiles off Dr. Moult's lab post, where he fidgets a little. */
 const SCIENTIST_CLEARANCE_TILES = 3;
 
 /** The doorway frame of a room: which way is in, and how far the room reaches each way. */
@@ -199,6 +204,45 @@ function pruneWebStragglers(tiles: readonly Point[]): Point[] {
   return kept;
 }
 
+/** Machines and the egg sac keep this many tiles (Chebyshev) clear of Dr. Moult's lab post. */
+const LAB_POST_FIXTURE_CLEARANCE_TILES = 1;
+
+/**
+ * The lab post: beside an end of the terminal bench on its doorway-side row,
+ * the end nearer the doorway's middle first, or in front of the bench when
+ * neither end is clear. Falls back to the tile in front of the terminal, which
+ * the bench's own placement keeps clear.
+ */
+function layOutLabPost(
+  frame: DoorFrame,
+  tableTiles: readonly Point[],
+  input: SpiderLabLayoutInput,
+): Point {
+  const tableFrame = tableTiles.map((tile) => frame.toFrame(tile));
+  const nearDepth = Math.min(...tableFrame.map((point) => point.depth));
+  const alongs = tableFrame.map((point) => point.along);
+  const minAlong = Math.min(...alongs);
+  const maxAlong = Math.max(...alongs);
+  const ends = [minAlong - 1, maxAlong + 1].sort((a, b) => Math.abs(a) - Math.abs(b));
+  const inFront: number[] = [];
+  for (let along = minAlong; along <= maxAlong; along++) inFront.push(along);
+  inFront.sort((a, b) => Math.abs(a) - Math.abs(b));
+  const candidates: Point[] = [
+    ...ends.map((along) => frame.toWorld({ along, depth: nearDepth })),
+    ...inFront.map((along) => frame.toWorld({ along, depth: nearDepth - 1 })),
+  ];
+  const fixtures = [...input.lifeMachineTiles, input.spiderEggTile];
+  const interior = (tile: Point): boolean =>
+    tile.x > input.bounds.x &&
+    tile.y > input.bounds.y &&
+    tile.x < input.bounds.x + input.bounds.w - 1 &&
+    tile.y < input.bounds.y + input.bounds.h - 1;
+  const fits = (tile: Point): boolean =>
+    interior(tile) &&
+    fixtures.every((fixture) => chebyshev(fixture, tile) > LAB_POST_FIXTURE_CLEARANCE_TILES);
+  return candidates.find(fits) ?? frame.toWorld({ along: COMPUTER_ALONG, depth: nearDepth - 1 });
+}
+
 /** Lays out the lab's furniture, webbing and cocoons around the pieces already placed. */
 export function layOutSpiderLab(input: SpiderLabLayoutInput): SpiderLabLayout {
   const frame = doorFrame(input.bounds, input.entranceWall);
@@ -216,10 +260,11 @@ export function layOutSpiderLab(input: SpiderLabLayoutInput): SpiderLabLayout {
     }
   }
 
+  const labPostTile = layOutLabPost(frame, computerTableTiles, input);
   const fixtures = [...input.lifeMachineTiles, input.spiderEggTile, ...computerTableTiles];
   const clearOfFixtures = (tile: Point): boolean =>
     fixtures.every((fixture) => chebyshev(fixture, tile) > FIXTURE_CLEARANCE_TILES) &&
-    chebyshev(input.scientistTile, tile) > SCIENTIST_CLEARANCE_TILES;
+    chebyshev(labPostTile, tile) > SCIENTIST_CLEARANCE_TILES;
 
   const benchTiles: Point[] = [];
   for (const depth of BENCH_ROW_DEPTHS) {
@@ -284,6 +329,7 @@ export function layOutSpiderLab(input: SpiderLabLayoutInput): SpiderLabLayout {
   return {
     computerTile,
     computerTableTiles,
+    labPostTile,
     benchTiles,
     shelfTiles,
     webTiles: settledWebTiles,

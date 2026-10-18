@@ -33,8 +33,16 @@ export type GlowColour = LightColour | 'arcane' | 'fire' | 'acid' | 'specimen';
  */
 export type MoodLightKind = 'hanging_bulb' | 'strip_light' | 'vat_glow' | 'flood_lamp';
 
+/**
+ * The spider lab's field station: a steady cool emergency lamp where a Bopca
+ * station has its hearth, and the team's battery lantern beside the cot. The
+ * steadiness is the point — the hallways either side of it flicker.
+ */
+export type FieldStationLightKind = 'station_lamp' | 'camp_lantern';
+
 /** Every kind of light the lighting pass knows how to draw. */
-export type LightKind = LightSourceKind | DynamicLightKind | MoodLightKind | 'hearth';
+export type LightKind =
+  LightSourceKind | DynamicLightKind | MoodLightKind | FieldStationLightKind | 'hearth';
 
 /**
  * How a light's strength moves over time.
@@ -44,9 +52,11 @@ export type LightKind = LightSourceKind | DynamicLightKind | MoodLightKind | 'he
  * - `brazier`: a flame with a deeper, faster beat.
  * - `candle`: a slow, shallow sway.
  * - `faulty_tube`: steady, then dark in short bursts.
+ * - `dying_tube`: a faulty tube far gone, cutting out most seconds and stuttering back.
  * - `pulse`: a slow breath in and out, for emergency lights.
  */
-export type FlickerProfile = 'steady' | 'flame' | 'brazier' | 'candle' | 'faulty_tube' | 'pulse';
+export type FlickerProfile =
+  'steady' | 'flame' | 'brazier' | 'candle' | 'faulty_tube' | 'dying_tube' | 'pulse';
 
 export interface LightKindSpec {
   /** How far the light cuts the dark, in tiles. */
@@ -94,6 +104,13 @@ const DESK_LAMP_GLOW_RADIUS_TILES = 2;
 const HEARTH_REACH_TILES = 6;
 const HEARTH_GLOW_RADIUS_TILES = 5;
 const HEARTH_GLOW_STRENGTH = 0.6;
+/** Reaches the station's corners from its middle, as a hearth does a Bopca station's. */
+const STATION_LAMP_REACH_TILES = 5;
+const STATION_LAMP_GLOW_RADIUS_TILES = 4;
+const STATION_LAMP_GLOW_STRENGTH = 0.5;
+const CAMP_LANTERN_REACH_TILES = 2.5;
+const CAMP_LANTERN_GLOW_RADIUS_TILES = 2.2;
+const CAMP_LANTERN_GLOW_STRENGTH = 0.7;
 
 /*
  * Mood lights colour a fight that must read exactly as it was tuned, so every
@@ -222,6 +239,20 @@ export const LIGHT_KINDS = {
     glowStrength: HEARTH_GLOW_STRENGTH,
     colour: 'warm',
     flicker: 'candle',
+  },
+  station_lamp: {
+    reachTiles: STATION_LAMP_REACH_TILES,
+    glowRadiusTiles: STATION_LAMP_GLOW_RADIUS_TILES,
+    glowStrength: STATION_LAMP_GLOW_STRENGTH,
+    colour: 'cool_white',
+    flicker: 'steady',
+  },
+  camp_lantern: {
+    reachTiles: CAMP_LANTERN_REACH_TILES,
+    glowRadiusTiles: CAMP_LANTERN_GLOW_RADIUS_TILES,
+    glowStrength: CAMP_LANTERN_GLOW_STRENGTH,
+    colour: 'tallow',
+    flicker: 'steady',
   },
   hanging_bulb: {
     reachTiles: HANGING_BULB_REACH_TILES,
@@ -391,6 +422,15 @@ export const GLOW_COLOURS = {
       { offset: 1, color: 'rgba(90,180,230,0)' },
     ],
     shadowRgb: '4,9,12',
+  },
+  // A cold, ill green: what the approach to the spider lab takes on as it nears the lab.
+  sickly: {
+    stops: [
+      { offset: 0, color: 'rgba(190,235,150,0.3)' },
+      { offset: 0.4, color: 'rgba(160,210,120,0.12)' },
+      { offset: 1, color: 'rgba(140,190,100,0)' },
+    ],
+    shadowRgb: '7,20,6',
   },
   emergency_red: {
     stops: [

@@ -170,8 +170,9 @@ export function rollRoomCharacter(
 }
 
 /**
- * The assignment of a hallway segment: the arena's drum and concourse are a
- * special region, every other segment a hallway character.
+ * The assignment of a hallway segment: the arena's drum and concourse and the
+ * spider lab's approach hallways are special regions, every other segment a
+ * hallway character.
  */
 export function rollHallwayCharacter(
   floor: DungeonFloorThemeId,
@@ -179,6 +180,7 @@ export function rollHallwayCharacter(
   rng: Rng,
 ): RegionAssignment | null {
   if (hallway.arena) return { type: 'special', tag: 'arena' };
+  if (hallway.labApproach) return { type: 'special', tag: 'lab_hallway' };
   const eligible = HALLWAY_CHARACTERS_BY_FLOOR[floor].filter((character) =>
     character.zones.includes(hallway.zone),
   );

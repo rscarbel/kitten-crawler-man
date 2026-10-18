@@ -61,6 +61,10 @@ import { resolveKills, type CombatContext } from '../../src/systems/CombatSystem
 import { EventBus } from '../../src/core/EventBus';
 import { AbilityManager } from '../../src/core/AbilityManager';
 import { createMob } from '../../src/levels/spawner';
+import {
+  CHASE_STALL_LIMIT_FRAMES,
+  NO_ROUTE_FORGET_FRAMES,
+} from '../../src/creatures/targetHoldOffs';
 import type { SoundId } from '../../src/audio/sounds';
 
 /** How a gate reports; the caller owns the failure count. */
@@ -478,6 +482,173 @@ function checkRecovery(r: SurvivalGateReporter): void {
     r.check(
       attacks > 0 && healedDuringFight === null,
       `swinging at a hostile (${attacks} attacks) never full-heals in ${HOSTILE_PRESENT_FRAMES} frames of fighting`,
+    );
+  }
+}
+
+// ── Hold-offs ───────────────────────────────────────────────────────────────
+
+/** Open ground a few tiles from the party, well inside a brawler's engage radius and clear of the sealed cell. */
+const OPEN_GROUND_OFFSET_TILES = 4;
+const OPEN_GROUND_TILE_X = PARTY_TILE_X + OPEN_GROUND_OFFSET_TILES;
+const OPEN_GROUND_TILE_Y = PARTY_TILE_Y - OPEN_GROUND_OFFSET_TILES;
+/** Shorter than a no-route hold-off, so an attack in this window means the hold was lifted, not waited out. */
+const HOLD_OFF_WATCH_FRAMES = NO_ROUTE_FORGET_FRAMES - 1;
+
+/** Two stalled chases — the first and its one re-aim — and a frame either side. */
+const GIVE_UP_BUDGET_FRAMES = (CHASE_STALL_LIMIT_FRAMES + 2) * 2;
+
+/**
+ * Pins `goblin` going for `victim`. The mob loop drops a held goblin's aim
+ * every frame, and whether it does so before or after the hire thinks is down
+ * to the grid's order.
+ */
+function pinAim(goblin: Mob, victim: Player | null): void {
+  Object.defineProperty(goblin, 'currentTarget', {
+    configurable: true,
+    get: () => victim,
+    set: () => undefined,
+  });
+}
+
+/**
+ * How often a hire that can get nowhere starts a chase on a goblin on the
+ * owner, after an earlier verdict held it off: until the chase that verdict's
+ * exemption allowed gives up, then over the full term of the hold that follows.
+ */
+function retriesOfPartyThreatGotNowhere(): {
+  gaveUp: boolean;
+  retriesAfter: number;
+  heldThroughout: boolean;
+} | null {
+  const spawned = spawnedScene('gluteus_maxx');
+  if (spawned === null) return null;
+  const { scene, merc } = spawned;
+  const goblin = addHeldGoblin(scene, OPEN_GROUND_TILE_X, OPEN_GROUND_TILE_Y);
+  goblin.hp = Number.MAX_SAFE_INTEGER;
+  pinAim(goblin, scene.human);
+  // Feet that cover no ground: every chase stalls, wherever the goblin stands.
+  merc['speed'] = 0;
+  merc['holdOffs'].holdOffUnreachable(goblin);
+  let chasing = false;
+  let gaveUp = false;
+  for (let frame = 0; frame < GIVE_UP_BUDGET_FRAMES && !gaveUp; frame++) {
+    step(scene);
+    const chasingNow = merc['engaged'] === goblin;
+    gaveUp = chasing && !chasingNow && merc['holdOffs'].isHeld(goblin);
+    chasing = chasingNow;
+  }
+  let retriesAfter = 0;
+  let heldThroughout = gaveUp;
+  for (let frame = 0; frame < NO_ROUTE_FORGET_FRAMES - 1; frame++) {
+    step(scene);
+    const chasingNow = merc['engaged'] === goblin;
+    if (chasingNow && !chasing) retriesAfter++;
+    chasing = chasingNow;
+    heldThroughout &&= merc['holdOffs'].isHeld(goblin);
+  }
+  return { gaveUp, retriesAfter, heldThroughout };
+}
+
+/**
+ * Attacks a hireling starts over `frames` against a goblin that cannot die,
+ * which is going for `victim` throughout.
+ */
+function attacksOnHeldOffGoblin(
+  spawned: { scene: Scene; merc: Mercenary },
+  goblin: Mob,
+  victim: Player | null,
+  frames: number,
+): number {
+  goblin.hp = Number.MAX_SAFE_INTEGER;
+  // A verdict reached earlier — before a door opened, from the far side of a wall.
+  spawned.merc['holdOffs'].holdOffUnreachable(goblin);
+  let attacks = 0;
+  const kit = spawned.merc.kit;
+  const startAttack = kit.startAttack.bind(kit);
+  kit.startAttack = (ctx, target, distance) => {
+    if (target === goblin) attacks++;
+    startAttack(ctx, target, distance);
+  };
+  pinAim(goblin, victim);
+  steps(spawned.scene, frames);
+  return attacks;
+}
+
+function checkHoldOffs(r: SurvivalGateReporter): void {
+  r.section('A hostile written off as unreachable is taken back once it proves otherwise');
+
+  const sealed = spawnedScene('gluteus_maxx');
+  if (sealed !== null) {
+    const goblin = addHeldGoblin(sealed.scene, SEALED_CELL_TILE_X, SEALED_CELL_TILE_Y);
+    steps(sealed.scene, HOLD_OFF_WATCH_FRAMES);
+    const homePx = Math.hypot(
+      sealed.merc.x - sealed.scene.human.x,
+      sealed.merc.y - sealed.scene.human.y,
+    );
+    const homeTiles = homePx / TILE_SIZE;
+    const followStartTiles = sealed.merc.kit.followBand.startTiles;
+    r.check(
+      sealed.merc['holdOffs'].isHeld(goblin) && homeTiles <= followStartTiles,
+      `a hostile sealed in a cell is written off and the hire comes back to the party (${homeTiles.toFixed(1)} tiles off)`,
+    );
+  }
+
+  const threat = spawnedScene('gluteus_maxx');
+  if (threat !== null) {
+    const goblin = addHeldGoblin(threat.scene, OPEN_GROUND_TILE_X, OPEN_GROUND_TILE_Y);
+    const attacks = attacksOnHeldOffGoblin(
+      threat,
+      goblin,
+      threat.scene.human,
+      HOLD_OFF_WATCH_FRAMES,
+    );
+    r.check(
+      attacks > 0,
+      `a reachable hostile on the owner is fought despite an old unreachable verdict (${attacks} attacks in ${HOLD_OFF_WATCH_FRAMES} frames)`,
+    );
+  }
+
+  const onHire = spawnedScene('gluteus_maxx');
+  if (onHire !== null) {
+    const goblin = addHeldGoblin(onHire.scene, OPEN_GROUND_TILE_X, OPEN_GROUND_TILE_Y);
+    const attacks = attacksOnHeldOffGoblin(onHire, goblin, onHire.merc, HOLD_OFF_WATCH_FRAMES);
+    r.check(
+      attacks > 0,
+      `a reachable hostile on the hire is fought back despite an old unreachable verdict (${attacks} attacks)`,
+    );
+  }
+
+  const adjacent = spawnedScene('gluteus_maxx');
+  if (adjacent !== null) {
+    const goblin = addHeldGoblin(adjacent.scene, OPEN_GROUND_TILE_X, OPEN_GROUND_TILE_Y);
+    // Inside strike range, so reach and nothing else is what can lift the hold.
+    const insideReachPx = adjacent.merc.strikeRangePx * HALF;
+    const previousX = goblin.x;
+    const previousY = goblin.y;
+    goblin.x = adjacent.merc.x + insideReachPx;
+    goblin.y = adjacent.merc.y;
+    adjacent.scene.mobs.grid.move(goblin, previousX, previousY);
+    const attacks = attacksOnHeldOffGoblin(adjacent, goblin, null, HOLD_OFF_WATCH_FRAMES);
+    r.check(
+      attacks > 0,
+      `a hostile within strike reach is fought despite an old unreachable verdict (${attacks} attacks)`,
+    );
+  }
+
+  const retries = retriesOfPartyThreatGotNowhere();
+  r.check(
+    retries !== null && retries.gaveUp && retries.retriesAfter === 0 && retries.heldThroughout,
+    `a goblin on the owner it can get nowhere near is retried once, then held for the full term (gave up: ${retries?.gaveUp ?? 'no spawn'}, ${retries?.retriesAfter ?? 0} retries after)`,
+  );
+
+  const idle = spawnedScene('gluteus_maxx');
+  if (idle !== null) {
+    const goblin = addHeldGoblin(idle.scene, OPEN_GROUND_TILE_X, OPEN_GROUND_TILE_Y);
+    const attacks = attacksOnHeldOffGoblin(idle, goblin, null, HOLD_OFF_WATCH_FRAMES);
+    r.checkCatches(
+      attacks > 0,
+      'a held-off hostile out of reach and fighting nobody stays held off for its term',
     );
   }
 }
@@ -1067,6 +1238,7 @@ function checkPersistence(r: SurvivalGateReporter): void {
 export function verifyHirelingSurvival(r: SurvivalGateReporter): void {
   checkHalfDamage(r);
   checkRecovery(r);
+  checkHoldOffs(r);
   checkPotions(r);
   checkDowned(r);
   checkRevive(r);

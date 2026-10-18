@@ -26,7 +26,7 @@
 
 import type { GameMap } from './GameMap';
 import type { TileContent } from './tileTypes';
-import { mordecaiAndBedTiles } from './safeRoomFixtures';
+import { isFieldStation, mordecaiAndBedTiles } from './safeRoomFixtures';
 import { planSafeRoomCounters, type SafeRoomCounterLayout } from './safeRoomCounterLayout';
 import {
   placeProp,
@@ -406,6 +406,7 @@ export function planSafeRoomDecor(map: GameMap): ReadonlyArray<SafeRoomDecorPlan
 
   for (let safeRoomIndex = 0; safeRoomIndex < map.safeRooms.length; safeRoomIndex++) {
     const safeRoom = map.safeRooms[safeRoomIndex];
+    if (isFieldStation(safeRoom)) continue;
     const { bounds, centre } = safeRoom;
     if (bounds.h < MIN_ROOM_HEIGHT_FOR_DECOR || bounds.w < MIN_ROOM_WIDTH_FOR_DECOR) continue;
 

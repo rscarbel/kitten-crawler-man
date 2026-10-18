@@ -75,12 +75,7 @@ import {
 } from '../../sprites/goblinSprite';
 import { TimedSpeech, drawTimedSpeechBubble } from '../../sprites/speechBubble';
 import type { Surface } from '../../ui/core/UiRoot';
-import {
-  activityDifficultyPickerSurface,
-  activityDiscardConfirmSurface,
-  type ActivityDifficultyPick,
-  type ActivityDiscardConfirm,
-} from '../../ui/screens/dialogs/activityDifficultyPicker';
+import { ActivityDifficultyGate } from '../../ui/screens/dialogs/activityDifficultyPicker';
 import { drawInteractionPrompt } from '../../ui/InteractionPrompt';
 import type { ToastOptions } from '../../ui/hud/toasts';
 import { REFRESHED_TOAST, refreshedNotice } from '../../ui/potionNotices';
@@ -122,6 +117,7 @@ export const CLOGGED_BATHROOM_QUEST_NAME = 'The Clogged Bathroom';
 /** Small on purpose: the real rewards are the open path and the stall. */
 export const CLOGGED_BATHROOM_XP_REWARD = 150;
 const FIX_OBJECTIVE = 'Fix the bathroom plumbing';
+const PIPE_BOARD_DIFFICULTY_SURFACE_ID = 'pipe-board-difficulty';
 
 /** A whole stall visit, from the door opening to the crawler stepping out refreshed. */
 export const STALL_VISIT_FRAMES = 240;
@@ -331,9 +327,14 @@ export class CloggedBathroomSystem
   private boardDifficulty: Difficulty | null = null;
   private boardOpen = false;
   private explainerOpen = false;
-  private difficultyPickerOpen = false;
-  /** A pick that would throw away the turns on the board, waiting on the player to confirm it. */
-  private pendingDiscard: Difficulty | null = null;
+  /**
+   * The board's difficulty question. Picking the board's own tier keeps the
+   * turns made on it; any other deals a fresh board, asking first when the
+   * board has turns on it.
+   */
+  readonly difficultyGate = new ActivityDifficultyGate({
+    inProgress: () => this.boardInProgressDifficulty,
+  });
 
   private visit: StallVisit | null = null;
   private readonly muffled = new TimedSpeech();
@@ -1012,58 +1013,12 @@ export class CloggedBathroomSystem
   usePipeWall(copy: BathroomCopy): void {
     if (this.isSolved) return;
     this.workedCopy = copy;
-    this.difficultyPickerOpen = true;
-  }
-
-  /**
-   * The picker's answer. Picking the board's own difficulty keeps the turns
-   * made on it. Any other deals a fresh board, but asks first when the board
-   * has turns on it, because the picker defaults to the world difficulty and
-   * a bare accept key would otherwise throw a run at another tier away.
-   */
-  choosePipeBoardDifficulty(difficulty: Difficulty): void {
-    this.difficultyPickerOpen = false;
-    if (this.isSolved) return;
-    const turnsAtAnotherTier =
-      this.boardInProgressDifficulty !== null && this.boardInProgressDifficulty !== difficulty;
-    if (turnsAtAnotherTier) {
-      this.pendingDiscard = difficulty;
-      return;
-    }
-    this.startPipeBoardAt(difficulty);
-  }
-
-  /** The confirm's "Start": the turns are dropped and a board at the picked tier is dealt. */
-  confirmPipeBoardDiscard(): void {
-    const next = this.pendingDiscard;
-    this.pendingDiscard = null;
-    if (next !== null && !this.isSolved) this.startPipeBoardAt(next);
-  }
-
-  /** The confirm's "Keep": back to the board in progress, at its own tier. */
-  keepPipeBoardInProgress(): void {
-    this.pendingDiscard = null;
-    const kept = this.boardDifficulty;
-    if (kept !== null && !this.isSolved) this.startPipeBoardAt(kept);
-  }
-
-  /** The confirm's Escape: back to the picker. */
-  backToPipeBoardDifficulty(): void {
-    this.pendingDiscard = null;
-    this.difficultyPickerOpen = !this.isSolved;
-  }
-
-  /** The picker's Escape: the wall is left alone. */
-  cancelPipeBoardDifficulty(): void {
-    this.difficultyPickerOpen = false;
-  }
-
-  get isPipeBoardDifficultyPickerOpen(): boolean {
-    return this.difficultyPickerOpen;
-  }
-
-  get isPipeBoardDiscardConfirmOpen(): boolean {
-    return this.pendingDiscard !== null;
+    this.difficultyGate.open({
+      activity: CLOGGED_BATHROOM_QUEST_NAME,
+      onPick: (difficulty) => {
+        if (!this.isSolved) this.startPipeBoardAt(difficulty);
+      },
+    });
   }
 
   /** The tier of the board when it has turns on it, null when there is nothing to lose. */
@@ -1084,30 +1039,6 @@ export class CloggedBathroomSystem
       return;
     }
     this.boardOpen = true;
-  }
-
-  private difficultyPick(): ActivityDifficultyPick | null {
-    if (!this.difficultyPickerOpen) return null;
-    return {
-      activity: CLOGGED_BATHROOM_QUEST_NAME,
-      inProgress: this.boardInProgressDifficulty,
-      pick: (difficulty) => this.choosePipeBoardDifficulty(difficulty),
-      cancel: () => this.cancelPipeBoardDifficulty(),
-    };
-  }
-
-  private discardConfirm(): ActivityDiscardConfirm | null {
-    const to = this.pendingDiscard;
-    const from = this.boardDifficulty;
-    if (to === null || from === null) return null;
-    return {
-      activity: CLOGGED_BATHROOM_QUEST_NAME,
-      from,
-      to,
-      keep: () => this.keepPipeBoardInProgress(),
-      discard: () => this.confirmPipeBoardDiscard(),
-      back: () => this.backToPipeBoardDifficulty(),
-    };
   }
 
   private ensureGeneration(difficulty: Difficulty): void {
@@ -1223,8 +1154,7 @@ export class CloggedBathroomSystem
    */
   surfaces(): readonly Surface[] {
     return [
-      activityDifficultyPickerSurface('pipe-board-difficulty', () => this.difficultyPick()),
-      activityDiscardConfirmSurface('pipe-board-difficulty-discard', () => this.discardConfirm()),
+      ...this.difficultyGate.surfaces(PIPE_BOARD_DIFFICULTY_SURFACE_ID),
       ...pipeBoardSurfaces(this),
       pipeBoardExplainerSurface(this),
     ];
@@ -1559,8 +1489,7 @@ export class CloggedBathroomSystem
     this.sparkle = null;
     this.boardOpen = false;
     this.explainerOpen = false;
-    this.difficultyPickerOpen = false;
-    this.pendingDiscard = null;
+    this.difficultyGate.close();
     if (this.board !== null) resetToScramble(this.board);
     this.explainerSeen = snapshot.explainerSeen;
     for (const copy of this.copies) {

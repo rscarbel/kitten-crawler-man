@@ -60,6 +60,7 @@ import type { FocusClaimant } from './menuFocusAudit.js';
 import type { UiSize } from '../src/core/Settings.js';
 import type { SafeAreaInsets, ViewportInput } from '../src/ui/core/viewport.js';
 import type { MenusKit } from '../src/systems/kits/MenusKit.js';
+import { SPIDER_QUEST_NAME } from '../src/systems/SpiderQuestSystem';
 
 export {};
 
@@ -1068,6 +1069,12 @@ const SAMPLE_QUANTITY_MAX = 5;
 const noop = (): void => undefined;
 
 /**
+ * The pipe board's question opened straight on its gate: the town has no
+ * bathroom, so there is no pipe wall to work.
+ */
+const PIPE_BOARD_AUDIT_REQUEST = { activity: 'The Clogged Bathroom', onPick: noop };
+
+/**
  * The grate's and a structure's popovers open only with a boarded grate or a
  * built structure in reach, which the town does not stand up headless. Both
  * are the one `StructurePopover`, audited open in the gallery.
@@ -1385,7 +1392,7 @@ function townOpeners(): Opener<Town>[] {
     ),
     menu(
       'keyboard-hero',
-      (scene) => scene['spiderQuest']['_startHacking'](),
+      (scene) => scene['spiderQuest']['_startHacking']('normal'),
       (scene) => {
         scene['spiderQuest']['phase'] = 'inactive';
       },
@@ -1422,10 +1429,8 @@ function townOpeners(): Opener<Town>[] {
     ),
     menu(
       'pipe-board-difficulty',
-      (scene) => {
-        scene.cloggedBathroom['difficultyPickerOpen'] = true;
-      },
-      (scene) => scene.cloggedBathroom.cancelPipeBoardDifficulty(),
+      (scene) => scene.cloggedBathroom.difficultyGate.open(PIPE_BOARD_AUDIT_REQUEST),
+      (scene) => scene.cloggedBathroom.difficultyGate.cancel(),
     ),
     menu(
       'pipe-board-difficulty-discard',
@@ -1434,26 +1439,29 @@ function townOpeners(): Opener<Town>[] {
         const board = bathroom.generateBoardNow('easy');
         const firstTurnable = board.tiles.findIndex((tile) => !tile.decoy && !tile.bolted);
         bathroom.turnPipeTile(firstTurnable, 'clockwise');
-        bathroom['difficultyPickerOpen'] = true;
-        bathroom.choosePipeBoardDifficulty('hard');
+        bathroom.difficultyGate.open(PIPE_BOARD_AUDIT_REQUEST);
+        bathroom.difficultyGate.choose('hard');
       },
       (scene) => {
         const bathroom = scene.cloggedBathroom;
-        bathroom.backToPipeBoardDifficulty();
-        bathroom.cancelPipeBoardDifficulty();
+        bathroom.difficultyGate.back();
+        bathroom.difficultyGate.cancel();
         bathroom.restartPipeBoard();
       },
     ),
     menu(
       'prison-difficulty',
       (scene) => {
-        const doors = scene['gameMap'].buildingEntries;
-        if (doors.length === 0) throw new Error('the town has no door to stand the picker on');
-        scene['pendingPrisonEntry'] = doors[0];
+        const door = scene['gameMap'].buildingEntries[0];
+        if (door === undefined) throw new Error('the town has no door to stand the picker on');
+        scene['prisonDifficulty'].open({ activity: door.name, onPick: noop });
       },
-      (scene) => {
-        scene['pendingPrisonEntry'] = null;
-      },
+      (scene) => scene['prisonDifficulty'].cancel(),
+    ),
+    menu(
+      'spider-terminal-difficulty',
+      (scene) => scene.spiderTerminalDifficulty.open({ activity: SPIDER_QUEST_NAME, onPick: noop }),
+      (scene) => scene.spiderTerminalDifficulty.cancel(),
     ),
     menu(
       'pipe-board-explainer',

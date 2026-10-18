@@ -80,10 +80,8 @@ export const worldPalette = {
     /** The pulsing ring round a placed gym barrier, marking where it slows mobs. */
     barrierSlowZone: '#60a5fa',
   },
-  /** The spider lab's alarm, the scientist's line and the terminal's boot text. */
+  /** Dr. Moult's speech bubble and the lab terminal's boot text. */
   spiderLab: {
-    alarm: '#fbbf24',
-    alarmOutline: 'rgba(0,0,0,0.8)',
     bubbleInk: '#1e293b',
     /** The console cyan the intrusion HUD is drawn in, so the boot line matches it. */
     console: '#4fc3f7',

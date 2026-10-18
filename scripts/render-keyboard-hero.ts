@@ -19,11 +19,16 @@
  * and it is restated here rather than imported because the drawing module reaches
  * for a DOM `document`, which node does not have.
  *
+ * A second sheet plays each difficulty tier's own chart at its own fall speed,
+ * frozen at the moment the most notes are on the field (on Nightmare, as its
+ * first double note falls), at a desktop fit and both phone orientations: the
+ * clutter check for a slower fall or a pair of notes.
+ *
  * The gates run first, before the contact sheet is allocated, so a failure is
  * reported against the art rather than after a multi-megapixel canvas.
  *
  *   npm run render:keyboard-hero
- *   npx tsx scripts/render-keyboard-hero.ts --out=board.png
+ *   npx tsx scripts/render-keyboard-hero.ts --out=board.png --tiers-out=tiers.png
  */
 
 import { createCanvas, type Canvas, type CanvasRenderingContext2D as Ctx } from 'canvas';
@@ -38,9 +43,25 @@ import {
 } from './gates-keyboard-hero.js';
 import { asGameContext } from './nodeGameContext.js';
 import { PREVIEW_DIR, writePreviewPng } from './previewOut.js';
-import { HIT_ZONE_IMG_CENTER } from '../src/systems/keyboardHeroGeometry.js';
+import {
+  HIT_ZONE_IMG_CENTER,
+  KEYBOARD_HERO_GEOMETRY,
+  NOTE_SPAWN_IMG_Y,
+  type KeyboardHeroGeometry,
+} from '../src/systems/keyboardHeroGeometry.js';
+import {
+  KEYBOARD_HERO_CHARTS,
+  type KeyboardHeroChartNote,
+} from '../src/systems/keyboardHeroChart.js';
+import {
+  DIFFICULTY_LABELS,
+  DIFFICULTY_ORDER,
+  type Difficulty,
+} from '../src/core/difficultyProfiles.js';
+import { palette } from '../src/ui/theme/tokens.js';
 import {
   BOARD_BAKE_SCALE,
+  CHORD_LINK_IMG_H,
   BOARD_IMG_H,
   BOARD_IMG_W,
   LANE_BED_IMG_H,
@@ -58,6 +79,7 @@ import type { Rect } from '../src/ui/core/geom.js';
 import { LANE_PALETTES, type LanePalette } from '../src/sprites/art/keyboardHeroLanePalettes.js';
 import {
   paintBoardFrame,
+  paintChordLink,
   paintLaneBed,
   paintLaneHighlight,
   paintNoteKeycap,
@@ -109,6 +131,9 @@ const DESKTOP_PANEL_W = 620;
 const DESKTOP_PANEL_H = 720;
 const MOBILE_PANEL_W = 390;
 const MOBILE_PANEL_H = 844;
+/** Phone landscape, where the board is height-bound and a slower fall has the least room. */
+const LANDSCAPE_PANEL_W = 844;
+const LANDSCAPE_PANEL_H = 390;
 
 const BOARD_PANELS: readonly BoardPanel[] = [
   {
@@ -212,16 +237,12 @@ function drawLaneBeds(ctx: Ctx, layout: KeyboardHeroLayout): void {
   for (const lane of LANE_INDICES) blit(ctx, bedPiece(lane), layout.lanes[lane]);
 }
 
-function drawHitWindow(ctx: Ctx, layout: KeyboardHeroLayout): void {
+function drawHitWindow(ctx: Ctx, layout: KeyboardHeroLayout, geometry: KeyboardHeroGeometry): void {
+  const halfHeight = geometry.hitWindowImgHalfHeight * layout.scale;
   ctx.save();
   ctx.globalCompositeOperation = 'lighter';
   ctx.fillStyle = HIT_BAND_COLOR;
-  ctx.fillRect(
-    layout.laneArea.x,
-    layout.hitLineY - layout.hitWindowHalfHeight,
-    layout.laneArea.w,
-    layout.hitWindowHalfHeight * 2,
-  );
+  ctx.fillRect(layout.laneArea.x, layout.hitLineY - halfHeight, layout.laneArea.w, halfHeight * 2);
   ctx.fillStyle = HIT_LINE_COLOR;
   const lineH = Math.max(1, HIT_LINE_IMG_H * layout.scale);
   ctx.fillRect(layout.laneArea.x, layout.hitLineY - lineH / 2, layout.laneArea.w, lineH);
@@ -255,7 +276,7 @@ function drawBoardPanel(ctx: Ctx, panel: BoardPanel): void {
 
   blit(ctx, framePiece(), layout.board);
   drawLaneBeds(ctx, layout);
-  drawHitWindow(ctx, layout);
+  drawHitWindow(ctx, layout, KEYBOARD_HERO_GEOMETRY.normal);
 
   drawReviewNotes(ctx, layout);
   for (const lane of LANE_INDICES) {
@@ -387,6 +408,203 @@ function drawBedStrips(ctx: Ctx, top: number): void {
   });
 }
 
+// ── Tier snapshots ──────────────────────────────────────────────────────────
+
+const TIER_PANELS: readonly BoardPanel[] = [
+  { caption: 'desktop', viewportW: DESKTOP_PANEL_W, viewportH: DESKTOP_PANEL_H, isMobile: false },
+  { caption: '390×844', viewportW: MOBILE_PANEL_W, viewportH: MOBILE_PANEL_H, isMobile: true },
+  {
+    caption: '844×390',
+    viewportW: LANDSCAPE_PANEL_W,
+    viewportH: LANDSCAPE_PANEL_H,
+    isMobile: true,
+  },
+];
+
+/** A note is drawn while any of it can still be inside the lane bed. */
+function isOnField(imgY: number): boolean {
+  return imgY >= NOTE_SPAWN_IMG_Y && imgY <= LANE_BED_IMG_H + NOTE_IMG_SIZE / 2;
+}
+
+function noteImgYAt(
+  note: KeyboardHeroChartNote,
+  songMs: number,
+  geometry: KeyboardHeroGeometry,
+): number {
+  return HIT_ZONE_IMG_CENTER + (songMs - note.timeMs) * geometry.fallSpeedImgPxPerMs;
+}
+
+/** The moment the given tier's field holds the most notes; ties go to the earlier moment. */
+function busiestMomentMs(
+  notes: readonly KeyboardHeroChartNote[],
+  geometry: KeyboardHeroGeometry,
+): number {
+  let best = { songMs: 0, count: -1 };
+  for (const anchor of notes) {
+    const songMs = anchor.timeMs;
+    const count = notes.filter((note) => isOnField(noteImgYAt(note, songMs, geometry))).length;
+    if (count > best.count) best = { songMs, count };
+  }
+  return best.songMs;
+}
+
+/** Nightmare is caught with its first double note halfway down, where the rung reads best. */
+function snapshotMomentMs(difficulty: Difficulty): number {
+  const { notes } = KEYBOARD_HERO_CHARTS[difficulty];
+  const geometry = KEYBOARD_HERO_GEOMETRY[difficulty];
+  const firstChord = notes.find((note) => note.chordId !== undefined);
+  if (firstChord === undefined) return busiestMomentMs(notes, geometry);
+  return firstChord.timeMs - geometry.noteTravelMs / 2;
+}
+
+const CHORD_LINK_INK = { core: palette.text.primary, glow: palette.accent.base };
+
+function drawChordLinks(
+  ctx: Ctx,
+  layout: KeyboardHeroLayout,
+  visible: readonly {
+    readonly note: KeyboardHeroChartNote;
+    readonly imgY: number;
+    readonly alpha: number;
+  }[],
+): void {
+  const firstOfChord = new Map<number, KeyboardHeroChartNote>();
+  for (const { note, imgY, alpha } of visible) {
+    if (note.chordId === undefined) continue;
+    const partner = firstOfChord.get(note.chordId);
+    if (partner === undefined) {
+      firstOfChord.set(note.chordId, note);
+      continue;
+    }
+    const left = layout.lanes[Math.min(partner.column, note.column)];
+    const right = layout.lanes[Math.max(partner.column, note.column)];
+    const fromX = left.x + left.w / 2;
+    const width = right.x + right.w / 2 - fromX;
+    const height = CHORD_LINK_IMG_H * layout.scale;
+    const span = Math.abs(note.column - partner.column);
+    const art = piece(`chord_${span}`, span * LANE_BED_IMG_W, CHORD_LINK_IMG_H, (c, w, h) =>
+      paintChordLink(c, w, h, CHORD_LINK_INK.core, CHORD_LINK_INK.glow),
+    );
+    ctx.save();
+    ctx.globalAlpha = alpha;
+    blit(ctx, art, {
+      x: fromX,
+      y: noteImgYToScreenY(layout, imgY) - height / 2,
+      w: width,
+      h: height,
+    });
+    ctx.restore();
+  }
+}
+
+function drawTierPanel(ctx: Ctx, panel: BoardPanel, difficulty: Difficulty, songMs: number): void {
+  const layout = computeKeyboardHeroLayout(panel.viewportW, panel.viewportH, panel.isMobile);
+  const geometry = KEYBOARD_HERO_GEOMETRY[difficulty];
+
+  ctx.fillStyle = PANEL_BACKDROP;
+  ctx.fillRect(0, 0, panel.viewportW, panel.viewportH);
+  blit(ctx, framePiece(), layout.board);
+  drawLaneBeds(ctx, layout);
+  drawHitWindow(ctx, layout, geometry);
+
+  const fadeSpan = geometry.fadeInEndImgY - NOTE_SPAWN_IMG_Y;
+  const visible = KEYBOARD_HERO_CHARTS[difficulty].notes
+    .map((note) => ({ note, imgY: noteImgYAt(note, songMs, geometry) }))
+    .filter(({ imgY }) => isOnField(imgY))
+    .map(({ note, imgY }) => ({
+      note,
+      imgY,
+      alpha: Math.min(1, Math.max(0, (imgY - NOTE_SPAWN_IMG_Y) / fadeSpan)),
+    }));
+
+  ctx.save();
+  ctx.beginPath();
+  ctx.rect(layout.laneArea.x, layout.laneArea.y, layout.laneArea.w, layout.laneArea.h);
+  ctx.clip();
+  drawChordLinks(ctx, layout, visible);
+  for (const { note, imgY, alpha } of visible) {
+    const laneRect = layout.lanes[note.column];
+    ctx.save();
+    ctx.globalAlpha = alpha;
+    blit(ctx, notePiece('normal', note.column), {
+      x: laneRect.x + (laneRect.w - layout.noteSize) / 2,
+      y: noteImgYToScreenY(layout, imgY) - layout.noteSize / 2,
+      w: layout.noteSize,
+      h: layout.noteSize,
+    });
+    ctx.restore();
+  }
+  ctx.restore();
+
+  for (const lane of LANE_INDICES) blit(ctx, receptorPiece('idle', lane), layout.receptors[lane]);
+  const buttons = layout.touchButtons;
+  if (buttons !== null) {
+    for (const lane of LANE_INDICES) blit(ctx, touchPiece('idle', lane), buttons[lane]);
+  }
+}
+
+function renderTierSheet(): void {
+  const rowWidth =
+    TIER_PANELS.reduce((total, panel) => total + panel.viewportW, 0) +
+    SWATCH_GAP * (TIER_PANELS.length - 1);
+  const rowHeight =
+    LABEL_HEIGHT + Math.max(...TIER_PANELS.map((panel) => panel.viewportH)) + CAPTION_HEIGHT;
+  const width = rowWidth + MARGIN * 2;
+  const height = MARGIN * 2 + LABEL_HEIGHT + DIFFICULTY_ORDER.length * (rowHeight + SECTION_GAP);
+
+  const canvas = createCanvas(width, height);
+  const ctx = canvas.getContext('2d');
+  ctx.fillStyle = BACKDROP;
+  ctx.fillRect(0, 0, width, height);
+  text(
+    ctx,
+    'Keyboard hero — each tier at its busiest moment',
+    MARGIN,
+    MARGIN + LABEL_HEIGHT - TEXT_BASELINE_INSET,
+    TITLE_FONT,
+    LABEL_COLOR,
+  );
+
+  let rowTop = MARGIN + LABEL_HEIGHT + SECTION_GAP;
+  for (const difficulty of DIFFICULTY_ORDER) {
+    const songMs = snapshotMomentMs(difficulty);
+    const geometry = KEYBOARD_HERO_GEOMETRY[difficulty];
+    const { notes } = KEYBOARD_HERO_CHARTS[difficulty];
+    text(
+      ctx,
+      `${DIFFICULTY_LABELS[difficulty]} — ${notes.length} notes, ` +
+        `${geometry.fallSpeedImgPxPerSec} px/s, ${Math.round(geometry.noteTravelMs)} ms travel, ` +
+        `at ${Math.round(songMs)} ms`,
+      MARGIN,
+      rowTop + LABEL_HEIGHT - TEXT_BASELINE_INSET,
+      LABEL_FONT,
+      LABEL_COLOR,
+    );
+    let panelX = MARGIN;
+    const panelTop = rowTop + LABEL_HEIGHT;
+    for (const panel of TIER_PANELS) {
+      ctx.save();
+      ctx.translate(panelX, panelTop);
+      drawTierPanel(ctx, panel, difficulty, songMs);
+      ctx.restore();
+      text(
+        ctx,
+        panel.caption,
+        panelX,
+        panelTop + panel.viewportH + CAPTION_HEIGHT - TEXT_BASELINE_INSET,
+        CAPTION_FONT,
+        SUBLABEL_COLOR,
+      );
+      panelX += panel.viewportW + SWATCH_GAP;
+    }
+    rowTop += rowHeight + SECTION_GAP;
+  }
+
+  const outPath = parseFlag('tiers-out', `${PREVIEW_DIR}/keyboard-hero-tiers.png`);
+  const writtenPath = writePreviewPng(outPath, canvas.toBuffer('image/png'));
+  console.log(`Wrote ${writtenPath} (${width}×${height}px)`);
+}
+
 function main(): void {
   reportFigureGates('keyboard hero', keyboardHeroGateFailures(paintKeyboardHeroArt()));
 
@@ -449,6 +667,8 @@ function main(): void {
   const outPath = parseFlag('out', `${PREVIEW_DIR}/keyboard-hero-review.png`);
   const writtenPath = writePreviewPng(outPath, canvas.toBuffer('image/png'));
   console.log(`Wrote ${writtenPath} (${width}×${height}px)`);
+
+  renderTierSheet();
 }
 
 main();

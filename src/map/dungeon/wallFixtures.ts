@@ -38,6 +38,12 @@ import type { Point } from '../roomDoorways';
 import type { RegionCharacters } from './regionCharacters';
 import type { CharacterId, CountRange, LightSourceKind, LightSourceSpec } from './roomCharacters';
 import { wallShapeAt } from './wallShape';
+import {
+  labApproachZoneAt,
+  labHallwayDecayAt,
+  type LabHallwayWalk,
+  type LabApproachTiles,
+} from '../labApproach';
 import { UINT32_SPAN } from '../../core/WorldRandom';
 import type { BreakMaterial } from '../../systems/destruction/breakMaterials';
 
@@ -148,6 +154,11 @@ export interface WallFixture {
    * breaker and for every other kind. Breaking that box puts the tube out.
    */
   readonly circuit: number | null;
+  /**
+   * A tube on its last legs: it stutters off and on far more than a merely
+   * faulty one. Only the spider lab's approach hangs one.
+   */
+  readonly dying: boolean;
   readonly state: WallFixtureState;
 }
 
@@ -238,6 +249,8 @@ export interface WallFixturePlacementInput {
   readonly regionMap: RegionMap;
   readonly characters: RegionCharacters;
   readonly rng: Rng;
+  /** The spider lab's approach, on the floor that has one. */
+  readonly labApproach?: LabHallwayWalk & LabApproachTiles;
 }
 
 interface FixtureDraft {
@@ -254,6 +267,7 @@ interface FixtureDraft {
   circuitBox: FixtureDraft | null;
   /** A breaker already blown when the floor is entered: the reason its room is dark. */
   startsBroken: boolean;
+  dying: boolean;
 }
 
 /** The faces along a region's north wall a fixture may hang on, split by what stands in front. */
@@ -344,6 +358,7 @@ class FixturePlacer {
       region,
       circuitBox: null,
       startsBroken: false,
+      dying: false,
     };
     this.drafts.push(draft);
     this.taken.add(faceKey(face.x, face.y));
@@ -599,9 +614,57 @@ function dressHallwayFaces(
   input: WallFixturePlacementInput,
 ) {
   const assignment = input.characters.forRegion(hallway.id);
+  if (assignment?.type === 'special' && assignment.tag === 'lab_hallway') {
+    dressLabHallwayFaces(placer, hallway, input.labApproach);
+    return;
+  }
   if (assignment?.type !== 'hallway') return;
   const faces = placer.facesAbove(hallway.tiles);
   placeLights(placer, faces, assignment.character.lighting.sources, hallway.id, input.rng);
+}
+
+/** How far down the approach its one dying tube hangs, where the outer hallway has a face for it. */
+const DYING_TUBE_DECAY = 0.3;
+/** The tube smashed just inside the mouth: the first thing wrong a crawler turning in sees. */
+const MOUTH_SMASHED_TUBE_DECAY = 0.06;
+/** The tube smashed in the inner hallway, close to the lab. */
+const INNER_SMASHED_TUBE_DECAY = 0.75;
+
+/**
+ * The spider lab's approach hangs no light by its profile: one dying tube that
+ * flickers, in the outer hallway where a face allows and in the inner one
+ * where none does, and tubes already smashed — one just inside the mouth, one
+ * near the lab.
+ */
+function dressLabHallwayFaces(
+  placer: FixturePlacer,
+  hallway: HallwayRegion,
+  lab: (LabHallwayWalk & LabApproachTiles) | undefined,
+): void {
+  const first = hallway.tiles.length > 0 ? hallway.tiles[0] : undefined;
+  if (lab === undefined || first === undefined) return;
+  const faces = placer.facesAbove(hallway.tiles).clear;
+  const decayOf = (face: Point): number => labHallwayDecayAt(lab, face.x, face.y + 1) ?? 0;
+  const hangNearest = (decay: number): FixtureDraft | null => {
+    let best: Point | null = null;
+    for (const face of faces) {
+      if (!placer.isFree(face)) continue;
+      if (best === null || Math.abs(decayOf(face) - decay) < Math.abs(decayOf(best) - decay)) {
+        best = face;
+      }
+    }
+    return best === null ? null : placer.place(best, 'fluorescent_tube', hallway.id);
+  };
+  const smash = (draft: FixtureDraft | null): void => {
+    if (draft !== null) draft.startsBroken = true;
+  };
+  const isOuter = labApproachZoneAt(lab, first.x, first.y) === 'outer_hallway';
+  const outerHasFace = placer.facesAbove(lab.outerHallwayTiles).clear.length > 0;
+  if (isOuter || !outerHasFace) {
+    const dying = hangNearest(isOuter ? DYING_TUBE_DECAY : INNER_SMASHED_TUBE_DECAY);
+    if (dying !== null) dying.dying = true;
+  }
+  smash(hangNearest(isOuter ? MOUTH_SMASHED_TUBE_DECAY : INNER_SMASHED_TUBE_DECAY));
 }
 
 /**
@@ -631,6 +694,7 @@ export function placeWallFixtures(input: WallFixturePlacementInput): WallFixture
       seed: draft.seed,
       region: draft.region,
       circuit,
+      dying: draft.dying,
       state,
     };
   });

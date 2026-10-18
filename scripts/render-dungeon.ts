@@ -48,7 +48,9 @@
  * - `--frame=room|hallway|junction|doorway` frames the first ordinary room, the
  *   longest straight corridor run, the corridor junction with the most arms, or
  *   the first doorway of that room, each with padding around it.
- * - `--safe-room`, `--quest-room`, `--spider-lab` frame those rooms.
+ * - `--safe-room`, `--quest-room` frame those rooms; `--spider-lab` frames the
+ *   lab's whole approach — the mouth in its host room, both hallways, the
+ *   station and the lab's doorway; `--lab-station` frames the station alone.
  * - `--stairwell` frames the floor's first stairwell and draws it as the game
  *   does, its pulsing outline and arrow included.
  * - `--sign=hallway|room` frames the first wayfinding sign of that kind (a map
@@ -117,6 +119,7 @@ import { floorSurfaceOf } from '../src/map/dungeon/floorSurface.js';
 import { buildColosseumDressing } from '../src/systems/bossRooms/BossRoomDressings.js';
 import { UINT32_SPAN } from '../src/core/WorldRandom.js';
 import { StairwellSystem } from '../src/systems/StairwellSystem.js';
+import { LabHallwayAtmosphere } from '../src/systems/spiderQuest/LabHallwayAtmosphere.js';
 
 const DEFAULT_LEVEL = 1;
 const DEFAULT_VIEW_TILES_W = 56;
@@ -264,6 +267,9 @@ const gameMap = tutorialRequested
 const safeRoom = flag('safe-room') ? gameMap.safeRooms[0] : undefined;
 const questRoom = flag('quest-room') ? gameMap.questRooms[0] : undefined;
 const spiderLab = flag('spider-lab') ? gameMap.spiderLabRoom : null;
+const labStation = flag('lab-station') ? gameMap.spiderLabRoom?.stationBounds : undefined;
+if (flag('lab-station') && labStation === undefined)
+  throw new Error('this floor has no lab station');
 const signKind = stringArg('sign', '');
 const questExitArg = stringArg('quest-exit', '');
 const questExitState = QUEST_EXIT_DOOR_STATES.find((state) => state === questExitArg);
@@ -316,6 +322,7 @@ const propsRequested =
   safeRoom !== undefined ||
   questRoom !== undefined ||
   spiderLab !== null ||
+  labStation !== undefined ||
   framedSign !== undefined ||
   questExitTile !== undefined;
 
@@ -483,9 +490,43 @@ const focus =
   safeRoom?.centre ??
   questRoom?.centre ??
   spiderLab?.centre ??
+  (labStation === undefined
+    ? undefined
+    : {
+        x: labStation.x + Math.floor(labStation.w / 2),
+        y: labStation.y + Math.floor(labStation.h / 2),
+      }) ??
   gameMap.startTile;
+/**
+ * The lab's whole approach: the mouth in its host room, both hallways, the
+ * station between them and the lab's doorway, which is what a crawler crossing
+ * the host room sees of it.
+ */
+function labApproachTarget(lab: NonNullable<typeof spiderLab>): Rect {
+  const tiles = [
+    lab.hallwayMouthTile,
+    lab.entranceTile,
+    ...lab.outerHallwayTiles,
+    ...lab.innerHallwayTiles,
+    { x: lab.stationBounds.x, y: lab.stationBounds.y },
+    {
+      x: lab.stationBounds.x + lab.stationBounds.w - 1,
+      y: lab.stationBounds.y + lab.stationBounds.h - 1,
+    },
+  ];
+  const xs = tiles.map((tile) => tile.x);
+  const ys = tiles.map((tile) => tile.y);
+  const x = Math.min(...xs);
+  const y = Math.min(...ys);
+  return { x, y, w: Math.max(...xs) - x + 1, h: Math.max(...ys) - y + 1 };
+}
+
 const chosenView =
-  frameKind === undefined ? focusedView(focus) : paddedView(frameTarget(frameKind));
+  frameKind === undefined
+    ? spiderLab === null
+      ? focusedView(focus)
+      : paddedView(labApproachTarget(spiderLab))
+    : paddedView(frameTarget(frameKind));
 
 const viewTilesW = intArg('w', chosenView.w);
 const viewTilesH = intArg('h', chosenView.h);
@@ -709,6 +750,9 @@ function smashView(): DestructiblePropSystem {
 
 setViewportSize(viewW, viewH);
 const smashed = smashRequested ? smashView() : null;
+const labHallway = propsRequested
+  ? LabHallwayAtmosphere.forMap({ gameMap, audio: null, audioScope: null, lights: null })
+  : null;
 smashed?.renderWreckage(ctx, camX, camY);
 const life = buildLife();
 life?.renderGround(ctx, camX, camY, viewW, viewH);
@@ -720,7 +764,15 @@ if (propsRequested) buildColosseumDressing(gameMap)?.renderGround(ctx, camX, cam
 if (propsRequested || smashRequested) {
   // Fixtures go in ahead of props so the stable sort keeps a fixture behind a
   // prop on the same foot line: the fixture is on the wall the prop stands at.
-  const sorted = [...wallFixtureDraws(), ...decorationDraws()].sort((a, b) => a.sortY - b.sortY);
+  // The approach's cocoons sort with the bodies, as `RenderPipeline` sorts a
+  // fixture: on their own top edge.
+  const cocoonDraws: SortedDraw[] = (labHallway?.sortedRenderables() ?? []).map((cocoon) => ({
+    sortY: cocoon.y,
+    draw: (target) => cocoon.render(target, camX, camY, TILE_SIZE),
+  }));
+  const sorted = [...wallFixtureDraws(), ...decorationDraws(), ...cocoonDraws].sort(
+    (a, b) => a.sortY - b.sortY,
+  );
   for (const entry of sorted) entry.draw(ctx);
 }
 if (stairwellRequested) {
@@ -732,6 +784,8 @@ if (stairwellRequested) {
   ).renderStairwells(ctx, camX, camY);
 }
 life?.renderAir(ctx, camX, camY, viewW, viewH);
+// The lab's approach strings its webs over the bodies.
+labHallway?.render(ctx, camX, camY, viewW, viewH);
 
 if (lightingRequested && !applyLighting(ctx, LIGHTING_CLOCK_MS)) {
   console.warn('--lighting: this map has no room characters to light it by; rendered unlit');

@@ -1,6 +1,6 @@
 /**
- * The spider lab's marks painted into the room itself, in world space: the
- * scientist's alarm and line, the arrow over the terminal and its boot line,
+ * The spider lab's marks painted into the room itself, in world space: Dr.
+ * Moult's speech bubble, the arrow over the terminal and its boot line,
  * the sealed room's pulsing border and the colours of the cutscene's gore.
  */
 
@@ -18,37 +18,8 @@ export const SPIDER_CUTSCENE_GORE_COLORS = [
 ] as const;
 
 const CENTRE = 0.5;
-/** The alarm and the scientist's line are set in the system face, not the world's monospace. */
+/** Dr. Moult's lines are set in the system face, not the world's monospace. */
 const LAB_MARK_FAMILY = 'sans-serif';
-
-const EXCLAMATION_BOB_AMPLITUDE = 3;
-const EXCLAMATION_BOB_PERIOD_MS = 350;
-const EXCLAMATION_FONT_SIZE = 16;
-const EXCLAMATION_STROKE_WIDTH = 3;
-const EXCLAMATION_RISE = 16;
-
-/** A bobbing gold "!" centred at (`cx`, `cy`), raised over someone with something to say. */
-export function paintExclamationMark(
-  ctx: CanvasRenderingContext2D,
-  cx: number,
-  cy: number,
-  nowMs: number,
-): void {
-  const bob = Math.sin(nowMs / EXCLAMATION_BOB_PERIOD_MS) * EXCLAMATION_BOB_AMPLITUDE;
-  const y = cy - EXCLAMATION_RISE + bob;
-  worldText(ctx, '!', {
-    x: cx,
-    y,
-    size: EXCLAMATION_FONT_SIZE,
-    bold: true,
-    family: LAB_MARK_FAMILY,
-    color: worldPalette.spiderLab.alarm,
-    outline: worldPalette.spiderLab.alarmOutline,
-    outlineWidth: EXCLAMATION_STROKE_WIDTH,
-    align: 'center',
-    baseline: 'middle',
-  });
-}
 
 const BUBBLE_PADDING = 8;
 const BUBBLE_FONT_SIZE = 9;

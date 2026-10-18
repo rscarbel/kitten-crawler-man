@@ -1,18 +1,22 @@
 /**
- * SpiderQuestSystem — orchestrates the Grotesque Spider boss quest on level 2.
+ * SpiderQuestSystem — orchestrates Pest Control, the Grotesque Spider boss
+ * quest on level 2.
  *
  * State machine:
- *   inactive → scientist_waiting → scientist_dialog → awaiting_hacking →
- *   hacking → hacking_failed → cutscene → boss_fight → complete
+ *   inactive → scientist_waiting → scientist_dialog → scientist_returning →
+ *   awaiting_hacking → hacking → hacking_failed → cutscene → boss_fight → complete
  */
 
 import { TILE_SIZE } from '../core/constants';
+import type { Difficulty } from '../core/difficultyProfiles';
 import { SpiderLabDressing, type SpiderLabQuestView } from './bossRooms/SpiderLabDressing';
 import type { DressingRenderable } from './bossRooms/BossRoomDressing';
 import { EGG_OPENING_FRAMES } from '../sprites/art/spiderLabArt';
-import { LabScientistFigure } from './bossRooms/labScientistFigure';
+import { LabScientistFigure, prewarmLabScientist } from './bossRooms/labScientistFigure';
 import { CENTER_COLLISION_OFFSET, SOLE_COLLISION_OFFSET } from '../map/collisionAnchors';
-import type { TrackerEntry } from './questTracker';
+import { characterTarget, type TrackerEntry } from './questTracker';
+import { tileCoordKey } from '../map/tileIndex';
+import type { QuestMarkerType } from './MiniMapSystem';
 import { clamp, pointInRect } from '../utils';
 import { awardPartyXp, type PartyXpApplied } from '../core/awardXp';
 import { CRAWLER_NAMES } from '../core/SkillManager';
@@ -26,6 +30,7 @@ import type { QuestRewardSpec } from '../ui/questReward/types';
 import { drawInteractionPrompt } from '../ui/InteractionPrompt';
 import type { GameMap } from '../map/GameMap';
 import type { SpiderLabRoomData } from '../map/GameMap';
+import type { Point, Rect } from '../map/roomDoorways';
 import type { Mob } from '../creatures/Mob';
 import type { Player } from '../Player';
 import type { HumanPlayer } from '../creatures/HumanPlayer';
@@ -61,7 +66,6 @@ import type { HealingFairy } from '../creatures/fairies/HealingFairy';
 import { level2 } from '../levels/level2';
 import { paintShutdownCutscene } from '../ui/hud/shutdownCaption';
 import {
-  paintExclamationMark,
   paintLockedRoomBorder,
   paintSpeechBubble,
   paintTerminalArrow,
@@ -72,10 +76,20 @@ import type { TopBandEntry } from '../ui/hud/topBand';
 import { stackedBandEntry, TOP_BAND_WIDTH } from '../ui/hud/topBandStack';
 import type { Conversation } from '../dialog/Conversation';
 import type { ConversationHandle } from '../dialog/request';
-import { SCIENTIST } from '../dialog/scripts/scenes/spider';
+import { MORDECAI_MESSAGE, SCIENTIST } from '../dialog/scripts/scenes/spider';
+import { drawQuestMarker, QUEST_MARKER_GOLD, questMarkerTopY } from '../sprites/questNPCSprite';
+import { ActivityDifficultyGate } from '../ui/screens/dialogs/activityDifficultyPicker';
+import {
+  markSpiderTutorialPagesSeen,
+  spiderTutorialPagesDue,
+  type SpiderTutorialPageId,
+} from '../ui/screens/dialogs/spiderTutorial';
+import type { SpiderQuestCue } from './spiderQuest/spiderQuestSoundCues';
 
 export const SPIDER_QUEST_ID = 'grotesque_spider';
-const SPIDER_QUEST_NAME = 'The Arachnid Experiment';
+export const SPIDER_QUEST_NAME = 'Pest Control';
+/** The Journal's name for the thread before Dr. Moult has asked for anything. */
+const SPIDER_QUEST_OFFERED_NAME = `Optional: ${SPIDER_QUEST_NAME}`;
 /** The skill book the lab pays out. */
 const SPIDER_QUEST_BOOK = 'skill_book_night_vision';
 export const SPIDER_QUEST_COMPLETION_XP = 2000;
@@ -131,9 +145,50 @@ const CS_SPIT_HIT_RADIUS_PX = 24;
 // Safety TTL for cutscene projectile in case scientist tile is very close
 const CS_SPIT_MIN_TTL = 30;
 
-// Scientist wander timing
-const SCIENTIST_WANDER_FRAMES = 180;
-const SCIENTIST_WANDER_SPREAD_TILES = 3;
+/** How often he shuffles to a new spot near whichever post he is keeping. */
+const SCIENTIST_FIDGET_FRAMES = 180;
+/** How far from his hallway post he shuffles while he waits there. */
+const HALLWAY_POST_FIDGET_TILES = 1;
+/**
+ * How many fidget spreads from his post he may be before he walks straight
+ * back rather than shuffling: past it he has come from somewhere else.
+ */
+const FIDGET_STRAY_SPREAD_MULTIPLE = 2;
+/** How far from his lab post he shuffles while he waits there. */
+const LAB_POST_FIDGET_TILES = 1;
+/** How close a crawler in his sight has to come before he calls them over. */
+const SCIENTIST_CALL_OUT_TILES = 8;
+const SCIENTIST_CALL_OUT_PX = TILE_SIZE * SCIENTIST_CALL_OUT_TILES;
+const CALL_OUT_LINE = 'Psst! You! Over here!';
+/** How long the call-out's bubble hangs over him. */
+const CALL_OUT_BUBBLE_FRAMES = 150;
+/** How long one "this way" wave lasts, at either post. */
+const BECKON_FRAMES = 90;
+/**
+ * Steps past the hallway mouth a crawler gets before he stops them: enough to
+ * read as turning in on purpose, not so many that they reach the station.
+ */
+const HALLWAY_TRIGGER_DEPTH_TILES = 2;
+/**
+ * His run back to the lab, in world pixels a tick: a panicked bolt, a little
+ * faster than a crawler walks, so one who follows finds him at his post.
+ */
+const SCIENTIST_RUN_SPEED = 3.2;
+/** His step over to the player's shoulder at the terminal. */
+const SCIENTIST_SHOULDER_STEP_SPEED = 1.2;
+/** How far beside the player's feet he stands during the hack, in tiles. */
+const SCIENTIST_SHOULDER_SIDE_TILES = 0.85;
+/** How far behind the player's feet, away from the screen, he stands during the hack, in tiles. */
+const SCIENTIST_SHOULDER_BACK_TILES = 0.3;
+/** Frames he holds the flinch's last pose after a failed hack before settling. */
+const FLINCH_HOLD_FRAMES = 30;
+/** The beat between Dr. Moult bolting and Mordecai's message, so the bolt is seen. */
+const MORDECAI_MESSAGE_DELAY_FRAMES = 30;
+/**
+ * Tiles past the approach's own length the route search may reach: the lab's
+ * doorway to his post inside it, with room for the path to bend.
+ */
+const SCIENTIST_RUN_PATH_SLACK_TILES = 24;
 /**
  * Half-width of the scientist's footprint, in tiles. His sprite is drawn
  * centred on his feet and is nearly a tile wide, so a single-point wall test
@@ -155,7 +210,6 @@ const FRAMES_PER_SECOND = 60;
 
 // Additional rendering constants
 const TILE_CENTER_OFFSET_PX = 0.5; // for tile/sprite centering
-const SCIENTIST_EXCLAMATION_OFFSET_Y = 8;
 const LOCKED_ROOM_ALPHA_MIN = 0.55;
 const LOCKED_ROOM_ALPHA_SWING = 0.25;
 const LOCKED_ROOM_PULSE_MULTIPLIER = 0.12;
@@ -175,8 +229,6 @@ const OFFSET_WEST = -1;
 const OFFSET_FAR = 2;
 const OFFSET_FAR_NORTH = -2;
 const OFFSET_FAR_WEST = -2;
-
-const TUTORIAL_PAGES = 2;
 
 // Cutscene spit projectile constants
 const CS_SPIT_TTL_MARGIN = 20;
@@ -235,13 +287,11 @@ const NEIGHBOR_OFFSETS_FAR: Array<[number, number]> = [
   [OFFSET_FAR_WEST, 0],
 ];
 
-// Resets on page reload — tutorial plays once per session, not on retries.
-let keyboardHeroTutorialSeen = false;
-
 export type SpiderQuestPhase =
   | 'inactive'
   | 'scientist_waiting'
   | 'scientist_dialog'
+  | 'scientist_returning'
   | 'awaiting_hacking'
   | 'hacking'
   | 'keyboard_hero_tutorial'
@@ -331,8 +381,6 @@ export interface SpiderQuestCheckpoint {
   readonly spiderEggOpened: boolean;
   readonly scientistDead: boolean;
   readonly hackingDone: boolean;
-  readonly hackStarting: boolean;
-  readonly hackStartTimer: number;
   readonly machineryForcedOff: boolean;
   readonly playerLocked: boolean;
   readonly roomLocked: boolean;
@@ -367,6 +415,17 @@ export class SpiderQuestSystem implements GameSystem {
   /** The hack is over for good: its song lets go of the music, so the floor's comes back. */
   keyboardHeroMusicReleasePending = false;
   hackFailErrorSoundPending = false;
+  /**
+   * A line of Dr. Moult's to play from where he stands. The scene cuts off
+   * whatever he was still saying before it plays, so he never talks over himself.
+   */
+  scientistVoicePending: {
+    readonly cue: SpiderQuestCue;
+    readonly x: number;
+    readonly y: number;
+  } | null = null;
+  /** "Message from Mordecai" just opened: its chime. */
+  mordecaiMessageChimePending = false;
   /** A note was struck cleanly — the board's per-press tick. */
   keyboardHeroHitTickPending = false;
   /** A firewall pip just shattered on a mistake. */
@@ -446,6 +505,33 @@ export class SpiderQuestSystem implements GameSystem {
   private scientistTargetY = 0;
   private scientistDead = false;
   private scientistDialogFadeAlpha = 1;
+  /** Whether he has called a crawler over yet; from then on the Journal lists him. */
+  private calledOut = false;
+  private callOutBubbleFrames = 0;
+  private beckonFrames = 0;
+  private flinchHoldFrames = 0;
+  /**
+   * Whether the active crawler was in the lab when he last looked from his lab
+   * post, so his beckon greets each arrival once. Cleared whenever he takes up
+   * the post, so a crawler already inside is greeted too.
+   */
+  private activeWasInLab = false;
+  /** His run back to the lab: the tiles of the path, and the next one he is heading for. */
+  private runRoute: readonly Point[] = [];
+  private runRouteIndex = 0;
+  /** Where he stands at the player's shoulder during the hack, once the terminal boots. */
+  private shoulderSpot: { x: number; y: number } | null = null;
+  /** How far each outer-hallway tile is walked from the mouth, for the stop trigger. */
+  private readonly outerHallwayDepth = new Map<number, number>();
+  /**
+   * From the moment he stops or talks to the party until Mordecai's message is
+   * read: the run back plays out with the party standing still, watching it.
+   */
+  private holdingPartyForScientist = false;
+  private mordecaiMessageTimer = 0;
+  /** The tier picked at the terminal, kept so Try Again replays the same one. */
+  private hackTier: Difficulty | null = null;
+  private tutorialPagesShowing: readonly SpiderTutorialPageId[] = [];
 
   // Spider egg
   private spiderEggOpened = false;
@@ -524,12 +610,22 @@ export class SpiderQuestSystem implements GameSystem {
   private gameMap: GameMap;
   private bus: EventBus;
 
-  /** The handle the scientist's offer opened with. */
+  /** The handle Dr. Moult's explanation opened with. */
   private conversationHandle: ConversationHandle | null = null;
+  /** The handle Mordecai's message opened with. */
+  private mordecaiHandle: ConversationHandle | null = null;
 
-  /** Whether the shared conversation is currently showing the scientist's offer. */
-  private get conversationOwned(): boolean {
+  private get explanationOwned(): boolean {
     return this.conversationHandle !== null && this.conversation.isActive(this.conversationHandle);
+  }
+
+  private get mordecaiMessageOwned(): boolean {
+    return this.mordecaiHandle !== null && this.conversation.isActive(this.mordecaiHandle);
+  }
+
+  /** Whether the shared conversation is currently showing one of this quest's beats. */
+  private get conversationOwned(): boolean {
+    return this.explanationOwned || this.mordecaiMessageOwned;
   }
 
   constructor(
@@ -539,6 +635,8 @@ export class SpiderQuestSystem implements GameSystem {
     private readonly conversation: Conversation,
     /** Grants a quest's free spin at the wheel, once per quest; false when it was already granted. */
     private readonly grantWheelFreeSpin: (questId: string) => boolean,
+    /** The terminal's difficulty question, mounted by the scene. */
+    private readonly terminalDifficulty: ActivityDifficultyGate = new ActivityDifficultyGate(),
   ) {
     this.gameMap = gameMap;
     this.bus = bus;
@@ -551,12 +649,13 @@ export class SpiderQuestSystem implements GameSystem {
       this.labDressing.attachQuest(this._labView(this.roomData));
       this.phase = 'scientist_waiting';
 
-      // His position is the point he is drawn standing on — the draw anchors his
-      // feet there — so home is the feet point of his tile, not its corner.
-      this.scientistX = this.scientistHomeX(this.roomData);
-      this.scientistY = this.scientistHomeY(this.roomData);
-      this.scientistTargetX = this.scientistX;
-      this.scientistTargetY = this.scientistY;
+      this.placeScientistAt(this.roomData.hallwayPostTile);
+      const facing = this.roomData.hallwayPostFacing;
+      this.scientistFigure.faceToward(facing.x, facing.y);
+      for (const tile of this.roomData.outerHallwayTiles) {
+        this.outerHallwayDepth.set(tileCoordKey(tile.x, tile.y), tile.distanceFromMouth);
+      }
+      prewarmLabScientist();
 
       // Build life machines and register their tiles as solid
       for (const pt of this.roomData.lifeMachineTiles) {
@@ -591,7 +690,37 @@ export class SpiderQuestSystem implements GameSystem {
   }
 
   /**
-   * Whether the Arachnid Experiment room is finished with.
+   * Whether Pest Control is under way or done: from the moment Dr. Moult's
+   * explanation closes. Before that the quest has only been offered.
+   */
+  get hasStarted(): boolean {
+    return (
+      this.phase !== 'inactive' &&
+      this.phase !== 'scientist_waiting' &&
+      this.phase !== 'scientist_dialog'
+    );
+  }
+
+  /**
+   * Whether the party must stand still: through the cutscene, and from the
+   * moment Dr. Moult stops or talks to them until Mordecai's message is read.
+   */
+  get holdsPartyMovement(): boolean {
+    return this._playerLocked || this.holdingPartyForScientist;
+  }
+
+  /** Whether he is bolting back down the hallway to his lab right now. */
+  get isScientistRunning(): boolean {
+    return this.runRouteIndex < this.runRoute.length;
+  }
+
+  /** Where his feet are, in world pixels. */
+  get scientistFeet(): { x: number; y: number } {
+    return { x: this.scientistX, y: this.scientistY };
+  }
+
+  /**
+   * Whether Pest Control's lab is finished with.
    *
    * `phase` reaching `'complete'` is the only durable record of it: the system
    * never emits `bossDefeated`, only `questCompleted { questId: SPIDER_QUEST_ID }`,
@@ -623,6 +752,7 @@ export class SpiderQuestSystem implements GameSystem {
   get isDialogOpen(): boolean {
     return (
       this.phase === 'scientist_dialog' ||
+      this.mordecaiMessageOwned ||
       this.phase === 'hacking_failed' ||
       this.phase === 'keyboard_hero_tutorial'
     );
@@ -638,10 +768,15 @@ export class SpiderQuestSystem implements GameSystem {
     return this.phase === 'hacking_failed';
   }
 
-  /** The failed-hack prompt's Try Again: starts the song over. */
+  /** The failed-hack prompt's Try Again: starts the song over at the tier just played. */
   retryHack(): void {
     if (this.phase !== 'hacking_failed') return;
-    this._startHacking();
+    const tier = this.hackTier;
+    if (tier === null) {
+      this.retreatFromHack();
+      return;
+    }
+    this._startHacking(tier);
   }
 
   /** The failed-hack prompt's Retreat: back on the floor, the level's music restored. */
@@ -657,9 +792,17 @@ export class SpiderQuestSystem implements GameSystem {
     this._machineryForcedOff = false;
   }
 
-  /** The two-page Keyboard Hero tutorial is up. */
+  /** The Keyboard Hero tutorial is up: whichever of its pages the chosen tier still has to teach. */
   get isKeyboardHeroTutorialOpen(): boolean {
     return this.phase === 'keyboard_hero_tutorial';
+  }
+
+  /**
+   * The tutorial pages this showing walks through: what the tier still has to
+   * teach this session. Undefined, for the base pages, when no boot chose any.
+   */
+  get tutorialPages(): readonly SpiderTutorialPageId[] | undefined {
+    return this.tutorialPagesShowing.length > 0 ? this.tutorialPagesShowing : undefined;
   }
 
   /** Zero-based index of the Keyboard Hero tutorial page on screen. */
@@ -683,10 +826,6 @@ export class SpiderQuestSystem implements GameSystem {
       // the mini-game from across the room mid-swing.
       this.hackStarting
     );
-  }
-
-  get playerLocked(): boolean {
-    return this._playerLocked;
   }
 
   get grotesqueSpider(): GrotesqueSpider | null {
@@ -738,8 +877,40 @@ export class SpiderQuestSystem implements GameSystem {
   }
 
   /**
-   * The Journal's line for the Arachnid Experiment, rebuilt from the phase every
-   * frame.
+   * The minimap's pip for Pest Control, the only place floor 2 shows the
+   * quest: Dr. Moult once he has called the party over, then the terminal
+   * from the moment he runs back to it until the hack is done.
+   */
+  get questMarkers(): Array<{ x: number; y: number; type: QuestMarkerType }> {
+    const room = this.roomData;
+    if (room === null || this.scientistDead) return [];
+    switch (this.phase) {
+      case 'scientist_waiting':
+      case 'scientist_dialog':
+        if (!this.calledOut) return [];
+        return [
+          {
+            x: Math.floor(this.scientistX / TILE_SIZE),
+            y: Math.floor(this.scientistY / TILE_SIZE),
+            type: 'exclamation',
+          },
+        ];
+      case 'scientist_returning':
+      case 'awaiting_hacking':
+      case 'keyboard_hero_tutorial':
+      case 'hacking':
+      case 'hacking_failed':
+        return [{ x: room.computerTile.x, y: room.computerTile.y, type: 'exclamation' }];
+      case 'inactive':
+      case 'cutscene':
+      case 'boss_fight':
+      case 'complete':
+        return [];
+    }
+  }
+
+  /**
+   * The Journal's line for Pest Control, rebuilt from the phase every frame.
    *
    * This questline has no `QuestManager` of its own — it only ever emitted
    * `questStarted`/`questCompleted` — so the name and the status are stated here
@@ -759,18 +930,20 @@ export class SpiderQuestSystem implements GameSystem {
     switch (this.phase) {
       case 'scientist_waiting':
       case 'scientist_dialog':
+        if (!this.calledOut) return [];
         return [
           {
             ...base,
+            name: SPIDER_QUEST_OFFERED_NAME,
             status: 'available',
-            objective: 'Hear out the scientist in the lab',
-            hint: 'The sealed room off the hallway — the one with the machines in it.',
-            target: {
+            objective: 'Someone by the taped-off hallway wants a word',
+            target: characterTarget({
               x: Math.floor(this.scientistX / TILE_SIZE),
               y: Math.floor(this.scientistY / TILE_SIZE),
-            },
+            }),
           },
         ];
+      case 'scientist_returning':
       case 'awaiting_hacking':
       case 'keyboard_hero_tutorial':
       case 'hacking':
@@ -779,7 +952,7 @@ export class SpiderQuestSystem implements GameSystem {
           {
             ...base,
             status: 'active',
-            objective: 'Shut the life machines down at the terminal',
+            objective: "Optional: get into Dr. Moult's terminal at the end of the hallway",
             hint: 'The console on the lab bench. Keep time with the prompts.',
             target: labTile,
           },
@@ -853,6 +1026,8 @@ export class SpiderQuestSystem implements GameSystem {
       this._updateBrood(this._grotesqueSpider);
     }
 
+    this._tickMordecaiMessage();
+
     if (this.phase === 'cutscene') {
       this._updateCutscene(ctx);
       return;
@@ -866,7 +1041,7 @@ export class SpiderQuestSystem implements GameSystem {
 
     if (this.phase !== 'boss_fight') {
       this._updateLifeMachines();
-      this._updateScientistWander(ctx.active);
+      this._updateScientist(ctx.active);
     }
 
     if (this.phase === 'awaiting_hacking') {
@@ -1038,74 +1213,114 @@ export class SpiderQuestSystem implements GameSystem {
     if (!this.roomData) return false;
     if (this.phase === 'scientist_waiting') return this.isWithinScientistReach(active);
     if (this.phase === 'awaiting_hacking') {
-      const dist = Math.hypot(
-        active.x - this.roomData.computerTile.x * TILE_SIZE,
-        active.y - this.roomData.computerTile.y * TILE_SIZE,
-      );
-      return dist <= COMPUTER_INTERACT_RANGE_PX * COMPUTER_INTERACT_MULTIPLIER;
+      return !this.terminalDifficulty.isOpen && this.isWithinTerminalReach(active);
     }
     return false;
+  }
+
+  /** Whether a crawler is near enough the terminal for it to answer a press. */
+  private isWithinTerminalReach(active: Player): boolean {
+    const room = this.roomData;
+    if (room === null) return false;
+    const dist = Math.hypot(
+      active.x - room.computerTile.x * TILE_SIZE,
+      active.y - room.computerTile.y * TILE_SIZE,
+    );
+    return dist <= COMPUTER_INTERACT_RANGE_PX * COMPUTER_INTERACT_MULTIPLIER;
   }
 
   tryInteract(active: Player): boolean {
     if (!this.wouldInteract(active)) return false;
 
     if (this.phase === 'scientist_waiting') {
-      this.menuOpenSoundPending = true;
-      this.explanationSoundPending = true;
-      this.openOfferConversation();
+      this.openExplanation(active, false);
       return true;
     }
 
     if (this.phase === 'awaiting_hacking') {
-      if (!this.hackStarting) {
-        this.hackStarting = true;
-        this.hackStartTimer = HACK_START_DELAY_FRAMES;
-      }
+      if (!this.hackStarting) this.openTerminalDifficulty();
       return true;
     }
 
     return false;
   }
 
-  /** The scientist's plea, ending on an "I'll help" / "Not now" accept/decline pair. */
-  private openOfferConversation(): void {
+  /**
+   * Asks which tier to hack at. Asked on every use until the hack succeeds,
+   * and with no "Start over?" step: a failed hack leaves nothing to keep.
+   */
+  private openTerminalDifficulty(): void {
+    this.terminalDifficulty.open({
+      activity: SPIDER_QUEST_NAME,
+      onPick: (difficulty) => this.bootTerminal(difficulty),
+    });
+  }
+
+  private bootTerminal(difficulty: Difficulty): void {
+    if (this.phase !== 'awaiting_hacking' || this.hackStarting) return;
+    this.hackTier = difficulty;
+    this.hackStarting = true;
+    this.hackStartTimer = HACK_START_DELAY_FRAMES;
+  }
+
+  /**
+   * Dr. Moult's explanation. It has to be read: there is no accept or decline,
+   * because the quest stays optional and the player opts in at the terminal.
+   * `stopped` is the hallway trigger's version, which opens on him shouting
+   * after a crawler who walked past him.
+   */
+  private openExplanation(active: Player, stopped: boolean): void {
     this.phase = 'scientist_dialog';
+    this.calledOut = true;
+    this.callOutBubbleFrames = 0;
+    this.beckonFrames = 0;
+    this.holdingPartyForScientist = true;
+    this.menuOpenSoundPending = true;
+    // Stopped, his shout is the line heard; his explanation recording would
+    // cut it off on the same frame.
+    if (stopped) this.raiseScientistVoice('waitStop');
+    else this.explanationSoundPending = true;
+    this.faceScientistToward(active);
+    this.scientistFigure.play('talk');
     this.conversationHandle = this.conversation.open({
-      lines: [SCIENTIST.labRequest],
+      lines: stopped ? [SCIENTIST.waitStop, SCIENTIST.explanation] : [SCIENTIST.explanation],
+      reward: null,
+      questRelated: true,
+      ending: { kind: 'close', onClosed: () => this.onExplanationClosed() },
+      dismiss: { kind: 'blocked' },
+      haltsWorld: true,
+      anchor: null,
+      locksKeyboard: true,
+    });
+  }
+
+  private onExplanationClosed(): void {
+    this.conversationHandle = null;
+    if (this.phase !== 'scientist_dialog') return;
+    this.phase = 'scientist_returning';
+    this.bus.emit('questStarted', { questId: SPIDER_QUEST_ID });
+    this.beginRunToLabPost();
+    this.mordecaiMessageTimer = MORDECAI_MESSAGE_DELAY_FRAMES;
+  }
+
+  /** Counts down to Mordecai's message, then opens it; reading it frees the party. */
+  private _tickMordecaiMessage(): void {
+    if (this.mordecaiMessageTimer <= 0) return;
+    this.mordecaiMessageTimer--;
+    if (this.mordecaiMessageTimer > 0) return;
+    this.mordecaiMessageChimePending = true;
+    this.mordecaiHandle = this.conversation.open({
+      lines: [MORDECAI_MESSAGE.warning],
       reward: null,
       questRelated: true,
       ending: {
-        kind: 'confirm',
-        // Taking the job is the primary: the player walked up to the
-        // scientist and pressed the talk key to hear him out, so accept is
-        // the answer a bare accept key should give. Turning him down stays a
-        // deliberate act.
-        keyboardDefault: 'accept',
-        accept: {
-          label: "I'll help",
-          tone: 'quest',
-          run: (convo) => {
-            convo.close();
-            this.phase = 'awaiting_hacking';
-            this.bus.emit('questStarted', { questId: SPIDER_QUEST_ID });
-          },
-        },
-        decline: {
-          label: 'Not now',
-          tone: 'exit',
-          run: (convo) => {
-            convo.close();
-            this.phase = 'scientist_waiting';
-          },
+        kind: 'close',
+        onClosed: () => {
+          this.mordecaiHandle = null;
+          this.holdingPartyForScientist = false;
         },
       },
-      dismiss: {
-        kind: 'allowed',
-        onDismissed: () => {
-          this.phase = 'scientist_waiting';
-        },
-      },
+      dismiss: { kind: 'blocked' },
       haltsWorld: true,
       anchor: null,
       locksKeyboard: true,
@@ -1123,10 +1338,7 @@ export class SpiderQuestSystem implements GameSystem {
       return true;
     }
     if (this.phase === 'hacking_failed') {
-      this.phase = 'awaiting_hacking';
-      this.hackStarting = false;
-      this.hackStartTimer = 0;
-      this._machineryForcedOff = false;
+      this.retreatFromHack();
       return true;
     }
     return false;
@@ -1143,13 +1355,18 @@ export class SpiderQuestSystem implements GameSystem {
   advanceTutorial(): void {
     if (this.phase !== 'keyboard_hero_tutorial') return;
     this.menuClickSoundPending = true;
-    const isLast = this._tutorialPage === TUTORIAL_PAGES - 1;
-    if (isLast) {
-      keyboardHeroTutorialSeen = true;
-      this._startHacking();
-    } else {
+    const isLast = this._tutorialPage >= this.tutorialPagesShowing.length - 1;
+    if (!isLast) {
       this._tutorialPage++;
+      return;
     }
+    markSpiderTutorialPagesSeen(this.tutorialPagesShowing);
+    const tier = this.hackTier;
+    if (tier === null) {
+      this.dismissDialog();
+      return;
+    }
+    this._startHacking(tier);
   }
 
   onBossKilled(human: HumanPlayer, cat: CatPlayer): void {
@@ -1245,12 +1462,10 @@ export class SpiderQuestSystem implements GameSystem {
   /** Snapshots the lab for the safe-room checkpoint. See {@link SpiderQuestCheckpoint}. */
   captureCheckpoint(): SpiderQuestCheckpoint {
     return {
-      phase: this.phase,
+      phase: checkpointPhase(this.phase),
       spiderEggOpened: this.spiderEggOpened,
       scientistDead: this.scientistDead,
       hackingDone: this._hackingDone,
-      hackStarting: this.hackStarting,
-      hackStartTimer: this.hackStartTimer,
       machineryForcedOff: this._machineryForcedOff,
       playerLocked: this._playerLocked,
       roomLocked: this._roomLocked,
@@ -1271,21 +1486,43 @@ export class SpiderQuestSystem implements GameSystem {
    * next attempt never mutates the checkpoint it was restored from.
    */
   restoreCheckpoint(snapshot: SpiderQuestCheckpoint): void {
-    // A conversation cannot survive the rewind: the accept/decline pair may
-    // be closing over state a restore is about to change out from under it.
+    // A conversation or a difficulty question cannot survive the rewind: each
+    // closes over state a restore is about to change out from under it.
     if (this.conversationOwned) {
       this.conversation.close();
     }
+    this.conversationHandle = null;
+    this.mordecaiHandle = null;
+    this.terminalDifficulty.close();
+    this.holdingPartyForScientist = false;
+    this.mordecaiMessageTimer = 0;
+    this.runRoute = [];
+    this.runRouteIndex = 0;
+    this.shoulderSpot = null;
+    this.hackTier = null;
+    this.beckonFrames = 0;
+    this.flinchHoldFrames = 0;
+    this.callOutBubbleFrames = 0;
+    // No save point is taken mid-fight, and the scene lets go of the boss
+    // track on a rewind itself; a latch left over from the fight would make
+    // the retry's re-lock think the track is still playing and never claim it.
+    this._bossMusicPlaying = false;
+    this._bossMusicStopGraceTimer = 0;
+    this.bossMusicStartPending = false;
+    this.bossMusicStopPending = false;
     // No save point is taken mid-fight, so the roster rewind has already dropped
     // every egg and hatchling as arriving after the checkpoint. Ending them
     // anyway keeps that true should a checkpoint ever be taken with a brood out.
     this._clearBrood();
-    this.phase = snapshot.phase;
+    this.phase = checkpointPhase(snapshot.phase);
+    // Not saved, so a rewind forgets the call-out exactly as a reload does.
+    if (this.phase === 'scientist_waiting') this.calledOut = false;
+    this.placeScientistForPhase();
     this.spiderEggOpened = snapshot.spiderEggOpened;
     this.scientistDead = snapshot.scientistDead;
     this._hackingDone = snapshot.hackingDone;
-    this.hackStarting = snapshot.hackStarting;
-    this.hackStartTimer = snapshot.hackStartTimer;
+    this.hackStarting = false;
+    this.hackStartTimer = 0;
     this._machineryForcedOff = snapshot.machineryForcedOff;
     this._playerLocked = snapshot.playerLocked;
     this._roomLocked = snapshot.roomLocked;
@@ -1676,7 +1913,7 @@ export class SpiderQuestSystem implements GameSystem {
     entity.y = clamp(entity.y, b.y * TILE_SIZE, (b.y + b.h - 1) * TILE_SIZE);
   }
 
-  private _startHacking(): void {
+  private _startHacking(tier: Difficulty): void {
     this.phase = 'hacking';
     if (this.machineryLoopActive) {
       this.machineryLoopActive = false;
@@ -1684,7 +1921,12 @@ export class SpiderQuestSystem implements GameSystem {
     }
     this._machineryForcedOff = true;
     this.keyboardHeroMusicStartPending = true;
+    // The board covers him for the whole song, so he is settled before it
+    // starts: a stride or a flinch left playing would hold through it.
+    if (this.roomData !== null) this.faceTerminal(this.roomData);
+    this.scientistFigure.play('idle');
     this.keyboardHero.start(
+      tier,
       () => this._onHackComplete(),
       () => this._onHackFail(),
       () => {
@@ -1697,15 +1939,18 @@ export class SpiderQuestSystem implements GameSystem {
     if (!this.hackStarting) return;
 
     this.hackStartTimer--;
-    if (this.hackStartTimer <= 0) {
-      this.hackStarting = false;
-      this.hackStartTimer = 0;
-      if (!keyboardHeroTutorialSeen) {
-        this.phase = 'keyboard_hero_tutorial';
-        this._tutorialPage = 0;
-      } else {
-        this._startHacking();
-      }
+    if (this.hackStartTimer > 0) return;
+    this.hackStarting = false;
+    this.hackStartTimer = 0;
+    const tier = this.hackTier;
+    if (tier === null) return;
+    const pages = spiderTutorialPagesDue();
+    if (pages.length > 0) {
+      this.tutorialPagesShowing = pages;
+      this.phase = 'keyboard_hero_tutorial';
+      this._tutorialPage = 0;
+    } else {
+      this._startHacking(tier);
     }
   }
 
@@ -1750,6 +1995,8 @@ export class SpiderQuestSystem implements GameSystem {
     this.keyboardHero.stop();
     this.keyboardHeroMusicStopPending = true;
     this.phase = 'hacking_failed';
+    this.scientistFigure.play('cower', { restart: true });
+    this.flinchHoldFrames = FLINCH_HOLD_FRAMES;
   }
 
   private _updateMachineryLoop(active: Player): void {
@@ -1937,13 +2184,33 @@ export class SpiderQuestSystem implements GameSystem {
     this.smallSpiders.push(spider);
   }
 
-  private scientistHomeX(room: SpiderLabRoomData): number {
-    return (room.scientistTile.x + CENTER_COLLISION_OFFSET) * TILE_SIZE;
+  /** Stands him on `tile`: his position is his feet, so the feet point of the tile. */
+  private placeScientistAt(tile: Point): void {
+    this.scientistX = (tile.x + CENTER_COLLISION_OFFSET) * TILE_SIZE;
+    this.scientistY = (tile.y + SOLE_COLLISION_OFFSET) * TILE_SIZE;
+    this.scientistTargetX = this.scientistX;
+    this.scientistTargetY = this.scientistY;
+    this.scientistWanderTimer = SCIENTIST_FIDGET_FRAMES;
+    this.scientistFigure.play('idle');
+    this.activeWasInLab = false;
   }
 
-  /** Just above the tile's bottom edge, so his feet still floor into his own tile. */
-  private scientistHomeY(room: SpiderLabRoomData): number {
-    return (room.scientistTile.y + SOLE_COLLISION_OFFSET) * TILE_SIZE;
+  /** Back at whichever post the phase keeps him at: the hallway mouth before he has asked, his lab after. */
+  private placeScientistForPhase(): void {
+    const room = this.roomData;
+    if (room === null) return;
+    const waiting = this.phase === 'scientist_waiting' || this.phase === 'inactive';
+    this.placeScientistAt(waiting ? room.hallwayPostTile : room.labPostTile);
+    const facing = waiting ? room.hallwayPostFacing : null;
+    if (facing !== null) this.scientistFigure.faceToward(facing.x, facing.y);
+  }
+
+  /** Dev start: the quest already taken up and Dr. Moult at his lab post, as a save made in the station has it. */
+  startAwaitingHacking(): void {
+    if (this.roomData === null) return;
+    this.phase = 'awaiting_hacking';
+    this.calledOut = true;
+    this.placeScientistForPhase();
   }
 
   /**
@@ -1973,37 +2240,178 @@ export class SpiderQuestSystem implements GameSystem {
     return dist <= INTERACT_RANGE_PX;
   }
 
-  private _updateScientistWander(active: Player): void {
-    if (!this.roomData) return;
+  private faceScientistToward(body: Player): void {
+    this.scientistFigure.faceToward(
+      body.x + TILE_SIZE * CENTER_COLLISION_OFFSET - this.scientistX,
+      body.y + TILE_SIZE * SOLE_COLLISION_OFFSET - this.scientistY,
+    );
+  }
 
-    if (this.phase === 'scientist_dialog') {
-      this.scientistFigure.faceToward(
-        active.x + TILE_SIZE * CENTER_COLLISION_OFFSET - this.scientistX,
-        active.y + TILE_SIZE * SOLE_COLLISION_OFFSET - this.scientistY,
-      );
-      this.scientistFigure.walk(0, 0);
-      return;
+  private raiseScientistVoice(cue: SpiderQuestCue): void {
+    this.scientistVoicePending = { cue, x: this.scientistX, y: this.scientistY };
+  }
+
+  /** Feet-to-feet distance from him to a crawler, in world pixels. */
+  private distanceToScientist(body: Player): number {
+    return Math.hypot(
+      body.x + TILE_SIZE * CENTER_COLLISION_OFFSET - this.scientistX,
+      body.y + TILE_SIZE * SOLE_COLLISION_OFFSET - this.scientistY,
+    );
+  }
+
+  /** Where he is and what he is doing, for every phase before the cutscene. */
+  private _updateScientist(active: Player): void {
+    const room = this.roomData;
+    if (room === null || this.scientistDead) return;
+    if (this.callOutBubbleFrames > 0) this.callOutBubbleFrames--;
+    let groundPx = 0;
+
+    switch (this.phase) {
+      case 'scientist_waiting':
+        groundPx = this.updateAtHallwayPost(room, active);
+        break;
+      case 'scientist_dialog':
+        this.faceScientistToward(active);
+        this.scientistFigure.play('talk');
+        break;
+      case 'scientist_returning':
+        groundPx = this.updateReturning(room, active);
+        break;
+      case 'awaiting_hacking':
+        groundPx = this.hackStarting
+          ? this.stepToShoulder(active, room)
+          : this.updateAtLabPost(room, active);
+        break;
+      case 'keyboard_hero_tutorial':
+        this.faceTerminal(room);
+        this.scientistFigure.play('idle');
+        break;
+      case 'hacking_failed':
+        this.faceTerminal(room);
+        this.settleAfterFlinch();
+        break;
+      // The song's own update returns before this one runs.
+      case 'hacking':
+      case 'inactive':
+      case 'cutscene':
+      case 'boss_fight':
+      case 'complete':
+        break;
+    }
+    this.scientistFigure.tick(groundPx);
+  }
+
+  /**
+   * His run back. A crawler who reaches the lab or the terminal before he does
+   * finds him already there: the terminal only answers once he is at his post.
+   */
+  private updateReturning(room: SpiderLabRoomData, active: Player): number {
+    if (this._isInRoom(active, room.bounds) || this.isWithinTerminalReach(active)) {
+      this.arriveAtLabPost(room);
+      return 0;
+    }
+    return this.isScientistRunning
+      ? this.stepRunRoute(room)
+      : this.fidgetAround(room.labPostTile, LAB_POST_FIDGET_TILES, room.bounds, null);
+  }
+
+  /**
+   * Before he has asked for anything: a fidget beside the mouth, the call-out
+   * the first time a crawler comes into sight, and the stop when the
+   * controlled crawler walks into the hallway without hearing him out.
+   */
+  private updateAtHallwayPost(room: SpiderLabRoomData, active: Player): number {
+    const tileX = Math.floor((active.x + TILE_SIZE * TILE_CENTER_OFFSET_PX) / TILE_SIZE);
+    const tileY = Math.floor((active.y + TILE_SIZE * TILE_CENTER_OFFSET_PX) / TILE_SIZE);
+    const depth = this.outerHallwayDepth.get(tileCoordKey(tileX, tileY));
+    if (depth !== undefined && depth > HALLWAY_TRIGGER_DEPTH_TILES && !this.conversation.isOpen) {
+      this.openExplanation(active, true);
+      return 0;
     }
 
-    if (this.phase !== 'scientist_waiting') return;
+    const inReach = this.distanceToScientist(active) <= SCIENTIST_CALL_OUT_PX;
+    const headY = this.scientistY - TILE_SIZE;
+    const activeCentreX = active.x + TILE_SIZE * TILE_CENTER_OFFSET_PX;
+    const activeCentreY = active.y + TILE_SIZE * TILE_CENTER_OFFSET_PX;
+    const seen =
+      inReach && this.gameMap.hasLineOfSight(this.scientistX, headY, activeCentreX, activeCentreY);
+    if (!this.calledOut && seen) {
+      this.calledOut = true;
+      this.callOutBubbleFrames = CALL_OUT_BUBBLE_FRAMES;
+      this.beckonFrames = BECKON_FRAMES;
+      this.raiseScientistVoice('callOut');
+    }
+
+    if (this.beckonFrames > 0) {
+      this.beckonFrames--;
+      this.faceScientistToward(active);
+      this.scientistFigure.play('beckon');
+      return 0;
+    }
+    const watching = this.calledOut && seen;
+    const groundPx = this.fidgetAround(
+      room.hallwayPostTile,
+      HALLWAY_POST_FIDGET_TILES,
+      room.hostBounds,
+      watching ? null : room.hallwayPostFacing,
+    );
+    if (watching && groundPx === 0) this.faceScientistToward(active);
+    return groundPx;
+  }
+
+  /** At his lab post: a fidget, and a wave toward the terminal each time the active crawler walks in. */
+  private updateAtLabPost(room: SpiderLabRoomData, active: Player): number {
+    const inLab = this._isInRoom(active, room.bounds);
+    const justArrived = inLab && !this.activeWasInLab;
+    this.activeWasInLab = inLab;
+    if (justArrived) {
+      this.beckonFrames = BECKON_FRAMES;
+      this.raiseScientistVoice('labBeckon');
+    }
+    if (this.beckonFrames > 0) {
+      this.beckonFrames--;
+      this.faceScientistToward(active);
+      this.scientistFigure.play('beckon');
+      return 0;
+    }
+    this.shoulderSpot = null;
+    const groundPx = this.fidgetAround(room.labPostTile, LAB_POST_FIDGET_TILES, room.bounds, null);
+    if (groundPx === 0 && inLab) this.faceScientistToward(active);
+    return groundPx;
+  }
+
+  /**
+   * A small shuffle about `post`: every so often he picks a standable spot
+   * within `spreadTiles` of it, inside `bounds`, and walks there. Out past
+   * that reach — after the run, or a retreat from the terminal — he heads
+   * straight back. Returns the ground he covered this tick.
+   */
+  private fidgetAround(
+    post: Point,
+    spreadTiles: number,
+    bounds: Rect,
+    restFacing: Point | null,
+  ): number {
+    const homeX = (post.x + CENTER_COLLISION_OFFSET) * TILE_SIZE;
+    const homeY = (post.y + SOLE_COLLISION_OFFSET) * TILE_SIZE;
+    const spread = TILE_SIZE * spreadTiles;
+    const strayed =
+      Math.hypot(this.scientistX - homeX, this.scientistY - homeY) >
+      spread * FIDGET_STRAY_SPREAD_MULTIPLE;
 
     this.scientistWanderTimer--;
-    if (this.scientistWanderTimer <= 0) {
-      this.scientistWanderTimer = SCIENTIST_WANDER_FRAMES;
-
-      const homeX = this.scientistHomeX(this.roomData);
-      const homeY = this.scientistHomeY(this.roomData);
-      const labBounds = this.roomData.bounds;
-      const spread = TILE_SIZE * SCIENTIST_WANDER_SPREAD_TILES;
+    if (strayed) {
+      this.scientistTargetX = homeX;
+      this.scientistTargetY = homeY;
+    } else if (this.scientistWanderTimer <= 0) {
+      this.scientistWanderTimer = SCIENTIST_FIDGET_FRAMES;
       let pickedX = homeX;
       let pickedY = homeY;
       for (let attempt = 0; attempt < SCIENTIST_WANDER_ATTEMPTS; attempt++) {
         const tx = homeX + (Math.random() * 2 - 1) * spread;
         const ty = homeY + (Math.random() * 2 - 1) * spread;
-        // Kept inside the lab: the room's doorway is wide enough for a random
-        // wander to walk him out into the corridor, away from his own quest.
-        const insideLab = pointInRect(tx / TILE_SIZE, ty / TILE_SIZE, labBounds);
-        if (insideLab && this.scientistCanStandAt(tx, ty)) {
+        const insideRoom = pointInRect(tx / TILE_SIZE, ty / TILE_SIZE, bounds);
+        if (insideRoom && this.scientistCanStandAt(tx, ty)) {
           pickedX = tx;
           pickedY = ty;
           break;
@@ -2016,24 +2424,165 @@ export class SpiderQuestSystem implements GameSystem {
     const dx = this.scientistTargetX - this.scientistX;
     const dy = this.scientistTargetY - this.scientistY;
     const dist = Math.hypot(dx, dy);
+    if (dist <= SCIENTIST_WALK_DIST_THRESHOLD) {
+      this.scientistFigure.play('idle');
+      if (restFacing !== null) this.scientistFigure.faceToward(restFacing.x, restFacing.y);
+      return 0;
+    }
+    const step = Math.min(SCIENTIST_WALK_SPEED, dist);
+    const nextX = this.scientistX + (dx / dist) * step;
+    const nextY = this.scientistY + (dy / dist) * step;
+    if (!strayed && !this.scientistCanStandAt(nextX, nextY)) {
+      this.scientistWanderTimer = 0;
+      this.scientistFigure.play('idle');
+      return 0;
+    }
+    this.scientistFigure.faceToward(dx, dy);
+    this.scientistFigure.play('walk');
+    this.scientistX = nextX;
+    this.scientistY = nextY;
+    return step;
+  }
 
-    if (dist > SCIENTIST_WALK_DIST_THRESHOLD) {
-      const speed = SCIENTIST_WALK_SPEED;
-      const nextX = this.scientistX + (dx / dist) * speed;
-      const nextY = this.scientistY + (dy / dist) * speed;
-      if (!this.scientistCanStandAt(nextX, nextY)) {
-        this.scientistWanderTimer = 0;
-        return;
-      }
-      this.scientistFigure.walk(nextX - this.scientistX, nextY - this.scientistY);
-      this.scientistX = nextX;
-      this.scientistY = nextY;
-    } else {
-      this.scientistFigure.walk(0, 0);
+  /** Sets him off down the hallway to his lab post, on the map's own path. */
+  private beginRunToLabPost(): void {
+    const room = this.roomData;
+    if (room === null) return;
+    const from = {
+      x: Math.floor(this.scientistX / TILE_SIZE),
+      y: Math.floor(this.scientistY / TILE_SIZE),
+    };
+    const to = room.labPostTile;
+    const reachTiles = room.labDoorwayDistance + SCIENTIST_RUN_PATH_SLACK_TILES;
+    const path = this.gameMap.findPath(from.x, from.y, to.x, to.y, reachTiles);
+    this.runRoute = path;
+    this.runRouteIndex = 0;
+    if (path.length === 0) {
+      // No path the search could find in reach: he is out of sight down the
+      // hallway either way, so he simply arrives.
+      this.arriveAtLabPost(room);
     }
   }
 
+  /**
+   * One tick of his run, straight at each waypoint at his own pace: the route
+   * is a path the map's search found, so it never runs him through a wall.
+   */
+  private stepRunRoute(room: SpiderLabRoomData): number {
+    let budget = SCIENTIST_RUN_SPEED;
+    let covered = 0;
+    while (budget > 0 && this.runRouteIndex < this.runRoute.length) {
+      const waypoint = this.runRoute[this.runRouteIndex];
+      const goalX = (waypoint.x + CENTER_COLLISION_OFFSET) * TILE_SIZE;
+      const goalY = (waypoint.y + SOLE_COLLISION_OFFSET) * TILE_SIZE;
+      const dx = goalX - this.scientistX;
+      const dy = goalY - this.scientistY;
+      const distance = Math.hypot(dx, dy);
+      if (distance > 0) this.scientistFigure.faceToward(dx, dy);
+      if (distance <= budget) {
+        this.scientistX = goalX;
+        this.scientistY = goalY;
+        budget -= distance;
+        covered += distance;
+        this.runRouteIndex++;
+      } else {
+        this.scientistX += (dx / distance) * budget;
+        this.scientistY += (dy / distance) * budget;
+        covered += budget;
+        budget = 0;
+      }
+    }
+    this.scientistFigure.play('run');
+    if (!this.isScientistRunning) this.arriveAtLabPost(room);
+    return covered;
+  }
+
+  private arriveAtLabPost(room: SpiderLabRoomData): void {
+    this.runRoute = [];
+    this.runRouteIndex = 0;
+    this.placeScientistAt(room.labPostTile);
+    if (this.phase === 'scientist_returning') this.phase = 'awaiting_hacking';
+  }
+
+  private faceTerminal(room: SpiderLabRoomData): void {
+    this.scientistFigure.faceToward(
+      (room.computerTile.x + TILE_CENTER_OFFSET_PX) * TILE_SIZE - this.scientistX,
+      (room.computerTile.y + TILE_CENTER_OFFSET_PX) * TILE_SIZE - this.scientistY,
+    );
+  }
+
+  /**
+   * While the terminal boots he steps up to the player's shoulder, beside and
+   * a little behind them, and watches the screen. A side he cannot stand on
+   * is passed over; with neither, he watches from where he is.
+   */
+  private stepToShoulder(active: Player, room: SpiderLabRoomData): number {
+    const spot = (this.shoulderSpot ??= this.shoulderSpotBeside(active, room));
+    const dx = spot.x - this.scientistX;
+    const dy = spot.y - this.scientistY;
+    const dist = Math.hypot(dx, dy);
+    if (dist <= SCIENTIST_WALK_DIST_THRESHOLD) {
+      this.faceTerminal(room);
+      this.scientistFigure.play('idle');
+      return 0;
+    }
+    const step = Math.min(SCIENTIST_SHOULDER_STEP_SPEED, dist);
+    const nextX = this.scientistX + (dx / dist) * step;
+    const nextY = this.scientistY + (dy / dist) * step;
+    if (!this.scientistCanStandAt(nextX, nextY)) {
+      this.shoulderSpot = { x: this.scientistX, y: this.scientistY };
+      return 0;
+    }
+    this.scientistFigure.faceToward(dx, dy);
+    this.scientistFigure.play('walk');
+    this.scientistX = nextX;
+    this.scientistY = nextY;
+    return step;
+  }
+
+  private shoulderSpotBeside(active: Player, room: SpiderLabRoomData): { x: number; y: number } {
+    const feetX = active.x + TILE_SIZE * CENTER_COLLISION_OFFSET;
+    const feetY = active.y + TILE_SIZE * SOLE_COLLISION_OFFSET;
+    const screenX = (room.computerTile.x + TILE_CENTER_OFFSET_PX) * TILE_SIZE;
+    const screenY = (room.computerTile.y + TILE_CENTER_OFFSET_PX) * TILE_SIZE;
+    const towardX = screenX - feetX;
+    const towardY = screenY - feetY;
+    const length = Math.hypot(towardX, towardY);
+    const dirX = length > 0 ? towardX / length : 0;
+    const dirY = length > 0 ? towardY / length : -1;
+    const side = TILE_SIZE * SCIENTIST_SHOULDER_SIDE_TILES;
+    const back = TILE_SIZE * SCIENTIST_SHOULDER_BACK_TILES;
+    const nearerFirst = [1, -1]
+      .map((sign) => ({
+        x: feetX - dirY * side * sign - dirX * back,
+        y: feetY + dirX * side * sign - dirY * back,
+      }))
+      .sort(
+        (a, b) =>
+          Math.hypot(a.x - this.scientistX, a.y - this.scientistY) -
+          Math.hypot(b.x - this.scientistX, b.y - this.scientistY),
+      );
+    return (
+      nearerFirst.find((spot) => this.scientistCanStandAt(spot.x, spot.y)) ?? {
+        x: this.scientistX,
+        y: this.scientistY,
+      }
+    );
+  }
+
+  /** The failed hack's one-shot flinch, held a moment on its last pose before he settles. */
+  private settleAfterFlinch(): void {
+    if (this.scientistFigure.currentAction !== 'cower') return;
+    if (!this.scientistFigure.oneShotFinished) return;
+    if (this.flinchHoldFrames > 0) {
+      this.flinchHoldFrames--;
+      return;
+    }
+    this.scientistFigure.play('idle');
+  }
+
   private _updateCutscene(ctx: SystemContext): void {
+    if (!this.scientistDead) this.scientistFigure.tick(0);
     // Her spit keeps playing through the glob's flight and the impact hold:
     // frozen on its release frame she would show a second glob in her mouth
     // while the first is in the air. It has already fired, so it cannot fire
@@ -2148,6 +2697,12 @@ export class SpiderQuestSystem implements GameSystem {
       // cells are the largest in the game; warming them here spends the
       // cutscene's frames on what the first seconds of the fight will blit.
       prewarmGrotesqueSpiderLocomotion();
+
+      this.scientistFigure.play('cower');
+      this.scientistFigure.faceToward(
+        spiderWorldX + TILE_SIZE / 2 - this.scientistX,
+        spiderWorldY + TILE_SIZE / 2 - this.scientistY,
+      );
 
       // Aim at scientist and start spit windup so the sprite animation begins immediately
       const dxToSci = this.scientistX - (spiderWorldX + TILE_SIZE / 2);
@@ -2343,12 +2898,12 @@ export class SpiderQuestSystem implements GameSystem {
     const centreX = this.scientistX - camX;
 
     if (this.phase === 'scientist_waiting') {
-      paintExclamationMark(
-        ctx,
-        centreX,
-        headTop - SCIENTIST_EXCLAMATION_OFFSET_Y,
-        performance.now(),
-      );
+      const boxLeft = centreX - TILE_SIZE / 2;
+      drawQuestMarker(ctx, boxLeft, headTop, TILE_SIZE, '!', QUEST_MARKER_GOLD);
+      if (this.callOutBubbleFrames > 0) {
+        const markerTop = questMarkerTopY(ctx, headTop, TILE_SIZE, '!');
+        paintSpeechBubble(ctx, boxLeft, markerTop, TILE_SIZE, CALL_OUT_LINE, 1);
+      }
     }
 
     // Scientist speech bubble during cutscene frames 102-162
@@ -2453,4 +3008,15 @@ export class SpiderQuestSystem implements GameSystem {
       : 0;
     paintShutdownCutscene(ctx, captionAlpha);
   }
+}
+
+/**
+ * The phase a checkpoint keeps. A save is never taken mid-explanation or with
+ * him still running, so either is kept as the steady phase it settles into:
+ * waiting at the hallway mouth, or waiting at his lab post.
+ */
+function checkpointPhase(phase: SpiderQuestPhase): SpiderQuestPhase {
+  if (phase === 'scientist_dialog') return 'scientist_waiting';
+  if (phase === 'scientist_returning') return 'awaiting_hacking';
+  return phase;
 }

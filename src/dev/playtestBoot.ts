@@ -33,6 +33,7 @@ export interface PlaytestBoot {
   spawn: PlaytestSpawn;
   preDefeatedBossTypes: readonly MobSpawnRule['type'][];
   doomsdayStage: PlaytestPreset['doomsdayStage'];
+  spiderQuestAwaitingHacking: boolean;
 }
 
 /** Tile a preset's crawlers start on before the real spawn point is resolved. */
@@ -145,39 +146,63 @@ export function buildPlaytestBoot(preset: PlaytestPreset): PlaytestBoot {
     spawn: preset.spawn,
     preDefeatedBossTypes: preset.preDefeatedBossTypes ?? [],
     doomsdayStage: preset.doomsdayStage,
+    spiderQuestAwaitingHacking: preset.spiderQuestAwaitingHacking ?? false,
   };
 }
 
-/** Tiles between the spider lab's doorway and the corridor tile outside it. */
-const LAB_DOORWAY_STEP_TILES = 1;
 /** How far inside its own doorway the nursery preset stands the party. */
 const QUEST_DOORWAY_STEP_TILES = 2;
 
 /**
- * The corridor tile just outside the spider lab, so the preset opens on the
- * scientist's door rather than inside the room with the egg.
- *
- * The generator records which tile the corridor broke through but not which wall
- * it broke through, so the outward direction is re-derived from which edge of the
- * room's bounds the doorway sits on.
+ * The open floor tile nearest the middle of the spider lab's field station, or
+ * null on a floor with no lab. Nearest rather than the middle itself, because
+ * the station's cot or barricade may stand there.
  */
-function spiderLabApproachTile(gameMap: GameMap): { x: number; y: number } | null {
+function spiderLabStationTile(gameMap: GameMap): { x: number; y: number } | null {
   const lab = gameMap.spiderLabRoom;
   if (lab === null) return null;
+  const { stationBounds } = lab;
+  const middle = {
+    x: stationBounds.x + Math.floor(stationBounds.w / 2),
+    y: stationBounds.y + Math.floor(stationBounds.h / 2),
+  };
+  let best: { x: number; y: number } | null = null;
+  let bestDistance = Infinity;
+  for (let y = stationBounds.y; y < stationBounds.y + stationBounds.h; y++) {
+    for (let x = stationBounds.x; x < stationBounds.x + stationBounds.w; x++) {
+      if (!gameMap.isWalkable(x, y)) continue;
+      const distance = Math.hypot(x - middle.x, y - middle.y);
+      if (distance >= bestDistance) continue;
+      best = { x, y };
+      bestDistance = distance;
+    }
+  }
+  return best ?? middle;
+}
 
-  const { bounds, entranceTile } = lab;
-  const lastX = bounds.x + bounds.w - 1;
-  const lastY = bounds.y + bounds.h - 1;
+/** How far short of the lab hallway's mouth the hallway preset stands the party, in tiles. */
+const SPIDER_HALLWAY_STANDOFF_TILES = 4;
 
-  let outwardX = 0;
-  let outwardY = 0;
-  if (entranceTile.y === bounds.y) outwardY = -LAB_DOORWAY_STEP_TILES;
-  else if (entranceTile.y === lastY) outwardY = LAB_DOORWAY_STEP_TILES;
-  else if (entranceTile.x === bounds.x) outwardX = -LAB_DOORWAY_STEP_TILES;
-  else if (entranceTile.x === lastX) outwardX = LAB_DOORWAY_STEP_TILES;
-
-  const outside = { x: entranceTile.x + outwardX, y: entranceTile.y + outwardY };
-  return gameMap.isWalkable(outside.x, outside.y) ? outside : entranceTile;
+/**
+ * A tile in the host room a few steps back from the lab hallway's mouth, along
+ * the way Dr. Moult faces at his post, so the preset opens with him and the
+ * opening both in view and the call-out still to come.
+ */
+function spiderHallwayHostTile(gameMap: GameMap): { x: number; y: number } | null {
+  const lab = gameMap.spiderLabRoom;
+  if (lab === null) return null;
+  const { hallwayMouthTile, hallwayPostFacing, hostBounds } = lab;
+  for (let standoff = SPIDER_HALLWAY_STANDOFF_TILES; standoff > 0; standoff--) {
+    const x = hallwayMouthTile.x + hallwayPostFacing.x * standoff;
+    const y = hallwayMouthTile.y + hallwayPostFacing.y * standoff;
+    const insideHost =
+      x >= hostBounds.x &&
+      y >= hostBounds.y &&
+      x < hostBounds.x + hostBounds.w &&
+      y < hostBounds.y + hostBounds.h;
+    if (insideHost && gameMap.isWalkable(x, y)) return { x, y };
+  }
+  return hallwayMouthTile;
 }
 
 /**
@@ -348,8 +373,10 @@ function resolveSpawnLandmark(
       return null;
     case 'safeRoomBefore':
       return gameMap.safeRoomGuarding(spawn.bossType)?.centre ?? null;
-    case 'spiderLabEntrance':
-      return spiderLabApproachTile(gameMap);
+    case 'spiderLabStation':
+      return spiderLabStationTile(gameMap);
+    case 'spiderHallwayHost':
+      return spiderHallwayHostTile(gameMap);
     case 'questRoomEntrance':
       return questRoomApproachTile(gameMap);
     case 'bathroomEntrance':

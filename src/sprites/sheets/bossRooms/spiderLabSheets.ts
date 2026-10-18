@@ -26,7 +26,7 @@ import {
   type RemainsColors,
 } from '../../art/spiderLabArt';
 import type { FrameEdge, FramePainter, PropSheetPlan } from '../propSheetPlan';
-import { scientistRemainsColors } from '../../person/labScientist';
+import { scientistRemainsColors } from '../../art/scientistArt';
 
 /**
  * The painted sheets that dress the Grotesque Spider's lab. Requested when the

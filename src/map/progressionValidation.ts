@@ -792,11 +792,15 @@ function validateStealthGate(
   const chainNeighbours = new Set(
     spine.chain.filter((_, index) => Math.abs(index - room.chainIndex) === 1).map(roomIndexOf),
   );
-  const labIndex = data.spiderLabRoom === null ? -1 : roomIndexOf(data.spiderLabRoom.bounds);
+  const labBranch = new Set(
+    data.spiderLabRoom === null
+      ? []
+      : [roomIndexOf(data.spiderLabRoom.bounds), roomIndexOf(data.spiderLabRoom.stationBounds)],
+  );
   const laneIndices = new Set(spine.lanes.flatMap((lane) => lane.rooms.map(roomIndexOf)));
   for (const neighbour of roomGraph[gateIndex].keys()) {
     if (chainNeighbours.has(neighbour)) continue;
-    if (neighbour === labIndex) fail('S7', 'the spider lab hangs off the gate room');
+    if (labBranch.has(neighbour)) fail('S7', 'the spider lab hangs off the gate room');
     else if (laneIndices.has(neighbour)) fail('S7', 'a lane room opens off the gate room');
     else fail('S7', `room ${neighbour} hangs off the gate room as a pocket`);
   }
@@ -927,12 +931,15 @@ export function validateProgression(
   // Excludes the mandatory safe-access pockets seated inside gauntlet branches
   // and the spine chain: they carry no guardsBossType/followsBossType either,
   // but they answer to their own path's run-limit rule (I10), not to the free
-  // region's pairwise spacing rule (I5) or its hop-spacing rule (I9).
+  // region's pairwise spacing rule (I5) or its hop-spacing rule (I9). A safe
+  // room serving a special room (the spider lab's station) is excluded for the
+  // same reason: it sits where its room's approach puts it, and S3 holds it there.
   const scatterSafeRooms = safeRooms.filter(
     (room) =>
       room.guardsBossType === undefined &&
       room.followsBossType === undefined &&
-      room.isSafeAccessPocket !== true,
+      room.isSafeAccessPocket !== true &&
+      room.servesSpecialRoom === undefined,
   );
 
   for (const [index, room] of gatewaySafeRooms.entries()) {
@@ -1344,47 +1351,11 @@ export function validateProgression(
   }
 
   // S3 — the spider lab hangs off the route as a dead end, so walking past its
-  // doorway is a choice rather than a detour the route makes for you.
+  // doorway is a choice rather than a detour the route makes for you. Its
+  // approach is host room → station → lab, one corridor a link, so the lab's
+  // only neighbour is its station and the station's only other one is the host.
   if (spiderLabIsDeadEnd) {
-    if (data.spiderLabRoom === null) {
-      fail('S3', 'this floor expects a spider lab and generated none');
-    } else {
-      const labBounds = data.spiderLabRoom.bounds;
-      const labDoorways = roomDoorways(grid, labBounds);
-      if (labDoorways.length !== 1) {
-        fail('S3', `the spider lab has ${labDoorways.length} doorways, expected exactly 1`);
-      }
-
-      // A leaf on the room graph, measured on the carved map. Sealing the lab's
-      // own doorway tiles and checking it went unreachable would prove nothing:
-      // those tiles are every perimeter tile with open floor outside it, so
-      // sealing them disconnects *any* rectangle from *anything*, and the check
-      // could not fail however many ways in the room had. Counting the rooms it
-      // reaches is the property the plan actually asks for — and it is the one
-      // that fails on a lab standing in open ground, which the doorway count
-      // deliberately reports as a single very wide opening.
-      const labIndex = roomIndexOf(labBounds);
-      if (labIndex < 0) {
-        fail('S3', 'the spider lab is missing from the floor’s room list');
-      } else {
-        const neighbours = roomGraph[labIndex];
-        if (neighbours.size !== 1) {
-          fail(
-            'S3',
-            `the spider lab connects to ${neighbours.size} rooms, expected exactly 1 — it is a ` +
-              'stop on the route rather than a dead end off it',
-          );
-        }
-        for (const [neighbour, corridors] of neighbours) {
-          if (corridors > 1) {
-            fail(
-              'S3',
-              `the spider lab is joined to room ${neighbour} by ${corridors} separate corridors`,
-            );
-          }
-        }
-      }
-    }
+    validateSpiderLabBranch(data, roomGraph, roomIndexOf, fail);
   }
 
   // I6 — the arena is only reachable through its antechamber, and skipping both
@@ -1460,4 +1431,86 @@ export function validateProgression(
   }
 
   return failures;
+}
+
+/**
+ * S3 — the spider lab's branch: the lab is a leaf on the room graph whose one
+ * neighbour is its station, and the station's only other neighbour is the
+ * chain room the branch leaves from, each joined by a single corridor.
+ *
+ * A leaf on the room graph, measured on the carved map. Sealing the lab's own
+ * doorway tiles and checking it went unreachable would prove nothing: those
+ * tiles are every perimeter tile with open floor outside it, so sealing them
+ * disconnects *any* rectangle from *anything*, and the check could not fail
+ * however many ways in the room had. Counting the rooms it reaches is the
+ * property asked for — and it is the one that fails on a lab standing in open
+ * ground, which the doorway count deliberately reports as a single very wide
+ * opening.
+ */
+function validateSpiderLabBranch(
+  data: DungeonData,
+  roomGraph: RoomGraph,
+  roomIndexOf: (rect: Rect) => number,
+  fail: (id: string, message: string) => void,
+): void {
+  const lab = data.spiderLabRoom;
+  if (lab === null) {
+    fail('S3', 'this floor expects a spider lab and generated none');
+    return;
+  }
+  const labDoorways = roomDoorways(data.grid, lab.bounds);
+  if (labDoorways.length !== 1) {
+    fail('S3', `the spider lab has ${labDoorways.length} doorways, expected exactly 1`);
+  }
+
+  const stations = data.safeRooms.filter((room) => room.servesSpecialRoom === 'spider_lab');
+  if (stations.length !== 1) {
+    fail('S3', `the floor has ${stations.length} lab stations, expected exactly 1`);
+    return;
+  }
+  const station = stations[0];
+  if (data.safeRooms[data.safeRooms.length - 1] !== station) {
+    fail('S3', 'the lab station is not the last safe room on the floor');
+  }
+
+  const labIndex = roomIndexOf(lab.bounds);
+  const stationIndex = roomIndexOf(station.bounds);
+  const hostIndex = roomIndexOf(lab.hostBounds);
+  if (labIndex < 0 || stationIndex < 0 || hostIndex < 0) {
+    fail('S3', 'the spider lab, its station or its host is missing from the floor’s room list');
+    return;
+  }
+
+  const expectNeighbours = (
+    label: string,
+    index: number,
+    expected: ReadonlyArray<number>,
+  ): void => {
+    const neighbours = roomGraph[index];
+    const unexpected = [...neighbours.keys()].filter((room) => !expected.includes(room));
+    const missing = expected.filter((room) => !neighbours.has(room));
+    if (unexpected.length > 0 || missing.length > 0) {
+      fail(
+        'S3',
+        `the ${label} connects to rooms [${[...neighbours.keys()].join(', ')}], expected ` +
+          `[${expected.join(', ')}] — the lab's branch is a stop on the route rather than a ` +
+          'dead end off it',
+      );
+    }
+    for (const [neighbour, corridors] of neighbours) {
+      if (corridors > 1) {
+        fail(
+          'S3',
+          `the ${label} is joined to room ${neighbour} by ${corridors} separate corridors`,
+        );
+      }
+    }
+  };
+  expectNeighbours('spider lab', labIndex, [stationIndex]);
+  expectNeighbours('lab station', stationIndex, [labIndex, hostIndex]);
+
+  const spine = data.progressionLayout?.spine ?? null;
+  if (spine !== null && !spine.chain.some((room) => roomIndexOf(room) === hostIndex)) {
+    fail('S3', 'the lab’s branch does not leave from a spine chain room');
+  }
 }

@@ -1,11 +1,12 @@
 /**
  * The dungeon's ground materials, and the rules for how they meet.
  *
- * One `GroundPalette` over the generated `ground_dungeon` sheet, covering the
- * safe room's floor — and only that. A Bopca station is the same waystation
- * wherever it is found, so it keeps one palette shared by both dungeon floors
- * while the floors themselves are drawn through `FLOOR1_GROUND` and
- * `FLOOR2_GROUND` (`src/map/dungeon/floorTheme.ts`).
+ * One `GroundPalette` over the generated `ground_dungeon` sheet, covering only
+ * the dungeon's safe rooms: the Bopca station's floor and the spider lab's
+ * field station. A Bopca station is the same waystation wherever it is found,
+ * so it keeps one palette shared by both dungeon floors while the floors
+ * themselves are drawn through `FLOOR1_GROUND` and `FLOOR2_GROUND`
+ * (`src/map/dungeon/floorTheme.ts`).
  *
  * This module is deliberately free of canvas code — `src/map/tiles/groundTiles.ts`
  * does the drawing.
@@ -21,6 +22,8 @@ import {
   SAFE_ROOM_RUG,
   SAFE_ROOM_STOVE,
   SAFE_ROOM_THRESHOLD,
+  LAB_STATION_FLOOR,
+  LAB_STATION_THRESHOLD,
 } from '../tileTypes';
 
 /** Sheet holding every dungeon ground material, one material per row. */
@@ -41,6 +44,8 @@ const GROUND_BLEND_ORDER = {
   bopca_scuff: 0,
   bopca_hearth: 1,
   bopca_tile: 2,
+  station_stripe: 3,
+  station_plate: 4,
 } as const satisfies Partial<Record<DungeonGroundMaterial, number>>;
 
 /**
@@ -54,6 +59,8 @@ const GROUND_FALLBACK_COLOR = {
   bopca_scuff: '#767169',
   bopca_hearth: '#8f6651',
   bopca_tile: '#d1c4a9',
+  station_plate: '#939ca1',
+  station_stripe: '#a09f8b',
 } as const satisfies Partial<Record<DungeonGroundMaterial, string>>;
 
 /**
@@ -66,6 +73,8 @@ const GROUND_SPILL = {
   bopca_scuff: null,
   bopca_hearth: null,
   bopca_tile: null,
+  station_plate: null,
+  station_stripe: null,
 } as const satisfies Partial<Record<DungeonGroundMaterial, GroundSpill | null>>;
 
 /**
@@ -75,6 +84,16 @@ const GROUND_SPILL = {
  */
 const KERBED_MATERIALS: ReadonlySet<string> = new Set<string>();
 const KERB_SOFT_MATERIALS: ReadonlySet<string> = new Set<string>();
+
+/**
+ * The field station's decking is laid steel and its stripe is painted on, so
+ * both meet everything at a straight tile edge: a mask-blended wedge of
+ * stripe, or of the corridor's concrete, in a steel deck reads as a tear.
+ */
+const HARD_EDGE_MATERIALS: ReadonlySet<string> = new Set<DungeonGroundMaterial>([
+  'station_plate',
+  'station_stripe',
+]);
 
 /**
  * What a position with no dungeon ground counts as inside the fringe — the walls
@@ -122,6 +141,10 @@ function dungeonGroundMaterialForTileType(type: number): DungeonGroundMaterial |
       return 'bopca_hearth';
     case SAFE_ROOM_THRESHOLD:
       return 'bopca_scuff';
+    case LAB_STATION_FLOOR:
+      return 'station_plate';
+    case LAB_STATION_THRESHOLD:
+      return 'station_stripe';
     default:
       return undefined;
   }
@@ -134,6 +157,7 @@ export const DUNGEON_GROUND: GroundPalette = {
   spill: GROUND_SPILL,
   kerbedMaterials: KERBED_MATERIALS,
   kerbSoftMaterials: KERB_SOFT_MATERIALS,
+  hardEdgeMaterials: HARD_EDGE_MATERIALS,
   fringeStandIn: FRINGE_STAND_IN_MATERIAL,
   materialForTileType: dungeonGroundMaterialForTileType,
 };

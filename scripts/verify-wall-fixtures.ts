@@ -132,7 +132,9 @@ function checkPlacement(gameMap: GameMap, label: string, level: number, seed: nu
     if (gameMap.regionAt(x, y + 1) !== fixture.region)
       fail('placement', `${where} faces another region`);
     const assignment = gameMap.regionCharacters.forRegion(fixture.region);
-    if (assignment === null || assignment.type === 'special') {
+    // The lab's approach hangs its own dying and smashed tubes.
+    const ownFixturesTag = assignment?.type === 'special' && assignment.tag === 'lab_hallway';
+    if (assignment === null || (assignment.type === 'special' && !ownFixturesTag)) {
       fail('placement', `${where} hangs in a special or undressed region`);
     }
     for (let dx = -1; dx <= 1; dx++) {
@@ -416,6 +418,7 @@ function losMap(openWall: boolean): { gameMap: GameMap; fixture: WallFixture } {
     seed: 0,
     region: 0,
     circuit: null,
+    dying: false,
     state: freshFixtureState('sconce'),
   };
   gameMap.wallFixtures = [fixture];

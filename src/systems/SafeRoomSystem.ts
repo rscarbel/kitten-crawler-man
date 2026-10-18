@@ -1,4 +1,5 @@
 import type { GameMap } from '../map/GameMap';
+import type { SafeRoomService } from '../map/DungeonGenerator';
 import { planSafeRoomCounters } from '../map/safeRoomCounterLayout';
 import {
   planSafeRoomDecor,
@@ -6,7 +7,7 @@ import {
   type SafeRoomDecorPlan,
 } from '../map/safeRoomDecorLayout';
 import { SAFE_ROOM_LANTERN, SAFE_ROOM_STOVE } from '../map/tileTypes';
-import { mordecaiAndBedTiles } from '../map/safeRoomFixtures';
+import { isFieldStation, mordecaiAndBedTiles } from '../map/safeRoomFixtures';
 import { TILE_SIZE } from '../core/constants';
 import type { SpatialGrid } from '../core/SpatialGrid';
 import type { Mob } from '../creatures/Mob';
@@ -46,6 +47,7 @@ export interface SafeRoomInfo {
   centre: { x: number; y: number };
   guardsBossType?: string;
   followsBossType?: string;
+  servesSpecialRoom?: SafeRoomService;
 }
 
 interface MordecaiMinimapMarker {
@@ -63,6 +65,7 @@ interface SafeRoomEntry {
   /** Boss this room is the last stop before, when it guards one. */
   guardsBossType?: string;
   followsBossType?: string;
+  servesSpecialRoom?: SafeRoomService;
   marker: QuestMarkerState;
   /** Tiles holding a standing lantern — the room's light sources. */
   lanternTiles: ReadonlyArray<{ x: number; y: number }>;
@@ -195,6 +198,7 @@ export class SafeRoomSystem implements GameSystem {
           centre: sr.centre,
           guardsBossType: sr.guardsBossType,
           followsBossType: sr.followsBossType,
+          servesSpecialRoom: sr.servesSpecialRoom,
           marker: 'none',
           lanternTiles: propTilesOfType(plan, SAFE_ROOM_LANTERN),
           stoveTiles: propTilesOfType(plan, SAFE_ROOM_STOVE),
@@ -210,7 +214,7 @@ export class SafeRoomSystem implements GameSystem {
           ),
           bedTileX: bed.x,
           bedTileY: bed.y,
-          showBed: sr.showBed ?? true,
+          showBed: (sr.showBed ?? true) && !isFieldStation(sr),
         });
       });
     }
@@ -373,6 +377,7 @@ export class SafeRoomSystem implements GameSystem {
       centre: entry.centre,
       guardsBossType: entry.guardsBossType,
       followsBossType: entry.followsBossType,
+      servesSpecialRoom: entry.servesSpecialRoom,
     };
   }
 

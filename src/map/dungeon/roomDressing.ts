@@ -1170,3 +1170,78 @@ export function dressHallway(
     }
   }
 }
+
+// ── The spider lab's approach ───────────────────────────────────────────────
+
+/** Everything the lab's approach hallways are dressed from besides the grid. */
+export interface LabHallwayDressingSite {
+  readonly hallway: HallwayRegion;
+  /** A tile nothing may stand on. */
+  readonly isReserved: (x: number, y: number) => boolean;
+  /** How far gone the approach is at a tile, 0 at the mouth to 1 at the lab; null off it. */
+  readonly decayAt: (x: number, y: number) => number | null;
+}
+
+/**
+ * What the approach's walkable scatter is, and the stretch of decay it lies
+ * in: paperwork blown out of the lab along the outer hallway, torn cable
+ * further in. Everything else the approach shows is painted, not placed.
+ */
+const LAB_HALLWAY_SCATTER: ReadonlyArray<{
+  readonly family: PropFamilyId;
+  readonly count: CountRange;
+  readonly minDecay: number;
+  readonly maxDecay: number;
+}> = [
+  { family: 'paper_drift', count: { min: 1, max: 2 }, minDecay: 0.15, maxDecay: 0.45 },
+  { family: 'cable_bundle', count: { min: 1, max: 1 }, minDecay: 0.6, maxDecay: 0.95 },
+];
+
+/**
+ * Dresses one of the spider lab's approach hallways: a little walkable
+ * scatter against its walls, never on the mouth, never beside the station or
+ * the lab's doorway, and nothing that blocks — the walk to the lab stays clear
+ * the whole way.
+ */
+export function dressLabHallway(
+  grid: TileContent[][],
+  site: LabHallwayDressingSite,
+  rng: Rng,
+): void {
+  const againstWall = (tile: Point): boolean =>
+    ORTHOGONAL.some((step) => !isOpen(grid, tile.x + step.x, tile.y + step.y));
+  const clearOfEnds = (tile: Point): boolean => {
+    for (let dy = -BLOCKING_CLEARANCE_TILES; dy <= BLOCKING_CLEARANCE_TILES; dy++) {
+      for (let dx = -BLOCKING_CLEARANCE_TILES; dx <= BLOCKING_CLEARANCE_TILES; dx++) {
+        const x = tile.x + dx;
+        const y = tile.y + dy;
+        if (isOpen(grid, x, y) && site.decayAt(x, y) === null) return false;
+      }
+    }
+    return true;
+  };
+  for (const entry of LAB_HALLWAY_SCATTER) {
+    const tileType = propFamilyTileType(entry.family);
+    if (tileType === null || tileTypeBlocks(tileType)) continue;
+    const candidates = site.hallway.tiles.filter((tile) => {
+      const decay = site.decayAt(tile.x, tile.y);
+      if (decay === null || decay < entry.minDecay || decay > entry.maxDecay) return false;
+      return (
+        isPlainFloor(grid, tile.x, tile.y) &&
+        !site.isReserved(tile.x, tile.y) &&
+        againstWall(tile) &&
+        clearOfEnds(tile)
+      );
+    });
+    let remaining = rollCount(entry.count, rng);
+    for (const { tile } of weightedOrder(
+      candidates.map((candidate) => ({ tile: candidate, weight: 1 })),
+      rng,
+    )) {
+      if (remaining <= 0) break;
+      if (!isPlainFloor(grid, tile.x, tile.y)) continue;
+      placeProp(grid[tile.y][tile.x], tileType);
+      remaining--;
+    }
+  }
+}

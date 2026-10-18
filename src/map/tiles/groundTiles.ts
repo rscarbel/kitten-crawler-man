@@ -67,6 +67,7 @@ import { isFaceMountedSign } from '../dungeon/wallShape';
 import { inferFloorType } from './helpers';
 import { floorSurfaceOf } from '../dungeon/floorSurface';
 import { drawFloorSurface } from './floorWearArt';
+import { drawLabHallwayFloor } from './labHallwayFloorArt';
 import type { GroundPalette } from '../ground/GroundPalette';
 import {
   CORNER_NE,
@@ -1902,5 +1903,6 @@ export function drawGroundTile(
   }
   applyGroundTone(ctx, structure, sx, sy, ts, tx, ty);
   drawFloorSurface(ctx, structure, sx, sy, ts, tx, ty);
+  drawLabHallwayFloor(ctx, structure, sx, sy, ts, tx, ty);
   drawOcclusion(ctx, structure, sx, sy, ts, tx, ty);
 }

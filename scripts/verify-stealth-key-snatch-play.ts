@@ -628,14 +628,12 @@ async function verifySeed(worldSeed: number): Promise<void> {
   const savesBeforeEntry = saves.length;
   building['onEnterBuilding'](entry);
   check(
-    currentScene(sceneManager) === outside && outside['pendingPrisonEntry'] === entry,
+    currentScene(sceneManager) === outside && outside['prisonDifficulty'].isPickerOpen,
     `${label}: the prison door asks for a difficulty before it opens`,
   );
   const worldDifficulty = settings.difficulty;
   const pickedDifficulty = DIFFICULTY_ORDER.find((tier) => tier !== worldDifficulty) ?? 'hard';
-  const difficultyPick = outside['prisonDifficultyPick']();
-  check(difficultyPick !== null, `${label}: the prison's difficulty picker is up`);
-  difficultyPick?.pick(pickedDifficulty);
+  outside['prisonDifficulty'].choose(pickedDifficulty);
   const doorSave: SavedProgress | undefined =
     saves.length > savesBeforeEntry ? saves[saves.length - 1] : undefined;
   check(doorSave !== undefined, `${label}: walking into the prison writes a save at the door`);

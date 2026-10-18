@@ -89,6 +89,7 @@ import { RegionMap, type RegionKind } from './regionMap';
 import { RegionCharacters } from './dungeon/regionCharacters';
 import { buildFloorSurface, FloorSurface, registerFloorSurface } from './dungeon/floorSurface';
 import { registerWallCharacters, registerWallFixtureFeet } from './dungeon/wallDressing';
+import { registerLabHallwayDecor } from './dungeon/labHallwayDecor';
 import { registerPrisonWallArt } from './dungeon/prisonDoorFaces';
 import { fixtureFoot, type WallFixture } from './dungeon/wallFixtures';
 import type { RegionCharacter } from './dungeon/roomCharacters';
@@ -1219,6 +1220,13 @@ export class GameMap {
     this.questRooms = data.questRooms;
     this.progressionLayout = data.progressionLayout;
     this.installDressing(data.grid, data, prisonWallArtFeet(data.stealthGateRoom));
+    if (data.spiderLabRoom !== null) {
+      registerLabHallwayDecor(
+        data.grid,
+        data.spiderLabRoom,
+        data.wallFixtures.map((fixture) => ({ x: fixture.tileX, y: fixture.tileY })),
+      );
+    }
     registerPrisonWallArt(data.grid, data.stealthGateRoom);
     // The flag goes on now and stays on; what changes is whether it is being
     // honoured. Every floor starts `clear`: the nursery is a room on the way,

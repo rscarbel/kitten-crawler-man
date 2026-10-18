@@ -43,6 +43,17 @@ const REFINE_SEARCH_AFTER_SEC = 0.09;
 const MELODY_BAND_LOW_HZ = 250;
 const MELODY_BAND_HIGH_HZ = 2500;
 
+/**
+ * The bass and kick band under the melody. It is never used to find onsets — the
+ * kick would swamp the melody — only to say how hard the low end lands on an
+ * onset the melody band already found, which is what marks a phrase accent.
+ */
+const LOW_BAND_LOW_HZ = 40;
+const LOW_BAND_HIGH_HZ = 250;
+
+/** How far around a melody onset the low band's own attack may land and still count as the same hit. */
+const LOW_BAND_SEARCH_SEC = 0.03;
+
 /** Pitch estimation looks for the dominant partial in this band. */
 const PITCH_BAND_LOW_HZ = 200;
 const PITCH_BAND_HIGH_HZ = 2200;
@@ -88,6 +99,8 @@ export interface OnsetAnalysis {
   strengths: readonly number[];
   /** MIDI note number of the dominant partial just after each attack. */
   midiNotes: readonly number[];
+  /** Peak low-band flux around each onset, normalised so the strongest low-band attack is 1. */
+  lowBandStrengths: readonly number[];
   /** Where the music body stops, ignoring the decay tail. */
   musicEndSec: number;
 }
@@ -337,6 +350,14 @@ function estimateMidiNote(spec: Spectrogram, onsetTimeSec: number): number {
   return Math.round(MIDI_A440_NOTE + SEMITONES_PER_OCTAVE * Math.log2(frequencyHz / A440_HZ));
 }
 
+function peakAround(values: Float64Array, centre: number, halfWidth: number): number {
+  let peak = 0;
+  const from = Math.max(0, centre - halfWidth);
+  const to = Math.min(values.length - 1, centre + halfWidth);
+  for (let i = from; i <= to; i++) peak = Math.max(peak, values[i]);
+  return peak;
+}
+
 /** Last moment the track is still meaningfully loud, so a reverb tail is not mistaken for music. */
 function findMusicEndSec(pcm: Float32Array, sampleRate: number): number {
   const windowSamples = Math.max(1, Math.round(ENVELOPE_WINDOW_SEC * sampleRate));
@@ -366,12 +387,15 @@ export function analyseOnsets(pcm: Float32Array, sampleRate = ANALYSIS_SAMPLE_RA
 
   const peakFrames = pickPeaks(coarseFlux, sampleRate / COARSE_HOP);
   const normalisedCoarse = normalise(coarseFlux);
+  const normalisedLow = normalise(spectralFlux(coarse, LOW_BAND_LOW_HZ, LOW_BAND_HIGH_HZ));
+  const lowSearchFrames = Math.round((LOW_BAND_SEARCH_SEC * sampleRate) / COARSE_HOP);
 
   const musicEndSec = findMusicEndSec(pcm, sampleRate);
 
   const timesSec: number[] = [];
   const strengths: number[] = [];
   const midiNotes: number[] = [];
+  const lowBandStrengths: number[] = [];
   for (const frame of peakFrames) {
     const coarseTimeSec = coarse.frameTimesSec[frame];
     if (coarseTimeSec > musicEndSec) continue;
@@ -379,7 +403,8 @@ export function analyseOnsets(pcm: Float32Array, sampleRate = ANALYSIS_SAMPLE_RA
     timesSec.push(timeSec);
     strengths.push(normalisedCoarse[frame]);
     midiNotes.push(estimateMidiNote(coarse, timeSec));
+    lowBandStrengths.push(peakAround(normalisedLow, frame, lowSearchFrames));
   }
 
-  return { timesSec, strengths, midiNotes, musicEndSec };
+  return { timesSec, strengths, midiNotes, lowBandStrengths, musicEndSec };
 }

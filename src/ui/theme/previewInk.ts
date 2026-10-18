@@ -112,7 +112,7 @@ export const previewInk = {
     ground: '#3f4d31',
     label: '#c9d2e0',
   },
-  /** Shared by the rat-kin and Shady scenes, which stand their figures on the same slate. */
+  /** Shared by the rat-kin, Shady and Dr. Moult scenes, which stand their figures on the same slate. */
   slate: {
     backdrop: '#20242e',
     ground: '#2c3342',

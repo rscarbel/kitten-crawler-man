@@ -8,6 +8,11 @@
  * `src/systems`, and pulling one in would drag both player classes along with it.
  */
 
+import type { SafeRoomService } from './DungeonGenerator';
+
+/** How far into a safe room a doorway's threshold band reaches: the doorway tile, plus one. */
+export const SAFE_ROOM_THRESHOLD_DEPTH_TILES = 2;
+
 /** How far off-centre Mordecai and the bed sit: a quarter of the room's width. */
 const SAFE_ROOM_ANCHOR_HALFWIDTH_DIVISOR = 4;
 
@@ -26,4 +31,14 @@ export function mordecaiAndBedTiles(
     { x: safeRoom.centre.x - halfWidth, y: safeRoom.centre.y },
     { x: safeRoom.centre.x + halfWidth, y: safeRoom.centre.y },
   ];
+}
+
+/**
+ * Whether a safe room is a special room's field station rather than a Bopca
+ * station: no counter, no Bopca, no furnishings and no bed. Asked explicitly
+ * by every planner rather than left to their size minimums, which a station
+ * could outgrow.
+ */
+export function isFieldStation(safeRoom: { servesSpecialRoom?: SafeRoomService }): boolean {
+  return safeRoom.servesSpecialRoom !== undefined;
 }

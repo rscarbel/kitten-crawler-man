@@ -114,8 +114,16 @@ export class GolemKit implements MercenaryKit {
     this.victim = null;
   }
 
+  hitsWithoutClosing(ctx: MercenaryKitContext, target: Mob, distancePx: number): boolean {
+    return this.inThrowLine(ctx.merc, target, distancePx);
+  }
+
   private canThrowAt(merc: Mercenary, victim: Mob, distancePx: number): boolean {
     if (this.throwCooldown > 0) return false;
+    return this.inThrowLine(merc, victim, distancePx);
+  }
+
+  private inThrowLine(merc: Mercenary, victim: Mob, distancePx: number): boolean {
     const minPx = TILE_SIZE * THROW_MIN_RANGE_TILES;
     const maxPx = TILE_SIZE * THROW_MAX_RANGE_TILES;
     if (distancePx < minPx || distancePx > maxPx) return false;

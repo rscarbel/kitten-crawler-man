@@ -323,6 +323,9 @@ export class CretinGuardKit extends BasicMeleeKit {
     const spotX = owner.x + toThreat.x * standoffPx;
     const spotY = owner.y + toThreat.y * standoffPx;
     const merc = ctx.merc;
+    // A block spot inside a wall or a prop has no route, and the walk's failed
+    // search would read as the threat being out of reach: go for it instead.
+    if (!merc.canStandAt(spotX + TILE_CENTER_OFFSET, spotY + TILE_CENTER_OFFSET)) return false;
     const arrivePx = TILE_SIZE * BODY_BLOCK_ARRIVE_TILES;
     if (Math.hypot(merc.x - spotX, merc.y - spotY) > arrivePx) {
       merc.walkTo(spotX, spotY, arrivePx);

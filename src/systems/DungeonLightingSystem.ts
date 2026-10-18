@@ -40,12 +40,15 @@ import {
   GLOW_FUNGUS,
   METAL_WALL,
   SAFE_ROOM_LANTERN,
+  LAB_STATION_LANTERN,
   SAFE_ROOM_STOVE,
   TORCH,
   VENDING_MACHINE,
   VOID_TYPE,
 } from '../map/tileTypes';
 import { NO_REGION } from '../map/regionMap';
+import { labHallwayDecayAt } from '../map/labApproach';
+import { isFieldStation } from '../map/safeRoomFixtures';
 import { lightSourceTileType } from '../map/dungeon/roomDressing';
 import { WALL_FIXTURE_SPECS, isFixturePowered } from '../map/dungeon/wallFixtures';
 import type { AmbientLevel, LightColour, LightingProfile } from '../map/dungeon/roomCharacters';
@@ -122,6 +125,7 @@ export const FLICKER_SHARE: Readonly<Record<FlickerProfile, number>> = {
   brazier: 0.3,
   candle: 0.15,
   faulty_tube: 1,
+  dying_tube: 1,
   pulse: 0.6,
 };
 /** Flicker groups per profile; lights alternate between them so a room never pulses in step. */
@@ -159,6 +163,20 @@ const FAULTY_START_SALT = 3;
 const FAULTY_LENGTH_SALT = 4;
 /** One tube in this many is faulty. */
 const FAULTY_TUBE_ONE_IN = 6;
+/**
+ * A dying tube's cycle: shorter than a faulty one's and far likelier to cut
+ * out, with a second stutter chasing the first, so it reads as failing rather
+ * than as an occasional blink.
+ */
+const DYING_WINDOW_MS = 1500;
+const DYING_BURST_CHANCE = 0.8;
+const DYING_STUTTER_CHANCE = 0.5;
+const DYING_BURST_MIN_MS = 60;
+const DYING_BURST_MAX_MS = 320;
+/** Lit time between a dying tube's first cut and the stutter after it. */
+const DYING_STUTTER_GAP_MS = 90;
+const DYING_STUTTER_MS = 70;
+const DYING_STUTTER_SALT = 5;
 
 /** A broken light's death: a gutter flash, then darkness, over this long. */
 export const LIGHT_DEATH_MS = 250;
@@ -224,9 +242,11 @@ export const STATIC_LIGHT_FIXTURES: ReadonlyMap<number, LightKind> = new Map<num
   [VENDING_MACHINE, 'vending_glow'],
   [BOILER, 'boiler_window'],
   // A safe room's own lamps: its standing lanterns and the stove's firebox,
-  // which warm it on top of the hearth glow that fills the whole room.
+  // which warm it on top of the hearth glow that fills the whole room, and the
+  // lab station's camp lantern, a warm pool under its cool emergency lamp.
   [SAFE_ROOM_LANTERN, 'standing_torch'],
   [SAFE_ROOM_STOVE, 'boiler_window'],
+  [LAB_STATION_LANTERN, 'camp_lantern'],
 ]);
 
 /**
@@ -282,6 +302,8 @@ export interface StaticLightRequest {
    * flicker instead of guttering out.
    */
   readonly powered?: () => boolean;
+  /** Overrides how the kind flickers, and the odd tube rolled faulty. */
+  readonly flicker?: FlickerProfile;
 }
 
 interface StaticLight {
@@ -539,7 +561,7 @@ export class DungeonLightingSystem implements GameSystem {
       carrier: request.carrier ?? null,
       powered: request.powered ?? null,
       poweredDown: false,
-      flicker: faulty ? 'faulty_tube' : spec.flicker,
+      flicker: request.flicker ?? (faulty ? 'faulty_tube' : spec.flicker),
       group: Math.floor(tileHash(request.tileX, request.tileY, 1) * FLICKER_GROUPS),
       on: true,
       diedAtMs: null,
@@ -578,8 +600,8 @@ export class DungeonLightingSystem implements GameSystem {
     const light = this.lightsByTile.get(this.tileIndex(tileX, tileY));
     if (light === undefined) return true;
     if (!light.on) return false;
-    if (light.flicker !== 'faulty_tube') return true;
-    return flickerValue('faulty_tube', light.group, this.deps.now()) > 0;
+    if (light.flicker !== 'faulty_tube' && light.flicker !== 'dying_tube') return true;
+    return flickerValue(light.flicker, light.group, this.deps.now()) > 0;
   }
 
   /** Whether any static light, lit or not, was registered at this tile. */
@@ -1032,6 +1054,40 @@ export class DungeonLightingSystem implements GameSystem {
   }
 
   /**
+   * How far down the spider lab's approach an open tile is, 0 at the mouth to
+   * 1 at the lab, or null for a tile on neither of its hallways.
+   */
+  private labHallwayDecay(tileX: number, tileY: number): number | null {
+    const lab = this.deps.gameMap.spiderLabRoom;
+    if (lab === null) return null;
+    if (this.specialTag(this.deps.gameMap.regionAt(tileX, tileY)) !== 'lab_hallway') return null;
+    return labHallwayDecayAt(lab, tileX, tileY);
+  }
+
+  /**
+   * An open tile's darkness and shadow colour as drawn. The lab's approach is
+   * graded along its walk rather than taken whole from its region: darker and
+   * greener the nearer the lab, so the wrongness grows as the crawler goes in.
+   */
+  private openTileShade(
+    tileX: number,
+    tileY: number,
+    colourRgb: (colour: LightColour) => readonly [number, number, number],
+  ): { level: number; rgb: readonly [number, number, number] } {
+    const ambient = this.openTileAmbient(tileX, tileY);
+    const rgb = colourRgb(ambient.colour);
+    const decay = this.labHallwayDecay(tileX, tileY);
+    if (decay === null) return { level: ambient.level, rgb };
+    const { mouthDarkness, labEndDarkness } = LIGHTING_TUNING.labHallway;
+    const from = colourRgb(this.floorFallbackColour());
+    const mix = (a: number, b: number): number => Math.round(a + (b - a) * decay);
+    return {
+      level: mouthDarkness + (labEndDarkness - mouthDarkness) * decay,
+      rgb: [mix(from[0], rgb[0]), mix(from[1], rgb[1]), mix(from[2], rgb[2])],
+    };
+  }
+
+  /**
    * Works out each tile's darkness before the cap and its colour, once per
    * floor. A wall takes the lightest darkness of the open tiles on its seen
    * side: a wall with floor to its south is a face of the region below it and
@@ -1058,9 +1114,9 @@ export class DungeonLightingSystem implements GameSystem {
         let level: number;
         let rgb = fallbackRgb;
         if (!this.isOpaque(x, y)) {
-          const ambient = this.openTileAmbient(x, y);
-          level = ambient.level;
-          rgb = colourRgb(ambient.colour);
+          const shade = this.openTileShade(x, y, colourRgb);
+          level = shade.level;
+          rgb = shade.rgb;
         } else {
           level = Infinity;
           const isFace = !this.isOpaque(x, y + 1);
@@ -1068,10 +1124,10 @@ export class DungeonLightingSystem implements GameSystem {
           for (let dy = firstRow; dy <= WALL_FACE_ROWS; dy++) {
             for (let dx = -1; dx <= 1; dx++) {
               if ((dx === 0 && dy === 0) || this.isOpaque(x + dx, y + dy)) continue;
-              const ambient = this.openTileAmbient(x + dx, y + dy);
-              if (ambient.level < level) {
-                level = ambient.level;
-                rgb = colourRgb(ambient.colour);
+              const shade = this.openTileShade(x + dx, y + dy, colourRgb);
+              if (shade.level < level) {
+                level = shade.level;
+                rgb = shade.rgb;
               }
             }
           }
@@ -1161,7 +1217,7 @@ export class DungeonLightingSystem implements GameSystem {
     return current;
   }
 
-  /** Lights every fixture on the map, and the hearth of every safe room. */
+  /** Lights every fixture on the map, and the hearth (or a field station's lamp) of every safe room. */
   private registerMapFixtures(): void {
     const { structure, regionMap } = this.deps.gameMap;
     for (let y = 0; y < structure.length; y++) {
@@ -1175,11 +1231,23 @@ export class DungeonLightingSystem implements GameSystem {
         this.registerStaticLight({ tileX: x, tileY: y, kind, carrierTileType: type });
       }
     }
+    const stations = this.deps.gameMap.safeRooms.filter(isFieldStation);
     for (const room of regionMap.rooms) {
       if (room.role !== 'safe') continue;
       const centreX = room.bounds.x + Math.floor(room.bounds.w / 2);
       const centreY = room.bounds.y + Math.floor(room.bounds.h / 2);
-      this.registerStaticLight({ tileX: centreX, tileY: centreY, kind: 'hearth' });
+      const isStation = stations.some(
+        ({ bounds }) =>
+          bounds.x === room.bounds.x &&
+          bounds.y === room.bounds.y &&
+          bounds.w === room.bounds.w &&
+          bounds.h === room.bounds.h,
+      );
+      this.registerStaticLight({
+        tileX: centreX,
+        tileY: centreY,
+        kind: isStation ? 'station_lamp' : 'hearth',
+      });
     }
     const { wallFixtures } = this.deps.gameMap;
     for (const fixture of wallFixtures) {
@@ -1191,6 +1259,7 @@ export class DungeonLightingSystem implements GameSystem {
         kind,
         carrier: () => !fixture.state.broken,
         powered: () => isFixturePowered(fixture, wallFixtures),
+        flicker: fixture.dying ? 'dying_tube' : undefined,
       });
     }
   }
@@ -1790,6 +1859,20 @@ export function flickerValue(profile: FlickerProfile, group: number, nowMs: numb
         tileHash(window, group, FAULTY_LENGTH_SALT) * (FAULTY_BURST_MAX_MS - FAULTY_BURST_MIN_MS);
       const into = nowMs - window * FAULTY_WINDOW_MS;
       return into >= start && into < start + length ? 0 : 1;
+    }
+    case 'dying_tube': {
+      const window = Math.floor(nowMs / DYING_WINDOW_MS);
+      if (tileHash(window, group, FAULTY_BURST_SALT) >= DYING_BURST_CHANCE) return 1;
+      const room = DYING_WINDOW_MS - DYING_BURST_MAX_MS - DYING_STUTTER_GAP_MS - DYING_STUTTER_MS;
+      const start = tileHash(window, group, FAULTY_START_SALT) * room;
+      const length =
+        DYING_BURST_MIN_MS +
+        tileHash(window, group, FAULTY_LENGTH_SALT) * (DYING_BURST_MAX_MS - DYING_BURST_MIN_MS);
+      const into = nowMs - window * DYING_WINDOW_MS;
+      if (into >= start && into < start + length) return 0;
+      if (tileHash(window, group, DYING_STUTTER_SALT) >= DYING_STUTTER_CHANCE) return 1;
+      const stutterStart = start + length + DYING_STUTTER_GAP_MS;
+      return into >= stutterStart && into < stutterStart + DYING_STUTTER_MS ? 0 : 1;
     }
   }
 }

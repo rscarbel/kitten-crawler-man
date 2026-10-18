@@ -124,8 +124,10 @@ npm run playtest             # lists the presets
 ```
 
 Builds, serves on :3000 and opens `?playtest=<id>` — a floor, a spawn landmark
-(a gateway safe room, the spider lab door) and a fully kitted party, so a change
-can be exercised without replaying the floors above it. Presets are data in
+(a gateway safe room, the spider lab's field station) and a fully kitted party, so
+a change can be exercised without replaying the floors above it. `spider` starts in
+the station with Dr. Moult already at his terminal; `spider-hallway` starts in the
+host room short of the lab hallway's mouth with him still waiting there. Presets are data in
 `src/dev/playtestPresets.ts`; add one there.
 
 A `?playtest=` or `?level=` boot never writes the real saved game, so it can't

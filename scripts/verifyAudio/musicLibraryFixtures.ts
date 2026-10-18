@@ -88,8 +88,6 @@ function townArrivalState(): Record<string, unknown> {
       spiderEggOpened: false,
       scientistDead: false,
       hackingDone: false,
-      hackStarting: false,
-      hackStartTimer: 0,
       machineryForcedOff: false,
       playerLocked: false,
       roomLocked: false,

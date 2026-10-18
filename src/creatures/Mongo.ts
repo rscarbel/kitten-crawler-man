@@ -29,6 +29,7 @@ import {
 import { getMongoStats, type MongoAttack, type MongoStats } from '../abilities/mongo';
 import type { LootDrop, PlayerDamageType } from './Mob';
 import { DamageLedger } from './damageLedger';
+import { TargetHoldOffs } from './targetHoldOffs';
 
 /**
  * Mongo — the cat's pet Mongoliensis.
@@ -123,8 +124,6 @@ const IDLE_BEFORE_CHITTER_FRAMES = IDLE_BEFORE_CHITTER_SECONDS * FRAMES_PER_SECO
  */
 const POUNCE_LUNGE_SPEED_MULTIPLIER = 2.7;
 
-/** How long a target he could not get to stays off his list. */
-const NO_ROUTE_FORGET_FRAMES = 180;
 /**
  * How long the mob that snapped the leash stays off his list.
  *
@@ -150,13 +149,9 @@ const LEASH_BAN_LIFT_APPROACH_TILES = 1.0;
  * behaviour is untouched.
  */
 const LEASH_BAN_LIFT_MIN_TILES = 2.25;
-/** A cat-distance no mob can be inside, for bans that must run their full term. */
-const NO_EARLY_LIFT = -1;
 
 /** Pixels of movement in a frame below which a walk counts as going nowhere. */
 const MOVEMENT_PROGRESS_EPSILON_PX = 0.01;
-/** Frames of standing still mid-chase before he writes the target off. */
-const ENGAGE_STALL_LIMIT_FRAMES = 45;
 
 /**
  * Frames beyond the pathfinder's own backoff that a stall has to persist for,
@@ -228,46 +223,6 @@ const GROWTH_FLASH_FRAMES = 10;
 
 /** Frames the despawn fade runs for once the recall has landed. */
 export const MONGO_FADE_FRAMES = 18;
-
-/**
- * A mob Mongo may not pick, and the two ways the ban ends.
- *
- * `liftAtCatDistance` is what makes a leash-break ban safe to apply to anything.
- * The question a break cannot answer is "will this mob come to us" — and the
- * proxies for it are all wrong. `retaliateMob` is set by every blow he lands and
- * nothing clears it while he lives, so it exempts every mob he has ever bitten;
- * `currentTarget` catches a mob that holds aggro while refusing to travel, which
- * is exactly the camp-dweller the ban exists for. Measuring instead lets the mob
- * answer with its feet: closing on the cat is what a mob in a fight does, and a
- * mob sitting out past a detour never will.
- */
-interface TargetBan {
-  framesLeft: number;
-  /**
-   * Cat-distance at which the ban lifts early, in pixels. Negative for a ban
-   * that only ever expires — there is no route to that mob, so it walking closer
-   * would just restart the grinding this recorded.
-   */
-  liftAtCatDistance: number;
-  /**
-   * Whether a mob attacking the owner has already spent its one free attempt at
-   * this ban, and must now serve the full term like anything else.
-   *
-   * A ban is a claim that he cannot get to something, and a mob that has walked
-   * to the cat has disproved the version of that claim which said "it is over
-   * there". So the top tier is allowed through — see {@link isValidTarget} — but
-   * exactly once, and this is what makes "once" true. Ungated, the exemption and
-   * the ban feed each other every single frame: he re-acquires the mob, the
-   * search fails, {@link abandonUnreachable} bans it again, and the next frame
-   * the exemption deletes the fresh ban. That is a full A* search per frame for
-   * as long as the mob lives, and worse than the cost, it pins him inside
-   * {@link engage} — where the homeward watchdog does not run, because walking
-   * away from the cat is what engaging *is*. A raptor laps there with no route to
-   * the mob and no route to a rescue, which is the vanish again wearing a
-   * different hat.
-   */
-  refusesPartyThreatLift: boolean;
-}
 
 interface PendingBlow {
   readonly attack: MongoAttack;
@@ -358,9 +313,9 @@ export class Mongo extends Mob {
    * And a mob that snapped his leash is one he cannot have without leaving the
    * cat, so it has to stop being the answer for long enough to get home.
    * Everything expires: doors open, walls come down, and the cat moves the whole
-   * frame of reference.
+   * frame of reference. Also counts how long a chase has gone nowhere.
    */
-  private readonly offLimits = new Map<Mob, TargetBan>();
+  private readonly holdOffs = new TargetHoldOffs();
   /**
    * What the cached A* route was last computed toward.
    *
@@ -372,19 +327,9 @@ export class Mongo extends Mob {
    */
   private navigationGoal: 'cat' | 'target' | null = null;
   /**
-   * Consecutive frames spent chasing a target while getting nowhere.
-   *
-   * A target that has broken line of sight leaves his A* goal parked on its last
-   * known position, which is a perfectly routable tile — the search *succeeds*,
-   * he walks to it, and stops. Nothing about that is a pathfinding failure, so
-   * the failure check never fires, and he stands at a wall with an enemy behind
-   * it for as long as both of them live.
-   */
-  private engageStallFrames = 0;
-  /**
    * Consecutive frames of walking toward the cat without getting closer to her.
    *
-   * Separate from {@link engageStallFrames} because the two mean opposite
+   * Separate from the hold-offs' chase-stall count because the two mean opposite
    * things. A chase that stalls is abandoned — there are other mobs. A walk home
    * that stalls cannot be abandoned; there is only the one cat, and giving up on
    * reaching her is the vanish this whole counter exists to end.
@@ -414,20 +359,6 @@ export class Mongo extends Mob {
    * as a pet coming back rather than as a toggle being flipped.
    */
   private recallFrames = 0;
-
-  /**
-   * Every mob this frame's scan let past its ban for attacking the owner.
-   *
-   * A set rather than "the last one", so the bookkeeping is right by inspection
-   * instead of by argument: a scan can exempt more than one candidate, and
-   * recording only the most recent quietly forgets an attempt that was spent on
-   * a mob the scan did not end up choosing. That is exactly the shape of
-   * near-miss that turned the previous version of this exemption into a
-   * per-frame A* lap. Cleared and refilled by every {@link pickTarget}; on the
-   * frames that skips — leashed, wounded, recalling, collapsing — it is stale and
-   * unread, because `abandonUnreachable` is unreachable from all of them.
-   */
-  private readonly partyThreatExemptionsUsed = new Set<Mob>();
 
   /** True once he has run out of HP — the state `MongoSystem` writes back as zero. */
   exhausted = false;
@@ -628,7 +559,7 @@ export class Mongo extends Mob {
     this.collapsing = true;
     this.pending = null;
     this.target = null;
-    this.engageStallFrames = 0;
+    this.holdOffs.resetStall();
     this.homeStallFrames = 0;
     // A stall latched on the very frame he was beaten to zero must not survive
     // the collapse. The rescue is suppressed *during* it, so left set it fires on
@@ -648,7 +579,7 @@ export class Mongo extends Mob {
     this.recalling = true;
     this.pending = null;
     this.target = null;
-    this.engageStallFrames = 0;
+    this.holdOffs.resetStall();
     // The run home is a fresh walk and gets a fresh allowance: a pet who stalled
     // his way into the recall should not be teleported on its first frame.
     this.homeStallFrames = 0;
@@ -707,7 +638,7 @@ export class Mongo extends Mob {
       return;
     }
 
-    this.expireOffLimits();
+    this.holdOffs.tick();
 
     // The leash is evaluated before the target list, not alongside it: no mob is
     // ever a reason to be further from the cat than this.
@@ -767,7 +698,7 @@ export class Mongo extends Mob {
   onRescued(): void {
     this.needsRescue = false;
     this.homeStallFrames = 0;
-    this.engageStallFrames = 0;
+    this.holdOffs.resetStall();
     this.target = null;
     this.navigationGoal = null;
     this.leashed = false;
@@ -802,19 +733,17 @@ export class Mongo extends Mob {
       // off the mob currently biting the party would leave the pet standing
       // beside them doing nothing. One that is chasing clears the bar within a
       // few frames; one sitting out past a detour never does.
-      this.offLimits.set(dropped, {
-        framesLeft: LEASH_BREAK_FORGET_FRAMES,
-        liftAtCatDistance: Math.max(
+      this.holdOffs.holdOffUntilCloser(
+        dropped,
+        LEASH_BREAK_FORGET_FRAMES,
+        Math.max(
           TILE_SIZE * LEASH_BAN_LIFT_MIN_TILES,
           this.catDistanceTo(dropped) - TILE_SIZE * LEASH_BAN_LIFT_APPROACH_TILES,
         ),
-        // Nothing is wrong with this mob — he simply cannot have it and stay with
-        // the cat — so if it comes to her he should absolutely take it again.
-        refusesPartyThreatLift: false,
-      });
+      );
     }
     this.target = null;
-    this.engageStallFrames = 0;
+    this.holdOffs.resetStall();
     this.clearAStarPath();
   }
 
@@ -831,7 +760,7 @@ export class Mongo extends Mob {
     // Cleared here and refilled during this frame's scan, so `abandonUnreachable`
     // — which runs later in the same frame, out of `engage` — reads a fresh
     // answer and never a stale mob reference.
-    this.partyThreatExemptionsUsed.clear();
+    this.holdOffs.beginScan();
     const held = this.target;
     const heldRank = held === null ? PRIORITY_NONE : this.rankOf(held);
     if (held !== null && this.isValidTarget(held, ENGAGE_PERSIST_TILES, heldRank)) {
@@ -918,7 +847,7 @@ export class Mongo extends Mob {
       // The cached route leads to the mob he just gave up on; walking it while
       // steering at a new one is the "chasing two things at once" stagger.
       this.clearAStarPath();
-      this.engageStallFrames = 0;
+      this.holdOffs.beginChase(chosen);
       if (chosen !== null) {
         this.lastKnownTargetX = chosen.x;
         this.lastKnownTargetY = chosen.y;
@@ -939,7 +868,7 @@ export class Mongo extends Mob {
    * the hold-off list outright. Both bans are claims that stop being true the
    * moment a mob closes on the cat, and one of them cannot say so by itself — a
    * leash-break ban lifts on cat-distance and a mob standing on her satisfies
-   * that, but {@link abandonUnreachable} sets `liftAtCatDistance` to a value no
+   * that, but {@link abandonUnreachable} sets a lift distance no
    * distance can ever satisfy, so it always runs its full term. Without this the
    * top tier's whole promise fails in the commonest case it exists for: he
    * cannot route to a mob across a diagonal gap and bans it, the mob then walks
@@ -948,7 +877,7 @@ export class Mongo extends Mob {
    * has just disproved with its feet.
    *
    * The exemption is spent once per ban, not granted afresh every frame; see
-   * {@link TargetBan.refusesPartyThreatLift} for what that costs when it is not.
+   * `TargetHoldOffs` for what that costs when it is not.
    */
   private isValidTarget(mob: Mob, radiusTiles: number, rank = PRIORITY_NEAREST): boolean {
     if (mob === this || !mob.isAlive || !mob.isPetAttackable) return false;
@@ -971,14 +900,14 @@ export class Mongo extends Mob {
     // again; it is fair game once it stops, the window it is meant to be hit in.
     if (mob.avoidInstead) return false;
     const fromCat = this.catDistanceTo(mob);
-    const ban = this.offLimits.get(mob);
-    if (ban !== undefined) {
-      const exempt = rank >= PRIORITY_PARTY_THREAT && !ban.refusesPartyThreatLift;
-      const banHolds = !exempt && fromCat > ban.liftAtCatDistance;
-      if (banHolds) return false;
-      if (exempt) this.partyThreatExemptionsUsed.add(mob);
-      this.offLimits.delete(mob);
-    }
+    const admitted =
+      !this.holdOffs.isHeld(mob) ||
+      this.holdOffs.admits(mob, {
+        ownerDistancePx: fromCat,
+        partyThreat: rank >= PRIORITY_PARTY_THREAT,
+        inReach: false,
+      });
+    if (!admitted) return false;
     return fromCat <= TILE_SIZE * radiusTiles;
   }
 
@@ -992,30 +921,10 @@ export class Mongo extends Mob {
     );
   }
 
-  private expireOffLimits(): void {
-    for (const [mob, ban] of this.offLimits) {
-      if (ban.framesLeft <= 1 || !mob.isAlive) this.offLimits.delete(mob);
-      else ban.framesLeft--;
-    }
-  }
-
   /** Gives up on a target he cannot get to, so the next frame picks another. */
   private abandonUnreachable(target: Mob): void {
-    this.offLimits.set(target, {
-      framesLeft: NO_ROUTE_FORGET_FRAMES,
-      liftAtCatDistance: NO_EARLY_LIFT,
-      // Only if the exemption is what let him try in the first place. Keyed on
-      // the exemption having actually been *used* rather than on the target's
-      // rank, because those are not the same test and the difference is the
-      // whole feature: a mob banned for the first time has no prior ban for the
-      // exemption to have lifted, so ranking on it would mark every party threat
-      // as having spent an attempt it was never granted — and he would refuse to
-      // peel the mob biting his owner for the full ban, which is the behaviour
-      // the exemption exists to prevent.
-      refusesPartyThreatLift: this.partyThreatExemptionsUsed.has(target),
-    });
+    this.holdOffs.holdOffUnreachable(target);
     this.target = null;
-    this.engageStallFrames = 0;
     this.clearAStarPath();
     this.isMoving = false;
   }
@@ -1145,9 +1054,8 @@ export class Mongo extends Mob {
       // grinding against geometry A* was willing to route him through, and the
       // second is the wall-walking the player reported.
       const covered = Math.hypot(this.x - preX, this.y - preY);
-      if (covered > MOVEMENT_PROGRESS_EPSILON_PX) this.engageStallFrames = 0;
-      else this.engageStallFrames++;
-      if (this.astarSearchFailed || this.engageStallFrames > ENGAGE_STALL_LIMIT_FRAMES) {
+      this.holdOffs.noteChaseFrame(covered <= MOVEMENT_PROGRESS_EPSILON_PX);
+      if (this.astarSearchFailed || this.holdOffs.chaseStalled) {
         this.abandonUnreachable(target);
         return;
       }
@@ -1160,9 +1068,10 @@ export class Mongo extends Mob {
       // the counter here — as "he is in position" implies — left him nose to the
       // masonry forever, because the persist band keeps handing him the target.
       const inReachButBlind = attack === null && !this.hasLOS(target);
-      if (inReachButBlind) this.engageStallFrames++;
-      else this.engageStallFrames = 0;
-      if (this.engageStallFrames > ENGAGE_STALL_LIMIT_FRAMES) {
+      const reachedTarget = distance <= biteRangePx || attack !== null;
+      if (reachedTarget && !inReachButBlind) this.holdOffs.noteChaseConnected();
+      this.holdOffs.noteChaseFrame(inReachButBlind);
+      if (this.holdOffs.chaseStalled) {
         this.abandonUnreachable(target);
         return;
       }

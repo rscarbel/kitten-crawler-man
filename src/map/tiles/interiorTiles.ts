@@ -26,6 +26,13 @@ import {
   SAFE_ROOM_STOOL,
   SAFE_ROOM_STOVE,
   SAFE_ROOM_TABLE,
+  LAB_STATION_COT,
+  LAB_STATION_BARRICADE,
+  LAB_STATION_FIRST_AID,
+  LAB_STATION_HAZMAT_LOCKER,
+  LAB_STATION_JERRY_CAN,
+  LAB_STATION_WHITEBOARD,
+  LAB_STATION_LANTERN,
   TRAINING_DUMMY,
   WEAPON_RACK,
   MUSTER_BOARD,
@@ -55,6 +62,15 @@ import {
   drawStoveTile,
   drawTableTile,
 } from '../../sprites/safeRoomDecor';
+import {
+  drawStationBarricadeTile,
+  drawStationCotTile,
+  drawStationFirstAidTile,
+  drawStationHazmatLockerTile,
+  drawStationJerryCanTile,
+  drawStationLanternTile,
+  drawStationWhiteboardTile,
+} from '../../sprites/labStationDecor';
 import { drawGroundTile } from './groundTiles';
 import { TOWN_INTERIOR_GROUND } from '../town/interiorMaterials';
 import { paintBigTopFloorMarks } from '../../sprites/art/bigTop/bigTopFloorArt';
@@ -142,6 +158,39 @@ function drawSafeRoomDecorProp(
       return;
     case SAFE_ROOM_RUG:
       drawRugTile(ctx, sx, sy, ts, tx);
+      return;
+  }
+}
+
+/** Dispatches one piece of the field station's kit to its own art, over ground already painted. */
+function drawLabStationProp(
+  ctx: CanvasRenderingContext2D,
+  type: number,
+  sx: number,
+  sy: number,
+  ts: number,
+): void {
+  switch (type) {
+    case LAB_STATION_COT:
+      drawStationCotTile(ctx, sx, sy, ts);
+      return;
+    case LAB_STATION_BARRICADE:
+      drawStationBarricadeTile(ctx, sx, sy, ts);
+      return;
+    case LAB_STATION_FIRST_AID:
+      drawStationFirstAidTile(ctx, sx, sy, ts);
+      return;
+    case LAB_STATION_HAZMAT_LOCKER:
+      drawStationHazmatLockerTile(ctx, sx, sy, ts);
+      return;
+    case LAB_STATION_JERRY_CAN:
+      drawStationJerryCanTile(ctx, sx, sy, ts);
+      return;
+    case LAB_STATION_WHITEBOARD:
+      drawStationWhiteboardTile(ctx, sx, sy, ts);
+      return;
+    case LAB_STATION_LANTERN:
+      drawStationLanternTile(ctx, sx, sy, ts);
       return;
   }
 }
@@ -717,6 +766,19 @@ export function drawInteriorTile(
     case SAFE_ROOM_RUG: {
       drawFloorBeneath(ctx, structure, sx, sy, ts, tx, ty);
       drawSafeRoomDecorProp(ctx, type, sx, sy, ts, tx);
+      return true;
+    }
+
+    // The spider lab's field station kit, over the decking it was stamped on.
+    case LAB_STATION_COT:
+    case LAB_STATION_BARRICADE:
+    case LAB_STATION_FIRST_AID:
+    case LAB_STATION_HAZMAT_LOCKER:
+    case LAB_STATION_JERRY_CAN:
+    case LAB_STATION_WHITEBOARD:
+    case LAB_STATION_LANTERN: {
+      drawFloorBeneath(ctx, structure, sx, sy, ts, tx, ty);
+      drawLabStationProp(ctx, type, sx, sy, ts);
       return true;
     }
 

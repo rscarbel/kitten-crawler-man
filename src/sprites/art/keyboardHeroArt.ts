@@ -1161,3 +1161,44 @@ export function paintTouchButton(
 
   ctx.restore();
 }
+
+// ── Chord link ──────────────────────────────────────────────────────────────
+
+/** The solid rung's share of the piece's height; the rest is its glow. */
+const CHORD_LINK_CORE_FRACTION = 0.34;
+const CHORD_LINK_CORE_ALPHA = 0.95;
+const CHORD_LINK_GLOW_ALPHA = 0.6;
+/** Where the glow reaches full strength, as a fraction of the half-height from the edge. */
+const CHORD_LINK_GLOW_SHOULDER = 0.3;
+
+/**
+ * The rung that joins the two notes of a double note. It spans the full gap
+ * between their lane centres and is laid under the keycaps, so only the stretch
+ * between the two caps shows: two keys bolted together read as "hit both".
+ * The colours come in from the theme rather than the lanes, because the rung
+ * belongs to neither lane it joins.
+ */
+export function paintChordLink(
+  ctx: CanvasRenderingContext2D,
+  w: number,
+  h: number,
+  core: string,
+  glow: string,
+): void {
+  ctx.save();
+  const shoulder = GRADIENT_MIDPOINT * CHORD_LINK_GLOW_SHOULDER;
+  ctx.fillStyle = verticalGradient(ctx, 0, 0, h, [
+    [0, rgba(glow, 0)],
+    [shoulder, rgba(glow, CHORD_LINK_GLOW_ALPHA * GRADIENT_MIDPOINT)],
+    [GRADIENT_MIDPOINT, rgba(glow, CHORD_LINK_GLOW_ALPHA)],
+    [1 - shoulder, rgba(glow, CHORD_LINK_GLOW_ALPHA * GRADIENT_MIDPOINT)],
+    [1, rgba(glow, 0)],
+  ]);
+  ctx.fillRect(0, 0, w, h);
+
+  const coreH = h * CHORD_LINK_CORE_FRACTION;
+  roundRectPath(ctx, 0, (h - coreH) / 2, w, coreH, coreH / 2);
+  ctx.fillStyle = rgba(core, CHORD_LINK_CORE_ALPHA);
+  ctx.fill();
+  ctx.restore();
+}

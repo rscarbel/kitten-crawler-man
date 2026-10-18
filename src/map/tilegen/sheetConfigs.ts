@@ -71,7 +71,8 @@ export const GROUND_SHEETS: ReadonlyArray<GroundSheetConfig> = [
   {
     key: 'ground_dungeon',
     file: 'ground_dungeon.png',
-    materials: ['bopca_scuff', 'bopca_hearth', 'bopca_tile'],
+    // Append only: a material's seed slot is its index from `seedSlotBase`.
+    materials: ['bopca_scuff', 'bopca_hearth', 'bopca_tile', 'station_plate', 'station_stripe'],
     seedSlotBase: 107,
   },
   {

@@ -12,7 +12,7 @@ Two things live here:
   citizens are a closed cast" below.
 - **The person genome.** A seed becomes an appearance genome, drawn over a
   forward-kinematics skeleton with a real walk cycle. It paints the cast's two child
-  looks and the lab scientist, and it drives the `?people` gallery. It is not how an
+  looks and drives the `?people` gallery. It is not how an
   adult citizen is drawn.
 
 **Routing:** use `add-creature` and `add-sprite` for enemies, bosses and animals. A new

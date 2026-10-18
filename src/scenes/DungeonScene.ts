@@ -1,3 +1,4 @@
+import { labApproachZoneAt } from '../map/labApproach';
 import { VILLAGE_CUES } from '../audio/villageSoundCues';
 import { displayHp } from '../core/crawlerFormulas';
 import { forwardQuestItemEvictions } from '../systems/questItemEvictions';
@@ -284,10 +285,7 @@ import { nearGoblinHintSurface } from '../ui/screens/dialogs/nearGoblinHint';
 import { defendTutorialSurface } from '../ui/screens/dialogs/defendTutorial';
 import { stairwellPromptSurface } from '../ui/screens/dialogs/stairwellPrompt';
 import { buildingEntryPromptSurface } from '../ui/screens/dialogs/buildingEntryPrompt';
-import {
-  activityDifficultyPickerSurface,
-  type ActivityDifficultyPick,
-} from '../ui/screens/dialogs/activityDifficultyPicker';
+import { ActivityDifficultyGate } from '../ui/screens/dialogs/activityDifficultyPicker';
 import { keyboardHeroSurface } from '../ui/screens/dialogs/keyboardHeroSurface';
 import { spiderTutorialSurface } from '../ui/screens/dialogs/spiderTutorial';
 import { hackFailedPromptSurface } from '../ui/screens/dialogs/hackFailedPrompt';
@@ -442,6 +440,7 @@ import {
   DungeonAmbienceSystem,
   type AmbienceFrame,
 } from '../systems/dungeon/DungeonAmbienceSystem';
+import { LabHallwayAtmosphere } from '../systems/spiderQuest/LabHallwayAtmosphere';
 import {
   DungeonLifeSystem,
   type LifeFrame,
@@ -452,6 +451,8 @@ import { dungeonFloorTheme } from '../map/dungeon/floorTheme';
 import { partyLightSource, type PartyCompanion } from '../systems/lighting/partyLights';
 import { beginAboveDarkness, flushAboveDarkness } from '../systems/lighting/aboveDarkness';
 import { SpiderQuestSystem } from '../systems/SpiderQuestSystem';
+import { spiderQuestCueSound, spiderQuestLoop } from '../systems/spiderQuest/spiderQuestSoundCues';
+import type { SafeRoomService } from '../map/DungeonGenerator';
 import { CircusQuestSystem, CIRCUS_QUEST_ID } from '../systems/CircusQuestSystem';
 import { MurderMysteryQuestSystem, MURDER_QUEST_ID } from '../systems/MurderMysteryQuestSystem';
 import { AnchorQuestSystem } from '../systems/AnchorQuestSystem';
@@ -599,7 +600,12 @@ import { musicUnlocksFromProgress } from '../core/musicBackfill';
 import { restoreMusicPlayback } from '../audio/music/playerPreference';
 import { difficultyStats } from '../core/DifficultyStats';
 import { settings } from '../core/Settings';
-import type { AudioManager } from '../audio/AudioManager';
+import {
+  placedGain,
+  type AudioManager,
+  type PlacedReach,
+  type PlayOptions,
+} from '../audio/AudioManager';
 import { KEYBOARD_HERO_SONG, type AudioScope } from '../audio/AudioScope';
 import { bossTrack, wireBossMusic } from '../audio/music/bossTracks';
 import type { MusicSelection } from '../audio/music/MusicDirector';
@@ -811,7 +817,7 @@ export interface DungeonSceneOptions {
   preDefeatedBossTypes?: readonly MobSpawnRule['type'][];
   /**
    * Dev bootstrap only: picks the spawn tile from this floor's freshly generated
-   * map — a gateway safe room, the spider lab door. A callback rather than a
+   * map — a gateway safe room, the spider lab's station. A callback rather than a
    * coordinate because the coordinate does not exist until the constructor has
    * generated the map, and because keeping the landmark vocabulary out of here
    * is what lets a release build drop the dev bootstrap entirely. Returning null
@@ -831,6 +837,11 @@ export interface DungeonSceneOptions {
    * before the gate's system is built.
    */
   stealthGateOpenAtStart?: (gameMap: GameMap) => boolean;
+  /**
+   * Dev bootstrap only: Pest Control starts already taken up, Dr. Moult at his
+   * lab post waiting for the hack — as a save made in the lab's station has it.
+   */
+  spiderQuestAwaitingHackingAtStart?: boolean;
   /**
    * Dev bootstrap only: the party walks straight through the prison door on
    * the first gameplay frame, the guard's briefing taken as given. Never
@@ -1075,6 +1086,24 @@ const KEYBOARD_HERO_HIT_TICK_VOLUME = 0.45;
 const PAUSE_KEY_LABEL = 'Esc';
 /** The id `Conversation.surface` mounts under. */
 const CONVERSATION_SURFACE_ID = 'conversation';
+const PRISON_DIFFICULTY_SURFACE_ID = 'prison-difficulty';
+const SPIDER_TERMINAL_DIFFICULTY_SURFACE_ID = 'spider-terminal-difficulty';
+/** How far Dr. Moult's footsteps carry while he runs back to his lab, in tiles. */
+const SCIENTIST_FOOTSTEPS_HEARING_TILES = 16;
+/** His footsteps' loop, or null while its recording is still missing. */
+const SCIENTIST_FOOTSTEPS_LOOP = spiderQuestLoop('panickedFootstepsLoop');
+/**
+ * The level of every line Dr. Moult speaks to the player. Each recording is
+ * already trimmed to the effects target, which leaves words the player has to
+ * catch no louder than a sword swing, so his voice is lifted above the effects.
+ */
+const SCIENTIST_SPEECH_VOLUME = 3.5;
+/**
+ * The player is always in sight when he speaks to them, so where he stands sets
+ * only the side his voice comes from, never how loud it is. That point also
+ * places the call-out's off-screen caption.
+ */
+const SCIENTIST_SPEECH_REACH = 'panOnly' as const satisfies PlacedReach;
 /** How close two world taps must land, in time, to read as the village kit's double-tap gesture. */
 const BRIAR_HOLLOW_DOUBLE_TAP_WINDOW_MS = 300;
 /** A hold that moved the crawler further than this was a walk, not a long-press. */
@@ -1379,6 +1408,8 @@ export class DungeonScene extends GameplayScene {
   private readonly dungeonLighting: DungeonLightingSystem | null;
   /** Beds, positional loops and distant one-shots on floors 1 and 2; null elsewhere. */
   private readonly dungeonAmbience: DungeonAmbienceSystem | null;
+  /** The spider lab's approach: its webs overhead and its sounds; null on a floor with no lab. */
+  private readonly labHallway: LabHallwayAtmosphere | null;
   /** Drips, splashes, critters, flies, motes and paper on floors 1 and 2; null elsewhere. */
   private readonly dungeonLife: DungeonLifeSystem | null;
   /** The Structure menu over a boarded grate, for a crawler who can spike it. */
@@ -1479,8 +1510,14 @@ export class DungeonScene extends GameplayScene {
   /** See {@link DungeonSceneOptions.devPrisonLayout}. */
   private readonly devPrisonLayout: PrisonLayout | null;
   private devPrisonEntryPending: boolean;
-  /** The prison door whose entry is waiting on the difficulty to play its stealth at. */
-  private pendingPrisonEntry: BuildingEntry | null = null;
+  private readonly prisonDifficulty = new ActivityDifficultyGate();
+  /**
+   * The lab terminal's difficulty question, owned here so it is mounted with
+   * the scene's other surfaces; the spider quest opens it.
+   */
+  readonly spiderTerminalDifficulty = new ActivityDifficultyGate();
+  /** Dr. Moult's last line, stopped before his next so he never talks over himself. */
+  private lastScientistVoice: SoundId | null = null;
   private readonly mercenarySystem: MercenarySystem;
   private readonly attackCowSystem: AttackCowSystem;
   private renderPipeline = new RenderPipeline();
@@ -2168,7 +2205,11 @@ export class DungeonScene extends GameplayScene {
       },
       this.conversation,
       (questId) => grantQuestFreeSpin(this.wheelLedger, questId),
+      this.spiderTerminalDifficulty,
     );
+    if (options?.spiderQuestAwaitingHackingAtStart === true) {
+      this.spiderQuest.startAwaitingHacking();
+    }
     this.spiderQuest.labDressing?.setLootSink(this.destruction.loot);
     this.circusQuestProgress = options?.circusQuestProgress ?? createCircusQuestProgress();
     this.murderQuestProgress = options?.murderQuestProgress ?? createMurderQuestProgress();
@@ -2758,6 +2799,12 @@ export class DungeonScene extends GameplayScene {
     this.dungeonLighting = this.buildDungeonLighting(levelDef);
     this.dungeonLife = this.buildDungeonLife();
     this.dungeonAmbience = this.buildDungeonAmbience(this.dungeonLife);
+    this.labHallway = LabHallwayAtmosphere.forMap({
+      gameMap: this.gameMap,
+      audio: this.audio,
+      audioScope: this.audioScope,
+      lights: this.dungeonLighting,
+    });
 
     // Re-apply cheat overlays carried in from the previous scene. God mode is an
     // overlay on top of base stats and so is never present in a snapshot — an
@@ -3636,6 +3683,7 @@ export class DungeonScene extends GameplayScene {
     this.audioScope?.dispose();
     this.ambientSound?.dispose();
     this.dungeonAmbience?.dispose();
+    this.labHallway?.dispose();
     this.bopca.dispose();
     this.cloggedBathroom.dispose();
     this.stealthKeySnatch.dispose();
@@ -4197,8 +4245,7 @@ export class DungeonScene extends GameplayScene {
     const atThePipeWall =
       bathroom.isPipeBoardOpen ||
       bathroom.isPipeBoardExplainerOpen ||
-      bathroom.isPipeBoardDifficultyPickerOpen ||
-      bathroom.isPipeBoardDiscardConfirmOpen;
+      bathroom.difficultyGate.isOpen;
     if (atThePipeWall) return null;
     const player = this.active();
     let nearest: TrackerTarget | null = null;
@@ -4587,23 +4634,10 @@ export class DungeonScene extends GameplayScene {
       return;
     }
     this.building?.closeMenu();
-    this.pendingPrisonEntry = entry;
-  }
-
-  /** The prison's difficulty question while it is waiting on an answer. */
-  private prisonDifficultyPick(): ActivityDifficultyPick | null {
-    const entry = this.pendingPrisonEntry;
-    if (entry === null) return null;
-    return {
+    this.prisonDifficulty.open({
       activity: entry.name,
-      pick: (difficulty) => {
-        this.pendingPrisonEntry = null;
-        this.enterBuilding(entry, difficulty);
-      },
-      cancel: () => {
-        this.pendingPrisonEntry = null;
-      },
-    };
+      onPick: (difficulty) => this.enterBuilding(entry, difficulty),
+    });
   }
 
   /**
@@ -5949,14 +5983,14 @@ export class DungeonScene extends GameplayScene {
 
   /**
    * The lab's own track plays over the floor's from the moment the active
-   * crawler turns into the lab's hallway until they walk back out of it. Held a
-   * layer above the floor's claim, so the floor re-claiming its track after the
-   * intro or a respawn cannot bury it.
+   * crawler turns into either of the lab's hallways until they walk back out of
+   * them. Held a layer above the floor's claim, so the floor re-claiming its
+   * track after the intro or a respawn cannot bury it.
    */
   private updateSpiderLabMusic(): void {
     const scope = this.audioScope;
     if (scope === null) return;
-    if (!this.isInSpiderLabOrHallway(this.active())) {
+    if (!this.isInSpiderLabWing(this.active())) {
       scope.releaseMusic('spider_lab');
       return;
     }
@@ -5967,13 +6001,13 @@ export class DungeonScene extends GameplayScene {
     });
   }
 
-  private isInSpiderLabOrHallway(body: Pick<Mob, 'x' | 'y'>): boolean {
+  private isInSpiderLabWing(body: Pick<Mob, 'x' | 'y'>): boolean {
     const lab = this.gameMap.spiderLabRoom;
     if (lab === null) return false;
     const tileX = Math.floor((body.x + TILE_SIZE * TILE_CENTRE_FRACTION) / TILE_SIZE);
     const tileY = Math.floor((body.y + TILE_SIZE * TILE_CENTRE_FRACTION) / TILE_SIZE);
     if (pointInRect(tileX, tileY, lab.bounds)) return true;
-    return lab.hallwayTiles.some((tile) => tile.x === tileX && tile.y === tileY);
+    return labApproachZoneAt(lab, tileX, tileY) !== null;
   }
 
   /** What this floor plays when nothing outranks it; null on the overworld, whose zones claim their own. */
@@ -6717,7 +6751,8 @@ export class DungeonScene extends GameplayScene {
       hackFailedPromptSurface('spider-hack-failed', this.spiderQuest),
       stairwellPromptSurface('stairwell', this.stairwell),
       buildingEntryPromptSurface('building-entry', () => this.building ?? null),
-      activityDifficultyPickerSurface('prison-difficulty', () => this.prisonDifficultyPick()),
+      ...this.prisonDifficulty.surfaces(PRISON_DIFFICULTY_SURFACE_ID),
+      ...this.spiderTerminalDifficulty.surfaces(SPIDER_TERMINAL_DIFFICULTY_SURFACE_ID),
       this.grateSpikes.surface(camera),
       ...(this.briarHollowKit?.surfaces(camera, () => siegeHudKeepouts(this.hud)) ?? []),
       this.followerMenu.surface({
@@ -7108,7 +7143,9 @@ export class DungeonScene extends GameplayScene {
     if (safeRoom === null) return null;
     const bearingOrigin = safeRoom.centre;
 
-    const pinned = this.pinnedGatewayAdvice(safeRoom.guardsBossType);
+    const pinned =
+      this.pinnedGatewayAdvice(safeRoom.guardsBossType) ??
+      this.pinnedStationAdvice(safeRoom.servesSpecialRoom);
     if (pinned !== null) return this.mordecaiAdvisor.renderObjective(pinned, bearingOrigin);
 
     const objectives = this.floorObjectives();
@@ -7134,6 +7171,28 @@ export class DungeonScene extends GameplayScene {
     const objective =
       id === 'ball_of_swine' ? this.ballOfSwineObjective('ball_of_swine') : this.bossObjective(id);
     return objective.complete ? null : objective;
+  }
+
+  /**
+   * The speech a special room's field station owes that room, or null.
+   *
+   * The spider lab's station sits on the lab's own dead-end branch, so for as
+   * long as Pest Control is unfinished it talks about nothing else: an aside
+   * about the scientist before the quest is taken up, the warning once it is.
+   * Neither carries a bearing — the lab is at the end of the hallway outside.
+   */
+  private pinnedStationAdvice(service: SafeRoomService | undefined): AdviceObjective | null {
+    if (service !== 'spider_lab') return null;
+    const progress = this.pestControlProgress();
+    if (progress === 'complete') return null;
+    const id = progress === 'unstarted' ? 'spider_lab_station' : 'spider_lab_started';
+    return adviceObjective(id, false, null);
+  }
+
+  /** How far the party has got with Pest Control. */
+  private pestControlProgress(): 'unstarted' | 'started' | 'complete' {
+    if (this.spiderQuest.isComplete) return 'complete';
+    return this.spiderQuest.hasStarted ? 'started' : 'unstarted';
   }
 
   /** What this floor still asks of the player, in the order Mordecai raises it. */
@@ -7266,12 +7325,16 @@ export class DungeonScene extends GameplayScene {
     );
   }
 
+  /**
+   * Pest Control as floor advice: before it starts, a heads-up pointing at Dr.
+   * Moult by the taped-off hallway; once it has, the warning about the lab.
+   */
   private spiderLabObjective(): AdviceObjective {
-    return adviceObjective(
-      'spider_lab',
-      this.spiderQuest.isComplete,
-      this.gameMap.spiderLabRoom?.centre ?? null,
-    );
+    const lab = this.gameMap.spiderLabRoom;
+    if (!this.spiderQuest.hasStarted) {
+      return adviceObjective('spider_lab', false, lab?.hallwayPostTile ?? null);
+    }
+    return adviceObjective('spider_lab_started', this.spiderQuest.isComplete, lab?.centre ?? null);
   }
 
   /**
@@ -8017,12 +8080,18 @@ export class DungeonScene extends GameplayScene {
     // under it, so without this the swing would pick straight back up on close.
     if (this.menus.pauseScreen.isOpen) this.gathering?.harvest.stopAll();
     // The village is not ticked under either, so its loops would play on unattended.
-    if (this.menus.pauseScreen.isOpen || this.gameOver) this.briarHollowKit?.silenceLoops();
+    if (this.menus.pauseScreen.isOpen || this.gameOver) {
+      this.briarHollowKit?.silenceLoops();
+      this.silenceScientistFootsteps();
+    }
     // Gameplay stops ticking the soundscape under all three end screens, so its
     // loops would hold their last volume behind the screen until it closed.
     const endScreenShowing =
       this.gameOver || this.levelCompleteScreen.isActive || this.runCompleteScreen.isActive;
-    if (endScreenShowing) this.dungeonAmbience?.silence();
+    if (endScreenShowing) {
+      this.dungeonAmbience?.silence();
+      this.labHallway?.silence();
+    }
 
     // Town keeps living through citizen chats and other overlay dialogs — only a
     // hard stop (game over, the pause menu, or a level- or run-complete screen)
@@ -8228,6 +8297,7 @@ export class DungeonScene extends GameplayScene {
     ambienceFrame.inSafeRoom = this.safeRoom.isEntityInSafeRoom(active);
     ambienceFrame.bossFight = this.bossRoom.anyLocked;
     this.dungeonAmbience?.update(ambienceFrame);
+    this.labHallway?.update(ambienceFrame, active);
   }
 
   private readonly _lifeParty: Walker[] = [];
@@ -8417,10 +8487,11 @@ export class DungeonScene extends GameplayScene {
       goreUnderDarkness: this.dungeonLighting !== null,
       lightShining: this.lightShining,
       isCrawlerHidden: (crawler) => this.cloggedBathroom.isCrawlerHidden(crawler),
-      sortedFixtures:
-        this.tutorial === null
-          ? this.cloggedBathroom.sortedFixtures()
-          : [...this.cloggedBathroom.sortedFixtures(), ...this.tutorial.gateRenderables()],
+      sortedFixtures: [
+        ...this.cloggedBathroom.sortedFixtures(),
+        ...(this.tutorial?.gateRenderables() ?? []),
+        ...(this.labHallway?.sortedRenderables() ?? []),
+      ],
     };
 
     this.renderPipeline.renderWorld(ctx, rc);
@@ -8463,6 +8534,7 @@ export class DungeonScene extends GameplayScene {
     this.murderQuest.renderWellClueOverlay(ctx, camX, camY, this.active());
     this.spiderQuest.renderLifeMachinesForeground(ctx, camX, camY, this.active());
     this.dungeonLife?.renderAir(ctx, camX, camY, viewportWidth(), viewportHeight());
+    this.labHallway?.render(ctx, camX, camY, viewportWidth(), viewportHeight());
     // Over every body and under every warning, health bar and label.
     this.renderDungeonDarkness(ctx, rc);
     // Over every body in the lab and under every warning: the dark her roars
@@ -8833,6 +8905,7 @@ export class DungeonScene extends GameplayScene {
     markers.push(...this.defendQuest.questMarkers);
     markers.push(...this.cloggedBathroom.questMarkers);
     markers.push(...this.stealthKeySnatch.questMarkers);
+    markers.push(...this.spiderQuest.questMarkers);
     markers.push(...this.circusQuest.questMarkers);
     markers.push(...this.murderQuest.questMarkers);
     markers.push(...this.anchorQuest.questMarkers);
@@ -8929,7 +9002,7 @@ export class DungeonScene extends GameplayScene {
     // off the pad before it lands.
     const swingingAtStriker = this.highStriker?.holdsCrawler(player) === true;
     const movementHeld =
-      this.spiderQuest.playerLocked ||
+      this.spiderQuest.holdsPartyMovement ||
       inStall ||
       catMoveBlocked ||
       humanMoveBlocked ||
@@ -9490,7 +9563,58 @@ export class DungeonScene extends GameplayScene {
     }
   }
 
+  /** Plays one of Dr. Moult's lines, cutting off whatever he was still saying. */
+  private sayAsScientist(
+    id: SoundId | null,
+    at: { readonly x: number; readonly y: number } | null,
+    opts?: PlayOptions,
+  ): void {
+    if (id === null) return;
+    if (this.lastScientistVoice !== null) this.audio?.stopSound(this.lastScientistVoice);
+    this.lastScientistVoice = id;
+    if (at === null) this.audio?.play(id, opts);
+    else this.audio?.playAt(id, at.x, at.y, opts, SCIENTIST_SPEECH_REACH);
+  }
+
+  /** Dr. Moult's footsteps are not ticked under the pause menu or the death screen, so they stop there. */
+  private silenceScientistFootsteps(): void {
+    if (SCIENTIST_FOOTSTEPS_LOOP !== null) this.audioScope?.stopLoop(SCIENTIST_FOOTSTEPS_LOOP);
+  }
+
+  /** His footsteps follow him down the hallway while he runs, louder the nearer he is. */
+  private updateScientistFootsteps(): void {
+    const scope = this.audioScope;
+    const footsteps = SCIENTIST_FOOTSTEPS_LOOP;
+    if (scope === null || footsteps === null) return;
+    const endScreenShowing = this.levelCompleteScreen.isActive || this.runCompleteScreen.isActive;
+    if (!this.spiderQuest.isScientistRunning || endScreenShowing) {
+      scope.stopLoop(footsteps);
+      return;
+    }
+    const feet = this.spiderQuest.scientistFeet;
+    const listener = this.active();
+    const distanceTiles = Math.hypot(feet.x - listener.x, feet.y - listener.y) / TILE_SIZE;
+    scope.startLoop(footsteps);
+    scope.setAmbientLoopVolume(
+      footsteps.id,
+      footsteps.volume * placedGain(distanceTiles, SCIENTIST_FOOTSTEPS_HEARING_TILES),
+    );
+  }
+
   private _processSpiderQuestSounds(): void {
+    const voice = this.spiderQuest.scientistVoicePending;
+    if (voice !== null) {
+      this.spiderQuest.scientistVoicePending = null;
+      this.sayAsScientist(spiderQuestCueSound(voice.cue, Math.random()), voice, {
+        volume: SCIENTIST_SPEECH_VOLUME,
+      });
+    }
+    if (this.spiderQuest.mordecaiMessageChimePending) {
+      this.spiderQuest.mordecaiMessageChimePending = false;
+      const chime = spiderQuestCueSound('mordecaiMessage', Math.random());
+      if (chime !== null) this.audio?.play(chime, { bus: 'ui' });
+    }
+    this.updateScientistFootsteps();
     if (this.spiderQuest.machineryStartPending) {
       this.spiderQuest.machineryStartPending = false;
       this.audioScope?.startLoop(MACHINERY_LOOP);
@@ -9509,7 +9633,9 @@ export class DungeonScene extends GameplayScene {
     }
     if (this.spiderQuest.exclamationSoundPending) {
       this.spiderQuest.exclamationSoundPending = false;
-      this.audio?.play('scientist_exclaiming_about_an_escape');
+      this.sayAsScientist('scientist_exclaiming_about_an_escape', null, {
+        volume: SCIENTIST_SPEECH_VOLUME,
+      });
     }
     if (this.spiderQuest.lifeMachinePoweringOnPending) {
       this.spiderQuest.lifeMachinePoweringOnPending = false;
@@ -9525,8 +9651,9 @@ export class DungeonScene extends GameplayScene {
     }
     if (this.spiderQuest.explanationSoundPending) {
       this.spiderQuest.explanationSoundPending = false;
-      // Boosted volume: this audio was recorded significantly quieter than other SFX
-      this.audio?.play('scientist_explaining_request', { volume: 3.5 });
+      this.sayAsScientist('scientist_explaining_request', null, {
+        volume: SCIENTIST_SPEECH_VOLUME,
+      });
     }
     if (this.spiderQuest.keyboardHeroMusicReleasePending) {
       this.spiderQuest.keyboardHeroMusicReleasePending = false;

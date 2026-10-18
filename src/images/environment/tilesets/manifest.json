@@ -150,6 +150,18 @@
         "frameCount": 32,
         "patchTiles": 4,
         "label": "Bopca station tile (glazed, calm)"
+      },
+      "station_plate": {
+        "row": 3,
+        "frameCount": 32,
+        "patchTiles": 4,
+        "label": "Field station galvanised decking"
+      },
+      "station_stripe": {
+        "row": 4,
+        "frameCount": 8,
+        "patchTiles": 2,
+        "label": "Field station decontamination stripe"
       }
     }
   },

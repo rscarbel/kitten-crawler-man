@@ -286,8 +286,6 @@ export function toPersistedSpiderQuestCheckpoint(
     spiderEggOpened: cp.spiderEggOpened,
     scientistDead: cp.scientistDead,
     hackingDone: cp.hackingDone,
-    hackStarting: cp.hackStarting,
-    hackStartTimer: cp.hackStartTimer,
     machineryForcedOff: cp.machineryForcedOff,
     playerLocked: cp.playerLocked,
     roomLocked: cp.roomLocked,
@@ -787,11 +785,17 @@ function parsePersistedMurderMysteryQuestCheckpoint(
   };
 }
 
-/** Every spider-lab phase, in the order the quest reaches them. */
+/**
+ * Every spider-lab phase, in the order the quest reaches them. A save only
+ * ever holds the steady ones: the explanation is saved as waiting and the run
+ * back as awaiting the hack, but the order lists every phase so a comparison
+ * along it never meets one it does not know.
+ */
 export const SPIDER_QUEST_PHASE_ORDER = [
   'inactive',
   'scientist_waiting',
   'scientist_dialog',
+  'scientist_returning',
   'awaiting_hacking',
   'keyboard_hero_tutorial',
   'hacking',
@@ -878,8 +882,6 @@ function parsePersistedSpiderQuestCheckpoint(
     spiderEggOpened,
     scientistDead,
     hackingDone,
-    hackStarting,
-    hackStartTimer,
     machineryForcedOff,
     playerLocked,
     roomLocked,
@@ -898,8 +900,6 @@ function parsePersistedSpiderQuestCheckpoint(
     !isBoolean(spiderEggOpened) ||
     !isBoolean(scientistDead) ||
     !isBoolean(hackingDone) ||
-    !isBoolean(hackStarting) ||
-    !isNumber(hackStartTimer) ||
     !isBoolean(machineryForcedOff) ||
     !isBoolean(playerLocked) ||
     !isBoolean(roomLocked) ||
@@ -917,8 +917,6 @@ function parsePersistedSpiderQuestCheckpoint(
     spiderEggOpened,
     scientistDead,
     hackingDone,
-    hackStarting,
-    hackStartTimer,
     machineryForcedOff,
     playerLocked,
     roomLocked,

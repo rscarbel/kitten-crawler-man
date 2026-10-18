@@ -1,8 +1,9 @@
 /**
- * The two-page Keyboard Hero tutorial raised in the spider's lab the first
- * time the hack starts: falling notes, then a hit beside a miss. The quest
- * owns the page and plays the click itself; the last page's button starts the
- * hack, and Escape (or ✕) retreats to the terminal.
+ * The Keyboard Hero tutorial raised in the spider's lab before a hack: falling
+ * notes, then a hit beside a miss, the first time a hack is played this
+ * session. The quest owns the page and plays the click itself; the
+ * last page's button starts the hack, and Escape (or ✕) retreats to the
+ * terminal.
  */
 
 import type { Rect } from '../../core/geom';
@@ -12,9 +13,33 @@ import { drawFallingNotesPage, drawHitMissPage } from '../../icons/explainerArt/
 import { pagedOverlaySurface, type PagedOverlayPage } from '../../widgets/pagedOverlay';
 import { paintInDesignSpace, type DesignSize } from './explainerPages';
 
+/** One page of the tutorial. */
+export type SpiderTutorialPageId = 'falling-notes' | 'hit-miss';
+
+/** The pages the tutorial teaches, in the order they are shown. */
+const BASE_PAGE_IDS: readonly SpiderTutorialPageId[] = ['falling-notes', 'hit-miss'];
+
+/** Pages already shown this session; module state, so a reload teaches it all again. */
+const pagesSeenThisSession = new Set<SpiderTutorialPageId>();
+
+/**
+ * The pages a hack still has to show this session, in order. Empty when there
+ * is nothing left to teach and the hack can start at once.
+ */
+export function spiderTutorialPagesDue(): readonly SpiderTutorialPageId[] {
+  return BASE_PAGE_IDS.filter((page) => !pagesSeenThisSession.has(page));
+}
+
+/** Records `pages` as shown, so later hacks this session skip them. */
+export function markSpiderTutorialPagesSeen(pages: readonly SpiderTutorialPageId[]): void {
+  for (const page of pages) pagesSeenThisSession.add(page);
+}
+
 /** What the tutorial reads from, and drives on, `SpiderQuestSystem`. */
 export interface SpiderTutorialModel {
   readonly isKeyboardHeroTutorialOpen: boolean;
+  /** The pages this showing walks through; the base pages when not given. */
+  readonly tutorialPages?: readonly SpiderTutorialPageId[];
   readonly tutorialPageIndex: number;
   /** Turns the page, or on the last one starts the hack. Plays its own click. */
   advanceTutorial(): void;
@@ -61,9 +86,9 @@ function paintBoard(
   );
 }
 
-function pages(touch: boolean): readonly PagedOverlayPage[] {
-  return [
-    {
+function pages(touch: boolean): Readonly<Record<SpiderTutorialPageId, PagedOverlayPage>> {
+  return {
+    'falling-notes': {
       title: 'Falling Notes',
       body: [
         'Notes fall down four lanes toward the rings at the bottom.',
@@ -79,7 +104,7 @@ function pages(touch: boolean): readonly PagedOverlayPage[] {
           ),
       },
     },
-    {
+    'hit-miss': {
       title: 'Hit vs. Miss',
       body: [
         'A miss breaks a firewall pip and flashes the lane red.',
@@ -95,7 +120,7 @@ function pages(touch: boolean): readonly PagedOverlayPage[] {
           ),
       },
     },
-  ];
+  };
 }
 
 const POINTER_PAGES = pages(false);
@@ -104,12 +129,24 @@ const TOUCH_PAGES = pages(true);
 /** Modal and halting; Space and Enter press the page's one button. */
 export function spiderTutorialSurface(model: SpiderTutorialModel, id = 'spider-tutorial'): Surface {
   let touch = false;
+  let shownPages: {
+    ids: readonly SpiderTutorialPageId[];
+    touch: boolean;
+    pages: readonly PagedOverlayPage[];
+  } | null = null;
+  const currentPages = (): readonly PagedOverlayPage[] => {
+    const ids = model.tutorialPages ?? BASE_PAGE_IDS;
+    if (shownPages?.ids === ids && shownPages.touch === touch) return shownPages.pages;
+    const byId = touch ? TOUCH_PAGES : POINTER_PAGES;
+    shownPages = { ids, touch, pages: ids.map((page) => byId[page]) };
+    return shownPages.pages;
+  };
   const advance = (): void => model.advanceTutorial();
   const inner = pagedOverlaySurface({
     id,
     title: TITLE,
     get pages(): readonly PagedOverlayPage[] {
-      return touch ? TOUCH_PAGES : POINTER_PAGES;
+      return currentPages();
     },
     doneLabel: GO_LABEL,
     back: false,

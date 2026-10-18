@@ -33,4 +33,12 @@ export const LIGHTING_TUNING = {
    * only where its body is genuinely hard to read.
    */
   eyeShineMinDarkness: 0.45,
+  /**
+   * The spider lab's approach, graded along its walk: a shade darker than any
+   * other hallway where it leaves the host room, and at the cap by the lab.
+   */
+  labHallway: {
+    mouthDarkness: 0.32,
+    labEndDarkness: 0.5,
+  },
 } as const;

@@ -32,8 +32,10 @@ export type PlaytestSpawn =
   | { readonly kind: 'mapStart' }
   /** The gateway safe room whose only onward exit is this boss's room. */
   | { readonly kind: 'safeRoomBefore'; readonly bossType: MobSpawnRule['type'] }
-  /** The corridor tile immediately outside the spider lab's door. */
-  | { readonly kind: 'spiderLabEntrance' }
+  /** The middle of the spider lab's field station, between its two hallways. */
+  | { readonly kind: 'spiderLabStation' }
+  /** In the room the spider lab's hallway leaves from, a few tiles short of its mouth. */
+  | { readonly kind: 'spiderHallwayHost' }
   /** The tile just inside the goblin mother's nursery, by the way in. */
   | { readonly kind: 'questRoomEntrance' }
   /** The tile just inside the first clogged bathroom, by the way in. */
@@ -130,6 +132,8 @@ export interface PlaytestPreset {
    * countdown and the Krasue Murders closed behind it at the Lich's death.
    */
   readonly doomsdayStage?: Extract<DoomsdayStage, 'containment' | 'escape'>;
+  /** Pest Control already taken up, Dr. Moult at his lab post waiting for the hack. */
+  readonly spiderQuestAwaitingHacking?: boolean;
   /** A Meat Shields hire already under contract for this floor, standing beside the party. */
   readonly hire?: MercenaryTemplateId;
   /** Mongo already out beside the cat on the first frame, rather than waiting on a summon. */
@@ -355,9 +359,10 @@ const KRAKAREN: PlaytestPreset = {
 
 const SPIDER: PlaytestPreset = {
   id: 'spider',
-  description: 'Outside the spider lab door, by the scientist',
+  description: "In the spider lab's station, Dr. Moult waiting at his terminal",
   levelId: 'level2',
-  spawn: { kind: 'spiderLabEntrance' },
+  spawn: { kind: 'spiderLabStation' },
+  spiderQuestAwaitingHacking: true,
   abilityLevels: { smush: 6, magic_missile: 6, protective_shell: 3 },
   human: {
     level: 20,
@@ -1101,6 +1106,15 @@ const TARANIS: PlaytestPreset = {
   },
 };
 
+/** The host room short of the lab hallway's mouth, Dr. Moult still waiting there to be met. */
+const SPIDER_HALLWAY: PlaytestPreset = {
+  ...SPIDER,
+  id: 'spider-hallway',
+  description: "A few tiles short of the spider lab's hallway, Dr. Moult waiting at its mouth",
+  spawn: { kind: 'spiderHallwayHost' },
+  spiderQuestAwaitingHacking: false,
+};
+
 export const PLAYTEST_PRESETS: readonly PlaytestPreset[] = [
   HOARDER,
   JUICER,
@@ -1111,6 +1125,7 @@ export const PLAYTEST_PRESETS: readonly PlaytestPreset[] = [
   PRISON,
   SWINE,
   SPIDER,
+  SPIDER_HALLWAY,
   LEVEL3,
   GEAR,
   ANCHOR_SHARDS,

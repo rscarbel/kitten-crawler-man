@@ -381,6 +381,7 @@ function hallSconce(
     seed: Math.floor(rng() * UINT32_SPAN),
     region: hallway.id,
     circuit: null,
+    dying: false,
     state: freshFixtureState(SCONCE_LIGHT_KIND),
   };
 }
