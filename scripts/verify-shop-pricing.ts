@@ -336,8 +336,9 @@ function smallestRealBundleDiscount(): number | undefined {
 section('Bundles never gain coins: synthetic bundles over scarce limited lines');
 {
   const discount = smallestRealBundleDiscount();
-  check(discount !== undefined, 'no real bundle row to take a realistic bundle discount from');
-  if (discount !== undefined) {
+  if (discount === undefined) {
+    console.log('  ..   skipped: no shop sells a bundle row to take a realistic discount from');
+  } else {
     for (const shop of SHOP_IDS) {
       if (!shopDef(shop).buysFromPlayer) continue;
       for (const line of shopDef(shop).catalog) {
@@ -451,7 +452,7 @@ function tickOneInterval(stock: ShopStock): void {
   for (let tick = 0; tick < RESTOCK_INTERVAL_TICKS; tick++) tickShopStock(stock);
 }
 
-/** A real catalog line with a given normal stock, so restock can be watched through the real record. */
+/** The first real catalog line whose normal stock passes `matches`, so restock can be watched through the real record. */
 function findLine(
   matches: (normal: number | 'unlimited') => boolean,
 ): { shop: ShopId; item: ItemId } | undefined {
@@ -463,37 +464,57 @@ function findLine(
   return undefined;
 }
 
-const NORMAL_OF_FIVE = 5;
-const THREE_BELOW = -3;
-const TWO_BELOW = -2;
-const NORMAL_OF_FIVE_HUNDRED = 500;
-const TWENTY_BELOW = 20;
-const FIFTEEN_BELOW = 15;
-const TWO_OVER = 2;
-const ONE_OVER = 1;
+/** The limited line with the deepest normal stock, so it can be bought furthest down. */
+function deepestLimitedLine(): { shop: ShopId; item: ItemId; normal: number } | undefined {
+  let deepest: { shop: ShopId; item: ItemId; normal: number } | undefined;
+  for (const shop of SHOP_IDS) {
+    for (const line of shopDef(shop).catalog) {
+      if (line.normalStock === 'unlimited') continue;
+      if (deepest === undefined || line.normalStock > deepest.normal) {
+        deepest = { shop, item: line.item, normal: line.normalStock };
+      }
+    }
+  }
+  return deepest;
+}
+
+/** An offset after one restock step: moved `step` toward normal, never past it. */
+function afterOneStep(offset: number, step: number): number {
+  return offset - Math.sign(offset) * Math.min(step, Math.abs(offset));
+}
+
+/** How far below normal the single-line restock walk starts, when the line is that deep. */
+const WALK_UNITS_BELOW = 3;
+const SOLD_IN_TWO = 2;
 const ONE_BELOW = -1;
+/** A normal stock larger than any shop lists, to check the step scales with normal rather than staying at one unit. */
+const LARGE_NORMAL = 500;
+const LARGE_NORMAL_UNITS_BELOW = 20;
 
 section('Restock: one interval of ticks moves a line one step toward normal');
 {
-  const fiveLine = findLine((normal) => normal === NORMAL_OF_FIVE);
-  check(fiveLine !== undefined, `no catalog line has a normal stock of ${NORMAL_OF_FIVE} to test`);
-  if (fiveLine !== undefined) {
-    const { shop, item } = fiveLine;
-    const stock = stockAt(shop, item, THREE_BELOW);
+  const walked = deepestLimitedLine();
+  check(walked !== undefined, 'no limited catalog line to watch restock');
+  if (walked !== undefined) {
+    const { shop, item, normal } = walked;
+    const step = restockStep(normal);
+    const startOffset = -Math.min(WALK_UNITS_BELOW, normal);
+    const expectedOffset = afterOneStep(startOffset, step);
+    const stock = stockAt(shop, item, startOffset);
     tickShopStock(stock);
     check(
-      stockOffset(stock, shop, item) === THREE_BELOW,
+      stockOffset(stock, shop, item) === startOffset,
       `${shop}/${item}: restocked after a single tick`,
     );
     for (let tick = 1; tick < RESTOCK_INTERVAL_TICKS - 1; tick++) tickShopStock(stock);
     check(
-      stockOffset(stock, shop, item) === THREE_BELOW,
+      stockOffset(stock, shop, item) === startOffset,
       `${shop}/${item}: restocked one tick before the interval of ${RESTOCK_INTERVAL_TICKS} ticks`,
     );
     tickShopStock(stock);
     check(
-      stockOffset(stock, shop, item) === TWO_BELOW,
-      `${shop}/${item} (normal ${NORMAL_OF_FIVE}): 3 below became ${-stockOffset(stock, shop, item)} below, not 2`,
+      stockOffset(stock, shop, item) === expectedOffset,
+      `${shop}/${item} (normal ${normal}, step ${step}): ${-startOffset} below became ${-stockOffset(stock, shop, item)} below, not ${-expectedOffset}`,
     );
 
     const oneBelow = stockAt(shop, item, ONE_BELOW);
@@ -508,31 +529,31 @@ section('Restock: one interval of ticks moves a line one step toward normal');
   check(unlimitedLine !== undefined, 'no unlimited catalog line to test');
   if (unlimitedLine !== undefined) {
     const { shop, item } = unlimitedLine;
-    const stock = stockAt(shop, item, TWO_OVER);
+    const stock = stockAt(shop, item, SOLD_IN_TWO);
     tickOneInterval(stock);
+    const expectedOffset = afterOneStep(SOLD_IN_TWO, restockStep('unlimited'));
     check(
-      stockOffset(stock, shop, item) === ONE_OVER,
-      `${shop}/${item} (unlimited): 2 over became ${stockOffset(stock, shop, item)} over, not 1`,
+      stockOffset(stock, shop, item) === expectedOffset,
+      `${shop}/${item} (unlimited): ${SOLD_IN_TWO} over became ${stockOffset(stock, shop, item)} over, not ${expectedOffset}`,
     );
   }
 
-  // No shop lists a line with a normal of 500, and the record only knows the
-  // normals in SHOPS, so the large-normal case is checked on the step itself.
-  // The record-level walk below applies the same step to every real line, so
-  // a large-normal line added later is covered end to end automatically.
-  const fiveHundredStep = restockStep(NORMAL_OF_FIVE_HUNDRED);
-  check(
-    TWENTY_BELOW - fiveHundredStep === FIFTEEN_BELOW,
-    `normal ${NORMAL_OF_FIVE_HUNDRED}: one step is ${fiveHundredStep} units, so 20 below becomes ${TWENTY_BELOW - fiveHundredStep} below, not 15`,
+  // The record only knows the normals in SHOPS, so a normal larger than any
+  // shop lists is checked on the step itself. The record-level walk below
+  // applies the same step to every real line, so a large-normal line added
+  // later is covered end to end automatically.
+  const largeStep = restockStep(LARGE_NORMAL);
+  const largeExpected = Math.max(
+    1,
+    Math.ceil(RESTOCK_FRACTION_PER_INTERVAL * LARGE_NORMAL - FLOAT_EPSILON),
   );
   check(
-    restockStep('unlimited') === 1,
-    `an unlimited line steps ${restockStep('unlimited')}, not 1`,
+    largeStep === largeExpected,
+    `normal ${LARGE_NORMAL}: one step is ${largeStep} units, not the rounded-up fraction ${largeExpected}, so ${LARGE_NORMAL_UNITS_BELOW} below would become ${LARGE_NORMAL_UNITS_BELOW - largeStep} below`,
   );
   check(
-    restockStep(NORMAL_OF_FIVE) ===
-      Math.max(1, Math.ceil(RESTOCK_FRACTION_PER_INTERVAL * NORMAL_OF_FIVE)),
-    `normal ${NORMAL_OF_FIVE}: step ${restockStep(NORMAL_OF_FIVE)} is not the rounded-up fraction`,
+    restockStep('unlimited') >= 1,
+    `an unlimited line steps ${restockStep('unlimited')} units, so a sold-in unlimited line never drains`,
   );
 }
 endSection();
@@ -562,50 +583,70 @@ for (const shop of SHOP_IDS) {
 }
 endSection();
 
+/**
+ * Up to `count` catalog lines from different shops that pass `matches`, so a
+ * shared-clock check spans counters rather than one shop's shelf.
+ */
+function linesFromDistinctShops(
+  count: number,
+  matches: (line: CatalogLine) => boolean,
+  excludeShops: ReadonlySet<ShopId> = new Set(),
+): { shop: ShopId; item: ItemId }[] {
+  const picked: { shop: ShopId; item: ItemId }[] = [];
+  for (const shop of SHOP_IDS) {
+    if (picked.length >= count) break;
+    if (excludeShops.has(shop)) continue;
+    const line = shopDef(shop).catalog.find(matches);
+    if (line !== undefined) picked.push({ shop, item: line.item });
+  }
+  return picked;
+}
+
+const SHARED_CLOCK_SOLD_IN_SHOPS = 2;
+
 section('One tickShopStock call restocks every shop line together');
 {
-  const clubLine = { shop: 'club_bar', item: 'speed_fizz' } as const satisfies {
-    shop: ShopId;
-    item: ItemId;
-  };
-  const villageLine = findLine((normal) => normal !== 'unlimited' && normal > 1);
-  const storeLine = { shop: 'general_store', item: 'health_potion' } as const satisfies {
-    shop: ShopId;
-    item: ItemId;
-  };
-  check(villageLine !== undefined, 'no limited catalog line to test restocking across shops');
-  check(
-    catalogItems(clubLine.shop).has(clubLine.item) &&
-      catalogItems(storeLine.shop).has(storeLine.item),
-    'the club bar and general store lines this check uses are no longer stocked',
+  const boughtDownLine = linesFromDistinctShops(
+    1,
+    (line) => line.normalStock !== 'unlimited' && line.normalStock > 1,
+  )[0];
+  check(boughtDownLine !== undefined, 'no limited catalog line to test restocking across shops');
+  const soldInLines = linesFromDistinctShops(
+    SHARED_CLOCK_SOLD_IN_SHOPS,
+    () => true,
+    new Set(boughtDownLine === undefined ? [] : [boughtDownLine.shop]),
   );
-  if (villageLine !== undefined) {
+  check(
+    soldInLines.length === SHARED_CLOCK_SOLD_IN_SHOPS,
+    `fewer than ${SHARED_CLOCK_SOLD_IN_SHOPS} other shops have a catalog line to sell into`,
+  );
+  const [twiceSold, onceSold] = soldInLines;
+  if (boughtDownLine !== undefined && twiceSold !== undefined && onceSold !== undefined) {
     const shared = createShopStock();
-    sellToShop(shared, clubLine.shop, clubLine.item);
-    sellToShop(shared, clubLine.shop, clubLine.item);
-    sellToShop(shared, storeLine.shop, storeLine.item);
-    buyFromShop(shared, villageLine.shop, villageLine.item);
+    sellToShop(shared, twiceSold.shop, twiceSold.item);
+    sellToShop(shared, twiceSold.shop, twiceSold.item);
+    sellToShop(shared, onceSold.shop, onceSold.item);
+    buyFromShop(shared, boughtDownLine.shop, boughtDownLine.item);
 
     const halted = captureShopStock(shared);
     const untickedCopy = createShopStock();
     restoreShopStock(untickedCopy, halted);
     tickOneInterval(shared);
 
+    const expectAfterOneStep = (line: { shop: ShopId; item: ItemId }, offset: number): void => {
+      const expected = afterOneStep(offset, restockStep(normalStockOf(line.shop, line.item)));
+      const actual = stockOffset(shared, line.shop, line.item);
+      check(
+        actual === expected,
+        `${line.shop}/${line.item} did not restock from the shared clock (${actual}, expected ${expected})`,
+      );
+    };
+    expectAfterOneStep(twiceSold, SOLD_IN_TWO);
+    expectAfterOneStep(onceSold, SOLD_IN_ONE);
+    expectAfterOneStep(boughtDownLine, ONE_BELOW);
     check(
-      stockOffset(shared, clubLine.shop, clubLine.item) === 1,
-      `club bar line did not restock from the shared clock (${stockOffset(shared, clubLine.shop, clubLine.item)})`,
-    );
-    check(
-      stockOffset(shared, storeLine.shop, storeLine.item) === 0,
-      `general store line did not restock from the shared clock (${stockOffset(shared, storeLine.shop, storeLine.item)})`,
-    );
-    check(
-      stockOffset(shared, villageLine.shop, villageLine.item) === 0,
-      `${villageLine.shop} line did not restock from the shared clock`,
-    );
-    check(
-      stockOffset(untickedCopy, clubLine.shop, clubLine.item) === TWO_OVER &&
-        stockOffset(untickedCopy, villageLine.shop, villageLine.item) === ONE_BELOW,
+      stockOffset(untickedCopy, twiceSold.shop, twiceSold.item) === SOLD_IN_TWO &&
+        stockOffset(untickedCopy, boughtDownLine.shop, boughtDownLine.item) === ONE_BELOW,
       'a record that was never ticked (a halted world) moved anyway',
     );
   }

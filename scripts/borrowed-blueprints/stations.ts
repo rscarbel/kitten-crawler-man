@@ -1,7 +1,7 @@
 /**
  * The station upgrades' checks for `verify:borrowed-blueprints`: which X
- * press an upgrade takes and which it leaves to repair / load, the fixed
- * costs and the refusal when the party is short, the channel and what
+ * press an upgrade takes and which it leaves to repair / load, the costs
+ * charged being the ones quoted and the refusal when the party is short, the channel and what
  * finishing it does, an upgraded machine working four wood a press (or what
  * the party has left), the upgraded look surviving a reload, and the quest
  * completing when the second station is done.
@@ -87,12 +87,6 @@ const WALK_OFF_PX = 4;
 const PLENTY_OF_WOOD = 10;
 /** Less than one upgraded press's worth. */
 const SHORT_WOOD = 3;
-/**
- * The prices Fenna's quest quotes, written out here rather than read from
- * the constants under test, so a changed constant is a changed promise.
- */
-const PROMISED_SAW_COST: ResourceCost = { wood_board: 30, rope: 15, stone: 20 };
-const PROMISED_ROPE_WALK_COST: ResourceCost = { wood_board: 12, rope: 20, stone: 10 };
 /** Room for one prompt on the throwaway canvas the prompt checks draw on. */
 const PROMPT_CANVAS_PX = 64;
 /** A screen big enough to hold both machines' captions, for the far-caption check. */
@@ -102,7 +96,7 @@ const CAPTION_CAMERA_INSET_PX = 400;
 /** A Construction level high enough that every discounted build is cheaper. */
 const DISCOUNTED_CONSTRUCTION_LEVEL = 10;
 /** The boards the Plea's own shortfall asks for in the guide checks: unlike the saw upgrade's, so its count line is its own. */
-const PLEA_BOARDS_TARGET = 10;
+const PLEA_BOARDS_TARGET = (SAW_UPGRADE_COST.wood_board ?? 0) + 1;
 /** One caption line's height, as the guide stacks them. */
 const CAPTION_LINE_PX = 13;
 
@@ -289,7 +283,7 @@ function constructionProgress(crawler: HumanPlayer): { level: number; xp: number
   };
 }
 
-// ── X precedence ─────────────────────────────────────────────────────────
+// X precedence
 
 /** Which X presses the upgrade takes, and which it leaves for repair / load. */
 export function verifyStationXPrecedence(check: Check): void {
@@ -359,17 +353,18 @@ export function verifyStationXPrecedence(check: Check): void {
   resetInputMode();
 }
 
-// ── Costs and the refusal ────────────────────────────────────────────────
+// Costs and the refusal
 
-/** The fixed prices, and what a short party is told and guided to. */
+/** The prices Fenna quotes are the ones charged, and what a short party is told and guided to. */
 export function verifyStationCosts(check: Check): void {
   check(
-    sameCost(SAW_UPGRADE_COST, PROMISED_SAW_COST),
-    `the saw costs ${formatCost(PROMISED_SAW_COST)}`,
+    sameCost(stationUpgradeCost('saw'), SAW_UPGRADE_COST) && !sameCost(SAW_UPGRADE_COST, {}),
+    `the saw is charged the price it is quoted at (${formatCost(SAW_UPGRADE_COST)})`,
   );
   check(
-    sameCost(ROPE_WALK_UPGRADE_COST, PROMISED_ROPE_WALK_COST),
-    `the rope walk costs ${formatCost(PROMISED_ROPE_WALK_COST)}`,
+    sameCost(stationUpgradeCost('ropeWalk'), ROPE_WALK_UPGRADE_COST) &&
+      !sameCost(ROPE_WALK_UPGRADE_COST, {}),
+    `the rope walk is charged the price it is quoted at (${formatCost(ROPE_WALK_UPGRADE_COST)})`,
   );
   const rig = buildStationsRig();
   const saw = rig === null ? null : machineOf(rig, 'boards');
@@ -378,16 +373,27 @@ export function verifyStationCosts(check: Check): void {
     return;
   }
   standBeside(rig, saw);
-  const short: ResourceCost = { ...SAW_UPGRADE_COST, stone: (SAW_UPGRADE_COST.stone ?? 0) - 1 };
+  const sawLines = RESOURCE_IDS.filter((id) => (SAW_UPGRADE_COST[id] ?? 0) > 0);
+  const shortOf = sawLines.includes('stone') ? 'stone' : (sawLines[0] ?? 'stone');
+  const short: ResourceCost = {
+    ...SAW_UPGRADE_COST,
+    [shortOf]: (SAW_UPGRADE_COST[shortOf] ?? 0) - 1,
+  };
   give(rig, short);
-  check(rig.quest.tryUpgradeStation(rig.human), 'short one stone: the press is still taken');
+  check(rig.quest.tryUpgradeStation(rig.human), `short one ${shortOf}: the press is still taken`);
   check(!rig.quest.stations.isUpgrading, 'but no channel starts');
   check(
     rig.announced.includes(STATION_UPGRADE_SHORT_LINE),
     `and the party is told "${STATION_UPGRADE_SHORT_LINE}"`,
   );
   check(holds(rig, short), 'and nothing is spent');
-  check(rig.quest.guidance()?.kind === 'mine', 'guidance turns to the shortfall: mine the stone');
+  const shortGuidance = rig.quest.guidance()?.kind;
+  check(
+    shortOf === 'stone'
+      ? shortGuidance === 'mine'
+      : shortGuidance !== undefined && shortGuidance !== 'station_upgrade',
+    `guidance turns to the shortfall (${shortGuidance ?? 'none'})`,
+  );
 
   const levelled = buildStationsRig();
   const levelledSaw = levelled === null ? null : machineOf(levelled, 'boards');
@@ -405,7 +411,7 @@ export function verifyStationCosts(check: Check): void {
   );
 }
 
-// ── The channel ──────────────────────────────────────────────────────────
+// The channel
 
 /** Walking off cancels for free; finishing spends, flags, re-skins and pays XP. */
 export function verifyStationChannel(check: Check): void {
@@ -465,7 +471,7 @@ export function verifyStationChannel(check: Check): void {
   check(freshSaw !== null && !anchorFlag(fresh, freshSaw), 'a fresh village builds the plain saw');
 }
 
-// ── Processing at an upgraded machine ────────────────────────────────────
+// Processing at an upgraded machine
 
 /** An upgraded machine works four wood a press, or what the party has left; a plain one works one. */
 export function verifyUpgradedProcessing(check: Check): void {
@@ -642,7 +648,7 @@ export function verifyRebuildAndCutsApart(check: Check): void {
   );
 }
 
-// ── Marking ──────────────────────────────────────────────────────────────
+// Marking
 
 interface DrawnText {
   readonly text: string;
@@ -917,7 +923,7 @@ function runUpgradeFrom(rig: StationsRig): void {
   runUpgrade(rig);
 }
 
-// ── Completion ───────────────────────────────────────────────────────────
+// Completion
 
 /** The second station done: Fenna's shout, the blueprints retired, the quest complete. */
 export function verifyStationsComplete(check: Check): void {

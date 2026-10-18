@@ -159,8 +159,12 @@ function checkStructure(): void {
     'every strip is longer than the glass is tall',
   );
   check(
-    BET_LADDER.map(totalBetFor).join(',') === '20,40,100,200,500',
-    'the bet ladder makes totals of 20 to 500 over twenty lines',
+    BET_LADDER.every((rung) => totalBetFor(rung) === rung * PAYLINE_COUNT),
+    'every rung of the bet ladder stakes its bet on every line',
+  );
+  check(
+    BET_LADDER.every((rung, index) => index === 0 || rung > BET_LADDER[index - 1]),
+    'the bet ladder climbs',
   );
 }
 

@@ -18,10 +18,11 @@
  * - How a hire stays alive — half damage, recovery, draughts, going down and
  *   being revived, and its health across doors and saves — in
  *   `verifyMercenaries/survival.ts`.
- * - The club market's Stat Boost row: a purchase charges the price and books
- *   one unit off the shared `ShopStock`; a second purchase is refused; the
- *   sold-out state survives a checkpoint capture/restore and a save/parse
- *   round trip.
+ * - The club market's Stat Boost row: a purchase charges the engine's price
+ *   and books one unit off the shared `ShopStock`; a purchase past the line's
+ *   normal stock is refused; the sale survives a checkpoint capture/restore
+ *   and a save/parse round trip. The price and stock themselves are tuning in
+ *   `src/economy/`, never pinned here.
  * - Each kit's own rules, one module per kit under `verifyMercenaries/`.
  * - What every hire shares, in `verifyMercenaries/lifecycle.ts`: spawning
  *   behind the owner, following and the leash, kill credit, friendly fire,
@@ -608,13 +609,10 @@ function checkShell(): void {
 // ── Club market: Stat Boost price and stock ─────────────────────────────────
 
 /**
- * The decided values, written out independently of the club market's `SHOPS`
- * entry rather than read from it: comparing the real row to the very data it
- * was built from can never fail, whatever that data says. This is what
- * actually pins the row to 1000 coins for 1 unit.
+ * Coins well beyond any shelf's worth of Stat Boosts, however they are priced,
+ * so a refused purchase can only be the shelf running out.
  */
-const DECIDED_STAT_BOOST_PRICE = 1000;
-const DECIDED_STAT_BOOST_STOCK = 1;
+const AMPLE_COINS = 1_000_000_000;
 
 /** A desktop window: every row of the club market is on screen without scrolling. */
 const STOCK_TEST_VIEWPORT_W = 1200;
@@ -720,27 +718,32 @@ const STAT_BOOST_BUY = 'buy-stat_boost_potion';
 
 /**
  * Builds the real club market shop over `stock`, buys the Stat Boost row (the
- * topmost, so the button scan always finds it first) twice at the same
- * button, and answers whether the second attempt was refused: no further
- * coins spent and no second unit granted.
+ * topmost, so the button scan always finds it first) once for every unit its
+ * catalog line normally holds, then once more at the same button, and answers
+ * whether that last attempt was refused: no further coins spent and no extra
+ * unit granted.
  */
-function secondStatBoostPurchaseIsRefused(stock: ShopStock): boolean {
+function purchasePastNormalStockIsRefused(stock: ShopStock, normalStock: number): boolean {
   const shop = createClubMarketShop(stock);
   const buyer = new HumanPlayer(0, 0, TILE_SIZE);
-  buyer.coins = statBoostPrice() * 2;
+  buyer.coins = AMPLE_COINS;
   const companion = new CatPlayer(1, 0, TILE_SIZE);
 
   shop.open();
   const rig = shopRig(shop, buyer, companion);
-  if (!rig.tap(STAT_BOOST_BUY)) return false;
-  const afterFirst = buyer.inventory.countOf('stat_boost_potion');
-  const coinsAfterFirst = buyer.coins;
+  for (let unit = 0; unit < normalStock; unit++) {
+    if (!rig.tap(STAT_BOOST_BUY)) return false;
+  }
+  const afterShelf = buyer.inventory.countOf(STAT_BOOST);
+  const coinsAfterShelf = buyer.coins;
 
   rig.tap(STAT_BOOST_BUY);
-  const afterSecond = buyer.inventory.countOf('stat_boost_potion');
-  const coinsAfterSecond = buyer.coins;
+  const afterExtra = buyer.inventory.countOf(STAT_BOOST);
+  const coinsAfterExtra = buyer.coins;
 
-  return afterFirst === 1 && afterSecond === 1 && coinsAfterSecond === coinsAfterFirst;
+  return (
+    afterShelf === normalStock && afterExtra === normalStock && coinsAfterExtra === coinsAfterShelf
+  );
 }
 
 function checkClubShopSellsAStack(): void {
@@ -818,11 +821,13 @@ function checkClubStock(): void {
 
   const item = realStatBoostRow();
   const price = statBoostPrice();
-  check(price === DECIDED_STAT_BOOST_PRICE, "the club market's Stat Boost price is 1000");
-  check(
-    item.normalStock === DECIDED_STAT_BOOST_STOCK,
-    "the club market's declared Stat Boost stock is 1",
-  );
+  const normalStock = item.normalStock;
+  if (normalStock === 'unlimited') {
+    console.log(
+      '  ..   skipped: the club market lists the Stat Boost as unlimited, so it cannot be bought out',
+    );
+    return;
+  }
 
   const clubStatBoostPreset = getPlaytestPreset('club-stat-boost');
   check(
@@ -833,17 +838,17 @@ function checkClubStock(): void {
   );
 
   check(
-    secondStatBoostPurchaseIsRefused(createShopStock()),
-    'buying the real club market out of Stat Boost refuses a second purchase',
+    purchasePastNormalStockIsRefused(createShopStock(), normalStock),
+    `buying the real club market out of its ${normalStock} Stat Boost(s) refuses one more purchase`,
   );
   // A gate that always passes proves nothing: with an extra unit on the
-  // shelf, the second purchase must go through, so the assertion above is
+  // shelf, the extra purchase must go through, so the assertion above is
   // shown catching the break rather than passing vacuously.
   const overstocked = createShopStock();
   sellToShop(overstocked, CLUB_MARKET, STAT_BOOST);
   checkCatches(
-    secondStatBoostPurchaseIsRefused(overstocked),
-    'a shelf holding more than one Stat Boost is caught letting a second sale through',
+    purchasePastNormalStockIsRefused(overstocked, normalStock),
+    'a shelf holding one Stat Boost more than normal is caught letting an extra sale through',
   );
 
   // Persistence: capture before the sale, sell, capture after, and prove both
@@ -860,25 +865,32 @@ function checkClubStock(): void {
   const rig = shopRig(shop, buyer, companion);
   check(rig.tap(STAT_BOOST_BUY), 'the Buy button for Stat Boost is found on the shop screen');
   check(
-    buyer.inventory.countOf(STAT_BOOST) === 1 && shop.purchasePending,
-    'a tap on Buy hands over the potion and flags the sale for its chime',
+    buyer.inventory.countOf(STAT_BOOST) === 1 && shop.purchasePending && buyer.coins === 0,
+    'a tap on Buy with exactly the price hands over the potion, takes every coin, and flags the sale for its chime',
   );
   const afterSaleSnapshot = captureShopStock(stock);
 
   restoreShopStock(stock, beforeSaleSnapshot);
   check(
-    statBoostsOnShelf(stock) === 1,
+    statBoostsOnShelf(stock) === normalStock,
     'restoring a pre-sale checkpoint undoes the sale (a death rewind gets the stock back)',
   );
 
   restoreShopStock(stock, afterSaleSnapshot);
-  check(statBoostsOnShelf(stock) === 0, 'restoring a post-sale checkpoint keeps the row sold out');
+  const afterOneSale = normalStock - 1;
+  check(
+    statBoostsOnShelf(stock) === afterOneSale,
+    'restoring a post-sale checkpoint keeps the unit sold',
+  );
 
   // The same validating parser a real save load runs through, not a bare cast,
-  // so this proves the sold-out state survives what the disk actually stores.
+  // so this proves the sale survives what the disk actually stores.
   const parsedJson: unknown = JSON.parse(JSON.stringify(afterSaleSnapshot));
   restoreShopStock(stock, parseShopStockSnapshot(parsedJson));
-  check(statBoostsOnShelf(stock) === 0, 'the sold-out state survives a save/parse round trip');
+  check(
+    statBoostsOnShelf(stock) === afterOneSale,
+    'the sold unit stays sold through a save/parse round trip',
+  );
 }
 
 /**

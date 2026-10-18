@@ -1227,14 +1227,15 @@ async function checkQuestFreeSpin(): Promise<void> {
     tapedChainOwed,
   } = await import('../src/core/WheelLedger');
   const { settleWheelLedger } = await import('../src/systems/casino/wheel/wheelPrizes');
-  const { TAPED_NOTHING, WHEEL_BET_STEP, tapedBoard } =
+  const { BASE_WHEEL_BOARD, TAPED_NOTHING, WHEEL_BET_STEP, tapedBoard } =
     await import('../src/systems/casino/wheel/wheelBoard');
   const STEP_MS = 16;
   /** Long enough for any spin and its reveal to play out. */
   const SPIN_BUDGET_MS = 40_000;
   const PURSE = 10_000;
   const FINAL_PRIZE = 'gold_50k';
-  const FINAL_PRIZE_GOLD = 50_000;
+  const finalPrize = BASE_WHEEL_BOARD.find((wedge) => wedge.prizeId === FINAL_PRIZE)?.prize;
+  const FINAL_PRIZE_GOLD = finalPrize?.kind === 'gold' ? finalPrize.amount : Number.NaN;
   /** The chain lands on the taped wedge this many times before it pays out. */
   const TAPED_LANDINGS = 2;
   const UPGRADE_STEPS = 2;

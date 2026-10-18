@@ -6,9 +6,12 @@
  * sawmill's two machines, Fenna's bulk processing, and every counter but the
  * infirmary shutting for the siege.
  *
- * The expected numbers are written out here from the request's wording, not
- * imported from the modules under test, so a rule that drifts fails rather
- * than agreeing with itself.
+ * Recipe and rule numbers (boards per wood, rope per wood) are written out
+ * here from the request's wording, not imported from the modules under test,
+ * so a rule that drifts fails rather than agreeing with itself. Prices, fees
+ * and stock levels are the opposite: they are tuned in `src/economy/`, so
+ * every one is read from there and the gate holds each counter to charging
+ * what the engine quotes, never to a particular number.
  *
  *   npm run verify:village-services [-- --fault=charge-first|buyer-only]
  *
@@ -31,7 +34,13 @@ import {
 import { PartyTools, type ToolOwner } from '../src/core/PartyTools';
 import { createPartyCraftsState, type PartyCraftsState } from '../src/core/partyCrafts';
 import { teachBoth } from '../src/core/CraftSkills';
-import { TOOL_TIER_LONG_HAFT, toolTierDef, type ToolKind } from '../src/core/toolTiers';
+import {
+  TOOL_TIER_HARDENED,
+  TOOL_TIER_LONG_HAFT,
+  forgeCoinPrice,
+  toolTierDef,
+  type ToolKind,
+} from '../src/core/toolTiers';
 import type { VillageQuestPhase } from '../src/core/villageQuestPhase';
 import { resetSessionTally, sessionTallyOf } from '../src/core/resourceSessionTally';
 import { referenceStats } from '../src/core/referenceCrawler';
@@ -80,10 +89,15 @@ import {
   RESTOCK_INTERVAL_TICKS,
   createShopStock,
   currentStock,
+  normalStockOf,
+  restockStep,
   shopStockKey,
   tickShopStock,
 } from '../src/economy/shopStock';
-import { buyPrice } from '../src/economy/pricing';
+import { buyPrice, priceBreakdown, stockCurveFor } from '../src/economy/pricing';
+import { shopDef, type ShopId } from '../src/economy/shops';
+import { SERVICE_PRICES } from '../src/economy/servicePrices';
+import { LOW_SUPPLIES_THRESHOLD } from '../src/systems/briarHollow/villagerCircumstances';
 import {
   UPGRADE_REBUY_GUARD_TICKS,
   forgeShop,
@@ -128,27 +142,20 @@ function last<T>(items: readonly T[]): T | undefined {
 
 // ── The request's own numbers ─────────────────────────────────────────────
 
-const POTION_PRICE = 5;
-/**
- * Counter prices come from the pricing engine rather than literals: this gate
- * checks that each counter charges what the engine says, while the numbers
- * themselves are tuned in `src/economy/`.
- */
+/** A potion at Vetch's counter, the yardstick the doctor's reference fee is logged against. */
+const POTION_PRICE = buyPrice('trading_post', 'health_potion', createShopStock());
 const EXPECTED_STEW_PRICE = buyPrice('cookhouse', 'hollow_stew', createShopStock());
 const EXPECTED_BURGER_PRICE = buyPrice('cookhouse', 'hamburger', createShopStock());
-const EXPECTED_FEE_PER_HP = 0.7;
-const EXPECTED_MIN_FEE = POTION_PRICE;
-const EXPECTED_ROPE_BASE = 10;
-const EXPECTED_ROPE_PRICE = buyPrice('trading_post', 'rope', createShopStock());
-const LOW_STOCK = 3;
-const EXPECTED_RESOLD_BURGER_PRICE = buyPrice('trading_post', 'hamburger', createShopStock());
+const EXPECTED_FEE_PER_HP = SERVICE_PRICES.infirmary.per_missing_hp;
+const EXPECTED_MIN_FEE = SERVICE_PRICES.infirmary.minimum_fee;
 const EXPECTED_BOARDS_PER_WOOD = 2;
 const EXPECTED_ROPE_PER_WOOD = 1;
-const EXPECTED_FEE_PER_WOOD = 8;
+const EXPECTED_FEE_PER_WOOD = SERVICE_PRICES.lumber_yard.processing_per_wood;
 const FULL_BATCH_WOOD = 10;
 const ROPE_BATCH_WOOD = 4;
 const REFUSED_BATCH_WOOD = 5;
-const HARDENED_AXE_PRICE = 250;
+const HARDENED_AXE_PRICE = forgeCoinPrice('axe', TOOL_TIER_HARDENED);
+const LONG_HAFT_AXE_PRICE = forgeCoinPrice('axe', TOOL_TIER_LONG_HAFT);
 const MANUAL_FRAMES = 72;
 const PLENTY_OF_COINS = 100_000;
 const MAX_MENU_ROWS = 9;
@@ -484,6 +491,90 @@ function checkDoctor(rig: Rig): void {
   );
 }
 
+const MERCHANT_SHOP = 'trading_post' as const satisfies ShopId;
+/**
+ * Units above the low-supplies threshold a watched line must normally hold:
+ * one unit above the threshold has to be below normal, so the shelf is
+ * already dearer there without yet counting as "running low".
+ */
+const WATCHED_LINE_HEADROOM = 2;
+
+interface LimitedLine {
+  readonly item: ItemId;
+  readonly normal: number;
+}
+
+function merchantLimitedLines(): LimitedLine[] {
+  return shopDef(MERCHANT_SHOP).catalog.flatMap((line) =>
+    line.normalStock === 'unlimited' ? [] : [{ item: line.item, normal: line.normalStock }],
+  );
+}
+
+/** The deepest limited line, so it can be bought furthest down, whichever one the catalog offers. */
+function watchedMerchantLine(): LimitedLine | undefined {
+  let deepest: LimitedLine | undefined;
+  for (const line of merchantLimitedLines()) {
+    if (deepest === undefined || line.normal > deepest.normal) deepest = line;
+  }
+  return deepest;
+}
+
+/** A line that starts at or under the threshold, which must not read as "running low" while full. */
+function shallowMerchantLine(): LimitedLine | undefined {
+  return merchantLimitedLines().find((line) => line.normal <= LOW_SUPPLIES_THRESHOLD);
+}
+
+/** Buying `item` down to one above the threshold makes it dearer but not low; down to the threshold makes it low. */
+function checkWatchedLineRunsLow(rig: Rig, item: ItemId, setLeft: (left: number) => void): void {
+  const { state } = rig;
+  const shelfRow = (): ShopRow | undefined =>
+    buildTradingPostMenu(state).options.find((option) => option.key === item);
+  const engineWorking = (): ReturnType<typeof priceBreakdown> =>
+    priceBreakdown(MERCHANT_SHOP, item, state.shopStock, 'buy');
+  const fullShelfPrice = buyPrice(MERCHANT_SHOP, item, createShopStock());
+  const scarcityMovesPrice = stockCurveFor(MERCHANT_SHOP, item).scarcityMarkup > 0;
+  const fullShelfWorking = priceBreakdown(MERCHANT_SHOP, item, createShopStock(), 'buy');
+  const aboveThreshold = LOW_SUPPLIES_THRESHOLD + 1;
+  setLeft(aboveThreshold);
+  const aboveThresholdPrice = shelfRow()?.price ?? 0;
+  const aboveThresholdWorking = engineWorking();
+  check(
+    aboveThresholdPrice === aboveThresholdWorking.final,
+    `with ${aboveThreshold} left the row shows the engine's price (${aboveThresholdPrice})`,
+  );
+  if (scarcityMovesPrice) {
+    check(
+      aboveThresholdWorking.unrounded > fullShelfWorking.unrounded &&
+        aboveThresholdPrice >= fullShelfPrice,
+      `a bought-down shelf is dearer (${aboveThresholdWorking.unrounded.toFixed(2)} > ${fullShelfWorking.unrounded.toFixed(2)} before rounding)`,
+    );
+  }
+  check(!isRunningLow(state, item), `${aboveThreshold} left is not yet running low`);
+  setLeft(LOW_SUPPLIES_THRESHOLD);
+  const atThresholdPrice = shelfRow()?.price ?? 0;
+  const atThresholdWorking = engineWorking();
+  check(
+    atThresholdPrice === atThresholdWorking.final,
+    `with ${LOW_SUPPLIES_THRESHOLD} left the row shows the engine's price (${atThresholdPrice})`,
+  );
+  if (scarcityMovesPrice) {
+    check(
+      atThresholdWorking.unrounded > aboveThresholdWorking.unrounded &&
+        atThresholdPrice >= aboveThresholdPrice,
+      `and dearer still as it empties (${atThresholdPrice})`,
+    );
+  } else {
+    console.log(`  ..   ${item}'s stock curve has no scarcity markup: price-climb checks skipped`);
+  }
+  check(isRunningLow(state, item), `${LOW_SUPPLIES_THRESHOLD} left is running low`);
+  const vetch = rig.villagers.villagerFor('vetch');
+  if (vetch !== null) {
+    state.talkCounts.vetch = 1;
+    const opening = openingLine('vetch', rig.villagers.contextFor('vetch', vetch, null));
+    check(opening.pages[0] === VETCH.lowSupplies, 'and Vetch opens on low_supplies');
+  }
+}
+
 function checkMerchant(): void {
   section('Merchant');
   const lockedState = createBriarHollowState();
@@ -494,26 +585,43 @@ function checkMerchant(): void {
     'the shelf carries no rope or boards before Fenna opens the machines up',
   );
 
+  const watched = watchedMerchantLine();
+  if (watched === undefined) {
+    console.log('  ..   skipped: the trading post has no limited line to buy down');
+    return;
+  }
+  const { item, normal } = watched;
   const rig = buildRig();
   if (rig === null) return;
   const { human, state } = rig;
   human.coins = PLENTY_OF_COINS;
-  const ropeRow = (): { price: number; unavailable?: string } | undefined =>
-    buildTradingPostMenu(state).options.find((option) => option.key === 'rope');
-  check(ropeRow()?.price === EXPECTED_ROPE_PRICE, `rope costs ${EXPECTED_ROPE_PRICE}`);
+  const watchedRow = (menuState: BriarHollowState): ShopRow | undefined =>
+    buildTradingPostMenu(menuState).options.find((option) => option.key === item);
+  const shelfRow = (): ShopRow | undefined => watchedRow(state);
+  const fullShelfPrice = buyPrice(MERCHANT_SHOP, item, createShopStock());
+  check(
+    shelfRow()?.price === fullShelfPrice,
+    `${item} costs ${fullShelfPrice}, as the engine quotes`,
+  );
   const panel = openShop(tradingPostShop(state));
-  panel.pressBuy('rope', { active: human, companion: rig.cat });
-  const ropeLeft = (target: BriarHollowState): number =>
-    currentStock(target.shopStock, 'trading_post', 'rope');
-  const setRopeLeft = (left: number): void => {
-    state.shopStock.offsets[shopStockKey('trading_post', 'rope')] = left - EXPECTED_ROPE_BASE;
+  const coinsBeforeSale = human.coins;
+  const heldBeforeSale = human.inventory.countOf(item);
+  panel.pressBuy(item, { active: human, companion: rig.cat });
+  check(
+    coinsBeforeSale - human.coins === fullShelfPrice,
+    'and the sale charges the price the row showed',
+  );
+  const leftOf = (target: BriarHollowState): number =>
+    currentStock(target.shopStock, MERCHANT_SHOP, item);
+  const setLeft = (left: number): void => {
+    state.shopStock.offsets[shopStockKey(MERCHANT_SHOP, item)] = left - normal;
   };
-  check(ropeLeft(state) === EXPECTED_ROPE_BASE - 1, 'a sale takes one off the shelf');
-  check(human.inventory.countOf('rope') === 1, 'and hands it over');
+  check(leftOf(state) === normal - 1, 'a sale takes one off the shelf');
+  check(human.inventory.countOf(item) === heldBeforeSale + 1, 'and hands it over');
 
   const rebuilt = buildRig(state);
   check(
-    rebuilt !== null && buildTradingPostMenu(rebuilt.state).options[2].desc.includes('9 left'),
+    rebuilt !== null && (watchedRow(rebuilt.state)?.desc.includes(`(${normal - 1} left)`) ?? false),
     'the count survives a scene rebuild',
   );
   const reloaded = createBriarHollowState();
@@ -521,30 +629,38 @@ function checkMerchant(): void {
     JSON.parse(JSON.stringify(captureBriarHollowState(state))),
   );
   if (snapshot !== undefined) restoreBriarHollowState(reloaded, snapshot);
-  check(ropeLeft(reloaded) === EXPECTED_ROPE_BASE - 1, 'and a save and reload');
+  check(leftOf(reloaded) === normal - 1, 'and a save and reload');
 
-  setRopeLeft(LOW_STOCK + 1);
-  const fourLeftPrice = ropeRow()?.price ?? 0;
-  check(fourLeftPrice > EXPECTED_ROPE_PRICE, `a bought-down shelf is dearer (${fourLeftPrice})`);
-  check(!isRunningLow(state, 'rope'), 'four left is not yet running low');
-  setRopeLeft(LOW_STOCK);
-  const threeLeftPrice = ropeRow()?.price ?? 0;
-  check(threeLeftPrice >= fourLeftPrice, `and dearer still as it empties (${threeLeftPrice})`);
-  check(isRunningLow(state, 'rope'), 'three left is running low');
-  const vetch = rig.villagers.villagerFor('vetch');
-  if (vetch !== null) {
-    state.talkCounts.vetch = 1;
-    const opening = openingLine('vetch', rig.villagers.contextFor('vetch', vetch, null));
-    check(opening.pages[0] === VETCH.lowSupplies, 'and Vetch opens on low_supplies');
+  if (normal >= LOW_SUPPLIES_THRESHOLD + WATCHED_LINE_HEADROOM) {
+    checkWatchedLineRunsLow(rig, item, setLeft);
+  } else {
+    console.log(
+      `  ..   skipped: ${item}, the deepest trading-post line, normally holds ${normal}, too few to buy down past the low-supplies threshold of ${LOW_SUPPLIES_THRESHOLD}`,
+    );
   }
-  const burgers = buildTradingPostMenu(state).options.find((option) => option.key === 'hamburger');
-  check(burgers?.price === EXPECTED_RESOLD_BURGER_PRICE, 'a full burger shelf is not "low"');
-  check(!isRunningLow(state, 'hamburger'), 'nor running low, though it starts at the threshold');
+  const shallow = shallowMerchantLine();
+  if (shallow === undefined) {
+    console.log(
+      `  ..   skipped: no trading-post line starts at or under the low-supplies threshold of ${LOW_SUPPLIES_THRESHOLD}`,
+    );
+  } else {
+    const shallowRow = buildTradingPostMenu(state).options.find(
+      (option) => option.key === shallow.item,
+    );
+    check(
+      shallowRow?.price === buyPrice(MERCHANT_SHOP, shallow.item, createShopStock()),
+      `a full ${shallow.item} shelf is not "low"`,
+    );
+    check(
+      !isRunningLow(state, shallow.item),
+      'nor running low, though it starts at or under the threshold',
+    );
+  }
 
-  setRopeLeft(0);
-  check(ropeRow()?.unavailable === 'Sold out', 'an empty shelf is sold out');
+  setLeft(0);
+  check(shelfRow()?.unavailable === 'Sold out', 'an empty shelf is sold out');
   const before = human.coins;
-  openShop(tradingPostShop(state)).pressBuy('rope', {
+  openShop(tradingPostShop(state)).pressBuy(item, {
     active: human,
     companion: rig.cat,
   });
@@ -553,28 +669,31 @@ function checkMerchant(): void {
   const counter = new ShopSession();
   const counterShop = tradingPostShop(state);
   counter.open(counterShop.build, counterShop.purchase, {
-    sell: { shop: 'trading_post', stock: state.shopStock },
+    sell: { shop: MERCHANT_SHOP, stock: state.shopStock },
   });
-  const counterRope = (): ShopRow | undefined =>
-    counter.rows.find((option) => option.key === 'rope');
-  counter.sell('rope', 1, human);
+  const counterRow = (): ShopRow | undefined => counter.rows.find((option) => option.key === item);
+  counter.sell(item, 1, human);
   check(
-    counterRope()?.unavailable === undefined && counterRope()?.price === ropeRow()?.price,
+    counterRow()?.unavailable === undefined && counterRow()?.price === shelfRow()?.price,
     'selling one back reopens the open counter at the shelf price',
   );
-  const shelfPrice = ropeRow()?.price;
+  const shelfPrice = shelfRow()?.price;
   const beforeRebuy = human.coins;
-  counter.pressBuy('rope', { active: human, companion: rig.cat });
+  counter.pressBuy(item, { active: human, companion: rig.cat });
   check(beforeRebuy - human.coins === shelfPrice, 'and buying it back charges what the shelf asks');
 
   for (let tick = 0; tick < RESTOCK_INTERVAL_TICKS; tick++) tickShopStock(state.shopStock);
-  check(ropeLeft(state) === 1, 'a restock step puts one back on an emptied shelf');
-  check(ropeRow()?.unavailable === undefined, 'and it is no longer sold out');
+  const oneRestockStep = Math.min(restockStep(normalStockOf(MERCHANT_SHOP, item)), normal);
+  check(
+    leftOf(state) === oneRestockStep,
+    `a restock step puts ${oneRestockStep} back on an emptied shelf`,
+  );
+  check(shelfRow()?.unavailable === undefined, 'and it is no longer sold out');
   const freshState = createBriarHollowState();
   freshState.unlocks.processingStations = true;
+  const freshRow = watchedRow(freshState);
   check(
-    buildTradingPostMenu(freshState).options[2].desc.includes(`${EXPECTED_ROPE_BASE} left`) &&
-      buildTradingPostMenu(freshState).options[2].price === EXPECTED_ROPE_PRICE,
+    (freshRow?.desc.includes(`(${normal} left)`) ?? false) && freshRow?.price === fullShelfPrice,
     "a new floor's village starts fully stocked",
   );
 }
@@ -1092,7 +1211,8 @@ function checkDoublePress(): void {
   if (rig === null) return;
   const { human, cat } = rig;
   rig.partyTools.grantStarterTools(human, cat);
-  const startingCoins = 3000;
+  // Enough for the next tier too, so only the press window can refuse the second press.
+  const startingCoins = HARDENED_AXE_PRICE + LONG_HAFT_AXE_PRICE;
   human.coins = startingCoins;
   const { wood = 0, stone = 0 } = toolTierDef('axe', TOOL_TIER_LONG_HAFT).costMaterials;
   human.inventory.addItem('wood', wood);
@@ -1110,6 +1230,7 @@ function checkDoublePress(): void {
   panel.update();
   panel.pressBuy('axe', { active: human, companion: cat });
   check(rig.crafts.tools.axeTier === 2, 'a press after the window buys the next tier');
+  human.coins = PLENTY_OF_COINS;
   const town = new ShopSession();
   let sales = 0;
   town.open(

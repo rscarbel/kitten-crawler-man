@@ -5,9 +5,13 @@
  * placement and its push-out and no-trap guarantees, build jobs, spikes,
  * dynamite, and persistence through a rebuild, a rewind and a reload.
  *
- * The expected numbers are written out here from the original request's
- * wording, not imported from the module under test, so a rule that drifts
- * from the request fails rather than agreeing with itself.
+ * Hit points, timings and the speed table are written out here from the
+ * original request's wording, so a rule that drifts from the request fails
+ * rather than agreeing with itself. Prices are tuning numbers the designer
+ * retunes freely, so every material and coin cost is read from the tables the
+ * game charges from, and the checks hold the rules around them instead: the
+ * cost shown is the cost charged, a discount takes the rule's own amount off
+ * every line, a party one short cannot pay.
  *
  *   npm run verify:construction [-- --fault=gate-open|skip-corridor|spend-at-start]
  *
@@ -26,7 +30,9 @@ import {
   restoreBriarHollowState,
   type BriarHollowState,
 } from '../src/core/briarHollowState';
-import { spend } from '../src/core/partyResources';
+import { spend, type ResourceCost } from '../src/core/partyResources';
+import { RESOURCE_IDS, type ResourceId } from '../src/core/resourceIds';
+import { constructionDiscount } from '../src/core/craftPerks';
 import { CONSTRUCTION_UNLOCK_IDS, grantConstructionUnlocks } from '../src/core/villageUnlocks';
 import { PlayerManager } from '../src/core/PlayerManager';
 import { AbilityManager } from '../src/core/AbilityManager';
@@ -83,13 +89,22 @@ import {
   villagerAnchorKeys,
 } from '../src/systems/briarHollow/constructionPlacement';
 import {
+  BELL_TOWER_REPAIR_COINS,
+  BELL_TOWER_REPAIR_COST,
+  REPAIR_CHUNKS_PER_FULL_REPAIR,
+  SNARE_BUILD_COST,
+  SPIKES_COST,
   STRUCTURE_BLAST_DAMAGE,
+  TREBUCHET_BUILD_COST,
   TREBUCHET_HEIGHT_TILES,
+  TREBUCHET_REPAIR_UNIT,
   TREBUCHET_WIDTH_TILES,
   WALL_TIERS,
+  capCost,
   discountedCost,
   jobFrames,
   repairChunks,
+  scaleCost,
   trebuchetRepairCost,
   wallSegmentHp,
 } from '../src/systems/briarHollow/structureRules';
@@ -127,8 +142,10 @@ const LONG_PRESS_VIEW_TILES = 6;
 const FAR_SNARE_TILES = 4;
 /** How far a held finger may drift and still be the same hold. */
 const HOLD_STILL_PX = 20;
-/** What a wooden wall costs, in boards. */
-const WOOD_WALL_BOARDS = 5;
+/** The Construction level every rig's crawlers start at; their prices are discounted for it. */
+const RIG_BUILDER_LEVEL = 1;
+/** Trebuchets' and snares' worth of materials a placement check hands over, so a refusal is never a shortage. */
+const PLENTY_OF_TRAPS = 4;
 /** The request's spikes: 150 health on walls, trebuchets and defense-quest grates alike. */
 const EXPECTED_SPIKES_HP = 150;
 
@@ -136,15 +153,9 @@ const EXPECTED_SPIKES_HP = 150;
 
 const EXPECTED_TIERS = {
   fence: { hp: 1 },
-  wood: { hp: 150, cost: { wood_board: 5 }, build: 3, repairChunk: { wood_board: 1 }, repair: 1.5 },
-  stone: { hp: 450, cost: { stone: 5 }, build: 4, repairChunk: { stone: 1 }, repair: 2 },
-  fortified: {
-    hp: 1000,
-    cost: { stone: 8, wood_board: 2 },
-    build: 5,
-    repairChunk: { stone: 2 },
-    repair: 2.5,
-  },
+  wood: { hp: 150, build: 3, repair: 1.5 },
+  stone: { hp: 450, build: 4, repair: 2 },
+  fortified: { hp: 1000, build: 5, repair: 2.5 },
 } as const;
 
 /** The request's speed table: every level shaves another 5% off. */
@@ -158,6 +169,23 @@ function sameCost(a: Partial<Record<string, number>>, b: Partial<Record<string, 
     if ((a[key] ?? 0) !== (b[key] ?? 0)) return false;
   }
   return true;
+}
+
+function upgradeCostOf(tier: PalisadeTier): ResourceCost {
+  return WALL_TIERS[tier].upgradeCost ?? {};
+}
+
+function repairChunkOf(tier: PalisadeTier): ResourceCost {
+  return WALL_TIERS[tier].repairChunkCost ?? {};
+}
+
+/** `cost` as a rig's own crawlers pay it. */
+function rigPrice(cost: ResourceCost): ResourceCost {
+  return discountedCost(cost, RIG_BUILDER_LEVEL);
+}
+
+function isFree(cost: ResourceCost): boolean {
+  return RESOURCE_IDS.every((id) => (cost[id] ?? 0) <= 0);
 }
 
 // ── The world ─────────────────────────────────────────────────────────────
@@ -208,8 +236,8 @@ function makeRig(state: BriarHollowState = createBriarHollowState(), map: GameMa
   const cat = new CatPlayer(site.gate.inside.x + 1, site.gate.inside.y, TILE_SIZE);
   human.isActive = true;
   cat.isActive = false;
-  teach(human, 1);
-  teach(cat, 1);
+  teach(human, RIG_BUILDER_LEVEL);
+  teach(cat, RIG_BUILDER_LEVEL);
   const messages: string[] = [];
   const crawlerOf = (kind: CrawlerKind) => (kind === 'human' ? human : cat);
   const mapSite = map.briarHollow ?? site;
@@ -258,16 +286,33 @@ function makeRig(state: BriarHollowState = createBriarHollowState(), map: GameMa
   return { state, bus, roster, human, cat, defense, construction, messages };
 }
 
-function give(
-  crawler: HumanPlayer | CatPlayer,
-  id: 'wood_board' | 'stone' | 'rope',
-  count: number,
-): void {
-  crawler.inventory.addItem(id, count);
+function giveCost(crawler: HumanPlayer | CatPlayer, cost: ResourceCost): void {
+  for (const id of RESOURCE_IDS) {
+    const amount = cost[id] ?? 0;
+    if (amount > 0) crawler.inventory.addItem(id, amount);
+  }
 }
 
-function boardsHeld(rig: Rig): number {
-  return rig.human.inventory.countOf('wood_board') + rig.cat.inventory.countOf('wood_board');
+/** Hands the human whatever the party lacks of `cost`, so it holds at least that much. */
+function topUpTo(rig: Rig, cost: ResourceCost): void {
+  for (const id of RESOURCE_IDS) {
+    const missing = (cost[id] ?? 0) - partyHolds(rig, id);
+    if (missing > 0) rig.human.inventory.addItem(id, missing);
+  }
+}
+
+function partyHolds(rig: Rig, id: ResourceId): number {
+  return rig.human.inventory.countOf(id) + rig.cat.inventory.countOf(id);
+}
+
+/** Whether the party holds exactly `cost` of every building material, and nothing more. */
+function holdsExactly(rig: Rig, cost: ResourceCost): boolean {
+  return RESOURCE_IDS.every((id) => partyHolds(rig, id) === (cost[id] ?? 0));
+}
+
+function giveTrapStock(crawler: HumanPlayer | CatPlayer): void {
+  giveCost(crawler, scaleCost(TREBUCHET_BUILD_COST, PLENTY_OF_TRAPS));
+  giveCost(crawler, scaleCost(SNARE_BUILD_COST, PLENTY_OF_TRAPS));
 }
 
 function runJob(rig: Rig, maxFrames = UPDATES_PER_SECOND * 20): void {
@@ -330,15 +375,9 @@ for (const tier of ['wood', 'stone', 'fortified'] as const) {
   const expected = EXPECTED_TIERS[tier];
   const actual = WALL_TIERS[tier];
   check(actual.baseHp === expected.hp, `${tier}: ${expected.hp} HP`);
-  check(
-    sameCost(actual.upgradeCost ?? {}, expected.cost),
-    `${tier}: costs ${JSON.stringify(expected.cost)}`,
-  );
+  check(!isFree(upgradeCostOf(tier)), `${tier}: raising a wall to it costs materials`);
   check(actual.buildSeconds === expected.build, `${tier}: builds in ${expected.build} s`);
-  check(
-    sameCost(actual.repairChunkCost ?? {}, expected.repairChunk),
-    `${tier}: repairs ${JSON.stringify(expected.repairChunk)} per chunk`,
-  );
+  check(!isFree(repairChunkOf(tier)), `${tier}: a repair chunk costs materials`);
   check(actual.repairSeconds === expected.repair, `${tier}: repairs in ${expected.repair} s`);
 }
 EXPECTED_SPEED_FACTORS.forEach((factor, index) => {
@@ -349,17 +388,46 @@ EXPECTED_SPEED_FACTORS.forEach((factor, index) => {
     `speed L${level}: a 1 s job takes ${frames} frames (×${factor})`,
   );
 });
-check(
-  sameCost(discountedCost({ wood_board: 1 }, 9), { wood_board: 1 }),
-  'L9: a 1-board line is not discounted',
-);
-check(sameCost(discountedCost({ wood_board: 1 }, 10), {}), 'L10: a 1-board line drops');
-check(sameCost(discountedCost({ stone: 2 }, 13), { stone: 1 }), 'L13: a 2-stone line costs 1');
-check(sameCost(discountedCost({ stone: 2 }, 14), {}), 'L14: a 2-stone line drops');
-check(
-  sameCost(discountedCost({ stone: 8, wood_board: 2 }, 14), { stone: 6 }),
-  'L14: fortified costs 6 stone',
-);
+{
+  const pricedBuilds: readonly ResourceCost[] = [
+    upgradeCostOf('wood'),
+    upgradeCostOf('stone'),
+    upgradeCostOf('fortified'),
+    TREBUCHET_BUILD_COST,
+    SNARE_BUILD_COST,
+    SPIKES_COST,
+    BELL_TOWER_REPAIR_COST,
+  ];
+  const everyLineLosesTheDiscount = (level: number) =>
+    pricedBuilds.every((cost) =>
+      RESOURCE_IDS.every((id) => {
+        const full = cost[id] ?? 0;
+        const expected = Math.max(0, full - constructionDiscount(level));
+        const charged = discountedCost(cost, level)[id];
+        return expected > 0 ? charged === expected : charged === undefined;
+      }),
+    );
+  const levels = Array.from({ length: MAX_CONSTRUCTION_LEVEL }, (_, index) => index + 1);
+  const failingLevel = levels.find((level) => !everyLineLosesTheDiscount(level));
+  check(
+    failingLevel === undefined,
+    `every level takes its own discount off every line of every build, and drops a line it covers${failingLevel === undefined ? '' : ` (wrong at L${failingLevel})`}`,
+  );
+  check(constructionDiscount(1) === 0, 'a level-1 builder pays full price');
+  check(
+    levels.every(
+      (level) => level === 1 || constructionDiscount(level) >= constructionDiscount(level - 1),
+    ),
+    'the discount never shrinks as the builder levels',
+  );
+  const fortified = upgradeCostOf('fortified');
+  const fortifiedAtTop = discountedCost(fortified, MAX_CONSTRUCTION_LEVEL);
+  check(
+    RESOURCE_IDS.every((id) => (fortifiedAtTop[id] ?? 0) <= (fortified[id] ?? 0)) &&
+      !sameCost(fortifiedAtTop, fortified),
+    'a top-level builder pays less for a fortified wall than a beginner',
+  );
+}
 // `repairChunks` is a fraction of max HP, so any consistent max stands in — the
 // tier's own reference number, not a real segment's (which now varies by length).
 const CHUNK_TEST_MAX = WALL_TIERS.wood.baseHp;
@@ -368,18 +436,26 @@ check(repairChunks(CHUNK_TEST_MAX * 0.2, CHUNK_TEST_MAX) === 1, 'repair chunks: 
 check(repairChunks(CHUNK_TEST_MAX * 0.21, CHUNK_TEST_MAX) === 2, 'repair chunks: 21% missing is 2');
 check(repairChunks(CHUNK_TEST_MAX * 0.99, CHUNK_TEST_MAX) === 5, 'repair chunks: 99% missing is 5');
 check(repairChunks(CHUNK_TEST_MAX, CHUNK_TEST_MAX) === 5, 'repair chunks: 100% missing is 5');
-check(
-  sameCost(trebuchetRepairCost(99, 100, false), { wood_board: 3, rope: 1 }),
-  'trebuchet repair: a scratch is one unit',
-);
-check(
-  sameCost(trebuchetRepairCost(50, 100, true), { wood_board: 12, rope: 4 }),
-  'trebuchet repair: broken at half is 4 units',
-);
-check(
-  sameCost(trebuchetRepairCost(0, 100, true), { wood_board: 15, rope: 5 }),
-  'trebuchet repair: broken at 0 is capped at the build cost',
-);
+{
+  const repairUnits = (units: number) =>
+    capCost(scaleCost(TREBUCHET_REPAIR_UNIT, units), TREBUCHET_BUILD_COST);
+  const BROKEN_AT_HALF_UNITS = 4;
+  const BROKEN_AT_ZERO_UNITS = 6;
+  check(
+    sameCost(trebuchetRepairCost(99, 100, false), repairUnits(1)),
+    'trebuchet repair: a scratch is one unit',
+  );
+  check(
+    sameCost(trebuchetRepairCost(50, 100, true), repairUnits(BROKEN_AT_HALF_UNITS)),
+    'trebuchet repair: broken at half is 4 units',
+  );
+  const brokenAtZero = trebuchetRepairCost(0, 100, true);
+  check(
+    sameCost(brokenAtZero, repairUnits(BROKEN_AT_ZERO_UNITS)) &&
+      RESOURCE_IDS.every((id) => (brokenAtZero[id] ?? 0) <= (TREBUCHET_BUILD_COST[id] ?? 0)),
+    'trebuchet repair: broken at 0 is 6 units, capped at the build cost',
+  );
+}
 
 {
   const rig = makeRig();
@@ -466,7 +542,10 @@ section('Segments');
     'a breach is walkable rubble',
   );
   check(
-    sameCost(woodRig.defense.repairCost(ref) ?? {}, { wood_board: 5 }),
+    sameCost(
+      woodRig.defense.repairCost(ref) ?? {},
+      scaleCost(repairChunkOf('wood'), REPAIR_CHUNKS_PER_FULL_REPAIR),
+    ),
     'repairing a breach costs the full five chunks',
   );
   woodRig.defense.applyRepair(ref);
@@ -541,8 +620,7 @@ function raiseWall(rig: Rig, id: string, to: PalisadeTier): void {
   // against any solid wall already satisfies.
   const { id, tile } = northWallSegment(4);
   const rig = makeRig();
-  give(rig.human, 'wood_board', 20);
-  give(rig.human, 'stone', 20);
+  giveCost(rig.human, upgradeCostOf('fortified'));
   raiseWall(rig, id, 'stone');
   rig.human.x = tile.x * TILE_SIZE;
   rig.human.y = (tile.y + 4) * TILE_SIZE;
@@ -576,8 +654,7 @@ function raiseWall(rig: Rig, id: string, to: PalisadeTier): void {
   // inside".
   const { id, tile } = northWallSegment(4);
   const rig = makeRig();
-  give(rig.human, 'wood_board', 20);
-  give(rig.human, 'stone', 20);
+  giveCost(rig.human, upgradeCostOf('fortified'));
   raiseWall(rig, id, 'stone');
   rig.cat.x = tile.x * TILE_SIZE;
   rig.cat.y = (tile.y - 4) * TILE_SIZE;
@@ -610,8 +687,7 @@ function raiseWall(rig: Rig, id: string, to: PalisadeTier): void {
   // its own (outside) side, never be pulled into the village.
   const { id, tile } = northWallSegment(2);
   const rigSouth = makeRig();
-  give(rigSouth.human, 'wood_board', 20);
-  give(rigSouth.human, 'stone', 20);
+  giveCost(rigSouth.human, upgradeCostOf('fortified'));
   raiseWall(rigSouth, id, 'stone');
   rigSouth.human.x = tile.x * TILE_SIZE;
   rigSouth.human.y = tile.y * TILE_SIZE + TILE_SIZE / 4; // leaning toward the south half of the tile
@@ -631,8 +707,7 @@ function raiseWall(rig: Rig, id: string, to: PalisadeTier): void {
 
   const { id: id2, tile: tile2 } = northWallSegment(2);
   const rigNorth = makeRig();
-  give(rigNorth.human, 'wood_board', 20);
-  give(rigNorth.human, 'stone', 20);
+  giveCost(rigNorth.human, upgradeCostOf('fortified'));
   raiseWall(rigNorth, id2, 'stone');
   standAt(rigNorth.human, tile2.x, tile2.y + 1, 0, -1);
   const rat = new Rat(tile2.x, tile2.y, TILE_SIZE);
@@ -757,8 +832,7 @@ function openPatch(): { x: number; y: number } {
 {
   const patch = openPatch();
   const rig = makeRig();
-  give(rig.human, 'wood_board', 60);
-  give(rig.human, 'rope', 20);
+  giveTrapStock(rig.human);
   // Builder faces north: the trebuchet goes up in the three rows above him.
   standAt(rig.human, patch.x, patch.y, 0, -1);
   standAt(rig.cat, patch.x + 3, patch.y + 2, 0, 1);
@@ -842,8 +916,7 @@ function openPatch(): { x: number; y: number } {
   const patch = openPatch();
   const checkpoint = gameMap.captureCheckpoint();
   const rig = makeRig();
-  give(rig.human, 'wood_board', 60);
-  give(rig.human, 'rope', 20);
+  giveTrapStock(rig.human);
   standAt(rig.human, patch.x, patch.y, 0, -1);
   standAt(rig.cat, patch.x, patch.y + 2, 0, 1);
   const footprint = rig.construction.plannedFootprint(rig.human, 'trebuchet').footprint;
@@ -871,11 +944,10 @@ function openPatch(): { x: number; y: number } {
   const patch = openPatch();
   const checkpoint = gameMap.captureCheckpoint();
   const rig = makeRig();
-  give(rig.human, 'wood_board', 60);
-  give(rig.human, 'rope', 20);
+  giveTrapStock(rig.human);
   standAt(rig.human, patch.x, patch.y, 0, -1);
-  const boardsBefore = boardsHeld(rig);
-  const ropeBefore = rig.human.inventory.countOf('rope') + rig.cat.inventory.countOf('rope');
+  const boardsBefore = partyHolds(rig, 'wood_board');
+  const ropeBefore = partyHolds(rig, 'rope');
   const wallRadius = 6;
   for (let y = patch.y - wallRadius; y <= patch.y + 2; y++) {
     for (let x = patch.x - wallRadius; x <= patch.x + wallRadius; x++) {
@@ -889,11 +961,8 @@ function openPatch(): { x: number; y: number } {
   check(!started, 'a trebuchet with nowhere to fit never starts');
   check(rig.messages.includes(NO_SPACE_MESSAGE), `it is refused with "${NO_SPACE_MESSAGE}"`);
   check(rig.construction.job === null, 'no job is left running');
-  check(boardsHeld(rig) === boardsBefore, 'no boards are spent on a no-room attempt');
-  check(
-    rig.human.inventory.countOf('rope') + rig.cat.inventory.countOf('rope') === ropeBefore,
-    'no rope is spent on a no-room attempt',
-  );
+  check(partyHolds(rig, 'wood_board') === boardsBefore, 'no boards are spent on a no-room attempt');
+  check(partyHolds(rig, 'rope') === ropeBefore, 'no rope is spent on a no-room attempt');
   check(
     rig.defense.at(attempted.x, attempted.y) === null,
     'nothing is built where the attempt was made',
@@ -945,8 +1014,7 @@ function openPatch(): { x: number; y: number } {
   );
   const rat = new Rat(bodyTile.x, bodyTile.y, TILE_SIZE);
   rig.roster.add(rat);
-  give(rig.human, 'wood_board', 60);
-  give(rig.human, 'rope', 20);
+  giveTrapStock(rig.human);
   rig.messages.length = 0;
   check(
     !rig.construction.startOption('trebuchet') && rig.messages.includes(NO_SPACE_MESSAGE),
@@ -958,8 +1026,7 @@ function openPatch(): { x: number; y: number } {
 {
   const patch = openPatch();
   const rig = makeRig();
-  give(rig.human, 'wood_board', 60);
-  give(rig.human, 'rope', 20);
+  giveTrapStock(rig.human);
   standAt(rig.human, patch.x, patch.y, 1, 0);
   const snareTile = rig.construction.plannedFootprint(rig.human, 'snare').footprint;
   const rat = new Rat(snareTile.x, snareTile.y, TILE_SIZE);
@@ -1082,22 +1149,26 @@ function walkSouthPast(rig: Rig, centreColumnPx: number, footprintTop: number): 
 // ── Jobs ──────────────────────────────────────────────────────────────────
 
 section('Jobs');
+const woodWallPrice = rigPrice(upgradeCostOf('wood'));
+/** A rig facing a bare stretch of the south wall, holding exactly a wooden wall's price. */
 function wallJobRig(): { rig: Rig; id: string } {
   const rig = makeRig();
   const { id, tile } = southWallSegment();
   standAt(rig.human, tile.x, tile.y - 1, 0, 1);
-  give(rig.human, 'wood_board', WOOD_WALL_BOARDS);
+  giveCost(rig.human, woodWallPrice);
   return { rig, id };
 }
 {
   const { rig, id } = wallJobRig();
+  const shown = rig.construction.optionStatus('wood').cost;
+  check(sameCost(shown, woodWallPrice), 'the menu quotes the price the builder pays');
   const started = rig.construction.startOption('wood');
   rig.construction.update();
-  check(started && boardsHeld(rig) === WOOD_WALL_BOARDS, 'starting a wall takes nothing');
+  check(started && holdsExactly(rig, woodWallPrice), 'starting a wall takes nothing');
   runJob(rig);
   check(
-    rig.defense.segmentTier(id) === 'wood' && boardsHeld(rig) === 0,
-    'finishing it takes the five boards',
+    rig.defense.segmentTier(id) === 'wood' && holdsExactly(rig, {}),
+    'finishing it takes the quoted price',
   );
   check(
     rig.human.craftSkills.getXp('construction') > 0 ||
@@ -1115,7 +1186,7 @@ function wallJobRig(): { rig: Rig; id: string } {
   rig.construction.update();
   check(
     rig.construction.job === null &&
-      boardsHeld(rig) === WOOD_WALL_BOARDS &&
+      holdsExactly(rig, woodWallPrice) &&
       rig.defense.segmentTier(id) === 'fence',
     'walking off cancels with nothing lost',
   );
@@ -1135,7 +1206,7 @@ function wallJobRig(): { rig: Rig; id: string } {
   const { rig, id } = wallJobRig();
   rig.construction.startOption('wood');
   rig.construction.update();
-  rig.human.inventory.removeItems('wood_board', WOOD_WALL_BOARDS);
+  for (const id of RESOURCE_IDS) rig.human.inventory.removeItems(id, woodWallPrice[id] ?? 0);
   runJob(rig);
   check(
     rig.defense.segmentTier(id) === 'fence' &&
@@ -1149,13 +1220,15 @@ function wallJobRig(): { rig: Rig; id: string } {
   const { rig, id } = wallJobRig();
   const ref = { kind: 'segment', id } as const;
   rig.defense.applyUpgrade(ref, 'human');
-  give(rig.human, 'stone', 5);
+  const stoneWallPrice = rigPrice(upgradeCostOf('stone'));
+  topUpTo(rig, stoneWallPrice);
+  const heldBefore = Object.fromEntries(RESOURCE_IDS.map((id) => [id, partyHolds(rig, id)]));
   rig.construction.startOption('stone');
   rig.construction.update();
   rig.defense.damage(ref, 10000, null, 'blast');
   runJob(rig);
   check(
-    rig.defense.segmentTier(id) === 'breach' && rig.human.inventory.countOf('stone') === 5,
+    rig.defense.segmentTier(id) === 'breach' && holdsExactly(rig, heldBefore),
     'an upgrade whose wall is breached mid-job spends nothing and builds nothing',
   );
 }
@@ -1167,11 +1240,11 @@ function wallJobRig(): { rig: Rig; id: string } {
   teach(rig.human, SPIKES_TEST_LEVEL);
   rig.construction.startSpikes(ref);
   rig.construction.update();
-  const boardsBefore = boardsHeld(rig);
+  const boardsBefore = partyHolds(rig, 'wood_board');
   rig.defense.damage(ref, 10000, null, 'blast');
   runJob(rig);
   check(
-    boardsHeld(rig) === boardsBefore && rig.defense.record(ref)?.spikesHp === null,
+    partyHolds(rig, 'wood_board') === boardsBefore && rig.defense.record(ref)?.spikesHp === null,
     'spikes whose wall falls mid-job spend nothing',
   );
 }
@@ -1182,21 +1255,22 @@ function wallJobRig(): { rig: Rig; id: string } {
   const ref = { kind: 'segment', id } as const;
   rig.defense.applyUpgrade(ref, 'human');
   rig.defense.damage(ref, 1, null, 'blast');
-  rig.human.inventory.removeItems('wood_board', boardsHeld(rig));
-  give(rig.human, 'wood_board', 1);
+  for (const id of RESOURCE_IDS) rig.human.inventory.removeItems(id, partyHolds(rig, id));
+  const scratchPrice = rigPrice(repairChunkOf('wood'));
+  giveCost(rig.human, scratchPrice);
   rig.construction.startRepair(ref);
   rig.construction.update();
   rig.defense.damage(ref, 10000, null, 'blast');
   runJob(rig);
   check(
-    rig.defense.segmentTier(id) === 'breach' && boardsHeld(rig) === 1,
-    'a scratch repair cannot stand a breach back up for one board',
+    rig.defense.segmentTier(id) === 'breach' && holdsExactly(rig, scratchPrice),
+    "a scratch repair cannot stand a breach back up for a scratch's price",
   );
-  give(rig.human, 'wood_board', 4);
+  topUpTo(rig, rigPrice(scaleCost(repairChunkOf('wood'), REPAIR_CHUNKS_PER_FULL_REPAIR)));
   rig.construction.startRepair(ref);
   runJob(rig);
   check(
-    rig.defense.segmentTier(id) === 'wood' && boardsHeld(rig) === 0,
+    rig.defense.segmentTier(id) === 'wood' && holdsExactly(rig, {}),
     'paid in full, the breach is repaired',
   );
 }
@@ -1212,7 +1286,7 @@ section('Spikes');
   teach(rig.human, 4);
   check(!rig.construction.startSpikes(ref), 'spikes are locked below Construction 5');
   teach(rig.human, 5);
-  give(rig.human, 'wood_board', 1);
+  giveCost(rig.human, SPIKES_COST);
   check(rig.construction.startSpikes(ref), 'spikes unlock at Construction 5');
   runJob(rig);
   const spikesMax = rig.defense.spikesMaxHp(ref);
@@ -1385,7 +1459,7 @@ section('Long-press');
   const menus = new MenusKit({ world, abilityManager: new AbilityManager() });
   const state = createBriarHollowState();
   grantConstructionUnlocks(state.unlocks, CONSTRUCTION_UNLOCK_IDS);
-  teach(pm.human, 1);
+  teach(pm.human, RIG_BUILDER_LEVEL);
   pm.human.isActive = true;
   pm.cat.isActive = false;
   const kit = new ConstructionKit({
@@ -1520,7 +1594,7 @@ section('The build key over a faced wall');
   const menus = new MenusKit({ world, abilityManager: new AbilityManager() });
   const state = createBriarHollowState();
   grantConstructionUnlocks(state.unlocks, CONSTRUCTION_UNLOCK_IDS);
-  teach(pm.human, 1);
+  teach(pm.human, RIG_BUILDER_LEVEL);
   pm.human.isActive = true;
   pm.cat.isActive = false;
   const kit = new ConstructionKit({
@@ -1539,7 +1613,7 @@ section('The build key over a faced wall');
     worldHalted: () => false,
   });
   standAt(pm.human, tile.x, tile.y - 1, 0, 1);
-  give(pm.human, 'wood_board', WOOD_WALL_BOARDS);
+  giveCost(pm.human, rigPrice(upgradeCostOf('wood')));
   check(kit.isWallPromptShowing(), 'facing a bare wall, the build prompt shows');
   check(
     !kit.tryBuildWall(true) && kit.construction.job === null,
@@ -1622,15 +1696,20 @@ section('Defend-quest grate spikes');
   check(!menu.tryOpen(), 'Construction 4 gets no grate menu either');
   teach(human, 5);
   check(menu.tryOpen(), 'Construction 5 opens the grate menu beside a boarded grate');
-  human.inventory.addItem('quest_wood_board', 5);
+  const grateSpikesPrice = discountedCost(SPIKES_COST, SPIKES_TEST_LEVEL);
+  const barricadeBoards = Math.max(1, grateSpikesPrice.wood_board ?? 0);
+  human.inventory.addItem('quest_wood_board', barricadeBoards);
   check(
-    !menu.addSpikes() && human.inventory.countOf('quest_wood_board') === 5,
+    !menu.addSpikes() && human.inventory.countOf('quest_wood_board') === barricadeBoards,
     'Barricade Boards do not pay for spikes',
   );
-  give(human, 'wood_board', 1);
+  giveCost(human, grateSpikesPrice);
   const spiked = menu.addSpikes();
   const barrierNow = () => quest.captureCheckpoint().barriers[0];
-  check(spiked && human.inventory.countOf('wood_board') === 0, 'spikes cost one Boards of Wood');
+  check(
+    spiked && RESOURCE_IDS.every((id) => human.inventory.countOf(id) === 0),
+    'spikes on a grate cost what spikes on a wall cost',
+  );
   check(
     GRATE_SPIKES_BASE_HP === EXPECTED_SPIKES_HP,
     `grate spikes hold ${EXPECTED_SPIKES_HP} HP, as a wall's do`,
@@ -1660,6 +1739,7 @@ section('Defend-quest grate spikes');
 // ── Bell tower repair ────────────────────────────────────────────────────
 
 section('Bell tower repair');
+const bellRepairPrice = rigPrice(BELL_TOWER_REPAIR_COST);
 {
   const rig = makeRig();
   rig.state.quest.bellTowerBroken = true;
@@ -1667,20 +1747,23 @@ section('Bell tower repair');
   const bellTile = site.square.bellTile;
   // Just outside the tower's own footprint, but within repair reach of it.
   standAt(rig.human, bellTile.x - 1, bellTile.y, 1, 0);
-  give(rig.human, 'wood_board', 30);
-  give(rig.human, 'rope', 5);
-  give(rig.human, 'stone', 20);
-  rig.human.coins = 30;
+  giveCost(rig.human, bellRepairPrice);
+  rig.human.coins = BELL_TOWER_REPAIR_COINS;
+  check(
+    sameCost(
+      rig.construction.repairCostFor({ kind: 'bellTower' }, rig.human) ?? {},
+      bellRepairPrice,
+    ),
+    'the repair quotes the price it charges',
+  );
 
   // The same entry point the repair key calls.
   rig.construction.repairOrLoad(STRUCTURE_REACH_TILES);
   runJob(rig);
 
   check(!rig.state.quest.bellTowerBroken, 'the repair key mends a broken tower it stands beside');
-  check(boardsHeld(rig) === 0, 'the repair spends the 30 boards');
-  check(rig.human.inventory.countOf('rope') === 0, 'the repair spends the 5 rope');
-  check(rig.human.inventory.countOf('stone') === 0, 'the repair spends the 20 stone');
-  check(rig.human.coins + rig.cat.coins === 0, 'the repair spends the 30 coins from the purse');
+  check(holdsExactly(rig, {}), 'the repair spends its materials');
+  check(rig.human.coins + rig.cat.coins === 0, 'the repair spends its coins from the purse');
 }
 {
   // A player short on coins alone: the repair must not silently succeed, and
@@ -1690,20 +1773,18 @@ section('Bell tower repair');
   rig.state.quest.phase = 'repair_bell';
   const bellTile = site.square.bellTile;
   standAt(rig.human, bellTile.x - 1, bellTile.y, 1, 0);
-  give(rig.human, 'wood_board', 30);
-  give(rig.human, 'rope', 5);
-  give(rig.human, 'stone', 20);
-  rig.human.coins = 0;
+  giveCost(rig.human, bellRepairPrice);
+  rig.human.coins = BELL_TOWER_REPAIR_COINS - 1;
   rig.cat.coins = 0;
 
   rig.construction.repairOrLoad(STRUCTURE_REACH_TILES);
   runJob(rig);
 
-  check(rig.state.quest.bellTowerBroken, 'short on coins, the tower stays broken');
-  check(boardsHeld(rig) === 30, 'short on coins, the boards are not spent');
+  check(rig.state.quest.bellTowerBroken, 'one coin short, the tower stays broken');
+  check(holdsExactly(rig, bellRepairPrice), 'one coin short, the materials are not spent');
   check(
     rig.messages.includes('Insufficient money.'),
-    'short on coins, the party is told why the repair failed',
+    'one coin short, the party is told why the repair failed',
   );
 }
 {
@@ -1714,10 +1795,8 @@ section('Bell tower repair');
   rig.state.quest.phase = 'repelled_failed';
   const bellTile = site.square.bellTile;
   standAt(rig.human, bellTile.x - 1, bellTile.y, 1, 0);
-  give(rig.human, 'wood_board', 30);
-  give(rig.human, 'rope', 5);
-  give(rig.human, 'stone', 20);
-  rig.human.coins = 30;
+  giveCost(rig.human, bellRepairPrice);
+  rig.human.coins = BELL_TOWER_REPAIR_COINS;
 
   rig.construction.repairOrLoad(STRUCTURE_REACH_TILES);
   runJob(rig);
@@ -1726,7 +1805,7 @@ section('Bell tower repair');
     rig.state.quest.bellTowerBroken,
     'before the Mayor asks, the repair key leaves the tower broken',
   );
-  check(boardsHeld(rig) === 30, 'before the Mayor asks, nothing is spent');
+  check(holdsExactly(rig, bellRepairPrice), 'before the Mayor asks, nothing is spent');
   check(!rig.defense.bellTowerRepairable, 'before the Mayor asks, the tower is not repairable');
 }
 

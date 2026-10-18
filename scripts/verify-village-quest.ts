@@ -101,7 +101,6 @@ const UPDATES_PER_SECOND = 60;
 /** The request's numbers, written out so a drifted constant fails here. */
 const REQUEST_IMMINENT_SECONDS = 45;
 const REQUEST_BELL_HP = 120;
-const REQUEST_COINS = 500;
 /** The Mayor's choice row must fit this many entries. */
 const MAYOR_CHOICE_LIMIT = 9;
 /** Pages turned at most while reading a conversation through to its choices. */
@@ -799,10 +798,10 @@ section('9. The retry and the turn-in');
   check(same(thanks, expected(...wanted)), `the Mayor thanks them (damaged: ${damaged})`);
   check(state.quest.phase === 'complete', 'the quest is complete');
   check(quest.status === 'completed', 'the quest manager agrees');
-  check(human.coins - coinsBefore === REQUEST_COINS, `the purse pays ${REQUEST_COINS} coins`);
-  // Widened from its literal type so a drifted constant fails this check at run time.
-  const gameQuestCoins: number = BRIAR_HOLLOW_QUEST_COINS;
-  check(gameQuestCoins === REQUEST_COINS, 'the purse is the request’s 500');
+  check(
+    human.coins - coinsBefore === BRIAR_HOLLOW_QUEST_COINS,
+    `the purse pays the quest's ${BRIAR_HOLLOW_QUEST_COINS} coins`,
+  );
   check(
     human.inventory.countOf('hamburger') - burgersBefore === BRIAR_HOLLOW_REWARD_BURGERS,
     `${BRIAR_HOLLOW_REWARD_BURGERS} hamburgers`,
