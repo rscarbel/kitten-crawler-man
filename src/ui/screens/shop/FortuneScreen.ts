@@ -17,6 +17,7 @@ import { skinsFor } from '../../theme/skins';
 import { lineHeightOf, measureTextHeight, text } from '../../widgets/text';
 import { coinPurse, measureCoinPurse } from './shopParts';
 import type { ShopParty } from './shopSession';
+import { SERVICE_PRICES } from '../../../economy/servicePrices';
 
 /** Who is doing the reading: the panel's title, the price, and the deck they read from. */
 export interface FortuneReader {
@@ -28,22 +29,19 @@ export interface FortuneReader {
   readonly draw: (context: TownDialogContext) => string;
 }
 
-const PLAZA_SEER_COST = 3;
-const HEDGE_WITCH_COST = 2;
-
 /** The plaza pays for the theatre. */
 export const PLAZA_SEER: FortuneReader = {
   name: 'Madame Voss, Seer',
-  cost: PLAZA_SEER_COST,
-  invitation: `Cross my palm with silver — ${PLAZA_SEER_COST} coins a reading.`,
+  cost: SERVICE_PRICES.fortune.plaza_seer,
+  invitation: `Cross my palm with silver — ${SERVICE_PRICES.fortune.plaza_seer} coins a reading.`,
   draw: drawFortune,
 };
 
 /** Hilda reads at her own table for less, and does not own a deck. */
 export const HEDGE_WITCH: FortuneReader = {
   name: 'Old Hilda',
-  cost: HEDGE_WITCH_COST,
-  invitation: `${HEDGE_WITCH_COST} coins, and I will tell you what I actually see.`,
+  cost: SERVICE_PRICES.fortune.hedge_witch,
+  invitation: `${SERVICE_PRICES.fortune.hedge_witch} coins, and I will tell you what I actually see.`,
   draw: drawHildaReading,
 };
 

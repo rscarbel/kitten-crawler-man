@@ -16,25 +16,17 @@ import type { Player, StatName } from '../Player';
 import type { ShopMenu, ShopRow, ShopPurchaseHandler } from '../ui/screens/shop/shopSession';
 import type { ResidentHost } from './townResidents';
 import { rotateLine } from './townServiceUtil';
+import { SERVICE_PRICES } from '../economy/servicePrices';
 
 /** Stat points one bought session is worth. */
 const DRILL_STAT_POINTS = 1;
 
-/**
- * What the *n*th point costs, indexed by how many the crawler already has. Each
- * one dearer than the last: the cap is meant to be felt as diminishing returns
- * on the way up rather than hit as a wall at the top, and a flat price would
- * make the fourth point the same purchase as the first.
- */
-const FIRST_POINT_PRICE = 35;
-const SECOND_POINT_PRICE = 75;
-const THIRD_POINT_PRICE = 150;
-const FOURTH_POINT_PRICE = 275;
+/** What the *n*th point costs, indexed by how many the crawler already has. */
 const DRILL_PRICES: ReadonlyArray<number> = [
-  FIRST_POINT_PRICE,
-  SECOND_POINT_PRICE,
-  THIRD_POINT_PRICE,
-  FOURTH_POINT_PRICE,
+  SERVICE_PRICES.drill_yard.first_point,
+  SERVICE_PRICES.drill_yard.second_point,
+  SERVICE_PRICES.drill_yard.third_point,
+  SERVICE_PRICES.drill_yard.fourth_point,
 ];
 
 /**
@@ -114,7 +106,7 @@ export function buildDrillYardMenu(
         // A capped row carries the last rung's price only because the field is
         // required; the panel draws `unavailable` in the price's place, so this
         // number is never shown once the yard is spent.
-        price: price ?? FOURTH_POINT_PRICE,
+        price: price ?? SERVICE_PRICES.drill_yard.fourth_point,
         desc: row.desc,
       };
       if (price === null) option.unavailable = DRILL_EXHAUSTED;

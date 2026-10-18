@@ -13,15 +13,17 @@ import type { BlueprintsQuestPhase } from '../core/blueprintsQuestPhase';
 import type { VillageBuildingId } from '../map/overworld/briarHollowLayout';
 import type { TownBuildingName } from '../map/town/townPlan';
 import { TOOL_TIER_BASIC, TOOL_TIER_LONG_HAFT } from '../core/toolTiers';
+import { buyPrice } from '../economy/pricing';
+import { createShopStock } from '../economy/shopStock';
 
 /**
  * Named starting points for playtesting, each one a floor plus the party that
  * should arrive on it. `npm run playtest -- <id>` opens the game straight into
  * one; nothing here is reachable from a shipped build.
  *
- * Deliberately type-only in its imports so the npm script can import this table
- * under Node to validate an id — every value import in this tree eventually
- * reaches browser-only rendering code.
+ * Its value imports are kept to pure data and pricing modules so the npm
+ * script can import this table under Node to validate an id; most of the
+ * rest of the tree eventually reaches browser-only rendering code.
  */
 
 /** Where a preset drops the party, resolved once the floor's map exists. */
@@ -638,20 +640,17 @@ const ANCHOR_STONE: PlaytestPreset = {
 
 /**
  * Each crawler's coins pared down to exactly one Stat Boost's price. What
- * actually stops a second purchase is the club market's shared stock, not
- * either wallet — the sold-out row shows up after one sale no matter which
+ * limits a second purchase is the club market's shared stock (normal stock 1,
+ * restocking one unit every `RESTOCK_INTERVAL_SECONDS` of game time), not
+ * either wallet — the row reads sold out after one sale no matter which
  * crawler is holding the controls — so this only keeps a fat purse from
  * masking the point of the preset: a run where the row is worth watching go
- * from "1000 coins" to sold out, not a shopping trip that happens to include it.
- *
- * Kept a literal rather than importing the club's own price constant: this
- * file's imports stay type-only (see the module doc comment) so the id
- * validator can run under Node without pulling in browser rendering code.
+ * from its price to sold out, not a shopping trip that happens to include it.
  */
-const CLUB_STAT_BOOST_PRICE = 1000;
+const CLUB_STAT_BOOST_PRICE = buyPrice('club_market', 'stat_boost_potion', createShopStock());
 
 /**
- * The town with just enough gold for the club market's one-per-run Stat
+ * The town with just enough gold for the club market's single-unit Stat
  * Boost, so buying it out and watching the row go sold out doesn't first
  * require a supply run.
  */

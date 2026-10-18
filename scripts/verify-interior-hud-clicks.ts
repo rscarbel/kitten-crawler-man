@@ -50,7 +50,7 @@ const { HumanPlayer } = await import('../src/creatures/HumanPlayer.js');
 const { CatPlayer } = await import('../src/creatures/CatPlayer.js');
 const { snapPlayer } = await import('../src/core/PlayerSnapshot.js');
 const { teachBoth } = await import('../src/core/CraftSkills.js');
-const { createMarketStock } = await import('../src/systems/market/MarketStock.js');
+const { createShopStock } = await import('../src/economy/shopStock.js');
 const { createBriarHollowState } = await import('../src/core/briarHollowState.js');
 const { BuildingInteriorScene } = await import('../src/scenes/BuildingInteriorScene.js');
 const { PointerInput, PRIMARY_BUTTON } = await import('../src/ui/core/pointer.js');
@@ -157,7 +157,7 @@ async function enter(
     new InputManager(),
     new SceneManager(),
     () => undefined,
-    createMarketStock(),
+    createShopStock(),
     undefined,
     undefined,
     undefined,

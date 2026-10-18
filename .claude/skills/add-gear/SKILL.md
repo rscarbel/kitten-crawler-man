@@ -144,7 +144,7 @@ dev_plain_sword: {
     reachTiles: HUMAN_ARM_REACH_TILES,
     heldVisual: 'plain_arming_sword',
   },
-  // name, stackable: false, canHotlist: true, baseValue, unsellable, description
+  // name, stackable: false, canHotlist: true, unsellable, description
 },
 ```
 

@@ -107,7 +107,7 @@ const { TutorialController } = await import('../src/systems/TutorialController.j
 const { HumanPlayer } = await import('../src/creatures/HumanPlayer.js');
 const { CatPlayer } = await import('../src/creatures/CatPlayer.js');
 const { snapPlayer } = await import('../src/core/PlayerSnapshot.js');
-const { createMarketStock } = await import('../src/systems/market/MarketStock.js');
+const { createShopStock } = await import('../src/economy/shopStock.js');
 const { environmentPaintDepth, environmentPaintedStepCount } =
   await import('../src/map/environmentArtCache.js');
 const { tileChunkBakeCount } = await import('../src/map/TileRenderer.js');
@@ -190,7 +190,7 @@ function buildScene(): Scene {
         input,
         sceneManager,
         () => undefined,
-        createMarketStock(),
+        createShopStock(),
         undefined,
         undefined,
         audio,

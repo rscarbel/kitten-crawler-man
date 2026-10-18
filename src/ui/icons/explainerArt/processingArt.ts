@@ -16,10 +16,10 @@ import {
 import { villagePropSheetKey } from '../../../sprites/sheets/villageSheets';
 import {
   BOARDS_PER_WOOD,
-  FENNA_FEE_PER_WOOD,
   MANUAL_PROCESS_SECONDS,
   ROPE_PER_WOOD,
 } from '../../../systems/briarHollow/services/woodProcessing';
+import { SERVICE_PRICES } from '../../../economy/servicePrices';
 import { worldText } from '../../world/worldText';
 import type { Rect } from '../../core/geom';
 import { drawResourceIcon } from '../resourceIcons';
@@ -397,7 +397,12 @@ export function drawFennaPage(
 
   drawArrow(ctx, (woodX + coinX) / 2, centreY);
   drawCoin(ctx, coinX, centreY, frame);
-  drawLabel(ctx, `${FENNA_FEE_PER_WOOD} coins`, coinX, centreY + COIN_RADIUS + LABEL_GAP);
+  drawLabel(
+    ctx,
+    `${SERVICE_PRICES.lumber_yard.processing_per_wood} coins`,
+    coinX,
+    centreY + COIN_RADIUS + LABEL_GAP,
+  );
 
   drawArrow(ctx, (coinX + outX) / 2, centreY);
   const boardsY = centreY - FENNA_ICON_SIZE * FENNA_OUTPUT_ROW_GAP_ICONS;

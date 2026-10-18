@@ -6,7 +6,10 @@
  * thing the people who live there actually have — Brann has explosives because
  * he clears stumps, Marta has food because she is the reason the town eats, and
  * Wendell has a hayloft. They are priced against the plaza's versions so no
- * homestead becomes the strictly better place to buy anything.
+ * homestead becomes the strictly better place to buy anything; the goods live
+ * on `SHOPS.cartwright` and `SHOPS.millers_farm` (each price is the item's base
+ * in `ITEM_PRICES` times that shop's markup), the
+ * hayloft and the hot plate in `SERVICE_PRICES`.
  *
  * Pure data + effect application; the shop screen owns the UI and
  * `BuildingInteriorScene` owns the sounds and the interaction gating.
@@ -16,21 +19,14 @@ import type { Player } from '../Player';
 import type { ShopMenu, ShopRow, ShopPurchaseHandler } from '../ui/screens/shop/shopSession';
 import type { ResidentHost } from './townResidents';
 import { rotateLine } from './townServiceUtil';
+import { SERVICE_PRICES } from '../economy/servicePrices';
+import { SHOPS, type ShopId } from '../economy/shops';
+import type { ShopStock } from '../economy/shopStock';
+import { catalogLineRow, findCatalogLine, handOverCatalogLine } from './market/vendorMenu';
 
 // -- Cartwright's Workshop --------------------------------------------------
 
-/**
- * The General Store's price, matched rather than undercut. Brann's yard is the
- * long walk from the plaza, so the reason to come here is the bundle — a modest
- * discount for buying three at once, not a cheaper stick for anyone who wanders
- * in. An unlimited cheaper stick would simply retire the store's dynamite line.
- */
-const DYNAMITE_PRICE = 10;
-const DYNAMITE_BUNDLE_SIZE = 3;
-const DYNAMITE_BUNDLE_PRICE = 26;
-
-const DYNAMITE_KEY = 'dynamite';
-const DYNAMITE_BUNDLE_KEY = 'dynamite_bundle';
+const CARTWRIGHT_SHOP = 'cartwright' as const satisfies ShopId;
 
 const CARTWRIGHT_BARKS: ReadonlyArray<string> = [
   'Stumps, mostly. I am not going to pretend that is all you want it for.',
@@ -44,51 +40,35 @@ const CARTWRIGHT_LINES: ReadonlyArray<string> = [
   'Do not run with it. I have seen where that ends and I had to rebuild the fence.',
 ];
 
-export function buildCartwrightMenu(turn: number, host: ResidentHost | null): ShopMenu {
+export function buildCartwrightMenu(
+  turn: number,
+  host: ResidentHost | null,
+  stock: ShopStock,
+): ShopMenu {
   return {
     title: "Cartwright's Workshop",
     bark: host?.line ?? rotateLine(CARTWRIGHT_BARKS, turn),
     byline: host?.name,
-    options: [
-      {
-        key: DYNAMITE_KEY,
-        label: 'Stick of Dynamite',
-        price: DYNAMITE_PRICE,
-        desc: 'Goblin Dynamite, at yard prices',
-      },
-      {
-        key: DYNAMITE_BUNDLE_KEY,
-        label: 'Bundle of Three',
-        price: DYNAMITE_BUNDLE_PRICE,
-        desc: `${DYNAMITE_BUNDLE_SIZE} sticks, for people clearing something large`,
-      },
-    ],
+    options: SHOPS.cartwright.catalog.map((line) => catalogLineRow(CARTWRIGHT_SHOP, line, stock)),
   };
 }
 
-export function sellCartwrightGoods(turn: number): ShopPurchaseHandler {
+export function sellCartwrightGoods(turn: number, stock: ShopStock): ShopPurchaseHandler {
   return (option, buyer) => {
-    const sticks =
-      option.key === DYNAMITE_BUNDLE_KEY
-        ? DYNAMITE_BUNDLE_SIZE
-        : option.key === DYNAMITE_KEY
-          ? 1
-          : 0;
-    if (sticks === 0) return { ok: false, line: 'Brann shrugs at the bench.' };
-    buyer.inventory.addItem('goblin_dynamite', sticks);
+    const line = findCatalogLine(CARTWRIGHT_SHOP, option.key);
+    if (line === undefined || !handOverCatalogLine(CARTWRIGHT_SHOP, line, stock, buyer)) {
+      return { ok: false, line: 'Brann shrugs at the bench.' };
+    }
     return { ok: true, line: rotateLine(CARTWRIGHT_LINES, turn) };
   };
 }
 
 // -- Miller's Farm ----------------------------------------------------------
 
-/** Under the club bar's pour, because she bakes them rather than importing them. */
-const CRISP_PRICE = 20;
-const HOT_PLATE_PRICE = 6;
+const MILLERS_FARM_SHOP = 'millers_farm' as const satisfies ShopId;
 /** Fraction of max HP a plate off Marta's table puts back. */
 const HOT_PLATE_HEAL_FRACTION = 0.25;
 
-const CRISP_KEY = 'crisp';
 const HOT_PLATE_KEY = 'hot_plate';
 
 const MILLER_BARKS: ReadonlyArray<string> = [
@@ -103,11 +83,16 @@ const MILLER_LINES: ReadonlyArray<string> = [
   'Come back when you are hungry rather than when you are dying.',
 ];
 
-export function buildMillerMenu(buyer: Player, turn: number, host: ResidentHost | null): ShopMenu {
+export function buildMillerMenu(
+  buyer: Player,
+  turn: number,
+  host: ResidentHost | null,
+  stock: ShopStock,
+): ShopMenu {
   const plate: ShopRow = {
     key: HOT_PLATE_KEY,
     label: 'A Hot Plate',
-    price: HOT_PLATE_PRICE,
+    price: SERVICE_PRICES.millers_farm.hot_plate,
     desc: 'Bread, dripping and whatever is in the pot. Mends a little',
   };
   if (buyer.hp >= buyer.maxHp) plate.unavailable = 'Unhurt';
@@ -118,17 +103,12 @@ export function buildMillerMenu(buyer: Player, turn: number, host: ResidentHost 
     byline: host?.name,
     options: [
       plate,
-      {
-        key: CRISP_KEY,
-        label: 'Bag of Crisps',
-        price: CRISP_PRICE,
-        desc: 'Cooldown Crisps, off the tray rather than off the bar',
-      },
+      ...SHOPS.millers_farm.catalog.map((line) => catalogLineRow(MILLERS_FARM_SHOP, line, stock)),
     ],
   };
 }
 
-export function serveMillerGoods(turn: number): ShopPurchaseHandler {
+export function serveMillerGoods(turn: number, stock: ShopStock): ShopPurchaseHandler {
   return (option, buyer) => {
     if (option.key === HOT_PLATE_KEY) {
       // Re-checked rather than trusting the menu's `Unhurt`: the guard the
@@ -140,15 +120,16 @@ export function serveMillerGoods(turn: number): ShopPurchaseHandler {
       buyer.hp = Math.min(buyer.maxHp, healed);
       return { ok: true, line: rotateLine(MILLER_LINES, turn) };
     }
-    if (option.key !== CRISP_KEY) return { ok: false, line: 'Marta wipes her hands and waits.' };
-    buyer.inventory.addItem('cooldown_crisp', 1);
+    const line = findCatalogLine(MILLERS_FARM_SHOP, option.key);
+    if (line === undefined || !handOverCatalogLine(MILLERS_FARM_SHOP, line, stock, buyer)) {
+      return { ok: false, line: 'Marta wipes her hands and waits.' };
+    }
     return { ok: true, line: 'Straight off the tray. Do not let them go soft.' };
   };
 }
 
 // -- Plumbline Farm ---------------------------------------------------------
 
-const HAYLOFT_PRICE = 10;
 /** A loft is not an inn: it mends most of you, and it will not touch what ails you. */
 const HAYLOFT_HEAL_FRACTION = 0.6;
 
@@ -174,7 +155,7 @@ export function buildPlumblineFarmMenu(
   const loft: ShopRow = {
     key: HAYLOFT_KEY,
     label: 'An hour in the loft',
-    price: HAYLOFT_PRICE,
+    price: SERVICE_PRICES.plumbline_farm.hayloft,
     desc: 'Mends most of you both. Does not touch poison or drink',
   };
   if (party.every((member) => member.hp >= member.maxHp)) loft.unavailable = 'Unhurt';

@@ -160,7 +160,6 @@ function restored(snap: PlayerSnapshot): HumanPlayer {
     stackable: false,
     canHotlist: true,
     type: 'weapon',
-    baseValue: 80,
   };
   const oldSword: InventoryItem = {
     id: SWORD,
@@ -169,7 +168,6 @@ function restored(snap: PlayerSnapshot): HumanPlayer {
     stackable: false,
     canHotlist: true,
     type: 'weapon',
-    baseValue: 900,
   };
   const oldShaped = (slot: InventoryItem | null): InventoryItem | null => {
     if (slot?.id === SWORD) return oldSword;

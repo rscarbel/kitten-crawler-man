@@ -147,7 +147,7 @@ export function villagerContext(state: BriarHollowState): VillagerContext {
     },
     breachExists: false,
     woodenWallStanding: false,
-    lowestStock: null,
+    suppliesRunningLow: false,
     soldierStance: null,
     unlocks: state.unlocks,
   };

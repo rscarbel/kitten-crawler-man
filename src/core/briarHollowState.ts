@@ -11,6 +11,14 @@
  */
 
 import { isRecord } from './guards';
+import {
+  captureShopStock,
+  createShopStock,
+  parseShopStockSnapshot,
+  restoreShopStock,
+  type ShopStock,
+  type ShopStockSnapshot,
+} from '../economy/shopStock';
 import type { PalisadeTier } from '../map/tileTypes';
 import type { CrawlerKind } from './SkillManager';
 import { VILLAGE_QUEST_PHASE_ORDER, type VillageQuestPhase } from './villageQuestPhase';
@@ -333,16 +341,12 @@ export interface BriarHollowState {
   talkCounts: Record<VillagerId, number>;
   /** One-shot lines already spoken, e.g. `"wicker:wooden_wall_built"`. */
   onceFlags: string[];
-  merchantStock: Record<string, number>;
   /**
-   * Units of an item a village shop holds because the party sold it some, on
-   * top of whatever it always carries — Vetch's counter and Pipkin's kitchen
-   * both use this one record, keyed `${vendorId}:${itemId}` the same way
-   * `MarketStock.held` is, so a sale to one never touches the other's shelf.
-   * Fed straight into `ShopSystem`'s own pricing functions (`heldFor`,
-   * `addHeldStock`, `decayHeldStock`); see `src/systems/market/shopPricing.ts`.
+   * Vetch's counter and Pipkin's kitchen, apart from the town's shops: each
+   * floor's village has its own state, so a new floor's village opens with
+   * every shelf at normal stock.
    */
-  merchantHeld: Record<string, number>;
+  shopStock: ShopStock;
   /**
    * Every tree and rock anyone has worked, keyed by `tileKey`, so a door visit
    * never refills a half-chopped tree. Not part of {@link BriarHollowStateSnapshot}:
@@ -467,8 +471,7 @@ export function createBriarHollowState(): BriarHollowState {
     soldierOrders: [],
     talkCounts: emptyTalkCounts(),
     onceFlags: [],
-    merchantStock: {},
-    merchantHeld: {},
+    shopStock: createShopStock(),
     nodes: new Map(),
     villagers: createVillagerMemory(),
   };
@@ -480,7 +483,11 @@ export function createBriarHollowState(): BriarHollowState {
  * in `structures` were keyed against, so a save written under an older cut can
  * be told apart from one written under the current one.
  */
-export type BriarHollowStateSnapshot = Omit<BriarHollowState, 'nodes' | 'villagers'> & {
+export type BriarHollowStateSnapshot = Omit<
+  BriarHollowState,
+  'nodes' | 'villagers' | 'shopStock'
+> & {
+  shopStock: ShopStockSnapshot;
   segmentScheme: number;
 };
 
@@ -502,8 +509,7 @@ export function captureBriarHollowState(state: BriarHollowState): BriarHollowSta
     soldierOrders: state.soldierOrders.map(copySoldierOrder),
     talkCounts: { ...state.talkCounts },
     onceFlags: [...state.onceFlags],
-    merchantStock: { ...state.merchantStock },
-    merchantHeld: { ...state.merchantHeld },
+    shopStock: captureShopStock(state.shopStock),
     segmentScheme: PALISADE_SEGMENT_SCHEME_VERSION,
   };
 }
@@ -525,8 +531,7 @@ export function restoreBriarHollowState(
   target.soldierOrders = snapshot.soldierOrders.map(copySoldierOrder);
   target.talkCounts = { ...snapshot.talkCounts };
   target.onceFlags = [...snapshot.onceFlags];
-  target.merchantStock = { ...snapshot.merchantStock };
-  target.merchantHeld = { ...snapshot.merchantHeld };
+  restoreShopStock(target.shopStock, snapshot.shopStock);
 }
 
 function copyUnlocks(unlocks: VillageUnlocks): VillageUnlocks {
@@ -900,16 +905,6 @@ function parseOnceFlags(value: unknown): string[] {
   return value.filter(isString);
 }
 
-/** Shared by `merchantStock` and `merchantHeld` — both are plain non-negative counts keyed by string. */
-function parseNonNegativeRecord(value: unknown): Record<string, number> {
-  if (!isRecord(value)) return {};
-  const record: Record<string, number> = {};
-  for (const [key, count] of Object.entries(value)) {
-    if (isNumber(count)) record[key] = Math.max(0, count);
-  }
-  return record;
-}
-
 /**
  * Reads a saved {@link BriarHollowStateSnapshot} back from untrusted JSON.
  * Tolerant field-by-field, like `parseTownMemoryCheckpoint`: a missing or
@@ -956,10 +951,7 @@ export function parseBriarHollowStateSnapshot(
     soldierOrders,
     talkCounts: parseTalkCounts(value.talkCounts),
     onceFlags: parseOnceFlags(value.onceFlags),
-    merchantStock: parseNonNegativeRecord(value.merchantStock),
-    // Absent from a save written before village shops remembered what the
-    // party sold them; such a save simply starts every shelf at zero.
-    merchantHeld: parseNonNegativeRecord(value.merchantHeld),
+    shopStock: parseShopStockSnapshot(value.shopStock),
     segmentScheme: PALISADE_SEGMENT_SCHEME_VERSION,
   };
 }

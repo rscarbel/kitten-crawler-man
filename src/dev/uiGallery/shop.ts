@@ -9,16 +9,21 @@ import { createMercenaryRoster } from '../../core/MercenaryRoster';
 import { MERCENARY_TEMPLATES } from '../../core/mercenaryTemplates';
 import { CatPlayer } from '../../creatures/CatPlayer';
 import { HumanPlayer } from '../../creatures/HumanPlayer';
-import { TOOL_TIER_HARDENED, TOOL_TIER_LONG_HAFT, toolTierDef } from '../../core/toolTiers';
+import {
+  TOOL_TIER_HARDENED,
+  TOOL_TIER_LONG_HAFT,
+  forgeCoinPrice,
+  toolTierDef,
+} from '../../core/toolTiers';
 import { buildForgeMenu } from '../../systems/briarHollow/services/forge';
 import type { ServiceParty } from '../../systems/briarHollow/services/serviceContext';
-import { createMarketStock } from '../../systems/market/MarketStock';
-import { GENERAL_STORE_PRICING } from '../../systems/market/shopProfiles';
+import { buyFromShop, createShopStock, sellToShop, type ShopStock } from '../../economy/shopStock';
+import type { ShopId } from '../../economy/shops';
+import { buildApothecaryMenu, serveRemedy } from '../../systems/townApothecary';
 import { GATE_LOCKED_LABEL } from '../../systems/market/vendorMenu';
 import { ClubVipLoungeSystem } from '../../systems/ClubVipLoungeSystem';
 import { buildTattooMenu, inkTattoo } from '../../systems/townTattooParlor';
 import { MercenaryGuildSystem } from '../../systems/MercenaryGuildSystem';
-import { GENERAL_STORE_CONFIG } from '../../systems/ShopSystem';
 import { TRAVEL_DESTINATIONS } from '../../systems/travel/travelDestinations';
 import type { TownDialogContext } from '../../systems/townDialog';
 import type { Surface } from '../../ui/core/UiRoot';
@@ -50,6 +55,14 @@ const QUIET_CONTEXT: TownDialogContext = {
   quillNamed: false,
 };
 const CONTRACT_FLOOR = 'level3';
+const APOTHECARY_SHOP = 'apothecary' as const satisfies ShopId;
+/** Poultices bought off the apothecary's three-unit batch, so its row reads "Low stock". */
+const POULTICES_BOUGHT = 2;
+/** Tonics and boards the party has already sold her, so those rows read "Overstocked". */
+const TONICS_SOLD = 3;
+const BOARDS_SOLD = 4;
+/** Speed Fizz is a potion she does not stock, so its Sell row is a specialty and nothing else. */
+const APOTHECARY_EXTRA_STACK = { id: 'speed_fizz', qty: 2 } as const;
 /** The forge party holds this share of the long-haft tier's materials, so its Buy shows a material shortfall. */
 const FORGE_MATERIAL_SHARE = 0.5;
 
@@ -103,10 +116,9 @@ function stallMenu(): ShopMenu {
 
 function stallSession(): ShopSession {
   const session = new ShopSession();
-  const held = createMarketStock().held;
   session.open(stallMenu, (option) => ({ ok: true, line: `One ${option.label}, coming up.` }), {
     blockedLine: () => 'Coin first, friend.',
-    sell: { pricing: GENERAL_STORE_PRICING, heldStock: held, vendorId: 'tinker' },
+    sell: { shop: 'tinker', stock: createShopStock() },
   });
   return session;
 }
@@ -167,7 +179,7 @@ function forgeSession(): { session: ShopSession; party: ShopParty } {
   const human = new HumanPlayer(0, 0, TILE_SIZE);
   const cat = new CatPlayer(0, 0, TILE_SIZE);
   const axeNext = toolTierDef('axe', TOOL_TIER_LONG_HAFT);
-  human.coins = axeNext.costCoins;
+  human.coins = forgeCoinPrice(TOOL_TIER_LONG_HAFT);
   const { wood = 0, stone = 0 } = axeNext.costMaterials;
   human.inventory.addItem('wood', Math.floor(wood * FORGE_MATERIAL_SHARE));
   human.inventory.addItem('stone', stone);
@@ -181,17 +193,49 @@ function forgeSession(): { session: ShopSession; party: ShopParty } {
   return { session, party: { active: human, companion: cat } };
 }
 
+/**
+ * The apothecary's counter partway through a visit: poultices bought down,
+ * tonics and boards sold in, so both stock tags show, and a bag holding a
+ * potion she does not stock, so a Sell row shows only her specialty.
+ */
+function apothecarySession(): { session: ShopSession; party: ShopParty } {
+  const stock: ShopStock = createShopStock();
+  buyFromShop(stock, APOTHECARY_SHOP, 'health_potion', POULTICES_BOUGHT);
+  for (let sold = 0; sold < TONICS_SOLD; sold++) sellToShop(stock, APOTHECARY_SHOP, 'jugg_juice');
+  for (let sold = 0; sold < BOARDS_SOLD; sold++) sellToShop(stock, APOTHECARY_SHOP, 'wood_board');
+  const party = makeParty(FIXTURE_COINS);
+  party.active.inventory.addItem(APOTHECARY_EXTRA_STACK.id, APOTHECARY_EXTRA_STACK.qty);
+  const crawlers = [party.active, party.companion];
+  const session = new ShopSession();
+  session.open(() => buildApothecaryMenu(crawlers, stock, 0, null), serveRemedy(crawlers, stock), {
+    sell: { shop: APOTHECARY_SHOP, stock },
+  });
+  return { session, party };
+}
+
+function apothecarySellSession(): { session: ShopSession; party: ShopParty } {
+  const setup = apothecarySession();
+  setup.session.setMode('sell');
+  return setup;
+}
+
 /** One fixture holding a shop session and the screen over it. */
 function shopFixture(
   name: string,
   setup: () => { session: ShopSession; party: ShopParty },
   interact?: (rig: FixtureRig) => void,
+  showPriceBreakdowns = false,
 ): DialogFixture {
   return {
     name,
     surfaces: (shown) => {
       const { session, party } = setup();
-      const surface = shopScreenSurface({ id: `${name}-shop`, session, party: () => party });
+      const surface = shopScreenSurface({
+        id: `${name}-shop`,
+        session,
+        party: () => party,
+        showPriceBreakdowns: () => showPriceBreakdowns,
+      });
       return [gate(surface, shown)];
     },
     interact,
@@ -237,12 +281,26 @@ export const SHOP_FIXTURES: readonly DialogFixture[] = [
   shopFixture('general-store', () => {
     const session = new ShopSession();
     openStoreCounter(session, {
-      config: GENERAL_STORE_CONFIG,
-      stock: { stock: createMarketStock(), vendorId: 'general-store' },
+      shop: 'general_store',
+      stock: createShopStock(),
       onTraded: () => undefined,
     });
     return { session, party: makeParty(FIXTURE_COINS) };
   }),
+  shopFixture('stock-tags', apothecarySession),
+  shopFixture('stock-tags-sell', apothecarySellSession),
+  shopFixture('prices-breakdown', apothecarySession, undefined, true),
+  shopFixture(
+    'prices-breakdown-sell',
+    apothecarySellSession,
+    (rig) => {
+      rig.tap(
+        rig.need('prices-breakdown-sell-shop/prices-breakdown-sell-shop/sell-row-wood_board'),
+      );
+      rig.settle();
+    },
+    true,
+  ),
   shopFixture('town-service', () => {
     const session = new ShopSession();
     session.open(serviceMenu, () => ({ ok: true, line: 'The bell rings.' }));

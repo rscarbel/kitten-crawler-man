@@ -22,7 +22,6 @@ import type { Crawler, ServiceParty } from './serviceContext';
 
 export const BOARDS_PER_WOOD = 2;
 export const ROPE_PER_WOOD = 1;
-export const FENNA_FEE_PER_WOOD = 8;
 
 /** Seconds one wood takes at a machine by hand. */
 export const MANUAL_PROCESS_SECONDS = 1.2;

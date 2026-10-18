@@ -121,7 +121,6 @@ function syntheticArmor(
 ): InventoryItem {
   return {
     id,
-    baseValue: 0,
     name,
     quantity: 1,
     stackable: false,

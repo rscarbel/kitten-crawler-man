@@ -48,6 +48,7 @@ import { perfMonitor } from '../core/PerfMonitor';
 import { setFigureCacheStatsRecording } from '../sprites/figure/figureCacheStats';
 import { drawPerfOverlay } from './perfOverlay';
 import { drawDifficultyOverlay } from './difficultyOverlay';
+import { showPriceBreakdowns } from '../ui/screens/shop/priceBreakdowns';
 import { getPlaytestPreset } from './playtestPresets';
 import {
   fortifyBriarHollow,
@@ -308,6 +309,9 @@ export function devBootScene(
   }
   if (params.get('difficulty') !== null) {
     overlays.push(drawDifficultyOverlay);
+  }
+  if (params.get('prices') !== null) {
+    showPriceBreakdowns();
   }
   if (overlays.length > 0) {
     sceneManager.setFrameOverlay((ctx) => {

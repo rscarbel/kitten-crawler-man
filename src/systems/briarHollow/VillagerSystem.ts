@@ -49,6 +49,7 @@ import {
 } from '../../dialog/scripts/briarHollow';
 import { VILLAGER_SCRIPTS } from '../../dialog/villagerRegistry';
 import { VillageNavigator } from './villageNavigator';
+import { tradingPostRunningLow } from './services/tradingPost';
 import { Villager, facingFor } from './Villager';
 import {
   DEPOSIT_NOTICE_RADIUS_TILES,
@@ -631,7 +632,6 @@ export class VillagerSystem {
         segment.tier === 'fortified' ||
         (segment.formerTier !== undefined && segment.formerTier !== 'fence'),
     );
-    const stocks = Object.values(state.merchantStock);
     return {
       nowSeconds: memory.clockSeconds,
       quest: state.quest,
@@ -647,7 +647,7 @@ export class VillagerSystem {
       },
       breachExists: segments.some((segment) => segment.tier === 'breach'),
       woodenWallStanding: segments.some((segment) => segment.tier === 'wood'),
-      lowestStock: stocks.length === 0 ? null : Math.min(...stocks),
+      suppliesRunningLow: tradingPostRunningLow(state),
       soldierStance,
       unlocks: state.unlocks,
     };

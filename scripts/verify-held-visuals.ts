@@ -12,7 +12,8 @@
  * - a held visual built outside its archetype's ranges throws, naming the item
  *   and the range it broke;
  * - the proving weapons are named nowhere in the game but their own item
- *   definitions and icons, so no loot table, shop or quest can hand them out.
+ *   definitions, icons and price lines, so no loot table, shop or quest can
+ *   hand them out.
  */
 
 import { readdirSync, readFileSync, statSync } from 'node:fs';
@@ -108,10 +109,16 @@ check(
 );
 
 const PROVING_ITEM_IDS = ['dev_plain_sword', 'dev_spiked_club', 'dev_felling_axe'] as const;
-/** The only modules that may name a proving weapon: its definition and its icon. */
+/**
+ * The only modules that may name a proving weapon: its definition, its icon
+ * and its price line. The price table must list every item id to compile, and
+ * a price alone stocks nothing: a shop sells only what a catalog in
+ * `src/economy/shops.ts` names, and that file is still scanned.
+ */
 const PROVING_ITEM_HOMES: ReadonlySet<string> = new Set([
   'src/core/ItemDefs.ts',
   'src/ui/icons/itemIcons.ts',
+  'src/economy/itemPrices.ts',
 ]);
 
 function sourceFiles(dir: string): string[] {

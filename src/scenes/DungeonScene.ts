@@ -230,11 +230,12 @@ import type { CrawlerSignPlacement } from '../map/crawlerSigns';
 import { MarketSystem, type MarketBrowse } from '../systems/market/MarketSystem';
 import type { TownPropRenderable } from '../systems/townPropRenderable';
 import {
-  captureMarketStock,
-  createMarketStock,
-  restoreMarketStock,
-  type MarketStock,
-} from '../systems/market/MarketStock';
+  captureShopStock,
+  createShopStock,
+  restoreShopStock,
+  tickShopStock,
+  type ShopStock,
+} from '../economy/shopStock';
 import {
   buildCitizenConversation,
   citizenSpecies,
@@ -332,8 +333,6 @@ import {
   fromPersistedMurderMysteryQuestCheckpoint,
   toPersistedBountyCheckpoint,
   fromPersistedBountyCheckpoint,
-  toPersistedMarketStockCheckpoint,
-  fromPersistedMarketStockCheckpoint,
   type PersistedWorldState,
 } from '../core/PersistedWorldState';
 import { assertNoFieldsLeft } from '../core/guards';
@@ -785,8 +784,11 @@ export interface DungeonSceneOptions {
    * part-way through its questline.
    */
   prepareBriarHollow?: (kit: BriarHollowKit, gameMap: GameMap) => void;
-  /** Market-stall stock, threaded by reference so a shop trip can't restock a stall. */
-  marketStock?: MarketStock;
+  /**
+   * Every shop's stock, threaded by reference so a building trip can't restock
+   * a shelf, and ticked by whichever scene is running so restocking is global.
+   */
+  shopStock?: ShopStock;
   /** Hired-mercenary roster, threaded by reference across building/scene transitions. */
   mercenaryRoster?: MercenaryRoster;
   /** Companion combat stance, threaded by reference so passive/aggressive survives building/floor transitions. */
@@ -1448,7 +1450,7 @@ export class DungeonScene extends GameplayScene {
   private gatheringCheckpoint: GatheringCheckpoint | null = null;
   /** When the last world tap resolved, so a second one close behind it reads as the kit's double-tap gesture. */
   private briarHollowLastWorldTapAt: number | null = null;
-  private readonly marketStock: MarketStock;
+  private readonly shopStock: ShopStock;
   private readonly mercenaryRoster: MercenaryRoster;
   /** Companion combat stance, threaded by reference so it survives building trips and floor changes. */
   private readonly companionStance: CompanionStanceState;
@@ -2201,7 +2203,7 @@ export class DungeonScene extends GameplayScene {
     // tier is non-null.
     this.partyTools.reconcile(this.human, this.cat);
     this.briarHollowState = options?.briarHollowState ?? createBriarHollowState();
-    this.marketStock = options?.marketStock ?? createMarketStock();
+    this.shopStock = options?.shopStock ?? createShopStock();
     this.mercenaryRoster = options?.mercenaryRoster ?? createMercenaryRoster();
     this.floorEntryMercenaryRoster =
       options?.floorEntryMercenaryRoster ?? captureMercenaryRoster(this.mercenaryRoster);
@@ -2551,7 +2553,7 @@ export class DungeonScene extends GameplayScene {
       // can steer clear of the stall footprints it claims.
       this.market = new MarketSystem(
         this.gameMap,
-        this.marketStock,
+        this.shopStock,
         (browse) => this.openMarketStall(browse),
         () => this.marketPanel?.isOpen === true,
         () => this.audio,
@@ -4836,7 +4838,7 @@ export class DungeonScene extends GameplayScene {
             }),
           );
         },
-        this.marketStock,
+        this.shopStock,
         this.humanAchievements,
         this.catAchievements,
         this.audio ?? undefined,
@@ -5009,7 +5011,7 @@ export class DungeonScene extends GameplayScene {
       clubMembership: this.clubMembership,
       townMemory: this.townMemory,
       briarHollowState: this.briarHollowState,
-      marketStock: this.marketStock,
+      shopStock: this.shopStock,
       mercenaryRoster: this.mercenaryRoster,
       godModeState: this.godModeState,
       companionStance: this.companionStance,
@@ -5303,7 +5305,7 @@ export class DungeonScene extends GameplayScene {
       bountyProgress: captureBountyProgress(this.bountyProgress),
       clubMembership: captureClubMembership(this.clubMembership),
       townMemory: captureTownMemory(this.townMemory),
-      marketStock: captureMarketStock(this.marketStock),
+      shopStock: captureShopStock(this.shopStock),
       mercenaryRoster: captureMercenaryRoster(this.mercenaryRoster),
       mongoPetState: captureMongoPetState(this.mongoPetState),
       attackCowState: captureAttackCowState(this.attackCowState),
@@ -5406,7 +5408,7 @@ export class DungeonScene extends GameplayScene {
     restoreBountyProgress(this.bountyProgress, world.bountyProgress);
     restoreClubMembership(this.clubMembership, world.clubMembership);
     restoreTownMemory(this.townMemory, world.townMemory);
-    restoreMarketStock(this.marketStock, world.marketStock);
+    restoreShopStock(this.shopStock, world.shopStock);
     restoreMercenaryRoster(this.mercenaryRoster, world.mercenaryRoster);
     // After `mongoSystem.dismiss()`, which writes the live pet's remaining HP
     // and rest latch into this very object on its way out — restoring first
@@ -5441,7 +5443,7 @@ export class DungeonScene extends GameplayScene {
       journal: captureJournalProgress(this.journalProgress),
       bountyProgress: captureBountyProgress(this.bountyProgress),
       clubMembership: captureClubMembership(this.clubMembership),
-      marketStock: toPersistedMarketStockCheckpoint(captureMarketStock(this.marketStock)),
+      shopStock: captureShopStock(this.shopStock),
       townMemory: captureTownMemory(this.townMemory),
       mercenaryRoster: captureMercenaryRoster(this.mercenaryRoster),
       mongoPetState: captureMongoPetState({ ...this.mongoPetState, hp: this.mongoSystem.hp }),
@@ -5494,7 +5496,7 @@ export class DungeonScene extends GameplayScene {
       journal,
       bountyProgress,
       clubMembership,
-      marketStock,
+      shopStock,
       townMemory,
       mercenaryRoster,
       mongoPetState,
@@ -5559,7 +5561,7 @@ export class DungeonScene extends GameplayScene {
     restoreBountyProgress(this.bountyProgress, bountyProgress);
     restoreClubMembership(this.clubMembership, clubMembership);
     restoreTownMemory(this.townMemory, townMemory);
-    restoreMarketStock(this.marketStock, fromPersistedMarketStockCheckpoint(marketStock));
+    restoreShopStock(this.shopStock, shopStock);
     restoreMercenaryRoster(this.mercenaryRoster, mercenaryRoster);
     restoreMongoPetState(this.mongoPetState, mongoPetState);
     // A save older than the village restores none of it, leaving the
@@ -6262,7 +6264,7 @@ export class DungeonScene extends GameplayScene {
         // only fire before this floor's first save, so the live state holds
         // nothing a save has ever recorded — the constructor's fresh state is
         // the correct rewind, the same as taking the stairs down.
-        marketStock: this.marketStock,
+        shopStock: this.shopStock,
         mercenaryRoster: this.mercenaryRoster,
         godModeState: this.godModeState,
         companionStance: this.companionStance,
@@ -8090,6 +8092,8 @@ export class DungeonScene extends GameplayScene {
       return;
     }
     this.gameStats.recordPlayedFrame();
+    tickShopStock(this.shopStock);
+    tickShopStock(this.briarHollowState.shopStock);
 
     if (this.tutorial?.showNearGoblinDialog === true) {
       this.silenceMovementLoops();

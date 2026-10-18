@@ -22,13 +22,8 @@ import type { ConversationHandle, ConversationTopic } from '../../../dialog/requ
 import type { TopicProvider, VillagerConversationFlow } from '../villagerTopics';
 import { otherCrawler, type ServiceParty, shopTrades } from './serviceContext';
 import { canAffordCoins, spendPartyCoins } from '../../../core/partyCoins';
-import {
-  FENNA_FEE_PER_WOOD,
-  outputFor,
-  outputItem,
-  partyWood,
-  processWood,
-} from './woodProcessing';
+import { SERVICE_PRICES } from '../../../economy/servicePrices';
+import { outputFor, outputItem, partyWood, processWood } from './woodProcessing';
 
 const FOREMAN = 'fenna';
 /** A batch starts at this many wood, or everything the party has if that is less. */
@@ -120,7 +115,7 @@ export function runBatch(
 ): BatchResult | null {
   const payer = host.party.active();
   const companion = otherCrawler(host.party, payer);
-  const fee = wood * FENNA_FEE_PER_WOOD;
+  const fee = wood * SERVICE_PRICES.lumber_yard.processing_per_wood;
   if (!canAffordCoins(payer, companion, fee)) return null;
   // The goods are delivered before the coins move: a batch whose wood was
   // spent elsewhere while the picker was open must never cost anything.
@@ -161,7 +156,7 @@ function openBatchPicker(
     max,
     initial: Math.min(max, initial ?? initialBatch(max)),
     unitLabel: 'wood',
-    costPerUnit: FENNA_FEE_PER_WOOD,
+    costPerUnit: SERVICE_PRICES.lumber_yard.processing_per_wood,
     currencyLabel: 'coins',
     confirmLabel: 'Process',
     detail: (qty) => outputPhrase(output, qty),

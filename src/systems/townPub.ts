@@ -1,7 +1,9 @@
 /**
  * The tavern round. Talking to a barkeep opens a short drink menu: a few coins
  * for something served on the spot rather than sold as an item the way the market
- * stalls do. Pure data + effect application here; the shop screen owns the UI
+ * stalls do. The rounds are services; the one real item on a board, Speed Fizz,
+ * is a line in `SHOPS.pub`, priced and stocked like any shop's, and downed at
+ * the bar rather than handed over. Pure data + effect application here; the shop screen owns the UI
  * and `BuildingInteriorScene` owns the sounds and the interaction gating.
  *
  * The town's three drinking houses each keep their own board, so the Low Quarter
@@ -17,24 +19,40 @@ import type { Player } from '../Player';
 import type { ShopMenu, ShopRow, ShopPurchaseHandler } from '../ui/screens/shop/shopSession';
 import type { ResidentHost } from './townResidents';
 import { rotateLine } from './townServiceUtil';
+import { SERVICE_PRICES } from '../economy/servicePrices';
+import type { SHOPS, ShopId } from '../economy/shops';
+import { buyFromShop, type ShopStock } from '../economy/shopStock';
+import { catalogLineRow, findCatalogLine } from './market/vendorMenu';
+
+const PUB_SHOP = 'pub' as const satisfies ShopId;
 
 /** What a serving does to whoever downs it. */
 type DrinkEffect = 'drunk' | 'drunk_and_heal' | 'heal' | 'speed';
 
-type Drink = ShopRow & {
-  effect: DrinkEffect;
-  /** Fraction of max HP restored; only read by the healing effects. */
-  healFraction?: number;
-};
+type PubServiceKey = keyof typeof SERVICE_PRICES.pub;
+type PubCatalogItem = (typeof SHOPS.pub.catalog)[number]['item'];
 
-const ALE_PRICE = 6;
-const BOOZY_MILK_PRICE = 14;
-const SPEED_FIZZ_PRICE = 10;
-const MEAD_PRICE = 12;
-const GUILD_RESERVE_PRICE = 22;
-const HONEY_BREAD_PRICE = 5;
-const STEW_PRICE = 9;
-const NIGHTCAP_PRICE = 16;
+interface Serving {
+  readonly effect: DrinkEffect;
+  /** Fraction of max HP restored; only read by the healing effects. */
+  readonly healFraction?: number;
+}
+
+/** A round: a service with a fixed fee, poured and drunk on the spot. */
+interface ServiceDrink extends Serving {
+  readonly kind: 'service';
+  readonly key: PubServiceKey;
+  readonly label: string;
+  readonly desc: string;
+}
+
+/** A real item off the pub's catalog, priced by the shop like any other, but opened and downed at the bar. */
+interface CatalogDrink extends Serving {
+  readonly kind: 'catalog';
+  readonly item: PubCatalogItem;
+}
+
+type Drink = ServiceDrink | CatalogDrink;
 
 const BOOZY_MILK_HEAL_FRACTION = 0.25;
 /** The Flagon's reserve is stronger drink and a better mend than the common round. */
@@ -45,69 +63,63 @@ const STEW_HEAL_FRACTION = 0.35;
 const NIGHTCAP_HEAL_FRACTION = 0.5;
 
 const ALE: Drink = {
+  kind: 'service',
   key: 'ale',
   label: 'Mug of Ale',
-  price: ALE_PRICE,
   desc: 'Cheap, warm, and it hits. Drunk for 30s',
   effect: 'drunk',
 };
 
 const BOOZY_MILK: Drink = {
+  kind: 'service',
   key: 'boozy_milk',
   label: 'Boozy Milk',
-  price: BOOZY_MILK_PRICE,
   desc: 'Nutritious. Arguably. Drunk, and it heals',
   effect: 'drunk_and_heal',
   healFraction: BOOZY_MILK_HEAL_FRACTION,
 };
 
-const SPEED_FIZZ: Drink = {
-  key: 'speed_fizz',
-  label: 'Speed Fizz',
-  price: SPEED_FIZZ_PRICE,
-  desc: 'Not a drink, really. Move speed x2, 25s',
-  effect: 'speed',
-};
+const SPEED_FIZZ: Drink = { kind: 'catalog', item: 'speed_fizz', effect: 'speed' };
 
 const MEAD: Drink = {
+  kind: 'service',
   key: 'mead',
   label: 'Spiced Mead',
-  price: MEAD_PRICE,
   desc: 'Served in a horn, because of course it is. Drunk for 30s',
   effect: 'drunk',
 };
 
 const GUILD_RESERVE: Drink = {
+  kind: 'service',
   key: 'guild_reserve',
   label: 'The Guild Reserve',
-  price: GUILD_RESERVE_PRICE,
   desc: 'Off the high shelf, for people with a table. Drunk, and it mends well',
   effect: 'drunk_and_heal',
   healFraction: GUILD_RESERVE_HEAL_FRACTION,
 };
 
 const HONEY_BREAD: Drink = {
+  kind: 'service',
   key: 'honey_bread',
   label: 'Honey Bread',
-  price: HONEY_BREAD_PRICE,
   desc: 'Fresh this morning. A small mend, and cheap',
   effect: 'heal',
   healFraction: HONEY_BREAD_HEAL_FRACTION,
 };
 
 const STEW: Drink = {
+  kind: 'service',
   key: 'stew',
   label: 'Bowl of Stew',
-  price: STEW_PRICE,
   desc: 'Hot, thick, and no hangover. Heals',
   effect: 'heal',
   healFraction: STEW_HEAL_FRACTION,
 };
 
 const NIGHTCAP: Drink = {
+  kind: 'service',
   key: 'nightcap',
   label: 'The Sleeping Cat',
-  price: NIGHTCAP_PRICE,
   desc: 'Milk, honey, and something that bites. Drunk, and it mends deeply',
   effect: 'drunk_and_heal',
   healFraction: NIGHTCAP_HEAL_FRACTION,
@@ -170,6 +182,24 @@ function drinksFor(house: string): ReadonlyArray<Drink> {
   return HOUSE_DRINKS.get(house) ?? DEFAULT_DRINKS;
 }
 
+function drinkKey(drink: Drink): string {
+  return drink.kind === 'service' ? drink.key : drink.item;
+}
+
+/** The row a drink shows, or null for a catalog drink the pub's catalog no longer lists. */
+function drinkRow(drink: Drink, stock: ShopStock): ShopRow | null {
+  if (drink.kind === 'service') {
+    return {
+      key: drink.key,
+      label: drink.label,
+      price: SERVICE_PRICES.pub[drink.key],
+      desc: drink.desc,
+    };
+  }
+  const line = findCatalogLine(PUB_SHOP, drink.item);
+  return line === undefined ? null : catalogLineRow(PUB_SHOP, line, stock);
+}
+
 function pourDrink(drink: Drink, player: Player): void {
   player.recordSwallowed();
   // The kitchen's plates are eaten, not drunk: only a drink gets the bottle.
@@ -196,23 +226,21 @@ export function buildTavernMenu(
   buyer: Player,
   turn: number,
   host: ResidentHost | null,
+  stock: ShopStock,
 ): ShopMenu {
   return {
     title: house,
     bark: host?.line ?? pubServeLine(house, turn),
     byline: host?.name,
-    options: drinksFor(house).map((drink) => {
-      const option: ShopRow = {
-        key: drink.key,
-        label: drink.label,
-        price: drink.price,
-        desc: drink.desc,
-      };
+    options: drinksFor(house).flatMap((drink) => {
+      const row = drinkRow(drink, stock);
+      if (row === null) return [];
       // Food is the only thing on any board whose whole effect is the mend, so
       // it is the only thing that can be bought for nothing. A drink that gets
       // you drunk still does something at full health; a bowl of stew does not.
-      if (drink.effect === 'heal' && buyer.hp >= buyer.maxHp) option.unavailable = 'Unhurt';
-      return option;
+      if (drink.effect === 'heal' && buyer.hp >= buyer.maxHp)
+        return [{ ...row, unavailable: 'Unhurt' }];
+      return [row];
     }),
   };
 }
@@ -221,14 +249,17 @@ export function buildTavernMenu(
  * The purchase handler for one house — bound to the same board `buildTavernMenu`
  * showed, so a key can never be served from a different tavern's list.
  */
-export function serveDrinkAt(house: string): ShopPurchaseHandler {
+export function serveDrinkAt(house: string, stock: ShopStock): ShopPurchaseHandler {
   return (option, player) => {
-    const drink = drinksFor(house).find((d) => d.key === option.key);
+    const drink = drinksFor(house).find((candidate) => drinkKey(candidate) === option.key);
     if (drink === undefined) return { ok: false, line: 'The barkeep shrugs.' };
     // Last line of defence behind the menu's own `Unhurt`, so a stale panel can
     // never take coin for a plate the buyer has no room for.
     if (drink.effect === 'heal' && player.hp >= player.maxHp) {
       return { ok: false, line: 'You have not got the room for it. Come back hungry.' };
+    }
+    if (drink.kind === 'catalog' && !buyFromShop(stock, PUB_SHOP, drink.item)) {
+      return { ok: false, line: 'The barkeep shakes the empty crate.' };
     }
     pourDrink(drink, player);
     return { ok: true, line: `${option.label} — down the hatch!` };

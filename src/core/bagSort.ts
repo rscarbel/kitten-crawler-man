@@ -5,6 +5,7 @@
  */
 
 import { ITEM_CATEGORIES, ITEM_DEF, type InventoryItem } from './ItemDefs';
+import { ITEM_PRICES } from '../economy/itemPrices';
 
 /** `manual` is the bag's own slot order; tidying in it only closes the gaps. */
 export const BAG_SORT_MODES = ['manual', 'category', 'name', 'value'] as const;
@@ -34,7 +35,7 @@ function categoryRank(stack: PlacedStack): number {
 
 /** What one stack is worth to a shop before markup, so a stack of forty outranks a single. */
 function stackValue(stack: PlacedStack): number {
-  return ITEM_DEF[stack.item.id].baseValue * stack.item.quantity;
+  return ITEM_PRICES[stack.item.id].base * stack.item.quantity;
 }
 
 const COMPARATORS: Readonly<Record<BagSortMode, (a: PlacedStack, b: PlacedStack) => number>> = {

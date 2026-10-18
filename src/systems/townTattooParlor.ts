@@ -21,21 +21,19 @@ import type { ShopMenu, ShopRow, ShopPurchaseHandler } from '../ui/screens/shop/
 import type { PlannedBuildingName } from '../map/town/townPlan';
 import type { ResidentHost } from './townResidents';
 import { rotateLine } from './townServiceUtil';
+import { SERVICE_PRICES } from '../economy/servicePrices';
 
 export const QUIET_NEEDLE_NAME = 'The Quiet Needle' as const satisfies PlannedBuildingName;
 
-const TATTOO_PRICE = 1500;
 /** Each mark's description is the whole of its rules, so a row wraps rather than cutting it off. */
 const TATTOO_DESC_LINES = 6;
 
 /**
- * The parlour's one skill mark. Priced well above a stat mark because it
- * teaches a skill on top of its effect, and gated on its own marker rather than
- * `tattoo`: a crawler may carry one stat mark *and* one skill mark, but never
- * two of either.
+ * The parlour's one skill mark, gated on its own marker rather than `tattoo`:
+ * a crawler may carry one stat mark *and* one skill mark, but never two of
+ * either.
  */
 const SKILL_TATTOO_KEY = 'brass_gullet';
-const SKILL_TATTOO_PRICE = 3500;
 
 function brassGulletOnSale(player: Player): boolean {
   return (
@@ -54,7 +52,7 @@ function buildSkillTattooOption(player: Player): ShopRow {
   const option: ShopRow = {
     key: SKILL_TATTOO_KEY,
     label: BRASS_GULLET_LABEL,
-    price: SKILL_TATTOO_PRICE,
+    price: SERVICE_PRICES.tattoo_parlor.skill_tattoo,
     desc: brassGulletDesc(def.name),
   };
   if (player.skillTattoo !== null) {
@@ -98,7 +96,7 @@ export function buildTattooMenu(player: Player, turn: number, host: ResidentHost
       const option: ShopRow = {
         key: id,
         label: design.label,
-        price: TATTOO_PRICE,
+        price: SERVICE_PRICES.tattoo_parlor.stat_tattoo,
         desc: design.desc,
       };
       if (existing !== null) {

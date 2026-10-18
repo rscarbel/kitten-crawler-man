@@ -85,7 +85,7 @@ const { loadSprites } = await import('../src/core/SpriteLoader');
 const { GameMap } = await import('../src/map/GameMap');
 const { renderCanvas, renderDecorationsOverlay } = await import('../src/map/TileRenderer');
 const { MarketSystem } = await import('../src/systems/market/MarketSystem');
-const { createMarketStock } = await import('../src/systems/market/MarketStock');
+const { createShopStock } = await import('../src/economy/shopStock');
 const { TownPropSystem } = await import('../src/systems/TownPropSystem');
 const { TownDecorSystem } = await import('../src/systems/TownDecorSystem');
 const { createTownPlan } = await import('../src/map/town/townPlan');
@@ -152,7 +152,7 @@ const gameMap = new GameMap({
 // stall tiles first so the other props steer clear of them.
 const market = new MarketSystem(
   gameMap,
-  createMarketStock(),
+  createShopStock(),
   () => undefined,
   () => false,
   () => null,

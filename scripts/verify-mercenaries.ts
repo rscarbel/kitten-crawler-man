@@ -19,7 +19,7 @@
  *   being revived, and its health across doors and saves — in
  *   `verifyMercenaries/survival.ts`.
  * - The club market's Stat Boost row: a purchase charges the price and books
- *   one unit off the shared `MarketStock`; a second purchase is refused; the
+ *   one unit off the shared `ShopStock`; a second purchase is refused; the
  *   sold-out state survives a checkpoint capture/restore and a save/parse
  *   round trip.
  * - Each kit's own rules, one module per kit under `verifyMercenaries/`.
@@ -68,27 +68,19 @@ import { EventBus } from '../src/core/EventBus';
 import { AbilityManager } from '../src/core/AbilityManager';
 import { createMob } from '../src/levels/spawner';
 import { gameContext } from './nodeGameContext.js';
-import { ShopSystem, type ShopConfig, type ShopItem } from '../src/systems/ShopSystem';
+import type { ShopSystem } from '../src/systems/ShopSystem';
+import { createClubMarketShop } from '../src/systems/DesperadoClubSystem';
+import { primaryCatalogLine, type CatalogLine } from '../src/economy/shops';
+import { buyPrice } from '../src/economy/pricing';
 import {
-  STAT_BOOST_PRICE,
-  STAT_BOOST_STOCK,
-  DESPERADO_MARKET_VENDOR_ID,
-  MARKET_SHOP_CONFIG,
-  createClubMarketShop,
-} from '../src/systems/DesperadoClubSystem';
-import { CLUB_INTERIOR_W } from '../src/core/clubLayout';
-import {
-  createMarketStock,
-  captureMarketStock,
-  restoreMarketStock,
-  remainingFor,
-  type MarketStock,
-} from '../src/systems/market/MarketStock';
-import {
-  toPersistedMarketStockCheckpoint,
-  fromPersistedMarketStockCheckpoint,
-  parsePersistedMarketStockCheckpoint,
-} from '../src/core/PersistedWorldState';
+  captureShopStock,
+  createShopStock,
+  currentStock,
+  parseShopStockSnapshot,
+  restoreShopStock,
+  sellToShop,
+  type ShopStock,
+} from '../src/economy/shopStock';
 import { UiRoot } from '../src/ui/core/UiRoot';
 import { MOUSE_POINTER_ID, PRIMARY_BUTTON } from '../src/ui/core/pointer';
 import { NO_INSETS } from '../src/ui/core/viewport';
@@ -616,10 +608,10 @@ function checkShell(): void {
 // ── Club market: Stat Boost price and stock ─────────────────────────────────
 
 /**
- * The decided values, written out independently of `STAT_BOOST_PRICE` /
- * `STAT_BOOST_STOCK` rather than imported from them: comparing the real row
- * to the very constants it was built from can never fail, whatever those
- * constants say. This is what actually pins the row to 1000 coins for 1 unit.
+ * The decided values, written out independently of the club market's `SHOPS`
+ * entry rather than read from it: comparing the real row to the very data it
+ * was built from can never fail, whatever that data says. This is what
+ * actually pins the row to 1000 coins for 1 unit.
  */
 const DECIDED_STAT_BOOST_PRICE = 1000;
 const DECIDED_STAT_BOOST_STOCK = 1;
@@ -636,26 +628,23 @@ const STACK_ADDED = 3;
 const STACK_SOLD = 2;
 const SOLD_STACK_ITEM = 'health_potion';
 
-/** The real Stat Boost row, exactly as `DesperadoClubSystem` sells it — never a hand-built copy. */
-function realStatBoostRow(): ShopItem {
-  const row = MARKET_SHOP_CONFIG.items.find((entry) => entry.id === 'stat_boost_potion');
-  if (row === undefined) throw new Error('stat_boost_potion missing from MARKET_SHOP_CONFIG');
+const CLUB_MARKET = 'club_market' as const;
+const STAT_BOOST = 'stat_boost_potion' as const;
+
+/** The real Stat Boost row, exactly as the club market's `SHOPS` entry lists it — never a hand-built copy. */
+function realStatBoostRow(): CatalogLine {
+  const row = primaryCatalogLine(CLUB_MARKET, STAT_BOOST);
+  if (row === undefined) throw new Error('stat_boost_potion missing from SHOPS.club_market');
   return row;
 }
 
-/**
- * The club market config with the Stat Boost row's declared stock overridden,
- * everything else — price, the other two rows — left exactly as the real
- * config has it. Only the negative case below needs this; the gate itself
- * always sells through `createClubMarketShop`, the same factory the club uses.
- */
-function marketConfigWithStatBoostStock(stockLimit: number): ShopConfig {
-  return {
-    ...MARKET_SHOP_CONFIG,
-    items: MARKET_SHOP_CONFIG.items.map((entry) =>
-      entry.id === 'stat_boost_potion' ? { ...entry, stock: stockLimit } : entry,
-    ),
-  };
+/** What the club market charges for the Stat Boost at normal stock. */
+function statBoostPrice(): number {
+  return buyPrice(CLUB_MARKET, STAT_BOOST, createShopStock());
+}
+
+function statBoostsOnShelf(stock: ShopStock): number {
+  return currentStock(stock, CLUB_MARKET, STAT_BOOST);
 }
 
 /** The shop screen over a real `UiRoot`, driven by taps on the regions it registers. */
@@ -730,16 +719,15 @@ function shopRig(shop: ShopSystem, buyer: HumanPlayer, companion: CatPlayer): Sh
 const STAT_BOOST_BUY = 'buy-stat_boost_potion';
 
 /**
- * Builds a club market shop with `buildShop`, buys the Stat Boost row (the
+ * Builds the real club market shop over `stock`, buys the Stat Boost row (the
  * topmost, so the button scan always finds it first) twice at the same
  * button, and answers whether the second attempt was refused: no further
  * coins spent and no second unit granted.
  */
-function secondStatBoostPurchaseIsRefused(buildShop: (stock: MarketStock) => ShopSystem): boolean {
-  const stock = createMarketStock();
-  const shop = buildShop(stock);
+function secondStatBoostPurchaseIsRefused(stock: ShopStock): boolean {
+  const shop = createClubMarketShop(stock);
   const buyer = new HumanPlayer(0, 0, TILE_SIZE);
-  buyer.coins = STAT_BOOST_PRICE * 2;
+  buyer.coins = statBoostPrice() * 2;
   const companion = new CatPlayer(1, 0, TILE_SIZE);
 
   shop.open();
@@ -757,7 +745,7 @@ function secondStatBoostPurchaseIsRefused(buildShop: (stock: MarketStock) => Sho
 
 function checkClubShopSellsAStack(): void {
   section('Club market: selling part of a stack through the quantity card');
-  const shop = createClubMarketShop(createMarketStock());
+  const shop = createClubMarketShop(createShopStock());
   const seller = new HumanPlayer(0, 0, TILE_SIZE);
   const companion = new CatPlayer(1, 0, TILE_SIZE);
   seller.inventory.addItem(SOLD_STACK_ITEM, STACK_ADDED);
@@ -791,6 +779,9 @@ function checkDismissAsksFirst(): void {
   roster.floorLevelId = FLOOR;
   const hire = MERCENARY_TEMPLATES[0];
   roster.active = { id: hire.id, name: hire.name, contractLevelId: FLOOR, introduced: true };
+  // Read through a call so the desk's own writes to the roster are seen,
+  // rather than the contract this check just assigned.
+  const signedHireId = (): string | null => roster.active?.id ?? null;
   const desk = new MercenaryGuildSystem(roster, null);
   const human = new HumanPlayer(0, 0, TILE_SIZE);
   const cat = new CatPlayer(1, 0, TILE_SIZE);
@@ -811,14 +802,14 @@ function checkDismissAsksFirst(): void {
   root.key('Enter', {});
   settle();
   check(
-    !desk.dismissConfirm.isOpen && roster.active?.id === hire.id,
+    !desk.dismissConfirm.isOpen && signedHireId() === hire.id,
     'a bare Enter answers No and the contract stands',
   );
   desk.askDismiss();
   settle();
   root.key('y', {});
   settle();
-  check(roster.active === null, 'Y tears the contract up');
+  check(signedHireId() === null, 'Y tears the contract up');
   check(desk.open, 'and the desk stays open behind the answer');
 }
 
@@ -826,86 +817,68 @@ function checkClubStock(): void {
   section('Club market: Stat Boost price and stock');
 
   const item = realStatBoostRow();
+  const price = statBoostPrice();
+  check(price === DECIDED_STAT_BOOST_PRICE, "the club market's Stat Boost price is 1000");
   check(
-    item.price === DECIDED_STAT_BOOST_PRICE,
-    "the club market's declared Stat Boost price is 1000",
-  );
-  check(
-    item.stock === DECIDED_STAT_BOOST_STOCK,
+    item.normalStock === DECIDED_STAT_BOOST_STOCK,
     "the club market's declared Stat Boost stock is 1",
   );
 
   const clubStatBoostPreset = getPlaytestPreset('club-stat-boost');
   check(
     clubStatBoostPreset !== null &&
-      clubStatBoostPreset.human.coins === STAT_BOOST_PRICE &&
-      clubStatBoostPreset.cat.coins === STAT_BOOST_PRICE,
+      clubStatBoostPreset.human.coins === price &&
+      clubStatBoostPreset.cat.coins === price,
     "the 'club-stat-boost' playtest preset gives both crawlers exactly the real Stat Boost price",
   );
 
   check(
-    secondStatBoostPurchaseIsRefused(createClubMarketShop),
+    secondStatBoostPurchaseIsRefused(createShopStock()),
     'buying the real club market out of Stat Boost refuses a second purchase',
   );
-  // A gate that always passes proves nothing: with the row declared with
-  // extra stock, the second purchase must go through, so the assertion above
-  // is shown catching the break rather than passing vacuously.
-  const brokenStockLimit = STAT_BOOST_STOCK + 1;
+  // A gate that always passes proves nothing: with an extra unit on the
+  // shelf, the second purchase must go through, so the assertion above is
+  // shown catching the break rather than passing vacuously.
+  const overstocked = createShopStock();
+  sellToShop(overstocked, CLUB_MARKET, STAT_BOOST);
   checkCatches(
-    secondStatBoostPurchaseIsRefused(
-      (stock) =>
-        new ShopSystem(CLUB_INTERIOR_W, marketConfigWithStatBoostStock(brokenStockLimit), {
-          stock,
-          vendorId: DESPERADO_MARKET_VENDOR_ID,
-        }),
-    ),
-    'a row declared with more than one unit of stock is caught letting a second sale through',
+    secondStatBoostPurchaseIsRefused(overstocked),
+    'a shelf holding more than one Stat Boost is caught letting a second sale through',
   );
 
   // Persistence: capture before the sale, sell, capture after, and prove both
   // a checkpoint restore and a save/parse round trip land on the right side
   // of the sale — through the same factory the club builds its market with.
-  const stock = createMarketStock();
+  const stock = createShopStock();
   const shop = createClubMarketShop(stock);
   const buyer = new HumanPlayer(0, 0, TILE_SIZE);
-  buyer.coins = STAT_BOOST_PRICE;
+  buyer.coins = price;
   const companion = new CatPlayer(1, 0, TILE_SIZE);
 
-  const beforeSaleSnapshot = captureMarketStock(stock);
+  const beforeSaleSnapshot = captureShopStock(stock);
   shop.open();
   const rig = shopRig(shop, buyer, companion);
   check(rig.tap(STAT_BOOST_BUY), 'the Buy button for Stat Boost is found on the shop screen');
   check(
-    buyer.inventory.countOf('stat_boost_potion') === 1 && shop.purchasePending,
+    buyer.inventory.countOf(STAT_BOOST) === 1 && shop.purchasePending,
     'a tap on Buy hands over the potion and flags the sale for its chime',
   );
-  const afterSaleSnapshot = captureMarketStock(stock);
+  const afterSaleSnapshot = captureShopStock(stock);
 
-  restoreMarketStock(stock, beforeSaleSnapshot);
+  restoreShopStock(stock, beforeSaleSnapshot);
   check(
-    remainingFor(stock, DESPERADO_MARKET_VENDOR_ID, item) === 1,
+    statBoostsOnShelf(stock) === 1,
     'restoring a pre-sale checkpoint undoes the sale (a death rewind gets the stock back)',
   );
 
-  restoreMarketStock(stock, afterSaleSnapshot);
-  check(
-    remainingFor(stock, DESPERADO_MARKET_VENDOR_ID, item) === 0,
-    'restoring a post-sale checkpoint keeps the row sold out',
-  );
+  restoreShopStock(stock, afterSaleSnapshot);
+  check(statBoostsOnShelf(stock) === 0, 'restoring a post-sale checkpoint keeps the row sold out');
 
   // The same validating parser a real save load runs through, not a bare cast,
   // so this proves the sold-out state survives what the disk actually stores.
-  const jsonText = JSON.stringify(toPersistedMarketStockCheckpoint(afterSaleSnapshot));
-  const parsedJson: unknown = JSON.parse(jsonText);
-  const persistedCheckpoint = parsePersistedMarketStockCheckpoint(parsedJson);
-  check(persistedCheckpoint !== undefined, 'the market stock checkpoint parses back out of JSON');
-  if (persistedCheckpoint !== undefined) {
-    restoreMarketStock(stock, fromPersistedMarketStockCheckpoint(persistedCheckpoint));
-  }
-  check(
-    remainingFor(stock, DESPERADO_MARKET_VENDOR_ID, item) === 0,
-    'the sold-out state survives a save/parse round trip',
-  );
+  const parsedJson: unknown = JSON.parse(JSON.stringify(afterSaleSnapshot));
+  restoreShopStock(stock, parseShopStockSnapshot(parsedJson));
+  check(statBoostsOnShelf(stock) === 0, 'the sold-out state survives a save/parse round trip');
 }
 
 /**

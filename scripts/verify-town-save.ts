@@ -448,7 +448,6 @@ function checkRenamedBuildingMemory(): void {
   const untouchedRoom = roomKey(UNRENAMED_BUILDING_NAME, RENAMED_ROOM_FLOOR);
   const parsed = parseTownMemoryCheckpoint({
     residentTalks: [],
-    poulticesLeft: 0,
     clearedRooms: [oldRoom, untouchedRoom],
     clearedCamps: [],
     paidOutInteriorProps: [oldProp],
@@ -514,7 +513,6 @@ function checkRenamedInteriorPropMemory(): void {
   }
   const parsed = parseTownMemoryCheckpoint({
     residentTalks: [],
-    poulticesLeft: 0,
     clearedRooms: [],
     clearedCamps: [],
     paidOutInteriorProps: [

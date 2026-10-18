@@ -21,7 +21,8 @@ import { tileKey } from '../tileKey';
 import { doorwayKeepClearTiles } from '../doorwayKeepClear';
 import { buildVendorMenu, createVendorPurchase, type VendorGateCheck } from './vendorMenu';
 import { MARKET_VENDORS, type VendorDef } from './vendorDefs';
-import type { MarketStock } from './MarketStock';
+import type { ShopStock } from '../../economy/shopStock';
+import { shopDef } from '../../economy/shops';
 import type { AudioManager } from '../../audio/AudioManager';
 import type { GameMap } from '../../map/GameMap';
 import type { Player } from '../../Player';
@@ -81,8 +82,8 @@ export interface MarketBrowse {
   purchase: ShopPurchaseHandler;
   /** Sounds the refusal when the player pokes a row they can't buy. */
   onBlocked: () => void;
-  /** This stall's Sell tab. */
-  sell: ShopSellConfig;
+  /** This stall's Sell tab, or undefined for a stall that buys nothing back. */
+  sell: ShopSellConfig | undefined;
 }
 
 export class MarketSystem implements GameSystem {
@@ -94,7 +95,7 @@ export class MarketSystem implements GameSystem {
 
   constructor(
     private readonly gameMap: GameMap,
-    private readonly stock: MarketStock,
+    private readonly stock: ShopStock,
     private readonly onBrowse: (browse: MarketBrowse) => void,
     /** Whether a stall panel is currently up — drives the vendor's held pose. */
     private readonly isBrowsing: () => boolean,
@@ -162,12 +163,13 @@ export class MarketSystem implements GameSystem {
       buildMenu: () => buildVendorMenu(stall.def, this.stock, visits, this.isGateOpen),
       purchase: createVendorPurchase(stall.def, this.stock, this.getAudio),
       onBlocked: () => this.getAudio()?.play('error_taking_action'),
-      sell: {
-        pricing: stall.def.pricing,
-        heldStock: this.stock.held,
-        vendorId: stall.def.id,
-        onSold: () => this.getAudio()?.play('purchase_success'),
-      },
+      sell: shopDef(stall.def.id).buysFromPlayer
+        ? {
+            shop: stall.def.id,
+            stock: this.stock,
+            onSold: () => this.getAudio()?.play('purchase_success'),
+          }
+        : undefined,
     });
     return true;
   }

@@ -74,7 +74,7 @@ const { loadSprites } = await import('../src/core/SpriteLoader.js');
 const { GameMap } = await import('../src/map/GameMap.js');
 const { renderCanvas, renderDecorationsOverlay } = await import('../src/map/TileRenderer.js');
 const { MarketSystem } = await import('../src/systems/market/MarketSystem.js');
-const { createMarketStock } = await import('../src/systems/market/MarketStock.js');
+const { createShopStock } = await import('../src/economy/shopStock.js');
 const { TownPropSystem } = await import('../src/systems/TownPropSystem.js');
 const { TownDecorSystem } = await import('../src/systems/TownDecorSystem.js');
 const { TownLifeSystem } = await import('../src/systems/TownLifeSystem.js');
@@ -228,7 +228,7 @@ const gameMap = new GameMap({
 // the other street furniture steers clear of them.
 const market = new MarketSystem(
   gameMap,
-  createMarketStock(),
+  createShopStock(),
   () => undefined,
   () => false,
   () => null,

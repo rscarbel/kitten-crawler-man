@@ -25,6 +25,8 @@ Browser dungeon crawler: TypeScript + one HTML5 Canvas, no framework, bundled by
 
 See the `add-system` skill for the recipe.
 
+`src/economy/` is every price in the game: item base prices (`itemPrices.ts`), shops and their markups (`shops.ts`), stock curves and restock (`stockCurves.ts`, `shopStock.ts`), the pricing engine (`pricing.ts`), and coin fees for services (`servicePrices.ts`). `npm run report:prices` prints the result.
+
 ### Scene kits
 
 `src/systems/kits/` groups the systems that make a _place_ rather than a _floor_, so a new environment gets them by construction instead of by hand-wiring:

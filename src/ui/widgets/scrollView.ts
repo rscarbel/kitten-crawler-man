@@ -71,10 +71,19 @@ export function scrollGutterWidth(ui: Ui): number {
   return ui.theme.space.sm + SCROLLBAR_ACTIVE_WIDTH;
 }
 
+/**
+ * Whether a scroll view of `viewHeight` showing `contentHeight` scrolls, and so
+ * narrows its content by {@link scrollGutterWidth}. Layout that must match the
+ * drawn width asks this before measuring.
+ */
+export function scrollViewScrolls(contentHeight: number, viewHeight: number): boolean {
+  return contentHeight - viewHeight > OVERFLOW_TOLERANCE;
+}
+
 export function scrollView(ui: Ui, rect: Rect, opts: ScrollViewOptions): ScrollViewResult {
   const state = ui.state(SCROLL, opts.id);
   const overflow = opts.contentHeight - rect.h;
-  const maxOffset = overflow > OVERFLOW_TOLERANCE ? overflow : 0;
+  const maxOffset = scrollViewScrolls(opts.contentHeight, rect.h) ? overflow : 0;
   state.offset = clampOffset(state.offset, maxOffset);
   const scrollable = maxOffset > 0;
   const { space } = ui.theme;

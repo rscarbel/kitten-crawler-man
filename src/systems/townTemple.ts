@@ -15,8 +15,7 @@ import type { Player } from '../Player';
 import type { ShopMenu, ShopRow } from '../ui/screens/shop/shopSession';
 import type { ResidentHost } from './townResidents';
 import { rotateLine } from './townServiceUtil';
-
-const BLESSING_PRICE = 25;
+import { SERVICE_PRICES } from '../economy/servicePrices';
 
 const GRACE_LINES: ReadonlyArray<string> = [
   'The skyfowl sees you. Rise mended, and go carefully.',
@@ -48,7 +47,7 @@ export function buildBlessingMenu(
   const option: ShopRow = {
     key: 'blessing',
     label: 'Blessing of the Sky',
-    price: BLESSING_PRICE,
+    price: SERVICE_PRICES.temple.blessing,
     desc: 'Fully heals you and your companion, and stands the fallen up',
   };
   if (party.every((member) => member.hp >= member.maxHp && !member.isKnockedOut)) {

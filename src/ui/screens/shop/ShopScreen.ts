@@ -6,6 +6,11 @@
  * one-line description, a price chip and a Buy button that says why when it
  * cannot be pressed. Selling a stack asks how many first.
  *
+ * An item row priced by the engine carries a tag beside its price when stock
+ * is moving it ("Low stock", "Overstocked") and, selling, when the shop buys
+ * that kind of goods at its specialty rate. Under `?prices` the selected row
+ * also shows the engine's working, step by step.
+ *
  * Halts the world and keeps the keyboard while open; a tap outside it, Close,
  * Escape and ✕ all close it. A bare accept press closes it too, unless an
  * affordable quest row is on the menu, which then takes that press.
@@ -16,21 +21,27 @@ import { costShortfall, formatCost } from '../../../core/partyResources';
 import { ITEM_DEF, isItemId, type ItemId } from '../../../core/ItemDefs';
 import { centerIn, inset, splitH, splitV, type Rect } from '../../core/geom';
 import { UI_ERROR_SOUND, type Surface, type Ui } from '../../core/UiRoot';
+import { UiStateSlot } from '../../core/uiState';
+import type { PriceQuote, StockTag } from '../../../economy/pricing';
 import { QuantityPickerState } from '../../QuantityPickerState';
 import { button, buttonHeight, measureButton } from '../../widgets/button';
 import {
   listRow,
   listRowHeight,
   listRowTextWidth,
+  listRowTagLineHeight,
+  listRowTagLines,
   listRowTrailingMax,
   type RowLeading,
+  type RowTag,
 } from '../../widgets/listRow';
 import { drawGlass } from '../../widgets/paint';
-import { panel, panelBodyWidth } from '../../widgets/panel';
-import { scrollView } from '../../widgets/scrollView';
+import { panel, panelBodyMaxHeight, panelBodyWidth, type PanelOptions } from '../../widgets/panel';
+import { scrollGutterWidth, scrollView, scrollViewScrolls } from '../../widgets/scrollView';
 import { stepper, stepperKey } from '../../widgets/stepper';
 import { tabs, type TabItem } from '../../widgets/tabs';
 import { lineHeightOf, measureTextHeight, text, tabularNumber } from '../../widgets/text';
+import { priceBreakdownsShown } from './priceBreakdowns';
 import { skinsFor } from '../../theme/skins';
 import type { PanelWidth } from '../../theme/tokens';
 import {
@@ -60,6 +71,8 @@ export interface ShopScreenOptions {
   readonly party: () => ShopParty;
   /** Runs after the session closes, for a host that tidies up after the counter. */
   readonly onClose?: () => void;
+  /** Whether the selected row shows its price working; the `?prices` dev flag when omitted. */
+  readonly showPriceBreakdowns?: () => boolean;
 }
 
 const SHOP_TABS: readonly TabItem[] = [
@@ -78,6 +91,17 @@ const SELLER_LINE_MAX_LINES = 2;
 const PRICE_LAYOUT_SAMPLE = '9,999';
 /** Any one of these makes a row the widest it gets; they size the shared Buy column. */
 const ACTION_LABEL_SAMPLES = [BUY_LABEL, SELL_LABEL] as const;
+
+const STOCK_TAGS = {
+  low_stock: { label: 'Low stock', tone: 'warning' },
+  overstocked: { label: 'Overstocked', tone: 'info' },
+} as const satisfies Record<StockTag, RowTag>;
+const SPECIALTY_TAG = { label: 'Specialty', tone: 'success' } as const satisfies RowTag;
+/** How many decimals a breakdown's multipliers and running totals show. */
+const BREAKDOWN_DECIMALS = 2;
+
+/** Which row's working `?prices` shows, per tab; null until a row is tapped, which shows the first. */
+const PRICE_SELECTION = new UiStateSlot<string | null>('shop-price-selection', () => null);
 
 interface QuantityPrompt {
   readonly id: ItemId;
@@ -110,6 +134,81 @@ function leadingFor(menu: ShopMenu, row: ShopRow): RowLeading | undefined {
   return menu.rowGlyph === undefined ? undefined : { kind: 'glyph', glyph: menu.rowGlyph };
 }
 
+/**
+ * A row as its leading picture and trailing column see it: without the tag
+ * lines reserved under its subtitle, which leave both their usual size.
+ */
+function untaggedRow(ui: Ui, row: Rect, tagLines: number): Rect {
+  return { ...row, h: row.h - listRowTagLineHeight(ui) * tagLines };
+}
+
+/** What is left of `cell` under `row`, a strip at its top. */
+function cellBelow(cell: Rect, row: Rect): Rect {
+  return { ...cell, y: row.y + row.h, h: cell.h - row.h };
+}
+
+/** The tags beside a row's price: why stock moves it, then the specialty rate. */
+function tagsFor(quote: PriceQuote | undefined): RowTag[] {
+  if (quote === undefined) return [];
+  const tags: RowTag[] = [];
+  if (quote.stockTag !== null) tags.push(STOCK_TAGS[quote.stockTag]);
+  if (quote.specialty) tags.push(SPECIALTY_TAG);
+  return tags;
+}
+
+function formatAmount(amount: number): string {
+  return amount.toLocaleString('en-US', { maximumFractionDigits: BREAKDOWN_DECIMALS });
+}
+
+/** The engine's working as lines: base, each step with its multiplier and running total, final. */
+function breakdownLines(quote: PriceQuote): string[] {
+  const { base, steps, final } = quote.breakdown;
+  return [
+    `Base ${formatAmount(base)}`,
+    ...steps.map(
+      (step) =>
+        `${step.label}  ×${formatAmount(step.multiplier)} → ${formatAmount(step.runningTotal)}`,
+    ),
+    `Final ${formatAmount(final)}`,
+  ];
+}
+
+function breakdownHeight(ui: Ui, quote: PriceQuote | undefined): number {
+  if (quote === undefined) return 0;
+  return lineHeightOf(ui, 'caption') * breakdownLines(quote).length + ui.theme.space.sm;
+}
+
+/**
+ * Draws the working in `block` (the strip a selected row grows by), lined
+ * up under the row's description.
+ */
+function renderBreakdown(
+  ui: Ui,
+  rowRect: Rect,
+  block: Rect,
+  leading: RowLeading | undefined,
+  quote: PriceQuote,
+): void {
+  const { space } = ui.theme;
+  const textW = listRowTextWidth(ui, rowRect, { leading });
+  const left = rowRect.x + rowRect.w - space.md - textW;
+  const lines = breakdownLines(quote);
+  const lineH = lineHeightOf(ui, 'caption');
+  const area: Rect = { x: left, y: block.y, w: textW, h: lineH * lines.length };
+  const cells = splitV(
+    area,
+    lines.map(() => lineH),
+    0,
+  );
+  lines.forEach((line, index) => {
+    text(ui, cells[index], {
+      text: line,
+      role: index === lines.length - 1 ? 'caption' : 'muted',
+      tabular: true,
+    });
+  });
+}
+
 /** Why a row's Buy cannot be pressed, or null when it can. */
 function buyRefusal(row: ShopRow, unpriced: boolean, party: ShopParty): string | null {
   if (row.unavailable !== undefined) return row.unavailable;
@@ -128,6 +227,7 @@ function buyRefusal(row: ShopRow, unpriced: boolean, party: ShopParty): string |
  */
 export function shopScreenSurface(opts: ShopScreenOptions): Surface {
   const { session } = opts;
+  const breakdownsShown = opts.showPriceBreakdowns ?? priceBreakdownsShown;
   let prompt: QuantityPrompt | null = null;
   let promptGeneration = -1;
 
@@ -177,6 +277,7 @@ export function shopScreenSurface(opts: ShopScreenOptions): Surface {
         menu,
         party,
         close,
+        breakdowns: breakdownsShown(),
         onSellRow: (row) => {
           if (row.held > 1) askQuantity(row);
           else sellNow(row.id, 1);
@@ -204,7 +305,103 @@ interface RenderShopArgs {
   readonly menu: ShopMenu;
   readonly party: ShopParty;
   readonly close: () => void;
+  readonly breakdowns: boolean;
   readonly onSellRow: (row: SellRow) => void;
+}
+
+/** A row as `?prices` sees it: the key it is selected by and the working it shows. */
+interface PricedRow {
+  readonly key: string;
+  readonly quote?: PriceQuote;
+}
+
+function selectionId(args: RenderShopArgs, mode: ShopMode): string {
+  return `${args.id}/price-${mode}`;
+}
+
+/** The row whose working shows: the one last tapped, else the first with any; null when breakdowns are off. */
+function selectedPricedRow(
+  ui: Ui,
+  args: RenderShopArgs,
+  mode: ShopMode,
+  rows: readonly PricedRow[],
+): PricedRow | null {
+  if (!args.breakdowns) return null;
+  const chosen = ui.state(PRICE_SELECTION, selectionId(args, mode));
+  const priced = rows.filter((row) => row.quote !== undefined);
+  const first = priced.length > 0 ? priced[0] : null;
+  return priced.find((row) => row.key === chosen) ?? first;
+}
+
+/** The tap that selects a row for `?prices`, or none when breakdowns are off or the row has no working. */
+function selectTap(
+  ui: Ui,
+  args: RenderShopArgs,
+  mode: ShopMode,
+  row: PricedRow,
+): (() => void) | undefined {
+  if (!args.breakdowns || row.quote === undefined) return undefined;
+  return () => ui.setState(PRICE_SELECTION, selectionId(args, mode), row.key);
+}
+
+/** Each row's height: the shared row height, plus the working's strip under the selected row. */
+function rowHeights(
+  ui: Ui,
+  rows: readonly PricedRow[],
+  rowH: number,
+  selected: PricedRow | null,
+): number[] {
+  return rows.map((row) =>
+    row.key === selected?.key ? rowH + breakdownHeight(ui, row.quote) : rowH,
+  );
+}
+
+function sellLeading(row: SellRow): RowLeading {
+  return { kind: 'item', item: row.id };
+}
+
+/**
+ * How many lines of tags every row reserves under its subtitle: none where
+ * the tags sit beside the subtitle, else as many as the most-tagged row needs
+ * at the width the rows are drawn, so no tag is lost to a narrow screen.
+ */
+function tagLinesFor(
+  ui: Ui,
+  args: RenderShopArgs,
+  opts: {
+    readonly listW: number;
+    readonly mode: ShopMode;
+    readonly unpriced: boolean;
+    readonly baseRowH: number;
+    readonly rows: readonly {
+      readonly quote: PriceQuote | undefined;
+      readonly leading: RowLeading | undefined;
+    }[];
+  },
+): number {
+  if (ui.size !== 'compact') return 0;
+  const rowRect: Rect = { x: 0, y: 0, w: opts.listW, h: opts.baseRowH };
+  const actionLabel =
+    opts.mode === 'sell' ? SELL_LABEL : (args.menu.unpriced?.actionLabel ?? BUY_LABEL);
+  const statuses =
+    opts.mode === 'sell'
+      ? []
+      : args.menu.options.flatMap((row) =>
+          row.unavailable === undefined ? [] : [row.unavailable],
+        );
+  const trailingWidth = trailingLayout(ui, rowRect, !opts.unpriced, actionLabel, statuses).total;
+  const linesPerRow = opts.rows.map((row) =>
+    listRowTagLines(
+      ui,
+      listRowTextWidth(ui, rowRect, { leading: row.leading, trailingWidth }),
+      tagsFor(row.quote),
+    ),
+  );
+  return Math.max(0, ...linesPerRow);
+}
+
+function sellPricedRows(rows: readonly SellRow[]): PricedRow[] {
+  return rows.map((row) => ({ key: row.id, quote: row.quote }));
 }
 
 function renderShop(ui: Ui, args: RenderShopArgs): void {
@@ -214,10 +411,13 @@ function renderShop(ui: Ui, args: RenderShopArgs): void {
   const mode: ShopMode = sellable ? session.mode : 'buy';
   const unpriced = menu.unpriced !== undefined && mode === 'buy';
   const questRow = session.questDefaultRow(party);
-  const rowH = mode === 'buy' ? buyRowHeight(ui, menu, unpriced) : listRowHeight(ui, true);
   const sellRows = mode === 'sell' ? session.sellRows(party.active) : [];
   const rowCount =
     mode === 'sell' ? Math.max(1, sellRows.length) : Math.max(1, menu.options.length);
+  const pricedRows: readonly PricedRow[] =
+    mode === 'sell' ? sellPricedRows(sellRows) : menu.options;
+  const selected = selectedPricedRow(ui, args, mode, pricedRows);
+  const breakdownH = selected === null ? 0 : breakdownHeight(ui, selected.quote);
   const compact = ui.size === 'compact';
   const lineLines = compact ? 1 : SELLER_LINE_MAX_LINES;
   const lineH = lineHeightOf(ui, 'body') * lineLines;
@@ -225,17 +425,25 @@ function renderShop(ui: Ui, args: RenderShopArgs): void {
   const tabsH = sellable ? ui.theme.size.control : 0;
   const headerTracks: number[] = [lineH, ...(sellable ? [tabsH] : [])];
   const headerH = headerTracks.reduce((sum, h) => sum + h, 0) + space.md * headerTracks.length;
-  const contentHeight = headerH + rowCount * rowH;
+  const tagRows =
+    mode === 'sell'
+      ? sellRows.map((row) => ({ quote: row.quote, leading: sellLeading(row) }))
+      : menu.options.map((row) => ({ quote: row.quote, leading: leadingFor(menu, row) }));
+  const rowLayoutAt = (
+    listW: number,
+  ): { rowH: number; tagLines: number; contentHeight: number } => {
+    const baseRowH =
+      mode === 'buy' ? buyRowHeight(ui, menu, unpriced, listW) : listRowHeight(ui, true);
+    const tagLines = tagLinesFor(ui, args, { listW, mode, unpriced, baseRowH, rows: tagRows });
+    const rowH = baseRowH + listRowTagLineHeight(ui) * tagLines;
+    return { rowH, tagLines, contentHeight: headerH + rowCount * rowH + breakdownH };
+  };
 
-  const p = panel(ui, {
-    id: args.id,
+  const frame: Pick<PanelOptions, 'title' | 'subtitle' | 'width' | 'onClose' | 'footer'> = {
     title: menu.title,
     subtitle: menu.byline,
     width: SHOP_PANEL_WIDTH,
-    height: 'content',
-    contentHeight,
     onClose: args.close,
-    onScrimTap: args.close,
     footer: compact
       ? []
       : [
@@ -247,6 +455,22 @@ function renderShop(ui: Ui, args: RenderShopArgs): void {
             onTap: args.close,
           },
         ],
+  };
+  // The list's scroll view narrows its rows by a gutter once it scrolls, so
+  // wrapping is measured at that narrower width whenever the rows overflow.
+  const fullListW = panelBodyWidth(ui, SHOP_PANEL_WIDTH);
+  const unscrolled = rowLayoutAt(fullListW);
+  const listScrolls = scrollViewScrolls(unscrolled.contentHeight, panelBodyMaxHeight(ui, frame));
+  const { rowH, tagLines, contentHeight } = listScrolls
+    ? rowLayoutAt(fullListW - scrollGutterWidth(ui))
+    : unscrolled;
+
+  const p = panel(ui, {
+    ...frame,
+    id: args.id,
+    height: 'content',
+    contentHeight,
+    onScrimTap: args.close,
   });
 
   const [lineRow, ...rest] = splitV(p.body, [...headerTracks, 'fill'], space.md);
@@ -284,9 +508,9 @@ function renderShop(ui: Ui, args: RenderShopArgs): void {
   }
 
   if (mode === 'sell') {
-    renderSellList(ui, listRect, args, sellRows, rowH);
+    renderSellList(ui, listRect, args, sellRows, { rowH, selected, tagLines });
   } else {
-    renderBuyList(ui, listRect, args, { unpriced, questRow, rowH });
+    renderBuyList(ui, listRect, args, { unpriced, questRow, rowH, selected, tagLines });
   }
 }
 
@@ -332,17 +556,12 @@ function trailingLayout(
 /**
  * One height for every buy row: a single line of description, or, for a menu
  * that lets its descriptions wrap, as many lines as the longest one needs at
- * this panel's width, up to {@link ShopMenu.descLines}.
+ * the list's drawn width, up to {@link ShopMenu.descLines}.
  */
-function buyRowHeight(ui: Ui, menu: ShopMenu, unpriced: boolean): number {
+function buyRowHeight(ui: Ui, menu: ShopMenu, unpriced: boolean, listW: number): number {
   const maxLines = menu.descLines ?? 1;
   if (maxLines <= 1) return listRowHeight(ui, true);
-  const singleLineRow: Rect = {
-    x: 0,
-    y: 0,
-    w: panelBodyWidth(ui, SHOP_PANEL_WIDTH),
-    h: listRowHeight(ui, true),
-  };
+  const singleLineRow: Rect = { x: 0, y: 0, w: listW, h: listRowHeight(ui, true) };
   const actionLabel = menu.unpriced?.actionLabel ?? BUY_LABEL;
   const statuses = menu.options.flatMap((row) =>
     row.unavailable === undefined ? [] : [row.unavailable],
@@ -363,31 +582,32 @@ function renderBuyList(
   ui: Ui,
   rect: Rect,
   args: RenderShopArgs,
-  opts: { readonly unpriced: boolean; readonly questRow: ShopRow | null; readonly rowH: number },
+  opts: {
+    readonly unpriced: boolean;
+    readonly questRow: ShopRow | null;
+    readonly rowH: number;
+    readonly selected: PricedRow | null;
+    readonly tagLines: number;
+  },
 ): void {
   const { menu, party, session } = args;
   const { palette } = ui.theme;
   const actionLabel = menu.unpriced?.actionLabel ?? BUY_LABEL;
   const rows = menu.options;
   const statuses = rows.flatMap((row) => (row.unavailable === undefined ? [] : [row.unavailable]));
+  const heights = rowHeights(ui, rows, opts.rowH, opts.selected);
+  const listHeight = heights.reduce((sum, h) => sum + h, 0);
   scrollView(ui, rect, {
     id: `${args.id}/rows-buy`,
-    contentHeight: rows.length * opts.rowH,
+    contentHeight: listHeight,
     draw: (content) => {
-      const layout = trailingLayout(
-        ui,
-        { ...content, h: opts.rowH },
-        !opts.unpriced,
-        actionLabel,
-        statuses,
-      );
-      const cells = splitV(
-        { ...content, h: rows.length * opts.rowH },
-        rows.map(() => opts.rowH),
-        0,
-      );
+      const layoutRow = untaggedRow(ui, { ...content, h: opts.rowH }, opts.tagLines);
+      const layout = trailingLayout(ui, layoutRow, !opts.unpriced, actionLabel, statuses);
+      const cells = splitV({ ...content, h: listHeight }, heights, 0);
       rows.forEach((row, index) => {
-        const cell = cells[index];
+        const cell: Rect = { ...cells[index], h: opts.rowH };
+        const leading = leadingFor(menu, row);
+        const isSelected = row.key === opts.selected?.key;
         const refusal = buyRefusal(row, opts.unpriced, party);
         const isQuestDefault = opts.questRow?.key === row.key;
         const status = row.unavailable;
@@ -398,7 +618,11 @@ function renderBuyList(
           title: row.label,
           subtitle,
           subtitleLines: menu.descLines,
-          leading: leadingFor(menu, row),
+          leading,
+          tags: tagsFor(row.quote),
+          tagLines: opts.tagLines,
+          selected: isSelected,
+          onTap: selectTap(ui, args, 'buy', row),
           accent: row.isQuestItem === true ? palette.category.quest : undefined,
           trailingWidth: layout.total,
           trailingContent: (trailing) => {
@@ -422,6 +646,15 @@ function renderBuyList(
             });
           },
         });
+        if (isSelected && row.quote !== undefined) {
+          renderBreakdown(
+            ui,
+            { ...cell, h: layoutRow.h },
+            cellBelow(cells[index], cell),
+            leading,
+            row.quote,
+          );
+        }
       });
     },
   });
@@ -432,29 +665,41 @@ function renderSellList(
   rect: Rect,
   args: RenderShopArgs,
   rows: readonly SellRow[],
-  rowH: number,
+  opts: {
+    readonly rowH: number;
+    readonly selected: PricedRow | null;
+    readonly tagLines: number;
+  },
 ): void {
+  const { rowH } = opts;
   if (rows.length === 0) {
     text(ui, { ...rect, h: rowH }, { text: NOTHING_TO_SELL, role: 'muted', align: 'center' });
     return;
   }
+  const pricedRows = sellPricedRows(rows);
+  const heights = rowHeights(ui, pricedRows, rowH, opts.selected);
+  const listHeight = heights.reduce((sum, h) => sum + h, 0);
   scrollView(ui, rect, {
     id: `${args.id}/rows-sell`,
-    contentHeight: rows.length * rowH,
+    contentHeight: listHeight,
     draw: (content) => {
-      const layout = trailingLayout(ui, { ...content, h: rowH }, true, SELL_LABEL);
-      const cells = splitV(
-        { ...content, h: rows.length * rowH },
-        rows.map(() => rowH),
-        0,
-      );
+      const layoutRow = untaggedRow(ui, { ...content, h: rowH }, opts.tagLines);
+      const layout = trailingLayout(ui, layoutRow, true, SELL_LABEL);
+      const cells = splitV({ ...content, h: listHeight }, heights, 0);
       rows.forEach((row, index) => {
-        const cell = cells[index];
+        const cell: Rect = { ...cells[index], h: rowH };
+        const leading = sellLeading(row);
+        const pricedRow = pricedRows[index];
+        const isSelected = row.id === opts.selected?.key;
         listRow(ui, cell, {
           id: `${args.id}/sell-row-${row.id}`,
           title: ITEM_DEF[row.id].name,
           subtitle: `You have ${row.held}`,
-          leading: { kind: 'item', item: row.id },
+          leading,
+          tags: tagsFor(row.quote),
+          tagLines: opts.tagLines,
+          selected: isSelected,
+          onTap: selectTap(ui, args, 'sell', pricedRow),
           trailingWidth: layout.total,
           trailingContent: (trailing) => {
             const [chipCell, buttonCell] = splitH(
@@ -463,7 +708,7 @@ function renderSellList(
               ui.theme.space.sm,
             );
             priceChip(ui, chipCell, {
-              label: row.unitPrice.toLocaleString('en-US'),
+              label: row.quote.breakdown.final.toLocaleString('en-US'),
               tone: 'normal',
               withCoin: true,
             });
@@ -475,6 +720,14 @@ function renderSellList(
             });
           },
         });
+        if (isSelected)
+          renderBreakdown(
+            ui,
+            { ...cell, h: layoutRow.h },
+            cellBelow(cells[index], cell),
+            leading,
+            row.quote,
+          );
       });
     },
   });

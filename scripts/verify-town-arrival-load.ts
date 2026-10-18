@@ -57,7 +57,7 @@ const { buildingSheetsNotYetQueued } =
 const { tileChunkBakeCount } = await import('../src/map/TileRenderer.js');
 const { level3 } = await import('../src/levels/level3.js');
 const { MarketSystem } = await import('../src/systems/market/MarketSystem.js');
-const { createMarketStock } = await import('../src/systems/market/MarketStock.js');
+const { createShopStock } = await import('../src/economy/shopStock.js');
 const { TownPropSystem } = await import('../src/systems/TownPropSystem.js');
 const { TownDecorSystem } = await import('../src/systems/TownDecorSystem.js');
 const { TownLifeSystem } = await import('../src/systems/TownLifeSystem.js');
@@ -138,7 +138,7 @@ queueFloorArt();
 
 const market = new MarketSystem(
   gameMap,
-  createMarketStock(),
+  createShopStock(),
   () => undefined,
   () => false,
   () => null,

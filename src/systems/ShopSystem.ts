@@ -1,84 +1,21 @@
 import { TILE_SIZE } from '../core/constants';
-import type { ItemId } from '../core/ItemDefs';
 import type { Player } from '../Player';
 import type { GameSystem } from './GameSystem';
 import { drawInteractionPrompt } from '../ui/InteractionPrompt';
 import type { Townsperson } from '../creatures/Townsperson';
-import { decayHeldStock, type MarketStock } from './market/MarketStock';
-import type { ShopPricingProfile } from './market/shopPricing';
-import { GENERAL_STORE_PRICING } from './market/shopProfiles';
+import type { ShopId } from '../economy/shops';
+import type { ShopStock } from '../economy/shopStock';
 import { ShopSession } from '../ui/screens/shop/shopSession';
 import { openStoreCounter } from '../ui/screens/shop/storeCounter';
 
 const SHOPKEEPER_HALF_TILE = 0.5;
 const SHOPKEEPER_INTERACT_RANGE = 3.5;
 
-const HEALTH_POTION_PRICE = 5;
-export const GOBLIN_DYNAMITE_PRICE = 10;
-const CONFUSING_FOG_PRICE = 15;
-
-const DEFAULT_SHOP_TITLE = 'General Store';
-
-export interface ShopItem {
-  id: ItemId;
-  label: string;
-  price: number;
-  desc: string;
-  /** Units available for the whole run. Omit for an unlimited line, the default for every ShopSystem row. */
-  stock?: number;
-}
-
-/** A shop's catalog and how it prices what it buys back. */
-export interface ShopConfig {
-  title: string;
-  items: ReadonlyArray<ShopItem>;
-  pricing: ShopPricingProfile;
-}
-
-/**
- * Backs a `ShopSystem`'s limited rows with the same cross-scene counter the
- * overworld market stalls use, so a line bought out at a club counter stays
- * sold out through a checkpoint restore or a reload the same way a market
- * stall does. Also where the shop's held-stock (what the player has sold it)
- * lives, so a sale here survives leaving and re-entering the building.
- */
-export interface ShopStockConfig {
-  stock: MarketStock;
-  vendorId: string;
-}
-
-const SHOP_ITEMS: ReadonlyArray<ShopItem> = [
-  {
-    id: 'health_potion',
-    label: 'Health Potion',
-    price: HEALTH_POTION_PRICE,
-    desc: 'Restores 50% max HP',
-  },
-  {
-    id: 'goblin_dynamite',
-    label: 'Goblin Dynamite',
-    price: GOBLIN_DYNAMITE_PRICE,
-    desc: 'Throw for AoE damage',
-  },
-  {
-    id: 'scroll_of_confusing_fog',
-    label: 'Scroll of Confusing Fog',
-    price: CONFUSING_FOG_PRICE,
-    desc: 'Blinds nearby enemies',
-  },
-];
-
-/** The town's General Store: the same everyday catalog and pricing personality in every building of this type. */
-export const GENERAL_STORE_CONFIG: ShopConfig = {
-  title: DEFAULT_SHOP_TITLE,
-  items: SHOP_ITEMS,
-  pricing: GENERAL_STORE_PRICING,
-};
-
 /**
  * A catalog store's counter: the town's General Store, the club's bar and
- * market. Owns where the keeper stands, the "Shop" prompt and the held stock's
- * recovery; the counter itself is a {@link ShopSession} the shop screen draws.
+ * market. Owns where the keeper stands and the "Shop" prompt; the counter
+ * itself is a {@link ShopSession} the shop screen draws, priced from the
+ * shop's `SHOPS` entry against the shared stock record.
  */
 export class ShopSystem implements GameSystem {
   readonly session = new ShopSession();
@@ -100,8 +37,8 @@ export class ShopSystem implements GameSystem {
 
   constructor(
     interiorWidth: number,
-    private readonly config: ShopConfig,
-    private readonly stockConfig: ShopStockConfig,
+    private readonly shop: ShopId,
+    private readonly stock: ShopStock,
   ) {
     this.fallbackKeeperX = Math.floor(interiorWidth / 2) * TILE_SIZE;
   }
@@ -125,8 +62,8 @@ export class ShopSystem implements GameSystem {
 
   open(): void {
     openStoreCounter(this.session, {
-      config: this.config,
-      stock: this.stockConfig,
+      shop: this.shop,
+      stock: this.stock,
       onTraded: () => {
         this.purchasePending = true;
       },
@@ -137,10 +74,9 @@ export class ShopSystem implements GameSystem {
     this.session.close();
   }
 
-  /** One tick, open or not: the counter's line and live prices, and the held stock's recovery. */
+  /** One tick, open or not: the counter's feedback line and live prices. */
   update(): void {
     this.session.update();
-    decayHeldStock(this.stockConfig.stock.held, this.config.pricing.heldStockRecoveryPerTick);
   }
 
   isNearShopkeeper(player: Player): boolean {

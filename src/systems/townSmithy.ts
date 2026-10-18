@@ -18,10 +18,7 @@ import type { Player } from '../Player';
 import type { ShopMenu, ShopRow, ShopPurchaseHandler } from '../ui/screens/shop/shopSession';
 import type { ResidentHost } from './townResidents';
 import { rotateLine } from './townServiceUtil';
-
-const SINGLE_EDGE_PRICE = 18;
-/** Both crawlers at once, discounted against buying two singles — she only heats the forge once. */
-const PAIR_EDGE_PRICE = 30;
+import { SERVICE_PRICES } from '../economy/servicePrices';
 
 const SINGLE_EDGE_KEY = 'edge';
 const PAIR_EDGE_KEY = 'edge_pair';
@@ -53,7 +50,7 @@ export function buildSmithyMenu(
   const single: ShopRow = {
     key: SINGLE_EDGE_KEY,
     label: 'Put an edge on it',
-    price: SINGLE_EDGE_PRICE,
+    price: SERVICE_PRICES.smithy.single_edge,
     desc: `+${WHETSTONE_MELEE_DAMAGE_BONUS} melee damage for 3 minutes`,
   };
   if (buyer.hasStatus(WHETSTONE_STATUS)) single.unavailable = 'Still sharp';
@@ -61,7 +58,7 @@ export function buildSmithyMenu(
   const pair: ShopRow = {
     key: PAIR_EDGE_KEY,
     label: 'Edge the pair of you',
-    price: PAIR_EDGE_PRICE,
+    price: SERVICE_PRICES.smithy.pair_edge,
     desc: 'The same edge, for you and your companion',
   };
   if (party.every((member) => member.hasStatus(WHETSTONE_STATUS))) pair.unavailable = 'Still sharp';

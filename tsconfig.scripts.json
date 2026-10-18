@@ -243,6 +243,8 @@
     "scripts/verify-slots.ts",
     "scripts/verify-wheel.ts",
     "scripts/report-slots-rtp.ts",
+    "scripts/report-prices.ts",
+    "scripts/verify-shop-pricing.ts",
     "scripts/verify-tactics.ts",
     "scripts/tacticsSections/ranged.ts",
     "scripts/tacticsSections/special.ts",

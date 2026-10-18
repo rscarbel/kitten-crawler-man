@@ -33,6 +33,7 @@ import { snapPlayer, restorePlayer } from '../src/core/PlayerSnapshot';
 import { HumanPlayer } from '../src/creatures/HumanPlayer';
 import { CatPlayer } from '../src/creatures/CatPlayer';
 import { TILE_SIZE } from '../src/core/constants';
+import { shopStockKey } from '../src/economy/shopStock';
 import { HOLLOW_BELL_MAX_HP } from '../src/systems/briarHollow/hollowBell';
 
 /** Not a valid `StructureRecord`, `onceFlag` or top-level shape — a wrong-typed value used across several checks below. */
@@ -41,7 +42,9 @@ const GARBAGE_NUMBER = 42;
 const HUMAN_RESOURCING_XP = 50000;
 const CAT_RESOURCING_XP = 500;
 const HUMAN_CONSTRUCTION_XP = 200;
-const SAMPLE_HAMBURGER_STOCK = 5;
+const SAMPLE_HAMBURGER_OFFSET = -2;
+const SAMPLE_STEW_OFFSET = 3;
+const SAMPLE_RESTOCK_CLOCK = 120;
 
 let failures = 0;
 let checks = 0;
@@ -115,7 +118,13 @@ function populatedState(): BriarHollowState {
   state.talkCounts.tikka = 4;
   state.talkCounts.oren = 2;
   state.onceFlags = ['wicker:wooden_wall_built', 'tikka:construction_skill_granted'];
-  state.merchantStock = { hamburger: 5, hollow_stew: 2 };
+  state.shopStock = {
+    offsets: {
+      [shopStockKey('trading_post', 'hamburger')]: SAMPLE_HAMBURGER_OFFSET,
+      [shopStockKey('cookhouse', 'hollow_stew')]: SAMPLE_STEW_OFFSET,
+    },
+    ticksSinceRestock: SAMPLE_RESTOCK_CLOCK,
+  };
   return state;
 }
 
@@ -189,7 +198,13 @@ function populatedState(): BriarHollowState {
     ],
     talkCounts: { ...captured.talkCounts, tikka: 'four' },
     onceFlags: ['fine', GARBAGE_NUMBER, null, 'also-fine'],
-    merchantStock: { hamburger: SAMPLE_HAMBURGER_STOCK, hollow_stew: 'lots' },
+    shopStock: {
+      offsets: {
+        [shopStockKey('trading_post', 'hamburger')]: SAMPLE_HAMBURGER_OFFSET,
+        [shopStockKey('cookhouse', 'hollow_stew')]: 'lots',
+      },
+      ticksSinceRestock: 'soon',
+    },
   };
   const parsed = parseBriarHollowStateSnapshot(corrupted);
   check(parsed !== undefined, 'a record with corrupted entries still parses');
@@ -210,9 +225,11 @@ function populatedState(): BriarHollowState {
     'non-string onceFlags entries are dropped',
   );
   check(
-    parsed?.merchantStock.hamburger === SAMPLE_HAMBURGER_STOCK &&
-      !('hollow_stew' in parsed.merchantStock),
-    'a wrong-typed stock count is dropped rather than kept as garbage',
+    parsed?.shopStock.offsets[shopStockKey('trading_post', 'hamburger')] ===
+      SAMPLE_HAMBURGER_OFFSET &&
+      !(shopStockKey('cookhouse', 'hollow_stew') in parsed.shopStock.offsets) &&
+      parsed.shopStock.ticksSinceRestock === 0,
+    'a wrong-typed stock offset or restock clock is dropped rather than kept as garbage',
   );
 }
 

@@ -96,7 +96,7 @@ npm run verify:preview-scene  # the ?human and ?donut preview routes
 
 ## Dev overlays
 
-`?perf` shows fps, update/render/separation ms, and active vs. separated mob counts — the game's only profiling. `?difficulty` shows damage taken, potions consumed, dodges, deaths and per-segment HP delta, plus guard blocks per fight, kites and their length, and HP remaining in fights with vs. without a trait-bearing mob. They compose rather than replacing each other. Both live under `src/dev/`, which release builds resolve to an inert stub, so neither reaches a player.
+`?perf` shows fps, update/render/separation ms, and active vs. separated mob counts — the game's only profiling. `?difficulty` shows damage taken, potions consumed, dodges, deaths and per-segment HP delta, plus guard blocks per fight, kites and their length, and HP remaining in fights with vs. without a trait-bearing mob. They compose rather than replacing each other. Both live under `src/dev/`, which release builds resolve to an inert stub, so neither reaches a player. `?prices` shows the pricing engine's working (base, each markup/stock/buyback step with its multiplier and running total, final) under the selected row of every item counter's Buy and Sell tabs; tap a row to select it. Service rows have no working and show none.
 
 ## Chat cheats
 

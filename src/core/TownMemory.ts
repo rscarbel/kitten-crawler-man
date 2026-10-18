@@ -9,16 +9,12 @@
  * object threaded by reference through the `DungeonScene` ↔
  * `BuildingInteriorScene` constructors.
  *
- * Two things need it, and both were broken without it:
+ * Each of its records was broken without it. For example:
  *
  *  - **Resident stories.** A resident's lore list is walked one conversation per
  *    talk. Held on the `Townsperson`, that counter reset on every entry, so
  *    pages two and three were only reachable by standing in the room talking
  *    repeatedly — and every visit re-told page one before the shop would open.
- *  - **The apothecary's batch.** Fen's cheap poultices are meant to be rationed.
- *    Held on the scene, the batch refilled by stepping out of the door and back
- *    in, which made a 4-coin health potion unlimited and the General Store's
- *    5-coin one pointless.
  */
 
 import type { ResidentId } from '../systems/townResidents';
@@ -26,14 +22,11 @@ import type { ResidentId } from '../systems/townResidents';
 export interface TownMemory {
   /** How many times the player has talked to each named resident. */
   residentTalks: Map<ResidentId, number>;
-  /** Poultices left in Apothecary Fen's current batch. */
-  poulticesLeft: number;
   /**
    * Rooms whose hostile occupants have already been dealt with, keyed by
    * `<building name>#<floor>`.
    *
-   * The third thing that needs this record. An interior map is regenerated on
-   * every entry, so a room that spawns its hostiles from its own layout would
+   * An interior map is regenerated on every entry, so a room that spawns its hostiles from its own layout would
    * restock them the moment the player stepped back through the door — turning
    * a fight into a farm.
    */
@@ -69,13 +62,9 @@ export interface TownMemory {
   paidOutInteriorProps: Set<string>;
 }
 
-/** How many poultices Fen has made up, and does not remake while you wait. */
-export const APOTHECARY_BATCH_SIZE = 3;
-
 export function createTownMemory(): TownMemory {
   return {
     residentTalks: new Map(),
-    poulticesLeft: APOTHECARY_BATCH_SIZE,
     clearedRooms: new Set(),
     clearedCamps: new Set(),
     paidOutInteriorProps: new Set(),
@@ -240,21 +229,19 @@ export function forgetClearedCamps(memory: TownMemory): void {
 /** A point-in-time copy of the town's memory. */
 export interface TownMemoryCheckpoint {
   residentTalks: ReadonlyArray<readonly [ResidentId, number]>;
-  poulticesLeft: number;
   clearedRooms: ReadonlyArray<string>;
   clearedCamps: ReadonlyArray<string>;
   paidOutInteriorProps: ReadonlyArray<string>;
 }
 
 /**
- * Snapshots the town so a death rewinds it along with the coins that paid for
- * it — the batch especially, since restoring a purse without restoring the
- * stock it bought would hand the player free poultices on every death.
+ * Snapshots the town so a death rewinds it with everything else since the
+ * checkpoint: a room cleared or a prop looted after it is fought or looted
+ * again, rather than left empty while the rewind takes back what it paid.
  */
 export function captureTownMemory(memory: TownMemory): TownMemoryCheckpoint {
   return {
     residentTalks: [...memory.residentTalks],
-    poulticesLeft: memory.poulticesLeft,
     clearedRooms: [...memory.clearedRooms],
     clearedCamps: [...memory.clearedCamps],
     paidOutInteriorProps: [...memory.paidOutInteriorProps],
@@ -267,7 +254,6 @@ export function captureTownMemory(memory: TownMemory): TownMemoryCheckpoint {
  */
 export function restoreTownMemory(memory: TownMemory, snapshot: TownMemoryCheckpoint): void {
   memory.residentTalks = new Map(snapshot.residentTalks);
-  memory.poulticesLeft = snapshot.poulticesLeft;
   memory.clearedRooms = new Set(snapshot.clearedRooms);
   memory.clearedCamps = new Set(snapshot.clearedCamps);
   memory.paidOutInteriorProps = new Set(snapshot.paidOutInteriorProps);

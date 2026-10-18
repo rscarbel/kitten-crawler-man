@@ -240,7 +240,7 @@ function villagerContext(): VillagerContext {
     },
     breachExists: false,
     woodenWallStanding: false,
-    lowestStock: null,
+    suppliesRunningLow: false,
     soldierStance: null,
     unlocks: state.unlocks,
   };

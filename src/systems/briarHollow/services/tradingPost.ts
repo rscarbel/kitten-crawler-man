@@ -1,12 +1,10 @@
 /**
  * Vetch's Nibnose Trading Post: a little of everything, in limited supply.
  *
- * Stock lives in `BriarHollowState.merchantStock`, so a door visit never
- * refills the shelves and a save keeps what was bought. A line with no entry
- * there is fully stocked — a new floor's village starts with nothing recorded,
- * which is what restocks it — and an entry is only ever written by a sale.
- * That also keeps Vetch's "running low" opening honest: the lowest recorded
- * count is always something the party actually bought down.
+ * What the shelf carries and how it prices live on `SHOPS.trading_post`; the
+ * stock lives in `BriarHollowState.shopStock`, so a door visit never refills
+ * the shelves and a save keeps what was bought. Each floor's village has its
+ * own state, so a new floor's village opens fully stocked.
  *
  * Construction materials are on the shelf, dearer than making them, so a
  * party with coin to spare can skip some of the gathering.
@@ -15,10 +13,15 @@
 import { ITEM_DEF, type ItemId } from '../../../core/ItemDefs';
 import type { BriarHollowState } from '../../../core/briarHollowState';
 import type { Player } from '../../../Player';
-import { HEALTH_POTION_PRICE } from '../../market/vendorDefs';
-import { GOBLIN_DYNAMITE_PRICE } from '../../ShopSystem';
-import { SOLD_OUT_LABEL } from '../../market/vendorMenu';
-import { TRADING_POST_PRICING } from '../../market/shopProfiles';
+import { SOLD_OUT_LABEL, catalogLinePricing } from '../../market/vendorMenu';
+import { SHOPS, type CatalogLine, type ShopId } from '../../../economy/shops';
+import {
+  buyFromShop,
+  currentStock,
+  isLimitedLine,
+  isSoldOut,
+  normalStockOf,
+} from '../../../economy/shopStock';
 import type {
   ShopMenu,
   ShopRow,
@@ -29,7 +32,6 @@ import type { TopicProvider } from '../villagerTopics';
 import { SPEAKERS } from '../../../dialog/speakers';
 import { VETCH } from '../../../dialog/scripts/briarHollow';
 import { LOW_SUPPLIES_THRESHOLD } from '../villagerCircumstances';
-import { HAMBURGER_PRICE } from './cookhouse';
 import {
   type ShopCounter,
   type ShopDefinition,
@@ -38,86 +40,54 @@ import {
   shopTrades,
 } from './serviceContext';
 
-/** A village shop carries its goods a long way; everything the town also sells costs a tenth more. */
-const VILLAGE_MARKUP = 1.1;
-/** Burgers resold from Pipkin's kitchen, cold, at a quarter over his price. */
-const RESOLD_BURGER_MARKUP = 1.25;
-/** "Prices may become less friendly": what a line costs once it is running out. */
-export const LOW_STOCK_MARKUP = 1.5;
-
-/** Each is dearer than Fenna turning a party's own wood into it, so gathering stays the cheap way. */
-export const ROPE_PRICE = 6;
-export const BOARD_PRICE = 4;
-export const STONE_PRICE = 3;
-
+const TRADING_POST_SHOP = 'trading_post' as const satisfies ShopId;
 const TRADING_POST_TITLE = 'Nibnose Trading Post';
 export const MERCHANT = 'vetch';
 
-export interface TradingPostLine {
-  readonly id: ItemId;
-  readonly basePrice: number;
-  readonly baseStock: number;
-}
-
-export const TRADING_POST_LINES: readonly TradingPostLine[] = [
-  {
-    id: 'health_potion',
-    basePrice: Math.round(HEALTH_POTION_PRICE * VILLAGE_MARKUP),
-    baseStock: 5,
-  },
-  {
-    id: 'goblin_dynamite',
-    basePrice: Math.round(GOBLIN_DYNAMITE_PRICE * VILLAGE_MARKUP),
-    baseStock: 4,
-  },
-  { id: 'rope', basePrice: ROPE_PRICE, baseStock: 10 },
-  { id: 'wood_board', basePrice: BOARD_PRICE, baseStock: 20 },
-  { id: 'stone', basePrice: STONE_PRICE, baseStock: 20 },
-  { id: 'hamburger', basePrice: Math.round(HAMBURGER_PRICE * RESOLD_BURGER_MARKUP), baseStock: 3 },
-];
-
-export function remainingStock(state: BriarHollowState, entry: TradingPostLine): number {
-  return state.merchantStock[entry.id] ?? entry.baseStock;
+export function remainingStock(state: BriarHollowState, item: ItemId): number {
+  return currentStock(state.shopStock, TRADING_POST_SHOP, item);
 }
 
 /**
  * Running low means bought down to the threshold. A line that starts at or
  * under it (Pipkin sends over only a few burgers) is not "low" until one sells.
  */
-export function isRunningLow(state: BriarHollowState, entry: TradingPostLine): boolean {
-  const remaining = remainingStock(state, entry);
-  return remaining <= LOW_SUPPLIES_THRESHOLD && remaining < entry.baseStock;
+export function isRunningLow(state: BriarHollowState, item: ItemId): boolean {
+  const normal = normalStockOf(TRADING_POST_SHOP, item);
+  if (normal === 'unlimited') return false;
+  const remaining = remainingStock(state, item);
+  return remaining <= LOW_SUPPLIES_THRESHOLD && remaining < normal;
 }
 
-export function linePrice(state: BriarHollowState, entry: TradingPostLine): number {
-  return isRunningLow(state, entry)
-    ? Math.ceil(entry.basePrice * LOW_STOCK_MARKUP)
-    : entry.basePrice;
-}
-
-/** Every shelf back to its full count. A new floor's village starts this way. */
-export function restockTradingPost(state: BriarHollowState): void {
-  state.merchantStock = {};
+/** Whether any line on Vetch's shelf is running low, which is what sets him worrying about supplies. */
+export function tradingPostRunningLow(state: BriarHollowState): boolean {
+  return SHOPS.trading_post.catalog.some((line) => isRunningLow(state, line.item));
 }
 
 /** Machine-processed goods the shelf carries only once Fenna has let the crawlers run the mill. */
 const PROCESSED_GOODS: ReadonlySet<ItemId> = new Set<ItemId>(['rope', 'wood_board']);
 
-function tradingPostLinesFor(state: BriarHollowState): readonly TradingPostLine[] {
-  if (state.unlocks.processingStations) return TRADING_POST_LINES;
-  return TRADING_POST_LINES.filter((entry) => !PROCESSED_GOODS.has(entry.id));
+function tradingPostLinesFor(state: BriarHollowState): readonly CatalogLine[] {
+  const lines: readonly CatalogLine[] = SHOPS.trading_post.catalog;
+  if (state.unlocks.processingStations) return lines;
+  return lines.filter((line) => !PROCESSED_GOODS.has(line.item));
 }
 
 export function buildTradingPostMenu(state: BriarHollowState): ShopMenu {
-  const options = tradingPostLinesFor(state).map((entry): ShopRow => {
-    const remaining = remainingStock(state, entry);
+  const options = tradingPostLinesFor(state).map((line): ShopRow => {
+    const remaining = remainingStock(state, line.item);
+    const description = line.desc ?? ITEM_DEF[line.item].description ?? '';
     const option: ShopRow = {
-      key: entry.id,
-      label: ITEM_DEF[entry.id].name,
-      price: linePrice(state, entry),
-      desc: `${ITEM_DEF[entry.id].description ?? ''} (${remaining} left)`,
+      key: line.item,
+      label: line.label ?? ITEM_DEF[line.item].name,
+      ...catalogLinePricing(TRADING_POST_SHOP, line, state.shopStock),
+      desc: isLimitedLine(TRADING_POST_SHOP, line.item)
+        ? `${description} (${remaining} left)`
+        : description,
     };
-    if (remaining <= 0) option.unavailable = SOLD_OUT_LABEL;
+    if (isSoldOut(state.shopStock, TRADING_POST_SHOP, line.item)) {
+      option.unavailable = SOLD_OUT_LABEL;
+    }
     return option;
   });
   return {
@@ -133,18 +103,18 @@ export function tradingPostPurchase(
   option: ShopRow,
   buyer: Player,
 ): ShopPurchaseResult {
-  const entry = tradingPostLinesFor(state).find((candidate) => candidate.id === option.key);
-  if (entry === undefined) return { ok: false, line: '' };
-  const remaining = remainingStock(state, entry);
-  if (remaining <= 0) return { ok: false, line: SOLD_OUT_LABEL };
-  buyer.inventory.addItem(entry.id, 1);
-  const left = remaining - 1;
-  state.merchantStock[entry.id] = left;
-  return { ok: true, line: `${ITEM_DEF[entry.id].name} — ${left} left.` };
+  const line = tradingPostLinesFor(state).find((candidate) => candidate.item === option.key);
+  if (line === undefined) return { ok: false, line: '' };
+  if (!buyFromShop(state.shopStock, TRADING_POST_SHOP, line.item)) {
+    return { ok: false, line: SOLD_OUT_LABEL };
+  }
+  buyer.inventory.addItem(line.item, 1);
+  const left = remainingStock(state, line.item);
+  return { ok: true, line: `${ITEM_DEF[line.item].name} — ${left} left.` };
 }
 
 function tradingPostSellConfig(state: BriarHollowState): ShopSellConfig {
-  return { pricing: TRADING_POST_PRICING, heldStock: state.merchantHeld, vendorId: MERCHANT };
+  return { shop: TRADING_POST_SHOP, stock: state.shopStock };
 }
 
 export function tradingPostShop(state: BriarHollowState): ShopDefinition {

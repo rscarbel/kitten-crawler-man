@@ -29,6 +29,7 @@ import {
 import type { Player } from '../Player';
 import type { ShopRow, ShopPurchaseHandler } from '../ui/screens/shop/shopSession';
 import { rotateLine } from './townServiceUtil';
+import { SERVICE_PRICES } from '../economy/servicePrices';
 
 interface InnRoom {
   readonly key: string;
@@ -43,15 +44,11 @@ interface InnRoom {
   readonly lines: ReadonlyArray<string>;
 }
 
-const ATTIC_ROOM_PRICE = 25;
-const HEARTH_ROOM_PRICE = 55;
-const CATS_OWN_ROOM_PRICE = 90;
-
 const ROOMS: ReadonlyArray<InnRoom> = [
   {
     key: 'room_attic',
     label: 'The Attic Cot',
-    price: ATTIC_ROOM_PRICE,
+    price: SERVICE_PRICES.inn.attic_room,
     status: 'well_rested',
     boonSummary: '+2 CON',
     makeBoon: makeWellRested,
@@ -64,7 +61,7 @@ const ROOMS: ReadonlyArray<InnRoom> = [
   {
     key: 'room_hearth',
     label: 'The Hearthside Room',
-    price: HEARTH_ROOM_PRICE,
+    price: SERVICE_PRICES.inn.hearth_room,
     status: 'hearth_warmed',
     boonSummary: '+2 STR',
     makeBoon: makeHearthWarmed,
@@ -77,7 +74,7 @@ const ROOMS: ReadonlyArray<InnRoom> = [
   {
     key: 'room_cats_own',
     label: "The Cat's Own Room",
-    price: CATS_OWN_ROOM_PRICE,
+    price: SERVICE_PRICES.inn.cats_own_room,
     status: 'deep_slumber',
     boonSummary: '+2 DEX and +2 INT',
     makeBoon: makeDeepSlumber,

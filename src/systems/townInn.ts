@@ -18,6 +18,7 @@
  * `BuildingInteriorScene` owns the fade, the sounds and the interaction gating.
  */
 
+import type { ShopStock } from '../economy/shopStock';
 import type { Player } from '../Player';
 import type { ShopMenu, ShopPurchaseHandler } from '../ui/screens/shop/shopSession';
 import { buildInnRoomOptions, isInnRoomKey, rentInnRoom } from './townInnRooms';
@@ -31,8 +32,9 @@ export function buildInnMenu(
   turn: number,
   host: ResidentHost | null,
   townInDanger: boolean,
+  stock: ShopStock,
 ): ShopMenu {
-  const menu = buildTavernMenu(house, buyer, turn, host);
+  const menu = buildTavernMenu(house, buyer, turn, host, stock);
   return { ...menu, options: [...menu.options, ...buildInnRoomOptions(townInDanger)] };
 }
 
@@ -44,8 +46,9 @@ export function serveInn(
   house: string,
   party: ReadonlyArray<Player>,
   turn: number,
+  stock: ShopStock,
 ): ShopPurchaseHandler {
-  const serveFood = serveDrinkAt(house);
+  const serveFood = serveDrinkAt(house, stock);
   const rentRoom = rentInnRoom(party, turn);
   return (option, buyer) => {
     if (!isInnRoomKey(option.key)) return serveFood(option, buyer);

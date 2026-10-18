@@ -7,12 +7,7 @@ import type { MercenaryRoster } from '../core/MercenaryRoster';
 import type { ClubMembership } from '../core/ClubMembership';
 import type { MercenaryTemplateId } from '../core/mercenaryTemplates';
 import type { CretinVariant } from '../sprites/cretinSprite';
-
-/** Prices for the VIP back-room services (canon-flavoured coin sinks). */
-const VIP_HEAL_PRICE = 40;
-const VIP_COCKTAIL_PRICE = 60;
-/** The escort pair (canon: 300/crawler, 500/pair). Free when casino wagers exceed it. */
-export const BODYGUARD_PAIR_PRICE = 500;
+import { SERVICE_PRICES } from '../economy/servicePrices';
 
 /**
  * Stamped on a booking made where no scene has named the floor. Only harnesses
@@ -95,7 +90,7 @@ const VIP_SERVICES: ReadonlyArray<VipService> = [
  * members-only back room. Sells three premium coin sinks: a
  * full heal, a short buff cocktail, and a Cretin bodyguard escort. The
  * escort is free when the player's casino wagers this visit clear
- * {@link BODYGUARD_PAIR_PRICE} — the canon "spend enough at the tables and
+ * the escort's own price — the canon "spend enough at the tables and
  * security is free" perk. The booking lasts until the party leaves the floor it
  * was made on, so it is kept on the {@link ClubMembership} that outlives each
  * visit. The escort is cosmetic (the club is a safe zone); the host
@@ -147,11 +142,11 @@ export class ClubVipLoungeSystem {
   }
 
   private get escortIsFree(): boolean {
-    return this.wageredAtOpen > BODYGUARD_PAIR_PRICE;
+    return this.wageredAtOpen > SERVICE_PRICES.vip_lounge.bodyguard_pair;
   }
 
   private escortCost(): number {
-    return this.escortIsFree ? 0 : BODYGUARD_PAIR_PRICE;
+    return this.escortIsFree ? 0 : SERVICE_PRICES.vip_lounge.bodyguard_pair;
   }
 
   private heal(player: Player, companion: Player): void {
@@ -160,12 +155,12 @@ export class ClubVipLoungeSystem {
       this.audio?.play('error');
       return;
     }
-    if (!canAffordCoins(player, companion, VIP_HEAL_PRICE)) {
+    if (!canAffordCoins(player, companion, SERVICE_PRICES.vip_lounge.heal)) {
       this.feedbackMsg = 'Not enough coins for the medic.';
       this.audio?.play('error');
       return;
     }
-    spendPartyCoins(player, companion, VIP_HEAL_PRICE, player);
+    spendPartyCoins(player, companion, SERVICE_PRICES.vip_lounge.heal, player);
     player.hp = player.maxHp;
     this.feedbackMsg = 'Patched up. Good as new.';
     this.audio?.play('potion_drink');
@@ -179,12 +174,12 @@ export class ClubVipLoungeSystem {
       this.audio?.play('error');
       return;
     }
-    if (!canAffordCoins(player, companion, VIP_COCKTAIL_PRICE)) {
+    if (!canAffordCoins(player, companion, SERVICE_PRICES.vip_lounge.cocktail)) {
       this.feedbackMsg = 'Not enough coins for the cocktail.';
       this.audio?.play('error');
       return;
     }
-    spendPartyCoins(player, companion, VIP_COCKTAIL_PRICE, player);
+    spendPartyCoins(player, companion, SERVICE_PRICES.vip_lounge.cocktail, player);
     if (!speedActive) player.activateSpeedFizz();
     if (!cooldownActive) player.activateCooldownCrisp();
     this.feedbackMsg = 'The VIP Cocktail hits. You feel unstoppable.';
@@ -253,8 +248,8 @@ export class ClubVipLoungeSystem {
       case 'heal': {
         const atFull = player.hp >= player.maxHp;
         return {
-          label: `Buy — ${VIP_HEAL_PRICE}`,
-          disabled: atFull || !canAffordCoins(player, companion, VIP_HEAL_PRICE),
+          label: `Buy — ${SERVICE_PRICES.vip_lounge.heal}`,
+          disabled: atFull || !canAffordCoins(player, companion, SERVICE_PRICES.vip_lounge.heal),
           statusLine: atFull
             ? 'Already at full health.'
             : `${displayHp(player.hp)} / ${player.maxHp} HP`,
@@ -263,8 +258,9 @@ export class ClubVipLoungeSystem {
       case 'buff': {
         const bothActive = player.hasStatus('speed_fizz') && player.hasStatus('cooldown_crisp');
         return {
-          label: `Buy — ${VIP_COCKTAIL_PRICE}`,
-          disabled: bothActive || !canAffordCoins(player, companion, VIP_COCKTAIL_PRICE),
+          label: `Buy — ${SERVICE_PRICES.vip_lounge.cocktail}`,
+          disabled:
+            bothActive || !canAffordCoins(player, companion, SERVICE_PRICES.vip_lounge.cocktail),
           statusLine: bothActive ? 'Cocktail already active.' : '',
         };
       }

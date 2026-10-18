@@ -10,6 +10,8 @@
  * never on the template id, so two hires sharing a kit behave alike.
  */
 
+import { SERVICE_PRICES } from '../economy/servicePrices';
+
 export type MercenaryTemplateId =
   'sledge' | 'bomo' | 'dong_quixote' | 'splash_zone' | 'gluteus_maxx' | 'bucket_boy' | 'tumbledown';
 
@@ -55,16 +57,6 @@ export interface MercenaryTemplate {
   readonly voice: MercenaryVoiceId;
 }
 
-// Prices are tuned against floor-3 coin income. Cheapest is the hire that
-// barely fights; dearest is the best tank.
-const BUCKET_BOY_PRICE = 120;
-const GLUTEUS_MAXX_PRICE = 220;
-const SPLASH_ZONE_PRICE = 260;
-const DONG_QUIXOTE_PRICE = 280;
-const TUMBLEDOWN_PRICE = 300;
-const BOMO_PRICE = 300;
-const SLEDGE_PRICE = 350;
-
 const SLEDGE_HP = 95;
 const BOMO_HP = 85;
 const DONG_QUIXOTE_HP = 60;
@@ -97,7 +89,7 @@ const TEMPLATES_BY_ID: Readonly<Record<MercenaryTemplateId, MercenaryTemplate>> 
     role: 'Bodyguard',
     pitch:
       "Seven foot of rock in a rented tux. Sweet on the cat. Scuff the tux and I'll scuff you.",
-    price: SLEDGE_PRICE,
+    price: SERVICE_PRICES.mercenary_guild.sledge,
     hp: SLEDGE_HP,
     speed: CRETIN_SPEED,
     damage: CRETIN_DAMAGE,
@@ -112,7 +104,7 @@ const TEMPLATES_BY_ID: Readonly<Record<MercenaryTemplateId, MercenaryTemplate>> 
     species: 'Cretin',
     role: 'Bodyguard',
     pitch: 'Bought his own shield spell. Uses it on whoever looks worst. Bless him.',
-    price: BOMO_PRICE,
+    price: SERVICE_PRICES.mercenary_guild.bomo,
     hp: BOMO_HP,
     speed: CRETIN_SPEED,
     damage: CRETIN_DAMAGE,
@@ -127,7 +119,7 @@ const TEMPLATES_BY_ID: Readonly<Record<MercenaryTemplateId, MercenaryTemplate>> 
     species: 'Human',
     role: 'Lancer',
     pitch: "Seventy if he's a day, and he'll charge a wall if you point at it. No horse.",
-    price: DONG_QUIXOTE_PRICE,
+    price: SERVICE_PRICES.mercenary_guild.dong_quixote,
     hp: DONG_QUIXOTE_HP,
     speed: DONG_QUIXOTE_SPEED,
     damage: DONG_QUIXOTE_DAMAGE,
@@ -142,7 +134,7 @@ const TEMPLATES_BY_ID: Readonly<Record<MercenaryTemplateId, MercenaryTemplate>> 
     species: 'Otter',
     role: 'Water Mage',
     pitch: 'Nice lad. Married. Washes a whole crowd off its feet. Front rows get wet.',
-    price: SPLASH_ZONE_PRICE,
+    price: SERVICE_PRICES.mercenary_guild.splash_zone,
     hp: SPLASH_ZONE_HP,
     speed: SPLASH_ZONE_SPEED,
     damage: SPLASH_ZONE_DAMAGE,
@@ -158,7 +150,7 @@ const TEMPLATES_BY_ID: Readonly<Record<MercenaryTemplateId, MercenaryTemplate>> 
     role: 'Brawler',
     pitch:
       "Hits like a cart, folds like a napkin. Keep him off the uppers, or don't. Your funeral.",
-    price: GLUTEUS_MAXX_PRICE,
+    price: SERVICE_PRICES.mercenary_guild.gluteus_maxx,
     hp: GLUTEUS_MAXX_HP,
     speed: GLUTEUS_MAXX_SPEED,
     damage: GLUTEUS_MAXX_DAMAGE,
@@ -173,7 +165,7 @@ const TEMPLATES_BY_ID: Readonly<Record<MercenaryTemplateId, MercenaryTemplate>> 
     species: 'Crocodilian',
     role: 'Medic',
     pitch: 'Cheap, loyal, screams a lot. Heals, though.',
-    price: BUCKET_BOY_PRICE,
+    price: SERVICE_PRICES.mercenary_guild.bucket_boy,
     hp: BUCKET_BOY_HP,
     speed: BUCKET_BOY_SPEED,
     damage: BUCKET_BOY_DAMAGE,
@@ -188,7 +180,7 @@ const TEMPLATES_BY_ID: Readonly<Record<MercenaryTemplateId, MercenaryTemplate>> 
     species: 'Rock Golem',
     role: 'Heavy',
     pitch: "Doesn't talk, doesn't drink, doesn't unionize.",
-    price: TUMBLEDOWN_PRICE,
+    price: SERVICE_PRICES.mercenary_guild.tumbledown,
     hp: TUMBLEDOWN_HP,
     speed: TUMBLEDOWN_SPEED,
     damage: TUMBLEDOWN_DAMAGE,

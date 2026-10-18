@@ -39,7 +39,7 @@ import {
 } from './TownMemory';
 import type { JournalProgressCheckpoint } from './JournalProgress';
 import { TACTICS_TRAITS, type TacticsTrait } from '../creatures/tactics/tacticsTraits';
-import type { MarketStockCheckpoint } from '../systems/market/MarketStock';
+import { parseShopStockSnapshot, type ShopStockSnapshot } from '../economy/shopStock';
 import {
   CIRCUS_QUEST_STAGE_ORDER,
   type CircusQuestProgressCheckpoint,
@@ -94,7 +94,7 @@ export interface PersistedWorldState {
   journal: JournalProgressCheckpoint;
   bountyProgress: BountyProgressCheckpoint;
   clubMembership: ClubMembershipCheckpoint;
-  marketStock: PersistedMarketStockCheckpoint;
+  shopStock: ShopStockSnapshot;
   townMemory: TownMemoryCheckpoint;
   mercenaryRoster: MercenaryRosterCheckpoint;
   mongoPetState: MongoPetStateCheckpoint;
@@ -344,23 +344,6 @@ export function fromPersistedBountyCheckpoint(
   persisted: PersistedBountyCheckpoint,
 ): BountyCheckpoint {
   return { ...persisted, boss: null, encounter: [], shady: null };
-}
-
-export interface PersistedMarketStockCheckpoint {
-  readonly remaining: ReadonlyArray<readonly [string, number]>;
-  readonly held: Readonly<Record<string, number>>;
-}
-
-export function toPersistedMarketStockCheckpoint(
-  cp: MarketStockCheckpoint,
-): PersistedMarketStockCheckpoint {
-  return { remaining: [...cp.remaining], held: { ...cp.held } };
-}
-
-export function fromPersistedMarketStockCheckpoint(
-  persisted: PersistedMarketStockCheckpoint,
-): MarketStockCheckpoint {
-  return { remaining: new Map(persisted.remaining), held: { ...persisted.held } };
 }
 
 function isNumber(value: unknown): value is number {
@@ -1012,33 +995,9 @@ function parsePersistedBountyCheckpoint(value: unknown): PersistedBountyCheckpoi
   };
 }
 
-/** A `Record<string, number>` read back from untrusted JSON; a non-numeric or missing entry is simply dropped. */
-function parseNumberRecord(value: unknown): Record<string, number> {
-  if (!isRecord(value)) return {};
-  const record: Record<string, number> = {};
-  for (const [key, entry] of Object.entries(value)) {
-    if (isNumber(entry)) record[key] = entry;
-  }
-  return record;
-}
-
-export function parsePersistedMarketStockCheckpoint(
-  value: unknown,
-): PersistedMarketStockCheckpoint | undefined {
-  if (!isRecord(value)) return undefined;
-  const remaining = parseArray(value.remaining, (entry) =>
-    parseStringKeyedTuple(entry, (v) => (isNumber(v) ? v : undefined)),
-  );
-  if (remaining === undefined) return undefined;
-  // Absent from a save written before shops remembered what players sold
-  // them; such a save simply starts every shop's held stock at zero.
-  const held = parseNumberRecord(value.held);
-  return { remaining, held };
-}
-
 export function parseTownMemoryCheckpoint(value: unknown): TownMemoryCheckpoint | undefined {
   if (!isRecord(value)) return undefined;
-  const { residentTalks, poulticesLeft, clearedRooms } = value;
+  const { residentTalks, clearedRooms } = value;
   // Absent from a save written before camps were remembered; such a save
   // simply remembers none, rather than losing the whole world state over it.
   const clearedCamps = value.clearedCamps ?? [];
@@ -1052,7 +1011,6 @@ export function parseTownMemoryCheckpoint(value: unknown): TownMemoryCheckpoint 
   );
   if (
     parsedTalks === undefined ||
-    !isNumber(poulticesLeft) ||
     !isStringArray(clearedRooms) ||
     !isStringArray(clearedCamps) ||
     !isStringArray(paidOutInteriorProps)
@@ -1067,7 +1025,6 @@ export function parseTownMemoryCheckpoint(value: unknown): TownMemoryCheckpoint 
   }
   return {
     residentTalks: validTalks,
-    poulticesLeft,
     clearedRooms: clearedRooms.map(migrateRoomKey),
     clearedCamps,
     paidOutInteriorProps: paidOutInteriorProps.map(migrateInteriorPropPayoutKey),
@@ -1446,7 +1403,7 @@ export function parsePersistedWorldState(value: unknown): PersistedWorldState | 
   const journal = parseJournalProgressCheckpoint(value.journal);
   const bountyProgress = parseBountyProgressCheckpoint(value.bountyProgress);
   const clubMembership = parseClubMembershipCheckpoint(value.clubMembership);
-  const marketStock = parsePersistedMarketStockCheckpoint(value.marketStock);
+  const shopStock = parseShopStockSnapshot(value.shopStock);
   const townMemory = parseTownMemoryCheckpoint(value.townMemory);
   const mercenaryRoster = parseMercenaryRosterCheckpoint(value.mercenaryRoster);
   const mongoPetState = parseMongoPetStateCheckpoint(value.mongoPetState);
@@ -1474,7 +1431,6 @@ export function parsePersistedWorldState(value: unknown): PersistedWorldState | 
     journal === undefined ||
     bountyProgress === undefined ||
     clubMembership === undefined ||
-    marketStock === undefined ||
     townMemory === undefined ||
     mercenaryRoster === undefined ||
     mongoPetState === undefined ||
@@ -1501,7 +1457,7 @@ export function parsePersistedWorldState(value: unknown): PersistedWorldState | 
     journal,
     bountyProgress,
     clubMembership,
-    marketStock,
+    shopStock,
     townMemory,
     mercenaryRoster,
     mongoPetState,

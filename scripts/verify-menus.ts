@@ -1582,7 +1582,7 @@ const { ClubSlotsSystem, SLOTS_SURFACE_ID, SLOTS_RULES_SURFACE_ID } =
 const { playUntilBust, playUntilGameOver } = await import('../src/dev/uiGallery/dialogs/poker.js');
 const { snapPlayer } = await import('../src/core/PlayerSnapshot.js');
 const { teachBoth } = await import('../src/core/CraftSkills.js');
-const { createMarketStock } = await import('../src/systems/market/MarketStock.js');
+const { createShopStock } = await import('../src/economy/shopStock.js');
 const { BuildingInteriorScene } = await import('../src/scenes/BuildingInteriorScene.js');
 const { indoorsConstructionSource } =
   await import('../src/systems/briarHollow/ConstructionSystem.js');
@@ -1614,7 +1614,7 @@ async function enter(entry: Entry): Promise<Interior> {
     new InputManager(),
     new SceneManager(),
     noop,
-    createMarketStock(),
+    createShopStock(),
   );
   // The room's own loading screen, audited while it is up the way the town's
   // is: it is the one surface a player meets before any other in the room.

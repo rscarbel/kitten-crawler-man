@@ -46,7 +46,7 @@ import { SafeRoomSystem } from '../systems/SafeRoomSystem';
 import { BopcaSystem } from '../systems/BopcaSystem';
 import { stampSafeRoomCounters } from '../map/safeRoomCounterLayout';
 import { stampSafeRoomDecor } from '../map/safeRoomDecorLayout';
-import { ShopSystem, GENERAL_STORE_CONFIG } from '../systems/ShopSystem';
+import { ShopSystem } from '../systems/ShopSystem';
 import { TouchMoveState } from '../core/TouchMoveState';
 import { CRAWLER_NAMES } from '../core/SkillManager';
 import { constructionUnlocked } from '../core/villageUnlocks';
@@ -151,7 +151,8 @@ import { adviceObjective, MordecaiAdvisor, type AdviceSnapshot } from '../system
 import type { MurderQuestProgress, MurderQuestStage } from '../core/MurderQuestProgress';
 import { createDoomsdayProgress, type DoomsdayProgress } from '../core/DoomsdayProgress';
 import { createClubMembership, type ClubMembership } from '../core/ClubMembership';
-import type { MarketStock } from '../systems/market/MarketStock';
+import { tickShopStock, type ShopStock } from '../economy/shopStock';
+import type { ShopId } from '../economy/shops';
 import { FollowerScreen } from '../ui/screens/follower/FollowerScreen';
 import {
   CompanionSystem,
@@ -231,13 +232,6 @@ import {
   type ShopSellConfig,
 } from '../ui/screens/shop/shopSession';
 import { shopScreenSurface } from '../ui/screens/shop/ShopScreen';
-import {
-  ARMOURY_PRICING,
-  APOTHECARY_PRICING,
-  MERCHANT_STALL_PRICING,
-  FARMER_PRICING,
-} from '../systems/market/shopProfiles';
-import type { ShopPricingProfile } from '../systems/market/shopPricing';
 import { createSceneUi, sceneMouse } from '../ui/core/sceneUi';
 import type { Rect } from '../ui/core/geom';
 import { worldText } from '../ui/world/worldText';
@@ -929,11 +923,12 @@ export class BuildingInteriorScene extends GameplayScene {
       companions: InteriorCompanionDeparture,
     ) => void,
     /**
-     * The overworld market's stock counters, threaded by reference like
-     * `clubMembership` so a club line bought out stays sold out on the next
-     * visit and through a checkpoint restore.
+     * Every shop's stock, threaded by reference like `clubMembership` so a
+     * line bought out stays sold out on the next visit and through a
+     * checkpoint restore. Ticked here while this scene runs, so every shop
+     * restocks on game time wherever the party is.
      */
-    private readonly marketStock: MarketStock,
+    private readonly shopStock: ShopStock,
     humanAchievements?: AchievementManager,
     catAchievements?: AchievementManager,
     audio?: AudioManager,
@@ -1208,16 +1203,8 @@ export class BuildingInteriorScene extends GameplayScene {
       });
     }
 
-    // Keyed by the building's own name rather than a shared constant: two
-    // different General Stores must not pool the stock each one holds from
-    // the player's sales.
     this.shop =
-      entry.type === 'store'
-        ? new ShopSystem(this.mapW, GENERAL_STORE_CONFIG, {
-            stock: this.marketStock,
-            vendorId: `general_store:${entry.name}`,
-          })
-        : null;
+      entry.type === 'store' ? new ShopSystem(this.mapW, 'general_store', this.shopStock) : null;
 
     this.club =
       entry.type === 'club'
@@ -1230,7 +1217,7 @@ export class BuildingInteriorScene extends GameplayScene {
             this.audioScope,
             this.human.hasDesperadoPassTattoo || this.cat.hasDesperadoPassTattoo,
             this.active(),
-            this.marketStock,
+            this.shopStock,
             this.humanAchievements,
             this.catAchievements,
             this.circus?.worldSeed ?? POKER_DEV_SEED,
@@ -2938,6 +2925,8 @@ export class BuildingInteriorScene extends GameplayScene {
     if (this.readingPanel?.isOpen === true) return;
     if (this.readablePanel.isOpen) return;
     this.gameStats.recordPlayedFrame();
+    tickShopStock(this.shopStock);
+    tickShopStock(this.briarHollowState.shopStock);
     // Deliberately does not return: the player has to be able to walk while the
     // box is up, because walking off is what dismisses it. Mordecai's own
     // conversation is the shared one, already ticked above; this only measures
@@ -3885,26 +3874,14 @@ export class BuildingInteriorScene extends GameplayScene {
   }
 
   /**
-   * Fill the service panel with whatever this building sells. Each builder returns
-   * both the rows and the handler that performs the service, so the two can never
-   * drift apart.
-   *
-   * Switched on the building's name, and — inside a branch whose building runs
-   * more than one priced counter — on the role of the NPC the player walked up
-   * to. `openService` has already resolved that role from the talk target, so
-   * this never has to guess which counter is in front of the player.
+   * A Sell tab for a building service that trades in actual goods, priced by
+   * the counter's own `SHOPS` entry against the shared stock record, so a sale
+   * here and a sale at the General Store never share a shelf.
    */
-  /**
-   * A Sell tab for a building service that trades in actual goods, keyed off
-   * this scene's own `marketStock` — the same held-stock store the General
-   * Store and the Desperado Club's counters already use — so a sale here and
-   * a sale at the General Store never share a shelf.
-   */
-  private sellConfigFor(vendorId: string, pricing: ShopPricingProfile): ShopSellConfig {
+  private sellConfigFor(shop: ShopId): ShopSellConfig {
     return {
-      pricing,
-      heldStock: this.marketStock.held,
-      vendorId,
+      shop,
+      stock: this.shopStock,
       onSold: () => {
         playInteriorCue(this.audio, 'tillDrawer');
         this.audio?.play('purchase_success');
@@ -3920,6 +3897,16 @@ export class BuildingInteriorScene extends GameplayScene {
     this.audio?.play('purchase_success');
   }
 
+  /**
+   * Fill the service panel with whatever this building sells. Each builder returns
+   * both the rows and the handler that performs the service, so the two can never
+   * drift apart.
+   *
+   * Switched on the building's name, and — inside a branch whose building runs
+   * more than one priced counter — on the role of the NPC the player walked up
+   * to. `openService` has already resolved that role from the talk target, so
+   * this never has to guess which counter is in front of the player.
+   */
   private openServiceMenu(
     panel: ShopSession,
     turn: number,
@@ -3982,18 +3969,18 @@ export class BuildingInteriorScene extends GameplayScene {
           return;
         }
         panel.open(
-          () => buildArmouryMenu(turn, host),
-          confirmed(overCounter(issueArmour, 'tillDrawer'), never),
+          () => buildArmouryMenu(turn, host, this.shopStock),
+          confirmed(overCounter(issueArmour(this.shopStock), 'tillDrawer'), never),
           {
-            sell: this.sellConfigFor('armoury', ARMOURY_PRICING),
+            sell: this.sellConfigFor('armoury'),
           },
         );
         return;
       case 'Herb & Remedy':
         panel.open(
-          () => buildApothecaryMenu(party, this.townMemory, turn, host),
-          confirmed(overCounter(serveRemedy(party, this.townMemory), 'tillDrawer'), never),
-          { sell: this.sellConfigFor('apothecary', APOTHECARY_PRICING) },
+          () => buildApothecaryMenu(party, this.shopStock, turn, host),
+          confirmed(overCounter(serveRemedy(party, this.shopStock), 'tillDrawer'), never),
+          { sell: this.sellConfigFor('apothecary') },
         );
         return;
       case 'The Rusty Anvil':
@@ -4004,16 +3991,16 @@ export class BuildingInteriorScene extends GameplayScene {
         return;
       case "Cartwright's Workshop":
         panel.open(
-          () => buildCartwrightMenu(turn, host),
-          confirmed(overCounter(sellCartwrightGoods(turn), 'tillDrawer'), never),
-          { sell: this.sellConfigFor('cartwright_workshop', MERCHANT_STALL_PRICING) },
+          () => buildCartwrightMenu(turn, host, this.shopStock),
+          confirmed(overCounter(sellCartwrightGoods(turn, this.shopStock), 'tillDrawer'), never),
+          { sell: this.sellConfigFor('cartwright') },
         );
         return;
       case "Miller's Farm":
         panel.open(
-          () => buildMillerMenu(this.active(), turn, host),
-          confirmed(overCounter(serveMillerGoods(turn), 'scaleWeigh'), never),
-          { sell: this.sellConfigFor('millers_farm', FARMER_PRICING) },
+          () => buildMillerMenu(this.active(), turn, host, this.shopStock),
+          confirmed(overCounter(serveMillerGoods(turn, this.shopStock), 'scaleWeigh'), never),
+          { sell: this.sellConfigFor('millers_farm') },
         );
         return;
       case 'Plumbline Farm':
@@ -4031,18 +4018,19 @@ export class BuildingInteriorScene extends GameplayScene {
               turn,
               host,
               isTownInDanger(this.townDialogContext()),
+              this.shopStock,
             ),
           // A round off the kitchen board pours; a room gets the safe room's own
           // cue instead, because that is what the player just bought a night of.
-          confirmed(serveInn(this.entry.name, party, turn), (option) =>
+          confirmed(serveInn(this.entry.name, party, turn, this.shopStock), (option) =>
             isInnRoomKey(option.key) ? 'entered_safe_room' : POUR_CUE,
           ),
         );
         return;
       default:
         panel.open(
-          () => buildTavernMenu(this.entry.name, this.active(), turn, host),
-          confirmed(serveDrinkAt(this.entry.name), always),
+          () => buildTavernMenu(this.entry.name, this.active(), turn, host, this.shopStock),
+          confirmed(serveDrinkAt(this.entry.name, this.shopStock), always),
         );
     }
   }

@@ -2,18 +2,14 @@
  * Every market vendor in the Over City square, as pure data. `MarketSystem`
  * places the stalls and stations the people, `src/sprites/marketStall.ts` draws
  * the carts, and `vendorMenu.ts` turns a def into the priced menu the player
- * browses — so adding a vendor is an edit to `MARKET_VENDORS` alone.
- *
- * Invariant: every `items` entry must reference an existing `ItemId`. This file
- * adds no new items; it only gives the player a place in town to buy the snacks
- * and potions they'd otherwise only find as drops or in the club.
+ * browses. What a stall sells and how it prices lives in its `SHOPS` entry
+ * (`src/economy/shops.ts`), keyed by the vendor's `id`; this file only says
+ * who stands behind it, what the cart looks like and where it goes.
  */
 
-import type { ItemId } from '../../core/ItemDefs';
+import type { ShopId } from '../../economy/shops';
 import type { TownRole } from '../../sprites/person/PersonAppearance';
 import type { TownSpecies } from '../townSpecies';
-import type { ShopPricingProfile } from './shopPricing';
-import { STREET_VENDOR_PRICING, MERCHANT_STALL_PRICING } from './shopProfiles';
 
 /** Which stall silhouette and palette `src/sprites/marketStall.ts` draws. */
 export type StallStyle = 'produce_cart' | 'tinker_bench' | 'butcher_block' | 'cloth_awning';
@@ -21,35 +17,9 @@ export type StallStyle = 'produce_cart' | 'tinker_bench' | 'butcher_block' | 'cl
 /** Drives the little goods drawn on the counter, so a stall looks like what it sells. */
 export type GoodsMotif = 'produce' | 'bottles' | 'meat' | 'trinkets';
 
-/**
- * A condition outside the market that decides whether a line is on the counter
- * at all — as opposed to `stock`, which is about how many are left.
- *
- * A gated line is *absent* rather than greyed out: a row reading "Anchor Shard —
- * unavailable" to a player who has never heard of the Anchor is a puzzle piece
- * with no puzzle. The scene answers the condition, since the market has no way
- * to know what the party is carrying or which quests are live.
- */
-export type VendorLineGate = 'anchor_shard';
-
-export interface VendorStockLine {
-  id: ItemId;
-  label: string;
-  price: number;
-  desc: string;
-  /** When set, the line only appears while the scene says this gate is open. */
-  gate?: VendorLineGate;
-  /**
-   * Units available per restock. Omit for an unlimited line — every line ships
-   * unlimited today; the counting plumbing exists for future rare goods, not to
-   * gate the everyday consumables below.
-   */
-  stock?: number;
-}
-
 export interface VendorDef {
-  /** Stable key — used for stock state and for the appearance seed. Never reuse. */
-  id: string;
+  /** The stall's `SHOPS` entry: its catalog, its pricing and its key in the shared stock record. */
+  id: ShopId;
   /** Vendor's own name, e.g. 'Bess Ottoline'. Shown in the panel header. */
   vendorName: string;
   /** Stall name, e.g. "Greengrocer's Cart". Shown as the panel title. */
@@ -62,20 +32,9 @@ export interface VendorDef {
   motif: GoodsMotif;
   /** Rotated greeting lines, indexed by how many times the player has browsed. */
   barks: ReadonlyArray<string>;
-  items: ReadonlyArray<VendorStockLine>;
   /** Offset in tiles from the square centre for the stall's west tile. */
   placement: { dx: number; dy: number };
-  /** This stall's Sell tab pricing personality — see `src/systems/market/shopPricing.ts`. */
-  pricing: ShopPricingProfile;
 }
-
-/** What a health potion costs at a stall — the yardstick every other heal on the floor is priced against. */
-export const HEALTH_POTION_PRICE = 5;
-const SPEED_FIZZ_PRICE = 12;
-const COOLDOWN_CRISP_PRICE = 15;
-const JUGG_JUICE_PRICE = 22;
-/** The tinker priced the Anchor's first shard as scrap, and never revised it. */
-export const ANCHOR_SHARD_PRICE_COINS = 20;
 
 // The stalls flank the plaza on its west and east sides, on the centre row. Each
 // is two tiles wide from its `DX`, with the vendor standing on the row behind it.
@@ -107,26 +66,11 @@ const GREENGROCER: VendorDef = {
     'Back again? Good. The turnips remember you.',
     'Orlo over there sells the shine, I sell the substance. We do fine off each other.',
   ],
-  items: [
-    {
-      id: 'cooldown_crisp',
-      label: 'Cooldown Crisp',
-      price: COOLDOWN_CRISP_PRICE,
-      desc: 'Halves ability cooldowns, 25s',
-    },
-    {
-      id: 'jugg_juice',
-      label: 'Jugg Juice',
-      price: JUGG_JUICE_PRICE,
-      desc: '+50% max HP & full heal, 30s',
-    },
-  ],
   placement: { dx: WEST_STALL_DX, dy: STALL_ROW_DY },
-  pricing: STREET_VENDOR_PRICING,
 };
 
 /** Stable key for the tinker's stall, so a questline can point at it by name. */
-export const TINKER_VENDOR_ID = 'tinker';
+export const TINKER_VENDOR_ID = 'tinker' as const satisfies ShopId;
 
 const TINKER: VendorDef = {
   id: TINKER_VENDOR_ID,
@@ -143,33 +87,7 @@ const TINKER: VendorDef = {
     'You keep buying, I keep brewing. Fair trade.',
     'Bess sells you breakfast, I sell you the rest of the trip. Between us you’re covered.',
   ],
-  // The shard leads the counter while its gate is open: the panel draws rows in
-  // this order and hands its accept key to the first buyable quest row, so a
-  // player sent here for the shard can open the stall and take it without
-  // walking past the potions.
-  items: [
-    {
-      id: 'anchor_shard_tinker',
-      label: 'Anchor Shard',
-      price: ANCHOR_SHARD_PRICE_COINS,
-      desc: 'Odd grey wedge. Voss wants it',
-      gate: 'anchor_shard',
-    },
-    {
-      id: 'health_potion',
-      label: 'Health Potion',
-      price: HEALTH_POTION_PRICE,
-      desc: 'Restores 50% max HP',
-    },
-    {
-      id: 'speed_fizz',
-      label: 'Speed Fizz',
-      price: SPEED_FIZZ_PRICE,
-      desc: 'Doubles move speed, 25s',
-    },
-  ],
   placement: { dx: EAST_STALL_DX, dy: STALL_ROW_DY },
-  pricing: MERCHANT_STALL_PRICING,
 };
 
 /** The market's vendors, in placement order. */

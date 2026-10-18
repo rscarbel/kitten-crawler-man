@@ -25,6 +25,7 @@ import type { PartyCraftsState } from '../../../core/partyCrafts';
 import { teachBoth } from '../../../core/CraftSkills';
 import {
   TOOL_TIER_BASIC,
+  forgeCoinPrice,
   isToolTier,
   toolTierDef,
   type ToolKind,
@@ -210,15 +211,16 @@ function upgradeOption(tools: PartyToolsState, kind: ToolKind): ShopRow {
     };
   }
   const next = toolTierDef(kind, nextTier);
+  const nextPrice = forgeCoinPrice(nextTier);
   const gain = `${describeToolTierGain(next)} (now ${describeToolTierGain(current)}). Applies to Carl and Donut.`;
   const pitch = `Replaces your ${current.name}. ${next.description} ${gain}`;
   if (!hasMaterials(next.costMaterials)) {
-    return { key: kind, label: next.name, price: next.costCoins, desc: pitch };
+    return { key: kind, label: next.name, price: nextPrice, desc: pitch };
   }
   return {
     key: kind,
     label: next.name,
-    price: next.costCoins,
+    price: nextPrice,
     materials: next.costMaterials,
     // The subtitle is one line cut to fit, so the material cost leads it.
     desc: `Also takes ${formatCost(next.costMaterials)}. ${pitch}`,
@@ -226,9 +228,10 @@ function upgradeOption(tools: PartyToolsState, kind: ToolKind): ShopRow {
 }
 
 /** Whether the party's shared purse and combined packs cover a tier's coins and materials. */
-function partyCanAffordTier(party: ServiceParty, def: ToolTierDef): boolean {
+function partyCanAffordTier(party: ServiceParty, kind: ToolKind, tier: ToolTier): boolean {
   const { human, cat } = party;
-  return canAffordCoins(human, cat, def.costCoins) && canAfford(human, cat, def.costMaterials);
+  const materials = toolTierDef(kind, tier).costMaterials;
+  return canAffordCoins(human, cat, forgeCoinPrice(tier)) && canAfford(human, cat, materials);
 }
 
 /** The next tier of `kind` when the party can pay for all of it right now, else null. */
@@ -239,7 +242,7 @@ function affordableNextTier(
 ): ToolTier | null {
   const next = nextToolTier(tools, kind);
   if (next === null) return null;
-  return partyCanAffordTier(party, toolTierDef(kind, next)) ? next : null;
+  return partyCanAffordTier(party, kind, next) ? next : null;
 }
 
 /** Oren's line as the menu opens: an upgrade the party can afford right now, the axe first. */

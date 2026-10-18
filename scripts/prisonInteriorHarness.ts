@@ -26,7 +26,7 @@ import {
 import { PRISON_LAYOUTS } from '../src/map/goblinPrisonLayouts.js';
 import { BuildingInteriorScene } from '../src/scenes/BuildingInteriorScene.js';
 import type { InteriorFloorContext } from '../src/scenes/interiorFloorContext.js';
-import { createMarketStock } from '../src/systems/market/MarketStock.js';
+import { createShopStock } from '../src/economy/shopStock.js';
 import { detachedPrisonVisit } from '../src/systems/stealthKeySnatch/prisonVisit.js';
 import type { GoblinPrisonSystem } from '../src/systems/stealthKeySnatch/GoblinPrisonSystem.js';
 import type { SystemContext } from '../src/systems/GameSystem.js';
@@ -112,7 +112,7 @@ export async function enterPrison(
     new InputManager(),
     new SceneManager(),
     () => undefined,
-    createMarketStock(),
+    createShopStock(),
     undefined,
     undefined,
     undefined,

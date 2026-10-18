@@ -85,8 +85,8 @@ import type { Mob } from '../src/creatures/Mob';
 import type { SystemContext } from '../src/systems/GameSystem';
 import { Conversation } from '../src/dialog/Conversation';
 import { setViewportSize } from '../src/core/Viewport';
-import { ShopSystem, GENERAL_STORE_CONFIG } from '../src/systems/ShopSystem';
-import { createMarketStock } from '../src/systems/market/MarketStock';
+import { ShopSystem } from '../src/systems/ShopSystem';
+import { createShopStock } from '../src/economy/shopStock';
 
 // The confrontation's office scene paginates its dialog against the live
 // viewport; without a size set, DialogBox measures against a zero-width box
@@ -401,10 +401,7 @@ console.log('\nGeneral Store counter');
   check(kestrel !== undefined, 'the General Store roster actually places Kestrel in the room');
 
   const mapWidth = map.structure[0]?.length ?? 0;
-  const shop = new ShopSystem(mapWidth, GENERAL_STORE_CONFIG, {
-    stock: createMarketStock(),
-    vendorId: 'general_store:verify-interiors',
-  });
+  const shop = new ShopSystem(mapWidth, 'general_store', createShopStock());
   shop.setKeeper(kestrel ?? null);
   if (kestrel !== undefined) {
     const atCounter = new HumanPlayer(

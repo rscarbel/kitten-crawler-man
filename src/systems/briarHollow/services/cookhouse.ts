@@ -1,17 +1,18 @@
 /**
  * Pipkin's Cookhouse: burgers for a quick bite, stew for a proper heal.
  *
- * The stew heals exactly like a health potion and shares its cooldown, so it
- * costs what a potion does. A burger heals about half as much, but it feeds a
- * strength bonus and has no cooldown at all, so it is priced a little over
- * half a potion rather than at half.
+ * The menu and its pricing live on `SHOPS.cookhouse`. Hollow Stew heals
+ * exactly like a health potion and shares its cooldown, so its base price is a
+ * potion's; a burger heals about half as much but feeds a strength bonus and
+ * has no cooldown at all, so it is worth a little over half a potion.
  */
 
-import { ITEM_DEF, type ItemId } from '../../../core/ItemDefs';
+import { ITEM_DEF } from '../../../core/ItemDefs';
 import type { BriarHollowState } from '../../../core/briarHollowState';
 import type { Player } from '../../../Player';
-import { HEALTH_POTION_PRICE } from '../../market/vendorDefs';
-import { FARMER_PRICING } from '../../market/shopProfiles';
+import { SHOPS, type ShopId } from '../../../economy/shops';
+import { buyFromShop } from '../../../economy/shopStock';
+import { SOLD_OUT_LABEL, catalogLinePricing } from '../../market/vendorMenu';
 import type { ShopMenu, ShopRow, ShopPurchaseResult } from '../../../ui/screens/shop/shopSession';
 import type { TopicProvider } from '../villagerTopics';
 import { SPEAKERS } from '../../../dialog/speakers';
@@ -24,27 +25,16 @@ import {
   shopTrades,
 } from './serviceContext';
 
-/** A burger's price as a share of a potion's: half the heal, plus a buff and no cooldown. */
-const HAMBURGER_PRICE_SHARE_OF_POTION = 0.6;
-
-/** Hollow Stew is a potion in a bowl, and costs one. */
-export const HOLLOW_STEW_PRICE = HEALTH_POTION_PRICE;
-export const HAMBURGER_PRICE = Math.round(HEALTH_POTION_PRICE * HAMBURGER_PRICE_SHARE_OF_POTION);
-
+const COOKHOUSE_SHOP = 'cookhouse' as const satisfies ShopId;
 const COOKHOUSE_TITLE = "Pipkin's Cookhouse";
 export const COOK = 'pipkin';
 
-const MENU_ITEMS: ReadonlyArray<{ readonly id: ItemId; readonly price: number }> = [
-  { id: 'hamburger', price: HAMBURGER_PRICE },
-  { id: 'hollow_stew', price: HOLLOW_STEW_PRICE },
-];
-
-export function buildCookMenu(): ShopMenu {
-  const options: ShopRow[] = MENU_ITEMS.map(({ id, price }) => ({
-    key: id,
-    label: ITEM_DEF[id].name,
-    price,
-    desc: ITEM_DEF[id].description ?? '',
+export function buildCookMenu(state: BriarHollowState): ShopMenu {
+  const options = SHOPS.cookhouse.catalog.map((line): ShopRow => ({
+    key: line.item,
+    label: ITEM_DEF[line.item].name,
+    ...catalogLinePricing(COOKHOUSE_SHOP, line, state.shopStock),
+    desc: ITEM_DEF[line.item].description ?? '',
   }));
   return {
     title: COOKHOUSE_TITLE,
@@ -58,11 +48,18 @@ export function buildCookMenu(): ShopMenu {
  * Hands the dish over. Stew bought while the buyer's potion cooldown is still running still sells
  * — it keeps — but Pipkin says why it can't be eaten yet.
  */
-export function cookPurchase(option: ShopRow, buyer: Player): ShopPurchaseResult {
-  const dish = MENU_ITEMS.find((item) => item.id === option.key);
+export function cookPurchase(
+  state: BriarHollowState,
+  option: ShopRow,
+  buyer: Player,
+): ShopPurchaseResult {
+  const dish = SHOPS.cookhouse.catalog.find((line) => line.item === option.key);
   if (dish === undefined) return { ok: false, line: '' };
-  buyer.inventory.addItem(dish.id, 1);
-  if (dish.id === 'hamburger') return { ok: true, line: sellerLine(PIPKIN.buyBurger) };
+  if (!buyFromShop(state.shopStock, COOKHOUSE_SHOP, dish.item)) {
+    return { ok: false, line: SOLD_OUT_LABEL };
+  }
+  buyer.inventory.addItem(dish.item, 1);
+  if (dish.item === 'hamburger') return { ok: true, line: sellerLine(PIPKIN.buyBurger) };
   const stewCannotBeEatenYet = buyer.potionCooldownFrames > 0;
   return {
     ok: true,
@@ -72,12 +69,10 @@ export function cookPurchase(option: ShopRow, buyer: Player): ShopPurchaseResult
 
 export function cookShop(state: BriarHollowState): ShopDefinition {
   return {
-    build: buildCookMenu,
-    purchase: (option, buyer) => cookPurchase(option, buyer),
+    build: () => buildCookMenu(state),
+    purchase: (option, buyer) => cookPurchase(state, option, buyer),
     blockedLine: () => sellerLine(PIPKIN.cannotAfford),
-    // Pipkin feeds the whole garrison, so — the farmer's rate — he takes food
-    // back at a good price and barely notices a stack of it.
-    sell: { pricing: FARMER_PRICING, heldStock: state.merchantHeld, vendorId: COOK },
+    sell: { shop: COOKHOUSE_SHOP, stock: state.shopStock },
   };
 }
 

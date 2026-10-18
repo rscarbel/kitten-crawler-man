@@ -38,7 +38,7 @@ import { referenceStats } from '../src/core/referenceCrawler';
 import { HumanPlayer } from '../src/creatures/HumanPlayer';
 import { CatPlayer } from '../src/creatures/CatPlayer';
 import { GameMap } from '../src/map/GameMap';
-import { ShopSession } from '../src/ui/screens/shop/shopSession';
+import { ShopSession, type ShopRow } from '../src/ui/screens/shop/shopSession';
 import { RewardGrantedDialog } from '../src/ui/RewardGrantedDialog';
 import { QuantityDialog } from '../src/ui/screens/dialogs/QuantityDialog';
 import {
@@ -73,9 +73,15 @@ import {
 } from '../src/systems/briarHollow/services/infirmary';
 import {
   buildTradingPostMenu,
-  restockTradingPost,
+  isRunningLow,
   tradingPostShop,
 } from '../src/systems/briarHollow/services/tradingPost';
+import {
+  RESTOCK_INTERVAL_TICKS,
+  currentStock,
+  shopStockKey,
+  tickShopStock,
+} from '../src/economy/shopStock';
 import {
   UPGRADE_REBUY_GUARD_TICKS,
   forgeShop,
@@ -128,8 +134,9 @@ const EXPECTED_FEE_PER_HP = 0.7;
 const EXPECTED_MIN_FEE = POTION_PRICE;
 const EXPECTED_ROPE_BASE = 10;
 const EXPECTED_ROPE_PRICE = 6;
-const EXPECTED_ROPE_LOW_PRICE = 9;
 const LOW_STOCK = 3;
+/** Pipkin's burgers resold cold on Vetch's shelf, a quarter over his price. */
+const EXPECTED_RESOLD_BURGER_PRICE = 4;
 const EXPECTED_BOARDS_PER_WOOD = 2;
 const EXPECTED_ROPE_PER_WOOD = 1;
 const EXPECTED_FEE_PER_WOOD = 8;
@@ -494,7 +501,12 @@ function checkMerchant(): void {
   check(ropeRow()?.price === EXPECTED_ROPE_PRICE, 'rope costs 6');
   const panel = openShop(tradingPostShop(state));
   panel.pressBuy('rope', { active: human, companion: rig.cat });
-  check(state.merchantStock.rope === EXPECTED_ROPE_BASE - 1, 'a sale takes one off the shelf');
+  const ropeLeft = (target: BriarHollowState): number =>
+    currentStock(target.shopStock, 'trading_post', 'rope');
+  const setRopeLeft = (left: number): void => {
+    state.shopStock.offsets[shopStockKey('trading_post', 'rope')] = left - EXPECTED_ROPE_BASE;
+  };
+  check(ropeLeft(state) === EXPECTED_ROPE_BASE - 1, 'a sale takes one off the shelf');
   check(human.inventory.countOf('rope') === 1, 'and hands it over');
 
   const rebuilt = buildRig(state);
@@ -507,12 +519,16 @@ function checkMerchant(): void {
     JSON.parse(JSON.stringify(captureBriarHollowState(state))),
   );
   if (snapshot !== undefined) restoreBriarHollowState(reloaded, snapshot);
-  check(reloaded.merchantStock.rope === EXPECTED_ROPE_BASE - 1, 'and a save and reload');
+  check(ropeLeft(reloaded) === EXPECTED_ROPE_BASE - 1, 'and a save and reload');
 
-  state.merchantStock.rope = LOW_STOCK + 1;
-  check(ropeRow()?.price === EXPECTED_ROPE_PRICE, 'four left is still the base price');
-  state.merchantStock.rope = LOW_STOCK;
-  check(ropeRow()?.price === EXPECTED_ROPE_LOW_PRICE, 'three left is marked up by half');
+  setRopeLeft(LOW_STOCK + 1);
+  const fourLeftPrice = ropeRow()?.price ?? 0;
+  check(fourLeftPrice > EXPECTED_ROPE_PRICE, `a bought-down shelf is dearer (${fourLeftPrice})`);
+  check(!isRunningLow(state, 'rope'), 'four left is not yet running low');
+  setRopeLeft(LOW_STOCK);
+  const threeLeftPrice = ropeRow()?.price ?? 0;
+  check(threeLeftPrice >= fourLeftPrice, `and dearer still as it empties (${threeLeftPrice})`);
+  check(isRunningLow(state, 'rope'), 'three left is running low');
   const vetch = rig.villagers.villagerFor('vetch');
   if (vetch !== null) {
     state.talkCounts.vetch = 1;
@@ -520,12 +536,10 @@ function checkMerchant(): void {
     check(opening.pages[0] === VETCH.lowSupplies, 'and Vetch opens on low_supplies');
   }
   const burgers = buildTradingPostMenu(state).options.find((option) => option.key === 'hamburger');
-  check(
-    burgers?.price === Math.round(EXPECTED_BURGER_PRICE * 1.25),
-    'a full burger shelf is not "low"',
-  );
+  check(burgers?.price === EXPECTED_RESOLD_BURGER_PRICE, 'a full burger shelf is not "low"');
+  check(!isRunningLow(state, 'hamburger'), 'nor running low, though it starts at the threshold');
 
-  state.merchantStock.rope = 0;
+  setRopeLeft(0);
   check(ropeRow()?.unavailable === 'Sold out', 'an empty shelf is sold out');
   const before = human.coins;
   openShop(tradingPostShop(state)).pressBuy('rope', {
@@ -534,16 +548,31 @@ function checkMerchant(): void {
   });
   check(human.coins === before, 'and sells nothing');
 
-  restockTradingPost(state);
+  const counter = new ShopSession();
+  const counterShop = tradingPostShop(state);
+  counter.open(counterShop.build, counterShop.purchase, {
+    sell: { shop: 'trading_post', stock: state.shopStock },
+  });
+  const counterRope = (): ShopRow | undefined =>
+    counter.rows.find((option) => option.key === 'rope');
+  counter.sell('rope', 1, human);
   check(
-    buildTradingPostMenu(state).options.every((option) => option.unavailable === undefined) &&
-      ropeRow()?.price === EXPECTED_ROPE_PRICE,
-    'entering the floor restocks every shelf',
+    counterRope()?.unavailable === undefined && counterRope()?.price === ropeRow()?.price,
+    'selling one back reopens the open counter at the shelf price',
   );
+  const shelfPrice = ropeRow()?.price;
+  const beforeRebuy = human.coins;
+  counter.pressBuy('rope', { active: human, companion: rig.cat });
+  check(beforeRebuy - human.coins === shelfPrice, 'and buying it back charges what the shelf asks');
+
+  for (let tick = 0; tick < RESTOCK_INTERVAL_TICKS; tick++) tickShopStock(state.shopStock);
+  check(ropeLeft(state) === 1, 'a restock step puts one back on an emptied shelf');
+  check(ropeRow()?.unavailable === undefined, 'and it is no longer sold out');
   const freshState = createBriarHollowState();
   freshState.unlocks.processingStations = true;
   check(
-    buildTradingPostMenu(freshState).options[2].desc.includes(`${EXPECTED_ROPE_BASE} left`),
+    buildTradingPostMenu(freshState).options[2].desc.includes(`${EXPECTED_ROPE_BASE} left`) &&
+      buildTradingPostMenu(freshState).options[2].price === EXPECTED_ROPE_PRICE,
     "a new floor's village starts fully stocked",
   );
 }

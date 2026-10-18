@@ -6,10 +6,11 @@
  * thing nobody else in town sells is the cure — the only way to get a poison,
  * a burn or a sepsis off a crawler short of waiting it out or dying.
  *
- * The batch is held in `TownMemory`, threaded by reference through the scene
- * constructors, so it does *not* refill by stepping out of the door and back in
- * — the same rule the market stalls' stock plays by, and the only thing keeping
- * a 4-coin health potion from making the General Store's 5-coin one pointless.
+ * What she sells and at what margin lives on `SHOPS.apothecary`; the batch is
+ * that line's stock in the shared `ShopStock`, threaded by reference through
+ * the scenes, so it does *not* refill by stepping out of the door and back in.
+ * It comes back only at the slow global restock rate, which is what keeps a
+ * cheaper health potion from making the General Store's pointless.
  *
  * Pure data + effect application; the shop screen owns the UI and
  * `BuildingInteriorScene` owns the sounds and the interaction gating.
@@ -19,22 +20,23 @@ import { CURABLE_AILMENT_STATUSES } from '../core/StatusEffect';
 import type { ItemId } from '../core/ItemDefs';
 import type { Player } from '../Player';
 import type { ShopMenu, ShopRow, ShopPurchaseHandler } from '../ui/screens/shop/shopSession';
-import type { TownMemory } from '../core/TownMemory';
 import type { ResidentHost } from './townResidents';
 import { rotateLine } from './townServiceUtil';
+import { SERVICE_PRICES } from '../economy/servicePrices';
+import { SHOPS, type ShopId } from '../economy/shops';
+import type { ShopStock } from '../economy/shopStock';
+import { catalogLineRow, findCatalogLine, handOverCatalogLine } from './market/vendorMenu';
 
-/** Undercuts the General Store's price, but only while the batch lasts. */
-const POULTICE_PRICE = 4;
-const CURE_PRICE = 12;
-/** Her ruin-root tonic is the club bar's Jugg Juice at an apothecary's margin. */
-const TONIC_PRICE = 26;
-
-const POULTICE_KEY = 'poultice';
+const APOTHECARY_SHOP = 'apothecary' as const satisfies ShopId;
 const CURE_KEY = 'cure';
-const TONIC_KEY = 'tonic';
 
-const POULTICE_ITEM: ItemId = 'health_potion';
-const TONIC_ITEM: ItemId = 'jugg_juice';
+type ApothecaryItem = (typeof SHOPS.apothecary.catalog)[number]['item'];
+
+/** What Fen says as each remedy goes over the counter. */
+const HANDED_OVER_LINES: Readonly<Record<ApothecaryItem, string>> = {
+  health_potion: 'Keep it out of the sun. It sours by the week.',
+  jugg_juice: 'Root, honey and something I will not name. Down it fast.',
+};
 
 const APOTHECARY_BARKS: ReadonlyArray<string> = [
   'Coin on the counter, ailment out loud. I have heard worse than yours.',
@@ -42,50 +44,44 @@ const APOTHECARY_BARKS: ReadonlyArray<string> = [
   'Something on you is still working. I can see it from here. Shall I take it off?',
 ];
 
+function handedOverLine(item: ItemId): string {
+  const lines: Partial<Record<ItemId, string>> = HANDED_OVER_LINES;
+  return lines[item] ?? 'Mind how you carry it.';
+}
+
 function afflicted(party: ReadonlyArray<Player>): boolean {
   return party.some((member) => CURABLE_AILMENT_STATUSES.some((type) => member.hasStatus(type)));
 }
 
-/** The apothecary's board for this visit. */
+/** The apothecary's board for this visit: her shelf, then the cure. */
 export function buildApothecaryMenu(
   party: ReadonlyArray<Player>,
-  memory: TownMemory,
+  stock: ShopStock,
   turn: number,
   host: ResidentHost | null,
 ): ShopMenu {
-  const poultice: ShopRow = {
-    key: POULTICE_KEY,
-    label: 'Marsh Poultice',
-    price: POULTICE_PRICE,
-    desc: `A health potion, cheap. ${memory.poulticesLeft} left in the batch`,
-  };
-  if (memory.poulticesLeft <= 0) poultice.unavailable = 'Sold out';
+  const shelf = SHOPS.apothecary.catalog.map((line) =>
+    catalogLineRow(APOTHECARY_SHOP, line, stock),
+  );
 
   const cure: ShopRow = {
     key: CURE_KEY,
     label: "Fen's Antidote",
-    price: CURE_PRICE,
+    price: SERVICE_PRICES.apothecary.cure,
     desc: 'Draws poison, burn and rot out of you both',
   };
   if (!afflicted(party)) cure.unavailable = 'Unafflicted';
-
-  const tonic: ShopRow = {
-    key: TONIC_KEY,
-    label: 'Ruin-Root Tonic',
-    price: TONIC_PRICE,
-    desc: 'Jugg Juice, ground here rather than poured at the club',
-  };
 
   return {
     title: 'Herb & Remedy',
     bark: host?.line ?? rotateLine(APOTHECARY_BARKS, turn),
     byline: host?.name,
-    options: [poultice, cure, tonic],
+    options: [...shelf, cure],
   };
 }
 
-/** Serves whichever remedy was bought, against the visit's own batch. */
-export function serveRemedy(party: ReadonlyArray<Player>, memory: TownMemory): ShopPurchaseHandler {
+/** Serves whichever remedy was bought, against the shop's own stock. */
+export function serveRemedy(party: ReadonlyArray<Player>, stock: ShopStock): ShopPurchaseHandler {
   return (option, buyer) => {
     if (option.key === CURE_KEY) {
       let cleared = 0;
@@ -93,16 +89,11 @@ export function serveRemedy(party: ReadonlyArray<Player>, memory: TownMemory): S
       if (cleared === 0) return { ok: false, line: 'There is nothing on you worth my stock.' };
       return { ok: true, line: 'Drawn out and burnt. Do not go and collect more of it.' };
     }
-    if (option.key === POULTICE_KEY) {
-      if (memory.poulticesLeft <= 0) return { ok: false, line: 'That was the last of the batch.' };
-      buyer.inventory.addItem(POULTICE_ITEM, 1);
-      memory.poulticesLeft--;
-      return { ok: true, line: 'Keep it out of the sun. It sours by the week.' };
+    const line = findCatalogLine(APOTHECARY_SHOP, option.key);
+    if (line === undefined) return { ok: false, line: 'Fen frowns at the shelf.' };
+    if (!handOverCatalogLine(APOTHECARY_SHOP, line, stock, buyer)) {
+      return { ok: false, line: 'That was the last of the batch.' };
     }
-    if (option.key === TONIC_KEY) {
-      buyer.inventory.addItem(TONIC_ITEM, 1);
-      return { ok: true, line: 'Root, honey and something I will not name. Down it fast.' };
-    }
-    return { ok: false, line: 'Fen frowns at the shelf.' };
+    return { ok: true, line: handedOverLine(line.item) };
   };
 }

@@ -78,7 +78,6 @@ const BLUEPRINTS_QUEST_ICONS: readonly IconSpec[] = BLUEPRINTS_QUEST_ICON_ID_LIS
 
 const REFERENCE_HEALTH_POTION: InventoryItem = {
   id: 'health_potion',
-  baseValue: 0,
   name: 'Health Potion',
   quantity: 1,
   stackable: true,
@@ -86,7 +85,6 @@ const REFERENCE_HEALTH_POTION: InventoryItem = {
 };
 const REFERENCE_GOBLIN_DYNAMITE: InventoryItem = {
   id: 'goblin_dynamite',
-  baseValue: 0,
   name: 'Goblin Dynamite',
   quantity: 1,
   stackable: true,

@@ -13,9 +13,9 @@ import {
 import { keybindings } from '../../../core/Keybindings';
 import {
   BOARDS_PER_WOOD,
-  FENNA_FEE_PER_WOOD,
   ROPE_PER_WOOD,
 } from '../../../systems/briarHollow/services/woodProcessing';
+import { SERVICE_PRICES } from '../../../economy/servicePrices';
 
 /** The explainer's pages, worded for the player's own bindings and device. */
 export function processingExplainerPages(touch: boolean): ExplainerPageContent[] {
@@ -41,7 +41,7 @@ export function processingExplainerPages(touch: boolean): ExplainerPageContent[]
       subtitle: 'Let Fenna do it',
       drawIllustration: drawFennaPage,
       lines: [
-        `Rather not stand at a machine yourself? Fenna will run a whole batch for ${FENNA_FEE_PER_WOOD} coins per wood.`,
+        `Rather not stand at a machine yourself? Fenna will run a whole batch for ${SERVICE_PRICES.lumber_yard.processing_per_wood} coins per wood.`,
         "It's a purchase like any other from her — quick, but it earns no Construction XP.",
       ],
     },

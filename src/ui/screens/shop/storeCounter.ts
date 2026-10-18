@@ -1,85 +1,62 @@
 /**
  * A catalog store's counter (the town's General Store, the club's bar and
- * market) as a shop session: its catalog priced against what it is holding,
- * its limited lines booked off the shared market stock, and a Sell tab priced
- * by the same engine. The store's own system keeps decaying the held stock
- * every tick it is entered, so the session leaves that alone.
+ * market) as a shop session: its `SHOPS` catalog priced against the shared
+ * stock record, its limited lines booked off that record, and a Sell tab
+ * priced by the same engine. The scene restocks the record on its own clock,
+ * so the session never touches the restock.
  */
 
-import type { ItemId } from '../../../core/ItemDefs';
-import {
-  consumeStock,
-  heldFor,
-  remainingFor,
-  removeHeldStock,
-} from '../../../systems/market/MarketStock';
-import { shopBuyPrice } from '../../../systems/market/shopPricing';
-import { SOLD_OUT_LABEL } from '../../../systems/market/vendorMenu';
-import type { ShopConfig, ShopItem, ShopStockConfig } from '../../../systems/ShopSystem';
+import { catalogLineLabel, catalogLineUnits, shopDef, type ShopId } from '../../../economy/shops';
+import { buyFromShop, isSoldOut, type ShopStock } from '../../../economy/shopStock';
+import { SOLD_OUT_LABEL, catalogLinePricing } from '../../../systems/market/vendorMenu';
 import type { ShopMenu, ShopRow, ShopSession } from './shopSession';
 
 const NOT_ENOUGH_COINS_LINE = 'Not enough coins!';
 const STORE_BARK = 'Have a look around.';
 
 export interface StoreCounter {
-  readonly config: ShopConfig;
-  readonly stock: ShopStockConfig;
+  readonly shop: ShopId;
+  readonly stock: ShopStock;
   /** Runs after every purchase or sale that went through, for the host's sound. */
   readonly onTraded: () => void;
 }
 
-function catalogLine(config: ShopConfig, id: ItemId): ShopItem | undefined {
-  return config.items.find((line) => line.id === id);
-}
-
-function heldUnits(counter: StoreCounter, id: ItemId): number {
-  return heldFor(counter.stock.stock.held, counter.stock.vendorId, id);
-}
-
 function storeMenu(counter: StoreCounter): ShopMenu {
-  const { config, stock } = counter;
-  const options: ShopRow[] = config.items.map((item) => {
-    const soldOut = remainingFor(stock.stock, stock.vendorId, item) === 0;
+  const { shop, stock } = counter;
+  const def = shopDef(shop);
+  const options: ShopRow[] = def.catalog.map((line) => {
+    const soldOut = isSoldOut(stock, shop, line.item, catalogLineUnits(line));
     return {
-      key: item.id,
-      label: item.label,
-      desc: item.desc,
-      price: shopBuyPrice(item.id, config.pricing, heldUnits(counter, item.id), item.price),
-      icon: { kind: 'item', item: item.id },
+      key: line.item,
+      label: catalogLineLabel(line),
+      desc: line.desc ?? '',
+      ...catalogLinePricing(shop, line, stock),
+      icon: { kind: 'item', item: line.item },
       ...(soldOut ? { unavailable: SOLD_OUT_LABEL } : {}),
     };
   });
-  return { title: config.title, bark: STORE_BARK, options };
+  return { title: def.name, bark: STORE_BARK, options };
 }
 
 /** Opens `session` on the store's counter. */
 export function openStoreCounter(session: ShopSession, counter: StoreCounter): void {
-  const { config, stock } = counter;
+  const { shop, stock } = counter;
   session.open(
     () => storeMenu(counter),
     (option, player) => {
-      const item = config.items.find((line) => line.id === option.key);
-      if (item === undefined) return { ok: false, line: '' };
-      player.inventory.addItem(item.id, 1);
-      consumeStock(stock.stock, stock.vendorId, item);
-      if (heldUnits(counter, item.id) > 0) {
-        removeHeldStock(stock.stock.held, stock.vendorId, item.id);
-      }
+      const line = shopDef(shop).catalog.find((candidate) => candidate.item === option.key);
+      if (line === undefined) return { ok: false, line: '' };
+      const units = catalogLineUnits(line);
+      if (!buyFromShop(stock, shop, line.item, units)) return { ok: false, line: SOLD_OUT_LABEL };
+      player.inventory.addItem(line.item, units);
       counter.onTraded();
-      return { ok: true, line: `Bought ${item.label}!` };
+      return { ok: true, line: `Bought ${catalogLineLabel(line)}!` };
     },
     {
       blockedLine: (option) =>
         option.unavailable !== undefined ? SOLD_OUT_LABEL : NOT_ENOUGH_COINS_LINE,
       liveRows: true,
-      sell: {
-        pricing: config.pricing,
-        heldStock: stock.stock.held,
-        vendorId: stock.vendorId,
-        catalogPrice: (id) => catalogLine(config, id)?.price,
-        decaysWhileOpen: false,
-        onSold: counter.onTraded,
-      },
+      ...(shopDef(shop).buysFromPlayer ? { sell: { shop, stock, onSold: counter.onTraded } } : {}),
     },
   );
 }

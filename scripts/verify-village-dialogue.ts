@@ -88,7 +88,6 @@ const JUST_NOW_SECONDS = NOW_SECONDS - 5;
 const MILESTONE_LEVELS: readonly number[] = [0, 5, 10, 15];
 const PLENTY_OF_STONE = 12;
 const LAST_TALK_STONE = 3;
-const LOW_STOCK = 2;
 
 function questState(phase: VillageQuestPhase): VillageQuestState {
   return { ...createBriarHollowState().quest, phase };
@@ -122,7 +121,7 @@ function baseContext(phase: VillageQuestPhase, talkCount: number): VillagerConte
     },
     breachExists: false,
     woodenWallStanding: false,
-    lowestStock: null,
+    suppliesRunningLow: false,
     soldierStance: null,
     unlocks: createBriarHollowState().unlocks,
   };
@@ -152,7 +151,7 @@ function representativeContexts(
       onceFlags: [onceFlagFor('wicker', 'wooden_wall_built')],
     },
     { ...base, events: { ...base.events, firstWoodenWallBuilt: true } },
-    { ...base, lowestStock: LOW_STOCK },
+    { ...base, suppliesRunningLow: true },
     { ...base, party: partyState({ axeTier: 0, pickaxeTier: 0 }) },
     { ...base, breachExists: true },
   ];

@@ -23,7 +23,7 @@ import type { SpiderQuestCheckpoint } from '../systems/SpiderQuestSystem';
 import type { StairwellCheckpoint } from '../systems/StairwellSystem';
 import type { TreasureChestCheckpoint } from '../systems/TreasureChestSystem';
 import type { TreeCheckpoint } from '../systems/TreeSystem';
-import type { MarketStockCheckpoint } from '../systems/market/MarketStock';
+import type { ShopStockSnapshot } from '../economy/shopStock';
 import type { BountyProgressCheckpoint } from './BountyProgress';
 import type { CircusQuestProgressCheckpoint } from './CircusQuestProgress';
 import type { AnchorQuestProgressCheckpoint } from './AnchorQuestProgress';
@@ -98,7 +98,7 @@ export interface WorldCheckpoint {
   journal: JournalProgressCheckpoint;
   bountyProgress: BountyProgressCheckpoint;
   clubMembership: ClubMembershipCheckpoint;
-  marketStock: MarketStockCheckpoint;
+  shopStock: ShopStockSnapshot;
   townMemory: TownMemoryCheckpoint;
   mercenaryRoster: MercenaryRosterCheckpoint;
   mongoPetState: MongoPetStateCheckpoint;

@@ -9,79 +9,42 @@
  * Priced above the General Store's consumables and below the parlour's ink: a
  * crawler should be able to walk out of here kitted after two or three floors'
  * worth of coin, and should still have to choose which piece they want first.
+ * The pieces and their order live on `SHOPS.armoury`; each price is the item's
+ * base in `ITEM_PRICES` times that shop's markup.
  *
  * Pure data + effect application; the shop screen owns the UI and
  * `BuildingInteriorScene` owns the sounds and the interaction gating.
  */
 
 import type { ItemId } from '../core/ItemDefs';
-import type { ShopMenu, ShopRow, ShopPurchaseHandler } from '../ui/screens/shop/shopSession';
+import type { ShopMenu, ShopPurchaseHandler } from '../ui/screens/shop/shopSession';
 import type { ResidentHost } from './townResidents';
 import { rotateLine } from './townServiceUtil';
+import { SHOPS, type ShopId } from '../economy/shops';
+import type { ShopStock } from '../economy/shopStock';
+import { catalogLineRow, findCatalogLine, handOverCatalogLine } from './market/vendorMenu';
 
-const HELM_PRICE = 40;
-const BRACERS_PRICE = 55;
-const GAMBESON_PRICE = 60;
-const BOOTS_PRICE = 70;
-const BRACELET_PRICE = 150;
+const ARMOURY_SHOP = 'armoury' as const satisfies ShopId;
 
-interface IssuePiece {
-  readonly key: string;
-  readonly item: ItemId;
-  readonly label: string;
-  readonly price: number;
-  readonly desc: string;
-  /** The quartermaster's line as he puts it on the counter. */
-  readonly issued: string;
+type ArmouryItem = (typeof SHOPS.armoury.catalog)[number]['item'];
+
+/** The quartermaster's line as he puts each piece on the counter. */
+const ISSUED_LINES: Readonly<Record<ArmouryItem, string>> = {
+  issue_kettle_helm:
+    'Strap it under the jaw, not behind it. The dent is not mine and it is not yours yet.',
+  riveted_bracers:
+    'Four rivets a side. When one goes you bring them back, you do not keep wearing them.',
+  padded_gambeson:
+    'It smells. It will go on smelling. That is the previous owner and he earned it.',
+  marching_boots:
+    'Hobnails bite on wet stone. They also announce you. Decide which of those you want.',
+  bracelet_of_dex: "Not sized for a human wrist. I don't ask who it's for, I just sell it.",
+};
+
+function issuedLine(item: ItemId): string {
+  const lines: Partial<Record<ItemId, string>> = ISSUED_LINES;
+  return lines[item] ?? 'Signed for. Bring it back in one piece.';
 }
-
-/**
- * Cheapest first, which is also weakest first. The order is the offer: a crawler
- * reading down the board sees the price climbing with the protection rather than
- * having to work it out from four stat lines.
- */
-const ISSUE_KIT: ReadonlyArray<IssuePiece> = [
-  {
-    key: 'helm',
-    item: 'issue_kettle_helm',
-    label: 'Issue Kettle Helm',
-    price: HELM_PRICE,
-    desc: 'Iron, wide brim, one dent. +1 Constitution',
-    issued: 'Strap it under the jaw, not behind it. The dent is not mine and it is not yours yet.',
-  },
-  {
-    key: 'bracers',
-    item: 'riveted_bracers',
-    label: 'Riveted Bracers',
-    price: BRACERS_PRICE,
-    desc: 'Boiled leather on the blocking arm. +1 Strength',
-    issued: 'Four rivets a side. When one goes you bring them back, you do not keep wearing them.',
-  },
-  {
-    key: 'gambeson',
-    item: 'padded_gambeson',
-    label: 'Padded Gambeson',
-    price: GAMBESON_PRICE,
-    desc: 'Twenty layers, quilted through. +2 Constitution',
-    issued: 'It smells. It will go on smelling. That is the previous owner and he earned it.',
-  },
-  {
-    key: 'boots',
-    item: 'marching_boots',
-    label: 'Marching Boots',
-    price: BOOTS_PRICE,
-    desc: 'Hobnailed and already broken in. +1 Dexterity',
-    issued: 'Hobnails bite on wet stone. They also announce you. Decide which of those you want.',
-  },
-  {
-    key: 'bracelet',
-    item: 'bracelet_of_dex',
-    label: 'Bracelet of +2 DEX',
-    price: BRACELET_PRICE,
-    desc: 'An agility boosting accessory equipped on the front leg. +2 Dexterity',
-    issued: "Not sized for a human wrist. I don't ask who it's for, I just sell it.",
-  },
-];
 
 const QUARTERMASTER_BARKS: ReadonlyArray<string> = [
   'Protection, not edge. Edge is the smith and she is better at it than I would be.',
@@ -90,21 +53,26 @@ const QUARTERMASTER_BARKS: ReadonlyArray<string> = [
 ];
 
 /** The armoury's board for this visit. */
-export function buildArmouryMenu(turn: number, host: ResidentHost | null): ShopMenu {
+export function buildArmouryMenu(
+  turn: number,
+  host: ResidentHost | null,
+  stock: ShopStock,
+): ShopMenu {
   return {
     title: 'The Quartermaster',
     bark: host?.line ?? rotateLine(QUARTERMASTER_BARKS, turn),
     byline: host?.name,
-    options: ISSUE_KIT.map((piece): ShopRow => {
-      return { key: piece.key, label: piece.label, price: piece.price, desc: piece.desc };
-    }),
+    options: SHOPS.armoury.catalog.map((line) => catalogLineRow(ARMOURY_SHOP, line, stock)),
   };
 }
 
-/** Hands over the chosen piece. */
-export const issueArmour: ShopPurchaseHandler = (option, buyer) => {
-  const piece = ISSUE_KIT.find((candidate) => candidate.key === option.key);
-  if (piece === undefined) return { ok: false, line: 'Dann checks the rack and finds nothing.' };
-  buyer.inventory.addItem(piece.item, 1);
-  return { ok: true, line: piece.issued };
-};
+/** Hands over the chosen piece, booked against the armoury's stock. */
+export function issueArmour(stock: ShopStock): ShopPurchaseHandler {
+  return (option, buyer) => {
+    const line = findCatalogLine(ARMOURY_SHOP, option.key);
+    if (line === undefined || !handOverCatalogLine(ARMOURY_SHOP, line, stock, buyer)) {
+      return { ok: false, line: 'Dann checks the rack and finds nothing.' };
+    }
+    return { ok: true, line: issuedLine(line.item) };
+  };
+}

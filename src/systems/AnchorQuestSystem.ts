@@ -33,7 +33,7 @@ import type { DialogLine, NonEmpty } from '../dialog/line';
 import type { ConversationHandle, DialogReward } from '../dialog/request';
 import { bagItemRewardLine, itemIconPainter, partyXpSections } from '../ui/questReward/rewardLines';
 import type { QuestRewardSpec, RewardItemLine } from '../ui/questReward/types';
-import type { VendorLineGate } from './market/vendorDefs';
+import type { VendorLineGate } from '../economy/shops';
 import { HILDA_COTTAGE_NAME, SKY_TEMPLE_NAME } from './interiorStoryOwnership';
 import {
   travelUnlocksSection,

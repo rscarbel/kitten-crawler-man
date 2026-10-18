@@ -43,8 +43,7 @@ import { CRETIN_WALK_FRAMES, CRETIN_WALK_TILES_PER_CYCLE } from '../sprites/cret
 import { CatPlayer } from '../creatures/CatPlayer';
 import { drawClubProp } from '../sprites/clubFurnitureSprite';
 import { drawClubDecor } from '../sprites/clubDecor';
-import { ShopSystem, type ShopConfig } from './ShopSystem';
-import { CLUB_BAR_PRICING, CLUB_MARKET_PRICING } from './market/shopProfiles';
+import { ShopSystem } from './ShopSystem';
 import { ClubCasinoSystem, type CasinoSeat } from './ClubCasinoSystem';
 import { ClubPokerSystem, POKER_MIN_BUY_IN } from './ClubPokerSystem';
 import { TABLE_MAXIMUM, TABLE_MINIMUM } from './casino/BlackjackTable';
@@ -68,11 +67,8 @@ import { mercenaryDeskSurface } from '../ui/screens/shop/MercenaryDeskScreen';
 import { MercenaryGuildSystem } from './MercenaryGuildSystem';
 import { ClubVipLoungeSystem, type EscortPair } from './ClubVipLoungeSystem';
 import { ClubCrowdSystem, tileBody, playerBody, type CrowdBody } from './ClubCrowdSystem';
-import type { MarketStock } from './market/MarketStock';
+import type { ShopStock } from '../economy/shopStock';
 import { worldPalette } from '../ui/theme/worldInk';
-
-/** Keys the club market's stock lines the same way the overworld stalls key theirs. */
-export const DESPERADO_MARKET_VENDOR_ID = 'desperado_market';
 
 const STATION_INTERACT_RANGE = 2.6;
 /** How long the club set and the jazz set take to crossfade, either way. */
@@ -167,91 +163,14 @@ function prewarmEscort(pair: EscortPair): void {
   for (const variant of pair.variants) prewarmCretin(variant);
 }
 
-// Bar drinks — the club's buff consumables, priced as premium members' pours.
-/** The house special leads the board, because that is what a house special is. */
-const DIRTY_SHIRLEY_PRICE = 15;
-const SPEED_FIZZ_PRICE = 20;
-const COOLDOWN_CRISP_PRICE = 25;
-const JUGG_JUICE_PRICE = 30;
-
-/** Keys the bar's stock lines the same way the market stall/club counter keys theirs. */
-export const DESPERADO_BAR_VENDOR_ID = 'desperado_bar';
-
-const BAR_SHOP_CONFIG: ShopConfig = {
-  title: 'The Bar',
-  pricing: CLUB_BAR_PRICING,
-  items: [
-    {
-      id: 'dirty_shirley',
-      label: 'The Dirty Shirley',
-      price: DIRTY_SHIRLEY_PRICE,
-      desc: 'The house special. Ask for it dirty',
-    },
-    {
-      id: 'speed_fizz',
-      label: 'Speed Fizz',
-      price: SPEED_FIZZ_PRICE,
-      desc: 'Double move speed, 25s',
-    },
-    {
-      id: 'cooldown_crisp',
-      label: 'Cooldown Crisp',
-      price: COOLDOWN_CRISP_PRICE,
-      desc: 'Halve ability cooldowns, 25s',
-    },
-    {
-      id: 'jugg_juice',
-      label: 'Jugg Juice',
-      price: JUGG_JUICE_PRICE,
-      desc: '+50% max HP & full heal, 30s',
-    },
-  ],
-};
-
-// Market gear — club-exclusive equipment otherwise only won off dangerous foes.
-export const STAT_BOOST_PRICE = 1000;
-/** Never restocks: one permanent stat roll per run is what keeps it worth the price. */
-export const STAT_BOOST_STOCK = 1;
-const TROLLSKIN_SHIRT_PRICE = 120;
-const SEPSIS_CROWN_PRICE = 150;
-
-export const MARKET_SHOP_CONFIG: ShopConfig = {
-  title: 'The Market',
-  pricing: CLUB_MARKET_PRICING,
-  items: [
-    {
-      id: 'stat_boost_potion',
-      label: 'Stat Boost',
-      price: STAT_BOOST_PRICE,
-      desc: '+2-4 to a random stat, permanent',
-      stock: STAT_BOOST_STOCK,
-    },
-    {
-      id: 'trollskin_shirt',
-      label: 'Trollskin Shirt',
-      price: TROLLSKIN_SHIRT_PRICE,
-      desc: '+3 CON, 2.5x regen, negates melee debuffs',
-    },
-    {
-      id: 'enchanted_crown_sepsis_whore',
-      label: 'Crown of the Sepsis Whore',
-      price: SEPSIS_CROWN_PRICE,
-      desc: '+5 INT, attacks can inflict Sepsis',
-    },
-  ],
-};
-
 /**
  * The one place the club's market shop is built, so a gate that wants to
  * assert on the Stat Boost row's real price and stock exercises the same
- * `ShopItem` list and the same `MarketStock` wiring the club actually plays
- * with, rather than a copy that could drift from it unnoticed.
+ * `SHOPS` entry and the same stock wiring the club actually plays with,
+ * rather than a copy that could drift from it unnoticed.
  */
-export function createClubMarketShop(marketStock: MarketStock): ShopSystem {
-  return new ShopSystem(CLUB_INTERIOR_W, MARKET_SHOP_CONFIG, {
-    stock: marketStock,
-    vendorId: DESPERADO_MARKET_VENDOR_ID,
-  });
+export function createClubMarketShop(shopStock: ShopStock): ShopSystem {
+  return new ShopSystem(CLUB_INTERIOR_W, 'club_market', shopStock);
 }
 
 /** Which cast figure each station's staff draws as; the casino and the door have their own renderers. */
@@ -368,7 +287,7 @@ export class DesperadoClubSystem {
     audioScope: AudioScope | null,
     hasPassTattoo: boolean,
     arrivingCrawler: Player,
-    marketStock: MarketStock,
+    shopStock: ShopStock,
     private readonly humanAchievements?: AchievementManager,
     private readonly catAchievements?: AchievementManager,
     worldSeed: number = POKER_DEV_SEED,
@@ -376,11 +295,8 @@ export class DesperadoClubSystem {
   ) {
     this.music = audioScope;
     this.crowd = new ClubCrowdSystem(map);
-    this.barShop = new ShopSystem(CLUB_INTERIOR_W, BAR_SHOP_CONFIG, {
-      stock: marketStock,
-      vendorId: DESPERADO_BAR_VENDOR_ID,
-    });
-    this.marketShop = createClubMarketShop(marketStock);
+    this.barShop = new ShopSystem(CLUB_INTERIOR_W, 'club_bar', shopStock);
+    this.marketShop = createClubMarketShop(shopStock);
     this.casino = new ClubCasinoSystem(audio, membership);
     this.casino.isLucky = isLucky;
     this.casino.onWinnings = (coins, screenX, screenY) =>

@@ -40,7 +40,6 @@ interface IconSpec {
 
 const REFERENCE_HEALTH_POTION: InventoryItem = {
   id: 'health_potion',
-  baseValue: 0,
   name: 'Health Potion',
   quantity: 1,
   stackable: true,

@@ -124,8 +124,8 @@ export interface VillagerContext {
   readonly breachExists: boolean;
   /** A segment currently stands at the wooden tier — one that stone could reinforce. */
   readonly woodenWallStanding: boolean;
-  /** The lowest count in the merchant's stock, or null while he has none recorded. */
-  readonly lowestStock: number | null;
+  /** Some line on the merchant's shelf has been bought down to `LOW_SUPPLIES_THRESHOLD` or under. */
+  readonly suppliesRunningLow: boolean;
   /** This villager's standing orders when they are a soldier; null for civilians. */
   readonly soldierStance: SoldierStance | null;
   /** What the questline has opened up so far, for a topic that only makes sense once something is. */
@@ -334,8 +334,7 @@ function recentEventLine(villager: VillagerId, ctx: VillagerContext): DialogLine
     return canUpgrade && hintCooledDown ? WICKER.stoneUpgradeAvailable : null;
   }
   if (villager === 'vetch') {
-    const running = ctx.lowestStock !== null && ctx.lowestStock <= LOW_SUPPLIES_THRESHOLD;
-    return running ? VETCH.lowSupplies : null;
+    return ctx.suppliesRunningLow ? VETCH.lowSupplies : null;
   }
   return null;
 }

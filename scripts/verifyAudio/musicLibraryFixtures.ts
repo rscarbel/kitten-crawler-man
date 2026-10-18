@@ -183,10 +183,9 @@ function townArrivalState(): Record<string, unknown> {
       slotsJackpotPool: JACKPOT_FLOOR,
       slotsTurbo: false,
     },
-    marketStock: { remaining: [], held: {} },
+    shopStock: { offsets: {}, ticksSinceRestock: 0 },
     townMemory: {
       residentTalks: [],
-      poulticesLeft: 3,
       clearedRooms: [],
       clearedCamps: [],
       paidOutInteriorProps: [],

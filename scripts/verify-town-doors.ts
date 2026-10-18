@@ -44,7 +44,7 @@ const { TILE_SIZE } = await import('../src/core/constants');
 const { GameMap } = await import('../src/map/GameMap');
 const { level3 } = await import('../src/levels/level3');
 const { MarketSystem } = await import('../src/systems/market/MarketSystem');
-const { createMarketStock } = await import('../src/systems/market/MarketStock');
+const { createShopStock } = await import('../src/economy/shopStock');
 const { TownPropSystem } = await import('../src/systems/TownPropSystem');
 const { TownDecorSystem } = await import('../src/systems/TownDecorSystem');
 
@@ -83,7 +83,7 @@ for (const worldSeed of WORLD_SEEDS) {
   });
   const market = new MarketSystem(
     gameMap,
-    createMarketStock(),
+    createShopStock(),
     () => undefined,
     () => false,
     () => null,

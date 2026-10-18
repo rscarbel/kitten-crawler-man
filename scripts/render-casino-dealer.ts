@@ -50,7 +50,7 @@ const { CatPlayer } = await import('../src/creatures/CatPlayer.js');
 const { Conversation } = await import('../src/dialog/Conversation.js');
 const { createClubMembership } = await import('../src/core/ClubMembership.js');
 const { createMercenaryRoster } = await import('../src/core/MercenaryRoster.js');
-const { createMarketStock } = await import('../src/systems/market/MarketStock.js');
+const { createShopStock } = await import('../src/economy/shopStock.js');
 const { DesperadoClubSystem } = await import('../src/systems/DesperadoClubSystem.js');
 const { CLUB_PROPS } = await import('../src/core/clubProps.js');
 const { CLUB_STATIONS } = await import('../src/core/clubLayout.js');
@@ -130,7 +130,7 @@ const club = new DesperadoClubSystem(
   null,
   false,
   human,
-  createMarketStock(),
+  createShopStock(),
 );
 for (let frame = 0; frame < WARM_FRAMES; frame++) club.update(human, cat);
 

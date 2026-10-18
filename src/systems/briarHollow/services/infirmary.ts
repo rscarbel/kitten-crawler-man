@@ -11,7 +11,6 @@
  * one potion: a scratch is never cheaper to have seen to than to drink away.
  */
 
-import { HEALTH_POTION_PRICE } from '../../market/vendorDefs';
 import type { ShopMenu, ShopRow, ShopPurchaseResult } from '../../../ui/screens/shop/shopSession';
 import type { TopicProvider } from '../villagerTopics';
 import { SPEAKERS } from '../../../dialog/speakers';
@@ -24,10 +23,7 @@ import {
   sellerLine,
   shopTopic,
 } from './serviceContext';
-
-/** Coins per point of health missing across both crawlers, rounded up. */
-export const SELLA_FEE_PER_MISSING_HP = 0.7;
-export const SELLA_MIN_FEE = HEALTH_POTION_PRICE;
+import { SERVICE_PRICES } from '../../../economy/servicePrices';
 
 const INFIRMARY_TITLE = 'The Infirmary';
 export const DOCTOR = 'sella';
@@ -51,8 +47,8 @@ export function partyIsUnhurt(party: ServiceParty): boolean {
 }
 
 export function treatmentFee(party: ServiceParty): number {
-  const byWounds = Math.ceil(missingPartyHp(party) * SELLA_FEE_PER_MISSING_HP);
-  return Math.max(SELLA_MIN_FEE, byWounds);
+  const byWounds = Math.ceil(missingPartyHp(party) * SERVICE_PRICES.infirmary.per_missing_hp);
+  return Math.max(SERVICE_PRICES.infirmary.minimum_fee, byWounds);
 }
 
 export function buildInfirmaryMenu(party: ServiceParty): ShopMenu {
