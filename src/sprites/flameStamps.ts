@@ -165,11 +165,7 @@ let bakedFlameStamps: FlameStamps | null = null;
 
 export function flameStamps(): FlameStamps {
   bakedFlameStamps ??= {
-    body: FLAME_BODY_TIERS.map((ink) =>
-      FLAME_BEND_CURVATURES.map((curvature) =>
-        bakeTeardrop(ink, STAMP_TEARDROP_WIDTH, STAMP_TEARDROP_HEIGHT, curvature),
-      ),
-    ),
+    body: bakeFlameBodyTiers(FLAME_BODY_TIERS),
     root: bakeTeardrop(
       FLAME_ROOT_INK,
       STAMP_TEARDROP_WIDTH,
@@ -182,6 +178,21 @@ export function flameStamps(): FlameStamps {
     glow: bakeSoftDisc(FLAME_GLOW_INK, STAMP_GLOW_SIZE),
   };
   return bakedFlameStamps;
+}
+
+/**
+ * One row of bend variants per heat tier, indexed [tier][bend]. Exported so a
+ * fire in another colour — arcane flame — is built from exactly the same
+ * parcels as the natural one rather than a second painter's take on them.
+ */
+export function bakeFlameBodyTiers(
+  tiers: ReadonlyArray<FlameInk>,
+): ReadonlyArray<ReadonlyArray<CanvasSurface>> {
+  return tiers.map((ink) =>
+    FLAME_BEND_CURVATURES.map((curvature) =>
+      bakeTeardrop(ink, STAMP_TEARDROP_WIDTH, STAMP_TEARDROP_HEIGHT, curvature),
+    ),
+  );
 }
 
 /** A radial falloff in unit space, so one gradient serves every disc in a bake. */

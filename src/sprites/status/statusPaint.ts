@@ -265,45 +265,6 @@ export function drawGroundPool(
 
 // -- Shapes ----------------------------------------------------------------
 
-/**
- * Waist of a flame tongue as a fraction of its own height. Real flame is far
- * taller than it is wide; anything rounder reads as a balloon.
- */
-const TONGUE_WAIST_FRACTION = 0.42;
-/** How far the tongue's widest point sits above its base. */
-const TONGUE_SHOULDER_FRACTION = 0.4;
-
-/**
- * A single lick of flame: a teardrop rooted at (`baseX`, `baseY`), rising
- * `height` pixels to a tip displaced sideways by `tipLean`.
- */
-export function drawFlameTongue(
-  ctx: CanvasRenderingContext2D,
-  baseX: number,
-  baseY: number,
-  width: number,
-  height: number,
-  tipLean: number,
-): void {
-  const halfWidth = width / 2;
-  const waist = width * TONGUE_WAIST_FRACTION;
-  const shoulderY = baseY - height * TONGUE_SHOULDER_FRACTION;
-  const tipX = baseX + tipLean;
-  const tipY = baseY - height;
-
-  ctx.beginPath();
-  ctx.moveTo(baseX - halfWidth, baseY);
-  ctx.quadraticCurveTo(baseX - waist, shoulderY, tipX, tipY);
-  ctx.quadraticCurveTo(baseX + waist, shoulderY, baseX + halfWidth, baseY);
-  ctx.quadraticCurveTo(
-    baseX,
-    baseY + halfWidth * TONGUE_SHOULDER_FRACTION,
-    baseX - halfWidth,
-    baseY,
-  );
-  ctx.fill();
-}
-
 /** Number of segments a bolt is broken into. More reads as noise, fewer as a zigzag. */
 const BOLT_SEGMENTS = 6;
 
