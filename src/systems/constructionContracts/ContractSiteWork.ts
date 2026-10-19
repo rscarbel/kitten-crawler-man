@@ -162,7 +162,7 @@ export interface ContractSiteWorkDeps {
   readonly state: Pick<BriarHollowState, 'contracts'>;
   readonly human: HumanPlayer;
   readonly cat: CatPlayer;
-  readonly audio: Pick<AudioManager, 'play'> | null;
+  readonly audio: Pick<AudioManager, 'playRandom'> | null;
   /** Where the work-channel loops run. */
   readonly audioScope: ContractLoopAudio | null;
   /** Whether a contract at `site` is worked in this scene. */

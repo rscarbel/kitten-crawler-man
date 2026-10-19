@@ -33,7 +33,7 @@ export interface WendellContractsHookDeps {
   readonly state: BriarHollowState;
   /** The interior scene's own bus. */
   readonly bus: EventBus;
-  readonly audio: Pick<AudioManager, 'play'> | null;
+  readonly audio: Pick<AudioManager, 'playRandom'> | null;
   readonly conversation: Conversation;
   /** The floor-3 overworld's world seed, which the contract stream is drawn from. */
   readonly worldSeed: number;

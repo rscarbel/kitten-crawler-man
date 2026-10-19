@@ -2,15 +2,21 @@
  * A street lamp: an iron post with a glazed lantern head, burning.
  *
  * The town has no day/night cycle and no lighting pass, so "lit" here means the
- * lamp carries its own halo rather than that it lights anything. That is the
- * same bargain the fortune teller's orb and the torches already make, and it is
- * the reason the halo is drawn with `shadowBlur` on the flame rather than as a
- * radial gradient over the ground: a gradient would need to composite under
- * everything else in the scene, and a prop draws after the ground is baked.
+ * lamp carries its own light rather than that it lights anything. That is the
+ * same bargain the fortune teller's orb and the torches already make. The light
+ * is baked into the prop's frame, so every part of it — the halo and the bloom
+ * over the glazing — has to fit inside that frame and be painted by the prop
+ * itself. There is deliberately no pool of light on the paving: a glow at the
+ * foot of the post reads as a second light source down there.
+ *
+ * Every glow is a radial gradient whose alpha follows an inverse-square curve
+ * (see `addFalloffStops`). A flat disc or a linear ramp both leave a visible
+ * edge where the light stops; real light has no edge, only a bright centre that
+ * drops away fast and a long faint tail.
  */
 
-import { rgb } from './art/town/townArt';
-import { getTownRamp } from './art/town/townPalette';
+import { rgb, rgba } from './art/town/townArt';
+import { getTownRamp, type RGB } from './art/town/townPalette';
 
 const TWO_PI = Math.PI * 2;
 
@@ -35,29 +41,39 @@ const FINIAL_RADIUS_PX = 2;
 const FLAME_CY = -1.8;
 const FLAME_RX = 0.08;
 const FLAME_RY = 0.13;
-const FLAME_GLOW_BLUR = 0.55;
+const FLAME_CORE_SHARE = 0.5;
 
 /**
- * The glow around the lantern head.
- *
- * Drawn as its own disc rather than left to the flame's `shadowBlur`, because
- * blur spreads a shape's *own* alpha: the flame is a 2.6 px ellipse at a 32 px
- * tile, so blurring it over half a tile thins it to nothing, leaving no visible
- * light at the head while the pool at the foot stays solid — a lamp that only
- * lights its own feet.
+ * The wide halo in the air around the head. Its radius is bounded by the sheet
+ * frame (`street_lamp` in `townscapeSheets.ts`), which leaves two tiles either
+ * side of the post and four above the anchor tile.
  */
-const HEAD_GLOW_RADIUS = 0.55;
-const HEAD_GLOW_ALPHA = 0.22;
+const HALO_RADIUS = 1.4;
+const HALO_PEAK_ALPHA = 0.5;
+/** How steeply the halo falls off; higher keeps more of it near the flame. */
+const HALO_SHARPNESS = 3.2;
 
 /**
- * The pool on the paving. Deliberately fainter than the head glow: it is a
- * consequence of the light, and when it was the stronger of the two it read as
- * the source.
+ * The tight bloom over the lantern, drawn after the iron frame so the glare
+ * eats into the glazing bars the way a bright source does in a camera or an eye.
  */
-const GROUND_POOL_RADIUS = 0.5;
-const GROUND_POOL_ALPHA = 0.07;
-/** The pool is an ellipse seen in perspective, not a circle. */
-const GROUND_POOL_FLATTEN = 0.45;
+const BLOOM_RADIUS = 0.42;
+const BLOOM_PEAK_ALPHA = 0.55;
+const BLOOM_SHARPNESS = 5;
+
+/**
+ * The glass is lit from inside: brightest beside the flame and amber toward
+ * the panes' edges, rather than one flat tint.
+ */
+const GLASS_GLOW_REACH = 0.36;
+
+/** A warm catch-light down the post's flank, fading as it leaves the head. */
+const POST_RIM_WIDTH_PX = 1;
+const POST_RIM_LENGTH = 0.6;
+const POST_RIM_ALPHA = 0.55;
+
+/** Stops per falloff gradient; enough that the curve shows no banding. */
+const FALLOFF_STOPS = 8;
 
 /**
  * The flame's breathing, in frames and in fractions of its own size. Kept small:
@@ -72,10 +88,23 @@ const FLICKER_AMPLITUDE = 0.14;
 const OC_IRON = getTownRamp('iron_black');
 const IRON = rgb(OC_IRON.mid);
 const IRON_LIGHT = rgb(OC_IRON.light);
-const GLASS = 'rgba(255, 226, 160, 0.35)';
 const FLAME_CORE = '#fff0c0';
 const FLAME_EDGE = '#f0a63c';
-const HALO = 'rgba(255, 196, 96, 1)';
+
+/**
+ * Light shifts from near-white at the source to deep amber at its fringe: the
+ * hot centre saturates, and what survives the falloff is the warm end of the
+ * candle's spectrum.
+ */
+const LIGHT_HOT: RGB = [255, 240, 196];
+const LIGHT_WARM: RGB = [255, 190, 92];
+const LIGHT_FRINGE: RGB = [232, 128, 44];
+const GLASS_HOT: RGB = [255, 238, 186];
+const GLASS_EDGE: RGB = [214, 150, 70];
+const GLASS_EDGE_ALPHA = 0.75;
+/** Where on the hot-to-fringe ramp the warm midtone sits. */
+const LIGHT_WARM_AT = 0.35;
+
 const GROUND_SHADOW = 'rgba(0,0,0,0.26)';
 const GROUND_SHADOW_HALF_WIDTH = 0.26;
 const GROUND_SHADOW_HEIGHT = 0.07;
@@ -106,6 +135,46 @@ export function streetLampFlickerForStep(step: number): number {
   return 1 + steppedWave * FLICKER_AMPLITUDE;
 }
 
+function mixRgb(a: RGB, b: RGB, t: number): RGB {
+  return [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t, a[2] + (b[2] - a[2]) * t];
+}
+
+function lightColourAt(t: number): RGB {
+  if (t < LIGHT_WARM_AT) return mixRgb(LIGHT_HOT, LIGHT_WARM, t / LIGHT_WARM_AT);
+  return mixRgb(LIGHT_WARM, LIGHT_FRINGE, (t - LIGHT_WARM_AT) / (1 - LIGHT_WARM_AT));
+}
+
+/**
+ * Fills `gradient` with an inverse-square falloff, `1 / (1 + (k·t)²)`, shifted
+ * and rescaled so it starts at `peakAlpha` and reaches exactly zero at the rim
+ * — the raw curve never reaches zero, and cutting it off leaves a ring.
+ */
+function addFalloffStops(gradient: CanvasGradient, peakAlpha: number, sharpness: number): void {
+  const curveAt = (t: number) => 1 / (1 + (sharpness * t) ** 2);
+  const rimValue = curveAt(1);
+  for (let i = 0; i <= FALLOFF_STOPS; i++) {
+    const t = i / FALLOFF_STOPS;
+    const normalized = (curveAt(t) - rimValue) / (1 - rimValue);
+    gradient.addColorStop(t, rgba(lightColourAt(t), peakAlpha * normalized));
+  }
+}
+
+function fillFalloff(
+  ctx: CanvasRenderingContext2D,
+  cx: number,
+  cy: number,
+  radius: number,
+  peakAlpha: number,
+  sharpness: number,
+): void {
+  const gradient = ctx.createRadialGradient(cx, cy, 0, cx, cy, radius);
+  addFalloffStops(gradient, peakAlpha, sharpness);
+  ctx.fillStyle = gradient;
+  ctx.beginPath();
+  ctx.arc(cx, cy, radius, 0, TWO_PI);
+  ctx.fill();
+}
+
 /** Draws one lit street lamp standing on the tile whose top-left is (sx, sy). */
 export function drawStreetLamp(
   ctx: CanvasRenderingContext2D,
@@ -117,6 +186,7 @@ export function drawStreetLamp(
   ctx.save();
   const cx = sx + ts / 2;
   const baseY = sy + ts * BASE_Y;
+  const flameY = sy + ts * FLAME_CY;
 
   ctx.fillStyle = GROUND_SHADOW;
   ctx.beginPath();
@@ -151,47 +221,46 @@ export function drawStreetLamp(
   const headBottom = sy + ts * HEAD_BOTTOM;
   const headHalf = ts * HEAD_HALF_WIDTH;
 
-  // Under the lantern body, so the glow spills out around the glazing rather
-  // than washing over the iron in front of it.
-  ctx.save();
-  ctx.globalAlpha = HEAD_GLOW_ALPHA * flicker;
-  ctx.fillStyle = HALO;
-  ctx.beginPath();
-  ctx.arc(cx, sy + ts * FLAME_CY, ts * HEAD_GLOW_RADIUS * flicker, 0, TWO_PI);
-  ctx.fill();
-  ctx.restore();
+  const rimTop = headBottom;
+  const rimBottom = headBottom + ts * POST_RIM_LENGTH;
+  const rim = ctx.createLinearGradient(0, rimTop, 0, rimBottom);
+  rim.addColorStop(0, rgba(LIGHT_WARM, POST_RIM_ALPHA * flicker));
+  rim.addColorStop(1, rgba(LIGHT_WARM, 0));
+  ctx.fillStyle = rim;
+  ctx.fillRect(
+    cx + POST_WIDTH_PX / 2 - POST_RIM_WIDTH_PX,
+    rimTop,
+    POST_RIM_WIDTH_PX,
+    rimBottom - rimTop,
+  );
 
-  ctx.fillStyle = GLASS;
+  // Under the lantern body, so the halo spills out around the glazing rather
+  // than washing over the iron in front of it.
+  fillFalloff(
+    ctx,
+    cx,
+    flameY,
+    ts * HALO_RADIUS * flicker,
+    HALO_PEAK_ALPHA * flicker,
+    HALO_SHARPNESS,
+  );
+
+  const glass = ctx.createRadialGradient(cx, flameY, 0, cx, flameY, ts * GLASS_GLOW_REACH);
+  glass.addColorStop(0, rgb(GLASS_HOT));
+  glass.addColorStop(1, rgba(GLASS_EDGE, GLASS_EDGE_ALPHA));
+  ctx.fillStyle = glass;
   ctx.fillRect(cx - headHalf, headTop, headHalf * 2, headBottom - headTop);
 
-  ctx.save();
-  ctx.shadowColor = HALO;
-  ctx.shadowBlur = ts * FLAME_GLOW_BLUR * flicker;
+  const flameRx = ts * FLAME_RX * flicker;
+  const flameRy = ts * FLAME_RY * flicker;
   ctx.fillStyle = FLAME_EDGE;
   ctx.beginPath();
-  ctx.ellipse(
-    cx,
-    sy + ts * FLAME_CY,
-    ts * FLAME_RX * flicker,
-    ts * FLAME_RY * flicker,
-    0,
-    0,
-    TWO_PI,
-  );
+  ctx.ellipse(cx, flameY, flameRx, flameRy, 0, 0, TWO_PI);
   ctx.fill();
   ctx.fillStyle = FLAME_CORE;
   ctx.beginPath();
-  ctx.ellipse(
-    cx,
-    sy + ts * FLAME_CY,
-    ts * FLAME_RX * flicker * 0.5,
-    ts * FLAME_RY * flicker * 0.5,
-    0,
-    0,
-    TWO_PI,
-  );
+  ctx.ellipse(cx, flameY, flameRx * FLAME_CORE_SHARE, flameRy * FLAME_CORE_SHARE, 0, 0, TWO_PI);
   ctx.fill();
-  ctx.restore();
 
   // The lantern's iron frame, over the glass and the flame so the glazing bars
   // read as being in front of the light rather than beside it.
@@ -210,23 +279,14 @@ export function drawStreetLamp(
   ctx.arc(cx, headTop - ts * CAP_HEIGHT, FINIAL_RADIUS_PX, 0, TWO_PI);
   ctx.fill();
 
-  // A soft pool on the paving under the lamp. Drawn last and very faint, because
-  // it is over the ground rather than under it and anything stronger reads as a
-  // painted disc.
-  ctx.save();
-  ctx.globalAlpha = GROUND_POOL_ALPHA * flicker;
-  ctx.fillStyle = HALO;
-  ctx.beginPath();
-  ctx.ellipse(
+  ctx.globalCompositeOperation = 'lighter';
+  fillFalloff(
+    ctx,
     cx,
-    baseY,
-    ts * GROUND_POOL_RADIUS,
-    ts * GROUND_POOL_RADIUS * GROUND_POOL_FLATTEN,
-    0,
-    0,
-    TWO_PI,
+    flameY,
+    ts * BLOOM_RADIUS * flicker,
+    BLOOM_PEAK_ALPHA * flicker,
+    BLOOM_SHARPNESS,
   );
-  ctx.fill();
-  ctx.restore();
   ctx.restore();
 }

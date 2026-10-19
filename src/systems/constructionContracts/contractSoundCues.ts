@@ -4,9 +4,8 @@
  *
  * Every play site raises a cue from this table, never a raw id, so each
  * recording that lands is its registration in `src/audio/sounds.ts` plus one
- * line here. A cue still waiting on its recording either borrows the nearest
- * sound the game already has or is an empty list — silent — where nothing
- * stands in; each entry's JSDoc names the file it is waiting for.
+ * line here. A cue with several takes plays a random one each time; a loop
+ * cue plays its first.
  *
  * Contract spots sit both on the floor-3 streets and inside buildings, so
  * every id here is preloaded through the `constructionContracts` group in
@@ -28,16 +27,16 @@ export const CONTRACT_CUES = {
   contractSigned: ['contract_signed'],
   /** The work channel's loop on a wood or rope spot. Final: `repairing_loop`. */
   woodWorkLoop: ['repairing_loop'],
-  /** The work channel's loop on a stone or plaster spot. Waits on `masonry_work_loop`; `repairing_loop` stands in. */
-  stoneWorkLoop: ['repairing_loop'],
-  /** The broken boards and old nails coming out as a wood spot's channel starts. Waits on `old_work_pry`. */
-  oldWorkPry: [],
+  /** The work channel's loop on a stone or plaster spot. */
+  stoneWorkLoop: ['masonry_work_loop'],
+  /** The broken boards and old nails coming out as a wood spot's channel starts. */
+  oldWorkPry: ['old_work_pry_1', 'old_work_pry_2', 'old_work_pry_3', 'old_work_pry_4'],
   /** A wood spot finished. Final: `hammer_strike`. */
   woodSpotDone: ['hammer_strike'],
   /** A rope spot finished. Final: `rope_tightening`. */
   ropeSpotDone: ['rope_tightening'],
-  /** A stone or plaster spot finished. Waits on `stone_set_mortar`; `hammer_strike` stands in. */
-  stoneSpotDone: ['hammer_strike'],
+  /** A stone or plaster spot finished: the last stone set home. */
+  stoneSpotDone: ['stone_set_mortar_1', 'stone_set_mortar_2', 'stone_set_mortar_3'],
   /** Layered on every spot's own finish cue. Final: `construction_complete`. */
   spotFinished: ['construction_complete'],
   /** The last spot of a contract finished. */
@@ -79,17 +78,18 @@ export function contractMaterialCues(material: ContractSpotMaterial): ContractMa
   return MATERIAL_CUES[material];
 }
 
-/** The recording behind `cue`, or null while the cue is silent. */
+/** The first recording behind `cue`, or null while the cue is silent. */
 export function contractCueSound(cue: ContractCue): SoundId | null {
   const takes: readonly SoundId[] = CONTRACT_CUES[cue];
   return takes[0] ?? null;
 }
 
-/** Plays `cue` once through `audio`. Silent for an empty cue or a missing audio manager. */
-export function playContractCue(audio: Pick<AudioManager, 'play'> | null, cue: ContractCue): void {
-  const sound = contractCueSound(cue);
-  if (audio === null || sound === null) return;
-  audio.play(sound);
+/** Plays one take of `cue` through `audio`. Silent for an empty cue or a missing audio manager. */
+export function playContractCue(
+  audio: Pick<AudioManager, 'playRandom'> | null,
+  cue: ContractCue,
+): void {
+  audio?.playRandom(CONTRACT_CUES[cue]);
 }
 
 const CONTRACT_WORK_LOOP_VOLUME = 0.7;

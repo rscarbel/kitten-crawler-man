@@ -28,7 +28,7 @@ export interface ContractSettlementDeps {
   readonly state: Pick<BriarHollowState, 'contracts'>;
   /** The scene's own bus, which `questCompleted` goes out on. */
   readonly bus: EventBus;
-  readonly audio: Pick<AudioManager, 'play'> | null;
+  readonly audio: Pick<AudioManager, 'playRandom'> | null;
   /** The scene's one conversation, which Wendell's note opens on. */
   readonly conversation: Conversation;
   /** Flies `coins` from a world position to the HUD's coin pill. */

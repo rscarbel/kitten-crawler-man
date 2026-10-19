@@ -20,6 +20,7 @@
 import { range, type Rng } from '../person/rng';
 import { fillSoftEllipse, withClip } from './softShade';
 import {
+  BELL_HEIGHT_TILES,
   BELL_PIVOT,
   BRASS,
   CLOTH,
@@ -934,80 +935,253 @@ function paintTowerRoof(ctx: Ctx, g: Grid, rng: Rng): void {
 }
 
 /**
- * The bell tower after a lost siege: its stone plinth stands (nothing there
- * for an attacker to reach), but the timber frame above it is snapped off
- * partway up, the belfry and roof have come down across the stumps, and the
- * bell itself lies cracked on the stone where it fell.
+ * The bell tower after a lost siege. The plinth stands, though its front
+ * corner has been smashed open; the plank-clad lower stage is torn down to a
+ * ragged edge that lets the dark inside show; one corner post still stands to
+ * belfry height and the other is snapped off short. The belfry's timbers lie
+ * heaped across the stumps, the roof has come down on its side with its hollow
+ * underside facing out, and the bell lies cracked on the stone where it fell.
+ * Every break shows pale torn wood, which is what reads as "smashed" rather
+ * than "unfinished".
  */
 const BROKEN_BELL_TOWER = {
-  /** Where the timber legs give out, short of the belfry floor they used to carry. */
-  snapHeight: 1.55,
-  /** One stump splinters higher than the other, so the break reads as violent, not sawn. */
-  leftSnapRise: 0.14,
-  rightSnapRise: -0.16,
-  /** A shard of the lower cladding, still nailed to the left stump, hanging loose. */
-  splitBoard: [
-    [0.5, 1.1],
-    [0.66, 1.14],
-    [0.6, 0.7],
-    [0.46, 0.66],
+  /** The front cladding's torn top, left to right, between the two corner posts. */
+  frontTear: [
+    [0.44, 1.92],
+    [0.56, 1.74],
+    [0.64, 1.8],
+    [0.74, 1.56],
+    [0.84, 1.62],
+    [0.94, 1.42],
+    [1.06, 1.5],
+    [1.16, 1.36],
+    [1.28, 1.4],
+    [1.36, 1.08],
+    [1.46, 1.16],
+    [1.56, 0.92],
   ],
-  splitBoardWidth: 0.05,
-  /** The collapsed belfry and roof, tipped across the stumps and the plinth's rear edge. */
-  roofPivot: { x: 1, up: 1.62 },
-  roofTiltRadians: -0.46,
-  roofApexReach: 0.6,
-  roofHalfWidth: 0.65,
-  roofDepth: 0.3,
-  /** The bell, thrown clear and lying on its side on the plinth top. */
-  bell: { x: 0.7, up: 0.46, radiusX: 0.46, radiusY: 0.22 },
-  bellCrackTurns: [
-    [-0.3, 0.5],
-    [0.1, 0.25],
-    [-0.15, -0.05],
-    [0.25, -0.28],
+  frontTearLeftUp: 1.98,
+  frontTearRightUp: 0.96,
+  /** The back wall's torn top, seen over the front's: always higher, so the gap reads as depth. */
+  backTear: [
+    [0.5, 2.12],
+    [0.66, 2.0],
+    [0.8, 2.06],
+    [0.96, 1.84],
+    [1.1, 1.9],
+    [1.24, 1.66],
+    [1.36, 1.72],
+    [1.48, 1.44],
   ],
-  /** What is left of the bell rope, cut short and trailing off the taller stump. */
-  ropeFrom: { x: 1.36, up: 1.55 + 0.14 },
-  ropeTo: { x: 1.5, up: 0.9 },
-  /** Splinters and stones thrown clear of the frame. */
-  debrisPlanks: [
-    [0.3, 0.86, 0.72, 0.62],
-    [1.62, 0.5, 1.4, 0.72],
+  backTearLeftUp: 2.14,
+  backTearRightUp: 1.4,
+  /** How far down the back wall's inner face the cellar-dark of the gutted stage reaches. */
+  backWallFloorUp: 0.9,
+  /** The pale torn fibres along a ragged plank edge, as a share of the outline width. */
+  tornEdgeShare: 2.2,
+  tornEdgeDrop: 0.03,
+  /** The standing corner post, snapped at belfry height, and its stub of brace. */
+  tallStumpUp: 2.4,
+  hangingBrace: { fromUp: 2.18, toX: 0.86, toUp: 1.7 },
+  shortStumpUp: 1.12,
+  /** Belfry timbers lying behind the fallen roof: [x0, up0, x1, up1, width share of a leg]. */
+  pileBehind: [
+    [0.34, 2.06, 1.42, 1.4, 1],
+    [0.58, 1.3, 1.5, 1.86, 0.85],
+    [0.9, 1.0, 1.76, 0.86, 0.9],
   ],
-  rubbleStones: [
-    [0.42, 0.28, 0.08],
-    [1.5, 0.24, 0.07],
-    [1.16, 0.66, 0.06],
+  /** Timbers lying in front of the fallen roof, across the plinth top. */
+  pileFront: [[0.46, 0.98, 1.08, 0.8, 0.6]],
+  /** Joists' round ends poking out of the heap. */
+  joistEnds: [
+    [0.66, 1.06],
+    [1.24, 0.98],
+    [1.52, 1.28],
   ],
+  /** Loose boards ripped from the cladding: [x0, up0, x1, up1]. */
+  looseBoards: [
+    [0.26, 1.42, 0.5, 0.92],
+    [1.6, 1.62, 1.86, 1.14],
+    [1.2, 0.56, 1.5, 0.48],
+  ],
+  looseBoardWidth: 0.07,
+  /** The roof, tipped on its side: its eave's centre, and where its apex digs into the plinth. */
+  roof: {
+    eaveX: 1.24,
+    eaveUp: 1.5,
+    apexX: 1.84,
+    apexUp: 0.74,
+    halfWidth: 0.56,
+    /** How far the eave's front and back corners stand off the eave line, foreshortened. */
+    eaveDepth: 0.11,
+    shingleCourses: 6,
+    /** Where the rafters inside the open underside meet, as a share of the way to the apex. */
+    rafterMeet: 0.38,
+    rafterWidth: 0.035,
+    /** A patch stripped of shingles, in the roof's own frame: [along eave, toward apex] shares. */
+    hole: [
+      [-0.46, 0.2],
+      [-0.24, 0.18],
+      [-0.2, 0.38],
+      [-0.36, 0.42],
+    ],
+    /** The laths across that patch, spread over this band of the way to the apex. */
+    lathCount: 3,
+    holeLathFrom: 0.2,
+    holeLathSpan: 0.3,
+  },
+  /** The bell on its side: crown to the left, open mouth to the right, rolled a little. */
+  bell: {
+    crownX: 0.2,
+    crownUp: 0.86,
+    tiltRadians: 0.32,
+    widthShare: 0.9,
+    crown: 0.1,
+    crownHalfWidth: 0.45,
+    waist: 0.6,
+    waistHalfWidth: 0.55,
+    /** The mouth seen edge-on, as a share of its own height. */
+    mouthSquash: 0.4,
+    rimShare: 1.6,
+    clapperShare: 0.3,
+    clapperDrop: 0.45,
+    litBand: 0.35,
+    crackTurns: [
+      [0.3, -0.4],
+      [0.48, -0.05],
+      [0.62, -0.32],
+      [0.8, 0.08],
+      [1, -0.14],
+    ],
+  },
+  /** The brass knot and pennant, thrown clear of the roof and lying on the plinth. */
+  finial: {
+    poleFromX: 1.22,
+    poleFromUp: 0.5,
+    poleToX: 1.56,
+    poleToUp: 0.46,
+    knotX: 1.66,
+    knotUp: 0.5,
+    knotRadius: 0.11,
+  },
+  pennant: [
+    [1.26, 0.52],
+    [1.4, 0.62],
+    [1.36, 0.5],
+    [1.5, 0.44],
+  ],
+  /**
+   * The heap the collapse left where the plinth stood, ragged all round, so the
+   * ruin sits in the square's ground instead of on a tile of its own.
+   */
+  heap: [
+    [0.14, 0.52],
+    [0.22, 0.3],
+    [0.36, 0.18],
+    [0.5, 0.2],
+    [0.64, 0.08],
+    [0.84, 0.14],
+    [1.0, 0.06],
+    [1.18, 0.13],
+    [1.34, 0.07],
+    [1.5, 0.16],
+    [1.66, 0.18],
+    [1.8, 0.34],
+    [1.9, 0.52],
+    [1.84, 0.72],
+    [1.94, 0.92],
+    [1.86, 1.14],
+    [1.9, 1.38],
+    [1.76, 1.58],
+    [1.74, 1.8],
+    [1.56, 1.9],
+    [1.4, 2.02],
+    [1.2, 1.96],
+    [1.0, 2.06],
+    [0.8, 1.96],
+    [0.6, 2.02],
+    [0.42, 1.88],
+    [0.26, 1.74],
+    [0.2, 1.5],
+    [0.08, 1.3],
+    [0.16, 1.08],
+    [0.1, 0.86],
+    [0.04, 0.68],
+  ],
+  /**
+   * Stones lying on the heap's edge, at irregular gaps so the edge reads as
+   * spill rather than a kerb: [index into `heap`, radius].
+   */
+  heapRimStones: [
+    [0, 0.055],
+    [2, 0.04],
+    [3, 0.06],
+    [7, 0.035],
+    [10, 0.05],
+    [11, 0.035],
+    [13, 0.06],
+    [18, 0.04],
+    [21, 0.05],
+    [26, 0.045],
+    [29, 0.06],
+  ],
+  /** Where the heap rises highest and catches the light. */
+  heapCrest: { x: 1, up: 1.25, rx: 0.75, ry: 0.55 },
+  /** The heap's front lip falls into its own shadow below this height. */
+  heapLipUp: 0.45,
+  /** Fieldstones rolled off the heap onto the open ground: [x, up, radius]. */
+  fallenStones: [
+    [0.16, 0.08, 0.07],
+    [0.3, 0.06, 0.055],
+    [0.44, 0.1, 0.045],
+    [1.78, 0.08, 0.05],
+    [0.86, 0.5, 0.04],
+  ],
+  /** Shingles shed across the heap and the ground: [x, up, turn in radians]. */
+  shingles: [
+    [0.22, 1.96, 0.5],
+    [0.32, 2.08, -0.4],
+    [1.68, 2.02, 0.3],
+    [1.8, 1.88, -0.7],
+    [0.56, 0.5, 0.9],
+    [1.02, 0.44, -0.3],
+    [0.2, 1.2, -0.2],
+    [1.86, 0.4, 0.6],
+    [1.1, 0.06, 0.2],
+  ],
+  shingleLength: 0.12,
+  shingleWidth: 0.07,
   dustX: 1,
-  dustUp: 0.3,
-  dustRx: 0.85,
-  dustRy: 0.32,
+  dustUp: 0.9,
+  dustRx: 0.9,
+  dustRy: 0.55,
 } as const;
+
+/** The torn fibres at a snapped timber's end, across (±1 = its edges) and along (+ = past the end). */
+const SPLINTER_PROFILE: ReadonlyArray<Point> = [
+  [-1, -0.7],
+  [-1, 0.5],
+  [-0.6, 0.1],
+  [-0.3, 1.5],
+  [0, 0.3],
+  [0.35, 1.1],
+  [0.7, 0.2],
+  [1, 0.8],
+  [1, -0.5],
+  [0.5, -1],
+  [0, -0.5],
+  [-0.5, -1.1],
+];
+/** The dust a collapse leaves settling over the heap. */
+const DUST_ALPHA = 0.3;
+/** How dark the gutted stage's floor gets under the back wall. */
+const GUTTED_SHADE_ALPHA = 0.85;
 
 function paintBellTowerBroken(ctx: Ctx, g: Grid, _variant: number, rng: Rng): void {
   const t = BELL_TOWER;
   const b = BROKEN_BELL_TOWER;
-  const c = t.centre;
-  shadow(ctx, g, c, t.plinth.front + t.plinth.depth / 2, t.shadowRx, t.shadowRy);
-
-  const plinth = boxFaces(g, t.plinth);
-  ctx.fillStyle = STONE.body;
-  ctx.fillRect(plinth.top.x, plinth.top.y, plinth.top.w, plinth.top.h);
-  paintFlagstones(ctx, plinth.top, g.s(t.flagstone), forkRng(rng));
-  drawFieldstones(
-    ctx,
-    plinth.front.x,
-    plinth.front.y,
-    plinth.front.w,
-    plinth.front.h,
-    forkRng(rng),
-    g.s(t.plinth.height / 2),
-  );
-  inkBox(ctx, g, plinth);
-  for (const [mx, mu, rx, ry] of t.plinthMoss) mossTuft(ctx, g, mx, mu, rx, ry);
-
+  shadow(ctx, g, t.centre, t.plinth.front + t.plinth.depth / 2, t.shadowRx, t.shadowRy);
+  paintRubbleHeap(ctx, g, rng);
   fillSoftEllipse(
     ctx,
     g.x(b.dustX),
@@ -1017,104 +1191,479 @@ function paintBellTowerBroken(ctx: Ctx, g: Grid, _variant: number, rng: Rng): vo
     STONE.dark,
     DUST_ALPHA,
   );
+  for (const [sx, su, turn] of b.shingles.slice(0, 4)) fallenShingle(ctx, g, sx, su, turn);
 
-  const legLeftFoot = c - t.legFootHalfWidth;
-  const legRightFoot = c + t.legFootHalfWidth;
-  const leftSnap = b.snapHeight + b.leftSnapRise;
-  const rightSnap = b.snapHeight + b.rightSnapRise;
-  const leftStumpX = c - towerHalfWidth(leftSnap);
-  const rightStumpX = c + towerHalfWidth(rightSnap);
-  strut(ctx, g, legLeftFoot, t.legFoot, leftStumpX, leftSnap, t.legWidth, BARK_TONE);
-  strut(ctx, g, legRightFoot, t.legFoot, rightStumpX, rightSnap, t.legWidth, BARK_TONE);
+  paintGuttedStage(ctx, g, rng);
 
-  for (const [fromX, fromUp, toX, toUp] of b.debrisPlanks) {
-    strut(ctx, g, fromX, fromUp, toX, toUp, b.splitBoardWidth, WOOD_TONE);
+  const legLeftFoot = t.centre - t.legFootHalfWidth;
+  const legRightFoot = t.centre + t.legFootHalfWidth;
+  const tallTopX = t.centre - towerHalfWidth(b.tallStumpUp);
+  const shortTopX = t.centre + towerHalfWidth(b.shortStumpUp);
+  const brace = b.hangingBrace;
+  const braceFromX = t.centre - towerHalfWidth(brace.fromUp);
+  snappedTimber(ctx, g, braceFromX, brace.fromUp, brace.toX, brace.toUp, t.braceWidth);
+  snappedTimber(ctx, g, legLeftFoot, t.legFoot, tallTopX, b.tallStumpUp, t.legWidth, BARK_TONE);
+  snappedTimber(ctx, g, legRightFoot, t.legFoot, shortTopX, b.shortStumpUp, t.legWidth, BARK_TONE);
+
+  for (const [x0, u0, x1, u1, share] of b.pileBehind) {
+    snappedTimber(ctx, g, x0, u0, x1, u1, t.legWidth * share, BARK_TONE);
   }
+  for (const [x0, u0, x1, u1] of b.looseBoards.slice(0, 2)) {
+    snappedTimber(ctx, g, x0, u0, x1, u1, b.looseBoardWidth, WOOD_TONE);
+  }
+
+  paintFallenRoof(ctx, g, forkRng(rng));
+
+  for (const [x0, u0, x1, u1, share] of b.pileFront) {
+    snappedTimber(ctx, g, x0, u0, x1, u1, t.floorBeam * share, WOOD_TONE);
+  }
+  for (const [jx, ju] of b.joistEnds) logEndFacing(ctx, g, jx, ju, t.joistEnd);
+  for (const [x0, u0, x1, u1] of b.looseBoards.slice(2)) {
+    snappedTimber(ctx, g, x0, u0, x1, u1, b.looseBoardWidth, WOOD_TONE);
+  }
+
+  paintFallenFinial(ctx, g);
+  paintFallenBell(ctx, g);
+
+  const stoneRng = forkRng(rng);
+  for (const [sx, su, radius] of b.fallenStones) {
+    ellipseT(ctx, g, sx, su, radius, radius * STONE_SQUASH);
+    fillInked(ctx, g, pickStoneFace(stoneRng));
+  }
+  for (const [sx, su, turn] of b.shingles.slice(4)) fallenShingle(ctx, g, sx, su, turn);
+}
+
+/**
+ * The low mound of stone, grit and splinters the tower came down into. It has
+ * no outline of its own: its edge is a broken ring of inked stones, so the
+ * ground shows between them and the heap reads as spilled, not laid.
+ */
+function paintRubbleHeap(ctx: Ctx, g: Grid, rng: Rng): void {
+  const b = BROKEN_BELL_TOWER;
+  const heap = b.heap.map(([x, up]): Point => [g.x(x), g.y(up)]);
+  const top = g.y(Math.max(...b.heap.map(([, up]) => up)));
+  const bottom = g.y(0);
+  const left = g.x(0);
+  const width = g.s(BELL_TOWER.centre * 2);
+  const chipRng = forkRng(rng);
+  withClip(
+    ctx,
+    () => polygon(ctx, heap),
+    () => {
+      const lip = ctx.createLinearGradient(0, g.y(b.heapLipUp), 0, bottom);
+      lip.addColorStop(0, RUBBLE_DUST);
+      lip.addColorStop(1, HOLLOW_SHADE);
+      // Translucent, so the square's own ground shows through and the heap
+      // takes on whatever it fell onto.
+      ctx.globalAlpha = HEAP_FILL_ALPHA;
+      ctx.fillStyle = RUBBLE_DUST;
+      ctx.fillRect(left, top, width, bottom - top);
+      ctx.fillStyle = lip;
+      ctx.fillRect(left, g.y(b.heapLipUp), width, bottom - g.y(b.heapLipUp));
+      ctx.globalAlpha = 1;
+      const crest = b.heapCrest;
+      fillSoftEllipse(
+        ctx,
+        g.x(crest.x),
+        g.y(crest.up),
+        g.s(crest.rx),
+        g.s(crest.ry),
+        STONE.highlight,
+        HEAP_CREST_ALPHA,
+      );
+      const chips = Math.round(((bottom - top) * width * RUBBLE_BED.chipsPerTile) / (g.ts * g.ts));
+      for (let chip = 0; chip < chips; chip++) {
+        const chipX = left + chipRng() * width;
+        const chipY = top + chipRng() * (bottom - top);
+        const radius = g.s(range(chipRng, RUBBLE_BED.chipMin, RUBBLE_BED.chipMax));
+        ctx.beginPath();
+        ctx.ellipse(chipX, chipY, radius, radius * STONE_SQUASH, 0, 0, TWO_PI);
+        ctx.fillStyle = chipRng() < RUBBLE_BED.woodChipShare ? WOOD.dark : pickStoneFace(chipRng);
+        ctx.fill();
+      }
+    },
+  );
+  const rimRng = forkRng(rng);
+  for (const [pointIndex, radius] of b.heapRimStones) {
+    const [x, up] = b.heap[pointIndex];
+    ellipseT(ctx, g, x, up, radius, radius * STONE_SQUASH);
+    fillInked(ctx, g, pickStoneFace(rimRng));
+  }
+}
+/** How brightly the heap's crest catches the light. */
+const HEAP_CREST_ALPHA = 0.18;
+const HEAP_FILL_ALPHA = 0.5;
+/** Crushed mortar and grit: a neutral grey, nearer the square's gravel than the green fieldstone. */
+const RUBBLE_DUST = '#5a5550';
+const RUBBLE_BED = {
+  chipsPerTile: 90,
+  chipMin: 0.012,
+  chipMax: 0.045,
+  woodChipShare: 0.25,
+} as const;
+
+/** A ragged run of plank ends: the torn line itself, with pale fresh wood just under it. */
+function tornEdge(ctx: Ctx, g: Grid, points: ReadonlyArray<Point>): void {
+  const b = BROKEN_BELL_TOWER;
+  const trace = (drop: number): void => {
+    ctx.beginPath();
+    points.forEach(([x, up], index) => {
+      if (index === 0) ctx.moveTo(g.x(x), g.y(up - drop));
+      else ctx.lineTo(g.x(x), g.y(up - drop));
+    });
+  };
+  trace(b.tornEdgeDrop);
+  ctx.strokeStyle = LOG.cut;
+  ctx.lineWidth = g.ink * b.tornEdgeShare;
+  ctx.stroke();
+  trace(0);
+  outline(ctx, g);
+}
+
+/**
+ * The lower stage torn open: the back wall's inner face, dark toward the
+ * gutted floor, shows over a front wall ripped lower still, and the little
+ * door hangs on in what is left of it.
+ */
+function paintGuttedStage(ctx: Ctx, g: Grid, rng: Rng): void {
+  const t = BELL_TOWER;
+  const b = BROKEN_BELL_TOWER;
+  const c = t.centre;
+  const leftEdge = (up: number): Point => [c - towerHalfWidth(up), up];
+  const rightEdge = (up: number): Point => [c + towerHalfWidth(up), up];
+  const toPx = ([x, up]: Point): Point => [g.x(x), g.y(up)];
+  const stageLeft = c - t.legFootHalfWidth;
+  const stageWidthPx = g.s(t.legFootHalfWidth * 2);
+
+  const backTop: Point[] = [
+    leftEdge(b.backTearLeftUp),
+    ...b.backTear,
+    rightEdge(b.backTearRightUp),
+  ];
+  const backWall: Point[] = [leftEdge(b.backWallFloorUp), ...backTop, rightEdge(b.backWallFloorUp)];
+  withClip(
+    ctx,
+    () => polygon(ctx, backWall.map(toPx)),
+    () => {
+      drawPlanks(
+        ctx,
+        g.x(stageLeft),
+        g.y(b.backTearLeftUp),
+        stageWidthPx,
+        g.s(b.backTearLeftUp - b.backWallFloorUp),
+        forkRng(rng),
+        { direction: 'horizontal', boardPx: g.s(t.stagePlank), base: WOOD.dark, nailChance: 0 },
+      );
+      const gutted = ctx.createLinearGradient(0, g.y(b.backTearLeftUp), 0, g.y(b.backWallFloorUp));
+      gutted.addColorStop(0, CLEAR);
+      gutted.addColorStop(1, HOLLOW_SHADE);
+      ctx.globalAlpha = GUTTED_SHADE_ALPHA;
+      ctx.fillStyle = gutted;
+      ctx.fillRect(
+        g.x(stageLeft),
+        g.y(b.backTearLeftUp),
+        stageWidthPx,
+        g.s(b.backTearLeftUp - b.backWallFloorUp),
+      );
+      ctx.globalAlpha = 1;
+    },
+  );
+  polygon(ctx, backWall.map(toPx));
+  outline(ctx, g);
+  tornEdge(ctx, g, backTop);
+
+  const frontTop: Point[] = [
+    leftEdge(b.frontTearLeftUp),
+    ...b.frontTear,
+    rightEdge(b.frontTearRightUp),
+  ];
+  const frontWall: Point[] = [leftEdge(t.legFoot), ...frontTop, rightEdge(t.legFoot)];
+  withClip(
+    ctx,
+    () => polygon(ctx, frontWall.map(toPx)),
+    () => {
+      drawPlanks(
+        ctx,
+        g.x(stageLeft),
+        g.y(b.frontTearLeftUp),
+        stageWidthPx,
+        g.s(b.frontTearLeftUp - t.legFoot),
+        forkRng(rng),
+        { direction: 'horizontal', boardPx: g.s(t.stagePlank), base: WOOD.body },
+      );
+      paintTowerDoor(ctx, g, forkRng(rng));
+    },
+  );
+  polygon(ctx, frontWall.map(toPx));
+  outline(ctx, g);
+  tornEdge(ctx, g, frontTop);
+}
+
+/** A timber snapped across: the strut, then the pale torn fibres of its broken end at (x1, u1). */
+function snappedTimber(
+  ctx: Ctx,
+  g: Grid,
+  x0: number,
+  u0: number,
+  x1: number,
+  u1: number,
+  width: number,
+  tone: Tone = WOOD_TONE,
+): void {
+  strut(ctx, g, x0, u0, x1, u1, width, tone);
+  const ax = g.x(x0);
+  const ay = g.y(u0);
+  const bx = g.x(x1);
+  const by = g.y(u1);
+  const length = Math.hypot(bx - ax, by - ay);
+  if (length < DEGENERATE_LENGTH_PX) return;
+  const alongX = (bx - ax) / length;
+  const alongY = (by - ay) / length;
+  const half = g.s(width) / 2;
   polygon(
     ctx,
-    b.splitBoard.map(([x, up]): Point => [g.x(x), g.y(up)]),
+    SPLINTER_PROFILE.map(([across, reach]): Point => [
+      bx - alongY * half * across + alongX * half * reach,
+      by + alongX * half * across + alongY * half * reach,
+    ]),
   );
-  fillInked(ctx, g, WOOD.light);
+  fillInked(ctx, g, LOG.cut);
+}
 
-  const rubbleRng = forkRng(rng);
-  for (const [sx, su, radius] of b.rubbleStones) {
-    ellipseT(ctx, g, sx, su, radius, radius * STONE_SQUASH);
-    fillInked(ctx, g, rubbleRng() < STONE_LIGHT_CHANCE ? STONE.light : STONE.body);
-  }
-
+/** One shingle shed from the roof, lying flat at a turn. */
+function fallenShingle(ctx: Ctx, g: Grid, x: number, up: number, turn: number): void {
+  const b = BROKEN_BELL_TOWER;
   ctx.save();
   try {
-    const pivotX = g.x(b.roofPivot.x);
-    const pivotY = g.y(b.roofPivot.up);
-    ctx.translate(pivotX, pivotY);
-    ctx.rotate(b.roofTiltRadians);
-    ctx.translate(-pivotX, -pivotY);
-    const roof: Point[] = [
-      [g.x(b.roofPivot.x - b.roofHalfWidth), g.y(b.roofPivot.up)],
-      [g.x(b.roofPivot.x + b.roofApexReach), g.y(b.roofPivot.up + b.roofDepth)],
-      [g.x(b.roofPivot.x + b.roofHalfWidth), g.y(b.roofPivot.up)],
-      [g.x(b.roofPivot.x), g.y(b.roofPivot.up - b.roofDepth)],
-    ];
-    withClip(
-      ctx,
-      () => polygon(ctx, roof),
-      () => {
-        ctx.fillStyle = WOOD.dark;
-        ctx.fillRect(
-          g.x(b.roofPivot.x - b.roofHalfWidth),
-          g.y(b.roofPivot.up + b.roofDepth),
-          g.s(b.roofHalfWidth * 2),
-          g.s(b.roofDepth * 2),
-        );
-        ctx.strokeStyle = WOOD.deep;
-        ctx.lineWidth = g.ink * SHINGLE_LINE_SHARE;
-        for (let course = 1; course < BROKEN_ROOF_SHINGLE_COURSES; course++) {
-          const along = course / BROKEN_ROOF_SHINGLE_COURSES;
-          const y = g.y(b.roofPivot.up + b.roofDepth * (1 - 2 * along));
-          ctx.beginPath();
-          ctx.moveTo(g.x(b.roofPivot.x - b.roofHalfWidth * (1 - along)), y);
-          ctx.lineTo(g.x(b.roofPivot.x + b.roofHalfWidth * (1 - along)), y);
-          ctx.stroke();
-        }
-      },
-    );
-    polygon(ctx, roof);
-    outline(ctx, g);
+    ctx.translate(g.x(x), g.y(up));
+    ctx.rotate(turn);
+    const length = g.s(b.shingleLength);
+    const width = g.s(b.shingleWidth);
+    ctx.beginPath();
+    ctx.rect(-length / 2, -width / 2, length, width);
+    fillInked(ctx, g, WOOD.mid);
   } finally {
     ctx.restore();
   }
+}
 
-  const rope = b.ropeFrom;
-  cord(
-    ctx,
-    g,
-    [
-      [rope.x, rope.up],
-      [b.ropeTo.x, b.ropeTo.up],
-    ],
-    ROPE_WIDTH_TILES,
-    ROPE.dark,
-  );
-
-  const bell = b.bell;
-  ellipseT(ctx, g, bell.x, bell.up, bell.radiusX, bell.radiusY);
-  fillInked(ctx, g, BRASS.body);
-  litSpot(ctx, g, bell.x, bell.up, bell.radiusX, bell.radiusY, BRASS.light, SHEEN.medium);
+/** A plain inked beam between two points already in pixels, for art drawn in a rotated frame. */
+function beamPx(ctx: Ctx, g: Grid, from: Point, to: Point, widthPx: number, color: string): void {
   ctx.beginPath();
-  ctx.moveTo(g.x(bell.x - bell.radiusX), g.y(bell.up));
-  for (const [dx, du] of b.bellCrackTurns) {
-    ctx.lineTo(g.x(bell.x + dx * bell.radiusX), g.y(bell.up + du * bell.radiusY));
-  }
+  ctx.moveTo(...from);
+  ctx.lineTo(...to);
   ctx.strokeStyle = INK;
-  ctx.lineWidth = g.ink;
+  ctx.lineWidth = widthPx + g.ink * 2;
+  ctx.stroke();
+  ctx.strokeStyle = color;
+  ctx.lineWidth = widthPx;
   ctx.stroke();
 }
-/** The dust a collapse leaves settling over the plinth. */
-const DUST_ALPHA = 0.3;
-/** Shingle lap lines drawn across the fallen roof's shorter, simpler silhouette. */
-const BROKEN_ROOF_SHINGLE_COURSES = 4;
-/** The stub of bell rope left dangling after the tower comes down. */
-const ROPE_WIDTH_TILES = 0.02;
+
+/**
+ * The pyramid roof lying on its side, drawn in its own frame: the eave line
+ * along x, the apex up -y. The two shingled faces run to the apex; at the eave
+ * the open underside shows, its rafters converging into the dark.
+ */
+function paintFallenRoof(ctx: Ctx, g: Grid, rng: Rng): void {
+  const r = BROKEN_BELL_TOWER.roof;
+  const eaveX = g.x(r.eaveX);
+  const eaveY = g.y(r.eaveUp);
+  const apexDx = g.x(r.apexX) - eaveX;
+  const apexDy = g.y(r.apexUp) - eaveY;
+  const height = Math.hypot(apexDx, apexDy);
+  const turnToApex = Math.atan2(apexDx, -apexDy);
+  const half = g.s(r.halfWidth);
+  const depth = g.s(r.eaveDepth);
+  const courseHeight = height / r.shingleCourses;
+  const apex: Point = [0, -height];
+  const eaveLeft: Point = [-half, 0];
+  const eaveRight: Point = [half, 0];
+  const eaveNear: Point = [0, depth];
+  const eaveFar: Point = [0, -depth];
+  ctx.save();
+  try {
+    ctx.translate(eaveX, eaveY);
+    ctx.rotate(turnToApex);
+
+    const faces: ReadonlyArray<readonly [ReadonlyArray<Point>, string]> = [
+      [[apex, eaveLeft, eaveNear], WOOD.light],
+      [[apex, eaveNear, eaveRight], WOOD.mid],
+    ];
+    for (const [face, tone] of faces) {
+      withClip(
+        ctx,
+        () => polygon(ctx, face),
+        () => {
+          ctx.fillStyle = tone;
+          ctx.fillRect(-half, -height, half * 2, height + depth);
+          ctx.strokeStyle = WOOD.deep;
+          ctx.lineWidth = g.ink * SHINGLE_LINE_SHARE;
+          for (let course = 1; course < r.shingleCourses; course++) {
+            const toward = course / r.shingleCourses;
+            const spread = 1 - toward;
+            const lapY = -height * toward;
+            ctx.beginPath();
+            ctx.moveTo(-half * spread, lapY);
+            ctx.lineTo(0, lapY + depth * spread);
+            ctx.lineTo(half * spread, lapY);
+            ctx.stroke();
+            const stagger = course % 2 === 0 ? 0 : 1 / 2;
+            for (let index = 0; index <= SHINGLES_PER_COURSE; index++) {
+              const across = ((index + stagger) / SHINGLES_PER_COURSE) * 2 - 1;
+              const jointX = across * half * spread;
+              const jointY = lapY + depth * spread * (1 - Math.abs(across));
+              ctx.beginPath();
+              ctx.moveTo(jointX, jointY);
+              ctx.lineTo(
+                jointX + jitter(rng, g.s(BELL_TOWER.shingleJitter)),
+                jointY + courseHeight * SHINGLE_JOINT_SHARE,
+              );
+              ctx.stroke();
+            }
+          }
+        },
+      );
+    }
+    polygon(ctx, [apex, eaveLeft, eaveNear, eaveRight]);
+    outline(ctx, g);
+    ctx.beginPath();
+    ctx.moveTo(...apex);
+    ctx.lineTo(...eaveNear);
+    ctx.strokeStyle = WOOD.highlight;
+    ctx.lineWidth = g.ink;
+    ctx.stroke();
+
+    const hole = r.hole.map(([alongShare, towardShare]): Point => [
+      alongShare * half,
+      -towardShare * height,
+    ]);
+    const lathWidth = g.s(r.rafterWidth);
+    withClip(
+      ctx,
+      () => polygon(ctx, hole),
+      () => {
+        ctx.fillStyle = HOLLOW_SHADE;
+        ctx.fillRect(-half, -height, half * 2, height);
+        for (let lath = 1; lath <= r.lathCount; lath++) {
+          const lathY = -height * (r.holeLathFrom + (r.holeLathSpan * lath) / (r.lathCount + 1));
+          beamPx(ctx, g, [-half, lathY], [half, lathY], lathWidth, WOOD.light);
+        }
+      },
+    );
+    polygon(ctx, hole);
+    outline(ctx, g);
+
+    const underside: Point[] = [eaveLeft, eaveFar, eaveRight, eaveNear];
+    const rafterMeet: Point = [0, -height * r.rafterMeet];
+    withClip(
+      ctx,
+      () => polygon(ctx, underside),
+      () => {
+        ctx.fillStyle = HOLLOW_SHADE;
+        ctx.fillRect(-half, -height, half * 2, height + depth * 2);
+        for (const corner of [eaveLeft, eaveRight, eaveNear]) {
+          beamPx(ctx, g, corner, rafterMeet, lathWidth, WOOD.mid);
+        }
+      },
+    );
+    polygon(ctx, underside);
+    outline(ctx, g, g.ink * DOOR_OUTLINE_SHARE);
+  } finally {
+    ctx.restore();
+  }
+}
+
+/** The finial snapped off the roof's apex: its brass pole, the knot, and the torn pennant. */
+function paintFallenFinial(ctx: Ctx, g: Grid): void {
+  const b = BROKEN_BELL_TOWER;
+  const f = b.finial;
+  polygon(
+    ctx,
+    b.pennant.map(([x, up]): Point => [g.x(x), g.y(up)]),
+  );
+  fillInked(ctx, g, CLOTH.madder.body);
+  strut(
+    ctx,
+    g,
+    f.poleFromX,
+    f.poleFromUp,
+    f.poleToX,
+    f.poleToUp,
+    BELL_TOWER.finialWidth,
+    BRASS_TONE,
+  );
+  const knotX = g.x(f.knotX);
+  const knotY = g.y(f.knotUp);
+  const knotLine = g.s(BELL_TOWER.knotLine);
+  drawBriarKnot(ctx, knotX, knotY, g.s(f.knotRadius), INK, knotLine + g.ink * 2);
+  drawBriarKnot(ctx, knotX, knotY, g.s(f.knotRadius), BRASS.light, knotLine);
+}
+
+/**
+ * The bell on its side, in its own frame: the crown at the origin and the lip
+ * along +x, the same waisted profile it hangs with. Its open mouth faces the
+ * viewer edge-on, dark inside with the clapper fallen to the low side.
+ */
+function paintFallenBell(ctx: Ctx, g: Grid): void {
+  const bell = BROKEN_BELL_TOWER.bell;
+  const length = g.s(BELL_HEIGHT_TILES);
+  const halfWidth = (length * bell.widthShare) / 2;
+  const crownX = length * bell.crown;
+  const crownHalf = halfWidth * bell.crownHalfWidth;
+  const waistX = length * bell.waist;
+  const waistHalf = halfWidth * bell.waistHalfWidth;
+  const mouthHalf = halfWidth * bell.mouthSquash;
+  const trace = (): void => {
+    ctx.beginPath();
+    ctx.moveTo(crownX, -crownHalf);
+    ctx.quadraticCurveTo(waistX, -waistHalf, length, -halfWidth);
+    ctx.lineTo(length, halfWidth);
+    ctx.quadraticCurveTo(waistX, waistHalf, crownX, crownHalf);
+    ctx.quadraticCurveTo(0, crownHalf, 0, 0);
+    ctx.quadraticCurveTo(0, -crownHalf, crownX, -crownHalf);
+    ctx.closePath();
+  };
+  ctx.save();
+  try {
+    ctx.translate(g.x(bell.crownX), g.y(bell.crownUp));
+    ctx.rotate(bell.tiltRadians);
+    const body = ctx.createLinearGradient(0, -halfWidth, 0, halfWidth);
+    body.addColorStop(0, BRASS.light);
+    body.addColorStop(bell.litBand, BRASS.body);
+    body.addColorStop(1, BRASS.dark);
+    trace();
+    fillInked(ctx, g, body);
+
+    ctx.beginPath();
+    ctx.moveTo(crownX + g.ink, -crownHalf);
+    bell.crackTurns.forEach(([along, across]) => {
+      ctx.lineTo(length * along, halfWidth * across);
+    });
+    ctx.strokeStyle = BRASS.glint;
+    ctx.lineWidth = g.ink * 2;
+    ctx.stroke();
+    ctx.strokeStyle = INK;
+    ctx.lineWidth = g.ink;
+    ctx.stroke();
+
+    ctx.beginPath();
+    ctx.ellipse(length, 0, mouthHalf, halfWidth, 0, 0, TWO_PI);
+    ctx.fillStyle = HOLLOW_SHADE;
+    ctx.fill();
+    ctx.strokeStyle = BRASS.light;
+    ctx.lineWidth = g.ink * bell.rimShare;
+    ctx.stroke();
+    outline(ctx, g);
+
+    const clapperRadius = mouthHalf * bell.clapperShare * 2;
+    ctx.beginPath();
+    ctx.arc(length, halfWidth * bell.clapperDrop, clapperRadius, 0, TWO_PI);
+    fillInked(ctx, g, IRON.body);
+  } finally {
+    ctx.restore();
+  }
+}
 
 /** Flat paving over a top face: irregular flags with dark joints. */
 function paintFlagstones(ctx: Ctx, rect: PxRect, flagPx: number, rng: Rng): void {

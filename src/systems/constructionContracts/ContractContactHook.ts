@@ -37,7 +37,7 @@ export interface ContractContactHookDeps {
   readonly story: () => InteriorStoryState;
   /** The interior scene's own bus. */
   readonly bus: EventBus;
-  readonly audio: Pick<AudioManager, 'play'> | null;
+  readonly audio: Pick<AudioManager, 'playRandom'> | null;
   readonly conversation: Conversation;
   readonly flyCoins: ContractSettlementDeps['flyCoins'];
   /** The voice a resident standing in this room speaks in, or null when they are not here. */
