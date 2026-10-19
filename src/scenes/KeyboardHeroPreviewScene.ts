@@ -21,7 +21,7 @@
  *    two-strike fail sequence can be reviewed without having to play badly.
  *
  * Both run tabs carry a tier switch, so each tier's chart and fall speed —
- * Nightmare's double notes included — can be watched in motion.
+ * Crawler's and Nightmare's double notes included — can be watched in motion.
  */
 
 import { keybindings, type GameAction } from '../core/Keybindings';

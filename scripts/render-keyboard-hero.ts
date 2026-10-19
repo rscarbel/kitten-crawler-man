@@ -20,8 +20,8 @@
  * for a DOM `document`, which node does not have.
  *
  * A second sheet plays each difficulty tier's own chart at its own fall speed,
- * frozen at the moment the most notes are on the field (on Nightmare, as its
- * first double note falls), at a desktop fit and both phone orientations: the
+ * frozen at the moment the most notes are on the field (on Crawler and
+ * Nightmare, as the first double note falls), at a desktop fit and both phone orientations: the
  * clutter check for a slower fall or a pair of notes.
  *
  * The gates run first, before the contact sheet is allocated, so a failure is
@@ -448,7 +448,7 @@ function busiestMomentMs(
   return best.songMs;
 }
 
-/** Nightmare is caught with its first double note halfway down, where the rung reads best. */
+/** A tier with double notes is caught with its first one halfway down, where the rung reads best. */
 function snapshotMomentMs(difficulty: Difficulty): number {
   const { notes } = KEYBOARD_HERO_CHARTS[difficulty];
   const geometry = KEYBOARD_HERO_GEOMETRY[difficulty];

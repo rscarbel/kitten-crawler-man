@@ -28,6 +28,10 @@ import type { DialogLine, NonEmpty } from '../dialog/line';
 import { CLARABELLE } from '../dialog/scripts/scenes/clarabelle';
 import { CLUB_ANIM_FRAMES_PER_SECOND, drawClubNpc } from '../sprites/clubNpcSprite';
 import { drawClubCastFigure, type ClubFigureRef } from '../sprites/clubCastFigure';
+import { drawOverheadIcon, overheadIconFor, type ShopSign } from '../sprites/overheadIcon';
+import { scaleHumanoidBox } from '../sprites/humanoidScale';
+import { figureRowInkTop } from '../sprites/figure/figureFrameCache';
+import { rosemarieIdleRow } from '../sprites/rosemarieSprite';
 import {
   CLUB_BARTENDER,
   clubDancerAt,
@@ -172,6 +176,11 @@ function prewarmEscort(pair: EscortPair): void {
 export function createClubMarketShop(shopStock: ShopStock): ShopSystem {
   return new ShopSystem(CLUB_INTERIOR_W, 'club_market', shopStock);
 }
+
+/** The bar, the market and the VIP host all sell at any hour, so each wears the coin. */
+const STATION_SHOP_SIGN = 'trades' as const satisfies ShopSign;
+/** Rosemarie sells contracts; one already running blocks a new one only until it ends, so the coin stays. */
+const MERCENARY_DESK_ICON = overheadIconFor('none', STATION_SHOP_SIGN);
 
 /** Which cast figure each station's staff draws as; the casino and the door have their own renderers. */
 const STATION_FIGURE: Readonly<
@@ -852,14 +861,28 @@ export class DesperadoClubSystem {
       if (station.id === 'mercenary') {
         // Read through `this.guild` at draw time: this list is built by a field
         // initializer, before the constructor has made the guild.
+        const deskTile = station.tile;
         figures.push({
-          y: station.tile.y * TILE_SIZE,
-          render: (ctx, camX, camY, tileSize) => this.guild.renderDesk(ctx, camX, camY, tileSize),
+          y: deskTile.y * TILE_SIZE,
+          render: (ctx, camX, camY, tileSize) => {
+            this.guild.renderDesk(ctx, camX, camY, tileSize);
+            const sx = deskTile.x * TILE_SIZE - camX;
+            const sy = deskTile.y * TILE_SIZE - camY;
+            const artTop = figureRowInkTop(rosemarieIdleRow(), sy, tileSize);
+            drawOverheadIcon(ctx, sx, artTop, tileSize, MERCENARY_DESK_ICON);
+          },
         });
         continue;
       }
       figures.push(
-        this.castFigure(station.tile, STATION_FIGURE[station.id], 'idle', 1, station.tile.x),
+        this.castFigure(
+          station.tile,
+          STATION_FIGURE[station.id],
+          'idle',
+          1,
+          station.tile.x,
+          STATION_SHOP_SIGN,
+        ),
       );
     }
     return figures;
@@ -876,24 +899,27 @@ export class DesperadoClubSystem {
     action: 'idle',
     facingX: number,
     seed: number,
+    shopSign: ShopSign,
   ): InteriorFigure {
+    // The club's staff have no questline, so the only icon one can wear is the coin.
+    const icon = overheadIconFor('none', shopSign);
     return {
       y: tile.y * TILE_SIZE,
-      render: (ctx, camX, camY, tileSize) =>
-        drawClubCastFigure(
-          ctx,
-          ref,
-          tile.x * TILE_SIZE - camX,
-          tile.y * TILE_SIZE - camY,
-          tileSize,
-          {
-            action,
-            walkPhase: 0,
-            facingX,
-            facingY: 1,
-            loopOffsetSeconds: seed / CLUB_ANIM_FRAMES_PER_SECOND,
-          },
-        ),
+      render: (ctx, camX, camY, tileSize) => {
+        const sx = tile.x * TILE_SIZE - camX;
+        const sy = tile.y * TILE_SIZE - camY;
+        const drawnRow = drawClubCastFigure(ctx, ref, sx, sy, tileSize, {
+          action,
+          walkPhase: 0,
+          facingX,
+          facingY: 1,
+          loopOffsetSeconds: seed / CLUB_ANIM_FRAMES_PER_SECOND,
+        });
+        if (icon === 'none') return;
+        const box = scaleHumanoidBox(sx, sy, tileSize);
+        const artTop = drawnRow === undefined ? box.sy : figureRowInkTop(drawnRow, sy, tileSize);
+        drawOverheadIcon(ctx, box.sx, artTop, box.s, icon);
+      },
     };
   }
 

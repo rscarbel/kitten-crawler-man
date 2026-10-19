@@ -224,7 +224,13 @@ import {
   inkTattoo,
 } from '../systems/townTattooParlor';
 import { buildArmouryMenu, issueArmour } from '../systems/townArmoury';
-import { buildDrillYardMenu, runDrill } from '../systems/townDrillYard';
+import {
+  DRILL_YARD_BUILDING,
+  buildDrillYardMenu,
+  drillYardHasTraining,
+  runDrill,
+} from '../systems/townDrillYard';
+import { shopSignWhen } from '../sprites/overheadIcon';
 import {
   ShopSession,
   type ShopRow,
@@ -1473,10 +1479,11 @@ export class BuildingInteriorScene extends GameplayScene {
     // itself; it only needs her position for the "Shop" prompt and interact
     // range, so it is handed a pointer to her own `Townsperson` here, once
     // the roster that places her exists.
-    this.shop?.setKeeper(
+    const storeKeeper =
       this.occupants?.people.find((person) => person.residentId === 'keeper_brenna_kestrel') ??
-        null,
-    );
+      null;
+    this.shop?.setKeeper(storeKeeper);
+    if (this.shop !== null && storeKeeper !== null) storeKeeper.shopSign = 'trades';
     // Suppressed for the same reason occupants are: a room hosting a live quest
     // encounter is a fight, not a library.
     this.readables =
@@ -3110,6 +3117,7 @@ export class BuildingInteriorScene extends GameplayScene {
     this.skyfowlFoley.update(this.audio, this.occupants?.people ?? [], player.x, player.y);
     this.syncPlumblineFarmRoom();
     this.applyResidentQuestMarkers();
+    this.applyServiceShopSigns();
     for (const hook of this.residentQuestHooks) hook.update();
     this.contractSite?.update();
     this.prisonKey?.update(player);
@@ -3617,6 +3625,30 @@ export class BuildingInteriorScene extends GameplayScene {
   }
 
   /**
+   * Hangs a coin over every occupant who keeps one of this building's priced
+   * counters. A counter whose shelf is empty for now keeps it; only the two
+   * that can run out for good drop it — the Quiet Needle once neither crawler
+   * has a mark left to buy, the drill yard once both are at the cap.
+   */
+  private applyServiceShopSigns(): void {
+    if (this.occupants === null) return;
+    const party = [this.human, this.cat];
+    for (const person of this.occupants.people) {
+      const service = interiorServiceForRole(this.entry.name, person.role);
+      if (service === undefined) continue;
+      person.shopSign = shopSignWhen(this.serviceStillSells(person.role, party));
+    }
+  }
+
+  private serviceStillSells(role: TownRole, party: readonly Player[]): boolean {
+    if (this.entry.name === QUIET_NEEDLE_NAME) return party.some(hasTattooForSale);
+    if (this.entry.name === DRILL_YARD_BUILDING && role === 'guard') {
+      return party.some(drillYardHasTraining);
+    }
+    return true;
+  }
+
+  /**
    * Whether the occupant a press from `player` would talk to is a resident a
    * questline has put a glyph over. Their business outranks the counter, bar
    * or safe room they stand at: a shopkeeper who is also a contract's client
@@ -3992,7 +4024,7 @@ export class BuildingInteriorScene extends GameplayScene {
           counterOptions(null),
         );
         return;
-      case 'The Barracks':
+      case DRILL_YARD_BUILDING:
         // The garrison's two counters. Split on role rather than on anything the
         // room can be asked, because both stand in the same building and only
         // the NPC the player talked to says which one they are at.

@@ -15,7 +15,8 @@ import { TILE_SIZE } from '../../core/constants';
 import { Townsperson } from '../../creatures/Townsperson';
 import type { WanderParams } from '../../creatures/townWander';
 import { STALL_WIDTH_TILES, stallRippleStep, stallVariantIndex } from '../../sprites/marketStall';
-import { drawTownSheetFrame } from '../../sprites/townSheetProp';
+import { drawTownSheetFrame, townSheetStateInkTop } from '../../sprites/townSheetProp';
+import { drawOverheadIcon } from '../../sprites/overheadIcon';
 import { drawInteractionPrompt } from '../../ui/InteractionPrompt';
 import { tileKey } from '../tileKey';
 import { doorwayKeepClearTiles } from '../doorwayKeepClear';
@@ -280,7 +281,7 @@ export class MarketSystem implements GameSystem {
       pauseMin: VENDOR_PAUSE_MIN,
       pauseMax: VENDOR_PAUSE_MAX,
     };
-    return new Townsperson({
+    const vendor = new Townsperson({
       x: standX,
       y: standY,
       role: def.role,
@@ -290,6 +291,9 @@ export class MarketSystem implements GameSystem {
       wander,
       initialFacing: 'down',
     });
+    vendor.shopSign = 'trades';
+    vendor.drawsOwnOverheadIcon = false;
+    return vendor;
   }
 }
 
@@ -380,15 +384,11 @@ class StallProp implements TownPropRenderable {
       sy,
       tileSize,
     );
-    drawTownSheetFrame(
-      ctx,
-      STALL_CANOPY_SHEET_KEY,
-      `ripple_${stallRippleStep(phase)}`,
-      variantFrame,
-      sx,
-      sy,
-      tileSize,
-    );
+    const canopyState = `ripple_${stallRippleStep(phase)}`;
+    drawTownSheetFrame(ctx, STALL_CANOPY_SHEET_KEY, canopyState, variantFrame, sx, sy, tileSize);
+    // The canopy covers the vendor's head, so their icon hangs over it instead.
+    const canopyTop = townSheetStateInkTop(STALL_CANOPY_SHEET_KEY, canopyState, sy, tileSize) ?? sy;
+    drawOverheadIcon(ctx, vendor.x - camX, canopyTop, tileSize, vendor.overheadIcon);
     ctx.restore();
   }
 }

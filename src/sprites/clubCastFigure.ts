@@ -13,6 +13,7 @@ import { WALK_FRAMES as HUMAN_WALK_FRAMES } from './art/townCastFrameCounts';
 import type { DanceStyle } from './art/danceStyles';
 import { HUMANOID_NPC_SCALE } from './humanoidScale';
 import { drawTownCastSprite } from './townCastSprite';
+import type { DrawnFigureRow } from './figure/figureDef';
 import type { TownCastLook } from './person/townCastLooks';
 
 export type ClubFigureRef =
@@ -50,9 +51,9 @@ export function drawClubCastFigure(
   sy: number,
   tileSize: number,
   state: ClubFigureState,
-): void {
+): DrawnFigureRow | undefined {
   if (ref.species === 'skyfowl') {
-    drawSkyfowlCastSprite(ctx, ref.lookId, sx, sy, tileSize, {
+    return drawSkyfowlCastSprite(ctx, ref.lookId, sx, sy, tileSize, {
       action: state.action,
       walkPhase: state.walkPhase,
       facingX: state.facingX,
@@ -60,9 +61,8 @@ export function drawClubCastFigure(
       loopOffsetSeconds: state.loopOffsetSeconds,
       danceStyle: state.danceStyle,
     });
-    return;
   }
-  drawTownCastSprite(ctx, ref.look, sx, sy, tileSize, {
+  return drawTownCastSprite(ctx, ref.look, sx, sy, tileSize, {
     action: state.action,
     walkPhase: state.walkPhase,
     facingX: state.facingX,

@@ -136,7 +136,7 @@ export function questNPCHelpBubbleTop(sy: number, s: number): number {
 
 const EXCLAMATION_BOUNCE_FREQ = 3;
 const EXCLAMATION_BOUNCE_AMP = 0.04;
-const EXCLAMATION_CENTER_X = 0.5;
+export const EXCLAMATION_CENTER_X = 0.5;
 const EXCLAMATION_FONT_SIZE_RATIO = 0.45;
 const EXCLAMATION_OUTLINE_WIDTH = 3;
 const EXCLAMATION_GLOW_BLUR = 8;

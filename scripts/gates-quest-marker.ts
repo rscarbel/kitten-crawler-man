@@ -255,6 +255,24 @@ function namedSubjects(): Subject[] {
       },
     },
     {
+      label: 'ratkin villager (shop coin)',
+      draw(ctx, sx, sy, marked) {
+        villager.marker = 'none';
+        villager.shopSign = marked ? 'trades' : 'closed';
+        const { camX, camY } = cameraFor(sx, sy);
+        villager.render(ctx, camX, camY, TILE_SIZE);
+      },
+    },
+    {
+      label: 'fortune teller (shop coin)',
+      draw(ctx, sx, sy, marked) {
+        seer.markerState = 'none';
+        seer.shopSign = marked ? 'trades' : 'closed';
+        const { camX, camY } = cameraFor(sx, sy);
+        seer.render(ctx, camX, camY, TILE_SIZE);
+      },
+    },
+    {
       label: 'recruiter',
       draw(ctx, sx, sy, marked) {
         recruiter.marker = marked ? 'exclamation' : 'none';
@@ -266,6 +284,7 @@ function namedSubjects(): Subject[] {
       label: 'fortune teller',
       draw(ctx, sx, sy, marked) {
         seer.markerState = marked ? 'exclamation' : 'none';
+        seer.shopSign = 'closed';
         const { camX, camY } = cameraFor(sx, sy);
         seer.render(ctx, camX, camY, TILE_SIZE);
       },

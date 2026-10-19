@@ -23,6 +23,12 @@ import { BUILD_ROWS } from '../../../sprites/art/humanFigure';
 import { worldBar } from '../../../ui/world/worldShapes';
 import { drawInteractionPrompt, interactionPromptsSuppressed } from '../../../ui/InteractionPrompt';
 import { drawRopeCoilGlyph, drawSawBladeGlyph } from '../../../ui/icons/stationGlyphs';
+import {
+  GLYPH_BADGE_BOB_AMPLITUDE,
+  GLYPH_BADGE_SIZE,
+  drawGlyphBadge,
+  glyphBadgeBob,
+} from '../../../ui/world/glyphBadge';
 import { cueSoundOr } from '../blueprints/blueprintsSoundCues';
 import { UPGRADED_WOOD_PER_PRESS } from '../blueprints/StationUpgrades';
 import {
@@ -89,14 +95,6 @@ const PROGRESS_BAR_HEIGHT = 5;
 const PROGRESS_BAR_LIFT = 10;
 const TILE_CENTRE = 0.5;
 
-/** Glyph radius inside the far indicator's badge. */
-const FAR_ICON_GLYPH_RADIUS = 7;
-/** Badge padding around the glyph. */
-const FAR_ICON_PADDING = 5;
-const FAR_ICON_BADGE_SIZE = FAR_ICON_GLYPH_RADIUS * 2 + FAR_ICON_PADDING * 2;
-const FAR_ICON_BADGE_RADIUS = 5;
-const FAR_ICON_BOB_PERIOD_MS = 1100;
-const FAR_ICON_BOB_AMPLITUDE = 3;
 /** Clear air kept between the badge's lowest point and the prop's own art, at rest. */
 const FAR_ICON_GAP_ABOVE_ART = 4;
 /**
@@ -105,7 +103,7 @@ const FAR_ICON_GAP_ABOVE_ART = 4;
  * heights) the badge's centre floats, so that even at the lowest point of its
  * bob the whole badge sits clear above the tallest ink the prop's sheet paints.
  */
-const FAR_ICON_LIFT = FAR_ICON_BOB_AMPLITUDE + FAR_ICON_BADGE_SIZE / 2 + FAR_ICON_GAP_ABOVE_ART;
+const FAR_ICON_LIFT = GLYPH_BADGE_BOB_AMPLITUDE + GLYPH_BADGE_SIZE / 2 + FAR_ICON_GAP_ABOVE_ART;
 /**
  * The badge fades in over this band as the crawler approaches, fully gone by
  * the time the SPACE prompt takes over — so the two affordances never double up.
@@ -114,8 +112,6 @@ const FAR_ICON_FADE_START_TILES = 5;
 const FAR_ICON_FADE_END_TILES = PROCESSING_REACH_TILES + 1;
 /** Opacity floor for the badge when the party is out of wood to feed the machine. */
 const FAR_ICON_NO_WOOD_ALPHA = 0.4;
-const FAR_ICON_BADGE_FILL = 'rgba(30, 30, 30, 0.78)';
-const FAR_ICON_BADGE_BORDER = 'rgba(200, 200, 200, 0.55)';
 
 /**
  * A pulsing glow on the ground under a machine while a crawler is close
@@ -522,7 +518,7 @@ export class SawmillService {
     if (fade <= 0) return;
     const hasWood = partyWood(this.deps.party) >= 1;
     const alpha = fade * (hasWood ? 1 : FAR_ICON_NO_WOOD_ALPHA);
-    const bob = Math.sin(performance.now() / FAR_ICON_BOB_PERIOD_MS) * FAR_ICON_BOB_AMPLITUDE;
+    const bob = glyphBadgeBob(performance.now());
     const sx = centre.x - camX;
     const sy =
       stationArtTopTileY(station, this.deps.isUpgraded(station)) * TILE_SIZE -
@@ -532,22 +528,7 @@ export class SawmillService {
 
     ctx.save();
     ctx.globalAlpha = alpha;
-    ctx.beginPath();
-    const bx = sx - FAR_ICON_BADGE_SIZE / 2;
-    const by = sy - FAR_ICON_BADGE_SIZE / 2;
-    const r = FAR_ICON_BADGE_RADIUS;
-    ctx.moveTo(bx + r, by);
-    ctx.arcTo(bx + FAR_ICON_BADGE_SIZE, by, bx + FAR_ICON_BADGE_SIZE, by + FAR_ICON_BADGE_SIZE, r);
-    ctx.arcTo(bx + FAR_ICON_BADGE_SIZE, by + FAR_ICON_BADGE_SIZE, bx, by + FAR_ICON_BADGE_SIZE, r);
-    ctx.arcTo(bx, by + FAR_ICON_BADGE_SIZE, bx, by, r);
-    ctx.arcTo(bx, by, bx + FAR_ICON_BADGE_SIZE, by, r);
-    ctx.closePath();
-    ctx.fillStyle = FAR_ICON_BADGE_FILL;
-    ctx.fill();
-    ctx.strokeStyle = FAR_ICON_BADGE_BORDER;
-    ctx.lineWidth = 1;
-    ctx.stroke();
-    STATION_GLYPH[station.kind](ctx, sx, sy, FAR_ICON_GLYPH_RADIUS);
+    drawGlyphBadge(ctx, sx, sy, STATION_GLYPH[station.kind]);
     ctx.restore();
   }
 

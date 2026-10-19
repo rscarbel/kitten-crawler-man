@@ -27,12 +27,14 @@ import {
   speechBubbleOriginAbove,
   type TimedBubbleStyle,
 } from '../../sprites/speechBubble';
+import { questMarkerColorFor } from '../../sprites/questNPCSprite';
 import {
-  drawQuestMarker,
-  questMarkerColorFor,
-  questMarkerTopY,
-  type QuestMarkerGlyph,
-} from '../../sprites/questNPCSprite';
+  drawOverheadIcon,
+  overheadIconFor,
+  overheadIconTopY,
+  type OverheadIcon,
+  type ShopSign,
+} from '../../sprites/overheadIcon';
 import type { DrawnFigureRow } from '../../sprites/figure/figureDef';
 import { drawQuestBeacon } from '../../sprites/questBeacon';
 import { figureRowInkTop } from '../../sprites/figure/figureFrameCache';
@@ -116,6 +118,8 @@ export class Villager implements TownPropRenderable {
   facingY = 1;
   state: VillagerState = 'working';
   marker: NPCMarkerType = 'none';
+  /** Whether this villager has a counter open; their quest `marker` outranks it overhead. */
+  shopSign: ShopSign = 'closed';
   readonly bark = new TimedSpeech();
   /** Shows the wordless "…" bubble while set — the unnamed four in hiding. */
   hushed = false;
@@ -370,10 +374,10 @@ export class Villager implements TownPropRenderable {
     return sy - VILLAGER_HEAD_CLEARANCE_TILES * tileSize;
   }
 
-  /** The glyph over this villager's head, or null while they wear none. */
-  private get markerGlyph(): QuestMarkerGlyph | null {
-    if (this.state === 'talking' || questMarkerColorFor(this.marker) === undefined) return null;
-    return this.marker === 'question' ? '?' : '!';
+  /** The one icon over this villager's head; none while they are talking. */
+  private get overheadIcon(): OverheadIcon {
+    if (this.state === 'talking') return 'none';
+    return overheadIconFor(this.marker, this.shopSign);
   }
 
   /** The measured top of the row last drawn, or the fixed clearance before the first draw. */
@@ -383,13 +387,11 @@ export class Villager implements TownPropRenderable {
   }
 
   /**
-   * The line a bubble over this villager must sit above: their quest marker's
-   * top at the height of its bounce while they wear one, else their art's.
+   * The line a bubble over this villager must sit above: their overhead
+   * icon's top at the height of its bounce while they wear one, else their art's.
    */
   private overheadTop(ctx: CanvasRenderingContext2D, sy: number, tileSize: number): number {
-    const artTop = this.artTop(sy, tileSize);
-    const glyph = this.markerGlyph;
-    return glyph === null ? artTop : questMarkerTopY(ctx, artTop, tileSize, glyph);
+    return overheadIconTopY(ctx, this.artTop(sy, tileSize), tileSize, this.overheadIcon);
   }
 
   render(ctx: CanvasRenderingContext2D, camX: number, camY: number, tileSize: number): void {
@@ -409,10 +411,7 @@ export class Villager implements TownPropRenderable {
       loopOffsetSeconds: this.loopOffsetSeconds,
     });
 
-    const glyph = this.markerGlyph;
-    if (markerColor !== undefined && glyph !== null) {
-      drawQuestMarker(ctx, sx, this.artTop(sy, tileSize), tileSize, glyph, markerColor);
-    }
+    drawOverheadIcon(ctx, sx, this.artTop(sy, tileSize), tileSize, this.overheadIcon);
 
     this.renderSparks(ctx, camX, camY);
   }

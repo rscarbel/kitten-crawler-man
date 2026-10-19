@@ -23,6 +23,7 @@ import {
   shopTopic,
   shopTrades,
 } from './serviceContext';
+import { shopSignWhen } from '../../../sprites/overheadIcon';
 
 const COOKHOUSE_SHOP = 'cookhouse' as const satisfies ShopId;
 const COOKHOUSE_TITLE = "Pipkin's Cookhouse";
@@ -80,5 +81,6 @@ export function cookhouseTopics(counter: ShopCounter, state: BriarHollowState): 
       if (villager !== COOK || !shopTrades(ctx.quest.phase)) return [];
       return [shopTopic('buy_food', 'Buy food', counter, () => cookShop(state), flow)];
     },
+    shopSignFor: (villager, ctx) => shopSignWhen(villager === COOK && shopTrades(ctx.quest.phase)),
   };
 }

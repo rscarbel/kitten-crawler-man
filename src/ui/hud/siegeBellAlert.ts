@@ -447,6 +447,7 @@ function renderAlarmCard(ui: Ui, card: AlarmCard, keepouts: SiegeHudKeepouts): R
     text: card.headline,
     style: layout.headlineStyle,
     color: skin.headline.color,
+    halo: skin.textHalo,
     align: 'center',
     wrap: true,
   });
@@ -454,6 +455,7 @@ function renderAlarmCard(ui: Ui, card: AlarmCard, keepouts: SiegeHudKeepouts): R
     text: card.detail,
     style: layout.detailStyle,
     color: skin.detail.color,
+    halo: skin.textHalo,
     align: 'center',
     wrap: true,
   });

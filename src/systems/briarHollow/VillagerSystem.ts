@@ -25,6 +25,7 @@ import type { GameMap } from '../../map/GameMap';
 import type { BriarHollowSite, VillagerAnchorKind } from '../../map/overworld/briarHollowSite';
 import type { TilePoint } from '../../map/town/townPlan';
 import { ratkinCastEventFrame, ratkinCastLoopFrame } from '../../sprites/ratkinCastSprite';
+import { shopSignWhen, type ShopSign } from '../../sprites/overheadIcon';
 import { drawInteractionPrompt } from '../../ui/InteractionPrompt';
 import type { NPCMarkerType } from '../../creatures/QuestNPC';
 import type { Conversation } from '../../dialog/Conversation';
@@ -1501,11 +1502,24 @@ export class VillagerSystem {
   private refreshMarkers(): void {
     for (const villager of this.villagers) {
       const named = asVillagerId(villager.id);
+      if (named === null) {
+        villager.marker = 'none';
+        villager.shopSign = 'closed';
+        continue;
+      }
+      const ctx = this.contextFor(named, villager, null);
       villager.marker =
-        named === null || this.questLines.length === 0
-          ? 'none'
-          : firstQuestMarker(named, this.contextFor(named, villager, null), this.questLines);
+        this.questLines.length === 0 ? 'none' : firstQuestMarker(named, ctx, this.questLines);
+      villager.shopSign = this.shopSignFor(named, ctx);
     }
+  }
+
+  /** `'trades'` when any provider has a counter open under this villager. */
+  private shopSignFor(villager: VillagerId, ctx: VillagerContext): ShopSign {
+    const trades = this.topicProviders.some(
+      (provider) => provider.shopSignFor?.(villager, ctx) === 'trades',
+    );
+    return shopSignWhen(trades);
   }
 
   // ── Rendering ──────────────────────────────────────────────────────────

@@ -1,8 +1,7 @@
 /**
  * Illustrations for the Keyboard Hero tutorial in the spider's lab: the real
  * board, laid out in the illustration band, with notes falling to the
- * receptors on the first page, a hit beside a miss on the second, and on
- * Nightmare a double note falling to two receptors at once.
+ * receptors on the first page and a hit beside a miss on the second.
  */
 
 import { HIT_ZONE_IMG_CENTER, KEYBOARD_HERO_GEOMETRY } from '../../../systems/keyboardHeroGeometry';

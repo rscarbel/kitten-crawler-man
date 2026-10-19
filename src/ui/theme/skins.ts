@@ -221,6 +221,8 @@ export interface SiegeAlertSkin {
   readonly glowBlur: number;
   readonly headline: TextSkin;
   readonly detail: TextSkin;
+  /** The outline round the card's words, which carries them where the see-through card cannot. */
+  readonly textHalo: string;
   /** The alarm glyphs either side of the headline. */
   readonly glyph: string;
   readonly glyphSize: number;
@@ -369,6 +371,8 @@ const PRIZE_GLOW_BLUR = 28;
 const PRIZE_RAYS_ALPHA = 0.22;
 const PRIZE_ICON_SIZE = 64;
 const SIEGE_ALERT_BORDER_WIDTH = 2;
+/** Low enough that the fight behind the card stays in view while it holds. */
+const SIEGE_ALERT_FILL_ALPHA = 0.35;
 const SIEGE_ALERT_GLOW_ALPHA = 0.6;
 const SIEGE_ALERT_GLOW_BLUR = 32;
 const SIEGE_ALERT_GLYPH_SIZE = 36;
@@ -863,11 +867,11 @@ function buildSkins(theme: Theme): Skins {
     },
     siegeAlert: {
       panel: {
-        fill: palette.surface.solid,
+        fill: withAlpha(palette.surface.solid, SIEGE_ALERT_FILL_ALPHA),
         border: palette.state.danger,
         borderWidth: SIEGE_ALERT_BORDER_WIDTH,
         radius: radius.lg,
-        shadow: elevation.panel,
+        shadow: null,
         padding: space.lg,
       },
       paddingCompact: space.sm,
@@ -875,6 +879,7 @@ function buildSkins(theme: Theme): Skins {
       glowBlur: SIEGE_ALERT_GLOW_BLUR,
       headline: { style: type.alarm, color: palette.state.danger },
       detail: { style: type.heading, color: palette.text.primary },
+      textHalo: palette.surface.sunken,
       glyph: palette.state.danger,
       glyphSize: SIEGE_ALERT_GLYPH_SIZE,
       edgePulse: palette.state.danger,

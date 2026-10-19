@@ -28,12 +28,14 @@ import {
 } from './citizenFigure';
 import { residentFigure } from './residentFigures';
 import type { NPCMarkerType } from './QuestNPC';
+import { questMarkerColorFor } from '../sprites/questNPCSprite';
 import {
-  drawQuestMarker,
-  questMarkerColorFor,
-  questMarkerTopY,
-  type QuestMarkerGlyph,
-} from '../sprites/questNPCSprite';
+  drawOverheadIcon,
+  overheadIconFor,
+  overheadIconTopY,
+  type OverheadIcon,
+  type ShopSign,
+} from '../sprites/overheadIcon';
 import type { DrawnFigureRow } from '../sprites/figure/figureDef';
 import { drawQuestBeacon } from '../sprites/questBeacon';
 import type { CitizenSpeechStyle } from '../dialog/speakers';
@@ -149,6 +151,13 @@ export class Townsperson implements WanderState {
    * Follows the shipped convention: `'exclamation'` offers, `'question'` turns in.
    */
   markerType: NPCMarkerType = 'none';
+  /** Whether this citizen keeps a counter that trades; their `markerType` outranks it overhead. */
+  shopSign: ShopSign = 'closed';
+  /**
+   * False when whatever this citizen is drawn inside paints over their head —
+   * a market stall's canopy — and hangs {@link overheadIcon} above itself instead.
+   */
+  drawsOwnOverheadIcon = true;
 
   private readonly wander: WanderParams;
 
@@ -289,17 +298,14 @@ export class Townsperson implements WanderState {
       loopOffsetSeconds: this.id * LOOP_OFFSET_SECONDS_PER_ID,
     });
 
-    const glyph = this.markerGlyph;
-    if (markerColor !== undefined && glyph !== null) {
-      const artTop = this.artTop(this.y - camY);
-      drawQuestMarker(ctx, box.sx, artTop, box.s, glyph, markerColor);
+    if (this.drawsOwnOverheadIcon) {
+      drawOverheadIcon(ctx, box.sx, this.artTop(this.y - camY), box.s, this.overheadIcon);
     }
   }
 
-  /** The glyph over this citizen's head, or null while they wear none. */
-  private get markerGlyph(): QuestMarkerGlyph | null {
-    if (questMarkerColorFor(this.markerType) === undefined) return null;
-    return this.markerType === 'question' ? '?' : '!';
+  /** The one icon over this citizen's head. */
+  get overheadIcon(): OverheadIcon {
+    return overheadIconFor(this.markerType, this.shopSign);
   }
 
   /** The measured top of the row last drawn, or the humanoid box's top before the first draw. */
@@ -311,14 +317,11 @@ export class Townsperson implements WanderState {
 
   /**
    * The screen y a bubble or label hung over this citizen must stay above, for
-   * a citizen whose tile top is at screen `sy`: their quest marker's top at the
-   * height of its bounce while they wear one, else their art's.
+   * a citizen whose tile top is at screen `sy`: their overhead icon's top at
+   * the height of its bounce while they wear one, else their art's.
    */
   overheadTop(ctx: CanvasRenderingContext2D, sy: number): number {
-    const artTop = this.artTop(sy);
-    const glyph = this.markerGlyph;
-    if (glyph === null) return artTop;
-    const markerSize = scaleHumanoidBox(this.x, sy, this.cycleDistanceDrawSize).s;
-    return questMarkerTopY(ctx, artTop, markerSize, glyph);
+    const iconSize = scaleHumanoidBox(this.x, sy, this.cycleDistanceDrawSize).s;
+    return overheadIconTopY(ctx, this.artTop(sy), iconSize, this.overheadIcon);
   }
 }

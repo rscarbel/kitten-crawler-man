@@ -33,6 +33,7 @@ import {
   shopTopic,
   shopTrades,
 } from './serviceContext';
+import { shopSignWhen } from '../../../sprites/overheadIcon';
 
 const TRADING_POST_SHOP = 'trading_post' as const satisfies ShopId;
 const TRADING_POST_TITLE = 'Nibnose Trading Post';
@@ -115,5 +116,7 @@ export function tradingPostTopics(state: BriarHollowState, counter: ShopCounter)
       if (villager !== MERCHANT || !shopTrades(ctx.quest.phase)) return [];
       return [shopTopic('browse', 'Browse', counter, () => tradingPostShop(state), flow)];
     },
+    shopSignFor: (villager, ctx) =>
+      shopSignWhen(villager === MERCHANT && shopTrades(ctx.quest.phase)),
   };
 }

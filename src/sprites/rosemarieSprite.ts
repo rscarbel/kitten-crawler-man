@@ -1,5 +1,10 @@
 import { progressFrameIndex, timeFrameIndex } from '../core/SpriteRenderer';
-import { type FigureDef, figureFrameCount } from './figure/figureDef';
+import {
+  type DrawnFigureRow,
+  type FigureDef,
+  drawnFigureRow,
+  figureFrameCount,
+} from './figure/figureDef';
 import { drawFigureCached, prewarmFigureState } from './figure/figureFrameCache';
 import {
   BERNIE_FIGURE,
@@ -108,6 +113,14 @@ function drawWith(
   }
   drawFigureCached(ctx, build.bernie, BERNIE_SNUFFLE_STATE, bernieFrame, seatX, seatY, s);
   ctx.restore();
+}
+
+/**
+ * Her front idle row in the world. An overhead icon sits on this row's ink top
+ * even mid-toss, so it holds still while her arm goes up.
+ */
+export function rosemarieIdleRow(): DrawnFigureRow {
+  return drawnFigureRow(IN_WORLD.rosemarie, rosemarieStateName('idle', 'front'));
 }
 
 /**

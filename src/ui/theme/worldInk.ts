@@ -33,6 +33,22 @@ export const worldPalette = {
   shadow: 'rgba(0,0,0,0.75)',
   /** The colour a fade to or from darkness washes the scene in. */
   shade: '#000000',
+  /** The bobbing badge over a Briar Hollow station or a shop, and the glyph frame it shares. */
+  glyphBadge: {
+    fill: 'rgba(30, 30, 30, 0.78)',
+    border: 'rgba(200, 200, 200, 0.55)',
+    /** The coin glyph's dark edge, so its emerald face separates from the badge's dark fill. */
+    glyphOutline: 'rgba(0, 0, 0, 0.85)',
+  },
+  /**
+   * The coin glyph in the badge over anyone who sells things. Emerald, deeper
+   * and bluer than the quest `?`'s light green, so a shop never reads as a turn-in.
+   */
+  shopSign: {
+    coin: '#10b981',
+    /** Pale on the emerald face, since a dark mark sinks into the coin at badge size. */
+    mark: '#ecfdf5',
+  },
   /** The frames and arrows that mark where a quest wants the party to go. */
   objective: {
     /** An objective the party can act on now. */

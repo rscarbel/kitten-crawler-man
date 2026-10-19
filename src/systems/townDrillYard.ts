@@ -23,6 +23,10 @@ import type { ServiceIconId } from '../sprites/art/itemIcons/serviceIcons';
 import { hostByline, type ResidentHost } from './townResidents';
 import { rotateLine } from './townServiceUtil';
 import { SERVICE_PRICES } from '../economy/servicePrices';
+import type { PlannedBuildingName } from '../map/town/townPlan';
+
+/** The garrison whose guard runs the drill yard. */
+export const DRILL_YARD_BUILDING = 'The Barracks' as const satisfies PlannedBuildingName;
 
 /** Stat points one bought session is worth. */
 const DRILL_STAT_POINTS = 1;
@@ -97,6 +101,11 @@ const DRILL_EXHAUSTED = 'Nothing left I can teach you';
 /** What the next point costs this crawler, or `null` when they are at the cap. */
 function nextPrice(player: Player): number | null {
   return DRILL_PRICES[player.drillTraining] ?? null;
+}
+
+/** Whether the yard still has a point to teach this crawler; once every crawler is capped it never trades again. */
+export function drillYardHasTraining(player: Player): boolean {
+  return nextPrice(player) !== null;
 }
 
 /** The drill yard's board for this crawler. */

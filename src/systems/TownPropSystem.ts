@@ -24,11 +24,8 @@ import { TILE_SIZE } from '../core/constants';
 import { playDrinkGesture } from '../creatures/humanGestures';
 import { FOUNTAIN, WELL } from '../map/tileTypes';
 import { drawQuestBeacon } from '../sprites/questBeacon';
-import {
-  drawQuestMarker,
-  questMarkerColorFor,
-  type QuestMarkerState,
-} from '../sprites/questNPCSprite';
+import { questMarkerColorFor, type QuestMarkerState } from '../sprites/questNPCSprite';
+import { drawOverheadIcon, overheadIconFor, type ShopSign } from '../sprites/overheadIcon';
 import { drawTownSheetFrame, townSheetStateInkTop } from '../sprites/townSheetProp';
 import { drawInteractionPrompt } from '../ui/InteractionPrompt';
 import { tileKey } from './tileKey';
@@ -447,8 +444,9 @@ const NOTICE_BOARD_SHOWS_BEACON = false;
 const FORTUNE_TELLER_SHOWS_BEACON = true;
 
 /**
- * Draws a single-picture town fixture with the marker glyph over it while
- * `markerState` has something to say. A fixture that `showsBeacon` also gets
+ * Draws a single-picture town fixture with its one overhead icon: the quest
+ * glyph while `markerState` has something to say, else the coin while
+ * `shopSign` trades. A fixture that `showsBeacon` also gets
  * the quest beacon behind it — the same order every other quest giver draws
  * these in, so the column stands behind the fixture rather than across it.
  */
@@ -456,6 +454,7 @@ function drawMarkedFixture(
   ctx: CanvasRenderingContext2D,
   sheetKey: string,
   markerState: QuestMarkerState,
+  shopSign: ShopSign,
   showsBeacon: boolean,
   tile: TileXY,
   camX: number,
@@ -472,11 +471,10 @@ function drawMarkedFixture(
 
   drawTownSheetFrame(ctx, sheetKey, FIXTURE_STATE, FIXTURE_FRAME, sx, sy, tileSize);
 
-  if (markerColor !== undefined) {
-    const glyph = markerState === 'question' ? '?' : '!';
-    const artTop = townSheetStateInkTop(sheetKey, FIXTURE_STATE, sy, tileSize) ?? sy;
-    drawQuestMarker(ctx, sx, artTop, tileSize, glyph, markerColor);
-  }
+  const icon = overheadIconFor(markerState, shopSign);
+  if (icon === 'none') return;
+  const artTop = townSheetStateInkTop(sheetKey, FIXTURE_STATE, sy, tileSize) ?? sy;
+  drawOverheadIcon(ctx, sx, artTop, tileSize, icon);
 }
 
 class NoticeBoardProp implements TownPropRenderable {
@@ -498,6 +496,7 @@ class NoticeBoardProp implements TownPropRenderable {
       ctx,
       NOTICE_BOARD_SHEET_KEY,
       this.markerState,
+      'closed',
       NOTICE_BOARD_SHOWS_BEACON,
       this.tile,
       camX,
@@ -534,6 +533,8 @@ class BenchProp implements TownPropRenderable {
 export class FortuneTellerProp implements TownPropRenderable {
   /** What Voss has for the player — written each frame by `AnchorQuestSystem` via `setFortuneTellerMarker`. */
   markerState: QuestMarkerState = 'none';
+  /** Madame Voss reads for a fee at any hour, so her table always trades. */
+  shopSign: ShopSign = 'trades';
 
   constructor(readonly tile: TileXY) {}
 
@@ -550,6 +551,7 @@ export class FortuneTellerProp implements TownPropRenderable {
       ctx,
       FORTUNE_TELLER_SHEET_KEY,
       this.markerState,
+      this.shopSign,
       FORTUNE_TELLER_SHOWS_BEACON,
       this.tile,
       camX,

@@ -150,7 +150,7 @@ function laneKey(lane: number): string {
 /**
  * A lane with no note anywhere near `pressMs`, so pressing it is a miss
  * whatever the chart holds — the neighbouring lane is not safe, because on
- * Nightmare a double note's partner can be sitting in it.
+ * Crawler and Nightmare a double note's partner can be sitting in it.
  */
 function emptyLaneAt(
   notes: readonly KeyboardHeroChartNote[],

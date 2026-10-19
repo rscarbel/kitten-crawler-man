@@ -39,6 +39,7 @@ import {
 } from '../../dialog/scripts/briarHollow';
 import type { VillagerId } from '../../dialog/scripts/briarHollow';
 import type { VillagerContext } from './villagerCircumstances';
+import type { ShopSign } from '../../sprites/overheadIcon';
 
 /**
  * What a topic (or an opening) builds a `ConversationRequest` through,
@@ -85,6 +86,13 @@ export interface TopicProvider {
     ctx: VillagerContext,
     flow: VillagerConversationFlow,
   ): readonly ConversationTopic[];
+  /**
+   * For a provider whose rows open a counter: whether `villager`'s counter
+   * would trade right now, which hangs a coin over them. Answered beside
+   * `topics` so the coin and the row it promises are decided from the same
+   * conditions.
+   */
+  shopSignFor?(villager: VillagerId, ctx: VillagerContext): ShopSign;
 }
 
 /** A topic that answers with one or more lines and closes the conversation once they're read. */

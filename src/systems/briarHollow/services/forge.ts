@@ -57,6 +57,7 @@ import {
   shopTopic,
   shopTrades,
 } from './serviceContext';
+import { shopSignWhen } from '../../../sprites/overheadIcon';
 
 const FORGE_TITLE = 'Ironwhisker Forge';
 export const SMITH = 'oren';
@@ -101,6 +102,14 @@ export function partyOwnsTools(tools: PartyToolsState): boolean {
 export function nextToolTier(tools: PartyToolsState, kind: ToolKind): ToolTier | null {
   const next = (tierOf(tools, kind) ?? TOOL_TIER_BASIC) + 1;
   return isToolTier(next) ? next : null;
+}
+
+/**
+ * Whether Oren has anything left to sell. His stock is the next tier of each
+ * tool, so once both are at their finest he never trades again.
+ */
+export function forgeHasUpgradesLeft(tools: PartyToolsState): boolean {
+  return TOOL_KINDS.some((kind) => nextToolTier(tools, kind) !== null);
 }
 
 function resourcingLearnedByBoth(party: ServiceParty): boolean {
@@ -370,5 +379,13 @@ export function forgeTopics(host: ForgeHost): TopicProvider {
       };
       return [shopTopic('upgrades', 'Shop', host, () => forgeShop(host), flow), teachAgain];
     },
+    shopSignFor: (villager, ctx) =>
+      shopSignWhen(
+        villager === SMITH &&
+          questAccepted(ctx.quest.phase) &&
+          shopTrades(ctx.quest.phase) &&
+          partyOwnsTools(host.tools) &&
+          forgeHasUpgradesLeft(host.tools),
+      ),
   };
 }
