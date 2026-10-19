@@ -52,6 +52,9 @@ import { viewportHeight, viewportWidth } from '../../core/Viewport';
 import { MAX_TOOL_TIER, TOOL_TIER_BASIC, isToolTier, type ToolTier } from '../../core/toolTiers';
 import { VILLAGER_TALK_RANGE_TILES, VillagerSystem } from './VillagerSystem';
 import { TILE_SIZE } from '../../core/constants';
+import { drawQuestMarker, questMarkerColorFor } from '../../sprites/questNPCSprite';
+import { hollowPropInkTop } from '../../map/tiles/hollowVillageTiles';
+import { noticeBoardMarkerFor } from '../constructionContracts/contractIssue';
 import type { VillagerPartyState } from './villagerCircumstances';
 import { partyCount } from '../../core/partyResources';
 import { hostileWithinAttackRange } from '../interactionPromptGate';
@@ -734,6 +737,22 @@ export class BriarHollowKit {
     renderNecromancerTelegraphs(ctx, camX, camY, this.world.roster.mobs);
   }
 
+  /** The village board's marker colour while a contract waits on it; undefined when it has nothing to post or cannot be read. */
+  private noticeBoardMarkerColor(): string | undefined {
+    if (this.noticeBoardTile === null || this.deps.openNoticeBoard === undefined) return undefined;
+    return questMarkerColorFor(noticeBoardMarkerFor(this.deps.state));
+  }
+
+  private renderNoticeBoardMarker(ctx: CanvasRenderingContext2D, camX: number, camY: number): void {
+    const board = this.noticeBoardTile;
+    const markerColor = this.noticeBoardMarkerColor();
+    if (board === null || markerColor === undefined) return;
+    const sx = board.x * TILE_SIZE - camX;
+    const sy = board.y * TILE_SIZE - camY;
+    const artTop = hollowPropInkTop('notice_board', sy, TILE_SIZE) ?? sy;
+    drawQuestMarker(ctx, sx, artTop, TILE_SIZE, '!', markerColor);
+  }
+
   /**
    * The village's Y-sorted bodies and props, in the same shape `TownPropSystem`
    * and `MarketSystem` hand `DungeonScene` — merged into the scene's one
@@ -767,6 +786,7 @@ export class BriarHollowKit {
     this.contracts?.renderAbove(ctx, camX, camY);
     this.assault?.renderAbove(ctx, camX, camY);
     this.soldiers?.renderAbove(ctx, camX, camY);
+    this.renderNoticeBoardMarker(ctx, camX, camY);
     // A downed crawler's arrow is the only arrow the game allows on screen, so
     // the quest guide's arrows and captions stand down until they are revived.
     const crawlerDown = this.deps.human.isKnockedOut || this.deps.cat.isKnockedOut;

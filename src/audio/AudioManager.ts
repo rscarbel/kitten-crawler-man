@@ -344,6 +344,18 @@ function isAutoplayRefusal(err: unknown): boolean {
   return err instanceof DOMException && err.name === 'NotAllowedError';
 }
 
+/** `MediaError.MEDIA_ERR_NETWORK`: the download broke off after the element had started. */
+const MEDIA_ERR_NETWORK = 2;
+
+/** Paused, or failed mid-stream: a failed element stops sounding without reporting itself paused. */
+function streamElementStalled(el: HTMLAudioElement): boolean {
+  return el.paused || el.error !== null;
+}
+
+function ambientStreamStalled(pooled: PooledStream): boolean {
+  return pooled.state === 'playing' && streamElementStalled(pooled.voice.el);
+}
+
 /** A retried play() that fails again is retried by the next gesture or unlock. */
 function ignoreRetryFailure(): void {
   return;
@@ -644,13 +656,23 @@ export class AudioManager {
    * element start only there, and `resume()` settles after the gesture has
    * ended, so a stream started from `onContextUnlocked` alone can be refused.
    * A refused stream leaves the context running, so no later unlock would
-   * ever retry it; every gesture retries the refused ones. An element paused
-   * any other way (a lock screen, a hardware media key) is left alone.
+   * ever retry it; every gesture retries the refused ones.
+   *
+   * Once the context runs, every gesture also wakes any stream that should be
+   * sounding and is not. A browser can pause or fail a streamed element on
+   * its own while the page stays in front (a dropped range request, a media
+   * session pause, an audio-session hiccup), and with the context running no
+   * unlock fires to notice, so without this only backgrounding the page and
+   * bringing it back would wake the music.
    */
   private readonly handleUnlockGesture = (): void => {
     this.attemptResume();
     if (this.backgrounded || this.ctx.state === 'closed') return;
     this.music.engineReady();
+    if (this.ctx.state === 'running') {
+      this.restartStalledStreams();
+      return;
+    }
     this.retryRefusedStreams();
   };
 
@@ -669,15 +691,37 @@ export class AudioManager {
 
   private retryRefusedStreams(): void {
     for (const slot of this.musicStreamSlots) {
-      if (!slot.refusedPlay || slot.state !== 'playing' || slot.awaitingStart) continue;
-      if (slot.held) continue;
-      if (!slot.el.paused || slot.el.ended) continue;
-      this.playStream(slot.el, slot, ignoreRetryFailure);
+      if (slot.refusedPlay && this.musicSlotStalled(slot)) this.wakeStream(slot.el, slot);
     }
     for (const pooled of this.ambientStreamPool) {
-      if (!pooled.refusedPlay || pooled.state !== 'playing' || !pooled.voice.el.paused) continue;
-      this.playStream(pooled.voice.el, pooled, ignoreRetryFailure);
+      if (pooled.refusedPlay && ambientStreamStalled(pooled))
+        this.wakeStream(pooled.voice.el, pooled);
     }
+  }
+
+  /**
+   * A slot whose track should be sounding and is not. A held slot was paused
+   * on purpose, a stolen one is still fading its old track, and an element
+   * that played to its end is never woken: play() would start its song over
+   * on top of whatever followed it.
+   */
+  private musicSlotStalled(slot: MusicStreamSlot): boolean {
+    if (slot.state !== 'playing' || slot.awaitingStart || slot.held) return false;
+    return !slot.el.ended && streamElementStalled(slot.el);
+  }
+
+  /**
+   * play() again on a stalled element. An element whose download broke off
+   * is reloaded first, since play() alone does not fetch again after a
+   * network error, and is put back where it stopped.
+   */
+  private wakeStream(el: HTMLAudioElement, stream: { refusedPlay: boolean }): void {
+    if (el.error?.code === MEDIA_ERR_NETWORK) {
+      const resumeAtS = el.currentTime;
+      el.load();
+      el.currentTime = resumeAtS;
+    }
+    this.playStream(el, stream, ignoreRetryFailure);
   }
 
   /** True when the AudioContext is actively processing audio. */
@@ -726,20 +770,15 @@ export class AudioManager {
    * AudioContext alone leaves those elements paused forever, silent even
    * though `ctx.state` is back to 'running' and nothing else ever calls
    * `.play()` on them again — so every element still logically "playing" is
-   * nudged back into motion here, the one place that knows the context is
-   * genuinely alive again. An element that played to its end is never
-   * nudged: play() would start its song over on top of whatever followed it.
+   * nudged back into motion here, whenever the context is known to be alive:
+   * as it comes back, and on every gesture while it runs.
    */
   private restartStalledStreams(): void {
     for (const slot of this.musicStreamSlots) {
-      if (slot.state !== 'playing' || slot.awaitingStart || !slot.el.paused) continue;
-      if (slot.el.ended || slot.held) continue;
-      this.playStream(slot.el, slot, ignoreRetryFailure);
+      if (this.musicSlotStalled(slot)) this.wakeStream(slot.el, slot);
     }
     for (const pooled of this.ambientStreamPool) {
-      if (pooled.state === 'playing' && pooled.voice.el.paused) {
-        this.playStream(pooled.voice.el, pooled, ignoreRetryFailure);
-      }
+      if (ambientStreamStalled(pooled)) this.wakeStream(pooled.voice.el, pooled);
     }
   }
 

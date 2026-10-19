@@ -30,6 +30,7 @@ import type { BriarHollowSite } from '../../../map/overworld/briarHollowSite';
 import { QuantityDialog } from '../../../ui/screens/dialogs/QuantityDialog';
 import type { Surface } from '../../../ui/core/UiRoot';
 import { shopScreenSurface } from '../../../ui/screens/shop/ShopScreen';
+import { priceBreakdownsShown } from '../../../ui/screens/shop/priceBreakdowns';
 import { ShopSession } from '../../../ui/screens/shop/shopSession';
 import type { ProcessingStationKind } from '../processingStations';
 import type { BarkLine, NonEmpty } from '../../../dialog/line';
@@ -263,9 +264,7 @@ export class VillageServices {
     // this is the one place `deps.audio` is in scope, so the sale chime is
     // layered on here rather than threaded into every `ShopDefinition`.
     const sell =
-      shop.sell === undefined
-        ? undefined
-        : { ...shop.sell, onSold: () => audio?.play('purchase_success') };
+      shop.sell === null ? null : { ...shop.sell, onSold: () => audio?.play('purchase_success') };
     this.panel.open(
       shop.build,
       (option, buyer) => {
@@ -273,7 +272,13 @@ export class VillageServices {
         audio?.play(result.ok ? 'purchase_success' : 'error');
         return result;
       },
-      { blockedLine: shop.blockedLine, rebuyGuardTicks: shop.rebuyGuardTicks, sell },
+      {
+        onBlocked: null,
+        blockedLine: shop.blockedLine,
+        rebuyGuardTicks: shop.rebuyGuardTicks,
+        sell,
+        liveRows: false,
+      },
     );
     audio?.play('menu_open');
   }
@@ -515,6 +520,7 @@ export class VillageServices {
           const active = this.party.active();
           return { active, companion: otherCrawler(this.party, active) };
         },
+        showPriceBreakdowns: priceBreakdownsShown,
       }),
       this.picker.surface('village-services-picker'),
     ];

@@ -35,7 +35,7 @@ import { QUEST_BANNER_FRAMES, questBannerEntry } from '../../ui/QuestBanners';
 import { palette } from '../../ui/theme/tokens';
 import { drawMongoIcon, type MongoStage } from '../../sprites/mongoSprite';
 import type { DialogFixture } from './dialogs/fixture';
-import { siegeHudEntry } from '../../systems/briarHollow/siegeHudEntry';
+import { siegeHudEntry, type SiegeHudBar } from '../../systems/briarHollow/siegeHudEntry';
 import { UPDATES_PER_SECOND } from '../../systems/briarHollow/structureRules';
 import type {
   BellAlertView,
@@ -478,19 +478,28 @@ function bugabooEntry(): TopBandEntry {
   });
 }
 
+const SIEGE_WAVE_HEADLINE = `Defend Briar Hollow — Wave ${SIEGE_FIXTURE_WAVE}/${SIEGE_FIXTURE_WAVE_COUNT} (West)`;
+/** The longest headlines the card carries: the side the army or the next wave comes from, and the time left. */
+const SIEGE_IMMINENT_HEADLINE = 'The army is coming from the North — 1:30';
+const SIEGE_LULL_HEADLINE = `Wave ${SIEGE_FIXTURE_WAVE + 1} from the North — 0:25`;
+
+function siegeBellBar(bellFraction: number): SiegeHudBar {
+  return { id: 'bell', label: 'Clocktower', fraction: bellFraction, kind: 'hp', flash: 0 };
+}
+
 /** A quiet HUD under the siege's card, for the siege's alert and celebration to float over. */
-function siegeHud(name: string, bellFraction: number): DialogFixture {
+function siegeHud(
+  name: string,
+  bellFraction: number,
+  headline: string = SIEGE_WAVE_HEADLINE,
+  bars: readonly SiegeHudBar[] = [siegeBellBar(bellFraction)],
+): DialogFixture {
   return hudFixture({
     name,
     status: [],
     skillPoints: 0,
     dockExtras: ['build'],
-    topBand: () => [
-      siegeHudEntry({
-        headline: `Defend Briar Hollow — Wave ${SIEGE_FIXTURE_WAVE}/${SIEGE_FIXTURE_WAVE_COUNT} (west)`,
-        bars: [{ id: 'bell', label: 'Clocktower', fraction: bellFraction, kind: 'hp', flash: 0 }],
-      }),
-    ],
+    topBand: () => [siegeHudEntry({ headline, bars })],
     lootBanner: false,
     toasts: 'none',
     expanded: false,
@@ -599,6 +608,8 @@ function siegeVictoryFixture(name: string, secondsIn: number): DialogFixture {
 }
 
 const SIEGE_FIXTURES: readonly DialogFixture[] = [
+  siegeHud('siege-card-imminent', 1, SIEGE_IMMINENT_HEADLINE, []),
+  siegeHud('siege-card-lull', SIEGE_ALERT_BELL_FRACTION, SIEGE_LULL_HEADLINE),
   siegeAlertFixture('siege-bell-alert', BELL_ALERT_DETAIL, SIEGE_ALERT_BELL_FRACTION),
   siegeAlertFixture(
     'siege-bell-alert-threshold',

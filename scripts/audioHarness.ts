@@ -391,6 +391,8 @@ export class FakeAudioElement {
   volume = 1;
   currentTime = 0;
   paused = true;
+  /** Set by a check to fail the element the way a broken-off download does: silent, yet not paused. */
+  error: { readonly code: number } | null = null;
   onended: (() => void) | null = null;
   /** Set by `createMediaElementSource`. */
   graphNode: FakeMediaElementSourceNode | null = null;
@@ -433,7 +435,7 @@ export class FakeAudioElement {
    * recording it wraps when looping, and otherwise stops and fires `onended`.
    */
   runFor(seconds: number, durationS: number): void {
-    if (this.paused) return;
+    if (this.paused || this.error !== null) return;
     this.currentTime += seconds;
     if (this.currentTime < durationS) return;
     if (this.loop) {
@@ -443,6 +445,13 @@ export class FakeAudioElement {
     this.currentTime = durationS;
     this.paused = true;
     this.onended?.();
+  }
+
+  /** Starts the resource over, as a browser's load() does: paused at the start, with no error. */
+  load(): void {
+    this.error = null;
+    this.paused = true;
+    this.currentTime = 0;
   }
 
   pause(): void {

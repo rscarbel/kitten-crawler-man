@@ -129,6 +129,7 @@ import {
 } from '../systems/constructionContracts/contractQuest';
 import {
   issueNextContract,
+  noticeBoardMarkerFor,
   workOrderStateFor,
 } from '../systems/constructionContracts/contractIssue';
 import { contractContactName } from '../systems/constructionContracts/contractContacts';
@@ -254,6 +255,7 @@ import {
 } from '../ui/screens/dialogs/NoticeBoard';
 import { ShopSession } from '../ui/screens/shop/shopSession';
 import { shopScreenSurface } from '../ui/screens/shop/ShopScreen';
+import { priceBreakdownsShown } from '../ui/screens/shop/priceBreakdowns';
 import { FortuneTable, fortuneScreenSurface } from '../ui/screens/shop/FortuneScreen';
 import {
   drawInteractionPrompt,
@@ -6488,7 +6490,10 @@ export class DungeonScene extends GameplayScene {
     if (this.marketPanel === null) return;
     this.marketPanel.open(browse.buildMenu, browse.purchase, {
       onBlocked: browse.onBlocked,
+      blockedLine: null,
+      rebuyGuardTicks: 0,
       sell: browse.sell,
+      liveRows: false,
     });
     this.audio?.play('menu_open');
   }
@@ -6733,8 +6738,20 @@ export class DungeonScene extends GameplayScene {
       ...(this.noticeBoard === null ? [] : [this.noticeBoard.surface('notice-board')]),
       ...(this.marketPanel === null
         ? []
-        : [shopScreenSurface({ id: 'market-stall', session: this.marketPanel, party })]),
-      shopScreenSurface({ id: 'travel-menu', session: this.travelMenu.session, party }),
+        : [
+            shopScreenSurface({
+              id: 'market-stall',
+              session: this.marketPanel,
+              party,
+              showPriceBreakdowns: priceBreakdownsShown,
+            }),
+          ]),
+      shopScreenSurface({
+        id: 'travel-menu',
+        session: this.travelMenu.session,
+        party,
+        showPriceBreakdowns: priceBreakdownsShown,
+      }),
       ...(this.fortuneTeller === null
         ? []
         : [fortuneScreenSurface({ id: 'fortune-teller', table: this.fortuneTeller, party })]),
@@ -9179,6 +9196,7 @@ export class DungeonScene extends GameplayScene {
     // She is a plaza prop, not a `Player`, so unlike every other quest giver
     // she has no `markerType` field of her own for the beacon to read.
     this.townProps?.setFortuneTellerMarker(this.anchorQuest.markerState);
+    this.townProps?.setNoticeBoardMarker(noticeBoardMarkerFor(this.briarHollowState));
     this.updateSpeedFizzDiscovery();
     this.doomsdayEscape.update(ctx);
     if (this.doomsdayEscape.pinRequested) {

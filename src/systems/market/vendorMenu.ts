@@ -7,14 +7,13 @@
 
 import type { VendorDef } from './vendorDefs';
 import {
-  catalogLineLabel,
   catalogLineUnits,
   shopDef,
   type CatalogLine,
   type ShopId,
   type VendorLineGate,
 } from '../../economy/shops';
-import { lineQuote, type PriceQuote } from '../../economy/pricing';
+import { lineQuote } from '../../economy/pricing';
 import {
   buyFromShop,
   currentStock,
@@ -24,7 +23,13 @@ import {
 } from '../../economy/shopStock';
 import type { AudioManager } from '../../audio/AudioManager';
 import type { Player } from '../../Player';
-import type { ShopMenu, ShopRow, ShopPurchaseHandler } from '../../ui/screens/shop/shopSession';
+import {
+  offerUnless,
+  type ShopCost,
+  type ShopMenu,
+  type ShopRow,
+  type ShopPurchaseHandler,
+} from '../../ui/screens/shop/shopSession';
 
 export const SOLD_OUT_LABEL = 'Sold out';
 
@@ -49,7 +54,7 @@ const BUNDLE_KEY_SEPARATOR = '_x';
  * of one item can tell which row was bought.
  */
 export function catalogLineKey(line: CatalogLine): string {
-  if (line.bundle === undefined) return line.item;
+  if (line.bundle === null) return line.item;
   return `${line.item}${BUNDLE_KEY_SEPARATOR}${line.bundle.quantity}`;
 }
 
@@ -58,14 +63,9 @@ export function findCatalogLine(shop: ShopId, key: string): CatalogLine | undefi
   return shopDef(shop).catalog.find((line) => catalogLineKey(line) === key);
 }
 
-/** A catalog line's Buy-side price and the working behind it, for a row built by hand. */
-export function catalogLinePricing(
-  shop: ShopId,
-  line: CatalogLine,
-  stock: ShopStock,
-): { readonly price: number; readonly quote: PriceQuote } {
-  const quote = lineQuote(shop, line, stock, 'buy');
-  return { price: quote.breakdown.final, quote };
+/** A catalog line's Buy-side cost: the engine's price for the shop's current stock, and its working. */
+export function catalogLineCost(shop: ShopId, line: CatalogLine, stock: ShopStock): ShopCost {
+  return { kind: 'quoted', quote: lineQuote(shop, line, stock, 'buy') };
 }
 
 /**
@@ -74,19 +74,17 @@ export function catalogLinePricing(
  * sold out.
  */
 export function catalogLineRow(shop: ShopId, line: CatalogLine, stock: ShopStock): ShopRow {
-  const description = line.desc ?? '';
-  const row: ShopRow = {
+  const soldOut = isSoldOut(stock, shop, line.item, catalogLineUnits(line));
+  return {
     key: catalogLineKey(line),
-    label: catalogLineLabel(line),
-    ...catalogLinePricing(shop, line, stock),
+    label: line.label,
     desc: isLimitedLine(shop, line.item)
-      ? `${description} (${currentStock(stock, shop, line.item)} left)`
-      : description,
-    // A bundle's key is not an item id, so the row would otherwise lose the item's icon.
-    icon: { kind: 'item', item: line.item },
+      ? `${line.desc} (${currentStock(stock, shop, line.item)} left)`
+      : line.desc,
+    art: { kind: 'item', item: line.item },
+    offer: offerUnless(soldOut ? SOLD_OUT_LABEL : null, catalogLineCost(shop, line, stock)),
+    questErrand: false,
   };
-  if (isSoldOut(stock, shop, line.item, catalogLineUnits(line))) row.unavailable = SOLD_OUT_LABEL;
-  return row;
 }
 
 /**
@@ -131,28 +129,25 @@ export function buildVendorMenu(
   // merely present-and-tempting, so a mid-errand player can't wander off and
   // spend the coins Voss is waiting on.
   const catalog = shopDef(def.id).catalog;
-  const errandInProgress = catalog.some((line) => line.gate !== undefined && isGateOpen(line.gate));
+  const errandInProgress = catalog.some((line) => line.gate !== null && isGateOpen(line.gate));
   return {
     title: def.stallName,
     bark: vendorBark(def, visits),
     byline: def.vendorName,
+    emblem: null,
     // A closed gate drops the row entirely rather than disabling it — see
     // `VendorLineGate`. Because the panel rebuilds its rows after every
     // purchase, the shard's row vanishes the moment it is bought.
     options: catalog
-      .filter((line) => line.gate === undefined || isGateOpen(line.gate))
-      .map((line) => {
-        const option: ShopRow = {
-          ...catalogLineRow(def.id, line, stock),
-          // A gate is always a questline's condition — that is what `VendorLineGate`
-          // is for — so a gated line is exactly the row that earns the panel's
-          // quest treatment and its accept key.
-          isQuestItem: line.gate !== undefined,
-        };
-        if (option.unavailable === undefined && errandInProgress && line.gate === undefined) {
-          option.unavailable = GATE_LOCKED_LABEL;
-        }
-        return option;
+      .filter((line) => line.gate === null || isGateOpen(line.gate))
+      .map((line): ShopRow => {
+        const row = catalogLineRow(def.id, line, stock);
+        // A gate is always a questline's condition — that is what `VendorLineGate`
+        // is for — so a gated line is exactly the row that earns the panel's
+        // quest treatment and its accept key.
+        if (line.gate !== null) return { ...row, questErrand: true };
+        if (row.offer.status !== 'open' || !errandInProgress) return row;
+        return { ...row, offer: offerUnless(GATE_LOCKED_LABEL, row.offer.cost) };
       }),
   };
 }
@@ -171,13 +166,12 @@ export function createVendorPurchase(
   return (option, buyer) => {
     const line = findCatalogLine(def.id, option.key);
     if (line === undefined) return { ok: false, line: 'The vendor shrugs.' };
-    const label = catalogLineLabel(line);
     if (!handOverCatalogLine(def.id, line, stock, buyer)) {
-      return { ok: false, line: `${label} is sold out.` };
+      return { ok: false, line: `${line.label} is sold out.` };
     }
     const audio = getAudio();
     audio?.play('purchase_success');
     audio?.play('coin_pouch', { volume: COIN_POUCH_VOLUME });
-    return { ok: true, line: `Bought ${label}!` };
+    return { ok: true, line: `Bought ${line.label}!` };
   };
 }

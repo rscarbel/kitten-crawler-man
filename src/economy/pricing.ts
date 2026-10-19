@@ -85,11 +85,11 @@ interface PriceFactor {
 
 /** Which of the shop's markups applies to this item, labelled with the one that won. */
 function markupFactor(def: ShopDef, item: ItemId, category: ItemCategory): PriceFactor {
-  const itemMarkup = def.itemMarkup?.[item];
+  const itemMarkup = def.itemMarkup[item];
   if (itemMarkup !== undefined) {
     return { label: `${def.name}: ${ITEM_DEF[item].name} markup`, multiplier: itemMarkup };
   }
-  const categoryMarkup = def.categoryMarkup?.[category];
+  const categoryMarkup = def.categoryMarkup[category];
   if (categoryMarkup !== undefined) {
     return { label: `${def.name}: ${category} markup`, multiplier: categoryMarkup };
   }
@@ -99,7 +99,7 @@ function markupFactor(def: ShopDef, item: ItemId, category: ItemCategory): Price
 /** The stock curve a shop applies to this item: its category override, else its own. */
 export function stockCurveFor(shop: ShopId, item: ItemId): StockCurve {
   const def = shopDef(shop);
-  return def.categoryStockCurve?.[ITEM_PRICES[item].category] ?? def.stockCurve;
+  return def.categoryStockCurve[ITEM_PRICES[item].category] ?? def.stockCurve;
 }
 
 /**
@@ -181,7 +181,7 @@ function bundleFactor(bundle: CatalogBundle): PriceFactor {
 
 /** Whether this shop buys the item back at its specialty rate. */
 function isSpecialtySale(shop: ShopId, item: ItemId): boolean {
-  return shopDef(shop).specialties?.includes(ITEM_PRICES[item].category) ?? false;
+  return shopDef(shop).specialties.includes(ITEM_PRICES[item].category);
 }
 
 function buybackFactor(shop: ShopId, item: ItemId): PriceFactor {
@@ -219,7 +219,7 @@ function roundSell(unrounded: number): number {
 function breakdown(
   shop: ShopId,
   item: ItemId,
-  bundle: CatalogBundle | undefined,
+  bundle: CatalogBundle | null,
   stock: ShopStock,
   side: PriceSide,
 ): PriceBreakdown {
@@ -230,7 +230,7 @@ function breakdown(
 
   if (side === 'buy') {
     const factors =
-      bundle === undefined
+      bundle === null
         ? unitFactors
         : [markup, bundleStockFactor(shop, item, quoted, bundle), bundleFactor(bundle)];
     const { steps, unrounded } = applyFactors(base, factors);
@@ -254,7 +254,7 @@ export function priceBreakdown(
   stock: ShopStock,
   side: PriceSide,
 ): PriceBreakdown {
-  return breakdown(shop, item, undefined, stock, side);
+  return breakdown(shop, item, null, stock, side);
 }
 
 /**
@@ -268,7 +268,7 @@ export function lineBreakdown(
   stock: ShopStock,
   side: PriceSide,
 ): PriceBreakdown {
-  const bundle = side === 'buy' ? line.bundle : undefined;
+  const bundle = side === 'buy' ? line.bundle : null;
   return breakdown(shop, line.item, bundle, stock, side);
 }
 

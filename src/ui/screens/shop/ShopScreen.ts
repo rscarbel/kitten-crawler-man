@@ -1,61 +1,67 @@
 /**
- * The one shop screen: every vendor, tavern, temple, stall, the general store
- * and the Anchor's destinations draw through it. A header with the counter's
- * name, the seller's line and the party's purse; Buy / Sell tabs when the
- * counter buys back; a scrolling list of rows, each with its picture, a
- * one-line description, a price chip and a Buy button that says why when it
- * cannot be pressed. Selling a stack asks how many first.
+ * The one shop screen: every vendor, tavern, temple, forge, stall, the
+ * general store, the VIP lounge and the Anchor's destinations draw through
+ * it. A header with the counter's name, the seller's line and the party's
+ * purse; Buy / Sell tabs when the counter buys back; then a grid of offer
+ * cards — two across where there is room, one on a phone held upright.
  *
- * An item row priced by the engine carries a tag beside its price when stock
- * is moving it ("Low stock", "Overstocked") and, selling, when the shop buys
- * that kind of goods at its specialty rate. Under `?prices` the selected row
- * also shows the engine's working, step by step.
+ * Every card shows the picture of what is sold, its name, its whole
+ * description, and every part of its cost as a pill of its own: the coins,
+ * and each raw material with how much of it the party holds against how much
+ * it takes. A pill turns red while the party is short of it, so the reason a
+ * Buy cannot be pressed is on the card rather than behind a tooltip. Selling
+ * a stack asks how many first.
+ *
+ * An item priced by the engine carries a tag when stock is moving its price
+ * ("Low stock", "Overstocked") and, selling, when the shop buys that kind of
+ * goods at its specialty rate. Under `?prices` the selected card also shows
+ * the engine's working, step by step.
  *
  * Halts the world and keeps the keyboard while open; a tap outside it, Close,
  * Escape and ✕ all close it. A bare accept press closes it too, unless an
- * affordable quest row is on the menu, which then takes that press.
+ * affordable quest offer is on the menu, which then takes that press.
  */
 
+import type { SoundId } from '../../../audio/sounds';
 import { partyCoins } from '../../../core/partyCoins';
-import { costShortfall, formatCost } from '../../../core/partyResources';
-import { ITEM_DEF, isItemId, type ItemId } from '../../../core/ItemDefs';
+import { costShortfall, formatCost, partyCount } from '../../../core/partyResources';
+import { ITEM_DEF, type ItemId } from '../../../core/ItemDefs';
 import { centerIn, inset, splitH, splitV, type Rect } from '../../core/geom';
 import { UI_ERROR_SOUND, type Surface, type Ui } from '../../core/UiRoot';
 import { UiStateSlot } from '../../core/uiState';
 import type { PriceQuote, StockTag } from '../../../economy/pricing';
 import { QuantityPickerState } from '../../QuantityPickerState';
+import { badge, badgeSize, type BadgeTone } from '../../widgets/badge';
 import { button, buttonHeight, measureButton } from '../../widgets/button';
-import {
-  listRow,
-  listRowHeight,
-  listRowTextWidth,
-  listRowTagLineHeight,
-  listRowTagLines,
-  listRowTrailingMax,
-  type RowLeading,
-  type RowTag,
-} from '../../widgets/listRow';
-import { drawGlass } from '../../widgets/paint';
+import { card } from '../../widgets/card';
+import { drawGlass, fillRounded, strokeRounded } from '../../widgets/paint';
 import { panel, panelBodyMaxHeight, panelBodyWidth, type PanelOptions } from '../../widgets/panel';
 import { scrollGutterWidth, scrollView, scrollViewScrolls } from '../../widgets/scrollView';
 import { stepper, stepperKey } from '../../widgets/stepper';
 import { tabs, type TabItem } from '../../widgets/tabs';
 import { lineHeightOf, measureTextHeight, text, tabularNumber } from '../../widgets/text';
-import { priceBreakdownsShown } from './priceBreakdowns';
-import { skinsFor } from '../../theme/skins';
+import { skinsFor, type ControlSize } from '../../theme/skins';
 import type { PanelWidth } from '../../theme/tokens';
 import {
   coinPurse,
+  costPills,
   measureCoinPurse,
-  measurePriceChip,
-  priceChip,
+  measureCostPills,
+  offerArt,
   refusableButton,
   sellerLine,
-  type PriceTone,
+  widestCostPill,
+  type CostPill,
 } from './shopParts';
 import {
+  costCoins,
+  menuTakesCoins,
+  offerCost,
+  rowQuote,
   shopRowEnabled,
   type SellRow,
+  type ShopArt,
+  type ShopCost,
   type ShopMenu,
   type ShopMode,
   type ShopParty,
@@ -69,10 +75,8 @@ export interface ShopScreenOptions {
   readonly session: ShopSession;
   /** Who pays and who stands beside them, read every frame. */
   readonly party: () => ShopParty;
-  /** Runs after the session closes, for a host that tidies up after the counter. */
-  readonly onClose?: () => void;
-  /** Whether the selected row shows its price working; the `?prices` dev flag when omitted. */
-  readonly showPriceBreakdowns?: () => boolean;
+  /** Whether the selected card shows its price working; a scene passes `priceBreakdownsShown`, the `?prices` dev flag. */
+  readonly showPriceBreakdowns: () => boolean;
 }
 
 const SHOP_TABS: readonly TabItem[] = [
@@ -80,27 +84,50 @@ const SHOP_TABS: readonly TabItem[] = [
   { id: 'sell', label: 'Sell' },
 ];
 
-const SHOP_PANEL_WIDTH = 'md' as const satisfies PanelWidth;
+/** Room for a grid of cards, two across. */
+const SHOP_PANEL_WIDTH = 'lg' as const satisfies PanelWidth;
+/** A counter with one offer and nothing to buy back keeps to the narrower frame rather than one card in a wide one. */
+const SINGLE_OFFER_PANEL_WIDTH = 'md' as const satisfies PanelWidth;
 const BUY_LABEL = 'Buy';
 const SELL_LABEL = 'Sell';
 const CLOSE_LABEL = 'Close';
+const FREE_LABEL = 'Free';
 const NOTHING_TO_SELL = "Nothing here you're able to sell.";
 /** The seller's line wraps to at most this many lines before it is cut short. */
 const SELLER_LINE_MAX_LINES = 2;
-/** The longest price a row is laid out for, so every row's chip and button line up. */
-const PRICE_LAYOUT_SAMPLE = '9,999';
-/** Any one of these makes a row the widest it gets; they size the shared Buy column. */
-const ACTION_LABEL_SAMPLES = [BUY_LABEL, SELL_LABEL] as const;
+/** An offer's name wraps to at most this many lines. */
+const TITLE_MAX_LINES = 2;
+/** Narrowest a card is laid out at; a list wide enough for two of them shows two across. */
+const CARD_MIN_WIDTH = 260;
+const MAX_COLUMNS = 2;
+/** The offer's picture: big enough to read as the thing itself, smaller on a phone so the words keep their room. */
+const ART_SIDE = 64;
+const ART_SIDE_COMPACT = 52;
+/** A card's Buy is a full-size control, so it is an easy target on a phone. */
+const ACTION_SIZE = 'md' as const satisfies ControlSize;
+
+/** A short pill under an offer's name, saying something about it ("Low stock", "Quest"). */
+interface OfferTag {
+  readonly label: string;
+  readonly tone: BadgeTone;
+}
 
 const STOCK_TAGS = {
   low_stock: { label: 'Low stock', tone: 'warning' },
   overstocked: { label: 'Overstocked', tone: 'info' },
-} as const satisfies Record<StockTag, RowTag>;
-const SPECIALTY_TAG = { label: 'Specialty', tone: 'success' } as const satisfies RowTag;
+} as const satisfies Record<StockTag, OfferTag>;
+const SPECIALTY_TAG = { label: 'Specialty', tone: 'success' } as const satisfies OfferTag;
+const QUEST_TAG = { label: 'Quest', tone: 'accent' } as const satisfies OfferTag;
+/** The tone a shut offer's reason reads in, and one with nothing left to sell. */
+const CLOSED_TONE = 'neutral' as const satisfies BadgeTone;
+const SPENT_TONE = 'success' as const satisfies BadgeTone;
 /** How many decimals a breakdown's multipliers and running totals show. */
 const BREAKDOWN_DECIMALS = 2;
+/** The quest offer's frame is drawn this thick, in quest gold. */
+const QUEST_BORDER_WIDTH = 1.5;
+const DIVIDER_WIDTH = 1;
 
-/** Which row's working `?prices` shows, per tab; null until a row is tapped, which shows the first. */
+/** Which card's working `?prices` shows, per tab; null until a card is tapped, which shows the first. */
 const PRICE_SELECTION = new UiStateSlot<string | null>('shop-price-selection', () => null);
 
 interface QuantityPrompt {
@@ -108,49 +135,77 @@ interface QuantityPrompt {
   readonly picker: QuantityPickerState;
 }
 
-/** What a row's chip says, and how it reads. */
-function priceFor(
-  row: ShopRow,
-  unpriced: boolean,
-  affordable: boolean,
-): { label: string; tone: PriceTone; withCoin: boolean } | null {
-  if (unpriced) return null;
-  if (row.unavailable !== undefined)
-    return { label: row.unavailable, tone: 'muted', withCoin: false };
+/** What a card's action slot holds: a button to press, or why there is none. */
+type OfferAction =
+  | {
+      readonly kind: 'button';
+      readonly id: string;
+      readonly label: string;
+      /** Why it cannot be pressed, or null when it can. */
+      readonly refusal: string | null;
+      readonly primary: boolean;
+      /** Played when a refused press lands; null when the session sounds its own refusal. */
+      readonly sound: SoundId | null;
+      readonly onTap: () => void;
+    }
+  | { readonly kind: 'status'; readonly label: string; readonly tone: BadgeTone };
+
+/** One card as the grid draws it, for a Buy offer and a Sell stack alike. */
+interface OfferCard {
+  /** The key `?prices` selects it by. */
+  readonly key: string;
+  /** Region id of the card itself. */
+  readonly regionId: string;
+  readonly art: ShopArt;
+  readonly title: string;
+  readonly desc: string;
+  readonly tags: readonly OfferTag[];
+  readonly quest: boolean;
+  /** A shut offer's picture is faded. */
+  readonly faded: boolean;
+  readonly costs: readonly CostPill[];
+  readonly action: OfferAction;
+  readonly quote: PriceQuote | null;
+}
+
+function formatCoins(coins: number): string {
+  return coins === 0 ? FREE_LABEL : coins.toLocaleString('en-US');
+}
+
+function coinPill(coins: number, affordable: boolean, muted: boolean): CostPill {
   return {
-    label: row.price.toLocaleString('en-US'),
-    tone: affordable ? 'normal' : 'danger',
-    withCoin: true,
+    icon: { kind: 'coin' },
+    name: null,
+    amount: formatCoins(coins),
+    tone: muted ? 'muted' : affordable ? 'price' : 'short',
   };
 }
 
-function leadingFor(menu: ShopMenu, row: ShopRow): RowLeading | undefined {
-  if (row.icon !== undefined) {
-    return row.icon.kind === 'item'
-      ? { kind: 'item', item: row.icon.item }
-      : { kind: 'glyph', glyph: row.icon.glyph };
-  }
-  if (isItemId(row.key)) return { kind: 'item', item: row.key };
-  return menu.rowGlyph === undefined ? undefined : { kind: 'glyph', glyph: menu.rowGlyph };
+/** Every part of `cost`, against what the party holds, as pills. */
+function costPillsFor(cost: ShopCost, party: ShopParty, muted: boolean): CostPill[] {
+  if (cost.kind === 'free') return [];
+  const coins = costCoins(cost);
+  const purse = partyCoins(party.active, party.companion);
+  const coinsPill = coinPill(coins, purse >= coins, muted);
+  if (cost.kind !== 'coinsAndMaterials') return [coinsPill];
+  const materialPills = cost.materials.map((line): CostPill => {
+    const held = partyCount(party.active, party.companion, line.resource);
+    const tone = muted ? 'muted' : held >= line.amount ? 'met' : 'short';
+    return {
+      icon: { kind: 'item', item: line.resource },
+      name: ITEM_DEF[line.resource].name,
+      amount: `${Math.min(held, line.amount)}/${line.amount}`,
+      tone,
+    };
+  });
+  return coins > 0 ? [coinsPill, ...materialPills] : materialPills;
 }
 
-/**
- * A row as its leading picture and trailing column see it: without the tag
- * lines reserved under its subtitle, which leave both their usual size.
- */
-function untaggedRow(ui: Ui, row: Rect, tagLines: number): Rect {
-  return { ...row, h: row.h - listRowTagLineHeight(ui) * tagLines };
-}
-
-/** What is left of `cell` under `row`, a strip at its top. */
-function cellBelow(cell: Rect, row: Rect): Rect {
-  return { ...cell, y: row.y + row.h, h: cell.h - row.h };
-}
-
-/** The tags beside a row's price: why stock moves it, then the specialty rate. */
-function tagsFor(quote: PriceQuote | undefined): RowTag[] {
-  if (quote === undefined) return [];
-  const tags: RowTag[] = [];
+/** The tags under an offer's name: why stock moves its price, the specialty rate, a quest errand. */
+function tagsFor(quote: PriceQuote | null, quest: boolean): OfferTag[] {
+  const tags: OfferTag[] = [];
+  if (quest) tags.push(QUEST_TAG);
+  if (quote === null) return tags;
   if (quote.stockTag !== null) tags.push(STOCK_TAGS[quote.stockTag]);
   if (quote.specialty) tags.push(SPECIALTY_TAG);
   return tags;
@@ -173,52 +228,17 @@ function breakdownLines(quote: PriceQuote): string[] {
   ];
 }
 
-function breakdownHeight(ui: Ui, quote: PriceQuote | undefined): number {
-  if (quote === undefined) return 0;
-  return lineHeightOf(ui, 'caption') * breakdownLines(quote).length + ui.theme.space.sm;
-}
-
-/**
- * Draws the working in `block` (the strip a selected row grows by), lined
- * up under the row's description.
- */
-function renderBreakdown(
-  ui: Ui,
-  rowRect: Rect,
-  block: Rect,
-  leading: RowLeading | undefined,
-  quote: PriceQuote,
-): void {
-  const { space } = ui.theme;
-  const textW = listRowTextWidth(ui, rowRect, { leading });
-  const left = rowRect.x + rowRect.w - space.md - textW;
-  const lines = breakdownLines(quote);
-  const lineH = lineHeightOf(ui, 'caption');
-  const area: Rect = { x: left, y: block.y, w: textW, h: lineH * lines.length };
-  const cells = splitV(
-    area,
-    lines.map(() => lineH),
-    0,
-  );
-  lines.forEach((line, index) => {
-    text(ui, cells[index], {
-      text: line,
-      role: index === lines.length - 1 ? 'caption' : 'muted',
-      tabular: true,
-    });
-  });
-}
-
-/** Why a row's Buy cannot be pressed, or null when it can. */
-function buyRefusal(row: ShopRow, unpriced: boolean, party: ShopParty): string | null {
-  if (row.unavailable !== undefined) return row.unavailable;
-  if (shopRowEnabled(row, unpriced, party)) return null;
-  const coinsShort = row.price - partyCoins(party.active, party.companion);
-  if (coinsShort > 0 || row.materials === undefined) {
+/** Why an open offer's Buy cannot be pressed, or null when it can. */
+function buyRefusal(row: ShopRow, party: ShopParty): string | null {
+  if (row.offer.status !== 'open') return row.offer.reason;
+  if (shopRowEnabled(row, party)) return null;
+  const { cost } = row.offer;
+  const coinsShort = costCoins(cost) - partyCoins(party.active, party.companion);
+  if (coinsShort > 0 || cost.kind !== 'coinsAndMaterials') {
     return `${coinsShort.toLocaleString('en-US')} more coins needed`;
   }
-  const materialsShort = costShortfall(party.active, party.companion, row.materials);
-  return `${formatCost(materialsShort)} more needed`;
+  const materials = Object.fromEntries(cost.materials.map((line) => [line.resource, line.amount]));
+  return `${formatCost(costShortfall(party.active, party.companion, materials))} more needed`;
 }
 
 /**
@@ -227,14 +247,13 @@ function buyRefusal(row: ShopRow, unpriced: boolean, party: ShopParty): string |
  */
 export function shopScreenSurface(opts: ShopScreenOptions): Surface {
   const { session } = opts;
-  const breakdownsShown = opts.showPriceBreakdowns ?? priceBreakdownsShown;
+  const breakdownsShown = opts.showPriceBreakdowns;
   let prompt: QuantityPrompt | null = null;
   let promptGeneration = -1;
 
   const close = (): void => {
     prompt = null;
     session.close();
-    opts.onClose?.();
   };
 
   const currentPrompt = (): QuantityPrompt | null => {
@@ -309,99 +328,203 @@ interface RenderShopArgs {
   readonly onSellRow: (row: SellRow) => void;
 }
 
-/** A row as `?prices` sees it: the key it is selected by and the working it shows. */
-interface PricedRow {
-  readonly key: string;
-  readonly quote?: PriceQuote;
+function buyCards(args: RenderShopArgs): OfferCard[] {
+  const { menu, party, session } = args;
+  const questRow = session.questDefaultRow(party);
+  return menu.options.map((row): OfferCard => {
+    const cost = offerCost(row.offer);
+    const quote = rowQuote(row);
+    const open = row.offer.status === 'open';
+    const isQuestDefault = questRow?.key === row.key;
+    const action: OfferAction =
+      row.offer.status === 'open'
+        ? {
+            kind: 'button',
+            id: `${args.id}/buy-${row.key}`,
+            label: row.offer.cost.kind === 'free' ? row.offer.cost.actionLabel : BUY_LABEL,
+            refusal: buyRefusal(row, party),
+            primary: isQuestDefault,
+            sound: session.soundsOwnRefusal ? null : UI_ERROR_SOUND,
+            onTap: () => session.tryBuy(row, party),
+          }
+        : {
+            kind: 'status',
+            label: row.offer.reason,
+            tone: row.offer.status === 'spent' ? SPENT_TONE : CLOSED_TONE,
+          };
+    return {
+      key: row.key,
+      regionId: `${args.id}/row-${row.key}`,
+      art: row.art,
+      title: row.label,
+      desc: row.desc,
+      tags: tagsFor(quote, row.questErrand),
+      quest: row.questErrand,
+      faded: !open,
+      costs: cost === null ? [] : costPillsFor(cost, party, !open),
+      action,
+      quote,
+    };
+  });
+}
+
+function sellCards(args: RenderShopArgs, rows: readonly SellRow[]): OfferCard[] {
+  return rows.map((row) => ({
+    key: row.id,
+    regionId: `${args.id}/sell-row-${row.id}`,
+    art: { kind: 'item', item: row.id },
+    title: ITEM_DEF[row.id].name,
+    desc: `You have ${row.held}`,
+    tags: tagsFor(row.quote, false),
+    quest: false,
+    faded: false,
+    costs: [coinPill(row.quote.breakdown.final, true, false)],
+    action: {
+      kind: 'button',
+      id: `${args.id}/sell-${row.id}`,
+      label: SELL_LABEL,
+      refusal: null,
+      primary: false,
+      sound: null,
+      onTap: () => args.onSellRow(row),
+    },
+    quote: row.quote,
+  }));
 }
 
 function selectionId(args: RenderShopArgs, mode: ShopMode): string {
   return `${args.id}/price-${mode}`;
 }
 
-/** The row whose working shows: the one last tapped, else the first with any; null when breakdowns are off. */
-function selectedPricedRow(
+/** The card whose working shows: the one last tapped, else the first with any; null when breakdowns are off. */
+function selectedKey(
   ui: Ui,
   args: RenderShopArgs,
   mode: ShopMode,
-  rows: readonly PricedRow[],
-): PricedRow | null {
+  cards: readonly OfferCard[],
+): string | null {
   if (!args.breakdowns) return null;
   const chosen = ui.state(PRICE_SELECTION, selectionId(args, mode));
-  const priced = rows.filter((row) => row.quote !== undefined);
-  const first = priced.length > 0 ? priced[0] : null;
-  return priced.find((row) => row.key === chosen) ?? first;
+  const priced = cards.filter((offer) => offer.quote !== null);
+  const chosenCard = priced.find((offer) => offer.key === chosen);
+  if (chosenCard !== undefined) return chosenCard.key;
+  return priced.length > 0 ? priced[0].key : null;
 }
 
-/** The tap that selects a row for `?prices`, or none when breakdowns are off or the row has no working. */
-function selectTap(
-  ui: Ui,
-  args: RenderShopArgs,
-  mode: ShopMode,
-  row: PricedRow,
-): (() => void) | undefined {
-  if (!args.breakdowns || row.quote === undefined) return undefined;
-  return () => ui.setState(PRICE_SELECTION, selectionId(args, mode), row.key);
+/** The pieces of one card, measured at one width. */
+interface CardLayout {
+  readonly artSide: number;
+  readonly textW: number;
+  readonly titleH: number;
+  readonly tagsH: number;
+  /** The art and, beside it, the name and tags. */
+  readonly headH: number;
+  readonly descH: number;
+  readonly breakdownH: number;
+  readonly topH: number;
+  readonly actionW: number;
+  /** Whether the action sits on a line of its own under the pills, which happens when they would not fit beside it. */
+  readonly actionBelow: boolean;
+  readonly pillsH: number;
+  readonly footerH: number;
+  readonly height: number;
 }
 
-/** Each row's height: the shared row height, plus the working's strip under the selected row. */
-function rowHeights(
-  ui: Ui,
-  rows: readonly PricedRow[],
-  rowH: number,
-  selected: PricedRow | null,
-): number[] {
-  return rows.map((row) =>
-    row.key === selected?.key ? rowH + breakdownHeight(ui, row.quote) : rowH,
-  );
+function cardPadding(ui: Ui): number {
+  return skinsFor(ui.theme).panel.raised.padding;
 }
 
-function sellLeading(row: SellRow): RowLeading {
-  return { kind: 'item', item: row.id };
+function actionWidth(ui: Ui, action: OfferAction): number {
+  return action.kind === 'button'
+    ? measureButton(ui, { label: action.label, size: ACTION_SIZE })
+    : badgeSize(ui, { label: action.label }).w;
 }
 
-/**
- * How many lines of tags every row reserves under its subtitle: none where
- * the tags sit beside the subtitle, else as many as the most-tagged row needs
- * at the width the rows are drawn, so no tag is lost to a narrow screen.
- */
-function tagLinesFor(
-  ui: Ui,
-  args: RenderShopArgs,
-  opts: {
-    readonly listW: number;
-    readonly mode: ShopMode;
-    readonly unpriced: boolean;
-    readonly baseRowH: number;
-    readonly rows: readonly {
-      readonly quote: PriceQuote | undefined;
-      readonly leading: RowLeading | undefined;
-    }[];
-  },
-): number {
-  if (ui.size !== 'compact') return 0;
-  const rowRect: Rect = { x: 0, y: 0, w: opts.listW, h: opts.baseRowH };
-  const actionLabel =
-    opts.mode === 'sell' ? SELL_LABEL : (args.menu.unpriced?.actionLabel ?? BUY_LABEL);
-  const statuses =
-    opts.mode === 'sell'
-      ? []
-      : args.menu.options.flatMap((row) =>
-          row.unavailable === undefined ? [] : [row.unavailable],
-        );
-  const trailingWidth = trailingLayout(ui, rowRect, !opts.unpriced, actionLabel, statuses).total;
-  const linesPerRow = opts.rows.map((row) =>
-    listRowTagLines(
-      ui,
-      listRowTextWidth(ui, rowRect, { leading: row.leading, trailingWidth }),
-      tagsFor(row.quote),
+function actionHeight(ui: Ui, action: OfferAction): number {
+  return action.kind === 'button'
+    ? buttonHeight(ui, ACTION_SIZE)
+    : badgeSize(ui, { label: action.label }).h;
+}
+
+function cardLayout(ui: Ui, offer: OfferCard, width: number, selected: boolean): CardLayout {
+  const { space } = ui.theme;
+  const pad = cardPadding(ui);
+  const innerW = width - pad * 2;
+  const artSide = ui.size === 'compact' ? ART_SIDE_COMPACT : ART_SIDE;
+  const textW = innerW - artSide - space.md;
+  const titleLines = Math.min(
+    TITLE_MAX_LINES,
+    Math.ceil(
+      measureTextHeight(ui, textW, { text: offer.title, role: 'title' }) /
+        lineHeightOf(ui, 'title'),
     ),
   );
-  return Math.max(0, ...linesPerRow);
+  const titleH = titleLines * lineHeightOf(ui, 'title');
+  const tagsH =
+    offer.tags.length === 0 ? 0 : badgeSize(ui, { label: '', kind: 'tag' }).h + space.xs;
+  const descH = measureTextHeight(ui, innerW, { text: offer.desc, role: 'secondary' });
+  const breakdownH =
+    selected && offer.quote !== null
+      ? space.sm + lineHeightOf(ui, 'caption') * breakdownLines(offer.quote).length
+      : 0;
+  const headH = Math.max(artSide, titleH + tagsH);
+  const topH = headH + space.sm + descH + breakdownH;
+  const actionW = Math.min(innerW, actionWidth(ui, offer.action));
+  const besideW = innerW - actionW - space.sm;
+  const actionBelow = offer.costs.length > 0 && besideW < widestCostPill(ui, offer.costs);
+  const pillsW = actionBelow ? innerW : besideW;
+  const pillsH = measureCostPills(ui, offer.costs, pillsW);
+  const actionH = actionHeight(ui, offer.action);
+  const footerH = actionBelow ? pillsH + space.sm + actionH : Math.max(pillsH, actionH);
+  const height = pad * 2 + topH + space.md * 2 + footerH;
+  return {
+    artSide,
+    textW,
+    titleH,
+    tagsH,
+    headH,
+    descH,
+    breakdownH,
+    topH,
+    actionW,
+    actionBelow,
+    pillsH,
+    footerH,
+    height,
+  };
 }
 
-function sellPricedRows(rows: readonly SellRow[]): PricedRow[] {
-  return rows.map((row) => ({ key: row.id, quote: row.quote }));
+/** How many cards go across a list `width` wide. */
+function columnsFor(ui: Ui, width: number): number {
+  const gap = gridGap(ui);
+  return Math.min(MAX_COLUMNS, Math.max(1, Math.floor((width + gap) / (CARD_MIN_WIDTH + gap))));
+}
+
+function gridGap(ui: Ui): number {
+  return ui.size === 'compact' ? ui.theme.space.sm : ui.theme.space.md;
+}
+
+/** Each card's cell at `width`, rows as tall as their tallest card so footers line up across a row. */
+function gridCells(
+  ui: Ui,
+  width: number,
+  cards: readonly OfferCard[],
+  selected: string | null,
+): { readonly cells: Rect[]; readonly height: number } {
+  const gap = gridGap(ui);
+  const columns = columnsFor(ui, width);
+  const cellW = (width - gap * (columns - 1)) / columns;
+  const heights = cards.map((offer) => cardLayout(ui, offer, cellW, offer.key === selected).height);
+  const cells: Rect[] = [];
+  let y = 0;
+  for (let start = 0; start < cards.length; start += columns) {
+    const rowH = Math.max(...heights.slice(start, start + columns));
+    for (let column = 0; column < columns && start + column < cards.length; column++) {
+      cells.push({ x: column * (cellW + gap), y, w: cellW, h: rowH });
+    }
+    y += rowH + gap;
+  }
+  return { cells, height: Math.max(0, y - gap) };
 }
 
 function renderShop(ui: Ui, args: RenderShopArgs): void {
@@ -409,40 +532,26 @@ function renderShop(ui: Ui, args: RenderShopArgs): void {
   const { space } = ui.theme;
   const sellable = session.sellConfig !== null;
   const mode: ShopMode = sellable ? session.mode : 'buy';
-  const unpriced = menu.unpriced !== undefined && mode === 'buy';
   const questRow = session.questDefaultRow(party);
   const sellRows = mode === 'sell' ? session.sellRows(party.active) : [];
-  const rowCount =
-    mode === 'sell' ? Math.max(1, sellRows.length) : Math.max(1, menu.options.length);
-  const pricedRows: readonly PricedRow[] =
-    mode === 'sell' ? sellPricedRows(sellRows) : menu.options;
-  const selected = selectedPricedRow(ui, args, mode, pricedRows);
-  const breakdownH = selected === null ? 0 : breakdownHeight(ui, selected.quote);
+  const cards = mode === 'sell' ? sellCards(args, sellRows) : buyCards(args);
+  const selected = selectedKey(ui, args, mode, cards);
   const compact = ui.size === 'compact';
-  const lineLines = compact ? 1 : SELLER_LINE_MAX_LINES;
-  const lineH = lineHeightOf(ui, 'body') * lineLines;
+  const width: PanelWidth =
+    menu.options.length <= 1 && !sellable ? SINGLE_OFFER_PANEL_WIDTH : SHOP_PANEL_WIDTH;
+  const lineH = lineHeightOf(ui, 'body') * SELLER_LINE_MAX_LINES;
   const purseBesideTabs = compact && sellable;
   const tabsH = sellable ? ui.theme.size.control : 0;
   const headerTracks: number[] = [lineH, ...(sellable ? [tabsH] : [])];
   const headerH = headerTracks.reduce((sum, h) => sum + h, 0) + space.md * headerTracks.length;
-  const tagRows =
-    mode === 'sell'
-      ? sellRows.map((row) => ({ quote: row.quote, leading: sellLeading(row) }))
-      : menu.options.map((row) => ({ quote: row.quote, leading: leadingFor(menu, row) }));
-  const rowLayoutAt = (
-    listW: number,
-  ): { rowH: number; tagLines: number; contentHeight: number } => {
-    const baseRowH =
-      mode === 'buy' ? buyRowHeight(ui, menu, unpriced, listW) : listRowHeight(ui, true);
-    const tagLines = tagLinesFor(ui, args, { listW, mode, unpriced, baseRowH, rows: tagRows });
-    const rowH = baseRowH + listRowTagLineHeight(ui) * tagLines;
-    return { rowH, tagLines, contentHeight: headerH + rowCount * rowH + breakdownH };
-  };
+  const emptyH = lineHeightOf(ui, 'body') + space.lg * 2;
+  const listHeightAt = (listW: number): number =>
+    cards.length === 0 ? emptyH : gridCells(ui, listW, cards, selected).height;
 
   const frame: Pick<PanelOptions, 'title' | 'subtitle' | 'width' | 'onClose' | 'footer'> = {
     title: menu.title,
-    subtitle: menu.byline,
-    width: SHOP_PANEL_WIDTH,
+    ...(menu.byline === null ? {} : { subtitle: menu.byline }),
+    width,
     onClose: args.close,
     footer: compact
       ? []
@@ -456,14 +565,14 @@ function renderShop(ui: Ui, args: RenderShopArgs): void {
           },
         ],
   };
-  // The list's scroll view narrows its rows by a gutter once it scrolls, so
-  // wrapping is measured at that narrower width whenever the rows overflow.
-  const fullListW = panelBodyWidth(ui, SHOP_PANEL_WIDTH);
-  const unscrolled = rowLayoutAt(fullListW);
-  const listScrolls = scrollViewScrolls(unscrolled.contentHeight, panelBodyMaxHeight(ui, frame));
-  const { rowH, tagLines, contentHeight } = listScrolls
-    ? rowLayoutAt(fullListW - scrollGutterWidth(ui))
-    : unscrolled;
+  // The list's scroll view narrows its cards by a gutter once it scrolls, so
+  // wrapping is measured at that narrower width whenever the cards overflow.
+  const fullListW = panelBodyWidth(ui, width);
+  const unscrolledH = headerH + listHeightAt(fullListW);
+  const listScrolls = scrollViewScrolls(unscrolledH, panelBodyMaxHeight(ui, frame));
+  const contentHeight = listScrolls
+    ? headerH + listHeightAt(fullListW - scrollGutterWidth(ui))
+    : unscrolledH;
 
   const p = panel(ui, {
     ...frame,
@@ -478,13 +587,13 @@ function renderShop(ui: Ui, args: RenderShopArgs): void {
   const listRect = sellable ? rest[1] : rest[0];
 
   let lineRect = lineRow;
-  if (menu.titleIcon !== undefined) {
+  if (menu.emblem !== null) {
     const side = Math.min(lineRow.h, ui.theme.size.slot);
-    menu.titleIcon(ui.ctx, centerIn({ ...lineRow, w: side }, side, side));
+    menu.emblem(ui.ctx, centerIn({ ...lineRow, w: side }, side, side));
     lineRect = inset(lineRect, { l: side + space.sm });
   }
-  let tabsArea = tabsRect ?? null;
-  if (menu.unpriced === undefined) {
+  let tabsArea = tabsRect;
+  if (menuTakesCoins(menu) || sellable) {
     const coins = partyCoins(party.active, party.companion);
     const purseW = measureCoinPurse(ui, coins);
     const purseRow = purseBesideTabs && tabsArea !== null ? tabsArea : lineRect;
@@ -495,7 +604,7 @@ function renderShop(ui: Ui, args: RenderShopArgs): void {
   sellerLine(ui, lineRect, {
     line: session.currentLine,
     strength: session.feedbackStrength,
-    maxLines: lineLines,
+    maxLines: SELLER_LINE_MAX_LINES,
   });
 
   if (tabsArea !== null) {
@@ -507,229 +616,167 @@ function renderShop(ui: Ui, args: RenderShopArgs): void {
     });
   }
 
-  if (mode === 'sell') {
-    renderSellList(ui, listRect, args, sellRows, { rowH, selected, tagLines });
-  } else {
-    renderBuyList(ui, listRect, args, { unpriced, questRow, rowH, selected, tagLines });
-  }
-}
-
-interface TrailingLayout {
-  readonly chipW: number;
-  readonly buttonW: number;
-  readonly total: number;
-  /** Whether a row's status fits in the chip column; one that does not reads as its subtitle. */
-  readonly statusFits: (status: string) => boolean;
-}
-
-/**
- * The width a row's trailing chip and button need, shared by every row so the
- * columns line up. The chip column widens for a status only as far as the row
- * can spare, so the button is never pushed past the row's edge on a phone.
- */
-function trailingLayout(
-  ui: Ui,
-  rowRect: Rect,
-  withChip: boolean,
-  actionLabel: string,
-  statuses: readonly string[] = [],
-): TrailingLayout {
-  const { space } = ui.theme;
-  const maxTotal = listRowTrailingMax(ui, rowRect, true);
-  const buttonW = Math.max(
-    ...[...ACTION_LABEL_SAMPLES, actionLabel].map((label) =>
-      measureButton(ui, { label, size: 'sm' }),
-    ),
-  );
-  if (!withChip) {
-    return { chipW: 0, buttonW, total: buttonW, statusFits: () => false };
-  }
-  const gap = space.sm;
-  const maxChipW = maxTotal - gap - buttonW;
-  const priceW = measurePriceChip(ui, PRICE_LAYOUT_SAMPLE, true);
-  const statusWidth = (status: string): number => measurePriceChip(ui, status, false);
-  const statusFits = (status: string): boolean => statusWidth(status) <= maxChipW;
-  const chipW = Math.max(priceW, ...statuses.filter(statusFits).map(statusWidth));
-  return { chipW, buttonW, total: chipW + gap + buttonW, statusFits };
-}
-
-/**
- * One height for every buy row: a single line of description, or, for a menu
- * that lets its descriptions wrap, as many lines as the longest one needs at
- * the list's drawn width, up to {@link ShopMenu.descLines}.
- */
-function buyRowHeight(ui: Ui, menu: ShopMenu, unpriced: boolean, listW: number): number {
-  const maxLines = menu.descLines ?? 1;
-  if (maxLines <= 1) return listRowHeight(ui, true);
-  const singleLineRow: Rect = { x: 0, y: 0, w: listW, h: listRowHeight(ui, true) };
-  const actionLabel = menu.unpriced?.actionLabel ?? BUY_LABEL;
-  const statuses = menu.options.flatMap((row) =>
-    row.unavailable === undefined ? [] : [row.unavailable],
-  );
-  const trailingWidth = trailingLayout(ui, singleLineRow, !unpriced, actionLabel, statuses).total;
-  const captionH = lineHeightOf(ui, 'caption');
-  const linesNeeded = menu.options.map((row) => {
-    const width = listRowTextWidth(ui, singleLineRow, {
-      leading: leadingFor(menu, row),
-      trailingWidth,
-    });
-    return Math.ceil(measureTextHeight(ui, width, { text: row.desc, role: 'caption' }) / captionH);
-  });
-  return listRowHeight(ui, true, Math.min(maxLines, Math.max(1, ...linesNeeded)));
-}
-
-function renderBuyList(
-  ui: Ui,
-  rect: Rect,
-  args: RenderShopArgs,
-  opts: {
-    readonly unpriced: boolean;
-    readonly questRow: ShopRow | null;
-    readonly rowH: number;
-    readonly selected: PricedRow | null;
-    readonly tagLines: number;
-  },
-): void {
-  const { menu, party, session } = args;
-  const { palette } = ui.theme;
-  const actionLabel = menu.unpriced?.actionLabel ?? BUY_LABEL;
-  const rows = menu.options;
-  const statuses = rows.flatMap((row) => (row.unavailable === undefined ? [] : [row.unavailable]));
-  const heights = rowHeights(ui, rows, opts.rowH, opts.selected);
-  const listHeight = heights.reduce((sum, h) => sum + h, 0);
-  scrollView(ui, rect, {
-    id: `${args.id}/rows-buy`,
-    contentHeight: listHeight,
-    draw: (content) => {
-      const layoutRow = untaggedRow(ui, { ...content, h: opts.rowH }, opts.tagLines);
-      const layout = trailingLayout(ui, layoutRow, !opts.unpriced, actionLabel, statuses);
-      const cells = splitV({ ...content, h: listHeight }, heights, 0);
-      rows.forEach((row, index) => {
-        const cell: Rect = { ...cells[index], h: opts.rowH };
-        const leading = leadingFor(menu, row);
-        const isSelected = row.key === opts.selected?.key;
-        const refusal = buyRefusal(row, opts.unpriced, party);
-        const isQuestDefault = opts.questRow?.key === row.key;
-        const status = row.unavailable;
-        const statusInChip = status !== undefined && layout.statusFits(status);
-        const subtitle = status !== undefined && !statusInChip ? status : row.desc;
-        listRow(ui, cell, {
-          id: `${args.id}/row-${row.key}`,
-          title: row.label,
-          subtitle,
-          subtitleLines: menu.descLines,
-          leading,
-          tags: tagsFor(row.quote),
-          tagLines: opts.tagLines,
-          selected: isSelected,
-          onTap: selectTap(ui, args, 'buy', row),
-          accent: row.isQuestItem === true ? palette.category.quest : undefined,
-          trailingWidth: layout.total,
-          trailingContent: (trailing) => {
-            const [chipCell, buttonCell] = splitH(
-              trailing,
-              opts.unpriced ? [0, layout.buttonW] : [layout.chipW, layout.buttonW],
-              opts.unpriced ? 0 : ui.theme.space.sm,
-            );
-            const coinsCovered = partyCoins(party.active, party.companion) >= row.price;
-            const price = priceFor(row, opts.unpriced, coinsCovered);
-            const chipShowsPrice = status === undefined || statusInChip;
-            if (price !== null && chipShowsPrice) priceChip(ui, chipCell, price);
-            refusableButton(ui, buttonCell, {
-              id: `${args.id}/buy-${row.key}`,
-              label: actionLabel,
-              refusal,
-              variant: isQuestDefault ? 'primary' : 'secondary',
-              primary: isQuestDefault,
-              sound: session.soundsOwnRefusal ? null : UI_ERROR_SOUND,
-              onTap: () => session.tryBuy(row, party),
-            });
-          },
-        });
-        if (isSelected && row.quote !== undefined) {
-          renderBreakdown(
-            ui,
-            { ...cell, h: layoutRow.h },
-            cellBelow(cells[index], cell),
-            leading,
-            row.quote,
-          );
-        }
-      });
-    },
-  });
-}
-
-function renderSellList(
-  ui: Ui,
-  rect: Rect,
-  args: RenderShopArgs,
-  rows: readonly SellRow[],
-  opts: {
-    readonly rowH: number;
-    readonly selected: PricedRow | null;
-    readonly tagLines: number;
-  },
-): void {
-  const { rowH } = opts;
-  if (rows.length === 0) {
-    text(ui, { ...rect, h: rowH }, { text: NOTHING_TO_SELL, role: 'muted', align: 'center' });
+  if (cards.length === 0) {
+    text(ui, { ...listRect, h: emptyH }, { text: NOTHING_TO_SELL, role: 'muted', align: 'center' });
     return;
   }
-  const pricedRows = sellPricedRows(rows);
-  const heights = rowHeights(ui, pricedRows, rowH, opts.selected);
-  const listHeight = heights.reduce((sum, h) => sum + h, 0);
-  scrollView(ui, rect, {
-    id: `${args.id}/rows-sell`,
-    contentHeight: listHeight,
+  const listH = listHeightAt(listRect.w - (listScrolls ? scrollGutterWidth(ui) : 0));
+  scrollView(ui, listRect, {
+    id: `${args.id}/rows-${mode}`,
+    contentHeight: listH,
     draw: (content) => {
-      const layoutRow = untaggedRow(ui, { ...content, h: rowH }, opts.tagLines);
-      const layout = trailingLayout(ui, layoutRow, true, SELL_LABEL);
-      const cells = splitV({ ...content, h: listHeight }, heights, 0);
-      rows.forEach((row, index) => {
-        const cell: Rect = { ...cells[index], h: rowH };
-        const leading = sellLeading(row);
-        const pricedRow = pricedRows[index];
-        const isSelected = row.id === opts.selected?.key;
-        listRow(ui, cell, {
-          id: `${args.id}/sell-row-${row.id}`,
-          title: ITEM_DEF[row.id].name,
-          subtitle: `You have ${row.held}`,
-          leading,
-          tags: tagsFor(row.quote),
-          tagLines: opts.tagLines,
-          selected: isSelected,
-          onTap: selectTap(ui, args, 'sell', pricedRow),
-          trailingWidth: layout.total,
-          trailingContent: (trailing) => {
-            const [chipCell, buttonCell] = splitH(
-              trailing,
-              [layout.chipW, layout.buttonW],
-              ui.theme.space.sm,
-            );
-            priceChip(ui, chipCell, {
-              label: row.quote.breakdown.final.toLocaleString('en-US'),
-              tone: 'normal',
-              withCoin: true,
-            });
-            button(ui, centerIn(buttonCell, buttonCell.w, buttonHeight(ui, 'sm')), {
-              id: `${args.id}/sell-${row.id}`,
-              label: SELL_LABEL,
-              size: 'sm',
-              onTap: () => args.onSellRow(row),
-            });
-          },
-        });
-        if (isSelected)
-          renderBreakdown(
-            ui,
-            { ...cell, h: layoutRow.h },
-            cellBelow(cells[index], cell),
-            leading,
-            row.quote,
-          );
+      const { cells } = gridCells(ui, content.w, cards, selected);
+      cards.forEach((offer, index) => {
+        const cell = cells[index];
+        const placed: Rect = { ...cell, x: content.x + cell.x, y: content.y + cell.y };
+        const isSelected = offer.key === selected;
+        const onSelect =
+          args.breakdowns && offer.quote !== null
+            ? () => ui.setState(PRICE_SELECTION, selectionId(args, mode), offer.key)
+            : undefined;
+        renderCard(ui, placed, offer, isSelected, onSelect);
       });
     },
+  });
+}
+
+function renderCard(
+  ui: Ui,
+  rect: Rect,
+  offer: OfferCard,
+  selected: boolean,
+  onSelect: (() => void) | undefined,
+): void {
+  const { space, palette } = ui.theme;
+  const layout = cardLayout(ui, offer, rect.w, selected);
+  const { body } = card(ui, rect, {
+    id: offer.regionId,
+    kind: 'raised',
+    selected,
+    onTap: onSelect,
+  });
+  if (offer.quest && !selected) {
+    strokeRounded(
+      ui.ctx,
+      rect,
+      skinsFor(ui.theme).panel.raised.radius,
+      palette.category.quest,
+      QUEST_BORDER_WIDTH,
+    );
+  }
+
+  const artRect: Rect = { x: body.x, y: body.y, w: layout.artSide, h: layout.artSide };
+  offerArt(ui, artRect, offer.art, offer.faded);
+
+  const textX = body.x + layout.artSide + space.md;
+  const nameBlockH = layout.titleH + layout.tagsH;
+  let y = body.y + (layout.headH - nameBlockH) / 2;
+  text(
+    ui,
+    { x: textX, y, w: layout.textW, h: layout.titleH },
+    { text: offer.title, role: 'title', wrap: true, maxLines: TITLE_MAX_LINES },
+  );
+  y += layout.titleH;
+  if (offer.tags.length > 0) {
+    let tagX = textX;
+    const tagH = layout.tagsH - space.xs;
+    for (const tag of offer.tags) {
+      const size = badgeSize(ui, { label: tag.label, kind: 'tag' });
+      if (tagX + size.w > textX + layout.textW) break;
+      badge(
+        ui,
+        { x: tagX, y: y + space.xs, w: size.w, h: tagH },
+        {
+          label: tag.label,
+          tone: tag.tone,
+          kind: 'tag',
+        },
+      );
+      tagX += size.w + space.xs;
+    }
+  }
+  y = body.y + layout.headH + space.sm;
+  text(
+    ui,
+    { x: body.x, y, w: body.w, h: layout.descH },
+    { text: offer.desc, role: 'secondary', wrap: true },
+  );
+  y += layout.descH;
+  if (layout.breakdownH > 0 && offer.quote !== null) {
+    renderBreakdown(
+      ui,
+      { x: body.x, y: y + space.sm, w: body.w, h: layout.breakdownH },
+      offer.quote,
+    );
+  }
+
+  const footer: Rect = {
+    x: body.x,
+    y: rect.y + rect.h - cardPadding(ui) - layout.footerH,
+    w: body.w,
+    h: layout.footerH,
+  };
+  const divider: Rect = { x: body.x, y: footer.y - space.md, w: body.w, h: DIVIDER_WIDTH };
+  fillRounded(ui.ctx, divider, 0, palette.border.subtle);
+
+  const actionH = actionHeight(ui, offer.action);
+  const actionRect: Rect = layout.actionBelow
+    ? {
+        x: footer.x + footer.w - layout.actionW,
+        y: footer.y + footer.h - actionH,
+        w: layout.actionW,
+        h: actionH,
+      }
+    : {
+        x: footer.x + footer.w - layout.actionW,
+        y: footer.y + (footer.h - actionH) / 2,
+        w: layout.actionW,
+        h: actionH,
+      };
+  const pillsRect: Rect = layout.actionBelow
+    ? { x: footer.x, y: footer.y, w: footer.w, h: layout.pillsH }
+    : {
+        x: footer.x,
+        y: footer.y + (footer.h - layout.pillsH) / 2,
+        w: footer.w - layout.actionW - space.sm,
+        h: layout.pillsH,
+      };
+  costPills(ui, pillsRect, offer.costs);
+  renderAction(ui, actionRect, offer.action);
+}
+
+function renderAction(ui: Ui, rect: Rect, action: OfferAction): void {
+  if (action.kind === 'status') {
+    badge(ui, rect, { label: action.label, tone: action.tone, variant: 'soft' });
+    return;
+  }
+  refusableButton(ui, rect, {
+    id: action.id,
+    label: action.label,
+    size: ACTION_SIZE,
+    refusal: action.refusal,
+    variant: action.primary ? 'primary' : 'secondary',
+    primary: action.primary,
+    sound: action.sound,
+    onTap: action.onTap,
+  });
+}
+
+/** Draws the engine's working in `area`, under the card's description. */
+function renderBreakdown(ui: Ui, area: Rect, quote: PriceQuote): void {
+  const lines = breakdownLines(quote);
+  const lineH = lineHeightOf(ui, 'caption');
+  const cells = splitV(
+    { ...area, h: lineH * lines.length },
+    lines.map(() => lineH),
+    0,
+  );
+  lines.forEach((line, index) => {
+    text(ui, cells[index], {
+      text: line,
+      role: index === lines.length - 1 ? 'caption' : 'muted',
+      tabular: true,
+    });
   });
 }
 
@@ -768,11 +815,11 @@ function renderQuantityPrompt(
     const buttonsH = buttonHeight(ui, 'md');
     const innerH = titleH + size.control + totalH + buttonsH + space.sm * PROMPT_GAPS;
     const w = Math.min(QUANTITY_CARD_MAX_WIDTH, ui.viewport.w - space.lg * 2);
-    const card = centerIn(ui.viewport, w, innerH + skin.padding * 2);
-    ui.block(card);
-    drawGlass(ui, card, skin);
+    const promptCard = centerIn(ui.viewport, w, innerH + skin.padding * 2);
+    ui.block(promptCard);
+    drawGlass(ui, promptCard, skin);
     const [titleRow, stepRow, totalRow, buttonRow] = splitV(
-      inset(card, skin.padding),
+      inset(promptCard, skin.padding),
       [titleH, size.control, totalH, buttonsH],
       space.sm,
     );

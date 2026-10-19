@@ -298,7 +298,7 @@ section('Bundles never gain coins: every real bundle row, at every stock level')
 for (const shop of SHOP_IDS) {
   if (!shopDef(shop).buysFromPlayer) continue;
   for (const line of shopDef(shop).catalog) {
-    if (line.bundle === undefined) continue;
+    if (line.bundle === null) continue;
     for (const offset of stockOffsets(shop, line.item)) {
       checkLineBuyThenSell(shop, line.item, line, offset);
     }
@@ -318,7 +318,7 @@ const SYNTHETIC_BUNDLE_SIZES = [PAIR_BUNDLE, TRIPLE_BUNDLE] as const;
 function smallestRealBundleDiscount(): number | undefined {
   const discounts = SHOP_IDS.flatMap((shop) =>
     shopDef(shop).catalog.flatMap((line) =>
-      line.bundle === undefined ? [] : [line.bundle.bundleDiscount],
+      line.bundle === null ? [] : [line.bundle.bundleDiscount],
     ),
   );
   return discounts.length === 0 ? undefined : Math.min(...discounts);
@@ -342,7 +342,7 @@ section('Bundles never gain coins: synthetic bundles over scarce limited lines')
     for (const shop of SHOP_IDS) {
       if (!shopDef(shop).buysFromPlayer) continue;
       for (const line of shopDef(shop).catalog) {
-        if (line.normalStock === 'unlimited' || line.bundle !== undefined) continue;
+        if (line.normalStock === 'unlimited' || line.bundle !== null) continue;
         if (stockCurveFor(shop, line.item).scarcityMarkup <= 0) continue;
         const normal = line.normalStock;
         for (const quantity of SYNTHETIC_BUNDLE_SIZES) {

@@ -11,7 +11,12 @@
  * one potion: a scratch is never cheaper to have seen to than to drink away.
  */
 
-import type { ShopMenu, ShopRow, ShopPurchaseResult } from '../../../ui/screens/shop/shopSession';
+import {
+  offerUnless,
+  type ShopMenu,
+  type ShopRow,
+  type ShopPurchaseResult,
+} from '../../../ui/screens/shop/shopSession';
 import type { TopicProvider } from '../villagerTopics';
 import { SPEAKERS } from '../../../dialog/speakers';
 import { SELLA } from '../../../dialog/scripts/briarHollow';
@@ -55,14 +60,19 @@ export function buildInfirmaryMenu(party: ServiceParty): ShopMenu {
   const option: ShopRow = {
     key: TREATMENT_KEY,
     label: 'Treat the party',
-    price: treatmentFee(party),
     desc: 'Heals you and your companion to full, and stands the fallen up',
+    art: { kind: 'service', service: 'treatment' },
+    offer: offerUnless(partyIsUnhurt(party) ? UNHURT_LABEL : null, {
+      kind: 'coins',
+      coins: treatmentFee(party),
+    }),
+    questErrand: false,
   };
-  if (partyIsUnhurt(party)) option.unavailable = UNHURT_LABEL;
   return {
     title: INFIRMARY_TITLE,
     bark: sellerLine(SELLA.shopOpen),
     byline: SPEAKERS.sella.name,
+    emblem: null,
     options: [option],
   };
 }
@@ -90,9 +100,11 @@ export function infirmaryShop(party: ServiceParty, host: InfirmaryHost): ShopDef
       return { ok: true, line: sellerLine(SELLA.buyHealing) };
     },
     blockedLine: (option) =>
-      option.unavailable === undefined
+      option.offer.status === 'open'
         ? sellerLine(SELLA.cannotAfford)
         : sellerLine(SELLA.fullyHealthy),
+    rebuyGuardTicks: 0,
+    sell: null,
   };
 }
 

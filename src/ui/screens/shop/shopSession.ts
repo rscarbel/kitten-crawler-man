@@ -19,62 +19,146 @@ import type { ShopId } from '../../../economy/shops';
 import { cloneShopStock, sellToShop, type ShopStock } from '../../../economy/shopStock';
 import { sellableHoldings } from '../../../systems/market/sellableInventory';
 import type { Rect } from '../../core/geom';
-import type { GlyphId } from '../../theme/glyphs';
+import { RESOURCE_IDS, type ResourceId } from '../../../core/resourceIds';
+import type { ServiceIconId } from '../../../sprites/art/itemIcons/serviceIcons';
 
-/** What sits at the start of a row: an item's own icon, or a glyph for a service. */
-export type ShopRowIcon =
+/**
+ * The picture on an offer: an item's own icon, or a painted service (a
+ * drink poured on the spot, a room, a blessing, a destination).
+ */
+export type ShopArt =
   | { readonly kind: 'item'; readonly item: ItemId }
-  | { readonly kind: 'glyph'; readonly glyph: GlyphId };
+  | { readonly kind: 'service'; readonly service: ServiceIconId };
+
+/** One raw material an offer costs, read against both crawlers' combined packs. */
+export interface MaterialLine {
+  readonly resource: ResourceId;
+  readonly amount: number;
+}
+
+/** What taking an offer costs, every part of which the card shows. */
+export type ShopCost =
+  /** Nothing: the row's button does a free thing, named by `actionLabel` ("Travel"). */
+  | { readonly kind: 'free'; readonly actionLabel: string }
+  /** A flat fee for a service. */
+  | { readonly kind: 'coins'; readonly coins: number }
+  /** Goods priced by the engine against the shop's stock; the quote is its working and its tags. */
+  | { readonly kind: 'quoted'; readonly quote: PriceQuote }
+  /** Coins plus raw materials, charged together from the party. */
+  | {
+      readonly kind: 'coinsAndMaterials';
+      readonly coins: number;
+      readonly materials: readonly [MaterialLine, ...MaterialLine[]];
+    };
+
+/** Whether an offer can be taken, and what it costs while it can or could be. */
+export type ShopOffer =
+  | { readonly status: 'open'; readonly cost: ShopCost }
+  /** Shut for now ("Sold out", "Unhurt"); the cost still shows, greyed. */
+  | { readonly status: 'closed'; readonly reason: string; readonly cost: ShopCost }
+  /** Nothing left to sell here at any price ("Finest", "Nothing left I can teach you"). */
+  | { readonly status: 'spent'; readonly reason: string };
 
 export interface ShopRow {
   /** Stable identifier for the row, so a handler can act on a rebuilt menu. */
   readonly key: string;
   readonly label: string;
-  readonly price: number;
   readonly desc: string;
-  /**
-   * Raw materials the row also costs. The session checks and charges them
-   * from both crawlers' combined packs, the steered crawler's first, alongside the coins.
-   */
-  readonly materials?: ResourceCost;
-  /** When set, the row cannot be bought and shows this instead (e.g. "Already inked", "Sold out"). */
-  unavailable?: string;
+  readonly art: ShopArt;
+  readonly offer: ShopOffer;
   /**
    * A questline's errand rather than ordinary stock. Drawn in quest gold, and
    * while it is affordable it is the row a bare accept press buys, so a
    * player sent for one thing can take it without navigating past the rest.
    */
-  readonly isQuestItem?: boolean;
-  /** Defaults to the item's icon when `key` is an item id, else the menu's `rowGlyph`. */
-  readonly icon?: ShopRowIcon;
-  /**
-   * The engine's working for an item row, whose `price` is its final; a
-   * service row (a drink, a cure, a blessing) has none.
-   */
-  readonly quote?: PriceQuote;
-}
-
-/** A menu of free actions rather than goods: no prices, no purse, and each row's button reads `actionLabel`. */
-export interface UnpricedRows {
-  readonly actionLabel: string;
+  readonly questErrand: boolean;
 }
 
 /** Paints a small picture into `rect`, beside the counter's bark. */
-export type ShopTitleIcon = (ctx: CanvasRenderingContext2D, rect: Rect) => void;
+export type ShopEmblem = (ctx: CanvasRenderingContext2D, rect: Rect) => void;
 
 export interface ShopMenu {
   readonly title: string;
   /** The seller's opening line, shown until a purchase replaces it with feedback. */
   readonly bark: string;
-  /** Who is selling, under the title. Omit where the room is the seller and a name would repeat the title. */
-  readonly byline?: string;
+  /** Who is selling, under the title; null where the room is the seller and a name would repeat the title. */
+  readonly byline: string | null;
+  /** A picture beside the bark, for a counter that is a thing rather than a person; null for none. */
+  readonly emblem: ShopEmblem | null;
   readonly options: readonly ShopRow[];
-  readonly unpriced?: UnpricedRows;
-  readonly titleIcon?: ShopTitleIcon;
-  /** The leading glyph of a row whose key is not an item and which names no icon of its own. */
-  readonly rowGlyph?: GlyphId;
-  /** The most lines a row's description wraps to, for a menu whose descriptions are its rules. One when omitted. */
-  readonly descLines?: number;
+}
+
+/** The coins `cost` takes. */
+export function costCoins(cost: ShopCost): number {
+  switch (cost.kind) {
+    case 'free':
+      return 0;
+    case 'coins':
+    case 'coinsAndMaterials':
+      return cost.coins;
+    case 'quoted':
+      return cost.quote.breakdown.final;
+  }
+}
+
+/** The raw materials `cost` takes, as the party's resource ledger reads them. */
+export function costMaterials(cost: ShopCost): ResourceCost {
+  const materials: ResourceCost = {};
+  if (cost.kind !== 'coinsAndMaterials') return materials;
+  for (const line of cost.materials) materials[line.resource] = line.amount;
+  return materials;
+}
+
+/**
+ * A coin fee, with `materials` added when there are any: a cost whose
+ * material list is empty is a plain coin fee, so the card never shows an
+ * empty materials line.
+ */
+export function coinsWithMaterials(coins: number, materials: ResourceCost): ShopCost {
+  const lines = RESOURCE_IDS.flatMap((resource): MaterialLine[] => {
+    const amount = materials[resource];
+    return amount === undefined || amount <= 0 ? [] : [{ resource, amount }];
+  });
+  if (lines.length === 0) return { kind: 'coins', coins };
+  const [first, ...rest] = lines;
+  return { kind: 'coinsAndMaterials', coins, materials: [first, ...rest] };
+}
+
+/** An offer that is open unless `closedReason` names why not. */
+export function offerUnless(closedReason: string | null, cost: ShopCost): ShopOffer {
+  return closedReason === null
+    ? { status: 'open', cost }
+    : { status: 'closed', reason: closedReason, cost };
+}
+
+/** The offer's cost, or null when there is nothing left to sell. */
+export function offerCost(offer: ShopOffer): ShopCost | null {
+  return offer.status === 'spent' ? null : offer.cost;
+}
+
+/** The coins a row asks, or null when there is nothing left to sell. */
+export function rowCoins(row: ShopRow): number | null {
+  const cost = offerCost(row.offer);
+  return cost === null ? null : costCoins(cost);
+}
+
+/** Why the offer cannot be taken at any price right now, or null while it is open. */
+export function offerClosedReason(offer: ShopOffer): string | null {
+  return offer.status === 'open' ? null : offer.reason;
+}
+
+/** The engine's working behind a row's price, or null for a fee or a free row. */
+export function rowQuote(row: ShopRow): PriceQuote | null {
+  const cost = offerCost(row.offer);
+  return cost?.kind === 'quoted' ? cost.quote : null;
+}
+
+/** Whether any row on `menu` costs coins, which is when the counter shows the purse. */
+export function menuTakesCoins(menu: ShopMenu): boolean {
+  return menu.options.some((row) => {
+    const cost = offerCost(row.offer);
+    return cost !== null && cost.kind !== 'free';
+  });
 }
 
 /** What a handler did: whether the purchase went through, and the line to echo. */
@@ -101,24 +185,30 @@ export interface ShopSellConfig {
   readonly shop: ShopId;
   /** The stock record the shop keeps; a sale puts the unit on this shop's shelf. */
   readonly stock: ShopStock;
-  /** Runs after each successful sale, for the caller to layer its own sound. */
-  readonly onSold?: () => void;
+  /** Runs after each successful sale, for the caller to layer its own sound; null when the counter adds none. */
+  readonly onSold: (() => void) | null;
 }
 
 /** Everything `open` takes besides the menu and the purchase. */
 export interface ShopOpenOptions {
-  /** Called when the player presses a Buy the session refuses; a disabled Buy is otherwise only the error cue. */
-  readonly onBlocked?: () => void;
-  readonly blockedLine?: ShopBlockedLine;
+  /**
+   * Called when the player presses a Buy the session refuses. Null leaves the
+   * refusal to the screen's own error cue.
+   */
+  readonly onBlocked: (() => void) | null;
+  /** Null when the seller has nothing to say to a refused Buy, so the bark stays. */
+  readonly blockedLine: ShopBlockedLine | null;
   /**
    * For a row that becomes a dearer product the moment it sells (a tool's
    * next tier): how many ticks after a sale a further Buy is ignored, so a
-   * double press buys once rather than twice up the ladder.
+   * double press buys once rather than twice up the ladder. Zero for a row
+   * that sells the same product again.
    */
-  readonly rebuyGuardTicks?: number;
-  readonly sell?: ShopSellConfig;
+  readonly rebuyGuardTicks: number;
+  /** Null for a counter with no Sell tab. */
+  readonly sell: ShopSellConfig | null;
   /** Rebuild the rows every tick, for a counter whose prices drift while it is open. */
-  readonly liveRows?: boolean;
+  readonly liveRows: boolean;
 }
 
 /** Who pays and who stands beside them. */
@@ -144,21 +234,31 @@ export const SHOP_FEEDBACK_FADE_TICKS = 25;
 
 const NOT_HELD_LINE = "You don't have one of those!";
 
-/** Whether `option` can be bought: available and, on a priced menu, affordable. */
-export function shopRowEnabled(option: ShopRow, unpriced: boolean, party: ShopParty): boolean {
-  if (option.unavailable !== undefined) return false;
-  if (unpriced) return true;
-  if (!canAffordCoins(party.active, party.companion, option.price)) return false;
-  return (
-    option.materials === undefined || canAfford(party.active, party.companion, option.materials)
-  );
+/** Whether `option` can be taken right now: open, and its whole cost covered by the party. */
+export function shopRowEnabled(option: ShopRow, party: ShopParty): boolean {
+  if (option.offer.status !== 'open') return false;
+  const { cost } = option.offer;
+  if (!canAffordCoins(party.active, party.companion, costCoins(cost))) return false;
+  return canAfford(party.active, party.companion, costMaterials(cost));
 }
+
+/**
+ * What a closed session holds, so nothing it reads between `close` and the
+ * next `open` can reach the last counter's handlers.
+ */
+const CLOSED_SHOP_OPTIONS: ShopOpenOptions = {
+  onBlocked: null,
+  blockedLine: null,
+  rebuyGuardTicks: 0,
+  sell: null,
+  liveRows: false,
+};
 
 export class ShopSession {
   private menu: ShopMenu | null = null;
   private build: ShopMenuBuilder | null = null;
   private purchase: ShopPurchaseHandler | null = null;
-  private options: ShopOpenOptions = {};
+  private options: ShopOpenOptions = CLOSED_SHOP_OPTIONS;
   private rebuyGuardLeft = 0;
   private feedback = '';
   private feedbackLeft = 0;
@@ -180,7 +280,7 @@ export class ShopSession {
   }
 
   get sellConfig(): ShopSellConfig | null {
-    return this.options.sell ?? null;
+    return this.options.sell;
   }
 
   /** The rows on offer right now, or none while closed. */
@@ -201,7 +301,7 @@ export class ShopSession {
     return Math.min(1, this.feedbackLeft / SHOP_FEEDBACK_FADE_TICKS);
   }
 
-  open(build: ShopMenuBuilder, purchase: ShopPurchaseHandler, options: ShopOpenOptions = {}): void {
+  open(build: ShopMenuBuilder, purchase: ShopPurchaseHandler, options: ShopOpenOptions): void {
     this.build = build;
     this.menu = build();
     this.purchase = purchase;
@@ -216,7 +316,7 @@ export class ShopSession {
     this.menu = null;
     this.build = null;
     this.purchase = null;
-    this.options = {};
+    this.options = CLOSED_SHOP_OPTIONS;
     this.mode = 'buy';
   }
 
@@ -229,11 +329,11 @@ export class ShopSession {
     if (this.feedbackLeft > 0) this.feedbackLeft--;
     if (this.rebuyGuardLeft > 0) this.rebuyGuardLeft--;
     if (this.menu === null) return;
-    if (this.options.liveRows === true) this.rebuildMenu();
+    if (this.options.liveRows) this.rebuildMenu();
   }
 
   setMode(mode: ShopMode): void {
-    if (mode === 'sell' && this.options.sell === undefined) return;
+    if (mode === 'sell' && this.options.sell === null) return;
     this.mode = mode;
   }
 
@@ -242,10 +342,7 @@ export class ShopSession {
     const menu = this.menu;
     if (menu === null || this.mode !== 'buy') return null;
     return (
-      menu.options.find(
-        (option) =>
-          option.isQuestItem === true && shopRowEnabled(option, menu.unpriced !== undefined, party),
-      ) ?? null
+      menu.options.find((option) => option.questErrand && shopRowEnabled(option, party)) ?? null
     );
   }
 
@@ -262,7 +359,7 @@ export class ShopSession {
 
   /** Whether the opener sounds a refused purchase itself, so the screen must not sound it too. */
   get soundsOwnRefusal(): boolean {
-    return this.options.onBlocked !== undefined;
+    return this.options.onBlocked !== null;
   }
 
   tryBuy(pressed: ShopRow, party: ShopParty): void {
@@ -271,20 +368,19 @@ export class ShopSession {
     this.rebuildMenu();
     const option = this.menu?.options.find((candidate) => candidate.key === pressed.key);
     if (option === undefined) return;
-    const unpriced = this.menu?.unpriced !== undefined;
-    if (!shopRowEnabled(option, unpriced, party)) {
-      this.options.onBlocked?.();
-      const refusal = this.options.blockedLine?.(option, party.active) ?? null;
+    if (option.offer.status !== 'open' || !shopRowEnabled(option, party)) {
+      const { onBlocked, blockedLine } = this.options;
+      if (onBlocked !== null) onBlocked();
+      const refusal = blockedLine === null ? null : blockedLine(option, party.active);
       if (refusal !== null) this.showFeedback(refusal);
       return;
     }
     const result = purchase(option, party.active);
     if (result.ok) {
-      if (!unpriced) spendPartyCoins(party.active, party.companion, option.price, party.active);
-      if (!unpriced && option.materials !== undefined) {
-        spend(party.active, party.companion, option.materials, party.active);
-      }
-      this.rebuyGuardLeft = this.options.rebuyGuardTicks ?? 0;
+      const { cost } = option.offer;
+      spendPartyCoins(party.active, party.companion, costCoins(cost), party.active);
+      spend(party.active, party.companion, costMaterials(cost), party.active);
+      this.rebuyGuardLeft = this.options.rebuyGuardTicks;
     }
     if (this.purchase === null) return;
     this.rebuildMenu();
@@ -304,7 +400,7 @@ export class ShopSession {
   /** The Sell tab's rows, read live off the bag so a sale shows the instant it happens. */
   sellRows(seller: Player): SellRow[] {
     const sell = this.options.sell;
-    if (sell === undefined) return [];
+    if (sell === null) return [];
     return sellableHoldings(seller).map(({ id, qty }) => ({
       id,
       held: qty,
@@ -320,7 +416,7 @@ export class ShopSession {
    */
   sellQuote(id: ItemId, quantity: number): number {
     const sell = this.options.sell;
-    if (sell === undefined) return 0;
+    if (sell === null) return 0;
     let total = 0;
     const scratch = cloneShopStock(sell.stock);
     for (let sold = 0; sold < quantity; sold++) {
@@ -333,7 +429,7 @@ export class ShopSession {
   /** Sells up to `quantity` of `id`, one unit at a time at each unit's own price. Returns the units sold. */
   sell(id: ItemId, quantity: number, seller: Player): number {
     const sell = this.options.sell;
-    if (sell === undefined || !isItemId(id)) return 0;
+    if (sell === null || !isItemId(id)) return 0;
     let sold = 0;
     let earned = 0;
     while (sold < quantity) {
@@ -352,7 +448,7 @@ export class ShopSession {
     const what = sold === 1 ? name : `${sold} × ${name}`;
     this.rebuildMenu();
     this.showFeedback(`Sold ${what} for ${earned} coins.`);
-    sell.onSold?.();
+    if (sell.onSold !== null) sell.onSold();
     return sold;
   }
 

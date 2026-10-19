@@ -68,7 +68,7 @@ The floor-3 town's systems, and where each rule lives. The durable description i
 - **Interiors:** layouts are data in `src/map/town/interiors/`, with props from `TOWN_INTERIOR_PROPS`.
   - `InteriorOccupantSystem` seats the room's people.
   - `InteriorPropInteractionSystem` runs examine, search and use; `InteriorReadableSystem` runs paged documents.
-  - `TownInteriorPropDestructionSystem` breaks placed props, and `InteriorBreakReactionBarks` voices the reactions.
+  - `TownInteriorPropDestructionSystem` breaks placed props, and `InteriorBreakReactions` captions the reactions.
   - `townInteriorPropFigures.ts` splits walkable ground props from Y-sorted ones.
   - `src/scenes/interiorCamera.ts` frames the room clear of the HUD: `interiorHudOccluders` (`src/scenes/interiorHud.ts`) turns the shared HUD layout (`liveHudLayout`) into occluders for `hudClearView`.
 - **Memory:** `TownMemory` (`src/core/TownMemory.ts`) is threaded by reference through both scenes, like `BriarHollowState`: resident talks, cleared rooms and camps, and props that have paid out. `RENAMED_BUILDINGS` migrates old building names in saves.

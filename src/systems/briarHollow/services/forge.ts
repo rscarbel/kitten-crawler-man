@@ -34,9 +34,15 @@ import {
 } from '../../../core/toolTiers';
 import { drawItemIcon } from '../../../ui/icons/drawItemIcon';
 import { asPercent } from '../../../ui/itemEffectLines';
-import type { ShopMenu, ShopRow, ShopPurchaseResult } from '../../../ui/screens/shop/shopSession';
+import {
+  coinsWithMaterials,
+  costCoins,
+  type ShopMenu,
+  type ShopRow,
+  type ShopPurchaseResult,
+} from '../../../ui/screens/shop/shopSession';
 import { canAffordCoins } from '../../../core/partyCoins';
-import { canAfford, formatCost, type ResourceCost } from '../../../core/partyResources';
+import { canAfford } from '../../../core/partyResources';
 import { SPEAKERS } from '../../../dialog/speakers';
 import { OREN } from '../../../dialog/scripts/briarHollow';
 import type { ConversationRequest, ConversationTopic } from '../../../dialog/request';
@@ -104,11 +110,12 @@ function resourcingLearnedByBoth(party: ServiceParty): boolean {
 }
 
 function toolReward(kind: ToolKind): GrantedReward {
-  const def = ITEM_DEF[toolTierDef(kind, TOOL_TIER_BASIC).id];
+  const tier = toolTierDef(kind, TOOL_TIER_BASIC);
+  const def = ITEM_DEF[tier.id];
   return {
     kind: 'item',
     name: def.name,
-    description: def.description ?? '',
+    description: tier.description,
     renderIcon: (ctx, rect) => drawItemIcon(ctx, rect, { ...def, quantity: 1 }),
   };
 }
@@ -194,10 +201,6 @@ function describeToolTierGain(def: ToolTierDef): string {
   return parts.length > 0 ? parts.join(', ') : 'no bonus';
 }
 
-function hasMaterials(cost: ResourceCost): boolean {
-  return Object.values(cost).some((amount) => amount > 0);
-}
-
 function upgradeOption(tools: PartyToolsState, kind: ToolKind): ShopRow {
   const current = toolTierDef(kind, tierOf(tools, kind) ?? TOOL_TIER_BASIC);
   const nextTier = nextToolTier(tools, kind);
@@ -205,25 +208,24 @@ function upgradeOption(tools: PartyToolsState, kind: ToolKind): ShopRow {
     return {
       key: kind,
       label: `${current.name} (finest)`,
-      price: 0,
       desc: current.description,
-      unavailable: FINEST_LABEL,
+      art: { kind: 'item', item: current.id },
+      offer: { status: 'spent', reason: FINEST_LABEL },
+      questErrand: false,
     };
   }
   const next = toolTierDef(kind, nextTier);
-  const nextPrice = forgeCoinPrice(kind, nextTier);
   const gain = `${describeToolTierGain(next)} (now ${describeToolTierGain(current)}). Applies to Carl and Donut.`;
-  const pitch = `Replaces your ${current.name}. ${next.description} ${gain}`;
-  if (!hasMaterials(next.costMaterials)) {
-    return { key: kind, label: next.name, price: nextPrice, desc: pitch };
-  }
   return {
     key: kind,
     label: next.name,
-    price: nextPrice,
-    materials: next.costMaterials,
-    // The subtitle is one line cut to fit, so the material cost leads it.
-    desc: `Also takes ${formatCost(next.costMaterials)}. ${pitch}`,
+    desc: `Replaces your ${current.name}. ${next.description} ${gain}`,
+    art: { kind: 'item', item: next.id },
+    offer: {
+      status: 'open',
+      cost: coinsWithMaterials(forgeCoinPrice(kind, nextTier), next.costMaterials),
+    },
+    questErrand: false,
   };
 }
 
@@ -259,6 +261,7 @@ export function buildForgeMenu(tools: PartyToolsState, party: ServiceParty): Sho
     title: FORGE_TITLE,
     bark: forgeBark(tools, party),
     byline: SPEAKERS.oren.name,
+    emblem: null,
     options: TOOL_KINDS.map((kind) => upgradeOption(tools, kind)),
   };
 }
@@ -293,12 +296,16 @@ export function forgeShop(host: ForgeHost): ShopDefinition {
     rebuyGuardTicks: UPGRADE_REBUY_GUARD_TICKS,
     blockedLine: (option) => {
       const kind = kindOfOption(option);
-      if (kind !== null && option.unavailable !== undefined) return alreadyMaxLine(kind);
+      if (option.offer.status !== 'open') {
+        return kind === null ? null : alreadyMaxLine(kind);
+      }
+      const { cost } = option.offer;
       const { human, cat } = host.party;
-      const coinsCovered = canAffordCoins(human, cat, option.price);
-      if (coinsCovered && option.materials !== undefined) return sellerLine(OREN.needsMaterials);
+      const coinsCovered = canAffordCoins(human, cat, costCoins(cost));
+      if (coinsCovered && cost.kind === 'coinsAndMaterials') return sellerLine(OREN.needsMaterials);
       return sellerLine(OREN.cannotAffordUpgrade);
     },
+    sell: null,
   };
 }
 

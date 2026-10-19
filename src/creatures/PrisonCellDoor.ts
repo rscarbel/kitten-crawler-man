@@ -69,6 +69,10 @@ export class PrisonCellDoor extends Mob {
     return false;
   }
 
+  override get showsOnRadar(): boolean {
+    return false;
+  }
+
   override get isPetAttackable(): boolean {
     return false;
   }

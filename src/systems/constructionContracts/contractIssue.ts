@@ -9,6 +9,7 @@
 import type { ActiveContract, BriarHollowState } from '../../core/briarHollowState';
 import { formatCost } from '../../core/partyResources';
 import type { WorkOrderNoticeState } from '../townNotices';
+import type { QuestMarkerState } from '../../sprites/questNPCSprite';
 import { contractSiteFor, contractSpot, type ContractSiteDef } from './contractCatalog';
 import { contractContactName } from './contractContacts';
 import { contractSiteEligible, type ContractWorld } from './contractEligibility';
@@ -58,4 +59,15 @@ export function workOrderStateFor(state: BriarHollowState): WorkOrderNoticeState
   if (active === null || site === undefined) return { kind: 'open' };
   if (isContractReady(active)) return { kind: 'ready', contactName: contractContactName(site) };
   return { kind: 'held', siteName: site.name, remaining: remainingSpotLabels(active, site) };
+}
+
+/**
+ * The overhead marker a notice board wears: `!` while a contract is waiting to
+ * be taken off it, nothing while one is held, ready to collect, or contracts
+ * are still locked. The same branch `workOrderStateFor` gives the board's
+ * "take contract" action, so the marker never promises a posting the board
+ * will not hand over.
+ */
+export function noticeBoardMarkerFor(state: BriarHollowState): QuestMarkerState {
+  return workOrderStateFor(state).kind === 'open' ? 'exclamation' : 'none';
 }

@@ -62,11 +62,12 @@ export function otherCrawler(party: ServiceParty, crawler: Crawler): Crawler {
 export interface ShopDefinition {
   readonly build: ShopMenuBuilder;
   readonly purchase: ShopPurchaseHandler;
-  readonly blockedLine?: ShopBlockedLine;
-  /** How many ticks a Buy is ignored after a sale. Absent, every press buys. */
-  readonly rebuyGuardTicks?: number;
-  /** Opts this counter into a Sell tab. Absent for a service with no goods to buy back. */
-  readonly sell?: ShopSellConfig;
+  /** Null when the seller lets the bark stand over a refused Buy. */
+  readonly blockedLine: ShopBlockedLine | null;
+  /** How many ticks a Buy is ignored after a sale. Zero, every press buys. */
+  readonly rebuyGuardTicks: number;
+  /** Opts this counter into a Sell tab. Null for a service with no goods to buy back. */
+  readonly sell: ShopSellConfig | null;
 }
 
 /** Where a shop topic sends the party: the priced menu, opened over the village. */

@@ -20,7 +20,7 @@
  * `?prices`.
  */
 
-import { ITEM_DEF, type ItemId } from '../core/ItemDefs';
+import type { ItemId } from '../core/ItemDefs';
 import type { ItemCategory } from './itemPrices';
 import {
   FRONTIER,
@@ -58,13 +58,14 @@ export interface CatalogLine {
    * stock count, so a bundle line normally repeats its single line's figure.
    */
   readonly normalStock: number | 'unlimited';
-  /** Shown instead of the item's name, for a shop that brands its own (the apothecary's "Marsh Poultice"). */
-  readonly label?: string;
-  readonly desc?: string;
-  /** Sold as a pack of this many, at `bundleDiscount` off the unit price. */
-  readonly bundle?: CatalogBundle;
-  /** Only on the counter while the scene says this gate is open (the Tinker's Anchor shard). */
-  readonly gate?: VendorLineGate;
+  /** The row's name at this counter: the item's own name, or a shop's brand for it (the apothecary's "Marsh Poultice"). */
+  readonly label: string;
+  /** The line under the offer's name: what it does, in the counter's own words. */
+  readonly desc: string;
+  /** Sold as a pack of this many, at `bundleDiscount` off the unit price; null for a single unit. */
+  readonly bundle: CatalogBundle | null;
+  /** Only on the counter while the scene says this gate is open (the Tinker's Anchor shard); null for an always-stocked line. */
+  readonly gate: VendorLineGate | null;
 }
 
 /** One counter's whole pricing personality and what it sells. */
@@ -73,15 +74,15 @@ export interface ShopDef {
   /** Multiplies every price at this counter, buying and selling. 1 = sells at base. */
   readonly markup: number;
   /** Specialty taste: replaces `markup` for a whole category. Applies to both what it charges and what it pays. */
-  readonly categoryMarkup?: Partial<Record<ItemCategory, number>>;
+  readonly categoryMarkup: Partial<Record<ItemCategory, number>>;
   /** Replaces both of the above for one item. */
-  readonly itemMarkup?: Partial<Record<ItemId, number>>;
+  readonly itemMarkup: Partial<Record<ItemId, number>>;
   /** The categories this shop specialises in: it buys these back at SPECIALTY_BUYBACK instead of DEFAULT_BUYBACK. */
-  readonly specialties?: readonly ItemCategory[];
+  readonly specialties: readonly ItemCategory[];
   /** How stock moves price at this counter. */
   readonly stockCurve: StockCurve;
   /** Replaces `stockCurve` for a category, for a shop that turns food over faster than gear. */
-  readonly categoryStockCurve?: Partial<Record<ItemCategory, StockCurve>>;
+  readonly categoryStockCurve: Partial<Record<ItemCategory, StockCurve>>;
   /** Whether it has a Sell tab at all. */
   readonly buysFromPlayer: boolean;
   readonly catalog: readonly CatalogLine[];
@@ -96,13 +97,37 @@ export const SHOPS = {
   general_store: {
     name: 'General Store',
     markup: 1,
+    categoryMarkup: {},
+    itemMarkup: {},
+    specialties: [],
     stockCurve: MODERATE,
     categoryStockCurve: { food: STREET, potion: STREET, armor: PREMIUM, tool: PREMIUM },
     buysFromPlayer: true,
     catalog: [
-      { item: 'health_potion', normalStock: 'unlimited', desc: 'Restores 50% max HP' },
-      { item: 'goblin_dynamite', normalStock: 'unlimited', desc: 'Throw for AoE damage' },
-      { item: 'scroll_of_confusing_fog', normalStock: 'unlimited', desc: 'Blinds nearby enemies' },
+      {
+        item: 'health_potion',
+        normalStock: 'unlimited',
+        desc: 'Restores 50% max HP',
+        label: 'Health Potion',
+        bundle: null,
+        gate: null,
+      },
+      {
+        item: 'goblin_dynamite',
+        normalStock: 'unlimited',
+        desc: 'Throw for AoE damage',
+        label: 'Goblin Dynamite',
+        bundle: null,
+        gate: null,
+      },
+      {
+        item: 'scroll_of_confusing_fog',
+        normalStock: 'unlimited',
+        desc: 'Blinds nearby enemies',
+        label: 'Scroll of Confusing Fog',
+        bundle: null,
+        gate: null,
+      },
     ],
   },
 
@@ -115,12 +140,28 @@ export const SHOPS = {
     name: "Greengrocer's Cart",
     markup: 1,
     specialties: ['food'],
+    categoryMarkup: {},
+    itemMarkup: {},
     stockCurve: MODERATE,
     categoryStockCurve: { food: STREET, potion: STREET },
     buysFromPlayer: true,
     catalog: [
-      { item: 'cooldown_crisp', normalStock: 'unlimited', desc: 'Halves ability cooldowns, 25s' },
-      { item: 'jugg_juice', normalStock: 'unlimited', desc: '+50% max HP & full heal, 30s' },
+      {
+        item: 'cooldown_crisp',
+        normalStock: 'unlimited',
+        desc: 'Halves ability cooldowns, 25s',
+        label: 'Cooldown Crisp',
+        bundle: null,
+        gate: null,
+      },
+      {
+        item: 'jugg_juice',
+        normalStock: 'unlimited',
+        desc: '+50% max HP & full heal, 30s',
+        label: 'Jugg Juice',
+        bundle: null,
+        gate: null,
+      },
     ],
   },
 
@@ -131,7 +172,11 @@ export const SHOPS = {
   tinker: {
     name: "Tinker's Stall",
     markup: 1,
+    categoryMarkup: {},
+    itemMarkup: {},
+    specialties: [],
     stockCurve: MODERATE,
+    categoryStockCurve: {},
     buysFromPlayer: true,
     // The shard leads the counter while its gate is open: the panel draws rows
     // in catalog order and hands its accept key to the first buyable quest row,
@@ -144,9 +189,24 @@ export const SHOPS = {
         label: 'Anchor Shard',
         desc: 'Odd grey wedge. Voss wants it',
         gate: 'anchor_shard',
+        bundle: null,
       },
-      { item: 'health_potion', normalStock: 'unlimited', desc: 'Restores 50% max HP' },
-      { item: 'speed_fizz', normalStock: 'unlimited', desc: 'Doubles move speed, 25s' },
+      {
+        item: 'health_potion',
+        normalStock: 'unlimited',
+        desc: 'Restores 50% max HP',
+        label: 'Health Potion',
+        bundle: null,
+        gate: null,
+      },
+      {
+        item: 'speed_fizz',
+        normalStock: 'unlimited',
+        desc: 'Doubles move speed, 25s',
+        label: 'Speed Fizz',
+        bundle: null,
+        gate: null,
+      },
     ],
   },
 
@@ -172,7 +232,9 @@ export const SHOPS = {
        */
       health_potion: 1,
     },
+    specialties: [],
     stockCurve: PREMIUM,
+    categoryStockCurve: {},
     buysFromPlayer: true,
     // The house special leads the board, because that is what a house special is.
     catalog: [
@@ -180,10 +242,34 @@ export const SHOPS = {
         item: 'dirty_shirley',
         normalStock: 'unlimited',
         desc: 'The house special. Ask for it dirty',
+        label: 'The Dirty Shirley',
+        bundle: null,
+        gate: null,
       },
-      { item: 'speed_fizz', normalStock: 'unlimited', desc: 'Double move speed, 25s' },
-      { item: 'cooldown_crisp', normalStock: 'unlimited', desc: 'Halve ability cooldowns, 25s' },
-      { item: 'jugg_juice', normalStock: 'unlimited', desc: '+50% max HP & full heal, 30s' },
+      {
+        item: 'speed_fizz',
+        normalStock: 'unlimited',
+        desc: 'Double move speed, 25s',
+        label: 'Speed Fizz',
+        bundle: null,
+        gate: null,
+      },
+      {
+        item: 'cooldown_crisp',
+        normalStock: 'unlimited',
+        desc: 'Halve ability cooldowns, 25s',
+        label: 'Cooldown Crisp',
+        bundle: null,
+        gate: null,
+      },
+      {
+        item: 'jugg_juice',
+        normalStock: 'unlimited',
+        desc: '+50% max HP & full heal, 30s',
+        label: 'Jugg Juice',
+        bundle: null,
+        gate: null,
+      },
     ],
   },
 
@@ -196,25 +282,36 @@ export const SHOPS = {
   club_market: {
     name: 'The Market',
     markup: 1,
+    categoryMarkup: {},
+    itemMarkup: {},
+    specialties: [],
     stockCurve: PREMIUM,
+    categoryStockCurve: {},
     buysFromPlayer: true,
     catalog: [
       {
         item: 'stat_boost_potion',
         normalStock: 1,
         desc: '+2-4 to a random stat, permanent',
+        label: 'Stat Boost',
+        bundle: null,
+        gate: null,
       },
       {
         item: 'trollskin_shirt',
         normalStock: 'unlimited',
         label: 'Trollskin Shirt',
         desc: '+3 CON, 2.5x regen, negates melee debuffs',
+        bundle: null,
+        gate: null,
       },
       {
         item: 'enchanted_crown_sepsis_whore',
         normalStock: 'unlimited',
         label: 'Crown of the Sepsis Whore',
         desc: '+5 INT, attacks can inflict Sepsis',
+        bundle: null,
+        gate: null,
       },
     ],
   },
@@ -231,13 +328,19 @@ export const SHOPS = {
       /** Poured on the spot rather than sold sealed to carry off, so it goes for a little under the stalls' price. */
       speed_fizz: 0.83,
     },
+    categoryMarkup: {},
+    specialties: [],
     stockCurve: MODERATE,
+    categoryStockCurve: {},
     buysFromPlayer: false,
     catalog: [
       {
         item: 'speed_fizz',
         normalStock: 'unlimited',
         desc: 'Not a drink, really. Move speed x2, 25s',
+        label: 'Speed Fizz',
+        bundle: null,
+        gate: null,
       },
     ],
   },
@@ -251,7 +354,10 @@ export const SHOPS = {
     name: 'The Quartermaster',
     markup: 1,
     specialties: ['armor', 'weapon'],
+    categoryMarkup: {},
+    itemMarkup: {},
     stockCurve: PREMIUM,
+    categoryStockCurve: {},
     buysFromPlayer: true,
     // Cheapest first, which is also weakest first: a crawler reading down the
     // board sees the price climbing with the protection rather than having to
@@ -261,26 +367,41 @@ export const SHOPS = {
         item: 'issue_kettle_helm',
         normalStock: 'unlimited',
         desc: 'Iron, wide brim, one dent. +1 Constitution',
+        label: 'Issue Kettle Helm',
+        bundle: null,
+        gate: null,
       },
       {
         item: 'riveted_bracers',
         normalStock: 'unlimited',
         desc: 'Boiled leather on the blocking arm. +1 Strength',
+        label: 'Riveted Bracers',
+        bundle: null,
+        gate: null,
       },
       {
         item: 'padded_gambeson',
         normalStock: 'unlimited',
         desc: 'Twenty layers, quilted through. +2 Constitution',
+        label: 'Padded Gambeson',
+        bundle: null,
+        gate: null,
       },
       {
         item: 'marching_boots',
         normalStock: 'unlimited',
         desc: 'Hobnailed and already broken in. +1 Dexterity',
+        label: 'Marching Boots',
+        bundle: null,
+        gate: null,
       },
       {
         item: 'bracelet_of_dex',
         normalStock: 'unlimited',
         desc: 'An agility boosting accessory equipped on the front leg. +2 Dexterity',
+        label: 'Bracelet of +2 DEX',
+        bundle: null,
+        gate: null,
       },
     ],
   },
@@ -304,7 +425,9 @@ export const SHOPS = {
       jugg_juice: 1.18,
     },
     specialties: ['potion'],
+    categoryMarkup: {},
     stockCurve: MODERATE,
+    categoryStockCurve: {},
     buysFromPlayer: true,
     catalog: [
       {
@@ -312,12 +435,16 @@ export const SHOPS = {
         normalStock: 3,
         label: 'Marsh Poultice',
         desc: 'A health potion, cheap',
+        bundle: null,
+        gate: null,
       },
       {
         item: 'jugg_juice',
         normalStock: 'unlimited',
         label: 'Ruin-Root Tonic',
         desc: 'Jugg Juice, ground here rather than poured at the club',
+        bundle: null,
+        gate: null,
       },
     ],
   },
@@ -331,7 +458,11 @@ export const SHOPS = {
   cartwright: {
     name: "Cartwright's Workshop",
     markup: 1,
+    categoryMarkup: {},
+    itemMarkup: {},
+    specialties: [],
     stockCurve: MODERATE,
+    categoryStockCurve: {},
     buysFromPlayer: true,
     catalog: [
       {
@@ -339,6 +470,8 @@ export const SHOPS = {
         normalStock: 'unlimited',
         label: 'Stick of Dynamite',
         desc: 'Goblin Dynamite, at yard prices',
+        bundle: null,
+        gate: null,
       },
       {
         item: 'goblin_dynamite',
@@ -346,6 +479,7 @@ export const SHOPS = {
         label: 'Bundle of Three',
         desc: '3 sticks, for people clearing something large',
         bundle: { quantity: 3, bundleDiscount: 0.13 },
+        gate: null,
       },
     ],
   },
@@ -373,6 +507,8 @@ export const SHOPS = {
         normalStock: 'unlimited',
         label: 'Bag of Crisps',
         desc: 'Cooldown Crisps, off the tray rather than off the bar',
+        bundle: null,
+        gate: null,
       },
     ],
   },
@@ -396,16 +532,59 @@ export const SHOPS = {
       /** Half again over base, so buying stone never undercuts the party breaking its own rocks. */
       stone: 1.5,
     },
+    specialties: [],
     stockCurve: FRONTIER,
     categoryStockCurve: { food: FRONTIER_STREET, potion: FRONTIER_STREET },
     buysFromPlayer: true,
     catalog: [
-      { item: 'health_potion', normalStock: 5 },
-      { item: 'goblin_dynamite', normalStock: 4 },
-      { item: 'rope', normalStock: 10 },
-      { item: 'wood_board', normalStock: 20 },
-      { item: 'stone', normalStock: 20 },
-      { item: 'hamburger', normalStock: 3 },
+      {
+        item: 'health_potion',
+        normalStock: 5,
+        desc: 'Restores 50% max HP',
+        label: 'Health Potion',
+        bundle: null,
+        gate: null,
+      },
+      {
+        item: 'goblin_dynamite',
+        normalStock: 4,
+        desc: 'Throw for AoE damage',
+        label: 'Goblin Dynamite',
+        bundle: null,
+        gate: null,
+      },
+      {
+        item: 'rope',
+        normalStock: 10,
+        desc: 'Strong processed rope for trebuchets and snare traps',
+        label: 'Rope',
+        bundle: null,
+        gate: null,
+      },
+      {
+        item: 'wood_board',
+        normalStock: 20,
+        desc: 'Processed timber for walls, repairs, trebuchets and snares',
+        label: 'Boards of Wood',
+        bundle: null,
+        gate: null,
+      },
+      {
+        item: 'stone',
+        normalStock: 20,
+        desc: 'Usable stone, cut from the rocks outside the wall',
+        label: 'Stone',
+        bundle: null,
+        gate: null,
+      },
+      {
+        item: 'hamburger',
+        normalStock: 3,
+        desc: 'Sent over from Pipkin a few at a time',
+        label: 'Hamburger',
+        bundle: null,
+        gate: null,
+      },
     ],
   },
   /**
@@ -417,19 +596,35 @@ export const SHOPS = {
     name: "Pipkin's Cookhouse",
     markup: 1,
     specialties: ['food'],
+    categoryMarkup: {},
+    itemMarkup: {},
     stockCurve: MODERATE,
     categoryStockCurve: { food: PREMIUM },
     buysFromPlayer: true,
     catalog: [
-      { item: 'hamburger', normalStock: 'unlimited' },
-      { item: 'hollow_stew', normalStock: 'unlimited' },
+      {
+        item: 'hamburger',
+        normalStock: 'unlimited',
+        desc: 'Fresh meat, a hot pan, bread, and enough seasoning to make it worth chewing',
+        label: 'Hamburger',
+        bundle: null,
+        gate: null,
+      },
+      {
+        item: 'hollow_stew',
+        normalStock: 'unlimited',
+        desc: 'Filling stew. Heals you the same way a health potion does',
+        label: 'Hollow Stew',
+        bundle: null,
+        gate: null,
+      },
     ],
   },
 } as const satisfies Record<string, ShopDef>;
 
 export type ShopId = keyof typeof SHOPS;
 
-/** A shop's entry, widened to `ShopDef` so optional fields read uniformly across shops. */
+/** A shop's entry, widened to `ShopDef` so its literal-typed fields read uniformly across shops. */
 export function shopDef(shop: ShopId): ShopDef {
   return SHOPS[shop];
 }
@@ -446,15 +641,10 @@ export function isShopId(value: string): value is ShopId {
  */
 export function primaryCatalogLine(shop: ShopId, item: ItemId): CatalogLine | undefined {
   const lines = shopDef(shop).catalog.filter((line) => line.item === item);
-  return lines.find((line) => line.bundle === undefined) ?? lines[0];
+  return lines.find((line) => line.bundle === null) ?? lines[0];
 }
 
-/** The units one row hands over: a bundle's quantity, else one. */
+/** The units one row hands over: a bundle's quantity, or one for a single-unit line. */
 export function catalogLineUnits(line: CatalogLine): number {
-  return line.bundle?.quantity ?? 1;
-}
-
-/** The name a row shows: the shop's own label for it, else the item's name. */
-export function catalogLineLabel(line: CatalogLine): string {
-  return line.label ?? ITEM_DEF[line.item].name;
+  return line.bundle === null ? 1 : line.bundle.quantity;
 }

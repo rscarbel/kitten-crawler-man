@@ -3,7 +3,7 @@
  * in `TRAVEL_DESTINATIONS` order, each either a Travel button or disabled with
  * the reason it cannot be chosen (still locked, already here, under siege).
  *
- * A thin owner of a `ShopSession` in its unpriced mode, drawn by the shop
+ * A thin owner of a `ShopSession` whose offers are free, drawn by the shop
  * screen, so it gets that screen's scrolling list, keyboard focus,
  * tap-outside-to-close and phone layout rather than a second list widget.
  * Choosing a row hands the destination to `onChoose` —
@@ -22,13 +22,25 @@ import {
   type TravelUnlockState,
 } from '../systems/travel/travelDestinations';
 import { drawAnchorStoneIcon } from './icons/anchorStoneIcon';
-import { ShopSession, type ShopMenu, type ShopRow } from './screens/shop/shopSession';
+import {
+  ShopSession,
+  offerUnless,
+  type ShopCost,
+  type ShopMenu,
+  type ShopRow,
+} from './screens/shop/shopSession';
+import type { ServiceIconId } from '../sprites/art/itemIcons/serviceIcons';
 
 export const TRAVEL_MENU_TITLE = 'Travel Locations';
 const TRAVEL_MENU_BARK = 'The stone hums, waiting for a place it knows.';
 const TRAVEL_ACTION_LABEL = 'Travel';
-/** Free travel still goes through the row's price field, which unpriced rows ignore. */
-const NO_PRICE = 0;
+const TRAVEL_COST = { kind: 'free', actionLabel: TRAVEL_ACTION_LABEL } as const satisfies ShopCost;
+
+const DESTINATION_ART = {
+  town: 'travel_town',
+  circus: 'travel_circus',
+  briar_hollow: 'travel_briar_hollow',
+} as const satisfies Record<TravelDestinationId, ServiceIconId>;
 
 type Caster = HumanPlayer | CatPlayer;
 
@@ -41,23 +53,20 @@ export function buildTravelMenu(
   state: TravelUnlockState,
   caster: { readonly x: number; readonly y: number },
 ): ShopMenu {
-  const options: ShopRow[] = TRAVEL_DESTINATIONS.map((destination) => {
-    const refusal = travelRefusal(destination, state, map, caster);
-    return {
-      key: destination.id,
-      label: destination.label,
-      price: NO_PRICE,
-      desc: destination.description,
-      ...(refusal === null ? {} : { unavailable: refusal }),
-    };
-  });
+  const options = TRAVEL_DESTINATIONS.map((destination): ShopRow => ({
+    key: destination.id,
+    label: destination.label,
+    desc: destination.description,
+    art: { kind: 'service', service: DESTINATION_ART[destination.id] },
+    offer: offerUnless(travelRefusal(destination, state, map, caster), TRAVEL_COST),
+    questErrand: false,
+  }));
   return {
     title: TRAVEL_MENU_TITLE,
     bark: TRAVEL_MENU_BARK,
+    byline: null,
+    emblem: (ctx, rect) => drawAnchorStoneIcon(ctx, rect),
     options,
-    unpriced: { actionLabel: TRAVEL_ACTION_LABEL },
-    rowGlyph: 'map',
-    titleIcon: (ctx, rect) => drawAnchorStoneIcon(ctx, rect),
   };
 }
 
@@ -89,6 +98,7 @@ export class TravelMenu {
     this.session.open(
       () => buildTravelMenu(this.map, this.state, caster),
       (option) => this.choose(option, caster),
+      { onBlocked: null, blockedLine: null, rebuyGuardTicks: 0, sell: null, liveRows: false },
     );
   }
 

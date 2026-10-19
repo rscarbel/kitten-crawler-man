@@ -13,15 +13,9 @@
 import { ITEM_DEF, type ItemId } from '../../../core/ItemDefs';
 import type { BriarHollowState } from '../../../core/briarHollowState';
 import type { Player } from '../../../Player';
-import { SOLD_OUT_LABEL, catalogLinePricing } from '../../market/vendorMenu';
+import { SOLD_OUT_LABEL, catalogLineRow } from '../../market/vendorMenu';
 import { SHOPS, type CatalogLine, type ShopId } from '../../../economy/shops';
-import {
-  buyFromShop,
-  currentStock,
-  isLimitedLine,
-  isSoldOut,
-  normalStockOf,
-} from '../../../economy/shopStock';
+import { buyFromShop, currentStock, normalStockOf } from '../../../economy/shopStock';
 import type {
   ShopMenu,
   ShopRow,
@@ -74,27 +68,14 @@ function tradingPostLinesFor(state: BriarHollowState): readonly CatalogLine[] {
 }
 
 export function buildTradingPostMenu(state: BriarHollowState): ShopMenu {
-  const options = tradingPostLinesFor(state).map((line): ShopRow => {
-    const remaining = remainingStock(state, line.item);
-    const description = line.desc ?? ITEM_DEF[line.item].description ?? '';
-    const option: ShopRow = {
-      key: line.item,
-      label: line.label ?? ITEM_DEF[line.item].name,
-      ...catalogLinePricing(TRADING_POST_SHOP, line, state.shopStock),
-      desc: isLimitedLine(TRADING_POST_SHOP, line.item)
-        ? `${description} (${remaining} left)`
-        : description,
-    };
-    if (isSoldOut(state.shopStock, TRADING_POST_SHOP, line.item)) {
-      option.unavailable = SOLD_OUT_LABEL;
-    }
-    return option;
-  });
   return {
     title: TRADING_POST_TITLE,
     bark: sellerLine(VETCH.shopOpen),
     byline: SPEAKERS.vetch.name,
-    options,
+    emblem: null,
+    options: tradingPostLinesFor(state).map((line) =>
+      catalogLineRow(TRADING_POST_SHOP, line, state.shopStock),
+    ),
   };
 }
 
@@ -114,14 +95,15 @@ export function tradingPostPurchase(
 }
 
 function tradingPostSellConfig(state: BriarHollowState): ShopSellConfig {
-  return { shop: TRADING_POST_SHOP, stock: state.shopStock };
+  return { shop: TRADING_POST_SHOP, stock: state.shopStock, onSold: null };
 }
 
 export function tradingPostShop(state: BriarHollowState): ShopDefinition {
   return {
     build: () => buildTradingPostMenu(state),
     purchase: (option, buyer) => tradingPostPurchase(state, option, buyer),
-    blockedLine: (option) => option.unavailable ?? null,
+    blockedLine: (option) => (option.offer.status === 'open' ? null : option.offer.reason),
+    rebuyGuardTicks: 0,
     sell: tradingPostSellConfig(state),
   };
 }

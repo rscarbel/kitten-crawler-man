@@ -1508,8 +1508,9 @@ function townOpeners(): Opener<Town>[] {
       'village-priced-menu',
       (scene) =>
         services(scene).panel.open(
-          () => ({ title: 'Audit', bark: 'Audit day.', options: [] }),
+          () => ({ title: 'Audit', bark: 'Audit day.', byline: null, emblem: null, options: [] }),
           () => ({ ok: false, line: 'Nothing for sale.' }),
+          { onBlocked: null, blockedLine: null, rebuyGuardTicks: 0, sell: null, liveRows: false },
         ),
       (scene) => services(scene).panel.close(),
     ),
@@ -1803,7 +1804,8 @@ function interiorCases(): InteriorCase[] {
         menu('club-market-shop', (scene) => club(scene)['marketShop'].open(), closeClub),
         menu(
           'club-vip',
-          (scene) => club(scene)['vip'].openPanel(club(scene).coinsWageredThisVisit),
+          (scene) =>
+            club(scene)['vip'].openPanel(club(scene).coinsWageredThisVisit, scene.pm.active()),
           closeClub,
         ),
         menu('club-guild', (scene) => club(scene)['guild'].openPanel(), closeClub),

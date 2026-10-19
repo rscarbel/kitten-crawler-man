@@ -61,8 +61,8 @@ import type { ToastTone } from '../ui/hud/toasts';
 import type { Surface } from '../ui/core/UiRoot';
 import { keybindings } from '../core/Keybindings';
 import { shopScreenSurface } from '../ui/screens/shop/ShopScreen';
+import { priceBreakdownsShown } from '../ui/screens/shop/priceBreakdowns';
 import type { ShopParty } from '../ui/screens/shop/shopSession';
-import { vipLoungeSurface } from '../ui/screens/shop/VipLoungeScreen';
 import { mercenaryDeskSurface } from '../ui/screens/shop/MercenaryDeskScreen';
 import { MercenaryGuildSystem } from './MercenaryGuildSystem';
 import { ClubVipLoungeSystem, type EscortPair } from './ClubVipLoungeSystem';
@@ -412,9 +412,24 @@ export class DesperadoClubSystem {
   /** The bar and market counters, the VIP lounge, the mercenary desk and its dismiss question. */
   stationSurfaces(party: () => ShopParty): Surface[] {
     return [
-      shopScreenSurface({ id: CLUB_BAR_SURFACE_ID, session: this.barShop.session, party }),
-      shopScreenSurface({ id: CLUB_MARKET_SURFACE_ID, session: this.marketShop.session, party }),
-      vipLoungeSurface({ id: CLUB_VIP_SURFACE_ID, lounge: this.vip, party }),
+      shopScreenSurface({
+        id: CLUB_BAR_SURFACE_ID,
+        session: this.barShop.session,
+        party,
+        showPriceBreakdowns: priceBreakdownsShown,
+      }),
+      shopScreenSurface({
+        id: CLUB_MARKET_SURFACE_ID,
+        session: this.marketShop.session,
+        party,
+        showPriceBreakdowns: priceBreakdownsShown,
+      }),
+      shopScreenSurface({
+        id: CLUB_VIP_SURFACE_ID,
+        session: this.vip.session,
+        party,
+        showPriceBreakdowns: priceBreakdownsShown,
+      }),
       mercenaryDeskSurface({ id: CLUB_GUILD_SURFACE_ID, desk: this.guild, party }),
       this.guild.dismissConfirm.surface(CLUB_GUILD_DISMISS_SURFACE_ID),
     ];
@@ -499,6 +514,7 @@ export class DesperadoClubSystem {
     this.crowd.update(this.staticCrowdBodies(active, companion));
     this.barShop.update();
     this.marketShop.update();
+    this.vip.update();
     // Only the coin-pool total this drives matters, and the casino is never open
     // while this update runs — an open table routes through `tickOpenModals`
     // instead — so a missing companion here falls back to the active crawler alone.
@@ -523,6 +539,7 @@ export class DesperadoClubSystem {
     this.guild.updateDesk();
     this.barShop.update();
     this.marketShop.update();
+    this.vip.update();
     this.drainShopTrades();
     this.casino.update(active, companion);
     this.poker.update();
@@ -730,7 +747,7 @@ export class DesperadoClubSystem {
       this.guild.openPanel();
       return true;
     }
-    this.vip.openPanel(this.coinsWageredThisVisit);
+    this.vip.openPanel(this.coinsWageredThisVisit, player);
     prewarmEscort(this.vip.escortPair);
     return true;
   }

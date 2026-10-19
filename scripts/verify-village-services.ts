@@ -47,7 +47,12 @@ import { referenceStats } from '../src/core/referenceCrawler';
 import { HumanPlayer } from '../src/creatures/HumanPlayer';
 import { CatPlayer } from '../src/creatures/CatPlayer';
 import { GameMap } from '../src/map/GameMap';
-import { ShopSession, type ShopRow } from '../src/ui/screens/shop/shopSession';
+import {
+  ShopSession,
+  offerClosedReason,
+  rowCoins,
+  type ShopRow,
+} from '../src/ui/screens/shop/shopSession';
 import { RewardGrantedDialog } from '../src/ui/RewardGrantedDialog';
 import { QuantityDialog } from '../src/ui/screens/dialogs/QuantityDialog';
 import {
@@ -121,6 +126,16 @@ const fault = process.argv.find((arg) => arg.startsWith('--fault='))?.split('=')
 
 let failures = 0;
 let checks = 0;
+
+/** A row's coin price; undefined when the row is missing, null when it has nothing left to sell. */
+function rowCoinsOf(row: ShopRow | undefined): number | null | undefined {
+  return row === undefined ? undefined : rowCoins(row);
+}
+
+/** Why a row is refused; undefined when the row is missing, null while it is open. */
+function closedReasonOf(row: ShopRow | undefined): string | null | undefined {
+  return row === undefined ? undefined : offerClosedReason(row.offer);
+}
 
 function check(ok: boolean, message: string): void {
   checks++;
@@ -362,13 +377,16 @@ function openShop(shop: ShopDefinition): ShopSession {
   const purchase: ShopDefinition['purchase'] =
     fault === 'charge-first'
       ? (option, buyer) => {
-          buyer.coins -= option.price;
+          buyer.coins -= rowCoins(option) ?? 0;
           return shop.purchase(option, buyer);
         }
       : shop.purchase;
   panel.open(shop.build, purchase, {
+    onBlocked: null,
     blockedLine: shop.blockedLine,
     rebuyGuardTicks: shop.rebuyGuardTicks,
+    sell: null,
+    liveRows: false,
   });
   return panel;
 }
@@ -402,8 +420,8 @@ function checkCook(rig: Rig): void {
   section('Cook');
   const { human, cat } = rig;
   const menu = cookShop(rig.state).build();
-  const price = (key: string): number | undefined =>
-    menu.options.find((option) => option.key === key)?.price;
+  const price = (key: string): number | null | undefined =>
+    rowCoinsOf(menu.options.find((option) => option.key === key));
   check(price('hollow_stew') === EXPECTED_STEW_PRICE, `stew costs ${price('hollow_stew')}`);
   check(price('hamburger') === EXPECTED_BURGER_PRICE, `a burger costs ${price('hamburger')}`);
   check(menu.bark === sellerLine(PIPKIN.shopOpen), 'the menu opens on shop_open');
@@ -468,7 +486,7 @@ function checkDoctor(rig: Rig): void {
   check(panel.currentLine === sellerLine(SELLA.buyHealing), 'Sella says buy_healing');
 
   const unhurt = buildInfirmaryMenu(party).options[0];
-  check(unhurt.unavailable === 'Unhurt', 'the row is disabled at full HP');
+  check(offerClosedReason(unhurt.offer) === 'Unhurt', 'the row is disabled at full HP');
   const topic = infirmaryTopics(party, host).topics(
     'sella',
     rig.villagers.contextFor('sella', human, null),
@@ -536,7 +554,7 @@ function checkWatchedLineRunsLow(rig: Rig, item: ItemId, setLeft: (left: number)
   const fullShelfWorking = priceBreakdown(MERCHANT_SHOP, item, createShopStock(), 'buy');
   const aboveThreshold = LOW_SUPPLIES_THRESHOLD + 1;
   setLeft(aboveThreshold);
-  const aboveThresholdPrice = shelfRow()?.price ?? 0;
+  const aboveThresholdPrice = rowCoinsOf(shelfRow()) ?? 0;
   const aboveThresholdWorking = engineWorking();
   check(
     aboveThresholdPrice === aboveThresholdWorking.final,
@@ -551,7 +569,7 @@ function checkWatchedLineRunsLow(rig: Rig, item: ItemId, setLeft: (left: number)
   }
   check(!isRunningLow(state, item), `${aboveThreshold} left is not yet running low`);
   setLeft(LOW_SUPPLIES_THRESHOLD);
-  const atThresholdPrice = shelfRow()?.price ?? 0;
+  const atThresholdPrice = rowCoinsOf(shelfRow()) ?? 0;
   const atThresholdWorking = engineWorking();
   check(
     atThresholdPrice === atThresholdWorking.final,
@@ -600,7 +618,7 @@ function checkMerchant(): void {
   const shelfRow = (): ShopRow | undefined => watchedRow(state);
   const fullShelfPrice = buyPrice(MERCHANT_SHOP, item, createShopStock());
   check(
-    shelfRow()?.price === fullShelfPrice,
+    rowCoinsOf(shelfRow()) === fullShelfPrice,
     `${item} costs ${fullShelfPrice}, as the engine quotes`,
   );
   const panel = openShop(tradingPostShop(state));
@@ -648,7 +666,7 @@ function checkMerchant(): void {
       (option) => option.key === shallow.item,
     );
     check(
-      shallowRow?.price === buyPrice(MERCHANT_SHOP, shallow.item, createShopStock()),
+      rowCoinsOf(shallowRow) === buyPrice(MERCHANT_SHOP, shallow.item, createShopStock()),
       `a full ${shallow.item} shelf is not "low"`,
     );
     check(
@@ -658,7 +676,7 @@ function checkMerchant(): void {
   }
 
   setLeft(0);
-  check(shelfRow()?.unavailable === 'Sold out', 'an empty shelf is sold out');
+  check(closedReasonOf(shelfRow()) === 'Sold out', 'an empty shelf is sold out');
   const before = human.coins;
   openShop(tradingPostShop(state)).pressBuy(item, {
     active: human,
@@ -669,15 +687,19 @@ function checkMerchant(): void {
   const counter = new ShopSession();
   const counterShop = tradingPostShop(state);
   counter.open(counterShop.build, counterShop.purchase, {
-    sell: { shop: MERCHANT_SHOP, stock: state.shopStock },
+    onBlocked: null,
+    blockedLine: null,
+    rebuyGuardTicks: 0,
+    sell: { shop: MERCHANT_SHOP, stock: state.shopStock, onSold: null },
+    liveRows: false,
   });
   const counterRow = (): ShopRow | undefined => counter.rows.find((option) => option.key === item);
   counter.sell(item, 1, human);
   check(
-    counterRow()?.unavailable === undefined && counterRow()?.price === shelfRow()?.price,
+    closedReasonOf(counterRow()) === null && rowCoinsOf(counterRow()) === rowCoinsOf(shelfRow()),
     'selling one back reopens the open counter at the shelf price',
   );
-  const shelfPrice = shelfRow()?.price;
+  const shelfPrice = rowCoinsOf(shelfRow());
   const beforeRebuy = human.coins;
   counter.pressBuy(item, { active: human, companion: rig.cat });
   check(beforeRebuy - human.coins === shelfPrice, 'and buying it back charges what the shelf asks');
@@ -688,12 +710,13 @@ function checkMerchant(): void {
     leftOf(state) === oneRestockStep,
     `a restock step puts ${oneRestockStep} back on an emptied shelf`,
   );
-  check(shelfRow()?.unavailable === undefined, 'and it is no longer sold out');
+  check(closedReasonOf(shelfRow()) === null, 'and it is no longer sold out');
   const freshState = createBriarHollowState();
   freshState.unlocks.processingStations = true;
   const freshRow = watchedRow(freshState);
   check(
-    (freshRow?.desc.includes(`(${normal} left)`) ?? false) && freshRow?.price === fullShelfPrice,
+    (freshRow?.desc.includes(`(${normal} left)`) ?? false) &&
+      rowCoinsOf(freshRow) === fullShelfPrice,
     "a new floor's village starts fully stocked",
   );
 }
@@ -828,7 +851,7 @@ function checkForge(): void {
     .build()
     .options.find((option) => option.key === 'axe');
   check(
-    top?.unavailable !== undefined && (top?.label.endsWith('(finest)') ?? false),
+    top?.offer.status === 'spent' && top.label.endsWith('(finest)'),
     'the top axe is marked finest',
   );
   const coins = human.coins;
@@ -1234,11 +1257,27 @@ function checkDoublePress(): void {
   const town = new ShopSession();
   let sales = 0;
   town.open(
-    () => ({ title: '', bark: '', options: [{ key: 'x', label: 'x', price: 1, desc: '' }] }),
+    () => ({
+      title: '',
+      bark: '',
+      byline: null,
+      emblem: null,
+      options: [
+        {
+          key: 'x',
+          label: 'x',
+          desc: '',
+          art: { kind: 'item', item: 'rope' },
+          offer: { status: 'open', cost: { kind: 'coins', coins: 1 } },
+          questErrand: false,
+        },
+      ],
+    }),
     () => {
       sales++;
       return { ok: true, line: '' };
     },
+    { onBlocked: null, blockedLine: null, rebuyGuardTicks: 0, sell: null, liveRows: false },
   );
   town.pressBuy('x', { active: human, companion: cat });
   town.pressBuy('x', { active: human, companion: cat });

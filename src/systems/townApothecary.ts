@@ -19,8 +19,13 @@
 import { CURABLE_AILMENT_STATUSES } from '../core/StatusEffect';
 import type { ItemId } from '../core/ItemDefs';
 import type { Player } from '../Player';
-import type { ShopMenu, ShopRow, ShopPurchaseHandler } from '../ui/screens/shop/shopSession';
-import type { ResidentHost } from './townResidents';
+import {
+  offerUnless,
+  type ShopMenu,
+  type ShopRow,
+  type ShopPurchaseHandler,
+} from '../ui/screens/shop/shopSession';
+import { hostByline, type ResidentHost } from './townResidents';
 import { rotateLine } from './townServiceUtil';
 import { SERVICE_PRICES } from '../economy/servicePrices';
 import { SHOPS, type ShopId } from '../economy/shops';
@@ -67,15 +72,20 @@ export function buildApothecaryMenu(
   const cure: ShopRow = {
     key: CURE_KEY,
     label: "Fen's Antidote",
-    price: SERVICE_PRICES.apothecary.cure,
     desc: 'Draws poison, burn and rot out of you both',
+    art: { kind: 'service', service: 'antidote' },
+    offer: offerUnless(afflicted(party) ? null : 'Unafflicted', {
+      kind: 'coins',
+      coins: SERVICE_PRICES.apothecary.cure,
+    }),
+    questErrand: false,
   };
-  if (!afflicted(party)) cure.unavailable = 'Unafflicted';
 
   return {
     title: 'Herb & Remedy',
     bark: host?.line ?? rotateLine(APOTHECARY_BARKS, turn),
-    byline: host?.name,
+    byline: hostByline(host),
+    emblem: null,
     options: [...shelf, cure],
   };
 }

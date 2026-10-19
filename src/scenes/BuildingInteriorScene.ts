@@ -185,7 +185,7 @@ import {
 } from '../systems/InteriorPropInteractionSystem';
 import { TownInteriorPropDestructionSystem } from '../systems/TownInteriorPropDestructionSystem';
 import { ContractInteriorSite } from '../systems/constructionContracts/ContractInteriorSite';
-import { InteriorBreakReactionBarks } from '../systems/InteriorBreakReactionBarks';
+import { InteriorBreakReactions } from '../systems/InteriorBreakReactions';
 import { InteriorSkyfowlFoley } from '../systems/InteriorSkyfowlFoley';
 import { AmbientSoundSystem, type AmbientEmitter } from '../systems/AmbientSoundSystem';
 import {
@@ -229,9 +229,11 @@ import {
   ShopSession,
   type ShopRow,
   type ShopPurchaseHandler,
+  type ShopOpenOptions,
   type ShopSellConfig,
 } from '../ui/screens/shop/shopSession';
 import { shopScreenSurface } from '../ui/screens/shop/ShopScreen';
+import { priceBreakdownsShown } from '../ui/screens/shop/priceBreakdowns';
 import { createSceneUi, sceneMouse } from '../ui/core/sceneUi';
 import type { Rect } from '../ui/core/geom';
 import { worldText } from '../ui/world/worldText';
@@ -347,7 +349,8 @@ import {
   roomNameEntry,
   type InteriorChrome,
 } from './interiorHud';
-import { cameraWorldView, setVisibleWorldView } from '../core/visibleWorldView';
+import { cameraWorldView, setVisibleWorldView, visibleWorldView } from '../core/visibleWorldView';
+import { captionToward } from '../ui/hud/captions';
 import { createMongoPetState, type MongoPetState } from '../core/MongoPetState';
 import { detachedPartyRun, type InteriorPartyRun } from './interiorPartyRun';
 import { reloadPage, type SaveWriteOutcome } from '../core/progressPersistence';
@@ -606,6 +609,8 @@ const DETACHED_ROOM_WORLD_SEED = 0;
 
 /** A human occupant's reaction to a break. */
 const HUMAN_TUT_SOUNDS: ReadonlyArray<SoundId> = ['townsfolk_tut_1', 'townsfolk_tut_2'];
+/** A townsperson's x/y is their tile's corner; a caption points at the middle of it. */
+const TILE_CENTRE_FRACTION = 0.5;
 /** Wendell's voice for his small talk on the rare frame he is not found standing in his room. */
 const WENDELL_FALLBACK_SPEECH_STYLE: CitizenSpeechStyle = 'townsfolkMasculine';
 
@@ -2497,7 +2502,12 @@ export class BuildingInteriorScene extends GameplayScene {
     if (this.prison !== null) surfaces.push(this.prison.fadeSurface());
     if (this.servicePanel !== null) {
       surfaces.push(
-        shopScreenSurface({ id: SERVICE_SURFACE_ID, session: this.servicePanel, party }),
+        shopScreenSurface({
+          id: SERVICE_SURFACE_ID,
+          session: this.servicePanel,
+          party,
+          showPriceBreakdowns: priceBreakdownsShown,
+        }),
       );
     }
     if (this.readingPanel !== null) {
@@ -2507,7 +2517,14 @@ export class BuildingInteriorScene extends GameplayScene {
     }
     const shop = this.shop;
     if (shop !== null) {
-      surfaces.push(shopScreenSurface({ id: SHOP_SURFACE_ID, session: shop.session, party }));
+      surfaces.push(
+        shopScreenSurface({
+          id: SHOP_SURFACE_ID,
+          session: shop.session,
+          party,
+          showPriceBreakdowns: priceBreakdownsShown,
+        }),
+      );
     }
     const club = this.club;
     if (club !== null) {
@@ -3298,7 +3315,7 @@ export class BuildingInteriorScene extends GameplayScene {
    * Plays a break's cue and, if the room is occupied, lets the nearest
    * occupant react — the consequence side of breaking things in someone's
    * building (the loot itself was already rolled when the prop broke). The
-   * reaction is a bubble over their head, never the conversation box: it
+   * reaction is a caption pointing at them, never the conversation box: it
    * must not stop the fight or wait to be dismissed.
    */
   private drainInteriorPropBreaks(): void {
@@ -3306,13 +3323,17 @@ export class BuildingInteriorScene extends GameplayScene {
     const breaks = this.interiorPropDestruction.drainBreaks();
     if (breaks.length === 0) return;
     this.interiorPropDestruction.playBreakCues(this.audio, breaks);
-    const reacted = this.breakReactions.react(breaks, this.occupants?.people ?? []);
-    if (reacted && this.breakReactions.current?.speaker.species === 'human') {
-      this.audio?.playRandom(HUMAN_TUT_SOUNDS);
-    }
+    const reaction = this.breakReactions.react(breaks, this.occupants?.people ?? []);
+    if (reaction === null) return;
+    const speakerCentre = {
+      x: reaction.speaker.x + TILE_SIZE * TILE_CENTRE_FRACTION,
+      y: reaction.speaker.y + TILE_SIZE * TILE_CENTRE_FRACTION,
+    };
+    this.menus.captions.post(captionToward(reaction.text, speakerCentre, visibleWorldView()));
+    if (reaction.speaker.species === 'human') this.audio?.playRandom(HUMAN_TUT_SOUNDS);
   }
 
-  private readonly breakReactions = new InteriorBreakReactionBarks();
+  private readonly breakReactions = new InteriorBreakReactions();
   private readonly skyfowlFoley = new InteriorSkyfowlFoley();
 
   /**
@@ -3933,6 +3954,15 @@ export class BuildingInteriorScene extends GameplayScene {
         return result;
       };
     };
+    // No building counter guards a rebuy, rebuilds its rows each tick or answers
+    // a refused Buy in words: the screen's own error cue covers a refusal here.
+    const counterOptions = (sell: ShopSellConfig | null): ShopOpenOptions => ({
+      onBlocked: null,
+      blockedLine: null,
+      rebuyGuardTicks: 0,
+      sell,
+      liveRows: false,
+    });
     // A counter trading in goods rather than a service is heard taking the coin.
     const overCounter = (handler: ShopPurchaseHandler, cue: InteriorCue): ShopPurchaseHandler => {
       return (option, buyer) => {
@@ -3950,12 +3980,17 @@ export class BuildingInteriorScene extends GameplayScene {
             overCounter(() => ({ ok: true, line: grantBlessing(party, turn) }), 'offeringCoin'),
             never,
           ),
+          counterOptions(null),
         );
         return;
       case 'The Quiet Needle':
         // Rebuilt per purchase, so inking one stat design marks the other stat
         // designs as spent — and the skill mark as spent independently of them.
-        panel.open(() => buildTattooMenu(this.active(), turn, host), confirmed(inkTattoo, never));
+        panel.open(
+          () => buildTattooMenu(this.active(), turn, host),
+          confirmed(inkTattoo, never),
+          counterOptions(null),
+        );
         return;
       case 'The Barracks':
         // The garrison's two counters. Split on role rather than on anything the
@@ -3965,48 +4000,49 @@ export class BuildingInteriorScene extends GameplayScene {
           panel.open(
             () => buildDrillYardMenu(this.active(), turn, host),
             confirmed(runDrill, never),
+            counterOptions(null),
           );
           return;
         }
         panel.open(
           () => buildArmouryMenu(turn, host, this.shopStock),
           confirmed(overCounter(issueArmour(this.shopStock), 'tillDrawer'), never),
-          {
-            sell: this.sellConfigFor('armoury'),
-          },
+          counterOptions(this.sellConfigFor('armoury')),
         );
         return;
       case 'Herb & Remedy':
         panel.open(
           () => buildApothecaryMenu(party, this.shopStock, turn, host),
           confirmed(overCounter(serveRemedy(party, this.shopStock), 'tillDrawer'), never),
-          { sell: this.sellConfigFor('apothecary') },
+          counterOptions(this.sellConfigFor('apothecary')),
         );
         return;
       case 'The Rusty Anvil':
         panel.open(
           () => buildSmithyMenu(party, this.active(), turn, host),
           confirmed(sharpenEdges(party, turn), never),
+          counterOptions(null),
         );
         return;
       case "Cartwright's Workshop":
         panel.open(
           () => buildCartwrightMenu(turn, host, this.shopStock),
           confirmed(overCounter(sellCartwrightGoods(turn, this.shopStock), 'tillDrawer'), never),
-          { sell: this.sellConfigFor('cartwright') },
+          counterOptions(this.sellConfigFor('cartwright')),
         );
         return;
       case "Miller's Farm":
         panel.open(
           () => buildMillerMenu(this.active(), turn, host, this.shopStock),
           confirmed(overCounter(serveMillerGoods(turn, this.shopStock), 'scaleWeigh'), never),
-          { sell: this.sellConfigFor('millers_farm') },
+          counterOptions(this.sellConfigFor('millers_farm')),
         );
         return;
       case 'Plumbline Farm':
         panel.open(
           () => buildPlumblineFarmMenu(party, turn, host),
           confirmed(servePlumblineFarmRest(party, turn), never),
+          counterOptions(null),
         );
         return;
       case 'The Sleeping Cat Inn':
@@ -4025,12 +4061,14 @@ export class BuildingInteriorScene extends GameplayScene {
           confirmed(serveInn(this.entry.name, party, turn, this.shopStock), (option) =>
             isInnRoomKey(option.key) ? 'entered_safe_room' : POUR_CUE,
           ),
+          counterOptions(null),
         );
         return;
       default:
         panel.open(
           () => buildTavernMenu(this.entry.name, this.active(), turn, host, this.shopStock),
           confirmed(serveDrinkAt(this.entry.name, this.shopStock), always),
+          counterOptions(null),
         );
     }
   }
@@ -4448,7 +4486,6 @@ export class BuildingInteriorScene extends GameplayScene {
     this.mercenarySystem.renderSpeech(ctx, camX, camY);
     this.attackCowSystem.renderOverlay(ctx, camX, camY);
     this.crawlerBarks.render(ctx, camX, camY, this.human, this.cat);
-    this.breakReactions.render(ctx, camX, camY, this.occupants?.people ?? []);
 
     this.soulCrystal.render(ctx, camX, camY, this.active(), isOnCrystalFloor);
 

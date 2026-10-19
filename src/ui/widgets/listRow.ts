@@ -1,7 +1,7 @@
 /**
  * One row of a list: an optional leading picture, a title with an optional
- * subtitle, and an optional trailing value or control. Priced rows, journal
- * entries, follower and mercenary lists are all this.
+ * subtitle, and an optional trailing value or control. Journal entries,
+ * follower and mercenary lists are all this.
  */
 
 import type { ItemId } from '../../core/ItemDefs';
@@ -19,15 +19,8 @@ import {
   isDisabled,
   strokeRounded,
 } from './paint';
-import { badge, badgeSize, type BadgeTone } from './badge';
-import { lineHeightOf, measureText, measureTextHeight, text } from './text';
+import { lineHeightOf, measureText, text } from './text';
 import { tooltip } from './tooltip';
-
-/** A short soft pill on a row, saying something about its trailing value ("Low stock"). */
-export interface RowTag {
-  readonly label: string;
-  readonly tone: BadgeTone;
-}
 
 /** What sits at the start of a row. */
 export type RowLeading =
@@ -44,8 +37,6 @@ export interface ListRowOptions {
    */
   readonly titleColor?: string;
   readonly subtitle?: string;
-  /** The most lines the subtitle wraps to before it ends in an ellipsis. One when omitted. */
-  readonly subtitleLines?: number;
   readonly leading?: RowLeading;
   /** A value on the right: a price, a count, a state. */
   readonly trailing?: string;
@@ -54,20 +45,6 @@ export interface ListRowOptions {
   /** Draws custom content (chips, a button) at the right; gets the space left of `trailing`. */
   readonly trailingWidth?: number;
   readonly trailingContent?: (rect: Rect) => void;
-  /**
-   * Pills right-aligned at the end of the subtitle line, beside the trailing
-   * content (on the title line when the subtitle wraps or there is none).
-   * A tag that would cut the line's text shorter than half the line is left out.
-   */
-  readonly tags?: readonly RowTag[];
-  /**
-   * Lays `tags` on lines of their own under the subtitle instead, flowing onto
-   * as many as this, for a row too narrow to spare its subtitle the room. Size
-   * the row with that many {@link listRowTagLineHeight}s added (count them
-   * with {@link listRowTagLines}); the leading picture keeps the size it has
-   * without them.
-   */
-  readonly tagLines?: number;
   /** A token colour for the thin bar on the row's left edge (a category). */
   readonly accent?: string;
   readonly selected?: boolean;
@@ -83,51 +60,15 @@ const SELECTED_BORDER_ALPHA = 0.25;
 const ACCENT_BAR_WIDTH = 3;
 const BORDER_WIDTH = 1;
 
-/** A row tall enough for a title and a subtitle of up to `subtitleLines` lines. */
-export function listRowHeight(ui: Ui, withSubtitle: boolean, subtitleLines = 1): number {
+/** A row tall enough for a title and, with `withSubtitle`, a line of subtitle. */
+export function listRowHeight(ui: Ui, withSubtitle: boolean): number {
   if (!withSubtitle) return ui.theme.size.row;
-  const lines = lineHeightOf(ui, 'label') + lineHeightOf(ui, 'caption') * subtitleLines;
+  const lines = lineHeightOf(ui, 'label') + lineHeightOf(ui, 'caption');
   return Math.max(ui.theme.size.row, lines + ui.theme.space.md * 2);
 }
 
-/** The extra height each of a row's {@link ListRowOptions.tagLines} needs. */
-export function listRowTagLineHeight(ui: Ui): number {
-  return badgeSize(ui, { label: '' }).h + ui.theme.space.xxs;
-}
-
-/** How many lines `tags` flow onto across `width`, as {@link ListRowOptions.tagLines} lays them. */
-export function listRowTagLines(ui: Ui, width: number, tags: readonly RowTag[]): number {
-  return flowTags(ui, width, tags).reduce((lines, placed) => Math.max(lines, placed.line + 1), 0);
-}
-
-interface PlacedTag {
-  readonly tag: RowTag;
-  readonly line: number;
-  readonly x: number;
-  readonly w: number;
-}
-
-/** Flows `tags` left to right, starting a new line whenever the next would run past `width`. */
-function flowTags(ui: Ui, width: number, tags: readonly RowTag[]): PlacedTag[] {
-  const { space } = ui.theme;
-  const placed: PlacedTag[] = [];
-  let line = 0;
-  let x = 0;
-  for (const tag of tags) {
-    const { w } = badgeSize(ui, { label: tag.label });
-    if (x > 0 && x + w > width) {
-      line++;
-      x = 0;
-    }
-    placed.push({ tag, line, x, w });
-    x += w + space.xs;
-  }
-  return placed;
-}
-
-function leadingSide(ui: Ui, rect: Rect, tagLines = 0): number {
-  const height = rect.h - listRowTagLineHeight(ui) * tagLines;
-  return Math.min(height - ui.theme.space.sm * 2, ui.theme.size.slot);
+function leadingSide(ui: Ui, rect: Rect): number {
+  return Math.min(rect.h - ui.theme.space.sm * 2, ui.theme.size.slot);
 }
 
 /**
@@ -139,60 +80,6 @@ export function listRowTrailingMax(ui: Ui, rect: Rect, withLeading: boolean): nu
   const { space } = ui.theme;
   const leading = withLeading ? leadingSide(ui, rect) + space.md : 0;
   return (rect.w - space.md * 2 - leading) / 2;
-}
-
-/**
- * The width a row's title and subtitle get, laid out as {@link listRow} lays
- * them out beside a leading picture and `trailingContent` of `trailingWidth`,
- * so a caller can size a row round a wrapped subtitle before drawing it.
- */
-export function listRowTextWidth(
-  ui: Ui,
-  rect: Rect,
-  opts: Pick<ListRowOptions, 'leading' | 'trailingWidth'>,
-): number {
-  const { space } = ui.theme;
-  let width = rect.w - space.md * 2;
-  if (opts.leading !== undefined) width -= leadingSide(ui, rect) + space.md;
-  if (opts.trailingWidth !== undefined) width -= Math.min(width / 2, opts.trailingWidth) + space.md;
-  return width;
-}
-
-/**
- * Draws `tags` right-aligned in `line`, the first nearest the right edge,
- * stopping at the first that would squeeze the line's text (`textWidth` wide
- * at its natural size) below half the line. Returns the width left for text.
- */
-function drawRowTags(ui: Ui, line: Rect, tags: readonly RowTag[], textWidth: number): number {
-  if (tags.length === 0) return line.w;
-  const { space } = ui.theme;
-  const textKeeps = Math.min(textWidth, line.w / 2);
-  const maxTagsWidth = line.w - textKeeps;
-  let used = 0;
-  for (const tag of tags) {
-    const size = badgeSize(ui, { label: tag.label });
-    const needed = used + size.w + space.xs;
-    if (needed > maxTagsWidth) break;
-    const right = line.x + line.w - used;
-    badge(ui, { x: right - size.w, y: line.y, w: size.w, h: line.h }, { ...tag, variant: 'soft' });
-    used = needed;
-  }
-  return line.w - used;
-}
-
-/** Draws `tags` flowed across `area`, `lines` lines of {@link listRowTagLineHeight}; any past the last line are left out. */
-function drawTagLines(ui: Ui, area: Rect, tags: readonly RowTag[], lines: number): void {
-  const lineH = listRowTagLineHeight(ui);
-  for (const placed of flowTags(ui, area.w, tags)) {
-    if (placed.line >= lines) break;
-    const cell: Rect = {
-      x: area.x + placed.x,
-      y: area.y + placed.line * lineH,
-      w: placed.w,
-      h: lineH,
-    };
-    badge(ui, cell, { ...placed.tag, variant: 'soft' });
-  }
 }
 
 export function listRow(ui: Ui, rect: Rect, opts: ListRowOptions): HitState {
@@ -249,7 +136,7 @@ export function listRow(ui: Ui, rect: Rect, opts: ListRowOptions): HitState {
   const titleColor = opts.titleColor ?? (disabled ? palette.text.disabled : undefined);
 
   if (opts.leading !== undefined) {
-    const side = leadingSide(ui, rect, opts.tagLines);
+    const side = leadingSide(ui, rect);
     const box: Rect = { x: content.x, y: rect.y + (rect.h - side) / 2, w: side, h: side };
     drawLeading(ui, box, opts.leading, disabled);
     content = inset(content, { l: side + space.md });
@@ -278,56 +165,27 @@ export function listRow(ui: Ui, rect: Rect, opts: ListRowOptions): HitState {
   }
 
   const titleH = lineHeightOf(ui, 'label');
-  const tags = opts.tags ?? [];
   if (opts.subtitle === undefined) {
-    const titleLine: Rect = { ...content, y: rect.y, h: rect.h };
-    const titleW = drawRowTags(ui, titleLine, tags, measureText(ui, opts.title, { role: 'label' }));
-    text(ui, { ...titleLine, w: titleW }, { text: opts.title, role: 'label', color: titleColor });
-  } else {
-    const subtitleLines = opts.subtitleLines ?? 1;
-    const wraps = subtitleLines > 1;
-    const subH = wraps
-      ? Math.min(
-          measureTextHeight(ui, content.w, { text: opts.subtitle, role: 'caption' }),
-          lineHeightOf(ui, 'caption') * subtitleLines,
-        )
-      : lineHeightOf(ui, 'caption');
-    const reservedTagLines = opts.tagLines ?? 0;
-    const ownTagLine = reservedTagLines > 0 && tags.length > 0;
-    const tagsH = ownTagLine ? listRowTagLineHeight(ui) * reservedTagLines : 0;
-    const top = rect.y + (rect.h - titleH - subH - tagsH) / 2;
-    const titleLine: Rect = { x: content.x, y: top, w: content.w, h: titleH };
-    const subtitleLine: Rect = { x: content.x, y: top + titleH, w: content.w, h: subH };
-    const tagsBesideTitle = wraps && !ownTagLine;
-    const tagsBesideSubtitle = !wraps && !ownTagLine;
-    if (ownTagLine) {
-      const tagArea: Rect = { ...subtitleLine, y: subtitleLine.y + subH, h: tagsH };
-      drawTagLines(ui, tagArea, tags, reservedTagLines);
-    }
-    const titleW = tagsBesideTitle
-      ? drawRowTags(ui, titleLine, tags, measureText(ui, opts.title, { role: 'label' }))
-      : titleLine.w;
-    const subtitleW = tagsBesideSubtitle
-      ? drawRowTags(ui, subtitleLine, tags, measureText(ui, opts.subtitle, { role: 'caption' }))
-      : subtitleLine.w;
     text(
       ui,
-      { ...titleLine, w: titleW },
-      {
-        text: opts.title,
-        role: 'label',
-        color: titleColor,
-      },
+      { ...content, y: rect.y, h: rect.h },
+      { text: opts.title, role: 'label', color: titleColor },
+    );
+  } else {
+    const subH = lineHeightOf(ui, 'caption');
+    const top = rect.y + (rect.h - titleH - subH) / 2;
+    text(
+      ui,
+      { x: content.x, y: top, w: content.w, h: titleH },
+      { text: opts.title, role: 'label', color: titleColor },
     );
     text(
       ui,
-      { ...subtitleLine, w: subtitleW },
+      { x: content.x, y: top + titleH, w: content.w, h: subH },
       {
         text: opts.subtitle,
         role: 'caption',
         color: disabled ? palette.text.disabled : undefined,
-        wrap: wraps,
-        maxLines: wraps ? subtitleLines : undefined,
       },
     );
   }

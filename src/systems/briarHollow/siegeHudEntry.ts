@@ -2,7 +2,9 @@
  * The siege's card in the HUD's top band: the countdown or the wave as a
  * headline, then the bell's health and the necromancer's and the bounty
  * mark's. A narrow band, or a compact screen where height is scarce, lays
- * the bars side by side on one row under a one-line headline.
+ * the bars side by side on one row. The headline always wraps in full, never
+ * ellipsised: it names the side the next attack comes from and the time
+ * left, and both are the point of the card.
  */
 
 import type { Rect } from '../../ui/core/geom';
@@ -42,20 +44,13 @@ export const SIEGE_HUD_ENTRY_ID = 'briar-siege';
 const SIEGE_HUD_MAX_WIDTH = 360;
 /** Narrower than this, a bar per row leaves too little room beside the headline's wrap; the bars share a row. */
 const SIEGE_HUD_FULL_LAYOUT_MIN_WIDTH = 280;
-const FULL_HEADLINE_MAX_LINES = 2;
-const COMPACT_HEADLINE_MAX_LINES = 1;
 
 function isCompact(ui: Ui, width: number): boolean {
   return width < SIEGE_HUD_FULL_LAYOUT_MIN_WIDTH || ui.size === 'compact';
 }
 
-function headlineOptions(ui: Ui, view: SiegeHudView, compact: boolean) {
-  return {
-    text: view.headline,
-    role: 'danger',
-    style: ui.theme.type.title,
-    maxLines: compact ? COMPACT_HEADLINE_MAX_LINES : FULL_HEADLINE_MAX_LINES,
-  } as const;
+function headlineOptions(ui: Ui, view: SiegeHudView) {
+  return { text: view.headline, role: 'danger', style: ui.theme.type.title } as const;
 }
 
 function meterHeight(ui: Ui, kind: SiegeHudBarKind): number {
@@ -79,11 +74,7 @@ function contentWidth(ui: Ui, width: number): number {
 
 function contentHeight(ui: Ui, view: SiegeHudView, width: number): number {
   const compact = isCompact(ui, width);
-  const headline = measureTextHeight(
-    ui,
-    contentWidth(ui, width),
-    headlineOptions(ui, view, compact),
-  );
+  const headline = measureTextHeight(ui, contentWidth(ui, width), headlineOptions(ui, view));
   const rows = barRows(view, compact);
   const gap = ui.theme.space.xs;
   return rows.reduce((total, row) => total + gap + barRowHeight(ui, row), headline);
@@ -116,7 +107,7 @@ function renderBar(ui: Ui, rect: Rect, bar: SiegeHudBar): void {
 function render(ui: Ui, rect: Rect, view: SiegeHudView): void {
   const inner = topBandCard(ui, rect, { accent: ui.theme.palette.state.danger });
   const compact = isCompact(ui, rect.w);
-  const headline = headlineOptions(ui, view, compact);
+  const headline = headlineOptions(ui, view);
   const headlineHeight = measureTextHeight(ui, inner.w, headline);
   text(ui, { ...inner, h: headlineHeight }, { ...headline, wrap: true, align: 'center' });
   const gap = ui.theme.space.xs;

@@ -140,6 +140,10 @@ export abstract class MazePropTarget<K extends MazeTargetKind = MazeTargetKind> 
     return false;
   }
 
+  override get showsOnRadar(): boolean {
+    return false;
+  }
+
   /** Nothing hunts it and nothing rewinds it: the maze is rebuilt whole on every entry. */
   override get isPetAttackable(): boolean {
     return false;

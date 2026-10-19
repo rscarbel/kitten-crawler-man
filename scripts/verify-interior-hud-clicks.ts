@@ -76,6 +76,8 @@ const WOUNDED_HP = 1;
  * case a release on Close could fire the slot underneath it.
  */
 const LANDSCAPE_PHONE = { width: 667, height: 375 } as const;
+/** The surface the General Store's shop screen mounts as. */
+const SHOP_SURFACE_ID = 'shop';
 /** The shop's footer Close, drawn where the screen is tall enough for a footer. */
 const SHOP_FOOTER_CLOSE_ID = 'shop/shop/leave';
 /** The shop's header ✕, the way out on a screen too short for the footer. */
@@ -200,6 +202,35 @@ function dockPoint(scene: Interior, id: DockId): Point | null {
   return rect === null ? null : centre(rect);
 }
 
+/**
+ * The shop's panel as last drawn, in CSS pixels: the bounds of every region the
+ * shop registered except its full-screen scrim, so it holds for a phone's
+ * bottom sheet and a tablet's centred card alike.
+ */
+function shopPanelRect(scene: Interior): Rect {
+  const { screen, uiScale } = scene.ui.viewport;
+  const coversScreen = (rect: Rect): boolean => rect.w >= screen.w && rect.h >= screen.h;
+  const panelRects = scene.ui
+    .regions()
+    .filter((region) => region.surfaceId === SHOP_SURFACE_ID && !coversScreen(region.rect))
+    .map((region) => toCssRect(region.rect, uiScale));
+  if (panelRects.length === 0) throw new Error('the open shop drew no panel');
+  const left = Math.min(...panelRects.map((rect) => rect.x));
+  const top = Math.min(...panelRects.map((rect) => rect.y));
+  const right = Math.max(...panelRects.map((rect) => rect.x + rect.w));
+  const bottom = Math.max(...panelRects.map((rect) => rect.y + rect.h));
+  return { x: left, y: top, w: right - left, h: bottom - top };
+}
+
+/** A point on the shop's scrim, in CSS pixels: midway between the screen's top edge and the panel's. */
+function shopScrimPoint(scene: Interior): Point {
+  const panel = shopPanelRect(scene);
+  if (panel.y <= 0)
+    throw new Error('the shop panel reaches the top of the screen: no scrim above it');
+  const screenCss = toCssRect(scene.ui.viewport.screen, scene.ui.viewport.uiScale);
+  return { x: screenCss.w / 2, y: panel.y / 2 };
+}
+
 function requireDockPoint(scene: Interior, id: DockId): Point {
   const point = dockPoint(scene, id);
   if (point === null) throw new Error(`the HUD drew no ${id} button`);
@@ -276,17 +307,29 @@ if (buildPoint !== null) {
   menus.constructionMenu.close();
   frame();
 
-  // The shop is modal: its scrim covers every point the panel does not, and
-  // a tap on the scrim closes the shop rather than reaching what is under it.
+  // The shop is modal: its panel and its scrim between them cover the whole
+  // screen. A tap on the panel stays with the shop; a tap on the scrim closes
+  // it. Neither reaches what is under it.
   shop.open();
   frame();
+  const buildUnderPanel = inside(buildPoint, shopPanelRect(scene));
   tap(buildPoint);
   frame();
   check(
     !menus.constructionMenu.isOpen,
     'a tap on Build under the open shop does not open the Construction menu',
   );
-  check(!shop.isOpen, 'the tap went to the shop, which it closed as a tap outside the panel');
+  check(
+    shop.isOpen === buildUnderPanel,
+    buildUnderPanel
+      ? 'the panel over Build kept the tap, and the shop stays open'
+      : 'the tap went to the scrim over Build, which closed the shop',
+  );
+  if (shop.isOpen) {
+    tap(shopScrimPoint(scene));
+    frame();
+    check(!shop.isOpen, 'a tap on the scrim beside the panel closes the shop');
+  }
   shop.close();
   frame();
 }
@@ -331,16 +374,27 @@ check(
 
 shop.open();
 frame();
+const pauseUnderPanel = inside(pausePoint, shopPanelRect(scene));
 click(pausePoint);
 frame();
 check(!scene['pauseScreen'].isOpen, 'a click on the pause button under the shop does not pause');
-check(!shop.isOpen, 'it closes the shop instead, as a tap outside the panel');
+check(
+  shop.isOpen === pauseUnderPanel,
+  pauseUnderPanel
+    ? 'the panel over pause kept the click, and the shop stays open'
+    : 'the click went to the scrim over pause, which closed the shop',
+);
+if (shop.isOpen) {
+  click(shopScrimPoint(scene));
+  frame();
+  check(!shop.isOpen, 'a click on the scrim beside the panel closes the shop');
+}
 shop.open();
 frame();
 
 const stackOverShop = scene.ui.openSurfaceIds();
 check(
-  stackOverShop.indexOf('room-status') > stackOverShop.indexOf('shop'),
+  stackOverShop.indexOf('room-status') > stackOverShop.indexOf(SHOP_SURFACE_ID),
   `the room's status (toast, fight bars) draws over the shop (${stackOverShop.join(', ')})`,
 );
 scene['togglePause']();

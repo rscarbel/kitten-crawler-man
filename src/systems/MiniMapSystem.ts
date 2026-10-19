@@ -468,13 +468,11 @@ export class MiniMapSystem implements GameSystem {
       ctx.stroke();
     }
 
-    // Mobs — red dots (only within radar range)
     const MOB_RADAR_PX = TILE_SIZE * MOB_RADAR_TILES;
-    ctx.fillStyle = worldPalette.minimap.hostile;
     this._radarQuery.clear();
     const mobsOnRadar = mobGrid.queryCircle(active.x, active.y, MOB_RADAR_PX, this._radarQuery);
     for (const mob of mobsOnRadar) {
-      if (!mob.isAlive) continue;
+      if (!mob.isAlive || !mob.showsOnRadar) continue;
       const mobTX = Math.floor((mob.x + HALF_TILE) / TILE_SIZE);
       const mobTY = Math.floor((mob.y + HALF_TILE) / TILE_SIZE);
       if (!this.fogOfWar[mobTY * mapSize + mobTX]) continue;
@@ -482,6 +480,8 @@ export class MiniMapSystem implements GameSystem {
         mmX + (mobTX - viewCenterTX + halfTiles) * pxPerTile + Math.floor(pxPerTile / 2);
       const mmDotY =
         mmY + (mobTY - viewCenterTY + halfTiles) * pxPerTile + Math.floor(pxPerTile / 2);
+      // Read every frame, so a fowl the player provokes turns red the moment it turns.
+      ctx.fillStyle = mob.isHostile ? worldPalette.minimap.hostile : worldPalette.minimap.friendly;
       ctx.beginPath();
       ctx.arc(mmDotX, mmDotY, MOB_DOT_RADIUS, 0, Math.PI * 2);
       ctx.fill();
@@ -508,7 +508,7 @@ export class MiniMapSystem implements GameSystem {
       const petSY =
         mmY + (petTY - viewCenterTY + halfTiles) * pxPerTile + Math.floor(pxPerTile / 2);
       // Pink for his feathers, apart from every other dot: red is a hostile,
-      // blue the companion, white Mordecai and the stairs.
+      // blue the companion, white a friendly creature, Mordecai and the stairs.
       ctx.fillStyle = MINIMAP_MARKER_COLORS.pet;
       ctx.beginPath();
       ctx.arc(petSX, petSY, PET_DOT_RADIUS, 0, Math.PI * 2);

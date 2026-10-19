@@ -16,8 +16,13 @@
  */
 
 import type { Player } from '../Player';
-import type { ShopMenu, ShopRow, ShopPurchaseHandler } from '../ui/screens/shop/shopSession';
-import type { ResidentHost } from './townResidents';
+import {
+  offerUnless,
+  type ShopMenu,
+  type ShopRow,
+  type ShopPurchaseHandler,
+} from '../ui/screens/shop/shopSession';
+import { hostByline, type ResidentHost } from './townResidents';
 import { rotateLine } from './townServiceUtil';
 import { SERVICE_PRICES } from '../economy/servicePrices';
 import { SHOPS, type ShopId } from '../economy/shops';
@@ -48,7 +53,8 @@ export function buildCartwrightMenu(
   return {
     title: "Cartwright's Workshop",
     bark: host?.line ?? rotateLine(CARTWRIGHT_BARKS, turn),
-    byline: host?.name,
+    byline: hostByline(host),
+    emblem: null,
     options: SHOPS.cartwright.catalog.map((line) => catalogLineRow(CARTWRIGHT_SHOP, line, stock)),
   };
 }
@@ -92,15 +98,20 @@ export function buildMillerMenu(
   const plate: ShopRow = {
     key: HOT_PLATE_KEY,
     label: 'A Hot Plate',
-    price: SERVICE_PRICES.millers_farm.hot_plate,
     desc: 'Bread, dripping and whatever is in the pot. Mends a little',
+    art: { kind: 'service', service: 'hot_plate' },
+    offer: offerUnless(buyer.hp >= buyer.maxHp ? 'Unhurt' : null, {
+      kind: 'coins',
+      coins: SERVICE_PRICES.millers_farm.hot_plate,
+    }),
+    questErrand: false,
   };
-  if (buyer.hp >= buyer.maxHp) plate.unavailable = 'Unhurt';
 
   return {
     title: "Miller's Farm",
     bark: host?.line ?? rotateLine(MILLER_BARKS, turn),
-    byline: host?.name,
+    byline: hostByline(host),
+    emblem: null,
     options: [
       plate,
       ...SHOPS.millers_farm.catalog.map((line) => catalogLineRow(MILLERS_FARM_SHOP, line, stock)),
@@ -152,18 +163,24 @@ export function buildPlumblineFarmMenu(
   turn: number,
   host: ResidentHost | null,
 ): ShopMenu {
+  const unhurt = party.every((member) => member.hp >= member.maxHp);
   const loft: ShopRow = {
     key: HAYLOFT_KEY,
     label: 'An hour in the loft',
-    price: SERVICE_PRICES.plumbline_farm.hayloft,
     desc: 'Mends most of you both. Does not touch poison or drink',
+    art: { kind: 'service', service: 'hayloft' },
+    offer: offerUnless(unhurt ? 'Unhurt' : null, {
+      kind: 'coins',
+      coins: SERVICE_PRICES.plumbline_farm.hayloft,
+    }),
+    questErrand: false,
   };
-  if (party.every((member) => member.hp >= member.maxHp)) loft.unavailable = 'Unhurt';
 
   return {
     title: 'Plumbline Farm',
     bark: host?.line ?? rotateLine(HAYLOFT_BARKS, turn),
-    byline: host?.name,
+    byline: hostByline(host),
+    emblem: null,
     options: [loft],
   };
 }

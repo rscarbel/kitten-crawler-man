@@ -32,7 +32,6 @@ import {
 import { SERVICE_PRICES } from '../src/economy/servicePrices';
 import {
   SHOPS,
-  catalogLineLabel,
   catalogLineUnits,
   isShopId,
   shopDef,
@@ -228,8 +227,7 @@ function itemsSection(items: readonly ItemId[]): string[] {
 
 function lineName(line: CatalogLine): string {
   const units = catalogLineUnits(line);
-  const label = catalogLineLabel(line);
-  return units > 1 ? `${label} (pack of ${units})` : label;
+  return units > 1 ? `${line.label} (pack of ${units})` : line.label;
 }
 
 function catalogRow(shop: ShopId, line: CatalogLine): string[] {

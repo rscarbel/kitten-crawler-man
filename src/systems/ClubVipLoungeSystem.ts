@@ -1,13 +1,20 @@
 import { playDrinkGesture } from '../creatures/humanGestures';
 import { displayHp } from '../core/crawlerFormulas';
 import type { Player } from '../Player';
-import { canAffordCoins, spendPartyCoins } from '../core/partyCoins';
 import type { AudioManager } from '../audio/AudioManager';
 import type { MercenaryRoster } from '../core/MercenaryRoster';
 import type { ClubMembership } from '../core/ClubMembership';
 import type { MercenaryTemplateId } from '../core/mercenaryTemplates';
 import type { CretinVariant } from '../sprites/cretinSprite';
 import { SERVICE_PRICES } from '../economy/servicePrices';
+import type { ServiceIconId } from '../sprites/art/itemIcons/serviceIcons';
+import {
+  ShopSession,
+  offerUnless,
+  type ShopMenu,
+  type ShopPurchaseResult,
+  type ShopRow,
+} from '../ui/screens/shop/shopSession';
 
 /**
  * Stamped on a booking made where no scene has named the floor. Only harnesses
@@ -49,41 +56,23 @@ export function escortPairFor(roster: MercenaryRoster): EscortPair {
 /** One of the lounge's three paid services. */
 export type VipServiceKind = 'heal' | 'buff' | 'escort';
 
-/** A service as the lounge screen draws it: what it is, what pressing it costs, and whether it can be pressed. */
-export interface VipServiceCard {
-  readonly kind: VipServiceKind;
-  readonly name: string;
-  readonly desc: string;
-  readonly actionLabel: string;
-  readonly disabled: boolean;
-  /** A line about the service's state (HP, already active, comped); empty when there is nothing to say. */
-  readonly statusLine: string;
-}
+const LOUNGE_TITLE = 'VIP Lounge';
+const LOUNGE_BARK = 'A hush-quiet back room — velvet, privacy, and comped luxury.';
+const ALREADY_HEALED = 'Already at full health';
+const COCKTAIL_ACTIVE = 'Cocktail already active';
+const ESCORT_HIRED = 'Hired';
 
-interface VipService {
-  name: string;
-  /** Takes the escort pair because the escort card names whichever two are working tonight. */
-  desc: (escort: EscortPair) => string;
-  kind: VipServiceKind;
-}
+const VIP_SERVICE_ART = {
+  heal: 'vip_recovery',
+  buff: 'vip_cocktail',
+  escort: 'vip_escort',
+} as const satisfies Record<VipServiceKind, ServiceIconId>;
 
-const VIP_SERVICES: ReadonlyArray<VipService> = [
-  {
-    name: 'Full Recovery',
-    desc: () => 'A back-room medic patches you up completely.',
-    kind: 'heal',
-  },
-  {
-    name: 'VIP Cocktail',
-    desc: () => 'Speed Fizz + Cooldown Crisp on the house pour.',
-    kind: 'buff',
-  },
-  {
-    name: 'Private Escort',
-    desc: (escort) => `${escort.names} shadow you through the club until this floor is done.`,
-    kind: 'escort',
-  },
-];
+const VIP_SERVICE_KINDS: readonly VipServiceKind[] = ['heal', 'buff', 'escort'];
+
+function vipServiceKind(key: string): VipServiceKind | null {
+  return VIP_SERVICE_KINDS.find((kind) => kind === key) ?? null;
+}
 
 /**
  * The Desperado Club's VIP Lounge — the tasteful adaptation of the book's
@@ -97,16 +86,14 @@ const VIP_SERVICES: ReadonlyArray<VipService> = [
  * {@link DesperadoClubSystem} renders the two Cretins trailing the player.
  */
 export class ClubVipLoungeSystem {
-  open = false;
+  /** The lounge's counter, drawn by the shop screen like every other. */
+  readonly session = new ShopSession();
 
   /** Set when the escort is hired; the host clears it after firing the bodyguard achievement. */
   escortPending = false;
 
   /** Casino coins wagered this visit, captured when the panel opens (the free-escort gate). */
   private wageredAtOpen = 0;
-
-  /** Transient status line (e.g. "Not enough coins"); cleared on the next valid action. */
-  private feedbackMsg = '';
 
   constructor(
     private readonly audio: AudioManager | null,
@@ -131,14 +118,130 @@ export class ClubVipLoungeSystem {
     return escortPairFor(this.roster);
   }
 
-  openPanel(coinsWageredThisVisit: number): void {
-    this.open = true;
+  get open(): boolean {
+    return this.session.isOpen;
+  }
+
+  /** Opens the lounge for `guest`, whose health and drinks decide which services are on. */
+  openPanel(coinsWageredThisVisit: number, guest: Player): void {
     this.wageredAtOpen = coinsWageredThisVisit;
-    this.feedbackMsg = '';
+    this.session.open(
+      () => this.menu(guest),
+      (option, buyer) => this.serve(option, buyer),
+      {
+        onBlocked: () => this.audio?.play('error'),
+        blockedLine: (option) => this.refusalLine(option),
+        rebuyGuardTicks: 0,
+        sell: null,
+        liveRows: false,
+      },
+    );
   }
 
   close(): void {
-    this.open = false;
+    this.session.close();
+  }
+
+  update(): void {
+    this.session.update();
+  }
+
+  private menu(guest: Player): ShopMenu {
+    return {
+      title: LOUNGE_TITLE,
+      bark: LOUNGE_BARK,
+      byline: null,
+      emblem: null,
+      options: VIP_SERVICE_KINDS.map((kind) => this.serviceRow(kind, guest)),
+    };
+  }
+
+  private serviceRow(kind: VipServiceKind, guest: Player): ShopRow {
+    const art: ShopRow['art'] = { kind: 'service', service: VIP_SERVICE_ART[kind] };
+    switch (kind) {
+      case 'heal': {
+        const atFull = guest.hp >= guest.maxHp;
+        return {
+          key: kind,
+          label: 'Full Recovery',
+          desc: `A back-room medic patches you up completely. ${displayHp(guest.hp)} / ${guest.maxHp} HP`,
+          art,
+          offer: offerUnless(atFull ? ALREADY_HEALED : null, {
+            kind: 'coins',
+            coins: SERVICE_PRICES.vip_lounge.heal,
+          }),
+          questErrand: false,
+        };
+      }
+      case 'buff': {
+        const bothActive = guest.hasStatus('speed_fizz') && guest.hasStatus('cooldown_crisp');
+        return {
+          key: kind,
+          label: 'VIP Cocktail',
+          desc: 'Speed Fizz + Cooldown Crisp on the house pour.',
+          art,
+          offer: offerUnless(bothActive ? COCKTAIL_ACTIVE : null, {
+            kind: 'coins',
+            coins: SERVICE_PRICES.vip_lounge.cocktail,
+          }),
+          questErrand: false,
+        };
+      }
+      case 'escort': {
+        const pitch = `${this.escortPair.names} shadow you through the club until this floor is done.`;
+        if (this.escortActive) {
+          return {
+            key: kind,
+            label: 'Private Escort',
+            desc: `${this.escortPair.names} have your back until this floor is done.`,
+            art,
+            offer: { status: 'spent', reason: ESCORT_HIRED },
+            questErrand: false,
+          };
+        }
+        return {
+          key: kind,
+          label: 'Private Escort',
+          desc: this.escortIsFree ? `${pitch} Comped: your table play covers it.` : pitch,
+          art,
+          offer: { status: 'open', cost: { kind: 'coins', coins: this.escortCost() } },
+          questErrand: false,
+        };
+      }
+    }
+  }
+
+  private refusalLine(option: ShopRow): string {
+    switch (vipServiceKind(option.key)) {
+      case 'heal':
+        return option.offer.status === 'open'
+          ? 'Not enough coins for the medic.'
+          : "You're already at full health.";
+      case 'buff':
+        return option.offer.status === 'open'
+          ? 'Not enough coins for the cocktail.'
+          : 'That cocktail is already coursing through you.';
+      case 'escort':
+        return option.offer.status === 'open'
+          ? 'The escort costs more coins than you carry.'
+          : `${this.escortPair.names} already have your back.`;
+      case null:
+        return '';
+    }
+  }
+
+  /** Performs a service the session has already checked the guest can pay for; the session takes the coins. */
+  private serve(option: ShopRow, buyer: Player): ShopPurchaseResult {
+    switch (vipServiceKind(option.key)) {
+      case 'heal':
+        return this.heal(buyer);
+      case 'buff':
+        return this.buff(buyer);
+      case 'escort':
+        return this.hireEscort();
+      case null:
+        return { ok: false, line: '' };
+    }
   }
 
   private get escortIsFree(): boolean {
@@ -149,137 +252,36 @@ export class ClubVipLoungeSystem {
     return this.escortIsFree ? 0 : SERVICE_PRICES.vip_lounge.bodyguard_pair;
   }
 
-  private heal(player: Player, companion: Player): void {
-    if (player.hp >= player.maxHp) {
-      this.feedbackMsg = "You're already at full health.";
-      this.audio?.play('error');
-      return;
-    }
-    if (!canAffordCoins(player, companion, SERVICE_PRICES.vip_lounge.heal)) {
-      this.feedbackMsg = 'Not enough coins for the medic.';
-      this.audio?.play('error');
-      return;
-    }
-    spendPartyCoins(player, companion, SERVICE_PRICES.vip_lounge.heal, player);
+  private heal(player: Player): ShopPurchaseResult {
+    if (player.hp >= player.maxHp) return { ok: false, line: "You're already at full health." };
     player.hp = player.maxHp;
-    this.feedbackMsg = 'Patched up. Good as new.';
     this.audio?.play('potion_drink');
+    return { ok: true, line: 'Patched up. Good as new.' };
   }
 
-  private buff(player: Player, companion: Player): void {
+  private buff(player: Player): ShopPurchaseResult {
     const speedActive = player.hasStatus('speed_fizz');
     const cooldownActive = player.hasStatus('cooldown_crisp');
     if (speedActive && cooldownActive) {
-      this.feedbackMsg = 'That cocktail is already coursing through you.';
-      this.audio?.play('error');
-      return;
+      return { ok: false, line: 'That cocktail is already coursing through you.' };
     }
-    if (!canAffordCoins(player, companion, SERVICE_PRICES.vip_lounge.cocktail)) {
-      this.feedbackMsg = 'Not enough coins for the cocktail.';
-      this.audio?.play('error');
-      return;
-    }
-    spendPartyCoins(player, companion, SERVICE_PRICES.vip_lounge.cocktail, player);
     if (!speedActive) player.activateSpeedFizz();
     if (!cooldownActive) player.activateCooldownCrisp();
-    this.feedbackMsg = 'The VIP Cocktail hits. You feel unstoppable.';
     this.audio?.play('potion_drink');
     playDrinkGesture(player);
+    return { ok: true, line: 'The VIP Cocktail hits. You feel unstoppable.' };
   }
 
-  private hireEscort(player: Player, companion: Player): void {
-    if (this.escortActive) return;
-    const cost = this.escortCost();
-    if (!canAffordCoins(player, companion, cost)) {
-      this.feedbackMsg = 'The escort costs more coins than you carry.';
-      this.audio?.play('error');
-      return;
-    }
-    spendPartyCoins(player, companion, cost, player);
+  private hireEscort(): ShopPurchaseResult {
+    if (this.escortActive) return { ok: false, line: '' };
     this.membership.escortLevelId = this.roster.floorLevelId ?? HARNESS_ESCORT_LEVEL_ID;
     this.escortPending = true;
-    this.feedbackMsg = this.escortIsFree
-      ? 'On the house — the tables have been kind. Enjoy the muscle.'
-      : `${this.escortPair.names} fall in behind you.`;
     this.audio?.play('purchase_success');
-  }
-
-  /** The line the lounge last answered with; empty until something is pressed. */
-  get feedback(): string {
-    return this.feedbackMsg;
-  }
-
-  /** The three services, in the order the lounge lists them. */
-  serviceCards(player: Player, companion: Player): VipServiceCard[] {
-    return VIP_SERVICES.map((service) => {
-      const state = this.buttonStateFor(service.kind, player, companion);
-      return {
-        kind: service.kind,
-        name: service.name,
-        desc: service.desc(this.escortPair),
-        actionLabel: state.label,
-        disabled: state.disabled,
-        statusLine: state.statusLine,
-      };
-    });
-  }
-
-  /** Presses a service's button, refused and charged by the same rules as a click. */
-  activate(kind: VipServiceKind, player: Player, companion: Player): void {
-    switch (kind) {
-      case 'heal':
-        this.heal(player, companion);
-        return;
-      case 'buff':
-        this.buff(player, companion);
-        return;
-      case 'escort':
-        this.hireEscort(player, companion);
-        return;
-    }
-  }
-
-  private buttonStateFor(
-    kind: VipServiceKind,
-    player: Player,
-    companion: Player,
-  ): { label: string; disabled: boolean; statusLine: string } {
-    switch (kind) {
-      case 'heal': {
-        const atFull = player.hp >= player.maxHp;
-        return {
-          label: `Buy — ${SERVICE_PRICES.vip_lounge.heal}`,
-          disabled: atFull || !canAffordCoins(player, companion, SERVICE_PRICES.vip_lounge.heal),
-          statusLine: atFull
-            ? 'Already at full health.'
-            : `${displayHp(player.hp)} / ${player.maxHp} HP`,
-        };
-      }
-      case 'buff': {
-        const bothActive = player.hasStatus('speed_fizz') && player.hasStatus('cooldown_crisp');
-        return {
-          label: `Buy — ${SERVICE_PRICES.vip_lounge.cocktail}`,
-          disabled:
-            bothActive || !canAffordCoins(player, companion, SERVICE_PRICES.vip_lounge.cocktail),
-          statusLine: bothActive ? 'Cocktail already active.' : '',
-        };
-      }
-      case 'escort': {
-        if (this.escortActive) {
-          return {
-            label: 'Hired',
-            disabled: true,
-            statusLine: `${this.escortPair.names} have your back until this floor is done.`,
-          };
-        }
-        const free = this.escortIsFree;
-        const cost = this.escortCost();
-        return {
-          label: free ? 'Hire — FREE' : `Hire — ${cost}`,
-          disabled: !canAffordCoins(player, companion, cost),
-          statusLine: free ? 'Comped: your table play covers it.' : '',
-        };
-      }
-    }
+    return {
+      ok: true,
+      line: this.escortIsFree
+        ? 'On the house — the tables have been kind. Enjoy the muscle.'
+        : `${this.escortPair.names} fall in behind you.`,
+    };
   }
 }

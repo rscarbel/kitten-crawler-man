@@ -1575,6 +1575,15 @@ export abstract class Mob extends Player {
   }
 
   /**
+   * Whether the minimap radar draws this body as a creature dot. A prop that is
+   * a Mob only so the party's weapons reach it (a door, a maze target, scenery)
+   * overrides this to false, so the radar never shows it as a wandering NPC.
+   */
+  get showsOnRadar(): boolean {
+    return true;
+  }
+
+  /**
    * Tiles this mob's current movement will actually cross, for a village
    * gate deciding whether to open. Undefined means the gate should fall back
    * to opening for mere proximity, which is right for a mob with no route of

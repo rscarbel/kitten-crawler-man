@@ -18,7 +18,7 @@
 
 import type { ItemId } from '../core/ItemDefs';
 import type { ShopMenu, ShopPurchaseHandler } from '../ui/screens/shop/shopSession';
-import type { ResidentHost } from './townResidents';
+import { hostByline, type ResidentHost } from './townResidents';
 import { rotateLine } from './townServiceUtil';
 import { SHOPS, type ShopId } from '../economy/shops';
 import type { ShopStock } from '../economy/shopStock';
@@ -61,7 +61,8 @@ export function buildArmouryMenu(
   return {
     title: 'The Quartermaster',
     bark: host?.line ?? rotateLine(QUARTERMASTER_BARKS, turn),
-    byline: host?.name,
+    byline: hostByline(host),
+    emblem: null,
     options: SHOPS.armoury.catalog.map((line) => catalogLineRow(ARMOURY_SHOP, line, stock)),
   };
 }

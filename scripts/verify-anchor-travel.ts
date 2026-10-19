@@ -50,6 +50,7 @@ import {
   type TravelDestinationId,
 } from '../src/systems/travel/travelDestinations';
 import { TravelMenu } from '../src/ui/TravelMenu';
+import { offerClosedReason } from '../src/ui/screens/shop/shopSession';
 import {
   CIRCUS_QUEST_NAME,
   captureCircusQuestProgress,
@@ -246,14 +247,15 @@ function wildernessTile(map: GameMap): { x: number; y: number } | null {
   return null;
 }
 
-function rowReason(rig: Rig, id: TravelDestinationId): string | undefined | null {
+/** Why the row is refused; null for an open row, undefined for a missing one. */
+function rowReason(rig: Rig, id: TravelDestinationId): string | null | undefined {
   const row = rig.menu.options.find((option) => option.key === id);
-  return row === undefined ? null : row.unavailable;
+  return row === undefined ? undefined : offerClosedReason(row.offer);
 }
 
 function enabledRows(rig: Rig): string[] {
   return rig.menu.options
-    .filter((option) => option.unavailable === undefined)
+    .filter((option) => option.offer.status === 'open')
     .map((option) => option.key);
 }
 

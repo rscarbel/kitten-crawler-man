@@ -432,15 +432,19 @@ export const SHOP_BELL_KEEPER_LINE: BarkLine = narrator.bark(
   '"Be right with you!" comes a voice from the back.',
 );
 
-/** An occupant's reaction to hearing something break nearby, split by how heavy the break sounded. */
-export const BREAK_REACTION_LINES_LIGHT: NonEmpty<BarkLine> = [
-  narrator.bark('Someone nearby winces at the crash.'),
-  narrator.bark('"Careful with that!" someone calls out, not looking up.'),
-  narrator.bark('A sharp intake of breath from across the room.'),
+/**
+ * An occupant's reaction to hearing something break nearby, split by how
+ * heavy the break sounded. Captions rather than dialog lines: they narrate
+ * what the room does and must never stop a fight to be read.
+ */
+export const BREAK_REACTION_CAPTIONS_LIGHT: NonEmpty<string> = [
+  'Someone nearby winces at the crash.',
+  '"Careful with that!" someone calls out, not looking up.',
+  'A sharp intake of breath from across the room.',
 ];
 
-export const BREAK_REACTION_LINES_HEAVY: NonEmpty<BarkLine> = [
-  narrator.bark('The clang draws a few startled looks.'),
-  narrator.bark('"That better not have been mine," someone mutters.'),
-  narrator.bark('Someone nearby mutters about the cost of replacing it.'),
+export const BREAK_REACTION_CAPTIONS_HEAVY: NonEmpty<string> = [
+  'The clang draws a few startled looks.',
+  '"That better not have been mine," someone mutters.',
+  'Someone nearby mutters about the cost of replacing it.',
 ];

@@ -196,6 +196,11 @@ export function residentHost(def: ResidentDef | null, turn: number): ResidentHos
   return { name: def.name, line: rotateLine(residentLinesFor(def.id).ambient, turn) };
 }
 
+/** A hosted menu's byline: the host's name, or none for an unnamed occupant. */
+export function hostByline(host: ResidentHost | null): string | null {
+  return host === null ? null : host.name;
+}
+
 /**
  * Builds one conversation line with a named resident — a single `DialogLine`
  * whose pages are the reactive lead (if any) followed by the body.

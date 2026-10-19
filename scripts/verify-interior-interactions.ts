@@ -37,10 +37,9 @@ import {
 import { applyMovement, type MovementInput } from '../src/systems/GameLoopPhases.js';
 import { InteriorOccupantSystem } from '../src/systems/InteriorOccupantSystem.js';
 import {
-  BREAK_REACTION_DURATION_FRAMES,
-  BREAK_REACTION_GAP_FRAMES,
-  InteriorBreakReactionBarks,
-} from '../src/systems/InteriorBreakReactionBarks.js';
+  BREAK_REACTION_COOLDOWN_FRAMES,
+  InteriorBreakReactions,
+} from '../src/systems/InteriorBreakReactions.js';
 
 let failures = 0;
 function check(condition: boolean, label: string): void {
@@ -589,12 +588,12 @@ console.log('\nExamine/search/use dispatch');
   conversation.dismiss();
 }
 
-// ── Break reactions are a bubble, never the conversation box ───────────────
+// ── Break reactions are a caption, never the conversation box ──────────────
 //
-// A reaction that opened the shared Conversation stood in front of the fight
-// and could not be walked away from. It must leave the box closed, hang over
-// the occupant nearest the break, fade on its own, and let a burst of breaks
-// earn one line rather than a wall of them.
+// A reaction must never open the shared Conversation: the box would stand in
+// front of the fight and could not be walked away from. It comes from the
+// occupant nearest the break, and a burst of breaks earns one line rather than
+// a wall of them.
 
 console.log('\nBreak reactions (General Store)');
 {
@@ -611,34 +610,34 @@ console.log('\nBreak reactions (General Store)');
   const firstBreak = reactionBreaks[0];
 
   const conversation = new Conversation(null);
-  const reactions = new InteriorBreakReactionBarks();
+  const reactions = new InteriorBreakReactions();
 
-  check(!reactions.react([firstBreak], []), 'an empty room does not react');
-  check(reactions.react([firstBreak], people), 'an occupied room reacts to a break');
+  check(reactions.react([firstBreak], []) === null, 'an empty room does not react');
+  const shown = reactions.react([firstBreak], people);
+  check(shown !== null, 'an occupied room reacts to a break');
   check(!conversation.isOpen, 'the reaction leaves the conversation box closed');
 
   const { x: breakX, y: breakY } = footprintCentrePx(firstBreak.placed);
   const distSq = (x: number, y: number): number => (x - breakX) ** 2 + (y - breakY) ** 2;
   const nearestDistSq = Math.min(...people.map((person) => distSq(person.x, person.y)));
-  const shown = reactions.current;
   check(
     shown !== null && distSq(shown.speaker.x, shown.speaker.y) === nearestDistSq,
-    'the line hangs over the occupant nearest the break',
+    'the line comes from the occupant nearest the break',
   );
 
   check(reactionBreaks.length > 1, 'the store has more than one breakable to burst through');
-  const burstReacted = reactionBreaks.slice(1).some((brk) => reactions.react([brk], people));
+  const burstReacted = reactionBreaks
+    .slice(1)
+    .some((brk) => reactions.react([brk], people) !== null);
   check(!burstReacted, 'a burst of breaks while a line is up adds no second line');
-  check(reactions.current?.text === shown?.text, 'the burst leaves the first line in place');
 
-  for (let frame = 0; frame < BREAK_REACTION_DURATION_FRAMES; frame++) reactions.update();
-  check(reactions.current === null, 'the line fades on its own');
+  for (let frame = 0; frame < BREAK_REACTION_COOLDOWN_FRAMES - 1; frame++) reactions.update();
   check(
-    !reactions.react([firstBreak], people),
-    'the room stays quiet through the gap after a line',
+    reactions.react([firstBreak], people) === null,
+    'the room stays quiet until the cooldown has run',
   );
-  for (let frame = 0; frame < BREAK_REACTION_GAP_FRAMES; frame++) reactions.update();
-  check(reactions.react([firstBreak], people), 'after the gap the room reacts again');
+  reactions.update();
+  check(reactions.react([firstBreak], people) !== null, 'after the cooldown the room reacts again');
   check(!conversation.isOpen, 'still no conversation after a second reaction');
 }
 

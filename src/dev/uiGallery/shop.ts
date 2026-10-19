@@ -24,9 +24,12 @@ import { GATE_LOCKED_LABEL } from '../../systems/market/vendorMenu';
 import { ClubVipLoungeSystem } from '../../systems/ClubVipLoungeSystem';
 import { buildTattooMenu, inkTattoo } from '../../systems/townTattooParlor';
 import { MercenaryGuildSystem } from '../../systems/MercenaryGuildSystem';
-import { TRAVEL_DESTINATIONS } from '../../systems/travel/travelDestinations';
+import {
+  TRAVEL_DESTINATIONS,
+  type TravelDestinationId,
+} from '../../systems/travel/travelDestinations';
 import type { TownDialogContext } from '../../systems/townDialog';
-import type { Surface } from '../../ui/core/UiRoot';
+import type { HitRegion, Surface } from '../../ui/core/UiRoot';
 import { drawAnchorStoneIcon } from '../../ui/icons/anchorStoneIcon';
 import {
   FortuneTable,
@@ -36,11 +39,40 @@ import {
 import { mercenaryDeskSurface } from '../../ui/screens/shop/MercenaryDeskScreen';
 import { shopScreenSurface } from '../../ui/screens/shop/ShopScreen';
 import { openStoreCounter } from '../../ui/screens/shop/storeCounter';
-import { ShopSession, type ShopMenu, type ShopParty } from '../../ui/screens/shop/shopSession';
-import { vipLoungeSurface } from '../../ui/screens/shop/VipLoungeScreen';
+import {
+  ShopSession,
+  offerUnless,
+  type ShopCost,
+  type ShopMenu,
+  type ShopOpenOptions,
+  type ShopParty,
+  type ShopRow,
+} from '../../ui/screens/shop/shopSession';
+import type { ServiceIconId } from '../../sprites/art/itemIcons/serviceIcons';
+import type { ItemId } from '../../core/ItemDefs';
+import { buildDrillYardMenu, runDrill } from '../../systems/townDrillYard';
+import { buildInnMenu } from '../../systems/townInn';
+import { buildBlessingMenu } from '../../systems/townTemple';
 import type { DialogFixture, FixtureRig } from './dialogs/fixture';
 
 const FIXTURE_COINS = 140;
+/** The tinker's fixture prices: one too dear for the fixture purse, the rest within it. */
+const STALL_PRICES = {
+  shard: 30,
+  potion: 12,
+  dynamite: 18,
+  fizz: 45,
+  rope: 6,
+  tome: 2400,
+} as const;
+/** A wounded crawler keeps this share of their health, so heal offers are open. */
+const WOUNDED_HP_FRACTION = 0.4;
+const INN_HOUSE = 'The Sleeping Cat Inn';
+const TRAVEL_ART = {
+  town: 'travel_town',
+  circus: 'travel_circus',
+  briar_hollow: 'travel_briar_hollow',
+} as const satisfies Record<TravelDestinationId, ServiceIconId>;
 const POOR_COINS = 4;
 const SELL_STACKS = [
   { id: 'health_potion', qty: 6 },
@@ -65,6 +97,14 @@ const BOARDS_SOLD = 4;
 const APOTHECARY_EXTRA_STACK = { id: 'speed_fizz', qty: 2 } as const;
 /** The forge party holds this share of the long-haft tier's materials, so its Buy shows a material shortfall. */
 const FORGE_MATERIAL_SHARE = 0.5;
+/** A fixture counter with no refusal line, rebuy guard, Sell tab or drifting prices. */
+const NO_COUNTER_EXTRAS: ShopOpenOptions = {
+  onBlocked: null,
+  blockedLine: null,
+  rebuyGuardTicks: 0,
+  sell: null,
+  liveRows: false,
+};
 
 function makeParty(coins: number): ShopParty {
   const active = new HumanPlayer(0, 0, TILE_SIZE);
@@ -76,40 +116,59 @@ function makeParty(coins: number): ShopParty {
 
 /** A market stall: everyday stock, an errand in quest gold, a sold-out line, a gated line and one too dear. */
 function stallMenu(): ShopMenu {
+  const item = (
+    key: ItemId,
+    label: string,
+    coins: number,
+    desc: string,
+    closedReason: string | null,
+  ): ShopRow => ({
+    key,
+    label,
+    desc,
+    art: { kind: 'item', item: key },
+    offer: offerUnless(closedReason, { kind: 'coins', coins }),
+    questErrand: false,
+  });
   return {
     title: 'Tinker’s Stall',
     bark: 'Bits, bobs, and the odd thing that explodes. Mind the dynamite.',
     byline: 'Pip the Tinker',
+    emblem: null,
     options: [
       {
-        key: 'anchor_shard_tinker',
-        label: 'Anchor shard',
-        price: 30,
-        desc: 'The piece of the Wayfinder’s Anchor the tinker has been keeping for you.',
-        isQuestItem: true,
+        ...item(
+          'anchor_shard_tinker',
+          'Anchor shard',
+          STALL_PRICES.shard,
+          'The piece of the Wayfinder’s Anchor the tinker has been keeping for you.',
+          null,
+        ),
+        questErrand: true,
       },
-      { key: 'health_potion', label: 'Health Potion', price: 12, desc: 'Restores 50% max HP' },
-      {
-        key: 'goblin_dynamite',
-        label: 'Goblin Dynamite',
-        price: 18,
-        desc: 'Throw for AoE damage',
-        unavailable: GATE_LOCKED_LABEL,
-      },
-      {
-        key: 'speed_fizz',
-        label: 'Speed Fizz',
-        price: 45,
-        desc: 'Move faster for a short while',
-        unavailable: 'Sold out',
-      },
-      { key: 'rope', label: 'Rope', price: 6, desc: 'Ties things to other things' },
-      {
-        key: 'magic_missile_tome',
-        label: 'Tome of Magic Missile',
-        price: 2400,
-        desc: 'Teaches the cat to throw raw force',
-      },
+      item('health_potion', 'Health Potion', STALL_PRICES.potion, 'Restores 50% max HP', null),
+      item(
+        'goblin_dynamite',
+        'Goblin Dynamite',
+        STALL_PRICES.dynamite,
+        'Throw for AoE damage',
+        GATE_LOCKED_LABEL,
+      ),
+      item(
+        'speed_fizz',
+        'Speed Fizz',
+        STALL_PRICES.fizz,
+        'Move faster for a short while',
+        'Sold out',
+      ),
+      item('rope', 'Rope', STALL_PRICES.rope, 'Ties things to other things', null),
+      item(
+        'magic_missile_tome',
+        'Tome of Magic Missile',
+        STALL_PRICES.tome,
+        'Teaches the cat to throw raw force',
+        null,
+      ),
     ],
   };
 }
@@ -117,56 +176,64 @@ function stallMenu(): ShopMenu {
 function stallSession(): ShopSession {
   const session = new ShopSession();
   session.open(stallMenu, (option) => ({ ok: true, line: `One ${option.label}, coming up.` }), {
+    onBlocked: null,
     blockedLine: () => 'Coin first, friend.',
-    sell: { shop: 'tinker', stock: createShopStock() },
+    rebuyGuardTicks: 0,
+    sell: { shop: 'tinker', stock: createShopStock(), onSold: null },
+    liveRows: false,
   });
   return session;
 }
 
-/** Town services: a glyph per row, one already done, one beyond the purse. */
-function serviceMenu(): ShopMenu {
-  return {
-    title: 'Temple of the Ninth Bell',
-    bark: 'Kneel, crawler. The bell remembers the names it is paid to.',
-    rowGlyph: 'sparkle',
-    options: [
-      {
-        key: 'blessing',
-        label: 'Blessing of Vigour',
-        price: 25,
-        desc: '+10% max HP until you next sleep',
-      },
-      {
-        key: 'cleanse',
-        label: 'Cleansing',
-        price: 15,
-        desc: 'Washes off poison and worse',
-        unavailable: 'Already clean',
-        icon: { kind: 'glyph', glyph: 'heart' },
-      },
-      {
-        key: 'rite',
-        label: 'Rite of the Long Night',
-        price: 400,
-        desc: 'The bell rings for you once',
-      },
-    ],
-  };
+/** The Barracks drill yard: one stat point per row, priced at the crawler's next rung. */
+function drillYardSession(): { session: ShopSession; party: ShopParty } {
+  const party = makeParty(FIXTURE_COINS);
+  const session = new ShopSession();
+  session.open(() => buildDrillYardMenu(party.active, 0, null), runDrill, NO_COUNTER_EXTRAS);
+  return { session, party };
+}
+
+/** The Sleeping Cat: its kitchen board and the guest wing, with the party wounded so the food is on. */
+function innSession(): { session: ShopSession; party: ShopParty } {
+  const party = makeParty(FIXTURE_COINS);
+  party.active.hp = Math.ceil(party.active.maxHp * WOUNDED_HP_FRACTION);
+  const stock = createShopStock();
+  const session = new ShopSession();
+  session.open(
+    () => buildInnMenu(INN_HOUSE, party.active, 0, null, false, stock),
+    () => ({ ok: true, line: '' }),
+    NO_COUNTER_EXTRAS,
+  );
+  return { session, party };
+}
+
+/** The temple's one blessing, for a wounded party: the narrow single-offer counter. */
+function templeSession(): { session: ShopSession; party: ShopParty } {
+  const party = makeParty(FIXTURE_COINS);
+  party.active.hp = Math.ceil(party.active.maxHp * WOUNDED_HP_FRACTION);
+  const session = new ShopSession();
+  session.open(
+    () => buildBlessingMenu([party.active, party.companion], 0, null),
+    () => ({ ok: true, line: 'The bell rings.' }),
+    NO_COUNTER_EXTRAS,
+  );
+  return { session, party };
 }
 
 function travelMenu(): ShopMenu {
+  const travelCost = { kind: 'free', actionLabel: 'Travel' } as const satisfies ShopCost;
   return {
     title: 'Travel Locations',
     bark: 'The stone hums, waiting for a place it knows.',
-    rowGlyph: 'map',
-    unpriced: { actionLabel: 'Travel' },
-    titleIcon: (ctx, rect) => drawAnchorStoneIcon(ctx, rect),
-    options: TRAVEL_DESTINATIONS.map((destination, index) => ({
+    byline: null,
+    emblem: (ctx, rect) => drawAnchorStoneIcon(ctx, rect),
+    options: TRAVEL_DESTINATIONS.map((destination, index): ShopRow => ({
       key: destination.id,
       label: destination.label,
-      price: 0,
       desc: destination.description,
-      ...(index === 0 ? { unavailable: 'You are already here.' } : {}),
+      art: { kind: 'service', service: TRAVEL_ART[destination.id] },
+      offer: offerUnless(index === 0 ? 'You are already here.' : null, travelCost),
+      questErrand: false,
     })),
   };
 }
@@ -189,6 +256,7 @@ function forgeSession(): { session: ShopSession; party: ShopParty } {
   session.open(
     () => buildForgeMenu(tools, party),
     () => ({ ok: true, line: '' }),
+    NO_COUNTER_EXTRAS,
   );
   return { session, party: { active: human, companion: cat } };
 }
@@ -208,7 +276,8 @@ function apothecarySession(): { session: ShopSession; party: ShopParty } {
   const crawlers = [party.active, party.companion];
   const session = new ShopSession();
   session.open(() => buildApothecaryMenu(crawlers, stock, 0, null), serveRemedy(crawlers, stock), {
-    sell: { shop: APOTHECARY_SHOP, stock },
+    ...NO_COUNTER_EXTRAS,
+    sell: { shop: APOTHECARY_SHOP, stock, onSold: null },
   });
   return { session, party };
 }
@@ -242,6 +311,19 @@ function shopFixture(
   };
 }
 
+/**
+ * Applies `act` to a card's control when it is on screen. On the shortest
+ * landscape phones a shop's header leaves room for little more than the top
+ * of the first card, so the control can be scrolled below the fold; the
+ * fixture then captures the shop as it opens.
+ */
+function whenShown(rig: FixtureRig, id: string, act: (region: HitRegion) => void): void {
+  const region = rig.region(id);
+  if (region === null) return;
+  act(region);
+  rig.settle();
+}
+
 function gate(surface: Surface, shown: () => boolean): Surface {
   return { ...surface, isOpen: () => shown() && surface.isOpen() };
 }
@@ -252,13 +334,14 @@ export const SHOP_FIXTURES: readonly DialogFixture[] = [
     'shop-buy-refused',
     () => ({ session: stallSession(), party: makeParty(POOR_COINS) }),
     (rig) => {
-      rig.tap(
-        rig.need('shop-buy-refused-shop/shop-buy-refused-shop/buy-anchor_shard_tinker/refused'),
+      whenShown(
+        rig,
+        'shop-buy-refused-shop/shop-buy-refused-shop/buy-anchor_shard_tinker/refused',
+        (region) => {
+          rig.tap(region);
+          rig.hover(region);
+        },
       );
-      rig.hover(
-        rig.need('shop-buy-refused-shop/shop-buy-refused-shop/buy-anchor_shard_tinker/refused'),
-      );
-      rig.settle();
     },
   ),
   shopFixture('shop-sell', () => {
@@ -274,8 +357,9 @@ export const SHOP_FIXTURES: readonly DialogFixture[] = [
       return { session, party: makeParty(FIXTURE_COINS) };
     },
     (rig) => {
-      rig.tap(rig.need('shop-sell-quantity-shop/shop-sell-quantity-shop/sell-wood_board'));
-      rig.settle();
+      whenShown(rig, 'shop-sell-quantity-shop/shop-sell-quantity-shop/sell-wood_board', (region) =>
+        rig.tap(region),
+      );
     },
   ),
   shopFixture('general-store', () => {
@@ -294,43 +378,41 @@ export const SHOP_FIXTURES: readonly DialogFixture[] = [
     'prices-breakdown-sell',
     apothecarySellSession,
     (rig) => {
-      rig.tap(
-        rig.need('prices-breakdown-sell-shop/prices-breakdown-sell-shop/sell-row-wood_board'),
+      whenShown(
+        rig,
+        'prices-breakdown-sell-shop/prices-breakdown-sell-shop/sell-row-wood_board',
+        (region) => rig.tap(region),
       );
-      rig.settle();
     },
     true,
   ),
-  shopFixture('town-service', () => {
-    const session = new ShopSession();
-    session.open(serviceMenu, () => ({ ok: true, line: 'The bell rings.' }));
-    return { session, party: makeParty(FIXTURE_COINS) };
-  }),
+  shopFixture('town-service', templeSession),
+  shopFixture('drill-yard', drillYardSession),
+  shopFixture('inn', innSession),
   shopFixture('tattoo-parlour', () => {
     const party = makeParty(FIXTURE_COINS);
     const session = new ShopSession();
-    session.open(() => buildTattooMenu(party.active, 0, null), inkTattoo);
+    session.open(() => buildTattooMenu(party.active, 0, null), inkTattoo, NO_COUNTER_EXTRAS);
     return { session, party };
   }),
   shopFixture('forge', forgeSession),
   shopFixture('forge-refused', forgeSession, (rig) => {
-    rig.hover(rig.need('forge-refused-shop/forge-refused-shop/buy-axe/refused'));
-    rig.settle();
+    whenShown(rig, 'forge-refused-shop/forge-refused-shop/buy-axe/refused', (region) =>
+      rig.hover(region),
+    );
   }),
   shopFixture('travel', () => {
     const session = new ShopSession();
-    session.open(travelMenu, () => ({ ok: true, line: '' }));
+    session.open(travelMenu, () => ({ ok: true, line: '' }), NO_COUNTER_EXTRAS);
     return { session, party: makeParty(FIXTURE_COINS) };
   }),
-  {
-    name: 'vip',
-    surfaces: (shown) => {
-      const lounge = new ClubVipLoungeSystem(null, createMercenaryRoster(), createClubMembership());
-      lounge.openPanel(0);
-      const party = makeParty(FIXTURE_COINS);
-      return [gate(vipLoungeSurface({ id: 'vip-lounge', lounge, party: () => party }), shown)];
-    },
-  },
+  shopFixture('vip', () => {
+    const party = makeParty(FIXTURE_COINS);
+    party.active.hp = Math.ceil(party.active.maxHp * WOUNDED_HP_FRACTION);
+    const lounge = new ClubVipLoungeSystem(null, createMercenaryRoster(), createClubMembership());
+    lounge.openPanel(0, party.active);
+    return { session: lounge.session, party };
+  }),
   {
     name: 'mercenary',
     surfaces: (shown) => {

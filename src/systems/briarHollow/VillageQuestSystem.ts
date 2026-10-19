@@ -72,6 +72,7 @@ import { BRAMBLEWICK, FENNA, OREN, TIKKA, type VillagerId } from '../../dialog/s
 import type { ConversationRequest, ConversationTopic } from '../../dialog/request';
 import {
   KEEP_TALKING,
+  type OpeningAfter,
   type OpeningPages,
   type QuestLineProvider,
   type QuestOpening,
@@ -134,6 +135,8 @@ const DECLINE_TOPIC_KEY = 'quest_decline';
 const TEACH_AGAIN_TOPIC_KEY = 'quest_construction_again';
 const MORE_TIME_TOPIC_KEY = 'quest_more_time';
 const READY_FOR_ASSAULT_TOPIC_KEY = 'quest_ready_for_assault';
+/** An opening that ends the conversation once read, with nothing further to run. */
+const CLOSE_WHEN_READ: OpeningAfter = { kind: 'close', onClosed: () => undefined };
 
 /** What the active crawler says once processing is done, before heading back to Tikka. */
 export const PROCESSING_DONE_LINE =
@@ -596,7 +599,9 @@ export class VillageQuestSystem implements QuestLineProvider, TopicProvider {
         const pages = this.victoryPages();
         this.grantRewards();
         this.setPhase('complete');
-        return { pages, questRelated: true, after: KEEP_TALKING };
+        // The thanks is the quest's last beat, so it ends the talk rather
+        // than dropping into his questions and goodbye.
+        return { pages, questRelated: true, after: CLOSE_WHEN_READ };
       }
       case 'complete':
         return {

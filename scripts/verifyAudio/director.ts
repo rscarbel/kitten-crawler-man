@@ -68,6 +68,9 @@ const KEY_PRESSES_AFTER_A_FAILED_LOAD = 3;
 /** The streamed song the title screen claims before any gesture. */
 const GESTURE_GATED_TRACK = 'welcome_to_the_dungeon' as const satisfies MusicTrackId;
 
+/** `MediaError.MEDIA_ERR_NETWORK`: the download broke off after the element had started. */
+const MEDIA_ERR_NETWORK = 2;
+
 /** Holds claims the way a scene's scope does: one object per scene. */
 type Holder = object;
 
@@ -574,13 +577,33 @@ export async function checkAutoplayLock(
   await osPaused.settle();
   const element = osPaused.sounding(GESTURE_GATED_TRACK);
   element?.pause();
+  await osPaused.settle();
+  const silentAfterSystemPause = osPaused.sounding(GESTURE_GATED_TRACK) === null;
   unlockGesture('keydown');
   await osPaused.settle();
   check(
-    element !== null && element.paused,
-    'a stream the system paused itself is not restarted by a later key press',
+    element !== null && silentAfterSystemPause && !element.paused,
+    'a stream the system paused itself, with the context running, restarts on the next key press',
   );
   await osPaused.dispose();
+
+  const brokenOff = await rig(harness);
+  claimOn(brokenOff.audio, {}, 'title', 'area', loopOf(GESTURE_GATED_TRACK));
+  await brokenOff.settle();
+  const failed = brokenOff.sounding(GESTURE_GATED_TRACK);
+  const positionAtFailureS = failed?.currentTime ?? 0;
+  if (failed !== null) failed.error = { code: MEDIA_ERR_NETWORK };
+  unlockGesture('keydown');
+  await brokenOff.settle();
+  check(
+    failed !== null &&
+      failed.error === null &&
+      !failed.paused &&
+      failed.currentTime >= positionAtFailureS &&
+      positionAtFailureS > 0,
+    'a stream whose download broke off is reloaded on the next key press and carries on from where it stopped',
+  );
+  await brokenOff.dispose();
 
   const decoded = await rig(harness);
   const scope = decoded.audio.createScope();

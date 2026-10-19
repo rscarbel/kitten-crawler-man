@@ -225,6 +225,8 @@ export const worldPalette = {
     escape: '#4ade80',
     corpse: '#000000',
     hostile: '#ef4444',
+    /** A creature on the map that is not hostile right now: a hireling, a cow, a calm fowl. */
+    friendly: '#ffffff',
     mordecai: '#ffffff',
     questOffer: '#fbbf24',
     questTurnIn: '#4ade80',

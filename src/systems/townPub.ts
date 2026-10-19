@@ -16,10 +16,16 @@
 import { makeDrunk } from '../core/StatusEffect';
 import { playDrinkGesture } from '../creatures/humanGestures';
 import type { Player } from '../Player';
-import type { ShopMenu, ShopRow, ShopPurchaseHandler } from '../ui/screens/shop/shopSession';
-import type { ResidentHost } from './townResidents';
+import {
+  offerUnless,
+  type ShopMenu,
+  type ShopRow,
+  type ShopPurchaseHandler,
+} from '../ui/screens/shop/shopSession';
+import { hostByline, type ResidentHost } from './townResidents';
 import { rotateLine } from './townServiceUtil';
 import { SERVICE_PRICES } from '../economy/servicePrices';
+import type { ServiceIconId } from '../sprites/art/itemIcons/serviceIcons';
 import type { SHOPS, ShopId } from '../economy/shops';
 import { buyFromShop, type ShopStock } from '../economy/shopStock';
 import { catalogLineRow, findCatalogLine } from './market/vendorMenu';
@@ -44,6 +50,7 @@ interface ServiceDrink extends Serving {
   readonly key: PubServiceKey;
   readonly label: string;
   readonly desc: string;
+  readonly art: ServiceIconId;
 }
 
 /** A real item off the pub's catalog, priced by the shop like any other, but opened and downed at the bar. */
@@ -65,6 +72,7 @@ const NIGHTCAP_HEAL_FRACTION = 0.5;
 const ALE: Drink = {
   kind: 'service',
   key: 'ale',
+  art: 'ale',
   label: 'Mug of Ale',
   desc: 'Cheap, warm, and it hits. Drunk for 30s',
   effect: 'drunk',
@@ -73,6 +81,7 @@ const ALE: Drink = {
 const BOOZY_MILK: Drink = {
   kind: 'service',
   key: 'boozy_milk',
+  art: 'boozy_milk',
   label: 'Boozy Milk',
   desc: 'Nutritious. Arguably. Drunk, and it heals',
   effect: 'drunk_and_heal',
@@ -84,6 +93,7 @@ const SPEED_FIZZ: Drink = { kind: 'catalog', item: 'speed_fizz', effect: 'speed'
 const MEAD: Drink = {
   kind: 'service',
   key: 'mead',
+  art: 'mead',
   label: 'Spiced Mead',
   desc: 'Served in a horn, because of course it is. Drunk for 30s',
   effect: 'drunk',
@@ -92,6 +102,7 @@ const MEAD: Drink = {
 const GUILD_RESERVE: Drink = {
   kind: 'service',
   key: 'guild_reserve',
+  art: 'guild_reserve',
   label: 'The Guild Reserve',
   desc: 'Off the high shelf, for people with a table. Drunk, and it mends well',
   effect: 'drunk_and_heal',
@@ -101,6 +112,7 @@ const GUILD_RESERVE: Drink = {
 const HONEY_BREAD: Drink = {
   kind: 'service',
   key: 'honey_bread',
+  art: 'honey_bread',
   label: 'Honey Bread',
   desc: 'Fresh this morning. A small mend, and cheap',
   effect: 'heal',
@@ -110,6 +122,7 @@ const HONEY_BREAD: Drink = {
 const STEW: Drink = {
   kind: 'service',
   key: 'stew',
+  art: 'stew',
   label: 'Bowl of Stew',
   desc: 'Hot, thick, and no hangover. Heals',
   effect: 'heal',
@@ -119,6 +132,7 @@ const STEW: Drink = {
 const NIGHTCAP: Drink = {
   kind: 'service',
   key: 'nightcap',
+  art: 'nightcap',
   label: 'The Sleeping Cat',
   desc: 'Milk, honey, and something that bites. Drunk, and it mends deeply',
   effect: 'drunk_and_heal',
@@ -192,8 +206,10 @@ function drinkRow(drink: Drink, stock: ShopStock): ShopRow | null {
     return {
       key: drink.key,
       label: drink.label,
-      price: SERVICE_PRICES.pub[drink.key],
       desc: drink.desc,
+      art: { kind: 'service', service: drink.art },
+      offer: { status: 'open', cost: { kind: 'coins', coins: SERVICE_PRICES.pub[drink.key] } },
+      questErrand: false,
     };
   }
   const line = findCatalogLine(PUB_SHOP, drink.item);
@@ -231,16 +247,18 @@ export function buildTavernMenu(
   return {
     title: house,
     bark: host?.line ?? pubServeLine(house, turn),
-    byline: host?.name,
+    byline: hostByline(host),
+    emblem: null,
     options: drinksFor(house).flatMap((drink) => {
       const row = drinkRow(drink, stock);
       if (row === null) return [];
       // Food is the only thing on any board whose whole effect is the mend, so
       // it is the only thing that can be bought for nothing. A drink that gets
       // you drunk still does something at full health; a bowl of stew does not.
-      if (drink.effect === 'heal' && buyer.hp >= buyer.maxHp)
-        return [{ ...row, unavailable: 'Unhurt' }];
-      return [row];
+      if (drink.effect !== 'heal' || buyer.hp < buyer.maxHp || row.offer.status !== 'open') {
+        return [row];
+      }
+      return [{ ...row, offer: offerUnless('Unhurt', row.offer.cost) }];
     }),
   };
 }

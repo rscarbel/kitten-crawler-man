@@ -50,6 +50,8 @@ const VIEWPORTS: readonly ReviewViewport[] = [
   { w: 844, h: 390, density: 'touch' },
   { w: 568, h: 320, density: 'touch' },
   { w: 390, h: 844, density: 'touch' },
+  /** A Galaxy S23 held upright: the narrowest common tall phone. */
+  { w: 360, h: 780, density: 'touch' },
   { w: 360, h: 640, density: 'touch' },
   { w: 768, h: 1024, density: 'touch' },
   { w: 1280, h: 720, density: 'pointer' },

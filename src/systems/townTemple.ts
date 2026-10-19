@@ -12,8 +12,8 @@
  */
 
 import type { Player } from '../Player';
-import type { ShopMenu, ShopRow } from '../ui/screens/shop/shopSession';
-import type { ResidentHost } from './townResidents';
+import { offerUnless, type ShopMenu, type ShopRow } from '../ui/screens/shop/shopSession';
+import { hostByline, type ResidentHost } from './townResidents';
 import { rotateLine } from './townServiceUtil';
 import { SERVICE_PRICES } from '../economy/servicePrices';
 
@@ -44,19 +44,23 @@ export function buildBlessingMenu(
   turn: number,
   host: ResidentHost | null,
 ): ShopMenu {
+  const unhurt = party.every((member) => member.hp >= member.maxHp && !member.isKnockedOut);
   const option: ShopRow = {
     key: 'blessing',
     label: 'Blessing of the Sky',
-    price: SERVICE_PRICES.temple.blessing,
     desc: 'Fully heals you and your companion, and stands the fallen up',
+    art: { kind: 'service', service: 'blessing' },
+    offer: offerUnless(unhurt ? 'Unhurt' : null, {
+      kind: 'coins',
+      coins: SERVICE_PRICES.temple.blessing,
+    }),
+    questErrand: false,
   };
-  if (party.every((member) => member.hp >= member.maxHp && !member.isKnockedOut)) {
-    option.unavailable = 'Unhurt';
-  }
   return {
     title: 'Temple of the Sky',
     bark: host?.line ?? priestBark(turn),
-    byline: host?.name,
+    byline: hostByline(host),
+    emblem: null,
     options: [option],
   };
 }

@@ -326,6 +326,11 @@ export class TownPropSystem implements GameSystem {
     if (this.fortuneTellerProp !== null) this.fortuneTellerProp.markerState = state;
   }
 
+  /** Sets the plaza notice board's overhead beacon/glyph; a prop, so like Voss it has no `markerType` of its own. */
+  setNoticeBoardMarker(state: QuestMarkerState): void {
+    if (this.board !== null) this.board.markerState = state;
+  }
+
   private placeBenches(): void {
     const fountain = this.gameMap.fountainCentre;
     if (fountain === undefined) return;
@@ -437,7 +442,47 @@ const FORTUNE_TELLER_SHEET_KEY = 'over_city_fortune_teller';
 const FIXTURE_STATE = 'idle';
 const FIXTURE_FRAME = 0;
 
+/** A board is a thing, not a quest giver, so it wears only the "!" and none of the gold column. */
+const NOTICE_BOARD_SHOWS_BEACON = false;
+const FORTUNE_TELLER_SHOWS_BEACON = true;
+
+/**
+ * Draws a single-picture town fixture with the marker glyph over it while
+ * `markerState` has something to say. A fixture that `showsBeacon` also gets
+ * the quest beacon behind it — the same order every other quest giver draws
+ * these in, so the column stands behind the fixture rather than across it.
+ */
+function drawMarkedFixture(
+  ctx: CanvasRenderingContext2D,
+  sheetKey: string,
+  markerState: QuestMarkerState,
+  showsBeacon: boolean,
+  tile: TileXY,
+  camX: number,
+  camY: number,
+  tileSize: number,
+): void {
+  const sx = tile.x * tileSize - camX;
+  const sy = tile.y * tileSize - camY;
+
+  const markerColor = questMarkerColorFor(markerState);
+  if (showsBeacon && markerColor !== undefined) {
+    drawQuestBeacon(ctx, sx, sy, tileSize, camX, camY, performance.now(), markerColor);
+  }
+
+  drawTownSheetFrame(ctx, sheetKey, FIXTURE_STATE, FIXTURE_FRAME, sx, sy, tileSize);
+
+  if (markerColor !== undefined) {
+    const glyph = markerState === 'question' ? '?' : '!';
+    const artTop = townSheetStateInkTop(sheetKey, FIXTURE_STATE, sy, tileSize) ?? sy;
+    drawQuestMarker(ctx, sx, artTop, tileSize, glyph, markerColor);
+  }
+}
+
 class NoticeBoardProp implements TownPropRenderable {
+  /** Whether a construction contract is waiting on the board — written each frame via `setNoticeBoardMarker`. */
+  markerState: QuestMarkerState = 'none';
+
   constructor(readonly tile: TileXY) {}
 
   get x(): number {
@@ -449,13 +494,14 @@ class NoticeBoardProp implements TownPropRenderable {
   }
 
   render(ctx: CanvasRenderingContext2D, camX: number, camY: number, tileSize: number): void {
-    drawTownSheetFrame(
+    drawMarkedFixture(
       ctx,
       NOTICE_BOARD_SHEET_KEY,
-      FIXTURE_STATE,
-      FIXTURE_FRAME,
-      this.tile.x * tileSize - camX,
-      this.tile.y * tileSize - camY,
+      this.markerState,
+      NOTICE_BOARD_SHOWS_BEACON,
+      this.tile,
+      camX,
+      camY,
       tileSize,
     );
   }
@@ -500,31 +546,15 @@ export class FortuneTellerProp implements TownPropRenderable {
   }
 
   render(ctx: CanvasRenderingContext2D, camX: number, camY: number, tileSize: number): void {
-    const sx = this.tile.x * tileSize - camX;
-    const sy = this.tile.y * tileSize - camY;
-
-    // Beacon first, so the column stands behind her rather than across her —
-    // the same order every other quest giver draws these two in.
-    const markerColor = questMarkerColorFor(this.markerState);
-    if (markerColor !== undefined) {
-      drawQuestBeacon(ctx, sx, sy, tileSize, camX, camY, performance.now(), markerColor);
-    }
-
-    drawTownSheetFrame(
+    drawMarkedFixture(
       ctx,
       FORTUNE_TELLER_SHEET_KEY,
-      FIXTURE_STATE,
-      FIXTURE_FRAME,
-      sx,
-      sy,
+      this.markerState,
+      FORTUNE_TELLER_SHOWS_BEACON,
+      this.tile,
+      camX,
+      camY,
       tileSize,
     );
-
-    if (markerColor !== undefined) {
-      const glyph = this.markerState === 'question' ? '?' : '!';
-      const artTop =
-        townSheetStateInkTop(FORTUNE_TELLER_SHEET_KEY, FIXTURE_STATE, sy, tileSize) ?? sy;
-      drawQuestMarker(ctx, sx, artTop, tileSize, glyph, markerColor);
-    }
   }
 }

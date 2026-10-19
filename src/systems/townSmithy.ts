@@ -15,8 +15,13 @@
 
 import { makeWhetstone, WHETSTONE_MELEE_DAMAGE_BONUS } from '../core/StatusEffect';
 import type { Player } from '../Player';
-import type { ShopMenu, ShopRow, ShopPurchaseHandler } from '../ui/screens/shop/shopSession';
-import type { ResidentHost } from './townResidents';
+import {
+  offerUnless,
+  type ShopMenu,
+  type ShopRow,
+  type ShopPurchaseHandler,
+} from '../ui/screens/shop/shopSession';
+import { hostByline, type ResidentHost } from './townResidents';
 import { rotateLine } from './townServiceUtil';
 import { SERVICE_PRICES } from '../economy/servicePrices';
 
@@ -24,6 +29,7 @@ const SINGLE_EDGE_KEY = 'edge';
 const PAIR_EDGE_KEY = 'edge_pair';
 
 const WHETSTONE_STATUS = 'whetstone';
+const STILL_SHARP = 'Still sharp';
 
 const SMITH_BARKS: ReadonlyArray<string> = [
   'Forge is hot. Hand me what you swing and I will make it worth swinging.',
@@ -50,23 +56,33 @@ export function buildSmithyMenu(
   const single: ShopRow = {
     key: SINGLE_EDGE_KEY,
     label: 'Put an edge on it',
-    price: SERVICE_PRICES.smithy.single_edge,
     desc: `+${WHETSTONE_MELEE_DAMAGE_BONUS} melee damage for 3 minutes`,
+    art: { kind: 'service', service: 'edge' },
+    offer: offerUnless(buyer.hasStatus(WHETSTONE_STATUS) ? STILL_SHARP : null, {
+      kind: 'coins',
+      coins: SERVICE_PRICES.smithy.single_edge,
+    }),
+    questErrand: false,
   };
-  if (buyer.hasStatus(WHETSTONE_STATUS)) single.unavailable = 'Still sharp';
 
+  const bothSharp = party.every((member) => member.hasStatus(WHETSTONE_STATUS));
   const pair: ShopRow = {
     key: PAIR_EDGE_KEY,
     label: 'Edge the pair of you',
-    price: SERVICE_PRICES.smithy.pair_edge,
     desc: 'The same edge, for you and your companion',
+    art: { kind: 'service', service: 'edge_pair' },
+    offer: offerUnless(bothSharp ? STILL_SHARP : null, {
+      kind: 'coins',
+      coins: SERVICE_PRICES.smithy.pair_edge,
+    }),
+    questErrand: false,
   };
-  if (party.every((member) => member.hasStatus(WHETSTONE_STATUS))) pair.unavailable = 'Still sharp';
 
   return {
     title: 'The Rusty Anvil',
     bark: host?.line ?? rotateLine(SMITH_BARKS, turn),
-    byline: host?.name,
+    byline: hostByline(host),
+    emblem: null,
     options: [single, pair],
   };
 }

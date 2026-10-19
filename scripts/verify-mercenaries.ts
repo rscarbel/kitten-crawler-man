@@ -86,6 +86,7 @@ import { UiRoot } from '../src/ui/core/UiRoot';
 import { MOUSE_POINTER_ID, PRIMARY_BUTTON } from '../src/ui/core/pointer';
 import { NO_INSETS } from '../src/ui/core/viewport';
 import { shopScreenSurface } from '../src/ui/screens/shop/ShopScreen';
+import { priceBreakdownsShown } from '../src/ui/screens/shop/priceBreakdowns';
 import { mercenaryDeskSurface } from '../src/ui/screens/shop/MercenaryDeskScreen';
 import { MercenaryGuildSystem } from '../src/systems/MercenaryGuildSystem';
 import { verifyBrawlerKit } from './verifyMercenaries/brawler';
@@ -683,6 +684,7 @@ function shopRig(shop: ShopSystem, buyer: HumanPlayer, companion: CatPlayer): Sh
       id: SHOP_SURFACE_ID,
       session: shop.session,
       party: () => ({ active: buyer, companion }),
+      showPriceBreakdowns: priceBreakdownsShown,
     }),
   );
   settle();

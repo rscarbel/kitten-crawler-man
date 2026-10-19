@@ -573,8 +573,8 @@ A prop def may carry an `interaction` (`{ kind: 'examine' | 'search' | 'use', id
     footprint's centre, and every footprint tile opened.
   - **Broken debris never blocks.**
   - Beds, bunks, cabinets and wall racks are deliberately unbreakable.
-  - An occupant reacts with a timed bark (`InteriorBreakReactionBarks`), never a
-    conversation.
+  - An occupant reacts with a HUD caption pointing at them (`InteriorBreakReactions`),
+    never a conversation or a speech bubble.
 - **Loot.** A layout entry's `dropsLoot` overrides the def's `dropsLootByDefault`. Shop
   merchandise is `dropsLoot: false`, so breaking stock is never a way to steal it. Loot
   always drops, lands and then flies to the HUD.

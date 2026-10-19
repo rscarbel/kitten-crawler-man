@@ -816,7 +816,7 @@ section('9. The retry and the turn-in');
       .length === 1,
     'questCompleted is emitted once',
   );
-  choose('Goodbye');
+  check(!conversation.isOpen, 'the thanks ends the talk, with no questions or goodbye after it');
   const xpSectionsShown = (rewardScreens[0]?.sections ?? []).flatMap((section) =>
     section.kind === 'xp' ? [section.amount] : [],
   );

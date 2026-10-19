@@ -37,6 +37,8 @@ const BUILD_SETTLE_FRAMES = 400;
 const STAGED_DEFENSE_FRAMES = 3000;
 /** Tiles off the pile the driven crawler waits at while the companion stands on it. */
 const AWAY_FROM_PILE_TILES = 6;
+/** How far, in Manhattan tiles, a crawler can reach a grate to build on it. */
+const BUILD_REACH_TILES = 2;
 
 let failures = 0;
 let checks = 0;
@@ -57,6 +59,37 @@ if (gameMap.questRooms.length === 0) throw new Error('floor 1 generated no nurse
 const room = gameMap.questRooms[0];
 const grate = room.grateTiles[0];
 
+function manhattan(a: { x: number; y: number }, b: { x: number; y: number }): number {
+  return Math.abs(a.x - b.x) + Math.abs(a.y - b.y);
+}
+
+/**
+ * A walkable nursery tile beside the grate under test with no other grate in
+ * reach. A build press picks an open grate over a repair, so on a layout whose
+ * grates sit close together a builder in reach of a second, open grate boards
+ * that one instead and the repair checks would be measuring the wrong grate.
+ */
+function soleGrateBuilderTile(): { x: number; y: number } {
+  const { bounds } = room;
+  for (let reach = 1; reach <= BUILD_REACH_TILES; reach++) {
+    for (let y = grate.y - reach; y <= grate.y + reach; y++) {
+      for (let x = grate.x - reach; x <= grate.x + reach; x++) {
+        const tile = { x, y };
+        if (manhattan(tile, grate) !== reach) continue;
+        const inRoom =
+          x >= bounds.x && x < bounds.x + bounds.w && y >= bounds.y && y < bounds.y + bounds.h;
+        if (!inRoom || !gameMap.isWalkable(x, y)) continue;
+        const rivalInReach = room.grateTiles.some(
+          (other) => other !== grate && manhattan(tile, other) <= BUILD_REACH_TILES,
+        );
+        if (!rivalInReach) return tile;
+      }
+    }
+  }
+  throw new Error(`world seed ${gameMap.worldSeed}: no tile reaches grate 0 alone`);
+}
+const builderTile = soleGrateBuilderTile();
+
 function freshQuest() {
   const quest = new DefendQuestSystem(
     gameMap,
@@ -66,7 +99,7 @@ function freshQuest() {
     () => 1,
     undefined,
   );
-  const human = new HumanPlayer(grate.x, grate.y + 1, TILE_SIZE);
+  const human = new HumanPlayer(builderTile.x, builderTile.y, TILE_SIZE);
   const cat = new CatPlayer(room.centre.x, room.centre.y + 1, TILE_SIZE);
   human.isActive = true;
   cat.isActive = false;
@@ -170,6 +203,6 @@ console.log('── a repair whose barrier gives way ──');
 console.log(
   failures === 0
     ? `\nPASS — ${checks}/${checks} checks passed`
-    : `\nFAIL — ${checks - failures}/${checks} checks passed`,
+    : `\nFAIL — ${checks - failures}/${checks} checks passed (world seed ${gameMap.worldSeed})`,
 );
 if (failures > 0) process.exit(1);

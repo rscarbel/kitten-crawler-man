@@ -13,8 +13,14 @@
  */
 
 import type { Player, StatName } from '../Player';
-import type { ShopMenu, ShopRow, ShopPurchaseHandler } from '../ui/screens/shop/shopSession';
-import type { ResidentHost } from './townResidents';
+import type {
+  ShopMenu,
+  ShopOffer,
+  ShopRow,
+  ShopPurchaseHandler,
+} from '../ui/screens/shop/shopSession';
+import type { ServiceIconId } from '../sprites/art/itemIcons/serviceIcons';
+import { hostByline, type ResidentHost } from './townResidents';
 import { rotateLine } from './townServiceUtil';
 import { SERVICE_PRICES } from '../economy/servicePrices';
 
@@ -39,6 +45,7 @@ export const DRILL_TRAINING_CAP = DRILL_PRICES.length;
 const DRILL_ROWS: ReadonlyArray<{
   readonly key: string;
   readonly stat: StatName;
+  readonly art: ServiceIconId;
   readonly label: string;
   readonly desc: string;
   readonly taught: string;
@@ -46,6 +53,7 @@ const DRILL_ROWS: ReadonlyArray<{
   {
     key: 'pell_work',
     stat: 'strength',
+    art: 'drill_strength',
     label: 'Pell Work',
     desc: `Hours on the straw man until the swing comes off the hip. +${DRILL_STAT_POINTS} Strength`,
     taught: 'Again. Again. There — that one came off the hip. Keep it.',
@@ -53,6 +61,7 @@ const DRILL_ROWS: ReadonlyArray<{
   {
     key: 'shield_hours',
     stat: 'constitution',
+    art: 'drill_constitution',
     label: 'Shield Hours',
     desc: `Stand in the ring and be hit until standing stops being a decision. +${DRILL_STAT_POINTS} Constitution`,
     taught:
@@ -61,6 +70,7 @@ const DRILL_ROWS: ReadonlyArray<{
   {
     key: 'footwork',
     stat: 'dexterity',
+    art: 'drill_dexterity',
     label: 'Footwork',
     desc: `Sand, rope and a stick across the ankles. +${DRILL_STAT_POINTS} Dexterity`,
     taught: 'You are off the line now instead of backing down it. Do not go proud about it.',
@@ -68,6 +78,7 @@ const DRILL_ROWS: ReadonlyArray<{
   {
     key: 'stairwells',
     stat: 'intelligence',
+    art: 'drill_intelligence',
     label: 'Reading a Stairwell',
     desc: `Where they wait, which way they come, what a floor's shape is telling you. +${DRILL_STAT_POINTS} Intelligence`,
     taught: 'You will see the room before you are in it now. That is worth more than the swing.',
@@ -95,23 +106,23 @@ export function buildDrillYardMenu(
   host: ResidentHost | null,
 ): ShopMenu {
   const price = nextPrice(player);
+  const offer: ShopOffer =
+    price === null
+      ? { status: 'spent', reason: DRILL_EXHAUSTED }
+      : { status: 'open', cost: { kind: 'coins', coins: price } };
   return {
     title: 'The Drill Yard',
     bark: host?.line ?? rotateLine(SERGEANT_BARKS, turn),
-    byline: host?.name,
-    options: DRILL_ROWS.map((row): ShopRow => {
-      const option: ShopRow = {
-        key: row.key,
-        label: row.label,
-        // A capped row carries the last rung's price only because the field is
-        // required; the panel draws `unavailable` in the price's place, so this
-        // number is never shown once the yard is spent.
-        price: price ?? SERVICE_PRICES.drill_yard.fourth_point,
-        desc: row.desc,
-      };
-      if (price === null) option.unavailable = DRILL_EXHAUSTED;
-      return option;
-    }),
+    byline: hostByline(host),
+    emblem: null,
+    options: DRILL_ROWS.map((row): ShopRow => ({
+      key: row.key,
+      label: row.label,
+      desc: row.desc,
+      art: { kind: 'service', service: row.art },
+      offer,
+      questErrand: false,
+    })),
   };
 }
 

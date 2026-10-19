@@ -76,6 +76,10 @@ export class GrimaldiVine extends Mob {
     return false;
   }
 
+  override get showsOnRadar(): boolean {
+    return false;
+  }
+
   /**
    * Where the quest planted him is where he is: he cannot walk, so a restore has
    * nothing to rewind, but anchoring him keeps a checkpoint from treating a

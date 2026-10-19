@@ -27,7 +27,12 @@ import {
   type StatusEffect,
 } from '../core/StatusEffect';
 import type { Player } from '../Player';
-import type { ShopRow, ShopPurchaseHandler } from '../ui/screens/shop/shopSession';
+import {
+  offerUnless,
+  type ShopRow,
+  type ShopPurchaseHandler,
+} from '../ui/screens/shop/shopSession';
+import type { ServiceIconId } from '../sprites/art/itemIcons/serviceIcons';
 import { rotateLine } from './townServiceUtil';
 import { SERVICE_PRICES } from '../economy/servicePrices';
 
@@ -35,6 +40,7 @@ interface InnRoom {
   readonly key: string;
   readonly label: string;
   readonly price: number;
+  readonly art: ServiceIconId;
   /** The boon's own status type, so a re-rent can be recognised as a refresh. */
   readonly status: string;
   /** What the boon is worth, stated on the row — the player is paying for this, not for the bed. */
@@ -49,6 +55,7 @@ const ROOMS: ReadonlyArray<InnRoom> = [
     key: 'room_attic',
     label: 'The Attic Cot',
     price: SERVICE_PRICES.inn.attic_room,
+    art: 'room_attic',
     status: 'well_rested',
     boonSummary: '+2 CON',
     makeBoon: makeWellRested,
@@ -62,6 +69,7 @@ const ROOMS: ReadonlyArray<InnRoom> = [
     key: 'room_hearth',
     label: 'The Hearthside Room',
     price: SERVICE_PRICES.inn.hearth_room,
+    art: 'room_hearth',
     status: 'hearth_warmed',
     boonSummary: '+2 STR',
     makeBoon: makeHearthWarmed,
@@ -75,6 +83,7 @@ const ROOMS: ReadonlyArray<InnRoom> = [
     key: 'room_cats_own',
     label: "The Cat's Own Room",
     price: SERVICE_PRICES.inn.cats_own_room,
+    art: 'room_cats_own',
     status: 'deep_slumber',
     boonSummary: '+2 DEX and +2 INT',
     makeBoon: makeDeepSlumber,
@@ -101,16 +110,14 @@ export function isInnRoomKey(key: string): boolean {
  * reads as a bug rather than as a rule.
  */
 export function buildInnRoomOptions(townInDanger: boolean): ReadonlyArray<ShopRow> {
-  return ROOMS.map((room) => {
-    const option: ShopRow = {
-      key: room.key,
-      label: room.label,
-      price: room.price,
-      desc: `Mends you both, sleeps off what ails you, ${room.boonSummary} for ${ROOM_BOON_DURATION_MINUTES} minutes`,
-    };
-    if (townInDanger) option.unavailable = 'Not tonight';
-    return option;
-  });
+  return ROOMS.map((room): ShopRow => ({
+    key: room.key,
+    label: room.label,
+    desc: `Mends you both, sleeps off what ails you, ${room.boonSummary} for ${ROOM_BOON_DURATION_MINUTES} minutes`,
+    art: { kind: 'service', service: room.art },
+    offer: offerUnless(townInDanger ? 'Not tonight' : null, { kind: 'coins', coins: room.price }),
+    questErrand: false,
+  }));
 }
 
 /**

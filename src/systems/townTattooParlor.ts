@@ -16,17 +16,21 @@ import {
   STAT_TATTOO_IDS,
   brassGulletDesc,
   isStatTattooId,
+  type StatTattooId,
 } from '../core/tattoos';
-import type { ShopMenu, ShopRow, ShopPurchaseHandler } from '../ui/screens/shop/shopSession';
+import type { ServiceIconId } from '../sprites/art/itemIcons/serviceIcons';
+import {
+  offerUnless,
+  type ShopMenu,
+  type ShopRow,
+  type ShopPurchaseHandler,
+} from '../ui/screens/shop/shopSession';
 import type { PlannedBuildingName } from '../map/town/townPlan';
-import type { ResidentHost } from './townResidents';
+import { hostByline, type ResidentHost } from './townResidents';
 import { rotateLine } from './townServiceUtil';
 import { SERVICE_PRICES } from '../economy/servicePrices';
 
 export const QUIET_NEEDLE_NAME = 'The Quiet Needle' as const satisfies PlannedBuildingName;
-
-/** Each mark's description is the whole of its rules, so a row wraps rather than cutting it off. */
-const TATTOO_DESC_LINES = 6;
 
 /**
  * The parlour's one skill mark, gated on its own marker rather than `tattoo`:
@@ -34,6 +38,13 @@ const TATTOO_DESC_LINES = 6;
  * either.
  */
 const SKILL_TATTOO_KEY = 'brass_gullet';
+
+const STAT_TATTOO_ART = {
+  coiled_fist: 'tattoo_coiled_fist',
+  iron_ribs: 'tattoo_iron_ribs',
+  third_eye: 'tattoo_third_eye',
+  quick_serpent: 'tattoo_quick_serpent',
+} as const satisfies Record<StatTattooId, ServiceIconId>;
 
 function brassGulletOnSale(player: Player): boolean {
   return (
@@ -46,21 +57,27 @@ export function hasTattooForSale(player: Player): boolean {
   return player.tattoo === null || brassGulletOnSale(player);
 }
 
+/** Why `player` cannot take the skill mark, or null when they can. */
+function skillTattooRefusal(player: Player): string | null {
+  if (player.skillTattoo !== null) return 'Already marked';
+  if (player.skills.previewUnlock(BRASS_GULLET_SKILL) === 'already_max') return 'Mastered';
+  return null;
+}
+
 /** The skill-tattoo row, with its availability resolved for `player`. */
 function buildSkillTattooOption(player: Player): ShopRow {
   const def = getSkillDef(BRASS_GULLET_SKILL);
-  const option: ShopRow = {
+  return {
     key: SKILL_TATTOO_KEY,
     label: BRASS_GULLET_LABEL,
-    price: SERVICE_PRICES.tattoo_parlor.skill_tattoo,
     desc: brassGulletDesc(def.name),
+    art: { kind: 'service', service: 'tattoo_brass_gullet' },
+    offer: offerUnless(skillTattooRefusal(player), {
+      kind: 'coins',
+      coins: SERVICE_PRICES.tattoo_parlor.skill_tattoo,
+    }),
+    questErrand: false,
   };
-  if (player.skillTattoo !== null) {
-    option.unavailable = 'Already marked';
-  } else if (player.skills.previewUnlock(BRASS_GULLET_SKILL) === 'already_max') {
-    option.unavailable = 'Mastered';
-  }
-  return option;
 }
 
 const TATTOOIST_BARKS: ReadonlyArray<string> = [
@@ -89,20 +106,22 @@ export function buildTattooMenu(player: Player, turn: number, host: ResidentHost
   return {
     title: QUIET_NEEDLE_NAME,
     bark: host?.line ?? tattooistBark(turn),
-    byline: host?.name,
-    descLines: TATTOO_DESC_LINES,
-    options: STAT_TATTOO_IDS.map((id) => {
+    byline: hostByline(host),
+    emblem: null,
+    options: STAT_TATTOO_IDS.map((id): ShopRow => {
       const design = STAT_TATTOO_DESIGNS[id];
-      const option: ShopRow = {
+      const refusal = existing === null ? null : existing === id ? 'Yours' : 'Already inked';
+      return {
         key: id,
         label: design.label,
-        price: SERVICE_PRICES.tattoo_parlor.stat_tattoo,
         desc: design.desc,
+        art: { kind: 'service', service: STAT_TATTOO_ART[id] },
+        offer: offerUnless(refusal, {
+          kind: 'coins',
+          coins: SERVICE_PRICES.tattoo_parlor.stat_tattoo,
+        }),
+        questErrand: false,
       };
-      if (existing !== null) {
-        option.unavailable = existing === id ? 'Yours' : 'Already inked';
-      }
-      return option;
     }).concat(buildSkillTattooOption(player)),
   };
 }

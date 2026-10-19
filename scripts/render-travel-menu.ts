@@ -31,6 +31,7 @@ const { TravelMenu } = await import('../src/ui/TravelMenu.js');
 const { UiRoot } = await import('../src/ui/core/UiRoot.js');
 const { NO_INSETS } = await import('../src/ui/core/viewport.js');
 const { shopScreenSurface } = await import('../src/ui/screens/shop/ShopScreen.js');
+const { priceBreakdownsShown } = await import('../src/ui/screens/shop/priceBreakdowns.js');
 
 type Density = import('../src/ui/theme/tokens.js').Density;
 type ViewportInput = import('../src/ui/core/viewport.js').ViewportInput;
@@ -131,6 +132,7 @@ for (const viewport of VIEWPORTS) {
         id: 'travel-menu',
         session: menu.session,
         party: () => ({ active: human, companion: cat }),
+        showPriceBreakdowns: priceBreakdownsShown,
       }),
     );
     const canvas = createCanvas(viewport.width, viewport.height);

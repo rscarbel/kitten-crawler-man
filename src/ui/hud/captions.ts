@@ -96,6 +96,20 @@ export function captionForCue(cue: PlayedCue, view: VisibleWorldView | null): He
   return { text: caption.text, direction };
 }
 
+/**
+ * A caption for something said or done at `point` rather than a sound — a
+ * room's reaction, narration — pointing toward it when there is a `view` to
+ * judge from. Posted whatever the captions setting, since nothing else on
+ * screen carries the words.
+ */
+export function captionToward(
+  text: string,
+  point: { readonly x: number; readonly y: number },
+  view: VisibleWorldView | null,
+): HeardCaption {
+  return { text, direction: view === null ? null : directionFrom(view, point) };
+}
+
 /** The caption lane a scene's HUD draws, fed by the cues its audio plays. */
 export class SoundCaptions {
   private lines: MutableLine[] = [];

@@ -22,7 +22,7 @@ import {
   getSpriteExtentsPxByKey,
   type MapSpriteExtentsPx,
 } from '../../core/SpriteLoader';
-import { drawSprite } from '../../core/SpriteRenderer';
+import { drawSprite, spriteStateInkTop } from '../../core/SpriteRenderer';
 import { isVillageStandingProp, type VillageStandingPropId } from '../../sprites/art/villageArt';
 import { villagePropSheetKey } from '../../sprites/sheets/villageSheets';
 import {
@@ -221,6 +221,22 @@ export function drawHollowPropTile(
   if (def === undefined || stateDef === undefined) return;
   const variant = variantFor(structure, placement, stateDef.frameCount);
   drawSprite(ctx, def, stateDef, variant, sx, sy, ts);
+}
+
+/**
+ * The screen y of the highest pixel a standing prop paints, for a prop whose
+ * drawing tile's top-left is at screen y `sy` — what a marker hung over it
+ * stays clear of. `undefined` while its sheet is not loaded.
+ */
+export function hollowPropInkTop(
+  prop: VillageStandingPropId,
+  sy: number,
+  ts: number,
+): number | undefined {
+  const def = getSpriteDefByKey(villagePropSheetKey(prop));
+  const stateDef = def?.states.get(prop);
+  if (def === undefined || stateDef === undefined) return undefined;
+  return spriteStateInkTop(def, stateDef, sy, ts);
 }
 
 const NO_EXTENTS: MapSpriteExtentsPx = { left: 0, up: 0, right: 0, down: 0 };

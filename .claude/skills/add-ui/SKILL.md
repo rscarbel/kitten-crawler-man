@@ -517,9 +517,19 @@ shop, the casino).
   `MenusKit.inventoryActions` for `resolvePendingInventoryActions`; tutorial
   narrowing is the host's `restrictions()`. `npm run verify:inventory-screen`.
 - **`src/ui/screens/shop/`** — `ShopSession` (state) + `shopScreenSurface` for
-  every priced menu and store counter (Buy/Sell `tabs`, `listRow`s, the stepper
-  modal for selling a stack; pricing stays in `src/systems/market/`).
-  `FortuneScreen`, `VipLoungeScreen` and `MercenaryDeskScreen` are variants.
+  every counter that sells anything: stores, stalls, taverns, services, Oren's
+  forge, the VIP lounge, the Anchor's destinations. Offers are a grid of cards
+  (two across where there is room) with the thing's picture, its whole
+  description and one cost pill per part of the price (coins, each material as
+  held/needed, red while short), Buy/Sell `tabs`, and the stepper modal for
+  selling a stack. A `ShopRow` has no optional fields: `art` (an item icon or a
+  `SERVICE_ICONS` painter from `src/sprites/art/itemIcons/serviceIcons.ts`),
+  `desc`, `offer` (`open` / `closed` with a reason / `spent`) carrying a
+  `ShopCost` (`free`, `coins`, `quoted` by the engine, `coinsAndMaterials`
+  with a non-empty material list) and `questErrand`. A service with no picture
+  is a type error: paint one. Pricing stays in `src/economy/` and
+  `src/systems/market/`. `FortuneScreen` (a card reading) and
+  `MercenaryDeskScreen` (a hiring roster with portraits) are their own screens.
 - **`src/ui/screens/pause/`** — `PauseScreen` (one per scene on
   `MenusKit.pauseScreen`, band `modal`): a sidebar card on `regular`/`wide`, a
   drill-in list with a back chevron on `compact`. `open()` or

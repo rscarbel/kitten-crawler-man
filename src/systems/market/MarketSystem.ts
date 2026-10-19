@@ -82,8 +82,8 @@ export interface MarketBrowse {
   purchase: ShopPurchaseHandler;
   /** Sounds the refusal when the player pokes a row they can't buy. */
   onBlocked: () => void;
-  /** This stall's Sell tab, or undefined for a stall that buys nothing back. */
-  sell: ShopSellConfig | undefined;
+  /** This stall's Sell tab, or null for a stall that buys nothing back. */
+  sell: ShopSellConfig | null;
 }
 
 export class MarketSystem implements GameSystem {
@@ -169,7 +169,7 @@ export class MarketSystem implements GameSystem {
             stock: this.stock,
             onSold: () => this.getAudio()?.play('purchase_success'),
           }
-        : undefined,
+        : null,
     });
     return true;
   }

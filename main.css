@@ -7,6 +7,18 @@
   user-select: none;
 }
 
+/*
+ * A text field needs its own selection back: under `user-select: none` a
+ * phone's browser keeps the caret pinned at the start of the field, so every
+ * letter typed lands in front of the last and "hello" comes out "olleh".
+ * WebKit reads only the prefixed property.
+ */
+input,
+textarea {
+  -webkit-user-select: text;
+  user-select: text;
+}
+
 html {
   overflow: hidden;
   height: 100%;
