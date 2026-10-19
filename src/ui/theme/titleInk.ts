@@ -69,6 +69,10 @@ const hallInk = {
   doorFrame: '#6e6150',
   doorReveal: '#1a140f',
   doorVoid: '#000000',
+  /** The stone of the stair passage beyond the doorway, before light and depth darken it. */
+  passageStone: rgbOfHex('#7c705e'),
+  /** The worn arris of the top step, the brightest edge inside the doorway. */
+  passageNosing: rgbOfHex('#b8a98e'),
   /** A warm breath rising out of the stairwell, pulling the eye to where the dive goes. */
   doorGlow: 'rgba(214, 96, 36, 0.28)',
   doorGlowFade: 'rgba(214, 96, 36, 0)',

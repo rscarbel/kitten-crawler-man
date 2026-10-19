@@ -14,9 +14,9 @@ import { DEFAULT_DUNGEON_FLOOR_THEME } from '../../../map/dungeon/floorTheme';
 import { getMaterial, paintPatch } from '../../../map/tilegen/materials';
 import { TILE_PX, type Surface } from '../../../map/tilegen/raster';
 import { dungeonWallMasonry, paintFaceStrip } from '../../../sprites/art/dungeonWallArt';
-import { STAIRWELL_OPENING, paintStairwell } from '../../../sprites/art/stairwellArt';
 import { TITLE_INK } from '../../../ui/theme/titleInk';
 import { TitleBakedPlane } from '../titleBake';
+import { paintStairPassage } from './stairPassage';
 import {
   HALL_DEPTH,
   WALL_FADE_START_TILES,
@@ -463,11 +463,7 @@ function paintDoorway(ctx: CanvasRenderingContext2D, hall: TitleHall): void {
   ctx.clip();
   ctx.fillStyle = TITLE_INK.hall.doorVoid;
   ctx.fillRect(door.x, door.y, door.w, door.h);
-  const openingWidthShare = STAIRWELL_OPENING.right - STAIRWELL_OPENING.left;
-  const size = door.w / openingWidthShare;
-  const originX = door.x - STAIRWELL_OPENING.left * size;
-  const originY = hall.farFloorY - STAIRWELL_OPENING.bottom * size;
-  paintStairwell(ctx, originX, originY, size, HALL_THEME);
+  paintStairPassage(ctx, hall);
 
   const glowRadius = door.w * DOOR_GLOW_RADIUS_SHARE;
   const glowX = door.x + door.w * HALF;
