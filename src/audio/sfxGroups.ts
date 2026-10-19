@@ -177,6 +177,8 @@ const DUNGEON_CUE_SFX_IDS: readonly SoundId[] = [
   'puddle_step_2',
   'puddle_step_3',
   'puddle_step_4',
+  'puddle_step_5',
+  'puddle_step_6',
   'vending_glass_smash_1',
   'vending_glass_smash_2',
   'vending_glass_smash_3',

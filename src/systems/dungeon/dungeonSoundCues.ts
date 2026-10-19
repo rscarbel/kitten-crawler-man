@@ -171,7 +171,14 @@ export const DUNGEON_CUES = {
   /** Beetles or roaches scattering. Waits on `critter_scuttle_1..3`. */
   critterScuttle: [],
   /** A footstep in a puddle. */
-  puddleStep: ['puddle_step_1', 'puddle_step_2', 'puddle_step_3', 'puddle_step_4'],
+  puddleStep: [
+    'puddle_step_1',
+    'puddle_step_2',
+    'puddle_step_3',
+    'puddle_step_4',
+    'puddle_step_5',
+    'puddle_step_6',
+  ],
   /** Paper drifts lifting underfoot. */
   paperRustle: ['paper_rustle_1', 'paper_rustle_2', 'paper_rustle_3', 'paper_rustle_4'],
 } as const satisfies Record<string, readonly SoundId[]>;
