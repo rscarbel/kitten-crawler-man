@@ -49,6 +49,15 @@ export const worldPalette = {
     /** Pale on the emerald face, since a dark mark sinks into the coin at badge size. */
     mark: '#ecfdf5',
   },
+  /**
+   * The cross glyph in the badge over a healer. Green on white because a red
+   * cross on white is the Red Cross emblem, whose use is restricted by the
+   * Geneva Conventions and national law; the first-aid green cross is not.
+   */
+  medicalSign: {
+    disc: '#f8fafc',
+    cross: '#16a34a',
+  },
   /** The frames and arrows that mark where a quest wants the party to go. */
   objective: {
     /** An objective the party can act on now. */

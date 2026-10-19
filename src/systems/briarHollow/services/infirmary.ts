@@ -28,7 +28,6 @@ import {
   sellerLine,
   shopTopic,
 } from './serviceContext';
-import { shopSignWhen } from '../../../sprites/overheadIcon';
 import { SERVICE_PRICES } from '../../../economy/servicePrices';
 
 const INFIRMARY_TITLE = 'The Infirmary';
@@ -112,7 +111,7 @@ export function infirmaryShop(party: ServiceParty, host: InfirmaryHost): ShopDef
 /** "Treatment" under Sella's conversation — open through the siege, when it matters most. */
 export function infirmaryTopics(party: ServiceParty, host: InfirmaryHost): TopicProvider {
   return {
-    shopSignFor: (villager) => shopSignWhen(villager === DOCTOR),
+    shopSignFor: (villager) => (villager === DOCTOR ? 'treats' : 'closed'),
     topics(villager, _ctx, flow) {
       if (villager !== DOCTOR) return [];
       const treatment = shopTopic(

@@ -1,8 +1,8 @@
 /**
  * The small dark rounded-square badge that bobs over something in the world
- * to say what it does: a Briar Hollow station's output, or the coin over
- * anyone who sells things. One painter, so every such badge reads as the
- * same family.
+ * to say what it does: a Briar Hollow station's output, the coin over
+ * anyone who sells things, or the cross over a healer. One painter, so every
+ * such badge reads as the same family.
  */
 
 import { worldPalette } from '../theme/worldInk';

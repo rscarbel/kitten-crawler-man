@@ -88,9 +88,9 @@ export interface TopicProvider {
   ): readonly ConversationTopic[];
   /**
    * For a provider whose rows open a counter: whether `villager`'s counter
-   * would trade right now, which hangs a coin over them. Answered beside
-   * `topics` so the coin and the row it promises are decided from the same
-   * conditions.
+   * would trade (a coin) or treat (a cross) right now, which hangs that badge
+   * over them. Answered beside `topics` so the badge and the row it promises
+   * are decided from the same conditions.
    */
   shopSignFor?(villager: VillagerId, ctx: VillagerContext): ShopSign;
 }

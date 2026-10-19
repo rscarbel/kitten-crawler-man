@@ -25,7 +25,7 @@ import type { GameMap } from '../../map/GameMap';
 import type { BriarHollowSite, VillagerAnchorKind } from '../../map/overworld/briarHollowSite';
 import type { TilePoint } from '../../map/town/townPlan';
 import { ratkinCastEventFrame, ratkinCastLoopFrame } from '../../sprites/ratkinCastSprite';
-import { shopSignWhen, type ShopSign } from '../../sprites/overheadIcon';
+import type { ShopSign } from '../../sprites/overheadIcon';
 import { drawInteractionPrompt } from '../../ui/InteractionPrompt';
 import type { NPCMarkerType } from '../../creatures/QuestNPC';
 import type { Conversation } from '../../dialog/Conversation';
@@ -1514,12 +1514,13 @@ export class VillagerSystem {
     }
   }
 
-  /** `'trades'` when any provider has a counter open under this villager. */
+  /** The first open counter any provider keeps under this villager, or `'closed'`. */
   private shopSignFor(villager: VillagerId, ctx: VillagerContext): ShopSign {
-    const trades = this.topicProviders.some(
-      (provider) => provider.shopSignFor?.(villager, ctx) === 'trades',
-    );
-    return shopSignWhen(trades);
+    for (const provider of this.topicProviders) {
+      const sign = provider.shopSignFor?.(villager, ctx) ?? 'closed';
+      if (sign !== 'closed') return sign;
+    }
+    return 'closed';
   }
 
   // ── Rendering ──────────────────────────────────────────────────────────
