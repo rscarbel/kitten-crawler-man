@@ -61,6 +61,8 @@ export const INTERIOR_CUES = {
   searchEmpty: ['search_empty'],
   /** A coin laid in the temple's offering bowl, or a blessing paid for. */
   offeringCoin: ['offering_coin_bowl'],
+  /** The Quiet Needle's tattooist inking a design the party just paid for. */
+  tattooNeedle: ['tattoo_needle'],
   /** Sitting down on a bench or stool. */
   benchSit: ['bench_creak_sit'],
   /** A dart into the Sunken Stump's board. */

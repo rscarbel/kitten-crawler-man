@@ -3995,7 +3995,8 @@ export class BuildingInteriorScene extends GameplayScene {
       sell,
       liveRows: false,
     });
-    // A counter trading in goods rather than a service is heard taking the coin.
+    // A counter whose trade makes a sound of its own (the till taking coin, the
+    // tattooist's needle) is heard over the purchase chime.
     const overCounter = (handler: ShopPurchaseHandler, cue: InteriorCue): ShopPurchaseHandler => {
       return (option, buyer) => {
         const result = handler(option, buyer);
@@ -4020,7 +4021,7 @@ export class BuildingInteriorScene extends GameplayScene {
         // designs as spent — and the skill mark as spent independently of them.
         panel.open(
           () => buildTattooMenu(this.active(), turn, host),
-          confirmed(inkTattoo, never),
+          confirmed(overCounter(inkTattoo, 'tattooNeedle'), never),
           counterOptions(null),
         );
         return;

@@ -31,7 +31,7 @@
  * - A light that went out by being smashed: layer {@link LIGHT_OUT_CUE}.
  */
 
-import type { SoundId } from '../../audio/sounds';
+import { WOOD_SMASHING_SOUNDS, type SoundId } from '../../audio/sounds';
 import type { WallFixtureKind } from '../../map/dungeon/wallFixtures';
 import type { BreakMaterial, SmashCue } from '../destruction/breakMaterials';
 import { WALL_FIXTURE_SPECS } from '../../map/dungeon/wallFixtures';
@@ -57,14 +57,14 @@ export const DUNGEON_CUES = {
   boilerRoomBed: ['tech_machinery_running'],
 
   // ── Positional loops ──
-  /** A wall sconce or standing torch. Waits on `torch_burn_loop`; the brazier's crackle stands in. */
-  torchBurn: ['ambient_fire_crackling'],
+  /** A wall sconce or standing torch. */
+  torchBurn: ['torch_burn_loop'],
   /** A brazier. Final: `ambient_fire_crackling`. */
   brazierCrackle: ['ambient_fire_crackling'],
   /** Fluorescent tubes and sodium lamps. */
   fluorescentHum: ['fluorescent_hum_loop'],
-  /** A leaking pipe or steam valve. Waits on `steam_leak_loop`. */
-  steamLeak: [],
+  /** A leaking pipe or steam valve. */
+  steamLeak: ['steam_leak_loop'],
   /** A breaker panel, and the vending machine. Waits on `electrical_panel_buzz_loop`. */
   panelBuzz: [],
   /** A security camera dome, only while it turns. Waits on `camera_servo_loop`. */
@@ -73,8 +73,15 @@ export const DUNGEON_CUES = {
   fliesBuzz: [],
 
   // ── Ambient one-shots ──
-  /** A drip landing in a puddle. Waits on `water_drip_1..4`. */
-  waterDrip: [],
+  /** A drip landing in a puddle. */
+  waterDrip: [
+    'water_drip_1',
+    'water_drip_2',
+    'water_drip_3',
+    'water_drip_4',
+    'water_drip_5',
+    'water_drip_6',
+  ],
   /** Floor 2: a distant pipe knocking in the walls. Waits on `pipe_knock_1..3`. */
   pipeKnock: [],
   /** Floor 1: old stone settling, grit trickling down. Waits on `stone_settle_1..2`; `rumble` stands in. */
@@ -85,8 +92,8 @@ export const DUNGEON_CUES = {
   fluorescentFlicker: [],
 
   // ── Breaking: the wood, iron, rubbish and glass cues every prop falls back on ──
-  /** Splitting planks. Final: `wood_smashing_1..2`. */
-  woodSmash: ['wood_smashing_1', 'wood_smashing_2'],
+  /** Splitting planks. */
+  woodSmash: WOOD_SMASHING_SOUNDS,
   /** Iron folding up. Final: `hammer_strike`. */
   ironSmash: ['hammer_strike'],
   /** A burst bag and the rubbish it held. Final: `garbage_bag_burst_1..2`. */

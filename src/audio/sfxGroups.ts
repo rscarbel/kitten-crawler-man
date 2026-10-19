@@ -1,4 +1,4 @@
-import { STREAMING_SOUND_IDS, type SoundId } from './sounds';
+import { STREAMING_SOUND_IDS, WOOD_SMASHING_SOUNDS, type SoundId } from './sounds';
 import type { BuildingEntry } from '../systems/BuildingSystem';
 import { interiorSellsSomething } from '../systems/townServices';
 import { CONTRACT_CUES } from '../systems/constructionContracts/contractSoundCues';
@@ -147,6 +147,14 @@ const DUNGEON_CUE_SFX_IDS: readonly SoundId[] = [
   'cobweb_tear_1',
   'cobweb_tear_2',
   'fluorescent_hum_loop',
+  'torch_burn_loop',
+  'steam_leak_loop',
+  'water_drip_1',
+  'water_drip_2',
+  'water_drip_3',
+  'water_drip_4',
+  'water_drip_5',
+  'water_drip_6',
   'metal_dent_1',
   'metal_dent_2',
   'metal_dent_3',
@@ -340,8 +348,7 @@ export const SFX_GROUPS: Record<SfxGroup, readonly SoundId[]> = {
     'wood_breaking_1',
     'wood_breaking_2',
     'wood_breaking_3',
-    'wood_smashing_1',
-    'wood_smashing_2',
+    ...WOOD_SMASHING_SOUNDS,
     // Reward flow, timers, save chime and the pet's happy squawks: any floor can fire them.
     'coin_land_tick',
     'garbage_bag_burst_1',

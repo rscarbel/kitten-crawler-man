@@ -1,6 +1,6 @@
 import { PLAYER_SPEED, TILE_SIZE } from '../core/constants';
 import { timeFrameIndex } from '../core/SpriteRenderer';
-import type { SoundId } from '../audio/sounds';
+import { WOOD_SMASHING_SOUNDS, type SoundId } from '../audio/sounds';
 import type { HumanPlayer } from '../creatures/HumanPlayer';
 import type { CatPlayer } from '../creatures/CatPlayer';
 import {
@@ -184,7 +184,8 @@ export class JuicerRoomSystem
   private readonly treadmills: Treadmill[] = [];
   private readonly puffs: ChalkPuff[] = [];
   private readonly renderables: DressingRenderable[] = [];
-  private readonly pendingSounds: SoundId[] = [];
+  /** Each entry is one cue's takes; the scene plays one of them at random. */
+  private readonly pendingSounds: Array<readonly SoundId[]> = [];
   private boomboxHp = BOOMBOX_HP;
   private sealed = false;
   private defeated = false;
@@ -276,7 +277,7 @@ export class JuicerRoomSystem
 
   override onSeal(): void {
     if (this.defeated || this.layout === null) return;
-    if (!this.sealed) this.pendingSounds.push('gate_opening');
+    if (!this.sealed) this.pendingSounds.push(['gate_opening']);
     this.sealed = true;
   }
 
@@ -378,7 +379,7 @@ export class JuicerRoomSystem
   }
 
   /** Sound cues raised since the last call, for the scene to play. */
-  drainSoundCues(): SoundId[] {
+  drainSoundCues(): Array<readonly SoundId[]> {
     return this.pendingSounds.splice(0, this.pendingSounds.length);
   }
 
@@ -566,7 +567,7 @@ export class JuicerRoomSystem
       return;
     }
     if (this.shutterFrame === 0 || this.shutterFrame === SHUTTER_CLOSED_FRAME) {
-      if (this.shutterHold === 0 && target === 0) this.pendingSounds.push('gate_opening');
+      if (this.shutterHold === 0 && target === 0) this.pendingSounds.push(['gate_opening']);
     }
     this.shutterHold++;
     if (this.shutterHold < SHUTTER_FRAME_HOLD) return;
@@ -661,7 +662,7 @@ export class JuicerRoomSystem
       if (treadmill.shutoffFrames <= 0) continue;
       treadmill.shutoffFrames--;
       const beepStarts = treadmill.shutoffFrames === CONSOLE_BEEP_FRAMES;
-      if (beepStarts && this.beltsLive) this.pendingSounds.push('cooldown_crisp');
+      if (beepStarts && this.beltsLive) this.pendingSounds.push(['cooldown_crisp']);
     }
   }
 
@@ -688,13 +689,13 @@ export class JuicerRoomSystem
         for (const treadmill of this.treadmills) {
           if (treadmill.shutoffFrames > 0 || !inReach(treadmill.layout.console)) continue;
           treadmill.shutoffFrames = CONSOLE_SHUTOFF_FRAMES;
-          this.pendingSounds.push('error');
+          this.pendingSounds.push(['error']);
         }
       }
       const boombox = this.layout?.boombox ?? null;
       if (boombox !== null && this.boomboxHp > 0 && inReach(boombox)) {
         this.boomboxHp--;
-        this.pendingSounds.push(this.boomboxHp <= 0 ? 'wood_smashing_1' : 'hammer_strike');
+        this.pendingSounds.push(this.boomboxHp <= 0 ? WOOD_SMASHING_SOUNDS : ['hammer_strike']);
       }
     }
   }

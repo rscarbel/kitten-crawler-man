@@ -52,7 +52,7 @@ import {
 import { paintPlankBoard, paintStoneCourses, paintGlazing } from '../town/townMaterials';
 import { mulberry32 } from '../../person/rng';
 import type { AnchorKind } from '../../../systems/InteriorOccupantSystem';
-import type { SoundId } from '../../../audio/sounds';
+import { WOOD_SMASHING_SOUNDS, type SoundId } from '../../../audio/sounds';
 import {
   paintCatPortrait,
   paintDairyChurn,
@@ -2492,7 +2492,7 @@ function frameHeadroomTilesFor(id: string): number {
 
 // ── Break cues and drop tables (reused across every destructible interior prop) ──
 
-const BREAK_CUES_WOOD: readonly [SoundId, ...SoundId[]] = ['wood_smashing_1', 'wood_smashing_2'];
+const BREAK_CUES_WOOD: readonly [SoundId, ...SoundId[]] = WOOD_SMASHING_SOUNDS;
 const BREAK_CUES_WOOD_LIGHT: readonly [SoundId, ...SoundId[]] = [
   'wood_breaking_1',
   'wood_breaking_2',

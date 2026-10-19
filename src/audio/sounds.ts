@@ -307,6 +307,9 @@ const SFX_IDS = [
   'mirror_pivot_5',
   'monitor_pop',
   'mordecai_message_chime',
+  'notice_tear_off_1',
+  'notice_tear_off_2',
+  'notice_tear_off_3',
   'nothing_final_tone',
   'nothing_void_swallow',
   'offering_coin_bowl',
@@ -699,6 +702,7 @@ const SFX_IDS = [
   'stat_boost',
   'station_upgrade_flourish',
   'steam_valve_burst',
+  'steam_leak_loop',
   'structure_dismantle',
   'swing_heavy_1',
   'swing_heavy_2',
@@ -720,6 +724,7 @@ const SFX_IDS = [
   'taranis_wave_hit_2',
   'taranis_wave_hit_3',
   'taranis_wave_hit_4',
+  'tattoo_needle',
   'tech_machinery_running',
   'teleport',
   'thrall_fade_out',
@@ -733,6 +738,7 @@ const SFX_IDS = [
   'toilet_flush_2',
   'toilet_flush_3',
   'tool_upgrade',
+  'torch_burn_loop',
   'torch_extinguish',
   'townsfolk_hm_female_1',
   'townsfolk_hm_female_2',
@@ -773,6 +779,12 @@ const SFX_IDS = [
   'wall_hit_stone',
   'wall_hit_wood',
   'wall_upgrade_stone',
+  'water_drip_1',
+  'water_drip_2',
+  'water_drip_3',
+  'water_drip_4',
+  'water_drip_5',
+  'water_drip_6',
   'weapon_draw_blade_1',
   'weapon_draw_blade_2',
   'weapon_draw_blade_3',
@@ -806,6 +818,11 @@ const SFX_IDS = [
   'wood_breaking_3',
   'wood_smashing_1',
   'wood_smashing_2',
+  'wood_smashing_3',
+  'wood_smashing_4',
+  'wood_smashing_5',
+  'wood_smashing_6',
+  'wood_smashing_7',
 ] as const;
 
 const SOUND_IDS_TUPLE = [...MUSIC_TRACK_IDS, ...JINGLE_IDS, ...SFX_IDS] as const;
@@ -1091,6 +1108,9 @@ export const SOUND_MANIFEST: Record<SoundId, string> = {
   mirror_pivot_4: './src/audio/effects/circus/mirror_pivot_4.mp3',
   mirror_pivot_5: './src/audio/effects/circus/mirror_pivot_5.mp3',
   monitor_pop: './src/audio/effects/dungeon/monitor_pop.mp3',
+  notice_tear_off_1: './src/audio/effects/construction/notice_tear_off_1.mp3',
+  notice_tear_off_2: './src/audio/effects/construction/notice_tear_off_2.mp3',
+  notice_tear_off_3: './src/audio/effects/construction/notice_tear_off_3.mp3',
   nothing_final_tone: './src/audio/casino/wheel/nothing_final_tone.mp3',
   nothing_void_swallow: './src/audio/casino/wheel/nothing_void_swallow.mp3',
   offering_coin_bowl: './src/audio/effects/interior/offering_coin_bowl.mp3',
@@ -1511,6 +1531,7 @@ export const SOUND_MANIFEST: Record<SoundId, string> = {
   station_upgrade_flourish: './src/audio/effects/construction/station_upgrade_flourish.mp3',
   stealth_music: './src/audio/music/stealth_music.mp3',
   steam_valve_burst: './src/audio/effects/dungeon/steam_valve_burst.mp3',
+  steam_leak_loop: './src/audio/ambient/steam_leak_loop.mp3',
   structure_dismantle: './src/audio/effects/construction/structure_dismantle.mp3',
   swing_heavy_1: './src/audio/combat/weapons/swing_heavy_1.mp3',
   swing_heavy_2: './src/audio/combat/weapons/swing_heavy_2.mp3',
@@ -1532,6 +1553,7 @@ export const SOUND_MANIFEST: Record<SoundId, string> = {
   taranis_wave_hit_2: './src/audio/effects/taranis/wave_hit_2.mp3',
   taranis_wave_hit_3: './src/audio/effects/taranis/wave_hit_3.mp3',
   taranis_wave_hit_4: './src/audio/effects/taranis/wave_hit_4.mp3',
+  tattoo_needle: './src/audio/effects/interior/tattoo_needle.mp3',
   tavern_music_1: './src/audio/music/tavern_music_1.mp3',
   tavern_music_2: './src/audio/music/tavern_music_2.mp3',
   tech_machinery_running: './src/audio/bosses/grotesque_spider/tech_machinery_running.mp3',
@@ -1550,6 +1572,7 @@ export const SOUND_MANIFEST: Record<SoundId, string> = {
   toilet_flush_3: './src/audio/effects/bathroom/toilet_flush_3.mp3',
   tool_upgrade: './src/audio/effects/village/tool_upgrade.mp3',
   torch_extinguish: './src/audio/effects/dungeon/torch_extinguish.mp3',
+  torch_burn_loop: './src/audio/ambient/torch_burn_loop.mp3',
   town_music_1: './src/audio/music/town_music_1.mp3',
   town_music_2: './src/audio/music/town_music_2.mp3',
   townsfolk_hm_female_1: './src/audio/characters/town/townsfolk_hm_female_1.mp3',
@@ -1586,6 +1609,12 @@ export const SOUND_MANIFEST: Record<SoundId, string> = {
   vending_glass_smash_2: './src/audio/effects/dungeon/vending_glass_smash_2.mp3',
   vending_glass_smash_3: './src/audio/effects/dungeon/vending_glass_smash_3.mp3',
   vending_glass_smash_4: './src/audio/effects/dungeon/vending_glass_smash_4.mp3',
+  water_drip_1: './src/audio/effects/dungeon/water_drip_1.mp3',
+  water_drip_2: './src/audio/effects/dungeon/water_drip_2.mp3',
+  water_drip_3: './src/audio/effects/dungeon/water_drip_3.mp3',
+  water_drip_4: './src/audio/effects/dungeon/water_drip_4.mp3',
+  water_drip_5: './src/audio/effects/dungeon/water_drip_5.mp3',
+  water_drip_6: './src/audio/effects/dungeon/water_drip_6.mp3',
   village_gate_close: './src/audio/effects/construction/village_gate_close.mp3',
   village_gate_open: './src/audio/effects/construction/village_gate_open.mp3',
   wall_break_stone: './src/audio/effects/construction/wall_break_stone.mp3',
@@ -1623,6 +1652,11 @@ export const SOUND_MANIFEST: Record<SoundId, string> = {
   wood_breaking_3: './src/audio/effects/wood_breaking_3.mp3',
   wood_smashing_1: './src/audio/effects/wood_smashing_1.mp3',
   wood_smashing_2: './src/audio/effects/wood_smashing_2.mp3',
+  wood_smashing_3: './src/audio/effects/wood_smashing_3.mp3',
+  wood_smashing_4: './src/audio/effects/wood_smashing_4.mp3',
+  wood_smashing_5: './src/audio/effects/wood_smashing_5.mp3',
+  wood_smashing_6: './src/audio/effects/wood_smashing_6.mp3',
+  wood_smashing_7: './src/audio/effects/wood_smashing_7.mp3',
 };
 
 /** The Desperado Club's rotating soundtrack — a shuffled, looping playlist entered on club arrival. */
@@ -1784,6 +1818,17 @@ export function musicLoopStartS(id: SoundId): number | undefined {
 export const NON_STREAMING_SOUND_IDS: ReadonlyArray<SoundId> = ALL_SOUND_IDS.filter(
   (id) => !STREAMING_SOUND_IDS.has(id),
 );
+
+/** Every take of planks splitting apart; whatever smashes wood picks one of these. */
+export const WOOD_SMASHING_SOUNDS = [
+  'wood_smashing_1',
+  'wood_smashing_2',
+  'wood_smashing_3',
+  'wood_smashing_4',
+  'wood_smashing_5',
+  'wood_smashing_6',
+  'wood_smashing_7',
+] as const satisfies ReadonlyArray<SoundId>;
 
 /**
  * Recorded, awaiting a play site: registered sound effects that nothing plays

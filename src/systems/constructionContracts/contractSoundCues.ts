@@ -25,6 +25,8 @@ import type { ContractSpotMaterial } from './contractCatalog';
 export const CONTRACT_CUES = {
   /** Wendell issuing a contract. */
   contractSigned: ['contract_signed'],
+  /** A work order's strip torn off the notice board, layered on {@link CONTRACT_CUES.contractSigned}. */
+  noticeTearOff: ['notice_tear_off_1', 'notice_tear_off_2', 'notice_tear_off_3'],
   /** The work channel's loop on a wood or rope spot. Final: `repairing_loop`. */
   woodWorkLoop: ['repairing_loop'],
   /** The work channel's loop on a stone or plaster spot. */

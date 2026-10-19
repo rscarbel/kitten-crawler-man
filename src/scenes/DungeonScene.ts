@@ -618,7 +618,7 @@ import {
   WALKING_LOOP,
 } from '../audio/loopLevels';
 import { Conversation } from '../dialog/Conversation';
-import type { MusicTrackId, SoundId } from '../audio/sounds';
+import { WOOD_SMASHING_SOUNDS, type MusicTrackId, type SoundId } from '../audio/sounds';
 import type { VillageBuildingId } from '../map/overworld/briarHollowLayout';
 import { rectCentre } from '../map/overworld/briarHollowSite';
 import { sfxGroupsForLevelId } from '../audio/sfxGroups';
@@ -1138,7 +1138,7 @@ const FRAMES_PER_SECOND = 60;
 const MS_PER_SECOND = 1000;
 const TREE_FALL_SOUNDS = ['tree_fall_1', 'tree_fall_2', 'tree_fall_3', 'tree_fall_4'] as const;
 /** A nursery barrier giving way — the smash, not the per-blow crack the scene cycles separately. */
-const BARRIER_BREAK_SOUNDS = ['wood_smashing_1', 'wood_smashing_2'] as const;
+const BARRIER_BREAK_SOUNDS = WOOD_SMASHING_SOUNDS;
 const MONGO_ADULT_SQUAWK_MIN_LEVEL = 5;
 const MONGO_ADULT_HAPPY_SQUAWKS = [
   'happy_adult_mongo_squawk_1',
@@ -6469,6 +6469,7 @@ export class DungeonScene extends GameplayScene {
       }),
     );
     this.bus.emit('questStarted', { questId: CONSTRUCTION_CONTRACT_QUEST_ID });
+    playContractCue(this.audio, 'noticeTearOff');
     playContractCue(this.audio, 'contractSigned');
   }
 
@@ -9220,7 +9221,7 @@ export class DungeonScene extends GameplayScene {
     this.bossRoomDressings.update(ctx);
     const colosseumCue = this.bossRoomDressings.parts.colosseum?.takeSoundCue() ?? null;
     if (colosseumCue !== null) this.audio?.play(colosseumCue);
-    for (const cue of this.juicerRoom.drainSoundCues()) this.audio?.play(cue);
+    for (const takes of this.juicerRoom.drainSoundCues()) this.audio?.playRandom(takes);
     for (const cue of this.bossRoomDressings.parts.krakaren?.drainSoundCues() ?? []) {
       this.audio?.play(cue.id, { volume: cue.volume });
     }
