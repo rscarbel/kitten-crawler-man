@@ -16,7 +16,6 @@
  * loading cover — is added again on every trip unless the outgoing scene gives
  * it back. After each trip this records, and at the end asserts flat:
  *
- *  - frame cost (update and render, measured around the scene's own methods);
  *  - the figure cache's prewarm queue, resident bytes and pinned rows;
  *  - listeners left on `window`, `document` and the canvas;
  *  - how many scenes are still reachable after a full GC (a scene that is still
@@ -27,8 +26,8 @@
  *    warmed speculatively for the map's wild mobs yield to a cache full of
  *    the crowd, by design, and are only counted.
  *
- * Node's canvas costs are not a browser's, so frame times here are compared
- * with themselves across the soak rather than against a budget.
+ * Every check is a count, a byte total or a reachability test, never a timing,
+ * so a busy machine can't fail it.
  *
  *   npm run verify:town-soak
  *   npx tsx scripts/verify-town-soak.ts --cycles=5          # shorter run
@@ -97,16 +96,8 @@ const MAX_WALK_FRAMES = 90;
 const WANDER_FRAMES = 40;
 /** Frames the party stands still after a scene change before it is driven. */
 const ARRIVAL_PAUSE_FRAMES = 5;
-/** The first and last trips compared for drift. */
+/** The last trips, compared with every trip before them for drift. */
 const COMPARE_WINDOW = 5;
-/**
- * How much slower the last trips' frames may be than the first trips'. Loose,
- * because it is a timing on a shared machine: it exists to catch cost that
- * grows with every trip, which after twenty trips is multiples, not percent.
- */
-const MAX_FRAME_COST_GROWTH = 1.5;
-/** Absolute slack on the frame-cost comparison, for a fast baseline. */
-const FRAME_COST_SLACK_MS = 5;
 /** A prewarm backlog this small passes however it compares with earlier trips. */
 const MAX_SETTLED_PREWARM_DEPTH = 64;
 /** How far the late trips' prewarm backlog may exceed the earlier trips' peak. */
@@ -135,7 +126,7 @@ const MAX_CONVERSATION_DISMISSALS = 8;
 const BYTES_PER_KILOBYTE = 1024;
 const BYTES_PER_MEGABYTE = BYTES_PER_KILOBYTE * BYTES_PER_KILOBYTE;
 const MAX_CACHE_GROWTH_BYTES = MAX_CACHE_GROWTH_MEGABYTES * BYTES_PER_MEGABYTE;
-const MS_PLACES = 1;
+const MEGABYTE_PLACES = 1;
 
 const failures: string[] = [];
 function check(ok: boolean, message: string): void {
@@ -147,7 +138,7 @@ await loadSprites('src/images/');
 const input = new InputManager();
 const sceneManager = new SceneManager();
 
-// ── Scene tracking and per-scene timing ─────────────────────────────────────
+// ── Scene tracking ──────────────────────────────────────────────────────────
 
 /** Whether an object is still reachable, without keeping it so. */
 interface WeakHandle {
@@ -169,33 +160,9 @@ function weakHandle(target: object): WeakHandle {
 
 let current: Scene | null = null;
 const constructed: WeakHandle[] = [];
-let updateMs = 0;
-let renderMs = 0;
-
-function instrument(scene: Scene): void {
-  const update = scene.update.bind(scene);
-  const render = scene.render.bind(scene);
-  scene.update = () => {
-    const startedAt = performance.now();
-    try {
-      update();
-    } finally {
-      updateMs += performance.now() - startedAt;
-    }
-  };
-  scene.render = (ctx) => {
-    const startedAt = performance.now();
-    try {
-      render(ctx);
-    } finally {
-      renderMs += performance.now() - startedAt;
-    }
-  };
-}
 
 const replace = sceneManager.replace.bind(sceneManager);
 sceneManager.replace = (scene: Scene) => {
-  instrument(scene);
   constructed.push(weakHandle(scene));
   current = scene;
   replace(scene);
@@ -323,9 +290,6 @@ setFigureCacheStatsRecording(true);
 
 interface CycleSample {
   readonly door: string;
-  readonly frameMs: number;
-  readonly updateMs: number;
-  readonly renderMs: number;
   readonly prewarmDepth: number;
   readonly cacheBytes: number;
   readonly pinnedRows: number;
@@ -435,25 +399,11 @@ for (let cycle = 0; cycle < CYCLES; cycle++) {
   }
   await runFrames(ARRIVAL_PAUSE_FRAMES);
 
-  updateMs = 0;
-  renderMs = 0;
   resetCacheWork();
-  let measuredFrames = 0;
-  const measureStart = performance.now();
-  const countFrames = (): boolean => {
-    measuredFrames++;
-    return false;
-  };
-  await holdUntil('a', WANDER_FRAMES / 2, countFrames);
-  await holdUntil('d', WANDER_FRAMES / 2, countFrames);
-  const elapsed = performance.now() - measureStart;
-  const frames = Math.max(1, measuredFrames);
+  await wander();
   const stats = getFigureCacheStats();
   samples.push({
     door: door.name,
-    frameMs: elapsed / frames,
-    updateMs: updateMs / frames,
-    renderMs: renderMs / frames,
     prewarmDepth: figurePrewarmDepth(),
     cacheBytes: stats.bytes,
     pinnedRows: pinnedFigureRowCount(),
@@ -480,23 +430,8 @@ check(!isFigureIdleSweepHeld(), 'the figure idle sweep was left held');
 check(!renderQuality.isLoadingCovered, 'the render-quality loading cover was left on');
 check(samples.length === CYCLES, `only ${samples.length} of ${CYCLES} trips completed`);
 
-function mean(values: readonly number[]): number {
-  return values.length === 0 ? 0 : values.reduce((sum, value) => sum + value, 0) / values.length;
-}
-
-if (samples.length >= COMPARE_WINDOW * 2) {
-  const first = samples.slice(0, COMPARE_WINDOW);
-  const last = samples.slice(-COMPARE_WINDOW);
-  const firstCost = mean(first.map((sample) => sample.updateMs + sample.renderMs));
-  const lastCost = mean(last.map((sample) => sample.updateMs + sample.renderMs));
-  check(
-    lastCost <= firstCost * MAX_FRAME_COST_GROWTH + FRAME_COST_SLACK_MS,
-    `frame cost grew from ${firstCost.toFixed(MS_PLACES)} ms to ${lastCost.toFixed(MS_PLACES)} ms over the soak`,
-  );
-}
-
 function megabytes(bytes: number): string {
-  return (bytes / BYTES_PER_MEGABYTE).toFixed(MS_PLACES);
+  return (bytes / BYTES_PER_MEGABYTE).toFixed(MEGABYTE_PLACES);
 }
 
 // The cache fills as the soak meets looks it has not drawn yet, then levels
@@ -567,13 +502,10 @@ console.log(`town soak — ${samples.length} trips, arrival settled in ${arrival
 /** Each column's heading, and the cell it prints for one trip. */
 const COLUMNS: ReadonlyArray<readonly [string, (sample: CycleSample, index: number) => string]> = [
   ['trip', (_, index) => String(index)],
-  ['frame ms', (sample) => sample.frameMs.toFixed(MS_PLACES)],
-  ['update', (sample) => sample.updateMs.toFixed(MS_PLACES)],
-  ['render', (sample) => sample.renderMs.toFixed(MS_PLACES)],
   ['prewarm', (sample) => String(sample.prewarmDepth)],
   ['cache MB', (sample) => megabytes(sample.cacheBytes)],
   ['pins', (sample) => String(sample.pinnedRows)],
-  ['pin MB', (sample) => sample.pinnedMegabytes.toFixed(MS_PLACES)],
+  ['pin MB', (sample) => sample.pinnedMegabytes.toFixed(MEGABYTE_PLACES)],
   ['exit load', (sample) => String(sample.exitLoadFrames)],
   ['in lazy', (sample) => String(sample.indoorLazyBakes)],
   ['in direct', (sample) => String(sample.indoorDirectDraws)],

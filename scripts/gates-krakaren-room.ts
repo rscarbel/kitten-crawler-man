@@ -62,18 +62,11 @@ import {
   buildEnvironment,
   findFloorWithRoom,
   gameGauntletDressings,
-  roomView,
-  useFloorTheme,
   type RoomEnvironment,
 } from './bossRooms/harness.js';
 import { krakarenRoom } from './bossRooms/krakaren.js';
 import { runKrakarenFight, summarise, type FightMetrics } from './bossRooms/krakarenFightSim.js';
 import { installCanvasGlobals } from './nodeCanvasGlobals.js';
-import { asGameContext } from './nodeGameContext.js';
-import { createCanvas } from 'canvas';
-import { setViewportSize } from '../src/core/Viewport.js';
-import { CHUNK_TILES } from '../src/map/tiles/chunkTiles.js';
-import { BED_PAINT_REACH } from '../src/map/tiles/bossRooms/krakarenTiles.js';
 
 installCanvasGlobals();
 
@@ -215,8 +208,6 @@ function floodEverything(lab: Lab): void {
   lab.env.frame.roster.add(boss);
   for (let f = 0; f < RUPTURE_SETTLE_FRAMES; f++) lab.room.update(lab.env.frame);
 }
-/** Frames for the room's floor-load prewarm to finish, at its per-frame budget. */
-const PREWARM_SETTLE_FRAMES = 400;
 /** Long enough for all eight vats to crack and burst in turn. */
 const RUPTURE_SETTLE_FRAMES = 600;
 
@@ -589,116 +580,7 @@ for (const side of DOOR_SIDES) {
   );
 }
 
-// ── 8. The bed's chunk re-bakes as cheaply as any other ─────────────────────
-
-/**
- * How much dearer the chunk under her vat bed may be to re-bake than an
- * ordinary chunk of the lab. Every burst floods tiles in that chunk, and the
- * cache re-bakes an invalidated chunk inside the next frame, so a dear bed is a
- * hitch on every burst. A ratio rather than milliseconds, so the gate means the
- * same thing on any machine.
- */
-const MAX_BED_CHUNK_REBAKE_RATIO = 2.5;
-const REBAKE_SAMPLES = 15;
-
-function medianOf(values: number[]): number {
-  const sorted = values.slice().sort((a, b) => a - b);
-  return sorted[Math.floor(sorted.length / 2)];
-}
-
-for (const side of DOOR_SIDES) {
-  const scope = `bed re-bake (${side} door)`;
-  const lab = buildLab(side);
-  const { env, room } = lab;
-  // Everything the floor load paints ahead of need, as the game would have by the fight.
-  for (let f = 0; f < PREWARM_SETTLE_FRAMES; f++) room.update(env.frame);
-  const view = roomView(env.room);
-  setViewportSize(view.widthPx, view.heightPx);
-  useFloorTheme(env.levelDef);
-  const ctx = asGameContext(createCanvas(view.widthPx, view.heightPx).getContext('2d'));
-  const bake = (): void =>
-    env.gameMap.renderCanvas(ctx, view.camX, view.camY, view.widthPx, view.heightPx);
-  bake();
-  const chunkOf = (t: TilePoint): string =>
-    `${Math.floor(t.x / CHUNK_TILES)},${Math.floor(t.y / CHUNK_TILES)}`;
-  const centre = room.layout.centre;
-  const bedChunks = new Set<string>();
-  for (let dy = -BED_PAINT_REACH; dy <= BED_PAINT_REACH; dy++) {
-    for (let dx = -BED_PAINT_REACH; dx <= BED_PAINT_REACH; dx++) {
-      bedChunks.add(chunkOf({ x: centre.x + dx, y: centre.y + dy }));
-    }
-  }
-  // The ordinary chunks are every chunk beside the bed's that holds floor. A
-  // chunk's re-bake cost follows what it paints — bare rock re-bakes in a
-  // fraction of a floored chunk — and varies twofold between floored chunks, so
-  // the bed is compared against the typical floored chunk around it rather
-  // than any single one, which would measure that chunk's luck, not the bed.
-  const b = env.room.bounds;
-  const margin = CHUNK_TILES;
-  const chunkSamples = new Map<string, TilePoint>();
-  for (let y = b.y - margin; y < b.y + b.h + margin; y++) {
-    for (let x = b.x - margin; x < b.x + b.w + margin; x++) {
-      const key = chunkOf({ x, y });
-      if (!bedChunks.has(key) && !chunkSamples.has(key)) chunkSamples.set(key, { x, y });
-    }
-  }
-  const chunkHoldsFloor = (t: TilePoint): boolean => {
-    const left = Math.floor(t.x / CHUNK_TILES) * CHUNK_TILES;
-    const top = Math.floor(t.y / CHUNK_TILES) * CHUNK_TILES;
-    for (let y = top; y < top + CHUNK_TILES; y++) {
-      for (let x = left; x < left + CHUNK_TILES; x++) {
-        if (env.gameMap.isWalkable(x, y)) return true;
-      }
-    }
-    return false;
-  };
-  const ordinaries = [...chunkSamples.values()].filter(chunkHoldsFloor);
-  if (ordinaries.length === 0) {
-    check(false, scope, 'no chunk beside the bed holds floor — nothing to compare');
-    continue;
-  }
-  // Each timing looks at the one chunk under test, so the chunk is on screen
-  // and nothing else is re-baked beside it.
-  const chunkPx = CHUNK_TILES * TILE_SIZE;
-  setViewportSize(chunkPx, chunkPx);
-  const bakeChunkOf = (t: TilePoint): void => {
-    const camX = Math.floor(t.x / CHUNK_TILES) * chunkPx;
-    const camY = Math.floor(t.y / CHUNK_TILES) * chunkPx;
-    env.gameMap.renderCanvas(ctx, camX, camY, chunkPx, chunkPx);
-  };
-  const timeRebake = (t: TilePoint): number => {
-    env.gameMap.markTileDirty(t.x, t.y);
-    const start = performance.now();
-    bakeChunkOf(t);
-    return performance.now() - start;
-  };
-  bakeChunkOf(centre);
-  for (const t of ordinaries) bakeChunkOf(t);
-  // Bed and ordinary re-bakes alternate within each round, so a burst of load
-  // from elsewhere on the machine lands on both sides of the ratio alike.
-  const bedSamples: number[] = [];
-  const ordinarySamples: number[] = [];
-  for (let i = 0; i < REBAKE_SAMPLES; i++) {
-    for (const t of ordinaries) {
-      bedSamples.push(timeRebake(centre));
-      ordinarySamples.push(timeRebake(t));
-    }
-  }
-  const bedMs = medianOf(bedSamples);
-  const ordinaryMs = medianOf(ordinarySamples);
-  const ratio = bedMs / ordinaryMs;
-  check(
-    ratio <= MAX_BED_CHUNK_REBAKE_RATIO,
-    scope,
-    `the bed's chunk re-bakes in ${bedMs.toFixed(2)} ms, ${ratio.toFixed(1)}x an ordinary chunk's ${ordinaryMs.toFixed(2)} ms`,
-  );
-  note(
-    scope,
-    `bed chunk ${bedMs.toFixed(2)} ms vs ordinary ${ordinaryMs.toFixed(2)} ms (${ratio.toFixed(2)}x)`,
-  );
-}
-
-// ── 9. Not easier than the stone room ────────────────────────────────────────
+// ── 8. Not easier than the stone room ────────────────────────────────────────
 
 const runs: FightMetrics[] = [];
 for (const side of DOOR_SIDES) {

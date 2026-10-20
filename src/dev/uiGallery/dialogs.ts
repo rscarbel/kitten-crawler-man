@@ -5,6 +5,7 @@
  * with the fixture picker.
  */
 
+import { FIXTURES as AI_SHOW } from './dialogs/aiShow';
 import { FIXTURES as BESPOKE } from './dialogs/bespoke';
 import { FIXTURES as CASINO } from './dialogs/casino';
 import { FIXTURES as CHOICE } from './dialogs/choice';
@@ -28,4 +29,5 @@ export const DIALOG_FIXTURES: readonly DialogFixture[] = [
   ...SLOTS,
   ...WHEEL,
   ...PIPE_BOARD,
+  ...AI_SHOW,
 ];

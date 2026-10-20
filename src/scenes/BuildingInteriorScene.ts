@@ -13,7 +13,6 @@ import { citizenVoiceSounds, type CitizenSpeechStyle } from '../dialog/speakers'
 import type { DialogLine } from '../dialog/line';
 import { forwardQuestItemEvictions } from '../systems/questItemEvictions';
 import { forwardEquipmentChanges } from '../systems/equipmentChangeEvents';
-import { displayHp } from '../core/crawlerFormulas';
 import type { XpDiminishingTier } from '../levels/xpDiminishing';
 import { type SceneManager } from '../core/Scene';
 import { type InputManager } from '../core/InputManager';
@@ -126,6 +125,15 @@ import { postMusicLibraryNotices, returnUnreadMusicNotices } from '../ui/hud/now
 import { floorArrivalLoadTasks } from './floorArrivalLoad';
 import type { ArrivalLoadingScreen } from '../levels/types';
 import { aiAdapter } from '../ai/AIAdapter';
+import type { AISceneContext } from '../ai/aiActions';
+import { AIShowStage } from '../ai/show/AIShowStage';
+import { viewerFavor } from '../core/viewerFavor';
+import type { AIContextSource, SessionInput } from '../ai/context/types';
+import { readCrawler, readNearbyMobs } from '../ai/context/sceneReaders';
+import { mobLabel } from '../ai/context/eventMapping';
+import { allLevelDefs } from '../levels';
+import { forwardSceneHooksToBus } from '../systems/sceneHookEvents';
+import { StatusChangeWatcher } from '../systems/statusChangeEvents';
 import { EventBus } from '../core/EventBus';
 import { CrawlerBarkSystem } from '../systems/CrawlerBarkSystem';
 import { barkWhenBlueprintsItemEvicted } from '../systems/briarHollow/blueprints/blueprintsEvictionBark';
@@ -321,7 +329,7 @@ import type { PendingLoot } from '../systems/LootSystem';
 import { BigTopMazeSystem } from '../systems/BigTopMazeSystem';
 import { restartBigTopTent } from '../systems/bigTop/bigTopTent';
 import type { GroundHazardSource } from '../systems/GroundHazardSource';
-import type { Difficulty } from '../core/difficultyProfiles';
+import { DIFFICULTY_LABELS, type Difficulty } from '../core/difficultyProfiles';
 import { CultHideoutSystem } from '../systems/CultHideoutSystem';
 import { QuillConfrontationSystem } from '../systems/QuillConfrontationSystem';
 import { SoulCrystalSystem } from '../systems/SoulCrystalSystem';
@@ -458,7 +466,6 @@ const MAX_TOWER_FLOOR_INDEX = TOWER_FLOOR_COUNT - 1;
 const DEFAULT_MAP_FALLBACK_WIDTH = 18;
 /** The companion cat's missile is a constant patter in a fight; held under the swings it covers. */
 const CAT_MISSILE_VOLUME = 0.5;
-const RECENT_EVENTS_LIMIT = 5;
 const TILE_CENTER_RATIO = 0.5;
 const SAFE_ROOM_PULSE_BASE = 0.6;
 const SAFE_ROOM_PULSE_PERIOD_MS = 600;
@@ -467,6 +474,10 @@ const EXIT_HINT_PULSE_PERIOD_MS = 500;
 const EXIT_ARROW_Y_OFFSET = 15;
 /** Shown when the party falls indoors to something no quest encounter owns. */
 const INTERIOR_DEFEAT_MESSAGE = 'The building kept what was left of you.';
+/** The death cause reported to the AI for a defeat no named hazard explains. */
+const INTERIOR_DEFEAT_CAUSE = 'interiorDefeat';
+const TUTORIAL_LEVEL_ID = 'tutorial';
+const AI_FRAMES_PER_SECOND = 60;
 /** Fraction of max HP both players are revived to after falling in an interior fight. */
 const INTERIOR_REVIVE_HP_FRACTION = 0.5;
 /** Single-room buildings, and the storey a tower is entered on. */
@@ -680,6 +691,11 @@ export class BuildingInteriorScene extends GameplayScene {
   private readonly menus: MenusKit;
   /** The unread-achievement chip, its notifications and the loot-box opener, as outdoors. */
   private readonly achievementUI: AchievementUISystem;
+  /**
+   * The show AI's questions, adverts and the viewers' favour. Challenges stay
+   * outside: a door is where a challenge ends, so none starts indoors.
+   */
+  private readonly aiShow: AIShowStage;
   /** The overworld's Quest Journal, read through the door; null on a floor with none. */
   private readonly overworldJournal: InteriorJournalSource | null;
   /** The way out toward a pinned objective outside this building. */
@@ -904,6 +920,10 @@ export class BuildingInteriorScene extends GameplayScene {
   private readonly catAchievements: AchievementManager;
   private readonly gameStats: GameStats;
   private gameOver = false;
+  /** One for the whole building, however many storeys' combat kits it builds. */
+  private readonly statusChanges = new StatusChangeWatcher();
+  /** Stops this scene's bus hearing every shop counter's trades; set in `onEnter`. */
+  private stopForwardingSceneHooks: () => void = () => undefined;
   /** Drives ability XP and levelling for everything the party does indoors. */
   private readonly abilityManager: AbilityManager;
 
@@ -1314,6 +1334,7 @@ export class BuildingInteriorScene extends GameplayScene {
           // indoors, and nothing hostile reaches a town interior, so there is no
           // protection to lose.
           safeRoom: null,
+          statusChanges: this.statusChanges,
         }),
       });
     }
@@ -1358,16 +1379,19 @@ export class BuildingInteriorScene extends GameplayScene {
       this.rewardFly,
       this.audio,
     );
+    this.aiShow = new AIShowStage({
+      bus: this.bus,
+      favor: viewerFavor,
+      challenges: null,
+      postToast: (text, opts) => this.menus.toasts.post(text, opts),
+    });
+    this.achievementUI.boxCoinMultiplier = () => this.aiShow.boxCoinMultiplier();
     this.systemNotices = new SystemNoticeSystem(this.bus, this.menus.toasts);
     this.tacticsNotices = new TacticsNoticeSystem(tacticsNoticesSeen ?? new Set<TacticsTrait>());
     this.chat = new ChatKit({
       world: this.floors[GROUND_FLOOR_INDEX].world,
       abilityManager: this.abilityManager,
       godModeState: this.godModeState,
-      describeSituation: () =>
-        `Human is level ${this.human.level}, Cat is level ${this.cat.level}. ` +
-        `Inside: ${this.entry.name}. ` +
-        `Human HP: ${displayHp(this.human.hp)}/${this.human.maxHp}, Cat HP: ${displayHp(this.cat.hp)}/${this.cat.maxHp}.`,
       sceneCommands: [
         {
           name: '!cow',
@@ -2193,6 +2217,11 @@ export class BuildingInteriorScene extends GameplayScene {
 
   onEnter(): void {
     bindRunStats(this.gameStats);
+    this.stopForwardingSceneHooks = forwardSceneHooksToBus(this.bus, {
+      conversation: this.conversation,
+      achievementUI: this.achievementUI,
+    });
+    aiAdapter.bindScene(this.createAISceneContext(), this.bus, this.createAIContextSource());
     this.stopForwardingQuestItemEvictions?.();
     this.stopForwardingQuestItemEvictions = forwardQuestItemEvictions(this.bus, {
       human: this.human,
@@ -2394,6 +2423,8 @@ export class BuildingInteriorScene extends GameplayScene {
     this.humanTalk.stop(this.human);
     // The next scene binds its own; a level-up must never reach this one's menus.
     this.abilityManager.onLevelUp = null;
+    aiAdapter.unbindScene(this.bus);
+    this.stopForwardingSceneHooks();
     // Same contract as DungeonScene's bus: subscribers are re-wired per scene, so
     // the listeners this scene added must not outlive it.
     this.bus.clear();
@@ -2451,6 +2482,8 @@ export class BuildingInteriorScene extends GameplayScene {
       promptSurface(),
       this.hud,
       this.hud.overlay(),
+      ...aiAdapter.surfaces(() => this.hud.isOpen()),
+      ...this.aiShow.surfaces(),
       ...this.menus.surfaces({
         pauseFrame: () => ({
           humanAchievements: this.humanAchievements,
@@ -2819,6 +2852,8 @@ export class BuildingInteriorScene extends GameplayScene {
     this.tickSaveIndicator();
     this.achievementUI.tick();
     playRewardLandingCues(this.audio, this.rewardFly.update());
+    // Every frame, as in the dungeon: it drains actions held over a pause and ticks timed AI effects.
+    aiAdapter.update();
 
     // The death screen accepts through its own surface — nothing to poll for
     // here. The fall he died in still plays out beneath it as it fades in.
@@ -3505,7 +3540,128 @@ export class BuildingInteriorScene extends GameplayScene {
     this.gameStats.recordDeath();
     // The death screen stops the site's ticks, so its work loop would play on under it.
     this.contractSite?.cancelWork();
+    const fallen = this.fallenCrawler();
+    const source = fallen?.lastDamageSource ?? null;
+    this.bus.emit('playerDied', {
+      fallen,
+      cause: source === null ? INTERIOR_DEFEAT_CAUSE : causeFromDamageSource(source),
+    });
     this.combat.deathScreen.activate(this.deathScreenMessage(), this.defeatRespawnMode);
+  }
+
+  /** The crawler whose death or bleed-out ended the run, or null when neither is down. */
+  private fallenCrawler(): HumanPlayer | CatPlayer | null {
+    const active = this.active();
+    const inactive = active === this.human ? this.cat : this.human;
+    if (!active.isAlive) return active;
+    if (inactive.isKnockedOut || !inactive.isAlive) return inactive;
+    return null;
+  }
+
+  /** A menu or dialog the AI must not act over, other than the pause screen. */
+  private aiMenuOpen(): boolean {
+    // The pause screen halts the world too, but it is `isPaused`, not a menu.
+    const haltedByMenu = this.ui.worldHalted() && !this.pauseScreen.isOpen;
+    return haltedByMenu || this.citizenDialogTarget !== null || this.chat.isOpen;
+  }
+
+  private aiPaused(): boolean {
+    return this.gameOver || this.pauseScreen.isOpen || this.aiMenuOpen();
+  }
+
+  private aiHostilesAlive(): boolean {
+    return this.world.roster.mobs.some((mob) => mob.isAlive && mob.isHostile);
+  }
+
+  /** The level this building stands on, by floor number; the tutorial has no buildings. */
+  private aiLevelId(): string {
+    const level = allLevelDefs().find(
+      (def) => def.floorNumber === this.floor.floorNumber && def.id !== TUTORIAL_LEVEL_ID,
+    );
+    return level?.id ?? `floor${this.floor.floorNumber}`;
+  }
+
+  private createAISceneContext(): AISceneContext {
+    return {
+      getHuman: () => this.human,
+      getCat: () => this.cat,
+      getMobs: () => this.world.roster.mobs,
+      getGameMap: () => this.map,
+      getLevelId: () => this.aiLevelId(),
+      spawnMob: (mob) => this.world.roster.add(mob),
+      isBossFightActive: () => this.activeEncounter !== null && this.aiHostilesAlive(),
+      isPaused: () => this.aiPaused(),
+      isInSafeRoom: () => this.safeRoom?.isEntityInSafeRoom(this.active()) ?? false,
+      isIndoors: () => true,
+      // The room's own map is seeded apart from the floor; allowances belong to the floor.
+      getFloorKey: () => this.floor.aiFloorKey ?? `${this.aiLevelId()}#indoors`,
+      postToast: (text, opts) => this.menus.toasts.post(text, opts),
+      getAudio: () => this.audio,
+      getAudioScope: () => this.audioScope,
+      getAchievements: (target) =>
+        target === 'human' ? this.humanAchievements : this.catAchievements,
+      getShow: () => this.aiShow,
+    };
+  }
+
+  private createAIContextSource(): AIContextSource {
+    const inSafeRoom = (): boolean => this.safeRoom?.isEntityInSafeRoom(this.active()) ?? false;
+    return {
+      crawlerNameOf: (player) =>
+        player === this.human ? 'Carl' : player === this.cat ? 'Donut' : null,
+      isPartyInSafeRoom: inSafeRoom,
+      isCrawlerInSafeRoom: (crawler) =>
+        this.safeRoom?.isEntityInSafeRoom(crawler === 'Carl' ? this.human : this.cat) ?? false,
+      readSession: () => {
+        const levelId = this.aiLevelId();
+        const level = allLevelDefs().find((def) => def.id === levelId);
+        const companions: string[] = [];
+        if (this.mongoSystem.mongo !== null) companions.push('Mongo');
+        const hireling = this.mercenarySystem.activeMerc;
+        if (hireling !== null) companions.push(mobLabel(hireling));
+        if (this.attackCowSystem.standingCow !== null) companions.push('the attack cow');
+        const session: SessionInput = {
+          floorNumber: this.floor.floorNumber,
+          levelId,
+          floorName: level?.name ?? `Floor ${this.floor.floorNumber}`,
+          levelTimerRunning: false,
+          difficulty: DIFFICULTY_LABELS[settings.difficulty],
+          secondsPlayed: Math.floor(this.gameStats.framesPlayed / AI_FRAMES_PER_SECOND),
+          deaths: this.gameStats.deaths,
+          activeQuests: (this.overworldJournal?.entries() ?? [])
+            .filter((entry) => entry.status === 'active')
+            .map((entry) => ({ id: entry.id, name: entry.name, objective: entry.objective })),
+          companions,
+          indoors: true,
+        };
+        const held = this.floor.heldLevelTimerFrames;
+        if (held !== null) session.levelTimerSeconds = Math.ceil(held / AI_FRAMES_PER_SECOND);
+        return session;
+      },
+      readLive: () => {
+        const active = this.active();
+        const safe = inSafeRoom();
+        const nearbyMobs = readNearbyMobs(this.world.roster.mobs, active);
+        const menuOpen = this.aiMenuOpen();
+        return {
+          activeCrawler: this.human.isActive ? 'Carl' : 'Donut',
+          carl: readCrawler(this.human, 'Carl'),
+          donut: readCrawler(this.cat, 'Donut'),
+          location: {
+            kind: safe ? 'safeRoom' : 'building',
+            label: safe ? `safe room in ${this.entry.name}` : this.entry.name,
+            inSafeRoom: safe,
+            inBossArena: false,
+            buildingName: this.entry.name,
+          },
+          nearbyMobs,
+          combatInProgress: nearbyMobs.length > 0,
+          bossFightActive: this.activeEncounter !== null && this.aiHostilesAlive(),
+          isPaused: this.gameOver || this.pauseScreen.isOpen || menuOpen,
+          menuOpen,
+        };
+      },
+    };
   }
 
   /**
@@ -4116,25 +4272,16 @@ export class BuildingInteriorScene extends GameplayScene {
   private talkToMordecai(active: { x: number; y: number }): void {
     if (this.safeRoom === null) return;
 
-    const line = this.mordecaiAdvisor.nextAdvice(this.circusAdviceSnapshot());
+    const adviceSnapshot = this.circusAdviceSnapshot();
+    const advised = this.mordecaiAdvisor.nextObjective(adviceSnapshot);
+    if (advised !== null) this.bus.emit('mordecaiAdviceGiven', { objectiveId: advised.id });
+    const line = this.mordecaiAdvisor.nextAdvice(adviceSnapshot);
     if (line !== null) {
       this.safeRoom.openMordecaiLine(active, line);
       return;
     }
 
-    const humanEvents = this.humanAchievements.getTopRecentEvents(RECENT_EVENTS_LIMIT);
-    const catEvents = this.catAchievements.getTopRecentEvents(RECENT_EVENTS_LIMIT);
-    const merged = [...humanEvents, ...catEvents]
-      .sort((a, b) => a.secondsAgo - b.secondsAgo)
-      .slice(0, RECENT_EVENTS_LIMIT);
-    this.safeRoom.openMordecaiDialog(
-      active,
-      aiAdapter.chatWithMordecai({
-        recentEvents: merged,
-        humanLevel: this.human.level,
-        catLevel: this.cat.level,
-      }),
-    );
+    this.safeRoom.openMordecaiDialog(active, aiAdapter.chatWithMordecai());
   }
 
   /**
@@ -4719,6 +4866,7 @@ export class BuildingInteriorScene extends GameplayScene {
         : null,
       topBand: this.topBandEntries(),
       levelTimer: this.heldLevelTimer(),
+      favor: controls ? this.aiShow.favorModel() : null,
     };
   }
 

@@ -1,5 +1,6 @@
-/** Settings: volumes, mute, mono, background audio, captions and the way to the music player, UI size, render quality, difficulty, the companion toggle and the way to the controls. */
+/** Settings: volumes, mute, mono, background audio, captions and the way to the music player, UI size, render quality, difficulty, the System AI's intensity and indicators, the companion toggle and the way to the controls. */
 
+import { AI_INTENSITIES, AI_INTENSITY_LABELS, type AIIntensity } from '../../../ai/aiIntensity';
 import {
   DIFFICULTY_LABELS,
   DIFFICULTY_ORDER,
@@ -49,6 +50,21 @@ const DIFFICULTY_HINTS: Readonly<Record<Difficulty, string>> = {
   normal: 'The game as shipped — no scaling on either side.',
   hard: 'Take more damage now; tougher spawns and bigger rewards from the next floor or bounty.',
 };
+
+const AI_INTENSITY_CHOICES: readonly Choice<AIIntensity>[] = AI_INTENSITIES.map((value) => ({
+  value,
+  label: AI_INTENSITY_LABELS[value],
+}));
+
+const AI_INTENSITY_HINTS: Readonly<Record<AIIntensity, string>> = {
+  off: 'The System only answers when you talk to it. It never acts on its own.',
+  commentary: 'The System narrates and reacts, but never touches your run.',
+  classic: 'The System meddles the way the show intends: rewards, punishments and surprises.',
+  chaotic: 'The System meddles about twice as often. The viewers approve.',
+};
+
+const AI_INTERVENTIONS_HINT =
+  'A short line names what the System just did to your run, so you can tell its meddling from bad luck.';
 
 const SOUND_CAPTIONS_HINT =
   'Captions name alarms, warnings and cries from off screen, even with the sound muted.';
@@ -166,6 +182,23 @@ function renderSettings(layout: SectionLayout, ctx: PauseContext): void {
     onPick: (difficulty) => ctx.actions.requestDifficulty(difficulty),
   });
   layout.paragraph(DIFFICULTY_HINTS[settings.difficulty], 'muted', ui.theme.space.md);
+
+  layout.heading('System AI');
+  choiceRow(layout, {
+    id: 'ai-intensity',
+    choices: AI_INTENSITY_CHOICES,
+    selected: settings.aiIntensity,
+    onPick: (intensity) => settings.setAIIntensity(intensity),
+  });
+  layout.paragraph(AI_INTENSITY_HINTS[settings.aiIntensity], 'muted', ui.theme.space.md);
+  const interventions = settings.aiInterventionIndicators;
+  wideButton(layout, {
+    id: 'ai-interventions',
+    label: `Show AI interventions: ${onOff(interventions)}`,
+    selected: interventions,
+    onTap: () => settings.setAIInterventionIndicators(!interventions),
+  });
+  layout.paragraph(AI_INTERVENTIONS_HINT, 'muted', ui.theme.space.md);
 
   layout.heading('Companion');
   const autoSummon = settings.catAutoSummonsMongo;

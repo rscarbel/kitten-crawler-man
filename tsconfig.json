@@ -11,10 +11,7 @@
     "noErrorTruncation": true,
     "noFallthroughCasesInSwitch": true,
     "noImplicitAny": true,
-    "noUnusedLocals": true,
-    "paths": {
-      "game-ai-server/sdk": ["./src/ai/game-ai-server-sdk.d.ts"]
-    }
+    "noUnusedLocals": true
   },
   "include": ["src/**/*"]
 }

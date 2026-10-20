@@ -53,7 +53,7 @@ import {
   type RewardStripSize,
 } from '../ui/screens/dialogs/conversationChrome';
 import type { PaintTarget } from '../ui/widgets/paint';
-import { resolveSpeaker, speakerTypeface } from './speakers';
+import { resolveSpeaker, SPEAKERS, speakerTypeface, type SpeakerRef } from './speakers';
 import type {
   Choice,
   ConfirmKeyboardDefault,
@@ -248,6 +248,15 @@ export class Conversation {
    */
   private currentHandle: ConversationHandle | null = null;
 
+  /**
+   * Told when a conversation opens on an empty box and when the box empties,
+   * with the name of whoever spoke first. Beats chained with `play` are the
+   * same conversation and report nothing; a request that supersedes another
+   * reports the first ending and the second starting.
+   */
+  onTalk: ((change: { speaker: string; phase: 'started' | 'ended' }) => void) | null = null;
+  private openedSpeaker: string | null = null;
+
   constructor(private readonly audio: AudioManager | null) {
     this.box = new DialogBox(audio, { showFooterHint: false });
   }
@@ -318,6 +327,10 @@ export class Conversation {
     };
     this.currentHandle = handle;
     this.begin(request, true);
+    if (this.openedSpeaker === null) {
+      this.openedSpeaker = speakerName(request.lines[0].speaker);
+      this.onTalk?.({ speaker: this.openedSpeaker, phase: 'started' });
+    }
     return handle;
   }
 
@@ -429,6 +442,9 @@ export class Conversation {
   }
 
   private doClose(): void {
+    const endedSpeaker = this.openedSpeaker;
+    this.openedSpeaker = null;
+    if (endedSpeaker !== null) this.onTalk?.({ speaker: endedSpeaker, phase: 'ended' });
     this.box.hide();
     this.request = null;
     this.currentHandle = null;
@@ -1004,4 +1020,12 @@ export class Conversation {
     const y = fitting?.y ?? Math.max(0, compact.aboveY);
     drawRewardStrip(target, reward, { x: boxRect.x, y, w: width, h: height }, size);
   }
+}
+
+const NAMELESS_SPEAKER = 'narrator';
+
+/** A speaker's name without painting a portrait, which `resolveSpeaker` would. */
+function speakerName(ref: SpeakerRef): string {
+  if (ref.kind === 'transient') return ref.name;
+  return SPEAKERS[ref.id].name ?? NAMELESS_SPEAKER;
 }

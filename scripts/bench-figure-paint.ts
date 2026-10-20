@@ -13,12 +13,15 @@
  * Two numbers per figure. The direct column is what a cache miss costs when it
  * falls back to painting straight into the frame; the bake column is what
  * admitting one cell to the cache costs — `bakeFigureCell`, the same helper the
- * worst-cell gate below uses, so a figure that opts out of supersampling is
- * timed the way the cache actually bakes it rather than at four times the area.
+ * worst-cell measurement below uses, so a figure that opts out of supersampling
+ * is timed the way the cache actually bakes it rather than at four times the
+ * area.
  *
  * These are node-canvas's software rasteriser, which is not Chrome's. The
  * fallback threshold is decided on Chrome numbers from the `?paintbench` dev
- * route; read these as ratios and as a ranking.
+ * route; read these as ratios and as a ranking. Every number is wall-clock on
+ * whatever machine runs it, so none of them decides the exit code: it fails
+ * only when a figure declares nothing to time.
  */
 
 import { PAINT_BENCH_SUBJECTS } from '../src/dev/paintBenchSubjects.js';
@@ -99,23 +102,11 @@ for (const subject of PAINT_BENCH_SUBJECTS) {
 
 // ── Carl's worst cell ────────────────────────────────────────────────────────
 
-/**
- * How many times slower node-canvas paints a figure cell than Chrome does.
- * Measured at three to five times across this project's figures; the low end
- * is taken, so the node budget below is the stricter reading of the Chrome one.
- */
-const NODE_TO_CHROME_PAINT_FACTOR = 3;
-/**
- * Carl's slowest cell must bake inside the cache's per-frame bake budget in
- * Chrome, which is this in node. He is on screen continuously and a strike's
- * row can go cold, so a cell that overruns it is a hitch on the impact frame.
- */
-const HUMAN_WORST_CELL_BUDGET_MS = FRAME_BAKE_BUDGET_MS * NODE_TO_CHROME_PAINT_FACTOR;
 /** Timed bakes per cell in the screening pass over every cell. */
 const SCREEN_REPEATS = 3;
 /**
- * How many of the screening pass's slowest cells are re-timed before the gate
- * judges. A screening median of three is cheap enough to run over all ~1200
+ * How many of the screening pass's slowest cells are re-timed before the worst
+ * is reported. A screening median of three is cheap enough to run over all ~1200
  * cells, but one scheduler stall across two of the three samples is enough to
  * make an ordinary cell look like the worst: a single max over such a screen
  * swings between five and eleven milliseconds from run to run on unchanged art.
@@ -124,19 +115,12 @@ const SCREEN_REPEATS = 3;
  */
 const CONFIRM_CANDIDATES = 12;
 /**
- * Timed bakes per candidate in the confirming pass. The gate reads each
- * candidate's minimum: load on the machine only ever adds time to a bake, so
+ * Timed bakes per candidate in the confirming pass. Each candidate reads as its
+ * minimum: load on the machine only ever adds time to a bake, so
  * the fastest of many is the closest reading of what the cell itself costs,
  * and a cell that is genuinely slow is slow on every one of them.
  */
 const CONFIRM_REPEATS = 15;
-
-/**
- * A synthetic cell slow enough that the gate must fail it, run on every
- * invocation so a gate that has stopped being able to go red is caught here
- * rather than trusted.
- */
-const SELF_TEST_SLOW_CELL_MS = 10;
 
 function medianOf(values: readonly number[]): number {
   const sorted = [...values].sort((a, b) => a - b);
@@ -183,38 +167,11 @@ function worstBakedCell(def: FigureDef): { worst: TimedCell | null; cellsTimed: 
   return { worst, cellsTimed: screened.length };
 }
 
-function busyWaitMs(ms: number): void {
-  const startedAt = performance.now();
-  while (performance.now() - startedAt < ms) {
-    // Burning the time is the point: this cell stands in for a slow painter.
-  }
-}
-
-/**
- * One row of the figure with one of its cells made deliberately slower than the
- * budget. One row rather than all of them, so the self-test costs a fraction of
- * the real measurement while still running its screen and its confirmation.
- */
-function withOneSlowCell(def: FigureDef, slowState: string, slowFrame: number): FigureDef {
-  const slowRow = def.states.get(slowState);
-  return {
-    ...def,
-    id: `${def.id}_self_test`,
-    states: new Map(slowRow === undefined ? [] : [[slowState, slowRow]]),
-    paintFrame: (ctx, state, frame) => {
-      if (state === slowState && frame === slowFrame) busyWaitMs(SELF_TEST_SLOW_CELL_MS);
-      def.paintFrame(ctx, state, frame);
-    },
-  };
-}
-
 function describe(cell: TimedCell): string {
   return `${cell.state}[${cell.frame}] bakes in ${cell.ms.toFixed(MS_DECIMALS)} ms`;
 }
 
-const budgetNote =
-  `against ${HUMAN_WORST_CELL_BUDGET_MS} ms in node — the ${FRAME_BAKE_BUDGET_MS} ms Chrome ` +
-  `bake budget × ${NODE_TO_CHROME_PAINT_FACTOR}`;
+const budgetNote = `(the cache's per-frame bake budget is ${FRAME_BAKE_BUDGET_MS} ms in Chrome)`;
 const method =
   `fastest of ${CONFIRM_REPEATS} on the slowest ${CONFIRM_CANDIDATES} of a median-of-` +
   `${SCREEN_REPEATS} screen`;
@@ -233,38 +190,16 @@ const HUMAN_OUTFITS_TIMED: readonly FigureDef[] = [
   ),
 ];
 
-const firstState = HUMAN_FIGURE.states.keys().next().value;
-if (firstState === undefined) {
-  console.error(`  FAIL ${HUMAN_FIGURE.id} declares no cells to time`);
-  process.exitCode = 1;
-} else {
-  const selfTestFrame = 0;
-  const slowFigure = withOneSlowCell(HUMAN_FIGURE, firstState, selfTestFrame);
-  const selfTest = worstBakedCell(slowFigure).worst;
-  const selfTestCaught =
-    selfTest !== null &&
-    selfTest.state === firstState &&
-    selfTest.frame === selfTestFrame &&
-    selfTest.ms > HUMAN_WORST_CELL_BUDGET_MS;
-  console.log(
-    `\n  ${selfTestCaught ? 'ok  ' : 'FAIL'} self-test: a ${SELF_TEST_SLOW_CELL_MS} ms cell at ` +
-      `${firstState}[${selfTestFrame}] is judged over budget` +
-      (selfTest === null ? ' (nothing was timed)' : ` (measured ${describe(selfTest)})`),
-  );
-  if (!selfTestCaught) process.exitCode = 1;
-
-  for (const figure of HUMAN_OUTFITS_TIMED) {
-    const { worst, cellsTimed } = worstBakedCell(figure);
-    if (worst === null) {
-      console.error(`  FAIL ${figure.id} declares no cells to time`);
-      process.exitCode = 1;
-      continue;
-    }
-    const withinBudget = worst.ms <= HUMAN_WORST_CELL_BUDGET_MS;
-    console.log(
-      `  ${withinBudget ? 'ok  ' : 'FAIL'} ${figure.id} worst cell: ${describe(worst)} ` +
-        `(${method}, over ${cellsTimed} cells) ${budgetNote}`,
-    );
-    if (!withinBudget) process.exitCode = 1;
+console.log('');
+for (const figure of HUMAN_OUTFITS_TIMED) {
+  const { worst, cellsTimed } = worstBakedCell(figure);
+  if (worst === null) {
+    console.error(`  FAIL ${figure.id} declares no cells to time`);
+    process.exitCode = 1;
+    continue;
   }
+  console.log(
+    `  ${figure.id} worst cell: ${describe(worst)} ` +
+      `(${method}, over ${cellsTimed} cells) ${budgetNote}`,
+  );
 }

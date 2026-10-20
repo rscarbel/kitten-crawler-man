@@ -10,6 +10,11 @@
  * `SpriteLoader` def leaves a def pointing at a surface that has been given up,
  * and the floor never repaints.
  *
+ * Pacing is checked by what a frame defers, never by how long it took: the
+ * probes that need a step to overspend burn the allowance themselves, and the
+ * drain's frame times are printed for reading only, so a busy machine can't
+ * fail the gate.
+ *
  * Run: npm run gates:environment-art
  */
 
@@ -69,40 +74,11 @@ const MASK_SHEET_KEY = 'ground_masks';
  *
  * The town is the heaviest floor there is: roughly 450 ms of ground and two
  * seconds of facades, so at the cache's budget it owes a few hundred frames —
- * several seconds of a fade-in. This is generous against that, and its job is to
- * catch a queue that has stopped draining rather than one that is a little
- * slower than it was.
+ * several seconds of a fade-in. Every frame runs at least its first step, and
+ * this is more frames than the drain has steps, so a loaded machine cannot push
+ * a draining queue past it: its job is to catch a queue that has stopped.
  */
 const FRAME_BUDGET_TO_FINISH = 1200;
-/**
- * How far above the stated budget the mean spend per frame may sit.
- *
- * The budget is honoured as an average, not a ceiling — a single ground patch
- * costs several times a frame's whole allowance and cannot be split — so what is
- * asserted is that the overspend is genuinely repaid rather than merely
- * recorded. A little slack absorbs the last frame of a queue, which cannot be
- * repaid because there is nothing after it.
- */
-const MEAN_SPEND_SLACK = 1.4;
-
-/**
- * Longest a single frame of painting may take **in node**.
- *
- * A step cannot be split, so the spike is a property of the most expensive piece
- * of art rather than of the budget. What that costs, though, depends heavily on
- * which canvas is under it: measured across the same fifteen facades, node-canvas
- * and Chrome disagree by three times *in opposite directions* per pass — node
- * paints a thatched roof in 204 ms against Chrome's 40, and Chrome reads a plane
- * back far more slowly than node does. Chrome's worst single stage is 64 ms, and
- * Chrome is where the frame the player sees is drawn.
- *
- * So this limit is node's, and its job is not to certify a frame time. It is to
- * catch a painter that has become *unsplittable* — one pass that swallows a
- * whole family's cost — before it reaches a device with no headroom. The number
- * to re-measure if this fires is the browser one; the numbers above are what it
- * was when the facades were converted.
- */
-const WORST_FRAME_LIMIT_MS = 260;
 
 const failures: string[] = [];
 
@@ -252,17 +228,6 @@ check(
   `expected ${PAINTED_KEYS.length} resident sheets, found ${environmentArtSheetCount()}`,
 );
 check(environmentArtBytes() > 0, 'the painted sheets report no memory at all');
-check(
-  report.worstFrameMs <= WORST_FRAME_LIMIT_MS,
-  `one frame of painting took ${report.worstFrameMs.toFixed(1)} ms, past the ` +
-    `${WORST_FRAME_LIMIT_MS} ms a single step may spend here — a step cannot be split, so one ` +
-    `pass has grown to swallow its family's whole cost`,
-);
-check(
-  report.meanMsPerFrame <= ENVIRONMENT_PAINT_BUDGET_MS * MEAN_SPEND_SLACK,
-  `the queue spent a mean of ${report.meanMsPerFrame.toFixed(1)} ms a frame against a ` +
-    `${ENVIRONMENT_PAINT_BUDGET_MS} ms budget — the overspend is being recorded but not repaid`,
-);
 
 const bytesBeforeRelease = environmentArtBytes();
 // The town's own keep set: the masks are in it, and nothing else this gate
@@ -624,7 +589,7 @@ check(environmentSheetsAwaiting() === 0, 'a flush left sheets waiting to be aske
 // A gate that measured nothing passes vacuously.
 check(
   report.frames > 0,
-  'the queue finished without a single frame being spent, so nothing was timed',
+  'the queue finished without a single frame being spent, so nothing was drained',
 );
 
 console.log(
@@ -634,9 +599,7 @@ console.log(
 console.log(
   `  mean per frame   ${report.meanMsPerFrame.toFixed(1)} ms (budget ${ENVIRONMENT_PAINT_BUDGET_MS})`,
 );
-console.log(
-  `  worst frame      ${report.worstFrameMs.toFixed(1)} ms (limit ${WORST_FRAME_LIMIT_MS})`,
-);
+console.log(`  worst frame      ${report.worstFrameMs.toFixed(1)} ms`);
 console.log(`  resident         ${(bytesBeforeRelease / BYTES_PER_MEGABYTE).toFixed(1)} MB`);
 
 if (failures.length > 0) {

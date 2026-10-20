@@ -136,8 +136,9 @@ are in `docs/asset-management.md` ("A crowd is pinned, not swept").
 - `npm run render:residents` for the named residents.
 - `npm run render:cast-motion` / `gates:cast-motion` check foot lock, cadence and dance
   energy.
-- `npm run verify:plaza-perf` checks the plaza crowd's cache behaviour. It is headless
-  and wall-clock sensitive.
+- `npm run verify:plaza-perf` checks the plaza crowd's cache behaviour. It is headless,
+  fails only on cache counts, and paces bakes on a simulated clock, so machine load
+  cannot change its verdict.
 
 `npm run render:townsfolk` gates the person-skeleton painter (cell bounds, stance plant,
 cadence and more). Confirm the gate list in `scripts/render-townsfolk.ts` before stating

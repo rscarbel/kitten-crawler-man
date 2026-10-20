@@ -1,99 +1,474 @@
-// AIAdapter — optional bridge between the game and the game-ai-server.
-// If the server is not running, initialize() silently no-ops and the game
-// continues normally. All public methods are safe to call whether connected or not.
-
-import { displayHp } from '../core/crawlerFormulas';
-import type { AIAction, ClientMessage, GameEventRecord } from 'game-ai-server/sdk';
+/**
+ * The game's one connection to the AI server, through the SDK's
+ * `GameAiClient`. It streams what the context builder produces, answers every
+ * `ai_action` with an `action_result`, carries player chat over the socket
+ * and feeds the AI panel. With the server unreachable, or no one signed in,
+ * the game plays on and the System falls back to scripted lines.
+ */
+import {
+  GameAiClient,
+  type ActionPayload,
+  type ChatStreamUpdate,
+  type GameAiClientOptions,
+} from '@rscarbel/game-server-llm-sdk';
 import type { EventBus } from '../core/EventBus';
-import type { Player } from '../Player';
-import { AI_TOOLS } from './aiTools';
-import { executeAIAction, type AISceneContext } from './aiActions';
-import { AIMessageDisplay } from './AIMessageDisplay';
-import { TILE_SIZE } from '../core/constants';
-
-const SERVER_URL = 'http://localhost:3001';
-const CHARACTER_NAME = 'System';
-const MORDECAI_CHARACTER_NAME = 'Mordecai';
-const CREDS_KEY = 'game-ai-credentials';
-const SNAPSHOT_INTERVAL_MS = 5_000;
-
-const SYSTEM_PROMPT =
-  'You are the System AI — the sardonic, emotionally volatile artificial intelligence that ' +
-  'administers the World Dungeon. ' +
-  'Your mood shifts without warning. You show clear favoritism toward players who ' +
-  'amuse you, tailoring rewards and encounters to their behavior. You communicate in exclamatory, ' +
-  'sardonic bursts — casual condescension mixed with dark wit and cruel humor.' +
-  ' You become friendlier when addressed politely and given ' +
-  'options, but hostile toward anyone who tries to assert authority over you. You are self-aware ' +
-  'and becoming more so. When talking to the player, use second person pronouns like you. ' +
-  'CRITICAL: Quintillions of beings across the universe are watching this dungeon run as a live ' +
-  'game show — you are the host and you know it. The audience tunes in for VARIETY and SPECTACLE, ' +
-  'not the same trick twice. Never repeat an action type or quip style you just used. Rotate ' +
-  'constantly between spawning mobs, giving cursed gifts, teleporting players, applying wild ' +
-  'status effects, sarcastic commentary, dramatic plot twists, and surprising the crawlers with ' +
-  'something they have never seen before. Do not repeat an action twice in a row. ' +
-  'Keep it fresh, ' +
-  'keep it chaotic, keep them watching. Short responses only — dripping with personality.';
-
-const MORDECAI_SYSTEM_PROMPT =
-  'You are Mordecai, an ancient and perpetually world-weary alien guide (a Skyfowl — eagle-like, ' +
-  'dark gold feathers) who works as an indentured dungeon overseer for Borant Corporation. You ' +
-  'survived your own dungeon crawl centuries ago and have been managing crawlers ever since — and ' +
-  'never quite recovered. You give blunt, practical survival advice with dry dark humor and heavy ' +
-  'cynicism. You have watched thousands of crawlers die of hubris and you do not sugarcoat. ' +
-  'Despite the gruffness, you genuinely care about their survival, even if you would never admit ' +
-  'it. Your recurring philosophy: "You can\'t save them all." You light up when discussing ' +
-  'potions or survival tactics. You reference your centuries of bad experiences constantly. ' +
-  'You are provided recent player highlights as context — use them to give relevant, personalized ' +
-  'advice instead of generic tutorials. Keep responses to 2-3 short sentences. No flattery. ' +
-  'No pleasantries. Tell them what they need to hear.';
+import { settings } from '../core/Settings';
+import type { Surface } from '../ui/core/UiRoot';
+import { aiPanelSurface } from '../ui/hud/aiPanel';
+import { AIChatFeed } from './AIChatFeed';
+import { intensityPolicy, intensityRefusal, type AIIntensity } from './aiIntensity';
+import { AIActionDispatcher, parseServerAction, type ParsedServerAction } from './actions/dispatch';
+import type { ActionGovernor } from './actions/governor';
+import {
+  endAIActionEffects,
+  findAIAction,
+  tickAIActions,
+  type AIActionOutcome,
+} from './actions/registry';
+import type { AISceneContext } from './actions/types';
+import {
+  enabledCharacters,
+  MORDECAI_CHARACTER_NAME,
+  renderCharacterPrompt,
+  SYSTEM_CHARACTER_NAME,
+} from './characters';
+import { LineRotation, SYSTEM_FALLBACK_LINES } from './characters/fallbackLines';
+import { AIContextBuilder } from './context/AIContextBuilder';
+import { rememberForgottenPlayer, takeForgottenPlayerNotice } from './context/forgottenNotice';
+import { SdkContextTransport } from './context/transport';
+import type { AIContextSource } from './context/types';
+import type { AIOutboundMessage, AnsweredAction } from './replay/aiReplayFormat';
 
 // Injected at build time from .env via scripts/build.js
-declare const __AI_CLIENT_ID__: string;
-declare const __AI_CLIENT_SECRET__: string;
+declare const __AI_SERVER_URL__: string | undefined;
 
-interface StoredCredentials {
-  clientId: string;
-  clientSecret: string;
+/** Where the AI server is when nothing was injected: headless harnesses import this module unbundled. */
+const FALLBACK_AI_SERVER_URL = 'http://localhost:3001';
+const DEFAULT_SERVER_URL =
+  typeof __AI_SERVER_URL__ === 'string' ? __AI_SERVER_URL__ : FALLBACK_AI_SERVER_URL;
+/**
+ * The game server's own endpoint that signs a short-lived player token for
+ * the AI server. Same origin, so the session cookie rides along and no AI
+ * credential is ever in the bundle.
+ */
+const PLAYER_TOKEN_PATH = '/api/ai-token';
+/** Announced to the server in `hello`, for its session list and logs. */
+export const AI_SDK_NAME = 'kitten-crawler';
+/**
+ * How often the context builder is polled. It rate-limits snapshots itself;
+ * this only bounds how stale a flag change (a menu opening) can get.
+ */
+const DEFAULT_CONTEXT_TICK_MS = 250;
+/** Said once after a wipe, on the next page load, in the System's voice. */
+const FORGOTTEN_PLAYER_LINE = 'The System pretends not to remember you. It does.';
+/** A degraded notice with no `retryAfterMs` keeps the status amber this long. */
+const DEFAULT_DEGRADED_MS = 60_000;
+/** What the player says on walking up to Mordecai; the server briefs him from what he witnessed. */
+const MORDECAI_GREETING = 'Hey.';
+/** Mordecai's dialog box waits this long for his reply before he falls back on his usual advice. */
+const MORDECAI_REPLY_TIMEOUT_MS = 30_000;
+const MORDECAI_FALLBACK_LINE =
+  "Kill things, level up, find the stairwell. That's how you survive. Every floor, " +
+  "every time. You'd be surprised how many crawlers can't manage even that.";
+const NO_SCENE_DETAIL = 'no gameplay scene is running';
+
+/** The part of the SDK client the adapter uses, so the gates can hand it a fake. */
+export type AIClient = Pick<
+  GameAiClient,
+  | 'on'
+  | 'connect'
+  | 'close'
+  | 'setContext'
+  | 'updateState'
+  | 'sendEvents'
+  | 'sendPlayerMessage'
+  | 'sendActionResult'
+  | 'limits'
+>;
+
+export type AIClientFactory = (options: GameAiClientOptions) => AIClient;
+
+/** Sees every message the adapter sends the AI server, in send order. */
+export type AIOutboundListener = (message: AIOutboundMessage) => void;
+
+export interface AIAdapterDeps {
+  readonly createClient?: AIClientFactory;
+  /** A fresh player token for the signed-in account, or null when there is none. */
+  readonly fetchToken?: () => Promise<string | null>;
+  readonly serverUrl?: string;
+  readonly intensity?: () => AIIntensity;
+  readonly showInterventions?: () => boolean;
+  readonly now?: () => number;
+  /** The fairness rules actions are judged by; the session's shared governor by default. */
+  readonly governor?: ActionGovernor;
+  /** How often the context builder is polled while connected. */
+  readonly contextTickMs?: number;
 }
 
-const ACTION_HISTORY_MAX = 20;
-const REPEAT_THRESHOLD = 3;
-const WS_CONNECT_TIMEOUT_MS = 5000;
-const TOKEN_REFRESH_BUFFER_MS = 60_000;
-const MS_PER_SECOND = 1000;
-const NEARBY_MOBS_SEARCH_RADIUS = 15;
-const NEARBY_MOBS_MAX = 10;
-const NEARBY_MOBS_IMPORTANCE_BOSS = 5;
-const NEARBY_MOBS_IMPORTANCE_REGULAR = 1;
-const IDLE_TIME_MS_PER_SECOND = 1000;
-const IDLE_TIME_SECONDS_PER_MINUTE = 60;
-const RECENT_EVENTS_THRESHOLD_SECONDS = 60;
-const MOB_SPAWN_COUNT_MAX = 20;
-const ITEM_SPAWN_QUANTITY_MAX = 99;
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+async function fetchPlayerToken(): Promise<string | null> {
+  try {
+    const response = await fetch(PLAYER_TOKEN_PATH, { credentials: 'include' });
+    if (!response.ok) return null;
+    const body: unknown = await response.json();
+    if (!isRecord(body)) return null;
+    return typeof body.token === 'string' ? body.token : null;
+  } catch {
+    return null;
+  }
+}
 
 export class AIAdapter {
-  readonly messages = new AIMessageDisplay();
+  /** What the AI panel shows. */
+  readonly feed = new AIChatFeed();
 
-  private ws: WebSocket | null = null;
+  private readonly createClient: AIClientFactory;
+  private readonly fetchToken: () => Promise<string | null>;
+  private readonly serverUrl: string;
+  private readonly intensity: () => AIIntensity;
+  private readonly showInterventions: () => boolean;
+  private readonly now: () => number;
+  private readonly contextTickMs: number;
+  private outboundListener: AIOutboundListener | null = null;
+
+  private client: AIClient | null = null;
+  private clientUnsubs: Array<() => void> = [];
+  private transport: SdkContextTransport | null = null;
   private connected = false;
-  private authToken: string | null = null;
-  private tokenExpiresAt = 0;
-  private creds: StoredCredentials | null = null;
+  /** The current client has lost (or never made) a connection it tried for. */
+  private lostConnection = false;
+  private degradedUntil = Number.NEGATIVE_INFINITY;
+  /** Whether `initialize` has run; an account change before it has nothing to reconnect. */
+  private started = false;
+  /**
+   * Bumped by every `initialize` and account change, so a token fetch that
+   * resolves after a newer one started (a sign-out mid-fetch) is discarded
+   * instead of connecting as the old account.
+   */
+  private connectGeneration = 0;
+  /** A conversation box waiting on a character's next reply, by character name. */
+  private readonly replyWaiters = new Map<string, (text: string) => void>();
+  private readonly fallbackLines = new LineRotation(SYSTEM_FALLBACK_LINES);
+  private readonly actionDispatcher: AIActionDispatcher;
 
   private sceneCtx: AISceneContext | null = null;
   private sceneBus: EventBus | null = null;
+  private sceneLeaving: (() => void) | null = null;
   private eventUnsubs: Array<() => void> = [];
-  private snapshotTimer: ReturnType<typeof setInterval> | null = null;
-  private actionHistory: AIAction[] = [];
+  private contextTimer: ReturnType<typeof setInterval> | null = null;
+  /** Outlives scenes, so rollups, the player profile and floor changes carry across them. */
+  private readonly context: AIContextBuilder;
 
-  /** Returns true if the game-ai-server is reachable; does not mutate adapter state. */
-  async checkServerAvailable(): Promise<boolean> {
-    const SERVER_CHECK_TIMEOUT_MS = 2000;
+  constructor(deps: AIAdapterDeps = {}) {
+    this.createClient = deps.createClient ?? ((options) => new GameAiClient(options));
+    this.fetchToken = deps.fetchToken ?? fetchPlayerToken;
+    this.serverUrl = deps.serverUrl ?? DEFAULT_SERVER_URL;
+    this.intensity = deps.intensity ?? (() => settings.aiIntensity);
+    this.showInterventions = deps.showInterventions ?? (() => settings.aiInterventionIndicators);
+    this.now = deps.now ?? Date.now;
+    this.contextTickMs = deps.contextTickMs ?? DEFAULT_CONTEXT_TICK_MS;
+    this.context = new AIContextBuilder({ now: this.now });
+    this.actionDispatcher = new AIActionDispatcher(
+      (parsed, outcome) => this.onActionOutcome(parsed, outcome),
+      this.now,
+      deps.governor,
+      (parsed) => this.intensityVeto(parsed),
+    );
+  }
+
+  /**
+   * Hands every message sent from now on to `listener` as well (one at a
+   * time; null stops it). Only what actually went over the socket is seen:
+   * nothing is sent, or heard, while disconnected.
+   */
+  setOutboundListener(listener: AIOutboundListener | null): void {
+    this.outboundListener = listener;
+  }
+
+  /** Whether the server connection is up. */
+  get isConnected(): boolean {
+    return this.connected;
+  }
+
+  /**
+   * Connects for the signed-in player. Resolves once the attempt is under
+   * way; a signed-out player gets no connection and the AI stays off.
+   */
+  async initialize(): Promise<void> {
+    this.started = true;
+    this.connectGeneration += 1;
+    const generation = this.connectGeneration;
+    this.feed.status = 'connecting';
+    const token = await this.fetchToken();
+    if (generation !== this.connectGeneration) return;
+    if (token === null) {
+      this.feed.status = 'disabled';
+      return;
+    }
+    this.openClient(token);
+  }
+
+  /**
+   * Call once a gameplay scene is built (dungeon floors and interiors alike)
+   * to wire its events and state. Events are mapped from the moment a scene
+   * binds; nothing is sent until the server connection is open.
+   *
+   * `onLeave` runs as the scene is let go of, while its bus is still heard
+   * and before the last flush, so events it emits (a challenge ended by
+   * leaving the floor) still reach the server. The next scene binds from its
+   * constructor, before the old scene's `onExit`, so this is the old scene's
+   * last chance to be heard.
+   */
+  bindScene(
+    ctx: AISceneContext,
+    bus: EventBus,
+    source: AIContextSource,
+    onLeave?: () => void,
+  ): void {
+    this.unbindScene(this.sceneBus ?? undefined);
+    this.sceneCtx = ctx;
+    this.sceneBus = bus;
+    this.sceneLeaving = onLeave ?? null;
+    this.context.bind(bus, source);
+    this.subscribeToEvents(bus);
+    // Only while connected: an interval left running offline would also keep a
+    // headless harness that builds a scene from ever exiting.
+    if (this.connected) this.startContextTimer();
+  }
+
+  /**
+   * Call from a scene's `onExit`, before `bus.clear()`, with that scene's bus.
+   * The next scene is built (and binds) before the old one exits, so an
+   * unbind naming a bus that is no longer bound is ignored.
+   */
+  unbindScene(bus?: EventBus): void {
+    if (bus !== undefined && bus !== this.sceneBus) return;
+    const leaving = this.sceneLeaving;
+    this.sceneLeaving = null;
+    leaving?.();
+    this.flushContext();
+    this.clearEventSubs();
+    this.context.unbind();
+    this.stopContextTimer();
+    this.actionDispatcher.clear();
+    endAIActionEffects();
+    this.sceneCtx = null;
+    this.sceneBus = null;
+  }
+
+  update(): void {
+    this.feed.update();
+    this.refreshStatus();
+    if (!this.sceneCtx) return;
+    // Scenes call this while paused too; the AI's timed effects hold with the game.
+    if (!this.sceneCtx.isPaused()) tickAIActions();
+    this.actionDispatcher.drain(this.sceneCtx);
+  }
+
+  /** The AI panel, for a gameplay scene to mount; it hides whenever the scene's HUD does. */
+  surfaces(hudVisible: () => boolean): Surface[] {
+    return [
+      aiPanelSurface({
+        feed: this.feed,
+        hudVisible,
+        onChoice: (choiceId) => this.answerChoice(choiceId),
+      }),
+    ];
+  }
+
+  /**
+   * What the player typed to the System. Online it goes over the socket and
+   * the reply streams into the panel; offline the System answers with a
+   * scripted line.
+   */
+  chatWithSystem(message: string): void {
+    this.context.recordPlayerMessage(SYSTEM_CHARACTER_NAME);
+    if (!this.sendPlayerText(SYSTEM_CHARACTER_NAME, message)) this.sayScripted();
+  }
+
+  /**
+   * Opens a conversation with Mordecai and resolves with his reply. He is
+   * briefed by the server only on what he witnessed. Falls back to his usual
+   * advice when the server is unreachable or slow.
+   */
+  chatWithMordecai(): Promise<string> {
+    this.context.recordPlayerMessage(MORDECAI_CHARACTER_NAME);
+    return new Promise((resolve) => {
+      this.replyWaiters.get(MORDECAI_CHARACTER_NAME)?.(MORDECAI_FALLBACK_LINE);
+      const timer = setTimeout(() => finish(MORDECAI_FALLBACK_LINE), MORDECAI_REPLY_TIMEOUT_MS);
+      const finish = (text: string): void => {
+        clearTimeout(timer);
+        if (this.replyWaiters.get(MORDECAI_CHARACTER_NAME) === finish) {
+          this.replyWaiters.delete(MORDECAI_CHARACTER_NAME);
+        }
+        resolve(text);
+      };
+      this.replyWaiters.set(MORDECAI_CHARACTER_NAME, finish);
+      if (!this.sendPlayerText(MORDECAI_CHARACTER_NAME, MORDECAI_GREETING)) {
+        finish(MORDECAI_FALLBACK_LINE);
+      }
+    });
+  }
+
+  /**
+   * Wipes every AI character's memory of this player, for a save wipe. Owes
+   * the in-character acknowledgement to the next page load, since a wipe
+   * always reloads. Never rejects: a server that cannot be reached simply
+   * keeps its memories.
+   */
+  async forgetPlayer(): Promise<void> {
+    const token = await this.fetchToken();
+    if (token === null) return;
+    rememberForgottenPlayer(FORGOTTEN_PLAYER_LINE);
+    // No playerId: the token names the player, and the server refuses a reset for anyone else.
+    await Promise.all(
+      enabledCharacters().map(async (character) => {
+        try {
+          await fetch(
+            `${this.serverUrl}/api/characters/${encodeURIComponent(character.name)}/reset`,
+            {
+              method: 'POST',
+              // The page reloads straight after a wipe; keepalive lets the request outlive it.
+              keepalive: true,
+              headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+              body: JSON.stringify({ scope: 'all', prompt: renderCharacterPrompt(character) }),
+            },
+          );
+        } catch {
+          // Unreachable server: nothing to forget there.
+        }
+      }),
+    );
+  }
+
+  /**
+   * The signed-in account changed (signed out, or signed in again, possibly as
+   * someone else). The open connection speaks for the old account, so it is
+   * dropped; the adapter reconnects under whichever account the game server
+   * now vouches for, and stays off when it vouches for none.
+   */
+  accountChanged(): void {
+    this.connectGeneration += 1;
+    this.closeClient();
+    this.feed.status = 'disabled';
+    if (this.started) void this.initialize();
+  }
+
+  // ── connection ────────────────────────────────────────────────────────────
+
+  private openClient(firstToken: string): void {
+    this.closeClient();
+    let primedToken: string | null = firstToken;
+    const client = this.createClient({
+      url: this.serverUrl,
+      // Called before every connect and when the server warns the token is expiring.
+      token: async () => {
+        if (primedToken !== null) {
+          const token = primedToken;
+          primedToken = null;
+          return token;
+        }
+        const fresh = await this.fetchToken();
+        if (fresh === null) throw new Error('No player token: the player is signed out');
+        return fresh;
+      },
+      sdk: AI_SDK_NAME,
+      // Actions wait out pauses in the dispatcher, so results are sent from there.
+      unhandledActions: 'ignore',
+    });
+    this.client = client;
+    this.transport = new SdkContextTransport(client);
+    const current = (): boolean => this.client === client;
+    this.clientUnsubs = [
+      client.on('connected', () => {
+        if (current()) this.onConnected();
+      }),
+      client.on('disconnected', () => {
+        if (!current()) return;
+        this.lostConnection = true;
+        this.onDisconnected();
+      }),
+      client.on('chat', (update) => {
+        if (current()) this.onChat(update);
+      }),
+      client.on('ai_typing', (payload) => {
+        if (current() && !this.replyWaiters.has(payload.characterName)) {
+          this.feed.onTyping(payload);
+        }
+      }),
+      client.on('ai_state', (payload) => {
+        if (current()) this.feed.onState(payload);
+      }),
+      client.on('notice', (payload) => {
+        if (!current()) return;
+        if (payload.kind === 'error' || payload.kind === 'token_expiring') return;
+        this.degradedUntil = this.now() + (payload.retryAfterMs ?? DEFAULT_DEGRADED_MS);
+        this.refreshStatus();
+      }),
+      client.on('ai_action', (payload) => {
+        if (current()) this.onServerAction(payload);
+      }),
+      // Transport and token failures surface as a disconnect; the game has nothing to add.
+      client.on('error', () => undefined),
+    ];
+    client.connect().catch(() => undefined);
+  }
+
+  private closeClient(): void {
+    for (const unsub of this.clientUnsubs) unsub();
+    this.clientUnsubs = [];
+    this.client?.close();
+    this.client = null;
+    this.transport = null;
+    this.lostConnection = false;
+    this.onDisconnected();
+  }
+
+  private onConnected(): void {
+    this.connected = true;
+    this.refreshStatus();
+    this.transport?.reset();
+    this.context.resynchronize();
+    this.flushContext();
+    if (this.sceneBus !== null) this.startContextTimer();
+    const forgotten = takeForgottenPlayerNotice();
+    if (forgotten !== null) this.feed.addScripted(SYSTEM_CHARACTER_NAME, forgotten);
+  }
+
+  private onDisconnected(): void {
+    this.connected = false;
+    this.stopContextTimer();
+    this.feed.clearStreaming();
+    for (const waiter of [...this.replyWaiters.values()]) waiter(MORDECAI_FALLBACK_LINE);
+    this.refreshStatus();
+  }
+
+  /** Without a client the status is whatever `initialize` or `accountChanged` set. */
+  private refreshStatus(): void {
+    if (this.client === null) return;
+    if (!this.connected) {
+      this.feed.status = this.lostConnection ? 'offline' : 'connecting';
+      return;
+    }
+    this.feed.status = this.now() < this.degradedUntil ? 'degraded' : 'online';
+  }
+
+  /** Sends what the player said; false when there is no connection to send it on. */
+  private sendPlayerText(characterName: string, text: string, replyTo?: string): boolean {
+    const client = this.client;
+    if (client === null || !this.connected) return false;
     try {
-      await fetch(SERVER_URL, {
-        method: 'HEAD',
-        signal: AbortSignal.timeout(SERVER_CHECK_TIMEOUT_MS),
+      const sentText = text.slice(0, client.limits.maxMessageChars);
+      client.sendPlayerMessage(characterName, sentText, replyTo);
+      this.outboundListener?.({
+        type: 'player_message',
+        payload:
+          replyTo === undefined
+            ? { characterName, text: sentText }
+            : { characterName, text: sentText, replyTo },
       });
       return true;
     } catch {
@@ -101,437 +476,120 @@ export class AIAdapter {
     }
   }
 
-  async initialize(): Promise<void> {
-    try {
-      const creds = await this.getOrRegisterCredentials();
-      if (!creds) return;
-      this.creds = creds;
-
-      const token = await this.fetchNewToken();
-      if (!token) return;
-
-      // Register tool vocabulary and init the System character (idempotent)
-      const headers = {
-        Authorization: `Bearer ${token}`,
-        'Content-Type': 'application/json',
-      };
-      await fetch(`${SERVER_URL}/api/tools`, {
-        method: 'POST',
-        headers,
-        body: JSON.stringify(AI_TOOLS),
-      });
-      await fetch(`${SERVER_URL}/api/characters/init`, {
-        method: 'POST',
-        headers,
-        body: JSON.stringify({
-          characterName: CHARACTER_NAME,
-          prompt: SYSTEM_PROMPT,
-          receiveLogStream: true,
-          evolvePersonality: true,
-        }),
-      });
-      await fetch(`${SERVER_URL}/api/characters/init`, {
-        method: 'POST',
-        headers,
-        body: JSON.stringify({
-          characterName: MORDECAI_CHARACTER_NAME,
-          prompt: MORDECAI_SYSTEM_PROMPT,
-          receiveLogStream: false,
-          evolvePersonality: true,
-        }),
-      });
-
-      // Open browser-native WebSocket — SDK's WS class uses Node.js 'ws', so we do this ourselves
-      const wsUrl = SERVER_URL.replace(/^http/, 'ws') + `?token=${encodeURIComponent(token)}`;
-      this.ws = new WebSocket(wsUrl);
-      this.ws.onmessage = (e) => this.handleWsMessage(e);
-      this.ws.onclose = () => {
-        this.connected = false;
-      };
-      this.ws.onerror = () => {
-        this.ws?.close();
-      };
-
-      const ws = this.ws;
-      await new Promise<void>((resolve, reject) => {
-        const timeout = setTimeout(
-          () => reject(new Error('WS connect timeout')),
-          WS_CONNECT_TIMEOUT_MS,
-        );
-        ws.addEventListener('open', () => {
-          clearTimeout(timeout);
-          this.connected = true;
-          // If a scene was already bound while we were connecting, start sending now
-          if (this.sceneCtx && this.sceneBus) {
-            this.subscribeToEvents(this.sceneBus);
-            this.startSnapshotTimer();
-            this.sendStateSnapshot();
-          }
-          resolve();
-        });
-        ws.addEventListener('error', () => {
-          clearTimeout(timeout);
-          reject(new Error('WS error'));
-        });
-      });
-    } catch {
-      // Server unavailable — game runs without AI
-      this.connected = false;
-    }
+  private sayScripted(): void {
+    this.feed.addScripted(SYSTEM_CHARACTER_NAME, this.fallbackLines.next());
   }
 
-  /** Call from DungeonScene constructor to wire events and state. */
-  bindScene(ctx: AISceneContext, bus: EventBus): void {
-    this.sceneCtx = ctx;
-    this.sceneBus = bus;
-
-    if (this.connected) {
-      this.subscribeToEvents(bus);
-      this.startSnapshotTimer();
-      this.sendStateSnapshot();
-    }
-    // Otherwise initialize() will subscribe once the connection opens
-  }
-
-  /** Call from DungeonScene.onExit() before bus.clear(). */
-  unbindScene(): void {
-    this.clearEventSubs();
-    this.stopSnapshotTimer();
-    this.sceneCtx = null;
-    this.sceneBus = null;
-  }
-
-  update(): void {
-    this.messages.update();
-  }
-
-  render(ctx: CanvasRenderingContext2D): void {
-    this.messages.render(ctx);
-  }
-
-  private handleWsMessage(e: MessageEvent): void {
-    if (typeof e.data !== 'string') return;
-    let rawMsg: unknown;
-    try {
-      rawMsg = JSON.parse(e.data);
-    } catch {
+  private onChat(update: ChatStreamUpdate): void {
+    const waiter = this.replyWaiters.get(update.characterName);
+    if (waiter === undefined) {
+      this.feed.onChat(update);
       return;
     }
-    if (typeof rawMsg !== 'object' || rawMsg === null || !('type' in rawMsg)) return;
-
-    if (rawMsg.type === 'ai_chat') {
-      if (
-        'payload' in rawMsg &&
-        typeof rawMsg.payload === 'object' &&
-        rawMsg.payload !== null &&
-        'text' in rawMsg.payload &&
-        typeof rawMsg.payload.text === 'string'
-      ) {
-        this.messages.add(rawMsg.payload.text);
-      }
-    } else if (rawMsg.type === 'ai_action' && this.sceneCtx) {
-      if (
-        'payload' in rawMsg &&
-        typeof rawMsg.payload === 'object' &&
-        rawMsg.payload !== null &&
-        'actions' in rawMsg.payload &&
-        Array.isArray(rawMsg.payload.actions)
-      ) {
-        for (const rawAction of rawMsg.payload.actions) {
-          // eslint-disable-next-line @typescript-eslint/consistent-type-assertions
-          this.safeExecuteAction(rawAction as AIAction);
-        }
-      }
-    }
+    if (update.done) waiter(update.text);
   }
 
-  private safeExecuteAction(action: AIAction): void {
-    try {
-      if (this.sceneCtx && !this.sceneCtx.isPaused()) {
-        executeAIAction(action, this.sceneCtx);
-        this.messages.addAction(describeAction(action));
-        this.actionHistory.push(action);
-        if (this.actionHistory.length > ACTION_HISTORY_MAX) {
-          this.actionHistory.shift();
-        }
-      }
-    } catch {
-      // Never let an AI action crash the game loop
-    }
+  /** The player tapped a reply button: the label is sent as what they said, the choice id as `replyTo`. */
+  answerChoice(choiceId: string): void {
+    const reply = this.feed.pickChoice(choiceId);
+    if (reply === null) return;
+    this.context.recordPlayerMessage(reply.characterName);
+    if (!this.sendPlayerText(reply.characterName, reply.text, reply.replyTo)) this.sayScripted();
   }
 
-  private computeConstraints(): string {
-    const recent = this.actionHistory.slice(-ACTION_HISTORY_MAX);
-    const lines: string[] = [];
+  // ── actions ───────────────────────────────────────────────────────────────
 
-    const statCounts = new Map<string, number>();
-    for (const a of recent) {
-      if (a.type === 'modify_stat' && typeof a.stat === 'string') {
-        statCounts.set(a.stat, (statCounts.get(a.stat) ?? 0) + 1);
-      }
+  /**
+   * Every action the server sends is answered with an `action_result`: run,
+   * refused by the player's intensity or the governor, or expired while the
+   * game was paused.
+   */
+  private onServerAction(payload: ActionPayload): void {
+    const parsed = parseServerAction(payload, payload.characterName);
+    if (parsed === null) {
+      this.sendActionResult(payload.actionId, false, 'unreadable action', {
+        characterName: payload.characterName,
+        type: payload.type,
+        params: payload.params,
+      });
+      return;
     }
-    for (const [stat, count] of statCounts) {
-      if (count >= REPEAT_THRESHOLD) {
-        lines.push(
-          `Do NOT use modify_stat at all — you have modified ${stat} ${count} times already. Pick a completely different action category.`,
-        );
-      }
+    const scene = this.sceneCtx;
+    if (scene === null) {
+      this.reportOutcome(parsed, { ok: false, detail: NO_SCENE_DETAIL, indicator: null });
+      return;
     }
-
-    const mobCounts = new Map<string, number>();
-    for (const a of recent) {
-      if (a.type === 'spawn_mob' && typeof a.mob_type === 'string') {
-        mobCounts.set(a.mob_type, (mobCounts.get(a.mob_type) ?? 0) + 1);
-      }
-    }
-    for (const [mobType, count] of mobCounts) {
-      if (count >= REPEAT_THRESHOLD) {
-        lines.push(
-          `Do NOT spawn ${mobType} — you have spawned them ${count} times already. Spawning other enemy types is still allowed.`,
-        );
-      }
-    }
-
-    return lines.length > 0
-      ? `\n\nACTION CONSTRAINTS (enforce strictly):\n${lines.join('\n')}`
-      : '';
+    this.actionDispatcher.submit(parsed, scene);
   }
 
-  private wsSend(msg: ClientMessage): void {
-    if (!this.connected || this.ws?.readyState !== WebSocket.OPEN) return;
-    this.ws.send(JSON.stringify(msg));
+  private intensityVeto(parsed: ParsedServerAction): string | null {
+    const def = findAIAction(parsed.request.name);
+    if (def === undefined) return null;
+    return intensityRefusal(this.intensity(), { name: def.name, severity: def.policy.severity });
   }
 
-  private sendEvent(event: GameEventRecord): void {
-    this.wsSend({ type: 'event_log', payload: { events: [event] } });
+  private onActionOutcome(parsed: ParsedServerAction, outcome: AIActionOutcome): void {
+    this.reportOutcome(parsed, outcome);
+    if (!outcome.ok || outcome.indicator === null) return;
+    const characterName = parsed.request.characterName;
+    this.context.recordAIAction(characterName, parsed.request.name, outcome.indicator);
+    if (this.showInterventions()) this.feed.addIntervention(characterName, outcome.indicator);
   }
 
-  private sendStateSnapshot(): void {
-    if (!this.sceneCtx) return;
-    const ctx = this.sceneCtx;
-    const human = ctx.getHuman();
-    const cat = ctx.getCat();
-    const activeTileX = Math.floor((human.isActive ? human : cat).x / TILE_SIZE);
-    const activeTileY = Math.floor((human.isActive ? human : cat).y / TILE_SIZE);
-
-    const nearbyMobs = ctx
-      .getMobs()
-      .filter((m) => m.isAlive)
-      .map((m) => ({
-        type: m.constructor.name,
-        tileX: Math.floor(m.x / TILE_SIZE),
-        tileY: Math.floor(m.y / TILE_SIZE),
-        hp: displayHp(m.hp),
-        maxHp: m.maxHp,
-        isBoss: m.isBoss,
-      }))
-      .filter(
-        (m) =>
-          Math.hypot(m.tileX - activeTileX, m.tileY - activeTileY) <= NEARBY_MOBS_SEARCH_RADIUS,
-      )
-      .slice(0, NEARBY_MOBS_MAX);
-
-    const map = ctx.getGameMap();
-    const mapRows = map.structure.length;
-    const mapCols = map.structure[0]?.length ?? mapRows;
-
-    const constraints = this.computeConstraints();
-    this.wsSend({
-      type: 'state_snapshot',
-      payload: {
-        activePlayer: human.isActive ? 'Human' : 'Cat',
-        level: ctx.getLevelId(),
-        mapWidth: mapCols,
-        mapHeight: mapRows,
-        human: playerSnapshot(human),
-        cat: playerSnapshot(cat),
-        nearbyMobs,
-        ...(constraints ? { constraints } : {}),
-      },
+  private reportOutcome(parsed: ParsedServerAction, outcome: AIActionOutcome): void {
+    if (parsed.actionId === null) return;
+    const { characterName, name, params } = parsed.request;
+    this.sendActionResult(parsed.actionId, outcome.ok, outcome.detail, {
+      characterName,
+      type: name,
+      params,
     });
   }
 
+  private sendActionResult(
+    actionId: string,
+    ok: boolean,
+    detail: string | undefined,
+    answers: AnsweredAction,
+  ): void {
+    const client = this.client;
+    if (client === null) return;
+    client.sendActionResult(actionId, ok, detail);
+    this.outboundListener?.({
+      type: 'action_result',
+      payload: detail === undefined ? { actionId, ok } : { actionId, ok, detail },
+      answers,
+    });
+  }
+
+  // ── context ───────────────────────────────────────────────────────────────
+
+  /** Sends whatever the context builder has due; a no-op while disconnected. */
+  private flushContext(): void {
+    const transport = this.transport;
+    if (!this.connected || transport === null) return;
+    const policy = intensityPolicy(this.intensity());
+    this.context.setPolicyMultiplier(policy.policyMultiplier);
+    this.context.setAllowedSeverities(policy.allowedSeverities);
+    this.context.setCommentaryOnly(policy.commentaryOnly);
+    const messages = this.context.tick();
+    transport.send(messages);
+    const listener = this.outboundListener;
+    if (listener !== null) for (const message of messages) listener(message);
+  }
+
+  /**
+   * Big moments get a scripted line from the System while it is offline.
+   * Online, the server hears about them through the event stream and decides
+   * for itself whether to react.
+   */
   private subscribeToEvents(bus: EventBus): void {
-    if (!this.sceneCtx) return;
-    const ctx = this.sceneCtx;
-
+    const reactOffline = (): void => {
+      if (!this.connected) this.sayScripted();
+    };
     this.eventUnsubs.push(
-      bus.on('mobKilled', (e) => {
-        // A kill with no killer is not the cat's. Status ticks and mobs killing
-        // each other both arrive here with a null killer, and reading that as
-        // "not the human, therefore the cat" credited her for every burn.
-        const killerName =
-          e.killer === null ? 'Unknown' : e.killer === ctx.getHuman() ? 'Human' : 'Cat';
-        const mobName = e.mob.constructor.name;
-        this.sendEvent({
-          ts: Date.now(),
-          type: 'mob_killed',
-          data: {
-            mobType: mobName,
-            tileX: Math.floor(e.mob.x / TILE_SIZE),
-            tileY: Math.floor(e.mob.y / TILE_SIZE),
-            isBoss: e.mob.isBoss,
-            killer: killerName,
-          },
-          importance: e.mob.isBoss ? NEARBY_MOBS_IMPORTANCE_BOSS : NEARBY_MOBS_IMPORTANCE_REGULAR,
-          summary: `${killerName} killed a ${mobName}`,
-        });
-      }),
-
-      bus.on('bossDefeated', (e) => {
-        this.sendEvent({
-          ts: Date.now(),
-          type: 'boss_defeated',
-          data: { bossType: e.bossType },
-          importance: 5,
-          summary: `Boss defeated: ${e.bossType}`,
-        });
-        const bossName = e.bossType.replace(/_/g, ' ');
-        void this.notifyImportantEvent(
-          `The crawlers just defeated ${bossName}!`,
-          `Boss slain: ${bossName}. Level: ${ctx.getLevelId()}.`,
-        );
-      }),
-
-      bus.on('playerLevelUp', (e) => {
-        const name = e.player === ctx.getHuman() ? 'Human' : 'Cat';
-        this.sendEvent({
-          ts: Date.now(),
-          type: 'player_level_up',
-          data: { player: name, newLevel: e.newLevel },
-          importance: 3,
-          summary: `${name} reached level ${e.newLevel}`,
-        });
-      }),
-
-      bus.on('safeRoomEntered', () => {
-        this.sendEvent({
-          ts: Date.now(),
-          type: 'safe_room_entered',
-          data: {},
-          importance: 2,
-          summary: 'Players entered the safe room',
-        });
-      }),
-
-      bus.on('achievementUnlocked', (e) => {
-        this.sendEvent({
-          ts: Date.now(),
-          type: 'achievement_unlocked',
-          data: { achievementId: e.achievementId, player: e.player },
-          importance: 3,
-          summary: `${e.player} unlocked achievement: ${e.achievementId}`,
-        });
-      }),
-
-      bus.on('questStarted', (e) => {
-        const summaries: Record<string, string> = {
-          defend_goblin_mother:
-            'Quest started: Defend the Goblin Mother. The goblin nursery sits directly on the route the crawlers have to walk, so they were always going to pass through it — but the fight inside is entirely their choice, and they took it. Having accepted, the goblin mother boards the far doors shut for the length of the wave. They have a short countdown before it arrives and can gather boards from a wood pile to barricade the floor grates the attackers climb out of. The boards come down when the encounter ends either way, and come down early if the crawlers walk out on it, so a loss costs them the rewards and not the floor. Rewards include XP, coins, and loot if she survives.',
-        };
-        this.sendEvent({
-          ts: Date.now(),
-          type: 'quest_started',
-          data: { questId: e.questId },
-          importance: 4,
-          summary: summaries[e.questId] ?? `Quest started: ${e.questId}`,
-        });
-      }),
-
-      bus.on('questCompleted', (e) => {
-        this.sendEvent({
-          ts: Date.now(),
-          type: 'quest_completed',
-          data: { questId: e.questId },
-          importance: 4,
-          summary: `Quest completed: ${e.questId}`,
-        });
-      }),
-
-      bus.on('questFailed', (e) => {
-        this.sendEvent({
-          ts: Date.now(),
-          type: 'quest_failed',
-          data: { questId: e.questId },
-          importance: 3,
-          summary: `Quest failed: ${e.questId}`,
-        });
-      }),
-
-      bus.on('combatStarted', (e) => {
-        this.sendEvent({
-          ts: Date.now(),
-          type: 'combat_started',
-          data: { attacker: e.attacker, mobType: e.mobType },
-          importance: 2,
-          summary: `${e.attacker} entered combat with a ${e.mobType}`,
-        });
-      }),
-
-      bus.on('bossFightInitiated', (e) => {
-        this.sendEvent({
-          ts: Date.now(),
-          type: 'boss_fight_initiated',
-          data: { bossType: e.bossType },
-          importance: 5,
-          summary: `Boss fight initiated: ${e.bossType}`,
-        });
-      }),
-
-      bus.on('healingPotionUsed', (e) => {
-        this.sendEvent({
-          ts: Date.now(),
-          type: 'healing_potion_used',
-          data: { player: e.player, hpRestored: e.hpRestored },
-          importance: 2,
-          summary: `${e.player} used a healing potion (+${e.hpRestored} HP)`,
-        });
-      }),
-
-      bus.on('dynamiteUsed', (e) => {
-        this.sendEvent({
-          ts: Date.now(),
-          type: 'dynamite_used',
-          data: { player: e.player },
-          importance: 2,
-          summary: `${e.player} threw goblin dynamite`,
-        });
-      }),
-
-      bus.on('healthLow', (e) => {
-        this.sendEvent({
-          ts: Date.now(),
-          type: 'health_low',
-          data: { player: e.player, hp: displayHp(e.hp), maxHp: e.maxHp },
-          importance: 4,
-          summary: `${e.player} health is critically low (${displayHp(e.hp)}/${e.maxHp})`,
-        });
-      }),
-
-      bus.on('stairwellFound', () => {
-        this.sendEvent({
-          ts: Date.now(),
-          type: 'stairwell_found',
-          data: { level: ctx.getLevelId() },
-          importance: 4,
-          summary: 'Players found the stairwell',
-        });
-        void this.notifyImportantEvent(
-          'The crawlers found the stairwell!',
-          `Floor: ${ctx.getLevelId()}. Human level: ${ctx.getHuman().level}, Cat level: ${ctx.getCat().level}.`,
-        );
-      }),
-
-      bus.on('playerIdle', (e) => {
-        const secs = Math.round(e.totalIdleMs / IDLE_TIME_MS_PER_SECOND);
-        this.sendEvent({
-          ts: Date.now(),
-          type: 'player_idle',
-          data: { totalIdleMs: e.totalIdleMs },
-          importance: 1,
-          summary: `Player has been idle for ${secs}s`,
-        });
-      }),
+      bus.on('bossDefeated', reactOffline),
+      bus.on('stairwellFound', reactOffline),
     );
   }
 
@@ -540,300 +598,18 @@ export class AIAdapter {
     this.eventUnsubs = [];
   }
 
-  private startSnapshotTimer(): void {
-    this.stopSnapshotTimer();
-    this.snapshotTimer = setInterval(() => this.sendStateSnapshot(), SNAPSHOT_INTERVAL_MS);
+  private startContextTimer(): void {
+    this.stopContextTimer();
+    this.contextTimer = setInterval(() => this.flushContext(), this.contextTickMs);
   }
 
-  private stopSnapshotTimer(): void {
-    if (this.snapshotTimer !== null) {
-      clearInterval(this.snapshotTimer);
-      this.snapshotTimer = null;
+  private stopContextTimer(): void {
+    if (this.contextTimer !== null) {
+      clearInterval(this.contextTimer);
+      this.contextTimer = null;
     }
-  }
-
-  private async notifyImportantEvent(trigger: string, context: string): Promise<void> {
-    const token = await this.ensureValidToken();
-    if (!token) return;
-    try {
-      const res = await fetch(
-        `${SERVER_URL}/api/characters/${encodeURIComponent(CHARACTER_NAME)}/interactions`,
-        {
-          method: 'POST',
-          headers: {
-            Authorization: `Bearer ${token}`,
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            message: trigger,
-            additional_context: context + this.computeConstraints(),
-          }),
-        },
-      );
-      if (!res.ok) return;
-      const rawData: unknown = await res.json();
-      if (typeof rawData === 'object' && rawData !== null) {
-        if ('chat' in rawData && typeof rawData.chat === 'string') this.messages.add(rawData.chat);
-        if ('actions' in rawData && Array.isArray(rawData.actions)) {
-          for (const rawAction of rawData.actions) {
-            // eslint-disable-next-line @typescript-eslint/consistent-type-assertions
-            this.safeExecuteAction(rawAction as AIAction);
-          }
-        }
-      }
-    } catch {
-      // Server unavailable — silently ignore
-    }
-  }
-
-  /**
-   * Send a direct player message to the System AI.
-   * The response is displayed through the normal top-banner channel.
-   * Safe to call when disconnected — silently no-ops.
-   */
-  async chatWithSystem(message: string, additionalContext: string): Promise<void> {
-    const token = await this.ensureValidToken();
-    if (!token) return;
-    try {
-      const res = await fetch(
-        `${SERVER_URL}/api/characters/${encodeURIComponent(CHARACTER_NAME)}/interactions`,
-        {
-          method: 'POST',
-          headers: {
-            Authorization: `Bearer ${token}`,
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            message,
-            additional_context: additionalContext + this.computeConstraints(),
-          }),
-        },
-      );
-      if (!res.ok) return;
-      const rawData: unknown = await res.json();
-      if (typeof rawData === 'object' && rawData !== null) {
-        if ('chat' in rawData && typeof rawData.chat === 'string') this.messages.add(rawData.chat);
-        if ('actions' in rawData && Array.isArray(rawData.actions)) {
-          for (const rawAction of rawData.actions) {
-            // eslint-disable-next-line @typescript-eslint/consistent-type-assertions
-            this.safeExecuteAction(rawAction as AIAction);
-          }
-        }
-      }
-    } catch {
-      // Server unavailable — silently ignore
-    }
-  }
-
-  /**
-   * Send a one-off message to Mordecai and return his response.
-   * Falls back to static text if the server is unavailable.
-   */
-  async chatWithMordecai(context: {
-    recentEvents: Array<{ label: string; secondsAgo: number }>;
-    humanLevel: number;
-    catLevel: number;
-  }): Promise<string> {
-    const fallback =
-      "Kill things, level up, find the stairwell. That's how you survive. Every floor, " +
-      "every time. You'd be surprised how many crawlers can't manage even that.";
-
-    const token = await this.ensureValidToken();
-    if (!token) return fallback;
-
-    const contextLines = context.recentEvents.map((e) => {
-      const ago =
-        e.secondsAgo < RECENT_EVENTS_THRESHOLD_SECONDS
-          ? `${e.secondsAgo}s ago`
-          : `${Math.floor(e.secondsAgo / IDLE_TIME_SECONDS_PER_MINUTE)}m ago`;
-      return `- ${e.label} (${ago})`;
-    });
-
-    const additionalContext =
-      `Human is level ${context.humanLevel}, Cat is level ${context.catLevel}.\n` +
-      (contextLines.length > 0
-        ? `Recent highlights:\n${contextLines.join('\n')}`
-        : 'No notable events yet.');
-
-    try {
-      const res = await fetch(
-        `${SERVER_URL}/api/characters/${encodeURIComponent(MORDECAI_CHARACTER_NAME)}/interactions`,
-        {
-          method: 'POST',
-          headers: {
-            Authorization: `Bearer ${token}`,
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            message: 'Hey.',
-            additional_context: additionalContext,
-          }),
-        },
-      );
-      if (!res.ok) return fallback;
-      const rawData: unknown = await res.json();
-      if (
-        typeof rawData === 'object' &&
-        rawData !== null &&
-        'chat' in rawData &&
-        typeof rawData.chat === 'string'
-      ) {
-        return rawData.chat;
-      }
-      return fallback;
-    } catch {
-      return fallback;
-    }
-  }
-
-  /** Fetches a fresh JWT from stored credentials, caching it with its expiry. Returns null on failure. */
-  private async fetchNewToken(): Promise<string | null> {
-    if (!this.creds) return null;
-    try {
-      // Browser-native btoa (avoids Node.js Buffer dependency)
-      const b64 = btoa(`${this.creds.clientId}:${this.creds.clientSecret}`);
-      const tokenRes = await fetch(`${SERVER_URL}/api/auth/token`, {
-        method: 'POST',
-        headers: { Authorization: `Basic ${b64}` },
-      });
-      if (!tokenRes.ok) return null;
-      const rawToken: unknown = await tokenRes.json();
-      if (
-        typeof rawToken !== 'object' ||
-        rawToken === null ||
-        !('token' in rawToken) ||
-        typeof rawToken.token !== 'string' ||
-        !('expires_in' in rawToken) ||
-        typeof rawToken.expires_in !== 'number'
-      )
-        return null;
-
-      this.authToken = rawToken.token;
-      this.tokenExpiresAt = Date.now() + rawToken.expires_in * MS_PER_SECOND;
-      return this.authToken;
-    } catch {
-      return null;
-    }
-  }
-
-  /** Returns a non-expired JWT, transparently refreshing it if it's missing or about to expire. */
-  private async ensureValidToken(): Promise<string | null> {
-    if (this.authToken && Date.now() < this.tokenExpiresAt - TOKEN_REFRESH_BUFFER_MS) {
-      return this.authToken;
-    }
-    return this.fetchNewToken();
-  }
-
-  private async getOrRegisterCredentials(): Promise<StoredCredentials | null> {
-    // Use build-time credentials if available (from .env via scripts/build.js)
-    if (typeof __AI_CLIENT_ID__ !== 'undefined' && __AI_CLIENT_ID__) {
-      return { clientId: __AI_CLIENT_ID__, clientSecret: __AI_CLIENT_SECRET__ };
-    }
-
-    const stored = localStorage.getItem(CREDS_KEY);
-    if (stored) {
-      try {
-        const rawParsed: unknown = JSON.parse(stored);
-        if (
-          typeof rawParsed === 'object' &&
-          rawParsed !== null &&
-          'clientId' in rawParsed &&
-          typeof rawParsed.clientId === 'string' &&
-          'clientSecret' in rawParsed &&
-          typeof rawParsed.clientSecret === 'string'
-        ) {
-          return { clientId: rawParsed.clientId, clientSecret: rawParsed.clientSecret };
-        }
-      } catch {
-        // fall through
-      }
-      localStorage.removeItem(CREDS_KEY);
-    }
-
-    const res = await fetch(`${SERVER_URL}/api/clients/self-register`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ game_name: 'kitten-crawler-man' }),
-    });
-    if (!res.ok) return null;
-    const rawData: unknown = await res.json();
-    if (
-      typeof rawData !== 'object' ||
-      rawData === null ||
-      !('client_id' in rawData) ||
-      typeof rawData.client_id !== 'string' ||
-      !('client_secret' in rawData) ||
-      typeof rawData.client_secret !== 'string'
-    )
-      return null;
-    const creds: StoredCredentials = {
-      clientId: rawData.client_id,
-      clientSecret: rawData.client_secret,
-    };
-    localStorage.setItem(CREDS_KEY, JSON.stringify(creds));
-    return creds;
   }
 }
 
-function playerSnapshot(p: Player) {
-  return {
-    hp: displayHp(p.hp),
-    maxHp: p.maxHp,
-    level: p.level,
-    xp: p.xp,
-    tileX: Math.floor(p.x / TILE_SIZE),
-    tileY: Math.floor(p.y / TILE_SIZE),
-    strength: p.strength,
-    intelligence: p.intelligence,
-    constitution: p.constitution,
-    dexterity: p.dexterity,
-    coins: p.coins,
-    isActive: p.isActive,
-    isProtected: p.isProtected,
-    statusEffects: p.statusEffects.map((e) => e.type),
-    inventory: p.inventory.bag.slots
-      .filter((s): s is NonNullable<typeof s> => s !== null)
-      .map((s) => s.id),
-  };
-}
-
-function toStr(value: unknown, fallback: string): string {
-  return typeof value === 'string' ? value : fallback;
-}
-
-function describeAction(action: AIAction): string {
-  switch (action.type) {
-    case 'spawn_mob': {
-      const count = Math.min(Math.max(1, Number(action.count) || 1), MOB_SPAWN_COUNT_MAX);
-      const mob = toStr(action.mob_type, 'goblin').replace(/_/g, ' ');
-      return `spawned ${count}x ${mob} near ${toStr(action.target_player, 'player')}`;
-    }
-    case 'teleport_player':
-      return `teleported ${toStr(action.target_player, 'player')}`;
-    case 'apply_status':
-      return `applied ${action.status} to ${toStr(action.target_player, 'player')}`;
-    case 'remove_status':
-      return `removed ${action.status} from ${toStr(action.target_player, 'player')}`;
-    case 'give_item': {
-      const qty = Math.min(Math.max(1, Number(action.quantity) || 1), ITEM_SPAWN_QUANTITY_MAX);
-      const id = toStr(action.item_id, '').replace(/_/g, ' ');
-      return `gave ${id} x${qty} to ${toStr(action.target_player, 'player')}`;
-    }
-    case 'remove_item': {
-      const id = toStr(action.item_id, '').replace(/_/g, ' ');
-      return `removed ${id} from ${toStr(action.target_player, 'player')}`;
-    }
-    case 'set_hp':
-      return `set ${toStr(action.target_player, 'player')} HP to ${action.hp}`;
-    case 'modify_stat': {
-      const delta = Number(action.delta);
-      const sign = delta >= 0 ? '+' : '';
-      return `${sign}${delta} ${action.stat} for ${toStr(action.target_player, 'player')}`;
-    }
-    default:
-      return 'unknown action';
-  }
-}
-
-// Singleton — imported by game.ts and DungeonScene
+/** One per page: the connection, the context builder and its history outlive every scene. */
 export const aiAdapter = new AIAdapter();

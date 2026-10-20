@@ -11,6 +11,7 @@ import type { HitState } from '../core/UiRoot';
 import type { ItemSlotOptions } from '../widgets/itemSlot';
 import type { GlyphId } from '../theme/glyphs';
 import type { TopBandEntry } from './topBand';
+import type { ViewerFavorModel } from './viewerFavorPill';
 
 export type CrawlerId = 'human' | 'cat';
 
@@ -192,6 +193,12 @@ export interface HudModel {
    * compact one.
    */
   readonly levelTimer: LevelTimerModel | null;
+  /**
+   * The viewers' favour, once the show's AI has moved it this run; null or
+   * absent hides it. A pill on the readout row where there is room, a card
+   * in the top band where there is not.
+   */
+  readonly favor?: ViewerFavorModel | null;
 }
 
 /**

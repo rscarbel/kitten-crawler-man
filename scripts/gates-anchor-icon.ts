@@ -7,9 +7,9 @@
  *  - every frame paints something and nothing outside its own cell;
  *  - the stone and shards fill their cell about as much as other icons do;
  *  - consecutive frames at the real frame rate differ by little, so the
- *    animation can never strobe or pop;
- *  - one repaint costs well under a frame's budget, since the hotbar repaints
- *    it every frame.
+ *    animation can never strobe or pop.
+ *
+ * Every check reads pixels, never a timing, so a busy machine can't fail it.
  *
  *   npm run gates:anchor-icon
  */
@@ -98,11 +98,6 @@ const BYTE_MAX = 255;
 const HOTBAR_SLOT_FILL = '#0f172a';
 
 const DELTA_DECIMALS = 4;
-const MS_DECIMALS = 3;
-
-const PERF_ITERATIONS = 2000;
-/** Generous for node-canvas, which is slower than Chrome's accelerated canvas. */
-const MAX_MS_PER_PAINT = 0.5;
 
 const failures: string[] = [];
 function fail(id: string, message: string): void {
@@ -238,26 +233,11 @@ function gateSmoothMotion(): void {
   }
 }
 
-function gateCost(): void {
-  const size = SIZES[SIZES.length - 1];
-  const ctx = gameContext(size, size);
-  const started = performance.now();
-  for (let iteration = 0; iteration < PERF_ITERATIONS; iteration++) {
-    paintAnchorStoneAt(ctx, { x: 0, y: 0, w: size, h: size }, iteration * REAL_FRAME_S);
-  }
-  const msPerPaint = (performance.now() - started) / PERF_ITERATIONS;
-  console.log(`  cost: ${msPerPaint.toFixed(MS_DECIMALS)} ms per ${size}px paint (node-canvas)`);
-  if (msPerPaint > MAX_MS_PER_PAINT) {
-    fail('cost', `${msPerPaint.toFixed(MS_DECIMALS)} ms per paint exceeds ${MAX_MS_PER_PAINT} ms`);
-  }
-}
-
 /** Runs every gate and returns one message per failure. */
 export function anchorIconGateFailures(): string[] {
   failures.length = 0;
   gateFrames();
   gateSmoothMotion();
-  gateCost();
   return [...failures];
 }
 

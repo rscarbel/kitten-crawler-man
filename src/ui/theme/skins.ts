@@ -116,6 +116,7 @@ export const METER_KINDS = [
   'progress',
   'warning',
   'danger',
+  'favor',
 ] as const;
 
 export type MeterKind = (typeof METER_KINDS)[number];
@@ -715,6 +716,8 @@ function buildMeters(theme: Theme): Record<MeterKind, MeterSkin> {
     progress: meter(palette.accent.base),
     warning: meter(palette.state.warning),
     danger: meter(palette.state.danger),
+    // The audience's meter wears the System's own terminal colour: the show's voice, not the party's.
+    favor: meter(palette.tier.celestial, palette.text.muted),
   };
 }
 

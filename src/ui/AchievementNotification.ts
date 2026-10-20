@@ -1,4 +1,4 @@
-import type { AchievementDef, BoxTier } from '../core/AchievementManager';
+import { isAIAchievementDef, type AwardDef, type BoxTier } from '../core/AchievementManager';
 import { randomFromArray, randomInt } from '../utils';
 import type { Rect } from './core/geom';
 import type { Ui } from './core/UiRoot';
@@ -40,6 +40,11 @@ const BOX_H = 280;
 const FADE_IN_FRAMES = 18;
 const OK_BTN_W = 100;
 const OK_BTN_H = 40;
+const BUILT_IN_HEADER = 'New achievement!';
+/** An achievement's name never takes more of the card than this, however it was written. */
+const NAME_MAX_LINES = 2;
+/** The System writes its own achievements, and the card says so. */
+const AI_HEADER = 'The System awards you!';
 
 const BOX_MARGIN = 32;
 const PULSE_MIN = 0.85;
@@ -140,7 +145,7 @@ export class AchievementNotification {
    * Draws the card over the whole screen with its OK button, which is the
    * default for Space and Enter and stays disabled until the card has faded in.
    */
-  paint(ui: Ui, achievement: AchievementDef, player: 'Human' | 'Cat', onOk: () => void): void {
+  paint(ui: Ui, achievement: AwardDef, player: 'Human' | 'Cat', onOk: () => void): void {
     const { ctx, theme } = ui;
     const cw = ui.screen.w;
     const ch = ui.screen.h;
@@ -183,7 +188,7 @@ export class AchievementNotification {
     ctx.shadowColor = palette.accent.base;
     ctx.shadowBlur = HEADER_GLOW;
     text(ui, column(card.y + HEADER_TOP, type.heading.lineHeight, DIVIDER_PADDING), {
-      text: 'New achievement!',
+      text: isAIAchievementDef(achievement) ? AI_HEADER : BUILT_IN_HEADER,
       style: type.heading,
       color: palette.accent.base,
       align: 'center',
@@ -199,14 +204,18 @@ export class AchievementNotification {
     );
 
     let cursorY = card.y + DIVIDER_Y + space.lg;
-    const nameHeight = measureTextHeight(ui, card.w - ACHIEVEMENT_NAME_PADDING * 2, {
-      text: achievement.name,
-      role: 'title',
-    });
+    const nameHeight = Math.min(
+      measureTextHeight(ui, card.w - ACHIEVEMENT_NAME_PADDING * 2, {
+        text: achievement.name,
+        role: 'title',
+      }),
+      type.title.lineHeight * NAME_MAX_LINES,
+    );
     text(ui, column(cursorY, nameHeight, ACHIEVEMENT_NAME_PADDING), {
       text: achievement.name,
       role: 'title',
       wrap: true,
+      maxLines: NAME_MAX_LINES,
       align: 'center',
     });
     cursorY += nameHeight;

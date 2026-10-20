@@ -199,9 +199,9 @@ green).
 
 Outside the module: `npm run gates:figure-cache` includes a painter that throws
 mid-save and asserts no later cell inherits its clip or alpha, and
-`npm run bench:figure-paint` fails when Carl's slowest cell — in the default outfit or
-in all his gear — bakes over the cache's per-frame bake budget (converted to node time), after
-self-testing that a deliberately slow figure is caught.
+`npm run bench:figure-paint` reports Carl's slowest cell to bake — in the default outfit
+and in all his gear — beside the cache's per-frame bake budget. It is a wall-clock
+reading, so it informs and never fails.
 
 ## Equipment gates
 

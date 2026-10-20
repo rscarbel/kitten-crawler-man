@@ -44,6 +44,8 @@ function resumeFromProgress(baseOptions: DungeonSceneOptions, progress: GameProg
  * held in memory can outlive the wipe.
  */
 function wipeAllProgress(persistence: ProgressPersistence): Promise<void> {
+  // Not awaited: the AI forgetting the player must never hold up, or fail, the wipe itself.
+  void aiAdapter.forgetPlayer();
   return persistence.wipe();
 }
 
@@ -225,11 +227,13 @@ requestAnimationFrame(() => dismissBootSplash());
     },
     reauthenticate: async () => {
       signedInAs = await new LoginUI(authClient).show();
+      aiAdapter.accountChanged();
       return wipeAccountOf(signedInAs);
     },
     signOut: async () => {
       await authClient.logout();
       signedInAs = null;
+      aiAdapter.accountChanged();
     },
   };
 

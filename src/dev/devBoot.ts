@@ -71,6 +71,8 @@ import { PRISON_LAYOUTS, type PrisonLayout } from '../map/goblinPrisonLayouts';
 import type { Difficulty } from '../core/difficultyProfiles';
 import { blueprintsPlaytestState } from './blueprintsPlaytest';
 import { contractsPlaytestState } from './contractsPlaytest';
+import { aiAdapter } from '../ai/AIAdapter';
+import { startBrowserReplayRecording } from './aiReplayRecorder';
 
 /**
  * Dev-only entry points, reachable by query parameter.
@@ -315,6 +317,8 @@ export function devBootScene(
   if (params.get('prices') !== null) {
     showPriceBreakdowns();
   }
+  const aiRecordName = params.get('ai-record');
+  if (aiRecordName !== null) startBrowserReplayRecording(aiAdapter, aiRecordName);
   if (overlays.length > 0) {
     sceneManager.setFrameOverlay((ctx) => {
       for (const overlay of overlays) overlay(ctx);

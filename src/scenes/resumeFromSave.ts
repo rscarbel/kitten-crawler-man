@@ -17,6 +17,7 @@ import { createWheelLedger } from '../core/WheelLedger';
 import { createAttackCowState } from '../core/AttackCowState';
 import { withBloodVomitFrames } from '../core/bloodVomitSave';
 import { MusicLibrary } from '../core/MusicLibrary';
+import { viewerFavor } from '../core/viewerFavor';
 
 /**
  * An ability manager carrying a save's progress, or a fresh one at level 1.
@@ -115,6 +116,7 @@ export function sceneSetupFromSave(
   // no less heard for the death, and rewinding it would announce its unlock
   // and its credit a second time.
   options.musicLibrary ??= MusicLibrary.forSave(progress);
+  viewerFavor.restore(progress.viewerFavor);
   if (progress.mongoPetHp !== undefined && Number.isFinite(progress.mongoPetHp)) {
     // Clamped against the maximum the *restored* level implies: this arrives
     // as unvalidated JSON, and a value above the maximum renders as a

@@ -297,8 +297,8 @@ Two lint rules bite modules that live under `src/`:
     and run `npm run verify:eye-shine`.
 13. **Validation gates:** `npm run check:full`,
     `npm run gates:figure-cache`, `npm run render:<x>` must all exit 0 (for
-    Carl, `render:human` gates three outfits and `bench:figure-paint` gates his
-    slowest cell).
+    Carl, `render:human` gates three outfits; `bench:figure-paint` reports his
+    slowest cell's bake time, which is read, never gated).
     `check` and `check:full` run prettier `--write` over the whole repo, which
     reformats other agents' mid-edit files too. A subagent working beside
     others formats its own paths with `npx prettier --write <paths>` and

@@ -19,6 +19,7 @@ import { parseAttackCowHp } from './AttackCowState';
 import { MusicLibrary, backfilledMusicLibrary } from './MusicLibrary';
 import type { SerializedMusicLibrary } from './MusicLibrary';
 import { parsePersistedWorldState, type PersistedWorldState } from './PersistedWorldState';
+import { parseViewerFavor } from './viewerFavor';
 
 /**
  * The fields of a save that belong to the whole run rather than to the floor it
@@ -43,13 +44,15 @@ type RunSaveFieldKey =
   | 'attackCowOwned'
   | 'attackCowHp'
   | 'attackCowResting'
-  | 'musicLibrary';
+  | 'musicLibrary'
+  | 'viewerFavor';
 
 /**
- * The cow's HP is the one run field whose absence means something (full, not
- * yet measured), so its key must be written but its value may be `undefined`.
+ * Run fields whose absence means something, so their keys must be written but
+ * their values may be `undefined`: the cow's HP (full, not yet measured) and
+ * the viewers' favour (the AI has not moved it yet).
  */
-type RunSaveFieldAbsentWhenUnmeasured = 'attackCowHp';
+type RunSaveFieldAbsentWhenUnmeasured = 'attackCowHp' | 'viewerFavor';
 
 /**
  * The run-level fields every save path must write, built in one place so that a
@@ -71,7 +74,7 @@ export type RunSaveFields = Required<
  * - MAJOR — a field removed, renamed, or re-meant. Builds of another major
  *   refuse the save rather than resume a run from misread state.
  */
-export const SAVE_FORMAT_VERSION = '1.2.0';
+export const SAVE_FORMAT_VERSION = '1.3.0';
 
 interface SemanticVersion {
   major: number;
@@ -210,6 +213,7 @@ export function parseGameProgress(raw: unknown): GameProgress | null {
     attackCowOwned: typeof raw.attackCowOwned === 'boolean' ? raw.attackCowOwned : undefined,
     attackCowHp: parseAttackCowHp(raw.attackCowHp),
     attackCowResting: typeof raw.attackCowResting === 'boolean' ? raw.attackCowResting : undefined,
+    viewerFavor: parseViewerFavor(raw.viewerFavor),
   };
   return { ...progress, version, savedAt, musicLibrary: parseMusicLibrary(raw, progress) };
 }

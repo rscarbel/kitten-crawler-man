@@ -17,6 +17,7 @@ import { lineHeightOf, measureTextHeight, text } from '../../widgets/text';
 import type { PauseContext, PauseSection, SectionLayout } from './section';
 
 const OPEN_BOXES_LABEL = 'Open Boxes';
+const AI_AWARDS_HEADING = 'System awards';
 
 function tierColor(theme: Theme, tier: BoxTier): string {
   const { palette } = theme;
@@ -82,7 +83,9 @@ function crawlerAchievements(layout: SectionLayout, ctx: PauseContext, crawler: 
   const manager = ctx.achievements[crawler];
   layout.heading(CRAWLER_NAMES[crawler], ui.theme.palette.crawler[crawler]);
   const unlocked = unlockedFor(manager, crawler);
-  if (unlocked.length === 0) layout.paragraph('No achievements yet...', 'muted');
+  if (unlocked.length === 0 && manager.aiAchievements().length === 0) {
+    layout.paragraph('No achievements yet...', 'muted');
+  }
   for (const def of unlocked) {
     const tier =
       def.lootBox === undefined
@@ -92,6 +95,14 @@ function crawlerAchievements(layout: SectionLayout, ctx: PauseContext, crawler: 
             color: tierColor(ui.theme, def.lootBox.tier),
           };
     achievementRow(layout, ui, def.name, tier);
+  }
+  const aiAwards = manager.aiAchievements();
+  if (aiAwards.length > 0) layout.paragraph(AI_AWARDS_HEADING, 'muted', space.xs);
+  for (const award of aiAwards) {
+    achievementRow(layout, ui, award.name, {
+      label: `${award.lootBox.tier} ${award.lootBox.category} · ${award.description}`,
+      color: tierColor(ui.theme, award.lootBox.tier),
+    });
   }
 
   const boxCount = manager.pendingBoxes.length;

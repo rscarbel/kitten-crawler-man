@@ -41,6 +41,11 @@ export interface InteriorFloorContext {
    * explainer read and the key taken or lost.
    */
   readonly stealthKeySnatch?: StealthKeySnatchVisit;
+  /**
+   * The outdoor floor's key for the AI's per-floor allowances (`aiFloorKey`),
+   * so a visit indoors draws on the floor's allowance rather than a fresh one.
+   */
+  readonly aiFloorKey?: string;
 }
 
 /** Every enterable building in town stands on the level-3 overworld. */

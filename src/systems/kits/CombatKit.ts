@@ -40,6 +40,7 @@ import { MobUpdateLoop } from '../MobUpdateLoop';
 import { PlayerTickSystem } from '../PlayerTickSystem';
 import type { SafeRoomSystem } from '../SafeRoomSystem';
 import { SmushEffectSystem } from '../SmushEffectSystem';
+import { StatusChangeWatcher } from '../statusChangeEvents';
 import { TaranisStrikeSystem } from '../TaranisStrikeSystem';
 import type { SpellSystem } from '../SpellSystem';
 import type { DestructiblePropSystem } from '../DestructiblePropSystem';
@@ -72,6 +73,12 @@ export interface CombatKitDeps {
   readonly abilityManager: AbilityManager;
   /** Narrowed exactly as `CombatContext` narrows it. Null where there is no safe room. */
   readonly safeRoom: Pick<SafeRoomSystem, 'isEntityInSafeRoom'> | null;
+  /**
+   * Shared by every kit in one scene. A scene with several maps (a tower's
+   * storeys) builds a kit per map, and a watcher per kit would report the
+   * same status change once from each.
+   */
+  readonly statusChanges?: StatusChangeWatcher;
 }
 
 /** Systems a swing can reach that not every scene has. */
@@ -119,6 +126,7 @@ export class CombatKit {
   /** The Fury of Taranis's waves in flight, with what each swing has struck. */
   readonly taranis = new TaranisStrikeSystem();
   readonly deathScreen = new DeathScreen();
+  private readonly statusChanges: StatusChangeWatcher;
 
   private readonly world: SceneWorld;
   private readonly abilityManager: AbilityManager;
@@ -132,6 +140,7 @@ export class CombatKit {
   constructor(deps: CombatKitDeps) {
     this.world = deps.world;
     this.abilityManager = deps.abilityManager;
+    this.statusChanges = deps.statusChanges ?? new StatusChangeWatcher();
     this.spells = deps.world.roster.spells;
     this.bodyPartGore = new BodyPartGoreSystem(deps.world.gameMap);
     this.deathScreen.audio = deps.world.audio;
@@ -303,6 +312,8 @@ export class CombatKit {
       audio?.play('dynamite_explosion');
     }
     this.playSplatterCues(audio);
+    const { human, cat } = this.world.pm;
+    this.statusChanges.update(human, cat, this.world.bus);
   }
 
   /**

@@ -66,12 +66,6 @@ export interface ChatKitDeps {
   readonly world: SceneWorld;
   readonly abilityManager: AbilityManager;
   readonly godModeState: GodModeState;
-  /**
-   * A one-line description of where the party is and how they are doing, handed
-   * to the AI when the text is not a command. Read at open time, not at
-   * construction, because every number in it moves.
-   */
-  readonly describeSituation: () => string;
   /** Commands only this scene can answer — bounty warps, floor reveals. */
   readonly sceneCommands?: ReadonlyArray<ChatCommand>;
 }
@@ -82,7 +76,6 @@ export class ChatKit {
   private readonly world: SceneWorld;
   private readonly abilityManager: AbilityManager;
   private readonly godModeState: GodModeState;
-  private readonly describeSituation: () => string;
   private readonly commands: ReadonlyArray<ChatCommand>;
 
   /**
@@ -97,7 +90,6 @@ export class ChatKit {
     this.world = deps.world;
     this.abilityManager = deps.abilityManager;
     this.godModeState = deps.godModeState;
-    this.describeSituation = deps.describeSituation;
     this.commands = [...this.universalCommands(), ...(deps.sceneCommands ?? [])];
   }
 
@@ -136,7 +128,6 @@ export class ChatKit {
   }
 
   open(canvas: HTMLCanvasElement): void {
-    const situation = this.describeSituation();
     this.chat.open(canvas, (text) => {
       const typed = text.trim();
       const command = this.commands.find(
@@ -148,7 +139,7 @@ export class ChatKit {
         return;
       }
       this.chat.showBubble(typed);
-      void aiAdapter.chatWithSystem(typed, situation);
+      aiAdapter.chatWithSystem(typed);
     });
   }
 

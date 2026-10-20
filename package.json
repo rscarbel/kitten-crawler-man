@@ -23,6 +23,10 @@
     "add:music": "tsx scripts/add-music.ts",
     "lint:figure-scripts": "eslint scripts/figureSheet.ts scripts/figureGates.ts scripts/parity-figure-sheet.ts scripts/gates-figure-cache.ts scripts/nodeGameContext.ts scripts/previewOut.ts scripts/report-asset-residency.ts scripts/bench-figure-paint.ts scripts/bench-turn-residency.ts scripts/build-review-index.ts scripts/wave-test-figure.ts scripts/gates-equipment.ts scripts/gates-equipment-garments.ts scripts/gates-equipment-donut.ts scripts/render-garments.ts",
     "server": "tsx server/index.ts",
+    "ai:sync": "tsx scripts/ai-sync.ts",
+    "lint:ai-scripts": "eslint scripts/ai-sync.ts scripts/verify-ai-context.ts scripts/verify-ai-transport.ts scripts/dev-ai.ts scripts/record-ai-replays.ts scripts/aiReplaySchema.ts",
+    "ai:replays": "tsx scripts/record-ai-replays.ts",
+    "dev:ai": "tsx scripts/dev-ai.ts",
     "dev": "node scripts/build.js --dev-boot && npm run server",
     "playtest": "tsx scripts/playtest.ts",
     "format": "prettier --write --cache --cache-strategy content --ignore-unknown .",
@@ -60,6 +64,8 @@
     "verify:arrival-load": "tsx scripts/gate.ts tsx scripts/verify-arrival-load.ts",
     "verify:audio": "tsx scripts/gate.ts tsx scripts/verify-audio.ts",
     "verify:shop-pricing": "tsx scripts/gate.ts tsx scripts/verify-shop-pricing.ts",
+    "verify:ai-actions": "tsx scripts/gate.ts tsx scripts/verify-ai-actions.ts",
+    "verify:server-static": "tsx scripts/gate.ts tsx scripts/verify-server-static.ts",
     "verify:ui-input": "tsx scripts/gate.ts tsx scripts/verify-ui-input.ts",
     "verify:chat-input": "tsx scripts/gate.ts tsx scripts/verify-chat-input.ts",
     "verify:pause-keyboard": "tsx scripts/gate.ts tsx scripts/verify-pause-keyboard.ts",
@@ -268,6 +274,8 @@
     "verify:dungeon-interior-return": "tsx scripts/gate.ts tsx scripts/verify-dungeon-interior-return.ts",
     "verify:nursery": "tsx scripts/gate.ts tsx scripts/verify-nursery.ts",
     "verify:run-stats": "tsx scripts/gate.ts tsx scripts/verify-run-stats.ts",
+    "verify:ai-context": "tsx scripts/gate.ts tsx scripts/verify-ai-context.ts",
+    "verify:ai-transport": "tsx scripts/gate.ts tsx scripts/verify-ai-transport.ts",
     "verify:separation": "tsx scripts/gate.ts tsx scripts/verify-separation.ts",
     "verify:spider-fight": "tsx scripts/gate.ts tsx scripts/verify-spider-fight.ts",
     "verify:tactics": "tsx scripts/gate.ts tsx scripts/verify-tactics.ts",
@@ -317,6 +325,7 @@
     "wave:figure": "tsx scripts/wave-test-figure.ts"
   },
   "dependencies": {
+    "@rscarbel/game-server-llm-sdk": "0.1.0",
     "bcryptjs": "^3.0.3",
     "better-sqlite3": "^13.0.1",
     "cookie-parser": "^1.4.7",
@@ -337,6 +346,7 @@
     "prettier": "^3.9.8",
     "tsx": "^4.23.15",
     "typescript": "^6.0.3",
-    "typescript-eslint": "^8.70.1"
+    "typescript-eslint": "^8.70.1",
+    "zod": "^4.6.7"
   }
 }

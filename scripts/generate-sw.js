@@ -60,7 +60,15 @@ self.addEventListener('activate', (event) => {
 });
 
 /**
- * Network-first for everything: a player online always gets the build that is
+ * Responses from the game's backend are never touched: they carry bearer
+ * tokens and one player's progress, and a shared device's cache would hand them
+ * to whoever opens the app next. Left unhandled, they go to the network as if
+ * there were no worker.
+ */
+const PRIVATE_PATH = /(^|\\/)(api|\\.well-known)\\//;
+
+/**
+ * Network-first for every game file: a player online always gets the build that is
  * deployed right now. The cache exists only so an installed app still starts
  * with no connection at all.
  *
@@ -78,6 +86,7 @@ self.addEventListener('fetch', (event) => {
 
   const url = new URL(event.request.url);
   if (url.origin !== self.location.origin) return;
+  if (PRIVATE_PATH.test(url.pathname) || event.request.headers.has('Authorization')) return;
 
   const networkRequest =
     event.request.mode === 'navigate'

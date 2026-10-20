@@ -73,10 +73,15 @@ export class MordecaiAdvisor {
    * `AdviceObjective.optional`.
    */
   nextAdvice(snapshot: AdviceSnapshot): DialogLine | null {
+    const next = this.nextObjective(snapshot);
+    return next === null ? null : this.render(next, snapshot.bearingOrigin);
+  }
+
+  /** The objective `nextAdvice` would speak about, or null when every one is done. */
+  nextObjective(snapshot: AdviceSnapshot): AdviceObjective | null {
     const unfinished = snapshot.objectives.filter((objective) => !objective.complete);
     if (unfinished.length === 0) return null;
-    const next = unfinished.find((objective) => objective.optional !== true) ?? unfinished[0];
-    return this.render(next, snapshot.bearingOrigin);
+    return unfinished.find((objective) => objective.optional !== true) ?? unfinished[0];
   }
 
   /**

@@ -31,7 +31,6 @@ const SCANNED_DIRECTORIES: readonly string[] = [
 
 /** HUD, menu and panel owners that live outside `src/ui/`. */
 const SCANNED_FILES: readonly string[] = [
-  'src/ai/AIMessageDisplay.ts',
   'src/systems/AchievementUISystem.ts',
   'src/systems/ArenaSystem.ts',
   'src/systems/BossIntroSystem.ts',
@@ -152,6 +151,7 @@ const TEXT_PRIMITIVE_RULES: ReadonlySet<string> = new Set(['fontString', 'direct
  * repo-relative paths without an extension (e.g. `src/ui/InventoryPanel`).
  */
 const DELETED_LEGACY_MODULES: readonly string[] = [
+  'src/ai/AIMessageDisplay',
   'src/scenes/PostSignupScene',
   'src/ui/InventoryPanel',
   'src/ui/GearPanel',

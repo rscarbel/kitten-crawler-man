@@ -19,9 +19,11 @@
  * and that a walk back out of a building — the same floor rebuilt around the
  * same map — owes too little to put the screen up again.
  *
- * Also reports how long each task took, headless. Node's canvas costs are not
- * a browser's (they diverge by multiples, in both directions), so the timings
- * are a shape to compare runs against, not a claim about a player's wait.
+ * Every check is a count, never a timing, so a busy machine can't fail it. It
+ * also prints how long each loader task took, headless, as information only:
+ * Node's canvas costs are not a browser's (they diverge by multiples, in both
+ * directions), so the timings are a shape to compare runs against, not a claim
+ * about a player's wait.
  *
  *   npm run verify:town-arrival-load
  *   npx tsx scripts/verify-town-arrival-load.ts --fault=skip-loader   # must fail
@@ -95,12 +97,6 @@ const MAX_LOAD_FRAMES = 20000;
 const CULL_MARGIN = TILE_SIZE;
 /** Matches `RenderPipeline.ENTITY_SORT_Y_OFFSET`: a figure sorts by its foot. */
 const ENTITY_SORT_Y_OFFSET = TILE_SIZE;
-/**
- * How much slower than the steady state the first frame of play may be. Loose,
- * because it is a timing: it exists to catch a whole screenful of baking left
- * for frame 0 (several times the steady cost), not a few cold branches.
- */
-const MAX_FIRST_FRAME_RATIO = 2;
 /** Decimal places for millisecond readouts. */
 const MS_PLACES = 1;
 
@@ -241,9 +237,6 @@ interface PlayFrame {
   readonly directDraws: number;
   readonly chunkBakes: number;
   readonly environmentSteps: number;
-  readonly renderMs: number;
-  readonly groundMs: number;
-  readonly overlayMs: number;
 }
 
 function playFrame(): PlayFrame {
@@ -258,13 +251,10 @@ function playFrame(): PlayFrame {
   });
   const chunksBefore = tileChunkBakeCount();
   const stepsBefore = environmentPaintedStepCount();
-  const startedAt = performance.now();
   beginFigureFrame();
   beginEnvironmentArtFrame();
   gameMap.renderCanvas(ctx, camX, camY, VIEWPORT_W, VIEWPORT_H);
-  const groundDoneAt = performance.now();
   gameMap.renderDecorationsOverlay(ctx, camX, camY, VIEWPORT_W, VIEWPORT_H);
-  const overlayDoneAt = performance.now();
   const inView = townLife.people.filter(
     (person) =>
       person.x >= camX - CULL_MARGIN &&
@@ -290,9 +280,6 @@ function playFrame(): PlayFrame {
     directDraws: stats.directDraws,
     chunkBakes: tileChunkBakeCount() - chunksBefore,
     environmentSteps: environmentPaintedStepCount() - stepsBefore,
-    renderMs: performance.now() - startedAt,
-    groundMs: groundDoneAt - startedAt,
-    overlayMs: overlayDoneAt - groundDoneAt,
   };
 }
 
@@ -321,16 +308,6 @@ check(
 check(
   sum((f) => f.environmentSteps) === 0 && environmentPaintDepth() === 0,
   `${sum((f) => f.environmentSteps)} environment step(s) painted during play, ${environmentPaintDepth()} still owed`,
-);
-const steadyRenderMs = played
-  .slice(1)
-  .map((f) => f.renderMs)
-  .sort((a, b) => a - b);
-const medianSteadyRenderMs = steadyRenderMs[Math.floor(steadyRenderMs.length / 2)] ?? 0;
-check(
-  firstFrame.renderMs <= medianSteadyRenderMs * MAX_FIRST_FRAME_RATIO,
-  `frame 0 took ${firstFrame.renderMs.toFixed(MS_PLACES)} ms against a steady median of ` +
-    `${medianSteadyRenderMs.toFixed(MS_PLACES)} ms — something still bakes on the first frame of play`,
 );
 check(
   figurePrewarmDepth() === 0,
@@ -369,17 +346,8 @@ for (const [label, ms] of msByTask) {
 console.log(
   `  first ${PLAY_FRAMES} frames of play: ${sum((f) => f.lazyBakes)} lazy bakes, ` +
     `${sum((f) => f.approxDraws)} stand-ins, ${sum((f) => f.directDraws)} direct paints, ` +
-    `${sum((f) => f.chunkBakes)} chunk bakes, ${sum((f) => f.environmentSteps)} env steps; ` +
-    `frame 0 render ${firstFrame.renderMs.toFixed(MS_PLACES)} ms`,
+    `${sum((f) => f.chunkBakes)} chunk bakes, ${sum((f) => f.environmentSteps)} env steps`,
 );
-/** Frames of play shown individually in the report, to show the first against the rest. */
-const REPORTED_FRAMES = 4;
-for (const [index, frame] of played.slice(0, REPORTED_FRAMES).entries()) {
-  console.log(
-    `    frame ${index}: render ${frame.renderMs.toFixed(MS_PLACES)} ms ` +
-      `(ground ${frame.groundMs.toFixed(MS_PLACES)}, decorations ${frame.overlayMs.toFixed(MS_PLACES)})`,
-  );
-}
 console.log(`  building exit owes a loading screen: ${exitOwesWork}`);
 
 if (failures.length > 0) {

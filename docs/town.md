@@ -2318,8 +2318,9 @@ Review harnesses for the town's art, each writing into `preview/`:
   cast.
 - `npm run render:cast-motion` renders gait and dance; its gates are
   `npm run gates:cast-motion`.
-- `npm run verify:plaza-perf` measures the plaza crowd's cache behaviour. It is headless
-  and wall-clock sensitive, so run it on an idle machine.
+- `npm run verify:plaza-perf` measures the plaza crowd's cache behaviour. It is headless,
+  fails only on cache counts, and paces bakes on a simulated clock, so machine load
+  cannot change its verdict.
 
 `townMetrics.ts` computes the numbers without a canvas, so
 `generateOverworld` + `collectBuildingPlots` + `measureTown` run headlessly under

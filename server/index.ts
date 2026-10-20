@@ -5,6 +5,9 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import authRouter from './routes/auth.js';
 import progressRouter from './routes/progress.js';
+import { aiTokenRouter } from './routes/aiToken.js';
+import { aiSigningKey } from './aiSigningKey.js';
+import { servePublicOnly } from './publicFiles.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.join(__dirname, '..');
@@ -21,16 +24,21 @@ const app = express();
 app.use(express.json({ limit: JSON_BODY_LIMIT }));
 app.use(cookieParser());
 
-// Serve compiled frontend assets
-app.use(express.static(ROOT));
+// Ahead of the static root so nothing on disk can shadow the JWKS.
+app.use(aiTokenRouter(PORT));
+
+// The static root is the repo root, so only allowlisted game files are ever served from it.
+app.use(servePublicOnly(express.static(ROOT, { dotfiles: 'deny' })));
 
 app.use('/api/auth', authRouter);
 app.use('/api/progress', progressRouter);
 
-// Catch-all: serve index.html for any non-API GET (SPA fallback)
 app.get(/^(?!\/api\/).*/, (_req, res) => {
   res.sendFile(path.join(ROOT, 'index.html'));
 });
+
+// Loaded at boot so a first run generates its key now and a malformed one fails here.
+aiSigningKey();
 
 app.listen(PORT, () => {
   console.log(`Game server running at http://localhost:${PORT}`);

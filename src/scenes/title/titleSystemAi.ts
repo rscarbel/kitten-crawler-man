@@ -11,9 +11,8 @@
 
 import type { Rect } from '../../ui/core/geom';
 import type { Surface, Ui } from '../../ui/core/UiRoot';
-import { TERMINAL_FONT_STACK } from '../../ui/theme/fonts';
 import { skinsFor } from '../../ui/theme/skins';
-import type { Theme } from '../../ui/theme/tokens';
+import { terminalTheme } from '../../ui/theme/terminalTheme';
 import type { PaintTarget } from '../../ui/widgets/paint';
 import { measureText, text, wrapToWidth } from '../../ui/widgets/text';
 import type { TitleClock } from './titleClock';
@@ -50,17 +49,6 @@ export interface TitleSystemAiDeps {
   readonly stage: () => TitleStage;
   /** The menu's strip this frame, in UI units: held upright, the line sits just above it. */
   readonly menuStrip: (ui: Ui) => Rect;
-}
-
-const terminalThemes = new WeakMap<Theme, Theme>();
-
-/** `theme` with the terminal face in place of the UI face, built once per theme. */
-function terminalTheme(theme: Theme): Theme {
-  const cached = terminalThemes.get(theme);
-  if (cached !== undefined) return cached;
-  const built: Theme = { ...theme, fontFamily: TERMINAL_FONT_STACK };
-  terminalThemes.set(theme, built);
-  return built;
 }
 
 /** How much of `quip` shows at `nowMs`, or null when it is not up. */

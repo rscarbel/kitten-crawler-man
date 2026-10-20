@@ -60,6 +60,8 @@ import type { FocusClaimant } from './menuFocusAudit.js';
 import type { UiSize } from '../src/core/Settings.js';
 import type { SafeAreaInsets, ViewportInput } from '../src/ui/core/viewport.js';
 import type { MenusKit } from '../src/systems/kits/MenusKit.js';
+import type { AIShowStage } from '../src/ai/show/AIShowStage.js';
+import type { AIChallengeSystem } from '../src/systems/AIChallengeSystem.js';
 import { SPIDER_QUEST_NAME } from '../src/systems/SpiderQuestSystem';
 
 export {};
@@ -969,10 +971,19 @@ function settle(scene: SceneUnderAudit, surfaceId: string): void {
 /** Longer than any surface's opening motion, so a close button is audited where it comes to rest. */
 const ENTRANCE_MS = motion.slow;
 
-/** Runs frames until the surface's opening motion has played out, on the scene's own clock. */
+/**
+ * Runs frames until the surface's opening motion has played out, on the
+ * scene's own clock, which is `performance.now`. The last frame starts after
+ * the deadline, so however few frames a loaded machine manages in between,
+ * the one audited is drawn with the motion finished.
+ */
 function settleEntrance(scene: SceneUnderAudit, surfaceId: string): void {
-  const start = performance.now();
-  while (performance.now() - start < ENTRANCE_MS && scene.ui.isOpen(surfaceId)) step(scene);
+  const deadline = performance.now() + ENTRANCE_MS;
+  let settledFrameDrawn = false;
+  while (!settledFrameDrawn && scene.ui.isOpen(surfaceId)) {
+    settledFrameDrawn = performance.now() >= deadline;
+    step(scene);
+  }
 }
 
 /**
@@ -1204,6 +1215,53 @@ function menusKitOpeners<S>(menusOf: (scene: S) => MenusKit): Opener<S>[] {
   ];
 }
 
+/** The show AI's question and sponsor break, and, where the scene runs challenges, its offer card. */
+function aiShowOpeners<S>(
+  stageOf: (scene: S) => AIShowStage,
+  challengesOf: ((scene: S) => AIChallengeSystem) | null,
+): Opener<S>[] {
+  const openers = [
+    opener<S>(
+      'ai-question',
+      (scene) =>
+        void stageOf(scene).ask({
+          question: 'Audit: save the cat or the loot?',
+          choices: ['The cat', 'The loot'],
+          askedBy: 'System',
+        }),
+      (scene) => stageOf(scene).dismissQuestion(),
+    ),
+    opener<S>(
+      'ai-sponsor',
+      (scene) =>
+        stageOf(scene).runSponsorBreak({ sponsor: 'Audit Pellets', message: 'NOW AUDITED.' }),
+      (scene) => stageOf(scene).endSponsorBreak(true),
+    ),
+  ];
+  if (challengesOf === null) return openers;
+  return [
+    ...openers,
+    opener<S>(
+      'ai-challenge-offer',
+      (scene) =>
+        void challengesOf(scene).propose({
+          template: 'untouched',
+          title: 'Audit',
+          count: 1,
+          mobType: 'any',
+          seconds: SAMPLE_CHALLENGE_SECONDS,
+          rewardTier: 'Bronze',
+          pitch: '',
+          taunt: 'Audited.',
+          offeredBy: 'System',
+        }),
+      (scene) => stageOf(scene).declineChallenge(),
+    ),
+  ];
+}
+
+const SAMPLE_CHALLENGE_SECONDS = 60;
+
 function townOpeners(): Opener<Town>[] {
   const menu = opener<Town>;
   const briar = (scene: Town) => {
@@ -1223,6 +1281,10 @@ function townOpeners(): Opener<Town>[] {
   };
   return [
     ...menusKitOpeners<Town>((scene) => scene['menus']),
+    ...aiShowOpeners<Town>(
+      (scene) => scene['aiShow'],
+      (scene) => scene['aiChallenges'],
+    ),
     menu(
       'wipe-hold',
       (scene) =>
@@ -1452,8 +1514,9 @@ function townOpeners(): Opener<Town>[] {
     menu(
       'prison-difficulty',
       (scene) => {
-        const door = scene['gameMap'].buildingEntries[0];
-        if (door === undefined) throw new Error('the town has no door to stand the picker on');
+        const doors = scene['gameMap'].buildingEntries;
+        if (doors.length === 0) throw new Error('the town has no door to stand the picker on');
+        const door = doors[0];
         scene['prisonDifficulty'].open({ activity: door.name, onPick: noop });
       },
       (scene) => scene['prisonDifficulty'].cancel(),
@@ -1650,6 +1713,7 @@ function roomOpeners(): Opener<Interior>[] {
   const menu = opener<Interior>;
   return [
     ...menusKitOpeners<Interior>((scene) => scene['menus']),
+    ...aiShowOpeners<Interior>((scene) => scene['aiShow'], null),
     menu(
       'conversation',
       (scene) => void scene['conversation'].open(haltingRequest()),

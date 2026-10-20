@@ -9,6 +9,9 @@ dotenv.config({ path: path.resolve(__dirname, '../.env') });
 
 const serve = process.argv.includes('--serve');
 
+/** Where the AI server listens when `.env` names none: the local dev server. */
+const DEFAULT_AI_SERVER_URL = 'http://localhost:3001';
+
 // Dev serving keeps readable output so stack traces point at real source lines;
 // only the shipped bundle is minified.
 const minify = !serve;
@@ -50,11 +53,15 @@ const opts = {
   // function names must survive minification.
   keepNames: minify,
   legalComments: 'none',
-  alias: { ws: './src/ai/ws-stub.ts' },
   plugins: [devBootStub],
+  // The AI SDK loads the Node `ws` package only when there is no global
+  // WebSocket; a browser always has one, so it must never be bundled.
+  external: ['ws'],
   define: {
-    __AI_CLIENT_ID__: JSON.stringify(process.env.AI_CLIENT_ID ?? ''),
-    __AI_CLIENT_SECRET__: JSON.stringify(process.env.AI_CLIENT_SECRET ?? ''),
+    // Only public values belong here: whatever is defined is readable by anyone
+    // who loads the game. The AI credential stays on the game server, which
+    // signs player tokens at /api/ai-token.
+    __AI_SERVER_URL__: JSON.stringify(process.env.AI_SERVER_URL ?? DEFAULT_AI_SERVER_URL),
     __AI_ENABLED__: process.env.AI_ENABLED === 'true' ? 'true' : 'false',
     __DEV_BUILD__: devBoot ? 'true' : 'false',
   },

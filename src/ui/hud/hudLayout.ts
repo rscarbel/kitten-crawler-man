@@ -18,6 +18,7 @@ import { resolveTheme, type Density, type Theme } from '../theme/tokens';
 import { hudButtonLayout, type HudButtonRects } from './hudButtonLayout';
 import type { CaptionAnchor } from './captions';
 import type { PackSize } from './hudPacking';
+import { FAVOR_PILL_MIN_W } from './viewerFavorPill';
 
 /** The minimap's side, by screen size and whether the player has expanded it. */
 const MINIMAP_SIDE: Readonly<
@@ -140,6 +141,13 @@ export interface HudGeometry {
    * compact screen; null where the timer is a card in the top band.
    */
   readonly levelTimerChip: Rect | null;
+  /**
+   * The room left on the readout row, inside the frames' width, for the
+   * viewers' favour pill; null where the row has none, and the favour rides
+   * in the top band instead. Never widens the frames block, so the dock and
+   * the band are laid out the same with the pill or without it.
+   */
+  readonly favor: Rect | null;
   readonly miniMap: Rect;
   /** The minimap's square at its normal size: the part no button or bar ever covers. */
   readonly normalMiniMap: Rect;
@@ -337,6 +345,10 @@ export function hudLayout(opts: HudLayoutOptions): HudGeometry {
     w: Math.max(metrics.activeW, readoutRight - left),
     h: coins.y + coins.h - top,
   };
+  const favorLeft = readoutRight + space.xs;
+  const favorRoom = framesBlock.x + framesBlock.w - favorLeft;
+  const favor: Rect | null =
+    favorRoom >= FAVOR_PILL_MIN_W ? { x: favorLeft, y: coins.y, w: favorRoom, h: coins.h } : null;
 
   const hotbar = hotbarRects(theme, viewport, margin);
   const button = theme.size.control;
@@ -405,6 +417,7 @@ export function hudLayout(opts: HudLayoutOptions): HudGeometry {
     framesBlock,
     coins,
     levelTimerChip,
+    favor,
     miniMap,
     normalMiniMap,
     buttons,

@@ -5,7 +5,7 @@
  */
 
 import type { AchievementManager, BoxContents, LootBox } from '../core/AchievementManager';
-import type { AchievementDef } from '../core/AchievementManager';
+import type { AwardDef } from '../core/AchievementManager';
 import { ACHIEVEMENT_DEFS, getBoxContents } from '../core/AchievementManager';
 import { AchievementNotification } from '../ui/AchievementNotification';
 import { LootBoxOpener } from '../ui/LootBoxOpener';
@@ -21,7 +21,7 @@ import { ACTIVATE_KEYS, UI_TAP_SOUND, type Surface } from '../ui/core/UiRoot';
 import type { LootBannerModel } from '../ui/hud/hudModel';
 
 interface QueueEntry {
-  def: AchievementDef;
+  def: AwardDef;
   mgr: AchievementManager;
   player: 'Human' | 'Cat';
 }
@@ -39,6 +39,16 @@ export class AchievementUISystem {
    * state immediately after the normal loot box opener finishes.
    */
   onAllBoxesOpened: (() => void) | null = null;
+  /** Told as each box's contents are paid out to its owner. */
+  onBoxOpened:
+    | ((opened: { owner: HumanPlayer | CatPlayer; box: LootBox; contents: BoxContents }) => void)
+    | null = null;
+  /**
+   * What every box's coins are multiplied by when it opens: the viewers'
+   * favour bonus where the scene has one. Read as each box opens, so the
+   * reveal shows the coins that are actually paid.
+   */
+  boxCoinMultiplier: () => number = () => 1;
 
   constructor(
     private readonly humanAchievements: AchievementManager,
@@ -208,6 +218,7 @@ export class AchievementUISystem {
       (box) => this.contentsFor(box),
       (box, contents) => {
         mgr.openBox(box.id);
+        this.onBoxOpened?.({ owner: target, box, contents });
         if (contents.potions) {
           target.inventory.addItem('health_potion', contents.potions);
           this.rewardFly.enqueueItem(
@@ -267,7 +278,8 @@ export class AchievementUISystem {
    * from the shared bonus so the reveal shows both.
    */
   private contentsFor(box: LootBox): BoxContents {
-    const base = getBoxContents(box.tier, box.category);
+    const shared = getBoxContents(box.tier, box.category);
+    const base = { ...shared, coins: Math.round(shared.coins * this.boxCoinMultiplier()) };
     const achievementRewards =
       box.fromAchievement === null ? [] : (ACHIEVEMENT_DEFS[box.fromAchievement].itemRewards ?? []);
     const itemRewards = [...achievementRewards, ...(box.itemRewards ?? [])];

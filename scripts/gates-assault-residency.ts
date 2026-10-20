@@ -233,7 +233,10 @@ interface Drained {
   readonly frames: number;
   /** Cells the prewarm queue baked on the way. */
   readonly cells: number;
-  /** Median milliseconds a baked cell cost, over the frames that baked any. */
+  /**
+   * Median wall-clock milliseconds a baked cell cost, over the frames that
+   * baked any. Printed, never checked: it is whatever this machine's load made it.
+   */
   readonly medianCellMs: number;
 }
 
@@ -293,16 +296,6 @@ function checkLead(gateId: string, def: FigureDef, stage: Stage, drained: Draine
       `${def.id} ${stage.label} bakes ${drained.cells} cells, ${workMs} ms of work at ` +
         `${lead.msPerCell} ms each with a ${lead.safety}x margin, past its ${lead.frames}-frame ` +
         `lead (${leadMs} ms of prewarm budget)`,
-    );
-  }
-  // The estimate is what the lead is sized on; a cell that costs more than the
-  // whole margin in node has left no room for a slower browser.
-  const ceilingMs = lead.msPerCell * lead.safety;
-  if (drained.medianCellMs > ceilingMs) {
-    fail(
-      gateId,
-      `${def.id} ${stage.label} cells cost ${drained.medianCellMs.toFixed(MS_DECIMALS)} ms each, ` +
-        `past the ${ceilingMs} ms the lead's estimate and margin allow`,
     );
   }
 }

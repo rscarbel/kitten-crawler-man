@@ -49,7 +49,8 @@ export type MusicClaimOwner =
   | 'boss'
   | 'tower_finale'
   | 'keyboard_hero'
-  | 'player';
+  | 'player'
+  | 'ai_director';
 
 export interface MusicClaim {
   readonly owner: MusicClaimOwner;

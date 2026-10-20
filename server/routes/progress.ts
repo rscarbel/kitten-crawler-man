@@ -1,26 +1,31 @@
 import { Router } from 'express';
-import type { Response } from 'express';
+import type { Request, Response } from 'express';
 import db from '../db.js';
-import { requireAuth } from '../middleware/auth.js';
-import type { AuthedRequest } from '../middleware/auth.js';
+import { HTTP_STATUS } from '../httpStatus.js';
+import { authedUser, isRecord, requireAuth } from '../middleware/auth.js';
 
 const router = Router();
 router.use(requireAuth);
 
-router.get('/', (req: AuthedRequest, res: Response) => {
-  const { id } = req.user;
-  const row = db.prepare('SELECT data FROM progress WHERE user_id = ?').get(id) as
-    { data: string } | undefined;
+function savedData(row: unknown): unknown {
+  if (!isRecord(row) || typeof row.data !== 'string') return null;
+  const parsed: unknown = JSON.parse(row.data);
+  return parsed;
+}
 
-  res.json({ data: row ? (JSON.parse(row.data) as unknown) : null });
+router.get('/', (req: Request, res: Response) => {
+  const { id } = authedUser(req);
+  const row: unknown = db.prepare('SELECT data FROM progress WHERE user_id = ?').get(id);
+  res.json({ data: savedData(row) });
 });
 
-router.post('/', (req: AuthedRequest, res: Response) => {
-  const { id } = req.user;
-  const { data } = req.body as { data?: unknown };
+router.post('/', (req: Request, res: Response) => {
+  const { id } = authedUser(req);
+  const body: unknown = req.body;
+  const data = isRecord(body) ? body.data : undefined;
 
-  if (!data || typeof data !== 'object') {
-    res.status(400).json({ error: 'data must be an object' });
+  if (!isRecord(data)) {
+    res.status(HTTP_STATUS.BAD_REQUEST).json({ error: 'data must be an object' });
     return;
   }
 
@@ -37,8 +42,8 @@ router.post('/', (req: AuthedRequest, res: Response) => {
   res.json({ ok: true });
 });
 
-router.delete('/', (req: AuthedRequest, res: Response) => {
-  const { id } = req.user;
+router.delete('/', (req: Request, res: Response) => {
+  const { id } = authedUser(req);
   db.prepare('DELETE FROM progress WHERE user_id = ?').run(id);
   res.json({ ok: true });
 });

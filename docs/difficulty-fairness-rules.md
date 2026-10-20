@@ -549,6 +549,51 @@ FIREBALL_FLIGHT_FRAMES`, so a crawler standing dead on the landing who starts
 
 ---
 
+## The show AI's interventions
+
+Every action the show's AI takes (`src/ai/actions/`) passes the `ActionGovernor`
+(`governor.ts`) before it runs, whatever the server already allowed. The AI may
+pressure a crawler; it never ambushes a beaten one:
+
+- **Two HP shields.** Nothing that spawns hostiles or harms the party runs while
+  either crawler is down or under `LOW_HP_FRACTION` of their health. During a
+  fight the line rises to `HURT_IN_COMBAT_FRACTION`: a party already losing a
+  fight is not piled on. Help (heals, cures, buffs) is never held back. Both lines
+  are written into the tool descriptions the model reads.
+- **Nothing the AI does finishes a crawler.** HP actions stop at the low-HP line,
+  a constitution cut that would cross it is undone, and a damage-over-time status
+  is refused when everything already eating the crawler's HP (blood vomiting
+  included) would carry them under it.
+- **No spawns in menus, boss fights, safe rooms or indoors**, none closer than
+  `MIN_SPAWN_DISTANCE_TILES`, and every spawn levelled once inside the floor's
+  own band (P5).
+- **Limits.** Per-action cooldowns, per-floor caps, no stacking stat changes, and
+  per-floor budgets for spawns, gifts, fines, loot boxes and clock changes, kept
+  across reloads and shared with every building on the floor.
+
+## The show AI's challenges and favour
+
+The show's AI may set a challenge (`offer_challenge`) and move the viewers'
+favour (`viewer_reaction`). Both are held to the rules above:
+
+- **A challenge only puts its own box at stake.** It never stops the crawlers
+  doing anything: drinking a potion during a no-potion challenge simply fails
+  it. The worst a challenge costs is the reward and a taunt.
+- **Offers are fair when made.** None while either crawler is under a quarter
+  of their health, mid-fight or in a boss fight; one at a time; a few per
+  floor; and each template is checked for being winnable from where the party
+  stands (enough of the named creature alive, at least
+  `CHALLENGE_MIN_SECONDS_PER_KILL` per kill, time for the walk to the stairs,
+  no status already eating HP under a no-damage rule, a living boss for the
+  potion fast). Templates and their bounds live in `src/ai/show/challenges.ts`;
+  the clock counts gameplay frames, so it stops whenever the world does.
+- **Favour only ever helps.** From `FAVOR_PERKS`' thresholds up
+  (`src/core/viewerFavor.ts`) loot boxes pay a little more coin; at the bottom
+  of the meter nothing is taken away. One reaction moves it at most
+  `FAVOR_SWING_MAX`.
+
+Gate: `npm run verify:ai-actions`.
+
 ## Deliberately out of bounds
 
 Changes that would undo the above, and are not to be made without a decision to change

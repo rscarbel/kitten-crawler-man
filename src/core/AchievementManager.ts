@@ -1,6 +1,8 @@
+import { displayNameOf } from '../ai/AIChatFeed';
 import { randomInt } from '../utils';
 import { isItemId, type ItemId } from './ItemDefs';
 import { isRecord } from './guards';
+import { plainLine } from './plainText';
 
 const BRONZE_ADVENTURER_POTION_MIN = 1;
 const BRONZE_ADVENTURER_POTION_MAX = 2;
@@ -16,6 +18,15 @@ const RECENT_EVENTS_MAX_CAP = 20;
 /** Sticks of dynamite each explosives achievement hands over. */
 const ACHIEVEMENT_DYNAMITE_STICKS = 5;
 const EVENT_TIMESTAMP_MILLISECONDS_DIVISOR = 1000;
+/**
+ * The most System-authored achievements one crawler keeps. Each floor allows
+ * only a few, so a run never reaches it; it bounds what a tampered save can
+ * make the game hold.
+ */
+export const AI_ACHIEVEMENTS_MAX = 200;
+export const AI_ACHIEVEMENT_TITLE_MAX_CHARS = 60;
+export const AI_ACHIEVEMENT_DESCRIPTION_MAX_CHARS = 160;
+const AI_ACHIEVEMENT_AWARDER_MAX_CHARS = 40;
 
 export interface RecentEvent {
   label: string;
@@ -88,6 +99,54 @@ export interface AchievementDef {
    * inventory rather than always to the human.
    */
   itemRewards?: ReadonlyArray<ItemReward>;
+}
+
+/** The category every achievement the AI writes is filed under. */
+export const AI_ACHIEVEMENT_CATEGORY = 'AI';
+
+/** An AI achievement's identity: its title, folded so that re-wordings of case and spacing match. */
+export type AIAchievementKey = `ai:${string}`;
+
+/**
+ * An achievement the show's AI wrote on the spot: its own title, description
+ * and box tier. Kept beside the built-in ones and shown through the same
+ * notification, chip and Achievements page.
+ */
+export interface AIAchievementDef {
+  readonly id: AIAchievementKey;
+  readonly category: typeof AI_ACHIEVEMENT_CATEGORY;
+  readonly name: string;
+  readonly description: string;
+  readonly lootBox: { readonly tier: BoxTier; readonly category: BoxCategory };
+  /** The character who awarded it. */
+  readonly awardedBy: string;
+  /** Wall-clock milliseconds of the award. */
+  readonly awardedAt: number;
+}
+
+/** Either kind of achievement, as the notification queue and its card take them. */
+export type AwardDef = AchievementDef | AIAchievementDef;
+
+export function isAIAchievementDef(def: AwardDef): def is AIAchievementDef {
+  return 'category' in def;
+}
+
+/** The key an AI achievement titled `title` is stored and deduplicated under. */
+export function aiAchievementKey(title: string): AIAchievementKey {
+  return `ai:${plainLine(title).toLowerCase()}`;
+}
+
+function isAIAchievementKey(value: unknown): value is AIAchievementKey {
+  return typeof value === 'string' && value.startsWith('ai:');
+}
+
+/** What a request to award an AI achievement carries. */
+export interface AIAchievementGrant {
+  readonly title: string;
+  readonly description: string;
+  readonly tier: BoxTier;
+  readonly category: BoxCategory;
+  readonly awardedBy: string;
 }
 
 export const ACHIEVEMENT_DEFS: Record<AchievementId, AchievementDef> = {
@@ -396,23 +455,59 @@ function arrayOrEmpty(value: unknown): unknown[] {
   return Array.isArray(value) ? value : [];
 }
 
+function boundedText(value: unknown, maxChars: number): string | undefined {
+  if (typeof value !== 'string') return undefined;
+  const line = plainLine(value);
+  if (line.length === 0 || line.length > maxChars) return undefined;
+  return line;
+}
+
+function parseAIAchievement(value: unknown): AIAchievementDef | undefined {
+  if (!isRecord(value)) return undefined;
+  const name = boundedText(value.name, AI_ACHIEVEMENT_TITLE_MAX_CHARS);
+  const description = boundedText(value.description, AI_ACHIEVEMENT_DESCRIPTION_MAX_CHARS);
+  const awardedBy = boundedText(value.awardedBy, AI_ACHIEVEMENT_AWARDER_MAX_CHARS);
+  const { lootBox, awardedAt } = value;
+  if (name === undefined || description === undefined || awardedBy === undefined) return undefined;
+  if (!isRecord(lootBox) || !isBoxTier(lootBox.tier) || !isBoxCategory(lootBox.category)) {
+    return undefined;
+  }
+  return {
+    id: aiAchievementKey(name),
+    category: AI_ACHIEVEMENT_CATEGORY,
+    name,
+    description,
+    lootBox: { tier: lootBox.tier, category: lootBox.category },
+    awardedBy,
+    awardedAt: isFiniteNumber(awardedAt) ? awardedAt : 0,
+  };
+}
+
+function copyAIAchievement(def: AIAchievementDef): AIAchievementDef {
+  return { ...def, lootBox: { ...def.lootBox } };
+}
+
 /**
  * One crawler's achievements as a save stores them. Notifications are kept by
  * id rather than by def, so a reworded achievement shows its current text.
  */
 export interface SerializedAchievements {
   unlocked: AchievementId[];
-  pendingNotifications: AchievementId[];
+  pendingNotifications: Array<AchievementId | AIAchievementKey>;
   pendingBoxes: LootBox[];
   nextBoxId: number;
   recentEvents: RecentEvent[];
   menuUnseen: number;
+  /** The AI's achievements, oldest first. Absent on saves written before the AI could award any. */
+  aiAchievements?: AIAchievementDef[];
 }
 
 export class AchievementManager {
   private unlocked = new Set<AchievementId>();
+  /** The AI's achievements by key, in the order they were awarded. */
+  private aiAwards = new Map<AIAchievementKey, AIAchievementDef>();
   /** Queue of achievement defs waiting to be shown as unread (icon badge). */
-  readonly pendingNotifications: AchievementDef[] = [];
+  readonly pendingNotifications: AwardDef[] = [];
   /** Loot boxes accumulated from achievements, awaiting opening in a safe room. */
   readonly pendingBoxes: LootBox[] = [];
   private nextBoxId = 1;
@@ -496,6 +591,42 @@ export class AchievementManager {
     return this.unlocked.has(id);
   }
 
+  /** Whether an AI achievement with this title (ignoring case and spacing) is already held. */
+  hasAIAchievement(title: string): boolean {
+    return this.aiAwards.has(aiAchievementKey(title));
+  }
+
+  /** The AI's achievements, oldest first. */
+  aiAchievements(): readonly AIAchievementDef[] {
+    return [...this.aiAwards.values()];
+  }
+
+  /**
+   * Files an achievement the AI wrote under the AI category, queues its
+   * notification and its loot box like any unlock, and returns it. Null when
+   * this crawler already holds one by that title, or holds as many as
+   * {@link AI_ACHIEVEMENTS_MAX}.
+   */
+  grantAIAchievement(grant: AIAchievementGrant): AIAchievementDef | null {
+    const id = aiAchievementKey(grant.title);
+    if (this.aiAwards.has(id) || this.aiAwards.size >= AI_ACHIEVEMENTS_MAX) return null;
+    const def: AIAchievementDef = {
+      id,
+      category: AI_ACHIEVEMENT_CATEGORY,
+      name: plainLine(grant.title),
+      description: plainLine(grant.description),
+      lootBox: { tier: grant.tier, category: grant.category },
+      awardedBy: grant.awardedBy,
+      awardedAt: Date.now(),
+    };
+    this.aiAwards.set(id, def);
+    this.pendingNotifications.push(def);
+    this.menuUnseen++;
+    this.grantBox(grant.tier, grant.category, null);
+    this.logRecentEvent(`Awarded "${def.name}" by ${displayNameOf(grant.awardedBy)}`);
+    return def;
+  }
+
   /** Returns all achievement defs paired with their unlock status, in definition order. */
   getAllAchievements(): Array<{ def: AchievementDef; unlocked: boolean }> {
     return Object.keys(ACHIEVEMENT_DEFS)
@@ -508,9 +639,10 @@ export class AchievementManager {
 
   /**
    * Directly grant a loot box without requiring a new achievement unlock.
-   * Use when the achievement is already earned but the box should still be awarded.
+   * Use when the achievement is already earned but the box should still be awarded,
+   * or pass null for a box no achievement earned (an AI director's gift).
    */
-  grantBox(tier: BoxTier, category: BoxCategory, fromAchievement: AchievementId): void {
+  grantBox(tier: BoxTier, category: BoxCategory, fromAchievement: AchievementId | null): void {
     this.pendingBoxes.push({
       id: this.nextBoxId++,
       tier,
@@ -534,6 +666,9 @@ export class AchievementManager {
   clone(): AchievementManager {
     const copy = new AchievementManager();
     copy.unlocked = new Set(this.unlocked);
+    copy.aiAwards = new Map(
+      [...this.aiAwards].map(([key, def]) => [key, copyAIAchievement(def)] as const),
+    );
     copy.pendingNotifications.push(...this.pendingNotifications);
     copy.pendingBoxes.push(...this.pendingBoxes.map(copyLootBox));
     copy.nextBoxId = this.nextBoxId;
@@ -550,6 +685,7 @@ export class AchievementManager {
       nextBoxId: this.nextBoxId,
       recentEvents: this.recentEvents.map((event) => ({ ...event })),
       menuUnseen: this.menuUnseen,
+      aiAchievements: [...this.aiAwards.values()].map(copyAIAchievement),
     };
   }
 
@@ -563,8 +699,18 @@ export class AchievementManager {
     const manager = new AchievementManager();
     if (!isRecord(value)) return manager;
     manager.unlocked = new Set(arrayOrEmpty(value.unlocked).filter(isAchievementIdValue));
-    const notifications = arrayOrEmpty(value.pendingNotifications).filter(isAchievementIdValue);
-    manager.pendingNotifications.push(...notifications.map((id) => ACHIEVEMENT_DEFS[id]));
+    const aiAwards = arrayOrEmpty(value.aiAchievements)
+      .map(parseAIAchievement)
+      .filter((def) => def !== undefined)
+      .slice(0, AI_ACHIEVEMENTS_MAX);
+    manager.aiAwards = new Map(aiAwards.map((def) => [def.id, def] as const));
+    for (const id of arrayOrEmpty(value.pendingNotifications)) {
+      if (isAchievementIdValue(id)) manager.pendingNotifications.push(ACHIEVEMENT_DEFS[id]);
+      else if (isAIAchievementKey(id)) {
+        const award = manager.aiAwards.get(id);
+        if (award !== undefined) manager.pendingNotifications.push(award);
+      }
+    }
     const boxes = arrayOrEmpty(value.pendingBoxes)
       .map(parseLootBox)
       .filter((box) => box !== undefined);
@@ -589,6 +735,9 @@ export class AchievementManager {
    */
   restoreFrom(other: AchievementManager): void {
     this.unlocked = new Set(other.unlocked);
+    this.aiAwards = new Map(
+      [...other.aiAwards].map(([key, def]) => [key, copyAIAchievement(def)] as const),
+    );
     this.pendingNotifications.length = 0;
     this.pendingNotifications.push(...other.pendingNotifications);
     this.pendingBoxes.length = 0;

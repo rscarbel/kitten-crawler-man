@@ -254,6 +254,35 @@ const CLOSED_SHOP_OPTIONS: ShopOpenOptions = {
   liveRows: false,
 };
 
+/** A completed purchase or sale, as reported to `onShopTrade` listeners. */
+export type ShopTrade =
+  | { kind: 'buy'; crawler: Player; item: string; coins: number; shop: string }
+  | { kind: 'sell'; crawler: Player; item: string; quantity: number; coins: number; shop: string };
+
+export type ShopTradeListener = (trade: ShopTrade) => void;
+
+/**
+ * Every listener is told of every trade at every counter. Sessions are built
+ * by many systems (stores, the club, the village, travel), none of which holds
+ * the scene's bus, so the scene listens here instead of hooking each one.
+ */
+const tradeListeners = new Set<ShopTradeListener>();
+
+/**
+ * Listens to every purchase that went through and every sale of at least one
+ * unit, at every shop counter. Returns the unsubscribe function.
+ */
+export function onShopTrade(listener: ShopTradeListener): () => void {
+  tradeListeners.add(listener);
+  return () => {
+    tradeListeners.delete(listener);
+  };
+}
+
+function reportTrade(trade: ShopTrade): void {
+  for (const listener of tradeListeners) listener(trade);
+}
+
 export class ShopSession {
   private menu: ShopMenu | null = null;
   private build: ShopMenuBuilder | null = null;
@@ -381,6 +410,13 @@ export class ShopSession {
       spendPartyCoins(party.active, party.companion, costCoins(cost), party.active);
       spend(party.active, party.companion, costMaterials(cost), party.active);
       this.rebuyGuardLeft = this.options.rebuyGuardTicks;
+      reportTrade({
+        kind: 'buy',
+        crawler: party.active,
+        item: option.label,
+        coins: costCoins(cost),
+        shop: this.menu?.title ?? '',
+      });
     }
     if (this.purchase === null) return;
     this.rebuildMenu();
@@ -449,6 +485,14 @@ export class ShopSession {
     this.rebuildMenu();
     this.showFeedback(`Sold ${what} for ${earned} coins.`);
     if (sell.onSold !== null) sell.onSold();
+    reportTrade({
+      kind: 'sell',
+      crawler: seller,
+      item: name,
+      quantity: sold,
+      coins: earned,
+      shop: this.menu?.title ?? '',
+    });
     return sold;
   }
 

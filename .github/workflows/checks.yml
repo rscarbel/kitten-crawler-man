@@ -21,6 +21,7 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: read
+      packages: read # the AI SDK comes from GitHub Packages
     steps:
       - uses: actions/checkout@v4
         with:
@@ -31,9 +32,14 @@ jobs:
         with:
           node-version: 24
           cache: npm
+          registry-url: https://npm.pkg.github.com
+          scope: '@rscarbel'
 
+      # GitHub Packages wants a token even for public packages.
       - name: Install dependencies
         run: npm ci
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Typecheck, lint, format, UI style, audio (uncached)
         run: npm run check:ci

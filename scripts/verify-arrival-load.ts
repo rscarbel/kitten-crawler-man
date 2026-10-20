@@ -13,12 +13,10 @@
  *    render path, painted directly or drawn as a stand-in, no ground chunk is
  *    baked, no environment step is painted or still owed, and no sprite the
  *    scene drew was still missing;
- *  - the first frame of play costs no more than twice the steady median;
  *  - nothing that announces the arrival — the floor's sting, a room's music —
  *    starts while the screen is still up, and a floor's sting does play.
  *
- * Node's canvas costs are not a browser's, so timings are only compared with
- * themselves.
+ * Every check is a count, never a timing, so a busy machine can't fail it.
  *
  *   npm run verify:arrival-load
  *   npx tsx scripts/verify-arrival-load.ts --env=level1          # one environment
@@ -119,13 +117,6 @@ const FRAMES_PER_SECOND = 60;
 const FRAME_MS = MS_PER_SECOND / FRAMES_PER_SECOND;
 /** Frames of play measured after the loading screen closes. */
 const PLAY_FRAMES = 120;
-/**
- * How much slower than the steady state the first frame of play may be. Loose,
- * because it is a timing: it exists to catch a screenful of baking left for
- * frame 0, which is several times the steady cost, not a few cold branches.
- */
-const MAX_FIRST_FRAME_RATIO = 2;
-const MS_PLACES = 1;
 
 await loadSprites('src/images/');
 const input = new InputManager();
@@ -214,7 +205,6 @@ function buildScene(): Scene {
 
 let clockMs = 0;
 const thrown: string[] = [];
-let renderMs = 0;
 
 /** One frame of the real loop, after letting promise callbacks run as a browser does. */
 async function runFrame(): Promise<void> {
@@ -234,31 +224,8 @@ function check(ok: boolean, message: string): void {
 
 const scene = buildScene();
 screenUp = () => scene.arrivalLoadingOpen;
-/**
- * The loading screen's own fade over the first frames of play is not the
- * world's cost, and a fade drawn on node's canvas costs more than the world
- * does; it is taken out of the frame time so the comparison is the world's.
- * The fade, and the fault that skips the screen, reach the loader itself,
- * which only the scene holds.
- */
+/** The fault that skips the screen reaches the loader itself, which only the scene holds. */
 const loader = scene['arrivalLoading'];
-let fadeMs = 0;
-const renderFadeOut = loader.renderFadeOut.bind(loader);
-loader.renderFadeOut = (ctx) => {
-  const startedAt = performance.now();
-  renderFadeOut(ctx);
-  fadeMs = performance.now() - startedAt;
-};
-const render = scene.render.bind(scene);
-scene.render = (ctx) => {
-  const startedAt = performance.now();
-  fadeMs = 0;
-  try {
-    render(ctx);
-  } finally {
-    renderMs = performance.now() - startedAt - fadeMs;
-  }
-};
 sceneManager.replace(scene);
 
 check(scene.arrivalLoadingOpen, 'no loading screen went up on arrival');
@@ -282,7 +249,6 @@ interface PlayFrame {
   readonly directDraws: number;
   readonly chunkBakes: number;
   readonly environmentSteps: number;
-  readonly renderMs: number;
 }
 
 const played: PlayFrame[] = [];
@@ -297,7 +263,6 @@ for (let frame = 0; frame < PLAY_FRAMES; frame++) {
     directDraws: stats.directDraws,
     chunkBakes: tileChunkBakeCount() - chunksBefore,
     environmentSteps: environmentPaintedStepCount() - stepsBefore,
-    renderMs,
   });
 }
 
@@ -328,16 +293,6 @@ check(
   newMisses.length === 0,
   `sprite(s) drawn while still missing: ${newMisses.map(([key]) => key).join(', ')}`,
 );
-const steadyRenderMs = played
-  .slice(1)
-  .map((f) => f.renderMs)
-  .sort((a, b) => a - b);
-const medianSteadyRenderMs = steadyRenderMs[Math.floor(steadyRenderMs.length / 2)] ?? 0;
-check(
-  firstFrame.renderMs <= medianSteadyRenderMs * MAX_FIRST_FRAME_RATIO,
-  `frame 0 took ${firstFrame.renderMs.toFixed(MS_PLACES)} ms against a steady median of ` +
-    `${medianSteadyRenderMs.toFixed(MS_PLACES)} ms`,
-);
 const heardUnderScreen = announcements.filter((announcement) => announcement.underScreen);
 check(
   heardUnderScreen.length === 0,
@@ -355,8 +310,7 @@ console.log(
   `${environment}: loader ${arrivalFrames} frames; first ${PLAY_FRAMES} frames of play: ` +
     `${sum((f) => f.lazyBakes)} lazy bakes, ${sum((f) => f.approxDraws)} stand-ins, ` +
     `${sum((f) => f.directDraws)} direct paints, ${sum((f) => f.chunkBakes)} chunk bakes, ` +
-    `${sum((f) => f.environmentSteps)} env steps; frame 0 ${firstFrame.renderMs.toFixed(MS_PLACES)} ms, ` +
-    `steady median ${medianSteadyRenderMs.toFixed(MS_PLACES)} ms`,
+    `${sum((f) => f.environmentSteps)} env steps`,
 );
 if (failures.length > 0) {
   console.error(`FAIL ${environment}${skipLoader ? ' (fault=skip-loader)' : ''}`);

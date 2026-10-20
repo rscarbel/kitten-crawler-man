@@ -405,7 +405,9 @@ host lifts it over its own panels. Mount both.
 - **`HudModel`**: `crawlers` (active first), `activeCrawler`, `coins`,
   `skillPoints`, `minimap` (`MinimapModel` with its own `paint`, `toggle`,
   `pan?`), `dock`, `summon`, `lootBanner`, `hotbar`, `topBand`, `levelTimer`
-  (`{ frames, paused } | null`; the HUD decides chip or band card).
+  (`{ frames, paused } | null`; the HUD decides chip or band card) and
+  `favor` (the viewers' favour: a pill on the readout row in the room
+  `HudGeometry.favor` leaves inside the frames' width, else a band card).
 - **Dock:** `DockButtonModel { id, icon, label, key?, badge?, selected?, pulse?, bounce?, onTap }`.
   Buttons fire on release. `hudButtonLayout` fixes the column order (Pause, Bag,
   Build, achievement chip, Journal, then a scene's `extras`, which never shift

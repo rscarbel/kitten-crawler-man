@@ -3,7 +3,8 @@
  * a quiet moment with skill points to spend and toasts up, a boss fight with
  * the top band full and statuses ticking, the safe room's call to collect,
  * a building with its room-name banner, the sound captions beside a toast and
- * a credit card, and a hotbar slot's tooltip read over the open bag.
+ * a credit card, a hotbar slot's tooltip read over the open bag, and the AI
+ * panel online (a question with reply buttons) and offline.
  */
 
 import { HOTBAR_COUNT, ITEM_DEF, type InventoryItem, type ItemId } from '../../core/ItemDefs';
@@ -11,6 +12,12 @@ import { DOOMSDAY_CONTAIN_OBJECTIVE } from '../../core/DoomsdayProgress';
 import { CONTAINMENT_LABEL, doomsdayCountdownEntry } from '../../systems/DoomsdayEscapeSystem';
 import type { Rect } from '../../ui/core/geom';
 import type { Surface } from '../../ui/core/UiRoot';
+import { AIChatFeed } from '../../ai/AIChatFeed';
+import { SYSTEM_CHARACTER_NAME } from '../../ai/characters';
+import { aiPanelSurface } from '../../ui/hud/aiPanel';
+import { aiChallengeBandEntry } from '../../ui/hud/aiChallengeBand';
+import type { ViewerFavorModel } from '../../ui/hud/viewerFavorPill';
+import { FAVOR_MAX, favorPerk, favorTier } from '../../core/viewerFavor';
 import { HudSurface } from '../../ui/hud/HudSurface';
 import type {
   DockButtonModel,
@@ -328,6 +335,10 @@ interface HudFixtureSpec {
   readonly lootBanner: boolean;
   readonly toasts: FixtureToasts;
   readonly expanded: boolean;
+  /** Fills the AI panel; absent leaves it unmounted. */
+  readonly ai?: (feed: AIChatFeed) => void;
+  /** The viewers' favour meter; absent hides it, as before the AI first moves it. */
+  readonly favor?: ViewerFavorModel;
 }
 
 function hudFixture(spec: HudFixtureSpec): DialogFixture {
@@ -417,6 +428,7 @@ function hudFixture(spec: HudFixtureSpec): DialogFixture {
           spec.levelTimerFrames === undefined
             ? null
             : { frames: spec.levelTimerFrames, paused: false },
+        favor: spec.favor ?? null,
       });
       const hud = new HudSurface({
         id: `hud-${spec.name}`,
@@ -427,6 +439,21 @@ function hudFixture(spec: HudFixtureSpec): DialogFixture {
         captions: () => captions,
       });
       const surfaces: Surface[] = [hud, hud.overlay()];
+      const fillAI = spec.ai;
+      if (fillAI !== undefined) {
+        const feed = new AIChatFeed();
+        fillAI(feed);
+        surfaces.splice(
+          1,
+          0,
+          aiPanelSurface({
+            id: `ai-panel-${spec.name}`,
+            feed,
+            hudVisible: shown,
+            onChoice: record,
+          }),
+        );
+      }
       return surfaces;
     },
   };
@@ -648,7 +675,111 @@ function hotbarTooltipOverMenu(): DialogFixture {
   };
 }
 
+/** Frames for a streamed message to type out completely before the fixture is drawn. */
+const AI_TYPE_OUT_FRAMES = 120;
+
+function aiOnline(feed: AIChatFeed): void {
+  feed.status = 'online';
+  feed.onChat({
+    messageId: 'fixture-question',
+    characterName: SYSTEM_CHARACTER_NAME,
+    text: 'Crawler! The viewers demand a choice. Fight the goblin champion for a Gold box, or flee and keep your dignity. Such as it is.',
+    done: true,
+    choices: [
+      { id: 'fight', label: 'Fight' },
+      { id: 'flee', label: 'Flee' },
+      { id: 'beg', label: 'Beg for mercy' },
+    ],
+  });
+  for (let frame = 0; frame < AI_TYPE_OUT_FRAMES; frame++) feed.update();
+  feed.onState({
+    characterName: SYSTEM_CHARACTER_NAME,
+    mood: { label: 'amused', intensity: 1 },
+    relationship: { respect: 0 },
+  });
+  feed.onState({
+    characterName: SYSTEM_CHARACTER_NAME,
+    mood: { label: 'amused', intensity: 1 },
+    relationship: { respect: 1 },
+  });
+  feed.addIntervention(SYSTEM_CHARACTER_NAME, 'granted Carl a Bronze Adventurer box');
+}
+
+function aiOffline(feed: AIChatFeed): void {
+  feed.status = 'offline';
+  feed.addScripted(SYSTEM_CHARACTER_NAME, 'Please hold while I pretend to care.');
+  for (let frame = 0; frame < AI_TYPE_OUT_FRAMES; frame++) feed.update();
+}
+
+/** A run the viewers are warming to, just after a cheer. */
+const SHOW_FAVOR_VALUE = 68;
+const SHOW_FAVOR_SWING = 6;
+const SHOW_FAVOR: ViewerFavorModel = {
+  value: SHOW_FAVOR_VALUE,
+  max: FAVOR_MAX,
+  tier: favorTier(SHOW_FAVOR_VALUE),
+  perk: favorPerk(SHOW_FAVOR_VALUE).label,
+  swing: { delta: SHOW_FAVOR_SWING, seq: 1 },
+};
+const SHOW_CHALLENGE_FRAMES_LEFT = 2_580;
+const SHOW_CHALLENGE_FRAMES_LIMIT = 5_400;
+
+function showChallengeEntry(): TopBandEntry {
+  return aiChallengeBandEntry({
+    title: 'Rat Race',
+    objective: 'Kill 5 rats within 90s without taking damage',
+    progress: '2/5',
+    clock: { framesLeft: SHOW_CHALLENGE_FRAMES_LEFT, framesLimit: SHOW_CHALLENGE_FRAMES_LIMIT },
+    urgent: false,
+  });
+}
+
 export const HUD_FIXTURES: readonly DialogFixture[] = [
+  hudFixture({
+    name: 'ai-show',
+    status: [],
+    skillPoints: 0,
+    dockExtras: [],
+    topBand: () => [showChallengeEntry()],
+    lootBanner: false,
+    toasts: 'none',
+    expanded: false,
+    favor: SHOW_FAVOR,
+  }),
+  hudFixture({
+    name: 'ai-show-timed-floor',
+    status: [],
+    skillPoints: 0,
+    dockExtras: [],
+    topBand: () => [showChallengeEntry()],
+    levelTimerFrames: LATE_TIMER_FRAMES,
+    lootBanner: false,
+    toasts: 'none',
+    expanded: false,
+    favor: SHOW_FAVOR,
+  }),
+  hudFixture({
+    name: 'ai-online',
+    status: [],
+    skillPoints: 0,
+    dockExtras: [],
+    topBand: () => [],
+    lootBanner: false,
+    toasts: 'none',
+    expanded: false,
+    ai: aiOnline,
+  }),
+  hudFixture({
+    name: 'ai-offline',
+    status: FIGHT_STATUS,
+    skillPoints: 0,
+    dockExtras: [],
+    topBand: () => [],
+    lootBanner: false,
+    toasts: 'none',
+    expanded: false,
+    ai: aiOffline,
+  }),
   hudFixture({
     name: 'quiet',
     status: [],

@@ -11,9 +11,11 @@ name: Deploy
 # KittenCrawlerManDeployStack, deployed by hand:
 #   AWS_PROFILE=personal-website npx cdk deploy KittenCrawlerManDeployStack
 #
-# Building here rather than from a laptop is also what keeps credentials out of
-# the shipped bundle: scripts/build.js inlines .env values via esbuild `define`,
-# and a runner has no .env, so AI_CLIENT_ID/AI_CLIENT_SECRET compile to "".
+# Building here rather than from a laptop also keeps a laptop's .env out of the
+# shipped bundle: scripts/build.js inlines .env values via esbuild `define`, and
+# a runner has no .env, so AI_ENABLED compiles to false and the static site
+# ships with the AI off. No AI credential is ever inlined; the game server
+# signs player tokens instead.
 
 on:
   push:
@@ -34,6 +36,7 @@ jobs:
     permissions:
       contents: read
       pages: write # actions/configure-pages
+      packages: read # the AI SDK comes from GitHub Packages
     steps:
       - uses: actions/checkout@v4
 
@@ -41,9 +44,14 @@ jobs:
         with:
           node-version: 20
           cache: npm
+          registry-url: https://npm.pkg.github.com
+          scope: '@rscarbel'
 
+      # GitHub Packages wants a token even for public packages.
       - name: Install dependencies
         run: npm ci
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Build site and offline ZIP
         run: npm run build:release

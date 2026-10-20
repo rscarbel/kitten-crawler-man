@@ -8,6 +8,7 @@
  * all — while these settings must work in every boot path.
  */
 
+import { DEFAULT_AI_INTENSITY, isAIIntensity, type AIIntensity } from '../ai/aiIntensity';
 import { MUSIC_TRACK_IDS, type MusicTrackId } from '../audio/sounds';
 import type { Difficulty } from './difficultyProfiles';
 
@@ -118,6 +119,10 @@ interface SettingsData {
   soundCaptions: boolean;
   /** The dotted route painted on the ground toward the pinned objective. */
   questRouteTrail: boolean;
+  /** How much the AI characters may do on their own; sent to the AI server with the session context. */
+  aiIntensity: AIIntensity;
+  /** The "System intervened" line shown when an AI action lands. */
+  aiInterventionIndicators: boolean;
 }
 
 const DEFAULTS: SettingsData = {
@@ -135,6 +140,8 @@ const DEFAULTS: SettingsData = {
   audioInBackground: false,
   soundCaptions: false,
   questRouteTrail: true,
+  aiIntensity: DEFAULT_AI_INTENSITY,
+  aiInterventionIndicators: true,
 };
 
 function isQualityPreset(value: unknown): value is QualityPreset {
@@ -218,6 +225,7 @@ function load(): SettingsData {
   const quality = stored.quality;
   const difficulty = stored.difficulty;
   const uiSize = stored.uiSize;
+  const aiIntensity = stored.aiIntensity;
   const sfxVolume = readVolume(stored, 'sfxVolume', DEFAULTS.sfxVolume);
   return {
     quality: isQualityPreset(quality) ? quality : DEFAULTS.quality,
@@ -235,6 +243,12 @@ function load(): SettingsData {
     audioInBackground: readBoolean(stored, 'audioInBackground', DEFAULTS.audioInBackground),
     soundCaptions: readBoolean(stored, 'soundCaptions', DEFAULTS.soundCaptions),
     questRouteTrail: readBoolean(stored, 'questRouteTrail', DEFAULTS.questRouteTrail),
+    aiIntensity: isAIIntensity(aiIntensity) ? aiIntensity : DEFAULTS.aiIntensity,
+    aiInterventionIndicators: readBoolean(
+      stored,
+      'aiInterventionIndicators',
+      DEFAULTS.aiInterventionIndicators,
+    ),
   };
 }
 
@@ -382,6 +396,24 @@ class Settings {
 
   setQuestRouteTrail(enabled: boolean): void {
     this.data.questRouteTrail = enabled;
+    this.persist();
+  }
+
+  get aiIntensity(): AIIntensity {
+    return this.data.aiIntensity;
+  }
+
+  setAIIntensity(intensity: AIIntensity): void {
+    this.data.aiIntensity = intensity;
+    this.persist();
+  }
+
+  get aiInterventionIndicators(): boolean {
+    return this.data.aiInterventionIndicators;
+  }
+
+  setAIInterventionIndicators(enabled: boolean): void {
+    this.data.aiInterventionIndicators = enabled;
     this.persist();
   }
 

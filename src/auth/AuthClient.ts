@@ -117,6 +117,12 @@ export interface GameProgress {
    * one backfilled from its progress.
    */
   musicLibrary?: SerializedMusicLibrary;
+  /**
+   * The viewers' favour meter, 0–100. Absent until the show's AI first moved
+   * it, and on every save written before it existed; either way the run
+   * carries on at the starting favour with the meter hidden.
+   */
+  viewerFavor?: number;
   savedAt: string;
 }
 

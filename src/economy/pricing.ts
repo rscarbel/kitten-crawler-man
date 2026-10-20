@@ -17,9 +17,12 @@
  *     a bundle costs exactly what buying its units one by one would, before
  *     the discount, so it can never undercut reselling those units singly.
  *  4. **Bundle**, buying a bundle line only: × quantity × (1 − discount).
- *  5. **Buyback**, selling only: the shop pays `DEFAULT_BUYBACK` of its own
+ *  5. **Adjustment**, buying only: a temporary sale or surge
+ *     (`setPriceAdjustment`) while one is running. A sale never goes below
+ *     the most any shop pays back for the item.
+ *  6. **Buyback**, selling only: the shop pays `DEFAULT_BUYBACK` of its own
  *     price, or `SPECIALTY_BUYBACK` for a category in its `specialties`.
- *  6. **Round and clamp**: a buy price rounds to nearest, a sell price rounds
+ *  7. **Round and clamp**: a buy price rounds to nearest, a sell price rounds
  *     up, and neither goes below `MIN_PRICE_COINS`.
  *
  * A sell price is quoted at the stock the shop will hold after taking the
@@ -37,8 +40,22 @@
 
 import { ITEM_DEF, type ItemId } from '../core/ItemDefs';
 import { ITEM_PRICES, type ItemCategory } from './itemPrices';
-import { shopDef, type CatalogBundle, type CatalogLine, type ShopDef, type ShopId } from './shops';
-import { currentStock, normalStockOf, type ShopStock } from './shopStock';
+import {
+  SHOPS,
+  isShopId,
+  shopDef,
+  type CatalogBundle,
+  type CatalogLine,
+  type ShopDef,
+  type ShopId,
+} from './shops';
+import {
+  buyFromShop,
+  createShopStock,
+  currentStock,
+  normalStockOf,
+  type ShopStock,
+} from './shopStock';
 import type { StockCurve } from './stockCurves';
 
 /** What a shop pays for an item outside its specialties, as a fraction of its own buy price. */
@@ -75,6 +92,60 @@ export interface PriceBreakdown {
   readonly unrounded: number;
   /** Rounded, never below MIN_PRICE_COINS, and on the sell side never above the shop's own price for the unit. */
   readonly final: number;
+}
+
+/**
+ * A temporary, shop-wide change to what every shop charges: a sale or a surge
+ * the AI director calls. It moves buy prices only. A sale also caps what a
+ * shop pays, through the rule that a shop never pays more for a unit than it
+ * charges for it, so a discount cannot be bought cheap and sold back dear.
+ */
+export interface PriceAdjustment {
+  /** Shown as the step's label in the price working, e.g. "System sale". */
+  readonly label: string;
+  readonly multiplier: number;
+}
+
+/** Units walked off a shelf when measuring the most a shop pays; past any line's normal stock. */
+const RESALE_SHELF_WALK_UNITS = 64;
+
+/** The furthest a price adjustment can move a price, either way. */
+export const PRICE_ADJUSTMENT_MIN_MULTIPLIER = 0.5;
+export const PRICE_ADJUSTMENT_MAX_MULTIPLIER = 1.5;
+
+let activeAdjustment: {
+  readonly adjustment: PriceAdjustment;
+  readonly expiresAtMs: number;
+} | null = null;
+
+/** Starts a price adjustment for `durationMs`, replacing any already running. */
+export function setPriceAdjustment(
+  adjustment: PriceAdjustment,
+  durationMs: number,
+  nowMs: number = Date.now(),
+): void {
+  const multiplier = Math.min(
+    PRICE_ADJUSTMENT_MAX_MULTIPLIER,
+    Math.max(PRICE_ADJUSTMENT_MIN_MULTIPLIER, adjustment.multiplier),
+  );
+  activeAdjustment = {
+    adjustment: { label: adjustment.label, multiplier },
+    expiresAtMs: nowMs + Math.max(0, durationMs),
+  };
+}
+
+/** The adjustment in force at `nowMs`, or null. */
+export function activePriceAdjustment(nowMs: number = Date.now()): PriceAdjustment | null {
+  if (activeAdjustment === null) return null;
+  if (nowMs >= activeAdjustment.expiresAtMs) {
+    activeAdjustment = null;
+    return null;
+  }
+  return activeAdjustment.adjustment;
+}
+
+export function clearPriceAdjustment(): void {
+  activeAdjustment = null;
 }
 
 /** A step before its running total is known. */
@@ -216,29 +287,97 @@ function roundSell(unrounded: number): number {
   return Math.max(MIN_PRICE_COINS, Math.ceil(unrounded - FLOAT_TOLERANCE));
 }
 
+/**
+ * The most any shop pays for one unit of `item` at any shelf level from full
+ * to bare, with no adjustment running. A sale held at or above it can never be
+ * bought and sold back anywhere, during the sale or after it, for a gain.
+ */
+function highestResalePrice(item: ItemId): number {
+  const cached = highestResaleCache.get(item);
+  if (cached !== undefined) return cached;
+  let highest = 0;
+  for (const shop of Object.keys(SHOPS)) {
+    if (!isShopId(shop)) continue;
+    const shelf = createShopStock();
+    highest = Math.max(highest, breakdown(shop, item, null, shelf, 'sell', null).final);
+    // Scarcity raises what a shop pays, so walk its shelf down to bare.
+    for (let unit = 0; unit < RESALE_SHELF_WALK_UNITS; unit++) {
+      if (!buyFromShop(shelf, shop, item)) break;
+      highest = Math.max(highest, breakdown(shop, item, null, shelf, 'sell', null).final);
+    }
+  }
+  highestResaleCache.set(item, highest);
+  return highest;
+}
+const highestResaleCache = new Map<ItemId, number>();
+
+/**
+ * A buy price under a sale: the discount applied, then held at the item's
+ * {@link highestResalePrice} so the sale is never an arbitrage, and never
+ * above what the line costs without the sale.
+ */
+function saleBreakdown(
+  shop: ShopId,
+  item: ItemId,
+  bundle: CatalogBundle | null,
+  quoted: number,
+  markup: PriceFactor,
+  adjustment: PriceAdjustment,
+): PriceBreakdown {
+  const { base } = ITEM_PRICES[item];
+  const regularFactors =
+    bundle === null
+      ? [markup, stockFactor(shop, item, quoted)]
+      : [markup, bundleStockFactor(shop, item, quoted, bundle), bundleFactor(bundle)];
+  const regular = applyFactors(base, regularFactors);
+  const units = bundle === null ? 1 : bundle.quantity;
+  const resaleFloor = highestResalePrice(item) * units;
+  const regularFinal = roundBuy(regular.unrounded);
+  const discounted = regular.unrounded * adjustment.multiplier;
+  const heldUnrounded = Math.min(regular.unrounded, Math.max(discounted, resaleFloor));
+  const multiplier = regular.unrounded > 0 ? heldUnrounded / regular.unrounded : 1;
+  const { steps, unrounded } = applyFactors(base, [
+    ...regularFactors,
+    { label: adjustment.label, multiplier },
+  ]);
+  return { base, steps, unrounded, final: Math.min(regularFinal, roundBuy(unrounded)) };
+}
+
 function breakdown(
   shop: ShopId,
   item: ItemId,
   bundle: CatalogBundle | null,
   stock: ShopStock,
   side: PriceSide,
+  adjustment: PriceAdjustment | null = activePriceAdjustment(),
 ): PriceBreakdown {
   const { base, category } = ITEM_PRICES[item];
   const quoted = quotedStock(stock, shop, item, side);
   const markup = markupFactor(shopDef(shop), item, category);
   const unitFactors = [markup, stockFactor(shop, item, quoted)];
+  const adjustmentFactors: PriceFactor[] = adjustment === null ? [] : [adjustment];
 
   if (side === 'buy') {
+    if (adjustment !== null && adjustment.multiplier < 1) {
+      return saleBreakdown(shop, item, bundle, quoted, markup, adjustment);
+    }
     const factors =
       bundle === null
-        ? unitFactors
-        : [markup, bundleStockFactor(shop, item, quoted, bundle), bundleFactor(bundle)];
+        ? [...unitFactors, ...adjustmentFactors]
+        : [
+            markup,
+            bundleStockFactor(shop, item, quoted, bundle),
+            bundleFactor(bundle),
+            ...adjustmentFactors,
+          ];
     const { steps, unrounded } = applyFactors(base, factors);
     return { base, steps, unrounded, final: roundBuy(unrounded) };
   }
 
   const { steps, unrounded } = applyFactors(base, [...unitFactors, buybackFactor(shop, item)]);
-  const shopsOwnPriceForTheUnit = roundBuy(applyFactors(base, unitFactors).unrounded);
+  const shopsOwnPriceForTheUnit = roundBuy(
+    applyFactors(base, [...unitFactors, ...adjustmentFactors]).unrounded,
+  );
   const final = Math.min(roundSell(unrounded), shopsOwnPriceForTheUnit);
   return { base, steps, unrounded, final };
 }

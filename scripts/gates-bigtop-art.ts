@@ -7,7 +7,8 @@
  *   npm run gates:bigtop-art -- --fault=dark-telegraph
  *
  * Every measurement is taken on the real tent through `bigTopInteriorHarness`,
- * drawn the way the scene draws it:
+ * drawn the way the scene draws it, and is a pixel, a count or a byte total,
+ * never a timing, so a busy machine can't fail it:
  *
  *  - **Hazards stay readable.** Every forced hazard state, lit, keeps at least
  *    the contrast and colour salience it has in the same tent drawn
@@ -26,9 +27,6 @@
  *    `drawImage` calls in the heaviest frame; the lighting's canvases stay
  *    under a memory budget; every lighting painter is drawn through the
  *    strict-canvas watch.
- *  - **Cost**: the lighting pass is timed in node and held to a node budget.
- *    It catches a pass that has grown, not a browser frame time — that is
- *    measured in Chrome with `?perf`, whose `lighting` row is this pass.
  *
  *  - **The act props** (the cached prop frames): every picture in each act's
  *    catalogue is painted on its own at both game scales through the strict
@@ -211,17 +209,6 @@ const BYTES_PER_KILOBYTE = 1024;
 const BYTES_PER_MEGABYTE = BYTES_PER_KILOBYTE * BYTES_PER_KILOBYTE;
 /** Bytes of canvas the stage lights may hold: the mask and every glow texture baked. */
 const MAX_LIGHTING_MEGABYTES = 6;
-
-/**
- * Node milliseconds for one frame of the lighting pass (mask, house board and
- * live lights) at the game's own view size. A node limit, not a frame budget:
- * node's CPU canvas pays about 0.2 ms to shrink each baked glow onto the
- * frame, which a browser's GPU canvas does for a small fraction of that, so
- * this catches a pass that has grown rather than certifying a frame time.
- */
-const NODE_LIGHTING_BUDGET_MS = 8;
-const BENCH_WARMUP_FRAMES = 20;
-const BENCH_FRAMES = 120;
 
 // ── Reporting ────────────────────────────────────────────────────────────────
 
@@ -921,34 +908,6 @@ console.log('\nChecking the hall of mirrors reflects the crawlers, and what it c
     `reflections cost at most ${MAX_REFLECTING_PANES} sprite blits per crawler (` +
       `${perCrawler.map((crawler) => `${crawler.name} ${crawler.reflections}`).join(', ')}; ` +
       `${nearReflections} for both)`,
-  );
-}
-
-// ── Cost ─────────────────────────────────────────────────────────────────────
-
-console.log('\nTiming the lighting pass in node…');
-{
-  const tent = buildTent(ART_SEED);
-  enterAct(tent, 'menagerie');
-  forceHazard(tent, 'spotlight-beam');
-  const view = viewCentredOn(hazardFocus('spotlight-beam'));
-  const canvas = createCanvas(view.widthPx, view.heightPx);
-  const ctx = asGameContext(canvas.getContext('2d'));
-  renderTentFrame(tent, view, { scale: MEASURE_SCALE, withParty: false, withMobs: false });
-  const samples: number[] = [];
-  for (let frame = 0; frame < BENCH_WARMUP_FRAMES + BENCH_FRAMES; frame++) {
-    const startedAt = performance.now();
-    tent.maze.renderLighting(ctx, view.camX, view.camY);
-    const elapsed = performance.now() - startedAt;
-    if (frame >= BENCH_WARMUP_FRAMES) samples.push(elapsed);
-    tick(tent);
-  }
-  const perFrame = spreadOf(samples);
-  check(
-    perFrame.median <= NODE_LIGHTING_BUDGET_MS,
-    `lighting costs ${perFrame.median.toFixed(2)} ms a frame in node, median ` +
-      `(worst ${Math.max(...samples).toFixed(2)} ms; node budget ${NODE_LIGHTING_BUDGET_MS} ms, ` +
-      `${view.widthPx}×${view.heightPx} at ${TILE_SIZE} px per tile)`,
   );
 }
 

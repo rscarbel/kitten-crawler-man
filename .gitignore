@@ -11,3 +11,5 @@ preview
 sw.js
 .gate-logs
 .price-report/
+.keys
+data/

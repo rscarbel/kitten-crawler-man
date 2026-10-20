@@ -32,6 +32,8 @@ import type { EquipmentChange } from './EquipmentManager';
 import type { HolsterMotion } from '../sprites/art/human/motionSets';
 import type { ToolKind, ToolTier } from './toolTiers';
 import type { ProcessingStationKind } from '../systems/briarHollow/processingStations';
+import type { BoxCategory, BoxTier } from './AchievementManager';
+import type { ChallengeSummary } from '../ai/show/challenges';
 
 export interface GameEvents {
   mobKilled: {
@@ -314,33 +316,114 @@ export interface GameEvents {
     woodSpent: number;
     via: 'manual' | 'fenna';
   };
+
+  /** A shop purchase went through: `item` is the row's label, `coins` what it cost. */
+  shopPurchase: { buyer: Player; item: string; coins: number; shop: string };
+
+  /** A crawler sold `quantity` of `item` to a shop for `coins` in total. */
+  shopSold: { seller: Player; item: string; quantity: number; coins: number; shop: string };
+
+  /** A status effect the crawler did not have took hold (a refresh of a running one does not count). */
+  statusApplied: { player: Player; status: string };
+
+  /** A status effect the crawler had is gone: cured, cleared or worn off. */
+  statusCured: { player: Player; status: string };
+
+  /** A loot box was opened and paid out to `owner`. */
+  boxOpened: {
+    owner: Player;
+    tier: BoxTier;
+    category: BoxCategory;
+    coins: number;
+    potions: number;
+    items: string[];
+  };
+
+  /**
+   * The run ended on the death screen. `fallen` is the crawler whose death or
+   * bleed-out ended it, or null when the floor's collapse clock ran out on a
+   * party still standing; `cause` is the death explanation's key.
+   */
+  playerDied: { fallen: Player | null; cause: string };
+
+  /** A conversation opened on an empty dialog box (`started`) or the box emptied (`ended`). */
+  conversation: { speaker: string; phase: 'started' | 'ended' };
+
+  /** Mordecai pointed the party at one of the floor's objectives. */
+  mordecaiAdviceGiven: { objectiveId: string };
+
+  /** The player took a challenge the show's AI offered; its clock starts now. */
+  challengeAccepted: ChallengeSummary;
+
+  /** The player turned down a challenge the show's AI offered. */
+  challengeDeclined: ChallengeSummary;
+
+  /** An accepted challenge was won; its box went to `rewardedTo`. */
+  challengeCompleted: ChallengeSummary & { rewardedTo: 'Human' | 'Cat'; secondsTaken: number };
+
+  /**
+   * An accepted challenge was lost: `reason` says how, `taunt` is the AI's
+   * line the player was shown (empty when the party simply left the floor).
+   */
+  challengeFailed: ChallengeSummary & { reason: string; taunt: string };
+
+  /**
+   * The player answered a question the show's AI put to them. `answer` is the
+   * label they picked, or null when they waved the question away.
+   */
+  playerAnswered: {
+    questionId: string;
+    question: string;
+    answer: string | null;
+    choices: string[];
+    askedBy: string;
+  };
+
+  /** The viewers' favour meter moved: `delta` is how far it really moved, after clamping. */
+  viewerFavorChanged: {
+    favor: number;
+    delta: number;
+    reaction: string;
+    comment: string;
+    tier: string;
+  };
+
+  /** The show's AI wrote and awarded an achievement. */
+  aiAchievementAwarded: {
+    title: string;
+    description: string;
+    tier: BoxTier;
+    player: 'Human' | 'Cat';
+    awardedBy: string;
+  };
+
+  /** A sponsor break the AI ran came off the screen, watched through or skipped. */
+  sponsorBreakEnded: { sponsor: string; skipped: boolean };
 }
 
 type EventCallback<T> = (data: T) => void;
 
+type ListenerSets = { [K in keyof GameEvents]?: Set<EventCallback<GameEvents[K]>> };
+
 export class EventBus {
-  // Type erasure is unavoidable for a heterogeneous event map — callbacks are
-  // stored as unknown and narrowed by the generic API surface.
-  private readonly listeners = new Map<string, Set<EventCallback<unknown>>>();
+  private listeners: ListenerSets = {};
 
   /** Subscribe to an event. Returns an unsubscribe function. */
   on<K extends keyof GameEvents>(event: K, callback: EventCallback<GameEvents[K]>): () => void {
-    let set = this.listeners.get(event);
-    if (!set) {
-      set = new Set();
-      this.listeners.set(event, set);
-    }
-    // eslint-disable-next-line @typescript-eslint/consistent-type-assertions
-    set.add(callback as EventCallback<unknown>);
+    const set = this.listeners[event] ?? new Set<EventCallback<GameEvents[K]>>();
+    // Narrowing the map to this one key is what lets the compiler see that the
+    // set stored under `event` holds callbacks for `event`'s payload.
+    const forThisEvent: { [P in K]?: Set<EventCallback<GameEvents[P]>> } = this.listeners;
+    forThisEvent[event] = set;
+    set.add(callback);
     return () => {
-      // eslint-disable-next-line @typescript-eslint/consistent-type-assertions
-      this.listeners.get(event)?.delete(callback as EventCallback<unknown>);
+      this.listeners[event]?.delete(callback);
     };
   }
 
   /** Emit an event, notifying all subscribers synchronously. */
   emit<K extends keyof GameEvents>(event: K, data: GameEvents[K]): void {
-    const set = this.listeners.get(event);
+    const set = this.listeners[event];
     if (!set) return;
     for (const cb of set) {
       cb(data);
@@ -349,6 +432,6 @@ export class EventBus {
 
   /** Remove all listeners (call on scene teardown). */
   clear(): void {
-    this.listeners.clear();
+    this.listeners = {};
   }
 }

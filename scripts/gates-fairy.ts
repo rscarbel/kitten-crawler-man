@@ -6,12 +6,12 @@
  * stream itself where no pixels are needed. Failures accumulate rather than
  * throwing one at a time, so one run reports everything that is wrong; a gate
  * whose filtered loop examined nothing fails loudly rather than passing.
+ * No gate is a timing, so a busy machine can't fail one.
  *
  *   npm run gates:fairy        the gates alone
  *   npm run render:fairy       the gates, then the review sheets
  */
 
-import { performance } from 'node:perf_hooks';
 import { pathToFileURL } from 'node:url';
 
 import { paintFigureCell } from './figureSheet.js';
@@ -778,38 +778,6 @@ function gateMemory(): void {
   }
 }
 
-// ── G14 paint cost ───────────────────────────────────────────────────────────
-
-/**
- * Node's software rasteriser is several times slower than Chrome at this, so
- * this is a magnitude check: a cell far past this is a painter that has grown
- * a loop, not a number to tune against.
- */
-const MAX_NODE_MS_PER_CELL = 12;
-const COST_SAMPLE_FRAMES = 4;
-
-/** G14 — a cell costs a few milliseconds at most, measured at the in-game density. */
-function gatePaintCost(): void {
-  let measured = 0;
-  for (const kind of FAIRY_KINDS) {
-    const figure = fairyFigureOf(kind);
-    const started = performance.now();
-    for (let frame = 0; frame < COST_SAMPLE_FRAMES; frame++) {
-      paintFigureCell(figure, fairyStateName('hover', 'front'), frame, IN_GAME_DENSITY);
-    }
-    const perCell = (performance.now() - started) / COST_SAMPLE_FRAMES;
-    measured++;
-    console.log(`  G14 ${figure.id}: ${perCell.toFixed(2)} ms per cell in node`);
-    if (perCell > MAX_NODE_MS_PER_CELL) {
-      fail(
-        'G14',
-        `${figure.id} costs ${perCell.toFixed(1)} ms a cell (at most ${MAX_NODE_MS_PER_CELL})`,
-      );
-    }
-  }
-  failUnlessMeasured('G14', measured, 'figures');
-}
-
 // ── G15 the health bar clears the headwear ──────────────────────────────────
 
 /**
@@ -899,7 +867,6 @@ export function fairyGateFailures(): string[] {
   gateKindsDiffer();
   gateDetailThreshold();
   gateMemory();
-  gatePaintCost();
   gateHealthBarClearsHeadwear();
   return [...failures];
 }

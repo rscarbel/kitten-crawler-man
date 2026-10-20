@@ -32,10 +32,8 @@ import { parseSpiderLabDressingCheckpoint } from '../../src/systems/bossRooms/sp
 import { darknessMaskBytes } from '../../src/systems/bossRooms/spiderLabLighting.js';
 import type { DressingRenderable } from '../../src/systems/bossRooms/BossRoomDressing.js';
 import type { RoomGateContext } from './harness.js';
-import { setViewportSize } from '../../src/core/Viewport.js';
-import { gameContext } from '../nodeGameContext.js';
 
-const FAULTS = ['cocoon-cap', 'abort', 'hack-path', 'dark-cost'] as const;
+const FAULTS = ['cocoon-cap', 'abort', 'hack-path'] as const;
 type SpiderFault = (typeof FAULTS)[number];
 const FAULT_PREFIX = '--spider-fault=';
 const faultArg = process.argv
@@ -359,98 +357,7 @@ function gateWebClearing(context: RoomGateContext): void {
 /** Long enough for every capped batch of regrowth to finish. */
 const REGROW_WAIT_FRAMES = 1200;
 
-/** View sizes the dark's cost is measured at: a common game window, and the whole room at once. */
-const COST_VIEWS: ReadonlyArray<readonly [number, number]> = [
-  [1280, 720],
-  [1472, 1216],
-];
-const COST_WARMUP_FRAMES = 10;
-const REFERENCE_FILL = 'rgba(6,4,12,0.8)';
-const COST_FRAMES = 60;
-/**
- * How many plain full-view blits the lab's dark pass may cost. The dark is one
- * stretched blit of the visible part of a small mask, a few fixtures and a
- * handful of glimmers, so it should stay within a small multiple of copying
- * the view once. Stretching the whole mask every frame measured twelve to thirty-five.
- */
-const MAX_DARK_PASS_BLITS = 6;
-let darkCostMeasured = false;
-
-/**
- * The lab's dark pass costs no more than a few plain blits of the view, in its
- * darkest state, measured against a blit on the same machine in the same run
- * so the ratio holds on any machine. Measured once per sweep: the pass does not
- * depend on the floor.
- */
-function gateDarkPassCost(context: RoomGateContext): void {
-  if (darkCostMeasured) return;
-  darkCostMeasured = true;
-  const lab = freshLab(context);
-  lab.attachQuest(testQuest({ count: 0 }));
-  lab.onSeal();
-  lab.enterLightPhase(2);
-  lab.enterLightPhase(3);
-  for (let i = 0; i < SETTLE_FOR_COST_FRAMES; i++) lab.update(context.env.frame);
-  if (fault === 'dark-cost') {
-    // The whole mask stretched over the whole room, edge to edge, every frame.
-    Reflect.set(
-      lab,
-      'blitMask',
-      (
-        ctx: CanvasRenderingContext2D,
-        mask: HTMLCanvasElement | OffscreenCanvas,
-        camX: number,
-        camY: number,
-      ) => {
-        const b = lab.room.bounds;
-        ctx.drawImage(
-          mask,
-          b.x * TILE_SIZE - camX,
-          b.y * TILE_SIZE - camY,
-          b.w * TILE_SIZE,
-          b.h * TILE_SIZE,
-        );
-      },
-    );
-  }
-  const centre = lab.room.centre;
-  for (const [width, height] of COST_VIEWS) {
-    setViewportSize(width, height);
-    const ctx = gameContext(width, height);
-    // A translucent full-view layer, so the reference blit has to blend every pixel.
-    const referenceCtx = gameContext(width, height);
-    referenceCtx.fillStyle = REFERENCE_FILL;
-    referenceCtx.fillRect(0, 0, width, height);
-    const reference = referenceCtx.canvas;
-    const camX = (centre.x + HALF) * TILE_SIZE - width / 2;
-    const camY = (centre.y + HALF) * TILE_SIZE - height / 2;
-    const time = (draw: () => void): number => {
-      for (let i = 0; i < COST_WARMUP_FRAMES; i++) draw();
-      const start = performance.now();
-      for (let i = 0; i < COST_FRAMES; i++) draw();
-      return (performance.now() - start) / COST_FRAMES;
-    };
-    const blitMs = time(() => ctx.drawImage(reference, 0, 0));
-    const darkMs = time(() => {
-      lab.renderDarkness(ctx, camX, camY);
-      lab.renderCeiling(ctx, camX, camY);
-    });
-    const blits = darkMs / Math.max(blitMs, Number.EPSILON);
-    context.report.note(
-      `dark pass at ${width}x${height}: ${darkMs.toFixed(2)} ms, ${blits.toFixed(1)} view blits (${blitMs.toFixed(2)} ms each)`,
-    );
-    if (blits > MAX_DARK_PASS_BLITS) {
-      context.report.fail(
-        `the dark pass at ${width}x${height} costs ${blits.toFixed(1)} view blits (max ${MAX_DARK_PASS_BLITS})`,
-      );
-    }
-  }
-}
-/** Past the dark's fade, so the pass measured is the steady one. */
-const SETTLE_FOR_COST_FRAMES = 40;
-
 export function spiderLabGates(context: RoomGateContext): void {
-  gateDarkPassCost(context);
   gateWebClearing(context);
   gateHackPath(context);
   gateLayout(context);

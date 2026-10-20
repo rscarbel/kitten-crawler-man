@@ -53,6 +53,7 @@ npm run bench:separation     # measures the separation strategy crossover
 npm run verify:slots         # slot engine: paylines, wilds, scatters, jackpot pool, free spins, money invariants
 npm run verify:wheel         # Wheel of Fortune: board red share, bet upgrades, retired prizes, landings, the wipe's save latch
 npm run verify:audio         # music director, library and credits, voices, ramped stops, scopes, captions, mute/mono/background
+npm run verify:ai-actions    # AI action registry: schemas vs tool definitions, fuzzed calls through the governor's fairness rules
 npm run report:slots-rtp     # slot RTP / hit-rate / win-tier report for tuning; never fails (-- --spins=N --seed=S --bet=B)
 npm run bench:slots          # times the slots MEGA WIN celebration on a phone-sized canvas (-- idle for the resting machine)
 ```
@@ -96,7 +97,7 @@ npm run verify:preview-scene  # the ?human and ?donut preview routes
 
 ## Dev overlays
 
-`?perf` shows fps, update/render/separation ms, and active vs. separated mob counts — the game's only profiling. `?difficulty` shows damage taken, potions consumed, dodges, deaths and per-segment HP delta, plus guard blocks per fight, kites and their length, and HP remaining in fights with vs. without a trait-bearing mob. They compose rather than replacing each other. Both live under `src/dev/`, which release builds resolve to an inert stub, so neither reaches a player. `?prices` shows the pricing engine's working (base, each markup/stock/buyback step with its multiplier and running total, final) under the selected row of every item counter's Buy and Sell tabs; tap a row to select it. Service rows have no working and show none.
+`?perf` shows fps, update/render/separation ms, and active vs. separated mob counts — the game's only profiling. `?difficulty` shows damage taken, potions consumed, dodges, deaths and per-segment HP delta, plus guard blocks per fight, kites and their length, and HP remaining in fights with vs. without a trait-bearing mob. They compose rather than replacing each other. Both live under `src/dev/`, which release builds resolve to an inert stub, so neither reaches a player. `?ai-record` records the page's AI traffic for an AI replay fixture, downloaded with F8 (see "AI replay fixtures"). `?prices` shows the pricing engine's working (base, each markup/stock/buyback step with its multiplier and running total, final) under the selected row of every item counter's Buy and Sell tabs; tap a row to select it. Service rows have no working and show none.
 
 ## Chat cheats
 
@@ -114,6 +115,25 @@ npm run kill     # free port 3000 (pass `-- 8080` for the serve port)
 
 - `serve` rebuilds on request but has **no HMR** — refresh the browser to pick up changes.
 - The game runs fully offline without the backend; auth/progress are optional.
+
+## Running with the AI (`npm run dev:ai`)
+
+`scripts/dev-ai.ts` starts the whole AI stack from this repo. The AI server checkout is `$AI_SERVER_DIR` (default `../game-server-llm`), and its `.env` decides the provider:
+
+- DynamoDB Local (:8000) and MinIO (:9000): reused when both ports answer, otherwise the server's `npm run infra:up` (fails early when Docker isn't running).
+- `LLM_PROVIDER=openai-compat` on Ollama (base URL on :11434 or `OPENAI_COMPAT_API=ollama`): the server's `scripts/ollama-dev.sh`, which applies the tuned settings to an Ollama it starts and warms the fast model. An Ollama already serving keeps its own settings; `npm run dev:ai -- --restart-ollama` replaces it. Any other OpenAI-compatible server is only checked for an answer on `/models`.
+- `LLM_PROVIDER=bedrock`: `aws sts get-caller-identity --profile $AWS_PROFILE` must pass.
+- `npm run build:sdk` in the server when `packages/sdk/dist` is missing.
+- Then the AI server's `npm run dev` (:3001) and this repo's `npm run dev` (:3000, a `--dev-boot` build) as child processes, output prefixed `[ai  ]` / `[game]`, each waited on until its `/.well-known/jwks.json` answers. It refuses to start when either port is taken (`npm run kill -- <port>`).
+
+It prints the game and console URLs and `AI provider → <provider> (fast: <model>, smart: <model>) ✓`, read from the server's `.env` (the console's Settings page can override a tier at runtime; the printout does not see that). Ctrl-C stops both process groups. It warns when this repo's `.env` has `AI_ENABLED` off or no `AI_APP_ID`. One-time setup is in the README.
+
+## AI replay fixtures
+
+The AI server's eval harness replays recorded sessions: every message the game sent (`context_set`, `state_snapshot` full/patch, `event_log`, `player_message`, `action_result`) with `atMs` since the recording started. The format is `src/ai/replay/aiReplayFormat.ts` (`AI_REPLAY_VERSION`; bump it when a field changes meaning) and its zod schema is `scripts/aiReplaySchema.ts`, which must keep compiling against those types (`asSchemaInput`). Fixtures live in the **server** repo, `bench/replays/`, beside the generated `replay.schema.json`.
+
+- `npm run ai:replays` acts out scripted sessions headlessly through the real `AIAdapter`, context builder, event mapping, action registry and challenge system (a fake SDK client in place of the socket, a scripted clock, so the output is deterministic) and writes `dynamite-incident.json` and `challenge-and-death.json`, validated and formatted with the target repo's Prettier config. `-- --out=<dir>` writes elsewhere. A new scenario is a new function in `scripts/record-ai-replays.ts`; `world.say(text, { kind: 'recall', mentionsAny, description })` adds a memory-recall expectation on the reply: the eval matches `mentionsAny` as whole words or phrases, case-insensitively, and the script refuses a term the question itself contains.
+- In the browser, a dev build with `?ai-record` (or `?ai-record=<name>`) records from page load through `AIAdapter.setOutboundListener`, and **F8** downloads the fixture. Only what was actually sent is recorded, so the AI must be connected (signed in, `AI_ENABLED=true`, a normal boot: a `?playtest=`/`?level=` boot takes over before the adapter connects). Move the file into the server's `bench/replays/` to use it. The recorder is in `src/dev/`, wired from `devBoot.ts`, so release builds don't contain it.
 - `npm run build:zip` produces the distributable; a service worker is regenerated on full builds.
 
 ## Jumping to a point in the game
@@ -144,15 +164,21 @@ file, and use `npm run serve` / `dev` / `playtest` when you need those URLs.
 
 ## Build internals
 
-`scripts/build.js` bundles `src/game.ts`, aliases `ws` to a stub, and injects `__AI_CLIENT_ID__` / `__AI_CLIENT_SECRET__` / `__AI_ENABLED__` from `.env` via esbuild `define`.
+`scripts/build.js` bundles `src/game.ts` (with the AI SDK, `@rscarbel/game-server-llm-sdk`, which uses the browser's own WebSocket; `ws` is marked external so it is never bundled) and injects `__AI_ENABLED__` and `__AI_SERVER_URL__` from `.env` via esbuild `define`. Only public values go there: anything defined is readable by every player.
+
+The SDK is installed from GitHub Packages (`.npmrc` maps the `@rscarbel` scope there). Installing needs a GitHub token with `read:packages` in the user's `~/.npmrc`; CI uses the workflow's `GITHUB_TOKEN`. Unreleased SDK changes are tried with `npm link` (see the SDK's README).
 
 ## `.env`
 
-From `.env.example`: `AI_ENABLED` (default `false` — with it off, `game.ts` skips auth/AI and boots straight into the game), `AI_CLIENT_ID`, `AI_CLIENT_SECRET`, `JWT_SECRET`. The AI adapter expects its LLM server on `localhost:3001` and silently no-ops when absent.
+From `.env.example`: `AI_ENABLED` (default `false` — with it off, `game.ts` skips auth/AI and boots straight into the game, which is how the static site ships), `AI_SERVER_URL` (default `http://localhost:3001`), `AI_APP_ID`, `PUBLIC_URL`, `AI_SIGNING_KEY_DIR` / `AI_SIGNING_KEY_PEM`, `JWT_SECRET`, and `AI_SYNC_CLIENT_ID` / `AI_SYNC_CLIENT_SECRET` for `npm run ai:sync`. With the AI server absent the game plays on, the panel's dot shows offline and the System answers from scripted lines.
+
+**`npm run ai:sync`** (`scripts/ai-sync.ts`) pushes the characters, the generated tools, the world bible and the event importance hints to the AI server once per deploy, as a service account (client credentials). Each upload is one entry in its `SYNC_STEPS`; an optional one (the lore and the importance hints) is skipped with a note when the service account lacks its scope (`lore:write`) or the server answers its endpoint with a 404. A character goes up exactly as `PUT /api/characters/:name` keeps it: the server takes identity only from `personality.core` and strips unknown keys, so the role and the acting-rule notes are folded into that core (`renderCharacterCore`). `-- --dry-run` prints the payloads; `-- --snapshot=<file>` writes them all to one JSON file, formatted with the target repo's prettier config (the AI server's `bench/game/kitten-crawler-sync.json` is made this way), and sends nothing. The README says how to create the service account.
+
+**AI player tokens.** The browser never holds an AI credential. `GET /api/ai-token` (`server/routes/aiToken.ts`, login required) signs a 10-minute ES256 token for the signed-in user (`sub` = user id, `aud` = `AI_APP_ID`, `iss` = `PUBLIC_URL`, `kid` in the header), and `GET /.well-known/jwks.json` publishes the public key for the AI server to trust. The private key comes from `AI_SIGNING_KEY_PEM`, or is generated on first run into `AI_SIGNING_KEY_DIR` (default `.keys/`, gitignored). A logged-out player gets a 401 and plays without the AI.
 
 ## Backend
 
-`server/index.ts` — Express on :3000, serves the static root, mounts `/api/auth` and `/api/progress`. `server/db.ts` — better-sqlite3 (`game.db`, `users` + `progress` tables). JWT cookies + bcrypt in `server/routes/` and `server/middleware/`.
+`server/index.ts` — Express on :3000, serves the static root, mounts `/api/auth`, `/api/progress`, `/api/ai-token` and `/.well-known/jwks.json` (`server/routes/aiToken.ts`, key in `server/aiSigningKey.ts`). `server/db.ts` — better-sqlite3 (`data/game.db`, or `$GAME_DATA_DIR/game.db`; a `game.db` left at the repo root is moved there on first start; `users` + `progress` tables). Only allowlisted game files are served from the repo root (`server/publicFiles.ts`). JWT cookies + bcrypt in `server/routes/` and `server/middleware/`.
 
 ## Sprite generation
 

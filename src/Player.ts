@@ -38,6 +38,7 @@ import {
 import { applyRetchPose, retchPoseOf } from './sprites/status/statusBloodVomit';
 import type { StatusMouth } from './sprites/status/statusPaint';
 import {
+  BLOOD_VOMIT_INTERVAL_FRAMES,
   BLOOD_VOMIT_MAX_HP_SHARE,
   CHILLED_ACTION_SPEED_FACTOR,
   CHILLED_MOVE_SPEED_FACTOR,
@@ -323,6 +324,50 @@ const SPIT_VENOM_TICK_INTERVAL = 40;
 
 /** Damage every status effect deals per tick of its own interval. */
 const STATUS_TICK_DAMAGE = 1;
+
+/** How often each damage-over-time status bites, by type. */
+const STATUS_DAMAGE_INTERVALS: ReadonlyMap<string, number> = new Map([
+  ['burn', BURN_TICK_INTERVAL],
+  ['poison', POISON_TICK_INTERVAL],
+  ['sepsis', SEPSIS_TICK_INTERVAL],
+  ['magic_burn', MAGIC_BURN_TICK_INTERVAL],
+  ['electrified', ELECTRIFIED_TICK_INTERVAL],
+  ['spit_venom', SPIT_VENOM_TICK_INTERVAL],
+]);
+
+/**
+ * How many more times an effect that bites every `interval` frames will bite.
+ * A bite lands on each frame whose elapsed count is a positive multiple of the
+ * interval, up to and including the frame the effect runs out on.
+ */
+function remainingBites(effect: StatusEffect, interval: number): number {
+  const elapsed = Math.max(0, effect.totalTicks - effect.ticksRemaining);
+  const bitesInWholeRun = Math.floor(effect.totalTicks / interval);
+  const bitesAlreadyLanded = Math.floor(Math.max(0, elapsed - 1) / interval);
+  return Math.max(0, bitesInWholeRun - bitesAlreadyLanded);
+}
+
+/**
+ * The most HP these effects can still take from a crawler with `maxHp` before
+ * they run out: every damage-over-time status's remaining ticks, and every
+ * remaining bout of blood vomiting (a share of max HP each). Resistances are
+ * ignored, so it is an upper bound for anything that must not let a status
+ * kill; regeneration in the meantime is not counted either.
+ */
+export function pendingStatusDamage(effects: readonly StatusEffect[], maxHp: number): number {
+  let total = 0;
+  for (const effect of effects) {
+    if (effect.type === BLOOD_VOMIT_STATUS) {
+      const bout = Math.max(1, Math.round(maxHp * BLOOD_VOMIT_MAX_HP_SHARE));
+      total += remainingBites(effect, BLOOD_VOMIT_INTERVAL_FRAMES) * bout;
+      continue;
+    }
+    const interval = STATUS_DAMAGE_INTERVALS.get(effect.type);
+    if (interval === undefined) continue;
+    total += remainingBites(effect, interval) * STATUS_TICK_DAMAGE;
+  }
+  return total;
+}
 
 /** Share of a damage number that survives a matching resistance. */
 export const RESISTED_DAMAGE_FRACTION = 0.5;
