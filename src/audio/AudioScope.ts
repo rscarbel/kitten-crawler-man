@@ -64,6 +64,7 @@ export interface ScopeEngine {
   keyboardHeroSongFailed(): boolean;
   outputLatencyS(): number;
   preload(ids: ReadonlyArray<SoundId>): Promise<void>;
+  preloadCompressed(ids: ReadonlyArray<SoundId>): Promise<void>;
   attach(hooks: ScopeHooks): void;
   detach(hooks: ScopeHooks): void;
   readonly music: ScopeMusicEngine;
@@ -79,6 +80,8 @@ export interface ScopeHooks {
   holds(id: SoundId): boolean;
   /** Every id this scope preloaded. */
   readonly declared: ReadonlySet<SoundId>;
+  /** Every id whose compressed file this scope keeps for an on-demand decode. */
+  readonly declaredCompressed: ReadonlySet<SoundId>;
 }
 
 /** A loop the scope wants playing, and its voice when it is. */
@@ -118,6 +121,7 @@ export class AudioScope {
   private keyboardHero: KeyboardHeroState | null = null;
   private readonly owned = new Set<ScopedDisposable>();
   private readonly declared = new Set<SoundId>();
+  private readonly declaredCompressed = new Set<SoundId>();
   private disposed = false;
   /** Who the director sees as holding this scope's music claims. */
   private readonly musicHolder: MusicClaimHolder = {};
@@ -127,6 +131,7 @@ export class AudioScope {
     restartWanted: () => this.restartWanted(),
     holds: (id) => this.loops.has(id) || (id === KEYBOARD_HERO_SONG && this.keyboardHero !== null),
     declared: this.declared,
+    declaredCompressed: this.declaredCompressed,
   };
 
   constructor(private readonly engine: ScopeEngine) {
@@ -140,6 +145,16 @@ export class AudioScope {
   preload(ids: ReadonlyArray<SoundId>): Promise<void> {
     for (const id of ids) this.declared.add(id);
     return this.engine.preload(ids);
+  }
+
+  /**
+   * Fetches `ids` without decoding them and keeps their compressed files while
+   * this scope lives, so a play of one whose decoded buffer was let go decodes
+   * it on demand rather than going unheard.
+   */
+  keepCompressed(ids: ReadonlyArray<SoundId>): Promise<void> {
+    for (const id of ids) this.declaredCompressed.add(id);
+    return this.engine.preloadCompressed(ids);
   }
 
   /**

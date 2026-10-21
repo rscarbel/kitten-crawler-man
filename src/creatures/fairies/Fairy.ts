@@ -9,6 +9,7 @@ import type { Player } from '../../Player';
 import type { Difficulty } from '../../core/difficultyProfiles';
 import { scaledCooldownFramesForLevel } from '../mobLevelScaling';
 import { isMarkedGround } from '../tactics/markedGround';
+import { isInsideAirspaceBody } from '../airspace';
 import { isWorldPointInView } from '../../core/visibleWorldView';
 import {
   drawFairySprite,
@@ -234,9 +235,10 @@ const UNIT_TILE_CENTRE = 0.5;
  * A fragile flying caster that changes the fight around it, and keeps its
  * distance while it does.
  *
- * Flies over mobs but not over masonry: `isFlying` takes it out of the ground
- * separation pass and the crawler-collision pass, while its own movement still
- * runs through `followTargetAStar` and `moveWithCollision`.
+ * Flies over mobs but not over masonry, nor over a body that fills the air
+ * (`Mob.fillsAirspace`): `isFlying` takes it out of the ground separation pass
+ * and the crawler-collision pass, while its own movement still runs through
+ * `followTargetAStar` and `moveWithCollision`, which slide it round such a body.
  *
  * The base owns everything the five kinds share — the hover, the positioning
  * (backing off from the party behind its allies, and running for another room
@@ -998,6 +1000,7 @@ export abstract class Fairy extends Mob {
       return false;
     }
     if (isMarkedGround(x, y)) return false;
+    if (isInsideAirspaceBody(x, y)) return false;
     const boundToBoss = bossOfHealer(this) !== null;
     if (!boundToBoss && !this.isWithinSpawnLeash(x, y)) return false;
     const map = this.map;

@@ -24,6 +24,7 @@ import {
   TREBUCHET_HEIGHT_TILES,
   TREBUCHET_MAX_AMMO,
   TREBUCHET_WIDTH_TILES,
+  UPDATES_PER_SECOND,
 } from '../systems/briarHollow/structureRules';
 import {
   grantConstructionUnlocks,
@@ -190,4 +191,25 @@ function footprintInside(site: BriarHollowSite, tileX: number, tileY: number): b
     }
   }
   return true;
+}
+
+/**
+ * The countdown `&assaultNow` leaves: long enough for a scene's caches to warm
+ * before a recording starts, short enough that the first wave comes up inside it.
+ */
+const ASSAULT_NOW_COUNTDOWN_SECONDS = 12;
+
+/**
+ * Rings the bell as "I'm ready" would, then cuts the countdown short so the
+ * first wave comes up within a short recording. Does nothing unless the
+ * village stands fortified and waiting.
+ */
+export function beginAssaultForPlaytest(kit: BriarHollowKit): void {
+  const countdownFrames = ASSAULT_NOW_COUNTDOWN_SECONDS * UPDATES_PER_SECOND;
+  const assault = kit.assault;
+  if (assault === null) return;
+  assault.begin();
+  if (!assault.inSiege) return;
+  const quest = kit.state.quest;
+  quest.imminentCountdownFrames = Math.min(quest.imminentCountdownFrames, countdownFrames);
 }

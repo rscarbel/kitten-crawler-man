@@ -157,7 +157,7 @@ function stepScreen(setup: RewardRig, frames: number): void {
 }
 
 function renderScreen(setup: RewardRig): void {
-  setup.ui.frame(surfaceContext(allocCanvas(SCREEN_W, SCREEN_H)));
+  setup.ui.frame(surfaceContext(allocCanvas('ui', SCREEN_W, SCREEN_H)));
 }
 
 /** Every XP line on a screen, as `recipient=amount`, in the order listed. */

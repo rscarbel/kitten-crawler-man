@@ -9,7 +9,12 @@
  */
 
 import { listAt } from '../../../systems/casino/poker/npc/listAt';
-import { allocCanvas, surfaceContext, type CanvasSurface } from '../../../core/canvasSurface';
+import {
+  allocCanvas,
+  releaseSurface,
+  surfaceContext,
+  type CanvasSurface,
+} from '../../../core/canvasSurface';
 import { onCanvasRecovery } from '../../../core/canvasRecovery';
 import {
   paintSlotBulb,
@@ -228,6 +233,7 @@ const bakes = new Map<string, Bake>();
 const bakeFailures = new Map<string, { readonly key: string; readonly at: number }>();
 const BAKE_RETRY_MS = 1000;
 onCanvasRecovery(() => {
+  for (const bake of bakes.values()) releaseSurface(bake.surface);
   bakes.clear();
   bakeFailures.clear();
 });
@@ -245,21 +251,25 @@ function baked(
   const now = performance.now();
   const failure = bakeFailures.get(slot);
   if (failure?.key === key && now - failure.at < BAKE_RETRY_MS) return null;
+  let surface: CanvasSurface | null = null;
   try {
-    const surface = allocCanvas(
+    surface = allocCanvas(
+      'casino',
       Math.max(1, Math.ceil(w * scale)),
       Math.max(1, Math.ceil(h * scale)),
     );
     const ctx = surfaceContext(surface);
     ctx.scale(scale, scale);
     paint(ctx);
-    bakes.set(slot, { key, surface });
-    bakeFailures.delete(slot);
-    return surface;
   } catch {
+    if (surface !== null) releaseSurface(surface);
     bakeFailures.set(slot, { key, at: now });
     return null;
   }
+  if (held !== undefined) releaseSurface(held.surface);
+  bakes.set(slot, { key, surface });
+  bakeFailures.delete(slot);
+  return surface;
 }
 
 function rectKey(r: Rect): string {

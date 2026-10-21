@@ -608,7 +608,7 @@ function scratchSurface(w: number, h: number): CanvasSurface {
   const key = `${w}x${h}`;
   const existing = scratch.get(key);
   if (existing !== undefined) return existing;
-  const surface = allocCanvas(w, h);
+  const surface = allocCanvas('groundTileParts', w, h);
   scratch.set(key, surface);
   return surface;
 }

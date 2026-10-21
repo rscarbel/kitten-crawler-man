@@ -1,4 +1,9 @@
-import { allocCanvas, surfaceContext, type CanvasSurface } from '../core/canvasSurface';
+import {
+  allocCanvas,
+  releaseSurface,
+  surfaceContext,
+  type CanvasSurface,
+} from '../core/canvasSurface';
 import { progressFrameIndex, timeFrameIndex, walkFrameIndex } from '../core/SpriteRenderer';
 import { MOLD_LION_FIGURE } from './art/moldLionFigure';
 import { figureFrameCount } from './figure/figureDef';
@@ -63,6 +68,7 @@ const PUFF_EDGE_COLOR = 'rgba(96, 150, 48, 0)';
 let puffTexture: CanvasSurface | null = null;
 // Baked once and kept; a purge would leave it blank for good.
 onCanvasRecovery(() => {
+  if (puffTexture !== null) releaseSurface(puffTexture);
   puffTexture = null;
 });
 
@@ -73,7 +79,7 @@ onCanvasRecovery(() => {
  */
 function getPuffTexture(): CanvasSurface {
   if (puffTexture !== null) return puffTexture;
-  const texture = allocCanvas(PUFF_TEXTURE_PX, PUFF_TEXTURE_PX);
+  const texture = allocCanvas('creatureArt', PUFF_TEXTURE_PX, PUFF_TEXTURE_PX);
   const texCtx = surfaceContext(texture);
   const radius = PUFF_TEXTURE_PX / 2;
   const gradient = texCtx.createRadialGradient(radius, radius, 0, radius, radius, radius);

@@ -3,7 +3,12 @@
  * same painters the world uses for the finished structure, scaled to fit.
  */
 
-import { allocCanvas, surfaceContext, type CanvasSurface } from '../../../core/canvasSurface';
+import {
+  allocCanvas,
+  releaseSurface,
+  surfaceContext,
+  type CanvasSurface,
+} from '../../../core/canvasSurface';
 import type { Rect } from '../../core/geom';
 import type { BuildOption } from '../../../systems/briarHollow/ConstructionSystem';
 import type { PalisadeTier } from '../../../map/tileTypes';
@@ -101,8 +106,12 @@ const WASHED_FILTER = 'grayscale(1)';
  */
 const MAX_CACHED_PICTURES = 48;
 const cache = new Map<string, CanvasSurface>();
+function clearPictures(): void {
+  for (const picture of cache.values()) releaseSurface(picture);
+  cache.clear();
+}
 // Baked once and kept; a purge would leave it blank for good.
-onCanvasRecovery(() => cache.clear());
+onCanvasRecovery(clearPictures);
 
 /**
  * Draws `option`'s finished structure centred in `box`, from a picture
@@ -123,8 +132,8 @@ export function drawStructureArt(
   const key = `${option}|${pixelW}x${pixelH}|${look}`;
   let picture = cache.get(key);
   if (picture === undefined) {
-    if (cache.size >= MAX_CACHED_PICTURES) cache.clear();
-    const surface = allocCanvas(pixelW, pixelH);
+    if (cache.size >= MAX_CACHED_PICTURES) clearPictures();
+    const surface = allocCanvas('construction', pixelW, pixelH);
     const surfaceCtx = surfaceContext(surface);
     surfaceCtx.scale(pixelW / box.w, pixelH / box.h);
     if (look === 'washed') surfaceCtx.filter = WASHED_FILTER;

@@ -18,11 +18,16 @@
  * shared cache, so a figure is soft for a moment, never missing.
  */
 
-import { allocCanvas, surfaceContext, type CanvasSurface } from '../../core/canvasSurface';
+import {
+  allocCanvas,
+  releaseSurface,
+  surfaceContext,
+  type CanvasSurface,
+} from '../../core/canvasSurface';
 import { canvasGeneration } from '../../core/canvasRecovery';
 import type { FigureDef } from '../../sprites/figure/figureDef';
 import { figureFrameCount } from '../../sprites/figure/figureDef';
-import { BYTES_PER_MEGABYTE } from '../../sprites/figure/figureCacheStats';
+import { BYTES_PER_MEGABYTE } from '../../core/canvasSurface';
 
 /** Where a figure's art can reach inside its cell, in its own cell pixels. */
 export interface HeroCellCrop {
@@ -124,6 +129,9 @@ export class TitleHeroCells {
   private clear(): void {
     if (this.idleHandle !== null) globalThis.cancelIdleCallback(this.idleHandle);
     this.idleHandle = null;
+    for (const row of this.rows.values()) {
+      for (const cell of row.cells.values()) releaseSurface(cell);
+    }
     this.rows.clear();
     this.queue.length = 0;
     this.bytes = 0;
@@ -244,7 +252,10 @@ export class TitleHeroCells {
   }
 
   private release(key: string, row: HeroRow): void {
-    for (const cell of row.cells.values()) this.bytes -= cellBytes(cell);
+    for (const cell of row.cells.values()) {
+      this.bytes -= cellBytes(cell);
+      releaseSurface(cell);
+    }
     this.rows.delete(key);
   }
 
@@ -256,7 +267,7 @@ export class TitleHeroCells {
     const height = Math.max(1, Math.ceil(crop.height * row.density));
     this.makeRoom(width * height * BYTES_PER_PIXEL, row);
     const startedMs = clockMs();
-    const cell = allocCanvas(width, height);
+    const cell = allocCanvas('title', width, height);
     const ctx = surfaceContext(cell);
     ctx.setTransform(
       row.density,

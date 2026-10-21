@@ -5,8 +5,9 @@
  * rotated by its play site. Every play site uses the cue, never the raw id,
  * so swapping a recording is its registration and one line here.
  *
- * Every id named here must be preloaded by a group floor 3 loads (the
- * `briarHollow` group, or `universal`), or the cue is silently never heard.
+ * Every id named here must be in a group floor 3 has decoded when the cue
+ * plays — `briarHollow`, `briarHollowSiege` (held near the village and
+ * through a siege) or `universal` — or the cue is silently never heard.
  */
 
 import type { JingleId, MusicTrackId, SoundId } from './sounds';

@@ -14,7 +14,12 @@
  */
 
 import type { BeamDirection, MirrorFacing, MirrorKind } from '../../../map/bigTopMazeLayout';
-import { allocCanvas, surfaceContext, type CanvasSurface } from '../../../core/canvasSurface';
+import {
+  allocCanvas,
+  releaseSurface,
+  surfaceContext,
+  type CanvasSurface,
+} from '../../../core/canvasSurface';
 import { drawRadialGlow, type GlowStop } from '../../radialGlow';
 import { hashUnit } from '../../flameStamps';
 import { fillSoftEllipse } from '../softShade';
@@ -991,6 +996,7 @@ const reflectionScratch = new Map<number, CanvasSurface>();
 
 /** Drops the reflection scratch surfaces, e.g. when the party leaves the tent. */
 export function clearReflectionScratch(): void {
+  for (const surface of reflectionScratch.values()) releaseSurface(surface);
   reflectionScratch.clear();
 }
 
@@ -1012,7 +1018,8 @@ export function paintReflectionSource(
   const height = pxPerTile * REFLECTION_SOURCE_TILES_HIGH;
   let surface = reflectionScratch.get(slot);
   if (surface?.width !== width || surface.height !== height) {
-    surface = allocCanvas(width, height);
+    if (surface !== undefined) releaseSurface(surface);
+    surface = allocCanvas('bigTopProps', width, height);
     reflectionScratch.set(slot, surface);
   }
   const target = surfaceContext(surface);

@@ -27,15 +27,20 @@ installCanvasGlobals();
 
 const {
   ENVIRONMENT_PAINT_BUDGET_MS,
+  RECENTLY_DRAWN_FRAMES,
   beginEnvironmentArtFrame,
   environmentArtBytes,
   environmentArtSheetCount,
   environmentPaintDepth,
+  environmentSheetEvictionStats,
   environmentSheetsAwaiting,
   flushEnvironmentArtCache,
   hasEnvironmentSheet,
+  paintEnvironmentArtNow,
   releaseEnvironmentArt,
   requestEnvironmentSheet,
+  residentEnvironmentSheetKeys,
+  setEnvironmentSheetByteBudget,
 } = await import('../src/map/environmentArtCache.js');
 const { GROUND_SHEET_KEYS, requestGroundSheets } =
   await import('../src/map/ground/runtimeGroundSheets.js');
@@ -66,7 +71,11 @@ const { allBossRoomSheetPlans } = await import('../src/sprites/sheets/bossRoomSh
 const { bathroomSheetPlans } = await import('../src/sprites/sheets/bathroomSheets.js');
 const { getLevelDef } = await import('../src/levels/index.js');
 const { runCanvasRecovery } = await import('../src/core/canvasRecovery.js');
-const { CanvasContextUnavailableError } = await import('../src/core/canvasSurface.js');
+const { BYTES_PER_MEGABYTE, CanvasContextUnavailableError } =
+  await import('../src/core/canvasSurface.js');
+const { beginRenderFrame } = await import('../src/core/renderFrameClock.js');
+const { OverlayTileCache } = await import('../src/map/TileRenderer.js');
+const { SPRITE_BUILDING } = await import('../src/map/tileTypes.js');
 
 const MASK_SHEET_KEY = 'ground_masks';
 /**
@@ -99,8 +108,6 @@ interface DrainReport {
  * Each probe below runs under an art seed no earlier probe used, so a sheet
  * left resident by one probe can never pass for the next probe's repaint.
  */
-const BYTES_PER_KILOBYTE = 1024;
-const BYTES_PER_MEGABYTE = BYTES_PER_KILOBYTE * BYTES_PER_KILOBYTE;
 let nextArtSeedIndex = 1;
 function freshArtSeed(): number {
   const seed = FLOOR_ART_SEEDS[nextArtSeedIndex];
@@ -579,6 +586,85 @@ for (
 check(
   hasEnvironmentSheet(PROBE_KEY),
   'a sheet refused a surface mid-paint never painted once memory was back',
+);
+
+// ── the byte budget ────────────────────────────────────────────────────────
+
+/** Every pixel of a published sheet, or null when it is not published. */
+function sheetPixels(key: SpriteKey): Uint8ClampedArray | null {
+  const def = getSpriteDefByKey(key);
+  if (def === undefined || !('getContext' in def.img)) return null;
+  const surface = def.img;
+  const probe = createCanvas(surface.width, surface.height);
+  const probeCtx = probe.getContext('2d');
+  probeCtx.drawImage(asNodeCanvas(surface), 0, 0);
+  return probeCtx.getImageData(0, 0, surface.width, surface.height).data;
+}
+
+function samePixels(a: Uint8ClampedArray | null, b: Uint8ClampedArray | null): boolean {
+  if (a === null || b === null || a.length !== b.length) return false;
+  return a.every((value, index) => value === b[index]);
+}
+
+// Over a budget of nothing, every sheet goes once it has sat undrawn past the
+// protection window — except the one looked up on every frame, and the facade
+// drawn on every frame only from the overlay entry baked from it — and a
+// lookup of an evicted sheet paints it again, pixel for pixel.
+const DRAWN_KEY: SpriteKey = 'ground_floor1';
+const IDLE_KEY: SpriteKey = 'ground_floor2';
+const FACADE_KEY = BUILDING_KEYS[0];
+flushEnvironmentArtCache();
+setFloorArtSeed(freshArtSeed());
+requestGroundSheets([DRAWN_KEY, IDLE_KEY]);
+requestBuildingSheets(floorArtSubSeed(BUILDING_SALT));
+paintEnvironmentArtNow();
+const PROBE_TILE_SIZE = 32;
+const FACADE_TILE = { tileId: 'gate-facade', type: SPRITE_BUILDING, spriteKey: FACADE_KEY };
+const overlayCache = new OverlayTileCache([[FACADE_TILE]], PROBE_TILE_SIZE);
+check(
+  overlayCache.get(SPRITE_BUILDING, 0, 0) !== null,
+  'the budget probe could not bake an overlay entry from a facade',
+);
+const keptKeys = new Set<string>([DRAWN_KEY, FACADE_KEY]);
+const idleKeys = residentEnvironmentSheetKeys().filter((key) => !keptKeys.has(key));
+check(idleKeys.includes(IDLE_KEY), 'the budget probe painted no idle sheet to evict');
+const idlePixelsBefore = sheetPixels(IDLE_KEY);
+const evictionsBefore = environmentSheetEvictionStats();
+setEnvironmentSheetByteBudget(0);
+for (let frame = 0; frame <= RECENTLY_DRAWN_FRAMES; frame++) {
+  beginRenderFrame();
+  overlayCache.beginFrame();
+  getSpriteDefByKey(DRAWN_KEY);
+  overlayCache.get(SPRITE_BUILDING, 0, 0);
+  beginEnvironmentArtFrame();
+  if (!hasEnvironmentSheet(DRAWN_KEY) || !hasEnvironmentSheet(FACADE_KEY)) break;
+}
+check(hasEnvironmentSheet(DRAWN_KEY), 'a sheet drawn on every frame was evicted over the budget');
+check(
+  hasEnvironmentSheet(FACADE_KEY),
+  'a facade drawn on every frame from its cached overlay entry was evicted over the budget',
+);
+for (const key of idleKeys) {
+  check(!hasEnvironmentSheet(key), `"${key}" sat undrawn past the window but was not evicted`);
+  check(getSpriteDefByKey(key) === undefined, `"${key}" was evicted but is still published`);
+}
+const evictionsAfter = environmentSheetEvictionStats();
+check(
+  evictionsAfter.evictions - evictionsBefore.evictions === idleKeys.length,
+  `expected ${idleKeys.length} evictions over the budget, counted ` +
+    `${evictionsAfter.evictions - evictionsBefore.evictions}`,
+);
+setEnvironmentSheetByteBudget(null);
+paintEnvironmentArtNow();
+check(hasEnvironmentSheet(IDLE_KEY), 'an evicted sheet looked up again was never repainted');
+check(
+  environmentSheetEvictionStats().repaintsAfterEviction - evictionsBefore.repaintsAfterEviction ===
+    idleKeys.length,
+  'an evicted sheet was repainted without being looked up, or looked up without being repainted',
+);
+check(
+  samePixels(idlePixelsBefore, sheetPixels(IDLE_KEY)),
+  'an evicted sheet repainted to different pixels than it held before',
 );
 
 flushEnvironmentArtCache();

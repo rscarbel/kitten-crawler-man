@@ -37,6 +37,7 @@ export const tutorialLevel: LevelDef = {
   // Shares floor 1's "cellars" theme and safe-room furniture; its hand-built
   // map has no bosses or quest content of its own, so no groups beyond that.
   spriteGroups: ['core', 'dungeon_common', 'floor1_tileset'],
+  interiorSpriteGroups: [],
   roomMobs: [],
   hallwayMobs: [],
   nextLevelId: 'level1',

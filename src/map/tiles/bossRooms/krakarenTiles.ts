@@ -16,7 +16,12 @@ import { mulberry32 } from '../../../sprites/person/rng';
 import type { TileContent } from '../../tileTypes';
 import { KRAKAREN_CONSOLE, KRAKAREN_TANK, KRAKAREN_WADE, positionHash } from '../../tileTypes';
 import { SPRITE_BUILDING_OVERLAY_FPS } from '../overlayAnimation';
-import { allocCanvas, surfaceContext, type CanvasSurface } from '../../../core/canvasSurface';
+import {
+  allocCanvas,
+  releaseSurface,
+  surfaceContext,
+  type CanvasSurface,
+} from '../../../core/canvasSurface';
 import type { TilePoint } from '../../../systems/bossRooms/bossRoomLayout';
 import { onCanvasRecovery } from '../../../core/canvasRecovery';
 
@@ -204,6 +209,12 @@ const SPECKLE_SEED = 0x5ec;
  */
 const floorTiles = new Map<string, CanvasSurface>();
 
+/** Safe to release on eviction: every caller draws the surface it fetched before fetching another. */
+function releaseAll(cache: Map<string, CanvasSurface>): void {
+  for (const surface of cache.values()) releaseSurface(surface);
+  cache.clear();
+}
+
 function floorVariantAt(tx: number, ty: number): FloorVariant {
   const panelHash = positionHash(Math.floor(tx / PANEL_TILES), Math.floor(ty / PANEL_TILES));
   const tileHash = positionHash(tx, ty);
@@ -234,7 +245,7 @@ function labFloorSurface(v: FloorVariant, ts: number): CanvasSurface {
   const key = `${ts},${v.westSeam ? 1 : 0}${v.northSeam ? 1 : 0}${v.light ? 1 : 0},${v.tone},${v.speckles},${v.sheen ? 1 : 0}${v.stain ? 1 : 0}`;
   const cached = floorTiles.get(key);
   if (cached !== undefined) return cached;
-  const surface = allocCanvas(ts, ts);
+  const surface = allocCanvas('bossRoomTiles', ts, ts);
   paintLabFloor(surfaceContext(surface), v, ts);
   floorTiles.set(key, surface);
   return surface;
@@ -417,9 +428,9 @@ export function vatBedSurface(lab: KrakarenLabLayout, ts: number): CanvasSurface
   const key = `${lab.centre.x},${lab.centre.y},${ts}`;
   const cached = vatBeds.get(key);
   if (cached !== undefined) return cached;
-  if (vatBeds.size >= MAX_CACHED_VAT_BEDS) vatBeds.clear();
+  if (vatBeds.size >= MAX_CACHED_VAT_BEDS) releaseAll(vatBeds);
   const size = Math.round(BED_SPAN_TILES * ts * BED_SUPERSAMPLE);
-  const surface = allocCanvas(size, size);
+  const surface = allocCanvas('bossRoomTiles', size, size);
   const bedCtx = surfaceContext(surface);
   const scale = size / (BED_SPAN_TILES * ts);
   bedCtx.scale(scale, scale);
@@ -670,9 +681,9 @@ const LIVE_COLD = { r: 120, g: 190, b: 255, a: 0.16 } as const;
 const waterTiles = new Map<string, CanvasSurface>();
 // Baked once and kept; a purge would leave it blank for good.
 onCanvasRecovery(() => {
-  floorTiles.clear();
-  vatBeds.clear();
-  waterTiles.clear();
+  releaseAll(floorTiles);
+  releaseAll(vatBeds);
+  releaseAll(waterTiles);
 });
 /**
  * Dropped wholesale past this many, which only a floor change reaches: one lab
@@ -728,8 +739,8 @@ export function wadeWaterSurface(
   const cacheKey = waterKey(tx, ty, size, live, isWet);
   const cached = waterTiles.get(cacheKey);
   if (cached !== undefined) return cached;
-  if (waterTiles.size >= MAX_CACHED_WATER_TILES) waterTiles.clear();
-  const surface = allocCanvas(size, size);
+  if (waterTiles.size >= MAX_CACHED_WATER_TILES) releaseAll(waterTiles);
+  const surface = allocCanvas('bossRoomTiles', size, size);
   waterTiles.set(cacheKey, surface);
   paintWater(surface, size, tx, ty, live, isWet);
   return surface;

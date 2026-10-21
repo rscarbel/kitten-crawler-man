@@ -9,7 +9,12 @@
  * a blit at the camera's fractional offset would resample it once more.
  */
 
-import { allocCanvas, surfaceContext, type CanvasSurface } from '../../core/canvasSurface';
+import {
+  allocCanvas,
+  releaseSurface,
+  surfaceContext,
+  type CanvasSurface,
+} from '../../core/canvasSurface';
 import type { Rect } from '../../ui/core/geom';
 
 /** Below this much shade the tint is invisible, so the figure is drawn straight. */
@@ -68,6 +73,7 @@ export class TitleShadeBuffer {
   }
 
   dispose(): void {
+    if (this.surface !== null) releaseSurface(this.surface);
     this.surface = null;
   }
 
@@ -75,9 +81,13 @@ export class TitleShadeBuffer {
     const current = this.surface;
     if (current !== null && current.width >= width && current.height >= height) return current;
     const grown = allocCanvas(
+      'title',
       Math.max(width, current?.width ?? 0),
       Math.max(height, current?.height ?? 0),
     );
+    // No paint callback draws through the buffer it is painting for, so the
+    // smaller surface is never still in use when it is outgrown.
+    if (current !== null) releaseSurface(current);
     this.surface = grown;
     return grown;
   }

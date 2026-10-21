@@ -16,7 +16,12 @@
  *    same either way.
  */
 
-import { allocCanvas, surfaceContext, type CanvasSurface } from '../../core/canvasSurface';
+import {
+  allocCanvas,
+  releaseSurface,
+  surfaceContext,
+  type CanvasSurface,
+} from '../../core/canvasSurface';
 import { onCanvasRecovery } from '../../core/canvasRecovery';
 
 /** A colour as raw channels, so alpha can be varied per-particle without string surgery. */
@@ -156,7 +161,10 @@ const GLOW_MID_ALPHA = 0.35;
 
 const glowCache = new Map<string, CanvasSurface>();
 // Baked once and kept; a purge would leave it blank for good.
-onCanvasRecovery(() => glowCache.clear());
+onCanvasRecovery(() => {
+  for (const surface of glowCache.values()) releaseSurface(surface);
+  glowCache.clear();
+});
 
 /**
  * A soft radial disc of the given colour, baked once and reused. Draw it with
@@ -167,7 +175,7 @@ function glowSprite(color: Rgb): CanvasSurface {
   const cached = glowCache.get(key);
   if (cached !== undefined) return cached;
 
-  const surface = allocCanvas(GLOW_SPRITE_PX, GLOW_SPRITE_PX);
+  const surface = allocCanvas('effects', GLOW_SPRITE_PX, GLOW_SPRITE_PX);
   const ctx = surfaceContext(surface);
   const gradient = ctx.createRadialGradient(
     GLOW_CENTER_PX,
@@ -199,7 +207,9 @@ const GRADIENT_FACTORY_PX = 1;
 let gradientFactory: CanvasRenderingContext2D | null = null;
 
 export function gradientContext(): CanvasRenderingContext2D {
-  gradientFactory ??= surfaceContext(allocCanvas(GRADIENT_FACTORY_PX, GRADIENT_FACTORY_PX));
+  gradientFactory ??= surfaceContext(
+    allocCanvas('effects', GRADIENT_FACTORY_PX, GRADIENT_FACTORY_PX),
+  );
   return gradientFactory;
 }
 

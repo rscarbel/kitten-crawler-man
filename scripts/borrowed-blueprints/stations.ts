@@ -618,7 +618,7 @@ export function verifyRebuildAndCutsApart(check: Check): void {
   give(rig, SAW_UPGRADE_COST);
   rig.quest.tryUpgradeStation(rig.human);
   setInteractionPromptsSuppressed(false);
-  const promptCtx = surfaceContext(allocCanvas(PROMPT_CANVAS_PX, PROMPT_CANVAS_PX));
+  const promptCtx = surfaceContext(allocCanvas('ui', PROMPT_CANVAS_PX, PROMPT_CANVAS_PX));
   const claimed = rig.services.renderPrompt(promptCtx, 0, 0, rig.human);
   check(
     claimed && interactionPromptsDrawnThisFrame() === 0,
@@ -672,7 +672,7 @@ const NON_COLOUR_FILL = 'gradient-or-pattern';
 function recordFrame(draw: (ctx: CanvasRenderingContext2D) => void): RecordedFrame {
   setViewportSize(CAPTION_SCREEN_PX, CAPTION_SCREEN_PX);
   setInteractionPromptsSuppressed(false);
-  const ctx = surfaceContext(allocCanvas(CAPTION_SCREEN_PX, CAPTION_SCREEN_PX));
+  const ctx = surfaceContext(allocCanvas('ui', CAPTION_SCREEN_PX, CAPTION_SCREEN_PX));
   const texts: DrawnText[] = [];
   const fills: string[] = [];
   const fillText = ctx.fillText.bind(ctx);

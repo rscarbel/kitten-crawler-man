@@ -21,7 +21,7 @@ import { createCanvas } from 'canvas';
 import { installCanvasGlobals } from './nodeCanvasGlobals.js';
 import { asGameContext, type NodeContext } from './nodeGameContext.js';
 import { PREVIEW_DIR, writePreviewPng } from './previewOut.js';
-import { BYTES_PER_MEGABYTE } from '../src/sprites/figure/figureCacheStats.js';
+import { BYTES_PER_MEGABYTE } from '../src/core/canvasSurface.js';
 import { HUMAN_SCALE } from '../src/sprites/art/human/figureScale.js';
 import { VIEWS } from '../src/sprites/art/carl/rig.js';
 import { PROP_ART } from '../src/sprites/art/carl/props.js';

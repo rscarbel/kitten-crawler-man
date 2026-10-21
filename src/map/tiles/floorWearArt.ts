@@ -13,7 +13,12 @@
  * continuously rather than stepping tile by tile.
  */
 
-import { allocCanvas, surfaceContext, type CanvasSurface } from '../../core/canvasSurface';
+import {
+  allocCanvas,
+  releaseSurface,
+  surfaceContext,
+  type CanvasSurface,
+} from '../../core/canvasSurface';
 import type { TileContent } from '../tileTypes';
 import {
   EDGE_LINE_EAST,
@@ -69,7 +74,10 @@ const EDGE_LINE_COLOR = 'rgba(196, 168, 74, 0.34)';
 
 const washCache = new Map<string, CanvasSurface>();
 // Baked once and kept; a purge would leave it blank for good.
-onCanvasRecovery(() => washCache.clear());
+onCanvasRecovery(() => {
+  for (const surface of washCache.values()) releaseSurface(surface);
+  washCache.clear();
+});
 
 function cachedWash(key: string): CanvasSurface | undefined {
   const surface = washCache.get(key);
@@ -84,6 +92,8 @@ function storeWash(key: string, surface: CanvasSurface): void {
   while (washCache.size > WASH_CACHE_MAX_ENTRIES) {
     const oldest = washCache.keys().next();
     if (oldest.done === true) break;
+    const evicted = washCache.get(oldest.value);
+    if (evicted !== undefined) releaseSurface(evicted);
     washCache.delete(oldest.value);
   }
 }
@@ -107,7 +117,7 @@ function roundedCorners(surface: FloorSurface, tx: number, ty: number): TileCorn
 }
 
 function buildWash(corners: TileCorners, width: number, height: number): CanvasSurface {
-  const surface = allocCanvas(width, height);
+  const surface = allocCanvas('groundTileParts', width, height);
   const ctx = surfaceContext(surface);
   const image = ctx.createImageData(width, height);
   const { northWest, northEast, southWest, southEast } = corners;

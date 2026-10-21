@@ -21,7 +21,13 @@ import environmentCellarPropsManifest from '../images/environment/cellar_props/m
 import { TILE_SIZE } from './constants';
 import { ASSET_GROUPS, type AssetGroup } from './assetGroups';
 import { settings } from './Settings';
-import type { CanvasSurface } from './canvasSurface';
+import {
+  allocCanvas,
+  countDecodedImage,
+  forgetDecodedImage,
+  releaseSurface,
+  type CanvasSurface,
+} from './canvasSurface';
 
 const environmentManifest = {
   ...environmentBuildingsManifest,
@@ -177,7 +183,29 @@ export interface SpriteDef {
   readonly states: ReadonlyMap<string, SpriteStateDef>;
 }
 
-const _defs = new Map<string, SpriteDef>();
+/**
+ * A loaded sheet, plus the hook a runtime painter asked to hear every lookup
+ * through: the environment cache keeps a sheet only while something draws it,
+ * and a lookup is the one thing every draw of a sheet does.
+ */
+interface LoadedSpriteDef extends SpriteDef {
+  readonly onLookup?: () => void;
+}
+
+const _defs = new Map<string, LoadedSpriteDef>();
+
+/** Told of every lookup of a runtime-painted key that is not published. */
+let paintedSpriteMissHandler: ((key: string) => void) | null = null;
+
+/**
+ * Hears every lookup of a runtime-painted sheet that is not published, so the
+ * cache that let one go can paint it again the moment something wants it. One
+ * listener: the environment cache is the only painter that gives sheets back
+ * while their floor is still being played.
+ */
+export function onPaintedSpriteMiss(handler: (key: string) => void): void {
+  paintedSpriteMissHandler = handler;
+}
 
 /**
  * One promise per in-flight (or already-settled) image load, keyed by manifest
@@ -285,11 +313,12 @@ function downscaleSheet(
   const halfImageHeight = Math.round(img.naturalHeight * DOWNSCALE_FACTOR);
   if (halfImageWidth < 1 || halfImageHeight < 1) return undefined;
 
-  const canvas = document.createElement('canvas');
-  canvas.width = halfImageWidth;
-  canvas.height = halfImageHeight;
+  const canvas = allocCanvas('spriteSheets', halfImageWidth, halfImageHeight);
   const ctx = canvas.getContext('2d');
-  if (ctx === null) return undefined;
+  if (ctx === null) {
+    releaseSurface(canvas);
+    return undefined;
+  }
   ctx.drawImage(img, 0, 0, halfImageWidth, halfImageHeight);
 
   return {
@@ -318,7 +347,10 @@ function ensureLoading(key: string, entry: SpriteManifestEntry, base: string): P
   // `_loading`: there is no in-flight work to share, and an entry there would
   // outlive the painter that eventually registers the sheet.
   const path = entry.path;
-  if (path === undefined) return Promise.resolve();
+  if (path === undefined) {
+    paintedSpriteMissHandler?.(key);
+    return Promise.resolve();
+  }
   const existing = _loading.get(key);
   if (existing) return existing;
 
@@ -330,6 +362,7 @@ function ensureLoading(key: string, entry: SpriteManifestEntry, base: string): P
         statesMap.set(name, sd);
       }
       const downscaled = shouldDownscaleForLowEndDevice() ? downscaleSheet(img, entry) : undefined;
+      if (downscaled === undefined) countDecodedImage(img);
       _defs.set(key, {
         img: downscaled?.img ?? img,
         frameWidth: downscaled?.frameWidth ?? entry.frameWidth,
@@ -432,12 +465,7 @@ export async function loadGroups(
 let _scratchCtx: CanvasRenderingContext2D | null = null;
 
 function getScratchCtx(): CanvasRenderingContext2D | null {
-  if (_scratchCtx === null) {
-    const canvas = document.createElement('canvas');
-    canvas.width = 1;
-    canvas.height = 1;
-    _scratchCtx = canvas.getContext('2d');
-  }
+  _scratchCtx ??= allocCanvas('misc', 1, 1).getContext('2d');
   return _scratchCtx;
 }
 
@@ -545,6 +573,7 @@ export function getSpriteDef(key: SpriteKey): SpriteDef | undefined {
     recordMiss(key);
     void ensureLoading(key, _manifest[key], DEFAULT_IMAGE_BASE);
   }
+  def?.onLookup?.();
   return def;
 }
 
@@ -591,8 +620,16 @@ export function getManifestEntry(key: SpriteKey): SpriteManifestEntry {
  * getting to redefine it. Mismatched sheet dimensions throw here rather than
  * bleeding a neighbouring row into a frame, which is how frame-size drift
  * usually presents.
+ *
+ * `onLookup` runs on every lookup that finds the sheet, for a painter that
+ * keeps only what is being drawn.
  */
-export function registerPaintedSprite(key: SpriteKey, img: CanvasSurface, scale: number): void {
+export function registerPaintedSprite(
+  key: SpriteKey,
+  img: CanvasSurface,
+  scale: number,
+  onLookup?: () => void,
+): void {
   const entry = _manifest[key];
   if (entry.path !== undefined) {
     throw new Error(`Sprite "${key}" ships as a file; it must not be painted over at runtime`);
@@ -616,6 +653,7 @@ export function registerPaintedSprite(key: SpriteKey, img: CanvasSurface, scale:
     tileY: entry.tileY * scale,
     tileScale: entry.tileScale * scale,
     states: statesMap,
+    onLookup,
   });
 }
 
@@ -671,13 +709,13 @@ export function releaseSpritesExcept(keep: ReadonlySet<SpriteKey>): void {
       def.img.onload = null;
       def.img.onerror = null;
       def.img.src = '';
+      forgetDecodedImage(def.img);
     } else {
       // A downscaled sheet (see `downscaleSheet`): a `<canvas>` has no `src` to
       // clear, so the equivalent release is shrinking its own backing store to
       // nothing — the decoded pixels it held are what actually cost memory,
       // and dropping the `_defs` entry below only frees the wrapper object.
-      def.img.width = 0;
-      def.img.height = 0;
+      releaseSurface(def.img);
     }
     _defs.delete(key);
     // Not expected to still be here (a resolved `_defs` entry means its
@@ -812,6 +850,7 @@ export function getSpriteDefByKey(key: string): SpriteDef | undefined {
     const entry = manifestEntryFor(key);
     if (entry !== undefined) void ensureLoading(key, entry, DEFAULT_IMAGE_BASE);
   }
+  def?.onLookup?.();
   return def;
 }
 

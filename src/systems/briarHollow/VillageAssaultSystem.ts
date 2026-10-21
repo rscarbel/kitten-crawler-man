@@ -1193,6 +1193,12 @@ export class VillageAssaultSystem {
     return this.phase === 'imminent' || this.phase === 'assault';
   }
 
+  /** Whether any of the siege's own dead still stands, withdrawing or not. */
+  get hasLivingSiegeMobs(): boolean {
+    for (const mob of this.waveOf.keys()) if (mob.isAlive) return true;
+    return false;
+  }
+
   /** Frames left on the countdown. */
   get countdownFrames(): number {
     return this.deps.state.quest.imminentCountdownFrames;

@@ -188,7 +188,7 @@ export function planBuildingPaint(spec: BuildingSpec, weatherSeed = 0): Building
   // Read back pixel by pixel by the ink and outline stages, which is the whole
   // reason this one asks: a GPU-backed surface pays a full synchronisation for
   // every one of those reads.
-  const canvas = allocReadableCanvas(frameWidthPx(spec), frameHeightPx(spec));
+  const canvas = allocReadableCanvas('environmentSheets', frameWidthPx(spec), frameHeightPx(spec));
   const ctx = freshSurfaceContext(canvas);
 
   // Allocated now and painted by the stages below, so the composite stage after
@@ -239,8 +239,7 @@ export function planBuildingPaint(spec: BuildingSpec, weatherSeed = 0): Building
             // of what painting a facade holds. Given back here rather than left
             // to the collector, so a floor loading fifteen buildings holds one
             // building's worth of surfaces rather than fifteen.
-            plane.canvas.width = 0;
-            plane.canvas.height = 0;
+            releaseSurface(plane.canvas);
           }
         },
       },
@@ -273,7 +272,12 @@ export function planBuildingPaint(spec: BuildingSpec, weatherSeed = 0): Building
 /** Paints a whole building in one go, for a caller with no frames to spread it over. */
 export function paintBuilding(spec: BuildingSpec, weatherSeed = 0): PaintedBuilding {
   const plan = planBuildingPaint(spec, weatherSeed);
-  for (const stage of plan.stages) stage.run();
+  try {
+    for (const stage of plan.stages) stage.run();
+  } catch (error) {
+    plan.release();
+    throw error;
+  }
   return { canvas: plan.canvas, projection: plan.projection };
 }
 

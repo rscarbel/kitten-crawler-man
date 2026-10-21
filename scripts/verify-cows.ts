@@ -80,7 +80,7 @@ import { Conversation } from '../src/dialog/Conversation';
 import { cowFigure } from '../src/sprites/art/cowFigure';
 import type { CowAge, CowCoatId } from '../src/sprites/cowSprite';
 import {
-  CACHE_BYTE_BUDGET,
+  CACHE_BUDGET_MEGABYTES,
   IDLE_FRAMES_BEFORE_RELEASE,
 } from '../src/sprites/figure/figureFrameCache';
 
@@ -764,7 +764,9 @@ function herdSection(seeds: number): void {
     tally.fenceStuck === 0,
     `an animal set down inside a fence post steps out onto its pen (${tally.fenceStuck} did not)`,
   );
-  const herdShare = CACHE_BYTE_BUDGET / HERD_CACHE_SHARE_DIVISOR;
+  // The herd is simulated without a display, so it is held to the full
+  // budget a full-density screen gets rather than a device-scaled one.
+  const herdShare = (CACHE_BUDGET_MEGABYTES * BYTES_PER_MEGABYTE) / HERD_CACHE_SHARE_DIVISOR;
   check(
     tally.peakWarmBytes > 0 && tally.peakWarmBytes <= herdShare,
     `the herd's cache demand (rows drawn this frame, and warmed rows not yet drawn) peaks at ` +

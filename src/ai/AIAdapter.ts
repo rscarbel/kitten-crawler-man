@@ -188,6 +188,15 @@ export class AIAdapter {
     this.outboundListener = listener;
   }
 
+  /**
+   * The gameplay scene bound right now, or null between scenes. Every floor
+   * and interior binds on construction, so this follows the party through
+   * doors and down stairwells without the reader tracking scene changes.
+   */
+  get boundScene(): AISceneContext | null {
+    return this.sceneCtx;
+  }
+
   /** Whether the server connection is up. */
   get isConnected(): boolean {
     return this.connected;

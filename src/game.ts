@@ -150,7 +150,7 @@ if (LOCAL_WIPE_MARKER.read() !== null) PAGE_SAVE_LATCH.engage();
 const input = new InputManager();
 const audio = new AudioManager();
 // Only the universal group (menu/UI + generic player-combat cues) decodes at
-// boot now; per-floor and per-interior SFX preload additively as the player
+// boot; per-floor and per-interior SFX preload additively as the player
 // reaches them (DungeonScene / BuildingInteriorScene constructors), so a
 // floor's sounds are never paid for until that floor is actually visited.
 void audio.preload(CORE_SFX_IDS);

@@ -39,6 +39,7 @@ export type SfxGroup =
   | 'level2'
   | 'level3'
   | 'briarHollow'
+  | 'briarHollowSiege'
   | 'constructionContracts'
   | 'cloggedBathroom'
   | 'stealthKeySnatch'
@@ -548,6 +549,13 @@ export const SFX_GROUPS: Record<SfxGroup, readonly SoundId[]> = {
     'tree_fall_3',
     'tree_fall_4',
     ...BOMBER_GOBLIN_SFX_IDS,
+    // A hireling's thrown rocks and the cretin mercenary's blows.
+    'rock_thud_1',
+    'rock_thud_2',
+    'rock_thud_3',
+    'rock_thud_4',
+    // Shady's offer can be taken anywhere he stands; decoded on its first play.
+    'accepted_bounty',
   ],
 
   /**
@@ -577,15 +585,9 @@ export const SFX_GROUPS: Record<SfxGroup, readonly SoundId[]> = {
     'rock_breaking_1',
     'rock_breaking_2',
     'rope_tightening',
-    // The raised ratkin's squeak layer under its recorded death.
-    'rat_squeak_1',
-    'rat_squeak_2',
-    'rat_squeak_3',
     'thrall_fade_out',
     'thrall_summoned',
-    // Library sounds the village still borrows for cues with no recording: the
-    // stone-wall break and the necromancer's pulse release (`deep_rumbling`), the
-    // grave bull's collapse and a fairy's raise call.
+    // Library sounds the village still borrows for cues with no recording.
     'deep_rumbling',
     'bones_rattling',
     'fairy_raise_call',
@@ -593,78 +595,46 @@ export const SFX_GROUPS: Record<SfxGroup, readonly SoundId[]> = {
     'anvil_strike_1',
     'anvil_strike_2',
     'anvil_strike_3',
-    'bell_toll_hit',
-    'boulder_fire_whoosh',
     'doctor_treatment',
-    'miasma_hiss',
-    'necromancer_arrival',
-    'necromancer_blink',
-    'necromancer_hurt_1',
-    'necromancer_hurt_2',
-    'necromancer_hurt_3',
-    'necromancer_hurt_4',
-    'ratkin_soldier_ack_1',
-    'ratkin_soldier_ack_2',
-    'ratkin_soldier_ack_3',
-    'ratkin_soldier_down',
-    'ratkin_soldier_hurt_1',
-    'ratkin_soldier_hurt_2',
-    'snare_convert',
-    'bell_alarm',
-    'bell_crack',
-    'bell_victory_peal',
-    'briar_hollow_victory',
-    'firework_burst_1',
-    'firework_burst_2',
-    'firework_burst_3',
-    'firework_burst_4',
-    'firework_launch_1',
-    'firework_launch_2',
-    'firework_launch_3',
-    'firework_launch_4',
-    'boulder_impact_1',
-    'boulder_impact_2',
-    'boulder_impact_3',
-    'boulder_impact_4',
     'construction_complete',
     'repairing_loop',
-    'fence_break',
-    'gate_thud',
-    'grave_bull_bellow',
-    'grave_bull_charge',
-    'necro_war_horn',
-    'necromancer_bolt',
-    'necromancer_death',
-    'necromancer_pulse_charge',
-    'necromancer_pulse_release',
-    'necromancer_raise',
-    'raised_ratkin_death',
-    'raised_ratkin_groan',
     'ratkin_chatter_1',
     'ratkin_chatter_2',
     'ratkin_chatter_3',
     'ratkin_chatter_4',
     'ratkin_chatter_5',
     'ratkin_chatter_6',
-    'ratkin_soldier_strike_1',
-    'ratkin_soldier_strike_2',
-    'ratkin_soldier_strike_3',
-    'snare_break',
-    'snare_trigger',
     'spikes_add',
-    'spikes_impale',
     'structure_dismantle',
     'tool_upgrade',
+    'trebuchet_load',
+    // The defences the party builds stand anywhere outside the town wall, and
+    // fight any hostile; their blows, and a soldier's hurt and fall, play
+    // unplaced, so they are heard wherever the party is.
+    'boulder_fire_whoosh',
+    'boulder_impact_1',
+    'boulder_impact_2',
+    'boulder_impact_3',
+    'boulder_impact_4',
+    'miasma_hiss',
     'trebuchet_break',
     'trebuchet_fire_1',
     'trebuchet_fire_2',
-    'trebuchet_load',
-    'village_gate_close',
-    'village_gate_open',
+    'snare_break',
+    'snare_convert',
+    'snare_trigger',
+    'spikes_impale',
+    'fence_break',
+    'gate_thud',
     'wall_break_stone',
     'wall_break_wood',
     'wall_hit_stone',
     'wall_hit_wood',
+    'ratkin_soldier_down',
+    'ratkin_soldier_hurt_1',
+    'ratkin_soldier_hurt_2',
+    'village_gate_close',
+    'village_gate_open',
     'wall_upgrade_stone',
     // The Borrowed Blueprints: Plumbline Farm, the pasture fence, the harvest
     // and Midge's escort.
@@ -690,6 +660,62 @@ export const SFX_GROUPS: Record<SfxGroup, readonly SoundId[]> = {
     'scythe_unhook',
     'station_upgrade_flourish',
     ...BOMBER_GOBLIN_SFX_IDS,
+  ],
+
+  /**
+   * The siege of Briar Hollow and the dead it raises: the bell, the militia's
+   * orders and blows, Vordrick and his raised ratkin and grave bulls, the
+   * victory. Every one plays only near the village, during a siege or while
+   * its dead still stand, or on Midge's escort (whose ambushers are the same
+   * dead), so floor 3 decodes it only then (`FloorSfxGates`).
+   */
+  briarHollowSiege: [
+    'bell_alarm',
+    'bell_crack',
+    'bell_toll_hit',
+    'bell_victory_peal',
+    'briar_hollow_victory',
+    'firework_burst_1',
+    'firework_burst_2',
+    'firework_burst_3',
+    'firework_burst_4',
+    'firework_launch_1',
+    'firework_launch_2',
+    'firework_launch_3',
+    'firework_launch_4',
+    'ratkin_soldier_ack_1',
+    'ratkin_soldier_ack_2',
+    'ratkin_soldier_ack_3',
+    'ratkin_soldier_strike_1',
+    'ratkin_soldier_strike_2',
+    'ratkin_soldier_strike_3',
+    'necro_war_horn',
+    'necromancer_arrival',
+    'necromancer_blink',
+    'necromancer_bolt',
+    'necromancer_death',
+    'necromancer_hurt_1',
+    'necromancer_hurt_2',
+    'necromancer_hurt_3',
+    'necromancer_hurt_4',
+    'necromancer_pulse_charge',
+    'necromancer_pulse_release',
+    'necromancer_raise',
+    'grave_bull_bellow',
+    'grave_bull_charge',
+    'raised_ratkin_death',
+    'raised_ratkin_groan',
+    // The raised ratkin's squeak layer under its recorded death.
+    'rat_squeak_1',
+    'rat_squeak_2',
+    'rat_squeak_3',
+    // Borrowed for the stone wall's break, the necromancer's pulse and the
+    // grave bull's collapse.
+    'deep_rumbling',
+    'bones_rattling',
+    // The lava llamas the waves send.
+    'llama_fireball',
+    'llama_fireball_explosion',
   ],
 
   /**
@@ -725,9 +751,16 @@ export const SFX_GROUPS: Record<SfxGroup, readonly SoundId[]> = {
    * boss — see the remaining `[STAND-IN]` comments in
    * `GameLoopPhases.playMobAudioCues` — need their own preload here even though
    * the sample itself "belongs" to another floor.
+   *
+   * The siege of Briar Hollow fields the same bosses as its bounty marks, so
+   * floor 3 holds this group while a bounty is out or a siege is on.
    */
   bounty: [
     'accepted_bounty',
+    // The Evil Clown's troupe: its fat clown's burp and its lemur.
+    'clown_burp',
+    'circus_lemur_attack',
+    'circus_lemur_sound',
     'bones_rattling',
     'bounty_fight_engaged',
     'clown_horn',
@@ -778,7 +811,13 @@ export const SFX_GROUPS: Record<SfxGroup, readonly SoundId[]> = {
     'wood_breaking_2',
   ],
 
-  /** `CircusQuestSystem` + `BigTopMazeSystem` (Grimaldi, Heather the Bear, the clown troupe), and the grounds' high striker. */
+  /**
+   * `CircusQuestSystem` + `BigTopMazeSystem` (Grimaldi, Heather the Bear, the
+   * clown troupe), and the grounds' high striker. The siege of Briar Hollow
+   * sends clowns, lemurs and llamas too, so floor 3 holds this group near the
+   * grounds, while the circus quest has mobs out, or while a siege is on; the
+   * Big Top declares it itself.
+   */
   circusQuest: [
     'bear_big_attack',
     'bear_growl_1',
@@ -851,8 +890,9 @@ export const SFX_GROUPS: Record<SfxGroup, readonly SoundId[]> = {
    *
    * The Lich's *creature* cues — its damage grunt, its death, its cast wind-up,
    * and its raised skeletons' swings — are played by the shared mob-audio drain
-   * rather than from here, and still come from `bounty`. `verify:lich` checks
-   * what these systems play; it does not reach that drain.
+   * rather than from here; its death and wind-up are listed here, the rest are
+   * in `level3`, because the tower is entered with `bounty` let go. `verify:lich`
+   * checks what these systems play; it does not reach that drain.
    */
   murderMysteryQuest: [
     'krasue_attack',
@@ -865,6 +905,9 @@ export const SFX_GROUPS: Record<SfxGroup, readonly SoundId[]> = {
     'deep_rumbling',
     'powering_off',
     'charging_up_1',
+    // The Lich's cast wind-up and death, shared with the Skeleton Lord.
+    'prepare_for_magic_strike',
+    'skeleton_lord_death',
     // Miss Quill's and the Lich's hard-mode healers.
     ...FAIRY_SFX_IDS,
   ],
@@ -875,7 +918,13 @@ export const SFX_GROUPS: Record<SfxGroup, readonly SoundId[]> = {
    * suggests: `DungeonScene` builds `MongoSystem` unconditionally, so the pet's
    * own cues are universal.
    */
-  mongoMercenary: ['sword_attack_1'],
+  mongoMercenary: [
+    'sword_attack_1',
+    // Tumbledown, the golem for hire, fights with the rock golem's voice.
+    'massive_strike_with_dirt_impact',
+    'rock_golem_grunt',
+    'rock_golem_frustrated',
+  ],
 
   /** The town safe room's Bopca cook — `BopcaSystem`. */
   interiorBopca: [
@@ -973,21 +1022,40 @@ export const SFX_GROUPS: Record<SfxGroup, readonly SoundId[]> = {
 export const CORE_SFX_IDS: readonly SoundId[] = SFX_GROUPS.universal;
 
 /**
- * The floor-3 overworld is the only place bounty bosses, the circus/murder-
- * mystery questlines, Briar Hollow and Mongo/mercenary escorts can appear (`BountySystem`,
- * `CircusQuestSystem` etc. are all constructed only for that level def), so
- * its groups are bundled together rather than requiring each system to
- * preload for itself.
+ * Floor 3's groups held for as long as the floor is: what can sound anywhere
+ * on it, at any moment. The questlines and the siege that can only sound in
+ * one place or while they run are {@link GATED_SFX_GROUPS}, held and let go by
+ * `FloorSfxGates` as the party nears them or they start.
  */
 const LEVEL3_SFX_GROUPS: readonly SfxGroup[] = [
   'level3',
   'briarHollow',
   'constructionContracts',
-  'bounty',
-  'circusQuest',
   'murderMysteryQuest',
   'mongoMercenary',
 ];
+
+/** Floor 3's groups decoded only while something can play them (`FloorSfxGates`). */
+export const GATED_SFX_GROUPS = [
+  'briarHollowSiege',
+  'bounty',
+  'circusQuest',
+] as const satisfies readonly SfxGroup[];
+
+export type GatedSfxGroup = (typeof GATED_SFX_GROUPS)[number];
+
+/** Every id in a gated group. */
+export const GATED_SFX_IDS: ReadonlySet<SoundId> = new Set(
+  GATED_SFX_GROUPS.flatMap((group) => SFX_GROUPS[group]),
+);
+
+/**
+ * Ids a floor's scenes keep compressed: the gated groups on floor 3, so a cue
+ * played while its group is let go decodes on demand rather than going unheard.
+ */
+export function compressedSfxForLevelId(levelId: string): readonly SoundId[] {
+  return levelId === 'level3' ? [...GATED_SFX_IDS] : [];
+}
 
 /** Floor 2's own cues plus the quests that only appear there. */
 const LEVEL2_SFX_GROUPS: readonly SfxGroup[] = [

@@ -1352,12 +1352,18 @@ export class DefenseStructures {
     return { type: HOLLOW_PALISADE, wallTier: record.tier, damageStage: stage, spiked };
   }
 
-  /** A painter that reads its neighbours needs them re-baked too, or a chunk border keeps a stale seam. */
+  /**
+   * A decoration painter that reads its neighbours needs them redrawn too. The
+   * neighbours' ground is left to the chunk cache, whose repaint of a changed
+   * tile already reaches one tile past it, across chunk borders; marking them
+   * base-dirty as well would widen every patch by a second ring.
+   */
   private markTileAndNeighboursDirty(tileX: number, tileY: number, layer: DirtyLayer): void {
     const gameMap = this.deps.gameMap;
     for (let dy = -1; dy <= 1; dy++) {
       for (let dx = -1; dx <= 1; dx++) {
-        if (layer === 'base') gameMap.markTileDirty(tileX + dx, tileY + dy);
+        const isChangedTile = dx === 0 && dy === 0;
+        if (layer === 'base' && isChangedTile) gameMap.markTileDirty(tileX, tileY);
         else gameMap.markDecorationDirty(tileX + dx, tileY + dy);
       }
     }

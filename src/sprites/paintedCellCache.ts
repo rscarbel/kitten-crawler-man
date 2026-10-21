@@ -19,6 +19,7 @@ import {
   CanvasContextUnavailableError,
   surfaceContext,
   type CanvasSurface,
+  releaseSurface,
 } from '../core/canvasSurface';
 import { canvasGeneration, reportCanvasAllocationFailure } from '../core/canvasRecovery';
 
@@ -44,11 +45,6 @@ export interface CellBox {
   readonly top: number;
   readonly width: number;
   readonly height: number;
-}
-
-function releaseSurface(surface: CanvasSurface): void {
-  surface.width = 0;
-  surface.height = 0;
 }
 
 export class PaintedCellCache {
@@ -99,6 +95,7 @@ export class PaintedCellCache {
       return held;
     }
     const surface = allocCanvas(
+      'paintedCells',
       Math.max(1, Math.ceil(box.width * bakeScale)),
       Math.max(1, Math.ceil(box.height * bakeScale)),
     );

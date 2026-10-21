@@ -393,6 +393,11 @@ export class EscortAmbushSystem {
     return this.deps.carry.wavesSprung;
   }
 
+  /** Whether any of the road's ambushers still stands, with or without Midge to go for. */
+  get hasLivingAmbushers(): boolean {
+    return this.ambushers.some((mob) => mob.isAlive);
+  }
+
   /** The road's ambushers still standing. */
   get livingAmbushers(): readonly Mob[] {
     return this.ambushers.filter((mob) => mob.isAlive);

@@ -196,6 +196,14 @@ export function prewarmSkyfowlCastMember(id: SkyfowlLookId): void {
  * Exempts a cast member's idle and walk rows from the cache's idle-release
  * sweep — see `pinTownCastLook`, the human cast's own equivalent, for why.
  */
+/** The rows {@link prewarmSkyfowlCastMember} warms and {@link pinSkyfowlCastMember} pins. */
+export function skyfowlCastMemberRows(id: SkyfowlLookId): DrawnFigureRow[] {
+  const figure = skyfowlCastFigure(id);
+  return PREWARM_CAST_ROLES.flatMap((role) =>
+    PREWARM_VIEWS.map((view) => drawnFigureRow(figure, castStateName(role, view))),
+  );
+}
+
 export function pinSkyfowlCastMember(id: SkyfowlLookId): void {
   const figure = skyfowlCastFigure(id);
   for (const role of PREWARM_CAST_ROLES) {

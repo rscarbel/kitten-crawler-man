@@ -1,5 +1,10 @@
 import type { SpriteDef, SpriteStateDef } from './SpriteLoader';
-import { allocCanvas, surfaceContext, type CanvasSurface } from './canvasSurface';
+import {
+  allocCanvas,
+  freshSurfaceContext,
+  releaseSurface,
+  type CanvasSurface,
+} from './canvasSurface';
 
 /**
  * Resolve the sheet-pixel origin (srcX, srcY) of a frame, wrapping onto
@@ -65,8 +70,8 @@ function measureInkBounds(
     top: 0,
   };
 
-  const surface = allocCanvas(frameWidth, frameHeight);
-  const ctx = surfaceContext(surface);
+  const surface = allocCanvas('misc', frameWidth, frameHeight);
+  const ctx = freshSurfaceContext(surface);
   // `surface.width`/`.height` are what the canvas actually allocated — a canvas
   // dimension is a whole number, so a fractional `frameWidth` (the low-end
   // downscale in `SpriteLoader.ts` can halve an odd source width, e.g. 65 → 32.5) gets
@@ -82,8 +87,10 @@ function measureInkBounds(
     pixels = ctx.getImageData(0, 0, w, h).data;
   } catch {
     // A sheet served from a foreign origin taints the surface; the cell centre
-    // is the only honest answer left, and it is what the old code assumed.
+    // is the only honest answer left.
     return wholeCell;
+  } finally {
+    releaseSurface(surface);
   }
 
   let minX = w;

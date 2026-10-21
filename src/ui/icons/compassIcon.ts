@@ -8,7 +8,12 @@
  * each of sixty frames a second buys nothing; a single `drawImage` does.
  */
 
-import { allocCanvas, surfaceContext, type CanvasSurface } from '../../core/canvasSurface';
+import {
+  allocCanvas,
+  releaseSurface,
+  surfaceContext,
+  type CanvasSurface,
+} from '../../core/canvasSurface';
 import type { Rect } from '../core/geom';
 import { iconSquare } from './iconSquare';
 import { onCanvasRecovery } from '../../core/canvasRecovery';
@@ -46,6 +51,7 @@ const CARDINAL_COUNT = 4;
 let texture: CanvasSurface | null = null;
 // Baked once and kept; a purge would leave it blank for good.
 onCanvasRecovery(() => {
+  if (texture !== null) releaseSurface(texture);
   texture = null;
 });
 
@@ -71,7 +77,7 @@ function drawNeedle(
 
 function bake(): CanvasSurface {
   const size = COMPASS_TEXTURE_PX;
-  const surface = allocCanvas(size, size);
+  const surface = allocCanvas('ui', size, size);
   const ctx = surfaceContext(surface);
   const centre = size / 2;
   const radius = size * DIAL_RADIUS;

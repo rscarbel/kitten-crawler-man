@@ -64,16 +64,22 @@ import {
 import {
   allocCanvas,
   allocReadableCanvas,
+  BYTES_PER_MEGABYTE,
   CanvasContextUnavailableError,
   surfaceContext,
   type CanvasSurface,
+  releaseSurface,
 } from '../core/canvasSurface';
 import {
   canvasGeneration,
   registerPurgeProbe,
   reportCanvasAllocationFailure,
 } from '../core/canvasRecovery';
-import { repaintedSheetRevision } from './environmentArtCache';
+import {
+  recordSheetLookups,
+  repaintedSheetRevision,
+  touchEnvironmentSheets,
+} from './environmentArtCache';
 import { perfMonitor } from '../core/PerfMonitor';
 import { drawInteriorTile } from './tiles/interiorTiles';
 import { hollowPropExtentsPx } from './tiles/hollowVillageTiles';
@@ -99,6 +105,18 @@ import { CHUNK_TILES } from './tiles/chunkTiles';
  * One bake always runs regardless, so a cache can never stall.
  */
 const CHUNK_BAKE_BUDGET_MS = 4;
+
+/**
+ * Milliseconds of a frame's chunk budget that work for ground not yet on
+ * screen may spend: baking ahead of the camera and patching off-screen
+ * chunks. Kept well under {@link CHUNK_BAKE_BUDGET_MS} because it runs on
+ * every frame of a walk, on top of the figure cache's own prewarm, and a frame
+ * pushed past a vsync is a visible stutter. It is still plenty: the camera
+ * takes a whole chunk's width — about 200 frames at walking pace, 70 at three
+ * times that — to reach the chunks one ahead of it, while a leading column
+ * of the costliest town chunks needs a few dozen frames at this pace.
+ */
+const CHUNK_SPECULATIVE_BUDGET_MS = 1;
 
 /**
  * Baked chunks kept alive. A 1080p view spans 20 chunks, so this holds the
@@ -143,6 +161,8 @@ interface CachedChunk {
   canvas: CanvasSurface;
   /** Frame this chunk was last drawn from — drives LRU eviction. */
   lastUsedFrame: number;
+  /** Environment sheets its pixels came from, kept drawn while the chunk is. */
+  sheets: readonly string[];
   /**
    * Whether the purge probe found ink in this chunk the first time it read it,
    * or null before then. Only a chunk once seen with ink can be judged purged
@@ -173,10 +193,6 @@ const CHUNK_REPAINT_MARGIN_TILES = 1;
  * draws this ring of tiles around its clip so their overreach is laid back.
  */
 const TILE_PAINT_OVERREACH_TILES = 1;
-/** Time one {@link TileChunkCache.repaintTiles} call may spend patching before it marks the rest stale. */
-const CHUNK_REPAINT_BUDGET_MS = 2;
-/** A patch at least this share of its chunk's tiles is cheaper re-baked under the stale budget. */
-const CHUNK_REPAINT_STALE_SHARE = 0.5;
 
 /** The tile rectangle (end exclusive) one chunk repaints in place. */
 interface ChunkRepaintPatch {
@@ -186,6 +202,27 @@ interface ChunkRepaintPatch {
   tileY0: number;
   tileX1: number;
   tileY1: number;
+}
+
+/**
+ * A chunk bake spread across frames: a fresh canvas the chunk's tiles are
+ * painted into in the bake's own row-major order, a frame's leftover budget at
+ * a time, so the finished canvas holds exactly what one bake would have.
+ * Until it finishes, the chunk's old picture (or, ahead of the view, nothing)
+ * is what is drawn.
+ */
+interface ChunkBakeJob {
+  readonly cx: number;
+  readonly cy: number;
+  readonly key: number;
+  readonly canvas: CanvasSurface;
+  /** Index, in the bake's row-major order, of the next tile to paint. */
+  nextTile: number;
+  readonly sheets: Set<string>;
+  /** Painting time so far, folded into the bake cost estimate once it finishes. */
+  spentMs: number;
+  /** A sheet it drew from was repainted after it began, so it finishes as a stale chunk. */
+  stale: boolean;
 }
 
 /** Frames a cache waits after a failed bake before baking again. */
@@ -205,8 +242,6 @@ const OVERLAY_RENDER_RETRY_MS = 1000;
  */
 const OVERLAY_REDRAWS_PER_FRAME = 8;
 
-const BYTES_PER_KILOBYTE = 1024;
-const BYTES_PER_MEGABYTE = BYTES_PER_KILOBYTE * BYTES_PER_KILOBYTE;
 /**
  * Canvas memory the overlay cache may hold. A town screen draws a few
  * megabytes of entries — its buildings dominate, at up to half a megabyte
@@ -221,16 +256,6 @@ const OVERLAY_CACHE_BUDGET_BYTES = OVERLAY_CACHE_BUDGET_MEGABYTES * BYTES_PER_ME
  */
 const OVERLAY_CACHE_EVICT_TO_MEGABYTES = 24;
 const OVERLAY_CACHE_EVICT_TO_BYTES = OVERLAY_CACHE_EVICT_TO_MEGABYTES * BYTES_PER_MEGABYTE;
-
-/**
- * Releases a surface's pixels. Dropping the reference alone leaves the backing
- * store counted against the browser's canvas memory until a collection, and iOS
- * refuses every new context once that budget is spent.
- */
-function releaseSurface(surface: CanvasSurface): void {
-  surface.width = 0;
-  surface.height = 0;
-}
 
 let warnedTileArtFailure = false;
 
@@ -323,7 +348,7 @@ function probeChunkPurged(): boolean {
 }
 
 function probeContext(): CanvasRenderingContext2D {
-  const surface = probeSurface ?? allocReadableCanvas(PROBE_SAMPLE_PX, PROBE_SAMPLE_PX);
+  const surface = probeSurface ?? allocReadableCanvas('misc', PROBE_SAMPLE_PX, PROBE_SAMPLE_PX);
   try {
     const ctx = surfaceContext(surface);
     probeSurface = surface;
@@ -525,8 +550,14 @@ export class TileChunkCache {
   /** Frames in a row that showed a stale chunk and re-baked none; dev builds only. */
   private framesWithoutStaleBake = 0;
   private warnedStaleDrain = false;
-  /** Per-chunk patches of one {@link repaintTiles} call, reused across calls. */
-  private readonly repaintPatches = new Map<number, ChunkRepaintPatch>();
+  /**
+   * Changed tiles whose baked pixels are not yet repainted, per chunk key.
+   * A visible chunk's patch is painted before the chunk is drawn, so a change
+   * never shows its old art; an off-screen one waits for spare budget.
+   */
+  private readonly pendingPatches = new Map<number, ChunkRepaintPatch>();
+  /** The one chunk bake in progress across frames, if any. */
+  private job: ChunkBakeJob | null = null;
 
   constructor(
     private structure: TileContent[][],
@@ -556,36 +587,77 @@ export class TileChunkCache {
     };
   }
 
-  private bakeChunk(cx: number, cy: number): CachedChunk {
+  private allocChunkCanvas(cx: number, cy: number): CanvasSurface {
+    const { tileX0, tileY0, tileX1, tileY1 } = this.chunkTileBounds(cx, cy);
+    return allocCanvas('tileChunks', (tileX1 - tileX0) * this.ts, (tileY1 - tileY0) * this.ts);
+  }
+
+  /**
+   * Paints a chunk's tiles into its canvas in the bake's row-major order, from
+   * tile `fromTile`, until `deadlineMs` passes — always at least one tile —
+   * and returns the index of the next tile to paint. Every sheet a tile drew
+   * from is added to `sheets`.
+   */
+  private paintChunkTiles(
+    canvas: CanvasSurface,
+    cx: number,
+    cy: number,
+    fromTile: number,
+    deadlineMs: number,
+    sheets: Set<string>,
+  ): number {
     const ts = this.ts;
     const structure = this.structure;
     const { tileX0, tileY0, tileX1, tileY1 } = this.chunkTileBounds(cx, cy);
-
-    const canvas = allocCanvas((tileX1 - tileX0) * ts, (tileY1 - tileY0) * ts);
-    try {
-      const cctx = surfaceContext(canvas);
-      for (let y = tileY0; y < tileY1; y++) {
-        for (let x = tileX0; x < tileX1; x++) {
-          const tile = structure[y][x];
-          const sx = (x - tileX0) * ts;
-          const sy = (y - tileY0) * ts;
-          const isDecoration = DECORATION_TYPES.has(tile.type);
-          drawTile(cctx, structure, tile.type, sx, sy, ts, x, y, isDecoration);
-        }
+    const widthTiles = tileX1 - tileX0;
+    const tileCount = widthTiles * (tileY1 - tileY0);
+    const cctx = surfaceContext(canvas);
+    let nextTile = fromTile;
+    const recorded = recordSheetLookups(() => {
+      while (nextTile < tileCount) {
+        const x = tileX0 + (nextTile % widthTiles);
+        const y = tileY0 + Math.floor(nextTile / widthTiles);
+        const tile = structure[y][x];
+        const isDecoration = DECORATION_TYPES.has(tile.type);
+        drawTile(
+          cctx,
+          structure,
+          tile.type,
+          (x - tileX0) * ts,
+          (y - tileY0) * ts,
+          ts,
+          x,
+          y,
+          isDecoration,
+        );
+        nextTile++;
+        if (performance.now() >= deadlineMs) break;
       }
-    } catch (error) {
-      releaseSurface(canvas);
-      throw error;
-    }
+    });
+    for (const key of recorded) sheets.add(key);
+    return nextTile;
+  }
 
+  private chunkTileCount(cx: number, cy: number): number {
+    const { tileX0, tileY0, tileX1, tileY1 } = this.chunkTileBounds(cx, cy);
+    return (tileX1 - tileX0) * (tileY1 - tileY0);
+  }
+
+  /** Makes a finished canvas the chunk's picture, releasing the one it replaces. */
+  private installChunk(
+    key: number,
+    canvas: CanvasSurface,
+    sheets: ReadonlySet<string>,
+    stale: boolean,
+  ): CachedChunk {
     const cached: CachedChunk = {
       canvas,
       lastUsedFrame: this.frameCounter,
+      sheets: sheets.size === 0 ? [] : [...sheets],
       probedInk: null,
       generation: canvasGeneration(),
-      stale: false,
+      stale,
     };
-    const key = this.chunkKey(cx, cy);
     const replaced = this.chunks.get(key);
     if (replaced !== undefined) this.releaseChunk(replaced);
     this.chunks.set(key, cached);
@@ -593,33 +665,138 @@ export class TileChunkCache {
     return cached;
   }
 
+  private bakeChunk(cx: number, cy: number): CachedChunk {
+    const key = this.chunkKey(cx, cy);
+    const canvas = this.allocChunkCanvas(cx, cy);
+    const sheets = new Set<string>();
+    try {
+      this.paintChunkTiles(canvas, cx, cy, 0, Number.POSITIVE_INFINITY, sheets);
+    } catch (error) {
+      releaseSurface(canvas);
+      throw error;
+    }
+    // Painted from the structure as it stands, so every patch owed is in it.
+    this.pendingPatches.delete(key);
+    return this.installChunk(key, canvas, sheets, false);
+  }
+
+  /** Folds one finished bake's cost into the estimate every budgeted caller paces itself by. */
+  private noteBakeCost(elapsedMs: number): void {
+    perfMonitor.count('chunkBakes', 1);
+    const estimate = this.chunkBakeEstimateMs;
+    this.chunkBakeEstimateMs =
+      estimate === null ? elapsedMs : estimate + (elapsedMs - estimate) * CHUNK_BAKE_COST_SMOOTHING;
+  }
+
   /**
-   * Bakes a chunk, or returns null when the bake threw. A failure holds off
-   * every bake for a while: the usual cause is the browser's canvas memory
-   * running out, and retrying every frame would only fail every frame. A stale
-   * chunk whose re-bake fails keeps its old picture.
+   * A failure holds off every bake for a while: the usual cause is the
+   * browser's canvas memory running out, and retrying every frame would only
+   * fail every frame.
+   */
+  private noteBakeFailure(error: unknown): void {
+    this.bakeRetryFrame = this.frameCounter + CHUNK_BAKE_RETRY_FRAMES;
+    noteTileArtFailure(error);
+  }
+
+  /**
+   * Bakes a chunk now, or returns null when the bake threw. A stale chunk
+   * whose re-bake fails keeps its old picture. A chunk with a bake in progress
+   * across frames finishes that one, which costs only what it has left.
    *
-   * Returns how long it took as well, and folds that into the cost estimate
-   * every budgeted caller paces itself by.
+   * Returns how long it took as well.
    */
   private timedBake(cx: number, cy: number): { chunk: CachedChunk | null; elapsedMs: number } {
     if (this.frameCounter < this.bakeRetryFrame) return { chunk: null, elapsedMs: 0 };
+    const job = this.job;
+    if (job?.key === this.chunkKey(cx, cy)) {
+      const startedAt = performance.now();
+      const chunk = this.advanceJob(job, Number.POSITIVE_INFINITY);
+      return { chunk, elapsedMs: performance.now() - startedAt };
+    }
     const perfStartedAt = perfMonitor.begin();
     const startedAt = performance.now();
     let chunk: CachedChunk | null = null;
     try {
       chunk = this.bakeChunk(cx, cy);
     } catch (error) {
-      this.bakeRetryFrame = this.frameCounter + CHUNK_BAKE_RETRY_FRAMES;
-      noteTileArtFailure(error);
+      this.noteBakeFailure(error);
     }
     const elapsedMs = performance.now() - startedAt;
     perfMonitor.end('chunkBake', perfStartedAt);
-    perfMonitor.count('chunkBakes', 1);
-    const estimate = this.chunkBakeEstimateMs;
-    this.chunkBakeEstimateMs =
-      estimate === null ? elapsedMs : estimate + (elapsedMs - estimate) * CHUNK_BAKE_COST_SMOOTHING;
+    this.noteBakeCost(elapsedMs);
     return { chunk, elapsedMs };
+  }
+
+  private startJob(cx: number, cy: number): ChunkBakeJob | null {
+    let canvas: CanvasSurface;
+    try {
+      canvas = this.allocChunkCanvas(cx, cy);
+    } catch (error) {
+      this.noteBakeFailure(error);
+      return null;
+    }
+    const key = this.chunkKey(cx, cy);
+    // The old picture stays on screen until the job finishes, and the job may
+    // yet be dropped, so a patch it owes is painted now rather than discarded.
+    // Its tiles are painted from the structure as it stands from here on, so
+    // only a change after this point is still owed.
+    const resident = this.chunks.get(key);
+    if (resident !== undefined) this.applyPendingPatch(key, resident);
+    else this.pendingPatches.delete(key);
+    const job: ChunkBakeJob = {
+      cx,
+      cy,
+      key,
+      canvas,
+      nextTile: 0,
+      sheets: new Set(),
+      spentMs: 0,
+      stale: false,
+    };
+    this.job = job;
+    return job;
+  }
+
+  /**
+   * Paints the job's next tiles until `deadlineMs`, at least one, and installs
+   * the chunk once its last tile is painted. Returns the installed chunk, or
+   * null while unfinished or when painting threw.
+   */
+  private advanceJob(job: ChunkBakeJob, deadlineMs: number): CachedChunk | null {
+    const perfStartedAt = perfMonitor.begin();
+    const startedAt = performance.now();
+    try {
+      job.nextTile = this.paintChunkTiles(
+        job.canvas,
+        job.cx,
+        job.cy,
+        job.nextTile,
+        deadlineMs,
+        job.sheets,
+      );
+    } catch (error) {
+      this.dropJob();
+      this.noteBakeFailure(error);
+      return null;
+    } finally {
+      job.spentMs += performance.now() - startedAt;
+      perfMonitor.end('chunkBake', perfStartedAt);
+    }
+    if (job.nextTile < this.chunkTileCount(job.cx, job.cy)) return null;
+    this.job = null;
+    this.noteBakeCost(job.spentMs);
+    const installed = this.installChunk(job.key, job.canvas, job.sheets, job.stale);
+    // A change made while the job ran is owed to the new picture, which a
+    // caller may draw straight away.
+    this.applyPendingPatch(job.key, installed);
+    return this.chunks.get(job.key) ?? null;
+  }
+
+  private dropJob(): void {
+    const job = this.job;
+    if (job === null) return;
+    this.job = null;
+    releaseSurface(job.canvas);
   }
 
   /** Whether another bake fits in what is left of `budgetMs`, by the measured cost of one. */
@@ -657,12 +834,15 @@ export class TileChunkCache {
    */
   markAllStale(): void {
     for (const chunk of this.chunks.values()) chunk.stale = true;
+    if (this.job !== null) this.job.stale = true;
   }
 
   /** Releases every baked chunk's pixels. The cache stays usable and re-bakes on demand. */
   dispose(): void {
     for (const chunk of this.chunks.values()) this.releaseChunk(chunk);
     this.chunks.clear();
+    this.pendingPatches.clear();
+    this.dropJob();
   }
 
   private releaseChunk(chunk: CachedChunk): void {
@@ -700,8 +880,12 @@ export class TileChunkCache {
     let warm = 0;
     for (let cy = cy0; cy <= cy1; cy++) {
       for (let cx = cx0; cx <= cx1; cx++) {
-        const cached = this.chunks.get(this.chunkKey(cx, cy));
+        const key = this.chunkKey(cx, cy);
+        const cached = this.chunks.get(key);
         if (cached !== undefined && !cached.stale) {
+          // A patch is a fraction of a bake, so it is never what holds a
+          // loading screen up.
+          spentMs += this.applyPendingPatch(key, cached);
           warm++;
           continue;
         }
@@ -761,27 +945,27 @@ export class TileChunkCache {
   }
 
   /**
-   * Repaints the baked pixels around tiles whose base art changed, in place.
+   * Queues a repaint of the baked pixels around tiles whose base art changed.
    * Required whenever a base tile changes at runtime — a chunk is baked once
    * and reused forever, so a smashed barrel would otherwise keep showing its
    * intact art on top of its own wreckage — and a few tiles cost far less than
    * re-baking the whole chunk.
    *
-   * A patch covering most of its chunk, or one past what is left of
-   * {@link CHUNK_REPAINT_BUDGET_MS} for this call, marks the chunk stale
-   * instead: its old picture is drawn until the stale budget re-bakes it, so a
-   * change across a whole map never costs a frame every resident chunk.
+   * Nothing is painted here. A visible chunk's patch is painted into its canvas
+   * just before the chunk is drawn, from the frame's bake budget; an off-screen
+   * one waits for spare budget, or for the chunk to scroll into view. A patch
+   * reproduces exactly what a bake lays down in its rectangle, so a patched
+   * chunk never needs re-baking.
    *
    * Each tile's patch is widened by {@link CHUNK_REPAINT_MARGIN_TILES}, since a
    * neighbour's painter may read the changed tile, and patched in every chunk
-   * it overlaps, so a change on a chunk border leaves no seam. A chunk that is
-   * not resident is left alone: it bakes fresh when it is next seen.
+   * it overlaps, so a change on a chunk border leaves no seam. A chunk neither
+   * resident nor being baked is left alone: it bakes fresh when it is next seen.
    */
   repaintTiles(tiles: ReadonlyArray<{ readonly x: number; readonly y: number }>): void {
     this.syncCanvasGeneration();
-    if (this.chunks.size === 0) return;
-    const patches = this.repaintPatches;
-    patches.clear();
+    if (this.chunks.size === 0 && this.job === null) return;
+    const patches = this.pendingPatches;
     const rows = this.structure.length;
     const cols = this.structure[0]?.length ?? rows;
     for (const tile of tiles) {
@@ -797,7 +981,13 @@ export class TileChunkCache {
       for (let cy = cy0; cy <= cy1; cy++) {
         for (let cx = cx0; cx <= cx1; cx++) {
           const key = this.chunkKey(cx, cy);
-          if (!this.chunks.has(key)) continue;
+          const resident = this.chunks.has(key);
+          // A re-bake in progress would finish without a patch the old
+          // picture is about to be given, so it starts over when next chosen.
+          if (resident && this.job?.key === key) this.dropJob();
+          // A first bake in progress may already have painted these tiles as
+          // they were, so it owes the patch as much as a finished chunk does.
+          if (!resident && this.job?.key !== key) continue;
           const patch = patches.get(key);
           if (patch === undefined) {
             patches.set(key, { cx, cy, tileX0, tileY0, tileX1, tileY1 });
@@ -810,28 +1000,26 @@ export class TileChunkCache {
         }
       }
     }
+  }
+
+  /**
+   * Paints the patch owed to a resident chunk, if any, and returns how long it
+   * took. A chunk whose patch throws is dropped, since a chunk half repainted
+   * is worse than none: it bakes again when next seen.
+   */
+  private applyPendingPatch(key: number, chunk: CachedChunk): number {
+    const patch = this.pendingPatches.get(key);
+    if (patch === undefined) return 0;
+    this.pendingPatches.delete(key);
     const startedAt = performance.now();
-    const chunkArea = CHUNK_TILES * CHUNK_TILES;
-    for (const [key, patch] of patches) {
-      const chunk = this.chunks.get(key);
-      if (chunk === undefined) continue;
-      const patchArea = (patch.tileX1 - patch.tileX0) * (patch.tileY1 - patch.tileY0);
-      const coversMostOfChunk = patchArea >= chunkArea * CHUNK_REPAINT_STALE_SHARE;
-      const overBudget = performance.now() - startedAt >= CHUNK_REPAINT_BUDGET_MS;
-      if (coversMostOfChunk || overBudget) {
-        chunk.stale = true;
-        continue;
-      }
-      try {
-        this.repaintPatch(chunk, patch);
-      } catch (error) {
-        // A chunk half repainted is worse than none: drop it and let it bake.
-        this.releaseChunk(chunk);
-        this.chunks.delete(key);
-        noteTileArtFailure(error);
-      }
+    try {
+      this.repaintPatch(chunk, patch);
+    } catch (error) {
+      this.releaseChunk(chunk);
+      this.chunks.delete(key);
+      noteTileArtFailure(error);
     }
-    patches.clear();
+    return performance.now() - startedAt;
   }
 
   /**
@@ -867,34 +1055,43 @@ export class TileChunkCache {
       cctx.rect(clipLeft, clipTop, clipWidth, clipHeight);
       cctx.clip();
       cctx.clearRect(clipLeft, clipTop, clipWidth, clipHeight);
-      for (let y = drawY0; y < drawY1; y++) {
-        for (let x = drawX0; x < drawX1; x++) {
-          const tile = structure[y][x];
-          const isDecoration = DECORATION_TYPES.has(tile.type);
-          drawTile(
-            cctx,
-            structure,
-            tile.type,
-            (x - bounds.tileX0) * ts,
-            (y - bounds.tileY0) * ts,
-            ts,
-            x,
-            y,
-            isDecoration,
-          );
+      const patchSheets = recordSheetLookups(() => {
+        for (let y = drawY0; y < drawY1; y++) {
+          for (let x = drawX0; x < drawX1; x++) {
+            const tile = structure[y][x];
+            const isDecoration = DECORATION_TYPES.has(tile.type);
+            drawTile(
+              cctx,
+              structure,
+              tile.type,
+              (x - bounds.tileX0) * ts,
+              (y - bounds.tileY0) * ts,
+              ts,
+              x,
+              y,
+              isDecoration,
+            );
+          }
         }
-      }
+      });
+      // The rest of the chunk still shows what it was baked from.
+      const addedSheets = patchSheets.filter((key) => !chunk.sheets.includes(key));
+      if (addedSheets.length > 0) chunk.sheets = [...chunk.sheets, ...addedSheets];
     } finally {
       cctx.restore();
     }
   }
 
   /**
-   * Draws the chunks under this view. Cold chunks bake first, then visible
-   * stale ones, then the ring just ahead of a moving camera, all from one
-   * per-frame time budget. `unbounded` lifts the budget, for a map's very first
-   * frame: every visible chunk is cold there, and throttling only smears the
-   * same work across frames the player spends waiting on a black screen anyway.
+   * Draws the chunks under this view, all from one per-frame time budget. A
+   * visible chunk owed a patch is patched before it is drawn, and a cold one
+   * bakes; the first bake always runs, so the cache never stalls. What is left
+   * goes to one bake spread across frames: a visible stale chunk's re-bake,
+   * whose old picture is drawn until it finishes, else the next cold chunk just
+   * ahead of a moving camera. Spare time after that patches off-screen chunks.
+   * `unbounded` lifts the budget, for a map's very first frame: every visible
+   * chunk is cold there, and throttling only smears the same work across
+   * frames the player spends waiting on a black screen anyway.
    */
   renderVisible(
     ctx: CanvasRenderingContext2D,
@@ -929,9 +1126,18 @@ export class TileChunkCache {
       for (let cx = cx0; cx <= cx1; cx++) {
         const dx = baseX + cx * chunkPx;
         const dy = baseY + cy * chunkPx;
-        const cached = this.chunks.get(this.chunkKey(cx, cy));
+        const key = this.chunkKey(cx, cy);
+        let cached = this.chunks.get(key);
+        // Never held to the budget: a patch is a fraction of a bake, there is
+        // at most a screenful of them, and a chunk drawn without its patch
+        // would show the change's old art.
+        if (cached !== undefined && this.pendingPatches.has(key)) {
+          spentMs += this.applyPendingPatch(key, cached);
+          cached = this.chunks.get(key);
+        }
         if (cached) {
           cached.lastUsedFrame = this.frameCounter;
+          touchEnvironmentSheets(cached.sheets);
           ctx.drawImage(cached.canvas, dx, dy);
           probeChunk = cached;
           probeChunkDrawnSinceProbe = true;
@@ -942,6 +1148,7 @@ export class TileChunkCache {
           bakedAny = true;
           const { chunk, elapsedMs } = this.timedBake(cx, cy);
           spentMs += elapsedMs;
+          if (!unbounded) perfMonitor.count('chunkColdBakes', 1);
           if (chunk !== null) {
             ctx.drawImage(chunk.canvas, dx, dy);
             continue;
@@ -959,21 +1166,35 @@ export class TileChunkCache {
     }
 
     perfMonitor.count('staleChunks', staleVisible.length / CHUNK_COORDS_PER_ENTRY);
+    const backgroundStartedAt = performance.now();
+    const deadlineMs = backgroundStartedAt + Math.max(0, budgetMs - spentMs);
+    const speculativeDeadlineMs = unbounded
+      ? deadlineMs
+      : Math.min(deadlineMs, backgroundStartedAt + CHUNK_SPECULATIVE_BUDGET_MS);
     let rebakedStale = false;
-    for (let index = 0; index < staleVisible.length; index += CHUNK_COORDS_PER_ENTRY) {
-      if (bakedAny && !this.bakeFits(spentMs, budgetMs)) break;
-      rebakedStale = true;
-      bakedAny = true;
-      const cx = staleVisible[index];
-      const cy = staleVisible[index + 1];
-      const { chunk, elapsedMs } = this.timedBake(cx, cy);
-      spentMs += elapsedMs;
-      if (chunk !== null) ctx.drawImage(chunk.canvas, baseX + cx * chunkPx, baseY + cy * chunkPx);
+    // The guaranteed bake: a frame that baked nothing cold always moves a
+    // stale re-bake on, so a screenful of stale chunks always drains.
+    let owedProgress = !bakedAny;
+    while (this.frameCounter >= this.bakeRetryFrame) {
+      if (!owedProgress && performance.now() >= deadlineMs) break;
+      const job = this.job ?? this.startNextJob(cameraX, cameraY, cx0, cy0, cx1, cy1);
+      if (job === null) break;
+      owedProgress = false;
+      const inView = job.cx >= cx0 && job.cx <= cx1 && job.cy >= cy0 && job.cy <= cy1;
+      if (inView) rebakedStale = true;
+      // A bake ahead of the camera that stands between a stale chunk on screen
+      // and its re-bake is finished at the full budget, so the stale one is
+      // never held to the speculative pace.
+      const blocksStaleRebake = staleVisible.length > 0;
+      const jobDeadlineMs = inView || blocksStaleRebake ? deadlineMs : speculativeDeadlineMs;
+      const chunk = this.advanceJob(job, jobDeadlineMs);
+      if (chunk === null) break;
+      if (inView) ctx.drawImage(chunk.canvas, baseX + job.cx * chunkPx, baseY + job.cy * chunkPx);
     }
 
     if (WATCHES_STALE_DRAIN) this.watchStaleDrain(staleVisible.length > 0, rebakedStale);
 
-    spentMs = this.prefetchAhead(cameraX, cameraY, cx0, cy0, cx1, cy1, spentMs, budgetMs);
+    this.patchOffscreen(speculativeDeadlineMs);
     this.previousCameraX = cameraX;
     this.previousCameraY = cameraY;
 
@@ -990,41 +1211,88 @@ export class TileChunkCache {
   }
 
   /**
-   * Spends what is left of the frame's budget baking the cold chunks just past
-   * the edge of the view the camera is moving toward. A chunk the budget could
-   * not bake is painted tile by tile, which costs as much as baking it, on
-   * every frame until it bakes — so the cheapest cold chunk is one baked before
-   * it ever scrolls in. Never forced: a frame with no time left skips it.
+   * Starts the next bake spread across frames: a visible stale chunk's first,
+   * since its old picture is on screen, then the next cold chunk ahead of the
+   * camera. Null when there is neither.
    */
-  private prefetchAhead(
+  private startNextJob(
     cameraX: number,
     cameraY: number,
     cx0: number,
     cy0: number,
     cx1: number,
     cy1: number,
-    spentMs: number,
-    budgetMs: number,
+  ): ChunkBakeJob | null {
+    const staleVisible = this.staleVisible;
+    for (let index = 0; index < staleVisible.length; index += CHUNK_COORDS_PER_ENTRY) {
+      const cx = staleVisible[index];
+      const cy = staleVisible[index + 1];
+      if (this.chunks.get(this.chunkKey(cx, cy))?.stale === true) return this.startJob(cx, cy);
+    }
+    const ahead = this.nextChunkAhead(cameraX, cameraY, cx0, cy0, cx1, cy1);
+    if (ahead === NO_CHUNK) return null;
+    return this.startJob(ahead % this.chunksX, Math.floor(ahead / this.chunksX));
+  }
+
+  /**
+   * The key of the first cold chunk just past the edge of the view the camera
+   * is moving toward, or {@link NO_CHUNK}. A chunk that scrolls in cold is
+   * baked whole on the frame it appears, or painted tile by tile — which costs
+   * as much as baking it — on every frame until it bakes, so the cheapest cold
+   * chunk is one baked before it ever scrolls in. Moving diagonally, the
+   * corner chunk between the leading column and row is included.
+   */
+  private nextChunkAhead(
+    cameraX: number,
+    cameraY: number,
+    cx0: number,
+    cy0: number,
+    cx1: number,
+    cy1: number,
   ): number {
     const movedX = cameraX - (this.previousCameraX ?? cameraX);
     const movedY = cameraY - (this.previousCameraY ?? cameraY);
-    let spent = spentMs;
-    const prefetch = (cx: number, cy: number): boolean => {
-      if (cx < 0 || cy < 0 || cx >= this.chunksX || cy >= this.chunksY) return true;
-      if (this.chunks.has(this.chunkKey(cx, cy))) return true;
-      if (!this.bakeFits(spent, budgetMs)) return false;
-      spent += this.timedBake(cx, cy).elapsedMs;
-      return true;
-    };
+    const rowFrom = movedY < 0 ? cy0 - 1 : cy0;
+    const rowTo = movedY > 0 ? cy1 + 1 : cy1;
     if (movedX !== 0) {
       const column = movedX > 0 ? cx1 + 1 : cx0 - 1;
-      for (let cy = cy0; cy <= cy1; cy++) if (!prefetch(column, cy)) return spent;
+      for (let cy = rowFrom; cy <= rowTo; cy++) {
+        const key = this.coldChunkKey(column, cy);
+        if (key !== NO_CHUNK) return key;
+      }
     }
     if (movedY !== 0) {
       const row = movedY > 0 ? cy1 + 1 : cy0 - 1;
-      for (let cx = cx0; cx <= cx1; cx++) if (!prefetch(cx, row)) return spent;
+      for (let cx = cx0; cx <= cx1; cx++) {
+        const key = this.coldChunkKey(cx, row);
+        if (key !== NO_CHUNK) return key;
+      }
     }
-    return spent;
+    return NO_CHUNK;
+  }
+
+  /** The chunk's key when it is on the map and not baked, else {@link NO_CHUNK}. */
+  private coldChunkKey(cx: number, cy: number): number {
+    if (cx < 0 || cy < 0 || cx >= this.chunksX || cy >= this.chunksY) return NO_CHUNK;
+    const key = this.chunkKey(cx, cy);
+    return this.chunks.has(key) ? NO_CHUNK : key;
+  }
+
+  /**
+   * Paints the patches owed to chunks off screen until `deadlineMs`, so a
+   * chunk scrolling back into view has nothing left to patch. A patch owed to
+   * a chunk no longer resident is dropped: it bakes fresh when next seen.
+   */
+  private patchOffscreen(deadlineMs: number): void {
+    for (const [key] of this.pendingPatches) {
+      if (performance.now() >= deadlineMs) return;
+      const chunk = this.chunks.get(key);
+      if (chunk !== undefined) {
+        this.applyPendingPatch(key, chunk);
+        continue;
+      }
+      if (this.job?.key !== key) this.pendingPatches.delete(key);
+    }
   }
 
   /**
@@ -1051,6 +1319,8 @@ export class TileChunkCache {
       const evicted = this.chunks.get(oldestKey);
       if (evicted !== undefined) this.releaseChunk(evicted);
       this.chunks.delete(oldestKey);
+      // A bake in progress for it still owes the patches made since it began.
+      if (this.job?.key !== oldestKey) this.pendingPatches.delete(oldestKey);
     }
   }
 }
@@ -1101,6 +1371,8 @@ interface OverlayCacheEntry {
   type: number;
   /** The facade sheet a sprite building's entry was drawn from; undefined for every other type. */
   spriteKey: string | undefined;
+  /** Environment sheets its pixels came from, kept drawn while the entry is. */
+  sheets: readonly string[];
   /** Rendered before a sheet it may draw from landed; served until a frame's allowance redraws it. */
   stale: boolean;
   /** The overlay cache frame this entry was last drawn on, for eviction. */
@@ -1282,6 +1554,7 @@ export class OverlayTileCache {
     // A shared entry is keyed by its picture, so its type always matches.
     if (hit !== undefined && (sharedKey !== null || hit.type === type)) {
       hit.lastUsedFrame = this.frame;
+      touchEnvironmentSheets(hit.sheets);
       if (!hit.stale) return hit;
       const allowanceSpent = this.staleRedrawsThisFrame >= OVERLAY_REDRAWS_PER_FRAME;
       if (capStaleRedraws && allowanceSpent) return hit;
@@ -1334,7 +1607,19 @@ export class OverlayTileCache {
     const perfStartedAt = perfMonitor.begin();
     const ctx = surfaceContext(entry.canvas);
     ctx.clearRect(0, 0, entry.canvas.width, entry.canvas.height);
-    drawTile(ctx, this.structure, type, entry.leftOverhang, entry.overhead, this.ts, tx, ty, false);
+    entry.sheets = recordSheetLookups(() =>
+      drawTile(
+        ctx,
+        this.structure,
+        type,
+        entry.leftOverhang,
+        entry.overhead,
+        this.ts,
+        tx,
+        ty,
+        false,
+      ),
+    );
     entry.stale = false;
     perfMonitor.end('overlayBake', perfStartedAt);
     perfMonitor.count('overlayRedraws', 1);
@@ -1474,10 +1759,13 @@ export class OverlayTileCache {
   private renderEntry(type: number, tx: number, ty: number): OverlayCacheEntry {
     const perfStartedAt = perfMonitor.begin();
     const { overhead, leftOverhang, width, height } = this.entryFrame(type, tx, ty);
-    const canvas = allocCanvas(width, height);
+    const canvas = allocCanvas('tileOverlays', width, height);
+    let sheets: readonly string[];
     try {
       const ctx = surfaceContext(canvas);
-      drawTile(ctx, this.structure, type, leftOverhang, overhead, this.ts, tx, ty, false);
+      sheets = recordSheetLookups(() =>
+        drawTile(ctx, this.structure, type, leftOverhang, overhead, this.ts, tx, ty, false),
+      );
     } catch (error) {
       releaseSurface(canvas);
       throw error;
@@ -1490,6 +1778,7 @@ export class OverlayTileCache {
       leftOverhang,
       type,
       spriteKey: type === SPRITE_BUILDING ? this.structure[ty][tx].spriteKey : undefined,
+      sheets,
       stale: false,
       lastUsedFrame: this.frame,
     };

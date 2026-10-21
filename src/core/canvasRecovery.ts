@@ -26,6 +26,7 @@ import {
   CanvasContextUnavailableError,
   surfaceContext,
   type CanvasSurface,
+  releaseSurface,
 } from './canvasSurface';
 
 /**
@@ -143,14 +144,13 @@ export function checkCanvasesSoon(): void {
 
 function releaseSentinel(): void {
   if (sentinel === null) return;
-  sentinel.width = 0;
-  sentinel.height = 0;
+  releaseSurface(sentinel);
   sentinel = null;
 }
 
 /** A fresh sentinel, or null when the browser will not give a context for one. */
 function paintSentinel(): CanvasSurface | null {
-  const surface = allocCanvas(SENTINEL_SIZE_PX, SENTINEL_SIZE_PX);
+  const surface = allocCanvas('misc', SENTINEL_SIZE_PX, SENTINEL_SIZE_PX);
   try {
     const ctx = surfaceContext(surface);
     ctx.fillStyle = SENTINEL_FILL;
@@ -162,8 +162,7 @@ function paintSentinel(): CanvasSurface | null {
     }
     return surface;
   } catch {
-    surface.width = 0;
-    surface.height = 0;
+    releaseSurface(surface);
     return null;
   }
 }

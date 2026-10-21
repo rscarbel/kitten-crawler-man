@@ -61,7 +61,12 @@ import {
   type SpriteStateDef,
   type TileOffset,
 } from '../../core/SpriteLoader';
-import { allocCanvas, surfaceContext, type CanvasSurface } from '../../core/canvasSurface';
+import {
+  allocCanvas,
+  surfaceContext,
+  type CanvasSurface,
+  releaseSurface,
+} from '../../core/canvasSurface';
 import { onCanvasRecovery } from '../../core/canvasRecovery';
 import { isFaceMountedSign } from '../dungeon/wallShape';
 import { inferFloorType } from './helpers';
@@ -411,11 +416,6 @@ class SurfaceCache {
   }
 }
 
-function releaseSurface(surface: CanvasSurface): void {
-  surface.width = 0;
-  surface.height = 0;
-}
-
 /**
  * Caps chosen so a single chunk bake never evicts anything it still needs — a
  * 16x16 chunk touches at most 256 tiles x 4 quadrants x a handful of layers —
@@ -461,7 +461,7 @@ let maskAlphaChannelRead = false;
 function maskAlpha(mask: MaskSheet): Uint8ClampedArray | undefined {
   if (maskAlphaChannelRead) return maskAlphaChannel;
   maskAlphaChannelRead = true;
-  const surface = allocCanvas(mask.def.img.width, mask.def.img.height);
+  const surface = allocCanvas('groundTileParts', mask.def.img.width, mask.def.img.height);
   const ctx = surfaceContext(surface);
   ctx.drawImage(mask.def.img, 0, 0);
   try {
@@ -617,7 +617,7 @@ function maskedOverlayQuarter(
   const width = quarterExtent(ts, tileQuarterX);
   const height = quarterExtent(ts, tileQuarterY);
 
-  const surface = allocCanvas(width, height);
+  const surface = allocCanvas('groundTileParts', width, height);
   const surfaceCtx = surfaceContext(surface);
 
   const { def, state, frame } = resolved;
@@ -679,7 +679,7 @@ function weightStencil(
   if (cached !== undefined) return cached;
 
   const alpha = layerCoverage(channel, mask, maskFrames, quadrant, width, height);
-  const stencil = allocCanvas(width, height);
+  const stencil = allocCanvas('groundTileParts', width, height);
   const stencilCtx = surfaceContext(stencil);
   const image = stencilCtx.createImageData(width, height);
   const ALPHA_MAX = 255;
@@ -698,7 +698,9 @@ let weighedQuarter: CanvasSurface | undefined;
 function weighedQuarterSurface(width: number, height: number): CanvasSurface {
   const existing = weighedQuarter;
   if (existing?.width === width && existing.height === height) return existing;
-  const surface = allocCanvas(width, height);
+  const surface = allocCanvas('groundTileParts', width, height);
+  // Every caller draws the quarter it was handed before asking for the next one.
+  if (existing !== undefined) releaseSurface(existing);
   weighedQuarter = surface;
   return surface;
 }
@@ -1157,8 +1159,7 @@ function toneFields(): ReadonlyArray<ToneField> {
     seed: (field.seed + term) >>> 0,
   }));
   for (const surface of noiseFields.values()) {
-    surface.width = 0;
-    surface.height = 0;
+    releaseSurface(surface);
   }
   noiseFields.clear();
   toneAlphaCache.clear();
@@ -1318,7 +1319,7 @@ const noiseFields = new Map<string, CanvasSurface>();
  */
 function buildNoiseField(field: ToneField, cell: number): CanvasSurface {
   const span = field.periodTiles + NOISE_MARGIN_SAMPLES * 2;
-  const samples = allocCanvas(span, span);
+  const samples = allocCanvas('groundTileParts', span, span);
   const samplesCtx = surfaceContext(samples);
   const image = samplesCtx.createImageData(span, span);
   const alphas = toneAlphas(field);
@@ -1327,7 +1328,11 @@ function buildNoiseField(field: ToneField, cell: number): CanvasSurface {
   }
   samplesCtx.putImageData(image, 0, 0);
 
-  const surface = allocCanvas(field.periodTiles * cell, field.periodTiles * cell);
+  const surface = allocCanvas(
+    'groundTileParts',
+    field.periodTiles * cell,
+    field.periodTiles * cell,
+  );
   const surfaceCtx = surfaceContext(surface);
   surfaceCtx.imageSmoothingEnabled = true;
   surfaceCtx.imageSmoothingQuality = 'high';
@@ -1660,7 +1665,7 @@ function occlusionBand(
   const width = runsHorizontally ? ts : depth;
   const height = runsHorizontally ? depth : ts;
 
-  const surface = allocCanvas(width, height);
+  const surface = allocCanvas('groundTileParts', width, height);
   const bandCtx = surfaceContext(surface);
 
   // Dark at the occluder's edge, transparent at the far edge of the band.

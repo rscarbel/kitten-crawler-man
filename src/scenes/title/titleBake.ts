@@ -9,7 +9,13 @@
  * the generation, and art lost to a purge is painted again on the next frame.
  */
 
-import { allocCanvas, surfaceContext, type CanvasSurface } from '../../core/canvasSurface';
+import {
+  allocCanvas,
+  surfaceContext,
+  type CanvasSurface,
+  releaseSurface,
+  resizeSurface,
+} from '../../core/canvasSurface';
 import { canvasGeneration } from '../../core/canvasRecovery';
 import type { TitleStage } from './titleStage';
 
@@ -87,8 +93,7 @@ export class TitleBakedPlane {
 
   dispose(): void {
     if (this.canvas !== null) {
-      this.canvas.width = 0;
-      this.canvas.height = 0;
+      releaseSurface(this.canvas);
     }
     this.canvas = null;
     this.bakedKey = '';
@@ -116,9 +121,8 @@ export class TitleBakedPlane {
     const margin = this.marginPx;
     const pixelWidth = Math.ceil((stage.width + margin * 2) * ratio);
     const pixelHeight = Math.ceil((stage.height + margin * 2) * ratio);
-    const canvas = existing ?? allocCanvas(pixelWidth, pixelHeight);
-    canvas.width = pixelWidth;
-    canvas.height = pixelHeight;
+    const canvas = existing ?? allocCanvas('title', pixelWidth, pixelHeight);
+    resizeSurface(canvas, pixelWidth, pixelHeight);
     const bakeCtx = surfaceContext(canvas);
     bakeCtx.setTransform(ratio, 0, 0, ratio, margin * ratio, margin * ratio);
     this.paint(bakeCtx, stage, ratio);

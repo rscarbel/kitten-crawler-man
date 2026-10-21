@@ -21,7 +21,12 @@
  */
 
 import type { AudioManager } from '../../audio/AudioManager';
-import { allocCanvas, surfaceContext, type CanvasSurface } from '../../core/canvasSurface';
+import {
+  allocCanvas,
+  releaseSurface,
+  surfaceContext,
+  type CanvasSurface,
+} from '../../core/canvasSurface';
 import { onCanvasRecovery } from '../../core/canvasRecovery';
 import { TILE_SIZE } from '../../core/constants';
 import { MILLISECONDS_PER_SECOND } from '../../core/SpriteRenderer';
@@ -162,6 +167,7 @@ function strikerFrame(): CircusFrame {
 
 function paintedFrame(paint: (ctx: Ctx, frame: CircusFrame) => void): CanvasSurface {
   const surface = allocCanvas(
+    'circus',
     FRAME_WIDTH_TILES * CIRCUS_TILE_SCALE,
     FRAME_HEIGHT_TILES * CIRCUS_TILE_SCALE,
   );
@@ -177,6 +183,10 @@ interface LiveParts {
 let liveParts: LiveParts | null = null;
 // Painted once and shared by every striker; a purge would leave them blank.
 onCanvasRecovery(() => {
+  if (liveParts !== null) {
+    releaseSurface(liveParts.mallet);
+    releaseSurface(liveParts.puck);
+  }
   liveParts = null;
 });
 

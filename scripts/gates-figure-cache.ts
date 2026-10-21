@@ -11,12 +11,12 @@
  */
 
 import { EMPTY_ALPHA_CUTOFF } from '../src/core/spriteFrames.js';
+import { BYTES_PER_MEGABYTE } from '../src/core/canvasSurface.js';
 import {
-  BYTES_PER_MEGABYTE,
   getFigureCacheStats,
   setFigureCacheStatsRecording,
 } from '../src/sprites/figure/figureCacheStats.js';
-import { figureStates, type FigureDef } from '../src/sprites/figure/figureDef.js';
+import { drawnFigureRow, figureStates, type FigureDef } from '../src/sprites/figure/figureDef.js';
 import {
   beginFigureFrame,
   boostPrewarmBudget,
@@ -27,13 +27,15 @@ import {
   figurePrewarmGiveUps,
   figurePrewarmRequests,
   figureResidentBytes,
+  figureRowInkPending,
+  figureRowInkTop,
   flushFigureFrameCache,
   markFigureStateDrawn,
   pinFigureState,
   prewarmFigureState,
   unpinFigureState,
   CACHE_BUDGET_MEGABYTES,
-  CACHE_BYTE_BUDGET,
+  figureCacheByteBudget,
   FIGURE_BYTE_BUDGET,
   FRAME_BAKE_BUDGET_MS,
   IDLE_FRAMES_BEFORE_RELEASE,
@@ -865,7 +867,7 @@ const REFUSED_URGENT_SETTLE_FRAMES = 3;
 {
   reset();
   const bytesPerBigCell = BIG_CELL_SIZE * BIG_CELL_SIZE * BYTES_PER_PIXEL;
-  const cellsToFillCache = Math.ceil(CACHE_BYTE_BUDGET / bytesPerBigCell) + 1;
+  const cellsToFillCache = Math.ceil(figureCacheByteBudget() / bytesPerBigCell) + 1;
   const hog: FigureDef = {
     ...makeFigure('yield-hog', 0, BIG_CELL_SIZE, cellsToFillCache),
     budgetMegabytes: CACHE_BUDGET_MEGABYTES * 2,
@@ -1287,21 +1289,35 @@ const TRANSIT_TILE = 3;
   );
 }
 
-// `drawFigureCachedApprox` never bakes: a stand-in cell when one exists, a
-// direct paint only when the figure has nothing baked at all.
+// `drawFigureCachedApprox` draws a stand-in cell when one exists, and bakes
+// only for a figure with nothing baked at all, painting directly when the
+// frame's allowance refuses that bake.
 {
   reset();
   const figure = makeFigure('approx-fig', CHEAP_PAINT_MS);
 
-  // Nothing baked yet for this figure at all: no stand-in exists, so this is
-  // the one case that still falls back to a direct paint.
+  // Nothing baked yet for this figure at all: no stand-in exists, and a direct
+  // paint would pay a bake's paint every frame until the queue got to it.
   drawFigureCachedApprox(ctx, figure, 'walk', 0, 0, 0, TILE_SIZE);
   const cold = getFigureCacheStats();
   check(
-    'an approximate draw with nothing baked yet falls back to a direct paint',
-    cold.directDraws === 1 && cold.bakes === 0 && cold.approxDraws === 0,
-    `${cold.directDraws} direct draw(s), ${cold.bakes} bake(s), ${cold.approxDraws} approximate ` +
+    'an approximate draw with nothing baked yet bakes the exact cell',
+    cold.bakes === 1 && cold.directDraws === 0 && cold.approxDraws === 0,
+    `${cold.bakes} bake(s), ${cold.directDraws} direct draw(s), ${cold.approxDraws} approximate ` +
       `draw(s) for a figure with nothing resident`,
+  );
+  releaseFigure(figure);
+
+  beginFigureFrame();
+  const allowanceSpender = makeFigure('approx-allowance-spender', SLOW_PAINT_MS);
+  drawFigureCached(ctx, allowanceSpender, 'walk', 0, 0, 0, TILE_SIZE);
+  drawFigureCachedApprox(ctx, figure, 'walk', 0, 0, 0, TILE_SIZE);
+  const refused = getFigureCacheStats();
+  check(
+    'an approximate draw with nothing baked and no allowance left paints directly',
+    refused.directDraws === 1 && refused.directDrawCauses.frameAllowance === 1,
+    `${refused.directDraws} direct draw(s), ${refused.directDrawCauses.frameAllowance} of them ` +
+      'put down to the spent allowance',
   );
 
   // A direct paint pays the painter's full price, so it asks for its row to be
@@ -1313,9 +1329,10 @@ const TRANSIT_TILE = 3;
   );
   // Dropped again, so the next frames bake nothing but what this check places.
   releaseFigure(figure);
+  releaseFigure(allowanceSpender);
 
-  // One real cell exists now (baked the ordinary way, never through the
-  // approximate path, which must never itself bake).
+  // One real cell, baked by an exact draw, so the approximate draws below
+  // have a stand-in to borrow.
   beginFigureFrame();
   drawFigureCached(ctx, figure, 'walk', 0, 0, 0, TILE_SIZE);
   beginFigureFrame();
@@ -1399,6 +1416,31 @@ const BOOST_TEST_BUDGET_CELL_MULTIPLE = 3;
     afterBoost.prewarmBakes < boosted.prewarmBakes,
     `the frame after the boost expired baked ${afterBoost.prewarmBakes} cell(s), the boosted ` +
       `frame baked ${boosted.prewarmBakes}`,
+  );
+}
+
+// A row a figure on screen is waiting on is baked ahead of a backlog of ink
+// measurements. Each measurement paints a frame, so a crowd's worth of them
+// would otherwise take the whole prewarm budget for as long as the backlog
+// lasts, and the figure would be painted live on every one of those frames.
+{
+  reset();
+  const inked = makeFigure('ink-backlog', PREWARM_BAKE_BUDGET_MS);
+  figureRowInkTop(drawnFigureRow(inked, 'walk'), 0, TILE_SIZE);
+  figureRowInkTop(drawnFigureRow(inked, 'attack'), 0, TILE_SIZE);
+  const allowanceSpender = makeFigure('ink-allowance-spender', SLOW_PAINT_MS);
+  const waiting = makeFigure('drawn-behind-ink', CHEAP_PAINT_MS);
+  beginFigureFrame();
+  drawFigureCached(ctx, allowanceSpender, 'walk', 0, 0, 0, TILE_SIZE);
+  drawFigureCached(ctx, waiting, 'walk', 0, 0, 0, TILE_SIZE);
+  const missed = getFigureCacheStats();
+  beginFigureFrame();
+  const next = getFigureCacheStats();
+  check(
+    'a row drawn directly is baked ahead of queued ink measurements',
+    missed.directDraws === 1 && next.prewarmBakes >= 1 && figureRowInkPending() > 0,
+    `the draw painted ${missed.directDraws} cell(s) directly; the next frame baked ` +
+      `${next.prewarmBakes} cell(s) with ${figureRowInkPending()} row(s) of ink still queued`,
   );
 }
 

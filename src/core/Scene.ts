@@ -5,6 +5,7 @@ import type { UiRoot } from '../ui/core/UiRoot';
 import { rebindCaptureArmed } from '../ui/screens/pause/rebindCapture';
 import { beginFigureFrame } from '../sprites/figure/figureFrameCache';
 import { beginEnvironmentArtFrame } from '../map/environmentArtCache';
+import { beginRenderFrame } from './renderFrameClock';
 import { beginCanvasRecoveryFrame, watchForCanvasLoss } from './canvasRecovery';
 import { closeAboveDarkness } from '../systems/lighting/aboveDarkness';
 import { perfMonitor } from './PerfMonitor';
@@ -369,6 +370,11 @@ export class SceneManager {
     this.frameOverlay = overlay;
   }
 
+  /** Whether a surface on the current scene halts its world: a menu, a dialog, a loading screen. */
+  get worldHalted(): boolean {
+    return this.current?.ui.worldHalted() ?? false;
+  }
+
   /**
    * One rAF tick, wrapped so nothing thrown inside it can stop the loop.
    *
@@ -461,6 +467,7 @@ export class SceneManager {
     // without going through whichever pipeline owned the call would silently
     // freeze that clock, turning the cache off. This is the one call site every
     // scene passes through.
+    beginRenderFrame();
     beginFigureFrame();
     beginEnvironmentArtFrame();
     closeAboveDarkness();
@@ -474,7 +481,7 @@ export class SceneManager {
       throw error;
     } finally {
       perfMonitor.end('render', renderStartedAt);
-      perfMonitor.endFrame();
+      perfMonitor.endFrame(now);
     }
 
     // After the timers close, so the overlay reports the frame it is drawn on

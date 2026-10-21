@@ -213,6 +213,9 @@ export const level2: LevelDef = {
     'boss_grotesque_spider',
     'boss_colosseum',
   ],
+  // The prison under this floor paints its own ground (`PrisonGround`) from
+  // this floor's tileset.
+  interiorSpriteGroups: [],
   roomMobs: [
     {
       type: 'troglodyte',

@@ -22,6 +22,8 @@ export const PERF_GAUGES = [
   'separationMobs',
   'separationChecks',
   'chunkBakes',
+  /** Chunks baked on the frame they scrolled into view, the bake prefetch exists to avoid. */
+  'chunkColdBakes',
   'chunkDirectDraws',
   'chunkRepaints',
   'staleChunks',
@@ -33,6 +35,18 @@ export type PerfGauge = (typeof PERF_GAUGES)[number];
 
 type TimerTotals = Record<PerfTimer, number>;
 type GaugeTotals = Record<PerfGauge, number>;
+
+/**
+ * Handed each rendered frame's own totals as it closes, before they are folded
+ * into the reporting window. `frameStartedAt` is the frame's rAF timestamp.
+ * The totals are live and cleared straight after the call, so a listener must
+ * copy what it keeps.
+ */
+export type PerfFrameListener = (
+  frameStartedAt: number,
+  timers: Readonly<TimerTotals>,
+  gauges: Readonly<GaugeTotals>,
+) => void;
 
 function zeroTimers(): TimerTotals {
   return {
@@ -52,6 +66,7 @@ function zeroGauges(): GaugeTotals {
     separationMobs: 0,
     separationChecks: 0,
     chunkBakes: 0,
+    chunkColdBakes: 0,
     chunkDirectDraws: 0,
     chunkRepaints: 0,
     staleChunks: 0,
@@ -84,6 +99,7 @@ class PerfMonitor {
   private windowFrames = 0;
   private windowStartedAt = 0;
   private reportedFps = 0;
+  private frameListener: PerfFrameListener | null = null;
 
   get enabled(): boolean {
     return this.on;
@@ -113,12 +129,18 @@ class PerfMonitor {
     this.frameGauges[gauge] += amount;
   }
 
+  /** At most one listener; `null` removes it. */
+  setFrameListener(listener: PerfFrameListener | null): void {
+    this.frameListener = listener;
+  }
+
   /**
    * Closes the frame, folding its totals into the reporting window and, once
    * the window is full, replacing the reported averages with it.
    */
-  endFrame(): void {
+  endFrame(frameStartedAt: number): void {
     if (!this.on) return;
+    this.frameListener?.(frameStartedAt, this.frameTimers, this.frameGauges);
     for (const timer of PERF_TIMERS) {
       const frameMs = this.frameTimers[timer];
       this.windowTimers[timer] += frameMs;

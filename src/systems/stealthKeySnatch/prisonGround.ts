@@ -16,7 +16,12 @@
  */
 
 import { TILE_SIZE } from '../../core/constants';
-import { allocCanvas, surfaceContext, type CanvasSurface } from '../../core/canvasSurface';
+import {
+  allocCanvas,
+  surfaceContext,
+  type CanvasSurface,
+  releaseSurface,
+} from '../../core/canvasSurface';
 import { canvasGeneration } from '../../core/canvasRecovery';
 import type { InteriorFigure } from '../../core/InteriorFigure';
 import type { SpriteKey } from '../../core/SpriteLoader';
@@ -209,7 +214,7 @@ class BakedFigure implements InteriorFigure {
 
   private surface(): CanvasSurface {
     if (this.canvas !== null) return this.canvas;
-    const canvas = allocCanvas(Math.ceil(this.width), Math.ceil(this.height));
+    const canvas = allocCanvas('prisonGround', Math.ceil(this.width), Math.ceil(this.height));
     this.paint(surfaceContext(canvas));
     this.canvas = canvas;
     return canvas;
@@ -222,8 +227,7 @@ class BakedFigure implements InteriorFigure {
   /** Gives back the baked pixels; the next draw bakes them again. */
   release(): void {
     if (this.canvas === null) return;
-    this.canvas.width = 0;
-    this.canvas.height = 0;
+    releaseSurface(this.canvas);
     this.canvas = null;
   }
 
@@ -294,13 +298,11 @@ export class PrisonGround {
     if (this.generation === current) return;
     this.generation = current;
     if (this.grime !== null) {
-      this.grime.width = 0;
-      this.grime.height = 0;
+      releaseSurface(this.grime);
       this.grime = null;
     }
     for (const tile of this.strawTiles.values()) {
-      tile.width = 0;
-      tile.height = 0;
+      releaseSurface(tile);
     }
     this.strawTiles.clear();
     for (const figure of this.figures) figure.release();
@@ -375,7 +377,7 @@ export class PrisonGround {
   private grimeSurface(): CanvasSurface {
     if (this.grime !== null) return this.grime;
     const { grid } = this.parsed;
-    const canvas = allocCanvas(grid.width, grid.height);
+    const canvas = allocCanvas('prisonGround', grid.width, grid.height);
     const ctx = surfaceContext(canvas);
     for (let y = 0; y < grid.height; y++) {
       for (let x = 0; x < grid.width; x++) {
@@ -399,7 +401,7 @@ export class PrisonGround {
   private strawTile(variant: number): CanvasSurface {
     const cached = this.strawTiles.get(variant);
     if (cached !== undefined) return cached;
-    const canvas = allocCanvas(TILE_SIZE, TILE_SIZE);
+    const canvas = allocCanvas('prisonGround', TILE_SIZE, TILE_SIZE);
     const ctx = surfaceContext(canvas);
     const speck = TILE_SIZE * STRAW_SPECK_LENGTH_SHARE;
     ctx.fillStyle = `rgba(${STRAW_RGB},${STRAW_ALPHA})`;

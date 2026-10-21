@@ -1,5 +1,8 @@
-import type { AssetGroup } from '../core/assetGroups';
+import { ASSET_GROUPS, type AssetGroup } from '../core/assetGroups';
 import type { SpriteKey } from '../core/SpriteLoader';
+import { level3 } from '../levels/level3';
+import type { LevelDef } from '../levels/types';
+import { groundSheetKeysAmong } from '../map/ground/runtimeGroundSheets';
 import type { InteriorVariant } from '../map/GameMap';
 import type { StealthKeySnatchVisit } from '../systems/stealthKeySnatch/stealthKeySnatchVisit';
 
@@ -16,7 +19,11 @@ export interface InteriorFloorContext {
   readonly floorNumber: number;
   /** The ground sheets the room's floor and walls are painted from. */
   readonly groundSheets: readonly SpriteKey[];
-  /** The environment groups the room's furniture is drawn from. */
+  /**
+   * The environment groups the room's furniture is drawn from, the floor's
+   * indoor-only groups among them. Requested before the room's loading card
+   * goes up, so nothing in them is drawn unpainted.
+   */
   readonly spriteGroups: readonly AssetGroup[];
   /** How far the active crawler can see indoors, for the off-screen markers. */
   readonly sightRadiusPx: number;
@@ -48,14 +55,29 @@ export interface InteriorFloorContext {
   readonly aiFloorKey?: string;
 }
 
-/** Every enterable building in town stands on the level-3 overworld. */
-const OVERWORLD_FLOOR_NUMBER = 3;
+/**
+ * What a building's room is painted from: `outdoorGroups`, art of the floor
+ * outside that the room shares (already held, so asking again costs nothing),
+ * and the floor's indoor-only groups, which nothing but a room asks for.
+ */
+export function interiorArt(
+  outdoorGroups: readonly AssetGroup[],
+  floor: Pick<LevelDef, 'interiorSpriteGroups'>,
+): Pick<InteriorFloorContext, 'groundSheets' | 'spriteGroups'> {
+  const spriteGroups = [...outdoorGroups, ...floor.interiorSpriteGroups];
+  return {
+    groundSheets: groundSheetKeysAmong(spriteGroups.flatMap((group) => ASSET_GROUPS[group])),
+    spriteGroups,
+  };
+}
 
-/** The town's buildings: lit end to end, so only the viewport edge hides anything. */
+/**
+ * The town's buildings: lit end to end, so only the viewport edge hides anything.
+ * Their counters and notice boards are the street's own `town` sheets.
+ */
 export const TOWN_INTERIOR_FLOOR: InteriorFloorContext = {
-  floorNumber: OVERWORLD_FLOOR_NUMBER,
-  groundSheets: ['ground_interior'],
-  spriteGroups: ['town'],
+  floorNumber: level3.floorNumber,
+  ...interiorArt(['town'], level3),
   sightRadiusPx: Number.POSITIVE_INFINITY,
   ownsMusic: true,
   heldLevelTimerFrames: null,

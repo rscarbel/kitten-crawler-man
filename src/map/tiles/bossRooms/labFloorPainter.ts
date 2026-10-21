@@ -1,4 +1,9 @@
-import { allocCanvas, surfaceContext, type CanvasSurface } from '../../../core/canvasSurface';
+import {
+  allocCanvas,
+  releaseSurface,
+  surfaceContext,
+  type CanvasSurface,
+} from '../../../core/canvasSurface';
 import { tileCoordKey } from '../../tileIndex';
 import { LAB_WEB, positionHash, type TileContent } from '../../tileTypes';
 import { drawWallShadow } from '../helpers';
@@ -544,14 +549,17 @@ function drawHazardBorders(
 /** The roundel, painted once per tile size and blitted into each tile it covers. */
 const roundelCache = new Map<number, CanvasSurface>();
 // Baked once and kept; a purge would leave it blank for good.
-onCanvasRecovery(() => roundelCache.clear());
+onCanvasRecovery(() => {
+  for (const surface of roundelCache.values()) releaseSurface(surface);
+  roundelCache.clear();
+});
 
 function roundelSurface(ts: number): CanvasSurface {
   const cached = roundelCache.get(ts);
   if (cached !== undefined) return cached;
   const radius = ROUNDEL_RADIUS_TILES * ts;
   const size = Math.ceil(radius * 2);
-  const surface = allocCanvas(size, size);
+  const surface = allocCanvas('bossRoomTiles', size, size);
   const c = surfaceContext(surface);
   const cx = size / 2;
   const cy = size / 2;

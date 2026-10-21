@@ -179,7 +179,11 @@ export const level3: LevelDef = {
   // "union every group named in this level's own fields" pass would silently
   // drop their sprite coverage. Their coverage is unioned in by level id from
   // `SYSTEM_ASSET_REQUIREMENTS` instead — see `scripts/verify-assets.ts`.
-  spriteGroups: ['core', 'town', 'overworld', 'dungeon_common'],
+  // No `dungeon_common`: nothing on this floor stands on dungeon ground or
+  // beside a skeleton. The bones the camps scatter are overworld art, and the
+  // dungeon ground under the inn's safe-room counter is `town_interior`'s.
+  spriteGroups: ['core', 'town', 'overworld'],
+  interiorSpriteGroups: ['town_interior'],
   roomMobs: [],
   hallwayMobs: [
     {

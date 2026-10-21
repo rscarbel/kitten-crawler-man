@@ -394,6 +394,15 @@ export interface LevelDef {
    * does not list everything that can appear on it.
    */
   spriteGroups: readonly AssetGroup[];
+  /**
+   * Groups drawn only inside this floor's buildings, never on the floor
+   * itself. They are left out of the floor's arrival, so the floor does not
+   * hold them in memory, and every `BuildingInteriorScene` on it asks for them
+   * before its loading card goes up, so the card does not lift until they are
+   * painted. A group listed here must not also be in `spriteGroups`; that would
+   * paint it on arrival anyway, and `verify:assets` fails on it.
+   */
+  interiorSpriteGroups: readonly AssetGroup[];
   /** Mobs that can spawn at room centres (all non-start, non-special rooms). */
   roomMobs: MobSpawnRule[];
   /** Mobs that can spawn at hallway points. */

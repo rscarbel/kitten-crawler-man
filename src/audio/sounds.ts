@@ -863,7 +863,7 @@ const SOUND_IDS_TUPLE = [...MUSIC_TRACK_IDS, ...JINGLE_IDS, ...SFX_IDS] as const
 
 export type SoundId = (typeof SOUND_IDS_TUPLE)[number];
 
-/** All valid sound IDs. Use as the default argument for AudioManager.preload(). */
+/** All valid sound IDs. */
 export const ALL_SOUND_IDS: ReadonlyArray<SoundId> = SOUND_IDS_TUPLE;
 
 /** Maps every SoundId to its asset path relative to the document root. */
@@ -1798,7 +1798,7 @@ export const TEMPLE_MUSIC_TRACKS: ReadonlyArray<MusicTrackId> = ['temple_music']
  * `AudioBuffer` — decoding them all as Float32 PCM is ~828 MB for audio that
  * is played one or two at a time.
  *
- * `AudioManager.preload` excludes these ids by default and `startMusicTrack`/
+ * `AudioManager.preload` skips these ids and `startMusicTrack`/
  * `startAmbientLoop` route them through the streaming path instead of
  * `buffers`.
  */
@@ -1882,11 +1882,6 @@ export function musicLoopStartS(id: SoundId): number | undefined {
   return loopStarts[id];
 }
 
-/** Every sound id not covered by `STREAMING_SOUND_IDS` — the default `preload()` set. */
-export const NON_STREAMING_SOUND_IDS: ReadonlyArray<SoundId> = ALL_SOUND_IDS.filter(
-  (id) => !STREAMING_SOUND_IDS.has(id),
-);
-
 /** Every take of planks splitting apart; whatever smashes wood picks one of these. */
 export const WOOD_SMASHING_SOUNDS = [
   'wood_smashing_1',
@@ -1909,3 +1904,36 @@ export const UNWIRED_SOUND_IDS = [
   'door_creak_4',
   'trapdoor_creak_open',
 ] as const satisfies ReadonlyArray<SoundId>;
+
+/**
+ * Long, rare one-shots that are decoded the first time they are played rather
+ * than when their group preloads. Their group's preload fetches the compressed
+ * file (a twentieth of the decoded size) and keeps it, so the first play waits
+ * only for the decode: 2–31 ms in Chrome for these recordings, the 27-second
+ * chant the slowest. Once decoded each stays resident until its group is
+ * released, like any other sound.
+ *
+ * Only stings that open a moment — a fight, a reward, a jackpot, a death —
+ * belong here, never a cue an animation is timed to, a telegraph, a hit, the
+ * feedback to the player's own input, or anything played through
+ * `AudioManager.playNow` or as a loop, which never wait for a decode.
+ */
+export const ON_DEMAND_SOUND_IDS: ReadonlySet<SoundId> = new Set<SoundId>([
+  'skeleton_lord_chant',
+  'slots_jackpot_siren',
+  'bounty_fight_engaged',
+  'death_sequence',
+  'briar_hollow_victory',
+  'accepted_bounty',
+  'necro_war_horn',
+  'life_machine_powering_on',
+  'bell_victory_peal',
+  'necromancer_arrival',
+  'level_begins',
+  'ability_level_up',
+  'new_unlock',
+  'slots_epic_win',
+  'slots_mega_win',
+  'nothing_void_swallow',
+  'nothing_final_tone',
+]);

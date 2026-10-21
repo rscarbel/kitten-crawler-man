@@ -15,12 +15,12 @@ import { garmentMaterialOf } from '../sprites/garments/itemLooks';
 import { settings } from '../core/Settings';
 import type { SoundId } from './sounds';
 import {
-  NON_STREAMING_SOUND_IDS,
   musicLoopStartS,
+  ON_DEMAND_SOUND_IDS,
   SOUND_MANIFEST,
   STREAMING_SOUND_IDS,
 } from './sounds';
-import { CORE_SFX_IDS } from './sfxGroups';
+import { CORE_SFX_IDS, GATED_SFX_IDS, SFX_GROUPS, type GatedSfxGroup } from './sfxGroups';
 import { TILE_SIZE } from '../core/constants';
 import { isWorldPointInView } from '../core/visibleWorldView';
 import { SOUND_PRIORITY_RANK, soundTraits, type SoundTraits } from './soundTraits';
@@ -218,6 +218,19 @@ interface LiveVoice {
   stopping: boolean;
 }
 
+/** Takes one off `id`'s count, forgetting it at zero. */
+function countDown(counts: Map<SoundId, number>, id: SoundId): void {
+  const remaining = (counts.get(id) ?? 1) - 1;
+  if (remaining > 0) counts.set(id, remaining);
+  else counts.delete(id);
+}
+
+/** A decode under way, and the release generation it began in. */
+interface RunningDecode {
+  readonly generation: number;
+  readonly decoding: Promise<void>;
+}
+
 /** A one-shot waiting for the audio context to unlock. */
 interface QueuedPlay {
   readonly id: SoundId;
@@ -392,7 +405,7 @@ function loopedPositionS(elapsedS: number, durationS: number, loopStartS: number
  *
  * Usage:
  *   const audio = new AudioManager();
- *   void audio.preload();           // decode everything in the background
+ *   void audio.preload(CORE_SFX_IDS); // decode the boot group in the background
  *   audio.resume();                 // call on first user gesture
  *   audio.play('splat_1');
  *   const scope = audio.createScope();
@@ -414,6 +427,32 @@ export class AudioManager {
   private readonly uiGain: GainNode;
 
   private readonly buffers = new Map<SoundId, AudioBuffer>();
+  /**
+   * Compressed files kept for a decode on demand: `ON_DEMAND_SOUND_IDS` waiting
+   * for their first play, and files a scope keeps (`AudioScope.keepCompressed`).
+   */
+  private readonly encoded = new Map<SoundId, ArrayBuffer>();
+  /** Each id's fetch under way, so a second load waits on the same one. */
+  private readonly fetches = new Map<SoundId, Promise<ArrayBuffer>>();
+  /** How many loads of each id are fetching or decoding, so a release sees them too. */
+  private readonly loadsInFlight = new Map<SoundId, number>();
+  /** How many of those began since the id was last released; a release clears it. */
+  private readonly currentLoads = new Map<SoundId, number>();
+  /**
+   * Bumped each time an id is released: a fetch or decode begun before the
+   * release drops its result rather than bringing the sound back.
+   */
+  private readonly releaseGenerations = new Map<SoundId, number>();
+  /** Gated ids already reported as played with their group let go, so dev builds name each once. */
+  private readonly gatedFallbackWarned = new Set<SoundId>();
+  /**
+   * Each id's decode under way and the release generation it began in, so a
+   * second request waits on the same one, unless a release has since made it
+   * stale.
+   */
+  private readonly onDemandDecodes = new Map<SoundId, RunningDecode>();
+  /** The newest play each on-demand id was asked for while it decoded; a stop clears it. */
+  private readonly playsAwaitingDecode = new Map<SoundId, QueuedPlay>();
   /** Every id a `preload` has fetched or is fetching, whether or not it decoded. */
   private readonly preloadRequested = new Set<SoundId>();
   private readonly missingBufferWarned = new Set<SoundId>();
@@ -788,38 +827,154 @@ export class AudioManager {
   }
 
   /**
-   * Fetch and decode sounds into memory in parallel.
-   * Defaults to every non-streamed sound in the manifest — music and ambience
+   * Fetch and decode sounds into memory in parallel. Music and ambience
    * (`STREAMING_SOUND_IDS`) are played via `MediaElementAudioSourceNode`
-   * instead and must never be decoded into `buffers`.
+   * instead and are never decoded into `buffers`, so they are skipped.
    * Failures emit a console warning and are skipped — they will not throw.
    */
-  async preload(ids: ReadonlyArray<SoundId> = NON_STREAMING_SOUND_IDS): Promise<void> {
-    await Promise.all(
-      ids.map(async (id) => {
-        if (this.buffers.has(id) || STREAMING_SOUND_IDS.has(id)) return;
-        this.preloadRequested.add(id);
-        const path = SOUND_MANIFEST[id];
-        try {
-          const response = await fetch(path);
-          if (!response.ok) throw new Error(`HTTP ${response.status}`);
-          const arrayBuffer = await response.arrayBuffer();
-          const audioBuffer = await this.ctx.decodeAudioData(arrayBuffer);
-          this.buffers.set(id, audioBuffer);
-          this.failedDecodes.delete(id);
-          const pendingOpts = this.pendingSfx.get(id);
-          if (pendingOpts !== undefined) {
-            this.pendingSfx.delete(id);
-            this.play(id, pendingOpts);
-          }
-        } catch (err) {
-          this.failedDecodes.add(id);
-          console.warn(`[AudioManager] Failed to load "${id}":`, err);
-        }
-      }),
-    );
+  async preload(ids: ReadonlyArray<SoundId>): Promise<void> {
+    await Promise.all(ids.map((id) => this.load(id, 'decoded')));
     // Loops a scope was refused while these were decoding can start now.
     this.restartScopeLoops();
+  }
+
+  private async preloadCompressed(ids: ReadonlyArray<SoundId>): Promise<void> {
+    await Promise.all(ids.map((id) => this.load(id, 'compressed')));
+  }
+
+  private generationOf(id: SoundId): number {
+    return this.releaseGenerations.get(id) ?? 0;
+  }
+
+  /** Whether a live scope keeps `id`'s compressed file once it is decoded. */
+  private keepsCompressed(id: SoundId): boolean {
+    return [...this.scopes].some((scope) => scope.declaredCompressed.has(id));
+  }
+
+  /** Whether a play of `id` is waiting on its file or its decode. */
+  private hasPlayWaiting(id: SoundId): boolean {
+    return this.pendingSfx.has(id) || this.playsAwaitingDecode.has(id);
+  }
+
+  private fetchFile(id: SoundId): Promise<ArrayBuffer> {
+    const running = this.fetches.get(id);
+    if (running !== undefined) return running;
+    const fetching = fetch(SOUND_MANIFEST[id])
+      .then((response) => {
+        if (!response.ok) throw new Error(`HTTP ${response.status}`);
+        return response.arrayBuffer();
+      })
+      .finally(() => {
+        this.fetches.delete(id);
+      });
+    this.fetches.set(id, fetching);
+    return fetching;
+  }
+
+  /**
+   * Fetches `id` and, when `want` is `decoded` and the id is not one decoded on
+   * its first play, decodes it. A release while this runs drops the result,
+   * except a compressed file some scope still keeps.
+   */
+  private async load(id: SoundId, want: 'decoded' | 'compressed'): Promise<void> {
+    if (this.buffers.has(id) || STREAMING_SOUND_IDS.has(id)) return;
+    this.preloadRequested.add(id);
+    const generation = this.generationOf(id);
+    this.loadsInFlight.set(id, (this.loadsInFlight.get(id) ?? 0) + 1);
+    this.currentLoads.set(id, (this.currentLoads.get(id) ?? 0) + 1);
+    try {
+      const file = this.encoded.get(id) ?? (await this.fetchFile(id));
+      const released = this.generationOf(id) !== generation;
+      if (released && !this.keepsCompressed(id)) return;
+      if (!this.encoded.has(id)) this.encoded.set(id, file);
+      if (released) {
+        this.decodeForWaitingPlay(id);
+        return;
+      }
+      const decodesNow = want === 'decoded' && !ON_DEMAND_SOUND_IDS.has(id);
+      if (decodesNow || this.hasPlayWaiting(id)) await this.decodeEncoded(id);
+    } catch (err) {
+      this.failedDecodes.add(id);
+      console.warn(`[AudioManager] Failed to load "${id}":`, err);
+    } finally {
+      countDown(this.loadsInFlight, id);
+      if (this.generationOf(id) === generation) countDown(this.currentLoads, id);
+    }
+  }
+
+  private storeDecoded(id: SoundId, buffer: AudioBuffer): void {
+    this.buffers.set(id, buffer);
+    this.failedDecodes.delete(id);
+    const pendingOpts = this.pendingSfx.get(id);
+    if (pendingOpts !== undefined) {
+      this.pendingSfx.delete(id);
+      this.play(id, pendingOpts);
+    }
+  }
+
+  /**
+   * Decodes `id`'s fetched file, then plays whatever was asked of it meanwhile.
+   * The decoder detaches the file it is given, so a file a scope keeps is
+   * decoded from a copy and every other is dropped here. A release before the
+   * decode lands drops the buffer and the plays waiting on it.
+   */
+  private decodeEncoded(id: SoundId): Promise<void> {
+    const generation = this.generationOf(id);
+    const running = this.onDemandDecodes.get(id);
+    if (running?.generation === generation) return running.decoding;
+    const file = this.encoded.get(id);
+    if (file === undefined) return Promise.resolve();
+    const keepsFile = this.keepsCompressed(id);
+    if (!keepsFile) this.encoded.delete(id);
+    const decoding = this.ctx
+      .decodeAudioData(keepsFile ? file.slice(0) : file)
+      .then((buffer) => {
+        if (this.generationOf(id) !== generation) {
+          this.decodeForWaitingPlay(id);
+          return;
+        }
+        this.storeDecoded(id, buffer);
+        const awaiting = this.playsAwaitingDecode.get(id);
+        this.playsAwaitingDecode.delete(id);
+        if (awaiting !== undefined) this.request(id, awaiting.opts, awaiting.source);
+      })
+      .catch((err: unknown) => {
+        this.failedDecodes.add(id);
+        this.playsAwaitingDecode.delete(id);
+        console.warn(`[AudioManager] Failed to decode "${id}":`, err);
+      })
+      .finally(() => {
+        if (this.onDemandDecodes.get(id)?.decoding === decoding) this.onDemandDecodes.delete(id);
+      });
+    this.onDemandDecodes.set(id, { generation, decoding });
+    return decoding;
+  }
+
+  /**
+   * A load or decode made stale by a release drops its result, but a play
+   * asked for since the release still wants the sound: decode it afresh from
+   * the kept file.
+   */
+  private decodeForWaitingPlay(id: SoundId): void {
+    if (this.hasPlayWaiting(id) && this.encoded.has(id)) void this.decodeEncoded(id);
+  }
+
+  /**
+   * Bytes held outside the JS heap for sound effects: every decoded buffer's
+   * float samples, plus the compressed files kept for on-demand decoding.
+   */
+  get residentAudioBytes(): number {
+    let bytes = 0;
+    for (const buffer of this.buffers.values()) {
+      bytes += buffer.length * buffer.numberOfChannels * Float32Array.BYTES_PER_ELEMENT;
+    }
+    for (const file of this.encoded.values()) bytes += file.byteLength;
+    return bytes;
+  }
+
+  /** How many decoded buffers are resident. */
+  get decodedBufferCount(): number {
+    return this.buffers.size;
   }
 
   /**
@@ -831,12 +986,24 @@ export class AudioManager {
    * fine failure mode.
    */
   releaseSounds(ids: ReadonlyArray<SoundId>): void {
-    for (const id of ids) {
-      if (this.liveVoices.some((live) => live.id === id)) continue;
-      if (this.music.currentTrack === id) continue;
-      if ([...this.scopes].some((scope) => scope.holds(id))) continue;
-      this.buffers.delete(id);
-    }
+    for (const id of ids) this.releaseSound(id, { keepFile: false });
+  }
+
+  /**
+   * Drops `id`'s buffer, and its compressed file unless `keepFile`, along with
+   * every play still waiting on it; a load or decode under way drops its
+   * result. Skipped while the id is sounding or a scope holds it.
+   */
+  private releaseSound(id: SoundId, { keepFile }: { readonly keepFile: boolean }): void {
+    if (this.liveVoices.some((live) => live.id === id)) return;
+    if (this.music.currentTrack === id) return;
+    if ([...this.scopes].some((scope) => scope.holds(id))) return;
+    this.releaseGenerations.set(id, this.generationOf(id) + 1);
+    this.currentLoads.delete(id);
+    this.buffers.delete(id);
+    if (!keepFile) this.encoded.delete(id);
+    this.pendingSfx.delete(id);
+    this.playsAwaitingDecode.delete(id);
   }
 
   /**
@@ -847,15 +1014,54 @@ export class AudioManager {
     return new AudioScope(this.scopeEngine);
   }
 
+  /** The scope each held SFX group declares through, while it is held. */
+  private readonly heldGroupScopes = new Map<GatedSfxGroup, AudioScope>();
+
+  /**
+   * Keeps `group` decoded or lets it go. A held group outlives the scene that
+   * asked for it, so a building's door does not release and then re-decode
+   * what the floor outside will want again; letting go releases whatever no
+   * scope still declares and no voice is playing.
+   */
+  holdSfxGroup(group: GatedSfxGroup, held: boolean): void {
+    const scope = this.heldGroupScopes.get(group);
+    if (held === (scope !== undefined)) return;
+    if (scope !== undefined) {
+      this.heldGroupScopes.delete(group);
+      scope.dispose();
+      return;
+    }
+    const holding = this.createScope();
+    this.heldGroupScopes.set(group, holding);
+    void holding.preload(SFX_GROUPS[group]);
+  }
+
+  /** Whether {@link holdSfxGroup} is keeping `group` decoded. */
+  holdsSfxGroup(group: GatedSfxGroup): boolean {
+    return this.heldGroupScopes.has(group);
+  }
+
   /**
    * Releases every decoded buffer no live scope declared, except the boot
    * group every scene relies on. Runs as a scope is disposed, by which time
    * the scene replacing it has already declared what it needs.
    */
   private evictUndeclaredSounds(): void {
-    const kept = new Set<SoundId>(CORE_SFX_IDS);
-    for (const scope of this.scopes) for (const id of scope.declared) kept.add(id);
-    this.releaseSounds([...this.buffers.keys()].filter((id) => !kept.has(id)));
+    const keptDecoded = new Set<SoundId>(CORE_SFX_IDS);
+    const keptFiles = new Set<SoundId>();
+    for (const scope of this.scopes) {
+      for (const id of scope.declared) keptDecoded.add(id);
+      for (const id of scope.declaredCompressed) keptFiles.add(id);
+    }
+    const resident = new Set<SoundId>([
+      ...this.buffers.keys(),
+      ...this.encoded.keys(),
+      ...this.loadsInFlight.keys(),
+    ]);
+    for (const id of resident) {
+      if (keptDecoded.has(id)) continue;
+      this.releaseSound(id, { keepFile: keptFiles.has(id) });
+    }
   }
 
   private readonly scopeEngine: ScopeEngine = {
@@ -875,6 +1081,7 @@ export class AudioManager {
     keyboardHeroSongFailed: () => this.failedDecodes.has(KEYBOARD_HERO_SONG),
     outputLatencyS: () => this.outputLatencySeconds(),
     preload: (ids) => this.preload(ids),
+    preloadCompressed: (ids) => this.preloadCompressed(ids),
     attach: (hooks) => {
       this.scopes.add(hooks);
     },
@@ -1021,6 +1228,22 @@ export class AudioManager {
   private request(id: SoundId, opts: PlayOptions, source: WorldPoint | null): void {
     const buffer = this.buffers.get(id);
     if (!buffer) {
+      const generation = this.generationOf(id);
+      const fileOnTheWay =
+        this.currentLoads.has(id) || this.onDemandDecodes.get(id)?.generation === generation;
+      if (this.encoded.has(id) || fileOnTheWay) {
+        this.warnGatedFallback(id);
+        this.playsAwaitingDecode.set(id, { id, opts, source });
+        void this.decodeEncoded(id);
+        return;
+      }
+      // Work begun before a release drops what it brings, so this play starts its own.
+      if (this.loadsInFlight.has(id)) {
+        this.warnGatedFallback(id);
+        this.playsAwaitingDecode.set(id, { id, opts, source });
+        void this.load(id, 'compressed');
+        return;
+      }
       this.warnNeverPreloaded(id);
       return;
     }
@@ -1038,6 +1261,20 @@ export class AudioManager {
     }
 
     this.startSource(id, buffer, opts, source);
+  }
+
+  /**
+   * A gated group's id played before its group was decoded still sounds,
+   * decoded from its kept file a few milliseconds late; dev builds name it
+   * once, since the gate should have held the group in time.
+   */
+  private warnGatedFallback(id: SoundId): void {
+    if (!WARNS_ON_MISSING_BUFFER || ON_DEMAND_SOUND_IDS.has(id) || !GATED_SFX_IDS.has(id)) return;
+    if (this.gatedFallbackWarned.has(id)) return;
+    this.gatedFallbackWarned.add(id);
+    console.warn(
+      `[AudioManager] "${id}" played before its gated group decoded; decoding on demand`,
+    );
   }
 
   /**
@@ -1232,6 +1469,8 @@ export class AudioManager {
    * for a long cue a skip has to cut (the slot machine's jackpot siren).
    */
   fadeOutSound(id: SoundId, fadeMs: number): void {
+    this.playsAwaitingDecode.delete(id);
+    this.pendingSfx.delete(id);
     for (const live of this.liveVoices) {
       if (live.id !== id || live.stopping) continue;
       live.stopping = true;
@@ -1249,6 +1488,7 @@ export class AudioManager {
       this.play(id, opts);
     } else {
       this.pendingSfx.set(id, opts);
+      void this.decodeEncoded(id);
     }
   }
 

@@ -5,7 +5,12 @@
  */
 
 import { TILE_SIZE } from '../core/constants';
-import { allocCanvas, surfaceContext, type CanvasSurface } from '../core/canvasSurface';
+import {
+  allocCanvas,
+  releaseSurface,
+  surfaceContext,
+  type CanvasSurface,
+} from '../core/canvasSurface';
 import type { GameMap } from '../map/GameMap';
 import type { Rect } from '../ui/core/geom';
 import { MINIMAP_MARKER_COLORS, minimapTileColor } from '../ui/theme/minimapColors';
@@ -75,9 +80,11 @@ function layoutSurface(map: GameMap, pxPerTile: number, deviceScale: number): Ca
     cached.pxPerTile === pxPerTile &&
     cached.deviceScale === deviceScale;
   if (fresh) return cached.surface;
+  if (cached !== undefined) releaseSurface(cached.surface);
   const mapW = map.structure[0]?.length ?? 1;
   const mapH = map.structure.length;
   const surface = allocCanvas(
+    'minimap',
     Math.max(1, Math.ceil(mapW * pxPerTile * deviceScale)),
     Math.max(1, Math.ceil(mapH * pxPerTile * deviceScale)),
   );

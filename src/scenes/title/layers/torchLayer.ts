@@ -11,7 +11,13 @@
  * only ever dims the hall from wherever it stood.
  */
 
-import { allocCanvas, surfaceContext, type CanvasSurface } from '../../../core/canvasSurface';
+import {
+  allocCanvas,
+  surfaceContext,
+  type CanvasSurface,
+  releaseSurface,
+  resizeSurface,
+} from '../../../core/canvasSurface';
 import { canvasGeneration } from '../../../core/canvasRecovery';
 import { renderQuality } from '../../../core/RenderQuality';
 import { drawSpriteKey } from '../../../core/SpriteRenderer';
@@ -300,8 +306,11 @@ function repaintBrand(
   height: number,
   shade: number,
 ): void {
-  canvas.width = Math.max(1, Math.ceil(width * ratio));
-  canvas.height = Math.max(1, Math.ceil(height * ratio));
+  resizeSurface(
+    canvas,
+    Math.max(1, Math.ceil(width * ratio)),
+    Math.max(1, Math.ceil(height * ratio)),
+  );
   const brandCtx = surfaceContext(canvas);
   brandCtx.setTransform(ratio, 0, 0, ratio, 0, 0);
   const tileSize = TORCH_SHEET_TILE_PX * k;
@@ -446,7 +455,7 @@ export function torchLayer(): TitleLayer {
         const light = stage.lights.torches[index];
         const k = (pxPerTileAt(hall, mount) * SCONCE_TILES) / TORCH_SHEET_TILE_PX;
         paintBracket(ctx, mount.x, mount.y + (SHEET_SOCKET_RIM_Y - SHEET_HEAD_TOP_Y) * k, k);
-        const brand = (brands[index] ??= { canvas: allocCanvas(1, 1), key: '' });
+        const brand = (brands[index] ??= { canvas: allocCanvas('title', 1, 1), key: '' });
         paintBrand(ctx, brand, mount, k, light.level, camera.zoom);
         const intensity = light.level * light.flicker;
         if (guttering[index]) paintGutterEmbers(ctx, mount, k, light.flicker, index);
@@ -463,8 +472,7 @@ export function torchLayer(): TitleLayer {
     },
     dispose: () => {
       for (const brand of brands) {
-        brand.canvas.width = 0;
-        brand.canvas.height = 0;
+        releaseSurface(brand.canvas);
       }
       brands = [];
     },

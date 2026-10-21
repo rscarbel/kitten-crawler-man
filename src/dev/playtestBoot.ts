@@ -293,6 +293,51 @@ function briarHollowThreshold(
   return threshold === undefined ? null : { x: threshold.x, y: threshold.y };
 }
 
+/**
+ * How far outside the stairwell's own footprint the approach spawn stands the
+ * party: far enough that the descend prompt waits for a step onto the stairs.
+ */
+const STAIRWELL_APPROACH_STANDOFF_TILES = 2;
+/** The widest ring searched around a stairwell for ground that is not the stairs. */
+const STAIRWELL_APPROACH_MAX_RING = 12;
+
+/** Walkable, off the stairs and inside `roomIndex` (any room when it is `-1`). */
+function isApproachTile(gameMap: GameMap, x: number, y: number, roomIndex: number): boolean {
+  if (!gameMap.isWalkable(x, y) || gameMap.isStairwellTile(x, y)) return false;
+  return roomIndex === -1 || gameMap.roomIndexAt(x, y) === roomIndex;
+}
+
+/** The first approach tile on the Chebyshev ring `ring` around `centre`, in scan order. */
+function approachTileOnRing(
+  gameMap: GameMap,
+  centre: { x: number; y: number },
+  ring: number,
+  roomIndex: number,
+): { x: number; y: number } | null {
+  for (let dy = -ring; dy <= ring; dy++) {
+    for (let dx = -ring; dx <= ring; dx++) {
+      if (Math.max(Math.abs(dx), Math.abs(dy)) !== ring) continue;
+      const x = centre.x + dx;
+      const y = centre.y + dy;
+      if (isApproachTile(gameMap, x, y, roomIndex)) return { x, y };
+    }
+  }
+  return null;
+}
+
+function stairwellApproachTile(gameMap: GameMap): { x: number; y: number } | null {
+  const stairwell = gameMap.stairwellTiles.length > 0 ? gameMap.stairwellTiles[0] : null;
+  if (stairwell === null) return null;
+  const roomIndex = gameMap.roomIndexAt(stairwell.x, stairwell.y);
+  for (let ring = 1; ring <= STAIRWELL_APPROACH_MAX_RING; ring++) {
+    const edge = approachTileOnRing(gameMap, stairwell, ring, roomIndex);
+    if (edge === null) continue;
+    const standoffRing = ring + STAIRWELL_APPROACH_STANDOFF_TILES;
+    return approachTileOnRing(gameMap, stairwell, standoffRing, roomIndex) ?? edge;
+  }
+  return null;
+}
+
 const PLAYTEST_FLOOD_STEPS = [
   { dx: 1, dy: 0 },
   { dx: -1, dy: 0 },
@@ -377,6 +422,8 @@ function resolveSpawnLandmark(
       return spiderLabStationTile(gameMap);
     case 'spiderHallwayHost':
       return spiderHallwayHostTile(gameMap);
+    case 'stairwellApproach':
+      return stairwellApproachTile(gameMap);
     case 'questRoomEntrance':
       return questRoomApproachTile(gameMap);
     case 'bathroomEntrance':

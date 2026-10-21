@@ -92,6 +92,7 @@ import {
   laySlab,
   lightRim,
   makeLayer,
+  withComposeLayers,
   maskedCopy,
   occludeAround,
   outlineInto,
@@ -1574,15 +1575,15 @@ function finishHolding(
 }
 /** Carl seen head-on, walking toward the camera. */
 export function drawCarlFront(ctx: Ctx, pose: CarlPose, options: CarlComposeOptions = {}): void {
-  drawFigure(ctx, VIEWS.front, pose, options);
+  withComposeLayers(() => drawFigure(ctx, VIEWS.front, pose, options));
 }
 
 /** Carl seen from behind, walking away. */
 export function drawCarlBack(ctx: Ctx, pose: CarlPose, options: CarlComposeOptions = {}): void {
-  drawFigure(ctx, VIEWS.back, pose, options);
+  withComposeLayers(() => drawFigure(ctx, VIEWS.back, pose, options));
 }
 
 /** Carl in profile. Always drawn facing +X; the runtime mirrors for the left. */
 export function drawCarlSide(ctx: Ctx, pose: CarlPose, options: CarlComposeOptions = {}): void {
-  drawFigure(ctx, VIEWS.side, pose, options);
+  withComposeLayers(() => drawFigure(ctx, VIEWS.side, pose, options));
 }

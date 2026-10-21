@@ -35,7 +35,12 @@
  */
 
 import { HOLLOW_THRESHOLD, type TileContent } from '../tileTypes';
-import { allocCanvas, surfaceContext, type CanvasSurface } from '../../core/canvasSurface';
+import {
+  allocCanvas,
+  releaseSurface,
+  surfaceContext,
+  type CanvasSurface,
+} from '../../core/canvasSurface';
 import type { MapSpriteExtentsPx } from '../../core/SpriteLoader';
 import type { VillageBuildingDef, VillageBuildingId } from '../overworld/briarHollowSite';
 import { briarHollowSiteFor } from './hollowSiteRegistry';
@@ -495,6 +500,7 @@ const pieceCache = new Map<string, CachedPiece>();
 const pieceLookups = new Map<number, WeakMap<WallPiece, CachedPiece>>();
 // Baked once and kept; a purge would leave it blank for good.
 onCanvasRecovery(() => {
+  for (const piece of pieceCache.values()) releaseSurface(piece.surface);
   pieceCache.clear();
   pieceLookups.clear();
 });
@@ -518,7 +524,7 @@ function paintPiece(piece: WallPiece, ts: number): CachedPiece {
   const padUp = Math.ceil(ts * WALL_REACH_UP_TILES);
   const width = ts * (1 + lintelReachTiles(piece));
   const height = padUp + ts;
-  const surface = allocCanvas(width * WALL_CACHE_DENSITY, height * WALL_CACHE_DENSITY);
+  const surface = allocCanvas('palisades', width * WALL_CACHE_DENSITY, height * WALL_CACHE_DENSITY);
   const ctx = surfaceContext(surface);
   ctx.scale(WALL_CACHE_DENSITY, WALL_CACHE_DENSITY);
   paintWallPiece(ctx, piece, 0, padUp, ts);

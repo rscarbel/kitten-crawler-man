@@ -4,7 +4,12 @@
  * farther bands smaller and slower, so the floor never sits still.
  */
 
-import { allocCanvas, surfaceContext, type CanvasSurface } from '../../../core/canvasSurface';
+import {
+  allocCanvas,
+  surfaceContext,
+  type CanvasSurface,
+  releaseSurface,
+} from '../../../core/canvasSurface';
 import { smoothstepUnit } from '../../../map/overworld/elevation';
 import { canvasGeneration } from '../../../core/canvasRecovery';
 import { renderQuality } from '../../../core/RenderQuality';
@@ -88,7 +93,7 @@ function smoothstep(t: number): number {
 }
 
 function bakeFogStrip(seed: number): CanvasSurface {
-  const canvas = allocCanvas(FOG_TEXTURE_WIDTH, FOG_TEXTURE_HEIGHT);
+  const canvas = allocCanvas('title', FOG_TEXTURE_WIDTH, FOG_TEXTURE_HEIGHT);
   const ctx = surfaceContext(canvas);
   const image = ctx.createImageData(FOG_TEXTURE_WIDTH, FOG_TEXTURE_HEIGHT);
   const noise = new NoiseField(FOG_TEXTURE_WIDTH);
@@ -117,6 +122,7 @@ export function fogLayer(): TitleLayer {
   const stripFor = (index: number, band: FogBand): CanvasSurface => {
     const generation = canvasGeneration();
     if (generation !== stripGeneration) {
+      for (const strip of strips) releaseSurface(strip);
       strips = [];
       stripGeneration = generation;
     }
@@ -170,8 +176,7 @@ export function fogLayer(): TitleLayer {
     },
     dispose: () => {
       for (const strip of strips) {
-        strip.width = 0;
-        strip.height = 0;
+        releaseSurface(strip);
       }
       strips = [];
     },

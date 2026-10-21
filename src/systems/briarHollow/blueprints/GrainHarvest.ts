@@ -38,7 +38,12 @@ import { viewportHeight, viewportWidth } from '../../../core/Viewport';
 import type { SpatialGrid } from '../../../core/SpatialGrid';
 import type { Mob } from '../../../creatures/Mob';
 import { BLUEPRINTS_GRAIN_TARGET } from '../../../core/blueprintsQuestPhase';
-import { allocCanvas, type CanvasSurface, surfaceContext } from '../../../core/canvasSurface';
+import {
+  allocCanvas,
+  type CanvasSurface,
+  releaseSurface,
+  surfaceContext,
+} from '../../../core/canvasSurface';
 import { keybindings } from '../../../core/Keybindings';
 import { activeInputMode, byInputMode, keyLabel } from '../../../ui/core/inputMode';
 import { HumanPlayer } from '../../../creatures/HumanPlayer';
@@ -216,7 +221,10 @@ export function grainStageFor(cuts: number, secondsSinceStubble: number): GrainS
 
 const standSurfaces = new Map<string, CanvasSurface>();
 // Baked once and kept; a purge would leave it blank for good.
-onCanvasRecovery(() => standSurfaces.clear());
+onCanvasRecovery(() => {
+  for (const surface of standSurfaces.values()) releaseSurface(surface);
+  standSurfaces.clear();
+});
 
 /** One stage of one stand layout, painted once for every tile that shows it. */
 function standSurface(stage: GrainStage, layout: number): CanvasSurface {
@@ -224,7 +232,7 @@ function standSurface(stage: GrainStage, layout: number): CanvasSurface {
   const known = standSurfaces.get(cacheKey);
   if (known !== undefined) return known;
   const size = TILE_SIZE * GRAIN_STAND_SUPERSAMPLE;
-  const surface = allocCanvas(size, size);
+  const surface = allocCanvas('props', size, size);
   drawGrainStand(surfaceContext(surface), 0, 0, size, layout, 0, stage);
   standSurfaces.set(cacheKey, surface);
   return surface;

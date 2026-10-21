@@ -46,12 +46,18 @@ import {
   type MurderQuestStage,
 } from '../core/MurderQuestProgress';
 import { perfMonitor } from '../core/PerfMonitor';
+import { setDeviceMemoryOverride } from '../core/deviceMemoryBudget';
 import { setFigureCacheStatsRecording } from '../sprites/figure/figureCacheStats';
 import { drawPerfOverlay } from './perfOverlay';
+import { installPerfDensity } from './perfDensity';
+import { installPerfDuplicateCells } from './perfDuplicateCells';
+import { installPerfMemory } from './perfMemory';
+import { installPerfRecorder } from './perfRecorder';
 import { drawDifficultyOverlay } from './difficultyOverlay';
 import { showPriceBreakdowns } from '../ui/screens/shop/priceBreakdowns';
 import { getPlaytestPreset } from './playtestPresets';
 import {
+  beginAssaultForPlaytest,
   fortifyBriarHollow,
   parseTrebuchetCount,
   parseWallTier,
@@ -73,6 +79,10 @@ import { blueprintsPlaytestState } from './blueprintsPlaytest';
 import { contractsPlaytestState } from './contractsPlaytest';
 import { aiAdapter } from '../ai/AIAdapter';
 import { startBrowserReplayRecording } from './aiReplayRecorder';
+import { startPerfWalkFromParams } from './perfScenes';
+import { DEFAULT_FLOOR_ART_SEED } from '../map/ground/floorArtSeed';
+import { createGodModeState } from '../core/GodMode';
+import { createClubMembership } from '../core/ClubMembership';
 
 /**
  * Dev-only entry points, reachable by query parameter.
@@ -178,8 +188,12 @@ export function installDevLoopFallback(): void {
  * quest state must not pick up a dev seed; without the persist step unless the
  * URL opts in with `save`; and with any `murder` stage seeded, so
  * `?playtest=<id>&murder=<stage>` drops a kitted party straight into a
- * questline beat; and with the music of everything the party skipped past
- * already unlocked, as a save made there would have it.
+ * questline beat; with the music of everything the party skipped past
+ * already unlocked, as a save made there would have it; and, given `seed=<n>`,
+ * the floor generated from that world seed and painted with the reviewed
+ * art seed, so two visits to the same URL walk the same map; and, given
+ * `tough`, the `!tough` cheat already on, so a scripted walk neither dies nor
+ * thins out the floor it is measuring.
  */
 function devFloorOptions(
   options: DungeonSceneOptions,
@@ -187,8 +201,18 @@ function devFloorOptions(
 ): DungeonSceneOptions {
   const persistsSaves = params.get('save') !== null;
   const seededMurderProgress = parseMurderQuestProgress(params.get('murder'));
+  const worldSeed = Number.parseInt(params.get('seed') ?? '', 10);
+  const pinnedMap = Number.isInteger(worldSeed)
+    ? { worldSeed, artSeed: DEFAULT_FLOOR_ART_SEED }
+    : {};
+  const cheats =
+    params.get('tough') === null
+      ? {}
+      : { godModeState: { ...createGodModeState(), toughActive: true } };
   return {
     ...options,
+    ...pinnedMap,
+    ...cheats,
     saveProgress: persistsSaves ? options.saveProgress : undefined,
     progressWipe: persistsSaves ? options.progressWipe : undefined,
     murderQuestProgress: seededMurderProgress ?? options.murderQuestProgress,
@@ -306,9 +330,17 @@ export function devBootScene(
   // because `setFrameOverlay` holds a single function, so `?perf&?difficulty`
   // would otherwise silently show only the second one.
   const overlays: Array<(ctx: CanvasRenderingContext2D) => void> = [];
+  const deviceMemoryGigabytes = Number.parseFloat(params.get('deviceMemory') ?? '');
+  if (Number.isFinite(deviceMemoryGigabytes) && deviceMemoryGigabytes > 0) {
+    setDeviceMemoryOverride(deviceMemoryGigabytes);
+  }
   if (params.get('perf') !== null) {
     perfMonitor.enable();
     setFigureCacheStatsRecording(true);
+    installPerfMemory(sceneManager.canvas, options.audio ?? null);
+    installPerfDensity(sceneManager.canvas);
+    installPerfDuplicateCells();
+    installPerfRecorder(sceneManager.canvas);
     overlays.push(drawPerfOverlay);
   }
   if (params.get('difficulty') !== null) {
@@ -319,6 +351,7 @@ export function devBootScene(
   }
   const aiRecordName = params.get('ai-record');
   if (aiRecordName !== null) startBrowserReplayRecording(aiAdapter, aiRecordName);
+  startPerfWalkFromParams(params, sceneManager);
   if (overlays.length > 0) {
     sceneManager.setFrameOverlay((ctx) => {
       for (const overlay of overlays) overlay(ctx);
@@ -552,6 +585,9 @@ export function devBootScene(
         };
       }
       if (preset.mongoOut === true) floorOptions.mongoWasOut = true;
+      if (preset.clubMember === true) {
+        floorOptions.clubMembership = { ...createClubMembership(), hasDesperadoPass: true };
+      }
       const defences = preset.briarHollowDefences;
       if (defences !== undefined) {
         const wallsFlag = params.get('walls');
@@ -561,8 +597,11 @@ export function devBootScene(
         if (wallsFlag !== null && parseWallTier(wallsFlag) === null) {
           console.error(`Unknown walls "${wallsFlag}"; standing the ring at ${defences.wallTier}`);
         }
-        floorOptions.prepareBriarHollow = (kit, gameMap) =>
+        const assaultNow = params.get('assaultNow') !== null;
+        floorOptions.prepareBriarHollow = (kit, gameMap) => {
           fortifyBriarHollow(kit, gameMap, { wallTier, trebuchets });
+          if (assaultNow) beginAssaultForPlaytest(kit);
+        };
       } else if (preset.constructionContracts !== undefined) {
         floorOptions.briarHollowState = contractsPlaytestState(preset.constructionContracts);
       } else if (preset.briarHollowBlueprints !== undefined) {

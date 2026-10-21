@@ -16,6 +16,7 @@
 
 import { mix } from '../carlArt';
 import type { Pt2 } from './skeleton';
+import { resizeSurface, allocCanvas, releaseSurface } from '../../../core/canvasSurface';
 
 export type Ctx = CanvasRenderingContext2D;
 
@@ -256,16 +257,25 @@ const SCRATCH_COUNT = 3;
 function scratchSurfaces(width: number, height: number): readonly Scratch[] | null {
   if (scratches.length === 0) {
     if (typeof document === 'undefined') return null;
+    const made: Scratch[] = [];
     for (let i = 0; i < SCRATCH_COUNT; i++) {
-      const canvas = document.createElement('canvas');
+      const canvas = allocCanvas('signet', width, height);
       const ctx = canvas.getContext('2d');
-      if (ctx === null) return null;
-      scratches.push({ canvas, ctx });
+      if (ctx === null) {
+        releaseSurface(canvas);
+        for (const partial of made) releaseSurface(partial.canvas);
+        return null;
+      }
+      made.push({ canvas, ctx });
     }
+    scratches.push(...made);
   }
   for (const { canvas } of scratches) {
-    if (canvas.width < width) canvas.width = width;
-    if (canvas.height < height) canvas.height = height;
+    const grownWidth = Math.max(canvas.width, width);
+    const grownHeight = Math.max(canvas.height, height);
+    if (grownWidth !== canvas.width || grownHeight !== canvas.height) {
+      resizeSurface(canvas, grownWidth, grownHeight);
+    }
   }
   return scratches;
 }

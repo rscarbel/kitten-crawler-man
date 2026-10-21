@@ -26,7 +26,12 @@ import {
 import { makeStuck, makeSpitVenom } from '../core/StatusEffect';
 import { PLAYER_SPEED, TILE_SIZE } from '../core/constants';
 import { tileSpeedFactor } from '../map/tileSpeed';
-import { allocCanvas, surfaceContext, type CanvasSurface } from '../core/canvasSurface';
+import {
+  allocCanvas,
+  releaseSurface,
+  surfaceContext,
+  type CanvasSurface,
+} from '../core/canvasSurface';
 import { PLAYER_HIT_FLASH_MARGIN_TILES } from '../Player';
 import { hasRoomToMove } from '../map/findWalkableTile';
 import type { GameMap } from '../map/GameMap';
@@ -227,7 +232,12 @@ function occludedPlayerScratch(size: number): {
     occludedPlayerSurfaceSize < size
   ) {
     occludedPlayerSurfaceSize = Math.max(occludedPlayerSurfaceSize, size);
-    occludedPlayerSurface = allocCanvas(occludedPlayerSurfaceSize, occludedPlayerSurfaceSize);
+    if (occludedPlayerSurface !== null) releaseSurface(occludedPlayerSurface);
+    occludedPlayerSurface = allocCanvas(
+      'figureScratch',
+      occludedPlayerSurfaceSize,
+      occludedPlayerSurfaceSize,
+    );
     occludedPlayerCtx = surfaceContext(occludedPlayerSurface);
   }
   return { surface: occludedPlayerSurface, ctx: occludedPlayerCtx };

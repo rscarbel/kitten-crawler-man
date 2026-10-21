@@ -18,7 +18,12 @@
  * rather than paint laid over it.
  */
 
-import { allocCanvas, surfaceContext, type CanvasSurface } from '../core/canvasSurface';
+import {
+  allocCanvas,
+  releaseSurface,
+  surfaceContext,
+  type CanvasSurface,
+} from '../core/canvasSurface';
 import { onCanvasRecovery } from '../core/canvasRecovery';
 
 /** Where and how big one beam is, in screen pixels. */
@@ -176,7 +181,7 @@ function bakeTexture(
   shade: (x: number, y: number) => { readonly alpha: number; readonly whiteness: number },
   color: Rgb,
 ): CanvasSurface {
-  const surface = allocCanvas(width, height);
+  const surface = allocCanvas('effects', width, height);
   const ctx = surfaceContext(surface);
   const image = ctx.createImageData(width, height);
   const pixels = image.data;
@@ -277,7 +282,14 @@ interface BeamTextures {
 /** Keyed on colour alone; the game uses a handful of marker colours, so this stays tiny. */
 const texturesByColor = new Map<string, BeamTextures>();
 // Baked once and kept; a purge would leave it blank for good.
-onCanvasRecovery(() => texturesByColor.clear());
+onCanvasRecovery(() => {
+  for (const { beam, pool, mote } of texturesByColor.values()) {
+    releaseSurface(beam);
+    releaseSurface(pool);
+    releaseSurface(mote);
+  }
+  texturesByColor.clear();
+});
 
 function texturesFor(color: string): BeamTextures {
   const cached = texturesByColor.get(color);

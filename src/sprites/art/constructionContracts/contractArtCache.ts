@@ -6,7 +6,12 @@
  * a contract ends or the scene goes.
  */
 
-import { allocCanvas, surfaceContext, type CanvasSurface } from '../../../core/canvasSurface';
+import {
+  allocCanvas,
+  surfaceContext,
+  type CanvasSurface,
+  releaseSurface,
+} from '../../../core/canvasSurface';
 import {
   paintContractDamage,
   type ContractArtMaterial,
@@ -88,6 +93,7 @@ function paintImage(
   const headroom = headroomTiles * spec.tilePx;
   const height = footprintHeight + headroom;
   const surface = allocCanvas(
+    'construction',
     Math.max(1, Math.ceil(width * CONTRACT_ART_DENSITY)),
     Math.max(1, Math.ceil(height * CONTRACT_ART_DENSITY)),
   );
@@ -162,8 +168,7 @@ export function drawContractBuildSite(
 /** Drops every cached piece of contract art, giving its pixels back. */
 export function releaseContractArt(): void {
   for (const image of [...overlayCache.values(), ...buildSiteCache.values()]) {
-    image.surface.width = 0;
-    image.surface.height = 0;
+    releaseSurface(image.surface);
   }
   overlayCache.clear();
   buildSiteCache.clear();

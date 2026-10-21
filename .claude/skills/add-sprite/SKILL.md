@@ -49,6 +49,13 @@ look at cannot be different art.
   `AssetGroup` the floor declares, and say whether it varies with the floor's art
   seed. Seeded art is repainted whenever a floor's layout changes; unseeded art
   survives the stairs and is released with its asset group.
+  Art drawn only inside buildings goes in a group the floor names in
+  `LevelDef.interiorSpriteGroups`, not `spriteGroups` (the town's is
+  `town_interior`: the rooms' ground and the Desperado Club's furniture), so it
+  is painted behind a building's loading card instead of on the floor's
+  arrival. See "Indoor-only art is painted at the door" in
+  `docs/asset-management.md`. `npm run verify:environment-sheet-budget` checks
+  every floor's set, arrival plus indoor, fits the sheet cache's budget.
   Boss-room families are the exception to registering one by one: each room's
   plans live in `src/sprites/sheets/bossRooms/<room>Sheets.ts`, keyed by its
   asset group (`boss_hoarder`, `boss_juicer`, `boss_krakaren`,
@@ -89,6 +96,7 @@ look at cannot be different art.
 
 - Manifest keys are `snake_case` (`rat`, `goblin_base`); sprite modules are `src/sprites/<camelName>Sprite.ts` exporting `draw<PascalName>Sprite`.
 - Multi-layer sprites (e.g. goblin body + weapon overlay): separate manifest keys drawn at the same frame — see `src/sprites/goblinSprite.ts`.
+- **Every off-screen surface has an owner.** Allocate with `allocCanvas(owner, w, h)` (or `allocReadableCanvas` for one read back with `getImageData`) from `src/core/canvasSurface.ts`, naming the specific `SurfaceOwner` the pixels belong to (add one to `SURFACE_OWNERS` for a new pool). Resize with `resizeSurface`, never by assigning `width`/`height`, and call `releaseSurface` on every eviction and drop path so the pixels go back at once. A new cache gets a byte budget; `RecentSurfaceCache` (`src/core/recentSurfaceCache.ts`) is the ready-made LRU that never lets go of what was just drawn. The owners, their limits and how to measure them are in `docs/asset-management.md`.
 - Reference shape (`src/sprites/ratSprite.ts`): attack anim → `attack` state via `progressFrameIndex`; moving → `walk` via `walkFrameIndex`; else `idle` frame 0. `flipX = facingX < 0`.
 
 ## Painted figures and the frame cache

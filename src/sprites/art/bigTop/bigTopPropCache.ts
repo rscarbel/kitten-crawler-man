@@ -21,7 +21,13 @@
  * frame index; a continuous value such as a lean is quantised into the state.
  */
 
-import { allocCanvas, surfaceContext, type CanvasSurface } from '../../../core/canvasSurface';
+import {
+  allocCanvas,
+  BYTES_PER_MEGABYTE,
+  releaseSurface,
+  surfaceContext,
+  type CanvasSurface,
+} from '../../../core/canvasSurface';
 import { onCanvasRecovery } from '../../../core/canvasRecovery';
 
 type Ctx = CanvasRenderingContext2D;
@@ -106,7 +112,6 @@ interface CachedFrame {
 }
 
 const BYTES_PER_PIXEL = 4;
-const BYTES_PER_MEGABYTE = 1024 * 1024;
 /**
  * The whole cache's ceiling; a fire-walk screen's props at 64 px a tile fit in
  * a fraction of it. Sized so every act's frames, the hall's generated glass,
@@ -152,7 +157,7 @@ export function bakeBigTopPropFrame(
 ): CanvasSurface {
   const width = Math.max(1, Math.ceil(box.width * pxPerTile));
   const height = Math.max(1, Math.ceil(box.height * pxPerTile));
-  const surface = allocCanvas(width, height);
+  const surface = allocCanvas('bigTopProps', width, height);
   const ctx = surfaceContext(surface);
   observer?.beforePaint(ctx, key);
   ctx.save();
@@ -172,6 +177,7 @@ function evictUntilFits(incomingBytes: number): void {
   for (const [id, frame] of frames) {
     if (residentBytes + incomingBytes <= BIG_TOP_PROP_CACHE_BUDGET_BYTES) return;
     frames.delete(id);
+    releaseSurface(frame.surface);
     residentBytes -= frame.bytes;
     evictions++;
   }
@@ -278,6 +284,7 @@ export function bigTopPropCacheEvictions(): number {
 
 /** Drops every baked frame, e.g. when the party leaves the tent. */
 export function clearBigTopPropCache(): void {
+  for (const frame of frames.values()) releaseSurface(frame.surface);
   frames.clear();
   residentBytes = 0;
   evictions = 0;

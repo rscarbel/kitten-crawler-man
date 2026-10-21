@@ -8,6 +8,10 @@
  * queued it, so the decision whether the arrival owes enough work to cover
  * reads the real backlog. What the screen waits on is the shared
  * `floorArrivalLoadTasks`, which drain the same queues every environment fills.
+ *
+ * The same screen covers a warp within the scene — a checkpoint restore, a
+ * recall landing — that would otherwise put the party down among art not yet
+ * ready ({@link ArrivalLoader.coverWarp}).
  */
 import type { LoadTask } from '../core/LoadRunner';
 import { renderQuality } from '../core/RenderQuality';
@@ -36,22 +40,57 @@ export interface ArrivalLoadRequest {
   readonly tasks: () => LoadTask[];
 }
 
+/** A warp's screen: an arrival's, but always put up, since the caller has decided it is owed. */
+export type WarpLoadRequest = Omit<ArrivalLoadRequest, 'returning'>;
+
 export class ArrivalLoader {
   private overlay: LoadingOverlay | null = null;
   private begun = false;
   private closedCallbacks: Array<() => void> = [];
+  /**
+   * Mounted once whether or not anything is owed, so a warp later in the
+   * scene's life has somewhere to put its screen: open exactly while an
+   * overlay is.
+   */
+  private readonly surface: Surface = {
+    id: ARRIVAL_LOADING_SURFACE_ID,
+    band: 'system',
+    haltsWorld: true,
+    locksKeyboard: true,
+    blocksEscape: true,
+    isOpen: () => this.isOpen,
+    render: (ui) => this.overlaySurface?.render(ui),
+    onKey: (key, mods) => this.overlaySurface?.onKey?.(key, mods) === true,
+  };
+  private overlaySurface: Surface | null = null;
 
   /** Puts the loading screen up if the arrival owes enough work to be worth covering. */
   begin(request: ArrivalLoadRequest): void {
     if (this.begun) throw new Error('an arrival is begun once per scene');
     this.begun = true;
     if (!floorArrivalOwesWork(request.returning)) return;
-    this.overlay = new LoadingOverlay({
+    this.open(request);
+  }
+
+  /**
+   * Puts the screen up over a warp within the scene, until its work is done.
+   * For a caller that has already found the destination owed work; does
+   * nothing while a screen is already up.
+   */
+  coverWarp(request: WarpLoadRequest): void {
+    if (this.isOpen) return;
+    this.open(request);
+  }
+
+  private open(request: WarpLoadRequest): void {
+    const overlay = new LoadingOverlay({
       kicker: request.kicker,
       title: request.title,
       tips: request.screen.tips,
       tasks: request.tasks(),
     });
+    this.overlay = overlay;
+    this.overlaySurface = overlay.surface(ARRIVAL_LOADING_SURFACE_ID);
     // Its frames are neither play nor a sign that anything went unused: the
     // render-quality probe would judge the loader's frames, and the figure
     // cache's idle sweep would release the rows being warmed for play.
@@ -83,12 +122,12 @@ export class ArrivalLoader {
     callback();
   }
 
-  /** The screen's surface, to mount with the scene's others; none when nothing was owed. */
+  /** The screen's surface, to mount with the scene's others. */
   surfaces(): Surface[] {
     if (!this.begun) {
       throw new Error('a scene mounted its surfaces before beginning its arrival');
     }
-    return this.overlay === null ? [] : [this.overlay.surface(ARRIVAL_LOADING_SURFACE_ID)];
+    return [this.surface];
   }
 
   /**
@@ -117,6 +156,7 @@ export class ArrivalLoader {
     if (overlay === null || overlay.isOpen) return;
     if (!overlay.isVisible) {
       this.overlay = null;
+      this.overlaySurface = null;
       return;
     }
     overlay.renderFadeOut(ctx, viewportWidth(), viewportHeight());
@@ -126,6 +166,7 @@ export class ArrivalLoader {
   dispose(): void {
     if (this.overlay?.isOpen === true) this.releaseHolds();
     this.overlay = null;
+    this.overlaySurface = null;
     this.closedCallbacks = [];
   }
 

@@ -34,11 +34,13 @@ export const INCUBUS_DRAWN_STATES: readonly string[] = INCUBUS_ROLES.flatMap((ro
 /**
  * The rows warmed the moment a safe room stands him up: every idle view, since
  * he is standing the frame the room exists and the player can walk in from any
- * side. The walk follows within a wander beat, and the talk only once spoken
- * to; both bake on first use while the cache's own approximation covers them.
+ * side, and every walk view, since his wander sets off within the first two
+ * seconds of play — inside the room's loading card rather than on the render
+ * path. The talk waits until he is spoken to.
  */
-const PREWARMED_STATES: readonly string[] = INCUBUS_VIEWS.map((view) =>
-  incubusStateName('idle', view),
+const PREWARMED_ROLES: readonly IncubusRole[] = ['idle', 'walk'];
+const PREWARMED_STATES: readonly string[] = PREWARMED_ROLES.flatMap((role) =>
+  INCUBUS_VIEWS.map((view) => incubusStateName(role, view)),
 );
 
 export function prewarmIncubusSprite(): void {

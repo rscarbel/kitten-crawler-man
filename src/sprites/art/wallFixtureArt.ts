@@ -11,7 +11,12 @@
  * a screen — is painted bright; the light it throws is the lighting pass's.
  */
 
-import { allocCanvas, surfaceContext, type CanvasSurface } from '../../core/canvasSurface';
+import {
+  allocCanvas,
+  releaseSurface,
+  surfaceContext,
+  type CanvasSurface,
+} from '../../core/canvasSurface';
 import type { DungeonFloorThemeId } from '../../map/dungeon/floorTheme';
 import {
   BANNER_TEAR_STAGES,
@@ -121,7 +126,10 @@ type GlowRgb = string;
 const GLOW_SPRITE_PX = 64;
 const glowSprites = new Map<GlowRgb, CanvasSurface>();
 // Baked once and kept; a purge would leave it blank for good.
-onCanvasRecovery(() => glowSprites.clear());
+onCanvasRecovery(() => {
+  for (const sprite of glowSprites.values()) releaseSurface(sprite);
+  glowSprites.clear();
+});
 
 /**
  * A soft disc of one colour, painted once and reused: a fixture draws every
@@ -130,7 +138,7 @@ onCanvasRecovery(() => glowSprites.clear());
 function glowSprite(rgb: GlowRgb): CanvasSurface {
   const cached = glowSprites.get(rgb);
   if (cached !== undefined) return cached;
-  const sprite = allocCanvas(GLOW_SPRITE_PX, GLOW_SPRITE_PX);
+  const sprite = allocCanvas('effects', GLOW_SPRITE_PX, GLOW_SPRITE_PX);
   const c = surfaceContext(sprite);
   const radius = GLOW_SPRITE_PX * HALF;
   const gradient = c.createRadialGradient(radius, radius, 0, radius, radius, radius);

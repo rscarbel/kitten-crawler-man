@@ -93,15 +93,11 @@ const { CatPlayer } = await import('../src/creatures/CatPlayer.js');
 const { MobRoster } = await import('../src/systems/kits/SceneWorld.js');
 const { SpellSystem } = await import('../src/systems/SpellSystem.js');
 const { setViewportSize, setRenderScaleValue } = await import('../src/core/Viewport.js');
-const {
-  beginFigureFrame,
-  setFigureBakeClock,
-  touchFigureState,
-  CACHE_BUDGET_MEGABYTES: FIGURE_CACHE_BUDGET_MEGABYTES,
-  CACHE_BYTE_BUDGET: FIGURE_CACHE_BYTE_BUDGET,
-} = await import('../src/sprites/figure/figureFrameCache.js');
-const { setFigureCacheStatsRecording, getFigureCacheStats, BYTES_PER_MEGABYTE } =
+const { beginFigureFrame, setFigureBakeClock, touchFigureState, figureCacheByteBudget } =
+  await import('../src/sprites/figure/figureFrameCache.js');
+const { setFigureCacheStatsRecording, getFigureCacheStats } =
   await import('../src/sprites/figure/figureCacheStats.js');
+const { BYTES_PER_MEGABYTE } = await import('../src/core/canvasSurface.js');
 const { prewarmAndPinCitizenTalk } = await import('../src/creatures/citizenFigure.js');
 const { townCastStateFor } = await import('../src/sprites/townCastSprite.js');
 const { townCastOutfitFigure } = await import('../src/sprites/art/townCastFigure.js');
@@ -575,8 +571,8 @@ const report = {
   figureCache: {
     peakBytes: peakFigureBytes,
     peakMegabytes: peakFigureBytes / BYTES_PER_MEGABYTE,
-    budgetMegabytes: FIGURE_CACHE_BUDGET_MEGABYTES,
-    budgetBytes: FIGURE_CACHE_BYTE_BUDGET,
+    budgetMegabytes: figureCacheByteBudget() / BYTES_PER_MEGABYTE,
+    budgetBytes: figureCacheByteBudget(),
     peakFigures: peakFigureFigures,
     totalBakes: totalFigureBakes,
     totalPrewarmBakes: totalFigurePrewarmBakes,
@@ -638,7 +634,7 @@ if (asJson) {
     `  render ms: mean ${renderSummary.mean.toFixed(MS_DECIMAL_PLACES)}, p95 ${renderSummary.p95.toFixed(MS_DECIMAL_PLACES)}, max ${renderSummary.max.toFixed(MS_DECIMAL_PLACES)}`,
   );
   console.log(
-    `  figure cache: peak ${(peakFigureBytes / BYTES_PER_MEGABYTE).toFixed(2)} MB / ${FIGURE_CACHE_BUDGET_MEGABYTES} MB budget, ` +
+    `  figure cache: peak ${(peakFigureBytes / BYTES_PER_MEGABYTE).toFixed(2)} MB / ${(figureCacheByteBudget() / BYTES_PER_MEGABYTE).toFixed(0)} MB budget, ` +
       `peak ${peakFigureFigures} figures, ${totalFigureBakes} bakes + ${totalFigurePrewarmBakes} prewarm bakes, ` +
       `${totalFigureEvictions} evictions, ${figureHitRate.toFixed(1)}% hit rate ` +
       `(shared by the player's own prewarmed sprite and every plaza citizen)`,

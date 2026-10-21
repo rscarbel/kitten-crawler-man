@@ -16,7 +16,7 @@
  * let the second pass overwrite the first.
  */
 
-import { allocCanvas, surfaceContext, type CanvasSurface } from './canvasSurface';
+import { allocCanvas, releaseSurface, surfaceContext, type CanvasSurface } from './canvasSurface';
 import { renderQuality } from './RenderQuality';
 import { cachedCellRim, type PlacedRim } from './cellRimCache';
 import {
@@ -143,15 +143,24 @@ function acquireSurfaces(deviceWidth: number, deviceHeight: number): Surfaces {
     surfaceHeight < deviceHeight;
 
   if (needsRealloc) {
-    surfaceWidth = Math.max(surfaceWidth, deviceWidth);
-    surfaceHeight = Math.max(surfaceHeight, deviceHeight);
-    bodySurface = allocCanvas(surfaceWidth, surfaceHeight);
+    const grownWidth = Math.max(surfaceWidth, deviceWidth);
+    const grownHeight = Math.max(surfaceHeight, deviceHeight);
+    for (const outgrown of [bodySurface, overlaySurface, rimSurface, pristineSurface]) {
+      if (outgrown !== null) releaseSurface(outgrown);
+    }
+    // Cleared before reallocating so a context refused partway leaves the set
+    // incomplete, which the next call rebuilds, rather than holding released surfaces.
+    bodySurface = overlaySurface = rimSurface = pristineSurface = null;
+    bodyContext = overlayContext = rimContext = pristineContext = null;
+    surfaceWidth = grownWidth;
+    surfaceHeight = grownHeight;
+    bodySurface = allocCanvas('figureScratch', surfaceWidth, surfaceHeight);
     bodyContext = surfaceContext(bodySurface);
-    overlaySurface = allocCanvas(surfaceWidth, surfaceHeight);
+    overlaySurface = allocCanvas('figureScratch', surfaceWidth, surfaceHeight);
     overlayContext = surfaceContext(overlaySurface);
-    rimSurface = allocCanvas(surfaceWidth, surfaceHeight);
+    rimSurface = allocCanvas('figureScratch', surfaceWidth, surfaceHeight);
     rimContext = surfaceContext(rimSurface);
-    pristineSurface = allocCanvas(surfaceWidth, surfaceHeight);
+    pristineSurface = allocCanvas('figureScratch', surfaceWidth, surfaceHeight);
     pristineContext = surfaceContext(pristineSurface);
   }
 

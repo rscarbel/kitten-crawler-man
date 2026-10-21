@@ -13,6 +13,7 @@ import { BallOfSwine } from '../creatures/BallOfSwine';
 import type { Mob } from '../creatures/Mob';
 import { resetPathfindBudget } from '../creatures/pathfindBudget';
 import { setPackAlertGrid } from '../creatures/packAlert';
+import { setAirspaceBodies } from '../creatures/airspace';
 import {
   setTrebuchetThreatDefense,
   tryThreatenTrebuchet,
@@ -104,6 +105,8 @@ export class MobUpdateLoop implements GameSystem {
   private readonly flyingSeparationDx: number[] = [];
   private readonly flyingSeparationDy: number[] = [];
   private readonly aiTargets: Player[] = [];
+  /** Every living mob that blocks flight, published to `airspace.ts` each frame. */
+  private readonly airspaceBodies: Mob[] = [];
   private readonly players: Player[] = [];
   /**
    * Rebuilt per pass rather than held across frames — see `SeparationGrid`. The
@@ -149,10 +152,17 @@ export class MobUpdateLoop implements GameSystem {
     setMarkedGroundSources(this.hazardSources);
     setTrebuchetThreatDefense(this.trebuchetDefense);
 
-    // Tick BrindleGrub evolution for ALL alive grubs (not just those in AI radius)
+    // Over the whole roster rather than the active mobs: a grub evolves off
+    // screen, and a flyer ticked for its own reasons can meet a body outside
+    // the party's activation radius.
+    const airspaceBodies = this.airspaceBodies;
+    airspaceBodies.length = 0;
     for (const mob of mobs) {
-      if (mob instanceof BrindleGrub && mob.isAlive) mob.tickEvolve();
+      if (!mob.isAlive) continue;
+      if (mob instanceof BrindleGrub) mob.tickEvolve();
+      if (mob.fillsAirspace) airspaceBodies.push(mob);
     }
+    setAirspaceBodies(airspaceBodies);
 
     // Only activate mobs near players
     const activeMobs = mobGrid.queryCircle(human.x, human.y, AI_RADIUS);
@@ -351,13 +361,14 @@ export class MobUpdateLoop implements GameSystem {
   }
 
   /**
-   * Drops the published grid so a torn-down scene's mobs can never be
-   * searched, and the published view so its camera is never tested against
-   * another map. The scene publishes its view, but it is dropped here because
+   * Drops the published grid and airspace bodies so a torn-down scene's mobs
+   * can never be searched or block a flyer, and the published view so its
+   * camera is never tested against another map. The scene publishes its view, but it is dropped here because
    * this is the one teardown every scene with mobs runs.
    */
   dispose(): void {
     setPackAlertGrid(null);
+    setAirspaceBodies([]);
     setVisibleWorldView(null);
     setMarkedGroundSources([]);
     setTrebuchetThreatDefense(null);

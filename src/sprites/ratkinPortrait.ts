@@ -25,7 +25,8 @@ const STANDARD_HEAD_HEIGHT_TILES = 1.24;
 const HALF = 0.5;
 
 const portraits = new Map<RatkinCastId, CanvasSurface>();
-// Baked once and kept; a purge would leave it blank for good.
+// Forgotten after a recovery, which may have blanked them, but not released: an
+// open conversation keeps drawing the portrait it was handed until it moves on.
 onCanvasRecovery(() => portraits.clear());
 
 /** The portrait for `id`, painted once and kept. */
@@ -36,7 +37,7 @@ export function ratkinPortrait(id: RatkinCastId): CanvasSurface {
   const headTiles = STANDARD_HEAD_TILES * build.headScale * build.scale;
   const tileSize = (PORTRAIT_PX * HEAD_FILL) / headTiles;
   const headCentreBelowTileTop = (SOLE_TILES - STANDARD_HEAD_HEIGHT_TILES * build.scale) * tileSize;
-  const surface = allocCanvas(PORTRAIT_PX, PORTRAIT_PX);
+  const surface = allocCanvas('ui', PORTRAIT_PX, PORTRAIT_PX);
   const ctx = surfaceContext(surface);
   const sx = PORTRAIT_PX * HALF - tileSize * HALF;
   const sy = PORTRAIT_PX * HALF - headCentreBelowTileTop;

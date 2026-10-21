@@ -35,7 +35,12 @@
  * turns one blink into two.
  */
 
-import { allocCanvas, freshSurfaceContext, type CanvasSurface } from '../../core/canvasSurface';
+import {
+  allocCanvas,
+  freshSurfaceContext,
+  releaseSurface,
+  type CanvasSurface,
+} from '../../core/canvasSurface';
 import { hashLattice } from '../../map/tilegen/noise';
 import { chimneyPotMouth } from './materials/roofFurniture';
 import { groundHeightToFrameY, project, type Projection } from './projection';
@@ -46,6 +51,8 @@ import { frameHeightPx, frameWidthPx, type BuildingSpec, type LifeEffectSpec } f
 type Ctx = CanvasRenderingContext2D;
 
 const SEED_LIFE = 4409;
+/** Spaces each life effect's seed apart from the next one's. */
+const LIFE_EFFECT_SEED_STRIDE = 97;
 
 /** Smooth 0 → 1 → 0 across one cycle, and continuous where the cycle wraps. */
 function pulseEnvelope(phase: number): number {
@@ -110,12 +117,24 @@ function effectPhase(effect: LifeEffectSpec, step: number, frames: number): numb
 
 export function paintLifeFrame(spec: BuildingSpec, step: number): CanvasSurface {
   const projection = project(spec);
-  const canvas = allocCanvas(frameWidthPx(spec), frameHeightPx(spec));
+  const canvas = allocCanvas('environmentSheets', frameWidthPx(spec), frameHeightPx(spec));
   const ctx = freshSurfaceContext(canvas);
 
-  for (const [index, effect] of spec.life.effects.entries()) {
-    const phase = effectPhase(effect, step, spec.life.frames);
-    paintEffect(ctx, projection, spec, effect, phase, spec.seed + SEED_LIFE + index * 97);
+  try {
+    for (const [index, effect] of spec.life.effects.entries()) {
+      const phase = effectPhase(effect, step, spec.life.frames);
+      paintEffect(
+        ctx,
+        projection,
+        spec,
+        effect,
+        phase,
+        spec.seed + SEED_LIFE + index * LIFE_EFFECT_SEED_STRIDE,
+      );
+    }
+  } catch (error) {
+    releaseSurface(canvas);
+    throw error;
   }
   return canvas;
 }

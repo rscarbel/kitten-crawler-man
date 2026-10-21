@@ -14,7 +14,12 @@
  * it never bleeds past the figure's edge.
  */
 
-import { allocCanvas, surfaceContext, type CanvasSurface } from '../../core/canvasSurface';
+import {
+  allocCanvas,
+  releaseSurface,
+  surfaceContext,
+  type CanvasSurface,
+} from '../../core/canvasSurface';
 import { mix, rgba } from '../art/carlArt';
 import { fillSoftEllipse } from '../art/softShade';
 import { OUTLINE_PX } from '../art/carl/figure';
@@ -81,13 +86,21 @@ export function paintTownCastFrame(
   pose: Pose,
   facing: Facing,
 ): void {
-  const body = allocCanvas(cellWidth, cellHeight);
-  const bodyCtx = surfaceContext(body);
-  drawPersonWithPose(bodyCtx, sx, sy, size, appearance, pose, facing);
-  paintGlaze(bodyCtx, cellWidth, cellHeight, appearance);
+  const body = allocCanvas('figureScratch', cellWidth, cellHeight);
+  try {
+    const bodyCtx = surfaceContext(body);
+    drawPersonWithPose(bodyCtx, sx, sy, size, appearance, pose, facing);
+    paintGlaze(bodyCtx, cellWidth, cellHeight, appearance);
 
-  const outlined = outlineFrom(body, cellWidth, cellHeight, outlinePx(size));
-  ctx.drawImage(outlined, 0, 0);
+    const outlined = outlineFrom(body, cellWidth, cellHeight, outlinePx(size));
+    try {
+      ctx.drawImage(outlined, 0, 0);
+    } finally {
+      releaseSurface(outlined);
+    }
+  } finally {
+    releaseSurface(body);
+  }
 }
 
 /** A soft shadow wash on one side of the figure and a light wash on the other, clipped to its own ink. */
@@ -132,11 +145,6 @@ function paintGlaze(
   ctx.restore();
 }
 
-/**
- * Dilates `body`'s own silhouette into a warm outline ring, then lays `body`
- * back over it — the same construction `carl/figure.ts`'s `outlineInto` uses,
- * generalised to a source surface rather than Carl's own layer stack.
- */
 /** Below this alpha, a pixel counts as outside the silhouette. */
 const SILHOUETTE_ALPHA_THRESHOLD = 96;
 const OPAQUE_ALPHA = 255;
@@ -152,7 +160,7 @@ const ALPHA_CHANNEL_OFFSET = 3;
  * top afterwards so the figure's own interior antialiasing is untouched.
  */
 function hardSilhouette(body: CanvasSurface, cellWidth: number, cellHeight: number): CanvasSurface {
-  const mask = allocCanvas(cellWidth, cellHeight);
+  const mask = allocCanvas('figureScratch', cellWidth, cellHeight);
   const maskCtx = surfaceContext(mask);
   maskCtx.drawImage(body, 0, 0);
   const image = maskCtx.getImageData(0, 0, cellWidth, cellHeight);
@@ -164,6 +172,11 @@ function hardSilhouette(body: CanvasSurface, cellWidth: number, cellHeight: numb
   return mask;
 }
 
+/**
+ * Dilates `body`'s own silhouette into a warm outline ring, then lays `body`
+ * back over it — the same construction `carl/figure.ts`'s `outlineInto` uses,
+ * generalised to a source surface rather than Carl's own layer stack.
+ */
 function outlineFrom(
   body: CanvasSurface,
   cellWidth: number,
@@ -171,13 +184,17 @@ function outlineFrom(
   px: number,
 ): CanvasSurface {
   const mask = hardSilhouette(body, cellWidth, cellHeight);
-  const ring = allocCanvas(cellWidth, cellHeight);
+  const ring = allocCanvas('figureScratch', cellWidth, cellHeight);
   const ringCtx = surfaceContext(ring);
-  for (let i = 0; i < OUTLINE_SAMPLES; i++) {
-    const angle = (i / OUTLINE_SAMPLES) * TWO_PI;
-    const dx = Math.round(Math.cos(angle) * px);
-    const dy = Math.round(Math.sin(angle) * px);
-    ringCtx.drawImage(mask, dx, dy);
+  try {
+    for (let i = 0; i < OUTLINE_SAMPLES; i++) {
+      const angle = (i / OUTLINE_SAMPLES) * TWO_PI;
+      const dx = Math.round(Math.cos(angle) * px);
+      const dy = Math.round(Math.sin(angle) * px);
+      ringCtx.drawImage(mask, dx, dy);
+    }
+  } finally {
+    releaseSurface(mask);
   }
   ringCtx.save();
   ringCtx.globalCompositeOperation = 'source-in';

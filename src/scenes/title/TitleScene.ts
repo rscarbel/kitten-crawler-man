@@ -8,6 +8,7 @@
 import { Scene, type SceneManager } from '../../core/Scene';
 import type { InputManager } from '../../core/InputManager';
 import type { AudioManager } from '../../audio/AudioManager';
+import { GATED_SFX_GROUPS } from '../../audio/sfxGroups';
 import type { AudioScope } from '../../audio/AudioScope';
 import type { DungeonSceneOptions } from '../DungeonScene';
 import { UiRoot } from '../../ui/core/UiRoot';
@@ -102,6 +103,7 @@ export class TitleScene extends Scene {
   ) {
     super();
     this.audio = baseOptions.audio ?? null;
+    for (const group of GATED_SFX_GROUPS) this.audio?.holdSfxGroup(group, false);
     this.viewportInput = harness.viewport ?? browserViewportInput;
     this.clock = new TitleClockSource(
       { ignitionMs: IGNITION_DURATION_MS, diveMs: DIVE_DURATION_MS },

@@ -144,7 +144,11 @@ export function bakeDarknessMask(
   phase: LabLightPhase,
 ): CanvasSurface {
   const { width, height } = maskSize(room);
-  const surface = allocCanvas(width + DARKNESS_MASK_PAD_PX * 2, height + DARKNESS_MASK_PAD_PX * 2);
+  const surface = allocCanvas(
+    'lighting',
+    width + DARKNESS_MASK_PAD_PX * 2,
+    height + DARKNESS_MASK_PAD_PX * 2,
+  );
   const ctx = surfaceContext(surface);
   ctx.translate(DARKNESS_MASK_PAD_PX, DARKNESS_MASK_PAD_PX);
   ctx.fillStyle = `rgba(${DARKNESS_RGB},${DARKNESS_ALPHA})`;

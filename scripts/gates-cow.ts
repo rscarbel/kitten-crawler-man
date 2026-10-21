@@ -22,7 +22,10 @@ import {
   nothingMeasuredFailures,
 } from './figureGates.js';
 import { asGameContext } from './nodeGameContext.js';
-import { CACHE_BYTE_BUDGET, figureByteBudgetFor } from '../src/sprites/figure/figureFrameCache.js';
+import {
+  figureByteBudgetFor,
+  figureCacheByteBudget,
+} from '../src/sprites/figure/figureFrameCache.js';
 import {
   type CowPose,
   cowFrontFaceHeight,
@@ -840,7 +843,7 @@ function gateMemory(): void {
     herdPrewarm += bytesOf(entry, COW_PREWARMED_STATES);
   }
   failUnlessMeasured('C11', figuresMeasured, 'figures');
-  const herdBudget = CACHE_BYTE_BUDGET * HERD_PREWARM_CACHE_SHARE;
+  const herdBudget = figureCacheByteBudget() * HERD_PREWARM_CACHE_SHARE;
   console.log(
     `  C11 memory: the six figures' prewarm set is ${(herdPrewarm / BYTES_PER_MEGABYTE).toFixed(2)} MB ` +
       `of the herd's ${(herdBudget / BYTES_PER_MEGABYTE).toFixed(2)} MB share`,

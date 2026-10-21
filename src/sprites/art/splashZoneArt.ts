@@ -32,7 +32,7 @@
  * left, matching every other figure.
  */
 
-import { allocCanvas, surfaceContext } from '../../core/canvasSurface';
+import { allocCanvas, releaseSurface, surfaceContext } from '../../core/canvasSurface';
 import { clamp01, deg, lerp, mix, rgba, type Pt } from './carlArt';
 
 type Ctx = CanvasRenderingContext2D;
@@ -1926,41 +1926,46 @@ export function drawOtter(ctx: Ctx, view: OtterView, pose: OtterPose): void {
   const pxPerUnit = Math.max(Math.hypot(transform.a, transform.b), DEGENERATE_DENSITY);
   const width = Math.ceil((LAYER_MAX_X - LAYER_MIN_X) * pxPerUnit);
   const height = Math.ceil((LAYER_MAX_Y - LAYER_MIN_Y) * pxPerUnit);
-  const body = allocCanvas(width, height);
-  const bodyCtx = surfaceContext(body);
-  bodyCtx.save();
-  bodyCtx.scale(pxPerUnit, pxPerUnit);
-  bodyCtx.translate(-LAYER_MIN_X, -LAYER_MIN_Y);
-  withBodyTransform(bodyCtx, pose, () => {
-    paintBody(bodyCtx, view, pose, skeleton);
-  });
-  bodyCtx.restore();
-
-  const outlined = allocCanvas(width, height);
-  const outCtx = surfaceContext(outlined);
-  const outlinePx = Math.max(1, Math.round((OUTLINE_CELL_PX * pxPerUnit) / AUTHORED_PX_PER_TILE));
-  for (let i = 0; i < OUTLINE_SAMPLES; i++) {
-    const angle = (i / OUTLINE_SAMPLES) * TWO_PI;
-    outCtx.drawImage(
-      body,
-      Math.round(Math.cos(angle) * outlinePx),
-      Math.round(Math.sin(angle) * outlinePx),
-    );
-  }
-  outCtx.globalCompositeOperation = 'source-in';
-  outCtx.fillStyle = rgba(SILHOUETTE_OUTLINE, SILHOUETTE_OUTLINE_ALPHA);
-  outCtx.fillRect(0, 0, width, height);
-  outCtx.globalCompositeOperation = 'source-over';
-  outCtx.drawImage(body, 0, 0);
-
-  ctx.save();
+  const body = allocCanvas('creatureArt', width, height);
+  const outlined = allocCanvas('creatureArt', width, height);
   try {
-    ctx.globalAlpha = outerAlpha;
-    ctx.translate(LAYER_MIN_X, LAYER_MIN_Y);
-    ctx.scale(1 / pxPerUnit, 1 / pxPerUnit);
-    ctx.drawImage(outlined, 0, 0);
+    const bodyCtx = surfaceContext(body);
+    bodyCtx.save();
+    bodyCtx.scale(pxPerUnit, pxPerUnit);
+    bodyCtx.translate(-LAYER_MIN_X, -LAYER_MIN_Y);
+    withBodyTransform(bodyCtx, pose, () => {
+      paintBody(bodyCtx, view, pose, skeleton);
+    });
+    bodyCtx.restore();
+
+    const outCtx = surfaceContext(outlined);
+    const outlinePx = Math.max(1, Math.round((OUTLINE_CELL_PX * pxPerUnit) / AUTHORED_PX_PER_TILE));
+    for (let i = 0; i < OUTLINE_SAMPLES; i++) {
+      const angle = (i / OUTLINE_SAMPLES) * TWO_PI;
+      outCtx.drawImage(
+        body,
+        Math.round(Math.cos(angle) * outlinePx),
+        Math.round(Math.sin(angle) * outlinePx),
+      );
+    }
+    outCtx.globalCompositeOperation = 'source-in';
+    outCtx.fillStyle = rgba(SILHOUETTE_OUTLINE, SILHOUETTE_OUTLINE_ALPHA);
+    outCtx.fillRect(0, 0, width, height);
+    outCtx.globalCompositeOperation = 'source-over';
+    outCtx.drawImage(body, 0, 0);
+
+    ctx.save();
+    try {
+      ctx.globalAlpha = outerAlpha;
+      ctx.translate(LAYER_MIN_X, LAYER_MIN_Y);
+      ctx.scale(1 / pxPerUnit, 1 / pxPerUnit);
+      ctx.drawImage(outlined, 0, 0);
+    } finally {
+      ctx.restore();
+    }
   } finally {
-    ctx.restore();
+    releaseSurface(body);
+    releaseSurface(outlined);
   }
 
   withBodyTransform(ctx, pose, () => {

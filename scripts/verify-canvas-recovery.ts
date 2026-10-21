@@ -44,12 +44,13 @@ import { asGameContext } from './nodeGameContext.js';
 /** Two chunks a side, so more than one chunk is baked, wiped and rebuilt. */
 const MAP_TILES = CHUNK_TILES * 2;
 const MAP_PX = MAP_TILES * TILE_SIZE;
-const MAP_CHUNKS_PER_SIDE = MAP_TILES / CHUNK_TILES;
 /**
- * Frames that re-bake every stale chunk on the map: a frame of play always
- * re-bakes at least one visible stale chunk, so one frame per chunk is enough.
+ * Frames that are sure to re-bake every stale chunk on the map: a frame of
+ * play always paints at least one tile of a visible stale chunk's re-bake, so
+ * one frame per tile is the most it can take. The drain stops as soon as the
+ * floor matches, which on any machine is a frame or two per chunk.
  */
-const FRAMES_TO_DRAIN_STALE_CHUNKS = MAP_CHUNKS_PER_SIDE * MAP_CHUNKS_PER_SIDE;
+const FRAMES_TO_DRAIN_STALE_CHUNKS = MAP_TILES * MAP_TILES;
 const ALPHA_OFFSET = 3;
 const CHANNELS = 4;
 /** Well past `CHUNK_BAKE_RETRY_FRAMES`, so a held-off bake has had its retry. */
@@ -253,7 +254,10 @@ check(canvasRecoveryCount() === recoveriesBefore + 1, 'the purge check notices t
 check(opaqueShare(render(gameMap)) === 1, 'the floor draws in fallback colour while it repaints');
 paintEnvironmentArtNow();
 let after: Uint8ClampedArray = new Uint8ClampedArray(0);
-for (let frame = 0; frame < FRAMES_TO_DRAIN_STALE_CHUNKS; frame++) after = render(gameMap);
+for (let frame = 0; frame < FRAMES_TO_DRAIN_STALE_CHUNKS; frame++) {
+  after = render(gameMap);
+  if (samePixels(before, after)) break;
+}
 check(samePixels(before, after), 'the recovered floor matches the floor before the wipe');
 
 checkCanvasesSoon();

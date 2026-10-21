@@ -115,6 +115,16 @@ for (const def of LEVELS) {
     for (const type of req.mobTypes) mobTypes.add(type);
   }
 
+  for (const group of def.interiorSpriteGroups) {
+    if (def.spriteGroups.includes(group)) {
+      fail(
+        `Floor "${def.id}" lists "${group}" in both spriteGroups and interiorSpriteGroups — ` +
+          `an indoor-only group in spriteGroups is painted on arrival, which is what ` +
+          `interiorSpriteGroups exists to avoid.`,
+      );
+    }
+  }
+
   const declaredKeys = requiredSpriteKeysForLevel(def.id, def.spriteGroups);
 
   for (const type of mobTypes) {

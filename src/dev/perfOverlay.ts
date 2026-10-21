@@ -10,7 +10,8 @@
 
 import { PERF_TIMERS, perfMonitor } from '../core/PerfMonitor';
 import { viewportWidth } from '../core/Viewport';
-import { BYTES_PER_MEGABYTE, getFigureCacheStats } from '../sprites/figure/figureCacheStats';
+import { BYTES_PER_MEGABYTE } from '../core/canvasSurface';
+import { getFigureCacheStats } from '../sprites/figure/figureCacheStats';
 import {
   environmentArtBytes,
   environmentArtSheetCount,
@@ -19,6 +20,7 @@ import {
   environmentSheetsQueued,
 } from '../map/environmentArtCache';
 import { buildingSheetsNotYetQueued } from '../sprites/buildinggen/runtimeBuildingSheets';
+import { largestMemoryOwners, perfMemorySnapshot } from './perfMemory';
 import { inset, type Rect } from '../ui/core/geom';
 import { WORLD_TEXT } from '../ui/theme/worldInk';
 import { worldPlate } from '../ui/world/worldShapes';
@@ -119,6 +121,30 @@ function environmentArtRows(neutral: string): PerfRow[] {
   ];
 }
 
+/** Enough to name where the memory went without crowding out the timer rows. */
+const LARGEST_MEMORY_OWNERS_SHOWN = 3;
+/** An owner's name is cut short where it would run into the value column. */
+const MEMORY_OWNER_LABEL_CHARS = 15;
+
+/** Every tracked owner's bytes as one total, then the owners holding the most of them. */
+function memoryRows(neutral: string): PerfRow[] {
+  const snapshot = perfMemorySnapshot();
+  const totalMegabytes = snapshot.totalBytes / BYTES_PER_MEGABYTE;
+  const ownerRows = largestMemoryOwners(LARGEST_MEMORY_OWNERS_SHOWN).map(({ owner, tally }) => ({
+    label: ` ${owner.slice(0, MEMORY_OWNER_LABEL_CHARS)}`,
+    value: `${(tally.bytes / BYTES_PER_MEGABYTE).toFixed(MEGABYTE_DECIMALS)}/${tally.surfaces}`,
+    color: neutral,
+  }));
+  return [
+    {
+      label: 'mem MB/surf',
+      value: `${totalMegabytes.toFixed(MEGABYTE_DECIMALS)}/${snapshot.totalSurfaces}`,
+      color: WORLD_TEXT.value.color,
+    },
+    ...ownerRows,
+  ];
+}
+
 function buildRows(): PerfRow[] {
   const fps = perfMonitor.fps;
   const neutral = WORLD_TEXT.label.color;
@@ -176,6 +202,7 @@ function buildRows(): PerfRow[] {
     },
     ...figureCacheRows(neutral),
     ...environmentArtRows(neutral),
+    ...memoryRows(neutral),
   ];
 }
 

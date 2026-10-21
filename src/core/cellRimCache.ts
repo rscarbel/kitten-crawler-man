@@ -16,7 +16,13 @@
  * evicted rim's surface is kept for the next rim of its size.
  */
 
-import { allocCanvas, surfaceContext, type CanvasSurface } from './canvasSurface';
+import {
+  allocCanvas,
+  BYTES_PER_MEGABYTE,
+  surfaceContext,
+  type CanvasSurface,
+  releaseSurface,
+} from './canvasSurface';
 import { canvasGeneration } from './canvasRecovery';
 import { onFigureCellDropped, type FigureCellBlit } from '../sprites/figure/figureFrameCache';
 
@@ -25,8 +31,6 @@ const SIZE_KEY_STEPS_PER_PIXEL = 1000;
 /** Evicted rim surfaces kept for reuse, so a miss under pressure rarely allocates. */
 const SPARE_SURFACE_LIMIT = 8;
 const BYTES_PER_PIXEL = 4;
-const BYTES_PER_KILOBYTE = 1024;
-const BYTES_PER_MEGABYTE = BYTES_PER_KILOBYTE * BYTES_PER_KILOBYTE;
 /** A few dozen allies' rims across their poses and phases. */
 const RIM_CACHE_BUDGET_MEGABYTES = 8;
 const RIM_CACHE_BUDGET_BYTES = RIM_CACHE_BUDGET_MEGABYTES * BYTES_PER_MEGABYTE;
@@ -64,11 +68,6 @@ let spareCount = 0;
 let silhouette: CanvasSurface | null = null;
 let silhouetteContext: CanvasRenderingContext2D | null = null;
 
-function releaseSurface(surface: CanvasSurface): void {
-  surface.width = 0;
-  surface.height = 0;
-}
-
 function sizeKey(width: number, height: number): string {
   return `${width}x${height}`;
 }
@@ -77,7 +76,7 @@ function sizeKey(width: number, height: number): string {
 function rimSurface(width: number, height: number): CanvasSurface {
   const spares = spareSurfaces.get(sizeKey(width, height));
   const spare = spares?.pop();
-  if (spare === undefined) return allocCanvas(width, height);
+  if (spare === undefined) return allocCanvas('rims', width, height);
   spareCount--;
   return spare;
 }
@@ -146,7 +145,7 @@ function silhouetteFor(width: number, height: number): CanvasRenderingContext2D 
   const grownWidth = Math.max(width, silhouette?.width ?? 0);
   const grownHeight = Math.max(height, silhouette?.height ?? 0);
   if (silhouette !== null) releaseSurface(silhouette);
-  const grown = allocCanvas(grownWidth, grownHeight);
+  const grown = allocCanvas('rims', grownWidth, grownHeight);
   silhouette = grown;
   silhouetteContext = surfaceContext(grown);
   return silhouetteContext;

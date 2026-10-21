@@ -11,7 +11,12 @@
  * entry — comes out identical to the same tile in its chunk's bake.
  */
 
-import { allocCanvas, surfaceContext, type CanvasSurface } from '../../core/canvasSurface';
+import {
+  allocCanvas,
+  surfaceContext,
+  type CanvasSurface,
+  releaseSurface,
+} from '../../core/canvasSurface';
 import { floorArtSubSeed, GROUND_TONE_SALT } from '../ground/floorArtSeed';
 import {
   buildMacroField,
@@ -71,17 +76,12 @@ function macroFor(
 }
 
 function uploadSamples(field: MacroField): CanvasSurface {
-  const samples = allocCanvas(field.spanX, field.spanY);
+  const samples = allocCanvas('groundTileParts', field.spanX, field.spanY);
   const samplesCtx = surfaceContext(samples);
   const image = samplesCtx.createImageData(field.spanX, field.spanY);
   image.data.set(field.rgba);
   samplesCtx.putImageData(image, 0, 0);
   return samples;
-}
-
-function releaseSurface(surface: CanvasSurface): void {
-  surface.width = 0;
-  surface.height = 0;
 }
 
 /**

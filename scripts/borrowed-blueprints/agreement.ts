@@ -87,7 +87,7 @@ function arrowBearing(dx: number, dy: number): string {
 
 /** A canvas that records every string drawn on it. */
 function recordingContext(): { readonly ctx: CanvasRenderingContext2D; readonly texts: string[] } {
-  const ctx = surfaceContext(allocCanvas(PROMPT_CANVAS_PX, PROMPT_CANVAS_PX));
+  const ctx = surfaceContext(allocCanvas('ui', PROMPT_CANVAS_PX, PROMPT_CANVAS_PX));
   const texts: string[] = [];
   const fillText = ctx.fillText.bind(ctx);
   ctx.fillText = (...args: Parameters<CanvasRenderingContext2D['fillText']>) => {

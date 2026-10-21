@@ -237,7 +237,7 @@ function bothStationsUpgradedRig(): CompletionRig {
 /** Every word one frame of the village's panels and the screen drew, at a desktop window. */
 function renderDialogs(setup: CompletionRig): string[] {
   setViewportSize(SCREEN_W, SCREEN_H);
-  const ctx = surfaceContext(allocCanvas(SCREEN_W, SCREEN_H));
+  const ctx = surfaceContext(allocCanvas('ui', SCREEN_W, SCREEN_H));
   const texts: string[] = [];
   const fillText = ctx.fillText.bind(ctx);
   ctx.fillText = (...args: Parameters<CanvasRenderingContext2D['fillText']>) => {

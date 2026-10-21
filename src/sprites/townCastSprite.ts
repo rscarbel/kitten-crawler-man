@@ -165,6 +165,14 @@ export function prewarmTownCastLook(look: TownCastLook): void {
  * active and would rather hold the memory than pay a rebake for a look one
  * or two citizens rarely turn to face away from the camera in.
  */
+/** The rows {@link prewarmTownCastLook} warms and {@link pinTownCastLook} pins. */
+export function townCastLookRows(look: TownCastLook): DrawnFigureRow[] {
+  const figure = townCastOutfitFigure(look);
+  return PREWARM_CITIZEN_ROLES.flatMap((role) =>
+    ALL_TOWN_CAST_VIEWS.map((view) => drawnFigureRow(figure, townCastStateName(role, view))),
+  );
+}
+
 export function pinTownCastLook(look: TownCastLook): void {
   const figure = townCastOutfitFigure(look);
   for (const role of PREWARM_CITIZEN_ROLES) {

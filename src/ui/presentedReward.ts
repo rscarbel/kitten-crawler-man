@@ -12,7 +12,12 @@
 
 import type { BoxTier } from '../core/AchievementManager';
 import { ITEM_DEF, type ItemId } from '../core/ItemDefs';
-import { allocCanvas, surfaceContext, type CanvasSurface } from '../core/canvasSurface';
+import {
+  allocCanvas,
+  releaseSurface,
+  surfaceContext,
+  type CanvasSurface,
+} from '../core/canvasSurface';
 import { onCanvasRecovery } from '../core/canvasRecovery';
 import { inset, type Rect } from './core/geom';
 import { ITEM_ICONS } from './icons/itemIcons';
@@ -119,8 +124,12 @@ const PRIME_A = 12.9898;
 const PRIME_B = 43758.5453;
 
 const bitmaps = new Map<string, CanvasSurface | null>();
+function clearBitmaps(): void {
+  for (const bitmap of bitmaps.values()) if (bitmap !== null) releaseSurface(bitmap);
+  bitmaps.clear();
+}
 // A purged canvas would stay blank for good.
-onCanvasRecovery(() => bitmaps.clear());
+onCanvasRecovery(clearBitmaps);
 
 function scatter(index: number): number {
   const value = Math.sin(index * PRIME_A) * PRIME_B;
@@ -142,12 +151,13 @@ function cachedBitmap(
   const full = `${key}@${size}`;
   const cached = bitmaps.get(full);
   if (cached !== undefined) return cached;
-  if (bitmaps.size >= MAX_CACHED_BITMAPS) bitmaps.clear();
+  if (bitmaps.size >= MAX_CACHED_BITMAPS) clearBitmaps();
   let surface: CanvasSurface | null = null;
   try {
-    surface = allocCanvas(size, size);
+    surface = allocCanvas('ui', size, size);
     paint(surfaceContext(surface), size);
   } catch {
+    if (surface !== null) releaseSurface(surface);
     surface = null;
   }
   bitmaps.set(full, surface);

@@ -54,6 +54,20 @@
  *       speakers and unmuting restores it; mono sends the one audible route
  *       through a one-channel downmix into both sides of a merger; with
  *       background audio on, a blurred window keeps playing.
+ *   23. On-demand stings: preloading one plays nothing, its first play
+ *       decodes it and then sounds, and a stop before the decode lands
+ *       cancels that play.
+ *   24. Gated floor-3 groups: each is decoded on approach before its first
+ *       cue, held through the band between taking hold and letting go, held
+ *       anywhere while its activity runs or a recall is landing by it, and
+ *       released once left, without cutting a voice still sounding.
+ *   25. Gated groups' safety net: the Evil Clown's troupe and the party's own
+ *       defences sound wherever they fight; a gated cue played with its group
+ *       let go still sounds from its kept file; a group let go before its
+ *       decode lands stays let go, and so does a play waiting on it, while a
+ *       play asked for after that release still sounds, once, whether or not
+ *       its file is kept; an
+ *       on-demand sting's unplayed file goes with its scope.
  *
  *   npm run verify:audio
  *   npx tsx scripts/verify-audio.ts --only=15
@@ -76,9 +90,12 @@ const { mulberry32 } = await import('../src/sprites/person/rng.js');
 Math.random = mulberry32(RNG_SEED);
 
 const { AudioManager } = await import('../src/audio/AudioManager.js');
-const { CORE_SFX_IDS, sfxGroupsForLevelId } = await import('../src/audio/sfxGroups.js');
+const { compressedSfxForLevelId, CORE_SFX_IDS, GATED_SFX_GROUPS, SFX_GROUPS, sfxGroupsForLevelId } =
+  await import('../src/audio/sfxGroups.js');
+const { FloorSfxGates, groupsActiveAnywhere, SFX_GATE_APPROACH_TILES, SFX_GATE_LEAVE_TILES } =
+  await import('../src/systems/FloorSfxGates.js');
 const { AmbientSoundSystem } = await import('../src/systems/AmbientSoundSystem.js');
-const { SOUND_MANIFEST } = await import('../src/audio/sounds.js');
+const { ON_DEMAND_SOUND_IDS, SOUND_MANIFEST } = await import('../src/audio/sounds.js');
 const { MACHINERY_LOOP, SPIDER_WALKING_LOOP, WADING_LOOP, WALKING_LOOP } =
   await import('../src/audio/loopLevels.js');
 const { checkBackfill, checkSaveRoundTrip } = await import('./verifyAudio/musicLibrary.js');
@@ -323,15 +340,19 @@ async function checkScopeDisposal(): Promise<void> {
   check(forge?.paused === false, 'coming back restarts the streamed bed');
   backgrounded.dispose();
 
-  const level1Only = sfxGroupsForLevelId('level1').filter((id) => !CORE_SFX_IDS.includes(id));
+  // `playNow` reads a decoded buffer, which an on-demand sting holds only once played.
+  const decodedOnPreload = (id: SoundId): boolean => !ON_DEMAND_SOUND_IDS.has(id);
+  const level1Only = sfxGroupsForLevelId('level1').filter(
+    (id) => !CORE_SFX_IDS.includes(id) && decodedOnPreload(id),
+  );
   const level2Only = sfxGroupsForLevelId('level2').filter(
-    (id) => !CORE_SFX_IDS.includes(id) && !level1Only.includes(id),
+    (id) => !CORE_SFX_IDS.includes(id) && !level1Only.includes(id) && decodedOnPreload(id),
   );
   const shared = level1Only.find((id) => sfxGroupsForLevelId('level2').includes(id));
-  const universal = CORE_SFX_IDS[0];
+  const universal = CORE_SFX_IDS.find(decodedOnPreload);
   const evicted = level1Only.find((id) => id !== shared);
   const kept = firstOf(level2Only);
-  await audio.preload([universal]);
+  await audio.preload(universal === undefined ? [] : [universal]);
   const leaving = audio.createScope();
   await leaving.preload(level1Only);
   const arriving = audio.createScope();
@@ -350,7 +371,10 @@ async function checkScopeDisposal(): Promise<void> {
     shared === undefined || audio.playNow(shared) !== null,
     'a buffer both scenes declared stays decoded',
   );
-  check(audio.playNow(universal) !== null, 'a universal buffer is never released');
+  check(
+    universal !== undefined && audio.playNow(universal) !== null,
+    'a universal buffer is never released',
+  );
   arriving.dispose();
 
   const elementsBefore = harness.elements().length;
@@ -432,6 +456,294 @@ async function checkScopeDisposal(): Promise<void> {
   audio.dispose();
 }
 
+async function checkOnDemandStings(): Promise<void> {
+  const sting = 'accepted_bounty' as const satisfies SoundId;
+  const stopped = 'bounty_fight_engaged' as const satisfies SoundId;
+  check(
+    ON_DEMAND_SOUND_IDS.has(sting) && ON_DEMAND_SOUND_IDS.has(stopped),
+    'both stings checked here decode on demand',
+  );
+  const sourcesBefore = harness.sources.length;
+  const audio = await freshManager([sting, stopped]);
+  const startedOf = (id: SoundId): number =>
+    harness.sources.slice(sourcesBefore).filter((source) => source.label === labelOf(id)).length;
+  check(startedOf(sting) === 0, 'preloading an on-demand sting plays nothing');
+
+  audio.play(sting);
+  await harness.flush();
+  check(startedOf(sting) === 1, 'its first play decodes it and then sounds');
+
+  audio.play(stopped);
+  audio.stopSound(stopped);
+  await harness.flush();
+  check(startedOf(stopped) === 0, 'a stop before the decode lands cancels that play');
+  audio.play(stopped);
+  await harness.flush();
+  check(startedOf(stopped) === 1, 'once decoded it plays like any other sound');
+}
+
+/** Nothing under way on the overworld. */
+const QUIET_OVERWORLD = {
+  siegeRunning: false,
+  siegeDeadStanding: false,
+  escortUnderWay: false,
+  escortAmbushersStanding: false,
+  bountyOut: false,
+  circusMobsOut: false,
+};
+
+/** Where the scripted village stands, in tiles. */
+const GATED_VILLAGE = { x: 200, y: 200, w: 20, h: 20 } as const;
+/** Where the scripted circus grounds stand, in tiles. */
+const GATED_GROUNDS = { x: 20, y: 200, w: 10, h: 10 } as const;
+/** Far from both places. */
+const FAR_TILE = { x: 0, y: 0 } as const;
+/** A cue each gated group plays, decoded on preload rather than on demand. */
+const FIRST_CUES = {
+  briarHollowSiege: 'bell_alarm',
+  bounty: 'mantid_hiss_1',
+  circusQuest: 'bear_growl_1',
+} as const satisfies Record<(typeof GATED_SFX_GROUPS)[number], SoundId>;
+
+/** A tile `tiles` west of the scripted village's west edge. */
+function westOfVillage(tiles: number): { x: number; y: number } {
+  return { x: GATED_VILLAGE.x - tiles, y: GATED_VILLAGE.y };
+}
+
+async function checkGatedGroups(): Promise<void> {
+  // The boot group first: gated groups borrow some of its ids, which stay decoded.
+  const audio = await freshManager(CORE_SFX_IDS);
+  const activity = { ...QUIET_OVERWORLD };
+  const anywhere = (group: (typeof GATED_SFX_GROUPS)[number]) => (): boolean =>
+    groupsActiveAnywhere(activity)[group];
+  const gates = new FloorSfxGates(audio, [
+    {
+      group: 'briarHollowSiege',
+      activeAnywhere: anywhere('briarHollowSiege'),
+      places: [GATED_VILLAGE],
+    },
+    { group: 'bounty', activeAnywhere: anywhere('bounty'), places: [] },
+    { group: 'circusQuest', activeAnywhere: anywhere('circusQuest'), places: [GATED_GROUNDS] },
+  ]);
+  const residentAt = async (party: readonly { x: number; y: number }[]): Promise<number> => {
+    gates.update(party);
+    await harness.flush();
+    return audio.decodedBufferCount;
+  };
+  const siegeOnly = new Set(
+    SFX_GROUPS.briarHollowSiege.filter(
+      (id) => !ON_DEMAND_SOUND_IDS.has(id) && !CORE_SFX_IDS.includes(id),
+    ),
+  );
+  // Played and run out, so no voice of it holds its buffer past a later let-go.
+  const firstCueHeard = (group: (typeof GATED_SFX_GROUPS)[number]): boolean => {
+    const heard = audio.playNow(FIRST_CUES[group]) !== null;
+    audio.stopSound(FIRST_CUES[group]);
+    harness.advance(SETTLE_MS);
+    return heard;
+  };
+
+  const baseline = await residentAt([FAR_TILE]);
+  check(
+    GATED_SFX_GROUPS.every((group) => !audio.holdsSfxGroup(group)),
+    `far from everything, no gated group is decoded (${baseline} buffers)`,
+  );
+  const outsideApproach = await residentAt([westOfVillage(SFX_GATE_APPROACH_TILES + 1)]);
+  check(outsideApproach === baseline, 'one tile short of the approach radius decodes nothing');
+  const approached = await residentAt([westOfVillage(SFX_GATE_APPROACH_TILES)]);
+  check(
+    approached - baseline === siegeOnly.size && firstCueHeard('briarHollowSiege'),
+    `nearing the village decodes the siege's ${siegeOnly.size} buffers before its first cue ` +
+      `(${approached - baseline} decoded)`,
+  );
+  const inBand = await residentAt([westOfVillage(SFX_GATE_LEAVE_TILES)]);
+  check(inBand === approached, 'walking back out to the leave radius keeps them');
+  audio.play('bell_crack');
+  harness.advance(1);
+  const sounding = firstOf(harness.sources.slice(-1));
+  const left = await residentAt([westOfVillage(SFX_GATE_LEAVE_TILES + 1)]);
+  check(
+    left === baseline + 1 && sounding?.label === labelOf('bell_crack') && !sounding.isSilenced(),
+    `past it they are let go, all but the one still sounding (${left - baseline} kept)`,
+  );
+  audio.stopSound('bell_crack');
+  harness.advance(SETTLE_MS);
+  activity.bountyOut = true;
+  await residentAt([FAR_TILE]);
+  check(
+    audio.holdsSfxGroup('bounty') && firstCueHeard('bounty'),
+    "a bounty out decodes the bosses' group wherever the party is",
+  );
+  activity.bountyOut = false;
+  await residentAt([FAR_TILE]);
+  check(!audio.holdsSfxGroup('bounty'), 'collecting it lets the group go');
+  activity.siegeRunning = true;
+  await residentAt([FAR_TILE]);
+  check(
+    GATED_SFX_GROUPS.every((group) => audio.holdsSfxGroup(group) && firstCueHeard(group)),
+    'a siege holds the siege, the bounty marks and the circus mobs it fields',
+  );
+  activity.siegeRunning = false;
+  activity.siegeDeadStanding = true;
+  await residentAt([FAR_TILE]);
+  check(
+    GATED_SFX_GROUPS.every((group) => audio.holdsSfxGroup(group)),
+    'after a siege, its dead walking back out keep all three groups decoded',
+  );
+  activity.siegeDeadStanding = false;
+  activity.escortAmbushersStanding = true;
+  await residentAt([FAR_TILE]);
+  check(
+    audio.holdsSfxGroup('briarHollowSiege'),
+    "with Midge delivered, her ambushers still standing keep the siege's dead decoded",
+  );
+  activity.escortAmbushersStanding = false;
+  const landing = { x: GATED_GROUNDS.x, y: GATED_GROUNDS.y };
+  await residentAt([FAR_TILE, landing]);
+  check(
+    audio.holdsSfxGroup('circusQuest') && !audio.holdsSfxGroup('briarHollowSiege'),
+    "a recall landing on the grounds decodes the circus's group before the party arrives",
+  );
+  const released = await residentAt([FAR_TILE]);
+  check(
+    released === baseline && GATED_SFX_GROUPS.every((group) => !audio.holdsSfxGroup(group)),
+    `with nothing near and nothing under way every gated group is let go (${released} buffers)`,
+  );
+}
+
+/** The party's own defences, and its soldiers' hurt and fall, which fight anywhere and play unplaced. */
+const DEFENCE_SOUNDS = [
+  'trebuchet_fire_1',
+  'trebuchet_fire_2',
+  'boulder_impact_1',
+  'boulder_fire_whoosh',
+  'miasma_hiss',
+  'trebuchet_break',
+  'snare_trigger',
+  'snare_break',
+  'snare_convert',
+  'spikes_impale',
+  'wall_hit_wood',
+  'wall_break_stone',
+  'fence_break',
+  'gate_thud',
+  'ratkin_soldier_hurt_1',
+  'ratkin_soldier_down',
+] as const satisfies readonly SoundId[];
+
+/** The Evil Clown bounty's troupe, which fights at a bounty site far from the circus grounds. */
+const CLOWN_TROUPE_SOUNDS = [
+  'clown_burp',
+  'clown_horn',
+  'circus_lemur_attack',
+  'circus_lemur_sound',
+] as const satisfies readonly SoundId[];
+
+async function checkGatedSafetyNet(): Promise<void> {
+  const troupeMissing = CLOWN_TROUPE_SOUNDS.filter((id) => !SFX_GROUPS.bounty.includes(id));
+  check(
+    troupeMissing.length === 0,
+    `an Evil Clown bounty's troupe is voiced by the bounty group (${troupeMissing.join(', ') || 'all there'})`,
+  );
+  const floorWide = new Set<SoundId>([...CORE_SFX_IDS, ...sfxGroupsForLevelId('level3')]);
+  const defencesMissing = DEFENCE_SOUNDS.filter((id) => !floorWide.has(id));
+  check(
+    defencesMissing.length === 0,
+    `the party's defences are decoded anywhere on floor 3 (${defencesMissing.join(', ') || 'all there'})`,
+  );
+
+  const audio = await freshManager(CORE_SFX_IDS);
+  const floor = audio.createScope();
+  await floor.keepCompressed(compressedSfxForLevelId('level3'));
+  await harness.flush();
+  const sourcesBefore = harness.sources.length;
+  const startedOf = (id: SoundId): number =>
+    harness.sources.slice(sourcesBefore).filter((source) => source.label === labelOf(id)).length;
+  audio.play('mantid_hiss_2');
+  await harness.flush();
+  check(
+    startedOf('mantid_hiss_2') === 1,
+    'a gated cue played with its group never held still sounds, decoded from its kept file',
+  );
+  audio.holdSfxGroup('circusQuest', true);
+  await harness.flush();
+  audio.holdSfxGroup('circusQuest', false);
+  await harness.flush();
+  audio.play('bear_growl_1');
+  await harness.flush();
+  check(startedOf('bear_growl_1') === 1, 'and so does one whose group was decoded and let go');
+
+  const racing = await freshManager(CORE_SFX_IDS);
+  const racingFloor = racing.createScope();
+  await racingFloor.keepCompressed(compressedSfxForLevelId('level3'));
+  await harness.flush();
+  const decodedBefore = racing.decodedBufferCount;
+  racing.holdSfxGroup('bounty', true);
+  racing.playWhenReady('mantid_furious');
+  racing.holdSfxGroup('bounty', false);
+  await harness.flush();
+  check(
+    racing.decodedBufferCount === decodedBefore,
+    `a group let go before its decodes land stays let go (${racing.decodedBufferCount - decodedBefore} came back)`,
+  );
+  racing.holdSfxGroup('bounty', true);
+  await harness.flush();
+  check(
+    startedOf('mantid_furious') === 0,
+    'and a play waiting on it is dropped with it, not played when the group comes back',
+  );
+  racing.holdSfxGroup('bounty', false);
+
+  const replaying = await freshManager(CORE_SFX_IDS);
+  await replaying.createScope().keepCompressed(compressedSfxForLevelId('level3'));
+  await harness.flush();
+  replaying.holdSfxGroup('bounty', true);
+  replaying.holdSfxGroup('bounty', false);
+  replaying.play('mantid_hiss_3');
+  await harness.flush();
+  check(
+    startedOf('mantid_hiss_3') === 1,
+    'a play just after its group is let go mid-decode still sounds, decoded afresh',
+  );
+
+  const unkept = 'mantid_hiss_4' as const satisfies SoundId;
+  const fetching = await freshManager([]);
+  const fetchingScope = fetching.createScope();
+  void fetchingScope.preload([unkept]);
+  fetchingScope.dispose();
+  fetching.play(unkept);
+  await harness.flush();
+  const startedPromptly = startedOf(unkept);
+  harness.advance(SETTLE_MS);
+  await harness.flush();
+  check(
+    startedPromptly === 1 && startedOf(unkept) === 1,
+    `a play after a release mid-fetch of a file nobody keeps sounds at once, and once ` +
+      `(${startedPromptly} then ${startedOf(unkept)})`,
+  );
+
+  const stopped = await freshManager([]);
+  const stoppedScope = stopped.createScope();
+  void stoppedScope.preload(['death_sequence']);
+  stopped.playWhenReady('death_sequence');
+  stopped.fadeOutSound('death_sequence', 0);
+  await harness.flush();
+  check(
+    startedOf('death_sequence') === 0,
+    'a stop before a waiting sound has loaded drops it rather than playing it after',
+  );
+
+  const sting = 'accepted_bounty' as const satisfies SoundId;
+  const owner = await freshManager([]);
+  const stingScope = owner.createScope();
+  await stingScope.preload([sting]);
+  await harness.flush();
+  stingScope.dispose();
+  owner.play(sting);
+  await harness.flush();
+  check(startedOf(sting) === 0, "an on-demand sting's unplayed file is let go with its scope");
+}
+
 async function checkRampedStops(): Promise<void> {
   const audio = await freshManager([
     'splat_1',
@@ -445,13 +757,15 @@ async function checkRampedStops(): Promise<void> {
     'keyboard_hero_music_track_1',
   ]);
 
-  await expectRampedStops('stopSound on a full-volume one-shot', () => {
+  await expectRampedStops('stopSound on a full-volume one-shot', async () => {
     audio.play('death_sequence');
+    await harness.flush();
     harness.advance(SETTLE_MS);
     audio.stopSound('death_sequence');
   });
-  await expectRampedStops('fadeOutSound on a full-volume one-shot', () => {
+  await expectRampedStops('fadeOutSound on a full-volume one-shot', async () => {
     audio.play('slots_jackpot_siren');
+    await harness.flush();
     harness.advance(SETTLE_MS);
     audio.fadeOutSound('slots_jackpot_siren', SKIPPED_FADE_MS);
   });
@@ -637,6 +951,9 @@ const CHECKS: readonly AudioCheck[] = [
     name: 'the pause menu holds the music',
     run: () => director.checkPauseMenuHoldsMusic(harness, check),
   },
+  { id: 23, name: 'on-demand stings', run: checkOnDemandStings },
+  { id: 24, name: 'gated floor-3 groups', run: checkGatedGroups },
+  { id: 25, name: "gated groups' safety net", run: checkGatedSafetyNet },
 ];
 
 const onlyArg = process.argv.find((arg) => arg.startsWith('--only='));

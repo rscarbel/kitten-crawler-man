@@ -1,4 +1,9 @@
-import { allocCanvas, surfaceContext, type CanvasSurface } from '../../../core/canvasSurface';
+import {
+  allocCanvas,
+  releaseSurface,
+  surfaceContext,
+  type CanvasSurface,
+} from '../../../core/canvasSurface';
 import { dungeonFloorTheme } from '../../dungeon/floorTheme';
 import { NoiseField, hashLattice } from '../../tilegen/noise';
 import { drawGroundTile } from '../groundTiles';
@@ -105,7 +110,10 @@ const SAND_PEBBLE_SHADOW_OFFSET = 1;
 
 const sandTextures = new Map<number, CanvasSurface>();
 // Baked once and kept; a purge would leave it blank for good.
-onCanvasRecovery(() => sandTextures.clear());
+onCanvasRecovery(() => {
+  for (const texture of sandTextures.values()) releaseSurface(texture);
+  sandTextures.clear();
+});
 
 function lerpRgb(a: RGB, b: RGB, t: number): RGB {
   const clamped = Math.max(0, Math.min(1, t));
@@ -160,7 +168,7 @@ function sandTexture(ts: number): CanvasSurface {
       }
     }
   }
-  const canvas = allocCanvas(size, size);
+  const canvas = allocCanvas('bossRoomTiles', size, size);
   const textureCtx = surfaceContext(canvas);
   const image = textureCtx.createImageData(size, size);
   image.data.set(surface.toRgba());
@@ -1205,7 +1213,7 @@ function mudPatchImage(structure: TileContent[][], patch: MudPatch, ts: number):
 
   const widthPx = Math.max(1, Math.round(patch.width * ts));
   const heightPx = Math.max(1, Math.round(patch.height * ts));
-  const canvas = allocCanvas(widthPx, heightPx);
+  const canvas = allocCanvas('bossRoomTiles', widthPx, heightPx);
   const mudCtx = surfaceContext(canvas);
   const image = mudCtx.createImageData(widthPx, heightPx);
   const noise = new NoiseField(Math.max(widthPx, heightPx));

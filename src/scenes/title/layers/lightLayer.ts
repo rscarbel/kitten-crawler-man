@@ -9,7 +9,13 @@
  * nothing: darkness that hides the art costs more than the mood buys.
  */
 
-import { allocCanvas, surfaceContext, type CanvasSurface } from '../../../core/canvasSurface';
+import {
+  allocCanvas,
+  surfaceContext,
+  type CanvasSurface,
+  releaseSurface,
+  resizeSurface,
+} from '../../../core/canvasSurface';
 import { canvasGeneration } from '../../../core/canvasRecovery';
 import { renderQuality } from '../../../core/RenderQuality';
 import { TITLE_INK, titleRgb, titleRgba, type TitleRgb } from '../../../ui/theme/titleInk';
@@ -63,7 +69,7 @@ const HALF = 0.5;
 const RGB_MAX = 255;
 
 function bakePoolStamp(ink: TitleRgb): CanvasSurface {
-  const stamp = allocCanvas(POOL_STAMP_PX, POOL_STAMP_PX);
+  const stamp = allocCanvas('title', POOL_STAMP_PX, POOL_STAMP_PX);
   const ctx = surfaceContext(stamp);
   const centre = POOL_STAMP_PX * HALF;
   const gradient = ctx.createRadialGradient(centre, centre, 0, centre, centre, centre);
@@ -92,13 +98,19 @@ export function lightLayer(): TitleLayer {
   let hotspotStamp: CanvasSurface | null = null;
   let stampGeneration = canvasGeneration();
 
+  const releaseStamps = (): void => {
+    if (poolStamp !== null) releaseSurface(poolStamp);
+    if (hotspotStamp !== null) releaseSurface(hotspotStamp);
+    poolStamp = null;
+    hotspotStamp = null;
+  };
+
   const lightmapFor = (stage: TitleStage, pxPerTexel: number): CanvasSurface => {
     const width = Math.ceil((stage.width + LIGHT_MARGIN_PX * 2) / pxPerTexel);
     const height = Math.ceil((stage.height + LIGHT_MARGIN_PX * 2) / pxPerTexel);
-    const canvas = lightmap ?? allocCanvas(width, height);
+    const canvas = lightmap ?? allocCanvas('title', width, height);
     if (canvas.width !== width || canvas.height !== height) {
-      canvas.width = width;
-      canvas.height = height;
+      resizeSurface(canvas, width, height);
     }
     lightmap = canvas;
     return canvas;
@@ -119,8 +131,7 @@ export function lightLayer(): TitleLayer {
       const map = lightmapFor(stage, pxPerTexel);
       const generation = canvasGeneration();
       if (generation !== stampGeneration) {
-        poolStamp = null;
-        hotspotStamp = null;
+        releaseStamps();
         stampGeneration = generation;
       }
       const stamp = (poolStamp ??= bakePoolStamp(TITLE_INK.light.pool));
@@ -219,12 +230,10 @@ export function lightLayer(): TitleLayer {
     },
     dispose: () => {
       if (lightmap !== null) {
-        lightmap.width = 0;
-        lightmap.height = 0;
+        releaseSurface(lightmap);
       }
       lightmap = null;
-      poolStamp = null;
-      hotspotStamp = null;
+      releaseStamps();
     },
   };
 }

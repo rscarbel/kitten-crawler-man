@@ -38,6 +38,8 @@ export type PlaytestSpawn =
   | { readonly kind: 'spiderHallwayHost' }
   /** The tile just inside the goblin mother's nursery, by the way in. */
   | { readonly kind: 'questRoomEntrance' }
+  /** A few tiles short of the floor's first stairwell, in the room that holds it. */
+  | { readonly kind: 'stairwellApproach' }
   /** The tile just inside the first clogged bathroom, by the way in. */
   | { readonly kind: 'bathroomEntrance' }
   /** Floor 2's stealth gate room, in front of the gate guard, gate still locked. */
@@ -138,6 +140,8 @@ export interface PlaytestPreset {
   readonly hire?: MercenaryTemplateId;
   /** Mongo already out beside the cat on the first frame, rather than waiting on a summon. */
   readonly mongoOut?: boolean;
+  /** The Desperado Pass already held, so the club's door opens without Clarabelle's greeting. */
+  readonly clubMember?: boolean;
   /**
    * "The Show Must Go On" already at this point, with the party put down on the
    * circus grounds instead of at `spawn`.
@@ -900,7 +904,9 @@ function withQuantities(
  * Briar Hollow with the questline done up to the siege — the Mayor's asks
  * met, the bell ready to ring — the ring built to a tier (`--walls`, stone
  * unless told), eight loaded trebuchets, and Carl carrying a stockpile and a
- * crate of dynamite for the fight.
+ * crate of dynamite for the fight. `&assaultNow` on the URL rings the bell on
+ * arrival with a short countdown, so the first wave comes without a word
+ * with the Mayor.
  */
 const BRIAR_HOLLOW_ASSAULT: PlaytestPreset = {
   ...BRIAR_HOLLOW_VILLAGE,
@@ -1115,6 +1121,39 @@ const SPIDER_HALLWAY: PlaytestPreset = {
   spiderQuestAwaitingHacking: false,
 };
 
+/** Floor 1 from its own start, with the Juicer preset's party to survive what comes. */
+const LEVEL1: PlaytestPreset = {
+  ...JUICER,
+  id: 'level1',
+  description: "Start of the first floor, the Juicer preset's party",
+  spawn: { kind: 'mapStart' },
+};
+
+/** Floor 1 a few steps short of its stairwell, with the Juicer preset's party, for watching a descent. */
+const STAIRWELL: PlaytestPreset = {
+  ...JUICER,
+  id: 'stairwell',
+  description: "A few tiles short of the first floor's stairwell, the Juicer preset's party",
+  spawn: { kind: 'stairwellApproach' },
+};
+
+/** The circus grounds with the Big Top open, and the floor-3 party to walk into it. */
+const BIG_TOP: PlaytestPreset = {
+  ...LEVEL3,
+  id: 'bigtop',
+  description: 'Circus grounds with the Big Top open, the floor-3 party',
+  circusQuest: { stage: 'bigtop_ready', heatherSlain: true },
+};
+
+/** The street outside the members' club, whose casino floor is inside, the pass already held. */
+const CASINO_FLOOR: PlaytestPreset = {
+  ...LEVEL3,
+  id: 'casino-floor',
+  description: "Outside the Desperado Club's door, a member, the casino floor one step inside",
+  spawn: { kind: 'townBuildingDoor', buildingName: 'The Desperado Club' },
+  clubMember: true,
+};
+
 export const PLAYTEST_PRESETS: readonly PlaytestPreset[] = [
   HOARDER,
   JUICER,
@@ -1150,6 +1189,10 @@ export const PLAYTEST_PRESETS: readonly PlaytestPreset[] = [
   CONTRACTS_LAST_SPOT,
   RESOURCING_THRALLS,
   TARANIS,
+  LEVEL1,
+  STAIRWELL,
+  BIG_TOP,
+  CASINO_FLOOR,
 ];
 
 export function getPlaytestPreset(id: string): PlaytestPreset | null {

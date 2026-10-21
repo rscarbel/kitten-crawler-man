@@ -19,6 +19,7 @@ import type { RewardFlySystem } from './RewardFlySystem';
 import { keybindings } from '../core/Keybindings';
 import { ACTIVATE_KEYS, UI_TAP_SOUND, type Surface } from '../ui/core/UiRoot';
 import type { LootBannerModel } from '../ui/hud/hudModel';
+import type { PauseFrame } from '../ui/screens/pause/PauseScreen';
 
 interface QueueEntry {
   def: AwardDef;
@@ -195,6 +196,26 @@ export class AchievementUISystem {
       return true;
     }
     return false;
+  }
+
+  /**
+   * The pause menu's loot-box buttons: each present only while the party is in
+   * a safe room and that crawler has boxes waiting.
+   *
+   * @param closePause Puts the pause menu away as the boxes start opening.
+   */
+  pauseBoxOpeners(closePause: () => void): Pick<PauseFrame, 'onOpenHumanBoxes' | 'onOpenCatBoxes'> {
+    const inSafe = this.partyInSafeRoom;
+    return {
+      onOpenHumanBoxes:
+        inSafe && this.humanAchievements.pendingBoxes.length > 0
+          ? () => this.openBoxQueue('human', closePause)
+          : undefined,
+      onOpenCatBoxes:
+        inSafe && this.catAchievements.pendingBoxes.length > 0
+          ? () => this.openBoxQueue('cat', closePause)
+          : undefined,
+    };
   }
 
   /** Start opening loot box queue for a player, then chain to the other player's boxes. */

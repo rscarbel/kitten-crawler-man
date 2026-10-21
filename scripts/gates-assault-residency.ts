@@ -39,7 +39,7 @@ import { gameContext } from './nodeGameContext.js';
 import { nothingMeasuredFailures, reportFigureGates } from './figureGates.js';
 import { figureFrameCount, type FigureDef } from '../src/sprites/figure/figureDef.js';
 import {
-  CACHE_BYTE_BUDGET,
+  figureCacheByteBudget,
   IDLE_FRAMES_BEFORE_RELEASE,
   PREWARM_BAKE_BUDGET_MS,
   beginFigureFrame,
@@ -692,7 +692,7 @@ function checkArrival(
   if (crawlerMisses > 0) {
     fail('A2 countdown', `${label} cost the crawlers ${crawlerMisses} cold cells`);
   }
-  if (resident > CACHE_BYTE_BUDGET) {
+  if (resident > figureCacheByteBudget()) {
     fail('A2 countdown', `${label} holds ${mb(resident)} MB, past the cache's ceiling`);
   }
 }

@@ -64,7 +64,7 @@ let measureTarget: PaintTarget | null = null;
 
 function measuringTarget(): PaintTarget {
   if (measureTarget !== null) return measureTarget;
-  const canvas = allocCanvas(MEASURE_CANVAS_PX, MEASURE_CANVAS_PX);
+  const canvas = allocCanvas('title', MEASURE_CANVAS_PX, MEASURE_CANVAS_PX);
   measureTarget = { ctx: surfaceContext(canvas), theme: resolveTheme('pointer') };
   return measureTarget;
 }

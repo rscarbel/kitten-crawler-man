@@ -13,7 +13,12 @@
  * painter the bake and the art gate share.
  */
 
-import { allocCanvas, surfaceContext, type CanvasSurface } from '../../core/canvasSurface';
+import {
+  allocCanvas,
+  releaseSurface,
+  surfaceContext,
+  type CanvasSurface,
+} from '../../core/canvasSurface';
 import { HAMBURGER_PALETTE as PALETTE } from '../../ui/icons/foodIcons';
 import { onCanvasRecovery } from '../../core/canvasRecovery';
 
@@ -283,13 +288,14 @@ export const GROUND_BURGER_BAKE_PX = 64;
 let bakedBurger: CanvasSurface | null = null;
 // Baked once and kept; a purge would leave it blank for good.
 onCanvasRecovery(() => {
+  if (bakedBurger !== null) releaseSurface(bakedBurger);
   bakedBurger = null;
 });
 
 /** The ground burger, baked once at {@link GROUND_BURGER_BAKE_PX} and reused. */
 export function groundBurgerSprite(): CanvasSurface {
   if (bakedBurger !== null) return bakedBurger;
-  const surface = allocCanvas(GROUND_BURGER_BAKE_PX, GROUND_BURGER_BAKE_PX);
+  const surface = allocCanvas('props', GROUND_BURGER_BAKE_PX, GROUND_BURGER_BAKE_PX);
   paintBurgerInCell(surfaceContext(surface), 0, 0, GROUND_BURGER_BAKE_PX);
   bakedBurger = surface;
   return surface;

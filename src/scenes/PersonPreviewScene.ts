@@ -31,8 +31,8 @@ import {
 } from '../sprites/person/PersonAppearance';
 import { drawPerson } from '../sprites/person/drawPerson';
 import { walkCycleDistance } from '../sprites/person/gait';
+import { BYTES_PER_MEGABYTE } from '../core/canvasSurface';
 import {
-  BYTES_PER_MEGABYTE,
   getFigureCacheStats,
   setFigureCacheStatsRecording,
 } from '../sprites/figure/figureCacheStats';

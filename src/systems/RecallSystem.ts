@@ -23,6 +23,7 @@ import type { GameMap } from '../map/GameMap';
 import type { GameSystem, SystemContext } from './GameSystem';
 import type { HumanPlayer } from '../creatures/HumanPlayer';
 import type { LevelDef } from '../levels/types';
+import type { TilePoint } from '../map/town/townPlan';
 import { TILE_SIZE } from '../core/constants';
 import { worldBar } from '../ui/world/worldShapes';
 import { worldText } from '../ui/world/worldText';
@@ -132,6 +133,11 @@ export class RecallSystem implements GameSystem {
   /** Whether a channel is running, so the party is about to be moved unless it is given up. */
   get isChannelling(): boolean {
     return this.channel !== null;
+  }
+
+  /** Where a running channel will land the party, or null with no channel. */
+  get channelLandingTile(): TilePoint | null {
+    return this.channel?.destination.landingTile(this.gameMap) ?? null;
   }
 
   captureCheckpoint(): RecallCheckpoint {

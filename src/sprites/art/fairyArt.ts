@@ -32,7 +32,7 @@
  */
 
 import { type Pt, clamp01, clampAlpha, deg, easeOut, lerp, mix, rgba } from './carlArt';
-import { allocCanvas, surfaceContext } from '../../core/canvasSurface';
+import { allocCanvas, releaseSurface, surfaceContext } from '../../core/canvasSurface';
 import { withClip } from './softShade';
 import type { FairyKind } from './fairyTiming';
 
@@ -4325,19 +4325,23 @@ const FADE_LAYER_HEIGHT = 1.8;
 function paintFaded(ctx: Ctx, pxPerTile: number, fade: number, paint: (layer: Ctx) => void): void {
   const width = Math.max(1, Math.ceil(FADE_LAYER_WIDTH * pxPerTile));
   const height = Math.max(1, Math.ceil(FADE_LAYER_HEIGHT * pxPerTile));
-  const surface = allocCanvas(width, height);
-  const layer = surfaceContext(surface);
-  layer.setTransform(
-    pxPerTile,
-    0,
-    0,
-    pxPerTile,
-    -FADE_LAYER_LEFT * pxPerTile,
-    -FADE_LAYER_TOP * pxPerTile,
-  );
-  paint(layer);
-  ctx.globalAlpha *= fade;
-  ctx.drawImage(surface, FADE_LAYER_LEFT, FADE_LAYER_TOP, width / pxPerTile, height / pxPerTile);
+  const surface = allocCanvas('creatureArt', width, height);
+  try {
+    const layer = surfaceContext(surface);
+    layer.setTransform(
+      pxPerTile,
+      0,
+      0,
+      pxPerTile,
+      -FADE_LAYER_LEFT * pxPerTile,
+      -FADE_LAYER_TOP * pxPerTile,
+    );
+    paint(layer);
+    ctx.globalAlpha *= fade;
+    ctx.drawImage(surface, FADE_LAYER_LEFT, FADE_LAYER_TOP, width / pxPerTile, height / pxPerTile);
+  } finally {
+    releaseSurface(surface);
+  }
 }
 
 /** Everything but the shadow, which stays on the ground while the body lifts, rolls and fades. */

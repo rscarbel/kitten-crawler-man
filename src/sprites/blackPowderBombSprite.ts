@@ -124,7 +124,7 @@ function bakedSphere(radius: number): { surface: CanvasSurface; drawRadius: numb
 function bakeSphere(radius: number): CanvasSurface {
   const extent = (radius + BAKE_PAD_PX) * BAKE_SUPERSAMPLE;
   const size = Math.ceil(extent * 2);
-  const surface = allocCanvas(size, size);
+  const surface = allocCanvas('props', size, size);
   const ctx = surfaceContext(surface);
   const r = radius * BAKE_SUPERSAMPLE;
   const c = size / 2;

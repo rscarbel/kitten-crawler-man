@@ -24,7 +24,7 @@
  */
 
 import type { SpriteKey } from '../../core/SpriteLoader';
-import { allocReadableCanvas, surfaceContext } from '../../core/canvasSurface';
+import { allocReadableCanvas, releaseSurface, surfaceContext } from '../../core/canvasSurface';
 import { VILLAGE_PROPS } from '../../map/overworld/briarHollowLayout';
 import { mulberry32, subSeed } from '../person/rng';
 import {
@@ -238,23 +238,28 @@ function measureArtTopTilesAboveFootprint(prop: VillageStandingPropId): number {
   if (sheet === undefined) throw new Error(`village prop ${prop} has no sheet`);
   const frameWidth = sheet.w * VILLAGE_TILE_SCALE;
   const frameHeight = frameHeightPx(sheet);
-  const surface = allocReadableCanvas(frameWidth, frameHeight);
-  const ctx = surfaceContext(surface);
-  const art = VILLAGE_PROP_ART[prop];
-  const propSeed = subSeed(VILLAGE_PROP_SEED, hashPropId(prop));
-  art.paint(
-    ctx,
-    {
-      originX: 0,
-      originY: frameHeight - VILLAGE_TILE_SCALE,
-      tileScale: VILLAGE_TILE_SCALE,
-      footprintW: sheet.w,
-      footprintH: sheet.h,
-    },
-    0,
-    mulberry32(subSeed(propSeed, 0)),
-  );
-  const { data } = ctx.getImageData(0, 0, frameWidth, frameHeight);
+  const surface = allocReadableCanvas('environmentSheets', frameWidth, frameHeight);
+  let data: Uint8ClampedArray;
+  try {
+    const ctx = surfaceContext(surface);
+    const art = VILLAGE_PROP_ART[prop];
+    const propSeed = subSeed(VILLAGE_PROP_SEED, hashPropId(prop));
+    art.paint(
+      ctx,
+      {
+        originX: 0,
+        originY: frameHeight - VILLAGE_TILE_SCALE,
+        tileScale: VILLAGE_TILE_SCALE,
+        footprintW: sheet.w,
+        footprintH: sheet.h,
+      },
+      0,
+      mulberry32(subSeed(propSeed, 0)),
+    );
+    data = ctx.getImageData(0, 0, frameWidth, frameHeight).data;
+  } finally {
+    releaseSurface(surface);
+  }
   const footprintTopPx = sheet.headroomTiles * VILLAGE_TILE_SCALE;
   for (let y = 0; y < frameHeight; y++) {
     for (let x = 0; x < frameWidth; x++) {

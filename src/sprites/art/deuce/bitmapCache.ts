@@ -11,7 +11,12 @@
  * age out.
  */
 
-import { allocCanvas, type CanvasSurface, surfaceContext } from '../../../core/canvasSurface';
+import {
+  allocCanvas,
+  type CanvasSurface,
+  surfaceContext,
+  releaseSurface,
+} from '../../../core/canvasSurface';
 import { type Ctx } from './paint';
 
 export interface CacheBox {
@@ -44,7 +49,7 @@ export class BitmapCache {
     const fullKey = `${key}|${width}x${height}`;
     let surface = this.entries.get(fullKey);
     if (surface === undefined) {
-      surface = allocCanvas(width, height);
+      surface = allocCanvas('deuceBitmaps', width, height);
       const target = surfaceContext(surface);
       target.scale(width / box.w, height / box.h);
       target.translate(-box.x, -box.y);
@@ -67,8 +72,7 @@ export class BitmapCache {
       this.entries.delete(oldest.value);
       if (evicted !== undefined) {
         // Shrinking the surface hands its pixels back straight away.
-        evicted.width = 0;
-        evicted.height = 0;
+        releaseSurface(evicted);
       }
     }
   }

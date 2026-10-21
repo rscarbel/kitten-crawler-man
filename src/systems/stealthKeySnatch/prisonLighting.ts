@@ -27,7 +27,12 @@
  */
 
 import { TILE_SIZE } from '../../core/constants';
-import { allocCanvas, surfaceContext, type CanvasSurface } from '../../core/canvasSurface';
+import {
+  allocCanvas,
+  releaseSurface,
+  surfaceContext,
+  type CanvasSurface,
+} from '../../core/canvasSurface';
 import { perfMonitor } from '../../core/PerfMonitor';
 import { rectContainsTile, type ParsedPrisonLayout } from '../../map/goblinPrisonPlan';
 import { drawRadialGlow, type GlowStop } from '../../sprites/radialGlow';
@@ -283,6 +288,7 @@ export class PrisonLighting {
     if (this.mask !== null) return this.mask;
     const tileToMask = TILE_SIZE * MASK_SCALE;
     const surface = allocCanvas(
+      'lighting',
       Math.ceil(this.width * tileToMask),
       Math.ceil(this.height * tileToMask),
     );
@@ -342,7 +348,8 @@ export class PrisonLighting {
     const width = Math.max(1, Math.ceil(viewW * CUT_SCALE));
     const height = Math.max(1, Math.ceil(viewH * CUT_SCALE));
     if (this.cut?.surface.width !== width || this.cut.surface.height !== height) {
-      const surface = allocCanvas(width, height);
+      if (this.cut !== null) releaseSurface(this.cut.surface);
+      const surface = allocCanvas('lighting', width, height);
       this.cut = { surface, ctx: surfaceContext(surface) };
     }
     return this.cut;

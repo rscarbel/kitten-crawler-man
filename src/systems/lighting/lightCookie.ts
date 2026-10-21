@@ -11,7 +11,12 @@
  */
 
 import { TILE_SIZE } from '../../core/constants';
-import { allocCanvas, surfaceContext, type CanvasSurface } from '../../core/canvasSurface';
+import {
+  allocCanvas,
+  releaseSurface,
+  surfaceContext,
+  type CanvasSurface,
+} from '../../core/canvasSurface';
 import { WALL_FACE_RISE_TILES } from '../../map/dungeon/wallLight';
 
 /** Rows of wall a face reaches into above the floor it stands on. */
@@ -703,7 +708,7 @@ export class LightCookie {
 
   private blank(): { surface: CanvasSurface; ctx: CanvasRenderingContext2D; image: ImageData } {
     const sizePx = this.sizeTiles * LIGHT_PX_PER_TILE;
-    const surface = allocCanvas(sizePx, sizePx);
+    const surface = allocCanvas('lightCookies', sizePx, sizePx);
     const ctx = surfaceContext(surface);
     return { surface, ctx, image: ctx.createImageData(sizePx, sizePx) };
   }
@@ -714,6 +719,8 @@ export class LightCookie {
 
   /** Forgets the painted masks, so the next use paints them again. */
   forgetPainted(): void {
+    if (this.painted !== null) releaseSurface(this.painted);
+    if (this.glowPainted !== null) releaseSurface(this.glowPainted.surface);
     this.painted = null;
     this.glowPainted = null;
   }
@@ -775,7 +782,7 @@ function paintGlow(
   const tileY = Math.floor(centreY / TILE_SIZE - radiusTiles);
   const sizeTiles = Math.ceil(radiusTiles * 2) + 2;
   const sizePx = sizeTiles * LIGHT_PX_PER_TILE;
-  const surface = allocCanvas(sizePx, sizePx);
+  const surface = allocCanvas('lightCookies', sizePx, sizePx);
   const ctx = surfaceContext(surface);
   const image = ctx.createImageData(sizePx, sizePx);
   rasteriseGlow(
@@ -813,6 +820,8 @@ export class OriginCookieCache {
 
   /** Forgets every painted mask, so each is painted again on its next use. */
   clear(): void {
+    for (const placed of this.cuts.values()) releaseSurface(placed.surface);
+    for (const placed of this.glows.values()) releaseSurface(placed.surface);
     this.cuts.clear();
     this.glows.clear();
   }
@@ -826,7 +835,7 @@ export class OriginCookieCache {
     this.field.rebuild([{ visibility, weight: 1 }], this.isOpaque);
     const sizeTiles = visibility.sizeTiles;
     const sizePx = sizeTiles * LIGHT_PX_PER_TILE;
-    const surface = allocCanvas(sizePx, sizePx);
+    const surface = allocCanvas('lightCookies', sizePx, sizePx);
     const ctx = surfaceContext(surface);
     const image = ctx.createImageData(sizePx, sizePx);
     rasteriseCut(
@@ -850,7 +859,7 @@ export class OriginCookieCache {
       tileY: visibility.originTileY,
       sizeTiles,
     };
-    lruSet(this.cuts, key, placed, ORIGIN_COOKIE_LIMIT);
+    lruSetSurface(this.cuts, key, placed, ORIGIN_COOKIE_LIMIT);
     return placed;
   }
 
@@ -879,7 +888,7 @@ export class OriginCookieCache {
       radiusTiles,
       stops,
     );
-    lruSet(this.glows, key, placed, ORIGIN_COOKIE_LIMIT);
+    lruSetSurface(this.glows, key, placed, ORIGIN_COOKIE_LIMIT);
     return placed;
   }
 }
@@ -910,12 +919,36 @@ function lruGet<T>(map: Map<number, T>, key: number): T | undefined {
 }
 
 /** Caches a value, forgetting the least recently used one when the cache is full. */
-function lruSet<T>(map: Map<number, T>, key: number, value: T, limit: number): void {
+function lruSet<T>(
+  map: Map<number, T>,
+  key: number,
+  value: T,
+  limit: number,
+  onForget?: (forgotten: T) => void,
+): void {
   if (map.size >= limit) {
-    const oldest = map.keys().next();
-    if (oldest.done !== true) map.delete(oldest.value);
+    const oldest = map.entries().next();
+    if (oldest.done !== true) {
+      const [oldestKey, forgotten] = oldest.value;
+      map.delete(oldestKey);
+      onForget?.(forgotten);
+    }
   }
   map.set(key, value);
+}
+
+/**
+ * {@link lruSet} for painted masks, giving the forgotten one's pixels back at
+ * once. Every mask is drawn the moment it is fetched, so the one forgotten is
+ * never still waiting to be drawn.
+ */
+function lruSetSurface(
+  map: Map<number, PlacedSurface>,
+  key: number,
+  value: PlacedSurface,
+  limit: number,
+): void {
+  lruSet(map, key, value, limit, (forgotten) => releaseSurface(forgotten.surface));
 }
 
 /** Shadowcasts from the emitter; the masks themselves are painted when first drawn. */

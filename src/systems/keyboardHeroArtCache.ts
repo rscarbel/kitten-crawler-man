@@ -35,7 +35,12 @@
  *    the fixed-size sheet did.
  */
 
-import { allocCanvas, surfaceContext, type CanvasSurface } from '../core/canvasSurface';
+import {
+  allocCanvas,
+  surfaceContext,
+  type CanvasSurface,
+  releaseSurface,
+} from '../core/canvasSurface';
 import {
   paintBoardFrame,
   paintChordLink,
@@ -103,7 +108,7 @@ function paintPiece(
   const supersample = supersampleFor(width, designWidth);
   const paintW = Math.max(1, Math.round(width * supersample));
   const paintH = Math.max(1, Math.round(height * supersample));
-  const surface = allocCanvas(paintW, paintH);
+  const surface = allocCanvas('keyboardHero', paintW, paintH);
   const ctx = surfaceContext(surface);
   ctx.save();
   ctx.beginPath();
@@ -232,8 +237,7 @@ export function chordLinkArt(
  * collector; resizing to nothing frees it now.
  */
 function discard(surface: CanvasSurface): void {
-  surface.width = 0;
-  surface.height = 0;
+  releaseSurface(surface);
 }
 
 /**

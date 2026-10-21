@@ -4,12 +4,19 @@
  * things moving in the dark under an open grate.
  *
  * The barrier and pile are painted once per pose into small surfaces and
- * blitted from then on; a pose is a handful of discrete stages, so the set is
- * bounded (well under two megabytes all told) and is only ever built for a
- * floor that has a nursery.
+ * blitted from then on. In the world a pose is a handful of discrete stages at
+ * one tile size, well under two megabytes all told; the defence explainer also
+ * draws them at a size that follows the window, which would add a set per
+ * window size, so the cache is held to a budget above the world's set.
  */
 
-import { allocCanvas, surfaceContext, type CanvasSurface } from '../core/canvasSurface';
+import {
+  allocCanvas,
+  BYTES_PER_MEGABYTE,
+  surfaceContext,
+  type CanvasSurface,
+} from '../core/canvasSurface';
+import { RecentSurfaceCache } from '../core/recentSurfaceCache';
 import {
   BARRIER_ART_MARGIN,
   BARRIER_DAMAGE_STAGES,
@@ -31,8 +38,16 @@ const ART_SCALE = 3;
 const HALF = 0.5;
 const FULL_TURN = Math.PI * 2;
 
-const surfaces = new Map<string, CanvasSurface>();
-// Baked once and kept; a purge would leave it blank for good.
+const POSE_BUDGET_MEGABYTES = 4;
+/** A pose drawn this frame or the one before is never let go. */
+const POSE_PROTECTED_FRAMES = 1;
+
+const surfaces = new RecentSurfaceCache<CanvasSurface>(
+  POSE_BUDGET_MEGABYTES * BYTES_PER_MEGABYTE,
+  POSE_PROTECTED_FRAMES,
+  (surface) => surface,
+);
+// A purge blanks every pose; they repaint as they are next drawn.
 onCanvasRecovery(() => surfaces.clear());
 
 function bake(
@@ -45,7 +60,11 @@ function bake(
   const cached = surfaces.get(key);
   if (cached !== undefined) return cached;
   const scaledTs = ts * ART_SCALE;
-  const surface = allocCanvas(Math.ceil(widthTiles * scaledTs), Math.ceil(heightTiles * scaledTs));
+  const surface = allocCanvas(
+    'props',
+    Math.ceil(widthTiles * scaledTs),
+    Math.ceil(heightTiles * scaledTs),
+  );
   paint(surfaceContext(surface), scaledTs);
   surfaces.set(key, surface);
   return surface;

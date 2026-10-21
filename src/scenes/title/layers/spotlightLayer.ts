@@ -11,7 +11,12 @@
  */
 
 import { TILE_SIZE } from '../../../core/constants';
-import { allocCanvas, surfaceContext, type CanvasSurface } from '../../../core/canvasSurface';
+import {
+  allocCanvas,
+  surfaceContext,
+  type CanvasSurface,
+  releaseSurface,
+} from '../../../core/canvasSurface';
 import { canvasGeneration } from '../../../core/canvasRecovery';
 import { renderQuality } from '../../../core/RenderQuality';
 import { TITLE_INK, titleRgba, type TitleRgb } from '../../../ui/theme/titleInk';
@@ -149,7 +154,7 @@ function sweepLevel(clock: TitleClock, levelAtDive: number): number {
 }
 
 function bakeBeam(ink: TitleRgb): CanvasSurface {
-  const texture = allocCanvas(BEAM_TEXTURE_WIDTH, BEAM_TEXTURE_HEIGHT);
+  const texture = allocCanvas('title', BEAM_TEXTURE_WIDTH, BEAM_TEXTURE_HEIGHT);
   const ctx = surfaceContext(texture);
   const centre = BEAM_TEXTURE_WIDTH * HALF;
   for (let row = 0; row < BEAM_TEXTURE_HEIGHT; row++) {
@@ -168,7 +173,7 @@ function bakeBeam(ink: TitleRgb): CanvasSurface {
 }
 
 function bakePool(ink: TitleRgb): CanvasSurface {
-  const texture = allocCanvas(POOL_TEXTURE_PX, POOL_TEXTURE_PX);
+  const texture = allocCanvas('title', POOL_TEXTURE_PX, POOL_TEXTURE_PX);
   const ctx = surfaceContext(texture);
   const centre = POOL_TEXTURE_PX * HALF;
   const gradient = ctx.createRadialGradient(centre, centre, 0, centre, centre, centre);
@@ -264,9 +269,19 @@ export function spotlightLayer(): TitleLayer {
   let key = 0;
   let sweep = 0;
 
+  const releaseTextures = (): void => {
+    const baked = textures;
+    if (baked === null) return;
+    for (const texture of [baked.keyBeam, baked.keyPool, baked.sweepBeam, baked.sweepPool]) {
+      releaseSurface(texture);
+    }
+    textures = null;
+  };
+
   const currentTextures = (): RigTextures => {
     const generation = canvasGeneration();
     if (textures !== null && textures.generation === generation) return textures;
+    releaseTextures();
     const ink = TITLE_INK.spotlight;
     const baked: RigTextures = {
       keyBeam: bakeBeam(ink.beam),
@@ -320,14 +335,6 @@ export function spotlightLayer(): TitleLayer {
         paintLamp(ctx, keyLamp(stage, key * pulse), baked.keyBeam, baked.keyPool);
       }
     },
-    dispose: () => {
-      const baked = textures;
-      if (baked === null) return;
-      for (const texture of [baked.keyBeam, baked.keyPool, baked.sweepBeam, baked.sweepPool]) {
-        texture.width = 0;
-        texture.height = 0;
-      }
-      textures = null;
-    },
+    dispose: releaseTextures,
   };
 }

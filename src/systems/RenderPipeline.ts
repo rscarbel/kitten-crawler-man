@@ -9,7 +9,12 @@
 import { MAX_MOB_CULL_MARGIN_TILES, TILE_SIZE } from '../core/constants';
 import { nightVisionBonusTiles } from '../core/SkillManager';
 import { drawSpriteKey } from '../core/SpriteRenderer';
-import { allocCanvas, surfaceContext, type CanvasSurface } from '../core/canvasSurface';
+import {
+  allocCanvas,
+  releaseSurface,
+  surfaceContext,
+  type CanvasSurface,
+} from '../core/canvasSurface';
 import { noteDrawFailure, recoverDrawState } from '../core/drawFailure';
 import type { WorldSight } from '../core/visibleWorldView';
 import { setQuestBeaconViewer } from '../sprites/questBeacon';
@@ -814,9 +819,10 @@ export class RenderPipeline {
   private visibilityFogDisc(innerR: number, outerR: number): CanvasSurface {
     const cached = this._fogDisc;
     if (cached && this._fogDiscInnerR === innerR && this._fogDiscOuterR === outerR) return cached;
+    if (cached !== null) releaseSurface(cached);
 
     const size = Math.ceil(outerR * 2);
-    const disc = allocCanvas(size, size);
+    const disc = allocCanvas('lighting', size, size);
     const dctx = surfaceContext(disc);
     const centre = size / 2;
     const grad = dctx.createRadialGradient(centre, centre, innerR, centre, centre, outerR);

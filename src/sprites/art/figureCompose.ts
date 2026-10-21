@@ -22,7 +22,12 @@
  */
 
 import type { Pt } from './carlArt';
-import { allocCanvas, type CanvasSurface, surfaceContext } from '../../core/canvasSurface';
+import {
+  allocCanvas,
+  type CanvasSurface,
+  releaseSurface,
+  surfaceContext,
+} from '../../core/canvasSurface';
 
 type Ctx = CanvasRenderingContext2D;
 
@@ -129,9 +134,37 @@ export interface Layer {
   readonly ctx: Ctx;
 }
 
+/**
+ * The layers made inside each {@link withComposeLayers} under way, innermost
+ * last. A painter can compose another figure halfway through its own — a held
+ * prop that is itself a painted figure — so each composition owns only the
+ * layers made while it is the innermost.
+ */
+const layerScopes: Layer[][] = [];
+
+/**
+ * Runs one composition and gives back the pixels of every layer it made,
+ * however it ends. A layer is a throwaway the size of the figure; left to the
+ * collector, a crowd's worth of bakes holds hundreds of them at once.
+ */
+export function withComposeLayers<T>(compose: () => T): T {
+  const owned: Layer[] = [];
+  layerScopes.push(owned);
+  try {
+    return compose();
+  } finally {
+    layerScopes.pop();
+    for (const layer of owned) releaseSurface(layer.surface);
+  }
+}
+
+/** A blank layer, owned by the innermost {@link withComposeLayers} when one is under way. */
 export function makeLayer(bounds: LayerBounds): Layer {
-  const surface = allocCanvas(bounds.width, bounds.height);
-  return { surface, ctx: surfaceContext(surface) };
+  const surface = allocCanvas('figureScratch', bounds.width, bounds.height);
+  const layer = { surface, ctx: surfaceContext(surface) };
+  const innermost = layerScopes.length > 0 ? layerScopes[layerScopes.length - 1] : undefined;
+  innermost?.push(layer);
+  return layer;
 }
 
 /** Runs `paint` on a layer in figure units, leaving the layer's own state as it found it. */

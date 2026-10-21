@@ -21,8 +21,9 @@ import {
   allocReadableCanvas,
   type CanvasSurface,
   surfaceContext,
+  releaseSurface,
 } from '../../core/canvasSurface';
-import { BYTES_PER_MEGABYTE } from '../figure/figureCacheStats';
+import { BYTES_PER_MEGABYTE } from '../../core/canvasSurface';
 import { HUMAN_CELL_PX_PER_UNIT } from '../art/human/figureScale';
 import { archetypeSpec } from './gripArchetypes';
 import { HELD_FACINGS, type HeldFacing, type HeldVisualDef } from './heldVisualDef';
@@ -96,12 +97,12 @@ let residentBytes = 0;
 function releasePicture(key: string, picture: HeldPicture): void {
   pictures.delete(key);
   residentBytes -= picture.bytes;
-  picture.surface.width = 0;
-  picture.surface.height = 0;
+  releaseSurface(picture.surface);
 }
 
 // A purge leaves every cached surface blank; paint each again on demand.
 onCanvasRecovery(() => {
+  for (const picture of pictures.values()) releaseSurface(picture.surface);
   pictures.clear();
   residentBytes = 0;
 });
@@ -176,7 +177,8 @@ let scratch: CanvasSurface | null = null;
 
 function scratchOfSize(side: number): CanvasSurface {
   if (scratch === null || scratch.width < side || scratch.height < side) {
-    scratch = allocReadableCanvas(side, side);
+    if (scratch !== null) releaseSurface(scratch);
+    scratch = allocReadableCanvas('heldArt', side, side);
   }
   return scratch;
 }
@@ -225,7 +227,7 @@ function paintPicture(def: HeldVisualDef, key: HeldLookKey): HeldPicture {
     width: 1,
     height: 1,
   };
-  const cropped = allocCanvas(bounds.width, bounds.height);
+  const cropped = allocCanvas('heldArt', bounds.width, bounds.height);
   surfaceContext(cropped).drawImage(
     surface,
     bounds.left,
@@ -327,8 +329,7 @@ export function measureHeldVisualSet(def: HeldVisualDef): { pictures: number; by
     const picture = paintPicture(def, key);
     count += 1;
     bytes += picture.bytes;
-    picture.surface.width = 0;
-    picture.surface.height = 0;
+    releaseSurface(picture.surface);
   }
   return { pictures: count, bytes };
 }

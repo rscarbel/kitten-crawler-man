@@ -118,7 +118,12 @@ import {
   type MusicTrackId,
   type SoundId,
 } from '../audio/sounds';
-import { sfxGroupsForBuildingEntry, sfxGroupsForFloorNumber } from '../audio/sfxGroups';
+import {
+  compressedSfxForLevelId,
+  SFX_GROUPS,
+  sfxGroupsForBuildingEntry,
+  sfxGroupsForFloorNumber,
+} from '../audio/sfxGroups';
 import { prewarmGroups } from '../core/SpriteLoader';
 import { ArrivalLoader } from './ArrivalLoader';
 import { activeMusicLibrary } from '../core/MusicLibrary';
@@ -667,8 +672,9 @@ export class BuildingInteriorScene extends GameplayScene {
   private exitMenuOpen = false;
   private exitDismissed = false;
 
-  // Safe room — the one building the town plan flags with `hasSafeRoom`
+  /** Null in every interior but the one the town plan flags with `hasSafeRoom`. */
   private readonly safeRoom: SafeRoomSystem | null;
+  private wasInSafeRoom = false;
   private readonly mordecaiAdvisor = new MordecaiAdvisor();
   /** Null in every interior but the one the town plan flags as the safe room. */
   private readonly bopca: BopcaSystem | null;
@@ -1036,6 +1042,7 @@ export class BuildingInteriorScene extends GameplayScene {
       ...sfxGroupsForFloorNumber(floor.floorNumber),
       ...sfxGroupsForBuildingEntry(entry),
     ]);
+    void this.audioScope?.keepCompressed(compressedSfxForLevelId(`level${floor.floorNumber}`));
     this.abilityManager = abilityManager ?? new AbilityManager();
     this.townMemory = townMemory ?? createTownMemory();
     this.partyCrafts = partyCrafts ?? createPartyCraftsState();
@@ -1082,6 +1089,11 @@ export class BuildingInteriorScene extends GameplayScene {
     // put down have to be the same decision, or the maze gets built and then
     // entered through the ring's single door.
     const variant = floor.variant ?? interiorVariantFor(entry, this.circus);
+    // Floor 3 holds the circus group only near the grounds; the tent declares
+    // it too, so its cues never rest on how the party came to the door.
+    if (variant !== 'default' && variant.kind === 'bigtop_maze') {
+      void this.audioScope?.preload(SFX_GROUPS.circusQuest);
+    }
     const prisonPlan =
       variant !== 'default' && variant.kind === 'goblin_prison' ? variant.plan : null;
     this.companionsWaitOutside = prisonPlan !== null;
@@ -1124,33 +1136,30 @@ export class BuildingInteriorScene extends GameplayScene {
     // Every storey shares the one seed, so this covers the tower as well as a
     // single room. Set before any ground sheet or tile chunk is baked indoors.
     setFloorArtSeed(this.map.artSeed);
-    // Indoors uses one generated sheet, plus the corner masks every pair is
-    // composited through. Queued rather than painted outright, so the fade into
-    // the shop is not the frame that pays for its floorboards.
+    // Queued rather than painted outright, and before the loading card begins
+    // below, so the card is up until every sheet lands. That is the whole
+    // guarantee for the floor's indoor-only groups (`LevelDef.interiorSpriteGroups`):
+    // the floor never painted them, and the overworld's cache may have let them
+    // go since the last visit, but the card cannot lift while one is owed.
+    // The floor's own groups are already held, so asking again costs nothing.
     const repaintTileArt = (): void => {
       for (const floor of isTower ? this.towerFloors : [this.map]) {
         floor.markTileArtStale({ includeFacades: true });
       }
     };
     requestGroundSheets(floor.groundSheets, repaintTileArt);
-    // The town's furniture stands indoors too — a shop counter and a notice
-    // board are the same sheets the street uses — and entering a building never
-    // releases them, so this is a no-op on every visit after the first.
     requestEnvironmentSheetsForGroups(floor.spriteGroups, { onSheetPainted: repaintTileArt });
 
     this.mapW = this.map.structure[0]?.length ?? DEFAULT_MAP_FALLBACK_WIDTH;
 
-    // Interiors (shops, the club, the tower) all draw from the town furniture
-    // sheets — 'town' is a safe superset here rather than a per-entry-type
-    // breakdown, since every interior variant is cheap to re-request and
-    // already covered by that one lazily-loaded group.
-    // `prewarmGroups` (not `loadGroups`) also forces the GPU texture upload
+    // The fetched sheets among the same groups. `prewarmGroups` (not
+    // `loadGroups`) also forces the GPU texture upload
     // during the fade into the interior rather than on the first draw —
     // still fire-and-forget, must not block construction. Ground
     // tiles/decorations bake into cached chunk canvases on first draw and
     // never re-look at a sheet that finishes loading after that bake (see
     // `GameMap.markTileArtStale`'s doc comment) — every tower floor was
-    // built above from the same 'town' group, so one resolution covers all
+    // built above from the same `floor.spriteGroups`, so one resolution covers all
     // of them; `changeFloor` never re-triggers this load.
     const interiorMaps = isTower ? this.towerFloors : [this.map];
     const spriteGroupsReady = prewarmGroups(floor.spriteGroups).then(() => {
@@ -2493,6 +2502,7 @@ export class BuildingInteriorScene extends GameplayScene {
           humanAchievements: this.humanAchievements,
           catAchievements: this.catAchievements,
           gameStats: this.gameStats,
+          ...this.achievementUI.pauseBoxOpeners(() => this.pauseScreen.close()),
         }),
         togglePause: () => this.togglePause(),
       }),
@@ -2813,6 +2823,45 @@ export class BuildingInteriorScene extends GameplayScene {
     this.human.autoTarget = null;
     this.cat.autoTarget = null;
     this.companion.isFollowOverride = false;
+  }
+
+  /**
+   * The safe room answers as a dungeon floor's does: a crawler inside it is
+   * protected, which is also what lets the pause menu and the HUD banner open
+   * loot boxes, and walking in unlocks `safe_haven` and saves.
+   */
+  private updateSafeRoomProtection(): void {
+    const safeRoom = this.safeRoom;
+    if (safeRoom === null) return;
+    this.pm.updateProtection(safeRoom);
+    const nowInSafeRoom = this.pm.isAnySafe(safeRoom);
+    const justEntered = nowInSafeRoom && !this.wasInSafeRoom;
+    this.wasInSafeRoom = nowInSafeRoom;
+    if (justEntered) this.onSafeRoomEntered();
+  }
+
+  private onSafeRoomEntered(): void {
+    this.bus.emit('safeRoomEntered', {});
+    this.humanAchievements.tryUnlock('safe_haven');
+    this.catAchievements.tryUnlock('safe_haven');
+    // A reload would stand a downed crawler, hire or cow up for free.
+    if (this.isRevivePending || !this.partyRun.maySave()) return;
+    void this.saveNow()
+      .catch((): SaveWriteOutcome => 'failed')
+      .then((outcome) => {
+        // The floor outside announces its own saves on its own bus, which is
+        // dormant while the party is indoors; a wiped run announces nothing.
+        if (outcome !== 'latched') this.bus.emit('gameSaved', {});
+      });
+  }
+
+  private get isRevivePending(): boolean {
+    return (
+      this.human.isKnockedOut ||
+      this.cat.isKnockedOut ||
+      this.mercenarySystem.revivePending ||
+      this.attackCowSystem.revivePending
+    );
   }
 
   /**
@@ -3148,6 +3197,7 @@ export class BuildingInteriorScene extends GameplayScene {
     this.human.tickTimers();
     this.cat.tickTimers();
     drainBloodVomitRetches([this.human, this.cat], this.bus);
+    this.updateSafeRoomProtection();
     this.safeRoom?.updateWander();
     this.bopca?.tick(this.human, this.cat, player, this.inactive());
     this.shop?.update();

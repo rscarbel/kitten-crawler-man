@@ -127,6 +127,11 @@ export class MarketSystem implements GameSystem {
     return this.renderables;
   }
 
+  /** The stationed vendors, one per stall. */
+  get vendors(): ReadonlyArray<Townsperson> {
+    return this.stalls.map((stall) => stall.vendor);
+  }
+
   /**
    * Tiles the stalls have claimed, so `TownPropSystem` can keep its own props off
    * them. `blockTilePermanently` alone would not do: prop placement deliberately

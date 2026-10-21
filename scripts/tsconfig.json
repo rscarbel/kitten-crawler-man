@@ -4,7 +4,7 @@
     "module": "NodeNext",
     "moduleResolution": "NodeNext",
     "strict": true,
-    "lib": ["ES2020"],
+    "lib": ["ES2020", "ES2021.WeakRef"],
     "types": ["node"]
   },
   "include": ["./**/*.ts"]

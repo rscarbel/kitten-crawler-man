@@ -123,7 +123,8 @@ Pictures are cached per id × 32 axis-angle steps × 4 foreshortening steps ×
 facing × mirroring × shade × phase (`heldVisualCache.ts`, 4 MB LRU); the
 residual rotation is applied at blit, so nothing snaps. `paintHeldVisual` is
 the bake-time path, `drawHeldVisual` the runtime one; both go through
-`compositeHeldItem` (`held/heldComposite.ts`).
+`compositeHeldItem` (`held/heldComposite.ts`). Any new scratch or cache
+surface follows the surface rule in `add-sprite` ("Conventions").
 
 ## A weapon: item, stat block, procs
 

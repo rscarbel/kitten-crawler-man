@@ -28,7 +28,12 @@ import {
   type PalisadeTier,
   type TileContent,
 } from '../tileTypes';
-import { allocCanvas, surfaceContext, type CanvasSurface } from '../../core/canvasSurface';
+import {
+  allocCanvas,
+  releaseSurface,
+  surfaceContext,
+  type CanvasSurface,
+} from '../../core/canvasSurface';
 import type { MapSpriteExtentsPx } from '../../core/SpriteLoader';
 import { briarHollowSiteFor } from './hollowSiteRegistry';
 import { tileHash } from './hollowTileHash';
@@ -322,7 +327,7 @@ function cachedPiece(piece: PalisadePiece, ts: number): CachedArt {
   const padDown = Math.ceil(ts * PALISADE_REACH_DOWN_TILES);
   const width = ts;
   const height = padUp + ts + padDown;
-  const surface = allocCanvas(width * CACHE_DENSITY, height * CACHE_DENSITY);
+  const surface = allocCanvas('palisades', width * CACHE_DENSITY, height * CACHE_DENSITY);
   const ctx = surfaceContext(surface);
   ctx.scale(CACHE_DENSITY, CACHE_DENSITY);
   paintPalisadePiece(ctx, piece, 0, padUp, ts);
@@ -1601,7 +1606,7 @@ function gatePosts(ts: number): CachedGate {
   const padUp = Math.ceil(ts * GATE_REACH_UP_TILES);
   const width = padSide * 2;
   const height = padUp + ts;
-  const surface = allocCanvas(width * CACHE_DENSITY, height * CACHE_DENSITY);
+  const surface = allocCanvas('palisades', width * CACHE_DENSITY, height * CACHE_DENSITY);
   const ctx = surfaceContext(surface);
   ctx.scale(CACHE_DENSITY, CACHE_DENSITY);
   const centreX = padSide;
@@ -1777,9 +1782,10 @@ interface CachedGateEW {
 const gatePostCacheEW = new Map<number, CachedGateEW>();
 // Baked once and kept; a purge would leave it blank for good.
 onCanvasRecovery(() => {
-  pieceCache.clear();
-  gatePostCache.clear();
-  gatePostCacheEW.clear();
+  for (const cache of [pieceCache, gatePostCache, gatePostCacheEW]) {
+    for (const art of cache.values()) releaseSurface(art.surface);
+    cache.clear();
+  }
 });
 
 /** Paints an east/west gate centred on `centreX`, ground line `centreY`. For the map and the review sheet. */
@@ -1812,7 +1818,7 @@ function gatePostsEW(ts: number): CachedGateEW {
   const padUp = Math.ceil(ts * (GATE_POST_HEIGHT_TILES + GATE_POST_TOP_MARGIN_TILES));
   const width = padAcross * 2;
   const height = padAlong * 2 + padUp;
-  const surface = allocCanvas(width * CACHE_DENSITY, height * CACHE_DENSITY);
+  const surface = allocCanvas('palisades', width * CACHE_DENSITY, height * CACHE_DENSITY);
   const ctx = surfaceContext(surface);
   ctx.scale(CACHE_DENSITY, CACHE_DENSITY);
   const centreX = padAcross;

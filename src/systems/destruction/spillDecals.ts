@@ -12,7 +12,12 @@
  */
 
 import { TILE_SIZE } from '../../core/constants';
-import { allocCanvas, surfaceContext, type CanvasSurface } from '../../core/canvasSurface';
+import {
+  allocCanvas,
+  releaseSurface,
+  surfaceContext,
+  type CanvasSurface,
+} from '../../core/canvasSurface';
 import { mulberry32 } from '../../sprites/person/rng';
 import { tileHash } from '../../map/tiles/hollowTileHash';
 import type { CellarSpill } from './cellarPropKinds';
@@ -42,7 +47,10 @@ type Ctx = CanvasRenderingContext2D;
 
 const cache = new Map<string, CanvasSurface>();
 // Baked once and kept; a purge would leave it blank for good.
-onCanvasRecovery(() => cache.clear());
+onCanvasRecovery(() => {
+  for (const surface of cache.values()) releaseSurface(surface);
+  cache.clear();
+});
 
 /** Which of a spill's looks lies at this tile. */
 export function spillVariant(tileX: number, tileY: number): number {
@@ -69,7 +77,7 @@ export function drawSpill(
   const key = `${kind}:${look}:${variant}`;
   let surface = cache.get(key);
   if (surface === undefined) {
-    surface = allocCanvas(SPAN_PX, SPAN_PX);
+    surface = allocCanvas('effects', SPAN_PX, SPAN_PX);
     // Seeded by kind and variant alone, never by look: a pool that burns off
     // chars in the very outline it lay in.
     const shapeSeed = hashKey(`${kind}:${variant}`);

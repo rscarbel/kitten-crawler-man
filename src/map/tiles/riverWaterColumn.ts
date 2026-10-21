@@ -162,7 +162,7 @@ function buildSamples(structure: TileContent[][]): CanvasSurface | null {
       rgba[at + ALPHA] = Math.round(tint.opacity * BYTE_MAX);
     }
   }
-  const samples = allocCanvas(spanX, spanY);
+  const samples = allocCanvas('groundTileParts', spanX, spanY);
   const samplesCtx = surfaceContext(samples);
   const image = samplesCtx.createImageData(spanX, spanY);
   image.data.set(rgba);

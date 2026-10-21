@@ -64,7 +64,7 @@ import {
 } from '../core/difficultyProfiles';
 import { setFloorReferencePartyLevel } from '../core/floorReferenceLevel';
 import { getSpriteMissCounts, prewarmGroups, releaseSpritesExcept } from '../core/SpriteLoader';
-import { flushFigureFrameCache } from '../sprites/figure/figureFrameCache';
+import { bakeFigurePrewarmFor, flushFigureFrameCache } from '../sprites/figure/figureFrameCache';
 import { requiredSpriteKeysForLevel } from '../core/systemAssetRequirements';
 import { getLevelDef, levelLoadingKicker } from '../levels';
 import { dungeonOptionsForLevel } from '../levels/dungeonOptions';
@@ -226,6 +226,12 @@ import {
 } from '../systems/BuildingSystem';
 import { interiorSellsSomething } from '../systems/townServices';
 import { TownLifeSystem } from '../systems/TownLifeSystem';
+import {
+  TownResidency,
+  tileFocus,
+  type ResidencyFocus,
+  type ResidencyOutlook,
+} from '../systems/TownResidency';
 import type { Townsperson } from '../creatures/Townsperson';
 import { CITIZEN_TALK_RADIUS_TILES } from '../creatures/townInteraction';
 import { prewarmAndPinCitizenTalk } from '../creatures/citizenFigure';
@@ -389,7 +395,15 @@ import {
   isCircusResolvedStage,
   restoreCircusQuestProgress,
   type CircusQuestProgress,
+  type CircusQuestStage,
 } from '../core/CircusQuestProgress';
+import {
+  FloorSfxGates,
+  groupsActiveAnywhere,
+  type FloorSfxGate,
+  type OverworldActivity,
+} from '../systems/FloorSfxGates';
+import type { GatedSfxGroup } from '../audio/sfxGroups';
 import { CircusGroundsAmbience } from '../systems/circus/CircusGroundsAmbience';
 import { HighStrikerSystem } from '../systems/circus/HighStrikerSystem';
 import {
@@ -429,7 +443,11 @@ import {
   type InteriorCompanionDeparture,
 } from '../systems/companionCarry';
 import type { DungeonInteriorReturn } from './dungeonInteriorReturn';
-import { TOWN_INTERIOR_FLOOR, type InteriorFloorContext } from './interiorFloorContext';
+import {
+  TOWN_INTERIOR_FLOOR,
+  interiorArt,
+  type InteriorFloorContext,
+} from './interiorFloorContext';
 import {
   DEFEND_LOOT_BOX_TIER,
   DEFEND_QUEST_ID,
@@ -635,7 +653,7 @@ import { Conversation } from '../dialog/Conversation';
 import { WOOD_SMASHING_SOUNDS, type MusicTrackId, type SoundId } from '../audio/sounds';
 import type { VillageBuildingId } from '../map/overworld/briarHollowLayout';
 import { rectCentre, rectContains } from '../map/overworld/briarHollowSite';
-import { sfxGroupsForLevelId } from '../audio/sfxGroups';
+import { sfxGroupsForLevelId, compressedSfxForLevelId } from '../audio/sfxGroups';
 import { DUNGEON_CUES, playDungeonCue, type DungeonCue } from '../systems/dungeon/dungeonSoundCues';
 import {
   downedCompanionArrowCandidate,
@@ -645,7 +663,8 @@ import {
 import { viewportWidth, viewportHeight } from '../core/Viewport';
 import { renderQuality } from '../core/RenderQuality';
 import { floorArrivalLoadTasks } from './floorArrivalLoad';
-import { ArrivalLoader } from './ArrivalLoader';
+import { ArrivalLoader, type WarpLoadRequest } from './ArrivalLoader';
+import { steppedWork, type LoadTask } from '../core/LoadRunner';
 import { postMusicLibraryNotices, returnUnreadMusicNotices } from '../ui/hud/nowPlaying';
 import { createSceneUi, sceneMouse } from '../ui/core/sceneUi';
 import { byInputMode } from '../ui/core/inputMode';
@@ -1000,6 +1019,28 @@ const FOLLOWER_FOLLOW_RANGE_TILES = 2.5;
  */
 const RECALL_MAX_PATH_DISTANCE_TILES = 96;
 const TILE_CENTER_OFFSET = 0.5;
+
+/**
+ * Loading-screen frames a warp's crowd task may take before it is called done
+ * whatever it has left (ten seconds at 60 Hz), for a cache that keeps its requests queued
+ * without baking them, as one whose canvases are being refused does.
+ */
+const WARP_COVER_MAX_STEPS = 600;
+
+/**
+ * Loading-screen frames over which a warp's crowd rows the queue gives up on
+ * are asked for again. Nothing is drawn under the screen, so after a couple
+ * of frames every unpinned row counts as out of use and may be evicted; a
+ * refusal that outlasts this is one no room will cure.
+ */
+const WARP_COVER_FORGIVING_STEPS = 10;
+
+/** Circus stages whose waves or bear are out on the grounds and can follow the party off them. */
+const CIRCUS_STAGES_WITH_MOBS_OUT: ReadonlySet<CircusQuestStage> = new Set([
+  'ritual_defense',
+  'heather_hunt',
+  'assault',
+]);
 const COMPANION_ERROR_DISPLAY_FRAMES = 180;
 
 /** Ripples and splashes centre on the wader, not on their tile corner. */
@@ -1387,10 +1428,15 @@ export class DungeonScene extends GameplayScene {
   private readonly travelUnlocks: TravelUnlockState;
   private building: BuildingSystem | null = null;
   private townLife: TownLifeSystem | null = null;
+  private townResidency: TownResidency | null = null;
   protected readonly arrivalLoading = new ArrivalLoader();
+  /** The arrival's own screen and work, for a warp within the floor that needs covering. */
+  private warpLoadRequest: WarpLoadRequest | null = null;
   private townProps: TownPropSystem | null = null;
   /** Shady's bounty loop. Overworld only — null on every other floor. */
   private bounty: BountySystem | null = null;
+  /** Holds floor 3's gated SFX groups decoded while the party is near or they are under way. */
+  private readonly sfxGates: FloorSfxGates | null;
   private townDecor: TownDecorSystem | null = null;
   private market: MarketSystem | null = null;
   /**
@@ -2661,6 +2707,11 @@ export class DungeonScene extends GameplayScene {
         ...this.townDecor.props,
       ];
       this.townLife = new TownLifeSystem(this.gameMap, () => renderQuality.fullDetail);
+      const townLife = this.townLife;
+      this.townResidency = new TownResidency({
+        people: () => [...townLife.people, ...(this.market?.vendors ?? [])],
+        roomContested: () => this.briarHollowKit?.assault?.inSiege === true,
+      });
       this.bounty = new BountySystem(
         this.gameMap,
         this.bus,
@@ -2912,6 +2963,7 @@ export class DungeonScene extends GameplayScene {
     // re-decoding what a previous floor already loaded. This is the per-floor
     // SFX unload/reload cycle: only the current floor's sounds stay resident.
     void this.audioScope?.preload(sfxGroupsForLevelId(levelDef.id));
+    void this.audioScope?.keepCompressed(compressedSfxForLevelId(levelDef.id));
     // Same "additive, cheap on re-entry" reasoning as the SFX preload above,
     // for this floor's declared sprite groups.
     // `prewarmGroups` also forces each sheet's GPU texture upload during this
@@ -2963,6 +3015,7 @@ export class DungeonScene extends GameplayScene {
       this.conversation,
       this.travelUnlocks,
     );
+    this.sfxGates = this.buildSfxGates(levelDef);
     this.circusQuest.onItemGranted = (id, quantity, worldX, worldY) => {
       const cam = this.camera();
       for (let i = 0; i < quantity; i++) {
@@ -3071,6 +3124,7 @@ export class DungeonScene extends GameplayScene {
       this.applyPersistedWorldState(options.persistedWorldState);
     }
     if (interiorReturn !== null) this.applyInteriorReturn(interiorReturn);
+    this.updateSfxGates();
 
     this.wireEventBus();
     this.checkFloorEntryAchievements();
@@ -3083,11 +3137,10 @@ export class DungeonScene extends GameplayScene {
     // measures what is owed. Checked on every construction rather than at the
     // call sites that build this scene, because there are several and a floor
     // is arrived on through all of them: stairs, a save, a restart, a door.
-    this.arrivalLoading.begin({
+    this.warpLoadRequest = {
       kicker: levelLoadingKicker(levelDef),
       title: levelDef.name,
       screen: levelDef.arrivalLoadingScreen,
-      returning: options?.existingMap !== undefined,
       tasks: () =>
         floorArrivalLoadTasks({
           gameMap: this.gameMap,
@@ -3095,6 +3148,10 @@ export class DungeonScene extends GameplayScene {
           viewport: () => ({ width: viewportWidth(), height: viewportHeight() }),
           spriteGroupsReady,
         }),
+    };
+    this.arrivalLoading.begin({
+      ...this.warpLoadRequest,
+      returning: options?.existingMap !== undefined,
     });
     for (const surface of this.surfaces()) this.ui.mount(surface);
     const startingPopulation = new Set(initialMobs);
@@ -3722,6 +3779,73 @@ export class DungeonScene extends GameplayScene {
       },
       onQuickLoad: () => this.briarHollowKit?.repairOrLoad(),
     });
+  }
+
+  /**
+   * The overworld's gated groups: each held near its place (the village, the
+   * circus grounds; a bounty has none) or while `groupsActiveAnywhere` says
+   * something under way can play it. Off the overworld there are none, so every
+   * held group is let go.
+   */
+  private buildSfxGates(levelDef: LevelDef): FloorSfxGates | null {
+    const audio = this.audio;
+    if (audio === null) return null;
+    if (!levelDef.isOverworld) return new FloorSfxGates(audio, []);
+    const activeAnywhere = (group: GatedSfxGroup) => (): boolean =>
+      groupsActiveAnywhere(this.overworldActivity())[group];
+    const gates: FloorSfxGate[] = [
+      { group: 'bounty', activeAnywhere: activeAnywhere('bounty'), places: [] },
+    ];
+    const village = this.gameMap.briarHollow;
+    if (village !== null) {
+      gates.push({
+        group: 'briarHollowSiege',
+        activeAnywhere: activeAnywhere('briarHollowSiege'),
+        places: [village.palisadeBounds],
+      });
+    }
+    const circusCentre = this.gameMap.circusCentre;
+    const circusRadius = this.gameMap.circusRadiusTiles ?? 0;
+    gates.push({
+      group: 'circusQuest',
+      activeAnywhere: activeAnywhere('circusQuest'),
+      places:
+        circusCentre === undefined
+          ? []
+          : [
+              {
+                x: circusCentre.x - circusRadius,
+                y: circusCentre.y - circusRadius,
+                w: circusRadius * 2 + 1,
+                h: circusRadius * 2 + 1,
+              },
+            ],
+    });
+    return new FloorSfxGates(audio, gates);
+  }
+
+  private overworldActivity(): OverworldActivity {
+    const assault = this.briarHollowKit?.assault;
+    return {
+      siegeRunning: assault?.inSiege === true,
+      siegeDeadStanding: assault?.hasLivingSiegeMobs === true,
+      escortUnderWay: this.briarHollowState.blueprints.phase === 'escort_midge',
+      escortAmbushersStanding:
+        this.briarHollowKit?.blueprints?.escort.ambush.hasLivingAmbushers === true,
+      bountyOut: this.bountyProgress.phase !== 'available',
+      circusMobsOut: CIRCUS_STAGES_WITH_MOBS_OUT.has(this.circusQuestProgress.stage),
+    };
+  }
+
+  private updateSfxGates(): void {
+    const gates = this.sfxGates;
+    if (gates === null) return;
+    const partyTiles = [this.human, this.cat].map((crawler) => ({
+      x: Math.floor(crawler.x / TILE_SIZE + TILE_CENTER_OFFSET),
+      y: Math.floor(crawler.y / TILE_SIZE + TILE_CENTER_OFFSET),
+    }));
+    const landing = this.recall.channelLandingTile;
+    gates.update(landing === null ? partyTiles : [...partyTiles, landing]);
   }
 
   onExit(): void {
@@ -4591,6 +4715,71 @@ export class DungeonScene extends GameplayScene {
   }
 
   /**
+   * What the next frames may be drawn around: the active crawler, whom the
+   * camera follows; the other one, whom a switch moves the camera to at once,
+   * unless knocked out and so not switchable to; and the landing of a warp
+   * that is coming — a recall channel's, or the save point a death screen
+   * will put the party back at. Only the death screen covers the world: a
+   * channel is played through, its caster still in the fight.
+   */
+  private residencyOutlook(): ResidencyOutlook {
+    const active = this.active();
+    const inactive = this.inactive();
+    const focus: ResidencyFocus[] = [{ x: active.x, y: active.y }];
+    if (!inactive.isKnockedOut) focus.push({ x: inactive.x, y: inactive.y });
+    const landing = this.recall.channelLandingTile;
+    if (landing !== null) focus.push(tileFocus(landing));
+    const respawn = this.gameOver ? this.checkpointRespawnFocus() : null;
+    if (respawn !== null) focus.push(respawn);
+    return { focus, covered: respawn !== null };
+  }
+
+  /** Where a checkpoint restore would put the party, or null when the death screen leads elsewhere. */
+  private checkpointRespawnFocus(): ResidencyFocus | null {
+    const route = respawnRouteFor(this.lastSave);
+    if (route.kind !== 'checkpoint') return null;
+    return { x: route.checkpoint.respawnX, y: route.checkpoint.respawnY };
+  }
+
+  /**
+   * Puts the arrival's loading screen over a warp that has just landed the
+   * party among crowd rows not yet baked — a cache full of a fight's rows can
+   * outrun the death screen's boosted rewarm and a recall channel's
+   * normal-budget one — rather
+   * than show them as stand-ins. A warm landing shows nothing.
+   */
+  private coverWarpIfCrowdCold(): void {
+    const residency = this.townResidency;
+    const request = this.warpLoadRequest;
+    if (residency === null || request === null) return;
+    // Decided now rather than at the next check, so the rows the landing
+    // needs are queued before the screen measures what it owes.
+    residency.settleNow(this.residencyOutlook());
+    const active = this.active();
+    const landing: ResidencyFocus = { x: active.x, y: active.y };
+    if (residency.isWarmAround(landing)) return;
+    // Its own task, ahead of the arrival's: a row the queue gave up on while
+    // a fight held the room is not in the queue the arrival's task drains.
+    // Forgiven for the first few frames only, then done when the rows are
+    // warm or given up on again: a cache that cannot make room under the
+    // screen either — its surfaces refused, its room pinned — leaves a few
+    // stand-ins rather than a screen that never lifts.
+    let steps = 0;
+    const crowdTask: LoadTask = {
+      label: 'Waking the inhabitants',
+      work: steppedWork((budgetMs, mustProgress) => {
+        steps++;
+        if (steps <= WARP_COVER_FORGIVING_STEPS) residency.forgiveAndWarmAround(landing);
+        bakeFigurePrewarmFor(budgetMs, mustProgress);
+        const warmth = residency.warmthAround(landing);
+        const settled = warmth.share === 1 || !warmth.anyQueued;
+        return settled || steps >= WARP_COVER_MAX_STEPS ? 1 : warmth.share;
+      }),
+    };
+    this.arrivalLoading.coverWarp({ ...request, tasks: () => [crowdTask, ...request.tasks()] });
+  }
+
+  /**
    * The Wayfinder's Anchor's half of the warp: everything that has to happen to
    * the world, in the order the shipped teleports establish.
    *
@@ -4619,6 +4808,7 @@ export class DungeonScene extends GameplayScene {
     this.mercenarySystem.dismissForTransition(this.world.roster.mobs, this.world.roster.grid);
     this.attackCowSystem.dismiss(this.world.roster.mobs, this.world.roster.grid);
     this.placePartyAtTile(landing);
+    this.coverWarpIfCrowdCold();
     return true;
   }
 
@@ -4815,6 +5005,7 @@ export class DungeonScene extends GameplayScene {
     switch (route.kind) {
       case 'checkpoint':
         this.restoreFromCheckpoint(route.checkpoint);
+        this.coverWarpIfCrowdCold();
         break;
       case 'resumeSave':
         this.respawnFromSave(route.progress);
@@ -4977,7 +5168,7 @@ export class DungeonScene extends GameplayScene {
         heldFloor === null
           ? { ...TOWN_INTERIOR_FLOOR, aiFloorKey: this.aiFloorKey() }
           : this.interiorFloorContext(heldFloor, entry, prisonDifficulty),
-        this.interiorPartyRun(),
+        this.interiorPartyRun(returnTile),
       ),
     );
   }
@@ -5036,10 +5227,7 @@ export class DungeonScene extends GameplayScene {
     return {
       ...(entry.type === 'prison' ? this.prisonVisitContext(prisonDifficulty) : {}),
       floorNumber: levelDef.floorNumber,
-      groundSheets: groundSheetKeysAmong(
-        requiredSpriteKeysForLevel(levelDef.id, levelDef.spriteGroups),
-      ),
-      spriteGroups: levelDef.spriteGroups,
+      ...interiorArt(levelDef.spriteGroups, levelDef),
       sightRadiusPx: visibilityRadiusPx(this.active()),
       ownsMusic: false,
       heldLevelTimerFrames: levelDef.hasCollapseTimer === true ? heldFloor.levelTimerFrames : null,
@@ -5717,11 +5905,12 @@ export class DungeonScene extends GameplayScene {
    * stands indoors, and once storage has taken it, makes it the save a death
    * respawns from. The world
    * half is this scene's own, still the one the party walks back out into.
-   * Resolves once storage has answered, for a caller that must not run ahead
-   * of the write.
+   * A save cannot resume indoors, so a reload resumes on `doorstep`, the
+   * building's own front step. Resolves once storage has answered, for a
+   * caller that must not run ahead of the write.
    */
-  private commitSaveFromInterior(party: SaveParty): Promise<SaveWriteOutcome> {
-    const progress = this.buildSaveProgress(party);
+  private commitSaveFromInterior(party: SaveParty, doorstep: TilePoint): Promise<SaveWriteOutcome> {
+    const progress = this.buildSaveProgress(party, doorstep);
     const previous = this.lastSave;
     const point = savePointAfterWrite<LevelCheckpoint>(progress, null, this.tutorial !== null);
     return adoptWhenCommitted(
@@ -5729,6 +5918,7 @@ export class DungeonScene extends GameplayScene {
       () => this.lastSave === previous,
       () => {
         this.lastSave = point;
+        this.lastSavePointTile = doorstep;
       },
     );
   }
@@ -5744,11 +5934,12 @@ export class DungeonScene extends GameplayScene {
     this.wipeHold.begin(this.progressWipe, restart);
   }
 
-  private interiorPartyRun(): InteriorPartyRun {
+  private interiorPartyRun(doorstep: TilePoint): InteriorPartyRun {
     return {
       wheelLedger: this.wheelLedger,
       attackCowState: this.attackCowState,
-      commitSave: (party) => this.commitSaveFromInterior(party),
+      commitSave: (party) => this.commitSaveFromInterior(party, doorstep),
+      maySave: () => this.canSaveInTown,
       progressWipe: this.progressWipe,
     };
   }
@@ -5803,7 +5994,10 @@ export class DungeonScene extends GameplayScene {
     this.musicLibrary.absorbBackfill(musicUnlocksFromProgress(progress, progress.world?.persisted));
   }
 
-  private buildSaveProgress(party: SaveParty): SaveProgressInput {
+  private buildSaveProgress(
+    party: SaveParty,
+    resumeTile: TilePoint | null = this.lastSavePointTile,
+  ): SaveProgressInput {
     const humanSnap = revivedSnapshot(party.human);
     const catSnap = revivedSnapshot(party.cat);
     return {
@@ -5818,7 +6012,7 @@ export class DungeonScene extends GameplayScene {
               generatorVersion: WORLD_GENERATOR_VERSION,
               worldSeed: this.gameMap.worldSeed,
               artSeed: this.gameMap.artSeed,
-              safeRoomTile: this.lastSavePointTile,
+              safeRoomTile: resumeTile,
               levelTimerFrames:
                 this.levelDef.hasCollapseTimer === true ? this.levelTimerFrames : null,
               persisted: this.persistedWorldStateFor(party),
@@ -6940,20 +7134,11 @@ export class DungeonScene extends GameplayScene {
   }
 
   private pauseFrame(): PauseFrame {
-    const inSafe = this.human.isProtected || this.cat.isProtected;
-    const closePause = (): void => this.menus.pauseScreen.close();
     return {
       humanAchievements: this.humanAchievements,
       catAchievements: this.catAchievements,
       gameStats: this.gameStats,
-      onOpenHumanBoxes:
-        inSafe && this.humanAchievements.pendingBoxes.length > 0
-          ? () => this.achievementUI.openBoxQueue('human', closePause)
-          : undefined,
-      onOpenCatBoxes:
-        inSafe && this.catAchievements.pendingBoxes.length > 0
-          ? () => this.achievementUI.openBoxQueue('cat', closePause)
-          : undefined,
+      ...this.achievementUI.pauseBoxOpeners(() => this.menus.pauseScreen.close()),
     };
   }
 
@@ -8119,6 +8304,8 @@ export class DungeonScene extends GameplayScene {
   }
 
   update(): void {
+    // Ahead of the arrival screen's return, so a group the arrival needs decodes under it.
+    this.updateSfxGates();
     // Ahead of everything, the town's streets included: the arrival's own work
     // is being done under this screen, and a world ticked behind it would be
     // played by nobody — a crowd walking off from where it was warmed, a save
@@ -8194,6 +8381,9 @@ export class DungeonScene extends GameplayScene {
     // Town keeps living through citizen chats and other overlay dialogs — only a
     // hard stop (game over, the pause menu, or a level- or run-complete screen)
     // should freeze the streets.
+    // Ungated: a death screen or a pause is exactly when the next place the
+    // party is drawn may be a warp away, and the caches can use the time.
+    this.townResidency?.update(this.residencyOutlook());
     if (
       !this.gameOver &&
       !this.menus.pauseScreen.isOpen &&

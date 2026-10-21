@@ -60,6 +60,43 @@ re-download and re-decode hundreds of megabytes every time the player opened a s
 `releaseSpritesExcept` is called once, at the stairs transition, keyed on the new floor's
 required keys.
 
+## Indoor-only art is painted at the door
+
+Some art is only ever drawn inside a floor's buildings. On floor 3 that is
+`town_interior`: `ground_interior`, the rooms' floors and walls; `ground_dungeon`, which
+the Sleeping Cat Inn's safe-room counter, galley and stove stand on; and the sixteen
+`club_*` sheets of the Desperado Club's furniture. Painting it on the floor's arrival
+would hold 10.9 MB the street never shows. Such a group is declared in
+`LevelDef.interiorSpriteGroups` and never in `spriteGroups`: `verify:assets` fails on a
+group listed in both, because there it would be painted on arrival anyway. Nothing on
+the floor asks for it; `requiredSpriteKeysForLevel` leaves it out, so the stairs release
+it like any art the next floor does not name.
+
+`interiorArt` (`src/scenes/interiorFloorContext.ts`) builds what a room is painted from:
+the outdoor groups it shares with the street, plus the floor's indoor-only groups, with
+the ground sheets among them. `BuildingInteriorScene` requests all of it before its
+`ArrivalLoader` begins, and the loader's first task does not finish while any sheet is
+owed. That ordering is the whole guarantee that a room never shows missing art: on a
+first visit the sheets are painted behind the card (about a quarter of a second more,
+headless, on the first building entered), and on a later visit each one is either still
+resident, so the request costs nothing, or was let go by the cache, so it is queued again
+and the card waits for it.
+
+Leaving the room releases nothing. The sheets stay resident and go idle, and the
+environment cache's least-recently-drawn eviction lets them go first if the floor ever
+needs the room. Releasing them on every exit would only repaint them on every entry,
+behind a card that would otherwise be up for a few frames; keeping them costs 10.9 MB
+that the budget has room for.
+
+To add another indoor-only set: declare an `AssetGroup` in `ASSET_GROUPS`, list it in
+the floor's `interiorSpriteGroups`, and, if its sheets are painted, register their
+family in `environmentSheets.ts` under that group. A ground sheet in the group is found
+by `groundSheetKeysAmong` and needs no registration. `npm run verify:arrival-load`'s
+interior environments (a shop, and the inn for its safe room) fail on any sprite a room
+draws unpainted that the floor outside does not hold — a ground sheet included, since a
+material falling back to its flat colour is a lookup miss — which is what goes red if a
+room stops asking for its group.
+
 ## Sound is grouped the same way
 
 Music tracks and ambience beds stream through `MediaElementAudioSourceNode` and are never
@@ -122,9 +159,14 @@ loading screen, after a scene rebuild — reads every row as unused and evicts t
 own, which the first frames of play then re-bake on the render path.
 
 **A crowd is pinned, not swept.** The global ceiling, `CACHE_BUDGET_MEGABYTES` (188), is
-sized for a town plaza and for arriving on level 3. The crowd's own working set is about 122 MB, and on top of it sits
-the player's own per-figure ceiling (56 MB), so a town visit never leaves Carl's new gear
-nowhere to bake. The ten-second idle window is a false signal for a strolling crowd:
+sized for a town plaza and for arriving on level 3. The crowd's pinned working set is the
+largest share of it (about 83 MB on arrival in the seed-7919 town at DPR 2, measured
+headless in 2026-10; the constant's JSDoc gives ~122 MB as its spread across world seeds),
+and beside it sits the player's
+own per-figure ceiling, `HUMAN_FIGURE_BUDGET_MEGABYTES` (67), so a town visit never leaves
+Carl's new gear nowhere to bake. Pinning only the citizens within a radius of the camera
+was measured and rejected: thousands of crowd draws became stand-in frames as citizens
+walked into the ring cold. The ten-second idle window is a false signal for a strolling crowd:
 a look worn by one or two citizens can go that long between draws of its rarer facing.
 So the town pins each citizen's `idle` and `walk` rows (`pinCitizenFigure`) and warms
 `talk` only when a citizen is frozen into a conversation (`prewarmAndPinCitizenTalk`).
@@ -135,12 +177,49 @@ So the town pins each citizen's `idle` and `walk` rows (`pinCitizenFigure`) and 
 - `TownLifeSystem.dispose` unpins on every path that rebuilds the town scene.
 - A pinned row that has gone missing is re-queued urgently the next time it is drawn.
 
+**Far from town the crowd stands down.** Briar Hollow is the town's neighbour, and a
+siege wave there is a dozen distinct creatures in several facings; with the crowd's
+~83 MB pinned off screen beside the party's ~45, the wave's rows evicted one another
+and were painted live every frame. `TownResidency` (owned by `DungeonScene` on the
+overworld) measures, for every look the crowd and the market's vendors wear, how far
+a camera would have to travel before a citizen wearing it came into view, from each
+crawler (a switch moves the camera to the other at once, unless it is knocked out)
+and from any warp landing that is coming (a recall channel, a death screen's save
+point). Past the hold distance plus a hysteresis it stands the look's rows down
+(`setFigureStatePinStandby`): still pinned against the sweep, so a quiet trip costs no
+re-bake, but evictable when something on screen needs the room. The hold distance is
+the walk the fastest crawler (Speed Fizz with the stall's boon) covers in
+`CROWD_REWARM_LEAD_SECONDS`; inside it a look is held again and any row missing is
+asked for urgently, nearest look first, within the ordinary prewarm budget. Outside
+it, and while no siege contests the room, missing rows are asked for speculatively, so
+they fill back in as the fight's rows are swept. Only behind the death screen, which
+covers the world, is the budget raised; a recall channel is played through and rewarms
+its landing at the ordinary budget. A warp that still lands among cold rows comes in
+behind the arrival's own loading screen (`ArrivalLoader.coverWarp`), which asks for
+the rows again, forgiving any the queue gave up on, for its first
+`WARP_COVER_FORGIVING_STEPS` frames, and lifts when they are warm, when the queue has
+given up on them again, or after `WARP_COVER_MAX_STEPS`: a cache
+that cannot make room leaves a few stand-ins rather than a screen that never lifts. Nothing changes inside the town: every
+look is within the hold distance of anywhere in it. `npm run verify:town-residency`
+counts the stand-ins after a walk home, a death, two recalls and a crawler switch.
+
 **A row nothing has room for is abandoned for a while.** After
 `PREWARM_CAPACITY_RETRIES` refusals the queue gives the row up and refuses it for
 `IDLE_FRAMES_BEFORE_RELEASE`. That is the window in which the rows crowding it out are
 released if nothing draws them. Taken back at once, the row would reach the front of the
 queue every frame, be refused there every frame, and spend the allowance the rows behind
 it are waiting on. It is still drawn meanwhile, painted directly.
+
+**A frame's prewarm runs in a fixed order.** Urgent rows drain first, then the queued
+row ink measurements (`figureRowInkTop`, which places markers over a figure), then the
+speculative rows — all from one `PREWARM_BAKE_BUDGET_MS` (3 ms, a mean; an overrun is
+repaid out of later frames) inside the frame's `FRAME_BAKE_BUDGET_MS` (4). Ink first
+would let a crowd walking into view spend the whole budget for tens of seconds while
+every figure that missed was painted live. A cell that is painted directly records why
+(`FIGURE_DIRECT_DRAW_CAUSES` in `figureCacheStats.ts`): `frameAllowance` (the frame's
+time was spent), `figureBudget` or `cacheBudget` (still over a ceiling after eviction
+found nothing out of use), `memoryHeld` (bakes paused after the browser refused a
+surface) or `tooLarge`. `__perfRecorder` sums them per recording.
 
 **A citizen draws approximately; a fight draws exactly.** `drawFigureCachedApprox` never
 bakes on the render path. It borrows the nearest baked frame of the same row, then any
@@ -363,6 +442,97 @@ is loaded. The whole town's art — ground, street furniture, signage, wildernes
 club, facades — is 718 paint steps, which the queue drains in a few seconds of
 a floor's fade-in while everything that has landed is already drawn.
 
+## Every surface has an owner
+
+Every off-screen canvas comes from `allocCanvas(owner, w, h)` — or
+`allocReadableCanvas` for one read back pixel by pixel — in `src/core/canvasSurface.ts`,
+against a `SurfaceOwner` from `SURFACE_OWNERS`. The module keeps a live count of
+surfaces and backing-store bytes per owner; decoded `SpriteLoader` images (and their
+half-size copies) count under `spriteSheets`, and the main canvas, the one canvas made
+elsewhere, is reported as `mainCanvas`. `resizeSurface` changes a surface's size and its
+tally together. `releaseSurface` zero-sizes a dropped surface so its pixels go back at
+once rather than at the next collection; a `FinalizationRegistry` takes a surface
+collected without release off the tally, so the count is what is held, not everything
+ever allocated.
+
+**Obligations for new code:** pick the specific owner the pixels belong to (add one to
+`SURFACE_OWNERS` for a new pool rather than reaching for `misc`), call `releaseSurface`
+on every eviction and drop path, and never assign `width`/`height` directly. Dropped
+surfaces left to the collector are what that costs: measured in the town, they hold
+486 MB tracked against 383 with every drop released — 89 MB of it in 2461 throwaway
+scratch surfaces.
+
+## Byte limits by owner
+
+Every large owner is bounded, and each limit sits above the busiest scene's on-screen
+working set, so it stops growth without ever evicting something visible:
+
+- **Figure cells:** `CACHE_BUDGET_MEGABYTES` (188) overall, read through
+  `figureCacheByteBudget()`; per figure, `FigureDef.budgetMegabytes` or the 24 MB default
+  — Carl 67 (`HUMAN_FIGURE_BUDGET_MEGABYTES`), Necromancer 32, Donut 28.
+- **Environment sheets:** `ENVIRONMENT_SHEET_BUDGET_MEGABYTES` (160), least recently
+  drawn first. A sheet looked up within `RECENTLY_DRAWN_FRAMES` (half a minute) or still
+  painting is never a candidate, so when everything resident is in use the cache stays
+  over budget rather than opening a hole. A cache that bakes from a sheet and then draws
+  its own copy (tile chunks, overlays) records the keys with `recordSheetLookups` and
+  calls `touchEnvironmentSheets` on every cached draw, or a ground material on screen
+  only through a baked chunk would look idle. Floor 3 paints about 126 MB on arrival,
+  and 137 MB once its buildings have been visited; a walk around it draws most of that,
+  so the whole set is its working set and the limit is a ceiling against growth, not a
+  trim. `npm run verify:environment-sheet-budget` sums every floor's set, arrival plus
+  indoor-only groups, from the sheet plans' dimensions without painting anything, and
+  fails if one uses more than 90% of the budget.
+- **Tile chunks:** `MAX_CACHED_CHUNKS` (60; a 1080p view spans 20), measured at 20–34 MB.
+  **Tile overlays:** `OVERLAY_CACHE_BUDGET_MEGABYTES` (32), evicting in batches down to 24.
+- **Smaller pools:** town interior props 8 MB and nursery poses 4 MB, both through the
+  shared `RecentSurfaceCache` (`src/core/recentSurfaceCache.ts`: a byte budget, LRU, and
+  nothing drawn within its protected frames let go); figure rims
+  (`RIM_CACHE_BUDGET_MEGABYTES`, 8); Big Top props (6); held item art
+  (`HELD_ART_BUDGET_MEGABYTES`, 4); title hero cells (32).
+
+**Only half-density devices get smaller budgets.** `memoryBudgetScale()` in
+`src/core/deviceMemoryBudget.ts` scales the figure and environment-sheet budgets: full
+when `navigator.deviceMemory` reports 8 GB or more, or when the device does not bake at
+half density (`shouldDownscaleForLowEndDevice()`); a third on a half-density device
+reporting 2 GB or less; half on any other half-density device. A half-density cell holds
+a quarter of the bytes, so those fractions still clear the town's peak (51 MB of cells,
+35 MB of sheets). A full-density phone keeps the full budgets however little memory it
+reports: every smaller budget measured in the town walk added on-screen stand-ins and
+repaints. Never branch on platform; `&deviceMemory=<GB>` stands in for the browser's
+report.
+
+**What scenes hold**, tracked peak by `__perfMemory`, Chrome on an M1 Pro at DPR 2,
+2026-10:
+
+| scene                       | tracked peak | largest owners (MB)                                      |
+| --------------------------- | ------------ | -------------------------------------------------------- |
+| floor 1                     | ≈230 MB      | figure cells 111, sheets 45, chunks 29, lighting 24      |
+| floor 2, spider lab         | ≈270 MB      | figure cells 153, sheets 47, chunks 34, lighting 25      |
+| Juicer's gym                | ≈240 MB      |                                                          |
+| town, Big Top, casino floor | ≈383–391 MB  | figure cells 188 (at the ceiling), sheets 139, chunks 20 |
+| Briar Hollow siege          | ≈390–407 MB  | figure cells 188, sheets 139, chunks 30, main canvas 17  |
+| casino table (idle)         | ≈65 MB       |                                                          |
+
+The overworld scenes sit at the figure ceiling because the crowd's pinned rows fill it;
+in the town walk the cache still serves 99.4% of cells, with one direct paint in 30 s.
+
+## Ground chunks bake on a budget
+
+`TileRenderer` bakes the ground into chunk canvases from one per-frame budget,
+`CHUNK_BAKE_BUDGET_MS` (4). A visible chunk owed a patch is patched before it is drawn,
+and the first cold visible chunk always bakes so the cache cannot stall; a cold chunk
+the budget refuses is painted tile by tile, which costs a bake every frame it happens,
+so the cheapest cold chunk is one baked before it scrolls in. Leftover time goes to one
+bake **sliced across frames**, in the bake's own row-major tile order into a fresh
+canvas, while the old picture stays on screen: a visible stale chunk's re-bake (a sheet
+it was baked from was repainted) first, else the next cold chunk one ring ahead of the
+camera's motion, the corner included on a diagonal. Work for ground not yet on screen
+is held to `CHUNK_SPECULATIVE_BUDGET_MS` (1), since it runs on every frame of a walk;
+the camera takes about 200 frames at walking pace to cross a chunk, so that lead is
+ample. A tile edit marks a **patch** (widened by `CHUNK_REPAINT_MARGIN_TILES`, since a
+neighbour's painter reads it) on every chunk it touches instead of a re-bake; off-screen
+patches are painted in speculative time. A map's very first frame is unbounded.
+
 ## Resolution is not the lever
 
 Most sheets are authored at `tileScale: 64` while `TILE_SIZE` is 32, which looks like a
@@ -383,11 +553,60 @@ frame at the end of a long animation row.
 ## Measuring any of this
 
 `performance.memory` reports the JS heap only. Bitmaps and audio buffers live outside it,
-which is why this looked like a non-problem for a long time. Use Chrome's Task Manager
+which is why this looked like a non-problem for a long time. `__perfMemory` adds both
+beside the surfaces: `audioBuffers` is every decoded sound effect's float samples plus the
+compressed files `ON_DEMAND_SOUND_IDS` keep, and `jsHeap` is `usedJSHeapSize` where
+Chrome reports it. Decoded audio is resampled to the context's rate, so a 16 kHz effect
+costs as much as a 48 kHz one. At a 44.1 kHz context the floor-3 overworld holds about
+161 MB with nothing under way, 176 MB near Briar Hollow and 203 MB in a siege, which
+also holds the bounty and circus groups (`FloorSfxGates`); 1.5 MB of that is the gated
+groups' compressed files, kept so a cue whose group was let go still plays. Use Chrome's Task Manager
 for the per-tab total and cross-check with `ps -Ao rss,command | grep Renderer`.
 Unregister the service worker first — it precaches every shipped asset and will serve a
 stale bundle. A slow frame with a matching `longtask` entry is JS; a slow frame without
 one is raster or GPU upload.
+
+**Timing and per-owner bytes in Chrome.** The repeatable scenes are `PERF_SCENES` in
+`src/dev/perfScenes.ts`: each is a dev query pinned to one world seed under `!tough`,
+plus a scripted walk.
+
+1. `npm run serve`, then open `http://localhost:8080/?<scene query>&perf&perfwalk=<id>`
+   in a **visible, focused** tab. `&perfwalkDelay=<s>` (default 10) and
+   `&perfwalkSeconds=<s>` (default 30) set the warm-up and the walk's length;
+   `&assaultNow` rings the Briar Hollow bell on arrival; `&deviceMemory=<GB>` measures
+   another device's budgets.
+2. Press a real key so intro banners clear and rAF runs at full rate.
+3. Wait for `__perfWalk.state === 'walking'` (the warm-up lets the JIT and caches
+   settle), call `__perfRecorder.start(label)`, wait for `'done'`, then
+   `__perfRecorder.stop()`. The recording holds real rAF frame intervals (p50/p95/p99,
+   max, frames over 20 and 33 ms), every perf timer and gauge, the figure cache's hit
+   rate and direct-draw causes over the whole run, long animation frames, and
+   `__perfMemory` sampled each second.
+4. Three runs per scene; keep the median, since a first run's JIT warm-up over-reports.
+   Write results under `preview/perf/<label>/`.
+
+Never call `getImageData` or `toDataURL` on the main canvas during a timing run: it
+moves the canvas to software rendering for good. `__perfMemory()` returns per-owner
+surfaces and bytes at any moment. The density check (`__perfDensity.start()` /
+`.report()`: pixels a cache paints per tile against pixels it is drawn at, from a probe
+on every `drawImage`) and `__perfDuplicateCells()`, which reads every cell back, both
+slow the frame, so they belong in a separate, untimed run;
+`npm run report:duplicate-cells` bakes every figure headless and counts the same way.
+
+**Caveats.** node-canvas draws about five times slower than Chrome and reads pixels back
+very differently, so headless numbers are counts and ratios, never frame times.
+`__perfMemory` counts canvases, decoded images, decoded audio and the JS heap; it misses
+the browser's own GPU textures, compositor tiles and decode caches, so reconciling the tracked total with Task Manager's memory footprint and GPU
+memory is a human's job, as is any phone measurement (open the same route with `&perf`
+and read the overlay). On a 120 Hz display about 1% of frames read 20–25 ms from vsync
+jitter even when nothing is happening, so judge hitches by frames over 33 ms and by the
+timers and gauges, not by the over-20 ms count alone.
+
+**Findings that stand (2026-10).** Every large owner's density ratio is at most 1.0
+(figure cells and props 1.0, sheets and chunks 0.5), so there is no density to cut
+without visible loss. About 4% of live figure cells are byte-identical to another cell of
+the same figure (6.6% across every figure baked headless at 1×, Carl's 12.6% the
+highest); the saving does not justify reference-counted sharing of cell surfaces.
 
 `npm run verify:assets` is the build-time gate: it proves every mob a floor can produce
 has its sprite keys declared, so a creature can never reach a floor whose groups do not

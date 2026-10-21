@@ -9,7 +9,12 @@
  * particles and nothing has to be stepped to get there.
  */
 
-import { allocCanvas, surfaceContext, type CanvasSurface } from '../../../core/canvasSurface';
+import {
+  allocCanvas,
+  surfaceContext,
+  type CanvasSurface,
+  releaseSurface,
+} from '../../../core/canvasSurface';
 import { renderQuality } from '../../../core/RenderQuality';
 import { getRenderScale } from '../../../core/Viewport';
 import { mulberry32, subSeed, type Rng } from '../../../sprites/person/rng';
@@ -180,7 +185,7 @@ const SPRITE_KINDS: readonly SpriteKind[] = ['ember', 'spark', 'dust', 'mote'];
 
 function bakeSprite(kind: SpriteKind, scale: number): CanvasSurface {
   const side = Math.ceil(SPRITE_RADIUS_PX * 2 * scale);
-  const surface = allocCanvas(side, side);
+  const surface = allocCanvas('title', side, side);
   const ctx = surfaceContext(surface);
   const radius = side * HALF;
   const [core, body, fade] = SPRITE_INK[kind];
@@ -301,8 +306,7 @@ class ParticlesLayer implements TitleLayer {
     const sprites = this.sprites;
     if (sprites === null) return;
     for (const kind of SPRITE_KINDS) {
-      sprites[kind].width = 0;
-      sprites[kind].height = 0;
+      releaseSurface(sprites[kind]);
     }
     this.sprites = null;
   }

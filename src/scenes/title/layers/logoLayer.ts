@@ -7,7 +7,12 @@
  * a frame is a few blits plus the sheen.
  */
 
-import { allocCanvas, surfaceContext, type CanvasSurface } from '../../../core/canvasSurface';
+import {
+  allocCanvas,
+  surfaceContext,
+  type CanvasSurface,
+  releaseSurface,
+} from '../../../core/canvasSurface';
 import { getRenderScale } from '../../../core/Viewport';
 import type { Rect } from '../../../ui/core/geom';
 import { mix } from '../../../ui/theme/color';
@@ -246,7 +251,7 @@ function paintWordmark(
 }
 
 function bakeSurface(bounds: Rect, scale: number): CanvasSurface {
-  return allocCanvas(Math.ceil(bounds.w * scale), Math.ceil(bounds.h * scale));
+  return allocCanvas('title', Math.ceil(bounds.w * scale), Math.ceil(bounds.h * scale));
 }
 
 /** A context on `surface` that draws in stage CSS pixels. */
@@ -314,8 +319,7 @@ function bakeGlow(geometry: TitleLogoGeometry, scale: number): CanvasSurface {
 }
 
 function release(surface: CanvasSurface): void {
-  surface.width = 0;
-  surface.height = 0;
+  releaseSurface(surface);
 }
 
 class LogoLayer implements TitleLayer {

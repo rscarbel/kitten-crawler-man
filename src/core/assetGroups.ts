@@ -15,6 +15,7 @@ import type { SpriteKey } from './SpriteLoader';
 export type AssetGroup =
   | 'core'
   | 'town'
+  | 'town_interior'
   | 'overworld'
   | 'dungeon_common'
   | 'floor1_tileset'
@@ -65,8 +66,7 @@ export const ASSET_GROUPS: Readonly<Record<AssetGroup, readonly SpriteKey[]>> = 
     'find-the-stairwell',
   ],
 
-  // Level 3's town: buildings, the desperado club interior and street
-  // furniture.
+  // Level 3's town: buildings and street furniture.
   town: [
     'barracks',
     'blackwood_lodge',
@@ -84,22 +84,6 @@ export const ASSET_GROUPS: Readonly<Record<AssetGroup, readonly SpriteKey[]>> = 
     'sleeping_cat_inn',
     'sunken_stump',
     'temple',
-    'club_bar_counter',
-    'club_bar_stool',
-    'club_casino_table',
-    'club_drink_shelf',
-    'club_market_backdrop',
-    'club_market_stall',
-    'club_merc_desk',
-    'club_poker_table',
-    'club_velvet_rope',
-    'club_vip_counter',
-    'club_weapon_rack',
-    'club_slot_cabinet',
-    'club_slot_lights',
-    'club_fortune_wheel',
-    'club_fortune_wheel_lights',
-    'club_croupier_counter',
     'bunting_11',
     'bunting_16',
     'gate_arch_across_2',
@@ -122,6 +106,31 @@ export const ASSET_GROUPS: Readonly<Record<AssetGroup, readonly SpriteKey[]>> = 
     'over_city_signpost',
     'ground_overworld',
     'modern_decorations',
+  ],
+
+  // Drawn only inside the town's buildings: the rooms' floors and walls, the
+  // inn's safe-room counter and galley (laid on dungeon ground), and the
+  // Desperado Club's furniture. Level 3 names it in `interiorSpriteGroups`, so
+  // it is painted behind a building's loading card rather than on arrival.
+  town_interior: [
+    'ground_interior',
+    'ground_dungeon',
+    'club_bar_counter',
+    'club_bar_stool',
+    'club_casino_table',
+    'club_drink_shelf',
+    'club_market_backdrop',
+    'club_market_stall',
+    'club_merc_desk',
+    'club_poker_table',
+    'club_velvet_rope',
+    'club_vip_counter',
+    'club_weapon_rack',
+    'club_slot_cabinet',
+    'club_slot_lights',
+    'club_fortune_wheel',
+    'club_fortune_wheel_lights',
+    'club_croupier_counter',
   ],
 
   // Level 3's wilderness: trees, boulders, the goblin camps, Briar Hollow and the circus.
@@ -165,6 +174,8 @@ export const ASSET_GROUPS: Readonly<Record<AssetGroup, readonly SpriteKey[]>> = 
     'goblin_tent_b',
     'goblin_tent_c',
     'goblin_tent_d',
+    // Scattered through the goblin camps and Briar Hollow's ruins.
+    'bone_scatter',
     // Briar Hollow's props.
     'village_1x1',
     'village_1x1_variants',
@@ -186,14 +197,12 @@ export const ASSET_GROUPS: Readonly<Record<AssetGroup, readonly SpriteKey[]>> = 
   ],
 
   // Shared by every dungeon floor (tutorial, level 1, level 2): the generic
-  // dungeon/interior ground, and the mob types that show up in more than one
-  // floor's spawn tables.
+  // dungeon ground.
   // Floor-specific tile *palettes* are their own groups below,
   // since floor 1 and floor 2 share these five tile types but not their look
   // (`src/map/dungeon/floorTheme.ts`).
   dungeon_common: [
     'ground_dungeon',
-    'ground_interior',
     // The dead, on any dungeon floor a character or a stamp lays them out on.
     'bone_scatter',
     'bone_pile',

@@ -15,7 +15,12 @@
 import type { Player } from '../../Player';
 import { PLAYER_HIT_FLASH_MARGIN_TILES } from '../../Player';
 import { TILE_SIZE } from '../../core/constants';
-import { allocCanvas, surfaceContext, type CanvasSurface } from '../../core/canvasSurface';
+import {
+  allocCanvas,
+  releaseSurface,
+  freshSurfaceContext,
+  type CanvasSurface,
+} from '../../core/canvasSurface';
 
 /** How strongly the hidden crawler shows through: a ghost, not a second body. */
 export const OCCLUDED_CRAWLER_ALPHA = 0.5;
@@ -26,8 +31,10 @@ let scratch: { surface: CanvasSurface; ctx: CanvasRenderingContext2D; size: numb
 function scratchOf(size: number): { surface: CanvasSurface; ctx: CanvasRenderingContext2D } {
   if (scratch === null || scratch.size < size) {
     const grown = Math.max(size, scratch?.size ?? 0);
-    const surface = allocCanvas(grown, grown);
-    scratch = { surface, ctx: surfaceContext(surface), size: grown };
+    if (scratch !== null) releaseSurface(scratch.surface);
+    scratch = null;
+    const surface = allocCanvas('figureScratch', grown, grown);
+    scratch = { surface, ctx: freshSurfaceContext(surface), size: grown };
   }
   return scratch;
 }

@@ -20,7 +20,7 @@ import {
   type SpriteKey,
   type SpriteStateDef,
 } from '../../core/SpriteLoader';
-import { allocCanvas, surfaceContext } from '../../core/canvasSurface';
+import { allocCanvas, surfaceContext, releaseSurface } from '../../core/canvasSurface';
 import { getMaterial, paintPatch } from '../tilegen/materials';
 import { buildMaskSet } from '../tilegen/masks';
 import { slicePatch } from '../tilegen/patchSlice';
@@ -186,7 +186,7 @@ function maskSheetPlan(onReady?: () => void): EnvironmentSheetPlan {
               `Corner masks paint ${masks.length} frames, but "${key}" declares ${row.frameCount}`,
             );
           }
-          const scratch = allocCanvas(TILE_PX, TILE_PX);
+          const scratch = allocCanvas('groundTileParts', TILE_PX, TILE_PX);
           const scratchCtx = surfaceContext(scratch);
           masks.forEach((mask, index) => {
             const image = scratchCtx.createImageData(TILE_PX, TILE_PX);
@@ -199,8 +199,7 @@ function maskSheetPlan(onReady?: () => void): EnvironmentSheetPlan {
             scratchCtx.putImageData(image, 0, 0);
             ctx.drawImage(scratch, index * TILE_PX, row.row * TILE_PX);
           });
-          scratch.width = 0;
-          scratch.height = 0;
+          releaseSurface(scratch);
         },
       },
     ],

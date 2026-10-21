@@ -48,8 +48,8 @@ import {
   setFigureBakeClock,
   touchFigureState,
 } from '../src/sprites/figure/figureFrameCache.js';
+import { BYTES_PER_MEGABYTE } from '../src/core/canvasSurface.js';
 import {
-  BYTES_PER_MEGABYTE,
   getFigureCacheStats,
   setFigureCacheStatsRecording,
 } from '../src/sprites/figure/figureCacheStats.js';

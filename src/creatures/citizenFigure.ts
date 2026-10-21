@@ -23,11 +23,13 @@ import {
   pinSkyfowlCastMember,
   prewarmAndPinSkyfowlTalk,
   prewarmSkyfowlCastMember,
+  skyfowlCastMemberRows,
 } from '../sprites/skyfowlCastSprite';
 import {
   pinTownCastLook,
   prewarmAndPinTownCastTalk,
   prewarmTownCastLook,
+  townCastLookRows,
 } from '../sprites/townCastSprite';
 import type { TownSpecies } from '../systems/townSpecies';
 import type { CitizenSpeechStyle } from '../dialog/speakers';
@@ -192,6 +194,20 @@ export function pinCitizenFigure(figure: CitizenFigure): void {
     return;
   }
   pinTownCastLook(figure.look);
+}
+
+/**
+ * The rows {@link pinCitizenFigure} pins: the idle and walk rows of the
+ * citizen's look in every facing, which every citizen wearing it shares.
+ */
+export function citizenFigureRows(figure: CitizenFigure): DrawnFigureRow[] {
+  if (figure.species === 'skyfowl') return skyfowlCastMemberRows(figure.look.id);
+  return townCastLookRows(figure.look);
+}
+
+/** Names a citizen's look: citizens wearing the same one share every row. */
+export function citizenLookKey(figure: CitizenFigure): string {
+  return `${figure.species}:${figure.look.id}`;
 }
 
 /**

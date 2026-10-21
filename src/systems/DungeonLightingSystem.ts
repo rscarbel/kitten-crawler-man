@@ -28,7 +28,12 @@
  */
 
 import { TILE_SIZE } from '../core/constants';
-import { allocCanvas, surfaceContext, type CanvasSurface } from '../core/canvasSurface';
+import {
+  allocCanvas,
+  releaseSurface,
+  surfaceContext,
+  type CanvasSurface,
+} from '../core/canvasSurface';
 import { canvasGeneration } from '../core/canvasRecovery';
 import type { GameMap } from '../map/GameMap';
 import {
@@ -484,7 +489,11 @@ export class DungeonLightingSystem implements GameSystem {
     const isOpaque = (x: number, y: number): boolean => this.isOpaque(x, y);
     this.originCookies = new OriginCookieCache(new VisibilityCache(isOpaque), isOpaque);
     this.indexRegions();
-    this.ambientSurface = allocCanvas(Math.max(1, this.mapWidth), Math.max(1, this.mapHeight));
+    this.ambientSurface = allocCanvas(
+      'lighting',
+      Math.max(1, this.mapWidth),
+      Math.max(1, this.mapHeight),
+    );
     this.computeAmbient();
     this.applyCap();
     this.sink = {
@@ -765,12 +774,8 @@ export class DungeonLightingSystem implements GameSystem {
     if (this.generation === current) return;
     this.generation = current;
     this.applyCap();
-    this.cache = null;
+    this.releaseOnDemandSurfaces();
     this.cacheDirty = true;
-    this.flickerLayers.clear();
-    this.buffer = null;
-    this.dynamicLayer = null;
-    this.overlay = null;
     this.lastBlit.valid = false;
     this.originCookies.clear();
     for (const light of this.staticLights) light.cookie.forgetPainted();
@@ -778,9 +783,29 @@ export class DungeonLightingSystem implements GameSystem {
 
   dispose(): void {
     this.sources.length = 0;
-    this.flickerLayers.clear();
+    this.releaseOnDemandSurfaces();
+    this.lastBlit.valid = false;
+    this.originCookies.clear();
+    for (const light of this.staticLights) light.cookie.forgetPainted();
+    releaseSurface(this.ambientSurface);
+  }
+
+  /** Gives back every surface painted on demand: each is painted again on its next use. */
+  private releaseOnDemandSurfaces(): void {
+    this.releaseFlickerLayers();
+    if (this.cache !== null) releaseSurface(this.cache.surface);
     this.cache = null;
+    if (this.buffer !== null) releaseSurface(this.buffer.surface);
     this.buffer = null;
+    if (this.dynamicLayer !== null) releaseSurface(this.dynamicLayer.surface);
+    this.dynamicLayer = null;
+    if (this.overlay !== null) releaseSurface(this.overlay.surface);
+    this.overlay = null;
+  }
+
+  private releaseFlickerLayers(): void {
+    for (const layer of this.flickerLayers.values()) releaseSurface(layer.surface);
+    this.flickerLayers.clear();
   }
 
   /**
@@ -908,7 +933,8 @@ export class DungeonLightingSystem implements GameSystem {
     const target = ctx.canvas;
     let overlay = this.overlay;
     if (overlay?.surface.width !== target.width || overlay.surface.height !== target.height) {
-      const surface = allocCanvas(target.width, target.height);
+      if (overlay !== null) releaseSurface(overlay.surface);
+      const surface = allocCanvas('lighting', target.width, target.height);
       overlay = { surface, ctx: surfaceContext(surface) };
       this.overlay = overlay;
     }
@@ -1375,7 +1401,8 @@ export class DungeonLightingSystem implements GameSystem {
     if (this.dynamicCount === 0) return;
     let layer = this.dynamicLayer;
     if (layer?.surface.width !== width || layer.surface.height !== height) {
-      const surface = allocCanvas(width, height);
+      if (layer !== null) releaseSurface(layer.surface);
+      const surface = allocCanvas('lighting', width, height);
       layer = { surface, ctx: surfaceContext(surface) };
       this.dynamicLayer = layer;
     }
@@ -1461,10 +1488,11 @@ export class DungeonLightingSystem implements GameSystem {
 
     let cache = this.cache;
     if (cache === null || cache.surface.width < widthPx || cache.surface.height < heightPx) {
-      const surface = allocCanvas(widthPx, heightPx);
+      if (cache !== null) releaseSurface(cache.surface);
+      const surface = allocCanvas('lighting', widthPx, heightPx);
       cache = { surface, ctx: surfaceContext(surface), tileX, tileY, widthTiles, heightTiles };
       this.cache = cache;
-      this.flickerLayers.clear();
+      this.releaseFlickerLayers();
     }
     cache.tileX = tileX;
     cache.tileY = tileY;
@@ -1558,7 +1586,7 @@ export class DungeonLightingSystem implements GameSystem {
     const key = `${profile}:${group}`;
     const existing = this.flickerLayers.get(key);
     if (existing !== undefined) return existing;
-    const surface = allocCanvas(cache.surface.width, cache.surface.height);
+    const surface = allocCanvas('lighting', cache.surface.width, cache.surface.height);
     const layer: FlickerLayer = {
       profile,
       group,
@@ -1582,7 +1610,8 @@ export class DungeonLightingSystem implements GameSystem {
     ) {
       return existing;
     }
-    const surface = allocCanvas(width, height);
+    if (existing !== null) releaseSurface(existing.surface);
+    const surface = allocCanvas('lighting', width, height);
     const buffer = { surface, ctx: surfaceContext(surface) };
     this.buffer = buffer;
     return buffer;

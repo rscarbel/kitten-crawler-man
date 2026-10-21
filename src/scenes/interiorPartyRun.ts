@@ -23,9 +23,16 @@ export interface InteriorPartyRun {
   readonly attackCowState: AttackCowState;
   /**
    * Writes a save now and makes it the one a death or a reload returns to.
-   * Resolves once storage has answered.
+   * A reload resumes on the building's doorstep. Resolves once storage has
+   * answered.
    */
   readonly commitSave: (party: SaveParty) => Promise<SaveWriteOutcome>;
+  /**
+   * Whether the floor outside allows a save right now. A building is no
+   * refuge from a fight still running out there — a boss, or an attack on
+   * the town — and a reload must not be able to skip it.
+   */
+  readonly maySave: () => boolean;
   /** The page's wipe, or null where nothing is saved (dev routes, harnesses). */
   readonly progressWipe: ProgressWipe | null;
 }
@@ -36,6 +43,7 @@ export function detachedPartyRun(): InteriorPartyRun {
     wheelLedger: createWheelLedger(),
     attackCowState: createAttackCowState(),
     commitSave: () => Promise.resolve('disabled'),
+    maySave: () => true,
     progressWipe: null,
   };
 }

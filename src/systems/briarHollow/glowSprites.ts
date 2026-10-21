@@ -16,6 +16,7 @@ import {
   allocCanvas,
   CanvasContextUnavailableError,
   surfaceContext,
+  releaseSurface,
 } from '../../core/canvasSurface';
 import type { CanvasSurface } from '../../core/canvasSurface';
 import { canvasGeneration, reportCanvasAllocationFailure } from '../../core/canvasRecovery';
@@ -37,11 +38,6 @@ const GLOW_SPRITE_CACHE_LIMIT = 8;
 const sprites = new Map<number, CanvasSurface>();
 let spritesGeneration = canvasGeneration();
 
-function releaseSurface(surface: CanvasSurface): void {
-  surface.width = 0;
-  surface.height = 0;
-}
-
 function syncCanvasGeneration(): void {
   const current = canvasGeneration();
   if (spritesGeneration === current) return;
@@ -61,7 +57,7 @@ function evictOldest(): void {
 function bakeGlow(radius: number): CanvasSurface | null {
   const size = Math.max(1, Math.ceil(radius * 2 * GLOW_BAKE_SCALE));
   const centre = size / 2;
-  const surface = allocCanvas(size, size);
+  const surface = allocCanvas('effects', size, size);
   try {
     const ctx = surfaceContext(surface);
     const gradient = ctx.createRadialGradient(centre, centre, 0, centre, centre, centre);

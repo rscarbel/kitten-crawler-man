@@ -8,7 +8,12 @@
  * since a canvas the browser purged would otherwise stay blank for good.
  */
 
-import { allocCanvas, surfaceContext, type CanvasSurface } from '../../../core/canvasSurface';
+import {
+  allocCanvas,
+  releaseSurface,
+  surfaceContext,
+  type CanvasSurface,
+} from '../../../core/canvasSurface';
 import { onCanvasRecovery } from '../../../core/canvasRecovery';
 import { paintSlotSymbol } from '../../../sprites/art/slotSymbolArt';
 import type { SlotSymbol } from '../../../systems/casino/slots/slotSymbols';
@@ -40,24 +45,28 @@ const failedAt = new Map<string, number>();
 const BAKE_RETRY_MS = 1000;
 const bakedSizes: string[] = [];
 onCanvasRecovery(() => {
+  for (const surface of cache.values()) releaseSurface(surface);
   cache.clear();
   failedAt.clear();
   bakedSizes.length = 0;
 });
 
 function bake(symbol: SlotSymbol, pxW: number, pxH: number): CanvasSurface | null {
+  let surface: CanvasSurface | null = null;
   try {
-    const surface = allocCanvas(pxW, pxH);
+    surface = allocCanvas('casino', pxW, pxH);
     paintSlotSymbol(surfaceContext(surface), symbol, 0, 0, pxW, pxH);
     return surface;
   } catch {
+    if (surface !== null) releaseSurface(surface);
     return null;
   }
 }
 
 function smear(sharp: CanvasSurface, pxW: number, pxH: number): CanvasSurface | null {
+  let surface: CanvasSurface | null = null;
   try {
-    const surface = allocCanvas(pxW, pxH);
+    surface = allocCanvas('casino', pxW, pxH);
     const ctx = surfaceContext(surface);
     const spread = pxH * BLUR_SPREAD;
     const step = spread / (BLUR_COPIES - 1);
@@ -67,6 +76,7 @@ function smear(sharp: CanvasSurface, pxW: number, pxH: number): CanvasSurface | 
     }
     return surface;
   } catch {
+    if (surface !== null) releaseSurface(surface);
     return null;
   }
 }
@@ -95,8 +105,10 @@ export function bakedSymbol(
     bakedSizes.push(sizeKey);
     if (bakedSizes.length > MAX_BAKED_SIZES) {
       const oldest = bakedSizes.shift();
-      for (const cachedKey of [...cache.keys()]) {
-        if (oldest !== undefined && cachedKey.endsWith(`|${oldest}`)) cache.delete(cachedKey);
+      for (const [cachedKey, surface] of [...cache.entries()]) {
+        if (oldest === undefined || !cachedKey.endsWith(`|${oldest}`)) continue;
+        releaseSurface(surface);
+        cache.delete(cachedKey);
       }
     }
   }

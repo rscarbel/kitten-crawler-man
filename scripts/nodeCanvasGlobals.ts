@@ -79,6 +79,7 @@ export function paintEnvironmentArtInNode(artSeed = DEFAULT_FLOOR_ART_SEED): voi
   requestEnvironmentSheetsForGroups([
     'core',
     'town',
+    'town_interior',
     'overworld',
     'dungeon_common',
     'floor1_tileset',

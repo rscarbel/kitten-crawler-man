@@ -404,7 +404,12 @@ function verifyConstructionUnlocked(): void {
 // ── Sounds ───────────────────────────────────────────────────────────────
 
 function verifySoundCues(): void {
-  const preloaded = new Set<SoundId>([...SFX_GROUPS.universal, ...SFX_GROUPS.briarHollow]);
+  // The escort holds the siege's group, whose dead its ambushers are.
+  const preloaded = new Set<SoundId>([
+    ...SFX_GROUPS.universal,
+    ...SFX_GROUPS.briarHollow,
+    ...SFX_GROUPS.briarHollowSiege,
+  ]);
   for (const [cue, takes] of Object.entries(BLUEPRINTS_CUES)) {
     const ids: readonly SoundId[] = takes;
     const missing = ids.filter((id) => !preloaded.has(id));

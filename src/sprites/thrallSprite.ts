@@ -9,7 +9,12 @@
  * reads as a stack of ghosts rather than one.
  */
 
-import { allocCanvas, type CanvasSurface, surfaceContext } from '../core/canvasSurface';
+import {
+  allocCanvas,
+  releaseSurface,
+  type CanvasSurface,
+  freshSurfaceContext,
+} from '../core/canvasSurface';
 import { drawFigureCached } from './figure/figureFrameCache';
 import { thrallFigure } from './art/thrallFigure';
 import type { ToolKind } from '../core/toolTiers';
@@ -61,8 +66,10 @@ function scratchFor(
   height: number,
 ): { surface: CanvasSurface; ctx: CanvasRenderingContext2D } {
   if (scratch === null || scratch.width < width || scratch.height < height) {
-    const surface = allocCanvas(width, height);
-    scratch = { surface, ctx: surfaceContext(surface), width, height };
+    if (scratch !== null) releaseSurface(scratch.surface);
+    scratch = null;
+    const surface = allocCanvas('creatureArt', width, height);
+    scratch = { surface, ctx: freshSurfaceContext(surface), width, height };
   }
   return scratch;
 }

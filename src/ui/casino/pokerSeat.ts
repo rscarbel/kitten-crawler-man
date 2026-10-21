@@ -8,7 +8,12 @@
  * figure painting is far too heavy to run six times a frame.
  */
 
-import { allocCanvas, surfaceContext, type CanvasSurface } from '../../core/canvasSurface';
+import {
+  allocCanvas,
+  releaseSurface,
+  surfaceContext,
+  type CanvasSurface,
+} from '../../core/canvasSurface';
 import { onCanvasRecovery } from '../../core/canvasRecovery';
 import { drawCatSprite } from '../../sprites/catSprite';
 import { drawClubCastFigure, type ClubFigureRef } from '../../sprites/clubCastFigure';
@@ -112,8 +117,12 @@ const DONUT_BUST: BustCrop = { top: 0.05, span: 0.62 };
 const BUST_BAKE_PX = 128;
 const MAX_BAKED_BUSTS = 32;
 const bustCache = new Map<string, CanvasSurface | null>();
+function clearBusts(): void {
+  for (const bust of bustCache.values()) if (bust !== null) releaseSurface(bust);
+  bustCache.clear();
+}
 // The busts are baked once and kept; a purged canvas would stay blank for good.
-onCanvasRecovery(() => bustCache.clear());
+onCanvasRecovery(clearBusts);
 
 type FigurePainter = (ctx: CanvasRenderingContext2D, x: number, y: number, tile: number) => void;
 
@@ -121,14 +130,14 @@ type FigurePainter = (ctx: CanvasRenderingContext2D, x: number, y: number, tile:
 function bakedBust(key: string, crop: BustCrop, paint: FigurePainter): CanvasSurface | null {
   const cached = bustCache.get(key);
   if (cached !== undefined) return cached;
-  if (bustCache.size >= MAX_BAKED_BUSTS) bustCache.clear();
+  if (bustCache.size >= MAX_BAKED_BUSTS) clearBusts();
   let baked: CanvasSurface | null = null;
   try {
-    const surface = allocCanvas(BUST_BAKE_PX, BUST_BAKE_PX);
+    baked = allocCanvas('casino', BUST_BAKE_PX, BUST_BAKE_PX);
     const tile = BUST_BAKE_PX / crop.span;
-    paint(surfaceContext(surface), BUST_BAKE_PX * HALF - tile * HALF, -crop.top * tile, tile);
-    baked = surface;
+    paint(surfaceContext(baked), BUST_BAKE_PX * HALF - tile * HALF, -crop.top * tile, tile);
   } catch {
+    if (baked !== null) releaseSurface(baked);
     baked = null;
   }
   bustCache.set(key, baked);

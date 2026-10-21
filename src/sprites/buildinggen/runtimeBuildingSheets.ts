@@ -18,7 +18,7 @@
  * `colOffset` the loader already understands.
  */
 
-import { CanvasContextUnavailableError } from '../../core/canvasSurface';
+import { CanvasContextUnavailableError, releaseSurface } from '../../core/canvasSurface';
 import {
   deferEnvironmentSheet,
   hasEnvironmentSheet,
@@ -147,8 +147,7 @@ function sheetPlanFor(
       ctx.drawImage(paint.canvas, idleColumn * frameWidth, idleState.row * frameHeight);
       // The facade is on the sheet now, and the surface it was painted on is
       // several megabytes of the largest thing the cache allocates.
-      paint.canvas.width = 0;
-      paint.canvas.height = 0;
+      releaseSurface(paint.canvas);
     },
   });
   for (let step = 0; step < spec.life.frames; step++) {
@@ -173,8 +172,7 @@ function sheetPlanFor(
         } finally {
           ctx.restore();
         }
-        frame.width = 0;
-        frame.height = 0;
+        releaseSurface(frame);
       },
     });
   }

@@ -284,6 +284,14 @@ import {
   paintPetitionCounter,
   paintTowerHearth,
 } from './rooms/townCenterTower';
+import {
+  allocCanvas,
+  BYTES_PER_MEGABYTE,
+  freshSurfaceContext,
+  releaseSurface,
+} from '../../../core/canvasSurface';
+import { RecentSurfaceCache } from '../../../core/recentSurfaceCache';
+import { onCanvasRecovery } from '../../../core/canvasRecovery';
 
 type Ctx = CanvasRenderingContext2D;
 
@@ -4671,7 +4679,26 @@ interface CachedPropFrame {
   readonly height: number;
 }
 
-const frameCache = new Map<string, CachedPropFrame>();
+/**
+ * Megabytes of baked prop frames kept before the least recently drawn are let
+ * go. Every prop and variant baked comes to tens of megabytes, but a building
+ * draws only its own furniture — about 4 MB for the busiest, the inn and the
+ * Horned Flagon — so at twice that a building never re-bakes its own props, and
+ * the frames given back are those of buildings the party has left.
+ */
+const PROP_FRAME_BUDGET_MEGABYTES = 8;
+/** A frame drawn this frame or the one before is never let go. */
+const PROP_FRAME_PROTECTED_FRAMES = 1;
+
+const frameCache = new RecentSurfaceCache<CachedPropFrame>(
+  PROP_FRAME_BUDGET_MEGABYTES * BYTES_PER_MEGABYTE,
+  PROP_FRAME_PROTECTED_FRAMES,
+  (frame) => frame.canvas,
+);
+// A purge blanks every baked frame; they repaint as they are next drawn.
+onCanvasRecovery((cause) => {
+  if (cause === 'purged') frameCache.clear();
+});
 
 /** Deterministic per-`(propId, variant)` seed — the same prop always paints the same picture. */
 function propVariantSeed(propId: TownInteriorPropId, variant: number): number {
@@ -4686,11 +4713,8 @@ function bakePropFrame(propId: TownInteriorPropId, variant: number): CachedPropF
   const headroomTiles = frameHeadroomTilesFor(propId);
   const width = Math.ceil(propDef.footprint.w * TOWN_TILE_SCALE);
   const height = Math.ceil((propDef.footprint.h + headroomTiles) * TOWN_TILE_SCALE);
-  const canvas = document.createElement('canvas');
-  canvas.width = width;
-  canvas.height = height;
-  const ctx = canvas.getContext('2d');
-  if (ctx === null) throw new Error(`townInteriorProps: 2D context unavailable for ${propId}`);
+  const canvas = allocCanvas('townInteriorProps', width, height);
+  const ctx = freshSurfaceContext(canvas);
   const frame: TownPropFrame = {
     originX: 0,
     // `TownPropFrame.originY` is the top of the footprint's bottom-left
@@ -4704,7 +4728,12 @@ function bakePropFrame(propId: TownInteriorPropId, variant: number): CachedPropF
     footprintH: propDef.footprint.h,
   };
   const rng = mulberry32(propVariantSeed(propId, variant));
-  propDef.paint(ctx, frame, variant, rng);
+  try {
+    propDef.paint(ctx, frame, variant, rng);
+  } catch (error) {
+    releaseSurface(canvas);
+    throw error;
+  }
   return { canvas, width, height };
 }
 

@@ -11,6 +11,7 @@ Browser dungeon crawler: TypeScript + one HTML5 Canvas, no framework, bundled by
 
 - Entry: `src/game.ts` → creates `InputManager` + `SceneManager`.
 - `SceneManager` (`src/core/Scene.ts`) owns the canvas, attaches all DOM listeners once, and runs a fixed-timestep loop: 60 Hz `update()` via accumulator, `render()` once per rAF. `replace(scene)` calls `onExit`/`onEnter`.
+- Each rendered frame `SceneManager` first calls `beginRenderFrame()` (`src/core/renderFrameClock.ts`; `renderFrameNumber()` is what caches read to tell "drawn this frame" from "idle"), then `beginFigureFrame()` and `beginEnvironmentArtFrame()`, which drain the paced bake queues. Each cache spends a per-frame time budget, never a count: figure cells `FRAME_BAKE_BUDGET_MS` (4, prewarm's share `PREWARM_BAKE_BUDGET_MS` 3), environment sheets `ENVIRONMENT_PAINT_BUDGET_MS` (8), tile chunks `CHUNK_BAKE_BUDGET_MS` (4, of which ground off screen gets `CHUNK_SPECULATIVE_BUDGET_MS` 1). A heavy arrival drains them behind an `ArrivalLoader` instead. Budgets and byte limits: `docs/asset-management.md`.
 - Scenes: `DungeonScene` (main orchestrator, ~3k lines), `BuildingInteriorScene`, `GameplayScene` (shared camera/HUD/companion logic), `TitleScene` (`src/scenes/title/`: the title screen and its menu, a layer stack listed in `TITLE_LAYERS`). A `Scene` implements `update()` + `render(ctx)` and takes input through its `ui: UiRoot` (see Input). Localhost review scenes extend `PreviewScene`.
 
 ## Systems
@@ -86,7 +87,7 @@ The floor-3 town's systems, and where each rule lives. The durable description i
 - **Overworld:** regenerated around the party on the way out.
 - **Any other floor:** held aside. `holdFloorForInterior` writes a save at the door when one is allowed (no fight, boss or revive pending), then returns a `DungeonInteriorReturn` (`src/scenes/dungeonInteriorReturn.ts`, memory only): the live crawlers and population (corpses included, less the mobs systems stand up themselves), a `WorldCheckpoint`, the collapse clock, the return tile and the last save. The scene rebuilt on the way out takes it as `interiorReturn` and calls `applyWorldCheckpoint(world, frames, 'keep')` instead of spawning a floor; `withVisitOutcome` folds back the quest state the interior changed.
 - `applyWorldCheckpoint` is shared with the death rewind (`'rewind'`): both run `restoreFloorCheckpoint` (the floor's systems); only a death also runs `restoreRunProgress` (tallies, companions, threaded objects), because the party kept spending and earning indoors.
-- The interior reads its floor through `InteriorFloorContext` (`src/scenes/interiorFloorContext.ts`; `TOWN_INTERIOR_FLOOR` for the town): floor number, ground sheets and sprite groups, sight radius, whether it owns the music, `heldLevelTimerFrames` (the collapse clock shown paused; nothing indoors ticks it), and the optional `variant` and `stealthKeySnatch` visit for the prison.
+- The interior reads its floor through `InteriorFloorContext` (`src/scenes/interiorFloorContext.ts`; `TOWN_INTERIOR_FLOOR` for the town): floor number, ground sheets and sprite groups (built by `interiorArt`, which adds the floor's indoor-only `LevelDef.interiorSpriteGroups`), sight radius, whether it owns the music, `heldLevelTimerFrames` (the collapse clock shown paused; nothing indoors ticks it), and the optional `variant` and `stealthKeySnatch` visit for the prison.
 - A defeat indoors rebuilds the held floor first and then calls `respawnAfterDeath()`, so it rewinds exactly like a death outside.
 
 Gate: `npm run verify:dungeon-interior-return` (same creatures and systems back, party at the door, clock held then running, door save resumes in front of the door).
@@ -231,7 +232,7 @@ Durable reference — describes the shipped system, is kept and maintained:
 
 - `docs/town.md` — how the third floor's town is generated, rendered and tuned
 - `docs/over-city-reference.md` — source-material background for third-floor content
-- `docs/asset-management.md` — lazy sprite/sound loading, per-floor eviction, declared coverage
+- `docs/asset-management.md` — lazy sprite/sound loading, per-floor eviction, declared coverage, surface owners and byte limits, perf measurement
 - `docs/difficulty-fairness-rules.md` — the P1-P6 fairness rules (curves, telegraphs, tactics) and the target-feel bands
 
 Every other file in `docs/` is an implementation plan — usually named

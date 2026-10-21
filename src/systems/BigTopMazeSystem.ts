@@ -67,7 +67,12 @@ import {
 } from '../sprites/bigTopMazeProps';
 import { drawIntervalRoomLamp } from '../sprites/art/bigTop/bigTopShellArt';
 import { clearBigTopPropCache } from '../sprites/art/bigTop/bigTopPropCache';
-import { allocCanvas, surfaceContext, type CanvasSurface } from '../core/canvasSurface';
+import {
+  allocCanvas,
+  releaseSurface,
+  surfaceContext,
+  type CanvasSurface,
+} from '../core/canvasSurface';
 import {
   drawMirrorHallPane,
   drawPaneReflection,
@@ -1715,6 +1720,8 @@ export class BigTopMazeSystem implements GameSystem, GroundHazardSource {
     for (const tile of this.glassTiles) this.map.unblockTilePermanently(tile.x, tile.y);
     clearBigTopPropCache();
     clearReflectionScratch();
+    this.lighting.dispose();
+    if (this.warmSurface !== null) releaseSurface(this.warmSurface);
     this.warmSurface = null;
     this.warmWindows = [];
   }
@@ -1758,7 +1765,7 @@ export class BigTopMazeSystem implements GameSystem, GroundHazardSource {
     const view = this.warmWindows.shift();
     const sectionId = this.warmSectionId;
     if (view === undefined || sectionId === null) return;
-    this.warmSurface ??= allocCanvas(1, 1);
+    this.warmSurface ??= allocCanvas('bigTopProps', 1, 1);
     const scratch = surfaceContext(this.warmSurface);
     const liveTransform = live.getTransform();
     scratch.save();

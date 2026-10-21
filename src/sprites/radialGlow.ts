@@ -9,7 +9,12 @@
  * colour stops for the lifetime of the page.
  */
 
-import { allocCanvas, surfaceContext, type CanvasSurface } from '../core/canvasSurface';
+import {
+  allocCanvas,
+  releaseSurface,
+  surfaceContext,
+  type CanvasSurface,
+} from '../core/canvasSurface';
 import { onCanvasRecovery } from '../core/canvasRecovery';
 
 /**
@@ -27,7 +32,10 @@ export interface GlowStop {
 
 const texturesByStops = new Map<string, CanvasSurface>();
 // Baked once and kept; a purge would leave it blank for good.
-onCanvasRecovery(() => texturesByStops.clear());
+onCanvasRecovery(() => {
+  for (const texture of texturesByStops.values()) releaseSurface(texture);
+  texturesByStops.clear();
+});
 
 function stopsKey(stops: ReadonlyArray<GlowStop>, coreFraction: number): string {
   return `${coreFraction}#${stops.map((stop) => `${stop.offset}:${stop.color}`).join('|')}`;
@@ -38,7 +46,7 @@ function textureFor(stops: ReadonlyArray<GlowStop>, coreFraction: number): Canva
   const cached = texturesByStops.get(key);
   if (cached !== undefined) return cached;
 
-  const texture = allocCanvas(GLOW_TEXTURE_PX, GLOW_TEXTURE_PX);
+  const texture = allocCanvas('effects', GLOW_TEXTURE_PX, GLOW_TEXTURE_PX);
   const ctx = surfaceContext(texture);
   const radius = GLOW_TEXTURE_PX / 2;
   const gradient = ctx.createRadialGradient(

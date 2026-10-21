@@ -38,6 +38,7 @@ import {
   laySlab,
   lightRim,
   makeLayer,
+  withComposeLayers,
   clear,
   layerBounds,
   occludeAround,
@@ -3117,7 +3118,7 @@ export function drawGoblin(
   ctx.scale(unit, unit);
   try {
     drawGroundShadow(ctx, style, pose);
-    composeGoblin(ctx, unit, style, pose, skeleton, prop, offHandProp);
+    withComposeLayers(() => composeGoblin(ctx, unit, style, pose, skeleton, prop, offHandProp));
     overlay?.(ctx, skeleton);
   } finally {
     ctx.restore();

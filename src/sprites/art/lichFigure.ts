@@ -18,7 +18,12 @@
  * runs: `npm run render:lich`.
  */
 
-import { allocCanvas, surfaceContext, type CanvasSurface } from '../../core/canvasSurface';
+import {
+  allocCanvas,
+  releaseSurface,
+  surfaceContext,
+  type CanvasSurface,
+} from '../../core/canvasSurface';
 import { type FigureDef, figureStates } from '../figure/figureDef';
 import {
   type ArmAngles,
@@ -922,53 +927,63 @@ function paintWithEdgeLight(
   rimPx: number,
   paintFigure: (ctx: Ctx) => void,
 ): void {
-  const figure = allocCanvas(target.width, target.height);
-  paintFigure(surfaceContext(figure));
+  const scratch: CanvasSurface[] = [];
+  const allocScratch = (): CanvasSurface => {
+    const surface = allocCanvas('creatureArt', target.width, target.height);
+    scratch.push(surface);
+    return surface;
+  };
+  try {
+    const figure = allocScratch();
+    paintFigure(surfaceContext(figure));
 
-  const mask = allocCanvas(target.width, target.height);
-  const maskCtx = surfaceContext(mask);
-  maskCtx.drawImage(figure, 0, 0);
-  const image = maskCtx.getImageData(0, 0, mask.width, mask.height);
-  const { data } = image;
-  for (let i = 0; i < data.length; i += CHANNELS) {
-    const solid = data[i + ALPHA_OFFSET] >= RIM_MASK_CUTOFF;
-    data[i] = RIM_RGB.r;
-    data[i + 1] = RIM_RGB.g;
-    data[i + 2] = RIM_RGB.b;
-    data[i + ALPHA_OFFSET] = solid ? MAX_ALPHA : 0;
+    const mask = allocScratch();
+    const maskCtx = surfaceContext(mask);
+    maskCtx.drawImage(figure, 0, 0);
+    const image = maskCtx.getImageData(0, 0, mask.width, mask.height);
+    const { data } = image;
+    for (let i = 0; i < data.length; i += CHANNELS) {
+      const solid = data[i + ALPHA_OFFSET] >= RIM_MASK_CUTOFF;
+      data[i] = RIM_RGB.r;
+      data[i + 1] = RIM_RGB.g;
+      data[i + 2] = RIM_RGB.b;
+      data[i + ALPHA_OFFSET] = solid ? MAX_ALPHA : 0;
+    }
+    maskCtx.putImageData(image, 0, 0);
+
+    const halo = allocScratch();
+    const haloCtx = surfaceContext(halo);
+    for (let i = 0; i < RIM_DILATE_SAMPLES; i++) {
+      const angle = (i / RIM_DILATE_SAMPLES) * TWO_PI;
+      haloCtx.drawImage(mask, Math.cos(angle) * rimPx, Math.sin(angle) * rimPx);
+    }
+    haloCtx.globalCompositeOperation = 'destination-out';
+    haloCtx.drawImage(mask, 0, 0);
+
+    haloCtx.globalCompositeOperation = 'destination-in';
+    const reach = Math.hypot(target.width, target.height) / 2;
+    const centreX = target.width / 2;
+    const centreY = target.height / 2;
+    const fade = haloCtx.createLinearGradient(
+      centreX + RIM_FROM.x * reach,
+      centreY + RIM_FROM.y * reach,
+      centreX - RIM_FROM.x * reach,
+      centreY - RIM_FROM.y * reach,
+    );
+    fade.addColorStop(0, rgba('#ffffff', 1));
+    fade.addColorStop(1, rgba('#ffffff', RIM_FAR_SIDE_SHARE));
+    haloCtx.fillStyle = fade;
+    haloCtx.fillRect(0, 0, halo.width, halo.height);
+
+    const ctx = surfaceContext(target);
+    ctx.save();
+    ctx.globalAlpha = RIM_ALPHA;
+    ctx.drawImage(halo, 0, 0);
+    ctx.restore();
+    ctx.drawImage(figure, 0, 0);
+  } finally {
+    for (const surface of scratch) releaseSurface(surface);
   }
-  maskCtx.putImageData(image, 0, 0);
-
-  const halo = allocCanvas(target.width, target.height);
-  const haloCtx = surfaceContext(halo);
-  for (let i = 0; i < RIM_DILATE_SAMPLES; i++) {
-    const angle = (i / RIM_DILATE_SAMPLES) * TWO_PI;
-    haloCtx.drawImage(mask, Math.cos(angle) * rimPx, Math.sin(angle) * rimPx);
-  }
-  haloCtx.globalCompositeOperation = 'destination-out';
-  haloCtx.drawImage(mask, 0, 0);
-
-  haloCtx.globalCompositeOperation = 'destination-in';
-  const reach = Math.hypot(target.width, target.height) / 2;
-  const centreX = target.width / 2;
-  const centreY = target.height / 2;
-  const fade = haloCtx.createLinearGradient(
-    centreX + RIM_FROM.x * reach,
-    centreY + RIM_FROM.y * reach,
-    centreX - RIM_FROM.x * reach,
-    centreY - RIM_FROM.y * reach,
-  );
-  fade.addColorStop(0, rgba('#ffffff', 1));
-  fade.addColorStop(1, rgba('#ffffff', RIM_FAR_SIDE_SHARE));
-  haloCtx.fillStyle = fade;
-  haloCtx.fillRect(0, 0, halo.width, halo.height);
-
-  const ctx = surfaceContext(target);
-  ctx.save();
-  ctx.globalAlpha = RIM_ALPHA;
-  ctx.drawImage(halo, 0, 0);
-  ctx.restore();
-  ctx.drawImage(figure, 0, 0);
 }
 
 const SCRAP_PIECES: ReadonlyArray<string> = ['gore_skull', 'gore_forearm'];
@@ -1091,7 +1106,7 @@ function poseRowOf(state: string): RowSpec | undefined {
  */
 function paintPoseCell(ctx: Ctx, row: RowSpec, frame: number): void {
   const density = EDGE_LIGHT_DENSITY;
-  const surface = allocCanvas(FRAME_WIDTH * density, FRAME_HEIGHT * density);
+  const surface = allocCanvas('creatureArt', FRAME_WIDTH * density, FRAME_HEIGHT * density);
   const place = (target: Ctx): void => {
     target.translate(POSE_ORIGIN_X * density, POSE_ORIGIN_Y * density);
     // Scaled about the ground line, so the taller figure still stands on the
@@ -1100,20 +1115,24 @@ function paintPoseCell(ctx: Ctx, row: RowSpec, frame: number): void {
   };
   const posed = row.pose(frame);
 
-  const shadowCtx = surfaceContext(surface);
-  shadowCtx.save();
-  place(shadowCtx);
-  drawLichContactShadow(shadowCtx, posed);
-  shadowCtx.restore();
+  try {
+    const shadowCtx = surfaceContext(surface);
+    shadowCtx.save();
+    place(shadowCtx);
+    drawLichContactShadow(shadowCtx, posed);
+    shadowCtx.restore();
 
-  paintWithEdgeLight(surface, RIM_REACH_TILES * TILE_SCALE * density, (figureCtx) => {
-    figureCtx.save();
-    place(figureCtx);
-    paintView(figureCtx, row.view, posed);
-    figureCtx.restore();
-  });
+    paintWithEdgeLight(surface, RIM_REACH_TILES * TILE_SCALE * density, (figureCtx) => {
+      figureCtx.save();
+      place(figureCtx);
+      paintView(figureCtx, row.view, posed);
+      figureCtx.restore();
+    });
 
-  ctx.drawImage(surface, 0, 0, FRAME_WIDTH, FRAME_HEIGHT);
+    ctx.drawImage(surface, 0, 0, FRAME_WIDTH, FRAME_HEIGHT);
+  } finally {
+    releaseSurface(surface);
+  }
 }
 
 /**

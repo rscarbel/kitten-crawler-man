@@ -15,7 +15,12 @@
  * water there is none.
  */
 
-import { allocCanvas, surfaceContext, type CanvasSurface } from '../../core/canvasSurface';
+import {
+  allocCanvas,
+  releaseSurface,
+  surfaceContext,
+  type CanvasSurface,
+} from '../../core/canvasSurface';
 import type { FloorSurface } from '../dungeon/floorSurface';
 import {
   LIQUID_EDGE_FIELD,
@@ -68,13 +73,14 @@ const GLINT_EDGE_RGBA = 'rgba(236, 244, 255, 0)';
 let glintSprite: CanvasSurface | null = null;
 // Baked once and kept; a purge would leave it blank for good.
 onCanvasRecovery(() => {
+  if (glintSprite !== null) releaseSurface(glintSprite);
   glintSprite = null;
 });
 
 /** A soft white ellipse, painted once and stretched per streak. */
 function sprite(): CanvasSurface {
   if (glintSprite !== null) return glintSprite;
-  const surface = allocCanvas(GLINT_SPRITE_PX, GLINT_SPRITE_PX);
+  const surface = allocCanvas('groundTileParts', GLINT_SPRITE_PX, GLINT_SPRITE_PX);
   const ctx = surfaceContext(surface);
   const centre = GLINT_SPRITE_PX * HALF;
   const gradient = ctx.createRadialGradient(centre, centre, 0, centre, centre, centre);

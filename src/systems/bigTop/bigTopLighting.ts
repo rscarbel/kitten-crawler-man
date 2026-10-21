@@ -1,5 +1,10 @@
 import { TILE_SIZE } from '../../core/constants';
-import { allocCanvas, surfaceContext, type CanvasSurface } from '../../core/canvasSurface';
+import {
+  allocCanvas,
+  releaseSurface,
+  surfaceContext,
+  type CanvasSurface,
+} from '../../core/canvasSurface';
 import { perfMonitor } from '../../core/PerfMonitor';
 import { viewportHeight, viewportWidth } from '../../core/Viewport';
 import {
@@ -281,7 +286,7 @@ function actDarkColour(act: MazeSectionId): string {
 /** Allocates the tent's mask and paints it. */
 export function bakeBigTopDarknessMask(fixtures: ReadonlyArray<LightFixture>): CanvasSurface {
   const { width, height } = bigTopMaskDimensions();
-  const surface = allocCanvas(width, height);
+  const surface = allocCanvas('lighting', width, height);
   paintBigTopDarkness(surfaceContext(surface), fixtures);
   return surface;
 }
@@ -505,6 +510,13 @@ export class BigTopLighting {
   private maskSurface(): CanvasSurface {
     this.mask ??= bakeBigTopDarknessMask(this.fixtures);
     return this.mask;
+  }
+
+  /** Gives the mask's pixels back; a later draw would bake it again. */
+  dispose(): void {
+    if (this.mask === null) return;
+    releaseSurface(this.mask);
+    this.mask = null;
   }
 
   /** Every lamp whose pool is in the mask. */

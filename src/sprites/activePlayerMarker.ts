@@ -6,7 +6,12 @@
  * every player — a gradient object per frame for a sixteen-pixel blob.
  */
 
-import { allocCanvas, surfaceContext, type CanvasSurface } from '../core/canvasSurface';
+import {
+  allocCanvas,
+  releaseSurface,
+  surfaceContext,
+  type CanvasSurface,
+} from '../core/canvasSurface';
 import { onCanvasRecovery } from '../core/canvasRecovery';
 
 /**
@@ -34,12 +39,13 @@ const MARKER_ALPHA = 0.5;
 let texture: CanvasSurface | null = null;
 // Baked once and kept; a purge would leave it blank for good.
 onCanvasRecovery(() => {
+  if (texture !== null) releaseSurface(texture);
   texture = null;
 });
 
 function getTexture(): CanvasSurface {
   if (texture !== null) return texture;
-  const surface = allocCanvas(TEXTURE_PX, TEXTURE_PX);
+  const surface = allocCanvas('effects', TEXTURE_PX, TEXTURE_PX);
   const ctx = surfaceContext(surface);
   const radius = TEXTURE_PX / 2;
   const highlightOffset = radius * HIGHLIGHT_OFFSET_FRACTION;

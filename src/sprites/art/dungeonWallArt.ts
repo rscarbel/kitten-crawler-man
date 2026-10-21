@@ -30,7 +30,12 @@
  * would be sliced off at a chunk seam.
  */
 
-import { allocCanvas, surfaceContext, type CanvasSurface } from '../../core/canvasSurface';
+import {
+  allocCanvas,
+  releaseSurface,
+  surfaceContext,
+  type CanvasSurface,
+} from '../../core/canvasSurface';
 import { Surface, TILE_PX, positiveMod, type RGB } from '../../map/tilegen/raster';
 import { NoiseField, hashLattice } from '../../map/tilegen/noise';
 import { TILE_SIZE } from '../../core/constants';
@@ -382,12 +387,21 @@ export function paintFaceStrip(themeId: DungeonFloorThemeId, band: number): Face
 
 const faceStrips = new Map<string, CanvasSurface>();
 
+/**
+ * Empties a cache and gives its surfaces' pixels back. Safe because every
+ * surface here is drawn the moment it is fetched and never handed out.
+ */
+function releaseCache<K>(cache: Map<K, CanvasSurface>): void {
+  for (const surface of cache.values()) releaseSurface(surface);
+  cache.clear();
+}
+
 function faceStripCanvas(themeId: DungeonFloorThemeId, band: number): CanvasSurface {
   const key = `${themeId}|${band}`;
   const cached = faceStrips.get(key);
   if (cached !== undefined) return cached;
   const pixels = paintFaceStrip(themeId, band);
-  const canvas = allocCanvas(pixels.width, pixels.height);
+  const canvas = allocCanvas('dungeonWalls', pixels.width, pixels.height);
   const stripCtx = surfaceContext(canvas);
   const image = stripCtx.createImageData(pixels.width, pixels.height);
   const pixelCount = pixels.width * pixels.height;
@@ -731,9 +745,9 @@ function compositeFor(
   const key = `${themeId}|${ts}|${shapeKey(shape)}|${sliceColumn}|${sliceBand}`;
   const cached = composites.get(key);
   if (cached !== undefined) return cached;
-  if (composites.size >= MAX_COMPOSITES) composites.clear();
+  if (composites.size >= MAX_COMPOSITES) releaseCache(composites);
   const size = Math.max(1, Math.ceil(ts));
-  const canvas = allocCanvas(size, size);
+  const canvas = allocCanvas('dungeonWalls', size, size);
   paintComposite(surfaceContext(canvas), themeId, shape, ts, sliceColumn, sliceBand);
   composites.set(key, canvas);
   return canvas;
@@ -875,7 +889,7 @@ function wallTopCanvas(themeId: DungeonFloorThemeId): CanvasSurface {
   const cached = wallTopCanvases.get(themeId);
   if (cached !== undefined) return cached;
   const surface = paintWallTop(themeId);
-  const canvas = allocCanvas(TOP_PATCH_PX, TOP_PATCH_PX);
+  const canvas = allocCanvas('dungeonWalls', TOP_PATCH_PX, TOP_PATCH_PX);
   const topCtx = surfaceContext(canvas);
   const image = topCtx.createImageData(TOP_PATCH_PX, TOP_PATCH_PX);
   image.data.set(surface.toRgba());
@@ -892,10 +906,10 @@ const MAX_SHADOWS = 2048;
 const shadows = new Map<string, CanvasSurface>();
 // Baked once and kept; a purge would leave it blank for good.
 onCanvasRecovery(() => {
-  faceStrips.clear();
-  composites.clear();
-  wallTopCanvases.clear();
-  shadows.clear();
+  releaseCache(faceStrips);
+  releaseCache(composites);
+  releaseCache(wallTopCanvases);
+  releaseCache(shadows);
 });
 
 /**
@@ -911,10 +925,10 @@ function shadowFor(light: Float32Array, ts: number): CanvasSurface {
   const key = `${ts}|${quantised.join(',')}`;
   const cached = shadows.get(key);
   if (cached !== undefined) return cached;
-  if (shadows.size >= MAX_SHADOWS) shadows.clear();
+  if (shadows.size >= MAX_SHADOWS) releaseCache(shadows);
 
   const size = Math.max(1, Math.ceil(ts));
-  const canvas = allocCanvas(size, size);
+  const canvas = allocCanvas('dungeonWalls', size, size);
   const shadowCtx = surfaceContext(canvas);
   const image = shadowCtx.createImageData(size, size);
   const cells = WALL_LIGHT_SAMPLES - 1;

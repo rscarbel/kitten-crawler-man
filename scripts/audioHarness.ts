@@ -645,7 +645,7 @@ export interface AudioHarness {
 /** The longest single step {@link AudioHarness.advance} takes, so ends and timers interleave in order. */
 const ADVANCE_STEP_MS = 1;
 /** Rounds of microtasks {@link AudioHarness.flush} waits through. */
-const FLUSH_ROUNDS = 10;
+const FLUSH_ROUNDS = 20;
 
 /**
  * Installs the fake `AudioContext` and `Audio` on `globalThis`. Call before
@@ -731,6 +731,19 @@ export function installFakeAudio(options: AudioHarnessOptions): AudioHarness {
   Reflect.set(globalThis, 'Audio', FakeAudioElement);
 
   if (options.decodesEverything === true) {
+    // A kept file is decoded from a copy, which must still name its sound.
+    const sliceFile = (file: ArrayBuffer, begin?: number, end?: number): ArrayBuffer =>
+      Uint8Array.prototype.slice.call(new Uint8Array(file), begin, end).buffer;
+    Reflect.set(
+      ArrayBuffer.prototype,
+      'slice',
+      function labelledSlice(this: ArrayBuffer, begin?: number, end?: number): ArrayBuffer {
+        const copy = sliceFile(this, begin, end);
+        const label = harness.fetchedLabels.get(this);
+        if (label !== undefined) harness.fetchedLabels.set(copy, label);
+        return copy;
+      },
+    );
     Reflect.set(globalThis, 'fetch', (url: string) => {
       const body = new ArrayBuffer(0);
       harness.fetchedLabels.set(body, url);

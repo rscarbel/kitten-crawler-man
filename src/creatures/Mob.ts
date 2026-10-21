@@ -35,6 +35,7 @@ import { SEPARATION_RADIUS } from '../systems/mobSeparation';
 import type { KiteAim, TacticalMove } from './tactics/tacticalFrame';
 import type { SilhouetteLayer } from '../core/silhouetteComposite';
 import type { SiegeCapable, SiegeDirective, SiegeLobber } from './siege/siegeTypes';
+import { deflectAroundAirspaceBodies, isInsideAirspaceBody } from './airspace';
 import { deferChrome, type ChromePart } from '../systems/lighting/aboveDarkness';
 import {
   GUARD_KNOCKBACK_FRAMES,
@@ -909,6 +910,15 @@ export abstract class Mob extends Player {
    */
   get collisionRadiusPx(): number {
     return SEPARATION_RADIUS;
+  }
+
+  /**
+   * Whether this mob's body fills the air above it out to
+   * {@link collisionRadiusPx}, so a flying mob must go round it instead of over
+   * it (`airspace.ts`). Only a body far taller than a flyer's height sets it.
+   */
+  get fillsAirspace(): boolean {
+    return false;
   }
 
   /**
@@ -2358,7 +2368,12 @@ export abstract class Mob extends Player {
     // Pop waypoints that are already close enough
     while (this.astarPath.length > 0) {
       const wp = this.astarPath[0];
-      if (Math.hypot(wp.x * ts - this.x, wp.y * ts - this.y) < ts * ASTAR_WAYPOINT_CLOSE_FRACTION) {
+      const reached =
+        Math.hypot(wp.x * ts - this.x, wp.y * ts - this.y) < ts * ASTAR_WAYPOINT_CLOSE_FRACTION;
+      // The path is laid over tiles, blind to bodies; a flyer cannot reach a
+      // waypoint inside one, and would circle it until the next search.
+      const unreachableInFlight = this.isFlying && isInsideAirspaceBody(wp.x * ts, wp.y * ts);
+      if (reached || unreachableInFlight) {
         this.astarPath.shift();
       } else {
         break;
@@ -2734,7 +2749,10 @@ export abstract class Mob extends Player {
     if (this.rootFrames > 0 && !this.knockbackStepInProgress) return;
     const startX = this.x;
     const startY = this.y;
-    this.stepAvoidingMarkedGround(dx, dy);
+    const step = this.isFlying
+      ? deflectAroundAirspaceBodies(this, this.x, this.y, { dx, dy })
+      : { dx, dy };
+    this.stepAvoidingMarkedGround(step.dx, step.dy);
     if (this.knockbackStepInProgress || this.separationStepInProgress) return;
     this.recordOwnStride(Math.hypot(this.x - startX, this.y - startY));
   }

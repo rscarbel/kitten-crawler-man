@@ -4,7 +4,8 @@
  * state on the very first frame of play.
  *
  * Runs the game's real `SceneManager` and the real scene for each environment —
- * the tutorial, floors 1 and 2, floor 3's town and a shop interior — headless
+ * the tutorial, floors 1 and 2, floor 3's town, a shop interior and the inn,
+ * whose safe-room counter stands on dungeon ground — headless
  * behind the browser shim, ticking the real frame loop by hand, one environment
  * per child process so no cache warmed by one can flatter the next. For each:
  *
@@ -13,6 +14,10 @@
  *    render path, painted directly or drawn as a stand-in, no ground chunk is
  *    baked, no environment step is painted or still owed, and no sprite the
  *    scene drew was still missing;
+ *  - indoors, no sprite was missing at any point of the arrival unless the floor
+ *    outside holds it: a room is only ever entered from that floor, so its
+ *    arrival set is resident, but the floor's indoor-only groups
+ *    (`LevelDef.interiorSpriteGroups`) are the room's to ask for;
  *  - nothing that announces the arrival — the floor's sting, a room's music —
  *    starts while the screen is still up, and a floor's sting does play.
  *
@@ -25,7 +30,7 @@
 
 import { spawnSync } from 'node:child_process';
 
-const ENVIRONMENTS = ['tutorial', 'level1', 'level2', 'level3', 'interior'] as const;
+const ENVIRONMENTS = ['tutorial', 'level1', 'level2', 'level3', 'interior', 'inn'] as const;
 type Environment = (typeof ENVIRONMENTS)[number];
 
 function isEnvironment(value: string): value is Environment {
@@ -88,6 +93,8 @@ console.warn = (...args: unknown[]) => {
 };
 
 const WORLD_SEED = 1;
+/** The town's one building with a safe room, whose counter is painted from dungeon ground. */
+const INN_NAME = 'The Sleeping Cat Inn';
 const { mulberry32 } = await import('../src/sprites/person/rng.js');
 Math.random = mulberry32(WORLD_SEED);
 
@@ -98,6 +105,7 @@ const { AudioManager } = await import('../src/audio/AudioManager.js');
 const { InputManager } = await import('../src/core/InputManager.js');
 const { getLevelDef } = await import('../src/levels/index.js');
 const { level3 } = await import('../src/levels/level3.js');
+const { requiredSpriteKeysForLevel } = await import('../src/core/systemAssetRequirements.js');
 const { GameMap } = await import('../src/map/GameMap.js');
 const { DungeonScene } = await import('../src/scenes/DungeonScene.js');
 const { BuildingInteriorScene } = await import('../src/scenes/BuildingInteriorScene.js');
@@ -160,15 +168,18 @@ function buildScene(): Scene {
         worldSeed: WORLD_SEED,
         audio,
       });
-    case 'interior': {
+    case 'interior':
+    case 'inn': {
       const town = new GameMap({
         mapSize: level3.mapSize,
         tileHeight: TILE_SIZE,
         mapType: 'overworld',
         worldSeed: WORLD_SEED,
       });
-      const store = town.buildingEntries.find((entry) => entry.type === 'store');
-      if (store === undefined) throw new Error('the town has no General Store');
+      const store = town.buildingEntries.find((entry) =>
+        environment === 'inn' ? entry.name === INN_NAME : entry.type === 'store',
+      );
+      if (store === undefined) throw new Error(`the town has no building for ${environment}`);
       const human = new HumanPlayer(0, 0, TILE_SIZE);
       const cat = new CatPlayer(1, 0, TILE_SIZE);
       human.isActive = true;
@@ -222,6 +233,7 @@ function check(ok: boolean, message: string): void {
   if (!ok) failures.push(message);
 }
 
+const missesBeforeScene = new Map(getSpriteMissCounts());
 const scene = buildScene();
 screenUp = () => scene.arrivalLoadingOpen;
 /** The fault that skips the screen reaches the loader itself, which only the scene holds. */
@@ -293,6 +305,17 @@ check(
   newMisses.length === 0,
   `sprite(s) drawn while still missing: ${newMisses.map(([key]) => key).join(', ')}`,
 );
+if (environment === 'interior' || environment === 'inn') {
+  const heldOutside = new Set<string>(requiredSpriteKeysForLevel(level3.id, level3.spriteGroups));
+  const missedIndoors = [...getSpriteMissCounts()].filter(
+    ([key, count]) => count > (missesBeforeScene.get(key) ?? 0) && !heldOutside.has(key),
+  );
+  check(
+    missedIndoors.length === 0,
+    `sprite(s) the room drew unpainted that the floor outside does not hold: ` +
+      missedIndoors.map(([key]) => key).join(', '),
+  );
+}
 const heardUnderScreen = announcements.filter((announcement) => announcement.underScreen);
 check(
   heardUnderScreen.length === 0,

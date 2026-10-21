@@ -23,10 +23,15 @@ import {
   CanvasContextUnavailableError,
   surfaceContext,
   type CanvasSurface,
+  releaseSurface,
+  BYTES_PER_MEGABYTE,
 } from '../core/canvasSurface';
 import { onCanvasRecovery, reportCanvasAllocationFailure } from '../core/canvasRecovery';
 import { floorArtSeed } from './ground/floorArtSeed';
+import { renderFrameNumber } from '../core/renderFrameClock';
+import { memoryBudgetScale } from '../core/deviceMemoryBudget';
 import {
+  onPaintedSpriteMiss,
   registerPaintedSprite,
   shouldDownscaleForLowEndDevice,
   unregisterPaintedSprite,
@@ -75,6 +80,36 @@ const BYTES_PER_PIXEL = 4;
  * memory-pressure recovery the refusal sets off run first.
  */
 const DEFERRED_SHEET_RETRY_MS = 5000;
+
+/**
+ * Megabytes of finished sheets kept before the least recently drawn are let go.
+ *
+ * Above everything the busiest floor paints for itself, so a floor as it is
+ * today never loses a sheet. The Over City holds about 137 MB of sheets once its
+ * buildings have been visited; one screen of it draws about 57 MB at once, but a
+ * walk around the town draws most of the rest, and a facade let go and walked
+ * back to is a building missing for the frames it takes to repaint. So the
+ * floor's whole set is its working set, and the limit is a ceiling against
+ * growth rather than a trim: what it stops is a floor that gains sheets until
+ * they no longer fit, which `verify:environment-sheet-budget` checks every
+ * floor against.
+ */
+export const ENVIRONMENT_SHEET_BUDGET_MEGABYTES = 160;
+
+const RECENTLY_DRAWN_SECONDS = 30;
+const NOMINAL_FRAMES_PER_SECOND = 60;
+
+/**
+ * Render frames a sheet is safe from eviction after its last lookup.
+ *
+ * A sheet is looked up every frame it is drawn as a sprite, but a ground
+ * material is looked up only while a tile chunk is being baked from it, and the
+ * baked chunk keeps showing it long after. Letting one go inside that time would
+ * be invisible until the next chunk is baked, then flat fallback colour at the
+ * edge of the screen while it repaints. Half a minute, which covers walking a
+ * screen's width many times over and a short visit indoors.
+ */
+export const RECENTLY_DRAWN_FRAMES = RECENTLY_DRAWN_SECONDS * NOMINAL_FRAMES_PER_SECOND;
 
 /** One piece of a sheet: a material's patch, a prop's frame row, a facade. */
 export interface PaintStep {
@@ -191,6 +226,25 @@ interface ResidentSheet {
   readonly variesWithFloorSeed: boolean;
   /** The floor art seed this sheet's pixels were painted under. */
   readonly artSeed: number;
+  /**
+   * The render frame of the sheet's latest lookup through `SpriteLoader`, or of
+   * the latest draw of something baked from it.
+   */
+  lastLookupFrame: number;
+}
+let sheetByteBudgetOverride: number | null = null;
+
+/**
+ * Scaled for this device only where sheets paint at half density (see
+ * `memoryBudgetScale`): at full density the Over City's 137 MB of sheets is
+ * the floor's whole working set, and a smaller limit let go of facades that
+ * were then walked back to and repainted.
+ */
+function sheetByteBudget(): number {
+  return (
+    sheetByteBudgetOverride ??
+    ENVIRONMENT_SHEET_BUDGET_MEGABYTES * memoryBudgetScale() * BYTES_PER_MEGABYTE
+  );
 }
 
 const resident = new Map<string, ResidentSheet>();
@@ -275,6 +329,27 @@ const deferred = new Map<string, DeferredSheet>();
 let deferredRetryAtMs = 0;
 
 /**
+ * Sheets let go over the byte budget, painted again the first time anything
+ * looks one up. Shaped like a deferred sheet because it is one: owed, with
+ * nothing to paint it into until it is wanted.
+ */
+const evicted = new Map<string, DeferredSheet>();
+
+/** Counts since the module loaded, for the cache's gate. */
+interface EnvironmentSheetEvictionStats {
+  /** Sheets let go over the byte budget. */
+  evictions: number;
+  /** Evicted sheets looked up again, and so painted again. */
+  repaintsAfterEviction: number;
+}
+
+const evictionStats: EnvironmentSheetEvictionStats = { evictions: 0, repaintsAfterEviction: 0 };
+
+export function environmentSheetEvictionStats(): Readonly<EnvironmentSheetEvictionStats> {
+  return { ...evictionStats };
+}
+
+/**
  * Holds a sheet that could not be given a surface, to be asked for again after
  * {@link DEFERRED_SHEET_RETRY_MS} or the next canvas recovery, whichever is
  * first. For a caller whose own planning was refused a surface, as well as for
@@ -296,7 +371,12 @@ function retryDeferredSheets(): void {
   const current = floorArtSeed();
   for (const [key, sheet] of deferred) {
     if (sheet.variesWithFloorSeed && sheet.artSeed !== current) continue;
-    replays.push({ key, replan: sheet.replan, variesWithFloorSeed: sheet.variesWithFloorSeed });
+    replays.push({
+      key,
+      replan: sheet.replan,
+      variesWithFloorSeed: sheet.variesWithFloorSeed,
+      artSeed: sheet.artSeed,
+    });
   }
   deferred.clear();
 }
@@ -324,13 +404,16 @@ export function requestEnvironmentSheet(plan: EnvironmentSheetPlan): SheetReques
   if (resident.has(plan.key) && !pending.has(plan.key)) return 'alreadyPainted';
   if (pending.has(plan.key)) return 'alreadyQueued';
   const scale = paintScaleNow();
-  const surface = allocCanvas(Math.round(plan.widthPx * scale), Math.round(plan.heightPx * scale));
+  const surface = allocCanvas(
+    'environmentSheets',
+    Math.round(plan.widthPx * scale),
+    Math.round(plan.heightPx * scale),
+  );
   let ctx: CanvasRenderingContext2D;
   try {
     ctx = surfaceContext(surface);
   } catch (error) {
-    surface.width = 0;
-    surface.height = 0;
+    releaseSurface(surface);
     if (!(error instanceof CanvasContextUnavailableError)) throw error;
     deferEnvironmentSheet(plan.key, plan.variesWithFloorSeed, replanOf(plan));
     // A bare replan reuses these steps and the surfaces they paint into.
@@ -339,6 +422,7 @@ export function requestEnvironmentSheet(plan: EnvironmentSheetPlan): SheetReques
     return 'deferred';
   }
   deferred.delete(plan.key);
+  evicted.delete(plan.key);
   ctx.scale(scale, scale);
   pending.set(plan.key, {
     plan,
@@ -378,6 +462,11 @@ export function environmentArtBytes(): number {
     bytes += sheet.surface.width * sheet.surface.height * BYTES_PER_PIXEL;
   }
   return bytes;
+}
+
+/** Keys of the finished sheets, for the cache's gate. */
+export function residentEnvironmentSheetKeys(): string[] {
+  return [...resident.keys()];
 }
 
 /** Sheets painted and published, for the `?perf` readout. */
@@ -420,14 +509,20 @@ function readyStepsOf(plan: EnvironmentSheetPlan): number {
 
 function publish(sheet: PendingSheet): void {
   sheet.published = true;
-  registerPaintedSprite(sheet.plan.key, sheet.surface, sheet.scale);
-  resident.set(sheet.plan.key, {
+  const residentSheet: ResidentSheet = {
     replan: replanOf(sheet.plan),
     surface: sheet.surface,
     bytes: sheet.surface.width * sheet.surface.height * BYTES_PER_PIXEL,
     variesWithFloorSeed: sheet.plan.variesWithFloorSeed,
     artSeed: sheet.artSeed,
+    lastLookupFrame: renderFrameNumber(),
+  };
+  const key = sheet.plan.key;
+  registerPaintedSprite(key, sheet.surface, sheet.scale, () => {
+    residentSheet.lastLookupFrame = renderFrameNumber();
+    lookupRecording?.add(key);
   });
+  resident.set(sheet.plan.key, residentSheet);
   if (sheet.replayed) repaintedRevision += 1;
   sheet.plan.onReady?.();
 }
@@ -574,6 +669,7 @@ function drainQueue(budgetMs: number, mustProgress: boolean): number {
  */
 export function beginEnvironmentArtFrame(): void {
   msPaintedThisFrame = 0;
+  evictOverBudget();
   retryDeferredSheets();
   requestNextReplay();
   if (paintDebtMs > 0) {
@@ -645,13 +741,87 @@ export function paintEnvironmentArtNow(): void {
   }
 }
 
+/**
+ * Lets the least recently drawn finished sheets go until the rest fit the byte
+ * budget. A sheet looked up within {@link RECENTLY_DRAWN_FRAMES} is never a
+ * candidate, nor is one still painting, so the budget is a ceiling that gives
+ * way rather than a hole in the frame: when everything resident is in use, the
+ * cache stays over budget.
+ */
+function evictOverBudget(): void {
+  let residentBytes = 0;
+  for (const sheet of resident.values()) residentBytes += sheet.bytes;
+  if (residentBytes <= sheetByteBudget()) return;
+  const oldestDrawnFrame = renderFrameNumber() - RECENTLY_DRAWN_FRAMES;
+  const candidates = [...resident].filter(
+    ([key, sheet]) => sheet.lastLookupFrame < oldestDrawnFrame && !pending.has(key),
+  );
+  candidates.sort(([, a], [, b]) => a.lastLookupFrame - b.lastLookupFrame);
+  for (const [key, sheet] of candidates) {
+    if (residentBytes <= sheetByteBudget()) return;
+    drop(key, sheet.surface);
+    resident.delete(key);
+    residentBytes -= sheet.bytes;
+    evicted.set(key, {
+      replan: sheet.replan,
+      variesWithFloorSeed: sheet.variesWithFloorSeed,
+      artSeed: sheet.artSeed,
+    });
+    evictionStats.evictions += 1;
+  }
+}
+
+/** Sheets looked up while {@link recordSheetLookups} runs, or null outside one. */
+let lookupRecording: Set<string> | null = null;
+const NO_SHEETS: readonly string[] = [];
+
+/**
+ * Runs a paint and returns the keys of every sheet it looked up.
+ *
+ * For a cache that bakes from sheets and then draws its own copy: a sheet
+ * shown that way is never looked up again, and would look idle while it is on
+ * screen. The cache keeps these keys with what it baked and passes them to
+ * {@link touchEnvironmentSheets} each time it draws it. Nested recordings each
+ * see their own lookups, and the outer one sees the inner one's too.
+ */
+export function recordSheetLookups(paint: () => void): readonly string[] {
+  const outer = lookupRecording;
+  const recorded = new Set<string>();
+  lookupRecording = recorded;
+  try {
+    paint();
+  } finally {
+    lookupRecording = outer;
+  }
+  if (outer !== null) for (const key of recorded) outer.add(key);
+  return recorded.size === 0 ? NO_SHEETS : [...recorded];
+}
+
+/** Marks sheets as drawn this frame, for a cache drawing something it baked from them. */
+export function touchEnvironmentSheets(keys: readonly string[]): void {
+  if (keys.length === 0) return;
+  const frame = renderFrameNumber();
+  for (const key of keys) {
+    const sheet = resident.get(key);
+    if (sheet !== undefined) sheet.lastLookupFrame = frame;
+  }
+}
+
+/**
+ * Overrides the byte budget, or restores this device's own with null. For the
+ * cache's gate, which cannot afford to paint a floor's worth of sheets to see
+ * one evicted.
+ */
+export function setEnvironmentSheetByteBudget(bytes: number | null): void {
+  sheetByteBudgetOverride = bytes;
+}
+
 function drop(key: string, surface: CanvasSurface): void {
   // Shrinking the backing store is what actually gives the pixels back; dropping
   // the map entry alone only frees the wrapper object. The `SpriteLoader` def
   // has to go with it, or the next lookup hands back a def pointing at a
   // zero-sized surface and the sheet never repaints.
-  surface.width = 0;
-  surface.height = 0;
+  releaseSurface(surface);
   unregisterPaintedSprite(key);
 }
 
@@ -674,6 +844,9 @@ function release(shouldRelease: (key: string, variesWithFloorSeed: boolean) => b
   }
   for (const [key, sheet] of deferred) {
     if (shouldRelease(key, sheet.variesWithFloorSeed)) deferred.delete(key);
+  }
+  for (const [key, sheet] of evicted) {
+    if (shouldRelease(key, sheet.variesWithFloorSeed)) evicted.delete(key);
   }
   // The queue the debt was owed against is gone, so the next floor's first frame
   // must not open paused. The cost estimates stay: they are a property of the
@@ -716,12 +889,12 @@ export function stagingSurfaceOfAtLeast(width: number, height: number): CanvasSu
   const existing = staging;
   if (existing !== null && existing.width >= width && existing.height >= height) return existing;
   const grown = allocCanvas(
+    'environmentSheets',
     Math.max(width, existing?.width ?? 0),
     Math.max(height, existing?.height ?? 0),
   );
   if (existing !== null) {
-    existing.width = 0;
-    existing.height = 0;
+    releaseSurface(existing);
   }
   staging = grown;
   return grown;
@@ -731,6 +904,8 @@ interface SheetReplay {
   readonly key: string;
   readonly replan: () => EnvironmentSheetPlan;
   readonly variesWithFloorSeed: boolean;
+  /** The floor art seed it is owed under; one for another floor is let go. */
+  readonly artSeed: number;
 }
 
 /**
@@ -803,6 +978,7 @@ function repaintAllEnvironmentArt(): void {
       key,
       replan: sheet.replan,
       variesWithFloorSeed: sheet.variesWithFloorSeed,
+      artSeed: sheet.artSeed,
     });
   }
   for (const key of queue) {
@@ -814,6 +990,7 @@ function repaintAllEnvironmentArt(): void {
         key,
         replan: replanOf(sheet.plan),
         variesWithFloorSeed: sheet.plan.variesWithFloorSeed,
+        artSeed: sheet.artSeed,
       });
     }
     const settled = sheet.plan.onSettled;
@@ -826,13 +1003,24 @@ function repaintAllEnvironmentArt(): void {
         key,
         replan: sheet.replan,
         variesWithFloorSeed: sheet.variesWithFloorSeed,
+        artSeed: sheet.artSeed,
       });
     }
   }
+  // A replay already owed — an evicted sheet looked up again, or a repaint
+  // waiting its turn — is owed still: the release below empties the queue.
+  for (const replay of replays) {
+    if (owed.has(replay.key)) continue;
+    if (replay.variesWithFloorSeed && replay.artSeed !== current) continue;
+    owed.set(replay.key, replay);
+  }
+  // Evicted sheets stay owed on demand rather than joining the repaint: nothing
+  // drew them lately, which is why they were let go.
+  const stillEvicted = [...evicted];
   release(() => true);
+  for (const [key, sheet] of stillEvicted) evicted.set(key, sheet);
   if (staging !== null) {
-    staging.width = 0;
-    staging.height = 0;
+    releaseSurface(staging);
     staging = null;
   }
   replays.push(...owed.values());
@@ -842,6 +1030,20 @@ function repaintAllEnvironmentArt(): void {
   // After the first repaint is queued, so the chain's next sheet goes behind it.
   for (const settled of interruptedChains) settled();
 }
+
+onPaintedSpriteMiss((key) => {
+  const sheet = evicted.get(key);
+  if (sheet === undefined) return;
+  evicted.delete(key);
+  if (sheet.variesWithFloorSeed && sheet.artSeed !== floorArtSeed()) return;
+  replays.push({
+    key,
+    replan: sheet.replan,
+    variesWithFloorSeed: sheet.variesWithFloorSeed,
+    artSeed: sheet.artSeed,
+  });
+  evictionStats.repaintsAfterEviction += 1;
+});
 
 onCanvasRecovery((cause) => {
   // Under memory pressure the sheets are correct and the costliest art there is
@@ -858,8 +1060,7 @@ export function flushEnvironmentArtCache(): void {
   costByClass.clear();
   abandoned.clear();
   if (staging !== null) {
-    staging.width = 0;
-    staging.height = 0;
+    releaseSurface(staging);
     staging = null;
   }
   paintDebtMs = 0;

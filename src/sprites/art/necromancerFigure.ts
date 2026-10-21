@@ -14,7 +14,12 @@
  * moments the player most needs to see his face.
  */
 
-import { allocCanvas, surfaceContext, type CanvasSurface } from '../../core/canvasSurface';
+import {
+  allocCanvas,
+  releaseSurface,
+  surfaceContext,
+  type CanvasSurface,
+} from '../../core/canvasSurface';
 import { type FigureDef, figureStates } from '../figure/figureDef';
 import { clamp01, deg, easeInOut, easeOut, hump, lerp, ramp, rgba, type Pt } from './carlArt';
 import {
@@ -909,64 +914,73 @@ function applyRimLight(
   const height = bottom - top;
   if (width <= 0 || height <= 0) return;
   const local = pt(lantern.x - left, lantern.y - top);
-  const outline = solidMask(figure, left, top, width, height);
-  const clothMask = solidMask(cloth, left, top, width, height);
+  const scratch: CanvasSurface[] = [];
+  try {
+    const outline = solidMask(figure, left, top, width, height);
+    scratch.push(outline);
+    const clothMask = solidMask(cloth, left, top, width, height);
+    scratch.push(clothMask);
 
-  // The band just inside the whole figure's outline, kept only where it is
-  // cloth: the lantern lights the robe's edge, and neither the ivory nor a
-  // hand tucked into a gap in the cloth should pick up a blue ring.
-  const edge = allocCanvas(width, height);
-  const edgeCtx = surfaceContext(edge);
-  edgeCtx.drawImage(outline, 0, 0);
-  const depth = RIM_DEPTH_TILES * unit;
-  const eroded = allocCanvas(width, height);
-  const erodedCtx = surfaceContext(eroded);
-  erodedCtx.drawImage(outline, 0, 0);
-  erodedCtx.globalCompositeOperation = 'destination-in';
-  for (let i = 0; i < RIM_SAMPLES; i++) {
-    const angle = (i / RIM_SAMPLES) * TWO_PI;
-    erodedCtx.drawImage(outline, Math.cos(angle) * depth, Math.sin(angle) * depth);
+    // The band just inside the whole figure's outline, kept only where it is
+    // cloth: the lantern lights the robe's edge, and neither the ivory nor a
+    // hand tucked into a gap in the cloth should pick up a blue ring.
+    const edge = allocCanvas('creatureArt', width, height);
+    scratch.push(edge);
+    const edgeCtx = surfaceContext(edge);
+    edgeCtx.drawImage(outline, 0, 0);
+    const depth = RIM_DEPTH_TILES * unit;
+    const eroded = allocCanvas('creatureArt', width, height);
+    scratch.push(eroded);
+    const erodedCtx = surfaceContext(eroded);
+    erodedCtx.drawImage(outline, 0, 0);
+    erodedCtx.globalCompositeOperation = 'destination-in';
+    for (let i = 0; i < RIM_SAMPLES; i++) {
+      const angle = (i / RIM_SAMPLES) * TWO_PI;
+      erodedCtx.drawImage(outline, Math.cos(angle) * depth, Math.sin(angle) * depth);
+    }
+    edgeCtx.globalCompositeOperation = 'destination-out';
+    edgeCtx.drawImage(eroded, 0, 0);
+    edgeCtx.globalCompositeOperation = 'destination-in';
+    edgeCtx.drawImage(clothMask, 0, 0);
+    const fade = edgeCtx.createRadialGradient(
+      local.x,
+      local.y,
+      RIM_NEAR_TILES * unit * reach,
+      local.x,
+      local.y,
+      RIM_FAR_TILES * unit * reach,
+    );
+    fade.addColorStop(0, rgba('#ffffff', 1));
+    fade.addColorStop(1, rgba('#ffffff', RIM_FAR_SHARE));
+    edgeCtx.fillStyle = fade;
+    edgeCtx.fillRect(0, 0, width, height);
+
+    // The spill is drawn straight onto the cloth mask, which is then spent.
+    const spillCtx = surfaceContext(clothMask);
+    const spillGradient = spillCtx.createRadialGradient(
+      local.x,
+      local.y,
+      0,
+      local.x,
+      local.y,
+      SPILL_REACH_TILES * unit * reach,
+    );
+    spillGradient.addColorStop(0, rimRgba(SPILL_ALPHA));
+    spillGradient.addColorStop(1, rimRgba(0));
+    spillCtx.globalCompositeOperation = 'source-in';
+    spillCtx.fillStyle = spillGradient;
+    spillCtx.fillRect(0, 0, width, height);
+
+    const ctx = surfaceContext(figure);
+    ctx.save();
+    ctx.globalCompositeOperation = 'source-atop';
+    ctx.drawImage(clothMask, left, top);
+    ctx.globalAlpha = RIM_ALPHA;
+    ctx.drawImage(edge, left, top);
+    ctx.restore();
+  } finally {
+    for (const surface of scratch) releaseSurface(surface);
   }
-  edgeCtx.globalCompositeOperation = 'destination-out';
-  edgeCtx.drawImage(eroded, 0, 0);
-  edgeCtx.globalCompositeOperation = 'destination-in';
-  edgeCtx.drawImage(clothMask, 0, 0);
-  const fade = edgeCtx.createRadialGradient(
-    local.x,
-    local.y,
-    RIM_NEAR_TILES * unit * reach,
-    local.x,
-    local.y,
-    RIM_FAR_TILES * unit * reach,
-  );
-  fade.addColorStop(0, rgba('#ffffff', 1));
-  fade.addColorStop(1, rgba('#ffffff', RIM_FAR_SHARE));
-  edgeCtx.fillStyle = fade;
-  edgeCtx.fillRect(0, 0, width, height);
-
-  // The spill is drawn straight onto the cloth mask, which is then spent.
-  const spillCtx = surfaceContext(clothMask);
-  const spillGradient = spillCtx.createRadialGradient(
-    local.x,
-    local.y,
-    0,
-    local.x,
-    local.y,
-    SPILL_REACH_TILES * unit * reach,
-  );
-  spillGradient.addColorStop(0, rimRgba(SPILL_ALPHA));
-  spillGradient.addColorStop(1, rimRgba(0));
-  spillCtx.globalCompositeOperation = 'source-in';
-  spillCtx.fillStyle = spillGradient;
-  spillCtx.fillRect(0, 0, width, height);
-
-  const ctx = surfaceContext(figure);
-  ctx.save();
-  ctx.globalCompositeOperation = 'source-atop';
-  ctx.drawImage(clothMask, left, top);
-  ctx.globalAlpha = RIM_ALPHA;
-  ctx.drawImage(edge, left, top);
-  ctx.restore();
 }
 
 /**
@@ -981,7 +995,7 @@ function solidMask(
   width: number,
   height: number,
 ): CanvasSurface {
-  const mask = allocCanvas(width, height);
+  const mask = allocCanvas('creatureArt', width, height);
   const maskCtx = surfaceContext(mask);
   maskCtx.drawImage(source, -left, -top);
   maskCtx.globalCompositeOperation = 'source-in';
@@ -1191,23 +1205,31 @@ function paintNecromancerFrame(ctx: Ctx, state: string, frame: number): void {
     drawNecromancerGround(ctx, row.view, pose);
   });
 
-  const body = allocCanvas(width, height);
-  const bodyCtx = surfaceContext(body);
-  bodyCtx.save();
-  placeInCell(bodyCtx, density);
-  drawNecromancerBody(bodyCtx, row.view, pose);
-  bodyCtx.restore();
-  if (pose.cageBurst < 1) {
-    const cloth = allocCanvas(width, height);
-    const clothCtx = surfaceContext(cloth);
-    clothCtx.save();
-    placeInCell(clothCtx, density);
-    drawNecromancerBody(clothCtx, row.view, pose, 'cloth');
-    clothCtx.restore();
-    applyRimLight(body, cloth, lanternPx, unit, lanternLight(pose));
+  const body = allocCanvas('creatureArt', width, height);
+  try {
+    const bodyCtx = surfaceContext(body);
+    bodyCtx.save();
+    placeInCell(bodyCtx, density);
+    drawNecromancerBody(bodyCtx, row.view, pose);
+    bodyCtx.restore();
+    if (pose.cageBurst < 1) {
+      const cloth = allocCanvas('creatureArt', width, height);
+      try {
+        const clothCtx = surfaceContext(cloth);
+        clothCtx.save();
+        placeInCell(clothCtx, density);
+        drawNecromancerBody(clothCtx, row.view, pose, 'cloth');
+        clothCtx.restore();
+        applyRimLight(body, cloth, lanternPx, unit, lanternLight(pose));
+      } finally {
+        releaseSurface(cloth);
+      }
+    }
+    applyFray(body, pose.fray, unit, density);
+    ctx.drawImage(body, 0, 0, width / density, height / density);
+  } finally {
+    releaseSurface(body);
   }
-  applyFray(body, pose.fray, unit, density);
-  ctx.drawImage(body, 0, 0, width / density, height / density);
 
   inCell(() => {
     drawNecromancerGlow(ctx, row.view, pose);

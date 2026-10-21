@@ -13,6 +13,12 @@
  */
 
 import type { HumanPlayer } from '../../creatures/HumanPlayer';
+import {
+  allocCanvas,
+  releaseSurface,
+  resizeSurface,
+  type CanvasSurface,
+} from '../../core/canvasSurface';
 import type { CatPlayer } from '../../creatures/CatPlayer';
 import type { AudioManager } from '../../audio/AudioManager';
 import type { BriarHollowState } from '../../core/briarHollowState';
@@ -217,7 +223,7 @@ export class ConstructionKit {
   private structureTarget: StructureRef | null = null;
   private preview: BuildOption | null = null;
   /** Reused across frames so a fading "no room" silhouette doesn't allocate a canvas every draw. */
-  private noRoomGhostCanvas: HTMLCanvasElement | null = null;
+  private noRoomGhostCanvas: CanvasSurface | null = null;
   private secondsSinceNothingNote = NOTHING_NOTE_COOLDOWN_SECONDS;
   private buildPulseSecondsLeft = 0;
   private timeSeconds = 0;
@@ -956,10 +962,9 @@ export class ConstructionKit {
       footprint.kind === 'trebuchet' ? TREBUCHET_REACH_UP_TILES : SNARE_REACH_UP_TILES;
     const width = Math.ceil(footprint.w * TILE_SIZE);
     const height = Math.ceil((footprint.h + reachUpTiles) * TILE_SIZE);
-    const canvas = this.noRoomGhostCanvas ?? document.createElement('canvas');
+    const canvas = this.noRoomGhostCanvas ?? allocCanvas('construction', width, height);
     this.noRoomGhostCanvas = canvas;
-    canvas.width = width;
-    canvas.height = height;
+    resizeSurface(canvas, width, height);
     const sctx = canvas.getContext('2d');
     if (sctx === null) return;
     const originY = reachUpTiles * TILE_SIZE;
@@ -1411,6 +1416,7 @@ export class ConstructionKit {
   }
 
   dispose(): void {
+    if (this.noRoomGhostCanvas !== null) releaseSurface(this.noRoomGhostCanvas);
     this.construction.dispose();
     this.deps.menus.constructionMenu.close();
     this.closeStructureMenu();

@@ -4,7 +4,12 @@
  * rather than the hall, so it never drifts or shakes with the camera.
  */
 
-import { allocCanvas, surfaceContext, type CanvasSurface } from '../../../core/canvasSurface';
+import {
+  allocCanvas,
+  surfaceContext,
+  type CanvasSurface,
+  releaseSurface,
+} from '../../../core/canvasSurface';
 import { canvasGeneration } from '../../../core/canvasRecovery';
 import { renderQuality } from '../../../core/RenderQuality';
 import { hashUnit } from '../../../sprites/flameStamps';
@@ -82,7 +87,7 @@ function paintVignette(ctx: CanvasRenderingContext2D, stage: TitleStage): void {
 }
 
 function bakeGrainTile(): CanvasSurface {
-  const tile = allocCanvas(GRAIN_TILE_PX, GRAIN_TILE_PX);
+  const tile = allocCanvas('title', GRAIN_TILE_PX, GRAIN_TILE_PX);
   const ctx = surfaceContext(tile);
   const random = mulberry32(GRAIN_SEED);
   for (let y = 0; y < GRAIN_TILE_PX; y++) {
@@ -112,7 +117,10 @@ export function vignetteLayer(): TitleLayer {
     if (grain !== null && grain.ctx === ctx && grain.generation === generation) {
       return grain.pattern;
     }
-    if (grain !== null && grain.generation !== generation) grainTile = null;
+    if (grain !== null && grain.generation !== generation && grainTile !== null) {
+      releaseSurface(grainTile);
+      grainTile = null;
+    }
     const tile = (grainTile ??= bakeGrainTile());
     const pattern = ctx.createPattern(tile, 'repeat');
     grain = pattern === null ? null : { ctx, pattern, generation };
@@ -143,8 +151,7 @@ export function vignetteLayer(): TitleLayer {
     dispose: () => {
       vignette.dispose();
       if (grainTile !== null) {
-        grainTile.width = 0;
-        grainTile.height = 0;
+        releaseSurface(grainTile);
       }
       grainTile = null;
       grain = null;

@@ -8,8 +8,35 @@
  * Recording stays off unless a dev harness turns it on.
  */
 
-/** Bytes in a megabyte, for readouts that report the cache's size. */
-export const BYTES_PER_MEGABYTE = 1024 * 1024;
+/**
+ * Why a missed cell was painted straight into the frame instead of baked:
+ * the frame's time allowance was spent, the figure's own byte ceiling or the
+ * whole cache's still refused it after eviction found nothing out of use to
+ * drop, bakes were held off after the browser refused a surface, or the cell
+ * is too large for any empty cache.
+ */
+export const FIGURE_DIRECT_DRAW_CAUSES = [
+  'frameAllowance',
+  'figureBudget',
+  'cacheBudget',
+  'memoryHeld',
+  'tooLarge',
+] as const;
+
+export type FigureDirectDrawCause = (typeof FIGURE_DIRECT_DRAW_CAUSES)[number];
+
+export type FigureDirectDrawCauseCounts = Record<FigureDirectDrawCause, number>;
+
+/** A fresh count of zero direct draws for every cause. */
+export function emptyDirectDrawCauses(): FigureDirectDrawCauseCounts {
+  return {
+    frameAllowance: 0,
+    figureBudget: 0,
+    cacheBudget: 0,
+    memoryHeld: 0,
+    tooLarge: 0,
+  };
+}
 
 export interface FigureCacheStats {
   /** Cells served from a baked surface this frame. */
@@ -22,6 +49,8 @@ export interface FigureCacheStats {
   prewarmBakes: number;
   /** Cells a miss could not bake, painted straight into the target instead. */
   directDraws: number;
+  /** {@link directDraws} split by what refused the cell its bake. */
+  directDrawCauses: FigureDirectDrawCauseCounts;
   /**
    * Cells a caller preferring an approximation over a bake drew as a stand-in
    * — the nearest already-baked frame of the same row, or any already-baked
@@ -48,6 +77,7 @@ const ZEROED: FigureCacheStats = {
   bakes: 0,
   prewarmBakes: 0,
   directDraws: 0,
+  directDrawCauses: emptyDirectDrawCauses(),
   approxDraws: 0,
   bakeMs: 0,
   evictions: 0,
@@ -58,7 +88,7 @@ const ZEROED: FigureCacheStats = {
 };
 
 let recording = false;
-const live: FigureCacheStats = { ...ZEROED };
+const live: FigureCacheStats = { ...ZEROED, directDrawCauses: emptyDirectDrawCauses() };
 
 /** Turns recording on or off. Only a dev harness should ever call this. */
 export function setFigureCacheStatsRecording(enabled: boolean): void {
@@ -76,6 +106,7 @@ function resetPerFrameCounts(): void {
   live.bakes = 0;
   live.prewarmBakes = 0;
   live.directDraws = 0;
+  live.directDrawCauses = emptyDirectDrawCauses();
   live.approxDraws = 0;
   live.bakeMs = 0;
   live.evictions = 0;
@@ -107,8 +138,10 @@ export function recordFigureCachePrewarmBake(): void {
   if (recording) live.prewarmBakes++;
 }
 
-export function recordFigureCacheDirectDraw(): void {
-  if (recording) live.directDraws++;
+export function recordFigureCacheDirectDraw(cause: FigureDirectDrawCause): void {
+  if (!recording) return;
+  live.directDraws++;
+  live.directDrawCauses[cause]++;
 }
 
 export function recordFigureCacheApproxDraw(): void {
@@ -143,5 +176,5 @@ export function recordFigureCacheOccupancy(figures: number, rows: number, bytes:
 
 /** A snapshot of the counters. Copied, so a caller cannot hold a live view. */
 export function getFigureCacheStats(): FigureCacheStats {
-  return { ...live };
+  return { ...live, directDrawCauses: { ...live.directDrawCauses } };
 }

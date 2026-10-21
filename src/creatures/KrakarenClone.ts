@@ -356,6 +356,11 @@ export class KrakarenClone extends Mob {
     return KRAKAREN_BODY_RADIUS_PX;
   }
 
+  /** She towers over a hovering fairy, so nothing flies across her. */
+  override get fillsAirspace(): boolean {
+    return true;
+  }
+
   /**
    * A shove never moves her. `moveWithCollision` would swallow the motion
    * anyway; refusing it here keeps a knockback from ever starting, so nothing

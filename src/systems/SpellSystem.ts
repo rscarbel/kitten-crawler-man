@@ -1,4 +1,10 @@
 import { TILE_SIZE } from '../core/constants';
+import {
+  allocCanvas,
+  freshSurfaceContext,
+  releaseSurface,
+  type CanvasSurface,
+} from '../core/canvasSurface';
 import { platform } from '../core/Platform';
 import type { SpatialGrid } from '../core/SpatialGrid';
 import type { Mob } from '../creatures/Mob';
@@ -78,7 +84,7 @@ interface ActiveFog {
   totalFrames: number;
   radiusPx: number;
   /** Pre-rendered fog cloud texture (drawn once at cast time). */
-  cachedCanvas: HTMLCanvasElement;
+  cachedCanvas: CanvasSurface;
   cachedSize: number;
 }
 
@@ -167,17 +173,11 @@ const SHELL_RENDER_EXTENT = 25;
 const FULL_POWER_LEVEL = 15;
 
 /** Pre-render the fog cloud texture to an offscreen canvas (called once per fog). */
-function bakeFogCloud(radiusPx: number): { canvas: HTMLCanvasElement; size: number } {
+function bakeFogCloud(radiusPx: number): { canvas: CanvasSurface; size: number } {
   const size = Math.ceil(radiusPx * FOG_CACHE_SIZE_FACTOR + FOG_MARGIN * FOG_CACHE_SIZE_FACTOR);
-  const canvas = document.createElement('canvas');
-  canvas.width = size;
-  canvas.height = size;
-  const ctx = canvas.getContext('2d');
+  const canvas = allocCanvas('spellFog', size, size);
+  const ctx = freshSurfaceContext(canvas);
   const center = size * TILE_CENTER_OFFSET;
-
-  if (ctx === null) {
-    throw new Error('2d context cannot be found');
-  }
 
   for (const blob of FOG_BLOBS) {
     const bx = center + blob.dx * radiusPx;
@@ -263,6 +263,7 @@ export class SpellSystem implements GameSystem {
    */
   dropWorldEffects(): void {
     this.activeShell = null;
+    for (const fog of this.activeFogs) releaseSurface(fog.cachedCanvas);
     this.activeFogs = [];
     this.shellOwner = null;
     this.catMiniShell = null;
@@ -636,7 +637,10 @@ export class SpellSystem implements GameSystem {
     this.fogResistedNames.length = 0;
     this.activeFogs = this.activeFogs.filter((fog) => {
       fog.framesLeft--;
-      if (fog.framesLeft <= 0) return false;
+      if (fog.framesLeft <= 0) {
+        releaseSurface(fog.cachedCanvas);
+        return false;
+      }
       this._querySet.clear();
       const inFog = mobGrid.queryCircle(fog.x, fog.y, fog.radiusPx + TILE_SIZE, this._querySet);
       const rSq = fog.radiusPx * fog.radiusPx;

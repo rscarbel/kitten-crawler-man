@@ -78,7 +78,12 @@ import {
   statusVisual,
   type StatusVisualFrame,
 } from './sprites/status/statusEffectVisuals';
-import { allocCanvas, surfaceContext, type CanvasSurface } from './core/canvasSurface';
+import {
+  allocCanvas,
+  releaseSurface,
+  surfaceContext,
+  type CanvasSurface,
+} from './core/canvasSurface';
 import {
   deferChrome,
   type AboveDarknessDrawer,
@@ -264,7 +269,8 @@ let afterimageCanvasSize = 0;
 function afterimageSurface(minSize: number): CanvasSurface {
   if (afterimageCanvasSurface === null || afterimageCanvasSize < minSize) {
     afterimageCanvasSize = Math.max(afterimageCanvasSize, minSize);
-    afterimageCanvasSurface = allocCanvas(afterimageCanvasSize, afterimageCanvasSize);
+    if (afterimageCanvasSurface !== null) releaseSurface(afterimageCanvasSurface);
+    afterimageCanvasSurface = allocCanvas('effects', afterimageCanvasSize, afterimageCanvasSize);
   }
   return afterimageCanvasSurface;
 }
@@ -386,7 +392,7 @@ const DEFAULT_WATERLINE_ABOVE_FOOT_PX = 16;
 export const WALK_FRAME_SPEED = 0.14;
 
 /** Potion effect constants */
-const SPEED_FIZZ_MULTIPLIER = 2;
+export const SPEED_FIZZ_MULTIPLIER = 2;
 const JUGG_JUICE_HP_MULTIPLIER_BONUS = 0.5;
 const JUGG_JUICE_FLAT_BONUS = 5;
 const STAT_BOOST_MIN = 2;

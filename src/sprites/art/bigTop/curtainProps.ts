@@ -11,6 +11,7 @@
 
 import {
   allocReadableCanvas,
+  releaseSurface,
   surfaceContext,
   type CanvasSurface,
 } from '../../../core/canvasSurface';
@@ -127,7 +128,8 @@ function scratchFor(size: number): { surface: CanvasSurface; ctx: Ctx } {
   if (cached !== null && cached.width === pixels && cached.height === pixels) {
     return { surface: cached, ctx: surfaceContext(cached) };
   }
-  const surface = allocReadableCanvas(pixels, pixels);
+  if (cached !== null) releaseSurface(cached);
+  const surface = allocReadableCanvas('bigTopProps', pixels, pixels);
   foldScratch = surface;
   return { surface, ctx: surfaceContext(surface) };
 }

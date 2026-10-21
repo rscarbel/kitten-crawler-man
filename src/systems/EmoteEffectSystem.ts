@@ -204,7 +204,7 @@ export class EmoteEffectSystem {
     if (cached !== undefined) return cached;
     const rimPx = Math.max(1, sizePx * HEART_RIM_SHARE);
     const side = Math.ceil(sizePx + rimPx * 2 + HEART_CELL_PAD_PX * 2);
-    const cell = allocCanvas(side, side);
+    const cell = allocCanvas('effects', side, side);
     const ctx = surfaceContext(cell);
     const origin = (side - sizePx) / 2;
     traceHeart(ctx, origin, origin, sizePx);

@@ -53,7 +53,7 @@ import { makeSepsis } from '../src/core/StatusEffect';
 import { BIG_TOP_SEALED_MESSAGE, createCircusQuestProgress } from '../src/core/CircusQuestProgress';
 import { Conversation } from '../src/dialog/Conversation';
 import { readFileSync } from 'node:fs';
-import { SFX_GROUPS, sfxGroupsForLevelId } from '../src/audio/sfxGroups';
+import { SFX_GROUPS } from '../src/audio/sfxGroups';
 import { ALL_SOUND_IDS, STREAMING_SOUND_IDS, type SoundId } from '../src/audio/sounds';
 import {
   BIG_TOP_AMBIENT_BED,
@@ -3177,8 +3177,6 @@ console.log('\nChecking every Big Top cue can actually be heard…');
     missingFromGroup.length === 0,
     `every one is in the circusQuest group (${missingFromGroup.join(', ') || 'none missing'})`,
   );
-  const missingFromFloor = unpreloadedIds(cueIds, sfxGroupsForLevelId('level3'));
-  check(missingFromFloor.length === 0, "and in floor 3's preload bundle");
   for (const music of [BIG_TOP_MUSIC]) {
     check(STREAMING_SOUND_IDS.has(music), `${music} streams as music`);
   }

@@ -207,6 +207,7 @@ export const level1: LevelDef = {
   groundTheme: 'cellars',
   mapSize: 450,
   spriteGroups: ['core', 'dungeon_common', 'floor1_tileset', 'boss_hoarder', 'boss_juicer'],
+  interiorSpriteGroups: [],
   roomMobs: [
     {
       type: 'goblin',

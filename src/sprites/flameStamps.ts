@@ -225,7 +225,7 @@ function stampDisc(ctx: CanvasRenderingContext2D, cx: number, cy: number, radius
  * anything else made of burning gas or its smoke is shaded with the same falloff.
  */
 export function bakeSoftDisc(ink: FlameInk, size: number): CanvasSurface {
-  const surface = allocCanvas(size, size);
+  const surface = allocCanvas('effects', size, size);
   const ctx = surfaceContext(surface);
   ctx.fillStyle = unitFalloff(ctx, ink, ink.alpha);
   stampDisc(ctx, size / 2, size / 2, size / 2);
@@ -288,7 +288,7 @@ function bakeTeardrop(
 ): CanvasSurface {
   const maxRadius = width / 2;
   const paddedWidth = Math.ceil(width * STAMP_BEND_PADDING);
-  const surface = allocCanvas(paddedWidth, height);
+  const surface = allocCanvas('effects', paddedWidth, height);
   const ctx = surfaceContext(surface);
   const footY = height - maxRadius * STAMP_FOOT_INSET;
   const lobeSpacing = (footY - maxRadius * STAMP_TIP_INSET) / (STAMP_LOBE_COUNT - 1);

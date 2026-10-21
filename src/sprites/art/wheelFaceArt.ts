@@ -11,7 +11,12 @@
  * wedge 0's leading edge starts under the pointer at the top.
  */
 
-import { allocCanvas, surfaceContext, type CanvasSurface } from '../../core/canvasSurface';
+import {
+  allocCanvas,
+  releaseSurface,
+  surfaceContext,
+  type CanvasSurface,
+} from '../../core/canvasSurface';
 import { onCanvasRecovery } from '../../core/canvasRecovery';
 import type { WheelBoard, WheelWedge } from '../../systems/casino/wheel/wheelBoard';
 import { wedgeEndAngle, wedgeStartAngle } from '../../systems/casino/wheel/wheelGeometry';
@@ -504,7 +509,15 @@ const MAX_CACHED_FACES = 8;
 const MAX_FACE_PX = 2048;
 const faceCache = new Map<string, CanvasSurface | null>();
 // A purged canvas would stay blank for good, so recovery repaints every face.
-onCanvasRecovery(() => faceCache.clear());
+onCanvasRecovery(releaseFaces);
+
+/** Every face is drawn the moment it is fetched and never held, so dropping one may free it. */
+function releaseFaces(): void {
+  for (const face of faceCache.values()) {
+    if (face !== null) releaseSurface(face);
+  }
+  faceCache.clear();
+}
 
 function boardKey(board: WheelBoard): string {
   return board.map((wedge) => wedge.id).join('|');
@@ -519,14 +532,15 @@ export function cachedWheelFace(board: WheelBoard, pixels: number): CanvasSurfac
   const key = `${boardKey(board)}@${size}`;
   const cached = faceCache.get(key);
   if (cached !== undefined) return cached;
-  if (faceCache.size >= MAX_CACHED_FACES) faceCache.clear();
+  if (faceCache.size >= MAX_CACHED_FACES) releaseFaces();
   let face: CanvasSurface | null = null;
   try {
-    face = allocCanvas(size, size);
+    face = allocCanvas('casino', size, size);
     const ctx = surfaceContext(face);
     ctx.translate(size / 2, size / 2);
     paintWheelFace(ctx, board, size / 2);
   } catch {
+    if (face !== null) releaseSurface(face);
     face = null;
   }
   faceCache.set(key, face);

@@ -68,7 +68,7 @@ const { level3 } = await import('../src/levels/level3.js');
 const { renderQuality } = await import('../src/core/RenderQuality.js');
 const { environmentPaintDepth } = await import('../src/map/environmentArtCache.js');
 const {
-  CACHE_BYTE_BUDGET,
+  figureCacheByteBudget,
   figurePrewarmDepth,
   figurePrewarmGiveUps,
   pinnedFigureRowCount,
@@ -482,8 +482,8 @@ if (samples.length > 0) {
       `trip ${index}: ${sample.documentListeners} document listeners, up from ${baseline.documentListeners}`,
     );
     check(
-      sample.cacheBytes <= CACHE_BYTE_BUDGET,
-      `trip ${index}: figure cache at ${megabytes(sample.cacheBytes)} MB, over its ${megabytes(CACHE_BYTE_BUDGET)} MB budget`,
+      sample.cacheBytes <= figureCacheByteBudget(),
+      `trip ${index}: figure cache at ${megabytes(sample.cacheBytes)} MB, over its ${megabytes(figureCacheByteBudget())} MB budget`,
     );
     check(
       sample.exitLoadFrames === 0,

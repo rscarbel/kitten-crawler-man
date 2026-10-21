@@ -14,7 +14,7 @@
 
 import { viewportHeight, viewportWidth } from '../core/Viewport';
 import { PAINT_BENCH_SUBJECTS, type PaintBenchSubject } from '../dev/paintBenchSubjects';
-import { allocCanvas, surfaceContext } from '../core/canvasSurface';
+import { allocCanvas, releaseSurface, surfaceContext } from '../core/canvasSurface';
 import { worldText } from '../ui/world/worldText';
 import { PreviewScene, type PreviewControl } from './PreviewScene';
 import { figureBakeDensity } from '../sprites/figure/figureDef';
@@ -67,7 +67,7 @@ function timePaints(subject: PaintBenchSubject, density: number): number {
   const { def } = subject;
   const width = Math.ceil(def.frameWidth * density);
   const height = Math.ceil(def.frameHeight * density);
-  const surface = allocCanvas(width, height);
+  const surface = allocCanvas('misc', width, height);
   const ctx = surfaceContext(surface);
   const frames = def.states.get(subject.state)?.frames ?? 1;
 
@@ -83,7 +83,9 @@ function timePaints(subject: PaintBenchSubject, density: number): number {
   for (let i = 0; i < WARMUP_PAINTS; i++) paint(i);
   const startedAt = performance.now();
   for (let i = 0; i < TIMED_PAINTS; i++) paint(i);
-  return (performance.now() - startedAt) / TIMED_PAINTS;
+  const perPaintMs = (performance.now() - startedAt) / TIMED_PAINTS;
+  releaseSurface(surface);
+  return perPaintMs;
 }
 
 /**
@@ -102,9 +104,9 @@ function timeBakePaints(subject: PaintBenchSubject): number {
   const cellHeight = Math.ceil(def.frameHeight);
   const superWidth = cellWidth * supersample;
   const superHeight = cellHeight * supersample;
-  const superSurface = allocCanvas(superWidth, superHeight);
+  const superSurface = allocCanvas('misc', superWidth, superHeight);
   const superCtx = surfaceContext(superSurface);
-  const cellSurface = allocCanvas(cellWidth, cellHeight);
+  const cellSurface = allocCanvas('misc', cellWidth, cellHeight);
   const cellCtx = surfaceContext(cellSurface);
   const frames = def.states.get(subject.state)?.frames ?? 1;
 
@@ -122,7 +124,10 @@ function timeBakePaints(subject: PaintBenchSubject): number {
   for (let i = 0; i < WARMUP_PAINTS; i++) paint(i);
   const startedAt = performance.now();
   for (let i = 0; i < TIMED_PAINTS; i++) paint(i);
-  return (performance.now() - startedAt) / TIMED_PAINTS;
+  const perPaintMs = (performance.now() - startedAt) / TIMED_PAINTS;
+  releaseSurface(superSurface);
+  releaseSurface(cellSurface);
+  return perPaintMs;
 }
 
 /** Gap between subjects, long enough that the tab stays answerable. */

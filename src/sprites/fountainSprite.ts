@@ -10,7 +10,12 @@
  * 2D context, so an offline script can rasterise preview sheets with the
  * `canvas` devDependency.
  */
-import { allocCanvas, surfaceContext, type CanvasSurface } from '../core/canvasSurface';
+import {
+  allocCanvas,
+  releaseSurface,
+  surfaceContext,
+  type CanvasSurface,
+} from '../core/canvasSurface';
 import { rgb } from './art/town/townArt';
 import { getTownRamp } from './art/town/townPalette';
 import { onCanvasRecovery } from '../core/canvasRecovery';
@@ -1100,24 +1105,31 @@ export function fountainCompositionSize(ts: number): {
 
 const compositionFrames = new Map<string, CanvasSurface>();
 // Baked once and kept; a purge would leave it blank for good.
-onCanvasRecovery(() => compositionFrames.clear());
+onCanvasRecovery(() => {
+  for (const frame of compositionFrames.values()) releaseSurface(frame);
+  compositionFrames.clear();
+});
 
 function buildCompositionFrame(ts: number, frame: number): CanvasSurface {
   const { width, height, headroom } = fountainCompositionSize(ts);
 
-  const scratch = allocCanvas(width * AUTHORING_SCALE, height * AUTHORING_SCALE);
-  const scratchCtx = surfaceContext(scratch);
-  const authoredUnit = ts * AUTHORING_SCALE;
-  // Rounding the headroom to whole pixels can shift it off the exact tile-unit
-  // grid; offsetting the origin keeps the block's top edge on the rounded row.
-  const originY = headroom * AUTHORING_SCALE - HEADROOM_TILES * authoredUnit;
-  drawFountainComposition(scratchCtx, 0, originY, authoredUnit, frame / FOUNTAIN_LOOP_FRAMES);
+  const scratch = allocCanvas('props', width * AUTHORING_SCALE, height * AUTHORING_SCALE);
+  try {
+    const scratchCtx = surfaceContext(scratch);
+    const authoredUnit = ts * AUTHORING_SCALE;
+    // Rounding the headroom to whole pixels can shift it off the exact tile-unit
+    // grid; offsetting the origin keeps the block's top edge on the rounded row.
+    const originY = headroom * AUTHORING_SCALE - HEADROOM_TILES * authoredUnit;
+    drawFountainComposition(scratchCtx, 0, originY, authoredUnit, frame / FOUNTAIN_LOOP_FRAMES);
 
-  const target = allocCanvas(width, height);
-  const targetCtx = surfaceContext(target);
-  targetCtx.imageSmoothingEnabled = true;
-  targetCtx.drawImage(scratch, 0, 0, width, height);
-  return target;
+    const target = allocCanvas('props', width, height);
+    const targetCtx = surfaceContext(target);
+    targetCtx.imageSmoothingEnabled = true;
+    targetCtx.drawImage(scratch, 0, 0, width, height);
+    return target;
+  } finally {
+    releaseSurface(scratch);
+  }
 }
 
 function compositionFrame(ts: number, frame: number): CanvasSurface {

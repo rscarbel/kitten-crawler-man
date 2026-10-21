@@ -24,7 +24,12 @@
  */
 
 import { TILE_SIZE } from '../../core/constants';
-import { allocCanvas, surfaceContext, type CanvasSurface } from '../../core/canvasSurface';
+import {
+  allocCanvas,
+  releaseSurface,
+  surfaceContext,
+  type CanvasSurface,
+} from '../../core/canvasSurface';
 import type { GameMap } from '../../map/GameMap';
 import {
   BIG_TOP_KING_POLES,
@@ -456,8 +461,7 @@ export class CircusGroundsAmbience {
     this.seconds += dtSeconds;
     const site = gameMap.circusGrounds;
     if (site === null) {
-      this.anchors = null;
-      this.renderables.length = 0;
+      this.dropAnchors();
       return;
     }
     if (this.anchors?.site !== site) this.rebuild(site);
@@ -470,6 +474,18 @@ export class CircusGroundsAmbience {
     if (record === undefined || record.vinesWithered === redeemed) return;
     record.vinesWithered = redeemed;
     for (const tile of circusVineTiles(gameMap.structure)) gameMap.markTileDirty(tile.x, tile.y);
+  }
+
+  /**
+   * The arch's painted crossbar belongs to the anchors and goes with them, as
+   * do the renderables built from them: one left behind would draw the
+   * released crossbar.
+   */
+  private dropAnchors(): void {
+    this.renderables.length = 0;
+    const arch = this.anchors?.arch;
+    if (arch !== undefined && arch !== null) releaseSurface(arch.surface);
+    this.anchors = null;
   }
 
   private rebuild(site: CircusGroundsSite): void {
@@ -523,6 +539,7 @@ export class CircusGroundsAmbience {
       balloons.push({ tie, count: BOOTH_BALLOONS, salt: balloons.length });
       looseBalloonFrom ??= tie.point;
     }
+    this.dropAnchors();
     const arch = this.paintArch(site);
     // Up the screen the south post's cap is where the sign hangs, so only the
     // north post flies balloons there.
@@ -590,7 +607,7 @@ export class CircusGroundsAmbience {
     const spanTiles = across ? Math.abs(second.x - first.x) : Math.abs(second.y - first.y);
     const scale = CIRCUS_TILE_SCALE;
     const layout = crossbarLayout(spanTiles, across, scale);
-    const surface = allocCanvas(layout.width, layout.height);
+    const surface = allocCanvas('circus', layout.width, layout.height);
     const ctx = surfaceContext(surface);
     paintArchCrossbar(
       ctx,
@@ -754,10 +771,12 @@ export class CircusGroundsAmbience {
   }
 
   dispose(): void {
-    this.renderables.length = 0;
-    this.anchors = null;
+    this.dropAnchors();
+    if (this.marionette !== null) releaseSurface(this.marionette);
     this.marionette = null;
+    if (this.doorSpill !== null) releaseSurface(this.doorSpill);
     this.doorSpill = null;
+    for (const sprite of this.glowSprites.values()) releaseSurface(sprite);
     this.glowSprites.clear();
   }
 
@@ -1296,7 +1315,7 @@ export class CircusGroundsAmbience {
     const cached = this.glowSprites.get(key);
     if (cached !== undefined) return cached;
     const size = Math.ceil(radius * 2);
-    const surface = allocCanvas(size, size);
+    const surface = allocCanvas('circus', size, size);
     const ctx = surfaceContext(surface);
     const gradient = ctx.createRadialGradient(radius, radius, 0, radius, radius, radius);
     for (const stop of stops) gradient.addColorStop(stop.offset, stop.color);
@@ -1310,6 +1329,7 @@ export class CircusGroundsAmbience {
     if (this.marionette !== null) return this.marionette;
     const scale = CIRCUS_TILE_SCALE;
     const surface = allocCanvas(
+      'circus',
       Math.ceil(MARIONETTE.widthTiles * scale),
       Math.ceil(MARIONETTE.heightTiles * scale),
     );
@@ -1322,7 +1342,7 @@ export class CircusGroundsAmbience {
   private doorSpillTexture(): CanvasSurface {
     if (this.doorSpill !== null) return this.doorSpill;
     const size = DOOR_SPILL_TEXTURE_PX;
-    const surface = allocCanvas(size, size);
+    const surface = allocCanvas('circus', size, size);
     const ctx = surfaceContext(surface);
     const narrow = size / (2 * DOOR_SPILL.spread);
     ctx.beginPath();

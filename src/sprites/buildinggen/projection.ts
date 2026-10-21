@@ -243,7 +243,7 @@ export function makePlane(quad: Quad, widthOverride?: number, heightOverride?: n
     1,
     Math.round(heightOverride ?? Math.max(distance(quad.tl, quad.bl), distance(quad.tr, quad.br))),
   );
-  const canvas = allocReadableCanvas(width, height);
+  const canvas = allocReadableCanvas('environmentSheets', width, height);
   return { canvas, ctx: freshSurfaceContext(canvas), width, height, quad };
 }
 

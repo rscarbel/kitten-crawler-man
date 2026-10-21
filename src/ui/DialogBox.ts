@@ -39,7 +39,7 @@ let measuringCtx: CanvasRenderingContext2D | null = null;
  * before a real one is ever handed to this box.
  */
 function measuringContext(): CanvasRenderingContext2D {
-  measuringCtx ??= surfaceContext(allocCanvas(1, 1));
+  measuringCtx ??= surfaceContext(allocCanvas('ui', 1, 1));
   return measuringCtx;
 }
 

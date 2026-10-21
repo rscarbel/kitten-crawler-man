@@ -7,7 +7,12 @@
  * baked once per size, and lit by the light layer rather than here.
  */
 
-import { allocCanvas, surfaceContext, type CanvasSurface } from '../../../core/canvasSurface';
+import {
+  allocCanvas,
+  releaseSurface,
+  surfaceContext,
+  type CanvasSurface,
+} from '../../../core/canvasSurface';
 import { smoothstepUnit } from '../../../map/overworld/elevation';
 import { canvasGeneration } from '../../../core/canvasRecovery';
 import { DEFAULT_DUNGEON_FLOOR_THEME } from '../../../map/dungeon/floorTheme';
@@ -103,6 +108,7 @@ let cachedTextures: HallTextures | null = null;
 function hallTextures(): HallTextures {
   const generation = canvasGeneration();
   if (cachedTextures !== null && cachedTextures.generation === generation) return cachedTextures;
+  if (cachedTextures !== null) releaseHallTextures(cachedTextures);
   cachedTextures = {
     wall: mipChain(paintWallTexture()),
     floor: mipChain(paintFloorTexture()),
@@ -110,6 +116,12 @@ function hallTextures(): HallTextures {
     generation,
   };
   return cachedTextures;
+}
+
+function releaseHallTextures(textures: HallTextures): void {
+  for (const level of textures.wall.levels) releaseSurface(level);
+  for (const level of textures.floor.levels) releaseSurface(level);
+  releaseSurface(textures.junctionShade);
 }
 
 /**
@@ -127,7 +139,7 @@ function paintWallTexture(): CanvasSurface {
   const stripTop = height - stripRowsUsed;
   const fadeStartRow = height - WALL_FADE_START_TILES * TILE_PX;
 
-  const canvas = allocCanvas(width, height);
+  const canvas = allocCanvas('title', width, height);
   const ctx = surfaceContext(canvas);
   const image = ctx.createImageData(width, height);
   for (let y = 0; y < height; y++) {
@@ -160,7 +172,7 @@ function paintFloorTexture(): CanvasSurface {
 }
 
 function surfaceToCanvas(surface: Surface): CanvasSurface {
-  const canvas = allocCanvas(surface.size, surface.size);
+  const canvas = allocCanvas('title', surface.size, surface.size);
   const ctx = surfaceContext(canvas);
   const image = ctx.createImageData(surface.size, surface.size);
   image.data.set(surface.toRgba());
@@ -169,7 +181,7 @@ function surfaceToCanvas(surface: Surface): CanvasSurface {
 }
 
 function paintJunctionShade(): CanvasSurface {
-  const canvas = allocCanvas(JUNCTION_SHADE_TEXTURE_PX, 1);
+  const canvas = allocCanvas('title', JUNCTION_SHADE_TEXTURE_PX, 1);
   const ctx = surfaceContext(canvas);
   const gradient = ctx.createLinearGradient(0, 0, JUNCTION_SHADE_TEXTURE_PX, 0);
   gradient.addColorStop(0, TITLE_INK.hall.junctionShade);
@@ -185,7 +197,7 @@ function mipChain(base: CanvasSurface): MipChain {
   for (let level = 1; level < MIP_LEVELS; level++) {
     const width = Math.max(1, Math.round(previous.width * HALF));
     const height = Math.max(1, Math.round(previous.height * HALF));
-    const next = allocCanvas(width, height);
+    const next = allocCanvas('title', width, height);
     const ctx = surfaceContext(next);
     ctx.imageSmoothingEnabled = true;
     ctx.drawImage(previous, 0, 0, width, height);

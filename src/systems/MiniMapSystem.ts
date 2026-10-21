@@ -1,4 +1,10 @@
 import type { GameMap } from '../map/GameMap';
+import {
+  allocCanvas,
+  freshSurfaceContext,
+  releaseSurface,
+  type CanvasSurface,
+} from '../core/canvasSurface';
 import { TILE_SIZE } from '../core/constants';
 import type { Mob } from '../creatures/Mob';
 import type { SpatialGrid } from '../core/SpatialGrid';
@@ -140,28 +146,15 @@ export class MiniMapSystem implements GameSystem {
   private readonly REVEAL_RADIUS = 10;
 
   /** Offscreen canvas caching revealed tile colors (1px per tile). */
-  private _tileCache: OffscreenCanvas | HTMLCanvasElement;
-  private _tileCacheCtx: OffscreenCanvasRenderingContext2D | CanvasRenderingContext2D;
+  private readonly _tileCache: CanvasSurface;
+  private readonly _tileCacheCtx: CanvasRenderingContext2D;
 
   constructor(private readonly gameMap: GameMap) {
     const sz = gameMap.structure.length;
     this.fogOfWar = new Uint8Array(sz * sz);
 
-    if (typeof OffscreenCanvas !== 'undefined') {
-      const c = new OffscreenCanvas(sz, sz);
-      const tctx = c.getContext('2d');
-      if (!tctx) throw new Error('Failed to get 2D context for minimap');
-      this._tileCache = c;
-      this._tileCacheCtx = tctx;
-    } else {
-      const c = document.createElement('canvas');
-      c.width = sz;
-      c.height = sz;
-      const tctx = c.getContext('2d');
-      if (!tctx) throw new Error('Failed to get 2D context for minimap');
-      this._tileCache = c;
-      this._tileCacheCtx = tctx;
-    }
+    this._tileCache = allocCanvas('minimap', sz, sz);
+    this._tileCacheCtx = freshSurfaceContext(this._tileCache);
     this._tileCacheCtx.fillStyle = worldPalette.minimap.unexplored;
     this._tileCacheCtx.fillRect(0, 0, sz, sz);
   }
@@ -668,6 +661,6 @@ export class MiniMapSystem implements GameSystem {
   }
 
   dispose(): void {
-    /* no-op — satisfies GameSystem interface */
+    releaseSurface(this._tileCache);
   }
 }
