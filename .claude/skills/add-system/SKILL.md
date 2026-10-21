@@ -167,3 +167,7 @@ path, roster identity across a checkpoint rewind, a kill paying out, floor loot
 surviving the door, destructibles indoors, `dispose` releasing the pack-alert
 grid, and a room gaining a fight from content alone. Run it after any change to
 `src/systems/kits/`.
+
+## Design debt
+
+If this work turns up hacky code, a fragile coupling, or a design that will make the next change harder, and it is beyond your task, record it in `docs/design-debt.md` (rules and entry shape are at the top of that file). Before building on a system, check that file for entries about it and honour their **Until then** lines.

@@ -96,3 +96,7 @@ Floor 2's spine seats a **stealth gate room** at chain index `stealthGateChainIn
 4. If it is drawn in the Y-sorted pass (anything that stands up), it also needs the decoration registries in `TileRenderer.ts` and `GameMap.ts`, and the minimap colours. A missed entry renders bare floor and still typechecks. The full list is under "Tile types and registries" in the "Circus grounds" section of `docs/town.md`.
 
 Finish with the `dev-workflow` gates (typecheck, lint, format).
+
+## Design debt
+
+If this work turns up hacky code, a fragile coupling, or a design that will make the next change harder, and it is beyond your task, record it in `docs/design-debt.md` (rules and entry shape are at the top of that file). Before building on a system, check that file for entries about it and honour their **Until then** lines.

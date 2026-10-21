@@ -41,7 +41,7 @@ Read the `add-ui` skill before touching any menu, dialog, HUD element or on-scre
 
 Line-number references (`see Mob.ts:412`, "the check on line 88") rot on the _next edit to that file_, which makes them the most fragile pointer available and the one most likely to be silently wrong when read. This applies with full force to plan documents, which are written to be executed by an agent that will trust what they say: a plan citing `Foo.ts:317` sends that agent to whatever happens to sit on line 317 that day. Point at a file, a function, a class, a constant, or a distinctive quoted fragment of the code — those survive edits, and they can be found by grep. If the reason lives only in a plan, write the reason itself into the comment instead of pointing at the document.
 
-Exactly four docs are durable references describing the shipped system, and those may be cited by filename: `docs/town.md`, `docs/over-city-reference.md`, `docs/asset-management.md`, `docs/difficulty-fairness-rules.md`. Every other file in `docs/` is a plan and must never be cited from code, from a skill, or from another doc.
+Exactly four docs are durable references describing the shipped system, and those may be cited by filename: `docs/town.md`, `docs/over-city-reference.md`, `docs/asset-management.md`, `docs/difficulty-fairness-rules.md`. One more doc is durable but is a register, not a description: `docs/design-debt.md` may be cited from skills and from this file, never from code. Every other file in `docs/` is a plan and must never be cited from code, from a skill, or from another doc.
 
 **No magic numbers.** Every numeric literal whose meaning isn't self-evident must be extracted into a named constant. This codebase accumulates lots of numbers (frame counts, tile sizes, damage values, pixel offsets, timers) — unnamed literals make them all look the same and make future changes brittle. When you encounter a pre-existing magic number while editing, refactor it into a named constant as part of that edit. Name the constant after what the number _means_, not what it _is_ (e.g. `TONGUE_STRIKE_FRAMES = 18`, not `FRAMES_18`).
 
@@ -59,3 +59,7 @@ Every `verify:*`/`gates:*` script prints one line when it passes. When it fails,
 **Subagents** run `npm run check` and the specific gates for their change, never `check:full` or broad sweeps. The orchestrating agent runs `check:full` and `verify:affected` once, after every subagent has finished. Several agents running full type-aware lints at once contend for the CPU and turn a two-minute check into fifteen.
 
 If any gate fails, fix the issue before proceeding. Do not skip or ignore failures.
+
+## Design Debt
+
+Take the clean, scalable path, never the shortcut. When you come across hacky code, a breach of common industry practice, or a design that will make later work harder, and it is beyond the scope of your task, add an entry to `docs/design-debt.md`, following the rules at the top of that file. Extend an existing entry rather than duplicating it. Never work around a recorded problem in a way that deepens it; each entry's **Until then** line says what to avoid.

@@ -264,3 +264,7 @@ same reason.
 | New gameplay mechanic              | `add-system`      |
 | New menu / dialog / HUD element    | `add-ui`          |
 | Running & verifying                | `dev-workflow`    |
+
+## Design debt
+
+If this work turns up hacky code, a fragile coupling, or a design that will make the next change harder, and it is beyond your task, record it in `docs/design-debt.md` (rules and entry shape are at the top of that file). Before building on a system, check that file for entries about it and honour their **Until then** lines.

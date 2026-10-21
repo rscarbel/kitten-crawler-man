@@ -124,3 +124,7 @@ A hireling is a player-owned `Mob` like Mongo, but paid for at the Desperado Clu
 8. **Gate.** Write `scripts/verifyMercenaries/<kit>.ts` (it falls under the `scripts/verifyMercenaries/*.ts` include in `tsconfig.scripts.json`) measuring each special by its effect — HP moved, bodies displaced — never by counting casts, each rule paired with a run that must fail; call it from `scripts/verify-mercenaries.ts`. The shared checks in `verifyMercenaries/lifecycle.ts` (spawn, follow, leash, credit, friendly fire, survivability) and the hub's save and death checks iterate every template, so a new hire is covered by them automatically. Run `npm run verify:mercenaries`, `verify:tactics`, and `verify:friendly-fire`; `npm run verify:companions-indoors` covers following into buildings and tower storeys, and `npm run verify:hireling-loss` covers the circus assault and other rooms that can seal a hire away from the party.
 
 Finish with the `dev-workflow` gates (typecheck, lint, format), plus `npm run verify:assets`, and `npm run verify:tactics` if the creature is tactics-eligible.
+
+## Design debt
+
+If this work turns up hacky code, a fragile coupling, or a design that will make the next change harder, and it is beyond your task, record it in `docs/design-debt.md` (rules and entry shape are at the top of that file). Before building on a system, check that file for entries about it and honour their **Until then** lines.
