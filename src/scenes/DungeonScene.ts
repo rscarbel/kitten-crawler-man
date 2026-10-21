@@ -4748,6 +4748,17 @@ export class DungeonScene extends GameplayScene {
    * normal-budget one — rather
    * than show them as stand-ins. A warm landing shows nothing.
    */
+  /**
+   * Readies the landing of a warp that moved the party within this floor. The
+   * sound groups are decided here rather than on the next update, because the
+   * screen the warp may raise halts updates, and a group the landing needs has
+   * to decode under it.
+   */
+  private settleAfterWarp(): void {
+    this.updateSfxGates();
+    this.coverWarpIfCrowdCold();
+  }
+
   private coverWarpIfCrowdCold(): void {
     const residency = this.townResidency;
     const request = this.warpLoadRequest;
@@ -4808,7 +4819,7 @@ export class DungeonScene extends GameplayScene {
     this.mercenarySystem.dismissForTransition(this.world.roster.mobs, this.world.roster.grid);
     this.attackCowSystem.dismiss(this.world.roster.mobs, this.world.roster.grid);
     this.placePartyAtTile(landing);
-    this.coverWarpIfCrowdCold();
+    this.settleAfterWarp();
     return true;
   }
 
@@ -5005,7 +5016,7 @@ export class DungeonScene extends GameplayScene {
     switch (route.kind) {
       case 'checkpoint':
         this.restoreFromCheckpoint(route.checkpoint);
-        this.coverWarpIfCrowdCold();
+        this.settleAfterWarp();
         break;
       case 'resumeSave':
         this.respawnFromSave(route.progress);
@@ -8304,13 +8315,14 @@ export class DungeonScene extends GameplayScene {
   }
 
   update(): void {
-    // Ahead of the arrival screen's return, so a group the arrival needs decodes under it.
-    this.updateSfxGates();
     // Ahead of everything, the town's streets included: the arrival's own work
     // is being done under this screen, and a world ticked behind it would be
     // played by nobody — a crowd walking off from where it was warmed, a save
     // taken of a floor the player has not seen.
     if (this.arrivalLoading.isOpen) return;
+    // Ahead of every halting return, so a sound the party walks into range of
+    // is decoding even while a menu or conversation holds the world.
+    this.updateSfxGates();
     this.yieldCitizenDialogToInterruption();
     const active = this.active();
     // Ahead of every halting return, because a conversation that halts the world
