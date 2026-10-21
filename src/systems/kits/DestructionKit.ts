@@ -19,6 +19,7 @@ import type { HumanPlayer } from '../../creatures/HumanPlayer';
 import { ALL_BREAKABLE_PROPS, DestructiblePropSystem } from '../DestructiblePropSystem';
 import type { DestructiblePropCheckpoint, DestructiblePropKind } from '../DestructiblePropSystem';
 import { DynamiteSystem } from '../DynamiteSystem';
+import { BOMBER_GOBLIN_CUES, blastCue } from '../bomberGoblinSoundCues';
 import type { SystemContext } from '../GameSystem';
 import { LootSystem } from '../LootSystem';
 import { GroundPickupSystem, type GroundPickupCheckpoint } from '../GroundPickupSystem';
@@ -132,9 +133,13 @@ export class DestructionKit {
 
     if (this.groundPickups.drainPickedUp()) audio?.play('picking_up_ground_object');
 
+    if (this.dynamite.stickLandSoundPending) {
+      this.dynamite.stickLandSoundPending = false;
+      audio?.playRandom(BOMBER_GOBLIN_CUES.stickLanded);
+    }
     if (this.dynamite.explosionSoundPending) {
       this.dynamite.explosionSoundPending = false;
-      audio?.play('dynamite_explosion');
+      audio?.playRandom(BOMBER_GOBLIN_CUES[blastCue(this.dynamite.explosionSoundKind)]);
     }
 
     return smashes.wood > 0 || smashes.iron > 0 || smashes.trash > 0;

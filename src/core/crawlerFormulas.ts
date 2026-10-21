@@ -3,8 +3,8 @@
  *
  * `HumanPlayer`, `CatPlayer` and `Player` compute their live numbers through
  * these, and `src/core/referenceCrawler.ts` computes an idealised crawler
- * through the same ones — so the difficulty-curve gate measures the formulas the
- * game actually runs rather than a copy of them that could drift.
+ * through the same ones — so it reads the formulas the game actually runs
+ * rather than a copy of them that could drift.
  */
 
 import type { StatName } from '../Player';

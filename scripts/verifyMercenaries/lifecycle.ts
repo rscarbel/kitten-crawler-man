@@ -1845,7 +1845,7 @@ function makeFightRoom(): GameMap {
 }
 
 function levelOwner(human: HumanPlayer): void {
-  const reference = referenceStats('human', 'balanced', PARTY_LEVEL);
+  const reference = referenceStats('human', PARTY_LEVEL);
   for (const stat of ALL_STATS) human.setBaseStat(stat, reference.stats[stat]);
   human.level = PARTY_LEVEL;
   human.hp = human.maxHp;

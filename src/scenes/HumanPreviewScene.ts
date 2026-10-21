@@ -36,6 +36,7 @@ import {
   type CarlHeldDraw,
   type CarlStowedDraw,
   drawHumanSelection,
+  explosiveHeldDraw,
   type HumanRowSelection,
   isGaitCycle,
   motionSetOfRow,
@@ -303,7 +304,7 @@ export class HumanPreviewScene extends PreviewScene {
           top,
           size,
           selection,
-          this.rowHeld(),
+          this.rowHeld(selection),
           this.rowStowed(selection),
         );
       });
@@ -319,8 +320,14 @@ export class HumanPreviewScene extends PreviewScene {
     this.renderChrome(ctx);
   }
 
-  /** The picked weapon in his fist on the row pane's cells, where the row closes it on one. */
-  private rowHeld(): CarlHeldDraw | null {
+  /**
+   * What is in his fist on the row pane's cells: a stick of dynamite on the
+   * rows that throw one, else the picked weapon where the row closes his fist
+   * on one.
+   */
+  private rowHeld(selection: HumanRowSelection): CarlHeldDraw | null {
+    const explosive = explosiveHeldDraw(HELD_VISUALS.prop_dynamite, selection);
+    if (explosive !== null) return explosive;
     const id = this.pickedWeapon;
     const look = id === null ? null : weaponLook(id);
     return look === null ? null : { look, phase: 0 };

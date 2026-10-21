@@ -1174,8 +1174,7 @@ party and is snapped beside them if that takes longer than `MIDGE_CALL_TIMEOUT_S
   three for the cow — drawn from `ESCORT_AMBUSH_KINDS` within `ESCORT_KIND_CAPS` (three
   ruins ghouls at most), levelled like the siege and fielded as lesser dead at
   `ESCORT_BODY_HEALTH_SHARE` of their kind's health (`fieldAsLesserDead`); both that and
-  `MIDGE_ESCORT_HP` are tuned by playtest. `verify:difficulty-curve` prices a wave a third
-  at a time, the thirds that reach the party back to back. They come up one after
+  `MIDGE_ESCORT_HP` are tuned by playtest. They come up one after
   another behind Midge, on one bearing per wave swung up to forty degrees off straight
   behind her, each at the first spot along it the party cannot see, so just past the
   screen's edge whichever way the road runs (`offscreenSpawns.ts`, the siege's rules);

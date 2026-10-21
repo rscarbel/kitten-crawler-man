@@ -9,9 +9,11 @@
  * together, which is why it was built before the goblin rework shipped rather
  * than left as a nice-to-have.
  *
- * All four archetypes play every row simultaneously on a labelled grid, at a
+ * The armed archetypes play every row simultaneously on a labelled grid, at a
  * chosen zoom and speed, over a backdrop that cycles the real floor palettes so
  * the contrast check happens against the thing the goblin actually stands on.
+ * The two bombers have rows of their own and play on a second grid, behind the
+ * "show bombers" control.
  * Killing an archetype fires the real `BodyPartGoreSystem`, which is the only
  * way to check that pieces tumble in place rather than orbiting.
  */
@@ -34,6 +36,13 @@ import {
   GOBLIN_IDLE_FPS,
 } from '../sprites/goblinSprite';
 import { figureFrameCount } from '../sprites/figure/figureDef';
+import {
+  GOBLIN_BOMBER_ROWS,
+  GOBLIN_BOMBER_EVENT_FRAMES,
+  type GoblinBomberRow,
+} from '../sprites/art/goblinBomberFigure';
+import { GOBLIN_BOMBER_ARCHETYPES, type GoblinBomberArchetype } from '../sprites/art/goblinArt';
+import { drawGoblinBomberSprite } from '../sprites/goblinBomberSprite';
 import { previewInk } from '../ui/theme/previewInk';
 
 const ARCHETYPES: ReadonlyArray<GoblinArchetype> = ['sword', 'axe', 'mace', 'warhammer', 'bow'];
@@ -80,6 +89,32 @@ const ROWS: ReadonlyArray<RowSpec> = [
   { state: 'attack_heavy', fps: 14 },
   { state: 'flinch', fps: 12 },
 ];
+
+/** The bombers' rows, in the order the grid shows them, and how fast each plays. */
+const BOMBER_ROWS: ReadonlyArray<{ readonly state: GoblinBomberRow; readonly fps: number }> = [
+  { state: 'walk', fps: 10 },
+  { state: 'run', fps: 14 },
+  { state: 'idle', fps: GOBLIN_IDLE_FPS },
+  { state: 'light', fps: 12 },
+  { state: 'aim', fps: 8 },
+  { state: 'throw', fps: 14 },
+  { state: 'flinch', fps: 12 },
+];
+
+/** The frame a bomber row's event lands on, outlined like a strike's impact. */
+function bomberPeakFrameOf(archetype: GoblinBomberArchetype, row: GoblinBomberRow): number | null {
+  const events = GOBLIN_BOMBER_EVENT_FRAMES[archetype];
+  if (row === 'light') return events.fuseCatch;
+  if (row === 'throw') return events.release;
+  return null;
+}
+
+/** How many frames a bomber row holds, or null when that bomber does not paint it. */
+function bomberFrameCountOf(archetype: GoblinBomberArchetype, row: GoblinBomberRow): number | null {
+  return (
+    GOBLIN_BOMBER_ROWS[archetype].find((candidate) => candidate.name === row)?.frameCount ?? null
+  );
+}
 
 /** How many frames a row actually holds, from the figure that paints it. */
 function frameCountOf(weapon: GoblinArchetype, state: GoblinState): number {
@@ -134,6 +169,8 @@ export class GoblinPreviewScene extends PreviewScene {
   /** Fractional frame counter, so a 0.25× speed still advances. */
   private clock = 0;
   private stepRequested = false;
+  /** The armed goblins share one grid and the bombers another: their rows differ. */
+  private showBombers = false;
 
   update(): void {
     if (this.stepRequested) {
@@ -170,6 +207,12 @@ export class GoblinPreviewScene extends PreviewScene {
     const cell = this.cellSize();
     const gridLeft = MARGIN + ROW_LABEL_WIDTH;
     const gridTop = this.headerBottom + MARGIN + LABEL_SIZE;
+
+    if (this.showBombers) {
+      this.renderBombers(ctx, gridLeft, gridTop);
+      this.renderChrome(ctx);
+      return;
+    }
 
     ARCHETYPES.forEach((weapon, column) => {
       const x = gridLeft + column * (cell.w + CELL_PADDING);
@@ -257,6 +300,65 @@ export class GoblinPreviewScene extends PreviewScene {
     this.renderChrome(ctx);
   }
 
+  private renderBombers(ctx: CanvasRenderingContext2D, gridLeft: number, gridTop: number): void {
+    const cell = this.cellSize();
+    const tile = BASE_TILE_SIZE * ZOOM_LEVELS[this.zoomIndex];
+    const elapsedSeconds = this.clock / FRAMES_PER_SECOND;
+    GOBLIN_BOMBER_ARCHETYPES.forEach((archetype, column) => {
+      worldText(ctx, archetype, {
+        x: gridLeft + column * (cell.w + CELL_PADDING) + cell.w / 2,
+        y: gridTop - LABEL_SIZE - LABEL_GAP,
+        size: LABEL_SIZE,
+        align: 'center',
+        color: previewInk.grid.caption,
+        outline: true,
+      });
+    });
+    BOMBER_ROWS.forEach((row, rowIndex) => {
+      const y = gridTop + rowIndex * (cell.h + CELL_PADDING);
+      worldText(ctx, row.state, {
+        x: MARGIN,
+        y: y + cell.h / 2 - LABEL_SIZE,
+        size: LABEL_SIZE,
+        color: previewInk.grid.caption,
+        outline: true,
+      });
+      GOBLIN_BOMBER_ARCHETYPES.forEach((archetype, column) => {
+        const frames = bomberFrameCountOf(archetype, row.state);
+        if (frames === null) return;
+        const x = gridLeft + column * (cell.w + CELL_PADDING);
+        const shown = Math.floor(elapsedSeconds * row.fps) % frames;
+        ctx.save();
+        ctx.beginPath();
+        ctx.rect(x, y, cell.w, cell.h);
+        ctx.clip();
+        drawGoblinBomberSprite(ctx, {
+          archetype,
+          x: x + cell.w / 2 - tile / 2,
+          y: y + cell.h * GROUND_FRACTION - tile,
+          tileSize: tile,
+          facingX: 1,
+          state: row.state,
+          frame: shown,
+        });
+        ctx.restore();
+        ctx.strokeStyle = previewInk.grid.cellBorder;
+        ctx.strokeRect(x, y, cell.w, cell.h);
+        if (shown !== bomberPeakFrameOf(archetype, row.state)) return;
+        ctx.strokeStyle = previewInk.grid.impactFrame;
+        ctx.lineWidth = PEAK_FRAME_OUTLINE_WIDTH;
+        const outlineInset = PEAK_FRAME_OUTLINE_WIDTH / 2;
+        ctx.strokeRect(
+          x + outlineInset,
+          y + outlineInset,
+          cell.w - PEAK_FRAME_OUTLINE_WIDTH,
+          cell.h - PEAK_FRAME_OUTLINE_WIDTH,
+        );
+        ctx.lineWidth = 1;
+      });
+    });
+  }
+
   protected previewTitle(): string {
     return 'goblin preview — ?goblins';
   }
@@ -293,6 +395,13 @@ export class GoblinPreviewScene extends PreviewScene {
         label: `speed ${SPEED_LEVELS[this.speedIndex]}x`,
         onTap: () => {
           this.speedIndex = (this.speedIndex + 1) % SPEED_LEVELS.length;
+        },
+      },
+      {
+        id: 'family',
+        label: this.showBombers ? 'show armed' : 'show bombers',
+        onTap: () => {
+          this.showBombers = !this.showBombers;
         },
       },
       {

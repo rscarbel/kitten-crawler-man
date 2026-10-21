@@ -72,6 +72,8 @@ const SPARK_FANS: readonly (readonly number[])[] = [
 ];
 /** The flare on the tick the fuse catches: a wider halo than the steady burn. */
 const CATCHING_HALO_SCALE = 1.25;
+/** How far a lit fuse's spark, at its catching flare, reaches from the fuse's tip. */
+export const FUSE_SPARK_REACH = Math.max(SPARK_HALO_RADIUS, SPARK_RAY_LENGTH) * CATCHING_HALO_SCALE;
 
 /**
  * The looks a stick can be posed with:
@@ -138,7 +140,7 @@ export const dynamiteReach: PropReach = (grip, prop) =>
     grip.centre,
     Math.hypot(STICK_LENGTH * (1 - STICK_GRIP_SHARE) + FUSE_LENGTH, FUSE_LENGTH * FUSE_BEND) *
       (prop.scale ?? 1) +
-      Math.max(SPARK_HALO_RADIUS, SPARK_RAY_LENGTH) * CATCHING_HALO_SCALE,
+      FUSE_SPARK_REACH,
   );
 
 export const drawDynamite: PropPainter = (ctx, grip, prop, _view, behindHand) => {
@@ -196,8 +198,17 @@ export const drawDynamite: PropPainter = (ctx, grip, prop, _view, behindHand) =>
   });
   ctx.restore();
 
+  paintFuseSpark(ctx, fuseTip, prop);
+};
+
+/**
+ * The spark at a fuse's tip for the prop's variant: none unlit, a flare as it
+ * catches, a flickering fan while it burns. Shared by every fused prop, so a
+ * stick and a bomb burn alike.
+ */
+export function paintFuseSpark(ctx: CanvasRenderingContext2D, tip: Pt, prop: HeldProp): void {
   const fan = sparkFanOf(prop);
   if (fan === null) return;
   const haloScale = prop.variant === 'catching' ? CATCHING_HALO_SCALE : 1;
-  drawSpark(ctx, fuseTip, fan, haloScale);
-};
+  drawSpark(ctx, tip, fan, haloScale);
+}

@@ -13,7 +13,8 @@
  * written as pages, `-p1.png`, `-p2.png`, …. Tools are shown on their swings, every
  * tier at the tile; weapons on every row their grip and weight play — stance,
  * stride, each blow standing and one version on the move, the draw and the
- * stow, the weapon at rest until the fist closes on it.
+ * stow, the weapon at rest until the fist closes on it; a thrown explosive
+ * on the light, hold and throw rows, its fuse as each frame has it.
  *
  * `--part=hands` paints the grip alone at six times the cell's density, in
  * all three views, through a roll of the hand round the handle from knuckles
@@ -34,6 +35,7 @@ import { carriedGripOf } from '../src/sprites/art/human/carry.js';
 import { BARE_CARL_OUTFIT } from '../src/sprites/garments/human/carlDressing.js';
 import {
   CHOP_ROWS,
+  explosiveRowNames,
   FRAME_H,
   FRAME_W,
   HUMAN_ROW_TABLE,
@@ -50,7 +52,11 @@ import {
   HUMAN_SCALE,
   TILE_SCALE,
 } from '../src/sprites/art/human/figureScale.js';
-import { drawHumanFigureSelection, motionSetOfRow } from '../src/sprites/humanSprite.js';
+import {
+  drawHumanFigureSelection,
+  explosiveHeldDraw,
+  motionSetOfRow,
+} from '../src/sprites/humanSprite.js';
 import { motionSetOf } from '../src/sprites/art/human/motionSets.js';
 import { carlSocketsAt } from '../src/sprites/art/human/sockets.js';
 import { beginFigureFrame } from '../src/sprites/figure/figureFrameCache.js';
@@ -58,6 +64,7 @@ import { HELD_VISUALS, stowedPlacementOfHeld } from '../src/sprites/held/heldVis
 import {
   HELD_VISUAL_IDS,
   type HeldVisualId,
+  THROWN_PROP_VISUAL_IDS,
   TOOL_HELD_VISUAL_IDS,
   WEAPON_HELD_VISUAL_IDS,
 } from '../src/sprites/held/heldVisualIds.js';
@@ -178,6 +185,12 @@ function showings(only: string | null): Showing[] {
         rows: weaponRows(look),
       };
     }),
+    ...THROWN_PROP_VISUAL_IDS.map((id) => ({
+      id,
+      look: HELD_VISUALS[id],
+      figure: base,
+      rows: explosiveRowNames(),
+    })),
   ];
   if (only === null) return list;
   const tool = TOOL_HELD_VISUAL_IDS.find((id) => id === only);
@@ -218,7 +231,7 @@ function strip(
       TILE_TOP_SHARE * tile,
       tile,
       { row, frame, flipX },
-      { look, phase: 0 },
+      explosiveHeldDraw(look, { row, frame, flipX }) ?? { look, phase: 0 },
       stowed,
     );
   }
@@ -252,9 +265,11 @@ function bandsFor(showing: Showing): Band[] {
       });
     }
   }
+  const thrown = THROWN_PROP_VISUAL_IDS.some((id) => id === showing.id);
   const tiers =
     showing.figure.def.id === humanFigureFor(BARE_CARL_OUTFIT, null).def.id &&
-    showing.id !== 'quest_scythe'
+    showing.id !== 'quest_scythe' &&
+    !thrown
       ? TOOL_HELD_VISUAL_IDS.filter((id) => id.includes('pick') === showing.id.includes('pick'))
       : [showing.id];
   for (const row of showing.rows) {

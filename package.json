@@ -223,7 +223,6 @@
     "verify:eye-shine": "tsx scripts/gate.ts tsx scripts/verify-eye-shine.ts",
     "verify:dungeon-life": "tsx scripts/gate.ts tsx scripts/verify-dungeon-life.ts",
     "verify:wall-fixtures": "tsx scripts/gate.ts tsx scripts/verify-wall-fixtures.ts",
-    "verify:difficulty-curve": "tsx scripts/gate.ts tsx scripts/verify-difficulty-curve.ts",
     "verify:difficulty": "tsx scripts/gate.ts tsx scripts/verify-difficulty.ts",
     "verify:difficulty-guard": "tsx scripts/gate.ts tsx scripts/verify-difficulty-guard.ts",
     "verify:xp-split": "tsx scripts/gate.ts tsx scripts/verify-xp-split.ts",

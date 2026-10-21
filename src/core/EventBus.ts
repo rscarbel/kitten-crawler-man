@@ -34,6 +34,7 @@ import type { ToolKind, ToolTier } from './toolTiers';
 import type { ProcessingStationKind } from '../systems/briarHollow/processingStations';
 import type { BoxCategory, BoxTier } from './AchievementManager';
 import type { ChallengeSummary } from '../ai/show/challenges';
+import type { ExplosionVariant } from '../sprites/dynamiteExplosion';
 
 export interface GameEvents {
   mobKilled: {
@@ -123,7 +124,8 @@ export interface GameEvents {
    */
   stewRefusedOnCooldown: { eater: Player };
 
-  dynamiteUsed: { player: 'Human' | 'Cat' };
+  /** A thrown explosive left a crawler's hand; `item` is the one spent. */
+  dynamiteUsed: { player: 'Human' | 'Cat'; item: ItemId };
 
   /** A player's HP dropped below 25 % of max. */
   healthLow: { player: 'Human' | 'Cat'; hp: number; maxHp: number };
@@ -286,6 +288,14 @@ export interface GameEvents {
    * hit, like livestock bolting.
    */
   blastLanded: { x: number; y: number; radiusPx: number };
+
+  /**
+   * A crawler's or a goblin's dynamite or black powder bomb, or a gas bottle
+   * set off through `DynamiteSystem`, went off at world pixel (`x`, `y`). Separate from `blastLanded`, which a trebuchet boulder
+   * also raises, so a reaction tied to the charge itself — the camera kick —
+   * can weigh one kind of charge against the other.
+   */
+  explosiveDetonated: { x: number; y: number; kind: ExplosionVariant };
 
   /** The Briar Hollow defense quest moved to a new phase. */
   villageQuestPhaseChanged: { phase: VillageQuestPhase };

@@ -20,7 +20,7 @@
 
 import {
   ARCHETYPE_SCALE,
-  GOBLIN_ARCHETYPES,
+  GOBLIN_ARMED_ARCHETYPES,
   GOBLIN_PLUMBER_SCALE,
   GOBLIN_PLUMBER_STYLE,
   GOBLIN_STYLES,
@@ -40,7 +40,7 @@ import {
   buildSkeleton,
   seededNoise,
   shoulderHeight,
-  type GoblinArchetype,
+  type GoblinArmedArchetype,
   type GoblinPose,
   type GoblinProp,
   type GoblinStyle,
@@ -90,7 +90,7 @@ export const ROWS: readonly RowSpec[] = [
  * `src/sprites/goblinSprite.ts` carries the same numbers and an art gate
  * asserts the two match — if one moves, both move.
  */
-export const IMPACT_FRAMES: Record<GoblinArchetype, { light: number; heavy: number }> = {
+export const IMPACT_FRAMES: Record<GoblinArmedArchetype, { light: number; heavy: number }> = {
   sword: { light: 6, heavy: 8 },
   axe: { light: 6, heavy: 9 },
   mace: { light: 7, heavy: 8 },
@@ -132,7 +132,7 @@ export function goblinRowFrameCount(name: string): number {
 }
 
 /** Progress at which an attack's impact frame lands. */
-function impactProgress(archetype: GoblinArchetype, kind: 'light' | 'heavy'): number {
+function impactProgress(archetype: GoblinArmedArchetype, kind: 'light' | 'heavy'): number {
   const row = rowByName(kind === 'light' ? 'attack_light' : 'attack_heavy');
   return shotProgress(IMPACT_FRAMES[archetype][kind], row.frameCount);
 }
@@ -173,7 +173,7 @@ function groundPerCycleTiles(gait: GaitConfig, drawScale: number): number {
 }
 
 /** Ground one of an archetype's walk cycles covers, in tiles. */
-export function goblinWalkGroundPerCycleTiles(archetype: GoblinArchetype): number {
+export function goblinWalkGroundPerCycleTiles(archetype: GoblinArmedArchetype): number {
   return groundPerCycleTiles(GAITS[archetype], ARCHETYPE_SCALE[archetype]);
 }
 
@@ -193,7 +193,7 @@ function footTarget(phase: number, config: GaitConfig): Pt {
   return { x, y };
 }
 
-const GAITS: Record<GoblinArchetype, GaitConfig> = {
+const GAITS: Record<GoblinArmedArchetype, GaitConfig> = {
   sword: {
     stride: 0.34,
     lift: 0.13,
@@ -300,7 +300,7 @@ interface CarryConfig {
 /** How steeply a slung bow hangs from the fist. Near vertical; see {@link CarryConfig.angle}. */
 const BOW_CARRY_ANGLE = deg(62);
 
-const CARRIES: Record<GoblinArchetype, CarryConfig> = {
+const CARRIES: Record<GoblinArmedArchetype, CarryConfig> = {
   sword: { hipFraction: 1.25, heightFraction: 0.46 },
   axe: { hipFraction: 1.6, heightFraction: 0.62 },
   mace: { hipFraction: 1.25, heightFraction: 0.46 },
@@ -315,7 +315,7 @@ const CARRIES: Record<GoblinArchetype, CarryConfig> = {
   bow: { hipFraction: 3.6, heightFraction: 0.62, angle: BOW_CARRY_ANGLE },
 };
 
-function carryHand(archetype: GoblinArchetype, style: GoblinStyle): Pt {
+function carryHand(archetype: GoblinArmedArchetype, style: GoblinStyle): Pt {
   const carry = CARRIES[archetype];
   return {
     x: style.proportions.hipHalfWidth * carry.hipFraction,
@@ -364,7 +364,7 @@ function groundDrop(prop: GoblinProp): number {
 
 /** The carry angle for one archetype: its stated one, or the solved one. */
 function carryAngleFor(
-  archetype: GoblinArchetype,
+  archetype: GoblinArmedArchetype,
   style: GoblinStyle,
   prop: GoblinProp,
   handY: number,
@@ -416,7 +416,7 @@ const FREE_ARM_SWING_SHARE = 0.7;
 const WALK_HEAD_NOD = deg(2);
 
 function walkPose(
-  archetype: GoblinArchetype,
+  archetype: GoblinArmedArchetype,
   style: GoblinStyle,
   prop: GoblinProp,
   phase: number,
@@ -490,7 +490,7 @@ interface IdleConfig {
   readonly earFlickFrame: number;
 }
 
-const IDLES: Record<GoblinArchetype, IdleConfig> = {
+const IDLES: Record<GoblinArmedArchetype, IdleConfig> = {
   sword: { blinkFrame: 5, earFlickFrame: 11 },
   axe: { blinkFrame: 9, earFlickFrame: 2 },
   mace: { blinkFrame: 7, earFlickFrame: 11 },
@@ -522,7 +522,7 @@ function windowedAt(frame: number, start: number, length: number, frameCount: nu
 }
 
 function idlePose(
-  archetype: GoblinArchetype,
+  archetype: GoblinArmedArchetype,
   style: GoblinStyle,
   prop: GoblinProp,
   frame: number,
@@ -658,7 +658,7 @@ const BOW_FIDGET = {
  * it can be dropped on top of the loop.
  */
 function idleBreakPose(
-  archetype: GoblinArchetype,
+  archetype: GoblinArmedArchetype,
   style: GoblinStyle,
   prop: GoblinProp,
   progress: number,
@@ -936,7 +936,7 @@ const SWING_WIND_SNARL = 0.4;
 const SWING_FOLLOW_JAW_CLOSE = 0.5;
 
 function swingPose(
-  archetype: GoblinArchetype,
+  archetype: GoblinArmedArchetype,
   style: GoblinStyle,
   prop: GoblinProp,
   spec: SwingSpec,
@@ -1071,7 +1071,7 @@ const THRUST_WIND_END = 0.32;
  * axis and must not rotate, or the "thrust" reads as a slap.
  */
 function thrustPose(
-  archetype: GoblinArchetype,
+  archetype: GoblinArmedArchetype,
   style: GoblinStyle,
   prop: GoblinProp,
   progress: number,
@@ -1371,9 +1371,9 @@ function bowShotPose(
 }
 
 /** Melee archetypes: every one whose attack rows are a swing or a thrust. */
-type MeleeArchetype = Exclude<GoblinArchetype, 'bow'>;
+type MeleeArchetype = Exclude<GoblinArmedArchetype, 'bow'>;
 
-function isMeleeArchetype(archetype: GoblinArchetype): archetype is MeleeArchetype {
+function isMeleeArchetype(archetype: GoblinArmedArchetype): archetype is MeleeArchetype {
   return archetype !== 'bow';
 }
 
@@ -1648,7 +1648,7 @@ const SWING_SPECS: Record<MeleeArchetype, { light: SwingSpec | null; heavy: Swin
  * what the gates exempt is exactly what the art covers.
  */
 export function accelerationWindow(
-  archetype: GoblinArchetype,
+  archetype: GoblinArmedArchetype,
   kind: 'light' | 'heavy',
 ): { readonly from: number; readonly to: number } {
   const row = rowByName(kind === 'light' ? 'attack_light' : 'attack_heavy');
@@ -1664,7 +1664,7 @@ export function accelerationWindow(
 }
 
 function attackPose(
-  archetype: GoblinArchetype,
+  archetype: GoblinArmedArchetype,
   style: GoblinStyle,
   prop: GoblinProp,
   kind: 'light' | 'heavy',
@@ -1712,7 +1712,7 @@ const FLINCH_RECOIL = {
  * kill produces no reaction at all and the goblin reads as unhittable.
  */
 function flinchPose(
-  archetype: GoblinArchetype,
+  archetype: GoblinArmedArchetype,
   style: GoblinStyle,
   prop: GoblinProp,
   progress: number,
@@ -1813,7 +1813,7 @@ function drawImpactSmear(
 }
 
 /** Frames either side of impact that carry a smear, and how strongly. */
-function smearStrength(archetype: GoblinArchetype, row: RowSpec, frame: number): number {
+function smearStrength(archetype: GoblinArmedArchetype, row: RowSpec, frame: number): number {
   if (row.name !== 'attack_light' && row.name !== 'attack_heavy') return 0;
   const kind = row.name === 'attack_light' ? 'light' : 'heavy';
   // The sword's stab does not rotate, so a crescent would be a lie. Neither does
@@ -1843,7 +1843,7 @@ const GORE_SEED = 90210;
  * assert against is the same object the frames were painted with rather than a
  * second one built from the same table.
  */
-function weaponFor(archetype: GoblinArchetype): GoblinProp {
+function weaponFor(archetype: GoblinArmedArchetype): GoblinProp {
   const style = GOBLIN_STYLES[archetype];
   return WEAPON_FACTORIES[archetype](style.palette, seededNoise(GORE_SEED + archetype.length));
 }
@@ -1858,7 +1858,7 @@ const NO_BOW_DRAW: BowDraw = { amount: 0, nocked: false };
  * a bow's draw is a property of the *weapon*, and putting it on `GoblinPose`
  * would give every other archetype a field it can only ever leave at zero.
  */
-function bowDrawFor(archetype: GoblinArchetype, row: RowSpec, frame: number): BowDraw {
+function bowDrawFor(archetype: GoblinArmedArchetype, row: RowSpec, frame: number): BowDraw {
   if (isMeleeArchetype(archetype)) return NO_BOW_DRAW;
   if (row.name !== 'attack_light' && row.name !== 'attack_heavy') return NO_BOW_DRAW;
   const kind = row.name === 'attack_light' ? 'light' : 'heavy';
@@ -1871,7 +1871,7 @@ function bowDrawFor(archetype: GoblinArchetype, row: RowSpec, frame: number): Bo
  * and idle through it.
  */
 export function poseFor(
-  archetype: GoblinArchetype,
+  archetype: GoblinArmedArchetype,
   style: GoblinStyle,
   prop: GoblinProp,
   row: RowSpec,
@@ -1916,7 +1916,7 @@ interface CellGeometry {
   readonly tileY: number;
 }
 
-const GEOMETRY: Record<GoblinArchetype, CellGeometry> = {
+const GEOMETRY: Record<GoblinArmedArchetype, CellGeometry> = {
   sword: { frameWidth: 152, frameHeight: 104, tileX: 44, tileY: 28 },
   axe: { frameWidth: 128, frameHeight: 112, tileX: 32, tileY: 36 },
   mace: { frameWidth: 112, frameHeight: 104, tileX: 24, tileY: 28 },
@@ -1925,7 +1925,7 @@ const GEOMETRY: Record<GoblinArchetype, CellGeometry> = {
 };
 
 /** The cell row the soles stand on: the bottom of the creature's own tile. */
-function groundYOf(archetype: GoblinArchetype): number {
+function groundYOf(archetype: GoblinArmedArchetype): number {
   return GEOMETRY[archetype].tileY + TILE_SCALE;
 }
 
@@ -1962,7 +1962,7 @@ export const GOBLIN_GORE_STATES: readonly string[] = [
  * Per archetype, not shared: the five builds are different sizes and their
  * pieces are cut from different bodies, so their ink centres do not agree.
  */
-export const GORE_RECENTRE: Readonly<Record<GoblinArchetype, ReadonlyMap<string, Pt>>> = {
+export const GORE_RECENTRE: Readonly<Record<GoblinArmedArchetype, ReadonlyMap<string, Pt>>> = {
   sword: new Map([
     ['gore_head', pt(0.0703125, -0.0234375)],
     ['gore_torso', pt(0, 0)],
@@ -2020,7 +2020,7 @@ export const GORE_RECENTRE: Readonly<Record<GoblinArchetype, ReadonlyMap<string,
   ]),
 };
 
-function goreRecentreOf(archetype: GoblinArchetype, state: string): Pt {
+function goreRecentreOf(archetype: GoblinArmedArchetype, state: string): Pt {
   const offset = GORE_RECENTRE[archetype].get(state);
   if (offset === undefined) {
     throw new Error(`no gore recentring offset for goblin_${archetype} "${state}"`);
@@ -2035,7 +2035,7 @@ function goreRecentreOf(archetype: GoblinArchetype, state: string): Pt {
  * frame would produce identical art at real cost; the cache paints a cell for
  * every frame of every row of five figures.
  */
-const WEAPONS: Record<GoblinArchetype, GoblinProp> = {
+const WEAPONS: Record<GoblinArmedArchetype, GoblinProp> = {
   sword: weaponFor('sword'),
   axe: weaponFor('axe'),
   mace: weaponFor('mace'),
@@ -2043,7 +2043,7 @@ const WEAPONS: Record<GoblinArchetype, GoblinProp> = {
   bow: weaponFor('bow'),
 };
 
-const GORE_PIECES: Record<GoblinArchetype, readonly GorePiece[]> = {
+const GORE_PIECES: Record<GoblinArmedArchetype, readonly GorePiece[]> = {
   sword: gorePieces(GOBLIN_STYLES.sword),
   axe: gorePieces(GOBLIN_STYLES.axe),
   mace: gorePieces(GOBLIN_STYLES.mace),
@@ -2052,17 +2052,21 @@ const GORE_PIECES: Record<GoblinArchetype, readonly GorePiece[]> = {
 };
 
 /** The weapon an archetype's frames are painted with, for the arc gates. */
-export function goblinWeapon(archetype: GoblinArchetype): GoblinProp {
+export function goblinWeapon(archetype: GoblinArmedArchetype): GoblinProp {
   return WEAPONS[archetype];
 }
 
 /** The pose one frame of one animation row resolves to, for the pose gates. */
-export function goblinPose(archetype: GoblinArchetype, row: RowSpec, frame: number): GoblinPose {
+export function goblinPose(
+  archetype: GoblinArmedArchetype,
+  row: RowSpec,
+  frame: number,
+): GoblinPose {
   return poseFor(archetype, GOBLIN_STYLES[archetype], WEAPONS[archetype], row, frame);
 }
 
 /** Where the weapon's tip sits on a frame, in figure units, or null if unarmed. */
-export function goblinWeaponTip(pose: GoblinPose, archetype: GoblinArchetype): Pt | null {
+export function goblinWeaponTip(pose: GoblinPose, archetype: GoblinArmedArchetype): Pt | null {
   if (pose.weaponAngle === null) return null;
   return along(pose.nearHand, pose.weaponAngle, WEAPONS[archetype].tipDistance);
 }
@@ -2071,7 +2075,7 @@ function poseRowOf(state: string): RowSpec | undefined {
   return ROWS.find((row) => row.name === state);
 }
 
-function gorePieceOf(archetype: GoblinArchetype, state: string): GorePiece {
+function gorePieceOf(archetype: GoblinArmedArchetype, state: string): GorePiece {
   const piece = GORE_PIECES[archetype].find((candidate) => candidate.state === state);
   if (piece === undefined) throw new Error(`no gore piece for goblin_${archetype} "${state}"`);
   return piece;
@@ -2086,7 +2090,7 @@ function gorePieceOf(archetype: GoblinArchetype, state: string): GorePiece {
  * cell is the spin the gore field applies about that point.
  */
 function paintGoblinFrame(
-  archetype: GoblinArchetype,
+  archetype: GoblinArmedArchetype,
   ctx: CanvasRenderingContext2D,
   state: string,
   frame: number,
@@ -2140,7 +2144,7 @@ function goblinStateFrames(): Record<string, number> {
   return frames;
 }
 
-function goblinFigureOf(archetype: GoblinArchetype): FigureDef {
+function goblinFigureOf(archetype: GoblinArmedArchetype): FigureDef {
   const geometry = GEOMETRY[archetype];
   return {
     id: `goblin_${archetype}`,
@@ -2166,7 +2170,7 @@ export const GOBLIN_WARHAMMER_FIGURE: FigureDef = goblinFigureOf('warhammer');
 export const GOBLIN_BOW_FIGURE: FigureDef = goblinFigureOf('bow');
 
 /** Every goblin figure by archetype — the five sheets this family replaced. */
-export const GOBLIN_FIGURES: Record<GoblinArchetype, FigureDef> = {
+export const GOBLIN_FIGURES: Record<GoblinArmedArchetype, FigureDef> = {
   sword: GOBLIN_SWORD_FIGURE,
   axe: GOBLIN_AXE_FIGURE,
   mace: GOBLIN_MACE_FIGURE,
@@ -2191,7 +2195,7 @@ export const GOBLIN_PLUMBER_ROWS: readonly RowSpec[] = ROWS.filter(
  * held tool's head on the floor and leans on it while it rolls its neck, which
  * on a wrench reads as a tradesman taking a breather rather than as a threat.
  */
-const PLUMBER_CHOREOGRAPHY: GoblinArchetype = 'sword';
+const PLUMBER_CHOREOGRAPHY: GoblinArmedArchetype = 'sword';
 
 /** Ground one of the plumber's walk cycles covers, in tiles. */
 export const GOBLIN_PLUMBER_WALK_GROUND_PER_CYCLE_TILES = groundPerCycleTiles(
@@ -2250,5 +2254,5 @@ export const GOBLIN_PLUMBER_FIGURE: FigureDef = {
   paintFrame: paintPlumberFrame,
 };
 
-export { ARCHETYPE_SCALE, GOBLIN_ARCHETYPES, GOBLIN_STYLES };
-export type { GoblinArchetype };
+export { ARCHETYPE_SCALE, GOBLIN_ARMED_ARCHETYPES, GOBLIN_STYLES };
+export type { GoblinArmedArchetype };

@@ -32,12 +32,15 @@ import { offset, pt } from '../carl/geometry';
 import { type HeldProp } from '../carl/props';
 import { burningDynamite, type DynamiteVariant } from '../carl/props/dynamite';
 import { type ZippoVariant } from '../carl/props/zippo';
+import { handGrip } from '../carl/limbs';
 import {
   type ArmAngles,
   buildSkeleton,
   type CarlPose,
   FULL_UPPER_ARM,
+  HAFT_IN_PLANE,
   type HandShape,
+  poseAsDrawn,
   setArmAngles,
   VIEWS,
 } from '../carl/rig';
@@ -55,6 +58,7 @@ import {
 import { IDLE_SIDE_FOOT_LEAD, idleBack, idleFront, idleSide } from './idles';
 import { KNUCKLES_TO_CAMERA, PALM_TO_CAMERA, towards, turnHand } from './handTurn';
 import type { Vec3 } from '../../held/heldPaint';
+import type { HandleRadius } from '../../held/gripArchetypes';
 
 // ── Row lengths and timing ───────────────────────────────────────────────────
 
@@ -323,24 +327,49 @@ function poseFromKey(view: CardinalView, key: ThrowKey, previous: ThrowKey | nul
   if (pose.rightArmAngles !== null) pose.rightHand = skeleton.rightArm.end;
   if (pose.leftArmAngles !== null) pose.leftHand = skeleton.leftArm.end;
 
-  const props: HeldProp[] = [
-    { kind: 'zippo', hand: 'left', variant: key.zippo, angle: deg(key.zippoAngle ?? 0) },
-  ];
-  if (key.stick !== null) {
-    props.push({
-      kind: 'dynamite',
-      hand: 'right',
-      variant: key.stick,
-      angle: deg(key.stickAngle ?? 0),
-    });
-  }
-  pose.heldProps = props;
+  const lighter: HeldProp = {
+    kind: 'zippo',
+    hand: 'left',
+    variant: key.zippo,
+    angle: deg(key.zippoAngle ?? 0),
+  };
+  pose.heldProps = [lighter];
   pose.leftHandShape = 'grip';
   pose.rightHandShape = handShapeHolding(key.stick !== null);
   turnHand(pose, 'left', LIGHTER_HAND_PALM[view]);
-  if (key.stick !== null) turnHand(pose, 'right', STICK_HAND_PALM[view]);
+  if (key.stick !== null) {
+    pose.rightHandOrientation = {
+      palmNormal: STICK_HAND_PALM[view],
+      haftDepth: HAFT_IN_PLANE,
+      haftAngle: explosiveHaftAngle(pose, view, deg(key.stickAngle ?? 0)),
+      handle: EXPLOSIVE_HANDLE,
+    };
+  }
   if (key.stick === null) pose.rightFist = OPEN_HAND_FIST;
   return pose;
+}
+
+/**
+ * The throwing fist closes round whatever explosive he lobs as round an
+ * equipment-chosen item: the explosive is composited into it at runtime, so
+ * one set of rows throws a stick or a bomb. Its fingers curl round the
+ * stick's thickness, which a bomb's iron fills as well.
+ */
+const EXPLOSIVE_HANDLE: HandleRadius = 'thick';
+
+/**
+ * The authored haft angle that lays the explosive `stickAngle` round from the
+ * way the drawn fist's bore runs — a prop's `angle`, carried into a hand
+ * orientation. A mirrored view reflects both the fist and the turn, so the
+ * angle is found on the drawn skeleton and reflected back.
+ */
+function explosiveHaftAngle(pose: CarlPose, view: CardinalView, stickAngle: number): number {
+  const spec = VIEWS[view];
+  const drawn = buildSkeleton(poseAsDrawn(pose, spec), spec);
+  const drawnArm = spec.mirrored ? drawn.leftArm : drawn.rightArm;
+  const drawnTurn = spec.mirrored ? Math.PI - stickAngle : stickAngle;
+  const drawnAxis = handGrip(drawnArm).haftAngle + drawnTurn;
+  return spec.mirrored ? Math.PI - drawnAxis : drawnAxis;
 }
 
 function keyAt(keys: readonly ThrowKey[], frame: number): ThrowKey {
@@ -409,6 +438,14 @@ const SIDE_COCKED: ThrowKey = {
   stickAngle: 0,
   zippo: 'closed',
 };
+
+/**
+ * Degrees the stick is tipped back in the fist as the arm draws past the ear
+ * in profile, so the burning fuse's spark clears the back of his head.
+ */
+const SIDE_DRAW_BACK_STICK_TILT = -10;
+/** The tilt on the frames either side of the arm passing the ear, easing the stick into it and out. */
+const SIDE_DRAW_BACK_STICK_EASE = -5;
 
 const SIDE_LIGHT: readonly ThrowKey[] = [
   idleKey('unlit'),
@@ -506,6 +543,7 @@ const SIDE_LIGHT: readonly ThrowKey[] = [
     rightFoot: { x: -0.19, lift: 0.07, pitch: 20 },
     leftFoot: { x: -SIDE_IDLE_FOOT },
     stick: burningDynamite(1),
+    stickAngle: SIDE_DRAW_BACK_STICK_EASE,
     zippo: 'closed',
   },
   {
@@ -522,6 +560,7 @@ const SIDE_LIGHT: readonly ThrowKey[] = [
     rightFoot: { x: SIDE_STANCE_BACK_FOOT },
     leftFoot: { x: -SIDE_IDLE_FOOT },
     stick: burningDynamite(2),
+    stickAngle: SIDE_DRAW_BACK_STICK_TILT,
     zippo: 'closed',
   },
   {
@@ -533,6 +572,7 @@ const SIDE_LIGHT: readonly ThrowKey[] = [
     right: { kind: 'angles', upper: -72, fore: -178 },
     left: { kind: 'angles', upper: 64, fore: 106 },
     stick: burningDynamite(3),
+    stickAngle: SIDE_DRAW_BACK_STICK_EASE,
   },
   SIDE_COCKED,
 ];
@@ -1186,4 +1226,27 @@ export function dynamiteHold(view: CardinalView, frame: number): CarlPose {
 
 export function dynamiteThrow(view: CardinalView, frame: number): CarlPose {
   return poseAt(view, THROW_KEYS[view], frame);
+}
+
+/** The three dynamite row families. */
+export type ThrowRowFamily = 'light' | 'hold' | 'throw';
+
+/**
+ * The fuse of the explosive in his throwing fist on a frame of a dynamite
+ * row, or null where it has left his hand: what the runtime picks the held
+ * explosive's picture by.
+ */
+export function explosiveFuseAt(
+  family: ThrowRowFamily,
+  view: CardinalView,
+  frame: number,
+): DynamiteVariant | null {
+  switch (family) {
+    case 'light':
+      return keyAt(LIGHT_KEYS[view], frame).stick;
+    case 'hold':
+      return holdKey(COCKED[view], frame).stick;
+    case 'throw':
+      return keyAt(THROW_KEYS[view], frame).stick;
+  }
 }

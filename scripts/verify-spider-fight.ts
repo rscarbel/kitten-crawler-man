@@ -4323,7 +4323,7 @@ function bossMusicSurvivesADeathRetry(): void {
 
 /**
  * The crawler party the time-to-kill is measured with: both crawlers at a party
- * level a player reaching the lab on schedule would hold, on the balanced build,
+ * level a player reaching the lab on schedule would hold, points spread evenly,
  * with no gear, skills or consumables.
  */
 const REFERENCE_PARTY_LEVEL = 8;
@@ -4599,13 +4599,13 @@ function fightAtLevel(partyLevel: number, seed: number, style: ReaderStyle): Fig
   }> = [
     {
       player: human,
-      cycle: referenceStats('human', 'balanced', partyLevel).attackCycle,
+      cycle: referenceStats('human', partyLevel).attackCycle,
       swing: { cycleIndex: 0, cooldown: 0 },
       escaping: null,
     },
     {
       player: cat,
-      cycle: referenceStats('cat', 'balanced', partyLevel).attackCycle,
+      cycle: referenceStats('cat', partyLevel).attackCycle,
       swing: { cycleIndex: 0, cooldown: 0 },
       escaping: null,
     },

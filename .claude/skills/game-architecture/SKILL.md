@@ -169,7 +169,7 @@ The painter, the row table and the gates are in the `bipedal-figure` skill (`ref
 
 ### Mob levels and tactics
 
-A mob is levelled once, at spawn: `applyMobLevel` multiplies its stats through the curves in `src/creatures/mobLevelScaling.ts` (the only place level math lives), then `applySpawnDifficulty` (`src/core/difficultyProfiles.ts`) stamps the profile's reward scale and rolls its tactics traits. Every spawn site calls both, in that order. The curves are held to an HP-share-per-fight target by `verify:difficulty-curve`; the reference crawler it measures against is `src/core/referenceCrawler.ts`.
+A mob is levelled once, at spawn: `applyMobLevel` multiplies its stats through the curves in `src/creatures/mobLevelScaling.ts` (the only place level math lives), then `applySpawnDifficulty` (`src/core/difficultyProfiles.ts`) stamps the profile's reward scale and rolls its tactics traits. Every spawn site calls both, in that order. The curves aim at an HP-share-per-fight target tuned by playtest.
 
 Traits (`src/creatures/tactics/`) are opt-in per creature via `Mob.tacticsEligibility` (default none) and owned by `Mob.tactics` (`MobTactics`). `block` is resolved in `Mob.takeDamageFrom` for every creature; movement traits are queried from the creature's own `updateAI` (`chooseMove` / `disengage` / `claimRiposte`), with `Goblin` as the reference. Tactics read the world through two per-frame publications from `MobUpdateLoop` — the mob grid (`setPackAlertGrid` in `packAlert.ts`) and marked hazard ground (`tactics/markedGround.ts`) — rather than holding a world reference. `verify:tactics` gates them; the rules are P6 in `docs/difficulty-fairness-rules.md`.
 

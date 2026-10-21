@@ -83,7 +83,11 @@ import {
   CIRCUS_STRUCTURE_TALL,
   CIRCUS_STRUCTURE_LOW,
 } from './tileTypes';
-import { isSightTransparentTileType, isWalkableTileType } from './walkability';
+import {
+  isLobBlockingTileType,
+  isSightTransparentTileType,
+  isWalkableTileType,
+} from './walkability';
 import type { Rect } from './roomDoorways';
 import { RegionMap, type RegionKind } from './regionMap';
 import { RegionCharacters } from './dungeon/regionCharacters';
@@ -2807,6 +2811,18 @@ export class GameMap {
       if (blocks(tileX, tileY)) return false;
     }
     return true;
+  }
+
+  /**
+   * Whether a lobbed bomb comes down against this tile rather than arcing over
+   * it: a real wall, a building (a sprite building's whole footprint, not only
+   * its anchor), or off the grid. Runtime block bits are ignored — they mark
+   * props, bodies and built structures, all of which a lob clears.
+   */
+  blocksLob(tileX: number, tileY: number): boolean {
+    if (!this.isInsideGrid(tileX, tileY)) return true;
+    if (this.isSpriteBuildingTile(tileX, tileY)) return true;
+    return isLobBlockingTileType(this.structure[tileY][tileX]);
   }
 
   /**

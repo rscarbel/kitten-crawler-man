@@ -276,7 +276,7 @@ section('A thrown stick of dynamite counts once, and not on an ally');
   const dynamite = new DynamiteSystem(stage.map);
   const stats = freshStats();
   // A tap drops the stick at his feet, which is where both targets stand.
-  check(dynamite.beginCharge(DYNAMITE_HOTBAR_SLOT, human), 'he lights a stick');
+  check(dynamite.beginCharge(DYNAMITE_HOTBAR_SLOT, human, 'goblin_dynamite'), 'he lights a stick');
   dynamite.release(human);
   for (let frame = 0; frame < DYNAMITE_FRAMES && hpLost(hostile) === 0; frame++) {
     dynamite.update(stage.ctx);

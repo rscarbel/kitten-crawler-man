@@ -1,4 +1,4 @@
-import type { FairyRoomRate, LevelDef } from './types';
+import type { EscortSpawnRule, FairyRoomRate, LevelDef } from './types';
 import { FLOOR_TWO_DEFEND_QUEST_INTENSITY } from './defendQuestIntensity';
 
 const FRAMES_PER_SECOND = 60;
@@ -88,6 +88,39 @@ const ARCHER_MIN_PER_ROOM = 1;
 const ARCHER_MAX_PER_ROOM = 2;
 const ARCHER_MIN_LEVEL = AMBIENT_MIN_LEVEL;
 const ARCHER_MAX_LEVEL = AMBIENT_MAX_LEVEL;
+
+/**
+ * A goblin room's own melee goblins. The floor plus the room's full back line —
+ * both archers and both bombers — fits under the per-room cap, so neither kind
+ * of escort is the one silently dropped; in a busy room the reserved escorts
+ * crowd the melee count down toward this floor.
+ */
+const GOBLIN_ROOM_MIN = 3;
+const GOBLIN_ROOM_MAX = 5;
+
+/**
+ * The bomber goblins, alongside goblins wherever they spawn: up to one of each
+ * with a goblin room or a hallway goblin, so a lone bomber is never what a
+ * room is made of.
+ */
+const BOMBER_MIN_PER_GROUP = 0;
+const BOMBER_MAX_PER_GROUP = 1;
+const BOMBER_ESCORTS: EscortSpawnRule[] = [
+  {
+    type: 'goblin_dynamiter',
+    minCount: BOMBER_MIN_PER_GROUP,
+    maxCount: BOMBER_MAX_PER_GROUP,
+    minLevel: AMBIENT_MIN_LEVEL,
+    maxLevel: AMBIENT_MAX_LEVEL,
+  },
+  {
+    type: 'goblin_bombardier',
+    minCount: BOMBER_MIN_PER_GROUP,
+    maxCount: BOMBER_MAX_PER_GROUP,
+    minLevel: AMBIENT_MIN_LEVEL,
+    maxLevel: AMBIENT_MAX_LEVEL,
+  },
+];
 
 /**
  * The goblin mother's bugaboo wave on this floor. A choke on the post-Krakaren
@@ -200,8 +233,8 @@ export const level2: LevelDef = {
     {
       type: 'goblin',
       chance: 0.25,
-      minCount: 3,
-      maxCount: 5,
+      minCount: GOBLIN_ROOM_MIN,
+      maxCount: GOBLIN_ROOM_MAX,
       minLevel: AMBIENT_MIN_LEVEL,
       maxLevel: AMBIENT_MAX_LEVEL,
       // Floor 2's goblin rooms always carry archers, and up to two of them: by
@@ -215,12 +248,19 @@ export const level2: LevelDef = {
           minLevel: ARCHER_MIN_LEVEL,
           maxLevel: ARCHER_MAX_LEVEL,
         },
+        ...BOMBER_ESCORTS,
       ],
     },
   ],
   hallwayMobs: [
     { type: 'troglodyte', chance: 0.3, minLevel: AMBIENT_MIN_LEVEL, maxLevel: AMBIENT_MAX_LEVEL },
-    { type: 'goblin', chance: 0.3, minLevel: AMBIENT_MIN_LEVEL, maxLevel: AMBIENT_MAX_LEVEL },
+    {
+      type: 'goblin',
+      chance: 0.3,
+      minLevel: AMBIENT_MIN_LEVEL,
+      maxLevel: AMBIENT_MAX_LEVEL,
+      escorts: BOMBER_ESCORTS,
+    },
     { type: 'rat', chance: 0.3, minLevel: AMBIENT_MIN_LEVEL, maxLevel: AMBIENT_MAX_LEVEL },
   ],
   bossRooms: [

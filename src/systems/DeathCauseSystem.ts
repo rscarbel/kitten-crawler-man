@@ -18,6 +18,7 @@ import {
   DEATH_EXPLOSION_ATTACK_TYPE,
 } from './FairyFireballSystem';
 import { NECRO_PULSE_ATTACK_TYPE } from '../creatures/Necromancer';
+import { BLACK_POWDER_ATTACK_TYPE, GOBLIN_DYNAMITE_ATTACK_TYPE } from './goblinBombConstants';
 
 /**
  * Maps a mob's class name (and optional attackType) to a DeathCause key.
@@ -184,6 +185,9 @@ export function causeFromDamageSource(source: DamageSource): DeathCause {
     if (attackType === DEATH_FLAME_ATTACK_TYPE) return 'fireFairyDeathFlame';
     if (attackType === DEATH_EXPLOSION_ATTACK_TYPE) return 'fireFairyDeathExplosion';
   }
+
+  if (attackType === GOBLIN_DYNAMITE_ATTACK_TYPE) return 'goblinDynamite';
+  if (attackType === BLACK_POWDER_ATTACK_TYPE) return 'goblinBlackPowder';
 
   if (mobType === 'KrakarenTentacle') return 'krakarenTentacleStrike';
 

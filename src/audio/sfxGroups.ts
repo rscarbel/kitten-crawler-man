@@ -9,6 +9,7 @@ import { TUTORIAL_CUES } from '../systems/tutorialSoundCues';
 import { TUTORIAL_LEVEL_ID } from '../levels/tutorial';
 import { INTERIOR_CUES } from '../systems/interiorInteractionSoundCues';
 import { POKER_CUES } from '../systems/casino/poker/pokerSoundCues';
+import { BOMBER_GOBLIN_CUES } from '../systems/bomberGoblinSoundCues';
 
 /**
  * Every take in a cue table that is decoded into a buffer. A cue table also
@@ -52,6 +53,12 @@ export type SfxGroup =
   | 'interiorInteractions'
   | 'tutorial'
   | 'misc';
+
+/**
+ * Every cue the Dynamite and Black Powder Goblins raise (`BOMBER_GOBLIN_CUES`):
+ * they spawn on all three floors and march in Briar Hollow's siege waves.
+ */
+const BOMBER_GOBLIN_SFX_IDS: readonly SoundId[] = decodedCueIds(BOMBER_GOBLIN_CUES);
 
 /**
  * Every cue a fairy, its spells or its death can raise. Fairies spawn in rooms
@@ -275,6 +282,10 @@ export const SFX_GROUPS: Record<SfxGroup, readonly SoundId[]> = {
     'cooldown_crisp',
     'death_sequence',
     'dynamite_explosion',
+    // The party's own dynamite landing and Black Powder Bomb going off, which
+    // can be thrown wherever a stick of dynamite can.
+    ...BOMBER_GOBLIN_CUES.stickLanded,
+    ...BOMBER_GOBLIN_CUES.blackPowderBlast,
     'entered_safe_room',
     'error',
     'error_taking_action',
@@ -460,6 +471,7 @@ export const SFX_GROUPS: Record<SfxGroup, readonly SoundId[]> = {
     ...DUNGEON_CUE_SFX_IDS,
     ...FAIRY_SFX_IDS,
     ...RAISED_SKELETON_SFX_IDS,
+    ...BOMBER_GOBLIN_SFX_IDS,
   ],
 
   /** Krakaren clone boss room, Ball of Swine, the spider lab quest, level2's llama/rat/arena. */
@@ -509,6 +521,7 @@ export const SFX_GROUPS: Record<SfxGroup, readonly SoundId[]> = {
     ...DUNGEON_CUE_SFX_IDS,
     ...FAIRY_SFX_IDS,
     ...RAISED_SKELETON_SFX_IDS,
+    ...BOMBER_GOBLIN_SFX_IDS,
   ],
 
   /**
@@ -534,6 +547,7 @@ export const SFX_GROUPS: Record<SfxGroup, readonly SoundId[]> = {
     'tree_fall_2',
     'tree_fall_3',
     'tree_fall_4',
+    ...BOMBER_GOBLIN_SFX_IDS,
   ],
 
   /**
@@ -675,6 +689,7 @@ export const SFX_GROUPS: Record<SfxGroup, readonly SoundId[]> = {
     'scythe_timing_perfect',
     'scythe_unhook',
     'station_upgrade_flourish',
+    ...BOMBER_GOBLIN_SFX_IDS,
   ],
 
   /**

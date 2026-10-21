@@ -36,6 +36,7 @@ export type ItemId =
   | 'marching_boots'
   | 'scroll_of_confusing_fog'
   | 'goblin_dynamite'
+  | 'black_powder_bomb'
   | 'gym_dumbbell'
   | 'gym_bench_press'
   | 'gym_treadmill'
@@ -402,6 +403,18 @@ export const ITEM_DEF: Record<ItemId, ItemDef> = {
       'A hissing stick of goblin-made dynamite. Only the Human can throw it. ' +
       'Hold the hotbar key to charge your throw — release to hurl it. ' +
       'Tap it to drop it at your feet. Warning: holding too long has consequences.',
+  },
+  black_powder_bomb: {
+    id: 'black_powder_bomb',
+    category: 'consumable',
+    name: 'Black Powder Bomb',
+    stackable: true,
+    canHotlist: true,
+    type: 'consumable',
+    description:
+      'A round cast-iron bomb packed with goblin black powder. Only the Human can throw it. ' +
+      'Thrown like dynamite — hold the hotbar key to charge, release to hurl — ' +
+      'but it explodes the moment it lands. A tap lobs it a short way clear of you.',
   },
   gym_dumbbell: {
     id: 'gym_dumbbell',

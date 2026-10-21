@@ -167,6 +167,11 @@ export class BrindleGrub extends Mob {
     return this.stage === STAGE_VESPA;
   }
 
+  /** The hatched hornet spits at the nearest mob as readily as at the party; the larvae hunt nothing. */
+  override get huntsOtherMobs(): boolean {
+    return this.isVespa;
+  }
+
   stage: GrubStage = STAGE_LARVA;
   private evolveTimer: number;
   private spitCooldown = 0;

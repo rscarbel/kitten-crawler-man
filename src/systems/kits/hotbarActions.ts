@@ -10,7 +10,7 @@
 import type { AbilityManager } from '../../core/AbilityManager';
 import { castShellWithGesture, isCastingShell } from '../../creatures/humanGestures';
 import { weaponStatsOf, type InventoryItem } from '../../core/ItemDefs';
-import type { DynamiteSystem } from '../DynamiteSystem';
+import { isThrownExplosive, type DynamiteSystem, type ThrownExplosiveId } from '../DynamiteSystem';
 import type { SkillBookReadRequest } from '../../ui/screens/inventory/InventoryActions';
 import type { SpellSystem } from '../SpellSystem';
 import type { MenusKit, PotionSlot } from './MenusKit';
@@ -64,10 +64,11 @@ export function activateHotbarSlot(
   const active = pm.active();
   const slot = active.inventory.actionBar.slots[hotbarIdx];
   // Any other slot, even an empty one, takes his hand back, and the
-  // dynamite's own slot pressed again is the way to put the stick away.
-  if (host.dynamite?.isReadied === true) {
-    host.dynamite.putAway(pm.human);
-    if (slot === null || slot.id === 'goblin_dynamite') return;
+  // readied item's own slot pressed again is the way to put it away.
+  const readiedItem = host.dynamite?.readiedItem ?? null;
+  if (readiedItem !== null) {
+    host.dynamite?.putAway(pm.human);
+    if (slot === null || slot.id === readiedItem) return;
   }
   if (slot === null) return;
   if (!active.canAct) {
@@ -128,13 +129,12 @@ export function activateHotbarSlot(
     return;
   }
 
-  if (slot.id === 'goblin_dynamite' && pm.human.isActive && host.dynamite !== null) {
+  if (isThrownExplosive(slot.id) && pm.human.isActive && host.dynamite !== null) {
     if (host.dynamite.isCharging) {
       releaseDynamite(host);
-      bus.emit('dynamiteUsed', { player: 'Human' });
     } else if (dynamiteGrip === 'ready') {
-      readyDynamite(host, host.dynamite);
-    } else if (!host.dynamite.beginCharge(hotbarIdx, pm.human)) {
+      readyDynamite(host, host.dynamite, slot.id);
+    } else if (!host.dynamite.beginCharge(hotbarIdx, pm.human, slot.id)) {
       refuseDynamiteInSafeRoom(host);
     }
     return;
@@ -170,8 +170,8 @@ export function refuseDynamiteInSafeRoom(host: Pick<HotbarHost, 'world' | 'menus
   host.menus.announce(DYNAMITE_SAFE_ROOM_REFUSAL);
 }
 
-function readyDynamite(host: HotbarHost, dynamite: DynamiteSystem): void {
-  if (!dynamite.ready(host.world.pm.human)) {
+function readyDynamite(host: HotbarHost, dynamite: DynamiteSystem, item: ThrownExplosiveId): void {
+  if (!dynamite.ready(host.world.pm.human, item)) {
     refuseDynamiteInSafeRoom(host);
     return;
   }
@@ -192,9 +192,10 @@ export function throwReadiedDynamiteAt(
 ): boolean {
   const { pm, bus } = host.world;
   const dynamite = host.dynamite;
-  if (dynamite?.isReadied !== true || !pm.human.isActive) return false;
+  const item = dynamite?.readiedItem ?? null;
+  if (dynamite === null || item === null || !pm.human.isActive) return false;
   if (!dynamite.throwReadiedAt(pm.human, worldX, worldY)) return true;
-  bus.emit('dynamiteUsed', { player: 'Human' });
+  bus.emit('dynamiteUsed', { player: 'Human', item });
   return true;
 }
 
@@ -214,13 +215,16 @@ export function refuseAnchorIndoors(host: Pick<HotbarHost, 'world' | 'menus'>): 
 export function releaseChargedDynamite(host: HotbarHost, hotbarIdx: number): boolean {
   if (host.dynamite?.chargingHotbarIdx !== hotbarIdx) return false;
   releaseDynamite(host);
-  host.world.bus.emit('dynamiteUsed', { player: 'Human' });
   return true;
 }
 
+/** Lets go of whatever he is charging and reports the throw. */
 function releaseDynamite(host: HotbarHost): void {
-  const { pm } = host.world;
+  const { pm, bus } = host.world;
+  const item = host.dynamite?.chargingItem ?? null;
+  if (item === null) return;
   host.dynamite?.release(pm.human);
+  bus.emit('dynamiteUsed', { player: 'Human', item });
 }
 
 /** The potion key means "any bottle you have", unlike a slot, which names one. */

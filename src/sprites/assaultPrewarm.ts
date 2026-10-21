@@ -42,6 +42,7 @@ import { GRAVE_BULL_ARRIVAL_ROWS } from './graveBullSprite';
 import { NECROMANCER_ARRIVAL_ROWS } from './necromancerSprite';
 import { RAISED_ARRIVAL_ROWS } from './raisedRatkinSprite';
 import { GOBLIN_FIGURES } from './art/goblinFigure';
+import { GOBLIN_BOMBER_FIGURES } from './art/goblinBomberFigure';
 import { RAT_FIGURE } from './art/ratFigure';
 import { COCKROACH_FIGURE } from './art/cockroachFigure';
 import { SKYFOWL_TOUGH_LOOKS } from './art/skyfowl/cast';
@@ -108,6 +109,8 @@ export type AssaultRosterKind =
   | 'skeleton_archer'
   | 'goblin'
   | 'goblin_archer'
+  | 'goblin_dynamiter'
+  | 'goblin_bombardier'
   | 'rat'
   | 'cockroach'
   | 'sky_fowl'
@@ -164,6 +167,18 @@ const ROSTER_KIND_ROWS: Readonly<Record<AssaultRosterKind, RosterKindRows>> = {
     figures: [GOBLIN_FIGURES.bow],
     walk: 'walk',
     attacks: ['attack_heavy', 'attack_light'],
+    views: 'single',
+  },
+  goblin_dynamiter: {
+    figures: [GOBLIN_BOMBER_FIGURES.dynamite],
+    walk: 'walk',
+    attacks: ['light', 'throw'],
+    views: 'single',
+  },
+  goblin_bombardier: {
+    figures: [GOBLIN_BOMBER_FIGURES.black_powder],
+    walk: 'walk',
+    attacks: ['light', 'aim', 'throw'],
     views: 'single',
   },
   rat: { figures: [RAT_FIGURE], walk: 'walk', attacks: ['bite'], views: THREE_VIEWS },

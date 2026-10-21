@@ -247,7 +247,7 @@ function fight(found: FoundRoom, options: JuicerFightSimOptions): JuicerFightMet
     bossRoom,
   };
 
-  const reference = referenceStats('human', 'balanced', SIM_PARTY_LEVEL);
+  const reference = referenceStats('human', SIM_PARTY_LEVEL);
   const swing = reference.attackCycle[0];
   let swingCooldown = 0;
 

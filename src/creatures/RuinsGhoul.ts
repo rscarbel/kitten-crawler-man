@@ -17,7 +17,7 @@ const ATTACK_ANIM_FRAMES = 26;
 /**
  * The overworld's commonest mob, met in pairs on every road; its bite is set
  * so that a badly built party can still walk away from the pair it cannot
- * avoid, which `verify:difficulty-curve` holds.
+ * avoid.
  */
 export const GHOUL_ATTACK_DAMAGE = 4;
 const COIN_DROP_MAX = 2;

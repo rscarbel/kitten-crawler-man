@@ -211,7 +211,7 @@ function runSeededFight(options: RunOptions): FightMetrics {
     return landed;
   };
 
-  const attack = referenceStats('human', 'balanced', SIM_PARTY_LEVEL).attackCycle[0];
+  const attack = referenceStats('human', SIM_PARTY_LEVEL).attackCycle[0];
   const reach = human.getMeleeRange();
   let swingCooldown = 0;
   let attacks = 0;

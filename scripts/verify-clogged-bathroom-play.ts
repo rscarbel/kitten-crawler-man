@@ -666,7 +666,7 @@ function throwBlow(rig: Rig, kind: DamageKind, goblin: Goblin, stand: Tile): voi
       // The blast is meant to catch the crawlers too; what it does to them is not under test here.
       human.godMode = true;
       cat.godMode = true;
-      dynamite.beginCharge(0, human);
+      dynamite.beginCharge(0, human, 'goblin_dynamite');
       dynamite.release(human);
       tickPinned(scene, DYNAMITE_FRAMES);
       human.godMode = false;

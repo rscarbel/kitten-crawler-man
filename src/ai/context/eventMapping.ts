@@ -73,7 +73,7 @@ export function describeDamageSource(source: DamageSource | null): string {
     case 'status':
       return humanize(source.effectType);
     case 'dynamite':
-      return 'their own dynamite';
+      return 'their own explosive';
     case 'environmental':
       return source.hazard === undefined ? 'the environment' : humanize(source.hazard);
     case 'doomsday':
@@ -137,7 +137,10 @@ export function subscribeGameEvents(bus: EventBus, host: EventMappingHost): Arra
       emit({
         type: 'dynamiteUsed',
         data: { crawler: sideName(e.player) },
-        summary: `${sideName(e.player)} lit a stick of goblin dynamite.`,
+        summary:
+          e.item === 'black_powder_bomb'
+            ? `${sideName(e.player)} lobbed a black powder bomb.`
+            : `${sideName(e.player)} lit a stick of goblin dynamite.`,
         importance: EVENT_IMPORTANCE.dynamiteUsed,
         witness: 'inSafeRoom',
         subject: sideName(e.player),
@@ -148,8 +151,8 @@ export function subscribeGameEvents(bus: EventBus, host: EventMappingHost): Arra
         type: 'dynamiteKills',
         data: { kills: e.kills, bossKilled: e.bossKilled },
         summary: e.bossKilled
-          ? `Carl blew up a boss with dynamite (${e.kills} dead in the blast).`
-          : `Carl's dynamite killed ${e.kills} enemies at once.`,
+          ? `Carl blew up a boss with an explosive (${e.kills} dead in the blast).`
+          : `Carl's explosive killed ${e.kills} enemies at once.`,
         importance: e.bossKilled ? IMPORTANCE.LANDMARK : EVENT_IMPORTANCE.dynamiteKills,
         witness: 'inSafeRoom',
         subject: 'Carl',

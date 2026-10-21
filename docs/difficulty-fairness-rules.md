@@ -4,18 +4,23 @@ The game applies real pressure — fights that can be lost, potions that get use
 Frustration is kept out by the rules below, not by keeping enemies weak. They are
 labelled **P1–P6** so code comments and review notes can name one without restating it.
 
-Three headless gates hold the rules. Each runs against the game's own exported
+Headless gates hold the behaviour rules. Each runs against the game's own exported
 constants, functions and creature classes rather than a copy, so a retuned formula
 either still satisfies the rule or fails the script:
 
-- `npm run verify:difficulty` — P2 and P5, plus the cadence curve and spawn level bands.
-- `npm run verify:difficulty-curve` — P1: the HP-share target, measured on every
-  regular creature, boss and bounty escort in the spawn tables; and P4's room-fight
-  band, measured on every floor that spawns rooms.
+- `npm run verify:difficulty` — P2 (telegraph floor, projectile caps, bombers,
+  dynamite) and P5, plus the cadence curve, walk-speed caps and spawn level bands.
+- `npm run verify:bounty` — the bounty rules under P1: every staged bounty mob carries
+  the per-blow cap and no blow it lands exceeds it, and the encounter commits a
+  stagger apart.
 - `npm run verify:tactics` — P6: which mobs learn a trait, how likely, and how each
   learned behaviour is bounded once running.
 - `npm run verify:fairies` — the fairy rules below, plus spawn tables, boss healers
   and flight.
+
+Balance — how much of the party's HP a fight costs, how long a kill takes — is tuned
+by playtest, and no gate holds it: a scripted party never plays as well or as
+strategically as a person, so what it loses says little about how hard a fight feels.
 
 ---
 
@@ -29,8 +34,8 @@ rest of the rising challenge comes from how **often** and how **well** enemies a
 
 Every per-level curve — HP, damage, walk speed, projectile speed, cadence — lives in
 `src/creatures/mobLevelScaling.ts`, each with its own named ceiling on the multiplier
-(`MAX_MOB_HP_MULTIPLIER` and siblings) so raising the level cap cannot silently
-extend a curve past what was checked. `Mob.applyMobLevel`, `Mob.scaledDamage` and
+(`MAX_MOB_HP_MULTIPLIER` and siblings) that caps the curve whatever level a mob is
+given, independent of the spawner's level cap. `Mob.applyMobLevel`, `Mob.scaledDamage` and
 every boss, summon and quest system that levels a mob read these functions; nothing
 rolls its own level arithmetic.
 
@@ -40,73 +45,20 @@ curve than the shared one: `LevelDef.levelledCurve`, a `LevelledCurve` in
 anything spawned at another mob's level. A level-1 mob is the same on every curve.
 Floor 1 is the one floor that uses it: it keeps `LEARNING_FLOOR_LEVELLED_CURVE`, the
 steeper, rounded-up curve it was tuned on, so none of its fights moved when the shared
-curve was flattened for the deeper floors. Which rules read the floor's curve: the
-room-fight band, the off-stat where-met rule, the boss ratio ceilings (walked only
-inside the floor's boss band, since a floor's curve never levels a boss past it) and
-the learning-floor gate. The regular creatures' ratio paths and the hits band read
-the shared curve — they are what keep the shared curve itself honest — and a floor on
-its own curve is held instead to the fights and blows it was tuned with:
-`verify:difficulty-curve` holds floor 1's rooms, treasure guards and bosses within a
-named tolerance of their tuned costs, either way, and its multi-point blows and health
-bars to their tuned values exactly.
+curve was flattened for the deeper floors.
 
-The HP and damage rates (`MOB_LEVEL_HP_SCALE`, `MOB_LEVEL_DAMAGE_SCALE`) are not
-picked by feel. They are whatever satisfies the target `verify:difficulty-curve`
-asserts, and the target's bounds are the named constants beside the curves in the
-same module:
+The HP and damage rates are tuned by playtest toward that flat share. A player who
+spent points badly should struggle, never be locked out.
 
-- **HP share per fight.** One mob, one stand-up fight, measured against the reference
-  crawler in `src/core/referenceCrawler.ts` — real stat, HP, dodge and damage
-  formulas, no gear, skills or consumables — and expressed as a ratio of the same
-  creature's share at party level 1. Along the expected path for the `balanced`
-  build, the trend (averaged over `HP_SHARE_TREND_WINDOW` party levels) never falls
-  by more than `HP_SHARE_DIP_TOLERANCE` from one level to the next until spawn levels
-  reach the cap, ends between `HP_SHARE_END_MIN` and `HP_SHARE_END_MAX`, and never
-  exceeds `HP_SHARE_CEILING`. A fight cheaper than `RATIO_CEILING_MIN_HP_SHARE` of max
-  HP is exempt from the ratio ceilings only.
-- **Hits to kill.** The `balanced` build kills a regular mob, where that mob is met,
-  in `HITS_TO_KILL_MIN`–`HITS_TO_KILL_MAX` blows (a fairy in up to
-  `FAIRY_HITS_TO_KILL_MAX`; see Fairies). At levels a floor has tracked the
-  party up to (below), it kills one within `TIME_TO_KILL_MAX_SECONDS` instead: time is
-  what tells a sponge from a tough mob once the mob has out-grown the blow count.
-- **The off-stat build never gets locked out.** A deliberately badly spent build
-  still beats every regular mob at its floor's authored band alone (share under
-  `OFF_STAT_HP_SHARE_MAX`). At levels a floor has tracked the party up to, it cannot:
-  that build's main attack never grows, and a tracked mob keeps levelling. There the
-  rule is held for the party it plays in, an off-stat human and an off-stat cat
-  together, at three strengths:
-  - **per mob, on normal:** they beat any one regular mob with more than half their
-    pooled bar left (`OFF_STAT_PARTY_HP_SHARE_MAX`); on hard, they still win;
-  - **the unavoidable fight, on normal:** they finish the smallest fight a crossing
-    of the floor cannot avoid — the roaming pair on every overworld road — with at
-    least `OFF_STAT_UNAVOIDABLE_HP_REMAINING_MIN` of their bar;
-  - **optional encounters whole, on easy:** a camp taken all at once may beat them
-    on normal, where they can walk around it, pull it apart, retreat or drink; on
-    easy, where a struggling build is sent, they finish every one.
-
-  A player who spent points badly struggles; they are never locked out.
-
-- **Difficulty profiles.** Easy sits at or below normal. Hard may sit higher but is
-  held to `HARD_HP_SHARE_CEILING`.
-- **Bosses and escorts.** A boss fight may cost more, up to `BOSS_HP_SHARE_CEILING`
-  times its own level-1 cost. Bounty escorts spawn at a full party ratio and are held
-  to the regular ceiling at that ratio.
-- **Bounties, absolutely.** A ratio against a creature's own level-1 fight cannot see
-  a creature authored to kill from full at level 1, so every bounty is also staged
-  whole — `stageBountyEncounter` and `EncounterCommitment`, the real mob loop and
-  projectile systems — against each `balanced` reference crawler standing her
-  ground, on normal and hard, at every party level through the cap, with dodge left
-  out. No single blow from the mark, its escort or its summons may take more than
-  `BOUNTY_MAX_BLOW_HP_SHARE` of the victim's full bar: every bounty mob carries that
-  cap (`Mob.blowCapShareOfTargetHp`), applied after the difficulty scale, so it holds
-  for either crawler whatever the curve does. The human standing her ground also
-  lives at least a second past first blood on normal, and past the
-  `LOCKED_TELEGRAPH_MIN_FRAMES` floor on hard. Donut's bar is a few points by design and dodge is
-  her defence, so with dodge left out she is held to the per-blow cap and the
-  `LOCKED_TELEGRAPH_MIN_FRAMES` floor. An
-  encounter commits one member at a time (`StaggeredCommit`,
-  `src/systems/bountyCommit.ts`), so a mirrored pair of escorts never lands its
-  first blows on the same frame.
+**Bounties, absolutely.** Bounties are where the level multiplier bites hardest —
+escorts spawn at the party's own level, the mark a level above — so every bounty mob
+carries a per-blow cap (`Mob.blowCapShareOfTargetHp`, set to
+`BOUNTY_MAX_BLOW_HP_SHARE` by `stageBountyEncounter` in `src/systems/BountySystem.ts`),
+applied after the difficulty scale: no single blow from the mark, its escort or its
+summons takes more than that share of the struck crawler's full bar, whatever the
+curve does. An encounter commits one member at a time (`StaggeredCommit`,
+`src/systems/bountyCommit.ts`), so a mirrored pair of escorts never lands its first
+blows on the same frame. `verify:bounty` asserts both.
 
 When a fight drags, the answer is more pressure — a shorter cooldown, a smarter
 approach, an extra body — not more hit points. When one creature cannot pass without
@@ -123,12 +75,11 @@ the learning floor:
 - **More bodies** — `overLevelReinforcement`: each room gains one body for every
   `levelsPerBody` levels past the room's band top, up to `maxBodies`, and never past
   `MAX_ROOM_SPAWN_COUNT` (`overLevelReinforcementBodies` in `src/levels/spawner.ts`).
-  The per-mob fight is unchanged, so every one-on-one rule holds as authored.
+  The per-mob fight is unchanged, so every one-on-one fight stays as authored.
 - **Higher levels** — `ambientTracking`: every ambient band slides up so its rolls
   land `levelsBehind` under the party's earned level, never past the floor's
   `maxLevel` (`partyTrackedBand`). The step back softens the arrival, where every
-  band's top sits well under what the party has earned. The mob outgrows the off-stat build, so a floor that tracks is
-  held to the restated off-stat and time-to-kill rules above. The ceiling sits where
+  band's top sits well under what the party has earned. The ceiling sits where
   no tactics trait has reached its cap yet, leaving the top of every ramp to bounty
   escorts.
 
@@ -212,18 +163,6 @@ Target feel for an on-level player — the bands the counters are read against:
 | Potions used per gauntlet segment       | 1–3    |
 | Deaths per floor, first clear           | 0–2    |
 | Time-to-kill, one regular mob           | 3–8 s  |
-
-`verify:difficulty-curve` holds the first row for a reference party — the `balanced`
-human and cat together, both attacking, the fights the spawner rolls (a floor's rooms;
-on the overworld each camp and a pair of roaming mobs) — early, mid and late between
-a floor's recommended level and the level its XP curve's last tier starts at, where a
-thorough party leaves it: between `ROOM_FIGHT_HP_REMAINING_MIN` and
-`ROOM_FIGHT_HP_REMAINING_MAX` on normal, where the first floor, the one mechanics are
-learned on, is held only to the minimum — and to its tuned costs (P1, a floor's own curve). Easy must leave no less than normal at the
-same party level, and hard no more — but never less than
-`HARD_ROOM_FIGHT_HP_REMAINING_MIN`. The model stands both crawlers still, so a player who
-steps out of telegraphs keeps more than it says; it is the bar for the reference party,
-not a prediction of any one run.
 
 The overlay also tallies P6 per segment: guard blocks per fight, kites started and
 their average length in frames, and HP remaining split between fights that included
@@ -320,7 +259,8 @@ healers and flight.
   its hover goal is re-chosen early once a threat closes on it by
   `FAIRY_THREAT_SHIFT_REPLAN_TILES`, with a switch margin so a crawler pacing at the
   range boundary cannot make it jitter. Within `FAIRY_FLUTTER_RANGE_TILES` of a threat
-  it flutters away at its top speed, `FAIRY_MAX_SPEED` (0.85 × `PLAYER_SPEED`), which
+  it flutters away at its top speed, `FAIRY_MAX_SPEED` (0.85 × 0.7 = 0.595 × `PLAYER_SPEED`; the shield fairy alone
+  keeps the unslowed 0.85, `SHIELD_MAX_SPEED`), which
   levelling can never raise: a crawler who commits to the chase always closes the gap.
   Hover goals never land on marked ground, walls, or ground a fairy may not be placed
   on (inside the town wall, the town's safe radius, the circus grounds) — except a
@@ -465,12 +405,11 @@ FIREBALL_FLIGHT_FRAMES`, so a crawler standing dead on the landing who starts
   `FREEZE_GRACE_FRAMES` blocks only a second freeze — an ice bolt can still re-chill
   the crawler on the way out. A frozen crawler's in-progress swing is abandoned
   (`abandonSwing`), not merely paused.
-- **Flat bursts price outside the level-ratio trend.** The fireball's landed blast
-  (`FIREBALL_BLAST_DAMAGE`), the death flame's tick (`DEATH_FLAME_TICK_DAMAGE`) and
-  the death explosion (`DEATH_EXPLOSION_DAMAGE`) are flat, undodgeable-once-inside
-  damage under P2, and are priced as a flat radial burst rather than held to the
-  HP-share trend a regular attack is. The death flame never applies burn — only the
-  landed blast can roll `FIREBALL_BURN_CHANCE`.
+- **Flat bursts stay flat.** The fireball's landed blast (`FIREBALL_BLAST_DAMAGE`),
+  the death flame's tick (`DEATH_FLAME_TICK_DAMAGE`) and the death explosion
+  (`DEATH_EXPLOSION_DAMAGE`) are flat, undodgeable-once-inside damage under P2, and
+  never scale with level. The death flame never applies burn — only the landed blast
+  can roll `FIREBALL_BURN_CHANCE`.
 - **The lob's flight speed is fixed, not level-scaled.** A fireball always flies the
   same `FIREBALL_FLIGHT_FRAMES`, and its throw range is clamped to
   `FIREBALL_MAX_RANGE_TILES`, so its horizontal speed never grows with level. The dodge
@@ -498,54 +437,114 @@ FIREBALL_FLIGHT_FRAMES`, so a crawler standing dead on the landing who starts
   and called the first frame the fairy is back in view. The telekinetic shove needs a
   crawler within reach and is not held. The counterplay is kill priority: no refill or
   raise outlives the fairy, and the death army is the price of taking it.
-- **Fairy rooms are a deliberately brutal encounter class.** A room, rate-upgrade room
-  or floor-3 roaming pair that rolled fairies is priced apart from the ordinary fights
-  and is exempt from the ordinary room band and the hard floor: it is meant to be the
-  hardest regular fight on its floor, and several of its fights cost the reference
-  party standing and trading blows more than its whole pooled HP — floor 3's roaming
-  pair with a fairy deals about two party wipes on normal, and floor 2's rooms past the
-  Ball of Swine's safe room nearly two and a half early in the floor. The counterplay the price
-  leaves out is what makes the class winnable: **kill priority** — a warded body is
-  invulnerable only while its shield fairy lives, so the shield fairy dies first and
-  the wall comes down with it — and the potions and retreats the pricer never credits.
-  The gate does not price chasing a fleeing fairy: a fairy left alone runs for the next
-  room, and running it down drags the party into that room's fight with the fairy
-  still casting, so a real fight is harder than its priced cost, not easier. A fairy
-  carries more health than its host (`FAIRY_BASE_HP_FRACTION`), which puts it a blow
-  past the ordinary hits-to-kill limit early in a floor's window; it is held to
-  `FAIRY_HITS_TO_KILL_MAX` (8) instead. A fire fairy's twin lob is priced as one ball
-  at each crawler, since the reference party has both in the fight. A necro fairy's
-  bodies are priced as real lesser sword skeletons and archers, each from the frame it
-  is on its feet: its `NECRO_ARMY` climbs out as the fight opens and each place in it is
-  refilled on the fairy's own countdowns while it lives, its `NECRO_DEATH_ARMY` climbs
-  out on its death, and every room mob that falls while it lives stands back up at
-  `RESURRECT_HP_FRACTION` on the raise cooldown, once — so the kill order decides how
-  many bodies it adds. Its shove is not priced.
-  `verify:difficulty-curve` reads the class in **party wipes** — pooled max HP lost,
-  not stopped at an empty bar — because HP remaining stops at zero, and a floor of zero
-  cannot fail. Its band:
-  - at most `FAIRY_ROOM_FIGHT_WIPES_MAX` (2.7) wipes on normal and
-    `HARD_FAIRY_ROOM_FIGHT_WIPES_MAX` (6) on hard, just above the harshest fight priced
-    plus its recorded-cost tolerance;
-  - each fight within `FAIRY_FIGHT_COST_TOLERANCE` (±10%) of its own recorded cost on
-    normal and on hard, both ways, so fairy fights can neither quietly get harsher nor
-    quietly go soft;
-  - the fairies themselves adding at least `FAIRY_ROOM_FIGHT_FAIRY_COST_MIN` (0.2)
-    wipes over the same rolls with the fairies left out.
-- **Support fairies are priced by the time they add.** A fight with a shield, healing
-  or necro fairy is played out on a clock over sampled kill orders, with the party
-  finishing one body before starting the next unless a ward lands on it first. A
-  shield fairy lays nothing before the fight: its first ward goes up as the fight
-  opens and one more every between-casts cooldown until it holds `shieldWardCount`,
-  each on an unwarded ally drawn at random, so unwarded allies can be struck down
-  meanwhile. A warded body cannot be struck down while its shield fairy lives, so the
-  fairy dies before any body it wards. A
-  healer's living heals (`healingFairyHealAmount` on `healingFairyCooldownFrames`,
-  started once the struck body is under `HEAL_TRIGGER_HP_FRACTION` and landing only if
-  it is still alive), the healer's death-wave overheal (`OVERHEAL_MAX_HP_FRACTION` of
-  each standing non-boss's max HP), and the shield fairy's death aegis are charged as
-  the time they add. A room is taken to be small enough that every support reaches
-  every ally.
+
+## Bomber goblins
+
+The Dynamite Goblin and the Black Powder Goblin (`src/creatures/GoblinBomber.ts`)
+lob explosives that `GoblinBombSystem` carries from the throw to the blast. Their
+sizes live in `src/systems/goblinBombConstants.ts`, and everything about their
+timing and AI that the difficulty decides lives in its `BOMBER_TUNING`, one
+`BomberTuning` per difficulty, read live through `activeBomberTuning()`: a
+difficulty changed mid-run applies on the next frame, while a stick already
+thrown keeps the flight and fuse it was thrown with. Like the fairy fireball, the
+dodge is leaving the marked circle in time, never outrunning a projectile.
+
+On Crawler and Nightmare the bombers are among the harder regulars on a floor:
+every window leaves a crawler who reacts in half a second well under a second to
+spare. On Kitten they keep the slower, plainer mechanics they first shipped with.
+The blast's damage is the same on every difficulty.
+
+| `BomberTuning` field                                      | Kitten           | Crawler / Nightmare |
+| --------------------------------------------------------- | ---------------- | ------------------- |
+| `dynamiteFlightFrames` / `blackPowderFlightFrames`        | 42 / 48          | 35 / 40             |
+| `fuse` (frames, final stretch)                            | 120, 40          | 93, 32              |
+| `bombardierLockFrames`                                    | 36               | 30                  |
+| `actionFrames` light / throw, dynamite                    | 30 / 24          | 23 / 19             |
+| `actionFrames` light / throw, black powder                | 40 / 28          | 31 / 22             |
+| `throwCooldownFrames` dynamite / black powder             | 150 / 180        | 110 / 135           |
+| `walkSpeed`, `maxSpeedRatio`                              | 1.2, 0.7         | 1.45, 0.75          |
+| `retreatSpeedRatio`                                       | 0 (its own walk) | 0.8                 |
+| `retreatMaxFrames` / `retreatCooldownFrames`              | 70 / 150         | 80 / 120            |
+| `interruptedRecoveryFrames`                               | 45               | 38                  |
+| `aimLeadShare` dynamite / black powder, `maxAimLeadTiles` | 0 / 0, 0         | 0.5 / 0.4, 2        |
+| `closeMoves`                                              | no               | yes                 |
+| `throwsWhileRetreating`                                   | no               | yes                 |
+
+The Dynamite Goblin keeps at most `DYNAMITER_MAX_LIVE_STICKS` (2) of its own sticks
+live on every difficulty, a dropped stick included.
+
+- **The lob's flight is fixed, not level-scaled.** A stick always flies
+  `dynamiteFlightFrames` and a bomb `blackPowderFlightFrames`, and every throw is
+  clamped to `GOBLIN_BOMB_MAX_RANGE_TILES`, so horizontal speed never grows with
+  level (P2).
+- **Throws are led on Crawler and Nightmare.** A stick is aimed `aimLeadShare` of
+  the way to where the target will be when it lands; a black powder landing that
+  share of the way to where the target will be when it bursts, measured from the
+  first lock frame. The lead is capped at `maxAimLeadTiles` and dropped when the
+  led landing would catch the bomber. A crawler who keeps walking the same way
+  walks toward the circle; the fairness inequalities below are for a crawler
+  standing on the landing. On Kitten every lob comes down at the target's feet.
+- **A goblin stick's fuse outlasts a reaction and a walk out of its circle, on
+  every difficulty.** The stick may roll up to `GOBLIN_DYNAMITE_SETTLE_TILES` after
+  it lands, so that roll is walked too: with `W = ceil((GOBLIN_DYNAMITE_BLAST_RADIUS_PX +
+GOBLIN_DYNAMITE_SETTLE_PX) / PLAYER_SPEED)` (`GOBLIN_DYNAMITE_WALK_OUT_FRAMES`),
+  `GOBLIN_BOMB_DODGE_REACTION_FRAMES + W < fuse.frames`
+  (`goblinDynamiteDodgeMarginFrames`): about half a second to spare on Crawler and
+  Nightmare, about a second on Kitten. The red danger circle fills with the fuse
+  from landing to blast. A stick the goblin drops at its own feet burns the same
+  fuse.
+- **A black powder bomb's lock plus its flight outlast a reaction and a walk out,
+  on every difficulty.** The bomb goes off the frame it touches the ground, so the
+  circle drawn during the aim is the only warning. The landing is resolved on the
+  first frame of the lock, not on release, and `bombardierLockFrames` is never
+  under `LOCKED_TELEGRAPH_MIN_FRAMES`. With `W = ceil(BLACK_POWDER_BLAST_RADIUS_PX /
+PLAYER_SPEED)` (`BLACK_POWDER_WALK_OUT_FRAMES`),
+  `GOBLIN_BOMB_DODGE_REACTION_FRAMES + W < bombardierLockFrames +
+blackPowderFlightFrames` (`blackPowderDodgeMarginFrames`): under a third of a
+  second to spare on Crawler and Nightmare, half a second on Kitten. A bomber
+  killed or staggered mid-aim throws nothing and its circle goes with it, and a
+  lock it was shoved toward is not thrown.
+- **Closing in is not a safe answer on Crawler and Nightmare.** Inside its band a
+  bomber backs off at `retreatSpeedRatio` of the player's speed for a limited
+  budget, and still throws whenever a lob would land clear of itself. A crawler in
+  its face meets its close-range move, once per `CLOSE_MOVE_COOLDOWN_FRAMES`: the
+  Dynamite Goblin drops a lit stick half a tile toward the crawler and scurries out
+  of its circle; the Black Powder Goblin hops nearly three tiles back and locks at
+  once, with no light row. On Kitten closing in works: the bomber backs off at a
+  walk and throws nothing until the retreat ends, and it has no close-range move.
+  On every difficulty its levelled walk is capped under the player's
+  (`maxSpeedRatio`), so a crawler who commits to the chase catches one once its
+  retreat runs out.
+- **The blast is a share of the struck crawler's own bar.** A blast takes
+  `GOBLIN_DYNAMITE_HP_SHARE` or `GOBLIN_BLACK_POWDER_HP_SHARE` of each struck
+  crawler's max HP (`goblinBlastDamage`), scaled by the difficulty's incoming
+  damage, so Carl's deep bar loses the same share as Donut's and it never grows
+  with the mob's own level (P2). It is undodgeable: no dodge roll turns aside an
+  explosion the crawler is standing in. Siege walls and trebuchets take a multiple
+  of the blast an on-curve crawler would take at the floor's reference party level
+  (`floorReferencePartyLevel`).
+- **Who the blast hurts.** Carl and Donut take the full blast, as do party-side
+  mobs (Mongo, hirelings, soldiers, thralls, converted mobs, attack cows), each the
+  same share of its own max HP. A hostile that attacks other mobs on its own
+  (`Mob.huntsOtherMobs`, today the Brindled Vespa) is the goblins' enemy too and
+  takes the full blast. Every other
+  mob, bosses and the thrower's own pack included, loses exactly
+  `GOBLIN_BLAST_DAMAGE_TO_BYSTANDER_MOBS` (1 HP), credited to nobody, so a goblin
+  never wipes its own band and a mob the party wore down still pays the party.
+- **Knockback.** Every mob still standing inside the radius is pushed straight out
+  from the centre, hardest at the centre and to nothing at the edge, through
+  collision, so never through a wall. Party-side mobs are pushed too. Bosses, mobs
+  that cannot walk and mobs whose movement is scripted by their own attack
+  (`Mob.resistsBlastKnockback`: the Grave Bull's charge, the necromancer's standoff)
+  are not. The crawlers are never pushed.
+- **Allies treat both landing spots as marked ground.** From the throw on, a stick's
+  landing (widened by the settle roll) and, from the first frame of the lock, a
+  black powder landing are marked ground (`GroundHazardSource`, widened by
+  `GOBLIN_BOMB_HAZARD_MARGIN_TILES`), whether or not a circle is drawn there. The AI
+  companion, Mongo, hirelings, soldiers and thralls leave every overlapping circle at
+  once, never stepping from one into another, and take no step back until the blast
+  has gone off, as with the fairy fireball. Hostiles, the bombers included, refuse
+  marked steps the same way.
 
 ---
 
@@ -606,8 +605,8 @@ this document first:
   `ambientTracking`, or tracking on the learning floor (see P1).
 - XP that skips a floor's diminishing curve.
 - Uncapped scaling curves of any kind.
-- Raising the HP or damage curve above what `verify:difficulty-curve` allows, or
-  loosening that gate's bounds to make room for it.
+- Raising the HP or damage curve to make a fight harder; raise how often and how well
+  enemies attack instead (P1, P6).
 - Rolling tactics traits below `TACTICS_MIN_MOB_LEVEL`, re-rolling them on a live mob,
   or letting a guard meet a spell, a status tick or a low-HP blow.
 - Nerfing potion healing or potion cooldown.

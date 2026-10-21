@@ -9,19 +9,19 @@ import type { Mob } from '../creatures/Mob';
  * every def is drawn with — land their first blows at least a reaction apart
  * rather than on one frame, and the cooldowns they share then keep them apart.
  */
-export const BOUNTY_COMMIT_STAGGER_MIN_FRAMES = 30;
+const BOUNTY_COMMIT_STAGGER_MIN_FRAMES = 30;
 /**
  * The longest gap: a full second, the time a crawler who has just been hit
  * needs to answer it — a potion, a step back — before the next body arrives.
  * Small encounters get all of it.
  */
-export const BOUNTY_COMMIT_STAGGER_MAX_FRAMES = 60;
+const BOUNTY_COMMIT_STAGGER_MAX_FRAMES = 60;
 /**
  * The whole stagger is shared out over this many frames, so a large group does
  * not leave its last member standing idle for most of the fight: a six-body
  * troupe is loose within three seconds. Only the minimum gap can stretch it.
  */
-export const BOUNTY_COMMIT_SPREAD_FRAMES = 180;
+const BOUNTY_COMMIT_SPREAD_FRAMES = 180;
 
 /** The gap between members for a group of `memberCount` living members. */
 export function bountyCommitStaggerFrames(memberCount: number): number {
@@ -44,7 +44,7 @@ export function bountyCommitStaggerFrames(memberCount: number): number {
  * struck while it waits goes immediately: holding still under a beating reads
  * as broken, not as tactics.
  */
-export class StaggeredCommit {
+class StaggeredCommit {
   private framesSinceCommit = 0;
   private readonly releaseFrame = new Map<Mob, number>();
   private readonly lastReleaseFrame: number;
@@ -112,8 +112,11 @@ export class EncounterCommitment {
       if (!encounter.some((mob) => mob.isAlive && mob.currentTarget !== null)) return false;
       this.commit = new StaggeredCommit(encounter);
       justCommitted = true;
+    } else {
+      // The commit frame is frame zero of the stagger: ticking on it as well
+      // would let the second member loose one frame short of its gap.
+      this.commit.tick();
     }
-    this.commit.tick();
     for (const mob of encounter) {
       if (!mob.isAlive) continue;
       mob.forceAggro = true;

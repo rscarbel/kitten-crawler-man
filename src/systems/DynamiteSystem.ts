@@ -1,4 +1,5 @@
 import type { GameMap } from '../map/GameMap';
+import { resolveLobLanding } from './goblinBombConstants';
 import type { DestructiblePropSystem } from './DestructiblePropSystem';
 import type { TownInteriorPropDestructionSystem } from './TownInteriorPropDestructionSystem';
 import { EXPLOSION_IGNITE_RING_TILES, type TreeSystem } from './TreeSystem';
@@ -13,6 +14,9 @@ import {
   drawDynamiteRangeRing,
   drawDynamiteThrowPath,
 } from '../sprites/dynamiteSprite';
+import { drawBlackPowderBombFlight, drawThrownBombShadow } from '../sprites/blackPowderBombSprite';
+import type { ItemId } from '../core/ItemDefs';
+import type { ThrownPropVisualId } from '../sprites/held/heldVisualIds';
 import type { Rect } from '../ui/core/geom';
 import type { Surface, Ui } from '../ui/core/UiRoot';
 import { skinsFor } from '../ui/theme/skins';
@@ -22,7 +26,9 @@ import {
   type BlastCore,
   drawDynamiteExplosion,
   drawScorchMark,
-  EXPLOSION_TOTAL_FRAMES,
+  explosionLightRemaining,
+  explosionTotalFrames,
+  type ExplosionVariant,
   SCORCH_TOTAL_FRAMES,
 } from '../sprites/dynamiteExplosion';
 import type { GameSystem, SystemContext } from './GameSystem';
@@ -41,6 +47,25 @@ import {
 import { DYNAMITE_THROWING_HAND } from '../sprites/art/human/actionsThrow';
 import { type CarlRowView, prewarmHumanRow } from '../sprites/humanSprite';
 import { easeOut, type Pt } from '../sprites/art/carlArt';
+
+/** The explosives he throws through this system, by the item spent on each throw. */
+export type ThrownExplosiveId = Extract<ItemId, 'goblin_dynamite' | 'black_powder_bomb'>;
+
+/** What each explosive looks like in his throwing fist. */
+const THROWN_EXPLOSIVE_LOOKS: Readonly<Record<ThrownExplosiveId, ThrownPropVisualId>> = {
+  goblin_dynamite: 'prop_dynamite',
+  black_powder_bomb: 'prop_black_powder_bomb',
+};
+
+export function isThrownExplosive(id: ItemId): id is ThrownExplosiveId {
+  return id === 'goblin_dynamite' || id === 'black_powder_bomb';
+}
+
+/**
+ * Which picture a blast is painted as. A chain takes the kind of whatever set
+ * it off; a gas bottle's blast is drawn as dynamite.
+ */
+export type BlastKind = ExplosionVariant;
 
 /** Frames of charge for a full-strength throw. */
 export const DYN_MAX_CHARGE = 120;
@@ -159,6 +184,24 @@ const CHAIN_MAX_FIREBALL_SCALE = 1.5;
 const CHAIN_RIPPLE_PX_PER_FRAME = 24;
 /** Spreads consecutive blasts' seeds so no two blasts share a picture. */
 const BLAST_SEED_STRIDE = 7919;
+/**
+ * How far past its own blast's edge a black powder bomb lands at the least, in
+ * tiles. A bomb goes off where it lands, so a tap that dropped it at his feet
+ * would only blow up the thrower: in open ground the shortest throw clears
+ * him. A wall nearer than that still stops the lob at its foot, inside his own
+ * blast, and the throw preview shows it landing there.
+ */
+const BLACK_POWDER_MIN_CLEARANCE_TILES = 0.5;
+const BLACK_POWDER_MIN_THROW_PX = DYN_RADIUS + BLACK_POWDER_MIN_CLEARANCE_TILES * TILE_SIZE;
+/** Ground covered per frame by a lobbed bomb; flight time follows from the distance. */
+const BLACK_POWDER_FLIGHT_PX_PER_FRAME = 8;
+const BLACK_POWDER_MIN_FLIGHT_FRAMES = 10;
+const BLACK_POWDER_MAX_FLIGHT_FRAMES = 30;
+/** Turns a bomb makes over a whole flight: a slow spin, not a tumble. */
+const BLACK_POWDER_SPIN_TURNS = 0.6;
+/** Spacing of the dots on a bomb's straight-line throw preview, in pixels. */
+const BLACK_POWDER_PATH_SAMPLE_PX = 12;
+
 /** Max frames to simulate for the throw path preview (covers full fuse duration). */
 const TRAJECTORY_MAX_FRAMES = 300;
 /** Collect a path point every N simulated frames to keep screen-point count manageable. */
@@ -302,6 +345,28 @@ interface LiveDynamite {
 type BlastCharge = Pick<LiveDynamite, 'x' | 'y' | 'mobDamage' | 'crawlerDamage'>;
 
 /**
+ * A black powder bomb on its lob. Unlike a stick it has no physics body: its
+ * landing point is fixed when it is thrown, cut short at the first wall on
+ * the way, and it goes off on the frame it gets there.
+ */
+interface LiveBomb {
+  /** Where its ground point starts: his centre, the same as a stick's body. */
+  readonly fromX: number;
+  readonly fromY: number;
+  readonly landX: number;
+  readonly landY: number;
+  readonly flightFrames: number;
+  readonly arcPx: number;
+  /** The hand it left, which its drawn position closes from; null when thrown from his centre. */
+  readonly handFrom: Pt | null;
+  readonly mobDamage: number;
+  readonly crawlerDamage: number;
+  /** Keeps two bombs in the air from sparking in step. */
+  readonly seed: number;
+  frame: number;
+}
+
+/**
  * One detonation — a single stick, or every stick a chain reaction swept up.
  *
  * The per-stick figures are kept beside the chained totals because a
@@ -321,6 +386,7 @@ interface Blast {
 
 /** A blast's picture, aged every tick until its smoke has cleared. */
 interface LiveExplosion {
+  readonly kind: BlastKind;
   readonly x: number;
   readonly y: number;
   readonly radius: number;
@@ -337,13 +403,24 @@ interface ScorchMark {
   ageFrames: number;
 }
 
-/** A stick released and waiting for the throw's release frame to leave his hand. */
+/** A stick or bomb released and waiting for the throw's release frame to leave his hand. */
 interface PendingThrow {
-  readonly stick: LiveDynamite;
-  /** Ticks since the key was let go, which the fuse is charged when it launches. */
+  /** Where a bomb will land; null for a stick, which is still a blast in his hand. */
+  readonly landing: Pt | null;
+  /** Ticks since the key was let go, which a stick's fuse is charged when it launches. */
   ticksPending: number;
-  /** Puts the stick in the world, from his throwing hand or from his centre. */
+  /** Puts it in the world, from his throwing hand or from his centre. */
   readonly launch: (fromHand: boolean) => void;
+}
+
+/** What a throw puts in the world once it leaves him, told how long it waited and which hand it left, if any. */
+type ThrowPlacement = (ticksPending: number, hand: Pt | null) => void;
+
+/** He has something in hand: posed for it, with the views whose rows have been warmed. */
+interface HeldExplosive {
+  readonly item: ThrownExplosiveId;
+  /** The view whose rows have been warmed, null before the first tick. */
+  warmedView: CarlRowView | null;
 }
 
 /** A blast's light reaches past its damage radius by this much. */
@@ -352,31 +429,37 @@ const BLAST_LIGHT_REACH_SCALE = 1.5;
 const BLAST_LIGHT_MIN_REACH_TILES = 3;
 
 export class DynamiteSystem implements GameSystem {
-  private _charging: {
-    hotbarIdx: number;
-    chargeFrames: number;
-    /** Whether the fuse has been drawn catching, so a light cut short is not played twice. */
-    lit: boolean;
-    /** The view whose hold and throw have been warmed, null before the first tick. */
-    warmedView: CarlRowView | null;
-  } | null = null;
+  private _charging:
+    | (HeldExplosive & {
+        hotbarIdx: number;
+        chargeFrames: number;
+        /** Whether the fuse has been drawn catching, so a light cut short is not played twice. */
+        lit: boolean;
+      })
+    | null = null;
   /**
    * A stick in his hand, unlit, waiting for a tap on the world to say where it
    * goes — the touch screen's way to throw, where holding a hotbar slot down
    * while aiming with the same thumb is impractical. Nothing burns while it
    * is held, so it can wait out a menu or a conversation.
    */
-  private _readied: {
-    /** The view whose stance and throw have been warmed, null before the first tick. */
-    warmedView: CarlRowView | null;
-  } | null = null;
+  private _readied: HeldExplosive | null = null;
   private pendingThrow: PendingThrow | null = null;
   private liveDynamites: LiveDynamite[] = [];
+  private liveBombs: LiveBomb[] = [];
   private explosions: LiveExplosion[] = [];
   private scorches: ScorchMark[] = [];
   private blastCount = 0;
+  private bombsThrown = 0;
   /** Set each time a stick goes off; `DestructionKit` reads and clears it to sound the blast. */
   explosionSoundPending = false;
+  /** The kind of the latest blast, for whatever sounds {@link explosionSoundPending}. */
+  explosionSoundKind: BlastKind = 'dynamite';
+  /**
+   * Set when a thrown stick comes down out of the air; `DestructionKit` reads
+   * and clears it. A stick dropped at his feet never flew, so it never lands.
+   */
+  stickLandSoundPending = false;
   /**
    * Told of every blast's centre and radius, in world pixels, so built
    * structures — walls, trebuchets, snares — take their share. Any bomb goes
@@ -427,6 +510,7 @@ export class DynamiteSystem implements GameSystem {
     this._readied = null;
     this.pendingThrow = null;
     this.liveDynamites = [];
+    this.liveBombs = [];
     this.explosions = [];
     this.scorches = [];
     this.lastBlastFrame = new WeakMap<Mob, number>();
@@ -448,7 +532,23 @@ export class DynamiteSystem implements GameSystem {
       inHand: false,
       radiusPx: DYN_RADIUS,
     }));
-    if (this._charging !== null || this.pendingThrow !== null) {
+    for (const bomb of this.liveBombs) {
+      points.push({ x: bomb.landX, y: bomb.landY, inHand: false, radiusPx: DYN_RADIUS });
+    }
+    const pendingLanding = this.pendingThrow?.landing ?? null;
+    if (pendingLanding !== null) {
+      points.push({
+        x: pendingLanding.x,
+        y: pendingLanding.y,
+        inHand: false,
+        radiusPx: DYN_RADIUS,
+      });
+    }
+    // A bomb never goes off in his hand, so only a stick warns from there.
+    const stickInHand =
+      this._charging?.item === 'goblin_dynamite' ||
+      (this.pendingThrow !== null && pendingLanding === null);
+    if (stickInHand) {
       points.push({
         x: human.x + HALF_TILE,
         y: human.y + HALF_TILE,
@@ -462,7 +562,7 @@ export class DynamiteSystem implements GameSystem {
   /** A blast lights the room it goes off in, dying away with its fireball. */
   collectLights(sink: DynamicLightSink): void {
     for (const explosion of this.explosions) {
-      const remaining = 1 - explosion.ageFrames / EXPLOSION_TOTAL_FRAMES;
+      const remaining = explosionLightRemaining(explosion.kind, explosion.ageFrames);
       const reachTiles = Math.max(BLAST_LIGHT_MIN_REACH_TILES, explosion.radius / TILE_SIZE);
       sink.add(
         explosion.x,
@@ -486,22 +586,33 @@ export class DynamiteSystem implements GameSystem {
     return this._charging?.hotbarIdx ?? null;
   }
 
-  /** Whether he holds an unlit stick waiting for a tap to throw it. */
+  /** What he is charging a throw of, null when he is not. */
+  get chargingItem(): ThrownExplosiveId | null {
+    return this._charging?.item ?? null;
+  }
+
+  /** Whether he holds an unlit stick or bomb waiting for a tap to throw it. */
   get isReadied(): boolean {
     return this._readied !== null;
   }
 
+  /** What he holds waiting for a tap, null when nothing is readied. */
+  get readiedItem(): ThrownExplosiveId | null {
+    return this._readied?.item ?? null;
+  }
+
   /**
-   * Puts an unlit stick in his hand, to be thrown by {@link throwReadiedAt}.
+   * Puts an unlit `item` in his hand, to be thrown by {@link throwReadiedAt}.
    * Refused in the safe room for the same reason as {@link beginCharge}, and
-   * with no stick to hold.
+   * with none to hold.
    *
    * @returns whether he took one in hand; a refusal is the caller's to explain.
    */
-  ready(human: HumanPlayer): boolean {
-    if (human.isProtected || human.inventory.countOf('goblin_dynamite') === 0) return false;
+  ready(human: HumanPlayer, item: ThrownExplosiveId): boolean {
+    if (human.isProtected || human.inventory.countOf(item) === 0) return false;
     this._charging = null;
-    this._readied = { warmedView: null };
+    this._readied = { item, warmedView: null };
+    human.takeExplosiveInHand(THROWN_EXPLOSIVE_LOOKS[item]);
     return true;
   }
 
@@ -520,9 +631,10 @@ export class DynamiteSystem implements GameSystem {
    * @returns whether a stick was thrown or dropped.
    */
   throwReadiedAt(human: HumanPlayer, targetX: number, targetY: number): boolean {
-    if (this._readied === null || !human.canAct) return false;
+    const readied = this._readied;
+    if (readied === null || !human.canAct) return false;
     this._readied = null;
-    if (!human.inventory.removeOne('goblin_dynamite')) {
+    if (!human.inventory.removeOne(readied.item)) {
       this.stopDynamiteAction(human);
       return false;
     }
@@ -536,6 +648,11 @@ export class DynamiteSystem implements GameSystem {
       human.facingY = toTargetY / targetDistance;
     }
     const reach = slideDistance(this.maxThrowSpeed(human));
+    if (readied.item === 'black_powder_bomb') {
+      const distance = Math.max(this.bombMinThrow(reach), Math.min(targetDistance, reach));
+      this.throwBomb(human, distance);
+      return true;
+    }
     const speed = launchSpeedFor(Math.min(targetDistance, reach));
     const dropsAtFeet = speed < DYN_SPEED_MIN;
     const expLvl = human.explosivesHandling;
@@ -557,7 +674,7 @@ export class DynamiteSystem implements GameSystem {
       this.liveDynamites.push(stick);
       return true;
     }
-    this.throwFromHand(human, stick);
+    this.throwStick(human, stick);
     return true;
   }
 
@@ -566,16 +683,79 @@ export class DynamiteSystem implements GameSystem {
     return DYN_SPEED_MAX + (human.explosivesHandling - 1) * DYN_SPEED_PER_LEVEL;
   }
 
+  /** The shortest bomb throw, never past his longest. */
+  private bombMinThrow(reach: number): number {
+    return Math.min(BLACK_POWDER_MIN_THROW_PX, reach);
+  }
+
+  /** How far a bomb thrown on `chargeFrames` of charge flies: his shortest throw to his longest. */
+  private bombThrowDistance(human: HumanPlayer, chargeFrames: number): number {
+    const reach = slideDistance(this.maxThrowSpeed(human));
+    const shortest = this.bombMinThrow(reach);
+    const chargeRatio = Math.min(1, chargeFrames / DYN_MAX_CHARGE);
+    return shortest + (reach - shortest) * chargeRatio;
+  }
+
+  /**
+   * Where a bomb thrown `distance` px from his centre the way he faces comes
+   * down, by the same rule as a goblin's lob: it arcs over props, bodies and
+   * built structures and stops at the foot of a real wall or building.
+   */
+  private bombLanding(human: HumanPlayer, distance: number): Pt {
+    const origin = { x: human.x + HALF_TILE, y: human.y + HALF_TILE };
+    const target = {
+      x: origin.x + human.facingX * distance,
+      y: origin.y + human.facingY * distance,
+    };
+    return resolveLobLanding(this.gameMap, origin, target);
+  }
+
+  /** Has him lob a bomb `distance` px the way he faces; it bursts where it lands. */
+  private throwBomb(human: HumanPlayer, distance: number): void {
+    const fromX = human.x + HALF_TILE;
+    const fromY = human.y + HALF_TILE;
+    const landing = this.bombLanding(human, distance);
+    const flown = Math.hypot(landing.x - fromX, landing.y - fromY);
+    const flightFrames = Math.round(
+      Math.min(
+        BLACK_POWDER_MAX_FLIGHT_FRAMES,
+        Math.max(BLACK_POWDER_MIN_FLIGHT_FRAMES, flown / BLACK_POWDER_FLIGHT_PX_PER_FRAME),
+      ),
+    );
+    const expLvl = human.explosivesHandling;
+    const mobDamage = dynamiteMobDamage(human.level, expLvl);
+    const crawlerDamage = dynamiteCrawlerDamage(expLvl);
+    const arcPx = lobArcTiles(human.facingX, human.facingY) * TILE_SIZE;
+    this.bombsThrown++;
+    const seed = this.bombsThrown * BLAST_SEED_STRIDE;
+    this.throwFromHand(human, landing, (_ticksPending, hand) => {
+      this.liveBombs.push({
+        fromX,
+        fromY,
+        landX: landing.x,
+        landY: landing.y,
+        flightFrames,
+        arcPx,
+        handFrom: hand,
+        mobDamage,
+        crawlerDamage,
+        seed,
+        frame: 0,
+      });
+    });
+  }
+
   /**
    * Starts lighting a stick. Refused in the safe room, which is a sanctuary
    * for the crawlers and not a bunker to bomb out of.
    *
    * @returns whether the light began; a refusal is the caller's to explain.
    */
-  beginCharge(hotbarIdx: number, human: HumanPlayer): boolean {
+  beginCharge(hotbarIdx: number, human: HumanPlayer, item: ThrownExplosiveId): boolean {
     if (human.isProtected) return false;
     this._readied = null;
-    this._charging = { hotbarIdx, chargeFrames: 0, lit: false, warmedView: null };
+    this._charging = { item, hotbarIdx, chargeFrames: 0, lit: false, warmedView: null };
+    human.takeExplosiveInHand(THROWN_EXPLOSIVE_LOOKS[item]);
     return true;
   }
 
@@ -589,13 +769,17 @@ export class DynamiteSystem implements GameSystem {
       this.stopDynamiteAction(human);
       return;
     }
-    const { chargeFrames } = this._charging;
+    const { chargeFrames, item } = this._charging;
     this._charging = null;
 
-    // With no stick left to throw — the last one sold or dropped mid-charge —
+    // With none left to throw — the last one sold or dropped mid-charge —
     // the light or the hold he is posed in has nothing in its hand.
-    if (!human.inventory.removeOne('goblin_dynamite')) {
+    if (!human.inventory.removeOne(item)) {
       this.stopDynamiteAction(human);
+      return;
+    }
+    if (item === 'black_powder_bomb') {
+      this.throwBomb(human, this.bombThrowDistance(human, chargeFrames));
       return;
     }
 
@@ -623,16 +807,31 @@ export class DynamiteSystem implements GameSystem {
       this.liveDynamites.push(stick);
       return;
     }
-    this.throwFromHand(human, stick);
+    this.throwStick(human, stick);
+  }
+
+  /** Has him throw `stick`, its fuse burning from the key's release. */
+  private throwStick(human: HumanPlayer, stick: LiveDynamite): void {
+    this.throwFromHand(human, null, (ticksPending, hand) => {
+      // The fuse is lit from the key's release, not from the frame the stick
+      // leaves his hand, so a throw's windup never delays the blast the
+      // player timed.
+      stick.fuseFrames -= ticksPending;
+      if (hand !== null) {
+        stick.lobFrom = hand;
+        stick.lobArc = lobArcTiles(stick.vx, stick.vy);
+      }
+      this.liveDynamites.push(stick);
+    });
   }
 
   /**
-   * Has him throw `stick`, and launches it on the frame it leaves his hand —
-   * from that hand — or at once from his centre if he cannot throw right now
+   * Has him throw, and calls `place` on the frame it leaves his hand — with
+   * that hand — or at once with no hand if he cannot throw right now
    * (mid-blow, reeling, out cold). A throw cut short before its release frame
-   * still launches the stick, from his centre: the item is already spent.
+   * still places it, from his centre: the item is already spent.
    */
-  private throwFromHand(human: HumanPlayer, stick: LiveDynamite): void {
+  private throwFromHand(human: HumanPlayer, landing: Pt | null, place: ThrowPlacement): void {
     // A second release can land before the first throw reaches its release
     // frame; the new throw row replaces the old one, whose own end is then no
     // longer the pending throw's and would drop a stick already paid for.
@@ -640,20 +839,13 @@ export class DynamiteSystem implements GameSystem {
     const row = human.rowFacing(THROW_ROWS);
     const releaseFrame = eventFrame(row, 'release');
     const pending: PendingThrow = {
-      stick,
+      landing,
       ticksPending: 0,
       launch: (fromHand) => {
         if (this.pendingThrow !== pending) return;
         this.pendingThrow = null;
-        // The fuse is lit from the key's release, not from the frame the stick
-        // leaves his hand, so a throw's windup never delays the blast the
-        // player timed.
-        stick.fuseFrames -= pending.ticksPending;
-        if (fromHand) {
-          stick.lobFrom = human.handWorldPosition(DYNAMITE_THROWING_HAND);
-          stick.lobArc = lobArcTiles(stick.vx, stick.vy);
-        }
-        this.liveDynamites.push(stick);
+        const hand = fromHand ? human.handWorldPosition(DYNAMITE_THROWING_HAND) : null;
+        place(pending.ticksPending, hand);
       },
     };
     this.pendingThrow = pending;
@@ -736,8 +928,7 @@ export class DynamiteSystem implements GameSystem {
    * the light row's first frame, held there by pacing it at zero. Re-asked
    * whenever he is drawn in anything else and stands free, as the charge pose is.
    */
-  private poseForReadied(human: HumanPlayer): void {
-    const readied = this._readied;
+  private poseForReadied(human: HumanPlayer, readied: HeldExplosive | null): void {
     if (readied === null) return;
     const view = human.rowViewFacing();
     // The throw follows a tap with no light to hide a bake behind, so its
@@ -781,7 +972,7 @@ export class DynamiteSystem implements GameSystem {
         mobDamage: Math.round(dynamiteMobDamage(human.level, 0) * GAS_CYLINDER_MOB_DAMAGE_FRACTION),
         crawlerDamage: GAS_CYLINDER_CRAWLER_DAMAGE,
       };
-      this.detonate(charge, human, cat, mobGrid, gas.radiusPx);
+      this.detonate(charge, 'dynamite', human, cat, mobGrid, gas.radiusPx);
     }
     // Walking into the safe room with a stick alight snuffs it: the stick is
     // only spent on release, so it goes back in the bag unburned.
@@ -791,23 +982,29 @@ export class DynamiteSystem implements GameSystem {
     }
     // The hotbar slot is the only way to put a readied stick back, so a stick
     // whose slot was emptied or rearranged away goes back on its own.
-    const stickOnHotbar = human.inventory.actionBar.slots.some(
-      (slot) => slot?.id === 'goblin_dynamite',
-    );
-    const cannotHoldStick =
-      !human.isActive ||
-      human.isProtected ||
-      !stickOnHotbar ||
-      human.inventory.countOf('goblin_dynamite') === 0;
-    if (this._readied !== null && cannotHoldStick) this.putAway(human);
-    this.poseForReadied(human);
+    const readiedItem = this._readied?.item ?? null;
+    if (readiedItem !== null) {
+      const heldOnHotbar = human.inventory.actionBar.slots.some((slot) => slot?.id === readiedItem);
+      const cannotHold =
+        !human.isActive ||
+        human.isProtected ||
+        !heldOnHotbar ||
+        human.inventory.countOf(readiedItem) === 0;
+      if (cannotHold) this.putAway(human);
+    }
+    this.poseForReadied(human, this._readied);
     if (this._charging) {
       this._charging.chargeFrames++;
-      if (this._charging.chargeFrames >= DYN_EXPLODE_HAND) {
+      if (this._charging.item === 'black_powder_bomb') {
+        // A bomb has no fuse to light while he winds up, so it is held the way
+        // a readied one is and can never go off in his hand.
+        this.poseForReadied(human, this._charging);
+      } else if (this._charging.chargeFrames >= DYN_EXPLODE_HAND) {
         this.explodeInHand(human, cat, mobGrid);
         return;
+      } else {
+        this.poseForCharge(human);
       }
-      this.poseForCharge(human);
     }
     if (this.pendingThrow !== null) this.pendingThrow.ticksPending++;
     this.updatePhysics(human, cat, mobGrid);
@@ -825,7 +1022,7 @@ export class DynamiteSystem implements GameSystem {
       mobDamage: dynamiteMobDamage(human.level, human.explosivesHandling),
       crawlerDamage: dynamiteCrawlerDamage(human.explosivesHandling),
     };
-    this.detonate(inHand, human, cat, mobGrid);
+    this.detonate(inHand, 'dynamite', human, cat, mobGrid);
   }
 
   /**
@@ -834,6 +1031,7 @@ export class DynamiteSystem implements GameSystem {
    */
   private detonate(
     trigger: BlastCharge,
+    kind: BlastKind,
     human: HumanPlayer,
     cat: CatPlayer,
     mobGrid: SpatialGrid<Mob>,
@@ -852,6 +1050,7 @@ export class DynamiteSystem implements GameSystem {
       1 + CHAIN_FIREBALL_GROWTH_PER_STICK * (chain.length - 1),
     );
     this.explosions.push({
+      kind,
       x: blast.x,
       y: blast.y,
       radius: blast.radius,
@@ -867,6 +1066,8 @@ export class DynamiteSystem implements GameSystem {
       ageFrames: 0,
     });
     this.scorches.push({ x: blast.x, y: blast.y, radius: blast.radius, seed, ageFrames: 0 });
+    this.explosionSoundKind = kind;
+    this.bus?.emit('explosiveDetonated', { x: blast.x, y: blast.y, kind });
     this.triggerExplosion(blast, human, cat, mobGrid);
   }
 
@@ -967,13 +1168,19 @@ export class DynamiteSystem implements GameSystem {
 
   private updatePhysics(human: HumanPlayer, cat: CatPlayer, mobGrid: SpatialGrid<Mob>): void {
     for (const explosion of this.explosions) explosion.ageFrames++;
-    this.explosions = this.explosions.filter((e) => e.ageFrames < EXPLOSION_TOTAL_FRAMES);
+    this.explosions = this.explosions.filter((e) => e.ageFrames < explosionTotalFrames(e.kind));
     for (const scorch of this.scorches) scorch.ageFrames++;
     this.scorches = this.scorches.filter((mark) => mark.ageFrames < SCORCH_TOTAL_FRAMES);
 
     for (const dyn of this.liveDynamites) {
       dyn.fuseFrames--;
-      if (dyn.lobFrame < LOB_FRAMES) dyn.lobFrame++;
+      if (dyn.lobFrame < LOB_FRAMES) {
+        dyn.lobFrame++;
+        // A thrown stick is drawn in the air until its lob ends, whatever its
+        // body is doing, so that is when it is heard hitting the floor.
+        const lobEndsNow = dyn.lobFrom !== null && dyn.lobFrame === LOB_FRAMES;
+        if (lobEndsNow) this.stickLandSoundPending = true;
+      }
       if (dyn.state === 'stopped') continue;
 
       const nextX = dyn.x + dyn.vx;
@@ -997,6 +1204,8 @@ export class DynamiteSystem implements GameSystem {
       dyn.vx *= DYN_FRICTION;
       dyn.vy *= DYN_FRICTION;
       const spd = Math.hypot(dyn.vx, dyn.vy);
+      const settlesWithoutLob = dyn.lobFrom === null && dyn.state === 'flying';
+      if (settlesWithoutLob && spd < DYN_SLIDE_THRESHOLD) this.stickLandSoundPending = true;
       if (spd < DYN_STOP) {
         dyn.state = 'stopped';
         dyn.vx = 0;
@@ -1013,8 +1222,22 @@ export class DynamiteSystem implements GameSystem {
     while (burntOut !== undefined) {
       const trigger = burntOut;
       this.liveDynamites = this.liveDynamites.filter((dyn) => dyn !== trigger);
-      this.detonate(trigger, human, cat, mobGrid);
+      this.detonate(trigger, 'dynamite', human, cat, mobGrid);
       burntOut = this.liveDynamites.find((dyn) => dyn.fuseFrames <= 0);
+    }
+
+    for (const bomb of this.liveBombs) bomb.frame++;
+    const landed = this.liveBombs.filter((bomb) => bomb.frame >= bomb.flightFrames);
+    if (landed.length === 0) return;
+    this.liveBombs = this.liveBombs.filter((bomb) => bomb.frame < bomb.flightFrames);
+    for (const bomb of landed) {
+      const charge: BlastCharge = {
+        x: bomb.landX,
+        y: bomb.landY,
+        mobDamage: bomb.mobDamage,
+        crawlerDamage: bomb.crawlerDamage,
+      };
+      this.detonate(charge, 'black_powder', human, cat, mobGrid);
     }
   }
 
@@ -1023,14 +1246,20 @@ export class DynamiteSystem implements GameSystem {
     for (const mark of this.scorches) {
       drawScorchMark(ctx, mark.x - camX, mark.y - camY, mark.radius, mark.seed, mark.ageFrames);
     }
+    // In the ground pass so a bomb's shadow lies under the creatures it passes over.
+    for (const bomb of this.liveBombs) {
+      const now = bombPointAt(bomb, bomb.frame);
+      drawThrownBombShadow(ctx, now.x - camX, now.groundY - camY, now.height, TILE_SIZE);
+    }
   }
 
   render(ctx: CanvasRenderingContext2D, camX: number, camY: number): void {
     for (const dyn of this.liveDynamites) {
       this.renderStick(ctx, dyn, dyn.x - camX, dyn.y - camY);
     }
+    for (const bomb of this.liveBombs) this.renderBomb(ctx, bomb, camX, camY);
     for (const explosion of this.explosions) {
-      drawDynamiteExplosion(ctx, explosion, camX, camY);
+      drawDynamiteExplosion(ctx, explosion, camX, camY, explosion.kind);
     }
   }
 
@@ -1075,15 +1304,40 @@ export class DynamiteSystem implements GameSystem {
   }
 
   /**
+   * A bomb on its lob: its ground point runs straight from his centre to the
+   * landing, it rides an arc above that, and over the first frames its drawn
+   * position closes from the hand that threw it onto that path.
+   */
+  private renderBomb(
+    ctx: CanvasRenderingContext2D,
+    bomb: LiveBomb,
+    camX: number,
+    camY: number,
+  ): void {
+    const now = bombPointAt(bomb, bomb.frame);
+    const before = bombPointAt(bomb, Math.max(0, bomb.frame - 1));
+    const progress = Math.min(1, bomb.frame / bomb.flightFrames);
+    const screenX = now.x - camX;
+    const screenY = now.groundY - camY;
+    drawBlackPowderBombFlight(ctx, screenX, screenY - now.height, TILE_SIZE, {
+      ageFrames: bomb.frame,
+      spin: progress * BLACK_POWDER_SPIN_TURNS * Math.PI * 2,
+      seed: bomb.seed,
+      velocityX: now.x - before.x,
+      velocityY: now.groundY - now.height - (before.groundY - before.height),
+    });
+  }
+
+  /**
    * The throw-power meter at the right edge, half way down: an upright bar
    * that fills from the bottom while the stick is held, yellow near full
    * strength, and flashing red once holding on means it goes off in hand.
    */
   renderChargeMeter(ui: Ui): void {
     if (!this._charging) return;
-    const { chargeFrames } = this._charging;
+    const { chargeFrames, item } = this._charging;
     const ratio = Math.min(1, chargeFrames / DYN_MAX_CHARGE);
-    const isDanger = chargeFrames >= DYN_DANGER;
+    const isDanger = item === 'goblin_dynamite' && chargeFrames >= DYN_DANGER;
     const flashOn = !isDanger || Math.floor(chargeFrames / CHARGE_FLASH_FRAMES) % 2 === 0;
     const { palette, space, type, radius } = ui.theme;
     const labelHeight = type.overline.lineHeight;
@@ -1140,8 +1394,29 @@ export class DynamiteSystem implements GameSystem {
     }
   }
 
+  /** A bomb's preview: a straight line from his centre to where it would land now. */
+  private bombPreviewPath(human: HumanPlayer, chargeFrames: number): Pt[] {
+    const fromX = human.x + HALF_TILE;
+    const fromY = human.y + HALF_TILE;
+    const landing = this.bombLanding(human, this.bombThrowDistance(human, chargeFrames));
+    const length = Math.hypot(landing.x - fromX, landing.y - fromY);
+    const samples = Math.max(1, Math.ceil(length / BLACK_POWDER_PATH_SAMPLE_PX));
+    const points: Pt[] = [];
+    for (let sample = 0; sample <= samples; sample++) {
+      const share = sample / samples;
+      points.push({
+        x: fromX + (landing.x - fromX) * share,
+        y: fromY + (landing.y - fromY) * share,
+      });
+    }
+    return points;
+  }
+
   private simulateTrajectory(human: HumanPlayer): Array<{ x: number; y: number }> {
     const chargeFrames = this._charging?.chargeFrames ?? 0;
+    if (this._charging?.item === 'black_powder_bomb') {
+      return this.bombPreviewPath(human, chargeFrames);
+    }
     if (chargeFrames < DYN_TAP) return [];
 
     const cacheKey = `${chargeFrames}|${human.facingX}|${human.facingY}|${Math.round(human.x)}|${Math.round(human.y)}|${human.explosivesHandling}`;
@@ -1273,5 +1548,28 @@ export function dynamiteChargeSurface(opts: DynamiteChargeSurfaceOptions): Surfa
     haltsWorld: false,
     isOpen: () => opts.dynamite().isCharging && opts.shows(),
     render: (ui) => opts.dynamite().renderChargeMeter(ui),
+  };
+}
+
+/**
+ * Where a bomb `frame` frames into its lob is drawn, in world pixels: its
+ * point on the floor and its height above it, closing from the throwing hand
+ * over the first frames.
+ */
+function bombPointAt(
+  bomb: LiveBomb,
+  frame: number,
+): { x: number; groundY: number; height: number } {
+  const progress = Math.min(1, frame / bomb.flightFrames);
+  const handProgress = Math.min(1, frame / LOB_FRAMES);
+  const fromHand = 1 - easeOut(handProgress);
+  const handDx = bomb.handFrom === null ? 0 : (bomb.handFrom.x - bomb.fromX) * fromHand;
+  const handDy = bomb.handFrom === null ? 0 : (bomb.handFrom.y - bomb.fromY) * fromHand;
+  // The hand is above the floor, so its offset is height, not ground.
+  const height = PARABOLA_PEAK_GAIN * progress * (1 - progress) * bomb.arcPx - handDy;
+  return {
+    x: bomb.fromX + (bomb.landX - bomb.fromX) * progress + handDx,
+    groundY: bomb.fromY + (bomb.landY - bomb.fromY) * progress,
+    height,
   };
 }

@@ -79,13 +79,22 @@ import {
   enlistInSiege,
   isInsidePalisade,
   isInsidePalisadeTile,
+  isStandingStructure,
+  nearestStructurePoint,
   siegeAdvance,
+  siegeCanEngage,
   nearestEngageableDefender,
   tileUnder,
 } from '../../creatures/siege/siegeCapability';
 import { livingAssaultSpawns } from '../../creatures/siege/assaultCaps';
 import { INSIDE_PALISADE, palisadeDistanceFor } from '../../creatures/siege/palisadeDistance';
-import type { SiegeDirective, SiegeWorld } from '../../creatures/siege/siegeTypes';
+import type {
+  SiegeCapable,
+  SiegeDirective,
+  SiegeLobber,
+  SiegePoint,
+  SiegeWorld,
+} from '../../creatures/siege/siegeTypes';
 import { engageTrebuchet, nearestLiveTrebuchetTo } from '../../creatures/siege/trebuchetThreat';
 import {
   ASSAULT_WAVE_NUMBERS,
@@ -102,7 +111,7 @@ import { worldText } from '../../ui/world/worldText';
 import { viewportHeight, viewportWidth } from '../../core/Viewport';
 import type { MobRoster } from '../kits/SceneWorld';
 import type { MusicClaims } from '../../audio/AudioScope';
-import type { DefenseStructures } from './DefenseStructures';
+import type { DefenseStructures, StructureRef } from './DefenseStructures';
 import type { VillageAmbience } from './VillageAmbience';
 import { SiegeFlowField } from './SiegeFlowField';
 import { siegeHudEntry, type SiegeHudBar, type SiegeHudView } from './siegeHudEntry';
@@ -282,6 +291,8 @@ export const SIEGE_DEFENDER_NOTICE_TILES = 6;
 export const ARCHER_HOLD_TILES = 7;
 /** An archer holding off the wall looses at defenders this close; the palisade does not block its sight. */
 const ARCHER_SHOOT_TILES = 9;
+/** Offset from a body's origin to the ground point under it. */
+const HALF_TILE = TILE_SIZE / 2;
 /** Seconds per minute, for the countdown's m:ss. */
 const SECONDS_PER_MINUTE = 60;
 const TWO_DIGITS = 2;
@@ -371,6 +382,8 @@ export type AssaultUndeadKind =
 export type AssaultHostileKind =
   | 'goblin'
   | 'goblin_archer'
+  | 'goblin_dynamiter'
+  | 'goblin_bombardier'
   | 'rat'
   | 'cockroach'
   | 'sky_fowl'
@@ -405,7 +418,14 @@ export interface AssaultWaveSpec {
 export const ASSAULT_WAVES: readonly AssaultWaveSpec[] = [
   {
     undead: { raised_ratkin: 5, ruins_ghoul: 2, skeleton_warrior: 2, skeleton_archer: 1 },
-    hostiles: { goblin: 2, goblin_archer: 1, rat: 2, cockroach: 2, sky_fowl: 1 },
+    hostiles: {
+      goblin: 2,
+      goblin_archer: 1,
+      goblin_dynamiter: 1,
+      rat: 2,
+      cockroach: 2,
+      sky_fowl: 1,
+    },
     necromancerHealthShare: 0.4,
   },
   {
@@ -417,6 +437,8 @@ export const ASSAULT_WAVES: readonly AssaultWaveSpec[] = [
       grave_bull: 1,
     },
     hostiles: {
+      goblin_dynamiter: 1,
+      goblin_bombardier: 1,
       troglodyte: 1,
       llama: 1,
       circus_lemur: 1,
@@ -445,7 +467,15 @@ export const ASSAULT_WAVES: readonly AssaultWaveSpec[] = [
       skeleton_archer: 2,
       grave_bull: 1,
     },
-    hostiles: { rock_golem: 2, goblin: 2, krasue: 1, troglodyte: 1, stilt_clown: 1 },
+    hostiles: {
+      rock_golem: 2,
+      goblin: 2,
+      goblin_dynamiter: 1,
+      goblin_bombardier: 1,
+      krasue: 1,
+      troglodyte: 1,
+      stilt_clown: 1,
+    },
     necromancerHealthShare: 1,
   },
 ];
@@ -466,6 +496,8 @@ const UNDEAD_ORDER: readonly AssaultUndeadKind[] = [
 const HOSTILE_ORDER: readonly AssaultHostileKind[] = [
   'goblin',
   'goblin_archer',
+  'goblin_dynamiter',
+  'goblin_bombardier',
   'rat',
   'cockroach',
   'sky_fowl',
@@ -647,8 +679,9 @@ function tilesOutsidePalisade(site: BriarHollowSite, tileX: number, tileY: numbe
  * An assault mob's frame while it has a wall to reach. The undead with a
  * siege of their own (the Grave Bull's charge, the necromancer) are left to
  * it; any mob with a defender close on its own side of the wall fights them
- * with its own AI; archers hold off the wall and shoot; everyone else strikes
- * the structure in their way, or takes the next step toward the bell.
+ * with its own AI; archers hold off the wall and shoot; lobbers stand off at
+ * their throwing distance and lob over it; everyone else strikes the
+ * structure in their way, or takes the next step toward the bell.
  */
 class MarchDirective implements SiegeDirective {
   constructor(private readonly site: BriarHollowSite) {}
@@ -659,6 +692,8 @@ class MarchDirective implements SiegeDirective {
     if (siege === null || !mob.isHostile || mob.ownsSiegeMovement) return false;
     // Still climbing out of the ground: its own AI plays the rise and holds it there.
     if (mob instanceof RisingSkeleton && mob.isRising) return false;
+    const lobber = mob.siegeLobber;
+    if (lobber !== null) return this.steerLobber(mob, lobber, siege, targets);
     const defenderDistance =
       nearestEngageableDefender(mob, targets, SIEGE_DEFENDER_NOTICE_TILES * TILE_SIZE)?.distance ??
       Infinity;
@@ -692,6 +727,67 @@ class MarchDirective implements SiegeDirective {
     return siegeAdvance(mob);
   }
 
+  /**
+   * A lobber's frame. It throws, in order, at a live trebuchet in throwing
+   * range, then at a crawler or defender in throwing range, then at the
+   * structure the flow says is in its way, from as far off as a lob reaches.
+   * A lob clears the palisade, so none of the three has to be on its own side
+   * of the ring. With none of them to throw at it walks the flow in, and it
+   * never strikes a wall: one too close to lob at safely is backed away from.
+   * Only the bell, which a blast cannot reach, is struck like anyone strikes it.
+   */
+  private steerLobber(
+    mob: Mob,
+    lobber: SiegeLobber,
+    siege: SiegeCapable,
+    targets: readonly Player[],
+  ): boolean {
+    const { defense, flow } = siege.world;
+    const reachPx = lobber.lobBandMaxPx;
+
+    const trebuchet = nearestLiveTrebuchetTo(mob, defense, reachPx);
+    if (trebuchet !== null && lobber.lobAt(trebuchet)) {
+      siege.siegeTarget = trebuchet.ref;
+      return true;
+    }
+
+    const defender = nearestLobTarget(mob, targets, reachPx);
+    if (defender !== null) {
+      // Too close to throw at without catching itself: its own AI backs off,
+      // where it can reach this one at all.
+      const crowded = defender.distance < lobber.lobBandMinPx;
+      if (crowded && siegeCanEngage(mob, defender.target)) return false;
+      if (lobber.lobAt(groundUnder(defender.target))) {
+        siege.siegeTarget = null;
+        return true;
+      }
+    }
+
+    const ahead = structureAhead(mob, siege, Math.ceil(reachPx / TILE_SIZE));
+    if (ahead !== null && ahead.kind === 'bell') return siegeAdvance(mob);
+    const aim = ahead === null ? null : nearestStructurePoint(defense, ahead, mob);
+    if (ahead !== null && aim !== null) {
+      if (lobber.lobAt(aim)) {
+        siege.siegeTarget = ahead;
+        return true;
+      }
+      const fromX = mob.x + HALF_TILE - aim.x;
+      const fromY = mob.y + HALF_TILE - aim.y;
+      if (Math.hypot(fromX, fromY) < lobber.lobBandMinPx) {
+        siege.siegeTarget = null;
+        mob.marchStep(fromX, fromY);
+        return true;
+      }
+    }
+
+    if (lobber.lobAt(null)) return true;
+    siege.siegeTarget = null;
+    const next = flow.nextStep(tileUnder(mob), siege.spreadSeed);
+    if (next === null) return false;
+    mob.marchStep(next.x * TILE_SIZE - mob.x, next.y * TILE_SIZE - mob.y);
+    return true;
+  }
+
   /** Whether a point in the world stands on the same side of the ring as the mob. */
   private onSameSide(mob: Mob, point: { readonly x: number; readonly y: number }): boolean {
     const pointInside = isInsidePalisadeTile(
@@ -723,6 +819,50 @@ class MarchDirective implements SiegeDirective {
     mob.marchStep(next.x * TILE_SIZE - mob.x, next.y * TILE_SIZE - mob.y);
     return true;
   }
+}
+
+/** The ground point under a body. */
+function groundUnder(body: { readonly x: number; readonly y: number }): SiegePoint {
+  return { x: body.x + HALF_TILE, y: body.y + HALF_TILE };
+}
+
+/**
+ * The nearest live target within `reachPx` of `mob`, on either side of the
+ * ring — a lob clears the palisade — and how far it stands, mob position to
+ * target position; null when none qualify.
+ */
+function nearestLobTarget(
+  mob: Mob,
+  targets: readonly Player[],
+  reachPx: number,
+): { readonly target: Player; readonly distance: number } | null {
+  let best: { readonly target: Player; readonly distance: number } | null = null;
+  for (const target of targets) {
+    if (!target.isAlive || target.isDefendTarget === true) continue;
+    const distance = Math.hypot(target.x - mob.x, target.y - mob.y);
+    if (distance > reachPx || (best !== null && distance >= best.distance)) continue;
+    best = { target, distance };
+  }
+  return best;
+}
+
+/**
+ * The first standing structure on `mob`'s way in, looking up to `steps` tiles
+ * down the flow from where it stands; null when the way is open that far. The
+ * flow is a cost field over the structures, so its path runs through the wall
+ * the wave is breaking and names it a step before it.
+ */
+function structureAhead(mob: Mob, siege: SiegeCapable, steps: number): StructureRef | null {
+  const { defense, flow } = siege.world;
+  let tile = tileUnder(mob);
+  for (let step = 0; step <= steps; step++) {
+    const ref = flow.blockingStructure(tile, siege.spreadSeed);
+    if (ref !== null && isStandingStructure(defense, ref)) return ref;
+    const next = flow.nextStep(tile, siege.spreadSeed);
+    if (next === null) return null;
+    tile = next;
+  }
+  return null;
 }
 
 /** A body that stands where it is and takes no part: the withdrawn dead waiting to be released. */

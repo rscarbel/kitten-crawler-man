@@ -302,6 +302,79 @@ const FIREWORK_BURST_IDS = [
   'firework_burst_4',
 ] as const satisfies readonly SoundId[];
 
+/**
+ * A blast is the loudest thing on screen and the reason for the damage the
+ * player just took, so it never loses its voice to the fight around it.
+ */
+const EXPLOSION = { priority: 'high', ...VARIED } as const satisfies Partial<SoundTraits>;
+
+const EXPLOSION_IDS = [
+  'dynamite_explosion',
+  'black_powder_explosion_1',
+  'black_powder_explosion_2',
+  'black_powder_explosion_3',
+  'black_powder_explosion_4',
+] as const satisfies readonly SoundId[];
+
+/** The handling noises of a thrown explosive: lit, tossed, landed. */
+const EXPLOSIVE_HANDLING_IDS = [
+  'fuse_light_1',
+  'fuse_light_2',
+  'fuse_light_3',
+  'fuse_light_4',
+  'bomb_toss_whoosh_1',
+  'bomb_toss_whoosh_2',
+  'bomb_toss_whoosh_3',
+  'bomb_toss_whoosh_4',
+  'dynamite_stick_land_1',
+  'dynamite_stick_land_2',
+  'dynamite_stick_land_3',
+] as const satisfies readonly SoundId[];
+
+/**
+ * A bomber goblin's voice. A pack throws together, so each take sounds once
+ * at a time and a repeat inside the gap is dropped rather than stacked.
+ */
+const BOMBER_VOICE = {
+  maxVoices: 1,
+  minIntervalMs: 600,
+  ...VARIED,
+} as const satisfies Partial<SoundTraits>;
+
+/** Longer than a giggle, so a second goblin lighting just after the first stays quiet. */
+const BOMBER_CACKLE = {
+  ...BOMBER_VOICE,
+  minIntervalMs: 2000,
+} as const satisfies Partial<SoundTraits>;
+
+const BOMBER_GRUNT_IDS = [
+  'goblin_bomber_throw_grunt_1',
+  'goblin_bomber_throw_grunt_2',
+  'goblin_bomber_throw_grunt_3',
+] as const satisfies readonly SoundId[];
+
+const BOMBER_CACKLE_IDS = [
+  'goblin_bomber_cackle_1',
+  'goblin_bomber_cackle_2',
+  'goblin_bomber_cackle_3',
+  'goblin_bomber_cackle_4',
+  'goblin_bomber_cackle_5',
+] as const satisfies readonly SoundId[];
+
+const FIRE_IN_THE_HOLE_IDS = [
+  'goblin_fire_in_the_hole_1',
+  'goblin_fire_in_the_hole_2',
+  'goblin_fire_in_the_hole_3',
+  'goblin_fire_in_the_hole_4',
+] as const satisfies readonly SoundId[];
+
+const BOMBS_AWAY_IDS = [
+  'goblin_bombs_away_1',
+  'goblin_bombs_away_2',
+  'goblin_bombs_away_3',
+  'goblin_bombs_away_4',
+] as const satisfies readonly SoundId[];
+
 function isImpactId(id: SoundId): boolean {
   return IMPACT_IDS.some((impact) => impact === id);
 }
@@ -332,6 +405,12 @@ const ID_TRAITS: Readonly<Partial<Record<SoundId, Partial<SoundTraits>>>> = {
   ...Object.fromEntries(STINGER_IDS.map((id) => [id, STINGER])),
   ...Object.fromEntries(FIREWORK_LAUNCH_IDS.map((id) => [id, FIREWORK_LAUNCH])),
   ...Object.fromEntries(FIREWORK_BURST_IDS.map((id) => [id, FIREWORK_BURST])),
+  ...Object.fromEntries(EXPLOSION_IDS.map((id) => [id, EXPLOSION])),
+  ...Object.fromEntries(EXPLOSIVE_HANDLING_IDS.map((id) => [id, VARIED])),
+  ...Object.fromEntries(BOMBER_GRUNT_IDS.map((id) => [id, BOMBER_VOICE])),
+  ...Object.fromEntries(FIRE_IN_THE_HOLE_IDS.map((id) => [id, BOMBER_VOICE])),
+  ...Object.fromEntries(BOMBS_AWAY_IDS.map((id) => [id, BOMBER_VOICE])),
+  ...Object.fromEntries(BOMBER_CACKLE_IDS.map((id) => [id, BOMBER_CACKLE])),
   ...Object.fromEntries(
     SIEGE_ENGINE_IDS.map((id) => [id, { ...(isImpactId(id) ? VARIED : {}), ...SIEGE_ENGINE }]),
   ),
@@ -392,6 +471,8 @@ const SOUND_CAPTIONS: Readonly<Partial<Record<SoundId, SoundCaption>>> = {
     always('Guard gives up the search'),
   ),
   ...takes(['goblin_1', 'goblin_2'], offscreen('Goblin snarls')),
+  ...takes(FIRE_IN_THE_HOLE_IDS, offscreen('Fire in the hole!')),
+  ...takes(BOMBS_AWAY_IDS, offscreen('Bombs away!')),
   ...takes(['rat_squeak_1', 'rat_squeak_2', 'rat_squeak_3'], offscreen('Rat squeaks')),
   ...takes(
     ['tuskling_grunt_1', 'tuskling_grunt_2', 'tuskling_grunt_3', 'tuskling_grunt_4'],

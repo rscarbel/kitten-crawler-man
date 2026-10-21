@@ -91,15 +91,21 @@ const PROP_KIND_BY_ID: Partial<Record<HeldVisualId, keyof typeof PROP_ART>> = {
   prop_crate: 'crate',
   prop_wrench: 'wrench',
   prop_dynamite: 'dynamite',
+  prop_black_powder_bomb: 'blackPowderBomb',
   prop_zippo: 'zippo',
   prop_bottle: 'bottle',
 };
 const PROP_SOURCE_VARIANT: Partial<Record<HeldVisualId, string>> = {
   prop_dynamite: burningDynamite(0),
+  prop_black_powder_bomb: burningDynamite(0),
   prop_zippo: 'lit',
 };
 /** The phase of each held visual that matches its own painter's variant. */
-const PROP_NEW_PHASE: Partial<Record<HeldVisualId, number>> = { prop_dynamite: 2, prop_zippo: 2 };
+const PROP_NEW_PHASE: Partial<Record<HeldVisualId, number>> = {
+  prop_dynamite: 2,
+  prop_black_powder_bomb: 2,
+  prop_zippo: 2,
+};
 
 function flag(name: string): string | null {
   const prefix = `--${name}=`;

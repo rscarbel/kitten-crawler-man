@@ -74,6 +74,8 @@ const { PrisonGoblin } = await import('../src/creatures/PrisonGoblin.js');
 const { PrisonerGoblin } = await import('../src/creatures/PrisonerGoblin.js');
 const { PrisonCellDoor } = await import('../src/creatures/PrisonCellDoor.js');
 const { GoblinArcher } = await import('../src/creatures/GoblinArcher.js');
+const { GoblinDynamiter } = await import('../src/creatures/GoblinDynamiter.js');
+const { GoblinBombardier } = await import('../src/creatures/GoblinBombardier.js');
 const { GraveBull } = await import('../src/creatures/GraveBull.js');
 const { GrimaldiVine } = await import('../src/creatures/GrimaldiVine.js');
 const { GrotesqueSpider } = await import('../src/creatures/GrotesqueSpider.js');
@@ -277,6 +279,8 @@ const SUBJECTS: Readonly<Record<string, () => readonly Subject[]>> = {
   PrisonerGoblin: () => [eyed('goblin prisoner', new PrisonerGoblin(...at, 1))],
   PrisonCellDoor: () => [eyeless('prison cell door', new PrisonCellDoor(...at, 'across'))],
   GoblinArcher: () => [eyed('goblin archer', new GoblinArcher(...at))],
+  GoblinDynamiter: () => [eyed('dynamite goblin', new GoblinDynamiter(...at))],
+  GoblinBombardier: () => [eyed('black powder goblin', new GoblinBombardier(...at))],
   GraveBull: () => [eyed('grave bull', new GraveBull(...at))],
   GrimaldiVine: () => [eyeless('Grimaldi vine', new GrimaldiVine(...at))],
   GrotesqueSpider: () => [eyed('grotesque spider', new GrotesqueSpider(...at), 'turnsToFace')],

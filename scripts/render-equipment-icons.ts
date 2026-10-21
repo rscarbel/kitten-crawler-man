@@ -1,6 +1,6 @@
 #!/usr/bin/env tsx
 /**
- * Review sheet for the worn-equipment, tool and Scroll of Confusing Fog icons,
+ * Review sheet for the worn-equipment, tool, explosive and Scroll of Confusing Fog icons,
  * drawn through the real `drawItemIcon` dispatcher onto a slot-coloured cell.
  *
  * Each row is one item at the sizes a player actually meets it — the hotbar's
@@ -51,6 +51,7 @@ const FAMILIES: Readonly<Record<string, readonly ItemId[]>> = {
     'worldscar_pick',
   ],
   scroll: ['scroll_of_confusing_fog'],
+  explosives: ['goblin_dynamite', 'black_powder_bomb'],
   fairyRings: [
     'ring_of_the_cold_shoulder',
     'ring_of_the_asbestos_knuckle',

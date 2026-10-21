@@ -129,6 +129,7 @@ export const ITEM_PRICES = {
   scroll_of_confusing_fog:      { base:   150, category: 'magic_scroll' },
   // explosive
   goblin_dynamite:              { base:    40, category: 'explosive' },
+  black_powder_bomb:            { base:    60, category: 'explosive' },
   // trap
   trebuchet_kit:                { base:   300, category: 'trap' },
   snare_kit:                    { base:   100, category: 'trap' },

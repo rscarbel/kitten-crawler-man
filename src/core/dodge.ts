@@ -8,10 +8,10 @@
  */
 
 /** Dexterity at which the curve alone yields a 50% dodge chance. */
-export const DODGE_HALF_POINT = 20;
+const DODGE_HALF_POINT = 20;
 
 /** No amount of dexterity, gear, or skill can push dodge past this. */
-export const DODGE_CHANCE_CAP = 0.6;
+const DODGE_CHANCE_CAP = 0.6;
 
 /**
  * Probability in [0, DODGE_CHANCE_CAP] that an incoming mob attack misses.

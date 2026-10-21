@@ -26,6 +26,7 @@ import { drawEyesOfSplatterIcon } from '../../sprites/art/itemIcons/eyesOfSplatt
 import { drawFoodIcon, type FoodIconId } from './foodIcons';
 import { drawIssueKitIcon, type IssueKitItemId } from '../../sprites/art/itemIcons/issueKitIcon';
 import { drawPrisonKeyIcon } from '../../sprites/art/itemIcons/prisonKeyIcon';
+import { drawBlackPowderBombIcon } from '../../sprites/art/itemIcons/blackPowderBombIcon';
 import { drawKitIcon, type KitIconId } from './kitIcons';
 import { drawMagistratesWritIcon, drawUnreadableLetterIcon } from './murderMysteryLetterIcons';
 import {
@@ -105,6 +106,7 @@ export const ITEM_ICONS: Record<ItemId, ItemIconPainter> = {
   dirty_shirley: drawDirtyShirleyIcon,
   scroll_of_confusing_fog: drawConfusingFogScrollIcon,
   goblin_dynamite: drawDynamiteInventoryIcon,
+  black_powder_bomb: drawBlackPowderBombIcon,
   hamburger: food('hamburger'),
   hollow_stew: food('hollow_stew'),
 

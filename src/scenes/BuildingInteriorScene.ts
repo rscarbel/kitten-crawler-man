@@ -1,6 +1,7 @@
 import { noteDrawFailure, recoverDrawState } from '../core/drawFailure';
 import { firstResidentMarker, type ResidentQuestHook } from '../systems/residentQuestHooks';
 import { drainBloodVomitRetches } from '../systems/bloodVomitRetches';
+import { ExplosionShake } from '../systems/ExplosionShake';
 import { WendellBlueprintsHook } from '../systems/briarHollow/blueprints/WendellBlueprintsHook';
 import { WendellContractsHook } from '../systems/constructionContracts/WendellContractsHook';
 import { ContractContactHook } from '../systems/constructionContracts/ContractContactHook';
@@ -681,6 +682,7 @@ export class BuildingInteriorScene extends GameplayScene {
    * a hand-played sound at each emit site — the place a cue is chosen.
    */
   private readonly bus = new EventBus();
+  private readonly explosionShake = new ExplosionShake(this.bus, () => this.active());
   /** Stops forwarding the crawlers' quest-slot evictions onto this scene's bus; set while the scene is running. */
   private stopForwardingQuestItemEvictions: (() => void) | null = null;
   /** Stops forwarding the crawlers' equipment changes onto this scene's bus; set while the scene is running. */
@@ -2148,6 +2150,7 @@ export class BuildingInteriorScene extends GameplayScene {
     const departing = this.floors[this.currentFloor];
     departing.combat.leaveFloor();
     departing.destruction.resetForCheckpoint();
+    this.explosionShake.reset();
     // A bolt already loosed belongs to the storey it was fired on, and the rise
     // cue belongs to skeletons the player is walking away from.
     departing.skeletonShots.resetForCheckpoint();
@@ -2380,7 +2383,7 @@ export class BuildingInteriorScene extends GameplayScene {
 
   /** The dynamite in his hand waiting to be thrown, which the hotbars mark in use. */
   private readiedDynamiteId(): ItemId | null {
-    return this.destruction.dynamite.isReadied ? 'goblin_dynamite' : null;
+    return this.destruction.dynamite.readiedItem;
   }
 
   /** The collaborators a hotbar press reaches, resolved against the live floor. */
@@ -2428,6 +2431,7 @@ export class BuildingInteriorScene extends GameplayScene {
     // Same contract as DungeonScene's bus: subscribers are re-wired per scene, so
     // the listeners this scene added must not outlive it.
     this.bus.clear();
+    this.explosionShake.dispose();
     const library = activeMusicLibrary();
     if (library !== null) returnUnreadMusicNotices(this.menus, library);
     this.menus.dispose();
@@ -3342,6 +3346,7 @@ export class BuildingInteriorScene extends GameplayScene {
     this.skeletonShots.update(ctx);
     this.drainCasterAudioCues();
     destruction.update(ctx);
+    this.explosionShake.update();
     if (destruction.drainAudioCues(this.audio)) {
       // A hearth or brazier that has just been smashed is floor now, and the
       // emitters were scanned off the layout before it was — left alone, the
@@ -4548,6 +4553,10 @@ export class BuildingInteriorScene extends GameplayScene {
    */
   protected override cameraFocus(): { x: number; y: number } {
     return this.bigTopMaze?.cameraTargetOverride ?? super.cameraFocus();
+  }
+
+  protected override cameraShake(): { x: number; y: number } {
+    return this.explosionShake.cameraOffset;
   }
 
   render(ctx: CanvasRenderingContext2D): void {

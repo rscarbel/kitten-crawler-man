@@ -134,7 +134,7 @@ export function fairyRoomRate(
  * fails, else a uniform count in its range, held under
  * {@link MAX_FAIRIES_PER_ROOM}.
  */
-export function rollFairyCount(rate: FairyRoomRate, difficulty: Difficulty, rng: FairyRng): number {
+function rollFairyCount(rate: FairyRoomRate, difficulty: Difficulty, rng: FairyRng): number {
   if (rng() >= rate.chance[difficulty]) return 0;
   const count = rollIntInclusive(rng, rate.minCount[difficulty], rate.maxCount[difficulty]);
   return Math.min(count, MAX_FAIRIES_PER_ROOM);
@@ -595,7 +595,7 @@ const BOSS_HEALER_MIN_RADIUS_TILES = 3;
 const BOSS_HEALER_MAX_RADIUS_TILES = 5;
 
 /** Where a fight allows its healer to be placed, by tile. */
-export type BossHealerTileFilter = (tileX: number, tileY: number) => boolean;
+type BossHealerTileFilter = (tileX: number, tileY: number) => boolean;
 
 const ANY_BOSS_HEALER_TILE: BossHealerTileFilter = () => true;
 

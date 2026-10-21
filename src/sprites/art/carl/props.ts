@@ -23,6 +23,7 @@ import { boardReach, drawBoard } from './props/board';
 import { crateReach, drawCrate } from './props/crate';
 import { wrenchReach, drawWrench } from './props/wrench';
 import { dynamiteReach, drawDynamite } from './props/dynamite';
+import { blackPowderBombReach, drawBlackPowderBomb } from './props/blackPowderBomb';
 import { zippoReach, drawZippo } from './props/zippo';
 import { bottleReach, drawBottle } from './props/bottle';
 import { slingshotReach, drawSlingshot } from './props/slingshot';
@@ -31,7 +32,15 @@ type Ctx = CanvasRenderingContext2D;
 
 /** Every prop Carl can be posed holding. */
 type CarlPropKind =
-  'hammer' | 'dynamite' | 'zippo' | 'bottle' | 'slingshot' | 'board' | 'crate' | 'wrench';
+  | 'hammer'
+  | 'dynamite'
+  | 'blackPowderBomb'
+  | 'zippo'
+  | 'bottle'
+  | 'slingshot'
+  | 'board'
+  | 'crate'
+  | 'wrench';
 
 /**
  * A prop held in one hand, carried on a `CarlPose`.
@@ -119,6 +128,7 @@ export const PROP_ART: Record<CarlPropKind, PropArt> = {
   wrench: { paint: drawWrench, reach: wrenchReach },
   hammer: { paint: drawHammer, reach: hammerReach },
   dynamite: { paint: drawDynamite, reach: dynamiteReach },
+  blackPowderBomb: { paint: drawBlackPowderBomb, reach: blackPowderBombReach },
   zippo: { paint: drawZippo, reach: zippoReach },
   bottle: { paint: drawBottle, reach: bottleReach },
   slingshot: { paint: drawSlingshot, reach: slingshotReach },

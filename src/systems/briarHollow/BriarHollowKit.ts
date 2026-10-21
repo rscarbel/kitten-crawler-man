@@ -158,6 +158,8 @@ export interface BriarHollowKitDeps {
   readonly worldHalted?: () => boolean;
   /** The level the siege's undead come at, which the militia is levelled to meet. */
   readonly assaultLevel: () => number;
+  /** Uniform [0, 1) the siege draws its campaign and spawns from; a gate passes a seeded stream. */
+  readonly assaultRandom?: () => number;
   /**
    * Whether a body stands in a safe room, where nothing the village's
    * defences throw may land. Absent means nowhere is.
@@ -542,6 +544,7 @@ export class BriarHollowKit {
             audio: deps.audio,
             setPhase: (phase) => this.quest?.setPhase(phase),
             waveLevel: deps.assaultLevel,
+            random: deps.assaultRandom,
             difficulty: activeDifficultyProfile,
             downedSoldiers: () => soldiers?.soldiers.filter((soldier) => soldier.isDowned) ?? [],
             mayorBark: () =>

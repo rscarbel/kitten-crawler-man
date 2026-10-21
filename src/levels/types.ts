@@ -73,6 +73,8 @@ export interface MobSpawnRule extends MobLevelRange {
     | 'skeleton_lord'
     | 'the_lich'
     | 'goblin_archer'
+    | 'goblin_dynamiter'
+    | 'goblin_bombardier'
     | 'fairy_shield'
     | 'fairy_healer'
     | 'fairy_ice'
@@ -93,7 +95,8 @@ export interface MobSpawnRule extends MobLevelRange {
   /** Maximum number of this mob type to spawn per room (default 1). */
   maxCount?: number;
   /**
-   * Extra mobs spawned into the same room alongside this rule's own.
+   * Extra mobs spawned into the same room alongside this rule's own, or beside
+   * a hallway rule's one body.
    *
    * The mechanism exists for one creature and states its design contract: a
    * goblin archer must never be the thing a room is made of. Alone it is a slow,
@@ -121,7 +124,9 @@ export interface EscortSpawnRule extends MobLevelRange {
   /**
    * Withheld until the progression region at this index; absent means every
    * region. Floor 1's archers are gated behind the Hoarder this way, so the
-   * opening stretch of a first-time crawler's first dungeon is unchanged.
+   * opening stretch of a first-time crawler's first dungeon is unchanged. A
+   * hallway point belongs to no region, so an escort with one set never joins
+   * a hallway rule.
    */
   minRegion?: number;
 }

@@ -26,6 +26,7 @@ export const SCRIPTED_PROP_VISUAL_IDS = [
   'prop_crate',
   'prop_wrench',
   'prop_dynamite',
+  'prop_black_powder_bomb',
   'prop_zippo',
   'prop_bottle',
 ] as const;
@@ -66,3 +67,9 @@ export type ToolHeldVisualId = (typeof TOOL_HELD_VISUAL_IDS)[number];
 /** Names the look a working tool's item is drawn with: a tier's, or Merrit's scythe. */
 export type WorkingToolHeldVisualId = ToolHeldVisualId | 'quest_scythe';
 export type ScriptedPropVisualId = (typeof SCRIPTED_PROP_VISUAL_IDS)[number];
+/** Looks the dynamite rows' throwing hand can hold: whichever explosive he is lobbing. */
+export const THROWN_PROP_VISUAL_IDS = [
+  'prop_dynamite',
+  'prop_black_powder_bomb',
+] as const satisfies readonly ScriptedPropVisualId[];
+export type ThrownPropVisualId = (typeof THROWN_PROP_VISUAL_IDS)[number];

@@ -37,7 +37,6 @@ Typecheck and lint don't prove behavior. Several invariants have their own scrip
 
 ```bash
 npm run verify:difficulty    # the P2 and P5 fairness rules (docs/difficulty-fairness-rules.md)
-npm run verify:difficulty-curve # P1: HP share per fight across party levels, every spawnable creature
 npm run verify:tactics       # P6: tactics trait rolls, guard, kite, flank, riposte bounds
 npm run verify:progression   # 50 generated maps per floor: reachability and bypass invariants
 npm run verify:quest-choke   # the defense quest's room, on the live GameMap

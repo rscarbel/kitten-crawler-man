@@ -499,8 +499,8 @@ function checkDoctor(rig: Rig): void {
   );
 
   const floorLevel = 15;
-  const refHuman = referenceStats('human', 'balanced', floorLevel).maxHp;
-  const refCat = referenceStats('cat', 'balanced', floorLevel).maxHp;
+  const refHuman = referenceStats('human', floorLevel).maxHp;
+  const refCat = referenceStats('cat', floorLevel).maxHp;
   const halfMissing = Math.ceil(refHuman / 2) + Math.ceil(refCat / 2);
   const reference = Math.max(EXPECTED_MIN_FEE, Math.ceil(halfMissing * EXPECTED_FEE_PER_HP));
   console.log(

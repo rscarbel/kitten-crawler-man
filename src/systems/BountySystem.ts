@@ -68,8 +68,7 @@ import {
  * its mark — a percentage-of-max-HP attack scaled a second time by mob level,
  * or a walk speed with no ceiling — and those are fixed at the source. Every
  * levelled walk speed goes through `Mob.levelledSpeedCap`, so no escort can
- * outrun the player, and `verify:difficulty-curve` holds escorts at this level
- * to their own HP-share band. Tune an individual mark, not this number.
+ * outrun the player. Tune an individual mark, not this number.
  */
 export const MAX_BOUNTY_MOB_LEVEL = 20;
 /** The mark itself outranks its escort by this much. */
@@ -175,20 +174,18 @@ export function bountyPayoutCoins(bossLevel: number): number {
 }
 
 /** A bounty encounter as staged, before it is inserted into a scene. */
-export interface StagedBountyEncounter {
+interface StagedBountyEncounter {
   readonly boss: Mob;
   readonly minions: readonly Mob[];
   readonly bossLevel: number;
-  readonly minionLevel: number;
 }
 
 /**
  * Builds an encounter through its def and applies everything the bounty rules
  * demand of its mobs — level, difficulty, boss flags, the per-blow cap, the
- * site leash — so a new bounty creature cannot forget any of it. Exported so
- * `verify:difficulty-curve` fights exactly what a player meets.
+ * site leash — so a new bounty creature cannot forget any of it.
  */
-export function stageBountyEncounter(
+function stageBountyEncounter(
   def: BountyDef,
   site: { readonly x: number; readonly y: number },
   map: GameMap,
@@ -220,7 +217,7 @@ export function stageBountyEncounter(
     mob.homePoint = homePoint;
     mob.leashRadiusTiles = SITE_LEASH_RADIUS_TILES;
   }
-  return { boss, minions, bossLevel, minionLevel };
+  return { boss, minions, bossLevel };
 }
 
 /**

@@ -457,7 +457,7 @@ async function dynamiteIncident(): Promise<AIReplayFixture> {
   });
   await world.step(QUICK_BEAT_MS, () => {
     live.carl.notableItems = { 'Goblin Dynamite': DYNAMITE_HELD - 1 };
-    bus.emit('dynamiteUsed', { player: 'Human' });
+    bus.emit('dynamiteUsed', { player: 'Human', item: 'goblin_dynamite' });
   });
   await world.step(QUICK_BEAT_MS, () => {
     for (const goblin of rest) kill(world, goblin, human);

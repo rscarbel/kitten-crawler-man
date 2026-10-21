@@ -1,9 +1,13 @@
 import { type GameMap } from '../map/GameMap';
 import { type Mob } from '../creatures/Mob';
-import type { TreasureRoomData } from '../map/DungeonGenerator';
+import {
+  START_ROOM_HALLWAY_SPAWN_MARGIN_TILES,
+  type TreasureRoomData,
+} from '../map/DungeonGenerator';
 import { campSiteKey } from '../map/overworld/camps';
 import { Goblin } from '../creatures/Goblin';
 import { prewarmGoblin, type GoblinWeapon } from '../sprites/goblinSprite';
+import { prewarmGoblinBomber } from '../sprites/goblinBomberSprite';
 import { Llama } from '../creatures/Llama';
 import { RockGolem } from '../creatures/RockGolem';
 import { RockGolemBoss } from '../creatures/RockGolemBoss';
@@ -54,6 +58,8 @@ import { MoldLion } from '../creatures/MoldLion';
 import { TerrorTheClown } from '../creatures/TerrorTheClown';
 import { CityElfCultist } from '../creatures/CityElfCultist';
 import { GoblinArcher } from '../creatures/GoblinArcher';
+import { GoblinDynamiter } from '../creatures/GoblinDynamiter';
+import { GoblinBombardier } from '../creatures/GoblinBombardier';
 import { Fairy } from '../creatures/fairies/Fairy';
 import { ShieldFairy } from '../creatures/fairies/ShieldFairy';
 import { HealingFairy } from '../creatures/fairies/HealingFairy';
@@ -73,23 +79,25 @@ type GoblinVariant = { readonly weapon: GoblinWeapon; readonly weight: number };
 const MAX_SPAWN_ATTEMPTS = 20;
 
 /** Extra mobs spawned in treasure rooms for difficulty. */
-export const TREASURE_ROOM_EXTRA_MOBS = 3;
+const TREASURE_ROOM_EXTRA_MOBS = 3;
 
 /** Treasure room mob level boost. */
-export const TREASURE_ROOM_LEVEL_BOOST = 1;
+const TREASURE_ROOM_LEVEL_BOOST = 1;
 
 /** Maximum mob level cap. */
 export const MAX_MOB_LEVEL = 20;
 
 /**
- * Hard ceiling on the mobs one room may spawn, after a region bonus is added to
- * the rolled count.
+ * Hard ceiling on the mobs one room may spawn: the host rule's roll, its
+ * region bonus, any over-level reinforcement and its escorts together.
  *
- * The bonus and the roll are both ranges, so their worst cases compound: a room
- * rolling five goblins in the post-Juicer region would otherwise open with
- * seven of them in a doorway, which is a wall of bodies rather than a fight.
+ * The bonus, the reinforcement and the roll are all ranges, so their worst
+ * cases compound into a wall of bodies in a doorway rather than a fight unless
+ * something bounds them. Seven is the fewest that still seats a floor-2 goblin
+ * room's own melee floor beside its whole back line (both archers and both
+ * bombers), so the bombers join a room rather than displacing its goblins.
  */
-export const MAX_ROOM_SPAWN_COUNT = 6;
+export const MAX_ROOM_SPAWN_COUNT = 7;
 
 /** Room boundary inset (1 tile from wall). */
 const ROOM_BOUNDARY_INSET = 1;
@@ -185,7 +193,7 @@ function probeSpawnTile(
  * most telegraphed of the four, and one in every four goblins being one would
  * make it ordinary. The sword skirmisher is the common grunt.
  */
-export const GOBLIN_VARIANTS: readonly GoblinVariant[] = [
+const GOBLIN_VARIANTS: readonly GoblinVariant[] = [
   { weapon: 'sword', weight: 4 },
   { weapon: 'axe', weight: 3 },
   { weapon: 'mace', weight: 2 },
@@ -432,13 +440,16 @@ export function resolveBossLevel(
 }
 
 /**
- * The escort mobs one room actually gets: every eligible escort rule, expanded
- * to one entry per body so the caller can simply count them.
+ * The escort mobs one room or hallway point actually gets: every eligible
+ * escort rule, expanded to one entry per body so the caller can simply count
+ * them. A hallway point has no region (`null`), so an escort withheld until a
+ * region is never fielded in a hallway: it could otherwise turn up ahead of
+ * the boss it waits behind.
  */
-function rollEscorts(rule: MobSpawnRule, region: number): EscortSpawnRule[] {
+function rollEscorts(rule: MobSpawnRule, region: number | null): EscortSpawnRule[] {
   const rolled: EscortSpawnRule[] = [];
   for (const escort of rule.escorts ?? []) {
-    if (escort.minRegion !== undefined && region < escort.minRegion) continue;
+    if (escort.minRegion !== undefined && (region === null || region < escort.minRegion)) continue;
     const count = randomInt(escort.minCount ?? 1, escort.maxCount ?? 1);
     for (let i = 0; i < count; i++) rolled.push(escort);
   }
@@ -455,7 +466,7 @@ type MobFactory = (tileX: number, tileY: number) => Mob;
 const MOB_REGISTRY = new Map<string, MobFactory>();
 
 /** Register a mob type so it can be spawned by name. */
-export function registerMob(type: string, factory: MobFactory): void {
+function registerMob(type: string, factory: MobFactory): void {
   MOB_REGISTRY.set(type, factory);
 }
 
@@ -516,6 +527,8 @@ registerMob('skeleton_archer', (x, y) => new SkeletonArcher(x, y, TILE_SIZE));
 registerMob('skeleton_lord', (x, y) => new SkeletonLord(x, y, TILE_SIZE));
 registerMob('the_lich', (x, y) => new TheLich(x, y, TILE_SIZE));
 registerMob('goblin_archer', (x, y) => new GoblinArcher(x, y, TILE_SIZE));
+registerMob('goblin_dynamiter', (x, y) => new GoblinDynamiter(x, y, TILE_SIZE));
+registerMob('goblin_bombardier', (x, y) => new GoblinBombardier(x, y, TILE_SIZE));
 registerMob('fairy_shield', (x, y) => new ShieldFairy(x, y, TILE_SIZE));
 registerMob('fairy_healer', (x, y) => new HealingFairy(x, y, TILE_SIZE));
 registerMob('fairy_ice', (x, y) => new IceFairy(x, y, TILE_SIZE));
@@ -540,6 +553,14 @@ function prewarmGoblinBand(): void {
 
 function prewarmGoblinArcher(): void {
   prewarmGoblin('bow');
+}
+
+function prewarmGoblinDynamiter(): void {
+  prewarmGoblinBomber('dynamite');
+}
+
+function prewarmGoblinBombardier(): void {
+  prewarmGoblinBomber('black_powder');
 }
 
 /** Warms the one kind of fairy that arrived. */
@@ -582,6 +603,8 @@ const MOB_PREWARM: ReadonlyMap<string, (mob: Mob) => void> = new Map([
   ['tuskling', prewarmTuskling],
   ['goblin', prewarmGoblinBand],
   ['goblin_archer', prewarmGoblinArcher],
+  ['goblin_dynamiter', prewarmGoblinDynamiter],
+  ['goblin_bombardier', prewarmGoblinBombardier],
   ['cockroach', prewarmCockroach],
   ['rat', prewarmRat],
   ['troglodyte', prewarmTroglodyte],
@@ -799,9 +822,9 @@ function findWalkableTileInCamp(
  *
  * One of two answers to a party that has out-levelled a floor, the other being
  * {@link partyTrackedBand}. This one leaves every mob at its authored level, so
- * the one-on-one rules — the off-stat crawler winning alone among them — hold
- * exactly as authored, while the room still costs more: its cost grows with
- * the number of bodies attacking while the party works through them.
+ * every one-on-one fight stays exactly as authored, while the room still costs
+ * more: its cost grows with the number of bodies attacking while the party
+ * works through them.
  */
 export function overLevelReinforcementBodies(
   def: Pick<LevelDef, 'overLevelReinforcement'>,
@@ -818,7 +841,7 @@ export function overLevelReinforcementBodies(
 }
 
 /** How many of a room's host rule spawn, and which escorts join them. */
-export interface RoomPopulation {
+interface RoomPopulation {
   readonly hostCount: number;
   readonly escorts: readonly EscortSpawnRule[];
 }
@@ -829,8 +852,8 @@ export interface RoomPopulation {
  * escorts' places reserved first and the whole room held under
  * {@link MAX_ROOM_SPAWN_COUNT}.
  *
- * Exported so `scripts/verify-difficulty-curve.ts` prices the rooms the
- * spawner really fills rather than a copy of its arithmetic.
+ * Exported so `scripts/verify-difficulty.ts` reads the rooms the spawner
+ * really fills rather than a copy of its arithmetic.
  */
 export function rollRoomPopulation(
   def: LevelDef,
@@ -854,9 +877,57 @@ export function rollRoomPopulation(
   return { hostCount, escorts };
 }
 
+/** How far from a hallway spawn point its escorts may be dropped, in tiles each way. */
+const HALLWAY_ESCORT_SPREAD_TILES = 2;
+/** Offset from a tile's origin to its centre, as a share of a tile. */
+const TILE_CENTRE_SHARE = 0.5;
+
+/**
+ * A tile near the hallway spawn point (`x`, `y`) for one of its escorts, held
+ * to the point's own rules: in the point's hallway segment and in a straight
+ * walk of it, never in a room (a boss room, the defence quest's room, a safe
+ * room) or the start room's margin, and off the tiles a stealth gate keeps
+ * clear. Null when there is none.
+ */
+function findHallwayEscortTile(
+  map: GameMap,
+  x: number,
+  y: number,
+): { x: number; y: number } | null {
+  const bounds: SpawnBounds = {
+    minTX: x - HALLWAY_ESCORT_SPREAD_TILES,
+    minTY: y - HALLWAY_ESCORT_SPREAD_TILES,
+    maxTX: x + HALLWAY_ESCORT_SPREAD_TILES,
+    maxTY: y + HALLWAY_ESCORT_SPREAD_TILES,
+  };
+  const tileCentre = (tile: number): number => (tile + TILE_CENTRE_SHARE) * TILE_SIZE;
+  const segment = map.regionAt(x, y);
+  if (map.regionKind(segment) !== 'hallway') return null;
+  // A map with hallway segments has rooms, and the first placed is the start room.
+  const [firstRoom] = map.roomBounds;
+  const start = map.progressionLayout?.startRoom ?? firstRoom;
+  const inStartMargin = (tileX: number, tileY: number): boolean =>
+    tileX >= start.x - START_ROOM_HALLWAY_SPAWN_MARGIN_TILES &&
+    tileX < start.x + start.w + START_ROOM_HALLWAY_SPAWN_MARGIN_TILES &&
+    tileY >= start.y - START_ROOM_HALLWAY_SPAWN_MARGIN_TILES &&
+    tileY < start.y + start.h + START_ROOM_HALLWAY_SPAWN_MARGIN_TILES;
+  const keepClear = map.stealthGateRoom?.keepClearTiles ?? [];
+  return probeSpawnTile(
+    map,
+    bounds,
+    (tileX, tileY) =>
+      map.isMobSpawnTile(tileX, tileY) &&
+      map.regionAt(tileX, tileY) === segment &&
+      !inStartMargin(tileX, tileY) &&
+      !keepClear.some((tile) => tile.x === tileX && tile.y === tileY) &&
+      map.hasWalkableLine(tileCentre(x), tileCentre(y), tileCentre(tileX), tileCentre(tileY)),
+  );
+}
+
 /**
  * Instantiate all mobs for a level. Room spawn points draw from
- * `def.roomMobs`; hallway points draw from `def.hallwayMobs`.
+ * `def.roomMobs`; hallway points draw from `def.hallwayMobs`. Both honour a
+ * rule's `escorts`.
  * If `def.bossRoom` is set and the map has a boss room centre, spawns the boss there.
  * Camps named in `clearedCamps` (see `TownMemory.clearedCamps`) are left empty.
  */
@@ -901,11 +972,25 @@ export function spawnForLevel(
   if (def.hallwayMobs.length > 0) {
     for (const { x, y } of map.hallwaySpawnPoints) {
       const rule = pickRule(def.hallwayMobs);
-      const mob = createMob(rule.type, x, y, map);
-      mob.applyMobLevel(resolveAmbientLevel(rule, def, partyLevel, profile), def.levelledCurve);
-      applySpawnDifficulty(mob, profile);
-      mob.allowSlingshotDrop = def.slingshotDrops === true;
-      mobs.push(mob);
+      const spawnAt = (
+        band: MobLevelRange,
+        type: MobSpawnRule['type'],
+        tileX: number,
+        tileY: number,
+      ): void => {
+        const mob = createMob(type, tileX, tileY, map);
+        mob.applyMobLevel(resolveAmbientLevel(band, def, partyLevel, profile), def.levelledCurve);
+        applySpawnDifficulty(mob, profile);
+        mob.allowSlingshotDrop = def.slingshotDrops === true;
+        mobs.push(mob);
+      };
+      spawnAt(rule, rule.type, x, y);
+      const escorts = rollEscorts(rule, null);
+      if (escorts.length === 0) continue;
+      for (const escort of escorts) {
+        const tile = findHallwayEscortTile(map, x, y);
+        if (tile !== null) spawnAt(escort, escort.type, tile.x, tile.y);
+      }
     }
   }
 

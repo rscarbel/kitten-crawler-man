@@ -79,32 +79,31 @@ export const ESCORT_WAVE_COUNT = ESCORT_WAVE_PROGRESS.length;
  * The fewest and most bodies one wave brings. Nine: the road's ambushes are
  * a deliberate horde, three bodies to each crawler and three more for the
  * cow, so the party cannot simply stand in front of Midge and trade blows
- * with a line of three. `verify:difficulty-curve` prices a wave this size on
- * its own band for the escort, since no room on the floor fields nine.
+ * with a line of three.
  */
-export const ESCORT_WAVE_MIN_BODIES = 9;
-export const ESCORT_WAVE_MAX_BODIES = 9;
+const ESCORT_WAVE_MIN_BODIES = 9;
+const ESCORT_WAVE_MAX_BODIES = 9;
 /**
  * Each of the road's dead comes at this share of its kind's health: a horde
  * of lesser dead rather than nine of the wilds' own, so the danger is in how
  * many of them there are and how many get past the party to the cow, not in
  * any one of them. Their blows are their kind's own. Tuned by playtest.
  */
-export const ESCORT_BODY_HEALTH_SHARE = 0.4;
+const ESCORT_BODY_HEALTH_SHARE = 0.4;
 /** What the road's ambushers are drawn from: the dead that roam these wilds. */
-export const ESCORT_AMBUSH_KINDS = [
+const ESCORT_AMBUSH_KINDS = [
   'ruins_ghoul',
   'raised_ratkin',
   'skeleton_warrior',
   'skeleton_archer',
 ] as const;
 /** One of the road's ambusher kinds. */
-export type EscortAmbushKind = (typeof ESCORT_AMBUSH_KINDS)[number];
+type EscortAmbushKind = (typeof ESCORT_AMBUSH_KINDS)[number];
 /**
  * The most of a kind one wave may bring. The ghoul hits hardest of the four:
  * one in every three bodies at most, as a wave of three held it to one.
  */
-export const ESCORT_KIND_CAPS: Readonly<Partial<Record<EscortAmbushKind, number>>> = {
+const ESCORT_KIND_CAPS: Readonly<Partial<Record<EscortAmbushKind, number>>> = {
   ruins_ghoul: 3,
 };
 
@@ -157,7 +156,7 @@ const WAVE_SWING_RADIANS = degreesToRadians(WAVE_SWING_DEGREES);
  * wall: a wave raised past the edge of a wide screen, at her back, needs
  * about that much road to close on a cow the party keeps walking.
  */
-export const WAVE_SANCTUARY_CLEARANCE_TILES = 20;
+const WAVE_SANCTUARY_CLEARANCE_TILES = 20;
 /** How far either side of its wave's bearing one body may come up, so a wave comes from one side of her. */
 const SPAWN_SPREAD_DEGREES = 20;
 const SPAWN_SPREAD_RADIANS = degreesToRadians(SPAWN_SPREAD_DEGREES);
@@ -264,12 +263,12 @@ const INCOMING_MARKER_MIN_ALPHA = 0.55;
 const INCOMING_MARKER_ALPHA_RANGE = 0.4;
 
 /** The caption a wave springs with, naming the side of the road it comes from. */
-export function escortAmbushCaption(direction: string): string {
+function escortAmbushCaption(direction: string): string {
   return `Ambush! The dead come for Midge from the ${direction}!`;
 }
 
 /** The compass point nearest `bearing`, a screen-space angle in radians (0 is east, y runs down). */
-export function compassWord(bearing: number): (typeof COMPASS_WORDS)[number] {
+function compassWord(bearing: number): (typeof COMPASS_WORDS)[number] {
   const sector = FULL_TURN / COMPASS_WORDS.length;
   const turns = (((bearing % FULL_TURN) + FULL_TURN) % FULL_TURN) / sector;
   return COMPASS_WORDS[Math.round(turns) % COMPASS_WORDS.length];
@@ -300,7 +299,7 @@ interface Body {
   readonly y: number;
 }
 
-export interface EscortAmbushDeps {
+interface EscortAmbushDeps {
   readonly gameMap: GameMap;
   readonly site: BriarHollowSite;
   readonly roster: MobRoster;
@@ -323,7 +322,7 @@ export interface EscortAmbushDeps {
 }
 
 /** One update of the road: where Midge is, whether she is being led, and whether the escort is still on. */
-export interface EscortAmbushFrame {
+interface EscortAmbushFrame {
   readonly midge: Player | null;
   readonly led: boolean;
   /** Whether the quest is at the escort step at all. */
@@ -987,6 +986,6 @@ function drawIncomingMarker(
  * of its kind's health. Call after `applyMobLevel`, which would otherwise level
  * the scaled figure again.
  */
-export function fieldAsLesserDead(mob: Mob): void {
+function fieldAsLesserDead(mob: Mob): void {
   mob.scaleMaxHp(ESCORT_BODY_HEALTH_SHARE);
 }

@@ -143,7 +143,9 @@ function nearestPeerDistance(mob: Mob, targets: readonly Player[]): number {
  * - governed by the assault's own siege behaviour already (`siegeCapable` or
  *   `siegeDirective`), which weighs this same choice itself, in `MarchDirective`;
  * - converted to the party's side, or built to leave structures alone
- *   (`siegeStructureMultiplier` of 0 — archers, casters).
+ *   (`siegeStructureMultiplier` of 0 — archers, casters);
+ * - a lobber (`lobsAtStructures`), which throws at an engine from range and
+ *   must never be marched up to one to swing at it.
  */
 export function tryThreatenTrebuchet(mob: Mob, targets: readonly Player[]): boolean {
   if (
@@ -153,7 +155,8 @@ export function tryThreatenTrebuchet(mob: Mob, targets: readonly Player[]): bool
     mob.isConverted ||
     mob.siegeCapable !== null ||
     mob.siegeDirective !== null ||
-    mob.siegeStructureMultiplier <= 0
+    mob.siegeStructureMultiplier <= 0 ||
+    mob.lobsAtStructures
   ) {
     return false;
   }

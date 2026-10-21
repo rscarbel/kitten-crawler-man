@@ -38,6 +38,7 @@ import type { RockThrowSystem } from './RockThrowSystem';
 import type { HirelingBoltSystem } from './HirelingBoltSystem';
 import type { SkeletonProjectileSystem } from './SkeletonProjectileSystem';
 import type { GoblinArrowSystem } from './GoblinArrowSystem';
+import type { GoblinBombSystem } from './GoblinBombSystem';
 import type { ClownGasSystem } from './ClownGasSystem';
 import type { FairySystem } from './FairySystem';
 import type { FairyFireballSystem } from './FairyFireballSystem';
@@ -234,6 +235,8 @@ export interface RenderContext {
   hirelingShots?: HirelingBoltSystem;
   skeletonShots: SkeletonProjectileSystem;
   goblinArrows: GoblinArrowSystem;
+  /** Absent in scenes no bomber goblin fights in. */
+  goblinBombs?: GoblinBombSystem;
   clownGas: ClownGasSystem;
   /** Absent in scenes no fairy flies in. */
   fairies?: FairySystem;
@@ -418,6 +421,8 @@ export class RenderPipeline {
     // Rings, reticles, charges and flames are all ground the party walks on.
     rc.fairies?.renderGround(ctx, camX, camY);
     rc.fairyFireballs?.renderGround(ctx, camX, camY);
+    // Scorches, the shadows under bombs in the air, and the burning sticks' circles.
+    rc.goblinBombs?.renderGround(ctx, camX, camY);
     // The Smush's floor half: its rings and cracks are the ground Carl stamps,
     // and drawn over him they wash out the feet the stamp is read from.
     rc.smushFx.renderGround(ctx, camX, camY);
@@ -445,6 +450,7 @@ export class RenderPipeline {
         rc.camY + viewportHeight(),
       ) === true ||
       rc.fairyFireballs?.hasGroundArt === true ||
+      rc.goblinBombs?.hasGroundWarnings === true ||
       rc.destructibles.hasGroundArt
     );
   }
@@ -474,6 +480,7 @@ export class RenderPipeline {
     rc.clownGas.renderGround(ctx, camX, camY);
     rc.fairies?.renderGround(ctx, camX, camY);
     rc.fairyFireballs?.renderGround(ctx, camX, camY);
+    rc.goblinBombs?.renderGroundWarnings(ctx, camX, camY);
     rc.destructibles.renderGroundWarnings(ctx, camX, camY);
   }
 
@@ -742,6 +749,7 @@ export class RenderPipeline {
     // behind the skeleton it is about to fly past.
     rc.skeletonShots.render(ctx, camX, camY);
     rc.goblinArrows.render(ctx, camX, camY);
+    rc.goblinBombs?.render(ctx, camX, camY);
     rc.clownGas.render(ctx, camX, camY);
     // Tethers, chains, beams and lobs cross the fight, so none may hide behind a body.
     rc.fairies?.render(ctx, camX, camY);

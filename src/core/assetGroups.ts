@@ -323,6 +323,8 @@ export const ASSET_GROUPS: Readonly<Record<AssetGroup, readonly SpriteKey[]>> = 
 export const MOB_SPRITE_KEYS: Readonly<Record<string, readonly SpriteKey[]>> = {
   goblin: [],
   goblin_archer: [],
+  goblin_dynamiter: [],
+  goblin_bombardier: [],
   llama: [],
   rock_golem: [],
   rock_golem_boss: [],

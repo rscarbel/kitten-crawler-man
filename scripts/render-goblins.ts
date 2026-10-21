@@ -27,24 +27,34 @@
  *   npx tsx scripts/render-goblins.ts --variant=axe --out=axe.png
  *   npx tsx scripts/render-goblins.ts --variant=mace --mode=arc --row=attack_light
  *   npx tsx scripts/render-goblins.ts --variant=warhammer --mode=parts --part=head --scale=6
+ *   npx tsx scripts/render-goblins.ts --mode=bombs
+ *
+ * `--mode=bombs` renders what the bomber goblins throw instead of a figure:
+ * see `goblinBombsSheet.ts`.
  */
 
 import { createCanvas, type Canvas } from 'canvas';
 import {
-  GOBLIN_ARCHETYPES,
-  GOBLIN_FIGURES,
   GOBLIN_GORE_STATES,
-  GOBLIN_STYLES,
   IMPACT_FRAMES,
-  ROWS,
   TILE_SCALE,
   goblinPose,
   goblinWeaponTip,
-  type GoblinArchetype,
   type RowSpec,
 } from '../src/sprites/art/goblinFigure.js';
-import { ARCHETYPE_SCALE, figureHeight } from '../src/sprites/art/goblinArt.js';
+import {
+  GOBLIN_ARCHETYPES,
+  figureHeight,
+  type GoblinArchetype,
+  type Pt,
+} from '../src/sprites/art/goblinArt.js';
+import {
+  GOBLIN_BOMBER_EVENT_FRAMES,
+  goblinBomberSkeleton,
+} from '../src/sprites/art/goblinBomberFigure.js';
+import { figureOf, isArmed, rowsOf, scaleOf, styleOf } from './goblinSubjects.js';
 import { bakeFigureCell } from './figureSheet.js';
+import { renderGoblinBombSheet } from './goblinBombsSheet.js';
 import { goblinGateFailures } from './gates-goblins.js';
 import { reportFigureGates } from './figureGates.js';
 import { installCanvasGlobals } from './nodeCanvasGlobals.js';
@@ -64,10 +74,10 @@ installCanvasGlobals();
 const COLS_PER_ROW = 10;
 
 /** The physical review-sheet row each state's frames start on. */
-function rowOffsets(): Map<string, number> {
+function rowOffsets(rows: readonly RowSpec[]): Map<string, number> {
   const offsets = new Map<string, number>();
   let physicalRow = 0;
-  for (const row of ROWS) {
+  for (const row of rows) {
     offsets.set(row.name, physicalRow);
     physicalRow += Math.ceil(row.frameCount / COLS_PER_ROW);
   }
@@ -105,15 +115,16 @@ function stateOf(row: RowSpec, frame: number): string {
  * cache bakes it, so what a reviewer looks at is what the game blits.
  */
 function bakeReviewSheet(archetype: GoblinArchetype): Canvas {
-  const def = GOBLIN_FIGURES[archetype];
-  const offsets = rowOffsets();
-  const physicalRows = [...ROWS, GORE_ROW].reduce(
+  const def = figureOf(archetype);
+  const rows = rowsOf(archetype);
+  const offsets = rowOffsets(rows);
+  const physicalRows = [...rows, GORE_ROW].reduce(
     (total, row) => total + Math.ceil(row.frameCount / COLS_PER_ROW),
     0,
   );
   const sheet = createCanvas(COLS_PER_ROW * def.frameWidth, physicalRows * def.frameHeight);
   const ctx = sheet.getContext('2d');
-  for (const row of [...ROWS, GORE_ROW]) {
+  for (const row of [...rows, GORE_ROW]) {
     const start = offsets.get(row.name);
     if (start === undefined) throw new Error(`no review-sheet offset for ${row.name}`);
     for (let frame = 0; frame < row.frameCount; frame++) {
@@ -194,12 +205,14 @@ interface Geometry {
   readonly frameHeight: number;
   readonly tileX: number;
   readonly tileY: number;
+  /** The rows this build paints, in the order the review sheet lays them out. */
+  readonly rows: readonly RowSpec[];
 }
 
 /** The cell the figure declares — the same four numbers the runtime places it by. */
 function geometryOf(archetype: GoblinArchetype): Geometry {
-  const { frameWidth, frameHeight, tileX, tileY } = GOBLIN_FIGURES[archetype];
-  return { frameWidth, frameHeight, tileX, tileY };
+  const { frameWidth, frameHeight, tileX, tileY } = figureOf(archetype);
+  return { frameWidth, frameHeight, tileX, tileY, rows: rowsOf(archetype) };
 }
 
 interface FrameSource {
@@ -208,7 +221,7 @@ interface FrameSource {
 }
 
 function frameSource(row: RowSpec, frame: number, geometry: Geometry): FrameSource {
-  const start = rowOffsets().get(row.name);
+  const start = rowOffsets(geometry.rows).get(row.name);
   if (start === undefined) throw new Error(`no offset for ${row.name}`);
   return {
     sx: (frame % COLS_PER_ROW) * geometry.frameWidth,
@@ -217,6 +230,12 @@ function frameSource(row: RowSpec, frame: number, geometry: Geometry): FrameSour
 }
 
 function impactFrameOf(archetype: GoblinArchetype, row: RowSpec): number | null {
+  if (!isArmed(archetype)) {
+    const events = GOBLIN_BOMBER_EVENT_FRAMES[archetype];
+    if (row.name === 'light') return events.fuseCatch;
+    if (row.name === 'throw') return events.release;
+    return null;
+  }
   if (row.name === 'attack_light') return IMPACT_FRAMES[archetype].light;
   if (row.name === 'attack_heavy') return IMPACT_FRAMES[archetype].heavy;
   return null;
@@ -226,10 +245,10 @@ function impactFrameOf(archetype: GoblinArchetype, row: RowSpec): number | null 
 
 /**
  * The height the goblin is actually drawn at, not its authored height — the rig
- * is authored at one size and shrunk at bake time by `ARCHETYPE_SCALE`.
+ * is authored at one size and shrunk at bake time by its draw scale.
  */
 function drawnHeight(archetype: GoblinArchetype): number {
-  return figureHeight(GOBLIN_STYLES[archetype].proportions) * ARCHETYPE_SCALE[archetype];
+  return figureHeight(styleOf(archetype).proportions) * scaleOf(archetype);
 }
 
 function drawSheetPanels(
@@ -495,19 +514,24 @@ interface TracePoint {
 }
 
 /**
- * The weapon tip per frame, per row.
- *
- * Computed from the choreography rather than read back from a dumped JSON file.
- * The dump existed because the trace was produced inside a bake and the harness
- * could only see what the bake wrote down; the harness now calls the same pose
- * functions the figure paints from, so there is nothing left to drift.
+ * What the arc panel traces: an armed goblin's weapon tip, or a bomber's
+ * throwing hand, which carries the explosive through the lob.
+ */
+function tracedPointOf(archetype: GoblinArchetype, row: RowSpec, frame: number): Pt | null {
+  if (isArmed(archetype)) return goblinWeaponTip(goblinPose(archetype, row, frame), archetype);
+  return goblinBomberSkeleton(archetype, row.name, frame).nearArm.end;
+}
+
+/**
+ * The traced point per frame, per row, computed from the same pose functions
+ * the figure paints from, so the trace and the art cannot disagree.
  */
 function arcTraceOf(archetype: GoblinArchetype): Record<string, readonly TracePoint[]> {
   const trace: Record<string, readonly TracePoint[]> = {};
-  for (const row of ROWS) {
+  for (const row of rowsOf(archetype)) {
     const points: TracePoint[] = [];
     for (let frame = 0; frame < row.frameCount; frame++) {
-      const tip = goblinWeaponTip(goblinPose(archetype, row, frame), archetype);
+      const tip = tracedPointOf(archetype, row, frame);
       if (tip === null) break;
       points.push({ x: tip.x, y: tip.y });
     }
@@ -781,7 +805,8 @@ function parseMode(): Mode {
 }
 
 function renderVariant(archetype: GoblinArchetype, mode: Mode, scale: number, only: string): void {
-  const rows = only === '' ? ROWS : ROWS.filter((row) => row.name === only);
+  const allRows = rowsOf(archetype);
+  const rows = only === '' ? allRows : allRows.filter((row) => row.name === only);
   if (rows.length === 0) throw new Error(`No row named "${only}"`);
   const out = parseFlag('out', `${PREVIEW_DIR}/goblin-${archetype}-${mode}.png`);
 
@@ -812,6 +837,10 @@ function renderVariant(archetype: GoblinArchetype, mode: Mode, scale: number, on
 }
 
 function main(): void {
+  if (parseFlag('mode', 'sheet') === 'bombs') {
+    console.log(renderGoblinBombSheet(parseFlag('out', `${PREVIEW_DIR}/goblin-bombs.png`)));
+    return;
+  }
   // Gates first, before any contact sheet is baked. A contact sheet is a
   // tens-of-megapixel allocation, and measuring art on the far side of one has
   // already made a centroid gate report a seam at twice its true width.
@@ -820,7 +849,7 @@ function main(): void {
   const mode = parseMode();
   const scale = parseNumberFlag('scale', DEFAULT_SCALE, MIN_SCALE, MAX_SCALE);
   const only = parseFlag('row', '');
-  // With no `--variant` every build is rendered: five figures share one
+  // With no `--variant` every build is rendered: the armed figures share one
   // choreography, and a review that only ever looked at the axe would never see
   // the war hammer outgrow its cell.
   const requested = parseFlag('variant', '');

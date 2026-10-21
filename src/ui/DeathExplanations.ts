@@ -74,6 +74,8 @@ export type DeathCause =
   | 'fireFairyBlast'
   | 'fireFairyDeathFlame'
   | 'fireFairyDeathExplosion'
+  | 'goblinDynamite'
+  | 'goblinBlackPowder'
   | 'frozenSolid'
   | 'burningTree'
   | 'lavaFlames'
@@ -477,15 +479,25 @@ export const DEATH_EXPLANATIONS: Record<DeathCause, readonly string[]> = {
     'The mini-explosion had a countdown lit at the fairy’s death. You did not watch it.',
     'You killed the fire fairy. The fairy killed you back, a few seconds later.',
   ],
+  goblinDynamite: [
+    'A goblin threw a lit stick at your feet. The red circle filled up. So did you, with shrapnel.',
+    'The stick bounced, settled and fizzed. You had two whole seconds and spent them standing there.',
+    'Goblin dynamite has a short fuse. Shorter than your attention span, apparently.',
+  ],
+  goblinBlackPowder: [
+    'The goblin held the bomb up and drew a red circle on you. Then it stopped drawing and threw.',
+    'Black powder goes off the moment it lands. The circle you ignored was where it was going to land.',
+    'No fuse on the ground, no second chance. The only warning was the circle while it aimed.',
+  ],
   frozenSolid: [
     'You were encased in ice and could not so much as raise a hand while it finished you.',
     'Frozen solid, unable to act, while whatever was already hitting you kept hitting you.',
     'The ice fairy did not need to land another shot. You were already standing still for everyone else.',
   ],
   explosiveFriendlyFire: [
-    "Your own dynamite got you. That's a one-way ticket.",
+    "Your own explosive got you. That's a one-way ticket.",
     'You blew yourself up. No one else to blame here.',
-    'Self-inflicted dynamite death. At least you took the blast personally.',
+    'Self-inflicted blast death. At least you took it personally.',
   ],
   raisedRatkin: [
     'One of Briar Hollow’s own dead clawed you down. It was slower than you.',

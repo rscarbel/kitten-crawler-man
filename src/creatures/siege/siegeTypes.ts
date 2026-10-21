@@ -53,6 +53,33 @@ export interface SiegeCapable {
   readonly spreadSeed: number;
 }
 
+/** A world point in pixels. */
+export interface SiegePoint {
+  readonly x: number;
+  readonly y: number;
+}
+
+/**
+ * A siege mob that fights by lobbing explosives over the palisade instead of
+ * walking up to it and swinging. The assault's march drives it through this:
+ * it picks what to throw at, and the lobber decides whether a lob from where
+ * it stands would come down there.
+ */
+export interface SiegeLobber {
+  /** Nearest a lob may come down to the lobber's feet, in pixels: its own blast is inside this. */
+  readonly lobBandMinPx: number;
+  /** Furthest the lobber throws from where it stands, in pixels. */
+  readonly lobBandMaxPx: number;
+  /**
+   * One frame of lobbing at the ground point `point`: carries on an action
+   * under way, or stands and starts one when a lob from here would come down
+   * on the point. `null` only carries on an action under way. Answers false,
+   * having done nothing, when there is no action under way and no lob from
+   * here would land on the point, so the caller moves the lobber instead.
+   */
+  lobAt(point: SiegePoint | null): boolean;
+}
+
 /**
  * What an assault mob does this frame instead of its own AI, when the
  * assault has something for it to do: consulted by the mob loop before

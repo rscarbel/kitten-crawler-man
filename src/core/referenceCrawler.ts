@@ -1,8 +1,8 @@
 /**
  * What an on-schedule crawler of a given party level looks like, as numbers.
  *
- * Pure and side-effect-free so `scripts/verify-difficulty-curve.ts` can price a
- * fight against a real levelled mob without constructing a crawler. Every
+ * Pure and side-effect-free so a fight against a real levelled mob can be
+ * priced headlessly without constructing a crawler. Every
  * number comes out of the formulas the crawlers themselves run
  * (`src/core/crawlerFormulas.ts`, `computeDodgeChance`, the magic missile's own
  * stat table), so retuning any of them moves the reference with it.
@@ -33,61 +33,12 @@ import {
   STAT_POINTS_PER_LEVEL,
 } from './crawlerFormulas';
 
-export type ReferenceCrawler = 'human' | 'cat';
+type ReferenceCrawler = 'human' | 'cat';
 
 export const REFERENCE_CRAWLERS: readonly ReferenceCrawler[] = ['human', 'cat'];
 
-export const REFERENCE_BUILD_NAMES = [
-  'balanced',
-  'offense-heavy',
-  'defense-heavy',
-  'off-stat',
-] as const;
-
-/**
- * How a crawler spends her level-up points.
- *
- * `off-stat` is the deliberately weak one: every point into the stat that does
- * least for that crawler's main attack. It exists so the curve gate can insist
- * that a player who spent badly still wins a one-on-one — they should struggle,
- * never be locked out.
- */
-export type ReferenceBuild = (typeof REFERENCE_BUILD_NAMES)[number];
-
-/** A share of each level-up point per stat; normalised before use, so only the ratios matter. */
-export type StatAllocation = Readonly<Record<StatName, number>>;
-
 /** The spell level a crawler who has never trained her spell casts at. */
 const UNTRAINED_SPELL_LEVEL = 1;
-
-/**
- * The builds, per crawler.
- *
- * Weight on a stat the crawler cannot spend into (Donut's constitution and
- * dexterity) is spread evenly over the stats she can, so one table of intents
- * serves both crawlers. The human's main attack is his fist, so his `off-stat`
- * build never buys strength and spreads every point over the three stats that
- * do nothing for it. Donut's attack key
- * claws on three presses in every four (her missile is on cooldown for the
- * rest), so her claws are her main attack and her `off-stat` dumps into
- * intelligence too, which only feeds the one press in four that is a missile.
- */
-export const REFERENCE_BUILDS: Readonly<
-  Record<ReferenceCrawler, Readonly<Record<ReferenceBuild, StatAllocation>>>
-> = {
-  human: {
-    balanced: { strength: 1, intelligence: 1, constitution: 1, dexterity: 1 },
-    'offense-heavy': { strength: 3, intelligence: 0, constitution: 1, dexterity: 1 },
-    'defense-heavy': { strength: 1, intelligence: 0, constitution: 2, dexterity: 2 },
-    'off-stat': { strength: 0, intelligence: 1, constitution: 1, dexterity: 1 },
-  },
-  cat: {
-    balanced: { strength: 1, intelligence: 1, constitution: 1, dexterity: 1 },
-    'offense-heavy': { strength: 3, intelligence: 1, constitution: 1, dexterity: 1 },
-    'defense-heavy': { strength: 1, intelligence: 1, constitution: 2, dexterity: 2 },
-    'off-stat': { strength: 0, intelligence: 1, constitution: 0, dexterity: 0 },
-  },
-};
 
 /** One press of the attack key: what it deals, as what, and how long until the next press. */
 export interface ReferenceAttack {
@@ -96,7 +47,7 @@ export interface ReferenceAttack {
   readonly frames: number;
 }
 
-export interface ReferenceStats {
+interface ReferenceStats {
   readonly stats: Readonly<Record<StatName, number>>;
   readonly maxHp: number;
   readonly dodgeChance: number;
@@ -129,57 +80,20 @@ function canSpendInto(crawler: ReferenceCrawler, stat: StatName): boolean {
   return crawler === 'human' || !CAT_LOCKED_STATS.includes(stat);
 }
 
-/** The build's weights with any locked stat's share spread evenly over the spendable ones. */
-function spendableWeights(
-  crawler: ReferenceCrawler,
-  allocation: StatAllocation,
-): Record<StatName, number> {
-  const spendable = ALL_STATS.filter((stat) => canSpendInto(crawler, stat));
-  const lockedWeight = ALL_STATS.filter((stat) => !canSpendInto(crawler, stat)).reduce(
-    (sum, stat) => sum + allocation[stat],
-    0,
-  );
-  const redistributed = lockedWeight / spendable.length;
-  const weights: Record<StatName, number> = {
-    strength: 0,
-    intelligence: 0,
-    constitution: 0,
-    dexterity: 0,
-  };
-  for (const stat of spendable) weights[stat] = allocation[stat] + redistributed;
-  return weights;
-}
-
 /**
- * Hands out `points` one at a time, each to the stat furthest behind its share,
- * so the result at every party level is the allocation a player following the
- * build would actually have — never a fractional point.
+ * Every level-up point spread evenly, in turn, over the stats the crawler can
+ * spend into, so the result at every party level is the allocation a player
+ * spending evenly would actually have — never a fractional point.
  */
-function allocatePoints(
-  weights: Record<StatName, number>,
-  points: number,
-): Record<StatName, number> {
-  const totalWeight = ALL_STATS.reduce((sum, stat) => sum + weights[stat], 0);
+function spentPoints(crawler: ReferenceCrawler, points: number): Record<StatName, number> {
+  const spendable = ALL_STATS.filter((stat) => canSpendInto(crawler, stat));
   const spent: Record<StatName, number> = {
     strength: 0,
     intelligence: 0,
     constitution: 0,
     dexterity: 0,
   };
-  for (let point = 1; point <= points; point++) {
-    let neediest: StatName = ALL_STATS[0];
-    let largestShortfall = -Infinity;
-    for (const stat of ALL_STATS) {
-      if (weights[stat] <= 0) continue;
-      const owed = (weights[stat] / totalWeight) * point;
-      const shortfall = owed - spent[stat];
-      if (shortfall > largestShortfall) {
-        largestShortfall = shortfall;
-        neediest = stat;
-      }
-    }
-    spent[neediest]++;
-  }
+  for (let point = 0; point < points; point++) spent[spendable[point % spendable.length]]++;
   return spent;
 }
 
@@ -209,44 +123,13 @@ function attackCycleFor(
 }
 
 /**
- * How points are counted: `whole` is the allocation one player following the
- * build actually has, a point at a time; `expected` is the average over every
- * player following it, fractional and smooth. Stat points arrive one at a time,
- * so a single player's fight cost steps down each time a point lands — a
- * trend check wants `expected`, a check on what one fight costs wants `whole`.
+ * The crawler a player who spreads her points evenly has at `partyLevel`, with
+ * no gear, skills, trained spells or consumables.
  */
-export type PointCounting = 'whole' | 'expected';
-
-/** The build's points as a player would hold them after `points` level-ups. */
-function spentPoints(
-  weights: Record<StatName, number>,
-  points: number,
-  counting: PointCounting,
-): Record<StatName, number> {
-  if (counting === 'whole') return allocatePoints(weights, points);
-  const totalWeight = ALL_STATS.reduce((sum, stat) => sum + weights[stat], 0);
-  return {
-    strength: (weights.strength / totalWeight) * points,
-    intelligence: (weights.intelligence / totalWeight) * points,
-    constitution: (weights.constitution / totalWeight) * points,
-    dexterity: (weights.dexterity / totalWeight) * points,
-  };
-}
-
-/**
- * The crawler a player following `build` has at `partyLevel`, with no gear,
- * skills, trained spells or consumables.
- */
-export function referenceStats(
-  crawler: ReferenceCrawler,
-  build: ReferenceBuild,
-  partyLevel: number,
-  counting: PointCounting = 'whole',
-): ReferenceStats {
+export function referenceStats(crawler: ReferenceCrawler, partyLevel: number): ReferenceStats {
   const levelsGained = Math.max(0, partyLevel - 1);
   const points = levelsGained * STAT_POINTS_PER_LEVEL;
-  const weights = spendableWeights(crawler, REFERENCE_BUILDS[crawler][build]);
-  const spent = spentPoints(weights, points, counting);
+  const spent = spentPoints(crawler, points);
   const base = startingStats(crawler);
   const stats: Record<StatName, number> = {
     strength: base.strength + spent.strength,
@@ -262,4 +145,14 @@ export function referenceStats(
     dodgeChance: computeDodgeChance(stats.dexterity),
     attackCycle: attackCycleFor(crawler, stats),
   };
+}
+
+/**
+ * The max HP of an on-schedule Carl at `partyLevel`: the
+ * yardstick a blow sized as a share of a crawler's health is measured against.
+ * Carl rather than Donut because her constitution never grows, so her max HP
+ * says nothing about how far into the run the party is.
+ */
+export function onCurveCrawlerMaxHp(partyLevel: number): number {
+  return referenceStats('human', partyLevel).maxHp;
 }

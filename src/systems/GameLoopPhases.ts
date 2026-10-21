@@ -32,6 +32,13 @@ import { KrakarenClone } from '../creatures/KrakarenClone';
 import { KrakarenTentacle } from '../creatures/KrakarenTentacle';
 import { playFairyCastCues } from './fairyAudioCues';
 import { playUndeadCues } from './undeadAudioCues';
+import { GoblinBomber } from '../creatures/GoblinBomber';
+import {
+  BOMBER_GOBLIN_CUES,
+  BOMBER_SOUND_CUE_PLAYS,
+  CueGap,
+  PACK_CACKLE_GAP_S,
+} from './bomberGoblinSoundCues';
 
 /**
  * Named phases of the game update loop, extracted from DungeonScene.updateGameplay().
@@ -468,6 +475,9 @@ const MOB_CENTRE_FRACTION = 0.5;
  */
 const BOSS_CUE_REACH = 'panOnly' as const satisfies PlacedReach;
 
+/** Shared by every bomber on the floor, so a pack lighting together gives one cackle. */
+const packCackleGap = new CueGap(PACK_CACKLE_GAP_S);
+
 /**
  * Play queued per-mob combat audio cues (attack + projectile), keyed by each
  * mob's audioTag, each from where the mob stands. Shared by DungeonScene
@@ -486,6 +496,7 @@ export function playMobAudioCues(mobs: Mob[], audio: AudioManager | null): void 
         )
       : null;
     playCuesOf(mob, voice);
+    playBomberGoblinCues(mob, voice, audio?.clockSeconds ?? 0);
     // The damage switch only takes the flag for the tags it voices; a
     // creature silenced now must not bring an old cue with it once heard.
     if (!heard) mob.damageSoundPending = false;
@@ -724,6 +735,19 @@ function playCuesOf(mob: Mob, audio: PlacedCuePlayer | null): void {
   playKrakarenTentacleCues(mob, audio);
   playFairyCastCues(mob, audio);
   playUndeadCues(mob, audio);
+}
+
+/**
+ * Drains a bomber goblin's light, throw and shout cues every frame, heard or
+ * not. A cackle waits out {@link PACK_CACKLE_GAP_S} after any bomber's last.
+ */
+function playBomberGoblinCues(mob: Mob, audio: PlacedCuePlayer | null, clockS: number): void {
+  if (!(mob instanceof GoblinBomber)) return;
+  for (const raised of mob.takeSoundCues()) {
+    if (audio === null) continue;
+    if (raised === 'cackle' && !packCackleGap.allows(clockS)) continue;
+    for (const cue of BOMBER_SOUND_CUE_PLAYS[raised]) audio.playRandom(BOMBER_GOBLIN_CUES[cue]);
+  }
 }
 
 /**

@@ -42,6 +42,10 @@ import { SkeletonSummonSystem } from '../src/systems/SkeletonSummonSystem';
 import { SkeletonProjectileSystem } from '../src/systems/SkeletonProjectileSystem';
 import { GroundPickupSystem } from '../src/systems/GroundPickupSystem';
 import { DynamiteSystem } from '../src/systems/DynamiteSystem';
+import { GoblinBombSystem } from '../src/systems/GoblinBombSystem';
+import { setFloorReferencePartyLevel } from '../src/core/floorReferenceLevel';
+import { DIFFICULTY_PROFILES } from '../src/core/difficultyProfiles';
+import { recommendedPartyLevelFor } from '../src/levels/spawner';
 import { BriarHollowKit } from '../src/systems/briarHollow/BriarHollowKit';
 import type { MidgeEscortCarry } from '../src/core/midgeEscortCarry';
 import type { BlueprintsCue } from '../src/systems/briarHollow/blueprints/blueprintsSoundCues';
@@ -91,6 +95,8 @@ export interface SiegeRig {
   readonly combat: CombatKit;
   /** The skeletons' arrows and the necromancer's bolts in flight. */
   readonly projectiles: SkeletonProjectileSystem;
+  /** The bomber goblins' sticks and bombs, in the air and on the ground. */
+  readonly goblinBombs: GoblinBombSystem;
   /** Names of every "New Item!" card the rig was asked to show. */
   readonly rewardCards: string[];
   /** Every announce, in order. */
@@ -113,6 +119,8 @@ export interface SiegeRigOptions {
   readonly crafts?: PartyCraftsState;
   /** The level the siege's undead and the militia come at: a number, or a roll per spawn. */
   readonly assaultLevel: number | (() => number);
+  /** Uniform [0, 1) the siege draws from; `Math.random` by default. */
+  readonly random?: () => number;
   /** The scene's music claims the siege claims its track through; none by default. */
   readonly music?: () => MusicClaims | null;
   /** Midge's escort as a door carried it; a fresh record by default. */
@@ -123,6 +131,9 @@ export interface SiegeRigOptions {
 
 export function buildSiegeRig(options: SiegeRigOptions): SiegeRig {
   const { map, site } = villageMap(options.seed);
+  // Briar Hollow stands on floor 3, and a bomber's blast is sized to the
+  // floor being played, as the scene publishes on entering it.
+  setFloorReferencePartyLevel(recommendedPartyLevelFor(level3, DIFFICULTY_PROFILES.normal));
   const state = options.state ?? createBriarHollowState();
   const crafts = options.crafts ?? createPartyCraftsState();
   const bus = new EventBus();
@@ -175,6 +186,7 @@ export function buildSiegeRig(options: SiegeRigOptions): SiegeRig {
       const level = options.assaultLevel;
       return typeof level === 'number' ? level : level();
     },
+    assaultRandom: options.random,
     music: options.music,
     midgeEscortCarry: options.midgeEscortCarry,
     onBlueprintsCue: options.onBlueprintsCue,
@@ -184,6 +196,13 @@ export function buildSiegeRig(options: SiegeRigOptions): SiegeRig {
   });
   const summons = new SkeletonSummonSystem(map, (mob) => roster.add(mob));
   const projectiles = new SkeletonProjectileSystem(map);
+  const goblinBombs = new GoblinBombSystem({
+    gameMap: map,
+    bus,
+    destructibles: null,
+    trees: () => null,
+    siegeStructures: () => (kit.assault?.inSiege === true ? (kit.defences?.defense ?? null) : null),
+  });
   const targets: Player[] = [];
   const context = (): SystemContext => {
     targets.length = 0;
@@ -215,6 +234,7 @@ export function buildSiegeRig(options: SiegeRigOptions): SiegeRig {
     kit,
     combat,
     projectiles,
+    goblinBombs,
     rewardCards,
     announced,
     explainerOpens,
@@ -228,6 +248,7 @@ export function buildSiegeRig(options: SiegeRigOptions): SiegeRig {
       combat.updateMobs(ctx);
       summons.update(ctx);
       projectiles.update(ctx);
+      goblinBombs.update(ctx);
       combat.resolveKills();
       combat.playerTick.update(ctx);
       // The real scene is the one caller of `conversation.update`; a harness
@@ -238,6 +259,7 @@ export function buildSiegeRig(options: SiegeRigOptions): SiegeRig {
     dispose: () => {
       kit.dispose();
       combat.dispose();
+      goblinBombs.dispose();
       bus.clear();
     },
   };

@@ -34,7 +34,7 @@ const SPEED_FULL_POWER = 9.0;
 const SPEED_BASE = 4.5;
 
 /** Runtime stats computed from the current ability level. */
-export interface MagicMissileStats {
+interface MagicMissileStats {
   /** Frames between allowed player-triggered shots (0 = no cooldown). */
   cooldownFrames: number;
   /** Multiplier applied to base missile damage (2 + intelligence). */

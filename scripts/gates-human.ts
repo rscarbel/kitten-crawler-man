@@ -126,6 +126,7 @@ import {
 import { FOREARM_LENGTH, HEAD_RY, UPPER_ARM_LENGTH } from '../src/sprites/art/carl/proportions.js';
 import {
   alwaysDrawnRows,
+  explosiveHeldDraw,
   HUMAN_ATTACK_ROWS,
   motionSetOfRow,
   type HumanRowSelection,
@@ -143,6 +144,7 @@ import {
 } from '../src/sprites/art/human/motionSets.js';
 import { GRIP_ARCHETYPES } from '../src/sprites/held/gripArchetypes.js';
 import { HELD_VISUALS } from '../src/sprites/held/heldVisuals.js';
+import { compositeHeldItem, heldTransformAt } from '../src/sprites/held/heldComposite.js';
 import { ITEM_DEF, isItemId, type ItemId, weaponStatsOf } from '../src/core/ItemDefs.js';
 import {
   dressedPose,
@@ -583,6 +585,35 @@ const STEP_VS_RUNNER_UP = 1.35;
  * the only frames a player reads as an impact. G6 is what holds the spike to
  * exactly that step.
  */
+/**
+ * A cell's ink as it moves on screen: the baked cell, and on a frame his fist
+ * closes on an explosive, the stick composited there as the runtime draws it.
+ * The explosive is part of the motion a reader follows — the arm drawing a
+ * stick back past his head — and without it a throw's steps are measured on
+ * an empty fist.
+ */
+function motionCellAlpha(row: HumanRowName, frame: number): Uint8ClampedArray {
+  const held = explosiveHeldDraw(HELD_VISUALS.prop_dynamite, { row, frame, flipX: false });
+  if (held === null) return cellAlpha(row, frame, HUMAN_FIGURE);
+  const cell = bakeFigureCell(HUMAN_FIGURE, row, frame);
+  const source = {
+    id: HUMAN_FIGURE.id,
+    painting: humanFigureFor(DEFAULT_CARL_OUTFIT, null).painting,
+  };
+  const socket = carlSocketsAt(source, row, frame).sockets.mainHand;
+  const ctx = asGameContext(cell.getContext('2d'));
+  compositeHeldItem(
+    ctx,
+    held.look,
+    heldTransformAt(socket, HUMAN_CELL_PX_PER_UNIT, held.phase),
+    'painted',
+  );
+  const { data } = cell.getContext('2d').getImageData(0, 0, frameWidth, frameHeight);
+  const alpha = new Uint8ClampedArray(frameWidth * frameHeight);
+  for (let i = 0; i < alpha.length; i++) alpha[i] = data[i * CHANNELS + ALPHA_OFFSET];
+  return alpha;
+}
+
 function isDeclaredSpike(row: string, step: number): boolean {
   const stomp = STOMP_ROWS.find((candidate) => candidate.row === row);
   return stomp !== undefined && step === stomp.impact - 1;
@@ -620,7 +651,7 @@ function gateMotionContinuity(): void {
   let stepsMeasured = 0;
   for (const row of HUMAN_ROWS) {
     const cells = Array.from({ length: row.frameCount }, (_unused, frame) =>
-      cellAlpha(row.name, frame, HUMAN_FIGURE),
+      motionCellAlpha(row.name, frame),
     );
     const steps: number[] = [];
     for (let i = 1; i < cells.length; i++) steps.push(frameDelta(cells[i - 1], cells[i]));

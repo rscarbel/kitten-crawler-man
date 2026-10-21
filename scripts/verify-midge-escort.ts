@@ -308,11 +308,11 @@ function buildEscortRig(
   return { rig, escort, music, carry, cues, view };
 }
 
-/** The reference party at {@link PARTY_LEVEL}: `balanced` stats, full health, a few potions each. */
+/** The reference party at {@link PARTY_LEVEL}: even-spread stats, full health, a few potions each. */
 function equipParty(rig: SiegeRig): void {
   const crawlers = [
-    { body: rig.human, stats: referenceStats('human', 'balanced', PARTY_LEVEL).stats },
-    { body: rig.cat, stats: referenceStats('cat', 'balanced', PARTY_LEVEL).stats },
+    { body: rig.human, stats: referenceStats('human', PARTY_LEVEL).stats },
+    { body: rig.cat, stats: referenceStats('cat', PARTY_LEVEL).stats },
   ];
   for (const { body, stats } of crawlers) {
     body.level = PARTY_LEVEL;
@@ -508,8 +508,8 @@ interface Striker {
 }
 
 function strikersFor(rig: SiegeRig): Striker[] {
-  const human = referenceStats('human', 'balanced', PARTY_LEVEL).attackCycle[0];
-  const cat = referenceStats('cat', 'balanced', PARTY_LEVEL).attackCycle[0];
+  const human = referenceStats('human', PARTY_LEVEL).attackCycle[0];
+  const cat = referenceStats('cat', PARTY_LEVEL).attackCycle[0];
   const fresh = {
     cooldown: 0,
     stalledFrames: 0,

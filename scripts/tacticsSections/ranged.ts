@@ -1,6 +1,6 @@
 /**
  * `verify:tactics` sections for the ranged creatures — the goblin archer, the
- * skeleton archer and the lava llama — whose kite is "keep a friend between
+ * skeleton archer, the lava llama and the two bomber goblins — whose kite is "keep a friend between
  * me and the player while shooting", plus their regroup.
  *
  * Each check drives the real creature through the real mob loop on the room
@@ -52,6 +52,8 @@ const RANGED_CASES: readonly RangedCase[] = [
   { type: 'goblin_archer', helperType: 'goblin' },
   { type: 'skeleton_archer', helperType: 'skeleton_sword' },
   { type: 'llama', helperType: 'llama' },
+  { type: 'goblin_dynamiter', helperType: 'goblin' },
+  { type: 'goblin_bombardier', helperType: 'goblin' },
 ];
 
 /** The ranged creatures' eligibility, in roll order: a draw is asked for each. */

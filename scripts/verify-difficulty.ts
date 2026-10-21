@@ -51,7 +51,12 @@ import {
   regionLevelBand,
   resolveBossLevel,
   resolveSpawnLevel,
+  roomSpawnBounds,
+  spawnExtraMobs,
+  spawnForLevel,
+  spawnTreasureRoomMobs,
 } from '../src/levels/spawner';
+import { mulberry32 } from '../src/sprites/person/rng';
 import {
   WAYFINDER_GRACE_FRAMES,
   WAYFINDER_PULSE_PERIOD_FRAMES,
@@ -86,6 +91,7 @@ import { FloorTypeValue, type TileContent } from '../src/map/tileTypes';
 import { HumanPlayer } from '../src/creatures/HumanPlayer';
 import { TheLich, HANDS_WINDUP_FRAMES, LICH_MAX_SPEED } from '../src/creatures/TheLich';
 import {
+  applySpawnDifficulty,
   DIFFICULTY_PROFILES,
   NORMAL_AMBIENT_LEVEL_RATIO,
   NORMAL_BOSS_LEVEL_RATIO,
@@ -105,13 +111,35 @@ import { dirname, join, resolve } from 'path';
 import { fileURLToPath } from 'url';
 import { level2 } from '../src/levels/level2';
 import { level3 } from '../src/levels/level3';
-import type { LevelDef, MobLevelRange } from '../src/levels/types';
+import type { LevelDef, MobLevelRange, MobSpawnRule } from '../src/levels/types';
 import { PLAYER_SPEED, TILE_SIZE } from '../src/core/constants';
 import { DifficultyStats, type RoomFightDetails } from '../src/core/DifficultyStats';
 import { CatPlayer } from '../src/creatures/CatPlayer';
 import { createMob } from '../src/levels/spawner';
 import { MobRoster } from '../src/systems/kits/SceneWorld';
 import { SpellSystem } from '../src/systems/SpellSystem';
+import type { SystemContext } from '../src/systems/GameSystem';
+import { GoblinBombSystem, applyGoblinBlastToBodies } from '../src/systems/GoblinBombSystem';
+import {
+  BLACK_POWDER_WALK_OUT_FRAMES,
+  BOMBER_TUNING,
+  type BombPoint,
+  GOBLIN_BOMB_DODGE_REACTION_FRAMES,
+  GOBLIN_DYNAMITE_WALK_OUT_FRAMES,
+  activeBomberTuning,
+  blackPowderDodgeMarginFrames,
+  goblinBombBlastRadiusPx,
+  goblinDynamiteDodgeMarginFrames,
+} from '../src/systems/goblinBombConstants';
+import { GoblinBomber } from '../src/creatures/GoblinBomber';
+import { settings } from '../src/core/Settings';
+import { goblinBombReleaseFrame } from '../src/sprites/goblinBomberSprite';
+import { Mercenary } from '../src/creatures/Mercenary';
+import { getMercenaryTemplate, type MercenaryTemplateId } from '../src/core/mercenaryTemplates';
+import {
+  floorReferencePartyLevel,
+  setFloorReferencePartyLevel,
+} from '../src/core/floorReferenceLevel';
 import {
   DynamiteSystem,
   dynamiteCrawlerDamage,
@@ -1155,6 +1183,690 @@ section('progression regions');
   check(tagsMatchGeometry, 'each room’s region matches the gauntlet whose bounds contain it');
 }
 
+// ── Floor 1's bombers wait behind the Juicer ─────────────────────────────────
+
+/** Floor-1 maps generated and populated for the bomber check. */
+const BOMBER_MAP_SEEDS = 6;
+/** Rooms rolled per region for the bomber check, on top of the real maps. */
+const BOMBER_ROOM_ROLLS = 4000;
+const BOMBER_SEED_BASE = 0xb0b;
+/** A mid-floor party, inside every band the floor authors. */
+const BOMBER_CHECK_PARTY_LEVEL = 5;
+
+/** Whether a mob is one of the goblins that lob explosives. */
+function isBomber(mob: Mob): boolean {
+  return mob.bombThrower !== null;
+}
+
+const bomberProbeMap = openChaseRoom();
+
+/** Whether a spawn rule's type is a bomber's, read off the creature it builds. */
+function isBomberType(type: MobSpawnRule['type']): boolean {
+  return isBomber(createMob(type, 0, 0, bomberProbeMap));
+}
+
+section("floor 1's bombers wait behind the Juicer");
+{
+  const def = level1;
+  const profile = DIFFICULTY_PROFILES.normal;
+  const juicerGauntlet = def.progression?.gauntlets.findIndex(
+    (gauntlet) => gauntlet.bossType === 'juicer',
+  );
+  check(juicerGauntlet !== undefined && juicerGauntlet >= 0, 'floor 1 still has a Juicer gauntlet');
+  const postJuicerRegion = (juicerGauntlet ?? 0) + 1;
+
+  // Every rule that is not a room's own escort has no region to gate on, so
+  // none may name a bomber at all.
+  const ungatedTypes = [
+    ...def.hallwayMobs.flatMap((rule) => [rule.type, ...(rule.escorts ?? []).map((e) => e.type)]),
+    ...def.roomMobs.map((rule) => rule.type),
+    ...(def.extraSpawns ?? []).map((rule) => rule.type),
+  ];
+  check(
+    !ungatedTypes.some(isBomberType),
+    'no floor-1 hallway, extra spawn or room host rule fields a bomber',
+  );
+
+  const random = Math.random;
+  let earlyRolled = 0;
+  let lateRolled = 0;
+  Math.random = mulberry32(BOMBER_SEED_BASE);
+  for (const region of progressionRegions(def)) {
+    for (const rule of def.roomMobs) {
+      for (let roll = 0; roll < BOMBER_ROOM_ROLLS; roll++) {
+        const { escorts } = rollRoomPopulation(
+          def,
+          rule,
+          region,
+          BOMBER_CHECK_PARTY_LEVEL,
+          profile,
+        );
+        const bombers = escorts.filter((escort) => isBomberType(escort.type)).length;
+        if (region < postJuicerRegion) earlyRolled += bombers;
+        else lateRolled += bombers;
+      }
+    }
+  }
+
+  let earlySpawned = 0;
+  let lateSpawned = 0;
+  let unplaced = 0;
+  for (let seed = 0; seed < BOMBER_MAP_SEEDS; seed++) {
+    Math.random = mulberry32(BOMBER_SEED_BASE + seed);
+    const map = new GameMap({
+      mapSize: def.mapSize,
+      tileHeight: TILE_SIZE,
+      mapType: 'dungeon',
+      dungeon: dungeonOptionsForLevel(def),
+    });
+    const mobs = [
+      ...spawnForLevel(def, map, BOMBER_CHECK_PARTY_LEVEL, profile, new Set()),
+      ...spawnExtraMobs(def, map, BOMBER_CHECK_PARTY_LEVEL, profile),
+      ...spawnTreasureRoomMobs(map.treasureRooms, def, map, BOMBER_CHECK_PARTY_LEVEL, profile),
+    ];
+    for (const mob of mobs.filter(isBomber)) {
+      const tileX = Math.floor(mob.x / TILE_SIZE);
+      const tileY = Math.floor(mob.y / TILE_SIZE);
+      const room = map.mobSpawnPoints.find((point) => {
+        const bounds = roomSpawnBounds(point);
+        return (
+          tileX >= bounds.minTX &&
+          tileX <= bounds.maxTX &&
+          tileY >= bounds.minTY &&
+          tileY <= bounds.maxTY
+        );
+      });
+      if (room === undefined) unplaced++;
+      else if (room.region < postJuicerRegion) earlySpawned++;
+      else lateSpawned++;
+    }
+  }
+  Math.random = random;
+
+  check(
+    earlyRolled === 0 && earlySpawned === 0 && unplaced === 0,
+    `no bomber spawns before the Juicer (${earlyRolled} rolled, ${earlySpawned} on ${BOMBER_MAP_SEEDS} maps, ${unplaced} outside a room)`,
+  );
+  check(
+    lateRolled > 0 && lateSpawned > 0,
+    `bombers do spawn past the Juicer (${lateRolled} rolled, ${lateSpawned} on ${BOMBER_MAP_SEEDS} maps)`,
+  );
+}
+
+// ── Bomber goblins: a throw the target can walk out of ───────────────────────
+
+/** Where the bomber and its target start, in tiles of the open chase room. */
+const BOMBER_THROW_BOMBER_TILE_X = 11;
+const BOMBER_THROW_TARGET_TILE_X = 6;
+const BOMBER_THROW_ROW = 12;
+/** A corner of the room, out of every blast, where the dodger waits for a landing. */
+const BOMBER_THROW_DODGER_PARK_TILE = 2;
+/** Long enough for a light, a lock, a throw, a flight and a whole fuse. */
+const BOMBER_THROW_MAX_FRAMES = 900;
+/**
+ * The target circles its start tile until the throw is committed: a circle
+ * rather than a back-and-forth strafe, so every stretch of a lock sees it
+ * travel the same chord and no lock can straddle a turn and sit still. Slower
+ * than a walk, and small enough to keep it inside the bomber's band.
+ */
+const BOMBER_TARGET_CIRCLE_RADIUS_PX = TILE_SIZE;
+const BOMBER_TARGET_CIRCLE_PERIOD_FRAMES = 240;
+/**
+ * How far the target must have moved between the first lock frame and the
+ * release for the lock check to mean anything: a landing re-aimed at the
+ * release would sit at least this far from the locked one.
+ */
+const BOMBER_MIN_LOCK_DRIFT_PX = TILE_SIZE / 4;
+/** The furthest ahead of a target's feet a bombardier's locked landing may sit, on the difficulty being played. */
+function maxAimLeadPx(): number {
+  return TILE_SIZE * activeBomberTuning().maxAimLeadTiles;
+}
+/**
+ * Frames a close-range probe watches a bomber with a crawler in its face: past
+ * a drop's release and a hop's lock, but short of the backing off that would
+ * carry it far enough for an ordinary lob.
+ */
+const BOMBER_CLOSE_PROBE_FRAMES = 30;
+/**
+ * Frames the measured release-to-blast may fall short of flight plus fuse:
+ * the release is seen on the frame the system launches it, and the landing
+ * and the blast each tick on the frame they happen.
+ */
+const BOMBER_TIMING_SLACK_FRAMES = 2;
+/** How far from the bomber the close-range probe's crawler stands, in tiles. */
+const BOMBER_CLOSE_PROBE_OFFSET_TILES = 1;
+/** Room for floating-point error when two landings are compared, in pixels. */
+const LANDING_MATCH_EPSILON_PX = 1e-6;
+/** Bomber levels a throw is compared across: authored, and the top. */
+const BOMBER_LOW_LEVEL = 1;
+const BOMBER_HIGH_LEVEL = MAX_MOB_LEVEL;
+/** A late floor's reference party level, for the blast-size comparison. */
+const BOMBER_LATE_FLOOR_PARTY_LEVEL = 26;
+/** Floors whose blast size is compared across bomber levels: the first, and a late one. */
+const BOMBER_DAMAGE_FLOOR_PARTY_LEVELS = [1, BOMBER_LATE_FLOOR_PARTY_LEVEL] as const;
+
+const BOMBER_TYPES = ['goblin_dynamiter', 'goblin_bombardier'] as const;
+/** Any hireling serves as the control on the landing; a sturdy one outlives the blast. */
+const BOMBER_CONTROL_HIRELING = 'sledge' as const satisfies MercenaryTemplateId;
+type BomberType = (typeof BOMBER_TYPES)[number];
+
+/** What one real throw at a moving target did, frame by frame. */
+interface BomberThrowRun {
+  crawlerHpShare: number;
+  /** Frames a black powder landing was locked before the bomb left the hand. */
+  lockFrames: number;
+  /**
+   * Whether the first locked landing sat ahead of the target's feet along its
+   * motion, as that frame's AI saw them, and no further than the aim's lead cap.
+   */
+  lockedLeadingTarget: boolean;
+  /** How far the first locked landing sat from the target's feet, in pixels. */
+  lockLeadPx: number;
+  /** Whether the locked landing never moved for the rest of the lock. */
+  lockHeld: boolean;
+  /** Whether the bomb in the air flew to the first locked landing. */
+  flewToLock: boolean;
+  /** How far the target's feet travelled between the first lock frame and the release. */
+  targetDriftDuringLockPx: number;
+  /** Frames from the release to the stick touching the floor (dynamite only). */
+  releaseToLandingFrames: number | null;
+  /** Frames from the release to the blast. */
+  releaseToBlastFrames: number | null;
+  /** How far the dodger's centre was from the blast when it went off. */
+  dodgerDistanceAtBlastPx: number | null;
+  dodgerHpLost: number;
+  /** Blows the dodger's own dodge roll turned aside: a blast that reached it all the same. */
+  dodgerDodges: number;
+  /**
+   * Health lost by a hireling left standing on the landing, the control for
+   * the dodge. A mob rather than a crawler because mobs never roll a dodge, so
+   * the control cannot pass or fail on the dice.
+   */
+  standerHpLost: number;
+  blastRadiusPx: number;
+}
+
+function sameGroundPoint(a: BombPoint, b: BombPoint): boolean {
+  return Math.hypot(a.x - b.x, a.y - b.y) <= LANDING_MATCH_EPSILON_PX;
+}
+
+function feetOfCrawler(crawler: { readonly x: number; readonly y: number }): BombPoint {
+  return { x: crawler.x + TILE_SIZE / 2, y: crawler.y + TILE_SIZE / 2 };
+}
+
+function standOn(crawler: { x: number; y: number }, point: BombPoint): void {
+  crawler.x = point.x - TILE_SIZE / 2;
+  crawler.y = point.y - TILE_SIZE / 2;
+}
+
+/**
+ * Drives a real bomber of `type` at `mobLevel`, levelled and stamped as a spawn
+ * is, through its first throw at a moving target, in the real
+ * `GoblinBombSystem`.
+ *
+ * The moment the landing is known — the stick touching the floor, or the black
+ * powder lock beginning — a dodger is dropped on it; once the throw has left
+ * the hand the target stops moving, and it and a hireling stand on the landing
+ * as the control. The dodger stands still for
+ * `GOBLIN_BOMB_DODGE_REACTION_FRAMES`, then walks straight away from the
+ * bomber at `PLAYER_SPEED`: the way a stick rolls, so the worst case for it.
+ */
+function runBomberThrow(type: BomberType, mobLevel: number): BomberThrowRun {
+  const map = openChaseRoom();
+  const roster = new MobRoster(map, new SpellSystem());
+  const target = new HumanPlayer(BOMBER_THROW_TARGET_TILE_X, BOMBER_THROW_ROW, TILE_SIZE);
+  const dodger = new CatPlayer(
+    BOMBER_THROW_DODGER_PARK_TILE,
+    BOMBER_THROW_DODGER_PARK_TILE,
+    TILE_SIZE,
+  );
+  const bomber = createMob(type, BOMBER_THROW_BOMBER_TILE_X, BOMBER_THROW_ROW, map);
+  bomber.applyMobLevel(mobLevel);
+  applySpawnDifficulty(bomber);
+  roster.add(bomber);
+  const thrower = bomber.bombThrower;
+  const system = new GoblinBombSystem({
+    gameMap: map,
+    bus: null,
+    destructibles: null,
+    trees: () => null,
+    siegeStructures: () => null,
+  });
+  const stander = new Mercenary(
+    BOMBER_THROW_DODGER_PARK_TILE,
+    BOMBER_THROW_DODGER_PARK_TILE,
+    TILE_SIZE,
+    target,
+    BOMBER_CONTROL_HIRELING,
+    getMercenaryTemplate(BOMBER_CONTROL_HIRELING).name,
+  );
+  stander.setMap(map);
+  const ctx: SystemContext = {
+    human: target,
+    cat: dodger,
+    active: target,
+    inactive: dodger,
+    activeIsMoving: false,
+    roster,
+    gameMap: map,
+    extraTargets: [stander],
+  };
+  const run: BomberThrowRun = {
+    crawlerHpShare: bomber instanceof GoblinBomber ? bomber.crawlerHpShare : 0,
+    lockFrames: 0,
+    lockedLeadingTarget: false,
+    lockLeadPx: 0,
+    lockHeld: true,
+    flewToLock: false,
+    targetDriftDuringLockPx: 0,
+    releaseToLandingFrames: null,
+    releaseToBlastFrames: null,
+    dodgerDistanceAtBlastPx: null,
+    dodgerHpLost: 0,
+    dodgerDodges: 0,
+    standerHpLost: 0,
+    blastRadiusPx: goblinBombBlastRadiusPx(
+      type === 'goblin_dynamiter' ? 'dynamite' : 'black_powder',
+    ),
+  };
+  if (thrower === null) return run;
+
+  let firstLock: BombPoint | null = null;
+  let targetFeetAtLock: BombPoint | null = null;
+  let releasedAt: number | null = null;
+  let landing: BombPoint | null = null;
+  let landingKnownAt = 0;
+  let fleeX = 0;
+  let fleeY = 0;
+  let standerHpBefore = 0;
+  let dodgerHpBefore = 0;
+  let dodgesBefore = 0;
+
+  let standerParked = false;
+  const targetStartX = target.x;
+  const targetStartY = target.y;
+
+  const dropDodgerOnLanding = (point: BombPoint, frame: number): void => {
+    landing = point;
+    landingKnownAt = frame;
+    standOn(dodger, point);
+    const bomberFeet = feetOfCrawler(bomber);
+    const away = Math.hypot(point.x - bomberFeet.x, point.y - bomberFeet.y);
+    fleeX = (point.x - bomberFeet.x) / away;
+    fleeY = (point.y - bomberFeet.y) / away;
+    dodgerHpBefore = dodger.hp;
+    dodgesBefore = dodger.pendingDodges;
+  };
+
+  let previousTargetFeet = feetOfCrawler(target);
+  for (let frame = 0; frame < BOMBER_THROW_MAX_FRAMES; frame++) {
+    const targetFeet = feetOfCrawler(target);
+    const targetStep = {
+      x: targetFeet.x - previousTargetFeet.x,
+      y: targetFeet.y - previousTargetFeet.y,
+    };
+    previousTargetFeet = targetFeet;
+    bomber.updateAI([target]);
+    bomber.tickTimers();
+
+    const locked = thrower.lockedBombLanding;
+    if (locked !== null && releasedAt === null) {
+      run.lockFrames++;
+      if (firstLock === null) {
+        firstLock = { x: locked.x, y: locked.y };
+        targetFeetAtLock = targetFeet;
+        const leadX = locked.x - targetFeet.x;
+        const leadY = locked.y - targetFeet.y;
+        run.lockLeadPx = Math.hypot(leadX, leadY);
+        const leadsAlongMotion = leadX * targetStep.x + leadY * targetStep.y > 0;
+        const withinLeadCap = run.lockLeadPx <= maxAimLeadPx() + LANDING_MATCH_EPSILON_PX;
+        run.lockedLeadingTarget = leadsAlongMotion && withinLeadCap;
+      } else if (!sameGroundPoint(locked, firstLock)) {
+        run.lockHeld = false;
+      }
+    }
+
+    const flightsBefore = system.liveFlights.length;
+    system.update(ctx);
+    if (releasedAt === null && system.liveFlights.length > flightsBefore) {
+      releasedAt = frame;
+      const flight = system.liveFlights[system.liveFlights.length - 1];
+      if (firstLock !== null)
+        run.flewToLock = sameGroundPoint({ x: flight.toX, y: flight.toY }, firstLock);
+      if (targetFeetAtLock !== null) {
+        const releasedFeet = feetOfCrawler(target);
+        run.targetDriftDuringLockPx = Math.hypot(
+          releasedFeet.x - targetFeetAtLock.x,
+          releasedFeet.y - targetFeetAtLock.y,
+        );
+      }
+    }
+    // The lock is the black powder's only warning, so its dodge clock starts
+    // on the first lock frame; a stick's starts when it touches the floor.
+    if (landing === null && firstLock !== null) dropDodgerOnLanding(firstLock, frame);
+
+    let blasted: BombPoint | null = null;
+    for (const cue of system.takeCues()) {
+      if (cue.cue === 'stickLanded') {
+        if (run.releaseToLandingFrames === null && releasedAt !== null) {
+          run.releaseToLandingFrames = frame - releasedAt;
+          if (landing === null) dropDodgerOnLanding({ x: cue.x, y: cue.y }, frame);
+        }
+      } else if (blasted === null) {
+        blasted = { x: cue.x, y: cue.y };
+      }
+    }
+    // The target keeps moving until the throw is committed to the ground,
+    // so the lock is tested against a moving target, then stands on the
+    // landing as the control the dodge is measured against.
+    if (!standerParked && releasedAt !== null && landing !== null) {
+      standerParked = true;
+      standOn(target, landing);
+      standOn(stander, landing);
+      standerHpBefore = stander.hp;
+    }
+    if (blasted !== null) {
+      if (releasedAt !== null) run.releaseToBlastFrames = frame - releasedAt;
+      const dodgerFeet = feetOfCrawler(dodger);
+      run.dodgerDistanceAtBlastPx = Math.hypot(dodgerFeet.x - blasted.x, dodgerFeet.y - blasted.y);
+      run.dodgerHpLost = dodgerHpBefore - dodger.hp;
+      run.dodgerDodges = dodger.pendingDodges - dodgesBefore;
+      run.standerHpLost = standerHpBefore - stander.hp;
+      return run;
+    }
+
+    if (!standerParked) {
+      const angle = (2 * Math.PI * (frame + 1)) / BOMBER_TARGET_CIRCLE_PERIOD_FRAMES;
+      target.x = targetStartX + BOMBER_TARGET_CIRCLE_RADIUS_PX * (Math.cos(angle) - 1);
+      target.y = targetStartY + BOMBER_TARGET_CIRCLE_RADIUS_PX * Math.sin(angle);
+    }
+    if (landing !== null && frame - landingKnownAt >= GOBLIN_BOMB_DODGE_REACTION_FRAMES) {
+      dodger.x += fleeX * PLAYER_SPEED;
+      dodger.y += fleeY * PLAYER_SPEED;
+    }
+  }
+  return run;
+}
+
+section('bomber goblins throw at the ground, and the ground can be left');
+{
+  for (const difficulty of ALL_DIFFICULTIES) {
+    const tuning = BOMBER_TUNING[difficulty];
+    check(
+      isAtLeast(tuning.bombardierLockFrames, LOCKED_TELEGRAPH_MIN_FRAMES),
+      `${difficulty}: the Black Powder Goblin's lock is at least ${LOCKED_TELEGRAPH_MIN_FRAMES} frames (${tuning.bombardierLockFrames})`,
+    );
+    check(
+      goblinDynamiteDodgeMarginFrames(tuning) > 0 &&
+        isBelow(
+          GOBLIN_BOMB_DODGE_REACTION_FRAMES + GOBLIN_DYNAMITE_WALK_OUT_FRAMES,
+          tuning.fuse.frames,
+        ),
+      `${difficulty}: a stick's fuse outlasts a reaction and a walk out: ${GOBLIN_BOMB_DODGE_REACTION_FRAMES} + ${GOBLIN_DYNAMITE_WALK_OUT_FRAMES} < ${tuning.fuse.frames}`,
+    );
+    check(
+      blackPowderDodgeMarginFrames(tuning) > 0 &&
+        isBelow(
+          GOBLIN_BOMB_DODGE_REACTION_FRAMES + BLACK_POWDER_WALK_OUT_FRAMES,
+          tuning.bombardierLockFrames + tuning.blackPowderFlightFrames,
+        ),
+      `${difficulty}: a black powder lock and flight outlast a reaction and a walk out: ${GOBLIN_BOMB_DODGE_REACTION_FRAMES} + ${BLACK_POWDER_WALK_OUT_FRAMES} < ${tuning.bombardierLockFrames} + ${tuning.blackPowderFlightFrames}`,
+    );
+  }
+
+  const savedFloorLevel = floorReferencePartyLevel();
+  for (const floorPartyLevel of BOMBER_DAMAGE_FLOOR_PARTY_LEVELS) {
+    setFloorReferencePartyLevel(floorPartyLevel);
+    for (const type of BOMBER_TYPES) {
+      // Through the real blast and a real crawler's own bar, with the source
+      // each bomber stamps, so anything level-scaled on the way would show.
+      const blastAt = (level: number): { crawlerLost: number; structureBase: number } => {
+        const bomber = createMob(type, 0, 0, bomberProbeMap);
+        bomber.applyMobLevel(level);
+        applySpawnDifficulty(bomber);
+        if (!(bomber instanceof GoblinBomber)) return { crawlerLost: 0, structureBase: 0 };
+        const crawler = new HumanPlayer(0, 0, TILE_SIZE);
+        const feet = feetOfCrawler(crawler);
+        const hpBefore = crawler.hp;
+        applyGoblinBlastToBodies(
+          {
+            x: feet.x,
+            y: feet.y,
+            radiusPx: goblinBombBlastRadiusPx(bomber.archetype),
+            crawlerHpShare: bomber.crawlerHpShare,
+            thrower: bomber,
+            source: bomber.stampHarmLimits({
+              kind: 'mob',
+              mobType: bomber.mobType,
+              undodgeable: true,
+            }),
+          },
+          [crawler],
+          [],
+        );
+        return { crawlerLost: hpBefore - crawler.hp, structureBase: bomber.referenceBlastDamage };
+      };
+      const low = blastAt(BOMBER_LOW_LEVEL);
+      const high = blastAt(BOMBER_HIGH_LEVEL);
+      check(
+        low.crawlerLost > 0 && low.crawlerLost === high.crawlerLost,
+        `${type} on a party-level-${floorPartyLevel} floor: a crawler caught in the blast loses the same at bomber level ${BOMBER_LOW_LEVEL} and ${BOMBER_HIGH_LEVEL} (${low.crawlerLost} vs ${high.crawlerLost} hp)`,
+      );
+      check(
+        low.structureBase > 0 && low.structureBase === high.structureBase,
+        `${type} on a party-level-${floorPartyLevel} floor: the blast a siege wall's damage is built on is the same at bomber level ${BOMBER_LOW_LEVEL} and ${BOMBER_HIGH_LEVEL} (${low.structureBase} vs ${high.structureBase})`,
+      );
+    }
+  }
+
+  setFloorReferencePartyLevel(BOMBER_LATE_FLOOR_PARTY_LEVEL);
+  const random = Math.random;
+  for (const type of BOMBER_TYPES) {
+    Math.random = mulberry32(BOMBER_SEED_BASE);
+    const low = runBomberThrow(type, BOMBER_LOW_LEVEL);
+    Math.random = mulberry32(BOMBER_SEED_BASE);
+    const high = runBomberThrow(type, BOMBER_HIGH_LEVEL);
+
+    for (const [label, run] of [
+      [`level ${BOMBER_LOW_LEVEL}`, low],
+      [`level ${BOMBER_HIGH_LEVEL}`, high],
+    ] as const) {
+      const name = `${type} at ${label}`;
+      check(
+        run.releaseToBlastFrames !== null,
+        `${name} throws at a moving target and the blast goes off`,
+      );
+      check(
+        run.standerHpLost > 0,
+        `${name}: a hireling left standing on the landing is hurt (${run.standerHpLost})`,
+      );
+      const distance = run.dodgerDistanceAtBlastPx ?? 0;
+      check(
+        distance > run.blastRadiusPx && run.dodgerHpLost === 0 && run.dodgerDodges === 0,
+        `${name}: a crawler who walks off the landing a reaction late is clear when it blows (${distance.toFixed(1)} px from a ${run.blastRadiusPx} px blast, ${run.dodgerHpLost} hp lost, ${run.dodgerDodges} dodged)`,
+      );
+      if (type !== 'goblin_bombardier') continue;
+      check(
+        isAtLeast(run.lockFrames, LOCKED_TELEGRAPH_MIN_FRAMES),
+        `${name}: the landing is locked for ${run.lockFrames} frames before the throw (min ${LOCKED_TELEGRAPH_MIN_FRAMES})`,
+      );
+      check(
+        run.lockedLeadingTarget &&
+          run.lockHeld &&
+          run.flewToLock &&
+          run.targetDriftDuringLockPx >= BOMBER_MIN_LOCK_DRIFT_PX,
+        `${name}: the bomb lands where the first lock frame put it, ${run.lockLeadPx.toFixed(1)} px ahead of the moving target (max ${maxAimLeadPx()}), though the target moved ${run.targetDriftDuringLockPx.toFixed(1)} px before the throw`,
+      );
+    }
+
+    check(
+      low.releaseToLandingFrames === high.releaseToLandingFrames &&
+        low.releaseToBlastFrames === high.releaseToBlastFrames &&
+        low.lockFrames === high.lockFrames,
+      `${type}: flight, fuse and lock take as long at bomber level ${BOMBER_HIGH_LEVEL} as at ${BOMBER_LOW_LEVEL} (${high.releaseToBlastFrames} vs ${low.releaseToBlastFrames} frames from release to blast)`,
+    );
+    check(
+      low.crawlerHpShare === high.crawlerHpShare && low.standerHpLost === high.standerHpLost,
+      `${type}: a hireling on the landing loses as much to a level-${BOMBER_HIGH_LEVEL} bomber as to a level-${BOMBER_LOW_LEVEL} one (${high.standerHpLost} vs ${low.standerHpLost})`,
+    );
+  }
+  Math.random = random;
+  setFloorReferencePartyLevel(savedFloorLevel);
+}
+
+/**
+ * Whether a bomber of `type` with a crawler standing in its face answers with
+ * its close-range move — a stick let go or a landing locked while a lob from
+ * there could not land clear of it — within {@link BOMBER_CLOSE_PROBE_FRAMES}.
+ */
+function closeMoveFires(type: BomberType): boolean {
+  const map = openChaseRoom();
+  const bomber = createMob(type, BOMBER_THROW_BOMBER_TILE_X, BOMBER_THROW_ROW, map);
+  const crawler = new HumanPlayer(
+    BOMBER_THROW_BOMBER_TILE_X - BOMBER_CLOSE_PROBE_OFFSET_TILES,
+    BOMBER_THROW_ROW,
+    TILE_SIZE,
+  );
+  const thrower = bomber.bombThrower;
+  if (thrower === null) return false;
+  for (let frame = 0; frame < BOMBER_CLOSE_PROBE_FRAMES; frame++) {
+    bomber.updateAI([crawler]);
+    bomber.tickTimers();
+    if (thrower.takePendingBombs().length > 0 || thrower.lockedBombLanding !== null) return true;
+  }
+  return false;
+}
+
+/**
+ * Shots a bomber of `type` lets go in its first throw, and whether a locked
+ * landing is left behind once the throw ends, when the difficulty flips from
+ * `from` to `to` on the `flipAtThrowFrame`th frame of its throw row.
+ */
+function throwAcrossFlip(
+  type: BomberType,
+  from: Difficulty,
+  to: Difficulty,
+  flipAtThrowFrame: number,
+): { shots: number; lockLeftBehind: boolean } {
+  settings.setDifficultyForSession(from);
+  const map = openChaseRoom();
+  const bomber = createMob(type, BOMBER_THROW_BOMBER_TILE_X, BOMBER_THROW_ROW, map);
+  const crawler = new HumanPlayer(BOMBER_THROW_TARGET_TILE_X, BOMBER_THROW_ROW, TILE_SIZE);
+  const thrower = bomber.bombThrower;
+  if (thrower === null || !(bomber instanceof GoblinBomber)) {
+    return { shots: 0, lockLeftBehind: false };
+  }
+  let shots = 0;
+  let throwFrame = -1;
+  let flipped = false;
+  for (let frame = 0; frame < BOMBER_THROW_MAX_FRAMES; frame++) {
+    bomber.updateAI([crawler]);
+    bomber.tickTimers();
+    shots += thrower.takePendingBombs().length;
+    if (bomber.currentAction === 'throw') {
+      throwFrame++;
+      if (!flipped && throwFrame === flipAtThrowFrame) {
+        settings.setDifficultyForSession(to);
+        flipped = true;
+      }
+    } else if (flipped) {
+      return { shots, lockLeftBehind: thrower.lockedBombLanding !== null };
+    } else {
+      shots = 0;
+      throwFrame = -1;
+    }
+  }
+  return { shots, lockLeftBehind: thrower.lockedBombLanding !== null };
+}
+
+section('a difficulty flipped mid-throw throws exactly once');
+{
+  const savedDifficulty = settings.difficulty;
+  const flips: readonly (readonly [Difficulty, Difficulty])[] = [
+    ['normal', 'easy'],
+    ['easy', 'normal'],
+  ];
+  for (const type of BOMBER_TYPES) {
+    const archetype = type === 'goblin_dynamiter' ? 'dynamite' : 'black_powder';
+    for (const [from, to] of flips) {
+      const throwFrames = BOMBER_TUNING[from].actionFrames[archetype].throw;
+      const failures: string[] = [];
+      for (let flipAt = 0; flipAt < throwFrames; flipAt++) {
+        const result = throwAcrossFlip(type, from, to, flipAt);
+        if (result.shots !== 1 || result.lockLeftBehind) {
+          failures.push(`@${flipAt}: ${result.shots} shots, lock left ${result.lockLeftBehind}`);
+        }
+      }
+      check(
+        failures.length === 0,
+        `${type}, ${from} → ${to} on every frame of the throw: one shot and no lock left behind${failures.length === 0 ? '' : ` (${failures.join('; ')})`}`,
+      );
+    }
+  }
+  settings.setDifficultyForSession(savedDifficulty);
+}
+
+section('Kitten bombers keep the gentler mechanics');
+{
+  const kitten = BOMBER_TUNING.easy;
+  const crawler = BOMBER_TUNING.normal;
+  check(
+    kitten.fuse.frames > crawler.fuse.frames &&
+      kitten.bombardierLockFrames > crawler.bombardierLockFrames &&
+      kitten.dynamiteFlightFrames > crawler.dynamiteFlightFrames &&
+      kitten.blackPowderFlightFrames > crawler.blackPowderFlightFrames,
+    `Kitten's fuse, lock and flights are slower than Crawler's (fuse ${kitten.fuse.frames} vs ${crawler.fuse.frames}, lock ${kitten.bombardierLockFrames} vs ${crawler.bombardierLockFrames})`,
+  );
+
+  const savedDifficulty = settings.difficulty;
+  const savedFloorLevel = floorReferencePartyLevel();
+  setFloorReferencePartyLevel(BOMBER_LATE_FLOOR_PARTY_LEVEL);
+  const random = Math.random;
+  for (const type of BOMBER_TYPES) {
+    settings.setDifficultyForSession('normal');
+    check(closeMoveFires(type), `${type} on Crawler answers a crawler in its face (the control)`);
+    settings.setDifficultyForSession('easy');
+    check(!closeMoveFires(type), `${type} on Kitten has no close-range drop or hop`);
+
+    Math.random = mulberry32(BOMBER_SEED_BASE);
+    const run = runBomberThrow(type, BOMBER_LOW_LEVEL);
+    if (type === 'goblin_bombardier') {
+      check(
+        run.lockLeadPx <= LANDING_MATCH_EPSILON_PX,
+        `${type} on Kitten locks onto the moving target's feet, not ahead of them (${run.lockLeadPx.toFixed(1)} px)`,
+      );
+      // The circle stays up from the first lock frame to the release.
+      const lockToRelease =
+        kitten.bombardierLockFrames +
+        goblinBombReleaseFrame('black_powder', kitten.actionFrames.black_powder.throw);
+      check(
+        run.lockFrames === lockToRelease,
+        `${type} on Kitten holds its landing ${lockToRelease} frames before the throw (${run.lockFrames})`,
+      );
+    } else {
+      const flightAndFuse =
+        kitten.dynamiteFlightFrames + kitten.fuse.frames - BOMBER_TIMING_SLACK_FRAMES;
+      check(
+        run.releaseToBlastFrames !== null && run.releaseToBlastFrames >= flightAndFuse,
+        `${type} on Kitten takes its flight and full fuse from release to blast (${run.releaseToBlastFrames} frames, min ${flightAndFuse})`,
+      );
+    }
+
+    // Read live: a bomber spawned on Crawler walks at Kitten's pace once the toggle flips.
+    settings.setDifficultyForSession('normal');
+    const bomber = createMob(type, 0, 0, bomberProbeMap);
+    settings.setDifficultyForSession('easy');
+    bomber.updateAI([]);
+    check(
+      bomber.moveSpeed === kitten.walkSpeed,
+      `${type} spawned on Crawler walks at Kitten's ${kitten.walkSpeed} once switched (${bomber.moveSpeed})`,
+    );
+  }
+  Math.random = random;
+  settings.setDifficultyForSession(savedDifficulty);
+  setFloorReferencePartyLevel(savedFloorLevel);
+}
+
 // ── Region level bonuses ─────────────────────────────────────────────────────
 
 /** A shipped band as a region actually spawns it, with the floor and region it came from. */
@@ -1615,7 +2327,7 @@ function blastAgainstLevelledMob(
     gameMap: explosiveMap,
   };
   for (let stick = 0; stick < sticks; stick++) {
-    dynamite.beginCharge(0, human);
+    dynamite.beginCharge(0, human, 'goblin_dynamite');
     dynamite.release(human);
   }
   for (let frame = 0; frame < DYNAMITE_SETTLE_FRAMES; frame++) dynamite.update(context);

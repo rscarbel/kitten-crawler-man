@@ -122,13 +122,15 @@ const KRASUE_MAX_LEVEL = 9;
  */
 const GOBLIN_CAMP_POPULATION = 5;
 const GOBLIN_CAMP_ARCHERS = 2;
+/** Up to one of each bomber goblin per camp, behind its melee residents. */
+const GOBLIN_CAMP_BOMBERS_MIN = 0;
+const GOBLIN_CAMP_BOMBERS_MAX = 1;
 const GOBLIN_MIN_LEVEL = 5;
 const GOBLIN_MAX_LEVEL = 7;
 /**
  * Kept small: a troglodyte's cost to the party grows with every other one
  * alive beside it, and the den's size is what keeps it a hard fight rather
- * than one the party cannot finish. `verify:difficulty-curve` prices the den
- * whole.
+ * than one the party cannot finish.
  */
 const TROGLODYTE_DEN_POPULATION = 3;
 const TROGLODYTE_MIN_LEVEL = 6;
@@ -216,6 +218,20 @@ export const level3: LevelDef = {
         type: 'goblin_archer',
         minCount: GOBLIN_CAMP_ARCHERS,
         maxCount: GOBLIN_CAMP_ARCHERS,
+        minLevel: GOBLIN_MIN_LEVEL,
+        maxLevel: GOBLIN_MAX_LEVEL,
+      },
+      {
+        type: 'goblin_dynamiter',
+        minCount: GOBLIN_CAMP_BOMBERS_MIN,
+        maxCount: GOBLIN_CAMP_BOMBERS_MAX,
+        minLevel: GOBLIN_MIN_LEVEL,
+        maxLevel: GOBLIN_MAX_LEVEL,
+      },
+      {
+        type: 'goblin_bombardier',
+        minCount: GOBLIN_CAMP_BOMBERS_MIN,
+        maxCount: GOBLIN_CAMP_BOMBERS_MAX,
         minLevel: GOBLIN_MIN_LEVEL,
         maxLevel: GOBLIN_MAX_LEVEL,
       },

@@ -47,7 +47,6 @@ import {
 } from '../../src/creatures/fairies/FireFairy';
 import type { ActiveFairyCast, FairyCastIntent } from '../../src/creatures/fairies/Fairy';
 import {
-  CHILLED_MOVE_SPEED_FACTOR,
   DEATH_FLAME_FRAMES,
   FAIRY_NOTICE_RANGE_TILES,
   FIREBALL_BLAST_RADIUS_TILES,
@@ -60,8 +59,8 @@ import {
   FIREBALL_HIT_RADIUS_PX,
   FIREBALL_MAX_RANGE_TILES,
   FIREBALL_RETICLE_RADIUS_FRACTION,
-  FROZEN_FRAMES,
 } from '../../src/creatures/fairies/fairyTuning';
+import { CHILLED_MOVE_SPEED_FACTOR, FROZEN_FRAMES } from '../../src/core/statusTuning';
 import { LOCKED_TELEGRAPH_MIN_FRAMES } from '../../src/creatures/mobLevelScaling';
 import { MAX_MOB_LEVEL } from '../../src/levels/spawner';
 import type { Player } from '../../src/Player';

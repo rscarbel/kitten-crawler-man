@@ -35,6 +35,20 @@ const ARCHER_FIRST_REGION = 1;
 const ARCHER_MIN_LEVEL = 1;
 const ARCHER_MAX_LEVEL = 3;
 
+/**
+ * The bomber goblins, attached to a goblin room past the Juicer and never
+ * spawned on their own. Their blast takes a large share of a crawler's health,
+ * so they wait until the party has had two gauntlets to learn to keep moving,
+ * and a room has at most one of each: a bomber should be the thing a room is
+ * remembered for, not what every room is made of.
+ */
+const BOMBER_MIN_PER_ROOM = 0;
+const BOMBER_MAX_PER_ROOM = 1;
+/** Region index 2 is the free-roam stretch past the Juicer. */
+const POST_JUICER_REGION = 2;
+const BOMBER_MIN_LEVEL = 1;
+const BOMBER_MAX_LEVEL = 3;
+
 /** Llama spawn chance (15%). */
 const LLAMA_CHANCE = 0.15;
 
@@ -209,6 +223,22 @@ export const level1: LevelDef = {
           minRegion: ARCHER_FIRST_REGION,
           minLevel: ARCHER_MIN_LEVEL,
           maxLevel: ARCHER_MAX_LEVEL,
+        },
+        {
+          type: 'goblin_dynamiter',
+          minCount: BOMBER_MIN_PER_ROOM,
+          maxCount: BOMBER_MAX_PER_ROOM,
+          minRegion: POST_JUICER_REGION,
+          minLevel: BOMBER_MIN_LEVEL,
+          maxLevel: BOMBER_MAX_LEVEL,
+        },
+        {
+          type: 'goblin_bombardier',
+          minCount: BOMBER_MIN_PER_ROOM,
+          maxCount: BOMBER_MAX_PER_ROOM,
+          minRegion: POST_JUICER_REGION,
+          minLevel: BOMBER_MIN_LEVEL,
+          maxLevel: BOMBER_MAX_LEVEL,
         },
       ],
     },

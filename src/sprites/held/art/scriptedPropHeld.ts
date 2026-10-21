@@ -1,6 +1,8 @@
 /**
- * The props scripted rows hold — hammer, board, crate, wrench, dynamite,
- * zippo, bottle — and the slingshot's carried look, as held visuals.
+ * The props scripted rows hold — hammer, board, crate, wrench, zippo,
+ * bottle — the explosives the throwing hand of the dynamite rows is handed at
+ * runtime (dynamite, a black powder bomb) and the slingshot's carried look,
+ * as held visuals.
  *
  * Each is painted by its existing prop painter, which draws handle and head
  * as one shaded form, so these supply their own handle painter that leaves
@@ -10,7 +12,7 @@
  * body's does.
  */
 
-import { burningDynamite } from '../../art/carl/props/dynamite';
+import { burningDynamite, type DynamiteVariant } from '../../art/carl/props/dynamite';
 import { type HeldProp, PROP_ART, type PropGrip } from '../../art/carl/props';
 import type { Pt } from '../../art/carlArt';
 import { VIEWS, type ViewSpec } from '../../art/carl/rig';
@@ -142,11 +144,23 @@ const flatOrProfile = (facing: HeldFacing): ViewSpec =>
 
 /** How many flicker steps the lit fuse's spark cycles through. */
 const DYNAMITE_SPARK_STEPS = 4;
-const DYNAMITE_VARIANTS = [
+const FUSE_VARIANTS: readonly DynamiteVariant[] = [
   'unlit',
   'catching',
   ...Array.from({ length: DYNAMITE_SPARK_STEPS }, (_, step) => burningDynamite(step)),
 ];
+
+/** The picture of a fused explosive's held visual that shows its fuse as `variant`. */
+export function fusePhaseOf(variant: DynamiteVariant): number {
+  return Math.max(0, FUSE_VARIANTS.indexOf(variant));
+}
+
+/**
+ * A thrown explosive is drawn as an equipment-chosen item in the throwing
+ * fist, its painter run in screen axes like a lighter's: its spark rises and
+ * its fuse stands up off the top whichever way the hand's frame is mirrored.
+ */
+const THROWN_OPTIONS: ScriptedPropOptions = { variants: FUSE_VARIANTS, keepsUpright: true };
 const ZIPPO_VARIANTS = ['closed', 'open', 'lit', 'lit-tall'];
 
 export const SCRIPTED_PROP_HELD: Readonly<Record<ScriptedPropVisualId, HeldVisualDef>> = {
@@ -190,7 +204,16 @@ export const SCRIPTED_PROP_HELD: Readonly<Record<ScriptedPropVisualId, HeldVisua
     'thrown',
     'light',
     { handleLength: 0.36, gripPoint: 0.42, headLength: 0.14, headWidth: 0.14, radius: 'thick' },
-    { variants: DYNAMITE_VARIANTS },
+    THROWN_OPTIONS,
+  ),
+  prop_black_powder_bomb: scriptedProp(
+    'prop_black_powder_bomb',
+    'Black powder bomb',
+    'blackPowderBomb',
+    'thrown',
+    'light',
+    { handleLength: 0.5, gripPoint: 0.6, headLength: 0.05, headWidth: 0.2, radius: 'thick' },
+    THROWN_OPTIONS,
   ),
   prop_zippo: scriptedProp(
     'prop_zippo',
@@ -245,6 +268,7 @@ const SCRIPTED_PROP_VISUALS: Readonly<Record<PropKind, ScriptedPropVisual>> = {
   crate: { def: SCRIPTED_PROP_HELD.prop_crate, painterTurn: 0 },
   wrench: { def: SCRIPTED_PROP_HELD.prop_wrench, painterTurn: 0 },
   dynamite: { def: SCRIPTED_PROP_HELD.prop_dynamite, painterTurn: 0 },
+  blackPowderBomb: { def: SCRIPTED_PROP_HELD.prop_black_powder_bomb, painterTurn: 0 },
   zippo: { def: SCRIPTED_PROP_HELD.prop_zippo, painterTurn: 0 },
   bottle: { def: SCRIPTED_PROP_HELD.prop_bottle, painterTurn: 0 },
   slingshot: { def: SLINGSHOT_HELD, painterTurn: SLINGSHOT_TURN },

@@ -388,7 +388,7 @@ const dynamite = (harness: PrisonHarness, inCell = true): void => {
   const { scene, human } = harness;
   human.inventory.addItem('goblin_dynamite', 1);
   const sticks = scene['destruction'].dynamite;
-  sticks.beginCharge(0, human);
+  sticks.beginCharge(0, human, 'goblin_dynamite');
   sticks.release(human);
 };
 

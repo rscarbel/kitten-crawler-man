@@ -926,7 +926,7 @@ function blastSection(seeds: number): void {
       quantity: 1,
     };
     const dynamite = new DynamiteSystem(world.map, null, () => null, bus);
-    dynamite.beginCharge(DYNAMITE_HOTBAR_SLOT, human);
+    dynamite.beginCharge(DYNAMITE_HOTBAR_SLOT, human, 'goblin_dynamite');
     dynamite.release(human);
     const abilities = new AbilityManager();
     for (let frame = 0; frame < DYNAMITE_WAIT_FRAMES; frame++) {

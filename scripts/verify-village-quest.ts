@@ -48,9 +48,19 @@ import type { MusicClaimOwner } from '../src/audio/music/MusicDirector';
 import { HOLLOW_BELL_MAX_HP } from '../src/systems/briarHollow/hollowBell';
 import { ASK_QUESTION_LABEL } from '../src/systems/briarHollow/villagerTopics';
 import {
+  ASSAULT_TUNING,
   ASSAULT_WAVE_COUNT,
   IMMINENT_FRAMES,
+  assaultDifficulty,
 } from '../src/systems/briarHollow/VillageAssaultSystem';
+import { activeDifficultyProfile } from '../src/core/difficultyProfiles';
+import { BOMBER_SIEGE_STRUCTURE_MULTIPLIER, GoblinBomber } from '../src/creatures/GoblinBomber';
+import { GoblinDynamiter } from '../src/creatures/GoblinDynamiter';
+import {
+  TREBUCHET_HEIGHT_TILES,
+  TREBUCHET_WIDTH_TILES,
+} from '../src/systems/briarHollow/structureRules';
+import type { StructureRef } from '../src/systems/briarHollow/DefenseStructures';
 import {
   BRIAR_HOLLOW_QUEST_COINS,
   BRIAR_HOLLOW_QUEST_ID,
@@ -67,6 +77,7 @@ import {
 } from '../src/systems/briarHollow/VillageQuestSystem';
 import { TREBUCHET_BUILD_COST } from '../src/systems/briarHollow/structureRules';
 import { buildSiegeRig, standAt } from './villageSiegeHarness';
+import { mulberry32 } from '../src/sprites/person/rng';
 import type { QuestRewardSpec } from '../src/ui/questReward/types';
 
 const VIEWPORT_WIDTH = 1280;
@@ -944,6 +955,163 @@ section('10. A scene rebuilt in the middle of the siege');
     `rewound to a checkpoint taken mid-assault, no undead stands (${inField} before, ${siegeUndead()} after)`,
   );
   live.dispose();
+}
+
+// ── 11. Bombers in the siege ──────────────────────────────────────────────
+
+/** How long the first wave is watched for a bomber's blast to land on the village. */
+const BOMBER_WAVE_WATCH_SECONDS = 120;
+/** How long a bomber stood off a wall is given to light, throw and blow it. */
+const BOMBER_STAGED_WATCH_SECONDS = 20;
+/** The staged bomber stands this many tiles outside the wall, within a lob of the engine. */
+const BOMBER_STANDOFF_TILES = 3;
+/** The staged engine's top edge stands this many tiles inside the wall. */
+const ENGINE_INSET_TILES = 2;
+/** Health every wall is given for the bomber siege: no wave breaches it in the time watched. */
+const UNBREACHABLE_WALL_HP = 1_000_000;
+/** Health the staged structures are given, as a multiple of one blow, so no blow is clipped. */
+const STAGED_HP_BLOWS = 10;
+
+section('11. Bombers in the siege');
+{
+  const bombRig = buildSiegeRig({
+    seed: SEED,
+    assaultLevel: ASSAULT_LEVEL,
+    random: mulberry32(SEED),
+  });
+  const bombAssault = bombRig.kit.assault;
+  const bombDefences = bombRig.kit.defences;
+  if (bombAssault === null || bombDefences === null) {
+    check(false, 'the bomber rig built a village');
+  } else {
+    const defense = bombDefences.defense;
+    bombRig.human.godMode = true;
+    bombRig.cat.godMode = true;
+    standAt(
+      bombRig.human,
+      bombRig.site.square.bellTile.x,
+      bombRig.site.square.bellTile.y + BELL_STAND_OFFSET_TILES,
+    );
+
+    const structureHp = (ref: StructureRef): number => defense.hp(ref);
+    const allRefs = (): StructureRef[] => [
+      ...bombRig.site.segments.map((segment): StructureRef => ({
+        kind: 'segment',
+        id: segment.id,
+      })),
+      ...defense.trebuchetRefs.map((entry) => entry.ref),
+    ];
+    // Every blast a siege lets reach the structures, and what it took off each.
+    const blasts: Array<{ damage: number | null; losses: Map<string, number> }> = [];
+    const realBlast = defense.blastInRadius.bind(defense);
+    defense.blastInRadius = (cx, cy, radiusPx, damage) => {
+      const before = allRefs().map((ref) => ({ ref, hp: structureHp(ref) }));
+      realBlast(cx, cy, radiusPx, damage);
+      const losses = new Map<string, number>();
+      for (const { ref, hp } of before) {
+        const lost = hp - structureHp(ref);
+        const name =
+          ref.kind === 'segment' ? ref.id : ref.kind === 'trebuchet' ? ref.key : ref.kind;
+        if (lost > 0) losses.set(name, lost);
+      }
+      blasts.push({ damage: damage ?? null, losses });
+    };
+
+    const stepBombRig = (done: () => boolean, limitSeconds: number): boolean => {
+      for (let i = 0; i < limitSeconds * UPDATES_PER_SECOND; i++) {
+        if (done()) return true;
+        bombRig.step();
+      }
+      return done();
+    };
+
+    // A closed ring of wooden walls too stout for the wave's swings to
+    // breach, so the bombers have walls to throw at however the fight goes.
+    for (const segment of bombRig.site.segments) {
+      if (defense.segmentTier(segment.id) === 'fence') {
+        defense.applyUpgrade({ kind: 'segment', id: segment.id }, 'human');
+      }
+    }
+    for (const record of bombRig.state.structures) {
+      if (record.kind === 'segment') record.hp = UNBREACHABLE_WALL_HP;
+    }
+    bombRig.state.quest.phase = 'fortifying';
+    bombAssault.begin();
+    const dynamiter = (): GoblinBomber | undefined =>
+      bombRig.world.roster.mobs.find(
+        (mob): mob is GoblinBomber =>
+          mob instanceof GoblinDynamiter && mob.isAlive && mob.siegeCapable !== null,
+      );
+    const fielded = stepBombRig(
+      () => dynamiter() !== undefined,
+      IMMINENT_FRAMES / UPDATES_PER_SECOND + BOMBER_WAVE_WATCH_SECONDS,
+    );
+    check(fielded, 'the first wave fields a Dynamite Goblin');
+    const landed = stepBombRig(
+      () => blasts.some((blast) => blast.losses.size > 0),
+      BOMBER_WAVE_WATCH_SECONDS,
+    );
+    check(
+      landed,
+      `a wave's bomber lobs a blast that damages the village (${blasts.length} blasts reached the structures)`,
+    );
+
+    const bomber = dynamiter();
+    // A north wall tile with open ground outside it to stand on and inside it
+    // for an engine, so one lob at the engine catches the wall as well.
+    const north = bombRig.site.segments
+      .flatMap((segment) => segment.tiles.map((tile) => ({ segment, tile })))
+      .find(({ segment, tile }) => {
+        if (defense.isOpening(segment.id)) return false;
+        for (let dy = 1; dy <= BOMBER_STANDOFF_TILES + 1; dy++) {
+          if (!bombRig.map.isWalkable(tile.x, tile.y - dy)) return false;
+        }
+        for (let dy = 1; dy < ENGINE_INSET_TILES + TREBUCHET_HEIGHT_TILES; dy++) {
+          for (let dx = 0; dx < TREBUCHET_WIDTH_TILES; dx++) {
+            if (!bombRig.map.isWalkable(tile.x + dx, tile.y + dy)) return false;
+          }
+        }
+        return true;
+      });
+    check(bomber !== undefined && north !== undefined, 'a bomber and a wall to stage it at');
+    if (bomber !== undefined && north !== undefined) {
+      const tuning = ASSAULT_TUNING[assaultDifficulty(activeDifficultyProfile())];
+      const expected =
+        bomber.referenceBlastDamage * BOMBER_SIEGE_STRUCTURE_MULTIPLIER * tuning.wallDamageScale;
+      const segmentRef: StructureRef = { kind: 'segment', id: north.segment.id };
+      if (defense.segmentTier(north.segment.id) === 'fence')
+        defense.applyUpgrade(segmentRef, 'human');
+      const engineRef = defense.placeTrebuchet(
+        north.tile.x,
+        north.tile.y + ENGINE_INSET_TILES,
+        'human',
+      );
+      const engineKey = engineRef.kind === 'trebuchet' ? engineRef.key : '';
+      const engine = defense.trebuchet(engineKey);
+      const wall = bombRig.state.structures.find(
+        (record) => record.kind === 'segment' && record.id === north.segment.id,
+      );
+      if (engine !== null) engine.hp = expected * STAGED_HP_BLOWS;
+      if (wall !== undefined) wall.hp = expected * STAGED_HP_BLOWS;
+      standAt(bomber, north.tile.x, north.tile.y - BOMBER_STANDOFF_TILES);
+      blasts.length = 0;
+      const caught = (): (typeof blasts)[number] | undefined =>
+        blasts.find((blast) => blast.losses.has(north.segment.id) && blast.losses.has(engineKey));
+      stepBombRig(() => caught() !== undefined, BOMBER_STAGED_WATCH_SECONDS);
+      const blast = caught();
+      const wallLoss = blast?.losses.get(north.segment.id) ?? 0;
+      const engineLoss = blast?.losses.get(engineKey) ?? 0;
+      check(
+        blast !== undefined && blast.damage === expected,
+        `a bomber's blast strikes structures for its crawler damage × ${BOMBER_SIEGE_STRUCTURE_MULTIPLIER} × the siege's wall scale ${tuning.wallDamageScale} (${blast?.damage ?? 'no blast'} of ${expected})`,
+      );
+      check(
+        wallLoss === expected && engineLoss === expected,
+        `and takes exactly that off a wall segment (${wallLoss}) and a trebuchet over the palisade (${engineLoss})`,
+      );
+    }
+  }
+  bombRig.dispose();
 }
 
 console.log(`\n${checks - failures}/${checks} checks passed`);

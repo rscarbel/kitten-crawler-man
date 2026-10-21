@@ -16,6 +16,12 @@ import { COCKROACH_BODY_PART_KEY, COCKROACH_GORE_PARTS } from '../sprites/cockro
 import { HOARDER_BODY_PART_KEY, HOARDER_GORE_PARTS } from '../sprites/hoarderSprite';
 import type { GameMap } from '../map/GameMap';
 import { GOBLIN_GORE_PARTS, goblinFigure } from '../sprites/goblinSprite';
+import {
+  GOBLIN_BOMBER_GORE_PARTS,
+  goblinBomberBodyPartKey,
+  goblinBomberFigure,
+} from '../sprites/goblinBomberSprite';
+import { GOBLIN_BOMBER_ARCHETYPES } from '../sprites/art/goblinArt';
 import { RAT_BODY_PART_KEY, RAT_GORE_PARTS } from '../sprites/ratSprite';
 import { LLAMA_BODY_PART_KEY, LLAMA_GORE_PARTS } from '../sprites/llamaSprite';
 import { LLAMA_FIGURE } from '../sprites/art/llamaFigure';
@@ -94,6 +100,10 @@ const GOBLIN_CONFIGS: ReadonlyArray<readonly [string, MobBodyPartConfig]> = [
   ['goblin_axe', { art: goblinFigure('axe'), parts: GOBLIN_GORE_PARTS }],
   ['goblin_mace', { art: goblinFigure('mace'), parts: GOBLIN_GORE_PARTS }],
   ['goblin_warhammer', { art: goblinFigure('warhammer'), parts: GOBLIN_GORE_PARTS }],
+  ...GOBLIN_BOMBER_ARCHETYPES.map((archetype): readonly [string, MobBodyPartConfig] => [
+    goblinBomberBodyPartKey(archetype),
+    { art: goblinBomberFigure(archetype), parts: GOBLIN_BOMBER_GORE_PARTS },
+  ]),
 ];
 
 const COCKROACH_CONFIG: MobBodyPartConfig = {

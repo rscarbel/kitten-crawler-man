@@ -34,6 +34,8 @@ import {
 import { BOUNTY_DEFS } from '../src/systems/bountyDefs';
 import { Conversation } from '../src/dialog/Conversation';
 import { createMob } from '../src/levels/spawner';
+import { BOUNTY_MAX_BLOW_HP_SHARE } from '../src/creatures/mobLevelScaling';
+import { bountyCommitStaggerFrames } from '../src/systems/bountyCommit';
 import {
   BountySystem,
   bountyBossLevel,
@@ -99,6 +101,10 @@ const REUSABLE_MINION_IDS: readonly string[] = [
 const MAX_LEVELLED_WALK_ADVANTAGE = 1.1;
 /** Party level the per-profile escort-speed and payout sweeps are run at. */
 const DIFFICULTY_TEST_PARTY_LEVEL = 15;
+/** Slack for a capped blow, which lands exactly on the cap by construction. */
+const BLOW_SHARE_EPSILON = 1e-9;
+/** Gaps past the last member's turn the commit sweep waits before calling a member never let loose. */
+const COMMIT_SWEEP_SLACK_GAPS = 1;
 
 let failures = 0;
 function check(ok: boolean, message: string): void {
@@ -501,6 +507,78 @@ console.log('\nDriving the full issue → kill → collect loop…');
     loopProgress.currentSiteIndex !== loopProgress.lastSiteIndex,
     'the next bounty picks a different site',
   );
+  system.dispose();
+}
+
+// The two promises a bounty makes to a crawler at full health: no single blow
+// from the encounter takes more than its share of her bar, and the group lets
+// itself loose a stagger apart rather than as one body. A mirrored pair landing
+// on one frame is two capped blows arriving as one that kills from full.
+console.log('\nChecking the per-blow cap and the staggered commit for every bounty…');
+for (const def of BOUNTY_DEFS) {
+  const map = new GameMap({ mapSize: MAP_SIZE, mapType: 'overworld' });
+  const start = map.startTile;
+  const human = new HumanPlayer(start.x, start.y, TILE_SIZE);
+  const cat = new CatPlayer(start.x + 1, start.y, TILE_SIZE);
+  const spawned: Mob[] = [];
+  const system = new BountySystem(
+    map,
+    new EventBus(),
+    createBountyProgress(),
+    (mob) => spawned.push(mob),
+    new Conversation(null),
+  );
+  check(system.issueBounty(human, cat, def.id), `${def.id}: issues on demand`);
+
+  const uncapped = spawned.filter((mob) => mob.blowCapShareOfTargetHp !== BOUNTY_MAX_BLOW_HP_SHARE);
+  check(
+    spawned.length > 0 && uncapped.length === 0,
+    `${def.id}: every staged mob carries the ${BOUNTY_MAX_BLOW_HP_SHARE} per-blow cap (${uncapped.length} of ${spawned.length} without)`,
+  );
+
+  const overweight: string[] = [];
+  for (const mob of spawned) {
+    const victim = new HumanPlayer(start.x, start.y, TILE_SIZE);
+    const killFromFullManyTimesOver = victim.maxHp * KILL_OVERKILL;
+    const source = mob.stampHarmLimits({ kind: 'mob', mobType: mob.mobType, undodgeable: true });
+    const hpBefore = victim.hp;
+    victim.takeDamage(killFromFullManyTimesOver, source);
+    const shareTaken = (hpBefore - victim.hp) / victim.maxHp;
+    if (shareTaken > BOUNTY_MAX_BLOW_HP_SHARE + BLOW_SHARE_EPSILON) {
+      overweight.push(`${mob.mobType} took ${(shareTaken * 100).toFixed(1)}%`);
+    }
+  }
+  check(
+    overweight.length === 0,
+    `${def.id}: no single blow takes more than ${BOUNTY_MAX_BLOW_HP_SHARE * 100}% of a full bar${overweight.length === 0 ? '' : ` (${overweight.join(', ')})`}`,
+  );
+
+  const boss = spawned.find((mob) => mob.isBoss) ?? null;
+  if (boss === null) {
+    check(false, `${def.id}: the commit sweep has a mark to notice the crawler`);
+  } else {
+    boss.currentTarget = human;
+    const ctx = makeContext(human, cat, map);
+    const stagger = bountyCommitStaggerFrames(spawned.length);
+    const releaseFrame = new Map<Mob, number>();
+    const sweepFrames = stagger * (spawned.length + COMMIT_SWEEP_SLACK_GAPS);
+    for (let frame = 0; frame < sweepFrames && releaseFrame.size < spawned.length; frame++) {
+      system.update(ctx);
+      for (const mob of spawned) {
+        if (!mob.aiHeld && !releaseFrame.has(mob)) releaseFrame.set(mob, frame);
+      }
+    }
+    check(
+      releaseFrame.size === spawned.length,
+      `${def.id}: every member is let loose (${releaseFrame.size} of ${spawned.length})`,
+    );
+    const frames = [...releaseFrame.values()].sort((a, b) => a - b);
+    const gaps = frames.slice(1).map((frame, index) => frame - frames[index]);
+    check(
+      gaps.length > 0 && gaps.every((gap) => gap === stagger),
+      `${def.id}: members are let loose exactly ${stagger} frames apart (release frames ${frames.join(', ')})`,
+    );
+  }
   system.dispose();
 }
 

@@ -21,7 +21,7 @@ import { prewarmGoblin, type GoblinWeapon } from '../sprites/goblinSprite';
 import { TILE_SIZE } from '../core/constants';
 
 /** The mobs a bounty encounter puts on the map: one named target plus its escort. */
-export interface BountyEncounter {
+interface BountyEncounter {
   boss: Mob;
   minions: Mob[];
 }

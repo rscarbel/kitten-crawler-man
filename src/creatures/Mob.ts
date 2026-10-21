@@ -24,6 +24,7 @@ import { worldText } from '../ui/world/worldText';
 import { measureFiguresInkTop } from '../sprites/figure/figureFrameCache';
 import type { SpatialGrid } from '../core/SpatialGrid';
 import type { Rng } from '../sprites/person/rng';
+import type { BombThrower } from '../systems/goblinBombConstants';
 import { knockbackStepPx } from '../core/knockbackEase';
 import { MobTactics } from './tactics/MobTactics';
 import type { TacticsTrait } from './tactics/tacticsTraits';
@@ -33,7 +34,7 @@ import { stepAlongEscape } from '../systems/GroundHazardSource';
 import { SEPARATION_RADIUS } from '../systems/mobSeparation';
 import type { KiteAim, TacticalMove } from './tactics/tacticalFrame';
 import type { SilhouetteLayer } from '../core/silhouetteComposite';
-import type { SiegeCapable, SiegeDirective } from './siege/siegeTypes';
+import type { SiegeCapable, SiegeDirective, SiegeLobber } from './siege/siegeTypes';
 import { deferChrome, type ChromePart } from '../systems/lighting/aboveDarkness';
 import {
   GUARD_KNOCKBACK_FRAMES,
@@ -74,7 +75,7 @@ export const BOSS_BLAST_DAMAGE_SCALE = 0.25;
  * tongue or a shockwave that resolves over an area has nothing for the victim's
  * armour to bite into, so it does not reflect.
  */
-export type MobBlowDelivery = 'contact' | 'ranged';
+type MobBlowDelivery = 'contact' | 'ranged';
 
 /** The damage source every blow a mob lands is described by. */
 export type MobDamageSource = Extract<DamageSource, { kind: 'mob' }>;
@@ -285,7 +286,7 @@ const MOB_DAMAGE_FLASH_FRAMES = 8;
  * climb out of the ground, for the same reason: a return that can be cut down
  * before it has finished reads as never having happened.
  */
-export const REVIVE_IN_PLACE_RISE_FRAMES = 40;
+const REVIVE_IN_PLACE_RISE_FRAMES = 40;
 /** Frames at which health bar starts fading out. */
 const HEALTH_BAR_FADE_FRAMES = 40;
 
@@ -976,6 +977,60 @@ export abstract class Mob extends Player {
    */
   get ownsSiegeMovement(): boolean {
     return false;
+  }
+
+  /**
+   * How this creature attacks the village's walls and trebuchets from range:
+   * itself, for a bomber that lobs explosives over the palisade; null for
+   * everything that has to walk up to a structure to hurt it.
+   */
+  get siegeLobber(): SiegeLobber | null {
+    return null;
+  }
+
+  /**
+   * Whether this creature throws at structures rather than striking them: in
+   * a siege it stands off at its throwing distance and lobs at walls,
+   * trebuchets and defenders, and never walks up to a wall to swing at it.
+   * A creature opts in by offering a {@link siegeLobber}.
+   */
+  get lobsAtStructures(): boolean {
+    return this.siegeLobber !== null;
+  }
+
+  /**
+   * Whether this creature attacks other hostile mobs on sight, on its own,
+   * rather than only the party and its allies — the Brindled Vespa, which
+   * spits at whatever is nearest. Anything that hunts the other monsters is
+   * fair game for them too: a goblin's bomb treats it as a real enemy and
+   * deals it full damage, where an ordinary hostile caught in the same blast
+   * loses a single point. False for everything else; a creature that starts
+   * fighting other mobs opts in here.
+   */
+  get huntsOtherMobs(): boolean {
+    return false;
+  }
+
+  /**
+   * Whether a blast's shove leaves this creature where it stands: a boss, a
+   * creature that cannot walk, and one whose movement is scripted from its
+   * own AI (`ownsSiegeMovement`: the Grave Bull's charge, the necromancer's
+   * standoff), which a push would knock off the line its attack is timed on.
+   * A boss is read off {@link blastDamageScale} as well as {@link isBoss},
+   * because the bosses whose own systems leave `isBoss` false on purpose (the
+   * Ball of Swine, Terror the Clown) still resist blasts.
+   */
+  get resistsBlastKnockback(): boolean {
+    const isAnyBoss = this.isBoss || this.blastDamageScale < 1;
+    return isAnyBoss || this.ownsSiegeMovement || this.moveSpeed <= 0;
+  }
+
+  /**
+   * The goblin-explosive outbox this creature offers `GoblinBombSystem`, or
+   * null for everything that throws none. A bomber returns itself.
+   */
+  get bombThrower(): BombThrower | null {
+    return null;
   }
 
   private structureStrikeFramesLeft = 0;

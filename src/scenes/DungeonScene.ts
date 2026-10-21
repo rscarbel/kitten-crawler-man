@@ -59,8 +59,10 @@ import {
   activeDifficultyProfile,
   applySpawnDifficulty,
   DIFFICULTY_LABELS,
+  DIFFICULTY_PROFILES,
   type Difficulty,
 } from '../core/difficultyProfiles';
+import { setFloorReferencePartyLevel } from '../core/floorReferenceLevel';
 import { getSpriteMissCounts, prewarmGroups, releaseSpritesExcept } from '../core/SpriteLoader';
 import { flushFigureFrameCache } from '../sprites/figure/figureFrameCache';
 import { requiredSpriteKeysForLevel } from '../core/systemAssetRequirements';
@@ -156,6 +158,9 @@ import { awardFirstHundred, bindAbilityLevelUps } from '../systems/abilityLevelU
 import { bindCraftLevelUps } from '../systems/craftLevelUps';
 import { SkeletonProjectileSystem } from '../systems/SkeletonProjectileSystem';
 import { GoblinArrowSystem } from '../systems/GoblinArrowSystem';
+import { GoblinBombSystem } from '../systems/GoblinBombSystem';
+import { ExplosionShake } from '../systems/ExplosionShake';
+import { BOMBER_GOBLIN_CUES, FuseSizzleLoops } from '../systems/bomberGoblinSoundCues';
 import { SkeletonSummonSystem } from '../systems/SkeletonSummonSystem';
 import { ClownGasSystem } from '../systems/ClownGasSystem';
 import { FairySystem } from '../systems/FairySystem';
@@ -1362,6 +1367,9 @@ export class DungeonScene extends GameplayScene {
   private hirelingShots: HirelingBoltSystem;
   private skeletonShots: SkeletonProjectileSystem;
   private goblinArrows: GoblinArrowSystem;
+  private readonly goblinBombs: GoblinBombSystem;
+  private readonly explosionShake: ExplosionShake;
+  private readonly fuseSizzle = new FuseSizzleLoops();
   private skeletonSummons: SkeletonSummonSystem;
   private clownGas: ClownGasSystem;
   private readonly fairies: FairySystem;
@@ -1753,6 +1761,10 @@ export class DungeonScene extends GameplayScene {
     // a leftover from the last one — see `DEFAULT_DUNGEON_FLOOR_THEME` for the
     // town interiors that would otherwise inherit floor 2's blockwork.
     setDungeonFloorTheme(levelDef.groundTheme ?? DEFAULT_DUNGEON_FLOOR_THEME);
+    // On the normal profile whatever the setting: the difficulty already
+    // scales every blow a crawler takes, and a floor's yardstick should not
+    // move with it.
+    setFloorReferencePartyLevel(recommendedPartyLevelFor(levelDef, DIFFICULTY_PROFILES.normal));
 
     // Both are needed before the roster below, which hands every mob it accepts
     // the spell context, and by the level spawners' audio-carrying siblings.
@@ -2331,6 +2343,18 @@ export class DungeonScene extends GameplayScene {
       gameMap: this.gameMap,
       getMobs: () => this.world.roster.mobs,
     });
+    this.explosionShake = new ExplosionShake(this.bus, () => this.active());
+    this.goblinBombs = new GoblinBombSystem({
+      gameMap: this.gameMap,
+      bus: this.bus,
+      destructibles: this.destruction.destructibles,
+      trees: () => this.trees,
+      siegeStructures: () => {
+        const kit = this.briarHollowKit;
+        if (kit?.assault?.inSiege !== true) return null;
+        return kit.defences?.defense ?? null;
+      },
+    });
     this.knightMissiles = new KnightMissileSystem(this.gameMap);
     this.companion = new CompanionSystem(
       this.gameMap,
@@ -2341,11 +2365,13 @@ export class DungeonScene extends GameplayScene {
     this.companion.registerHazardSource(this.bossRoom);
     this.companion.registerHazardSource(this.clownGas);
     this.companion.registerHazardSource(this.fairyFireballs);
+    this.companion.registerHazardSource(this.goblinBombs);
     this.companion.registerHazardSource(this.bossRoomDressings);
     this.combat.mobLoop.registerHazardSource(this.bossRoom);
     this.combat.mobLoop.registerHazardSource(this.bossRoomDressings);
     this.combat.mobLoop.registerHazardSource(this.clownGas);
     this.combat.mobLoop.registerHazardSource(this.fairyFireballs);
+    this.combat.mobLoop.registerHazardSource(this.goblinBombs);
     this.combat.mobLoop.registerHazardSource(this.lavaBalls);
     // Burning oil is floor anyone can step out of, so both sides steer clear of it.
     this.companion.registerHazardSource(this.destruction.destructibles);
@@ -3738,6 +3764,9 @@ export class DungeonScene extends GameplayScene {
     this.highStriker?.dispose();
     this.fairies.dispose();
     this.fairyFireballs.dispose();
+    this.goblinBombs.dispose();
+    this.explosionShake.dispose();
+    this.fuseSizzle.stopAll(this.audioScope);
     this.dungeonLighting?.dispose();
     // Drops any standing order along with the hazard sources that were meant to
     // steer around it. Both name systems this scene is taking with it.
@@ -5268,11 +5297,13 @@ export class DungeonScene extends GameplayScene {
 
     this.combat.resetForCheckpoint();
     this.destruction.resetForCheckpoint();
+    this.explosionShake.reset();
     this.lavaBalls.resetForCheckpoint();
     this.rockThrows.resetForCheckpoint();
     this.hirelingShots.resetForCheckpoint();
     this.skeletonShots.resetForCheckpoint();
     this.goblinArrows.resetForCheckpoint();
+    this.goblinBombs.resetForCheckpoint();
     this.clownGas.resetForCheckpoint();
     this.fairyFireballs.resetForCheckpoint();
     this.knightMissiles.resetForCheckpoint();
@@ -6119,7 +6150,7 @@ export class DungeonScene extends GameplayScene {
    * cross into an already-quiet room one step ahead of it, and the room's
    * count says nothing about a threat that hasn't entered yet.
    */
-  private static readonly STAIRWELL_SAVE_ENGAGEMENT_RADIUS_TILES = 4;
+  static readonly STAIRWELL_SAVE_ENGAGEMENT_RADIUS_TILES = 4;
 
   /**
    * Every room the floor's dungeon generator recorded that also holds a
@@ -6997,6 +7028,15 @@ export class DungeonScene extends GameplayScene {
   }
 
   /**
+   * For a frame the world does not run: footsteps and burning fuses go quiet,
+   * and the fuses come back on the next live frame if their sticks still burn.
+   */
+  private silenceFrozenWorldLoops(): void {
+    this.silenceMovementLoops();
+    this.fuseSizzle.stopAll(this.audioScope);
+  }
+
+  /**
    * Anything that takes the floor away from ordinary play.
    *
    * Read off the surface stack rather than restated as a second boolean
@@ -7646,7 +7686,7 @@ export class DungeonScene extends GameplayScene {
 
   /** The dynamite in his hand waiting to be thrown, which the hotbars mark in use. */
   private readiedDynamiteId(): ItemId | null {
-    return this.destruction.dynamite.isReadied ? 'goblin_dynamite' : null;
+    return this.destruction.dynamite.readiedItem;
   }
 
   /**
@@ -8122,7 +8162,7 @@ export class DungeonScene extends GameplayScene {
     }
 
     if (this.bossIntro.isActive) {
-      this.silenceMovementLoops();
+      this.silenceFrozenWorldLoops();
       this.bossIntro.tick();
       return;
     }
@@ -8213,7 +8253,7 @@ export class DungeonScene extends GameplayScene {
     if (this.gameOver) this.human.tickReactionWhileDefeated();
 
     if (this.gameplayHalted) {
-      this.silenceMovementLoops();
+      this.silenceFrozenWorldLoops();
       this.marketPanel?.update();
       this.travelMenu.update();
       return;
@@ -8223,11 +8263,11 @@ export class DungeonScene extends GameplayScene {
     tickShopStock(this.briarHollowState.shopStock);
 
     if (this.tutorial?.showNearGoblinDialog === true) {
-      this.silenceMovementLoops();
+      this.silenceFrozenWorldLoops();
       return;
     }
     if (this.tutorial?.showTutorialMordecaiDialog === true) {
-      this.silenceMovementLoops();
+      this.silenceFrozenWorldLoops();
       return;
     }
 
@@ -8269,6 +8309,7 @@ export class DungeonScene extends GameplayScene {
     lighting.addDynamicLightSource(this.cat);
     lighting.addDynamicLightSource(this.destruction.dynamite);
     lighting.addDynamicLightSource(this.fairyFireballs);
+    lighting.addDynamicLightSource(this.goblinBombs);
     lighting.addDynamicLightSource(this.lavaBalls);
     lighting.addDynamicLightSource(this.knightMissiles);
     lighting.addDynamicLightSource(this.skeletonShots);
@@ -8523,6 +8564,7 @@ export class DungeonScene extends GameplayScene {
       hirelingShots: this.hirelingShots,
       skeletonShots: this.skeletonShots,
       goblinArrows: this.goblinArrows,
+      goblinBombs: this.goblinBombs,
       clownGas: this.clownGas,
       fairies: this.fairies,
       fairyFireballs: this.fairyFireballs,
@@ -9455,11 +9497,13 @@ export class DungeonScene extends GameplayScene {
     this.fairies.update(ctx);
     this.skeletonShots.update(ctx);
     this.goblinArrows.update(ctx);
+    this.goblinBombs.update(ctx);
     this.clownGas.update(ctx);
     this.fairyFireballs.update(ctx);
     this.knightMissiles.update(ctx);
     this.trees?.update(ctx);
     this.destruction.update(ctx);
+    this.explosionShake.update();
     // After every system that can smash a lamp or a sconce this frame, so a
     // light broken now goes dark on the frame it breaks rather than the next.
     this.dungeonLighting?.update();
@@ -9505,6 +9549,16 @@ export class DungeonScene extends GameplayScene {
       this.goblinArrows.impactSoundAt = null;
       this.audio?.playAt('arrow_impact', goblinArrow.x, goblinArrow.y);
     }
+
+    // Drained here rather than from `playMobAudioCues` for the arrow's reason:
+    // a stick still burning on the floor has outlived the goblin that threw it.
+    for (const raised of this.goblinBombs.takeCues()) {
+      this.audio?.playRandomAt(BOMBER_GOBLIN_CUES[raised.cue], raised.x, raised.y);
+    }
+    this.fuseSizzle.update(this.audioScope, this.goblinBombs.liveSticks, {
+      x: ctx.active.x + TILE_SIZE * TILE_CENTRE_FRACTION,
+      y: ctx.active.y + TILE_SIZE * TILE_CENTRE_FRACTION,
+    });
 
     // Likewise the rise: the mob that made it happen is the lord, but the sound
     // belongs to the skeletons coming out of the ground.
@@ -10059,6 +10113,7 @@ export class DungeonScene extends GameplayScene {
     const smushShake = this.combat.smushFx.cameraOffset;
     const juicerShake = this.juicerRoom.cameraOffset;
     const villageShake = this.briarHollowKit?.cameraOffset ?? { x: 0, y: 0 };
+    const blastShake = this.explosionShake.cameraOffset;
     // Applied after the clamp so the sway can drift past the map edge rather than
     // being flattened to nothing whenever the camera is already against a border.
     const sway = player.hasStatus('drunk') ? drunkCameraOffset(frameTime) : { x: 0, y: 0 };
@@ -10069,14 +10124,16 @@ export class DungeonScene extends GameplayScene {
         sway.x +
         smushShake.x +
         juicerShake.x +
-        villageShake.x,
+        villageShake.x +
+        blastShake.x,
       y:
         clamp(camY, 0, mapPxH - viewportHeight()) +
         shakeOffset.y +
         sway.y +
         smushShake.y +
         juicerShake.y +
-        villageShake.y,
+        villageShake.y +
+        blastShake.y,
     };
   }
 

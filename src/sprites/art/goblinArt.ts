@@ -524,6 +524,28 @@ export interface GoblinOutfit {
   readonly leg?: (ctx: Ctx, chain: BoneChain, style: GoblinStyle, near: boolean) => void;
   /** Headwear in head space (+X forward), over the face and under the near ear. */
   readonly head?: (ctx: Ctx, style: GoblinStyle) => void;
+  /**
+   * Over the finished torso and hips in spine space, outside the torso's clip:
+   * straps and anything strapped to them that stands proud of the body.
+   */
+  readonly overTorso?: (ctx: Ctx, style: GoblinStyle) => void;
+  /**
+   * Carried on the back, in figure space from the top of the spine, behind the
+   * body: drawn there it is overlapped by the torso, as a quiver is.
+   */
+  readonly back?: (ctx: Ctx, spineTop: Pt, lean: number, style: GoblinStyle) => void;
+  /**
+   * Over one solved arm, after the bare arm is painted, at that arm's drawn
+   * width; `wristAngle` is the way the fist on its end is turned.
+   */
+  readonly arm?: (
+    ctx: Ctx,
+    chain: BoneChain,
+    width: number,
+    wristAngle: number,
+    style: GoblinStyle,
+    near: boolean,
+  ) => void;
 }
 
 /**
@@ -644,10 +666,17 @@ export interface GoblinPose {
    */
   readonly offHandAngle?: number;
   /**
-   * Paint the far arm and its held prop over the body rather than behind it,
-   * for a far arm raised and thrust out ahead of the chest.
+   * Paint the far arm, and whatever it holds, over the body rather than behind
+   * it, for a far arm raised and thrust out ahead of the chest or cradling
+   * something against the belly.
    */
   readonly offHandInFront?: boolean;
+  /**
+   * Paint the near arm and what it holds under the head instead of over it,
+   * for an arm drawn back behind the skull: a goblin's head sits forward of
+   * its shoulder, so an arm wound back over the top of it crosses the face.
+   */
+  readonly nearArmUnderHead?: boolean;
 }
 
 /** How much of the arm's length is used up when it hangs slack at the side. */
@@ -1242,6 +1271,16 @@ function traceTorso(ctx: Ctx, p: GoblinProportions): void {
 }
 
 function drawTorso(ctx: Ctx, style: GoblinStyle, squash: number): void {
+  drawTorsoAndHips(ctx, style, squash);
+  const overTorso = style.outfit?.overTorso;
+  if (overTorso === undefined) return;
+  ctx.save();
+  ctx.scale(1, squash);
+  overTorso(ctx, style);
+  ctx.restore();
+}
+
+function drawTorsoAndHips(ctx: Ctx, style: GoblinStyle, squash: number): void {
   const p = style.proportions;
   const { skin, cloth } = style.palette;
   const top = -p.torsoLength;
@@ -2145,6 +2184,8 @@ const EAR_TIP_DROOP = deg(8);
 
 /** The near eye — big — and the far eye, foreshortened toward the brow edge. */
 const EYE_NEAR = { x: 0.3, y: -0.1, rx: 0.22, ry: 0.13 } as const;
+/** The near eye's centre in head space: x in head widths and y in head radii, +X forward. */
+export const GOBLIN_NEAR_EYE: Pt = { x: EYE_NEAR.x, y: EYE_NEAR.y };
 const EYE_FAR = { x: 0.76, y: -0.12, rx: 0.15, ry: 0.11 } as const;
 /** The dark hollow each eye sits in, as a multiple of the eye's own radii. */
 const EYE_SOCKET_SCALE = 1.55;
@@ -2223,7 +2264,8 @@ const SKULL = {
   jawline: { x: 0.1, y: 0.98 },
 } as const;
 
-function traceSkull(ctx: Ctx, p: GoblinProportions): void {
+/** The skull's outline in head space, for headwear and face paint that must stay on the face. */
+export function traceSkull(ctx: Ctx, p: GoblinProportions): void {
   const r = p.headRadius;
   const rx = r * p.headWidthFactor;
   const at = (point: { readonly x: number; readonly y: number }): Pt =>
@@ -2578,6 +2620,33 @@ const NOSTRIL = {
   tilt: deg(24),
 } as const;
 
+/** The hooked nose's outline in head space, for face paint that must stay on the nose. */
+export function traceNose(ctx: Ctx, p: GoblinProportions): void {
+  const r = p.headRadius;
+  const rx = r * p.headWidthFactor;
+  const root = pt(rx * NOSE.root.x, r * NOSE.root.y);
+  const tipX = rx * NOSE.tipX + p.noseProjection;
+  const tipY = r * NOSE_TIP_DROP;
+  const septum = pt(lerp(tipX, rx * NOSE.septumBackX, NOSE.septumShare), r * NOSE.septumY);
+  const o = NOSE_OUTLINE;
+  ctx.beginPath();
+  ctx.moveTo(root.x, root.y - r * o.bridgeTop);
+  // Bridge: convex, bulging forward and down to the tip.
+  ctx.bezierCurveTo(
+    rx * o.bridgeX,
+    r * o.bridgeY,
+    tipX + r * o.overTip,
+    r * o.overTipY,
+    tipX,
+    tipY,
+  );
+  // The tip hooks down, then the underside scoops back under it.
+  ctx.quadraticCurveTo(tipX * o.hookBack, tipY + r * o.hookDrop, septum.x, septum.y);
+  ctx.quadraticCurveTo(rx * o.underX, r * o.underY, rx * o.nostrilWingX, r * o.nostrilWingY);
+  ctx.quadraticCurveTo(rx * o.cheekX, r * o.cheekY, root.x, root.y + r * o.rootUnder);
+  ctx.closePath();
+}
+
 /**
  * The long hooked nose, projecting well past the face so it breaks the head's
  * silhouette as a third point between the two ears.
@@ -2594,32 +2663,16 @@ function drawNose(ctx: Ctx, style: GoblinStyle): void {
   const tipX = rx * NOSE.tipX + p.noseProjection;
   const tipY = r * NOSE_TIP_DROP;
   const septum = pt(lerp(tipX, rx * NOSE.septumBackX, NOSE.septumShare), r * NOSE.septumY);
-  const o = NOSE_OUTLINE;
 
-  const traceNose = (): void => {
-    ctx.beginPath();
-    ctx.moveTo(root.x, root.y - r * o.bridgeTop);
-    // Bridge: convex, bulging forward and down to the tip.
-    ctx.bezierCurveTo(
-      rx * o.bridgeX,
-      r * o.bridgeY,
-      tipX + r * o.overTip,
-      r * o.overTipY,
-      tipX,
-      tipY,
-    );
-    // The tip hooks down, then the underside scoops back under it.
-    ctx.quadraticCurveTo(tipX * o.hookBack, tipY + r * o.hookDrop, septum.x, septum.y);
-    ctx.quadraticCurveTo(rx * o.underX, r * o.underY, rx * o.nostrilWingX, r * o.nostrilWingY);
-    ctx.quadraticCurveTo(rx * o.cheekX, r * o.cheekY, root.x, root.y + r * o.rootUnder);
-    ctx.closePath();
+  const traceNoseShape = (): void => {
+    traceNose(ctx, p);
   };
 
   ctx.fillStyle = skin.mid;
-  traceNose();
+  traceNoseShape();
   ctx.fill();
 
-  withClip(ctx, traceNose, () => {
+  withClip(ctx, traceNoseShape, () => {
     // The underside of a hook is the darkest part of the face.
     const u = NOSE_UNDERSIDE;
     ctx.fillStyle = skin.dark;
@@ -3032,6 +3085,13 @@ export function offHandWristAngle(skeleton: Skeleton, pose: GoblinPose): number 
 }
 
 /**
+ * Light painted over the finished figure in figure space: a flame, a spark, a
+ * wisp of smoke. Composed into the figure it would be outlined and rimmed like
+ * a solid part, and a glow with a dark ink ring round it reads as a sticker.
+ */
+export type GoblinOverlay = (ctx: Ctx, skeleton: Skeleton) => void;
+
+/**
  * Draw one goblin frame. `originX`/`originY` is the point between the feet and
  * `unit` is the pixel size of one tile; the figure always faces +X, so callers
  * mirror it at runtime rather than baking a second facing.
@@ -3048,6 +3108,7 @@ export function drawGoblin(
   pose: GoblinPose,
   prop?: GoblinProp,
   offHandProp?: GoblinProp,
+  overlay?: GoblinOverlay,
 ): void {
   const skeleton = buildSkeleton(style, pose);
 
@@ -3057,6 +3118,7 @@ export function drawGoblin(
   try {
     drawGroundShadow(ctx, style, pose);
     composeGoblin(ctx, unit, style, pose, skeleton, prop, offHandProp);
+    overlay?.(ctx, skeleton);
   } finally {
     ctx.restore();
   }
@@ -3108,7 +3170,7 @@ function composeGoblin(
   const body = makeLayer(bounds);
   const part = makeLayer(bounds);
   const scratch = makeLayer(bounds);
-  const farArmInFront = twoHanded || (heldOffHand !== undefined && pose.offHandInFront === true);
+  const farArmInFront = twoHanded || pose.offHandInFront === true;
   const farWristAngle = twoHanded ? nearWristAngle : offHandWristAngle(skeleton, pose);
   // The far arm is further from the camera, so it is drawn narrower — without
   // this the free arm reads as the same mass as the weapon arm and the figure
@@ -3122,6 +3184,14 @@ function composeGoblin(
   };
   const paintFarArm = (layer: Ctx): void => {
     drawLimb(layer, skeleton.farArm, p.armWidth * farArmScale, farPaint);
+    style.outfit?.arm?.(
+      layer,
+      skeleton.farArm,
+      p.armWidth * farArmScale,
+      farWristAngle,
+      style,
+      false,
+    );
     if (style.gear.bracer) drawBracer(layer, skeleton.farArm, style, farArmScale);
     heldOffHand?.paint(layer, skeleton.farArm.end, farWristAngle);
     drawHand(
@@ -3145,6 +3215,7 @@ function composeGoblin(
     // would put a leather tube across its chest.
     if (style.gear.quiver) drawQuiver(layer, skeleton.spineTop, skeleton.lean, style);
     if (style.gear.plunger) drawPlunger(layer, skeleton.spineTop, skeleton.lean, style);
+    style.outfit?.back?.(layer, skeleton.spineTop, skeleton.lean, style);
   };
 
   const bodySlab = (layer: Ctx): void => {
@@ -3159,6 +3230,7 @@ function composeGoblin(
     style.outfit?.leg?.(layer, skeleton.nearLeg, style, true);
     if (style.gear.greave) drawGreave(layer, skeleton.nearLeg, style);
     drawFoot(layer, skeleton.nearLeg.end, footAngle(skeleton.nearLeg, pose.nearFoot), style, true);
+    if (pose.nearArmUnderHead === true) paintNearArm(layer);
 
     fillCapsule(
       layer,
@@ -3181,9 +3253,9 @@ function composeGoblin(
   // than a goblin's fist, so painting the weapon over the hand buries it, and on
   // the overhead frames — where the haft crosses the whole body — the figure
   // ends up swinging something nobody is holding.
-  const frontSlab = (layer: Ctx): void => {
-    if (farArmInFront) paintFarArm(layer);
+  const paintNearArm = (layer: Ctx): void => {
     drawLimb(layer, skeleton.nearArm, p.armWidth, nearPaint);
+    style.outfit?.arm?.(layer, skeleton.nearArm, p.armWidth, nearWristAngle, style, true);
     if (style.gear.pauldron) drawPauldron(layer, skeleton.nearShoulder, skeleton.lean, style);
     if (!pose.propBehind) paintProp(layer);
     drawHand(
@@ -3194,6 +3266,11 @@ function composeGoblin(
       true,
       prop === undefined ? OPEN_HAND : CLOSED_GRIP,
     );
+  };
+
+  const frontSlab = (layer: Ctx): void => {
+    if (farArmInFront) paintFarArm(layer);
+    if (pose.nearArmUnderHead !== true) paintNearArm(layer);
   };
 
   const cast = pixelStep(SHADOW_FALL, px(CAST_DROP_PX));
@@ -3250,7 +3327,7 @@ const WRIST_FORWARD_TURN = deg(-46);
 // change how tall it stands next to the player.
 
 /** Sole-to-skull height each archetype stands at in play, in tile units. */
-const ARCHETYPE_HEIGHTS: Record<GoblinArchetype, number> = {
+const ARCHETYPE_HEIGHTS: Record<GoblinArmedArchetype, number> = {
   sword: 0.94,
   axe: 1.0,
   mace: 0.97,
@@ -3266,15 +3343,39 @@ const ARCHETYPE_HEIGHTS: Record<GoblinArchetype, number> = {
   bow: 1.05,
 };
 
-export type GoblinArchetype = 'sword' | 'axe' | 'mace' | 'warhammer' | 'bow';
+/**
+ * The five builds that share one set of rows: a walk, an idle, a fidget, a light
+ * and a heavy attack, and a flinch.
+ */
+export type GoblinArmedArchetype = 'sword' | 'axe' | 'mace' | 'warhammer' | 'bow';
 
-export const GOBLIN_ARCHETYPES: readonly GoblinArchetype[] = [
+/**
+ * The two builds that throw explosives. They have rows of their own (a run, a
+ * light, an aim and a throw) and no melee rows, so they are dressed in
+ * `goblinBomberArt.ts` and choreographed in `goblinBomberFigure.ts`.
+ */
+export type GoblinBomberArchetype = 'dynamite' | 'black_powder';
+
+/** Every hostile goblin build painted on this rig. */
+export type GoblinArchetype = GoblinArmedArchetype | GoblinBomberArchetype;
+
+export const GOBLIN_ARMED_ARCHETYPES: readonly GoblinArmedArchetype[] = [
   'sword',
   'axe',
   'mace',
   'warhammer',
   'bow',
 ] as const;
+
+export const GOBLIN_BOMBER_ARCHETYPES: readonly GoblinBomberArchetype[] = [
+  'dynamite',
+  'black_powder',
+] as const;
+
+export const GOBLIN_ARCHETYPES: readonly GoblinArchetype[] = [
+  ...GOBLIN_ARMED_ARCHETYPES,
+  ...GOBLIN_BOMBER_ARCHETYPES,
+];
 
 /**
  * Bright goblin green, hue-shifted: the shadows cool toward blue-green, the
@@ -3357,7 +3458,8 @@ const GOBLIN_SOCKET = '#10180a';
 const GOBLIN_TOOTH = '#f4efd8';
 const GOBLIN_MOUTH_INNER = '#4a1010';
 
-function goblinPalette(): GoblinPalette {
+/** The palette every goblin shares; a build that dresses differently overrides a ramp of it. */
+export function goblinPalette(): GoblinPalette {
   return {
     skin: GOBLIN_SKIN,
     cloth: CLOTH,
@@ -3374,7 +3476,8 @@ function goblinPalette(): GoblinPalette {
   };
 }
 
-const NO_GEAR: GoblinGear = {
+/** No looted plate and no workwear: the base a build switches its own gear on over. */
+export const NO_GEAR: GoblinGear = {
   pauldron: false,
   bracer: false,
   greave: false,
@@ -3557,7 +3660,7 @@ const BOW_STYLE: GoblinStyle = {
   earNotches: 2,
 };
 
-export const GOBLIN_STYLES: Record<GoblinArchetype, GoblinStyle> = {
+export const GOBLIN_STYLES: Record<GoblinArmedArchetype, GoblinStyle> = {
   sword: SWORD_STYLE,
   axe: AXE_STYLE,
   mace: MACE_STYLE,
@@ -3579,7 +3682,7 @@ export const GOBLIN_STYLES: Record<GoblinArchetype, GoblinStyle> = {
  * multiplies its tile unit by this, which scales pose, weapon and gore together
  * and leaves every ratio the gates measure exactly where it was.
  */
-export const ARCHETYPE_SCALE: Record<GoblinArchetype, number> = {
+export const ARCHETYPE_SCALE: Record<GoblinArmedArchetype, number> = {
   sword: ARCHETYPE_HEIGHTS.sword / figureHeight(SWORD_BUILD),
   axe: ARCHETYPE_HEIGHTS.axe / figureHeight(AXE_BUILD),
   mace: ARCHETYPE_HEIGHTS.mace / figureHeight(MACE_BUILD),

@@ -259,6 +259,43 @@ const SIGHT_TRANSPARENT_TILE_TYPES: readonly number[] = [
 ];
 
 /**
+ * Solid tile types a lobbed bomb cannot arc over: masonry, building fabric,
+ * rock faces and the grid's own border. Everything else that blocks a step —
+ * furniture, crates, barrels, trees, palisades, props — is low or narrow
+ * enough for a lob to clear, so it is left out on purpose.
+ */
+const LOB_BLOCKING_TILE_TYPES: readonly number[] = [
+  FloorTypeValue.wall,
+  VOID_TYPE,
+  BUILDING_WALL,
+  METAL_WALL,
+  ARENA_CAGE,
+  ROOF_THATCH,
+  ROOF_SLATE,
+  ROOF_RED,
+  ROOF_GREEN,
+  SPRITE_BUILDING,
+  RUINED_WALL,
+  TOWN_WALL,
+  INTERIOR_WALL,
+  CLIFF,
+  GOBLIN_TENT,
+  HOLLOW_WALL,
+  CIRCUS_STRUCTURE_TALL,
+];
+
+const LOB_BLOCKING_BY_TILE_TYPE = ((): Uint8Array => {
+  const table = new Uint8Array(TILE_TYPE_COUNT);
+  for (const type of LOB_BLOCKING_TILE_TYPES) table[type] = 1;
+  return table;
+})();
+
+/** Whether a tile's type is a wall or building a lobbed bomb comes down against. */
+export function isLobBlockingTileType(tile: TileContent): boolean {
+  return LOB_BLOCKING_BY_TILE_TYPE[tile.type] === 1;
+}
+
+/**
  * Walkability by tile type as a flat lookup, so the innermost walkability test
  * is one array read rather than a chain of inequality checks.
  * MODERN_DECORATION is excluded — its walkability depends on the tile's variant.

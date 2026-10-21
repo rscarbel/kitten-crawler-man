@@ -20,11 +20,7 @@
 
 import { TILE_SIZE } from '../../src/core/constants';
 import { OVERHEAL_STATUS } from '../../src/core/StatusEffect';
-import {
-  REFERENCE_CRAWLERS,
-  referenceStats,
-  type ReferenceBuild,
-} from '../../src/core/referenceCrawler';
+import { REFERENCE_CRAWLERS, referenceStats } from '../../src/core/referenceCrawler';
 import type { Mob } from '../../src/creatures/Mob';
 import type { Player } from '../../src/Player';
 import type { ActiveFairyCast, FairyCast } from '../../src/creatures/fairies/Fairy';
@@ -150,8 +146,6 @@ const CURVES: ReadonlyArray<readonly [string, LevelledCurve]> = [
   ['shared', SHARED_LEVELLED_CURVE],
   ['learning', LEARNING_FLOOR_LEVELLED_CURVE],
 ];
-/** The reference party build the difficulty curve prices regular fights with. */
-const REFERENCE_PARTY_BUILD: ReferenceBuild = 'balanced';
 /** Every boss whose HP phases carry a heal ceiling, by spawn key. */
 const PHASED_BOSS_KEYS = [
   'the_hoarder',
@@ -545,7 +539,7 @@ function checkBossHealing(report: FairyGateReport): void {
 function referencePartyDamagePerSecond(partyLevel: number): number {
   let perSecond = 0;
   for (const crawler of REFERENCE_CRAWLERS) {
-    const { attackCycle } = referenceStats(crawler, REFERENCE_PARTY_BUILD, partyLevel);
+    const { attackCycle } = referenceStats(crawler, partyLevel);
     const damage = attackCycle.reduce((sum, attack) => sum + attack.damage, 0);
     const frames = attackCycle.reduce((sum, attack) => sum + attack.frames, 0);
     perSecond += (damage / frames) * FRAMES_PER_SECOND;

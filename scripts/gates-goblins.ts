@@ -1,5 +1,6 @@
 /**
- * The goblins' art gates, for all five figures.
+ * The goblins' art gates, for all seven figures: the five armed builds and
+ * the two bombers.
  *
  * These gates enforce sheet-shape invariants directly against cells painted
  * from the figures — baked exactly the way the runtime cache bakes them,
@@ -7,7 +8,7 @@
  * The pose-stream gates measure the rig itself and need no pixels at all.
  *
  * Failures accumulate rather than throwing one at a time, so one run reports
- * everything that is wrong across all five builds. A gate that cannot find the
+ * everything that is wrong across all seven builds. A gate that cannot find the
  * row or state it names fails loudly, and so does one whose filtered loop ran
  * zero times: a lookup that quietly returns nothing turns a whole gate module
  * green while measuring nothing.
@@ -23,11 +24,9 @@ import {
 } from './figureGates.js';
 import {
   ARCHETYPE_SCALE,
-  GOBLIN_ARCHETYPES,
-  GOBLIN_FIGURES,
+  GOBLIN_ARMED_ARCHETYPES,
   GOBLIN_GORE_STATES,
   GOBLIN_STYLES,
-  GORE_RECENTRE,
   IMPACT_FRAMES,
   ROWS,
   TILE_SCALE,
@@ -39,17 +38,32 @@ import {
   goblinWeapon,
   goblinWeaponTip,
   nockPoint,
-  type GoblinArchetype,
+  type GoblinArmedArchetype,
   type RowSpec,
 } from '../src/sprites/art/goblinFigure.js';
 import {
+  GOBLIN_ARCHETYPES,
+  GOBLIN_BOMBER_ARCHETYPES,
   along,
   buildSkeleton,
   deg,
   goblinEarSpine,
+  offHandWristAngle,
+  type GoblinArchetype,
+  type GoblinBomberArchetype,
   type GoblinPose,
   type Pt,
 } from '../src/sprites/art/goblinArt.js';
+import { slowMatchEmberAt } from '../src/sprites/art/goblinBomberArt.js';
+import {
+  GOBLIN_BOMBER_EVENT_FRAMES,
+  goblinBomberFrame,
+  goblinBomberFuseAt,
+  goblinBomberPose,
+  goblinBomberSkeleton,
+  goblinDynamiteWickAt,
+} from '../src/sprites/art/goblinBomberFigure.js';
+import { GOBLIN_BOMBER_GORE_PARTS, goblinBomberStates } from '../src/sprites/goblinBomberSprite.js';
 import { previewInk } from '../src/ui/theme/previewInk.js';
 import { BONELESS_GORE_STATES, gorePieces } from '../src/sprites/art/goblinGore.js';
 import {
@@ -59,6 +73,16 @@ import {
   GOBLIN_STATES,
 } from '../src/sprites/goblinSprite.js';
 import { installCanvasGlobals } from './nodeCanvasGlobals.js';
+import {
+  figureOf,
+  goreRecentreOf,
+  isArmed,
+  poseOf,
+  rowOf,
+  rowsOf,
+  scaleOf,
+  styleOf,
+} from './goblinSubjects.js';
 
 const INK_ALPHA_THRESHOLD = 24;
 /**
@@ -121,7 +145,7 @@ function cellOf(archetype: GoblinArchetype, state: string, frame: number): Cell 
   const key = `${archetype}/${state}[${frame}]`;
   const cached = cellCache.get(key);
   if (cached !== undefined) return cached;
-  const def = GOBLIN_FIGURES[archetype];
+  const def = figureOf(archetype);
   const canvas = bakeFigureCell(def, state, frame);
   const { data } = canvas.getContext('2d').getImageData(0, 0, def.frameWidth, def.frameHeight);
   const cell: Cell = { data, width: def.frameWidth, height: def.frameHeight };
@@ -181,8 +205,9 @@ function rowByName(name: string): RowSpec {
   return row;
 }
 
-const LOOP_ROWS = ROWS.filter((row) => row.kind === 'loop');
-const ONE_SHOT_ROWS = ROWS.filter((row) => row.kind === 'oneShot');
+function loopRowsOf(archetype: GoblinArchetype): readonly RowSpec[] {
+  return rowsOf(archetype).filter((row) => row.kind === 'loop');
+}
 
 // ── G1 · structure ───────────────────────────────────────────────────────────
 
@@ -195,7 +220,7 @@ const ONE_SHOT_ROWS = ROWS.filter((row) => row.kind === 'oneShot');
  * overhead, and that cell size is frozen by the bake these figures replaced.
  */
 function gateStructure(archetype: GoblinArchetype): void {
-  const messages = figureStructuralFailures(GOBLIN_FIGURES[archetype], {
+  const messages = figureStructuralFailures(figureOf(archetype), {
     sparseStates: GOBLIN_GORE_STATES,
   });
   for (const message of messages) fail('G1', archetype, message);
@@ -226,7 +251,7 @@ const MIN_FRAME_BELOW_SOLE = 8;
  * the tile box the runtime hangs a health bar and a shadow from.
  */
 function gateAnchor(archetype: GoblinArchetype): void {
-  const def = GOBLIN_FIGURES[archetype];
+  const def = figureOf(archetype);
   const groundY = def.tileY + def.tileScale;
   if (groundY <= 0 || groundY >= def.frameHeight) {
     fail('G2', archetype, `the ground line at ${groundY} is outside the ${def.frameHeight}px cell`);
@@ -241,7 +266,7 @@ function gateAnchor(archetype: GoblinArchetype): void {
     );
   }
 
-  const idle = rowByName('idle');
+  const idle = rowOf(archetype, 'idle');
   let framesMeasured = 0;
   for (let frame = 0; frame < idle.frameCount; frame++) {
     const bounds = inkBoundsOf(cellOf(archetype, idle.name, frame), SOLID_ALPHA_THRESHOLD);
@@ -348,7 +373,7 @@ function gatePhaseCoverage(archetype: GoblinArchetype, row: RowSpec): void {
 
 function gateLoopClosure(archetype: GoblinArchetype): void {
   let rowsMeasured = 0;
-  for (const row of LOOP_ROWS) {
+  for (const row of loopRowsOf(archetype)) {
     rowsMeasured++;
     gatePhaseCoverage(archetype, row);
     const deltas = consecutiveDeltas(archetype, row);
@@ -402,8 +427,30 @@ const MOTION_SPIKE_RATIO = 2.5;
  */
 const FLINCH_SNAP_LAST_FRAME = 2;
 
+/**
+ * A bomber's declared spikes: the frames either side of the throw's release,
+ * where the arm whips over and the explosive leaves the hand, and the flash
+ * where the fuse catches, which is a burst of light on purpose.
+ */
+const BOMBER_RELEASE_SPIKE_BEFORE = 2;
+const BOMBER_RELEASE_SPIKE_AFTER = 2;
+const BOMBER_CATCH_SPIKE_AFTER = 2;
+
 function isDeclaredSpike(archetype: GoblinArchetype, row: RowSpec, frame: number): boolean {
   if (row.name === 'flinch') return frame <= FLINCH_SNAP_LAST_FRAME;
+  if (!isArmed(archetype)) {
+    const events = GOBLIN_BOMBER_EVENT_FRAMES[archetype];
+    if (row.name === 'throw') {
+      return (
+        frame >= events.release - BOMBER_RELEASE_SPIKE_BEFORE &&
+        frame <= events.release + BOMBER_RELEASE_SPIKE_AFTER
+      );
+    }
+    if (row.name === 'light') {
+      return frame >= events.fuseCatch && frame <= events.fuseCatch + BOMBER_CATCH_SPIKE_AFTER;
+    }
+    return false;
+  }
   if (row.name !== 'attack_light' && row.name !== 'attack_heavy') return false;
   const kind = row.name === 'attack_light' ? 'light' : 'heavy';
   const window = accelerationWindow(archetype, kind);
@@ -412,7 +459,7 @@ function isDeclaredSpike(archetype: GoblinArchetype, row: RowSpec, frame: number
 
 function gateMotionContinuity(archetype: GoblinArchetype): void {
   let stepsMeasured = 0;
-  for (const row of ROWS) {
+  for (const row of rowsOf(archetype)) {
     const deltas = consecutiveDeltas(archetype, row);
     const limit = median(deltas) * MOTION_SPIKE_RATIO;
     deltas.forEach((delta, index) => {
@@ -475,7 +522,7 @@ function inkCentroid(cell: Cell): { x: number; y: number } {
  */
 function gateCentroid(archetype: GoblinArchetype): void {
   let rowsMeasured = 0;
-  for (const row of LOOP_ROWS) {
+  for (const row of loopRowsOf(archetype)) {
     rowsMeasured++;
     const centroids = Array.from({ length: row.frameCount }, (_unused, frame) =>
       inkCentroid(cellOf(archetype, row.name, frame)),
@@ -505,23 +552,35 @@ function gateCentroid(archetype: GoblinArchetype): void {
 
 const ONE_SHOT_SETTLE_RATIO = 2.0;
 
+/**
+ * The row each one-shot hands over to. An armed goblin's always hand back to
+ * idle; a bomber's light runs straight into its throw (or its aim), the aim
+ * into the throw, and only the throw and the flinch return to idle.
+ */
+function handOffOf(archetype: GoblinArchetype, row: RowSpec): string {
+  if (isArmed(archetype)) return 'idle';
+  if (row.name === 'light') return archetype === 'black_powder' ? 'aim' : 'throw';
+  if (row.name === 'aim') return 'throw';
+  return 'idle';
+}
+
 function gateOneShotSettle(archetype: GoblinArchetype): void {
-  const idle = rowByName('idle');
   let rowsMeasured = 0;
-  for (const row of ONE_SHOT_ROWS) {
+  for (const row of rowsOf(archetype).filter((candidate) => candidate.kind === 'oneShot')) {
     rowsMeasured++;
+    const next = handOffOf(archetype, row);
     const deltas = consecutiveDeltas(archetype, row);
     const settle = cellDelta(
       cellOf(archetype, row.name, row.frameCount - 1),
-      cellOf(archetype, idle.name, 0),
+      cellOf(archetype, next, 0),
     );
     const limit = median(deltas) * ONE_SHOT_SETTLE_RATIO;
     if (settle > limit) {
       fail(
         'G6',
         archetype,
-        `${row.name}: the hand-off to idle is ${settle.toFixed(2)} against a limit of ` +
-          `${limit.toFixed(2)} — the goblin pops every time it swings`,
+        `${row.name}: the hand-off to ${next} is ${settle.toFixed(2)} against a limit of ` +
+          `${limit.toFixed(2)} — the goblin pops every time it plays the row`,
       );
     }
   }
@@ -542,9 +601,9 @@ function poseStream(archetype: GoblinArchetype): readonly PosedFrame[] {
   const cached = poseCache.get(archetype);
   if (cached !== undefined) return cached;
   const stream: PosedFrame[] = [];
-  for (const row of ROWS) {
+  for (const row of rowsOf(archetype)) {
     for (let frame = 0; frame < row.frameCount; frame++) {
-      stream.push({ row, frame, pose: goblinPose(archetype, row, frame) });
+      stream.push({ row, frame, pose: poseOf(archetype, row, frame) });
     }
   }
   poseCache.set(archetype, stream);
@@ -579,7 +638,7 @@ const CONTACT_ROLL_TOLERANCE = 0.02;
  */
 function gateFootSlide(archetype: GoblinArchetype): void {
   let stepsMeasured = 0;
-  for (const row of ROWS) {
+  for (const row of rowsOf(archetype)) {
     const poses = posesOfRow(archetype, row);
     for (const side of ['nearFoot', 'farFoot'] as const) {
       const steps: number[] = [];
@@ -661,7 +720,7 @@ interface ArcStep {
  * Null on a frame whose pose left `weaponAngle` unset — the caller decides
  * whether that is a gap worth failing over or a row with no weapon in it.
  */
-function tipsOfRow(archetype: GoblinArchetype, row: RowSpec): ReadonlyArray<Pt | null> {
+function tipsOfRow(archetype: GoblinArmedArchetype, row: RowSpec): ReadonlyArray<Pt | null> {
   return posesOfRow(archetype, row).map((pose) => goblinWeaponTip(pose, archetype));
 }
 
@@ -672,7 +731,7 @@ function atTurnaround(steps: readonly ArcStep[], index: number): boolean {
   return index + 1 < steps.length && reverses(steps[index], steps[index + 1]);
 }
 
-function arcStepsOf(archetype: GoblinArchetype, row: RowSpec): ArcStep[] | null {
+function arcStepsOf(archetype: GoblinArmedArchetype, row: RowSpec): ArcStep[] | null {
   const tips = tipsOfRow(archetype, row);
   const steps: ArcStep[] = [];
   for (let i = 1; i < tips.length; i++) {
@@ -686,7 +745,7 @@ function arcStepsOf(archetype: GoblinArchetype, row: RowSpec): ArcStep[] | null 
   return steps;
 }
 
-function gateWeaponArc(archetype: GoblinArchetype): void {
+function gateWeaponArc(archetype: GoblinArmedArchetype): void {
   let rowsMeasured = 0;
   let rowsWithAComparison = 0;
   let pairsCompared = 0;
@@ -774,7 +833,7 @@ const GRIP_SLACK_FRACTION = 0.5;
  */
 let archetypesWithAnOffGrip = 0;
 
-function gateOffHandGrip(archetype: GoblinArchetype): void {
+function gateOffHandGrip(archetype: GoblinArmedArchetype): void {
   const offGrip = goblinWeapon(archetype).offGripDistance;
   if (offGrip === null) return;
   archetypesWithAnOffGrip++;
@@ -814,7 +873,7 @@ function gateOffHandGrip(archetype: GoblinArchetype): void {
  */
 const MAX_TIP_BELOW_GROUND = 0.1;
 
-function gateWeaponClearsFloor(archetype: GoblinArchetype): void {
+function gateWeaponClearsFloor(archetype: GoblinArmedArchetype): void {
   const scale = ARCHETYPE_SCALE[archetype];
   let tipsMeasured = 0;
   for (const { row, frame, pose } of poseStream(archetype)) {
@@ -1084,7 +1143,7 @@ function gateGoreDistinctness(archetype: GoblinArchetype): void {
  * outside that circle is clipped away at some angle of the tumble.
  */
 function gateRotationSafety(archetype: GoblinArchetype): void {
-  const def = GOBLIN_FIGURES[archetype];
+  const def = figureOf(archetype);
   const radius = Math.min(def.frameWidth, def.frameHeight) / 2;
   let piecesMeasured = 0;
   for (const partName of GOBLIN_GORE_STATES) {
@@ -1129,7 +1188,7 @@ function gateRotationSafety(archetype: GoblinArchetype): void {
 const ROW_BUDGET_MEGABYTES = 6;
 
 function gateWarmRowSize(archetype: GoblinArchetype): void {
-  const def = GOBLIN_FIGURES[archetype];
+  const def = figureOf(archetype);
   const cellBytes = def.frameWidth * def.frameHeight * BYTES_PER_PIXEL;
   let widestState = '';
   let widestFrames = 0;
@@ -1165,11 +1224,11 @@ function gateWarmRowSize(archetype: GoblinArchetype): void {
 // ── G13 · runtime/art sync ───────────────────────────────────────────────────
 
 /** Which runtime table an archetype's attack timings come from, for error text. */
-function timingTableName(archetype: GoblinArchetype): string {
+function timingTableName(archetype: GoblinArmedArchetype): string {
   return archetype === 'bow' ? 'GOBLIN_BOW_SHOTS' : 'GOBLIN_ATTACKS';
 }
 
-function gateTimingTable(archetype: GoblinArchetype): void {
+function gateTimingTable(archetype: GoblinArmedArchetype): void {
   let kindsMeasured = 0;
   for (const kind of ['light', 'heavy'] as const) {
     // The archer's rows are measured by a table of their own: an arrow has no
@@ -1220,7 +1279,7 @@ function gateTimingTable(archetype: GoblinArchetype): void {
  */
 const PEAK_TOLERANCE_FRAMES = 1;
 
-function gateImpactIsThePeak(archetype: GoblinArchetype): void {
+function gateImpactIsThePeak(archetype: GoblinArmedArchetype): void {
   // The bow is exempt, and not as a loophole: this gate measures the *weapon
   // tip*, and a bow's tips are its limbs, which travel during the raise and the
   // lower and stand still through the hold. What has to peak on the release
@@ -1284,7 +1343,7 @@ const MIN_FULL_DRAW = 0.6;
  * suite is structurally blind to" (a fist drawn in mid-air, identically on every
  * frame) had nothing looking at it at all.
  */
-function gateBowDraw(archetype: GoblinArchetype): void {
+function gateBowDraw(archetype: GoblinArmedArchetype): void {
   if (archetype !== 'bow') return;
   const style = GOBLIN_STYLES.bow;
   const slack = style.proportions.handRadius * GRIP_SLACK_FRACTION;
@@ -1426,9 +1485,9 @@ function gateBowDraw(archetype: GoblinArchetype): void {
 const GORE_CENTRE_TOLERANCE_PX = 1.5;
 
 function gateGoreRecentre(archetype: GoblinArchetype): void {
-  const def = GOBLIN_FIGURES[archetype];
-  const paintedStates = new Set(gorePieces(GOBLIN_STYLES[archetype]).map((piece) => piece.state));
-  for (const frozenState of GORE_RECENTRE[archetype].keys()) {
+  const def = figureOf(archetype);
+  const paintedStates = new Set(gorePieces(styleOf(archetype)).map((piece) => piece.state));
+  for (const frozenState of goreRecentreOf(archetype).keys()) {
     if (paintedStates.has(frozenState)) continue;
     fail(
       'G17',
@@ -1476,17 +1535,21 @@ function gateGoreRecentre(archetype: GoblinArchetype): void {
  * the game can reach goes through here.
  */
 function gateRuntimeStateNames(archetype: GoblinArchetype): void {
-  const def = GOBLIN_FIGURES[archetype];
-  for (const message of missingStateFailures(def, GOBLIN_STATES, 'GoblinAnimator.resolve')) {
+  const def = figureOf(archetype);
+  const [states, resolver] = isArmed(archetype)
+    ? [GOBLIN_STATES, 'GoblinAnimator.resolve']
+    : [goblinBomberStates(archetype), 'GoblinBomberAnimator.resolve'];
+  for (const message of missingStateFailures(def, states, resolver)) {
     fail('G18', archetype, message);
   }
+  const goreParts = isArmed(archetype) ? GOBLIN_GORE_PARTS : GOBLIN_BOMBER_GORE_PARTS;
   // Against what `goblinGore.ts` actually paints, not against the figure's own
-  // declaration: `GOBLIN_GORE_PARTS` *is* that declaration, so comparing the two
+  // declaration: `goreParts` *is* that declaration, so comparing the two
   // would be one list agreeing with itself. The independent list is the set of
   // piece names the wound module authors.
-  const painted = gorePieces(GOBLIN_STYLES[archetype]).map((piece) => piece.state);
+  const painted = gorePieces(styleOf(archetype)).map((piece) => piece.state);
   let partsMeasured = 0;
-  for (const part of GOBLIN_GORE_PARTS) {
+  for (const part of goreParts) {
     partsMeasured++;
     if (painted.includes(part)) continue;
     fail(
@@ -1497,7 +1560,7 @@ function gateRuntimeStateNames(archetype: GoblinArchetype): void {
     );
   }
   for (const state of painted) {
-    if (GOBLIN_GORE_PARTS.includes(state)) continue;
+    if (goreParts.includes(state)) continue;
     fail(
       'G18',
       archetype,
@@ -1528,7 +1591,17 @@ const CONTRAST_FLOORS: ReadonlyArray<readonly [string, string]> = [
  * landing — the poses a player has to pick a goblin out of a room in.
  */
 function contrastFrames(archetype: GoblinArchetype): ReadonlyArray<readonly [string, number]> {
-  const walk = rowByName('walk');
+  const walk = rowOf(archetype, 'walk');
+  if (!isArmed(archetype)) {
+    const events = GOBLIN_BOMBER_EVENT_FRAMES[archetype];
+    return [
+      ['idle', 0],
+      ['walk', 0],
+      ['walk', Math.floor(walk.frameCount / 2)],
+      ['light', events.fuseCatch],
+      ['throw', events.release],
+    ];
+  }
   return [
     ['idle', 0],
     ['walk', 0],
@@ -1817,16 +1890,16 @@ const EAR_CLEAR_OF_SKULL = 1.3;
  * somewhere else entirely fails rather than passing on stray ink.
  */
 function gateEarsBreakSilhouette(archetype: GoblinArchetype): void {
-  const def = GOBLIN_FIGURES[archetype];
-  const style = GOBLIN_STYLES[archetype];
-  const unit = TILE_SCALE * ARCHETYPE_SCALE[archetype];
+  const def = figureOf(archetype);
+  const style = styleOf(archetype);
+  const unit = TILE_SCALE * scaleOf(archetype);
   const groundY = def.tileY + def.tileScale;
   const skullHalfWidth = style.proportions.headRadius * style.proportions.headWidthFactor;
   let samples = 0;
   for (const rowName of ['idle', 'walk']) {
-    const row = rowByName(rowName);
+    const row = rowOf(archetype, rowName);
     for (let frame = 0; frame < row.frameCount; frame++) {
-      const pose = goblinPose(archetype, row, frame);
+      const pose = poseOf(archetype, row, frame);
       const skeleton = buildSkeleton(style, pose);
       const cell = cellOf(archetype, row.name, frame);
       for (const near of [true, false]) {
@@ -1911,8 +1984,8 @@ function legExtension(
  * space only, so it costs nothing to run.
  */
 function gateNeverUpright(archetype: GoblinArchetype): void {
-  const style = GOBLIN_STYLES[archetype];
-  const scale = ARCHETYPE_SCALE[archetype];
+  const style = styleOf(archetype);
+  const scale = scaleOf(archetype);
   let frames = 0;
   let plantedLegs = 0;
   for (const { row, frame, pose } of poseStream(archetype)) {
@@ -1970,7 +2043,7 @@ function gateNeverUpright(archetype: GoblinArchetype): void {
 const FIDGET_MAX_WEAPON_RISE = deg(3);
 
 /** G23: through the whole idle break, the weapon never turns up from its idle carry. */
-function gateFidgetIsNoTelegraph(archetype: GoblinArchetype): void {
+function gateFidgetIsNoTelegraph(archetype: GoblinArmedArchetype): void {
   const idle = goblinPose(archetype, rowByName('idle'), 0);
   if (idle.weaponAngle === null) {
     fail('G23', archetype, 'idle frame 0 carries no weapon to measure the fidget against');
@@ -2016,12 +2089,287 @@ function restBeatFailure(pose: GoblinPose): string | null {
 /** G24: idle frame 0 carries no ear flick and no blink, for every build and the plumber. */
 function gateIdleRestFrame(): void {
   const idle = rowByName('idle');
-  for (const archetype of GOBLIN_ARCHETYPES) {
+  for (const archetype of GOBLIN_ARMED_ARCHETYPES) {
     const message = restBeatFailure(goblinPose(archetype, idle, 0));
+    if (message !== null) fail('G24', archetype, message);
+  }
+  for (const archetype of GOBLIN_BOMBER_ARCHETYPES) {
+    const message = restBeatFailure(goblinBomberPose(archetype, 'idle', 0));
     if (message !== null) fail('G24', archetype, message);
   }
   const plumberMessage = restBeatFailure(goblinPlumberPose(idle, 0));
   if (plumberMessage !== null) failures.push(`G24 goblin_plumber: ${plumberMessage}`);
+}
+
+// ── G25 · a bomber's fuse catches on the flame it is put to ─────────────────
+
+/**
+ * How far the fuse may sit from the flame on the frame it catches, in authored
+ * tile units: about a pixel at the 32-px tile. Further than that and the spark
+ * bursts in mid-air beside the candle or the match.
+ */
+const FUSE_CATCH_TOLERANCE = 0.035;
+
+/**
+ * Where each bomber's flame is on a frame: the dynamite goblin's candle wick,
+ * or the end of the slow-match in the black powder goblin's far fist.
+ */
+function flameAt(archetype: GoblinBomberArchetype, row: string, frame: number): Pt {
+  const pose = goblinBomberPose(archetype, row, frame);
+  const skeleton = buildSkeleton(styleOf(archetype), pose);
+  if (archetype === 'dynamite') return goblinDynamiteWickAt(skeleton);
+  return slowMatchEmberAt(skeleton.farArm.end, offHandWristAngle(skeleton, pose));
+}
+
+/**
+ * G25: on the light row's catch frame the lit fuse touches the flame and the
+ * spark bursts there at full strength; before it, the black powder goblin's
+ * fuse is not yet burning.
+ */
+function gateFuseCatches(archetype: GoblinBomberArchetype): void {
+  const catchFrame = GOBLIN_BOMBER_EVENT_FRAMES[archetype].fuseCatch;
+  const frame = goblinBomberFrame(archetype, 'light', catchFrame);
+  const skeleton = buildSkeleton(styleOf(archetype), frame.pose);
+  const fuse = goblinBomberFuseAt(archetype, frame, skeleton);
+  if (fuse === null) {
+    fail('G25', archetype, `light frame ${catchFrame}: no fuse is lit on the catch frame`);
+    return;
+  }
+  const flame = flameAt(archetype, 'light', catchFrame);
+  const gap = Math.hypot(fuse.x - flame.x, fuse.y - flame.y);
+  if (gap > FUSE_CATCH_TOLERANCE) {
+    fail(
+      'G25',
+      archetype,
+      `light frame ${catchFrame}: the fuse is ${gap.toFixed(3)} tile from the flame, over ` +
+        `${FUSE_CATCH_TOLERANCE} — the spark bursts in mid-air`,
+    );
+  }
+  if (frame.burst < 1) {
+    fail('G25', archetype, `light frame ${catchFrame}: the catch flash is only ${frame.burst}`);
+  }
+  let earlier = 0;
+  for (let before = 0; before < catchFrame; before++) {
+    earlier++;
+    const lead = goblinBomberFrame(archetype, 'light', before);
+    if (lead.burst > 0) {
+      fail('G25', archetype, `light frame ${before}: the catch flashes before the fuse arrives`);
+    }
+    if (archetype === 'black_powder' && lead.litFuse !== null) {
+      fail('G25', archetype, `light frame ${before}: the bomb's fuse burns before it is lit`);
+    }
+  }
+  failUnlessMeasured('G25', archetype, earlier, 'light frames before the catch');
+}
+
+// ── G26 · the explosive leaves the hand on the release frame ────────────────
+
+/**
+ * G26: the throw holds its explosive up to the release frame and is empty-
+ * handed on it, the throwing hand out ahead of and above its shoulder: the
+ * overarm lob's release, not a dropped bomb.
+ */
+function gateReleaseLeavesTheHand(archetype: GoblinBomberArchetype): void {
+  const release = GOBLIN_BOMBER_EVENT_FRAMES[archetype].release;
+  const row = rowOf(archetype, 'throw');
+  if (release < 1 || release >= row.frameCount) {
+    fail('G26', archetype, `release frame ${release} is outside the ${row.frameCount}-frame throw`);
+    return;
+  }
+  let held = 0;
+  for (let frame = 0; frame < release; frame++) {
+    held++;
+    const shown = goblinBomberFrame(archetype, 'throw', frame);
+    if (!shown.nearHolds || shown.litFuse !== 'near') {
+      fail('G26', archetype, `throw frame ${frame}: the lit explosive is not in the hand yet`);
+    }
+  }
+  failUnlessMeasured('G26', archetype, held, 'throw frames before the release');
+  const loosed = goblinBomberFrame(archetype, 'throw', release);
+  if (loosed.nearHolds) {
+    fail('G26', archetype, `throw frame ${release}: the explosive is still in the hand`);
+  }
+  const skeleton = buildSkeleton(styleOf(archetype), loosed.pose);
+  const hand = skeleton.nearArm.end;
+  if (hand.x <= skeleton.nearShoulder.x || hand.y >= skeleton.nearShoulder.y) {
+    fail(
+      'G26',
+      archetype,
+      `throw frame ${release}: the hand lets go at (${hand.x.toFixed(2)}, ${hand.y.toFixed(2)}), ` +
+        'not out ahead of and above the shoulder — it reads as a drop, not a lob',
+    );
+  }
+}
+
+// ── G27 · the aim reads as a throw about to come, for the whole lock ────────
+
+/** The light row ends on the draw, so the aim is drawn from its very first frame. */
+const AIM_TELEGRAPH_FROM_FRAME = 0;
+
+/**
+ * G27: on every frame of the aim, the lit bomb is held behind
+ * the throwing shoulder and above it. The lock is the player's only warning,
+ * so a frame that relaxes the arm is a frame the warning is not shown.
+ */
+function gateAimTelegraphs(archetype: GoblinBomberArchetype): void {
+  if (archetype !== 'black_powder') return;
+  const row = rowOf(archetype, 'aim');
+  let frames = 0;
+  for (let frame = AIM_TELEGRAPH_FROM_FRAME; frame < row.frameCount; frame++) {
+    frames++;
+    const shown = goblinBomberFrame(archetype, 'aim', frame);
+    const skeleton = buildSkeleton(styleOf(archetype), shown.pose);
+    const hand = skeleton.nearArm.end;
+    if (!shown.nearHolds || shown.litFuse !== 'near') {
+      fail('G27', archetype, `aim frame ${frame}: the lit bomb is not in the throwing hand`);
+    }
+    if (hand.x >= skeleton.nearShoulder.x || hand.y >= skeleton.nearShoulder.y) {
+      fail(
+        'G27',
+        archetype,
+        `aim frame ${frame}: the bomb hand at (${hand.x.toFixed(2)}, ${hand.y.toFixed(2)}) is not ` +
+          'drawn back above the shoulder — the lock stops reading as a throw',
+      );
+    }
+  }
+  failUnlessMeasured('G27', archetype, frames, 'aim frames');
+}
+
+// ── G28 · a bomber's silhouette is its own ──────────────────────────────────
+
+/** A cell's solid pixels, keyed by their offset from the tile's ground-centre. */
+function solidFootprint(archetype: GoblinArchetype): ReadonlySet<string> {
+  const def = figureOf(archetype);
+  const cell = cellOf(archetype, 'idle', 0);
+  const groundX = Math.floor(def.frameWidth / 2);
+  const groundY = def.tileY + def.tileScale;
+  const footprint = new Set<string>();
+  for (let y = 0; y < cell.height; y++) {
+    for (let x = 0; x < cell.width; x++) {
+      if (alphaAt(cell, x, y) < SOLID_ALPHA_THRESHOLD) continue;
+      footprint.add(`${x - groundX},${y - groundY}`);
+    }
+  }
+  return footprint;
+}
+
+function footprintOverlap(a: ReadonlySet<string>, b: ReadonlySet<string>): number {
+  let intersection = 0;
+  for (const key of a) if (b.has(key)) intersection++;
+  const union = a.size + b.size - intersection;
+  return union === 0 ? 1 : intersection / union;
+}
+
+let armedOverlapFloor: number | null = null;
+
+/** The least any two armed goblins' resting outlines overlap. */
+function closestArmedOverlap(): number {
+  if (armedOverlapFloor !== null) return armedOverlapFloor;
+  let least = 1;
+  for (let a = 0; a < GOBLIN_ARMED_ARCHETYPES.length; a++) {
+    for (let b = a + 1; b < GOBLIN_ARMED_ARCHETYPES.length; b++) {
+      const overlap = footprintOverlap(
+        solidFootprint(GOBLIN_ARMED_ARCHETYPES[a]),
+        solidFootprint(GOBLIN_ARMED_ARCHETYPES[b]),
+      );
+      least = Math.min(least, overlap);
+    }
+  }
+  armedOverlapFloor = least;
+  return least;
+}
+
+/**
+ * G28: a bomber is told from every other goblin by its outline alone, with the
+ * colour off. The yardstick is the armed goblins themselves, which share one
+ * crouch and differ only by build and weapon: a bomber shares less of its
+ * resting outline with every other goblin, as intersection over union on the
+ * same tile, than the two most different armed goblins share with each other.
+ * Derived from the art on every run, so it follows a redraw of either family.
+ */
+function gateSilhouetteIsItsOwn(archetype: GoblinBomberArchetype): void {
+  const own = solidFootprint(archetype);
+  const ceiling = closestArmedOverlap();
+  let compared = 0;
+  for (const other of GOBLIN_ARCHETYPES) {
+    if (other === archetype) continue;
+    compared++;
+    const overlap = footprintOverlap(own, solidFootprint(other));
+    console.log(
+      `  G28 ${archetype} against ${other}: ${(overlap * PERCENT).toFixed(1)}% of the outline shared`,
+    );
+    if (overlap >= ceiling) {
+      fail(
+        'G28',
+        archetype,
+        `shares ${(overlap * PERCENT).toFixed(1)}% of its resting outline with goblin_${other}, ` +
+          `at or over the ${(ceiling * PERCENT).toFixed(1)}% the two most different armed ` +
+          'goblins share — with the colour off it does not stand apart',
+      );
+    }
+  }
+  failUnlessMeasured('G28', archetype, compared, 'other goblins');
+}
+
+// ── G29 · the dynamite goblin carries a flame on its head ───────────────────
+
+/**
+ * A pixel is flame-lit when it is bright, warm and opaque: red and green high
+ * and blue well under them, which no goblin skin, cloth or metal reaches.
+ */
+const FLAME_RED_MIN = 235;
+const FLAME_GREEN_MIN = 150;
+const FLAME_BLUE_MAX = 150;
+/**
+ * How far from the point just over the wick a flame pixel may be, in cell
+ * pixels, and how far over the wick that point sits, in authored tile units:
+ * the flame stands on the wick, so its body is a little above it. Measured
+ * there and not anywhere near the head, because the lit stick's fuse spark is
+ * the same warm colour and on a run it rides up beside the helmet.
+ */
+const FLAME_SEARCH_RADIUS_PX = 4;
+const FLAME_BODY_ABOVE_WICK = 0.04;
+
+function hasFlameAt(cell: Cell, x: number, y: number): boolean {
+  for (let dy = -FLAME_SEARCH_RADIUS_PX; dy <= FLAME_SEARCH_RADIUS_PX; dy++) {
+    for (let dx = -FLAME_SEARCH_RADIUS_PX; dx <= FLAME_SEARCH_RADIUS_PX; dx++) {
+      if (Math.hypot(dx, dy) > FLAME_SEARCH_RADIUS_PX) continue;
+      const px = Math.round(x + dx);
+      const py = Math.round(y + dy);
+      if (px < 0 || py < 0 || px >= cell.width || py >= cell.height) continue;
+      const at = (py * cell.width + px) * CHANNELS;
+      if (cell.data[at + ALPHA_OFFSET] < SOLID_ALPHA_THRESHOLD) continue;
+      if (cell.data[at] < FLAME_RED_MIN || cell.data[at + 1] < FLAME_GREEN_MIN) continue;
+      if (cell.data[at + 2] > FLAME_BLUE_MAX) continue;
+      return true;
+    }
+  }
+  return false;
+}
+
+/** G29: on every frame of every row, the candle's flame burns on the helmet's wick. */
+function gateCandleFlame(archetype: GoblinBomberArchetype): void {
+  if (archetype !== 'dynamite') return;
+  const def = figureOf(archetype);
+  const unit = TILE_SCALE * scaleOf(archetype);
+  const groundY = def.tileY + def.tileScale;
+  let frames = 0;
+  for (const row of rowsOf(archetype)) {
+    for (let frame = 0; frame < row.frameCount; frame++) {
+      frames++;
+      const wick = goblinDynamiteWickAt(goblinBomberSkeleton(archetype, row.name, frame));
+      const x = def.frameWidth / 2 + wick.x * unit;
+      const y = groundY + (wick.y - FLAME_BODY_ABOVE_WICK) * unit;
+      if (hasFlameAt(cellOf(archetype, row.name, frame), x, y)) continue;
+      fail(
+        'G29',
+        archetype,
+        `${row.name} frame ${frame}: no flame on the candle's wick at (${x.toFixed(1)}, ` +
+          `${y.toFixed(1)}) — the candle on the helmet is out`,
+      );
+    }
+  }
+  failUnlessMeasured('G29', archetype, frames, 'frames for the candle');
 }
 
 // ── Run ──────────────────────────────────────────────────────────────────────
@@ -2030,11 +2378,11 @@ function gateIdleRestFrame(): void {
 // `document.createElement('canvas')`, which Node does not have.
 installCanvasGlobals();
 
-/** Runs every gate over all five figures and returns one message per failure. */
+/** Runs every gate over all seven figures and returns one message per failure. */
 export function goblinGateFailures(): string[] {
   failures.length = 0;
   archetypesWithAnOffGrip = 0;
-  for (const archetype of GOBLIN_ARCHETYPES) {
+  for (const archetype of GOBLIN_ARMED_ARCHETYPES) {
     gateStructure(archetype);
     gateAnchor(archetype);
     gateLoopClosure(archetype);
@@ -2058,6 +2406,29 @@ export function goblinGateFailures(): string[] {
     gateEarsBreakSilhouette(archetype);
     gateNeverUpright(archetype);
     gateFidgetIsNoTelegraph(archetype);
+  }
+  for (const archetype of GOBLIN_BOMBER_ARCHETYPES) {
+    gateStructure(archetype);
+    gateAnchor(archetype);
+    gateLoopClosure(archetype);
+    gateMotionContinuity(archetype);
+    gateCentroid(archetype);
+    gateOneShotSettle(archetype);
+    gateFootSlide(archetype);
+    gateGoreLegibility(archetype);
+    gateGoreDistinctness(archetype);
+    gateRotationSafety(archetype);
+    gateWarmRowSize(archetype);
+    gateGoreRecentre(archetype);
+    gateRuntimeStateNames(archetype);
+    gateFloorContrast(archetype);
+    gateEarsBreakSilhouette(archetype);
+    gateNeverUpright(archetype);
+    gateFuseCatches(archetype);
+    gateReleaseLeavesTheHand(archetype);
+    gateAimTelegraphs(archetype);
+    gateSilhouetteIsItsOwn(archetype);
+    gateCandleFlame(archetype);
   }
   gateIdleRestFrame();
   for (const message of nothingMeasuredFailures(

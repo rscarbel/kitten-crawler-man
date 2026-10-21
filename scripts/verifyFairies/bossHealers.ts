@@ -1186,10 +1186,33 @@ const unstagedChase = (name: string): HealerChase => ({
   framesFleeing: 0,
 });
 
-/** One frame of a crawler walking straight at `quarry`, by the real movement code, as a touch stick drives it. */
+/**
+ * A tile route holds the start and goal tiles; one longer than this has a
+ * waypoint between them that the crawler must reach first.
+ */
+const DIRECT_ROUTE_TILES = 2;
+
+const tileOfPx = (px: number): number => Math.floor((px + TILE_SIZE / 2) / TILE_SIZE);
+
+/**
+ * One frame of a crawler walking at `quarry`, by the real movement code, as a
+ * touch stick drives it. It steers along a tile route rather than a straight
+ * line: a quarry that slips out through a doorway would otherwise leave the
+ * crawler pressed against the wall beside it, and a chase that never follows
+ * proves nothing about the quarry.
+ */
 function stepToward(chaser: Player, quarry: { x: number; y: number }, map: GameMap): void {
-  const offsetX = quarry.x - chaser.x;
-  const offsetY = quarry.y - chaser.y;
+  const route = map.findPath(
+    tileOfPx(chaser.x),
+    tileOfPx(chaser.y),
+    tileOfPx(quarry.x),
+    tileOfPx(quarry.y),
+  );
+  const waypoint = route.length > DIRECT_ROUTE_TILES ? route[1] : undefined;
+  const aimX = waypoint === undefined ? quarry.x : waypoint.x * TILE_SIZE;
+  const aimY = waypoint === undefined ? quarry.y : waypoint.y * TILE_SIZE;
+  const offsetX = aimX - chaser.x;
+  const offsetY = aimY - chaser.y;
   const distance = Math.hypot(offsetX, offsetY);
   if (distance === 0) return;
   applyMovement(chaser, { dx: offsetX / distance, dy: offsetY / distance, isMobile: true }, map);

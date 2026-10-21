@@ -34,7 +34,7 @@ const POSITIONING: FairyPositioning = {
 };
 
 /** Lands the frame it is chosen. */
-export const HEAL_CAST: FairyCast = {
+const HEAL_CAST: FairyCast = {
   id: 'heal',
   row: 'cast_heal',
   cooldownFrames: HEAL_COOLDOWN_FRAMES,

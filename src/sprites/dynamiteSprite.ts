@@ -1,5 +1,11 @@
 import type { Rect } from '../ui/core/geom';
 import { iconSquare } from '../ui/icons/iconSquare';
+import {
+  type FuseBurnOptions,
+  paintFuseBead,
+  paintFuseSmoke,
+  paintFuseSparks,
+} from './fuseEffects';
 
 /**
  * All procedural drawing functions for Goblin Dynamite:
@@ -71,6 +77,26 @@ const RANGE_RING_DOT_ALPHA = 0.22;
 
 // In-world floor/flying sprite
 
+const STICK_PAPER_INK = '#cc1a1a';
+const STICK_BAND_INK = '#1a0000';
+const STICK_LABEL_INK = 'rgba(255,255,255,0.18)';
+const FUSE_INK = '#6b3a1f';
+
+/** The red paper-wrapped stick, banded and labelled, standing upright on (cx, cy). */
+function paintStickBody(ctx: CanvasRenderingContext2D, cx: number, cy: number, s: number): void {
+  const bw = s * FLOOR_BODY_WIDTH;
+  const bh = s * FLOOR_BODY_HEIGHT;
+  ctx.fillStyle = STICK_PAPER_INK;
+  ctx.fillRect(cx - bw / 2, cy - bh / 2, bw, bh);
+
+  ctx.fillStyle = STICK_BAND_INK;
+  ctx.fillRect(cx - bw / 2, cy - bh * BAND_UPPER_Y, bw, s * BAND_THICKNESS_SCALE);
+  ctx.fillRect(cx - bw / 2, cy + bh * BAND_LOWER_Y, bw, s * BAND_THICKNESS_SCALE);
+
+  ctx.fillStyle = STICK_LABEL_INK;
+  ctx.fillRect(cx - bw / 2 + 1, cy - s * LABEL_STRIPE_Y_OFFSET, bw - 2, s * LABEL_STRIPE_HEIGHT);
+}
+
 /**
  * Draws a dynamite stick at the given screen position.
  * @param sx      Screen X (top-left of tile)
@@ -91,7 +117,6 @@ export function drawDynamiteFloorSprite(
 
   const cx = sx + s * FLOOR_CX_OFFSET;
   const cy = sy + s * FLOOR_CY_OFFSET;
-  const bw = s * FLOOR_BODY_WIDTH;
   const bh = s * FLOOR_BODY_HEIGHT;
 
   const fuseRatio = fuseFrames / fuseTotal;
@@ -107,17 +132,9 @@ export function drawDynamiteFloorSprite(
     ctx.fill();
   }
 
-  ctx.fillStyle = '#cc1a1a';
-  ctx.fillRect(cx - bw / 2, cy - bh / 2, bw, bh);
+  paintStickBody(ctx, cx, cy, s);
 
-  ctx.fillStyle = '#1a0000';
-  ctx.fillRect(cx - bw / 2, cy - bh * BAND_UPPER_Y, bw, s * BAND_THICKNESS_SCALE);
-  ctx.fillRect(cx - bw / 2, cy + bh * BAND_LOWER_Y, bw, s * BAND_THICKNESS_SCALE);
-
-  ctx.fillStyle = 'rgba(255,255,255,0.18)';
-  ctx.fillRect(cx - bw / 2 + 1, cy - s * LABEL_STRIPE_Y_OFFSET, bw - 2, s * LABEL_STRIPE_HEIGHT);
-
-  ctx.strokeStyle = '#6b3a1f';
+  ctx.strokeStyle = FUSE_INK;
   ctx.lineWidth = s * FUSE_LINEWIDTH;
   ctx.lineCap = 'round';
   ctx.beginPath();
@@ -161,6 +178,82 @@ export function drawDynamiteFloorSprite(
   }
 
   ctx.restore();
+}
+
+/** What a goblin's lit stick looks like this frame. */
+export interface LitDynamiteOptions extends FuseBurnOptions {
+  /** The stick's turn about its centre, in radians; 0 stands it upright, fuse up. */
+  readonly angle: number;
+  /** Share of the fuse still unburnt: 1 when lit, 0 the frame it goes off. */
+  readonly fuseLeft: number;
+}
+
+/**
+ * A goblin's fuse is longer than the item's so its burning down is something
+ * the eye can follow on the floor; the stick itself is the item's.
+ */
+const LIT_FUSE_LENGTH_SCALE = 2;
+/** Even a fuse about to blow keeps a nub showing, so the bead still sits on the stick. */
+const LIT_FUSE_MIN_SHOWN = 0.08;
+/** A thin shadow down the stick's far side, so the paper reads as a rolled cylinder. */
+const LIT_STICK_SHADE_SHARE = 0.35;
+const LIT_STICK_SHADE_INK = 'rgba(40, 0, 0, 0.35)';
+/** Paler than the item's cord, so the shrinking fuse stands out against a dark floor. */
+const LIT_FUSE_INK = '#a7773f';
+const LIT_FUSE_WIDTH_SCALE = 1.3;
+
+/**
+ * A goblin's lit stick of dynamite, centred on screen point (x, y) and turned
+ * by `angle`: the item's red banded stick, its fuse burnt down to `fuseLeft`,
+ * the hot bead at the burn point spitting sparks and a thread of smoke. Pure
+ * in its arguments, so it tumbles in the air and burns on the floor from the
+ * same picture.
+ */
+export function drawLitDynamiteStick(
+  ctx: CanvasRenderingContext2D,
+  x: number,
+  y: number,
+  s: number,
+  opts: LitDynamiteOptions,
+): void {
+  const bw = s * FLOOR_BODY_WIDTH;
+  const bh = s * FLOOR_BODY_HEIGHT;
+  const fuseScale = s * LIT_FUSE_LENGTH_SCALE;
+  const startY = -bh / 2;
+  const controlX = fuseScale * FUSE_CTRL_X_OFFSET;
+  const controlY = startY - fuseScale * FUSE_CTRL_Y_OFFSET;
+  const endX = fuseScale * FUSE_END_X_OFFSET;
+  const endY = startY - fuseScale * FUSE_END_Y_OFFSET;
+  // The unburnt part of a quadratic fuse is itself a quadratic: de Casteljau's split at `shown`.
+  const shown = Math.max(LIT_FUSE_MIN_SHOWN, Math.min(1, opts.fuseLeft));
+  const keep = 1 - shown;
+  const partControlX = controlX * shown;
+  const partControlY = startY * keep + controlY * shown;
+  const burnX = 2 * keep * shown * controlX + shown * shown * endX;
+  const burnY = keep * keep * startY + 2 * keep * shown * controlY + shown * shown * endY;
+
+  const cos = Math.cos(opts.angle);
+  const sin = Math.sin(opts.angle);
+  ctx.save();
+  ctx.translate(x, y);
+  ctx.rotate(opts.angle);
+  paintStickBody(ctx, 0, 0, s);
+  ctx.fillStyle = LIT_STICK_SHADE_INK;
+  ctx.fillRect(bw / 2 - bw * LIT_STICK_SHADE_SHARE, -bh / 2, bw * LIT_STICK_SHADE_SHARE, bh);
+  ctx.strokeStyle = LIT_FUSE_INK;
+  ctx.lineWidth = s * FUSE_LINEWIDTH * LIT_FUSE_WIDTH_SCALE;
+  ctx.lineCap = 'round';
+  ctx.beginPath();
+  ctx.moveTo(0, startY);
+  ctx.quadraticCurveTo(partControlX, partControlY, burnX, burnY);
+  ctx.stroke();
+  ctx.restore();
+
+  const beadX = x + cos * burnX - sin * burnY;
+  const beadY = y + sin * burnX + cos * burnY;
+  paintFuseSmoke(ctx, beadX, beadY, s, opts);
+  paintFuseSparks(ctx, beadX, beadY, s, opts);
+  paintFuseBead(ctx, beadX, beadY, s, opts);
 }
 
 // Inventory icon

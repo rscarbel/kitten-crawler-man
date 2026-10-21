@@ -119,7 +119,10 @@ import {
   dynamiteHold,
   dynamiteLight,
   dynamiteThrow,
+  explosiveFuseAt,
+  type ThrowRowFamily,
 } from './human/actionsThrow';
+import type { DynamiteVariant } from './carl/props/dynamite';
 import {
   CHEST_LID_UP_FRAME,
   CHEST_OPEN_FRAMES,
@@ -810,6 +813,36 @@ const LEVEL_UP_LOOK_UP = 1;
 const DYNAMITE_LIGHT_EVENTS = { fuseLit: [DYNAMITE_FUSE_CATCH_FRAME] } as const;
 /** The frame the stick leaves his hand, which is where and when it is spawned. */
 const DYNAMITE_THROW_EVENTS = { release: [DYNAMITE_RELEASE_FRAME] } as const;
+
+/** Each dynamite row's family and view, for reading the fuse of what is in his throwing fist. */
+const EXPLOSIVE_ROWS: Partial<
+  Record<HumanRowName, { readonly family: ThrowRowFamily; readonly view: CardinalView }>
+> = {
+  dynamite_light: { family: 'light', view: 'front' },
+  dynamite_light_side: { family: 'light', view: 'side' },
+  dynamite_light_away: { family: 'light', view: 'back' },
+  dynamite_hold: { family: 'hold', view: 'front' },
+  dynamite_hold_side: { family: 'hold', view: 'side' },
+  dynamite_hold_away: { family: 'hold', view: 'back' },
+  dynamite_throw: { family: 'throw', view: 'front' },
+  dynamite_throw_side: { family: 'throw', view: 'side' },
+  dynamite_throw_away: { family: 'throw', view: 'back' },
+};
+
+/**
+ * The fuse of the explosive in his throwing fist on a frame of `row`, or null
+ * on any frame no explosive is in it: every row but the dynamite rows, and
+ * those once it has left his hand.
+ */
+export function explosiveInHandAt(row: HumanRowName, frame: number): DynamiteVariant | null {
+  const spec = EXPLOSIVE_ROWS[row];
+  return spec === undefined ? null : explosiveFuseAt(spec.family, spec.view, frame);
+}
+
+/** The rows that light, hold and throw an explosive, in table order. */
+export function explosiveRowNames(): HumanRowName[] {
+  return HUMAN_ROWS.filter((row) => EXPLOSIVE_ROWS[row.name] !== undefined).map((row) => row.name);
+}
 
 /** The frame the Protective Shell's palm meets the dome's centre, where the dome is raised. */
 const SHELL_CAST_EVENTS = { cast: [SHELL_CAST_FRAME] } as const;

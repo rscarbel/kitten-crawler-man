@@ -591,7 +591,9 @@ if (!onPhone) {
   tap(street, slot);
   const farAbove = { x: human.x, y: human.y - FAR_BEYOND_REACH_PX };
   dynamite.throwReadiedAt(human, farAbove.x, farAbove.y);
-  const launched = dynamite['pendingThrow']?.stick;
+  dynamite['pendingThrow']?.launch(false);
+  const liveSticks = dynamite['liveDynamites'];
+  const launched = liveSticks.length === 0 ? undefined : liveSticks[liveSticks.length - 1];
   const launchSpeed = launched === undefined ? 0 : Math.hypot(launched.vx, launched.vy);
   check(
     launched !== undefined &&
@@ -620,6 +622,92 @@ if (!onPhone) {
   );
   unsubscribe();
   dynamite.resetForCheckpoint();
+  closeEverything(street);
+}
+
+/** Frames a tapped bomb is given to leave his hand, fly and burst. */
+const BOMB_BURST_FRAME_LIMIT = 120;
+const CARDINAL_FACINGS: ReadonlyArray<readonly [number, number]> = [
+  [1, 0],
+  [-1, 0],
+  [0, 1],
+  [0, -1],
+];
+/** How far from him the phone's tap lands, in tiles: short of the bomb's shortest throw. */
+const BOMB_TAP_TILES = 1;
+
+section('a tap on the black powder bomb slot lobs it clear, and it bursts where it lands');
+{
+  clearAwards(street);
+  closeEverything(street);
+  const human = street['human'];
+  if (!human.isActive) street['triggerSwitchCharacter'](true);
+  const index = 0;
+  const bombs = 2;
+  human.inventory.actionBar.slots[index] = { ...ITEM_DEF.black_powder_bomb, quantity: bombs };
+  frame(street);
+  const dynamite = street['destruction'].dynamite;
+  dynamite.resetForCheckpoint();
+  const slot = hudHotbarPoint(street, index);
+  const thrownItems: string[] = [];
+  const unsubscribe = street['bus'].on('dynamiteUsed', (e) => thrownItems.push(e.item));
+  // A bomb stopped by a wall bursts there, so the throw goes the most open way.
+  const openReach = ([dx, dy]: readonly [number, number]): number => {
+    human.facingX = dx;
+    human.facingY = dy;
+    const landing = dynamite['bombLanding'](human, FAR_BEYOND_REACH_PX);
+    return Math.hypot(landing.x - human.x, landing.y - human.y);
+  };
+  const [openX, openY] = CARDINAL_FACINGS.reduce((best, facing) =>
+    openReach(facing) > openReach(best) ? facing : best,
+  );
+  human.facingX = openX;
+  human.facingY = openY;
+  const hpBeforeThrow = human.hp;
+  if (onPhone) {
+    tap(street, slot);
+    frame(street);
+    check(dynamite.readiedItem === 'black_powder_bomb', 'the tap puts the bomb in his hand');
+    const cam = street['camera']();
+    tap(street, {
+      x: human.x + TILE_SIZE / 2 + openX * BOMB_TAP_TILES * TILE_SIZE - cam.x,
+      y: human.y + TILE_SIZE / 2 + openY * BOMB_TAP_TILES * TILE_SIZE - cam.y,
+    });
+  } else {
+    send(street, 'down', slot);
+    check(dynamite.chargingItem === 'black_powder_bomb', 'the press winds up a bomb throw');
+    send(street, 'up', slot);
+  }
+  check(
+    thrownItems.length === 1 && thrownItems[0] === 'black_powder_bomb',
+    `the throw is reported as the bomb (thrown: ${thrownItems.join(', ')})`,
+  );
+  check(
+    human.inventory.countOf('black_powder_bomb') === bombs - 1,
+    'one bomb is spent on the throw',
+  );
+  check(
+    dynamite.pendingBlastPoints(human).every((point) => !point.inHand),
+    'nothing warns of a blast in his hand: a bomb never goes off there',
+  );
+  let burst = false;
+  // The harness only renders, so his throw row never reaches its release
+  // frame: the bomb leaves from his centre, as a throw cut short does.
+  dynamite['pendingThrow']?.launch(false);
+  for (let tick = 0; tick < BOMB_BURST_FRAME_LIMIT && !burst; tick++) {
+    dynamite.update(street['_systemContext']);
+    burst = dynamite['explosions'].some((explosion) => explosion.kind === 'black_powder');
+  }
+  check(burst, 'the bomb bursts as a black powder blast without a fuse to burn down');
+  check(dynamite['liveDynamites'].length === 0, 'and leaves nothing lying on the ground');
+  check(
+    human.hp === hpBeforeThrow,
+    `even a tap lobs it clear of his own blast (hp ${hpBeforeThrow} → ${human.hp})`,
+  );
+  unsubscribe();
+  dynamite.resetForCheckpoint();
+  human.inventory.actionBar.slots[index] = null;
+  human.inventory.removeOne('black_powder_bomb');
   closeEverything(street);
 }
 

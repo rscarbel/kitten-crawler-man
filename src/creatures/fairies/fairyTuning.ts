@@ -44,10 +44,10 @@ export const FAIRY_TYPICAL_HOST_HP_BY_FLOOR: ReadonlyMap<number, number> = new M
 export const FAIRY_DEFAULT_HOST_FLOOR = FLOOR1;
 
 /** Share of the pre-slowdown speeds every fairy but the shield fairy moves at: 30% slower. */
-export const FAIRY_SPEED_SCALE = 0.7;
+const FAIRY_SPEED_SCALE = 0.7;
 
 /** The shield fairy's ceiling as a share of the crawler's speed; it is the one fairy not slowed. */
-export const SHIELD_MAX_SPEED_FRACTION_OF_PLAYER = 0.85;
+const SHIELD_MAX_SPEED_FRACTION_OF_PLAYER = 0.85;
 
 /** The shield fairy's ceiling in pixels per frame. */
 export const SHIELD_MAX_SPEED = PLAYER_SPEED * SHIELD_MAX_SPEED_FRACTION_OF_PLAYER;
@@ -60,8 +60,7 @@ export const SHIELD_BASE_SPEED = 1.5;
  * so a crawler who chases one down always catches it. Not the shield fairy's:
  * see {@link SHIELD_MAX_SPEED_FRACTION_OF_PLAYER}.
  */
-export const FAIRY_MAX_SPEED_FRACTION_OF_PLAYER =
-  SHIELD_MAX_SPEED_FRACTION_OF_PLAYER * FAIRY_SPEED_SCALE;
+const FAIRY_MAX_SPEED_FRACTION_OF_PLAYER = SHIELD_MAX_SPEED_FRACTION_OF_PLAYER * FAIRY_SPEED_SCALE;
 
 /** The ceiling above in pixels per frame. */
 export const FAIRY_MAX_SPEED = PLAYER_SPEED * FAIRY_MAX_SPEED_FRACTION_OF_PLAYER;
@@ -229,45 +228,6 @@ export const FAIRY_GOAL_ARRIVAL_TILES = 0.35;
  */
 export const FAIRY_CAST_RECOVER_FRAMES = 12;
 
-// ── Fights with fairies ──────────────────────────────────────────────────────
-
-/**
- * The most a room (or roaming pair) that rolled fairies may cost the reference
- * party on normal, in party wipes: pooled max HP lost, averaged over the rolls
- * and not stopped at an empty bar, so 1 is exactly one wipe.
- *
- * Fights with fairies are a deliberately brutal encounter class, held apart
- * from the ordinary room band. The pricer has every body stand and trade
- * blows, so it never credits the answer fairies are built around — killing
- * the shield fairy first, then the casters behind the wall — nor a potion or a
- * retreat mid-fight, and it reads several of these fights as more than one
- * wipe. The class is read in wipes rather than HP remaining because HP
- * remaining stops at zero, and a floor of zero cannot fail. Set just above the
- * harshest of these fights, so they cannot quietly get harsher still.
- */
-export const FAIRY_ROOM_FIGHT_WIPES_MAX = 2.7;
-
-/** {@link FAIRY_ROOM_FIGHT_WIPES_MAX} on hard. */
-export const HARD_FAIRY_ROOM_FIGHT_WIPES_MAX = 6;
-
-/**
- * The least the fairies alone must add to a fight on normal, in party wipes,
- * over the very same rolls with the fairies left out. Just under the cheapest
- * they add anywhere: fairies that cost less have stopped being what makes the
- * fight.
- */
-export const FAIRY_ROOM_FIGHT_FAIRY_COST_MIN = 0.2;
-
-/**
- * Most blows the balanced build may need to kill one fairy where it is met,
- * in place of the ordinary `HITS_TO_KILL_MAX`. A fairy carries more health
- * than its floor's typical host ({@link FAIRY_BASE_HP_FRACTION}) so that
- * reaching it past its wall is a commitment, which puts it a blow past the
- * ordinary limit early in a floor's window; one more blow of room, and no
- * further.
- */
-export const FAIRY_HITS_TO_KILL_MAX = 8;
-
 // ── Potency ──────────────────────────────────────────────────────────────────
 
 /** Fairy levels per extra potency step: one more shield ward or death-raised skeleton. */
@@ -385,16 +345,6 @@ export const ICE_BOLT_COOLDOWN_FRAMES = 120;
  * a raised cap.
  */
 export const ICE_BOLT_COOLDOWN_MIN_FRAMES = 80;
-// The frost statuses the bolt applies are tuned with the statuses themselves,
-// because the crawler reads them every frame; re-exported so a fairy retune
-// finds every number from here.
-export {
-  CHILLED_ACTION_SPEED_FACTOR,
-  CHILLED_FRAMES,
-  CHILLED_MOVE_SPEED_FACTOR,
-  FREEZE_GRACE_FRAMES,
-  FROZEN_FRAMES,
-} from '../../core/statusTuning';
 export const CHILL_BLAST_RADIUS_TILES = 3;
 
 // ── Fire fairy ───────────────────────────────────────────────────────────────

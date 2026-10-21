@@ -13,6 +13,7 @@ import {
 import { type FigureDef } from './figure/figureDef';
 import { ResidentRows } from './figure/residentRows';
 import {
+  explosiveInHandAt,
   firstImpactFrame,
   HUMAN_ROW_TABLE,
   HUMAN_ROWS,
@@ -47,6 +48,7 @@ import { CARL_VIEW_FALLBACK } from './carlViews';
 import { type CarriedGrip, carriedGripKey } from './art/human/carry';
 import type { HeldVisualDef } from './held/heldVisualDef';
 import { compositeHeldItem, heldTransformAt } from './held/heldComposite';
+import { fusePhaseOf } from './held/art/scriptedPropHeld';
 
 /**
  * Every strike the animator can throw, read off the row table: a row is a
@@ -530,6 +532,20 @@ function stowedAt(
 export interface CarlHeldDraw {
   readonly look: HeldVisualDef;
   readonly phase: number;
+}
+
+/**
+ * The explosive `look` in his throwing fist on the cell being drawn, its fuse
+ * as the row has it on that frame, or null on a cell with no explosive in his
+ * hand. The dynamite rows close his fist round nothing of their own, so the
+ * one set of rows lights, holds and throws whichever explosive this hands it.
+ */
+export function explosiveHeldDraw(
+  look: HeldVisualDef,
+  selection: HumanRowSelection,
+): CarlHeldDraw | null {
+  const fuse = explosiveInHandAt(selection.row, selection.frame);
+  return fuse === null ? null : { look, phase: fusePhaseOf(fuse) };
 }
 
 /**

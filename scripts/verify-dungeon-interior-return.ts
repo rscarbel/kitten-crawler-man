@@ -233,6 +233,28 @@ function chooseSideTile(map: LiveMap, returnTile: Tile): Tile | null {
   return null;
 }
 
+/**
+ * Kills every hostile close enough to the active crawler to hold off the door
+ * save. A goblin from the next corridor can wander or chase into that radius
+ * while the party stands pinned at the door, and the scene is right to refuse
+ * a save then; the walk-in under test is the uncontested one, and
+ * `verifyNoSaveMidFight` covers the contested one.
+ */
+function quietTheDoorStep(scene: Scene, label: string): void {
+  const active = scene.pm.active();
+  const engagementRadiusPx = DungeonScene.STAIRWELL_SAVE_ENGAGEMENT_RADIUS_TILES * TILE_SIZE;
+  const threats = scene['world'].roster.mobs.filter(
+    (mob) =>
+      mob.isHostile &&
+      mob.isAlive &&
+      Math.hypot(mob.x - active.x, mob.y - active.y) <= engagementRadiusPx,
+  );
+  const bosses = threats.filter((mob) => mob.isBoss);
+  check(bosses.length === 0, `${label}: no boss stands at the test door (${bosses.length})`);
+  for (const mob of threats) if (!mob.isBoss) mob.killOutright();
+  scene['world'].roster.rebuildGrid();
+}
+
 interface FloorState {
   readonly barriers: number;
   readonly openedChest: unknown;
@@ -368,6 +390,7 @@ async function verifySeed(worldSeed: number): Promise<void> {
   const clockAtDoor = outside.levelTimerRemainingFrames;
 
   // ── In ──
+  quietTheDoorStep(outside, label);
   const savesBefore = saves.length;
   const building = outside['building'];
   check(building !== null, `${label}: a floor with a building entry builds the door system`);

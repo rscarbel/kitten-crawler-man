@@ -64,10 +64,11 @@ import {
 } from '../src/sprites/art/human/timing.js';
 import { townCastLoopFrame } from '../src/sprites/townCastSprite.js';
 import {
-  GOBLIN_ARCHETYPES,
+  GOBLIN_ARMED_ARCHETYPES,
   GOBLIN_FIGURES,
   GOBLIN_PLUMBER_FIGURE,
 } from '../src/sprites/art/goblinFigure.js';
+import { GOBLIN_BOMBER_FIGURES } from '../src/sprites/art/goblinBomberFigure.js';
 import { bathroomGoblinAnimator, type GoblinPassiveAnimator } from '../src/sprites/goblinSprite.js';
 import { skyfowlCastLoopFrame } from '../src/sprites/skyfowlCastSprite.js';
 
@@ -165,12 +166,15 @@ function idleSubjects(): IdleSubject[] {
       });
     }
   }
-  for (const archetype of GOBLIN_ARCHETYPES) {
+  for (const archetype of GOBLIN_ARMED_ARCHETYPES) {
     subjects.push({
       label: `goblin_${archetype}.idle`,
       def: GOBLIN_FIGURES[archetype],
       state: 'idle',
     });
+  }
+  for (const def of Object.values(GOBLIN_BOMBER_FIGURES)) {
+    subjects.push({ label: `${def.id}.idle`, def, state: 'idle' });
   }
   subjects.push({ label: 'goblin_plumber.idle', def: GOBLIN_PLUMBER_FIGURE, state: 'idle' });
   return subjects;

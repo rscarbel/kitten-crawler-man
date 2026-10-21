@@ -213,7 +213,7 @@ export function buildSwineFight(seed: number): SwineFight {
   cat.isActive = false;
   human.level = SWINE_SIM_PARTY_LEVEL;
   cat.level = SWINE_SIM_PARTY_LEVEL;
-  const reference = referenceStats('human', 'balanced', SWINE_SIM_PARTY_LEVEL);
+  const reference = referenceStats('human', SWINE_SIM_PARTY_LEVEL);
   for (const stat of ALL_STATS) human.setBaseStat(stat, reference.stats[stat]);
   human.hp = human.maxHp;
   // Out of the fight entirely: a dead crawler is no target and no body to push.
@@ -386,7 +386,7 @@ export function runSwineFight(options: SwineFightOptions): SwineFightMetrics {
       hitLanded: false,
     };
     const loop = new MobUpdateLoop();
-    const attack = referenceStats('human', 'balanced', SWINE_SIM_PARTY_LEVEL).attackCycle;
+    const attack = referenceStats('human', SWINE_SIM_PARTY_LEVEL).attackCycle;
     let attackIndex = 0;
     let attackCooldown = 0;
 

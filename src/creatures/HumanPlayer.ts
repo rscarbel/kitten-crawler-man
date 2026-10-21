@@ -19,6 +19,7 @@ import {
   type CarlHeldDraw,
   type CarlStowedDraw,
   drawHumanSelection,
+  explosiveHeldDraw,
   handsShareHaft,
   heldHeadInTile,
   prewarmHumanRow,
@@ -75,7 +76,8 @@ import {
 } from '../sprites/held/heldVisuals';
 import { heldPhaseAt } from '../sprites/held/heldComposite';
 import { carriedGripOf } from '../sprites/art/human/carry';
-import type { WeaponHeldVisualDef } from '../sprites/held/heldVisualDef';
+import type { HeldVisualDef, WeaponHeldVisualDef } from '../sprites/held/heldVisualDef';
+import type { ThrownPropVisualId } from '../sprites/held/heldVisualIds';
 import { motionSetOf } from '../sprites/art/human/motionSets';
 import { carlSocketsAt } from '../sprites/art/human/sockets';
 import type { WorkingTool } from '../core/toolTiers';
@@ -250,6 +252,8 @@ export class HumanPlayer extends Player {
    * frames the stow holds it, though no longer drawn.
    */
   private stowing: WeaponHeldVisualDef | null = null;
+  /** The look of the explosive his throwing fist closes on in the dynamite rows. */
+  private explosiveLook: HeldVisualDef = HELD_VISUALS.prop_dynamite;
 
   /** Whether his gear has changed since his sprite was last dressed in it. */
   private outfitStale = true;
@@ -415,18 +419,25 @@ export class HumanPlayer extends Player {
   }
 
   /**
-   * What is drawn in his hands on the cell being drawn: the working tool on a
-   * swing where both fists close on its haft, else the weapon out in his
-   * hand, else nothing.
+   * What is drawn in his hands on the cell being drawn: the explosive he is
+   * lighting, holding or throwing, else the working tool on a swing where both
+   * fists close on its haft, else the weapon out in his hand, else nothing.
    */
   private heldDraw(selection: HumanRowSelection): CarlHeldDraw | null {
     if (!this.isAlive) return null;
+    const explosive = explosiveHeldDraw(this.explosiveLook, selection);
+    if (explosive !== null) return explosive;
     const tool = this.workingTool;
     const toolLook = tool === null ? null : workingToolHeldVisual(tool);
     if (toolLook !== null && handsShareHaft(selection)) return { look: toolLook, phase: 0 };
     const look = this.inHandLook();
     if (look === null) return null;
     return { look, phase: heldPhaseAt(look, this.standbyTicks) };
+  }
+
+  /** Puts `look` in his throwing fist for the dynamite rows that light, hold and throw it. */
+  takeExplosiveInHand(look: ThrownPropVisualId): void {
+    this.explosiveLook = HELD_VISUALS[look];
   }
 
   /**

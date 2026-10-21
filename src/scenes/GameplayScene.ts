@@ -46,6 +46,7 @@ import type {
 import { palette } from '../ui/theme/tokens';
 
 const CAMERA_CENTER_OFFSET_MULTIPLIER = 0.5;
+const NO_CAMERA_SHAKE = { x: 0, y: 0 } as const;
 /** The Cockroach pill's label: a standing capability rather than a timed effect. */
 const COCKROACH_PILL_LABEL = 'ROACH';
 
@@ -174,6 +175,14 @@ export abstract class GameplayScene extends Scene {
     return null;
   }
 
+  /**
+   * This frame's camera shake, added after the clamp so it still reads with the
+   * camera pinned against a wall. None by default.
+   */
+  protected cameraShake(): { x: number; y: number } {
+    return NO_CAMERA_SHAKE;
+  }
+
   protected computeCamera(map: GameMap): { x: number; y: number } {
     const player = this.active();
     const focus = this.cameraFocus();
@@ -196,7 +205,8 @@ export abstract class GameplayScene extends Scene {
     // Applied after the clamp so the sway still reads in a room smaller than the
     // viewport, where the camera is pinned and every clamped offset would vanish.
     const sway = player.hasStatus('drunk') ? drunkCameraOffset(frameTime) : { x: 0, y: 0 };
-    return { x: camera.x + sway.x, y: camera.y + sway.y };
+    const shake = this.cameraShake();
+    return { x: camera.x + sway.x + shake.x, y: camera.y + sway.y + shake.y };
   }
 
   /** Subscribes the save toast to the scene's own bus and toast stack — call once per scene setup. */

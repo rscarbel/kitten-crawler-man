@@ -20,8 +20,10 @@
 
 import {
   FULL_CIRCLE_ANGLE,
+  LIGHT,
   type GoblinPalette,
   type GoblinProp,
+  type Pt,
   type Ramp,
   lerp,
   mix,
@@ -1246,6 +1248,281 @@ export function makePipeWrenchProp(palette: GoblinPalette): GoblinProp {
           nutBottom - nutTop,
         );
       }
+
+      ctx.restore();
+    },
+  };
+}
+
+// ── Goblin dynamite ──────────────────────────────────────────────────────────
+//
+// A stick of red paper-wrapped dynamite held round its middle, with a tied fuse
+// out of the front end. The same red the player's own goblin dynamite is, so a
+// stick in a goblin's fist reads as the thing it is about to throw.
+
+/** The paper wrap: a saturated red, so a stick 3 px wide still reads by hue. */
+export const DYNAMITE_PAPER: Ramp = {
+  shadow: '#4a0d0a',
+  dark: '#7d1712',
+  mid: '#c22a1d',
+  light: '#e85a3f',
+  rim: '#f8a184',
+};
+/** The crimped paper ends and the string tie. */
+export const DYNAMITE_CRIMP = '#e3d2a2';
+export const DYNAMITE_FUSE_CORD = '#2b2118';
+
+/** How far the stick runs behind and ahead of the fist, in tile units. */
+const DYNAMITE_STICK_BACK = 0.15;
+const DYNAMITE_STICK_FRONT = 0.34;
+const DYNAMITE_STICK_HALF_WIDTH = 0.068;
+/** How long each crimped paper end is, in tile units along the stick. */
+const DYNAMITE_CRIMP_LENGTH = 0.03;
+/** The lit and shaded bands down the wrap, as shares of the half-width. */
+const DYNAMITE_LIT_SHARE = 0.45;
+const DYNAMITE_SHADE_FROM = 0.35;
+const DYNAMITE_BAND_ALPHA = 0.7;
+/** The string tie round the front of the wrap, from the front end. */
+const DYNAMITE_TIE_FROM_FRONT = 0.07;
+const DYNAMITE_TIE_WIDTH = 0.016;
+const DYNAMITE_FUSE_WIDTH = 0.018;
+
+/**
+ * Where the fuse ends in the stick's own space: forward of the front end and
+ * kinked up, the way a tied fuse stands when it is fresh. This is the burning
+ * point a spark is painted on.
+ */
+/** How far the fuse runs past the front of the stick, and how far it kinks up, in tile units. */
+const DYNAMITE_FUSE_LENGTH = 0.075;
+const DYNAMITE_FUSE_RISE = 0.035;
+/** The kink the fuse bends through: this far along it, and this far below the stick's axis. */
+const DYNAMITE_FUSE_KINK_ALONG = 0.045;
+const DYNAMITE_FUSE_KINK_DROP = 0.012;
+export const DYNAMITE_STICK_FUSE_TIP: Pt = {
+  x: DYNAMITE_STICK_FRONT + DYNAMITE_FUSE_LENGTH,
+  y: -DYNAMITE_FUSE_RISE,
+};
+/** The kink the fuse bends through on its way to the tip. */
+const DYNAMITE_FUSE_KINK: Pt = {
+  x: DYNAMITE_STICK_FRONT + DYNAMITE_FUSE_KINK_ALONG,
+  y: DYNAMITE_FUSE_KINK_DROP,
+};
+
+export function makeDynamiteStickProp(palette: GoblinPalette): GoblinProp {
+  const { outline } = palette;
+  const back = -DYNAMITE_STICK_BACK;
+  const front = DYNAMITE_STICK_FRONT;
+  const half = DYNAMITE_STICK_HALF_WIDTH;
+  return {
+    tipDistance: DYNAMITE_STICK_FUSE_TIP.x,
+    offGripDistance: null,
+    headHalfHeight: half,
+    paint: (ctx, hand, wristAngle) => {
+      ctx.save();
+      ctx.translate(hand.x, hand.y);
+      ctx.rotate(wristAngle);
+
+      ctx.strokeStyle = outline;
+      ctx.lineCap = 'round';
+      ctx.lineWidth = DYNAMITE_FUSE_WIDTH + PART_OUTLINE * 2;
+      const traceFuse = (): void => {
+        ctx.beginPath();
+        ctx.moveTo(front, 0);
+        ctx.quadraticCurveTo(
+          DYNAMITE_FUSE_KINK.x,
+          DYNAMITE_FUSE_KINK.y,
+          DYNAMITE_STICK_FUSE_TIP.x,
+          DYNAMITE_STICK_FUSE_TIP.y,
+        );
+      };
+      traceFuse();
+      ctx.stroke();
+      ctx.strokeStyle = DYNAMITE_FUSE_CORD;
+      ctx.lineWidth = DYNAMITE_FUSE_WIDTH;
+      traceFuse();
+      ctx.stroke();
+
+      const traceWrap = (grow: number): void => {
+        ctx.beginPath();
+        ctx.rect(back - grow, -half - grow, front - back + grow * 2, (half + grow) * 2);
+      };
+      ctx.fillStyle = outline;
+      traceWrap(PART_OUTLINE);
+      ctx.fill();
+      ctx.fillStyle = DYNAMITE_PAPER.mid;
+      traceWrap(0);
+      ctx.fill();
+      ctx.save();
+      traceWrap(0);
+      ctx.clip();
+      ctx.fillStyle = rgba(DYNAMITE_PAPER.rim, DYNAMITE_BAND_ALPHA);
+      ctx.fillRect(back, -half, front - back, half * DYNAMITE_LIT_SHARE);
+      ctx.fillStyle = rgba(DYNAMITE_PAPER.shadow, DYNAMITE_BAND_ALPHA);
+      ctx.fillRect(back, half * DYNAMITE_SHADE_FROM, front - back, half);
+      ctx.fillStyle = DYNAMITE_CRIMP;
+      ctx.fillRect(back, -half, DYNAMITE_CRIMP_LENGTH, half * 2);
+      ctx.fillRect(front - DYNAMITE_CRIMP_LENGTH, -half, DYNAMITE_CRIMP_LENGTH, half * 2);
+      ctx.fillRect(front - DYNAMITE_TIE_FROM_FRONT, -half, DYNAMITE_TIE_WIDTH, half * 2);
+      ctx.restore();
+
+      ctx.restore();
+    },
+  };
+}
+
+// ── Black powder bomb ────────────────────────────────────────────────────────
+//
+// A cast-iron sphere with a short iron neck and a twisted fuse, held on the
+// fingers with the ball above the fist. The ball is lit from the scene's key
+// light whichever way the hand turns it: a sphere has no edge to bevel, so the
+// highlight is turned back against the wrist to stay at the upper left.
+
+/** Cast iron: near-black, with a hard white glint, the shape every player knows as a bomb. */
+const BOMB_IRON: Ramp = {
+  shadow: '#0f1114',
+  dark: '#1d2126',
+  mid: '#3d444d',
+  light: '#7d8894',
+  rim: '#f2f6fa',
+};
+
+export const BLACK_POWDER_BOMB_RADIUS = 0.21;
+/** The ball sits on the fingers, its centre this far down the hand's axis. */
+export const BLACK_POWDER_BOMB_CENTRE = 0.19;
+const BOMB_NECK_LENGTH = 0.045;
+/** The neck is set into the ball: it starts this share of the radius out from the centre. */
+const BOMB_NECK_ROOT = 0.8;
+const BOMB_NECK_HALF_WIDTH = 0.055;
+/** The lit side is the ball pushed toward the key light by this share of its radius. */
+const BOMB_LIT_SHIFT = 0.42;
+const BOMB_LIT_SCALE = 0.9;
+/** The tight specular point, toward the light from the centre. */
+const BOMB_SPECULAR_AT = 0.5;
+const BOMB_SPECULAR_RADIUS = 0.24;
+/** The faint reflected light along the rim turned away from the key. */
+const BOMB_BOUNCE_WIDTH = 0.18;
+const BOMB_BOUNCE_ALPHA = 0.35;
+/** The reflected light spans this far either side of the point turned furthest from the key. */
+const BOMB_BOUNCE_SPREAD = Math.PI / 4;
+/** The casting seam: a thin ridge round the equator. */
+const BOMB_SEAM_WIDTH = 0.012;
+const BOMB_SEAM_ALPHA = 0.75;
+const BOMB_FUSE_WIDTH = 0.045;
+/** A pale twisted-hemp fuse: against the black ball it is the bomb's one bright line. */
+const BOMB_FUSE_CORD = '#e0cf9c';
+
+const BOMB_NECK_END = BLACK_POWDER_BOMB_CENTRE + BLACK_POWDER_BOMB_RADIUS + BOMB_NECK_LENGTH;
+/** Where the fuse ends in the bomb's own space; the burning point a spark sits on. */
+/** How far the bomb's fuse runs past its neck and how far it curls up, in tile units. */
+const BOMB_FUSE_LENGTH = 0.21;
+const BOMB_FUSE_RISE = 0.05;
+/** The fuse's curl: this far along it, and this far below the bomb's axis. */
+const BOMB_FUSE_KINK_ALONG = 0.1;
+const BOMB_FUSE_KINK_DROP = 0.05;
+export const BLACK_POWDER_BOMB_FUSE_TIP: Pt = {
+  x: BOMB_NECK_END + BOMB_FUSE_LENGTH,
+  y: -BOMB_FUSE_RISE,
+};
+const BOMB_FUSE_KINK: Pt = { x: BOMB_NECK_END + BOMB_FUSE_KINK_ALONG, y: BOMB_FUSE_KINK_DROP };
+
+export function makeBlackPowderBombProp(palette: GoblinPalette): GoblinProp {
+  const { outline } = palette;
+  const centre = BLACK_POWDER_BOMB_CENTRE;
+  const radius = BLACK_POWDER_BOMB_RADIUS;
+  return {
+    tipDistance: BLACK_POWDER_BOMB_FUSE_TIP.x,
+    offGripDistance: null,
+    headHalfHeight: radius,
+    paint: (ctx, hand, wristAngle) => {
+      ctx.save();
+      ctx.translate(hand.x, hand.y);
+      ctx.rotate(wristAngle);
+
+      ctx.lineCap = 'round';
+      const traceFuse = (): void => {
+        ctx.beginPath();
+        ctx.moveTo(BOMB_NECK_END, 0);
+        ctx.quadraticCurveTo(
+          BOMB_FUSE_KINK.x,
+          BOMB_FUSE_KINK.y,
+          BLACK_POWDER_BOMB_FUSE_TIP.x,
+          BLACK_POWDER_BOMB_FUSE_TIP.y,
+        );
+      };
+      ctx.strokeStyle = outline;
+      ctx.lineWidth = BOMB_FUSE_WIDTH + PART_OUTLINE * 2;
+      traceFuse();
+      ctx.stroke();
+      ctx.strokeStyle = BOMB_FUSE_CORD;
+      ctx.lineWidth = BOMB_FUSE_WIDTH;
+      traceFuse();
+      ctx.stroke();
+
+      const neckStart = centre + radius * BOMB_NECK_ROOT;
+      const traceNeck = (grow: number): void => {
+        ctx.beginPath();
+        ctx.rect(
+          neckStart - grow,
+          -BOMB_NECK_HALF_WIDTH - grow,
+          BOMB_NECK_END - neckStart + grow * 2,
+          (BOMB_NECK_HALF_WIDTH + grow) * 2,
+        );
+      };
+      ctx.fillStyle = outline;
+      traceNeck(PART_OUTLINE);
+      ctx.fill();
+      ctx.fillStyle = BOMB_IRON.light;
+      traceNeck(0);
+      ctx.fill();
+
+      const traceBall = (grow: number): void => {
+        ctx.beginPath();
+        ctx.arc(centre, 0, radius + grow, 0, FULL_CIRCLE_ANGLE);
+      };
+      ctx.fillStyle = outline;
+      traceBall(PART_OUTLINE);
+      ctx.fill();
+      ctx.fillStyle = BOMB_IRON.dark;
+      traceBall(0);
+      ctx.fill();
+
+      ctx.save();
+      traceBall(0);
+      ctx.clip();
+      // The seam turns with the ball, so it is laid before the light is turned back.
+      ctx.strokeStyle = rgba(BOMB_IRON.light, BOMB_SEAM_ALPHA);
+      ctx.lineWidth = BOMB_SEAM_WIDTH;
+      ctx.beginPath();
+      ctx.moveTo(centre, -radius);
+      ctx.lineTo(centre, radius);
+      ctx.stroke();
+
+      ctx.translate(centre, 0);
+      ctx.rotate(-wristAngle);
+      // One lit disc pushed toward the key: the boundary it leaves is a single
+      // curved terminator across the ball, not a ring round a centred glow.
+      const shift = radius * BOMB_LIT_SHIFT;
+      ctx.fillStyle = BOMB_IRON.mid;
+      ctx.beginPath();
+      ctx.arc(LIGHT.x * shift, LIGHT.y * shift, radius * BOMB_LIT_SCALE, 0, FULL_CIRCLE_ANGLE);
+      ctx.fill();
+      ctx.strokeStyle = rgba(BOMB_IRON.light, BOMB_BOUNCE_ALPHA);
+      ctx.lineWidth = radius * BOMB_BOUNCE_WIDTH;
+      ctx.beginPath();
+      const awayFromLight = Math.atan2(-LIGHT.y, -LIGHT.x);
+      ctx.arc(0, 0, radius, awayFromLight - BOMB_BOUNCE_SPREAD, awayFromLight + BOMB_BOUNCE_SPREAD);
+      ctx.stroke();
+      ctx.fillStyle = BOMB_IRON.rim;
+      ctx.beginPath();
+      ctx.arc(
+        LIGHT.x * radius * BOMB_SPECULAR_AT,
+        LIGHT.y * radius * BOMB_SPECULAR_AT,
+        radius * BOMB_SPECULAR_RADIUS,
+        0,
+        FULL_CIRCLE_ANGLE,
+      );
+      ctx.fill();
+      ctx.restore();
 
       ctx.restore();
     },

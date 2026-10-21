@@ -103,10 +103,18 @@ type PokerState =
  * Shoves at every decision until the player busts, stepping the table's own
  * clock. False when the bound ran out first. Shared with the menu audit, which
  * needs a busted table to open the rebuy prompt.
+ *
+ * Between hands every regular is topped up to cover the player, so no regular
+ * ever busts out and walks away. Without that, a lucky run of shoves empties
+ * the table and the game ends before the player busts — which seat order and
+ * shuffle make that likely depends on whatever random stream the caller hands
+ * the table, so the menu audit, sharing the scene's stream, would turn red
+ * whenever an unrelated system drew one more number.
  */
 export function playUntilBust(table: PokerTable): boolean {
   for (let step = 0; step < MAX_STEPS_TO_BUST; step++) {
     if (table.phase === 'player_busted') return true;
+    if (table.phase === 'between_hands') coverPlayerFromEverySeat(table);
     const legal = table.playerLegalActions();
     if (legal !== null) {
       if (legal.allIn !== null) table.playerAct({ kind: 'all_in' });
@@ -117,6 +125,16 @@ export function playUntilBust(table: PokerTable): boolean {
     table.update(TABLE_STEP_MS);
   }
   return table.phase === 'player_busted';
+}
+
+/** Tops every seated regular up to at least the player's stack, so the player's shove can never bust them. */
+function coverPlayerFromEverySeat(table: PokerTable): void {
+  const playerStack = table.playerStack;
+  for (const seat of table.seats) {
+    const shortOfCovering = playerStack - seat.stack;
+    if (seat.isPlayer || seat.occupantId === null || shortOfCovering <= 0) continue;
+    table.rebuySeat(seat.index, shortOfCovering);
+  }
 }
 
 /**

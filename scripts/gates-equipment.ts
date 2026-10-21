@@ -42,6 +42,7 @@ import { type HumanFigure, humanFigureFor } from '../src/sprites/art/human/appea
 import {
   CHOP_ROWS,
   eventFrame,
+  explosiveRowNames,
   FRAME_H,
   FRAME_W,
   HUMAN_ROW_TABLE,
@@ -81,6 +82,7 @@ import {
   type HeldVisualId,
   SCRIPTED_PROP_VISUAL_IDS,
   FIXTURE_TOOL_VISUAL_IDS,
+  THROWN_PROP_VISUAL_IDS,
   TOOL_HELD_VISUAL_IDS,
   WEAPON_HELD_VISUAL_IDS,
 } from '../src/sprites/held/heldVisualIds.js';
@@ -192,6 +194,15 @@ function subjects(only: string | null): Subject[] {
     const look = HELD_VISUALS[id];
     const figure = humanFigureFor(BARE_CARL_OUTFIT, carriedGripOf(look));
     list.push({ id, look, figure, rows: weaponRows(look), bitesGround: false });
+  }
+  for (const id of THROWN_PROP_VISUAL_IDS) {
+    list.push({
+      id,
+      look: HELD_VISUALS[id],
+      figure: base,
+      rows: explosiveRowNames(),
+      bitesGround: false,
+    });
   }
   return only === null ? list : list.filter((subject) => subject.id === only);
 }
@@ -511,6 +522,10 @@ function checkParity(only: string | null, failures: string[]): void {
       // Two props in his hands are baked one over the other, each with what of
       // him lies in front of it; the runtime composites one item.
       if (props?.length !== 1) continue;
+      // Beside a fist closed on an item, the front layer is that item's: the
+      // prop is only ever drawn baked, never composited between those layers.
+      const { sockets } = carlSocketsAt(sourceOf(base), row, frame);
+      if (sockets.mainHand.occupied || sockets.offHand.occupied) continue;
       measured++;
       const baked = createCanvas(CELL_W, CELL_H);
       const bakedCtx = asGameContext(baked.getContext('2d'));
@@ -745,7 +760,10 @@ export function equipmentGateFailures(only: string | null = null): string[] {
     checkWrap(subject, failures, counts);
     checkMirror(subject, failures, counts);
   }
-  const isProp = only === null || SCRIPTED_PROP_VISUAL_IDS.some((id) => id === only);
+  // A thrown explosive is a scripted prop no row bakes: it is composited at
+  // runtime and gated with the held items above.
+  const isThrown = THROWN_PROP_VISUAL_IDS.some((id) => id === only);
+  const isProp = only === null || (SCRIPTED_PROP_VISUAL_IDS.some((id) => id === only) && !isThrown);
   if (only === null) {
     const turned = checkPropsTurned(failures);
     failures.push(...nothingMeasuredFailures(turned, 'held props').map((f) => `E1: ${f}`));

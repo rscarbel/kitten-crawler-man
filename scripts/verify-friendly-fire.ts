@@ -33,6 +33,21 @@ import { makeSepsis } from '../src/core/StatusEffect';
 import { SpatialGrid } from '../src/core/SpatialGrid';
 import { AbilityManager } from '../src/core/AbilityManager';
 import { MAGIC_MISSILE_DEF } from '../src/abilities/magicMissile';
+import { FloorTypeValue, type TileContent } from '../src/map/tileTypes';
+import { BrindleGrub } from '../src/creatures/BrindleGrub';
+import { Mercenary } from '../src/creatures/Mercenary';
+import { getMercenaryTemplate, type MercenaryTemplateId } from '../src/core/mercenaryTemplates';
+import { GoblinBomber } from '../src/creatures/GoblinBomber';
+import {
+  applyGoblinBlastToBodies,
+  GOBLIN_BLAST_DAMAGE_TO_BYSTANDER_MOBS,
+  type GoblinBlast,
+} from '../src/systems/GoblinBombSystem';
+import {
+  BLACK_POWDER_ATTACK_TYPE,
+  BLACK_POWDER_BLAST_RADIUS_PX,
+  goblinBlastDamage,
+} from '../src/systems/goblinBombConstants';
 
 const MAP_SIZE = 60;
 /**
@@ -79,6 +94,23 @@ const BAIT_AHEAD_TILES = 6;
 const BAIT_OFFSET_TILES = 3;
 /** Vertical velocity below which a missile is still flying dead straight. */
 const STRAIGHT_FLIGHT_EPSILON = 1e-9;
+
+/** Side of the walled, open room the goblin blast is set off in, in tiles. */
+const BLAST_ROOM_TILES = 24;
+/** The blast goes off in the middle of that room. */
+const BLAST_CENTRE_TILE = BLAST_ROOM_TILES / 2;
+/** How far from the blast's centre each body stands, as a share of its radius. */
+const BLAST_VICTIM_RADIUS_SHARE = 0.4;
+/** Frames a shove is given to play out, far longer than any knockback lasts. */
+const KNOCKBACK_SETTLE_FRAMES = 120;
+/** Tiles off the blast the thrower stands, well outside it. */
+const THROWER_OFFSET_TILES = 6;
+/** A dodge roll no dodge chance reaches, so a crawler's hit cannot be rolled away. */
+const ROLL_THAT_NEVER_DODGES = 1 - Number.EPSILON;
+/** Any hireling serves for the party-side victim. */
+const BLAST_HIRELING = 'sledge' as const satisfies MercenaryTemplateId;
+/** Far more frames than a grub's two evolutions can take. */
+const GRUB_EVOLUTION_FRAME_LIMIT = 60 * 60 * 5;
 
 let failures = 0;
 function check(ok: boolean, message: string): void {
@@ -339,6 +371,165 @@ console.log("\nThe circus fight is the crawlers' fight");
       `${name} does take a crawler standing on that same tile`,
     );
   }
+}
+
+console.log(
+  '\nA goblin blast is aimed at the party: its enemies take all of it, everyone else a point',
+);
+{
+  const lastTile = BLAST_ROOM_TILES - 1;
+  const grid: TileContent[][] = Array.from({ length: BLAST_ROOM_TILES }, (_, y) =>
+    Array.from({ length: BLAST_ROOM_TILES }, (_, x) => ({
+      tileId: `${x}#${y}`,
+      type:
+        x === 0 || y === 0 || x === lastTile || y === lastTile
+          ? FloorTypeValue.wall
+          : FloorTypeValue.tile_floor,
+    })),
+  );
+  const room = new GameMap({ tileHeight: TILE_SIZE, prebuiltStructure: grid });
+
+  const centreX = BLAST_CENTRE_TILE * TILE_SIZE + TILE_SIZE / 2;
+  const centreY = BLAST_CENTRE_TILE * TILE_SIZE + TILE_SIZE / 2;
+  const bomber = createMob(
+    'goblin_bombardier',
+    BLAST_CENTRE_TILE + THROWER_OFFSET_TILES,
+    BLAST_CENTRE_TILE,
+    room,
+  );
+  const crawlerHpShare = bomber instanceof GoblinBomber ? bomber.crawlerHpShare : 0;
+  const blast: GoblinBlast = {
+    x: centreX,
+    y: centreY,
+    radiusPx: BLACK_POWDER_BLAST_RADIUS_PX,
+    crawlerHpShare,
+    thrower: bomber,
+    source: bomber.stampHarmLimits({
+      kind: 'mob',
+      mobType: bomber.mobType,
+      attackType: BLACK_POWDER_ATTACK_TYPE,
+      from: { x: centreX, y: centreY },
+      undodgeable: true,
+    }),
+  };
+
+  const owner = new HumanPlayer(start.x, start.y, TILE_SIZE);
+  const makeVespa = (): Mob => {
+    const grub = new BrindleGrub(BLAST_CENTRE_TILE, BLAST_CENTRE_TILE, TILE_SIZE);
+    grub.setMap(room);
+    for (let frame = 0; frame < GRUB_EVOLUTION_FRAME_LIMIT && !grub.isVespa; frame++) {
+      grub.tickEvolve();
+    }
+    return grub;
+  };
+  const makeHireling = (): Mob => {
+    const hireling = new Mercenary(
+      BLAST_CENTRE_TILE,
+      BLAST_CENTRE_TILE,
+      TILE_SIZE,
+      owner,
+      BLAST_HIRELING,
+      getMercenaryTemplate(BLAST_HIRELING).name,
+    );
+    hireling.setMap(room);
+    return hireling;
+  };
+  const spawned = (type: string) => (): Mob =>
+    createMob(type, BLAST_CENTRE_TILE, BLAST_CENTRE_TILE, room);
+
+  const victims: ReadonlyArray<{
+    name: string;
+    make: () => Mob;
+    fullBlast: boolean;
+    pushed: boolean;
+  }> = [
+    { name: 'a rat', make: spawned('rat'), fullBlast: false, pushed: true },
+    { name: 'a goblin', make: spawned('goblin'), fullBlast: false, pushed: true },
+    { name: 'the Juicer', make: spawned('juicer'), fullBlast: false, pushed: false },
+    { name: 'a Brindled Vespa', make: makeVespa, fullBlast: true, pushed: true },
+    { name: 'a hireling', make: makeHireling, fullBlast: true, pushed: true },
+  ];
+
+  const vespaProbe = makeVespa();
+  check(
+    vespaProbe instanceof BrindleGrub && vespaProbe.isVespa && vespaProbe.huntsOtherMobs,
+    'the grub under test has hatched into a Vespa that hunts other mobs',
+  );
+  const juicerProbe = spawned('juicer')();
+  check(juicerProbe.isBoss, 'the Juicer under test is a boss');
+
+  const placed: { name: string; mob: Mob; fullBlast: boolean; pushed: boolean }[] = [];
+  const crawler = new HumanPlayer(BLAST_CENTRE_TILE, BLAST_CENTRE_TILE, TILE_SIZE);
+  const bodyCount = victims.length + 1;
+  const standAround = (body: { x: number; y: number }, index: number): void => {
+    const angle = (2 * Math.PI * index) / bodyCount;
+    const offset = BLACK_POWDER_BLAST_RADIUS_PX * BLAST_VICTIM_RADIUS_SHARE;
+    body.x = centreX + Math.cos(angle) * offset - TILE_SIZE / 2;
+    body.y = centreY + Math.sin(angle) * offset - TILE_SIZE / 2;
+  };
+  victims.forEach((victim, index) => {
+    const mob = victim.make();
+    standAround(mob, index);
+    placed.push({ ...victim, mob });
+  });
+  standAround(crawler, victims.length);
+
+  const centreDistance = (body: { x: number; y: number }): number =>
+    Math.hypot(body.x + TILE_SIZE / 2 - centreX, body.y + TILE_SIZE / 2 - centreY);
+  const hpBefore = placed.map(({ mob }) => mob.hp);
+  const distanceBefore = placed.map(({ mob }) => centreDistance(mob));
+  const crawlerHpBefore = crawler.hp;
+  const crawlerXBefore = crawler.x;
+  const crawlerYBefore = crawler.y;
+
+  const random = Math.random;
+  Math.random = () => ROLL_THAT_NEVER_DODGES;
+  applyGoblinBlastToBodies(
+    blast,
+    [crawler],
+    placed.map(({ mob }) => mob),
+  );
+  // The same blow dealt straight to a twin is what "the full blast" means
+  // for this body, after whatever armour or difficulty scaling it carries.
+  const twinCrawler = new HumanPlayer(BLAST_CENTRE_TILE, BLAST_CENTRE_TILE, TILE_SIZE);
+  twinCrawler.takeDamage(goblinBlastDamage(crawlerHpShare, twinCrawler.maxHp), blast.source);
+  Math.random = random;
+  for (let frame = 0; frame < KNOCKBACK_SETTLE_FRAMES; frame++) {
+    for (const { mob } of placed) mob.advanceKnockback();
+  }
+
+  placed.forEach(({ name, mob, fullBlast, pushed }, index) => {
+    const lost = hpBefore[index] - mob.hp;
+    if (fullBlast) {
+      const twin = victims[index].make();
+      const twinBefore = twin.hp;
+      twin.takeDamageFrom(goblinBlastDamage(crawlerHpShare, twin.maxHp), bomber, 'explosion');
+      const fullLoss = twinBefore - twin.hp;
+      check(
+        lost === fullLoss && lost > GOBLIN_BLAST_DAMAGE_TO_BYSTANDER_MOBS,
+        `${name} takes the whole blast (${lost} hp, the full blow is ${fullLoss})`,
+      );
+    } else {
+      check(
+        lost === GOBLIN_BLAST_DAMAGE_TO_BYSTANDER_MOBS,
+        `${name} loses exactly ${GOBLIN_BLAST_DAMAGE_TO_BYSTANDER_MOBS} hp (${lost})`,
+      );
+    }
+    const moved = centreDistance(mob) - distanceBefore[index];
+    if (pushed) {
+      check(moved > 0, `${name} is thrown outward from the blast (${moved.toFixed(1)} px)`);
+    } else {
+      check(moved === 0, `${name} stands its ground (${moved.toFixed(1)} px)`);
+    }
+  });
+
+  const crawlerLost = crawlerHpBefore - crawler.hp;
+  const twinLost = twinCrawler.maxHp - twinCrawler.hp;
+  check(
+    crawlerLost === twinLost && crawlerLost > GOBLIN_BLAST_DAMAGE_TO_BYSTANDER_MOBS,
+    `a crawler takes the whole blast (${crawlerLost} hp, the full blow is ${twinLost})`,
+  );
+  check(crawler.x === crawlerXBefore && crawler.y === crawlerYBefore, 'and is not shoved by it');
 }
 
 console.log(

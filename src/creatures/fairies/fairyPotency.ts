@@ -15,7 +15,7 @@ const LOWEST_MOB_LEVEL = 1;
  * Extra potency each difficulty adds. Easy takes one away, so an easy fairy on
  * the first floor starts from the lowest potency.
  */
-export const FAIRY_DIFFICULTY_POTENCY_BONUS: Readonly<Record<Difficulty, number>> = {
+const FAIRY_DIFFICULTY_POTENCY_BONUS: Readonly<Record<Difficulty, number>> = {
   easy: -1,
   normal: 0,
   hard: 1,
