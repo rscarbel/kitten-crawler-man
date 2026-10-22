@@ -50,7 +50,7 @@ import { GameMap } from '../../src/map/GameMap';
 import { FloorTypeValue, type TileContent } from '../../src/map/tileTypes';
 import type { MobSpawnPoint } from '../../src/map/DungeonGenerator';
 import type { Player } from '../../src/Player';
-import { createMob } from '../../src/levels/spawner';
+import { liveSpawnContext, spawnMob } from '../../src/levels/spawnFunnel';
 import { FAIRY_SPAWN_KEYS } from '../../src/levels/fairySpawner';
 import { SpellSystem } from '../../src/systems/SpellSystem';
 import { MobRoster } from '../../src/systems/kits/SceneWorld';
@@ -259,7 +259,12 @@ function hpShare(makeFairy: () => Fairy | null, floorNumber: number, level: numb
 function verifyHp(report: FairyGateReport): void {
   const map = new GameMap({ tileHeight: TILE_SIZE, mapSize: HP_MAP_SIZE });
   const spawned = (): Fairy | null => {
-    const mob = createMob(FAIRY_SPAWN_KEYS.healer, 1, 1, map);
+    const mob = spawnMob(
+      FAIRY_SPAWN_KEYS.healer,
+      { x: 1, y: 1 },
+      map,
+      liveSpawnContext('dev:spawn'),
+    );
     return mob instanceof Fairy ? mob : null;
   };
   const halved = (): Fairy => new HalfHpFairy(1, 1, TILE_SIZE);

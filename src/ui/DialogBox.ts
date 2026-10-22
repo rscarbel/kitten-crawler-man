@@ -119,11 +119,20 @@ function bodyTheme(theme: Theme, typeface: SpeakerTypeface): Theme {
 /** Controls how the dialog body text is progressively revealed. */
 export type RevealMode = 'all' | 'sentence' | 'word' | 'letter';
 
-/** The speaker of the line now showing, resolved from a `SpeakerRef` — a portrait already painted, not a lookup key. */
+/**
+ * A portrait the box asks for its picture on every draw. Never a picture held
+ * across frames: a canvas recovery gives painted portraits back, and the next
+ * ask paints a fresh one.
+ */
+export interface PortraitSource {
+  image(): CanvasImageSource;
+}
+
+/** The speaker of the line now showing, resolved from a `SpeakerRef` — a portrait to draw, not a lookup key. */
 export interface ResolvedSpeaker {
   /** `null` renders a nameless speaker row. */
   readonly name: string | null;
-  readonly portrait: CanvasImageSource | null;
+  readonly portrait: PortraitSource | null;
   readonly voice: SpeakerVoice;
   readonly reveal: RevealMode;
   readonly textCase: TextCase;
@@ -578,7 +587,7 @@ export class DialogBox {
     if (speaker.portrait !== null) {
       const portrait = { x: plateX, y: rowY, w: ICON_SIZE, h: ICON_SIZE };
       fillRounded(ctx, portrait, radius.sm, palette.surface.sunken);
-      ctx.drawImage(speaker.portrait, plateX, rowY, ICON_SIZE, ICON_SIZE);
+      ctx.drawImage(speaker.portrait.image(), plateX, rowY, ICON_SIZE, ICON_SIZE);
       strokeRounded(ctx, portrait, radius.sm, palette.border.strong, PORTRAIT_BORDER_WIDTH);
       plateX += ICON_SIZE + ICON_GAP;
     }

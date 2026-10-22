@@ -28,7 +28,7 @@ import { MercenarySystem } from '../../src/systems/MercenarySystem';
 import { SpellSystem } from '../../src/systems/SpellSystem';
 import { MobRoster } from '../../src/systems/kits/SceneWorld';
 import type { SystemContext } from '../../src/systems/GameSystem';
-import { createMob } from '../../src/levels/spawner';
+import { liveSpawnContext, spawnMob } from '../../src/levels/spawnFunnel';
 import { getMercenaryTemplate } from '../../src/core/mercenaryTemplates';
 import { withWorldSeed } from '../../src/core/WorldRandom';
 import { resetPathfindBudget } from '../../src/creatures/pathfindBudget';
@@ -226,7 +226,7 @@ function woundTo(body: { hp: number; maxHp: number }, fraction: number): void {
 }
 
 function addHostile(h: Harness, x: number, y: number): Mob {
-  const mob = createMob('goblin', 0, 0, h.map);
+  const mob = spawnMob('goblin', { x: 0, y: 0 }, h.map, liveSpawnContext('dev:spawn'));
   mob.x = x;
   mob.y = y;
   mob.hp = mob.maxHp;

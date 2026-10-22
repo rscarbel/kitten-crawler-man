@@ -22,6 +22,9 @@
  *  - **A refusal paints rather than blanks.** The painter is present at
  *    runtime, so a cell the budget will not admit is drawn straight into the
  *    target. Full means slower, never invisible.
+ *  - **A busy frame borrows rather than paints.** A miss past the frame's bake
+ *    allowance draws the figure's nearest baked frame and asks for its own
+ *    urgently, so a crowd's misses cost blits, not painters.
  *  - **The bake budget is milliseconds.** Cell area varies by two orders of
  *    magnitude across the fleet, so a cell count would let one figure spike a
  *    frame and hold another back for no reason.
@@ -191,7 +194,7 @@ const BYTES_PER_PIXEL = 4;
  * Milliseconds of painting the cache may spend on a frame. Small enough to
  * disappear into one frame's slack, which means a cheap figure warms a whole
  * row in two or three frames while an expensive one lands a cell per frame and
- * paints directly in the meantime.
+ * borrows a neighbouring baked frame in the meantime.
  *
  * Sized against a town crowd's own closed set, not just one creature: a
  * plaza's worth of citizen looks needing their idle and walk rows warm in
@@ -223,8 +226,7 @@ export const PREWARM_BAKE_BUDGET_MS = 3;
  * How long bakes stay off after the browser refuses one a surface. Canvas
  * memory comes back only as caches give theirs up, so a bake tried on every
  * frame would fail on every frame, each attempt paying for an allocation and a
- * paint first; bodies draw directly in the meantime, as they do for any bake
- * the frame's allowance refuses.
+ * paint first; bodies draw directly in the meantime.
  */
 const BAKE_ALLOCATION_RETRY_MS = 2000;
 
@@ -788,6 +790,11 @@ export function beginFigureFrame(): void {
   beginFigureCacheStatsFrame();
   if (!idleSweepHeld) releaseIdleRows();
   runPrewarmQueue();
+}
+
+/** Milliseconds spent baking figure cells since {@link beginFigureFrame}. */
+export function figureBakeMsThisFrame(): number {
+  return msBakedThisFrame;
 }
 
 /**
@@ -2306,8 +2313,9 @@ function clampFrame(def: FigureDef, state: string, frame: number): number {
 }
 
 /**
- * The baked cell for this frame, or null when a budget or the frame's bake
- * allowance refused it. A refusal is the caller's cue to paint directly.
+ * The baked cell for this frame, a neighbouring one when the frame's bake
+ * allowance is spent, or null when a budget refused it or there was nothing
+ * of the figure to borrow. Null is the caller's cue to paint directly.
  */
 function cellFor(def: FigureDef, state: string, frame: number, scale: number): PlacedCell | null {
   lastDrawnFrameByFigure.set(def.id, frameCounter);
@@ -2324,8 +2332,10 @@ function cellFor(def: FigureDef, state: string, frame: number, scale: number): P
 
 /**
  * Bakes a missed cell on the render path, within what is left of the frame's
- * allowance, or returns null — having noted why — when it is refused and the
- * caller must paint directly.
+ * allowance. Past the allowance it borrows the nearest baked frame of the
+ * figure while the exact row warms on the queue, and returns null — having
+ * noted why — only when there is nothing to borrow or the cell can never be
+ * baked, and the caller must paint directly.
  */
 function bakeForDraw(
   entry: FigureEntry,
@@ -2335,8 +2345,20 @@ function bakeForDraw(
   scale: number,
 ): PlacedCell | null {
   if (!fitsBakeAllowance(entry, msBakedThisFrame, FRAME_BAKE_BUDGET_MS)) {
-    directPaintCause = 'frameAllowance';
+    // A live paint costs what a bake would and is thrown away, so a crowd
+    // missing more cells than one frame can bake would pay the painter for
+    // every one of them, every frame, until the queue caught up. A frame of a
+    // neighbouring pose costs one blit, and the urgent request lands the
+    // exact row within a few frames.
+    const standIn = nearestBakedCell(row, frame) ?? anyBakedCell(entry);
     dropRowIfEmpty(entry, state, row);
+    if (standIn !== null) {
+      recordFigureCacheApproxDraw();
+      noteUnbakedDraw(entry.def, state, 'standIn');
+      prewarmDrawnRow(entry.def, state, frame);
+      return placed(entry, standIn, scale, null);
+    }
+    directPaintCause = 'frameAllowance';
     return null;
   }
   const baked = bakeCell(entry, row, state, frame, RENDER_EVICTION);

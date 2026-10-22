@@ -50,6 +50,7 @@ import { Mob } from '../src/creatures/Mob';
 import { AIReplayRecorder } from '../src/dev/aiReplayRecorder';
 import { dungeonOptionsForLevel } from '../src/levels/dungeonOptions';
 import { level1 } from '../src/levels/level1';
+import type { MobKind } from '../src/levels/mobKinds';
 import { GameMap } from '../src/map/GameMap';
 import { AIChallengeSystem } from '../src/systems/AIChallengeSystem';
 import type { SystemContext } from '../src/systems/GameSystem';
@@ -132,7 +133,7 @@ class Dummy extends Mob {
     return null;
   }
 
-  constructor(name: string, typeKey: string, boss = false) {
+  constructor(name: string, typeKey: MobKind, boss = false) {
     super(START_TILE, START_TILE, TILE_SIZE, DUMMY_HP, DUMMY_SPEED);
     this.displayName = name;
     this.spawnTypeKey = typeKey;

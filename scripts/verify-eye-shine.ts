@@ -110,7 +110,7 @@ const { Signet } = await import('../src/creatures/Signet.js');
 const { SkeletonArcher } = await import('../src/creatures/SkeletonArcher.js');
 const { SkeletonLord } = await import('../src/creatures/SkeletonLord.js');
 const { SkeletonWarrior } = await import('../src/creatures/SkeletonWarrior.js');
-const { SkyFowl } = await import('../src/creatures/SkyFowl.js');
+const { SkyFowl, SKYFOWL_TOUGH_FAMILY } = await import('../src/creatures/SkyFowl.js');
 const { SmallSpider } = await import('../src/creatures/SmallSpider.js');
 const { SpiderEgg } = await import('../src/creatures/SpiderEgg.js');
 const { SpiderHatchling } = await import('../src/creatures/SpiderHatchling.js');
@@ -323,7 +323,7 @@ const SUBJECTS: Readonly<Record<string, () => readonly Subject[]>> = {
       return eyed(`Mongo L${level}`, new Mongo(...at, owner, level, probe.maxHp));
     });
   },
-  Necromancer: () => [eyed('necromancer', new Necromancer(...at))],
+  Necromancer: () => [eyed('necromancer', new Necromancer(...at, Math.random))],
   RaisedRatkin: () =>
     RAISED_RATKIN_LOOKS.map((look) => eyed(`raised ratkin ${look}`, new RaisedRatkin(...at, look))),
   Rat: () => [eyed('rat', new Rat(...at))],
@@ -342,7 +342,7 @@ const SUBJECTS: Readonly<Record<string, () => readonly Subject[]>> = {
     eyed('skeleton warrior', new SkeletonWarrior(...at)),
     eyeless('skeleton warrior rising', risingSkeleton()),
   ],
-  SkyFowl: () => [eyed('skyfowl', new SkyFowl(...at))],
+  SkyFowl: () => [eyed('skyfowl', new SkyFowl(...at, SKYFOWL_TOUGH_FAMILY.canonical))],
   SmallSpider: () => [eyed('small spider', new SmallSpider(...at), 'turnsToFace')],
   SpiderEgg: () => [eyeless('spider egg', new SpiderEgg(...at))],
   SpiderHatchling: () => [
@@ -825,7 +825,10 @@ class FixedViewSpider extends SmallSpider {
 }
 
 function negativeTests(): void {
-  const mirrored = eyed('negative: mirrored necromancer', new MirroredEyesNecromancer(...at));
+  const mirrored = eyed(
+    'negative: mirrored necromancer',
+    new MirroredEyesNecromancer(...at, Math.random),
+  );
   if (mirrorErrors(FACINGS.map((facing) => checkOne(mirrored, facing))).length === 0) {
     failures.push('negative test: eyes leaning on a face-on view that never flips went unnoticed');
   }

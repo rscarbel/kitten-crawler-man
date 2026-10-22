@@ -268,7 +268,9 @@ export class Juicer extends Mob {
   }
 
   override readonly audioTag = 'juicer';
-  override readonly bodyPartKey = JUICER_BODY_PART_KEY;
+  override get bodyPartKey(): string {
+    return JUICER_BODY_PART_KEY;
+  }
   readonly xpValue = 600;
   protected coinDropMin = COIN_DROP_MIN;
   protected coinDropMax = COIN_DROP_MAX;

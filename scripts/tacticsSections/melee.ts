@@ -33,7 +33,9 @@ import { RockGolemBoss } from '../../src/creatures/RockGolemBoss';
 import { MANTIS_SLASH_TOTAL_FRAMES, MantisCrony } from '../../src/creatures/MantisCrony';
 import { MoldLion } from '../../src/creatures/MoldLion';
 import { SWORD_SLASH_FRAMES } from '../../src/sprites/skeletonTiming';
-import { createMob, MAX_MOB_LEVEL } from '../../src/levels/spawner';
+import { MAX_MOB_LEVEL } from '../../src/levels/spawner';
+import { liveSpawnContext, spawnMob } from '../../src/levels/spawnFunnel';
+import type { StandaloneMobKind } from '../../src/levels/mobKinds';
 import { DIFFICULTY_PROFILES } from '../../src/core/difficultyProfiles';
 import type { Rng } from '../../src/sprites/person/rng';
 import { mulberry32 } from '../../src/sprites/person/rng';
@@ -66,13 +68,13 @@ export interface TacticsHarness {
 
 interface MeleeCase {
   /** Spawner key of the creature under test. */
-  readonly type: string;
+  readonly type: StandaloneMobKind;
   /** Exactly the traits it must be able to learn. */
   readonly eligibility: readonly TacticsTrait[];
   /** How far its blow reaches, in tiles: a flanker inside this has arrived. */
   readonly reachTiles: number;
   /** Spawner key of the pack mate a regroup or kite falls back on. */
-  readonly helperType: string;
+  readonly helperType: StandaloneMobKind;
   /**
    * A caster keeps facing its quarry while it falls back, so it can keep
    * casting; everything else turns to face where it walks.
@@ -185,7 +187,7 @@ const MELEE_CASES: readonly MeleeCase[] = [
 ];
 
 /** Relatives of the brawlers above that are bosses or unique, and must learn nothing. */
-const MUST_LEARN_NOTHING: readonly string[] = ['rock_golem_boss', 'terror_the_clown'];
+const MUST_LEARN_NOTHING: readonly StandaloneMobKind[] = ['rock_golem_boss', 'terror_the_clown'];
 
 /** A source that says yes to every roll, so "no trait" can only mean "not eligible". */
 const ALWAYS_YES: Rng = () => 0;
@@ -288,7 +290,12 @@ function addTrained(
   tile: TilePoint,
   wanted: readonly TacticsTrait[],
 ): Mob {
-  const mob = createMob(meleeCase.type, tile.x, tile.y, arena.map);
+  const mob = spawnMob(
+    meleeCase.type,
+    { x: tile.x, y: tile.y },
+    arena.map,
+    liveSpawnContext('dev:spawn'),
+  );
   mob.applyMobLevel(MAX_MOB_LEVEL);
   mob.rollTactics(
     DIFFICULTY_PROFILES.normal.tacticsChanceScale,
@@ -305,8 +312,8 @@ function addTrained(
  * already swung — so a probe that swings when it should fall back would never
  * be caught doing it.
  */
-function addHelper(arena: Arena, type: string, tile: TilePoint): Mob {
-  const helper = createMob(type, tile.x, tile.y, arena.map);
+function addHelper(arena: Arena, type: StandaloneMobKind, tile: TilePoint): Mob {
+  const helper = spawnMob(type, { x: tile.x, y: tile.y }, arena.map, liveSpawnContext('dev:spawn'));
   helper.applyMobLevel(HELPER_LEVEL);
   arena.roster.add(helper);
   bloody(helper, arena.human, 0);
@@ -356,7 +363,7 @@ function checkEligibility(map: GameMap, harness: TacticsHarness): void {
   const { check } = harness;
   harness.section('Melee roll: each brawler learns exactly its set, and only from level 5');
   for (const meleeCase of MELEE_CASES) {
-    const top = createMob(meleeCase.type, 1, 1, map);
+    const top = spawnMob(meleeCase.type, { x: 1, y: 1 }, map, liveSpawnContext('dev:spawn'));
     check(
       meleeCase.isExpectedClass(top),
       `${meleeCase.type} builds the creature it names (got ${top.constructor.name})`,
@@ -368,7 +375,7 @@ function checkEligibility(map: GameMap, harness: TacticsHarness): void {
       top.tactics.traits.join() === expected.join(),
       `${meleeCase.type} at the top level learns ${top.tactics.traits.join(',') || 'nothing'} (want ${expected.join(',')})`,
     );
-    const early = createMob(meleeCase.type, 1, 1, map);
+    const early = spawnMob(meleeCase.type, { x: 1, y: 1 }, map, liveSpawnContext('dev:spawn'));
     early.applyMobLevel(EARLY_GAME_TOP_MOB_LEVEL);
     early.rollTactics(DIFFICULTY_PROFILES.hard.tacticsChanceScale, ALWAYS_YES);
     check(
@@ -377,7 +384,7 @@ function checkEligibility(map: GameMap, harness: TacticsHarness): void {
     );
   }
   for (const type of MUST_LEARN_NOTHING) {
-    const mob = createMob(type, 1, 1, map);
+    const mob = spawnMob(type, { x: 1, y: 1 }, map, liveSpawnContext('dev:spawn'));
     mob.applyMobLevel(MAX_MOB_LEVEL);
     mob.rollTactics(DIFFICULTY_PROFILES.hard.tacticsChanceScale, ALWAYS_YES);
     check(

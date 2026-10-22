@@ -26,7 +26,7 @@ import {
   type RegularFairyKind,
   type RoomFairyRoll,
 } from '../../src/levels/fairySpawner';
-import { createMob } from '../../src/levels/spawner';
+import { liveSpawnContext, spawnMob } from '../../src/levels/spawnFunnel';
 import type { GameMap } from '../../src/map/GameMap';
 import { level1 } from '../../src/levels/level1';
 import { level2 } from '../../src/levels/level2';
@@ -483,7 +483,12 @@ function tallyBossHealerSpawns(spawn: BossHealerSpawn): BossHealerTally {
   const tally: BossHealerTally = { calls: 0, added: 0, healers: 0, shields: 0 };
   const map = makeArena();
   const centreTile = Math.floor(ARENA_TILES / 2);
-  const boss = createMob(SWINE_BOSS_TYPE, centreTile, centreTile, map);
+  const boss = spawnMob(
+    SWINE_BOSS_TYPE,
+    { x: centreTile, y: centreTile },
+    map,
+    liveSpawnContext('dev:spawn'),
+  );
   for (const difficulty of DIFFICULTIES) {
     tally.calls++;
     spawn(
@@ -519,7 +524,14 @@ const guaranteedBossHealerSpawn: BossHealerSpawn = (boss, map, addMob, difficult
   const kinds: FairyKind[] = [healer.kind];
   if (!needsGuaranteedShield(kinds, difficulty, false)) return;
   const centreTile = Math.floor(ARENA_TILES / 2);
-  addMob(createMob(FAIRY_SPAWN_KEYS.shield, centreTile, centreTile, map));
+  addMob(
+    spawnMob(
+      FAIRY_SPAWN_KEYS.shield,
+      { x: centreTile, y: centreTile },
+      map,
+      liveSpawnContext('dev:spawn'),
+    ),
+  );
 };
 
 function verifyGuaranteedShield(

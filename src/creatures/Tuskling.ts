@@ -78,7 +78,9 @@ export class Tuskling extends Mob {
   displayName = 'Tuskling';
   description = 'A hulking orc-hog hybrid. It lowers its tusks and charges without warning.';
   override readonly audioTag = 'tuskling';
-  override readonly bodyPartKey = TUSKLING_BODY_PART_KEY;
+  override get bodyPartKey(): string {
+    return TUSKLING_BODY_PART_KEY;
+  }
 
   /** 0–1: charge windup progress (for sprite snort animation). */
   chargeWindup = 0;

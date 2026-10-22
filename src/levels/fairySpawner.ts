@@ -12,7 +12,7 @@ import type { Mob } from '../creatures/Mob';
 import type { Player } from '../Player';
 import { Fairy } from '../creatures/fairies/Fairy';
 import type { FairyKind } from '../sprites/art/fairyTiming';
-import { HealingFairy } from '../creatures/fairies/HealingFairy';
+import type { HealingFairy } from '../creatures/fairies/HealingFairy';
 import { bindHealerToBoss } from '../creatures/fairies/bossHealerBond';
 import type { LevelledCurve } from '../creatures/mobLevelScaling';
 import { TILE_SIZE } from '../core/constants';
@@ -26,7 +26,6 @@ import { hasRoomToMove } from '../map/findWalkableTile';
 import { RUINS_CIRCUS_BUFFER } from '../map/OverworldGenerator';
 import { pastSafeRoomTest } from '../map/pastSafeRoom';
 import {
-  createMob,
   findWalkableSpawnTile,
   pickRule,
   regionLevelBand,
@@ -35,13 +34,10 @@ import {
   roomSpawnBounds,
   type SpawnBounds,
 } from './spawner';
-import type {
-  FairyRoomRate,
-  FairySpawnTable,
-  LevelDef,
-  MobLevelRange,
-  MobSpawnRule,
-} from './types';
+import type { FairyRoomRate, FairySpawnTable, LevelDef, MobLevelRange } from './types';
+import type { MobKind } from './mobKinds';
+import { liveSpawnContext, spawnMob, type SpawnContext } from './spawnFunnel';
+import { floorEncounter } from './encounters';
 
 /**
  * The most non-healer fairies one room may hold, however generous a table's
@@ -59,13 +55,13 @@ export type RegularFairyKind = Exclude<FairyKind, 'healer'>;
 export const REGULAR_FAIRY_KINDS: readonly RegularFairyKind[] = ['shield', 'ice', 'fire', 'necro'];
 
 /** The spawner key each kind is registered under. */
-export const FAIRY_SPAWN_KEYS: Readonly<Record<FairyKind, MobSpawnRule['type']>> = {
+export const FAIRY_SPAWN_KEYS = {
   shield: 'fairy_shield',
   healer: 'fairy_healer',
   ice: 'fairy_ice',
   fire: 'fairy_fire',
   necro: 'fairy_necro',
-};
+} as const satisfies Readonly<Record<FairyKind, MobKind>>;
 
 /**
  * What one room rolled: its counted fairies, separately whether it gets a
@@ -247,15 +243,14 @@ export function finishFairySpawn(
   fairy.stampPotency(difficulty);
 }
 
-/** A fairy of `kind` on the tile, or null if the registry handed back something else. */
+/** A fairy of `kind` on the tile, not yet levelled. */
 export function createFairy(
   kind: FairyKind,
-  tileX: number,
-  tileY: number,
+  tile: { readonly x: number; readonly y: number },
   map: GameMap,
-): Fairy | null {
-  const mob = createMob(FAIRY_SPAWN_KEYS[kind], tileX, tileY, map);
-  return mob instanceof Fairy ? mob : null;
+  context: SpawnContext,
+): Fairy {
+  return spawnMob(FAIRY_SPAWN_KEYS[kind], tile, map, context);
 }
 
 /** Places one fairy of `kind` in a ledger room, or null when the room has no floor left. */
@@ -264,15 +259,18 @@ function placeRoomFairy(
   room: FairyLedgerRoom,
   map: GameMap,
   ledger: FairyRoomLedger,
+  rng: FairyRng,
 ): Fairy | null {
-  const tile = findWalkableSpawnTile(map, room.spawnBounds);
+  const tile = findWalkableSpawnTile(map, room.spawnBounds, rng);
   if (tile === null) return null;
-  const fairy = createFairy(kind, tile.x, tile.y, map);
-  if (fairy === null) return null;
   const { def, partyLevel, profile, difficulty } = ledger;
+  const fairy = createFairy(kind, tile, map, {
+    encounter: floorEncounter(def.floorNumber, 'fairies'),
+    random: rng,
+  });
   finishFairySpawn(
     fairy,
-    resolveAmbientLevel(room.band, def, partyLevel, profile),
+    resolveAmbientLevel(room.band, def, partyLevel, profile, rng),
     def.levelledCurve,
     profile,
     difficulty,
@@ -292,9 +290,9 @@ const BASE_LEVEL_BAND: MobLevelRange = {};
  * from the host because the host roll has already happened, and this draws
  * from the same distribution the host band came from.
  */
-function roomFairyBand(def: LevelDef, region: number): MobLevelRange {
+function roomFairyBand(def: LevelDef, region: number, rng: FairyRng): MobLevelRange {
   if (def.roomMobs.length === 0) return BASE_LEVEL_BAND;
-  return regionLevelBand(pickRule(def.roomMobs), regionLevelBonusFor(def, region));
+  return regionLevelBand(pickRule(def.roomMobs, rng), regionLevelBonusFor(def, region));
 }
 
 /**
@@ -332,7 +330,7 @@ export function spawnRoomFairies(
       rect,
       spawnBounds: roomSpawnBounds(point),
       region: point.region,
-      band: roomFairyBand(ledger.def, point.region),
+      band: roomFairyBand(ledger.def, point.region, rng),
       fairies: [],
       upgradedBy: new Set(),
       pastSafeRoomOf: new Set(
@@ -344,11 +342,11 @@ export function spawnRoomFairies(
     const kinds: FairyKind[] = [...roll.fairies];
     if (roll.healer) kinds.push('healer');
     for (const kind of kinds) {
-      const fairy = placeRoomFairy(kind, room, map, ledger);
+      const fairy = placeRoomFairy(kind, room, map, ledger, rng);
       if (fairy !== null) placed.push(fairy);
     }
     if (roll.guaranteedShield) {
-      const shield = placeGuaranteedShield(room, room.fairies, map, ledger);
+      const shield = placeGuaranteedShield(room, room.fairies, map, ledger, rng);
       if (shield !== null) placed.push(shield);
     }
   }
@@ -365,11 +363,12 @@ function placeGuaranteedShield(
   residents: readonly Fairy[],
   map: GameMap,
   ledger: FairyRoomLedger,
+  rng: FairyRng,
 ): Fairy | null {
   const nightmareOnly = ledger.def.fairies?.guaranteedShieldNightmareOnly === true;
   const kinds = residents.map((fairy) => fairy.kind);
   if (!needsGuaranteedShield(kinds, ledger.difficulty, nightmareOnly)) return null;
-  const shield = placeRoomFairy('shield', room, map, ledger);
+  const shield = placeRoomFairy('shield', room, map, ledger, rng);
   room.guaranteedShield = shield;
   return shield;
 }
@@ -462,12 +461,12 @@ export function applyFairyRateUpgrade(
           room.guaranteedShield = null;
           continue;
         }
-        const fairy = placeRoomFairy(kind, room, map, ledger);
+        const fairy = placeRoomFairy(kind, room, map, ledger, rng);
         if (fairy === null) continue;
         added.push(fairy);
         residents.push(fairy);
       }
-      const shield = placeGuaranteedShield(room, residents, map, ledger);
+      const shield = placeGuaranteedShield(room, residents, map, ledger, rng);
       if (shield !== null) added.push(shield);
     }
   }
@@ -559,6 +558,10 @@ export function spawnOverworldFairies(
   const { def, partyLevel, profile, difficulty } = ledger;
   const table = def.fairies;
   if (table?.scatterChance === undefined) return placed;
+  const scatterContext: SpawnContext = {
+    encounter: floorEncounter(def.floorNumber, 'fairies'),
+    random: rng,
+  };
 
   for (const point of map.hallwaySpawnPoints) {
     const roll = rollScatterFairies(table, difficulty, rng);
@@ -567,17 +570,16 @@ export function spawnOverworldFairies(
     if (roll.guaranteedShield) kinds.push('shield');
     if (kinds.length === 0) continue;
     const band: MobLevelRange =
-      def.hallwayMobs.length > 0 ? pickRule(def.hallwayMobs) : BASE_LEVEL_BAND;
+      def.hallwayMobs.length > 0 ? pickRule(def.hallwayMobs, rng) : BASE_LEVEL_BAND;
     const taken = new Set<string>();
     for (const kind of kinds) {
       const tile = findScatterTile(map, point, taken, rng);
       if (tile === null) continue;
-      const fairy = createFairy(kind, tile.x, tile.y, map);
-      if (fairy === null) continue;
+      const fairy = createFairy(kind, tile, map, scatterContext);
       taken.add(`${tile.x},${tile.y}`);
       finishFairySpawn(
         fairy,
-        resolveAmbientLevel(band, def, partyLevel, profile),
+        resolveAmbientLevel(band, def, partyLevel, profile, rng),
         def.levelledCurve,
         profile,
         difficulty,
@@ -610,6 +612,7 @@ function findBossHealerTile(
   boss: Mob,
   map: GameMap,
   isAllowed: BossHealerTileFilter,
+  random: () => number,
 ): { x: number; y: number } | null {
   const ts = TILE_SIZE;
   const bossCentreX = boss.x + ts / 2;
@@ -637,9 +640,9 @@ function findBossHealerTile(
         else cramped.push({ x: tileX, y: tileY });
       }
     }
-    if (roomy.length > 0) return roomy[Math.floor(Math.random() * roomy.length)];
+    if (roomy.length > 0) return roomy[Math.floor(random() * roomy.length)];
   }
-  if (cramped.length > 0) return cramped[Math.floor(Math.random() * cramped.length)];
+  if (cramped.length > 0) return cramped[Math.floor(random() * cramped.length)];
   return null;
 }
 
@@ -660,10 +663,10 @@ function createBossHealer(
   difficulty: Difficulty,
   isAllowed: BossHealerTileFilter = ANY_BOSS_HEALER_TILE,
 ): HealingFairy | null {
-  const tile = findBossHealerTile(boss, map, isAllowed);
+  const healerContext = liveSpawnContext('fairy:boss-healer');
+  const tile = findBossHealerTile(boss, map, isAllowed, healerContext.random);
   if (tile === null) return null;
-  const mob = createMob(FAIRY_SPAWN_KEYS.healer, tile.x, tile.y, map);
-  if (!(mob instanceof HealingFairy)) return null;
+  const mob = spawnMob(FAIRY_SPAWN_KEYS.healer, tile, map, healerContext);
   mob.setHostFloor(hostFloor);
   mob.applyMobLevel(boss.mobLevel, boss.levelledCurve);
   applySpawnDifficulty(mob);

@@ -17,6 +17,7 @@ export function resolveVillageAssaultLevel(
   def: Pick<LevelDef, 'ambientTracking'>,
   partyLevel: number,
   profile: DifficultyProfile,
+  random: () => number,
 ): number {
-  return resolveAmbientLevel(VILLAGE_ASSAULT_LEVEL_BAND, def, partyLevel, profile);
+  return resolveAmbientLevel(VILLAGE_ASSAULT_LEVEL_BAND, def, partyLevel, profile, random);
 }

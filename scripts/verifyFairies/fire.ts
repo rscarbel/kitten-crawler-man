@@ -73,7 +73,7 @@ import {
   type MercenaryTemplateId,
 } from '../../src/core/mercenaryTemplates';
 import { isMarkedGround, setMarkedGroundSources } from '../../src/creatures/tactics/markedGround';
-import { createMob } from '../../src/levels/spawner';
+import { liveSpawnContext, spawnMob } from '../../src/levels/spawnFunnel';
 import { CompanionSystem } from '../../src/systems/CompanionSystem';
 import {
   FairyFireballSystem,
@@ -1453,7 +1453,12 @@ function allyDodgeRun(
     placeOnTile(ally, ALLY_TILE_X, ALLY_TILE_Y[setup.placement ?? 'beside the line']);
     if (ally instanceof Mercenary) ally.allies = [human, cat];
     if (stance === 'fighting') {
-      const foe = createMob('goblin', ALLY_FOE_TILE_X, ALLY_FOE_TILE_Y, s.map);
+      const foe = spawnMob(
+        'goblin',
+        { x: ALLY_FOE_TILE_X, y: ALLY_FOE_TILE_Y },
+        s.map,
+        liveSpawnContext('dev:spawn'),
+      );
       foe.hp = ALLY_FOE_HP;
       foe.aiHeld = true;
       ally.allMobs = [foe];

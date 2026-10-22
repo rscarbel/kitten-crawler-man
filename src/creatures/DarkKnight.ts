@@ -27,12 +27,12 @@ const PUNCH_RANGE_TILES = 1.5;
 /**
  * How far in front of himself the mace comes down, in tiles.
  *
- * A man swinging a mace at the floor can only hit the floor he can reach. This
- * used to be a 5.5-tile *targeting* range — the slam was aimed at wherever the
- * player was standing and detonated there, which read as a shockwave he never
- * animates and made backing off no defence at all. Now the impact point is a
- * fixed step along his own facing, locked at the start of the wind-up: stepping
- * out of the circle is still the dodge, but the circle is somewhere his arms go.
+ * A man swinging a mace at the floor can only hit the floor he can reach, so
+ * the impact point is a fixed step along his own facing, locked at the start of
+ * the wind-up, never wherever the player stands: a slam aimed at the player
+ * reads as a shockwave he never animates and makes backing off no defence.
+ * Stepping out of the circle is the dodge, and the circle is somewhere his arms
+ * go.
  */
 const SLAM_REACH_TILES = 1.4;
 /** Radius of the slam's impact disc, and of the circle drawn on the ground. */
@@ -88,12 +88,7 @@ function punchTiming(): { windup: number; execute: number } {
   return { windup, execute: Math.max(1, Math.round(gameFrames) - windup) };
 }
 
-/**
- * Game frames each sprite frame of the jab is held for. Played one-to-one the
- * whole attack is eight frames — an eighth of a second, which is a flicker
- * rather than a punch. Under twenty total, so it still reads as the snappy
- * filler it is meant to be.
- */
+/** The pause between attacks, drawn at random from this span. */
 const COOLDOWN_MIN_FRAMES = 34;
 const COOLDOWN_MAX_FRAMES = 60;
 /** Frames after a special before the punch is allowed to fill the gap. */
@@ -297,7 +292,9 @@ export class DarkKnight extends Mob {
   displayName = 'Dark Knight';
   description = 'A silent thing in blackened plate. The mace is the whole conversation.';
   override readonly audioTag = 'dark_knight';
-  override readonly bodyPartKey = DARK_KNIGHT_BODY_PART_KEY;
+  override get bodyPartKey(): string {
+    return DARK_KNIGHT_BODY_PART_KEY;
+  }
   mass = KNIGHT_MASS;
 
   /**

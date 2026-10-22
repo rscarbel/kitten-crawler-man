@@ -1,27 +1,53 @@
 /**
- * Resolves the player's quality preset into a concrete render scale, and — for
- * the `auto` preset — measures whether the machine can actually sustain it.
+ * Resolves the player's quality preset into a concrete render scale and a
+ * starting variety tier, and — when the device turns out not to keep up —
+ * steps down a one-way ladder of rungs for the rest of the session.
  *
- * Shape: static floor → one short probe under existing cover → latch for the
- * session. The ladder has two rungs below `sharp`: the render scale, then
- * optional scenery detail (`fullDetail`). Deliberately not continuous adaptation, which oscillates and is more
- * annoying than a slightly-low setting. The one exception is a single late
- * downgrade, which is what catches thermal throttling on laptops and phones —
- * something no boot-time probe can see. Because it is one-way and capped it
- * cannot oscillate.
+ * Shape: static floor → one short probe under existing cover → a safety net
+ * that keeps watching whole windows of play. Each breached window takes one
+ * rung, and the next window is sampled afresh, so a machine that is still
+ * slow after a rung takes the next one. Two kinds of rung:
+ *
+ *  - render rungs (`auto` only): the render scale, then optional scenery
+ *    detail (`fullDetail`);
+ *  - variety rungs: the next {@link VarietyTier}, fewer distinct looks to bake.
+ *
+ * A window whose bakes take a large share of the frame is paint-bound and
+ * takes a variety rung first, since fewer looks is what shrinks bake work;
+ * any other window takes a render rung first. When the preferred kind is used
+ * up the other kind is taken. `sharp` never gives up variety for lag: the
+ * player asked for the full picture, and lag alone does not justify less.
+ *
+ * Deliberately not continuous adaptation, which oscillates and is more
+ * annoying than a slightly-low setting. Every rung is latched and the ladder
+ * only goes down, so it cannot oscillate; the windows are long enough that
+ * only sustained slowness — thermal throttling, not a boss spawn — trips it.
  *
  * Only ever the choice `'auto'` is persisted, never its resolved value:
  * hardware, thermal state and external displays all change between sessions.
  */
 
-import type { SceneManager } from './Scene';
+import type { FrameCost } from './frameCost';
 import {
   MAX_SHARP_RENDER_SCALE,
   PERFORMANCE_RENDER_SCALE,
   settings,
   type QualityPreset,
 } from './Settings';
+import { FULL_SCALE, HALF_DENSITY_SCALE, deviceMemoryBudgetScale } from './deviceMemoryBudget';
+import {
+  FULL_VARIETY_TIER,
+  MINIMAL_VARIETY_TIER,
+  SHARED_LOOKS_TIER,
+  TRIMMED_VARIETY_TIER,
+  forceVarietyTier,
+  lowerVarietyTierTo,
+  stepVarietyTierDown,
+  varietyTier,
+  type VarietyTier,
+} from './varietyTier';
 import { flushFigureFrameCache } from '../sprites/figure/figureFrameCache';
+import { onCanvasRecovery } from './canvasRecovery';
 
 const MS_PER_SECOND = 1000;
 
@@ -34,10 +60,10 @@ const TARGET_REFRESH_MS = MS_PER_SECOND / TARGET_REFRESH_HZ;
  * level entry — chunks, person cells, sprite sheets — and those first frames
  * are far slower than the steady state they would be taken to represent.
  */
-const PROBE_WARMUP_FRAMES = 60;
+export const PROBE_WARMUP_FRAMES = 60;
 
 /** How long the probe samples for, once warmed up. */
-const PROBE_SAMPLE_MS = 2000;
+export const PROBE_SAMPLE_MS = 2000;
 
 /**
  * Frames per second below which the sample is discarded rather than acted on.
@@ -62,15 +88,50 @@ const BREACH_TOLERANCE = 1.5;
  * merely short of a high-refresh display's ceiling — about forty frames a
  * second.
  */
-const STUTTER_INTERVAL_MS = TARGET_REFRESH_MS * BREACH_TOLERANCE;
+export const STUTTER_INTERVAL_MS = TARGET_REFRESH_MS * BREACH_TOLERANCE;
 
 /**
- * Length of the post-probe watch window. Long enough that only sustained
+ * Length of each post-probe watch window. Long enough that only sustained
  * slowness trips it — a spike from a boss spawn or a chunk bake cannot.
  */
-const SAFETY_NET_WINDOW_MS = 10000;
+export const SAFETY_NET_WINDOW_MS = 10000;
+
+/**
+ * Share of the mean frame interval that the mean bake time must reach for a
+ * breached window to count as paint-bound. Bakes are only part of a frame's
+ * paint, so a third already means caching looks is what the frame is waiting
+ * on, more than the pixels or the simulation.
+ */
+const PAINT_BOUND_PARTS_OF_FRAME = 3;
+export const PAINT_BOUND_SHARE = 1 / PAINT_BOUND_PARTS_OF_FRAME;
+
+/**
+ * How long after a canvas recovery frames go unmeasured. The recovery repaints
+ * every cache it dropped, so the frames after it are slow and bake-heavy by
+ * design; read as play, they would take a lag rung on top of whatever the
+ * recovery itself asked of the device.
+ */
+export const RECOVERY_SETTLE_MS = 4000;
+
+/** Where `performance` starts: the player asked for smoothness over the full set of looks. */
+export const PERFORMANCE_PRESET_VARIETY_TIER = TRIMMED_VARIETY_TIER;
 
 type ProbeState = 'idle' | 'warmup' | 'sampling' | 'done';
+
+/** The two kinds of rung a breached window can take. */
+type LagRung = 'variety' | 'render';
+
+/**
+ * The tier a session starts at before anything is measured. A device whose
+ * caches already hold less has less room for distinct looks; the
+ * `performance` preset starts lower still.
+ */
+export function startingVarietyTier(preset: QualityPreset, deviceMemoryScale: number): VarietyTier {
+  if (preset === 'performance') return PERFORMANCE_PRESET_VARIETY_TIER;
+  if (deviceMemoryScale >= FULL_SCALE) return FULL_VARIETY_TIER;
+  if (deviceMemoryScale >= HALF_DENSITY_SCALE) return SHARED_LOOKS_TIER;
+  return TRIMMED_VARIETY_TIER;
+}
 
 function percentile(sortedAscending: number[], fraction: number): number {
   const index = Math.min(
@@ -96,13 +157,60 @@ export function sharpRenderScale(): number {
   return Math.min(Math.max(PERFORMANCE_RENDER_SCALE, rounded), MAX_SHARP_RENDER_SCALE);
 }
 
-class RenderQualityController {
-  private sceneManager: SceneManager | null = null;
+/** What the controller drives: the canvas owner, or a harness's stand-in. */
+interface RenderScaleTarget {
+  readonly renderScale: number;
+  setRenderScale(scale: number): void;
+}
+
+/** Everything the controller reads from outside, injectable for a headless harness. */
+interface RenderQualityEnvironment {
+  readonly preset: () => QualityPreset;
+  readonly storePreset: (preset: QualityPreset) => void;
+  readonly documentHidden: () => boolean;
+  readonly deviceMemoryScale: () => number;
+  readonly sharpRenderScale: () => number;
+  /** Called after the render scale moved. */
+  readonly onRenderScaleChanged: () => void;
+  /** Registers `handler` to run after every canvas recovery, whatever its cause. */
+  readonly subscribeCanvasRecovery: (handler: () => void) => void;
+}
+
+/** One sampled stretch of play: its frame intervals and what the frames spent baking. */
+class LagWindow {
+  readonly intervals: number[] = [];
+  private intervalMsTotal = 0;
+  private bakeMsTotal = 0;
+
+  add(interval: number, cost: FrameCost): void {
+    this.intervals.push(interval);
+    this.intervalMsTotal += interval;
+    this.bakeMsTotal += cost.bakeMs;
+  }
+
+  get breached(): boolean {
+    return breachesBudget(this.intervals);
+  }
+
+  /** Mean bake time at least {@link PAINT_BOUND_SHARE} of the mean interval; the counts cancel. */
+  get paintBound(): boolean {
+    return this.bakeMsTotal >= PAINT_BOUND_SHARE * this.intervalMsTotal;
+  }
+
+  clear(): void {
+    this.intervals.length = 0;
+    this.intervalMsTotal = 0;
+    this.bakeMsTotal = 0;
+  }
+}
+
+export class RenderQualityController {
+  private target: RenderScaleTarget | null = null;
 
   private probeState: ProbeState = 'idle';
   private warmupFramesLeft = 0;
   private samplingStartedAt = 0;
-  private probeIntervals: number[] = [];
+  private readonly probeWindow = new LagWindow();
   private lastFrameTime: number | null = null;
 
   /** Set once a probe or the safety net has lowered the scale, latching it. */
@@ -115,10 +223,11 @@ class RenderQualityController {
    */
   private detailDowngraded = false;
 
-  /** The late downgrade is single-shot; this records that it has been spent. */
-  private safetyNetSpent = false;
+  /** Set by {@link pinVarietyTier}; lag and the starting tier leave the tier alone. */
+  private varietyPinned = false;
+
   private safetyNetWindowStartedAt: number | null = null;
-  private safetyNetIntervals: number[] = [];
+  private readonly safetyNetWindow = new LagWindow();
 
   /**
    * Whether a loading screen owns the frames. Its frames are slow on purpose —
@@ -127,14 +236,23 @@ class RenderQualityController {
    */
   private loadingCover = false;
 
+  /** Set by a canvas recovery; the next measured frame starts the settle period. */
+  private recoverySettlePending = false;
+  private recoverySettleEndsAt: number | null = null;
+
+  constructor(private readonly env: RenderQualityEnvironment) {
+    env.subscribeCanvasRecovery(() => this.noteCanvasRecovery());
+  }
+
   /**
    * Wires the controller to the canvas owner and applies the stored preset.
    * `auto` starts optimistic — beginning low and upgrading later would make the
    * player's first impression the soft one.
    */
-  attach(sceneManager: SceneManager): void {
-    this.sceneManager = sceneManager;
-    this.applyScale(this.resolveScale(settings.quality));
+  attach(target: RenderScaleTarget): void {
+    this.target = target;
+    this.applyScale(this.resolveScale(this.env.preset()));
+    this.applyStartingVarietyTier();
   }
 
   /** The scale a preset asks for before any measurement. */
@@ -143,29 +261,52 @@ class RenderQualityController {
       case 'performance':
         return PERFORMANCE_RENDER_SCALE;
       case 'sharp':
-        return sharpRenderScale();
+        return this.env.sharpRenderScale();
       case 'auto':
-        return sharpRenderScale();
+        return this.env.sharpRenderScale();
     }
   }
 
   /**
+   * Lowers the tier to where this preset and device start. Re-applied at each
+   * level entry as well as at attach, because the device's memory report can
+   * be overridden after the canvas owner exists (`?deviceMemory=`); it only
+   * ever lowers, so a repeat is harmless.
+   */
+  private applyStartingVarietyTier(): void {
+    if (this.varietyPinned) return;
+    lowerVarietyTierTo(startingVarietyTier(this.env.preset(), this.env.deviceMemoryScale()));
+  }
+
+  /**
    * Records the player's explicit choice. A manual choice wins permanently on
-   * this device: no probe, no safety net. `auto` stays selectable so control can
-   * be handed back.
+   * this device: no probe, and no render rungs — though `performance` still
+   * gives up variety under sustained lag, since smoothness is what it asked
+   * for. `auto` stays selectable so control can be handed back.
    */
   setPreset(preset: QualityPreset): void {
-    settings.setQuality(preset);
+    this.env.storePreset(preset);
     this.probeState = preset === 'auto' ? 'idle' : 'done';
-    this.safetyNetSpent = preset !== 'auto';
     this.downgraded = false;
     this.detailDowngraded = false;
     this.resetSafetyNetWindow();
     this.applyScale(this.resolveScale(preset));
+    this.applyStartingVarietyTier();
     // Handing control back mid-level would otherwise leave `auto` unmeasured
     // until the next level entry, with neither the probe nor the safety net
     // running for the rest of this one.
     if (preset === 'auto') this.requestProbe();
+  }
+
+  /**
+   * Holds the tier where a dev override put it: lag no longer takes variety
+   * rungs and the starting tier no longer lowers it, so a measurement at one
+   * tier stays at that tier. A canvas recovery still steps it down, since that
+   * frees memory the device has run out of.
+   */
+  pinVarietyTier(tier: VarietyTier): void {
+    this.varietyPinned = true;
+    forceVarietyTier(tier);
   }
 
   /**
@@ -180,7 +321,7 @@ class RenderQualityController {
    */
   handleDisplayChange(): void {
     if (this.downgraded || this.detailDowngraded) return;
-    this.applyScale(this.resolveScale(settings.quality));
+    this.applyScale(this.resolveScale(this.env.preset()));
   }
 
   /**
@@ -191,14 +332,18 @@ class RenderQualityController {
    * A display with no extra pixels to render is measured all the same: the
    * cost is painting, not pixel fill, so detail is still there to give up. A
    * probe that has already run is never re-run: the choice is latched for the
-   * session.
+   * session. A manual preset skips the probe and arms the safety net directly.
    */
   requestProbe(): void {
-    if (settings.quality !== 'auto') return;
+    this.applyStartingVarietyTier();
     if (this.probeState !== 'idle') return;
+    if (this.env.preset() !== 'auto') {
+      this.probeState = 'done';
+      return;
+    }
     this.probeState = 'warmup';
     this.warmupFramesLeft = PROBE_WARMUP_FRAMES;
-    this.probeIntervals = [];
+    this.probeWindow.clear();
   }
 
   /**
@@ -208,12 +353,40 @@ class RenderQualityController {
    */
   beginLoadingCover(): void {
     this.loadingCover = true;
+    this.discardMeasurements();
+  }
+
+  /**
+   * Treats the {@link RECOVERY_SETTLE_MS} after a canvas recovery like a
+   * loading cover. The recovery has already lowered what the game asks of the
+   * device when it had to; its repaint must not be judged as lag on top.
+   */
+  private noteCanvasRecovery(): void {
+    this.recoverySettlePending = true;
+    this.recoverySettleEndsAt = null;
+    this.discardMeasurements();
+  }
+
+  /** Drops a part-collected safety-net window and starts a running probe over. */
+  private discardMeasurements(): void {
     this.resetSafetyNetWindow();
     if (this.probeState === 'warmup' || this.probeState === 'sampling') {
       this.probeState = 'warmup';
       this.warmupFramesLeft = PROBE_WARMUP_FRAMES;
-      this.probeIntervals = [];
+      this.probeWindow.clear();
     }
+  }
+
+  /** Whether `now` falls in the settle period after a canvas recovery. */
+  private settlingAfterRecovery(now: number): boolean {
+    if (this.recoverySettlePending) {
+      this.recoverySettlePending = false;
+      this.recoverySettleEndsAt = now + RECOVERY_SETTLE_MS;
+    }
+    if (this.recoverySettleEndsAt === null) return false;
+    if (now < this.recoverySettleEndsAt) return true;
+    this.recoverySettleEndsAt = null;
+    return false;
   }
 
   /** Whether a loading screen's cover is in force — see {@link beginLoadingCover}. */
@@ -234,7 +407,7 @@ class RenderQualityController {
    * budget, which only the preset and `auto`'s measurement answer.
    */
   get fullDetail(): boolean {
-    switch (settings.quality) {
+    switch (this.env.preset()) {
       case 'performance':
         return false;
       case 'sharp':
@@ -249,19 +422,23 @@ class RenderQualityController {
     this.loadingCover = false;
   }
 
-  /** Called once per rendered frame with the rAF timestamp. */
-  recordFrame(now: number): void {
+  /**
+   * Called once per rendered frame with the rAF timestamp and the cost of the
+   * frame the interval up to it was spent on.
+   */
+  recordFrame(now: number, cost: FrameCost): void {
     const previous = this.lastFrameTime;
     this.lastFrameTime = now;
     if (previous === null) return;
     if (this.loadingCover) return;
+    if (this.settlingAfterRecovery(now)) return;
     const interval = now - previous;
 
-    this.advanceProbe(now, interval);
-    this.advanceSafetyNet(now, interval);
+    this.advanceProbe(now, interval, cost);
+    this.advanceSafetyNet(now, interval, cost);
   }
 
-  private advanceProbe(now: number, interval: number): void {
+  private advanceProbe(now: number, interval: number, cost: FrameCost): void {
     switch (this.probeState) {
       case 'warmup':
         this.warmupFramesLeft--;
@@ -274,14 +451,15 @@ class RenderQualityController {
         // A hidden document gets throttled rAF, which would read as a machine
         // that cannot keep up. Abandon rather than act on it; the next level
         // entry gets another chance.
-        if (document.hidden) {
+        if (this.env.documentHidden()) {
           this.probeState = 'idle';
           return;
         }
-        this.probeIntervals.push(interval);
+        this.probeWindow.add(interval, cost);
         if (now - this.samplingStartedAt < PROBE_SAMPLE_MS) return;
         this.probeState = 'done';
-        this.judgeProbe();
+        this.judgeWindow(this.probeWindow);
+        this.probeWindow.clear();
         return;
       case 'idle':
       case 'done':
@@ -289,42 +467,35 @@ class RenderQualityController {
     }
   }
 
-  private judgeProbe(): void {
-    const intervals = this.probeIntervals;
-    this.probeIntervals = [];
-    if (breachesBudget(intervals)) this.downgradeOnce();
+  private judgeWindow(window: LagWindow): void {
+    if (window.breached) this.takeLagRung(window.paintBound);
   }
 
   /**
-   * The one late downgrade. Watches whole windows rather than single frames so
-   * only sustained slowness — thermal throttling, not a boss spawn — trips it.
+   * Watches whole windows of play once the probe is done, opening a fresh one
+   * after each judgement, so every breach — including one that persists after
+   * a rung was taken — takes the next rung.
    */
-  private advanceSafetyNet(now: number, interval: number): void {
-    if (this.safetyNetSpent) return;
+  private advanceSafetyNet(now: number, interval: number, cost: FrameCost): void {
     if (this.probeState !== 'done') return;
-    // Nothing left to give up at the bottom of the ladder — but do not spend the
-    // net here, because a move to a 1× display also lands in this branch and the
-    // player may well move back to the sharper screen.
-    if (!this.hasRungLeft()) {
+    // Nothing left to give up — but keep watching, because a move to a 1×
+    // display also lands here and the player may well move back to the sharper
+    // screen, which brings the scale rung back.
+    if (!this.hasLagRungLeft()) {
       this.resetSafetyNetWindow();
       return;
     }
-    if (document.hidden) {
+    if (this.env.documentHidden()) {
       this.resetSafetyNetWindow();
       return;
     }
-    if (this.safetyNetWindowStartedAt === null) {
-      this.safetyNetWindowStartedAt = now;
-      this.safetyNetIntervals = [];
-    }
-    this.safetyNetIntervals.push(interval);
+    this.safetyNetWindowStartedAt ??= now;
+    this.safetyNetWindow.add(interval, cost);
     if (now - this.safetyNetWindowStartedAt < SAFETY_NET_WINDOW_MS) return;
 
-    const intervals = this.safetyNetIntervals;
+    const { breached, paintBound } = this.safetyNetWindow;
     this.resetSafetyNetWindow();
-    if (!breachesBudget(intervals)) return;
-    this.safetyNetSpent = true;
-    this.downgradeOnce();
+    if (breached) this.takeLagRung(paintBound);
   }
 
   /**
@@ -335,25 +506,63 @@ class RenderQualityController {
    */
   private resetSafetyNetWindow(): void {
     this.safetyNetWindowStartedAt = null;
-    this.safetyNetIntervals = [];
+    this.safetyNetWindow.clear();
   }
 
   private currentScale(): number {
-    return this.sceneManager?.renderScale ?? PERFORMANCE_RENDER_SCALE;
+    return this.target?.renderScale ?? PERFORMANCE_RENDER_SCALE;
   }
 
-  /** Whether the ladder has a rung below where it stands. */
-  private hasRungLeft(): boolean {
-    return this.currentScale() > PERFORMANCE_RENDER_SCALE || !this.detailDowngraded;
+  private rungLeft(rung: LagRung): boolean {
+    switch (rung) {
+      case 'render':
+        return (
+          this.env.preset() === 'auto' &&
+          (this.currentScale() > PERFORMANCE_RENDER_SCALE || !this.detailDowngraded)
+        );
+      case 'variety':
+        return (
+          this.env.preset() !== 'sharp' &&
+          !this.varietyPinned &&
+          varietyTier() < MINIMAL_VARIETY_TIER
+        );
+    }
+  }
+
+  private hasLagRungLeft(): boolean {
+    return this.rungLeft('render') || this.rungLeft('variety');
   }
 
   /**
-   * Steps down one rung of the ladder: the render scale first, while there is
-   * any to give, then optional scenery detail. Scale goes first because it is
-   * the change a player notices least on a fast phone's dense screen; detail is
+   * Takes one rung for a breached window: variety first when the window was
+   * paint-bound, render first otherwise, and the other kind when the preferred
+   * one is used up.
+   */
+  private takeLagRung(paintBound: boolean): void {
+    const preferred: LagRung = paintBound ? 'variety' : 'render';
+    const fallback: LagRung = paintBound ? 'render' : 'variety';
+    if (this.rungLeft(preferred)) this.takeRung(preferred);
+    else if (this.rungLeft(fallback)) this.takeRung(fallback);
+  }
+
+  private takeRung(rung: LagRung): void {
+    switch (rung) {
+      case 'render':
+        this.downgradeRenderOnce();
+        return;
+      case 'variety':
+        stepVarietyTierDown();
+        return;
+    }
+  }
+
+  /**
+   * Steps down one render rung: the render scale first, while there is any to
+   * give, then optional scenery detail. Scale goes first because it is the
+   * change a player notices least on a fast phone's dense screen; detail is
    * what is left on a 1× display, where the frame's cost is painting alone.
    */
-  private downgradeOnce(): void {
+  private downgradeRenderOnce(): void {
     if (this.currentScale() > PERFORMANCE_RENDER_SCALE) {
       this.downgraded = true;
       this.applyScale(PERFORMANCE_RENDER_SCALE);
@@ -363,13 +572,13 @@ class RenderQualityController {
   }
 
   private applyScale(scale: number): void {
-    const manager = this.sceneManager;
-    if (manager === null) return;
-    if (manager.renderScale === scale) return;
-    manager.setRenderScale(scale);
+    const target = this.target;
+    if (target === null) return;
+    if (target.renderScale === scale) return;
+    target.setRenderScale(scale);
     // Baked cells are density-specific; keeping them would leave every cached
     // figure resampled for the rest of the session.
-    flushFigureFrameCache();
+    this.env.onRenderScaleChanged();
   }
 }
 
@@ -400,4 +609,14 @@ function breachesBudget(intervals: number[]): boolean {
   return percentile(sorted, BREACH_PERCENTILE) > STUTTER_INTERVAL_MS;
 }
 
-export const renderQuality = new RenderQualityController();
+const browserEnvironment: RenderQualityEnvironment = {
+  preset: () => settings.quality,
+  storePreset: (preset) => settings.setQuality(preset),
+  documentHidden: () => document.hidden,
+  deviceMemoryScale: deviceMemoryBudgetScale,
+  sharpRenderScale,
+  onRenderScaleChanged: flushFigureFrameCache,
+  subscribeCanvasRecovery: (handler) => onCanvasRecovery(handler),
+};
+
+export const renderQuality = new RenderQualityController(browserEnvironment);

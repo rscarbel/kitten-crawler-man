@@ -29,7 +29,7 @@ import { Mongo } from '../../src/creatures/Mongo';
 import { Mob } from '../../src/creatures/Mob';
 import type { Player } from '../../src/Player';
 import { WaterMageKit } from '../../src/creatures/mercenaries/waterMageKit';
-import { createMob } from '../../src/levels/spawner';
+import { liveSpawnContext, spawnMob } from '../../src/levels/spawnFunnel';
 import { SpellSystem } from '../../src/systems/SpellSystem';
 import { MobRoster } from '../../src/systems/kits/SceneWorld';
 import { HirelingBoltSystem, type HirelingShot } from '../../src/systems/HirelingBoltSystem';
@@ -217,7 +217,7 @@ function build(options: HarnessOptions = {}): Harness {
 function addGoblin(h: Harness, offsetX: number, offsetY: number): Mob {
   const tileX = Math.floor(h.merc.x / TILE_SIZE) + offsetX;
   const tileY = Math.floor(h.merc.y / TILE_SIZE) + offsetY;
-  const goblin = createMob('goblin', tileX, tileY, h.map);
+  const goblin = spawnMob('goblin', { x: tileX, y: tileY }, h.map, liveSpawnContext('dev:spawn'));
   goblin.applyMobLevel(STURDY_GOBLIN_LEVEL);
   h.roster.add(goblin);
   return goblin;
@@ -672,7 +672,12 @@ function boulderOutlivesThrower(die: Dying): boolean {
   golem.cat = cat;
   golem.allMobs = roster.mobs;
   golem.allies = [human, cat];
-  const goblin = createMob('goblin', MERC_TILE_X + THROW_TARGET_OFFSET_TILES, MERC_TILE_Y, map);
+  const goblin = spawnMob(
+    'goblin',
+    { x: MERC_TILE_X + THROW_TARGET_OFFSET_TILES, y: MERC_TILE_Y },
+    map,
+    liveSpawnContext('dev:spawn'),
+  );
   goblin.applyMobLevel(STURDY_GOBLIN_LEVEL);
   roster.add(goblin);
   const rocks = new RockThrowSystem(map);

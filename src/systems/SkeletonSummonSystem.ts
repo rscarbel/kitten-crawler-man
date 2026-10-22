@@ -21,7 +21,6 @@ import type { BriarHollowSite } from '../map/overworld/briarHollowSite';
 import type { Mob } from '../creatures/Mob';
 import { SkeletonLord } from '../creatures/SkeletonLord';
 import { TheLich } from '../creatures/TheLich';
-import { SkeletonWarrior } from '../creatures/SkeletonWarrior';
 import { SkeletonArcher } from '../creatures/SkeletonArcher';
 import { NecroFairy } from '../creatures/fairies/NecroFairy';
 import {
@@ -34,8 +33,6 @@ import { necroSkeletonLevel } from '../creatures/fairies/fairyPotency';
 import type { LevelledCurve } from '../creatures/mobLevelScaling';
 import { prewarmSkeletonEscortSprites } from '../sprites/skeletonSprite';
 import { RisingSkeleton } from '../creatures/RisingSkeleton';
-import { RaisedRatkin } from '../creatures/RaisedRatkin';
-import { GraveBull } from '../creatures/GraveBull';
 import {
   NECRO_ESCORT_CAP,
   Necromancer,
@@ -44,6 +41,9 @@ import {
 import { enlistInSiege, isInsidePalisadeTile } from '../creatures/siege/siegeCapability';
 import { INNER_RAISE_DIRECTIVE } from '../creatures/siege/innerRaiseDirective';
 import { TILE_SIZE } from '../core/constants';
+import { NECROMANCER_RAISES, type EncounterId } from '../levels/encounters';
+import type { SpawnTile } from '../levels/mobKinds';
+import { liveSpawnContext, spawnMob } from '../levels/spawnFunnel';
 import { hasRoomToMove } from '../map/findWalkableTile';
 import { applySpawnDifficulty } from '../core/difficultyProfiles';
 import type { GameSystem, SystemContext } from './GameSystem';
@@ -98,6 +98,7 @@ export interface SkeletonRaiseRequest {
 
 /** How one skeleton is staged as it rises, whoever asked for it. */
 interface RaiseStaging {
+  readonly encounter: EncounterId;
   readonly level: number;
   readonly curve: LevelledCurve;
   readonly strength: number;
@@ -122,6 +123,7 @@ const ESCORT_STRENGTH = 1;
 function stagingFor(summoner: SkeletonSummoner): RaiseStaging {
   const isFairy = summoner instanceof NecroFairy;
   return {
+    encounter: summonEncounterOf(summoner),
     level: isFairy ? necroSkeletonLevel(summoner.mobLevel) : summoner.mobLevel,
     curve: summoner.levelledCurve,
     strength: isFairy ? NECRO_SKELETON_STRENGTH : ESCORT_STRENGTH,
@@ -130,6 +132,15 @@ function stagingFor(summoner: SkeletonSummoner): RaiseStaging {
     paysNoRewards: isFairy,
   };
 }
+
+function summonEncounterOf(summoner: SkeletonSummoner): EncounterId {
+  if (summoner instanceof NecroFairy) return NECRO_FAIRY_SUMMONS;
+  if (summoner instanceof TheLich) return 'summon:the_lich';
+  return 'summon:skeleton_lord';
+}
+
+/** A necro fairy raises in life and leaves an army behind when it dies; both are its summons. */
+const NECRO_FAIRY_SUMMONS = 'summon:fairy_necro' as const satisfies EncounterId;
 
 /** Rings of tiles searched outward from the lord for somewhere to put a summon. */
 const MIN_SPAWN_RADIUS_TILES = 2;
@@ -326,8 +337,7 @@ export class SkeletonSummonSystem implements GameSystem {
     tileY: number,
     request: NecromancerRaiseRequest,
   ): void {
-    const risen = raisedBody(request, tileX, tileY);
-    risen.setMap(this.gameMap);
+    const risen = raisedBody(request, { x: tileX, y: tileY }, this.gameMap);
     // Before the roll: a body raised mid-fight is a summon and learns nothing.
     // A Grave Bull has no underground rise animation, so it simply appears
     // once the sigil's telegraph completes.
@@ -361,6 +371,7 @@ export class SkeletonSummonSystem implements GameSystem {
     prewarmSkeletonEscortSprites();
     for (const request of requests) {
       const staging: RaiseStaging = {
+        encounter: NECRO_FAIRY_SUMMONS,
         level: request.level,
         curve: request.curve,
         strength: request.strength,
@@ -385,11 +396,12 @@ export class SkeletonSummonSystem implements GameSystem {
     tileY: number,
     staging: RaiseStaging,
   ): RisingSkeleton {
+    const tile = { x: tileX, y: tileY };
+    const context = liveSpawnContext(staging.encounter);
     const risen =
       kind === 'sword'
-        ? new SkeletonWarrior(tileX, tileY, TILE_SIZE)
-        : new SkeletonArcher(tileX, tileY, TILE_SIZE);
-    risen.setMap(this.gameMap);
+        ? spawnMob('skeleton_sword', tile, this.gameMap, context)
+        : spawnMob('skeleton_archer', tile, this.gameMap, context);
     // Before the roll below: a skeleton learns what it may know from whether
     // it was summoned, and only this call marks it so.
     risen.beginRising();
@@ -493,16 +505,17 @@ function kindOf(skeleton: RisingSkeleton): SkeletonKind {
   return skeleton instanceof SkeletonArcher ? 'archer' : 'sword';
 }
 
-/** The body a necromancer's raise request climbs out as. */
-function raisedBody(request: NecromancerRaiseRequest, tileX: number, tileY: number): Mob {
+/** The body a necromancer's raise request climbs out as, on `map`. */
+function raisedBody(request: NecromancerRaiseRequest, tile: SpawnTile, map: GameMap): Mob {
+  const context = liveSpawnContext(NECROMANCER_RAISES);
   switch (request.kind) {
     case 'ratkin':
-      return new RaisedRatkin(tileX, tileY, TILE_SIZE, request.look);
+      return spawnMob('raised_ratkin', tile, map, { ...context, variant: request.look });
     case 'skeleton_warrior':
-      return new SkeletonWarrior(tileX, tileY, TILE_SIZE);
+      return spawnMob('skeleton_sword', tile, map, context);
     case 'skeleton_archer':
-      return new SkeletonArcher(tileX, tileY, TILE_SIZE);
+      return spawnMob('skeleton_archer', tile, map, context);
     case 'grave_bull':
-      return new GraveBull(tileX, tileY, TILE_SIZE);
+      return spawnMob('grave_bull', tile, map, context);
   }
 }

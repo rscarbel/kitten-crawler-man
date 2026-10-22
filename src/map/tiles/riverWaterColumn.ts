@@ -16,12 +16,18 @@
  * tile in its chunk's bake.
  *
  * Nothing changes which tiles are water once a map is generated, so the image
- * is built once per map and never invalidated.
+ * is built once per map and rebuilt only after a canvas recovery, which may
+ * have blanked it; the stale one is given back first.
  */
 
-import { allocCanvas, surfaceContext, type CanvasSurface } from '../../core/canvasSurface';
+import {
+  allocCanvas,
+  releaseSurface,
+  surfaceContext,
+  type CanvasSurface,
+} from '../../core/canvasSurface';
 import { isRiverChannel, MAX_WATER_DEPTH, VOID_TYPE, type TileContent } from '../tileTypes';
-import { onCanvasRecovery } from '../../core/canvasRecovery';
+import { canvasGeneration } from '../../core/canvasRecovery';
 
 /** Samples a smoothed upscale reads either side of a position: a cubic filter reaches two. */
 const FILTER_REACH_SAMPLES = 2;
@@ -80,14 +86,17 @@ const UNRECORDED_DEPTH = 1;
 const SHADING_BANK_SAMPLE: ColumnTint = { r: 8, g: 20, b: 22, opacity: 0.72 };
 
 interface BuiltColumn {
-  readonly samples: CanvasSurface;
+  /** Null on a map with no river. */
+  readonly samples: CanvasSurface | null;
+  /** The canvas generation the samples were uploaded in; a recovery may have blanked them since. */
+  readonly generation: number;
 }
 
-let built = new WeakMap<TileContent[][], BuiltColumn | null>();
-// Baked once and kept; a purge would leave it blank for good.
-onCanvasRecovery(() => {
-  built = new WeakMap<TileContent[][], BuiltColumn | null>();
-});
+/**
+ * Keyed by map, so a dead floor's samples go with it. A recovery is noticed at
+ * the next lookup, which gives the old samples back before uploading new ones.
+ */
+const built = new WeakMap<TileContent[][], BuiltColumn>();
 
 function channelDepth(cell: TileContent): number {
   return Math.min(MAX_WATER_DEPTH, Math.max(0, cell.waterDepth ?? UNRECORDED_DEPTH));
@@ -170,13 +179,15 @@ function buildSamples(structure: TileContent[][]): CanvasSurface | null {
   return samples;
 }
 
-function columnFor(structure: TileContent[][]): BuiltColumn | null {
+function samplesFor(structure: TileContent[][]): CanvasSurface | null {
+  const generation = canvasGeneration();
   const existing = built.get(structure);
-  if (existing !== undefined) return existing;
+  if (existing?.generation === generation) return existing.samples;
+  const staleSamples = existing?.samples ?? null;
+  if (staleSamples !== null) releaseSurface(staleSamples);
   const samples = buildSamples(structure);
-  const column = samples === null ? null : { samples };
-  built.set(structure, column);
-  return column;
+  built.set(structure, { samples, generation });
+  return samples;
 }
 
 /**
@@ -185,7 +196,7 @@ function columnFor(structure: TileContent[][]): BuiltColumn | null {
  * no river, or once built.
  */
 export function warmRiverWaterColumn(structure: TileContent[][]): void {
-  columnFor(structure);
+  samplesFor(structure);
 }
 
 /**
@@ -207,9 +218,8 @@ export function drawRiverWaterColumn(
   clipWidth: number,
   clipHeight: number,
 ): void {
-  const column = columnFor(structure);
-  if (column === null) return;
-  const { samples } = column;
+  const samples = samplesFor(structure);
+  if (samples === null) return;
   // Sample `tile + margin` is the tile's own, and a scaled blit lands its texel
   // exactly on the tile's square.
   const firstSampleX = tx + MARGIN_SAMPLES - FILTER_REACH_SAMPLES;

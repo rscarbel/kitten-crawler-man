@@ -27,7 +27,6 @@ import {
   forgiveFigurePrewarmGiveUp,
   isFigureStateQueued,
   isFigureStateWarm,
-  pinFigureState,
   prewarmFigureState,
   setFigureStatePinStandby,
 } from '../sprites/figure/figureFrameCache';
@@ -77,6 +76,8 @@ export interface ResidencyCitizen {
   readonly x: number;
   readonly y: number;
   readonly figure: CitizenFigure;
+  /** Pins the look worn now and any look worn later; see `Townsperson.pinLook`. */
+  pinLook(): void;
 }
 
 export interface TownResidencyDeps {
@@ -164,9 +165,7 @@ export class TownResidency {
   constructor(private readonly deps: TownResidencyDeps) {
     // The town pins its strolling crowd as it builds it; everyone else this
     // decides for, such as the market's vendors, is pinned here alike.
-    for (const person of deps.people()) {
-      for (const row of citizenFigureRows(person.figure)) pinFigureState(row.def, row.state);
-    }
+    for (const person of deps.people()) person.pinLook();
   }
 
   /** Decides, every few updates, which looks to hold and which to stand down. */

@@ -10,7 +10,7 @@
  */
 
 import type { SoundId } from '../audio/sounds';
-import type { ResolvedSpeaker, RevealMode } from '../ui/DialogBox';
+import type { PortraitSource, ResolvedSpeaker, RevealMode } from '../ui/DialogBox';
 import { ratkinPortrait } from '../sprites/ratkinPortrait';
 import type { RatkinCastId } from '../sprites/art/ratkin/cast';
 
@@ -85,8 +85,8 @@ const HUMAN_FEMININE_VOICE_SOUNDS: ReadonlyArray<SoundId> = [
 /** A source a portrait can be painted from. Ratkin faces are the only source today; add a case here, never a raw string key, when another is needed. */
 export type PortraitKey = { readonly source: 'ratkin'; readonly id: RatkinCastId };
 
-/** Paints (or fetches the cached paint of) the face behind a `PortraitKey`. Ratkin faces are the only source today; branch on `key.source` here when a second one exists. */
-export function resolvePortrait(key: PortraitKey): CanvasImageSource {
+/** The face behind a `PortraitKey`, painted when first drawn. Ratkin faces are the only source today; branch on `key.source` here when a second one exists. */
+export function resolvePortrait(key: PortraitKey): PortraitSource {
   return ratkinPortrait(key.id);
 }
 
@@ -635,8 +635,9 @@ export type SpeakerRef =
 
 /**
  * Resolves a `SpeakerRef` into what `DialogBox` needs to draw it: a cast
- * member's own entry in {@link SPEAKERS} with its portrait painted, or a
- * transient speaker's runtime name wearing one of {@link TRANSIENT_STYLES}.
+ * member's own entry in {@link SPEAKERS} with a {@link PortraitSource} that
+ * paints its portrait when the box draws, or a transient speaker's runtime
+ * name wearing one of {@link TRANSIENT_STYLES}.
  */
 export function resolveSpeaker(ref: SpeakerRef): ResolvedSpeaker {
   if (ref.kind === 'transient') {

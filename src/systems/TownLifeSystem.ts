@@ -41,7 +41,6 @@ import { SpatialGrid } from '../core/SpatialGrid';
 import { viewportWidth, viewportHeight } from '../core/Viewport';
 import { allResidents, residentSpecies } from './townResidents';
 import type { TownSpecies } from './townSpecies';
-import { pinCitizenFigure } from '../creatures/citizenFigure';
 import { boostPrewarmBudget, unpinAllFigureStates } from '../sprites/figure/figureFrameCache';
 import { mulberry32, rangeInt, subSeed, type Rng } from '../sprites/person/rng';
 
@@ -394,7 +393,7 @@ export class TownLifeSystem implements GameSystem {
     // Pinned immediately, not once baked: a pin on a row that hasn't landed
     // yet does nothing until something bakes it, so there is no ordering
     // requirement here — see `pinFigureState`.
-    for (const person of this.townsfolk) pinCitizenFigure(person.figure);
+    for (const person of this.townsfolk) person.pinLook();
   }
 
   /**

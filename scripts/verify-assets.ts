@@ -14,14 +14,11 @@
  *    touches the level def at all (`BountySystem`, `CircusQuestSystem`,
  *    `SpiderQuestSystem`, `MongoSystem`, ...).
  *
- * "Ground truth for what can be spawned" is `getRegisteredMobTypes()`
- * (`src/levels/spawner.ts`'s `MOB_REGISTRY`), not `MobSpawnRule['type']` — that
- * union is one entry narrower than the registry (`bugaboo` is registered but
- * missing from it), so deriving spawnability from the type alone would miss
- * a mob that's spawnable but absent from the union. This script uses the
- * registry to sanity-check `MOB_SPRITE_KEYS` itself, then the level defs'
- * actual field values (which are typed to the union, but a def only ever
- * contains what its author wrote) to compute what each floor produces.
+ * Every creature's sprite needs come from `MOB_SPRITE_KEYS` and
+ * `FRIENDLY_CREATURE_SPRITE_KEYS`, which are total over their kinds, so `tsc`
+ * already guarantees each kind has an entry. This script reads the level defs'
+ * actual field values (a def only ever contains what its author wrote) to
+ * compute what each floor produces.
  *
  * A second, independent check runs first: every key in the composed sprite
  * manifest must belong to some `ASSET_GROUPS` entry. A key no group names is
@@ -32,9 +29,15 @@
  */
 import { tutorialLevel, level1, level2, level3 } from '../src/levels/index';
 import type { LevelDef } from '../src/levels/types';
-import { getRegisteredMobTypes } from '../src/levels/spawner';
-import { ASSET_GROUPS, MOB_SPRITE_KEYS, type AssetGroup } from '../src/core/assetGroups';
-import { getManifestKeys } from '../src/core/SpriteLoader';
+import { allMobKinds } from '../src/levels/mobKinds';
+import {
+  ASSET_GROUPS,
+  FRIENDLY_CREATURE_SPRITE_KEYS,
+  MOB_SPRITE_KEYS,
+  type AssetGroup,
+  type CreatureKind,
+} from '../src/core/assetGroups';
+import { getManifestKeys, type SpriteKey } from '../src/core/SpriteLoader';
 import {
   SYSTEM_ASSET_REQUIREMENTS,
   requiredSpriteKeysForLevel,
@@ -49,10 +52,15 @@ function fail(message: string): void {
   console.error(`[verify-assets] FAIL: ${message}`);
 }
 
+const CREATURE_SPRITE_KEYS: Readonly<Record<CreatureKind, readonly SpriteKey[]>> = {
+  ...MOB_SPRITE_KEYS,
+  ...FRIENDLY_CREATURE_SPRITE_KEYS,
+};
+
 /** Every mob type a `LevelDef`'s own fields can spawn (not system-introduced). */
-function mobTypesFromLevelDef(def: LevelDef): Set<string> {
-  const types = new Set<string>();
-  const addRule = (rule: { type: string }): void => {
+function mobTypesFromLevelDef(def: LevelDef): Set<CreatureKind> {
+  const types = new Set<CreatureKind>();
+  const addRule = (rule: { type: CreatureKind }): void => {
     types.add(rule.type);
   };
   def.roomMobs.forEach(addRule);
@@ -94,19 +102,6 @@ for (const key of getManifestKeys()) {
   }
 }
 
-// Sanity-check the ground truth itself: every mob the spawner can actually
-// construct must have an entry in MOB_SPRITE_KEYS, even if that entry is an
-// empty array (procedural, no sheet). A missing entry means some floor's
-// coverage could pass this whole script while a real gap goes unrepresented.
-for (const type of getRegisteredMobTypes()) {
-  if (!(type in MOB_SPRITE_KEYS)) {
-    fail(
-      `MOB_REGISTRY has "${type}" but MOB_SPRITE_KEYS (src/core/assetGroups.ts) has no ` +
-        `entry for it — add one (an empty array if it is procedural/no-sheet).`,
-    );
-  }
-}
-
 for (const def of LEVELS) {
   const mobTypes = mobTypesFromLevelDef(def);
 
@@ -128,15 +123,7 @@ for (const def of LEVELS) {
   const declaredKeys = requiredSpriteKeysForLevel(def.id, def.spriteGroups);
 
   for (const type of mobTypes) {
-    const requiredKeys = MOB_SPRITE_KEYS[type];
-    if (requiredKeys === undefined) {
-      fail(
-        `Floor "${def.id}" can produce mob type "${type}", which has no entry in ` +
-          `MOB_SPRITE_KEYS — add one so its sprite requirement (or lack of one) is known.`,
-      );
-      continue;
-    }
-    for (const key of requiredKeys) {
+    for (const key of CREATURE_SPRITE_KEYS[type]) {
       if (!declaredKeys.has(key)) {
         fail(
           `Floor "${def.id}" can produce mob type "${type}", which needs sprite key ` +
@@ -155,9 +142,7 @@ for (const def of LEVELS) {
 for (const req of SYSTEM_ASSET_REQUIREMENTS) {
   const declaredKeys = keysForGroups(req.requiredGroups);
   for (const type of req.mobTypes) {
-    const requiredKeys = MOB_SPRITE_KEYS[type];
-    if (requiredKeys === undefined) continue; // already reported above
-    for (const key of requiredKeys) {
+    for (const key of CREATURE_SPRITE_KEYS[type]) {
       if (!declaredKeys.has(key)) {
         fail(
           `SYSTEM_ASSET_REQUIREMENTS entry "${req.id}" can produce mob type "${type}", ` +
@@ -174,5 +159,5 @@ if (failures > 0) {
   process.exit(1);
 }
 console.log(
-  `[verify-assets] OK — ${LEVELS.length} floors, ${SYSTEM_ASSET_REQUIREMENTS.length} system/quest/bounty entries, ${getRegisteredMobTypes().length} registered mob types, ${getManifestKeys().length} manifest keys, all covered.`,
+  `[verify-assets] OK — ${LEVELS.length} floors, ${SYSTEM_ASSET_REQUIREMENTS.length} system/quest/bounty entries, ${allMobKinds().length} registered mob types, ${getManifestKeys().length} manifest keys, all covered.`,
 );

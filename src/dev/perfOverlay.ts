@@ -11,6 +11,8 @@
 import { PERF_TIMERS, perfMonitor } from '../core/PerfMonitor';
 import { viewportWidth } from '../core/Viewport';
 import { BYTES_PER_MEGABYTE } from '../core/canvasSurface';
+import { lastFrameCost } from '../core/frameCost';
+import { varietyTier } from '../core/varietyTier';
 import { getFigureCacheStats } from '../sprites/figure/figureCacheStats';
 import {
   environmentArtBytes,
@@ -145,6 +147,21 @@ function memoryRows(neutral: string): PerfRow[] {
   ];
 }
 
+/**
+ * The last frame's update, render and bake milliseconds as the release build
+ * measures them — the split the quality controller picks its rung by.
+ */
+function frameCostRow(neutral: string): PerfRow {
+  const cost = lastFrameCost();
+  return {
+    label: 'upd/rnd/bake',
+    value: [cost.updateMs, cost.renderMs, cost.bakeMs]
+      .map((ms) => ms.toFixed(WORST_MS_DECIMALS))
+      .join('/'),
+    color: neutral,
+  };
+}
+
 function buildRows(): PerfRow[] {
   const fps = perfMonitor.fps;
   const neutral = WORLD_TEXT.label.color;
@@ -163,6 +180,8 @@ function buildRows(): PerfRow[] {
     },
     { label: 'ms avg/max', value: '', color: neutral },
     ...timerRows,
+    frameCostRow(neutral),
+    { label: 'variety tier', value: varietyTier().toString(), color: neutral },
     { label: 'mobs act/sep', value: `${activeMobs}/${separatedMobs}`, color: neutral },
     {
       label: 'sep checks',

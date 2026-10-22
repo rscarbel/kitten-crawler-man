@@ -34,10 +34,10 @@ import type { Player } from '../Player';
 import type { MurderQuestProgress } from '../core/MurderQuestProgress';
 import { DOOMSDAY_COUNTDOWN_MS, type DoomsdayProgress } from '../core/DoomsdayProgress';
 import { findNearbyWalkableTile } from '../map/findWalkableTile';
-import { MissQuill } from '../creatures/MissQuill';
-import { Remex } from '../creatures/Remex';
-import { CityElfCultist } from '../creatures/CityElfCultist';
-import { TheLich } from '../creatures/TheLich';
+import type { MissQuill } from '../creatures/MissQuill';
+import type { Remex } from '../creatures/Remex';
+import type { TheLich } from '../creatures/TheLich';
+import { liveSpawnContext, spawnMob } from '../levels/spawnFunnel';
 import { drawSkyFowlCorpse } from '../sprites/featherfallCorpseSprite';
 import { drawSoulBurst, prewarmLichFightEffects } from '../sprites/skeletonEffectsSprite';
 import { drawInteractionPrompt } from '../ui/InteractionPrompt';
@@ -62,6 +62,7 @@ import { spawnHardModeBossHealer } from '../levels/fairySpawner';
 import { level3 } from '../levels/level3';
 
 const SPAWN_SEARCH_RADIUS_TILES = 6;
+const QUILL_CONFRONTATION_SPAWNS = liveSpawnContext('quest:quill-confrontation');
 /**
  * Quill holds the south end of the office, away from the north-west stairs the
  * player climbs in by. The gap is deliberate: every offset here has to keep the
@@ -335,16 +336,16 @@ export class QuillConfrontationSystem implements GameSystem {
   private spawnEncounter(centreX: number, centreY: number): void {
     const remexTile = this.findSpawnTile(centreX + REMEX_OFFSET.dx, centreY + REMEX_OFFSET.dy);
     if (remexTile) {
-      const remex = new Remex(remexTile.x, remexTile.y, TILE_SIZE);
-      remex.setMap(this.map);
+      const remex = spawnMob('remex', remexTile, this.map, QUILL_CONFRONTATION_SPAWNS);
       this.addMob(remex);
       this.remex = remex;
     }
 
     const quillTile = this.findSpawnTile(centreX + QUILL_OFFSET.dx, centreY + QUILL_OFFSET.dy);
     if (quillTile) {
-      const quill = new MissQuill(quillTile.x, quillTile.y, TILE_SIZE, this.addMob);
-      quill.setMap(this.map);
+      const quill = spawnMob('miss_quill', quillTile, this.map, QUILL_CONFRONTATION_SPAWNS, {
+        addMob: this.addMob,
+      });
       quill.summonPartyLevel = this.partyLevel;
       if (this.remex) quill.setCapacitor(this.remex);
       this.addMob(quill);
@@ -355,8 +356,7 @@ export class QuillConfrontationSystem implements GameSystem {
     for (const { dx, dy } of GUARD_OFFSETS) {
       const tile = this.findSpawnTile(centreX + dx, centreY + dy);
       if (!tile) continue;
-      const guard = new CityElfCultist(tile.x, tile.y, TILE_SIZE);
-      guard.setMap(this.map);
+      const guard = spawnMob('city_elf_cultist', tile, this.map, QUILL_CONFRONTATION_SPAWNS);
       guard.applyMobLevel(questMobLevel(GUARD_LEVEL, this.partyLevel));
       applySpawnDifficulty(guard);
       guard.homePoint = { x: guard.x, y: guard.y };
@@ -637,8 +637,7 @@ export class QuillConfrontationSystem implements GameSystem {
     // cache before the first one is asked for, or the frame the banner clears
     // on pays for painting them.
     prewarmLichLocomotion();
-    const lich = new TheLich(this.lichTile.x, this.lichTile.y, TILE_SIZE);
-    lich.setMap(this.map);
+    const lich = spawnMob('the_lich', this.lichTile, this.map, QUILL_CONFRONTATION_SPAWNS);
     lich.applyMobLevel(questMobLevel(LICH_LEVEL, this.partyLevel));
     applySpawnDifficulty(lich);
     this.addMob(lich);

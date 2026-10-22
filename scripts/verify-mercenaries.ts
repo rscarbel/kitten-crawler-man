@@ -67,7 +67,7 @@ import type { SystemContext } from '../src/systems/GameSystem';
 import { resolveKills, type CombatContext } from '../src/systems/CombatSystem';
 import { EventBus } from '../src/core/EventBus';
 import { AbilityManager } from '../src/core/AbilityManager';
-import { createMob } from '../src/levels/spawner';
+import { liveSpawnContext, spawnMob } from '../src/levels/spawnFunnel';
 import { gameContext } from './nodeGameContext.js';
 import type { ShopSystem } from '../src/systems/ShopSystem';
 import { createClubMarketShop } from '../src/systems/DesperadoClubSystem';
@@ -458,11 +458,11 @@ function runThroughReviveWindow(harness: ShellHarness, merc: Mercenary, frame: D
 
 /** A hostile standing close enough that the press belongs to a fight. */
 function addNearbyHostile(harness: ShellHarness): void {
-  const goblin = createMob(
+  const goblin = spawnMob(
     'goblin',
-    ROOM_MIDDLE_TILE + NEARBY_HOSTILE_OFFSET_TILES,
-    ROOM_MIDDLE_TILE,
+    { x: ROOM_MIDDLE_TILE + NEARBY_HOSTILE_OFFSET_TILES, y: ROOM_MIDDLE_TILE },
     harness.map,
+    liveSpawnContext('dev:spawn'),
   );
   harness.mobs.add(goblin);
 }

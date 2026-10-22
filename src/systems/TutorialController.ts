@@ -1,6 +1,8 @@
 import { TILE_SIZE } from '../core/constants';
 import { getSmushStats } from '../abilities/smush';
-import { TutorialGoblin } from '../creatures/TutorialGoblin';
+import type { TutorialGoblin } from '../creatures/TutorialGoblin';
+import type { GameMap } from '../map/GameMap';
+import { liveSpawnContext, spawnMob } from '../levels/spawnFunnel';
 import type { HumanPlayer } from '../creatures/HumanPlayer';
 import type { CatPlayer } from '../creatures/CatPlayer';
 import {
@@ -17,6 +19,7 @@ import {
   TUTORIAL_TREASURE_ROOM_BOUNDS,
   TUTORIAL_HUMAN_HALL_BOUNDS,
   isInTutorialRect,
+  TutorialMap,
 } from '../map/TutorialMap';
 import type { QuestMarkerState } from '../sprites/questNPCSprite';
 import type { ObjectiveBeaconSource, TrackerTarget } from './questTracker';
@@ -722,7 +725,14 @@ export class TutorialController implements ObjectiveBeaconSource {
    */
   needsCameraPanStart = false;
 
-  constructor(mobs: TutorialMobs) {
+  /**
+   * @param map The tutorial floor the scene plays on; the goblins in `mobs`
+   *   were spawned onto it.
+   */
+  constructor(
+    readonly map: TutorialMap,
+    mobs: TutorialMobs,
+  ) {
     this._mobs = mobs;
     this.goblinA = mobs.goblinA;
     this.goblinB = mobs.goblinB;
@@ -731,9 +741,10 @@ export class TutorialController implements ObjectiveBeaconSource {
     this.syncObjectiveMobs();
   }
 
-  /** Convenience factory: creates mobs and controller in one call. */
+  /** A controller with its own tutorial floor and the four goblins spawned onto it. */
   static createForTutorial(): TutorialController {
-    return new TutorialController(TutorialController.createMobs(TILE_SIZE));
+    const map = new TutorialMap();
+    return new TutorialController(map, TutorialController.createMobs(map));
   }
 
   /** Wire in the scene's shared conversation, which Mordecai's tutorial lines open on. */
@@ -2043,35 +2054,28 @@ export class TutorialController implements ObjectiveBeaconSource {
 
   // ── Mob factory ───────────────────────────────────────────────────────────
 
-  /** Create all four tutorial goblins with appropriate AI flags. */
-  static createMobs(tileSize: number): TutorialMobs {
+  private static createMobs(map: GameMap): TutorialMobs {
+    const context = liveSpawnContext('quest:tutorial');
     return {
       // Three archetypes across the four, so the tutorial shows a player more
       // than one kind of goblin before they meet one that fights back.
-      goblinA: new TutorialGoblin(GOBLIN_A_POS.x, GOBLIN_A_POS.y, tileSize, 'mace', false, true),
-      goblinB: new TutorialGoblin(
-        GOBLIN_B_POS.x,
-        GOBLIN_B_POS.y,
-        tileSize,
-        'sword',
-        true,
-        false,
-        true,
-      ),
-      smushGuard1: new TutorialGoblin(
-        SMUSH_GUARD_1_POS.x,
-        SMUSH_GUARD_1_POS.y,
-        tileSize,
-        'axe',
-        true,
-      ),
-      smushGuard2: new TutorialGoblin(
-        SMUSH_GUARD_2_POS.x,
-        SMUSH_GUARD_2_POS.y,
-        tileSize,
-        'axe',
-        true,
-      ),
+      goblinA: spawnMob('tutorial_goblin', GOBLIN_A_POS, map, context, {
+        weapon: 'mace',
+        defenseOnly: true,
+      }),
+      goblinB: spawnMob('tutorial_goblin', GOBLIN_B_POS, map, context, {
+        weapon: 'sword',
+        stationary: true,
+        missileOnly: true,
+      }),
+      smushGuard1: spawnMob('tutorial_goblin', SMUSH_GUARD_1_POS, map, context, {
+        weapon: 'axe',
+        stationary: true,
+      }),
+      smushGuard2: spawnMob('tutorial_goblin', SMUSH_GUARD_2_POS, map, context, {
+        weapon: 'axe',
+        stationary: true,
+      }),
     };
   }
 }

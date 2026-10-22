@@ -183,7 +183,8 @@ export function buildSwineFight(seed: number): SwineFight {
   const arenaExterior = map.arenaExteriors[0];
   const profile = DIFFICULTY_PROFILES[SIM_DIFFICULTY];
   const roster = new MobRoster(map, new SpellSystem());
-  for (const mob of spawnExtraMobs(level2, map, SWINE_SIM_PARTY_LEVEL, profile)) roster.add(mob);
+  for (const mob of spawnExtraMobs(level2, map, SWINE_SIM_PARTY_LEVEL, profile, Math.random))
+    roster.add(mob);
   const ball = roster.mobs.find((mob): mob is BallOfSwine => mob instanceof BallOfSwine);
   if (ball === undefined) throw new Error(`seed ${seed} spawned no Ball of Swine`);
 

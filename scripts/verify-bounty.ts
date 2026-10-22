@@ -33,7 +33,8 @@ import {
 } from '../src/core/BountyProgress';
 import { BOUNTY_DEFS } from '../src/systems/bountyDefs';
 import { Conversation } from '../src/dialog/Conversation';
-import { createMob } from '../src/levels/spawner';
+import { liveSpawnContext, spawnMob } from '../src/levels/spawnFunnel';
+import type { StandaloneMobKind } from '../src/levels/mobKinds';
 import { BOUNTY_MAX_BLOW_HP_SHARE } from '../src/creatures/mobLevelScaling';
 import { bountyCommitStaggerFrames } from '../src/systems/bountyCommit';
 import {
@@ -87,7 +88,7 @@ const PLACEMENT_MAPS = 4;
  * A boss appendage that cannot be spawned on its own is not the first-class
  * mob that reuse requires.
  */
-const REUSABLE_MINION_IDS: readonly string[] = [
+const REUSABLE_MINION_IDS: readonly StandaloneMobKind[] = [
   'mantis',
   'skeleton_sword',
   'skeleton_archer',
@@ -349,7 +350,7 @@ console.log('\nChecking every def’s encounter under every difficulty profile�
     );
   }
 
-  const rewardCheckMob = createMob('goblin', 0, 0, map);
+  const rewardCheckMob = spawnMob('goblin', { x: 0, y: 0 }, map, liveSpawnContext('dev:spawn'));
   const baseXpValue = rewardCheckMob.xpValue;
   rewardCheckMob.applyDifficultyRewards(
     DIFFICULTY_PROFILES.hard.rewardXpScale,
@@ -400,7 +401,7 @@ console.log('\nSpawning every reusable bounty minion through the registry…');
   for (const id of REUSABLE_MINION_IDS) {
     let built = null;
     try {
-      built = createMob(id, start.x, start.y, map);
+      built = spawnMob(id, { x: start.x, y: start.y }, map, liveSpawnContext('dev:spawn'));
     } catch (error) {
       check(false, `registry id '${id}' spawns standalone (threw: ${String(error)})`);
       continue;

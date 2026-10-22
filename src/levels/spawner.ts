@@ -5,75 +5,15 @@ import {
   type TreasureRoomData,
 } from '../map/DungeonGenerator';
 import { campSiteKey } from '../map/overworld/camps';
-import { Goblin } from '../creatures/Goblin';
-import { prewarmGoblin, type GoblinWeapon } from '../sprites/goblinSprite';
-import { prewarmGoblinBomber } from '../sprites/goblinBomberSprite';
-import { Llama } from '../creatures/Llama';
-import { RockGolem } from '../creatures/RockGolem';
-import { RockGolemBoss } from '../creatures/RockGolemBoss';
-import { Mantid } from '../creatures/Mantid';
-import { SkeletonLord } from '../creatures/SkeletonLord';
-import { TheLich } from '../creatures/TheLich';
-import { SkeletonWarrior } from '../creatures/SkeletonWarrior';
-import { SkeletonArcher } from '../creatures/SkeletonArcher';
-import { MantisCrony } from '../creatures/MantisCrony';
-import { Rat } from '../creatures/Rat';
-import { TheHoarder } from '../creatures/TheHoarder';
-import { Cockroach } from '../creatures/Cockroach';
-import { Juicer } from '../creatures/Juicer';
-import { Troglodyte } from '../creatures/Troglodyte';
-import { Tuskling } from '../creatures/Tuskling';
-import { prewarmTuskling } from '../sprites/tusklingSprite';
-import { prewarmSkyfowlCastMember } from '../sprites/skyfowlCastSprite';
-import { COW_COATS, type CowCoatId, prewarmCow } from '../sprites/cowSprite';
-import { prewarmLlama } from '../sprites/llamaSprite';
-import { prewarmMoldLion } from '../sprites/moldLionSprite';
-import { prewarmBrindleGrub } from '../sprites/brindleGrubSprite';
-import { prewarmSmallSpider } from '../sprites/spiderSprite';
-import { prewarmBugaboo } from '../sprites/bugabooSprite';
-import { prewarmCockroach } from '../sprites/cockroachSprite';
-import { prewarmRat } from '../sprites/ratSprite';
-import { prewarmTroglodyte } from '../sprites/troglodyteSprite';
 import { BallOfSwine } from '../creatures/BallOfSwine';
-import { SkyFowl } from '../creatures/SkyFowl';
-import { Cow } from '../creatures/Cow';
-import { Necromancer } from '../creatures/Necromancer';
-import { RaisedRatkin } from '../creatures/RaisedRatkin';
-import { GraveBull } from '../creatures/GraveBull';
-import { prewarmNecromancerArrival } from '../sprites/necromancerSprite';
-import { prewarmGraveBull } from '../sprites/graveBullSprite';
-import { RatkinSoldier } from '../creatures/RatkinSoldier';
-import { KrakarenClone } from '../creatures/KrakarenClone';
-import { BrindleGrub } from '../creatures/BrindleGrub';
-import { Bugaboo } from '../creatures/Bugaboo';
-import { GrotesqueSpider } from '../creatures/GrotesqueSpider';
-import { SmallSpider } from '../creatures/SmallSpider';
-import { RuinsGhoul } from '../creatures/RuinsGhoul';
-import { Krasue } from '../creatures/Krasue';
-import { CircusLemur } from '../creatures/CircusLemur';
-import { StiltClown } from '../creatures/StiltClown';
-import { FatClown } from '../creatures/FatClown';
-import { EvilClown } from '../creatures/EvilClown';
-import { MoldLion } from '../creatures/MoldLion';
-import { TerrorTheClown } from '../creatures/TerrorTheClown';
-import { CityElfCultist } from '../creatures/CityElfCultist';
-import { GoblinArcher } from '../creatures/GoblinArcher';
-import { GoblinDynamiter } from '../creatures/GoblinDynamiter';
-import { GoblinBombardier } from '../creatures/GoblinBombardier';
-import { Fairy } from '../creatures/fairies/Fairy';
-import { ShieldFairy } from '../creatures/fairies/ShieldFairy';
-import { HealingFairy } from '../creatures/fairies/HealingFairy';
-import { IceFairy } from '../creatures/fairies/IceFairy';
-import { FireFairy } from '../creatures/fairies/FireFairy';
-import { NecroFairy } from '../creatures/fairies/NecroFairy';
-import { prewarmFairy } from '../sprites/fairySprite';
-import { clamp, randomInt } from '../utils';
+import { clamp, randomIntFrom } from '../utils';
+import { spawnMob, type SpawnContext } from './spawnFunnel';
+import { floorEncounter } from './encounters';
+import { type StandaloneMobKind } from './mobKinds';
 import { hasRoomToMove } from '../map/findWalkableTile';
 import { TILE_SIZE } from '../core/constants';
 import { applySpawnDifficulty, type DifficultyProfile } from '../core/difficultyProfiles';
 import type { EscortSpawnRule, MobLevelRange, MobSpawnRule, LevelDef } from './types';
-
-type GoblinVariant = { readonly weapon: GoblinWeapon; readonly weight: number };
 
 /** Maximum attempts to find a walkable spawn position. */
 const MAX_SPAWN_ATTEMPTS = 20;
@@ -131,14 +71,16 @@ export interface SpawnBounds {
 export function findWalkableSpawnTile(
   map: GameMap,
   bounds: SpawnBounds,
+  random: () => number,
 ): { x: number; y: number } | null {
   const roomy = probeSpawnTile(
     map,
     bounds,
     (x, y) => map.isMobSpawnTile(x, y) && hasRoomToMove(map, x, y),
+    random,
   );
   if (roomy !== null) return roomy;
-  return probeSpawnTile(map, bounds, (x, y) => map.isMobSpawnTile(x, y));
+  return probeSpawnTile(map, bounds, (x, y) => map.isMobSpawnTile(x, y), random);
 }
 
 /**
@@ -171,11 +113,12 @@ function probeSpawnTile(
   map: GameMap,
   bounds: SpawnBounds,
   isUsable: (x: number, y: number) => boolean,
+  random: () => number,
 ): { x: number; y: number } | null {
   const { minTX, minTY, maxTX, maxTY } = bounds;
   for (let attempt = 0; attempt < MAX_SPAWN_ATTEMPTS; attempt++) {
-    const cx = randomInt(minTX, maxTX);
-    const cy = randomInt(minTY, maxTY);
+    const cx = randomIntFrom(random, minTX, maxTX);
+    const cy = randomIntFrom(random, minTY, maxTY);
     if (isUsable(cx, cy)) return { x: cx, y: cy };
   }
   for (let cy = minTY; cy <= maxTY; cy++) {
@@ -186,34 +129,10 @@ function probeSpawnTile(
   return null;
 }
 
-/**
- * How often each archetype turns up.
- *
- * Weighted rather than uniform: a war-hammer brute is the biggest, slowest and
- * most telegraphed of the four, and one in every four goblins being one would
- * make it ordinary. The sword skirmisher is the common grunt.
- */
-const GOBLIN_VARIANTS: readonly GoblinVariant[] = [
-  { weapon: 'sword', weight: 4 },
-  { weapon: 'axe', weight: 3 },
-  { weapon: 'mace', weight: 2 },
-  { weapon: 'warhammer', weight: 1 },
-];
-
-function pickGoblinWeapon(): GoblinWeapon {
-  const total = GOBLIN_VARIANTS.reduce((sum, variant) => sum + variant.weight, 0);
-  let roll = Math.random() * total;
-  for (const variant of GOBLIN_VARIANTS) {
-    roll -= variant.weight;
-    if (roll <= 0) return variant.weapon;
-  }
-  return GOBLIN_VARIANTS[GOBLIN_VARIANTS.length - 1].weapon;
-}
-
 /** Pick a rule from a weighted list. Weights need not sum to 1. */
-export function pickRule(rules: MobSpawnRule[]): MobSpawnRule {
+export function pickRule(rules: MobSpawnRule[], random: () => number): MobSpawnRule {
   const total = rules.reduce((sum, r) => sum + r.chance, 0);
-  let roll = Math.random() * total;
+  let roll = random() * total;
   for (const rule of rules) {
     roll -= rule.chance;
     if (roll <= 0) return rule;
@@ -242,10 +161,11 @@ export function resolveSpawnLevel(
   band: MobLevelRange,
   partyLevel: number,
   profile: DifficultyProfile,
+  random: () => number,
 ): number {
   const min = band.minLevel ?? 1;
   const max = band.maxLevel ?? min;
-  return randomInt(earnedLevelFloor(band, partyLevel, profile), max);
+  return randomIntFrom(random, earnedLevelFloor(band, partyLevel, profile), max);
 }
 
 /**
@@ -317,8 +237,14 @@ export function resolveAmbientLevel(
   def: Pick<LevelDef, 'ambientTracking'>,
   partyLevel: number,
   profile: DifficultyProfile,
+  random: () => number,
 ): number {
-  return resolveSpawnLevel(partyTrackedBand(band, def, partyLevel, profile), partyLevel, profile);
+  return resolveSpawnLevel(
+    partyTrackedBand(band, def, partyLevel, profile),
+    partyLevel,
+    profile,
+    random,
+  );
 }
 
 /**
@@ -446,11 +372,15 @@ export function resolveBossLevel(
  * region is never fielded in a hallway: it could otherwise turn up ahead of
  * the boss it waits behind.
  */
-function rollEscorts(rule: MobSpawnRule, region: number | null): EscortSpawnRule[] {
+function rollEscorts(
+  rule: MobSpawnRule,
+  region: number | null,
+  random: () => number,
+): EscortSpawnRule[] {
   const rolled: EscortSpawnRule[] = [];
   for (const escort of rule.escorts ?? []) {
     if (escort.minRegion !== undefined && (region === null || region < escort.minRegion)) continue;
-    const count = randomInt(escort.minCount ?? 1, escort.maxCount ?? 1);
+    const count = randomIntFrom(random, escort.minCount ?? 1, escort.maxCount ?? 1);
     for (let i = 0; i < count; i++) rolled.push(escort);
   }
   // Truncated here rather than only reserved against, because the cap is stated
@@ -459,199 +389,6 @@ function rollEscorts(rule: MobSpawnRule, region: number | null): EscortSpawnRule
   // generous future roster would breach the ceiling with nothing to stop it.
   rolled.length = Math.min(rolled.length, MAX_ROOM_SPAWN_COUNT);
   return rolled;
-}
-
-type MobFactory = (tileX: number, tileY: number) => Mob;
-
-const MOB_REGISTRY = new Map<string, MobFactory>();
-
-/** Register a mob type so it can be spawned by name. */
-function registerMob(type: string, factory: MobFactory): void {
-  MOB_REGISTRY.set(type, factory);
-}
-
-/**
- * Every mob type actually spawnable via `createMob`, straight from the
- * registry rather than from `MobSpawnRule['type']`.
- *
- * That union is one entry narrower than this registry (`bugaboo` is
- * registered but was never added to the union), so anything deriving "what
- * can a floor spawn" from the typed union alone silently misses it —
- * `scripts/verify-assets.ts` uses this instead for exactly that reason.
- */
-export function getRegisteredMobTypes(): readonly string[] {
-  return Array.from(MOB_REGISTRY.keys());
-}
-
-registerMob('llama', (x, y) => new Llama(x, y, TILE_SIZE));
-registerMob('rock_golem', (x, y) => new RockGolem(x, y, TILE_SIZE));
-registerMob('rock_golem_boss', (x, y) => new RockGolemBoss(x, y, TILE_SIZE));
-registerMob('rat', (x, y) => new Rat(x, y, TILE_SIZE));
-registerMob('mantid', (x, y) => new Mantid(x, y, TILE_SIZE));
-registerMob('mantis', (x, y) => new MantisCrony(x, y, TILE_SIZE));
-registerMob('the_hoarder', (x, y) => new TheHoarder(x, y, TILE_SIZE));
-registerMob('cockroach', (x, y) => new Cockroach(x, y, TILE_SIZE));
-registerMob('juicer', (x, y) => new Juicer(x, y, TILE_SIZE));
-registerMob('troglodyte', (x, y) => new Troglodyte(x, y, TILE_SIZE));
-registerMob('tuskling', (x, y) => new Tuskling(x, y, TILE_SIZE));
-registerMob('sky_fowl', (x, y) => new SkyFowl(x, y, TILE_SIZE));
-// The herd itself is spawned by `LivestockSystem`, which picks every coat and
-// pairs every calf; these keys serve anything spawning one by name, which gets
-// a coat at random.
-registerMob('cow', (x, y) => new Cow(x, y, TILE_SIZE, randomCowCoat(), 'adult'));
-registerMob('calf', (x, y) => new Cow(x, y, TILE_SIZE, randomCowCoat(), 'calf'));
-// The village assault's undead: spawned only by the assault, never by a floor's tables.
-registerMob('necromancer', (x, y) => new Necromancer(x, y, TILE_SIZE));
-registerMob('raised_ratkin', (x, y) => new RaisedRatkin(x, y, TILE_SIZE));
-registerMob('grave_bull', (x, y) => new GraveBull(x, y, TILE_SIZE));
-// The militia are spawned by `SoldierSystem`, each as themselves; a soldier
-// spawned by name is Marta, the captain, standing where she was put.
-registerMob('ratkin_soldier', (x, y) => new RatkinSoldier(x, y, TILE_SIZE, 'marta'));
-registerMob('ball_of_swine', (x, y) => new BallOfSwine(x, y, TILE_SIZE));
-registerMob('krakaren_clone', (x, y) => new KrakarenClone(x, y, TILE_SIZE));
-registerMob('brindle_grub', (x, y) => new BrindleGrub(x, y, TILE_SIZE));
-registerMob('bugaboo', (x, y) => new Bugaboo(x, y, TILE_SIZE));
-registerMob('grotesque_spider', (x, y) => new GrotesqueSpider(x, y, TILE_SIZE));
-registerMob('small_spider', (x, y) => new SmallSpider(x, y, TILE_SIZE));
-registerMob('ruins_ghoul', (x, y) => new RuinsGhoul(x, y, TILE_SIZE));
-registerMob('krasue', (x, y) => new Krasue(x, y, TILE_SIZE));
-registerMob('circus_lemur', (x, y) => new CircusLemur(x, y, TILE_SIZE));
-registerMob('stilt_clown', (x, y) => new StiltClown(x, y, TILE_SIZE));
-registerMob('fat_clown', (x, y) => new FatClown(x, y, TILE_SIZE));
-registerMob('evil_clown', (x, y) => new EvilClown(x, y, TILE_SIZE));
-registerMob('mold_lion', (x, y) => new MoldLion(x, y, TILE_SIZE));
-registerMob('terror_the_clown', (x, y) => new TerrorTheClown(x, y, TILE_SIZE));
-registerMob('city_elf_cultist', (x, y) => new CityElfCultist(x, y, TILE_SIZE));
-registerMob('skeleton_sword', (x, y) => new SkeletonWarrior(x, y, TILE_SIZE));
-registerMob('skeleton_archer', (x, y) => new SkeletonArcher(x, y, TILE_SIZE));
-registerMob('skeleton_lord', (x, y) => new SkeletonLord(x, y, TILE_SIZE));
-registerMob('the_lich', (x, y) => new TheLich(x, y, TILE_SIZE));
-registerMob('goblin_archer', (x, y) => new GoblinArcher(x, y, TILE_SIZE));
-registerMob('goblin_dynamiter', (x, y) => new GoblinDynamiter(x, y, TILE_SIZE));
-registerMob('goblin_bombardier', (x, y) => new GoblinBombardier(x, y, TILE_SIZE));
-registerMob('fairy_shield', (x, y) => new ShieldFairy(x, y, TILE_SIZE));
-registerMob('fairy_healer', (x, y) => new HealingFairy(x, y, TILE_SIZE));
-registerMob('fairy_ice', (x, y) => new IceFairy(x, y, TILE_SIZE));
-registerMob('fairy_fire', (x, y) => new FireFairy(x, y, TILE_SIZE));
-registerMob('fairy_necro', (x, y) => new NecroFairy(x, y, TILE_SIZE));
-registerMob('goblin', (x, y) => {
-  return new Goblin(x, y, TILE_SIZE, pickGoblinWeapon());
-});
-
-/**
- * Warms every melee goblin's standing and walking rows.
- *
- * All four rather than the one this body happens to roll, because `GOBLIN_VARIANTS`
- * is rolled per body and a room or a camp fields several: whichever weapon this
- * goblin drew, its neighbours are drawing the others on the same frame. The four
- * warms are two rows each and a row already warm costs nothing, so the coverage
- * is worth more than the precision.
- */
-function prewarmGoblinBand(): void {
-  for (const variant of GOBLIN_VARIANTS) prewarmGoblin(variant.weapon);
-}
-
-function prewarmGoblinArcher(): void {
-  prewarmGoblin('bow');
-}
-
-function prewarmGoblinDynamiter(): void {
-  prewarmGoblinBomber('dynamite');
-}
-
-function prewarmGoblinBombardier(): void {
-  prewarmGoblinBomber('black_powder');
-}
-
-/** Warms the one kind of fairy that arrived. */
-function prewarmSpawnedFairy(mob: Mob): void {
-  if (mob instanceof Fairy) prewarmFairy(mob.kind);
-}
-
-function randomCowCoat(): CowCoatId {
-  return COW_COATS[randomInt(0, COW_COATS.length - 1)];
-}
-
-/** Warms the coat and age this particular cow turned out to be. */
-function prewarmSpawnedCow(mob: Mob): void {
-  if (mob instanceof Cow) prewarmCow(mob.coat, mob.age);
-}
-
-/** Warms the street-tough look this particular fightable bird turned out to be wearing. */
-function prewarmSpawnedSkyFowl(mob: Mob): void {
-  if (mob instanceof SkyFowl) prewarmSkyfowlCastMember(mob.toughLookId);
-}
-
-/**
- * Rows warmed the moment a spawn of a painted creature is *scheduled*.
- *
- * A pack's cells are shared across every instance of it, so the cost of a wave
- * is one row per state however many bodies arrive — but that row is cold until
- * somebody asks for it, and a wave asks for it on the frame it appears. Every
- * spawn path runs through `createMob`, which is the earliest moment the game
- * knows a creature is coming, so the warming starts here and the cache drains
- * it a few cells per frame under its own budget.
- *
- * A map rather than a record so that a type with no painted figure is an
- * ordinary lookup miss rather than an index the linter has to be argued with.
- *
- * The hook is handed the mob it is warming for, because a creature whose art
- * varies per instance — the Sky Fowl wears one of eight palettes, each its own
- * figure — cannot be warmed without knowing which one arrived.
- */
-const MOB_PREWARM: ReadonlyMap<string, (mob: Mob) => void> = new Map([
-  ['tuskling', prewarmTuskling],
-  ['goblin', prewarmGoblinBand],
-  ['goblin_archer', prewarmGoblinArcher],
-  ['goblin_dynamiter', prewarmGoblinDynamiter],
-  ['goblin_bombardier', prewarmGoblinBombardier],
-  ['cockroach', prewarmCockroach],
-  ['rat', prewarmRat],
-  ['troglodyte', prewarmTroglodyte],
-  ['small_spider', prewarmSmallSpider],
-  ['bugaboo', prewarmBugaboo],
-  ['llama', prewarmLlama],
-  ['mold_lion', prewarmMoldLion],
-  ['brindle_grub', prewarmBrindleGrub],
-  ['sky_fowl', prewarmSpawnedSkyFowl],
-  ['cow', prewarmSpawnedCow],
-  ['calf', prewarmSpawnedCow],
-  // Backstops only: the assault's countdown keeps each wave's arrival rows
-  // warm. The raised ratkin has none here — its spawn-time set (the idle and
-  // the head-on shamble besides the arrival rows) is more than the third
-  // wave's cache headroom holds, so its other rows are warmed only as each
-  // one engages.
-  ['necromancer', prewarmNecromancerArrival],
-  ['grave_bull', prewarmGraveBull],
-  ['fairy_shield', prewarmSpawnedFairy],
-  ['fairy_healer', prewarmSpawnedFairy],
-  ['fairy_ice', prewarmSpawnedFairy],
-  ['fairy_fire', prewarmSpawnedFairy],
-  ['fairy_necro', prewarmSpawnedFairy],
-]);
-
-// An unknown mob type otherwise falls back to a Goblin with zero console output —
-// a typo'd spawn-rule type silently spawns the wrong creature forever. Logged
-// once per type so a floor full of the same typo doesn't spam every spawn.
-const _unknownMobTypesLogged = new Set<string>();
-
-export function createMob(type: string, tileX: number, tileY: number, map: GameMap): Mob {
-  const factory = MOB_REGISTRY.get(type);
-  if (factory === undefined && !_unknownMobTypesLogged.has(type)) {
-    _unknownMobTypesLogged.add(type);
-    console.warn(`[spawner] Unknown mob type "${type}" — falling back to Goblin`);
-  }
-  const resolvedFactory = factory ?? MOB_REGISTRY.get('goblin');
-  if (!resolvedFactory) throw new Error(`Unknown mob type: ${type}`);
-  const mob = resolvedFactory(tileX, tileY);
-  mob.setMap(map);
-  MOB_PREWARM.get(type)?.(mob);
-  // The key that was *asked for*, which for a typo'd rule is not the key of the
-  // Goblin that came back. That is the right answer for the one question this
-  // field exists to serve — how many of a rule's own spawns are alive — and the
-  // mismatch has already been reported above.
-  mob.spawnTypeKey = type;
-  return mob;
 }
 
 /** Resolve an ExtraSpawnRule origin string to a tile coordinate, or null if the landmark doesn't exist. */
@@ -681,7 +418,7 @@ function resolveOrigin(
 
 /**
  * Post-spawn setup callbacks for mobs that need special initialization
- * beyond what `createMob` provides (e.g. BallOfSwine needs arena binding).
+ * beyond what `spawnMob` provides (e.g. BallOfSwine needs arena binding).
  */
 const SPAWN_SETUP: Partial<
   Record<string, (mob: Mob, map: GameMap, origin: { x: number; y: number }) => void>
@@ -703,20 +440,22 @@ export function spawnExtraMobs(
   map: GameMap,
   partyLevel: number,
   profile: DifficultyProfile,
+  random: () => number,
 ): Mob[] {
   const mobs: Mob[] = [];
   if (!def.extraSpawns) return mobs;
+  const context: SpawnContext = { encounter: floorEncounter(def.floorNumber, 'landmark'), random };
 
   for (const rule of def.extraSpawns) {
     const origin = resolveOrigin(rule.origin, map, def);
     if (!origin) continue;
 
     for (const [dx, dy] of rule.offsets) {
-      const mob = createMob(rule.type, origin.x + dx, origin.y + dy, map);
+      const mob = spawnMob(rule.type, { x: origin.x + dx, y: origin.y + dy }, map, context);
       mob.applyMobLevel(
         mob.isBoss
           ? resolveBossLevel(rule, partyLevel, profile)
-          : resolveAmbientLevel(rule, def, partyLevel, profile),
+          : resolveAmbientLevel(rule, def, partyLevel, profile, random),
         def.levelledCurve,
       );
       applySpawnDifficulty(mob, profile);
@@ -763,10 +502,12 @@ function spawnCampResidents(
   partyLevel: number,
   profile: DifficultyProfile,
   clearedCamps: ReadonlySet<string>,
+  random: () => number,
 ): Mob[] {
   const mobs: Mob[] = [];
   const rosters = def.campSpawns;
   if (rosters === undefined) return mobs;
+  const context: SpawnContext = { encounter: floorEncounter(def.floorNumber, 'camp'), random };
 
   for (const camp of map.camps) {
     const roster = rosters[camp.kind];
@@ -774,12 +515,15 @@ function spawnCampResidents(
     const key = campSiteKey(camp);
     if (clearedCamps.has(key)) continue;
     for (const rule of roster) {
-      const count = randomInt(rule.minCount ?? 1, rule.maxCount ?? 1);
+      const count = randomIntFrom(random, rule.minCount ?? 1, rule.maxCount ?? 1);
       for (let spawned = 0; spawned < count; spawned++) {
-        const tile = findWalkableTileInCamp(map, camp.centre, camp.radiusTiles);
+        const tile = findWalkableTileInCamp(map, camp.centre, camp.radiusTiles, random);
         if (tile === null) continue;
-        const mob = createMob(rule.type, tile.x, tile.y, map);
-        mob.applyMobLevel(resolveAmbientLevel(rule, def, partyLevel, profile), def.levelledCurve);
+        const mob = spawnMob(rule.type, tile, map, context);
+        mob.applyMobLevel(
+          resolveAmbientLevel(rule, def, partyLevel, profile, random),
+          def.levelledCurve,
+        );
         applySpawnDifficulty(mob, profile);
         mob.allowSlingshotDrop = def.slingshotDrops === true;
         // Its own spawn tile, **not** the camp's centre. The centre is a
@@ -802,12 +546,13 @@ function findWalkableTileInCamp(
   map: GameMap,
   centre: { x: number; y: number },
   radiusTiles: number,
+  random: () => number,
 ): { x: number; y: number } | null {
   for (let attempt = 0; attempt < CAMP_SPAWN_ATTEMPTS; attempt++) {
-    const angle = Math.random() * Math.PI * 2;
+    const angle = random() * Math.PI * 2;
     // Square-rooted so the draws are uniform over the disc's *area* rather than
     // piling up at its centre, which is where the fire is.
-    const reach = Math.sqrt(Math.random()) * radiusTiles;
+    const reach = Math.sqrt(random()) * radiusTiles;
     const tx = Math.round(centre.x + Math.cos(angle) * reach);
     const ty = Math.round(centre.y + Math.sin(angle) * reach);
     if (map.isMobSpawnTile(tx, ty)) return { x: tx, y: ty };
@@ -861,15 +606,16 @@ export function rollRoomPopulation(
   region: number,
   partyLevel: number,
   profile: DifficultyProfile,
+  random: () => number,
 ): RoomPopulation {
   // Escorts are rolled first and their places *reserved*, so a room that
   // would otherwise fill its whole allowance with the host rule still has
   // room for the archer that makes it a mixed group.
-  const escorts = rollEscorts(rule, region);
+  const escorts = rollEscorts(rule, region, random);
   const regionSpawnBonus = (def.progression?.regionSpawnBonus ?? [])[region] ?? 0;
   const hostBand = regionLevelBand(rule, regionLevelBonusFor(def, region));
   const reinforcement = overLevelReinforcementBodies(def, hostBand, partyLevel, profile);
-  const rolled = randomInt(rule.minCount ?? 1, rule.maxCount ?? 1);
+  const rolled = randomIntFrom(random, rule.minCount ?? 1, rule.maxCount ?? 1);
   const hostCount = Math.max(
     0,
     Math.min(MAX_ROOM_SPAWN_COUNT - escorts.length, rolled + regionSpawnBonus + reinforcement),
@@ -893,6 +639,7 @@ function findHallwayEscortTile(
   map: GameMap,
   x: number,
   y: number,
+  random: () => number,
 ): { x: number; y: number } | null {
   const bounds: SpawnBounds = {
     minTX: x - HALLWAY_ESCORT_SPREAD_TILES,
@@ -921,6 +668,7 @@ function findHallwayEscortTile(
       !inStartMargin(tileX, tileY) &&
       !keepClear.some((tile) => tile.x === tileX && tile.y === tileY) &&
       map.hasWalkableLine(tileCentre(x), tileCentre(y), tileCentre(tileX), tileCentre(tileY)),
+    random,
   );
 }
 
@@ -930,6 +678,7 @@ function findHallwayEscortTile(
  * rule's `escorts`.
  * If `def.bossRoom` is set and the map has a boss room centre, spawns the boss there.
  * Camps named in `clearedCamps` (see `TownMemory.clearedCamps`) are left empty.
+ * Every roll — which rule, how many, where — draws from `random`.
  */
 export function spawnForLevel(
   def: LevelDef,
@@ -937,27 +686,33 @@ export function spawnForLevel(
   partyLevel: number,
   profile: DifficultyProfile,
   clearedCamps: ReadonlySet<string>,
+  random: () => number,
 ): Mob[] {
   const mobs: Mob[] = [];
 
   if (def.roomMobs.length > 0) {
+    const roomContext: SpawnContext = {
+      encounter: floorEncounter(def.floorNumber, 'room'),
+      random,
+    };
     for (const { x, y, w, h, region } of map.mobSpawnPoints) {
       const levelBonus = regionLevelBonusFor(def, region);
-      const rule = pickRule(def.roomMobs);
+      const rule = pickRule(def.roomMobs, random);
       const { hostCount: count, escorts } = rollRoomPopulation(
         def,
         rule,
         region,
         partyLevel,
         profile,
+        random,
       );
       const bounds = roomSpawnBounds({ x, y, w, h });
-      const spawnInRoom = (band: MobLevelRange, type: MobSpawnRule['type']): void => {
-        const tile = findWalkableSpawnTile(map, bounds);
+      const spawnInRoom = (band: MobLevelRange, kind: StandaloneMobKind): void => {
+        const tile = findWalkableSpawnTile(map, bounds, random);
         if (tile === null) return;
-        const mob = createMob(type, tile.x, tile.y, map);
+        const mob = spawnMob(kind, tile, map, roomContext);
         mob.applyMobLevel(
-          resolveAmbientLevel(regionLevelBand(band, levelBonus), def, partyLevel, profile),
+          resolveAmbientLevel(regionLevelBand(band, levelBonus), def, partyLevel, profile, random),
           def.levelledCurve,
         );
         applySpawnDifficulty(mob, profile);
@@ -970,38 +725,49 @@ export function spawnForLevel(
   }
 
   if (def.hallwayMobs.length > 0) {
+    const hallwayContext: SpawnContext = {
+      encounter: floorEncounter(def.floorNumber, 'hallway'),
+      random,
+    };
     for (const { x, y } of map.hallwaySpawnPoints) {
-      const rule = pickRule(def.hallwayMobs);
+      const rule = pickRule(def.hallwayMobs, random);
       const spawnAt = (
         band: MobLevelRange,
-        type: MobSpawnRule['type'],
+        kind: StandaloneMobKind,
         tileX: number,
         tileY: number,
       ): void => {
-        const mob = createMob(type, tileX, tileY, map);
-        mob.applyMobLevel(resolveAmbientLevel(band, def, partyLevel, profile), def.levelledCurve);
+        const mob = spawnMob(kind, { x: tileX, y: tileY }, map, hallwayContext);
+        mob.applyMobLevel(
+          resolveAmbientLevel(band, def, partyLevel, profile, random),
+          def.levelledCurve,
+        );
         applySpawnDifficulty(mob, profile);
         mob.allowSlingshotDrop = def.slingshotDrops === true;
         mobs.push(mob);
       };
       spawnAt(rule, rule.type, x, y);
-      const escorts = rollEscorts(rule, null);
+      const escorts = rollEscorts(rule, null, random);
       if (escorts.length === 0) continue;
       for (const escort of escorts) {
-        const tile = findHallwayEscortTile(map, x, y);
+        const tile = findHallwayEscortTile(map, x, y, random);
         if (tile !== null) spawnAt(escort, escort.type, tile.x, tile.y);
       }
     }
   }
 
-  mobs.push(...spawnCampResidents(def, map, partyLevel, profile, clearedCamps));
+  mobs.push(...spawnCampResidents(def, map, partyLevel, profile, clearedCamps, random));
 
   const bossRooms = def.bossRooms ?? [];
+  const bossContext: SpawnContext = {
+    encounter: floorEncounter(def.floorNumber, 'boss-room'),
+    random,
+  };
   for (let i = 0; i < bossRooms.length; i++) {
     const bossEntry = bossRooms[i];
     if (i >= map.bossRooms.length) continue;
     const brData = map.bossRooms[i];
-    const boss = createMob(bossEntry.type, brData.centre.x, brData.centre.y, map);
+    const boss = spawnMob(bossEntry.type, brData.centre, map, bossContext);
     boss.applyMobLevel(resolveBossLevel(bossEntry, partyLevel, profile), def.levelledCurve);
     applySpawnDifficulty(boss, profile);
     boss.allowSlingshotDrop = def.slingshotDrops === true;
@@ -1021,9 +787,11 @@ export function spawnTreasureRoomMobs(
   map: GameMap,
   partyLevel: number,
   profile: DifficultyProfile,
+  random: () => number,
 ): Mob[] {
   const mobs: Mob[] = [];
   if (def.roomMobs.length === 0) return mobs;
+  const context: SpawnContext = { encounter: floorEncounter(def.floorNumber, 'treasure'), random };
 
   // Escorts are deliberately not honoured here. A treasure room's guards are a
   // fixed count at the top of their band — a second, additive mechanism on top
@@ -1037,10 +805,10 @@ export function spawnTreasureRoomMobs(
     const maxTY = y + h - ROOM_FAR_EDGE_INSET;
 
     for (let i = 0; i < TREASURE_ROOM_EXTRA_MOBS; i++) {
-      const rule = pickRule(def.roomMobs);
-      const tile = findWalkableSpawnTile(map, { minTX, minTY, maxTX, maxTY });
+      const rule = pickRule(def.roomMobs, random);
+      const tile = findWalkableSpawnTile(map, { minTX, minTY, maxTX, maxTY }, random);
       if (tile === null) continue;
-      const mob = createMob(rule.type, tile.x, tile.y, map);
+      const mob = spawnMob(rule.type, tile, map, context);
       const band = partyTrackedBand(regionLevelBand(rule, levelBonus), def, partyLevel, profile);
       const maxLevel = band.maxLevel ?? band.minLevel ?? 1;
       mob.applyMobLevel(

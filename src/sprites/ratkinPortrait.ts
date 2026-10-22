@@ -6,7 +6,12 @@
  * a hoe or a spear held above the head never drags it off the face.
  */
 
-import { allocCanvas, surfaceContext, type CanvasSurface } from '../core/canvasSurface';
+import {
+  allocCanvas,
+  releaseSurface,
+  surfaceContext,
+  type CanvasSurface,
+} from '../core/canvasSurface';
 import { RATKIN_BUILDS } from './art/ratkin/outfit';
 import { RATKIN_CAST_OUTFITS, type RatkinCastId } from './art/ratkin/cast';
 import { drawRatkinCastSprite } from './ratkinCastSprite';
@@ -25,12 +30,27 @@ const STANDARD_HEAD_HEIGHT_TILES = 1.24;
 const HALF = 0.5;
 
 const portraits = new Map<RatkinCastId, CanvasSurface>();
-// Forgotten after a recovery, which may have blanked them, but not released: an
-// open conversation keeps drawing the portrait it was handed until it moves on.
-onCanvasRecovery(() => portraits.clear());
+onCanvasRecovery(() => {
+  for (const portrait of portraits.values()) releaseSurface(portrait);
+  portraits.clear();
+});
 
-/** The portrait for `id`, painted once and kept. */
-export function ratkinPortrait(id: RatkinCastId): CanvasSurface {
+/**
+ * A cast member's portrait as a conversation holds it: asked for its picture
+ * each time it is drawn, never handed the surface itself. A recovery can then
+ * give every painted portrait back at once, and an open conversation draws a
+ * fresh one on its next frame rather than the blank it was holding.
+ */
+export interface RatkinPortraitHandle {
+  image(): CanvasSurface;
+}
+
+/** The portrait for `id`, painted on first draw and kept until a recovery. */
+export function ratkinPortrait(id: RatkinCastId): RatkinPortraitHandle {
+  return { image: () => paintedPortrait(id) };
+}
+
+function paintedPortrait(id: RatkinCastId): CanvasSurface {
   const cached = portraits.get(id);
   if (cached !== undefined) return cached;
   const build = RATKIN_BUILDS[RATKIN_CAST_OUTFITS[id].build];

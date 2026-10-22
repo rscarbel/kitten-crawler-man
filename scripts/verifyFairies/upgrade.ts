@@ -31,14 +31,16 @@ import { EventBus } from '../../src/core/EventBus';
 import { HumanPlayer } from '../../src/creatures/HumanPlayer';
 import { CatPlayer } from '../../src/creatures/CatPlayer';
 import type { Mob } from '../../src/creatures/Mob';
-import { Fairy } from '../../src/creatures/fairies/Fairy';
+import type { Fairy } from '../../src/creatures/fairies/Fairy';
 import { GameMap } from '../../src/map/GameMap';
 import type { TileRect } from '../../src/map/pastSafeRoom';
 import { dungeonOptionsForLevel } from '../../src/levels/dungeonOptions';
 import { level2 } from '../../src/levels/level2';
 import type { LevelDef } from '../../src/levels/types';
 import type { FairyRoomRate } from '../../src/levels/types';
-import { createMob, roomSpawnBounds, spawnForLevel } from '../../src/levels/spawner';
+import { roomSpawnBounds, spawnForLevel } from '../../src/levels/spawner';
+import { liveSpawnContext, spawnMob } from '../../src/levels/spawnFunnel';
+import type { StandaloneMobKind } from '../../src/levels/mobKinds';
 import {
   FAIRY_SPAWN_KEYS,
   FairyRoomLedger,
@@ -128,7 +130,7 @@ function buildFloor2(): BuiltFloor {
     dungeon: dungeonOptionsForLevel(level2),
   });
   const profile = DIFFICULTY_PROFILES[UPGRADE_DIFFICULTY];
-  const mobs = spawnForLevel(level2, map, PARTY_LEVEL, profile, new Set());
+  const mobs = spawnForLevel(level2, map, PARTY_LEVEL, profile, new Set(), Math.random);
   const ledger = new FairyRoomLedger(level2, PARTY_LEVEL, profile, UPGRADE_DIFFICULTY);
   mobs.push(...spawnRoomFairies(map, ledger));
   const human = new HumanPlayer(map.startTile.x, map.startTile.y, TILE_SIZE);
@@ -355,9 +357,12 @@ function secondGuarantees(ledger: FairyRoomLedger, before: readonly GuaranteeSna
 
 /** A fresh shield fairy dropped at a room's top-left, for a mutant ledger. */
 function extraShieldIn(map: GameMap, room: FairyLedgerRoom): Fairy {
-  const mob = createMob(FAIRY_SPAWN_KEYS.shield, room.rect.x, room.rect.y, map);
-  if (!(mob instanceof Fairy)) throw new Error('the shield spawn key made no fairy');
-  return mob;
+  return spawnMob(
+    FAIRY_SPAWN_KEYS.shield,
+    { x: room.rect.x, y: room.rect.y },
+    map,
+    liveSpawnContext('dev:spawn'),
+  );
 }
 
 /** A ledger whose room pass placed no guaranteed shields. */
@@ -584,7 +589,12 @@ export function verifyRateUpgrade(report: FairyGateReport): void {
     `${everyRoomBeforeGained} of ${before.length} before rooms gained`,
   );
 
-  const swine = createMob(SWINE_BOSS_TYPE, built.map.startTile.x, built.map.startTile.y, built.map);
+  const swine = spawnMob(
+    SWINE_BOSS_TYPE,
+    { x: built.map.startTile.x, y: built.map.startTile.y },
+    built.map,
+    liveSpawnContext('dev:spawn'),
+  );
   const rosterBefore = built.mobs.length;
   const guaranteesBefore = snapshotGuarantees(built.ledger);
   const untouched = past.filter((room) => room !== occupiedRoom && room !== engaged);
@@ -730,7 +740,8 @@ export function verifyRateUpgrade(report: FairyGateReport): void {
 
 // ── Fairies that fled in ─────────────────────────────────────────────────────
 
-const FLED_IN_BOSS_TYPE = 'fled_in_probe_boss';
+/** A floor-1 boss, so no upgrade floor 2 ships with answers to the probe's death. */
+const FLED_IN_BOSS_TYPE = 'the_hoarder' as const satisfies StandaloneMobKind;
 const FLED_IN_REGION = 0;
 /** A room in the middle of the test arena, the rect its spawn point describes. */
 const FLED_IN_POINT = { x: 12, y: 12, w: 9, h: 9, region: FLED_IN_REGION };
@@ -775,9 +786,12 @@ function fullRoomUpgradeDef(): LevelDef {
 }
 
 function fairyOn(map: GameMap, kind: FairyKind, tileX: number, tileY: number): Fairy {
-  const mob = createMob(FAIRY_SPAWN_KEYS[kind], tileX, tileY, map);
-  if (!(mob instanceof Fairy)) throw new Error(`the ${kind} spawn key made no fairy`);
-  return mob;
+  return spawnMob(
+    FAIRY_SPAWN_KEYS[kind],
+    { x: tileX, y: tileY },
+    map,
+    liveSpawnContext('dev:spawn'),
+  );
 }
 
 interface FledInOutcome {

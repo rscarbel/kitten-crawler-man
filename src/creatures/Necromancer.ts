@@ -22,7 +22,11 @@ import {
 } from './siege/palisadeDistance';
 import type { SiegeTile } from './siege/siegeTypes';
 import { UndeadCueQueue } from './siege/undeadCues';
-import { RAISED_RATKIN_LOOKS, type RaisedRatkinLook } from '../sprites/art/raisedRatkinArt';
+import type { RaisedRatkinLook } from '../sprites/art/raisedRatkinArt';
+import { RAISED_RATKIN_FAMILY } from './RaisedRatkin';
+import { resolveVariant } from '../core/mobVariantFamily';
+import { lookTierFor, NECROMANCER_RAISES } from '../levels/encounters';
+import { varietyTier } from '../core/varietyTier';
 import { prewarmRaisedRatkin } from '../sprites/raisedRatkinSprite';
 import { prewarmSkeletonEscortSprites } from '../sprites/skeletonSprite';
 import { prewarmGraveBull } from '../sprites/graveBullSprite';
@@ -367,12 +371,17 @@ function viewForFacing(facingX: number, facingY: number): NecromancerView {
   return facingY > 0 ? 'front' : 'away';
 }
 
-function pickLook(): RaisedRatkinLook {
-  return RAISED_RATKIN_LOOKS[Math.floor(Math.random() * RAISED_RATKIN_LOOKS.length)] ?? 'smock';
+/** The clothes the next raised ratkin climbs out in, as its family would dress it now. */
+function pickLook(random: () => number): RaisedRatkinLook {
+  return resolveVariant(
+    RAISED_RATKIN_FAMILY,
+    lookTierFor(NECROMANCER_RAISES, varietyTier()),
+    random,
+  );
 }
 
-function pickSiegeRaiseKind(): NecromancerTroopKind {
-  let roll = Math.random();
+function pickSiegeRaiseKind(random: () => number): NecromancerTroopKind {
+  let roll = random();
   for (const kind of SIEGE_RAISE_KINDS) {
     roll -= SIEGE_RAISE_KIND_WEIGHTS[kind];
     if (roll < 0) return kind;
@@ -536,8 +545,12 @@ export class Necromancer extends Mob {
   blinks = 0;
   lastBlinkLanding: SiegeTile | null = null;
 
-  constructor(tileX: number, tileY: number, tileSize: number) {
+  /** The stream he was spawned from; every roll he makes for a raise draws on it. */
+  private readonly random: () => number;
+
+  constructor(tileX: number, tileY: number, tileSize: number, random: () => number) {
     super(tileX, tileY, tileSize, NECRO_HP, NECRO_DRIFT_SPEED);
+    this.random = random;
     this.mass = NECRO_MASS;
     this.ignoresTownSafeZone = true;
     this.immuneToConfusion = true;
@@ -1295,12 +1308,17 @@ export class Necromancer extends Mob {
     if (sites.length === 0) return false;
     this.raiseSites = sites;
     this.raiseKinds = sites.map((_, index) =>
-      index < troopSites.length ? (inSiege ? pickSiegeRaiseKind() : 'ratkin') : 'grave_bull',
+      index < troopSites.length
+        ? inSiege
+          ? pickSiegeRaiseKind(this.random)
+          : 'ratkin'
+        : 'grave_bull',
     );
     this.raiseInner = sites.map((_, index) => index < inner.length);
-    this.raiseLooks = sites.map(() => pickLook());
+    this.raiseLooks = sites.map(() => pickLook(this.random));
     this.raiseKinds.forEach((kind, index) => {
-      if (kind === 'ratkin') prewarmRaisedRatkin(this.raiseLooks[index] ?? pickLook());
+      if (kind === 'ratkin')
+        prewarmRaisedRatkin(this.raiseLooks[index] ?? RAISED_RATKIN_FAMILY.canonical);
     });
     if (this.raiseKinds.some((kind) => kind === 'skeleton_warrior' || kind === 'skeleton_archer')) {
       prewarmSkeletonEscortSprites();
@@ -1321,7 +1339,7 @@ export class Necromancer extends Mob {
           tileX: site.x,
           tileY: site.y,
           kind: this.raiseKinds[index] ?? 'ratkin',
-          look: this.raiseLooks[index] ?? pickLook(),
+          look: this.raiseLooks[index] ?? RAISED_RATKIN_FAMILY.canonical,
           inner: this.raiseInner[index] ?? false,
         });
       });
@@ -1397,7 +1415,7 @@ export class Necromancer extends Mob {
         }
       }
       while (ring.length > 0 && sites.length < count) {
-        const index = Math.floor(Math.random() * ring.length);
+        const index = Math.floor(this.random() * ring.length);
         const [tile] = ring.splice(index, 1);
         accept(tile.x, tile.y);
       }
@@ -1445,7 +1463,7 @@ export class Necromancer extends Mob {
     const sites: SiegeTile[] = [];
     for (const pool of [near, far]) {
       while (pool.length > 0 && sites.length < count) {
-        const index = Math.floor(Math.random() * pool.length);
+        const index = Math.floor(this.random() * pool.length);
         const [tile] = pool.splice(index, 1);
         sites.push(tile);
       }

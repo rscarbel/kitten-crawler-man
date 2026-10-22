@@ -127,7 +127,9 @@ export class RockGolemBoss extends RockGolem {
   override readonly xpValue: number = BOSS_XP_VALUE;
   protected override coinDropMin = BOSS_COIN_DROP_MIN;
   protected override coinDropMax = BOSS_COIN_DROP_MAX;
-  override readonly bodyPartKey: string | null = ROCK_GOLEM_BOSS_BODY_PART_KEY;
+  override get bodyPartKey(): string {
+    return ROCK_GOLEM_BOSS_BODY_PART_KEY;
+  }
   override mass = BOSS_MASS;
   override displayName = 'Rock Golem';
   override description =

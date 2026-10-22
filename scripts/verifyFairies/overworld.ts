@@ -24,7 +24,7 @@ import { GameMap } from '../../src/map/GameMap';
 import { hasRoomToMove } from '../../src/map/findWalkableTile';
 import { RUINS_CIRCUS_BUFFER } from '../../src/map/OverworldGenerator';
 import { level3 } from '../../src/levels/level3';
-import { Fairy } from '../../src/creatures/fairies/Fairy';
+import type { Fairy } from '../../src/creatures/fairies/Fairy';
 import { IceFairy } from '../../src/creatures/fairies/IceFairy';
 import { FireFairy } from '../../src/creatures/fairies/FireFairy';
 import { setPackAlertGrid } from '../../src/creatures/packAlert';
@@ -37,7 +37,7 @@ import {
   FairyRoomLedger,
   spawnOverworldFairies,
 } from '../../src/levels/fairySpawner';
-import { createMob } from '../../src/levels/spawner';
+import { liveSpawnContext, spawnMob } from '../../src/levels/spawnFunnel';
 import { mulberry32 } from '../../src/sprites/person/rng';
 import type { FairyGateReport } from './report';
 
@@ -211,8 +211,12 @@ function withUnconditionalGuarantee(
 ): Fairy[] {
   const rolled = withoutGuarantee(group);
   if (rolled.length === 0) return rolled;
-  const shield = createMob(FAIRY_SPAWN_KEYS.shield, point.x, point.y, map);
-  if (!(shield instanceof Fairy)) throw new Error('the shield spawn key made no fairy');
+  const shield = spawnMob(
+    FAIRY_SPAWN_KEYS.shield,
+    { x: point.x, y: point.y },
+    map,
+    liveSpawnContext('dev:spawn'),
+  );
   return [...rolled, shield];
 }
 

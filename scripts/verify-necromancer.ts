@@ -65,7 +65,11 @@ import {
   GRAVE_BULL_STRUCTURE_MULTIPLIER,
   GraveBull,
 } from '../src/creatures/GraveBull';
-import { RAISED_RATKIN_HP, RaisedRatkin } from '../src/creatures/RaisedRatkin';
+import {
+  RAISED_RATKIN_FAMILY,
+  RAISED_RATKIN_HP,
+  RaisedRatkin,
+} from '../src/creatures/RaisedRatkin';
 import { RuinsGhoul } from '../src/creatures/RuinsGhoul';
 import { SkeletonWarrior } from '../src/creatures/SkeletonWarrior';
 import { SkeletonArcher } from '../src/creatures/SkeletonArcher';
@@ -340,7 +344,7 @@ function step(rig: Rig): void {
 }
 
 function spawnNecromancer(rig: Rig, tile: SiegeTile): Necromancer {
-  const necro = new Necromancer(tile.x, tile.y, TILE_SIZE);
+  const necro = new Necromancer(tile.x, tile.y, TILE_SIZE, () => Math.random());
   necro.applyMobLevel(TEST_LEVEL);
   enlistInSiege(necro, rig.world);
   rig.roster.add(necro);
@@ -804,7 +808,12 @@ section('Raise: the wave still reaches its numbers while he is at cap');
   const necro = spawnNecromancer(rig, laneOf('south').spawn);
   const lane = laneOf('south');
   for (let i = 0; i < NECRO_ESCORT_CAP; i++) {
-    const raised = new RaisedRatkin(lane.spawn.x + (i % 4), lane.spawn.y + 2, TILE_SIZE);
+    const raised = new RaisedRatkin(
+      lane.spawn.x + (i % 4),
+      lane.spawn.y + 2,
+      TILE_SIZE,
+      RAISED_RATKIN_FAMILY.canonical,
+    );
     raised.raisedByNecromancer = true;
     enlistInSiege(raised, rig.world);
     rig.roster.add(raised);
@@ -823,7 +832,12 @@ section('Raise: the wave still reaches its numbers while he is at cap');
   let spawned = 0;
   for (let attempt = 0; attempt < wanted * 2; attempt++) {
     if (counted(rig.roster.mobs) >= ASSAULT_LIVE_CAP) break;
-    const raised = new RaisedRatkin(lane.spawn.x + (attempt % 5), lane.spawn.y - 1, TILE_SIZE);
+    const raised = new RaisedRatkin(
+      lane.spawn.x + (attempt % 5),
+      lane.spawn.y - 1,
+      TILE_SIZE,
+      RAISED_RATKIN_FAMILY.canonical,
+    );
     enlistInSiege(raised, rig.world);
     rig.roster.add(raised);
     spawned++;
@@ -1160,7 +1174,7 @@ section('Raised Ratkin: rises immune, then can be hurt; the weakest wave body');
 {
   const rig = makeRig();
   const start = openRow(4);
-  const raised = new RaisedRatkin(start.x, start.y, TILE_SIZE);
+  const raised = new RaisedRatkin(start.x, start.y, TILE_SIZE, RAISED_RATKIN_FAMILY.canonical);
   raised.beginRising();
   raised.applyMobLevel(TEST_LEVEL);
   rig.roster.add(raised);
@@ -1205,7 +1219,7 @@ section('Siege strike: a raised ratkin batters the wall in its way, and spikes b
   const southRow = site.palisadeBounds.y + site.palisadeBounds.h - 1;
   const wallX = site.gate.tiles[2].x + 6;
   const segmentId = segmentAt(wallX, southRow);
-  const raised = new RaisedRatkin(wallX, southRow + 1, TILE_SIZE);
+  const raised = new RaisedRatkin(wallX, southRow + 1, TILE_SIZE, RAISED_RATKIN_FAMILY.canonical);
   raised.applyMobLevel(TEST_LEVEL);
   enlistInSiege(raised, rig.world);
   rig.roster.add(raised);

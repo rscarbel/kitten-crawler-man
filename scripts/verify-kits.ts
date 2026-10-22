@@ -53,7 +53,7 @@ import { TownInteriorPropDestructionSystem } from '../src/systems/TownInteriorPr
 import { InMemoryInteriorPayoutRecord } from '../src/systems/InteriorPropInteractionSystem';
 import { Mob, type ShellContext } from '../src/creatures/Mob';
 import { alertPackAround } from '../src/creatures/packAlert';
-import { createMob } from '../src/levels/spawner';
+import { liveSpawnContext, spawnMob } from '../src/levels/spawnFunnel';
 import { hasRoomToMove } from '../src/map/findWalkableTile';
 import type { SystemContext } from '../src/systems/GameSystem';
 import { SpellSystem } from '../src/systems/SpellSystem';
@@ -339,7 +339,7 @@ console.log('MobRoster.add is the single spawn path');
     // A real mob off the spawner, not just the harness's probe: the roster is
     // the only thing that puts one in the grid, and a mob the grid cannot find
     // is a mob nothing can hit.
-    const rat = createMob('rat', floor.x + 1, floor.y, map);
+    const rat = spawnMob('rat', { x: floor.x + 1, y: floor.y }, map, liveSpawnContext('dev:spawn'));
     stage.roster.add(rat);
     check(
       stage.roster.grid.queryCircle(rat.x, rat.y, PINPOINT_QUERY_RADIUS).has(rat),
@@ -410,7 +410,12 @@ console.log('\nA kill through CombatKit pays out');
     const combat = makeCombatKit(stage);
     const { human, cat } = stage.pm;
 
-    const victim = createMob('rat', floor.x + 1, floor.y, map);
+    const victim = spawnMob(
+      'rat',
+      { x: floor.x + 1, y: floor.y },
+      map,
+      liveSpawnContext('dev:spawn'),
+    );
     stage.roster.add(victim);
     standWestFacing(stage, victim.x + HALF_TILE, victim.y + HALF_TILE);
 
@@ -659,7 +664,12 @@ console.log('\nA swing resolves against the grid the roster holds now');
     // constructed around has never contained it. A swing that resolved against
     // that stale index would pass straight through the mob.
     stage.roster.rebuildGrid();
-    const target = createMob('rat', floor.x + 1, floor.y, map);
+    const target = spawnMob(
+      'rat',
+      { x: floor.x + 1, y: floor.y },
+      map,
+      liveSpawnContext('dev:spawn'),
+    );
     stage.roster.add(target);
     standWestFacing(stage, target.x + HALF_TILE, target.y + HALF_TILE);
 

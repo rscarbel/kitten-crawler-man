@@ -177,7 +177,9 @@ export class SkeletonLord extends Mob {
   protected coinDropMin = COIN_DROP_MIN;
   protected coinDropMax = COIN_DROP_MAX;
   override readonly audioTag = 'skeleton_lord';
-  override readonly bodyPartKey = SKELETON_LORD_BODY_PART_KEY;
+  override get bodyPartKey(): string {
+    return SKELETON_LORD_BODY_PART_KEY;
+  }
   displayName = 'Skeleton Lord';
   description = 'A crowned thing of bone and green fire that raises the dead to serve it.';
 

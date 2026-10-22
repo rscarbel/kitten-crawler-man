@@ -64,7 +64,7 @@ import {
   HIRELING_CATCH_UP_TILES,
   HIRELING_STUCK_FRAMES,
 } from '../src/creatures/mercenaries/hirelingCatchUp';
-import { createMob } from '../src/levels/spawner';
+import { liveSpawnContext, spawnMob } from '../src/levels/spawnFunnel';
 import { GameMap } from '../src/map/GameMap';
 import { findPartyArrivalTiles, hasRoomToMove } from '../src/map/findWalkableTile';
 import { FloorTypeValue, type TileContent } from '../src/map/tileTypes';
@@ -398,7 +398,7 @@ function checkMongoLocks(): void {
 
 /** A hostile standing on `map`, holding `body` as its target. */
 function hostileChasing(map: GameMap, roster: MobRoster, body: Mob, at: { x: number; y: number }) {
-  const hostile = createMob('goblin', at.x, at.y, map);
+  const hostile = spawnMob('goblin', { x: at.x, y: at.y }, map, liveSpawnContext('dev:spawn'));
   roster.add(hostile);
   hostile.currentTarget = body;
   hostile.retaliateMob = body;
@@ -849,7 +849,12 @@ function heldFoeBeside(
   body: { readonly x: number; readonly y: number },
 ): Mob {
   const tile = tileUnder(body);
-  const foe = createMob('goblin', tile.x + HELD_FOE_OFFSET_TILES, tile.y, map);
+  const foe = spawnMob(
+    'goblin',
+    { x: tile.x + HELD_FOE_OFFSET_TILES, y: tile.y },
+    map,
+    liveSpawnContext('dev:spawn'),
+  );
   roster.add(foe);
   foe.hp = foe.maxHp;
   foe.aiHeld = true;
@@ -1035,7 +1040,12 @@ function rangedDamageIndoors(id: MercenaryTemplateId, flyShots: boolean): number
   const post = tileUnder(merc);
   const foeTile = rangedFoeTile(store, post);
   if (foeTile === null) return 0;
-  const foe = createMob('goblin', foeTile.x, foeTile.y, store);
+  const foe = spawnMob(
+    'goblin',
+    { x: foeTile.x, y: foeTile.y },
+    store,
+    liveSpawnContext('dev:spawn'),
+  );
   roster.add(foe);
   foe.aiHeld = true;
   const rocks = new RockThrowSystem(store);

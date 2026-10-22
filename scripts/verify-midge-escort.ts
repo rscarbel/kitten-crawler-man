@@ -294,7 +294,7 @@ function buildEscortRig(
   const rig = buildSiegeRig({
     seed: mapSeed,
     state,
-    assaultLevel: () => resolveVillageAssaultLevel(level3, PARTY_LEVEL, profile),
+    assaultLevel: () => resolveVillageAssaultLevel(level3, PARTY_LEVEL, profile, Math.random),
     music: () => music,
     midgeEscortCarry: carry,
     onBlueprintsCue: (cue) => {

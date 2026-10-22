@@ -596,9 +596,13 @@ export interface MudEscape {
  * read off a real levelled ball through its own speed rule.
  */
 function fastestBallSpeed(map: GameMap): number {
-  const ball = spawnExtraMobs(level2, map, SWINE_SIM_PARTY_LEVEL, DIFFICULTY_PROFILES.normal).find(
-    (mob): mob is BallOfSwine => mob instanceof BallOfSwine,
-  );
+  const ball = spawnExtraMobs(
+    level2,
+    map,
+    SWINE_SIM_PARTY_LEVEL,
+    DIFFICULTY_PROFILES.normal,
+    Math.random,
+  ).find((mob): mob is BallOfSwine => mob instanceof BallOfSwine);
   if (ball === undefined) throw new Error('no Ball of Swine to measure');
   const FRENZIED_HP_SHARE = 0.1;
   ball.hp = Math.max(1, Math.floor(ball.maxHp * FRENZIED_HP_SHARE));

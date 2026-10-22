@@ -34,12 +34,10 @@ import { CIRCUS_QUEST_NAME, type CircusQuestProgress } from '../core/CircusQuest
 import type { MusicClaims } from '../audio/AudioScope';
 import { Signet } from '../creatures/Signet';
 import { SIGNET_OVERLAY_CLEARANCE } from '../sprites/signetSprite';
-import { CircusLemur } from '../creatures/CircusLemur';
-import { StiltClown } from '../creatures/StiltClown';
-import { FatClown } from '../creatures/FatClown';
-import { MoldLion } from '../creatures/MoldLion';
 import { TerrorTheClown } from '../creatures/TerrorTheClown';
-import { HeatherTheBear, HEATHER_LEVEL } from '../creatures/HeatherTheBear';
+import { HEATHER_LEVEL, type HeatherTheBear } from '../creatures/HeatherTheBear';
+import { liveSpawnContext, spawnMob } from '../levels/spawnFunnel';
+import type { StandaloneMobKind } from '../levels/mobKinds';
 import type { MongoSystem } from './MongoSystem';
 import type { QuestMarkerType } from './MiniMapSystem';
 import { drawInteractionPrompt } from '../ui/InteractionPrompt';
@@ -164,9 +162,9 @@ interface WaveStallWatch {
 }
 
 export interface WaveSpawn {
-  dx: number;
-  dy: number;
-  make: (x: number, y: number) => Mob;
+  readonly dx: number;
+  readonly dy: number;
+  readonly kind: StandaloneMobKind;
 }
 
 /**
@@ -175,13 +173,13 @@ export interface WaveSpawn {
  */
 export const RITUAL_WAVES: ReadonlyArray<ReadonlyArray<WaveSpawn>> = [
   [
-    { dx: -4, dy: -2, make: (x, y) => new MoldLion(x, y, TILE_SIZE) },
-    { dx: -4, dy: 2, make: (x, y) => new MoldLion(x, y, TILE_SIZE) },
+    { dx: -4, dy: -2, kind: 'mold_lion' },
+    { dx: -4, dy: 2, kind: 'mold_lion' },
   ],
   [
-    { dx: -5, dy: -1, make: (x, y) => new MoldLion(x, y, TILE_SIZE) },
-    { dx: -5, dy: 1, make: (x, y) => new MoldLion(x, y, TILE_SIZE) },
-    { dx: -6, dy: 0, make: (x, y) => new MoldLion(x, y, TILE_SIZE) },
+    { dx: -5, dy: -1, kind: 'mold_lion' },
+    { dx: -5, dy: 1, kind: 'mold_lion' },
+    { dx: -6, dy: 0, kind: 'mold_lion' },
   ],
 ];
 
@@ -196,23 +194,23 @@ export const RITUAL_WAVES: ReadonlyArray<ReadonlyArray<WaveSpawn>> = [
  */
 export const ASSAULT_WAVES: ReadonlyArray<ReadonlyArray<WaveSpawn>> = [
   [
-    { dx: -9, dy: 1, make: (x, y) => new CircusLemur(x, y, TILE_SIZE) },
-    { dx: -11, dy: 0, make: (x, y) => new CircusLemur(x, y, TILE_SIZE) },
-    { dx: -8, dy: 3, make: (x, y) => new CircusLemur(x, y, TILE_SIZE) },
-    { dx: -10, dy: -1, make: (x, y) => new CircusLemur(x, y, TILE_SIZE) },
-    { dx: -7, dy: 2, make: (x, y) => new CircusLemur(x, y, TILE_SIZE) },
+    { dx: -9, dy: 1, kind: 'circus_lemur' },
+    { dx: -11, dy: 0, kind: 'circus_lemur' },
+    { dx: -8, dy: 3, kind: 'circus_lemur' },
+    { dx: -10, dy: -1, kind: 'circus_lemur' },
+    { dx: -7, dy: 2, kind: 'circus_lemur' },
   ],
   [
-    { dx: 9, dy: 1, make: (x, y) => new StiltClown(x, y, TILE_SIZE) },
-    { dx: 11, dy: 0, make: (x, y) => new StiltClown(x, y, TILE_SIZE) },
+    { dx: 9, dy: 1, kind: 'stilt_clown' },
+    { dx: 11, dy: 0, kind: 'stilt_clown' },
   ],
   [
-    { dx: -2, dy: 2, make: (x, y) => new FatClown(x, y, TILE_SIZE) },
-    { dx: 2, dy: 2, make: (x, y) => new FatClown(x, y, TILE_SIZE) },
-    { dx: 8, dy: 3, make: (x, y) => new MoldLion(x, y, TILE_SIZE) },
-    { dx: 10, dy: 2, make: (x, y) => new MoldLion(x, y, TILE_SIZE) },
+    { dx: -2, dy: 2, kind: 'fat_clown' },
+    { dx: 2, dy: 2, kind: 'fat_clown' },
+    { dx: 8, dy: 3, kind: 'mold_lion' },
+    { dx: 10, dy: 2, kind: 'mold_lion' },
   ],
-  [{ dx: 0, dy: -8, make: (x, y) => new TerrorTheClown(x, y, TILE_SIZE) }],
+  [{ dx: 0, dy: -8, kind: 'terror_the_clown' }],
 ];
 
 export interface CircusQuestCheckpoint {
@@ -522,8 +520,12 @@ export class CircusQuestSystem implements GameSystem {
     // her into forest, where a walkable tile fenced in by trunks strands her.
     const tile = this.findArenaSpawnTile(origin.x + HEATHER_SPAWN_OFFSET_TILES, origin.y);
     if (!tile) return;
-    const heather = new HeatherTheBear(tile.x, tile.y, TILE_SIZE);
-    heather.setMap(this.gameMap);
+    const heather = spawnMob(
+      'heather_the_bear',
+      tile,
+      this.gameMap,
+      liveSpawnContext('quest:circus'),
+    );
     heather.applyMobLevel(questMobLevel(HEATHER_LEVEL, this.partyLevel));
     applySpawnDifficulty(heather);
     this.heather = heather;
@@ -549,11 +551,10 @@ export class CircusQuestSystem implements GameSystem {
     this.waveIndex = index;
     this.waveMobs = [];
     const wave = waves[index];
-    for (const { dx, dy, make } of wave) {
+    for (const { dx, dy, kind } of wave) {
       const tile = this.findArenaSpawnTile(origin.x + dx, origin.y + dy);
       if (!tile) continue;
-      const mob = make(tile.x, tile.y);
-      mob.setMap(this.gameMap);
+      const mob = spawnMob(kind, tile, this.gameMap, liveSpawnContext('quest:circus'));
       // Waves are authored at base stats, so their whole level comes from the
       // party floor — without it the circus is a level-1 encounter no matter
       // when the player walks into it.

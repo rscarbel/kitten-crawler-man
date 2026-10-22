@@ -144,8 +144,15 @@ offline generators did, so a cached cell is the sheet cell it replaced.
 
 **Prewarm is the pack rule.** A painter over roughly 1 ms per cell cannot be absorbed by
 the fallback, so every path that schedules such a creature calls `prewarmFigureState`
-when the spawn is _scheduled_ — the level spawner's `MOB_PREWARM` map, a wave scheduler,
-a boss intro, an attack telegraph — not when the mob first renders. Two things decide
+when the spawn is _scheduled_, not when the mob first renders. Each kind's `prewarm` on its
+`MOB_KINDS` entry (`src/levels/mobKinds.ts`) is the backstop: `spawnMob`
+(`src/levels/spawnFunnel.ts`) runs it for the look each body wears as the body is built.
+A wave scheduler, a boss intro or an attack telegraph that knows a kind is coming before
+any body exists warms it earlier: the kind's `warm(tier)` on its `MOB_KINDS` entry runs
+its `prewarm` for every look a spawn can wear at that variety tier; its
+`approachRows(tier, view)` lists the walk rows and then the opening attack rows a spawn
+at that tier walks up to a fight in, facing `view`, for a lead-in to warm in that order;
+`prewarmFigureState` warms particular rows. Two things decide
 where that hook goes: the lead must exceed
 `rows x frames x bake_ms / PREWARM_BAKE_BUDGET_MS`, and it must sit inside the cache's
 idle-release window or the warming is thrown away before it is used.
@@ -217,14 +224,18 @@ repaid out of later frames) inside the frame's `FRAME_BAKE_BUDGET_MS` (4). Ink f
 would let a crowd walking into view spend the whole budget for tens of seconds while
 every figure that missed was painted live. A cell that is painted directly records why
 (`FIGURE_DIRECT_DRAW_CAUSES` in `figureCacheStats.ts`): `frameAllowance` (the frame's
-time was spent), `figureBudget` or `cacheBudget` (still over a ceiling after eviction
+time was spent and the figure had nothing baked to borrow), `figureBudget` or `cacheBudget` (still over a ceiling after eviction
 found nothing out of use), `memoryHeld` (bakes paused after the browser refused a
 surface) or `tooLarge`. `__perfRecorder` sums them per recording.
 
 **A citizen draws approximately; a fight draws exactly.** `drawFigureCachedApprox` never
 bakes on the render path. It borrows the nearest baked frame of the same row, then any
-warm row of the figure, and it asks for the missing row urgently. Citizens draw this way;
-combat rows never do.
+warm row of the figure, and it asks for the missing row urgently. Citizens draw this way.
+`drawFigureCached` bakes a miss while the frame's allowance lasts and borrows the same
+way only once it is spent: a crowd of combatants arriving together (a siege wave) misses
+far more cells than a frame can bake, and painting each of them live, every frame, cost
+the siege most of its frame time. A borrowed frame lasts until its row lands from the
+urgent queue, a few frames later.
 
 A companion that follows the party is warmed on arrival, not per floor. The Meat Shields
 hirelings are all painted (the `companion:mercenary` requirement declares no sheets), and
@@ -499,7 +510,8 @@ a quarter of the bytes, so those fractions still clear the town's peak (51 MB of
 35 MB of sheets). A full-density phone keeps the full budgets however little memory it
 reports: every smaller budget measured in the town walk added on-screen stand-ins and
 repaints. Never branch on platform; `&deviceMemory=<GB>` stands in for the browser's
-report.
+report. The only other cut is the last resort of repeated canvas purges at the lowest
+variety tier, which halves the scale for the rest of the session ("Variety tiers").
 
 **What scenes hold**, tracked peak by `__perfMemory`, Chrome on an M1 Pro at DPR 2,
 2026-10:
@@ -515,6 +527,179 @@ report.
 
 The overworld scenes sit at the figure ceiling because the crowd's pinned rows fill it;
 in the town walk the cache still serves 99.4% of cells, with one direct paint in 30 s.
+
+## Variety tiers
+
+When a device cannot keep up — it lags, or the browser drops canvases — the game spends
+**variety** before it spends smoothness: fewer distinct enemy and townsfolk looks, so
+fewer figures to paint and cache. Fights stay as hard as they were. The tier is one global
+value, `varietyTier()` in `src/core/varietyTier.ts`, read when something spawns or a
+citizen picks its look:
+
+| tier | name         | enemies                                      | street crowd (human / skyfowl)                |
+| ---- | ------------ | -------------------------------------------- | --------------------------------------------- |
+| 0    | Full         | every look                                   | every look / all 16                           |
+| 1    | Shared looks | each variant family wears its canonical look | one commoner, one child, other roles all / 8  |
+| 2    | Trimmed      | the same, plus each ladder's tier-2 rows     | five role groups / 4                          |
+| 3    | Lean         | plus the tier-3 rows                         | three groups: guard, child, everyone else / 2 |
+| 4    | Minimal      | plus the tier-4 rows                         | as tier 3 / 1                                 |
+
+**Rules.**
+
+- High memory is acceptable; lag is not. The cache budgets in "Byte limits by owner" stay
+  as they are; variety goes first, and only the last resort below cuts a budget.
+- A mob on screen never changes kind. A mob's or citizen's look changes only right after
+  a purged canvas recovery, when the screen has just been blanked and every figure
+  repaints anyway, so nobody sees it swap. A tier step from lag alone re-dresses no one;
+  what spawns after it wears the new tier.
+- Bosses, bounty marks, the Necromancer, quest-critical mobs and boss adds are never
+  substituted — the Hoarder's cockroaches stay cockroaches. That is the kind's
+  `protected` field on its `MOB_KINDS` entry (`src/levels/mobKinds.ts`), and
+  `standInFor` (`src/levels/ladder.ts`) honours it whatever a ladder says.
+- A stand-in must already be part of the same encounter at that tier, so a substitution
+  never brings in a new look.
+- Tiers only go down during a session. Nothing raises the tier back up, so a device that
+  struggled once is never asked to carry the fuller set again.
+
+**What moves the tier.**
+
+- **Starting tier:** `startingVarietyTier` in `src/core/RenderQuality.ts` — `0` with full
+  cache budgets, `1` when `memoryBudgetScale()` is half, `2` below that. The
+  `performance` preset starts at `PERFORMANCE_PRESET_VARIETY_TIER` (2).
+- **Lag:** `RenderQualityController`'s safety net watches play in `SAFETY_NET_WINDOW_MS`
+  windows and takes one rung per breached window, opening a fresh window after each, so
+  a device still slow after a rung takes the next. A window is **paint-bound** when its
+  mean bake time is at least `PAINT_BOUND_SHARE` (a third) of its mean frame interval;
+  bake time is figure bakes, environment sheet paints and ground chunk bakes, split out
+  of every frame by `src/core/frameCost.ts` in release builds too (`lastFrameCost()`,
+  also shown by `?perf`). A paint-bound window takes a variety rung first; any other
+  takes a render rung first (`auto` only: render scale, then scenery detail). When the
+  preferred kind is used up the other is taken. Hidden-tab and loading-cover frames
+  never count. `sharp` never gives up variety for lag; `performance` gives up only
+  variety.
+- **Canvas loss:** `src/core/canvasRecovery.ts`. A `contextlost` holds every purge check
+  and recovery until `contextrestored`, or `CONTEXT_RESTORE_TIMEOUT_MS` if it never
+  comes, then repaints. Each loss lowers demand at most once: its first repaint steps
+  the tier down one (or, at the minimal tier, counts toward the budget cut). The pending
+  recovery owes a count of these purge steps, so two losses restored before one frame
+  step twice. A repaint for pixels only suspected lost asks for no less: a loss begun while the page was
+  hidden, a purge found by the first check after returning to the foreground, and a
+  page thawed from the back-forward cache. After a timeout, a late `contextrestored`,
+  or a sentinel that holds its pixels again, repaints once more without stepping; a
+  sentinel the browser refuses while the restore is overdue closes the loss too, since
+  it says memory is short, not that the context is still lost. That close is
+  unconfirmed (its own phase, `closedUnconfirmed`): until a sentinel holds, a restore
+  arrives or a new loss begins, a purge found reopens the same loss as overdue instead
+  of stepping the tier again, and backs the check interval off like any repeated purge,
+  so a sentinel refused at every check does not repaint at every other one. A
+  `'memoryPressure'` request (a surface that could not be allocated) steps the tier once
+  and never counts toward the budget cut, even when it rides on one of those repaints
+  that ask for no less; it steps nothing when requested while a loss that is answered
+  or began hidden is open (judged when requested, however the loss later ends), and is
+  spaced out by `MEMORY_PRESSURE_RECOVERY_SPACING_MS`. A memory-pressure request never
+  holds off the purge check. These steps apply whatever the preset, `sharp` included:
+  a dropped canvas is worse than fewer looks. After a purge only the
+  environment sheets drawn within `RECENTLY_DRAWN_FRAMES` are repainted at once; the
+  rest repaint on miss, so a recovery does not climb straight back to the peak that was
+  just lost.
+- **Last resort:** once `PURGES_AT_MINIMAL_TIER_BEFORE_BUDGET_CUT` purges have been
+  answered at tier 4, `cutMemoryBudgetsForSession()` (`src/core/deviceMemoryBudget.ts`)
+  halves what `memoryBudgetScale()` returns for the rest of the session. It is the only
+  path that lowers a cache budget below the device's own share.
+- **Dev:** `?variety=<0-4>` pins the tier (`pinVarietyTier`, from `src/dev/devBoot.ts`):
+  lag and the starting tier leave it there, a canvas recovery still steps it.
+  `npm run playtest -- briar-hollow-assault --variety=<n>` passes it through.
+
+**Look sharing versus kind substitution.** Look sharing keeps the kind, its stats and its
+behaviour and changes only which figure it is drawn as; it applies everywhere from the
+tier its family names. Kind substitution spawns a different kind in place of the authored
+one, in a threat-preserving number, and applies only inside an encounter that declares a
+ladder. Fairy, clown, skeleton and bomber kinds are separate kinds rather than looks of
+one kind, because their look tells the player what they will do; they are only ever
+reduced through a ladder.
+
+**Threat.** Every kind's `threat` on its `MOB_KINDS` entry rates it as a multiple of a
+melee goblin. The method is in the JSDoc on `MobKindEntry` (`src/levels/mobKinds.ts`);
+rate a new kind by it, not by feel, since every substitution count is a ratio of two
+threats.
+
+**Adding a variant family.** A kind with several looks declares a `MobVariantFamily`
+(`src/core/mobVariantFamily.ts`) beside its class — `weightedVariantFamily` or
+`uniformVariantFamily` — with its `canonical` look and the `sharedFromTier` from which
+every spawn wears it; `GOBLIN_MELEE_FAMILY` (`Goblin.ts`), `SKYFOWL_TOUGH_FAMILY` and
+`RAISED_RATKIN_FAMILY` are the examples. Register the kind with `lookKind` and an
+`applyVariant`. The class takes its look as a constructor argument, never picks one
+itself, draws the figure its look names, and takes any look-coupled parameter (a goblin
+weapon's swing timing) from the look. When the looks change the fight, the canonical one
+is the closest to the family's average, as the goblin's axe is. `spawnMob` (`src/levels/spawnFunnel.ts`) resolves the look,
+warms it and, after a purged recovery, re-dresses live mobs through `applyVariant`; no
+tier code changes for a new family.
+
+**Encounters that always share looks.** An encounter that fields so many bodies at once
+that every device should wear one look per kind sets a floor in
+`ENCOUNTER_LOOK_TIER_FLOORS` (`src/levels/encounters.ts`); `lookTierFor` gives the tier
+its looks resolve at. The Briar Hollow siege and the necromancer's raises sit at
+`SHARED_LOOKS_TIER`, so each kind there wears its canonical look whatever the variety
+tier, while the siege's ladder still reads the real tier. Anything that warms an
+encounter's looks ahead (the siege lead-in in `assaultPrewarm.ts`) asks `lookTierFor` too.
+
+**Adding a ladder.** A ladder is an encounter's ordered list of `LadderRow`s
+(`{ tier, kind, standIn }`): from `tier` on, `kind` spawns as `standIn`. It is data
+beside the encounter's own spawn table — `BRIAR_HOLLOW_SIEGE_LADDER` sits beside
+`ASSAULT_WAVES` in `src/systems/briarHollow/assaultWaves.ts` — registered under the
+encounter's `EncounterId` in `ENCOUNTER_LADDERS` (`src/levels/encounters.ts`). An encounter
+with no ladder gets look sharing only. The encounter plans each roster through
+`planEncounterRoster` before spawning it (the siege does so per mini-wave, in
+`planAssaultRoster`), and then spawns the planned kinds through `spawnMob`; `spawnMob`
+itself never substitutes. `resolveLadderRoster` pools replaced bodies per stand-in and
+converts them by `threat(kind) / threat(standIn)`, rounded once per stand-in and never
+below one body. Rows resolve transitively, so a stand-in a later tier removes resolves
+through its own row. A row whose two threats are further apart than
+`ONE_FOR_ONE_THREAT_BAND` must change the body count; `validateLadder` and
+`substitutionRespectsBand` hold this. A new mob in an encounter that has a ladder gets a
+row in it; only the kinds the encounter falls back on at tier 4 go without one. A kind's `approach`
+rows are what a lead-in warms for it, so warming always follows the kinds actually
+planned at the tier.
+
+**Town crowd.** `pickCitizenFigure` (`src/creatures/citizenFigure.ts`) reads the tier for
+street citizens, interior occupants and market vendors alike. Humans follow
+`TOWN_CAST_TIER_PLANS` (`src/sprites/person/townCastLooks.ts`): role groups that wear
+their first-listed role's looks, and how many of those looks each keeps. Guards and
+children always keep a look of their own. Skyfowl keep the first
+`skyfowlStreetLookAllowance(tier)` civilian looks, one per street role first while there
+is room. A citizen keeps its role, and with it its behaviour and services. Named
+residents keep their own looks at every tier, and a citizen in a conversation keeps the
+face being talked to; any other `Townsperson` re-picks only after a purged recovery.
+
+**Gates.**
+
+- `npm run check:spawn-funnel` (part of `lint` and `check`) — every hostile is built
+  through `spawnMob`; a `new` of a hostile class outside `src/levels/mobKinds.ts` fails.
+- `npm run verify:canvas-recovery` — one loss runs one recovery and one tier step, a
+  second loss steps again, the restore timeout recovers once, memory pressure steps
+  except inside an answered loss, a lag step never changes a live look, and only
+  repeated purges at tier 4 cut the budgets. A purge re-dresses a live mob in its
+  shared look, same kind and health, and repaints only the sheets drawn lately.
+- `npm run verify:render-quality` — synthetic windows walk the lag ladder in order,
+  paint-bound windows take variety rungs, `sharp` never steps on lag, and the starting
+  tier follows the memory scale and preset.
+- `npm run gates:assault-residency` (A4) — every declared ladder passes `validateLadder`;
+  at every tier and difficulty no planned mini-wave brings a removed kind, every
+  stand-in is already in the siege, every substitution keeps its threat, and the
+  lead-in warms exactly the planned kinds.
+- `npm run gates:human-cast` (H9, H10) and `npm run gates:skyfowl-cast` (G9) — the street
+  never wears more distinct looks than its tier allows; a citizen of either cast changes
+  look only at a purged recovery, and named residents and citizens in a conversation keep
+  theirs at every tier.
+
+**Measuring at a tier.** Serve the game and open
+`?playtest=briar-hollow-assault&assaultNow&perf&variety=<n>` for each tier, then read,
+at wave 2: figure-cache bytes and surfaces from `__perfMemory()`, the p95 frame interval
+from `__perfRecorder` (see "Measuring any of this"), and the tab's total from Chrome's
+Task Manager. The game's own tally misses GPU-side and browser memory — it read about
+725 MB against Chrome's 1.2 GB in the siege — so the Task Manager number is the one that
+says whether a tier holds. Run it with no gate suites or other game tabs open; they
+compete for the same GPU.
 
 ## Ground chunks bake on a budget
 

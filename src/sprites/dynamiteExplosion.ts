@@ -978,6 +978,21 @@ const SCORCH_SPECK_REACH_SPREAD = 0.5;
 const SCORCH_SPECK_MIN_SIZE = 0.035;
 const SCORCH_SPECK_SIZE_SPREAD = 0.05;
 
+/** How far a scorch's farthest stamp can reach from its centre, as a share of its radius. */
+const SCORCH_REACH_SHARE = Math.max(
+  SCORCH_CENTRE_SIZE,
+  SCORCH_BLOTCH_OFFSET + SCORCH_BLOTCH_MIN_SIZE + SCORCH_BLOTCH_SIZE_SPREAD,
+  SCORCH_SPECK_MIN_REACH +
+    SCORCH_SPECK_REACH_SPREAD +
+    SCORCH_SPECK_MIN_SIZE +
+    SCORCH_SPECK_SIZE_SPREAD,
+);
+
+/** The farthest any part of a scorch of `radius` is drawn from its centre, in pixels. */
+export function scorchMarkReachPx(radius: number): number {
+  return radius * SCORCH_REACH_SHARE;
+}
+
 /**
  * The blackened floor a blast leaves behind: an irregular soot blotch with
  * specks of soot flung outward from its centre. Drawn in the ground pass, under

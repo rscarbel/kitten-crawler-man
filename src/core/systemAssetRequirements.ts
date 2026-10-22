@@ -1,4 +1,4 @@
-import { ASSET_GROUPS, type AssetGroup } from './assetGroups';
+import { ASSET_GROUPS, type AssetGroup, type CreatureKind } from './assetGroups';
 import type { SpriteKey } from './SpriteLoader';
 
 /**
@@ -16,8 +16,9 @@ import type { SpriteKey } from './SpriteLoader';
  * One entry per system, or per bounty/quest *type* where a system covers more
  * than one distinct encounter — keyed by system/bounty-type/quest-id.
  * `levelIds` is which floors the entry's creatures can actually appear on;
- * `mobTypes` are keys into
- * `MOB_SPRITE_KEYS` (`src/core/assetGroups.ts`) so `verify:assets` can confirm
+ * `mobTypes` are creature kinds whose sprite needs `MOB_SPRITE_KEYS` and
+ * `FRIENDLY_CREATURE_SPRITE_KEYS` (`src/core/assetGroups.ts`) declare, so
+ * `verify:assets` can confirm
  * `requiredGroups` actually covers what the system spawns, not just that the
  * author remembered to list *something*.
  */
@@ -26,8 +27,8 @@ export interface SystemAssetRequirement {
   readonly id: string;
   /** Level ids (`LevelDef.id`) this system/encounter can introduce creatures on. */
   readonly levelIds: readonly string[];
-  /** Mob-type keys into `MOB_SPRITE_KEYS` this system/encounter can construct. */
-  readonly mobTypes: readonly string[];
+  /** The creature kinds this system/encounter can construct. */
+  readonly mobTypes: readonly CreatureKind[];
   /** Asset groups declared as covering `mobTypes`' sprite needs. */
   readonly requiredGroups: readonly AssetGroup[];
 }
@@ -187,7 +188,7 @@ export const SYSTEM_ASSET_REQUIREMENTS: readonly SystemAssetRequirement[] = [
     levelIds: LEVEL3,
     // The assault's undead are painted too — the necromancer, the three raised
     // ratkin looks and the Grave Bull — so they need no group either; the
-    // assault warms their figures ahead of each wave (`prewarmAssaultWave`).
+    // assault warms their figures ahead of each wave (`AssaultWavePrewarm`).
     // The herd (`LivestockSystem`) is painted as well, and warms its own coats
     // as it spawns.
     // The militia (`SoldierSystem`) are ratkin cast figures, warmed with the

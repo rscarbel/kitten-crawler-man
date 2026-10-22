@@ -37,12 +37,13 @@ import type { HumanPlayer } from '../creatures/HumanPlayer';
 import type { CatPlayer } from '../creatures/CatPlayer';
 import type { GameSystem, SystemContext } from './GameSystem';
 import type { EventBus } from '../core/EventBus';
-import { SmallSpider } from '../creatures/SmallSpider';
+import type { SmallSpider } from '../creatures/SmallSpider';
+import { liveSpawnContext, spawnMob } from '../levels/spawnFunnel';
 import { prewarmSmallSpider, prewarmSmallSpiderCombat } from '../sprites/spiderSprite';
-import { GrotesqueSpider, MAX_LIVE_EGGS_AND_HATCHLINGS } from '../creatures/GrotesqueSpider';
+import { MAX_LIVE_EGGS_AND_HATCHLINGS, type GrotesqueSpider } from '../creatures/GrotesqueSpider';
 import type { SpiderBroodContext, SpiderEggTile } from '../creatures/GrotesqueSpider';
-import { EGG_HATCHLINGS_PER_EGG, SpiderEgg } from '../creatures/SpiderEgg';
-import { SpiderHatchling } from '../creatures/SpiderHatchling';
+import { EGG_HATCHLINGS_PER_EGG, type SpiderEgg } from '../creatures/SpiderEgg';
+import type { SpiderHatchling } from '../creatures/SpiderHatchling';
 import { prewarmSpiderEgg } from '../sprites/spiderEggSprite';
 import { isInsideSlamCone, type SlamImpact } from '../creatures/grotesqueSpiderTimeline';
 import { SpiderImpactFeedback } from './SpiderImpactFeedback';
@@ -90,6 +91,8 @@ export const SPIDER_QUEST_ID = 'grotesque_spider';
 export const SPIDER_QUEST_NAME = 'Pest Control';
 /** The Journal's name for the thread before Dr. Moult has asked for anything. */
 const SPIDER_QUEST_OFFERED_NAME = `Optional: ${SPIDER_QUEST_NAME}`;
+/** How far south of the egg sac the Grotesque Spider climbs out. */
+const SPIDER_EMERGE_TILES_SOUTH_OF_EGG = 2;
 /** The skill book the lab pays out. */
 const SPIDER_QUEST_BOOK = 'skill_book_night_vision';
 export const SPIDER_QUEST_COMPLETION_XP = 2000;
@@ -1725,7 +1728,13 @@ export class SpiderQuestSystem implements GameSystem {
       liveBroodCount: () => this._liveBroodCount(),
       broodCap: () => MAX_LIVE_EGGS_AND_HATCHLINGS,
       spawnHatchling: (tileX, tileY) => {
-        const hatchling = new SpiderHatchling(tileX, tileY, TILE_SIZE, room.bounds);
+        const hatchling = spawnMob(
+          'spider_hatchling',
+          { x: tileX, y: tileY },
+          this.gameMap,
+          liveSpawnContext('quest:spider'),
+          { leash: room.bounds },
+        );
         this.addMob(hatchling);
         this.hatchlings.push(hatchling);
         this.eggHatchSoundPending = true;
@@ -1819,7 +1828,12 @@ export class SpiderQuestSystem implements GameSystem {
   }
 
   private _spawnEgg(tile: SpiderEggTile): void {
-    const egg = new SpiderEgg(tile.tileX, tile.tileY, TILE_SIZE);
+    const egg = spawnMob(
+      'spider_egg',
+      { x: tile.tileX, y: tile.tileY },
+      this.gameMap,
+      liveSpawnContext('quest:spider'),
+    );
     this.addMob(egg);
     this.spiderEggs.push(egg);
     this.eggLandSoundPending = true;
@@ -1845,7 +1859,13 @@ export class SpiderQuestSystem implements GameSystem {
       egg.hatch();
       this.eggHatchSoundPending = true;
       for (let i = 0; i < EGG_HATCHLINGS_PER_EGG; i++) {
-        const hatchling = new SpiderHatchling(egg.tileX, egg.tileY, TILE_SIZE, room.bounds);
+        const hatchling = spawnMob(
+          'spider_hatchling',
+          { x: egg.tileX, y: egg.tileY },
+          this.gameMap,
+          liveSpawnContext('quest:spider'),
+          { leash: room.bounds },
+        );
         this.addMob(hatchling);
         this.hatchlings.push(hatchling);
       }
@@ -2178,8 +2198,12 @@ export class SpiderQuestSystem implements GameSystem {
         break;
       }
     }
-    const spider = new SmallSpider(spawnX, spawnY, TILE_SIZE);
-    spider.setMap(this.gameMap);
+    const spider = spawnMob(
+      'small_spider',
+      { x: spawnX, y: spawnY },
+      this.gameMap,
+      liveSpawnContext('quest:spider'),
+    );
     this.addMob(spider);
     this.smallSpiders.push(spider);
   }
@@ -2679,12 +2703,16 @@ export class SpiderQuestSystem implements GameSystem {
       this._cutsceneCamFromY = ctx.active.y + TILE_SIZE / 2;
       this._cutsceneCamLerpProgress = 0;
 
-      // Spawn Grotesque Spider 2 tiles south of the egg, facing the scientist
       const eggTile = this.roomData.spiderEggTile;
-      const spiderWorldX = eggTile.x * TILE_SIZE;
-      const spiderWorldY = (eggTile.y + 2) * TILE_SIZE;
-      const spider = new GrotesqueSpider(eggTile.x, eggTile.y + 2, TILE_SIZE);
-      spider.setMap(this.gameMap);
+      const spiderTile = { x: eggTile.x, y: eggTile.y + SPIDER_EMERGE_TILES_SOUTH_OF_EGG };
+      const spiderWorldX = spiderTile.x * TILE_SIZE;
+      const spiderWorldY = spiderTile.y * TILE_SIZE;
+      const spider = spawnMob(
+        'grotesque_spider',
+        spiderTile,
+        this.gameMap,
+        liveSpawnContext('quest:spider'),
+      );
       this._grotesqueSpider = spider;
       this.addMob(spider);
       this._spiderHealer = spawnHardModeBossHealer(

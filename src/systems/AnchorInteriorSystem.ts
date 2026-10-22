@@ -41,7 +41,8 @@ import { findNearbyWalkableTile } from '../map/findWalkableTile';
 import { HumanPlayer } from '../creatures/HumanPlayer';
 import { REPAIR_ROWS } from '../sprites/art/humanFigure';
 import { distinctSpawnTiles, inPlainViewOnTheWayIn } from './interiorHostiles';
-import { ShrineVermin } from '../creatures/ShrineVermin';
+import type { ShrineVermin } from '../creatures/ShrineVermin';
+import { liveSpawnContext, spawnMob } from '../levels/spawnFunnel';
 import { applySpawnDifficulty } from '../core/difficultyProfiles';
 import type { Conversation } from '../dialog/Conversation';
 import type { DialogLine, NonEmpty } from '../dialog/line';
@@ -332,8 +333,9 @@ export class AnchorInteriorSystem {
     if (count <= 0) return;
     const wanted = this.naveSpawnAnchors(count);
     const huntable = inPlainViewOnTheWayIn(this.map);
+    const context = liveSpawnContext('quest:anchor-shrine');
     for (const tile of distinctSpawnTiles(this.map, wanted, VERMIN_SEARCH_RADIUS_TILES, huntable)) {
-      const rat = new ShrineVermin(tile.x, tile.y, TILE_SIZE);
+      const rat = spawnMob('shrine_vermin', tile, this.map, context);
       applySpawnDifficulty(rat);
       this.vermin.push(rat);
       this.addMob(rat);

@@ -32,6 +32,7 @@ import {
   SLAM_KILL_RADIUS_PX,
 } from '../creatures/KrakarenClone';
 import { KrakarenTentacle } from '../creatures/KrakarenTentacle';
+import { liveSpawnContext, spawnMob } from '../levels/spawnFunnel';
 import { hasRoomToMove } from '../map/findWalkableTile';
 import { roomDoorways, type Point } from '../map/roomDoorways';
 import { isLabFloodAtPx } from './bossRooms/krakarenLabLayout';
@@ -1498,7 +1499,12 @@ export class BossRoomSystem implements GameSystem, GroundHazardSource {
         if (this.gameMap.isWalkable(tileX, tileY)) {
           // Through the roster rather than by hand: a roach that never received
           // the scene's spell context walks straight through a protective shell.
-          const cockroach = new Cockroach(tileX, tileY, TILE_SIZE);
+          const cockroach = spawnMob(
+            'cockroach',
+            { x: tileX, y: tileY },
+            this.gameMap,
+            liveSpawnContext('boss:the_hoarder'),
+          );
           cockroach.isBossAdd = true;
           roster.add(cockroach);
           spawned++;
@@ -1711,7 +1717,13 @@ export class BossRoomSystem implements GameSystem, GroundHazardSource {
         const tileX = Math.floor(sp.x / TILE_SIZE);
         const tileY = Math.floor(sp.y / TILE_SIZE);
         if (!hasRoomToMove(this.gameMap, tileX, tileY)) continue;
-        const tentacle = new KrakarenTentacle(tileX, tileY, TILE_SIZE, mob);
+        const tentacle = spawnMob(
+          'krakaren_tentacle',
+          { x: tileX, y: tileY },
+          this.gameMap,
+          liveSpawnContext('boss:krakaren_clone'),
+          { owner: mob },
+        );
         tentacle.isBossAdd = true;
         // Once, at spawn, from the boss that raised it: an add levelled to a
         // weaker curve than the fight it belongs to is free damage reduction.

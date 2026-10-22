@@ -21,7 +21,6 @@ import { dungeonOptionsForLevel } from '../src/levels/dungeonOptions.js';
 import { level1 } from '../src/levels/level1.js';
 import { level2 } from '../src/levels/level2.js';
 import {
-  createMob,
   findWalkableSpawnTile,
   roomSpawnBounds,
   spawnExtraMobs,
@@ -29,6 +28,7 @@ import {
   spawnTreasureRoomMobs,
   type SpawnBounds,
 } from '../src/levels/spawner.js';
+import { liveSpawnContext, spawnMob } from '../src/levels/spawnFunnel.js';
 import type { LevelDef } from '../src/levels/types.js';
 import { STAIRWELL_FOOTPRINT_SPAN } from '../src/map/DungeonGenerator.js';
 import { GameMap } from '../src/map/GameMap.js';
@@ -142,10 +142,17 @@ function boundsHold(bounds: SpawnBounds, tile: Tile): boolean {
 function checkSpawns(levelDef: LevelDef, map: GameMap, seed: number, tally: FloorTally): void {
   const profile = DIFFICULTY_PROFILES.normal;
   const mobs = [
-    ...spawnForLevel(levelDef, map, SPAWN_PARTY_LEVEL, profile, new Set()),
-    ...spawnExtraMobs(levelDef, map, SPAWN_PARTY_LEVEL, profile),
+    ...spawnForLevel(levelDef, map, SPAWN_PARTY_LEVEL, profile, new Set(), Math.random),
+    ...spawnExtraMobs(levelDef, map, SPAWN_PARTY_LEVEL, profile, Math.random),
     ...(levelDef.hasTreasureRoomGuards === true
-      ? spawnTreasureRoomMobs(map.treasureRooms, levelDef, map, SPAWN_PARTY_LEVEL, profile)
+      ? spawnTreasureRoomMobs(
+          map.treasureRooms,
+          levelDef,
+          map,
+          SPAWN_PARTY_LEVEL,
+          profile,
+          Math.random,
+        )
       : []),
   ];
   tally.spawnedMobs += mobs.length;
@@ -166,7 +173,7 @@ function checkSpawns(levelDef: LevelDef, map: GameMap, seed: number, tally: Floo
 
   for (const bounds of stairwellRooms) {
     for (let draw = 0; draw < SPAWN_DRAWS_PER_ROOM; draw++) {
-      const tile = findWalkableSpawnTile(map, bounds);
+      const tile = findWalkableSpawnTile(map, bounds, Math.random);
       if (tile !== null && map.isStairwellTile(tile.x, tile.y)) tally.spawnDrawsOnStairwells++;
     }
   }
@@ -178,7 +185,8 @@ function checkSpawns(levelDef: LevelDef, map: GameMap, seed: number, tally: Floo
       maxTX: stairwell.x + STAIRWELL_FOOTPRINT_SPAN - 1,
       maxTY: stairwell.y + STAIRWELL_FOOTPRINT_SPAN - 1,
     };
-    if (findWalkableSpawnTile(map, footprintOnly) !== null) tally.footprintOnlySearchesFound++;
+    if (findWalkableSpawnTile(map, footprintOnly, Math.random) !== null)
+      tally.footprintOnlySearchesFound++;
   }
 }
 
@@ -208,7 +216,12 @@ function checkMovement(map: GameMap, seed: number, tally: FloorTally): void {
       for (const direction of DIRECTIONS) {
         if (!escapeIsOpen(map, stairwell, tile, direction)) continue;
         tally.escapesTried++;
-        const mob = createMob('goblin', tile.x, tile.y, map);
+        const mob = spawnMob(
+          'goblin',
+          { x: tile.x, y: tile.y },
+          map,
+          liveSpawnContext('dev:spawn'),
+        );
         walk(mob, direction, () => undefined);
         const end = centreTileOf(mob);
         if (inFootprint(stairwell, end)) {
@@ -222,7 +235,12 @@ function checkMovement(map: GameMap, seed: number, tally: FloorTally): void {
         const outside = { x: tile.x - direction.x, y: tile.y - direction.y };
         if (inFootprint(stairwell, outside) || !map.isMobSpawnTile(outside.x, outside.y)) continue;
         tally.entriesTried++;
-        const walker = createMob('goblin', outside.x, outside.y, map);
+        const walker = spawnMob(
+          'goblin',
+          { x: outside.x, y: outside.y },
+          map,
+          liveSpawnContext('dev:spawn'),
+        );
         let entered = false;
         walk(walker, direction, (m) => {
           if (map.isStairwellTile(centreTileOf(m).x, centreTileOf(m).y)) entered = true;
@@ -235,7 +253,12 @@ function checkMovement(map: GameMap, seed: number, tally: FloorTally): void {
           );
         }
 
-        const shoved = createMob('goblin', outside.x, outside.y, map);
+        const shoved = spawnMob(
+          'goblin',
+          { x: outside.x, y: outside.y },
+          map,
+          liveSpawnContext('dev:spawn'),
+        );
         shoved.shoveTo(tile.x * TILE_SIZE, tile.y * TILE_SIZE);
         const landing = centreTileOf(shoved);
         if (map.isStairwellTile(landing.x, landing.y)) {

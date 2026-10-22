@@ -2,10 +2,11 @@
  * The one place a citizen's species picks which cast paints it.
  *
  * `Townsperson` never reads `TownCastLook` or `SkyfowlLook` directly — it asks
- * this module for a `CitizenFigure` once at construction and draws through
- * `drawCitizenSprite` every frame. Adding a third species means adding a case
- * here and nowhere else in `Townsperson` itself (its wander, facing hysteresis
- * and cadence logic stay species-agnostic, same as before this axis existed).
+ * this module for a `CitizenFigure` at construction, and again only after a
+ * purged canvas recovery, and draws through `drawCitizenSprite` every frame.
+ * Adding a third species means adding a case here and nowhere else in
+ * `Townsperson` itself, whose wander, facing hysteresis and cadence logic are
+ * species-agnostic.
  */
 
 import type { DrawnFigureRow } from '../sprites/figure/figureDef';
@@ -32,6 +33,7 @@ import {
   townCastLookRows,
 } from '../sprites/townCastSprite';
 import type { TownSpecies } from '../systems/townSpecies';
+import { VARIETY_TIERS, varietyTier, type VarietyTier } from '../core/varietyTier';
 import type { CitizenSpeechStyle } from '../dialog/speakers';
 import {
   WALK_FRAMES as SKYFOWL_WALK_FRAMES,
@@ -79,18 +81,68 @@ const SKYFOWL_ROLE_FOR_TOWN_ROLE: Record<TownRole, SkyfowlRole> = {
   commoner: 'porter',
 };
 
-const SKYFOWL_LOOKS_BY_ROLE = new Map<SkyfowlRole, readonly SkyfowlLook[]>();
-for (const look of SKYFOWL_CIVILIAN_LOOKS) {
-  const existing = SKYFOWL_LOOKS_BY_ROLE.get(look.role) ?? [];
-  SKYFOWL_LOOKS_BY_ROLE.set(look.role, [...existing, look]);
+const STREET_SKYFOWL_ROLES: ReadonlySet<SkyfowlRole> = new Set(
+  Object.values(SKYFOWL_ROLE_FOR_TOWN_ROLE),
+);
+
+/**
+ * The civilian looks in the order a variety tier keeps them, a tier that keeps
+ * N keeping the first N: the first look of each role a street citizen can
+ * hold, in authored order, then every other look in authored order. A trimmed
+ * set therefore keeps one look per street role for as long as it has room.
+ */
+const SKYFOWL_LOOK_KEEP_ORDER: readonly SkyfowlLook[] = (() => {
+  const leads: SkyfowlLook[] = [];
+  const ledRoles = new Set<SkyfowlRole>();
+  for (const look of SKYFOWL_CIVILIAN_LOOKS) {
+    if (!STREET_SKYFOWL_ROLES.has(look.role) || ledRoles.has(look.role)) continue;
+    ledRoles.add(look.role);
+    leads.push(look);
+  }
+  const rest = SKYFOWL_CIVILIAN_LOOKS.filter((look) => !leads.includes(look));
+  return [...leads, ...rest];
+})();
+
+/** Each variety tier keeps this share of the tier above's skyfowl street looks. */
+const SKYFOWL_LOOKS_KEPT_PER_TIER_STEP = 0.5;
+const AT_LEAST_ONE_LOOK = 1;
+
+/** How many skyfowl civilian looks the street wears at `tier`. */
+export function skyfowlStreetLookAllowance(tier: VarietyTier): number {
+  const kept = Math.ceil(SKYFOWL_CIVILIAN_LOOKS.length * SKYFOWL_LOOKS_KEPT_PER_TIER_STEP ** tier);
+  return Math.max(AT_LEAST_ONE_LOOK, kept);
 }
+
+/**
+ * A uniform says what its wearer does, so a citizen whose own role has no look
+ * left at a tier borrows a plain one rather than a guard's armour.
+ */
+const UNIFORMED_SKYFOWL_ROLES: ReadonlySet<SkyfowlRole> = new Set<SkyfowlRole>(['guard']);
+
+interface SkyfowlTierPools {
+  readonly byRole: ReadonlyMap<SkyfowlRole, readonly SkyfowlLook[]>;
+  /** What a role with no look of its own at this tier wears. */
+  readonly borrowed: readonly SkyfowlLook[];
+}
+
+function skyfowlTierPools(tier: VarietyTier): SkyfowlTierPools {
+  const kept = SKYFOWL_LOOK_KEEP_ORDER.slice(0, skyfowlStreetLookAllowance(tier));
+  const byRole = new Map<SkyfowlRole, readonly SkyfowlLook[]>();
+  for (const look of kept) byRole.set(look.role, [...(byRole.get(look.role) ?? []), look]);
+  const plain = kept.filter((look) => !UNIFORMED_SKYFOWL_ROLES.has(look.role));
+  return { byRole, borrowed: plain.length > 0 ? plain : kept };
+}
+
+const SKYFOWL_POOLS_BY_TIER: ReadonlyMap<VarietyTier, SkyfowlTierPools> = new Map(
+  VARIETY_TIERS.map((tier) => [tier, skyfowlTierPools(tier)]),
+);
 
 /** Salt for the skyfowl picker's own stream — kept distinct from the human cast's. */
 const SKYFOWL_LOOK_PICK_SALT = 0x5c1fa7;
 
-function pickSkyfowlLook(seed: number, role: TownRole): SkyfowlLook {
-  const wanted = SKYFOWL_ROLE_FOR_TOWN_ROLE[role];
-  const pool = SKYFOWL_LOOKS_BY_ROLE.get(wanted) ?? SKYFOWL_CIVILIAN_LOOKS;
+function pickSkyfowlLook(seed: number, role: TownRole, tier: VarietyTier): SkyfowlLook {
+  const pools = SKYFOWL_POOLS_BY_TIER.get(tier) ?? skyfowlTierPools(tier);
+  const pool = pools.byRole.get(SKYFOWL_ROLE_FOR_TOWN_ROLE[role]) ?? pools.borrowed;
   const rng = mulberry32(subSeed(seed, SKYFOWL_LOOK_PICK_SALT));
   return pick(rng, pool);
 }
@@ -99,17 +151,20 @@ function pickSkyfowlLook(seed: number, role: TownRole): SkyfowlLook {
 
 /**
  * Deterministically picks the figure a citizen paints with, from its own
- * appearance seed, job and species. The only draw from randomness here is the
- * citizen's own seed (already spent on it before this axis existed) — no
- * extra draw against the world's own RNG stream.
+ * appearance seed, job and species, out of the looks the street wears at
+ * variety `tier`. The only draw from randomness here is the citizen's own
+ * seed — no extra draw against the world's own RNG stream.
  */
 export function pickCitizenFigure(
   seed: number,
   role: TownRole,
   species: TownSpecies,
+  tier: VarietyTier = varietyTier(),
 ): CitizenFigure {
-  if (species === 'skyfowl') return { species: 'skyfowl', look: pickSkyfowlLook(seed, role) };
-  return { species: 'human', look: pickTownCastLook(seed, role) };
+  if (species === 'skyfowl') {
+    return { species: 'skyfowl', look: pickSkyfowlLook(seed, role, tier) };
+  }
+  return { species: 'human', look: pickTownCastLook(seed, role, tier) };
 }
 
 /**

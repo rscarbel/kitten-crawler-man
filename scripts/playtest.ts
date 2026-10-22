@@ -12,6 +12,8 @@
  *        npm run playtest --briar-hollow-assault --walls=wood
  * `--walls` is fence, wood, stone or fortified (or 1–4 in that order);
  * `--trebuchets` is how many loaded engines stand inside the ring.
+ * `--variety=0`…`4` holds the look-variety tier there against lag and the
+ * starting tier; a canvas recovery still steps it down.
  *
  * Presets live in src/dev/playtestPresets.ts; the browser side of the handoff is
  * `?playtest=<id>` in src/game.ts.
@@ -67,7 +69,7 @@ function requestedPresetId(): string | null {
 }
 
 /** The flags a preset may read, handed on to the browser as query parameters of the same name. */
-const PRESET_FLAGS = ['walls', 'trebuchets'] as const;
+const PRESET_FLAGS = ['walls', 'trebuchets', 'variety'] as const;
 
 /**
  * `--name=value` from the arguments, or npm's `npm_config_name` when the flag

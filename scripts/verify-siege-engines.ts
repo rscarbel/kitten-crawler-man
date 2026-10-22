@@ -37,7 +37,7 @@ import { type Mob, despawnMob } from '../src/creatures/Mob';
 import { RuinsGhoul } from '../src/creatures/RuinsGhoul';
 import { SkeletonArcher } from '../src/creatures/SkeletonArcher';
 import { SkeletonWarrior } from '../src/creatures/SkeletonWarrior';
-import { RaisedRatkin } from '../src/creatures/RaisedRatkin';
+import { RAISED_RATKIN_FAMILY, RaisedRatkin } from '../src/creatures/RaisedRatkin';
 import { Goblin } from '../src/creatures/Goblin';
 import { Troglodyte } from '../src/creatures/Troglodyte';
 import { CONVERTIBLE_MOB_TYPES } from '../src/creatures/convertibleMobs';
@@ -607,7 +607,7 @@ section('Trebuchet damage');
   const target = spawn(rig, ghoul(), mid.x + 5 * TILE_SIZE, mid.y, siegeLevel);
   const bystander = spawn(
     rig,
-    new RaisedRatkin(0, 0, TILE_SIZE),
+    new RaisedRatkin(0, 0, TILE_SIZE, RAISED_RATKIN_FAMILY.canonical),
     mid.x + 6.2 * TILE_SIZE,
     mid.y,
     siegeLevel,
@@ -1241,7 +1241,10 @@ section('Converted allies');
   // A fight for every creature on the allow-list: the ally against a hostile
   // ghoul, with a crawler, a cow and a soldier standing beside the ally.
   const convertibles: ReadonlyArray<{ name: string; make: () => Mob }> = [
-    { name: 'Raised Ratkin', make: () => new RaisedRatkin(0, 0, TILE_SIZE) },
+    {
+      name: 'Raised Ratkin',
+      make: () => new RaisedRatkin(0, 0, TILE_SIZE, RAISED_RATKIN_FAMILY.canonical),
+    },
     { name: 'Skeleton Warrior', make: () => new SkeletonWarrior(0, 0, TILE_SIZE) },
     { name: 'Ruins Ghoul', make: () => ghoul() },
     { name: 'Goblin', make: () => new Goblin(0, 0, TILE_SIZE, 'sword') },
@@ -1337,7 +1340,13 @@ section('Converted allies');
 
   // A crumbled raised ratkin makes no death sound and plays out no corpse.
   const ratRig = makeRig({ seed: 8120, humanLevel: MAX_CONSTRUCTION_LEVEL });
-  const rat = spawn(ratRig, new RaisedRatkin(0, 0, TILE_SIZE), at.x, at.y, 5);
+  const rat = spawn(
+    ratRig,
+    new RaisedRatkin(0, 0, TILE_SIZE, RAISED_RATKIN_FAMILY.canonical),
+    at.x,
+    at.y,
+    5,
+  );
   ratRig.allies.convert(rat, ratRig.human);
   for (let f = 0; f < CONVERTED_ALLY_LIFETIME_FRAMES; f++) ratRig.allies.update();
   check(

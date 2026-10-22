@@ -121,7 +121,9 @@ export class RockGolem extends Mob {
   protected coinDropMin = COIN_DROP_MIN;
   protected coinDropMax = COIN_DROP_MAX;
   override readonly audioTag = 'rock_golem';
-  override readonly bodyPartKey: string | null = ROCK_GOLEM_BODY_PART_KEY;
+  override get bodyPartKey(): string {
+    return ROCK_GOLEM_BODY_PART_KEY;
+  }
   override mass = GOLEM_MASS;
   displayName = 'Rock Golem';
   description = 'A walking quarry. Slow, brutally heavy, and happy to throw the scenery at you.';

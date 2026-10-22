@@ -172,7 +172,9 @@ export class KrakarenClone extends Mob {
   description = 'A 20-ft immobile octopus horror with tentacles covered in human-shaped mouths.';
   mass = MASS;
   override readonly audioTag = 'krakaren';
-  override readonly bodyPartKey = KRAKAREN_BODY_PART_KEY;
+  override get bodyPartKey(): string {
+    return KRAKAREN_BODY_PART_KEY;
+  }
 
   isEnraged = false;
 

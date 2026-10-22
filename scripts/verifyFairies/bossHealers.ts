@@ -55,7 +55,9 @@ import { level1 } from '../../src/levels/level1';
 import { level2 } from '../../src/levels/level2';
 import { level3 } from '../../src/levels/level3';
 import type { LevelDef } from '../../src/levels/types';
-import { createMob, partyLevelOf, spawnExtraMobs, spawnForLevel } from '../../src/levels/spawner';
+import { partyLevelOf, spawnExtraMobs, spawnForLevel } from '../../src/levels/spawner';
+import { liveSpawnContext, spawnMob } from '../../src/levels/spawnFunnel';
+import { isStandaloneMobKind } from '../../src/levels/mobKinds';
 import {
   FAIRY_SPAWN_KEYS,
   FairyRoomLedger,
@@ -215,7 +217,7 @@ interface FloorBuild {
 function buildFloor(def: LevelDef, difficulty: Difficulty, partyLevel: number, seed: number) {
   const map = buildDungeon(def, seed);
   const profile = DIFFICULTY_PROFILES[difficulty];
-  const mobs = spawnForLevel(def, map, partyLevel, profile, new Set());
+  const mobs = spawnForLevel(def, map, partyLevel, profile, new Set(), Math.random);
   const ledger = new FairyRoomLedger(def, partyLevel, profile, difficulty);
   mobs.push(...spawnRoomFairies(map, ledger, mulberry32(seed)));
   const build: FloorBuild = { map, mobs, ledger };
@@ -393,7 +395,9 @@ function arenaRun(
     const map = buildDungeon(level2, seed);
     const profile = DIFFICULTY_PROFILES[difficulty];
     const roster = new MobRoster(map, new SpellSystem());
-    for (const mob of spawnExtraMobs(level2, map, FLOOR2_PARTY_LEVEL, profile)) roster.add(mob);
+    for (const mob of spawnExtraMobs(level2, map, FLOOR2_PARTY_LEVEL, profile, Math.random)) {
+      roster.add(mob);
+    }
     const bossRoom = new BossRoomSystem(
       map,
       undrawnMiniMap,
@@ -849,8 +853,13 @@ function checkUnboundHealerCaught(report: FairyGateReport, seed: number): void {
     if (boss !== null) {
       const tileX = Math.floor(boss.x / TILE_SIZE) + UNBOUND_HEALER_OFFSET_TILES;
       const tileY = Math.floor(boss.y / TILE_SIZE);
-      const stray = createMob(FAIRY_SPAWN_KEYS.healer, tileX, tileY, floor.map);
-      if (stray instanceof HealingFairy) healers.push(stray);
+      const stray = spawnMob(
+        FAIRY_SPAWN_KEYS.healer,
+        { x: tileX, y: tileY },
+        floor.map,
+        liveSpawnContext('dev:spawn'),
+      );
+      healers.push(stray);
     }
     const sighting: BossSighting = { name: bossType, boss, healers };
     return sighting;
@@ -876,15 +885,21 @@ function checkUnlevelledHealerCaught(report: FairyGateReport, hard: readonly Bos
       sighting.boss.spawnTypeKey !== null,
   );
   const reference = levelled?.boss ?? null;
-  const bossKey = reference?.spawnTypeKey ?? null;
+  const spawnKey = reference?.spawnTypeKey ?? null;
+  const bossKey = spawnKey !== null && isStandaloneMobKind(spawnKey) ? spawnKey : null;
   report.precondition(
     reference !== null && bossKey !== null,
-    'a hard-mode boss above level 1, with a spawn key, exists to test the healer levelling against',
+    'a hard-mode boss above level 1, with a standalone spawn key, exists to test the healer levelling against',
   );
   if (reference === null || bossKey === null) return;
   const arena = makeArena();
   const arenaCentre = Math.floor(ARENA_TILES / 2);
-  const boss = createMob(bossKey, arenaCentre, arenaCentre, arena);
+  const boss = spawnMob(
+    bossKey,
+    { x: arenaCentre, y: arenaCentre },
+    arena,
+    liveSpawnContext('dev:spawn'),
+  );
   const healer =
     spawnBossHealer(boss, arena, () => undefined, level1.floorNumber, HEALER_DIFFICULTY) ??
     undefined;
@@ -1432,8 +1447,15 @@ function arenaChase(seed: number, variant: HealerVariant): HealerChase {
     // The floor's own rooms as well as the arena: a healer with no fight left
     // near it runs for the next room holding one, and a floor with none would
     // leave nowhere to run to.
-    const floorMobs = spawnForLevel(level2, map, FLOOR2_PARTY_LEVEL, profile, new Set());
-    const arenaMobs = spawnExtraMobs(level2, map, FLOOR2_PARTY_LEVEL, profile);
+    const floorMobs = spawnForLevel(
+      level2,
+      map,
+      FLOOR2_PARTY_LEVEL,
+      profile,
+      new Set(),
+      Math.random,
+    );
+    const arenaMobs = spawnExtraMobs(level2, map, FLOOR2_PARTY_LEVEL, profile, Math.random);
     for (const mob of [...floorMobs, ...arenaMobs]) roster.add(mob);
     const bossRoom = realBossRoom(
       map,

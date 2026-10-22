@@ -27,8 +27,9 @@ import { Mongo } from '../src/creatures/Mongo';
 import { Signet } from '../src/creatures/Signet';
 import { MoldLion } from '../src/creatures/MoldLion';
 import { HeatherTheBear } from '../src/creatures/HeatherTheBear';
-import { SkyFowl } from '../src/creatures/SkyFowl';
-import { createMob } from '../src/levels/spawner';
+import { SKYFOWL_TOUGH_FAMILY, SkyFowl } from '../src/creatures/SkyFowl';
+import { liveSpawnContext, spawnMob } from '../src/levels/spawnFunnel';
+import type { StandaloneMobKind } from '../src/levels/mobKinds';
 import { makeSepsis } from '../src/core/StatusEffect';
 import { SpatialGrid } from '../src/core/SpatialGrid';
 import { AbilityManager } from '../src/core/AbilityManager';
@@ -37,7 +38,6 @@ import { FloorTypeValue, type TileContent } from '../src/map/tileTypes';
 import { BrindleGrub } from '../src/creatures/BrindleGrub';
 import { Mercenary } from '../src/creatures/Mercenary';
 import { getMercenaryTemplate, type MercenaryTemplateId } from '../src/core/mercenaryTemplates';
-import { GoblinBomber } from '../src/creatures/GoblinBomber';
 import {
   applyGoblinBlastToBodies,
   GOBLIN_BLAST_DAMAGE_TO_BYSTANDER_MOBS,
@@ -129,7 +129,7 @@ function makeCrawlers(): { human: HumanPlayer; cat: CatPlayer } {
 }
 
 function makeGoblin(tileX = start.x + 2, tileY = start.y): Mob {
-  return createMob('goblin', tileX, tileY, map);
+  return spawnMob('goblin', { x: tileX, y: tileY }, map, liveSpawnContext('dev:spawn'));
 }
 
 function makePet(owner: CatPlayer): Mongo {
@@ -145,7 +145,7 @@ function makeSignet(): Signet {
 }
 
 function makeFowl(): SkyFowl {
-  const fowl = new SkyFowl(start.x, start.y, TILE_SIZE);
+  const fowl = new SkyFowl(start.x, start.y, TILE_SIZE, SKYFOWL_TOUGH_FAMILY.canonical);
   fowl.setMap(map);
   return fowl;
 }
@@ -391,13 +391,13 @@ console.log(
 
   const centreX = BLAST_CENTRE_TILE * TILE_SIZE + TILE_SIZE / 2;
   const centreY = BLAST_CENTRE_TILE * TILE_SIZE + TILE_SIZE / 2;
-  const bomber = createMob(
+  const bomber = spawnMob(
     'goblin_bombardier',
-    BLAST_CENTRE_TILE + THROWER_OFFSET_TILES,
-    BLAST_CENTRE_TILE,
+    { x: BLAST_CENTRE_TILE + THROWER_OFFSET_TILES, y: BLAST_CENTRE_TILE },
     room,
+    liveSpawnContext('dev:spawn'),
   );
-  const crawlerHpShare = bomber instanceof GoblinBomber ? bomber.crawlerHpShare : 0;
+  const crawlerHpShare = bomber.crawlerHpShare;
   const blast: GoblinBlast = {
     x: centreX,
     y: centreY,
@@ -434,8 +434,13 @@ console.log(
     hireling.setMap(room);
     return hireling;
   };
-  const spawned = (type: string) => (): Mob =>
-    createMob(type, BLAST_CENTRE_TILE, BLAST_CENTRE_TILE, room);
+  const spawned = (type: StandaloneMobKind) => (): Mob =>
+    spawnMob(
+      type,
+      { x: BLAST_CENTRE_TILE, y: BLAST_CENTRE_TILE },
+      room,
+      liveSpawnContext('dev:spawn'),
+    );
 
   const victims: ReadonlyArray<{
     name: string;

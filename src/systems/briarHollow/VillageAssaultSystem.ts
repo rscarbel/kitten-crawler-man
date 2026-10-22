@@ -59,15 +59,24 @@ import type { Mob } from '../../creatures/Mob';
 import type { Player } from '../../Player';
 import { RaisedRatkin } from '../../creatures/RaisedRatkin';
 import { RisingSkeleton } from '../../creatures/RisingSkeleton';
-import { RuinsGhoul } from '../../creatures/RuinsGhoul';
-import { SkeletonWarrior } from '../../creatures/SkeletonWarrior';
-import { SkeletonArcher } from '../../creatures/SkeletonArcher';
-import { GraveBull } from '../../creatures/GraveBull';
 import { Necromancer } from '../../creatures/Necromancer';
 import { SkyFowl } from '../../creatures/SkyFowl';
 import type { Fairy } from '../../creatures/fairies/Fairy';
 import { BOUNTY_MAX_BLOW_HP_SHARE } from '../../creatures/mobLevelScaling';
-import { createMob } from '../../levels/spawner';
+import { planEncounterRoster, spawnMob, type SpawnContext } from '../../levels/spawnFunnel';
+import { BRIAR_HOLLOW_SIEGE } from '../../levels/encounters';
+import { varietyTier, type VarietyTier } from '../../core/varietyTier';
+import type { ApproachView } from '../../sprites/figure/approachRows';
+import {
+  ASSAULT_WAVES,
+  HOSTILE_ORDER,
+  MIN_UNDEAD_PER_WAVE,
+  UNDEAD_ORDER,
+  isAssaultSpawnKind,
+  type AssaultSpawnKind,
+  type AssaultUndeadKind,
+  type AssaultWaveSpec,
+} from './assaultWaves';
 import {
   REGULAR_FAIRY_KINDS,
   createFairy,
@@ -96,15 +105,7 @@ import type {
   SiegeWorld,
 } from '../../creatures/siege/siegeTypes';
 import { engageTrebuchet, nearestLiveTrebuchetTo } from '../../creatures/siege/trebuchetThreat';
-import {
-  ASSAULT_WAVE_NUMBERS,
-  AssaultWavePrewarm,
-  assaultRosterRows,
-  isAssaultRosterKind,
-  type AssaultApproachView,
-  type AssaultRosterEntry,
-  type AssaultWave,
-} from '../../sprites/assaultPrewarm';
+import { AssaultWavePrewarm, type AssaultLeadIn } from '../../sprites/assaultPrewarm';
 import { drawCrumble } from '../../sprites/art/siegeEffectsArt';
 import { worldPalette } from '../../ui/theme/worldInk';
 import { worldText } from '../../ui/world/worldText';
@@ -360,186 +361,71 @@ export function assaultDifficulty(profile: DifficultyProfile): Difficulty {
 const SIEGE_VOICE_HOLD_SECONDS = 2;
 const SIEGE_VOICE_HOLD_FRAMES = SIEGE_VOICE_HOLD_SECONDS * UPDATES_PER_SECOND;
 
-/** The fewest undead any wave raises, whatever the difficulty takes off it. */
-export const MIN_UNDEAD_PER_WAVE = 10;
 /**
  * How much harder a bounty mark strikes a wall than a common body of its
  * kind: a mark's swing is sized to fell a crawler, not to batter stone.
  */
 const BOUNTY_MARK_STRUCTURE_SCALE = 4;
 
+/** Every wave opens on the first wave's own roster. */
+const OPENING_ROSTER_INDEX = 0;
+
 // ── The waves ───────────────────────────────────────────────────────────────
-
-/** The necromancer's own army: the undead every wave raises. */
-export type AssaultUndeadKind =
-  'raised_ratkin' | 'ruins_ghoul' | 'skeleton_warrior' | 'skeleton_archer' | 'grave_bull';
-
-/**
- * The crawl's other hostiles he drives before him, by spawn-registry key:
- * across the four waves, every regular enemy there is but the spiders and the
- * grubs. The rock golems come with the last.
- */
-export type AssaultHostileKind =
-  | 'goblin'
-  | 'goblin_archer'
-  | 'goblin_dynamiter'
-  | 'goblin_bombardier'
-  | 'rat'
-  | 'cockroach'
-  | 'sky_fowl'
-  | 'troglodyte'
-  | 'llama'
-  | 'circus_lemur'
-  | 'fat_clown'
-  | 'stilt_clown'
-  | 'tuskling'
-  | 'mold_lion'
-  | 'krasue'
-  | 'city_elf_cultist'
-  | 'mantis'
-  | 'bugaboo'
-  | 'rock_golem';
-
-/** Which kind of body a wave spawns. */
-export type AssaultSpawnKind = AssaultUndeadKind | AssaultHostileKind;
-
-export interface AssaultWaveSpec {
-  /** Raised all at once as the wave begins; never fewer than {@link MIN_UNDEAD_PER_WAVE}. */
-  readonly undead: Readonly<Partial<Record<AssaultUndeadKind, number>>>;
-  readonly hostiles: Readonly<Partial<Record<AssaultHostileKind, number>>>;
-  /**
-   * The share of his full health Vordrick comes with. Below 1 he cannot be
-   * killed, and fades away when beaten; at 1 his death wins the siege.
-   */
-  readonly necromancerHealthShare: number;
-}
-
-/** Each wave's base counts, before the difficulty's {@link AssaultTuning.bodyScale}. */
-export const ASSAULT_WAVES: readonly AssaultWaveSpec[] = [
-  {
-    undead: { raised_ratkin: 5, ruins_ghoul: 2, skeleton_warrior: 2, skeleton_archer: 1 },
-    hostiles: {
-      goblin: 2,
-      goblin_archer: 1,
-      goblin_dynamiter: 1,
-      rat: 2,
-      cockroach: 2,
-      sky_fowl: 1,
-    },
-    necromancerHealthShare: 0.4,
-  },
-  {
-    undead: {
-      raised_ratkin: 4,
-      ruins_ghoul: 2,
-      skeleton_warrior: 2,
-      skeleton_archer: 2,
-      grave_bull: 1,
-    },
-    hostiles: {
-      goblin_dynamiter: 1,
-      goblin_bombardier: 1,
-      troglodyte: 1,
-      llama: 1,
-      circus_lemur: 1,
-      fat_clown: 1,
-      stilt_clown: 1,
-      tuskling: 2,
-    },
-    necromancerHealthShare: 0.55,
-  },
-  {
-    undead: {
-      raised_ratkin: 4,
-      ruins_ghoul: 3,
-      skeleton_warrior: 2,
-      skeleton_archer: 2,
-      grave_bull: 1,
-    },
-    hostiles: { mold_lion: 1, krasue: 2, city_elf_cultist: 1, mantis: 2, bugaboo: 1 },
-    necromancerHealthShare: 0.7,
-  },
-  {
-    undead: {
-      raised_ratkin: 5,
-      ruins_ghoul: 3,
-      skeleton_warrior: 3,
-      skeleton_archer: 2,
-      grave_bull: 1,
-    },
-    hostiles: {
-      rock_golem: 2,
-      goblin: 2,
-      goblin_dynamiter: 1,
-      goblin_bombardier: 1,
-      krasue: 1,
-      troglodyte: 1,
-      stilt_clown: 1,
-    },
-    necromancerHealthShare: 1,
-  },
-];
 
 /** The wave at `index` (from 0), or null past the last. */
 function waveSpec(index: number): AssaultWaveSpec | null {
   return index >= 0 && index < ASSAULT_WAVES.length ? ASSAULT_WAVES[index] : null;
 }
 
-const UNDEAD_ORDER: readonly AssaultUndeadKind[] = [
-  'raised_ratkin',
-  'ruins_ghoul',
-  'skeleton_warrior',
-  'skeleton_archer',
-  'grave_bull',
-];
-
-const HOSTILE_ORDER: readonly AssaultHostileKind[] = [
-  'goblin',
-  'goblin_archer',
-  'goblin_dynamiter',
-  'goblin_bombardier',
-  'rat',
-  'cockroach',
-  'sky_fowl',
-  'troglodyte',
-  'llama',
-  'circus_lemur',
-  'fat_clown',
-  'stilt_clown',
-  'tuskling',
-  'mold_lion',
-  'krasue',
-  'city_elf_cultist',
-  'mantis',
-  'bugaboo',
-  'rock_golem',
-];
-
 /** A body coming up the north lane walks south, toward the viewer, and so on round. */
-const APPROACH_VIEW_BY_SIDE: Readonly<Record<AssaultLaneId, AssaultApproachView>> = {
+const APPROACH_VIEW_BY_SIDE: Readonly<Record<AssaultLaneId, ApproachView>> = {
   north: 'front',
   south: 'away',
   east: 'side',
   west: 'side',
 };
 
+/** One kind of a planned mini-wave and how many of it rise. */
+export interface AssaultRosterEntry {
+  readonly kind: AssaultSpawnKind;
+  readonly count: number;
+}
+
+export type AssaultRoster = readonly AssaultRosterEntry[];
+
 /**
- * The figure-drawn kinds of wave `wave`'s roster other than the undead its
- * arrival rows already cover, in the order `planWave` sends them up the lane.
+ * The bodies wave `rosterIndex`'s roster (from 0) raises as one mini-wave on
+ * `difficulty`, at `context`'s variety tier: its counts scaled by the
+ * difficulty's {@link AssaultTuning.bodyScale}, any shortfall of undead made
+ * up in raised ratkin, the army's rank and file, then its kinds resolved
+ * through the siege's ladder. Kinds come in the order they go up the lane.
  */
-export function assaultWaveRoster(wave: AssaultWave): AssaultRosterEntry[] {
-  const spec = waveSpec(wave - 1);
+export function planAssaultRoster(
+  rosterIndex: number,
+  difficulty: Difficulty,
+  context: SpawnContext,
+): AssaultRoster {
+  const spec = waveSpec(rosterIndex);
   if (spec === null) return [];
-  const entries: AssaultRosterEntry[] = [];
-  for (const kind of UNDEAD_ORDER) {
-    const count = spec.undead[kind] ?? 0;
-    if (isAssaultRosterKind(kind)) entries.push({ kind, count });
+  const { bodyScale } = ASSAULT_TUNING[difficulty];
+  const scaledCount = (base: number | undefined): number =>
+    base === undefined || base <= 0 ? 0 : Math.max(1, Math.round(base * bodyScale));
+  const undeadCounts = new Map<AssaultUndeadKind, number>();
+  for (const kind of UNDEAD_ORDER) undeadCounts.set(kind, scaledCount(spec.undead[kind]));
+  const undeadTotal = [...undeadCounts.values()].reduce((sum, count) => sum + count, 0);
+  if (undeadTotal < MIN_UNDEAD_PER_WAVE) {
+    const shortfall = MIN_UNDEAD_PER_WAVE - undeadTotal;
+    undeadCounts.set('raised_ratkin', (undeadCounts.get('raised_ratkin') ?? 0) + shortfall);
   }
-  for (const kind of HOSTILE_ORDER) {
-    const count = spec.hostiles[kind] ?? 0;
-    if (isAssaultRosterKind(kind)) entries.push({ kind, count });
+  const authored = [
+    ...UNDEAD_ORDER.map((kind) => ({ kind, count: undeadCounts.get(kind) ?? 0 })),
+    ...HOSTILE_ORDER.map((kind) => ({ kind, count: scaledCount(spec.hostiles[kind]) })),
+  ];
+  const planned: AssaultRosterEntry[] = [];
+  for (const { kind, count } of planEncounterRoster(authored, context).roster) {
+    if (isAssaultSpawnKind(kind)) planned.push({ kind, count });
   }
-  return entries;
+  return planned;
 }
 
 /** The four sides, in the order the HUD names them. */
@@ -629,29 +515,19 @@ interface PendingArrival {
   waitedFrames: number;
 }
 
-function isUndeadKind(kind: AssaultSpawnKind): kind is AssaultUndeadKind {
-  return UNDEAD_ORDER.some((undead) => undead === kind);
+/** The siege's spawns, drawing from the assault's own random stream. */
+function assaultSpawnContext(random: () => number): SpawnContext {
+  return { encounter: BRIAR_HOLLOW_SIEGE, random };
 }
 
-/** One of the necromancer's dead, of `kind`, standing on tile (`tileX`, `tileY`), not yet levelled. */
-export function createUndead(kind: AssaultUndeadKind, tileX: number, tileY: number): Mob {
-  switch (kind) {
-    case 'raised_ratkin':
-      return new RaisedRatkin(tileX, tileY, TILE_SIZE);
-    case 'ruins_ghoul':
-      return new RuinsGhoul(tileX, tileY, TILE_SIZE);
-    case 'skeleton_warrior':
-      return new SkeletonWarrior(tileX, tileY, TILE_SIZE);
-    case 'skeleton_archer':
-      return new SkeletonArcher(tileX, tileY, TILE_SIZE);
-    case 'grave_bull':
-      return new GraveBull(tileX, tileY, TILE_SIZE);
-  }
-}
-
-function createSpawn(kind: AssaultSpawnKind, tileX: number, tileY: number, map: GameMap): Mob {
-  if (isUndeadKind(kind)) return createUndead(kind, tileX, tileY);
-  const mob = createMob(kind, tileX, tileY, map);
+function createSpawn(
+  kind: AssaultSpawnKind,
+  tileX: number,
+  tileY: number,
+  map: GameMap,
+  random: () => number,
+): Mob {
+  const mob = spawnMob(kind, { x: tileX, y: tileY }, map, assaultSpawnContext(random));
   // A town bird is calm until struck; one the necromancer drives is not.
   if (mob instanceof SkyFowl) mob.provoke();
   return mob;
@@ -1089,6 +965,15 @@ export class VillageAssaultSystem {
   private miniWaveRoster = 0;
   /** Bodies planned for the mini-wave now in the field, for the mini-wave-advance gate. */
   private miniWavePlanned = 0;
+  /** What the mini-wave now in the field was planned as, and at which tier: what its lead-in warms. */
+  private plannedMiniWave: { readonly roster: AssaultRoster; readonly tier: VarietyTier } | null =
+    null;
+  /** The first wave's roster as it would be planned now, kept while nothing it hangs on changes. */
+  private openingForecast: {
+    readonly difficulty: Difficulty;
+    readonly tier: VarietyTier;
+    readonly roster: AssaultRoster;
+  } | null = null;
   /** Every mini-wave's planned bodies summed, for the real wave's own clear gate. */
   private waveTotalPlanned = 0;
   /**
@@ -1166,11 +1051,7 @@ export class VillageAssaultSystem {
     };
     this.campaign = campaignFor(deps.state, this.random);
     this.bellWorld = hollowBellCentre(deps.site.square.bellTile);
-    this.prewarm =
-      deps.prewarm ??
-      new AssaultWavePrewarm({
-        rosterRows: (wave, view) => assaultRosterRows(assaultWaveRoster(wave), view),
-      });
+    this.prewarm = deps.prewarm ?? new AssaultWavePrewarm();
     this.march = new MarchDirective(deps.site);
     this.withdraw = new WithdrawDirective(deps.gameMap, deps.site);
     this.unsubscribers.push(
@@ -1344,6 +1225,7 @@ export class VillageAssaultSystem {
     this.miniWaveOf.clear();
     this.miniWaveRoster = 0;
     this.miniWavePlanned = 0;
+    this.plannedMiniWave = null;
     this.waveTotalPlanned = 0;
     this.fairies.clear();
     this.waveBodiesOut = false;
@@ -1451,7 +1333,7 @@ export class VillageAssaultSystem {
   }
 
   private updateImminent(frame: VillageAssaultFrame): void {
-    this.prewarm.update(1, this.approachView());
+    this.prewarm.update(this.openingLeadIn());
     const quest = this.deps.state.quest;
     quest.imminentCountdownFrames = Math.max(0, quest.imminentCountdownFrames - 1);
     if (this.checkAbandon(frame)) return;
@@ -1490,7 +1372,7 @@ export class VillageAssaultSystem {
     this.waveBodiesOut = false;
     // Anything the live cap held back from the mini-wave before still comes, first.
     const leftovers = this.pending.map((spawn) => ({ ...spawn, dueFrame: this.waveFrames }));
-    const planned = this.planWave(spec, realWaveIndex, rosterIndex, lane, this.waveFrames);
+    const planned = this.planWave(rosterIndex, realWaveIndex, lane, this.waveFrames);
     this.pending = [...leftovers, ...planned];
     this.miniWavePlanned = planned.length;
     this.waveTotalPlanned += planned.length;
@@ -1505,41 +1387,31 @@ export class VillageAssaultSystem {
   }
 
   /**
-   * A mini-wave's bodies, scaled for the difficulty and raised one after
-   * another up its lane, each {@link SPAWN_STAGGER_FRAMES} behind the last.
+   * A mini-wave's bodies as {@link planAssaultRoster} plans them at the tier
+   * in force now, raised one after another up its lane, each
+   * {@link SPAWN_STAGGER_FRAMES} behind the last. The plan is kept for the
+   * lead-in to warm, so a tier change while it rises reaches only the next.
    */
   private planWave(
-    spec: AssaultWaveSpec,
-    wave: number,
     rosterIndex: number,
+    wave: number,
     lane: AssaultLane,
     baseFrame: number,
   ): PendingSpawn[] {
-    const tuning = ASSAULT_TUNING[assaultDifficulty(this.deps.difficulty())];
-    const scaledCount = (base: number | undefined): number =>
-      base === undefined || base <= 0 ? 0 : Math.max(1, Math.round(base * tuning.bodyScale));
-    const undeadCounts = new Map<AssaultUndeadKind, number>();
-    for (const kind of UNDEAD_ORDER) undeadCounts.set(kind, scaledCount(spec.undead[kind]));
-    let undeadTotal = [...undeadCounts.values()].reduce((sum, count) => sum + count, 0);
-    // The shortfall is made up in raised ratkin, the army's rank and file.
-    if (undeadTotal < MIN_UNDEAD_PER_WAVE) {
-      const shortfall = MIN_UNDEAD_PER_WAVE - undeadTotal;
-      undeadCounts.set('raised_ratkin', (undeadCounts.get('raised_ratkin') ?? 0) + shortfall);
-      undeadTotal = MIN_UNDEAD_PER_WAVE;
-    }
-    const counts = new Map<AssaultSpawnKind, number>(undeadCounts);
-    for (const kind of HOSTILE_ORDER) {
-      const count = scaledCount(spec.hostiles[kind]);
-      if (count > 0) counts.set(kind, count);
-    }
+    const tier = varietyTier();
+    const roster = planAssaultRoster(rosterIndex, assaultDifficulty(this.deps.difficulty()), {
+      ...assaultSpawnContext(this.random),
+      tier,
+    });
+    this.plannedMiniWave = { roster, tier };
+    const counts = new Map(roster.map(({ kind, count }) => [kind, count]));
     // Round-robin through the kinds, so if the live cap holds some back it
     // holds back a mix rather than every one of the last kind.
-    const kinds: readonly AssaultSpawnKind[] = [...UNDEAD_ORDER, ...HOSTILE_ORDER];
     const order: AssaultSpawnKind[] = [];
     let added = true;
     while (added) {
       added = false;
-      for (const kind of kinds) {
+      for (const { kind } of roster) {
         const left = counts.get(kind) ?? 0;
         if (left <= 0) continue;
         order.push(kind);
@@ -1591,8 +1463,7 @@ export class VillageAssaultSystem {
     this.tickNecromancerRetreat();
 
     if (this.lullFrames > 0) {
-      // The next real wave always opens on its first mini-wave, the first wave's own roster.
-      this.prewarm.update(this.prewarmWaveFor(0), this.approachView());
+      this.prewarm.update(this.openingLeadIn());
       this.lullFrames--;
       if (this.lullFrames === 0) this.startWave(index + 1);
       return;
@@ -1602,10 +1473,7 @@ export class VillageAssaultSystem {
     this.spawnArrivals();
     const living = this.spawnDue();
     this.peakLiving = Math.max(this.peakLiving, living);
-    this.prewarm.update(
-      this.waveStillArriving() ? this.prewarmWaveFor(this.miniWaveRoster) : null,
-      this.approachView(),
-    );
+    this.prewarm.update(this.waveStillArriving() ? this.plannedLeadIn() : null);
 
     // Every mini-wave through this real wave shares one WAVE_MAX_FRAMES clock:
     // a wave with nowhere to spawn still reaches its own roster and advances
@@ -1663,14 +1531,41 @@ export class VillageAssaultSystem {
   }
 
   /** Which way the coming or current wave's bodies face as they walk up their lane. */
-  private approachView(): AssaultApproachView {
+  private approachView(): ApproachView {
     const side = this.attackSide;
     return side === null ? 'side' : APPROACH_VIEW_BY_SIDE[side];
   }
 
-  private prewarmWaveFor(index: number): AssaultWave | null {
-    const wave = index + 1;
-    return ASSAULT_WAVE_NUMBERS.find((number) => number === wave) ?? null;
+  /**
+   * The lead-in of the mini-wave every wave opens on, the first wave's own
+   * roster, as it would be planned at the tier in force now: the countdown
+   * and every lull warm what will rise.
+   */
+  private openingLeadIn(): AssaultLeadIn {
+    const difficulty = assaultDifficulty(this.deps.difficulty());
+    const tier = varietyTier();
+    const kept = this.openingForecast;
+    const forecast =
+      kept !== null && kept.difficulty === difficulty && kept.tier === tier
+        ? kept
+        : {
+            difficulty,
+            tier,
+            roster: planAssaultRoster(OPENING_ROSTER_INDEX, difficulty, {
+              ...assaultSpawnContext(this.random),
+              tier,
+            }),
+          };
+    this.openingForecast = forecast;
+    return { roster: forecast.roster, tier, view: this.approachView() };
+  }
+
+  /** The lead-in of the mini-wave now rising, as it was planned; null before any is. */
+  private plannedLeadIn(): AssaultLeadIn | null {
+    const planned = this.plannedMiniWave;
+    return planned === null
+      ? null
+      : { roster: planned.roster, tier: planned.tier, view: this.approachView() };
   }
 
   /**
@@ -1834,7 +1729,7 @@ export class VillageAssaultSystem {
     wave: number,
     rosterIndex: number,
   ): void {
-    const mob = createSpawn(kind, tile.x, tile.y, this.deps.gameMap);
+    const mob = createSpawn(kind, tile.x, tile.y, this.deps.gameMap, this.random);
     // They claw their way up out of the ground at the lane's head: the row
     // each wave's rows are warmed for.
     if (mob instanceof RaisedRatkin) mob.beginRising();
@@ -1847,7 +1742,12 @@ export class VillageAssaultSystem {
     const spec = waveSpec(wave);
     const tuning = ASSAULT_TUNING[assaultDifficulty(this.deps.difficulty())];
     const healthShare = (spec?.necromancerHealthShare ?? 1) * tuning.necromancerHealthScale;
-    const necro = new Necromancer(tile.x, tile.y, TILE_SIZE);
+    const necro = spawnMob(
+      'necromancer',
+      tile,
+      this.deps.gameMap,
+      assaultSpawnContext(this.random),
+    );
     necro.cannotBeKilled = wave < ASSAULT_WAVE_COUNT - 1;
     this.enlist(necro, lane, wave, { maxHpShare: healthShare });
     this.necromancer = necro;
@@ -1865,7 +1765,7 @@ export class VillageAssaultSystem {
     wave: number,
   ): void {
     const tuning = ASSAULT_TUNING[assaultDifficulty(this.deps.difficulty())];
-    const mark = createBountyMark(kind, tile.x, tile.y, this.deps.gameMap);
+    const mark = createBountyMark(kind, tile, this.deps.gameMap, assaultSpawnContext(this.random));
     mark.outgoingDamageScale = tuning.bountyDamageScale;
     mark.blowCapShareOfTargetHp = BOUNTY_MAX_BLOW_HP_SHARE;
     mark.isBoss = true;
@@ -1884,8 +1784,7 @@ export class VillageAssaultSystem {
    */
   private spawnFairy(kind: RegularFairyKind, tile: { x: number; y: number }): void {
     const { gameMap } = this.deps;
-    const fairy = createFairy(kind, tile.x, tile.y, gameMap);
-    if (fairy === null) return;
+    const fairy = createFairy(kind, tile, gameMap, assaultSpawnContext(this.random));
     const profile = this.deps.difficulty();
     finishFairySpawn(
       fairy,

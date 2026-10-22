@@ -71,13 +71,26 @@ and why the crowd is rolled from the world seed.
 - **Species is its own axis.** `TownSpecies` (`src/systems/townSpecies.ts`) is carried
   by `ResidentDef`, `OccupantSpec` and `Townsperson`. `TownRole` is only a job: services
   are keyed by role, so never add a species to it.
-- **One dispatch point.** `pickCitizenFigure(seed, role, species)`
+- **One dispatch point.** `pickCitizenFigure(seed, role, species, tier?)`
   (`src/creatures/citizenFigure.ts`) returns a `CitizenFigure`. `drawCitizenSprite`,
   `citizenWalkCyclePx`, `prewarmCitizenFigure`, `pinCitizenFigure` and
   `prewarmAndPinCitizenTalk` dispatch on it. `Townsperson` never reads a look directly.
   A third species is a case here.
+- **Variety tiers trim the street's looks, never its roles.** The pick reads the
+  variety tier (`src/core/varietyTier.ts`): humans by `TOWN_CAST_TIER_PLANS` (role
+  groups wearing their first role's looks), skyfowl by `skyfowlStreetLookAllowance`.
+  A `Townsperson` re-picks only after a purged canvas recovery, never while `frozen`
+  in a conversation, and a named resident never. A system that pins its crowd calls
+  `Townsperson.pinLook()` so a re-picked look is pinned too. `gates:human-cast` (H9,
+  H10) and `gates:skyfowl-cast` (G9) hold this. A new look joins the tier plans by where
+  it sits: a group, and a role trimmed to one look, wear only the lead role's
+  **first-listed** looks in `TOWN_CAST_LOOKS`, and skyfowl keep each street role's first
+  civilian look before any other. So list a role's most representative look first; a
+  human look that is first for none of its roles shows only at tier 0. A new `TownRole` joins a tier-2 group in
+  `TOWN_CAST_TIER_PLANS`, or it keeps a look of its own there. Background:
+  `docs/asset-management.md` ("Variety tiers").
 - **Humans:** the looks are `TOWN_CAST_LOOKS` in `src/sprites/person/townCastLooks.ts`,
-  picked by `pickTownCastLook(seed, role)`, and each is painted as one `FigureDef` by
+  picked by `pickTownCastLook(seed, role, tier)`, and each is painted as one `FigureDef` by
   `src/sprites/art/townCastFigure.ts`.
   - Adults paint on **Carl's rig** for his movement, never in his look. The
     outfit drops his boxers and hides his crop; `castAttachments` in

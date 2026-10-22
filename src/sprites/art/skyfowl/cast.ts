@@ -225,7 +225,7 @@ export const SKYFOWL_CIVILIAN_LOOKS: readonly SkyfowlLook[] = [
  * above uses, so the mixed lineup and blind review can test whether it reads
  * as hostile at a glance.
  */
-export const SKYFOWL_TOUGH_LOOKS: readonly SkyfowlLook[] = [
+export const SKYFOWL_TOUGH_LOOKS: readonly [SkyfowlLook, ...SkyfowlLook[]] = [
   toughLook('tough_hawkbrown_standard', HAWKBROWN, 'standard'),
   toughLook('tough_corvidblack_standard', CORVIDBLACK, 'standard'),
   toughLook('tough_sparrowfleck_slight', SPARROWFLECK, 'slight'),

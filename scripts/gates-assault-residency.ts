@@ -30,6 +30,13 @@
  *   A3  `touchFigureState`: a touched row outlives the idle window that
  *       sweeps an untouched one, and a row that is not held, or was baked
  *       before a bake-scale change, reports so.
+ *   A4  the siege's kind ladder, at every variety tier and difficulty: every
+ *       declared ladder passes `validateLadder`; no planned mini-wave brings
+ *       a kind its ladder removed; every stand-in is kept at the tier and was
+ *       already fielded by that roster or one before it; every substitution
+ *       keeps its threat (`substitutionRespectsBand`); and the ticker warms
+ *       exactly the planned roster's figures, no more and no fewer, with
+ *       every kind in one look whatever the tier.
  *
  *   npm run gates:assault-residency
  */
@@ -106,18 +113,38 @@ import {
   prewarmRaisedRatkinFight,
 } from '../src/sprites/raisedRatkinSprite.js';
 import {
-  ASSAULT_WAVE_NUMBERS,
   AssaultWavePrewarm,
-  assaultKindRows,
   assaultRosterRows,
-  type AssaultApproachView,
-  type AssaultWave,
+  type AssaultLeadIn,
+  type AssaultRow,
 } from '../src/sprites/assaultPrewarm.js';
+import type { ApproachView } from '../src/sprites/figure/approachRows.js';
 import {
+  ASSAULT_TUNING,
   IMMINENT_SECONDS,
   WAVE_LULL_SECONDS,
-  assaultWaveRoster,
+  planAssaultRoster,
+  type AssaultRoster,
 } from '../src/systems/briarHollow/VillageAssaultSystem.js';
+import { ASSAULT_WAVES } from '../src/systems/briarHollow/assaultWaves.js';
+import type { Difficulty } from '../src/core/difficultyProfiles.js';
+import { FULL_VARIETY_TIER, VARIETY_TIERS, type VarietyTier } from '../src/core/varietyTier.js';
+import { variantsInPlay, type MobVariantFamily } from '../src/core/mobVariantFamily.js';
+import { MOB_KINDS, allMobKinds, type MobKind, type VariantOf } from '../src/levels/mobKinds.js';
+import {
+  BRIAR_HOLLOW_SIEGE,
+  declaredLadders,
+  ladderFor,
+  lookTierFor,
+  NECROMANCER_RAISES,
+} from '../src/levels/encounters.js';
+import {
+  standInFor,
+  substitutionRespectsBand,
+  validateLadder,
+  type RosterEntry,
+} from '../src/levels/ladder.js';
+import { planEncounterRoster, type SpawnContext } from '../src/levels/spawnFunnel.js';
 import {
   alwaysDrawnRows,
   HUMAN_ATTACK_ROWS,
@@ -481,15 +508,21 @@ function graveBullStages(facing: (typeof BULL_FACINGS)[number]): Stage[] {
 const FIRST_BULL_WAVE = 2;
 const NECROMANCER_WAVE = 3;
 
+/** A wave by its number, from 1. */
+type AssaultWave = number;
+
+const ASSAULT_WAVE_NUMBERS: readonly AssaultWave[] = ASSAULT_WAVES.map((_, index) => index + 1);
+
+/** The one look the siege's raised ratkin climb out in, on every device. */
+const SIEGE_RAISED_LOOK = MOB_KINDS.raised_ratkin.family.canonical;
+
 /**
  * Every row a wave arrives playing, spelt out here rather than read from
  * `assaultWaveRows`, so the gate cannot agree with a list that has drifted.
  */
 function waveRows(wave: AssaultWave): Row[] {
-  const rows = RAISED_RATKIN_LOOKS.flatMap((look) =>
-    RAISED_ARRIVAL_ROWS.map((ref) =>
-      row(raisedRatkinFigure(look), raisedStateName(ref.action, ref.view)),
-    ),
+  const rows = RAISED_ARRIVAL_ROWS.map((ref) =>
+    row(raisedRatkinFigure(SIEGE_RAISED_LOOK), raisedStateName(ref.action, ref.view)),
   );
   if (wave >= FIRST_BULL_WAVE) rows.push(...bullRows(GRAVE_BULL_ARRIVAL_ROWS));
   if (wave >= NECROMANCER_WAVE) rows.push(...necroRows(NECROMANCER_ARRIVAL_ROWS));
@@ -535,21 +568,50 @@ function residentOf(rows: readonly Row[]): number {
 }
 
 /** The view a roster is warmed in here: a lane approached side-on, as the crawlers are fought. */
-const ROSTER_GATE_VIEW: AssaultApproachView = 'side';
-const APPROACH_VIEWS: readonly AssaultApproachView[] = ['front', 'side', 'away'];
+const ROSTER_GATE_VIEW: ApproachView = 'side';
+const APPROACH_VIEWS: readonly ApproachView[] = ['front', 'side', 'away'];
+const GATE_DIFFICULTY = 'normal' as const satisfies Difficulty;
 
-/** A ticker wired to the roster the way `VillageAssaultSystem` wires its own. */
+function isDifficulty(value: string): value is Difficulty {
+  return Object.prototype.hasOwnProperty.call(ASSAULT_TUNING, value);
+}
+
+const DIFFICULTIES: readonly Difficulty[] = Object.keys(ASSAULT_TUNING).filter(isDifficulty);
+
+/** Planning a roster draws nothing from its stream. */
+function noDraws(): number {
+  return 0;
+}
+
+function siegeContext(tier: VarietyTier): SpawnContext {
+  return { encounter: BRIAR_HOLLOW_SIEGE, random: noDraws, tier };
+}
+
+/** Wave `wave`'s own roster (from 1) as the siege plans it at `tier`. */
+function plannedRoster(
+  wave: AssaultWave,
+  tier: VarietyTier,
+  difficulty: Difficulty,
+): AssaultRoster {
+  return planAssaultRoster(wave - 1, difficulty, siegeContext(tier));
+}
+
+/** What the siege hands the ticker for wave `wave`'s roster, on normal, at full variety. */
+function leadInFor(wave: AssaultWave, view: ApproachView = ROSTER_GATE_VIEW): AssaultLeadIn {
+  return {
+    roster: plannedRoster(wave, FULL_VARIETY_TIER, GATE_DIFFICULTY),
+    tier: FULL_VARIETY_TIER,
+    view,
+  };
+}
+
 function rosterTicker(): AssaultWavePrewarm {
-  return new AssaultWavePrewarm({
-    rosterRows: (wave, view) => assaultRosterRows(assaultWaveRoster(wave), view),
-  });
+  return new AssaultWavePrewarm();
 }
 
 /** The rest of a wave's roster, as the ticker warms it after the undead. */
 function rosterRowsOf(wave: AssaultWave): Row[] {
-  return assaultRosterRows(assaultWaveRoster(wave), ROSTER_GATE_VIEW).map((r) =>
-    row(r.def, r.state),
-  );
+  return assaultRosterRows(leadInFor(wave)).map((r) => row(r.def, r.state));
 }
 
 /** Every row a wave arrives playing, its roster included. */
@@ -564,7 +626,7 @@ function arrivalRows(wave: AssaultWave): Row[] {
 function rosterFigures(): FigureDef[] {
   const figures = new Set<FigureDef>();
   for (const wave of ASSAULT_WAVE_NUMBERS) {
-    for (const r of assaultRosterRows(assaultWaveRoster(wave), ROSTER_GATE_VIEW)) {
+    for (const r of assaultRosterRows(leadInFor(wave))) {
       figures.add(r.def);
     }
   }
@@ -579,9 +641,9 @@ function rosterFigures(): FigureDef[] {
 function rosterNamesGate(): void {
   let named = 0;
   for (const wave of ASSAULT_WAVE_NUMBERS) {
-    for (const entry of assaultWaveRoster(wave)) {
+    for (const entry of plannedRoster(wave, FULL_VARIETY_TIER, GATE_DIFFICULTY)) {
       for (const view of APPROACH_VIEWS) {
-        const { walk, attack } = assaultKindRows(entry.kind, view);
+        const { walk, attack } = MOB_KINDS[entry.kind].approachRows(FULL_VARIETY_TIER, view);
         for (const r of [...walk, ...attack]) {
           named++;
           if (!r.def.states.has(r.state)) {
@@ -637,7 +699,7 @@ function play(
   let misses = 0;
   for (let update = 0; update < stretch.updates; update++) {
     stretch.otherRequests?.();
-    ticker.update(stretch.tickerWave);
+    ticker.update(stretch.tickerWave === null ? null : leadInFor(stretch.tickerWave));
     owed += rate;
     while (owed >= 1) {
       beginFigureFrame();
@@ -741,7 +803,7 @@ function lullBefore(wave: AssaultWave, rate: number, crawlers: readonly Row[]): 
   startCase(crawlers);
   const leadIn = rosterTicker();
   play(leadIn, { updates: COUNTDOWN_UPDATES, tickerWave: before, drawn: [] }, rate, crawlers);
-  const [survivorLook] = RAISED_RATKIN_LOOKS;
+  const survivorLook = SIEGE_RAISED_LOOK;
   const survivors = [row(raisedRatkinFigure(survivorLook), raisedStateName('shamble', 'side'))];
   if (before >= FIRST_BULL_WAVE) {
     survivors.push(row(GRAVE_BULL_FIGURE, graveBullStateName('walk', 'side')));
@@ -872,7 +934,7 @@ function oneRowInFlightGate(): void {
   const ticker = rosterTicker();
   let frames = 0;
   while (frames < COUNTDOWN_UPDATES) {
-    ticker.update(NECROMANCER_WAVE);
+    ticker.update(leadInFor(NECROMANCER_WAVE));
     beginFigureFrame();
     frames++;
   }
@@ -882,7 +944,7 @@ function oneRowInFlightGate(): void {
   let updates = 0;
   let lost = true;
   while (lost && updates < DRAIN_GIVE_UP_FRAMES) {
-    ticker.update(NECROMANCER_WAVE);
+    ticker.update(leadInFor(NECROMANCER_WAVE));
     deepest = Math.max(deepest, figurePrewarmDepth());
     beginFigureFrame();
     lost = waveRows(NECROMANCER_WAVE).some((r) => !touchFigureState(r.def, r.state));
@@ -900,9 +962,183 @@ function oneRowInFlightGate(): void {
   }
 }
 
+// ── A4 the siege's kind ladder ───────────────────────────────────────────────
+
+function rosterLabel(roster: readonly RosterEntry[]): string {
+  return roster.map((entry) => `${entry.count} ${entry.kind}`).join(', ');
+}
+
+/** Every figure the necromancer's undead arrive as, by the kind each is drawn for. */
+function undeadKindOfFigure(): Map<FigureDef, MobKind> {
+  const kinds = new Map<FigureDef, MobKind>();
+  for (const look of RAISED_RATKIN_LOOKS) kinds.set(raisedRatkinFigure(look), 'raised_ratkin');
+  kinds.set(GRAVE_BULL_FIGURE, 'grave_bull');
+  kinds.set(NECROMANCER_FIGURE, 'necromancer');
+  return kinds;
+}
+
+/** Every row the ticker asks for over a whole lead-in, with a cache that keeps all of them. */
+function rowsTheTickerWarms(leadIn: AssaultLeadIn): AssaultRow[] {
+  const requested: AssaultRow[] = [];
+  const ticker = new AssaultWavePrewarm({
+    request: (r) => requested.push(r),
+    touch: () => true,
+    fits: () => true,
+  });
+  let before = -1;
+  while (requested.length !== before) {
+    before = requested.length;
+    ticker.update(leadIn);
+  }
+  return requested;
+}
+
+/**
+ * The figures a planned roster should have warmed: each kind's declared rows
+ * at the tier, the raised ratkin's looks still worn there and the bull when
+ * the roster brings them, and the necromancer, who leads every wave.
+ */
+function figuresPlannedFor(leadIn: AssaultLeadIn): Set<FigureDef> {
+  const figures = new Set<FigureDef>([NECROMANCER_FIGURE]);
+  const lookTier = lookTierFor(BRIAR_HOLLOW_SIEGE, leadIn.tier);
+  const raisedLookTier = lookTierFor(NECROMANCER_RAISES, leadIn.tier);
+  for (const { kind } of leadIn.roster) {
+    const { walk, attack } = MOB_KINDS[kind].approachRows(lookTier, leadIn.view);
+    for (const r of [...walk, ...attack]) if (r.def.states.has(r.state)) figures.add(r.def);
+    if (kind === 'raised_ratkin') {
+      for (const look of variantsInPlay(MOB_KINDS.raised_ratkin.family, raisedLookTier)) {
+        figures.add(raisedRatkinFigure(look));
+      }
+    }
+    if (kind === 'grave_bull') figures.add(GRAVE_BULL_FIGURE);
+  }
+  return figures;
+}
+
+/** How many looks a spawn of `kind` can wear at `tier`, from its family alone. */
+function looksInPlay<K extends MobKind>(kind: K, tier: VarietyTier): number {
+  const family: MobVariantFamily<VariantOf<K>> = MOB_KINDS[kind].family;
+  return variantsInPlay(family, tier).length;
+}
+
+function figureNames(figures: Iterable<FigureDef>, kindOf: Map<FigureDef, MobKind>): string {
+  return [...figures].map((def) => kindOf.get(def) ?? 'an unplanned figure').join(', ');
+}
+
+/**
+ * A4: every declared ladder is sound — no protected kind, no kind without a
+ * threat, no loop — and, at every tier and difficulty, every siege mini-wave
+ * as planned brings no kind the ladder removed at or below the tier; every
+ * stand-in is kept at the tier and was already in that roster or one that
+ * rises before it; every substitution keeps its threat; every kind wears one
+ * look; and what the ticker warms for the planned roster is exactly its
+ * figures.
+ */
+function ladderGate(): void {
+  let ladders = 0;
+  for (const [encounter, ladder] of declaredLadders()) {
+    ladders++;
+    for (const problem of validateLadder(ladder)) fail('A4 ladder', `${encounter} ${problem}`);
+  }
+  const ladder = ladderFor(BRIAR_HOLLOW_SIEGE);
+  if (ladder.length === 0) fail('A4 ladder', 'the siege declares no ladder');
+
+  const kindOf = undeadKindOfFigure();
+  for (const kind of allMobKinds()) {
+    for (const view of APPROACH_VIEWS) {
+      const { walk, attack } = MOB_KINDS[kind].approachRows(FULL_VARIETY_TIER, view);
+      for (const r of [...walk, ...attack]) kindOf.set(r.def, kind);
+    }
+  }
+
+  let rosters = 0;
+  let substitutions = 0;
+  for (const difficulty of DIFFICULTIES) {
+    for (const tier of VARIETY_TIERS) {
+      const fieldedEarlier = new Set<MobKind>();
+      for (const wave of ASSAULT_WAVE_NUMBERS) {
+        rosters++;
+        const label = `${difficulty}, tier ${tier}, wave ${wave}'s roster`;
+        const authored = plannedRoster(wave, FULL_VARIETY_TIER, difficulty);
+        for (const { kind } of authored) fieldedEarlier.add(kind);
+        const planned = plannedRoster(wave, tier, difficulty);
+        for (const { kind } of planned) {
+          if (standInFor(ladder, kind, tier) !== kind) {
+            fail('A4 ladder', `${label} still brings ${kind}, which its ladder removes`);
+          }
+        }
+        const resolved = planEncounterRoster(authored, siegeContext(tier));
+        if (rosterLabel(resolved.roster) !== rosterLabel(planned)) {
+          fail(
+            'A4 ladder',
+            `${label} plans ${rosterLabel(planned)}, not its ladder's ${rosterLabel(resolved.roster)}`,
+          );
+        }
+        for (const substitution of resolved.substitutions) {
+          substitutions++;
+          const { standIn } = substitution;
+          const swap = `${substitution.replaced.join(' + ')} → ${substitution.bodiesOut} ${standIn}`;
+          if (standInFor(ladder, standIn, tier) !== standIn) {
+            fail('A4 ladder', `${label}: ${swap} stands in a kind the tier removes`);
+          }
+          if (!fieldedEarlier.has(standIn)) {
+            fail('A4 ladder', `${label}: ${swap} brings a look no roster so far has fielded`);
+          }
+          if (!substitutionRespectsBand(substitution)) {
+            fail(
+              'A4 ladder',
+              `${label}: ${swap} turns ${substitution.bodiesIn} bodies into ${substitution.bodiesOut} ` +
+                `outside the one-for-one threat band`,
+            );
+          }
+        }
+        for (const view of APPROACH_VIEWS) {
+          const leadIn: AssaultLeadIn = { roster: planned, tier, view };
+          const warmed = new Set(rowsTheTickerWarms(leadIn).map((r) => r.def));
+          const expected = figuresPlannedFor(leadIn);
+          const extra = [...warmed].filter((def) => !expected.has(def));
+          const missing = [...expected].filter((def) => !warmed.has(def));
+          if (extra.length > 0) {
+            fail(
+              'A4 prewarm',
+              `${label}, ${view}: warms ${figureNames(extra, kindOf)}, not planned`,
+            );
+          }
+          if (missing.length > 0) {
+            fail('A4 prewarm', `${label}, ${view}: never warms ${figureNames(missing, kindOf)}`);
+          }
+          const looksWarmed = new Map<MobKind, number>();
+          for (const def of warmed) {
+            const kind = kindOf.get(def);
+            if (kind !== undefined) looksWarmed.set(kind, (looksWarmed.get(kind) ?? 0) + 1);
+          }
+          for (const [kind, looks] of looksWarmed) {
+            const worn = looksInPlay(kind, lookTierFor(BRIAR_HOLLOW_SIEGE, tier));
+            if (worn !== 1) fail('A4 looks', `${label}: ${kind} wears ${worn} looks, not one`);
+            if (looks !== worn) {
+              fail('A4 prewarm', `${label}, ${view}: warms ${looks} ${kind} looks, ${worn} worn`);
+            }
+          }
+        }
+      }
+    }
+  }
+  console.log(
+    `  A4 ladder: ${ladders} ladders declared; ${rosters} planned rosters, ` +
+      `${substitutions} substitutions checked`,
+  );
+  for (const failure of nothingMeasuredFailures(ladders, 'declared ladders')) {
+    fail('A4 ladder', failure);
+  }
+  for (const failure of nothingMeasuredFailures(substitutions, 'siege substitutions')) {
+    fail('A4 ladder', failure);
+  }
+}
+
 function main(): void {
   setFigureCacheStatsRecording(true);
   console.log('Gating the assault figures against the figure cache…');
+  ladderGate();
   const necroArrival = necroRows(NECROMANCER_ARRIVAL_ROWS);
   runStages('A1 stages', NECROMANCER_FIGURE, necromancerStages(), () => warmDirectly(necroArrival));
   const bullArrival = bullRows(GRAVE_BULL_ARRIVAL_ROWS);

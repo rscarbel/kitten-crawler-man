@@ -6,6 +6,8 @@ import type { LootDrop } from './Mob';
 import { HumanPlayer } from './HumanPlayer';
 import { CatPlayer } from './CatPlayer';
 import { PLAYER_SPEED } from '../core/constants';
+import { SHARED_LOOKS_TIER } from '../core/varietyTier';
+import { weightedVariantFamily } from '../core/mobVariantFamily';
 import type { TacticsTrait } from './tactics/tacticsTraits';
 import { retreatTowardHelper } from './tactics/retreat';
 import { riposteCooldown } from './tactics/riposte';
@@ -90,6 +92,26 @@ export const GOBLIN_EYES: EyePlacement = {
   frontSpacing: 0.08,
 };
 
+/**
+ * The melee goblin's four archetypes and how often each turns up.
+ *
+ * Weighted rather than uniform: a war-hammer brute is the biggest, slowest and
+ * most telegraphed of the four, and one in every four goblins being one would
+ * make it ordinary. The sword skirmisher is the common grunt. The axe is the
+ * shared look because its swing timing sits closest to the weighted mean of
+ * all four, so a room of axes fights most like the mixed room it replaces.
+ */
+export const GOBLIN_MELEE_FAMILY = weightedVariantFamily<GoblinWeapon>(
+  [
+    { variant: 'sword', weight: 4 },
+    { variant: 'axe', weight: 3 },
+    { variant: 'mace', weight: 2 },
+    { variant: 'warhammer', weight: 1 },
+  ],
+  'axe',
+  SHARED_LOOKS_TIER,
+);
+
 export class Goblin extends Mob {
   protected override get eyePlacement(): EyePlacement {
     return GOBLIN_EYES;
@@ -101,15 +123,14 @@ export class Goblin extends Mob {
   displayName = 'Goblin';
   description = 'A scrappy little troublemaker armed with crude weapons.';
   override readonly audioTag = 'goblin';
-  readonly weapon: GoblinWeapon;
-  /** The gore sheet this goblin's flying pieces come from — one per archetype. */
-  readonly bodyPartKey: string;
+  private currentWeapon: GoblinWeapon;
+  private currentBodyPartKey: string;
 
   protected aggroRangePx: number;
   protected attackRangePx: number;
   protected attackDamage: number;
 
-  private readonly animator: GoblinAnimator;
+  private animator: GoblinAnimator;
   private readonly goblinTileSize: number;
   private attackCooldown = 0;
   private attackAnimTimer = 0;
@@ -141,14 +162,44 @@ export class Goblin extends Mob {
 
   constructor(tileX: number, tileY: number, tileSize: number, weapon: GoblinWeapon) {
     super(tileX, tileY, tileSize, GOBLIN_HP, GOBLIN_SPEED);
-    this.weapon = weapon;
-    this.bodyPartKey = goblinBodyPartKey(weapon);
+    this.currentWeapon = weapon;
+    this.currentBodyPartKey = goblinBodyPartKey(weapon);
     this.animator = new GoblinAnimator(weapon);
     this.goblinTileSize = tileSize;
     this.aggroRangePx = tileSize * AGGRO_RANGE_TILES;
     this.attackRangePx = tileSize * GOBLIN_ATTACKS[weapon].light.reachTiles;
     this.attackDamage = GOBLIN_ATTACKS[weapon].light.damage;
     this.previousHp = this.hp;
+  }
+
+  /** The archetype this goblin is drawn as and fights with. */
+  get weapon(): GoblinWeapon {
+    return this.currentWeapon;
+  }
+
+  /** The gore sheet this goblin's flying pieces come from — one per archetype. */
+  override get bodyPartKey(): string {
+    return this.currentBodyPartKey;
+  }
+
+  /**
+   * Re-arms this goblin as another archetype: its figure, its gore and the
+   * swing timing that belongs to the weapon all follow. Any blow in flight is
+   * dropped, since its timing was the old weapon's. Returns whether the look
+   * changed.
+   */
+  applyVariant(weapon: GoblinWeapon): boolean {
+    if (weapon === this.currentWeapon) return false;
+    this.currentWeapon = weapon;
+    this.currentBodyPartKey = goblinBodyPartKey(weapon);
+    this.animator = new GoblinAnimator(weapon);
+    this.attackAnimTimer = 0;
+    this.pendingImpact = 0;
+    this.attackKind = 'light';
+    this.attackRangePx = this.goblinTileSize * GOBLIN_ATTACKS[weapon].light.reachTiles;
+    this.attackDamage = GOBLIN_ATTACKS[weapon].light.damage;
+    if (this.isAggro) prewarmGoblinCombat(weapon);
+    return true;
   }
 
   /**

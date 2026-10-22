@@ -44,11 +44,13 @@ import type { Player } from '../Player';
 import { PlayerManager } from '../core/PlayerManager';
 import { setSkillBookReaders } from '../creatures/skillBookDrop';
 import { TouchMoveState } from '../core/TouchMoveState';
-import type { LevelDef, MobLevelRange, MobSpawnRule } from '../levels/types';
+import type { LevelDef, MobLevelRange } from '../levels/types';
+import type { MobKind } from '../levels/mobKinds';
+import { liveSpawnContext, spawnMob } from '../levels/spawnFunnel';
+import { floorEncounter } from '../levels/encounters';
 import {
   spawnForLevel,
   spawnExtraMobs,
-  createMob,
   spawnTreasureRoomMobs,
   partyLevelOf,
   pickRule,
@@ -170,10 +172,9 @@ import {
   playFairySystemCues,
   playFrostCues,
 } from '../systems/fairyAudioCues';
-import { Fairy } from '../creatures/fairies/Fairy';
 import { FAIRY_KINDS } from '../sprites/art/fairyTiming';
 import {
-  FAIRY_SPAWN_KEYS,
+  createFairy,
   FairyRoomLedger,
   spawnBossRoomHealers,
   spawnOverworldFairies,
@@ -579,7 +580,7 @@ import { GameplayInputHandler } from '../systems/GameplayInputHandler';
 import { GameplayScene } from './GameplayScene';
 import { TutorialController, type TutorialRenderContext } from '../systems/TutorialController';
 import { TUTORIAL_CUES, tutorialCueSource } from '../systems/tutorialSoundCues';
-import { TutorialMap, TUTORIAL_CHEST_POS, TUTORIAL_TREASURE_ROOM_BOUNDS } from '../map/TutorialMap';
+import { TUTORIAL_CHEST_POS, TUTORIAL_TREASURE_ROOM_BOUNDS } from '../map/TutorialMap';
 import { HOTBAR_COUNT, ITEM_DEF, type ItemId } from '../core/ItemDefs';
 import { BrindleGrub } from '../creatures/BrindleGrub';
 import { SmallSpider } from '../creatures/SmallSpider';
@@ -588,7 +589,7 @@ import {
   SLAM_AUDIO_SEEK_SECONDS,
   SCREECH_AUDIO_SEEK_SECONDS,
 } from '../creatures/GrotesqueSpider';
-import { randomInt, pointInRect } from '../utils';
+import { randomInt, randomIntFrom, pointInRect } from '../utils';
 import { aiAdapter } from '../ai/AIAdapter';
 import {
   adviceObjective,
@@ -849,7 +850,7 @@ export interface DungeonSceneOptions {
    * marked won before the first frame — a playtest preset dropping the party
    * past a gauntlet gate it never fought.
    */
-  preDefeatedBossTypes?: readonly MobSpawnRule['type'][];
+  preDefeatedBossTypes?: readonly MobKind[];
   /**
    * Dev bootstrap only: picks the spawn tile from this floor's freshly generated
    * map — a gateway safe room, the spider lab's station. A callback rather than a
@@ -1851,7 +1852,7 @@ export class DungeonScene extends GameplayScene {
     let spawnTileY = 0;
 
     if (tutorialController !== null) {
-      const tutMap = new TutorialMap();
+      const tutMap = tutorialController.map;
       this.gameMap = tutMap;
       this.tutorial = tutorialController;
       this.levelTimerFrames = this.TUTORIAL_TIME_LIMIT_FRAMES;
@@ -1980,6 +1981,7 @@ export class DungeonScene extends GameplayScene {
             partyLevel,
             difficultyProfile,
             clearedCamps,
+            Math.random,
           ).filter(
             // Left out of the roster entirely, not just marked dead: a boss
             // skipped this way never fights, so nothing should ever find it
@@ -2011,7 +2013,9 @@ export class DungeonScene extends GameplayScene {
               roomIndex < persistedBossRooms.length && persistedBossRooms[roomIndex].defeated,
           ),
         );
-        initialMobs.push(...spawnExtraMobs(levelDef, this.gameMap, partyLevel, difficultyProfile));
+        initialMobs.push(
+          ...spawnExtraMobs(levelDef, this.gameMap, partyLevel, difficultyProfile, Math.random),
+        );
 
         if (levelDef.hasTreasureRoomGuards === true) {
           initialMobs.push(
@@ -2021,6 +2025,7 @@ export class DungeonScene extends GameplayScene {
               this.gameMap,
               partyLevel,
               difficultyProfile,
+              Math.random,
             ),
           );
         }
@@ -2223,6 +2228,7 @@ export class DungeonScene extends GameplayScene {
           levelDef,
           partyLevelOf(this.human.level, this.cat.level),
           activeDifficultyProfile(),
+          Math.random,
         );
       },
       levelDef.levelledCurve,
@@ -2799,6 +2805,7 @@ export class DungeonScene extends GameplayScene {
                   levelDef,
                   partyLevelOf(this.human.level, this.cat.level),
                   activeDifficultyProfile(),
+                  Math.random,
                 ),
               midgeEscortCarry: this.midgeEscortCarry,
               travelUnlocks: this.travelUnlocks,
@@ -3448,13 +3455,9 @@ export class DungeonScene extends GameplayScene {
       // mob to a room lock and a clamp it has no room for. Its death is a boss
       // defeat all the same, and the arena's second wave waits on this event.
       if (mob.isBoss || mob instanceof BallOfSwine) {
-        // One emit per boss, named by its spawn key. Every listener that cares
-        // *which* boss died — the Mongo unlock, the difficulty stats, the arena
-        // — is written in snake_case spawn keys, and the class name this used
-        // to send was a second vocabulary they did not speak, so the Hoarder
-        // and the Juicer were never recorded as beaten. The Krakaren papered
-        // over its own case by announcing itself a second time under its real
-        // name, which cost a duplicate boss-slayer loot box per crawler.
+        // Every listener that cares which boss died (the Mongo unlock, the
+        // difficulty stats, the arena) matches snake_case spawn keys, so the
+        // event carries the mob's `spawnTypeKey`.
         bus.emit('bossDefeated', {
           bossType: mob.spawnTypeKey ?? (mob.constructor.name || 'unknown'),
           mob,
@@ -3488,20 +3491,24 @@ export class DungeonScene extends GameplayScene {
           );
           const headroom = MAX_CONCURRENT_ON_KILL_SPAWNS - alreadyAliveNearby;
           if (headroom <= 0) continue;
-          const count = Math.min(headroom, randomInt(rule.minCount, rule.maxCount));
+          const onKillContext = liveSpawnContext(
+            floorEncounter(this.levelDef.floorNumber, 'on-kill'),
+          );
+          const rolledCount = randomIntFrom(onKillContext.random, rule.minCount, rule.maxCount);
+          const count = Math.min(headroom, rolledCount);
           for (let i = 0; i < count; i++) {
             let placed = false;
             for (let attempt = 0; attempt < SPIT_PLACEMENT_ATTEMPTS && !placed; attempt++) {
               const ox = Math.floor(
-                (Math.random() - SPIT_PLACEMENT_RANDOMNESS) * rule.spreadRadius * 2,
+                (onKillContext.random() - SPIT_PLACEMENT_RANDOMNESS) * rule.spreadRadius * 2,
               );
               const oy = Math.floor(
-                (Math.random() - SPIT_PLACEMENT_RANDOMNESS) * rule.spreadRadius * 2,
+                (onKillContext.random() - SPIT_PLACEMENT_RANDOMNESS) * rule.spreadRadius * 2,
               );
               const gtx = tx + ox;
               const gty = ty + oy;
               if (!this.gameMap.isMobSpawnTile(gtx, gty)) continue;
-              const spawned = createMob(rule.type, gtx, gty, this.gameMap);
+              const spawned = spawnMob(rule.type, { x: gtx, y: gty }, this.gameMap, onKillContext);
               // Inherited rather than left at 1: these burst out of a mob the
               // party has just fought, and a level-1 grub swarm on floor 2 was
               // free XP that arrived exactly when the fight should be hardest.
@@ -4536,18 +4543,22 @@ export class DungeonScene extends GameplayScene {
     const partyLevel = partyLevelOf(this.human.level, this.cat.level);
     const floorRules =
       this.levelDef.roomMobs.length > 0 ? this.levelDef.roomMobs : this.levelDef.hallwayMobs;
-    const band: MobLevelRange = floorRules.length > 0 ? pickRule(floorRules) : {};
+    const band: MobLevelRange = floorRules.length > 0 ? pickRule(floorRules, Math.random) : {};
     let spawned = 0;
     for (let attempt = 0; attempt < FAIRY_CHEAT_ATTEMPTS && spawned < count; attempt++) {
       const tileX = originX + randomInt(-FAIRY_CHEAT_SPREAD_TILES, FAIRY_CHEAT_SPREAD_TILES);
       const tileY = originY + randomInt(-FAIRY_CHEAT_SPREAD_TILES, FAIRY_CHEAT_SPREAD_TILES);
       if (!this.gameMap.isMobSpawnTile(tileX, tileY)) continue;
-      const mob = createMob(FAIRY_SPAWN_KEYS[kind], tileX, tileY, this.gameMap);
-      if (!(mob instanceof Fairy)) continue;
+      const mob = createFairy(
+        kind,
+        { x: tileX, y: tileY },
+        this.gameMap,
+        liveSpawnContext('dev:spawn'),
+      );
       this.world.roster.add(mob);
       mob.setHostFloor(this.levelDef.floorNumber);
       mob.applyMobLevel(
-        resolveAmbientLevel(band, this.levelDef, partyLevel, profile),
+        resolveAmbientLevel(band, this.levelDef, partyLevel, profile, Math.random),
         this.levelDef.levelledCurve,
       );
       applySpawnDifficulty(mob, profile);

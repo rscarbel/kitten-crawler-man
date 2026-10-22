@@ -67,7 +67,9 @@ export class SkeletonWarrior extends RisingSkeleton {
     return SWORD_SKELETON_EYES;
   }
 
-  override readonly bodyPartKey = SKELETON_SWORD_BODY_PART_KEY;
+  override get bodyPartKey(): string {
+    return SKELETON_SWORD_BODY_PART_KEY;
+  }
   displayName = 'Skeleton Warrior';
   description = 'A rattling swordsman held together by somebody else’s will.';
 

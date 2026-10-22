@@ -14,7 +14,8 @@ import { SpellSystem } from '../../src/systems/SpellSystem';
 import { MobRoster, type SceneWorld } from '../../src/systems/kits/SceneWorld';
 import { CombatKit } from '../../src/systems/kits/CombatKit';
 import type { SystemContext } from '../../src/systems/GameSystem';
-import { createMob } from '../../src/levels/spawner';
+import { liveSpawnContext, spawnMob } from '../../src/levels/spawnFunnel';
+import type { StandaloneMobKind } from '../../src/levels/mobKinds';
 import type { Mob } from '../../src/creatures/Mob';
 import type { Player } from '../../src/Player';
 import { FairySystem } from '../../src/systems/FairySystem';
@@ -161,8 +162,8 @@ export function buildStage(innerWalls: readonly TileSpec[] = []) {
     gameMap: map,
     extraTargets: [],
   });
-  const add = (type: string, tileX: number, tileY: number): Mob => {
-    const mob = createMob(type, tileX, tileY, map);
+  const add = (type: StandaloneMobKind, tileX: number, tileY: number): Mob => {
+    const mob = spawnMob(type, { x: tileX, y: tileY }, map, liveSpawnContext('dev:spawn'));
     roster.add(mob);
     return mob;
   };

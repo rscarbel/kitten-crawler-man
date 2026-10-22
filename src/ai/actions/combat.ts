@@ -12,13 +12,9 @@ import {
 import { BOUNTY_MAX_BLOW_HP_SHARE } from '../../creatures/mobLevelScaling';
 import type { Mob } from '../../creatures/Mob';
 import { allLevelDefs, type LevelDef } from '../../levels';
-import {
-  MAX_MOB_LEVEL,
-  createMob,
-  getRegisteredMobTypes,
-  partyLevelOf,
-  resolveAmbientLevel,
-} from '../../levels/spawner';
+import { MAX_MOB_LEVEL, partyLevelOf, resolveAmbientLevel } from '../../levels/spawner';
+import type { StandaloneMobKind } from '../../levels/mobKinds';
+import { liveSpawnContext, spawnMob as spawnHostileMob } from '../../levels/spawnFunnel';
 import type { MobLevelRange } from '../../levels/types';
 import type { GameMap } from '../../map/GameMap';
 import { ALL_STATS, STAT_CODE, pendingStatusDamage } from '../../Player';
@@ -91,7 +87,7 @@ const PLACEMENTS = ['near', 'ambush', 'behind'] as const;
 type Placement = (typeof PLACEMENTS)[number];
 
 interface FloorSpawnRule extends MobLevelRange {
-  readonly type: string;
+  readonly type: StandaloneMobKind;
 }
 
 /** Every ambient spawn rule a floor rolls from: rooms, hallways and camps, never bosses. */
@@ -100,29 +96,28 @@ function ambientRulesOf(def: LevelDef): FloorSpawnRule[] {
   return [...def.roomMobs, ...def.hallwayMobs, ...camps];
 }
 
-function bossTypesOf(def: LevelDef): Set<string> {
+function bossTypesOf(def: LevelDef): Set<StandaloneMobKind> {
   return new Set((def.bossRooms ?? []).map((rule) => rule.type));
 }
 
 /**
- * Mob types the AI may name: the ambient creatures of every floor that the
- * spawner can build. Read from the level tables and the spawn registry, so a
- * new creature on a floor's tables joins the tool's vocabulary by itself.
+ * Mob types the AI may name: the ambient creatures of every floor. Read from
+ * the level tables, so a new creature on a floor's tables joins the tool's
+ * vocabulary by itself.
  */
-export function aiSpawnableMobTypes(): string[] {
-  const registered = new Set(getRegisteredMobTypes());
-  const types = new Set<string>();
+export function aiSpawnableMobTypes(): StandaloneMobKind[] {
+  const types = new Set<StandaloneMobKind>();
   for (const def of allLevelDefs()) {
     const bosses = bossTypesOf(def);
     for (const rule of ambientRulesOf(def)) {
-      if (registered.has(rule.type) && !bosses.has(rule.type)) types.add(rule.type);
+      if (!bosses.has(rule.type)) types.add(rule.type);
     }
   }
   return [...types].sort();
 }
 
 /** The band this floor spawns `type` at, widened over every rule naming it; null when it never does. */
-function floorBandFor(def: LevelDef, type: string): MobLevelRange | null {
+function floorBandFor(def: LevelDef, type: StandaloneMobKind): MobLevelRange | null {
   const bosses = bossTypesOf(def);
   if (bosses.has(type)) return null;
   let band: { minLevel: number; maxLevel: number } | null = null;
@@ -219,11 +214,11 @@ function findSpawnTile(
 function spawnLevelledMob(
   scene: AISceneContext,
   def: LevelDef,
-  type: string,
+  type: StandaloneMobKind,
   tile: { x: number; y: number },
   level: number,
 ): Mob {
-  const mob = createMob(type, tile.x, tile.y, scene.getGameMap());
+  const mob = spawnHostileMob(type, tile, scene.getGameMap(), liveSpawnContext('dev:spawn'));
   mob.applyMobLevel(level, def.levelledCurve);
   applySpawnDifficulty(mob, activeDifficultyProfile());
   scene.spawnMob(mob);
@@ -232,10 +227,10 @@ function spawnLevelledMob(
 
 function ambientLevelFor(scene: AISceneContext, def: LevelDef, band: MobLevelRange): number {
   const partyLevel = partyLevelOf(scene.getHuman().level, scene.getCat().level);
-  return resolveAmbientLevel(band, def, partyLevel, activeDifficultyProfile());
+  return resolveAmbientLevel(band, def, partyLevel, activeDifficultyProfile(), Math.random);
 }
 
-function nativeTypeRefusal(scene: AISceneContext, type: string): string | null {
+function nativeTypeRefusal(scene: AISceneContext, type: StandaloneMobKind): string | null {
   const def = levelDefOf(scene);
   if (def === null) return 'nothing can be spawned here';
   if (floorBandFor(def, type) === null) return `${snakeToWords(type)} is not native to this floor`;

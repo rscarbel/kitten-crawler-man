@@ -50,7 +50,7 @@ import { Cow, type CowRowWarmer } from '../src/creatures/Cow';
 import { Mongo } from '../src/creatures/Mongo';
 import { Mercenary } from '../src/creatures/Mercenary';
 import type { PlayerDamageType } from '../src/creatures/Mob';
-import { createMob } from '../src/levels/spawner';
+import { liveSpawnContext, spawnMob } from '../src/levels/spawnFunnel';
 import { applySpawnDifficulty } from '../src/core/difficultyProfiles';
 import { mulberry32 } from '../src/sprites/person/rng';
 import type { TilePoint, TileRect } from '../src/map/town/townPlan';
@@ -838,15 +838,16 @@ function damageSection(): void {
     `and so does a calf (${calf?.maxHp ?? 'none'} hp)`,
   );
 
-  // A cow spawned by name, outside any herd, has no pen: it still ambles
-  // about, and a spawn site that levels it to its own (higher) level still
-  // gets livestock.
-  const stray = createMob(
-    'cow',
+  // A lone cow, outside any herd, has no pen: it still ambles about, and a
+  // spawn site that levels it to its own (higher) level still gets livestock.
+  const stray = new Cow(
     Math.floor(cow.x / TILE_SIZE),
     Math.floor(cow.y / TILE_SIZE),
-    world.map,
+    TILE_SIZE,
+    'holstein',
+    'adult',
   );
+  stray.setMap(world.map);
   stray.applyMobLevel(SPAWN_SITE_LEVEL);
   applySpawnDifficulty(stray);
   const strayStart = { x: stray.x, y: stray.y };
@@ -860,7 +861,7 @@ function damageSection(): void {
     strayWalkedPx += moved;
     if (moved > 0) continue;
     strayPauseFrames++;
-    if (stray instanceof Cow && stray.drawnState.startsWith('walk')) strayFrozenStrides++;
+    if (stray.drawnState.startsWith('walk')) strayFrozenStrides++;
   }
   check(
     strayPauseFrames > 0 && strayFrozenStrides === 0,
@@ -1135,11 +1136,11 @@ function routingSection(): void {
   check(swings === 0, `Carl pets rather than slings (${swings} shots)`);
 
   // A hostile in reach takes the press.
-  const goblin = createMob(
+  const goblin = spawnMob(
     'goblin',
-    Math.floor(human.x / TILE_SIZE),
-    Math.floor(human.y / TILE_SIZE) + 1,
+    { x: Math.floor(human.x / TILE_SIZE), y: Math.floor(human.y / TILE_SIZE) + 1 },
     map,
+    liveSpawnContext('dev:spawn'),
   );
   roster.add(goblin);
   check(
@@ -1175,11 +1176,11 @@ function routingSection(): void {
   );
   // A hostile in range behind the cat does not pull a shot aimed at the cow
   // round to itself, so the tap is still taken; one in the line of the tap does.
-  const behind = createMob(
+  const behind = spawnMob(
     'goblin',
-    Math.floor(cat.x / TILE_SIZE) + HOSTILE_BEHIND_TILES,
-    Math.floor(cat.y / TILE_SIZE),
+    { x: Math.floor(cat.x / TILE_SIZE) + HOSTILE_BEHIND_TILES, y: Math.floor(cat.y / TILE_SIZE) },
     map,
+    liveSpawnContext('dev:spawn'),
   );
   roster.add(behind);
   check(

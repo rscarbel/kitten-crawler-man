@@ -13,11 +13,10 @@
  * its guards the moment the player stepped back through the door.
  */
 
-import { TILE_SIZE } from '../core/constants';
 import { applySpawnDifficulty } from '../core/difficultyProfiles';
 import { roomKey, type TownMemory } from '../core/TownMemory';
 import type { MurderQuestProgress } from '../core/MurderQuestProgress';
-import { CityElfCultist } from '../creatures/CityElfCultist';
+import { liveSpawnContext, spawnMob } from '../levels/spawnFunnel';
 import { CULT_HIDEOUT_CULTIST_LEVEL } from './CultHideoutSystem';
 import { questMobLevel } from './questMobLevel';
 import type { Mob } from '../creatures/Mob';
@@ -94,7 +93,12 @@ export function interiorHostilesFor(ctx: InteriorHostileContext): Mob[] {
     y: anchor.y + offset.dy,
   }));
   return distinctSpawnTiles(ctx.map, wanted, SPAWN_SEARCH_RADIUS_TILES).map((tile) => {
-    const guard = new CityElfCultist(tile.x, tile.y, TILE_SIZE);
+    const guard = spawnMob(
+      'city_elf_cultist',
+      tile,
+      ctx.map,
+      liveSpawnContext('quest:interior-hostiles'),
+    );
     guard.applyMobLevel(questMobLevel(STAIR_GUARD_LEVEL, ctx.partyLevel));
     applySpawnDifficulty(guard);
     // No boss room exists indoors, so nothing else would ever wake them, and a

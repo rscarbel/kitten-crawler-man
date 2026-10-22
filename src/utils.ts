@@ -7,9 +7,12 @@ const TILE_CENTER_OFFSET = 0.5;
 /** Milliseconds per second. */
 const MS_PER_SECOND = 1000;
 
-/** Return a random integer in the inclusive range [min, max]. */
-export const randomInt = (min: number, max: number) =>
-  min + Math.floor(worldRandom() * (max - min + 1));
+/** A random integer in the inclusive range [min, max], drawn from `random`. */
+export const randomIntFrom = (random: () => number, min: number, max: number): number =>
+  min + Math.floor(random() * (max - min + 1));
+
+/** A random integer in the inclusive range [min, max], drawn from the world's random stream. */
+export const randomInt = (min: number, max: number) => randomIntFrom(worldRandom, min, max);
 
 /** Pick a uniformly random element from a non-empty array. */
 export const randomFromArray = <T>(arr: T[]): T => arr[Math.floor(worldRandom() * arr.length)];

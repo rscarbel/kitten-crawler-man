@@ -60,7 +60,7 @@ import type { SystemContext } from '../../src/systems/GameSystem';
 import { resolveKills, type CombatContext } from '../../src/systems/CombatSystem';
 import { EventBus } from '../../src/core/EventBus';
 import { AbilityManager } from '../../src/core/AbilityManager';
-import { createMob } from '../../src/levels/spawner';
+import { liveSpawnContext, spawnMob } from '../../src/levels/spawnFunnel';
 import {
   CHASE_STALL_LIMIT_FRAMES,
   NO_ROUTE_FORGET_FRAMES,
@@ -306,7 +306,12 @@ function checkHalfDamage(r: SurvivalGateReporter): void {
     return;
   }
   const { scene, merc } = spawned;
-  const goblin = createMob('goblin', FAR_TILE_X, FAR_TILE_Y, scene.map);
+  const goblin = spawnMob(
+    'goblin',
+    { x: FAR_TILE_X, y: FAR_TILE_Y },
+    scene.map,
+    liveSpawnContext('dev:spawn'),
+  );
   for (const door of ['takeDamage', 'takeDamageFrom'] as const) {
     const lost = hpLostToOnePointHits(merc, goblin, door);
     r.check(
@@ -315,7 +320,12 @@ function checkHalfDamage(r: SurvivalGateReporter): void {
     );
   }
   // A body with no ledger behind it, measured by the same rule.
-  const unsoftened = createMob('goblin', FAR_TILE_X, FAR_TILE_Y, scene.map);
+  const unsoftened = spawnMob(
+    'goblin',
+    { x: FAR_TILE_X, y: FAR_TILE_Y },
+    scene.map,
+    liveSpawnContext('dev:spawn'),
+  );
   unsoftened.hp = unsoftened.maxHp;
   r.checkCatches(
     halvesOnePointHits(unsoftened, goblin, 'takeDamage'),
@@ -371,7 +381,12 @@ function removeMob(scene: Scene, mob: Mob): void {
 
 /** A goblin that never moves or swings: something to fight, not a threat. */
 function addHeldGoblin(scene: Scene, tileX: number, tileY: number): Mob {
-  const goblin = createMob('goblin', tileX, tileY, scene.map);
+  const goblin = spawnMob(
+    'goblin',
+    { x: tileX, y: tileY },
+    scene.map,
+    liveSpawnContext('dev:spawn'),
+  );
   placeAt(goblin, tileX, tileY);
   goblin.aiHeld = true;
   scene.mobs.add(goblin);
@@ -753,7 +768,12 @@ function checkDowned(r: SurvivalGateReporter): void {
   }
   const { scene, merc } = spawned;
   partyAway(scene);
-  const goblin = createMob('goblin', FAR_TILE_X - 2, FAR_TILE_Y, scene.map);
+  const goblin = spawnMob(
+    'goblin',
+    { x: FAR_TILE_X - 2, y: FAR_TILE_Y },
+    scene.map,
+    liveSpawnContext('dev:spawn'),
+  );
   scene.mobs.add(goblin);
   moveMob(scene, goblin, Math.round(merc.x / TILE_SIZE) + 1, Math.round(merc.y / TILE_SIZE));
   knockDownBy(scene, merc, goblin);
@@ -798,7 +818,12 @@ function checkDowned(r: SurvivalGateReporter): void {
 
   const unintercepted = spawnedScene('splash_zone');
   if (unintercepted !== null) {
-    const attacker = createMob('goblin', FAR_TILE_X, FAR_TILE_Y, unintercepted.scene.map);
+    const attacker = spawnMob(
+      'goblin',
+      { x: FAR_TILE_X, y: FAR_TILE_Y },
+      unintercepted.scene.map,
+      liveSpawnContext('dev:spawn'),
+    );
     knockDownUnintercepted(unintercepted.scene, unintercepted.merc, attacker);
     r.checkCatches(
       unintercepted.scene.kills.length === 0,

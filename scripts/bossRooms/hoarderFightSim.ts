@@ -20,8 +20,9 @@ import { CatPlayer } from '../../src/creatures/CatPlayer.js';
 import { HumanPlayer } from '../../src/creatures/HumanPlayer.js';
 import type { Mob } from '../../src/creatures/Mob.js';
 import { Cockroach } from '../../src/creatures/Cockroach.js';
-import { TheHoarder } from '../../src/creatures/TheHoarder.js';
-import { createMob, resolveBossLevel } from '../../src/levels/spawner.js';
+import type { TheHoarder } from '../../src/creatures/TheHoarder.js';
+import { resolveBossLevel } from '../../src/levels/spawner.js';
+import { liveSpawnContext, spawnMob } from '../../src/levels/spawnFunnel.js';
 import { MIN_STAT_VALUE, type DamageSource } from '../../src/Player.js';
 import { bareFistDamage } from '../../src/core/crawlerFormulas.js';
 import { mulberry32 } from '../../src/sprites/person/rng.js';
@@ -184,8 +185,12 @@ export function stageHoarderFight(side: DoorSide): StagedHoarderFight {
   if (band === undefined) throw new Error('floor one lists no hoarder');
 
   const profile = DIFFICULTY_PROFILES.normal;
-  const boss = createMob(HOARDER_BOSS_TYPE, room.spawn.x, room.spawn.y, gameMap);
-  if (!(boss instanceof TheHoarder)) throw new Error('the hoarder spawn key built something else');
+  const boss = spawnMob(
+    HOARDER_BOSS_TYPE,
+    { x: room.spawn.x, y: room.spawn.y },
+    gameMap,
+    liveSpawnContext('dev:spawn'),
+  );
   boss.applyMobLevel(resolveBossLevel(band, SIM_PARTY_LEVEL, profile), levelDef.levelledCurve);
   applySpawnDifficulty(boss, profile);
   if (BARE_ROOM) {

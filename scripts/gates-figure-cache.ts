@@ -447,7 +447,8 @@ console.log('figure frame cache gates');
   );
 }
 
-// A frame's painting is bounded: past the budget a miss paints straight out.
+// A frame's painting is bounded: past the budget a miss borrows the figure's
+// nearest baked frame rather than paying for a painter it would throw away.
 {
   reset();
   const figure = makeFigure('slow_paint', SLOW_PAINT_MS);
@@ -456,8 +457,25 @@ console.log('figure frame cache gates');
   const stats = getFigureCacheStats();
   check(
     'bake budget stops further bakes in a frame',
-    stats.bakes === 1 && stats.directDraws === 1,
-    `baked ${stats.bakes}, direct-drew ${stats.directDraws} — expected one of each`,
+    stats.bakes === 1 && stats.approxDraws === 1 && stats.directDraws === 0,
+    `baked ${stats.bakes}, borrowed ${stats.approxDraws}, direct-drew ${stats.directDraws} — ` +
+      'expected one bake and one borrowed frame',
+  );
+}
+
+// Past the budget, a figure with nothing baked to borrow is painted straight out.
+{
+  reset();
+  const spender = makeFigure('slow_spender', SLOW_PAINT_MS);
+  const cold = makeFigure('cold_past_budget', 0);
+  drawFigureCached(ctx, spender, 'walk', 0, 0, 0, TILE_SIZE);
+  drawFigureCached(ctx, cold, 'walk', 0, 0, 0, TILE_SIZE);
+  const stats = getFigureCacheStats();
+  check(
+    'a figure with nothing baked paints directly past the budget',
+    stats.bakes === 1 && stats.directDraws === 1 && stats.approxDraws === 0,
+    `baked ${stats.bakes}, direct-drew ${stats.directDraws}, borrowed ${stats.approxDraws} — ` +
+      'expected one bake and one direct draw',
   );
 }
 

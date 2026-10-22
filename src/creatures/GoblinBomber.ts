@@ -181,7 +181,11 @@ export abstract class GoblinBomber extends Mob implements BombThrower, SiegeLobb
   readonly xpValue = XP_VALUE;
   protected coinDropMin = COIN_DROP_MIN;
   protected coinDropMax = COIN_DROP_MAX;
-  override readonly bodyPartKey: string;
+  private readonly goreBodyPartKey: string;
+
+  override get bodyPartKey(): string {
+    return this.goreBodyPartKey;
+  }
 
   private readonly animator: GoblinBomberAnimator;
   private readonly aggroRangePx: number;
@@ -245,7 +249,7 @@ export abstract class GoblinBomber extends Mob implements BombThrower, SiegeLobb
     super(tileX, tileY, tileSize, BOMBER_HP, activeBomberTuning().walkSpeed);
     this.speedTuning = activeBomberTuning();
     this.animator = new GoblinBomberAnimator(archetype);
-    this.bodyPartKey = goblinBomberBodyPartKey(archetype);
+    this.goreBodyPartKey = goblinBomberBodyPartKey(archetype);
     this.aggroRangePx = tileSize * AGGRO_RANGE_TILES;
     this.blastRadiusPx = goblinBombBlastRadiusPx(archetype);
     const rollPx = archetype === 'dynamite' ? GOBLIN_DYNAMITE_SETTLE_PX : 0;

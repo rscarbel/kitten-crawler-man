@@ -147,7 +147,11 @@ export class Mercenary extends Mob {
    * A figure that comes apart on death, like the golem, names its rubble here;
    * every other hireling falls over instead and leaves this null.
    */
-  override readonly bodyPartKey: string | null;
+  private readonly goreBodyPartKey: string | null;
+
+  override get bodyPartKey(): string | null {
+    return this.goreBodyPartKey;
+  }
 
   /** The player this merc currently trails — reassigned each frame to the active character. */
   owner: Player;
@@ -246,7 +250,7 @@ export class Mercenary extends Mob {
     this.cat = owner;
     this.kit = createMercenaryKit(template);
     this.art = MERCENARY_ART[template.art];
-    this.bodyPartKey = this.art.goreBodyPartKey ?? null;
+    this.goreBodyPartKey = this.art.goreBodyPartKey ?? null;
     this.barker = new MercenaryBarker(MERCENARY_VOICES[template.voice]);
     this.kitContext = new ShellKitContext(this);
     this.audioTag = template.audioTag;

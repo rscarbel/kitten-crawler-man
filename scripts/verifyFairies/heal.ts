@@ -459,7 +459,10 @@ const SILENT_LICH_HOOKS: LichBattleHooks = {
  * attached has none, so it gets one. The Ball of Swine is a prop that refuses
  * every heal until its arena starts the fight, so it is put into its fight.
  */
-function addPhasedBoss(s: ReturnType<typeof healStage>, key: string): Mob {
+function addPhasedBoss(
+  s: ReturnType<typeof healStage>,
+  key: (typeof PHASED_BOSS_KEYS)[number],
+): Mob {
   const boss = s.add(key, HEALER_TILE + NEIGHBOR_OFFSET_TILES, HEALER_TILE);
   if (boss instanceof TheLich) new LichBattleSystem(s.map, boss, null, null, SILENT_LICH_HOOKS);
   if (boss instanceof BallOfSwine) boss.fightStarted = true;

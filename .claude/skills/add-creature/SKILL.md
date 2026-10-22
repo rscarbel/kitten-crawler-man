@@ -40,13 +40,28 @@ Levelled mobs can learn `flank`, `block`, `kite`, `regroup` and `riposte` (`src/
 - Traits are rolled at spawn by `applySpawnDifficulty` (`src/core/difficultyProfiles.ts`), which every spawn site must call straight after `applyMobLevel`. A system that levels a mob itself (a summon, a quest wave) calls it too.
 - Run `npm run verify:tactics` after opting a creature in.
 
-## Registration (all required for spawnable mobs)
+## Registration (all required for every hostile)
 
-1. `src/levels/spawner.ts` — import the class and add `registerMob('my_mob', (x, y) => new MyMob(x, y, TILE_SIZE))`. Unknown keys silently fall back to goblin, so don't skip this.
-2. `src/levels/types.ts` — add `'my_mob'` to the `MobSpawnRule['type']` string union.
+1. `src/levels/mobKinds.ts` — add an entry to `MOB_KIND_DEFS`. Its key is the kind (`MobKind` is derived from the keys, so a misspelled kind anywhere is a compile error). Every field is required:
+   - `create` — builds the class from the tile (and the look, for a kind with a variant family). A kind that needs extra constructor arguments (an owner, a leash) declares them as typed options: `kind<MyMob, MyOptions>({ create: (tile, _look, _random, options) => ... })` (the full signature is `create(tile, variant, random, ...options)`, where `random` is the spawn context's stream; a kind that rolls anything at construction draws from it, never `Math.random`), and also goes in `KINDS_NEEDING_OPTIONS`; such a kind cannot be named in a spawn table.
+   - `threat` — rated by the method in `MobKindEntry`'s JSDoc (base HP × hits per second × damage, normalised so a melee goblin is 1; ×1.5 ranged, ×1.25 area or status). Kind ladders convert counts with it.
+   - `role`, and `protected` (`'boss'`, `'boss-add'`, `'quest-critical'` or null). A protected kind is never substituted by a ladder.
+   - `prewarm` — the figure rows one spawn draws first, or null.
+   - `approach` (optional) — for a figure-drawn kind, the figure each look is drawn as and the row names it walks up to a fight in and opens it with (`ApproachSpec`, `src/sprites/figure/approachRows.ts`). A lead-in that knows a kind is coming, such as the Briar Hollow siege's countdown, warms exactly these, so a kind without it arrives cold there.
+   - A creature with several looks uses `lookKind` with a `MobVariantFamily` (`src/core/mobVariantFamily.ts`) declared beside the class, takes its look as a constructor argument (never picks one itself), draws the figure its look names, and exposes `applyVariant(look)` so a live body can be re-dressed in the shared look. Look-coupled parameters (a weapon's timing) come from the look.
+2. Spawn it only through `spawnMob(kind, tile, map, context)` (`src/levels/spawnFunnel.ts`). The context names the encounter (`EncounterId`, `src/levels/encounters.ts`) and the random stream; live play passes `Math.random` (`liveSpawnContext(encounter)`). `npm run check:spawn-funnel` fails on a hostile `new MyMob(` anywhere else in `src/`.
 3. Reference it in a level def (`src/levels/level*.ts`): `roomMobs`/`hallwayMobs` (`{ type, chance, minCount, maxCount, minLevel, maxLevel }`), `bossRooms: [{ type }]`, `extraSpawns` (landmark-relative, optional `setup` callback in `SPAWN_SETUP` for post-spawn init like arena binding), or `onMobKilledSpawns`. A gauntlet boss whose room has dressing is matched to it by boss type (`HOARDER_BOSS_TYPE` etc. in `src/systems/bossRooms/BossRoomDressings.ts`), never by its index in `bossRooms`.
-4. `src/core/assetGroups.ts` — add the mob type to `MOB_SPRITE_KEYS`, listing the sprite keys it needs (an empty array if it draws procedurally with no sheet). `npm run verify:assets` hard-fails on any registered mob type with no entry, so this is not optional.
+4. `src/core/assetGroups.ts` — add the kind to `MOB_SPRITE_KEYS`, listing the sprite keys it needs (an empty array if it draws procedurally with no sheet). The record is keyed by every `MobKind`, so a kind with no entry fails `tsc`. A friendly creature that never goes through `spawnMob` goes in `FRIENDLY_CREATURE_SPRITE_KEYS` instead.
 5. If the sheet is new, add its key to whichever `AssetGroup` covers the context the creature appears in, and make sure every floor that can produce it declares that group — via `LevelDef.spriteGroups` for a spawn-table mob, or via a `SYSTEM_ASSET_REQUIREMENTS` entry (`src/core/systemAssetRequirements.ts`) for anything a _system_ constructs: a bounty escort, a quest wave, a companion, a mid-fight summon. A creature reachable only through a system is named in no `LevelDef`, so nothing else declares it and its sheet would never be grouped. Background: `docs/asset-management.md`.
+
+### Variety tiers
+
+On a device that lags or drops canvases the game trims looks before smoothness (`docs/asset-management.md`, "Variety tiers"). A new kind takes part by:
+
+- rating `threat` by the method in `MobKindEntry`'s JSDoc, and setting `role` and `protected` (a protected kind is never substituted);
+- declaring a `MobVariantFamily` if it has more than one look, so every spawn can share the canonical one;
+- getting a row in the ladder of every encounter it joins that declares one (`ENCOUNTER_LADDERS`, `src/levels/encounters.ts`), with a stand-in that encounter already fields at that tier; `npm run gates:assault-residency` checks the siege's;
+- being spawned only through `spawnMob`, and in a laddered encounter only after `planEncounterRoster` has resolved the roster.
 
 ## Runtime spawning
 

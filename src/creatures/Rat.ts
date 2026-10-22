@@ -69,7 +69,9 @@ export class Rat extends Mob {
   protected coinDropMin = 0;
   protected coinDropMax = 1;
   override readonly audioTag = 'rat';
-  override readonly bodyPartKey = RAT_BODY_PART_KEY;
+  override get bodyPartKey(): string {
+    return RAT_BODY_PART_KEY;
+  }
   displayName = 'Rat';
   description = 'A nimble rodent that bites when cornered.';
 

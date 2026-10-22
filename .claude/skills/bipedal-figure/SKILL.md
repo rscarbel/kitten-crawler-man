@@ -275,10 +275,17 @@ Two lint rules bite modules that live under `src/`:
    ranking — Chrome even scrambles the ordering between variants. **Regime is per
    figure, never per family.** A figure over roughly 1 ms per cell ships only
    with prewarm coverage for every state its AI can enter.
-9. **Wire prewarm where the spawn is _scheduled_**, not where the mob is
-   constructed and never where it first renders: `MOB_PREWARM` in
-   `src/levels/spawner.ts` is the floor-wide backstop, plus the boss intro, the
-   attack telegraph, the wave scheduler. Compute the lead you need
+9. **Wire prewarm where the spawn is _scheduled_**, never where it first
+   renders. The backstop is the kind's `prewarm` on its `MOB_KINDS` entry
+   (`src/levels/mobKinds.ts`): `spawnMob` (`src/levels/spawnFunnel.ts`) runs it
+   for the look each body wears as it is built, which covers every floor-wide
+   spawn made while the floor is generated. Anything that knows a kind is coming
+   before a body exists warms it earlier — the kind's `warm(tier)` on its
+   `MOB_KINDS` entry runs its `prewarm` for every look a spawn can wear at that
+   variety tier, its `approachRows(tier, view)` lists the walk rows and then the
+   opening attack rows a spawn at that tier comes up to a fight in, facing
+   `view`, and `prewarmFigureState` warms particular rows — as the boss intro, the attack
+   telegraph and the wave scheduler do. Compute the lead you need
    (`rows × frames × bake_ms / PREWARM_BAKE_BUDGET_MS` in `figureFrameCache.ts`)
    rather than assuming it, and keep it inside that file's
    `IDLE_FRAMES_BEFORE_RELEASE` window or the warming is thrown away unused.

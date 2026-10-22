@@ -15,6 +15,12 @@
  *   H8  no two adult looks share the same (skin, hair colour, hair style,
  *       garment colour) combination — every look is visually distinguishable
  *       by at least one of those axes
+ *   H9  at every variety tier the street wears no more distinct human looks
+ *       than the tier's plan allows, each one offered for the role its
+ *       citizen's group wears, and never a named resident's look
+ *   H10 a citizen of either cast changes look only at a purged canvas
+ *       recovery, to the one the tier then gives it; a named resident and a
+ *       citizen in a conversation keep theirs at every tier
  *
  * Run by `npm run render:human-cast`, or alone: `npx tsx scripts/gates-human-cast.ts`.
  */
@@ -36,7 +42,29 @@ import {
   townCastStateName,
   WORK_TOWN_CAST_VIEWS,
 } from '../src/sprites/art/townCastFigure.js';
-import { TOWN_CAST_LOOKS, type TownCastLook } from '../src/sprites/person/townCastLooks.js';
+import {
+  TOWN_CAST_LOOKS,
+  TOWN_CAST_TIER_PLANS,
+  townCastLeadRole,
+  type TownCastLook,
+  type TownCastTierPlan,
+} from '../src/sprites/person/townCastLooks.js';
+import { TOWN_ROLES, type TownRole } from '../src/sprites/person/PersonAppearance.js';
+import {
+  FULL_VARIETY_TIER,
+  MINIMAL_VARIETY_TIER,
+  SHARED_LOOKS_TIER,
+  VARIETY_TIERS,
+  forceVarietyTier,
+  varietyTier,
+  type VarietyTier,
+} from '../src/core/varietyTier.js';
+import { runCanvasRecovery } from '../src/core/canvasRecovery.js';
+import { citizenLookKey, pickCitizenFigure } from '../src/creatures/citizenFigure.js';
+import { Townsperson } from '../src/creatures/Townsperson.js';
+import { residentFigure } from '../src/creatures/residentFigures.js';
+import { allResidents } from '../src/systems/townResidents.js';
+import { TOWN_SPECIES } from '../src/systems/townSpecies.js';
 import {
   CACHE_BUDGET_MEGABYTES,
   figureByteBudgetFor,
@@ -288,6 +316,227 @@ function gateResidency(): void {
   );
 }
 
+// ── H9 street looks per variety tier ─────────────────────────────────────────
+
+/** Seeds swept per role and tier: far more citizens of one role than any town holds. */
+const TIER_SWEEP_SEEDS = 512;
+
+/** The distinct looks a tier's plan lets the street wear, counted from the plan and the cast alone. */
+function humanStreetAllowance(tier: VarietyTier): number {
+  const plan: TownCastTierPlan = TOWN_CAST_TIER_PLANS[tier];
+  const allowed = new Set<string>();
+  for (const role of TOWN_ROLES) {
+    const lead = townCastLeadRole(plan, role);
+    const offered = TOWN_CAST_LOOKS.filter((look) => look.roles.includes(lead));
+    const limit = plan.looksPerRole[role];
+    const kept = limit === undefined ? offered : offered.slice(0, limit);
+    for (const look of kept) allowed.add(look.id);
+  }
+  return allowed.size;
+}
+
+function gateTierAllowance(): void {
+  const streetLookCount = TOWN_CAST_LOOKS.filter((look) => look.roles.length > 0).length;
+  if (humanStreetAllowance(FULL_VARIETY_TIER) !== streetLookCount) {
+    fail(
+      'H9',
+      `the full tier allows ${humanStreetAllowance(FULL_VARIETY_TIER)} looks, not every one of the ${streetLookCount} street looks`,
+    );
+  }
+  let previousAllowance = Number.POSITIVE_INFINITY;
+  let measured = 0;
+  for (const tier of VARIETY_TIERS) {
+    const allowance = humanStreetAllowance(tier);
+    if (allowance > previousAllowance) {
+      fail(
+        'H9',
+        `tier ${tier} allows ${allowance} looks, more than the tier above's ${previousAllowance}`,
+      );
+    }
+    previousAllowance = allowance;
+    const plan = TOWN_CAST_TIER_PLANS[tier];
+    const worn = new Set<string>();
+    for (const role of TOWN_ROLES) {
+      const lead = townCastLeadRole(plan, role);
+      const misfits = new Set<string>();
+      for (let seed = 0; seed < TIER_SWEEP_SEEDS; seed++) {
+        const figure = pickCitizenFigure(seed, role, 'human', tier);
+        measured++;
+        if (figure.species !== 'human') {
+          fail('H9', `a human ${role} was given a ${figure.species} figure at tier ${tier}`);
+          continue;
+        }
+        worn.add(figure.look.id);
+        if (!figure.look.roles.includes(lead)) misfits.add(figure.look.id);
+      }
+      for (const id of misfits) {
+        fail(
+          'H9',
+          `a ${role} wears ${id} at tier ${tier}, which is not offered for its group's ${lead}`,
+        );
+      }
+    }
+    if (worn.size > allowance) {
+      fail(
+        'H9',
+        `tier ${tier}'s street wears ${worn.size} distinct looks, over its allowance of ${allowance}`,
+      );
+    }
+  }
+  failures.push(...nothingMeasuredFailures(measured, 'tiered picks').map((m) => `H9: ${m}`));
+  gateSharedLooksTierKeepsUntrimmedRoles();
+}
+
+function lookIdsWorn(role: TownRole, tier: VarietyTier): Set<string> {
+  const worn = new Set<string>();
+  for (let seed = 0; seed < TIER_SWEEP_SEEDS; seed++) {
+    worn.add(pickCitizenFigure(seed, role, 'human', tier).look.id);
+  }
+  return worn;
+}
+
+/**
+ * The first step down trims only the roles its plan names; every other role
+ * must still wear every look it wears at the full tier.
+ */
+function gateSharedLooksTierKeepsUntrimmedRoles(): void {
+  const plan: TownCastTierPlan = TOWN_CAST_TIER_PLANS[SHARED_LOOKS_TIER];
+  const limits = plan.looksPerRole;
+  const untrimmed = TOWN_ROLES.filter((role) => limits[role] === undefined);
+  if (untrimmed.length === 0) {
+    fail('H9', `tier ${SHARED_LOOKS_TIER} trims every role; it should leave most roles whole`);
+  }
+  for (const role of untrimmed) {
+    const full = lookIdsWorn(role, FULL_VARIETY_TIER);
+    const shared = lookIdsWorn(role, SHARED_LOOKS_TIER);
+    const lost = [...full].filter((id) => !shared.has(id));
+    if (lost.length > 0) {
+      fail(
+        'H9',
+        `a ${role} loses ${lost.join(', ')} at tier ${SHARED_LOOKS_TIER}, though its plan leaves the role whole`,
+      );
+    }
+  }
+}
+
+// ── H10 a citizen changes look only behind a purge ───────────────────────────
+
+const STILL_WANDER = {
+  pickTarget: () => ({ x: 0, y: 0 }),
+  arriveDist: 1,
+  pauseMin: 1,
+  pauseMax: 1,
+};
+/** Street citizens built per role and species: enough that a lean tier must change some. */
+const RELOOK_SEEDS_PER_ROLE = 4;
+
+interface WatchedCitizen {
+  readonly person: Townsperson;
+  readonly label: string;
+  /** The look it should wear after a purged recovery leaves the game at `tier`. */
+  readonly expectAfterPurge: (tier: VarietyTier) => string;
+}
+
+function lookOf(person: Townsperson): string {
+  return citizenLookKey(person.figure);
+}
+
+function failChanged(
+  watched: readonly WatchedCitizen[],
+  before: ReadonlyMap<Townsperson, string>,
+  when: string,
+): void {
+  for (const { person, label } of watched) {
+    if (lookOf(person) !== before.get(person)) fail('H10', `${label} changed look ${when}`);
+  }
+}
+
+function gateRelookOnPurge(): void {
+  forceVarietyTier(FULL_VARIETY_TIER);
+  const watched: WatchedCitizen[] = [];
+  for (const species of TOWN_SPECIES) {
+    for (const role of TOWN_ROLES) {
+      for (let seed = 0; seed < RELOOK_SEEDS_PER_ROLE; seed++) {
+        const person = new Townsperson({
+          x: 0,
+          y: 0,
+          role,
+          species,
+          seed,
+          speed: 1,
+          wander: STILL_WANDER,
+        });
+        watched.push({
+          person,
+          label: `a ${species} ${role} (seed ${seed})`,
+          expectAfterPurge: (tier) => citizenLookKey(pickCitizenFigure(seed, role, species, tier)),
+        });
+      }
+    }
+  }
+  for (const def of allResidents()) {
+    const person = new Townsperson({
+      x: 0,
+      y: 0,
+      role: def.role,
+      species: def.species,
+      seed: 0,
+      speed: 1,
+      wander: STILL_WANDER,
+      residentId: def.id,
+    });
+    const ownLook = citizenLookKey(residentFigure(def.id));
+    if (lookOf(person) !== ownLook) fail('H10', `${def.name} does not wear their own look`);
+    watched.push({ person, label: def.name, expectAfterPurge: () => ownLook });
+  }
+  const talker = watched.find(
+    ({ person, expectAfterPurge }) =>
+      person.residentId === null && expectAfterPurge(MINIMAL_VARIETY_TIER) !== lookOf(person),
+  );
+  if (talker === undefined) {
+    fail(
+      'H10',
+      'no street citizen wears a look the minimal tier takes away, so a conversation cannot be tested',
+    );
+    return;
+  }
+  talker.person.frozen = true;
+
+  const before = new Map(watched.map(({ person }) => [person, lookOf(person)]));
+  const updateAll = (): void => {
+    for (const { person } of watched) person.update();
+  };
+
+  forceVarietyTier(MINIMAL_VARIETY_TIER);
+  updateAll();
+  failChanged(watched, before, 'when the tier dropped during play');
+  runCanvasRecovery('memoryPressure', null);
+  updateAll();
+  failChanged(watched, before, 'at a memory-pressure recovery, which repaints nothing on screen');
+
+  runCanvasRecovery('purged', null);
+  const tier = varietyTier();
+  updateAll();
+  let changed = 0;
+  for (const { person, label, expectAfterPurge } of watched) {
+    const expected = person === talker.person ? before.get(person) : expectAfterPurge(tier);
+    if (lookOf(person) !== before.get(person)) changed++;
+    if (lookOf(person) !== expected) {
+      fail(
+        'H10',
+        `${label} wears ${lookOf(person)} after a purge at tier ${tier}, not ${expected ?? 'the look it wore'}`,
+      );
+    }
+  }
+  if (changed === 0) fail('H10', `a purge at tier ${tier} changed no citizen's look`);
+
+  const afterPurge = new Map(watched.map(({ person }) => [person, lookOf(person)]));
+  talker.person.frozen = false;
+  updateAll();
+  failChanged(watched, afterPurge, 'after the purge had passed');
+  forceVarietyTier(FULL_VARIETY_TIER);
+}
+
 export function humanCastGateFailures(): string[] {
   failures = [];
   gateStructure();
@@ -298,6 +547,8 @@ export function humanCastGateFailures(): string[] {
   gateAdultTallerThanChild();
   gateLookCombinationsDistinct();
   gateResidency();
+  gateTierAllowance();
+  gateRelookOnPurge();
   return failures;
 }
 

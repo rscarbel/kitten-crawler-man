@@ -59,7 +59,7 @@ import type { SystemContext } from '../../src/systems/GameSystem';
 import { resolveKills, type CombatContext } from '../../src/systems/CombatSystem';
 import { EventBus } from '../../src/core/EventBus';
 import { AbilityManager } from '../../src/core/AbilityManager';
-import { createMob } from '../../src/levels/spawner';
+import { liveSpawnContext, spawnMob } from '../../src/levels/spawnFunnel';
 import { applySpawnDifficulty, DIFFICULTY_PROFILES } from '../../src/core/difficultyProfiles';
 import { referenceStats } from '../../src/core/referenceCrawler';
 import { ALL_STATS } from '../../src/Player';
@@ -251,7 +251,7 @@ function tilesBetween(a: { x: number; y: number }, b: { x: number; y: number }):
 
 /** A goblin that stands where it is put and never swings: a target, not a threat. */
 function addDummy(scene: Scene, tileX: number, tileY: number): Mob {
-  const mob = createMob('goblin', tileX, tileY, scene.map);
+  const mob = spawnMob('goblin', { x: tileX, y: tileY }, scene.map, liveSpawnContext('dev:spawn'));
   placeAtTile(mob, tileX, tileY);
   mob.aiHeld = true;
   scene.mobs.add(mob);
@@ -1895,7 +1895,12 @@ function standardFight(
     levelOwner(scene.human);
     Math.random = mulberry32(seed);
     for (const [tileX, tileY] of FIGHT_GOBLIN_TILES) {
-      const goblin = createMob('goblin', tileX, tileY, scene.map);
+      const goblin = spawnMob(
+        'goblin',
+        { x: tileX, y: tileY },
+        scene.map,
+        liveSpawnContext('dev:spawn'),
+      );
       placeAtTile(goblin, tileX, tileY);
       goblin.applyMobLevel(GOBLIN_LEVEL);
       applySpawnDifficulty(goblin, DIFFICULTY_PROFILES.normal);

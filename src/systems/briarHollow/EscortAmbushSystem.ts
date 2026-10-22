@@ -52,7 +52,8 @@ import type { TilePoint } from '../../map/town/townPlan';
 import type { MobRoster } from '../kits/SceneWorld';
 import { BLUEPRINTS_ESCORT_MUSIC } from './blueprints/blueprintsSoundCues';
 import { isUnseenSpawn, placeAmong, spawnDue, type OffscreenSpawnRules } from './offscreenSpawns';
-import { createUndead } from './VillageAssaultSystem';
+import { spawnMob } from '../../levels/spawnFunnel';
+import type { MobKind } from '../../levels/mobKinds';
 import type { MusicClaims } from '../../audio/AudioScope';
 
 const UPDATES_PER_SECOND = 60;
@@ -94,9 +95,9 @@ const ESCORT_BODY_HEALTH_SHARE = 0.4;
 const ESCORT_AMBUSH_KINDS = [
   'ruins_ghoul',
   'raised_ratkin',
-  'skeleton_warrior',
+  'skeleton_sword',
   'skeleton_archer',
-] as const;
+] as const satisfies readonly MobKind[];
 /** One of the road's ambusher kinds. */
 type EscortAmbushKind = (typeof ESCORT_AMBUSH_KINDS)[number];
 /**
@@ -723,7 +724,10 @@ export class EscortAmbushSystem {
 
   private raise(kind: AmbushKind, wave: number, tile: TilePoint): void {
     this.announceSide(wave, tile);
-    const mob = createUndead(kind, tile.x, tile.y);
+    const mob = spawnMob(kind, tile, this.deps.gameMap, {
+      encounter: 'quest:escort-ambush',
+      random: this.random,
+    });
     // They claw their way up out of the ground, as the siege's own do.
     if (mob instanceof RaisedRatkin) mob.beginRising();
     mob.applyMobLevel(this.deps.level());

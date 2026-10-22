@@ -27,7 +27,7 @@ import {
 import { BRIDGE, CLIFF, FloorTypeValue, isRiverChannel, type TileContent } from '../tileTypes';
 import { CHUNK_TILES } from './chunkTiles';
 import { overworldTerrainFor } from './overworldTerrainRegistry';
-import { onCanvasRecovery } from '../../core/canvasRecovery';
+import { canvasGeneration } from '../../core/canvasRecovery';
 
 /**
  * Samples a smoothed upscale reads either side of the position it shades: a
@@ -44,30 +44,38 @@ const HALF_TEXEL = 0.5;
 /** What the bake keeps of a map's macro field: the uploaded samples and which tiles are level. */
 interface BuiltMacro {
   readonly toneSeed: number;
+  /** The canvas generation the samples were uploaded in; a recovery may have blanked them since. */
+  readonly generation: number;
   readonly samples: CanvasSurface;
   readonly levelTiles: LevelTileMap;
 }
 
-let built = new WeakMap<TileContent[][], BuiltMacro>();
-// Baked once and kept; a purge would leave it blank for good.
-onCanvasRecovery(() => {
-  built = new WeakMap<TileContent[][], BuiltMacro>();
-});
+/**
+ * Keyed by map, so a dead floor's field goes with it. A recovery is noticed at
+ * the next lookup, which gives the old samples back before uploading new ones.
+ */
+const built = new WeakMap<TileContent[][], BuiltMacro>();
 
-/** The macro field for an overworld map, built once per map and tone seed and kept for the map's life. */
+/**
+ * The macro field for an overworld map, built once per map and tone seed and
+ * rebuilt after a canvas recovery, whose generation change may have blanked
+ * the uploaded samples.
+ */
 function macroFor(
   structure: TileContent[][],
   periodicToneAt: (cornerX: number, cornerY: number) => number,
 ): BuiltMacro | undefined {
   const toneSeed = floorArtSubSeed(GROUND_TONE_SALT);
+  const generation = canvasGeneration();
   const existing = built.get(structure);
-  if (existing?.toneSeed === toneSeed) return existing;
+  if (existing?.toneSeed === toneSeed && existing.generation === generation) return existing;
   if (existing !== undefined) releaseSurface(existing.samples);
 
   const field = buildOverworldMacroField(structure, periodicToneAt);
   if (field === undefined) return undefined;
   const macro: BuiltMacro = {
     toneSeed,
+    generation,
     samples: uploadSamples(field),
     levelTiles: field.levelTiles,
   };

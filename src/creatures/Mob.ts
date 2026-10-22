@@ -1,4 +1,5 @@
 import { Player, HP_BAR_HEIGHT, HP_BAR_Y_OFFSET } from '../Player';
+import type { MobKind } from '../levels/mobKinds';
 import type { EyePlacement } from '../sprites/eyePlacement';
 import type { DamageSource } from '../Player';
 import { FAIRY_AEGIS_STATUS, type StatusEffect } from '../core/StatusEffect';
@@ -1479,20 +1480,22 @@ export abstract class Mob extends Player {
   mobLevel = 1;
 
   /**
-   * The spawn-table key this mob was asked for, stamped by `createMob`; null for
-   * one built by calling its constructor directly.
+   * The hostile kind this mob was spawned as, stamped by `spawnMob`; null for a
+   * mob that is not a hostile kind (livestock, allies, props).
    *
    * The key rather than the class, because it is what spawn *rules* are written
    * in — it exists so a rule can ask how many of its own kind are already alive
    * without anything having to map a key back to a constructor.
    */
-  spawnTypeKey: string | null = null;
+  spawnTypeKey: MobKind | null = null;
 
   /** Display name shown in hover tooltip. Subclasses should override. */
   displayName = 'Unknown';
 
   /** Key into BodyPartGoreSystem's registry; null means no body-part gore for this mob. */
-  readonly bodyPartKey: string | null = null;
+  get bodyPartKey(): string | null {
+    return null;
+  }
 
   /** Short description shown in hover tooltip. Subclasses should override. */
   description = '';

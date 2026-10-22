@@ -15,7 +15,7 @@ import { setViewportSize } from '../../src/core/Viewport';
 import { CatPlayer } from '../../src/creatures/CatPlayer';
 import { HumanPlayer } from '../../src/creatures/HumanPlayer';
 import { HIRELING_CATCH_UP_TILES } from '../../src/creatures/mercenaries/hirelingCatchUp';
-import { createMob } from '../../src/levels/spawner';
+import { liveSpawnContext, spawnMob } from '../../src/levels/spawnFunnel';
 import { level3 } from '../../src/levels/level3';
 import { GameMap } from '../../src/map/GameMap';
 import { FloorTypeValue, type TileContent } from '../../src/map/tileTypes';
@@ -89,7 +89,12 @@ function caughtUpWith(hostileColumn: number): boolean {
   hire.x = HIRE_COLUMN * TILE_SIZE;
   hire.y = HALL_ROW * TILE_SIZE;
   mobs.grid.move(hire, preMoveX, preMoveY);
-  const hostile = createMob('goblin', hostileColumn, HALL_ROW, map);
+  const hostile = spawnMob(
+    'goblin',
+    { x: hostileColumn, y: HALL_ROW },
+    map,
+    liveSpawnContext('dev:spawn'),
+  );
   hostile.aiHeld = true;
   mobs.add(hostile);
   hostile.currentTarget = hire;

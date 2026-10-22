@@ -37,7 +37,7 @@ import { MercenarySystem } from '../../src/systems/MercenarySystem';
 import { SpellSystem } from '../../src/systems/SpellSystem';
 import { MobRoster } from '../../src/systems/kits/SceneWorld';
 import type { SystemContext } from '../../src/systems/GameSystem';
-import { createMob } from '../../src/levels/spawner';
+import { liveSpawnContext, spawnMob } from '../../src/levels/spawnFunnel';
 import {
   ABSORB_BREAK_LINGER_TICKS,
   SHIELD_STATUS,
@@ -202,7 +202,7 @@ function woundTo(body: { hp: number; maxHp: number }, fraction: number): void {
 }
 
 function addHostile(h: Harness, tileX: number, tileY: number): Mob {
-  const mob = createMob('goblin', 0, 0, h.map);
+  const mob = spawnMob('goblin', { x: 0, y: 0 }, h.map, liveSpawnContext('dev:spawn'));
   placeAt(mob, tileX, tileY);
   mob.hp = mob.maxHp;
   h.mobs.add(mob);
@@ -302,7 +302,12 @@ function checkWard(report: CretinGuardGateReporter): void {
     'the same blow on an unwarded Mongo is caught costing HP',
   );
 
-  const goblin = createMob('goblin', HUMAN_TILE_X + 1, HUMAN_TILE_Y, makeRoom());
+  const goblin = spawnMob(
+    'goblin',
+    { x: HUMAN_TILE_X + 1, y: HUMAN_TILE_Y },
+    makeRoom(),
+    liveSpawnContext('dev:spawn'),
+  );
   const struckMongo = makeMongo(cat, HUMAN_TILE_X, HUMAN_TILE_Y);
   struckMongo.applyStatus(makeShield(SHIELD_ABSORB, SHIELD_DURATION_TICKS));
   const struckBefore = struckMongo.hp;

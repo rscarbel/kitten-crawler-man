@@ -323,14 +323,18 @@ export class Cow extends Mob {
 
   readonly xpValue = 0;
   override readonly audioTag = 'cow';
-  override readonly bodyPartKey: string;
+  private readonly goreBodyPartKey: string;
+
+  override get bodyPartKey(): string {
+    return this.goreBodyPartKey;
+  }
   readonly coat: CowCoatId;
   readonly age: CowAge;
 
   /**
-   * The pen this animal lives in. Null for one spawned by name outside the
-   * herd (`createMob('cow')`), which then ambles about its spawn tile with the
-   * ordinary mob wander instead of its pen routine.
+   * The pen this animal lives in. Null for one placed outside the herd, which
+   * then ambles about its spawn tile with the ordinary mob wander instead of
+   * its pen routine.
    */
   pen: CowPen | null = null;
   /** How this animal asks for rows ahead of use. */
@@ -412,7 +416,7 @@ export class Cow extends Mob {
     this.coat = coat;
     this.age = age;
     this.random = random;
-    this.bodyPartKey = cowBodyPartKey(coat, age);
+    this.goreBodyPartKey = cowBodyPartKey(coat, age);
     this.mass = isCalf ? CALF_MASS : COW_MASS;
     this.kindLabel = isCalf ? 'Calf' : 'Cow';
     this.displayName = this.kindLabel;

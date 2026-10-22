@@ -39,7 +39,7 @@ import { Mercenary } from '../src/creatures/Mercenary';
 import type { Mob } from '../src/creatures/Mob';
 import { Mongo } from '../src/creatures/Mongo';
 import { RatkinSoldier } from '../src/creatures/RatkinSoldier';
-import { RaisedRatkin } from '../src/creatures/RaisedRatkin';
+import { RAISED_RATKIN_FAMILY, RaisedRatkin } from '../src/creatures/RaisedRatkin';
 import { RuinsGhoul } from '../src/creatures/RuinsGhoul';
 import { GameMap } from '../src/map/GameMap';
 import type { BriarHollowSite } from '../src/map/overworld/briarHollowSite';
@@ -1041,7 +1041,7 @@ type DuelOutcome = 'win' | 'loss' | 'draw';
  * rolled like any spawn, and already risen, so the fight starts at once.
  */
 function foeAt(rig: Rig, tile: TilePoint, level: number): Mob {
-  const foe = new RaisedRatkin(tile.x, tile.y, TILE_SIZE);
+  const foe = new RaisedRatkin(tile.x, tile.y, TILE_SIZE, RAISED_RATKIN_FAMILY.canonical);
   foe.applyMobLevel(level);
   applySpawnDifficulty(foe);
   rig.roster.add(foe);

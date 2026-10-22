@@ -2,7 +2,7 @@ import type { ItemId } from '../core/ItemDefs';
 import type { StatName } from '../Player';
 import type { SkillId } from '../core/SkillManager';
 import type { AbilityId } from '../core/AbilityManager';
-import type { MobSpawnRule } from '../levels/types';
+import type { MobKind } from '../levels/mobKinds';
 import type { Difficulty } from '../core/difficultyProfiles';
 import type { DoomsdayStage } from '../core/DoomsdayProgress';
 import type { MercenaryTemplateId } from '../core/mercenaryTemplates';
@@ -31,7 +31,7 @@ export type PlaytestSpawn =
   /** The floor's own entry point — map centre on a dungeon, the plaza in town. */
   | { readonly kind: 'mapStart' }
   /** The gateway safe room whose only onward exit is this boss's room. */
-  | { readonly kind: 'safeRoomBefore'; readonly bossType: MobSpawnRule['type'] }
+  | { readonly kind: 'safeRoomBefore'; readonly bossType: MobKind }
   /** The middle of the spider lab's field station, between its two hallways. */
   | { readonly kind: 'spiderLabStation' }
   /** In the room the spider lab's hallway leaves from, a few tiles short of its mouth. */
@@ -128,7 +128,7 @@ export interface PlaytestPreset {
    * Its room seals shut on skip like any other win: revealed on the minimap,
    * no chest guard, no hard-mode healer spawned for a boss that was never there.
    */
-  readonly preDefeatedBossTypes?: readonly MobSpawnRule['type'][];
+  readonly preDefeatedBossTypes?: readonly MobKind[];
   /**
    * Drops the party into the doomsday finale at this stage, with a full
    * countdown and the Krasue Murders closed behind it at the Lich's death.
@@ -906,13 +906,14 @@ function withQuantities(
  * unless told), eight loaded trebuchets, and Carl carrying a stockpile and a
  * crate of dynamite for the fight. `&assaultNow` on the URL rings the bell on
  * arrival with a short countdown, so the first wave comes without a word
- * with the Mayor.
+ * with the Mayor, and `&variety=<0-4>` (`--variety=` to the playtest script)
+ * holds the look-variety tier for measuring the siege at each one.
  */
 const BRIAR_HOLLOW_ASSAULT: PlaytestPreset = {
   ...BRIAR_HOLLOW_VILLAGE,
   id: 'briar-hollow-assault',
   description:
-    'Briar Hollow ready for the siege: walls built (--walls=fence|wood|stone|fortified), trebuchets up',
+    'Briar Hollow ready for the siege: walls built (--walls=fence|wood|stone|fortified), trebuchets up, --variety=0-4',
   briarHollowDefences: { wallTier: 'stone', trebuchets: ASSAULT_PRESET_TREBUCHETS },
   human: {
     ...BRIAR_HOLLOW_VILLAGE.human,

@@ -273,7 +273,9 @@ export class TheLich extends Mob {
   protected coinDropMin = COIN_DROP_MIN;
   protected coinDropMax = COIN_DROP_MAX;
   override readonly audioTag = 'the_lich';
-  override readonly bodyPartKey = LICH_BODY_PART_KEY;
+  override get bodyPartKey(): string {
+    return LICH_BODY_PART_KEY;
+  }
   displayName = 'The Lich';
   description =
     'A clerk-robed revenant with a magistrate’s seal at its belt and nothing under the hood but green fire.';

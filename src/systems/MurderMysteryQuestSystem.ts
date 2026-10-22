@@ -36,7 +36,8 @@ import type { MurderQuestProgress } from '../core/MurderQuestProgress';
 import type { MusicClaims } from '../audio/AudioScope';
 import type { QuestMarkerType } from './MiniMapSystem';
 import { GumGum } from '../creatures/GumGum';
-import { Krasue, AGGRO_RANGE_TILES as KRASUE_AGGRO_RANGE_TILES } from '../creatures/Krasue';
+import { type Krasue, AGGRO_RANGE_TILES as KRASUE_AGGRO_RANGE_TILES } from '../creatures/Krasue';
+import { liveSpawnContext, spawnMob } from '../levels/spawnFunnel';
 import { drawGumGumCorpse } from '../sprites/gumGumSprite';
 import { drawWellClueProp, drawHomeClueProp, drawRoostClueProp } from '../sprites/kraseuClueProps';
 import { drawRadialGlow } from '../sprites/radialGlow';
@@ -1099,8 +1100,12 @@ export class MurderMysteryQuestSystem implements GameSystem {
       // spawn already lost — better to drop it than ship dead weight.
       const spawnDistTiles = Math.hypot(tile.x - originX, tile.y - originY);
       if (spawnDistTiles > KRASUE_AGGRO_RANGE_TILES) continue;
-      const krasue = new Krasue(tile.x, tile.y, TILE_SIZE);
-      krasue.setMap(this.gameMap);
+      const krasue = spawnMob(
+        'krasue',
+        tile,
+        this.gameMap,
+        liveSpawnContext('quest:murder-mystery'),
+      );
       krasue.ignoresTownSafeZone = true;
       krasue.applyMobLevel(questMobLevel(NIGHT_SWARM_LEVEL, this.partyLevel));
       // Rolls traits like any krasue: the swarm is a wave of ordinary floor

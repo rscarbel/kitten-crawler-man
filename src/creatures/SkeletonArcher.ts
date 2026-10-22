@@ -66,7 +66,9 @@ export class SkeletonArcher extends RisingSkeleton {
   protected coinDropMin = COIN_DROP_MIN;
   protected coinDropMax = COIN_DROP_MAX;
   override readonly audioTag = 'skeleton';
-  override readonly bodyPartKey = SKELETON_ARCHER_BODY_PART_KEY;
+  override get bodyPartKey(): string {
+    return SKELETON_ARCHER_BODY_PART_KEY;
+  }
   displayName = 'Skeleton Archer';
   description = 'Looses bone-shafted arrows from behind its own front line.';
 

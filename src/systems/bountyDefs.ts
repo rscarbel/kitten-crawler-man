@@ -2,23 +2,10 @@ import { prewarmSkeletonEscortSprites, prewarmSkeletonLordSprite } from '../spri
 import type { Mob } from '../creatures/Mob';
 import type { GameMap } from '../map/GameMap';
 import { hasRoomToMove } from '../map/findWalkableTile';
-import { EvilClown } from '../creatures/EvilClown';
-import { StiltClown } from '../creatures/StiltClown';
-import { FatClown } from '../creatures/FatClown';
-import { CircusLemur } from '../creatures/CircusLemur';
-import { Mantid } from '../creatures/Mantid';
-import { MantisCrony } from '../creatures/MantisCrony';
 import { prewarmMantidApproach } from '../sprites/mantidSprite';
 import { prewarmRockGolemApproach } from '../sprites/rockGolemSprite';
-import { SkeletonLord } from '../creatures/SkeletonLord';
-import { SkeletonWarrior } from '../creatures/SkeletonWarrior';
-import { SkeletonArcher } from '../creatures/SkeletonArcher';
-import { DarkKnight } from '../creatures/DarkKnight';
-import { Goblin } from '../creatures/Goblin';
-import { RockGolem } from '../creatures/RockGolem';
-import { RockGolemBoss } from '../creatures/RockGolemBoss';
-import { prewarmGoblin, type GoblinWeapon } from '../sprites/goblinSprite';
-import { TILE_SIZE } from '../core/constants';
+import type { GoblinWeapon } from '../sprites/goblinSprite';
+import { liveSpawnContext, spawnMob } from '../levels/spawnFunnel';
 
 /** The mobs a bounty encounter puts on the map: one named target plus its escort. */
 interface BountyEncounter {
@@ -36,7 +23,8 @@ export interface BountyDef {
   /**
    * Builds the whole encounter at a site.
    *
-   * Implementations must `setMap()` every mob they create. They must NOT push
+   * Implementations must create every mob through `spawnMob`, which binds it to
+   * `map`, naming the bounty's own `bounty:<mark kind>` encounter. They must NOT push
    * into `mobs`/`mobGrid`, and they must NOT call `applyMobLevel` — BountySystem
    * owns insertion, level scaling and the bounty flags, and applies all three
    * uniformly so a new bounty creature cannot forget any of them.
@@ -64,13 +52,13 @@ export interface BountyDef {
 const CLOWN_TROUPE: ReadonlyArray<{
   readonly dx: number;
   readonly dy: number;
-  readonly make: (tileX: number, tileY: number) => Mob;
+  readonly kind: 'stilt_clown' | 'fat_clown' | 'circus_lemur';
 }> = [
-  { dx: -3, dy: -2, make: (x, y) => new StiltClown(x, y, TILE_SIZE) },
-  { dx: 3, dy: -2, make: (x, y) => new StiltClown(x, y, TILE_SIZE) },
-  { dx: -3, dy: 2, make: (x, y) => new FatClown(x, y, TILE_SIZE) },
-  { dx: 3, dy: 2, make: (x, y) => new FatClown(x, y, TILE_SIZE) },
-  { dx: 0, dy: 4, make: (x, y) => new CircusLemur(x, y, TILE_SIZE) },
+  { dx: -3, dy: -2, kind: 'stilt_clown' },
+  { dx: 3, dy: -2, kind: 'stilt_clown' },
+  { dx: -3, dy: 2, kind: 'fat_clown' },
+  { dx: 3, dy: 2, kind: 'fat_clown' },
+  { dx: 0, dy: 4, kind: 'circus_lemur' },
 ];
 
 /**
@@ -97,16 +85,14 @@ const EVIL_CLOWN_DEF: BountyDef = {
     'Mister Merriment',
   ],
   spawn(siteTileX, siteTileY, map) {
-    const boss = new EvilClown(siteTileX, siteTileY, TILE_SIZE);
-    boss.setMap(map);
+    const context = liveSpawnContext('bounty:evil_clown');
+    const boss = spawnMob('evil_clown', { x: siteTileX, y: siteTileY }, map, context);
 
     // The boss's own tile is claimed up front so no rescued minion lands inside him.
     const claimed = new Set<string>([tileKey(siteTileX, siteTileY)]);
     const escort = CLOWN_TROUPE.map((member) => {
       const tile = placeNearSite(map, siteTileX, siteTileY, member.dx, member.dy, claimed);
-      const minion = member.make(tile.x, tile.y);
-      minion.setMap(map);
-      return minion;
+      return spawnMob(member.kind, tile, map, context);
     });
 
     return { boss, minions: escort };
@@ -142,16 +128,14 @@ const MANTID_DEF: BountyDef = {
     prewarmMantidApproach('mantid');
     prewarmMantidApproach('mantis');
 
-    const boss = new Mantid(siteTileX, siteTileY, TILE_SIZE);
-    boss.setMap(map);
+    const context = liveSpawnContext('bounty:mantid');
+    const boss = spawnMob('mantid', { x: siteTileX, y: siteTileY }, map, context);
 
     // The boss's own tile is claimed up front so no rescued minion lands inside him.
     const claimed = new Set<string>([tileKey(siteTileX, siteTileY)]);
     const escort = MANTIS_FLANK_OFFSETS.map((offset) => {
       const tile = placeNearSite(map, siteTileX, siteTileY, offset.dx, offset.dy, claimed);
-      const minion = new MantisCrony(tile.x, tile.y, TILE_SIZE);
-      minion.setMap(map);
-      return minion;
+      return spawnMob('mantis', tile, map, context);
     });
 
     return { boss, minions: escort };
@@ -170,11 +154,11 @@ const MANTID_DEF: BountyDef = {
 const SKELETON_ESCORT: ReadonlyArray<{
   readonly dx: number;
   readonly dy: number;
-  readonly make: (tileX: number, tileY: number) => Mob;
+  readonly kind: 'skeleton_sword' | 'skeleton_archer';
 }> = [
-  { dx: -2, dy: 2, make: (x, y) => new SkeletonWarrior(x, y, TILE_SIZE) },
-  { dx: 2, dy: 2, make: (x, y) => new SkeletonWarrior(x, y, TILE_SIZE) },
-  { dx: 0, dy: -2, make: (x, y) => new SkeletonArcher(x, y, TILE_SIZE) },
+  { dx: -2, dy: 2, kind: 'skeleton_sword' },
+  { dx: 2, dy: 2, kind: 'skeleton_sword' },
+  { dx: 0, dy: -2, kind: 'skeleton_archer' },
 ];
 
 /** The Skeleton Lord, two sword skeletons and one archer. */
@@ -197,16 +181,14 @@ const SKELETON_LORD_DEF: BountyDef = {
     // paint, and the encounter is placed well before the player walks into it.
     prewarmSkeletonLordSprite();
     prewarmSkeletonEscortSprites();
-    const boss = new SkeletonLord(siteTileX, siteTileY, TILE_SIZE);
-    boss.setMap(map);
+    const context = liveSpawnContext('bounty:skeleton_lord');
+    const boss = spawnMob('skeleton_lord', { x: siteTileX, y: siteTileY }, map, context);
 
     // The boss's own tile is claimed up front so no rescued minion lands inside him.
     const claimed = new Set<string>([tileKey(siteTileX, siteTileY)]);
     const escort = SKELETON_ESCORT.map((member) => {
       const tile = placeNearSite(map, siteTileX, siteTileY, member.dx, member.dy, claimed);
-      const minion = member.make(tile.x, tile.y);
-      minion.setMap(map);
-      return minion;
+      return spawnMob(member.kind, tile, map, context);
     });
 
     return { boss, minions: escort };
@@ -351,13 +333,8 @@ const DARK_KNIGHT_DEF: BountyDef = {
     'Sir Malloch',
   ],
   spawn(siteTileX, siteTileY, map) {
-    const boss = new DarkKnight(siteTileX, siteTileY, TILE_SIZE);
-    boss.setMap(map);
-
-    // Warmed before the ten bodies are built rather than on the frame they first
-    // render: this is the densest goblin spawn in the game, and every one of them
-    // asks for the same two rows at once.
-    for (const weapon of GOBLIN_WEAPONS) prewarmGoblin(weapon);
+    const context = liveSpawnContext('bounty:dark_knight');
+    const boss = spawnMob('dark_knight', { x: siteTileX, y: siteTileY }, map, context);
 
     const escort: Mob[] = [];
     // The knight's own tile is claimed up front so no goblin is placed inside him.
@@ -374,9 +351,7 @@ const DARK_KNIGHT_DEF: BountyDef = {
       // stacking the rest on the knight's own tile would be worse than missing.
       if (tile === null) continue;
       const weapon = GOBLIN_WEAPONS[i % GOBLIN_WEAPONS.length];
-      const goblin = new Goblin(tile.x, tile.y, TILE_SIZE, weapon);
-      goblin.setMap(map);
-      escort.push(goblin);
+      escort.push(spawnMob('goblin', tile, map, { ...context, variant: weapon }));
     }
 
     return { boss, minions: escort };
@@ -405,8 +380,8 @@ const ROCK_GOLEM_DEF: BountyDef = {
     prewarmRockGolemApproach('rock_golem_boss');
     prewarmRockGolemApproach('rock_golem');
 
-    const boss = new RockGolemBoss(siteTileX, siteTileY, TILE_SIZE);
-    boss.setMap(map);
+    const context = liveSpawnContext('bounty:rock_golem_boss');
+    const boss = spawnMob('rock_golem_boss', { x: siteTileX, y: siteTileY }, map, context);
     const claimed = new Set<string>([tileKey(siteTileX, siteTileY)]);
     const guardTile = placeNearSite(
       map,
@@ -416,8 +391,7 @@ const ROCK_GOLEM_DEF: BountyDef = {
       0,
       claimed,
     );
-    const bodyguard = new RockGolem(guardTile.x, guardTile.y, TILE_SIZE);
-    bodyguard.setMap(map);
+    const bodyguard = spawnMob('rock_golem', guardTile, map, context);
     return { boss, minions: [bodyguard] };
   },
 };

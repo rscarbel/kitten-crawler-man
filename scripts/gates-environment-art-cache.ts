@@ -451,7 +451,7 @@ check(
   refusedPublishedSettles === 0,
   'a published sheet refused a later surface told its caller it was finished while rows were owed',
 );
-runCanvasRecovery('memoryPressure');
+runCanvasRecovery('memoryPressure', null);
 for (let frame = 0; frame < THROWING_PLAN_FRAMES; frame++) beginEnvironmentArtFrame();
 check(
   bandIsInked(PROBE_KEY, REFUSED_PUBLISHED_STEP, PROBE_BANDS),
@@ -542,7 +542,7 @@ check(
   `${environmentSheetsAwaiting()} of ${sheetsAskedFor} sheets refused a surface are held to be ` +
     'asked for again; the rest are lost until the floor is entered again',
 );
-runCanvasRecovery('memoryPressure');
+runCanvasRecovery('memoryPressure', null);
 const FRAMES_TO_LAND_DEFERRED = 4000;
 for (
   let frame = 0;
@@ -574,7 +574,7 @@ check(
   refusedMidPaintSettles === 1,
   `a sheet refused a surface mid-paint told its caller ${refusedMidPaintSettles} times, not once`,
 );
-runCanvasRecovery('memoryPressure');
+runCanvasRecovery('memoryPressure', null);
 for (
   let frame = 0;
   frame < FRAMES_TO_LAND_DEFERRED &&

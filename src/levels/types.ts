@@ -8,6 +8,7 @@ import type { AssetGroup } from '../core/assetGroups';
 import type { LevelledCurve } from '../creatures/mobLevelScaling';
 import type { Difficulty } from '../core/difficultyProfiles';
 import type { DefendQuestIntensity } from './defendQuestIntensity';
+import type { StandaloneMobKind } from './mobKinds';
 
 /**
  * One entry of a camp's roster: a mob type, a count and a level range.
@@ -39,52 +40,7 @@ export interface MobLevelRange {
 
 /** A single entry in a weighted mob-spawn table. */
 export interface MobSpawnRule extends MobLevelRange {
-  /** String key resolved by the spawner factory. */
-  type:
-    | 'goblin'
-    | 'llama'
-    | 'rock_golem'
-    | 'rock_golem_boss'
-    | 'mantid'
-    | 'mantis'
-    | 'rat'
-    | 'the_hoarder'
-    | 'cockroach'
-    | 'juicer'
-    | 'troglodyte'
-    | 'tuskling'
-    | 'ball_of_swine'
-    | 'krakaren_clone'
-    | 'brindle_grub'
-    | 'sky_fowl'
-    | 'grotesque_spider'
-    | 'small_spider'
-    | 'ruins_ghoul'
-    | 'krasue'
-    | 'circus_lemur'
-    | 'stilt_clown'
-    | 'fat_clown'
-    | 'evil_clown'
-    | 'mold_lion'
-    | 'terror_the_clown'
-    | 'city_elf_cultist'
-    | 'skeleton_sword'
-    | 'skeleton_archer'
-    | 'skeleton_lord'
-    | 'the_lich'
-    | 'goblin_archer'
-    | 'goblin_dynamiter'
-    | 'goblin_bombardier'
-    | 'fairy_shield'
-    | 'fairy_healer'
-    | 'fairy_ice'
-    | 'fairy_fire'
-    | 'fairy_necro'
-    | 'cow'
-    | 'calf'
-    | 'necromancer'
-    | 'raised_ratkin'
-    | 'grave_bull';
+  type: StandaloneMobKind;
   /**
    * Relative weight (0–1). The spawner normalises the list so weights
    * don't have to sum to exactly 1 — just make sure at least one rule exists.
@@ -106,8 +62,6 @@ export interface MobSpawnRule extends MobLevelRange {
    * room with archers and never once produce the mixed group it is for.
    */
   escorts?: EscortSpawnRule[];
-  /** Optional per-mob config forwarded to the constructor. */
-  config?: Record<string, unknown>;
 }
 
 /**
@@ -116,7 +70,7 @@ export interface MobSpawnRule extends MobLevelRange {
  * See {@link MobSpawnRule.escorts}.
  */
 export interface EscortSpawnRule extends MobLevelRange {
-  type: MobSpawnRule['type'];
+  type: StandaloneMobKind;
   /** Minimum number to spawn alongside the host rule (default 1). */
   minCount?: number;
   /** Maximum number to spawn alongside the host rule (default 1). */
@@ -140,7 +94,7 @@ export interface EscortSpawnRule extends MobLevelRange {
  * encounter's authored tuning intact for a party that comes back over-levelled.
  */
 export interface BossRoomRule extends MobLevelRange {
-  type: string;
+  type: StandaloneMobKind;
 }
 
 /**
@@ -149,8 +103,7 @@ export interface BossRoomRule extends MobLevelRange {
  * generic room/hallway spawn points.
  */
 export interface ExtraSpawnRule extends MobLevelRange {
-  /** Mob type key (must be registered in the spawner MOB_REGISTRY). */
-  type: MobSpawnRule['type'];
+  type: StandaloneMobKind;
   /**
    * Where the origin point comes from:
    * - `bossRoom:<index>` — centre of the Nth boss room (e.g. `bossRoom:1`)
@@ -170,7 +123,7 @@ export interface ExtraSpawnRule extends MobLevelRange {
  */
 export interface OnMobKilledSpawn {
   /** Mob type to spawn. */
-  type: MobSpawnRule['type'];
+  type: StandaloneMobKind;
   /** Min number to spawn (inclusive). */
   minCount: number;
   /** Max number to spawn (inclusive). */
@@ -203,7 +156,7 @@ export interface OverLevelReinforcement {
  */
 export interface GauntletDef {
   /** Boss guarding this gauntlet's gateway; pairs with the same-index `bossRooms` entry. */
-  bossType: MobSpawnRule['type'];
+  bossType: StandaloneMobKind;
   branchCount: { min: number; max: number };
   /** Rooms per branch, exclusive of the entry room and the gateway safe room. */
   branchRooms: { min: number; max: number };
@@ -329,7 +282,7 @@ export interface FairyRoomRate {
 
 /** Rates that replace one region's once a named boss is dead. */
 export interface FairyRateUpgrade {
-  readonly bossType: string;
+  readonly bossType: StandaloneMobKind;
   readonly region: number;
   readonly rate: FairyRoomRate;
   /**

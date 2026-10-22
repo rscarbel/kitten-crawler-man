@@ -12,7 +12,7 @@ import { SMUSH_DEF } from '../abilities/smush';
 import { MONGO_DEF } from '../abilities/mongo';
 import { getLevelDef, type LevelDef } from '../levels/index';
 import type { GameMap } from '../map/GameMap';
-import type { MobSpawnRule } from '../levels/types';
+import type { MobKind } from '../levels/mobKinds';
 import type { VillageBuildingId } from '../map/overworld/briarHollowLayout';
 import type { TownBuildingName } from '../map/town/townPlan';
 import type { PlaytestLoadout, PlaytestPreset, PlaytestSpawn } from './playtestPresets';
@@ -31,7 +31,7 @@ export interface PlaytestBoot {
   catSnap: PlayerSnapshot;
   abilityManager: AbilityManager;
   spawn: PlaytestSpawn;
-  preDefeatedBossTypes: readonly MobSpawnRule['type'][];
+  preDefeatedBossTypes: readonly MobKind[];
   doomsdayStage: PlaytestPreset['doomsdayStage'];
   spiderQuestAwaitingHacking: boolean;
 }

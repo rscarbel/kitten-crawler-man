@@ -77,7 +77,9 @@ export class MantisCrony extends Mob {
   protected coinDropMin = COIN_DROP_MIN;
   protected coinDropMax = COIN_DROP_MAX;
   override readonly audioTag = 'mantis';
-  override readonly bodyPartKey = MANTIS_BODY_PART_KEY;
+  override get bodyPartKey(): string {
+    return MANTIS_BODY_PART_KEY;
+  }
   displayName = 'Mantis';
   description = 'A man-sized praying mantis. It watches you with its whole head.';
   mass = MASS;

@@ -21,7 +21,9 @@ import type { GameMap } from '../../src/map/GameMap';
 import { HumanPlayer } from '../../src/creatures/HumanPlayer';
 import { CatPlayer } from '../../src/creatures/CatPlayer';
 import type { Mob } from '../../src/creatures/Mob';
-import { createMob, getRegisteredMobTypes, MAX_MOB_LEVEL } from '../../src/levels/spawner';
+import { MAX_MOB_LEVEL } from '../../src/levels/spawner';
+import { standaloneMobKinds, type StandaloneMobKind } from '../../src/levels/mobKinds';
+import { liveSpawnContext, spawnMob } from '../../src/levels/spawnFunnel';
 import { DIFFICULTY_PROFILES } from '../../src/core/difficultyProfiles';
 import { mulberry32, type Rng } from '../../src/sprites/person/rng';
 import { TACTICS_TRAITS, type TacticsTrait } from '../../src/creatures/tactics/tacticsTraits';
@@ -137,8 +139,13 @@ function makeArena(map: GameMap, playerTile: { x: number; y: number }): Arena {
 }
 
 /** Every trait `type` can learn, in roll order, read off a top-level roll that says yes to all. */
-function eligibilityOf(type: string, map: GameMap): readonly TacticsTrait[] {
-  const mob = createMob(type, PLAYER_TILE.x, PLAYER_TILE.y, map);
+function eligibilityOf(type: StandaloneMobKind, map: GameMap): readonly TacticsTrait[] {
+  const mob = spawnMob(
+    type,
+    { x: PLAYER_TILE.x, y: PLAYER_TILE.y },
+    map,
+    liveSpawnContext('dev:spawn'),
+  );
   mob.applyMobLevel(MAX_MOB_LEVEL);
   mob.rollTactics(DIFFICULTY_PROFILES.normal.tacticsChanceScale, ALWAYS_YES);
   mob.dispose();
@@ -165,12 +172,12 @@ function rollOnly(eligibility: readonly TacticsTrait[], wanted: readonly Tactics
 
 function addMob(
   arena: Arena,
-  type: string,
+  type: StandaloneMobKind,
   tile: { x: number; y: number },
   rng: Rng,
   woundShare: number,
 ): Mob {
-  const mob = createMob(type, tile.x, tile.y, arena.map);
+  const mob = spawnMob(type, { x: tile.x, y: tile.y }, arena.map, liveSpawnContext('dev:spawn'));
   mob.applyMobLevel(MAX_MOB_LEVEL);
   mob.rollTactics(DIFFICULTY_PROFILES.normal.tacticsChanceScale, rng);
   arena.roster.add(mob);
@@ -203,7 +210,7 @@ interface FallBackTrace {
 }
 
 interface FallBackRun {
-  readonly type: string;
+  readonly type: StandaloneMobKind;
   readonly eligibility: readonly TacticsTrait[];
   readonly fallBack: FallBack;
   readonly playerTile: { x: number; y: number };
@@ -282,13 +289,16 @@ function traceFallBack(map: GameMap, run: FallBackRun): FallBackTrace {
 
 /** Every registered creature and each fall-back it can learn. */
 function fallBackCases(map: GameMap): Array<{
-  type: string;
+  type: StandaloneMobKind;
   eligibility: readonly TacticsTrait[];
   fallBack: FallBack;
 }> {
-  const cases: Array<{ type: string; eligibility: readonly TacticsTrait[]; fallBack: FallBack }> =
-    [];
-  for (const type of getRegisteredMobTypes()) {
+  const cases: Array<{
+    type: StandaloneMobKind;
+    eligibility: readonly TacticsTrait[];
+    fallBack: FallBack;
+  }> = [];
+  for (const type of standaloneMobKinds()) {
     const eligibility = eligibilityOf(type, map);
     for (const fallBack of FALL_BACKS) {
       if (eligibility.includes(fallBack)) cases.push({ type, eligibility, fallBack });

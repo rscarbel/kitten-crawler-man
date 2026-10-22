@@ -132,6 +132,7 @@ function checkPopulatedFloor(name: string, levelDef: LevelDef, floorIndex: numbe
       POPULATED_PARTY_LEVEL,
       DIFFICULTY_PROFILES.normal,
       new Set(),
+      Math.random,
     );
     for (const mob of mobs) {
       const tileX = Math.floor(mob.x / TILE_SIZE + BODY_CENTRE_SHARE);

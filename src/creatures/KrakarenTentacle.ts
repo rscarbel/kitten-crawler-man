@@ -109,7 +109,9 @@ export class KrakarenTentacle extends Mob {
   readonly xpValue = GUARD_TENTACLE_XP;
   protected coinDropMin = 0;
   protected coinDropMax = 0;
-  override readonly bodyPartKey = KRAKAREN_TENTACLE_BODY_PART_KEY;
+  override get bodyPartKey(): string {
+    return KRAKAREN_TENTACLE_BODY_PART_KEY;
+  }
   /**
    * Its own tag rather than the boss's `'krakaren'`: `dealPreScaledDamage`
    * raises `attackSoundPending` on every connecting strike, and sharing the

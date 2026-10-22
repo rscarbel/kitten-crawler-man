@@ -185,7 +185,9 @@ export class EvilClown extends Mob {
   displayName = 'the Evil Clown';
   description = 'A clown the size of a doorway, juggling bottles of something green.';
   override readonly audioTag = 'evil_clown';
-  override readonly bodyPartKey = EVIL_CLOWN_BODY_PART_KEY;
+  override get bodyPartKey(): string {
+    return EVIL_CLOWN_BODY_PART_KEY;
+  }
 
   override get cullMarginTiles(): number {
     return CULL_MARGIN_TILES;

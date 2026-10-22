@@ -4,10 +4,11 @@ import type { Player } from '../Player';
 import type { Remex } from './Remex';
 import { drawMissQuillSprite } from '../sprites/missQuillSprite';
 import { type SoulBolt, fireSoulBolt, advanceSoulBolts, renderSoulBolts } from './soulBolt';
-import { Krasue } from './Krasue';
+import type { Krasue } from './Krasue';
 import { findNearbyWalkableTile } from '../map/findWalkableTile';
 import { applySpawnDifficulty } from '../core/difficultyProfiles';
 import { questMobLevel } from '../systems/questMobLevel';
+import { liveSpawnContext, spawnMob } from '../levels/spawnFunnel';
 
 const QUILL_HP = 260;
 /** She holds her office floor — a headmistress does not chase. */
@@ -205,8 +206,12 @@ export class MissQuill extends Mob {
           SUMMON_SPAWN_SEARCH_RADIUS_TILES,
         );
         if (spawnTile) {
-          const krasue = new Krasue(spawnTile.x, spawnTile.y, this.tileSize);
-          krasue.setMap(this.map);
+          const krasue = spawnMob(
+            'krasue',
+            spawnTile,
+            this.map,
+            liveSpawnContext('summon:miss_quill'),
+          );
           krasue.ignoresTownSafeZone = true;
           krasue.isSummon = true;
           krasue.applyMobLevel(questMobLevel(SUMMON_LEVEL, this.summonPartyLevel));

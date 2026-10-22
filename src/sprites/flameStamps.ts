@@ -11,7 +11,13 @@
  * edgeless stamps to draw them with and the repeatable randomness to vary them.
  */
 
-import { allocCanvas, surfaceContext, type CanvasSurface } from '../core/canvasSurface';
+import {
+  allocCanvas,
+  releaseSurface,
+  surfaceContext,
+  type CanvasSurface,
+} from '../core/canvasSurface';
+import { onCanvasRecovery } from '../core/canvasRecovery';
 
 /** A colour with its own opacity, for a stamp that is baked rather than composed. */
 export interface FlameInk {
@@ -162,6 +168,15 @@ export interface FlameStamps {
 }
 
 let bakedFlameStamps: FlameStamps | null = null;
+onCanvasRecovery(() => {
+  const stamps = bakedFlameStamps;
+  if (stamps === null) return;
+  releaseFlameBodyTiers(stamps.body);
+  for (const stamp of [stamps.root, stamps.throat, stamps.ember, stamps.fuel, stamps.glow]) {
+    releaseSurface(stamp);
+  }
+  bakedFlameStamps = null;
+});
 
 export function flameStamps(): FlameStamps {
   bakedFlameStamps ??= {
@@ -193,6 +208,11 @@ export function bakeFlameBodyTiers(
       bakeTeardrop(ink, STAMP_TEARDROP_WIDTH, STAMP_TEARDROP_HEIGHT, curvature),
     ),
   );
+}
+
+/** Gives back every stamp of a {@link bakeFlameBodyTiers} bake. */
+export function releaseFlameBodyTiers(tiers: ReadonlyArray<ReadonlyArray<CanvasSurface>>): void {
+  for (const bends of tiers) for (const stamp of bends) releaseSurface(stamp);
 }
 
 /** A radial falloff in unit space, so one gradient serves every disc in a bake. */

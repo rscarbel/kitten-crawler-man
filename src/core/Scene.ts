@@ -5,6 +5,7 @@ import type { UiRoot } from '../ui/core/UiRoot';
 import { rebindCaptureArmed } from '../ui/screens/pause/rebindCapture';
 import { beginFigureFrame } from '../sprites/figure/figureFrameCache';
 import { beginEnvironmentArtFrame } from '../map/environmentArtCache';
+import { beginFrameCostTally, closeFrameCost, lastFrameCost } from './frameCost';
 import { beginRenderFrame } from './renderFrameClock';
 import { beginCanvasRecoveryFrame, watchForCanvasLoss } from './canvasRecovery';
 import { closeAboveDarkness } from '../systems/lighting/aboveDarkness';
@@ -430,6 +431,8 @@ export class SceneManager {
     // the error.
     let updateFailure: { readonly error: unknown; readonly firstSeen: boolean } | null = null;
     const updateStartedAt = perfMonitor.begin();
+    const updateStartedAtMs = performance.now();
+    let updateMs = 0;
     try {
       while (this.accumulator >= this.FIXED_DT && steps < MAX_CATCHUP_UPDATES) {
         this.current?.update();
@@ -439,6 +442,7 @@ export class SceneManager {
     } catch (error) {
       updateFailure = { error, firstSeen: this.reportUpdateFailure(error) };
     } finally {
+      updateMs = performance.now() - updateStartedAtMs;
       perfMonitor.end('update', updateStartedAt);
     }
     if (this.accumulator >= this.FIXED_DT) this.accumulator = 0;
@@ -456,7 +460,9 @@ export class SceneManager {
       return;
     }
     this.lastRenderAt = now;
-    renderQuality.recordFrame(now);
+    // The interval ending now was spent on the previous rendered frame, so it
+    // is judged against that frame's cost.
+    renderQuality.recordFrame(now, lastFrameCost());
 
     // Before the figure and environment queues, so a frame that finds its
     // caches purged rebuilds them before those queues spend this frame's budget.
@@ -468,10 +474,14 @@ export class SceneManager {
     // freeze that clock, turning the cache off. This is the one call site every
     // scene passes through.
     beginRenderFrame();
+    // Before the queues drain, so the render time holds every bake the frame
+    // tallies and `bakeMs` stays a part of `renderMs`.
+    const renderStartedAt = perfMonitor.begin();
+    const renderStartedAtMs = performance.now();
+    beginFrameCostTally();
     beginFigureFrame();
     beginEnvironmentArtFrame();
     closeAboveDarkness();
-    const renderStartedAt = perfMonitor.begin();
     try {
       this.current?.render(this.ctx);
       if (takeSaveStackDrainRequest()) this.drainSaveStack();
@@ -480,6 +490,7 @@ export class SceneManager {
       this.drainSaveStack();
       throw error;
     } finally {
+      closeFrameCost(updateMs, performance.now() - renderStartedAtMs);
       perfMonitor.end('render', renderStartedAt);
       perfMonitor.endFrame(now);
     }

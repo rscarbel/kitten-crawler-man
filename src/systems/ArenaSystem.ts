@@ -16,7 +16,8 @@ import type { Mob } from '../creatures/Mob';
 import { BallOfSwine } from '../creatures/BallOfSwine';
 import { Tuskling } from '../creatures/Tuskling';
 import { BOSS_HEALER_ALIVE_NOTICE, BOSS_META, type BossRoomSystem } from './BossRoomSystem';
-import { createMob } from '../levels/spawner';
+import { liveSpawnContext, spawnMob } from '../levels/spawnFunnel';
+import type { EncounterId } from '../levels/encounters';
 import { hasRoomToMove } from '../map/findWalkableTile';
 import type { GameSystem, SystemContext } from './GameSystem';
 import type { TopBandEntry } from '../ui/hud/topBand';
@@ -30,6 +31,9 @@ import type { FairyConfinement } from '../creatures/fairies/Fairy';
 import { settings } from '../core/Settings';
 import type { SpatialGrid } from '../core/SpatialGrid';
 import { level2 } from '../levels/level2';
+
+/** The Ball of Swine's fight, which its loosed Tusklings belong to. */
+const BALL_OF_SWINE_ENCOUNTER = 'boss:ball_of_swine' as const satisfies EncounterId;
 
 /** 30 seconds at 60 fps — mirrors BossRoomSystem.ENTRY_WINDOW_FRAMES. */
 const ENTRY_WINDOW_FRAMES = 1800;
@@ -112,16 +116,15 @@ export function liveShedTusklings(mobs: readonly Mob[]): number {
 
 /**
  * A Tuskling the ball's fight lets loose mid-fight at `tile`, dazed for
- * `dazeFrames`, or null when the spawner will not make one. The caller adds it.
+ * `dazeFrames`. The caller adds it.
  */
 export function createBallTuskling(
   bos: BallOfSwine,
   tile: { x: number; y: number },
   gameMap: GameMap,
   dazeFrames: number,
-): Tuskling | null {
-  const mob = createMob('tuskling', tile.x, tile.y, gameMap);
-  if (!(mob instanceof Tuskling)) return null;
+): Tuskling {
+  const mob = spawnMob('tuskling', tile, gameMap, liveSpawnContext(BALL_OF_SWINE_ENCOUNTER));
   // Levelled to its parent: a base-stats Tuskling next to a level-15 boss is a
   // distraction the crawler can ignore, which is the opposite of the point.
   mob.applyMobLevel(bos.mobLevel, bos.levelledCurve);
@@ -311,13 +314,16 @@ export class ArenaSystem implements GameSystem {
         const r = TUSKLING_SPAWN_RADIUS_TILES;
         const tx = acx + Math.round(Math.cos(angle) * r);
         const ty = acy + Math.round(Math.sin(angle) * r);
-        const mob = createMob('tuskling', tx, ty, this.gameMap);
-        if (mob instanceof Tuskling) {
-          mob.isBossAdd = true;
-          mob.dazeTimer = TUSKLING_DAZE_FRAMES;
-          this.addMob(mob);
-          this.arenaLiveTusklings.push(mob);
-        }
+        const mob = spawnMob(
+          'tuskling',
+          { x: tx, y: ty },
+          this.gameMap,
+          liveSpawnContext(BALL_OF_SWINE_ENCOUNTER),
+        );
+        mob.isBossAdd = true;
+        mob.dazeTimer = TUSKLING_DAZE_FRAMES;
+        this.addMob(mob);
+        this.arenaLiveTusklings.push(mob);
       }
     });
   }
@@ -507,7 +513,7 @@ export class ArenaSystem implements GameSystem {
       const tile = this.shedTile(behind, bos);
       if (tile === null) continue;
       const mob = createBallTuskling(bos, tile, this.gameMap, SHED_DAZE_FRAMES);
-      if (mob !== null) this.addMob(mob);
+      this.addMob(mob);
     }
   }
 

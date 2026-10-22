@@ -27,7 +27,9 @@ import { HumanPlayer } from '../src/creatures/HumanPlayer';
 import { CatPlayer } from '../src/creatures/CatPlayer';
 import type { Mob, PlayerDamageType } from '../src/creatures/Mob';
 import type { SpatialGrid } from '../src/core/SpatialGrid';
-import { createMob, getRegisteredMobTypes, MAX_MOB_LEVEL } from '../src/levels/spawner';
+import { MAX_MOB_LEVEL } from '../src/levels/spawner';
+import { standaloneMobKinds } from '../src/levels/mobKinds';
+import { liveSpawnContext, spawnMob } from '../src/levels/spawnFunnel';
 import {
   DIFFICULTY_PROFILES,
   applySpawnDifficulty,
@@ -178,7 +180,7 @@ function isFiledUnderOwnCell(grid: SpatialGrid<Mob>, mob: Mob): boolean {
 
 /** A goblin at the top level with every trait it is eligible for. */
 function makeBlocker(map: GameMap, tileX: number, tileY: number): Mob {
-  const goblin = createMob('goblin', tileX, tileY, map);
+  const goblin = spawnMob('goblin', { x: tileX, y: tileY }, map, liveSpawnContext('dev:spawn'));
   goblin.applyMobLevel(MAX_MOB_LEVEL);
   goblin.rollTactics(DIFFICULTY_PROFILES.normal.tacticsChanceScale, ALWAYS_YES);
   return goblin;
@@ -243,11 +245,16 @@ function checkNothingBelowMinimumLevel(map: GameMap): void {
   const offenders: string[] = [];
   const eligibleAtTop: string[] = [];
   const unbuildable: string[] = [];
-  for (const type of getRegisteredMobTypes()) {
+  for (const type of standaloneMobKinds()) {
     try {
       for (let level = 1; level <= EARLY_GAME_TOP_MOB_LEVEL; level++) {
         for (const difficulty of ALL_DIFFICULTIES) {
-          const mob = createMob(type, ROOM_MIDDLE_TILE, ROOM_MIDDLE_TILE, map);
+          const mob = spawnMob(
+            type,
+            { x: ROOM_MIDDLE_TILE, y: ROOM_MIDDLE_TILE },
+            map,
+            liveSpawnContext('dev:spawn'),
+          );
           mob.applyMobLevel(level);
           // A roll that says yes to everything is the worst case: any trait
           // this mob could ever be given would show up here.
@@ -257,7 +264,12 @@ function checkNothingBelowMinimumLevel(map: GameMap): void {
           }
         }
       }
-      const top = createMob(type, ROOM_MIDDLE_TILE, ROOM_MIDDLE_TILE, map);
+      const top = spawnMob(
+        type,
+        { x: ROOM_MIDDLE_TILE, y: ROOM_MIDDLE_TILE },
+        map,
+        liveSpawnContext('dev:spawn'),
+      );
       top.applyMobLevel(MAX_MOB_LEVEL);
       top.rollTactics(DIFFICULTY_PROFILES.hard.tacticsChanceScale, ALWAYS_YES);
       if (top.tactics.hasAnyTrait) eligibleAtTop.push(`${type}(${top.tactics.traits.join(',')})`);
@@ -391,7 +403,12 @@ function checkRollTable(map: GameMap): void {
     withWorldSeed(ROLL_SEED, () => {
       const goblins: Mob[] = [];
       for (let i = 0; i < SPAWNED_GOBLIN_SAMPLES; i++) {
-        const goblin = createMob('goblin', ROOM_MIDDLE_TILE, ROOM_MIDDLE_TILE, map);
+        const goblin = spawnMob(
+          'goblin',
+          { x: ROOM_MIDDLE_TILE, y: ROOM_MIDDLE_TILE },
+          map,
+          liveSpawnContext('dev:spawn'),
+        );
         goblin.applyMobLevel(level);
         applySpawnDifficulty(goblin, normal);
         goblins.push(goblin);
@@ -604,11 +621,11 @@ function checkRefusedChannels(map: GameMap): void {
     ROOM_MIDDLE_TILE,
     TILE_SIZE,
   );
-  const bystander = createMob(
+  const bystander = spawnMob(
     'goblin',
-    ROOM_MIDDLE_TILE + BYSTANDER_OFFSET_TILES,
-    ROOM_MIDDLE_TILE,
+    { x: ROOM_MIDDLE_TILE + BYSTANDER_OFFSET_TILES, y: ROOM_MIDDLE_TILE },
     map,
+    liveSpawnContext('dev:spawn'),
   );
 
   for (const channel of REFUSED_CHANNELS) {
@@ -929,11 +946,11 @@ function checkCreditedBlows(map: GameMap): void {
   check(latched.tactics.isGuardReady, 'control: a real blow after the cooldown readies the guard');
 
   // A hireling's blow is a creature's: never guarded, but it is a clean hit.
-  const bystander = createMob(
+  const bystander = spawnMob(
     'goblin',
-    ROOM_MIDDLE_TILE + BYSTANDER_OFFSET_TILES,
-    ROOM_MIDDLE_TILE,
+    { x: ROOM_MIDDLE_TILE + BYSTANDER_OFFSET_TILES, y: ROOM_MIDDLE_TILE },
     map,
+    liveSpawnContext('dev:spawn'),
   );
   const hired = makeBlocker(map, ROOM_MIDDLE_TILE, ROOM_MIDDLE_TILE);
   let hiredGuards = 0;
@@ -1102,7 +1119,7 @@ function addTactician(
 ): Mob {
   const goblin =
     weapon === undefined
-      ? createMob('goblin', tile.x, tile.y, arena.map)
+      ? spawnMob('goblin', { x: tile.x, y: tile.y }, arena.map, liveSpawnContext('dev:spawn'))
       : new Goblin(tile.x, tile.y, TILE_SIZE, weapon);
   goblin.applyMobLevel(MAX_MOB_LEVEL);
   goblin.rollTactics(DIFFICULTY_PROFILES.normal.tacticsChanceScale, rollOnly(wanted));
@@ -2019,7 +2036,12 @@ function checkTelemetryDoesNotLeakAcrossFights(map: GameMap): void {
     TILE_SIZE,
   );
   const cat = new CatPlayer(FAR_CORNER_TILE, FAR_CORNER_TILE, TILE_SIZE);
-  const mob = createMob('goblin', ROOM_MIDDLE_TILE, ROOM_MIDDLE_TILE, map);
+  const mob = spawnMob(
+    'goblin',
+    { x: ROOM_MIDDLE_TILE, y: ROOM_MIDDLE_TILE },
+    map,
+    liveSpawnContext('dev:spawn'),
+  );
   mob.applyMobLevel(1);
   const ctx = makeTelemetryCtx(map, human, cat, mob);
   const telemetry = new DifficultyTelemetrySystem();
@@ -2053,7 +2075,12 @@ function checkTelemetryCountsOncePerFrame(map: GameMap): void {
     TILE_SIZE,
   );
   const cat = new CatPlayer(FAR_CORNER_TILE, FAR_CORNER_TILE, TILE_SIZE);
-  const mob = createMob('goblin', ROOM_MIDDLE_TILE, ROOM_MIDDLE_TILE, map);
+  const mob = spawnMob(
+    'goblin',
+    { x: ROOM_MIDDLE_TILE, y: ROOM_MIDDLE_TILE },
+    map,
+    liveSpawnContext('dev:spawn'),
+  );
   mob.applyMobLevel(1);
   const ctx = makeTelemetryCtx(map, human, cat, mob);
   const telemetry = new DifficultyTelemetrySystem();
@@ -2143,7 +2170,12 @@ function checkTelemetryCheckpointRoundTrips(map: GameMap): void {
     TILE_SIZE,
   );
   const cat = new CatPlayer(FAR_CORNER_TILE, FAR_CORNER_TILE, TILE_SIZE);
-  const mob = createMob('goblin', ROOM_MIDDLE_TILE, ROOM_MIDDLE_TILE, map);
+  const mob = spawnMob(
+    'goblin',
+    { x: ROOM_MIDDLE_TILE, y: ROOM_MIDDLE_TILE },
+    map,
+    liveSpawnContext('dev:spawn'),
+  );
   mob.applyMobLevel(1);
   const ctx = makeTelemetryCtx(map, human, cat, mob);
   const telemetry = new DifficultyTelemetrySystem();

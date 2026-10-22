@@ -6,7 +6,6 @@
  * crosses scenes via MurderQuestProgress.
  */
 
-import { TILE_SIZE } from '../core/constants';
 import { applySpawnDifficulty } from '../core/difficultyProfiles';
 import type { GameMap } from '../map/GameMap';
 import type { EventBus } from '../core/EventBus';
@@ -14,7 +13,8 @@ import type { GameSystem, SystemContext } from './GameSystem';
 import type { Mob } from '../creatures/Mob';
 import type { MurderQuestProgress } from '../core/MurderQuestProgress';
 import { findNearbyWalkableTile } from '../map/findWalkableTile';
-import { CityElfCultist } from '../creatures/CityElfCultist';
+import type { CityElfCultist } from '../creatures/CityElfCultist';
+import { liveSpawnContext, spawnMob } from '../levels/spawnFunnel';
 import { questBannerEntry, QUEST_BANNER_FRAMES } from '../ui/QuestBanners';
 import type { TopBandEntry } from '../ui/hud/topBand';
 import { objectiveBandEntry, type ObjectiveLine } from '../ui/hud/objectiveLine';
@@ -65,8 +65,12 @@ export class CultHideoutSystem implements GameSystem {
         SPAWN_SEARCH_RADIUS_TILES,
       );
       if (!tile) continue;
-      const cultist = new CityElfCultist(tile.x, tile.y, TILE_SIZE);
-      cultist.setMap(this.map);
+      const cultist = spawnMob(
+        'city_elf_cultist',
+        tile,
+        this.map,
+        liveSpawnContext('quest:cult-hideout'),
+      );
       cultist.applyMobLevel(questMobLevel(CULT_HIDEOUT_CULTIST_LEVEL, this.partyLevel));
       applySpawnDifficulty(cultist);
       this.addMob(cultist);

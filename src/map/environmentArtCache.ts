@@ -100,7 +100,8 @@ const RECENTLY_DRAWN_SECONDS = 30;
 const NOMINAL_FRAMES_PER_SECOND = 60;
 
 /**
- * Render frames a sheet is safe from eviction after its last lookup.
+ * Render frames a sheet is safe from eviction after its last lookup, and within
+ * which a purge repaints it straight away.
  *
  * A sheet is looked up every frame it is drawn as a sprite, but a ground
  * material is looked up only while a tile chunk is being baked from it, and the
@@ -108,6 +109,10 @@ const NOMINAL_FRAMES_PER_SECOND = 60;
  * be invisible until the next chunk is baked, then flat fallback colour at the
  * edge of the screen while it repaints. Half a minute, which covers walking a
  * screen's width many times over and a short visit indoors.
+ *
+ * A purge repaints only these at once. Repainting every resident sheet rebuilds
+ * the very memory peak that preceded the loss; one not drawn lately waits, like
+ * an evicted sheet, to be painted when it is next looked up.
  */
 export const RECENTLY_DRAWN_FRAMES = RECENTLY_DRAWN_SECONDS * NOMINAL_FRAMES_PER_SECOND;
 
@@ -329,9 +334,10 @@ const deferred = new Map<string, DeferredSheet>();
 let deferredRetryAtMs = 0;
 
 /**
- * Sheets let go over the byte budget, painted again the first time anything
- * looks one up. Shaped like a deferred sheet because it is one: owed, with
- * nothing to paint it into until it is wanted.
+ * Sheets let go over the byte budget, or purged without having been drawn
+ * lately, painted again the first time anything looks one up. Shaped like a
+ * deferred sheet because it is one: owed, with nothing to paint it into until
+ * it is wanted.
  */
 const evicted = new Map<string, DeferredSheet>();
 
@@ -663,6 +669,11 @@ function drainQueue(budgetMs: number, mustProgress: boolean): number {
   return spentMs;
 }
 
+/** Milliseconds spent painting environment sheets since {@link beginEnvironmentArtFrame}. */
+export function environmentPaintMsThisFrame(): number {
+  return msPaintedThisFrame;
+}
+
 /**
  * Starts a render frame: spends this frame's share of the paint allowance on
  * whatever sheets are still owed, after paying back any earlier overspend.
@@ -961,25 +972,31 @@ function requestNextReplay(): void {
 }
 
 /**
- * Paints every sheet again after the browser discarded the pixels of every
- * canvas. A sheet painted under another floor's seed is dropped instead: it is
- * art of a floor that no longer exists.
+ * Paints the sheets in use again after the browser discarded the pixels of
+ * every canvas: those drawn within {@link RECENTLY_DRAWN_FRAMES} and those still
+ * owed. The rest are evicted, to repaint when next looked up. A sheet painted
+ * under another floor's seed is dropped instead: it is art of a floor that no
+ * longer exists.
  *
  * Each sheet is withdrawn from `SpriteLoader` until it lands again, so the
  * ground falls back to each material's mean colour rather than drawing blank.
  */
-function repaintAllEnvironmentArt(): void {
+function repaintEnvironmentArtAfterPurge(): void {
   const current = floorArtSeed();
+  const oldestRecentFrame = renderFrameNumber() - RECENTLY_DRAWN_FRAMES;
   const owed = new Map<string, SheetReplay>();
+  const idle = new Map<string, DeferredSheet>();
   const interruptedChains: Array<() => void> = [];
   for (const [key, sheet] of resident) {
     if (sheet.variesWithFloorSeed && sheet.artSeed !== current) continue;
-    owed.set(key, {
-      key,
+    const owedSheet = {
       replan: sheet.replan,
       variesWithFloorSeed: sheet.variesWithFloorSeed,
       artSeed: sheet.artSeed,
-    });
+    };
+    const drawnRecently = sheet.lastLookupFrame >= oldestRecentFrame;
+    if (drawnRecently || pending.has(key)) owed.set(key, { key, ...owedSheet });
+    else idle.set(key, owedSheet);
   }
   for (const key of queue) {
     const sheet = pending.get(key);
@@ -1016,7 +1033,7 @@ function repaintAllEnvironmentArt(): void {
   }
   // Evicted sheets stay owed on demand rather than joining the repaint: nothing
   // drew them lately, which is why they were let go.
-  const stillEvicted = [...evicted];
+  const stillEvicted = [...evicted, ...idle];
   release(() => true);
   for (const [key, sheet] of stillEvicted) evicted.set(key, sheet);
   if (staging !== null) {
@@ -1048,7 +1065,7 @@ onPaintedSpriteMiss((key) => {
 onCanvasRecovery((cause) => {
   // Under memory pressure the sheets are correct and the costliest art there is
   // to repaint; only lost pixels justify painting them again.
-  if (cause === 'purged') repaintAllEnvironmentArt();
+  if (cause === 'purged') repaintEnvironmentArtAfterPurge();
   // A recovery gives memory back, so a refused sheet is worth asking for now.
   deferredRetryAtMs = 0;
   for (const sheet of pending.values()) sheet.retryAtMs = 0;

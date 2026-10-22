@@ -15,7 +15,7 @@ import { PLAYER_SPEED, TILE_SIZE } from '../core/constants';
 import { keybindings, type GameAction } from '../core/Keybindings';
 import type { AISceneContext } from '../ai/actions/types';
 import type { GameMap } from '../map/GameMap';
-import type { MobSpawnRule } from '../levels/types';
+import type { MobKind } from '../levels/mobKinds';
 import type { Player } from '../Player';
 import { doorwaySpan } from '../systems/BuildingSystem';
 
@@ -35,7 +35,7 @@ export type PerfWalkAnchor =
   /** The middle of the spider lab. */
   | { readonly kind: 'spiderLab' }
   /** The boss room nearest the safe room that waits before this boss. */
-  | { readonly kind: 'bossRoomPast'; readonly bossType: MobSpawnRule['type'] }
+  | { readonly kind: 'bossRoomPast'; readonly bossType: MobKind }
   /** A building's door, by its entry name. */
   | { readonly kind: 'buildingDoor'; readonly name: string };
 

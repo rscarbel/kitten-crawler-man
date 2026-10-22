@@ -463,16 +463,12 @@ export class ColosseumDressingSystem
       return;
     }
     const tile = this.releaseTile(cage);
-    const pig =
-      tile === null
-        ? null
-        : createBallTuskling(ball, tile, this.gameMap, CAGE_TUSKLING_DAZE_FRAMES);
-    if (pig === null) {
+    if (tile === null) {
       // Nowhere to put it: the door holds this time.
       cage.phase = 'idle';
       return;
     }
-    ctx.roster.add(pig);
+    ctx.roster.add(createBallTuskling(ball, tile, this.gameMap, CAGE_TUSKLING_DAZE_FRAMES));
     cage.phase = 'bursting';
     cage.timer = CAGE_BURST_TOTAL_FRAMES;
   }

@@ -129,7 +129,9 @@ export class Cockroach extends Mob {
   readonly xpValue = 2;
   protected coinDropMin = 0;
   protected coinDropMax = 0;
-  override readonly bodyPartKey = COCKROACH_BODY_PART_KEY;
+  override get bodyPartKey(): string {
+    return COCKROACH_BODY_PART_KEY;
+  }
   displayName = 'Cockroach';
   description = 'Scurries out of dark corners to overwhelm its prey.';
 

@@ -3,7 +3,7 @@ import type { EyePlacement } from '../sprites/eyePlacement';
 import type { PlayerDamageType } from './Mob';
 import { maybeDropSkillBook } from './skillBookDrop';
 import type { Player } from '../Player';
-import { drawSkyfowlCastSprite } from '../sprites/skyfowlCastSprite';
+import { drawSkyfowlCastSprite, prewarmSkyfowlCastMember } from '../sprites/skyfowlCastSprite';
 import {
   RUN_FRAMES,
   WALK_FRAMES,
@@ -14,13 +14,18 @@ import { gaitCyclesForDistance } from '../sprites/gaitCadence';
 import { SKYFOWL_TOUGH_LOOKS, type SkyfowlLookId } from '../sprites/art/skyfowl/cast';
 import type { LootDrop } from './Mob';
 import { randomInt } from '../utils';
+import { SHARED_LOOKS_TIER } from '../core/varietyTier';
+import { uniformVariantFamily } from '../core/mobVariantFamily';
 import type { TacticsTrait } from './tactics/tacticsTraits';
 
-/** Picks which of the four street-tough looks this fowl wears for its lifetime. */
-function randomSkyfowlToughLookId(): SkyfowlLookId {
-  const look = SKYFOWL_TOUGH_LOOKS[Math.floor(Math.random() * SKYFOWL_TOUGH_LOOKS.length)];
-  return look.id;
-}
+const [FIRST_TOUGH_LOOK, ...OTHER_TOUGH_LOOKS] = SKYFOWL_TOUGH_LOOKS;
+
+/** The street-tough looks a fightable fowl can wear, equally likely. */
+export const SKYFOWL_TOUGH_FAMILY = uniformVariantFamily<SkyfowlLookId>(
+  [FIRST_TOUGH_LOOK.id, ...OTHER_TOUGH_LOOKS.map((look) => look.id)],
+  FIRST_TOUGH_LOOK.id,
+  SHARED_LOOKS_TIER,
+);
 
 /** The blows the player lands by hand, as opposed to anything fired or thrown. */
 const HAND_SWUNG_DAMAGE_TYPES: ReadonlySet<PlayerDamageType | null> =
@@ -116,12 +121,11 @@ export class SkyFowl extends Mob {
   override readonly audioTag = 'skyfowl';
 
   /**
-   * Which of the four street-tough looks this fowl wears, chosen at
-   * construction and kept for its lifetime — bruised-plum, unkempt plumage
-   * and a hunched stance, the colour family and posture no citizen wears, so
-   * a player can never mistake a fightable fowl for a friendly one.
+   * Which of the street-tough looks this fowl wears — bruised-plum, unkempt
+   * plumage and a hunched stance, the colour family and posture no citizen
+   * wears, so a player can never mistake a fightable fowl for a friendly one.
    */
-  readonly toughLookId: SkyfowlLookId;
+  private currentToughLookId: SkyfowlLookId;
 
   private isAggressive = false;
 
@@ -156,11 +160,27 @@ export class SkyFowl extends Mob {
   private gaitRunning = false;
   private gaitMotionTicks = 0;
 
-  constructor(tileX: number, tileY: number, tileSize: number) {
+  constructor(tileX: number, tileY: number, tileSize: number, toughLookId: SkyfowlLookId) {
     super(tileX, tileY, tileSize, FOWL_HP, FOWL_SPEED_NEUTRAL);
-    this.toughLookId = randomSkyfowlToughLookId();
+    this.currentToughLookId = toughLookId;
     this.gaitSampleX = this.x;
     this.gaitSampleY = this.y;
+  }
+
+  get toughLookId(): SkyfowlLookId {
+    return this.currentToughLookId;
+  }
+
+  /**
+   * Dresses this fowl in another street-tough look and starts warming that
+   * look's idle and walk rows; how it fights is unchanged. Returns whether the
+   * look changed.
+   */
+  applyVariant(toughLookId: SkyfowlLookId): boolean {
+    if (toughLookId === this.currentToughLookId) return false;
+    this.currentToughLookId = toughLookId;
+    prewarmSkyfowlCastMember(toughLookId);
+    return true;
   }
 
   override resetToSpawn(): void {

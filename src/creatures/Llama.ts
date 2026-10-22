@@ -90,7 +90,9 @@ export class Llama extends Mob {
   protected coinDropMin = COIN_DROP_MIN;
   protected coinDropMax = COIN_DROP_MAX;
   override readonly audioTag = 'llama';
-  override readonly bodyPartKey = LLAMA_BODY_PART_KEY;
+  override get bodyPartKey(): string {
+    return LLAMA_BODY_PART_KEY;
+  }
   displayName = 'Lava Llama';
   description = 'Spits balls of molten rock from a distance.';
   private spitCooldown = 0;

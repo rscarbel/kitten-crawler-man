@@ -1,4 +1,5 @@
 import type { SpriteKey } from './SpriteLoader';
+import type { MobKind } from '../levels/mobKinds';
 
 /**
  * Typed, build-checked declarations of which sprite sheets a floor or system
@@ -316,20 +317,14 @@ export const ASSET_GROUPS: Readonly<Record<AssetGroup, readonly SpriteKey[]>> = 
 };
 
 /**
- * Ground truth for "does this mob type need a sheet, and which one(s)".
- *
- * Keyed by the same strings `MobSpawnRule['type']`/`MOB_REGISTRY` use, plus a
- * handful of creatures that are only ever constructed directly by a bounty or
- * quest system rather than through `createMob` (`dark_knight`, `mongo`,
- * `mercenary`) — those never appear in a `LevelDef`'s spawn tables, so
- * they would otherwise have no ground truth for `verify:assets` to check
- * `requiredGroups` against.
+ * Ground truth for "does this hostile kind need a sheet, and which one(s)":
+ * one entry per `MobKind` (`src/levels/mobKinds.ts`), so a kind added to the
+ * registry fails `tsc` here until its sprite needs are declared.
  *
  * An empty array means the creature is procedural canvas art (see the note on
  * `ASSET_GROUPS` above) and needs no group at all.
- *
  */
-export const MOB_SPRITE_KEYS: Readonly<Record<string, readonly SpriteKey[]>> = {
+export const MOB_SPRITE_KEYS: Readonly<Record<MobKind, readonly SpriteKey[]>> = {
   goblin: [],
   goblin_archer: [],
   goblin_dynamiter: [],
@@ -370,11 +365,6 @@ export const MOB_SPRITE_KEYS: Readonly<Record<string, readonly SpriteKey[]>> = {
   grave_bull: [],
   /** Painted by `skyfowlCastSprite.ts`, one figure per street-tough look. */
   sky_fowl: [],
-  /** Briar Hollow's herd, painted by `cowSprite.ts`, one figure per coat and age. */
-  cow: [],
-  calf: [],
-  /** Briar Hollow's militia, painted by `ratkinCastSprite.ts` like the rest of the ratkin cast. */
-  ratkin_soldier: [],
   /** The five fairies are painted, not baked. */
   fairy_shield: [],
   fairy_healer: [],
@@ -382,15 +372,42 @@ export const MOB_SPRITE_KEYS: Readonly<Record<string, readonly SpriteKey[]>> = {
   fairy_fire: [],
   fairy_necro: [],
 
-  // Not in MOB_REGISTRY — constructed directly by the systems named in each
-  // comment, never via `createMob`.
   /** `bountyDefs.ts`'s `DARK_KNIGHT_DEF` — painted, not baked. */
   dark_knight: [],
-  /** `HeatherTheBear`, `Signet`, `MissQuill`, `Remex`, `GrimaldiVine`, `GumGum` — all procedural. */
+  // Heather the Bear, Miss Quill and Remex are painted procedurally, so none holds a sheet.
   heather_the_bear: [],
-  signet: [],
   miss_quill: [],
   remex: [],
+  /** Boss adds and set-piece hostiles, all procedural or painted. */
+  krakaren_tentacle: [],
+  spider_hatchling: [],
+  spider_egg: [],
+  tutorial_goblin: [],
+  shrine_vermin: [],
+};
+
+/**
+ * Friendly creatures that systems build themselves (livestock, militia,
+ * companions, hirelings). None is a `MobKind`: they never appear in a spawn
+ * table, so `SYSTEM_ASSET_REQUIREMENTS` is the only place that names them.
+ */
+export type FriendlyCreatureKind =
+  'cow' | 'calf' | 'ratkin_soldier' | 'signet' | 'gum_gum' | 'mongo' | 'mercenary';
+
+/** Any creature whose sprite needs `verify:assets` checks. */
+export type CreatureKind = MobKind | FriendlyCreatureKind;
+
+/** {@link MOB_SPRITE_KEYS} for the friendly creatures. */
+export const FRIENDLY_CREATURE_SPRITE_KEYS: Readonly<
+  Record<FriendlyCreatureKind, readonly SpriteKey[]>
+> = {
+  /** Briar Hollow's herd, painted by `cowSprite.ts`, one figure per coat and age. */
+  cow: [],
+  calf: [],
+  /** Briar Hollow's militia, painted by `ratkinCastSprite.ts` like the rest of the ratkin cast. */
+  ratkin_soldier: [],
+  /** `Signet` and `GumGum` — procedural. */
+  signet: [],
   gum_gum: [],
   /** `MongoSystem` — a persistent companion, not a spawn-table mob; painted. */
   mongo: [],

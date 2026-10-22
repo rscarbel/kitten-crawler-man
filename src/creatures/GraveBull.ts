@@ -128,7 +128,9 @@ export class GraveBull extends Mob {
   protected coinDropMin = COIN_DROP_MIN;
   protected coinDropMax = COIN_DROP_MAX;
   override readonly audioTag = 'grave_bull';
-  override readonly bodyPartKey = GRAVE_BULL_BODY_PART_KEY;
+  override get bodyPartKey(): string {
+    return GRAVE_BULL_BODY_PART_KEY;
+  }
   override readonly rendersWhenDead = true;
   displayName = 'Grave Bull';
   description = 'A raised bull in trailing chains, blue fire in its ribs, built to break walls.';

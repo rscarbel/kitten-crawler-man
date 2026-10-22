@@ -14,8 +14,9 @@ import type { GameMap } from '../../src/map/GameMap';
 import { HumanPlayer } from '../../src/creatures/HumanPlayer';
 import { CatPlayer } from '../../src/creatures/CatPlayer';
 import type { Mob } from '../../src/creatures/Mob';
-import { BrindleGrub, type GrubStage } from '../../src/creatures/BrindleGrub';
-import { createMob, MAX_MOB_LEVEL } from '../../src/levels/spawner';
+import type { BrindleGrub, GrubStage } from '../../src/creatures/BrindleGrub';
+import { MAX_MOB_LEVEL } from '../../src/levels/spawner';
+import { liveSpawnContext, spawnMob } from '../../src/levels/spawnFunnel';
 import { DIFFICULTY_PROFILES } from '../../src/core/difficultyProfiles';
 import type { Rng } from '../../src/sprites/person/rng';
 import {
@@ -113,11 +114,12 @@ function grownGrub(
   stage: GrubStage,
   harness: TacticsHarness,
 ): BrindleGrub | null {
-  const mob = createMob('brindle_grub', tile.x, tile.y, map);
-  if (!(mob instanceof BrindleGrub)) {
-    harness.check(false, 'brindle_grub builds as a BrindleGrub');
-    return null;
-  }
+  const mob = spawnMob(
+    'brindle_grub',
+    { x: tile.x, y: tile.y },
+    map,
+    liveSpawnContext('dev:spawn'),
+  );
   mob.applyMobLevel(MAX_MOB_LEVEL);
   mob.rollTactics(DIFFICULTY_PROFILES.hard.tacticsChanceScale, rng);
   for (let frame = 0; frame < MAX_EVOLVE_FRAMES && mob.stage < stage; frame++) mob.tickEvolve();
@@ -157,7 +159,12 @@ function checkGrubEligibility(map: GameMap, harness: TacticsHarness): void {
     );
   }
 
-  const early = createMob('brindle_grub', PROBE_TILE, PROBE_TILE, map);
+  const early = spawnMob(
+    'brindle_grub',
+    { x: PROBE_TILE, y: PROBE_TILE },
+    map,
+    liveSpawnContext('dev:spawn'),
+  );
   early.applyMobLevel(HIGHEST_TRAITLESS_LEVEL);
   early.rollTactics(DIFFICULTY_PROFILES.hard.tacticsChanceScale, ALWAYS_YES);
   harness.check(

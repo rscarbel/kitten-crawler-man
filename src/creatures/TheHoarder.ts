@@ -136,7 +136,9 @@ export class TheHoarder extends Mob {
 
   override readonly audioTag = 'hoarder';
   readonly xpValue = 500;
-  override readonly bodyPartKey = HOARDER_BODY_PART_KEY;
+  override get bodyPartKey(): string {
+    return HOARDER_BODY_PART_KEY;
+  }
   protected coinDropMin = COIN_DROP_MIN;
   protected coinDropMax = COIN_DROP_MAX;
   displayName = 'The Hoarder';

@@ -22,6 +22,7 @@ import type { EventBus } from '../core/EventBus';
 import type { GameMap } from '../map/GameMap';
 import { Mob, type MobDamageSource } from '../creatures/Mob';
 import { TILE_SIZE } from '../core/constants';
+import { viewportHeight, viewportWidth } from '../core/Viewport';
 import { drawLitDynamiteStick } from '../sprites/dynamiteSprite';
 import { type FuseBurnOptions, paintFuseFloorGlow } from '../sprites/fuseEffects';
 import {
@@ -30,6 +31,7 @@ import {
   explosionLightRemaining,
   explosionTotalFrames,
   SCORCH_TOTAL_FRAMES,
+  scorchMarkReachPx,
   type ExplosionPicture,
 } from '../sprites/dynamiteExplosion';
 import {
@@ -626,8 +628,20 @@ export class GoblinBombSystem implements GameSystem, GroundHazardSource {
 
   /** Scorches, the shadows under everything in the air, and the sticks' circles. Under creatures. */
   renderGround(ctx: CanvasRenderingContext2D, camX: number, camY: number): void {
+    // A siege leaves scorches across the whole village for twenty seconds at a
+    // time, each a couple of dozen blits, so only those in view are drawn.
+    const viewW = viewportWidth();
+    const viewH = viewportHeight();
     for (const mark of this.scorches) {
-      drawScorchMark(ctx, mark.x - camX, mark.y - camY, mark.radius, mark.seed, mark.ageFrames);
+      const screenX = mark.x - camX;
+      const screenY = mark.y - camY;
+      const reach = scorchMarkReachPx(mark.radius);
+      const inView =
+        screenX + reach >= 0 &&
+        screenY + reach >= 0 &&
+        screenX - reach <= viewW &&
+        screenY - reach <= viewH;
+      if (inView) drawScorchMark(ctx, screenX, screenY, mark.radius, mark.seed, mark.ageFrames);
     }
     for (const flight of this.flights) {
       const now = flightPoint(flight, flight.age);

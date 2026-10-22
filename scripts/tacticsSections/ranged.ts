@@ -12,7 +12,9 @@ import { PLAYER_SPEED, TILE_SIZE } from '../../src/core/constants';
 import type { GameMap } from '../../src/map/GameMap';
 import { HumanPlayer } from '../../src/creatures/HumanPlayer';
 import { CatPlayer } from '../../src/creatures/CatPlayer';
-import { createMob, MAX_MOB_LEVEL } from '../../src/levels/spawner';
+import { MAX_MOB_LEVEL } from '../../src/levels/spawner';
+import { liveSpawnContext, spawnMob } from '../../src/levels/spawnFunnel';
+import type { StandaloneMobKind } from '../../src/levels/mobKinds';
 import { DIFFICULTY_PROFILES } from '../../src/core/difficultyProfiles';
 import { mulberry32, type Rng } from '../../src/sprites/person/rng';
 import type { TacticsTrait } from '../../src/creatures/tactics/tacticsTraits';
@@ -43,9 +45,9 @@ export interface TacticsHarness {
 
 interface RangedCase {
   /** Spawner key of the ranged creature under test. */
-  readonly type: string;
+  readonly type: StandaloneMobKind;
   /** Spawner key of the pack mate it falls back on. */
-  readonly helperType: string;
+  readonly helperType: StandaloneMobKind;
 }
 
 const RANGED_CASES: readonly RangedCase[] = [
@@ -157,14 +159,24 @@ function rangedLayout(
   // probe's draws — or a change to another creature's code or to the
   // crawlers' own — cannot shift what the next one measures.
   Math.random = mulberry32(SECTION_SEED);
-  const shooter = createMob(rangedCase.type, SHOOTER_TILE.x, SHOOTER_TILE.y, map);
+  const shooter = spawnMob(
+    rangedCase.type,
+    { x: SHOOTER_TILE.x, y: SHOOTER_TILE.y },
+    map,
+    liveSpawnContext('dev:spawn'),
+  );
   shooter.applyMobLevel(MAX_MOB_LEVEL);
   shooter.rollTactics(DIFFICULTY_PROFILES.normal.tacticsChanceScale, rollOnly(traits));
   arena.roster.add(shooter);
   bloody(shooter, arena.human, shooterWoundShare);
   let helper: Mob | null = null;
   if (withHelper) {
-    helper = createMob(rangedCase.helperType, helperTile.x, helperTile.y, map);
+    helper = spawnMob(
+      rangedCase.helperType,
+      { x: helperTile.x, y: helperTile.y },
+      map,
+      liveSpawnContext('dev:spawn'),
+    );
     helper.applyMobLevel(HELPER_LEVEL);
     arena.roster.add(helper);
     bloody(helper, arena.human, 0);
@@ -862,7 +874,12 @@ function checkRangedEligibility(map: GameMap, harness: TacticsHarness): void {
   const check = (ok: boolean, message: string): void => harness.check(ok, message);
   const expected = RANGED_ELIGIBILITY.join(',');
   for (const rangedCase of RANGED_CASES) {
-    const top = createMob(rangedCase.type, SHOOTER_TILE.x, SHOOTER_TILE.y, map);
+    const top = spawnMob(
+      rangedCase.type,
+      { x: SHOOTER_TILE.x, y: SHOOTER_TILE.y },
+      map,
+      liveSpawnContext('dev:spawn'),
+    );
     top.applyMobLevel(MAX_MOB_LEVEL);
     top.rollTactics(DIFFICULTY_PROFILES.hard.tacticsChanceScale, ALWAYS_YES);
     const rolled = top.tactics.traits.join(',');

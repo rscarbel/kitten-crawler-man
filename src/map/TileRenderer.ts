@@ -150,6 +150,16 @@ export function tileChunkBakeCount(): number {
   return chunkBakesTotal;
 }
 
+let chunkPaintMsTotal = 0;
+
+/**
+ * Milliseconds spent painting chunks — whole bakes, sliced bakes and patches —
+ * since the module loaded; a frame's share is measured as a difference.
+ */
+export function tileChunkPaintMsTotal(): number {
+  return chunkPaintMsTotal;
+}
+
 /**
  * Weight the newest measurement carries in the chunk bake cost estimate. Low for
  * the same reason as the other paced caches: one bake beside a collection must
@@ -722,6 +732,7 @@ export class TileChunkCache {
       this.noteBakeFailure(error);
     }
     const elapsedMs = performance.now() - startedAt;
+    chunkPaintMsTotal += elapsedMs;
     perfMonitor.end('chunkBake', perfStartedAt);
     this.noteBakeCost(elapsedMs);
     return { chunk, elapsedMs };
@@ -779,7 +790,9 @@ export class TileChunkCache {
       this.noteBakeFailure(error);
       return null;
     } finally {
-      job.spentMs += performance.now() - startedAt;
+      const elapsedMs = performance.now() - startedAt;
+      job.spentMs += elapsedMs;
+      chunkPaintMsTotal += elapsedMs;
       perfMonitor.end('chunkBake', perfStartedAt);
     }
     if (job.nextTile < this.chunkTileCount(job.cx, job.cy)) return null;
@@ -1019,7 +1032,9 @@ export class TileChunkCache {
       this.chunks.delete(key);
       noteTileArtFailure(error);
     }
-    return performance.now() - startedAt;
+    const elapsedMs = performance.now() - startedAt;
+    chunkPaintMsTotal += elapsedMs;
+    return elapsedMs;
   }
 
   /**

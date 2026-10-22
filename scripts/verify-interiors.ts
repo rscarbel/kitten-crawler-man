@@ -1172,6 +1172,7 @@ console.log('\nA cleared camp stays cleared');
       CAMP_CLEARING_PARTY_LEVEL,
       profile,
       memory.clearedCamps,
+      Math.random,
     );
     const clearedResidents = residentsOf(firstVisit, clearedKey);
     const standingResidents = residentsOf(firstVisit, standingKey);
@@ -1215,6 +1216,7 @@ console.log('\nA cleared camp stays cleared');
       CAMP_RETURNING_PARTY_LEVEL,
       profile,
       memory.clearedCamps,
+      Math.random,
     );
     check(
       residentsOf(afterDoorway, clearedKey).length === 0,
@@ -1237,6 +1239,7 @@ console.log('\nA cleared camp stays cleared');
       CAMP_RETURNING_PARTY_LEVEL,
       profile,
       reloadedMemory.clearedCamps,
+      Math.random,
     );
     check(
       residentsOf(afterReload, clearedKey).length === 0,
@@ -1279,6 +1282,7 @@ console.log('\nA cleared camp stays cleared');
       CAMP_CLEARING_PARTY_LEVEL,
       profile,
       memory.clearedCamps,
+      Math.random,
     );
     check(
       restartFloor.camps.every((camp) => residentsOf(restarted, campSiteKey(camp)).length > 0),

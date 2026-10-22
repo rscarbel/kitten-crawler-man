@@ -17,7 +17,13 @@ import { HumanPlayer } from '../../src/creatures/HumanPlayer';
 import { CatPlayer } from '../../src/creatures/CatPlayer';
 import { TACTICAL_RETREAT_MAX_SPEED, type Mob } from '../../src/creatures/Mob';
 import type { SpatialGrid } from '../../src/core/SpatialGrid';
-import { createMob, getRegisteredMobTypes, MAX_MOB_LEVEL } from '../../src/levels/spawner';
+import { MAX_MOB_LEVEL } from '../../src/levels/spawner';
+import {
+  isStandaloneMobKind,
+  type MobKind,
+  type StandaloneMobKind,
+} from '../../src/levels/mobKinds';
+import { liveSpawnContext, spawnMob } from '../../src/levels/spawnFunnel';
 import { DIFFICULTY_PROFILES } from '../../src/core/difficultyProfiles';
 import { mulberry32, type Rng } from '../../src/sprites/person/rng';
 import {
@@ -79,9 +85,10 @@ interface EligibilityCase {
 
 const PROBE_TILE = 12;
 
-/** Built through the spawner, so a mistyped key that falls back to a goblin is caught. */
-function spawned(type: string): (map: GameMap) => Mob {
-  return (map) => createMob(type, PROBE_TILE, PROBE_TILE, map);
+/** Built through the spawn funnel, the same path a floor spawn takes. */
+function spawned(type: StandaloneMobKind): (map: GameMap) => Mob {
+  return (map) =>
+    spawnMob(type, { x: PROBE_TILE, y: PROBE_TILE }, map, liveSpawnContext('dev:spawn'));
 }
 
 function summonedKrasue(): Mob {
@@ -166,7 +173,7 @@ const ELIGIBILITY_CASES: readonly EligibilityCase[] = [
 ];
 
 /** The spawner keys the shared "nothing below the minimum level" sweep must cover. */
-const SWEPT_TYPES = ['rat', 'circus_lemur', 'krasue', 'sky_fowl', 'bugaboo'];
+const SWEPT_TYPES: readonly MobKind[] = ['rat', 'circus_lemur', 'krasue', 'sky_fowl', 'bugaboo'];
 
 /** Every trait `mob` could ever roll: the top level, the hard profile, every roll a yes. */
 function eligibilityOf(mob: Mob): readonly TacticsTrait[] {
@@ -196,8 +203,7 @@ function checkEligibility(map: GameMap, harness: TacticsHarness): void {
       `${eligibilityCase.name}: nothing at level ${HIGHEST_TRAITLESS_LEVEL} (${early.tactics.traits.join(',') || 'none'})`,
     );
   }
-  const registered = getRegisteredMobTypes();
-  const unswept = SWEPT_TYPES.filter((type) => !registered.includes(type));
+  const unswept = SWEPT_TYPES.filter((type) => !isStandaloneMobKind(type));
   harness.check(
     unswept.length === 0,
     `the shared early-level sweep reaches every registered special case ${unswept.join(', ')}`,
@@ -259,13 +265,15 @@ function rollOnly(eligible: readonly TacticsTrait[], wanted: readonly TacticsTra
 /** A top-level `type` with exactly `wanted`, added to the arena. */
 function addCreature(
   arena: Arena,
-  type: string,
+  type: StandaloneMobKind,
   tile: TilePoint,
   wanted: readonly TacticsTrait[],
   harness: TacticsHarness,
 ): Mob {
-  const eligible = eligibilityOf(createMob(type, tile.x, tile.y, arena.map));
-  const mob = createMob(type, tile.x, tile.y, arena.map);
+  const eligible = eligibilityOf(
+    spawnMob(type, { x: tile.x, y: tile.y }, arena.map, liveSpawnContext('dev:spawn')),
+  );
+  const mob = spawnMob(type, { x: tile.x, y: tile.y }, arena.map, liveSpawnContext('dev:spawn'));
   mob.applyMobLevel(MAX_MOB_LEVEL);
   mob.rollTactics(DIFFICULTY_PROFILES.normal.tacticsChanceScale, rollOnly(eligible, wanted));
   if (mob.tactics.traits.join(',') !== wanted.join(',')) {
@@ -321,7 +329,7 @@ function takeAttackStarted(mob: Mob): boolean {
 // ── Flank ──────────────────────────────────────────────────────────────────
 
 interface FlankCase {
-  readonly type: string;
+  readonly type: StandaloneMobKind;
   /** Tiles west of the player the pack starts, inside the range its chase holds a target at. */
   readonly startGapTiles: number;
   /**
@@ -531,7 +539,7 @@ function checkFlank(map: GameMap, harness: TacticsHarness, flankCase: FlankCase)
 // ── Regroup ────────────────────────────────────────────────────────────────
 
 interface RetreatCase {
-  readonly type: string;
+  readonly type: StandaloneMobKind;
   readonly mirroredOnly: boolean;
   /**
    * Whether this creature's own levelled walk is faster than a retreat may go,
@@ -698,7 +706,7 @@ type AllyQuarry = 'cat' | 'human';
 /** A wounded mob beside the player with a fighting friend a few tiles off, or alone. */
 function retreatLayout(
   map: GameMap,
-  type: string,
+  type: StandaloneMobKind,
   traits: readonly TacticsTrait[],
   withAlly: boolean,
   woundShare: number,

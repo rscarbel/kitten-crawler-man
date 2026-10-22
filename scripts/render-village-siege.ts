@@ -159,7 +159,7 @@ const shots: HudShot[] = [
   {
     label: 'the necromancer out',
     prepare: () => {
-      const necro = new Necromancer(bell.x + SQUARE_MARGIN_TILES, bell.y, TILE_SIZE);
+      const necro = new Necromancer(bell.x + SQUARE_MARGIN_TILES, bell.y, TILE_SIZE, Math.random);
       necro.applyMobLevel(NECRO_LEVEL_SHOWN);
       necro.hp = necro.maxHp * NECRO_HP_SHARE_SHOWN;
       Object.defineProperty(assault, 'activeNecromancer', { value: necro });

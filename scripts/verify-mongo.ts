@@ -55,7 +55,7 @@ import {
 import type { SystemContext } from '../src/systems/GameSystem';
 import { SpellSystem } from '../src/systems/SpellSystem';
 import { MobRoster } from '../src/systems/kits/SceneWorld';
-import { createMob } from '../src/levels/spawner';
+import { liveSpawnContext, spawnMob } from '../src/levels/spawnFunnel';
 import { hasRoomToMove } from '../src/map/findWalkableTile';
 import { setPackAlertGrid } from '../src/creatures/packAlert';
 import { SafeRoomSystem } from '../src/systems/SafeRoomSystem';
@@ -464,7 +464,12 @@ function findOpenTileNear(
 
 /** Puts a live hostile on the map, wired the way the spawner would. */
 function spawnHostile(h: Harness, tile: { x: number; y: number }): Mob {
-  const mob = createMob(ATTACKER_MOB_ID, tile.x, tile.y, h.map);
+  const mob = spawnMob(
+    ATTACKER_MOB_ID,
+    { x: tile.x, y: tile.y },
+    h.map,
+    liveSpawnContext('dev:spawn'),
+  );
   h.roster.add(mob);
   return mob;
 }
@@ -728,7 +733,12 @@ console.log('\nstuck, with something biting the cat');
   if (mongo === null || pocket === null) {
     check(false, 'the engage-lap run had a summoned pet and solid ground to pin him in');
   } else {
-    const attacker = createMob(ATTACKER_MOB_ID, catTile.x + 1, catTile.y, h.map);
+    const attacker = spawnMob(
+      ATTACKER_MOB_ID,
+      { x: catTile.x + 1, y: catTile.y },
+      h.map,
+      liveSpawnContext('dev:spawn'),
+    );
     h.roster.add(attacker);
     attacker.currentTarget = h.cat;
     pinInto(h, mongo, pocket);
@@ -1390,7 +1400,12 @@ console.log('\na full recovery never takes more than thirty seconds');
       Object.defineProperty(mongo, 'displacesPlayers', { value: true });
     }
     roster.add(mongo);
-    const foe = createMob(ATTACKER_MOB_ID, CAT_TILE_X + FOE_OFFSET_TILES, ROW, map);
+    const foe = spawnMob(
+      ATTACKER_MOB_ID,
+      { x: CAT_TILE_X + FOE_OFFSET_TILES, y: ROW },
+      map,
+      liveSpawnContext('dev:spawn'),
+    );
     foe.x = (CAT_TILE_X + FOE_OFFSET_TILES) * TILE_SIZE;
     foe.y = ROW * TILE_SIZE;
     foe.aiHeld = true;

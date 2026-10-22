@@ -4,14 +4,10 @@
  * fights intact, fielded weaker than a real bounty by the siege's tuning.
  */
 
-import { TILE_SIZE } from '../../core/constants';
 import type { GameMap } from '../../map/GameMap';
 import type { Mob } from '../../creatures/Mob';
-import { EvilClown } from '../../creatures/EvilClown';
-import { Mantid } from '../../creatures/Mantid';
-import { SkeletonLord } from '../../creatures/SkeletonLord';
-import { DarkKnight } from '../../creatures/DarkKnight';
-import { RockGolemBoss } from '../../creatures/RockGolemBoss';
+import { spawnMob, type SpawnContext } from '../../levels/spawnFunnel';
+import type { SpawnTile } from '../../levels/mobKinds';
 import { prewarmMantidApproach } from '../../sprites/mantidSprite';
 import { prewarmSkeletonLordSprite } from '../../sprites/skeletonSprite';
 import { prewarmRockGolemApproach } from '../../sprites/rockGolemSprite';
@@ -29,34 +25,28 @@ export const ASSAULT_BOUNTY_KINDS: readonly AssaultBountyKind[] = [
 ];
 
 /**
- * Builds one bounty mark on the tile, on `map`, with its biggest rows warmed —
+ * Builds one bounty mark on `tile`, on `map`, with its biggest rows warmed —
  * unlevelled and unscaled: the siege owns both.
  */
 export function createBountyMark(
   kind: AssaultBountyKind,
-  tileX: number,
-  tileY: number,
+  tile: SpawnTile,
   map: GameMap,
+  context: SpawnContext,
 ): Mob {
-  const mark = buildMark(kind, tileX, tileY);
-  mark.setMap(map);
-  return mark;
-}
-
-function buildMark(kind: AssaultBountyKind, tileX: number, tileY: number): Mob {
   switch (kind) {
     case 'evil_clown':
-      return new EvilClown(tileX, tileY, TILE_SIZE);
+      return spawnMob('evil_clown', tile, map, context);
     case 'mantid':
       prewarmMantidApproach('mantid');
-      return new Mantid(tileX, tileY, TILE_SIZE);
+      return spawnMob('mantid', tile, map, context);
     case 'skeleton_lord':
       prewarmSkeletonLordSprite();
-      return new SkeletonLord(tileX, tileY, TILE_SIZE);
+      return spawnMob('skeleton_lord', tile, map, context);
     case 'dark_knight':
-      return new DarkKnight(tileX, tileY, TILE_SIZE);
+      return spawnMob('dark_knight', tile, map, context);
     case 'rock_golem':
       prewarmRockGolemApproach('rock_golem_boss');
-      return new RockGolemBoss(tileX, tileY, TILE_SIZE);
+      return spawnMob('rock_golem_boss', tile, map, context);
   }
 }

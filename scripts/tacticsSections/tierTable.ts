@@ -14,7 +14,9 @@
  */
 
 import type { GameMap } from '../../src/map/GameMap';
-import { createMob, MAX_MOB_LEVEL, regionLevelBand } from '../../src/levels/spawner';
+import { MAX_MOB_LEVEL, regionLevelBand } from '../../src/levels/spawner';
+import { liveSpawnContext, spawnMob } from '../../src/levels/spawnFunnel';
+import type { StandaloneMobKind } from '../../src/levels/mobKinds';
 import { level1, level2, level3 } from '../../src/levels';
 import type { LevelDef, MobLevelRange } from '../../src/levels/types';
 import { DIFFICULTY_PROFILES } from '../../src/core/difficultyProfiles';
@@ -60,7 +62,7 @@ const ALWAYS_YES: Rng = () => 0;
 interface AmbientSpawn {
   readonly floorNumber: number;
   readonly label: string;
-  readonly type: string;
+  readonly type: StandaloneMobKind;
   readonly topLevel: number;
 }
 
@@ -80,7 +82,7 @@ function reachableTop(def: LevelDef, band: MobLevelRange): number {
  */
 function ambientSpawns(def: LevelDef): AmbientSpawn[] {
   const spawns: AmbientSpawn[] = [];
-  const add = (label: string, type: string, band: MobLevelRange): void => {
+  const add = (label: string, type: StandaloneMobKind, band: MobLevelRange): void => {
     spawns.push({ floorNumber: def.floorNumber, label, type, topLevel: reachableTop(def, band) });
   };
   const regionBonuses = def.progression?.regionLevelBonus ?? [];
@@ -102,8 +104,8 @@ function ambientSpawns(def: LevelDef): AmbientSpawn[] {
 }
 
 /** Every trait a spawner `type` could ever roll, or none for a boss. */
-function learnableTraits(type: string, map: GameMap): readonly TacticsTrait[] {
-  const mob = createMob(type, PROBE_TILE, PROBE_TILE, map);
+function learnableTraits(type: StandaloneMobKind, map: GameMap): readonly TacticsTrait[] {
+  const mob = spawnMob(type, { x: PROBE_TILE, y: PROBE_TILE }, map, liveSpawnContext('dev:spawn'));
   if (mob.isBoss) return [];
   mob.applyMobLevel(MAX_MOB_LEVEL);
   mob.rollTactics(DIFFICULTY_PROFILES.hard.tacticsChanceScale, ALWAYS_YES);

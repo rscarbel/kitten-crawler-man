@@ -41,7 +41,11 @@ type Ctx = CanvasRenderingContext2D;
 /** The three looks the dead come back in. */
 export type RaisedRatkinLook = 'smock' | 'jack' | 'shroud';
 
-export const RAISED_RATKIN_LOOKS: readonly RaisedRatkinLook[] = ['smock', 'jack', 'shroud'];
+export const RAISED_RATKIN_LOOKS: readonly [RaisedRatkinLook, ...RaisedRatkinLook[]] = [
+  'smock',
+  'jack',
+  'shroud',
+];
 
 // ── Palette ──────────────────────────────────────────────────────────────────
 

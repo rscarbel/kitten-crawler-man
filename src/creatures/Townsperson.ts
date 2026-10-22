@@ -22,10 +22,13 @@ import {
   citizenWalkFrames,
   drawCitizenSprite,
   citizenSpeechStyle,
+  citizenLookKey,
   pickCitizenFigure,
+  pinCitizenFigure,
   prewarmCitizenFigure,
   type CitizenFigure,
 } from './citizenFigure';
+import { onCanvasRecovery } from '../core/canvasRecovery';
 import { residentFigure } from './residentFigures';
 import type { NPCMarkerType } from './QuestNPC';
 import { questMarkerColorFor } from '../sprites/questNPCSprite';
@@ -79,6 +82,19 @@ const sharedWanderStep: WanderStep = { dx: 0, dy: 0, moving: false, distance: 0 
 /** Source of `Townsperson.id` — a stable identity for pairwise crowd passes. */
 let nextTownspersonId = 0;
 
+/**
+ * Purged canvas recoveries since load. A purge blanks the screen and every
+ * cached figure is repainted, so it is the one moment a citizen can change to
+ * the look the current variety tier gives it without anyone seeing it change.
+ * Applied by each citizen on its next update or draw rather than in the
+ * recovery itself, so the tier the recovery steps to is read whatever order
+ * the recovery's handlers run in.
+ */
+let purgedRecoveries = 0;
+onCanvasRecovery((cause) => {
+  if (cause === 'purged') purgedRecoveries++;
+});
+
 export interface TownspersonOptions {
   x: number;
   y: number;
@@ -106,11 +122,14 @@ export class Townsperson implements WanderState {
   readonly species: TownSpecies;
   /** Set when this citizen is a named resident; drives their dialog and speaker label. */
   readonly residentId: ResidentId | null;
-  readonly figure: CitizenFigure;
-  /** The voice this citizen's dialog lines are spoken in. */
-  readonly speechStyle: CitizenSpeechStyle;
-  /** A stable, look-scoped seed for dialog line rotation — see `citizenDialogSeed`. */
-  readonly dialogSeed: number;
+  private wornFigure: CitizenFigure;
+  private wornSpeechStyle: CitizenSpeechStyle;
+  private wornDialogSeed: number;
+  private readonly seed: number;
+  /** {@link purgedRecoveries} as of this citizen's last look. */
+  private lookPurgeCount = purgedRecoveries;
+  /** Whether the owning system pinned this citizen's look, so a new look is pinned in turn. */
+  private looksPinned = false;
 
   x: number;
   y: number;
@@ -138,7 +157,7 @@ export class Townsperson implements WanderState {
   private cycleDistanceDrawSize = PERSON_DRAW_SIZE;
   /** The row the last render drew, which bubbles drawn in later passes stack over. */
   private drawnRow: DrawnFigureRow | undefined;
-  private readonly walkFrames: number;
+  private walkFrames: number;
   /** How many times the player has talked to this citizen — rotates their dialog. */
   conversationCount = 0;
   /** True while this citizen is mid-conversation — holds them in place facing the player. */
@@ -172,24 +191,73 @@ export class Townsperson implements WanderState {
     this.pause = opts.initialPause ?? 0;
     this.wander = opts.wander;
     if (opts.initialFacing !== undefined) this.facing = opts.initialFacing;
-    this.figure =
+    this.seed = opts.seed;
+    this.wornFigure =
       this.residentId !== null
         ? residentFigure(this.residentId)
         : pickCitizenFigure(opts.seed, opts.role, opts.species);
-    this.dialogSeed = citizenDialogSeed(this.figure);
-    this.speechStyle = citizenSpeechStyle(this.figure);
+    this.wornDialogSeed = citizenDialogSeed(this.wornFigure);
+    this.wornSpeechStyle = citizenSpeechStyle(this.wornFigure);
     // Every citizen shares its look's cells with every other wearer of that
     // look, so queuing this look's rows here costs nothing extra once the
     // crowd's small closed set is warm — and keeps the cost off whichever
     // citizen happens to draw the first frame anyone wears it in.
-    prewarmCitizenFigure(this.figure);
+    prewarmCitizenFigure(this.wornFigure);
     this.speed = opts.speed;
-    this.cycleDistance = citizenWalkCyclePx(this.figure, PERSON_DRAW_SIZE);
-    this.walkFrames = citizenWalkFrames(this.figure);
+    this.cycleDistance = citizenWalkCyclePx(this.wornFigure, PERSON_DRAW_SIZE);
+    this.walkFrames = citizenWalkFrames(this.wornFigure);
+  }
+
+  get figure(): CitizenFigure {
+    return this.wornFigure;
+  }
+
+  /** The voice this citizen's dialog lines are spoken in. */
+  get speechStyle(): CitizenSpeechStyle {
+    return this.wornSpeechStyle;
+  }
+
+  /** A stable, look-scoped seed for dialog line rotation — see `citizenDialogSeed`. */
+  get dialogSeed(): number {
+    return this.wornDialogSeed;
+  }
+
+  /**
+   * Exempts this citizen's look from the figure cache's idle sweep, and any
+   * look it changes to after a purge. For a system that keeps its crowd's
+   * working set resident for as long as the crowd stands.
+   */
+  pinLook(): void {
+    this.looksPinned = true;
+    pinCitizenFigure(this.wornFigure);
+  }
+
+  /**
+   * After a purged canvas recovery, changes to the look the current variety
+   * tier gives this citizen's seed and role. A named resident keeps its own
+   * look, and a citizen in a conversation keeps the face the player is
+   * talking to; neither changes later either, since only the moment of the
+   * purge hides the change.
+   */
+  private followPurgedRecovery(): void {
+    if (this.lookPurgeCount === purgedRecoveries) return;
+    this.lookPurgeCount = purgedRecoveries;
+    if (this.residentId !== null || this.frozen) return;
+    const next = pickCitizenFigure(this.seed, this.role, this.species);
+    if (citizenLookKey(next) === citizenLookKey(this.wornFigure)) return;
+    this.wornFigure = next;
+    this.wornDialogSeed = citizenDialogSeed(next);
+    this.wornSpeechStyle = citizenSpeechStyle(next);
+    this.cycleDistance = citizenWalkCyclePx(next, this.cycleDistanceDrawSize);
+    this.walkFrames = citizenWalkFrames(next);
+    this.drawnRow = undefined;
+    prewarmCitizenFigure(next);
+    if (this.looksPinned) pinCitizenFigure(next);
   }
 
   /** Advances one frame of wander, facing, and animation. */
   update(): void {
+    this.followPurgedRecovery();
     if (this.frozen) return;
     stepWander(this, this.wander, sharedWanderStep);
     this.moving = sharedWanderStep.moving;
@@ -274,6 +342,7 @@ export class Townsperson implements WanderState {
 
   /** Draws the citizen in world space. Y-sorted by the caller against `y`. */
   render(ctx: CanvasRenderingContext2D, camX: number, camY: number, tileSize: number): void {
+    this.followPurgedRecovery();
     const drawSize = tileSize > 0 ? tileSize : PERSON_DRAW_SIZE;
     const box = scaleHumanoidBox(this.x - camX, this.y - camY, drawSize);
     if (drawSize !== this.cycleDistanceDrawSize) {

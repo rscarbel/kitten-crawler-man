@@ -14,6 +14,9 @@
  *   G7  the street-tough family shares no plumage marking colour with any
  *       civilian look, and stands in a visibly different base posture
  *   G8  only fightable looks declare combat rows; no civilian look does
+ *   G9  at every variety tier the street wears no more distinct civilian
+ *       looks than the tier's allowance, and while the allowance has room
+ *       for one look per street role, every citizen keeps its own role's look
  *
  * Run by `npm run render:skyfowl-cast`, or alone: `npx tsx scripts/gates-skyfowl-cast.ts`.
  */
@@ -38,6 +41,9 @@ import {
   type SkyfowlLookId,
 } from '../src/sprites/art/skyfowl/cast.js';
 import type { FigureDef } from '../src/sprites/figure/figureDef.js';
+import { pickCitizenFigure, skyfowlStreetLookAllowance } from '../src/creatures/citizenFigure.js';
+import { TOWN_ROLES, type TownRole } from '../src/sprites/person/PersonAppearance.js';
+import { FULL_VARIETY_TIER, VARIETY_TIERS, type VarietyTier } from '../src/core/varietyTier.js';
 
 const CHANNELS = 4;
 const ALPHA_OFFSET = 3;
@@ -364,6 +370,78 @@ function gateCombatRowsMobOnly(): void {
   failUnlessMeasured('G8', measured, 'looks');
 }
 
+// ── G9 street looks per variety tier ─────────────────────────────────────────
+
+/** Seeds swept per role and tier: far more citizens of one role than any town holds. */
+const TIER_SWEEP_SEEDS = 512;
+
+/** The civilian looks a skyfowl `role` is given at `tier`, across the seed sweep. */
+function tierPicks(role: TownRole, tier: VarietyTier): Set<string> {
+  const picked = new Set<string>();
+  for (let seed = 0; seed < TIER_SWEEP_SEEDS; seed++) {
+    const figure = pickCitizenFigure(seed, role, 'skyfowl', tier);
+    if (figure.species !== 'skyfowl') {
+      fail('G9', `a skyfowl ${role} was given a ${figure.species} figure at tier ${tier}`);
+      continue;
+    }
+    picked.add(figure.look.id);
+  }
+  return picked;
+}
+
+function gateTierAllowance(): void {
+  const civilianIds = new Set<string>(SKYFOWL_CIVILIAN_LOOKS.map((look) => look.id));
+  const roleOfLook = new Map(SKYFOWL_CIVILIAN_LOOKS.map((look) => [look.id, look.role]));
+  if (skyfowlStreetLookAllowance(FULL_VARIETY_TIER) !== civilianIds.size) {
+    fail(
+      'G9',
+      `the full tier allows ${skyfowlStreetLookAllowance(FULL_VARIETY_TIER)} looks, not all ${civilianIds.size}`,
+    );
+  }
+  const fullRoles = new Map(
+    TOWN_ROLES.map((role) => [
+      role,
+      new Set([...tierPicks(role, FULL_VARIETY_TIER)].map((id) => roleOfLook.get(id))),
+    ]),
+  );
+  const streetSkyfowlRoles = new Set([...fullRoles.values()].flatMap((roles) => [...roles]));
+  let previousAllowance = Number.POSITIVE_INFINITY;
+  let measured = 0;
+  for (const tier of VARIETY_TIERS) {
+    const allowance = skyfowlStreetLookAllowance(tier);
+    if (allowance > previousAllowance) {
+      fail(
+        'G9',
+        `tier ${tier} allows ${allowance} looks, more than the tier above's ${previousAllowance}`,
+      );
+    }
+    previousAllowance = allowance;
+    const roomForEveryRole = allowance >= streetSkyfowlRoles.size;
+    const worn = new Set<string>();
+    for (const role of TOWN_ROLES) {
+      for (const id of tierPicks(role, tier)) {
+        measured++;
+        worn.add(id);
+        if (!civilianIds.has(id))
+          fail('G9', `a ${role} wears ${id} at tier ${tier}, which is no civilian look`);
+        if (roomForEveryRole && fullRoles.get(role)?.has(roleOfLook.get(id)) !== true) {
+          fail(
+            'G9',
+            `a ${role} wears ${id} at tier ${tier}, though the tier has room for its own role's look`,
+          );
+        }
+      }
+    }
+    if (worn.size > allowance) {
+      fail(
+        'G9',
+        `tier ${tier}'s street wears ${worn.size} distinct looks, over its allowance of ${allowance}`,
+      );
+    }
+  }
+  failUnlessMeasured('G9', measured, 'tiered picks');
+}
+
 export function skyfowlCastGateFailures(): string[] {
   failures = [];
   gateStructure();
@@ -374,6 +452,7 @@ export function skyfowlCastGateFailures(): string[] {
   gateBuildDistinctness();
   gateStreetToughDistinctness();
   gateCombatRowsMobOnly();
+  gateTierAllowance();
   return failures;
 }
 

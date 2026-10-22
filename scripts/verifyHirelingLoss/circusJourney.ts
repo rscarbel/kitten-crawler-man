@@ -46,7 +46,7 @@ import type { Mercenary } from '../../src/creatures/Mercenary';
 import { HIRELING_CATCH_UP_TILES } from '../../src/creatures/mercenaries/hirelingCatchUp';
 import { despawnMob, type Mob } from '../../src/creatures/Mob';
 import { Signet } from '../../src/creatures/Signet';
-import { createMob } from '../../src/levels/spawner';
+import { liveSpawnContext, spawnMob } from '../../src/levels/spawnFunnel';
 import { level3 } from '../../src/levels/level3';
 import {
   MAZE_CAT_SPAWN_TILE,
@@ -319,7 +319,12 @@ function rebuildQuest(
 }
 
 function makeDecoy(place: Place, tile: { x: number; y: number }): Decoy {
-  const mob = createMob('goblin', tile.x, tile.y, place.map);
+  const mob = spawnMob(
+    'goblin',
+    { x: tile.x, y: tile.y },
+    place.map,
+    liveSpawnContext('dev:spawn'),
+  );
   mob.aiHeld = true;
   place.mobs.add(mob);
   return { mob };

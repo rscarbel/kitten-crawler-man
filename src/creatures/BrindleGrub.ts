@@ -201,7 +201,11 @@ export class BrindleGrub extends Mob {
    * sufficient for stages 1 and 2. Only the fully-evolved Vespa gets a real
    * body-part set, set at the moment it evolves in `evolveToStage3()`.
    */
-  override bodyPartKey: string | null = null;
+  private goreBodyPartKey: string | null = null;
+
+  override get bodyPartKey(): string | null {
+    return this.goreBodyPartKey;
+  }
 
   /**
    * Populated each frame by DungeonScene so the Vespa can find mob targets
@@ -290,7 +294,7 @@ export class BrindleGrub extends Mob {
     this.isFlying = true;
     this.displayName = 'Brindled Vespa';
     this.description = 'A fully-evolved hornet that spits corrosive acid at anything nearby.';
-    this.bodyPartKey = BRINDLED_VESPA_BODY_PART_KEY;
+    this.goreBodyPartKey = BRINDLED_VESPA_BODY_PART_KEY;
   }
 
   /**

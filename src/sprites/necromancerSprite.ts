@@ -155,7 +155,7 @@ function prewarmRows(rows: readonly NecromancerRowRef[]): void {
   }
 }
 
-/** Warms the drift he arrives on. A backstop: the wave's ticker keeps these warm. */
+/** Warms the drift he arrives on, for a scene that shows him outside a siege wave's lead-in. */
 export function prewarmNecromancerArrival(): void {
   prewarmRows(NECROMANCER_ARRIVAL_ROWS);
 }

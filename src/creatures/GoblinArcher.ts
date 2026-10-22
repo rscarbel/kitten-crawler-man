@@ -35,6 +35,7 @@ import type { KiteAim } from './tactics/tacticalFrame';
  */
 
 const ARCHER_HP = 5;
+const ARCHER_BODY_PART_KEY = goblinBodyPartKey('bow');
 const ARCHER_SPEED = 1.2;
 /**
  * A kiter that outruns its pursuer is unkillable, so its levelled walk speed
@@ -106,7 +107,10 @@ export class GoblinArcher extends Mob {
   displayName = 'Goblin Archer';
   description = 'Hangs back behind its own line and punishes anyone who stands still.';
   override readonly audioTag = 'goblin';
-  override readonly bodyPartKey = goblinBodyPartKey('bow');
+
+  override get bodyPartKey(): string {
+    return ARCHER_BODY_PART_KEY;
+  }
 
   private readonly animator = new GoblinAnimator('bow');
   private readonly aggroRangePx: number;

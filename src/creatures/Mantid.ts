@@ -205,7 +205,9 @@ export class Mantid extends Mob {
   protected coinDropMin = COIN_DROP_MIN;
   protected coinDropMax = COIN_DROP_MAX;
   override readonly audioTag = 'mantid';
-  override readonly bodyPartKey = MANTID_BODY_PART_KEY;
+  override get bodyPartKey(): string {
+    return MANTID_BODY_PART_KEY;
+  }
   displayName = 'Mantid';
   description = 'A praying mantis the size of a horse, and every bit as patient.';
   mass = MASS;

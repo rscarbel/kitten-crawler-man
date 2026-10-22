@@ -129,7 +129,9 @@ export class Troglodyte extends Mob {
   displayName = 'Troglodyte';
   description = 'A cave-dwelling predator with a venomous tongue lash.';
   override readonly audioTag = 'troglodyte';
-  override readonly bodyPartKey = TROGLODYTE_BODY_PART_KEY;
+  override get bodyPartKey(): string {
+    return TROGLODYTE_BODY_PART_KEY;
+  }
 
   override get requiresEvasion(): boolean {
     return true;

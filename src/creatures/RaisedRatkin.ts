@@ -20,6 +20,8 @@ import {
   type RaisedRatkinAction,
 } from '../sprites/art/raisedRatkinFigure';
 import { RAISED_RATKIN_LOOKS, type RaisedRatkinLook } from '../sprites/art/raisedRatkinArt';
+import { SHARED_LOOKS_TIER } from '../core/varietyTier';
+import { uniformVariantFamily } from '../core/mobVariantFamily';
 import type { RatKinView } from '../sprites/art/ratKinArt';
 import { drawRaisedRatkinSprite, prewarmRaisedRatkinFight } from '../sprites/raisedRatkinSprite';
 
@@ -59,9 +61,12 @@ const GROAN_MAX_FRAMES = 720;
 const DEATH_SQUEAK_PLAYBACK_RATE = 0.7;
 const NO_TACTICS: readonly TacticsTrait[] = [];
 
-function pickLook(): RaisedRatkinLook {
-  return RAISED_RATKIN_LOOKS[Math.floor(Math.random() * RAISED_RATKIN_LOOKS.length)] ?? 'smock';
-}
+/** The burial clothes a raised ratkin can climb out in, equally likely. */
+export const RAISED_RATKIN_FAMILY = uniformVariantFamily<RaisedRatkinLook>(
+  RAISED_RATKIN_LOOKS,
+  RAISED_RATKIN_LOOKS[0],
+  SHARED_LOOKS_TIER,
+);
 
 /** Which of the three painted views a facing is seen from. */
 function viewForFacing(facingX: number, facingY: number): RatKinView {
@@ -101,7 +106,7 @@ export class RaisedRatkin extends RisingSkeleton {
   displayName = 'Raised Ratkin';
   description = 'One of Briar Hollow’s own dead, dragged back up with blue light in its eyes.';
 
-  readonly look: RaisedRatkinLook;
+  private currentLook: RaisedRatkinLook;
   /** Sounds waiting for the audio pass. */
   readonly cues = new UndeadCueQueue();
 
@@ -121,13 +126,28 @@ export class RaisedRatkin extends RisingSkeleton {
   private readonly aggroRangePx: number;
   private readonly attackRangePx: number;
 
-  constructor(tileX: number, tileY: number, tileSize: number, look: RaisedRatkinLook = pickLook()) {
+  constructor(tileX: number, tileY: number, tileSize: number, look: RaisedRatkinLook) {
     super(tileX, tileY, tileSize, RAISED_RATKIN_HP, RAISED_RATKIN_SPEED);
-    this.look = look;
+    this.currentLook = look;
     this.aggroRangePx = tileSize * AGGRO_RANGE_TILES;
     this.attackRangePx = tileSize * ATTACK_RANGE_TILES;
     this.lastX = this.x;
     this.lastY = this.y;
+  }
+
+  get look(): RaisedRatkinLook {
+    return this.currentLook;
+  }
+
+  /**
+   * Re-dresses this body in other burial clothes; how it fights is unchanged.
+   * Returns whether the look changed.
+   */
+  applyVariant(look: RaisedRatkinLook): boolean {
+    if (look === this.currentLook) return false;
+    this.currentLook = look;
+    if (this.fightWarmed) prewarmRaisedRatkinFight(look);
+    return true;
   }
 
   override get cullMarginTiles(): number {

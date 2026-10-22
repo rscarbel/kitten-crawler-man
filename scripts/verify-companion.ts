@@ -24,7 +24,8 @@ import { HumanPlayer } from '../src/creatures/HumanPlayer';
 import { CatPlayer } from '../src/creatures/CatPlayer';
 import { Mob } from '../src/creatures/Mob';
 import { Mongo } from '../src/creatures/Mongo';
-import { createMob } from '../src/levels/spawner';
+import { liveSpawnContext, spawnMob } from '../src/levels/spawnFunnel';
+import type { StandaloneMobKind } from '../src/levels/mobKinds';
 import { BallOfSwine } from '../src/creatures/BallOfSwine';
 import { makeSepsis, makeBurn } from '../src/core/StatusEffect';
 import { CompanionSystem } from '../src/systems/CompanionSystem';
@@ -256,8 +257,8 @@ function makeParty(map: GameMap): Party {
   return { map, human, cat, roster: new MobRoster(map, new SpellSystem()) };
 }
 
-function addMob(party: Party, type: string, tileX: number, tileY: number): Mob {
-  const mob = createMob(type, tileX, tileY, party.map);
+function addMob(party: Party, type: StandaloneMobKind, tileX: number, tileY: number): Mob {
+  const mob = spawnMob(type, { x: tileX, y: tileY }, party.map, liveSpawnContext('dev:spawn'));
   party.roster.add(mob);
   return mob;
 }
@@ -1562,7 +1563,12 @@ console.log('\nA respawn puts the companion back at heel and keeps only her comb
     companion.setDirective({ x: post.x, y: post.y, hold: false });
     companion.isFollowOverride = true;
     const quarryTile = { x: post.x / TILE_SIZE, y: post.y / TILE_SIZE };
-    party.cat.autoTarget = createMob('rat', quarryTile.x, quarryTile.y, party.map);
+    party.cat.autoTarget = spawnMob(
+      'rat',
+      { x: quarryTile.x, y: quarryTile.y },
+      party.map,
+      liveSpawnContext('dev:spawn'),
+    );
 
     party.cat.x = party.human.x;
     party.cat.y = party.human.y;

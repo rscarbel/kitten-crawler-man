@@ -5,6 +5,7 @@ import { Cockroach } from '../../creatures/Cockroach';
 import type { HumanPlayer } from '../../creatures/HumanPlayer';
 import { TheHoarder } from '../../creatures/TheHoarder';
 import type { GameMap } from '../../map/GameMap';
+import { liveSpawnContext, spawnMob } from '../../levels/spawnFunnel';
 import {
   HOARD_BAG,
   HOARD_PILE,
@@ -636,7 +637,7 @@ export class HoarderRoomSystem
     let live = 0;
     for (const mob of ctx.roster.mobs) if (mob instanceof Cockroach && mob.isAlive) live++;
     if (live >= cap || !this.gameMap.isWalkable(tile.x, tile.y)) return false;
-    const roach = new Cockroach(tile.x, tile.y, TILE_SIZE);
+    const roach = spawnMob('cockroach', tile, this.gameMap, liveSpawnContext('boss:the_hoarder'));
     roach.isBossAdd = true;
     ctx.roster.add(roach);
     return true;

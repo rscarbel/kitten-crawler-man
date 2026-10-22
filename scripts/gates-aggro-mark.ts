@@ -63,7 +63,7 @@ const { Signet } = await import('../src/creatures/Signet.js');
 const { SkeletonArcher } = await import('../src/creatures/SkeletonArcher.js');
 const { SkeletonLord } = await import('../src/creatures/SkeletonLord.js');
 const { SkeletonWarrior } = await import('../src/creatures/SkeletonWarrior.js');
-const { SkyFowl } = await import('../src/creatures/SkyFowl.js');
+const { SkyFowl, SKYFOWL_TOUGH_FAMILY } = await import('../src/creatures/SkyFowl.js');
 const { SmallSpider } = await import('../src/creatures/SmallSpider.js');
 const { StiltClown } = await import('../src/creatures/StiltClown.js');
 const { TerrorTheClown } = await import('../src/creatures/TerrorTheClown.js');
@@ -204,13 +204,13 @@ function subjects(): Subject[] {
     grubAt(2, 'cow-tailed grub'),
     grubAt(3, 'brindled vespa'),
     unmarked(new Remex(...at), 'remex'),
-    unmarked(new SkyFowl(...at), 'skyfowl'),
+    unmarked(new SkyFowl(...at, SKYFOWL_TOUGH_FAMILY.canonical), 'skyfowl'),
     unmarked(new Tuskling(...at), 'tuskling'),
     unmarked(new TheHoarder(...at), 'the Hoarder'),
     unmarked(new SmallSpider(...at), 'small spider'),
     unmarked(new GrotesqueSpider(...at), 'grotesque spider'),
     unmarked(new MissQuill(...at, () => undefined), 'Miss Quill'),
-    unmarked(new Necromancer(...at), 'necromancer'),
+    unmarked(new Necromancer(...at, Math.random), 'necromancer'),
     unmarked(new Juicer(...at), 'the Juicer'),
     unmarked(new BallOfSwine(...at), 'Ball of Swine'),
     unmarked(new KrakarenClone(...at), 'Krakaren'),

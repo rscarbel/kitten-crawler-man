@@ -85,7 +85,7 @@ import { StiltClown, CLOWN_MAX_SPEED as STILT_CLOWN_MAX_SPEED } from '../src/cre
 import { FatClown, CLOWN_MAX_SPEED as FAT_CLOWN_MAX_SPEED } from '../src/creatures/FatClown';
 import { Mantid, MANTID_MAX_SPEED } from '../src/creatures/Mantid';
 import { MantisCrony, MANTIS_MAX_SPEED } from '../src/creatures/MantisCrony';
-import { SkyFowl } from '../src/creatures/SkyFowl';
+import { SKYFOWL_TOUGH_FAMILY, SkyFowl } from '../src/creatures/SkyFowl';
 import { GameMap } from '../src/map/GameMap';
 import { FloorTypeValue, type TileContent } from '../src/map/tileTypes';
 import { HumanPlayer } from '../src/creatures/HumanPlayer';
@@ -111,11 +111,12 @@ import { dirname, join, resolve } from 'path';
 import { fileURLToPath } from 'url';
 import { level2 } from '../src/levels/level2';
 import { level3 } from '../src/levels/level3';
-import type { LevelDef, MobLevelRange, MobSpawnRule } from '../src/levels/types';
+import type { LevelDef, MobLevelRange } from '../src/levels/types';
+import type { StandaloneMobKind } from '../src/levels/mobKinds';
 import { PLAYER_SPEED, TILE_SIZE } from '../src/core/constants';
 import { DifficultyStats, type RoomFightDetails } from '../src/core/DifficultyStats';
 import { CatPlayer } from '../src/creatures/CatPlayer';
-import { createMob } from '../src/levels/spawner';
+import { liveSpawnContext, spawnMob } from '../src/levels/spawnFunnel';
 import { MobRoster } from '../src/systems/kits/SceneWorld';
 import { SpellSystem } from '../src/systems/SpellSystem';
 import type { SystemContext } from '../src/systems/GameSystem';
@@ -508,7 +509,7 @@ section('spawn counts');
           if (bodies < previous) reinforcementMonotone = false;
           previous = bodies;
           const population = withWorldSeed(REINFORCEMENT_ROLL_SEED + partyLevel, () =>
-            rollRoomPopulation(def, rule, region, partyLevel, profile),
+            rollRoomPopulation(def, rule, region, partyLevel, profile, Math.random),
           );
           if (population.hostCount + population.escorts.length > MAX_ROOM_SPAWN_COUNT) {
             roomsFitTheCap = false;
@@ -563,7 +564,10 @@ section('party tracking');
         if (trackedTop < previousTop) neverFalls = false;
         previousTop = trackedTop;
         const isTracked = tracked !== band;
-        if (isTracked && resolveAmbientLevel(band, def, partyLevel, profile) >= partyLevel) {
+        if (
+          isTracked &&
+          resolveAmbientLevel(band, def, partyLevel, profile, Math.random) >= partyLevel
+        ) {
           earnedFloorBelowParty = false;
         }
       }
@@ -658,7 +662,7 @@ section('level bands');
     const max = band.maxLevel ?? min;
     let previousBossLevel = 0;
     for (let partyLevel = 1; partyLevel <= MAX_PROBED_PARTY_LEVEL; partyLevel++) {
-      const rolled = resolveSpawnLevel(band, partyLevel, DIFFICULTY_PROFILES.normal);
+      const rolled = resolveSpawnLevel(band, partyLevel, DIFFICULTY_PROFILES.normal, Math.random);
       if (rolled < min || rolled > max) staysInBand = false;
       const bossLevel = resolveBossLevel(band, partyLevel, DIFFICULTY_PROFILES.normal);
       if (bossLevel < min || bossLevel > max) bossStaysInBand = false;
@@ -955,7 +959,12 @@ function openChaseRoom(): GameMap {
 /** The mean pixels per frame a provoked fowl of `level` covers chasing a far target. */
 function provokedFowlChase(level: number): { stepPx: number; moveSpeed: number } {
   const map = openChaseRoom();
-  const fowl = new SkyFowl(CHASE_FOWL_TILE, CHASE_FOWL_TILE, TILE_SIZE);
+  const fowl = new SkyFowl(
+    CHASE_FOWL_TILE,
+    CHASE_FOWL_TILE,
+    TILE_SIZE,
+    SKYFOWL_TOUGH_FAMILY.canonical,
+  );
   fowl.setMap(map);
   fowl.applyMobLevel(level);
   const target = new HumanPlayer(CHASE_TARGET_TILE, CHASE_FOWL_TILE, TILE_SIZE);
@@ -1060,7 +1069,7 @@ section('difficulty profiles');
       const min = band.minLevel ?? 1;
       const max = band.maxLevel ?? min;
       for (let partyLevel = 1; partyLevel <= MAX_PROFILE_PROBED_PARTY_LEVEL; partyLevel++) {
-        const rolled = resolveSpawnLevel(band, partyLevel, profile);
+        const rolled = resolveSpawnLevel(band, partyLevel, profile, Math.random);
         const bossLevel = resolveBossLevel(band, partyLevel, profile);
         if (rolled < min || rolled > max) everyProfileStaysInBand = false;
         if (bossLevel < min || bossLevel > max) everyProfileStaysInBand = false;
@@ -1201,8 +1210,8 @@ function isBomber(mob: Mob): boolean {
 const bomberProbeMap = openChaseRoom();
 
 /** Whether a spawn rule's type is a bomber's, read off the creature it builds. */
-function isBomberType(type: MobSpawnRule['type']): boolean {
-  return isBomber(createMob(type, 0, 0, bomberProbeMap));
+function isBomberType(type: StandaloneMobKind): boolean {
+  return isBomber(spawnMob(type, { x: 0, y: 0 }, bomberProbeMap, liveSpawnContext('dev:spawn')));
 }
 
 section("floor 1's bombers wait behind the Juicer");
@@ -1240,6 +1249,7 @@ section("floor 1's bombers wait behind the Juicer");
           region,
           BOMBER_CHECK_PARTY_LEVEL,
           profile,
+          Math.random,
         );
         const bombers = escorts.filter((escort) => isBomberType(escort.type)).length;
         if (region < postJuicerRegion) earlyRolled += bombers;
@@ -1260,9 +1270,16 @@ section("floor 1's bombers wait behind the Juicer");
       dungeon: dungeonOptionsForLevel(def),
     });
     const mobs = [
-      ...spawnForLevel(def, map, BOMBER_CHECK_PARTY_LEVEL, profile, new Set()),
-      ...spawnExtraMobs(def, map, BOMBER_CHECK_PARTY_LEVEL, profile),
-      ...spawnTreasureRoomMobs(map.treasureRooms, def, map, BOMBER_CHECK_PARTY_LEVEL, profile),
+      ...spawnForLevel(def, map, BOMBER_CHECK_PARTY_LEVEL, profile, new Set(), Math.random),
+      ...spawnExtraMobs(def, map, BOMBER_CHECK_PARTY_LEVEL, profile, Math.random),
+      ...spawnTreasureRoomMobs(
+        map.treasureRooms,
+        def,
+        map,
+        BOMBER_CHECK_PARTY_LEVEL,
+        profile,
+        Math.random,
+      ),
     ];
     for (const mob of mobs.filter(isBomber)) {
       const tileX = Math.floor(mob.x / TILE_SIZE);
@@ -1420,7 +1437,12 @@ function runBomberThrow(type: BomberType, mobLevel: number): BomberThrowRun {
     BOMBER_THROW_DODGER_PARK_TILE,
     TILE_SIZE,
   );
-  const bomber = createMob(type, BOMBER_THROW_BOMBER_TILE_X, BOMBER_THROW_ROW, map);
+  const bomber = spawnMob(
+    type,
+    { x: BOMBER_THROW_BOMBER_TILE_X, y: BOMBER_THROW_ROW },
+    map,
+    liveSpawnContext('dev:spawn'),
+  );
   bomber.applyMobLevel(mobLevel);
   applySpawnDifficulty(bomber);
   roster.add(bomber);
@@ -1621,7 +1643,12 @@ section('bomber goblins throw at the ground, and the ground can be left');
       // Through the real blast and a real crawler's own bar, with the source
       // each bomber stamps, so anything level-scaled on the way would show.
       const blastAt = (level: number): { crawlerLost: number; structureBase: number } => {
-        const bomber = createMob(type, 0, 0, bomberProbeMap);
+        const bomber = spawnMob(
+          type,
+          { x: 0, y: 0 },
+          bomberProbeMap,
+          liveSpawnContext('dev:spawn'),
+        );
         bomber.applyMobLevel(level);
         applySpawnDifficulty(bomber);
         if (!(bomber instanceof GoblinBomber)) return { crawlerLost: 0, structureBase: 0 };
@@ -1721,7 +1748,12 @@ section('bomber goblins throw at the ground, and the ground can be left');
  */
 function closeMoveFires(type: BomberType): boolean {
   const map = openChaseRoom();
-  const bomber = createMob(type, BOMBER_THROW_BOMBER_TILE_X, BOMBER_THROW_ROW, map);
+  const bomber = spawnMob(
+    type,
+    { x: BOMBER_THROW_BOMBER_TILE_X, y: BOMBER_THROW_ROW },
+    map,
+    liveSpawnContext('dev:spawn'),
+  );
   const crawler = new HumanPlayer(
     BOMBER_THROW_BOMBER_TILE_X - BOMBER_CLOSE_PROBE_OFFSET_TILES,
     BOMBER_THROW_ROW,
@@ -1750,7 +1782,12 @@ function throwAcrossFlip(
 ): { shots: number; lockLeftBehind: boolean } {
   settings.setDifficultyForSession(from);
   const map = openChaseRoom();
-  const bomber = createMob(type, BOMBER_THROW_BOMBER_TILE_X, BOMBER_THROW_ROW, map);
+  const bomber = spawnMob(
+    type,
+    { x: BOMBER_THROW_BOMBER_TILE_X, y: BOMBER_THROW_ROW },
+    map,
+    liveSpawnContext('dev:spawn'),
+  );
   const crawler = new HumanPlayer(BOMBER_THROW_TARGET_TILE_X, BOMBER_THROW_ROW, TILE_SIZE);
   const thrower = bomber.bombThrower;
   if (thrower === null || !(bomber instanceof GoblinBomber)) {
@@ -1854,7 +1891,7 @@ section('Kitten bombers keep the gentler mechanics');
 
     // Read live: a bomber spawned on Crawler walks at Kitten's pace once the toggle flips.
     settings.setDifficultyForSession('normal');
-    const bomber = createMob(type, 0, 0, bomberProbeMap);
+    const bomber = spawnMob(type, { x: 0, y: 0 }, bomberProbeMap, liveSpawnContext('dev:spawn'));
     settings.setDifficultyForSession('easy');
     bomber.updateAI([]);
     check(
@@ -2335,7 +2372,12 @@ function blastAgainstLevelledMob(
 }
 
 function makeGhoul(tileX: number, tileY: number): Mob {
-  return createMob(EXPLOSIVE_TARGET_MOB, tileX, tileY, explosiveMap);
+  return spawnMob(
+    EXPLOSIVE_TARGET_MOB,
+    { x: tileX, y: tileY },
+    explosiveMap,
+    liveSpawnContext('dev:spawn'),
+  );
 }
 
 /** Separate blasts needed to kill a mob of this level, before any guard or phase of its own. */
@@ -2378,13 +2420,19 @@ function collectProbeSpawn(mob: Mob): void {
   probeSpawns.push(mob);
 }
 
-function registeredMob(id: string): () => Mob {
-  return () => createMob(id, BOSS_PROBE_TILE, BOSS_PROBE_TILE, explosiveMap);
+function registeredMob(id: StandaloneMobKind): () => Mob {
+  return () =>
+    spawnMob(
+      id,
+      { x: BOSS_PROBE_TILE, y: BOSS_PROBE_TILE },
+      explosiveMap,
+      liveSpawnContext('dev:spawn'),
+    );
 }
 
 /**
  * Every boss the player fights, by the level rule that sets it. Bosses built
- * outside the spawner registry are constructed directly, exactly as their own
+ * outside the kind registry (`MOB_KINDS`) are constructed directly, exactly as their own
  * systems build them.
  */
 const ARENA_BOSSES: readonly (readonly [string, () => Mob])[] = [
@@ -2422,7 +2470,7 @@ const BOUNTY_ESCORTS = [
   'skeleton_sword',
   'skeleton_archer',
   'rock_golem',
-];
+] as const;
 
 section('explosives handling');
 {
@@ -2549,7 +2597,7 @@ section('explosives handling');
   }
 
   const makeLord = (tileX: number, tileY: number): Mob =>
-    createMob('skeleton_lord', tileX, tileY, explosiveMap);
+    spawnMob('skeleton_lord', { x: tileX, y: tileY }, explosiveMap, liveSpawnContext('dev:spawn'));
   const lordLevel = bountyBossLevel(LATE_GAME_PARTY_LEVEL, LATE_GAME_PARTY_LEVEL, normalProfile);
   const lateHandling = onCurveHandlingLevel(LATE_GAME_PARTY_LEVEL);
   const singleBlast = blastAgainstLevelledMob(

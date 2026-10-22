@@ -23,7 +23,14 @@
  */
 
 import { mulberry32, pick, subSeed } from './rng';
-import type { PersonAppearance, PersonBody, PersonHead, TownRole } from './PersonAppearance';
+import {
+  TOWN_ROLES,
+  type PersonAppearance,
+  type PersonBody,
+  type PersonHead,
+  type TownRole,
+} from './PersonAppearance';
+import { VARIETY_TIERS, type VarietyTier } from '../../core/varietyTier';
 import { deriveGlossRamp, deriveRamp, type GlossRamp, type Ramp } from '../art/carl/palette';
 import {
   FACING_BROW_DEFAULT,
@@ -711,18 +718,101 @@ for (const look of TOWN_CAST_LOOKS) {
 }
 
 /** Roles with no look of their own borrow the plain commoner set. */
-const FALLBACK_ROLE: TownRole = 'commoner';
+const FALLBACK_ROLE = 'commoner' as const satisfies TownRole;
+
+/** The looks offered for `role` itself, before any variety tier trims them. */
+function townCastLooksForRole(role: TownRole): readonly TownCastLook[] {
+  return LOOKS_BY_ROLE.get(role) ?? LOOKS_BY_ROLE.get(FALLBACK_ROLE) ?? TOWN_CAST_LOOKS;
+}
+
+/** Roles that wear one look pool between them: the looks of the group's first role. */
+type TownRoleGroup = readonly [TownRole, ...TownRole[]];
+
+/** How a variety tier trims the human street cast. */
+export interface TownCastTierPlan {
+  /** Roles that share their lead's looks. A role in no group keeps its own. */
+  readonly groups: readonly TownRoleGroup[];
+  /**
+   * How many of its lead role's looks each role keeps, first authored first.
+   * A role with no entry keeps all of them.
+   */
+  readonly looksPerRole: Readonly<Partial<Record<TownRole, number>>>;
+}
+
+/** Everyone not named in `apart`, led by `lead`: the catch-all group of a lean tier. */
+function restOfTheTown(lead: TownRole, apart: readonly TownRole[]): TownRoleGroup {
+  return [lead, ...TOWN_ROLES.filter((role) => role !== lead && !apart.includes(role))];
+}
+
+const ONE_LOOK_PER_ROLE = 1;
+
+function oneLookForEveryRole(): Partial<Record<TownRole, number>> {
+  const limits: Partial<Record<TownRole, number>> = {};
+  for (const role of TOWN_ROLES) limits[role] = ONE_LOOK_PER_ROLE;
+  return limits;
+}
+
+const ONE_LOOK_FOR_EVERY_ROLE = oneLookForEveryRole();
+
+const LEAN_CAST_PLAN: TownCastTierPlan = {
+  groups: [['guard'], ['child'], restOfTheTown('commoner', ['guard', 'child'])],
+  looksPerRole: ONE_LOOK_FOR_EVERY_ROLE,
+};
+
+/**
+ * The human street cast at each variety tier. A citizen keeps its role, and
+ * with it its behaviour and services; only the look it wears is drawn from a
+ * smaller set. Guards and children always keep a look of their own, because a
+ * guard's livery and a child's height are read as what the citizen is.
+ */
+export const TOWN_CAST_TIER_PLANS = {
+  0: { groups: [], looksPerRole: {} },
+  1: { groups: [], looksPerRole: { commoner: ONE_LOOK_PER_ROLE, child: ONE_LOOK_PER_ROLE } },
+  2: {
+    groups: [
+      ['guard'],
+      ['child'],
+      ['commoner', 'beggar', 'drunk', 'priest'],
+      ['laborer', 'farmer', 'smith'],
+      ['merchant', 'innkeeper', 'noble'],
+    ],
+    looksPerRole: ONE_LOOK_FOR_EVERY_ROLE,
+  },
+  3: LEAN_CAST_PLAN,
+  4: LEAN_CAST_PLAN,
+} as const satisfies Record<VarietyTier, TownCastTierPlan>;
+
+/** The role whose looks `role` wears under `plan`. */
+export function townCastLeadRole(plan: TownCastTierPlan, role: TownRole): TownRole {
+  return plan.groups.find((group) => group.includes(role))?.[0] ?? role;
+}
+
+function tieredPools(plan: TownCastTierPlan): ReadonlyMap<TownRole, readonly TownCastLook[]> {
+  const pools = new Map<TownRole, readonly TownCastLook[]>();
+  for (const role of TOWN_ROLES) {
+    const leadLooks = townCastLooksForRole(townCastLeadRole(plan, role));
+    const limit = plan.looksPerRole[role];
+    pools.set(role, limit === undefined ? leadLooks : leadLooks.slice(0, limit));
+  }
+  return pools;
+}
+
+const POOLS_BY_TIER: ReadonlyMap<
+  VarietyTier,
+  ReadonlyMap<TownRole, readonly TownCastLook[]>
+> = new Map(VARIETY_TIERS.map((tier) => [tier, tieredPools(TOWN_CAST_TIER_PLANS[tier])]));
 
 /** Salt for the picker's own stream, so it never correlates with a role bias draw. */
 const CAST_PICK_SALT = 0x7a5c11;
 
 /**
- * Deterministically buckets `seed` onto one look offered for `role`. The
- * *only* place a citizen's seed still touches its look — everything else
- * about how it is drawn comes from the fixed look, not from the seed.
+ * Deterministically buckets `seed` onto one look offered for `role` at
+ * variety `tier`. The *only* place a citizen's seed still touches its look —
+ * everything else about how it is drawn comes from the fixed look, not from
+ * the seed.
  */
-export function pickTownCastLook(seed: number, role: TownRole): TownCastLook {
-  const pool = LOOKS_BY_ROLE.get(role) ?? LOOKS_BY_ROLE.get(FALLBACK_ROLE) ?? TOWN_CAST_LOOKS;
+export function pickTownCastLook(seed: number, role: TownRole, tier: VarietyTier): TownCastLook {
+  const pool = POOLS_BY_TIER.get(tier)?.get(role) ?? townCastLooksForRole(role);
   const rng = mulberry32(subSeed(seed, CAST_PICK_SALT));
   return pick(rng, pool);
 }

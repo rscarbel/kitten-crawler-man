@@ -22,6 +22,7 @@ import type { HumanPlayer } from '../creatures/HumanPlayer';
 import { CatPlayer } from '../creatures/CatPlayer';
 import type { Player } from '../Player';
 import { Bugaboo } from '../creatures/Bugaboo';
+import { liveSpawnContext, spawnMob } from '../levels/spawnFunnel';
 import { prewarmBugaboo } from '../sprites/bugabooSprite';
 import { applySpawnDifficulty } from '../core/difficultyProfiles';
 import { QuestNPC } from '../creatures/QuestNPC';
@@ -1345,7 +1346,12 @@ export class DefendQuestSystem implements GameSystem {
 
   private spawnBugaboo(tileX: number, tileY: number, grateIdx: number): void {
     if (!this.npc) return;
-    const bug = new Bugaboo(tileX, tileY, TILE_SIZE);
+    const bug = spawnMob(
+      'bugaboo',
+      { x: tileX, y: tileY },
+      this.gameMap,
+      liveSpawnContext('quest:defend'),
+    );
     bug.applyMobLevel(this.resolveWaveLevel(), this.waveCurve);
     // Paired with the level, as every other spawn site in the game pairs them: a
     // wave that ignored the difficulty reward scale would pay differently from
@@ -1353,7 +1359,6 @@ export class DefendQuestSystem implements GameSystem {
     // survivors are now left alive to be fought, that gap is XP the party can
     // actually feel.
     applySpawnDifficulty(bug);
-    bug.setMap(this.gameMap);
     bug.defendTarget = this.npc;
 
     if (grateIdx >= 0 && this.roomData) {

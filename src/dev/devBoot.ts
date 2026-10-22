@@ -47,6 +47,8 @@ import {
 } from '../core/MurderQuestProgress';
 import { perfMonitor } from '../core/PerfMonitor';
 import { setDeviceMemoryOverride } from '../core/deviceMemoryBudget';
+import { renderQuality } from '../core/RenderQuality';
+import { asVarietyTier } from '../core/varietyTier';
 import { setFigureCacheStatsRecording } from '../sprites/figure/figureCacheStats';
 import { drawPerfOverlay } from './perfOverlay';
 import { installPerfDensity } from './perfDensity';
@@ -152,6 +154,7 @@ function parseMurderQuestProgress(stageParam: string | null): MurderQuestProgres
  * nobody is watching does not spin a core.
  */
 const UNTHROTTLED_FRAME_INTERVAL_MS = 16;
+const WHOLE_NUMBER = /^\d+$/;
 
 /**
  * Runs the game loop off `setTimeout` instead of `requestAnimationFrame`.
@@ -333,6 +336,12 @@ export function devBootScene(
   const deviceMemoryGigabytes = Number.parseFloat(params.get('deviceMemory') ?? '');
   if (Number.isFinite(deviceMemoryGigabytes) && deviceMemoryGigabytes > 0) {
     setDeviceMemoryOverride(deviceMemoryGigabytes);
+  }
+  const varietyFlag = params.get('variety');
+  if (varietyFlag !== null) {
+    const forcedTier = WHOLE_NUMBER.test(varietyFlag) ? asVarietyTier(Number(varietyFlag)) : null;
+    if (forcedTier === null) console.error(`Unknown variety "${varietyFlag}"; expected 0 to 4`);
+    else renderQuality.pinVarietyTier(forcedTier);
   }
   if (params.get('perf') !== null) {
     perfMonitor.enable();

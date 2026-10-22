@@ -134,19 +134,22 @@ export interface PersonAppearance {
  * hat, a child's smaller stature) without discarding the underlying variety.
  * `commoner` applies no bias — a plain seeded person.
  */
-export type TownRole =
-  | 'guard'
-  | 'merchant'
-  | 'farmer'
-  | 'smith'
-  | 'innkeeper'
-  | 'priest'
-  | 'child'
-  | 'drunk'
-  | 'noble'
-  | 'beggar'
-  | 'laborer'
-  | 'commoner';
+export const TOWN_ROLES = [
+  'guard',
+  'merchant',
+  'farmer',
+  'smith',
+  'innkeeper',
+  'priest',
+  'child',
+  'drunk',
+  'noble',
+  'beggar',
+  'laborer',
+  'commoner',
+] as const;
+
+export type TownRole = (typeof TOWN_ROLES)[number];
 
 const HEIGHT_MIN = 0.86;
 const HEIGHT_MAX = 1.14;

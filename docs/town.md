@@ -928,6 +928,16 @@ an `outgoingDamageScale`. The wave's fairy comes too, along with every earlier w
 fairy that has fallen since. Fairies are not enlisted: they fly with the wave and leave
 when the siege ends.
 
+The waves and the siege's kind ladder (`BRIAR_HOLLOW_SIEGE_LADDER`) live in
+`assaultWaves.ts`. Each mini-wave's roster is planned once, when it rises
+(`planAssaultRoster`): counts scaled for the difficulty, then resolved through the ladder
+at the variety tier in force, so a device that has given up variety fields fewer kinds,
+pooled by threat into more or fewer bodies of a kind the siege already fields. The
+leaders and the undead are never substituted. Every kind in the siege, the raised ratkin
+included, wears its one shared look on every device (`ENCOUNTER_LOOK_TIER_FLOORS`). The countdown and each mini-wave's lead-in
+warm exactly the planned kinds (`AssaultWavePrewarm`), from the rows each kind declares
+on its `MOB_KINDS` entry (`approach`).
+
 Vordrick leads every wave. In the first three he comes with a share of his health and
 `cannotBeKilled`: beaten to 1 HP, or still standing when the lull begins, he fades away
 (`Necromancer.beginFadingAway`) and is released with nothing paid. His death in the

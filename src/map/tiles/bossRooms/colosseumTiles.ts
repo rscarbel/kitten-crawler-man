@@ -24,7 +24,7 @@ import {
   type ColosseumLayout,
   type ColosseumSpectatorSeat,
 } from './colosseumGeometry';
-import { onCanvasRecovery } from '../../../core/canvasRecovery';
+import { canvasGeneration, onCanvasRecovery } from '../../../core/canvasRecovery';
 
 /**
  * The Iron Colosseum, painted tile by tile against its true circles.
@@ -1132,11 +1132,27 @@ interface MudPatch {
   readonly tiles: ReadonlyArray<readonly [number, number]>;
 }
 
-let mudPatchImages = new WeakMap<TileContent[][], Map<string, CanvasSurface>>();
-// Baked once and kept; a purge would leave it blank for good.
-onCanvasRecovery(() => {
-  mudPatchImages = new WeakMap<TileContent[][], Map<string, CanvasSurface>>();
-});
+interface MudPatchImages {
+  /** The canvas generation the images were painted in; a recovery may have blanked them since. */
+  readonly generation: number;
+  readonly byPatch: Map<string, CanvasSurface>;
+}
+
+/**
+ * Keyed by map, so a dead arena's mud goes with it. A recovery is noticed at
+ * the next lookup, which gives the old images back before painting new ones.
+ */
+const mudPatchImages = new WeakMap<TileContent[][], MudPatchImages>();
+
+function mudImagesFor(structure: TileContent[][]): Map<string, CanvasSurface> {
+  const generation = canvasGeneration();
+  const existing = mudPatchImages.get(structure);
+  if (existing?.generation === generation) return existing.byPatch;
+  if (existing !== undefined) for (const image of existing.byPatch.values()) releaseSurface(image);
+  const byPatch = new Map<string, CanvasSurface>();
+  mudPatchImages.set(structure, { generation, byPatch });
+  return byPatch;
+}
 
 function isMudAt(structure: TileContent[][], tileX: number, tileY: number): boolean {
   return structure[tileY]?.[tileX]?.type === ARENA_MUD;
@@ -1202,11 +1218,7 @@ function mudDepth(patch: MudPatch, isMud: ReadonlySet<string>, x: number, y: num
 }
 
 function mudPatchImage(structure: TileContent[][], patch: MudPatch, ts: number): CanvasSurface {
-  let byPatch = mudPatchImages.get(structure);
-  if (byPatch === undefined) {
-    byPatch = new Map();
-    mudPatchImages.set(structure, byPatch);
-  }
+  const byPatch = mudImagesFor(structure);
   const key = `${patch.minX},${patch.minY}|${ts}`;
   const cached = byPatch.get(key);
   if (cached !== undefined) return cached;

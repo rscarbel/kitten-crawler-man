@@ -41,7 +41,7 @@ const { speakerLines } = await import('../src/dialog/line.js');
 const { walkAwayRangeTiles } = await import('../src/dialog/walkAway.js');
 const { BriarHollowKit } = await import('../src/systems/briarHollow/BriarHollowKit.js');
 const { MobRoster } = await import('../src/systems/kits/SceneWorld.js');
-const { createMob } = await import('../src/levels/spawner.js');
+const { liveSpawnContext, spawnMob } = await import('../src/levels/spawnFunnel.js');
 
 type Scene = InstanceType<typeof DungeonScene>;
 type Point = { readonly x: number; readonly y: number };
@@ -282,11 +282,14 @@ async function verifyPaddockPresses(): Promise<void> {
     return herdCase.spot;
   };
   const setDownHostile = (): { hp: number } => {
-    const goblin = createMob(
+    const goblin = spawnMob(
       'goblin',
-      Math.floor(active.x / TILE_SIZE),
-      Math.floor(active.y / TILE_SIZE) + HOSTILE_OFFSET_TILES,
+      {
+        x: Math.floor(active.x / TILE_SIZE),
+        y: Math.floor(active.y / TILE_SIZE) + HOSTILE_OFFSET_TILES,
+      },
       found.map,
+      liveSpawnContext('dev:spawn'),
     );
     roster.add(goblin);
     return goblin;

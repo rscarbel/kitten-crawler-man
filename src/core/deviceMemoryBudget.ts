@@ -7,14 +7,14 @@ import { shouldDownscaleForLowEndDevice } from './SpriteLoader';
 const DESKTOP_MIN_GIGABYTES = 8;
 const SMALL_DEVICE_MAX_GIGABYTES = 2;
 
-const FULL_SCALE = 1;
+export const FULL_SCALE = 1;
 /**
  * A half-density device's figure and sheet caches hold a quarter of the bytes
  * for the same picture, and the town at that density peaks at 51 MB of figure
  * cells and 35 MB of sheets against full budgets of 188 and 160: half of each
  * still leaves the town's whole working set resident with room over.
  */
-const HALF_DENSITY_SCALE = 0.5;
+export const HALF_DENSITY_SCALE = 0.5;
 /**
  * For a phone that reports 2 GB or less: a third of each budget still clears
  * the half-density town's peak (63 MB against 51, 53 against 35).
@@ -22,7 +22,15 @@ const HALF_DENSITY_SCALE = 0.5;
 const SMALL_DEVICE_BUDGET_DIVISOR = 3;
 const SMALL_HALF_DENSITY_SCALE = 1 / SMALL_DEVICE_BUDGET_DIVISOR;
 
+/**
+ * What every cache budget is multiplied by once canvases have been lost at the
+ * least variety the game can show. Fewer looks cannot shrink the working set any
+ * further by then, so smaller caches are the only demand left to give up.
+ */
+const SESSION_BUDGET_CUT = 0.5;
+
 let gigabytesOverride: number | null = null;
+let budgetsCutForSession = false;
 
 /**
  * Stands in for `navigator.deviceMemory`, or restores the browser's own report
@@ -49,8 +57,11 @@ function reportedDeviceMemoryGigabytes(): number | null {
  * sheets need all but a few megabytes of theirs, and every smaller budget
  * measured there traded memory for stand-in frames and repaints, so a phone
  * with a dense display keeps the full budgets however little memory it reports.
+ *
+ * The device's own share, before any cut for the session: what says how much
+ * this device can carry. Caches read {@link memoryBudgetScale}.
  */
-export function memoryBudgetScale(): number {
+export function deviceMemoryBudgetScale(): number {
   const gigabytes = reportedDeviceMemoryGigabytes();
   if (gigabytes !== null && gigabytes >= DESKTOP_MIN_GIGABYTES) return FULL_SCALE;
   if (!shouldDownscaleForLowEndDevice()) return FULL_SCALE;
@@ -58,4 +69,23 @@ export function memoryBudgetScale(): number {
     return SMALL_HALF_DENSITY_SCALE;
   }
   return HALF_DENSITY_SCALE;
+}
+
+/**
+ * The share of its full byte budget a density-scaled cache holds now: this
+ * device's own share, cut once for the rest of the session by
+ * {@link cutMemoryBudgetsForSession}. What the caches read.
+ */
+export function memoryBudgetScale(): number {
+  const deviceScale = deviceMemoryBudgetScale();
+  return budgetsCutForSession ? deviceScale * SESSION_BUDGET_CUT : deviceScale;
+}
+
+/**
+ * Lowers every cache budget for the rest of the session. Idempotent: the cut
+ * applies once however often it is asked for. The only path that lowers a
+ * budget below the device's own share.
+ */
+export function cutMemoryBudgetsForSession(): void {
+  budgetsCutForSession = true;
 }

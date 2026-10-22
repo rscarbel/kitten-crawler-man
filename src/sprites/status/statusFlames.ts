@@ -32,6 +32,7 @@ import {
   bakeFlameBodyTiers,
   flameStamps,
   hashUnit,
+  releaseFlameBodyTiers,
   stampTeardrop,
   type FlameInk,
 } from '../flameStamps';
@@ -341,7 +342,10 @@ export function flameBodyLayers(f: StatusVisualFrame, palette: FlamePalette): Si
 
 const tierCache = new Map<FlamePalette, ReadonlyArray<ReadonlyArray<CanvasSurface>>>();
 // Baked once and kept; a purge would leave it blank for good.
-onCanvasRecovery(() => tierCache.clear());
+onCanvasRecovery(() => {
+  for (const tiers of tierCache.values()) releaseFlameBodyTiers(tiers);
+  tierCache.clear();
+});
 
 function parcelStamps(palette: FlamePalette): ReadonlyArray<ReadonlyArray<CanvasSurface>> {
   if (palette.tiers === FLAME_BODY_TIERS) return flameStamps().body;

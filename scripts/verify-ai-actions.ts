@@ -106,7 +106,8 @@ import { aiActionTimers } from '../src/ai/actions/timers';
 import { TELEPORT_HOSTILE_CLEARANCE_TILES } from '../src/ai/actions/world';
 import type { FloorLedgerSnapshot, FloorLedgerStore } from '../src/ai/actions/ledgerStore';
 import { tileOf } from '../src/ai/actions/helpers';
-import { createMob, getRegisteredMobTypes } from '../src/levels/spawner';
+import { standaloneMobKinds } from '../src/levels/mobKinds';
+import { liveSpawnContext, spawnMob } from '../src/levels/spawnFunnel';
 import {
   AI_BUDGET_POOLS,
   AI_CONTEXT_FLAGS,
@@ -264,7 +265,7 @@ section('registry shape');
     );
   }
 
-  const registered = new Set(getRegisteredMobTypes());
+  const registered = new Set(standaloneMobKinds());
   const spawnable = aiSpawnableMobTypes();
   check(spawnable.length > 0, 'the AI can name at least one creature');
   check(
@@ -984,7 +985,12 @@ section(
   step();
 
   const landing = tileOf(world.human);
-  const guard = createMob('rat', landing.x + 2, landing.y, world.map);
+  const guard = spawnMob(
+    'rat',
+    { x: landing.x + 2, y: landing.y },
+    world.map,
+    liveSpawnContext('dev:spawn'),
+  );
   world.mobs.push(guard);
   check(
     !system('teleport_player', { tile_x: landing.x, tile_y: landing.y }).ok,
@@ -1275,7 +1281,14 @@ section('the show: achievements, questions, favour and every challenge template'
   const spawnRats = (count: number): void => {
     const home = tileOf(world.human);
     for (let index = 0; index < count; index++) {
-      world.mobs.push(createMob('rat', home.x + index + 1, home.y + 1, world.map));
+      world.mobs.push(
+        spawnMob(
+          'rat',
+          { x: home.x + index + 1, y: home.y + 1 },
+          world.map,
+          liveSpawnContext('dev:spawn'),
+        ),
+      );
     }
   };
   const ctx = systemContextOf(world);
@@ -1394,7 +1407,12 @@ section('the show: achievements, questions, favour and every challenge template'
   check(wonAnother(), 'a clean kill wins an untouched slay');
 
   // no_potion_until_boss: needs a boss, lost to a potion, won by the kill.
-  const boss = createMob('rat', tileOf(world.human).x + 2, tileOf(world.human).y, world.map);
+  const boss = spawnMob(
+    'rat',
+    { x: tileOf(world.human).x + 2, y: tileOf(world.human).y },
+    world.map,
+    liveSpawnContext('dev:spawn'),
+  );
   boss.isBoss = true;
   world.mobs.push(boss);
   check(offer('no_potion_until_boss').ok, 'a potion fast is offered with a living boss');
